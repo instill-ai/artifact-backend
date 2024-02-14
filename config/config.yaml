@@ -1,0 +1,66 @@
+server:
+  privateport: 3085
+  publicport: 8085
+  https:
+    cert:
+    key:
+  edition: local-ce:dev
+  usage:
+    enabled: true
+    tlsenabled: true
+    host: usage.instill.tech
+    port: 443
+  debug: true
+  maxdatasize: 12 # MB in unit
+  workflow:
+    maxworkflowtimeout: 3600 # in seconds
+    maxworkflowretry: 1
+    maxactivityretry: 3
+database:
+  username: postgres
+  password: password
+  host: pg-sql
+  port: 5432
+  name: artifact
+  version: 10
+  timezone: Etc/UTC
+  pool:
+    idleconnections: 5
+    maxconnections: 10
+    connlifetime: 30m # In minutes, e.g., '60m'
+influxdb:
+  url: http://influxdb:8086
+  token: i-love-instill-ai
+  org: instill-ai
+  bucket: instill-ai
+  flushinterval: 10 # In seconds for non-blocking batch mode
+  https:
+    cert:
+    key:
+cache:
+  redis:
+    redisoptions:
+      addr: redis:6379
+log:
+  external: false
+  otelcollector:
+    host: otel-collector
+    port: 8095
+temporal:
+  hostport: temporal:7233
+  namespace: artifact-backend
+  retention: 1d
+  ca:
+  cert:
+  key:
+  servername:
+mgmtbackend:
+  host: mgmt-backend
+  publicport: 8084
+  privateport: 3084
+  https:
+    cert:
+    key:
+openfga:
+  host: openfga
+  port: 8080
