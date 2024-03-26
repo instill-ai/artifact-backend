@@ -32,8 +32,9 @@ import (
 	grpc_recovery "github.com/grpc-ecosystem/go-grpc-middleware/recovery"
 
 	"github.com/instill-ai/artifact-backend/config"
+	grpcclient "github.com/instill-ai/artifact-backend/pkg/client/grpc"
+	httpclient "github.com/instill-ai/artifact-backend/pkg/client/http"
 	"github.com/instill-ai/artifact-backend/pkg/constant"
-	"github.com/instill-ai/artifact-backend/pkg/external"
 	"github.com/instill-ai/artifact-backend/pkg/handler"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/middleware"
@@ -179,11 +180,11 @@ func main() {
 	grpcServerOpts = append(grpcServerOpts, grpc.MaxRecvMsgSize(constant.MaxPayloadSize))
 	grpcServerOpts = append(grpcServerOpts, grpc.MaxSendMsgSize(constant.MaxPayloadSize))
 
-	mgmtPrivateServiceClient, mgmtPrivateServiceClientConn := external.InitMgmtPrivateServiceClient(ctx)
+	mgmtPrivateServiceClient, mgmtPrivateServiceClientConn := grpcclient.NewMGMTPrivateClient(ctx)
 	if mgmtPrivateServiceClientConn != nil {
 		defer mgmtPrivateServiceClientConn.Close()
 	}
-	_, mgmtPublicServiceClientConn := external.InitMgmtPublicServiceClient(ctx)
+	_, mgmtPublicServiceClientConn := grpcclient.NewMGMTPublicClient(ctx)
 	if mgmtPublicServiceClientConn != nil {
 		defer mgmtPublicServiceClientConn.Close()
 	}
@@ -191,7 +192,7 @@ func main() {
 	redisClient := redis.NewClient(&config.Config.Cache.Redis.RedisOptions)
 	defer redisClient.Close()
 
-	influxDBClient, influxDBWriteClient := external.InitInfluxDBServiceClient(ctx)
+	influxDBClient, influxDBWriteClient := httpclient.NewInfluxDBClient(ctx)
 	defer influxDBClient.Close()
 
 	influxErrCh := influxDBWriteClient.Errors()
@@ -203,7 +204,7 @@ func main() {
 
 	repository := repository.NewRepository(db)
 
-	service := service.NewService()
+	service := service.NewService(httpclient.NewRegistryClient(ctx))
 
 	publicGrpcS := grpc.NewServer(grpcServerOpts...)
 	reflection.Register(publicGrpcS)
@@ -238,7 +239,7 @@ func main() {
 	// Start usage reporter
 	var usg usage.Usage
 	if config.Config.Server.Usage.Enabled {
-		usageServiceClient, usageServiceClientConn := external.InitUsageServiceClient(ctx)
+		usageServiceClient, usageServiceClientConn := grpcclient.NewUsageClient(ctx)
 		if usageServiceClientConn != nil {
 			defer usageServiceClientConn.Close()
 			logger.Info("try to start usage reporter")

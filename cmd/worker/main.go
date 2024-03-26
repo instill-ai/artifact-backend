@@ -15,7 +15,7 @@ import (
 	"go.temporal.io/sdk/worker"
 
 	"github.com/instill-ai/artifact-backend/config"
-	"github.com/instill-ai/artifact-backend/pkg/external"
+	httpclient "github.com/instill-ai/artifact-backend/pkg/client/http"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/x/temporal"
@@ -139,7 +139,7 @@ func main() {
 	redisClient := redis.NewClient(&config.Config.Cache.Redis.RedisOptions)
 	defer redisClient.Close()
 
-	influxDBClient, influxDBWriteClient := external.InitInfluxDBServiceClient(ctx)
+	influxDBClient, influxDBWriteClient := httpclient.NewInfluxDBClient(ctx)
 	defer influxDBClient.Close()
 
 	influxErrCh := influxDBWriteClient.Errors()

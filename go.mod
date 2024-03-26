@@ -5,9 +5,13 @@ go 1.21.1
 toolchain go1.21.3
 
 require (
+	github.com/frankban/quicktest v1.14.6
 	github.com/go-redis/redis/v9 v9.0.0-beta.2
+	github.com/go-resty/resty/v2 v2.12.0
 	github.com/gofrs/uuid v4.4.0+incompatible
+	github.com/gojuno/minimock/v3 v3.3.6
 	github.com/golang-migrate/migrate/v4 v4.17.0
+	github.com/google/go-cmp v0.6.0
 	github.com/grpc-ecosystem/go-grpc-middleware v1.3.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.16.0
 	github.com/influxdata/influxdb-client-go/v2 v2.12.3
@@ -37,10 +41,8 @@ require (
 )
 
 require (
-	cloud.google.com/go/longrunning v0.5.4 // indirect
 	github.com/gogo/status v1.1.1 // indirect
 	github.com/golang/mock v1.6.0 // indirect
-	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/kr/pretty v0.3.1 // indirect

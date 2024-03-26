@@ -61,6 +61,9 @@ mgmtbackend:
   https:
     cert:
     key:
+registry:
+  host: registry
+  port: 5000
 openfga:
   host: openfga
   port: 8080
