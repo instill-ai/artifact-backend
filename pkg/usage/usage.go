@@ -34,6 +34,8 @@ type usage struct {
 	version                  string
 }
 
+const maxPageSize = 100
+
 // NewUsage initiates a usage instance
 func NewUsage(ctx context.Context, r repository.Repository, mu mgmtPB.MgmtPrivateServiceClient, rc *redis.Client, usc usagePB.UsageServiceClient) Usage {
 	logger, _ := logger.GetZapLogger(ctx)
@@ -77,7 +79,7 @@ func (u *usage) RetrieveArtifactUsageData() interface{} {
 
 	// Roll over all users and update the metrics with the cached uuid
 	userPageToken := ""
-	userPageSizeMax := int32(repository.MaxPageSize)
+	userPageSizeMax := int32(maxPageSize)
 	for {
 		userResp, err := u.mgmtPrivateServiceClient.ListUsersAdmin(ctx, &mgmtPB.ListUsersAdminRequest{
 			PageSize:  &userPageSizeMax,
@@ -102,7 +104,7 @@ func (u *usage) RetrieveArtifactUsageData() interface{} {
 
 	// Roll over all orgs and update the metrics with the cached uuid
 	orgPageToken := ""
-	orgPageSizeMax := int32(repository.MaxPageSize)
+	orgPageSizeMax := int32(maxPageSize)
 	for {
 		orgResp, err := u.mgmtPrivateServiceClient.ListOrganizationsAdmin(ctx, &mgmtPB.ListOrganizationsAdminRequest{
 			PageSize:  &orgPageSizeMax,

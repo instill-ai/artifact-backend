@@ -53,9 +53,10 @@ go-gen:       					## Generate codes
 .PHONY: unit-test
 unit-test:       				## Run unit test
 	@go test -v -race -coverpkg=./... -coverprofile=coverage.out ./...
-	@go tool cover -func=coverage.out
-	@go tool cover -html=coverage.out
-	@rm coverage.out
+	@cat coverage.out | grep -v "mock" > coverage.final.out
+	@go tool cover -func=coverage.final.out
+	@go tool cover -html=coverage.final.out
+	@rm coverage.out coverage.final.out
 
 .PHONY: integration-test
 integration-test:				## Run integration test

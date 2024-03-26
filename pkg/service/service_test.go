@@ -27,9 +27,11 @@ func TestService_ListRepositoryTags(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
+	var pageSize int32 = 2
 	newReq := func(reqMod func(*artifactPB.ListRepositoryTagsRequest)) *artifactPB.ListRepositoryTagsRequest {
 		req := &artifactPB.ListRepositoryTagsRequest{
-			Parent: "repositories/" + repo,
+			Parent:   "repositories/" + repo,
+			PageSize: &pageSize,
 		}
 		if reqMod != nil {
 			reqMod(req)
@@ -37,16 +39,13 @@ func TestService_ListRepositoryTags(t *testing.T) {
 		return req
 	}
 
-	tagIDs := []string{"v1", "v2"}
-	want := []*artifactPB.RepositoryTag{
-		{
-			Name: "repositories/krule-wombat/llava-34b/tags/v1",
-			Id:   "v1",
-		},
-		{
-			Name: "repositories/krule-wombat/llava-34b/tags/v2",
-			Id:   "v2",
-		},
+	tagIDs := []string{"1.0.0", "1.0.1", "1.1.0-beta", "1.1.0", "latest"}
+	want := make([]*artifactPB.RepositoryTag, len(tagIDs))
+	for i, tagID := range tagIDs {
+		want[i] = &artifactPB.RepositoryTag{
+			Name: "repositories/krule-wombat/llava-34b/tags/" + tagID,
+			Id:   tagID,
+		}
 	}
 
 	testcases := []struct {
@@ -70,9 +69,55 @@ func TestService_ListRepositoryTags(t *testing.T) {
 			wantErr:     "foo",
 		},
 		{
-			name:         "ok",
+			name:         "ok - no pagination",
+			in:           func(req *artifactPB.ListRepositoryTagsRequest) { req.PageSize = nil },
 			registryTags: tagIDs,
 			want:         want,
+		},
+		{
+			name: "ok - page -1",
+			in: func(req *artifactPB.ListRepositoryTagsRequest) {
+				var page int32 = -1
+				req.Page = &page
+			},
+
+			registryTags: tagIDs,
+			want:         want[:2],
+		},
+		{
+			name:         "ok - page 0",
+			registryTags: tagIDs,
+			want:         want[:2],
+		},
+		{
+			name: "ok - page 1",
+			in: func(req *artifactPB.ListRepositoryTagsRequest) {
+				var page int32 = 1
+				req.Page = &page
+			},
+
+			registryTags: tagIDs,
+			want:         want[2:4],
+		},
+		{
+			name: "ok - page 2",
+			in: func(req *artifactPB.ListRepositoryTagsRequest) {
+				var page int32 = 2
+				req.Page = &page
+			},
+
+			registryTags: tagIDs,
+			want:         want[4:],
+		},
+		{
+			name: "ok - page 3",
+			in: func(req *artifactPB.ListRepositoryTagsRequest) {
+				var page int32 = 3
+				req.Page = &page
+			},
+
+			registryTags: tagIDs,
+			want:         want[0:0],
 		},
 	}
 
