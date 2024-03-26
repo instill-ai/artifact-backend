@@ -26,6 +26,7 @@ type AppConfig struct {
 	Cache       CacheConfig       `koanf:"cache"`
 	Log         LogConfig         `koanf:"log"`
 	MgmtBackend MgmtBackendConfig `koanf:"mgmtbackend"`
+	Registry    RegistryConfig    `koanf:"registry"`
 	OpenFGA     OpenFGAConfig     `koanf:"openfga"`
 }
 
@@ -139,6 +140,12 @@ type MgmtBackendConfig struct {
 		Cert string `koanf:"cert"`
 		Key  string `koanf:"key"`
 	}
+}
+
+// RegistryConfig is the registry configuration.
+type RegistryConfig struct {
+	Host string `koanf:"host"`
+	Port int    `koanf:"port"`
 }
 
 // Init - Assign global config to decoded config struct
