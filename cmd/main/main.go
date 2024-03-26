@@ -30,10 +30,8 @@ import (
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpc_zap "github.com/grpc-ecosystem/go-grpc-middleware/logging/zap"
 	grpc_recovery "github.com/grpc-ecosystem/go-grpc-middleware/recovery"
-	openfgaClient "github.com/openfga/go-sdk/client"
 
 	"github.com/instill-ai/artifact-backend/config"
-	"github.com/instill-ai/artifact-backend/pkg/acl"
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/external"
 	"github.com/instill-ai/artifact-backend/pkg/handler"
@@ -71,7 +69,6 @@ func grpcHandlerFunc(grpcServer *grpc.Server, gwHandler http.Handler) http.Handl
 }
 
 func main() {
-
 	if err := config.Init(); err != nil {
 		log.Fatal(err.Error())
 	}
@@ -79,13 +76,14 @@ func main() {
 	// setup tracing and metrics
 	ctx, cancel := context.WithCancel(context.Background())
 
-	if tp, err := custom_otel.SetupTracing(ctx, "artifact-backend"); err != nil {
+	tp, err := custom_otel.SetupTracing(ctx, "artifact-backend")
+	if err != nil {
 		panic(err)
-	} else {
-		defer func() {
-			err = tp.Shutdown(ctx)
-		}()
 	}
+
+	defer func() {
+		err = tp.Shutdown(ctx)
+	}()
 
 	ctx, span := otel.Tracer("main-tracer").Start(ctx,
 		"main",
@@ -105,7 +103,6 @@ func main() {
 	defer database.Close(db)
 
 	var temporalClientOptions client.Options
-	var err error
 	if config.Config.Temporal.Ca != "" && config.Config.Temporal.Cert != "" && config.Config.Temporal.Key != "" {
 		if temporalClientOptions, err = temporal.GetTLSClientOption(
 			config.Config.Temporal.HostPort,
@@ -165,29 +162,6 @@ func main() {
 		)),
 	}
 
-	fgaClient, err := openfgaClient.NewSdkClient(&openfgaClient.ClientConfiguration{
-		ApiScheme: "http",
-		ApiHost:   fmt.Sprintf("%s:%d", config.Config.OpenFGA.Host, config.Config.OpenFGA.Port),
-	})
-
-	if err != nil {
-		panic(err)
-	}
-
-	var aclClient acl.ACLClient
-	if stores, err := fgaClient.ListStores(context.Background()).Execute(); err == nil {
-		fgaClient.SetStoreId(*(*stores.Stores)[0].Id)
-		if models, err := fgaClient.ReadAuthorizationModels(context.Background()).Execute(); err == nil {
-			aclClient = acl.NewACLClient(fgaClient, (*models.AuthorizationModels)[0].Id)
-		}
-		if err != nil {
-			panic(err)
-		}
-
-	} else {
-		panic(err)
-	}
-
 	// Create tls based credential.
 	var creds credentials.TransportCredentials
 	var tlsConfig *tls.Config
@@ -229,39 +203,20 @@ func main() {
 
 	repository := repository.NewRepository(db)
 
-	service := service.NewService(
-		repository,
-		redisClient,
-		temporalClient,
-		influxDBWriteClient,
-		&aclClient,
-	)
-
-	privateGrpcS := grpc.NewServer(grpcServerOpts...)
-	reflection.Register(privateGrpcS)
+	service := service.NewService()
 
 	publicGrpcS := grpc.NewServer(grpcServerOpts...)
 	reflection.Register(publicGrpcS)
-
 	artifactPB.RegisterArtifactPublicServiceServer(
 		publicGrpcS,
 		handler.NewPublicHandler(ctx, service),
 	)
 
-	privateServeMux := runtime.NewServeMux(
-		runtime.WithForwardResponseOption(middleware.HTTPResponseModifier),
-		runtime.WithErrorHandler(middleware.ErrorHandler),
-		runtime.WithIncomingHeaderMatcher(middleware.CustomMatcher),
-		runtime.WithMarshalerOption(runtime.MIMEWildcard, &runtime.JSONPb{
-			MarshalOptions: protojson.MarshalOptions{
-				UseProtoNames:   true,
-				EmitUnpopulated: true,
-				UseEnumNumbers:  false,
-			},
-			UnmarshalOptions: protojson.UnmarshalOptions{
-				DiscardUnknown: true,
-			},
-		}),
+	privateGrpcS := grpc.NewServer(grpcServerOpts...)
+	reflection.Register(privateGrpcS)
+	artifactPB.RegisterArtifactPrivateServiceServer(
+		publicGrpcS,
+		handler.NewPrivateHandler(ctx, service),
 	)
 
 	publicServeMux := runtime.NewServeMux(
@@ -314,12 +269,6 @@ func main() {
 		logger.Fatal(err.Error())
 	}
 
-	privateHTTPServer := &http.Server{
-		Addr:      fmt.Sprintf(":%v", config.Config.Server.PrivatePort),
-		Handler:   grpcHandlerFunc(privateGrpcS, privateServeMux),
-		TLSConfig: tlsConfig,
-	}
-
 	publicHTTPServer := &http.Server{
 		Addr:      fmt.Sprintf(":%v", config.Config.Server.PublicPort),
 		Handler:   grpcHandlerFunc(publicGrpcS, publicServeMux),
@@ -331,21 +280,11 @@ func main() {
 	errSig := make(chan error)
 	if config.Config.Server.HTTPS.Cert != "" && config.Config.Server.HTTPS.Key != "" {
 		go func() {
-			if err := privateHTTPServer.ListenAndServeTLS(config.Config.Server.HTTPS.Cert, config.Config.Server.HTTPS.Key); err != nil {
-				errSig <- err
-			}
-		}()
-		go func() {
 			if err := publicHTTPServer.ListenAndServeTLS(config.Config.Server.HTTPS.Cert, config.Config.Server.HTTPS.Key); err != nil {
 				errSig <- err
 			}
 		}()
 	} else {
-		go func() {
-			if err := privateHTTPServer.ListenAndServe(); err != nil {
-				errSig <- err
-			}
-		}()
 		go func() {
 			if err := publicHTTPServer.ListenAndServe(); err != nil {
 				errSig <- err
