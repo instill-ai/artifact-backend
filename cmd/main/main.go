@@ -210,7 +210,7 @@ func main() {
 	reflection.Register(publicGrpcS)
 	artifactPB.RegisterArtifactPublicServiceServer(
 		publicGrpcS,
-		handler.NewPublicHandler(ctx, service),
+		handler.NewPublicHandler(ctx),
 	)
 
 	privateGrpcS := grpc.NewServer(grpcServerOpts...)

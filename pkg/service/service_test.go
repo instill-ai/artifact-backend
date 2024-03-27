@@ -1,4 +1,4 @@
-package service
+package service_test
 
 import (
 	"context"
@@ -14,6 +14,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/instill-ai/artifact-backend/pkg/mock"
+	artifact "github.com/instill-ai/artifact-backend/pkg/service"
 )
 
 const repo = "krule-wombat/llava-34b"
@@ -114,7 +115,7 @@ func TestService_ListRepositoryTags(t *testing.T) {
 			name:         "ok - not found in repo",
 			registryTags: tagIDs,
 			repoTags:     want[:2],
-			repoErr:      fmt.Errorf("repo error: %w", ErrNotFound),
+			repoErr:      fmt.Errorf("repo error: %w", artifact.ErrNotFound),
 			want:         wantWithEmptyOptional,
 		},
 		{
@@ -185,11 +186,12 @@ func TestService_ListRepositoryTags(t *testing.T) {
 
 			repository := mock.NewRepositoryMock(c)
 			for _, repoTag := range tc.repoTags {
-				repository.GetRepositoryTagMock.When(minimock.AnyContext, repoTag.Name).
+				name := artifact.RepositoryTagName(repoTag.Name)
+				repository.GetRepositoryTagMock.When(minimock.AnyContext, name).
 					Then(repoTag, tc.repoErr)
 			}
 
-			s := NewService(repository, registry)
+			s := artifact.NewService(repository, registry)
 			resp, err := s.ListRepositoryTags(ctx, newReq(tc.in))
 			if tc.wantErr != "" {
 				c.Check(err, qt.ErrorMatches, tc.wantErr)
@@ -202,4 +204,51 @@ func TestService_ListRepositoryTags(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestService_CreateRepositoryTag(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	newTag := func() *artifactpb.RepositoryTag {
+		return &artifactpb.RepositoryTag{
+			Name:       "repositories/shake/home/tags/1.3.0",
+			Id:         "1.3.0",
+			Digest:     "sha256:ab9ed2553e5a1c7f717436ffa070a06da8f2fe15caab4b71e2f02ce4efcae423",
+			UpdateTime: timestamppb.Now(),
+		}
+	}
+
+	c.Run("nok - invalid name", func(c *qt.C) {
+		t := newTag()
+		t.Name = "shake/home:1.3.0"
+		req := &artifactpb.CreateRepositoryTagRequest{Tag: t}
+
+		s := artifact.NewService(nil, nil)
+		_, err := s.CreateRepositoryTag(ctx, req)
+		c.Check(err, qt.ErrorMatches, "invalid tag name")
+	})
+
+	req := &artifactpb.CreateRepositoryTagRequest{Tag: newTag()}
+	clearedTag, want := newTag(), newTag()
+	clearedTag.UpdateTime = nil
+
+	c.Run("nok - repo error", func(c *qt.C) {
+		repository := mock.NewRepositoryMock(c)
+		repository.UpsertRepositoryTagMock.When(minimock.AnyContext, clearedTag).Then(nil, fmt.Errorf("foo"))
+
+		s := artifact.NewService(repository, nil)
+		_, err := s.CreateRepositoryTag(ctx, req)
+		c.Check(err, qt.ErrorMatches, "failed to upsert tag .*: foo")
+	})
+
+	c.Run("ok", func(c *qt.C) {
+		repository := mock.NewRepositoryMock(c)
+		repository.UpsertRepositoryTagMock.When(minimock.AnyContext, clearedTag).Then(want, nil)
+
+		s := artifact.NewService(repository, nil)
+		resp, err := s.CreateRepositoryTag(ctx, req)
+		c.Check(err, qt.IsNil)
+		c.Check(resp.GetTag(), cmpPB, want)
+	})
 }

@@ -15,11 +15,7 @@ const (
 )
 
 // Service implements the Artifact domain use cases.
-type Service interface {
-	ListRepositoryTags(context.Context, *pb.ListRepositoryTagsRequest) (*pb.ListRepositoryTagsResponse, error)
-}
-
-type service struct {
+type Service struct {
 	repository     Repository
 	registryClient RegistryClient
 }
@@ -28,9 +24,9 @@ type service struct {
 func NewService(
 	r Repository,
 	rc RegistryClient,
-) Service {
+) *Service {
 
-	return &service{
+	return &Service{
 		repository:     r,
 		registryClient: rc,
 	}
@@ -38,9 +34,9 @@ func NewService(
 
 // ListRepositoryTags fetches and paginates the tags of a repository in a
 // remote distribution registry.
-func (s *service) ListRepositoryTags(ctx context.Context, req *pb.ListRepositoryTagsRequest) (*pb.ListRepositoryTagsResponse, error) {
-	pageSize := s.pageSizeInRange(req.GetPageSize())
-	page := s.pageInRange(req.GetPage())
+func (s *Service) ListRepositoryTags(ctx context.Context, req *pb.ListRepositoryTagsRequest) (*pb.ListRepositoryTagsResponse, error) {
+	pageSize := pageSizeInRange(req.GetPageSize())
+	page := pageInRange(req.GetPage())
 	idx0, idx1 := page*pageSize, (page+1)*pageSize
 
 	// Content registry repository, not to be mixed with s.repository (artifact
@@ -66,7 +62,7 @@ func (s *service) ListRepositoryTags(ctx context.Context, req *pb.ListRepository
 
 	tags := make([]*pb.RepositoryTag, 0, len(paginatedIDs))
 	for _, id := range paginatedIDs {
-		name := tagName(repo, id)
+		name := NewRepositoryTagName(repo, id)
 		rt, err := s.repository.GetRepositoryTag(ctx, name)
 		if err != nil {
 			if !errors.Is(err, ErrNotFound) {
@@ -77,7 +73,7 @@ func (s *service) ListRepositoryTags(ctx context.Context, req *pb.ListRepository
 			// repository only holds extra information we'll aggregate to the
 			// tag ID list. If no record is found locally, the tag object will
 			// be returned with empty optional fields.
-			rt = &pb.RepositoryTag{Name: name, Id: id}
+			rt = &pb.RepositoryTag{Name: string(name), Id: id}
 		}
 
 		tags = append(tags, rt)
@@ -86,11 +82,7 @@ func (s *service) ListRepositoryTags(ctx context.Context, req *pb.ListRepository
 	return &pb.ListRepositoryTagsResponse{Tags: tags}, nil
 }
 
-func tagName(repo, id string) string {
-	return fmt.Sprintf("repositories/%s/tags/%s", repo, id)
-}
-
-func (s *service) pageSizeInRange(pageSize int32) int {
+func pageSizeInRange(pageSize int32) int {
 	if pageSize <= 0 {
 		return defaultPageSize
 	}
@@ -102,10 +94,30 @@ func (s *service) pageSizeInRange(pageSize int32) int {
 	return int(pageSize)
 }
 
-func (s *service) pageInRange(page int32) int {
+func pageInRange(page int32) int {
 	if page <= 0 {
 		return 0
 	}
 
 	return int(page)
+}
+
+// CreateRepositoryTag stores the tag information of a pushed repository
+// content.
+func (s *Service) CreateRepositoryTag(ctx context.Context, req *pb.CreateRepositoryTagRequest) (*pb.CreateRepositoryTagResponse, error) {
+	name := RepositoryTagName(req.GetTag().GetName())
+	if _, _, err := name.ExtractRepositoryAndID(); err != nil {
+		return nil, fmt.Errorf("invalid tag name")
+	}
+
+	// Clear output-only values.
+	tag := req.GetTag()
+	tag.UpdateTime = nil
+
+	storedTag, err := s.repository.UpsertRepositoryTag(ctx, tag)
+	if err != nil {
+		return nil, fmt.Errorf("failed to upsert tag %s: %w", tag.GetId(), err)
+	}
+
+	return &pb.CreateRepositoryTagResponse{Tag: storedTag}, nil
 }
