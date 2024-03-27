@@ -3,8 +3,11 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"os"
 
+	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 
 	"github.com/instill-ai/artifact-backend/config"
 )
@@ -55,8 +58,52 @@ func main() {
 	}
 
 	databaseConfig := config.Config.Database
-
 	if err := dbExistsOrCreate(databaseConfig); err != nil {
 		panic(err)
+	}
+
+	dsn := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?%s",
+		databaseConfig.Username,
+		databaseConfig.Password,
+		databaseConfig.Host,
+		databaseConfig.Port,
+		databaseConfig.Name,
+		"sslmode=disable",
+	)
+
+	migrateFolder, _ := os.Getwd()
+	m, err := migrate.New(fmt.Sprintf("file:///%s/pkg/db/migration", migrateFolder), dsn)
+	if err != nil {
+		panic(err)
+	}
+
+	expectedVersion := databaseConfig.Version
+	curVersion, dirty, err := m.Version()
+	if err != nil && curVersion != 0 {
+		panic(err)
+	}
+
+	fmt.Printf("Expected migration version is %d\n", expectedVersion)
+	fmt.Printf("The current schema version is %d, and dirty flag is %t\n", curVersion, dirty)
+	if dirty {
+		panic("the database's dirty flag is set, please fix it")
+	}
+
+	step := curVersion
+	for {
+		if expectedVersion <= step {
+			fmt.Printf("Migration to version %d complete\n", expectedVersion)
+			break
+		}
+
+		fmt.Printf("Step up to version %d\n", step+1)
+		if err := m.Steps(1); err != nil {
+			panic(err)
+		}
+
+		step, _, err = m.Version()
+		if err != nil {
+			panic(err)
+		}
 	}
 }
