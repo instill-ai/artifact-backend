@@ -17,7 +17,6 @@ import (
 	"github.com/instill-ai/artifact-backend/config"
 	httpclient "github.com/instill-ai/artifact-backend/pkg/client/http"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
-	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/x/temporal"
 	"github.com/instill-ai/x/zapadapter"
 
@@ -98,7 +97,6 @@ func main() {
 
 	db := database.GetSharedConnection()
 	defer database.Close(db)
-	repository := repository.NewRepository(db)
 
 	var err error
 
@@ -149,7 +147,7 @@ func main() {
 		}
 	}()
 
-	_ = artifactWorker.NewWorker(repository, redisClient, influxDBWriteClient)
+	_ = artifactWorker.NewWorker(redisClient, influxDBWriteClient)
 
 	w := worker.New(temporalClient, artifactWorker.TaskQueue, worker.Options{
 		MaxConcurrentActivityExecutionSize: 2,

@@ -10,7 +10,6 @@ import (
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
-	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/x/repo"
 
 	mgmtPB "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
@@ -27,7 +26,6 @@ type Usage interface {
 }
 
 type usage struct {
-	repository               repository.Repository
 	mgmtPrivateServiceClient mgmtPB.MgmtPrivateServiceClient
 	redisClient              *redis.Client
 	artifactReporter         usageReporter.Reporter
@@ -37,7 +35,7 @@ type usage struct {
 const maxPageSize = 100
 
 // NewUsage initiates a usage instance
-func NewUsage(ctx context.Context, r repository.Repository, mu mgmtPB.MgmtPrivateServiceClient, rc *redis.Client, usc usagePB.UsageServiceClient) Usage {
+func NewUsage(ctx context.Context, mu mgmtPB.MgmtPrivateServiceClient, rc *redis.Client, usc usagePB.UsageServiceClient) Usage {
 	logger, _ := logger.GetZapLogger(ctx)
 
 	version, err := repo.ReadReleaseManifest("release-please/manifest.json")
@@ -60,7 +58,6 @@ func NewUsage(ctx context.Context, r repository.Repository, mu mgmtPB.MgmtPrivat
 	}
 
 	return &usage{
-		repository:               r,
 		mgmtPrivateServiceClient: mu,
 		redisClient:              rc,
 		artifactReporter:         artifactReporter,
