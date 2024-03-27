@@ -2,9 +2,9 @@ package repository
 
 import (
 	"context"
-	"fmt"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -33,12 +33,11 @@ func (r *Repository) GetRepositoryTag(_ context.Context, name artifact.Repositor
 		return nil, err
 	}
 
-	// In the database, the tag name is the primary key. It is compacted to
-	// <repository>:tag to improve the efficiency of the queries.
-	dbName := fmt.Sprintf("%s:%s", repo, tagID)
-
 	record := new(repositoryTag)
-	if result := r.db.Model(record).Where("name = ?", dbName).First(record); result.Error != nil {
+	if result := r.db.Model(record).
+		Where("name = ?", repositoryTagName(repo, tagID)).
+		First(record); result.Error != nil {
+
 		if result.Error == gorm.ErrRecordNotFound {
 			return nil, artifact.ErrNotFound
 		}
@@ -57,10 +56,28 @@ func (r *Repository) GetRepositoryTag(_ context.Context, name artifact.Repositor
 // UpsertRepositoryTag stores the provided tag information in the database. The
 // update timestamp will be generated on insertion.
 func (r *Repository) UpsertRepositoryTag(_ context.Context, tag *artifactpb.RepositoryTag) (*artifactpb.RepositoryTag, error) {
+	repo, tagID, err := artifact.RepositoryTagName(tag.GetName()).ExtractRepositoryAndID()
+	if err != nil {
+		return nil, err
+	}
+
+	record := &repositoryTag{
+		Name:   repositoryTagName(repo, tagID),
+		Digest: tag.GetDigest(),
+	}
+
+	updateOnConflict := clause.OnConflict{
+		Columns:   []clause.Column{{Name: "name"}},
+		DoUpdates: clause.AssignmentColumns([]string{"digest"}),
+	}
+	if result := r.db.Clauses(updateOnConflict).Create(record); result.Error != nil {
+		return nil, result.Error
+	}
+
 	return &artifactpb.RepositoryTag{
 		Name:       tag.GetName(),
 		Id:         tag.GetId(),
-		Digest:     tag.GetDigest(),
-		UpdateTime: timestamppb.Now(),
+		Digest:     record.Digest,
+		UpdateTime: timestamppb.New(record.UpdateTime),
 	}, nil
 }

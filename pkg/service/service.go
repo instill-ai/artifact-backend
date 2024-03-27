@@ -106,7 +106,8 @@ func pageInRange(page int32) int {
 // content.
 func (s *Service) CreateRepositoryTag(ctx context.Context, req *pb.CreateRepositoryTagRequest) (*pb.CreateRepositoryTagResponse, error) {
 	name := RepositoryTagName(req.GetTag().GetName())
-	if _, _, err := name.ExtractRepositoryAndID(); err != nil {
+	_, id, err := name.ExtractRepositoryAndID()
+	if err != nil || id != req.GetTag().GetId() {
 		return nil, fmt.Errorf("invalid tag name")
 	}
 

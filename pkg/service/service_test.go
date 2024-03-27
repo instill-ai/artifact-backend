@@ -229,6 +229,16 @@ func TestService_CreateRepositoryTag(t *testing.T) {
 		c.Check(err, qt.ErrorMatches, "invalid tag name")
 	})
 
+	c.Run("nok - invalid ID", func(c *qt.C) {
+		t := newTag()
+		t.Id = "latest"
+		req := &artifactpb.CreateRepositoryTagRequest{Tag: t}
+
+		s := artifact.NewService(nil, nil)
+		_, err := s.CreateRepositoryTag(ctx, req)
+		c.Check(err, qt.ErrorMatches, "invalid tag name")
+	})
+
 	req := &artifactpb.CreateRepositoryTagRequest{Tag: newTag()}
 	clearedTag, want := newTag(), newTag()
 	clearedTag.UpdateTime = nil
