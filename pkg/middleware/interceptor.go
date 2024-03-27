@@ -17,7 +17,6 @@ import (
 
 	"github.com/instill-ai/artifact-backend/pkg/acl"
 	"github.com/instill-ai/artifact-backend/pkg/handler"
-	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/service"
 	"github.com/instill-ai/x/errmsg"
 )
@@ -90,15 +89,11 @@ func AsGRPCError(err error) error {
 		code = codes.AlreadyExists
 	case
 		errors.Is(err, gorm.ErrRecordNotFound),
-		errors.Is(err, repository.ErrNoDataDeleted),
-		errors.Is(err, repository.ErrNoDataUpdated),
 		errors.Is(err, service.ErrNotFound),
 		errors.Is(err, acl.ErrMembershipNotFound):
 
 		code = codes.NotFound
 	case
-		errors.Is(err, repository.ErrOwnerTypeNotMatch),
-		errors.Is(err, repository.ErrPageTokenDecode),
 		errors.Is(err, bcrypt.ErrMismatchedHashAndPassword),
 		errors.Is(err, handler.ErrCheckUpdateImmutableFields),
 		errors.Is(err, handler.ErrCheckOutputOnlyFields),

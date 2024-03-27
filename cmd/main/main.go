@@ -137,11 +137,11 @@ func main() {
 		grpc_zap.WithDecider(func(fullMethodName string, err error) bool {
 			// will not log gRPC calls if it was a call to liveness or readiness and no error was raised
 			if err == nil {
-				if match, _ := regexp.MatchString("vdp.artifact.v1beta.ArtifactPublicService/.*ness$", fullMethodName); match {
+				if match, _ := regexp.MatchString("artifact.artifact.v1alpha.ArtifactPublicService/.*ness$", fullMethodName); match {
 					return false
 				}
 				// stop logging successful private function calls
-				if match, _ := regexp.MatchString("vdp.artifact.v1beta.ArtifactPrivateService/.*Admin$", fullMethodName); match {
+				if match, _ := regexp.MatchString("artifact.artifact.v1alpha.ArtifactPrivateService/.*$", fullMethodName); match {
 					return false
 				}
 			}
@@ -204,7 +204,7 @@ func main() {
 
 	repository := repository.NewRepository(db)
 
-	service := service.NewService(httpclient.NewRegistryClient(ctx))
+	service := service.NewService(repository, httpclient.NewRegistryClient(ctx))
 
 	publicGrpcS := grpc.NewServer(grpcServerOpts...)
 	reflection.Register(publicGrpcS)
@@ -245,7 +245,7 @@ func main() {
 			logger.Info("try to start usage reporter")
 			go func() {
 				for {
-					usg = usage.NewUsage(ctx, repository, mgmtPrivateServiceClient, redisClient, usageServiceClient)
+					usg = usage.NewUsage(ctx, mgmtPrivateServiceClient, redisClient, usageServiceClient)
 					if usg != nil {
 						usg.StartReporter(ctx)
 						logger.Info("usage reporter started")

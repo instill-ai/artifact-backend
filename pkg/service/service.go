@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -18,20 +19,20 @@ type Service interface {
 	ListRepositoryTags(context.Context, *pb.ListRepositoryTagsRequest) (*pb.ListRepositoryTagsResponse, error)
 }
 
-// RegistryClient interacts with a distribution registry to manage
-// repositories.
-type RegistryClient interface {
-	ListTags(_ context.Context, repository string) (tags []string, _ error)
-}
-
 type service struct {
+	repository     Repository
 	registryClient RegistryClient
 }
 
 // NewService initiates a service instance
-func NewService(registryClient RegistryClient) Service {
+func NewService(
+	r Repository,
+	rc RegistryClient,
+) Service {
+
 	return &service{
-		registryClient: registryClient,
+		repository:     r,
+		registryClient: rc,
 	}
 }
 
@@ -42,12 +43,14 @@ func (s *service) ListRepositoryTags(ctx context.Context, req *pb.ListRepository
 	page := s.pageInRange(req.GetPage())
 	idx0, idx1 := page*pageSize, (page+1)*pageSize
 
-	_, repository, ok := strings.Cut(req.GetParent(), "repositories/")
+	// Content registry repository, not to be mixed with s.repository (artifact
+	// storage implementation).
+	_, repo, ok := strings.Cut(req.GetParent(), "repositories/")
 	if !ok {
 		return nil, fmt.Errorf("namespace error")
 	}
 
-	tagIDs, err := s.registryClient.ListTags(ctx, repository)
+	tagIDs, err := s.registryClient.ListTags(ctx, repo)
 	if err != nil {
 		return nil, err
 	}
@@ -62,11 +65,22 @@ func (s *service) ListRepositoryTags(ctx context.Context, req *pb.ListRepository
 	}
 
 	tags := make([]*pb.RepositoryTag, 0, len(paginatedIDs))
-	for _, tagID := range paginatedIDs {
-		tags = append(tags, &pb.RepositoryTag{
-			Id:   tagID,
-			Name: tagName(repository, tagID),
-		})
+	for _, id := range paginatedIDs {
+		name := tagName(repo, id)
+		rt, err := s.repository.GetRepositoryTag(ctx, name)
+		if err != nil {
+			if !errors.Is(err, ErrNotFound) {
+				return nil, fmt.Errorf("failed to fetch tag %s: %w", id, err)
+			}
+
+			// The source of truth for tags is the registry. The local
+			// repository only holds extra information we'll aggregate to the
+			// tag ID list. If no record is found locally, the tag object will
+			// be returned with empty optional fields.
+			rt = &pb.RepositoryTag{Name: name, Id: id}
+		}
+
+		tags = append(tags, rt)
 	}
 
 	return &pb.ListRepositoryTagsResponse{Tags: tags}, nil
