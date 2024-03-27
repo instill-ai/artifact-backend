@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -64,10 +65,19 @@ func (s *service) ListRepositoryTags(ctx context.Context, req *pb.ListRepository
 	}
 
 	tags := make([]*pb.RepositoryTag, 0, len(paginatedIDs))
-	for _, tagID := range paginatedIDs {
-		rt, err := s.repository.GetRepositoryTag(ctx, tagName(repo, tagID))
+	for _, id := range paginatedIDs {
+		name := tagName(repo, id)
+		rt, err := s.repository.GetRepositoryTag(ctx, name)
 		if err != nil {
-			return nil, fmt.Errorf("failed to fetch tag %s: %w", tagID, err)
+			if !errors.Is(err, ErrNotFound) {
+				return nil, fmt.Errorf("failed to fetch tag %s: %w", id, err)
+			}
+
+			// The source of truth for tags is the registry. The local
+			// repository only holds extra information we'll aggregate to the
+			// tag ID list. If no record is found locally, the tag object will
+			// be returned with empty optional fields.
+			rt = &pb.RepositoryTag{Name: name, Id: id}
 		}
 
 		tags = append(tags, rt)

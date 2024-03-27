@@ -41,6 +41,7 @@ func TestService_ListRepositoryTags(t *testing.T) {
 		return req
 	}
 
+	// Build test data.
 	want := []*artifactpb.RepositoryTag{
 		{
 			Id:     "1.0.0",
@@ -64,13 +65,17 @@ func TestService_ListRepositoryTags(t *testing.T) {
 		},
 	}
 
-	// Build test data.
+	wantWithEmptyOptional := make([]*artifactpb.RepositoryTag, len(want))
 	tagIDs := make([]string, len(want))
 	t0 := time.Now().UTC()
 	for i, tag := range want {
-		tagIDs[i] = tag.Id
-		want[i].Name = "repositories/krule-wombat/llava-34b/tags/" + tag.Id
+		id := tag.Id
+		name := "repositories/krule-wombat/llava-34b/tags/" + tag.Id
 
+		tagIDs[i] = id
+		wantWithEmptyOptional[i] = &artifactpb.RepositoryTag{Id: id, Name: name}
+
+		want[i].Name = name
 		t := t0.Add(-1 * time.Second * time.Duration(i))
 		want[i].UpdateTime = timestamppb.New(t)
 	}
@@ -82,7 +87,8 @@ func TestService_ListRepositoryTags(t *testing.T) {
 		registryTags []string
 		registryErr  error
 
-		repoErr error
+		repoTags []*artifactpb.RepositoryTag
+		repoErr  error
 
 		wantErr string
 		want    []*artifactpb.RepositoryTag
@@ -100,13 +106,22 @@ func TestService_ListRepositoryTags(t *testing.T) {
 		{
 			name:         "nok - repo error",
 			registryTags: tagIDs,
+			repoTags:     want[0:1],
 			repoErr:      fmt.Errorf("foo"),
 			wantErr:      "failed to fetch tag .*: foo",
+		},
+		{
+			name:         "ok - not found in repo",
+			registryTags: tagIDs,
+			repoTags:     want[:2],
+			repoErr:      fmt.Errorf("repo error: %w", ErrNotFound),
+			want:         wantWithEmptyOptional,
 		},
 		{
 			name:         "ok - no pagination",
 			in:           func(req *artifactpb.ListRepositoryTagsRequest) { req.PageSize = nil },
 			registryTags: tagIDs,
+			repoTags:     want,
 			want:         want,
 		},
 		{
@@ -117,11 +132,13 @@ func TestService_ListRepositoryTags(t *testing.T) {
 			},
 
 			registryTags: tagIDs,
+			repoTags:     want[:2],
 			want:         want[:2],
 		},
 		{
 			name:         "ok - page 0",
 			registryTags: tagIDs,
+			repoTags:     want[:2],
 			want:         want[:2],
 		},
 		{
@@ -132,6 +149,7 @@ func TestService_ListRepositoryTags(t *testing.T) {
 			},
 
 			registryTags: tagIDs,
+			repoTags:     want[2:4],
 			want:         want[2:4],
 		},
 		{
@@ -142,6 +160,7 @@ func TestService_ListRepositoryTags(t *testing.T) {
 			},
 
 			registryTags: tagIDs,
+			repoTags:     want[4:],
 			want:         want[4:],
 		},
 		{
@@ -165,23 +184,22 @@ func TestService_ListRepositoryTags(t *testing.T) {
 			}
 
 			repository := mock.NewRepositoryMock(c)
-			for _, wantedTag := range tc.want {
-				repository.GetRepositoryTagMock.When(minimock.AnyContext, wantedTag.Name).
-					Then(wantedTag, nil)
-			}
-
-			if tc.repoErr != nil {
-				repository.GetRepositoryTagMock.Return(nil, tc.repoErr)
+			for _, repoTag := range tc.repoTags {
+				repository.GetRepositoryTagMock.When(minimock.AnyContext, repoTag.Name).
+					Then(repoTag, tc.repoErr)
 			}
 
 			s := NewService(repository, registry)
-			got, err := s.ListRepositoryTags(ctx, newReq(tc.in))
+			resp, err := s.ListRepositoryTags(ctx, newReq(tc.in))
 			if tc.wantErr != "" {
 				c.Check(err, qt.ErrorMatches, tc.wantErr)
 				return
 			}
 
-			c.Check(got.GetTags(), cmpPB, tc.want)
+			c.Check(err, qt.IsNil)
+			for i, got := range resp.GetTags() {
+				c.Check(got, cmpPB, tc.want[i], qt.Commentf(tc.want[i].Id))
+			}
 		})
 	}
 }

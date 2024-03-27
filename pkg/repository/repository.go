@@ -9,6 +9,8 @@ import (
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	"google.golang.org/protobuf/types/known/timestamppb"
+
+	artifact "github.com/instill-ai/artifact-backend/pkg/service"
 )
 
 // Repository implements Artifact storage functions in PostgreSQL.
@@ -36,16 +38,25 @@ func (r *Repository) GetRepositoryTag(_ context.Context, name string) (*artifact
 		return nil, fmt.Errorf("invalid tag name")
 	}
 
+	// In the database, the tag name is the primary key. It is compacted to
+	// <repository>:tag to improve the efficiency of the queries.
 	repo := matches[1]
 	tagID := matches[4]
 	dbName := fmt.Sprintf("%s:%s", repo, tagID)
 
-	// In the database, the tag name is the primary key. It is compacted to
-	// <repository>:tag to improve the efficiency of the queries.
+	record := new(repositoryTag)
+	if result := r.db.Model(record).Where("name = ?", dbName).First(record); result.Error != nil {
+		if result.Error == gorm.ErrRecordNotFound {
+			return nil, artifact.ErrNotFound
+		}
+
+		return nil, result.Error
+	}
+
 	return &artifactpb.RepositoryTag{
 		Name:       name,
 		Id:         tagID,
-		Digest:     dbName,
-		UpdateTime: timestamppb.Now(),
+		Digest:     record.Digest,
+		UpdateTime: timestamppb.New(record.UpdateTime),
 	}, nil
 }
