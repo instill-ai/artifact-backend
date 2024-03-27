@@ -8,5 +8,6 @@ import (
 
 // Repository implements the storage functions for Artifact.
 type Repository interface {
-	GetRepositoryTag(_ context.Context, name string) (*pb.RepositoryTag, error)
+	GetRepositoryTag(context.Context, RepositoryTagName) (*pb.RepositoryTag, error)
+	UpsertRepositoryTag(context.Context, *pb.RepositoryTag) (*pb.RepositoryTag, error)
 }
