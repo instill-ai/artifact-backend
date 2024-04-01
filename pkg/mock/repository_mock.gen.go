@@ -9,6 +9,7 @@ import (
 	mm_time "time"
 
 	"github.com/gojuno/minimock/v3"
+	mm_service "github.com/instill-ai/artifact-backend/pkg/service"
 	pb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
@@ -17,11 +18,17 @@ type RepositoryMock struct {
 	t          minimock.Tester
 	finishOnce sync.Once
 
-	funcGetRepositoryTag          func(ctx context.Context, name string) (rp1 *pb.RepositoryTag, err error)
-	inspectFuncGetRepositoryTag   func(ctx context.Context, name string)
+	funcGetRepositoryTag          func(ctx context.Context, r1 mm_service.RepositoryTagName) (rp1 *pb.RepositoryTag, err error)
+	inspectFuncGetRepositoryTag   func(ctx context.Context, r1 mm_service.RepositoryTagName)
 	afterGetRepositoryTagCounter  uint64
 	beforeGetRepositoryTagCounter uint64
 	GetRepositoryTagMock          mRepositoryMockGetRepositoryTag
+
+	funcUpsertRepositoryTag          func(ctx context.Context, rp1 *pb.RepositoryTag) (rp2 *pb.RepositoryTag, err error)
+	inspectFuncUpsertRepositoryTag   func(ctx context.Context, rp1 *pb.RepositoryTag)
+	afterUpsertRepositoryTagCounter  uint64
+	beforeUpsertRepositoryTagCounter uint64
+	UpsertRepositoryTagMock          mRepositoryMockUpsertRepositoryTag
 }
 
 // NewRepositoryMock returns a mock for service.Repository
@@ -34,6 +41,9 @@ func NewRepositoryMock(t minimock.Tester) *RepositoryMock {
 
 	m.GetRepositoryTagMock = mRepositoryMockGetRepositoryTag{mock: m}
 	m.GetRepositoryTagMock.callArgs = []*RepositoryMockGetRepositoryTagParams{}
+
+	m.UpsertRepositoryTagMock = mRepositoryMockUpsertRepositoryTag{mock: m}
+	m.UpsertRepositoryTagMock.callArgs = []*RepositoryMockUpsertRepositoryTagParams{}
 
 	t.Cleanup(m.MinimockFinish)
 
@@ -59,8 +69,8 @@ type RepositoryMockGetRepositoryTagExpectation struct {
 
 // RepositoryMockGetRepositoryTagParams contains parameters of the Repository.GetRepositoryTag
 type RepositoryMockGetRepositoryTagParams struct {
-	ctx  context.Context
-	name string
+	ctx context.Context
+	r1  mm_service.RepositoryTagName
 }
 
 // RepositoryMockGetRepositoryTagResults contains results of the Repository.GetRepositoryTag
@@ -70,7 +80,7 @@ type RepositoryMockGetRepositoryTagResults struct {
 }
 
 // Expect sets up expected params for Repository.GetRepositoryTag
-func (mmGetRepositoryTag *mRepositoryMockGetRepositoryTag) Expect(ctx context.Context, name string) *mRepositoryMockGetRepositoryTag {
+func (mmGetRepositoryTag *mRepositoryMockGetRepositoryTag) Expect(ctx context.Context, r1 mm_service.RepositoryTagName) *mRepositoryMockGetRepositoryTag {
 	if mmGetRepositoryTag.mock.funcGetRepositoryTag != nil {
 		mmGetRepositoryTag.mock.t.Fatalf("RepositoryMock.GetRepositoryTag mock is already set by Set")
 	}
@@ -79,7 +89,7 @@ func (mmGetRepositoryTag *mRepositoryMockGetRepositoryTag) Expect(ctx context.Co
 		mmGetRepositoryTag.defaultExpectation = &RepositoryMockGetRepositoryTagExpectation{}
 	}
 
-	mmGetRepositoryTag.defaultExpectation.params = &RepositoryMockGetRepositoryTagParams{ctx, name}
+	mmGetRepositoryTag.defaultExpectation.params = &RepositoryMockGetRepositoryTagParams{ctx, r1}
 	for _, e := range mmGetRepositoryTag.expectations {
 		if minimock.Equal(e.params, mmGetRepositoryTag.defaultExpectation.params) {
 			mmGetRepositoryTag.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetRepositoryTag.defaultExpectation.params)
@@ -90,7 +100,7 @@ func (mmGetRepositoryTag *mRepositoryMockGetRepositoryTag) Expect(ctx context.Co
 }
 
 // Inspect accepts an inspector function that has same arguments as the Repository.GetRepositoryTag
-func (mmGetRepositoryTag *mRepositoryMockGetRepositoryTag) Inspect(f func(ctx context.Context, name string)) *mRepositoryMockGetRepositoryTag {
+func (mmGetRepositoryTag *mRepositoryMockGetRepositoryTag) Inspect(f func(ctx context.Context, r1 mm_service.RepositoryTagName)) *mRepositoryMockGetRepositoryTag {
 	if mmGetRepositoryTag.mock.inspectFuncGetRepositoryTag != nil {
 		mmGetRepositoryTag.mock.t.Fatalf("Inspect function is already set for RepositoryMock.GetRepositoryTag")
 	}
@@ -114,7 +124,7 @@ func (mmGetRepositoryTag *mRepositoryMockGetRepositoryTag) Return(rp1 *pb.Reposi
 }
 
 // Set uses given function f to mock the Repository.GetRepositoryTag method
-func (mmGetRepositoryTag *mRepositoryMockGetRepositoryTag) Set(f func(ctx context.Context, name string) (rp1 *pb.RepositoryTag, err error)) *RepositoryMock {
+func (mmGetRepositoryTag *mRepositoryMockGetRepositoryTag) Set(f func(ctx context.Context, r1 mm_service.RepositoryTagName) (rp1 *pb.RepositoryTag, err error)) *RepositoryMock {
 	if mmGetRepositoryTag.defaultExpectation != nil {
 		mmGetRepositoryTag.mock.t.Fatalf("Default expectation is already set for the Repository.GetRepositoryTag method")
 	}
@@ -129,14 +139,14 @@ func (mmGetRepositoryTag *mRepositoryMockGetRepositoryTag) Set(f func(ctx contex
 
 // When sets expectation for the Repository.GetRepositoryTag which will trigger the result defined by the following
 // Then helper
-func (mmGetRepositoryTag *mRepositoryMockGetRepositoryTag) When(ctx context.Context, name string) *RepositoryMockGetRepositoryTagExpectation {
+func (mmGetRepositoryTag *mRepositoryMockGetRepositoryTag) When(ctx context.Context, r1 mm_service.RepositoryTagName) *RepositoryMockGetRepositoryTagExpectation {
 	if mmGetRepositoryTag.mock.funcGetRepositoryTag != nil {
 		mmGetRepositoryTag.mock.t.Fatalf("RepositoryMock.GetRepositoryTag mock is already set by Set")
 	}
 
 	expectation := &RepositoryMockGetRepositoryTagExpectation{
 		mock:   mmGetRepositoryTag.mock,
-		params: &RepositoryMockGetRepositoryTagParams{ctx, name},
+		params: &RepositoryMockGetRepositoryTagParams{ctx, r1},
 	}
 	mmGetRepositoryTag.expectations = append(mmGetRepositoryTag.expectations, expectation)
 	return expectation
@@ -149,15 +159,15 @@ func (e *RepositoryMockGetRepositoryTagExpectation) Then(rp1 *pb.RepositoryTag, 
 }
 
 // GetRepositoryTag implements service.Repository
-func (mmGetRepositoryTag *RepositoryMock) GetRepositoryTag(ctx context.Context, name string) (rp1 *pb.RepositoryTag, err error) {
+func (mmGetRepositoryTag *RepositoryMock) GetRepositoryTag(ctx context.Context, r1 mm_service.RepositoryTagName) (rp1 *pb.RepositoryTag, err error) {
 	mm_atomic.AddUint64(&mmGetRepositoryTag.beforeGetRepositoryTagCounter, 1)
 	defer mm_atomic.AddUint64(&mmGetRepositoryTag.afterGetRepositoryTagCounter, 1)
 
 	if mmGetRepositoryTag.inspectFuncGetRepositoryTag != nil {
-		mmGetRepositoryTag.inspectFuncGetRepositoryTag(ctx, name)
+		mmGetRepositoryTag.inspectFuncGetRepositoryTag(ctx, r1)
 	}
 
-	mm_params := RepositoryMockGetRepositoryTagParams{ctx, name}
+	mm_params := RepositoryMockGetRepositoryTagParams{ctx, r1}
 
 	// Record call args
 	mmGetRepositoryTag.GetRepositoryTagMock.mutex.Lock()
@@ -174,7 +184,7 @@ func (mmGetRepositoryTag *RepositoryMock) GetRepositoryTag(ctx context.Context, 
 	if mmGetRepositoryTag.GetRepositoryTagMock.defaultExpectation != nil {
 		mm_atomic.AddUint64(&mmGetRepositoryTag.GetRepositoryTagMock.defaultExpectation.Counter, 1)
 		mm_want := mmGetRepositoryTag.GetRepositoryTagMock.defaultExpectation.params
-		mm_got := RepositoryMockGetRepositoryTagParams{ctx, name}
+		mm_got := RepositoryMockGetRepositoryTagParams{ctx, r1}
 		if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
 			mmGetRepositoryTag.t.Errorf("RepositoryMock.GetRepositoryTag got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
 		}
@@ -186,9 +196,9 @@ func (mmGetRepositoryTag *RepositoryMock) GetRepositoryTag(ctx context.Context, 
 		return (*mm_results).rp1, (*mm_results).err
 	}
 	if mmGetRepositoryTag.funcGetRepositoryTag != nil {
-		return mmGetRepositoryTag.funcGetRepositoryTag(ctx, name)
+		return mmGetRepositoryTag.funcGetRepositoryTag(ctx, r1)
 	}
-	mmGetRepositoryTag.t.Fatalf("Unexpected call to RepositoryMock.GetRepositoryTag. %v %v", ctx, name)
+	mmGetRepositoryTag.t.Fatalf("Unexpected call to RepositoryMock.GetRepositoryTag. %v %v", ctx, r1)
 	return
 }
 
@@ -257,11 +267,230 @@ func (m *RepositoryMock) MinimockGetRepositoryTagInspect() {
 	}
 }
 
+type mRepositoryMockUpsertRepositoryTag struct {
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockUpsertRepositoryTagExpectation
+	expectations       []*RepositoryMockUpsertRepositoryTagExpectation
+
+	callArgs []*RepositoryMockUpsertRepositoryTagParams
+	mutex    sync.RWMutex
+}
+
+// RepositoryMockUpsertRepositoryTagExpectation specifies expectation struct of the Repository.UpsertRepositoryTag
+type RepositoryMockUpsertRepositoryTagExpectation struct {
+	mock    *RepositoryMock
+	params  *RepositoryMockUpsertRepositoryTagParams
+	results *RepositoryMockUpsertRepositoryTagResults
+	Counter uint64
+}
+
+// RepositoryMockUpsertRepositoryTagParams contains parameters of the Repository.UpsertRepositoryTag
+type RepositoryMockUpsertRepositoryTagParams struct {
+	ctx context.Context
+	rp1 *pb.RepositoryTag
+}
+
+// RepositoryMockUpsertRepositoryTagResults contains results of the Repository.UpsertRepositoryTag
+type RepositoryMockUpsertRepositoryTagResults struct {
+	rp2 *pb.RepositoryTag
+	err error
+}
+
+// Expect sets up expected params for Repository.UpsertRepositoryTag
+func (mmUpsertRepositoryTag *mRepositoryMockUpsertRepositoryTag) Expect(ctx context.Context, rp1 *pb.RepositoryTag) *mRepositoryMockUpsertRepositoryTag {
+	if mmUpsertRepositoryTag.mock.funcUpsertRepositoryTag != nil {
+		mmUpsertRepositoryTag.mock.t.Fatalf("RepositoryMock.UpsertRepositoryTag mock is already set by Set")
+	}
+
+	if mmUpsertRepositoryTag.defaultExpectation == nil {
+		mmUpsertRepositoryTag.defaultExpectation = &RepositoryMockUpsertRepositoryTagExpectation{}
+	}
+
+	mmUpsertRepositoryTag.defaultExpectation.params = &RepositoryMockUpsertRepositoryTagParams{ctx, rp1}
+	for _, e := range mmUpsertRepositoryTag.expectations {
+		if minimock.Equal(e.params, mmUpsertRepositoryTag.defaultExpectation.params) {
+			mmUpsertRepositoryTag.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmUpsertRepositoryTag.defaultExpectation.params)
+		}
+	}
+
+	return mmUpsertRepositoryTag
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.UpsertRepositoryTag
+func (mmUpsertRepositoryTag *mRepositoryMockUpsertRepositoryTag) Inspect(f func(ctx context.Context, rp1 *pb.RepositoryTag)) *mRepositoryMockUpsertRepositoryTag {
+	if mmUpsertRepositoryTag.mock.inspectFuncUpsertRepositoryTag != nil {
+		mmUpsertRepositoryTag.mock.t.Fatalf("Inspect function is already set for RepositoryMock.UpsertRepositoryTag")
+	}
+
+	mmUpsertRepositoryTag.mock.inspectFuncUpsertRepositoryTag = f
+
+	return mmUpsertRepositoryTag
+}
+
+// Return sets up results that will be returned by Repository.UpsertRepositoryTag
+func (mmUpsertRepositoryTag *mRepositoryMockUpsertRepositoryTag) Return(rp2 *pb.RepositoryTag, err error) *RepositoryMock {
+	if mmUpsertRepositoryTag.mock.funcUpsertRepositoryTag != nil {
+		mmUpsertRepositoryTag.mock.t.Fatalf("RepositoryMock.UpsertRepositoryTag mock is already set by Set")
+	}
+
+	if mmUpsertRepositoryTag.defaultExpectation == nil {
+		mmUpsertRepositoryTag.defaultExpectation = &RepositoryMockUpsertRepositoryTagExpectation{mock: mmUpsertRepositoryTag.mock}
+	}
+	mmUpsertRepositoryTag.defaultExpectation.results = &RepositoryMockUpsertRepositoryTagResults{rp2, err}
+	return mmUpsertRepositoryTag.mock
+}
+
+// Set uses given function f to mock the Repository.UpsertRepositoryTag method
+func (mmUpsertRepositoryTag *mRepositoryMockUpsertRepositoryTag) Set(f func(ctx context.Context, rp1 *pb.RepositoryTag) (rp2 *pb.RepositoryTag, err error)) *RepositoryMock {
+	if mmUpsertRepositoryTag.defaultExpectation != nil {
+		mmUpsertRepositoryTag.mock.t.Fatalf("Default expectation is already set for the Repository.UpsertRepositoryTag method")
+	}
+
+	if len(mmUpsertRepositoryTag.expectations) > 0 {
+		mmUpsertRepositoryTag.mock.t.Fatalf("Some expectations are already set for the Repository.UpsertRepositoryTag method")
+	}
+
+	mmUpsertRepositoryTag.mock.funcUpsertRepositoryTag = f
+	return mmUpsertRepositoryTag.mock
+}
+
+// When sets expectation for the Repository.UpsertRepositoryTag which will trigger the result defined by the following
+// Then helper
+func (mmUpsertRepositoryTag *mRepositoryMockUpsertRepositoryTag) When(ctx context.Context, rp1 *pb.RepositoryTag) *RepositoryMockUpsertRepositoryTagExpectation {
+	if mmUpsertRepositoryTag.mock.funcUpsertRepositoryTag != nil {
+		mmUpsertRepositoryTag.mock.t.Fatalf("RepositoryMock.UpsertRepositoryTag mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockUpsertRepositoryTagExpectation{
+		mock:   mmUpsertRepositoryTag.mock,
+		params: &RepositoryMockUpsertRepositoryTagParams{ctx, rp1},
+	}
+	mmUpsertRepositoryTag.expectations = append(mmUpsertRepositoryTag.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.UpsertRepositoryTag return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockUpsertRepositoryTagExpectation) Then(rp2 *pb.RepositoryTag, err error) *RepositoryMock {
+	e.results = &RepositoryMockUpsertRepositoryTagResults{rp2, err}
+	return e.mock
+}
+
+// UpsertRepositoryTag implements service.Repository
+func (mmUpsertRepositoryTag *RepositoryMock) UpsertRepositoryTag(ctx context.Context, rp1 *pb.RepositoryTag) (rp2 *pb.RepositoryTag, err error) {
+	mm_atomic.AddUint64(&mmUpsertRepositoryTag.beforeUpsertRepositoryTagCounter, 1)
+	defer mm_atomic.AddUint64(&mmUpsertRepositoryTag.afterUpsertRepositoryTagCounter, 1)
+
+	if mmUpsertRepositoryTag.inspectFuncUpsertRepositoryTag != nil {
+		mmUpsertRepositoryTag.inspectFuncUpsertRepositoryTag(ctx, rp1)
+	}
+
+	mm_params := RepositoryMockUpsertRepositoryTagParams{ctx, rp1}
+
+	// Record call args
+	mmUpsertRepositoryTag.UpsertRepositoryTagMock.mutex.Lock()
+	mmUpsertRepositoryTag.UpsertRepositoryTagMock.callArgs = append(mmUpsertRepositoryTag.UpsertRepositoryTagMock.callArgs, &mm_params)
+	mmUpsertRepositoryTag.UpsertRepositoryTagMock.mutex.Unlock()
+
+	for _, e := range mmUpsertRepositoryTag.UpsertRepositoryTagMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.rp2, e.results.err
+		}
+	}
+
+	if mmUpsertRepositoryTag.UpsertRepositoryTagMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmUpsertRepositoryTag.UpsertRepositoryTagMock.defaultExpectation.Counter, 1)
+		mm_want := mmUpsertRepositoryTag.UpsertRepositoryTagMock.defaultExpectation.params
+		mm_got := RepositoryMockUpsertRepositoryTagParams{ctx, rp1}
+		if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmUpsertRepositoryTag.t.Errorf("RepositoryMock.UpsertRepositoryTag got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmUpsertRepositoryTag.UpsertRepositoryTagMock.defaultExpectation.results
+		if mm_results == nil {
+			mmUpsertRepositoryTag.t.Fatal("No results are set for the RepositoryMock.UpsertRepositoryTag")
+		}
+		return (*mm_results).rp2, (*mm_results).err
+	}
+	if mmUpsertRepositoryTag.funcUpsertRepositoryTag != nil {
+		return mmUpsertRepositoryTag.funcUpsertRepositoryTag(ctx, rp1)
+	}
+	mmUpsertRepositoryTag.t.Fatalf("Unexpected call to RepositoryMock.UpsertRepositoryTag. %v %v", ctx, rp1)
+	return
+}
+
+// UpsertRepositoryTagAfterCounter returns a count of finished RepositoryMock.UpsertRepositoryTag invocations
+func (mmUpsertRepositoryTag *RepositoryMock) UpsertRepositoryTagAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpsertRepositoryTag.afterUpsertRepositoryTagCounter)
+}
+
+// UpsertRepositoryTagBeforeCounter returns a count of RepositoryMock.UpsertRepositoryTag invocations
+func (mmUpsertRepositoryTag *RepositoryMock) UpsertRepositoryTagBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpsertRepositoryTag.beforeUpsertRepositoryTagCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.UpsertRepositoryTag.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmUpsertRepositoryTag *mRepositoryMockUpsertRepositoryTag) Calls() []*RepositoryMockUpsertRepositoryTagParams {
+	mmUpsertRepositoryTag.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockUpsertRepositoryTagParams, len(mmUpsertRepositoryTag.callArgs))
+	copy(argCopy, mmUpsertRepositoryTag.callArgs)
+
+	mmUpsertRepositoryTag.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockUpsertRepositoryTagDone returns true if the count of the UpsertRepositoryTag invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockUpsertRepositoryTagDone() bool {
+	for _, e := range m.UpsertRepositoryTagMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	// if default expectation was set then invocations count should be greater than zero
+	if m.UpsertRepositoryTagMock.defaultExpectation != nil && mm_atomic.LoadUint64(&m.afterUpsertRepositoryTagCounter) < 1 {
+		return false
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcUpsertRepositoryTag != nil && mm_atomic.LoadUint64(&m.afterUpsertRepositoryTagCounter) < 1 {
+		return false
+	}
+	return true
+}
+
+// MinimockUpsertRepositoryTagInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockUpsertRepositoryTagInspect() {
+	for _, e := range m.UpsertRepositoryTagMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.UpsertRepositoryTag with params: %#v", *e.params)
+		}
+	}
+
+	// if default expectation was set then invocations count should be greater than zero
+	if m.UpsertRepositoryTagMock.defaultExpectation != nil && mm_atomic.LoadUint64(&m.afterUpsertRepositoryTagCounter) < 1 {
+		if m.UpsertRepositoryTagMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to RepositoryMock.UpsertRepositoryTag")
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.UpsertRepositoryTag with params: %#v", *m.UpsertRepositoryTagMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcUpsertRepositoryTag != nil && mm_atomic.LoadUint64(&m.afterUpsertRepositoryTagCounter) < 1 {
+		m.t.Error("Expected call to RepositoryMock.UpsertRepositoryTag")
+	}
+}
+
 // MinimockFinish checks that all mocked methods have been called the expected number of times
 func (m *RepositoryMock) MinimockFinish() {
 	m.finishOnce.Do(func() {
 		if !m.minimockDone() {
 			m.MinimockGetRepositoryTagInspect()
+
+			m.MinimockUpsertRepositoryTagInspect()
 			m.t.FailNow()
 		}
 	})
@@ -286,5 +515,6 @@ func (m *RepositoryMock) MinimockWait(timeout mm_time.Duration) {
 func (m *RepositoryMock) minimockDone() bool {
 	done := true
 	return done &&
-		m.MinimockGetRepositoryTagDone()
+		m.MinimockGetRepositoryTagDone() &&
+		m.MinimockUpsertRepositoryTagDone()
 }
