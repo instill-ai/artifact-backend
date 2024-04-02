@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -216,7 +217,7 @@ func main() {
 	privateGrpcS := grpc.NewServer(grpcServerOpts...)
 	reflection.Register(privateGrpcS)
 	artifactPB.RegisterArtifactPrivateServiceServer(
-		publicGrpcS,
+		privateGrpcS,
 		handler.NewPrivateHandler(ctx, service),
 	)
 
@@ -276,22 +277,33 @@ func main() {
 		TLSConfig: tlsConfig,
 	}
 
+	privatePort := fmt.Sprintf(":%d", config.Config.Server.PrivatePort)
 	// Wait for interrupt signal to gracefully shutdown the server with a timeout of 5 seconds.
 	quitSig := make(chan os.Signal, 1)
 	errSig := make(chan error)
-	if config.Config.Server.HTTPS.Cert != "" && config.Config.Server.HTTPS.Key != "" {
-		go func() {
-			if err := publicHTTPServer.ListenAndServeTLS(config.Config.Server.HTTPS.Cert, config.Config.Server.HTTPS.Key); err != nil {
-				errSig <- err
-			}
-		}()
-	} else {
-		go func() {
-			if err := publicHTTPServer.ListenAndServe(); err != nil {
-				errSig <- err
-			}
-		}()
-	}
+
+	go func() {
+		privateListener, err := net.Listen("tcp", privatePort)
+		if err != nil {
+			errSig <- fmt.Errorf("failed to listen: %w", err)
+		}
+		if err := privateGrpcS.Serve(privateListener); err != nil {
+			errSig <- fmt.Errorf("failed to serve: %w", err)
+		}
+	}()
+
+	go func() {
+		var err error
+		switch {
+		case config.Config.Server.HTTPS.Cert != "" && config.Config.Server.HTTPS.Key != "":
+			err = publicHTTPServer.ListenAndServeTLS(config.Config.Server.HTTPS.Cert, config.Config.Server.HTTPS.Key)
+		default:
+			err = publicHTTPServer.ListenAndServe()
+		}
+		if err != nil {
+			errSig <- err
+		}
+	}()
 
 	span.End()
 	logger.Info("gRPC server is running.")
