@@ -5,10 +5,12 @@ package mock
 import (
 	"context"
 	"sync"
+
+	"github.com/gojuno/minimock/v3"
+
 	mm_atomic "sync/atomic"
 	mm_time "time"
 
-	"github.com/gojuno/minimock/v3"
 	mm_service "github.com/instill-ai/artifact-backend/pkg/service"
 	pb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )

@@ -6,10 +6,10 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	artifact "github.com/instill-ai/artifact-backend/pkg/service"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
 // Repository implements Artifact storage functions in PostgreSQL.

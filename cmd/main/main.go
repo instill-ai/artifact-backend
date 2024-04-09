@@ -14,12 +14,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/go-redis/redis/v9"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/contrib/propagators/b3"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
-	"go.temporal.io/sdk/client"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 	"google.golang.org/grpc"
@@ -33,8 +32,6 @@ import (
 	grpc_recovery "github.com/grpc-ecosystem/go-grpc-middleware/recovery"
 
 	"github.com/instill-ai/artifact-backend/config"
-	grpcclient "github.com/instill-ai/artifact-backend/pkg/client/grpc"
-	httpclient "github.com/instill-ai/artifact-backend/pkg/client/http"
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/handler"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
@@ -42,9 +39,9 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/service"
 	"github.com/instill-ai/artifact-backend/pkg/usage"
-	"github.com/instill-ai/x/temporal"
-	"github.com/instill-ai/x/zapadapter"
 
+	grpcclient "github.com/instill-ai/artifact-backend/pkg/client/grpc"
+	httpclient "github.com/instill-ai/artifact-backend/pkg/client/http"
 	database "github.com/instill-ai/artifact-backend/pkg/db"
 	custom_otel "github.com/instill-ai/artifact-backend/pkg/logger/otel"
 	artifactPB "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
@@ -104,35 +101,6 @@ func main() {
 	db := database.GetSharedConnection()
 	defer database.Close(db)
 
-	var temporalClientOptions client.Options
-	if config.Config.Temporal.Ca != "" && config.Config.Temporal.Cert != "" && config.Config.Temporal.Key != "" {
-		if temporalClientOptions, err = temporal.GetTLSClientOption(
-			config.Config.Temporal.HostPort,
-			config.Config.Temporal.Namespace,
-			zapadapter.NewZapAdapter(logger),
-			config.Config.Temporal.Ca,
-			config.Config.Temporal.Cert,
-			config.Config.Temporal.Key,
-			config.Config.Temporal.ServerName,
-			true,
-		); err != nil {
-			logger.Fatal(fmt.Sprintf("Unable to get Temporal client options: %s", err))
-		}
-	} else {
-		if temporalClientOptions, err = temporal.GetClientOption(
-			config.Config.Temporal.HostPort,
-			config.Config.Temporal.Namespace,
-			zapadapter.NewZapAdapter(logger)); err != nil {
-			logger.Fatal(fmt.Sprintf("Unable to get Temporal client options: %s", err))
-		}
-	}
-
-	temporalClient, err := client.Dial(temporalClientOptions)
-	if err != nil {
-		logger.Fatal(fmt.Sprintf("Unable to create client: %s", err))
-	}
-	defer temporalClient.Close()
-
 	// Shared options for the logger, with a custom gRPC code to log level function.
 	opts := []grpc_zap.Option{
 		grpc_zap.WithDecider(func(fullMethodName string, err error) bool {
@@ -171,7 +139,7 @@ func main() {
 		tlsConfig = &tls.Config{
 			ClientAuth: tls.RequireAndVerifyClientCert,
 		}
-		creds, err = credentials.NewServerTLSFromFile(config.Config.Server.HTTPS.Cert, config.Config.Server.HTTPS.Key)
+		creds, err := credentials.NewServerTLSFromFile(config.Config.Server.HTTPS.Cert, config.Config.Server.HTTPS.Key)
 		if err != nil {
 			logger.Fatal(fmt.Sprintf("failed to create credentials: %v", err))
 		}
@@ -317,11 +285,10 @@ func main() {
 	case err := <-errSig:
 		logger.Error(fmt.Sprintf("Fatal error: %v\n", err))
 	case <-quitSig:
-		if config.Config.Server.Usage.Enabled && usg != nil {
-			usg.TriggerSingleReporter(ctx)
-		}
+		// if config.Config.Server.Usage.Enabled && usg != nil {
+		// 	usg.TriggerSingleReporter(ctx)
+		// }
 		logger.Info("Shutting down server...")
-		privateGrpcS.GracefulStop()
 		publicGrpcS.GracefulStop()
 	}
 }

@@ -15,7 +15,7 @@ Before delving into the details to come up with your first PR, please familiaris
 
 ### Prerequisites
 
-- [Instill VDP](https://github.com/instill-ai/vdp)
+- [Instill Core](https://github.com/instill-ai/instill-core)
 
 ### Pre-commit hooks
 
@@ -23,11 +23,11 @@ check out `.pre-commit-config.yaml` for the set of hooks that we used
 
 ### Local development
 
-On the local machine, clone `vdp` repository in your workspace, move to the repository folder, and launch all dependent microservices:
+On the local machine, clone `instill-core` repository in your workspace, move to the repository folder, and launch all dependent microservices:
 ```bash
 $ cd <your-workspace>
-$ git clone https://github.com/instill-ai/vdp.git
-$ cd vdp
+$ git clone https://github.com/instill-ai/instill-core.git
+$ cd instill-core
 $ make latest PROFILE=artifact
 ```
 

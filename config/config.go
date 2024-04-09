@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-redis/redis/v9"
 	"github.com/knadh/koanf"
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/env"
 	"github.com/knadh/koanf/providers/file"
+	"github.com/redis/go-redis/v9"
 )
 
 // Config - Global variable to export
@@ -57,21 +57,6 @@ type ServerConfig struct {
 		MaxWorkflowTimeout int32 `koanf:"maxworkflowtimeout"`
 		MaxWorkflowRetry   int32 `koanf:"maxworkflowretry"`
 		MaxActivityRetry   int32 `koanf:"maxactivityretry"`
-	}
-}
-
-// ConnectorConfig defines the connector configurations
-type ConnectorConfig struct {
-	Airbyte struct {
-		MountSource struct {
-			VDP     string `koanf:"vdp"`
-			Airbyte string `koanf:"airbyte"`
-		}
-		MountTarget struct {
-			VDP     string `koanf:"vdp"`
-			Airbyte string `koanf:"airbyte"`
-		}
-		ExcludeLocalConnector bool `koanf:"excludelocalconnector"`
 	}
 }
 
