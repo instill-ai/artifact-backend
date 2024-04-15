@@ -60,13 +60,6 @@ $ go run ./cmd/migration
 $ go run ./cmd/main
 ```
 
-### Run the temporal worker
-
-```bash
-$ docker exec -it artifact-backend /bin/bash
-$ go run ./cmd/worker
-```
-
 ### Run the integration test
 
 ```bash

@@ -22,7 +22,6 @@ type AppConfig struct {
 	Server      ServerConfig      `koanf:"server"`
 	Database    DatabaseConfig    `koanf:"database"`
 	InfluxDB    InfluxDBConfig    `koanf:"influxdb"`
-	Temporal    TemporalConfig    `koanf:"temporal"`
 	Cache       CacheConfig       `koanf:"cache"`
 	Log         LogConfig         `koanf:"log"`
 	MgmtBackend MgmtBackendConfig `koanf:"mgmtbackend"`
@@ -96,17 +95,6 @@ type LogConfig struct {
 		Host string `koanf:"host"`
 		Port string `koanf:"port"`
 	}
-}
-
-// TemporalConfig related to Temporal
-type TemporalConfig struct {
-	HostPort   string `koanf:"hostport"`
-	Namespace  string `koanf:"namespace"`
-	Retention  string `koanf:"retention"`
-	Ca         string `koanf:"ca"`
-	Cert       string `koanf:"cert"`
-	Key        string `koanf:"key"`
-	ServerName string `koanf:"servername"`
 }
 
 // CacheConfig related to Redis
