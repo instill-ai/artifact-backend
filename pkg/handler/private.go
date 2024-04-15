@@ -7,6 +7,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/instill-ai/artifact-backend/pkg/logger"
+
 	artifact "github.com/instill-ai/artifact-backend/pkg/service"
 	pb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )

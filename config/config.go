@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-redis/redis/v9"
 	"github.com/knadh/koanf"
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/env"
 	"github.com/knadh/koanf/providers/file"
+	"github.com/redis/go-redis/v9"
 )
 
 // Config - Global variable to export
@@ -22,7 +22,6 @@ type AppConfig struct {
 	Server      ServerConfig      `koanf:"server"`
 	Database    DatabaseConfig    `koanf:"database"`
 	InfluxDB    InfluxDBConfig    `koanf:"influxdb"`
-	Temporal    TemporalConfig    `koanf:"temporal"`
 	Cache       CacheConfig       `koanf:"cache"`
 	Log         LogConfig         `koanf:"log"`
 	MgmtBackend MgmtBackendConfig `koanf:"mgmtbackend"`
@@ -57,21 +56,6 @@ type ServerConfig struct {
 		MaxWorkflowTimeout int32 `koanf:"maxworkflowtimeout"`
 		MaxWorkflowRetry   int32 `koanf:"maxworkflowretry"`
 		MaxActivityRetry   int32 `koanf:"maxactivityretry"`
-	}
-}
-
-// ConnectorConfig defines the connector configurations
-type ConnectorConfig struct {
-	Airbyte struct {
-		MountSource struct {
-			VDP     string `koanf:"vdp"`
-			Airbyte string `koanf:"airbyte"`
-		}
-		MountTarget struct {
-			VDP     string `koanf:"vdp"`
-			Airbyte string `koanf:"airbyte"`
-		}
-		ExcludeLocalConnector bool `koanf:"excludelocalconnector"`
 	}
 }
 
@@ -111,17 +95,6 @@ type LogConfig struct {
 		Host string `koanf:"host"`
 		Port string `koanf:"port"`
 	}
-}
-
-// TemporalConfig related to Temporal
-type TemporalConfig struct {
-	HostPort   string `koanf:"hostport"`
-	Namespace  string `koanf:"namespace"`
-	Retention  string `koanf:"retention"`
-	Ca         string `koanf:"ca"`
-	Cert       string `koanf:"cert"`
-	Key        string `koanf:"key"`
-	ServerName string `koanf:"servername"`
 }
 
 // CacheConfig related to Redis

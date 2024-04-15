@@ -6,15 +6,16 @@ import (
 	"testing"
 	"time"
 
-	qt "github.com/frankban/quicktest"
 	"github.com/gojuno/minimock/v3"
 	"github.com/google/go-cmp/cmp/cmpopts"
-
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	qt "github.com/frankban/quicktest"
+
 	"github.com/instill-ai/artifact-backend/pkg/mock"
+
 	artifact "github.com/instill-ai/artifact-backend/pkg/service"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
 const repo = "krule-wombat/llava-34b"

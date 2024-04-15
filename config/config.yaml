@@ -1,6 +1,6 @@
 server:
-  privateport: 3085
-  publicport: 8085
+  privateport: 3082
+  publicport: 8082
   https:
     cert:
     key:
@@ -46,14 +46,6 @@ log:
   otelcollector:
     host: otel-collector
     port: 8095
-temporal:
-  hostport: temporal:7233
-  namespace: artifact-backend
-  retention: 1d
-  ca:
-  cert:
-  key:
-  servername:
 mgmtbackend:
   host: mgmt-backend
   publicport: 8084

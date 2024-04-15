@@ -2,7 +2,7 @@
 
 [![Integration Test](https://github.com/instill-ai/artifact-backend/actions/workflows/integration-test.yml/badge.svg)](https://github.com/instill-ai/artifact-backend/actions/workflows/integration-test.yml)
 
-`artifact-backend` manages all stateful resources for [Instill VDP](https://github.com/instill-ai/vdp) and [Instill Model](https://github.com/instill-ai/model)
+`artifact-backend` manages all stateful resources for [Instill Core](https://github.com/instill-ai/instill-core).
 
 ## Contributing
 

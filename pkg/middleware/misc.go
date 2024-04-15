@@ -81,11 +81,7 @@ func ErrorHandler(ctx context.Context, mux *runtime.ServeMux, marshaler runtime.
 		return
 	}
 
-	md, ok := runtime.ServerMetadataFromContext(ctx)
-	if !ok {
-		logger.Error("Failed to extract ServerMetadata from context")
-	}
-
+	md, _ := runtime.ServerMetadataFromContext(ctx)
 	for k, vs := range md.HeaderMD {
 		if h, ok := func(key string) (string, bool) {
 			return fmt.Sprintf("%s%s", runtime.MetadataHeaderPrefix, key), true
