@@ -11,20 +11,19 @@ ARG SERVICE_NAME TARGETOS TARGETARCH
 RUN --mount=target=. --mount=type=cache,target=/root/.cache/go-build --mount=type=cache,target=/go/pkg GOOS=$TARGETOS GOARCH=$TARGETARCH CGO_ENABLED=0 go build -o /${SERVICE_NAME} ./cmd/main
 RUN --mount=target=. --mount=type=cache,target=/root/.cache/go-build --mount=type=cache,target=/go/pkg GOOS=$TARGETOS GOARCH=$TARGETARCH CGO_ENABLED=0 go build -o /${SERVICE_NAME}-migrate ./cmd/migration
 
-FROM gcr.io/distroless/base:nonroot
+FROM golang:${GOLANG_VERSION}
 
-USER nonroot:nonroot
+USER nobody:nogroup
 
 ARG SERVICE_NAME
 
 WORKDIR /${SERVICE_NAME}
 
-COPY --from=busybox:stable-musl --chown=nonroot:nonroot /bin/sh /bin/sh
-COPY --from=busybox:stable-musl --chown=nonroot:nonroot /bin/wget /bin/wget
+COPY --from=docker:dind-rootless --chown=nobody:nogroup /usr/local/bin/docker /usr/local/bin
 
-COPY --from=build --chown=nonroot:nonroot /src/config ./config
-COPY --from=build --chown=nonroot:nonroot /src/release-please ./release-please
-COPY --from=build --chown=nonroot:nonroot /src/pkg/db/migration ./pkg/db/migration
+COPY --from=build --chown=nobody:nogroup /src/config ./config
+COPY --from=build --chown=nobody:nogroup /src/release-please ./release-please
+COPY --from=build --chown=nobody:nogroup /src/pkg/db/migration ./pkg/db/migration
 
-COPY --from=build --chown=nonroot:nonroot /${SERVICE_NAME} ./
-COPY --from=build --chown=nonroot:nonroot /${SERVICE_NAME}-migrate ./
+COPY --from=build --chown=nobody:nogroup /${SERVICE_NAME}-migrate ./
+COPY --from=build --chown=nobody:nogroup /${SERVICE_NAME} ./
