@@ -5,6 +5,10 @@ ARG SERVICE_NAME
 
 WORKDIR /${SERVICE_NAME}
 
+# -- DinD
+
+COPY --from=docker:dind-rootless --chown=nobody:nogroup /usr/local/bin/docker /usr/local/bin
+
 # -- install 3rd-party
 
 ARG TARGETOS TARGETARCH K6_VERSION

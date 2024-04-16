@@ -16,12 +16,10 @@ dev:							## Run dev container
 		echo "Run dev container ${SERVICE_NAME}. To stop it, run \"make stop\"."
 	@docker run -d --rm \
 		-v $(PWD):/${SERVICE_NAME} \
-		-p ${PUBLIC_SERVICE_PORT}:${PUBLIC_SERVICE_PORT} \
-		-p ${PRIVATE_SERVICE_PORT}:${PRIVATE_SERVICE_PORT} \
 		-p ${SERVICE_PORT}:${SERVICE_PORT} \
 		--network instill-network \
 		--name ${SERVICE_NAME} \
-		instill/${SERVICE_NAME}:dev >/dev/null 2>&1
+		instill/${SERVICE_NAME}:dev
 
 .PHONY: logs
 logs:					## Tail service container logs with -n 10
