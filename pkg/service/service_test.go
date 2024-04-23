@@ -23,6 +23,7 @@ const repo = "krule-wombat/llava-34b"
 var cmpPB = qt.CmpEquals(
 	cmpopts.IgnoreUnexported(
 		artifactpb.RepositoryTag{},
+		artifactpb.ListRepositoryTagsResponse{},
 		timestamppb.Timestamp{},
 	),
 )
@@ -92,8 +93,9 @@ func TestService_ListRepositoryTags(t *testing.T) {
 		repoTags []*artifactpb.RepositoryTag
 		repoErr  error
 
-		wantErr string
-		want    []*artifactpb.RepositoryTag
+		wantErr  string
+		wantTags []*artifactpb.RepositoryTag
+		respMod  func(*artifactpb.ListRepositoryTagsResponse)
 	}{
 		{
 			name:    "nok - namespace error",
@@ -117,14 +119,17 @@ func TestService_ListRepositoryTags(t *testing.T) {
 			registryTags: tagIDs,
 			repoTags:     want[:2],
 			repoErr:      fmt.Errorf("repo error: %w", artifact.ErrNotFound),
-			want:         wantWithEmptyOptional,
+			wantTags:     wantWithEmptyOptional[:2],
 		},
 		{
 			name:         "ok - no pagination",
 			in:           func(req *artifactpb.ListRepositoryTagsRequest) { req.PageSize = nil },
 			registryTags: tagIDs,
 			repoTags:     want,
-			want:         want,
+			wantTags:     want,
+			respMod: func(resp *artifactpb.ListRepositoryTagsResponse) {
+				resp.PageSize = 10
+			},
 		},
 		{
 			name: "ok - page -1",
@@ -135,13 +140,16 @@ func TestService_ListRepositoryTags(t *testing.T) {
 
 			registryTags: tagIDs,
 			repoTags:     want[:2],
-			want:         want[:2],
+			wantTags:     want[:2],
+			respMod: func(resp *artifactpb.ListRepositoryTagsResponse) {
+				resp.Page = 0
+			},
 		},
 		{
 			name:         "ok - page 0",
 			registryTags: tagIDs,
 			repoTags:     want[:2],
-			want:         want[:2],
+			wantTags:     want[:2],
 		},
 		{
 			name: "ok - page 1",
@@ -152,7 +160,7 @@ func TestService_ListRepositoryTags(t *testing.T) {
 
 			registryTags: tagIDs,
 			repoTags:     want[2:4],
-			want:         want[2:4],
+			wantTags:     want[2:4],
 		},
 		{
 			name: "ok - page 2",
@@ -163,7 +171,7 @@ func TestService_ListRepositoryTags(t *testing.T) {
 
 			registryTags: tagIDs,
 			repoTags:     want[4:],
-			want:         want[4:],
+			wantTags:     want[4:],
 		},
 		{
 			name: "ok - page 3",
@@ -173,7 +181,7 @@ func TestService_ListRepositoryTags(t *testing.T) {
 			},
 
 			registryTags: tagIDs,
-			want:         want[0:0],
+			wantTags:     want[0:0],
 		},
 	}
 
@@ -193,16 +201,25 @@ func TestService_ListRepositoryTags(t *testing.T) {
 			}
 
 			s := artifact.NewService(repository, registry)
-			resp, err := s.ListRepositoryTags(ctx, newReq(tc.in))
+			req := newReq(tc.in)
+			resp, err := s.ListRepositoryTags(ctx, req)
 			if tc.wantErr != "" {
 				c.Check(err, qt.ErrorMatches, tc.wantErr)
 				return
 			}
 
 			c.Check(err, qt.IsNil)
-			for i, got := range resp.GetTags() {
-				c.Check(got, cmpPB, tc.want[i], qt.Commentf(tc.want[i].Id))
+
+			wantResp := &artifactpb.ListRepositoryTagsResponse{
+				Tags:      tc.wantTags,
+				TotalSize: int32(len(tc.registryTags)),
+				PageSize:  req.GetPageSize(),
+				Page:      req.GetPage(),
 			}
+			if tc.respMod != nil {
+				tc.respMod(wantResp)
+			}
+			c.Check(resp, cmpPB, wantResp)
 		})
 	}
 }
