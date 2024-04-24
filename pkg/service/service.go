@@ -51,10 +51,11 @@ func (s *Service) ListRepositoryTags(ctx context.Context, req *pb.ListRepository
 		return nil, err
 	}
 
+	totalSize := len(tagIDs)
 	var paginatedIDs []string
 	switch {
-	case idx0 >= len(tagIDs):
-	case idx1 > len(tagIDs):
+	case idx0 >= totalSize:
+	case idx1 > totalSize:
 		paginatedIDs = tagIDs[idx0:]
 	default:
 		paginatedIDs = tagIDs[idx0:idx1]
@@ -79,7 +80,12 @@ func (s *Service) ListRepositoryTags(ctx context.Context, req *pb.ListRepository
 		tags = append(tags, rt)
 	}
 
-	return &pb.ListRepositoryTagsResponse{Tags: tags}, nil
+	return &pb.ListRepositoryTagsResponse{
+		PageSize:  int32(pageSize),
+		Page:      int32(page),
+		TotalSize: int32(totalSize),
+		Tags:      tags,
+	}, nil
 }
 
 func pageSizeInRange(pageSize int32) int {
