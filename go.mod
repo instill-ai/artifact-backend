@@ -6,7 +6,6 @@ toolchain go1.21.3
 
 require (
 	github.com/frankban/quicktest v1.14.6
-	github.com/go-redis/redis/v9 v9.0.0-beta.2
 	github.com/go-resty/resty/v2 v2.12.0
 	github.com/gofrs/uuid v4.4.0+incompatible
 	github.com/gojuno/minimock/v3 v3.3.6
@@ -31,7 +30,7 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v0.39.0
 	go.opentelemetry.io/otel/trace v1.16.0
 	go.uber.org/zap v1.26.0
-	golang.org/x/net v0.22.0
+	golang.org/x/net v0.23.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240311132316-a219d84964c2
 	google.golang.org/grpc v1.62.1
 	google.golang.org/protobuf v1.33.0
