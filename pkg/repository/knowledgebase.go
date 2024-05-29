@@ -38,6 +38,7 @@ type KnowledgeBaseColumns struct {
 	UpdateTime  string
 	DeleteTime  string
 }
+
 var KnowledgeBaseColumn = KnowledgeBaseColumns{
 	ID:          "id",
 	KbID:        "kb_id",
@@ -68,6 +69,7 @@ func (r *Repository) CreateKnowledgeBase(ctx context.Context, kb KnowledgeBase) 
 
 	return &kb, nil
 }
+
 // GetKnowledgeBase fetches all KnowledgeBase records from the database, excluding soft-deleted ones.
 func (r *Repository) GetKnowledgeBase(ctx context.Context) ([]KnowledgeBase, error) {
 	var knowledgeBases []KnowledgeBase
@@ -79,6 +81,7 @@ func (r *Repository) GetKnowledgeBase(ctx context.Context) ([]KnowledgeBase, err
 
 	return knowledgeBases, nil
 }
+
 // UpdateKnowledgeBase updates a KnowledgeBase record in the database except for CreateTime and DeleteTime.
 func (r *Repository) UpdateKnowledgeBase(ctx context.Context, kb KnowledgeBase) (*KnowledgeBase, error) {
 	// Fetch the existing record to ensure it exists and to get the CreateTime and DeleteTime fields
@@ -126,7 +129,6 @@ func (r *Repository) DeleteKnowledgeBase(ctx context.Context, kb KnowledgeBase) 
 	*existingKB.DeleteTime = time.Now().UTC()
 	// set update time to current time
 	existingKB.UpdateTime = time.Now().UTC()
-
 
 	// Save the changes to mark the record as soft deleted
 	if err := r.db.WithContext(ctx).Save(&existingKB).Error; err != nil {
