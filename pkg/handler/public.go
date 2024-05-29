@@ -24,7 +24,7 @@ func NewPublicHandler(ctx context.Context, service *artifact.Service) artifactpb
 }
 
 // Liveness returns the health of the service.
-func (h *PublicHandler) Liveness(_ context.Context, _ *artifactpb.LivenessRequest) (*artifactpb.LivenessResponse, error) {
+func (ph *PublicHandler) Liveness(_ context.Context, _ *artifactpb.LivenessRequest) (*artifactpb.LivenessResponse, error) {
 	fmt.Println("Liveness")
 	return &artifactpb.LivenessResponse{
 		HealthCheckResponse: &healthcheckPB.HealthCheckResponse{
@@ -34,7 +34,7 @@ func (h *PublicHandler) Liveness(_ context.Context, _ *artifactpb.LivenessReques
 }
 
 // Readiness returns the state of the service.
-func (h *PublicHandler) Readiness(_ context.Context, _ *artifactpb.ReadinessRequest) (*artifactpb.ReadinessResponse, error) {
+func (ph *PublicHandler) Readiness(_ context.Context, _ *artifactpb.ReadinessRequest) (*artifactpb.ReadinessResponse, error) {
 	return &artifactpb.ReadinessResponse{
 		HealthCheckResponse: &healthcheckPB.HealthCheckResponse{
 			Status: healthcheckPB.HealthCheckResponse_SERVING_STATUS_SERVING,
