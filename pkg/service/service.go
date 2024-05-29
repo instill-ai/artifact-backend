@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/instill-ai/artifact-backend/pkg/customerror"
+	"github.com/instill-ai/artifact-backend/pkg/repository"
+	"github.com/instill-ai/artifact-backend/pkg/utils"
 	pb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
@@ -16,13 +19,13 @@ const (
 
 // Service implements the Artifact domain use cases.
 type Service struct {
-	repository     Repository
+	repository     repository.RepositoryI
 	registryClient RegistryClient
 }
 
 // NewService initiates a service instance
 func NewService(
-	r Repository,
+	r repository.RepositoryI,
 	rc RegistryClient,
 ) *Service {
 
@@ -63,10 +66,10 @@ func (s *Service) ListRepositoryTags(ctx context.Context, req *pb.ListRepository
 
 	tags := make([]*pb.RepositoryTag, 0, len(paginatedIDs))
 	for _, id := range paginatedIDs {
-		name := NewRepositoryTagName(repo, id)
+		name := utils.NewRepositoryTagName(repo, id)
 		rt, err := s.repository.GetRepositoryTag(ctx, name)
 		if err != nil {
-			if !errors.Is(err, ErrNotFound) {
+			if !errors.Is(err, customerror.ErrNotFound) {
 				return nil, fmt.Errorf("failed to fetch tag %s: %w", id, err)
 			}
 
@@ -111,7 +114,7 @@ func pageInRange(page int32) int {
 // CreateRepositoryTag stores the tag information of a pushed repository
 // content.
 func (s *Service) CreateRepositoryTag(ctx context.Context, req *pb.CreateRepositoryTagRequest) (*pb.CreateRepositoryTagResponse, error) {
-	name := RepositoryTagName(req.GetTag().GetName())
+	name := utils.RepositoryTagName(req.GetTag().GetName())
 	_, id, err := name.ExtractRepositoryAndID()
 	if err != nil || id != req.GetTag().GetId() {
 		return nil, fmt.Errorf("invalid tag name")

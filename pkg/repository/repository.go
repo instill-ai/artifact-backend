@@ -8,10 +8,20 @@ import (
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	artifact "github.com/instill-ai/artifact-backend/pkg/service"
+	"github.com/instill-ai/artifact-backend/pkg/customerror"
+	"github.com/instill-ai/artifact-backend/pkg/utils"
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
+type RepositoryI interface {
+	GetRepositoryTag(context.Context, utils.RepositoryTagName) (*artifactpb.RepositoryTag, error)
+	UpsertRepositoryTag(context.Context, *artifactpb.RepositoryTag) (*artifactpb.RepositoryTag, error)
+	// kb
+	CreateKnowledgeBase(ctx context.Context, kb KnowledgeBase) (*KnowledgeBase, error)
+	GetKnowledgeBase(ctx context.Context) ([]KnowledgeBase, error)
+	UpdateKnowledgeBase(ctx context.Context, kb KnowledgeBase) (*KnowledgeBase, error)
+	DeleteKnowledgeBase(ctx context.Context, kb KnowledgeBase) error
+}
 // Repository implements Artifact storage functions in PostgreSQL.
 type Repository struct {
 	db *gorm.DB
@@ -27,7 +37,7 @@ func NewRepository(db *gorm.DB) *Repository {
 // GetRepositoryTag fetches the tag information from the repository_tag table.
 // The name param is the resource name of the tag, e.g.
 // `repositories/admin/hello-world/tags/0.1.1-beta`.
-func (r *Repository) GetRepositoryTag(_ context.Context, name artifact.RepositoryTagName) (*artifactpb.RepositoryTag, error) {
+func (r *Repository) GetRepositoryTag(_ context.Context, name utils.RepositoryTagName) (*artifactpb.RepositoryTag, error) {
 	repo, tagID, err := name.ExtractRepositoryAndID()
 	if err != nil {
 		return nil, err
@@ -39,7 +49,7 @@ func (r *Repository) GetRepositoryTag(_ context.Context, name artifact.Repositor
 		First(record); result.Error != nil {
 
 		if result.Error == gorm.ErrRecordNotFound {
-			return nil, artifact.ErrNotFound
+			return nil, customerror.ErrNotFound
 		}
 
 		return nil, result.Error
@@ -56,7 +66,7 @@ func (r *Repository) GetRepositoryTag(_ context.Context, name artifact.Repositor
 // UpsertRepositoryTag stores the provided tag information in the database. The
 // update timestamp will be generated on insertion.
 func (r *Repository) UpsertRepositoryTag(_ context.Context, tag *artifactpb.RepositoryTag) (*artifactpb.RepositoryTag, error) {
-	repo, tagID, err := artifact.RepositoryTagName(tag.GetName()).ExtractRepositoryAndID()
+	repo, tagID, err := utils.RepositoryTagName(tag.GetName()).ExtractRepositoryAndID()
 	if err != nil {
 		return nil, err
 	}

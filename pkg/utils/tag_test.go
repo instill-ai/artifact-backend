@@ -1,12 +1,10 @@
-package service_test
+package utils
 
 import (
 	"fmt"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
-
-	artifact "github.com/instill-ai/artifact-backend/pkg/service"
 )
 
 func TestRepositoryTagName_ExtractRepositoryAndID(t *testing.T) {
@@ -21,7 +19,7 @@ func TestRepositoryTagName_ExtractRepositoryAndID(t *testing.T) {
 	}
 	for _, pair := range validPairs {
 		c.Run(fmt.Sprintf("ok - %s:%s", pair.repo, pair.id), func(c *qt.C) {
-			name := artifact.NewRepositoryTagName(pair.repo, pair.id)
+			name := NewRepositoryTagName(pair.repo, pair.id)
 			repo, id, err := name.ExtractRepositoryAndID()
 			c.Check(err, qt.IsNil)
 			c.Check(repo, qt.Equals, pair.repo)
@@ -29,7 +27,7 @@ func TestRepositoryTagName_ExtractRepositoryAndID(t *testing.T) {
 		})
 	}
 
-	invalid := []artifact.RepositoryTagName{
+	invalid := []RepositoryTagName{
 		"repositories/connan-wombat/tags/latest",
 		"repository/connan-wombat/mockasin/tags/latest",
 		"connan-wombat/mockasin:latest",
@@ -47,7 +45,7 @@ func TestRepositoryTagName_ExtractRepositoryAndID(t *testing.T) {
 
 func TestNewRepositoryTagName(t *testing.T) {
 	c := qt.New(t)
-	got := artifact.NewRepositoryTagName("connan-wombat/mockasin", "latest")
-	want := artifact.RepositoryTagName("repositories/connan-wombat/mockasin/tags/latest")
+	got := NewRepositoryTagName("connan-wombat/mockasin", "latest")
+	want := RepositoryTagName("repositories/connan-wombat/mockasin/tags/latest")
 	c.Check(got, qt.Equals, want)
 }

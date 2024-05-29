@@ -1,4 +1,4 @@
-package service_test
+package service
 
 import (
 	"context"
@@ -12,9 +12,10 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/instill-ai/artifact-backend/pkg/customerror"
 	"github.com/instill-ai/artifact-backend/pkg/mock"
 
-	artifact "github.com/instill-ai/artifact-backend/pkg/service"
+	"github.com/instill-ai/artifact-backend/pkg/utils"
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
@@ -118,7 +119,7 @@ func TestService_ListRepositoryTags(t *testing.T) {
 			name:         "ok - not found in repo",
 			registryTags: tagIDs,
 			repoTags:     want[:2],
-			repoErr:      fmt.Errorf("repo error: %w", artifact.ErrNotFound),
+			repoErr:      fmt.Errorf("repo error: %w", customerror.ErrNotFound),
 			wantTags:     wantWithEmptyOptional[:2],
 		},
 		{
@@ -193,14 +194,14 @@ func TestService_ListRepositoryTags(t *testing.T) {
 					Then(tc.registryTags, tc.registryErr)
 			}
 
-			repository := mock.NewRepositoryMock(c)
+			repository := mock.NewRepositoryIMock(c)
 			for _, repoTag := range tc.repoTags {
-				name := artifact.RepositoryTagName(repoTag.Name)
+				name := utils.RepositoryTagName(repoTag.Name)
 				repository.GetRepositoryTagMock.When(minimock.AnyContext, name).
 					Then(repoTag, tc.repoErr)
 			}
 
-			s := artifact.NewService(repository, registry)
+			s := NewService(repository, registry)
 			req := newReq(tc.in)
 			resp, err := s.ListRepositoryTags(ctx, req)
 			if tc.wantErr != "" {
@@ -242,7 +243,7 @@ func TestService_CreateRepositoryTag(t *testing.T) {
 		t.Name = "shake/home:1.3.0"
 		req := &artifactpb.CreateRepositoryTagRequest{Tag: t}
 
-		s := artifact.NewService(nil, nil)
+		s := NewService(nil, nil)
 		_, err := s.CreateRepositoryTag(ctx, req)
 		c.Check(err, qt.ErrorMatches, "invalid tag name")
 	})
@@ -252,7 +253,7 @@ func TestService_CreateRepositoryTag(t *testing.T) {
 		t.Id = "latest"
 		req := &artifactpb.CreateRepositoryTagRequest{Tag: t}
 
-		s := artifact.NewService(nil, nil)
+		s := NewService(nil, nil)
 		_, err := s.CreateRepositoryTag(ctx, req)
 		c.Check(err, qt.ErrorMatches, "invalid tag name")
 	})
@@ -262,19 +263,19 @@ func TestService_CreateRepositoryTag(t *testing.T) {
 	clearedTag.UpdateTime = nil
 
 	c.Run("nok - repo error", func(c *qt.C) {
-		repository := mock.NewRepositoryMock(c)
+		repository := mock.NewRepositoryIMock(c)
 		repository.UpsertRepositoryTagMock.When(minimock.AnyContext, clearedTag).Then(nil, fmt.Errorf("foo"))
 
-		s := artifact.NewService(repository, nil)
+		s := NewService(repository, nil)
 		_, err := s.CreateRepositoryTag(ctx, req)
 		c.Check(err, qt.ErrorMatches, "failed to upsert tag .*: foo")
 	})
 
 	c.Run("ok", func(c *qt.C) {
-		repository := mock.NewRepositoryMock(c)
+		repository := mock.NewRepositoryIMock(c)
 		repository.UpsertRepositoryTagMock.When(minimock.AnyContext, clearedTag).Then(want, nil)
 
-		s := artifact.NewService(repository, nil)
+		s := NewService(repository, nil)
 		resp, err := s.CreateRepositoryTag(ctx, req)
 		c.Check(err, qt.IsNil)
 		c.Check(resp.GetTag(), cmpPB, want)
