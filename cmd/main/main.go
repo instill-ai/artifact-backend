@@ -49,6 +49,11 @@ import (
 
 var propagator propagation.TextMapPropagator
 
+// grpcHandlerFunc handles incoming HTTP requests and routes them to either the gRPC server or the gateway handler.
+// It wraps the handler function with h2c.NewHandler to support HTTP/2 requests.
+// The function extracts the B3 context from the incoming request headers and sets it in the request context.
+// If the request is a gRPC request, it calls the gRPC server's ServeHTTP method.
+// Otherwise, it calls the gateway handler's ServeHTTP method.
 func grpcHandlerFunc(grpcServer *grpc.Server, gwHandler http.Handler) http.Handler {
 	return h2c.NewHandler(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -179,7 +184,7 @@ func main() {
 	reflection.Register(publicGrpcS)
 	artifactPB.RegisterArtifactPublicServiceServer(
 		publicGrpcS,
-		handler.NewPublicHandler(ctx),
+		handler.NewPublicHandler(ctx, service),
 	)
 
 	privateGrpcS := grpc.NewServer(grpcServerOpts...)

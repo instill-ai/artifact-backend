@@ -16,8 +16,8 @@ import (
 	grpc_recovery "github.com/grpc-ecosystem/go-grpc-middleware/recovery"
 
 	"github.com/instill-ai/artifact-backend/pkg/acl"
+	"github.com/instill-ai/artifact-backend/pkg/customerror"
 	"github.com/instill-ai/artifact-backend/pkg/handler"
-	"github.com/instill-ai/artifact-backend/pkg/service"
 	"github.com/instill-ai/x/errmsg"
 )
 
@@ -89,7 +89,7 @@ func AsGRPCError(err error) error {
 		code = codes.AlreadyExists
 	case
 		errors.Is(err, gorm.ErrRecordNotFound),
-		errors.Is(err, service.ErrNotFound),
+		errors.Is(err, customerror.ErrNotFound),
 		errors.Is(err, acl.ErrMembershipNotFound):
 
 		code = codes.NotFound
@@ -98,7 +98,7 @@ func AsGRPCError(err error) error {
 		errors.Is(err, handler.ErrCheckUpdateImmutableFields),
 		errors.Is(err, handler.ErrCheckOutputOnlyFields),
 		errors.Is(err, handler.ErrCheckRequiredFields),
-		errors.Is(err, service.ErrExceedMaxBatchSize),
+		errors.Is(err, customerror.ErrExceedMaxBatchSize),
 		errors.Is(err, handler.ErrFieldMask),
 		errors.Is(err, handler.ErrResourceID),
 		errors.Is(err, handler.ErrSematicVersion),
@@ -107,16 +107,16 @@ func AsGRPCError(err error) error {
 
 		code = codes.InvalidArgument
 	case
-		errors.Is(err, service.ErrNoPermission):
+		errors.Is(err, customerror.ErrNoPermission):
 
 		code = codes.PermissionDenied
 	case
-		errors.Is(err, service.ErrUnauthenticated):
+		errors.Is(err, customerror.ErrUnauthenticated):
 
 		code = codes.Unauthenticated
 
 	case
-		errors.Is(err, service.ErrRateLimiting):
+		errors.Is(err, customerror.ErrRateLimiting):
 
 		code = codes.ResourceExhausted
 	default:

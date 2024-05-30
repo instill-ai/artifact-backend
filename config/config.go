@@ -130,17 +130,27 @@ func Init() error {
 	fileRelativePath := fs.String("file", "config/config.yaml", "configuration file")
 	flag.Parse()
 
-	if err := k.Load(file.Provider(*fileRelativePath), parser); err != nil {
+	if err := k.Load(
+		file.Provider(*fileRelativePath),
+		parser,
+	); err != nil {
 		log.Fatal(err.Error())
 	}
 
-	if err := k.Load(env.ProviderWithValue("CFG_", ".", func(s string, v string) (string, interface{}) {
-		key := strings.Replace(strings.ToLower(strings.TrimPrefix(s, "CFG_")), "_", ".", -1)
-		if strings.Contains(v, ",") {
-			return key, strings.Split(strings.TrimSpace(v), ",")
-		}
-		return key, v
-	}), nil); err != nil {
+	if err := k.Load(
+		env.ProviderWithValue(
+			"CFG_",
+			".",
+			func(k string, v string) (string, interface{}) {
+				key := strings.Replace(strings.ToLower(strings.TrimPrefix(k, "CFG_")), "_", ".", -1)
+				if strings.Contains(v, ",") {
+					return key, strings.Split(strings.TrimSpace(v), ",")
+				}
+				return key, v
+			},
+		),
+		nil,
+	); err != nil {
 		return err
 	}
 

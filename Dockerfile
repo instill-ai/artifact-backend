@@ -24,6 +24,5 @@ COPY --from=docker:dind-rootless --chown=nobody:nogroup /usr/local/bin/docker /u
 COPY --from=build --chown=nobody:nogroup /src/config ./config
 COPY --from=build --chown=nobody:nogroup /src/release-please ./release-please
 COPY --from=build --chown=nobody:nogroup /src/pkg/db/migration ./pkg/db/migration
-
 COPY --from=build --chown=nobody:nogroup /${SERVICE_NAME}-migrate ./
 COPY --from=build --chown=nobody:nogroup /${SERVICE_NAME} ./

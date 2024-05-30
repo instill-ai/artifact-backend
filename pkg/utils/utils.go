@@ -1,11 +1,13 @@
 package utils
 
-import "strings"
+import (
+	"strings"
+)
 
 const (
-	CreateEvent     string = "Create"
-	UpdateEvent     string = "Update"
-	DeleteEvent     string = "Delete"
+	CreateEvent string = "Create"
+	UpdateEvent string = "Update"
+	DeleteEvent string = "Delete"
 )
 
 func IsAuditEvent(eventName string) bool {
