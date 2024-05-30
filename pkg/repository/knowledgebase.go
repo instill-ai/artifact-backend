@@ -21,8 +21,8 @@ type KnowledgeBase struct {
 	Description string     `gorm:"column:description;size:1023" json:"description"`
 	Tags        TagsArray  `gorm:"column:tags;type:VARCHAR(255)[]" json:"tags"`
 	Owner       string     `gorm:"column:owner;size:255;not null" json:"owner"`
-	CreateTime  time.Time  `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
-	UpdateTime  time.Time  `gorm:"column:update_time;not null;default:CURRENT_TIMESTAMP" json:"update_time"`
+	CreateTime  *time.Time  `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
+	UpdateTime  *time.Time  `gorm:"column:update_time;not null;autoUpdateTime" json:"update_time"` // Use autoUpdateTime
 	DeleteTime  *time.Time `gorm:"column:delete_time" json:"delete_time"`
 }
 
@@ -55,13 +55,6 @@ type TagsArray []string
 
 // CreateKnowledgeBase inserts a new KnowledgeBase record into the database.
 func (r *Repository) CreateKnowledgeBase(ctx context.Context, kb KnowledgeBase) (*KnowledgeBase, error) {
-	// Set the creation and update times to the current time if they are not already set
-	if kb.CreateTime.IsZero() {
-		kb.CreateTime = time.Now().UTC()
-	}
-	if kb.UpdateTime.IsZero() {
-		kb.UpdateTime = time.Now().UTC()
-	}
 
 	if err := r.db.WithContext(ctx).Create(&kb).Error; err != nil {
 		return nil, err
@@ -93,21 +86,13 @@ func (r *Repository) UpdateKnowledgeBase(ctx context.Context, kb KnowledgeBase) 
 		return nil, err
 	}
 
-	// Preserve CreateTime and DeleteTime
-	kb.CreateTime = existingKB.CreateTime
-	kb.DeleteTime = existingKB.DeleteTime
-
-	// Manually set the update time to the current time
-	kb.UpdateTime = time.Now().UTC()
-
-	// Update the record with the new values, except for CreateTime and DeleteTime
-	if err := r.db.WithContext(ctx).Model(&existingKB).Updates(KnowledgeBase{
-		KbID:        kb.KbID,
-		Name:        kb.Name,
-		Description: kb.Description,
-		Tags:        kb.Tags,
-		Owner:       kb.Owner,
-		UpdateTime:  kb.UpdateTime, // Manually set update time
+	// Update the specific fields of the record
+	if err := r.db.WithContext(ctx).Model(&existingKB).Updates(map[string]interface{}{
+		// "kb_id":        kb.KbID,
+		KnowledgeBaseColumn.Name:        kb.Name,
+		KnowledgeBaseColumn.Description: kb.Description,
+		KnowledgeBaseColumn.Tags:        kb.Tags,
+		KnowledgeBaseColumn.Owner:       kb.Owner,
 	}).Error; err != nil {
 		return nil, err
 	}
@@ -126,9 +111,8 @@ func (r *Repository) DeleteKnowledgeBase(ctx context.Context, kb KnowledgeBase) 
 	}
 
 	// Set the DeleteTime to the current time
-	*existingKB.DeleteTime = time.Now().UTC()
-	// set update time to current time
-	existingKB.UpdateTime = time.Now().UTC()
+	deleteTime := time.Now().UTC()
+	existingKB.DeleteTime = &deleteTime
 
 	// Save the changes to mark the record as soft deleted
 	if err := r.db.WithContext(ctx).Save(&existingKB).Error; err != nil {
