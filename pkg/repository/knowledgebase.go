@@ -16,7 +16,7 @@ type KnowledgeBaseI interface {
 	CreateKnowledgeBase(ctx context.Context, kb KnowledgeBase) (*KnowledgeBase, error)
 	ListKnowledgeBases(ctx context.Context, uid string) ([]KnowledgeBase, error)
 	UpdateKnowledgeBase(ctx context.Context, uid string, kb KnowledgeBase) (*KnowledgeBase, error)
-	DeleteKnowledgeBase(ctx context.Context, uid, kb_id string) error
+	DeleteKnowledgeBase(ctx context.Context, uid, kbID string) error
 }
 
 type KnowledgeBase struct {
@@ -133,9 +133,9 @@ func (r *Repository) CreateKnowledgeBase(ctx context.Context, kb KnowledgeBase) 
 // GetKnowledgeBase fetches all KnowledgeBase records from the database, excluding soft-deleted ones.
 func (r *Repository) ListKnowledgeBases(ctx context.Context, owner string) ([]KnowledgeBase, error) {
 	var knowledgeBases []KnowledgeBase
-	where_string := fmt.Sprintf("%v IS NULL AND %v = ?", KnowledgeBaseColumn.DeleteTime, KnowledgeBaseColumn.Owner)
+	whereString := fmt.Sprintf("%v IS NULL AND %v = ?", KnowledgeBaseColumn.DeleteTime, KnowledgeBaseColumn.Owner)
 	// Exclude records where DeleteTime is not null and filter by owner
-	if err := r.db.WithContext(ctx).Where(where_string, owner).Find(&knowledgeBases).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where(whereString, owner).Find(&knowledgeBases).Error; err != nil {
 		return nil, err
 	}
 
@@ -183,11 +183,11 @@ func (r *Repository) UpdateKnowledgeBase(ctx context.Context, uid string, kb Kno
 }
 
 // DeleteKnowledgeBase sets the DeleteTime to the current time to perform a soft delete.
-func (r *Repository) DeleteKnowledgeBase(ctx context.Context, uid string, kb_id string) error {
+func (r *Repository) DeleteKnowledgeBase(ctx context.Context, uid string, kbID string) error {
 	// Fetch the existing record to ensure it exists
 	var existingKB KnowledgeBase
 	conds := fmt.Sprintf("%v = ? AND %v IS NULL", KnowledgeBaseColumn.KbID, KnowledgeBaseColumn.DeleteTime)
-	if err := r.db.WithContext(ctx).First(&existingKB, conds, kb_id).Error; err != nil {
+	if err := r.db.WithContext(ctx).First(&existingKB, conds, kbID).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return err
 		}
@@ -213,8 +213,8 @@ func (r *Repository) DeleteKnowledgeBase(ctx context.Context, uid string, kb_id 
 
 func (r *Repository) checkIfNameUnique(ctx context.Context, owner string, name string) (bool, error) {
 	var existingKB KnowledgeBase
-	where_string := fmt.Sprintf("%v = ? AND %v = ?", KnowledgeBaseColumn.Owner, KnowledgeBaseColumn.Name)
-	if err := r.db.WithContext(ctx).Where(where_string, owner, name).First(&existingKB).Error; err != nil {
+	whereString := fmt.Sprintf("%v = ? AND %v = ?", KnowledgeBaseColumn.Owner, KnowledgeBaseColumn.Name)
+	if err := r.db.WithContext(ctx).Where(whereString, owner, name).First(&existingKB).Error; err != nil {
 		if err != gorm.ErrRecordNotFound {
 			return false, err
 		}

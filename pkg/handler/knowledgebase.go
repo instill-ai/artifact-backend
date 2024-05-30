@@ -22,7 +22,7 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 	errorRes := &artifactpb.CreateKnowledgeBaseResponse{
 		StatusCode: ErrorCreateKnowledgeBaseCode,
 	}
-	uid, err := getUserIdFromContext(ctx)
+	uid, err := getUserIDFromContext(ctx)
 	if err != nil {
 		errorRes.ErrorMsg = fmt.Sprintf("failed to get user id from header: %v", err)
 		return errorRes, nil
@@ -67,7 +67,7 @@ func (ph *PublicHandler) ListKnowledgeBases(ctx context.Context, _ *artifactpb.L
 		StatusCode: ErrorGetKnowledgeBasesCode,
 	}
 	// get user id from context
-	uid, err := getUserIdFromContext(ctx)
+	uid, err := getUserIDFromContext(ctx)
 	if err != nil {
 		errorRes.ErrorMsg = fmt.Sprintf("failed to get user id from header: %v", err)
 		return errorRes, nil
@@ -101,7 +101,7 @@ func (ph *PublicHandler) UpdateKnowledgeBase(ctx context.Context, req *artifactp
 	errorRes := &artifactpb.UpdateKnowledgeBaseResponse{
 		StatusCode: ErrorUpdateKnowledgeBaseCode,
 	}
-	uid, err := getUserIdFromContext(ctx)
+	uid, err := getUserIDFromContext(ctx)
 	if err != nil {
 		errorRes.ErrorMsg = fmt.Sprintf("failed to get user id from header: %v", err)
 		return errorRes, nil
@@ -149,7 +149,7 @@ func (ph *PublicHandler) DeleteKnowledgeBase(ctx context.Context, req *artifactp
 	errorRes := &artifactpb.DeleteKnowledgeBaseResponse{
 		StatusCode: ErrorDeleteKnowledgeBaseCode,
 	}
-	uid, err := getUserIdFromContext(ctx)
+	uid, err := getUserIDFromContext(ctx)
 	if err != nil {
 		errorRes.ErrorMsg = fmt.Sprintf("failed to get user id from header: %v", err)
 		return errorRes, nil
@@ -163,7 +163,7 @@ func (ph *PublicHandler) DeleteKnowledgeBase(ctx context.Context, req *artifactp
 		ErrorMsg: "", StatusCode: 0,
 	}, nil
 }
-func getUserIdFromContext(ctx context.Context) (string, error) {
+func getUserIDFromContext(ctx context.Context) (string, error) {
 	md, _ := metadata.FromIncomingContext(ctx)
 	if v, ok := md[strings.ToLower(constant.HeaderUserUIDKey)]; ok {
 		return v[0], nil
