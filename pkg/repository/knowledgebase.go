@@ -124,6 +124,9 @@ func (r *Repository) CreateKnowledgeBase(ctx context.Context, kb KnowledgeBase) 
 
 	// Create a new KnowledgeBase record
 	if err := r.db.WithContext(ctx).Create(&kb).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("knowledge base ID not found: %v", kb.KbID)
+		}
 		return nil, err
 	}
 
