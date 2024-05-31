@@ -7,7 +7,8 @@ CREATE TABLE knowledge_base (
     owner VARCHAR(255) NOT NULL,
     create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    delete_time TIMESTAMP
+    delete_time TIMESTAMP,
+    CONSTRAINT unique_owner_name UNIQUE (owner, name)
 );
 
 COMMENT ON TABLE knowledge_base IS 'Table to store knowledge base information';

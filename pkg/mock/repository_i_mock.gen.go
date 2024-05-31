@@ -11,7 +11,7 @@ import (
 	"github.com/gojuno/minimock/v3"
 	mm_repository "github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	pb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
 // RepositoryIMock implements repository.RepositoryI
@@ -25,32 +25,32 @@ type RepositoryIMock struct {
 	beforeCreateKnowledgeBaseCounter uint64
 	CreateKnowledgeBaseMock          mRepositoryIMockCreateKnowledgeBase
 
-	funcDeleteKnowledgeBase          func(ctx context.Context, kb mm_repository.KnowledgeBase) (err error)
-	inspectFuncDeleteKnowledgeBase   func(ctx context.Context, kb mm_repository.KnowledgeBase)
+	funcDeleteKnowledgeBase          func(ctx context.Context, uid string, kb_id string) (err error)
+	inspectFuncDeleteKnowledgeBase   func(ctx context.Context, uid string, kb_id string)
 	afterDeleteKnowledgeBaseCounter  uint64
 	beforeDeleteKnowledgeBaseCounter uint64
 	DeleteKnowledgeBaseMock          mRepositoryIMockDeleteKnowledgeBase
 
-	funcGetKnowledgeBase          func(ctx context.Context) (ka1 []mm_repository.KnowledgeBase, err error)
-	inspectFuncGetKnowledgeBase   func(ctx context.Context)
-	afterGetKnowledgeBaseCounter  uint64
-	beforeGetKnowledgeBaseCounter uint64
-	GetKnowledgeBaseMock          mRepositoryIMockGetKnowledgeBase
-
-	funcGetRepositoryTag          func(ctx context.Context, r1 utils.RepositoryTagName) (rp1 *artifactpb.RepositoryTag, err error)
+	funcGetRepositoryTag          func(ctx context.Context, r1 utils.RepositoryTagName) (rp1 *pb.RepositoryTag, err error)
 	inspectFuncGetRepositoryTag   func(ctx context.Context, r1 utils.RepositoryTagName)
 	afterGetRepositoryTagCounter  uint64
 	beforeGetRepositoryTagCounter uint64
 	GetRepositoryTagMock          mRepositoryIMockGetRepositoryTag
 
-	funcUpdateKnowledgeBase          func(ctx context.Context, kb mm_repository.KnowledgeBase) (kp1 *mm_repository.KnowledgeBase, err error)
-	inspectFuncUpdateKnowledgeBase   func(ctx context.Context, kb mm_repository.KnowledgeBase)
+	funcListKnowledgeBases          func(ctx context.Context, uid string) (ka1 []mm_repository.KnowledgeBase, err error)
+	inspectFuncListKnowledgeBases   func(ctx context.Context, uid string)
+	afterListKnowledgeBasesCounter  uint64
+	beforeListKnowledgeBasesCounter uint64
+	ListKnowledgeBasesMock          mRepositoryIMockListKnowledgeBases
+
+	funcUpdateKnowledgeBase          func(ctx context.Context, uid string, kb mm_repository.KnowledgeBase) (kp1 *mm_repository.KnowledgeBase, err error)
+	inspectFuncUpdateKnowledgeBase   func(ctx context.Context, uid string, kb mm_repository.KnowledgeBase)
 	afterUpdateKnowledgeBaseCounter  uint64
 	beforeUpdateKnowledgeBaseCounter uint64
 	UpdateKnowledgeBaseMock          mRepositoryIMockUpdateKnowledgeBase
 
-	funcUpsertRepositoryTag          func(ctx context.Context, rp1 *artifactpb.RepositoryTag) (rp2 *artifactpb.RepositoryTag, err error)
-	inspectFuncUpsertRepositoryTag   func(ctx context.Context, rp1 *artifactpb.RepositoryTag)
+	funcUpsertRepositoryTag          func(ctx context.Context, rp1 *pb.RepositoryTag) (rp2 *pb.RepositoryTag, err error)
+	inspectFuncUpsertRepositoryTag   func(ctx context.Context, rp1 *pb.RepositoryTag)
 	afterUpsertRepositoryTagCounter  uint64
 	beforeUpsertRepositoryTagCounter uint64
 	UpsertRepositoryTagMock          mRepositoryIMockUpsertRepositoryTag
@@ -70,11 +70,11 @@ func NewRepositoryIMock(t minimock.Tester) *RepositoryIMock {
 	m.DeleteKnowledgeBaseMock = mRepositoryIMockDeleteKnowledgeBase{mock: m}
 	m.DeleteKnowledgeBaseMock.callArgs = []*RepositoryIMockDeleteKnowledgeBaseParams{}
 
-	m.GetKnowledgeBaseMock = mRepositoryIMockGetKnowledgeBase{mock: m}
-	m.GetKnowledgeBaseMock.callArgs = []*RepositoryIMockGetKnowledgeBaseParams{}
-
 	m.GetRepositoryTagMock = mRepositoryIMockGetRepositoryTag{mock: m}
 	m.GetRepositoryTagMock.callArgs = []*RepositoryIMockGetRepositoryTagParams{}
+
+	m.ListKnowledgeBasesMock = mRepositoryIMockListKnowledgeBases{mock: m}
+	m.ListKnowledgeBasesMock.callArgs = []*RepositoryIMockListKnowledgeBasesParams{}
 
 	m.UpdateKnowledgeBaseMock = mRepositoryIMockUpdateKnowledgeBase{mock: m}
 	m.UpdateKnowledgeBaseMock.callArgs = []*RepositoryIMockUpdateKnowledgeBaseParams{}
@@ -414,14 +414,16 @@ type RepositoryIMockDeleteKnowledgeBaseExpectation struct {
 
 // RepositoryIMockDeleteKnowledgeBaseParams contains parameters of the RepositoryI.DeleteKnowledgeBase
 type RepositoryIMockDeleteKnowledgeBaseParams struct {
-	ctx context.Context
-	kb  mm_repository.KnowledgeBase
+	ctx   context.Context
+	uid   string
+	kb_id string
 }
 
 // RepositoryIMockDeleteKnowledgeBaseParamPtrs contains pointers to parameters of the RepositoryI.DeleteKnowledgeBase
 type RepositoryIMockDeleteKnowledgeBaseParamPtrs struct {
-	ctx *context.Context
-	kb  *mm_repository.KnowledgeBase
+	ctx   *context.Context
+	uid   *string
+	kb_id *string
 }
 
 // RepositoryIMockDeleteKnowledgeBaseResults contains results of the RepositoryI.DeleteKnowledgeBase
@@ -430,7 +432,7 @@ type RepositoryIMockDeleteKnowledgeBaseResults struct {
 }
 
 // Expect sets up expected params for RepositoryI.DeleteKnowledgeBase
-func (mmDeleteKnowledgeBase *mRepositoryIMockDeleteKnowledgeBase) Expect(ctx context.Context, kb mm_repository.KnowledgeBase) *mRepositoryIMockDeleteKnowledgeBase {
+func (mmDeleteKnowledgeBase *mRepositoryIMockDeleteKnowledgeBase) Expect(ctx context.Context, uid string, kb_id string) *mRepositoryIMockDeleteKnowledgeBase {
 	if mmDeleteKnowledgeBase.mock.funcDeleteKnowledgeBase != nil {
 		mmDeleteKnowledgeBase.mock.t.Fatalf("RepositoryIMock.DeleteKnowledgeBase mock is already set by Set")
 	}
@@ -443,7 +445,7 @@ func (mmDeleteKnowledgeBase *mRepositoryIMockDeleteKnowledgeBase) Expect(ctx con
 		mmDeleteKnowledgeBase.mock.t.Fatalf("RepositoryIMock.DeleteKnowledgeBase mock is already set by ExpectParams functions")
 	}
 
-	mmDeleteKnowledgeBase.defaultExpectation.params = &RepositoryIMockDeleteKnowledgeBaseParams{ctx, kb}
+	mmDeleteKnowledgeBase.defaultExpectation.params = &RepositoryIMockDeleteKnowledgeBaseParams{ctx, uid, kb_id}
 	for _, e := range mmDeleteKnowledgeBase.expectations {
 		if minimock.Equal(e.params, mmDeleteKnowledgeBase.defaultExpectation.params) {
 			mmDeleteKnowledgeBase.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmDeleteKnowledgeBase.defaultExpectation.params)
@@ -475,8 +477,8 @@ func (mmDeleteKnowledgeBase *mRepositoryIMockDeleteKnowledgeBase) ExpectCtxParam
 	return mmDeleteKnowledgeBase
 }
 
-// ExpectKbParam2 sets up expected param kb for RepositoryI.DeleteKnowledgeBase
-func (mmDeleteKnowledgeBase *mRepositoryIMockDeleteKnowledgeBase) ExpectKbParam2(kb mm_repository.KnowledgeBase) *mRepositoryIMockDeleteKnowledgeBase {
+// ExpectUidParam2 sets up expected param uid for RepositoryI.DeleteKnowledgeBase
+func (mmDeleteKnowledgeBase *mRepositoryIMockDeleteKnowledgeBase) ExpectUidParam2(uid string) *mRepositoryIMockDeleteKnowledgeBase {
 	if mmDeleteKnowledgeBase.mock.funcDeleteKnowledgeBase != nil {
 		mmDeleteKnowledgeBase.mock.t.Fatalf("RepositoryIMock.DeleteKnowledgeBase mock is already set by Set")
 	}
@@ -492,13 +494,35 @@ func (mmDeleteKnowledgeBase *mRepositoryIMockDeleteKnowledgeBase) ExpectKbParam2
 	if mmDeleteKnowledgeBase.defaultExpectation.paramPtrs == nil {
 		mmDeleteKnowledgeBase.defaultExpectation.paramPtrs = &RepositoryIMockDeleteKnowledgeBaseParamPtrs{}
 	}
-	mmDeleteKnowledgeBase.defaultExpectation.paramPtrs.kb = &kb
+	mmDeleteKnowledgeBase.defaultExpectation.paramPtrs.uid = &uid
+
+	return mmDeleteKnowledgeBase
+}
+
+// ExpectKb_idParam3 sets up expected param kb_id for RepositoryI.DeleteKnowledgeBase
+func (mmDeleteKnowledgeBase *mRepositoryIMockDeleteKnowledgeBase) ExpectKb_idParam3(kb_id string) *mRepositoryIMockDeleteKnowledgeBase {
+	if mmDeleteKnowledgeBase.mock.funcDeleteKnowledgeBase != nil {
+		mmDeleteKnowledgeBase.mock.t.Fatalf("RepositoryIMock.DeleteKnowledgeBase mock is already set by Set")
+	}
+
+	if mmDeleteKnowledgeBase.defaultExpectation == nil {
+		mmDeleteKnowledgeBase.defaultExpectation = &RepositoryIMockDeleteKnowledgeBaseExpectation{}
+	}
+
+	if mmDeleteKnowledgeBase.defaultExpectation.params != nil {
+		mmDeleteKnowledgeBase.mock.t.Fatalf("RepositoryIMock.DeleteKnowledgeBase mock is already set by Expect")
+	}
+
+	if mmDeleteKnowledgeBase.defaultExpectation.paramPtrs == nil {
+		mmDeleteKnowledgeBase.defaultExpectation.paramPtrs = &RepositoryIMockDeleteKnowledgeBaseParamPtrs{}
+	}
+	mmDeleteKnowledgeBase.defaultExpectation.paramPtrs.kb_id = &kb_id
 
 	return mmDeleteKnowledgeBase
 }
 
 // Inspect accepts an inspector function that has same arguments as the RepositoryI.DeleteKnowledgeBase
-func (mmDeleteKnowledgeBase *mRepositoryIMockDeleteKnowledgeBase) Inspect(f func(ctx context.Context, kb mm_repository.KnowledgeBase)) *mRepositoryIMockDeleteKnowledgeBase {
+func (mmDeleteKnowledgeBase *mRepositoryIMockDeleteKnowledgeBase) Inspect(f func(ctx context.Context, uid string, kb_id string)) *mRepositoryIMockDeleteKnowledgeBase {
 	if mmDeleteKnowledgeBase.mock.inspectFuncDeleteKnowledgeBase != nil {
 		mmDeleteKnowledgeBase.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.DeleteKnowledgeBase")
 	}
@@ -522,7 +546,7 @@ func (mmDeleteKnowledgeBase *mRepositoryIMockDeleteKnowledgeBase) Return(err err
 }
 
 // Set uses given function f to mock the RepositoryI.DeleteKnowledgeBase method
-func (mmDeleteKnowledgeBase *mRepositoryIMockDeleteKnowledgeBase) Set(f func(ctx context.Context, kb mm_repository.KnowledgeBase) (err error)) *RepositoryIMock {
+func (mmDeleteKnowledgeBase *mRepositoryIMockDeleteKnowledgeBase) Set(f func(ctx context.Context, uid string, kb_id string) (err error)) *RepositoryIMock {
 	if mmDeleteKnowledgeBase.defaultExpectation != nil {
 		mmDeleteKnowledgeBase.mock.t.Fatalf("Default expectation is already set for the RepositoryI.DeleteKnowledgeBase method")
 	}
@@ -537,14 +561,14 @@ func (mmDeleteKnowledgeBase *mRepositoryIMockDeleteKnowledgeBase) Set(f func(ctx
 
 // When sets expectation for the RepositoryI.DeleteKnowledgeBase which will trigger the result defined by the following
 // Then helper
-func (mmDeleteKnowledgeBase *mRepositoryIMockDeleteKnowledgeBase) When(ctx context.Context, kb mm_repository.KnowledgeBase) *RepositoryIMockDeleteKnowledgeBaseExpectation {
+func (mmDeleteKnowledgeBase *mRepositoryIMockDeleteKnowledgeBase) When(ctx context.Context, uid string, kb_id string) *RepositoryIMockDeleteKnowledgeBaseExpectation {
 	if mmDeleteKnowledgeBase.mock.funcDeleteKnowledgeBase != nil {
 		mmDeleteKnowledgeBase.mock.t.Fatalf("RepositoryIMock.DeleteKnowledgeBase mock is already set by Set")
 	}
 
 	expectation := &RepositoryIMockDeleteKnowledgeBaseExpectation{
 		mock:   mmDeleteKnowledgeBase.mock,
-		params: &RepositoryIMockDeleteKnowledgeBaseParams{ctx, kb},
+		params: &RepositoryIMockDeleteKnowledgeBaseParams{ctx, uid, kb_id},
 	}
 	mmDeleteKnowledgeBase.expectations = append(mmDeleteKnowledgeBase.expectations, expectation)
 	return expectation
@@ -577,15 +601,15 @@ func (mmDeleteKnowledgeBase *mRepositoryIMockDeleteKnowledgeBase) invocationsDon
 }
 
 // DeleteKnowledgeBase implements repository.RepositoryI
-func (mmDeleteKnowledgeBase *RepositoryIMock) DeleteKnowledgeBase(ctx context.Context, kb mm_repository.KnowledgeBase) (err error) {
+func (mmDeleteKnowledgeBase *RepositoryIMock) DeleteKnowledgeBase(ctx context.Context, uid string, kb_id string) (err error) {
 	mm_atomic.AddUint64(&mmDeleteKnowledgeBase.beforeDeleteKnowledgeBaseCounter, 1)
 	defer mm_atomic.AddUint64(&mmDeleteKnowledgeBase.afterDeleteKnowledgeBaseCounter, 1)
 
 	if mmDeleteKnowledgeBase.inspectFuncDeleteKnowledgeBase != nil {
-		mmDeleteKnowledgeBase.inspectFuncDeleteKnowledgeBase(ctx, kb)
+		mmDeleteKnowledgeBase.inspectFuncDeleteKnowledgeBase(ctx, uid, kb_id)
 	}
 
-	mm_params := RepositoryIMockDeleteKnowledgeBaseParams{ctx, kb}
+	mm_params := RepositoryIMockDeleteKnowledgeBaseParams{ctx, uid, kb_id}
 
 	// Record call args
 	mmDeleteKnowledgeBase.DeleteKnowledgeBaseMock.mutex.Lock()
@@ -604,7 +628,7 @@ func (mmDeleteKnowledgeBase *RepositoryIMock) DeleteKnowledgeBase(ctx context.Co
 		mm_want := mmDeleteKnowledgeBase.DeleteKnowledgeBaseMock.defaultExpectation.params
 		mm_want_ptrs := mmDeleteKnowledgeBase.DeleteKnowledgeBaseMock.defaultExpectation.paramPtrs
 
-		mm_got := RepositoryIMockDeleteKnowledgeBaseParams{ctx, kb}
+		mm_got := RepositoryIMockDeleteKnowledgeBaseParams{ctx, uid, kb_id}
 
 		if mm_want_ptrs != nil {
 
@@ -612,8 +636,12 @@ func (mmDeleteKnowledgeBase *RepositoryIMock) DeleteKnowledgeBase(ctx context.Co
 				mmDeleteKnowledgeBase.t.Errorf("RepositoryIMock.DeleteKnowledgeBase got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
 			}
 
-			if mm_want_ptrs.kb != nil && !minimock.Equal(*mm_want_ptrs.kb, mm_got.kb) {
-				mmDeleteKnowledgeBase.t.Errorf("RepositoryIMock.DeleteKnowledgeBase got unexpected parameter kb, want: %#v, got: %#v%s\n", *mm_want_ptrs.kb, mm_got.kb, minimock.Diff(*mm_want_ptrs.kb, mm_got.kb))
+			if mm_want_ptrs.uid != nil && !minimock.Equal(*mm_want_ptrs.uid, mm_got.uid) {
+				mmDeleteKnowledgeBase.t.Errorf("RepositoryIMock.DeleteKnowledgeBase got unexpected parameter uid, want: %#v, got: %#v%s\n", *mm_want_ptrs.uid, mm_got.uid, minimock.Diff(*mm_want_ptrs.uid, mm_got.uid))
+			}
+
+			if mm_want_ptrs.kb_id != nil && !minimock.Equal(*mm_want_ptrs.kb_id, mm_got.kb_id) {
+				mmDeleteKnowledgeBase.t.Errorf("RepositoryIMock.DeleteKnowledgeBase got unexpected parameter kb_id, want: %#v, got: %#v%s\n", *mm_want_ptrs.kb_id, mm_got.kb_id, minimock.Diff(*mm_want_ptrs.kb_id, mm_got.kb_id))
 			}
 
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
@@ -627,9 +655,9 @@ func (mmDeleteKnowledgeBase *RepositoryIMock) DeleteKnowledgeBase(ctx context.Co
 		return (*mm_results).err
 	}
 	if mmDeleteKnowledgeBase.funcDeleteKnowledgeBase != nil {
-		return mmDeleteKnowledgeBase.funcDeleteKnowledgeBase(ctx, kb)
+		return mmDeleteKnowledgeBase.funcDeleteKnowledgeBase(ctx, uid, kb_id)
 	}
-	mmDeleteKnowledgeBase.t.Fatalf("Unexpected call to RepositoryIMock.DeleteKnowledgeBase. %v %v", ctx, kb)
+	mmDeleteKnowledgeBase.t.Fatalf("Unexpected call to RepositoryIMock.DeleteKnowledgeBase. %v %v %v", ctx, uid, kb_id)
 	return
 }
 
@@ -696,283 +724,6 @@ func (m *RepositoryIMock) MinimockDeleteKnowledgeBaseInspect() {
 	}
 }
 
-type mRepositoryIMockGetKnowledgeBase struct {
-	mock               *RepositoryIMock
-	defaultExpectation *RepositoryIMockGetKnowledgeBaseExpectation
-	expectations       []*RepositoryIMockGetKnowledgeBaseExpectation
-
-	callArgs []*RepositoryIMockGetKnowledgeBaseParams
-	mutex    sync.RWMutex
-
-	expectedInvocations uint64
-}
-
-// RepositoryIMockGetKnowledgeBaseExpectation specifies expectation struct of the RepositoryI.GetKnowledgeBase
-type RepositoryIMockGetKnowledgeBaseExpectation struct {
-	mock      *RepositoryIMock
-	params    *RepositoryIMockGetKnowledgeBaseParams
-	paramPtrs *RepositoryIMockGetKnowledgeBaseParamPtrs
-	results   *RepositoryIMockGetKnowledgeBaseResults
-	Counter   uint64
-}
-
-// RepositoryIMockGetKnowledgeBaseParams contains parameters of the RepositoryI.GetKnowledgeBase
-type RepositoryIMockGetKnowledgeBaseParams struct {
-	ctx context.Context
-}
-
-// RepositoryIMockGetKnowledgeBaseParamPtrs contains pointers to parameters of the RepositoryI.GetKnowledgeBase
-type RepositoryIMockGetKnowledgeBaseParamPtrs struct {
-	ctx *context.Context
-}
-
-// RepositoryIMockGetKnowledgeBaseResults contains results of the RepositoryI.GetKnowledgeBase
-type RepositoryIMockGetKnowledgeBaseResults struct {
-	ka1 []mm_repository.KnowledgeBase
-	err error
-}
-
-// Expect sets up expected params for RepositoryI.GetKnowledgeBase
-func (mmGetKnowledgeBase *mRepositoryIMockGetKnowledgeBase) Expect(ctx context.Context) *mRepositoryIMockGetKnowledgeBase {
-	if mmGetKnowledgeBase.mock.funcGetKnowledgeBase != nil {
-		mmGetKnowledgeBase.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBase mock is already set by Set")
-	}
-
-	if mmGetKnowledgeBase.defaultExpectation == nil {
-		mmGetKnowledgeBase.defaultExpectation = &RepositoryIMockGetKnowledgeBaseExpectation{}
-	}
-
-	if mmGetKnowledgeBase.defaultExpectation.paramPtrs != nil {
-		mmGetKnowledgeBase.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBase mock is already set by ExpectParams functions")
-	}
-
-	mmGetKnowledgeBase.defaultExpectation.params = &RepositoryIMockGetKnowledgeBaseParams{ctx}
-	for _, e := range mmGetKnowledgeBase.expectations {
-		if minimock.Equal(e.params, mmGetKnowledgeBase.defaultExpectation.params) {
-			mmGetKnowledgeBase.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetKnowledgeBase.defaultExpectation.params)
-		}
-	}
-
-	return mmGetKnowledgeBase
-}
-
-// ExpectCtxParam1 sets up expected param ctx for RepositoryI.GetKnowledgeBase
-func (mmGetKnowledgeBase *mRepositoryIMockGetKnowledgeBase) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockGetKnowledgeBase {
-	if mmGetKnowledgeBase.mock.funcGetKnowledgeBase != nil {
-		mmGetKnowledgeBase.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBase mock is already set by Set")
-	}
-
-	if mmGetKnowledgeBase.defaultExpectation == nil {
-		mmGetKnowledgeBase.defaultExpectation = &RepositoryIMockGetKnowledgeBaseExpectation{}
-	}
-
-	if mmGetKnowledgeBase.defaultExpectation.params != nil {
-		mmGetKnowledgeBase.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBase mock is already set by Expect")
-	}
-
-	if mmGetKnowledgeBase.defaultExpectation.paramPtrs == nil {
-		mmGetKnowledgeBase.defaultExpectation.paramPtrs = &RepositoryIMockGetKnowledgeBaseParamPtrs{}
-	}
-	mmGetKnowledgeBase.defaultExpectation.paramPtrs.ctx = &ctx
-
-	return mmGetKnowledgeBase
-}
-
-// Inspect accepts an inspector function that has same arguments as the RepositoryI.GetKnowledgeBase
-func (mmGetKnowledgeBase *mRepositoryIMockGetKnowledgeBase) Inspect(f func(ctx context.Context)) *mRepositoryIMockGetKnowledgeBase {
-	if mmGetKnowledgeBase.mock.inspectFuncGetKnowledgeBase != nil {
-		mmGetKnowledgeBase.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.GetKnowledgeBase")
-	}
-
-	mmGetKnowledgeBase.mock.inspectFuncGetKnowledgeBase = f
-
-	return mmGetKnowledgeBase
-}
-
-// Return sets up results that will be returned by RepositoryI.GetKnowledgeBase
-func (mmGetKnowledgeBase *mRepositoryIMockGetKnowledgeBase) Return(ka1 []mm_repository.KnowledgeBase, err error) *RepositoryIMock {
-	if mmGetKnowledgeBase.mock.funcGetKnowledgeBase != nil {
-		mmGetKnowledgeBase.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBase mock is already set by Set")
-	}
-
-	if mmGetKnowledgeBase.defaultExpectation == nil {
-		mmGetKnowledgeBase.defaultExpectation = &RepositoryIMockGetKnowledgeBaseExpectation{mock: mmGetKnowledgeBase.mock}
-	}
-	mmGetKnowledgeBase.defaultExpectation.results = &RepositoryIMockGetKnowledgeBaseResults{ka1, err}
-	return mmGetKnowledgeBase.mock
-}
-
-// Set uses given function f to mock the RepositoryI.GetKnowledgeBase method
-func (mmGetKnowledgeBase *mRepositoryIMockGetKnowledgeBase) Set(f func(ctx context.Context) (ka1 []mm_repository.KnowledgeBase, err error)) *RepositoryIMock {
-	if mmGetKnowledgeBase.defaultExpectation != nil {
-		mmGetKnowledgeBase.mock.t.Fatalf("Default expectation is already set for the RepositoryI.GetKnowledgeBase method")
-	}
-
-	if len(mmGetKnowledgeBase.expectations) > 0 {
-		mmGetKnowledgeBase.mock.t.Fatalf("Some expectations are already set for the RepositoryI.GetKnowledgeBase method")
-	}
-
-	mmGetKnowledgeBase.mock.funcGetKnowledgeBase = f
-	return mmGetKnowledgeBase.mock
-}
-
-// When sets expectation for the RepositoryI.GetKnowledgeBase which will trigger the result defined by the following
-// Then helper
-func (mmGetKnowledgeBase *mRepositoryIMockGetKnowledgeBase) When(ctx context.Context) *RepositoryIMockGetKnowledgeBaseExpectation {
-	if mmGetKnowledgeBase.mock.funcGetKnowledgeBase != nil {
-		mmGetKnowledgeBase.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBase mock is already set by Set")
-	}
-
-	expectation := &RepositoryIMockGetKnowledgeBaseExpectation{
-		mock:   mmGetKnowledgeBase.mock,
-		params: &RepositoryIMockGetKnowledgeBaseParams{ctx},
-	}
-	mmGetKnowledgeBase.expectations = append(mmGetKnowledgeBase.expectations, expectation)
-	return expectation
-}
-
-// Then sets up RepositoryI.GetKnowledgeBase return parameters for the expectation previously defined by the When method
-func (e *RepositoryIMockGetKnowledgeBaseExpectation) Then(ka1 []mm_repository.KnowledgeBase, err error) *RepositoryIMock {
-	e.results = &RepositoryIMockGetKnowledgeBaseResults{ka1, err}
-	return e.mock
-}
-
-// Times sets number of times RepositoryI.GetKnowledgeBase should be invoked
-func (mmGetKnowledgeBase *mRepositoryIMockGetKnowledgeBase) Times(n uint64) *mRepositoryIMockGetKnowledgeBase {
-	if n == 0 {
-		mmGetKnowledgeBase.mock.t.Fatalf("Times of RepositoryIMock.GetKnowledgeBase mock can not be zero")
-	}
-	mm_atomic.StoreUint64(&mmGetKnowledgeBase.expectedInvocations, n)
-	return mmGetKnowledgeBase
-}
-
-func (mmGetKnowledgeBase *mRepositoryIMockGetKnowledgeBase) invocationsDone() bool {
-	if len(mmGetKnowledgeBase.expectations) == 0 && mmGetKnowledgeBase.defaultExpectation == nil && mmGetKnowledgeBase.mock.funcGetKnowledgeBase == nil {
-		return true
-	}
-
-	totalInvocations := mm_atomic.LoadUint64(&mmGetKnowledgeBase.mock.afterGetKnowledgeBaseCounter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmGetKnowledgeBase.expectedInvocations)
-
-	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
-}
-
-// GetKnowledgeBase implements repository.RepositoryI
-func (mmGetKnowledgeBase *RepositoryIMock) GetKnowledgeBase(ctx context.Context) (ka1 []mm_repository.KnowledgeBase, err error) {
-	mm_atomic.AddUint64(&mmGetKnowledgeBase.beforeGetKnowledgeBaseCounter, 1)
-	defer mm_atomic.AddUint64(&mmGetKnowledgeBase.afterGetKnowledgeBaseCounter, 1)
-
-	if mmGetKnowledgeBase.inspectFuncGetKnowledgeBase != nil {
-		mmGetKnowledgeBase.inspectFuncGetKnowledgeBase(ctx)
-	}
-
-	mm_params := RepositoryIMockGetKnowledgeBaseParams{ctx}
-
-	// Record call args
-	mmGetKnowledgeBase.GetKnowledgeBaseMock.mutex.Lock()
-	mmGetKnowledgeBase.GetKnowledgeBaseMock.callArgs = append(mmGetKnowledgeBase.GetKnowledgeBaseMock.callArgs, &mm_params)
-	mmGetKnowledgeBase.GetKnowledgeBaseMock.mutex.Unlock()
-
-	for _, e := range mmGetKnowledgeBase.GetKnowledgeBaseMock.expectations {
-		if minimock.Equal(*e.params, mm_params) {
-			mm_atomic.AddUint64(&e.Counter, 1)
-			return e.results.ka1, e.results.err
-		}
-	}
-
-	if mmGetKnowledgeBase.GetKnowledgeBaseMock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmGetKnowledgeBase.GetKnowledgeBaseMock.defaultExpectation.Counter, 1)
-		mm_want := mmGetKnowledgeBase.GetKnowledgeBaseMock.defaultExpectation.params
-		mm_want_ptrs := mmGetKnowledgeBase.GetKnowledgeBaseMock.defaultExpectation.paramPtrs
-
-		mm_got := RepositoryIMockGetKnowledgeBaseParams{ctx}
-
-		if mm_want_ptrs != nil {
-
-			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
-				mmGetKnowledgeBase.t.Errorf("RepositoryIMock.GetKnowledgeBase got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
-			}
-
-		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
-			mmGetKnowledgeBase.t.Errorf("RepositoryIMock.GetKnowledgeBase got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
-		}
-
-		mm_results := mmGetKnowledgeBase.GetKnowledgeBaseMock.defaultExpectation.results
-		if mm_results == nil {
-			mmGetKnowledgeBase.t.Fatal("No results are set for the RepositoryIMock.GetKnowledgeBase")
-		}
-		return (*mm_results).ka1, (*mm_results).err
-	}
-	if mmGetKnowledgeBase.funcGetKnowledgeBase != nil {
-		return mmGetKnowledgeBase.funcGetKnowledgeBase(ctx)
-	}
-	mmGetKnowledgeBase.t.Fatalf("Unexpected call to RepositoryIMock.GetKnowledgeBase. %v", ctx)
-	return
-}
-
-// GetKnowledgeBaseAfterCounter returns a count of finished RepositoryIMock.GetKnowledgeBase invocations
-func (mmGetKnowledgeBase *RepositoryIMock) GetKnowledgeBaseAfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmGetKnowledgeBase.afterGetKnowledgeBaseCounter)
-}
-
-// GetKnowledgeBaseBeforeCounter returns a count of RepositoryIMock.GetKnowledgeBase invocations
-func (mmGetKnowledgeBase *RepositoryIMock) GetKnowledgeBaseBeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmGetKnowledgeBase.beforeGetKnowledgeBaseCounter)
-}
-
-// Calls returns a list of arguments used in each call to RepositoryIMock.GetKnowledgeBase.
-// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
-func (mmGetKnowledgeBase *mRepositoryIMockGetKnowledgeBase) Calls() []*RepositoryIMockGetKnowledgeBaseParams {
-	mmGetKnowledgeBase.mutex.RLock()
-
-	argCopy := make([]*RepositoryIMockGetKnowledgeBaseParams, len(mmGetKnowledgeBase.callArgs))
-	copy(argCopy, mmGetKnowledgeBase.callArgs)
-
-	mmGetKnowledgeBase.mutex.RUnlock()
-
-	return argCopy
-}
-
-// MinimockGetKnowledgeBaseDone returns true if the count of the GetKnowledgeBase invocations corresponds
-// the number of defined expectations
-func (m *RepositoryIMock) MinimockGetKnowledgeBaseDone() bool {
-	for _, e := range m.GetKnowledgeBaseMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			return false
-		}
-	}
-
-	return m.GetKnowledgeBaseMock.invocationsDone()
-}
-
-// MinimockGetKnowledgeBaseInspect logs each unmet expectation
-func (m *RepositoryIMock) MinimockGetKnowledgeBaseInspect() {
-	for _, e := range m.GetKnowledgeBaseMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Errorf("Expected call to RepositoryIMock.GetKnowledgeBase with params: %#v", *e.params)
-		}
-	}
-
-	afterGetKnowledgeBaseCounter := mm_atomic.LoadUint64(&m.afterGetKnowledgeBaseCounter)
-	// if default expectation was set then invocations count should be greater than zero
-	if m.GetKnowledgeBaseMock.defaultExpectation != nil && afterGetKnowledgeBaseCounter < 1 {
-		if m.GetKnowledgeBaseMock.defaultExpectation.params == nil {
-			m.t.Error("Expected call to RepositoryIMock.GetKnowledgeBase")
-		} else {
-			m.t.Errorf("Expected call to RepositoryIMock.GetKnowledgeBase with params: %#v", *m.GetKnowledgeBaseMock.defaultExpectation.params)
-		}
-	}
-	// if func was set then invocations count should be greater than zero
-	if m.funcGetKnowledgeBase != nil && afterGetKnowledgeBaseCounter < 1 {
-		m.t.Error("Expected call to RepositoryIMock.GetKnowledgeBase")
-	}
-
-	if !m.GetKnowledgeBaseMock.invocationsDone() && afterGetKnowledgeBaseCounter > 0 {
-		m.t.Errorf("Expected %d calls to RepositoryIMock.GetKnowledgeBase but found %d calls",
-			mm_atomic.LoadUint64(&m.GetKnowledgeBaseMock.expectedInvocations), afterGetKnowledgeBaseCounter)
-	}
-}
-
 type mRepositoryIMockGetRepositoryTag struct {
 	mock               *RepositoryIMock
 	defaultExpectation *RepositoryIMockGetRepositoryTagExpectation
@@ -1007,7 +758,7 @@ type RepositoryIMockGetRepositoryTagParamPtrs struct {
 
 // RepositoryIMockGetRepositoryTagResults contains results of the RepositoryI.GetRepositoryTag
 type RepositoryIMockGetRepositoryTagResults struct {
-	rp1 *artifactpb.RepositoryTag
+	rp1 *pb.RepositoryTag
 	err error
 }
 
@@ -1091,7 +842,7 @@ func (mmGetRepositoryTag *mRepositoryIMockGetRepositoryTag) Inspect(f func(ctx c
 }
 
 // Return sets up results that will be returned by RepositoryI.GetRepositoryTag
-func (mmGetRepositoryTag *mRepositoryIMockGetRepositoryTag) Return(rp1 *artifactpb.RepositoryTag, err error) *RepositoryIMock {
+func (mmGetRepositoryTag *mRepositoryIMockGetRepositoryTag) Return(rp1 *pb.RepositoryTag, err error) *RepositoryIMock {
 	if mmGetRepositoryTag.mock.funcGetRepositoryTag != nil {
 		mmGetRepositoryTag.mock.t.Fatalf("RepositoryIMock.GetRepositoryTag mock is already set by Set")
 	}
@@ -1104,7 +855,7 @@ func (mmGetRepositoryTag *mRepositoryIMockGetRepositoryTag) Return(rp1 *artifact
 }
 
 // Set uses given function f to mock the RepositoryI.GetRepositoryTag method
-func (mmGetRepositoryTag *mRepositoryIMockGetRepositoryTag) Set(f func(ctx context.Context, r1 utils.RepositoryTagName) (rp1 *artifactpb.RepositoryTag, err error)) *RepositoryIMock {
+func (mmGetRepositoryTag *mRepositoryIMockGetRepositoryTag) Set(f func(ctx context.Context, r1 utils.RepositoryTagName) (rp1 *pb.RepositoryTag, err error)) *RepositoryIMock {
 	if mmGetRepositoryTag.defaultExpectation != nil {
 		mmGetRepositoryTag.mock.t.Fatalf("Default expectation is already set for the RepositoryI.GetRepositoryTag method")
 	}
@@ -1133,7 +884,7 @@ func (mmGetRepositoryTag *mRepositoryIMockGetRepositoryTag) When(ctx context.Con
 }
 
 // Then sets up RepositoryI.GetRepositoryTag return parameters for the expectation previously defined by the When method
-func (e *RepositoryIMockGetRepositoryTagExpectation) Then(rp1 *artifactpb.RepositoryTag, err error) *RepositoryIMock {
+func (e *RepositoryIMockGetRepositoryTagExpectation) Then(rp1 *pb.RepositoryTag, err error) *RepositoryIMock {
 	e.results = &RepositoryIMockGetRepositoryTagResults{rp1, err}
 	return e.mock
 }
@@ -1159,7 +910,7 @@ func (mmGetRepositoryTag *mRepositoryIMockGetRepositoryTag) invocationsDone() bo
 }
 
 // GetRepositoryTag implements repository.RepositoryI
-func (mmGetRepositoryTag *RepositoryIMock) GetRepositoryTag(ctx context.Context, r1 utils.RepositoryTagName) (rp1 *artifactpb.RepositoryTag, err error) {
+func (mmGetRepositoryTag *RepositoryIMock) GetRepositoryTag(ctx context.Context, r1 utils.RepositoryTagName) (rp1 *pb.RepositoryTag, err error) {
 	mm_atomic.AddUint64(&mmGetRepositoryTag.beforeGetRepositoryTagCounter, 1)
 	defer mm_atomic.AddUint64(&mmGetRepositoryTag.afterGetRepositoryTagCounter, 1)
 
@@ -1278,6 +1029,311 @@ func (m *RepositoryIMock) MinimockGetRepositoryTagInspect() {
 	}
 }
 
+type mRepositoryIMockListKnowledgeBases struct {
+	mock               *RepositoryIMock
+	defaultExpectation *RepositoryIMockListKnowledgeBasesExpectation
+	expectations       []*RepositoryIMockListKnowledgeBasesExpectation
+
+	callArgs []*RepositoryIMockListKnowledgeBasesParams
+	mutex    sync.RWMutex
+
+	expectedInvocations uint64
+}
+
+// RepositoryIMockListKnowledgeBasesExpectation specifies expectation struct of the RepositoryI.ListKnowledgeBases
+type RepositoryIMockListKnowledgeBasesExpectation struct {
+	mock      *RepositoryIMock
+	params    *RepositoryIMockListKnowledgeBasesParams
+	paramPtrs *RepositoryIMockListKnowledgeBasesParamPtrs
+	results   *RepositoryIMockListKnowledgeBasesResults
+	Counter   uint64
+}
+
+// RepositoryIMockListKnowledgeBasesParams contains parameters of the RepositoryI.ListKnowledgeBases
+type RepositoryIMockListKnowledgeBasesParams struct {
+	ctx context.Context
+	uid string
+}
+
+// RepositoryIMockListKnowledgeBasesParamPtrs contains pointers to parameters of the RepositoryI.ListKnowledgeBases
+type RepositoryIMockListKnowledgeBasesParamPtrs struct {
+	ctx *context.Context
+	uid *string
+}
+
+// RepositoryIMockListKnowledgeBasesResults contains results of the RepositoryI.ListKnowledgeBases
+type RepositoryIMockListKnowledgeBasesResults struct {
+	ka1 []mm_repository.KnowledgeBase
+	err error
+}
+
+// Expect sets up expected params for RepositoryI.ListKnowledgeBases
+func (mmListKnowledgeBases *mRepositoryIMockListKnowledgeBases) Expect(ctx context.Context, uid string) *mRepositoryIMockListKnowledgeBases {
+	if mmListKnowledgeBases.mock.funcListKnowledgeBases != nil {
+		mmListKnowledgeBases.mock.t.Fatalf("RepositoryIMock.ListKnowledgeBases mock is already set by Set")
+	}
+
+	if mmListKnowledgeBases.defaultExpectation == nil {
+		mmListKnowledgeBases.defaultExpectation = &RepositoryIMockListKnowledgeBasesExpectation{}
+	}
+
+	if mmListKnowledgeBases.defaultExpectation.paramPtrs != nil {
+		mmListKnowledgeBases.mock.t.Fatalf("RepositoryIMock.ListKnowledgeBases mock is already set by ExpectParams functions")
+	}
+
+	mmListKnowledgeBases.defaultExpectation.params = &RepositoryIMockListKnowledgeBasesParams{ctx, uid}
+	for _, e := range mmListKnowledgeBases.expectations {
+		if minimock.Equal(e.params, mmListKnowledgeBases.defaultExpectation.params) {
+			mmListKnowledgeBases.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmListKnowledgeBases.defaultExpectation.params)
+		}
+	}
+
+	return mmListKnowledgeBases
+}
+
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.ListKnowledgeBases
+func (mmListKnowledgeBases *mRepositoryIMockListKnowledgeBases) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockListKnowledgeBases {
+	if mmListKnowledgeBases.mock.funcListKnowledgeBases != nil {
+		mmListKnowledgeBases.mock.t.Fatalf("RepositoryIMock.ListKnowledgeBases mock is already set by Set")
+	}
+
+	if mmListKnowledgeBases.defaultExpectation == nil {
+		mmListKnowledgeBases.defaultExpectation = &RepositoryIMockListKnowledgeBasesExpectation{}
+	}
+
+	if mmListKnowledgeBases.defaultExpectation.params != nil {
+		mmListKnowledgeBases.mock.t.Fatalf("RepositoryIMock.ListKnowledgeBases mock is already set by Expect")
+	}
+
+	if mmListKnowledgeBases.defaultExpectation.paramPtrs == nil {
+		mmListKnowledgeBases.defaultExpectation.paramPtrs = &RepositoryIMockListKnowledgeBasesParamPtrs{}
+	}
+	mmListKnowledgeBases.defaultExpectation.paramPtrs.ctx = &ctx
+
+	return mmListKnowledgeBases
+}
+
+// ExpectUidParam2 sets up expected param uid for RepositoryI.ListKnowledgeBases
+func (mmListKnowledgeBases *mRepositoryIMockListKnowledgeBases) ExpectUidParam2(uid string) *mRepositoryIMockListKnowledgeBases {
+	if mmListKnowledgeBases.mock.funcListKnowledgeBases != nil {
+		mmListKnowledgeBases.mock.t.Fatalf("RepositoryIMock.ListKnowledgeBases mock is already set by Set")
+	}
+
+	if mmListKnowledgeBases.defaultExpectation == nil {
+		mmListKnowledgeBases.defaultExpectation = &RepositoryIMockListKnowledgeBasesExpectation{}
+	}
+
+	if mmListKnowledgeBases.defaultExpectation.params != nil {
+		mmListKnowledgeBases.mock.t.Fatalf("RepositoryIMock.ListKnowledgeBases mock is already set by Expect")
+	}
+
+	if mmListKnowledgeBases.defaultExpectation.paramPtrs == nil {
+		mmListKnowledgeBases.defaultExpectation.paramPtrs = &RepositoryIMockListKnowledgeBasesParamPtrs{}
+	}
+	mmListKnowledgeBases.defaultExpectation.paramPtrs.uid = &uid
+
+	return mmListKnowledgeBases
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.ListKnowledgeBases
+func (mmListKnowledgeBases *mRepositoryIMockListKnowledgeBases) Inspect(f func(ctx context.Context, uid string)) *mRepositoryIMockListKnowledgeBases {
+	if mmListKnowledgeBases.mock.inspectFuncListKnowledgeBases != nil {
+		mmListKnowledgeBases.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.ListKnowledgeBases")
+	}
+
+	mmListKnowledgeBases.mock.inspectFuncListKnowledgeBases = f
+
+	return mmListKnowledgeBases
+}
+
+// Return sets up results that will be returned by RepositoryI.ListKnowledgeBases
+func (mmListKnowledgeBases *mRepositoryIMockListKnowledgeBases) Return(ka1 []mm_repository.KnowledgeBase, err error) *RepositoryIMock {
+	if mmListKnowledgeBases.mock.funcListKnowledgeBases != nil {
+		mmListKnowledgeBases.mock.t.Fatalf("RepositoryIMock.ListKnowledgeBases mock is already set by Set")
+	}
+
+	if mmListKnowledgeBases.defaultExpectation == nil {
+		mmListKnowledgeBases.defaultExpectation = &RepositoryIMockListKnowledgeBasesExpectation{mock: mmListKnowledgeBases.mock}
+	}
+	mmListKnowledgeBases.defaultExpectation.results = &RepositoryIMockListKnowledgeBasesResults{ka1, err}
+	return mmListKnowledgeBases.mock
+}
+
+// Set uses given function f to mock the RepositoryI.ListKnowledgeBases method
+func (mmListKnowledgeBases *mRepositoryIMockListKnowledgeBases) Set(f func(ctx context.Context, uid string) (ka1 []mm_repository.KnowledgeBase, err error)) *RepositoryIMock {
+	if mmListKnowledgeBases.defaultExpectation != nil {
+		mmListKnowledgeBases.mock.t.Fatalf("Default expectation is already set for the RepositoryI.ListKnowledgeBases method")
+	}
+
+	if len(mmListKnowledgeBases.expectations) > 0 {
+		mmListKnowledgeBases.mock.t.Fatalf("Some expectations are already set for the RepositoryI.ListKnowledgeBases method")
+	}
+
+	mmListKnowledgeBases.mock.funcListKnowledgeBases = f
+	return mmListKnowledgeBases.mock
+}
+
+// When sets expectation for the RepositoryI.ListKnowledgeBases which will trigger the result defined by the following
+// Then helper
+func (mmListKnowledgeBases *mRepositoryIMockListKnowledgeBases) When(ctx context.Context, uid string) *RepositoryIMockListKnowledgeBasesExpectation {
+	if mmListKnowledgeBases.mock.funcListKnowledgeBases != nil {
+		mmListKnowledgeBases.mock.t.Fatalf("RepositoryIMock.ListKnowledgeBases mock is already set by Set")
+	}
+
+	expectation := &RepositoryIMockListKnowledgeBasesExpectation{
+		mock:   mmListKnowledgeBases.mock,
+		params: &RepositoryIMockListKnowledgeBasesParams{ctx, uid},
+	}
+	mmListKnowledgeBases.expectations = append(mmListKnowledgeBases.expectations, expectation)
+	return expectation
+}
+
+// Then sets up RepositoryI.ListKnowledgeBases return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockListKnowledgeBasesExpectation) Then(ka1 []mm_repository.KnowledgeBase, err error) *RepositoryIMock {
+	e.results = &RepositoryIMockListKnowledgeBasesResults{ka1, err}
+	return e.mock
+}
+
+// Times sets number of times RepositoryI.ListKnowledgeBases should be invoked
+func (mmListKnowledgeBases *mRepositoryIMockListKnowledgeBases) Times(n uint64) *mRepositoryIMockListKnowledgeBases {
+	if n == 0 {
+		mmListKnowledgeBases.mock.t.Fatalf("Times of RepositoryIMock.ListKnowledgeBases mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmListKnowledgeBases.expectedInvocations, n)
+	return mmListKnowledgeBases
+}
+
+func (mmListKnowledgeBases *mRepositoryIMockListKnowledgeBases) invocationsDone() bool {
+	if len(mmListKnowledgeBases.expectations) == 0 && mmListKnowledgeBases.defaultExpectation == nil && mmListKnowledgeBases.mock.funcListKnowledgeBases == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmListKnowledgeBases.mock.afterListKnowledgeBasesCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmListKnowledgeBases.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// ListKnowledgeBases implements repository.RepositoryI
+func (mmListKnowledgeBases *RepositoryIMock) ListKnowledgeBases(ctx context.Context, uid string) (ka1 []mm_repository.KnowledgeBase, err error) {
+	mm_atomic.AddUint64(&mmListKnowledgeBases.beforeListKnowledgeBasesCounter, 1)
+	defer mm_atomic.AddUint64(&mmListKnowledgeBases.afterListKnowledgeBasesCounter, 1)
+
+	if mmListKnowledgeBases.inspectFuncListKnowledgeBases != nil {
+		mmListKnowledgeBases.inspectFuncListKnowledgeBases(ctx, uid)
+	}
+
+	mm_params := RepositoryIMockListKnowledgeBasesParams{ctx, uid}
+
+	// Record call args
+	mmListKnowledgeBases.ListKnowledgeBasesMock.mutex.Lock()
+	mmListKnowledgeBases.ListKnowledgeBasesMock.callArgs = append(mmListKnowledgeBases.ListKnowledgeBasesMock.callArgs, &mm_params)
+	mmListKnowledgeBases.ListKnowledgeBasesMock.mutex.Unlock()
+
+	for _, e := range mmListKnowledgeBases.ListKnowledgeBasesMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.ka1, e.results.err
+		}
+	}
+
+	if mmListKnowledgeBases.ListKnowledgeBasesMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmListKnowledgeBases.ListKnowledgeBasesMock.defaultExpectation.Counter, 1)
+		mm_want := mmListKnowledgeBases.ListKnowledgeBasesMock.defaultExpectation.params
+		mm_want_ptrs := mmListKnowledgeBases.ListKnowledgeBasesMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryIMockListKnowledgeBasesParams{ctx, uid}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmListKnowledgeBases.t.Errorf("RepositoryIMock.ListKnowledgeBases got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.uid != nil && !minimock.Equal(*mm_want_ptrs.uid, mm_got.uid) {
+				mmListKnowledgeBases.t.Errorf("RepositoryIMock.ListKnowledgeBases got unexpected parameter uid, want: %#v, got: %#v%s\n", *mm_want_ptrs.uid, mm_got.uid, minimock.Diff(*mm_want_ptrs.uid, mm_got.uid))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmListKnowledgeBases.t.Errorf("RepositoryIMock.ListKnowledgeBases got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmListKnowledgeBases.ListKnowledgeBasesMock.defaultExpectation.results
+		if mm_results == nil {
+			mmListKnowledgeBases.t.Fatal("No results are set for the RepositoryIMock.ListKnowledgeBases")
+		}
+		return (*mm_results).ka1, (*mm_results).err
+	}
+	if mmListKnowledgeBases.funcListKnowledgeBases != nil {
+		return mmListKnowledgeBases.funcListKnowledgeBases(ctx, uid)
+	}
+	mmListKnowledgeBases.t.Fatalf("Unexpected call to RepositoryIMock.ListKnowledgeBases. %v %v", ctx, uid)
+	return
+}
+
+// ListKnowledgeBasesAfterCounter returns a count of finished RepositoryIMock.ListKnowledgeBases invocations
+func (mmListKnowledgeBases *RepositoryIMock) ListKnowledgeBasesAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmListKnowledgeBases.afterListKnowledgeBasesCounter)
+}
+
+// ListKnowledgeBasesBeforeCounter returns a count of RepositoryIMock.ListKnowledgeBases invocations
+func (mmListKnowledgeBases *RepositoryIMock) ListKnowledgeBasesBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmListKnowledgeBases.beforeListKnowledgeBasesCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryIMock.ListKnowledgeBases.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmListKnowledgeBases *mRepositoryIMockListKnowledgeBases) Calls() []*RepositoryIMockListKnowledgeBasesParams {
+	mmListKnowledgeBases.mutex.RLock()
+
+	argCopy := make([]*RepositoryIMockListKnowledgeBasesParams, len(mmListKnowledgeBases.callArgs))
+	copy(argCopy, mmListKnowledgeBases.callArgs)
+
+	mmListKnowledgeBases.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockListKnowledgeBasesDone returns true if the count of the ListKnowledgeBases invocations corresponds
+// the number of defined expectations
+func (m *RepositoryIMock) MinimockListKnowledgeBasesDone() bool {
+	for _, e := range m.ListKnowledgeBasesMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.ListKnowledgeBasesMock.invocationsDone()
+}
+
+// MinimockListKnowledgeBasesInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockListKnowledgeBasesInspect() {
+	for _, e := range m.ListKnowledgeBasesMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryIMock.ListKnowledgeBases with params: %#v", *e.params)
+		}
+	}
+
+	afterListKnowledgeBasesCounter := mm_atomic.LoadUint64(&m.afterListKnowledgeBasesCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.ListKnowledgeBasesMock.defaultExpectation != nil && afterListKnowledgeBasesCounter < 1 {
+		if m.ListKnowledgeBasesMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to RepositoryIMock.ListKnowledgeBases")
+		} else {
+			m.t.Errorf("Expected call to RepositoryIMock.ListKnowledgeBases with params: %#v", *m.ListKnowledgeBasesMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcListKnowledgeBases != nil && afterListKnowledgeBasesCounter < 1 {
+		m.t.Error("Expected call to RepositoryIMock.ListKnowledgeBases")
+	}
+
+	if !m.ListKnowledgeBasesMock.invocationsDone() && afterListKnowledgeBasesCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.ListKnowledgeBases but found %d calls",
+			mm_atomic.LoadUint64(&m.ListKnowledgeBasesMock.expectedInvocations), afterListKnowledgeBasesCounter)
+	}
+}
+
 type mRepositoryIMockUpdateKnowledgeBase struct {
 	mock               *RepositoryIMock
 	defaultExpectation *RepositoryIMockUpdateKnowledgeBaseExpectation
@@ -1301,12 +1357,14 @@ type RepositoryIMockUpdateKnowledgeBaseExpectation struct {
 // RepositoryIMockUpdateKnowledgeBaseParams contains parameters of the RepositoryI.UpdateKnowledgeBase
 type RepositoryIMockUpdateKnowledgeBaseParams struct {
 	ctx context.Context
+	uid string
 	kb  mm_repository.KnowledgeBase
 }
 
 // RepositoryIMockUpdateKnowledgeBaseParamPtrs contains pointers to parameters of the RepositoryI.UpdateKnowledgeBase
 type RepositoryIMockUpdateKnowledgeBaseParamPtrs struct {
 	ctx *context.Context
+	uid *string
 	kb  *mm_repository.KnowledgeBase
 }
 
@@ -1317,7 +1375,7 @@ type RepositoryIMockUpdateKnowledgeBaseResults struct {
 }
 
 // Expect sets up expected params for RepositoryI.UpdateKnowledgeBase
-func (mmUpdateKnowledgeBase *mRepositoryIMockUpdateKnowledgeBase) Expect(ctx context.Context, kb mm_repository.KnowledgeBase) *mRepositoryIMockUpdateKnowledgeBase {
+func (mmUpdateKnowledgeBase *mRepositoryIMockUpdateKnowledgeBase) Expect(ctx context.Context, uid string, kb mm_repository.KnowledgeBase) *mRepositoryIMockUpdateKnowledgeBase {
 	if mmUpdateKnowledgeBase.mock.funcUpdateKnowledgeBase != nil {
 		mmUpdateKnowledgeBase.mock.t.Fatalf("RepositoryIMock.UpdateKnowledgeBase mock is already set by Set")
 	}
@@ -1330,7 +1388,7 @@ func (mmUpdateKnowledgeBase *mRepositoryIMockUpdateKnowledgeBase) Expect(ctx con
 		mmUpdateKnowledgeBase.mock.t.Fatalf("RepositoryIMock.UpdateKnowledgeBase mock is already set by ExpectParams functions")
 	}
 
-	mmUpdateKnowledgeBase.defaultExpectation.params = &RepositoryIMockUpdateKnowledgeBaseParams{ctx, kb}
+	mmUpdateKnowledgeBase.defaultExpectation.params = &RepositoryIMockUpdateKnowledgeBaseParams{ctx, uid, kb}
 	for _, e := range mmUpdateKnowledgeBase.expectations {
 		if minimock.Equal(e.params, mmUpdateKnowledgeBase.defaultExpectation.params) {
 			mmUpdateKnowledgeBase.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmUpdateKnowledgeBase.defaultExpectation.params)
@@ -1362,8 +1420,30 @@ func (mmUpdateKnowledgeBase *mRepositoryIMockUpdateKnowledgeBase) ExpectCtxParam
 	return mmUpdateKnowledgeBase
 }
 
-// ExpectKbParam2 sets up expected param kb for RepositoryI.UpdateKnowledgeBase
-func (mmUpdateKnowledgeBase *mRepositoryIMockUpdateKnowledgeBase) ExpectKbParam2(kb mm_repository.KnowledgeBase) *mRepositoryIMockUpdateKnowledgeBase {
+// ExpectUidParam2 sets up expected param uid for RepositoryI.UpdateKnowledgeBase
+func (mmUpdateKnowledgeBase *mRepositoryIMockUpdateKnowledgeBase) ExpectUidParam2(uid string) *mRepositoryIMockUpdateKnowledgeBase {
+	if mmUpdateKnowledgeBase.mock.funcUpdateKnowledgeBase != nil {
+		mmUpdateKnowledgeBase.mock.t.Fatalf("RepositoryIMock.UpdateKnowledgeBase mock is already set by Set")
+	}
+
+	if mmUpdateKnowledgeBase.defaultExpectation == nil {
+		mmUpdateKnowledgeBase.defaultExpectation = &RepositoryIMockUpdateKnowledgeBaseExpectation{}
+	}
+
+	if mmUpdateKnowledgeBase.defaultExpectation.params != nil {
+		mmUpdateKnowledgeBase.mock.t.Fatalf("RepositoryIMock.UpdateKnowledgeBase mock is already set by Expect")
+	}
+
+	if mmUpdateKnowledgeBase.defaultExpectation.paramPtrs == nil {
+		mmUpdateKnowledgeBase.defaultExpectation.paramPtrs = &RepositoryIMockUpdateKnowledgeBaseParamPtrs{}
+	}
+	mmUpdateKnowledgeBase.defaultExpectation.paramPtrs.uid = &uid
+
+	return mmUpdateKnowledgeBase
+}
+
+// ExpectKbParam3 sets up expected param kb for RepositoryI.UpdateKnowledgeBase
+func (mmUpdateKnowledgeBase *mRepositoryIMockUpdateKnowledgeBase) ExpectKbParam3(kb mm_repository.KnowledgeBase) *mRepositoryIMockUpdateKnowledgeBase {
 	if mmUpdateKnowledgeBase.mock.funcUpdateKnowledgeBase != nil {
 		mmUpdateKnowledgeBase.mock.t.Fatalf("RepositoryIMock.UpdateKnowledgeBase mock is already set by Set")
 	}
@@ -1385,7 +1465,7 @@ func (mmUpdateKnowledgeBase *mRepositoryIMockUpdateKnowledgeBase) ExpectKbParam2
 }
 
 // Inspect accepts an inspector function that has same arguments as the RepositoryI.UpdateKnowledgeBase
-func (mmUpdateKnowledgeBase *mRepositoryIMockUpdateKnowledgeBase) Inspect(f func(ctx context.Context, kb mm_repository.KnowledgeBase)) *mRepositoryIMockUpdateKnowledgeBase {
+func (mmUpdateKnowledgeBase *mRepositoryIMockUpdateKnowledgeBase) Inspect(f func(ctx context.Context, uid string, kb mm_repository.KnowledgeBase)) *mRepositoryIMockUpdateKnowledgeBase {
 	if mmUpdateKnowledgeBase.mock.inspectFuncUpdateKnowledgeBase != nil {
 		mmUpdateKnowledgeBase.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.UpdateKnowledgeBase")
 	}
@@ -1409,7 +1489,7 @@ func (mmUpdateKnowledgeBase *mRepositoryIMockUpdateKnowledgeBase) Return(kp1 *mm
 }
 
 // Set uses given function f to mock the RepositoryI.UpdateKnowledgeBase method
-func (mmUpdateKnowledgeBase *mRepositoryIMockUpdateKnowledgeBase) Set(f func(ctx context.Context, kb mm_repository.KnowledgeBase) (kp1 *mm_repository.KnowledgeBase, err error)) *RepositoryIMock {
+func (mmUpdateKnowledgeBase *mRepositoryIMockUpdateKnowledgeBase) Set(f func(ctx context.Context, uid string, kb mm_repository.KnowledgeBase) (kp1 *mm_repository.KnowledgeBase, err error)) *RepositoryIMock {
 	if mmUpdateKnowledgeBase.defaultExpectation != nil {
 		mmUpdateKnowledgeBase.mock.t.Fatalf("Default expectation is already set for the RepositoryI.UpdateKnowledgeBase method")
 	}
@@ -1424,14 +1504,14 @@ func (mmUpdateKnowledgeBase *mRepositoryIMockUpdateKnowledgeBase) Set(f func(ctx
 
 // When sets expectation for the RepositoryI.UpdateKnowledgeBase which will trigger the result defined by the following
 // Then helper
-func (mmUpdateKnowledgeBase *mRepositoryIMockUpdateKnowledgeBase) When(ctx context.Context, kb mm_repository.KnowledgeBase) *RepositoryIMockUpdateKnowledgeBaseExpectation {
+func (mmUpdateKnowledgeBase *mRepositoryIMockUpdateKnowledgeBase) When(ctx context.Context, uid string, kb mm_repository.KnowledgeBase) *RepositoryIMockUpdateKnowledgeBaseExpectation {
 	if mmUpdateKnowledgeBase.mock.funcUpdateKnowledgeBase != nil {
 		mmUpdateKnowledgeBase.mock.t.Fatalf("RepositoryIMock.UpdateKnowledgeBase mock is already set by Set")
 	}
 
 	expectation := &RepositoryIMockUpdateKnowledgeBaseExpectation{
 		mock:   mmUpdateKnowledgeBase.mock,
-		params: &RepositoryIMockUpdateKnowledgeBaseParams{ctx, kb},
+		params: &RepositoryIMockUpdateKnowledgeBaseParams{ctx, uid, kb},
 	}
 	mmUpdateKnowledgeBase.expectations = append(mmUpdateKnowledgeBase.expectations, expectation)
 	return expectation
@@ -1464,15 +1544,15 @@ func (mmUpdateKnowledgeBase *mRepositoryIMockUpdateKnowledgeBase) invocationsDon
 }
 
 // UpdateKnowledgeBase implements repository.RepositoryI
-func (mmUpdateKnowledgeBase *RepositoryIMock) UpdateKnowledgeBase(ctx context.Context, kb mm_repository.KnowledgeBase) (kp1 *mm_repository.KnowledgeBase, err error) {
+func (mmUpdateKnowledgeBase *RepositoryIMock) UpdateKnowledgeBase(ctx context.Context, uid string, kb mm_repository.KnowledgeBase) (kp1 *mm_repository.KnowledgeBase, err error) {
 	mm_atomic.AddUint64(&mmUpdateKnowledgeBase.beforeUpdateKnowledgeBaseCounter, 1)
 	defer mm_atomic.AddUint64(&mmUpdateKnowledgeBase.afterUpdateKnowledgeBaseCounter, 1)
 
 	if mmUpdateKnowledgeBase.inspectFuncUpdateKnowledgeBase != nil {
-		mmUpdateKnowledgeBase.inspectFuncUpdateKnowledgeBase(ctx, kb)
+		mmUpdateKnowledgeBase.inspectFuncUpdateKnowledgeBase(ctx, uid, kb)
 	}
 
-	mm_params := RepositoryIMockUpdateKnowledgeBaseParams{ctx, kb}
+	mm_params := RepositoryIMockUpdateKnowledgeBaseParams{ctx, uid, kb}
 
 	// Record call args
 	mmUpdateKnowledgeBase.UpdateKnowledgeBaseMock.mutex.Lock()
@@ -1491,12 +1571,16 @@ func (mmUpdateKnowledgeBase *RepositoryIMock) UpdateKnowledgeBase(ctx context.Co
 		mm_want := mmUpdateKnowledgeBase.UpdateKnowledgeBaseMock.defaultExpectation.params
 		mm_want_ptrs := mmUpdateKnowledgeBase.UpdateKnowledgeBaseMock.defaultExpectation.paramPtrs
 
-		mm_got := RepositoryIMockUpdateKnowledgeBaseParams{ctx, kb}
+		mm_got := RepositoryIMockUpdateKnowledgeBaseParams{ctx, uid, kb}
 
 		if mm_want_ptrs != nil {
 
 			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
 				mmUpdateKnowledgeBase.t.Errorf("RepositoryIMock.UpdateKnowledgeBase got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.uid != nil && !minimock.Equal(*mm_want_ptrs.uid, mm_got.uid) {
+				mmUpdateKnowledgeBase.t.Errorf("RepositoryIMock.UpdateKnowledgeBase got unexpected parameter uid, want: %#v, got: %#v%s\n", *mm_want_ptrs.uid, mm_got.uid, minimock.Diff(*mm_want_ptrs.uid, mm_got.uid))
 			}
 
 			if mm_want_ptrs.kb != nil && !minimock.Equal(*mm_want_ptrs.kb, mm_got.kb) {
@@ -1514,9 +1598,9 @@ func (mmUpdateKnowledgeBase *RepositoryIMock) UpdateKnowledgeBase(ctx context.Co
 		return (*mm_results).kp1, (*mm_results).err
 	}
 	if mmUpdateKnowledgeBase.funcUpdateKnowledgeBase != nil {
-		return mmUpdateKnowledgeBase.funcUpdateKnowledgeBase(ctx, kb)
+		return mmUpdateKnowledgeBase.funcUpdateKnowledgeBase(ctx, uid, kb)
 	}
-	mmUpdateKnowledgeBase.t.Fatalf("Unexpected call to RepositoryIMock.UpdateKnowledgeBase. %v %v", ctx, kb)
+	mmUpdateKnowledgeBase.t.Fatalf("Unexpected call to RepositoryIMock.UpdateKnowledgeBase. %v %v %v", ctx, uid, kb)
 	return
 }
 
@@ -1606,23 +1690,23 @@ type RepositoryIMockUpsertRepositoryTagExpectation struct {
 // RepositoryIMockUpsertRepositoryTagParams contains parameters of the RepositoryI.UpsertRepositoryTag
 type RepositoryIMockUpsertRepositoryTagParams struct {
 	ctx context.Context
-	rp1 *artifactpb.RepositoryTag
+	rp1 *pb.RepositoryTag
 }
 
 // RepositoryIMockUpsertRepositoryTagParamPtrs contains pointers to parameters of the RepositoryI.UpsertRepositoryTag
 type RepositoryIMockUpsertRepositoryTagParamPtrs struct {
 	ctx *context.Context
-	rp1 **artifactpb.RepositoryTag
+	rp1 **pb.RepositoryTag
 }
 
 // RepositoryIMockUpsertRepositoryTagResults contains results of the RepositoryI.UpsertRepositoryTag
 type RepositoryIMockUpsertRepositoryTagResults struct {
-	rp2 *artifactpb.RepositoryTag
+	rp2 *pb.RepositoryTag
 	err error
 }
 
 // Expect sets up expected params for RepositoryI.UpsertRepositoryTag
-func (mmUpsertRepositoryTag *mRepositoryIMockUpsertRepositoryTag) Expect(ctx context.Context, rp1 *artifactpb.RepositoryTag) *mRepositoryIMockUpsertRepositoryTag {
+func (mmUpsertRepositoryTag *mRepositoryIMockUpsertRepositoryTag) Expect(ctx context.Context, rp1 *pb.RepositoryTag) *mRepositoryIMockUpsertRepositoryTag {
 	if mmUpsertRepositoryTag.mock.funcUpsertRepositoryTag != nil {
 		mmUpsertRepositoryTag.mock.t.Fatalf("RepositoryIMock.UpsertRepositoryTag mock is already set by Set")
 	}
@@ -1668,7 +1752,7 @@ func (mmUpsertRepositoryTag *mRepositoryIMockUpsertRepositoryTag) ExpectCtxParam
 }
 
 // ExpectRp1Param2 sets up expected param rp1 for RepositoryI.UpsertRepositoryTag
-func (mmUpsertRepositoryTag *mRepositoryIMockUpsertRepositoryTag) ExpectRp1Param2(rp1 *artifactpb.RepositoryTag) *mRepositoryIMockUpsertRepositoryTag {
+func (mmUpsertRepositoryTag *mRepositoryIMockUpsertRepositoryTag) ExpectRp1Param2(rp1 *pb.RepositoryTag) *mRepositoryIMockUpsertRepositoryTag {
 	if mmUpsertRepositoryTag.mock.funcUpsertRepositoryTag != nil {
 		mmUpsertRepositoryTag.mock.t.Fatalf("RepositoryIMock.UpsertRepositoryTag mock is already set by Set")
 	}
@@ -1690,7 +1774,7 @@ func (mmUpsertRepositoryTag *mRepositoryIMockUpsertRepositoryTag) ExpectRp1Param
 }
 
 // Inspect accepts an inspector function that has same arguments as the RepositoryI.UpsertRepositoryTag
-func (mmUpsertRepositoryTag *mRepositoryIMockUpsertRepositoryTag) Inspect(f func(ctx context.Context, rp1 *artifactpb.RepositoryTag)) *mRepositoryIMockUpsertRepositoryTag {
+func (mmUpsertRepositoryTag *mRepositoryIMockUpsertRepositoryTag) Inspect(f func(ctx context.Context, rp1 *pb.RepositoryTag)) *mRepositoryIMockUpsertRepositoryTag {
 	if mmUpsertRepositoryTag.mock.inspectFuncUpsertRepositoryTag != nil {
 		mmUpsertRepositoryTag.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.UpsertRepositoryTag")
 	}
@@ -1701,7 +1785,7 @@ func (mmUpsertRepositoryTag *mRepositoryIMockUpsertRepositoryTag) Inspect(f func
 }
 
 // Return sets up results that will be returned by RepositoryI.UpsertRepositoryTag
-func (mmUpsertRepositoryTag *mRepositoryIMockUpsertRepositoryTag) Return(rp2 *artifactpb.RepositoryTag, err error) *RepositoryIMock {
+func (mmUpsertRepositoryTag *mRepositoryIMockUpsertRepositoryTag) Return(rp2 *pb.RepositoryTag, err error) *RepositoryIMock {
 	if mmUpsertRepositoryTag.mock.funcUpsertRepositoryTag != nil {
 		mmUpsertRepositoryTag.mock.t.Fatalf("RepositoryIMock.UpsertRepositoryTag mock is already set by Set")
 	}
@@ -1714,7 +1798,7 @@ func (mmUpsertRepositoryTag *mRepositoryIMockUpsertRepositoryTag) Return(rp2 *ar
 }
 
 // Set uses given function f to mock the RepositoryI.UpsertRepositoryTag method
-func (mmUpsertRepositoryTag *mRepositoryIMockUpsertRepositoryTag) Set(f func(ctx context.Context, rp1 *artifactpb.RepositoryTag) (rp2 *artifactpb.RepositoryTag, err error)) *RepositoryIMock {
+func (mmUpsertRepositoryTag *mRepositoryIMockUpsertRepositoryTag) Set(f func(ctx context.Context, rp1 *pb.RepositoryTag) (rp2 *pb.RepositoryTag, err error)) *RepositoryIMock {
 	if mmUpsertRepositoryTag.defaultExpectation != nil {
 		mmUpsertRepositoryTag.mock.t.Fatalf("Default expectation is already set for the RepositoryI.UpsertRepositoryTag method")
 	}
@@ -1729,7 +1813,7 @@ func (mmUpsertRepositoryTag *mRepositoryIMockUpsertRepositoryTag) Set(f func(ctx
 
 // When sets expectation for the RepositoryI.UpsertRepositoryTag which will trigger the result defined by the following
 // Then helper
-func (mmUpsertRepositoryTag *mRepositoryIMockUpsertRepositoryTag) When(ctx context.Context, rp1 *artifactpb.RepositoryTag) *RepositoryIMockUpsertRepositoryTagExpectation {
+func (mmUpsertRepositoryTag *mRepositoryIMockUpsertRepositoryTag) When(ctx context.Context, rp1 *pb.RepositoryTag) *RepositoryIMockUpsertRepositoryTagExpectation {
 	if mmUpsertRepositoryTag.mock.funcUpsertRepositoryTag != nil {
 		mmUpsertRepositoryTag.mock.t.Fatalf("RepositoryIMock.UpsertRepositoryTag mock is already set by Set")
 	}
@@ -1743,7 +1827,7 @@ func (mmUpsertRepositoryTag *mRepositoryIMockUpsertRepositoryTag) When(ctx conte
 }
 
 // Then sets up RepositoryI.UpsertRepositoryTag return parameters for the expectation previously defined by the When method
-func (e *RepositoryIMockUpsertRepositoryTagExpectation) Then(rp2 *artifactpb.RepositoryTag, err error) *RepositoryIMock {
+func (e *RepositoryIMockUpsertRepositoryTagExpectation) Then(rp2 *pb.RepositoryTag, err error) *RepositoryIMock {
 	e.results = &RepositoryIMockUpsertRepositoryTagResults{rp2, err}
 	return e.mock
 }
@@ -1769,7 +1853,7 @@ func (mmUpsertRepositoryTag *mRepositoryIMockUpsertRepositoryTag) invocationsDon
 }
 
 // UpsertRepositoryTag implements repository.RepositoryI
-func (mmUpsertRepositoryTag *RepositoryIMock) UpsertRepositoryTag(ctx context.Context, rp1 *artifactpb.RepositoryTag) (rp2 *artifactpb.RepositoryTag, err error) {
+func (mmUpsertRepositoryTag *RepositoryIMock) UpsertRepositoryTag(ctx context.Context, rp1 *pb.RepositoryTag) (rp2 *pb.RepositoryTag, err error) {
 	mm_atomic.AddUint64(&mmUpsertRepositoryTag.beforeUpsertRepositoryTagCounter, 1)
 	defer mm_atomic.AddUint64(&mmUpsertRepositoryTag.afterUpsertRepositoryTagCounter, 1)
 
@@ -1896,9 +1980,9 @@ func (m *RepositoryIMock) MinimockFinish() {
 
 			m.MinimockDeleteKnowledgeBaseInspect()
 
-			m.MinimockGetKnowledgeBaseInspect()
-
 			m.MinimockGetRepositoryTagInspect()
+
+			m.MinimockListKnowledgeBasesInspect()
 
 			m.MinimockUpdateKnowledgeBaseInspect()
 
@@ -1929,8 +2013,8 @@ func (m *RepositoryIMock) minimockDone() bool {
 	return done &&
 		m.MinimockCreateKnowledgeBaseDone() &&
 		m.MinimockDeleteKnowledgeBaseDone() &&
-		m.MinimockGetKnowledgeBaseDone() &&
 		m.MinimockGetRepositoryTagDone() &&
+		m.MinimockListKnowledgeBasesDone() &&
 		m.MinimockUpdateKnowledgeBaseDone() &&
 		m.MinimockUpsertRepositoryTagDone()
 }

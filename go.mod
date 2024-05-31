@@ -14,7 +14,7 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware v1.3.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.19.1
 	github.com/influxdata/influxdb-client-go/v2 v2.12.3
-	github.com/instill-ai/protogen-go v0.3.3-alpha.0.20240527081147-f7cc66e329f9
+	github.com/instill-ai/protogen-go v0.3.3-alpha.0.20240530063823-abcb1c583452
 	github.com/instill-ai/usage-client v0.3.0-alpha.0.20240319060111-4a3a39f2fd61
 	github.com/instill-ai/x v0.3.0-alpha.0.20231219052200-6230a89e386c
 	github.com/knadh/koanf v1.5.0
@@ -37,6 +37,8 @@ require (
 	gorm.io/driver/postgres v1.4.5
 	gorm.io/gorm v1.24.7-0.20230306060331-85eaf9eeda11
 )
+
+require github.com/google/uuid v1.6.0 // indirect
 
 require (
 	github.com/catalinc/hashcash v0.0.0-20220723060415-5e3ec3e24f67 // indirect

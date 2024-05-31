@@ -19,7 +19,7 @@ const (
 
 // Service implements the Artifact domain use cases.
 type Service struct {
-	repository     repository.RepositoryI
+	Repository     repository.RepositoryI
 	registryClient RegistryClient
 }
 
@@ -30,7 +30,7 @@ func NewService(
 ) *Service {
 
 	return &Service{
-		repository:     r,
+		Repository:     r,
 		registryClient: rc,
 	}
 }
@@ -67,7 +67,7 @@ func (s *Service) ListRepositoryTags(ctx context.Context, req *pb.ListRepository
 	tags := make([]*pb.RepositoryTag, 0, len(paginatedIDs))
 	for _, id := range paginatedIDs {
 		name := utils.NewRepositoryTagName(repo, id)
-		rt, err := s.repository.GetRepositoryTag(ctx, name)
+		rt, err := s.Repository.GetRepositoryTag(ctx, name)
 		if err != nil {
 			if !errors.Is(err, customerror.ErrNotFound) {
 				return nil, fmt.Errorf("failed to fetch tag %s: %w", id, err)
@@ -124,7 +124,7 @@ func (s *Service) CreateRepositoryTag(ctx context.Context, req *pb.CreateReposit
 	tag := req.GetTag()
 	tag.UpdateTime = nil
 
-	storedTag, err := s.repository.UpsertRepositoryTag(ctx, tag)
+	storedTag, err := s.Repository.UpsertRepositoryTag(ctx, tag)
 	if err != nil {
 		return nil, fmt.Errorf("failed to upsert tag %s: %w", tag.GetId(), err)
 	}

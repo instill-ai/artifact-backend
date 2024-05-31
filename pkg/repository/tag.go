@@ -5,7 +5,7 @@ import (
 
 	customerror "github.com/instill-ai/artifact-backend/pkg/customerror"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	pb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -17,14 +17,14 @@ import (
 //
 // UpsertRepositoryTag(context.Context, *artifactpb.RepositoryTag) (*artifactpb.RepositoryTag, error)
 type TagI interface {
-	GetRepositoryTag(context.Context, utils.RepositoryTagName) (*artifactpb.RepositoryTag, error)
-	UpsertRepositoryTag(context.Context, *artifactpb.RepositoryTag) (*artifactpb.RepositoryTag, error)
+	GetRepositoryTag(context.Context, utils.RepositoryTagName) (*pb.RepositoryTag, error)
+	UpsertRepositoryTag(context.Context, *pb.RepositoryTag) (*pb.RepositoryTag, error)
 }
 
 // GetRepositoryTag fetches the tag information from the repository_tag table.
 // The name param is the resource name of the tag, e.g.
 // `repositories/admin/hello-world/tags/0.1.1-beta`.
-func (r *Repository) GetRepositoryTag(_ context.Context, name utils.RepositoryTagName) (*artifactpb.RepositoryTag, error) {
+func (r *Repository) GetRepositoryTag(_ context.Context, name utils.RepositoryTagName) (*pb.RepositoryTag, error) {
 	repo, tagID, err := name.ExtractRepositoryAndID()
 	if err != nil {
 		return nil, err
@@ -42,7 +42,7 @@ func (r *Repository) GetRepositoryTag(_ context.Context, name utils.RepositoryTa
 		return nil, result.Error
 	}
 
-	return &artifactpb.RepositoryTag{
+	return &pb.RepositoryTag{
 		Name:       string(name),
 		Id:         tagID,
 		Digest:     record.Digest,
@@ -52,7 +52,7 @@ func (r *Repository) GetRepositoryTag(_ context.Context, name utils.RepositoryTa
 
 // UpsertRepositoryTag stores the provided tag information in the database. The
 // update timestamp will be generated on insertion.
-func (r *Repository) UpsertRepositoryTag(_ context.Context, tag *artifactpb.RepositoryTag) (*artifactpb.RepositoryTag, error) {
+func (r *Repository) UpsertRepositoryTag(_ context.Context, tag *pb.RepositoryTag) (*pb.RepositoryTag, error) {
 	repo, tagID, err := utils.RepositoryTagName(tag.GetName()).ExtractRepositoryAndID()
 	if err != nil {
 		return nil, err
@@ -71,7 +71,7 @@ func (r *Repository) UpsertRepositoryTag(_ context.Context, tag *artifactpb.Repo
 		return nil, result.Error
 	}
 
-	return &artifactpb.RepositoryTag{
+	return &pb.RepositoryTag{
 		Name:       tag.GetName(),
 		Id:         tag.GetId(),
 		Digest:     record.Digest,
