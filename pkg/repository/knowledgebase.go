@@ -178,6 +178,9 @@ func (r *Repository) UpdateKnowledgeBase(ctx context.Context, uid string, kb Kno
 	// Fetch the updated record
 	var updatedKB KnowledgeBase
 	if err := r.db.WithContext(ctx).Where(conds, kb.KbID).First(&updatedKB).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("knowledge base ID not found: %v", kb.KbID)
+		}
 		return nil, err
 	}
 	// Return the updated record
@@ -208,6 +211,9 @@ func (r *Repository) DeleteKnowledgeBase(ctx context.Context, uid string, kbID s
 
 	// Save the changes to mark the record as soft deleted
 	if err := r.db.WithContext(ctx).Save(&existingKB).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("knowledge base ID not found: %v", existingKB.KbID)
+		}
 		return err
 	}
 
