@@ -13,29 +13,34 @@ import (
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
+// todo: add error codes in the error message
 const ErrorCreateKnowledgeBaseCode = 1000
 const ErrorGetKnowledgeBasesCode = 1001
 const ErrorUpdateKnowledgeBaseCode = 1002
 const ErrorDeleteKnowledgeBaseCode = 1003
 
+type ErrorMsg map[int]string
+const ErrorCreateKnowledgeBaseMsg = "failed to create knowledge base: %v"
+const ErrorListKnowledgeBasesMsg = "failed to get knowledge bases: %v "
+const ErrorUpdateKnowledgeBaseMsg = "failed to update knowledge base: %v"
+const ErrorDeleteKnowledgeBaseMsg = "failed to delete knowledge base: %v"
+
 func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactpb.CreateKnowledgeBaseRequest) (*artifactpb.CreateKnowledgeBaseResponse, error) {
-	errorRes := &artifactpb.CreateKnowledgeBaseResponse{
-		StatusCode: ErrorCreateKnowledgeBaseCode,
-	}
+
 	uid, err := getUserIDFromContext(ctx)
 	if err != nil {
-		errorRes.ErrorMsg = fmt.Sprintf("failed to get user id from header: %v", err)
-		return errorRes, nil
+		msg := fmt.Sprintf("failed to get user id from header: %v", err)
+		return nil, fmt.Errorf(ErrorCreateKnowledgeBaseMsg, msg)
 	}
 	// check name if it is empty
 	if req.Name == "" {
-		errorRes.ErrorMsg = "name is required"
-		return errorRes, nil
+		msg := "name is required"
+		return nil, fmt.Errorf(ErrorCreateKnowledgeBaseMsg, msg)
 	}
 	nameOk := isValidName(req.Name)
 	if !nameOk {
-		errorRes.ErrorMsg = "name is invalid: " + req.Name
-		return errorRes, nil
+		msg := "name is invalid: " + req.Name
+		return nil, fmt.Errorf(ErrorCreateKnowledgeBaseMsg, msg)
 	}
 	res, err := ph.service.Repository.CreateKnowledgeBase(ctx,
 		repository.KnowledgeBase{
@@ -47,8 +52,7 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 		},
 	)
 	if err != nil {
-		errorRes.ErrorMsg = fmt.Sprintf("failed to create knowledge base: %v", err)
-		return errorRes, nil
+		return nil, fmt.Errorf(fmt.Sprintf(ErrorCreateKnowledgeBaseMsg, err))
 	}
 	return &artifactpb.CreateKnowledgeBaseResponse{
 		Body: &artifactpb.KnowledgeBase{
@@ -63,19 +67,16 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 	}, nil
 }
 func (ph *PublicHandler) ListKnowledgeBases(ctx context.Context, _ *artifactpb.ListKnowledgeBasesRequest) (*artifactpb.ListKnowledgeBasesResponse, error) {
-	errorRes := &artifactpb.ListKnowledgeBasesResponse{
-		StatusCode: ErrorGetKnowledgeBasesCode,
-	}
+
 	// get user id from context
 	uid, err := getUserIDFromContext(ctx)
 	if err != nil {
-		errorRes.ErrorMsg = fmt.Sprintf("failed to get user id from header: %v", err)
-		return errorRes, nil
+
+		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
 	res, err := ph.service.Repository.ListKnowledgeBases(ctx, uid)
 	if err != nil {
-		errorRes.ErrorMsg = fmt.Sprintf("failed to get knowledge bases: %v", err)
-		return errorRes, nil
+		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
 
 	kbs := make([]*artifactpb.KnowledgeBase, len(res))
@@ -98,23 +99,18 @@ func (ph *PublicHandler) ListKnowledgeBases(ctx context.Context, _ *artifactpb.L
 	}, nil
 }
 func (ph *PublicHandler) UpdateKnowledgeBase(ctx context.Context, req *artifactpb.UpdateKnowledgeBaseRequest) (*artifactpb.UpdateKnowledgeBaseResponse, error) {
-	errorRes := &artifactpb.UpdateKnowledgeBaseResponse{
-		StatusCode: ErrorUpdateKnowledgeBaseCode,
-	}
 	uid, err := getUserIDFromContext(ctx)
 	if err != nil {
-		errorRes.ErrorMsg = fmt.Sprintf("failed to get user id from header: %v", err)
-		return errorRes, nil
+
+		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
 	}
 	// check name if it is empty
 	if req.Name == "" {
-		errorRes.ErrorMsg = "name is required"
-		return errorRes, nil
+		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, "name is required")
 	}
 	nameOk := isValidName(req.Name)
 	if !nameOk {
-		errorRes.ErrorMsg = "name is invalid: " + req.Name
-		return errorRes, nil
+		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, "name is invalid: "+req.Name)
 	}
 	// check if knowledge base exists
 	res, err := ph.service.Repository.UpdateKnowledgeBase(
@@ -129,8 +125,7 @@ func (ph *PublicHandler) UpdateKnowledgeBase(ctx context.Context, req *artifactp
 		},
 	)
 	if err != nil {
-		errorRes.ErrorMsg = fmt.Sprintf("failed to update knowledge base: %v", err)
-		return errorRes, nil
+		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
 	}
 	// populate response
 	return &artifactpb.UpdateKnowledgeBaseResponse{
@@ -146,18 +141,16 @@ func (ph *PublicHandler) UpdateKnowledgeBase(ctx context.Context, req *artifactp
 	}, nil
 }
 func (ph *PublicHandler) DeleteKnowledgeBase(ctx context.Context, req *artifactpb.DeleteKnowledgeBaseRequest) (*artifactpb.DeleteKnowledgeBaseResponse, error) {
-	errorRes := &artifactpb.DeleteKnowledgeBaseResponse{
-		StatusCode: ErrorDeleteKnowledgeBaseCode,
-	}
+
 	uid, err := getUserIDFromContext(ctx)
 	if err != nil {
-		errorRes.ErrorMsg = fmt.Sprintf("failed to get user id from header: %v", err)
-		return errorRes, nil
+
+		return nil, fmt.Errorf(ErrorDeleteKnowledgeBaseMsg, err)
 	}
 	err = ph.service.Repository.DeleteKnowledgeBase(ctx, uid, req.Id)
 	if err != nil {
-		errorRes.ErrorMsg = fmt.Sprintf("failed to delete knowledge base: %v", err)
-		return errorRes, nil
+
+		return nil, fmt.Errorf(ErrorDeleteKnowledgeBaseMsg, err)
 	}
 	return &artifactpb.DeleteKnowledgeBaseResponse{
 		ErrorMsg: "", StatusCode: 0,
@@ -168,7 +161,7 @@ func getUserIDFromContext(ctx context.Context) (string, error) {
 	if v, ok := md[strings.ToLower(constant.HeaderUserUIDKey)]; ok {
 		return v[0], nil
 	}
-	return "", fmt.Errorf("failed to get user id from header")
+	return "", fmt.Errorf("user id not found in context")
 }
 
 func isValidName(name string) bool {
