@@ -11,7 +11,6 @@ var ErrSematicVersion = errors.New("not a legal version, should be the format vX
 var ErrUpdateMask = errors.New("update mask error")
 var ErrConnectorNamespace = errors.New("can not use other's connector")
 
-// KnowledgeBase Errors
 var ErrCreateKnowledgeBase = errors.New("failed to create knowledge base")
 var ErrGetKnowledgeBases = errors.New("failed to get knowledge bases")
 var ErrUpdateKnowledgeBase = errors.New("failed to update knowledge base")

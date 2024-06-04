@@ -162,7 +162,7 @@ func getUserIDFromContext(ctx context.Context) (string, error) {
 func isValidName(name string) bool {
 	name = strings.ToLower(name) // Convert the name to lowercase for case-insensitive matching
 	// Define the regular expression pattern
-	pattern := `^[a-z0-9 _-]+$`
+	pattern := `^[a-z0-9_-]+$`
 	// Compile the regular expression
 	re := regexp.MustCompile(pattern)
 	// Match the name against the regular expression
