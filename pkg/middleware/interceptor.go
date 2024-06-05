@@ -103,8 +103,9 @@ func AsGRPCError(err error) error {
 		errors.Is(err, handler.ErrResourceID),
 		errors.Is(err, handler.ErrSematicVersion),
 		errors.Is(err, handler.ErrConnectorNamespace),
-		errors.Is(err, handler.ErrUpdateMask):
-
+		errors.Is(err, handler.ErrUpdateMask),
+		errors.Is(err, handler.ErrInvalidKnowledgeBaseName),
+		errors.Is(err, customerror.ErrInvalidArgument):
 		code = codes.InvalidArgument
 	case
 		errors.Is(err, customerror.ErrNoPermission):

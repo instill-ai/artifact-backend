@@ -16,4 +16,7 @@ var (
 	ErrRateLimiting = errors.New("rate limiting")
 	// Batch size exceeded.
 	ErrExceedMaxBatchSize = errors.New("the batch size can not exceed 32")
+	
+	// Invalid argument.
+	ErrInvalidArgument = errors.New("invalid argument")
 )

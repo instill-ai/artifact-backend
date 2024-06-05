@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/instill-ai/artifact-backend/pkg/customerror"
 	"gorm.io/gorm"
 )
 
@@ -119,13 +120,13 @@ func (r *Repository) CreateKnowledgeBase(ctx context.Context, kb KnowledgeBase) 
 		return nil, err
 	}
 	if nameExists {
-		return nil, fmt.Errorf("knowledge base name already exists")
+		return nil, fmt.Errorf("knowledge base name already exists. err: %w", customerror.ErrInvalidArgument)
 	}
 
 	// Create a new KnowledgeBase record
 	if err := r.db.WithContext(ctx).Create(&kb).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("knowledge base ID not found: %v", kb.KbID)
+			return nil, fmt.Errorf("knowledge base ID not found: %v, err:%w", kb.KbID, gorm.ErrRecordNotFound)
 		}
 		return nil, err
 	}
@@ -155,7 +156,7 @@ func (r *Repository) UpdateKnowledgeBase(ctx context.Context, uid string, kb Kno
 	// Find the KnowledgeBase record by ID
 	if err := r.db.WithContext(ctx).Where(conds, kb.KbID).First(&existingKB).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, err
+			return nil, fmt.Errorf("knowledge base ID not found: %v", kb.KbID)
 		}
 		return nil, err
 	}
@@ -179,7 +180,7 @@ func (r *Repository) UpdateKnowledgeBase(ctx context.Context, uid string, kb Kno
 	var updatedKB KnowledgeBase
 	if err := r.db.WithContext(ctx).Where(conds, kb.KbID).First(&updatedKB).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("knowledge base ID not found: %v", kb.KbID)
+			return nil, fmt.Errorf("knowledge base ID not found: %v. err: %w", kb.KbID, gorm.ErrRecordNotFound)
 		}
 		return nil, err
 	}
@@ -195,7 +196,7 @@ func (r *Repository) DeleteKnowledgeBase(ctx context.Context, uid string, kbID s
 	conds := fmt.Sprintf("%v = ? AND %v IS NULL", KnowledgeBaseColumn.KbID, KnowledgeBaseColumn.DeleteTime)
 	if err := r.db.WithContext(ctx).First(&existingKB, conds, kbID).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return err
+			return fmt.Errorf("knowledge base ID not found: %v. err: %w", kbID, gorm.ErrRecordNotFound)
 		}
 		return err
 	}
@@ -212,7 +213,7 @@ func (r *Repository) DeleteKnowledgeBase(ctx context.Context, uid string, kbID s
 	// Save the changes to mark the record as soft deleted
 	if err := r.db.WithContext(ctx).Save(&existingKB).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return fmt.Errorf("knowledge base ID not found: %v", existingKB.KbID)
+			return fmt.Errorf("knowledge base ID not found: %v. err: %w", existingKB.KbID, gorm.ErrRecordNotFound)
 		}
 		return err
 	}

@@ -9,38 +9,34 @@ import (
 	"google.golang.org/grpc/metadata"
 
 	"github.com/instill-ai/artifact-backend/pkg/constant"
+	"github.com/instill-ai/artifact-backend/pkg/customerror"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
-// todo: add error codes in the error message
-const ErrorCreateKnowledgeBaseCode = 1000
-const ErrorGetKnowledgeBasesCode = 1001
-const ErrorUpdateKnowledgeBaseCode = 1002
-const ErrorDeleteKnowledgeBaseCode = 1003
-
 type ErrorMsg map[int]string
-const ErrorCreateKnowledgeBaseMsg = "failed to create knowledge base: %v"
-const ErrorListKnowledgeBasesMsg = "failed to get knowledge bases: %v "
-const ErrorUpdateKnowledgeBaseMsg = "failed to update knowledge base: %v"
-const ErrorDeleteKnowledgeBaseMsg = "failed to delete knowledge base: %v"
+
+const ErrorCreateKnowledgeBaseMsg = "failed to create knowledge base: %w"
+const ErrorListKnowledgeBasesMsg = "failed to get knowledge bases: %w "
+const ErrorUpdateKnowledgeBaseMsg = "failed to update knowledge base: %w"
+const ErrorDeleteKnowledgeBaseMsg = "failed to delete knowledge base: %w"
 
 func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactpb.CreateKnowledgeBaseRequest) (*artifactpb.CreateKnowledgeBaseResponse, error) {
 
 	uid, err := getUserIDFromContext(ctx)
 	if err != nil {
-		msg := fmt.Sprintf("failed to get user id from header: %v", err)
-		return nil, fmt.Errorf(ErrorCreateKnowledgeBaseMsg, msg)
+		err := fmt.Errorf("failed to get user id from header: %v. err: %w", err, customerror.ErrUnauthenticated)
+		return nil, err
 	}
 	// check name if it is empty
 	if req.Name == "" {
-		msg := "name is required"
-		return nil, fmt.Errorf(ErrorCreateKnowledgeBaseMsg, msg)
+		err := fmt.Errorf("name is required. err: %w", ErrCheckRequiredFields)
+		return nil, err
 	}
 	nameOk := isValidName(req.Name)
 	if !nameOk {
-		msg := "name is invalid: " + req.Name
-		return nil, fmt.Errorf(ErrorCreateKnowledgeBaseMsg, msg)
+		msg := "name is invalid: %v. err: %w"
+		return nil, fmt.Errorf(msg, req.Name, customerror.ErrInvalidArgument)
 	}
 	res, err := ph.service.Repository.CreateKnowledgeBase(ctx,
 		repository.KnowledgeBase{
@@ -52,7 +48,7 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 		},
 	)
 	if err != nil {
-		return nil, fmt.Errorf(fmt.Sprintf(ErrorCreateKnowledgeBaseMsg, err))
+		return nil, err
 	}
 	return &artifactpb.CreateKnowledgeBaseResponse{
 		Body: &artifactpb.KnowledgeBase{
@@ -101,16 +97,15 @@ func (ph *PublicHandler) ListKnowledgeBases(ctx context.Context, _ *artifactpb.L
 func (ph *PublicHandler) UpdateKnowledgeBase(ctx context.Context, req *artifactpb.UpdateKnowledgeBaseRequest) (*artifactpb.UpdateKnowledgeBaseResponse, error) {
 	uid, err := getUserIDFromContext(ctx)
 	if err != nil {
-
-		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
+		return nil, err
 	}
 	// check name if it is empty
 	if req.Name == "" {
-		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, "name is required")
+		return nil, fmt.Errorf("name is empty. err: %w", ErrCheckRequiredFields)
 	}
 	nameOk := isValidName(req.Name)
 	if !nameOk {
-		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, "name is invalid: "+req.Name)
+		return nil, fmt.Errorf("name: %s is invalid. err: %w", req.Name, customerror.ErrInvalidArgument)
 	}
 	// check if knowledge base exists
 	res, err := ph.service.Repository.UpdateKnowledgeBase(
@@ -125,7 +120,7 @@ func (ph *PublicHandler) UpdateKnowledgeBase(ctx context.Context, req *artifactp
 		},
 	)
 	if err != nil {
-		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
+		return nil, err
 	}
 	// populate response
 	return &artifactpb.UpdateKnowledgeBaseResponse{
@@ -145,12 +140,12 @@ func (ph *PublicHandler) DeleteKnowledgeBase(ctx context.Context, req *artifactp
 	uid, err := getUserIDFromContext(ctx)
 	if err != nil {
 
-		return nil, fmt.Errorf(ErrorDeleteKnowledgeBaseMsg, err)
+		return nil, err
 	}
 	err = ph.service.Repository.DeleteKnowledgeBase(ctx, uid, req.Id)
 	if err != nil {
 
-		return nil, fmt.Errorf(ErrorDeleteKnowledgeBaseMsg, err)
+		return nil, err
 	}
 	return &artifactpb.DeleteKnowledgeBaseResponse{
 		ErrorMsg: "", StatusCode: 0,
@@ -161,13 +156,13 @@ func getUserIDFromContext(ctx context.Context) (string, error) {
 	if v, ok := md[strings.ToLower(constant.HeaderUserUIDKey)]; ok {
 		return v[0], nil
 	}
-	return "", fmt.Errorf("user id not found in context")
+	return "", fmt.Errorf("user id not found in context. err: %w", customerror.ErrUnauthenticated)
 }
 
 func isValidName(name string) bool {
 	name = strings.ToLower(name) // Convert the name to lowercase for case-insensitive matching
 	// Define the regular expression pattern
-	pattern := `^[a-z0-9 _-]+$`
+	pattern := `^[a-z0-9_-]+$`
 	// Compile the regular expression
 	re := regexp.MustCompile(pattern)
 	// Match the name against the regular expression
