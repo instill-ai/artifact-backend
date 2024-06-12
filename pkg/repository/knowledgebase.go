@@ -103,8 +103,8 @@ func (r *Repository) CreateKnowledgeBase(ctx context.Context, kb KnowledgeBase) 
 	// check if the kb_id is unique
 	var existingKB KnowledgeBase
 	// check if the knowledge base exists and not delete
-	where_clause := fmt.Sprintf("%v = ? AND %v IS NULL", KnowledgeBaseColumn.ID, KnowledgeBaseColumn.DeleteTime)
-	if err := r.db.WithContext(ctx).Where(where_clause, kb.ID).First(&existingKB).Error; err != nil {
+	whereClause := fmt.Sprintf("%v = ? AND %v IS NULL", KnowledgeBaseColumn.ID, KnowledgeBaseColumn.DeleteTime)
+	if err := r.db.WithContext(ctx).Where(whereClause, kb.ID).First(&existingKB).Error; err != nil {
 		if err != gorm.ErrRecordNotFound {
 			return nil, err
 		}

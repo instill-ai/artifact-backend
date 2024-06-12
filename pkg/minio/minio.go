@@ -7,7 +7,7 @@ import (
 
 	"github.com/instill-ai/artifact-backend/config"
 	log "github.com/instill-ai/artifact-backend/pkg/logger"
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+
 	"github.com/minio/minio-go"
 	"go.uber.org/zap"
 )
@@ -15,9 +15,9 @@ import (
 type MinioI interface {
 	GetClient() *minio.Client
 	// uploadFile
-	UploadBase64File(ctx context.Context, file_path_name string, base64_content string, file_type int) (err error)
+	UploadBase64File(ctx context.Context, filePathName string, base64Content string, fileMimeType string) (err error)
 	// deleteFile
-	DeleteFile(ctx context.Context, file_path_name string) (err error)
+	DeleteFile(ctx context.Context, filePathName string) (err error)
 }
 
 type Minio struct {
@@ -54,23 +54,22 @@ func (m *Minio) GetClient() *minio.Client {
 	return m.client
 }
 
-func (m *Minio) UploadBase64File(ctx context.Context, file_path_name string, base64_content string, file_type int) (err error) {
+func (m *Minio) UploadBase64File(ctx context.Context, filePathName string, base64Content string, fileMimeType string) (err error) {
 	log, err := log.GetZapLogger(ctx)
 	if err != nil {
 		return err
 	}
 	// Decode the base64 content
-	decodedContent, err := base64.StdEncoding.DecodeString(base64_content)
+	decodedContent, err := base64.StdEncoding.DecodeString(base64Content)
 	if err != nil {
 		return err
 	}
 	// Convert the decoded content to an io.Reader
 	contentReader := strings.NewReader(string(decodedContent))
 	// Upload the content to MinIO
-	contentType := checkFileType(file_type) // Adjust based on the file type
 	size := int64(len(decodedContent))
 	// Create the file path with folder structure
-	_, err = m.client.PutObjectWithContext(ctx, m.bucket, file_path_name, contentReader, size, minio.PutObjectOptions{ContentType: contentType})
+	_, err = m.client.PutObjectWithContext(ctx, m.bucket, filePathName, contentReader, size, minio.PutObjectOptions{ContentType: fileMimeType})
 	if err != nil {
 		log.Error("Failed to upload file to MinIO", zap.Error(err))
 		return err
@@ -78,27 +77,14 @@ func (m *Minio) UploadBase64File(ctx context.Context, file_path_name string, bas
 	return nil
 }
 
-func checkFileType(file_type int) string {
-	switch file_type {
-	case int(artifactpb.FileType_FILE_TYPE_PDF):
-		return "application/pdf"
-	case int(artifactpb.FileType_FILE_TYPE_MARKDOWN):
-		return "text/markdown"
-	case int(artifactpb.FileType_FILE_TYPE_TEXT):
-		return "text/plain"
-	default:
-		return "application/octet-stream"
-	}
-}
-
 // delete the file from minio
-func (m *Minio) DeleteFile(ctx context.Context, file_path_name string) (err error) {
+func (m *Minio) DeleteFile(ctx context.Context, filePathName string) (err error) {
 	log, err := log.GetZapLogger(ctx)
 	if err != nil {
 		return err
 	}
 	// Delete the file from MinIO
-	err = m.client.RemoveObject(m.bucket, file_path_name)
+	err = m.client.RemoveObject(m.bucket, filePathName)
 	if err != nil {
 		log.Error("Failed to delete file from MinIO", zap.Error(err))
 		return err

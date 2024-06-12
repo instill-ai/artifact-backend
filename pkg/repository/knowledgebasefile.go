@@ -12,9 +12,9 @@ import (
 
 type KnowledgeBaseFileI interface {
 	CreateKnowledgeBaseFile(ctx context.Context, kb KnowledgeBaseFile) (*KnowledgeBaseFile, error)
-	ListKnowledgeBaseFiles(ctx context.Context, uid string, owner_uid string, kb_uid string, page_size int32, next_page_token string, files_uid []string) ([]KnowledgeBaseFile, int, string, error)
-	DeleteKnowledgeBaseFile(ctx context.Context, file_uid string) error
-	ProcessKnowledgeBaseFiles(ctx context.Context, file_uids []string) ([]KnowledgeBaseFile, error)
+	ListKnowledgeBaseFiles(ctx context.Context, uid string, ownerUID string, kbUID string, pageSize int32, nextPageToken string, filesUID []string) ([]KnowledgeBaseFile, int, string, error)
+	DeleteKnowledgeBaseFile(ctx context.Context, fileUID string) error
+	ProcessKnowledgeBaseFiles(ctx context.Context, fileUids []string) ([]KnowledgeBaseFile, error)
 }
 
 type KnowledgeBaseFile struct {
@@ -92,18 +92,18 @@ func (r *Repository) CreateKnowledgeBaseFile(ctx context.Context, kb KnowledgeBa
 	return &kb, nil
 }
 
-func (r *Repository) ListKnowledgeBaseFiles(ctx context.Context, uid string, owner_uid string, kb_uid string, page_size int32, next_page_token string, files_uid []string) ([]KnowledgeBaseFile, int, string, error) {
+func (r *Repository) ListKnowledgeBaseFiles(ctx context.Context, uid string, ownerUID string, kbUID string, pageSize int32, nextPageToken string, fileUIDs []string) ([]KnowledgeBaseFile, int, string, error) {
 	var kbs []KnowledgeBaseFile
 	var totalCount int64
 
 	// Initial query with owner and knowledge base uid and delete time is null
-	where_clause := fmt.Sprintf("%v = ? AND %v = ? AND %v is NULL", KnowledgeBaseFileColumn.Owner, KnowledgeBaseFileColumn.KnowledgeBaseUID, KnowledgeBaseFileColumn.DeleteTime)
-	query := r.db.Model(&KnowledgeBaseFile{}).Where(where_clause, owner_uid, kb_uid)
+	whereClause := fmt.Sprintf("%v = ? AND %v = ? AND %v is NULL", KnowledgeBaseFileColumn.Owner, KnowledgeBaseFileColumn.KnowledgeBaseUID, KnowledgeBaseFileColumn.DeleteTime)
+	query := r.db.Model(&KnowledgeBaseFile{}).Where(whereClause, ownerUID, kbUID)
 
 	// Apply file UID filter if provided
-	if len(files_uid) > 0 {
-		where_clause := fmt.Sprintf("%v IN ?", KnowledgeBaseFileColumn.UID)
-		query = query.Where(where_clause, files_uid)
+	if len(fileUIDs) > 0 {
+		whereClause := fmt.Sprintf("%v IN ?", KnowledgeBaseFileColumn.UID)
+		query = query.Where(whereClause, fileUIDs)
 	}
 
 	// Count the total number of matching records
@@ -112,19 +112,19 @@ func (r *Repository) ListKnowledgeBaseFiles(ctx context.Context, uid string, own
 	}
 
 	// Apply pagination. page size's default value is 10 and cap to 100.
-	if page_size > 100 {
-		page_size = 100
-	} else if page_size <= 0 {
-		page_size = 10
+	if pageSize > 100 {
+		pageSize = 100
+	} else if pageSize <= 0 {
+		pageSize = 10
 	}
 
-	query = query.Limit(int(page_size))
+	query = query.Limit(int(pageSize))
 
-	if next_page_token != "" {
+	if nextPageToken != "" {
 		// Assuming next_page_token is the `create_time` timestamp of the last record from the previous page
-		if parsedTime, err := time.Parse(time.RFC3339, next_page_token); err == nil {
-			where_clause := fmt.Sprintf("%v > ?", KnowledgeBaseFileColumn.CreateTime)
-			query = query.Where(where_clause, parsedTime)
+		if parsedTime, err := time.Parse(time.RFC3339, nextPageToken); err == nil {
+			whereClause := fmt.Sprintf("%v > ?", KnowledgeBaseFileColumn.CreateTime)
+			query = query.Where(whereClause, parsedTime)
 		} else {
 			return nil, 0, "", fmt.Errorf("invalid next_page_token format(RFC3339): %v", err)
 		}
@@ -144,30 +144,30 @@ func (r *Repository) ListKnowledgeBaseFiles(ctx context.Context, uid string, own
 }
 
 // delete the file which is to set the delete time
-func (r *Repository) DeleteKnowledgeBaseFile(ctx context.Context, file_uid string) error {
-	current_time := time.Now()
-	where_clause := fmt.Sprintf("%v = ? AND %v is NULL", KnowledgeBaseFileColumn.UID, KnowledgeBaseFileColumn.DeleteTime)
+func (r *Repository) DeleteKnowledgeBaseFile(ctx context.Context, fileUID string) error {
+	currentTime := time.Now()
+	whereClause := fmt.Sprintf("%v = ? AND %v is NULL", KnowledgeBaseFileColumn.UID, KnowledgeBaseFileColumn.DeleteTime)
 	if err := r.db.WithContext(ctx).Model(&KnowledgeBaseFile{}).
-		Where(where_clause, file_uid).
-		Update(KnowledgeBaseFileColumn.DeleteTime, current_time).Error; err != nil {
+		Where(whereClause, fileUID).
+		Update(KnowledgeBaseFileColumn.DeleteTime, currentTime).Error; err != nil {
 		return err
 	}
 	return nil
 }
 
 // ProcessKnowledgeBaseFiles updates the process status of the files
-func (r *Repository) ProcessKnowledgeBaseFiles(ctx context.Context, file_uids []string) ([]KnowledgeBaseFile, error) {
+func (r *Repository) ProcessKnowledgeBaseFiles(ctx context.Context, fileUIDs []string) ([]KnowledgeBaseFile, error) {
 	// Update the process status of the files
-	waiting_status := artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_WAITING)]
+	waitingStatus := artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_WAITING)]
 	if err := r.db.WithContext(ctx).Model(&KnowledgeBaseFile{}).
-		Where(KnowledgeBaseFileColumn.UID+" IN ?", file_uids).
-		Update(KnowledgeBaseFileColumn.ProcessStatus, waiting_status).Error; err != nil {
+		Where(KnowledgeBaseFileColumn.UID+" IN ?", fileUIDs).
+		Update(KnowledgeBaseFileColumn.ProcessStatus, waitingStatus).Error; err != nil {
 		return nil, err
 	}
 
 	// Retrieve the updated records
 	var files []KnowledgeBaseFile
-	if err := r.db.WithContext(ctx).Where(KnowledgeBaseFileColumn.UID+" IN ?", file_uids).Find(&files).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where(KnowledgeBaseFileColumn.UID+" IN ?", fileUIDs).Find(&files).Error; err != nil {
 		return nil, err
 	}
 

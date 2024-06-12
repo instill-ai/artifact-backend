@@ -39,7 +39,7 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 		return nil, fmt.Errorf(msg, req.Name, customerror.ErrInvalidArgument)
 	}
 
-	db_data, err := ph.service.Repository.CreateKnowledgeBase(ctx,
+	dbData, err := ph.service.Repository.CreateKnowledgeBase(ctx,
 		repository.KnowledgeBase{
 			Name:        req.Name,
 			ID:          toIDStyle(req.Name),
@@ -57,13 +57,13 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 
 	return &artifactpb.CreateKnowledgeBaseResponse{
 		Body: &artifactpb.KnowledgeBase{
-			Name:        db_data.Name,
-			Id:          db_data.ID,
-			Description: db_data.Description,
-			Tags:        db_data.Tags,
-			OwnerName:   db_data.Owner,
-			CreateTime:  db_data.CreateTime.String(),
-			UpdateTime:  db_data.UpdateTime.String(),
+			Name:        dbData.Name,
+			Id:          dbData.ID,
+			Description: dbData.Description,
+			Tags:        dbData.Tags,
+			OwnerName:   dbData.Owner,
+			CreateTime:  dbData.CreateTime.String(),
+			UpdateTime:  dbData.UpdateTime.String(),
 		}, ErrorMsg: "", StatusCode: 0,
 	}, nil
 }
@@ -78,13 +78,13 @@ func (ph *PublicHandler) ListKnowledgeBases(ctx context.Context, _ *artifactpb.L
 
 	// TODO: ACL - check user's permission to list knowledge bases
 
-	db_data, err := ph.service.Repository.ListKnowledgeBases(ctx, uid)
+	dbData, err := ph.service.Repository.ListKnowledgeBases(ctx, uid)
 	if err != nil {
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
 
-	kbs := make([]*artifactpb.KnowledgeBase, len(db_data))
-	for i, kb := range db_data {
+	kbs := make([]*artifactpb.KnowledgeBase, len(dbData))
+	for i, kb := range dbData {
 		kbs[i] = &artifactpb.KnowledgeBase{
 			Name:        kb.Name,
 			Id:          kb.ID,
@@ -119,7 +119,7 @@ func (ph *PublicHandler) UpdateKnowledgeBase(ctx context.Context, req *artifactp
 	// TODO: ACL - check user's permission to update knowledge base
 
 	// check if knowledge base exists
-	db_data, err := ph.service.Repository.UpdateKnowledgeBase(
+	dbData, err := ph.service.Repository.UpdateKnowledgeBase(
 		ctx,
 		uid,
 		repository.KnowledgeBase{
@@ -136,13 +136,13 @@ func (ph *PublicHandler) UpdateKnowledgeBase(ctx context.Context, req *artifactp
 	// populate response
 	return &artifactpb.UpdateKnowledgeBaseResponse{
 		Body: &artifactpb.KnowledgeBase{
-			Name:        db_data.Name,
-			Id:          db_data.ID,
-			Description: db_data.Description,
-			Tags:        db_data.Tags,
-			CreateTime:  db_data.CreateTime.String(),
-			UpdateTime:  db_data.UpdateTime.String(),
-			OwnerName:   db_data.Owner,
+			Name:        dbData.Name,
+			Id:          dbData.ID,
+			Description: dbData.Description,
+			Tags:        dbData.Tags,
+			CreateTime:  dbData.CreateTime.String(),
+			UpdateTime:  dbData.UpdateTime.String(),
+			OwnerName:   dbData.Owner,
 		}, ErrorMsg: "", StatusCode: 0,
 	}, nil
 }

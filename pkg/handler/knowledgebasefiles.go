@@ -31,19 +31,18 @@ func (ph *PublicHandler) UploadKnowledgeBaseFile(ctx context.Context, req *artif
 	// .....
 
 	//get the owner uid from the mgmt service
-	var owner_uid uuid.UUID
+	var ownerUID uuid.UUID
 	{
 		filter := "id=" + req.OwnerId
-		owner_res, err := ph.service.MgmtPrv.ListUsersAdmin(ctx, &mgmtpb.ListUsersAdminRequest{Filter: &filter})
-		fmt.Println(owner_res)
+		ownerRes, err := ph.service.MgmtPrv.ListUsersAdmin(ctx, &mgmtpb.ListUsersAdminRequest{Filter: &filter})
 		if err != nil {
 			log.Error("failed to get owner uid", zap.Error(err))
 			return nil, err
 		}
-		if owner_res == nil || len(owner_res.Users) == 0 {
+		if ownerRes == nil || len(ownerRes.Users) == 0 {
 			return nil, fmt.Errorf("failed to get owner uid. err: %w", customerror.ErrNotFound)
 		}
-		owner_uid, err = uuid.Parse(*owner_res.Users[0].Uid)
+		ownerUID, err = uuid.Parse(*ownerRes.Users[0].Uid)
 		if err != nil {
 			log.Error("failed to parse owner uid", zap.Error(err))
 			return nil, err
@@ -52,9 +51,9 @@ func (ph *PublicHandler) UploadKnowledgeBaseFile(ctx context.Context, req *artif
 
 	// upload file to minio
 	var kb *repository.KnowledgeBase
-	var file_path_name string
+	var filePathName string
 	{
-		kb, err = ph.service.Repository.GetKnowledgeBaseByOwnerAndID(ctx, owner_uid.String(), req.KbId)
+		kb, err = ph.service.Repository.GetKnowledgeBaseByOwnerAndID(ctx, ownerUID.String(), req.KbId)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get knowledge base by owner and id. err: %w", err)
 		}
@@ -62,8 +61,8 @@ func (ph *PublicHandler) UploadKnowledgeBaseFile(ctx context.Context, req *artif
 		if strings.Contains(req.File.Name, "/") {
 			return nil, fmt.Errorf("file name cannot contain '/'. err: %w", customerror.ErrInvalidArgument)
 		}
-		file_path_name = kb.UID.String() + "/" + req.File.Name
-		err = ph.service.MinIO.UploadBase64File(ctx, file_path_name, req.File.Content, int(req.File.Type))
+		filePathName = kb.UID.String() + "/" + req.File.Name
+		err = ph.service.MinIO.UploadBase64File(ctx, filePathName, req.File.Content, fileTypeConvertToMime(req.File.Type))
 		if err != nil {
 			return nil, err
 		}
@@ -72,24 +71,27 @@ func (ph *PublicHandler) UploadKnowledgeBaseFile(ctx context.Context, req *artif
 	// create metadata in db
 	var res *repository.KnowledgeBaseFile
 	{
-		creator_uid, err := uuid.Parse(uid)
+		creatorUID, err := uuid.Parse(uid)
 		if err != nil {
 			log.Error("failed to parse creator uid", zap.Error(err))
 			return nil, err
 		}
 
-		kb_file := repository.KnowledgeBaseFile{
+		kbFile := repository.KnowledgeBaseFile{
 			Name:             req.File.Name,
 			Type:             artifactpb.FileType_name[int32(req.File.Type)],
-			Owner:            owner_uid,
-			CreatorUID:       creator_uid,
+			Owner:            ownerUID,
+			CreatorUID:       creatorUID,
 			KnowledgeBaseUID: kb.UID,
-			Destination:      file_path_name,
+			Destination:      filePathName,
 			ProcessStatus:    artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_NOTSTARTED)],
 		}
-		res, err = ph.service.Repository.CreateKnowledgeBaseFile(ctx, kb_file)
+		res, err = ph.service.Repository.CreateKnowledgeBaseFile(ctx, kbFile)
 		if err != nil {
-			ph.service.MinIO.DeleteFile(ctx, file_path_name)
+			err:= ph.service.MinIO.DeleteFile(ctx, filePathName)
+			if err != nil {
+				log.Error("failed to delete file in minio", zap.Error(err))
+			}
 			return nil, err
 		}
 	}
@@ -154,67 +156,67 @@ func (ph *PublicHandler) ListKnowledgeBaseFiles(ctx context.Context, req *artifa
 	// acl, err := ph.service.ACL.CheckPermission(ctx, uid, "knowledgeBase", req.KbId, "read")
 
 	// get the owner uid from the mgmt service
-	var owner_uid string
+	var ownerUID string
 	{
 		filter := "id=" + req.OwnerId
-		owner_res, err := ph.service.MgmtPrv.ListUsersAdmin(ctx, &mgmtpb.ListUsersAdminRequest{Filter: &filter})
+		ownerRes, err := ph.service.MgmtPrv.ListUsersAdmin(ctx, &mgmtpb.ListUsersAdminRequest{Filter: &filter})
 		if err != nil {
 			log.Error("failed to get owner uid", zap.Error(err))
 			return nil, err
 		}
-		if owner_res == nil || len(owner_res.Users) == 0 {
+		if ownerRes == nil || len(ownerRes.Users) == 0 {
 			return nil, fmt.Errorf("failed to get owner uid. err: %w", customerror.ErrNotFound)
 		}
-		owner_uid = *owner_res.Users[0].Uid
+		ownerUID = *ownerRes.Users[0].Uid
 
 	}
 
 	// get the kb uid from the knowledge base table
-	var kb_uid string
+	var kbUID string
 	{
-		kb, err := ph.service.Repository.GetKnowledgeBaseByOwnerAndID(ctx, owner_uid, req.KbId)
+		kb, err := ph.service.Repository.GetKnowledgeBaseByOwnerAndID(ctx, ownerUID, req.KbId)
 		if err != nil {
 			log.Error("failed to get knowledge base by owner and id", zap.Error(err))
 			return nil, err
 		}
-		kb_uid = kb.UID.String()
+		kbUID = kb.UID.String()
 	}
 	// fetch the knowledge base files
 	var files []*artifactpb.File
-	var total_size int
-	var next_page_token string
+	var totalSize int
+	var nextPageToken string
 	{
 		if req.Filter == nil {
 			req.Filter = &artifactpb.ListKnowledgeBaseFilesFilter{
 				FileUids: []string{},
 			}
 		}
-		kb_files, size, next_token, err := ph.service.Repository.ListKnowledgeBaseFiles(ctx, uid, owner_uid, kb_uid, req.PageSize, req.PageToken, req.Filter.FileUids)
+		kbFiles, size, nextToken, err := ph.service.Repository.ListKnowledgeBaseFiles(ctx, uid, ownerUID, kbUID, req.PageSize, req.PageToken, req.Filter.FileUids)
 		if err != nil {
 			log.Error("failed to list knowledge base files", zap.Error(err))
 			return nil, err
 		}
-		total_size = size
-		next_page_token = next_token
-		for _, kb_file := range kb_files {
+		totalSize = size
+		nextPageToken = nextToken
+		for _, kbFile := range kbFiles {
 			files = append(files, &artifactpb.File{
-				FileUid:       kb_file.UID.String(),
-				OwnerUid:      kb_file.Owner.String(),
-				CreatorUid:    kb_file.CreatorUID.String(),
-				KbUid:         kb_file.KnowledgeBaseUID.String(),
-				Name:          kb_file.Name,
-				Type:          artifactpb.FileType(artifactpb.FileType_value[kb_file.Type]),
-				CreateTime:    timestamppb.New(*kb_file.CreateTime),
-				UpdateTime:    timestamppb.New(*kb_file.UpdateTime),
-				ProcessStatus: artifactpb.FileProcessStatus(artifactpb.FileProcessStatus_value[kb_file.ProcessStatus]),
+				FileUid:       kbFile.UID.String(),
+				OwnerUid:      kbFile.Owner.String(),
+				CreatorUid:    kbFile.CreatorUID.String(),
+				KbUid:         kbFile.KnowledgeBaseUID.String(),
+				Name:          kbFile.Name,
+				Type:          artifactpb.FileType(artifactpb.FileType_value[kbFile.Type]),
+				CreateTime:    timestamppb.New(*kbFile.CreateTime),
+				UpdateTime:    timestamppb.New(*kbFile.UpdateTime),
+				ProcessStatus: artifactpb.FileProcessStatus(artifactpb.FileProcessStatus_value[kbFile.ProcessStatus]),
 			})
 		}
 	}
 
 	return &artifactpb.ListKnowledgeBaseFilesResponse{
 		Files:         files,
-		TotalSize:     int32(total_size),
-		NextPageToken: next_page_token,
+		TotalSize:     int32(totalSize),
+		NextPageToken: nextPageToken,
 		Filter:        req.Filter,
 	}, nil
 }
@@ -258,9 +260,9 @@ func (ph *PublicHandler) ProcessKnowledgeBaseFiles(ctx context.Context, req *art
 	}
 
 	// populate the files into response
-	var res_files []*artifactpb.File
+	var resFiles []*artifactpb.File
 	for _, file := range files {
-		res_files = append(res_files, &artifactpb.File{
+		resFiles = append(resFiles, &artifactpb.File{
 			FileUid:       file.UID.String(),
 			OwnerUid:      file.Owner.String(),
 			CreatorUid:    file.CreatorUID.String(),
@@ -273,7 +275,7 @@ func (ph *PublicHandler) ProcessKnowledgeBaseFiles(ctx context.Context, req *art
 		})
 	}
 	return &artifactpb.ProcessKnowledgeBaseFilesResponse{
-		Files: res_files,
+		Files: resFiles,
 	}, nil
 }
 
@@ -286,6 +288,6 @@ func fileTypeConvertToMime(t artifactpb.FileType) string {
 	case artifactpb.FileType_FILE_TYPE_TEXT:
 		return "text/plain"
 	default:
-		return ""
+		return "application/octet-stream"
 	}
 }
