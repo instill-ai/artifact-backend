@@ -7,6 +7,7 @@ import (
 type RepositoryI interface {
 	TagI
 	KnowledgeBaseI
+	KnowledgeBaseFileI
 }
 
 // Repository implements Artifact storage functions in PostgreSQL.

@@ -7,9 +7,11 @@ import (
 	"strings"
 
 	"github.com/instill-ai/artifact-backend/pkg/customerror"
+	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
 	pb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	mgmtPB "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
 )
 
 const (
@@ -20,17 +22,23 @@ const (
 // Service implements the Artifact domain use cases.
 type Service struct {
 	Repository     repository.RepositoryI
+	MinIO          minio.MinioI
+	MgmtPrv        mgmtPB.MgmtPrivateServiceClient
 	registryClient RegistryClient
 }
 
 // NewService initiates a service instance
 func NewService(
 	r repository.RepositoryI,
+	mc minio.MinioI,
+	mgmtPrv mgmtPB.MgmtPrivateServiceClient,
 	rc RegistryClient,
 ) *Service {
 
 	return &Service{
 		Repository:     r,
+		MinIO:          mc,
+		MgmtPrv:        mgmtPrv,
 		registryClient: rc,
 	}
 }

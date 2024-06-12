@@ -11,13 +11,15 @@ require (
 	github.com/gojuno/minimock/v3 v3.3.6
 	github.com/golang-migrate/migrate/v4 v4.17.0
 	github.com/google/go-cmp v0.6.0
+	github.com/google/uuid v1.6.0
 	github.com/grpc-ecosystem/go-grpc-middleware v1.3.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.19.1
 	github.com/influxdata/influxdb-client-go/v2 v2.12.3
-	github.com/instill-ai/protogen-go v0.3.3-alpha.0.20240530063823-abcb1c583452
+	github.com/instill-ai/protogen-go v0.3.3-alpha.0.20240612051236-4bd57e13ff0b
 	github.com/instill-ai/usage-client v0.3.0-alpha.0.20240319060111-4a3a39f2fd61
 	github.com/instill-ai/x v0.3.0-alpha.0.20231219052200-6230a89e386c
 	github.com/knadh/koanf v1.5.0
+	github.com/minio/minio-go v6.0.14+incompatible
 	github.com/openfga/go-sdk v0.2.3
 	github.com/redis/go-redis/v9 v9.5.1
 	go.opentelemetry.io/contrib/propagators/b3 v1.17.0
@@ -38,7 +40,10 @@ require (
 	gorm.io/gorm v1.24.7-0.20230306060331-85eaf9eeda11
 )
 
-require github.com/google/uuid v1.6.0 // indirect
+require (
+	github.com/go-ini/ini v1.67.0 // indirect
+	github.com/mitchellh/go-homedir v1.1.0 // indirect
+)
 
 require (
 	github.com/catalinc/hashcash v0.0.0-20220723060415-5e3ec3e24f67 // indirect

@@ -23,7 +23,7 @@ const ErrorDeleteKnowledgeBaseMsg = "failed to delete knowledge base: %w"
 
 func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactpb.CreateKnowledgeBaseRequest) (*artifactpb.CreateKnowledgeBaseResponse, error) {
 
-	uid, err := getUserIDFromContext(ctx)
+	uid, err := getUserUIDFromContext(ctx)
 	if err != nil {
 		err := fmt.Errorf("failed to get user id from header: %v. err: %w", err, customerror.ErrUnauthenticated)
 		return nil, err
@@ -38,10 +38,11 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 		msg := "name is invalid: %v. err: %w"
 		return nil, fmt.Errorf(msg, req.Name, customerror.ErrInvalidArgument)
 	}
-	res, err := ph.service.Repository.CreateKnowledgeBase(ctx,
+
+	dbData, err := ph.service.Repository.CreateKnowledgeBase(ctx,
 		repository.KnowledgeBase{
 			Name:        req.Name,
-			KbID:        toIDStyle(req.Name),
+			ID:          toIDStyle(req.Name),
 			Description: req.Description,
 			Tags:        req.Tags,
 			Owner:       uid,
@@ -50,36 +51,43 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 	if err != nil {
 		return nil, err
 	}
+
+	// TODO: ACL - set the owner of the knowledge base
+	// ....
+
 	return &artifactpb.CreateKnowledgeBaseResponse{
 		Body: &artifactpb.KnowledgeBase{
-			Name:        res.Name,
-			Id:          res.KbID,
-			Description: res.Description,
-			Tags:        res.Tags,
-			OwnerName:   res.Owner,
-			CreateTime:  res.CreateTime.String(),
-			UpdateTime:  res.UpdateTime.String(),
+			Name:        dbData.Name,
+			Id:          dbData.ID,
+			Description: dbData.Description,
+			Tags:        dbData.Tags,
+			OwnerName:   dbData.Owner,
+			CreateTime:  dbData.CreateTime.String(),
+			UpdateTime:  dbData.UpdateTime.String(),
 		}, ErrorMsg: "", StatusCode: 0,
 	}, nil
 }
 func (ph *PublicHandler) ListKnowledgeBases(ctx context.Context, _ *artifactpb.ListKnowledgeBasesRequest) (*artifactpb.ListKnowledgeBasesResponse, error) {
 
 	// get user id from context
-	uid, err := getUserIDFromContext(ctx)
+	uid, err := getUserUIDFromContext(ctx)
 	if err != nil {
 
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
-	res, err := ph.service.Repository.ListKnowledgeBases(ctx, uid)
+
+	// TODO: ACL - check user's permission to list knowledge bases
+
+	dbData, err := ph.service.Repository.ListKnowledgeBases(ctx, uid)
 	if err != nil {
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
 
-	kbs := make([]*artifactpb.KnowledgeBase, len(res))
-	for i, kb := range res {
+	kbs := make([]*artifactpb.KnowledgeBase, len(dbData))
+	for i, kb := range dbData {
 		kbs[i] = &artifactpb.KnowledgeBase{
 			Name:        kb.Name,
-			Id:          kb.KbID,
+			Id:          kb.ID,
 			Description: kb.Description,
 			Tags:        kb.Tags,
 			CreateTime:  kb.CreateTime.String(),
@@ -95,7 +103,7 @@ func (ph *PublicHandler) ListKnowledgeBases(ctx context.Context, _ *artifactpb.L
 	}, nil
 }
 func (ph *PublicHandler) UpdateKnowledgeBase(ctx context.Context, req *artifactpb.UpdateKnowledgeBaseRequest) (*artifactpb.UpdateKnowledgeBaseResponse, error) {
-	uid, err := getUserIDFromContext(ctx)
+	uid, err := getUserUIDFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -107,13 +115,16 @@ func (ph *PublicHandler) UpdateKnowledgeBase(ctx context.Context, req *artifactp
 	if !nameOk {
 		return nil, fmt.Errorf("name: %s is invalid. err: %w", req.Name, customerror.ErrInvalidArgument)
 	}
+
+	// TODO: ACL - check user's permission to update knowledge base
+
 	// check if knowledge base exists
-	res, err := ph.service.Repository.UpdateKnowledgeBase(
+	dbData, err := ph.service.Repository.UpdateKnowledgeBase(
 		ctx,
 		uid,
 		repository.KnowledgeBase{
 			Name:        req.Name,
-			KbID:        req.Id,
+			ID:          req.Id,
 			Description: req.Description,
 			Tags:        req.Tags,
 			Owner:       uid,
@@ -125,23 +136,26 @@ func (ph *PublicHandler) UpdateKnowledgeBase(ctx context.Context, req *artifactp
 	// populate response
 	return &artifactpb.UpdateKnowledgeBaseResponse{
 		Body: &artifactpb.KnowledgeBase{
-			Name:        res.Name,
-			Id:          res.KbID,
-			Description: res.Description,
-			Tags:        res.Tags,
-			CreateTime:  res.CreateTime.String(),
-			UpdateTime:  res.UpdateTime.String(),
-			OwnerName:   res.Owner,
+			Name:        dbData.Name,
+			Id:          dbData.ID,
+			Description: dbData.Description,
+			Tags:        dbData.Tags,
+			CreateTime:  dbData.CreateTime.String(),
+			UpdateTime:  dbData.UpdateTime.String(),
+			OwnerName:   dbData.Owner,
 		}, ErrorMsg: "", StatusCode: 0,
 	}, nil
 }
 func (ph *PublicHandler) DeleteKnowledgeBase(ctx context.Context, req *artifactpb.DeleteKnowledgeBaseRequest) (*artifactpb.DeleteKnowledgeBaseResponse, error) {
 
-	uid, err := getUserIDFromContext(ctx)
+	uid, err := getUserUIDFromContext(ctx)
 	if err != nil {
 
 		return nil, err
 	}
+
+	// TODO: ACL - check user's permission to delete knowledge base
+
 	err = ph.service.Repository.DeleteKnowledgeBase(ctx, uid, req.Id)
 	if err != nil {
 
@@ -151,7 +165,7 @@ func (ph *PublicHandler) DeleteKnowledgeBase(ctx context.Context, req *artifactp
 		ErrorMsg: "", StatusCode: 0,
 	}, nil
 }
-func getUserIDFromContext(ctx context.Context) (string, error) {
+func getUserUIDFromContext(ctx context.Context) (string, error) {
 	md, _ := metadata.FromIncomingContext(ctx)
 	if v, ok := md[strings.ToLower(constant.HeaderUserUIDKey)]; ok {
 		return v[0], nil
