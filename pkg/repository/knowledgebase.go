@@ -18,15 +18,16 @@ type KnowledgeBaseI interface {
 	ListKnowledgeBases(ctx context.Context, uid string) ([]KnowledgeBase, error)
 	UpdateKnowledgeBase(ctx context.Context, uid string, kb KnowledgeBase) (*KnowledgeBase, error)
 	DeleteKnowledgeBase(ctx context.Context, uid, kbID string) error
+	GetKnowledgeBaseByOwnerAndID(ctx context.Context, owner string, kbID string) (*KnowledgeBase, error)
 }
 
 type KnowledgeBase struct {
-	ID          uuid.UUID  `gorm:"type:uuid;default:uuid_generate_v4();primaryKey" json:"id"`
-	KbID        string     `gorm:"column:kb_id;size:255;not null;unique" json:"kb_id"`
+	UID         uuid.UUID  `gorm:"column:uid;type:uuid;default:uuid_generate_v4();primaryKey" json:"uid"`
+	ID          string     `gorm:"column:id;size:255;not null" json:"kb_id"`
 	Name        string     `gorm:"column:name;size:255;not null" json:"name"`
 	Description string     `gorm:"column:description;size:1023" json:"description"`
 	Tags        TagsArray  `gorm:"column:tags;type:VARCHAR(255)[]" json:"tags"`
-	Owner       string     `gorm:"column:owner;size:255;not null" json:"owner"`
+	Owner       string     `gorm:"column:owner;type:uuid;not null" json:"owner"`
 	CreateTime  *time.Time `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
 	UpdateTime  *time.Time `gorm:"column:update_time;not null;autoUpdateTime" json:"update_time"` // Use autoUpdateTime
 	DeleteTime  *time.Time `gorm:"column:delete_time" json:"delete_time"`
@@ -34,8 +35,8 @@ type KnowledgeBase struct {
 
 // table columns map
 type KnowledgeBaseColumns struct {
+	UID         string
 	ID          string
-	KbID        string
 	Name        string
 	Description string
 	Tags        string
@@ -46,8 +47,8 @@ type KnowledgeBaseColumns struct {
 }
 
 var KnowledgeBaseColumn = KnowledgeBaseColumns{
+	UID:         "uid",
 	ID:          "id",
-	KbID:        "kb_id",
 	Name:        "name",
 	Description: "description",
 	Tags:        "tags",
@@ -99,19 +100,16 @@ func formatPostgresArray(tags []string) string {
 
 // CreateKnowledgeBase inserts a new KnowledgeBase record into the database.
 func (r *Repository) CreateKnowledgeBase(ctx context.Context, kb KnowledgeBase) (*KnowledgeBase, error) {
-	// check if the kb_id is unique, if yes try to add suffix to make it unique
-	for try := 0; try < 5; try++ {
-		// Check if the kb_id already exists
-		var existingKB KnowledgeBase
-		if err := r.db.WithContext(ctx).Where(KnowledgeBaseColumn.KbID+" = ?", kb.KbID).First(&existingKB).Error; err != nil {
-			if err != gorm.ErrRecordNotFound {
-				return nil, err
-			}
-		} else {
-			// kb_id already exists, generate a new one
-			kb.KbID = fmt.Sprintf("%s_%s", kb.KbID, uuid.New().String()[0:5]) // Add suffix to make it unique
-			continue
+	// check if the kb_id is unique
+	var existingKB KnowledgeBase
+	// check if the knowledge base exists and not delete
+	where_clause := fmt.Sprintf("%v = ? AND %v IS NULL", KnowledgeBaseColumn.ID, KnowledgeBaseColumn.DeleteTime)
+	if err := r.db.WithContext(ctx).Where(where_clause, kb.ID).First(&existingKB).Error; err != nil {
+		if err != gorm.ErrRecordNotFound {
+			return nil, err
 		}
+	} else {
+		return nil, fmt.Errorf("knowledge base ID already exists. err: %w", customerror.ErrInvalidArgument)
 	}
 
 	// check if the name is unique in the owner's knowledge bases
@@ -126,7 +124,7 @@ func (r *Repository) CreateKnowledgeBase(ctx context.Context, kb KnowledgeBase) 
 	// Create a new KnowledgeBase record
 	if err := r.db.WithContext(ctx).Create(&kb).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("knowledge base ID not found: %v, err:%w", kb.KbID, gorm.ErrRecordNotFound)
+			return nil, fmt.Errorf("knowledge base ID not found: %v, err:%w", kb.ID, gorm.ErrRecordNotFound)
 		}
 		return nil, err
 	}
@@ -152,11 +150,11 @@ func (r *Repository) UpdateKnowledgeBase(ctx context.Context, uid string, kb Kno
 	var existingKB KnowledgeBase
 
 	// Find the KnowledgeBase record by ID
-	conds := fmt.Sprintf("%s = ?", KnowledgeBaseColumn.KbID)
+	conds := fmt.Sprintf("%s = ?", KnowledgeBaseColumn.ID)
 	// Find the KnowledgeBase record by ID
-	if err := r.db.WithContext(ctx).Where(conds, kb.KbID).First(&existingKB).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where(conds, kb.ID).First(&existingKB).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("knowledge base ID not found: %v", kb.KbID)
+			return nil, fmt.Errorf("knowledge base ID not found: %v", kb.ID)
 		}
 		return nil, err
 	}
@@ -178,9 +176,9 @@ func (r *Repository) UpdateKnowledgeBase(ctx context.Context, uid string, kb Kno
 	}
 	// Fetch the updated record
 	var updatedKB KnowledgeBase
-	if err := r.db.WithContext(ctx).Where(conds, kb.KbID).First(&updatedKB).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where(conds, kb.ID).First(&updatedKB).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("knowledge base ID not found: %v. err: %w", kb.KbID, gorm.ErrRecordNotFound)
+			return nil, fmt.Errorf("knowledge base name id not found: %v. err: %w", kb.ID, gorm.ErrRecordNotFound)
 		}
 		return nil, err
 	}
@@ -193,7 +191,7 @@ func (r *Repository) UpdateKnowledgeBase(ctx context.Context, uid string, kb Kno
 func (r *Repository) DeleteKnowledgeBase(ctx context.Context, uid string, kbID string) error {
 	// Fetch the existing record to ensure it exists
 	var existingKB KnowledgeBase
-	conds := fmt.Sprintf("%v = ? AND %v IS NULL", KnowledgeBaseColumn.KbID, KnowledgeBaseColumn.DeleteTime)
+	conds := fmt.Sprintf("%v = ? AND %v IS NULL", KnowledgeBaseColumn.ID, KnowledgeBaseColumn.DeleteTime)
 	if err := r.db.WithContext(ctx).First(&existingKB, conds, kbID).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return fmt.Errorf("knowledge base ID not found: %v. err: %w", kbID, gorm.ErrRecordNotFound)
@@ -213,7 +211,7 @@ func (r *Repository) DeleteKnowledgeBase(ctx context.Context, uid string, kbID s
 	// Save the changes to mark the record as soft deleted
 	if err := r.db.WithContext(ctx).Save(&existingKB).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return fmt.Errorf("knowledge base ID not found: %v. err: %w", existingKB.KbID, gorm.ErrRecordNotFound)
+			return fmt.Errorf("knowledge base ID not found: %v. err: %w", existingKB.ID, gorm.ErrRecordNotFound)
 		}
 		return err
 	}
@@ -223,7 +221,7 @@ func (r *Repository) DeleteKnowledgeBase(ctx context.Context, uid string, kbID s
 
 func (r *Repository) checkIfNameUnique(ctx context.Context, owner string, name string) (bool, error) {
 	var existingKB KnowledgeBase
-	whereString := fmt.Sprintf("%v = ? AND %v = ?", KnowledgeBaseColumn.Owner, KnowledgeBaseColumn.Name)
+	whereString := fmt.Sprintf("%v = ? AND %v = ? AND %s is NULL", KnowledgeBaseColumn.Owner, KnowledgeBaseColumn.Name, KnowledgeBaseColumn.DeleteTime)
 	if err := r.db.WithContext(ctx).Where(whereString, owner, name).First(&existingKB).Error; err != nil {
 		if err != gorm.ErrRecordNotFound {
 			return false, err
@@ -232,4 +230,28 @@ func (r *Repository) checkIfNameUnique(ctx context.Context, owner string, name s
 		return true, nil
 	}
 	return false, nil
+}
+
+// check if knowledge base exists by kb_uid
+func (r *Repository) checkIfKnowledgeBaseExists(ctx context.Context, kbUID string) (bool, error) {
+	var existingKB KnowledgeBase
+	whereString := fmt.Sprintf("%v = ? AND %s is NULL", KnowledgeBaseColumn.UID, KnowledgeBaseColumn.DeleteTime)
+	if err := r.db.WithContext(ctx).Where(whereString, kbUID).First(&existingKB).Error; err != nil {
+		if err != gorm.ErrRecordNotFound {
+			return false, err
+		}
+	} else {
+		return true, nil
+	}
+	return false, nil
+}
+
+// get the knowledge base by (owner, kb_id)
+func (r *Repository) GetKnowledgeBaseByOwnerAndID(ctx context.Context, owner string, kbID string) (*KnowledgeBase, error) {
+	var existingKB KnowledgeBase
+	whereString := fmt.Sprintf("%v = ? AND %v = ? AND %v is NULL", KnowledgeBaseColumn.Owner, KnowledgeBaseColumn.ID, KnowledgeBaseColumn.DeleteTime)
+	if err := r.db.WithContext(ctx).Where(whereString, owner, kbID).First(&existingKB).Error; err != nil {
+		return nil, err
+	}
+	return &existingKB, nil
 }

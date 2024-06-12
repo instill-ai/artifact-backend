@@ -27,6 +27,7 @@ type AppConfig struct {
 	MgmtBackend MgmtBackendConfig `koanf:"mgmtbackend"`
 	Registry    RegistryConfig    `koanf:"registry"`
 	OpenFGA     OpenFGAConfig     `koanf:"openfga"`
+	Minio       MinioConfig       `koanf:"minio"`
 }
 
 // OpenFGA config
@@ -119,6 +120,15 @@ type MgmtBackendConfig struct {
 type RegistryConfig struct {
 	Host string `koanf:"host"`
 	Port int    `koanf:"port"`
+}
+
+// MinioConfig is the minio configuration.
+type MinioConfig struct {
+	Host       string `koanf:"host"`
+	Port       string `koanf:"port"`
+	RootUser   string `koanf:"rootuser"`
+	RootPwd    string `koanf:"rootpwd"`
+	BucketName string `koanf:"bucketname"`
 }
 
 // Init - Assign global config to decoded config struct

@@ -26,7 +26,7 @@ run-local:
 		echo "A container named ${SERVICE_NAME} is already running. \nRestarting..."; \
 		make rm; \
 	fi
-	@docker run -d  --rm \
+	@docker run -d --rm \
 		-p ${SERVICE_PORT}:${SERVICE_PORT} \
 		--network instill-network \
 		--name ${SERVICE_NAME} \

@@ -44,6 +44,7 @@ import (
 	httpclient "github.com/instill-ai/artifact-backend/pkg/client/http"
 	database "github.com/instill-ai/artifact-backend/pkg/db"
 	custom_otel "github.com/instill-ai/artifact-backend/pkg/logger/otel"
+	minio "github.com/instill-ai/artifact-backend/pkg/minio"
 	artifactPB "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
@@ -178,7 +179,11 @@ func main() {
 
 	repository := repository.NewRepository(db)
 
-	service := service.NewService(repository, httpclient.NewRegistryClient(ctx))
+	// Initialize Minio client
+	minioClient, err := minio.NewMinioClientAndInitBucket()
+
+	
+	service := service.NewService(repository, minioClient, mgmtPrivateServiceClient, httpclient.NewRegistryClient(ctx))
 
 	publicGrpcS := grpc.NewServer(grpcServerOpts...)
 	reflection.Register(publicGrpcS)

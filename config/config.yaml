@@ -22,7 +22,7 @@ database:
   host: pg-sql
   port: 5432
   name: artifact
-  version: 2
+  version: 4
   timezone: Etc/UTC
   pool:
     idleconnections: 5
@@ -59,3 +59,9 @@ registry:
 openfga:
   host: openfga
   port: 8080
+minio:
+  host: minio
+  port: 9000
+  rootuser: minioadmin
+  rootpwd: minioadmin
+  bucketname: instill-ai-knowledge-bases
