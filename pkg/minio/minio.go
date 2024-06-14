@@ -31,8 +31,13 @@ func NewMinioClientAndInitBucket() (*Minio, error) {
 	if err != nil {
 		return nil, err
 	}
-	client, err := minio.New(cfg.Host+":"+cfg.Port, cfg.RootUser, cfg.RootUser, false)
+	client, err := minio.New(cfg.Host+":"+cfg.Port, cfg.RootUser, cfg.RootPwd, false)
 	if err != nil {
+		// log connection error
+		log.Error("cannot connect to minio",
+			zap.String("host:port", cfg.Host+":"+cfg.Port),
+			zap.String("user", cfg.RootUser),
+			zap.String("pwd", cfg.RootPwd), zap.Error(err))
 		return nil, err
 	}
 	err = client.MakeBucket(cfg.BucketName, "us-east-1")
