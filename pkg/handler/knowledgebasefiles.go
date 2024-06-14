@@ -30,21 +30,13 @@ func (ph *PublicHandler) UploadKnowledgeBaseFile(ctx context.Context, req *artif
 	// TODO: ACL - check if the creator can upload file to this knowledge base. ACL.
 	// .....
 
-	//get the owner uid from the mgmt service
-	var ownerUID uuid.UUID
+	// get the owner uid from the mgmt service
+	var ownerUID string
 	{
-		filter := "id=" + req.OwnerId
-		ownerRes, err := ph.service.MgmtPrv.ListUsersAdmin(ctx, &mgmtpb.ListUsersAdminRequest{Filter: &filter})
+		// get the owner uid from the mgmt service
+		ownerUID, err = ph.getOwnerUID(ctx, req.OwnerId)
 		if err != nil {
 			log.Error("failed to get owner uid", zap.Error(err))
-			return nil, err
-		}
-		if ownerRes == nil || len(ownerRes.Users) == 0 {
-			return nil, fmt.Errorf("failed to get owner uid. err: %w", customerror.ErrNotFound)
-		}
-		ownerUID, err = uuid.Parse(*ownerRes.Users[0].Uid)
-		if err != nil {
-			log.Error("failed to parse owner uid", zap.Error(err))
 			return nil, err
 		}
 	}
@@ -53,7 +45,7 @@ func (ph *PublicHandler) UploadKnowledgeBaseFile(ctx context.Context, req *artif
 	var kb *repository.KnowledgeBase
 	var filePathName string
 	{
-		kb, err = ph.service.Repository.GetKnowledgeBaseByOwnerAndID(ctx, ownerUID.String(), req.KbId)
+		kb, err = ph.service.Repository.GetKnowledgeBaseByOwnerAndID(ctx, ownerUID, req.KbId)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get knowledge base by owner and id. err: %w", err)
 		}
@@ -76,11 +68,16 @@ func (ph *PublicHandler) UploadKnowledgeBaseFile(ctx context.Context, req *artif
 			log.Error("failed to parse creator uid", zap.Error(err))
 			return nil, err
 		}
-
+		// turn ownerUIDUuID to uuid
+		ownerUIDUuid, err := uuid.Parse(ownerUID)
+		if err != nil {
+			log.Error("failed to parse owner uid", zap.Error(err))
+			return nil, err
+		}
 		kbFile := repository.KnowledgeBaseFile{
 			Name:             req.File.Name,
 			Type:             artifactpb.FileType_name[int32(req.File.Type)],
-			Owner:            ownerUID,
+			Owner:            ownerUIDUuid,
 			CreatorUID:       creatorUID,
 			KnowledgeBaseUID: kb.UID,
 			Destination:      filePathName,
@@ -88,7 +85,7 @@ func (ph *PublicHandler) UploadKnowledgeBaseFile(ctx context.Context, req *artif
 		}
 		res, err = ph.service.Repository.CreateKnowledgeBaseFile(ctx, kbFile)
 		if err != nil {
-			err:= ph.service.MinIO.DeleteFile(ctx, filePathName)
+			err := ph.service.MinIO.DeleteFile(ctx, filePathName)
 			if err != nil {
 				log.Error("failed to delete file in minio", zap.Error(err))
 			}
@@ -158,17 +155,12 @@ func (ph *PublicHandler) ListKnowledgeBaseFiles(ctx context.Context, req *artifa
 	// get the owner uid from the mgmt service
 	var ownerUID string
 	{
-		filter := "id=" + req.OwnerId
-		ownerRes, err := ph.service.MgmtPrv.ListUsersAdmin(ctx, &mgmtpb.ListUsersAdminRequest{Filter: &filter})
+		// get the owner uid from the mgmt service
+		ownerUID, err = ph.getOwnerUID(ctx, req.OwnerId)
 		if err != nil {
 			log.Error("failed to get owner uid", zap.Error(err))
 			return nil, err
 		}
-		if ownerRes == nil || len(ownerRes.Users) == 0 {
-			return nil, fmt.Errorf("failed to get owner uid. err: %w", customerror.ErrNotFound)
-		}
-		ownerUID = *ownerRes.Users[0].Uid
-
 	}
 
 	// get the kb uid from the knowledge base table
@@ -290,4 +282,35 @@ func fileTypeConvertToMime(t artifactpb.FileType) string {
 	default:
 		return "application/octet-stream"
 	}
+}
+
+// use mgmt service to get the user uid
+// TODO: when mgmt support get by owner.id, we can optimize this
+func (ph *PublicHandler) getOwnerUID(ctx context.Context, ownerID string) (string, error) {
+	log, _ := logger.GetZapLogger(ctx)
+
+	// get from user rpc
+	ownerUID, err := ph.service.MgmtPrv.GetUserAdmin(ctx, &mgmtpb.GetUserAdminRequest{Name: "users/" + ownerID})
+	if err != nil {
+		log.Error("error occurred when get user from mgmt", zap.Error(err))
+		return "", err
+	} else {
+		if ownerUID.User != nil {
+			if ownerUID.User.Uid != nil {
+				return *ownerUID.User.Uid, nil
+			}
+		}
+	}
+
+	// get from org rpc
+	orgUID, err := ph.service.MgmtPrv.GetOrganizationAdmin(ctx, &mgmtpb.GetOrganizationAdminRequest{Name: "organizations/" + ownerID})
+	if err != nil {
+		log.Error("error occurred when get organization from mgmt", zap.Error(err))
+		return "", err
+	} else {
+		if orgUID.Organization != nil {
+			return orgUID.Organization.Uid, nil
+		}
+	}
+	return "", fmt.Errorf("failed to get owner uid from users and orgs. err: %w", customerror.ErrNotFound)
 }
