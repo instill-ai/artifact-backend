@@ -285,11 +285,12 @@ func fileTypeConvertToMime(t artifactpb.FileType) string {
 }
 
 // use mgmt service to get the user uid
+// TODO: when mgmt support get by owner.id, we can optimize this
 func (ph *PublicHandler) getOwnerUID(ctx context.Context, ownerID string) (string, error) {
 	log, _ := logger.GetZapLogger(ctx)
 
 	// get from user rpc
-	ownerUID, err := ph.service.MgmtPrv.GetUserAdmin(ctx, &mgmtpb.GetUserAdminRequest{Name: ownerID})
+	ownerUID, err := ph.service.MgmtPrv.GetUserAdmin(ctx, &mgmtpb.GetUserAdminRequest{Name: "users" + ownerID})
 	if err != nil {
 		log.Error("error occurred when get user from mgmt", zap.Error(err))
 		return "", err
