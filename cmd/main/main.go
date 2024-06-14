@@ -180,7 +180,7 @@ func main() {
 	repository := repository.NewRepository(db)
 
 	// Initialize Minio client
-	minioClient, err := minio.NewMinioClientAndInitBucket()
+	minioClient, _ := minio.NewMinioClientAndInitBucket()
 
 	
 	service := service.NewService(repository, minioClient, mgmtPrivateServiceClient, httpclient.NewRegistryClient(ctx))
