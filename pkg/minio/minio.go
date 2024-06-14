@@ -3,6 +3,7 @@ package minio
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 	"strings"
 
 	"github.com/instill-ai/artifact-backend/config"
@@ -26,6 +27,7 @@ type Minio struct {
 }
 
 func NewMinioClientAndInitBucket() (*Minio, error) {
+	fmt.Printf("Initializing Minio client and bucket\n")
 	cfg := config.Config.Minio
 	log, err := log.GetZapLogger(context.Background())
 	if err != nil {
@@ -33,6 +35,7 @@ func NewMinioClientAndInitBucket() (*Minio, error) {
 	}
 	client, err := minio.New(cfg.Host+":"+cfg.Port, cfg.RootUser, cfg.RootPwd, false)
 	if err != nil {
+		fmt.Printf("Initializing Minio client and bucket\n")
 		// log connection error
 		log.Error("cannot connect to minio",
 			zap.String("host:port", cfg.Host+":"+cfg.Port),
