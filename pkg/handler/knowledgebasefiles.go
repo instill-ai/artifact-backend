@@ -290,7 +290,7 @@ func (ph *PublicHandler) getOwnerUID(ctx context.Context, ownerID string) (strin
 	log, _ := logger.GetZapLogger(ctx)
 
 	// get from user rpc
-	ownerUID, err := ph.service.MgmtPrv.GetUserAdmin(ctx, &mgmtpb.GetUserAdminRequest{Name: "users" + ownerID})
+	ownerUID, err := ph.service.MgmtPrv.GetUserAdmin(ctx, &mgmtpb.GetUserAdminRequest{Name: "users/" + ownerID})
 	if err != nil {
 		log.Error("error occurred when get user from mgmt", zap.Error(err))
 		return "", err
