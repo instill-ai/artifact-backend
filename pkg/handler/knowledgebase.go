@@ -26,7 +26,7 @@ const ErrorDeleteKnowledgeBaseMsg = "failed to delete knowledge base: %w"
 
 func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactpb.CreateKnowledgeBaseRequest) (*artifactpb.CreateKnowledgeBaseResponse, error) {
 	log, _ := logger.GetZapLogger(ctx)
-	authUid, err := getUserUIDFromContext(ctx)
+	authUID, err := getUserUIDFromContext(ctx)
 	if err != nil {
 		err := fmt.Errorf("failed to get user id from header: %v. err: %w", err, customerror.ErrUnauthenticated)
 		return nil, err
@@ -57,9 +57,9 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 		}
 	}
 
-	creatorUUID, err := uuid.Parse(authUid)
+	creatorUUID, err := uuid.Parse(authUID)
 	if err != nil {
-		log.Error("failed to parse creator uid", zap.String("uid", authUid), zap.Error(err))
+		log.Error("failed to parse creator uid", zap.String("uid", authUID), zap.Error(err))
 		return nil, err
 	}
 
