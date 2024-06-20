@@ -6,10 +6,13 @@ import (
 	"regexp"
 	"strings"
 
+	"go.uber.org/zap"
 	"google.golang.org/grpc/metadata"
 
+	"github.com/google/uuid"
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/customerror"
+	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
@@ -22,12 +25,16 @@ const ErrorUpdateKnowledgeBaseMsg = "failed to update knowledge base: %w"
 const ErrorDeleteKnowledgeBaseMsg = "failed to delete knowledge base: %w"
 
 func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactpb.CreateKnowledgeBaseRequest) (*artifactpb.CreateKnowledgeBaseResponse, error) {
-
-	uid, err := getUserUIDFromContext(ctx)
+	log, _ := logger.GetZapLogger(ctx)
+	authUid, err := getUserUIDFromContext(ctx)
 	if err != nil {
 		err := fmt.Errorf("failed to get user id from header: %v. err: %w", err, customerror.ErrUnauthenticated)
 		return nil, err
 	}
+
+	// TODO: check user's permission to create knowledge base in the user or org context
+	// ....
+
 	// check name if it is empty
 	if req.Name == "" {
 		err := fmt.Errorf("name is required. err: %w", ErrCheckRequiredFields)
@@ -35,134 +42,209 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 	}
 	nameOk := isValidName(req.Name)
 	if !nameOk {
-		msg := "name is invalid: %v. err: %w"
+		msg := "kb name is invalid: %v. err: %w"
 		return nil, fmt.Errorf(msg, req.Name, customerror.ErrInvalidArgument)
+	}
+
+	// get the owner uid from the mgmt service
+	var ownerUUID string
+	{
+		// get the owner uid from the mgmt service
+		ownerUUID, err = ph.getOwnerUID(ctx, req.OwnerId)
+		if err != nil {
+			log.Error("failed to get owner uid", zap.Error(err))
+			return nil, err
+		}
+	}
+
+	creatorUUID, err := uuid.Parse(authUid)
+	if err != nil {
+		log.Error("failed to parse creator uid", zap.String("uid", authUid), zap.Error(err))
+		return nil, err
 	}
 
 	dbData, err := ph.service.Repository.CreateKnowledgeBase(ctx,
 		repository.KnowledgeBase{
-			Name:        req.Name,
-			ID:          toIDStyle(req.Name),
+			Name: req.Name,
+			// make name as kbID
+			KbID:        req.Name,
 			Description: req.Description,
 			Tags:        req.Tags,
-			Owner:       uid,
+			Owner:       ownerUUID,
+			CreatorUID:  creatorUUID,
 		},
 	)
 	if err != nil {
 		return nil, err
 	}
-
 	// TODO: ACL - set the owner of the knowledge base
 	// ....
-
 	return &artifactpb.CreateKnowledgeBaseResponse{
-		Body: &artifactpb.KnowledgeBase{
-			Name:        dbData.Name,
-			Id:          dbData.ID,
-			Description: dbData.Description,
-			Tags:        dbData.Tags,
-			OwnerName:   dbData.Owner,
-			CreateTime:  dbData.CreateTime.String(),
-			UpdateTime:  dbData.UpdateTime.String(),
-		}, ErrorMsg: "", StatusCode: 0,
+		KnowledgeBase: &artifactpb.KnowledgeBase{
+			Name:                dbData.Name,
+			KbId:                dbData.KbID,
+			Description:         dbData.Description,
+			Tags:                dbData.Tags,
+			OwnerName:           dbData.Owner,
+			CreateTime:          dbData.CreateTime.String(),
+			UpdateTime:          dbData.UpdateTime.String(),
+			ConvertingPipelines: []string{"leo/fake-pipeline-1", "leo/fake-pipeline-2"},
+			SplittingPipelines:  []string{"leo/fake-pipeline-3", "leo/fake-pipeline-4"},
+			EmbeddingPipelines:  []string{"leo/fake-pipeline-5", "leo/fake-pipeline-6"},
+			// DownstreamApps: 	[]string{"leo/fake-app-1", "leo/fake-app-2"},
+		},
 	}, nil
 }
-func (ph *PublicHandler) ListKnowledgeBases(ctx context.Context, _ *artifactpb.ListKnowledgeBasesRequest) (*artifactpb.ListKnowledgeBasesResponse, error) {
 
+func (ph *PublicHandler) ListKnowledgeBases(ctx context.Context, req *artifactpb.ListKnowledgeBasesRequest) (*artifactpb.ListKnowledgeBasesResponse, error) {
+	log, _ := logger.GetZapLogger(ctx)
 	// get user id from context
-	uid, err := getUserUIDFromContext(ctx)
+	_, err := getUserUIDFromContext(ctx)
 	if err != nil {
 
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
 
-	// TODO: ACL - check user's permission to list knowledge bases
+	// get the owner uid from the mgmt service
+	var ownerUUID string
+	{
+		// get the owner uid from the mgmt service
+		ownerUUID, err = ph.getOwnerUID(ctx, req.OwnerId)
+		if err != nil {
+			log.Error("failed to get owner uid", zap.Error(err))
+			return nil, err
+		}
+	}
 
-	dbData, err := ph.service.Repository.ListKnowledgeBases(ctx, uid)
+	// TODO: ACL - check user(authUid)'s permission to list knowledge bases
+	// ....
+
+	dbData, err := ph.service.Repository.ListKnowledgeBases(ctx, ownerUUID)
 	if err != nil {
+		log.Error("failed to get knowledge bases", zap.Error(err))
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
 
 	kbs := make([]*artifactpb.KnowledgeBase, len(dbData))
 	for i, kb := range dbData {
 		kbs[i] = &artifactpb.KnowledgeBase{
-			Name:        kb.Name,
-			Id:          kb.ID,
-			Description: kb.Description,
-			Tags:        kb.Tags,
-			CreateTime:  kb.CreateTime.String(),
-			UpdateTime:  kb.UpdateTime.String(),
-			OwnerName:   kb.Owner,
+			Name:                kb.Name,
+			KbId:                kb.KbID,
+			Description:         kb.Description,
+			Tags:                kb.Tags,
+			CreateTime:          kb.CreateTime.String(),
+			UpdateTime:          kb.UpdateTime.String(),
+			OwnerName:           kb.Owner,
+			ConvertingPipelines: []string{"leo/fake-pipeline-1", "leo/fake-pipeline-2"},
+			SplittingPipelines:  []string{"leo/fake-pipeline-3", "leo/fake-pipeline-4"},
+			EmbeddingPipelines:  []string{"leo/fake-pipeline-5", "leo/fake-pipeline-6"},
+			// DownstreamApps: 	[]string{"leo/fake-app-1", "leo/fake-app-2"},
 		}
 	}
 	return &artifactpb.ListKnowledgeBasesResponse{
-		Body: &artifactpb.KnowledgeBasesList{
-			KnowledgeBases: kbs,
-		},
-		ErrorMsg: "", StatusCode: 0,
+		KnowledgeBases: kbs,
 	}, nil
 }
 func (ph *PublicHandler) UpdateKnowledgeBase(ctx context.Context, req *artifactpb.UpdateKnowledgeBaseRequest) (*artifactpb.UpdateKnowledgeBaseResponse, error) {
-	uid, err := getUserUIDFromContext(ctx)
+	log, _ := logger.GetZapLogger(ctx)
+	authUID, err := getUserUIDFromContext(ctx)
 	if err != nil {
+		log.Error("failed to get user id from header", zap.Error(err))
 		return nil, err
 	}
 	// check name if it is empty
-	if req.Name == "" {
-		return nil, fmt.Errorf("name is empty. err: %w", ErrCheckRequiredFields)
+	if req.KbId == "" {
+		log.Error("kb_id is empty", zap.Error(ErrCheckRequiredFields))
+		return nil, fmt.Errorf("kb_id is empty. err: %w", ErrCheckRequiredFields)
 	}
-	nameOk := isValidName(req.Name)
-	if !nameOk {
-		return nil, fmt.Errorf("name: %s is invalid. err: %w", req.Name, customerror.ErrInvalidArgument)
+
+	// get the owner uid from the mgmt service
+	var ownerUUID string
+	{
+		// get the owner uid from the mgmt service
+		ownerUUID, err = ph.getOwnerUID(ctx, req.OwnerId)
+		if err != nil {
+			log.Error("failed to get owner uid", zap.Error(err))
+			return nil, err
+		}
 	}
 
 	// TODO: ACL - check user's permission to update knowledge base
-
+	_ = authUID
 	// check if knowledge base exists
 	dbData, err := ph.service.Repository.UpdateKnowledgeBase(
 		ctx,
-		uid,
+		ownerUUID,
 		repository.KnowledgeBase{
-			Name:        req.Name,
-			ID:          req.Id,
+			// Name:        req.KbId,
+			KbID:        req.KbId,
 			Description: req.Description,
 			Tags:        req.Tags,
-			Owner:       uid,
+			Owner:       ownerUUID,
 		},
 	)
 	if err != nil {
+		log.Error("failed to update knowledge base", zap.Error(err))
 		return nil, err
 	}
 	// populate response
 	return &artifactpb.UpdateKnowledgeBaseResponse{
-		Body: &artifactpb.KnowledgeBase{
-			Name:        dbData.Name,
-			Id:          dbData.ID,
-			Description: dbData.Description,
-			Tags:        dbData.Tags,
-			CreateTime:  dbData.CreateTime.String(),
-			UpdateTime:  dbData.UpdateTime.String(),
-			OwnerName:   dbData.Owner,
-		}, ErrorMsg: "", StatusCode: 0,
+		KnowledgeBase: &artifactpb.KnowledgeBase{
+			Name:                dbData.Name,
+			KbId:                dbData.KbID,
+			Description:         dbData.Description,
+			Tags:                dbData.Tags,
+			CreateTime:          dbData.CreateTime.String(),
+			UpdateTime:          dbData.UpdateTime.String(),
+			OwnerName:           dbData.Owner,
+			ConvertingPipelines: []string{"leo/fake-pipeline-1", "leo/fake-pipeline-2"},
+			SplittingPipelines:  []string{"leo/fake-pipeline-3", "leo/fake-pipeline-4"},
+			EmbeddingPipelines:  []string{"leo/fake-pipeline-5", "leo/fake-pipeline-6"},
+			// DownstreamApps: 	[]string{"leo/fake-app-1", "leo/fake-app-2"},
+		},
 	}, nil
 }
 func (ph *PublicHandler) DeleteKnowledgeBase(ctx context.Context, req *artifactpb.DeleteKnowledgeBaseRequest) (*artifactpb.DeleteKnowledgeBaseResponse, error) {
-
-	uid, err := getUserUIDFromContext(ctx)
+	log, _ := logger.GetZapLogger(ctx)
+	authUID, err := getUserUIDFromContext(ctx)
 	if err != nil {
 
 		return nil, err
 	}
-
+	// get the owner uid from the mgmt service
+	var ownerUUID string
+	{
+		// get the owner uid from the mgmt service
+		ownerUUID, err = ph.getOwnerUID(ctx, req.OwnerId)
+		if err != nil {
+			log.Error("failed to get owner uid", zap.Error(err))
+			return nil, err
+		}
+	}
 	// TODO: ACL - check user's permission to delete knowledge base
+	_ = authUID
 
-	err = ph.service.Repository.DeleteKnowledgeBase(ctx, uid, req.Id)
+	deletedKb, err := ph.service.Repository.DeleteKnowledgeBase(ctx, ownerUUID, req.KbId)
 	if err != nil {
 
 		return nil, err
 	}
+	// populate response
+
 	return &artifactpb.DeleteKnowledgeBaseResponse{
-		ErrorMsg: "", StatusCode: 0,
+		KnowledgeBase: &artifactpb.KnowledgeBase{
+			Name:                deletedKb.Name,
+			KbId:                deletedKb.KbID,
+			Description:         deletedKb.Description,
+			Tags:                deletedKb.Tags,
+			CreateTime:          deletedKb.CreateTime.String(),
+			UpdateTime:          deletedKb.UpdateTime.String(),
+			OwnerName:           deletedKb.Owner,
+			ConvertingPipelines: []string{"leo/fake-pipeline-1", "leo/fake-pipeline-2"},
+			SplittingPipelines:  []string{"leo/fake-pipeline-3", "leo/fake-pipeline-4"},
+			EmbeddingPipelines:  []string{"leo/fake-pipeline-5", "leo/fake-pipeline-6"},
+			// DownstreamApps: 	[]string{"leo/fake-app-1", "leo/fake-app-2"}
+		},
 	}, nil
 }
 func getUserUIDFromContext(ctx context.Context) (string, error) {
@@ -173,25 +255,14 @@ func getUserUIDFromContext(ctx context.Context) (string, error) {
 	return "", fmt.Errorf("user id not found in context. err: %w", customerror.ErrUnauthenticated)
 }
 
+// The ID should be lowercase without any space or special character besides
+// the hyphen, it can not start with number or hyphen, and should be less
+// than 32 characters.
 func isValidName(name string) bool {
-	name = strings.ToLower(name) // Convert the name to lowercase for case-insensitive matching
 	// Define the regular expression pattern
-	pattern := `^[a-z0-9_-]+$`
+	pattern := `^[a-z]([a-z-]{0,30}[a-z])?$`
 	// Compile the regular expression
 	re := regexp.MustCompile(pattern)
 	// Match the name against the regular expression
 	return re.MatchString(name)
-}
-
-// toIDStyle converts a name to an ID style by replacing spaces with underscores
-// and ensuring it only contains lowercase letters, underscores, and hyphens.
-func toIDStyle(name string) string {
-
-	// Replace spaces with underscores
-	id := strings.ReplaceAll(name, " ", "_")
-
-	// Convert to lowercase
-	id = strings.ToLower(id)
-
-	return id
 }
