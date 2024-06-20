@@ -97,7 +97,7 @@ func GetZapLogger(ctx context.Context) (*zap.Logger, error) {
 			return nil
 		}),
 		zap.AddCaller(),
-		zap.AddStacktrace(zapcore.ErrorLevel),
+		// zap.AddStacktrace(zapcore.ErrorLevel),
 		)
 
 	return logger, err
