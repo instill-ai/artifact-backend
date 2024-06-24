@@ -83,9 +83,21 @@ func (s *Service) ListRepositoryTags(ctx context.Context, req *pb.ListRepository
 
 			// The source of truth for tags is the registry. The local
 			// repository only holds extra information we'll aggregate to the
-			// tag ID list. If no record is found locally, the tag object will
-			// be returned with empty optional fields.
-			rt = &pb.RepositoryTag{Name: string(name), Id: id}
+			// tag ID list. If no record is found locally, we create the missing
+			// record.
+			// rt = &pb.RepositoryTag{Name: string(name), Id: id}
+			if digest, err := s.registryClient.GetTagDigest(ctx, repo, id); err != nil {
+				rt = &pb.RepositoryTag{Name: string(name), Id: id}
+			} else {
+				rt = &pb.RepositoryTag{Name: string(name), Id: id, Digest: digest}
+				s.CreateRepositoryTag(ctx, &pb.CreateRepositoryTagRequest{
+					Tag: &pb.RepositoryTag{
+						Name:   string(name),
+						Id:     id,
+						Digest: digest,
+					},
+				})
+			}
 		}
 
 		tags = append(tags, rt)
@@ -138,4 +150,27 @@ func (s *Service) CreateRepositoryTag(ctx context.Context, req *pb.CreateReposit
 	}
 
 	return &pb.CreateRepositoryTagResponse{Tag: storedTag}, nil
+}
+
+func (s *Service) DeleteRepositoryTag(ctx context.Context, req *pb.DeleteRepositoryTagRequest) (*pb.DeleteRepositoryTagResponse, error) {
+	name := utils.RepositoryTagName(req.GetName())
+	repo, id, err := name.ExtractRepositoryAndID()
+	if err != nil {
+		return nil, fmt.Errorf("invalid tag name")
+	}
+
+	rt, err := s.Repository.GetRepositoryTag(ctx, name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find existing tag %s: %w", id, err)
+	}
+
+	if err := s.registryClient.DeleteTag(ctx, repo, rt.Digest); err != nil {
+		return nil, err
+	}
+
+	if err := s.Repository.DeleteRepositoryTag(ctx, rt.Digest); err != nil {
+		return nil, err
+	}
+
+	return &pb.DeleteRepositoryTagResponse{}, nil
 }
