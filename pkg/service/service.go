@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/instill-ai/artifact-backend/pkg/customerror"
+	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
@@ -46,6 +47,9 @@ func NewService(
 // ListRepositoryTags fetches and paginates the tags of a repository in a
 // remote distribution registry.
 func (s *Service) ListRepositoryTags(ctx context.Context, req *pb.ListRepositoryTagsRequest) (*pb.ListRepositoryTagsResponse, error) {
+
+	logger, _ := logger.GetZapLogger(ctx)
+
 	pageSize := pageSizeInRange(req.GetPageSize())
 	page := pageInRange(req.GetPage())
 	idx0, idx1 := page*pageSize, (page+1)*pageSize
@@ -90,13 +94,15 @@ func (s *Service) ListRepositoryTags(ctx context.Context, req *pb.ListRepository
 				rt = &pb.RepositoryTag{Name: string(name), Id: id}
 			} else {
 				rt = &pb.RepositoryTag{Name: string(name), Id: id, Digest: digest}
-				s.CreateRepositoryTag(ctx, &pb.CreateRepositoryTagRequest{
+				if _, err := s.CreateRepositoryTag(ctx, &pb.CreateRepositoryTagRequest{
 					Tag: &pb.RepositoryTag{
 						Name:   string(name),
 						Id:     id,
 						Digest: digest,
 					},
-				})
+				}); err != nil {
+					logger.Warn(fmt.Sprintf("Create missing tag record error: %v", err))
+				}
 			}
 		}
 
