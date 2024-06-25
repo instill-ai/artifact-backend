@@ -19,6 +19,7 @@ import (
 type TagI interface {
 	GetRepositoryTag(context.Context, utils.RepositoryTagName) (*pb.RepositoryTag, error)
 	UpsertRepositoryTag(context.Context, *pb.RepositoryTag) (*pb.RepositoryTag, error)
+	DeleteRepositoryTag(context.Context, string) error
 }
 
 // GetRepositoryTag fetches the tag information from the repository_tag table.
@@ -77,4 +78,23 @@ func (r *Repository) UpsertRepositoryTag(_ context.Context, tag *pb.RepositoryTa
 		Digest:     record.Digest,
 		UpdateTime: timestamppb.New(record.UpdateTime),
 	}, nil
+}
+
+// DeleteRepositoryTag delete the tag information from the repository_tag table.
+// The name param is the resource name of the tag, e.g.
+// `repositories/admin/hello-world/tags/0.1.1-beta`.
+func (r *Repository) DeleteRepositoryTag(_ context.Context, digest string) error {
+	record := new(repositoryTag)
+	if result := r.db.Model(record).
+		Where("digest = ?", digest).
+		Delete(record); result.Error != nil {
+
+		if result.Error == gorm.ErrRecordNotFound {
+			return customerror.ErrNotFound
+		}
+
+		return result.Error
+	}
+
+	return nil
 }

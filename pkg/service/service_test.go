@@ -88,8 +88,9 @@ func TestService_ListRepositoryTags(t *testing.T) {
 		name string
 		in   func(*artifactpb.ListRepositoryTagsRequest)
 
-		registryTags []string
-		registryErr  error
+		registryTags      []string
+		registryErr       error
+		registryDigestErr error
 
 		repoTags []*artifactpb.RepositoryTag
 		repoErr  error
@@ -116,11 +117,12 @@ func TestService_ListRepositoryTags(t *testing.T) {
 			wantErr:      "failed to fetch tag .*: foo",
 		},
 		{
-			name:         "ok - not found in repo",
-			registryTags: tagIDs,
-			repoTags:     want[:2],
-			repoErr:      fmt.Errorf("repo error: %w", customerror.ErrNotFound),
-			wantTags:     wantWithEmptyOptional[:2],
+			name:              "ok - not found in repo",
+			registryTags:      tagIDs,
+			repoTags:          want[:2],
+			registryDigestErr: fmt.Errorf("foo"),
+			repoErr:           fmt.Errorf("repo error: %w", customerror.ErrNotFound),
+			wantTags:          wantWithEmptyOptional[:2],
 		},
 		{
 			name:         "ok - no pagination",
@@ -197,8 +199,13 @@ func TestService_ListRepositoryTags(t *testing.T) {
 			repository := mock.NewRepositoryIMock(c)
 			for _, repoTag := range tc.repoTags {
 				name := utils.RepositoryTagName(repoTag.Name)
+				_, id, _ := name.ExtractRepositoryAndID()
 				repository.GetRepositoryTagMock.When(minimock.AnyContext, name).
 					Then(repoTag, tc.repoErr)
+				if tc.registryDigestErr != nil {
+					registry.GetTagDigestMock.When(minimock.AnyContext, repo, id).
+						Then("", tc.registryDigestErr)
+				}
 			}
 
 			s := NewService(repository, nil, nil, registry)

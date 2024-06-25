@@ -182,7 +182,6 @@ func main() {
 	// Initialize Minio client
 	minioClient, _ := minio.NewMinioClientAndInitBucket()
 
-	
 	service := service.NewService(repository, minioClient, mgmtPrivateServiceClient, httpclient.NewRegistryClient(ctx))
 
 	publicGrpcS := grpc.NewServer(grpcServerOpts...)

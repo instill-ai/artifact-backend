@@ -57,3 +57,30 @@ func (c *RegistryClient) ListTags(ctx context.Context, repository string) ([]str
 
 	return resp.Tags, nil
 }
+
+// DeleteTag calls the DELETE /v2/<name>/manifests/<reference> endpoint, where <name> is a
+// repository, and <reference> is the digest
+func (c *RegistryClient) DeleteTag(ctx context.Context, repository string, digest string) error {
+
+	deletePath := fmt.Sprintf("/v2/%s/manifests/%s", repository, digest)
+	r := c.R().SetContext(ctx)
+	if _, err := r.Delete(deletePath); err != nil {
+		return fmt.Errorf("couldn't delete the image with registry: %w", err)
+	}
+
+	return nil
+}
+
+// GetTagDigest calls the HEAD /v2/<name>/manifests/<reference> endpoint, where <name> is a
+// repository, and <reference> is the tag
+func (c *RegistryClient) GetTagDigest(ctx context.Context, repository string, tag string) (string, error) {
+
+	digestPath := fmt.Sprintf("/v2/%s/manifests/%s", repository, tag)
+	r := c.R().SetContext(ctx).SetHeader("Accept", "application/vnd.docker.distribution.manifest.v2+json")
+	resp, err := r.Head(digestPath)
+	if err != nil {
+		return "", fmt.Errorf("couldn't get the image digest: %w", err)
+	}
+
+	return resp.Header().Get("Docker-Content-Digest"), nil
+}
