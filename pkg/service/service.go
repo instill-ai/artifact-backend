@@ -44,6 +44,25 @@ func NewService(
 	}
 }
 
+func (s *Service) populateMissingRepositoryTags(ctx context.Context, name utils.RepositoryTagName, repo string, id string) (*pb.RepositoryTag, error) {
+	digest, err := s.registryClient.GetTagDigest(ctx, repo, id)
+	if err != nil {
+		return nil, err
+	}
+	rt := &pb.RepositoryTag{Name: string(name), Id: id, Digest: digest}
+	if _, err := s.CreateRepositoryTag(ctx, &pb.CreateRepositoryTagRequest{
+		Tag: &pb.RepositoryTag{
+			Name:   string(name),
+			Id:     id,
+			Digest: digest,
+		},
+	}); err != nil {
+		return nil, err
+	}
+
+	return rt, nil
+}
+
 // ListRepositoryTags fetches and paginates the tags of a repository in a
 // remote distribution registry.
 func (s *Service) ListRepositoryTags(ctx context.Context, req *pb.ListRepositoryTagsRequest) (*pb.ListRepositoryTagsResponse, error) {
@@ -89,20 +108,10 @@ func (s *Service) ListRepositoryTags(ctx context.Context, req *pb.ListRepository
 			// repository only holds extra information we'll aggregate to the
 			// tag ID list. If no record is found locally, we create the missing
 			// record.
-			// rt = &pb.RepositoryTag{Name: string(name), Id: id}
-			if digest, err := s.registryClient.GetTagDigest(ctx, repo, id); err != nil {
+			rt, err = s.populateMissingRepositoryTags(ctx, name, repo, id)
+			if err != nil {
+				logger.Warn(fmt.Sprintf("Create missing tag record error: %v", err))
 				rt = &pb.RepositoryTag{Name: string(name), Id: id}
-			} else {
-				rt = &pb.RepositoryTag{Name: string(name), Id: id, Digest: digest}
-				if _, err := s.CreateRepositoryTag(ctx, &pb.CreateRepositoryTagRequest{
-					Tag: &pb.RepositoryTag{
-						Name:   string(name),
-						Id:     id,
-						Digest: digest,
-					},
-				}); err != nil {
-					logger.Warn(fmt.Sprintf("Create missing tag record error: %v", err))
-				}
 			}
 		}
 
@@ -156,6 +165,31 @@ func (s *Service) CreateRepositoryTag(ctx context.Context, req *pb.CreateReposit
 	}
 
 	return &pb.CreateRepositoryTagResponse{Tag: storedTag}, nil
+}
+
+// GetRepositoryTag retrieve the information of a repository tag.
+func (s *Service) GetRepositoryTag(ctx context.Context, req *pb.GetRepositoryTagRequest) (*pb.GetRepositoryTagResponse, error) {
+	logger, _ := logger.GetZapLogger(ctx)
+
+	name := utils.RepositoryTagName(req.GetName())
+	repo, id, err := name.ExtractRepositoryAndID()
+	if err != nil {
+		return nil, fmt.Errorf("invalid tag name")
+	}
+
+	rt, err := s.Repository.GetRepositoryTag(ctx, name)
+	if err != nil {
+		if !errors.Is(err, customerror.ErrNotFound) {
+			return nil, err
+		}
+		rt, err = s.populateMissingRepositoryTags(ctx, name, repo, id)
+		if err != nil {
+			logger.Warn(fmt.Sprintf("Create missing tag record error: %v", err))
+			return nil, err
+		}
+	}
+
+	return &pb.GetRepositoryTagResponse{Tag: rt}, nil
 }
 
 func (s *Service) DeleteRepositoryTag(ctx context.Context, req *pb.DeleteRepositoryTagRequest) (*pb.DeleteRepositoryTagResponse, error) {

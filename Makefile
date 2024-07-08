@@ -38,7 +38,7 @@ run-local:
 
 .PHONY: logs
 logs:					## Tail service container logs with -n 10
-	@docker logs ${SERVICE_NAME} --follow 
+	@docker logs ${SERVICE_NAME} --follow
 
 .PHONY: stop
 stop:							## Stop container
