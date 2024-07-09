@@ -63,6 +63,23 @@ func (h *PrivateHandler) CreateRepositoryTag(ctx context.Context, req *pb.Create
 	return resp, nil
 }
 
+// GetRepositoryTag retrieve the information of a repository tag.
+func (h *PrivateHandler) GetRepositoryTag(ctx context.Context, req *pb.GetRepositoryTagRequest) (*pb.GetRepositoryTagResponse, error) {
+	ctx, span := tracer.Start(ctx, "GetRepositoryTag", trace.WithSpanKind(trace.SpanKindServer))
+	defer span.End()
+
+	logger, _ := logger.GetZapLogger(ctx)
+
+	resp, err := h.service.GetRepositoryTag(ctx, req)
+	if err != nil {
+		span.SetStatus(1, err.Error())
+		return nil, err
+	}
+
+	logger.Info("GeteRepositoryTag")
+	return resp, nil
+}
+
 // DeleteRepositoryTag deletes the information of a repository tag in registry.
 func (h *PrivateHandler) DeleteRepositoryTag(ctx context.Context, req *pb.DeleteRepositoryTagRequest) (*pb.DeleteRepositoryTagResponse, error) {
 	ctx, span := tracer.Start(ctx, "DeleteRepositoryTag", trace.WithSpanKind(trace.SpanKindServer))

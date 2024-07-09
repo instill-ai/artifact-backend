@@ -15,4 +15,3 @@ Please refer to the [community](https://github.com/instill-ai/community) reposit
 ## License
 
 See the [LICENSE](./LICENSE) file for licensing information.
-
