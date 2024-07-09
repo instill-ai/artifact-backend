@@ -33,6 +33,8 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 	}
 
 	// TODO: check user's permission to create knowledge base in the user or org context
+	// 1. if it is user namespace, it is okay
+	// 2. if it is org namespace, check if the user has permission to create knowledge base in the org
 	// ....
 
 	// check name if it is empty
@@ -63,6 +65,21 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 		return nil, err
 	}
 
+	// external service call - create knowledge base collection and set ACL in openFAG
+	callExternalService := func(kbUID string) error {
+		err = ph.service.MilvusClient.CreateKnowledgeBaseCollection(ctx, kbUID)
+		if err != nil {
+			log.Error("failed to create collection in milvus", zap.Error(err))
+			return err
+		}
+
+		// TODO: ACL - set the owner of the knowledge base
+		// ....
+
+		return nil
+	}
+
+	// create knowledge base
 	dbData, err := ph.service.Repository.CreateKnowledgeBase(ctx,
 		repository.KnowledgeBase{
 			Name: req.Name,
@@ -72,13 +89,12 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 			Tags:        req.Tags,
 			Owner:       ownerUUID,
 			CreatorUID:  creatorUUID,
-		},
+		}, callExternalService,
 	)
 	if err != nil {
 		return nil, err
 	}
-	// TODO: ACL - set the owner of the knowledge base
-	// ....
+
 	return &artifactpb.CreateKnowledgeBaseResponse{
 		KnowledgeBase: &artifactpb.KnowledgeBase{
 			Name:                dbData.Name,
@@ -91,7 +107,6 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 			ConvertingPipelines: []string{"leo/fake-pipeline-1", "leo/fake-pipeline-2"},
 			SplittingPipelines:  []string{"leo/fake-pipeline-3", "leo/fake-pipeline-4"},
 			EmbeddingPipelines:  []string{"leo/fake-pipeline-5", "leo/fake-pipeline-6"},
-			// DownstreamApps: 	[]string{"leo/fake-app-1", "leo/fake-app-2"},
 		},
 	}, nil
 }

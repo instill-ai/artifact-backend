@@ -28,8 +28,8 @@ func RecoveryInterceptorOpt() grpc_recovery.Option {
 	})
 }
 
-// UnaryAppendMetadataInterceptor - append metadatas for unary
-func UnaryAppendMetadataInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+// UnaryAppendMetadataAndErrorCodeInterceptor - append metadata for unary
+func UnaryAppendMetadataAndErrorCodeInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
@@ -42,7 +42,7 @@ func UnaryAppendMetadataInterceptor(ctx context.Context, req interface{}, info *
 	return h, AsGRPCError(err)
 }
 
-// StreamAppendMetadataInterceptor - append metadatas for stream
+// StreamAppendMetadataInterceptor - append metadata for stream
 func StreamAppendMetadataInterceptor(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 	md, ok := metadata.FromIncomingContext(stream.Context())
 	if !ok {

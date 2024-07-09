@@ -1,10 +1,14 @@
 package minio
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"fmt"
+	"io"
+	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/instill-ai/artifact-backend/config"
 	log "github.com/instill-ai/artifact-backend/pkg/logger"
@@ -16,9 +20,15 @@ import (
 type MinioI interface {
 	GetClient() *minio.Client
 	// uploadFile
-	UploadBase64File(ctx context.Context, filePathName string, base64Content string, fileMimeType string) (err error)
+	UploadBase64File(ctx context.Context, filePath string, base64Content string, fileMimeType string) (err error)
 	// deleteFile
-	DeleteFile(ctx context.Context, filePathName string) (err error)
+	DeleteFile(ctx context.Context, filePath string) (err error)
+	// GetFile
+	GetFile(ctx context.Context, filePath string) ([]byte, error)
+	// GetFilesByPaths
+	GetFilesByPaths(ctx context.Context, filePaths []string) ([]FileContent, error)
+	// KnowledgeBase
+	KnowledgeBaseI
 }
 
 type Minio struct {
@@ -26,9 +36,9 @@ type Minio struct {
 	bucket string
 }
 
-func NewMinioClientAndInitBucket() (*Minio, error) {
+func NewMinioClientAndInitBucket(cfg config.MinioConfig) (*Minio, error) {
 	fmt.Printf("Initializing Minio client and bucket\n")
-	cfg := config.Config.Minio
+	// cfg := config.Config.Minio
 	log, err := log.GetZapLogger(context.Background())
 	if err != nil {
 		return nil, err
@@ -98,4 +108,86 @@ func (m *Minio) DeleteFile(ctx context.Context, filePathName string) (err error)
 		return err
 	}
 	return nil
+}
+
+func (m *Minio) GetFile(ctx context.Context, filePathName string) ([]byte, error) {
+	log, err := log.GetZapLogger(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get the object using the client
+	object, err := m.client.GetObject(m.bucket, filePathName, minio.GetObjectOptions{})
+	if err != nil {
+		log.Error("Failed to get file from MinIO", zap.Error(err))
+		return nil, err
+	}
+	defer object.Close()
+
+	// Read the object's content
+	buf := new(bytes.Buffer)
+	_, err = buf.ReadFrom(object)
+	if err != nil {
+		log.Error("Failed to read file from MinIO", zap.Error(err))
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
+}
+
+// FileContent represents a file and its content
+type FileContent struct {
+	Name    string
+	Content []byte
+}
+
+// GetFiles retrieves the contents of specified files from MinIO
+func (m *Minio) GetFilesByPaths(ctx context.Context, filePaths []string) ([]FileContent, error) {
+	log, err := log.GetZapLogger(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var wg sync.WaitGroup
+	files := make([]FileContent, len(filePaths))
+	errors := make([]error, len(filePaths))
+
+	for i, path := range filePaths {
+		wg.Add(1)
+		go func(index int, filePath string) {
+			defer wg.Done()
+
+			obj, err := m.client.GetObject(m.bucket, filePath, minio.GetObjectOptions{})
+			if err != nil {
+				log.Error("Failed to get object from MinIO", zap.String("path", filePath), zap.Error(err))
+				errors[index] = err
+				return
+			}
+			defer obj.Close()
+
+			var buffer bytes.Buffer
+			_, err = io.Copy(&buffer, obj)
+			if err != nil {
+				log.Error("Failed to read object content", zap.String("path", filePath), zap.Error(err))
+				errors[index] = err
+				return
+			}
+
+			files[index] = FileContent{
+				Name:    filepath.Base(filePath),
+				Content: buffer.Bytes(),
+			}
+		}(i, path)
+	}
+
+	wg.Wait()
+
+	// Check if any errors occurred
+	for _, err := range errors {
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return files, nil
 }

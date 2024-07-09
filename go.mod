@@ -19,9 +19,10 @@ require (
 	github.com/instill-ai/usage-client v0.3.0-alpha.0.20240319060111-4a3a39f2fd61
 	github.com/instill-ai/x v0.3.0-alpha.0.20231219052200-6230a89e386c
 	github.com/knadh/koanf v1.5.0
+	github.com/milvus-io/milvus-sdk-go/v2 v2.4.1
 	github.com/minio/minio-go v6.0.14+incompatible
 	github.com/openfga/go-sdk v0.2.3
-	github.com/redis/go-redis/v9 v9.5.1
+	github.com/redis/go-redis/v9 v9.5.3
 	go.opentelemetry.io/contrib/propagators/b3 v1.17.0
 	go.opentelemetry.io/otel v1.16.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v0.39.0
@@ -41,8 +42,18 @@ require (
 )
 
 require (
+	cloud.google.com/go/longrunning v0.5.4 // indirect
+	github.com/cockroachdb/errors v1.9.1 // indirect
+	github.com/cockroachdb/logtags v0.0.0-20211118104740-dabe8e521a4f // indirect
+	github.com/cockroachdb/redact v1.1.3 // indirect
+	github.com/getsentry/sentry-go v0.12.0 // indirect
 	github.com/go-ini/ini v1.67.0 // indirect
+	github.com/gogo/protobuf v1.3.2 // indirect
+	github.com/milvus-io/milvus-proto/go-api/v2 v2.4.3 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
+	github.com/tidwall/gjson v1.14.4 // indirect
+	github.com/tidwall/match v1.1.1 // indirect
+	github.com/tidwall/pretty v1.2.0 // indirect
 )
 
 require (

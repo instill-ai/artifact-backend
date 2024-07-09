@@ -19,15 +19,18 @@ var Config AppConfig
 
 // AppConfig defines
 type AppConfig struct {
-	Server      ServerConfig      `koanf:"server"`
-	Database    DatabaseConfig    `koanf:"database"`
-	InfluxDB    InfluxDBConfig    `koanf:"influxdb"`
-	Cache       CacheConfig       `koanf:"cache"`
-	Log         LogConfig         `koanf:"log"`
-	MgmtBackend MgmtBackendConfig `koanf:"mgmtbackend"`
-	Registry    RegistryConfig    `koanf:"registry"`
-	OpenFGA     OpenFGAConfig     `koanf:"openfga"`
-	Minio       MinioConfig       `koanf:"minio"`
+	Server                ServerConfig          `koanf:"server"`
+	Database              DatabaseConfig        `koanf:"database"`
+	InfluxDB              InfluxDBConfig        `koanf:"influxdb"`
+	Cache                 CacheConfig           `koanf:"cache"`
+	Log                   LogConfig             `koanf:"log"`
+	MgmtBackend           MgmtBackendConfig     `koanf:"mgmtbackend"`
+	PipelineBackend       PipelineBackendConfig `koanf:"pipelinebackend"`
+	Registry              RegistryConfig        `koanf:"registry"`
+	OpenFGA               OpenFGAConfig         `koanf:"openfga"`
+	Minio                 MinioConfig           `koanf:"minio"`
+	Milvus                MilvusConfig          `koanf:"milvus"`
+	FileToEmbeddingWorker FileToEmbeddingWorker `koanf:"filetoembeddingworker"`
 }
 
 // OpenFGA config
@@ -116,6 +119,17 @@ type MgmtBackendConfig struct {
 	}
 }
 
+// PipelineBackendConfig related to pipeline-backend
+type PipelineBackendConfig struct {
+	Host        string `koanf:"host"`
+	PublicPort  int    `koanf:"publicport"`
+	PrivatePort int    `koanf:"privateport"`
+	HTTPS       struct {
+		Cert string `koanf:"cert"`
+		Key  string `koanf:"key"`
+	}
+}
+
 // RegistryConfig is the registry configuration.
 type RegistryConfig struct {
 	Host string `koanf:"host"`
@@ -131,15 +145,26 @@ type MinioConfig struct {
 	BucketName string `koanf:"bucketname"`
 }
 
+// MilvusConfig is the milvus configuration.
+type MilvusConfig struct {
+	Host string `koanf:"host"`
+	Port string `koanf:"port"`
+}
+
+type FileToEmbeddingWorker struct {
+	NumberOfWorkers int `koanf:"numberofworkers"`
+}
+
 // Init - Assign global config to decoded config struct
 func Init() error {
 	k := koanf.New(".")
 	parser := yaml.Parser()
-
 	fs := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	fileRelativePath := fs.String("file", "config/config.yaml", "configuration file")
-	flag.Parse()
-
+	err:= fs.Parse(os.Args[1:])
+	if err != nil {
+		log.Fatal(err.Error())
+	}
 	if err := k.Load(
 		file.Provider(*fileRelativePath),
 		parser,

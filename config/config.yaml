@@ -53,6 +53,13 @@ mgmtbackend:
   https:
     cert:
     key:
+pipelinebackend:
+  host: pipeline-backend
+  publicport: 8081
+  privateport: 3081
+  https:
+    cert:
+    key:
 registry:
   host: registry
   port: 5000
@@ -65,3 +72,8 @@ minio:
   rootuser: minioadmin
   rootpwd: minioadmin
   bucketname: instill-ai-knowledge-bases
+milvus:
+  host: milvus
+  port: 19530
+filetoembeddingworker:
+  numberofworkers: 2
