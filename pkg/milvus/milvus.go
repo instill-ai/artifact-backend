@@ -21,6 +21,8 @@ type MilvusClientI interface {
 	ListEmbeddings(ctx context.Context, collectionName string) ([]Embedding, error)
 	SearchEmbeddings(ctx context.Context, collectionName string, vectors [][]float32, topK int) ([][]Embedding, error)
 	DeleteEmbedding(ctx context.Context, collectionName string, embeddingUID []string) error
+	// GetKnowledgeBaseCollectionName returns the collection name for a knowledge base
+	GetKnowledgeBaseCollectionName(kbUID string) string
 	Close()
 }
 
@@ -81,7 +83,7 @@ func (m *MilvusClient) GetHealth(ctx context.Context) (bool, error) {
 // CreateKnowledgeBaseCollection
 func (m *MilvusClient) CreateKnowledgeBaseCollection(ctx context.Context, kbUID string) error {
 	logger, _ := logger.GetZapLogger(ctx)
-	collectionName := getKnowledgeBaseCollectionName(kbUID)
+	collectionName := m.GetKnowledgeBaseCollectionName(kbUID)
 
 	// 1. Check if the collection already exists
 	has, err := m.c.HasCollection(ctx, collectionName)
@@ -129,7 +131,7 @@ func (m *MilvusClient) CreateKnowledgeBaseCollection(ctx context.Context, kbUID 
 
 // InsertVectorsToKnowledgeBaseCollection
 func (m *MilvusClient) InsertVectorsToKnowledgeBaseCollection(ctx context.Context, kbUID string, embeddings []Embedding) error {
-	collectionName := getKnowledgeBaseCollectionName(kbUID)
+	collectionName := m.GetKnowledgeBaseCollectionName(kbUID)
 
 	// Check if the collection exists
 	has, err := m.c.HasCollection(ctx, collectionName)
@@ -380,7 +382,10 @@ func (m *MilvusClient) Close() {
 
 const kbCollectionPrefix = "kb_"
 
-// getKnowledgeBaseCollectionName
-func getKnowledgeBaseCollectionName(kbUID string) string {
+// GetKnowledgeBaseCollectionName returns the collection name for a knowledge base
+func (m *MilvusClient) GetKnowledgeBaseCollectionName(kbUID string) string {
+	// collection name can only contain numbers, letters and underscores: invalid parameter
+	// turn kbUID(uuid) into a valid collection name
+	kbUID = strings.ReplaceAll(kbUID, "-", "_")
 	return kbCollectionPrefix + kbUID
 }

@@ -13,11 +13,17 @@ type KnowledgeBaseI interface {
 	SaveConvertedFile(ctx context.Context, kbUID, convertedFileUID, fileExt string, content []byte) error
 	// SaveChunks saves batch of chunks(text files) to MinIO.
 	SaveChunks(ctx context.Context, kbUID string, chunks map[ChunkUIDType]ChunkContentType) error
+	// GetUploadedFilePathInKnowledgeBase returns the path of the uploaded file in MinIO.
+	GetUploadedFilePathInKnowledgeBase(kbUID, dest string) string
+	// GetConvertedFilePathInKnowledgeBase returns the path of the converted file in MinIO.
+	GetConvertedFilePathInKnowledgeBase(kbUID, ConvertedFileUID, fileExt string) string
+	// GetChunkPathInKnowledgeBase returns the path of the chunk in MinIO.
+	GetChunkPathInKnowledgeBase(kbUID, chunkUID string) string
 }
 
 // SaveConvertedFile saves a converted file to MinIO with the appropriate MIME type.
 func (m *Minio) SaveConvertedFile(ctx context.Context, kbUID, convertedFileUID, fileExt string, content []byte) error {
-	filePathName := GetConvertedFilePathInKnowledgeBase(kbUID, convertedFileUID, fileExt)
+	filePathName := m.GetConvertedFilePathInKnowledgeBase(kbUID, convertedFileUID, fileExt)
 	mimeType := "application/octet-stream"
 	if fileExt == "md" {
 		mimeType = "text/markdown"
@@ -41,7 +47,7 @@ func (m *Minio) SaveChunks(ctx context.Context, kbUID string, chunks map[ChunkUI
 		wg.Add(1)
 		go func(chunkUID ChunkUIDType, chunkContent ChunkContentType) {
 			defer wg.Done()
-			filePathName := GetChunkPathInKnowledgeBase(kbUID, string(chunkUID))
+			filePathName := m.GetChunkPathInKnowledgeBase(kbUID, string(chunkUID))
 
 			err := m.UploadBase64File(ctx, filePathName, base64.StdEncoding.EncodeToString(chunkContent), "text/plain")
 			if err != nil {
@@ -60,4 +66,16 @@ func (m *Minio) SaveChunks(ctx context.Context, kbUID string, chunks map[ChunkUI
 		return fmt.Errorf("failed to upload chunks: %v", errStr)
 	}
 	return nil
+}
+
+func (m *Minio) GetUploadedFilePathInKnowledgeBase(kbUID, dest string) string {
+	return kbUID + "/uploaded-file/" + dest
+}
+
+func (m *Minio) GetConvertedFilePathInKnowledgeBase(kbUID, ConvertedFileUID, fileExt string) string {
+	return kbUID + "/converted-file/" + ConvertedFileUID + "." + fileExt
+}
+
+func (m *Minio) GetChunkPathInKnowledgeBase(kbUID, chunkUID string) string {
+	return kbUID + "/chunk/" + chunkUID + ".txt"
 }

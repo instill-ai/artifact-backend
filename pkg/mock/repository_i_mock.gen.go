@@ -38,14 +38,14 @@ type RepositoryIMock struct {
 	beforeCreateKnowledgeBaseCounter uint64
 	CreateKnowledgeBaseMock          mRepositoryIMockCreateKnowledgeBase
 
-	funcCreateKnowledgeBaseFile          func(ctx context.Context, kb mm_repository.KnowledgeBaseFile) (kp1 *mm_repository.KnowledgeBaseFile, err error)
-	inspectFuncCreateKnowledgeBaseFile   func(ctx context.Context, kb mm_repository.KnowledgeBaseFile)
+	funcCreateKnowledgeBaseFile          func(ctx context.Context, kb mm_repository.KnowledgeBaseFile, externalServiceCall func(FileUID string) error) (kp1 *mm_repository.KnowledgeBaseFile, err error)
+	inspectFuncCreateKnowledgeBaseFile   func(ctx context.Context, kb mm_repository.KnowledgeBaseFile, externalServiceCall func(FileUID string) error)
 	afterCreateKnowledgeBaseFileCounter  uint64
 	beforeCreateKnowledgeBaseFileCounter uint64
 	CreateKnowledgeBaseFileMock          mRepositoryIMockCreateKnowledgeBaseFile
 
-	funcDeleteAndCreateChunks          func(ctx context.Context, sourceTable string, sourceUID uuid.UUID, chunks []mm_repository.TextChunk, externalServiceCall func(chunkUIDs []string) error) (ta1 []mm_repository.TextChunk, err error)
-	inspectFuncDeleteAndCreateChunks   func(ctx context.Context, sourceTable string, sourceUID uuid.UUID, chunks []mm_repository.TextChunk, externalServiceCall func(chunkUIDs []string) error)
+	funcDeleteAndCreateChunks          func(ctx context.Context, sourceTable string, sourceUID uuid.UUID, chunks []*mm_repository.TextChunk, externalServiceCall func(chunkUIDs []string) (map[string]any, error)) (tpa1 []*mm_repository.TextChunk, err error)
+	inspectFuncDeleteAndCreateChunks   func(ctx context.Context, sourceTable string, sourceUID uuid.UUID, chunks []*mm_repository.TextChunk, externalServiceCall func(chunkUIDs []string) (map[string]any, error))
 	afterDeleteAndCreateChunksCounter  uint64
 	beforeDeleteAndCreateChunksCounter uint64
 	DeleteAndCreateChunksMock          mRepositoryIMockDeleteAndCreateChunks
@@ -1117,14 +1117,16 @@ type RepositoryIMockCreateKnowledgeBaseFileExpectation struct {
 
 // RepositoryIMockCreateKnowledgeBaseFileParams contains parameters of the RepositoryI.CreateKnowledgeBaseFile
 type RepositoryIMockCreateKnowledgeBaseFileParams struct {
-	ctx context.Context
-	kb  mm_repository.KnowledgeBaseFile
+	ctx                 context.Context
+	kb                  mm_repository.KnowledgeBaseFile
+	externalServiceCall func(FileUID string) error
 }
 
 // RepositoryIMockCreateKnowledgeBaseFileParamPtrs contains pointers to parameters of the RepositoryI.CreateKnowledgeBaseFile
 type RepositoryIMockCreateKnowledgeBaseFileParamPtrs struct {
-	ctx *context.Context
-	kb  *mm_repository.KnowledgeBaseFile
+	ctx                 *context.Context
+	kb                  *mm_repository.KnowledgeBaseFile
+	externalServiceCall *func(FileUID string) error
 }
 
 // RepositoryIMockCreateKnowledgeBaseFileResults contains results of the RepositoryI.CreateKnowledgeBaseFile
@@ -1134,7 +1136,7 @@ type RepositoryIMockCreateKnowledgeBaseFileResults struct {
 }
 
 // Expect sets up expected params for RepositoryI.CreateKnowledgeBaseFile
-func (mmCreateKnowledgeBaseFile *mRepositoryIMockCreateKnowledgeBaseFile) Expect(ctx context.Context, kb mm_repository.KnowledgeBaseFile) *mRepositoryIMockCreateKnowledgeBaseFile {
+func (mmCreateKnowledgeBaseFile *mRepositoryIMockCreateKnowledgeBaseFile) Expect(ctx context.Context, kb mm_repository.KnowledgeBaseFile, externalServiceCall func(FileUID string) error) *mRepositoryIMockCreateKnowledgeBaseFile {
 	if mmCreateKnowledgeBaseFile.mock.funcCreateKnowledgeBaseFile != nil {
 		mmCreateKnowledgeBaseFile.mock.t.Fatalf("RepositoryIMock.CreateKnowledgeBaseFile mock is already set by Set")
 	}
@@ -1147,7 +1149,7 @@ func (mmCreateKnowledgeBaseFile *mRepositoryIMockCreateKnowledgeBaseFile) Expect
 		mmCreateKnowledgeBaseFile.mock.t.Fatalf("RepositoryIMock.CreateKnowledgeBaseFile mock is already set by ExpectParams functions")
 	}
 
-	mmCreateKnowledgeBaseFile.defaultExpectation.params = &RepositoryIMockCreateKnowledgeBaseFileParams{ctx, kb}
+	mmCreateKnowledgeBaseFile.defaultExpectation.params = &RepositoryIMockCreateKnowledgeBaseFileParams{ctx, kb, externalServiceCall}
 	for _, e := range mmCreateKnowledgeBaseFile.expectations {
 		if minimock.Equal(e.params, mmCreateKnowledgeBaseFile.defaultExpectation.params) {
 			mmCreateKnowledgeBaseFile.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmCreateKnowledgeBaseFile.defaultExpectation.params)
@@ -1201,8 +1203,30 @@ func (mmCreateKnowledgeBaseFile *mRepositoryIMockCreateKnowledgeBaseFile) Expect
 	return mmCreateKnowledgeBaseFile
 }
 
+// ExpectExternalServiceCallParam3 sets up expected param externalServiceCall for RepositoryI.CreateKnowledgeBaseFile
+func (mmCreateKnowledgeBaseFile *mRepositoryIMockCreateKnowledgeBaseFile) ExpectExternalServiceCallParam3(externalServiceCall func(FileUID string) error) *mRepositoryIMockCreateKnowledgeBaseFile {
+	if mmCreateKnowledgeBaseFile.mock.funcCreateKnowledgeBaseFile != nil {
+		mmCreateKnowledgeBaseFile.mock.t.Fatalf("RepositoryIMock.CreateKnowledgeBaseFile mock is already set by Set")
+	}
+
+	if mmCreateKnowledgeBaseFile.defaultExpectation == nil {
+		mmCreateKnowledgeBaseFile.defaultExpectation = &RepositoryIMockCreateKnowledgeBaseFileExpectation{}
+	}
+
+	if mmCreateKnowledgeBaseFile.defaultExpectation.params != nil {
+		mmCreateKnowledgeBaseFile.mock.t.Fatalf("RepositoryIMock.CreateKnowledgeBaseFile mock is already set by Expect")
+	}
+
+	if mmCreateKnowledgeBaseFile.defaultExpectation.paramPtrs == nil {
+		mmCreateKnowledgeBaseFile.defaultExpectation.paramPtrs = &RepositoryIMockCreateKnowledgeBaseFileParamPtrs{}
+	}
+	mmCreateKnowledgeBaseFile.defaultExpectation.paramPtrs.externalServiceCall = &externalServiceCall
+
+	return mmCreateKnowledgeBaseFile
+}
+
 // Inspect accepts an inspector function that has same arguments as the RepositoryI.CreateKnowledgeBaseFile
-func (mmCreateKnowledgeBaseFile *mRepositoryIMockCreateKnowledgeBaseFile) Inspect(f func(ctx context.Context, kb mm_repository.KnowledgeBaseFile)) *mRepositoryIMockCreateKnowledgeBaseFile {
+func (mmCreateKnowledgeBaseFile *mRepositoryIMockCreateKnowledgeBaseFile) Inspect(f func(ctx context.Context, kb mm_repository.KnowledgeBaseFile, externalServiceCall func(FileUID string) error)) *mRepositoryIMockCreateKnowledgeBaseFile {
 	if mmCreateKnowledgeBaseFile.mock.inspectFuncCreateKnowledgeBaseFile != nil {
 		mmCreateKnowledgeBaseFile.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.CreateKnowledgeBaseFile")
 	}
@@ -1226,7 +1250,7 @@ func (mmCreateKnowledgeBaseFile *mRepositoryIMockCreateKnowledgeBaseFile) Return
 }
 
 // Set uses given function f to mock the RepositoryI.CreateKnowledgeBaseFile method
-func (mmCreateKnowledgeBaseFile *mRepositoryIMockCreateKnowledgeBaseFile) Set(f func(ctx context.Context, kb mm_repository.KnowledgeBaseFile) (kp1 *mm_repository.KnowledgeBaseFile, err error)) *RepositoryIMock {
+func (mmCreateKnowledgeBaseFile *mRepositoryIMockCreateKnowledgeBaseFile) Set(f func(ctx context.Context, kb mm_repository.KnowledgeBaseFile, externalServiceCall func(FileUID string) error) (kp1 *mm_repository.KnowledgeBaseFile, err error)) *RepositoryIMock {
 	if mmCreateKnowledgeBaseFile.defaultExpectation != nil {
 		mmCreateKnowledgeBaseFile.mock.t.Fatalf("Default expectation is already set for the RepositoryI.CreateKnowledgeBaseFile method")
 	}
@@ -1241,14 +1265,14 @@ func (mmCreateKnowledgeBaseFile *mRepositoryIMockCreateKnowledgeBaseFile) Set(f 
 
 // When sets expectation for the RepositoryI.CreateKnowledgeBaseFile which will trigger the result defined by the following
 // Then helper
-func (mmCreateKnowledgeBaseFile *mRepositoryIMockCreateKnowledgeBaseFile) When(ctx context.Context, kb mm_repository.KnowledgeBaseFile) *RepositoryIMockCreateKnowledgeBaseFileExpectation {
+func (mmCreateKnowledgeBaseFile *mRepositoryIMockCreateKnowledgeBaseFile) When(ctx context.Context, kb mm_repository.KnowledgeBaseFile, externalServiceCall func(FileUID string) error) *RepositoryIMockCreateKnowledgeBaseFileExpectation {
 	if mmCreateKnowledgeBaseFile.mock.funcCreateKnowledgeBaseFile != nil {
 		mmCreateKnowledgeBaseFile.mock.t.Fatalf("RepositoryIMock.CreateKnowledgeBaseFile mock is already set by Set")
 	}
 
 	expectation := &RepositoryIMockCreateKnowledgeBaseFileExpectation{
 		mock:   mmCreateKnowledgeBaseFile.mock,
-		params: &RepositoryIMockCreateKnowledgeBaseFileParams{ctx, kb},
+		params: &RepositoryIMockCreateKnowledgeBaseFileParams{ctx, kb, externalServiceCall},
 	}
 	mmCreateKnowledgeBaseFile.expectations = append(mmCreateKnowledgeBaseFile.expectations, expectation)
 	return expectation
@@ -1281,15 +1305,15 @@ func (mmCreateKnowledgeBaseFile *mRepositoryIMockCreateKnowledgeBaseFile) invoca
 }
 
 // CreateKnowledgeBaseFile implements repository.RepositoryI
-func (mmCreateKnowledgeBaseFile *RepositoryIMock) CreateKnowledgeBaseFile(ctx context.Context, kb mm_repository.KnowledgeBaseFile) (kp1 *mm_repository.KnowledgeBaseFile, err error) {
+func (mmCreateKnowledgeBaseFile *RepositoryIMock) CreateKnowledgeBaseFile(ctx context.Context, kb mm_repository.KnowledgeBaseFile, externalServiceCall func(FileUID string) error) (kp1 *mm_repository.KnowledgeBaseFile, err error) {
 	mm_atomic.AddUint64(&mmCreateKnowledgeBaseFile.beforeCreateKnowledgeBaseFileCounter, 1)
 	defer mm_atomic.AddUint64(&mmCreateKnowledgeBaseFile.afterCreateKnowledgeBaseFileCounter, 1)
 
 	if mmCreateKnowledgeBaseFile.inspectFuncCreateKnowledgeBaseFile != nil {
-		mmCreateKnowledgeBaseFile.inspectFuncCreateKnowledgeBaseFile(ctx, kb)
+		mmCreateKnowledgeBaseFile.inspectFuncCreateKnowledgeBaseFile(ctx, kb, externalServiceCall)
 	}
 
-	mm_params := RepositoryIMockCreateKnowledgeBaseFileParams{ctx, kb}
+	mm_params := RepositoryIMockCreateKnowledgeBaseFileParams{ctx, kb, externalServiceCall}
 
 	// Record call args
 	mmCreateKnowledgeBaseFile.CreateKnowledgeBaseFileMock.mutex.Lock()
@@ -1308,7 +1332,7 @@ func (mmCreateKnowledgeBaseFile *RepositoryIMock) CreateKnowledgeBaseFile(ctx co
 		mm_want := mmCreateKnowledgeBaseFile.CreateKnowledgeBaseFileMock.defaultExpectation.params
 		mm_want_ptrs := mmCreateKnowledgeBaseFile.CreateKnowledgeBaseFileMock.defaultExpectation.paramPtrs
 
-		mm_got := RepositoryIMockCreateKnowledgeBaseFileParams{ctx, kb}
+		mm_got := RepositoryIMockCreateKnowledgeBaseFileParams{ctx, kb, externalServiceCall}
 
 		if mm_want_ptrs != nil {
 
@@ -1318,6 +1342,10 @@ func (mmCreateKnowledgeBaseFile *RepositoryIMock) CreateKnowledgeBaseFile(ctx co
 
 			if mm_want_ptrs.kb != nil && !minimock.Equal(*mm_want_ptrs.kb, mm_got.kb) {
 				mmCreateKnowledgeBaseFile.t.Errorf("RepositoryIMock.CreateKnowledgeBaseFile got unexpected parameter kb, want: %#v, got: %#v%s\n", *mm_want_ptrs.kb, mm_got.kb, minimock.Diff(*mm_want_ptrs.kb, mm_got.kb))
+			}
+
+			if mm_want_ptrs.externalServiceCall != nil && !minimock.Equal(*mm_want_ptrs.externalServiceCall, mm_got.externalServiceCall) {
+				mmCreateKnowledgeBaseFile.t.Errorf("RepositoryIMock.CreateKnowledgeBaseFile got unexpected parameter externalServiceCall, want: %#v, got: %#v%s\n", *mm_want_ptrs.externalServiceCall, mm_got.externalServiceCall, minimock.Diff(*mm_want_ptrs.externalServiceCall, mm_got.externalServiceCall))
 			}
 
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
@@ -1331,9 +1359,9 @@ func (mmCreateKnowledgeBaseFile *RepositoryIMock) CreateKnowledgeBaseFile(ctx co
 		return (*mm_results).kp1, (*mm_results).err
 	}
 	if mmCreateKnowledgeBaseFile.funcCreateKnowledgeBaseFile != nil {
-		return mmCreateKnowledgeBaseFile.funcCreateKnowledgeBaseFile(ctx, kb)
+		return mmCreateKnowledgeBaseFile.funcCreateKnowledgeBaseFile(ctx, kb, externalServiceCall)
 	}
-	mmCreateKnowledgeBaseFile.t.Fatalf("Unexpected call to RepositoryIMock.CreateKnowledgeBaseFile. %v %v", ctx, kb)
+	mmCreateKnowledgeBaseFile.t.Fatalf("Unexpected call to RepositoryIMock.CreateKnowledgeBaseFile. %v %v %v", ctx, kb, externalServiceCall)
 	return
 }
 
@@ -1425,8 +1453,8 @@ type RepositoryIMockDeleteAndCreateChunksParams struct {
 	ctx                 context.Context
 	sourceTable         string
 	sourceUID           uuid.UUID
-	chunks              []mm_repository.TextChunk
-	externalServiceCall func(chunkUIDs []string) error
+	chunks              []*mm_repository.TextChunk
+	externalServiceCall func(chunkUIDs []string) (map[string]any, error)
 }
 
 // RepositoryIMockDeleteAndCreateChunksParamPtrs contains pointers to parameters of the RepositoryI.DeleteAndCreateChunks
@@ -1434,18 +1462,18 @@ type RepositoryIMockDeleteAndCreateChunksParamPtrs struct {
 	ctx                 *context.Context
 	sourceTable         *string
 	sourceUID           *uuid.UUID
-	chunks              *[]mm_repository.TextChunk
-	externalServiceCall *func(chunkUIDs []string) error
+	chunks              *[]*mm_repository.TextChunk
+	externalServiceCall *func(chunkUIDs []string) (map[string]any, error)
 }
 
 // RepositoryIMockDeleteAndCreateChunksResults contains results of the RepositoryI.DeleteAndCreateChunks
 type RepositoryIMockDeleteAndCreateChunksResults struct {
-	ta1 []mm_repository.TextChunk
-	err error
+	tpa1 []*mm_repository.TextChunk
+	err  error
 }
 
 // Expect sets up expected params for RepositoryI.DeleteAndCreateChunks
-func (mmDeleteAndCreateChunks *mRepositoryIMockDeleteAndCreateChunks) Expect(ctx context.Context, sourceTable string, sourceUID uuid.UUID, chunks []mm_repository.TextChunk, externalServiceCall func(chunkUIDs []string) error) *mRepositoryIMockDeleteAndCreateChunks {
+func (mmDeleteAndCreateChunks *mRepositoryIMockDeleteAndCreateChunks) Expect(ctx context.Context, sourceTable string, sourceUID uuid.UUID, chunks []*mm_repository.TextChunk, externalServiceCall func(chunkUIDs []string) (map[string]any, error)) *mRepositoryIMockDeleteAndCreateChunks {
 	if mmDeleteAndCreateChunks.mock.funcDeleteAndCreateChunks != nil {
 		mmDeleteAndCreateChunks.mock.t.Fatalf("RepositoryIMock.DeleteAndCreateChunks mock is already set by Set")
 	}
@@ -1535,7 +1563,7 @@ func (mmDeleteAndCreateChunks *mRepositoryIMockDeleteAndCreateChunks) ExpectSour
 }
 
 // ExpectChunksParam4 sets up expected param chunks for RepositoryI.DeleteAndCreateChunks
-func (mmDeleteAndCreateChunks *mRepositoryIMockDeleteAndCreateChunks) ExpectChunksParam4(chunks []mm_repository.TextChunk) *mRepositoryIMockDeleteAndCreateChunks {
+func (mmDeleteAndCreateChunks *mRepositoryIMockDeleteAndCreateChunks) ExpectChunksParam4(chunks []*mm_repository.TextChunk) *mRepositoryIMockDeleteAndCreateChunks {
 	if mmDeleteAndCreateChunks.mock.funcDeleteAndCreateChunks != nil {
 		mmDeleteAndCreateChunks.mock.t.Fatalf("RepositoryIMock.DeleteAndCreateChunks mock is already set by Set")
 	}
@@ -1557,7 +1585,7 @@ func (mmDeleteAndCreateChunks *mRepositoryIMockDeleteAndCreateChunks) ExpectChun
 }
 
 // ExpectExternalServiceCallParam5 sets up expected param externalServiceCall for RepositoryI.DeleteAndCreateChunks
-func (mmDeleteAndCreateChunks *mRepositoryIMockDeleteAndCreateChunks) ExpectExternalServiceCallParam5(externalServiceCall func(chunkUIDs []string) error) *mRepositoryIMockDeleteAndCreateChunks {
+func (mmDeleteAndCreateChunks *mRepositoryIMockDeleteAndCreateChunks) ExpectExternalServiceCallParam5(externalServiceCall func(chunkUIDs []string) (map[string]any, error)) *mRepositoryIMockDeleteAndCreateChunks {
 	if mmDeleteAndCreateChunks.mock.funcDeleteAndCreateChunks != nil {
 		mmDeleteAndCreateChunks.mock.t.Fatalf("RepositoryIMock.DeleteAndCreateChunks mock is already set by Set")
 	}
@@ -1579,7 +1607,7 @@ func (mmDeleteAndCreateChunks *mRepositoryIMockDeleteAndCreateChunks) ExpectExte
 }
 
 // Inspect accepts an inspector function that has same arguments as the RepositoryI.DeleteAndCreateChunks
-func (mmDeleteAndCreateChunks *mRepositoryIMockDeleteAndCreateChunks) Inspect(f func(ctx context.Context, sourceTable string, sourceUID uuid.UUID, chunks []mm_repository.TextChunk, externalServiceCall func(chunkUIDs []string) error)) *mRepositoryIMockDeleteAndCreateChunks {
+func (mmDeleteAndCreateChunks *mRepositoryIMockDeleteAndCreateChunks) Inspect(f func(ctx context.Context, sourceTable string, sourceUID uuid.UUID, chunks []*mm_repository.TextChunk, externalServiceCall func(chunkUIDs []string) (map[string]any, error))) *mRepositoryIMockDeleteAndCreateChunks {
 	if mmDeleteAndCreateChunks.mock.inspectFuncDeleteAndCreateChunks != nil {
 		mmDeleteAndCreateChunks.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.DeleteAndCreateChunks")
 	}
@@ -1590,7 +1618,7 @@ func (mmDeleteAndCreateChunks *mRepositoryIMockDeleteAndCreateChunks) Inspect(f 
 }
 
 // Return sets up results that will be returned by RepositoryI.DeleteAndCreateChunks
-func (mmDeleteAndCreateChunks *mRepositoryIMockDeleteAndCreateChunks) Return(ta1 []mm_repository.TextChunk, err error) *RepositoryIMock {
+func (mmDeleteAndCreateChunks *mRepositoryIMockDeleteAndCreateChunks) Return(tpa1 []*mm_repository.TextChunk, err error) *RepositoryIMock {
 	if mmDeleteAndCreateChunks.mock.funcDeleteAndCreateChunks != nil {
 		mmDeleteAndCreateChunks.mock.t.Fatalf("RepositoryIMock.DeleteAndCreateChunks mock is already set by Set")
 	}
@@ -1598,12 +1626,12 @@ func (mmDeleteAndCreateChunks *mRepositoryIMockDeleteAndCreateChunks) Return(ta1
 	if mmDeleteAndCreateChunks.defaultExpectation == nil {
 		mmDeleteAndCreateChunks.defaultExpectation = &RepositoryIMockDeleteAndCreateChunksExpectation{mock: mmDeleteAndCreateChunks.mock}
 	}
-	mmDeleteAndCreateChunks.defaultExpectation.results = &RepositoryIMockDeleteAndCreateChunksResults{ta1, err}
+	mmDeleteAndCreateChunks.defaultExpectation.results = &RepositoryIMockDeleteAndCreateChunksResults{tpa1, err}
 	return mmDeleteAndCreateChunks.mock
 }
 
 // Set uses given function f to mock the RepositoryI.DeleteAndCreateChunks method
-func (mmDeleteAndCreateChunks *mRepositoryIMockDeleteAndCreateChunks) Set(f func(ctx context.Context, sourceTable string, sourceUID uuid.UUID, chunks []mm_repository.TextChunk, externalServiceCall func(chunkUIDs []string) error) (ta1 []mm_repository.TextChunk, err error)) *RepositoryIMock {
+func (mmDeleteAndCreateChunks *mRepositoryIMockDeleteAndCreateChunks) Set(f func(ctx context.Context, sourceTable string, sourceUID uuid.UUID, chunks []*mm_repository.TextChunk, externalServiceCall func(chunkUIDs []string) (map[string]any, error)) (tpa1 []*mm_repository.TextChunk, err error)) *RepositoryIMock {
 	if mmDeleteAndCreateChunks.defaultExpectation != nil {
 		mmDeleteAndCreateChunks.mock.t.Fatalf("Default expectation is already set for the RepositoryI.DeleteAndCreateChunks method")
 	}
@@ -1618,7 +1646,7 @@ func (mmDeleteAndCreateChunks *mRepositoryIMockDeleteAndCreateChunks) Set(f func
 
 // When sets expectation for the RepositoryI.DeleteAndCreateChunks which will trigger the result defined by the following
 // Then helper
-func (mmDeleteAndCreateChunks *mRepositoryIMockDeleteAndCreateChunks) When(ctx context.Context, sourceTable string, sourceUID uuid.UUID, chunks []mm_repository.TextChunk, externalServiceCall func(chunkUIDs []string) error) *RepositoryIMockDeleteAndCreateChunksExpectation {
+func (mmDeleteAndCreateChunks *mRepositoryIMockDeleteAndCreateChunks) When(ctx context.Context, sourceTable string, sourceUID uuid.UUID, chunks []*mm_repository.TextChunk, externalServiceCall func(chunkUIDs []string) (map[string]any, error)) *RepositoryIMockDeleteAndCreateChunksExpectation {
 	if mmDeleteAndCreateChunks.mock.funcDeleteAndCreateChunks != nil {
 		mmDeleteAndCreateChunks.mock.t.Fatalf("RepositoryIMock.DeleteAndCreateChunks mock is already set by Set")
 	}
@@ -1632,8 +1660,8 @@ func (mmDeleteAndCreateChunks *mRepositoryIMockDeleteAndCreateChunks) When(ctx c
 }
 
 // Then sets up RepositoryI.DeleteAndCreateChunks return parameters for the expectation previously defined by the When method
-func (e *RepositoryIMockDeleteAndCreateChunksExpectation) Then(ta1 []mm_repository.TextChunk, err error) *RepositoryIMock {
-	e.results = &RepositoryIMockDeleteAndCreateChunksResults{ta1, err}
+func (e *RepositoryIMockDeleteAndCreateChunksExpectation) Then(tpa1 []*mm_repository.TextChunk, err error) *RepositoryIMock {
+	e.results = &RepositoryIMockDeleteAndCreateChunksResults{tpa1, err}
 	return e.mock
 }
 
@@ -1658,7 +1686,7 @@ func (mmDeleteAndCreateChunks *mRepositoryIMockDeleteAndCreateChunks) invocation
 }
 
 // DeleteAndCreateChunks implements repository.RepositoryI
-func (mmDeleteAndCreateChunks *RepositoryIMock) DeleteAndCreateChunks(ctx context.Context, sourceTable string, sourceUID uuid.UUID, chunks []mm_repository.TextChunk, externalServiceCall func(chunkUIDs []string) error) (ta1 []mm_repository.TextChunk, err error) {
+func (mmDeleteAndCreateChunks *RepositoryIMock) DeleteAndCreateChunks(ctx context.Context, sourceTable string, sourceUID uuid.UUID, chunks []*mm_repository.TextChunk, externalServiceCall func(chunkUIDs []string) (map[string]any, error)) (tpa1 []*mm_repository.TextChunk, err error) {
 	mm_atomic.AddUint64(&mmDeleteAndCreateChunks.beforeDeleteAndCreateChunksCounter, 1)
 	defer mm_atomic.AddUint64(&mmDeleteAndCreateChunks.afterDeleteAndCreateChunksCounter, 1)
 
@@ -1676,7 +1704,7 @@ func (mmDeleteAndCreateChunks *RepositoryIMock) DeleteAndCreateChunks(ctx contex
 	for _, e := range mmDeleteAndCreateChunks.DeleteAndCreateChunksMock.expectations {
 		if minimock.Equal(*e.params, mm_params) {
 			mm_atomic.AddUint64(&e.Counter, 1)
-			return e.results.ta1, e.results.err
+			return e.results.tpa1, e.results.err
 		}
 	}
 
@@ -1717,7 +1745,7 @@ func (mmDeleteAndCreateChunks *RepositoryIMock) DeleteAndCreateChunks(ctx contex
 		if mm_results == nil {
 			mmDeleteAndCreateChunks.t.Fatal("No results are set for the RepositoryIMock.DeleteAndCreateChunks")
 		}
-		return (*mm_results).ta1, (*mm_results).err
+		return (*mm_results).tpa1, (*mm_results).err
 	}
 	if mmDeleteAndCreateChunks.funcDeleteAndCreateChunks != nil {
 		return mmDeleteAndCreateChunks.funcDeleteAndCreateChunks(ctx, sourceTable, sourceUID, chunks, externalServiceCall)

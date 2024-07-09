@@ -27,6 +27,10 @@ func (ph *PublicHandler) UploadKnowledgeBaseFile(ctx context.Context, req *artif
 		return nil, err
 	}
 
+	if strings.Contains(req.File.Name, "/") {
+		return nil, fmt.Errorf("file name cannot contain '/'. err: %w", customerror.ErrInvalidArgument)
+	}
+
 	// TODO: ACL - check if the creator can upload file to this knowledge base. ACL.
 	// .....
 
@@ -43,21 +47,12 @@ func (ph *PublicHandler) UploadKnowledgeBaseFile(ctx context.Context, req *artif
 
 	// upload file to minio
 	var kb *repository.KnowledgeBase
-	var filePathName string
 	{
 		kb, err = ph.service.Repository.GetKnowledgeBaseByOwnerAndID(ctx, ownerUID, req.KbId)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get knowledge base by owner and id. err: %w", err)
 		}
-		// check if the name has "/" which may cause folder creation in minio
-		if strings.Contains(req.File.Name, "/") {
-			return nil, fmt.Errorf("file name cannot contain '/'. err: %w", customerror.ErrInvalidArgument)
-		}
-		filePathName = kb.UID.String() + "/" + req.File.Name
-		err = ph.service.MinIO.UploadBase64File(ctx, filePathName, req.File.Content, fileTypeConvertToMime(req.File.Type))
-		if err != nil {
-			return nil, err
-		}
+
 	}
 
 	// create metadata in db
@@ -74,23 +69,25 @@ func (ph *PublicHandler) UploadKnowledgeBaseFile(ctx context.Context, req *artif
 			log.Error("failed to parse owner uid", zap.Error(err))
 			return nil, err
 		}
+		destination := ph.service.MinIO.GetUploadedFilePathInKnowledgeBase(kb.UID.String(), req.File.Name)
 		kbFile := repository.KnowledgeBaseFile{
 			Name:             req.File.Name,
 			Type:             artifactpb.FileType_name[int32(req.File.Type)],
 			Owner:            ownerUIDUuid,
 			CreatorUID:       creatorUID,
 			KnowledgeBaseUID: kb.UID,
-			Destination:      filePathName,
+			Destination:      destination,
 			ProcessStatus:    artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_NOTSTARTED)],
 		}
-		res, err = ph.service.Repository.CreateKnowledgeBaseFile(ctx, kbFile)
-		if err != nil {
-			err := ph.service.MinIO.DeleteFile(ctx, filePathName)
+		res, err = ph.service.Repository.CreateKnowledgeBaseFile(ctx, kbFile, func(FileUID string) error {
+			// upload file to minio
+			err = ph.service.MinIO.UploadBase64File(ctx, destination, req.File.Content, fileTypeConvertToMime(req.File.Type))
 			if err != nil {
-				log.Error("failed to delete file in minio", zap.Error(err))
+				return err
 			}
-			return nil, err
-		}
+
+			return nil
+		})
 	}
 
 	return &artifactpb.UploadKnowledgeBaseFileResponse{

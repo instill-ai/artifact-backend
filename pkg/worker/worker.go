@@ -94,7 +94,7 @@ func (wp *fileToEmbWorkerPool) startDispatcher(ctx context.Context) {
 					fmt.Println("Dispatcher received termination signal while dispatching")
 					return
 				case wp.channel <- file:
-					fmt.Printf("Dispatcher dispatched file. fileUID: %s", file.UID.String())
+					fmt.Printf("Dispatcher dispatched file. fileUID: %s\n", file.UID.String())
 				}
 			}
 		}
@@ -124,8 +124,11 @@ func (wp *fileToEmbWorkerPool) startWorker(ctx context.Context, workerID int) {
 			}
 
 			// register file process worker in redis and extend the lifetime
-			stopRegisterFunc := wp.registerFileWorker(ctx, file.UID.String(), extensionHelperPeriod, workerLifetime)
+			ok, stopRegisterFunc := wp.registerFileWorker(ctx, file.UID.String(), extensionHelperPeriod, workerLifetime)
 
+			if !ok {
+				continue
+			}
 			// start file processing tracing
 			fmt.Printf("Worker %d processing file: %s\n", workerID, file.UID.String())
 
@@ -159,15 +162,15 @@ type stopRegisterWorkerFunc func()
 // It returns a stopRegisterWorkerFunc that can be used to cancel the worker's lifetime extension and remove the worker key from Redis.
 // period: second
 // workerLifetime: second
-func (wp *fileToEmbWorkerPool) registerFileWorker(ctx context.Context, fileUID string, period time.Duration, workerLifetime time.Duration) stopRegisterWorkerFunc {
+func (wp *fileToEmbWorkerPool) registerFileWorker(ctx context.Context, fileUID string, period time.Duration, workerLifetime time.Duration) (bool, stopRegisterWorkerFunc) {
 	ok, err := wp.svc.RedisClient.SetNX(ctx, getWorkerKey(fileUID), "1", workerLifetime).Result()
 	if err != nil {
-		fmt.Printf("Error when setting worker key in redis. Error: %v", err)
-		return nil
+		fmt.Printf("Error when setting worker key in redis. Error: %v\n", err)
+		return false, nil
 	}
 	if !ok {
-		fmt.Printf("Worker already exists in redis. fileUID: %s", fileUID)
-		return nil
+		fmt.Printf("File is already being processed in redis. fileUID: %s\n", fileUID)
+		return false, nil
 	}
 	ctx, lifetimeHelperCancel := context.WithCancel(ctx)
 
@@ -183,9 +186,10 @@ func (wp *fileToEmbWorkerPool) registerFileWorker(ctx context.Context, fileUID s
 				return
 			case <-ticker.C:
 				// extend the lifetime of the worker
+				fmt.Printf("Extending %v's lifetime: %v \n", getWorkerKey(fileUID), workerLifetime)
 				err := wp.svc.RedisClient.Expire(ctx, getWorkerKey(fileUID), workerLifetime).Err()
 				if err != nil {
-					fmt.Printf("Error when extending worker lifetime in redis. Error: %v, worker: %v", err, getWorkerKey(fileUID))
+					fmt.Printf("Error when extending worker lifetime in redis. Error: %v, worker: %v\n", err, getWorkerKey(fileUID))
 					return
 				}
 			}
@@ -199,7 +203,7 @@ func (wp *fileToEmbWorkerPool) registerFileWorker(ctx context.Context, fileUID s
 		wp.svc.RedisClient.Del(ctx, getWorkerKey(fileUID))
 	}
 
-	return stopRegisterWorker
+	return true, stopRegisterWorker
 }
 
 // checkFileWorker checks if any of the provided fileUIDs have active workers
@@ -317,7 +321,7 @@ func (wp *fileToEmbWorkerPool) processWaitingFile(ctx context.Context, file repo
 		artifactpb.FileType_name[int32(artifactpb.FileType_FILE_TYPE_MARKDOWN)]:
 
 		updateMap := map[string]interface{}{
-			repository.KnowledgeBaseFileColumn.ProcessStatus: artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_EMBEDDING)],
+			repository.KnowledgeBaseFileColumn.ProcessStatus: artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CHUNKING)],
 		}
 		updatedFile, err := wp.svc.Repository.UpdateKnowledgeBaseFile(ctx, file.UID.String(), updateMap)
 		if err != nil {
@@ -402,7 +406,7 @@ func (wp *fileToEmbWorkerPool) processChunkingFile(ctx context.Context, file rep
 			logger.Error("Failed to get converted file from minIO.", zap.String("Converted file uid", convertedFile.UID.String()))
 			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
 		}
-		// call the chunking pipeline
+		// call the markdown chunking pipeline
 		chunks, err := wp.svc.SplitMarkdown(ctx, file.CreatorUID, string(convertedFileData))
 		if err != nil {
 			logger.Error("Failed to get chunks from converted file.", zap.String("Converted file uid", convertedFile.UID.String()))
@@ -435,8 +439,8 @@ func (wp *fileToEmbWorkerPool) processChunkingFile(ctx context.Context, file rep
 			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
 		}
 
-		//  Call the markdown chunking pipeline
-		chunks, err := wp.svc.SplitMarkdown(ctx, file.CreatorUID, string(originalFile))
+		//  Call the text chunking pipeline
+		chunks, err := wp.svc.SplitText(ctx, file.CreatorUID, string(originalFile))
 		if err != nil {
 			logger.Error("Failed to get chunks from original file.", zap.String("File uid", file.UID.String()))
 			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
@@ -557,12 +561,14 @@ func (wp *fileToEmbWorkerPool) processEmbeddingFile(ctx context.Context, file re
 	}
 
 	// save the embeddings into milvus and metadata into database
+	collection := wp.svc.MilvusClient.GetKnowledgeBaseCollectionName(file.KnowledgeBaseUID.String())
 	embeddings := make([]repository.Embedding, len(vectors))
 	for i, v := range vectors {
 		embeddings[i] = repository.Embedding{
 			SourceUID:   sourceUID,
 			SourceTable: sourceTable,
 			Vector:      v,
+			Collection:  collection,
 		}
 	}
 	err = wp.saveEmbeddings(ctx, file.KnowledgeBaseUID.String(), embeddings)
@@ -622,21 +628,21 @@ type chunk = struct {
 // save chunk into object storage and metadata into database
 func (wp *fileToEmbWorkerPool) saveChunks(ctx context.Context, kbUID string, sourceTable string, sourceUID uuid.UUID, chunks []chunk) error {
 	logger, _ := logger.GetZapLogger(ctx)
-	textChunks := make([]repository.TextChunk, len(chunks))
+	textChunks := make([]*repository.TextChunk, len(chunks))
 	for i, c := range chunks {
-		textChunks[i] = repository.TextChunk{
+		textChunks[i] = &repository.TextChunk{
 			SourceUID:   sourceUID,
 			SourceTable: sourceTable,
-			Start:       c.Start,
-			End:         c.End,
-			ContentDest: minio.GetChunkPathInKnowledgeBase(kbUID, sourceUID.String()),
+			StartPos:    c.Start,
+			EndPos:      c.End,
+			ContentDest: "not set yet",
 			Tokens:      c.Tokens,
 			Retrievable: true,
-			Order:       i,
+			InOrder:     i,
 		}
 	}
 	_, err := wp.svc.Repository.DeleteAndCreateChunks(ctx, sourceTable, sourceUID, textChunks,
-		func(chunkUIDs []string) error {
+		func(chunkUIDs []string) (map[string]any, error) {
 			// save the chunksForMinIO into object storage
 			chunksForMinIO := make(map[minio.ChunkUIDType]minio.ChunkContentType, len(textChunks))
 			for i, uid := range chunkUIDs {
@@ -645,9 +651,13 @@ func (wp *fileToEmbWorkerPool) saveChunks(ctx context.Context, kbUID string, sou
 			err := wp.svc.MinIO.SaveChunks(ctx, kbUID, chunksForMinIO)
 			if err != nil {
 				logger.Error("Failed to save chunks into object storage.", zap.String("SourceUID", sourceUID.String()))
-				return err
+				return nil, err
 			}
-			return nil
+			chunkDestMap := make(map[string]any, len(chunkUIDs))
+			for _, chunkUID := range chunkUIDs {
+				chunkDestMap[chunkUID] = wp.svc.MinIO.GetChunkPathInKnowledgeBase(kbUID, string(chunkUID))
+			}
+			return chunkDestMap, nil
 		},
 	)
 	if err != nil {

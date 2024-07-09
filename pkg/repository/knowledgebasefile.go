@@ -12,7 +12,7 @@ import (
 
 type KnowledgeBaseFileI interface {
 	KnowledgeBaseFileTableName() string
-	CreateKnowledgeBaseFile(ctx context.Context, kb KnowledgeBaseFile) (*KnowledgeBaseFile, error)
+	CreateKnowledgeBaseFile(ctx context.Context, kb KnowledgeBaseFile, externalServiceCall func(FileUID string) error) (*KnowledgeBaseFile, error)
 	ListKnowledgeBaseFiles(ctx context.Context, uid string, ownerUID string, kbUID string, pageSize int32, nextPageToken string, filesUID []string) ([]KnowledgeBaseFile, int, string, error)
 	DeleteKnowledgeBaseFile(ctx context.Context, fileUID string) error
 	ProcessKnowledgeBaseFiles(ctx context.Context, fileUids []string) ([]KnowledgeBaseFile, error)
@@ -74,7 +74,7 @@ func (r *Repository) KnowledgeBaseFileTableName() string {
 	return "knowledge_base_file"
 }
 
-func (r *Repository) CreateKnowledgeBaseFile(ctx context.Context, kb KnowledgeBaseFile) (*KnowledgeBaseFile, error) {
+func (r *Repository) CreateKnowledgeBaseFile(ctx context.Context, kb KnowledgeBaseFile, externalServiceCall func(FileUID string) error) (*KnowledgeBaseFile, error) {
 	// check if the file already exists in the same knowledge base and not delete
 	var existingFile KnowledgeBaseFile
 	whereClause := fmt.Sprintf("%s = ? AND %s = ? AND %v is NULL", KnowledgeBaseFileColumn.KnowledgeBaseUID, KnowledgeBaseFileColumn.Name, KnowledgeBaseFileColumn.DeleteTime)
@@ -95,9 +95,28 @@ func (r *Repository) CreateKnowledgeBaseFile(ctx context.Context, kb KnowledgeBa
 	}
 
 	kb.ExtraMetaData = "{}"
-	if err := r.db.WithContext(ctx).Create(&kb).Error; err != nil {
+
+	// Use a transaction to create the knowledge base file and call the external service
+	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Create the knowledge base file
+		if err := tx.Create(&kb).Error; err != nil {
+			return err
+		}
+
+		// Call the external service
+		if externalServiceCall != nil {
+			if err := externalServiceCall(kb.UID.String()); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
 		return nil, err
 	}
+
 	return &kb, nil
 }
 
