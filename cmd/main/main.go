@@ -43,6 +43,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	servicePkg "github.com/instill-ai/artifact-backend/pkg/service"
 	"github.com/instill-ai/artifact-backend/pkg/usage"
+	// "github.com/instill-ai/artifact-backend/pkg/worker"
 
 	grpcclient "github.com/instill-ai/artifact-backend/pkg/client/grpc"
 	httpclient "github.com/instill-ai/artifact-backend/pkg/client/http"

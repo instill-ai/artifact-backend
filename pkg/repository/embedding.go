@@ -22,6 +22,7 @@ type Embedding struct {
 	SourceUID   uuid.UUID  `gorm:"column:source_uid;type:uuid;not null" json:"source_uid"`
 	SourceTable string     `gorm:"column:source_table;size:255;not null" json:"source_table"`
 	Vector      []float32  `gorm:"column:vector;type:jsonb;not null" json:"vector"`
+	Collection  string     `gorm:"column:collection;size:255;not null" json:"collection"`
 	CreateTime  *time.Time `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
 	UpdateTime  *time.Time `gorm:"column:update_time;not null;default:CURRENT_TIMESTAMP" json:"update_time"`
 }
@@ -31,6 +32,7 @@ type EmbeddingColumns struct {
 	SourceUID   string
 	SourceTable string
 	Vector      string
+	Collection  string
 	CreateTime  string
 	UpdateTime  string
 }
@@ -40,6 +42,7 @@ var EmbeddingColumn = EmbeddingColumns{
 	SourceUID:   "source_uid",
 	SourceTable: "source_table",
 	Vector:      "vector",
+	Collection:  "collection",
 	CreateTime:  "create_time",
 	UpdateTime:  "update_time",
 }
