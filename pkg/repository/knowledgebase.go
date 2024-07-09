@@ -14,7 +14,7 @@ import (
 )
 
 type KnowledgeBaseI interface {
-	CreateKnowledgeBase(ctx context.Context, kb KnowledgeBase) (*KnowledgeBase, error)
+	CreateKnowledgeBase(ctx context.Context, kb KnowledgeBase, externalService func(kbUID string) error) (*KnowledgeBase, error)
 	ListKnowledgeBases(ctx context.Context, ownerUID string) ([]KnowledgeBase, error)
 	UpdateKnowledgeBase(ctx context.Context, ownerUID string, kb KnowledgeBase) (*KnowledgeBase, error)
 	DeleteKnowledgeBase(ctx context.Context, ownerUID, kbID string) (*KnowledgeBase, error)
@@ -102,21 +102,37 @@ func formatPostgresArray(tags []string) string {
 }
 
 // CreateKnowledgeBase inserts a new KnowledgeBase record into the database.
-func (r *Repository) CreateKnowledgeBase(ctx context.Context, kb KnowledgeBase) (*KnowledgeBase, error) {
-	// check if the name is unique in the owner's knowledge bases
-	KbIDExists, err := r.checkIfKbIDUnique(ctx, kb.Owner, kb.KbID)
-	if err != nil {
-		return nil, err
-	}
-	if KbIDExists {
-		return nil, fmt.Errorf("knowledge base name already exists. err: %w", customerror.ErrInvalidArgument)
-	}
-
-	// Create a new KnowledgeBase record
-	if err := r.db.WithContext(ctx).Create(&kb).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("knowledge base ID not found: %v, err:%w", kb.KbID, gorm.ErrRecordNotFound)
+func (r *Repository) CreateKnowledgeBase(ctx context.Context, kb KnowledgeBase, externalService func(kbUID string) error) (*KnowledgeBase, error) {
+	// Start a database transaction
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// check if the name is unique in the owner's knowledge bases
+		KbIDExists, err := r.checkIfKbIDUnique(ctx, kb.Owner, kb.KbID)
+		if err != nil {
+			return err
 		}
+		if KbIDExists {
+			return fmt.Errorf("knowledge base name already exists. err: %w", customerror.ErrInvalidArgument)
+		}
+
+		// Create a new KnowledgeBase record
+		if err := tx.Create(&kb).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return fmt.Errorf("knowledge base ID not found: %v, err:%w", kb.KbID, gorm.ErrRecordNotFound)
+			}
+			return err
+		}
+
+		// Call the external service
+		if externalService != nil {
+			if err := externalService(kb.UID.String()); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
 		return nil, err
 	}
 

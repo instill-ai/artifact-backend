@@ -15,10 +15,12 @@ import (
 	"time"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/contrib/propagators/b3"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
+	"go.uber.org/zap"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 	"google.golang.org/grpc"
@@ -26,6 +28,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/protobuf/encoding/protojson"
+	"gorm.io/gorm"
 
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpc_zap "github.com/grpc-ecosystem/go-grpc-middleware/logging/zap"
@@ -36,8 +39,9 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/handler"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/middleware"
+	"github.com/instill-ai/artifact-backend/pkg/milvus"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
-	"github.com/instill-ai/artifact-backend/pkg/service"
+	servicePkg "github.com/instill-ai/artifact-backend/pkg/service"
 	"github.com/instill-ai/artifact-backend/pkg/usage"
 
 	grpcclient "github.com/instill-ai/artifact-backend/pkg/client/grpc"
@@ -46,6 +50,8 @@ import (
 	custom_otel "github.com/instill-ai/artifact-backend/pkg/logger/otel"
 	minio "github.com/instill-ai/artifact-backend/pkg/minio"
 	artifactPB "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	mgmtv1beta "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
+	pipelinev1beta "github.com/instill-ai/protogen-go/vdp/pipeline/v1beta"
 )
 
 var propagator propagation.TextMapPropagator
@@ -104,85 +110,32 @@ func main() {
 	// verbosity 3 will avoid [transport] from emitting
 	grpc_zap.ReplaceGrpcLoggerV2WithVerbosity(logger, 3)
 
-	db := database.GetSharedConnection()
-	defer database.Close(db)
-
-	// Shared options for the logger, with a custom gRPC code to log level function.
-	opts := []grpc_zap.Option{
-		grpc_zap.WithDecider(func(fullMethodName string, err error) bool {
-			// will not log gRPC calls if it was a call to liveness or readiness and no error was raised
-			if err == nil {
-				if match, _ := regexp.MatchString("artifact.artifact.v1alpha.ArtifactPublicService/.*ness$", fullMethodName); match {
-					return false
-				}
-				// stop logging successful private function calls
-				if match, _ := regexp.MatchString("artifact.artifact.v1alpha.ArtifactPrivateService/.*$", fullMethodName); match {
-					return false
-				}
-			}
-			// by default everything will be logged
-			return true
-		}),
+	// Initialize clients needed for service
+	pipelinePublicServiceClient, pipelinePublicGrpcConn, _, mgmtPublicServiceClientConn, mgmtPrivateServiceClient, mgmtPrivateServiceGrpcConn,
+		redisClient, influxDBClient, db, minioClient, milvusClient := newClients(ctx, logger)
+	if pipelinePublicGrpcConn != nil {
+		defer pipelinePublicGrpcConn.Close()
 	}
-
-	grpcServerOpts := []grpc.ServerOption{
-		grpc.StreamInterceptor(grpc_middleware.ChainStreamServer(
-			middleware.StreamAppendMetadataInterceptor,
-			grpc_zap.StreamServerInterceptor(logger, opts...),
-			grpc_recovery.StreamServerInterceptor(middleware.RecoveryInterceptorOpt()),
-		)),
-		grpc.UnaryInterceptor(grpc_middleware.ChainUnaryServer(
-			middleware.UnaryAppendMetadataInterceptor,
-			grpc_zap.UnaryServerInterceptor(logger, opts...),
-			grpc_recovery.UnaryServerInterceptor(middleware.RecoveryInterceptorOpt()),
-		)),
-	}
-
-	// Create tls based credential.
-	var creds credentials.TransportCredentials
-	var tlsConfig *tls.Config
-	if config.Config.Server.HTTPS.Cert != "" && config.Config.Server.HTTPS.Key != "" {
-		tlsConfig = &tls.Config{
-			ClientAuth: tls.RequireAndVerifyClientCert,
-		}
-		creds, err := credentials.NewServerTLSFromFile(config.Config.Server.HTTPS.Cert, config.Config.Server.HTTPS.Key)
-		if err != nil {
-			logger.Fatal(fmt.Sprintf("failed to create credentials: %v", err))
-		}
-		grpcServerOpts = append(grpcServerOpts, grpc.Creds(creds))
-	}
-
-	grpcServerOpts = append(grpcServerOpts, grpc.MaxRecvMsgSize(constant.MaxPayloadSize))
-	grpcServerOpts = append(grpcServerOpts, grpc.MaxSendMsgSize(constant.MaxPayloadSize))
-
-	mgmtPrivateServiceClient, mgmtPrivateServiceClientConn := grpcclient.NewMGMTPrivateClient(ctx)
-	if mgmtPrivateServiceClientConn != nil {
-		defer mgmtPrivateServiceClientConn.Close()
-	}
-	_, mgmtPublicServiceClientConn := grpcclient.NewMGMTPublicClient(ctx)
 	if mgmtPublicServiceClientConn != nil {
 		defer mgmtPublicServiceClientConn.Close()
 	}
-
-	redisClient := redis.NewClient(&config.Config.Cache.Redis.RedisOptions)
+	if mgmtPrivateServiceGrpcConn != nil {
+		defer mgmtPrivateServiceGrpcConn.Close()
+	}
 	defer redisClient.Close()
-
-	influxDBClient, influxDBWriteClient := httpclient.NewInfluxDBClient(ctx)
 	defer influxDBClient.Close()
+	defer database.Close(db)
 
-	influxErrCh := influxDBWriteClient.Errors()
-	go func() {
-		for err := range influxErrCh {
-			logger.Error(fmt.Sprintf("write to bucket %s error: %s\n", config.Config.InfluxDB.Bucket, err.Error()))
-		}
-	}()
+	// Initialize service
+	service := servicePkg.NewService(
+		repository.NewRepository(db),
+		minioClient,
+		mgmtPrivateServiceClient,
+		pipelinePublicServiceClient,
+		httpclient.NewRegistryClient(ctx),
+		redisClient, milvusClient)
 
-	repository := repository.NewRepository(db)
-
-	// Initialize Minio client
-	minioClient, _ := minio.NewMinioClientAndInitBucket()
-
-	service := service.NewService(repository, minioClient, mgmtPrivateServiceClient, httpclient.NewRegistryClient(ctx))
+	grpcServerOpts, creds := newGrpcOptionAndCreds(logger)
 
 	publicGrpcS := grpc.NewServer(grpcServerOpts...)
 	reflection.Register(publicGrpcS)
@@ -212,6 +165,11 @@ func main() {
 			},
 		}),
 	)
+
+	// file-to-embeddings worker pool
+	// TODO: uncomment when file-to-embeddings worker is tested
+	// wp := worker.NewFileToEmbWorkerPool(ctx, service, config.Config.FileToEmbeddingWorker.NumberOfWorkers)
+	// wp.Start(ctx)
 
 	// Start usage reporter
 	var usg usage.Usage
@@ -246,6 +204,12 @@ func main() {
 	if err := artifactPB.RegisterArtifactPublicServiceHandlerFromEndpoint(ctx, publicServeMux, fmt.Sprintf(":%v", config.Config.Server.PublicPort), dialOpts); err != nil {
 		logger.Fatal(err.Error())
 	}
+	var tlsConfig *tls.Config
+	if config.Config.Server.HTTPS.Cert != "" && config.Config.Server.HTTPS.Key != "" {
+		tlsConfig = &tls.Config{
+			ClientAuth: tls.RequireAndVerifyClientCert,
+		}
+	}
 
 	publicHTTPServer := &http.Server{
 		Addr:      fmt.Sprintf(":%v", config.Config.Server.PublicPort),
@@ -255,7 +219,6 @@ func main() {
 
 	privatePort := fmt.Sprintf(":%d", config.Config.Server.PrivatePort)
 	// Wait for interrupt signal to gracefully shutdown the server with a timeout of 5 seconds.
-	quitSig := make(chan os.Signal, 1)
 	errSig := make(chan error)
 
 	go func() {
@@ -287,6 +250,7 @@ func main() {
 	// kill (no param) default send syscall.SIGTERM
 	// kill -2 is syscall.SIGINT
 	// kill -9 is syscall.SIGKILL but can't be catch, so don't need add it
+	quitSig := make(chan os.Signal, 1)
 	signal.Notify(quitSig, syscall.SIGINT, syscall.SIGTERM)
 
 	select {
@@ -298,5 +262,112 @@ func main() {
 		// }
 		logger.Info("Shutting down server...")
 		publicGrpcS.GracefulStop()
+		// TODO: uncomment when file-to-embeddings worker is tested
+		// wp.GraceFulStop()
 	}
+}
+
+func newClients(ctx context.Context, logger *zap.Logger) (
+	pipelinev1beta.PipelinePublicServiceClient,
+	*grpc.ClientConn,
+	mgmtv1beta.MgmtPublicServiceClient,
+	*grpc.ClientConn,
+	mgmtv1beta.MgmtPrivateServiceClient,
+	*grpc.ClientConn,
+	*redis.Client,
+	influxdb2.Client,
+	*gorm.DB,
+	*minio.Minio,
+	milvus.MilvusClientI) {
+
+	// init pipeline grpc client
+	pipelinePublicGrpcConn, err := grpcclient.NewGRPCConn(
+		fmt.Sprintf("%v:%v", config.Config.PipelineBackend.Host,
+			config.Config.PipelineBackend.PublicPort),
+		config.Config.PipelineBackend.HTTPS.Cert,
+		config.Config.PipelineBackend.HTTPS.Key)
+	if err != nil {
+		logger.Fatal(fmt.Sprintf("failed to create pipeline public grpc client: %v", err))
+	}
+	pipelinePublicServiceClient := pipelinev1beta.NewPipelinePublicServiceClient(pipelinePublicGrpcConn)
+
+	// initialize mgmt clients
+	mgmtPrivateServiceClient, mgmtPrivateServiceClientConn := grpcclient.NewMGMTPrivateClient(ctx)
+	mgmtPublicServiceClient, mgmtPublicServiceClientConn := grpcclient.NewMGMTPublicClient(ctx)
+
+	// Initialize redis client
+	redisClient := redis.NewClient(&config.Config.Cache.Redis.RedisOptions)
+
+	// Initialize InfluxDB client
+	influxDBClient, influxDBWriteClient := httpclient.NewInfluxDBClient(ctx)
+
+	influxErrCh := influxDBWriteClient.Errors()
+	go func() {
+		for err := range influxErrCh {
+			logger.Error(fmt.Sprintf("write to bucket %s error: %s\n", config.Config.InfluxDB.Bucket, err.Error()))
+		}
+	}()
+
+	// Initialize repository
+	db := database.GetSharedConnection()
+
+	// Initialize Minio client
+	minioClient, err := minio.NewMinioClientAndInitBucket(config.Config.Minio)
+	if err != nil {
+		logger.Fatal(fmt.Sprintf("failed to create minio client: %v", err))
+	}
+
+	// Initialize milvus client
+	milvusClient, err := milvus.NewMilvusClient(ctx, config.Config.Milvus.Host, config.Config.Milvus.Port)
+	if err != nil {
+		logger.Fatal(fmt.Sprintf("failed to create milvus client: %v", err))
+	}
+	return pipelinePublicServiceClient, pipelinePublicGrpcConn, mgmtPublicServiceClient, mgmtPrivateServiceClientConn, mgmtPrivateServiceClient, mgmtPublicServiceClientConn, redisClient, influxDBClient, db, minioClient, milvusClient
+}
+
+func newGrpcOptionAndCreds(logger *zap.Logger) ([]grpc.ServerOption, credentials.TransportCredentials) {
+	// Shared options for the logger, with a custom gRPC code to log level function.
+	opts := []grpc_zap.Option{
+		grpc_zap.WithDecider(func(fullMethodName string, err error) bool {
+			// will not log gRPC calls if it was a call to liveness or readiness and no error was raised
+			if err == nil {
+				if match, _ := regexp.MatchString("artifact.artifact.v1alpha.ArtifactPublicService/.*ness$", fullMethodName); match {
+					return false
+				}
+				// stop logging successful private function calls
+				if match, _ := regexp.MatchString("artifact.artifact.v1alpha.ArtifactPrivateService/.*$", fullMethodName); match {
+					return false
+				}
+			}
+			// by default everything will be logged
+			return true
+		}),
+	}
+	grpcServerOpts := []grpc.ServerOption{
+		grpc.StreamInterceptor(grpc_middleware.ChainStreamServer(
+			middleware.StreamAppendMetadataInterceptor,
+			grpc_zap.StreamServerInterceptor(logger, opts...),
+			grpc_recovery.StreamServerInterceptor(middleware.RecoveryInterceptorOpt()),
+		)),
+		grpc.UnaryInterceptor(grpc_middleware.ChainUnaryServer(
+			middleware.UnaryAppendMetadataAndErrorCodeInterceptor,
+			grpc_zap.UnaryServerInterceptor(logger, opts...),
+			grpc_recovery.UnaryServerInterceptor(middleware.RecoveryInterceptorOpt()),
+		)),
+	}
+
+	// Create tls based credential.
+	var creds credentials.TransportCredentials
+	var err error
+	if config.Config.Server.HTTPS.Cert != "" && config.Config.Server.HTTPS.Key != "" {
+		creds, err = credentials.NewServerTLSFromFile(config.Config.Server.HTTPS.Cert, config.Config.Server.HTTPS.Key)
+		if err != nil {
+			logger.Fatal(fmt.Sprintf("failed to create credentials: %v", err))
+		}
+		grpcServerOpts = append(grpcServerOpts, grpc.Creds(creds))
+	}
+
+	grpcServerOpts = append(grpcServerOpts, grpc.MaxRecvMsgSize(constant.MaxPayloadSize))
+	grpcServerOpts = append(grpcServerOpts, grpc.MaxSendMsgSize(constant.MaxPayloadSize))
+	return grpcServerOpts, creds
 }

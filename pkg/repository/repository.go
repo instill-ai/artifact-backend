@@ -8,6 +8,9 @@ type RepositoryI interface {
 	TagI
 	KnowledgeBaseI
 	KnowledgeBaseFileI
+	ConvertedFileI
+	TextChunkI
+	EmbeddingI
 }
 
 // Repository implements Artifact storage functions in PostgreSQL.

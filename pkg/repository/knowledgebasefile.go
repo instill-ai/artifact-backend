@@ -11,10 +11,13 @@ import (
 )
 
 type KnowledgeBaseFileI interface {
+	KnowledgeBaseFileTableName() string
 	CreateKnowledgeBaseFile(ctx context.Context, kb KnowledgeBaseFile) (*KnowledgeBaseFile, error)
 	ListKnowledgeBaseFiles(ctx context.Context, uid string, ownerUID string, kbUID string, pageSize int32, nextPageToken string, filesUID []string) ([]KnowledgeBaseFile, int, string, error)
 	DeleteKnowledgeBaseFile(ctx context.Context, fileUID string) error
 	ProcessKnowledgeBaseFiles(ctx context.Context, fileUids []string) ([]KnowledgeBaseFile, error)
+	GetIncompleteFile(ctx context.Context) []KnowledgeBaseFile
+	UpdateKnowledgeBaseFile(ctx context.Context, fileUID string, updateMap map[string]interface{}) (*KnowledgeBaseFile, error)
 }
 
 type KnowledgeBaseFile struct {
@@ -23,10 +26,11 @@ type KnowledgeBaseFile struct {
 	KnowledgeBaseUID uuid.UUID `gorm:"column:kb_uid;type:uuid;not null" json:"kb_uid"`
 	CreatorUID       uuid.UUID `gorm:"column:creator_uid;type:uuid;not null" json:"creator_uid"`
 	Name             string    `gorm:"column:name;size:255;not null" json:"name"`
-	Type             string    `gorm:"column:type;not null" json:"type"`
-	Destination      string    `gorm:"column:destination;size:255;not null" json:"destination"`
-	ProcessStatus    string    `gorm:"column:process_status;size:100;not null" json:"process_status"`
-	ExtraMetaData    string    `gorm:"column:extra_meta_data;type:jsonb" json:"extra_meta_data"`
+	// Type is defined in the grpc proto file
+	Type          string `gorm:"column:type;not null" json:"type"`
+	Destination   string `gorm:"column:destination;size:255;not null" json:"destination"`
+	ProcessStatus string `gorm:"column:process_status;size:100;not null" json:"process_status"`
+	ExtraMetaData string `gorm:"column:extra_meta_data;type:jsonb" json:"extra_meta_data"`
 	// Content not used yet
 	Content    []byte     `gorm:"column:content;type:bytea" json:"content"`
 	CreateTime *time.Time `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
@@ -63,6 +67,11 @@ var KnowledgeBaseFileColumn = KnowledgeBaseFileColumns{
 	CreateTime:       "create_time",
 	UpdateTime:       "update_time",
 	DeleteTime:       "delete_time",
+}
+
+// KnowledgeBaseFileTableName returns the table name of the KnowledgeBaseFile
+func (r *Repository) KnowledgeBaseFileTableName() string {
+	return "knowledge_base_file"
 }
 
 func (r *Repository) CreateKnowledgeBaseFile(ctx context.Context, kb KnowledgeBaseFile) (*KnowledgeBaseFile, error) {
@@ -172,4 +181,46 @@ func (r *Repository) ProcessKnowledgeBaseFiles(ctx context.Context, fileUIDs []s
 	}
 
 	return files, nil
+}
+
+// get the incomplete files
+func (r *Repository) GetIncompleteFile(ctx context.Context) []KnowledgeBaseFile {
+	var files []KnowledgeBaseFile
+	whereClause := fmt.Sprintf("%v NOT IN ? AND %v is null", KnowledgeBaseFileColumn.ProcessStatus, KnowledgeBaseFileColumn.DeleteTime)
+	if err := r.db.WithContext(ctx).Where(
+		whereClause, []string{
+			artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_NOTSTARTED)],
+			artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED)]}).
+		Find(&files).Error; err != nil {
+		return nil
+	}
+	return files
+}
+
+// UpdateKnowledgeBaseFile updates the data and retrieves the latest data
+func (r *Repository) UpdateKnowledgeBaseFile(ctx context.Context, fileUID string, updateMap map[string]interface{}) (*KnowledgeBaseFile, error) {
+	var updatedFile KnowledgeBaseFile
+
+	// Use a transaction to update and then fetch the latest data
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Update the data
+		if err := tx.Model(&KnowledgeBaseFile{}).
+			Where(KnowledgeBaseFileColumn.UID+" = ?", fileUID).
+			Updates(updateMap).Error; err != nil {
+			return err
+		}
+
+		// Fetch the latest data
+		if err := tx.Where(KnowledgeBaseFileColumn.UID+" = ?", fileUID).First(&updatedFile).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &updatedFile, nil
 }

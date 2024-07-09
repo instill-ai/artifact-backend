@@ -8,11 +8,14 @@ import (
 
 	"github.com/instill-ai/artifact-backend/pkg/customerror"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
+	"github.com/instill-ai/artifact-backend/pkg/milvus"
 	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
 	pb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	mgmtPB "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
+	pipelinev1beta "github.com/instill-ai/protogen-go/vdp/pipeline/v1beta"
+	"github.com/redis/go-redis/v9"
 )
 
 const (
@@ -25,7 +28,11 @@ type Service struct {
 	Repository     repository.RepositoryI
 	MinIO          minio.MinioI
 	MgmtPrv        mgmtPB.MgmtPrivateServiceClient
+	PipelinePub    pipelinev1beta.PipelinePublicServiceClient
 	registryClient RegistryClient
+	// refactor: we need redis interface in the future to mock the redis client
+	RedisClient  *redis.Client
+	MilvusClient milvus.MilvusClientI
 }
 
 // NewService initiates a service instance
@@ -33,14 +40,21 @@ func NewService(
 	r repository.RepositoryI,
 	mc minio.MinioI,
 	mgmtPrv mgmtPB.MgmtPrivateServiceClient,
-	rc RegistryClient,
+	pipelinePub pipelinev1beta.PipelinePublicServiceClient,
+	rgc RegistryClient,
+	rc *redis.Client,
+	milvusClient milvus.MilvusClientI,
+
 ) *Service {
 
 	return &Service{
 		Repository:     r,
 		MinIO:          mc,
 		MgmtPrv:        mgmtPrv,
-		registryClient: rc,
+		PipelinePub:    pipelinePub,
+		registryClient: rgc,
+		RedisClient:    rc,
+		MilvusClient:   milvusClient,
 	}
 }
 
