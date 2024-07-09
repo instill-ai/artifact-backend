@@ -4,16 +4,22 @@ import (
 	"context"
 	"errors"
 
+
 	"github.com/google/uuid"
+	"github.com/instill-ai/artifact-backend/pkg/logger"
 	pipelinev1beta "github.com/instill-ai/protogen-go/vdp/pipeline/v1beta"
+	"go.uber.org/zap"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
-// ConcertPDFToMD using converting pipeline to convert PDF to MD and consume caller's credits
-func (s *Service) ConcertPDFToMD(ctx context.Context, caller uuid.UUID, pdfBase64 string) (string, error) {
+
+// ConvertPDFToMD using converting pipeline to convert PDF to MD and consume caller's credits
+func (s *Service) ConvertPDFToMD(ctx context.Context, caller uuid.UUID, pdfBase64 string) (string, error) {
+	logger, _ := logger.GetZapLogger(ctx)
 	md := metadata.New(map[string]string{"Instill-User-Uid": caller.String(), "Instill-Auth-Type": "user"})
 	ctx = metadata.NewOutgoingContext(ctx, md)
+
 	req := &pipelinev1beta.TriggerOrganizationPipelineReleaseRequest{
 		Name: "organizations/preset/pipelines/indexing-convert-pdf/releases/v1.0.0",
 		Inputs: []*structpb.Struct{
@@ -26,10 +32,12 @@ func (s *Service) ConcertPDFToMD(ctx context.Context, caller uuid.UUID, pdfBase6
 	}
 	resp, err := s.PipelinePub.TriggerOrganizationPipelineRelease(ctx, req)
 	if err != nil {
+		logger.Error("failed to trigger pipeline", zap.Error(err))
 		return "", err
 	}
 	result, err := getConvertResult(resp)
 	if err != nil {
+		logger.Error("failed to get convert result", zap.Error(err))
 		return "", err
 	}
 	return result, nil

@@ -138,7 +138,6 @@ func checkValidFileType(t artifactpb.FileType) bool {
 func (ph *PublicHandler) ListKnowledgeBaseFiles(ctx context.Context, req *artifactpb.ListKnowledgeBaseFilesRequest) (*artifactpb.ListKnowledgeBaseFilesResponse, error) {
 
 	log, _ := logger.GetZapLogger(ctx)
-	fmt.Println("ListKnowledgeBaseFiles>>>", req)
 	uid, err := getUserUIDFromContext(ctx)
 	if err != nil {
 		log.Error("failed to get user id from header", zap.Error(err))

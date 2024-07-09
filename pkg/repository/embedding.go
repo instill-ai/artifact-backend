@@ -2,6 +2,8 @@ package repository
 
 import (
 	"context"
+	"database/sql/driver"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -16,15 +18,66 @@ type EmbeddingI interface {
 	UpsertEmbeddings(ctx context.Context, embeddings []Embedding, externalServiceCall func(embUIDs []string) error) ([]Embedding, error)
 	DeleteEmbeddingsBySource(ctx context.Context, sourceTable string, sourceUID uuid.UUID) error
 	DeleteEmbeddingsByUIDs(ctx context.Context, embUIDs []uuid.UUID) error
+	// GetEmbeddingByUIDs fetches embeddings by their UIDs.
+	GetEmbeddingByUIDs(ctx context.Context, embUIDs []uuid.UUID) ([]Embedding, error)
 }
 type Embedding struct {
 	UID         uuid.UUID  `gorm:"column:uid;type:uuid;default:gen_random_uuid();primaryKey" json:"uid"`
 	SourceUID   uuid.UUID  `gorm:"column:source_uid;type:uuid;not null" json:"source_uid"`
 	SourceTable string     `gorm:"column:source_table;size:255;not null" json:"source_table"`
-	Vector      []float32  `gorm:"column:vector;type:jsonb;not null" json:"vector"`
+	Vector      Vector     `gorm:"column:vector;type:jsonb;not null" json:"vector"`
 	Collection  string     `gorm:"column:collection;size:255;not null" json:"collection"`
 	CreateTime  *time.Time `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
 	UpdateTime  *time.Time `gorm:"column:update_time;not null;default:CURRENT_TIMESTAMP" json:"update_time"`
+}
+
+type Vector []float32
+
+func (v Vector) Value() (driver.Value, error) {
+	if v == nil {
+		return nil, nil
+	}
+	r, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	return string(r), nil
+}
+
+func (v *Vector) Scan(value interface{}) error {
+	if value == nil {
+		*v = nil
+		return nil
+	}
+
+	b, ok := value.([]byte)
+	if !ok {
+		return fmt.Errorf("type assertion to []byte failed")
+	}
+
+	return json.Unmarshal(b, v)
+}
+
+// MarshalJSON implements the json.Marshaler interface
+func (v Vector) MarshalJSON() ([]byte, error) {
+	if v == nil {
+		return []byte("null"), nil
+	}
+	return json.Marshal([]float32(v))
+}
+
+// UnmarshalJSON implements the json.Unmarshaler interface
+func (v *Vector) UnmarshalJSON(data []byte) error {
+	if string(data) == "null" {
+		*v = nil
+		return nil
+	}
+	var slice []float32
+	if err := json.Unmarshal(data, &slice); err != nil {
+		return err
+	}
+	*v = Vector(slice)
+	return nil
 }
 
 type EmbeddingColumns struct {
@@ -105,4 +158,14 @@ func (r *Repository) DeleteEmbeddingsBySource(ctx context.Context, sourceTable s
 func (r *Repository) DeleteEmbeddingsByUIDs(ctx context.Context, embUIDs []uuid.UUID) error {
 	where := fmt.Sprintf("%s IN (?)", EmbeddingColumn.UID)
 	return r.db.WithContext(ctx).Where(where, embUIDs).Delete(&Embedding{}).Error
+}
+
+// GetEmbeddingByUIDs fetches embeddings by their UIDs.
+func (r *Repository) GetEmbeddingByUIDs(ctx context.Context, embUIDs []uuid.UUID) ([]Embedding, error) {
+	var embeddings []Embedding
+	where := fmt.Sprintf("%s IN (?)", EmbeddingColumn.UID)
+	if err := r.db.WithContext(ctx).Where(where, embUIDs).Find(&embeddings).Error; err != nil {
+		return nil, err
+	}
+	return embeddings, nil
 }

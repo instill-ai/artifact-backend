@@ -12,7 +12,7 @@ import (
 
 type ConvertedFileI interface {
 	ConvertedFileTableName() string
-	CreateConvertedFile(ctx context.Context, cf ConvertedFile, callExternalService func(convertedFileUID uuid.UUID) error) (*ConvertedFile, error)
+	CreateConvertedFile(ctx context.Context, cf ConvertedFile, callExternalService func(convertedFileUID uuid.UUID) (map[string]any, error)) (*ConvertedFile, error)
 	DeleteConvertedFile(ctx context.Context, uid uuid.UUID) error
 	GetConvertedFileByFileUID(ctx context.Context, fileUID uuid.UUID) (*ConvertedFile, error)
 }
@@ -58,7 +58,7 @@ func (r *Repository) ConvertedFileTableName() string {
 	return "converted_file"
 }
 
-func (r *Repository) CreateConvertedFile(ctx context.Context, cf ConvertedFile, callExternalService func(convertedFileUID uuid.UUID) error) (*ConvertedFile, error) {
+func (r *Repository) CreateConvertedFile(ctx context.Context, cf ConvertedFile, callExternalService func(convertedFileUID uuid.UUID) (map[string]any, error)) (*ConvertedFile, error) {
 	err := r.db.Transaction(func(tx *gorm.DB) error {
 		// Check if file_uid exists
 		var existingFile ConvertedFile
@@ -88,9 +88,17 @@ func (r *Repository) CreateConvertedFile(ctx context.Context, cf ConvertedFile, 
 
 		if callExternalService != nil {
 			// Call the external service using the created record's UID
-			if err := callExternalService(cf.UID); err != nil {
+			if output, err := callExternalService(cf.UID); err != nil {
 				// If the external service returns an error, return the error to trigger a rollback
 				return err
+			} else {
+				// get dest from output and update the record
+				if dest, ok := output[ConvertedFileColumn.Destination].(string); ok {
+					update := map[string]any{ConvertedFileColumn.Destination: dest}
+					if err := tx.Model(&cf).Updates(update).Error; err != nil {
+						return err
+					}
+				}
 			}
 		}
 
@@ -113,7 +121,6 @@ func (r *Repository) GetConvertedFileByFileUID(ctx context.Context, fileUID uuid
 	return &cf, nil
 }
 
-
 // DeleteConvertedFile deletes the record by UID
 func (r *Repository) DeleteConvertedFile(ctx context.Context, uid uuid.UUID) error {
 	err := r.db.Transaction(func(tx *gorm.DB) error {
@@ -125,6 +132,16 @@ func (r *Repository) DeleteConvertedFile(ctx context.Context, uid uuid.UUID) err
 		return nil
 	})
 	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// UpdateConvertedFile updates the record by UID using update map.
+func (r *Repository) UpdateConvertedFile(ctx context.Context, uid uuid.UUID, update map[string]any) error {
+	// Specify the condition to find the record by its UID
+	where := fmt.Sprintf("%s = ?", ConvertedFileColumn.UID)
+	if err := r.db.WithContext(ctx).Model(&ConvertedFile{}).Where(where, uid).Updates(update).Error; err != nil {
 		return err
 	}
 	return nil

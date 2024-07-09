@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -110,6 +111,19 @@ func (wp *fileToEmbWorkerPool) startWorker(ctx context.Context, workerID int) {
 	logger, _ := logger.GetZapLogger(ctx)
 	logger.Info("Worker started", zap.Int("WorkerID", workerID))
 	defer wp.wg.Done()
+	// Defer a function to catch panics
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Error("Panic recovered in worker",
+				zap.Int("WorkerID", workerID),
+				zap.Any("panic", r),
+				zap.String("stack", string(debug.Stack())))
+			// Start a new worker
+			logger.Info("Restarting worker after panic", zap.Int("WorkerID", workerID))
+			wp.wg.Add(1)
+			go wp.startWorker(ctx, workerID)
+		}
+	}()
 	for {
 		select {
 		case <-ctx.Done():
@@ -352,7 +366,7 @@ func (wp *fileToEmbWorkerPool) processConvertingFile(ctx context.Context, file r
 	base64Data := base64.StdEncoding.EncodeToString(data)
 
 	// convert the pdf file to md
-	convertedMD, err := wp.svc.ConcertPDFToMD(ctx, file.CreatorUID, base64Data)
+	convertedMD, err := wp.svc.ConvertPDFToMD(ctx, file.CreatorUID, base64Data)
 	if err != nil {
 		logger.Error("Failed to convert pdf to md.", zap.String("File path", fileInMinIOPath))
 		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
@@ -565,8 +579,8 @@ func (wp *fileToEmbWorkerPool) processEmbeddingFile(ctx context.Context, file re
 	embeddings := make([]repository.Embedding, len(vectors))
 	for i, v := range vectors {
 		embeddings[i] = repository.Embedding{
-			SourceUID:   sourceUID,
-			SourceTable: sourceTable,
+			SourceTable: wp.svc.Repository.TextChunkTableName(),
+			SourceUID:   chunks[i].UID,
 			Vector:      v,
 			Collection:  collection,
 		}
@@ -602,13 +616,15 @@ func (wp *fileToEmbWorkerPool) saveConvertedFile(ctx context.Context, kbUID, fil
 	_, err := wp.svc.Repository.CreateConvertedFile(
 		ctx,
 		repository.ConvertedFile{KbUID: kbUID, FileUID: fileUID, Name: name, Type: "text/markdown", Destination: "destination"},
-		func(convertedFileUID uuid.UUID) error {
+		func(convertedFileUID uuid.UUID) (map[string]any, error) {
 			// save the converted file into object storage
 			err := wp.svc.MinIO.SaveConvertedFile(ctx, kbUID.String(), convertedFileUID.String(), "md", convertedFile)
 			if err != nil {
-				return err
+				return nil, err
 			}
-			return nil
+			output := make(map[string]any)
+			output[repository.ConvertedFileColumn.Destination] = wp.svc.MinIO.GetConvertedFilePathInKnowledgeBase(kbUID.String(), convertedFileUID.String(), "md")
+			return output, nil
 		})
 	if err != nil {
 		logger.Error("Failed to save converted file into object storage and metadata into database.", zap.String("FileUID", fileUID.String()))

@@ -112,7 +112,7 @@ package grpcclient
 // 	if err != nil {
 // 		fmt.Println(err)
 // 	}
-// 	fmt.Println("current working diretor:", dir)
+// 	fmt.Println("current working director:", dir)
 // 	pipelinePublicGrpcConn, err := NewGRPCConn("localhost:8081", "", "")
 // 	if err != nil {
 // 		t.Fatalf("failed to create grpc connection: %v", err)
@@ -123,7 +123,7 @@ package grpcclient
 // 	ctx := metadata.NewOutgoingContext(context.Background(), md)
 // 	pipelinePublicServiceClient := pipelinev1beta.NewPipelinePublicServiceClient(pipelinePublicGrpcConn)
 
-// 	base64PDF, err := readPDFtoBase64("../../../test_.pdf")
+// 	base64PDF, err := readFileToBase64("../../../test_.pdf")
 // 	if err != nil {
 // 		t.Fatalf("failed to read pdf file: %v", err)
 // 	}
@@ -139,8 +139,8 @@ package grpcclient
 // 	fmt.Println("convert result\n", res.Outputs[0].GetFields()["convert_result"].GetStringValue()[:100])
 // }
 
-// // readPDFtoBase64 read the pdf file and convert it to base64
-// func readPDFtoBase64(path string) (string, error) {
+// // readFileToBase64 read the pdf file and convert it to base64
+// func readFileToBase64(path string) (string, error) {
 // 	// Open the file
 // 	file, err := os.Open(path)
 // 	if err != nil {
@@ -237,7 +237,7 @@ package grpcclient
 // 	if err != nil {
 // 		fmt.Println(err)
 // 	}
-// 	fmt.Println("current working diretor:", dir)
+// 	fmt.Println("current working director:", dir)
 // 	pipelinePublicGrpcConn, err := NewGRPCConn("localhost:8081", "", "")
 // 	if err != nil {
 // 		t.Fatalf("failed to create grpc connection: %v", err)
