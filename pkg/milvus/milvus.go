@@ -69,6 +69,12 @@ func (m *MilvusClient) GetVersion(ctx context.Context) (string, error) {
 // GetHealth
 func (m *MilvusClient) GetHealth(ctx context.Context) (bool, error) {
 	h, err := m.c.CheckHealth(ctx)
+	if err != nil {
+		return false, fmt.Errorf("failed to check health: %w", err)
+	}
+	if h == nil {
+		return false, fmt.Errorf("health check returned nil")
+	}
 	return h.IsHealthy, err
 }
 
