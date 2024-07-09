@@ -11,6 +11,7 @@ import (
 )
 
 type TextChunkI interface {
+	TextChunkTableName() string
 	DeleteAndCreateChunks(ctx context.Context, sourceTable string, sourceUID uuid.UUID, chunks []*TextChunk, externalServiceCall func(chunkUIDs []string) (map[string]any, error)) ([]*TextChunk, error)
 	DeleteChunksBySource(ctx context.Context, sourceTable string, sourceUID uuid.UUID) error
 	DeleteChunksByUIDs(ctx context.Context, chunkUIDs []uuid.UUID) error
@@ -63,7 +64,7 @@ var TextChunkColumn = TextChunkColumns{
 }
 
 // TableName returns the table name of the TextChunk
-func (TextChunk) TableName() string {
+func (r *Repository) TextChunkTableName() string {
 	return "text_chunk"
 }
 

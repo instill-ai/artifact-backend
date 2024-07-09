@@ -26,8 +26,8 @@ type RepositoryIMock struct {
 	beforeConvertedFileTableNameCounter uint64
 	ConvertedFileTableNameMock          mRepositoryIMockConvertedFileTableName
 
-	funcCreateConvertedFile          func(ctx context.Context, cf mm_repository.ConvertedFile, callExternalService func(convertedFileUID uuid.UUID) error) (cp1 *mm_repository.ConvertedFile, err error)
-	inspectFuncCreateConvertedFile   func(ctx context.Context, cf mm_repository.ConvertedFile, callExternalService func(convertedFileUID uuid.UUID) error)
+	funcCreateConvertedFile          func(ctx context.Context, cf mm_repository.ConvertedFile, callExternalService func(convertedFileUID uuid.UUID) (map[string]any, error)) (cp1 *mm_repository.ConvertedFile, err error)
+	inspectFuncCreateConvertedFile   func(ctx context.Context, cf mm_repository.ConvertedFile, callExternalService func(convertedFileUID uuid.UUID) (map[string]any, error))
 	afterCreateConvertedFileCounter  uint64
 	beforeCreateConvertedFileCounter uint64
 	CreateConvertedFileMock          mRepositoryIMockCreateConvertedFile
@@ -104,6 +104,12 @@ type RepositoryIMock struct {
 	beforeGetConvertedFileByFileUIDCounter uint64
 	GetConvertedFileByFileUIDMock          mRepositoryIMockGetConvertedFileByFileUID
 
+	funcGetEmbeddingByUIDs          func(ctx context.Context, embUIDs []uuid.UUID) (ea1 []mm_repository.Embedding, err error)
+	inspectFuncGetEmbeddingByUIDs   func(ctx context.Context, embUIDs []uuid.UUID)
+	afterGetEmbeddingByUIDsCounter  uint64
+	beforeGetEmbeddingByUIDsCounter uint64
+	GetEmbeddingByUIDsMock          mRepositoryIMockGetEmbeddingByUIDs
+
 	funcGetIncompleteFile          func(ctx context.Context) (ka1 []mm_repository.KnowledgeBaseFile)
 	inspectFuncGetIncompleteFile   func(ctx context.Context)
 	afterGetIncompleteFileCounter  uint64
@@ -151,6 +157,12 @@ type RepositoryIMock struct {
 	afterProcessKnowledgeBaseFilesCounter  uint64
 	beforeProcessKnowledgeBaseFilesCounter uint64
 	ProcessKnowledgeBaseFilesMock          mRepositoryIMockProcessKnowledgeBaseFiles
+
+	funcTextChunkTableName          func() (s1 string)
+	inspectFuncTextChunkTableName   func()
+	afterTextChunkTableNameCounter  uint64
+	beforeTextChunkTableNameCounter uint64
+	TextChunkTableNameMock          mRepositoryIMockTextChunkTableName
 
 	funcUpdateKnowledgeBase          func(ctx context.Context, ownerUID string, kb mm_repository.KnowledgeBase) (kp1 *mm_repository.KnowledgeBase, err error)
 	inspectFuncUpdateKnowledgeBase   func(ctx context.Context, ownerUID string, kb mm_repository.KnowledgeBase)
@@ -226,6 +238,9 @@ func NewRepositoryIMock(t minimock.Tester) *RepositoryIMock {
 	m.GetConvertedFileByFileUIDMock = mRepositoryIMockGetConvertedFileByFileUID{mock: m}
 	m.GetConvertedFileByFileUIDMock.callArgs = []*RepositoryIMockGetConvertedFileByFileUIDParams{}
 
+	m.GetEmbeddingByUIDsMock = mRepositoryIMockGetEmbeddingByUIDs{mock: m}
+	m.GetEmbeddingByUIDsMock.callArgs = []*RepositoryIMockGetEmbeddingByUIDsParams{}
+
 	m.GetIncompleteFileMock = mRepositoryIMockGetIncompleteFile{mock: m}
 	m.GetIncompleteFileMock.callArgs = []*RepositoryIMockGetIncompleteFileParams{}
 
@@ -248,6 +263,8 @@ func NewRepositoryIMock(t minimock.Tester) *RepositoryIMock {
 
 	m.ProcessKnowledgeBaseFilesMock = mRepositoryIMockProcessKnowledgeBaseFiles{mock: m}
 	m.ProcessKnowledgeBaseFilesMock.callArgs = []*RepositoryIMockProcessKnowledgeBaseFilesParams{}
+
+	m.TextChunkTableNameMock = mRepositoryIMockTextChunkTableName{mock: m}
 
 	m.UpdateKnowledgeBaseMock = mRepositoryIMockUpdateKnowledgeBase{mock: m}
 	m.UpdateKnowledgeBaseMock.callArgs = []*RepositoryIMockUpdateKnowledgeBaseParams{}
@@ -453,14 +470,14 @@ type RepositoryIMockCreateConvertedFileExpectation struct {
 type RepositoryIMockCreateConvertedFileParams struct {
 	ctx                 context.Context
 	cf                  mm_repository.ConvertedFile
-	callExternalService func(convertedFileUID uuid.UUID) error
+	callExternalService func(convertedFileUID uuid.UUID) (map[string]any, error)
 }
 
 // RepositoryIMockCreateConvertedFileParamPtrs contains pointers to parameters of the RepositoryI.CreateConvertedFile
 type RepositoryIMockCreateConvertedFileParamPtrs struct {
 	ctx                 *context.Context
 	cf                  *mm_repository.ConvertedFile
-	callExternalService *func(convertedFileUID uuid.UUID) error
+	callExternalService *func(convertedFileUID uuid.UUID) (map[string]any, error)
 }
 
 // RepositoryIMockCreateConvertedFileResults contains results of the RepositoryI.CreateConvertedFile
@@ -470,7 +487,7 @@ type RepositoryIMockCreateConvertedFileResults struct {
 }
 
 // Expect sets up expected params for RepositoryI.CreateConvertedFile
-func (mmCreateConvertedFile *mRepositoryIMockCreateConvertedFile) Expect(ctx context.Context, cf mm_repository.ConvertedFile, callExternalService func(convertedFileUID uuid.UUID) error) *mRepositoryIMockCreateConvertedFile {
+func (mmCreateConvertedFile *mRepositoryIMockCreateConvertedFile) Expect(ctx context.Context, cf mm_repository.ConvertedFile, callExternalService func(convertedFileUID uuid.UUID) (map[string]any, error)) *mRepositoryIMockCreateConvertedFile {
 	if mmCreateConvertedFile.mock.funcCreateConvertedFile != nil {
 		mmCreateConvertedFile.mock.t.Fatalf("RepositoryIMock.CreateConvertedFile mock is already set by Set")
 	}
@@ -538,7 +555,7 @@ func (mmCreateConvertedFile *mRepositoryIMockCreateConvertedFile) ExpectCfParam2
 }
 
 // ExpectCallExternalServiceParam3 sets up expected param callExternalService for RepositoryI.CreateConvertedFile
-func (mmCreateConvertedFile *mRepositoryIMockCreateConvertedFile) ExpectCallExternalServiceParam3(callExternalService func(convertedFileUID uuid.UUID) error) *mRepositoryIMockCreateConvertedFile {
+func (mmCreateConvertedFile *mRepositoryIMockCreateConvertedFile) ExpectCallExternalServiceParam3(callExternalService func(convertedFileUID uuid.UUID) (map[string]any, error)) *mRepositoryIMockCreateConvertedFile {
 	if mmCreateConvertedFile.mock.funcCreateConvertedFile != nil {
 		mmCreateConvertedFile.mock.t.Fatalf("RepositoryIMock.CreateConvertedFile mock is already set by Set")
 	}
@@ -560,7 +577,7 @@ func (mmCreateConvertedFile *mRepositoryIMockCreateConvertedFile) ExpectCallExte
 }
 
 // Inspect accepts an inspector function that has same arguments as the RepositoryI.CreateConvertedFile
-func (mmCreateConvertedFile *mRepositoryIMockCreateConvertedFile) Inspect(f func(ctx context.Context, cf mm_repository.ConvertedFile, callExternalService func(convertedFileUID uuid.UUID) error)) *mRepositoryIMockCreateConvertedFile {
+func (mmCreateConvertedFile *mRepositoryIMockCreateConvertedFile) Inspect(f func(ctx context.Context, cf mm_repository.ConvertedFile, callExternalService func(convertedFileUID uuid.UUID) (map[string]any, error))) *mRepositoryIMockCreateConvertedFile {
 	if mmCreateConvertedFile.mock.inspectFuncCreateConvertedFile != nil {
 		mmCreateConvertedFile.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.CreateConvertedFile")
 	}
@@ -584,7 +601,7 @@ func (mmCreateConvertedFile *mRepositoryIMockCreateConvertedFile) Return(cp1 *mm
 }
 
 // Set uses given function f to mock the RepositoryI.CreateConvertedFile method
-func (mmCreateConvertedFile *mRepositoryIMockCreateConvertedFile) Set(f func(ctx context.Context, cf mm_repository.ConvertedFile, callExternalService func(convertedFileUID uuid.UUID) error) (cp1 *mm_repository.ConvertedFile, err error)) *RepositoryIMock {
+func (mmCreateConvertedFile *mRepositoryIMockCreateConvertedFile) Set(f func(ctx context.Context, cf mm_repository.ConvertedFile, callExternalService func(convertedFileUID uuid.UUID) (map[string]any, error)) (cp1 *mm_repository.ConvertedFile, err error)) *RepositoryIMock {
 	if mmCreateConvertedFile.defaultExpectation != nil {
 		mmCreateConvertedFile.mock.t.Fatalf("Default expectation is already set for the RepositoryI.CreateConvertedFile method")
 	}
@@ -599,7 +616,7 @@ func (mmCreateConvertedFile *mRepositoryIMockCreateConvertedFile) Set(f func(ctx
 
 // When sets expectation for the RepositoryI.CreateConvertedFile which will trigger the result defined by the following
 // Then helper
-func (mmCreateConvertedFile *mRepositoryIMockCreateConvertedFile) When(ctx context.Context, cf mm_repository.ConvertedFile, callExternalService func(convertedFileUID uuid.UUID) error) *RepositoryIMockCreateConvertedFileExpectation {
+func (mmCreateConvertedFile *mRepositoryIMockCreateConvertedFile) When(ctx context.Context, cf mm_repository.ConvertedFile, callExternalService func(convertedFileUID uuid.UUID) (map[string]any, error)) *RepositoryIMockCreateConvertedFileExpectation {
 	if mmCreateConvertedFile.mock.funcCreateConvertedFile != nil {
 		mmCreateConvertedFile.mock.t.Fatalf("RepositoryIMock.CreateConvertedFile mock is already set by Set")
 	}
@@ -639,7 +656,7 @@ func (mmCreateConvertedFile *mRepositoryIMockCreateConvertedFile) invocationsDon
 }
 
 // CreateConvertedFile implements repository.RepositoryI
-func (mmCreateConvertedFile *RepositoryIMock) CreateConvertedFile(ctx context.Context, cf mm_repository.ConvertedFile, callExternalService func(convertedFileUID uuid.UUID) error) (cp1 *mm_repository.ConvertedFile, err error) {
+func (mmCreateConvertedFile *RepositoryIMock) CreateConvertedFile(ctx context.Context, cf mm_repository.ConvertedFile, callExternalService func(convertedFileUID uuid.UUID) (map[string]any, error)) (cp1 *mm_repository.ConvertedFile, err error) {
 	mm_atomic.AddUint64(&mmCreateConvertedFile.beforeCreateConvertedFileCounter, 1)
 	defer mm_atomic.AddUint64(&mmCreateConvertedFile.afterCreateConvertedFileCounter, 1)
 
@@ -4639,6 +4656,311 @@ func (m *RepositoryIMock) MinimockGetConvertedFileByFileUIDInspect() {
 	}
 }
 
+type mRepositoryIMockGetEmbeddingByUIDs struct {
+	mock               *RepositoryIMock
+	defaultExpectation *RepositoryIMockGetEmbeddingByUIDsExpectation
+	expectations       []*RepositoryIMockGetEmbeddingByUIDsExpectation
+
+	callArgs []*RepositoryIMockGetEmbeddingByUIDsParams
+	mutex    sync.RWMutex
+
+	expectedInvocations uint64
+}
+
+// RepositoryIMockGetEmbeddingByUIDsExpectation specifies expectation struct of the RepositoryI.GetEmbeddingByUIDs
+type RepositoryIMockGetEmbeddingByUIDsExpectation struct {
+	mock      *RepositoryIMock
+	params    *RepositoryIMockGetEmbeddingByUIDsParams
+	paramPtrs *RepositoryIMockGetEmbeddingByUIDsParamPtrs
+	results   *RepositoryIMockGetEmbeddingByUIDsResults
+	Counter   uint64
+}
+
+// RepositoryIMockGetEmbeddingByUIDsParams contains parameters of the RepositoryI.GetEmbeddingByUIDs
+type RepositoryIMockGetEmbeddingByUIDsParams struct {
+	ctx     context.Context
+	embUIDs []uuid.UUID
+}
+
+// RepositoryIMockGetEmbeddingByUIDsParamPtrs contains pointers to parameters of the RepositoryI.GetEmbeddingByUIDs
+type RepositoryIMockGetEmbeddingByUIDsParamPtrs struct {
+	ctx     *context.Context
+	embUIDs *[]uuid.UUID
+}
+
+// RepositoryIMockGetEmbeddingByUIDsResults contains results of the RepositoryI.GetEmbeddingByUIDs
+type RepositoryIMockGetEmbeddingByUIDsResults struct {
+	ea1 []mm_repository.Embedding
+	err error
+}
+
+// Expect sets up expected params for RepositoryI.GetEmbeddingByUIDs
+func (mmGetEmbeddingByUIDs *mRepositoryIMockGetEmbeddingByUIDs) Expect(ctx context.Context, embUIDs []uuid.UUID) *mRepositoryIMockGetEmbeddingByUIDs {
+	if mmGetEmbeddingByUIDs.mock.funcGetEmbeddingByUIDs != nil {
+		mmGetEmbeddingByUIDs.mock.t.Fatalf("RepositoryIMock.GetEmbeddingByUIDs mock is already set by Set")
+	}
+
+	if mmGetEmbeddingByUIDs.defaultExpectation == nil {
+		mmGetEmbeddingByUIDs.defaultExpectation = &RepositoryIMockGetEmbeddingByUIDsExpectation{}
+	}
+
+	if mmGetEmbeddingByUIDs.defaultExpectation.paramPtrs != nil {
+		mmGetEmbeddingByUIDs.mock.t.Fatalf("RepositoryIMock.GetEmbeddingByUIDs mock is already set by ExpectParams functions")
+	}
+
+	mmGetEmbeddingByUIDs.defaultExpectation.params = &RepositoryIMockGetEmbeddingByUIDsParams{ctx, embUIDs}
+	for _, e := range mmGetEmbeddingByUIDs.expectations {
+		if minimock.Equal(e.params, mmGetEmbeddingByUIDs.defaultExpectation.params) {
+			mmGetEmbeddingByUIDs.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetEmbeddingByUIDs.defaultExpectation.params)
+		}
+	}
+
+	return mmGetEmbeddingByUIDs
+}
+
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.GetEmbeddingByUIDs
+func (mmGetEmbeddingByUIDs *mRepositoryIMockGetEmbeddingByUIDs) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockGetEmbeddingByUIDs {
+	if mmGetEmbeddingByUIDs.mock.funcGetEmbeddingByUIDs != nil {
+		mmGetEmbeddingByUIDs.mock.t.Fatalf("RepositoryIMock.GetEmbeddingByUIDs mock is already set by Set")
+	}
+
+	if mmGetEmbeddingByUIDs.defaultExpectation == nil {
+		mmGetEmbeddingByUIDs.defaultExpectation = &RepositoryIMockGetEmbeddingByUIDsExpectation{}
+	}
+
+	if mmGetEmbeddingByUIDs.defaultExpectation.params != nil {
+		mmGetEmbeddingByUIDs.mock.t.Fatalf("RepositoryIMock.GetEmbeddingByUIDs mock is already set by Expect")
+	}
+
+	if mmGetEmbeddingByUIDs.defaultExpectation.paramPtrs == nil {
+		mmGetEmbeddingByUIDs.defaultExpectation.paramPtrs = &RepositoryIMockGetEmbeddingByUIDsParamPtrs{}
+	}
+	mmGetEmbeddingByUIDs.defaultExpectation.paramPtrs.ctx = &ctx
+
+	return mmGetEmbeddingByUIDs
+}
+
+// ExpectEmbUIDsParam2 sets up expected param embUIDs for RepositoryI.GetEmbeddingByUIDs
+func (mmGetEmbeddingByUIDs *mRepositoryIMockGetEmbeddingByUIDs) ExpectEmbUIDsParam2(embUIDs []uuid.UUID) *mRepositoryIMockGetEmbeddingByUIDs {
+	if mmGetEmbeddingByUIDs.mock.funcGetEmbeddingByUIDs != nil {
+		mmGetEmbeddingByUIDs.mock.t.Fatalf("RepositoryIMock.GetEmbeddingByUIDs mock is already set by Set")
+	}
+
+	if mmGetEmbeddingByUIDs.defaultExpectation == nil {
+		mmGetEmbeddingByUIDs.defaultExpectation = &RepositoryIMockGetEmbeddingByUIDsExpectation{}
+	}
+
+	if mmGetEmbeddingByUIDs.defaultExpectation.params != nil {
+		mmGetEmbeddingByUIDs.mock.t.Fatalf("RepositoryIMock.GetEmbeddingByUIDs mock is already set by Expect")
+	}
+
+	if mmGetEmbeddingByUIDs.defaultExpectation.paramPtrs == nil {
+		mmGetEmbeddingByUIDs.defaultExpectation.paramPtrs = &RepositoryIMockGetEmbeddingByUIDsParamPtrs{}
+	}
+	mmGetEmbeddingByUIDs.defaultExpectation.paramPtrs.embUIDs = &embUIDs
+
+	return mmGetEmbeddingByUIDs
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.GetEmbeddingByUIDs
+func (mmGetEmbeddingByUIDs *mRepositoryIMockGetEmbeddingByUIDs) Inspect(f func(ctx context.Context, embUIDs []uuid.UUID)) *mRepositoryIMockGetEmbeddingByUIDs {
+	if mmGetEmbeddingByUIDs.mock.inspectFuncGetEmbeddingByUIDs != nil {
+		mmGetEmbeddingByUIDs.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.GetEmbeddingByUIDs")
+	}
+
+	mmGetEmbeddingByUIDs.mock.inspectFuncGetEmbeddingByUIDs = f
+
+	return mmGetEmbeddingByUIDs
+}
+
+// Return sets up results that will be returned by RepositoryI.GetEmbeddingByUIDs
+func (mmGetEmbeddingByUIDs *mRepositoryIMockGetEmbeddingByUIDs) Return(ea1 []mm_repository.Embedding, err error) *RepositoryIMock {
+	if mmGetEmbeddingByUIDs.mock.funcGetEmbeddingByUIDs != nil {
+		mmGetEmbeddingByUIDs.mock.t.Fatalf("RepositoryIMock.GetEmbeddingByUIDs mock is already set by Set")
+	}
+
+	if mmGetEmbeddingByUIDs.defaultExpectation == nil {
+		mmGetEmbeddingByUIDs.defaultExpectation = &RepositoryIMockGetEmbeddingByUIDsExpectation{mock: mmGetEmbeddingByUIDs.mock}
+	}
+	mmGetEmbeddingByUIDs.defaultExpectation.results = &RepositoryIMockGetEmbeddingByUIDsResults{ea1, err}
+	return mmGetEmbeddingByUIDs.mock
+}
+
+// Set uses given function f to mock the RepositoryI.GetEmbeddingByUIDs method
+func (mmGetEmbeddingByUIDs *mRepositoryIMockGetEmbeddingByUIDs) Set(f func(ctx context.Context, embUIDs []uuid.UUID) (ea1 []mm_repository.Embedding, err error)) *RepositoryIMock {
+	if mmGetEmbeddingByUIDs.defaultExpectation != nil {
+		mmGetEmbeddingByUIDs.mock.t.Fatalf("Default expectation is already set for the RepositoryI.GetEmbeddingByUIDs method")
+	}
+
+	if len(mmGetEmbeddingByUIDs.expectations) > 0 {
+		mmGetEmbeddingByUIDs.mock.t.Fatalf("Some expectations are already set for the RepositoryI.GetEmbeddingByUIDs method")
+	}
+
+	mmGetEmbeddingByUIDs.mock.funcGetEmbeddingByUIDs = f
+	return mmGetEmbeddingByUIDs.mock
+}
+
+// When sets expectation for the RepositoryI.GetEmbeddingByUIDs which will trigger the result defined by the following
+// Then helper
+func (mmGetEmbeddingByUIDs *mRepositoryIMockGetEmbeddingByUIDs) When(ctx context.Context, embUIDs []uuid.UUID) *RepositoryIMockGetEmbeddingByUIDsExpectation {
+	if mmGetEmbeddingByUIDs.mock.funcGetEmbeddingByUIDs != nil {
+		mmGetEmbeddingByUIDs.mock.t.Fatalf("RepositoryIMock.GetEmbeddingByUIDs mock is already set by Set")
+	}
+
+	expectation := &RepositoryIMockGetEmbeddingByUIDsExpectation{
+		mock:   mmGetEmbeddingByUIDs.mock,
+		params: &RepositoryIMockGetEmbeddingByUIDsParams{ctx, embUIDs},
+	}
+	mmGetEmbeddingByUIDs.expectations = append(mmGetEmbeddingByUIDs.expectations, expectation)
+	return expectation
+}
+
+// Then sets up RepositoryI.GetEmbeddingByUIDs return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockGetEmbeddingByUIDsExpectation) Then(ea1 []mm_repository.Embedding, err error) *RepositoryIMock {
+	e.results = &RepositoryIMockGetEmbeddingByUIDsResults{ea1, err}
+	return e.mock
+}
+
+// Times sets number of times RepositoryI.GetEmbeddingByUIDs should be invoked
+func (mmGetEmbeddingByUIDs *mRepositoryIMockGetEmbeddingByUIDs) Times(n uint64) *mRepositoryIMockGetEmbeddingByUIDs {
+	if n == 0 {
+		mmGetEmbeddingByUIDs.mock.t.Fatalf("Times of RepositoryIMock.GetEmbeddingByUIDs mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetEmbeddingByUIDs.expectedInvocations, n)
+	return mmGetEmbeddingByUIDs
+}
+
+func (mmGetEmbeddingByUIDs *mRepositoryIMockGetEmbeddingByUIDs) invocationsDone() bool {
+	if len(mmGetEmbeddingByUIDs.expectations) == 0 && mmGetEmbeddingByUIDs.defaultExpectation == nil && mmGetEmbeddingByUIDs.mock.funcGetEmbeddingByUIDs == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetEmbeddingByUIDs.mock.afterGetEmbeddingByUIDsCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetEmbeddingByUIDs.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetEmbeddingByUIDs implements repository.RepositoryI
+func (mmGetEmbeddingByUIDs *RepositoryIMock) GetEmbeddingByUIDs(ctx context.Context, embUIDs []uuid.UUID) (ea1 []mm_repository.Embedding, err error) {
+	mm_atomic.AddUint64(&mmGetEmbeddingByUIDs.beforeGetEmbeddingByUIDsCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetEmbeddingByUIDs.afterGetEmbeddingByUIDsCounter, 1)
+
+	if mmGetEmbeddingByUIDs.inspectFuncGetEmbeddingByUIDs != nil {
+		mmGetEmbeddingByUIDs.inspectFuncGetEmbeddingByUIDs(ctx, embUIDs)
+	}
+
+	mm_params := RepositoryIMockGetEmbeddingByUIDsParams{ctx, embUIDs}
+
+	// Record call args
+	mmGetEmbeddingByUIDs.GetEmbeddingByUIDsMock.mutex.Lock()
+	mmGetEmbeddingByUIDs.GetEmbeddingByUIDsMock.callArgs = append(mmGetEmbeddingByUIDs.GetEmbeddingByUIDsMock.callArgs, &mm_params)
+	mmGetEmbeddingByUIDs.GetEmbeddingByUIDsMock.mutex.Unlock()
+
+	for _, e := range mmGetEmbeddingByUIDs.GetEmbeddingByUIDsMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.ea1, e.results.err
+		}
+	}
+
+	if mmGetEmbeddingByUIDs.GetEmbeddingByUIDsMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetEmbeddingByUIDs.GetEmbeddingByUIDsMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetEmbeddingByUIDs.GetEmbeddingByUIDsMock.defaultExpectation.params
+		mm_want_ptrs := mmGetEmbeddingByUIDs.GetEmbeddingByUIDsMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryIMockGetEmbeddingByUIDsParams{ctx, embUIDs}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetEmbeddingByUIDs.t.Errorf("RepositoryIMock.GetEmbeddingByUIDs got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.embUIDs != nil && !minimock.Equal(*mm_want_ptrs.embUIDs, mm_got.embUIDs) {
+				mmGetEmbeddingByUIDs.t.Errorf("RepositoryIMock.GetEmbeddingByUIDs got unexpected parameter embUIDs, want: %#v, got: %#v%s\n", *mm_want_ptrs.embUIDs, mm_got.embUIDs, minimock.Diff(*mm_want_ptrs.embUIDs, mm_got.embUIDs))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetEmbeddingByUIDs.t.Errorf("RepositoryIMock.GetEmbeddingByUIDs got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetEmbeddingByUIDs.GetEmbeddingByUIDsMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetEmbeddingByUIDs.t.Fatal("No results are set for the RepositoryIMock.GetEmbeddingByUIDs")
+		}
+		return (*mm_results).ea1, (*mm_results).err
+	}
+	if mmGetEmbeddingByUIDs.funcGetEmbeddingByUIDs != nil {
+		return mmGetEmbeddingByUIDs.funcGetEmbeddingByUIDs(ctx, embUIDs)
+	}
+	mmGetEmbeddingByUIDs.t.Fatalf("Unexpected call to RepositoryIMock.GetEmbeddingByUIDs. %v %v", ctx, embUIDs)
+	return
+}
+
+// GetEmbeddingByUIDsAfterCounter returns a count of finished RepositoryIMock.GetEmbeddingByUIDs invocations
+func (mmGetEmbeddingByUIDs *RepositoryIMock) GetEmbeddingByUIDsAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetEmbeddingByUIDs.afterGetEmbeddingByUIDsCounter)
+}
+
+// GetEmbeddingByUIDsBeforeCounter returns a count of RepositoryIMock.GetEmbeddingByUIDs invocations
+func (mmGetEmbeddingByUIDs *RepositoryIMock) GetEmbeddingByUIDsBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetEmbeddingByUIDs.beforeGetEmbeddingByUIDsCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryIMock.GetEmbeddingByUIDs.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetEmbeddingByUIDs *mRepositoryIMockGetEmbeddingByUIDs) Calls() []*RepositoryIMockGetEmbeddingByUIDsParams {
+	mmGetEmbeddingByUIDs.mutex.RLock()
+
+	argCopy := make([]*RepositoryIMockGetEmbeddingByUIDsParams, len(mmGetEmbeddingByUIDs.callArgs))
+	copy(argCopy, mmGetEmbeddingByUIDs.callArgs)
+
+	mmGetEmbeddingByUIDs.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetEmbeddingByUIDsDone returns true if the count of the GetEmbeddingByUIDs invocations corresponds
+// the number of defined expectations
+func (m *RepositoryIMock) MinimockGetEmbeddingByUIDsDone() bool {
+	for _, e := range m.GetEmbeddingByUIDsMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetEmbeddingByUIDsMock.invocationsDone()
+}
+
+// MinimockGetEmbeddingByUIDsInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockGetEmbeddingByUIDsInspect() {
+	for _, e := range m.GetEmbeddingByUIDsMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryIMock.GetEmbeddingByUIDs with params: %#v", *e.params)
+		}
+	}
+
+	afterGetEmbeddingByUIDsCounter := mm_atomic.LoadUint64(&m.afterGetEmbeddingByUIDsCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetEmbeddingByUIDsMock.defaultExpectation != nil && afterGetEmbeddingByUIDsCounter < 1 {
+		if m.GetEmbeddingByUIDsMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to RepositoryIMock.GetEmbeddingByUIDs")
+		} else {
+			m.t.Errorf("Expected call to RepositoryIMock.GetEmbeddingByUIDs with params: %#v", *m.GetEmbeddingByUIDsMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetEmbeddingByUIDs != nil && afterGetEmbeddingByUIDsCounter < 1 {
+		m.t.Error("Expected call to RepositoryIMock.GetEmbeddingByUIDs")
+	}
+
+	if !m.GetEmbeddingByUIDsMock.invocationsDone() && afterGetEmbeddingByUIDsCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.GetEmbeddingByUIDs but found %d calls",
+			mm_atomic.LoadUint64(&m.GetEmbeddingByUIDsMock.expectedInvocations), afterGetEmbeddingByUIDsCounter)
+	}
+}
+
 type mRepositoryIMockGetIncompleteFile struct {
 	mock               *RepositoryIMock
 	defaultExpectation *RepositoryIMockGetIncompleteFileExpectation
@@ -7106,6 +7428,169 @@ func (m *RepositoryIMock) MinimockProcessKnowledgeBaseFilesInspect() {
 	}
 }
 
+type mRepositoryIMockTextChunkTableName struct {
+	mock               *RepositoryIMock
+	defaultExpectation *RepositoryIMockTextChunkTableNameExpectation
+	expectations       []*RepositoryIMockTextChunkTableNameExpectation
+
+	expectedInvocations uint64
+}
+
+// RepositoryIMockTextChunkTableNameExpectation specifies expectation struct of the RepositoryI.TextChunkTableName
+type RepositoryIMockTextChunkTableNameExpectation struct {
+	mock *RepositoryIMock
+
+	results *RepositoryIMockTextChunkTableNameResults
+	Counter uint64
+}
+
+// RepositoryIMockTextChunkTableNameResults contains results of the RepositoryI.TextChunkTableName
+type RepositoryIMockTextChunkTableNameResults struct {
+	s1 string
+}
+
+// Expect sets up expected params for RepositoryI.TextChunkTableName
+func (mmTextChunkTableName *mRepositoryIMockTextChunkTableName) Expect() *mRepositoryIMockTextChunkTableName {
+	if mmTextChunkTableName.mock.funcTextChunkTableName != nil {
+		mmTextChunkTableName.mock.t.Fatalf("RepositoryIMock.TextChunkTableName mock is already set by Set")
+	}
+
+	if mmTextChunkTableName.defaultExpectation == nil {
+		mmTextChunkTableName.defaultExpectation = &RepositoryIMockTextChunkTableNameExpectation{}
+	}
+
+	return mmTextChunkTableName
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.TextChunkTableName
+func (mmTextChunkTableName *mRepositoryIMockTextChunkTableName) Inspect(f func()) *mRepositoryIMockTextChunkTableName {
+	if mmTextChunkTableName.mock.inspectFuncTextChunkTableName != nil {
+		mmTextChunkTableName.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.TextChunkTableName")
+	}
+
+	mmTextChunkTableName.mock.inspectFuncTextChunkTableName = f
+
+	return mmTextChunkTableName
+}
+
+// Return sets up results that will be returned by RepositoryI.TextChunkTableName
+func (mmTextChunkTableName *mRepositoryIMockTextChunkTableName) Return(s1 string) *RepositoryIMock {
+	if mmTextChunkTableName.mock.funcTextChunkTableName != nil {
+		mmTextChunkTableName.mock.t.Fatalf("RepositoryIMock.TextChunkTableName mock is already set by Set")
+	}
+
+	if mmTextChunkTableName.defaultExpectation == nil {
+		mmTextChunkTableName.defaultExpectation = &RepositoryIMockTextChunkTableNameExpectation{mock: mmTextChunkTableName.mock}
+	}
+	mmTextChunkTableName.defaultExpectation.results = &RepositoryIMockTextChunkTableNameResults{s1}
+	return mmTextChunkTableName.mock
+}
+
+// Set uses given function f to mock the RepositoryI.TextChunkTableName method
+func (mmTextChunkTableName *mRepositoryIMockTextChunkTableName) Set(f func() (s1 string)) *RepositoryIMock {
+	if mmTextChunkTableName.defaultExpectation != nil {
+		mmTextChunkTableName.mock.t.Fatalf("Default expectation is already set for the RepositoryI.TextChunkTableName method")
+	}
+
+	if len(mmTextChunkTableName.expectations) > 0 {
+		mmTextChunkTableName.mock.t.Fatalf("Some expectations are already set for the RepositoryI.TextChunkTableName method")
+	}
+
+	mmTextChunkTableName.mock.funcTextChunkTableName = f
+	return mmTextChunkTableName.mock
+}
+
+// Times sets number of times RepositoryI.TextChunkTableName should be invoked
+func (mmTextChunkTableName *mRepositoryIMockTextChunkTableName) Times(n uint64) *mRepositoryIMockTextChunkTableName {
+	if n == 0 {
+		mmTextChunkTableName.mock.t.Fatalf("Times of RepositoryIMock.TextChunkTableName mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmTextChunkTableName.expectedInvocations, n)
+	return mmTextChunkTableName
+}
+
+func (mmTextChunkTableName *mRepositoryIMockTextChunkTableName) invocationsDone() bool {
+	if len(mmTextChunkTableName.expectations) == 0 && mmTextChunkTableName.defaultExpectation == nil && mmTextChunkTableName.mock.funcTextChunkTableName == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmTextChunkTableName.mock.afterTextChunkTableNameCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmTextChunkTableName.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// TextChunkTableName implements repository.RepositoryI
+func (mmTextChunkTableName *RepositoryIMock) TextChunkTableName() (s1 string) {
+	mm_atomic.AddUint64(&mmTextChunkTableName.beforeTextChunkTableNameCounter, 1)
+	defer mm_atomic.AddUint64(&mmTextChunkTableName.afterTextChunkTableNameCounter, 1)
+
+	if mmTextChunkTableName.inspectFuncTextChunkTableName != nil {
+		mmTextChunkTableName.inspectFuncTextChunkTableName()
+	}
+
+	if mmTextChunkTableName.TextChunkTableNameMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmTextChunkTableName.TextChunkTableNameMock.defaultExpectation.Counter, 1)
+
+		mm_results := mmTextChunkTableName.TextChunkTableNameMock.defaultExpectation.results
+		if mm_results == nil {
+			mmTextChunkTableName.t.Fatal("No results are set for the RepositoryIMock.TextChunkTableName")
+		}
+		return (*mm_results).s1
+	}
+	if mmTextChunkTableName.funcTextChunkTableName != nil {
+		return mmTextChunkTableName.funcTextChunkTableName()
+	}
+	mmTextChunkTableName.t.Fatalf("Unexpected call to RepositoryIMock.TextChunkTableName.")
+	return
+}
+
+// TextChunkTableNameAfterCounter returns a count of finished RepositoryIMock.TextChunkTableName invocations
+func (mmTextChunkTableName *RepositoryIMock) TextChunkTableNameAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmTextChunkTableName.afterTextChunkTableNameCounter)
+}
+
+// TextChunkTableNameBeforeCounter returns a count of RepositoryIMock.TextChunkTableName invocations
+func (mmTextChunkTableName *RepositoryIMock) TextChunkTableNameBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmTextChunkTableName.beforeTextChunkTableNameCounter)
+}
+
+// MinimockTextChunkTableNameDone returns true if the count of the TextChunkTableName invocations corresponds
+// the number of defined expectations
+func (m *RepositoryIMock) MinimockTextChunkTableNameDone() bool {
+	for _, e := range m.TextChunkTableNameMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.TextChunkTableNameMock.invocationsDone()
+}
+
+// MinimockTextChunkTableNameInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockTextChunkTableNameInspect() {
+	for _, e := range m.TextChunkTableNameMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Error("Expected call to RepositoryIMock.TextChunkTableName")
+		}
+	}
+
+	afterTextChunkTableNameCounter := mm_atomic.LoadUint64(&m.afterTextChunkTableNameCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.TextChunkTableNameMock.defaultExpectation != nil && afterTextChunkTableNameCounter < 1 {
+		m.t.Error("Expected call to RepositoryIMock.TextChunkTableName")
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcTextChunkTableName != nil && afterTextChunkTableNameCounter < 1 {
+		m.t.Error("Expected call to RepositoryIMock.TextChunkTableName")
+	}
+
+	if !m.TextChunkTableNameMock.invocationsDone() && afterTextChunkTableNameCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.TextChunkTableName but found %d calls",
+			mm_atomic.LoadUint64(&m.TextChunkTableNameMock.expectedInvocations), afterTextChunkTableNameCounter)
+	}
+}
+
 type mRepositoryIMockUpdateKnowledgeBase struct {
 	mock               *RepositoryIMock
 	defaultExpectation *RepositoryIMockUpdateKnowledgeBaseExpectation
@@ -8442,6 +8927,8 @@ func (m *RepositoryIMock) MinimockFinish() {
 
 			m.MinimockGetConvertedFileByFileUIDInspect()
 
+			m.MinimockGetEmbeddingByUIDsInspect()
+
 			m.MinimockGetIncompleteFileInspect()
 
 			m.MinimockGetKnowledgeBaseByOwnerAndIDInspect()
@@ -8457,6 +8944,8 @@ func (m *RepositoryIMock) MinimockFinish() {
 			m.MinimockListKnowledgeBasesInspect()
 
 			m.MinimockProcessKnowledgeBaseFilesInspect()
+
+			m.MinimockTextChunkTableNameInspect()
 
 			m.MinimockUpdateKnowledgeBaseInspect()
 
@@ -8503,6 +8992,7 @@ func (m *RepositoryIMock) minimockDone() bool {
 		m.MinimockDeleteKnowledgeBaseFileDone() &&
 		m.MinimockDeleteRepositoryTagDone() &&
 		m.MinimockGetConvertedFileByFileUIDDone() &&
+		m.MinimockGetEmbeddingByUIDsDone() &&
 		m.MinimockGetIncompleteFileDone() &&
 		m.MinimockGetKnowledgeBaseByOwnerAndIDDone() &&
 		m.MinimockGetRepositoryTagDone() &&
@@ -8511,6 +9001,7 @@ func (m *RepositoryIMock) minimockDone() bool {
 		m.MinimockListKnowledgeBaseFilesDone() &&
 		m.MinimockListKnowledgeBasesDone() &&
 		m.MinimockProcessKnowledgeBaseFilesDone() &&
+		m.MinimockTextChunkTableNameDone() &&
 		m.MinimockUpdateKnowledgeBaseDone() &&
 		m.MinimockUpdateKnowledgeBaseFileDone() &&
 		m.MinimockUpsertEmbeddingsDone() &&
