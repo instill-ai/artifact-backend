@@ -645,6 +645,10 @@ type chunk = struct {
 func (wp *fileToEmbWorkerPool) saveChunks(ctx context.Context, kbUID string, sourceTable string, sourceUID uuid.UUID, chunks []chunk) error {
 	logger, _ := logger.GetZapLogger(ctx)
 	textChunks := make([]*repository.TextChunk, len(chunks))
+
+	// turn kbuid to uuid no must parse
+	kbUIDuuid, _ := uuid.Parse(kbUID)
+
 	for i, c := range chunks {
 		textChunks[i] = &repository.TextChunk{
 			SourceUID:   sourceUID,
@@ -655,6 +659,7 @@ func (wp *fileToEmbWorkerPool) saveChunks(ctx context.Context, kbUID string, sou
 			Tokens:      c.Tokens,
 			Retrievable: true,
 			InOrder:     i,
+			KbUID:       kbUIDuuid,
 		}
 	}
 	_, err := wp.svc.Repository.DeleteAndCreateChunks(ctx, sourceTable, sourceUID, textChunks,
