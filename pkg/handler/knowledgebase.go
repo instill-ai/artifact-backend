@@ -104,9 +104,13 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 			OwnerName:           dbData.Owner,
 			CreateTime:          dbData.CreateTime.String(),
 			UpdateTime:          dbData.UpdateTime.String(),
-			ConvertingPipelines: []string{"leo/fake-pipeline-1", "leo/fake-pipeline-2"},
-			SplittingPipelines:  []string{"leo/fake-pipeline-3", "leo/fake-pipeline-4"},
-			EmbeddingPipelines:  []string{"leo/fake-pipeline-5", "leo/fake-pipeline-6"},
+			ConvertingPipelines: []string{"preset/indexing-convert-pdf"},
+			SplittingPipelines:  []string{"preset/indexing-split-text", "preset/indexing-split-markdown"},
+			EmbeddingPipelines:  []string{"preset/indexing-embed"},
+			DownstreamApps:      []string{},
+			TotalFiles:          0,
+			TotalTokens:         0,
+			UsedStorage:         0,
 		},
 	}, nil
 }
@@ -140,6 +144,21 @@ func (ph *PublicHandler) ListKnowledgeBases(ctx context.Context, req *artifactpb
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
 
+	kbUIDuuid := make([]uuid.UUID, len(dbData))
+	for i, kb := range dbData {
+		kbUIDuuid[i] = kb.UID
+	}
+
+	fileCounts, err := ph.service.Repository.GetCountFilesByListKnowledgeBaseUID(ctx, kbUIDuuid)
+	if err != nil {
+		log.Error("failed to get file counts", zap.Error(err))
+		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
+	}
+	tokenCounts, err := ph.service.Repository.GetTotalTokensByListKBUIDs(ctx, kbUIDuuid)
+	if err != nil {
+		log.Error("failed to get token counts", zap.Error(err))
+		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
+	}
 	kbs := make([]*artifactpb.KnowledgeBase, len(dbData))
 	for i, kb := range dbData {
 		kbs[i] = &artifactpb.KnowledgeBase{
@@ -150,10 +169,14 @@ func (ph *PublicHandler) ListKnowledgeBases(ctx context.Context, req *artifactpb
 			CreateTime:          kb.CreateTime.String(),
 			UpdateTime:          kb.UpdateTime.String(),
 			OwnerName:           kb.Owner,
-			ConvertingPipelines: []string{"leo/fake-pipeline-1", "leo/fake-pipeline-2"},
-			SplittingPipelines:  []string{"leo/fake-pipeline-3", "leo/fake-pipeline-4"},
-			EmbeddingPipelines:  []string{"leo/fake-pipeline-5", "leo/fake-pipeline-6"},
-			// DownstreamApps: 	[]string{"leo/fake-app-1", "leo/fake-app-2"},
+			ConvertingPipelines: []string{"preset/indexing-convert-pdf"},
+			SplittingPipelines:  []string{"preset/indexing-split-text", "preset/indexing-split-markdown"},
+			EmbeddingPipelines:  []string{"preset/indexing-embed"},
+			DownstreamApps:      []string{},
+			TotalFiles:          uint32(fileCounts[kb.UID]),
+			TotalTokens:         uint32(tokenCounts[kb.UID]),
+			// TODO: get used storage
+			UsedStorage:         0,
 		}
 	}
 	return &artifactpb.ListKnowledgeBasesResponse{
@@ -187,7 +210,7 @@ func (ph *PublicHandler) UpdateKnowledgeBase(ctx context.Context, req *artifactp
 	// TODO: ACL - check user's permission to update knowledge base
 	_ = authUID
 	// check if knowledge base exists
-	dbData, err := ph.service.Repository.UpdateKnowledgeBase(
+	kb, err := ph.service.Repository.UpdateKnowledgeBase(
 		ctx,
 		ownerUUID,
 		repository.KnowledgeBase{
@@ -202,20 +225,34 @@ func (ph *PublicHandler) UpdateKnowledgeBase(ctx context.Context, req *artifactp
 		log.Error("failed to update knowledge base", zap.Error(err))
 		return nil, err
 	}
+	fileCounts, err := ph.service.Repository.GetCountFilesByListKnowledgeBaseUID(ctx, []uuid.UUID{kb.UID})
+	if err != nil {
+		log.Error("failed to get file counts", zap.Error(err))
+		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
+	}
+	tokenCounts, err := ph.service.Repository.GetTotalTokensByListKBUIDs(ctx, []uuid.UUID{kb.UID})
+	if err != nil {
+		log.Error("failed to get token counts", zap.Error(err))
+		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
+	}
 	// populate response
 	return &artifactpb.UpdateKnowledgeBaseResponse{
 		KnowledgeBase: &artifactpb.KnowledgeBase{
-			Name:                dbData.Name,
-			KbId:                dbData.KbID,
-			Description:         dbData.Description,
-			Tags:                dbData.Tags,
-			CreateTime:          dbData.CreateTime.String(),
-			UpdateTime:          dbData.UpdateTime.String(),
-			OwnerName:           dbData.Owner,
-			ConvertingPipelines: []string{"leo/fake-pipeline-1", "leo/fake-pipeline-2"},
-			SplittingPipelines:  []string{"leo/fake-pipeline-3", "leo/fake-pipeline-4"},
-			EmbeddingPipelines:  []string{"leo/fake-pipeline-5", "leo/fake-pipeline-6"},
-			// DownstreamApps: 	[]string{"leo/fake-app-1", "leo/fake-app-2"},
+			Name:                kb.Name,
+			KbId:                kb.KbID,
+			Description:         kb.Description,
+			Tags:                kb.Tags,
+			CreateTime:          kb.CreateTime.String(),
+			UpdateTime:          kb.UpdateTime.String(),
+			OwnerName:           kb.Owner,
+			ConvertingPipelines: []string{"preset/indexing-convert-pdf"},
+			SplittingPipelines:  []string{"preset/indexing-split-text", "preset/indexing-split-markdown"},
+			EmbeddingPipelines:  []string{"preset/indexing-embed"},
+			DownstreamApps:      []string{},
+			TotalFiles:          uint32(fileCounts[kb.UID]),
+			TotalTokens:         uint32(tokenCounts[kb.UID]),
+			// TODO: get used storage
+			UsedStorage:         0,
 		},
 	}, nil
 }
@@ -244,21 +281,22 @@ func (ph *PublicHandler) DeleteKnowledgeBase(ctx context.Context, req *artifactp
 
 		return nil, err
 	}
-	// populate response
 
 	return &artifactpb.DeleteKnowledgeBaseResponse{
 		KnowledgeBase: &artifactpb.KnowledgeBase{
-			Name:                deletedKb.Name,
-			KbId:                deletedKb.KbID,
-			Description:         deletedKb.Description,
-			Tags:                deletedKb.Tags,
-			CreateTime:          deletedKb.CreateTime.String(),
-			UpdateTime:          deletedKb.UpdateTime.String(),
-			OwnerName:           deletedKb.Owner,
-			ConvertingPipelines: []string{"leo/fake-pipeline-1", "leo/fake-pipeline-2"},
-			SplittingPipelines:  []string{"leo/fake-pipeline-3", "leo/fake-pipeline-4"},
-			EmbeddingPipelines:  []string{"leo/fake-pipeline-5", "leo/fake-pipeline-6"},
-			// DownstreamApps: 	[]string{"leo/fake-app-1", "leo/fake-app-2"}
+			Name:        deletedKb.Name,
+			KbId:        deletedKb.KbID,
+			Description: deletedKb.Description,
+			Tags:        deletedKb.Tags,
+			CreateTime:  deletedKb.CreateTime.String(),
+			UpdateTime:  deletedKb.UpdateTime.String(),
+			OwnerName:   deletedKb.Owner,
+			ConvertingPipelines: []string{},
+			EmbeddingPipelines: []string{},
+			DownstreamApps:     []string{},
+			TotalFiles:         0,
+			TotalTokens:        0,
+			UsedStorage:        0,
 		},
 	}, nil
 }

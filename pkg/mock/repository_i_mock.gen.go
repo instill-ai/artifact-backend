@@ -104,6 +104,12 @@ type RepositoryIMock struct {
 	beforeGetConvertedFileByFileUIDCounter uint64
 	GetConvertedFileByFileUIDMock          mRepositoryIMockGetConvertedFileByFileUID
 
+	funcGetCountFilesByListKnowledgeBaseUID          func(ctx context.Context, kbUIDs []uuid.UUID) (m1 map[uuid.UUID]int64, err error)
+	inspectFuncGetCountFilesByListKnowledgeBaseUID   func(ctx context.Context, kbUIDs []uuid.UUID)
+	afterGetCountFilesByListKnowledgeBaseUIDCounter  uint64
+	beforeGetCountFilesByListKnowledgeBaseUIDCounter uint64
+	GetCountFilesByListKnowledgeBaseUIDMock          mRepositoryIMockGetCountFilesByListKnowledgeBaseUID
+
 	funcGetEmbeddingByUIDs          func(ctx context.Context, embUIDs []uuid.UUID) (ea1 []mm_repository.Embedding, err error)
 	inspectFuncGetEmbeddingByUIDs   func(ctx context.Context, embUIDs []uuid.UUID)
 	afterGetEmbeddingByUIDsCounter  uint64
@@ -133,6 +139,12 @@ type RepositoryIMock struct {
 	afterGetTextChunksBySourceCounter  uint64
 	beforeGetTextChunksBySourceCounter uint64
 	GetTextChunksBySourceMock          mRepositoryIMockGetTextChunksBySource
+
+	funcGetTotalTokensByListKBUIDs          func(ctx context.Context, kbUIDs []uuid.UUID) (m1 map[uuid.UUID]int, err error)
+	inspectFuncGetTotalTokensByListKBUIDs   func(ctx context.Context, kbUIDs []uuid.UUID)
+	afterGetTotalTokensByListKBUIDsCounter  uint64
+	beforeGetTotalTokensByListKBUIDsCounter uint64
+	GetTotalTokensByListKBUIDsMock          mRepositoryIMockGetTotalTokensByListKBUIDs
 
 	funcKnowledgeBaseFileTableName          func() (s1 string)
 	inspectFuncKnowledgeBaseFileTableName   func()
@@ -238,6 +250,9 @@ func NewRepositoryIMock(t minimock.Tester) *RepositoryIMock {
 	m.GetConvertedFileByFileUIDMock = mRepositoryIMockGetConvertedFileByFileUID{mock: m}
 	m.GetConvertedFileByFileUIDMock.callArgs = []*RepositoryIMockGetConvertedFileByFileUIDParams{}
 
+	m.GetCountFilesByListKnowledgeBaseUIDMock = mRepositoryIMockGetCountFilesByListKnowledgeBaseUID{mock: m}
+	m.GetCountFilesByListKnowledgeBaseUIDMock.callArgs = []*RepositoryIMockGetCountFilesByListKnowledgeBaseUIDParams{}
+
 	m.GetEmbeddingByUIDsMock = mRepositoryIMockGetEmbeddingByUIDs{mock: m}
 	m.GetEmbeddingByUIDsMock.callArgs = []*RepositoryIMockGetEmbeddingByUIDsParams{}
 
@@ -252,6 +267,9 @@ func NewRepositoryIMock(t minimock.Tester) *RepositoryIMock {
 
 	m.GetTextChunksBySourceMock = mRepositoryIMockGetTextChunksBySource{mock: m}
 	m.GetTextChunksBySourceMock.callArgs = []*RepositoryIMockGetTextChunksBySourceParams{}
+
+	m.GetTotalTokensByListKBUIDsMock = mRepositoryIMockGetTotalTokensByListKBUIDs{mock: m}
+	m.GetTotalTokensByListKBUIDsMock.callArgs = []*RepositoryIMockGetTotalTokensByListKBUIDsParams{}
 
 	m.KnowledgeBaseFileTableNameMock = mRepositoryIMockKnowledgeBaseFileTableName{mock: m}
 
@@ -4656,6 +4674,311 @@ func (m *RepositoryIMock) MinimockGetConvertedFileByFileUIDInspect() {
 	}
 }
 
+type mRepositoryIMockGetCountFilesByListKnowledgeBaseUID struct {
+	mock               *RepositoryIMock
+	defaultExpectation *RepositoryIMockGetCountFilesByListKnowledgeBaseUIDExpectation
+	expectations       []*RepositoryIMockGetCountFilesByListKnowledgeBaseUIDExpectation
+
+	callArgs []*RepositoryIMockGetCountFilesByListKnowledgeBaseUIDParams
+	mutex    sync.RWMutex
+
+	expectedInvocations uint64
+}
+
+// RepositoryIMockGetCountFilesByListKnowledgeBaseUIDExpectation specifies expectation struct of the RepositoryI.GetCountFilesByListKnowledgeBaseUID
+type RepositoryIMockGetCountFilesByListKnowledgeBaseUIDExpectation struct {
+	mock      *RepositoryIMock
+	params    *RepositoryIMockGetCountFilesByListKnowledgeBaseUIDParams
+	paramPtrs *RepositoryIMockGetCountFilesByListKnowledgeBaseUIDParamPtrs
+	results   *RepositoryIMockGetCountFilesByListKnowledgeBaseUIDResults
+	Counter   uint64
+}
+
+// RepositoryIMockGetCountFilesByListKnowledgeBaseUIDParams contains parameters of the RepositoryI.GetCountFilesByListKnowledgeBaseUID
+type RepositoryIMockGetCountFilesByListKnowledgeBaseUIDParams struct {
+	ctx    context.Context
+	kbUIDs []uuid.UUID
+}
+
+// RepositoryIMockGetCountFilesByListKnowledgeBaseUIDParamPtrs contains pointers to parameters of the RepositoryI.GetCountFilesByListKnowledgeBaseUID
+type RepositoryIMockGetCountFilesByListKnowledgeBaseUIDParamPtrs struct {
+	ctx    *context.Context
+	kbUIDs *[]uuid.UUID
+}
+
+// RepositoryIMockGetCountFilesByListKnowledgeBaseUIDResults contains results of the RepositoryI.GetCountFilesByListKnowledgeBaseUID
+type RepositoryIMockGetCountFilesByListKnowledgeBaseUIDResults struct {
+	m1  map[uuid.UUID]int64
+	err error
+}
+
+// Expect sets up expected params for RepositoryI.GetCountFilesByListKnowledgeBaseUID
+func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryIMockGetCountFilesByListKnowledgeBaseUID) Expect(ctx context.Context, kbUIDs []uuid.UUID) *mRepositoryIMockGetCountFilesByListKnowledgeBaseUID {
+	if mmGetCountFilesByListKnowledgeBaseUID.mock.funcGetCountFilesByListKnowledgeBaseUID != nil {
+		mmGetCountFilesByListKnowledgeBaseUID.mock.t.Fatalf("RepositoryIMock.GetCountFilesByListKnowledgeBaseUID mock is already set by Set")
+	}
+
+	if mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation == nil {
+		mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation = &RepositoryIMockGetCountFilesByListKnowledgeBaseUIDExpectation{}
+	}
+
+	if mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation.paramPtrs != nil {
+		mmGetCountFilesByListKnowledgeBaseUID.mock.t.Fatalf("RepositoryIMock.GetCountFilesByListKnowledgeBaseUID mock is already set by ExpectParams functions")
+	}
+
+	mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation.params = &RepositoryIMockGetCountFilesByListKnowledgeBaseUIDParams{ctx, kbUIDs}
+	for _, e := range mmGetCountFilesByListKnowledgeBaseUID.expectations {
+		if minimock.Equal(e.params, mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation.params) {
+			mmGetCountFilesByListKnowledgeBaseUID.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation.params)
+		}
+	}
+
+	return mmGetCountFilesByListKnowledgeBaseUID
+}
+
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.GetCountFilesByListKnowledgeBaseUID
+func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryIMockGetCountFilesByListKnowledgeBaseUID) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockGetCountFilesByListKnowledgeBaseUID {
+	if mmGetCountFilesByListKnowledgeBaseUID.mock.funcGetCountFilesByListKnowledgeBaseUID != nil {
+		mmGetCountFilesByListKnowledgeBaseUID.mock.t.Fatalf("RepositoryIMock.GetCountFilesByListKnowledgeBaseUID mock is already set by Set")
+	}
+
+	if mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation == nil {
+		mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation = &RepositoryIMockGetCountFilesByListKnowledgeBaseUIDExpectation{}
+	}
+
+	if mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation.params != nil {
+		mmGetCountFilesByListKnowledgeBaseUID.mock.t.Fatalf("RepositoryIMock.GetCountFilesByListKnowledgeBaseUID mock is already set by Expect")
+	}
+
+	if mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation.paramPtrs == nil {
+		mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation.paramPtrs = &RepositoryIMockGetCountFilesByListKnowledgeBaseUIDParamPtrs{}
+	}
+	mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation.paramPtrs.ctx = &ctx
+
+	return mmGetCountFilesByListKnowledgeBaseUID
+}
+
+// ExpectKbUIDsParam2 sets up expected param kbUIDs for RepositoryI.GetCountFilesByListKnowledgeBaseUID
+func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryIMockGetCountFilesByListKnowledgeBaseUID) ExpectKbUIDsParam2(kbUIDs []uuid.UUID) *mRepositoryIMockGetCountFilesByListKnowledgeBaseUID {
+	if mmGetCountFilesByListKnowledgeBaseUID.mock.funcGetCountFilesByListKnowledgeBaseUID != nil {
+		mmGetCountFilesByListKnowledgeBaseUID.mock.t.Fatalf("RepositoryIMock.GetCountFilesByListKnowledgeBaseUID mock is already set by Set")
+	}
+
+	if mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation == nil {
+		mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation = &RepositoryIMockGetCountFilesByListKnowledgeBaseUIDExpectation{}
+	}
+
+	if mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation.params != nil {
+		mmGetCountFilesByListKnowledgeBaseUID.mock.t.Fatalf("RepositoryIMock.GetCountFilesByListKnowledgeBaseUID mock is already set by Expect")
+	}
+
+	if mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation.paramPtrs == nil {
+		mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation.paramPtrs = &RepositoryIMockGetCountFilesByListKnowledgeBaseUIDParamPtrs{}
+	}
+	mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation.paramPtrs.kbUIDs = &kbUIDs
+
+	return mmGetCountFilesByListKnowledgeBaseUID
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.GetCountFilesByListKnowledgeBaseUID
+func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryIMockGetCountFilesByListKnowledgeBaseUID) Inspect(f func(ctx context.Context, kbUIDs []uuid.UUID)) *mRepositoryIMockGetCountFilesByListKnowledgeBaseUID {
+	if mmGetCountFilesByListKnowledgeBaseUID.mock.inspectFuncGetCountFilesByListKnowledgeBaseUID != nil {
+		mmGetCountFilesByListKnowledgeBaseUID.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.GetCountFilesByListKnowledgeBaseUID")
+	}
+
+	mmGetCountFilesByListKnowledgeBaseUID.mock.inspectFuncGetCountFilesByListKnowledgeBaseUID = f
+
+	return mmGetCountFilesByListKnowledgeBaseUID
+}
+
+// Return sets up results that will be returned by RepositoryI.GetCountFilesByListKnowledgeBaseUID
+func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryIMockGetCountFilesByListKnowledgeBaseUID) Return(m1 map[uuid.UUID]int64, err error) *RepositoryIMock {
+	if mmGetCountFilesByListKnowledgeBaseUID.mock.funcGetCountFilesByListKnowledgeBaseUID != nil {
+		mmGetCountFilesByListKnowledgeBaseUID.mock.t.Fatalf("RepositoryIMock.GetCountFilesByListKnowledgeBaseUID mock is already set by Set")
+	}
+
+	if mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation == nil {
+		mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation = &RepositoryIMockGetCountFilesByListKnowledgeBaseUIDExpectation{mock: mmGetCountFilesByListKnowledgeBaseUID.mock}
+	}
+	mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation.results = &RepositoryIMockGetCountFilesByListKnowledgeBaseUIDResults{m1, err}
+	return mmGetCountFilesByListKnowledgeBaseUID.mock
+}
+
+// Set uses given function f to mock the RepositoryI.GetCountFilesByListKnowledgeBaseUID method
+func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryIMockGetCountFilesByListKnowledgeBaseUID) Set(f func(ctx context.Context, kbUIDs []uuid.UUID) (m1 map[uuid.UUID]int64, err error)) *RepositoryIMock {
+	if mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation != nil {
+		mmGetCountFilesByListKnowledgeBaseUID.mock.t.Fatalf("Default expectation is already set for the RepositoryI.GetCountFilesByListKnowledgeBaseUID method")
+	}
+
+	if len(mmGetCountFilesByListKnowledgeBaseUID.expectations) > 0 {
+		mmGetCountFilesByListKnowledgeBaseUID.mock.t.Fatalf("Some expectations are already set for the RepositoryI.GetCountFilesByListKnowledgeBaseUID method")
+	}
+
+	mmGetCountFilesByListKnowledgeBaseUID.mock.funcGetCountFilesByListKnowledgeBaseUID = f
+	return mmGetCountFilesByListKnowledgeBaseUID.mock
+}
+
+// When sets expectation for the RepositoryI.GetCountFilesByListKnowledgeBaseUID which will trigger the result defined by the following
+// Then helper
+func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryIMockGetCountFilesByListKnowledgeBaseUID) When(ctx context.Context, kbUIDs []uuid.UUID) *RepositoryIMockGetCountFilesByListKnowledgeBaseUIDExpectation {
+	if mmGetCountFilesByListKnowledgeBaseUID.mock.funcGetCountFilesByListKnowledgeBaseUID != nil {
+		mmGetCountFilesByListKnowledgeBaseUID.mock.t.Fatalf("RepositoryIMock.GetCountFilesByListKnowledgeBaseUID mock is already set by Set")
+	}
+
+	expectation := &RepositoryIMockGetCountFilesByListKnowledgeBaseUIDExpectation{
+		mock:   mmGetCountFilesByListKnowledgeBaseUID.mock,
+		params: &RepositoryIMockGetCountFilesByListKnowledgeBaseUIDParams{ctx, kbUIDs},
+	}
+	mmGetCountFilesByListKnowledgeBaseUID.expectations = append(mmGetCountFilesByListKnowledgeBaseUID.expectations, expectation)
+	return expectation
+}
+
+// Then sets up RepositoryI.GetCountFilesByListKnowledgeBaseUID return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockGetCountFilesByListKnowledgeBaseUIDExpectation) Then(m1 map[uuid.UUID]int64, err error) *RepositoryIMock {
+	e.results = &RepositoryIMockGetCountFilesByListKnowledgeBaseUIDResults{m1, err}
+	return e.mock
+}
+
+// Times sets number of times RepositoryI.GetCountFilesByListKnowledgeBaseUID should be invoked
+func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryIMockGetCountFilesByListKnowledgeBaseUID) Times(n uint64) *mRepositoryIMockGetCountFilesByListKnowledgeBaseUID {
+	if n == 0 {
+		mmGetCountFilesByListKnowledgeBaseUID.mock.t.Fatalf("Times of RepositoryIMock.GetCountFilesByListKnowledgeBaseUID mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetCountFilesByListKnowledgeBaseUID.expectedInvocations, n)
+	return mmGetCountFilesByListKnowledgeBaseUID
+}
+
+func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryIMockGetCountFilesByListKnowledgeBaseUID) invocationsDone() bool {
+	if len(mmGetCountFilesByListKnowledgeBaseUID.expectations) == 0 && mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation == nil && mmGetCountFilesByListKnowledgeBaseUID.mock.funcGetCountFilesByListKnowledgeBaseUID == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetCountFilesByListKnowledgeBaseUID.mock.afterGetCountFilesByListKnowledgeBaseUIDCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetCountFilesByListKnowledgeBaseUID.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetCountFilesByListKnowledgeBaseUID implements repository.RepositoryI
+func (mmGetCountFilesByListKnowledgeBaseUID *RepositoryIMock) GetCountFilesByListKnowledgeBaseUID(ctx context.Context, kbUIDs []uuid.UUID) (m1 map[uuid.UUID]int64, err error) {
+	mm_atomic.AddUint64(&mmGetCountFilesByListKnowledgeBaseUID.beforeGetCountFilesByListKnowledgeBaseUIDCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetCountFilesByListKnowledgeBaseUID.afterGetCountFilesByListKnowledgeBaseUIDCounter, 1)
+
+	if mmGetCountFilesByListKnowledgeBaseUID.inspectFuncGetCountFilesByListKnowledgeBaseUID != nil {
+		mmGetCountFilesByListKnowledgeBaseUID.inspectFuncGetCountFilesByListKnowledgeBaseUID(ctx, kbUIDs)
+	}
+
+	mm_params := RepositoryIMockGetCountFilesByListKnowledgeBaseUIDParams{ctx, kbUIDs}
+
+	// Record call args
+	mmGetCountFilesByListKnowledgeBaseUID.GetCountFilesByListKnowledgeBaseUIDMock.mutex.Lock()
+	mmGetCountFilesByListKnowledgeBaseUID.GetCountFilesByListKnowledgeBaseUIDMock.callArgs = append(mmGetCountFilesByListKnowledgeBaseUID.GetCountFilesByListKnowledgeBaseUIDMock.callArgs, &mm_params)
+	mmGetCountFilesByListKnowledgeBaseUID.GetCountFilesByListKnowledgeBaseUIDMock.mutex.Unlock()
+
+	for _, e := range mmGetCountFilesByListKnowledgeBaseUID.GetCountFilesByListKnowledgeBaseUIDMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.m1, e.results.err
+		}
+	}
+
+	if mmGetCountFilesByListKnowledgeBaseUID.GetCountFilesByListKnowledgeBaseUIDMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetCountFilesByListKnowledgeBaseUID.GetCountFilesByListKnowledgeBaseUIDMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetCountFilesByListKnowledgeBaseUID.GetCountFilesByListKnowledgeBaseUIDMock.defaultExpectation.params
+		mm_want_ptrs := mmGetCountFilesByListKnowledgeBaseUID.GetCountFilesByListKnowledgeBaseUIDMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryIMockGetCountFilesByListKnowledgeBaseUIDParams{ctx, kbUIDs}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetCountFilesByListKnowledgeBaseUID.t.Errorf("RepositoryIMock.GetCountFilesByListKnowledgeBaseUID got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.kbUIDs != nil && !minimock.Equal(*mm_want_ptrs.kbUIDs, mm_got.kbUIDs) {
+				mmGetCountFilesByListKnowledgeBaseUID.t.Errorf("RepositoryIMock.GetCountFilesByListKnowledgeBaseUID got unexpected parameter kbUIDs, want: %#v, got: %#v%s\n", *mm_want_ptrs.kbUIDs, mm_got.kbUIDs, minimock.Diff(*mm_want_ptrs.kbUIDs, mm_got.kbUIDs))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetCountFilesByListKnowledgeBaseUID.t.Errorf("RepositoryIMock.GetCountFilesByListKnowledgeBaseUID got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetCountFilesByListKnowledgeBaseUID.GetCountFilesByListKnowledgeBaseUIDMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetCountFilesByListKnowledgeBaseUID.t.Fatal("No results are set for the RepositoryIMock.GetCountFilesByListKnowledgeBaseUID")
+		}
+		return (*mm_results).m1, (*mm_results).err
+	}
+	if mmGetCountFilesByListKnowledgeBaseUID.funcGetCountFilesByListKnowledgeBaseUID != nil {
+		return mmGetCountFilesByListKnowledgeBaseUID.funcGetCountFilesByListKnowledgeBaseUID(ctx, kbUIDs)
+	}
+	mmGetCountFilesByListKnowledgeBaseUID.t.Fatalf("Unexpected call to RepositoryIMock.GetCountFilesByListKnowledgeBaseUID. %v %v", ctx, kbUIDs)
+	return
+}
+
+// GetCountFilesByListKnowledgeBaseUIDAfterCounter returns a count of finished RepositoryIMock.GetCountFilesByListKnowledgeBaseUID invocations
+func (mmGetCountFilesByListKnowledgeBaseUID *RepositoryIMock) GetCountFilesByListKnowledgeBaseUIDAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetCountFilesByListKnowledgeBaseUID.afterGetCountFilesByListKnowledgeBaseUIDCounter)
+}
+
+// GetCountFilesByListKnowledgeBaseUIDBeforeCounter returns a count of RepositoryIMock.GetCountFilesByListKnowledgeBaseUID invocations
+func (mmGetCountFilesByListKnowledgeBaseUID *RepositoryIMock) GetCountFilesByListKnowledgeBaseUIDBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetCountFilesByListKnowledgeBaseUID.beforeGetCountFilesByListKnowledgeBaseUIDCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryIMock.GetCountFilesByListKnowledgeBaseUID.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryIMockGetCountFilesByListKnowledgeBaseUID) Calls() []*RepositoryIMockGetCountFilesByListKnowledgeBaseUIDParams {
+	mmGetCountFilesByListKnowledgeBaseUID.mutex.RLock()
+
+	argCopy := make([]*RepositoryIMockGetCountFilesByListKnowledgeBaseUIDParams, len(mmGetCountFilesByListKnowledgeBaseUID.callArgs))
+	copy(argCopy, mmGetCountFilesByListKnowledgeBaseUID.callArgs)
+
+	mmGetCountFilesByListKnowledgeBaseUID.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetCountFilesByListKnowledgeBaseUIDDone returns true if the count of the GetCountFilesByListKnowledgeBaseUID invocations corresponds
+// the number of defined expectations
+func (m *RepositoryIMock) MinimockGetCountFilesByListKnowledgeBaseUIDDone() bool {
+	for _, e := range m.GetCountFilesByListKnowledgeBaseUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetCountFilesByListKnowledgeBaseUIDMock.invocationsDone()
+}
+
+// MinimockGetCountFilesByListKnowledgeBaseUIDInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockGetCountFilesByListKnowledgeBaseUIDInspect() {
+	for _, e := range m.GetCountFilesByListKnowledgeBaseUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryIMock.GetCountFilesByListKnowledgeBaseUID with params: %#v", *e.params)
+		}
+	}
+
+	afterGetCountFilesByListKnowledgeBaseUIDCounter := mm_atomic.LoadUint64(&m.afterGetCountFilesByListKnowledgeBaseUIDCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetCountFilesByListKnowledgeBaseUIDMock.defaultExpectation != nil && afterGetCountFilesByListKnowledgeBaseUIDCounter < 1 {
+		if m.GetCountFilesByListKnowledgeBaseUIDMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to RepositoryIMock.GetCountFilesByListKnowledgeBaseUID")
+		} else {
+			m.t.Errorf("Expected call to RepositoryIMock.GetCountFilesByListKnowledgeBaseUID with params: %#v", *m.GetCountFilesByListKnowledgeBaseUIDMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetCountFilesByListKnowledgeBaseUID != nil && afterGetCountFilesByListKnowledgeBaseUIDCounter < 1 {
+		m.t.Error("Expected call to RepositoryIMock.GetCountFilesByListKnowledgeBaseUID")
+	}
+
+	if !m.GetCountFilesByListKnowledgeBaseUIDMock.invocationsDone() && afterGetCountFilesByListKnowledgeBaseUIDCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.GetCountFilesByListKnowledgeBaseUID but found %d calls",
+			mm_atomic.LoadUint64(&m.GetCountFilesByListKnowledgeBaseUIDMock.expectedInvocations), afterGetCountFilesByListKnowledgeBaseUIDCounter)
+	}
+}
+
 type mRepositoryIMockGetEmbeddingByUIDs struct {
 	mock               *RepositoryIMock
 	defaultExpectation *RepositoryIMockGetEmbeddingByUIDsExpectation
@@ -6205,6 +6528,311 @@ func (m *RepositoryIMock) MinimockGetTextChunksBySourceInspect() {
 	if !m.GetTextChunksBySourceMock.invocationsDone() && afterGetTextChunksBySourceCounter > 0 {
 		m.t.Errorf("Expected %d calls to RepositoryIMock.GetTextChunksBySource but found %d calls",
 			mm_atomic.LoadUint64(&m.GetTextChunksBySourceMock.expectedInvocations), afterGetTextChunksBySourceCounter)
+	}
+}
+
+type mRepositoryIMockGetTotalTokensByListKBUIDs struct {
+	mock               *RepositoryIMock
+	defaultExpectation *RepositoryIMockGetTotalTokensByListKBUIDsExpectation
+	expectations       []*RepositoryIMockGetTotalTokensByListKBUIDsExpectation
+
+	callArgs []*RepositoryIMockGetTotalTokensByListKBUIDsParams
+	mutex    sync.RWMutex
+
+	expectedInvocations uint64
+}
+
+// RepositoryIMockGetTotalTokensByListKBUIDsExpectation specifies expectation struct of the RepositoryI.GetTotalTokensByListKBUIDs
+type RepositoryIMockGetTotalTokensByListKBUIDsExpectation struct {
+	mock      *RepositoryIMock
+	params    *RepositoryIMockGetTotalTokensByListKBUIDsParams
+	paramPtrs *RepositoryIMockGetTotalTokensByListKBUIDsParamPtrs
+	results   *RepositoryIMockGetTotalTokensByListKBUIDsResults
+	Counter   uint64
+}
+
+// RepositoryIMockGetTotalTokensByListKBUIDsParams contains parameters of the RepositoryI.GetTotalTokensByListKBUIDs
+type RepositoryIMockGetTotalTokensByListKBUIDsParams struct {
+	ctx    context.Context
+	kbUIDs []uuid.UUID
+}
+
+// RepositoryIMockGetTotalTokensByListKBUIDsParamPtrs contains pointers to parameters of the RepositoryI.GetTotalTokensByListKBUIDs
+type RepositoryIMockGetTotalTokensByListKBUIDsParamPtrs struct {
+	ctx    *context.Context
+	kbUIDs *[]uuid.UUID
+}
+
+// RepositoryIMockGetTotalTokensByListKBUIDsResults contains results of the RepositoryI.GetTotalTokensByListKBUIDs
+type RepositoryIMockGetTotalTokensByListKBUIDsResults struct {
+	m1  map[uuid.UUID]int
+	err error
+}
+
+// Expect sets up expected params for RepositoryI.GetTotalTokensByListKBUIDs
+func (mmGetTotalTokensByListKBUIDs *mRepositoryIMockGetTotalTokensByListKBUIDs) Expect(ctx context.Context, kbUIDs []uuid.UUID) *mRepositoryIMockGetTotalTokensByListKBUIDs {
+	if mmGetTotalTokensByListKBUIDs.mock.funcGetTotalTokensByListKBUIDs != nil {
+		mmGetTotalTokensByListKBUIDs.mock.t.Fatalf("RepositoryIMock.GetTotalTokensByListKBUIDs mock is already set by Set")
+	}
+
+	if mmGetTotalTokensByListKBUIDs.defaultExpectation == nil {
+		mmGetTotalTokensByListKBUIDs.defaultExpectation = &RepositoryIMockGetTotalTokensByListKBUIDsExpectation{}
+	}
+
+	if mmGetTotalTokensByListKBUIDs.defaultExpectation.paramPtrs != nil {
+		mmGetTotalTokensByListKBUIDs.mock.t.Fatalf("RepositoryIMock.GetTotalTokensByListKBUIDs mock is already set by ExpectParams functions")
+	}
+
+	mmGetTotalTokensByListKBUIDs.defaultExpectation.params = &RepositoryIMockGetTotalTokensByListKBUIDsParams{ctx, kbUIDs}
+	for _, e := range mmGetTotalTokensByListKBUIDs.expectations {
+		if minimock.Equal(e.params, mmGetTotalTokensByListKBUIDs.defaultExpectation.params) {
+			mmGetTotalTokensByListKBUIDs.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetTotalTokensByListKBUIDs.defaultExpectation.params)
+		}
+	}
+
+	return mmGetTotalTokensByListKBUIDs
+}
+
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.GetTotalTokensByListKBUIDs
+func (mmGetTotalTokensByListKBUIDs *mRepositoryIMockGetTotalTokensByListKBUIDs) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockGetTotalTokensByListKBUIDs {
+	if mmGetTotalTokensByListKBUIDs.mock.funcGetTotalTokensByListKBUIDs != nil {
+		mmGetTotalTokensByListKBUIDs.mock.t.Fatalf("RepositoryIMock.GetTotalTokensByListKBUIDs mock is already set by Set")
+	}
+
+	if mmGetTotalTokensByListKBUIDs.defaultExpectation == nil {
+		mmGetTotalTokensByListKBUIDs.defaultExpectation = &RepositoryIMockGetTotalTokensByListKBUIDsExpectation{}
+	}
+
+	if mmGetTotalTokensByListKBUIDs.defaultExpectation.params != nil {
+		mmGetTotalTokensByListKBUIDs.mock.t.Fatalf("RepositoryIMock.GetTotalTokensByListKBUIDs mock is already set by Expect")
+	}
+
+	if mmGetTotalTokensByListKBUIDs.defaultExpectation.paramPtrs == nil {
+		mmGetTotalTokensByListKBUIDs.defaultExpectation.paramPtrs = &RepositoryIMockGetTotalTokensByListKBUIDsParamPtrs{}
+	}
+	mmGetTotalTokensByListKBUIDs.defaultExpectation.paramPtrs.ctx = &ctx
+
+	return mmGetTotalTokensByListKBUIDs
+}
+
+// ExpectKbUIDsParam2 sets up expected param kbUIDs for RepositoryI.GetTotalTokensByListKBUIDs
+func (mmGetTotalTokensByListKBUIDs *mRepositoryIMockGetTotalTokensByListKBUIDs) ExpectKbUIDsParam2(kbUIDs []uuid.UUID) *mRepositoryIMockGetTotalTokensByListKBUIDs {
+	if mmGetTotalTokensByListKBUIDs.mock.funcGetTotalTokensByListKBUIDs != nil {
+		mmGetTotalTokensByListKBUIDs.mock.t.Fatalf("RepositoryIMock.GetTotalTokensByListKBUIDs mock is already set by Set")
+	}
+
+	if mmGetTotalTokensByListKBUIDs.defaultExpectation == nil {
+		mmGetTotalTokensByListKBUIDs.defaultExpectation = &RepositoryIMockGetTotalTokensByListKBUIDsExpectation{}
+	}
+
+	if mmGetTotalTokensByListKBUIDs.defaultExpectation.params != nil {
+		mmGetTotalTokensByListKBUIDs.mock.t.Fatalf("RepositoryIMock.GetTotalTokensByListKBUIDs mock is already set by Expect")
+	}
+
+	if mmGetTotalTokensByListKBUIDs.defaultExpectation.paramPtrs == nil {
+		mmGetTotalTokensByListKBUIDs.defaultExpectation.paramPtrs = &RepositoryIMockGetTotalTokensByListKBUIDsParamPtrs{}
+	}
+	mmGetTotalTokensByListKBUIDs.defaultExpectation.paramPtrs.kbUIDs = &kbUIDs
+
+	return mmGetTotalTokensByListKBUIDs
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.GetTotalTokensByListKBUIDs
+func (mmGetTotalTokensByListKBUIDs *mRepositoryIMockGetTotalTokensByListKBUIDs) Inspect(f func(ctx context.Context, kbUIDs []uuid.UUID)) *mRepositoryIMockGetTotalTokensByListKBUIDs {
+	if mmGetTotalTokensByListKBUIDs.mock.inspectFuncGetTotalTokensByListKBUIDs != nil {
+		mmGetTotalTokensByListKBUIDs.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.GetTotalTokensByListKBUIDs")
+	}
+
+	mmGetTotalTokensByListKBUIDs.mock.inspectFuncGetTotalTokensByListKBUIDs = f
+
+	return mmGetTotalTokensByListKBUIDs
+}
+
+// Return sets up results that will be returned by RepositoryI.GetTotalTokensByListKBUIDs
+func (mmGetTotalTokensByListKBUIDs *mRepositoryIMockGetTotalTokensByListKBUIDs) Return(m1 map[uuid.UUID]int, err error) *RepositoryIMock {
+	if mmGetTotalTokensByListKBUIDs.mock.funcGetTotalTokensByListKBUIDs != nil {
+		mmGetTotalTokensByListKBUIDs.mock.t.Fatalf("RepositoryIMock.GetTotalTokensByListKBUIDs mock is already set by Set")
+	}
+
+	if mmGetTotalTokensByListKBUIDs.defaultExpectation == nil {
+		mmGetTotalTokensByListKBUIDs.defaultExpectation = &RepositoryIMockGetTotalTokensByListKBUIDsExpectation{mock: mmGetTotalTokensByListKBUIDs.mock}
+	}
+	mmGetTotalTokensByListKBUIDs.defaultExpectation.results = &RepositoryIMockGetTotalTokensByListKBUIDsResults{m1, err}
+	return mmGetTotalTokensByListKBUIDs.mock
+}
+
+// Set uses given function f to mock the RepositoryI.GetTotalTokensByListKBUIDs method
+func (mmGetTotalTokensByListKBUIDs *mRepositoryIMockGetTotalTokensByListKBUIDs) Set(f func(ctx context.Context, kbUIDs []uuid.UUID) (m1 map[uuid.UUID]int, err error)) *RepositoryIMock {
+	if mmGetTotalTokensByListKBUIDs.defaultExpectation != nil {
+		mmGetTotalTokensByListKBUIDs.mock.t.Fatalf("Default expectation is already set for the RepositoryI.GetTotalTokensByListKBUIDs method")
+	}
+
+	if len(mmGetTotalTokensByListKBUIDs.expectations) > 0 {
+		mmGetTotalTokensByListKBUIDs.mock.t.Fatalf("Some expectations are already set for the RepositoryI.GetTotalTokensByListKBUIDs method")
+	}
+
+	mmGetTotalTokensByListKBUIDs.mock.funcGetTotalTokensByListKBUIDs = f
+	return mmGetTotalTokensByListKBUIDs.mock
+}
+
+// When sets expectation for the RepositoryI.GetTotalTokensByListKBUIDs which will trigger the result defined by the following
+// Then helper
+func (mmGetTotalTokensByListKBUIDs *mRepositoryIMockGetTotalTokensByListKBUIDs) When(ctx context.Context, kbUIDs []uuid.UUID) *RepositoryIMockGetTotalTokensByListKBUIDsExpectation {
+	if mmGetTotalTokensByListKBUIDs.mock.funcGetTotalTokensByListKBUIDs != nil {
+		mmGetTotalTokensByListKBUIDs.mock.t.Fatalf("RepositoryIMock.GetTotalTokensByListKBUIDs mock is already set by Set")
+	}
+
+	expectation := &RepositoryIMockGetTotalTokensByListKBUIDsExpectation{
+		mock:   mmGetTotalTokensByListKBUIDs.mock,
+		params: &RepositoryIMockGetTotalTokensByListKBUIDsParams{ctx, kbUIDs},
+	}
+	mmGetTotalTokensByListKBUIDs.expectations = append(mmGetTotalTokensByListKBUIDs.expectations, expectation)
+	return expectation
+}
+
+// Then sets up RepositoryI.GetTotalTokensByListKBUIDs return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockGetTotalTokensByListKBUIDsExpectation) Then(m1 map[uuid.UUID]int, err error) *RepositoryIMock {
+	e.results = &RepositoryIMockGetTotalTokensByListKBUIDsResults{m1, err}
+	return e.mock
+}
+
+// Times sets number of times RepositoryI.GetTotalTokensByListKBUIDs should be invoked
+func (mmGetTotalTokensByListKBUIDs *mRepositoryIMockGetTotalTokensByListKBUIDs) Times(n uint64) *mRepositoryIMockGetTotalTokensByListKBUIDs {
+	if n == 0 {
+		mmGetTotalTokensByListKBUIDs.mock.t.Fatalf("Times of RepositoryIMock.GetTotalTokensByListKBUIDs mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetTotalTokensByListKBUIDs.expectedInvocations, n)
+	return mmGetTotalTokensByListKBUIDs
+}
+
+func (mmGetTotalTokensByListKBUIDs *mRepositoryIMockGetTotalTokensByListKBUIDs) invocationsDone() bool {
+	if len(mmGetTotalTokensByListKBUIDs.expectations) == 0 && mmGetTotalTokensByListKBUIDs.defaultExpectation == nil && mmGetTotalTokensByListKBUIDs.mock.funcGetTotalTokensByListKBUIDs == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetTotalTokensByListKBUIDs.mock.afterGetTotalTokensByListKBUIDsCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetTotalTokensByListKBUIDs.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetTotalTokensByListKBUIDs implements repository.RepositoryI
+func (mmGetTotalTokensByListKBUIDs *RepositoryIMock) GetTotalTokensByListKBUIDs(ctx context.Context, kbUIDs []uuid.UUID) (m1 map[uuid.UUID]int, err error) {
+	mm_atomic.AddUint64(&mmGetTotalTokensByListKBUIDs.beforeGetTotalTokensByListKBUIDsCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetTotalTokensByListKBUIDs.afterGetTotalTokensByListKBUIDsCounter, 1)
+
+	if mmGetTotalTokensByListKBUIDs.inspectFuncGetTotalTokensByListKBUIDs != nil {
+		mmGetTotalTokensByListKBUIDs.inspectFuncGetTotalTokensByListKBUIDs(ctx, kbUIDs)
+	}
+
+	mm_params := RepositoryIMockGetTotalTokensByListKBUIDsParams{ctx, kbUIDs}
+
+	// Record call args
+	mmGetTotalTokensByListKBUIDs.GetTotalTokensByListKBUIDsMock.mutex.Lock()
+	mmGetTotalTokensByListKBUIDs.GetTotalTokensByListKBUIDsMock.callArgs = append(mmGetTotalTokensByListKBUIDs.GetTotalTokensByListKBUIDsMock.callArgs, &mm_params)
+	mmGetTotalTokensByListKBUIDs.GetTotalTokensByListKBUIDsMock.mutex.Unlock()
+
+	for _, e := range mmGetTotalTokensByListKBUIDs.GetTotalTokensByListKBUIDsMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.m1, e.results.err
+		}
+	}
+
+	if mmGetTotalTokensByListKBUIDs.GetTotalTokensByListKBUIDsMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetTotalTokensByListKBUIDs.GetTotalTokensByListKBUIDsMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetTotalTokensByListKBUIDs.GetTotalTokensByListKBUIDsMock.defaultExpectation.params
+		mm_want_ptrs := mmGetTotalTokensByListKBUIDs.GetTotalTokensByListKBUIDsMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryIMockGetTotalTokensByListKBUIDsParams{ctx, kbUIDs}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetTotalTokensByListKBUIDs.t.Errorf("RepositoryIMock.GetTotalTokensByListKBUIDs got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.kbUIDs != nil && !minimock.Equal(*mm_want_ptrs.kbUIDs, mm_got.kbUIDs) {
+				mmGetTotalTokensByListKBUIDs.t.Errorf("RepositoryIMock.GetTotalTokensByListKBUIDs got unexpected parameter kbUIDs, want: %#v, got: %#v%s\n", *mm_want_ptrs.kbUIDs, mm_got.kbUIDs, minimock.Diff(*mm_want_ptrs.kbUIDs, mm_got.kbUIDs))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetTotalTokensByListKBUIDs.t.Errorf("RepositoryIMock.GetTotalTokensByListKBUIDs got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetTotalTokensByListKBUIDs.GetTotalTokensByListKBUIDsMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetTotalTokensByListKBUIDs.t.Fatal("No results are set for the RepositoryIMock.GetTotalTokensByListKBUIDs")
+		}
+		return (*mm_results).m1, (*mm_results).err
+	}
+	if mmGetTotalTokensByListKBUIDs.funcGetTotalTokensByListKBUIDs != nil {
+		return mmGetTotalTokensByListKBUIDs.funcGetTotalTokensByListKBUIDs(ctx, kbUIDs)
+	}
+	mmGetTotalTokensByListKBUIDs.t.Fatalf("Unexpected call to RepositoryIMock.GetTotalTokensByListKBUIDs. %v %v", ctx, kbUIDs)
+	return
+}
+
+// GetTotalTokensByListKBUIDsAfterCounter returns a count of finished RepositoryIMock.GetTotalTokensByListKBUIDs invocations
+func (mmGetTotalTokensByListKBUIDs *RepositoryIMock) GetTotalTokensByListKBUIDsAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetTotalTokensByListKBUIDs.afterGetTotalTokensByListKBUIDsCounter)
+}
+
+// GetTotalTokensByListKBUIDsBeforeCounter returns a count of RepositoryIMock.GetTotalTokensByListKBUIDs invocations
+func (mmGetTotalTokensByListKBUIDs *RepositoryIMock) GetTotalTokensByListKBUIDsBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetTotalTokensByListKBUIDs.beforeGetTotalTokensByListKBUIDsCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryIMock.GetTotalTokensByListKBUIDs.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetTotalTokensByListKBUIDs *mRepositoryIMockGetTotalTokensByListKBUIDs) Calls() []*RepositoryIMockGetTotalTokensByListKBUIDsParams {
+	mmGetTotalTokensByListKBUIDs.mutex.RLock()
+
+	argCopy := make([]*RepositoryIMockGetTotalTokensByListKBUIDsParams, len(mmGetTotalTokensByListKBUIDs.callArgs))
+	copy(argCopy, mmGetTotalTokensByListKBUIDs.callArgs)
+
+	mmGetTotalTokensByListKBUIDs.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetTotalTokensByListKBUIDsDone returns true if the count of the GetTotalTokensByListKBUIDs invocations corresponds
+// the number of defined expectations
+func (m *RepositoryIMock) MinimockGetTotalTokensByListKBUIDsDone() bool {
+	for _, e := range m.GetTotalTokensByListKBUIDsMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetTotalTokensByListKBUIDsMock.invocationsDone()
+}
+
+// MinimockGetTotalTokensByListKBUIDsInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockGetTotalTokensByListKBUIDsInspect() {
+	for _, e := range m.GetTotalTokensByListKBUIDsMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryIMock.GetTotalTokensByListKBUIDs with params: %#v", *e.params)
+		}
+	}
+
+	afterGetTotalTokensByListKBUIDsCounter := mm_atomic.LoadUint64(&m.afterGetTotalTokensByListKBUIDsCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetTotalTokensByListKBUIDsMock.defaultExpectation != nil && afterGetTotalTokensByListKBUIDsCounter < 1 {
+		if m.GetTotalTokensByListKBUIDsMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to RepositoryIMock.GetTotalTokensByListKBUIDs")
+		} else {
+			m.t.Errorf("Expected call to RepositoryIMock.GetTotalTokensByListKBUIDs with params: %#v", *m.GetTotalTokensByListKBUIDsMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetTotalTokensByListKBUIDs != nil && afterGetTotalTokensByListKBUIDsCounter < 1 {
+		m.t.Error("Expected call to RepositoryIMock.GetTotalTokensByListKBUIDs")
+	}
+
+	if !m.GetTotalTokensByListKBUIDsMock.invocationsDone() && afterGetTotalTokensByListKBUIDsCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.GetTotalTokensByListKBUIDs but found %d calls",
+			mm_atomic.LoadUint64(&m.GetTotalTokensByListKBUIDsMock.expectedInvocations), afterGetTotalTokensByListKBUIDsCounter)
 	}
 }
 
@@ -8927,6 +9555,8 @@ func (m *RepositoryIMock) MinimockFinish() {
 
 			m.MinimockGetConvertedFileByFileUIDInspect()
 
+			m.MinimockGetCountFilesByListKnowledgeBaseUIDInspect()
+
 			m.MinimockGetEmbeddingByUIDsInspect()
 
 			m.MinimockGetIncompleteFileInspect()
@@ -8936,6 +9566,8 @@ func (m *RepositoryIMock) MinimockFinish() {
 			m.MinimockGetRepositoryTagInspect()
 
 			m.MinimockGetTextChunksBySourceInspect()
+
+			m.MinimockGetTotalTokensByListKBUIDsInspect()
 
 			m.MinimockKnowledgeBaseFileTableNameInspect()
 
@@ -8992,11 +9624,13 @@ func (m *RepositoryIMock) minimockDone() bool {
 		m.MinimockDeleteKnowledgeBaseFileDone() &&
 		m.MinimockDeleteRepositoryTagDone() &&
 		m.MinimockGetConvertedFileByFileUIDDone() &&
+		m.MinimockGetCountFilesByListKnowledgeBaseUIDDone() &&
 		m.MinimockGetEmbeddingByUIDsDone() &&
 		m.MinimockGetIncompleteFileDone() &&
 		m.MinimockGetKnowledgeBaseByOwnerAndIDDone() &&
 		m.MinimockGetRepositoryTagDone() &&
 		m.MinimockGetTextChunksBySourceDone() &&
+		m.MinimockGetTotalTokensByListKBUIDsDone() &&
 		m.MinimockKnowledgeBaseFileTableNameDone() &&
 		m.MinimockListKnowledgeBaseFilesDone() &&
 		m.MinimockListKnowledgeBasesDone() &&

@@ -16,6 +16,7 @@ type TextChunkI interface {
 	DeleteChunksBySource(ctx context.Context, sourceTable string, sourceUID uuid.UUID) error
 	DeleteChunksByUIDs(ctx context.Context, chunkUIDs []uuid.UUID) error
 	GetTextChunksBySource(ctx context.Context, sourceTable string, sourceUID uuid.UUID) ([]TextChunk, error)
+	GetTotalTokensByListKBUIDs(ctx context.Context, kbUIDs []uuid.UUID) (map[uuid.UUID]int, error)
 }
 
 // currently, we use minio to store the chunk but in the future, we may just get the content from the source
@@ -33,6 +34,8 @@ type TextChunk struct {
 	InOrder     int        `gorm:"column:in_order;not null" json:"order"`
 	CreateTime  *time.Time `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
 	UpdateTime  *time.Time `gorm:"column:update_time;not null;default:CURRENT_TIMESTAMP" json:"update_time"`
+	// KbUID is the knowledge base UID
+	KbUID uuid.UUID `gorm:"column:kb_uid;type:uuid" json:"kb_uid"`
 }
 
 type TextChunkColumns struct {
@@ -157,4 +160,25 @@ func (r *Repository) GetTextChunksBySource(ctx context.Context, sourceTable stri
 		return nil, err
 	}
 	return chunks, nil
+}
+
+// GetTotalTokensByListKBUIDs returns the total tokens of the chunks by list of KBUIDs
+func (r *Repository) GetTotalTokensByListKBUIDs(ctx context.Context, kbUIDs []uuid.UUID) (map[uuid.UUID]int, error) {
+	var totalTokens []struct {
+		KbUID  uuid.UUID `gorm:"kb_uid"`
+		Tokens int       `gorm:"tokens"`
+	}
+	if err := r.db.WithContext(ctx).Model(&TextChunk{}).
+		Select("kb_uid, SUM(tokens) as tokens").
+		Where("kb_uid IN (?)", kbUIDs).
+		Group("kb_uid").
+		Scan(&totalTokens).Error; err != nil {
+		return nil, err
+	}
+
+	totalTokensMap := make(map[uuid.UUID]int)
+	for _, tt := range totalTokens {
+		totalTokensMap[tt.KbUID] = tt.Tokens
+	}
+	return totalTokensMap, nil
 }

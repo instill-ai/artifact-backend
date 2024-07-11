@@ -11,13 +11,22 @@ import (
 )
 
 type KnowledgeBaseFileI interface {
+	// KnowledgeBaseFileTableName returns the table name of the KnowledgeBaseFile
 	KnowledgeBaseFileTableName() string
+	// CreateKnowledgeBaseFile creates a new knowledge base file
 	CreateKnowledgeBaseFile(ctx context.Context, kb KnowledgeBaseFile, externalServiceCall func(FileUID string) error) (*KnowledgeBaseFile, error)
+	// ListKnowledgeBaseFiles lists the knowledge base files by owner UID, knowledge base UID, and page size
 	ListKnowledgeBaseFiles(ctx context.Context, uid string, ownerUID string, kbUID string, pageSize int32, nextPageToken string, filesUID []string) ([]KnowledgeBaseFile, int, string, error)
+	// DeleteKnowledgeBaseFile deletes the knowledge base file by file UID
 	DeleteKnowledgeBaseFile(ctx context.Context, fileUID string) error
+	// ProcessKnowledgeBaseFiles updates the process status of the files
 	ProcessKnowledgeBaseFiles(ctx context.Context, fileUids []string) ([]KnowledgeBaseFile, error)
+	// GetIncompleteFile returns the files that are not yet processed
 	GetIncompleteFile(ctx context.Context) []KnowledgeBaseFile
+	// UpdateKnowledgeBaseFile updates the data and retrieves the latest data
 	UpdateKnowledgeBaseFile(ctx context.Context, fileUID string, updateMap map[string]interface{}) (*KnowledgeBaseFile, error)
+	// GetCountFilesByListKnowledgeBaseUID returns the number of files associated with the knowledge base UID
+	GetCountFilesByListKnowledgeBaseUID(ctx context.Context, kbUIDs []uuid.UUID) (map[uuid.UUID]int64, error)
 }
 
 type KnowledgeBaseFile struct {
@@ -242,4 +251,33 @@ func (r *Repository) UpdateKnowledgeBaseFile(ctx context.Context, fileUID string
 	}
 
 	return &updatedFile, nil
+}
+
+// CountFilesByListKnowledgeBaseUID returns the number of files associated with the knowledge base UID
+func (r *Repository) GetCountFilesByListKnowledgeBaseUID(ctx context.Context, kbUIDs []uuid.UUID) (map[uuid.UUID]int64, error) {
+	var results []struct {
+		KnowledgeBaseUID uuid.UUID `gorm:"column:kb_uid"`
+		Count            int64     `gorm:"column:count"`
+	}
+
+	selectClause := fmt.Sprintf("%v, COUNT(*) as count", KnowledgeBaseFileColumn.KnowledgeBaseUID)
+	whereClause := fmt.Sprintf("%v IN ? AND %v IS NULL", KnowledgeBaseFileColumn.KnowledgeBaseUID, KnowledgeBaseFileColumn.DeleteTime)
+
+	// Adjust the query to match the structure and requirements of your database and tables
+	err := r.db.Table(r.KnowledgeBaseFileTableName()).
+		Select(selectClause).
+		Where(whereClause, kbUIDs).
+		Group(KnowledgeBaseFileColumn.KnowledgeBaseUID).
+		Find(&results).Error
+
+	if err != nil {
+		return nil, fmt.Errorf("error querying database: %w", err)
+	}
+
+	counts := make(map[uuid.UUID]int64)
+	for _, result := range results {
+		counts[result.KnowledgeBaseUID] = result.Count
+	}
+
+	return counts, nil
 }
