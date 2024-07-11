@@ -45,6 +45,8 @@ type KnowledgeBaseFile struct {
 	CreateTime *time.Time `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
 	UpdateTime *time.Time `gorm:"column:update_time;not null;autoUpdateTime" json:"update_time"` // Use autoUpdateTime
 	DeleteTime *time.Time `gorm:"column:delete_time" json:"delete_time"`
+	// Size
+	Size int64 `gorm:"column:size" json:"size"`
 }
 
 // table columns map
