@@ -43,7 +43,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	servicePkg "github.com/instill-ai/artifact-backend/pkg/service"
 	"github.com/instill-ai/artifact-backend/pkg/usage"
-	// "github.com/instill-ai/artifact-backend/pkg/worker"
+	"github.com/instill-ai/artifact-backend/pkg/worker"
 
 	grpcclient "github.com/instill-ai/artifact-backend/pkg/client/grpc"
 	httpclient "github.com/instill-ai/artifact-backend/pkg/client/http"
@@ -167,10 +167,9 @@ func main() {
 		}),
 	)
 
-	// file-to-embeddings worker pool
-	// TODO: uncomment when file-to-embeddings worker is tested
-	// wp := worker.NewFileToEmbWorkerPool(ctx, service, config.Config.FileToEmbeddingWorker.NumberOfWorkers)
-	// wp.Start(ctx)
+	// activate file-to-embeddings worker pool
+	wp := worker.NewFileToEmbWorkerPool(ctx, service, config.Config.FileToEmbeddingWorker.NumberOfWorkers)
+	wp.Start(ctx)
 
 	// Start usage reporter
 	var usg usage.Usage
@@ -263,8 +262,7 @@ func main() {
 		// }
 		logger.Info("Shutting down server...")
 		publicGrpcS.GracefulStop()
-		// TODO: uncomment when file-to-embeddings worker is tested
-		// wp.GraceFulStop()
+		wp.GraceFulStop()
 	}
 }
 
