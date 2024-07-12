@@ -81,13 +81,17 @@ func (ph *PublicHandler) UploadKnowledgeBaseFile(ctx context.Context, req *artif
 		}
 		res, err = ph.service.Repository.CreateKnowledgeBaseFile(ctx, kbFile, func(FileUID string) error {
 			// upload file to minio
-			err = ph.service.MinIO.UploadBase64File(ctx, destination, req.File.Content, fileTypeConvertToMime(req.File.Type))
+			err := ph.service.MinIO.UploadBase64File(ctx, destination, req.File.Content, fileTypeConvertToMime(req.File.Type))
 			if err != nil {
 				return err
 			}
 
 			return nil
 		})
+		if err != nil {
+			log.Error("failed to create knowledge base file", zap.Error(err))
+			return nil, err
+		}
 	}
 
 	return &artifactpb.UploadKnowledgeBaseFileResponse{

@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 	"errors"
+	"runtime/debug"
 
 	"github.com/jackc/pgconn"
 	"golang.org/x/crypto/bcrypt"
@@ -24,6 +25,7 @@ import (
 // RecoveryInterceptorOpt - panic handler
 func RecoveryInterceptorOpt() grpc_recovery.Option {
 	return grpc_recovery.WithRecoveryHandler(func(p interface{}) (err error) {
+		debug.PrintStack()
 		return status.Errorf(codes.Unknown, "panic triggered: %v", p)
 	})
 }
