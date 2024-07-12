@@ -116,6 +116,18 @@ type RepositoryIMock struct {
 	beforeGetEmbeddingByUIDsCounter uint64
 	GetEmbeddingByUIDsMock          mRepositoryIMockGetEmbeddingByUIDs
 
+	funcGetFilesTotalTokens func(ctx context.Context, sources map[mm_repository.FileUID]struct {
+		SourceTable mm_repository.SourceTable
+		SourceUID   mm_repository.SourceUID
+	}) (m1 map[mm_repository.FileUID]int, err error)
+	inspectFuncGetFilesTotalTokens func(ctx context.Context, sources map[mm_repository.FileUID]struct {
+		SourceTable mm_repository.SourceTable
+		SourceUID   mm_repository.SourceUID
+	})
+	afterGetFilesTotalTokensCounter  uint64
+	beforeGetFilesTotalTokensCounter uint64
+	GetFilesTotalTokensMock          mRepositoryIMockGetFilesTotalTokens
+
 	funcGetIncompleteFile          func(ctx context.Context) (ka1 []mm_repository.KnowledgeBaseFile)
 	inspectFuncGetIncompleteFile   func(ctx context.Context)
 	afterGetIncompleteFileCounter  uint64
@@ -139,6 +151,18 @@ type RepositoryIMock struct {
 	afterGetTextChunksBySourceCounter  uint64
 	beforeGetTextChunksBySourceCounter uint64
 	GetTextChunksBySourceMock          mRepositoryIMockGetTextChunksBySource
+
+	funcGetTotalChunksBySources func(ctx context.Context, sources map[mm_repository.FileUID]struct {
+		SourceTable mm_repository.SourceTable
+		SourceUID   mm_repository.SourceUID
+	}) (m1 map[mm_repository.FileUID]int, err error)
+	inspectFuncGetTotalChunksBySources func(ctx context.Context, sources map[mm_repository.FileUID]struct {
+		SourceTable mm_repository.SourceTable
+		SourceUID   mm_repository.SourceUID
+	})
+	afterGetTotalChunksBySourcesCounter  uint64
+	beforeGetTotalChunksBySourcesCounter uint64
+	GetTotalChunksBySourcesMock          mRepositoryIMockGetTotalChunksBySources
 
 	funcGetTotalTokensByListKBUIDs          func(ctx context.Context, kbUIDs []uuid.UUID) (m1 map[uuid.UUID]int, err error)
 	inspectFuncGetTotalTokensByListKBUIDs   func(ctx context.Context, kbUIDs []uuid.UUID)
@@ -256,6 +280,9 @@ func NewRepositoryIMock(t minimock.Tester) *RepositoryIMock {
 	m.GetEmbeddingByUIDsMock = mRepositoryIMockGetEmbeddingByUIDs{mock: m}
 	m.GetEmbeddingByUIDsMock.callArgs = []*RepositoryIMockGetEmbeddingByUIDsParams{}
 
+	m.GetFilesTotalTokensMock = mRepositoryIMockGetFilesTotalTokens{mock: m}
+	m.GetFilesTotalTokensMock.callArgs = []*RepositoryIMockGetFilesTotalTokensParams{}
+
 	m.GetIncompleteFileMock = mRepositoryIMockGetIncompleteFile{mock: m}
 	m.GetIncompleteFileMock.callArgs = []*RepositoryIMockGetIncompleteFileParams{}
 
@@ -267,6 +294,9 @@ func NewRepositoryIMock(t minimock.Tester) *RepositoryIMock {
 
 	m.GetTextChunksBySourceMock = mRepositoryIMockGetTextChunksBySource{mock: m}
 	m.GetTextChunksBySourceMock.callArgs = []*RepositoryIMockGetTextChunksBySourceParams{}
+
+	m.GetTotalChunksBySourcesMock = mRepositoryIMockGetTotalChunksBySources{mock: m}
+	m.GetTotalChunksBySourcesMock.callArgs = []*RepositoryIMockGetTotalChunksBySourcesParams{}
 
 	m.GetTotalTokensByListKBUIDsMock = mRepositoryIMockGetTotalTokensByListKBUIDs{mock: m}
 	m.GetTotalTokensByListKBUIDsMock.callArgs = []*RepositoryIMockGetTotalTokensByListKBUIDsParams{}
@@ -5284,6 +5314,335 @@ func (m *RepositoryIMock) MinimockGetEmbeddingByUIDsInspect() {
 	}
 }
 
+type mRepositoryIMockGetFilesTotalTokens struct {
+	mock               *RepositoryIMock
+	defaultExpectation *RepositoryIMockGetFilesTotalTokensExpectation
+	expectations       []*RepositoryIMockGetFilesTotalTokensExpectation
+
+	callArgs []*RepositoryIMockGetFilesTotalTokensParams
+	mutex    sync.RWMutex
+
+	expectedInvocations uint64
+}
+
+// RepositoryIMockGetFilesTotalTokensExpectation specifies expectation struct of the RepositoryI.GetFilesTotalTokens
+type RepositoryIMockGetFilesTotalTokensExpectation struct {
+	mock      *RepositoryIMock
+	params    *RepositoryIMockGetFilesTotalTokensParams
+	paramPtrs *RepositoryIMockGetFilesTotalTokensParamPtrs
+	results   *RepositoryIMockGetFilesTotalTokensResults
+	Counter   uint64
+}
+
+// RepositoryIMockGetFilesTotalTokensParams contains parameters of the RepositoryI.GetFilesTotalTokens
+type RepositoryIMockGetFilesTotalTokensParams struct {
+	ctx     context.Context
+	sources map[mm_repository.FileUID]struct {
+		SourceTable mm_repository.SourceTable
+		SourceUID   mm_repository.SourceUID
+	}
+}
+
+// RepositoryIMockGetFilesTotalTokensParamPtrs contains pointers to parameters of the RepositoryI.GetFilesTotalTokens
+type RepositoryIMockGetFilesTotalTokensParamPtrs struct {
+	ctx     *context.Context
+	sources *map[mm_repository.FileUID]struct {
+		SourceTable mm_repository.SourceTable
+		SourceUID   mm_repository.SourceUID
+	}
+}
+
+// RepositoryIMockGetFilesTotalTokensResults contains results of the RepositoryI.GetFilesTotalTokens
+type RepositoryIMockGetFilesTotalTokensResults struct {
+	m1  map[mm_repository.FileUID]int
+	err error
+}
+
+// Expect sets up expected params for RepositoryI.GetFilesTotalTokens
+func (mmGetFilesTotalTokens *mRepositoryIMockGetFilesTotalTokens) Expect(ctx context.Context, sources map[mm_repository.FileUID]struct {
+	SourceTable mm_repository.SourceTable
+	SourceUID   mm_repository.SourceUID
+}) *mRepositoryIMockGetFilesTotalTokens {
+	if mmGetFilesTotalTokens.mock.funcGetFilesTotalTokens != nil {
+		mmGetFilesTotalTokens.mock.t.Fatalf("RepositoryIMock.GetFilesTotalTokens mock is already set by Set")
+	}
+
+	if mmGetFilesTotalTokens.defaultExpectation == nil {
+		mmGetFilesTotalTokens.defaultExpectation = &RepositoryIMockGetFilesTotalTokensExpectation{}
+	}
+
+	if mmGetFilesTotalTokens.defaultExpectation.paramPtrs != nil {
+		mmGetFilesTotalTokens.mock.t.Fatalf("RepositoryIMock.GetFilesTotalTokens mock is already set by ExpectParams functions")
+	}
+
+	mmGetFilesTotalTokens.defaultExpectation.params = &RepositoryIMockGetFilesTotalTokensParams{ctx, sources}
+	for _, e := range mmGetFilesTotalTokens.expectations {
+		if minimock.Equal(e.params, mmGetFilesTotalTokens.defaultExpectation.params) {
+			mmGetFilesTotalTokens.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetFilesTotalTokens.defaultExpectation.params)
+		}
+	}
+
+	return mmGetFilesTotalTokens
+}
+
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.GetFilesTotalTokens
+func (mmGetFilesTotalTokens *mRepositoryIMockGetFilesTotalTokens) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockGetFilesTotalTokens {
+	if mmGetFilesTotalTokens.mock.funcGetFilesTotalTokens != nil {
+		mmGetFilesTotalTokens.mock.t.Fatalf("RepositoryIMock.GetFilesTotalTokens mock is already set by Set")
+	}
+
+	if mmGetFilesTotalTokens.defaultExpectation == nil {
+		mmGetFilesTotalTokens.defaultExpectation = &RepositoryIMockGetFilesTotalTokensExpectation{}
+	}
+
+	if mmGetFilesTotalTokens.defaultExpectation.params != nil {
+		mmGetFilesTotalTokens.mock.t.Fatalf("RepositoryIMock.GetFilesTotalTokens mock is already set by Expect")
+	}
+
+	if mmGetFilesTotalTokens.defaultExpectation.paramPtrs == nil {
+		mmGetFilesTotalTokens.defaultExpectation.paramPtrs = &RepositoryIMockGetFilesTotalTokensParamPtrs{}
+	}
+	mmGetFilesTotalTokens.defaultExpectation.paramPtrs.ctx = &ctx
+
+	return mmGetFilesTotalTokens
+}
+
+// ExpectSourcesParam2 sets up expected param sources for RepositoryI.GetFilesTotalTokens
+func (mmGetFilesTotalTokens *mRepositoryIMockGetFilesTotalTokens) ExpectSourcesParam2(sources map[mm_repository.FileUID]struct {
+	SourceTable mm_repository.SourceTable
+	SourceUID   mm_repository.SourceUID
+}) *mRepositoryIMockGetFilesTotalTokens {
+	if mmGetFilesTotalTokens.mock.funcGetFilesTotalTokens != nil {
+		mmGetFilesTotalTokens.mock.t.Fatalf("RepositoryIMock.GetFilesTotalTokens mock is already set by Set")
+	}
+
+	if mmGetFilesTotalTokens.defaultExpectation == nil {
+		mmGetFilesTotalTokens.defaultExpectation = &RepositoryIMockGetFilesTotalTokensExpectation{}
+	}
+
+	if mmGetFilesTotalTokens.defaultExpectation.params != nil {
+		mmGetFilesTotalTokens.mock.t.Fatalf("RepositoryIMock.GetFilesTotalTokens mock is already set by Expect")
+	}
+
+	if mmGetFilesTotalTokens.defaultExpectation.paramPtrs == nil {
+		mmGetFilesTotalTokens.defaultExpectation.paramPtrs = &RepositoryIMockGetFilesTotalTokensParamPtrs{}
+	}
+	mmGetFilesTotalTokens.defaultExpectation.paramPtrs.sources = &sources
+
+	return mmGetFilesTotalTokens
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.GetFilesTotalTokens
+func (mmGetFilesTotalTokens *mRepositoryIMockGetFilesTotalTokens) Inspect(f func(ctx context.Context, sources map[mm_repository.FileUID]struct {
+	SourceTable mm_repository.SourceTable
+	SourceUID   mm_repository.SourceUID
+})) *mRepositoryIMockGetFilesTotalTokens {
+	if mmGetFilesTotalTokens.mock.inspectFuncGetFilesTotalTokens != nil {
+		mmGetFilesTotalTokens.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.GetFilesTotalTokens")
+	}
+
+	mmGetFilesTotalTokens.mock.inspectFuncGetFilesTotalTokens = f
+
+	return mmGetFilesTotalTokens
+}
+
+// Return sets up results that will be returned by RepositoryI.GetFilesTotalTokens
+func (mmGetFilesTotalTokens *mRepositoryIMockGetFilesTotalTokens) Return(m1 map[mm_repository.FileUID]int, err error) *RepositoryIMock {
+	if mmGetFilesTotalTokens.mock.funcGetFilesTotalTokens != nil {
+		mmGetFilesTotalTokens.mock.t.Fatalf("RepositoryIMock.GetFilesTotalTokens mock is already set by Set")
+	}
+
+	if mmGetFilesTotalTokens.defaultExpectation == nil {
+		mmGetFilesTotalTokens.defaultExpectation = &RepositoryIMockGetFilesTotalTokensExpectation{mock: mmGetFilesTotalTokens.mock}
+	}
+	mmGetFilesTotalTokens.defaultExpectation.results = &RepositoryIMockGetFilesTotalTokensResults{m1, err}
+	return mmGetFilesTotalTokens.mock
+}
+
+// Set uses given function f to mock the RepositoryI.GetFilesTotalTokens method
+func (mmGetFilesTotalTokens *mRepositoryIMockGetFilesTotalTokens) Set(f func(ctx context.Context, sources map[mm_repository.FileUID]struct {
+	SourceTable mm_repository.SourceTable
+	SourceUID   mm_repository.SourceUID
+}) (m1 map[mm_repository.FileUID]int, err error)) *RepositoryIMock {
+	if mmGetFilesTotalTokens.defaultExpectation != nil {
+		mmGetFilesTotalTokens.mock.t.Fatalf("Default expectation is already set for the RepositoryI.GetFilesTotalTokens method")
+	}
+
+	if len(mmGetFilesTotalTokens.expectations) > 0 {
+		mmGetFilesTotalTokens.mock.t.Fatalf("Some expectations are already set for the RepositoryI.GetFilesTotalTokens method")
+	}
+
+	mmGetFilesTotalTokens.mock.funcGetFilesTotalTokens = f
+	return mmGetFilesTotalTokens.mock
+}
+
+// When sets expectation for the RepositoryI.GetFilesTotalTokens which will trigger the result defined by the following
+// Then helper
+func (mmGetFilesTotalTokens *mRepositoryIMockGetFilesTotalTokens) When(ctx context.Context, sources map[mm_repository.FileUID]struct {
+	SourceTable mm_repository.SourceTable
+	SourceUID   mm_repository.SourceUID
+}) *RepositoryIMockGetFilesTotalTokensExpectation {
+	if mmGetFilesTotalTokens.mock.funcGetFilesTotalTokens != nil {
+		mmGetFilesTotalTokens.mock.t.Fatalf("RepositoryIMock.GetFilesTotalTokens mock is already set by Set")
+	}
+
+	expectation := &RepositoryIMockGetFilesTotalTokensExpectation{
+		mock:   mmGetFilesTotalTokens.mock,
+		params: &RepositoryIMockGetFilesTotalTokensParams{ctx, sources},
+	}
+	mmGetFilesTotalTokens.expectations = append(mmGetFilesTotalTokens.expectations, expectation)
+	return expectation
+}
+
+// Then sets up RepositoryI.GetFilesTotalTokens return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockGetFilesTotalTokensExpectation) Then(m1 map[mm_repository.FileUID]int, err error) *RepositoryIMock {
+	e.results = &RepositoryIMockGetFilesTotalTokensResults{m1, err}
+	return e.mock
+}
+
+// Times sets number of times RepositoryI.GetFilesTotalTokens should be invoked
+func (mmGetFilesTotalTokens *mRepositoryIMockGetFilesTotalTokens) Times(n uint64) *mRepositoryIMockGetFilesTotalTokens {
+	if n == 0 {
+		mmGetFilesTotalTokens.mock.t.Fatalf("Times of RepositoryIMock.GetFilesTotalTokens mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetFilesTotalTokens.expectedInvocations, n)
+	return mmGetFilesTotalTokens
+}
+
+func (mmGetFilesTotalTokens *mRepositoryIMockGetFilesTotalTokens) invocationsDone() bool {
+	if len(mmGetFilesTotalTokens.expectations) == 0 && mmGetFilesTotalTokens.defaultExpectation == nil && mmGetFilesTotalTokens.mock.funcGetFilesTotalTokens == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetFilesTotalTokens.mock.afterGetFilesTotalTokensCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetFilesTotalTokens.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetFilesTotalTokens implements repository.RepositoryI
+func (mmGetFilesTotalTokens *RepositoryIMock) GetFilesTotalTokens(ctx context.Context, sources map[mm_repository.FileUID]struct {
+	SourceTable mm_repository.SourceTable
+	SourceUID   mm_repository.SourceUID
+}) (m1 map[mm_repository.FileUID]int, err error) {
+	mm_atomic.AddUint64(&mmGetFilesTotalTokens.beforeGetFilesTotalTokensCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetFilesTotalTokens.afterGetFilesTotalTokensCounter, 1)
+
+	if mmGetFilesTotalTokens.inspectFuncGetFilesTotalTokens != nil {
+		mmGetFilesTotalTokens.inspectFuncGetFilesTotalTokens(ctx, sources)
+	}
+
+	mm_params := RepositoryIMockGetFilesTotalTokensParams{ctx, sources}
+
+	// Record call args
+	mmGetFilesTotalTokens.GetFilesTotalTokensMock.mutex.Lock()
+	mmGetFilesTotalTokens.GetFilesTotalTokensMock.callArgs = append(mmGetFilesTotalTokens.GetFilesTotalTokensMock.callArgs, &mm_params)
+	mmGetFilesTotalTokens.GetFilesTotalTokensMock.mutex.Unlock()
+
+	for _, e := range mmGetFilesTotalTokens.GetFilesTotalTokensMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.m1, e.results.err
+		}
+	}
+
+	if mmGetFilesTotalTokens.GetFilesTotalTokensMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetFilesTotalTokens.GetFilesTotalTokensMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetFilesTotalTokens.GetFilesTotalTokensMock.defaultExpectation.params
+		mm_want_ptrs := mmGetFilesTotalTokens.GetFilesTotalTokensMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryIMockGetFilesTotalTokensParams{ctx, sources}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetFilesTotalTokens.t.Errorf("RepositoryIMock.GetFilesTotalTokens got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.sources != nil && !minimock.Equal(*mm_want_ptrs.sources, mm_got.sources) {
+				mmGetFilesTotalTokens.t.Errorf("RepositoryIMock.GetFilesTotalTokens got unexpected parameter sources, want: %#v, got: %#v%s\n", *mm_want_ptrs.sources, mm_got.sources, minimock.Diff(*mm_want_ptrs.sources, mm_got.sources))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetFilesTotalTokens.t.Errorf("RepositoryIMock.GetFilesTotalTokens got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetFilesTotalTokens.GetFilesTotalTokensMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetFilesTotalTokens.t.Fatal("No results are set for the RepositoryIMock.GetFilesTotalTokens")
+		}
+		return (*mm_results).m1, (*mm_results).err
+	}
+	if mmGetFilesTotalTokens.funcGetFilesTotalTokens != nil {
+		return mmGetFilesTotalTokens.funcGetFilesTotalTokens(ctx, sources)
+	}
+	mmGetFilesTotalTokens.t.Fatalf("Unexpected call to RepositoryIMock.GetFilesTotalTokens. %v %v", ctx, sources)
+	return
+}
+
+// GetFilesTotalTokensAfterCounter returns a count of finished RepositoryIMock.GetFilesTotalTokens invocations
+func (mmGetFilesTotalTokens *RepositoryIMock) GetFilesTotalTokensAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetFilesTotalTokens.afterGetFilesTotalTokensCounter)
+}
+
+// GetFilesTotalTokensBeforeCounter returns a count of RepositoryIMock.GetFilesTotalTokens invocations
+func (mmGetFilesTotalTokens *RepositoryIMock) GetFilesTotalTokensBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetFilesTotalTokens.beforeGetFilesTotalTokensCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryIMock.GetFilesTotalTokens.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetFilesTotalTokens *mRepositoryIMockGetFilesTotalTokens) Calls() []*RepositoryIMockGetFilesTotalTokensParams {
+	mmGetFilesTotalTokens.mutex.RLock()
+
+	argCopy := make([]*RepositoryIMockGetFilesTotalTokensParams, len(mmGetFilesTotalTokens.callArgs))
+	copy(argCopy, mmGetFilesTotalTokens.callArgs)
+
+	mmGetFilesTotalTokens.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetFilesTotalTokensDone returns true if the count of the GetFilesTotalTokens invocations corresponds
+// the number of defined expectations
+func (m *RepositoryIMock) MinimockGetFilesTotalTokensDone() bool {
+	for _, e := range m.GetFilesTotalTokensMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetFilesTotalTokensMock.invocationsDone()
+}
+
+// MinimockGetFilesTotalTokensInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockGetFilesTotalTokensInspect() {
+	for _, e := range m.GetFilesTotalTokensMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryIMock.GetFilesTotalTokens with params: %#v", *e.params)
+		}
+	}
+
+	afterGetFilesTotalTokensCounter := mm_atomic.LoadUint64(&m.afterGetFilesTotalTokensCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetFilesTotalTokensMock.defaultExpectation != nil && afterGetFilesTotalTokensCounter < 1 {
+		if m.GetFilesTotalTokensMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to RepositoryIMock.GetFilesTotalTokens")
+		} else {
+			m.t.Errorf("Expected call to RepositoryIMock.GetFilesTotalTokens with params: %#v", *m.GetFilesTotalTokensMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetFilesTotalTokens != nil && afterGetFilesTotalTokensCounter < 1 {
+		m.t.Error("Expected call to RepositoryIMock.GetFilesTotalTokens")
+	}
+
+	if !m.GetFilesTotalTokensMock.invocationsDone() && afterGetFilesTotalTokensCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.GetFilesTotalTokens but found %d calls",
+			mm_atomic.LoadUint64(&m.GetFilesTotalTokensMock.expectedInvocations), afterGetFilesTotalTokensCounter)
+	}
+}
+
 type mRepositoryIMockGetIncompleteFile struct {
 	mock               *RepositoryIMock
 	defaultExpectation *RepositoryIMockGetIncompleteFileExpectation
@@ -6528,6 +6887,335 @@ func (m *RepositoryIMock) MinimockGetTextChunksBySourceInspect() {
 	if !m.GetTextChunksBySourceMock.invocationsDone() && afterGetTextChunksBySourceCounter > 0 {
 		m.t.Errorf("Expected %d calls to RepositoryIMock.GetTextChunksBySource but found %d calls",
 			mm_atomic.LoadUint64(&m.GetTextChunksBySourceMock.expectedInvocations), afterGetTextChunksBySourceCounter)
+	}
+}
+
+type mRepositoryIMockGetTotalChunksBySources struct {
+	mock               *RepositoryIMock
+	defaultExpectation *RepositoryIMockGetTotalChunksBySourcesExpectation
+	expectations       []*RepositoryIMockGetTotalChunksBySourcesExpectation
+
+	callArgs []*RepositoryIMockGetTotalChunksBySourcesParams
+	mutex    sync.RWMutex
+
+	expectedInvocations uint64
+}
+
+// RepositoryIMockGetTotalChunksBySourcesExpectation specifies expectation struct of the RepositoryI.GetTotalChunksBySources
+type RepositoryIMockGetTotalChunksBySourcesExpectation struct {
+	mock      *RepositoryIMock
+	params    *RepositoryIMockGetTotalChunksBySourcesParams
+	paramPtrs *RepositoryIMockGetTotalChunksBySourcesParamPtrs
+	results   *RepositoryIMockGetTotalChunksBySourcesResults
+	Counter   uint64
+}
+
+// RepositoryIMockGetTotalChunksBySourcesParams contains parameters of the RepositoryI.GetTotalChunksBySources
+type RepositoryIMockGetTotalChunksBySourcesParams struct {
+	ctx     context.Context
+	sources map[mm_repository.FileUID]struct {
+		SourceTable mm_repository.SourceTable
+		SourceUID   mm_repository.SourceUID
+	}
+}
+
+// RepositoryIMockGetTotalChunksBySourcesParamPtrs contains pointers to parameters of the RepositoryI.GetTotalChunksBySources
+type RepositoryIMockGetTotalChunksBySourcesParamPtrs struct {
+	ctx     *context.Context
+	sources *map[mm_repository.FileUID]struct {
+		SourceTable mm_repository.SourceTable
+		SourceUID   mm_repository.SourceUID
+	}
+}
+
+// RepositoryIMockGetTotalChunksBySourcesResults contains results of the RepositoryI.GetTotalChunksBySources
+type RepositoryIMockGetTotalChunksBySourcesResults struct {
+	m1  map[mm_repository.FileUID]int
+	err error
+}
+
+// Expect sets up expected params for RepositoryI.GetTotalChunksBySources
+func (mmGetTotalChunksBySources *mRepositoryIMockGetTotalChunksBySources) Expect(ctx context.Context, sources map[mm_repository.FileUID]struct {
+	SourceTable mm_repository.SourceTable
+	SourceUID   mm_repository.SourceUID
+}) *mRepositoryIMockGetTotalChunksBySources {
+	if mmGetTotalChunksBySources.mock.funcGetTotalChunksBySources != nil {
+		mmGetTotalChunksBySources.mock.t.Fatalf("RepositoryIMock.GetTotalChunksBySources mock is already set by Set")
+	}
+
+	if mmGetTotalChunksBySources.defaultExpectation == nil {
+		mmGetTotalChunksBySources.defaultExpectation = &RepositoryIMockGetTotalChunksBySourcesExpectation{}
+	}
+
+	if mmGetTotalChunksBySources.defaultExpectation.paramPtrs != nil {
+		mmGetTotalChunksBySources.mock.t.Fatalf("RepositoryIMock.GetTotalChunksBySources mock is already set by ExpectParams functions")
+	}
+
+	mmGetTotalChunksBySources.defaultExpectation.params = &RepositoryIMockGetTotalChunksBySourcesParams{ctx, sources}
+	for _, e := range mmGetTotalChunksBySources.expectations {
+		if minimock.Equal(e.params, mmGetTotalChunksBySources.defaultExpectation.params) {
+			mmGetTotalChunksBySources.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetTotalChunksBySources.defaultExpectation.params)
+		}
+	}
+
+	return mmGetTotalChunksBySources
+}
+
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.GetTotalChunksBySources
+func (mmGetTotalChunksBySources *mRepositoryIMockGetTotalChunksBySources) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockGetTotalChunksBySources {
+	if mmGetTotalChunksBySources.mock.funcGetTotalChunksBySources != nil {
+		mmGetTotalChunksBySources.mock.t.Fatalf("RepositoryIMock.GetTotalChunksBySources mock is already set by Set")
+	}
+
+	if mmGetTotalChunksBySources.defaultExpectation == nil {
+		mmGetTotalChunksBySources.defaultExpectation = &RepositoryIMockGetTotalChunksBySourcesExpectation{}
+	}
+
+	if mmGetTotalChunksBySources.defaultExpectation.params != nil {
+		mmGetTotalChunksBySources.mock.t.Fatalf("RepositoryIMock.GetTotalChunksBySources mock is already set by Expect")
+	}
+
+	if mmGetTotalChunksBySources.defaultExpectation.paramPtrs == nil {
+		mmGetTotalChunksBySources.defaultExpectation.paramPtrs = &RepositoryIMockGetTotalChunksBySourcesParamPtrs{}
+	}
+	mmGetTotalChunksBySources.defaultExpectation.paramPtrs.ctx = &ctx
+
+	return mmGetTotalChunksBySources
+}
+
+// ExpectSourcesParam2 sets up expected param sources for RepositoryI.GetTotalChunksBySources
+func (mmGetTotalChunksBySources *mRepositoryIMockGetTotalChunksBySources) ExpectSourcesParam2(sources map[mm_repository.FileUID]struct {
+	SourceTable mm_repository.SourceTable
+	SourceUID   mm_repository.SourceUID
+}) *mRepositoryIMockGetTotalChunksBySources {
+	if mmGetTotalChunksBySources.mock.funcGetTotalChunksBySources != nil {
+		mmGetTotalChunksBySources.mock.t.Fatalf("RepositoryIMock.GetTotalChunksBySources mock is already set by Set")
+	}
+
+	if mmGetTotalChunksBySources.defaultExpectation == nil {
+		mmGetTotalChunksBySources.defaultExpectation = &RepositoryIMockGetTotalChunksBySourcesExpectation{}
+	}
+
+	if mmGetTotalChunksBySources.defaultExpectation.params != nil {
+		mmGetTotalChunksBySources.mock.t.Fatalf("RepositoryIMock.GetTotalChunksBySources mock is already set by Expect")
+	}
+
+	if mmGetTotalChunksBySources.defaultExpectation.paramPtrs == nil {
+		mmGetTotalChunksBySources.defaultExpectation.paramPtrs = &RepositoryIMockGetTotalChunksBySourcesParamPtrs{}
+	}
+	mmGetTotalChunksBySources.defaultExpectation.paramPtrs.sources = &sources
+
+	return mmGetTotalChunksBySources
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.GetTotalChunksBySources
+func (mmGetTotalChunksBySources *mRepositoryIMockGetTotalChunksBySources) Inspect(f func(ctx context.Context, sources map[mm_repository.FileUID]struct {
+	SourceTable mm_repository.SourceTable
+	SourceUID   mm_repository.SourceUID
+})) *mRepositoryIMockGetTotalChunksBySources {
+	if mmGetTotalChunksBySources.mock.inspectFuncGetTotalChunksBySources != nil {
+		mmGetTotalChunksBySources.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.GetTotalChunksBySources")
+	}
+
+	mmGetTotalChunksBySources.mock.inspectFuncGetTotalChunksBySources = f
+
+	return mmGetTotalChunksBySources
+}
+
+// Return sets up results that will be returned by RepositoryI.GetTotalChunksBySources
+func (mmGetTotalChunksBySources *mRepositoryIMockGetTotalChunksBySources) Return(m1 map[mm_repository.FileUID]int, err error) *RepositoryIMock {
+	if mmGetTotalChunksBySources.mock.funcGetTotalChunksBySources != nil {
+		mmGetTotalChunksBySources.mock.t.Fatalf("RepositoryIMock.GetTotalChunksBySources mock is already set by Set")
+	}
+
+	if mmGetTotalChunksBySources.defaultExpectation == nil {
+		mmGetTotalChunksBySources.defaultExpectation = &RepositoryIMockGetTotalChunksBySourcesExpectation{mock: mmGetTotalChunksBySources.mock}
+	}
+	mmGetTotalChunksBySources.defaultExpectation.results = &RepositoryIMockGetTotalChunksBySourcesResults{m1, err}
+	return mmGetTotalChunksBySources.mock
+}
+
+// Set uses given function f to mock the RepositoryI.GetTotalChunksBySources method
+func (mmGetTotalChunksBySources *mRepositoryIMockGetTotalChunksBySources) Set(f func(ctx context.Context, sources map[mm_repository.FileUID]struct {
+	SourceTable mm_repository.SourceTable
+	SourceUID   mm_repository.SourceUID
+}) (m1 map[mm_repository.FileUID]int, err error)) *RepositoryIMock {
+	if mmGetTotalChunksBySources.defaultExpectation != nil {
+		mmGetTotalChunksBySources.mock.t.Fatalf("Default expectation is already set for the RepositoryI.GetTotalChunksBySources method")
+	}
+
+	if len(mmGetTotalChunksBySources.expectations) > 0 {
+		mmGetTotalChunksBySources.mock.t.Fatalf("Some expectations are already set for the RepositoryI.GetTotalChunksBySources method")
+	}
+
+	mmGetTotalChunksBySources.mock.funcGetTotalChunksBySources = f
+	return mmGetTotalChunksBySources.mock
+}
+
+// When sets expectation for the RepositoryI.GetTotalChunksBySources which will trigger the result defined by the following
+// Then helper
+func (mmGetTotalChunksBySources *mRepositoryIMockGetTotalChunksBySources) When(ctx context.Context, sources map[mm_repository.FileUID]struct {
+	SourceTable mm_repository.SourceTable
+	SourceUID   mm_repository.SourceUID
+}) *RepositoryIMockGetTotalChunksBySourcesExpectation {
+	if mmGetTotalChunksBySources.mock.funcGetTotalChunksBySources != nil {
+		mmGetTotalChunksBySources.mock.t.Fatalf("RepositoryIMock.GetTotalChunksBySources mock is already set by Set")
+	}
+
+	expectation := &RepositoryIMockGetTotalChunksBySourcesExpectation{
+		mock:   mmGetTotalChunksBySources.mock,
+		params: &RepositoryIMockGetTotalChunksBySourcesParams{ctx, sources},
+	}
+	mmGetTotalChunksBySources.expectations = append(mmGetTotalChunksBySources.expectations, expectation)
+	return expectation
+}
+
+// Then sets up RepositoryI.GetTotalChunksBySources return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockGetTotalChunksBySourcesExpectation) Then(m1 map[mm_repository.FileUID]int, err error) *RepositoryIMock {
+	e.results = &RepositoryIMockGetTotalChunksBySourcesResults{m1, err}
+	return e.mock
+}
+
+// Times sets number of times RepositoryI.GetTotalChunksBySources should be invoked
+func (mmGetTotalChunksBySources *mRepositoryIMockGetTotalChunksBySources) Times(n uint64) *mRepositoryIMockGetTotalChunksBySources {
+	if n == 0 {
+		mmGetTotalChunksBySources.mock.t.Fatalf("Times of RepositoryIMock.GetTotalChunksBySources mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetTotalChunksBySources.expectedInvocations, n)
+	return mmGetTotalChunksBySources
+}
+
+func (mmGetTotalChunksBySources *mRepositoryIMockGetTotalChunksBySources) invocationsDone() bool {
+	if len(mmGetTotalChunksBySources.expectations) == 0 && mmGetTotalChunksBySources.defaultExpectation == nil && mmGetTotalChunksBySources.mock.funcGetTotalChunksBySources == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetTotalChunksBySources.mock.afterGetTotalChunksBySourcesCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetTotalChunksBySources.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetTotalChunksBySources implements repository.RepositoryI
+func (mmGetTotalChunksBySources *RepositoryIMock) GetTotalChunksBySources(ctx context.Context, sources map[mm_repository.FileUID]struct {
+	SourceTable mm_repository.SourceTable
+	SourceUID   mm_repository.SourceUID
+}) (m1 map[mm_repository.FileUID]int, err error) {
+	mm_atomic.AddUint64(&mmGetTotalChunksBySources.beforeGetTotalChunksBySourcesCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetTotalChunksBySources.afterGetTotalChunksBySourcesCounter, 1)
+
+	if mmGetTotalChunksBySources.inspectFuncGetTotalChunksBySources != nil {
+		mmGetTotalChunksBySources.inspectFuncGetTotalChunksBySources(ctx, sources)
+	}
+
+	mm_params := RepositoryIMockGetTotalChunksBySourcesParams{ctx, sources}
+
+	// Record call args
+	mmGetTotalChunksBySources.GetTotalChunksBySourcesMock.mutex.Lock()
+	mmGetTotalChunksBySources.GetTotalChunksBySourcesMock.callArgs = append(mmGetTotalChunksBySources.GetTotalChunksBySourcesMock.callArgs, &mm_params)
+	mmGetTotalChunksBySources.GetTotalChunksBySourcesMock.mutex.Unlock()
+
+	for _, e := range mmGetTotalChunksBySources.GetTotalChunksBySourcesMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.m1, e.results.err
+		}
+	}
+
+	if mmGetTotalChunksBySources.GetTotalChunksBySourcesMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetTotalChunksBySources.GetTotalChunksBySourcesMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetTotalChunksBySources.GetTotalChunksBySourcesMock.defaultExpectation.params
+		mm_want_ptrs := mmGetTotalChunksBySources.GetTotalChunksBySourcesMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryIMockGetTotalChunksBySourcesParams{ctx, sources}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetTotalChunksBySources.t.Errorf("RepositoryIMock.GetTotalChunksBySources got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.sources != nil && !minimock.Equal(*mm_want_ptrs.sources, mm_got.sources) {
+				mmGetTotalChunksBySources.t.Errorf("RepositoryIMock.GetTotalChunksBySources got unexpected parameter sources, want: %#v, got: %#v%s\n", *mm_want_ptrs.sources, mm_got.sources, minimock.Diff(*mm_want_ptrs.sources, mm_got.sources))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetTotalChunksBySources.t.Errorf("RepositoryIMock.GetTotalChunksBySources got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetTotalChunksBySources.GetTotalChunksBySourcesMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetTotalChunksBySources.t.Fatal("No results are set for the RepositoryIMock.GetTotalChunksBySources")
+		}
+		return (*mm_results).m1, (*mm_results).err
+	}
+	if mmGetTotalChunksBySources.funcGetTotalChunksBySources != nil {
+		return mmGetTotalChunksBySources.funcGetTotalChunksBySources(ctx, sources)
+	}
+	mmGetTotalChunksBySources.t.Fatalf("Unexpected call to RepositoryIMock.GetTotalChunksBySources. %v %v", ctx, sources)
+	return
+}
+
+// GetTotalChunksBySourcesAfterCounter returns a count of finished RepositoryIMock.GetTotalChunksBySources invocations
+func (mmGetTotalChunksBySources *RepositoryIMock) GetTotalChunksBySourcesAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetTotalChunksBySources.afterGetTotalChunksBySourcesCounter)
+}
+
+// GetTotalChunksBySourcesBeforeCounter returns a count of RepositoryIMock.GetTotalChunksBySources invocations
+func (mmGetTotalChunksBySources *RepositoryIMock) GetTotalChunksBySourcesBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetTotalChunksBySources.beforeGetTotalChunksBySourcesCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryIMock.GetTotalChunksBySources.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetTotalChunksBySources *mRepositoryIMockGetTotalChunksBySources) Calls() []*RepositoryIMockGetTotalChunksBySourcesParams {
+	mmGetTotalChunksBySources.mutex.RLock()
+
+	argCopy := make([]*RepositoryIMockGetTotalChunksBySourcesParams, len(mmGetTotalChunksBySources.callArgs))
+	copy(argCopy, mmGetTotalChunksBySources.callArgs)
+
+	mmGetTotalChunksBySources.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetTotalChunksBySourcesDone returns true if the count of the GetTotalChunksBySources invocations corresponds
+// the number of defined expectations
+func (m *RepositoryIMock) MinimockGetTotalChunksBySourcesDone() bool {
+	for _, e := range m.GetTotalChunksBySourcesMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetTotalChunksBySourcesMock.invocationsDone()
+}
+
+// MinimockGetTotalChunksBySourcesInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockGetTotalChunksBySourcesInspect() {
+	for _, e := range m.GetTotalChunksBySourcesMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryIMock.GetTotalChunksBySources with params: %#v", *e.params)
+		}
+	}
+
+	afterGetTotalChunksBySourcesCounter := mm_atomic.LoadUint64(&m.afterGetTotalChunksBySourcesCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetTotalChunksBySourcesMock.defaultExpectation != nil && afterGetTotalChunksBySourcesCounter < 1 {
+		if m.GetTotalChunksBySourcesMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to RepositoryIMock.GetTotalChunksBySources")
+		} else {
+			m.t.Errorf("Expected call to RepositoryIMock.GetTotalChunksBySources with params: %#v", *m.GetTotalChunksBySourcesMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetTotalChunksBySources != nil && afterGetTotalChunksBySourcesCounter < 1 {
+		m.t.Error("Expected call to RepositoryIMock.GetTotalChunksBySources")
+	}
+
+	if !m.GetTotalChunksBySourcesMock.invocationsDone() && afterGetTotalChunksBySourcesCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.GetTotalChunksBySources but found %d calls",
+			mm_atomic.LoadUint64(&m.GetTotalChunksBySourcesMock.expectedInvocations), afterGetTotalChunksBySourcesCounter)
 	}
 }
 
@@ -9559,6 +10247,8 @@ func (m *RepositoryIMock) MinimockFinish() {
 
 			m.MinimockGetEmbeddingByUIDsInspect()
 
+			m.MinimockGetFilesTotalTokensInspect()
+
 			m.MinimockGetIncompleteFileInspect()
 
 			m.MinimockGetKnowledgeBaseByOwnerAndIDInspect()
@@ -9566,6 +10256,8 @@ func (m *RepositoryIMock) MinimockFinish() {
 			m.MinimockGetRepositoryTagInspect()
 
 			m.MinimockGetTextChunksBySourceInspect()
+
+			m.MinimockGetTotalChunksBySourcesInspect()
 
 			m.MinimockGetTotalTokensByListKBUIDsInspect()
 
@@ -9626,10 +10318,12 @@ func (m *RepositoryIMock) minimockDone() bool {
 		m.MinimockGetConvertedFileByFileUIDDone() &&
 		m.MinimockGetCountFilesByListKnowledgeBaseUIDDone() &&
 		m.MinimockGetEmbeddingByUIDsDone() &&
+		m.MinimockGetFilesTotalTokensDone() &&
 		m.MinimockGetIncompleteFileDone() &&
 		m.MinimockGetKnowledgeBaseByOwnerAndIDDone() &&
 		m.MinimockGetRepositoryTagDone() &&
 		m.MinimockGetTextChunksBySourceDone() &&
+		m.MinimockGetTotalChunksBySourcesDone() &&
 		m.MinimockGetTotalTokensByListKBUIDsDone() &&
 		m.MinimockKnowledgeBaseFileTableNameDone() &&
 		m.MinimockListKnowledgeBaseFilesDone() &&

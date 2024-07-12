@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -17,6 +18,15 @@ type TextChunkI interface {
 	DeleteChunksByUIDs(ctx context.Context, chunkUIDs []uuid.UUID) error
 	GetTextChunksBySource(ctx context.Context, sourceTable string, sourceUID uuid.UUID) ([]TextChunk, error)
 	GetTotalTokensByListKBUIDs(ctx context.Context, kbUIDs []uuid.UUID) (map[uuid.UUID]int, error)
+	GetFilesTotalTokens(ctx context.Context, sources map[FileUID]struct {
+		SourceTable SourceTable
+		SourceUID   SourceUID
+	}) (map[FileUID]int, error)
+	// GetTotalChunksBySources
+	GetTotalChunksBySources(ctx context.Context, sources map[FileUID]struct {
+		SourceTable SourceTable
+		SourceUID   SourceUID
+	}) (map[FileUID]int, error)
 }
 
 // currently, we use minio to store the chunk but in the future, we may just get the content from the source
@@ -181,4 +191,106 @@ func (r *Repository) GetTotalTokensByListKBUIDs(ctx context.Context, kbUIDs []uu
 		totalTokensMap[tt.KbUID] = tt.Tokens
 	}
 	return totalTokensMap, nil
+}
+
+type FileUID = uuid.UUID
+type SourceTable = string
+type SourceUID = uuid.UUID
+
+// GetFilesTotalTokens returns the total tokens of the chunks by list of source table and source UID
+func (r *Repository) GetFilesTotalTokens(ctx context.Context, sources map[FileUID]struct {
+	SourceTable SourceTable
+	SourceUID   SourceUID
+}) (map[FileUID]int, error) {
+	result := make(map[FileUID]int)
+
+	// Prepare the conditions for the query
+	var conditions []string
+	var values []interface{}
+
+	for _, source := range sources {
+		conditions = append(conditions, "(source_table = ? AND source_uid = ?)")
+		values = append(values, source.SourceTable, source.SourceUID)
+	}
+
+	// Combine all conditions
+	whereClause := strings.Join(conditions, " OR ")
+
+	// Query to get total tokens grouped by source_table and source_uid
+	var tokenSums []struct {
+		SourceTable string    `gorm:"column:source_table"`
+		SourceUID   uuid.UUID `gorm:"column:source_uid"`
+		TotalTokens int       `gorm:"column:total_tokens"`
+	}
+
+	err := r.db.WithContext(ctx).Model(&TextChunk{}).
+		Select("source_table, source_uid, COALESCE(SUM(tokens), 0) as total_tokens").
+		Where(whereClause, values...).
+		Group("source_table, source_uid").
+		Find(&tokenSums).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Populate the result map
+	for _, sum := range tokenSums {
+		for fileUID, source := range sources {
+			if source.SourceTable == sum.SourceTable && source.SourceUID == sum.SourceUID {
+				result[fileUID] = sum.TotalTokens
+				break
+			}
+		}
+	}
+
+	return result, nil
+}
+
+// GetTotalChunksBySources returns the count of the chunks by source table and source UID
+func (r *Repository) GetTotalChunksBySources(ctx context.Context, sources map[FileUID]struct {
+	SourceTable SourceTable
+	SourceUID   SourceUID
+}) (map[FileUID]int, error) {
+	result := make(map[FileUID]int)
+
+	// Prepare the conditions for the query
+	var conditions []string
+	var values []interface{}
+
+	for _, source := range sources {
+		conditions = append(conditions, "(source_table = ? AND source_uid = ?)")
+		values = append(values, source.SourceTable, source.SourceUID)
+	}
+
+	// Combine all conditions
+	whereClause := strings.Join(conditions, " OR ")
+
+	// Query to get total tokens grouped by source_table and source_uid
+	var tokenSums []struct {
+		SourceTable SourceTable `gorm:"column:source_table"`
+		SourceUID   SourceUID   `gorm:"column:source_uid"`
+		TotalTokens int         `gorm:"column:total_tokens"`
+	}
+
+	err := r.db.WithContext(ctx).Model(&TextChunk{}).
+		Select("source_table, source_uid, COUNT(*) as total_tokens").
+		Where(whereClause, values...).
+		Group("source_table, source_uid").
+		Find(&tokenSums).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Populate the result map
+	for _, sum := range tokenSums {
+		for fileUID, source := range sources {
+			if source.SourceTable == sum.SourceTable && source.SourceUID == sum.SourceUID {
+				result[fileUID] = sum.TotalTokens
+				break
+			}
+		}
+	}
+
+	return result, nil
 }

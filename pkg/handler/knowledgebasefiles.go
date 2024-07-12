@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -13,6 +14,7 @@ import (
 	mgmtpb "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"gorm.io/gorm"
 )
 
 func (ph *PublicHandler) UploadKnowledgeBaseFile(ctx context.Context, req *artifactpb.UploadKnowledgeBaseFileRequest) (*artifactpb.UploadKnowledgeBaseFileResponse, error) {
@@ -69,6 +71,7 @@ func (ph *PublicHandler) UploadKnowledgeBaseFile(ctx context.Context, req *artif
 			log.Error("failed to parse owner uid", zap.Error(err))
 			return nil, err
 		}
+		fileSize, _ := getFileSize(req.File.Content)
 		destination := ph.service.MinIO.GetUploadedFilePathInKnowledgeBase(kb.UID.String(), req.File.Name)
 		kbFile := repository.KnowledgeBaseFile{
 			Name:             req.File.Name,
@@ -78,6 +81,7 @@ func (ph *PublicHandler) UploadKnowledgeBaseFile(ctx context.Context, req *artif
 			KnowledgeBaseUID: kb.UID,
 			Destination:      destination,
 			ProcessStatus:    artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_NOTSTARTED)],
+			Size:             fileSize,
 		}
 		res, err = ph.service.Repository.CreateKnowledgeBaseFile(ctx, kbFile, func(FileUID string) error {
 			// upload file to minio
@@ -105,8 +109,42 @@ func (ph *PublicHandler) UploadKnowledgeBaseFile(ctx context.Context, req *artif
 			CreateTime:    timestamppb.New(*res.CreateTime),
 			UpdateTime:    timestamppb.New(*res.UpdateTime),
 			ProcessStatus: artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_NOTSTARTED,
+			Size:          res.Size,
+			TotalChunks:   0,
+			TotalTokens:   0,
 		},
 	}, nil
+}
+
+// getFileSize returns the size of the file in bytes and a human-readable string
+func getFileSize(base64String string) (int64, string) {
+	// Get the length of the base64 string
+	base64Length := len(base64String)
+
+	// Calculate the size of the decoded data
+	// The actual size is approximately 3/4 of the base64 string length
+	decodedSize := base64Length / 4 * 3
+
+	// Remove padding characters
+	if base64String[base64Length-1] == '=' {
+		decodedSize--
+		if base64String[base64Length-2] == '=' {
+			decodedSize--
+		}
+	}
+
+	// Convert to appropriate unit
+	const unit = 1024
+	if decodedSize < unit {
+		return int64(decodedSize), fmt.Sprintf("%d B", decodedSize)
+	}
+	div, exp := int64(unit), 0
+	for n := int64(decodedSize) / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	size := float64(decodedSize) / float64(div)
+	return int64(decodedSize), fmt.Sprintf("%.1f %cB", size, "KMGTPE"[exp])
 }
 
 func checkUploadKnowledgeBaseFileRequest(req *artifactpb.UploadKnowledgeBaseFileRequest) error {
@@ -188,6 +226,24 @@ func (ph *PublicHandler) ListKnowledgeBaseFiles(ctx context.Context, req *artifa
 			log.Error("failed to list knowledge base files", zap.Error(err))
 			return nil, err
 		}
+		// get the tokens and chunks using the source table and source uid
+		sources, err := ph.findSourceTableAndSourceUIDByFileUID(ctx, kbFiles)
+		if err != nil {
+			log.Error("failed to find source table and source uid by file uid", zap.Error(err))
+			return nil, err
+		}
+		// TODO need test from file upload to file to embeded text then check the total tokens
+		totalTokens, err := ph.service.Repository.GetFilesTotalTokens(ctx, sources)
+		if err != nil {
+			log.Error("failed to get files total tokens", zap.Error(err))
+			return nil, err
+		}
+		// TODO get total chunks
+		totalChunks, err := ph.service.Repository.GetTotalChunksBySources(ctx, sources)
+		if err != nil {
+			log.Error("failed to get files total chunks", zap.Error(err))
+			return nil, err
+		}
 		totalSize = size
 		nextPageToken = nextToken
 		for _, kbFile := range kbFiles {
@@ -201,6 +257,9 @@ func (ph *PublicHandler) ListKnowledgeBaseFiles(ctx context.Context, req *artifa
 				CreateTime:    timestamppb.New(*kbFile.CreateTime),
 				UpdateTime:    timestamppb.New(*kbFile.UpdateTime),
 				ProcessStatus: artifactpb.FileProcessStatus(artifactpb.FileProcessStatus_value[kbFile.ProcessStatus]),
+				Size:          kbFile.Size,
+				TotalChunks:   int32(totalChunks[kbFile.UID]),
+				TotalTokens:   int32(totalTokens[kbFile.UID]),
 			})
 		}
 	}
@@ -211,6 +270,52 @@ func (ph *PublicHandler) ListKnowledgeBaseFiles(ctx context.Context, req *artifa
 		NextPageToken: nextPageToken,
 		Filter:        req.Filter,
 	}, nil
+}
+
+// findSourceTableAndSourceUIDByFiles find the source table and source uid by file uid.
+func (ph *PublicHandler) findSourceTableAndSourceUIDByFileUID(ctx context.Context, files []repository.KnowledgeBaseFile) (
+	map[uuid.UUID]struct {
+		SourceTable string
+		SourceUID   uuid.UUID
+	}, error) {
+	result := make(map[uuid.UUID]struct {
+		SourceTable string
+		SourceUID   uuid.UUID
+	})
+	logger, _ := logger.GetZapLogger(ctx)
+	for _, file := range files {
+		// find the source table and source uid by file uid
+		// check if the file is is text or markdown
+		switch file.Type {
+		case artifactpb.FileType_FILE_TYPE_TEXT.String(), artifactpb.FileType_FILE_TYPE_MARKDOWN.String():
+			result[file.UID] = struct {
+				SourceTable string
+				SourceUID   uuid.UUID
+			}{
+				SourceTable: ph.service.Repository.KnowledgeBaseFileTableName(),
+				SourceUID:   file.UID,
+			}
+		case artifactpb.FileType_FILE_TYPE_PDF.String():
+			convertedFile, err := ph.service.Repository.GetConvertedFileByFileUID(ctx, file.UID)
+			if err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					continue
+				} else {
+					logger.Error("failed to get converted file by file uid", zap.Error(err))
+					return nil, err
+				}
+			}
+			result[file.UID] = struct {
+				SourceTable string
+				SourceUID   uuid.UUID
+			}{
+				SourceTable: ph.service.Repository.ConvertedFileTableName(),
+				SourceUID:   convertedFile.UID,
+			}
+		}
+	}
+
+	return result, nil
 }
 
 func (ph *PublicHandler) DeleteKnowledgeBaseFile(
@@ -225,6 +330,11 @@ func (ph *PublicHandler) DeleteKnowledgeBaseFile(
 	// }
 
 	// TODO: ACL - check if the uid can delete file. ACL.
+
+	// check if file uid is empty
+	if req.FileUid == "" {
+		return nil, fmt.Errorf("file uid is required. err: %w", customerror.ErrInvalidArgument)
+	}
 
 	err := ph.service.Repository.DeleteKnowledgeBaseFile(ctx, req.FileUid)
 	if err != nil {
