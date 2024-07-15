@@ -1,8 +1,6 @@
 module github.com/instill-ai/artifact-backend
 
-go 1.21.1
-
-toolchain go1.21.3
+go 1.22
 
 require (
 	github.com/frankban/quicktest v1.14.6

@@ -123,3 +123,4 @@ test_.md
 test_pdf_base64.txt
 .DS_Store
 cmd/main/__debug_bin*
+.test

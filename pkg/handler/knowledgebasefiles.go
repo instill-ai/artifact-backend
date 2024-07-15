@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -14,7 +13,6 @@ import (
 	mgmtpb "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"gorm.io/gorm"
 )
 
 func (ph *PublicHandler) UploadKnowledgeBaseFile(ctx context.Context, req *artifactpb.UploadKnowledgeBaseFileRequest) (*artifactpb.UploadKnowledgeBaseFileResponse, error) {
@@ -227,18 +225,18 @@ func (ph *PublicHandler) ListKnowledgeBaseFiles(ctx context.Context, req *artifa
 			return nil, err
 		}
 		// get the tokens and chunks using the source table and source uid
-		sources, err := ph.findSourceTableAndSourceUIDByFileUID(ctx, kbFiles)
+		sources, err := ph.service.Repository.GetSourceTableAndUIDByFileUIDs(ctx, kbFiles)
 		if err != nil {
 			log.Error("failed to find source table and source uid by file uid", zap.Error(err))
 			return nil, err
 		}
-		// TODO need test from file upload to file to embeded text then check the total tokens
+
 		totalTokens, err := ph.service.Repository.GetFilesTotalTokens(ctx, sources)
 		if err != nil {
 			log.Error("failed to get files total tokens", zap.Error(err))
 			return nil, err
 		}
-		// TODO get total chunks
+
 		totalChunks, err := ph.service.Repository.GetTotalChunksBySources(ctx, sources)
 		if err != nil {
 			log.Error("failed to get files total chunks", zap.Error(err))
@@ -270,52 +268,6 @@ func (ph *PublicHandler) ListKnowledgeBaseFiles(ctx context.Context, req *artifa
 		NextPageToken: nextPageToken,
 		Filter:        req.Filter,
 	}, nil
-}
-
-// findSourceTableAndSourceUIDByFiles find the source table and source uid by file uid.
-func (ph *PublicHandler) findSourceTableAndSourceUIDByFileUID(ctx context.Context, files []repository.KnowledgeBaseFile) (
-	map[uuid.UUID]struct {
-		SourceTable string
-		SourceUID   uuid.UUID
-	}, error) {
-	result := make(map[uuid.UUID]struct {
-		SourceTable string
-		SourceUID   uuid.UUID
-	})
-	logger, _ := logger.GetZapLogger(ctx)
-	for _, file := range files {
-		// find the source table and source uid by file uid
-		// check if the file is is text or markdown
-		switch file.Type {
-		case artifactpb.FileType_FILE_TYPE_TEXT.String(), artifactpb.FileType_FILE_TYPE_MARKDOWN.String():
-			result[file.UID] = struct {
-				SourceTable string
-				SourceUID   uuid.UUID
-			}{
-				SourceTable: ph.service.Repository.KnowledgeBaseFileTableName(),
-				SourceUID:   file.UID,
-			}
-		case artifactpb.FileType_FILE_TYPE_PDF.String():
-			convertedFile, err := ph.service.Repository.GetConvertedFileByFileUID(ctx, file.UID)
-			if err != nil {
-				if errors.Is(err, gorm.ErrRecordNotFound) {
-					continue
-				} else {
-					logger.Error("failed to get converted file by file uid", zap.Error(err))
-					return nil, err
-				}
-			}
-			result[file.UID] = struct {
-				SourceTable string
-				SourceUID   uuid.UUID
-			}{
-				SourceTable: ph.service.Repository.ConvertedFileTableName(),
-				SourceUID:   convertedFile.UID,
-			}
-		}
-	}
-
-	return result, nil
 }
 
 func (ph *PublicHandler) DeleteKnowledgeBaseFile(

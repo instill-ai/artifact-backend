@@ -32,7 +32,7 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 		return nil, err
 	}
 
-	// TODO: check user's permission to create knowledge base in the user or org context
+	// TODO: ACL  check user's permission to create knowledge base in the user or org context
 	// 1. if it is user namespace, it is okay
 	// 2. if it is org namespace, check if the user has permission to create knowledge base in the org
 	// ....
@@ -175,8 +175,8 @@ func (ph *PublicHandler) ListKnowledgeBases(ctx context.Context, req *artifactpb
 			DownstreamApps:      []string{},
 			TotalFiles:          uint32(fileCounts[kb.UID]),
 			TotalTokens:         uint32(tokenCounts[kb.UID]),
-			// TODO: get used storage
-			UsedStorage:         0,
+			// TODO: get used storage of kb
+			UsedStorage: 0,
 		}
 	}
 	return &artifactpb.ListKnowledgeBasesResponse{
@@ -252,7 +252,7 @@ func (ph *PublicHandler) UpdateKnowledgeBase(ctx context.Context, req *artifactp
 			TotalFiles:          uint32(fileCounts[kb.UID]),
 			TotalTokens:         uint32(tokenCounts[kb.UID]),
 			// TODO: get used storage
-			UsedStorage:         0,
+			UsedStorage: 0,
 		},
 	}, nil
 }
@@ -284,19 +284,19 @@ func (ph *PublicHandler) DeleteKnowledgeBase(ctx context.Context, req *artifactp
 
 	return &artifactpb.DeleteKnowledgeBaseResponse{
 		KnowledgeBase: &artifactpb.KnowledgeBase{
-			Name:        deletedKb.Name,
-			KbId:        deletedKb.KbID,
-			Description: deletedKb.Description,
-			Tags:        deletedKb.Tags,
-			CreateTime:  deletedKb.CreateTime.String(),
-			UpdateTime:  deletedKb.UpdateTime.String(),
-			OwnerName:   deletedKb.Owner,
+			Name:                deletedKb.Name,
+			KbId:                deletedKb.KbID,
+			Description:         deletedKb.Description,
+			Tags:                deletedKb.Tags,
+			CreateTime:          deletedKb.CreateTime.String(),
+			UpdateTime:          deletedKb.UpdateTime.String(),
+			OwnerName:           deletedKb.Owner,
 			ConvertingPipelines: []string{},
-			EmbeddingPipelines: []string{},
-			DownstreamApps:     []string{},
-			TotalFiles:         0,
-			TotalTokens:        0,
-			UsedStorage:        0,
+			EmbeddingPipelines:  []string{},
+			DownstreamApps:      []string{},
+			TotalFiles:          0,
+			TotalTokens:         0,
+			UsedStorage:         0,
 		},
 	}, nil
 }
