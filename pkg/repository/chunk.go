@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -27,6 +28,7 @@ type TextChunkI interface {
 		SourceTable SourceTable
 		SourceUID   SourceUID
 	}) (map[FileUID]int, error)
+	UpdateChunk(ctx context.Context, chunkUID string, updates map[string]interface{}) (*TextChunk, error)
 }
 
 // currently, we use minio to store the chunk but in the future, we may just get the content from the source
@@ -293,4 +295,33 @@ func (r *Repository) GetTotalChunksBySources(ctx context.Context, sources map[Fi
 	}
 
 	return result, nil
+}
+
+// UpdateChunk updates a specific chunk identified by chunkUID with the provided updates map.
+func (r *Repository) UpdateChunk(ctx context.Context, chunkUID string, updates map[string]interface{}) (*TextChunk, error) {
+	// Fetch the existing chunk to ensure it exists
+	var existingChunk TextChunk
+	where := fmt.Sprintf("%s = ?", TextChunkColumn.UID)
+	if err := r.db.WithContext(ctx).Where(where, chunkUID).First(&existingChunk).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("chunk UID not found: %v. err: %w", chunkUID, gorm.ErrRecordNotFound)
+		}
+		return nil, err
+	}
+
+	// Update the specific fields of the chunk
+	if err := r.db.WithContext(ctx).Model(&existingChunk).Updates(updates).Error; err != nil {
+		return nil, err
+	}
+
+	// Fetch the updated chunk
+	var updatedChunk TextChunk
+	if err := r.db.WithContext(ctx).Where(where, chunkUID).Take(&updatedChunk).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("chunk UID not found after update: %v. err: %w", chunkUID, gorm.ErrRecordNotFound)
+		}
+		return nil, err
+	}
+
+	return &updatedChunk, nil
 }

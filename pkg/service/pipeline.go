@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 
-
 	"github.com/google/uuid"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	pipelinev1beta "github.com/instill-ai/protogen-go/vdp/pipeline/v1beta"
@@ -13,6 +12,8 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
+const chunkLength = 800
+const chunkOverlap = 200
 
 // ConvertPDFToMD using converting pipeline to convert PDF to MD and consume caller's credits
 func (s *Service) ConvertPDFToMD(ctx context.Context, caller uuid.UUID, pdfBase64 string) (string, error) {
@@ -78,8 +79,8 @@ func (s *Service) SplitMarkdown(ctx context.Context, caller uuid.UUID, markdown 
 			{
 				Fields: map[string]*structpb.Value{
 					"text_input":    {Kind: &structpb.Value_StringValue{StringValue: markdown}},
-					"chunk_length":  {Kind: &structpb.Value_NumberValue{NumberValue: 200}},
-					"chunk_overlap": {Kind: &structpb.Value_NumberValue{NumberValue: 50}},
+					"chunk_length":  {Kind: &structpb.Value_NumberValue{NumberValue: chunkLength}},
+					"chunk_overlap": {Kind: &structpb.Value_NumberValue{NumberValue: chunkOverlap}},
 				},
 			},
 		},
@@ -134,8 +135,8 @@ func (s *Service) SplitText(ctx context.Context, caller uuid.UUID, text string) 
 			{
 				Fields: map[string]*structpb.Value{
 					"text_input":    {Kind: &structpb.Value_StringValue{StringValue: text}},
-					"chunk_length":  {Kind: &structpb.Value_NumberValue{NumberValue: 200}},
-					"chunk_overlap": {Kind: &structpb.Value_NumberValue{NumberValue: 50}},
+					"chunk_length":  {Kind: &structpb.Value_NumberValue{NumberValue: chunkLength}},
+					"chunk_overlap": {Kind: &structpb.Value_NumberValue{NumberValue: chunkOverlap}},
 				},
 			},
 		},
@@ -151,7 +152,7 @@ func (s *Service) SplitText(ctx context.Context, caller uuid.UUID, text string) 
 	return result, nil
 }
 
-// TODO VectorizeText - waiting for CE to implement the global secret
+// TODO VectorizeText - waiting for CE to implement the global secret and use it in file-to-embeddings worker
 // VectorizeText using embedding pipeline to vectorize text and consume caller's credits
 func (s *Service) VectorizeText(ctx context.Context, caller uuid.UUID, texts []string) ([][]float32, error) {
 	md := metadata.New(map[string]string{"Instill-User-Uid": caller.String(), "Instill-Auth-Type": "user"})

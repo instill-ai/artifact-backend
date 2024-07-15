@@ -2,11 +2,14 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/instill-ai/artifact-backend/pkg/logger"
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
@@ -26,8 +29,19 @@ type KnowledgeBaseFileI interface {
 	// UpdateKnowledgeBaseFile updates the data and retrieves the latest data
 	UpdateKnowledgeBaseFile(ctx context.Context, fileUID string, updateMap map[string]interface{}) (*KnowledgeBaseFile, error)
 	// GetCountFilesByListKnowledgeBaseUID returns the number of files associated with the knowledge base UID
-	GetCountFilesByListKnowledgeBaseUID(ctx context.Context, kbUIDs []uuid.UUID) (map[uuid.UUID]int64, error)
+	GetCountFilesByListKnowledgeBaseUID(ctx context.Context, kbUIDs []KbUID) (map[KbUID]int64, error)
+	// GetSourceTableAndUIDByFileUIDs returns the source table and uid by file UID list
+	GetSourceTableAndUIDByFileUIDs(ctx context.Context, files []KnowledgeBaseFile) (map[FileUID]struct {
+		SourceTable string
+		SourceUID   uuid.UUID
+	}, error)
+	// GetKnowledgeBaseFilesByFileUIDs returns the knowledge base files by file UIDs
+	GetKnowledgeBaseFilesByFileUIDs(ctx context.Context, fileUIDs []uuid.UUID) ([]KnowledgeBaseFile, error)
+	// GetTruthSourceByFileUID returns the truth source file destination of minIO by file UID
+	GetTruthSourceByFileUID(ctx context.Context, fileUID uuid.UUID) (*SourceMeta, error)
 }
+
+type KbUID = uuid.UUID
 
 type KnowledgeBaseFile struct {
 	UID              uuid.UUID `gorm:"column:uid;type:uuid;default:gen_random_uuid();primaryKey" json:"uid"`
@@ -36,8 +50,9 @@ type KnowledgeBaseFile struct {
 	CreatorUID       uuid.UUID `gorm:"column:creator_uid;type:uuid;not null" json:"creator_uid"`
 	Name             string    `gorm:"column:name;size:255;not null" json:"name"`
 	// Type is defined in the grpc proto file
-	Type          string `gorm:"column:type;not null" json:"type"`
-	Destination   string `gorm:"column:destination;size:255;not null" json:"destination"`
+	Type        string `gorm:"column:type;not null" json:"type"`
+	Destination string `gorm:"column:destination;size:255;not null" json:"destination"`
+	// Process status is defined in the grpc proto file
 	ProcessStatus string `gorm:"column:process_status;size:100;not null" json:"process_status"`
 	ExtraMetaData string `gorm:"column:extra_meta_data;type:jsonb" json:"extra_meta_data"`
 	// Content not used yet
@@ -282,4 +297,124 @@ func (r *Repository) GetCountFilesByListKnowledgeBaseUID(ctx context.Context, kb
 	}
 
 	return counts, nil
+}
+
+// GetSourceTableAndUIDByFileUIDs returns the source table and uid by file UID list
+func (r *Repository) GetSourceTableAndUIDByFileUIDs(ctx context.Context, files []KnowledgeBaseFile) (
+	map[FileUID]struct {
+		SourceTable string
+		SourceUID   uuid.UUID
+	}, error) {
+	logger, _ := logger.GetZapLogger(ctx)
+	result := make(map[uuid.UUID]struct {
+		SourceTable string
+		SourceUID   uuid.UUID
+	})
+	for _, file := range files {
+		// find the source table and source uid by file uid
+		// check if the file is is text or markdown
+		switch file.Type {
+		case artifactpb.FileType_FILE_TYPE_TEXT.String(), artifactpb.FileType_FILE_TYPE_MARKDOWN.String():
+			result[file.UID] = struct {
+				SourceTable string
+				SourceUID   uuid.UUID
+			}{
+				SourceTable: r.KnowledgeBaseFileTableName(),
+				SourceUID:   file.UID,
+			}
+		case artifactpb.FileType_FILE_TYPE_PDF.String():
+			convertedFile, err := r.GetConvertedFileByFileUID(ctx, file.UID)
+			if err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					continue
+				} else {
+					logger.Error("failed to get converted file by file uid", zap.Error(err))
+					return map[uuid.UUID]struct {
+						SourceTable string
+						SourceUID   uuid.UUID
+					}{}, err
+				}
+			}
+			result[file.UID] = struct {
+				SourceTable string
+				SourceUID   uuid.UUID
+			}{
+				SourceTable: r.ConvertedFileTableName(),
+				SourceUID:   convertedFile.UID,
+			}
+		}
+	}
+
+	return result, nil
+}
+
+func (r *Repository) GetKnowledgeBaseFilesByFileUIDs(ctx context.Context, fileUIDs []uuid.UUID) ([]KnowledgeBaseFile, error) {
+	var files []KnowledgeBaseFile
+	// Convert UUIDs to strings as GORM works with strings in queries
+	var stringUIDs []string
+	for _, uid := range fileUIDs {
+		stringUIDs = append(stringUIDs, uid.String())
+	}
+	where := fmt.Sprintf("%v IN ?", KnowledgeBaseFileColumn.UID)
+	// Query the database for files with the given UIDs
+	if err := r.db.WithContext(ctx).Where(where, stringUIDs).Find(&files).Error; err != nil {
+		// If GORM returns ErrRecordNotFound, it's not considered an error in this context
+		if err == gorm.ErrRecordNotFound {
+			return []KnowledgeBaseFile{}, nil
+		}
+		// Return any other error that might have occurred during the query
+		return nil, err
+	}
+
+	// Return the found files, or an empty slice if none were found
+	return files, nil
+}
+
+type SourceMeta struct {
+	Dest       string
+	CreateTime time.Time
+}
+
+// GetTruthSourceByFileUID returns the truth source file destination of minIO by file UID
+func (r *Repository) GetTruthSourceByFileUID(ctx context.Context, fileUID uuid.UUID) (*SourceMeta, error) {
+	logger, _ := logger.GetZapLogger(ctx)
+	// get the file type by file uid
+	var file KnowledgeBaseFile
+	where := fmt.Sprintf("%v = ?", KnowledgeBaseFileColumn.UID)
+	if err := r.db.WithContext(ctx).Where(where, fileUID).First(&file).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, fmt.Errorf("file not found by file uid: %v", fileUID)
+		}
+		return nil, err
+	}
+	// assign truth source file destination and create time
+	var dest string
+	var createTime time.Time
+	switch file.Type {
+	// if the file type is text or markdown, the destination is the file destination
+	case artifactpb.FileType_FILE_TYPE_TEXT.String(), artifactpb.FileType_FILE_TYPE_MARKDOWN.String():
+		dest = file.Destination
+		createTime = *file.CreateTime
+	// if the file type is pdf, get the converted file destination
+	case artifactpb.FileType_FILE_TYPE_PDF.String():
+		convertedFile, err := r.GetConvertedFileByFileUID(ctx, fileUID)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				err = fmt.Errorf(`
+				Single source not found for the file UID.
+				It might be due to the file-to-single-source process not being completed yet
+				or the file does not exist. err: %w`, err)
+				logger.Error("converted file not found", zap.String("file_uid", fileUID.String()), zap.Error(err))
+				return nil, err
+			}
+			return nil, err
+		}
+		dest = convertedFile.Destination
+		createTime = *convertedFile.CreateTime
+	}
+
+	return &SourceMeta{
+		Dest:       dest,
+		CreateTime: createTime,
+	}, nil
 }

@@ -104,8 +104,8 @@ type RepositoryIMock struct {
 	beforeGetConvertedFileByFileUIDCounter uint64
 	GetConvertedFileByFileUIDMock          mRepositoryIMockGetConvertedFileByFileUID
 
-	funcGetCountFilesByListKnowledgeBaseUID          func(ctx context.Context, kbUIDs []uuid.UUID) (m1 map[uuid.UUID]int64, err error)
-	inspectFuncGetCountFilesByListKnowledgeBaseUID   func(ctx context.Context, kbUIDs []uuid.UUID)
+	funcGetCountFilesByListKnowledgeBaseUID          func(ctx context.Context, kbUIDs []mm_repository.KbUID) (m1 map[mm_repository.KbUID]int64, err error)
+	inspectFuncGetCountFilesByListKnowledgeBaseUID   func(ctx context.Context, kbUIDs []mm_repository.KbUID)
 	afterGetCountFilesByListKnowledgeBaseUIDCounter  uint64
 	beforeGetCountFilesByListKnowledgeBaseUIDCounter uint64
 	GetCountFilesByListKnowledgeBaseUIDMock          mRepositoryIMockGetCountFilesByListKnowledgeBaseUID
@@ -140,11 +140,26 @@ type RepositoryIMock struct {
 	beforeGetKnowledgeBaseByOwnerAndIDCounter uint64
 	GetKnowledgeBaseByOwnerAndIDMock          mRepositoryIMockGetKnowledgeBaseByOwnerAndID
 
+	funcGetKnowledgeBaseFilesByFileUIDs          func(ctx context.Context, fileUIDs []uuid.UUID) (ka1 []mm_repository.KnowledgeBaseFile, err error)
+	inspectFuncGetKnowledgeBaseFilesByFileUIDs   func(ctx context.Context, fileUIDs []uuid.UUID)
+	afterGetKnowledgeBaseFilesByFileUIDsCounter  uint64
+	beforeGetKnowledgeBaseFilesByFileUIDsCounter uint64
+	GetKnowledgeBaseFilesByFileUIDsMock          mRepositoryIMockGetKnowledgeBaseFilesByFileUIDs
+
 	funcGetRepositoryTag          func(ctx context.Context, r1 utils.RepositoryTagName) (rp1 *pb.RepositoryTag, err error)
 	inspectFuncGetRepositoryTag   func(ctx context.Context, r1 utils.RepositoryTagName)
 	afterGetRepositoryTagCounter  uint64
 	beforeGetRepositoryTagCounter uint64
 	GetRepositoryTagMock          mRepositoryIMockGetRepositoryTag
+
+	funcGetSourceTableAndUIDByFileUIDs func(ctx context.Context, files []mm_repository.KnowledgeBaseFile) (m1 map[mm_repository.FileUID]struct {
+		SourceTable string
+		SourceUID   uuid.UUID
+	}, err error)
+	inspectFuncGetSourceTableAndUIDByFileUIDs   func(ctx context.Context, files []mm_repository.KnowledgeBaseFile)
+	afterGetSourceTableAndUIDByFileUIDsCounter  uint64
+	beforeGetSourceTableAndUIDByFileUIDsCounter uint64
+	GetSourceTableAndUIDByFileUIDsMock          mRepositoryIMockGetSourceTableAndUIDByFileUIDs
 
 	funcGetTextChunksBySource          func(ctx context.Context, sourceTable string, sourceUID uuid.UUID) (ta1 []mm_repository.TextChunk, err error)
 	inspectFuncGetTextChunksBySource   func(ctx context.Context, sourceTable string, sourceUID uuid.UUID)
@@ -169,6 +184,12 @@ type RepositoryIMock struct {
 	afterGetTotalTokensByListKBUIDsCounter  uint64
 	beforeGetTotalTokensByListKBUIDsCounter uint64
 	GetTotalTokensByListKBUIDsMock          mRepositoryIMockGetTotalTokensByListKBUIDs
+
+	funcGetTruthSourceByFileUID          func(ctx context.Context, fileUID uuid.UUID) (sp1 *mm_repository.SourceMeta, err error)
+	inspectFuncGetTruthSourceByFileUID   func(ctx context.Context, fileUID uuid.UUID)
+	afterGetTruthSourceByFileUIDCounter  uint64
+	beforeGetTruthSourceByFileUIDCounter uint64
+	GetTruthSourceByFileUIDMock          mRepositoryIMockGetTruthSourceByFileUID
 
 	funcKnowledgeBaseFileTableName          func() (s1 string)
 	inspectFuncKnowledgeBaseFileTableName   func()
@@ -199,6 +220,12 @@ type RepositoryIMock struct {
 	afterTextChunkTableNameCounter  uint64
 	beforeTextChunkTableNameCounter uint64
 	TextChunkTableNameMock          mRepositoryIMockTextChunkTableName
+
+	funcUpdateChunk          func(ctx context.Context, chunkUID string, updates map[string]interface{}) (tp1 *mm_repository.TextChunk, err error)
+	inspectFuncUpdateChunk   func(ctx context.Context, chunkUID string, updates map[string]interface{})
+	afterUpdateChunkCounter  uint64
+	beforeUpdateChunkCounter uint64
+	UpdateChunkMock          mRepositoryIMockUpdateChunk
 
 	funcUpdateKnowledgeBase          func(ctx context.Context, ownerUID string, kb mm_repository.KnowledgeBase) (kp1 *mm_repository.KnowledgeBase, err error)
 	inspectFuncUpdateKnowledgeBase   func(ctx context.Context, ownerUID string, kb mm_repository.KnowledgeBase)
@@ -289,8 +316,14 @@ func NewRepositoryIMock(t minimock.Tester) *RepositoryIMock {
 	m.GetKnowledgeBaseByOwnerAndIDMock = mRepositoryIMockGetKnowledgeBaseByOwnerAndID{mock: m}
 	m.GetKnowledgeBaseByOwnerAndIDMock.callArgs = []*RepositoryIMockGetKnowledgeBaseByOwnerAndIDParams{}
 
+	m.GetKnowledgeBaseFilesByFileUIDsMock = mRepositoryIMockGetKnowledgeBaseFilesByFileUIDs{mock: m}
+	m.GetKnowledgeBaseFilesByFileUIDsMock.callArgs = []*RepositoryIMockGetKnowledgeBaseFilesByFileUIDsParams{}
+
 	m.GetRepositoryTagMock = mRepositoryIMockGetRepositoryTag{mock: m}
 	m.GetRepositoryTagMock.callArgs = []*RepositoryIMockGetRepositoryTagParams{}
+
+	m.GetSourceTableAndUIDByFileUIDsMock = mRepositoryIMockGetSourceTableAndUIDByFileUIDs{mock: m}
+	m.GetSourceTableAndUIDByFileUIDsMock.callArgs = []*RepositoryIMockGetSourceTableAndUIDByFileUIDsParams{}
 
 	m.GetTextChunksBySourceMock = mRepositoryIMockGetTextChunksBySource{mock: m}
 	m.GetTextChunksBySourceMock.callArgs = []*RepositoryIMockGetTextChunksBySourceParams{}
@@ -300,6 +333,9 @@ func NewRepositoryIMock(t minimock.Tester) *RepositoryIMock {
 
 	m.GetTotalTokensByListKBUIDsMock = mRepositoryIMockGetTotalTokensByListKBUIDs{mock: m}
 	m.GetTotalTokensByListKBUIDsMock.callArgs = []*RepositoryIMockGetTotalTokensByListKBUIDsParams{}
+
+	m.GetTruthSourceByFileUIDMock = mRepositoryIMockGetTruthSourceByFileUID{mock: m}
+	m.GetTruthSourceByFileUIDMock.callArgs = []*RepositoryIMockGetTruthSourceByFileUIDParams{}
 
 	m.KnowledgeBaseFileTableNameMock = mRepositoryIMockKnowledgeBaseFileTableName{mock: m}
 
@@ -313,6 +349,9 @@ func NewRepositoryIMock(t minimock.Tester) *RepositoryIMock {
 	m.ProcessKnowledgeBaseFilesMock.callArgs = []*RepositoryIMockProcessKnowledgeBaseFilesParams{}
 
 	m.TextChunkTableNameMock = mRepositoryIMockTextChunkTableName{mock: m}
+
+	m.UpdateChunkMock = mRepositoryIMockUpdateChunk{mock: m}
+	m.UpdateChunkMock.callArgs = []*RepositoryIMockUpdateChunkParams{}
 
 	m.UpdateKnowledgeBaseMock = mRepositoryIMockUpdateKnowledgeBase{mock: m}
 	m.UpdateKnowledgeBaseMock.callArgs = []*RepositoryIMockUpdateKnowledgeBaseParams{}
@@ -4727,23 +4766,23 @@ type RepositoryIMockGetCountFilesByListKnowledgeBaseUIDExpectation struct {
 // RepositoryIMockGetCountFilesByListKnowledgeBaseUIDParams contains parameters of the RepositoryI.GetCountFilesByListKnowledgeBaseUID
 type RepositoryIMockGetCountFilesByListKnowledgeBaseUIDParams struct {
 	ctx    context.Context
-	kbUIDs []uuid.UUID
+	kbUIDs []mm_repository.KbUID
 }
 
 // RepositoryIMockGetCountFilesByListKnowledgeBaseUIDParamPtrs contains pointers to parameters of the RepositoryI.GetCountFilesByListKnowledgeBaseUID
 type RepositoryIMockGetCountFilesByListKnowledgeBaseUIDParamPtrs struct {
 	ctx    *context.Context
-	kbUIDs *[]uuid.UUID
+	kbUIDs *[]mm_repository.KbUID
 }
 
 // RepositoryIMockGetCountFilesByListKnowledgeBaseUIDResults contains results of the RepositoryI.GetCountFilesByListKnowledgeBaseUID
 type RepositoryIMockGetCountFilesByListKnowledgeBaseUIDResults struct {
-	m1  map[uuid.UUID]int64
+	m1  map[mm_repository.KbUID]int64
 	err error
 }
 
 // Expect sets up expected params for RepositoryI.GetCountFilesByListKnowledgeBaseUID
-func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryIMockGetCountFilesByListKnowledgeBaseUID) Expect(ctx context.Context, kbUIDs []uuid.UUID) *mRepositoryIMockGetCountFilesByListKnowledgeBaseUID {
+func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryIMockGetCountFilesByListKnowledgeBaseUID) Expect(ctx context.Context, kbUIDs []mm_repository.KbUID) *mRepositoryIMockGetCountFilesByListKnowledgeBaseUID {
 	if mmGetCountFilesByListKnowledgeBaseUID.mock.funcGetCountFilesByListKnowledgeBaseUID != nil {
 		mmGetCountFilesByListKnowledgeBaseUID.mock.t.Fatalf("RepositoryIMock.GetCountFilesByListKnowledgeBaseUID mock is already set by Set")
 	}
@@ -4789,7 +4828,7 @@ func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryIMockGetCountFilesByList
 }
 
 // ExpectKbUIDsParam2 sets up expected param kbUIDs for RepositoryI.GetCountFilesByListKnowledgeBaseUID
-func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryIMockGetCountFilesByListKnowledgeBaseUID) ExpectKbUIDsParam2(kbUIDs []uuid.UUID) *mRepositoryIMockGetCountFilesByListKnowledgeBaseUID {
+func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryIMockGetCountFilesByListKnowledgeBaseUID) ExpectKbUIDsParam2(kbUIDs []mm_repository.KbUID) *mRepositoryIMockGetCountFilesByListKnowledgeBaseUID {
 	if mmGetCountFilesByListKnowledgeBaseUID.mock.funcGetCountFilesByListKnowledgeBaseUID != nil {
 		mmGetCountFilesByListKnowledgeBaseUID.mock.t.Fatalf("RepositoryIMock.GetCountFilesByListKnowledgeBaseUID mock is already set by Set")
 	}
@@ -4811,7 +4850,7 @@ func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryIMockGetCountFilesByList
 }
 
 // Inspect accepts an inspector function that has same arguments as the RepositoryI.GetCountFilesByListKnowledgeBaseUID
-func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryIMockGetCountFilesByListKnowledgeBaseUID) Inspect(f func(ctx context.Context, kbUIDs []uuid.UUID)) *mRepositoryIMockGetCountFilesByListKnowledgeBaseUID {
+func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryIMockGetCountFilesByListKnowledgeBaseUID) Inspect(f func(ctx context.Context, kbUIDs []mm_repository.KbUID)) *mRepositoryIMockGetCountFilesByListKnowledgeBaseUID {
 	if mmGetCountFilesByListKnowledgeBaseUID.mock.inspectFuncGetCountFilesByListKnowledgeBaseUID != nil {
 		mmGetCountFilesByListKnowledgeBaseUID.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.GetCountFilesByListKnowledgeBaseUID")
 	}
@@ -4822,7 +4861,7 @@ func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryIMockGetCountFilesByList
 }
 
 // Return sets up results that will be returned by RepositoryI.GetCountFilesByListKnowledgeBaseUID
-func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryIMockGetCountFilesByListKnowledgeBaseUID) Return(m1 map[uuid.UUID]int64, err error) *RepositoryIMock {
+func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryIMockGetCountFilesByListKnowledgeBaseUID) Return(m1 map[mm_repository.KbUID]int64, err error) *RepositoryIMock {
 	if mmGetCountFilesByListKnowledgeBaseUID.mock.funcGetCountFilesByListKnowledgeBaseUID != nil {
 		mmGetCountFilesByListKnowledgeBaseUID.mock.t.Fatalf("RepositoryIMock.GetCountFilesByListKnowledgeBaseUID mock is already set by Set")
 	}
@@ -4835,7 +4874,7 @@ func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryIMockGetCountFilesByList
 }
 
 // Set uses given function f to mock the RepositoryI.GetCountFilesByListKnowledgeBaseUID method
-func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryIMockGetCountFilesByListKnowledgeBaseUID) Set(f func(ctx context.Context, kbUIDs []uuid.UUID) (m1 map[uuid.UUID]int64, err error)) *RepositoryIMock {
+func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryIMockGetCountFilesByListKnowledgeBaseUID) Set(f func(ctx context.Context, kbUIDs []mm_repository.KbUID) (m1 map[mm_repository.KbUID]int64, err error)) *RepositoryIMock {
 	if mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation != nil {
 		mmGetCountFilesByListKnowledgeBaseUID.mock.t.Fatalf("Default expectation is already set for the RepositoryI.GetCountFilesByListKnowledgeBaseUID method")
 	}
@@ -4850,7 +4889,7 @@ func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryIMockGetCountFilesByList
 
 // When sets expectation for the RepositoryI.GetCountFilesByListKnowledgeBaseUID which will trigger the result defined by the following
 // Then helper
-func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryIMockGetCountFilesByListKnowledgeBaseUID) When(ctx context.Context, kbUIDs []uuid.UUID) *RepositoryIMockGetCountFilesByListKnowledgeBaseUIDExpectation {
+func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryIMockGetCountFilesByListKnowledgeBaseUID) When(ctx context.Context, kbUIDs []mm_repository.KbUID) *RepositoryIMockGetCountFilesByListKnowledgeBaseUIDExpectation {
 	if mmGetCountFilesByListKnowledgeBaseUID.mock.funcGetCountFilesByListKnowledgeBaseUID != nil {
 		mmGetCountFilesByListKnowledgeBaseUID.mock.t.Fatalf("RepositoryIMock.GetCountFilesByListKnowledgeBaseUID mock is already set by Set")
 	}
@@ -4864,7 +4903,7 @@ func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryIMockGetCountFilesByList
 }
 
 // Then sets up RepositoryI.GetCountFilesByListKnowledgeBaseUID return parameters for the expectation previously defined by the When method
-func (e *RepositoryIMockGetCountFilesByListKnowledgeBaseUIDExpectation) Then(m1 map[uuid.UUID]int64, err error) *RepositoryIMock {
+func (e *RepositoryIMockGetCountFilesByListKnowledgeBaseUIDExpectation) Then(m1 map[mm_repository.KbUID]int64, err error) *RepositoryIMock {
 	e.results = &RepositoryIMockGetCountFilesByListKnowledgeBaseUIDResults{m1, err}
 	return e.mock
 }
@@ -4890,7 +4929,7 @@ func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryIMockGetCountFilesByList
 }
 
 // GetCountFilesByListKnowledgeBaseUID implements repository.RepositoryI
-func (mmGetCountFilesByListKnowledgeBaseUID *RepositoryIMock) GetCountFilesByListKnowledgeBaseUID(ctx context.Context, kbUIDs []uuid.UUID) (m1 map[uuid.UUID]int64, err error) {
+func (mmGetCountFilesByListKnowledgeBaseUID *RepositoryIMock) GetCountFilesByListKnowledgeBaseUID(ctx context.Context, kbUIDs []mm_repository.KbUID) (m1 map[mm_repository.KbUID]int64, err error) {
 	mm_atomic.AddUint64(&mmGetCountFilesByListKnowledgeBaseUID.beforeGetCountFilesByListKnowledgeBaseUIDCounter, 1)
 	defer mm_atomic.AddUint64(&mmGetCountFilesByListKnowledgeBaseUID.afterGetCountFilesByListKnowledgeBaseUIDCounter, 1)
 
@@ -6252,6 +6291,311 @@ func (m *RepositoryIMock) MinimockGetKnowledgeBaseByOwnerAndIDInspect() {
 	}
 }
 
+type mRepositoryIMockGetKnowledgeBaseFilesByFileUIDs struct {
+	mock               *RepositoryIMock
+	defaultExpectation *RepositoryIMockGetKnowledgeBaseFilesByFileUIDsExpectation
+	expectations       []*RepositoryIMockGetKnowledgeBaseFilesByFileUIDsExpectation
+
+	callArgs []*RepositoryIMockGetKnowledgeBaseFilesByFileUIDsParams
+	mutex    sync.RWMutex
+
+	expectedInvocations uint64
+}
+
+// RepositoryIMockGetKnowledgeBaseFilesByFileUIDsExpectation specifies expectation struct of the RepositoryI.GetKnowledgeBaseFilesByFileUIDs
+type RepositoryIMockGetKnowledgeBaseFilesByFileUIDsExpectation struct {
+	mock      *RepositoryIMock
+	params    *RepositoryIMockGetKnowledgeBaseFilesByFileUIDsParams
+	paramPtrs *RepositoryIMockGetKnowledgeBaseFilesByFileUIDsParamPtrs
+	results   *RepositoryIMockGetKnowledgeBaseFilesByFileUIDsResults
+	Counter   uint64
+}
+
+// RepositoryIMockGetKnowledgeBaseFilesByFileUIDsParams contains parameters of the RepositoryI.GetKnowledgeBaseFilesByFileUIDs
+type RepositoryIMockGetKnowledgeBaseFilesByFileUIDsParams struct {
+	ctx      context.Context
+	fileUIDs []uuid.UUID
+}
+
+// RepositoryIMockGetKnowledgeBaseFilesByFileUIDsParamPtrs contains pointers to parameters of the RepositoryI.GetKnowledgeBaseFilesByFileUIDs
+type RepositoryIMockGetKnowledgeBaseFilesByFileUIDsParamPtrs struct {
+	ctx      *context.Context
+	fileUIDs *[]uuid.UUID
+}
+
+// RepositoryIMockGetKnowledgeBaseFilesByFileUIDsResults contains results of the RepositoryI.GetKnowledgeBaseFilesByFileUIDs
+type RepositoryIMockGetKnowledgeBaseFilesByFileUIDsResults struct {
+	ka1 []mm_repository.KnowledgeBaseFile
+	err error
+}
+
+// Expect sets up expected params for RepositoryI.GetKnowledgeBaseFilesByFileUIDs
+func (mmGetKnowledgeBaseFilesByFileUIDs *mRepositoryIMockGetKnowledgeBaseFilesByFileUIDs) Expect(ctx context.Context, fileUIDs []uuid.UUID) *mRepositoryIMockGetKnowledgeBaseFilesByFileUIDs {
+	if mmGetKnowledgeBaseFilesByFileUIDs.mock.funcGetKnowledgeBaseFilesByFileUIDs != nil {
+		mmGetKnowledgeBaseFilesByFileUIDs.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBaseFilesByFileUIDs mock is already set by Set")
+	}
+
+	if mmGetKnowledgeBaseFilesByFileUIDs.defaultExpectation == nil {
+		mmGetKnowledgeBaseFilesByFileUIDs.defaultExpectation = &RepositoryIMockGetKnowledgeBaseFilesByFileUIDsExpectation{}
+	}
+
+	if mmGetKnowledgeBaseFilesByFileUIDs.defaultExpectation.paramPtrs != nil {
+		mmGetKnowledgeBaseFilesByFileUIDs.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBaseFilesByFileUIDs mock is already set by ExpectParams functions")
+	}
+
+	mmGetKnowledgeBaseFilesByFileUIDs.defaultExpectation.params = &RepositoryIMockGetKnowledgeBaseFilesByFileUIDsParams{ctx, fileUIDs}
+	for _, e := range mmGetKnowledgeBaseFilesByFileUIDs.expectations {
+		if minimock.Equal(e.params, mmGetKnowledgeBaseFilesByFileUIDs.defaultExpectation.params) {
+			mmGetKnowledgeBaseFilesByFileUIDs.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetKnowledgeBaseFilesByFileUIDs.defaultExpectation.params)
+		}
+	}
+
+	return mmGetKnowledgeBaseFilesByFileUIDs
+}
+
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.GetKnowledgeBaseFilesByFileUIDs
+func (mmGetKnowledgeBaseFilesByFileUIDs *mRepositoryIMockGetKnowledgeBaseFilesByFileUIDs) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockGetKnowledgeBaseFilesByFileUIDs {
+	if mmGetKnowledgeBaseFilesByFileUIDs.mock.funcGetKnowledgeBaseFilesByFileUIDs != nil {
+		mmGetKnowledgeBaseFilesByFileUIDs.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBaseFilesByFileUIDs mock is already set by Set")
+	}
+
+	if mmGetKnowledgeBaseFilesByFileUIDs.defaultExpectation == nil {
+		mmGetKnowledgeBaseFilesByFileUIDs.defaultExpectation = &RepositoryIMockGetKnowledgeBaseFilesByFileUIDsExpectation{}
+	}
+
+	if mmGetKnowledgeBaseFilesByFileUIDs.defaultExpectation.params != nil {
+		mmGetKnowledgeBaseFilesByFileUIDs.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBaseFilesByFileUIDs mock is already set by Expect")
+	}
+
+	if mmGetKnowledgeBaseFilesByFileUIDs.defaultExpectation.paramPtrs == nil {
+		mmGetKnowledgeBaseFilesByFileUIDs.defaultExpectation.paramPtrs = &RepositoryIMockGetKnowledgeBaseFilesByFileUIDsParamPtrs{}
+	}
+	mmGetKnowledgeBaseFilesByFileUIDs.defaultExpectation.paramPtrs.ctx = &ctx
+
+	return mmGetKnowledgeBaseFilesByFileUIDs
+}
+
+// ExpectFileUIDsParam2 sets up expected param fileUIDs for RepositoryI.GetKnowledgeBaseFilesByFileUIDs
+func (mmGetKnowledgeBaseFilesByFileUIDs *mRepositoryIMockGetKnowledgeBaseFilesByFileUIDs) ExpectFileUIDsParam2(fileUIDs []uuid.UUID) *mRepositoryIMockGetKnowledgeBaseFilesByFileUIDs {
+	if mmGetKnowledgeBaseFilesByFileUIDs.mock.funcGetKnowledgeBaseFilesByFileUIDs != nil {
+		mmGetKnowledgeBaseFilesByFileUIDs.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBaseFilesByFileUIDs mock is already set by Set")
+	}
+
+	if mmGetKnowledgeBaseFilesByFileUIDs.defaultExpectation == nil {
+		mmGetKnowledgeBaseFilesByFileUIDs.defaultExpectation = &RepositoryIMockGetKnowledgeBaseFilesByFileUIDsExpectation{}
+	}
+
+	if mmGetKnowledgeBaseFilesByFileUIDs.defaultExpectation.params != nil {
+		mmGetKnowledgeBaseFilesByFileUIDs.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBaseFilesByFileUIDs mock is already set by Expect")
+	}
+
+	if mmGetKnowledgeBaseFilesByFileUIDs.defaultExpectation.paramPtrs == nil {
+		mmGetKnowledgeBaseFilesByFileUIDs.defaultExpectation.paramPtrs = &RepositoryIMockGetKnowledgeBaseFilesByFileUIDsParamPtrs{}
+	}
+	mmGetKnowledgeBaseFilesByFileUIDs.defaultExpectation.paramPtrs.fileUIDs = &fileUIDs
+
+	return mmGetKnowledgeBaseFilesByFileUIDs
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.GetKnowledgeBaseFilesByFileUIDs
+func (mmGetKnowledgeBaseFilesByFileUIDs *mRepositoryIMockGetKnowledgeBaseFilesByFileUIDs) Inspect(f func(ctx context.Context, fileUIDs []uuid.UUID)) *mRepositoryIMockGetKnowledgeBaseFilesByFileUIDs {
+	if mmGetKnowledgeBaseFilesByFileUIDs.mock.inspectFuncGetKnowledgeBaseFilesByFileUIDs != nil {
+		mmGetKnowledgeBaseFilesByFileUIDs.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.GetKnowledgeBaseFilesByFileUIDs")
+	}
+
+	mmGetKnowledgeBaseFilesByFileUIDs.mock.inspectFuncGetKnowledgeBaseFilesByFileUIDs = f
+
+	return mmGetKnowledgeBaseFilesByFileUIDs
+}
+
+// Return sets up results that will be returned by RepositoryI.GetKnowledgeBaseFilesByFileUIDs
+func (mmGetKnowledgeBaseFilesByFileUIDs *mRepositoryIMockGetKnowledgeBaseFilesByFileUIDs) Return(ka1 []mm_repository.KnowledgeBaseFile, err error) *RepositoryIMock {
+	if mmGetKnowledgeBaseFilesByFileUIDs.mock.funcGetKnowledgeBaseFilesByFileUIDs != nil {
+		mmGetKnowledgeBaseFilesByFileUIDs.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBaseFilesByFileUIDs mock is already set by Set")
+	}
+
+	if mmGetKnowledgeBaseFilesByFileUIDs.defaultExpectation == nil {
+		mmGetKnowledgeBaseFilesByFileUIDs.defaultExpectation = &RepositoryIMockGetKnowledgeBaseFilesByFileUIDsExpectation{mock: mmGetKnowledgeBaseFilesByFileUIDs.mock}
+	}
+	mmGetKnowledgeBaseFilesByFileUIDs.defaultExpectation.results = &RepositoryIMockGetKnowledgeBaseFilesByFileUIDsResults{ka1, err}
+	return mmGetKnowledgeBaseFilesByFileUIDs.mock
+}
+
+// Set uses given function f to mock the RepositoryI.GetKnowledgeBaseFilesByFileUIDs method
+func (mmGetKnowledgeBaseFilesByFileUIDs *mRepositoryIMockGetKnowledgeBaseFilesByFileUIDs) Set(f func(ctx context.Context, fileUIDs []uuid.UUID) (ka1 []mm_repository.KnowledgeBaseFile, err error)) *RepositoryIMock {
+	if mmGetKnowledgeBaseFilesByFileUIDs.defaultExpectation != nil {
+		mmGetKnowledgeBaseFilesByFileUIDs.mock.t.Fatalf("Default expectation is already set for the RepositoryI.GetKnowledgeBaseFilesByFileUIDs method")
+	}
+
+	if len(mmGetKnowledgeBaseFilesByFileUIDs.expectations) > 0 {
+		mmGetKnowledgeBaseFilesByFileUIDs.mock.t.Fatalf("Some expectations are already set for the RepositoryI.GetKnowledgeBaseFilesByFileUIDs method")
+	}
+
+	mmGetKnowledgeBaseFilesByFileUIDs.mock.funcGetKnowledgeBaseFilesByFileUIDs = f
+	return mmGetKnowledgeBaseFilesByFileUIDs.mock
+}
+
+// When sets expectation for the RepositoryI.GetKnowledgeBaseFilesByFileUIDs which will trigger the result defined by the following
+// Then helper
+func (mmGetKnowledgeBaseFilesByFileUIDs *mRepositoryIMockGetKnowledgeBaseFilesByFileUIDs) When(ctx context.Context, fileUIDs []uuid.UUID) *RepositoryIMockGetKnowledgeBaseFilesByFileUIDsExpectation {
+	if mmGetKnowledgeBaseFilesByFileUIDs.mock.funcGetKnowledgeBaseFilesByFileUIDs != nil {
+		mmGetKnowledgeBaseFilesByFileUIDs.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBaseFilesByFileUIDs mock is already set by Set")
+	}
+
+	expectation := &RepositoryIMockGetKnowledgeBaseFilesByFileUIDsExpectation{
+		mock:   mmGetKnowledgeBaseFilesByFileUIDs.mock,
+		params: &RepositoryIMockGetKnowledgeBaseFilesByFileUIDsParams{ctx, fileUIDs},
+	}
+	mmGetKnowledgeBaseFilesByFileUIDs.expectations = append(mmGetKnowledgeBaseFilesByFileUIDs.expectations, expectation)
+	return expectation
+}
+
+// Then sets up RepositoryI.GetKnowledgeBaseFilesByFileUIDs return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockGetKnowledgeBaseFilesByFileUIDsExpectation) Then(ka1 []mm_repository.KnowledgeBaseFile, err error) *RepositoryIMock {
+	e.results = &RepositoryIMockGetKnowledgeBaseFilesByFileUIDsResults{ka1, err}
+	return e.mock
+}
+
+// Times sets number of times RepositoryI.GetKnowledgeBaseFilesByFileUIDs should be invoked
+func (mmGetKnowledgeBaseFilesByFileUIDs *mRepositoryIMockGetKnowledgeBaseFilesByFileUIDs) Times(n uint64) *mRepositoryIMockGetKnowledgeBaseFilesByFileUIDs {
+	if n == 0 {
+		mmGetKnowledgeBaseFilesByFileUIDs.mock.t.Fatalf("Times of RepositoryIMock.GetKnowledgeBaseFilesByFileUIDs mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetKnowledgeBaseFilesByFileUIDs.expectedInvocations, n)
+	return mmGetKnowledgeBaseFilesByFileUIDs
+}
+
+func (mmGetKnowledgeBaseFilesByFileUIDs *mRepositoryIMockGetKnowledgeBaseFilesByFileUIDs) invocationsDone() bool {
+	if len(mmGetKnowledgeBaseFilesByFileUIDs.expectations) == 0 && mmGetKnowledgeBaseFilesByFileUIDs.defaultExpectation == nil && mmGetKnowledgeBaseFilesByFileUIDs.mock.funcGetKnowledgeBaseFilesByFileUIDs == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetKnowledgeBaseFilesByFileUIDs.mock.afterGetKnowledgeBaseFilesByFileUIDsCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetKnowledgeBaseFilesByFileUIDs.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetKnowledgeBaseFilesByFileUIDs implements repository.RepositoryI
+func (mmGetKnowledgeBaseFilesByFileUIDs *RepositoryIMock) GetKnowledgeBaseFilesByFileUIDs(ctx context.Context, fileUIDs []uuid.UUID) (ka1 []mm_repository.KnowledgeBaseFile, err error) {
+	mm_atomic.AddUint64(&mmGetKnowledgeBaseFilesByFileUIDs.beforeGetKnowledgeBaseFilesByFileUIDsCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetKnowledgeBaseFilesByFileUIDs.afterGetKnowledgeBaseFilesByFileUIDsCounter, 1)
+
+	if mmGetKnowledgeBaseFilesByFileUIDs.inspectFuncGetKnowledgeBaseFilesByFileUIDs != nil {
+		mmGetKnowledgeBaseFilesByFileUIDs.inspectFuncGetKnowledgeBaseFilesByFileUIDs(ctx, fileUIDs)
+	}
+
+	mm_params := RepositoryIMockGetKnowledgeBaseFilesByFileUIDsParams{ctx, fileUIDs}
+
+	// Record call args
+	mmGetKnowledgeBaseFilesByFileUIDs.GetKnowledgeBaseFilesByFileUIDsMock.mutex.Lock()
+	mmGetKnowledgeBaseFilesByFileUIDs.GetKnowledgeBaseFilesByFileUIDsMock.callArgs = append(mmGetKnowledgeBaseFilesByFileUIDs.GetKnowledgeBaseFilesByFileUIDsMock.callArgs, &mm_params)
+	mmGetKnowledgeBaseFilesByFileUIDs.GetKnowledgeBaseFilesByFileUIDsMock.mutex.Unlock()
+
+	for _, e := range mmGetKnowledgeBaseFilesByFileUIDs.GetKnowledgeBaseFilesByFileUIDsMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.ka1, e.results.err
+		}
+	}
+
+	if mmGetKnowledgeBaseFilesByFileUIDs.GetKnowledgeBaseFilesByFileUIDsMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetKnowledgeBaseFilesByFileUIDs.GetKnowledgeBaseFilesByFileUIDsMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetKnowledgeBaseFilesByFileUIDs.GetKnowledgeBaseFilesByFileUIDsMock.defaultExpectation.params
+		mm_want_ptrs := mmGetKnowledgeBaseFilesByFileUIDs.GetKnowledgeBaseFilesByFileUIDsMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryIMockGetKnowledgeBaseFilesByFileUIDsParams{ctx, fileUIDs}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetKnowledgeBaseFilesByFileUIDs.t.Errorf("RepositoryIMock.GetKnowledgeBaseFilesByFileUIDs got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.fileUIDs != nil && !minimock.Equal(*mm_want_ptrs.fileUIDs, mm_got.fileUIDs) {
+				mmGetKnowledgeBaseFilesByFileUIDs.t.Errorf("RepositoryIMock.GetKnowledgeBaseFilesByFileUIDs got unexpected parameter fileUIDs, want: %#v, got: %#v%s\n", *mm_want_ptrs.fileUIDs, mm_got.fileUIDs, minimock.Diff(*mm_want_ptrs.fileUIDs, mm_got.fileUIDs))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetKnowledgeBaseFilesByFileUIDs.t.Errorf("RepositoryIMock.GetKnowledgeBaseFilesByFileUIDs got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetKnowledgeBaseFilesByFileUIDs.GetKnowledgeBaseFilesByFileUIDsMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetKnowledgeBaseFilesByFileUIDs.t.Fatal("No results are set for the RepositoryIMock.GetKnowledgeBaseFilesByFileUIDs")
+		}
+		return (*mm_results).ka1, (*mm_results).err
+	}
+	if mmGetKnowledgeBaseFilesByFileUIDs.funcGetKnowledgeBaseFilesByFileUIDs != nil {
+		return mmGetKnowledgeBaseFilesByFileUIDs.funcGetKnowledgeBaseFilesByFileUIDs(ctx, fileUIDs)
+	}
+	mmGetKnowledgeBaseFilesByFileUIDs.t.Fatalf("Unexpected call to RepositoryIMock.GetKnowledgeBaseFilesByFileUIDs. %v %v", ctx, fileUIDs)
+	return
+}
+
+// GetKnowledgeBaseFilesByFileUIDsAfterCounter returns a count of finished RepositoryIMock.GetKnowledgeBaseFilesByFileUIDs invocations
+func (mmGetKnowledgeBaseFilesByFileUIDs *RepositoryIMock) GetKnowledgeBaseFilesByFileUIDsAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetKnowledgeBaseFilesByFileUIDs.afterGetKnowledgeBaseFilesByFileUIDsCounter)
+}
+
+// GetKnowledgeBaseFilesByFileUIDsBeforeCounter returns a count of RepositoryIMock.GetKnowledgeBaseFilesByFileUIDs invocations
+func (mmGetKnowledgeBaseFilesByFileUIDs *RepositoryIMock) GetKnowledgeBaseFilesByFileUIDsBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetKnowledgeBaseFilesByFileUIDs.beforeGetKnowledgeBaseFilesByFileUIDsCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryIMock.GetKnowledgeBaseFilesByFileUIDs.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetKnowledgeBaseFilesByFileUIDs *mRepositoryIMockGetKnowledgeBaseFilesByFileUIDs) Calls() []*RepositoryIMockGetKnowledgeBaseFilesByFileUIDsParams {
+	mmGetKnowledgeBaseFilesByFileUIDs.mutex.RLock()
+
+	argCopy := make([]*RepositoryIMockGetKnowledgeBaseFilesByFileUIDsParams, len(mmGetKnowledgeBaseFilesByFileUIDs.callArgs))
+	copy(argCopy, mmGetKnowledgeBaseFilesByFileUIDs.callArgs)
+
+	mmGetKnowledgeBaseFilesByFileUIDs.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetKnowledgeBaseFilesByFileUIDsDone returns true if the count of the GetKnowledgeBaseFilesByFileUIDs invocations corresponds
+// the number of defined expectations
+func (m *RepositoryIMock) MinimockGetKnowledgeBaseFilesByFileUIDsDone() bool {
+	for _, e := range m.GetKnowledgeBaseFilesByFileUIDsMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetKnowledgeBaseFilesByFileUIDsMock.invocationsDone()
+}
+
+// MinimockGetKnowledgeBaseFilesByFileUIDsInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockGetKnowledgeBaseFilesByFileUIDsInspect() {
+	for _, e := range m.GetKnowledgeBaseFilesByFileUIDsMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryIMock.GetKnowledgeBaseFilesByFileUIDs with params: %#v", *e.params)
+		}
+	}
+
+	afterGetKnowledgeBaseFilesByFileUIDsCounter := mm_atomic.LoadUint64(&m.afterGetKnowledgeBaseFilesByFileUIDsCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetKnowledgeBaseFilesByFileUIDsMock.defaultExpectation != nil && afterGetKnowledgeBaseFilesByFileUIDsCounter < 1 {
+		if m.GetKnowledgeBaseFilesByFileUIDsMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to RepositoryIMock.GetKnowledgeBaseFilesByFileUIDs")
+		} else {
+			m.t.Errorf("Expected call to RepositoryIMock.GetKnowledgeBaseFilesByFileUIDs with params: %#v", *m.GetKnowledgeBaseFilesByFileUIDsMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetKnowledgeBaseFilesByFileUIDs != nil && afterGetKnowledgeBaseFilesByFileUIDsCounter < 1 {
+		m.t.Error("Expected call to RepositoryIMock.GetKnowledgeBaseFilesByFileUIDs")
+	}
+
+	if !m.GetKnowledgeBaseFilesByFileUIDsMock.invocationsDone() && afterGetKnowledgeBaseFilesByFileUIDsCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.GetKnowledgeBaseFilesByFileUIDs but found %d calls",
+			mm_atomic.LoadUint64(&m.GetKnowledgeBaseFilesByFileUIDsMock.expectedInvocations), afterGetKnowledgeBaseFilesByFileUIDsCounter)
+	}
+}
+
 type mRepositoryIMockGetRepositoryTag struct {
 	mock               *RepositoryIMock
 	defaultExpectation *RepositoryIMockGetRepositoryTagExpectation
@@ -6554,6 +6898,326 @@ func (m *RepositoryIMock) MinimockGetRepositoryTagInspect() {
 	if !m.GetRepositoryTagMock.invocationsDone() && afterGetRepositoryTagCounter > 0 {
 		m.t.Errorf("Expected %d calls to RepositoryIMock.GetRepositoryTag but found %d calls",
 			mm_atomic.LoadUint64(&m.GetRepositoryTagMock.expectedInvocations), afterGetRepositoryTagCounter)
+	}
+}
+
+type mRepositoryIMockGetSourceTableAndUIDByFileUIDs struct {
+	mock               *RepositoryIMock
+	defaultExpectation *RepositoryIMockGetSourceTableAndUIDByFileUIDsExpectation
+	expectations       []*RepositoryIMockGetSourceTableAndUIDByFileUIDsExpectation
+
+	callArgs []*RepositoryIMockGetSourceTableAndUIDByFileUIDsParams
+	mutex    sync.RWMutex
+
+	expectedInvocations uint64
+}
+
+// RepositoryIMockGetSourceTableAndUIDByFileUIDsExpectation specifies expectation struct of the RepositoryI.GetSourceTableAndUIDByFileUIDs
+type RepositoryIMockGetSourceTableAndUIDByFileUIDsExpectation struct {
+	mock      *RepositoryIMock
+	params    *RepositoryIMockGetSourceTableAndUIDByFileUIDsParams
+	paramPtrs *RepositoryIMockGetSourceTableAndUIDByFileUIDsParamPtrs
+	results   *RepositoryIMockGetSourceTableAndUIDByFileUIDsResults
+	Counter   uint64
+}
+
+// RepositoryIMockGetSourceTableAndUIDByFileUIDsParams contains parameters of the RepositoryI.GetSourceTableAndUIDByFileUIDs
+type RepositoryIMockGetSourceTableAndUIDByFileUIDsParams struct {
+	ctx   context.Context
+	files []mm_repository.KnowledgeBaseFile
+}
+
+// RepositoryIMockGetSourceTableAndUIDByFileUIDsParamPtrs contains pointers to parameters of the RepositoryI.GetSourceTableAndUIDByFileUIDs
+type RepositoryIMockGetSourceTableAndUIDByFileUIDsParamPtrs struct {
+	ctx   *context.Context
+	files *[]mm_repository.KnowledgeBaseFile
+}
+
+// RepositoryIMockGetSourceTableAndUIDByFileUIDsResults contains results of the RepositoryI.GetSourceTableAndUIDByFileUIDs
+type RepositoryIMockGetSourceTableAndUIDByFileUIDsResults struct {
+	m1 map[mm_repository.FileUID]struct {
+		SourceTable string
+		SourceUID   uuid.UUID
+	}
+	err error
+}
+
+// Expect sets up expected params for RepositoryI.GetSourceTableAndUIDByFileUIDs
+func (mmGetSourceTableAndUIDByFileUIDs *mRepositoryIMockGetSourceTableAndUIDByFileUIDs) Expect(ctx context.Context, files []mm_repository.KnowledgeBaseFile) *mRepositoryIMockGetSourceTableAndUIDByFileUIDs {
+	if mmGetSourceTableAndUIDByFileUIDs.mock.funcGetSourceTableAndUIDByFileUIDs != nil {
+		mmGetSourceTableAndUIDByFileUIDs.mock.t.Fatalf("RepositoryIMock.GetSourceTableAndUIDByFileUIDs mock is already set by Set")
+	}
+
+	if mmGetSourceTableAndUIDByFileUIDs.defaultExpectation == nil {
+		mmGetSourceTableAndUIDByFileUIDs.defaultExpectation = &RepositoryIMockGetSourceTableAndUIDByFileUIDsExpectation{}
+	}
+
+	if mmGetSourceTableAndUIDByFileUIDs.defaultExpectation.paramPtrs != nil {
+		mmGetSourceTableAndUIDByFileUIDs.mock.t.Fatalf("RepositoryIMock.GetSourceTableAndUIDByFileUIDs mock is already set by ExpectParams functions")
+	}
+
+	mmGetSourceTableAndUIDByFileUIDs.defaultExpectation.params = &RepositoryIMockGetSourceTableAndUIDByFileUIDsParams{ctx, files}
+	for _, e := range mmGetSourceTableAndUIDByFileUIDs.expectations {
+		if minimock.Equal(e.params, mmGetSourceTableAndUIDByFileUIDs.defaultExpectation.params) {
+			mmGetSourceTableAndUIDByFileUIDs.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetSourceTableAndUIDByFileUIDs.defaultExpectation.params)
+		}
+	}
+
+	return mmGetSourceTableAndUIDByFileUIDs
+}
+
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.GetSourceTableAndUIDByFileUIDs
+func (mmGetSourceTableAndUIDByFileUIDs *mRepositoryIMockGetSourceTableAndUIDByFileUIDs) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockGetSourceTableAndUIDByFileUIDs {
+	if mmGetSourceTableAndUIDByFileUIDs.mock.funcGetSourceTableAndUIDByFileUIDs != nil {
+		mmGetSourceTableAndUIDByFileUIDs.mock.t.Fatalf("RepositoryIMock.GetSourceTableAndUIDByFileUIDs mock is already set by Set")
+	}
+
+	if mmGetSourceTableAndUIDByFileUIDs.defaultExpectation == nil {
+		mmGetSourceTableAndUIDByFileUIDs.defaultExpectation = &RepositoryIMockGetSourceTableAndUIDByFileUIDsExpectation{}
+	}
+
+	if mmGetSourceTableAndUIDByFileUIDs.defaultExpectation.params != nil {
+		mmGetSourceTableAndUIDByFileUIDs.mock.t.Fatalf("RepositoryIMock.GetSourceTableAndUIDByFileUIDs mock is already set by Expect")
+	}
+
+	if mmGetSourceTableAndUIDByFileUIDs.defaultExpectation.paramPtrs == nil {
+		mmGetSourceTableAndUIDByFileUIDs.defaultExpectation.paramPtrs = &RepositoryIMockGetSourceTableAndUIDByFileUIDsParamPtrs{}
+	}
+	mmGetSourceTableAndUIDByFileUIDs.defaultExpectation.paramPtrs.ctx = &ctx
+
+	return mmGetSourceTableAndUIDByFileUIDs
+}
+
+// ExpectFilesParam2 sets up expected param files for RepositoryI.GetSourceTableAndUIDByFileUIDs
+func (mmGetSourceTableAndUIDByFileUIDs *mRepositoryIMockGetSourceTableAndUIDByFileUIDs) ExpectFilesParam2(files []mm_repository.KnowledgeBaseFile) *mRepositoryIMockGetSourceTableAndUIDByFileUIDs {
+	if mmGetSourceTableAndUIDByFileUIDs.mock.funcGetSourceTableAndUIDByFileUIDs != nil {
+		mmGetSourceTableAndUIDByFileUIDs.mock.t.Fatalf("RepositoryIMock.GetSourceTableAndUIDByFileUIDs mock is already set by Set")
+	}
+
+	if mmGetSourceTableAndUIDByFileUIDs.defaultExpectation == nil {
+		mmGetSourceTableAndUIDByFileUIDs.defaultExpectation = &RepositoryIMockGetSourceTableAndUIDByFileUIDsExpectation{}
+	}
+
+	if mmGetSourceTableAndUIDByFileUIDs.defaultExpectation.params != nil {
+		mmGetSourceTableAndUIDByFileUIDs.mock.t.Fatalf("RepositoryIMock.GetSourceTableAndUIDByFileUIDs mock is already set by Expect")
+	}
+
+	if mmGetSourceTableAndUIDByFileUIDs.defaultExpectation.paramPtrs == nil {
+		mmGetSourceTableAndUIDByFileUIDs.defaultExpectation.paramPtrs = &RepositoryIMockGetSourceTableAndUIDByFileUIDsParamPtrs{}
+	}
+	mmGetSourceTableAndUIDByFileUIDs.defaultExpectation.paramPtrs.files = &files
+
+	return mmGetSourceTableAndUIDByFileUIDs
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.GetSourceTableAndUIDByFileUIDs
+func (mmGetSourceTableAndUIDByFileUIDs *mRepositoryIMockGetSourceTableAndUIDByFileUIDs) Inspect(f func(ctx context.Context, files []mm_repository.KnowledgeBaseFile)) *mRepositoryIMockGetSourceTableAndUIDByFileUIDs {
+	if mmGetSourceTableAndUIDByFileUIDs.mock.inspectFuncGetSourceTableAndUIDByFileUIDs != nil {
+		mmGetSourceTableAndUIDByFileUIDs.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.GetSourceTableAndUIDByFileUIDs")
+	}
+
+	mmGetSourceTableAndUIDByFileUIDs.mock.inspectFuncGetSourceTableAndUIDByFileUIDs = f
+
+	return mmGetSourceTableAndUIDByFileUIDs
+}
+
+// Return sets up results that will be returned by RepositoryI.GetSourceTableAndUIDByFileUIDs
+func (mmGetSourceTableAndUIDByFileUIDs *mRepositoryIMockGetSourceTableAndUIDByFileUIDs) Return(m1 map[mm_repository.FileUID]struct {
+	SourceTable string
+	SourceUID   uuid.UUID
+}, err error) *RepositoryIMock {
+	if mmGetSourceTableAndUIDByFileUIDs.mock.funcGetSourceTableAndUIDByFileUIDs != nil {
+		mmGetSourceTableAndUIDByFileUIDs.mock.t.Fatalf("RepositoryIMock.GetSourceTableAndUIDByFileUIDs mock is already set by Set")
+	}
+
+	if mmGetSourceTableAndUIDByFileUIDs.defaultExpectation == nil {
+		mmGetSourceTableAndUIDByFileUIDs.defaultExpectation = &RepositoryIMockGetSourceTableAndUIDByFileUIDsExpectation{mock: mmGetSourceTableAndUIDByFileUIDs.mock}
+	}
+	mmGetSourceTableAndUIDByFileUIDs.defaultExpectation.results = &RepositoryIMockGetSourceTableAndUIDByFileUIDsResults{m1, err}
+	return mmGetSourceTableAndUIDByFileUIDs.mock
+}
+
+// Set uses given function f to mock the RepositoryI.GetSourceTableAndUIDByFileUIDs method
+func (mmGetSourceTableAndUIDByFileUIDs *mRepositoryIMockGetSourceTableAndUIDByFileUIDs) Set(f func(ctx context.Context, files []mm_repository.KnowledgeBaseFile) (m1 map[mm_repository.FileUID]struct {
+	SourceTable string
+	SourceUID   uuid.UUID
+}, err error)) *RepositoryIMock {
+	if mmGetSourceTableAndUIDByFileUIDs.defaultExpectation != nil {
+		mmGetSourceTableAndUIDByFileUIDs.mock.t.Fatalf("Default expectation is already set for the RepositoryI.GetSourceTableAndUIDByFileUIDs method")
+	}
+
+	if len(mmGetSourceTableAndUIDByFileUIDs.expectations) > 0 {
+		mmGetSourceTableAndUIDByFileUIDs.mock.t.Fatalf("Some expectations are already set for the RepositoryI.GetSourceTableAndUIDByFileUIDs method")
+	}
+
+	mmGetSourceTableAndUIDByFileUIDs.mock.funcGetSourceTableAndUIDByFileUIDs = f
+	return mmGetSourceTableAndUIDByFileUIDs.mock
+}
+
+// When sets expectation for the RepositoryI.GetSourceTableAndUIDByFileUIDs which will trigger the result defined by the following
+// Then helper
+func (mmGetSourceTableAndUIDByFileUIDs *mRepositoryIMockGetSourceTableAndUIDByFileUIDs) When(ctx context.Context, files []mm_repository.KnowledgeBaseFile) *RepositoryIMockGetSourceTableAndUIDByFileUIDsExpectation {
+	if mmGetSourceTableAndUIDByFileUIDs.mock.funcGetSourceTableAndUIDByFileUIDs != nil {
+		mmGetSourceTableAndUIDByFileUIDs.mock.t.Fatalf("RepositoryIMock.GetSourceTableAndUIDByFileUIDs mock is already set by Set")
+	}
+
+	expectation := &RepositoryIMockGetSourceTableAndUIDByFileUIDsExpectation{
+		mock:   mmGetSourceTableAndUIDByFileUIDs.mock,
+		params: &RepositoryIMockGetSourceTableAndUIDByFileUIDsParams{ctx, files},
+	}
+	mmGetSourceTableAndUIDByFileUIDs.expectations = append(mmGetSourceTableAndUIDByFileUIDs.expectations, expectation)
+	return expectation
+}
+
+// Then sets up RepositoryI.GetSourceTableAndUIDByFileUIDs return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockGetSourceTableAndUIDByFileUIDsExpectation) Then(m1 map[mm_repository.FileUID]struct {
+	SourceTable string
+	SourceUID   uuid.UUID
+}, err error) *RepositoryIMock {
+	e.results = &RepositoryIMockGetSourceTableAndUIDByFileUIDsResults{m1, err}
+	return e.mock
+}
+
+// Times sets number of times RepositoryI.GetSourceTableAndUIDByFileUIDs should be invoked
+func (mmGetSourceTableAndUIDByFileUIDs *mRepositoryIMockGetSourceTableAndUIDByFileUIDs) Times(n uint64) *mRepositoryIMockGetSourceTableAndUIDByFileUIDs {
+	if n == 0 {
+		mmGetSourceTableAndUIDByFileUIDs.mock.t.Fatalf("Times of RepositoryIMock.GetSourceTableAndUIDByFileUIDs mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetSourceTableAndUIDByFileUIDs.expectedInvocations, n)
+	return mmGetSourceTableAndUIDByFileUIDs
+}
+
+func (mmGetSourceTableAndUIDByFileUIDs *mRepositoryIMockGetSourceTableAndUIDByFileUIDs) invocationsDone() bool {
+	if len(mmGetSourceTableAndUIDByFileUIDs.expectations) == 0 && mmGetSourceTableAndUIDByFileUIDs.defaultExpectation == nil && mmGetSourceTableAndUIDByFileUIDs.mock.funcGetSourceTableAndUIDByFileUIDs == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetSourceTableAndUIDByFileUIDs.mock.afterGetSourceTableAndUIDByFileUIDsCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetSourceTableAndUIDByFileUIDs.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetSourceTableAndUIDByFileUIDs implements repository.RepositoryI
+func (mmGetSourceTableAndUIDByFileUIDs *RepositoryIMock) GetSourceTableAndUIDByFileUIDs(ctx context.Context, files []mm_repository.KnowledgeBaseFile) (m1 map[mm_repository.FileUID]struct {
+	SourceTable string
+	SourceUID   uuid.UUID
+}, err error) {
+	mm_atomic.AddUint64(&mmGetSourceTableAndUIDByFileUIDs.beforeGetSourceTableAndUIDByFileUIDsCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetSourceTableAndUIDByFileUIDs.afterGetSourceTableAndUIDByFileUIDsCounter, 1)
+
+	if mmGetSourceTableAndUIDByFileUIDs.inspectFuncGetSourceTableAndUIDByFileUIDs != nil {
+		mmGetSourceTableAndUIDByFileUIDs.inspectFuncGetSourceTableAndUIDByFileUIDs(ctx, files)
+	}
+
+	mm_params := RepositoryIMockGetSourceTableAndUIDByFileUIDsParams{ctx, files}
+
+	// Record call args
+	mmGetSourceTableAndUIDByFileUIDs.GetSourceTableAndUIDByFileUIDsMock.mutex.Lock()
+	mmGetSourceTableAndUIDByFileUIDs.GetSourceTableAndUIDByFileUIDsMock.callArgs = append(mmGetSourceTableAndUIDByFileUIDs.GetSourceTableAndUIDByFileUIDsMock.callArgs, &mm_params)
+	mmGetSourceTableAndUIDByFileUIDs.GetSourceTableAndUIDByFileUIDsMock.mutex.Unlock()
+
+	for _, e := range mmGetSourceTableAndUIDByFileUIDs.GetSourceTableAndUIDByFileUIDsMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.m1, e.results.err
+		}
+	}
+
+	if mmGetSourceTableAndUIDByFileUIDs.GetSourceTableAndUIDByFileUIDsMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetSourceTableAndUIDByFileUIDs.GetSourceTableAndUIDByFileUIDsMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetSourceTableAndUIDByFileUIDs.GetSourceTableAndUIDByFileUIDsMock.defaultExpectation.params
+		mm_want_ptrs := mmGetSourceTableAndUIDByFileUIDs.GetSourceTableAndUIDByFileUIDsMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryIMockGetSourceTableAndUIDByFileUIDsParams{ctx, files}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetSourceTableAndUIDByFileUIDs.t.Errorf("RepositoryIMock.GetSourceTableAndUIDByFileUIDs got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.files != nil && !minimock.Equal(*mm_want_ptrs.files, mm_got.files) {
+				mmGetSourceTableAndUIDByFileUIDs.t.Errorf("RepositoryIMock.GetSourceTableAndUIDByFileUIDs got unexpected parameter files, want: %#v, got: %#v%s\n", *mm_want_ptrs.files, mm_got.files, minimock.Diff(*mm_want_ptrs.files, mm_got.files))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetSourceTableAndUIDByFileUIDs.t.Errorf("RepositoryIMock.GetSourceTableAndUIDByFileUIDs got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetSourceTableAndUIDByFileUIDs.GetSourceTableAndUIDByFileUIDsMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetSourceTableAndUIDByFileUIDs.t.Fatal("No results are set for the RepositoryIMock.GetSourceTableAndUIDByFileUIDs")
+		}
+		return (*mm_results).m1, (*mm_results).err
+	}
+	if mmGetSourceTableAndUIDByFileUIDs.funcGetSourceTableAndUIDByFileUIDs != nil {
+		return mmGetSourceTableAndUIDByFileUIDs.funcGetSourceTableAndUIDByFileUIDs(ctx, files)
+	}
+	mmGetSourceTableAndUIDByFileUIDs.t.Fatalf("Unexpected call to RepositoryIMock.GetSourceTableAndUIDByFileUIDs. %v %v", ctx, files)
+	return
+}
+
+// GetSourceTableAndUIDByFileUIDsAfterCounter returns a count of finished RepositoryIMock.GetSourceTableAndUIDByFileUIDs invocations
+func (mmGetSourceTableAndUIDByFileUIDs *RepositoryIMock) GetSourceTableAndUIDByFileUIDsAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetSourceTableAndUIDByFileUIDs.afterGetSourceTableAndUIDByFileUIDsCounter)
+}
+
+// GetSourceTableAndUIDByFileUIDsBeforeCounter returns a count of RepositoryIMock.GetSourceTableAndUIDByFileUIDs invocations
+func (mmGetSourceTableAndUIDByFileUIDs *RepositoryIMock) GetSourceTableAndUIDByFileUIDsBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetSourceTableAndUIDByFileUIDs.beforeGetSourceTableAndUIDByFileUIDsCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryIMock.GetSourceTableAndUIDByFileUIDs.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetSourceTableAndUIDByFileUIDs *mRepositoryIMockGetSourceTableAndUIDByFileUIDs) Calls() []*RepositoryIMockGetSourceTableAndUIDByFileUIDsParams {
+	mmGetSourceTableAndUIDByFileUIDs.mutex.RLock()
+
+	argCopy := make([]*RepositoryIMockGetSourceTableAndUIDByFileUIDsParams, len(mmGetSourceTableAndUIDByFileUIDs.callArgs))
+	copy(argCopy, mmGetSourceTableAndUIDByFileUIDs.callArgs)
+
+	mmGetSourceTableAndUIDByFileUIDs.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetSourceTableAndUIDByFileUIDsDone returns true if the count of the GetSourceTableAndUIDByFileUIDs invocations corresponds
+// the number of defined expectations
+func (m *RepositoryIMock) MinimockGetSourceTableAndUIDByFileUIDsDone() bool {
+	for _, e := range m.GetSourceTableAndUIDByFileUIDsMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetSourceTableAndUIDByFileUIDsMock.invocationsDone()
+}
+
+// MinimockGetSourceTableAndUIDByFileUIDsInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockGetSourceTableAndUIDByFileUIDsInspect() {
+	for _, e := range m.GetSourceTableAndUIDByFileUIDsMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryIMock.GetSourceTableAndUIDByFileUIDs with params: %#v", *e.params)
+		}
+	}
+
+	afterGetSourceTableAndUIDByFileUIDsCounter := mm_atomic.LoadUint64(&m.afterGetSourceTableAndUIDByFileUIDsCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetSourceTableAndUIDByFileUIDsMock.defaultExpectation != nil && afterGetSourceTableAndUIDByFileUIDsCounter < 1 {
+		if m.GetSourceTableAndUIDByFileUIDsMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to RepositoryIMock.GetSourceTableAndUIDByFileUIDs")
+		} else {
+			m.t.Errorf("Expected call to RepositoryIMock.GetSourceTableAndUIDByFileUIDs with params: %#v", *m.GetSourceTableAndUIDByFileUIDsMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetSourceTableAndUIDByFileUIDs != nil && afterGetSourceTableAndUIDByFileUIDsCounter < 1 {
+		m.t.Error("Expected call to RepositoryIMock.GetSourceTableAndUIDByFileUIDs")
+	}
+
+	if !m.GetSourceTableAndUIDByFileUIDsMock.invocationsDone() && afterGetSourceTableAndUIDByFileUIDsCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.GetSourceTableAndUIDByFileUIDs but found %d calls",
+			mm_atomic.LoadUint64(&m.GetSourceTableAndUIDByFileUIDsMock.expectedInvocations), afterGetSourceTableAndUIDByFileUIDsCounter)
 	}
 }
 
@@ -7521,6 +8185,311 @@ func (m *RepositoryIMock) MinimockGetTotalTokensByListKBUIDsInspect() {
 	if !m.GetTotalTokensByListKBUIDsMock.invocationsDone() && afterGetTotalTokensByListKBUIDsCounter > 0 {
 		m.t.Errorf("Expected %d calls to RepositoryIMock.GetTotalTokensByListKBUIDs but found %d calls",
 			mm_atomic.LoadUint64(&m.GetTotalTokensByListKBUIDsMock.expectedInvocations), afterGetTotalTokensByListKBUIDsCounter)
+	}
+}
+
+type mRepositoryIMockGetTruthSourceByFileUID struct {
+	mock               *RepositoryIMock
+	defaultExpectation *RepositoryIMockGetTruthSourceByFileUIDExpectation
+	expectations       []*RepositoryIMockGetTruthSourceByFileUIDExpectation
+
+	callArgs []*RepositoryIMockGetTruthSourceByFileUIDParams
+	mutex    sync.RWMutex
+
+	expectedInvocations uint64
+}
+
+// RepositoryIMockGetTruthSourceByFileUIDExpectation specifies expectation struct of the RepositoryI.GetTruthSourceByFileUID
+type RepositoryIMockGetTruthSourceByFileUIDExpectation struct {
+	mock      *RepositoryIMock
+	params    *RepositoryIMockGetTruthSourceByFileUIDParams
+	paramPtrs *RepositoryIMockGetTruthSourceByFileUIDParamPtrs
+	results   *RepositoryIMockGetTruthSourceByFileUIDResults
+	Counter   uint64
+}
+
+// RepositoryIMockGetTruthSourceByFileUIDParams contains parameters of the RepositoryI.GetTruthSourceByFileUID
+type RepositoryIMockGetTruthSourceByFileUIDParams struct {
+	ctx     context.Context
+	fileUID uuid.UUID
+}
+
+// RepositoryIMockGetTruthSourceByFileUIDParamPtrs contains pointers to parameters of the RepositoryI.GetTruthSourceByFileUID
+type RepositoryIMockGetTruthSourceByFileUIDParamPtrs struct {
+	ctx     *context.Context
+	fileUID *uuid.UUID
+}
+
+// RepositoryIMockGetTruthSourceByFileUIDResults contains results of the RepositoryI.GetTruthSourceByFileUID
+type RepositoryIMockGetTruthSourceByFileUIDResults struct {
+	sp1 *mm_repository.SourceMeta
+	err error
+}
+
+// Expect sets up expected params for RepositoryI.GetTruthSourceByFileUID
+func (mmGetTruthSourceByFileUID *mRepositoryIMockGetTruthSourceByFileUID) Expect(ctx context.Context, fileUID uuid.UUID) *mRepositoryIMockGetTruthSourceByFileUID {
+	if mmGetTruthSourceByFileUID.mock.funcGetTruthSourceByFileUID != nil {
+		mmGetTruthSourceByFileUID.mock.t.Fatalf("RepositoryIMock.GetTruthSourceByFileUID mock is already set by Set")
+	}
+
+	if mmGetTruthSourceByFileUID.defaultExpectation == nil {
+		mmGetTruthSourceByFileUID.defaultExpectation = &RepositoryIMockGetTruthSourceByFileUIDExpectation{}
+	}
+
+	if mmGetTruthSourceByFileUID.defaultExpectation.paramPtrs != nil {
+		mmGetTruthSourceByFileUID.mock.t.Fatalf("RepositoryIMock.GetTruthSourceByFileUID mock is already set by ExpectParams functions")
+	}
+
+	mmGetTruthSourceByFileUID.defaultExpectation.params = &RepositoryIMockGetTruthSourceByFileUIDParams{ctx, fileUID}
+	for _, e := range mmGetTruthSourceByFileUID.expectations {
+		if minimock.Equal(e.params, mmGetTruthSourceByFileUID.defaultExpectation.params) {
+			mmGetTruthSourceByFileUID.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetTruthSourceByFileUID.defaultExpectation.params)
+		}
+	}
+
+	return mmGetTruthSourceByFileUID
+}
+
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.GetTruthSourceByFileUID
+func (mmGetTruthSourceByFileUID *mRepositoryIMockGetTruthSourceByFileUID) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockGetTruthSourceByFileUID {
+	if mmGetTruthSourceByFileUID.mock.funcGetTruthSourceByFileUID != nil {
+		mmGetTruthSourceByFileUID.mock.t.Fatalf("RepositoryIMock.GetTruthSourceByFileUID mock is already set by Set")
+	}
+
+	if mmGetTruthSourceByFileUID.defaultExpectation == nil {
+		mmGetTruthSourceByFileUID.defaultExpectation = &RepositoryIMockGetTruthSourceByFileUIDExpectation{}
+	}
+
+	if mmGetTruthSourceByFileUID.defaultExpectation.params != nil {
+		mmGetTruthSourceByFileUID.mock.t.Fatalf("RepositoryIMock.GetTruthSourceByFileUID mock is already set by Expect")
+	}
+
+	if mmGetTruthSourceByFileUID.defaultExpectation.paramPtrs == nil {
+		mmGetTruthSourceByFileUID.defaultExpectation.paramPtrs = &RepositoryIMockGetTruthSourceByFileUIDParamPtrs{}
+	}
+	mmGetTruthSourceByFileUID.defaultExpectation.paramPtrs.ctx = &ctx
+
+	return mmGetTruthSourceByFileUID
+}
+
+// ExpectFileUIDParam2 sets up expected param fileUID for RepositoryI.GetTruthSourceByFileUID
+func (mmGetTruthSourceByFileUID *mRepositoryIMockGetTruthSourceByFileUID) ExpectFileUIDParam2(fileUID uuid.UUID) *mRepositoryIMockGetTruthSourceByFileUID {
+	if mmGetTruthSourceByFileUID.mock.funcGetTruthSourceByFileUID != nil {
+		mmGetTruthSourceByFileUID.mock.t.Fatalf("RepositoryIMock.GetTruthSourceByFileUID mock is already set by Set")
+	}
+
+	if mmGetTruthSourceByFileUID.defaultExpectation == nil {
+		mmGetTruthSourceByFileUID.defaultExpectation = &RepositoryIMockGetTruthSourceByFileUIDExpectation{}
+	}
+
+	if mmGetTruthSourceByFileUID.defaultExpectation.params != nil {
+		mmGetTruthSourceByFileUID.mock.t.Fatalf("RepositoryIMock.GetTruthSourceByFileUID mock is already set by Expect")
+	}
+
+	if mmGetTruthSourceByFileUID.defaultExpectation.paramPtrs == nil {
+		mmGetTruthSourceByFileUID.defaultExpectation.paramPtrs = &RepositoryIMockGetTruthSourceByFileUIDParamPtrs{}
+	}
+	mmGetTruthSourceByFileUID.defaultExpectation.paramPtrs.fileUID = &fileUID
+
+	return mmGetTruthSourceByFileUID
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.GetTruthSourceByFileUID
+func (mmGetTruthSourceByFileUID *mRepositoryIMockGetTruthSourceByFileUID) Inspect(f func(ctx context.Context, fileUID uuid.UUID)) *mRepositoryIMockGetTruthSourceByFileUID {
+	if mmGetTruthSourceByFileUID.mock.inspectFuncGetTruthSourceByFileUID != nil {
+		mmGetTruthSourceByFileUID.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.GetTruthSourceByFileUID")
+	}
+
+	mmGetTruthSourceByFileUID.mock.inspectFuncGetTruthSourceByFileUID = f
+
+	return mmGetTruthSourceByFileUID
+}
+
+// Return sets up results that will be returned by RepositoryI.GetTruthSourceByFileUID
+func (mmGetTruthSourceByFileUID *mRepositoryIMockGetTruthSourceByFileUID) Return(sp1 *mm_repository.SourceMeta, err error) *RepositoryIMock {
+	if mmGetTruthSourceByFileUID.mock.funcGetTruthSourceByFileUID != nil {
+		mmGetTruthSourceByFileUID.mock.t.Fatalf("RepositoryIMock.GetTruthSourceByFileUID mock is already set by Set")
+	}
+
+	if mmGetTruthSourceByFileUID.defaultExpectation == nil {
+		mmGetTruthSourceByFileUID.defaultExpectation = &RepositoryIMockGetTruthSourceByFileUIDExpectation{mock: mmGetTruthSourceByFileUID.mock}
+	}
+	mmGetTruthSourceByFileUID.defaultExpectation.results = &RepositoryIMockGetTruthSourceByFileUIDResults{sp1, err}
+	return mmGetTruthSourceByFileUID.mock
+}
+
+// Set uses given function f to mock the RepositoryI.GetTruthSourceByFileUID method
+func (mmGetTruthSourceByFileUID *mRepositoryIMockGetTruthSourceByFileUID) Set(f func(ctx context.Context, fileUID uuid.UUID) (sp1 *mm_repository.SourceMeta, err error)) *RepositoryIMock {
+	if mmGetTruthSourceByFileUID.defaultExpectation != nil {
+		mmGetTruthSourceByFileUID.mock.t.Fatalf("Default expectation is already set for the RepositoryI.GetTruthSourceByFileUID method")
+	}
+
+	if len(mmGetTruthSourceByFileUID.expectations) > 0 {
+		mmGetTruthSourceByFileUID.mock.t.Fatalf("Some expectations are already set for the RepositoryI.GetTruthSourceByFileUID method")
+	}
+
+	mmGetTruthSourceByFileUID.mock.funcGetTruthSourceByFileUID = f
+	return mmGetTruthSourceByFileUID.mock
+}
+
+// When sets expectation for the RepositoryI.GetTruthSourceByFileUID which will trigger the result defined by the following
+// Then helper
+func (mmGetTruthSourceByFileUID *mRepositoryIMockGetTruthSourceByFileUID) When(ctx context.Context, fileUID uuid.UUID) *RepositoryIMockGetTruthSourceByFileUIDExpectation {
+	if mmGetTruthSourceByFileUID.mock.funcGetTruthSourceByFileUID != nil {
+		mmGetTruthSourceByFileUID.mock.t.Fatalf("RepositoryIMock.GetTruthSourceByFileUID mock is already set by Set")
+	}
+
+	expectation := &RepositoryIMockGetTruthSourceByFileUIDExpectation{
+		mock:   mmGetTruthSourceByFileUID.mock,
+		params: &RepositoryIMockGetTruthSourceByFileUIDParams{ctx, fileUID},
+	}
+	mmGetTruthSourceByFileUID.expectations = append(mmGetTruthSourceByFileUID.expectations, expectation)
+	return expectation
+}
+
+// Then sets up RepositoryI.GetTruthSourceByFileUID return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockGetTruthSourceByFileUIDExpectation) Then(sp1 *mm_repository.SourceMeta, err error) *RepositoryIMock {
+	e.results = &RepositoryIMockGetTruthSourceByFileUIDResults{sp1, err}
+	return e.mock
+}
+
+// Times sets number of times RepositoryI.GetTruthSourceByFileUID should be invoked
+func (mmGetTruthSourceByFileUID *mRepositoryIMockGetTruthSourceByFileUID) Times(n uint64) *mRepositoryIMockGetTruthSourceByFileUID {
+	if n == 0 {
+		mmGetTruthSourceByFileUID.mock.t.Fatalf("Times of RepositoryIMock.GetTruthSourceByFileUID mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetTruthSourceByFileUID.expectedInvocations, n)
+	return mmGetTruthSourceByFileUID
+}
+
+func (mmGetTruthSourceByFileUID *mRepositoryIMockGetTruthSourceByFileUID) invocationsDone() bool {
+	if len(mmGetTruthSourceByFileUID.expectations) == 0 && mmGetTruthSourceByFileUID.defaultExpectation == nil && mmGetTruthSourceByFileUID.mock.funcGetTruthSourceByFileUID == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetTruthSourceByFileUID.mock.afterGetTruthSourceByFileUIDCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetTruthSourceByFileUID.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetTruthSourceByFileUID implements repository.RepositoryI
+func (mmGetTruthSourceByFileUID *RepositoryIMock) GetTruthSourceByFileUID(ctx context.Context, fileUID uuid.UUID) (sp1 *mm_repository.SourceMeta, err error) {
+	mm_atomic.AddUint64(&mmGetTruthSourceByFileUID.beforeGetTruthSourceByFileUIDCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetTruthSourceByFileUID.afterGetTruthSourceByFileUIDCounter, 1)
+
+	if mmGetTruthSourceByFileUID.inspectFuncGetTruthSourceByFileUID != nil {
+		mmGetTruthSourceByFileUID.inspectFuncGetTruthSourceByFileUID(ctx, fileUID)
+	}
+
+	mm_params := RepositoryIMockGetTruthSourceByFileUIDParams{ctx, fileUID}
+
+	// Record call args
+	mmGetTruthSourceByFileUID.GetTruthSourceByFileUIDMock.mutex.Lock()
+	mmGetTruthSourceByFileUID.GetTruthSourceByFileUIDMock.callArgs = append(mmGetTruthSourceByFileUID.GetTruthSourceByFileUIDMock.callArgs, &mm_params)
+	mmGetTruthSourceByFileUID.GetTruthSourceByFileUIDMock.mutex.Unlock()
+
+	for _, e := range mmGetTruthSourceByFileUID.GetTruthSourceByFileUIDMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.sp1, e.results.err
+		}
+	}
+
+	if mmGetTruthSourceByFileUID.GetTruthSourceByFileUIDMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetTruthSourceByFileUID.GetTruthSourceByFileUIDMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetTruthSourceByFileUID.GetTruthSourceByFileUIDMock.defaultExpectation.params
+		mm_want_ptrs := mmGetTruthSourceByFileUID.GetTruthSourceByFileUIDMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryIMockGetTruthSourceByFileUIDParams{ctx, fileUID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetTruthSourceByFileUID.t.Errorf("RepositoryIMock.GetTruthSourceByFileUID got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.fileUID != nil && !minimock.Equal(*mm_want_ptrs.fileUID, mm_got.fileUID) {
+				mmGetTruthSourceByFileUID.t.Errorf("RepositoryIMock.GetTruthSourceByFileUID got unexpected parameter fileUID, want: %#v, got: %#v%s\n", *mm_want_ptrs.fileUID, mm_got.fileUID, minimock.Diff(*mm_want_ptrs.fileUID, mm_got.fileUID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetTruthSourceByFileUID.t.Errorf("RepositoryIMock.GetTruthSourceByFileUID got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetTruthSourceByFileUID.GetTruthSourceByFileUIDMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetTruthSourceByFileUID.t.Fatal("No results are set for the RepositoryIMock.GetTruthSourceByFileUID")
+		}
+		return (*mm_results).sp1, (*mm_results).err
+	}
+	if mmGetTruthSourceByFileUID.funcGetTruthSourceByFileUID != nil {
+		return mmGetTruthSourceByFileUID.funcGetTruthSourceByFileUID(ctx, fileUID)
+	}
+	mmGetTruthSourceByFileUID.t.Fatalf("Unexpected call to RepositoryIMock.GetTruthSourceByFileUID. %v %v", ctx, fileUID)
+	return
+}
+
+// GetTruthSourceByFileUIDAfterCounter returns a count of finished RepositoryIMock.GetTruthSourceByFileUID invocations
+func (mmGetTruthSourceByFileUID *RepositoryIMock) GetTruthSourceByFileUIDAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetTruthSourceByFileUID.afterGetTruthSourceByFileUIDCounter)
+}
+
+// GetTruthSourceByFileUIDBeforeCounter returns a count of RepositoryIMock.GetTruthSourceByFileUID invocations
+func (mmGetTruthSourceByFileUID *RepositoryIMock) GetTruthSourceByFileUIDBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetTruthSourceByFileUID.beforeGetTruthSourceByFileUIDCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryIMock.GetTruthSourceByFileUID.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetTruthSourceByFileUID *mRepositoryIMockGetTruthSourceByFileUID) Calls() []*RepositoryIMockGetTruthSourceByFileUIDParams {
+	mmGetTruthSourceByFileUID.mutex.RLock()
+
+	argCopy := make([]*RepositoryIMockGetTruthSourceByFileUIDParams, len(mmGetTruthSourceByFileUID.callArgs))
+	copy(argCopy, mmGetTruthSourceByFileUID.callArgs)
+
+	mmGetTruthSourceByFileUID.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetTruthSourceByFileUIDDone returns true if the count of the GetTruthSourceByFileUID invocations corresponds
+// the number of defined expectations
+func (m *RepositoryIMock) MinimockGetTruthSourceByFileUIDDone() bool {
+	for _, e := range m.GetTruthSourceByFileUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetTruthSourceByFileUIDMock.invocationsDone()
+}
+
+// MinimockGetTruthSourceByFileUIDInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockGetTruthSourceByFileUIDInspect() {
+	for _, e := range m.GetTruthSourceByFileUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryIMock.GetTruthSourceByFileUID with params: %#v", *e.params)
+		}
+	}
+
+	afterGetTruthSourceByFileUIDCounter := mm_atomic.LoadUint64(&m.afterGetTruthSourceByFileUIDCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetTruthSourceByFileUIDMock.defaultExpectation != nil && afterGetTruthSourceByFileUIDCounter < 1 {
+		if m.GetTruthSourceByFileUIDMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to RepositoryIMock.GetTruthSourceByFileUID")
+		} else {
+			m.t.Errorf("Expected call to RepositoryIMock.GetTruthSourceByFileUID with params: %#v", *m.GetTruthSourceByFileUIDMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetTruthSourceByFileUID != nil && afterGetTruthSourceByFileUIDCounter < 1 {
+		m.t.Error("Expected call to RepositoryIMock.GetTruthSourceByFileUID")
+	}
+
+	if !m.GetTruthSourceByFileUIDMock.invocationsDone() && afterGetTruthSourceByFileUIDCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.GetTruthSourceByFileUID but found %d calls",
+			mm_atomic.LoadUint64(&m.GetTruthSourceByFileUIDMock.expectedInvocations), afterGetTruthSourceByFileUIDCounter)
 	}
 }
 
@@ -8907,6 +9876,339 @@ func (m *RepositoryIMock) MinimockTextChunkTableNameInspect() {
 	}
 }
 
+type mRepositoryIMockUpdateChunk struct {
+	mock               *RepositoryIMock
+	defaultExpectation *RepositoryIMockUpdateChunkExpectation
+	expectations       []*RepositoryIMockUpdateChunkExpectation
+
+	callArgs []*RepositoryIMockUpdateChunkParams
+	mutex    sync.RWMutex
+
+	expectedInvocations uint64
+}
+
+// RepositoryIMockUpdateChunkExpectation specifies expectation struct of the RepositoryI.UpdateChunk
+type RepositoryIMockUpdateChunkExpectation struct {
+	mock      *RepositoryIMock
+	params    *RepositoryIMockUpdateChunkParams
+	paramPtrs *RepositoryIMockUpdateChunkParamPtrs
+	results   *RepositoryIMockUpdateChunkResults
+	Counter   uint64
+}
+
+// RepositoryIMockUpdateChunkParams contains parameters of the RepositoryI.UpdateChunk
+type RepositoryIMockUpdateChunkParams struct {
+	ctx      context.Context
+	chunkUID string
+	updates  map[string]interface{}
+}
+
+// RepositoryIMockUpdateChunkParamPtrs contains pointers to parameters of the RepositoryI.UpdateChunk
+type RepositoryIMockUpdateChunkParamPtrs struct {
+	ctx      *context.Context
+	chunkUID *string
+	updates  *map[string]interface{}
+}
+
+// RepositoryIMockUpdateChunkResults contains results of the RepositoryI.UpdateChunk
+type RepositoryIMockUpdateChunkResults struct {
+	tp1 *mm_repository.TextChunk
+	err error
+}
+
+// Expect sets up expected params for RepositoryI.UpdateChunk
+func (mmUpdateChunk *mRepositoryIMockUpdateChunk) Expect(ctx context.Context, chunkUID string, updates map[string]interface{}) *mRepositoryIMockUpdateChunk {
+	if mmUpdateChunk.mock.funcUpdateChunk != nil {
+		mmUpdateChunk.mock.t.Fatalf("RepositoryIMock.UpdateChunk mock is already set by Set")
+	}
+
+	if mmUpdateChunk.defaultExpectation == nil {
+		mmUpdateChunk.defaultExpectation = &RepositoryIMockUpdateChunkExpectation{}
+	}
+
+	if mmUpdateChunk.defaultExpectation.paramPtrs != nil {
+		mmUpdateChunk.mock.t.Fatalf("RepositoryIMock.UpdateChunk mock is already set by ExpectParams functions")
+	}
+
+	mmUpdateChunk.defaultExpectation.params = &RepositoryIMockUpdateChunkParams{ctx, chunkUID, updates}
+	for _, e := range mmUpdateChunk.expectations {
+		if minimock.Equal(e.params, mmUpdateChunk.defaultExpectation.params) {
+			mmUpdateChunk.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmUpdateChunk.defaultExpectation.params)
+		}
+	}
+
+	return mmUpdateChunk
+}
+
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.UpdateChunk
+func (mmUpdateChunk *mRepositoryIMockUpdateChunk) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockUpdateChunk {
+	if mmUpdateChunk.mock.funcUpdateChunk != nil {
+		mmUpdateChunk.mock.t.Fatalf("RepositoryIMock.UpdateChunk mock is already set by Set")
+	}
+
+	if mmUpdateChunk.defaultExpectation == nil {
+		mmUpdateChunk.defaultExpectation = &RepositoryIMockUpdateChunkExpectation{}
+	}
+
+	if mmUpdateChunk.defaultExpectation.params != nil {
+		mmUpdateChunk.mock.t.Fatalf("RepositoryIMock.UpdateChunk mock is already set by Expect")
+	}
+
+	if mmUpdateChunk.defaultExpectation.paramPtrs == nil {
+		mmUpdateChunk.defaultExpectation.paramPtrs = &RepositoryIMockUpdateChunkParamPtrs{}
+	}
+	mmUpdateChunk.defaultExpectation.paramPtrs.ctx = &ctx
+
+	return mmUpdateChunk
+}
+
+// ExpectChunkUIDParam2 sets up expected param chunkUID for RepositoryI.UpdateChunk
+func (mmUpdateChunk *mRepositoryIMockUpdateChunk) ExpectChunkUIDParam2(chunkUID string) *mRepositoryIMockUpdateChunk {
+	if mmUpdateChunk.mock.funcUpdateChunk != nil {
+		mmUpdateChunk.mock.t.Fatalf("RepositoryIMock.UpdateChunk mock is already set by Set")
+	}
+
+	if mmUpdateChunk.defaultExpectation == nil {
+		mmUpdateChunk.defaultExpectation = &RepositoryIMockUpdateChunkExpectation{}
+	}
+
+	if mmUpdateChunk.defaultExpectation.params != nil {
+		mmUpdateChunk.mock.t.Fatalf("RepositoryIMock.UpdateChunk mock is already set by Expect")
+	}
+
+	if mmUpdateChunk.defaultExpectation.paramPtrs == nil {
+		mmUpdateChunk.defaultExpectation.paramPtrs = &RepositoryIMockUpdateChunkParamPtrs{}
+	}
+	mmUpdateChunk.defaultExpectation.paramPtrs.chunkUID = &chunkUID
+
+	return mmUpdateChunk
+}
+
+// ExpectUpdatesParam3 sets up expected param updates for RepositoryI.UpdateChunk
+func (mmUpdateChunk *mRepositoryIMockUpdateChunk) ExpectUpdatesParam3(updates map[string]interface{}) *mRepositoryIMockUpdateChunk {
+	if mmUpdateChunk.mock.funcUpdateChunk != nil {
+		mmUpdateChunk.mock.t.Fatalf("RepositoryIMock.UpdateChunk mock is already set by Set")
+	}
+
+	if mmUpdateChunk.defaultExpectation == nil {
+		mmUpdateChunk.defaultExpectation = &RepositoryIMockUpdateChunkExpectation{}
+	}
+
+	if mmUpdateChunk.defaultExpectation.params != nil {
+		mmUpdateChunk.mock.t.Fatalf("RepositoryIMock.UpdateChunk mock is already set by Expect")
+	}
+
+	if mmUpdateChunk.defaultExpectation.paramPtrs == nil {
+		mmUpdateChunk.defaultExpectation.paramPtrs = &RepositoryIMockUpdateChunkParamPtrs{}
+	}
+	mmUpdateChunk.defaultExpectation.paramPtrs.updates = &updates
+
+	return mmUpdateChunk
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.UpdateChunk
+func (mmUpdateChunk *mRepositoryIMockUpdateChunk) Inspect(f func(ctx context.Context, chunkUID string, updates map[string]interface{})) *mRepositoryIMockUpdateChunk {
+	if mmUpdateChunk.mock.inspectFuncUpdateChunk != nil {
+		mmUpdateChunk.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.UpdateChunk")
+	}
+
+	mmUpdateChunk.mock.inspectFuncUpdateChunk = f
+
+	return mmUpdateChunk
+}
+
+// Return sets up results that will be returned by RepositoryI.UpdateChunk
+func (mmUpdateChunk *mRepositoryIMockUpdateChunk) Return(tp1 *mm_repository.TextChunk, err error) *RepositoryIMock {
+	if mmUpdateChunk.mock.funcUpdateChunk != nil {
+		mmUpdateChunk.mock.t.Fatalf("RepositoryIMock.UpdateChunk mock is already set by Set")
+	}
+
+	if mmUpdateChunk.defaultExpectation == nil {
+		mmUpdateChunk.defaultExpectation = &RepositoryIMockUpdateChunkExpectation{mock: mmUpdateChunk.mock}
+	}
+	mmUpdateChunk.defaultExpectation.results = &RepositoryIMockUpdateChunkResults{tp1, err}
+	return mmUpdateChunk.mock
+}
+
+// Set uses given function f to mock the RepositoryI.UpdateChunk method
+func (mmUpdateChunk *mRepositoryIMockUpdateChunk) Set(f func(ctx context.Context, chunkUID string, updates map[string]interface{}) (tp1 *mm_repository.TextChunk, err error)) *RepositoryIMock {
+	if mmUpdateChunk.defaultExpectation != nil {
+		mmUpdateChunk.mock.t.Fatalf("Default expectation is already set for the RepositoryI.UpdateChunk method")
+	}
+
+	if len(mmUpdateChunk.expectations) > 0 {
+		mmUpdateChunk.mock.t.Fatalf("Some expectations are already set for the RepositoryI.UpdateChunk method")
+	}
+
+	mmUpdateChunk.mock.funcUpdateChunk = f
+	return mmUpdateChunk.mock
+}
+
+// When sets expectation for the RepositoryI.UpdateChunk which will trigger the result defined by the following
+// Then helper
+func (mmUpdateChunk *mRepositoryIMockUpdateChunk) When(ctx context.Context, chunkUID string, updates map[string]interface{}) *RepositoryIMockUpdateChunkExpectation {
+	if mmUpdateChunk.mock.funcUpdateChunk != nil {
+		mmUpdateChunk.mock.t.Fatalf("RepositoryIMock.UpdateChunk mock is already set by Set")
+	}
+
+	expectation := &RepositoryIMockUpdateChunkExpectation{
+		mock:   mmUpdateChunk.mock,
+		params: &RepositoryIMockUpdateChunkParams{ctx, chunkUID, updates},
+	}
+	mmUpdateChunk.expectations = append(mmUpdateChunk.expectations, expectation)
+	return expectation
+}
+
+// Then sets up RepositoryI.UpdateChunk return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockUpdateChunkExpectation) Then(tp1 *mm_repository.TextChunk, err error) *RepositoryIMock {
+	e.results = &RepositoryIMockUpdateChunkResults{tp1, err}
+	return e.mock
+}
+
+// Times sets number of times RepositoryI.UpdateChunk should be invoked
+func (mmUpdateChunk *mRepositoryIMockUpdateChunk) Times(n uint64) *mRepositoryIMockUpdateChunk {
+	if n == 0 {
+		mmUpdateChunk.mock.t.Fatalf("Times of RepositoryIMock.UpdateChunk mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmUpdateChunk.expectedInvocations, n)
+	return mmUpdateChunk
+}
+
+func (mmUpdateChunk *mRepositoryIMockUpdateChunk) invocationsDone() bool {
+	if len(mmUpdateChunk.expectations) == 0 && mmUpdateChunk.defaultExpectation == nil && mmUpdateChunk.mock.funcUpdateChunk == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmUpdateChunk.mock.afterUpdateChunkCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmUpdateChunk.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// UpdateChunk implements repository.RepositoryI
+func (mmUpdateChunk *RepositoryIMock) UpdateChunk(ctx context.Context, chunkUID string, updates map[string]interface{}) (tp1 *mm_repository.TextChunk, err error) {
+	mm_atomic.AddUint64(&mmUpdateChunk.beforeUpdateChunkCounter, 1)
+	defer mm_atomic.AddUint64(&mmUpdateChunk.afterUpdateChunkCounter, 1)
+
+	if mmUpdateChunk.inspectFuncUpdateChunk != nil {
+		mmUpdateChunk.inspectFuncUpdateChunk(ctx, chunkUID, updates)
+	}
+
+	mm_params := RepositoryIMockUpdateChunkParams{ctx, chunkUID, updates}
+
+	// Record call args
+	mmUpdateChunk.UpdateChunkMock.mutex.Lock()
+	mmUpdateChunk.UpdateChunkMock.callArgs = append(mmUpdateChunk.UpdateChunkMock.callArgs, &mm_params)
+	mmUpdateChunk.UpdateChunkMock.mutex.Unlock()
+
+	for _, e := range mmUpdateChunk.UpdateChunkMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.tp1, e.results.err
+		}
+	}
+
+	if mmUpdateChunk.UpdateChunkMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmUpdateChunk.UpdateChunkMock.defaultExpectation.Counter, 1)
+		mm_want := mmUpdateChunk.UpdateChunkMock.defaultExpectation.params
+		mm_want_ptrs := mmUpdateChunk.UpdateChunkMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryIMockUpdateChunkParams{ctx, chunkUID, updates}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmUpdateChunk.t.Errorf("RepositoryIMock.UpdateChunk got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.chunkUID != nil && !minimock.Equal(*mm_want_ptrs.chunkUID, mm_got.chunkUID) {
+				mmUpdateChunk.t.Errorf("RepositoryIMock.UpdateChunk got unexpected parameter chunkUID, want: %#v, got: %#v%s\n", *mm_want_ptrs.chunkUID, mm_got.chunkUID, minimock.Diff(*mm_want_ptrs.chunkUID, mm_got.chunkUID))
+			}
+
+			if mm_want_ptrs.updates != nil && !minimock.Equal(*mm_want_ptrs.updates, mm_got.updates) {
+				mmUpdateChunk.t.Errorf("RepositoryIMock.UpdateChunk got unexpected parameter updates, want: %#v, got: %#v%s\n", *mm_want_ptrs.updates, mm_got.updates, minimock.Diff(*mm_want_ptrs.updates, mm_got.updates))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmUpdateChunk.t.Errorf("RepositoryIMock.UpdateChunk got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmUpdateChunk.UpdateChunkMock.defaultExpectation.results
+		if mm_results == nil {
+			mmUpdateChunk.t.Fatal("No results are set for the RepositoryIMock.UpdateChunk")
+		}
+		return (*mm_results).tp1, (*mm_results).err
+	}
+	if mmUpdateChunk.funcUpdateChunk != nil {
+		return mmUpdateChunk.funcUpdateChunk(ctx, chunkUID, updates)
+	}
+	mmUpdateChunk.t.Fatalf("Unexpected call to RepositoryIMock.UpdateChunk. %v %v %v", ctx, chunkUID, updates)
+	return
+}
+
+// UpdateChunkAfterCounter returns a count of finished RepositoryIMock.UpdateChunk invocations
+func (mmUpdateChunk *RepositoryIMock) UpdateChunkAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateChunk.afterUpdateChunkCounter)
+}
+
+// UpdateChunkBeforeCounter returns a count of RepositoryIMock.UpdateChunk invocations
+func (mmUpdateChunk *RepositoryIMock) UpdateChunkBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateChunk.beforeUpdateChunkCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryIMock.UpdateChunk.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmUpdateChunk *mRepositoryIMockUpdateChunk) Calls() []*RepositoryIMockUpdateChunkParams {
+	mmUpdateChunk.mutex.RLock()
+
+	argCopy := make([]*RepositoryIMockUpdateChunkParams, len(mmUpdateChunk.callArgs))
+	copy(argCopy, mmUpdateChunk.callArgs)
+
+	mmUpdateChunk.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockUpdateChunkDone returns true if the count of the UpdateChunk invocations corresponds
+// the number of defined expectations
+func (m *RepositoryIMock) MinimockUpdateChunkDone() bool {
+	for _, e := range m.UpdateChunkMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.UpdateChunkMock.invocationsDone()
+}
+
+// MinimockUpdateChunkInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockUpdateChunkInspect() {
+	for _, e := range m.UpdateChunkMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryIMock.UpdateChunk with params: %#v", *e.params)
+		}
+	}
+
+	afterUpdateChunkCounter := mm_atomic.LoadUint64(&m.afterUpdateChunkCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.UpdateChunkMock.defaultExpectation != nil && afterUpdateChunkCounter < 1 {
+		if m.UpdateChunkMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to RepositoryIMock.UpdateChunk")
+		} else {
+			m.t.Errorf("Expected call to RepositoryIMock.UpdateChunk with params: %#v", *m.UpdateChunkMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcUpdateChunk != nil && afterUpdateChunkCounter < 1 {
+		m.t.Error("Expected call to RepositoryIMock.UpdateChunk")
+	}
+
+	if !m.UpdateChunkMock.invocationsDone() && afterUpdateChunkCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.UpdateChunk but found %d calls",
+			mm_atomic.LoadUint64(&m.UpdateChunkMock.expectedInvocations), afterUpdateChunkCounter)
+	}
+}
+
 type mRepositoryIMockUpdateKnowledgeBase struct {
 	mock               *RepositoryIMock
 	defaultExpectation *RepositoryIMockUpdateKnowledgeBaseExpectation
@@ -10253,13 +11555,19 @@ func (m *RepositoryIMock) MinimockFinish() {
 
 			m.MinimockGetKnowledgeBaseByOwnerAndIDInspect()
 
+			m.MinimockGetKnowledgeBaseFilesByFileUIDsInspect()
+
 			m.MinimockGetRepositoryTagInspect()
+
+			m.MinimockGetSourceTableAndUIDByFileUIDsInspect()
 
 			m.MinimockGetTextChunksBySourceInspect()
 
 			m.MinimockGetTotalChunksBySourcesInspect()
 
 			m.MinimockGetTotalTokensByListKBUIDsInspect()
+
+			m.MinimockGetTruthSourceByFileUIDInspect()
 
 			m.MinimockKnowledgeBaseFileTableNameInspect()
 
@@ -10270,6 +11578,8 @@ func (m *RepositoryIMock) MinimockFinish() {
 			m.MinimockProcessKnowledgeBaseFilesInspect()
 
 			m.MinimockTextChunkTableNameInspect()
+
+			m.MinimockUpdateChunkInspect()
 
 			m.MinimockUpdateKnowledgeBaseInspect()
 
@@ -10321,15 +11631,19 @@ func (m *RepositoryIMock) minimockDone() bool {
 		m.MinimockGetFilesTotalTokensDone() &&
 		m.MinimockGetIncompleteFileDone() &&
 		m.MinimockGetKnowledgeBaseByOwnerAndIDDone() &&
+		m.MinimockGetKnowledgeBaseFilesByFileUIDsDone() &&
 		m.MinimockGetRepositoryTagDone() &&
+		m.MinimockGetSourceTableAndUIDByFileUIDsDone() &&
 		m.MinimockGetTextChunksBySourceDone() &&
 		m.MinimockGetTotalChunksBySourcesDone() &&
 		m.MinimockGetTotalTokensByListKBUIDsDone() &&
+		m.MinimockGetTruthSourceByFileUIDDone() &&
 		m.MinimockKnowledgeBaseFileTableNameDone() &&
 		m.MinimockListKnowledgeBaseFilesDone() &&
 		m.MinimockListKnowledgeBasesDone() &&
 		m.MinimockProcessKnowledgeBaseFilesDone() &&
 		m.MinimockTextChunkTableNameDone() &&
+		m.MinimockUpdateChunkDone() &&
 		m.MinimockUpdateKnowledgeBaseDone() &&
 		m.MinimockUpdateKnowledgeBaseFileDone() &&
 		m.MinimockUpsertEmbeddingsDone() &&
