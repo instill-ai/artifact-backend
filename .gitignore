@@ -124,3 +124,4 @@ test_pdf_base64.txt
 .DS_Store
 cmd/main/__debug_bin*
 .test
+test_converted_pdf_.md
