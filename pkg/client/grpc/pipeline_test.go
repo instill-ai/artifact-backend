@@ -137,6 +137,12 @@ package grpcclient
 // 	}
 // 	t.Logf("pipeline triggered successfully")
 // 	fmt.Println("convert result\n", res.Outputs[0].GetFields()["convert_result"].GetStringValue()[:100])
+// 	// store the result to a file
+// 	err = os.WriteFile("../../../test_converted_pdf_.md", []byte(res.Outputs[0].GetFields()["convert_result"].GetStringValue()), 0644)
+// 	if err != nil {
+// 		t.Fatalf("failed to write file: %v", err)
+// 	}
+
 // }
 
 // // readFileToBase64 read the pdf file and convert it to base64
@@ -178,7 +184,7 @@ package grpcclient
 // 	ctx := metadata.NewOutgoingContext(context.Background(), md)
 // 	pipelinePublicServiceClient := pipelinev1beta.NewPipelinePublicServiceClient(pipelinePublicGrpcConn)
 
-// 	mdString, err := readMdToString("../../../test_.md")
+// 	mdString, err := readMdToString("../../../test_converted_pdf_.md")
 // 	if err != nil {
 // 		t.Fatalf("failed to read pdf file: %v", err)
 // 	}
@@ -188,8 +194,8 @@ package grpcclient
 // 			{
 // 				Fields: map[string]*structpb.Value{
 // 					"text_input":    {Kind: &structpb.Value_StringValue{StringValue: mdString}},
-// 					"chunk_length":  {Kind: &structpb.Value_NumberValue{NumberValue: 200}},
-// 					"chunk_overlap": {Kind: &structpb.Value_NumberValue{NumberValue: 50}},
+// 					"chunk_length":  {Kind: &structpb.Value_NumberValue{NumberValue: 800}},
+// 					"chunk_overlap": {Kind: &structpb.Value_NumberValue{NumberValue: 200}},
 // 				},
 // 			},
 // 		},
