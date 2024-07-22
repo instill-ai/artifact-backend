@@ -18,6 +18,7 @@ type TextChunkI interface {
 	DeleteChunksBySource(ctx context.Context, sourceTable string, sourceUID uuid.UUID) error
 	DeleteChunksByUIDs(ctx context.Context, chunkUIDs []uuid.UUID) error
 	GetTextChunksBySource(ctx context.Context, sourceTable string, sourceUID uuid.UUID) ([]TextChunk, error)
+	GetChunksByUIDs(ctx context.Context, chunkUIDs []uuid.UUID) ([]TextChunk, error)
 	GetTotalTokensByListKBUIDs(ctx context.Context, kbUIDs []uuid.UUID) (map[uuid.UUID]int, error)
 	GetFilesTotalTokens(ctx context.Context, sources map[FileUID]struct {
 		SourceTable SourceTable
@@ -34,9 +35,11 @@ type TextChunkI interface {
 // currently, we use minio to store the chunk but in the future, we may just get the content from the source
 // and segment it using start and end on the fly which is more storage efficient.
 type TextChunk struct {
-	UID         uuid.UUID `gorm:"column:uid;type:uuid;default:gen_random_uuid();primaryKey" json:"uid"`
-	SourceUID   uuid.UUID `gorm:"column:source_uid;type:uuid;not null" json:"source_uid"`
+	UID uuid.UUID `gorm:"column:uid;type:uuid;default:gen_random_uuid();primaryKey" json:"uid"`
+	// SourceUID is the UID of the source entity that the chunk is associated with. i.e. the UID of file or converted file etc.
+	// And SourceTable is the table name of the source entity.
 	SourceTable string    `gorm:"column:source_table;size:255;not null" json:"source_table"`
+	SourceUID   uuid.UUID `gorm:"column:source_uid;type:uuid;not null" json:"source_uid"`
 	StartPos    int       `gorm:"column:start_pos;not null" json:"start"`
 	EndPos      int       `gorm:"column:end_pos;not null" json:"end"`
 	// ContentDest is the destination path in minio
@@ -47,7 +50,8 @@ type TextChunk struct {
 	CreateTime  *time.Time `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
 	UpdateTime  *time.Time `gorm:"column:update_time;not null;default:CURRENT_TIMESTAMP" json:"update_time"`
 	// KbUID is the knowledge base UID
-	KbUID uuid.UUID `gorm:"column:kb_uid;type:uuid" json:"kb_uid"`
+	KbUID     uuid.UUID `gorm:"column:kb_uid;type:uuid" json:"kb_uid"`
+	KbFileUID uuid.UUID `gorm:"column:kb_file_uid;type:uuid" json:"kb_file_uid"`
 }
 
 type TextChunkColumns struct {
@@ -324,4 +328,13 @@ func (r *Repository) UpdateChunk(ctx context.Context, chunkUID string, updates m
 	}
 
 	return &updatedChunk, nil
+}
+
+func (r *Repository) GetChunksByUIDs(ctx context.Context, chunkUIDs []uuid.UUID) ([]TextChunk, error) {
+	var chunks []TextChunk
+	where := fmt.Sprintf("%s IN (?)", TextChunkColumn.UID)
+	if err := r.db.WithContext(ctx).Where(where, chunkUIDs).Find(&chunks).Error; err != nil {
+		return nil, err
+	}
+	return chunks, nil
 }

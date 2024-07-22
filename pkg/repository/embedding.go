@@ -22,13 +22,17 @@ type EmbeddingI interface {
 	GetEmbeddingByUIDs(ctx context.Context, embUIDs []uuid.UUID) ([]Embedding, error)
 }
 type Embedding struct {
-	UID         uuid.UUID  `gorm:"column:uid;type:uuid;default:gen_random_uuid();primaryKey" json:"uid"`
-	SourceUID   uuid.UUID  `gorm:"column:source_uid;type:uuid;not null" json:"source_uid"`
+	UID uuid.UUID `gorm:"column:uid;type:uuid;default:gen_random_uuid();primaryKey" json:"uid"`
+	// SourceUID is the UID of the source entity that the embedding is associated with. i.e. the UID of the chunk, file, etc.
+	// And SourceTable is the table name of the source entity.
 	SourceTable string     `gorm:"column:source_table;size:255;not null" json:"source_table"`
+	SourceUID   uuid.UUID  `gorm:"column:source_uid;type:uuid;not null" json:"source_uid"`
 	Vector      Vector     `gorm:"column:vector;type:jsonb;not null" json:"vector"`
 	Collection  string     `gorm:"column:collection;size:255;not null" json:"collection"`
 	CreateTime  *time.Time `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
 	UpdateTime  *time.Time `gorm:"column:update_time;not null;default:CURRENT_TIMESTAMP" json:"update_time"`
+	KbUID       uuid.UUID  `gorm:"column:kb_uid;type:uuid;not null" json:"kb_uid"`
+	KbFileUID   uuid.UUID  `gorm:"column:kb_file_uid;type:uuid;not null" json:"kb_file_uid"`
 }
 
 type Vector []float32

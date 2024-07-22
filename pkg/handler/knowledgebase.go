@@ -175,7 +175,7 @@ func (ph *PublicHandler) ListKnowledgeBases(ctx context.Context, req *artifactpb
 			DownstreamApps:      []string{},
 			TotalFiles:          uint32(fileCounts[kb.UID]),
 			TotalTokens:         uint32(tokenCounts[kb.UID]),
-			// TODO: get used storage of kb
+			// TODO: get kb used storage of kb
 			UsedStorage: 0,
 		}
 	}
@@ -251,7 +251,7 @@ func (ph *PublicHandler) UpdateKnowledgeBase(ctx context.Context, req *artifactp
 			DownstreamApps:      []string{},
 			TotalFiles:          uint32(fileCounts[kb.UID]),
 			TotalTokens:         uint32(tokenCounts[kb.UID]),
-			// TODO: get used storage
+			// TODO: get kb used storage
 			UsedStorage: 0,
 		},
 	}, nil
