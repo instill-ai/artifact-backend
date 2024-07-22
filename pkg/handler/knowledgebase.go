@@ -24,6 +24,9 @@ const ErrorListKnowledgeBasesMsg = "failed to get knowledge bases: %w "
 const ErrorUpdateKnowledgeBaseMsg = "failed to update knowledge base: %w"
 const ErrorDeleteKnowledgeBaseMsg = "failed to delete knowledge base: %w"
 
+// Note: in the future, we might have different max count for different user types
+const KnowledgeBaseMaxCount = 3
+
 func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactpb.CreateKnowledgeBaseRequest) (*artifactpb.CreateKnowledgeBaseResponse, error) {
 	log, _ := logger.GetZapLogger(ctx)
 	authUID, err := getUserUIDFromContext(ctx)
@@ -36,6 +39,18 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 	// 1. if it is user namespace, it is okay
 	// 2. if it is org namespace, check if the user has permission to create knowledge base in the org
 	// ....
+
+	// check if user has reached the maximum number of knowledge bases
+	// note: the simple implementation have race condition to bypass the check, but it is okay for now
+	kbCount, err := ph.service.Repository.GetKnowledgeBaseCountByOwner(ctx, authUID)
+	if err != nil {
+		log.Error("failed to get knowledge base count", zap.Error(err))
+		return nil, fmt.Errorf(ErrorCreateKnowledgeBaseMsg, err)
+	}
+	if kbCount >= KnowledgeBaseMaxCount {
+		err := fmt.Errorf("user has reached the 3 maximum number of knowledge bases: %v. ", kbCount)
+		return nil, err
+	}
 
 	// check name if it is empty
 	if req.Name == "" {
@@ -175,8 +190,7 @@ func (ph *PublicHandler) ListKnowledgeBases(ctx context.Context, req *artifactpb
 			DownstreamApps:      []string{},
 			TotalFiles:          uint32(fileCounts[kb.UID]),
 			TotalTokens:         uint32(tokenCounts[kb.UID]),
-			// TODO: get kb used storage of kb
-			UsedStorage: 0,
+			UsedStorage:         uint64(kb.Usage),
 		}
 	}
 	return &artifactpb.ListKnowledgeBasesResponse{
@@ -251,8 +265,7 @@ func (ph *PublicHandler) UpdateKnowledgeBase(ctx context.Context, req *artifactp
 			DownstreamApps:      []string{},
 			TotalFiles:          uint32(fileCounts[kb.UID]),
 			TotalTokens:         uint32(tokenCounts[kb.UID]),
-			// TODO: get kb used storage
-			UsedStorage: 0,
+			UsedStorage: uint64(kb.Usage),
 		},
 	}, nil
 }

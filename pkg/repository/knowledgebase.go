@@ -19,6 +19,8 @@ type KnowledgeBaseI interface {
 	UpdateKnowledgeBase(ctx context.Context, ownerUID string, kb KnowledgeBase) (*KnowledgeBase, error)
 	DeleteKnowledgeBase(ctx context.Context, ownerUID, kbID string) (*KnowledgeBase, error)
 	GetKnowledgeBaseByOwnerAndID(ctx context.Context, ownerUID string, kbID string) (*KnowledgeBase, error)
+	GetKnowledgeBaseCountByOwner(ctx context.Context, ownerUID string) (int64, error)
+	IncreaseKnowledgeBaseUsage(ctx context.Context, kbUID string, amount int) error
 }
 
 type KnowledgeBase struct {
@@ -34,6 +36,7 @@ type KnowledgeBase struct {
 	DeleteTime  *time.Time `gorm:"column:delete_time" json:"delete_time"`
 	// creator
 	CreatorUID uuid.UUID `gorm:"column:creator_uid;type:uuid;not null" json:"creator_uid"`
+	Usage      int64     `gorm:"column:usage;not null;default:0" json:"usage"`
 }
 
 // table columns map
@@ -47,6 +50,7 @@ type KnowledgeBaseColumns struct {
 	CreateTime  string
 	UpdateTime  string
 	DeleteTime  string
+	Usage       string
 }
 
 var KnowledgeBaseColumn = KnowledgeBaseColumns{
@@ -59,6 +63,7 @@ var KnowledgeBaseColumn = KnowledgeBaseColumns{
 	CreateTime:  "create_time",
 	UpdateTime:  "update_time",
 	DeleteTime:  "delete_time",
+	Usage:       "usage",
 }
 
 // TagsArray is a custom type to handle PostgreSQL VARCHAR(255)[] arrays.
@@ -249,4 +254,25 @@ func (r *Repository) GetKnowledgeBaseByOwnerAndID(ctx context.Context, owner str
 		return nil, err
 	}
 	return &existingKB, nil
+}
+
+// get the count of knowledge bases by owner
+func (r *Repository) GetKnowledgeBaseCountByOwner(ctx context.Context, owner string) (int64, error) {
+	var count int64
+	whereString := fmt.Sprintf("%v = ? AND %v is NULL", KnowledgeBaseColumn.Owner, KnowledgeBaseColumn.DeleteTime)
+	if err := r.db.WithContext(ctx).Model(&KnowledgeBase{}).Where(whereString, owner).Count(&count).Error; err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+// IncreaseKnowledgeBaseUsage increments the usage count of a KnowledgeBase record by a specified amount.
+func (r *Repository) IncreaseKnowledgeBaseUsage(ctx context.Context, kbUID string, amount int) error {
+	// Increment the usage count of the KnowledgeBase record by the specified amount
+	where := fmt.Sprintf("%v = ?", KnowledgeBaseColumn.UID)
+	expr := fmt.Sprintf("%v + ?", KnowledgeBaseColumn.Usage)
+	if err := r.db.WithContext(ctx).Model(&KnowledgeBase{}).Where(where, kbUID).Update(KnowledgeBaseColumn.Usage, gorm.Expr(expr, amount)).Error; err != nil {
+		return err
+	}
+	return nil
 }
