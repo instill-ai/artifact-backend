@@ -36,7 +36,7 @@ type KnowledgeBaseFileI interface {
 		SourceUID   uuid.UUID
 	}, error)
 	// GetKnowledgeBaseFilesByFileUIDs returns the knowledge base files by file UIDs
-	GetKnowledgeBaseFilesByFileUIDs(ctx context.Context, fileUIDs []uuid.UUID) ([]KnowledgeBaseFile, error)
+	GetKnowledgeBaseFilesByFileUIDs(ctx context.Context, fileUIDs []uuid.UUID, columns ...string) ([]KnowledgeBaseFile, error)
 	// GetTruthSourceByFileUID returns the truth source file destination of minIO by file UID
 	GetTruthSourceByFileUID(ctx context.Context, fileUID uuid.UUID) (*SourceMeta, error)
 }
@@ -348,7 +348,8 @@ func (r *Repository) GetSourceTableAndUIDByFileUIDs(ctx context.Context, files [
 	return result, nil
 }
 
-func (r *Repository) GetKnowledgeBaseFilesByFileUIDs(ctx context.Context, fileUIDs []uuid.UUID) ([]KnowledgeBaseFile, error) {
+func (r *Repository) GetKnowledgeBaseFilesByFileUIDs(
+	ctx context.Context, fileUIDs []uuid.UUID, columns ...string) ([]KnowledgeBaseFile, error) {
 	var files []KnowledgeBaseFile
 	// Convert UUIDs to strings as GORM works with strings in queries
 	var stringUIDs []string
@@ -356,8 +357,12 @@ func (r *Repository) GetKnowledgeBaseFilesByFileUIDs(ctx context.Context, fileUI
 		stringUIDs = append(stringUIDs, uid.String())
 	}
 	where := fmt.Sprintf("%v IN ?", KnowledgeBaseFileColumn.UID)
+	query := r.db.WithContext(ctx)
+	if len(columns) > 0 {
+		query = query.Select(columns)
+	}
 	// Query the database for files with the given UIDs
-	if err := r.db.WithContext(ctx).Where(where, stringUIDs).Find(&files).Error; err != nil {
+	if err := query.Where(where, stringUIDs).Find(&files).Error; err != nil {
 		// If GORM returns ErrRecordNotFound, it's not considered an error in this context
 		if err == gorm.ErrRecordNotFound {
 			return []KnowledgeBaseFile{}, nil

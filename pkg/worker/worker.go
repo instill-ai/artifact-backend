@@ -428,7 +428,7 @@ func (wp *fileToEmbWorkerPool) processChunkingFile(ctx context.Context, file rep
 		}
 
 		//  Save the chunks into object storage(minIO) and metadata into database
-		err = wp.saveChunks(ctx, file.KnowledgeBaseUID.String(), wp.svc.Repository.ConvertedFileTableName(), convertedFile.UID, chunks)
+		err = wp.saveChunks(ctx, file.KnowledgeBaseUID.String(), file.UID, wp.svc.Repository.ConvertedFileTableName(), convertedFile.UID, chunks)
 		if err != nil {
 			logger.Error("Failed to save chunks into object storage and metadata into database.", zap.String("File uid", file.UID.String()))
 			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
@@ -460,7 +460,7 @@ func (wp *fileToEmbWorkerPool) processChunkingFile(ctx context.Context, file rep
 			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
 		}
 		//  Save the chunks into object storage(minIO) and metadata into database
-		err = wp.saveChunks(ctx, file.KnowledgeBaseUID.String(), wp.svc.Repository.KnowledgeBaseFileTableName(), file.UID, chunks)
+		err = wp.saveChunks(ctx, file.KnowledgeBaseUID.String(), file.UID, wp.svc.Repository.KnowledgeBaseFileTableName(), file.UID, chunks)
 		if err != nil {
 			logger.Error("Failed to save chunks into object storage and metadata into database.", zap.String("File uid", file.UID.String()))
 			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
@@ -490,7 +490,7 @@ func (wp *fileToEmbWorkerPool) processChunkingFile(ctx context.Context, file rep
 			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
 		}
 		//  Save the chunks into object storage(minIO) and metadata into database
-		err = wp.saveChunks(ctx, file.KnowledgeBaseUID.String(), wp.svc.Repository.KnowledgeBaseFileTableName(), file.UID, chunks)
+		err = wp.saveChunks(ctx, file.KnowledgeBaseUID.String(), file.UID, wp.svc.Repository.KnowledgeBaseFileTableName(), file.UID, chunks)
 		if err != nil {
 			logger.Error("Failed to save chunks into object storage and metadata into database.", zap.String("File uid", file.UID.String()))
 			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
@@ -568,6 +568,7 @@ func (wp *fileToEmbWorkerPool) processEmbeddingFile(ctx context.Context, file re
 	}
 	// call the embedding pipeline
 	// TODO replace with real embedding pipeline in service/pipeline.go
+	// vectors, err := wp.svc.VectorizeText(ctx, file.CreatorUID, texts)
 	vectors, err := mockVectorizeText(ctx, file.CreatorUID, texts)
 	if err != nil {
 		logger.Error("Failed to get embeddings from chunks.", zap.String("SourceTable", sourceTable), zap.String("SourceUID", sourceUID.String()))
@@ -583,6 +584,8 @@ func (wp *fileToEmbWorkerPool) processEmbeddingFile(ctx context.Context, file re
 			SourceUID:   chunks[i].UID,
 			Vector:      v,
 			Collection:  collection,
+			KbUID:       file.KnowledgeBaseUID,
+			KbFileUID:   file.UID,
 		}
 	}
 	err = wp.saveEmbeddings(ctx, file.KnowledgeBaseUID.String(), embeddings)
@@ -642,7 +645,7 @@ type chunk = struct {
 }
 
 // save chunk into object storage and metadata into database
-func (wp *fileToEmbWorkerPool) saveChunks(ctx context.Context, kbUID string, sourceTable string, sourceUID uuid.UUID, chunks []chunk) error {
+func (wp *fileToEmbWorkerPool) saveChunks(ctx context.Context, kbUID string, kbFileUID uuid.UUID, sourceTable string, sourceUID uuid.UUID, chunks []chunk) error {
 	logger, _ := logger.GetZapLogger(ctx)
 	textChunks := make([]*repository.TextChunk, len(chunks))
 
@@ -655,11 +658,12 @@ func (wp *fileToEmbWorkerPool) saveChunks(ctx context.Context, kbUID string, sou
 			SourceTable: sourceTable,
 			StartPos:    c.Start,
 			EndPos:      c.End,
-			ContentDest: "not set yet",
+			ContentDest: "not set yet becasue we need to save the chunks in db to get the uid",
 			Tokens:      c.Tokens,
 			Retrievable: true,
 			InOrder:     i,
 			KbUID:       kbUIDuuid,
+			KbFileUID:   kbFileUID,
 		}
 	}
 	_, err := wp.svc.Repository.DeleteAndCreateChunks(ctx, sourceTable, sourceUID, textChunks,

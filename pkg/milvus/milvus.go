@@ -19,7 +19,8 @@ type MilvusClientI interface {
 	GetAllCollectionNames(ctx context.Context) ([]*entity.Collection, error)
 	DeleteCollection(ctx context.Context, collectionName string) error
 	ListEmbeddings(ctx context.Context, collectionName string) ([]Embedding, error)
-	SearchEmbeddings(ctx context.Context, collectionName string, vectors [][]float32, topK int) ([][]Embedding, error)
+	SearchSimilarEmbeddings(ctx context.Context, collectionName string, vectors [][]float32, topK int) ([][]SimilarEmbedding, error)
+	SearchSimilarEmbeddingsInKB(ctx context.Context, kbUID string, vectors [][]float32, topK int) ([][]SimilarEmbedding, error)
 	DeleteEmbedding(ctx context.Context, collectionName string, embeddingUID []string) error
 	// GetKnowledgeBaseCollectionName returns the collection name for a knowledge base
 	GetKnowledgeBaseCollectionName(kbUID string) string
@@ -296,24 +297,33 @@ func (m *MilvusClient) DeleteEmbedding(ctx context.Context, collectionName strin
 	return err
 }
 
-// SearchEmbeddings searches for embeddings similar to the input vector
-func (m *MilvusClient) SearchEmbeddings(ctx context.Context, collectionName string, vectors [][]float32, topK int) ([][]Embedding, error) {
-	logger, err := logger.GetZapLogger(ctx)
+type SimilarEmbedding struct {
+	Embedding
+	Score float32
+}
+
+// SearchSimilarEmbeddings searches for embeddings similar to the input vector
+func (m *MilvusClient) SearchSimilarEmbeddings(ctx context.Context, collectionName string, vectors [][]float32, topK int) ([][]SimilarEmbedding, error) {
+	log, err := logger.GetZapLogger(ctx)
 	if err != nil {
+		log.Error("failed to get logger", zap.Error(err))
 		return nil, fmt.Errorf("failed to get logger: %w", err)
 	}
 	// Check if the collection exists
 	has, err := m.c.HasCollection(ctx, collectionName)
 	if err != nil {
+		log.Error("failed to check collection existence", zap.Error(err))
 		return nil, fmt.Errorf("failed to check collection existence: %w", err)
 	}
 	if !has {
+		log.Error("collection does not exist", zap.String("collection_name", collectionName))
 		return nil, fmt.Errorf("collection %s does not exist", collectionName)
 	}
 
 	// Load the collection if it's not already loaded
 	err = m.c.LoadCollection(ctx, collectionName, false)
 	if err != nil {
+		log.Error("failed to load collection", zap.Error(err))
 		return nil, fmt.Errorf("failed to load collection: %w", err)
 	}
 	// Convert the input vector to float32
@@ -328,6 +338,7 @@ func (m *MilvusClient) SearchEmbeddings(ctx context.Context, collectionName stri
 	reorderK := 500
 	sp, err := entity.NewIndexSCANNSearchParam(nprobe, reorderK)
 	if err != nil {
+		log.Error("failed to create search param", zap.Error(err))
 		return nil, fmt.Errorf("failed to create search param: %w", err)
 	}
 	results, err := m.c.Search(
@@ -338,35 +349,40 @@ func (m *MilvusClient) SearchEmbeddings(ctx context.Context, collectionName stri
 			KbCollectionFiledEmbedding,
 		}, milvusVectors, KbCollectionFiledEmbedding, entity.COSINE, topK, sp)
 	if err != nil {
+		log.Error("failed to search embeddings", zap.Error(err))
 		return nil, fmt.Errorf("failed to search embeddings: %w", err)
 	}
 
-	logger.Info("Search result", zap.Any("results", results))
 	// Extract the embeddings from the search results
-	var embeddings [][]Embedding
+	var embeddings [][]SimilarEmbedding
 	for _, result := range results {
 		sourceTables, err := getStringData(result.Fields.GetColumn(KbCollectionFiledSourceTable))
 		if err != nil {
+			log.Error("error with source_table column", zap.Error(err))
 			return nil, fmt.Errorf("error with source_table column: %w", err)
 		}
 
 		sourceUIDs, err := getStringData(result.Fields.GetColumn(KbCollectionFiledSourceUID))
 		if err != nil {
+			log.Error("error with source_uid column", zap.Error(err))
 			return nil, fmt.Errorf("error with source_uid column: %w", err)
 		}
 		embeddingUIDs, err := getStringData(result.Fields.GetColumn(KbCollectionFiledEmbeddingUID))
 		if err != nil {
+			log.Error("error with embedding_uid column", zap.Error(err))
 			return nil, fmt.Errorf("error with embedding_uid column: %w", err)
 		}
 		vectors := result.Fields.GetColumn(KbCollectionFiledEmbedding).(*entity.ColumnFloatVector)
-		tempVectors := []Embedding{}
+		scores := result.Scores
+		tempVectors := []SimilarEmbedding{}
 		for i := 0; i < len(sourceTables); i++ {
-			tempVectors = append(tempVectors, Embedding{
-
-				SourceTable:  sourceTables[i],
-				SourceUID:    sourceUIDs[i],
-				EmbeddingUID: embeddingUIDs[i],
-				Vector:       vectors.Data()[i],
+			tempVectors = append(tempVectors, SimilarEmbedding{
+				Embedding: Embedding{
+					SourceTable:  sourceTables[i],
+					SourceUID:    sourceUIDs[i],
+					EmbeddingUID: embeddingUIDs[i],
+					Vector:       vectors.Data()[i]},
+				Score: scores[i],
 			})
 		}
 		embeddings = append(embeddings, tempVectors)
@@ -388,4 +404,10 @@ func (m *MilvusClient) GetKnowledgeBaseCollectionName(kbUID string) string {
 	// turn kbUID(uuid) into a valid collection name
 	kbUID = strings.ReplaceAll(kbUID, "-", "_")
 	return kbCollectionPrefix + kbUID
+}
+
+// GetSimilarEmbeddingsInKB
+func (m *MilvusClient) SearchSimilarEmbeddingsInKB(ctx context.Context, kbUID string, vectors [][]float32, topK int) ([][]SimilarEmbedding, error) {
+	collectionName := m.GetKnowledgeBaseCollectionName(kbUID)
+	return m.SearchSimilarEmbeddings(ctx, collectionName, vectors, topK)
 }
