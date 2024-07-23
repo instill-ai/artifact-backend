@@ -30,12 +30,17 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 		log.Error("failed to parse user id", zap.Error(err))
 		return nil, fmt.Errorf("failed to parse user id: %v. err: %w", err, customerror.ErrUnauthenticated)
 	}
+	ownerUID, err := ph.getOwnerUID(ctx, req.OwnerId)
+	if err != nil {
+		log.Error("failed to get owner uid", zap.Error(err))
+		return nil, fmt.Errorf("failed to get owner uid. err: %w", err)
+	}
 	// TODO ACL : check user has access to the knowledge base
 	_ = req.KbId
 	_ = uid
 
 	// retrieve the chunks based on the similarity
-	simChunksScroes, err := ph.service.SimilarityChunksSearch(ctx, uidUUID, req)
+	simChunksScroes, err := ph.service.SimilarityChunksSearch(ctx, uidUUID, ownerUID, req)
 	if err != nil {
 		log.Error("failed to get similarity chunks", zap.Error(err))
 		return nil, fmt.Errorf("failed to get similarity chunks. err: %w", err)
@@ -72,7 +77,7 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 		fileUids = append(fileUids, fileUID)
 	}
 	files, err := ph.service.Repository.GetKnowledgeBaseFilesByFileUIDs(
-		ctx, fileUids, repository.ConvertedFileColumn.FileUID, repository.KnowledgeBaseFileColumn.Name)
+		ctx, fileUids, repository.KnowledgeBaseFileColumn.UID, repository.KnowledgeBaseFileColumn.Name)
 	if err != nil {
 		log.Error("failed to get knowledge base files by file uids", zap.Error(err))
 		return nil, fmt.Errorf("failed to get knowledge base files by file uids. err: %w", err)
