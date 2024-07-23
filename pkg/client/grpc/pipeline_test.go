@@ -8,6 +8,7 @@ package grpcclient
 // 	"os"
 // 	"testing"
 
+// 	"github.com/instill-ai/artifact-backend/pkg/service"
 // 	pipelinev1beta "github.com/instill-ai/protogen-go/vdp/pipeline/v1beta"
 // 	"google.golang.org/grpc/metadata"
 // 	"google.golang.org/protobuf/types/known/structpb"
@@ -79,7 +80,7 @@ package grpcclient
 // 	ctx := metadata.NewOutgoingContext(context.Background(), md)
 // 	pipelinePublicServiceClient := pipelinev1beta.NewPipelinePublicServiceClient(pipelinePublicGrpcConn)
 // 	req := &pipelinev1beta.TriggerOrganizationPipelineReleaseRequest{
-// 		Name: "organizations/preset/pipelines/indexing-embed/releases/v1.0.0",
+// 		Name: "organizations/preset/pipelines/indexing-embed/releases/v1.1.0",
 // 		Data: []*pipelinev1beta.TriggerData{
 // 			{
 // 				Variable: &structpb.Struct{
@@ -102,8 +103,14 @@ package grpcclient
 // 	if err != nil {
 // 		t.Fatalf("failed to trigger pipeline: %v", err)
 // 	}
+// 	vector, err := service.GetVectorFromResponse(res)
+// 	if err != nil {
+// 		t.Fatalf("failed to trigger pipeline: %v", err)
+// 	}
 // 	t.Logf("pipeline triggered successfully")
-// 	fmt.Println(res)
+// 	fmt.Println("length of vector", len(vector[0]))
+// 	// first 10 elements of the vector
+// 	fmt.Println("vector", vector[0][:10])
 // }
 
 // func TestCEPresetConvertPDF2MdPipeReleaseRequest(t *testing.T) {
@@ -189,13 +196,13 @@ package grpcclient
 // 		t.Fatalf("failed to read pdf file: %v", err)
 // 	}
 // 	req := &pipelinev1beta.TriggerOrganizationPipelineReleaseRequest{
-// 		Name: "organizations/preset/pipelines/indexing-split-markdown/releases/v0.0.1",
+// 		Name: "organizations/preset/pipelines/indexing-split-markdown/releases/v1.0.1",
 // 		Inputs: []*structpb.Struct{
 // 			{
 // 				Fields: map[string]*structpb.Value{
-// 					"text_input":    {Kind: &structpb.Value_StringValue{StringValue: mdString}},
-// 					"chunk_length":  {Kind: &structpb.Value_NumberValue{NumberValue: 800}},
-// 					"chunk_overlap": {Kind: &structpb.Value_NumberValue{NumberValue: 200}},
+// 					"md_input":         {Kind: &structpb.Value_StringValue{StringValue: mdString}},
+// 					"max_chunk_length": {Kind: &structpb.Value_NumberValue{NumberValue: 800}},
+// 					"chunk_overlap":    {Kind: &structpb.Value_NumberValue{NumberValue: 200}},
 // 				},
 // 			},
 // 		},
@@ -259,7 +266,7 @@ package grpcclient
 // 		t.Fatalf("failed to read pdf file: %v", err)
 // 	}
 // 	req := &pipelinev1beta.TriggerOrganizationPipelineReleaseRequest{
-// 		Name: "organizations/preset/pipelines/indexing-split-text/releases/v0.0.1",
+// 		Name: "organizations/preset/pipelines/indexing-split-text/releases/v1.0.0",
 // 		Inputs: []*structpb.Struct{
 // 			{
 // 				Fields: map[string]*structpb.Value{

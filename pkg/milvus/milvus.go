@@ -32,11 +32,16 @@ type MilvusClient struct {
 }
 
 const (
-	VectorDim  = 3072
+	VectorDim  = 1536
 	VectorType = entity.FieldTypeFloatVector
-	ScannNlist = 2048
+	ScannNlist = 1024
 	MetricType = entity.COSINE
 	WitRaw     = true
+)
+// Search parameter
+const (
+	Nprobe   = 250
+	ReorderK = 250
 )
 
 type Embedding struct {
@@ -334,9 +339,7 @@ func (m *MilvusClient) SearchSimilarEmbeddings(ctx context.Context, collectionNa
 	}
 
 	// Perform the search
-	nprobe := 500
-	reorderK := 500
-	sp, err := entity.NewIndexSCANNSearchParam(nprobe, reorderK)
+	sp, err := entity.NewIndexSCANNSearchParam(Nprobe, ReorderK)
 	if err != nil {
 		log.Error("failed to create search param", zap.Error(err))
 		return nil, fmt.Errorf("failed to create search param: %w", err)

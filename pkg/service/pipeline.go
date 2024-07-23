@@ -14,6 +14,10 @@ import (
 
 const chunkLength = 800
 const chunkOverlap = 200
+const pdfToMDVersion = "v1.0.0"
+const mdSplitVersion = "v1.0.1"
+const textSplitVersion = "v1.0.0"
+const textEmbedVersion = "v1.1.0"
 
 // ConvertPDFToMD using converting pipeline to convert PDF to MD and consume caller's credits
 func (s *Service) ConvertPDFToMD(ctx context.Context, caller uuid.UUID, pdfBase64 string) (string, error) {
@@ -22,7 +26,7 @@ func (s *Service) ConvertPDFToMD(ctx context.Context, caller uuid.UUID, pdfBase6
 	ctx = metadata.NewOutgoingContext(ctx, md)
 
 	req := &pipelinev1beta.TriggerOrganizationPipelineReleaseRequest{
-		Name: "organizations/preset/pipelines/indexing-convert-pdf/releases/v1.0.0",
+		Name: "organizations/preset/pipelines/indexing-convert-pdf/releases/" + pdfToMDVersion,
 		Inputs: []*structpb.Struct{
 			{
 				Fields: map[string]*structpb.Value{
@@ -73,14 +77,14 @@ func (s *Service) SplitMarkdown(ctx context.Context, caller uuid.UUID, markdown 
 	md := metadata.New(map[string]string{"Instill-User-Uid": caller.String(), "Instill-Auth-Type": "user"})
 	ctx = metadata.NewOutgoingContext(ctx, md)
 	req := &pipelinev1beta.TriggerOrganizationPipelineReleaseRequest{
-		Name: "organizations/preset/pipelines/indexing-split-markdown/releases/v0.0.1",
+		Name: "organizations/preset/pipelines/indexing-split-markdown/releases/" + mdSplitVersion,
 
 		Inputs: []*structpb.Struct{
 			{
 				Fields: map[string]*structpb.Value{
-					"text_input":    {Kind: &structpb.Value_StringValue{StringValue: markdown}},
-					"chunk_length":  {Kind: &structpb.Value_NumberValue{NumberValue: chunkLength}},
-					"chunk_overlap": {Kind: &structpb.Value_NumberValue{NumberValue: chunkOverlap}},
+					"md_input":         {Kind: &structpb.Value_StringValue{StringValue: markdown}},
+					"max_chunk_length": {Kind: &structpb.Value_NumberValue{NumberValue: chunkLength}},
+					"chunk_overlap":    {Kind: &structpb.Value_NumberValue{NumberValue: chunkOverlap}},
 				},
 			},
 		},
@@ -129,7 +133,7 @@ func (s *Service) SplitText(ctx context.Context, caller uuid.UUID, text string) 
 	md := metadata.New(map[string]string{"Instill-User-Uid": caller.String(), "Instill-Auth-Type": "user"})
 	ctx = metadata.NewOutgoingContext(ctx, md)
 	req := &pipelinev1beta.TriggerOrganizationPipelineReleaseRequest{
-		Name: "organizations/preset/pipelines/indexing-split-text/releases/v0.0.1",
+		Name: "organizations/preset/pipelines/indexing-split-text/releases/" + textSplitVersion,
 
 		Inputs: []*structpb.Struct{
 			{
@@ -152,7 +156,6 @@ func (s *Service) SplitText(ctx context.Context, caller uuid.UUID, text string) 
 	return result, nil
 }
 
-// TODO VectorizeText - waiting for CE to implement the global secret and use it in file-to-embeddings worker
 // VectorizeText using embedding pipeline to vectorize text and consume caller's credits
 func (s *Service) VectorizeText(ctx context.Context, caller uuid.UUID, texts []string) ([][]float32, error) {
 	md := metadata.New(map[string]string{"Instill-User-Uid": caller.String(), "Instill-Auth-Type": "user"})
@@ -167,7 +170,7 @@ func (s *Service) VectorizeText(ctx context.Context, caller uuid.UUID, texts []s
 	}
 
 	req := &pipelinev1beta.TriggerOrganizationPipelineReleaseRequest{
-		Name: "organizations/preset/pipelines/indexing-embed-text/releases/v0.0.1",
+		Name: "organizations/preset/pipelines/indexing-embed-text/releases/" + textEmbedVersion,
 
 		Inputs: inputs,
 	}
