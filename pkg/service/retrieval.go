@@ -15,7 +15,6 @@ type SimChunk struct {
 	Score    float32
 }
 
-
 func (s *Service) SimilarityChunksSearch(ctx context.Context, caller uuid.UUID, req *artifactv1alpha.SimilarityChunksSearchRequest) ([]SimChunk, error) {
 	log, _ := logger.GetZapLogger(ctx)
 	log.Info("SimilarityChunksSearch")
@@ -25,8 +24,16 @@ func (s *Service) SimilarityChunksSearch(ctx context.Context, caller uuid.UUID, 
 		return nil, fmt.Errorf("failed to vectorize text. err: %w", err)
 	}
 
+	// get kb by kb_id and owner id
+	kb, err := s.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, req.OwnerId, req.KbId)
+	if err != nil {
+		log.Error("failed to get knowledge base by owner and id", zap.Error(err))
+		return nil, fmt.Errorf("failed to get knowledge base by owner and id. err: %w", err)
+
+	}
+
 	// search similar embeddings in kb
-	simEmbeddings, err := s.MilvusClient.SearchSimilarEmbeddingsInKB(ctx, req.KbId, textVector, int(req.Topk))
+	simEmbeddings, err := s.MilvusClient.SearchSimilarEmbeddingsInKB(ctx, kb.UID.String(), textVector, int(req.Topk))
 	if err != nil {
 		log.Error("failed to search similar embeddings in kb", zap.Error(err))
 		return nil, fmt.Errorf("failed to search similar embeddings in kb. err: %w", err)
