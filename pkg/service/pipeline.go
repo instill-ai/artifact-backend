@@ -170,7 +170,7 @@ func (s *Service) VectorizeText(ctx context.Context, caller uuid.UUID, texts []s
 	}
 
 	req := &pipelinev1beta.TriggerOrganizationPipelineReleaseRequest{
-		Name: "organizations/preset/pipelines/indexing-embed-text/releases/" + textEmbedVersion,
+		Name: "organizations/preset/pipelines/indexing-embed/releases/" + textEmbedVersion,
 
 		Inputs: inputs,
 	}

@@ -82,7 +82,7 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 
 	// external service call - create knowledge base collection and set ACL in openFAG
 	callExternalService := func(kbUID string) error {
-		err = ph.service.MilvusClient.CreateKnowledgeBaseCollection(ctx, kbUID)
+		err := ph.service.MilvusClient.CreateKnowledgeBaseCollection(ctx, kbUID)
 		if err != nil {
 			log.Error("failed to create collection in milvus", zap.Error(err))
 			return err
@@ -265,7 +265,7 @@ func (ph *PublicHandler) UpdateKnowledgeBase(ctx context.Context, req *artifactp
 			DownstreamApps:      []string{},
 			TotalFiles:          uint32(fileCounts[kb.UID]),
 			TotalTokens:         uint32(tokenCounts[kb.UID]),
-			UsedStorage: uint64(kb.Usage),
+			UsedStorage:         uint64(kb.Usage),
 		},
 	}, nil
 }

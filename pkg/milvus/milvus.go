@@ -170,7 +170,7 @@ func (m *MilvusClient) InsertVectorsToKnowledgeBaseCollection(ctx context.Contex
 		entity.NewColumnVarChar(KbCollectionFiledSourceTable, sourceTables),
 		entity.NewColumnVarChar(KbCollectionFiledSourceUID, sourceUIDs),
 		entity.NewColumnVarChar(KbCollectionFiledEmbeddingUID, embeddingUIDs),
-		entity.NewColumnFloatVector(KbCollectionFiledEmbedding, 3072, vectors),
+		entity.NewColumnFloatVector(KbCollectionFiledEmbedding, VectorDim, vectors),
 	}
 
 	// Insert the data
