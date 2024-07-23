@@ -15,6 +15,12 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+// 15MB
+const maxFileSize = 15 * 1024 * 1024
+
+// 1GB
+const KnowledgeBaseMaxUsage = 1024 * 1024 * 1024
+
 func (ph *PublicHandler) UploadKnowledgeBaseFile(ctx context.Context, req *artifactpb.UploadKnowledgeBaseFileRequest) (*artifactpb.UploadKnowledgeBaseFileResponse, error) {
 	log, _ := logger.GetZapLogger(ctx)
 	uid, err := getUserUIDFromContext(ctx)
@@ -52,7 +58,6 @@ func (ph *PublicHandler) UploadKnowledgeBaseFile(ctx context.Context, req *artif
 		if err != nil {
 			return nil, fmt.Errorf("failed to get knowledge base by owner and id. err: %w", err)
 		}
-
 	}
 
 	// create metadata in db
@@ -70,6 +75,15 @@ func (ph *PublicHandler) UploadKnowledgeBaseFile(ctx context.Context, req *artif
 			return nil, err
 		}
 		fileSize, _ := getFileSize(req.File.Content)
+		// check if file size is more than 15MB
+		if fileSize > maxFileSize {
+			return nil, fmt.Errorf("file size is more than 15MB. err: %w", customerror.ErrInvalidArgument)
+		}
+
+		if kb.Usage+fileSize > KnowledgeBaseMaxUsage {
+			return nil, fmt.Errorf("knowledge base 1 GB exceeded. err: %w", customerror.ErrInvalidArgument)
+		}
+
 		destination := ph.service.MinIO.GetUploadedFilePathInKnowledgeBase(kb.UID.String(), req.File.Name)
 		kbFile := repository.KnowledgeBaseFile{
 			Name:             req.File.Name,
@@ -81,6 +95,8 @@ func (ph *PublicHandler) UploadKnowledgeBaseFile(ctx context.Context, req *artif
 			ProcessStatus:    artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_NOTSTARTED)],
 			Size:             fileSize,
 		}
+
+		// create knowledge base file
 		res, err = ph.service.Repository.CreateKnowledgeBaseFile(ctx, kbFile, func(FileUID string) error {
 			// upload file to minio
 			err := ph.service.MinIO.UploadBase64File(ctx, destination, req.File.Content, fileTypeConvertToMime(req.File.Type))
@@ -90,8 +106,16 @@ func (ph *PublicHandler) UploadKnowledgeBaseFile(ctx context.Context, req *artif
 
 			return nil
 		})
+
 		if err != nil {
 			log.Error("failed to create knowledge base file", zap.Error(err))
+			return nil, err
+		}
+
+		// increase knowledge base usage
+		err = ph.service.Repository.IncreaseKnowledgeBaseUsage(ctx, kb.UID.String(), int(fileSize))
+		if err != nil {
+			log.Error("failed to increase knowledge base usage", zap.Error(err))
 			return nil, err
 		}
 	}
@@ -288,10 +312,31 @@ func (ph *PublicHandler) DeleteKnowledgeBaseFile(
 		return nil, fmt.Errorf("file uid is required. err: %w", customerror.ErrInvalidArgument)
 	}
 
-	err := ph.service.Repository.DeleteKnowledgeBaseFile(ctx, req.FileUid)
+	fuid, err := uuid.Parse(req.FileUid)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse file uid. err: %w", customerror.ErrInvalidArgument)
+	}
+
+	// get the file by uid
+	files, err := ph.service.Repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{fuid})
 	if err != nil {
 		return nil, err
 	}
+	if len(files) == 0 {
+		return nil, fmt.Errorf("file not found. err: %w", customerror.ErrNotFound)
+	}
+
+	err = ph.service.Repository.DeleteKnowledgeBaseFile(ctx, req.FileUid)
+	if err != nil {
+		return nil, err
+	}
+
+	// decrease knowledge base usage
+	err = ph.service.Repository.IncreaseKnowledgeBaseUsage(ctx, files[0].KnowledgeBaseUID.String(), int(-files[0].Size))
+	if err != nil {
+		return nil, err
+	}
+
 	return &artifactpb.DeleteKnowledgeBaseFileResponse{
 		FileUid: req.FileUid,
 	}, nil

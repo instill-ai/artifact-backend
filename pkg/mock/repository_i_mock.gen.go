@@ -146,6 +146,12 @@ type RepositoryIMock struct {
 	beforeGetKnowledgeBaseByOwnerAndIDCounter uint64
 	GetKnowledgeBaseByOwnerAndIDMock          mRepositoryIMockGetKnowledgeBaseByOwnerAndID
 
+	funcGetKnowledgeBaseCountByOwner          func(ctx context.Context, ownerUID string) (i1 int64, err error)
+	inspectFuncGetKnowledgeBaseCountByOwner   func(ctx context.Context, ownerUID string)
+	afterGetKnowledgeBaseCountByOwnerCounter  uint64
+	beforeGetKnowledgeBaseCountByOwnerCounter uint64
+	GetKnowledgeBaseCountByOwnerMock          mRepositoryIMockGetKnowledgeBaseCountByOwner
+
 	funcGetKnowledgeBaseFilesByFileUIDs          func(ctx context.Context, fileUIDs []uuid.UUID, columns ...string) (ka1 []mm_repository.KnowledgeBaseFile, err error)
 	inspectFuncGetKnowledgeBaseFilesByFileUIDs   func(ctx context.Context, fileUIDs []uuid.UUID, columns ...string)
 	afterGetKnowledgeBaseFilesByFileUIDsCounter  uint64
@@ -196,6 +202,12 @@ type RepositoryIMock struct {
 	afterGetTruthSourceByFileUIDCounter  uint64
 	beforeGetTruthSourceByFileUIDCounter uint64
 	GetTruthSourceByFileUIDMock          mRepositoryIMockGetTruthSourceByFileUID
+
+	funcIncreaseKnowledgeBaseUsage          func(ctx context.Context, kbUID string, amount int) (err error)
+	inspectFuncIncreaseKnowledgeBaseUsage   func(ctx context.Context, kbUID string, amount int)
+	afterIncreaseKnowledgeBaseUsageCounter  uint64
+	beforeIncreaseKnowledgeBaseUsageCounter uint64
+	IncreaseKnowledgeBaseUsageMock          mRepositoryIMockIncreaseKnowledgeBaseUsage
 
 	funcKnowledgeBaseFileTableName          func() (s1 string)
 	inspectFuncKnowledgeBaseFileTableName   func()
@@ -325,6 +337,9 @@ func NewRepositoryIMock(t minimock.Tester) *RepositoryIMock {
 	m.GetKnowledgeBaseByOwnerAndIDMock = mRepositoryIMockGetKnowledgeBaseByOwnerAndID{mock: m}
 	m.GetKnowledgeBaseByOwnerAndIDMock.callArgs = []*RepositoryIMockGetKnowledgeBaseByOwnerAndIDParams{}
 
+	m.GetKnowledgeBaseCountByOwnerMock = mRepositoryIMockGetKnowledgeBaseCountByOwner{mock: m}
+	m.GetKnowledgeBaseCountByOwnerMock.callArgs = []*RepositoryIMockGetKnowledgeBaseCountByOwnerParams{}
+
 	m.GetKnowledgeBaseFilesByFileUIDsMock = mRepositoryIMockGetKnowledgeBaseFilesByFileUIDs{mock: m}
 	m.GetKnowledgeBaseFilesByFileUIDsMock.callArgs = []*RepositoryIMockGetKnowledgeBaseFilesByFileUIDsParams{}
 
@@ -345,6 +360,9 @@ func NewRepositoryIMock(t minimock.Tester) *RepositoryIMock {
 
 	m.GetTruthSourceByFileUIDMock = mRepositoryIMockGetTruthSourceByFileUID{mock: m}
 	m.GetTruthSourceByFileUIDMock.callArgs = []*RepositoryIMockGetTruthSourceByFileUIDParams{}
+
+	m.IncreaseKnowledgeBaseUsageMock = mRepositoryIMockIncreaseKnowledgeBaseUsage{mock: m}
+	m.IncreaseKnowledgeBaseUsageMock.callArgs = []*RepositoryIMockIncreaseKnowledgeBaseUsageParams{}
 
 	m.KnowledgeBaseFileTableNameMock = mRepositoryIMockKnowledgeBaseFileTableName{mock: m}
 
@@ -6605,6 +6623,311 @@ func (m *RepositoryIMock) MinimockGetKnowledgeBaseByOwnerAndIDInspect() {
 	}
 }
 
+type mRepositoryIMockGetKnowledgeBaseCountByOwner struct {
+	mock               *RepositoryIMock
+	defaultExpectation *RepositoryIMockGetKnowledgeBaseCountByOwnerExpectation
+	expectations       []*RepositoryIMockGetKnowledgeBaseCountByOwnerExpectation
+
+	callArgs []*RepositoryIMockGetKnowledgeBaseCountByOwnerParams
+	mutex    sync.RWMutex
+
+	expectedInvocations uint64
+}
+
+// RepositoryIMockGetKnowledgeBaseCountByOwnerExpectation specifies expectation struct of the RepositoryI.GetKnowledgeBaseCountByOwner
+type RepositoryIMockGetKnowledgeBaseCountByOwnerExpectation struct {
+	mock      *RepositoryIMock
+	params    *RepositoryIMockGetKnowledgeBaseCountByOwnerParams
+	paramPtrs *RepositoryIMockGetKnowledgeBaseCountByOwnerParamPtrs
+	results   *RepositoryIMockGetKnowledgeBaseCountByOwnerResults
+	Counter   uint64
+}
+
+// RepositoryIMockGetKnowledgeBaseCountByOwnerParams contains parameters of the RepositoryI.GetKnowledgeBaseCountByOwner
+type RepositoryIMockGetKnowledgeBaseCountByOwnerParams struct {
+	ctx      context.Context
+	ownerUID string
+}
+
+// RepositoryIMockGetKnowledgeBaseCountByOwnerParamPtrs contains pointers to parameters of the RepositoryI.GetKnowledgeBaseCountByOwner
+type RepositoryIMockGetKnowledgeBaseCountByOwnerParamPtrs struct {
+	ctx      *context.Context
+	ownerUID *string
+}
+
+// RepositoryIMockGetKnowledgeBaseCountByOwnerResults contains results of the RepositoryI.GetKnowledgeBaseCountByOwner
+type RepositoryIMockGetKnowledgeBaseCountByOwnerResults struct {
+	i1  int64
+	err error
+}
+
+// Expect sets up expected params for RepositoryI.GetKnowledgeBaseCountByOwner
+func (mmGetKnowledgeBaseCountByOwner *mRepositoryIMockGetKnowledgeBaseCountByOwner) Expect(ctx context.Context, ownerUID string) *mRepositoryIMockGetKnowledgeBaseCountByOwner {
+	if mmGetKnowledgeBaseCountByOwner.mock.funcGetKnowledgeBaseCountByOwner != nil {
+		mmGetKnowledgeBaseCountByOwner.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBaseCountByOwner mock is already set by Set")
+	}
+
+	if mmGetKnowledgeBaseCountByOwner.defaultExpectation == nil {
+		mmGetKnowledgeBaseCountByOwner.defaultExpectation = &RepositoryIMockGetKnowledgeBaseCountByOwnerExpectation{}
+	}
+
+	if mmGetKnowledgeBaseCountByOwner.defaultExpectation.paramPtrs != nil {
+		mmGetKnowledgeBaseCountByOwner.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBaseCountByOwner mock is already set by ExpectParams functions")
+	}
+
+	mmGetKnowledgeBaseCountByOwner.defaultExpectation.params = &RepositoryIMockGetKnowledgeBaseCountByOwnerParams{ctx, ownerUID}
+	for _, e := range mmGetKnowledgeBaseCountByOwner.expectations {
+		if minimock.Equal(e.params, mmGetKnowledgeBaseCountByOwner.defaultExpectation.params) {
+			mmGetKnowledgeBaseCountByOwner.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetKnowledgeBaseCountByOwner.defaultExpectation.params)
+		}
+	}
+
+	return mmGetKnowledgeBaseCountByOwner
+}
+
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.GetKnowledgeBaseCountByOwner
+func (mmGetKnowledgeBaseCountByOwner *mRepositoryIMockGetKnowledgeBaseCountByOwner) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockGetKnowledgeBaseCountByOwner {
+	if mmGetKnowledgeBaseCountByOwner.mock.funcGetKnowledgeBaseCountByOwner != nil {
+		mmGetKnowledgeBaseCountByOwner.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBaseCountByOwner mock is already set by Set")
+	}
+
+	if mmGetKnowledgeBaseCountByOwner.defaultExpectation == nil {
+		mmGetKnowledgeBaseCountByOwner.defaultExpectation = &RepositoryIMockGetKnowledgeBaseCountByOwnerExpectation{}
+	}
+
+	if mmGetKnowledgeBaseCountByOwner.defaultExpectation.params != nil {
+		mmGetKnowledgeBaseCountByOwner.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBaseCountByOwner mock is already set by Expect")
+	}
+
+	if mmGetKnowledgeBaseCountByOwner.defaultExpectation.paramPtrs == nil {
+		mmGetKnowledgeBaseCountByOwner.defaultExpectation.paramPtrs = &RepositoryIMockGetKnowledgeBaseCountByOwnerParamPtrs{}
+	}
+	mmGetKnowledgeBaseCountByOwner.defaultExpectation.paramPtrs.ctx = &ctx
+
+	return mmGetKnowledgeBaseCountByOwner
+}
+
+// ExpectOwnerUIDParam2 sets up expected param ownerUID for RepositoryI.GetKnowledgeBaseCountByOwner
+func (mmGetKnowledgeBaseCountByOwner *mRepositoryIMockGetKnowledgeBaseCountByOwner) ExpectOwnerUIDParam2(ownerUID string) *mRepositoryIMockGetKnowledgeBaseCountByOwner {
+	if mmGetKnowledgeBaseCountByOwner.mock.funcGetKnowledgeBaseCountByOwner != nil {
+		mmGetKnowledgeBaseCountByOwner.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBaseCountByOwner mock is already set by Set")
+	}
+
+	if mmGetKnowledgeBaseCountByOwner.defaultExpectation == nil {
+		mmGetKnowledgeBaseCountByOwner.defaultExpectation = &RepositoryIMockGetKnowledgeBaseCountByOwnerExpectation{}
+	}
+
+	if mmGetKnowledgeBaseCountByOwner.defaultExpectation.params != nil {
+		mmGetKnowledgeBaseCountByOwner.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBaseCountByOwner mock is already set by Expect")
+	}
+
+	if mmGetKnowledgeBaseCountByOwner.defaultExpectation.paramPtrs == nil {
+		mmGetKnowledgeBaseCountByOwner.defaultExpectation.paramPtrs = &RepositoryIMockGetKnowledgeBaseCountByOwnerParamPtrs{}
+	}
+	mmGetKnowledgeBaseCountByOwner.defaultExpectation.paramPtrs.ownerUID = &ownerUID
+
+	return mmGetKnowledgeBaseCountByOwner
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.GetKnowledgeBaseCountByOwner
+func (mmGetKnowledgeBaseCountByOwner *mRepositoryIMockGetKnowledgeBaseCountByOwner) Inspect(f func(ctx context.Context, ownerUID string)) *mRepositoryIMockGetKnowledgeBaseCountByOwner {
+	if mmGetKnowledgeBaseCountByOwner.mock.inspectFuncGetKnowledgeBaseCountByOwner != nil {
+		mmGetKnowledgeBaseCountByOwner.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.GetKnowledgeBaseCountByOwner")
+	}
+
+	mmGetKnowledgeBaseCountByOwner.mock.inspectFuncGetKnowledgeBaseCountByOwner = f
+
+	return mmGetKnowledgeBaseCountByOwner
+}
+
+// Return sets up results that will be returned by RepositoryI.GetKnowledgeBaseCountByOwner
+func (mmGetKnowledgeBaseCountByOwner *mRepositoryIMockGetKnowledgeBaseCountByOwner) Return(i1 int64, err error) *RepositoryIMock {
+	if mmGetKnowledgeBaseCountByOwner.mock.funcGetKnowledgeBaseCountByOwner != nil {
+		mmGetKnowledgeBaseCountByOwner.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBaseCountByOwner mock is already set by Set")
+	}
+
+	if mmGetKnowledgeBaseCountByOwner.defaultExpectation == nil {
+		mmGetKnowledgeBaseCountByOwner.defaultExpectation = &RepositoryIMockGetKnowledgeBaseCountByOwnerExpectation{mock: mmGetKnowledgeBaseCountByOwner.mock}
+	}
+	mmGetKnowledgeBaseCountByOwner.defaultExpectation.results = &RepositoryIMockGetKnowledgeBaseCountByOwnerResults{i1, err}
+	return mmGetKnowledgeBaseCountByOwner.mock
+}
+
+// Set uses given function f to mock the RepositoryI.GetKnowledgeBaseCountByOwner method
+func (mmGetKnowledgeBaseCountByOwner *mRepositoryIMockGetKnowledgeBaseCountByOwner) Set(f func(ctx context.Context, ownerUID string) (i1 int64, err error)) *RepositoryIMock {
+	if mmGetKnowledgeBaseCountByOwner.defaultExpectation != nil {
+		mmGetKnowledgeBaseCountByOwner.mock.t.Fatalf("Default expectation is already set for the RepositoryI.GetKnowledgeBaseCountByOwner method")
+	}
+
+	if len(mmGetKnowledgeBaseCountByOwner.expectations) > 0 {
+		mmGetKnowledgeBaseCountByOwner.mock.t.Fatalf("Some expectations are already set for the RepositoryI.GetKnowledgeBaseCountByOwner method")
+	}
+
+	mmGetKnowledgeBaseCountByOwner.mock.funcGetKnowledgeBaseCountByOwner = f
+	return mmGetKnowledgeBaseCountByOwner.mock
+}
+
+// When sets expectation for the RepositoryI.GetKnowledgeBaseCountByOwner which will trigger the result defined by the following
+// Then helper
+func (mmGetKnowledgeBaseCountByOwner *mRepositoryIMockGetKnowledgeBaseCountByOwner) When(ctx context.Context, ownerUID string) *RepositoryIMockGetKnowledgeBaseCountByOwnerExpectation {
+	if mmGetKnowledgeBaseCountByOwner.mock.funcGetKnowledgeBaseCountByOwner != nil {
+		mmGetKnowledgeBaseCountByOwner.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBaseCountByOwner mock is already set by Set")
+	}
+
+	expectation := &RepositoryIMockGetKnowledgeBaseCountByOwnerExpectation{
+		mock:   mmGetKnowledgeBaseCountByOwner.mock,
+		params: &RepositoryIMockGetKnowledgeBaseCountByOwnerParams{ctx, ownerUID},
+	}
+	mmGetKnowledgeBaseCountByOwner.expectations = append(mmGetKnowledgeBaseCountByOwner.expectations, expectation)
+	return expectation
+}
+
+// Then sets up RepositoryI.GetKnowledgeBaseCountByOwner return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockGetKnowledgeBaseCountByOwnerExpectation) Then(i1 int64, err error) *RepositoryIMock {
+	e.results = &RepositoryIMockGetKnowledgeBaseCountByOwnerResults{i1, err}
+	return e.mock
+}
+
+// Times sets number of times RepositoryI.GetKnowledgeBaseCountByOwner should be invoked
+func (mmGetKnowledgeBaseCountByOwner *mRepositoryIMockGetKnowledgeBaseCountByOwner) Times(n uint64) *mRepositoryIMockGetKnowledgeBaseCountByOwner {
+	if n == 0 {
+		mmGetKnowledgeBaseCountByOwner.mock.t.Fatalf("Times of RepositoryIMock.GetKnowledgeBaseCountByOwner mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetKnowledgeBaseCountByOwner.expectedInvocations, n)
+	return mmGetKnowledgeBaseCountByOwner
+}
+
+func (mmGetKnowledgeBaseCountByOwner *mRepositoryIMockGetKnowledgeBaseCountByOwner) invocationsDone() bool {
+	if len(mmGetKnowledgeBaseCountByOwner.expectations) == 0 && mmGetKnowledgeBaseCountByOwner.defaultExpectation == nil && mmGetKnowledgeBaseCountByOwner.mock.funcGetKnowledgeBaseCountByOwner == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetKnowledgeBaseCountByOwner.mock.afterGetKnowledgeBaseCountByOwnerCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetKnowledgeBaseCountByOwner.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetKnowledgeBaseCountByOwner implements repository.RepositoryI
+func (mmGetKnowledgeBaseCountByOwner *RepositoryIMock) GetKnowledgeBaseCountByOwner(ctx context.Context, ownerUID string) (i1 int64, err error) {
+	mm_atomic.AddUint64(&mmGetKnowledgeBaseCountByOwner.beforeGetKnowledgeBaseCountByOwnerCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetKnowledgeBaseCountByOwner.afterGetKnowledgeBaseCountByOwnerCounter, 1)
+
+	if mmGetKnowledgeBaseCountByOwner.inspectFuncGetKnowledgeBaseCountByOwner != nil {
+		mmGetKnowledgeBaseCountByOwner.inspectFuncGetKnowledgeBaseCountByOwner(ctx, ownerUID)
+	}
+
+	mm_params := RepositoryIMockGetKnowledgeBaseCountByOwnerParams{ctx, ownerUID}
+
+	// Record call args
+	mmGetKnowledgeBaseCountByOwner.GetKnowledgeBaseCountByOwnerMock.mutex.Lock()
+	mmGetKnowledgeBaseCountByOwner.GetKnowledgeBaseCountByOwnerMock.callArgs = append(mmGetKnowledgeBaseCountByOwner.GetKnowledgeBaseCountByOwnerMock.callArgs, &mm_params)
+	mmGetKnowledgeBaseCountByOwner.GetKnowledgeBaseCountByOwnerMock.mutex.Unlock()
+
+	for _, e := range mmGetKnowledgeBaseCountByOwner.GetKnowledgeBaseCountByOwnerMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.i1, e.results.err
+		}
+	}
+
+	if mmGetKnowledgeBaseCountByOwner.GetKnowledgeBaseCountByOwnerMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetKnowledgeBaseCountByOwner.GetKnowledgeBaseCountByOwnerMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetKnowledgeBaseCountByOwner.GetKnowledgeBaseCountByOwnerMock.defaultExpectation.params
+		mm_want_ptrs := mmGetKnowledgeBaseCountByOwner.GetKnowledgeBaseCountByOwnerMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryIMockGetKnowledgeBaseCountByOwnerParams{ctx, ownerUID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetKnowledgeBaseCountByOwner.t.Errorf("RepositoryIMock.GetKnowledgeBaseCountByOwner got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.ownerUID != nil && !minimock.Equal(*mm_want_ptrs.ownerUID, mm_got.ownerUID) {
+				mmGetKnowledgeBaseCountByOwner.t.Errorf("RepositoryIMock.GetKnowledgeBaseCountByOwner got unexpected parameter ownerUID, want: %#v, got: %#v%s\n", *mm_want_ptrs.ownerUID, mm_got.ownerUID, minimock.Diff(*mm_want_ptrs.ownerUID, mm_got.ownerUID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetKnowledgeBaseCountByOwner.t.Errorf("RepositoryIMock.GetKnowledgeBaseCountByOwner got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetKnowledgeBaseCountByOwner.GetKnowledgeBaseCountByOwnerMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetKnowledgeBaseCountByOwner.t.Fatal("No results are set for the RepositoryIMock.GetKnowledgeBaseCountByOwner")
+		}
+		return (*mm_results).i1, (*mm_results).err
+	}
+	if mmGetKnowledgeBaseCountByOwner.funcGetKnowledgeBaseCountByOwner != nil {
+		return mmGetKnowledgeBaseCountByOwner.funcGetKnowledgeBaseCountByOwner(ctx, ownerUID)
+	}
+	mmGetKnowledgeBaseCountByOwner.t.Fatalf("Unexpected call to RepositoryIMock.GetKnowledgeBaseCountByOwner. %v %v", ctx, ownerUID)
+	return
+}
+
+// GetKnowledgeBaseCountByOwnerAfterCounter returns a count of finished RepositoryIMock.GetKnowledgeBaseCountByOwner invocations
+func (mmGetKnowledgeBaseCountByOwner *RepositoryIMock) GetKnowledgeBaseCountByOwnerAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetKnowledgeBaseCountByOwner.afterGetKnowledgeBaseCountByOwnerCounter)
+}
+
+// GetKnowledgeBaseCountByOwnerBeforeCounter returns a count of RepositoryIMock.GetKnowledgeBaseCountByOwner invocations
+func (mmGetKnowledgeBaseCountByOwner *RepositoryIMock) GetKnowledgeBaseCountByOwnerBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetKnowledgeBaseCountByOwner.beforeGetKnowledgeBaseCountByOwnerCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryIMock.GetKnowledgeBaseCountByOwner.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetKnowledgeBaseCountByOwner *mRepositoryIMockGetKnowledgeBaseCountByOwner) Calls() []*RepositoryIMockGetKnowledgeBaseCountByOwnerParams {
+	mmGetKnowledgeBaseCountByOwner.mutex.RLock()
+
+	argCopy := make([]*RepositoryIMockGetKnowledgeBaseCountByOwnerParams, len(mmGetKnowledgeBaseCountByOwner.callArgs))
+	copy(argCopy, mmGetKnowledgeBaseCountByOwner.callArgs)
+
+	mmGetKnowledgeBaseCountByOwner.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetKnowledgeBaseCountByOwnerDone returns true if the count of the GetKnowledgeBaseCountByOwner invocations corresponds
+// the number of defined expectations
+func (m *RepositoryIMock) MinimockGetKnowledgeBaseCountByOwnerDone() bool {
+	for _, e := range m.GetKnowledgeBaseCountByOwnerMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetKnowledgeBaseCountByOwnerMock.invocationsDone()
+}
+
+// MinimockGetKnowledgeBaseCountByOwnerInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockGetKnowledgeBaseCountByOwnerInspect() {
+	for _, e := range m.GetKnowledgeBaseCountByOwnerMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryIMock.GetKnowledgeBaseCountByOwner with params: %#v", *e.params)
+		}
+	}
+
+	afterGetKnowledgeBaseCountByOwnerCounter := mm_atomic.LoadUint64(&m.afterGetKnowledgeBaseCountByOwnerCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetKnowledgeBaseCountByOwnerMock.defaultExpectation != nil && afterGetKnowledgeBaseCountByOwnerCounter < 1 {
+		if m.GetKnowledgeBaseCountByOwnerMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to RepositoryIMock.GetKnowledgeBaseCountByOwner")
+		} else {
+			m.t.Errorf("Expected call to RepositoryIMock.GetKnowledgeBaseCountByOwner with params: %#v", *m.GetKnowledgeBaseCountByOwnerMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetKnowledgeBaseCountByOwner != nil && afterGetKnowledgeBaseCountByOwnerCounter < 1 {
+		m.t.Error("Expected call to RepositoryIMock.GetKnowledgeBaseCountByOwner")
+	}
+
+	if !m.GetKnowledgeBaseCountByOwnerMock.invocationsDone() && afterGetKnowledgeBaseCountByOwnerCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.GetKnowledgeBaseCountByOwner but found %d calls",
+			mm_atomic.LoadUint64(&m.GetKnowledgeBaseCountByOwnerMock.expectedInvocations), afterGetKnowledgeBaseCountByOwnerCounter)
+	}
+}
+
 type mRepositoryIMockGetKnowledgeBaseFilesByFileUIDs struct {
 	mock               *RepositoryIMock
 	defaultExpectation *RepositoryIMockGetKnowledgeBaseFilesByFileUIDsExpectation
@@ -8832,6 +9155,338 @@ func (m *RepositoryIMock) MinimockGetTruthSourceByFileUIDInspect() {
 	if !m.GetTruthSourceByFileUIDMock.invocationsDone() && afterGetTruthSourceByFileUIDCounter > 0 {
 		m.t.Errorf("Expected %d calls to RepositoryIMock.GetTruthSourceByFileUID but found %d calls",
 			mm_atomic.LoadUint64(&m.GetTruthSourceByFileUIDMock.expectedInvocations), afterGetTruthSourceByFileUIDCounter)
+	}
+}
+
+type mRepositoryIMockIncreaseKnowledgeBaseUsage struct {
+	mock               *RepositoryIMock
+	defaultExpectation *RepositoryIMockIncreaseKnowledgeBaseUsageExpectation
+	expectations       []*RepositoryIMockIncreaseKnowledgeBaseUsageExpectation
+
+	callArgs []*RepositoryIMockIncreaseKnowledgeBaseUsageParams
+	mutex    sync.RWMutex
+
+	expectedInvocations uint64
+}
+
+// RepositoryIMockIncreaseKnowledgeBaseUsageExpectation specifies expectation struct of the RepositoryI.IncreaseKnowledgeBaseUsage
+type RepositoryIMockIncreaseKnowledgeBaseUsageExpectation struct {
+	mock      *RepositoryIMock
+	params    *RepositoryIMockIncreaseKnowledgeBaseUsageParams
+	paramPtrs *RepositoryIMockIncreaseKnowledgeBaseUsageParamPtrs
+	results   *RepositoryIMockIncreaseKnowledgeBaseUsageResults
+	Counter   uint64
+}
+
+// RepositoryIMockIncreaseKnowledgeBaseUsageParams contains parameters of the RepositoryI.IncreaseKnowledgeBaseUsage
+type RepositoryIMockIncreaseKnowledgeBaseUsageParams struct {
+	ctx    context.Context
+	kbUID  string
+	amount int
+}
+
+// RepositoryIMockIncreaseKnowledgeBaseUsageParamPtrs contains pointers to parameters of the RepositoryI.IncreaseKnowledgeBaseUsage
+type RepositoryIMockIncreaseKnowledgeBaseUsageParamPtrs struct {
+	ctx    *context.Context
+	kbUID  *string
+	amount *int
+}
+
+// RepositoryIMockIncreaseKnowledgeBaseUsageResults contains results of the RepositoryI.IncreaseKnowledgeBaseUsage
+type RepositoryIMockIncreaseKnowledgeBaseUsageResults struct {
+	err error
+}
+
+// Expect sets up expected params for RepositoryI.IncreaseKnowledgeBaseUsage
+func (mmIncreaseKnowledgeBaseUsage *mRepositoryIMockIncreaseKnowledgeBaseUsage) Expect(ctx context.Context, kbUID string, amount int) *mRepositoryIMockIncreaseKnowledgeBaseUsage {
+	if mmIncreaseKnowledgeBaseUsage.mock.funcIncreaseKnowledgeBaseUsage != nil {
+		mmIncreaseKnowledgeBaseUsage.mock.t.Fatalf("RepositoryIMock.IncreaseKnowledgeBaseUsage mock is already set by Set")
+	}
+
+	if mmIncreaseKnowledgeBaseUsage.defaultExpectation == nil {
+		mmIncreaseKnowledgeBaseUsage.defaultExpectation = &RepositoryIMockIncreaseKnowledgeBaseUsageExpectation{}
+	}
+
+	if mmIncreaseKnowledgeBaseUsage.defaultExpectation.paramPtrs != nil {
+		mmIncreaseKnowledgeBaseUsage.mock.t.Fatalf("RepositoryIMock.IncreaseKnowledgeBaseUsage mock is already set by ExpectParams functions")
+	}
+
+	mmIncreaseKnowledgeBaseUsage.defaultExpectation.params = &RepositoryIMockIncreaseKnowledgeBaseUsageParams{ctx, kbUID, amount}
+	for _, e := range mmIncreaseKnowledgeBaseUsage.expectations {
+		if minimock.Equal(e.params, mmIncreaseKnowledgeBaseUsage.defaultExpectation.params) {
+			mmIncreaseKnowledgeBaseUsage.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmIncreaseKnowledgeBaseUsage.defaultExpectation.params)
+		}
+	}
+
+	return mmIncreaseKnowledgeBaseUsage
+}
+
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.IncreaseKnowledgeBaseUsage
+func (mmIncreaseKnowledgeBaseUsage *mRepositoryIMockIncreaseKnowledgeBaseUsage) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockIncreaseKnowledgeBaseUsage {
+	if mmIncreaseKnowledgeBaseUsage.mock.funcIncreaseKnowledgeBaseUsage != nil {
+		mmIncreaseKnowledgeBaseUsage.mock.t.Fatalf("RepositoryIMock.IncreaseKnowledgeBaseUsage mock is already set by Set")
+	}
+
+	if mmIncreaseKnowledgeBaseUsage.defaultExpectation == nil {
+		mmIncreaseKnowledgeBaseUsage.defaultExpectation = &RepositoryIMockIncreaseKnowledgeBaseUsageExpectation{}
+	}
+
+	if mmIncreaseKnowledgeBaseUsage.defaultExpectation.params != nil {
+		mmIncreaseKnowledgeBaseUsage.mock.t.Fatalf("RepositoryIMock.IncreaseKnowledgeBaseUsage mock is already set by Expect")
+	}
+
+	if mmIncreaseKnowledgeBaseUsage.defaultExpectation.paramPtrs == nil {
+		mmIncreaseKnowledgeBaseUsage.defaultExpectation.paramPtrs = &RepositoryIMockIncreaseKnowledgeBaseUsageParamPtrs{}
+	}
+	mmIncreaseKnowledgeBaseUsage.defaultExpectation.paramPtrs.ctx = &ctx
+
+	return mmIncreaseKnowledgeBaseUsage
+}
+
+// ExpectKbUIDParam2 sets up expected param kbUID for RepositoryI.IncreaseKnowledgeBaseUsage
+func (mmIncreaseKnowledgeBaseUsage *mRepositoryIMockIncreaseKnowledgeBaseUsage) ExpectKbUIDParam2(kbUID string) *mRepositoryIMockIncreaseKnowledgeBaseUsage {
+	if mmIncreaseKnowledgeBaseUsage.mock.funcIncreaseKnowledgeBaseUsage != nil {
+		mmIncreaseKnowledgeBaseUsage.mock.t.Fatalf("RepositoryIMock.IncreaseKnowledgeBaseUsage mock is already set by Set")
+	}
+
+	if mmIncreaseKnowledgeBaseUsage.defaultExpectation == nil {
+		mmIncreaseKnowledgeBaseUsage.defaultExpectation = &RepositoryIMockIncreaseKnowledgeBaseUsageExpectation{}
+	}
+
+	if mmIncreaseKnowledgeBaseUsage.defaultExpectation.params != nil {
+		mmIncreaseKnowledgeBaseUsage.mock.t.Fatalf("RepositoryIMock.IncreaseKnowledgeBaseUsage mock is already set by Expect")
+	}
+
+	if mmIncreaseKnowledgeBaseUsage.defaultExpectation.paramPtrs == nil {
+		mmIncreaseKnowledgeBaseUsage.defaultExpectation.paramPtrs = &RepositoryIMockIncreaseKnowledgeBaseUsageParamPtrs{}
+	}
+	mmIncreaseKnowledgeBaseUsage.defaultExpectation.paramPtrs.kbUID = &kbUID
+
+	return mmIncreaseKnowledgeBaseUsage
+}
+
+// ExpectAmountParam3 sets up expected param amount for RepositoryI.IncreaseKnowledgeBaseUsage
+func (mmIncreaseKnowledgeBaseUsage *mRepositoryIMockIncreaseKnowledgeBaseUsage) ExpectAmountParam3(amount int) *mRepositoryIMockIncreaseKnowledgeBaseUsage {
+	if mmIncreaseKnowledgeBaseUsage.mock.funcIncreaseKnowledgeBaseUsage != nil {
+		mmIncreaseKnowledgeBaseUsage.mock.t.Fatalf("RepositoryIMock.IncreaseKnowledgeBaseUsage mock is already set by Set")
+	}
+
+	if mmIncreaseKnowledgeBaseUsage.defaultExpectation == nil {
+		mmIncreaseKnowledgeBaseUsage.defaultExpectation = &RepositoryIMockIncreaseKnowledgeBaseUsageExpectation{}
+	}
+
+	if mmIncreaseKnowledgeBaseUsage.defaultExpectation.params != nil {
+		mmIncreaseKnowledgeBaseUsage.mock.t.Fatalf("RepositoryIMock.IncreaseKnowledgeBaseUsage mock is already set by Expect")
+	}
+
+	if mmIncreaseKnowledgeBaseUsage.defaultExpectation.paramPtrs == nil {
+		mmIncreaseKnowledgeBaseUsage.defaultExpectation.paramPtrs = &RepositoryIMockIncreaseKnowledgeBaseUsageParamPtrs{}
+	}
+	mmIncreaseKnowledgeBaseUsage.defaultExpectation.paramPtrs.amount = &amount
+
+	return mmIncreaseKnowledgeBaseUsage
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.IncreaseKnowledgeBaseUsage
+func (mmIncreaseKnowledgeBaseUsage *mRepositoryIMockIncreaseKnowledgeBaseUsage) Inspect(f func(ctx context.Context, kbUID string, amount int)) *mRepositoryIMockIncreaseKnowledgeBaseUsage {
+	if mmIncreaseKnowledgeBaseUsage.mock.inspectFuncIncreaseKnowledgeBaseUsage != nil {
+		mmIncreaseKnowledgeBaseUsage.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.IncreaseKnowledgeBaseUsage")
+	}
+
+	mmIncreaseKnowledgeBaseUsage.mock.inspectFuncIncreaseKnowledgeBaseUsage = f
+
+	return mmIncreaseKnowledgeBaseUsage
+}
+
+// Return sets up results that will be returned by RepositoryI.IncreaseKnowledgeBaseUsage
+func (mmIncreaseKnowledgeBaseUsage *mRepositoryIMockIncreaseKnowledgeBaseUsage) Return(err error) *RepositoryIMock {
+	if mmIncreaseKnowledgeBaseUsage.mock.funcIncreaseKnowledgeBaseUsage != nil {
+		mmIncreaseKnowledgeBaseUsage.mock.t.Fatalf("RepositoryIMock.IncreaseKnowledgeBaseUsage mock is already set by Set")
+	}
+
+	if mmIncreaseKnowledgeBaseUsage.defaultExpectation == nil {
+		mmIncreaseKnowledgeBaseUsage.defaultExpectation = &RepositoryIMockIncreaseKnowledgeBaseUsageExpectation{mock: mmIncreaseKnowledgeBaseUsage.mock}
+	}
+	mmIncreaseKnowledgeBaseUsage.defaultExpectation.results = &RepositoryIMockIncreaseKnowledgeBaseUsageResults{err}
+	return mmIncreaseKnowledgeBaseUsage.mock
+}
+
+// Set uses given function f to mock the RepositoryI.IncreaseKnowledgeBaseUsage method
+func (mmIncreaseKnowledgeBaseUsage *mRepositoryIMockIncreaseKnowledgeBaseUsage) Set(f func(ctx context.Context, kbUID string, amount int) (err error)) *RepositoryIMock {
+	if mmIncreaseKnowledgeBaseUsage.defaultExpectation != nil {
+		mmIncreaseKnowledgeBaseUsage.mock.t.Fatalf("Default expectation is already set for the RepositoryI.IncreaseKnowledgeBaseUsage method")
+	}
+
+	if len(mmIncreaseKnowledgeBaseUsage.expectations) > 0 {
+		mmIncreaseKnowledgeBaseUsage.mock.t.Fatalf("Some expectations are already set for the RepositoryI.IncreaseKnowledgeBaseUsage method")
+	}
+
+	mmIncreaseKnowledgeBaseUsage.mock.funcIncreaseKnowledgeBaseUsage = f
+	return mmIncreaseKnowledgeBaseUsage.mock
+}
+
+// When sets expectation for the RepositoryI.IncreaseKnowledgeBaseUsage which will trigger the result defined by the following
+// Then helper
+func (mmIncreaseKnowledgeBaseUsage *mRepositoryIMockIncreaseKnowledgeBaseUsage) When(ctx context.Context, kbUID string, amount int) *RepositoryIMockIncreaseKnowledgeBaseUsageExpectation {
+	if mmIncreaseKnowledgeBaseUsage.mock.funcIncreaseKnowledgeBaseUsage != nil {
+		mmIncreaseKnowledgeBaseUsage.mock.t.Fatalf("RepositoryIMock.IncreaseKnowledgeBaseUsage mock is already set by Set")
+	}
+
+	expectation := &RepositoryIMockIncreaseKnowledgeBaseUsageExpectation{
+		mock:   mmIncreaseKnowledgeBaseUsage.mock,
+		params: &RepositoryIMockIncreaseKnowledgeBaseUsageParams{ctx, kbUID, amount},
+	}
+	mmIncreaseKnowledgeBaseUsage.expectations = append(mmIncreaseKnowledgeBaseUsage.expectations, expectation)
+	return expectation
+}
+
+// Then sets up RepositoryI.IncreaseKnowledgeBaseUsage return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockIncreaseKnowledgeBaseUsageExpectation) Then(err error) *RepositoryIMock {
+	e.results = &RepositoryIMockIncreaseKnowledgeBaseUsageResults{err}
+	return e.mock
+}
+
+// Times sets number of times RepositoryI.IncreaseKnowledgeBaseUsage should be invoked
+func (mmIncreaseKnowledgeBaseUsage *mRepositoryIMockIncreaseKnowledgeBaseUsage) Times(n uint64) *mRepositoryIMockIncreaseKnowledgeBaseUsage {
+	if n == 0 {
+		mmIncreaseKnowledgeBaseUsage.mock.t.Fatalf("Times of RepositoryIMock.IncreaseKnowledgeBaseUsage mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmIncreaseKnowledgeBaseUsage.expectedInvocations, n)
+	return mmIncreaseKnowledgeBaseUsage
+}
+
+func (mmIncreaseKnowledgeBaseUsage *mRepositoryIMockIncreaseKnowledgeBaseUsage) invocationsDone() bool {
+	if len(mmIncreaseKnowledgeBaseUsage.expectations) == 0 && mmIncreaseKnowledgeBaseUsage.defaultExpectation == nil && mmIncreaseKnowledgeBaseUsage.mock.funcIncreaseKnowledgeBaseUsage == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmIncreaseKnowledgeBaseUsage.mock.afterIncreaseKnowledgeBaseUsageCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmIncreaseKnowledgeBaseUsage.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// IncreaseKnowledgeBaseUsage implements repository.RepositoryI
+func (mmIncreaseKnowledgeBaseUsage *RepositoryIMock) IncreaseKnowledgeBaseUsage(ctx context.Context, kbUID string, amount int) (err error) {
+	mm_atomic.AddUint64(&mmIncreaseKnowledgeBaseUsage.beforeIncreaseKnowledgeBaseUsageCounter, 1)
+	defer mm_atomic.AddUint64(&mmIncreaseKnowledgeBaseUsage.afterIncreaseKnowledgeBaseUsageCounter, 1)
+
+	if mmIncreaseKnowledgeBaseUsage.inspectFuncIncreaseKnowledgeBaseUsage != nil {
+		mmIncreaseKnowledgeBaseUsage.inspectFuncIncreaseKnowledgeBaseUsage(ctx, kbUID, amount)
+	}
+
+	mm_params := RepositoryIMockIncreaseKnowledgeBaseUsageParams{ctx, kbUID, amount}
+
+	// Record call args
+	mmIncreaseKnowledgeBaseUsage.IncreaseKnowledgeBaseUsageMock.mutex.Lock()
+	mmIncreaseKnowledgeBaseUsage.IncreaseKnowledgeBaseUsageMock.callArgs = append(mmIncreaseKnowledgeBaseUsage.IncreaseKnowledgeBaseUsageMock.callArgs, &mm_params)
+	mmIncreaseKnowledgeBaseUsage.IncreaseKnowledgeBaseUsageMock.mutex.Unlock()
+
+	for _, e := range mmIncreaseKnowledgeBaseUsage.IncreaseKnowledgeBaseUsageMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmIncreaseKnowledgeBaseUsage.IncreaseKnowledgeBaseUsageMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmIncreaseKnowledgeBaseUsage.IncreaseKnowledgeBaseUsageMock.defaultExpectation.Counter, 1)
+		mm_want := mmIncreaseKnowledgeBaseUsage.IncreaseKnowledgeBaseUsageMock.defaultExpectation.params
+		mm_want_ptrs := mmIncreaseKnowledgeBaseUsage.IncreaseKnowledgeBaseUsageMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryIMockIncreaseKnowledgeBaseUsageParams{ctx, kbUID, amount}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmIncreaseKnowledgeBaseUsage.t.Errorf("RepositoryIMock.IncreaseKnowledgeBaseUsage got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.kbUID != nil && !minimock.Equal(*mm_want_ptrs.kbUID, mm_got.kbUID) {
+				mmIncreaseKnowledgeBaseUsage.t.Errorf("RepositoryIMock.IncreaseKnowledgeBaseUsage got unexpected parameter kbUID, want: %#v, got: %#v%s\n", *mm_want_ptrs.kbUID, mm_got.kbUID, minimock.Diff(*mm_want_ptrs.kbUID, mm_got.kbUID))
+			}
+
+			if mm_want_ptrs.amount != nil && !minimock.Equal(*mm_want_ptrs.amount, mm_got.amount) {
+				mmIncreaseKnowledgeBaseUsage.t.Errorf("RepositoryIMock.IncreaseKnowledgeBaseUsage got unexpected parameter amount, want: %#v, got: %#v%s\n", *mm_want_ptrs.amount, mm_got.amount, minimock.Diff(*mm_want_ptrs.amount, mm_got.amount))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmIncreaseKnowledgeBaseUsage.t.Errorf("RepositoryIMock.IncreaseKnowledgeBaseUsage got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmIncreaseKnowledgeBaseUsage.IncreaseKnowledgeBaseUsageMock.defaultExpectation.results
+		if mm_results == nil {
+			mmIncreaseKnowledgeBaseUsage.t.Fatal("No results are set for the RepositoryIMock.IncreaseKnowledgeBaseUsage")
+		}
+		return (*mm_results).err
+	}
+	if mmIncreaseKnowledgeBaseUsage.funcIncreaseKnowledgeBaseUsage != nil {
+		return mmIncreaseKnowledgeBaseUsage.funcIncreaseKnowledgeBaseUsage(ctx, kbUID, amount)
+	}
+	mmIncreaseKnowledgeBaseUsage.t.Fatalf("Unexpected call to RepositoryIMock.IncreaseKnowledgeBaseUsage. %v %v %v", ctx, kbUID, amount)
+	return
+}
+
+// IncreaseKnowledgeBaseUsageAfterCounter returns a count of finished RepositoryIMock.IncreaseKnowledgeBaseUsage invocations
+func (mmIncreaseKnowledgeBaseUsage *RepositoryIMock) IncreaseKnowledgeBaseUsageAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmIncreaseKnowledgeBaseUsage.afterIncreaseKnowledgeBaseUsageCounter)
+}
+
+// IncreaseKnowledgeBaseUsageBeforeCounter returns a count of RepositoryIMock.IncreaseKnowledgeBaseUsage invocations
+func (mmIncreaseKnowledgeBaseUsage *RepositoryIMock) IncreaseKnowledgeBaseUsageBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmIncreaseKnowledgeBaseUsage.beforeIncreaseKnowledgeBaseUsageCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryIMock.IncreaseKnowledgeBaseUsage.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmIncreaseKnowledgeBaseUsage *mRepositoryIMockIncreaseKnowledgeBaseUsage) Calls() []*RepositoryIMockIncreaseKnowledgeBaseUsageParams {
+	mmIncreaseKnowledgeBaseUsage.mutex.RLock()
+
+	argCopy := make([]*RepositoryIMockIncreaseKnowledgeBaseUsageParams, len(mmIncreaseKnowledgeBaseUsage.callArgs))
+	copy(argCopy, mmIncreaseKnowledgeBaseUsage.callArgs)
+
+	mmIncreaseKnowledgeBaseUsage.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockIncreaseKnowledgeBaseUsageDone returns true if the count of the IncreaseKnowledgeBaseUsage invocations corresponds
+// the number of defined expectations
+func (m *RepositoryIMock) MinimockIncreaseKnowledgeBaseUsageDone() bool {
+	for _, e := range m.IncreaseKnowledgeBaseUsageMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.IncreaseKnowledgeBaseUsageMock.invocationsDone()
+}
+
+// MinimockIncreaseKnowledgeBaseUsageInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockIncreaseKnowledgeBaseUsageInspect() {
+	for _, e := range m.IncreaseKnowledgeBaseUsageMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryIMock.IncreaseKnowledgeBaseUsage with params: %#v", *e.params)
+		}
+	}
+
+	afterIncreaseKnowledgeBaseUsageCounter := mm_atomic.LoadUint64(&m.afterIncreaseKnowledgeBaseUsageCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.IncreaseKnowledgeBaseUsageMock.defaultExpectation != nil && afterIncreaseKnowledgeBaseUsageCounter < 1 {
+		if m.IncreaseKnowledgeBaseUsageMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to RepositoryIMock.IncreaseKnowledgeBaseUsage")
+		} else {
+			m.t.Errorf("Expected call to RepositoryIMock.IncreaseKnowledgeBaseUsage with params: %#v", *m.IncreaseKnowledgeBaseUsageMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcIncreaseKnowledgeBaseUsage != nil && afterIncreaseKnowledgeBaseUsageCounter < 1 {
+		m.t.Error("Expected call to RepositoryIMock.IncreaseKnowledgeBaseUsage")
+	}
+
+	if !m.IncreaseKnowledgeBaseUsageMock.invocationsDone() && afterIncreaseKnowledgeBaseUsageCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.IncreaseKnowledgeBaseUsage but found %d calls",
+			mm_atomic.LoadUint64(&m.IncreaseKnowledgeBaseUsageMock.expectedInvocations), afterIncreaseKnowledgeBaseUsageCounter)
 	}
 }
 
@@ -11899,6 +12554,8 @@ func (m *RepositoryIMock) MinimockFinish() {
 
 			m.MinimockGetKnowledgeBaseByOwnerAndIDInspect()
 
+			m.MinimockGetKnowledgeBaseCountByOwnerInspect()
+
 			m.MinimockGetKnowledgeBaseFilesByFileUIDsInspect()
 
 			m.MinimockGetRepositoryTagInspect()
@@ -11912,6 +12569,8 @@ func (m *RepositoryIMock) MinimockFinish() {
 			m.MinimockGetTotalTokensByListKBUIDsInspect()
 
 			m.MinimockGetTruthSourceByFileUIDInspect()
+
+			m.MinimockIncreaseKnowledgeBaseUsageInspect()
 
 			m.MinimockKnowledgeBaseFileTableNameInspect()
 
@@ -11976,6 +12635,7 @@ func (m *RepositoryIMock) minimockDone() bool {
 		m.MinimockGetFilesTotalTokensDone() &&
 		m.MinimockGetIncompleteFileDone() &&
 		m.MinimockGetKnowledgeBaseByOwnerAndIDDone() &&
+		m.MinimockGetKnowledgeBaseCountByOwnerDone() &&
 		m.MinimockGetKnowledgeBaseFilesByFileUIDsDone() &&
 		m.MinimockGetRepositoryTagDone() &&
 		m.MinimockGetSourceTableAndUIDByFileUIDsDone() &&
@@ -11983,6 +12643,7 @@ func (m *RepositoryIMock) minimockDone() bool {
 		m.MinimockGetTotalChunksBySourcesDone() &&
 		m.MinimockGetTotalTokensByListKBUIDsDone() &&
 		m.MinimockGetTruthSourceByFileUIDDone() &&
+		m.MinimockIncreaseKnowledgeBaseUsageDone() &&
 		m.MinimockKnowledgeBaseFileTableNameDone() &&
 		m.MinimockListKnowledgeBaseFilesDone() &&
 		m.MinimockListKnowledgeBasesDone() &&
