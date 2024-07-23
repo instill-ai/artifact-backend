@@ -140,11 +140,11 @@ type RepositoryIMock struct {
 	beforeGetIncompleteFileCounter uint64
 	GetIncompleteFileMock          mRepositoryIMockGetIncompleteFile
 
-	funcGetKnowledgeBaseByOwnerAndID          func(ctx context.Context, ownerUID string, kbID string) (kp1 *mm_repository.KnowledgeBase, err error)
-	inspectFuncGetKnowledgeBaseByOwnerAndID   func(ctx context.Context, ownerUID string, kbID string)
-	afterGetKnowledgeBaseByOwnerAndIDCounter  uint64
-	beforeGetKnowledgeBaseByOwnerAndIDCounter uint64
-	GetKnowledgeBaseByOwnerAndIDMock          mRepositoryIMockGetKnowledgeBaseByOwnerAndID
+	funcGetKnowledgeBaseByOwnerAndKbID          func(ctx context.Context, ownerUID string, kbID string) (kp1 *mm_repository.KnowledgeBase, err error)
+	inspectFuncGetKnowledgeBaseByOwnerAndKbID   func(ctx context.Context, ownerUID string, kbID string)
+	afterGetKnowledgeBaseByOwnerAndKbIDCounter  uint64
+	beforeGetKnowledgeBaseByOwnerAndKbIDCounter uint64
+	GetKnowledgeBaseByOwnerAndKbIDMock          mRepositoryIMockGetKnowledgeBaseByOwnerAndKbID
 
 	funcGetKnowledgeBaseCountByOwner          func(ctx context.Context, ownerUID string) (i1 int64, err error)
 	inspectFuncGetKnowledgeBaseCountByOwner   func(ctx context.Context, ownerUID string)
@@ -334,8 +334,8 @@ func NewRepositoryIMock(t minimock.Tester) *RepositoryIMock {
 	m.GetIncompleteFileMock = mRepositoryIMockGetIncompleteFile{mock: m}
 	m.GetIncompleteFileMock.callArgs = []*RepositoryIMockGetIncompleteFileParams{}
 
-	m.GetKnowledgeBaseByOwnerAndIDMock = mRepositoryIMockGetKnowledgeBaseByOwnerAndID{mock: m}
-	m.GetKnowledgeBaseByOwnerAndIDMock.callArgs = []*RepositoryIMockGetKnowledgeBaseByOwnerAndIDParams{}
+	m.GetKnowledgeBaseByOwnerAndKbIDMock = mRepositoryIMockGetKnowledgeBaseByOwnerAndKbID{mock: m}
+	m.GetKnowledgeBaseByOwnerAndKbIDMock.callArgs = []*RepositoryIMockGetKnowledgeBaseByOwnerAndKbIDParams{}
 
 	m.GetKnowledgeBaseCountByOwnerMock = mRepositoryIMockGetKnowledgeBaseCountByOwner{mock: m}
 	m.GetKnowledgeBaseCountByOwnerMock.callArgs = []*RepositoryIMockGetKnowledgeBaseCountByOwnerParams{}
@@ -6290,336 +6290,336 @@ func (m *RepositoryIMock) MinimockGetIncompleteFileInspect() {
 	}
 }
 
-type mRepositoryIMockGetKnowledgeBaseByOwnerAndID struct {
+type mRepositoryIMockGetKnowledgeBaseByOwnerAndKbID struct {
 	mock               *RepositoryIMock
-	defaultExpectation *RepositoryIMockGetKnowledgeBaseByOwnerAndIDExpectation
-	expectations       []*RepositoryIMockGetKnowledgeBaseByOwnerAndIDExpectation
+	defaultExpectation *RepositoryIMockGetKnowledgeBaseByOwnerAndKbIDExpectation
+	expectations       []*RepositoryIMockGetKnowledgeBaseByOwnerAndKbIDExpectation
 
-	callArgs []*RepositoryIMockGetKnowledgeBaseByOwnerAndIDParams
+	callArgs []*RepositoryIMockGetKnowledgeBaseByOwnerAndKbIDParams
 	mutex    sync.RWMutex
 
 	expectedInvocations uint64
 }
 
-// RepositoryIMockGetKnowledgeBaseByOwnerAndIDExpectation specifies expectation struct of the RepositoryI.GetKnowledgeBaseByOwnerAndID
-type RepositoryIMockGetKnowledgeBaseByOwnerAndIDExpectation struct {
+// RepositoryIMockGetKnowledgeBaseByOwnerAndKbIDExpectation specifies expectation struct of the RepositoryI.GetKnowledgeBaseByOwnerAndKbID
+type RepositoryIMockGetKnowledgeBaseByOwnerAndKbIDExpectation struct {
 	mock      *RepositoryIMock
-	params    *RepositoryIMockGetKnowledgeBaseByOwnerAndIDParams
-	paramPtrs *RepositoryIMockGetKnowledgeBaseByOwnerAndIDParamPtrs
-	results   *RepositoryIMockGetKnowledgeBaseByOwnerAndIDResults
+	params    *RepositoryIMockGetKnowledgeBaseByOwnerAndKbIDParams
+	paramPtrs *RepositoryIMockGetKnowledgeBaseByOwnerAndKbIDParamPtrs
+	results   *RepositoryIMockGetKnowledgeBaseByOwnerAndKbIDResults
 	Counter   uint64
 }
 
-// RepositoryIMockGetKnowledgeBaseByOwnerAndIDParams contains parameters of the RepositoryI.GetKnowledgeBaseByOwnerAndID
-type RepositoryIMockGetKnowledgeBaseByOwnerAndIDParams struct {
+// RepositoryIMockGetKnowledgeBaseByOwnerAndKbIDParams contains parameters of the RepositoryI.GetKnowledgeBaseByOwnerAndKbID
+type RepositoryIMockGetKnowledgeBaseByOwnerAndKbIDParams struct {
 	ctx      context.Context
 	ownerUID string
 	kbID     string
 }
 
-// RepositoryIMockGetKnowledgeBaseByOwnerAndIDParamPtrs contains pointers to parameters of the RepositoryI.GetKnowledgeBaseByOwnerAndID
-type RepositoryIMockGetKnowledgeBaseByOwnerAndIDParamPtrs struct {
+// RepositoryIMockGetKnowledgeBaseByOwnerAndKbIDParamPtrs contains pointers to parameters of the RepositoryI.GetKnowledgeBaseByOwnerAndKbID
+type RepositoryIMockGetKnowledgeBaseByOwnerAndKbIDParamPtrs struct {
 	ctx      *context.Context
 	ownerUID *string
 	kbID     *string
 }
 
-// RepositoryIMockGetKnowledgeBaseByOwnerAndIDResults contains results of the RepositoryI.GetKnowledgeBaseByOwnerAndID
-type RepositoryIMockGetKnowledgeBaseByOwnerAndIDResults struct {
+// RepositoryIMockGetKnowledgeBaseByOwnerAndKbIDResults contains results of the RepositoryI.GetKnowledgeBaseByOwnerAndKbID
+type RepositoryIMockGetKnowledgeBaseByOwnerAndKbIDResults struct {
 	kp1 *mm_repository.KnowledgeBase
 	err error
 }
 
-// Expect sets up expected params for RepositoryI.GetKnowledgeBaseByOwnerAndID
-func (mmGetKnowledgeBaseByOwnerAndID *mRepositoryIMockGetKnowledgeBaseByOwnerAndID) Expect(ctx context.Context, ownerUID string, kbID string) *mRepositoryIMockGetKnowledgeBaseByOwnerAndID {
-	if mmGetKnowledgeBaseByOwnerAndID.mock.funcGetKnowledgeBaseByOwnerAndID != nil {
-		mmGetKnowledgeBaseByOwnerAndID.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBaseByOwnerAndID mock is already set by Set")
+// Expect sets up expected params for RepositoryI.GetKnowledgeBaseByOwnerAndKbID
+func (mmGetKnowledgeBaseByOwnerAndKbID *mRepositoryIMockGetKnowledgeBaseByOwnerAndKbID) Expect(ctx context.Context, ownerUID string, kbID string) *mRepositoryIMockGetKnowledgeBaseByOwnerAndKbID {
+	if mmGetKnowledgeBaseByOwnerAndKbID.mock.funcGetKnowledgeBaseByOwnerAndKbID != nil {
+		mmGetKnowledgeBaseByOwnerAndKbID.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBaseByOwnerAndKbID mock is already set by Set")
 	}
 
-	if mmGetKnowledgeBaseByOwnerAndID.defaultExpectation == nil {
-		mmGetKnowledgeBaseByOwnerAndID.defaultExpectation = &RepositoryIMockGetKnowledgeBaseByOwnerAndIDExpectation{}
+	if mmGetKnowledgeBaseByOwnerAndKbID.defaultExpectation == nil {
+		mmGetKnowledgeBaseByOwnerAndKbID.defaultExpectation = &RepositoryIMockGetKnowledgeBaseByOwnerAndKbIDExpectation{}
 	}
 
-	if mmGetKnowledgeBaseByOwnerAndID.defaultExpectation.paramPtrs != nil {
-		mmGetKnowledgeBaseByOwnerAndID.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBaseByOwnerAndID mock is already set by ExpectParams functions")
+	if mmGetKnowledgeBaseByOwnerAndKbID.defaultExpectation.paramPtrs != nil {
+		mmGetKnowledgeBaseByOwnerAndKbID.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBaseByOwnerAndKbID mock is already set by ExpectParams functions")
 	}
 
-	mmGetKnowledgeBaseByOwnerAndID.defaultExpectation.params = &RepositoryIMockGetKnowledgeBaseByOwnerAndIDParams{ctx, ownerUID, kbID}
-	for _, e := range mmGetKnowledgeBaseByOwnerAndID.expectations {
-		if minimock.Equal(e.params, mmGetKnowledgeBaseByOwnerAndID.defaultExpectation.params) {
-			mmGetKnowledgeBaseByOwnerAndID.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetKnowledgeBaseByOwnerAndID.defaultExpectation.params)
+	mmGetKnowledgeBaseByOwnerAndKbID.defaultExpectation.params = &RepositoryIMockGetKnowledgeBaseByOwnerAndKbIDParams{ctx, ownerUID, kbID}
+	for _, e := range mmGetKnowledgeBaseByOwnerAndKbID.expectations {
+		if minimock.Equal(e.params, mmGetKnowledgeBaseByOwnerAndKbID.defaultExpectation.params) {
+			mmGetKnowledgeBaseByOwnerAndKbID.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetKnowledgeBaseByOwnerAndKbID.defaultExpectation.params)
 		}
 	}
 
-	return mmGetKnowledgeBaseByOwnerAndID
+	return mmGetKnowledgeBaseByOwnerAndKbID
 }
 
-// ExpectCtxParam1 sets up expected param ctx for RepositoryI.GetKnowledgeBaseByOwnerAndID
-func (mmGetKnowledgeBaseByOwnerAndID *mRepositoryIMockGetKnowledgeBaseByOwnerAndID) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockGetKnowledgeBaseByOwnerAndID {
-	if mmGetKnowledgeBaseByOwnerAndID.mock.funcGetKnowledgeBaseByOwnerAndID != nil {
-		mmGetKnowledgeBaseByOwnerAndID.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBaseByOwnerAndID mock is already set by Set")
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.GetKnowledgeBaseByOwnerAndKbID
+func (mmGetKnowledgeBaseByOwnerAndKbID *mRepositoryIMockGetKnowledgeBaseByOwnerAndKbID) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockGetKnowledgeBaseByOwnerAndKbID {
+	if mmGetKnowledgeBaseByOwnerAndKbID.mock.funcGetKnowledgeBaseByOwnerAndKbID != nil {
+		mmGetKnowledgeBaseByOwnerAndKbID.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBaseByOwnerAndKbID mock is already set by Set")
 	}
 
-	if mmGetKnowledgeBaseByOwnerAndID.defaultExpectation == nil {
-		mmGetKnowledgeBaseByOwnerAndID.defaultExpectation = &RepositoryIMockGetKnowledgeBaseByOwnerAndIDExpectation{}
+	if mmGetKnowledgeBaseByOwnerAndKbID.defaultExpectation == nil {
+		mmGetKnowledgeBaseByOwnerAndKbID.defaultExpectation = &RepositoryIMockGetKnowledgeBaseByOwnerAndKbIDExpectation{}
 	}
 
-	if mmGetKnowledgeBaseByOwnerAndID.defaultExpectation.params != nil {
-		mmGetKnowledgeBaseByOwnerAndID.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBaseByOwnerAndID mock is already set by Expect")
+	if mmGetKnowledgeBaseByOwnerAndKbID.defaultExpectation.params != nil {
+		mmGetKnowledgeBaseByOwnerAndKbID.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBaseByOwnerAndKbID mock is already set by Expect")
 	}
 
-	if mmGetKnowledgeBaseByOwnerAndID.defaultExpectation.paramPtrs == nil {
-		mmGetKnowledgeBaseByOwnerAndID.defaultExpectation.paramPtrs = &RepositoryIMockGetKnowledgeBaseByOwnerAndIDParamPtrs{}
+	if mmGetKnowledgeBaseByOwnerAndKbID.defaultExpectation.paramPtrs == nil {
+		mmGetKnowledgeBaseByOwnerAndKbID.defaultExpectation.paramPtrs = &RepositoryIMockGetKnowledgeBaseByOwnerAndKbIDParamPtrs{}
 	}
-	mmGetKnowledgeBaseByOwnerAndID.defaultExpectation.paramPtrs.ctx = &ctx
+	mmGetKnowledgeBaseByOwnerAndKbID.defaultExpectation.paramPtrs.ctx = &ctx
 
-	return mmGetKnowledgeBaseByOwnerAndID
+	return mmGetKnowledgeBaseByOwnerAndKbID
 }
 
-// ExpectOwnerUIDParam2 sets up expected param ownerUID for RepositoryI.GetKnowledgeBaseByOwnerAndID
-func (mmGetKnowledgeBaseByOwnerAndID *mRepositoryIMockGetKnowledgeBaseByOwnerAndID) ExpectOwnerUIDParam2(ownerUID string) *mRepositoryIMockGetKnowledgeBaseByOwnerAndID {
-	if mmGetKnowledgeBaseByOwnerAndID.mock.funcGetKnowledgeBaseByOwnerAndID != nil {
-		mmGetKnowledgeBaseByOwnerAndID.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBaseByOwnerAndID mock is already set by Set")
+// ExpectOwnerUIDParam2 sets up expected param ownerUID for RepositoryI.GetKnowledgeBaseByOwnerAndKbID
+func (mmGetKnowledgeBaseByOwnerAndKbID *mRepositoryIMockGetKnowledgeBaseByOwnerAndKbID) ExpectOwnerUIDParam2(ownerUID string) *mRepositoryIMockGetKnowledgeBaseByOwnerAndKbID {
+	if mmGetKnowledgeBaseByOwnerAndKbID.mock.funcGetKnowledgeBaseByOwnerAndKbID != nil {
+		mmGetKnowledgeBaseByOwnerAndKbID.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBaseByOwnerAndKbID mock is already set by Set")
 	}
 
-	if mmGetKnowledgeBaseByOwnerAndID.defaultExpectation == nil {
-		mmGetKnowledgeBaseByOwnerAndID.defaultExpectation = &RepositoryIMockGetKnowledgeBaseByOwnerAndIDExpectation{}
+	if mmGetKnowledgeBaseByOwnerAndKbID.defaultExpectation == nil {
+		mmGetKnowledgeBaseByOwnerAndKbID.defaultExpectation = &RepositoryIMockGetKnowledgeBaseByOwnerAndKbIDExpectation{}
 	}
 
-	if mmGetKnowledgeBaseByOwnerAndID.defaultExpectation.params != nil {
-		mmGetKnowledgeBaseByOwnerAndID.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBaseByOwnerAndID mock is already set by Expect")
+	if mmGetKnowledgeBaseByOwnerAndKbID.defaultExpectation.params != nil {
+		mmGetKnowledgeBaseByOwnerAndKbID.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBaseByOwnerAndKbID mock is already set by Expect")
 	}
 
-	if mmGetKnowledgeBaseByOwnerAndID.defaultExpectation.paramPtrs == nil {
-		mmGetKnowledgeBaseByOwnerAndID.defaultExpectation.paramPtrs = &RepositoryIMockGetKnowledgeBaseByOwnerAndIDParamPtrs{}
+	if mmGetKnowledgeBaseByOwnerAndKbID.defaultExpectation.paramPtrs == nil {
+		mmGetKnowledgeBaseByOwnerAndKbID.defaultExpectation.paramPtrs = &RepositoryIMockGetKnowledgeBaseByOwnerAndKbIDParamPtrs{}
 	}
-	mmGetKnowledgeBaseByOwnerAndID.defaultExpectation.paramPtrs.ownerUID = &ownerUID
+	mmGetKnowledgeBaseByOwnerAndKbID.defaultExpectation.paramPtrs.ownerUID = &ownerUID
 
-	return mmGetKnowledgeBaseByOwnerAndID
+	return mmGetKnowledgeBaseByOwnerAndKbID
 }
 
-// ExpectKbIDParam3 sets up expected param kbID for RepositoryI.GetKnowledgeBaseByOwnerAndID
-func (mmGetKnowledgeBaseByOwnerAndID *mRepositoryIMockGetKnowledgeBaseByOwnerAndID) ExpectKbIDParam3(kbID string) *mRepositoryIMockGetKnowledgeBaseByOwnerAndID {
-	if mmGetKnowledgeBaseByOwnerAndID.mock.funcGetKnowledgeBaseByOwnerAndID != nil {
-		mmGetKnowledgeBaseByOwnerAndID.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBaseByOwnerAndID mock is already set by Set")
+// ExpectKbIDParam3 sets up expected param kbID for RepositoryI.GetKnowledgeBaseByOwnerAndKbID
+func (mmGetKnowledgeBaseByOwnerAndKbID *mRepositoryIMockGetKnowledgeBaseByOwnerAndKbID) ExpectKbIDParam3(kbID string) *mRepositoryIMockGetKnowledgeBaseByOwnerAndKbID {
+	if mmGetKnowledgeBaseByOwnerAndKbID.mock.funcGetKnowledgeBaseByOwnerAndKbID != nil {
+		mmGetKnowledgeBaseByOwnerAndKbID.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBaseByOwnerAndKbID mock is already set by Set")
 	}
 
-	if mmGetKnowledgeBaseByOwnerAndID.defaultExpectation == nil {
-		mmGetKnowledgeBaseByOwnerAndID.defaultExpectation = &RepositoryIMockGetKnowledgeBaseByOwnerAndIDExpectation{}
+	if mmGetKnowledgeBaseByOwnerAndKbID.defaultExpectation == nil {
+		mmGetKnowledgeBaseByOwnerAndKbID.defaultExpectation = &RepositoryIMockGetKnowledgeBaseByOwnerAndKbIDExpectation{}
 	}
 
-	if mmGetKnowledgeBaseByOwnerAndID.defaultExpectation.params != nil {
-		mmGetKnowledgeBaseByOwnerAndID.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBaseByOwnerAndID mock is already set by Expect")
+	if mmGetKnowledgeBaseByOwnerAndKbID.defaultExpectation.params != nil {
+		mmGetKnowledgeBaseByOwnerAndKbID.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBaseByOwnerAndKbID mock is already set by Expect")
 	}
 
-	if mmGetKnowledgeBaseByOwnerAndID.defaultExpectation.paramPtrs == nil {
-		mmGetKnowledgeBaseByOwnerAndID.defaultExpectation.paramPtrs = &RepositoryIMockGetKnowledgeBaseByOwnerAndIDParamPtrs{}
+	if mmGetKnowledgeBaseByOwnerAndKbID.defaultExpectation.paramPtrs == nil {
+		mmGetKnowledgeBaseByOwnerAndKbID.defaultExpectation.paramPtrs = &RepositoryIMockGetKnowledgeBaseByOwnerAndKbIDParamPtrs{}
 	}
-	mmGetKnowledgeBaseByOwnerAndID.defaultExpectation.paramPtrs.kbID = &kbID
+	mmGetKnowledgeBaseByOwnerAndKbID.defaultExpectation.paramPtrs.kbID = &kbID
 
-	return mmGetKnowledgeBaseByOwnerAndID
+	return mmGetKnowledgeBaseByOwnerAndKbID
 }
 
-// Inspect accepts an inspector function that has same arguments as the RepositoryI.GetKnowledgeBaseByOwnerAndID
-func (mmGetKnowledgeBaseByOwnerAndID *mRepositoryIMockGetKnowledgeBaseByOwnerAndID) Inspect(f func(ctx context.Context, ownerUID string, kbID string)) *mRepositoryIMockGetKnowledgeBaseByOwnerAndID {
-	if mmGetKnowledgeBaseByOwnerAndID.mock.inspectFuncGetKnowledgeBaseByOwnerAndID != nil {
-		mmGetKnowledgeBaseByOwnerAndID.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.GetKnowledgeBaseByOwnerAndID")
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.GetKnowledgeBaseByOwnerAndKbID
+func (mmGetKnowledgeBaseByOwnerAndKbID *mRepositoryIMockGetKnowledgeBaseByOwnerAndKbID) Inspect(f func(ctx context.Context, ownerUID string, kbID string)) *mRepositoryIMockGetKnowledgeBaseByOwnerAndKbID {
+	if mmGetKnowledgeBaseByOwnerAndKbID.mock.inspectFuncGetKnowledgeBaseByOwnerAndKbID != nil {
+		mmGetKnowledgeBaseByOwnerAndKbID.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.GetKnowledgeBaseByOwnerAndKbID")
 	}
 
-	mmGetKnowledgeBaseByOwnerAndID.mock.inspectFuncGetKnowledgeBaseByOwnerAndID = f
+	mmGetKnowledgeBaseByOwnerAndKbID.mock.inspectFuncGetKnowledgeBaseByOwnerAndKbID = f
 
-	return mmGetKnowledgeBaseByOwnerAndID
+	return mmGetKnowledgeBaseByOwnerAndKbID
 }
 
-// Return sets up results that will be returned by RepositoryI.GetKnowledgeBaseByOwnerAndID
-func (mmGetKnowledgeBaseByOwnerAndID *mRepositoryIMockGetKnowledgeBaseByOwnerAndID) Return(kp1 *mm_repository.KnowledgeBase, err error) *RepositoryIMock {
-	if mmGetKnowledgeBaseByOwnerAndID.mock.funcGetKnowledgeBaseByOwnerAndID != nil {
-		mmGetKnowledgeBaseByOwnerAndID.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBaseByOwnerAndID mock is already set by Set")
+// Return sets up results that will be returned by RepositoryI.GetKnowledgeBaseByOwnerAndKbID
+func (mmGetKnowledgeBaseByOwnerAndKbID *mRepositoryIMockGetKnowledgeBaseByOwnerAndKbID) Return(kp1 *mm_repository.KnowledgeBase, err error) *RepositoryIMock {
+	if mmGetKnowledgeBaseByOwnerAndKbID.mock.funcGetKnowledgeBaseByOwnerAndKbID != nil {
+		mmGetKnowledgeBaseByOwnerAndKbID.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBaseByOwnerAndKbID mock is already set by Set")
 	}
 
-	if mmGetKnowledgeBaseByOwnerAndID.defaultExpectation == nil {
-		mmGetKnowledgeBaseByOwnerAndID.defaultExpectation = &RepositoryIMockGetKnowledgeBaseByOwnerAndIDExpectation{mock: mmGetKnowledgeBaseByOwnerAndID.mock}
+	if mmGetKnowledgeBaseByOwnerAndKbID.defaultExpectation == nil {
+		mmGetKnowledgeBaseByOwnerAndKbID.defaultExpectation = &RepositoryIMockGetKnowledgeBaseByOwnerAndKbIDExpectation{mock: mmGetKnowledgeBaseByOwnerAndKbID.mock}
 	}
-	mmGetKnowledgeBaseByOwnerAndID.defaultExpectation.results = &RepositoryIMockGetKnowledgeBaseByOwnerAndIDResults{kp1, err}
-	return mmGetKnowledgeBaseByOwnerAndID.mock
+	mmGetKnowledgeBaseByOwnerAndKbID.defaultExpectation.results = &RepositoryIMockGetKnowledgeBaseByOwnerAndKbIDResults{kp1, err}
+	return mmGetKnowledgeBaseByOwnerAndKbID.mock
 }
 
-// Set uses given function f to mock the RepositoryI.GetKnowledgeBaseByOwnerAndID method
-func (mmGetKnowledgeBaseByOwnerAndID *mRepositoryIMockGetKnowledgeBaseByOwnerAndID) Set(f func(ctx context.Context, ownerUID string, kbID string) (kp1 *mm_repository.KnowledgeBase, err error)) *RepositoryIMock {
-	if mmGetKnowledgeBaseByOwnerAndID.defaultExpectation != nil {
-		mmGetKnowledgeBaseByOwnerAndID.mock.t.Fatalf("Default expectation is already set for the RepositoryI.GetKnowledgeBaseByOwnerAndID method")
+// Set uses given function f to mock the RepositoryI.GetKnowledgeBaseByOwnerAndKbID method
+func (mmGetKnowledgeBaseByOwnerAndKbID *mRepositoryIMockGetKnowledgeBaseByOwnerAndKbID) Set(f func(ctx context.Context, ownerUID string, kbID string) (kp1 *mm_repository.KnowledgeBase, err error)) *RepositoryIMock {
+	if mmGetKnowledgeBaseByOwnerAndKbID.defaultExpectation != nil {
+		mmGetKnowledgeBaseByOwnerAndKbID.mock.t.Fatalf("Default expectation is already set for the RepositoryI.GetKnowledgeBaseByOwnerAndKbID method")
 	}
 
-	if len(mmGetKnowledgeBaseByOwnerAndID.expectations) > 0 {
-		mmGetKnowledgeBaseByOwnerAndID.mock.t.Fatalf("Some expectations are already set for the RepositoryI.GetKnowledgeBaseByOwnerAndID method")
+	if len(mmGetKnowledgeBaseByOwnerAndKbID.expectations) > 0 {
+		mmGetKnowledgeBaseByOwnerAndKbID.mock.t.Fatalf("Some expectations are already set for the RepositoryI.GetKnowledgeBaseByOwnerAndKbID method")
 	}
 
-	mmGetKnowledgeBaseByOwnerAndID.mock.funcGetKnowledgeBaseByOwnerAndID = f
-	return mmGetKnowledgeBaseByOwnerAndID.mock
+	mmGetKnowledgeBaseByOwnerAndKbID.mock.funcGetKnowledgeBaseByOwnerAndKbID = f
+	return mmGetKnowledgeBaseByOwnerAndKbID.mock
 }
 
-// When sets expectation for the RepositoryI.GetKnowledgeBaseByOwnerAndID which will trigger the result defined by the following
+// When sets expectation for the RepositoryI.GetKnowledgeBaseByOwnerAndKbID which will trigger the result defined by the following
 // Then helper
-func (mmGetKnowledgeBaseByOwnerAndID *mRepositoryIMockGetKnowledgeBaseByOwnerAndID) When(ctx context.Context, ownerUID string, kbID string) *RepositoryIMockGetKnowledgeBaseByOwnerAndIDExpectation {
-	if mmGetKnowledgeBaseByOwnerAndID.mock.funcGetKnowledgeBaseByOwnerAndID != nil {
-		mmGetKnowledgeBaseByOwnerAndID.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBaseByOwnerAndID mock is already set by Set")
+func (mmGetKnowledgeBaseByOwnerAndKbID *mRepositoryIMockGetKnowledgeBaseByOwnerAndKbID) When(ctx context.Context, ownerUID string, kbID string) *RepositoryIMockGetKnowledgeBaseByOwnerAndKbIDExpectation {
+	if mmGetKnowledgeBaseByOwnerAndKbID.mock.funcGetKnowledgeBaseByOwnerAndKbID != nil {
+		mmGetKnowledgeBaseByOwnerAndKbID.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBaseByOwnerAndKbID mock is already set by Set")
 	}
 
-	expectation := &RepositoryIMockGetKnowledgeBaseByOwnerAndIDExpectation{
-		mock:   mmGetKnowledgeBaseByOwnerAndID.mock,
-		params: &RepositoryIMockGetKnowledgeBaseByOwnerAndIDParams{ctx, ownerUID, kbID},
+	expectation := &RepositoryIMockGetKnowledgeBaseByOwnerAndKbIDExpectation{
+		mock:   mmGetKnowledgeBaseByOwnerAndKbID.mock,
+		params: &RepositoryIMockGetKnowledgeBaseByOwnerAndKbIDParams{ctx, ownerUID, kbID},
 	}
-	mmGetKnowledgeBaseByOwnerAndID.expectations = append(mmGetKnowledgeBaseByOwnerAndID.expectations, expectation)
+	mmGetKnowledgeBaseByOwnerAndKbID.expectations = append(mmGetKnowledgeBaseByOwnerAndKbID.expectations, expectation)
 	return expectation
 }
 
-// Then sets up RepositoryI.GetKnowledgeBaseByOwnerAndID return parameters for the expectation previously defined by the When method
-func (e *RepositoryIMockGetKnowledgeBaseByOwnerAndIDExpectation) Then(kp1 *mm_repository.KnowledgeBase, err error) *RepositoryIMock {
-	e.results = &RepositoryIMockGetKnowledgeBaseByOwnerAndIDResults{kp1, err}
+// Then sets up RepositoryI.GetKnowledgeBaseByOwnerAndKbID return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockGetKnowledgeBaseByOwnerAndKbIDExpectation) Then(kp1 *mm_repository.KnowledgeBase, err error) *RepositoryIMock {
+	e.results = &RepositoryIMockGetKnowledgeBaseByOwnerAndKbIDResults{kp1, err}
 	return e.mock
 }
 
-// Times sets number of times RepositoryI.GetKnowledgeBaseByOwnerAndID should be invoked
-func (mmGetKnowledgeBaseByOwnerAndID *mRepositoryIMockGetKnowledgeBaseByOwnerAndID) Times(n uint64) *mRepositoryIMockGetKnowledgeBaseByOwnerAndID {
+// Times sets number of times RepositoryI.GetKnowledgeBaseByOwnerAndKbID should be invoked
+func (mmGetKnowledgeBaseByOwnerAndKbID *mRepositoryIMockGetKnowledgeBaseByOwnerAndKbID) Times(n uint64) *mRepositoryIMockGetKnowledgeBaseByOwnerAndKbID {
 	if n == 0 {
-		mmGetKnowledgeBaseByOwnerAndID.mock.t.Fatalf("Times of RepositoryIMock.GetKnowledgeBaseByOwnerAndID mock can not be zero")
+		mmGetKnowledgeBaseByOwnerAndKbID.mock.t.Fatalf("Times of RepositoryIMock.GetKnowledgeBaseByOwnerAndKbID mock can not be zero")
 	}
-	mm_atomic.StoreUint64(&mmGetKnowledgeBaseByOwnerAndID.expectedInvocations, n)
-	return mmGetKnowledgeBaseByOwnerAndID
+	mm_atomic.StoreUint64(&mmGetKnowledgeBaseByOwnerAndKbID.expectedInvocations, n)
+	return mmGetKnowledgeBaseByOwnerAndKbID
 }
 
-func (mmGetKnowledgeBaseByOwnerAndID *mRepositoryIMockGetKnowledgeBaseByOwnerAndID) invocationsDone() bool {
-	if len(mmGetKnowledgeBaseByOwnerAndID.expectations) == 0 && mmGetKnowledgeBaseByOwnerAndID.defaultExpectation == nil && mmGetKnowledgeBaseByOwnerAndID.mock.funcGetKnowledgeBaseByOwnerAndID == nil {
+func (mmGetKnowledgeBaseByOwnerAndKbID *mRepositoryIMockGetKnowledgeBaseByOwnerAndKbID) invocationsDone() bool {
+	if len(mmGetKnowledgeBaseByOwnerAndKbID.expectations) == 0 && mmGetKnowledgeBaseByOwnerAndKbID.defaultExpectation == nil && mmGetKnowledgeBaseByOwnerAndKbID.mock.funcGetKnowledgeBaseByOwnerAndKbID == nil {
 		return true
 	}
 
-	totalInvocations := mm_atomic.LoadUint64(&mmGetKnowledgeBaseByOwnerAndID.mock.afterGetKnowledgeBaseByOwnerAndIDCounter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmGetKnowledgeBaseByOwnerAndID.expectedInvocations)
+	totalInvocations := mm_atomic.LoadUint64(&mmGetKnowledgeBaseByOwnerAndKbID.mock.afterGetKnowledgeBaseByOwnerAndKbIDCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetKnowledgeBaseByOwnerAndKbID.expectedInvocations)
 
 	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
 }
 
-// GetKnowledgeBaseByOwnerAndID implements repository.RepositoryI
-func (mmGetKnowledgeBaseByOwnerAndID *RepositoryIMock) GetKnowledgeBaseByOwnerAndID(ctx context.Context, ownerUID string, kbID string) (kp1 *mm_repository.KnowledgeBase, err error) {
-	mm_atomic.AddUint64(&mmGetKnowledgeBaseByOwnerAndID.beforeGetKnowledgeBaseByOwnerAndIDCounter, 1)
-	defer mm_atomic.AddUint64(&mmGetKnowledgeBaseByOwnerAndID.afterGetKnowledgeBaseByOwnerAndIDCounter, 1)
+// GetKnowledgeBaseByOwnerAndKbID implements repository.RepositoryI
+func (mmGetKnowledgeBaseByOwnerAndKbID *RepositoryIMock) GetKnowledgeBaseByOwnerAndKbID(ctx context.Context, ownerUID string, kbID string) (kp1 *mm_repository.KnowledgeBase, err error) {
+	mm_atomic.AddUint64(&mmGetKnowledgeBaseByOwnerAndKbID.beforeGetKnowledgeBaseByOwnerAndKbIDCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetKnowledgeBaseByOwnerAndKbID.afterGetKnowledgeBaseByOwnerAndKbIDCounter, 1)
 
-	if mmGetKnowledgeBaseByOwnerAndID.inspectFuncGetKnowledgeBaseByOwnerAndID != nil {
-		mmGetKnowledgeBaseByOwnerAndID.inspectFuncGetKnowledgeBaseByOwnerAndID(ctx, ownerUID, kbID)
+	if mmGetKnowledgeBaseByOwnerAndKbID.inspectFuncGetKnowledgeBaseByOwnerAndKbID != nil {
+		mmGetKnowledgeBaseByOwnerAndKbID.inspectFuncGetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, kbID)
 	}
 
-	mm_params := RepositoryIMockGetKnowledgeBaseByOwnerAndIDParams{ctx, ownerUID, kbID}
+	mm_params := RepositoryIMockGetKnowledgeBaseByOwnerAndKbIDParams{ctx, ownerUID, kbID}
 
 	// Record call args
-	mmGetKnowledgeBaseByOwnerAndID.GetKnowledgeBaseByOwnerAndIDMock.mutex.Lock()
-	mmGetKnowledgeBaseByOwnerAndID.GetKnowledgeBaseByOwnerAndIDMock.callArgs = append(mmGetKnowledgeBaseByOwnerAndID.GetKnowledgeBaseByOwnerAndIDMock.callArgs, &mm_params)
-	mmGetKnowledgeBaseByOwnerAndID.GetKnowledgeBaseByOwnerAndIDMock.mutex.Unlock()
+	mmGetKnowledgeBaseByOwnerAndKbID.GetKnowledgeBaseByOwnerAndKbIDMock.mutex.Lock()
+	mmGetKnowledgeBaseByOwnerAndKbID.GetKnowledgeBaseByOwnerAndKbIDMock.callArgs = append(mmGetKnowledgeBaseByOwnerAndKbID.GetKnowledgeBaseByOwnerAndKbIDMock.callArgs, &mm_params)
+	mmGetKnowledgeBaseByOwnerAndKbID.GetKnowledgeBaseByOwnerAndKbIDMock.mutex.Unlock()
 
-	for _, e := range mmGetKnowledgeBaseByOwnerAndID.GetKnowledgeBaseByOwnerAndIDMock.expectations {
+	for _, e := range mmGetKnowledgeBaseByOwnerAndKbID.GetKnowledgeBaseByOwnerAndKbIDMock.expectations {
 		if minimock.Equal(*e.params, mm_params) {
 			mm_atomic.AddUint64(&e.Counter, 1)
 			return e.results.kp1, e.results.err
 		}
 	}
 
-	if mmGetKnowledgeBaseByOwnerAndID.GetKnowledgeBaseByOwnerAndIDMock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmGetKnowledgeBaseByOwnerAndID.GetKnowledgeBaseByOwnerAndIDMock.defaultExpectation.Counter, 1)
-		mm_want := mmGetKnowledgeBaseByOwnerAndID.GetKnowledgeBaseByOwnerAndIDMock.defaultExpectation.params
-		mm_want_ptrs := mmGetKnowledgeBaseByOwnerAndID.GetKnowledgeBaseByOwnerAndIDMock.defaultExpectation.paramPtrs
+	if mmGetKnowledgeBaseByOwnerAndKbID.GetKnowledgeBaseByOwnerAndKbIDMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetKnowledgeBaseByOwnerAndKbID.GetKnowledgeBaseByOwnerAndKbIDMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetKnowledgeBaseByOwnerAndKbID.GetKnowledgeBaseByOwnerAndKbIDMock.defaultExpectation.params
+		mm_want_ptrs := mmGetKnowledgeBaseByOwnerAndKbID.GetKnowledgeBaseByOwnerAndKbIDMock.defaultExpectation.paramPtrs
 
-		mm_got := RepositoryIMockGetKnowledgeBaseByOwnerAndIDParams{ctx, ownerUID, kbID}
+		mm_got := RepositoryIMockGetKnowledgeBaseByOwnerAndKbIDParams{ctx, ownerUID, kbID}
 
 		if mm_want_ptrs != nil {
 
 			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
-				mmGetKnowledgeBaseByOwnerAndID.t.Errorf("RepositoryIMock.GetKnowledgeBaseByOwnerAndID got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+				mmGetKnowledgeBaseByOwnerAndKbID.t.Errorf("RepositoryIMock.GetKnowledgeBaseByOwnerAndKbID got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
 			}
 
 			if mm_want_ptrs.ownerUID != nil && !minimock.Equal(*mm_want_ptrs.ownerUID, mm_got.ownerUID) {
-				mmGetKnowledgeBaseByOwnerAndID.t.Errorf("RepositoryIMock.GetKnowledgeBaseByOwnerAndID got unexpected parameter ownerUID, want: %#v, got: %#v%s\n", *mm_want_ptrs.ownerUID, mm_got.ownerUID, minimock.Diff(*mm_want_ptrs.ownerUID, mm_got.ownerUID))
+				mmGetKnowledgeBaseByOwnerAndKbID.t.Errorf("RepositoryIMock.GetKnowledgeBaseByOwnerAndKbID got unexpected parameter ownerUID, want: %#v, got: %#v%s\n", *mm_want_ptrs.ownerUID, mm_got.ownerUID, minimock.Diff(*mm_want_ptrs.ownerUID, mm_got.ownerUID))
 			}
 
 			if mm_want_ptrs.kbID != nil && !minimock.Equal(*mm_want_ptrs.kbID, mm_got.kbID) {
-				mmGetKnowledgeBaseByOwnerAndID.t.Errorf("RepositoryIMock.GetKnowledgeBaseByOwnerAndID got unexpected parameter kbID, want: %#v, got: %#v%s\n", *mm_want_ptrs.kbID, mm_got.kbID, minimock.Diff(*mm_want_ptrs.kbID, mm_got.kbID))
+				mmGetKnowledgeBaseByOwnerAndKbID.t.Errorf("RepositoryIMock.GetKnowledgeBaseByOwnerAndKbID got unexpected parameter kbID, want: %#v, got: %#v%s\n", *mm_want_ptrs.kbID, mm_got.kbID, minimock.Diff(*mm_want_ptrs.kbID, mm_got.kbID))
 			}
 
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
-			mmGetKnowledgeBaseByOwnerAndID.t.Errorf("RepositoryIMock.GetKnowledgeBaseByOwnerAndID got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+			mmGetKnowledgeBaseByOwnerAndKbID.t.Errorf("RepositoryIMock.GetKnowledgeBaseByOwnerAndKbID got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
 		}
 
-		mm_results := mmGetKnowledgeBaseByOwnerAndID.GetKnowledgeBaseByOwnerAndIDMock.defaultExpectation.results
+		mm_results := mmGetKnowledgeBaseByOwnerAndKbID.GetKnowledgeBaseByOwnerAndKbIDMock.defaultExpectation.results
 		if mm_results == nil {
-			mmGetKnowledgeBaseByOwnerAndID.t.Fatal("No results are set for the RepositoryIMock.GetKnowledgeBaseByOwnerAndID")
+			mmGetKnowledgeBaseByOwnerAndKbID.t.Fatal("No results are set for the RepositoryIMock.GetKnowledgeBaseByOwnerAndKbID")
 		}
 		return (*mm_results).kp1, (*mm_results).err
 	}
-	if mmGetKnowledgeBaseByOwnerAndID.funcGetKnowledgeBaseByOwnerAndID != nil {
-		return mmGetKnowledgeBaseByOwnerAndID.funcGetKnowledgeBaseByOwnerAndID(ctx, ownerUID, kbID)
+	if mmGetKnowledgeBaseByOwnerAndKbID.funcGetKnowledgeBaseByOwnerAndKbID != nil {
+		return mmGetKnowledgeBaseByOwnerAndKbID.funcGetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, kbID)
 	}
-	mmGetKnowledgeBaseByOwnerAndID.t.Fatalf("Unexpected call to RepositoryIMock.GetKnowledgeBaseByOwnerAndID. %v %v %v", ctx, ownerUID, kbID)
+	mmGetKnowledgeBaseByOwnerAndKbID.t.Fatalf("Unexpected call to RepositoryIMock.GetKnowledgeBaseByOwnerAndKbID. %v %v %v", ctx, ownerUID, kbID)
 	return
 }
 
-// GetKnowledgeBaseByOwnerAndIDAfterCounter returns a count of finished RepositoryIMock.GetKnowledgeBaseByOwnerAndID invocations
-func (mmGetKnowledgeBaseByOwnerAndID *RepositoryIMock) GetKnowledgeBaseByOwnerAndIDAfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmGetKnowledgeBaseByOwnerAndID.afterGetKnowledgeBaseByOwnerAndIDCounter)
+// GetKnowledgeBaseByOwnerAndKbIDAfterCounter returns a count of finished RepositoryIMock.GetKnowledgeBaseByOwnerAndKbID invocations
+func (mmGetKnowledgeBaseByOwnerAndKbID *RepositoryIMock) GetKnowledgeBaseByOwnerAndKbIDAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetKnowledgeBaseByOwnerAndKbID.afterGetKnowledgeBaseByOwnerAndKbIDCounter)
 }
 
-// GetKnowledgeBaseByOwnerAndIDBeforeCounter returns a count of RepositoryIMock.GetKnowledgeBaseByOwnerAndID invocations
-func (mmGetKnowledgeBaseByOwnerAndID *RepositoryIMock) GetKnowledgeBaseByOwnerAndIDBeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmGetKnowledgeBaseByOwnerAndID.beforeGetKnowledgeBaseByOwnerAndIDCounter)
+// GetKnowledgeBaseByOwnerAndKbIDBeforeCounter returns a count of RepositoryIMock.GetKnowledgeBaseByOwnerAndKbID invocations
+func (mmGetKnowledgeBaseByOwnerAndKbID *RepositoryIMock) GetKnowledgeBaseByOwnerAndKbIDBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetKnowledgeBaseByOwnerAndKbID.beforeGetKnowledgeBaseByOwnerAndKbIDCounter)
 }
 
-// Calls returns a list of arguments used in each call to RepositoryIMock.GetKnowledgeBaseByOwnerAndID.
+// Calls returns a list of arguments used in each call to RepositoryIMock.GetKnowledgeBaseByOwnerAndKbID.
 // The list is in the same order as the calls were made (i.e. recent calls have a higher index)
-func (mmGetKnowledgeBaseByOwnerAndID *mRepositoryIMockGetKnowledgeBaseByOwnerAndID) Calls() []*RepositoryIMockGetKnowledgeBaseByOwnerAndIDParams {
-	mmGetKnowledgeBaseByOwnerAndID.mutex.RLock()
+func (mmGetKnowledgeBaseByOwnerAndKbID *mRepositoryIMockGetKnowledgeBaseByOwnerAndKbID) Calls() []*RepositoryIMockGetKnowledgeBaseByOwnerAndKbIDParams {
+	mmGetKnowledgeBaseByOwnerAndKbID.mutex.RLock()
 
-	argCopy := make([]*RepositoryIMockGetKnowledgeBaseByOwnerAndIDParams, len(mmGetKnowledgeBaseByOwnerAndID.callArgs))
-	copy(argCopy, mmGetKnowledgeBaseByOwnerAndID.callArgs)
+	argCopy := make([]*RepositoryIMockGetKnowledgeBaseByOwnerAndKbIDParams, len(mmGetKnowledgeBaseByOwnerAndKbID.callArgs))
+	copy(argCopy, mmGetKnowledgeBaseByOwnerAndKbID.callArgs)
 
-	mmGetKnowledgeBaseByOwnerAndID.mutex.RUnlock()
+	mmGetKnowledgeBaseByOwnerAndKbID.mutex.RUnlock()
 
 	return argCopy
 }
 
-// MinimockGetKnowledgeBaseByOwnerAndIDDone returns true if the count of the GetKnowledgeBaseByOwnerAndID invocations corresponds
+// MinimockGetKnowledgeBaseByOwnerAndKbIDDone returns true if the count of the GetKnowledgeBaseByOwnerAndKbID invocations corresponds
 // the number of defined expectations
-func (m *RepositoryIMock) MinimockGetKnowledgeBaseByOwnerAndIDDone() bool {
-	for _, e := range m.GetKnowledgeBaseByOwnerAndIDMock.expectations {
+func (m *RepositoryIMock) MinimockGetKnowledgeBaseByOwnerAndKbIDDone() bool {
+	for _, e := range m.GetKnowledgeBaseByOwnerAndKbIDMock.expectations {
 		if mm_atomic.LoadUint64(&e.Counter) < 1 {
 			return false
 		}
 	}
 
-	return m.GetKnowledgeBaseByOwnerAndIDMock.invocationsDone()
+	return m.GetKnowledgeBaseByOwnerAndKbIDMock.invocationsDone()
 }
 
-// MinimockGetKnowledgeBaseByOwnerAndIDInspect logs each unmet expectation
-func (m *RepositoryIMock) MinimockGetKnowledgeBaseByOwnerAndIDInspect() {
-	for _, e := range m.GetKnowledgeBaseByOwnerAndIDMock.expectations {
+// MinimockGetKnowledgeBaseByOwnerAndKbIDInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockGetKnowledgeBaseByOwnerAndKbIDInspect() {
+	for _, e := range m.GetKnowledgeBaseByOwnerAndKbIDMock.expectations {
 		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Errorf("Expected call to RepositoryIMock.GetKnowledgeBaseByOwnerAndID with params: %#v", *e.params)
+			m.t.Errorf("Expected call to RepositoryIMock.GetKnowledgeBaseByOwnerAndKbID with params: %#v", *e.params)
 		}
 	}
 
-	afterGetKnowledgeBaseByOwnerAndIDCounter := mm_atomic.LoadUint64(&m.afterGetKnowledgeBaseByOwnerAndIDCounter)
+	afterGetKnowledgeBaseByOwnerAndKbIDCounter := mm_atomic.LoadUint64(&m.afterGetKnowledgeBaseByOwnerAndKbIDCounter)
 	// if default expectation was set then invocations count should be greater than zero
-	if m.GetKnowledgeBaseByOwnerAndIDMock.defaultExpectation != nil && afterGetKnowledgeBaseByOwnerAndIDCounter < 1 {
-		if m.GetKnowledgeBaseByOwnerAndIDMock.defaultExpectation.params == nil {
-			m.t.Error("Expected call to RepositoryIMock.GetKnowledgeBaseByOwnerAndID")
+	if m.GetKnowledgeBaseByOwnerAndKbIDMock.defaultExpectation != nil && afterGetKnowledgeBaseByOwnerAndKbIDCounter < 1 {
+		if m.GetKnowledgeBaseByOwnerAndKbIDMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to RepositoryIMock.GetKnowledgeBaseByOwnerAndKbID")
 		} else {
-			m.t.Errorf("Expected call to RepositoryIMock.GetKnowledgeBaseByOwnerAndID with params: %#v", *m.GetKnowledgeBaseByOwnerAndIDMock.defaultExpectation.params)
+			m.t.Errorf("Expected call to RepositoryIMock.GetKnowledgeBaseByOwnerAndKbID with params: %#v", *m.GetKnowledgeBaseByOwnerAndKbIDMock.defaultExpectation.params)
 		}
 	}
 	// if func was set then invocations count should be greater than zero
-	if m.funcGetKnowledgeBaseByOwnerAndID != nil && afterGetKnowledgeBaseByOwnerAndIDCounter < 1 {
-		m.t.Error("Expected call to RepositoryIMock.GetKnowledgeBaseByOwnerAndID")
+	if m.funcGetKnowledgeBaseByOwnerAndKbID != nil && afterGetKnowledgeBaseByOwnerAndKbIDCounter < 1 {
+		m.t.Error("Expected call to RepositoryIMock.GetKnowledgeBaseByOwnerAndKbID")
 	}
 
-	if !m.GetKnowledgeBaseByOwnerAndIDMock.invocationsDone() && afterGetKnowledgeBaseByOwnerAndIDCounter > 0 {
-		m.t.Errorf("Expected %d calls to RepositoryIMock.GetKnowledgeBaseByOwnerAndID but found %d calls",
-			mm_atomic.LoadUint64(&m.GetKnowledgeBaseByOwnerAndIDMock.expectedInvocations), afterGetKnowledgeBaseByOwnerAndIDCounter)
+	if !m.GetKnowledgeBaseByOwnerAndKbIDMock.invocationsDone() && afterGetKnowledgeBaseByOwnerAndKbIDCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.GetKnowledgeBaseByOwnerAndKbID but found %d calls",
+			mm_atomic.LoadUint64(&m.GetKnowledgeBaseByOwnerAndKbIDMock.expectedInvocations), afterGetKnowledgeBaseByOwnerAndKbIDCounter)
 	}
 }
 
@@ -12552,7 +12552,7 @@ func (m *RepositoryIMock) MinimockFinish() {
 
 			m.MinimockGetIncompleteFileInspect()
 
-			m.MinimockGetKnowledgeBaseByOwnerAndIDInspect()
+			m.MinimockGetKnowledgeBaseByOwnerAndKbIDInspect()
 
 			m.MinimockGetKnowledgeBaseCountByOwnerInspect()
 
@@ -12634,7 +12634,7 @@ func (m *RepositoryIMock) minimockDone() bool {
 		m.MinimockGetEmbeddingByUIDsDone() &&
 		m.MinimockGetFilesTotalTokensDone() &&
 		m.MinimockGetIncompleteFileDone() &&
-		m.MinimockGetKnowledgeBaseByOwnerAndIDDone() &&
+		m.MinimockGetKnowledgeBaseByOwnerAndKbIDDone() &&
 		m.MinimockGetKnowledgeBaseCountByOwnerDone() &&
 		m.MinimockGetKnowledgeBaseFilesByFileUIDsDone() &&
 		m.MinimockGetRepositoryTagDone() &&

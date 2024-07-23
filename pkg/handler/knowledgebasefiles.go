@@ -54,7 +54,7 @@ func (ph *PublicHandler) UploadKnowledgeBaseFile(ctx context.Context, req *artif
 	// upload file to minio
 	var kb *repository.KnowledgeBase
 	{
-		kb, err = ph.service.Repository.GetKnowledgeBaseByOwnerAndID(ctx, ownerUID, req.KbId)
+		kb, err = ph.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, req.KbId)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get knowledge base by owner and id. err: %w", err)
 		}
@@ -226,7 +226,7 @@ func (ph *PublicHandler) ListKnowledgeBaseFiles(ctx context.Context, req *artifa
 	// get the kb uid from the knowledge base table
 	var kbUID string
 	{
-		kb, err := ph.service.Repository.GetKnowledgeBaseByOwnerAndID(ctx, ownerUID, req.KbId)
+		kb, err := ph.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, req.KbId)
 		if err != nil {
 			log.Error("failed to get knowledge base by owner and id", zap.Error(err))
 			return nil, err
