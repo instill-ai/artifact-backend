@@ -567,9 +567,8 @@ func (wp *fileToEmbWorkerPool) processEmbeddingFile(ctx context.Context, file re
 		texts[i] = string(f.Content)
 	}
 	// call the embedding pipeline
-	// TODO replace with real embedding pipeline in service/pipeline.go
-	// vectors, err := wp.svc.VectorizeText(ctx, file.CreatorUID, texts)
-	vectors, err := mockVectorizeText(ctx, file.CreatorUID, texts)
+	vectors, err := wp.svc.VectorizeText(ctx, file.CreatorUID, texts)
+	// vectors, err := mockVectorizeText(ctx, file.CreatorUID, texts)
 	if err != nil {
 		logger.Error("Failed to get embeddings from chunks.", zap.String("SourceTable", sourceTable), zap.String("SourceUID", sourceUID.String()))
 		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
@@ -736,6 +735,7 @@ func getWorkerKey(fileUID string) string {
 }
 
 // mockVectorizeText is a mock implementation of the VectorizeText function.
+//nolint:unused
 func mockVectorizeText(_ context.Context, _ uuid.UUID, texts []string) ([][]float32, error) {
 	vectors := make([][]float32, len(texts))
 	for i := range texts {
