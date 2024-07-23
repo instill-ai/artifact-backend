@@ -15,7 +15,7 @@ type SimChunk struct {
 	Score    float32
 }
 
-func (s *Service) SimilarityChunksSearch(ctx context.Context, caller uuid.UUID, req *artifactv1alpha.SimilarityChunksSearchRequest) ([]SimChunk, error) {
+func (s *Service) SimilarityChunksSearch(ctx context.Context, caller uuid.UUID, ownerUID string, req *artifactv1alpha.SimilarityChunksSearchRequest) ([]SimChunk, error) {
 	log, _ := logger.GetZapLogger(ctx)
 	log.Info("SimilarityChunksSearch")
 	textVector, err := s.VectorizeText(ctx, caller, []string{req.TextPrompt})
@@ -24,8 +24,8 @@ func (s *Service) SimilarityChunksSearch(ctx context.Context, caller uuid.UUID, 
 		return nil, fmt.Errorf("failed to vectorize text. err: %w", err)
 	}
 
-	// get kb by kb_id and owner id
-	kb, err := s.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, req.OwnerId, req.KbId)
+	// get kb by kb_id and owner uid
+	kb, err := s.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, req.KbId)
 	if err != nil {
 		log.Error("failed to get knowledge base by owner and id", zap.Error(err))
 		return nil, fmt.Errorf("failed to get knowledge base by owner and id. err: %w", err)
