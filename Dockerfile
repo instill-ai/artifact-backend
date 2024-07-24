@@ -1,5 +1,4 @@
-ARG GOLANG_VERSION
-FROM --platform=$TARGETPLATFORM golang:${GOLANG_VERSION} AS build
+FROM --platform=$TARGETPLATFORM golang:1.22.5 AS build
 
 WORKDIR /src
 
@@ -21,7 +20,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     GOOS=$TARGETOS GOARCH=$TARGETARCH CGO_ENABLED=0 go build -o /${SERVICE_NAME}-migrate ./cmd/migration
 
 
-FROM golang:${GOLANG_VERSION}
+FROM golang:1.22.5
 
 USER nobody:nogroup
 
