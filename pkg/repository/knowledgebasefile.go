@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -24,8 +25,8 @@ type KnowledgeBaseFileI interface {
 	DeleteKnowledgeBaseFile(ctx context.Context, fileUID string) error
 	// ProcessKnowledgeBaseFiles updates the process status of the files
 	ProcessKnowledgeBaseFiles(ctx context.Context, fileUids []string) ([]KnowledgeBaseFile, error)
-	// GetIncompleteFile returns the files that are not yet processed
-	GetIncompleteFile(ctx context.Context) []KnowledgeBaseFile
+	// GetNeedProcessFiles returns the files that are not yet processed
+	GetNeedProcessFiles(ctx context.Context) []KnowledgeBaseFile
 	// UpdateKnowledgeBaseFile updates the data and retrieves the latest data
 	UpdateKnowledgeBaseFile(ctx context.Context, fileUID string, updateMap map[string]interface{}) (*KnowledgeBaseFile, error)
 	// GetCountFilesByListKnowledgeBaseUID returns the number of files associated with the knowledge base UID
@@ -54,6 +55,7 @@ type KnowledgeBaseFile struct {
 	Destination string `gorm:"column:destination;size:255;not null" json:"destination"`
 	// Process status is defined in the grpc proto file
 	ProcessStatus string `gorm:"column:process_status;size:100;not null" json:"process_status"`
+	// Note: use ExtraMetaDataMarshal method to marshal and unmarshal. do not populate this field directly
 	ExtraMetaData string `gorm:"column:extra_meta_data;type:jsonb" json:"extra_meta_data"`
 	// Content not used yet
 	Content    []byte     `gorm:"column:content;type:bytea" json:"content"`
@@ -62,6 +64,12 @@ type KnowledgeBaseFile struct {
 	DeleteTime *time.Time `gorm:"column:delete_time" json:"delete_time"`
 	// Size
 	Size int64 `gorm:"column:size" json:"size"`
+	// This filed is not stored in the database. It is used to unmarshal the ExtraMetaData field
+	ExtraMetaDataUnmarshal *ExtraMetaData `gorm:"-" json:"extra_meta_data_unmarshal"`
+}
+
+type ExtraMetaData struct {
+	FaileReason string `json:"fail_reason"`
 }
 
 // table columns map
@@ -95,6 +103,51 @@ var KnowledgeBaseFileColumn = KnowledgeBaseFileColumns{
 	DeleteTime:       "delete_time",
 }
 
+// ExtraMetaDataMarshal marshals the ExtraMetaData struct to a JSON string
+func (kf *KnowledgeBaseFile) ExtraMetaDataMarshal() error {
+	if kf.ExtraMetaDataUnmarshal == nil {
+		kf.ExtraMetaData = "{}"
+		return nil
+	}
+	data, err := json.Marshal(kf.ExtraMetaDataUnmarshal)
+	if err != nil {
+		return err
+	}
+	kf.ExtraMetaData = string(data)
+	return nil
+}
+
+// ExtraMetaDataUnmarshal unmarshals the ExtraMetaData JSON string to a struct
+func (kf *KnowledgeBaseFile) ExtraMetaDataUnmarshalFunc() error {
+	var data ExtraMetaData
+	if kf.ExtraMetaData == "" {
+		kf.ExtraMetaDataUnmarshal = nil
+		return nil
+	}
+	if err := json.Unmarshal([]byte(kf.ExtraMetaData), &data); err != nil {
+		return err
+	}
+	kf.ExtraMetaDataUnmarshal = &data
+	return nil
+}
+
+// GORM hooks
+func (kf *KnowledgeBaseFile) BeforeCreate(tx *gorm.DB) (err error) {
+	return kf.ExtraMetaDataMarshal()
+}
+
+func (kf *KnowledgeBaseFile) BeforeSave(tx *gorm.DB) (err error) {
+	return kf.ExtraMetaDataMarshal()
+}
+
+func (kf *KnowledgeBaseFile) BeforeUpdate(tx *gorm.DB) (err error) {
+	return kf.ExtraMetaDataMarshal()
+}
+
+func (kf *KnowledgeBaseFile) AfterFind(tx *gorm.DB) (err error) {
+	return kf.ExtraMetaDataUnmarshalFunc()
+}
+
 // KnowledgeBaseFileTableName returns the table name of the KnowledgeBaseFile
 func (r *Repository) KnowledgeBaseFileTableName() string {
 	return "knowledge_base_file"
@@ -120,7 +173,7 @@ func (r *Repository) CreateKnowledgeBaseFile(ctx context.Context, kb KnowledgeBa
 		return nil, fmt.Errorf("knowledge base does not exist. kb.uid:{%v}", kb.KnowledgeBaseUID.String())
 	}
 
-	kb.ExtraMetaData = "{}"
+	// kb.ExtraMetaData = "{}"
 
 	// Use a transaction to create the knowledge base file and call the external service
 	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -228,14 +281,17 @@ func (r *Repository) ProcessKnowledgeBaseFiles(ctx context.Context, fileUIDs []s
 	return files, nil
 }
 
-// get the incomplete files
-func (r *Repository) GetIncompleteFile(ctx context.Context) []KnowledgeBaseFile {
+// GetNeedProcessFiles
+func (r *Repository) GetNeedProcessFiles(ctx context.Context) []KnowledgeBaseFile {
 	var files []KnowledgeBaseFile
-	whereClause := fmt.Sprintf("%v NOT IN ? AND %v is null", KnowledgeBaseFileColumn.ProcessStatus, KnowledgeBaseFileColumn.DeleteTime)
+	whereClause := fmt.Sprintf("%v IN ? AND %v is null", KnowledgeBaseFileColumn.ProcessStatus, KnowledgeBaseFileColumn.DeleteTime)
 	if err := r.db.WithContext(ctx).Where(
 		whereClause, []string{
-			artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_NOTSTARTED)],
-			artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED)]}).
+			artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_WAITING.String(),
+			artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CONVERTING.String(),
+			artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_EMBEDDING.String(),
+			artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CHUNKING.String(),
+		}).
 		Find(&files).Error; err != nil {
 		return nil
 	}

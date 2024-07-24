@@ -73,7 +73,7 @@ func (wp *fileToEmbWorkerPool) startDispatcher(ctx context.Context) {
 			return
 		case <-ticker.C:
 			// Periodically check for incomplete files
-			incompleteFiles := wp.svc.Repository.GetIncompleteFile(ctx)
+			incompleteFiles := wp.svc.Repository.GetNeedProcessFiles(ctx)
 			// Check if any of the incomplete files have active workers
 			fileUID := make([]string, len(incompleteFiles))
 			for i, file := range incompleteFiles {
@@ -150,6 +150,18 @@ func (wp *fileToEmbWorkerPool) startWorker(ctx context.Context, workerID int) {
 			err := wp.processFile(ctx, file)
 			if err != nil {
 				fmt.Printf("Error processing file: %s, error: %v\n", file.UID.String(), err)
+				file.ExtraMetaDataUnmarshal.FaileReason = err.Error()
+				err = file.ExtraMetaDataMarshal()
+				if err != nil {
+					fmt.Printf("Error marshaling extra metadata: %v\n", err)
+				}
+				_, err := wp.svc.Repository.UpdateKnowledgeBaseFile(ctx, file.UID.String(), map[string]interface{}{
+					repository.KnowledgeBaseFileColumn.ProcessStatus: artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_FAILED.String(),
+					repository.KnowledgeBaseFileColumn.ExtraMetaData: file.ExtraMetaData,
+				})
+				if err != nil {
+					fmt.Printf("Error updating file status: %v\n", err)
+				}
 			} else {
 				fmt.Printf("Worker %d finished processing fileUID: %s\n", workerID, file.UID.String())
 			}
@@ -735,6 +747,7 @@ func getWorkerKey(fileUID string) string {
 }
 
 // mockVectorizeText is a mock implementation of the VectorizeText function.
+//
 //nolint:unused
 func mockVectorizeText(_ context.Context, _ uuid.UUID, texts []string) ([][]float32, error) {
 	vectors := make([][]float32, len(texts))

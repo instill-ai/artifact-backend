@@ -134,12 +134,6 @@ type RepositoryIMock struct {
 	beforeGetFilesTotalTokensCounter uint64
 	GetFilesTotalTokensMock          mRepositoryIMockGetFilesTotalTokens
 
-	funcGetIncompleteFile          func(ctx context.Context) (ka1 []mm_repository.KnowledgeBaseFile)
-	inspectFuncGetIncompleteFile   func(ctx context.Context)
-	afterGetIncompleteFileCounter  uint64
-	beforeGetIncompleteFileCounter uint64
-	GetIncompleteFileMock          mRepositoryIMockGetIncompleteFile
-
 	funcGetKnowledgeBaseByOwnerAndKbID          func(ctx context.Context, ownerUID string, kbID string) (kp1 *mm_repository.KnowledgeBase, err error)
 	inspectFuncGetKnowledgeBaseByOwnerAndKbID   func(ctx context.Context, ownerUID string, kbID string)
 	afterGetKnowledgeBaseByOwnerAndKbIDCounter  uint64
@@ -157,6 +151,12 @@ type RepositoryIMock struct {
 	afterGetKnowledgeBaseFilesByFileUIDsCounter  uint64
 	beforeGetKnowledgeBaseFilesByFileUIDsCounter uint64
 	GetKnowledgeBaseFilesByFileUIDsMock          mRepositoryIMockGetKnowledgeBaseFilesByFileUIDs
+
+	funcGetNeedProcessFiles          func(ctx context.Context) (ka1 []mm_repository.KnowledgeBaseFile)
+	inspectFuncGetNeedProcessFiles   func(ctx context.Context)
+	afterGetNeedProcessFilesCounter  uint64
+	beforeGetNeedProcessFilesCounter uint64
+	GetNeedProcessFilesMock          mRepositoryIMockGetNeedProcessFiles
 
 	funcGetRepositoryTag          func(ctx context.Context, r1 utils.RepositoryTagName) (rp1 *pb.RepositoryTag, err error)
 	inspectFuncGetRepositoryTag   func(ctx context.Context, r1 utils.RepositoryTagName)
@@ -331,9 +331,6 @@ func NewRepositoryIMock(t minimock.Tester) *RepositoryIMock {
 	m.GetFilesTotalTokensMock = mRepositoryIMockGetFilesTotalTokens{mock: m}
 	m.GetFilesTotalTokensMock.callArgs = []*RepositoryIMockGetFilesTotalTokensParams{}
 
-	m.GetIncompleteFileMock = mRepositoryIMockGetIncompleteFile{mock: m}
-	m.GetIncompleteFileMock.callArgs = []*RepositoryIMockGetIncompleteFileParams{}
-
 	m.GetKnowledgeBaseByOwnerAndKbIDMock = mRepositoryIMockGetKnowledgeBaseByOwnerAndKbID{mock: m}
 	m.GetKnowledgeBaseByOwnerAndKbIDMock.callArgs = []*RepositoryIMockGetKnowledgeBaseByOwnerAndKbIDParams{}
 
@@ -342,6 +339,9 @@ func NewRepositoryIMock(t minimock.Tester) *RepositoryIMock {
 
 	m.GetKnowledgeBaseFilesByFileUIDsMock = mRepositoryIMockGetKnowledgeBaseFilesByFileUIDs{mock: m}
 	m.GetKnowledgeBaseFilesByFileUIDsMock.callArgs = []*RepositoryIMockGetKnowledgeBaseFilesByFileUIDsParams{}
+
+	m.GetNeedProcessFilesMock = mRepositoryIMockGetNeedProcessFiles{mock: m}
+	m.GetNeedProcessFilesMock.callArgs = []*RepositoryIMockGetNeedProcessFilesParams{}
 
 	m.GetRepositoryTagMock = mRepositoryIMockGetRepositoryTag{mock: m}
 	m.GetRepositoryTagMock.callArgs = []*RepositoryIMockGetRepositoryTagParams{}
@@ -6014,282 +6014,6 @@ func (m *RepositoryIMock) MinimockGetFilesTotalTokensInspect() {
 	}
 }
 
-type mRepositoryIMockGetIncompleteFile struct {
-	mock               *RepositoryIMock
-	defaultExpectation *RepositoryIMockGetIncompleteFileExpectation
-	expectations       []*RepositoryIMockGetIncompleteFileExpectation
-
-	callArgs []*RepositoryIMockGetIncompleteFileParams
-	mutex    sync.RWMutex
-
-	expectedInvocations uint64
-}
-
-// RepositoryIMockGetIncompleteFileExpectation specifies expectation struct of the RepositoryI.GetIncompleteFile
-type RepositoryIMockGetIncompleteFileExpectation struct {
-	mock      *RepositoryIMock
-	params    *RepositoryIMockGetIncompleteFileParams
-	paramPtrs *RepositoryIMockGetIncompleteFileParamPtrs
-	results   *RepositoryIMockGetIncompleteFileResults
-	Counter   uint64
-}
-
-// RepositoryIMockGetIncompleteFileParams contains parameters of the RepositoryI.GetIncompleteFile
-type RepositoryIMockGetIncompleteFileParams struct {
-	ctx context.Context
-}
-
-// RepositoryIMockGetIncompleteFileParamPtrs contains pointers to parameters of the RepositoryI.GetIncompleteFile
-type RepositoryIMockGetIncompleteFileParamPtrs struct {
-	ctx *context.Context
-}
-
-// RepositoryIMockGetIncompleteFileResults contains results of the RepositoryI.GetIncompleteFile
-type RepositoryIMockGetIncompleteFileResults struct {
-	ka1 []mm_repository.KnowledgeBaseFile
-}
-
-// Expect sets up expected params for RepositoryI.GetIncompleteFile
-func (mmGetIncompleteFile *mRepositoryIMockGetIncompleteFile) Expect(ctx context.Context) *mRepositoryIMockGetIncompleteFile {
-	if mmGetIncompleteFile.mock.funcGetIncompleteFile != nil {
-		mmGetIncompleteFile.mock.t.Fatalf("RepositoryIMock.GetIncompleteFile mock is already set by Set")
-	}
-
-	if mmGetIncompleteFile.defaultExpectation == nil {
-		mmGetIncompleteFile.defaultExpectation = &RepositoryIMockGetIncompleteFileExpectation{}
-	}
-
-	if mmGetIncompleteFile.defaultExpectation.paramPtrs != nil {
-		mmGetIncompleteFile.mock.t.Fatalf("RepositoryIMock.GetIncompleteFile mock is already set by ExpectParams functions")
-	}
-
-	mmGetIncompleteFile.defaultExpectation.params = &RepositoryIMockGetIncompleteFileParams{ctx}
-	for _, e := range mmGetIncompleteFile.expectations {
-		if minimock.Equal(e.params, mmGetIncompleteFile.defaultExpectation.params) {
-			mmGetIncompleteFile.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetIncompleteFile.defaultExpectation.params)
-		}
-	}
-
-	return mmGetIncompleteFile
-}
-
-// ExpectCtxParam1 sets up expected param ctx for RepositoryI.GetIncompleteFile
-func (mmGetIncompleteFile *mRepositoryIMockGetIncompleteFile) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockGetIncompleteFile {
-	if mmGetIncompleteFile.mock.funcGetIncompleteFile != nil {
-		mmGetIncompleteFile.mock.t.Fatalf("RepositoryIMock.GetIncompleteFile mock is already set by Set")
-	}
-
-	if mmGetIncompleteFile.defaultExpectation == nil {
-		mmGetIncompleteFile.defaultExpectation = &RepositoryIMockGetIncompleteFileExpectation{}
-	}
-
-	if mmGetIncompleteFile.defaultExpectation.params != nil {
-		mmGetIncompleteFile.mock.t.Fatalf("RepositoryIMock.GetIncompleteFile mock is already set by Expect")
-	}
-
-	if mmGetIncompleteFile.defaultExpectation.paramPtrs == nil {
-		mmGetIncompleteFile.defaultExpectation.paramPtrs = &RepositoryIMockGetIncompleteFileParamPtrs{}
-	}
-	mmGetIncompleteFile.defaultExpectation.paramPtrs.ctx = &ctx
-
-	return mmGetIncompleteFile
-}
-
-// Inspect accepts an inspector function that has same arguments as the RepositoryI.GetIncompleteFile
-func (mmGetIncompleteFile *mRepositoryIMockGetIncompleteFile) Inspect(f func(ctx context.Context)) *mRepositoryIMockGetIncompleteFile {
-	if mmGetIncompleteFile.mock.inspectFuncGetIncompleteFile != nil {
-		mmGetIncompleteFile.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.GetIncompleteFile")
-	}
-
-	mmGetIncompleteFile.mock.inspectFuncGetIncompleteFile = f
-
-	return mmGetIncompleteFile
-}
-
-// Return sets up results that will be returned by RepositoryI.GetIncompleteFile
-func (mmGetIncompleteFile *mRepositoryIMockGetIncompleteFile) Return(ka1 []mm_repository.KnowledgeBaseFile) *RepositoryIMock {
-	if mmGetIncompleteFile.mock.funcGetIncompleteFile != nil {
-		mmGetIncompleteFile.mock.t.Fatalf("RepositoryIMock.GetIncompleteFile mock is already set by Set")
-	}
-
-	if mmGetIncompleteFile.defaultExpectation == nil {
-		mmGetIncompleteFile.defaultExpectation = &RepositoryIMockGetIncompleteFileExpectation{mock: mmGetIncompleteFile.mock}
-	}
-	mmGetIncompleteFile.defaultExpectation.results = &RepositoryIMockGetIncompleteFileResults{ka1}
-	return mmGetIncompleteFile.mock
-}
-
-// Set uses given function f to mock the RepositoryI.GetIncompleteFile method
-func (mmGetIncompleteFile *mRepositoryIMockGetIncompleteFile) Set(f func(ctx context.Context) (ka1 []mm_repository.KnowledgeBaseFile)) *RepositoryIMock {
-	if mmGetIncompleteFile.defaultExpectation != nil {
-		mmGetIncompleteFile.mock.t.Fatalf("Default expectation is already set for the RepositoryI.GetIncompleteFile method")
-	}
-
-	if len(mmGetIncompleteFile.expectations) > 0 {
-		mmGetIncompleteFile.mock.t.Fatalf("Some expectations are already set for the RepositoryI.GetIncompleteFile method")
-	}
-
-	mmGetIncompleteFile.mock.funcGetIncompleteFile = f
-	return mmGetIncompleteFile.mock
-}
-
-// When sets expectation for the RepositoryI.GetIncompleteFile which will trigger the result defined by the following
-// Then helper
-func (mmGetIncompleteFile *mRepositoryIMockGetIncompleteFile) When(ctx context.Context) *RepositoryIMockGetIncompleteFileExpectation {
-	if mmGetIncompleteFile.mock.funcGetIncompleteFile != nil {
-		mmGetIncompleteFile.mock.t.Fatalf("RepositoryIMock.GetIncompleteFile mock is already set by Set")
-	}
-
-	expectation := &RepositoryIMockGetIncompleteFileExpectation{
-		mock:   mmGetIncompleteFile.mock,
-		params: &RepositoryIMockGetIncompleteFileParams{ctx},
-	}
-	mmGetIncompleteFile.expectations = append(mmGetIncompleteFile.expectations, expectation)
-	return expectation
-}
-
-// Then sets up RepositoryI.GetIncompleteFile return parameters for the expectation previously defined by the When method
-func (e *RepositoryIMockGetIncompleteFileExpectation) Then(ka1 []mm_repository.KnowledgeBaseFile) *RepositoryIMock {
-	e.results = &RepositoryIMockGetIncompleteFileResults{ka1}
-	return e.mock
-}
-
-// Times sets number of times RepositoryI.GetIncompleteFile should be invoked
-func (mmGetIncompleteFile *mRepositoryIMockGetIncompleteFile) Times(n uint64) *mRepositoryIMockGetIncompleteFile {
-	if n == 0 {
-		mmGetIncompleteFile.mock.t.Fatalf("Times of RepositoryIMock.GetIncompleteFile mock can not be zero")
-	}
-	mm_atomic.StoreUint64(&mmGetIncompleteFile.expectedInvocations, n)
-	return mmGetIncompleteFile
-}
-
-func (mmGetIncompleteFile *mRepositoryIMockGetIncompleteFile) invocationsDone() bool {
-	if len(mmGetIncompleteFile.expectations) == 0 && mmGetIncompleteFile.defaultExpectation == nil && mmGetIncompleteFile.mock.funcGetIncompleteFile == nil {
-		return true
-	}
-
-	totalInvocations := mm_atomic.LoadUint64(&mmGetIncompleteFile.mock.afterGetIncompleteFileCounter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmGetIncompleteFile.expectedInvocations)
-
-	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
-}
-
-// GetIncompleteFile implements repository.RepositoryI
-func (mmGetIncompleteFile *RepositoryIMock) GetIncompleteFile(ctx context.Context) (ka1 []mm_repository.KnowledgeBaseFile) {
-	mm_atomic.AddUint64(&mmGetIncompleteFile.beforeGetIncompleteFileCounter, 1)
-	defer mm_atomic.AddUint64(&mmGetIncompleteFile.afterGetIncompleteFileCounter, 1)
-
-	if mmGetIncompleteFile.inspectFuncGetIncompleteFile != nil {
-		mmGetIncompleteFile.inspectFuncGetIncompleteFile(ctx)
-	}
-
-	mm_params := RepositoryIMockGetIncompleteFileParams{ctx}
-
-	// Record call args
-	mmGetIncompleteFile.GetIncompleteFileMock.mutex.Lock()
-	mmGetIncompleteFile.GetIncompleteFileMock.callArgs = append(mmGetIncompleteFile.GetIncompleteFileMock.callArgs, &mm_params)
-	mmGetIncompleteFile.GetIncompleteFileMock.mutex.Unlock()
-
-	for _, e := range mmGetIncompleteFile.GetIncompleteFileMock.expectations {
-		if minimock.Equal(*e.params, mm_params) {
-			mm_atomic.AddUint64(&e.Counter, 1)
-			return e.results.ka1
-		}
-	}
-
-	if mmGetIncompleteFile.GetIncompleteFileMock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmGetIncompleteFile.GetIncompleteFileMock.defaultExpectation.Counter, 1)
-		mm_want := mmGetIncompleteFile.GetIncompleteFileMock.defaultExpectation.params
-		mm_want_ptrs := mmGetIncompleteFile.GetIncompleteFileMock.defaultExpectation.paramPtrs
-
-		mm_got := RepositoryIMockGetIncompleteFileParams{ctx}
-
-		if mm_want_ptrs != nil {
-
-			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
-				mmGetIncompleteFile.t.Errorf("RepositoryIMock.GetIncompleteFile got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
-			}
-
-		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
-			mmGetIncompleteFile.t.Errorf("RepositoryIMock.GetIncompleteFile got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
-		}
-
-		mm_results := mmGetIncompleteFile.GetIncompleteFileMock.defaultExpectation.results
-		if mm_results == nil {
-			mmGetIncompleteFile.t.Fatal("No results are set for the RepositoryIMock.GetIncompleteFile")
-		}
-		return (*mm_results).ka1
-	}
-	if mmGetIncompleteFile.funcGetIncompleteFile != nil {
-		return mmGetIncompleteFile.funcGetIncompleteFile(ctx)
-	}
-	mmGetIncompleteFile.t.Fatalf("Unexpected call to RepositoryIMock.GetIncompleteFile. %v", ctx)
-	return
-}
-
-// GetIncompleteFileAfterCounter returns a count of finished RepositoryIMock.GetIncompleteFile invocations
-func (mmGetIncompleteFile *RepositoryIMock) GetIncompleteFileAfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmGetIncompleteFile.afterGetIncompleteFileCounter)
-}
-
-// GetIncompleteFileBeforeCounter returns a count of RepositoryIMock.GetIncompleteFile invocations
-func (mmGetIncompleteFile *RepositoryIMock) GetIncompleteFileBeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmGetIncompleteFile.beforeGetIncompleteFileCounter)
-}
-
-// Calls returns a list of arguments used in each call to RepositoryIMock.GetIncompleteFile.
-// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
-func (mmGetIncompleteFile *mRepositoryIMockGetIncompleteFile) Calls() []*RepositoryIMockGetIncompleteFileParams {
-	mmGetIncompleteFile.mutex.RLock()
-
-	argCopy := make([]*RepositoryIMockGetIncompleteFileParams, len(mmGetIncompleteFile.callArgs))
-	copy(argCopy, mmGetIncompleteFile.callArgs)
-
-	mmGetIncompleteFile.mutex.RUnlock()
-
-	return argCopy
-}
-
-// MinimockGetIncompleteFileDone returns true if the count of the GetIncompleteFile invocations corresponds
-// the number of defined expectations
-func (m *RepositoryIMock) MinimockGetIncompleteFileDone() bool {
-	for _, e := range m.GetIncompleteFileMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			return false
-		}
-	}
-
-	return m.GetIncompleteFileMock.invocationsDone()
-}
-
-// MinimockGetIncompleteFileInspect logs each unmet expectation
-func (m *RepositoryIMock) MinimockGetIncompleteFileInspect() {
-	for _, e := range m.GetIncompleteFileMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Errorf("Expected call to RepositoryIMock.GetIncompleteFile with params: %#v", *e.params)
-		}
-	}
-
-	afterGetIncompleteFileCounter := mm_atomic.LoadUint64(&m.afterGetIncompleteFileCounter)
-	// if default expectation was set then invocations count should be greater than zero
-	if m.GetIncompleteFileMock.defaultExpectation != nil && afterGetIncompleteFileCounter < 1 {
-		if m.GetIncompleteFileMock.defaultExpectation.params == nil {
-			m.t.Error("Expected call to RepositoryIMock.GetIncompleteFile")
-		} else {
-			m.t.Errorf("Expected call to RepositoryIMock.GetIncompleteFile with params: %#v", *m.GetIncompleteFileMock.defaultExpectation.params)
-		}
-	}
-	// if func was set then invocations count should be greater than zero
-	if m.funcGetIncompleteFile != nil && afterGetIncompleteFileCounter < 1 {
-		m.t.Error("Expected call to RepositoryIMock.GetIncompleteFile")
-	}
-
-	if !m.GetIncompleteFileMock.invocationsDone() && afterGetIncompleteFileCounter > 0 {
-		m.t.Errorf("Expected %d calls to RepositoryIMock.GetIncompleteFile but found %d calls",
-			mm_atomic.LoadUint64(&m.GetIncompleteFileMock.expectedInvocations), afterGetIncompleteFileCounter)
-	}
-}
-
 type mRepositoryIMockGetKnowledgeBaseByOwnerAndKbID struct {
 	mock               *RepositoryIMock
 	defaultExpectation *RepositoryIMockGetKnowledgeBaseByOwnerAndKbIDExpectation
@@ -7258,6 +6982,282 @@ func (m *RepositoryIMock) MinimockGetKnowledgeBaseFilesByFileUIDsInspect() {
 	if !m.GetKnowledgeBaseFilesByFileUIDsMock.invocationsDone() && afterGetKnowledgeBaseFilesByFileUIDsCounter > 0 {
 		m.t.Errorf("Expected %d calls to RepositoryIMock.GetKnowledgeBaseFilesByFileUIDs but found %d calls",
 			mm_atomic.LoadUint64(&m.GetKnowledgeBaseFilesByFileUIDsMock.expectedInvocations), afterGetKnowledgeBaseFilesByFileUIDsCounter)
+	}
+}
+
+type mRepositoryIMockGetNeedProcessFiles struct {
+	mock               *RepositoryIMock
+	defaultExpectation *RepositoryIMockGetNeedProcessFilesExpectation
+	expectations       []*RepositoryIMockGetNeedProcessFilesExpectation
+
+	callArgs []*RepositoryIMockGetNeedProcessFilesParams
+	mutex    sync.RWMutex
+
+	expectedInvocations uint64
+}
+
+// RepositoryIMockGetNeedProcessFilesExpectation specifies expectation struct of the RepositoryI.GetNeedProcessFiles
+type RepositoryIMockGetNeedProcessFilesExpectation struct {
+	mock      *RepositoryIMock
+	params    *RepositoryIMockGetNeedProcessFilesParams
+	paramPtrs *RepositoryIMockGetNeedProcessFilesParamPtrs
+	results   *RepositoryIMockGetNeedProcessFilesResults
+	Counter   uint64
+}
+
+// RepositoryIMockGetNeedProcessFilesParams contains parameters of the RepositoryI.GetNeedProcessFiles
+type RepositoryIMockGetNeedProcessFilesParams struct {
+	ctx context.Context
+}
+
+// RepositoryIMockGetNeedProcessFilesParamPtrs contains pointers to parameters of the RepositoryI.GetNeedProcessFiles
+type RepositoryIMockGetNeedProcessFilesParamPtrs struct {
+	ctx *context.Context
+}
+
+// RepositoryIMockGetNeedProcessFilesResults contains results of the RepositoryI.GetNeedProcessFiles
+type RepositoryIMockGetNeedProcessFilesResults struct {
+	ka1 []mm_repository.KnowledgeBaseFile
+}
+
+// Expect sets up expected params for RepositoryI.GetNeedProcessFiles
+func (mmGetNeedProcessFiles *mRepositoryIMockGetNeedProcessFiles) Expect(ctx context.Context) *mRepositoryIMockGetNeedProcessFiles {
+	if mmGetNeedProcessFiles.mock.funcGetNeedProcessFiles != nil {
+		mmGetNeedProcessFiles.mock.t.Fatalf("RepositoryIMock.GetNeedProcessFiles mock is already set by Set")
+	}
+
+	if mmGetNeedProcessFiles.defaultExpectation == nil {
+		mmGetNeedProcessFiles.defaultExpectation = &RepositoryIMockGetNeedProcessFilesExpectation{}
+	}
+
+	if mmGetNeedProcessFiles.defaultExpectation.paramPtrs != nil {
+		mmGetNeedProcessFiles.mock.t.Fatalf("RepositoryIMock.GetNeedProcessFiles mock is already set by ExpectParams functions")
+	}
+
+	mmGetNeedProcessFiles.defaultExpectation.params = &RepositoryIMockGetNeedProcessFilesParams{ctx}
+	for _, e := range mmGetNeedProcessFiles.expectations {
+		if minimock.Equal(e.params, mmGetNeedProcessFiles.defaultExpectation.params) {
+			mmGetNeedProcessFiles.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetNeedProcessFiles.defaultExpectation.params)
+		}
+	}
+
+	return mmGetNeedProcessFiles
+}
+
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.GetNeedProcessFiles
+func (mmGetNeedProcessFiles *mRepositoryIMockGetNeedProcessFiles) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockGetNeedProcessFiles {
+	if mmGetNeedProcessFiles.mock.funcGetNeedProcessFiles != nil {
+		mmGetNeedProcessFiles.mock.t.Fatalf("RepositoryIMock.GetNeedProcessFiles mock is already set by Set")
+	}
+
+	if mmGetNeedProcessFiles.defaultExpectation == nil {
+		mmGetNeedProcessFiles.defaultExpectation = &RepositoryIMockGetNeedProcessFilesExpectation{}
+	}
+
+	if mmGetNeedProcessFiles.defaultExpectation.params != nil {
+		mmGetNeedProcessFiles.mock.t.Fatalf("RepositoryIMock.GetNeedProcessFiles mock is already set by Expect")
+	}
+
+	if mmGetNeedProcessFiles.defaultExpectation.paramPtrs == nil {
+		mmGetNeedProcessFiles.defaultExpectation.paramPtrs = &RepositoryIMockGetNeedProcessFilesParamPtrs{}
+	}
+	mmGetNeedProcessFiles.defaultExpectation.paramPtrs.ctx = &ctx
+
+	return mmGetNeedProcessFiles
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.GetNeedProcessFiles
+func (mmGetNeedProcessFiles *mRepositoryIMockGetNeedProcessFiles) Inspect(f func(ctx context.Context)) *mRepositoryIMockGetNeedProcessFiles {
+	if mmGetNeedProcessFiles.mock.inspectFuncGetNeedProcessFiles != nil {
+		mmGetNeedProcessFiles.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.GetNeedProcessFiles")
+	}
+
+	mmGetNeedProcessFiles.mock.inspectFuncGetNeedProcessFiles = f
+
+	return mmGetNeedProcessFiles
+}
+
+// Return sets up results that will be returned by RepositoryI.GetNeedProcessFiles
+func (mmGetNeedProcessFiles *mRepositoryIMockGetNeedProcessFiles) Return(ka1 []mm_repository.KnowledgeBaseFile) *RepositoryIMock {
+	if mmGetNeedProcessFiles.mock.funcGetNeedProcessFiles != nil {
+		mmGetNeedProcessFiles.mock.t.Fatalf("RepositoryIMock.GetNeedProcessFiles mock is already set by Set")
+	}
+
+	if mmGetNeedProcessFiles.defaultExpectation == nil {
+		mmGetNeedProcessFiles.defaultExpectation = &RepositoryIMockGetNeedProcessFilesExpectation{mock: mmGetNeedProcessFiles.mock}
+	}
+	mmGetNeedProcessFiles.defaultExpectation.results = &RepositoryIMockGetNeedProcessFilesResults{ka1}
+	return mmGetNeedProcessFiles.mock
+}
+
+// Set uses given function f to mock the RepositoryI.GetNeedProcessFiles method
+func (mmGetNeedProcessFiles *mRepositoryIMockGetNeedProcessFiles) Set(f func(ctx context.Context) (ka1 []mm_repository.KnowledgeBaseFile)) *RepositoryIMock {
+	if mmGetNeedProcessFiles.defaultExpectation != nil {
+		mmGetNeedProcessFiles.mock.t.Fatalf("Default expectation is already set for the RepositoryI.GetNeedProcessFiles method")
+	}
+
+	if len(mmGetNeedProcessFiles.expectations) > 0 {
+		mmGetNeedProcessFiles.mock.t.Fatalf("Some expectations are already set for the RepositoryI.GetNeedProcessFiles method")
+	}
+
+	mmGetNeedProcessFiles.mock.funcGetNeedProcessFiles = f
+	return mmGetNeedProcessFiles.mock
+}
+
+// When sets expectation for the RepositoryI.GetNeedProcessFiles which will trigger the result defined by the following
+// Then helper
+func (mmGetNeedProcessFiles *mRepositoryIMockGetNeedProcessFiles) When(ctx context.Context) *RepositoryIMockGetNeedProcessFilesExpectation {
+	if mmGetNeedProcessFiles.mock.funcGetNeedProcessFiles != nil {
+		mmGetNeedProcessFiles.mock.t.Fatalf("RepositoryIMock.GetNeedProcessFiles mock is already set by Set")
+	}
+
+	expectation := &RepositoryIMockGetNeedProcessFilesExpectation{
+		mock:   mmGetNeedProcessFiles.mock,
+		params: &RepositoryIMockGetNeedProcessFilesParams{ctx},
+	}
+	mmGetNeedProcessFiles.expectations = append(mmGetNeedProcessFiles.expectations, expectation)
+	return expectation
+}
+
+// Then sets up RepositoryI.GetNeedProcessFiles return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockGetNeedProcessFilesExpectation) Then(ka1 []mm_repository.KnowledgeBaseFile) *RepositoryIMock {
+	e.results = &RepositoryIMockGetNeedProcessFilesResults{ka1}
+	return e.mock
+}
+
+// Times sets number of times RepositoryI.GetNeedProcessFiles should be invoked
+func (mmGetNeedProcessFiles *mRepositoryIMockGetNeedProcessFiles) Times(n uint64) *mRepositoryIMockGetNeedProcessFiles {
+	if n == 0 {
+		mmGetNeedProcessFiles.mock.t.Fatalf("Times of RepositoryIMock.GetNeedProcessFiles mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetNeedProcessFiles.expectedInvocations, n)
+	return mmGetNeedProcessFiles
+}
+
+func (mmGetNeedProcessFiles *mRepositoryIMockGetNeedProcessFiles) invocationsDone() bool {
+	if len(mmGetNeedProcessFiles.expectations) == 0 && mmGetNeedProcessFiles.defaultExpectation == nil && mmGetNeedProcessFiles.mock.funcGetNeedProcessFiles == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetNeedProcessFiles.mock.afterGetNeedProcessFilesCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetNeedProcessFiles.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetNeedProcessFiles implements repository.RepositoryI
+func (mmGetNeedProcessFiles *RepositoryIMock) GetNeedProcessFiles(ctx context.Context) (ka1 []mm_repository.KnowledgeBaseFile) {
+	mm_atomic.AddUint64(&mmGetNeedProcessFiles.beforeGetNeedProcessFilesCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetNeedProcessFiles.afterGetNeedProcessFilesCounter, 1)
+
+	if mmGetNeedProcessFiles.inspectFuncGetNeedProcessFiles != nil {
+		mmGetNeedProcessFiles.inspectFuncGetNeedProcessFiles(ctx)
+	}
+
+	mm_params := RepositoryIMockGetNeedProcessFilesParams{ctx}
+
+	// Record call args
+	mmGetNeedProcessFiles.GetNeedProcessFilesMock.mutex.Lock()
+	mmGetNeedProcessFiles.GetNeedProcessFilesMock.callArgs = append(mmGetNeedProcessFiles.GetNeedProcessFilesMock.callArgs, &mm_params)
+	mmGetNeedProcessFiles.GetNeedProcessFilesMock.mutex.Unlock()
+
+	for _, e := range mmGetNeedProcessFiles.GetNeedProcessFilesMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.ka1
+		}
+	}
+
+	if mmGetNeedProcessFiles.GetNeedProcessFilesMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetNeedProcessFiles.GetNeedProcessFilesMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetNeedProcessFiles.GetNeedProcessFilesMock.defaultExpectation.params
+		mm_want_ptrs := mmGetNeedProcessFiles.GetNeedProcessFilesMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryIMockGetNeedProcessFilesParams{ctx}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetNeedProcessFiles.t.Errorf("RepositoryIMock.GetNeedProcessFiles got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetNeedProcessFiles.t.Errorf("RepositoryIMock.GetNeedProcessFiles got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetNeedProcessFiles.GetNeedProcessFilesMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetNeedProcessFiles.t.Fatal("No results are set for the RepositoryIMock.GetNeedProcessFiles")
+		}
+		return (*mm_results).ka1
+	}
+	if mmGetNeedProcessFiles.funcGetNeedProcessFiles != nil {
+		return mmGetNeedProcessFiles.funcGetNeedProcessFiles(ctx)
+	}
+	mmGetNeedProcessFiles.t.Fatalf("Unexpected call to RepositoryIMock.GetNeedProcessFiles. %v", ctx)
+	return
+}
+
+// GetNeedProcessFilesAfterCounter returns a count of finished RepositoryIMock.GetNeedProcessFiles invocations
+func (mmGetNeedProcessFiles *RepositoryIMock) GetNeedProcessFilesAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetNeedProcessFiles.afterGetNeedProcessFilesCounter)
+}
+
+// GetNeedProcessFilesBeforeCounter returns a count of RepositoryIMock.GetNeedProcessFiles invocations
+func (mmGetNeedProcessFiles *RepositoryIMock) GetNeedProcessFilesBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetNeedProcessFiles.beforeGetNeedProcessFilesCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryIMock.GetNeedProcessFiles.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetNeedProcessFiles *mRepositoryIMockGetNeedProcessFiles) Calls() []*RepositoryIMockGetNeedProcessFilesParams {
+	mmGetNeedProcessFiles.mutex.RLock()
+
+	argCopy := make([]*RepositoryIMockGetNeedProcessFilesParams, len(mmGetNeedProcessFiles.callArgs))
+	copy(argCopy, mmGetNeedProcessFiles.callArgs)
+
+	mmGetNeedProcessFiles.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetNeedProcessFilesDone returns true if the count of the GetNeedProcessFiles invocations corresponds
+// the number of defined expectations
+func (m *RepositoryIMock) MinimockGetNeedProcessFilesDone() bool {
+	for _, e := range m.GetNeedProcessFilesMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetNeedProcessFilesMock.invocationsDone()
+}
+
+// MinimockGetNeedProcessFilesInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockGetNeedProcessFilesInspect() {
+	for _, e := range m.GetNeedProcessFilesMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryIMock.GetNeedProcessFiles with params: %#v", *e.params)
+		}
+	}
+
+	afterGetNeedProcessFilesCounter := mm_atomic.LoadUint64(&m.afterGetNeedProcessFilesCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetNeedProcessFilesMock.defaultExpectation != nil && afterGetNeedProcessFilesCounter < 1 {
+		if m.GetNeedProcessFilesMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to RepositoryIMock.GetNeedProcessFiles")
+		} else {
+			m.t.Errorf("Expected call to RepositoryIMock.GetNeedProcessFiles with params: %#v", *m.GetNeedProcessFilesMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetNeedProcessFiles != nil && afterGetNeedProcessFilesCounter < 1 {
+		m.t.Error("Expected call to RepositoryIMock.GetNeedProcessFiles")
+	}
+
+	if !m.GetNeedProcessFilesMock.invocationsDone() && afterGetNeedProcessFilesCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.GetNeedProcessFiles but found %d calls",
+			mm_atomic.LoadUint64(&m.GetNeedProcessFilesMock.expectedInvocations), afterGetNeedProcessFilesCounter)
 	}
 }
 
@@ -12550,13 +12550,13 @@ func (m *RepositoryIMock) MinimockFinish() {
 
 			m.MinimockGetFilesTotalTokensInspect()
 
-			m.MinimockGetIncompleteFileInspect()
-
 			m.MinimockGetKnowledgeBaseByOwnerAndKbIDInspect()
 
 			m.MinimockGetKnowledgeBaseCountByOwnerInspect()
 
 			m.MinimockGetKnowledgeBaseFilesByFileUIDsInspect()
+
+			m.MinimockGetNeedProcessFilesInspect()
 
 			m.MinimockGetRepositoryTagInspect()
 
@@ -12633,10 +12633,10 @@ func (m *RepositoryIMock) minimockDone() bool {
 		m.MinimockGetCountFilesByListKnowledgeBaseUIDDone() &&
 		m.MinimockGetEmbeddingByUIDsDone() &&
 		m.MinimockGetFilesTotalTokensDone() &&
-		m.MinimockGetIncompleteFileDone() &&
 		m.MinimockGetKnowledgeBaseByOwnerAndKbIDDone() &&
 		m.MinimockGetKnowledgeBaseCountByOwnerDone() &&
 		m.MinimockGetKnowledgeBaseFilesByFileUIDsDone() &&
+		m.MinimockGetNeedProcessFilesDone() &&
 		m.MinimockGetRepositoryTagDone() &&
 		m.MinimockGetSourceTableAndUIDByFileUIDsDone() &&
 		m.MinimockGetTextChunksBySourceDone() &&
