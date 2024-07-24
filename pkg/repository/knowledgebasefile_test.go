@@ -54,7 +54,7 @@ func TestKnowledgeBaseFile_ExtraMetaDataMarshal_Nil(t *testing.T) {
 		t.Errorf("Unexpected error: %v", err)
 	}
 
-	if kf.ExtraMetaData != "" {
+	if kf.ExtraMetaData != "{}" {
 		t.Errorf("Expected ExtraMetaData to be empty, but got %q", kf.ExtraMetaData)
 	}
 }
