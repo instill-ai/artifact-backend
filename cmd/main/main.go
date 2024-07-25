@@ -16,6 +16,7 @@ import (
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
+	openfga "github.com/openfga/api/proto/openfga/v1"
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/contrib/propagators/b3"
 	"go.opentelemetry.io/otel"
@@ -35,6 +36,7 @@ import (
 	grpc_recovery "github.com/grpc-ecosystem/go-grpc-middleware/recovery"
 
 	"github.com/instill-ai/artifact-backend/config"
+	"github.com/instill-ai/artifact-backend/pkg/acl"
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/handler"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
@@ -113,7 +115,7 @@ func main() {
 
 	// Initialize clients needed for service
 	pipelinePublicServiceClient, pipelinePublicGrpcConn, _, mgmtPublicServiceClientConn, mgmtPrivateServiceClient, mgmtPrivateServiceGrpcConn,
-		redisClient, influxDBClient, db, minioClient, milvusClient := newClients(ctx, logger)
+		redisClient, influxDBClient, db, minioClient, milvusClient, aclClient, fgaClientConn, fgaReplicaClientConn := newClients(ctx, logger)
 	if pipelinePublicGrpcConn != nil {
 		defer pipelinePublicGrpcConn.Close()
 	}
@@ -126,6 +128,12 @@ func main() {
 	defer redisClient.Close()
 	defer influxDBClient.Close()
 	defer database.Close(db)
+	if fgaClientConn != nil {
+		defer fgaClientConn.Close()
+	}
+	if fgaReplicaClientConn != nil {
+		defer fgaReplicaClientConn.Close()
+	}
 
 	// Initialize service
 	service := servicePkg.NewService(
@@ -134,7 +142,9 @@ func main() {
 		mgmtPrivateServiceClient,
 		pipelinePublicServiceClient,
 		httpclient.NewRegistryClient(ctx),
-		redisClient, milvusClient)
+		redisClient,
+		milvusClient,
+		aclClient)
 
 	grpcServerOpts, creds := newGrpcOptionAndCreds(logger)
 
@@ -277,7 +287,11 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 	influxdb2.Client,
 	*gorm.DB,
 	*minio.Minio,
-	milvus.MilvusClientI) {
+	milvus.MilvusClientI,
+	acl.ACLClient,
+	*grpc.ClientConn,
+	*grpc.ClientConn,
+) {
 
 	// init pipeline grpc client
 	pipelinePublicGrpcConn, err := grpcclient.NewGRPCConn(
@@ -321,7 +335,19 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 	if err != nil {
 		logger.Fatal(fmt.Sprintf("failed to create milvus client: %v", err))
 	}
-	return pipelinePublicServiceClient, pipelinePublicGrpcConn, mgmtPublicServiceClient, mgmtPrivateServiceClientConn, mgmtPrivateServiceClient, mgmtPublicServiceClientConn, redisClient, influxDBClient, db, minioClient, milvusClient
+
+	// Init ACL client
+	fgaClient, fgaClientConn := acl.InitOpenFGAClient(ctx, config.Config.OpenFGA.Host, config.Config.OpenFGA.Port)
+
+	var fgaReplicaClient openfga.OpenFGAServiceClient
+	var fgaReplicaClientConn *grpc.ClientConn
+	if config.Config.OpenFGA.Replica.Host != "" {
+
+		fgaReplicaClient, fgaReplicaClientConn = acl.InitOpenFGAClient(ctx, config.Config.OpenFGA.Replica.Host, config.Config.OpenFGA.Replica.Port)
+
+	}
+	aclClient := acl.NewACLClient(fgaClient, fgaReplicaClient, redisClient)
+	return pipelinePublicServiceClient, pipelinePublicGrpcConn, mgmtPublicServiceClient, mgmtPrivateServiceClientConn, mgmtPrivateServiceClient, mgmtPublicServiceClientConn, redisClient, influxDBClient, db, minioClient, milvusClient, aclClient, fgaClientConn, fgaReplicaClientConn
 }
 
 func newGrpcOptionAndCreds(logger *zap.Logger) ([]grpc.ServerOption, credentials.TransportCredentials) {

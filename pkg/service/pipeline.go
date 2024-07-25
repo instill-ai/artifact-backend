@@ -3,8 +3,9 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 
-	"github.com/google/uuid"
+	"github.com/gofrs/uuid"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	pipelinev1beta "github.com/instill-ai/protogen-go/vdp/pipeline/v1beta"
 	"go.uber.org/zap"
@@ -14,10 +15,15 @@ import (
 
 const chunkLength = 800
 const chunkOverlap = 200
+const NamespaceID = "preset"
 const pdfToMDVersion = "v1.0.0"
 const mdSplitVersion = "v1.0.1"
 const textSplitVersion = "v1.0.0"
 const textEmbedVersion = "v1.1.0"
+const converPDFToMDPipelineID = "indexing-convert-pdf"
+const mdSplitPipelineID = "indexing-split-markdown"
+const textSplitPipelineID = "indexing-split-text"
+const textEmbedPipelineID = "indexing-embed"
 
 // ConvertPDFToMD using converting pipeline to convert PDF to MD and consume caller's credits
 func (s *Service) ConvertPDFToMD(ctx context.Context, caller uuid.UUID, pdfBase64 string) (string, error) {
@@ -25,8 +31,10 @@ func (s *Service) ConvertPDFToMD(ctx context.Context, caller uuid.UUID, pdfBase6
 	md := metadata.New(map[string]string{"Instill-User-Uid": caller.String(), "Instill-Auth-Type": "user"})
 	ctx = metadata.NewOutgoingContext(ctx, md)
 
-	req := &pipelinev1beta.TriggerOrganizationPipelineReleaseRequest{
-		Name: "organizations/preset/pipelines/indexing-convert-pdf/releases/" + pdfToMDVersion,
+	req := &pipelinev1beta.TriggerNamespacePipelineReleaseRequest{
+		NamespaceId: NamespaceID,
+		PipelineId:  converPDFToMDPipelineID,
+		ReleaseId:   pdfToMDVersion,
 		Inputs: []*structpb.Struct{
 			{
 				Fields: map[string]*structpb.Value{
@@ -35,10 +43,10 @@ func (s *Service) ConvertPDFToMD(ctx context.Context, caller uuid.UUID, pdfBase6
 			},
 		},
 	}
-	resp, err := s.PipelinePub.TriggerOrganizationPipelineRelease(ctx, req)
+	resp, err := s.PipelinePub.TriggerNamespacePipelineRelease(ctx, req)
 	if err != nil {
 		logger.Error("failed to trigger pipeline", zap.Error(err))
-		return "", err
+		return "", fmt.Errorf("failed to trigger %s pipeline: %w", converPDFToMDPipelineID, err)
 	}
 	result, err := getConvertResult(resp)
 	if err != nil {
@@ -50,7 +58,7 @@ func (s *Service) ConvertPDFToMD(ctx context.Context, caller uuid.UUID, pdfBase6
 
 // Helper function to safely extract the "convert_result" from the response.
 // It checks if the index and key are available to avoid nil pointer issues.
-func getConvertResult(resp *pipelinev1beta.TriggerOrganizationPipelineReleaseResponse) (string, error) {
+func getConvertResult(resp *pipelinev1beta.TriggerNamespacePipelineReleaseResponse) (string, error) {
 	if resp == nil || len(resp.Outputs) == 0 {
 		return "", errors.New("response is nil or has no outputs")
 	}
@@ -76,9 +84,10 @@ type Chunk = struct {
 func (s *Service) SplitMarkdown(ctx context.Context, caller uuid.UUID, markdown string) ([]Chunk, error) {
 	md := metadata.New(map[string]string{"Instill-User-Uid": caller.String(), "Instill-Auth-Type": "user"})
 	ctx = metadata.NewOutgoingContext(ctx, md)
-	req := &pipelinev1beta.TriggerOrganizationPipelineReleaseRequest{
-		Name: "organizations/preset/pipelines/indexing-split-markdown/releases/" + mdSplitVersion,
-
+	req := &pipelinev1beta.TriggerNamespacePipelineReleaseRequest{
+		NamespaceId: NamespaceID,
+		PipelineId:  mdSplitPipelineID,
+		ReleaseId:   mdSplitVersion,
 		Inputs: []*structpb.Struct{
 			{
 				Fields: map[string]*structpb.Value{
@@ -89,9 +98,9 @@ func (s *Service) SplitMarkdown(ctx context.Context, caller uuid.UUID, markdown 
 			},
 		},
 	}
-	res, err := s.PipelinePub.TriggerOrganizationPipelineRelease(ctx, req)
+	res, err := s.PipelinePub.TriggerNamespacePipelineRelease(ctx, req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to trigger %s pipeline. err:%w", mdSplitPipelineID, err)
 	}
 	result, err := GetChunksFromResponse(res)
 	if err != nil {
@@ -101,7 +110,7 @@ func (s *Service) SplitMarkdown(ctx context.Context, caller uuid.UUID, markdown 
 }
 
 // GetChunksFromResponse converts the pipeline response into a slice of Chunk.
-func GetChunksFromResponse(resp *pipelinev1beta.TriggerOrganizationPipelineReleaseResponse) ([]Chunk, error) {
+func GetChunksFromResponse(resp *pipelinev1beta.TriggerNamespacePipelineReleaseResponse) ([]Chunk, error) {
 	if resp == nil || len(resp.Outputs) == 0 {
 		return nil, errors.New("response is nil or has no outputs")
 	}
@@ -132,8 +141,10 @@ func GetChunksFromResponse(resp *pipelinev1beta.TriggerOrganizationPipelineRelea
 func (s *Service) SplitText(ctx context.Context, caller uuid.UUID, text string) ([]Chunk, error) {
 	md := metadata.New(map[string]string{"Instill-User-Uid": caller.String(), "Instill-Auth-Type": "user"})
 	ctx = metadata.NewOutgoingContext(ctx, md)
-	req := &pipelinev1beta.TriggerOrganizationPipelineReleaseRequest{
-		Name: "organizations/preset/pipelines/indexing-split-text/releases/" + textSplitVersion,
+	req := &pipelinev1beta.TriggerNamespacePipelineReleaseRequest{
+		NamespaceId: NamespaceID,
+		PipelineId:  textSplitPipelineID,
+		ReleaseId:   textSplitVersion,
 
 		Inputs: []*structpb.Struct{
 			{
@@ -145,9 +156,9 @@ func (s *Service) SplitText(ctx context.Context, caller uuid.UUID, text string) 
 			},
 		},
 	}
-	res, err := s.PipelinePub.TriggerOrganizationPipelineRelease(ctx, req)
+	res, err := s.PipelinePub.TriggerNamespacePipelineRelease(ctx, req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to trigger %s pipeline. err:%w", textSplitPipelineID, err)
 	}
 	result, err := GetChunksFromResponse(res)
 	if err != nil {
@@ -169,14 +180,15 @@ func (s *Service) VectorizeText(ctx context.Context, caller uuid.UUID, texts []s
 		})
 	}
 
-	req := &pipelinev1beta.TriggerOrganizationPipelineReleaseRequest{
-		Name: "organizations/preset/pipelines/indexing-embed/releases/" + textEmbedVersion,
-
-		Inputs: inputs,
+	req := &pipelinev1beta.TriggerNamespacePipelineReleaseRequest{
+		NamespaceId: NamespaceID,
+		PipelineId:  textEmbedPipelineID,
+		ReleaseId:   textEmbedVersion,
+		Inputs:      inputs,
 	}
-	res, err := s.PipelinePub.TriggerOrganizationPipelineRelease(ctx, req)
+	res, err := s.PipelinePub.TriggerNamespacePipelineRelease(ctx, req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to trigger %s pipeline. err:%w", textEmbedPipelineID, err)
 	}
 	result, err := GetVectorFromResponse(res)
 	if err != nil {
@@ -186,7 +198,7 @@ func (s *Service) VectorizeText(ctx context.Context, caller uuid.UUID, texts []s
 }
 
 // GetVectorFromResponse converts the pipeline response into a slice of float32.
-func GetVectorFromResponse(resp *pipelinev1beta.TriggerOrganizationPipelineReleaseResponse) ([][]float32, error) {
+func GetVectorFromResponse(resp *pipelinev1beta.TriggerNamespacePipelineReleaseResponse) ([][]float32, error) {
 	if resp == nil || len(resp.Outputs) == 0 {
 		return nil, errors.New("response is nil or has no outputs")
 	}

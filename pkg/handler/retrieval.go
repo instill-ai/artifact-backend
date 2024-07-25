@@ -4,10 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/google/uuid"
+	"github.com/gofrs/uuid"
 	"github.com/instill-ai/artifact-backend/pkg/customerror"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
+	"github.com/instill-ai/artifact-backend/pkg/service"
 	artifactv1alpha "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	"go.uber.org/zap"
 )
@@ -25,22 +26,35 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 		return nil, fmt.Errorf("failed to get user id from header: %v. err: %w", err, customerror.ErrUnauthenticated)
 	}
 	// turn uid to uuid
-	uidUUID, err := uuid.Parse(uid)
+	uidUUID, err := uuid.FromString(uid)
 	if err != nil {
 		log.Error("failed to parse user id", zap.Error(err))
 		return nil, fmt.Errorf("failed to parse user id: %v. err: %w", err, customerror.ErrUnauthenticated)
 	}
-	ownerUID, err := ph.getOwnerUID(ctx, req.OwnerId)
+	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
 	if err != nil {
-		log.Error("failed to get owner uid", zap.Error(err))
-		return nil, fmt.Errorf("failed to get owner uid. err: %w", err)
+		log.Error("failed to get namespace by ns id", zap.Error(err))
+		return nil, fmt.Errorf("failed to get namespace by ns id. err: %w", err)
 	}
-	// TODO ACL : check user has access to the knowledge base
-	_ = req.KbId
-	_ = uid
+	ownerUID := ns.NsUID
+	kb, err := ph.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID.String(), req.KbId)
+	if err != nil {
+		log.Error("failed to get knowledge base by owner and kb id", zap.Error(err))
+		return nil, fmt.Errorf("failed to get knowledge base by owner and kb id. err: %w", err)
+	}
+	// ACL : check user has access to the knowledge base
+	granted, err := ph.service.ACLClient.CheckPermission(ctx, "knowledgebase", kb.UID, "reader")
+	if err != nil {
+		log.Error("failed to check permission", zap.Error(err))
+		return nil, fmt.Errorf("failed to check permission. err: %w", err)
+	}
+	if !granted {
+		log.Error("permission denied", zap.String("user_id", uid), zap.String("kb_id", kb.UID.String()))
+		return nil, fmt.Errorf("SimilarityChunksSearch permission denied. err: %w", service.ErrNoPermission)
+	}
 
 	// retrieve the chunks based on the similarity
-	simChunksScroes, err := ph.service.SimilarityChunksSearch(ctx, uidUUID, ownerUID, req)
+	simChunksScroes, err := ph.service.SimilarityChunksSearch(ctx, uidUUID, ownerUID.String(), req)
 	if err != nil {
 		log.Error("failed to get similarity chunks", zap.Error(err))
 		return nil, fmt.Errorf("failed to get similarity chunks. err: %w", err)

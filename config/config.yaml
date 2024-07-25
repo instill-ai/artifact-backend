@@ -65,7 +65,7 @@ registry:
   port: 5000
 openfga:
   host: openfga
-  port: 8080
+  port: 8081
 minio:
   host: minio
   port: 9000

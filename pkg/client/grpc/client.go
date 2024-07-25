@@ -28,5 +28,5 @@ func NewGRPCConn(server, cert, key string) (*grpc.ClientConn, error) {
 		),
 	}
 
-	return grpc.Dial(server, opts...)
+	return grpc.NewClient(server, opts...)
 }
