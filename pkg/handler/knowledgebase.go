@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc/metadata"
 
-	"github.com/google/uuid"
+	"github.com/gofrs/uuid"
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/customerror"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
@@ -35,13 +35,28 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 		return nil, err
 	}
 
-	// TODO: ACL  check user's permission to create knowledge base in the user or org context
-	// 1. if it is user namespace, it is okay
-	// 2. if it is org namespace, check if the user has permission to create knowledge base in the org
-	// ....
-
+	// ACL  check user's permission to create knowledge base in the user or org context(namespace)
+	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
+	if err != nil {
+		log.Error(
+			"failed to check namespace permission",
+			zap.Error(err),
+			zap.String("owner_id(ns_id)", req.GetNamespaceId()),
+			zap.String("auth_uid", authUID))
+		return nil, fmt.Errorf(ErrorCreateKnowledgeBaseMsg, err)
+	}
+	err = ph.service.CheckNamespacePermission(ctx, ns)
+	if err != nil {
+		log.Error(
+			"failed to check namespace permission",
+			zap.Error(err),
+			zap.String("owner_id(ns_id)", req.GetNamespaceId()),
+			zap.String("auth_uid", authUID))
+		return nil, fmt.Errorf(ErrorCreateKnowledgeBaseMsg, err)
+	}
 	// check if user has reached the maximum number of knowledge bases
-	// note: the simple implementation have race condition to bypass the check, but it is okay for now
+	// note: the simple implementation have race condition to bypass the check,
+	// but it is okay for now
 	kbCount, err := ph.service.Repository.GetKnowledgeBaseCountByOwner(ctx, authUID)
 	if err != nil {
 		log.Error("failed to get knowledge base count", zap.Error(err))
@@ -63,18 +78,18 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 		return nil, fmt.Errorf(msg, req.Name, customerror.ErrInvalidArgument)
 	}
 
-	// get the owner uid from the mgmt service
-	var ownerUUID string
-	{
-		// get the owner uid from the mgmt service
-		ownerUUID, err = ph.getOwnerUID(ctx, req.OwnerId)
-		if err != nil {
-			log.Error("failed to get owner uid", zap.Error(err))
-			return nil, err
-		}
-	}
+	// // get the owner uid from the mgmt service
+	// var ownerUUID string
+	// {
+	// 	// get the owner uid from the mgmt service
+	// 	ownerUUID, err = ph.getOwnerUID(ctx, req.OwnerId)
+	// 	if err != nil {
+	// 		log.Error("failed to get owner uid", zap.Error(err))
+	// 		return nil, err
+	// 	}
+	// }
 
-	creatorUUID, err := uuid.Parse(authUID)
+	creatorUUID, err := uuid.FromString(authUID)
 	if err != nil {
 		log.Error("failed to parse creator uid", zap.String("uid", authUID), zap.Error(err))
 		return nil, err
@@ -88,8 +103,17 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 			return err
 		}
 
-		// TODO: ACL - set the owner of the knowledge base
-		// ....
+		// set the owner of the knowledge base
+		kbUIDuuid, err := uuid.FromString(kbUID)
+		if err != nil {
+			log.Error("failed to parse kb uid", zap.String("kb_uid", kbUID), zap.Error(err))
+			return err
+		}
+		err = ph.service.ACLClient.SetOwner(ctx, "knowledgebase", kbUIDuuid, string(ns.NsType), ns.NsUID)
+		if err != nil {
+			log.Error("failed to set owner in openFAG", zap.Error(err))
+			return err
+		}
 
 		return nil
 	}
@@ -102,7 +126,7 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 			KbID:        req.Name,
 			Description: req.Description,
 			Tags:        req.Tags,
-			Owner:       ownerUUID,
+			Owner:       ns.NsUID.String(),
 			CreatorUID:  creatorUUID,
 		}, callExternalService,
 	)
@@ -133,27 +157,34 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 func (ph *PublicHandler) ListKnowledgeBases(ctx context.Context, req *artifactpb.ListKnowledgeBasesRequest) (*artifactpb.ListKnowledgeBasesResponse, error) {
 	log, _ := logger.GetZapLogger(ctx)
 	// get user id from context
-	_, err := getUserUIDFromContext(ctx)
+	authUID, err := getUserUIDFromContext(ctx)
 	if err != nil {
 
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
 
-	// get the owner uid from the mgmt service
-	var ownerUUID string
-	{
-		// get the owner uid from the mgmt service
-		ownerUUID, err = ph.getOwnerUID(ctx, req.OwnerId)
-		if err != nil {
-			log.Error("failed to get owner uid", zap.Error(err))
-			return nil, err
-		}
+	// ACL - check user(authUid)'s permission to list knowledge bases in
+	// the user or org context(namespace)
+	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
+	if err != nil {
+		log.Error(
+			"failed to get namespace ",
+			zap.Error(err),
+			zap.String("owner_id(ns_id)", req.GetNamespaceId()),
+			zap.String("auth_uid", authUID))
+		return nil, fmt.Errorf("failed to get namespace. err: %w", err)
+	}
+	err = ph.service.CheckNamespacePermission(ctx, ns)
+	if err != nil {
+		log.Error(
+			"failed to check namespace permission",
+			zap.Error(err),
+			zap.String("owner_id(ns_id)", req.GetNamespaceId()),
+			zap.String("auth_uid", authUID))
+		return nil, fmt.Errorf("failed to check namespace permission. err:%w", err)
 	}
 
-	// TODO: ACL - check user(authUid)'s permission to list knowledge bases
-	// ....
-
-	dbData, err := ph.service.Repository.ListKnowledgeBases(ctx, ownerUUID)
+	dbData, err := ph.service.Repository.ListKnowledgeBases(ctx, ns.NsUID.String())
 	if err != nil {
 		log.Error("failed to get knowledge bases", zap.Error(err))
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
@@ -210,29 +241,41 @@ func (ph *PublicHandler) UpdateKnowledgeBase(ctx context.Context, req *artifactp
 		return nil, fmt.Errorf("kb_id is empty. err: %w", ErrCheckRequiredFields)
 	}
 
-	// get the owner uid from the mgmt service
-	var ownerUUID string
-	{
-		// get the owner uid from the mgmt service
-		ownerUUID, err = ph.getOwnerUID(ctx, req.OwnerId)
-		if err != nil {
-			log.Error("failed to get owner uid", zap.Error(err))
-			return nil, err
-		}
+	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
+	if err != nil {
+		log.Error(
+			"failed to get namespace ",
+			zap.Error(err),
+			zap.String("owner_id(ns_id)", req.GetNamespaceId()),
+			zap.String("auth_uid", authUID))
+		return nil, fmt.Errorf("failed to get namespace. err: %w", err)
+	}
+	// ACL - check user's permission to update knowledge base
+	kb, err := ph.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID.String(), req.KbId)
+	if err != nil {
+		log.Error("failed to get knowledge base", zap.Error(err))
+		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
+	}
+	granted, err := ph.service.ACLClient.CheckPermission(ctx, "knowledgebase", kb.UID, "writer")
+	if err != nil {
+		log.Error("failed to check permission", zap.Error(err))
+		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
+	}
+	if !granted {
+		log.Error("no permission to update knowledge base")
+		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, customerror.ErrNoPermission)
 	}
 
-	// TODO: ACL - check user's permission to update knowledge base
-	_ = authUID
-	// check if knowledge base exists
-	kb, err := ph.service.Repository.UpdateKnowledgeBase(
+	// update knowledge base
+	kb, err = ph.service.Repository.UpdateKnowledgeBase(
 		ctx,
-		ownerUUID,
+		ns.NsUID.String(),
 		repository.KnowledgeBase{
 			// Name:        req.KbId,
 			KbID:        req.KbId,
 			Description: req.Description,
 			Tags:        req.Tags,
-			Owner:       ownerUUID,
+			Owner:       ns.NsUID.String(),
 		},
 	)
 	if err != nil {
@@ -276,23 +319,40 @@ func (ph *PublicHandler) DeleteKnowledgeBase(ctx context.Context, req *artifactp
 
 		return nil, err
 	}
-	// get the owner uid from the mgmt service
-	var ownerUUID string
-	{
-		// get the owner uid from the mgmt service
-		ownerUUID, err = ph.getOwnerUID(ctx, req.OwnerId)
-		if err != nil {
-			log.Error("failed to get owner uid", zap.Error(err))
-			return nil, err
-		}
-	}
-	// TODO: ACL - check user's permission to delete knowledge base
-	_ = authUID
 
-	deletedKb, err := ph.service.Repository.DeleteKnowledgeBase(ctx, ownerUUID, req.KbId)
+	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
 	if err != nil {
+		log.Error(
+			"failed to get namespace ",
+			zap.Error(err),
+			zap.String("owner_id(ns_id)", req.GetNamespaceId()),
+			zap.String("auth_uid", authUID))
+		return nil, fmt.Errorf("failed to get namespace. err: %w", err)
+	}
+	// ACL - check user's permission to write knowledge base
+	kb, err := ph.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID.String(), req.KbId)
+	if err != nil {
+		log.Error("failed to get knowledge base", zap.Error(err))
+		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
+	}
+	granted, err := ph.service.ACLClient.CheckPermission(ctx, "knowledgebase", kb.UID, "writer")
+	if err != nil {
+		log.Error("failed to check permission", zap.Error(err))
+		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
+	}
+	if !granted {
+		log.Error("no permission to delete knowledge base")
+		return nil, fmt.Errorf(ErrorDeleteKnowledgeBaseMsg, customerror.ErrNoPermission)
+	}
 
+	deletedKb, err := ph.service.Repository.DeleteKnowledgeBase(ctx, ns.NsUID.String(), req.KbId)
+	if err != nil {
 		return nil, err
+	}
+	err = ph.service.ACLClient.Purge(ctx, "knowledgebase", deletedKb.UID)
+	if err != nil {
+		log.Error("failed to purge knowledge base", zap.Error(err))
+		return nil, fmt.Errorf(ErrorDeleteKnowledgeBaseMsg, err)
 	}
 
 	return &artifactpb.DeleteKnowledgeBaseResponse{

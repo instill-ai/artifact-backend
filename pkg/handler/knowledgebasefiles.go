@@ -5,12 +5,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/google/uuid"
+	"github.com/gofrs/uuid"
 	"github.com/instill-ai/artifact-backend/pkg/customerror"
 	"github.com/instill-ai/artifact-backend/pkg/logger" // Add this import
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
-	mgmtpb "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -23,7 +22,7 @@ const KnowledgeBaseMaxUsage = 1024 * 1024 * 1024
 
 func (ph *PublicHandler) UploadKnowledgeBaseFile(ctx context.Context, req *artifactpb.UploadKnowledgeBaseFileRequest) (*artifactpb.UploadKnowledgeBaseFileResponse, error) {
 	log, _ := logger.GetZapLogger(ctx)
-	uid, err := getUserUIDFromContext(ctx)
+	authUID, err := getUserUIDFromContext(ctx)
 	if err != nil {
 		err := fmt.Errorf("failed to get user id from header: %v. err: %w", err, customerror.ErrUnauthenticated)
 		return nil, err
@@ -36,44 +35,40 @@ func (ph *PublicHandler) UploadKnowledgeBaseFile(ctx context.Context, req *artif
 	if strings.Contains(req.File.Name, "/") {
 		return nil, fmt.Errorf("file name cannot contain '/'. err: %w", customerror.ErrInvalidArgument)
 	}
-
-	// TODO: ACL - check if the creator can upload file to this knowledge base. ACL.
-	// .....
-
-	// get the owner uid from the mgmt service
-	var ownerUID string
-	{
-		// get the owner uid from the mgmt service
-		ownerUID, err = ph.getOwnerUID(ctx, req.OwnerId)
-		if err != nil {
-			log.Error("failed to get owner uid", zap.Error(err))
-			return nil, err
-		}
+	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
+	if err != nil {
+		log.Error(
+			"failed to get namespace ",
+			zap.Error(err),
+			zap.String("owner_id(ns_id)", req.GetNamespaceId()),
+			zap.String("auth_uid", authUID))
+		return nil, fmt.Errorf("failed to get namespace. err: %w", err)
+	}
+	// ACL - check user's permission to write knowledge base
+	kb, err := ph.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID.String(), req.KbId)
+	if err != nil {
+		log.Error("failed to get knowledge base", zap.Error(err))
+		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
+	}
+	granted, err := ph.service.ACLClient.CheckPermission(ctx, "knowledgebase", kb.UID, "writer")
+	if err != nil {
+		log.Error("failed to check permission", zap.Error(err))
+		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
+	}
+	if !granted {
+		log.Error("no permission to delete knowledge base")
+		return nil, fmt.Errorf(ErrorDeleteKnowledgeBaseMsg, customerror.ErrNoPermission)
 	}
 
-	// upload file to minio
-	var kb *repository.KnowledgeBase
-	{
-		kb, err = ph.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, req.KbId)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get knowledge base by owner and id. err: %w", err)
-		}
-	}
-
-	// create metadata in db
+	// upload file to minio and database
 	var res *repository.KnowledgeBaseFile
 	{
-		creatorUID, err := uuid.Parse(uid)
+		creatorUID, err := uuid.FromString(authUID)
 		if err != nil {
 			log.Error("failed to parse creator uid", zap.Error(err))
 			return nil, err
 		}
-		// turn ownerUIDUuID to uuid
-		ownerUIDUuid, err := uuid.Parse(ownerUID)
-		if err != nil {
-			log.Error("failed to parse owner uid", zap.Error(err))
-			return nil, err
-		}
+
 		fileSize, _ := getFileSize(req.File.Content)
 		// check if file size is more than 15MB
 		if fileSize > maxFileSize {
@@ -88,7 +83,7 @@ func (ph *PublicHandler) UploadKnowledgeBaseFile(ctx context.Context, req *artif
 		kbFile := repository.KnowledgeBaseFile{
 			Name:             req.File.Name,
 			Type:             artifactpb.FileType_name[int32(req.File.Type)],
-			Owner:            ownerUIDUuid,
+			Owner:            ns.NsUID,
 			CreatorUID:       creatorUID,
 			KnowledgeBaseUID: kb.UID,
 			Destination:      destination,
@@ -170,7 +165,7 @@ func getFileSize(base64String string) (int64, string) {
 }
 
 func checkUploadKnowledgeBaseFileRequest(req *artifactpb.UploadKnowledgeBaseFileRequest) error {
-	if req.OwnerId == "" {
+	if req.GetNamespaceId() == "" {
 		return fmt.Errorf("owner uid is required. err: %w", ErrCheckRequiredFields)
 	} else if req.KbId == "" {
 		return fmt.Errorf("knowledge base uid is required. err: %w", ErrCheckRequiredFields)
@@ -202,31 +197,43 @@ func checkValidFileType(t artifactpb.FileType) bool {
 func (ph *PublicHandler) ListKnowledgeBaseFiles(ctx context.Context, req *artifactpb.ListKnowledgeBaseFilesRequest) (*artifactpb.ListKnowledgeBaseFilesResponse, error) {
 
 	log, _ := logger.GetZapLogger(ctx)
-	uid, err := getUserUIDFromContext(ctx)
+	authUID, err := getUserUIDFromContext(ctx)
 	if err != nil {
 		log.Error("failed to get user id from header", zap.Error(err))
 		err := fmt.Errorf("failed to get user id from header: %v. err: %w", err, customerror.ErrUnauthenticated)
 		return nil, err
 	}
 
-	// TODO: ACL - check if the creator can list files in this knowledge base. ACL using uid to check the certain namespace resource.
-	// acl, err := ph.service.ACL.CheckPermission(ctx, uid, "knowledgeBase", req.KbId, "read")
-
-	// get the owner uid from the mgmt service
-	var ownerUID string
-	{
-		// get the owner uid from the mgmt service
-		ownerUID, err = ph.getOwnerUID(ctx, req.OwnerId)
-		if err != nil {
-			log.Error("failed to get owner uid", zap.Error(err))
-			return nil, err
-		}
+	// ACL - check if the creator can list files in this knowledge base. ACL using uid to check the certain namespace resource.
+	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
+	if err != nil {
+		log.Error(
+			"failed to get namespace ",
+			zap.Error(err),
+			zap.String("owner_id(ns_id)", req.GetNamespaceId()),
+			zap.String("auth_uid", authUID))
+		return nil, fmt.Errorf("failed to get namespace. err: %w", err)
+	}
+	// ACL - check user's permission to write knowledge base
+	kb, err := ph.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID.String(), req.KbId)
+	if err != nil {
+		log.Error("failed to get knowledge base", zap.Error(err))
+		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
+	}
+	granted, err := ph.service.ACLClient.CheckPermission(ctx, "knowledgebase", kb.UID, "reader")
+	if err != nil {
+		log.Error("failed to check permission", zap.Error(err))
+		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
+	}
+	if !granted {
+		log.Error("no permission to delete knowledge base")
+		return nil, fmt.Errorf(ErrorDeleteKnowledgeBaseMsg, customerror.ErrNoPermission)
 	}
 
 	// get the kb uid from the knowledge base table
 	var kbUID string
 	{
-		kb, err := ph.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, req.KbId)
+		kb, err := ph.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID.String(), req.KbId)
 		if err != nil {
 			log.Error("failed to get knowledge base by owner and id", zap.Error(err))
 			return nil, err
@@ -243,7 +250,7 @@ func (ph *PublicHandler) ListKnowledgeBaseFiles(ctx context.Context, req *artifa
 				FileUids: []string{},
 			}
 		}
-		kbFiles, size, nextToken, err := ph.service.Repository.ListKnowledgeBaseFiles(ctx, uid, ownerUID, kbUID, req.PageSize, req.PageToken, req.Filter.FileUids)
+		kbFiles, size, nextToken, err := ph.service.Repository.ListKnowledgeBaseFiles(ctx, authUID, ns.NsUID.String(), kbUID, req.PageSize, req.PageToken, req.Filter.FileUids)
 		if err != nil {
 			log.Error("failed to list knowledge base files", zap.Error(err))
 			return nil, err
@@ -298,21 +305,34 @@ func (ph *PublicHandler) DeleteKnowledgeBaseFile(
 	ctx context.Context,
 	req *artifactpb.DeleteKnowledgeBaseFileRequest) (
 	*artifactpb.DeleteKnowledgeBaseFileResponse, error) {
-
-	// uid, err := getUserIDFromContext(ctx)
+	log, _ := logger.GetZapLogger(ctx)
+	// authUID, err := getUserUIDFromContext(ctx)
 	// if err != nil {
 	// 	err := fmt.Errorf("failed to get user id from header: %v. err: %w", err, customerror.ErrUnauthenticated)
 	// 	return nil, err
 	// }
 
-	// TODO: ACL - check if the uid can delete file. ACL.
-
+	// ACL - check user's permission to write knowledge base
+	kf, err := ph.service.Repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{uuid.FromStringOrNil(req.FileUid)})
+	if err != nil && len(kf) == 0 {
+		log.Error("failed to get knowledge base", zap.Error(err))
+		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
+	}
+	granted, err := ph.service.ACLClient.CheckPermission(ctx, "knowledgebase", kf[0].KnowledgeBaseUID, "writer")
+	if err != nil {
+		log.Error("failed to check permission", zap.Error(err))
+		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
+	}
+	if !granted {
+		log.Error("no permission to delete knowledge base")
+		return nil, fmt.Errorf(ErrorDeleteKnowledgeBaseMsg, customerror.ErrNoPermission)
+	}
 	// check if file uid is empty
 	if req.FileUid == "" {
 		return nil, fmt.Errorf("file uid is required. err: %w", customerror.ErrInvalidArgument)
 	}
 
-	fuid, err := uuid.Parse(req.FileUid)
+	fuid, err := uuid.FromString(req.FileUid)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse file uid. err: %w", customerror.ErrInvalidArgument)
 	}
@@ -350,8 +370,33 @@ func (ph *PublicHandler) ProcessKnowledgeBaseFiles(ctx context.Context, req *art
 	// 	return nil, err
 	// }
 
-	// TODO: ACL - check if the uid can process file. ACL.
-	// ....
+	// ACL - check if the uid can process file. ACL.
+	// chekc the fiels's kb_uid and use kb_uid to check if user has write permission
+	fileUUIDs := make([]uuid.UUID, 0, len(req.FileUids))
+	for _, fileUID := range req.FileUids {
+		fuid, err := uuid.FromString(fileUID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse file uid. err: %w", customerror.ErrInvalidArgument)
+		}
+		fileUUIDs = append(fileUUIDs, fuid)
+	}
+	kbfs, err := ph.service.Repository.GetKnowledgeBaseFilesByFileUIDs(ctx, fileUUIDs)
+	if err != nil {
+		return nil, err
+	}
+	if len(kbfs) == 0 {
+		return nil, fmt.Errorf("file not found. err: %w", customerror.ErrNotFound)
+	}
+	// check write permission for the knowledge base
+	for _, kbf := range kbfs {
+		granted, err := ph.service.ACLClient.CheckPermission(ctx, "knowledgebase", kbf.KnowledgeBaseUID, "writer")
+		if err != nil {
+			return nil, err
+		}
+		if !granted {
+			return nil, fmt.Errorf("no permission to process knowledge base file.fileUID:%s err: %w", kbf.UID, customerror.ErrNoPermission)
+		}
+	}
 
 	files, err := ph.service.Repository.ProcessKnowledgeBaseFiles(ctx, req.FileUids)
 	if err != nil {
@@ -389,35 +434,4 @@ func fileTypeConvertToMime(t artifactpb.FileType) string {
 	default:
 		return "application/octet-stream"
 	}
-}
-
-// use mgmt service to get the user uid
-// REFACTOR: when mgmt support owner.uid get by owner.id, we can optimize this
-func (ph *PublicHandler) getOwnerUID(ctx context.Context, ownerID string) (string, error) {
-	log, _ := logger.GetZapLogger(ctx)
-
-	// get from user rpc
-	ownerUID, err := ph.service.MgmtPrv.GetUserAdmin(ctx, &mgmtpb.GetUserAdminRequest{Name: "users/" + ownerID})
-	if err != nil {
-		log.Error("error occurred when get user from mgmt", zap.Error(err))
-		return "", err
-	} else {
-		if ownerUID.User != nil {
-			if ownerUID.User.Uid != nil {
-				return *ownerUID.User.Uid, nil
-			}
-		}
-	}
-
-	// get from org rpc
-	orgUID, err := ph.service.MgmtPrv.GetOrganizationAdmin(ctx, &mgmtpb.GetOrganizationAdminRequest{Name: "organizations/" + ownerID})
-	if err != nil {
-		log.Error("error occurred when get organization from mgmt", zap.Error(err))
-		return "", err
-	} else {
-		if orgUID.Organization != nil {
-			return orgUID.Organization.Uid, nil
-		}
-	}
-	return "", fmt.Errorf("failed to get owner uid from users and orgs. err: %w", customerror.ErrNotFound)
 }

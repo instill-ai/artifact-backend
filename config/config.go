@@ -35,8 +35,13 @@ type AppConfig struct {
 
 // OpenFGA config
 type OpenFGAConfig struct {
-	Host string `koanf:"host"`
-	Port int    `koanf:"port"`
+	Host    string `koanf:"host"`
+	Port    int    `koanf:"port"`
+	Replica struct {
+		Host                 string `koanf:"host"`
+		Port                 int    `koanf:"port"`
+		ReplicationTimeFrame int    `koanf:"replicationtimeframe"` // in seconds
+	} `koanf:"replica"`
 }
 
 // ServerConfig defines HTTP server configurations
@@ -161,7 +166,7 @@ func Init() error {
 	parser := yaml.Parser()
 	fs := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	fileRelativePath := fs.String("file", "config/config.yaml", "configuration file")
-	err:= fs.Parse(os.Args[1:])
+	err := fs.Parse(os.Args[1:])
 	if err != nil {
 		log.Fatal(err.Error())
 	}

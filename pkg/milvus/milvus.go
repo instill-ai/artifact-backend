@@ -38,6 +38,7 @@ const (
 	MetricType = entity.COSINE
 	WitRaw     = true
 )
+
 // Search parameter
 const (
 	Nprobe   = 250
@@ -350,7 +351,7 @@ func (m *MilvusClient) SearchSimilarEmbeddings(ctx context.Context, collectionNa
 			KbCollectionFiledSourceUID,
 			KbCollectionFiledEmbeddingUID,
 			KbCollectionFiledEmbedding,
-		}, milvusVectors, KbCollectionFiledEmbedding, entity.COSINE, topK, sp)
+		}, milvusVectors, KbCollectionFiledEmbedding, MetricType, topK, sp)
 	if err != nil {
 		log.Error("failed to search embeddings", zap.Error(err))
 		return nil, fmt.Errorf("failed to search embeddings: %w", err)

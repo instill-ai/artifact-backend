@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/gofrs/uuid"
 	"github.com/instill-ai/artifact-backend/pkg/customerror"
 	"gorm.io/gorm"
 )

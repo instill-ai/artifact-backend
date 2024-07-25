@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/google/uuid"
+	"github.com/gofrs/uuid"
 	"github.com/instill-ai/artifact-backend/pkg/customerror"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
@@ -15,21 +15,40 @@ import (
 
 func (ph *PublicHandler) ListChunks(ctx context.Context, req *artifactpb.ListChunksRequest) (*artifactpb.ListChunksResponse, error) {
 	log, _ := logger.GetZapLogger(ctx)
-	uid, err := getUserUIDFromContext(ctx)
+	authUID, err := getUserUIDFromContext(ctx)
 	if err != nil {
 		log.Error("failed to get user id from header", zap.Error(err))
 		return nil, fmt.Errorf("failed to get user id from header: %v. err: %w", err, customerror.ErrUnauthenticated)
 	}
-	fileUID, err := uuid.Parse(req.FileUid)
+	fileUID, err := uuid.FromString(req.FileUid)
 	if err != nil {
 		log.Error("failed to parse file uid", zap.Error(err))
 		return nil, fmt.Errorf("failed to parse file uid: %v. err: %w", err, customerror.ErrInvalidArgument)
 	}
-	// TODO: ACL - check if the user(uid from context) has access to the chunk. get knowledge base id and owner id and check if the user has access to the knowledge base
-	{
-		_ = uid
-		_ = req.OwnerId
-		_ = req.KbId
+	// ACL - check if the user(uid from context) has access to the chunk. get knowledge base id and owner id and check if the user has access to the knowledge base
+	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
+	if err != nil {
+		log.Error(
+			"failed to get namespace ",
+			zap.Error(err),
+			zap.String("owner_id(ns_id)", req.GetNamespaceId()),
+			zap.String("auth_uid", authUID))
+		return nil, fmt.Errorf("failed to get namespace. err: %w", err)
+	}
+	// ACL - check user's permission to write knowledge base
+	kb, err := ph.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID.String(), req.KbId)
+	if err != nil {
+		log.Error("failed to get knowledge base", zap.Error(err))
+		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
+	}
+	granted, err := ph.service.ACLClient.CheckPermission(ctx, "knowledgebase", kb.UID, "writer")
+	if err != nil {
+		log.Error("failed to check permission", zap.Error(err))
+		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
+	}
+	if !granted {
+		log.Error("no permission list chunks", zap.String("user_id", authUID), zap.String("kb_id", kb.UID.String()))
+		return nil, fmt.Errorf(ErrorDeleteKnowledgeBaseMsg, customerror.ErrNoPermission)
 	}
 
 	fileUIDs := []uuid.UUID{fileUID}
@@ -83,19 +102,31 @@ func (ph *PublicHandler) ListChunks(ctx context.Context, req *artifactpb.ListChu
 
 func (ph *PublicHandler) UpdateChunk(ctx context.Context, req *artifactpb.UpdateChunkRequest) (*artifactpb.UpdateChunkResponse, error) {
 	log, _ := logger.GetZapLogger(ctx)
-	uid, err := getUserUIDFromContext(ctx)
+	authUID, err := getUserUIDFromContext(ctx)
 	if err != nil {
 		log.Error("failed to get user id from header", zap.Error(err))
 		return nil, fmt.Errorf("failed to get user id from header: %v. err: %w", err, customerror.ErrUnauthenticated)
 	}
 
-	// TODO: ACL - check if the user(uid from context) has access to the chunk. get chunk's kb uid and check if the uid has access to the knowledge base
-	{
-		_ = uid
-		_ = req.ChunkUid
-		// use chunk uid to get the knowledge base id
-		// ....
-		// check ACL
+	// ACL - check if the user(uid from context) has access to the chunk. get chunk's kb uid and check if the uid has access to the knowledge base
+	chunks, err := ph.service.Repository.GetChunksByUIDs(ctx, []uuid.UUID{uuid.FromStringOrNil(req.ChunkUid)})
+	if err != nil {
+		log.Error("failed to get chunks by uids", zap.Error(err))
+		return nil, fmt.Errorf("failed to get chunks by uids: %w", err)
+	}
+	if len(chunks) == 0 {
+		log.Error("no chunks found for the given chunk uids")
+		return nil, fmt.Errorf("no chunks found for the given chunk uids: %v. err: %w", req.ChunkUid, customerror.ErrNotFound)
+	}
+	// ACL - check user's permission to write knowledge base
+	granted, err := ph.service.ACLClient.CheckPermission(ctx, "knowledgebase", chunks[0].KbUID, "writer")
+	if err != nil {
+		log.Error("failed to check permission", zap.Error(err))
+		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
+	}
+	if !granted {
+		log.Error("no permission update chunks", zap.String("user_id", authUID), zap.String("kb_id", chunks[0].KbUID.String()))
+		return nil, fmt.Errorf(ErrorDeleteKnowledgeBaseMsg, customerror.ErrNoPermission)
 	}
 
 	retrievable := req.Retrievable
@@ -125,25 +156,41 @@ func (ph *PublicHandler) UpdateChunk(ctx context.Context, req *artifactpb.Update
 
 func (ph *PublicHandler) GetSourceFile(ctx context.Context, req *artifactpb.GetSourceFileRequest) (*artifactpb.GetSourceFileResponse, error) {
 	log, _ := logger.GetZapLogger(ctx)
-	uid, err := getUserUIDFromContext(ctx)
+	authUID, err := getUserUIDFromContext(ctx)
 	if err != nil {
 		log.Error("failed to get user id from header", zap.Error(err))
 		return nil, fmt.Errorf("failed to get user id from header: %v. err: %w", err, customerror.ErrUnauthenticated)
 	}
-	fileUID, err := uuid.Parse(req.FileUid)
+	fileUID, err := uuid.FromString(req.FileUid)
 	if err != nil {
 		log.Error("failed to parse file uid", zap.Error(err))
 		return nil, fmt.Errorf("failed to parse file uid: %v. err: %w", err, customerror.ErrInvalidArgument)
 	}
 
-	// TODO ACL - check if the user(uid from context) has access to the source file.
-	{
-		_ = uid
-		_ = req.FileUid
-		// use file uid to get the knowledge base id
-		// ....
-		// check ACL
-		// ...
+	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
+	if err != nil {
+		log.Error(
+			"failed to get namespace ",
+			zap.Error(err),
+			zap.String("owner_id(ns_id)", req.GetNamespaceId()),
+			zap.String("auth_uid", authUID))
+		return nil, fmt.Errorf("failed to get namespace in GetSourceFile. err: %w", err)
+	}
+	// ACL - check user's permission to write knowledge base
+	kb, err := ph.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID.String(), req.KbId)
+	if err != nil {
+		log.Error("failed to get knowledge base in GetSourceFile", zap.Error(err))
+		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
+	}
+	// ACL - check if the user(uid from context) has access to the source file.
+	granted, err := ph.service.ACLClient.CheckPermission(ctx, "knowledgebase", kb.UID, "writer")
+	if err != nil {
+		log.Error("failed to check permission in GetSourceFile", zap.Error(err))
+		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
+	}
+	if !granted {
+		log.Error("no permission get source file in GetSourceFile", zap.String("user_id", authUID), zap.String("kb_id", kb.UID.String()))
+		return nil, fmt.Errorf(ErrorDeleteKnowledgeBaseMsg, customerror.ErrNoPermission)
 	}
 	source, err := ph.service.Repository.GetTruthSourceByFileUID(ctx, fileUID)
 	if err != nil {

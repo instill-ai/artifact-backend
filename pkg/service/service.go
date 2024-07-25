@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/instill-ai/artifact-backend/pkg/acl"
 	"github.com/instill-ai/artifact-backend/pkg/customerror"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/milvus"
@@ -33,6 +34,7 @@ type Service struct {
 	// refactor: we need redis interface in the future to mock the redis client
 	RedisClient  *redis.Client
 	MilvusClient milvus.MilvusClientI
+	ACLClient    acl.ACLClient
 }
 
 // NewService initiates a service instance
@@ -44,6 +46,7 @@ func NewService(
 	rgc RegistryClient,
 	rc *redis.Client,
 	milvusClient milvus.MilvusClientI,
+	aclClient acl.ACLClient,
 
 ) *Service {
 
@@ -55,6 +58,7 @@ func NewService(
 		registryClient: rgc,
 		RedisClient:    rc,
 		MilvusClient:   milvusClient,
+		ACLClient:      aclClient,
 	}
 }
 

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/google/uuid"
+	"github.com/gofrs/uuid"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	artifactv1alpha "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	"go.uber.org/zap"
@@ -19,6 +19,7 @@ func (s *Service) SimilarityChunksSearch(ctx context.Context, caller uuid.UUID, 
 	log, _ := logger.GetZapLogger(ctx)
 	log.Info("SimilarityChunksSearch")
 	textVector, err := s.VectorizeText(ctx, caller, []string{req.TextPrompt})
+	fmt.Println("textVector", textVector[0][:10])
 	if err != nil {
 		log.Error("failed to vectorize text", zap.Error(err))
 		return nil, fmt.Errorf("failed to vectorize text. err: %w", err)
@@ -48,7 +49,7 @@ func (s *Service) SimilarityChunksSearch(ctx context.Context, caller uuid.UUID, 
 		if simEmb.SourceTable != s.Repository.TextChunkTableName() {
 			continue
 		}
-		simChunkUID, err := uuid.Parse(simEmb.SourceUID)
+		simChunkUID, err := uuid.FromString(simEmb.SourceUID)
 		if err != nil {
 			log.Error("failed to parse chunk uid", zap.Error(err))
 			return nil, fmt.Errorf("failed to parse chunk uid: %v. err: %w", simEmb.SourceUID, err)

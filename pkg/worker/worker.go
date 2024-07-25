@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/gofrs/uuid"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/milvus"
 	"github.com/instill-ai/artifact-backend/pkg/minio"
@@ -661,8 +661,11 @@ func (wp *fileToEmbWorkerPool) saveChunks(ctx context.Context, kbUID string, kbF
 	textChunks := make([]*repository.TextChunk, len(chunks))
 
 	// turn kbuid to uuid no must parse
-	kbUIDuuid, _ := uuid.Parse(kbUID)
-
+	kbUIDuuid, err := uuid.FromString(kbUID)
+	if err != nil {
+		logger.Error("Failed to parse kbUID to uuid.", zap.String("KbUID", kbUID))
+		return err
+	}
 	for i, c := range chunks {
 		textChunks[i] = &repository.TextChunk{
 			SourceUID:   sourceUID,
@@ -677,7 +680,7 @@ func (wp *fileToEmbWorkerPool) saveChunks(ctx context.Context, kbUID string, kbF
 			KbFileUID:   kbFileUID,
 		}
 	}
-	_, err := wp.svc.Repository.DeleteAndCreateChunks(ctx, sourceTable, sourceUID, textChunks,
+	_, err = wp.svc.Repository.DeleteAndCreateChunks(ctx, sourceTable, sourceUID, textChunks,
 		func(chunkUIDs []string) (map[string]any, error) {
 			// save the chunksForMinIO into object storage
 			chunksForMinIO := make(map[minio.ChunkUIDType]minio.ChunkContentType, len(textChunks))
