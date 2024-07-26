@@ -16,14 +16,14 @@ import (
 const chunkLength = 800
 const chunkOverlap = 200
 const NamespaceID = "preset"
-const pdfToMDVersion = "v1.0.0"
-const mdSplitVersion = "v1.0.1"
-const textSplitVersion = "v1.0.0"
-const textEmbedVersion = "v1.1.0"
-const converPDFToMDPipelineID = "indexing-convert-pdf"
-const mdSplitPipelineID = "indexing-split-markdown"
-const textSplitPipelineID = "indexing-split-text"
-const textEmbedPipelineID = "indexing-embed"
+const PDFToMDVersion = "v1.0.0"
+const MdSplitVersion = "v1.0.1"
+const TextSplitVersion = "v1.0.0"
+const TextEmbedVersion = "v1.1.0"
+const ConverPDFToMDPipelineID = "indexing-convert-pdf"
+const MdSplitPipelineID = "indexing-split-markdown"
+const TextSplitPipelineID = "indexing-split-text"
+const TextEmbedPipelineID = "indexing-embed"
 
 // ConvertPDFToMD using converting pipeline to convert PDF to MD and consume caller's credits
 func (s *Service) ConvertPDFToMD(ctx context.Context, caller uuid.UUID, pdfBase64 string) (string, error) {
@@ -33,8 +33,8 @@ func (s *Service) ConvertPDFToMD(ctx context.Context, caller uuid.UUID, pdfBase6
 
 	req := &pipelinev1beta.TriggerNamespacePipelineReleaseRequest{
 		NamespaceId: NamespaceID,
-		PipelineId:  converPDFToMDPipelineID,
-		ReleaseId:   pdfToMDVersion,
+		PipelineId:  ConverPDFToMDPipelineID,
+		ReleaseId:   PDFToMDVersion,
 		Inputs: []*structpb.Struct{
 			{
 				Fields: map[string]*structpb.Value{
@@ -46,7 +46,7 @@ func (s *Service) ConvertPDFToMD(ctx context.Context, caller uuid.UUID, pdfBase6
 	resp, err := s.PipelinePub.TriggerNamespacePipelineRelease(ctx, req)
 	if err != nil {
 		logger.Error("failed to trigger pipeline", zap.Error(err))
-		return "", fmt.Errorf("failed to trigger %s pipeline: %w", converPDFToMDPipelineID, err)
+		return "", fmt.Errorf("failed to trigger %s pipeline: %w", ConverPDFToMDPipelineID, err)
 	}
 	result, err := getConvertResult(resp)
 	if err != nil {
@@ -86,8 +86,8 @@ func (s *Service) SplitMarkdown(ctx context.Context, caller uuid.UUID, markdown 
 	ctx = metadata.NewOutgoingContext(ctx, md)
 	req := &pipelinev1beta.TriggerNamespacePipelineReleaseRequest{
 		NamespaceId: NamespaceID,
-		PipelineId:  mdSplitPipelineID,
-		ReleaseId:   mdSplitVersion,
+		PipelineId:  MdSplitPipelineID,
+		ReleaseId:   MdSplitVersion,
 		Inputs: []*structpb.Struct{
 			{
 				Fields: map[string]*structpb.Value{
@@ -100,7 +100,7 @@ func (s *Service) SplitMarkdown(ctx context.Context, caller uuid.UUID, markdown 
 	}
 	res, err := s.PipelinePub.TriggerNamespacePipelineRelease(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to trigger %s pipeline. err:%w", mdSplitPipelineID, err)
+		return nil, fmt.Errorf("failed to trigger %s pipeline. err:%w", MdSplitPipelineID, err)
 	}
 	result, err := GetChunksFromResponse(res)
 	if err != nil {
@@ -143,8 +143,8 @@ func (s *Service) SplitText(ctx context.Context, caller uuid.UUID, text string) 
 	ctx = metadata.NewOutgoingContext(ctx, md)
 	req := &pipelinev1beta.TriggerNamespacePipelineReleaseRequest{
 		NamespaceId: NamespaceID,
-		PipelineId:  textSplitPipelineID,
-		ReleaseId:   textSplitVersion,
+		PipelineId:  TextSplitPipelineID,
+		ReleaseId:   TextSplitVersion,
 
 		Inputs: []*structpb.Struct{
 			{
@@ -158,7 +158,7 @@ func (s *Service) SplitText(ctx context.Context, caller uuid.UUID, text string) 
 	}
 	res, err := s.PipelinePub.TriggerNamespacePipelineRelease(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to trigger %s pipeline. err:%w", textSplitPipelineID, err)
+		return nil, fmt.Errorf("failed to trigger %s pipeline. err:%w", TextSplitPipelineID, err)
 	}
 	result, err := GetChunksFromResponse(res)
 	if err != nil {
@@ -182,13 +182,13 @@ func (s *Service) VectorizeText(ctx context.Context, caller uuid.UUID, texts []s
 
 	req := &pipelinev1beta.TriggerNamespacePipelineReleaseRequest{
 		NamespaceId: NamespaceID,
-		PipelineId:  textEmbedPipelineID,
-		ReleaseId:   textEmbedVersion,
+		PipelineId:  TextEmbedPipelineID,
+		ReleaseId:   TextEmbedVersion,
 		Inputs:      inputs,
 	}
 	res, err := s.PipelinePub.TriggerNamespacePipelineRelease(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to trigger %s pipeline. err:%w", textEmbedPipelineID, err)
+		return nil, fmt.Errorf("failed to trigger %s pipeline. err:%w", TextEmbedPipelineID, err)
 	}
 	result, err := GetVectorFromResponse(res)
 	if err != nil {
