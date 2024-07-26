@@ -48,6 +48,9 @@ func NewACLClient(wc openfga.OpenFGAServiceClient, rc openfga.OpenFGAServiceClie
 	if err != nil {
 		panic(err)
 	}
+	if len(storeResp.Stores) == 0 {
+		panic(">>No openfga store found<<")
+	}
 	storeID := storeResp.Stores[0].Id
 
 	modelResp, err := wc.ReadAuthorizationModels(context.Background(), &openfga.ReadAuthorizationModelsRequest{
@@ -57,6 +60,9 @@ func NewACLClient(wc openfga.OpenFGAServiceClient, rc openfga.OpenFGAServiceClie
 		panic(err)
 	}
 
+	if len(modelResp.AuthorizationModels) == 0 {
+		panic(">>No openfga auth model found<<")
+	}
 	// Note: becasue the code always return the first model,
 	// when we have updated the model, we need to update the code to get the
 	// latest model. i.e. restart the service.
