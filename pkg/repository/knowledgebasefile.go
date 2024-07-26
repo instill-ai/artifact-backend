@@ -45,7 +45,8 @@ type KnowledgeBaseFileI interface {
 type KbUID = uuid.UUID
 
 type KnowledgeBaseFile struct {
-	UID              uuid.UUID `gorm:"column:uid;type:uuid;default:gen_random_uuid();primaryKey" json:"uid"`
+	UID uuid.UUID `gorm:"column:uid;type:uuid;default:gen_random_uuid();primaryKey" json:"uid"`
+	// the knowledge base file is under the owner(namespace)
 	Owner            uuid.UUID `gorm:"column:owner;type:uuid;not null" json:"owner"`
 	KnowledgeBaseUID uuid.UUID `gorm:"column:kb_uid;type:uuid;not null" json:"kb_uid"`
 	CreatorUID       uuid.UUID `gorm:"column:creator_uid;type:uuid;not null" json:"creator_uid"`
@@ -432,6 +433,7 @@ func (r *Repository) GetKnowledgeBaseFilesByFileUIDs(
 }
 
 type SourceMeta struct {
+	KbUID      uuid.UUID
 	Dest       string
 	CreateTime time.Time
 }
@@ -449,11 +451,13 @@ func (r *Repository) GetTruthSourceByFileUID(ctx context.Context, fileUID uuid.U
 		return nil, err
 	}
 	// assign truth source file destination and create time
+	var kbUID uuid.UUID
 	var dest string
 	var createTime time.Time
 	switch file.Type {
 	// if the file type is text or markdown, the destination is the file destination
 	case artifactpb.FileType_FILE_TYPE_TEXT.String(), artifactpb.FileType_FILE_TYPE_MARKDOWN.String():
+		kbUID = file.KnowledgeBaseUID
 		dest = file.Destination
 		createTime = *file.CreateTime
 	// if the file type is pdf, get the converted file destination
@@ -470,6 +474,7 @@ func (r *Repository) GetTruthSourceByFileUID(ctx context.Context, fileUID uuid.U
 			}
 			return nil, err
 		}
+		kbUID = convertedFile.KbUID
 		dest = convertedFile.Destination
 		createTime = *convertedFile.CreateTime
 	}
@@ -477,5 +482,6 @@ func (r *Repository) GetTruthSourceByFileUID(ctx context.Context, fileUID uuid.U
 	return &SourceMeta{
 		Dest:       dest,
 		CreateTime: createTime,
+		KbUID:      kbUID,
 	}, nil
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/customerror"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
+	"github.com/instill-ai/artifact-backend/pkg/service"
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
@@ -215,13 +216,15 @@ func (ph *PublicHandler) ListKnowledgeBases(ctx context.Context, req *artifactpb
 			CreateTime:          kb.CreateTime.String(),
 			UpdateTime:          kb.UpdateTime.String(),
 			OwnerName:           kb.Owner,
-			ConvertingPipelines: []string{"preset/indexing-convert-pdf"},
-			SplittingPipelines:  []string{"preset/indexing-split-text", "preset/indexing-split-markdown"},
-			EmbeddingPipelines:  []string{"preset/indexing-embed"},
-			DownstreamApps:      []string{},
-			TotalFiles:          uint32(fileCounts[kb.UID]),
-			TotalTokens:         uint32(tokenCounts[kb.UID]),
-			UsedStorage:         uint64(kb.Usage),
+			ConvertingPipelines: []string{service.NamespaceID + "/" + service.ConverPDFToMDPipelineID},
+			SplittingPipelines: []string{
+				service.NamespaceID + "/" + service.TextSplitPipelineID,
+				service.NamespaceID + "/" + service.MdSplitPipelineID},
+			EmbeddingPipelines: []string{service.NamespaceID + "/" + service.TextEmbedPipelineID},
+			DownstreamApps:     []string{},
+			TotalFiles:         uint32(fileCounts[kb.UID]),
+			TotalTokens:        uint32(tokenCounts[kb.UID]),
+			UsedStorage:        uint64(kb.Usage),
 		}
 	}
 	return &artifactpb.ListKnowledgeBasesResponse{
@@ -302,13 +305,15 @@ func (ph *PublicHandler) UpdateKnowledgeBase(ctx context.Context, req *artifactp
 			CreateTime:          kb.CreateTime.String(),
 			UpdateTime:          kb.UpdateTime.String(),
 			OwnerName:           kb.Owner,
-			ConvertingPipelines: []string{"preset/indexing-convert-pdf"},
-			SplittingPipelines:  []string{"preset/indexing-split-text", "preset/indexing-split-markdown"},
-			EmbeddingPipelines:  []string{"preset/indexing-embed"},
-			DownstreamApps:      []string{},
-			TotalFiles:          uint32(fileCounts[kb.UID]),
-			TotalTokens:         uint32(tokenCounts[kb.UID]),
-			UsedStorage:         uint64(kb.Usage),
+			ConvertingPipelines: []string{service.NamespaceID + "/" + service.ConverPDFToMDPipelineID},
+			SplittingPipelines: []string{
+				service.NamespaceID + "/" + service.TextSplitPipelineID,
+				service.NamespaceID + "/" + service.MdSplitPipelineID},
+			EmbeddingPipelines: []string{service.NamespaceID + "/" + service.TextEmbedPipelineID},
+			DownstreamApps:     []string{},
+			TotalFiles:         uint32(fileCounts[kb.UID]),
+			TotalTokens:        uint32(tokenCounts[kb.UID]),
+			UsedStorage:        uint64(kb.Usage),
 		},
 	}, nil
 }

@@ -230,16 +230,6 @@ func (ph *PublicHandler) ListKnowledgeBaseFiles(ctx context.Context, req *artifa
 		return nil, fmt.Errorf(ErrorDeleteKnowledgeBaseMsg, customerror.ErrNoPermission)
 	}
 
-	// get the kb uid from the knowledge base table
-	var kbUID string
-	{
-		kb, err := ph.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID.String(), req.KbId)
-		if err != nil {
-			log.Error("failed to get knowledge base by owner and id", zap.Error(err))
-			return nil, err
-		}
-		kbUID = kb.UID.String()
-	}
 	// fetch the knowledge base files
 	var files []*artifactpb.File
 	var totalSize int
@@ -250,7 +240,7 @@ func (ph *PublicHandler) ListKnowledgeBaseFiles(ctx context.Context, req *artifa
 				FileUids: []string{},
 			}
 		}
-		kbFiles, size, nextToken, err := ph.service.Repository.ListKnowledgeBaseFiles(ctx, authUID, ns.NsUID.String(), kbUID, req.PageSize, req.PageToken, req.Filter.FileUids)
+		kbFiles, size, nextToken, err := ph.service.Repository.ListKnowledgeBaseFiles(ctx, authUID, ns.NsUID.String(), kb.UID.String(), req.PageSize, req.PageToken, req.Filter.FileUids)
 		if err != nil {
 			log.Error("failed to list knowledge base files", zap.Error(err))
 			return nil, err
@@ -312,13 +302,13 @@ func (ph *PublicHandler) DeleteKnowledgeBaseFile(
 	// 	return nil, err
 	// }
 
-	// ACL - check user's permission to write knowledge base
-	kf, err := ph.service.Repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{uuid.FromStringOrNil(req.FileUid)})
-	if err != nil && len(kf) == 0 {
+	// ACL - check user's permission to write knowledge base of kb file
+	kbfs, err := ph.service.Repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{uuid.FromStringOrNil(req.FileUid)})
+	if err != nil && len(kbfs) == 0 {
 		log.Error("failed to get knowledge base", zap.Error(err))
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
-	granted, err := ph.service.ACLClient.CheckPermission(ctx, "knowledgebase", kf[0].KnowledgeBaseUID, "writer")
+	granted, err := ph.service.ACLClient.CheckPermission(ctx, "knowledgebase", kbfs[0].KnowledgeBaseUID, "writer")
 	if err != nil {
 		log.Error("failed to check permission", zap.Error(err))
 		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
