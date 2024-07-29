@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/gofrs/uuid"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
@@ -17,21 +18,22 @@ type SimChunk struct {
 
 func (s *Service) SimilarityChunksSearch(ctx context.Context, caller uuid.UUID, ownerUID string, req *artifactv1alpha.SimilarityChunksSearchRequest) ([]SimChunk, error) {
 	log, _ := logger.GetZapLogger(ctx)
-	log.Info("SimilarityChunksSearch")
+	t := time.Now()
 	textVector, err := s.VectorizeText(ctx, caller, []string{req.TextPrompt})
-	fmt.Println("textVector", textVector[0][:10])
 	if err != nil {
 		log.Error("failed to vectorize text", zap.Error(err))
 		return nil, fmt.Errorf("failed to vectorize text. err: %w", err)
 	}
-
+	log.Info("vectorize text", zap.Duration("duration", time.Since(t)))
+	t = time.Now()
 	// get kb by kb_id and owner uid
 	kb, err := s.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, req.KbId)
 	if err != nil {
 		log.Error("failed to get knowledge base by owner and id", zap.Error(err))
 		return nil, fmt.Errorf("failed to get knowledge base by owner and id. err: %w", err)
-
 	}
+	log.Info("get knowledge base by owner and id", zap.Duration("duration", time.Since(t)))
+	t = time.Now()
 
 	// search similar embeddings in kb
 	simEmbeddings, err := s.MilvusClient.SearchSimilarEmbeddingsInKB(ctx, kb.UID.String(), textVector, int(req.Topk))
@@ -39,6 +41,7 @@ func (s *Service) SimilarityChunksSearch(ctx context.Context, caller uuid.UUID, 
 		log.Error("failed to search similar embeddings in kb", zap.Error(err))
 		return nil, fmt.Errorf("failed to search similar embeddings in kb. err: %w", err)
 	}
+	log.Info("search similar embeddings in kb", zap.Duration("duration", time.Since(t)))
 
 	// fetch chunks by their UIDs
 	res := make([]SimChunk, 0, len(simEmbeddings))

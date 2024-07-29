@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/milvus-io/milvus-sdk-go/v2/client"
@@ -315,6 +316,7 @@ func (m *MilvusClient) SearchSimilarEmbeddings(ctx context.Context, collectionNa
 		log.Error("failed to get logger", zap.Error(err))
 		return nil, fmt.Errorf("failed to get logger: %w", err)
 	}
+	t := time.Now()
 	// Check if the collection exists
 	has, err := m.c.HasCollection(ctx, collectionName)
 	if err != nil {
@@ -325,6 +327,8 @@ func (m *MilvusClient) SearchSimilarEmbeddings(ctx context.Context, collectionNa
 		log.Error("collection does not exist", zap.String("collection_name", collectionName))
 		return nil, fmt.Errorf("collection %s does not exist", collectionName)
 	}
+	log.Info("check collection existence", zap.Duration("duration", time.Since(t)))
+	t = time.Now()
 
 	// Load the collection if it's not already loaded
 	err = m.c.LoadCollection(ctx, collectionName, false)
@@ -338,6 +342,8 @@ func (m *MilvusClient) SearchSimilarEmbeddings(ctx context.Context, collectionNa
 	for i, v := range vectors {
 		milvusVectors[i] = entity.FloatVector(v)
 	}
+	log.Info("load collection", zap.Duration("duration", time.Since(t)))
+	t = time.Now()
 
 	// Perform the search
 	sp, err := entity.NewIndexSCANNSearchParam(Nprobe, ReorderK)
@@ -356,7 +362,7 @@ func (m *MilvusClient) SearchSimilarEmbeddings(ctx context.Context, collectionNa
 		log.Error("failed to search embeddings", zap.Error(err))
 		return nil, fmt.Errorf("failed to search embeddings: %w", err)
 	}
-
+	log.Info("search embeddings", zap.Duration("duration", time.Since(t)))
 	// Extract the embeddings from the search results
 	var embeddings [][]SimilarEmbedding
 	for _, result := range results {
