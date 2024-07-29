@@ -366,6 +366,9 @@ func (m *MilvusClient) SearchSimilarEmbeddings(ctx context.Context, collectionNa
 	// Extract the embeddings from the search results
 	var embeddings [][]SimilarEmbedding
 	for _, result := range results {
+		if result.ResultCount == 0 {
+			continue
+		}
 		sourceTables, err := getStringData(result.Fields.GetColumn(KbCollectionFiledSourceTable))
 		if err != nil {
 			log.Error("error with source_table column", zap.Error(err))
