@@ -58,7 +58,7 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 	// check if user has reached the maximum number of catalogs
 	// note: the simple implementation have race condition to bypass the check,
 	// but it is okay for now
-	kbCount, err := ph.service.Repository.GetKnowledgeBaseCountByOwner(ctx, authUID)
+	kbCount, err := ph.service.Repository.GetKnowledgeBaseCountByOwner(ctx, ns.NsUID.String())
 	if err != nil {
 		log.Error("failed to get catalog count", zap.Error(err))
 		return nil, fmt.Errorf(ErrorCreateKnowledgeBaseMsg, err)
