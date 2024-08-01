@@ -20,15 +20,15 @@ import (
 
 type ErrorMsg map[int]string
 
-const ErrorCreateKnowledgeBaseMsg = "failed to create knowledge base: %w"
-const ErrorListKnowledgeBasesMsg = "failed to get knowledge bases: %w "
-const ErrorUpdateKnowledgeBaseMsg = "failed to update knowledge base: %w"
-const ErrorDeleteKnowledgeBaseMsg = "failed to delete knowledge base: %w"
+const ErrorCreateKnowledgeBaseMsg = "failed to create catalog: %w"
+const ErrorListKnowledgeBasesMsg = "failed to get catalogs: %w "
+const ErrorUpdateKnowledgeBaseMsg = "failed to update catalog: %w"
+const ErrorDeleteKnowledgeBaseMsg = "failed to delete catalog: %w"
 
 // Note: in the future, we might have different max count for different user types
 const KnowledgeBaseMaxCount = 3
 
-func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactpb.CreateKnowledgeBaseRequest) (*artifactpb.CreateKnowledgeBaseResponse, error) {
+func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.CreateCatalogRequest) (*artifactpb.CreateCatalogResponse, error) {
 	log, _ := logger.GetZapLogger(ctx)
 	authUID, err := getUserUIDFromContext(ctx)
 	if err != nil {
@@ -36,7 +36,7 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 		return nil, err
 	}
 
-	// ACL  check user's permission to create knowledge base in the user or org context(namespace)
+	// ACL  check user's permission to create catalog in the user or org context(namespace)
 	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
 	if err != nil {
 		log.Error(
@@ -55,16 +55,16 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 			zap.String("auth_uid", authUID))
 		return nil, fmt.Errorf(ErrorCreateKnowledgeBaseMsg, err)
 	}
-	// check if user has reached the maximum number of knowledge bases
+	// check if user has reached the maximum number of catalogs
 	// note: the simple implementation have race condition to bypass the check,
 	// but it is okay for now
 	kbCount, err := ph.service.Repository.GetKnowledgeBaseCountByOwner(ctx, authUID)
 	if err != nil {
-		log.Error("failed to get knowledge base count", zap.Error(err))
+		log.Error("failed to get catalog count", zap.Error(err))
 		return nil, fmt.Errorf(ErrorCreateKnowledgeBaseMsg, err)
 	}
 	if kbCount >= KnowledgeBaseMaxCount {
-		err := fmt.Errorf("user has reached the 3 maximum number of knowledge bases: %v. ", kbCount)
+		err := fmt.Errorf("user has reached the 3 maximum number of catalogs: %v. ", kbCount)
 		return nil, err
 	}
 
@@ -75,7 +75,8 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 	}
 	nameOk := isValidName(req.Name)
 	if !nameOk {
-		msg := "kb name is invalid: %v. err: %w"
+		msg := "the catalog name should be lowercase without any space or special character besides the hyphen, " +
+			"it can not start with number or hyphen, and should be less than 32 characters. name: %v. err: %w"
 		return nil, fmt.Errorf(msg, req.Name, customerror.ErrInvalidArgument)
 	}
 
@@ -96,7 +97,7 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 		return nil, err
 	}
 
-	// external service call - create knowledge base collection and set ACL in openFAG
+	// external service call - create catalog collection and set ACL in openFAG
 	callExternalService := func(kbUID string) error {
 		err := ph.service.MilvusClient.CreateKnowledgeBaseCollection(ctx, kbUID)
 		if err != nil {
@@ -104,7 +105,7 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 			return err
 		}
 
-		// set the owner of the knowledge base
+		// set the owner of the catalog
 		kbUIDuuid, err := uuid.FromString(kbUID)
 		if err != nil {
 			log.Error("failed to parse kb uid", zap.String("kb_uid", kbUID), zap.Error(err))
@@ -119,7 +120,7 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 		return nil
 	}
 
-	// create knowledge base
+	// create catalog
 	dbData, err := ph.service.Repository.CreateKnowledgeBase(ctx,
 		repository.KnowledgeBase{
 			Name: req.Name,
@@ -135,10 +136,10 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 		return nil, err
 	}
 
-	return &artifactpb.CreateKnowledgeBaseResponse{
-		KnowledgeBase: &artifactpb.KnowledgeBase{
+	return &artifactpb.CreateCatalogResponse{
+		Catalog: &artifactpb.Catalog{
 			Name:                dbData.Name,
-			KbId:                dbData.KbID,
+			CatalogId:           dbData.KbID,
 			Description:         dbData.Description,
 			Tags:                dbData.Tags,
 			OwnerName:           dbData.Owner,
@@ -155,7 +156,7 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 	}, nil
 }
 
-func (ph *PublicHandler) ListKnowledgeBases(ctx context.Context, req *artifactpb.ListKnowledgeBasesRequest) (*artifactpb.ListKnowledgeBasesResponse, error) {
+func (ph *PublicHandler) ListCatalogs(ctx context.Context, req *artifactpb.ListCatalogsRequest) (*artifactpb.ListCatalogsResponse, error) {
 	log, _ := logger.GetZapLogger(ctx)
 	// get user id from context
 	authUID, err := getUserUIDFromContext(ctx)
@@ -164,7 +165,7 @@ func (ph *PublicHandler) ListKnowledgeBases(ctx context.Context, req *artifactpb
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
 
-	// ACL - check user(authUid)'s permission to list knowledge bases in
+	// ACL - check user(authUid)'s permission to list catalogs in
 	// the user or org context(namespace)
 	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
 	if err != nil {
@@ -187,7 +188,7 @@ func (ph *PublicHandler) ListKnowledgeBases(ctx context.Context, req *artifactpb
 
 	dbData, err := ph.service.Repository.ListKnowledgeBases(ctx, ns.NsUID.String())
 	if err != nil {
-		log.Error("failed to get knowledge bases", zap.Error(err))
+		log.Error("failed to get catalogs", zap.Error(err))
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
 
@@ -206,11 +207,11 @@ func (ph *PublicHandler) ListKnowledgeBases(ctx context.Context, req *artifactpb
 		log.Error("failed to get token counts", zap.Error(err))
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
-	kbs := make([]*artifactpb.KnowledgeBase, len(dbData))
+	kbs := make([]*artifactpb.Catalog, len(dbData))
 	for i, kb := range dbData {
-		kbs[i] = &artifactpb.KnowledgeBase{
+		kbs[i] = &artifactpb.Catalog{
 			Name:                kb.Name,
-			KbId:                kb.KbID,
+			CatalogId:           kb.KbID,
 			Description:         kb.Description,
 			Tags:                kb.Tags,
 			CreateTime:          kb.CreateTime.String(),
@@ -227,11 +228,11 @@ func (ph *PublicHandler) ListKnowledgeBases(ctx context.Context, req *artifactpb
 			UsedStorage:        uint64(kb.Usage),
 		}
 	}
-	return &artifactpb.ListKnowledgeBasesResponse{
-		KnowledgeBases: kbs,
+	return &artifactpb.ListCatalogsResponse{
+		Catalogs: kbs,
 	}, nil
 }
-func (ph *PublicHandler) UpdateKnowledgeBase(ctx context.Context, req *artifactpb.UpdateKnowledgeBaseRequest) (*artifactpb.UpdateKnowledgeBaseResponse, error) {
+func (ph *PublicHandler) UpdateCatalog(ctx context.Context, req *artifactpb.UpdateCatalogRequest) (*artifactpb.UpdateCatalogResponse, error) {
 	log, _ := logger.GetZapLogger(ctx)
 	authUID, err := getUserUIDFromContext(ctx)
 	if err != nil {
@@ -239,7 +240,7 @@ func (ph *PublicHandler) UpdateKnowledgeBase(ctx context.Context, req *artifactp
 		return nil, err
 	}
 	// check name if it is empty
-	if req.KbId == "" {
+	if req.CatalogId == "" {
 		log.Error("kb_id is empty", zap.Error(ErrCheckRequiredFields))
 		return nil, fmt.Errorf("kb_id is empty. err: %w", ErrCheckRequiredFields)
 	}
@@ -253,10 +254,10 @@ func (ph *PublicHandler) UpdateKnowledgeBase(ctx context.Context, req *artifactp
 			zap.String("auth_uid", authUID))
 		return nil, fmt.Errorf("failed to get namespace. err: %w", err)
 	}
-	// ACL - check user's permission to update knowledge base
-	kb, err := ph.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID.String(), req.KbId)
+	// ACL - check user's permission to update catalog
+	kb, err := ph.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID.String(), req.CatalogId)
 	if err != nil {
-		log.Error("failed to get knowledge base", zap.Error(err))
+		log.Error("failed to get catalog", zap.Error(err))
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
 	granted, err := ph.service.ACLClient.CheckPermission(ctx, "knowledgebase", kb.UID, "writer")
@@ -265,24 +266,24 @@ func (ph *PublicHandler) UpdateKnowledgeBase(ctx context.Context, req *artifactp
 		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
 	}
 	if !granted {
-		log.Error("no permission to update knowledge base")
+		log.Error("no permission to update catalog")
 		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, customerror.ErrNoPermission)
 	}
 
-	// update knowledge base
+	// update catalog
 	kb, err = ph.service.Repository.UpdateKnowledgeBase(
 		ctx,
 		ns.NsUID.String(),
 		repository.KnowledgeBase{
 			// Name:        req.KbId,
-			KbID:        req.KbId,
+			KbID:        req.CatalogId,
 			Description: req.Description,
 			Tags:        req.Tags,
 			Owner:       ns.NsUID.String(),
 		},
 	)
 	if err != nil {
-		log.Error("failed to update knowledge base", zap.Error(err))
+		log.Error("failed to update catalog", zap.Error(err))
 		return nil, err
 	}
 	fileCounts, err := ph.service.Repository.GetCountFilesByListKnowledgeBaseUID(ctx, []uuid.UUID{kb.UID})
@@ -296,10 +297,10 @@ func (ph *PublicHandler) UpdateKnowledgeBase(ctx context.Context, req *artifactp
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
 	// populate response
-	return &artifactpb.UpdateKnowledgeBaseResponse{
-		KnowledgeBase: &artifactpb.KnowledgeBase{
+	return &artifactpb.UpdateCatalogResponse{
+		Catalog: &artifactpb.Catalog{
 			Name:                kb.Name,
-			KbId:                kb.KbID,
+			CatalogId:           kb.KbID,
 			Description:         kb.Description,
 			Tags:                kb.Tags,
 			CreateTime:          kb.CreateTime.String(),
@@ -317,7 +318,7 @@ func (ph *PublicHandler) UpdateKnowledgeBase(ctx context.Context, req *artifactp
 		},
 	}, nil
 }
-func (ph *PublicHandler) DeleteKnowledgeBase(ctx context.Context, req *artifactpb.DeleteKnowledgeBaseRequest) (*artifactpb.DeleteKnowledgeBaseResponse, error) {
+func (ph *PublicHandler) DeleteCatalog(ctx context.Context, req *artifactpb.DeleteCatalogRequest) (*artifactpb.DeleteCatalogResponse, error) {
 	log, _ := logger.GetZapLogger(ctx)
 	authUID, err := getUserUIDFromContext(ctx)
 	if err != nil {
@@ -334,10 +335,10 @@ func (ph *PublicHandler) DeleteKnowledgeBase(ctx context.Context, req *artifactp
 			zap.String("auth_uid", authUID))
 		return nil, fmt.Errorf("failed to get namespace. err: %w", err)
 	}
-	// ACL - check user's permission to write knowledge base
-	kb, err := ph.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID.String(), req.KbId)
+	// ACL - check user's permission to write catalog
+	kb, err := ph.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID.String(), req.CatalogId)
 	if err != nil {
-		log.Error("failed to get knowledge base", zap.Error(err))
+		log.Error("failed to get catalog", zap.Error(err))
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
 	granted, err := ph.service.ACLClient.CheckPermission(ctx, "knowledgebase", kb.UID, "writer")
@@ -346,24 +347,24 @@ func (ph *PublicHandler) DeleteKnowledgeBase(ctx context.Context, req *artifactp
 		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
 	}
 	if !granted {
-		log.Error("no permission to delete knowledge base")
+		log.Error("no permission to delete catalog")
 		return nil, fmt.Errorf(ErrorDeleteKnowledgeBaseMsg, customerror.ErrNoPermission)
 	}
 
-	deletedKb, err := ph.service.Repository.DeleteKnowledgeBase(ctx, ns.NsUID.String(), req.KbId)
+	deletedKb, err := ph.service.Repository.DeleteKnowledgeBase(ctx, ns.NsUID.String(), req.CatalogId)
 	if err != nil {
 		return nil, err
 	}
 	err = ph.service.ACLClient.Purge(ctx, "knowledgebase", deletedKb.UID)
 	if err != nil {
-		log.Error("failed to purge knowledge base", zap.Error(err))
+		log.Error("failed to purge catalog", zap.Error(err))
 		return nil, fmt.Errorf(ErrorDeleteKnowledgeBaseMsg, err)
 	}
 
-	return &artifactpb.DeleteKnowledgeBaseResponse{
-		KnowledgeBase: &artifactpb.KnowledgeBase{
+	return &artifactpb.DeleteCatalogResponse{
+		Catalog: &artifactpb.Catalog{
 			Name:                deletedKb.Name,
-			KbId:                deletedKb.KbID,
+			CatalogId:           deletedKb.KbID,
 			Description:         deletedKb.Description,
 			Tags:                deletedKb.Tags,
 			CreateTime:          deletedKb.CreateTime.String(),
@@ -391,7 +392,7 @@ func getUserUIDFromContext(ctx context.Context) (string, error) {
 // than 32 characters.
 func isValidName(name string) bool {
 	// Define the regular expression pattern
-	pattern := `^[a-z]([a-z-]{0,30}[a-z])?$`
+	pattern := "^[a-z][-a-z_0-9]{0,31}$"
 	// Compile the regular expression
 	re := regexp.MustCompile(pattern)
 	// Match the name against the regular expression

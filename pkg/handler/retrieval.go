@@ -41,14 +41,14 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 	log.Info("get namespace by ns id", zap.Duration("duration", time.Since(t)))
 	t = time.Now()
 	ownerUID := ns.NsUID
-	kb, err := ph.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID.String(), req.KbId)
+	kb, err := ph.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID.String(), req.CatalogId)
 	if err != nil {
-		log.Error("failed to get knowledge base by owner and kb id", zap.Error(err))
-		return nil, fmt.Errorf("failed to get knowledge base by owner and kb id. err: %w", err)
+		log.Error("failed to get catalog by owner and kb id", zap.Error(err))
+		return nil, fmt.Errorf("failed to get catalog by owner and kb id. err: %w", err)
 	}
-	log.Info("get knowledge base by owner and kb id", zap.Duration("duration", time.Since(t)))
+	log.Info("get catalog by owner and kb id", zap.Duration("duration", time.Since(t)))
 	t = time.Now()
-	// ACL : check user has access to the knowledge base
+	// ACL : check user has access to the catalog
 	granted, err := ph.service.ACLClient.CheckPermission(ctx, "knowledgebase", kb.UID, "reader")
 	if err != nil {
 		log.Error("failed to check permission", zap.Error(err))
@@ -106,13 +106,13 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 	files, err := ph.service.Repository.GetKnowledgeBaseFilesByFileUIDs(
 		ctx, fileUids, repository.KnowledgeBaseFileColumn.UID, repository.KnowledgeBaseFileColumn.Name)
 	if err != nil {
-		log.Error("failed to get knowledge base files by file uids", zap.Error(err))
-		return nil, fmt.Errorf("failed to get knowledge base files by file uids. err: %w", err)
+		log.Error("failed to get catalog files by file uids", zap.Error(err))
+		return nil, fmt.Errorf("failed to get catalog files by file uids. err: %w", err)
 	}
 	for _, file := range files {
 		fileUIDMapName[file.UID] = file.Name
 	}
-	log.Info("get knowledge base files by file uids", zap.Duration("duration", time.Since(t)))
+	log.Info("get catalog files by file uids", zap.Duration("duration", time.Since(t)))
 
 	// prepare the response
 	simChunks := make([]*artifactv1alpha.SimilarityChunk, 0, len(chunks))

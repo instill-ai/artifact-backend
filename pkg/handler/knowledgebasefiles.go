@@ -20,7 +20,7 @@ const maxFileSize = 15 * 1024 * 1024
 // 1GB
 const KnowledgeBaseMaxUsage = 1024 * 1024 * 1024
 
-func (ph *PublicHandler) UploadKnowledgeBaseFile(ctx context.Context, req *artifactpb.UploadKnowledgeBaseFileRequest) (*artifactpb.UploadKnowledgeBaseFileResponse, error) {
+func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.UploadCatalogFileRequest) (*artifactpb.UploadCatalogFileResponse, error) {
 	log, _ := logger.GetZapLogger(ctx)
 	authUID, err := getUserUIDFromContext(ctx)
 	if err != nil {
@@ -44,10 +44,10 @@ func (ph *PublicHandler) UploadKnowledgeBaseFile(ctx context.Context, req *artif
 			zap.String("auth_uid", authUID))
 		return nil, fmt.Errorf("failed to get namespace. err: %w", err)
 	}
-	// ACL - check user's permission to write knowledge base
-	kb, err := ph.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID.String(), req.KbId)
+	// ACL - check user's permission to write catalog
+	kb, err := ph.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID.String(), req.CatalogId)
 	if err != nil {
-		log.Error("failed to get knowledge base", zap.Error(err))
+		log.Error("failed to get catalog", zap.Error(err))
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
 	granted, err := ph.service.ACLClient.CheckPermission(ctx, "knowledgebase", kb.UID, "writer")
@@ -56,7 +56,7 @@ func (ph *PublicHandler) UploadKnowledgeBaseFile(ctx context.Context, req *artif
 		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
 	}
 	if !granted {
-		log.Error("no permission to delete knowledge base")
+		log.Error("no permission to delete catalog")
 		return nil, fmt.Errorf(ErrorDeleteKnowledgeBaseMsg, customerror.ErrNoPermission)
 	}
 
@@ -76,7 +76,7 @@ func (ph *PublicHandler) UploadKnowledgeBaseFile(ctx context.Context, req *artif
 		}
 
 		if kb.Usage+fileSize > KnowledgeBaseMaxUsage {
-			return nil, fmt.Errorf("knowledge base 1 GB exceeded. err: %w", customerror.ErrInvalidArgument)
+			return nil, fmt.Errorf("catalog 1 GB exceeded. err: %w", customerror.ErrInvalidArgument)
 		}
 
 		destination := ph.service.MinIO.GetUploadedFilePathInKnowledgeBase(kb.UID.String(), req.File.Name)
@@ -91,7 +91,7 @@ func (ph *PublicHandler) UploadKnowledgeBaseFile(ctx context.Context, req *artif
 			Size:             fileSize,
 		}
 
-		// create knowledge base file
+		// create catalog file
 		res, err = ph.service.Repository.CreateKnowledgeBaseFile(ctx, kbFile, func(FileUID string) error {
 			// upload file to minio
 			err := ph.service.MinIO.UploadBase64File(ctx, destination, req.File.Content, fileTypeConvertToMime(req.File.Type))
@@ -103,24 +103,24 @@ func (ph *PublicHandler) UploadKnowledgeBaseFile(ctx context.Context, req *artif
 		})
 
 		if err != nil {
-			log.Error("failed to create knowledge base file", zap.Error(err))
+			log.Error("failed to create catalog file", zap.Error(err))
 			return nil, err
 		}
 
-		// increase knowledge base usage
+		// increase catalog usage
 		err = ph.service.Repository.IncreaseKnowledgeBaseUsage(ctx, kb.UID.String(), int(fileSize))
 		if err != nil {
-			log.Error("failed to increase knowledge base usage", zap.Error(err))
+			log.Error("failed to increase catalog usage", zap.Error(err))
 			return nil, err
 		}
 	}
 
-	return &artifactpb.UploadKnowledgeBaseFileResponse{
+	return &artifactpb.UploadCatalogFileResponse{
 		File: &artifactpb.File{
 			FileUid:       res.UID.String(),
 			OwnerUid:      res.Owner.String(),
 			CreatorUid:    res.CreatorUID.String(),
-			KbUid:         res.KnowledgeBaseUID.String(),
+			CatalogUid:    res.KnowledgeBaseUID.String(),
 			Name:          res.Name,
 			Type:          req.File.Type,
 			CreateTime:    timestamppb.New(*res.CreateTime),
@@ -164,11 +164,11 @@ func getFileSize(base64String string) (int64, string) {
 	return int64(decodedSize), fmt.Sprintf("%.1f %cB", size, "KMGTPE"[exp])
 }
 
-func checkUploadKnowledgeBaseFileRequest(req *artifactpb.UploadKnowledgeBaseFileRequest) error {
+func checkUploadKnowledgeBaseFileRequest(req *artifactpb.UploadCatalogFileRequest) error {
 	if req.GetNamespaceId() == "" {
 		return fmt.Errorf("owner uid is required. err: %w", ErrCheckRequiredFields)
-	} else if req.KbId == "" {
-		return fmt.Errorf("knowledge base uid is required. err: %w", ErrCheckRequiredFields)
+	} else if req.CatalogId == "" {
+		return fmt.Errorf("catalog uid is required. err: %w", ErrCheckRequiredFields)
 	} else if req.File == nil {
 		return fmt.Errorf("file is required. err: %w", ErrCheckRequiredFields)
 	} else if req.File.Name == "" {
@@ -194,7 +194,7 @@ func checkValidFileType(t artifactpb.FileType) bool {
 	return false
 }
 
-func (ph *PublicHandler) ListKnowledgeBaseFiles(ctx context.Context, req *artifactpb.ListKnowledgeBaseFilesRequest) (*artifactpb.ListKnowledgeBaseFilesResponse, error) {
+func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.ListCatalogFilesRequest) (*artifactpb.ListCatalogFilesResponse, error) {
 
 	log, _ := logger.GetZapLogger(ctx)
 	authUID, err := getUserUIDFromContext(ctx)
@@ -204,7 +204,7 @@ func (ph *PublicHandler) ListKnowledgeBaseFiles(ctx context.Context, req *artifa
 		return nil, err
 	}
 
-	// ACL - check if the creator can list files in this knowledge base. ACL using uid to check the certain namespace resource.
+	// ACL - check if the creator can list files in this catalog. ACL using uid to check the certain namespace resource.
 	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
 	if err != nil {
 		log.Error(
@@ -214,10 +214,10 @@ func (ph *PublicHandler) ListKnowledgeBaseFiles(ctx context.Context, req *artifa
 			zap.String("auth_uid", authUID))
 		return nil, fmt.Errorf("failed to get namespace. err: %w", err)
 	}
-	// ACL - check user's permission to write knowledge base
-	kb, err := ph.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID.String(), req.KbId)
+	// ACL - check user's permission to write catalog
+	kb, err := ph.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID.String(), req.CatalogId)
 	if err != nil {
-		log.Error("failed to get knowledge base", zap.Error(err))
+		log.Error("failed to get catalog", zap.Error(err))
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
 	granted, err := ph.service.ACLClient.CheckPermission(ctx, "knowledgebase", kb.UID, "reader")
@@ -226,23 +226,23 @@ func (ph *PublicHandler) ListKnowledgeBaseFiles(ctx context.Context, req *artifa
 		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
 	}
 	if !granted {
-		log.Error("no permission to delete knowledge base")
+		log.Error("no permission to delete catalog")
 		return nil, fmt.Errorf(ErrorDeleteKnowledgeBaseMsg, customerror.ErrNoPermission)
 	}
 
-	// fetch the knowledge base files
+	// fetch the catalog files
 	var files []*artifactpb.File
 	var totalSize int
 	var nextPageToken string
 	{
 		if req.Filter == nil {
-			req.Filter = &artifactpb.ListKnowledgeBaseFilesFilter{
+			req.Filter = &artifactpb.ListCatalogFilesFilter{
 				FileUids: []string{},
 			}
 		}
 		kbFiles, size, nextToken, err := ph.service.Repository.ListKnowledgeBaseFiles(ctx, authUID, ns.NsUID.String(), kb.UID.String(), req.PageSize, req.PageToken, req.Filter.FileUids)
 		if err != nil {
-			log.Error("failed to list knowledge base files", zap.Error(err))
+			log.Error("failed to list catalog files", zap.Error(err))
 			return nil, err
 		}
 		// get the tokens and chunks using the source table and source uid
@@ -270,7 +270,7 @@ func (ph *PublicHandler) ListKnowledgeBaseFiles(ctx context.Context, req *artifa
 				FileUid:       kbFile.UID.String(),
 				OwnerUid:      kbFile.Owner.String(),
 				CreatorUid:    kbFile.CreatorUID.String(),
-				KbUid:         kbFile.KnowledgeBaseUID.String(),
+				CatalogUid:    kbFile.KnowledgeBaseUID.String(),
 				Name:          kbFile.Name,
 				Type:          artifactpb.FileType(artifactpb.FileType_value[kbFile.Type]),
 				CreateTime:    timestamppb.New(*kbFile.CreateTime),
@@ -283,7 +283,7 @@ func (ph *PublicHandler) ListKnowledgeBaseFiles(ctx context.Context, req *artifa
 		}
 	}
 
-	return &artifactpb.ListKnowledgeBaseFilesResponse{
+	return &artifactpb.ListCatalogFilesResponse{
 		Files:         files,
 		TotalSize:     int32(totalSize),
 		NextPageToken: nextPageToken,
@@ -291,10 +291,10 @@ func (ph *PublicHandler) ListKnowledgeBaseFiles(ctx context.Context, req *artifa
 	}, nil
 }
 
-func (ph *PublicHandler) DeleteKnowledgeBaseFile(
+func (ph *PublicHandler) DeleteCatalogFile(
 	ctx context.Context,
-	req *artifactpb.DeleteKnowledgeBaseFileRequest) (
-	*artifactpb.DeleteKnowledgeBaseFileResponse, error) {
+	req *artifactpb.DeleteCatalogFileRequest) (
+	*artifactpb.DeleteCatalogFileResponse, error) {
 	log, _ := logger.GetZapLogger(ctx)
 	// authUID, err := getUserUIDFromContext(ctx)
 	// if err != nil {
@@ -302,10 +302,10 @@ func (ph *PublicHandler) DeleteKnowledgeBaseFile(
 	// 	return nil, err
 	// }
 
-	// ACL - check user's permission to write knowledge base of kb file
+	// ACL - check user's permission to write catalog of kb file
 	kbfs, err := ph.service.Repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{uuid.FromStringOrNil(req.FileUid)})
 	if err != nil && len(kbfs) == 0 {
-		log.Error("failed to get knowledge base", zap.Error(err))
+		log.Error("failed to get catalog", zap.Error(err))
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
 	granted, err := ph.service.ACLClient.CheckPermission(ctx, "knowledgebase", kbfs[0].KnowledgeBaseUID, "writer")
@@ -314,7 +314,7 @@ func (ph *PublicHandler) DeleteKnowledgeBaseFile(
 		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
 	}
 	if !granted {
-		log.Error("no permission to delete knowledge base")
+		log.Error("no permission to delete catalog")
 		return nil, fmt.Errorf(ErrorDeleteKnowledgeBaseMsg, customerror.ErrNoPermission)
 	}
 	// check if file uid is empty
@@ -341,19 +341,19 @@ func (ph *PublicHandler) DeleteKnowledgeBaseFile(
 		return nil, err
 	}
 
-	// decrease knowledge base usage
+	// decrease catalog usage
 	err = ph.service.Repository.IncreaseKnowledgeBaseUsage(ctx, files[0].KnowledgeBaseUID.String(), int(-files[0].Size))
 	if err != nil {
 		return nil, err
 	}
 
-	return &artifactpb.DeleteKnowledgeBaseFileResponse{
+	return &artifactpb.DeleteCatalogFileResponse{
 		FileUid: req.FileUid,
 	}, nil
 
 }
 
-func (ph *PublicHandler) ProcessKnowledgeBaseFiles(ctx context.Context, req *artifactpb.ProcessKnowledgeBaseFilesRequest) (*artifactpb.ProcessKnowledgeBaseFilesResponse, error) {
+func (ph *PublicHandler) ProcessCatalogFiles(ctx context.Context, req *artifactpb.ProcessCatalogFilesRequest) (*artifactpb.ProcessCatalogFilesResponse, error) {
 	// uid, err := getUserIDFromContext(ctx)
 	// if err != nil {
 	// 	err := fmt.Errorf("failed to get user id from header: %v. err: %w", err, customerror.ErrUnauthenticated)
@@ -377,14 +377,14 @@ func (ph *PublicHandler) ProcessKnowledgeBaseFiles(ctx context.Context, req *art
 	if len(kbfs) == 0 {
 		return nil, fmt.Errorf("file not found. err: %w", customerror.ErrNotFound)
 	}
-	// check write permission for the knowledge base
+	// check write permission for the catalog
 	for _, kbf := range kbfs {
 		granted, err := ph.service.ACLClient.CheckPermission(ctx, "knowledgebase", kbf.KnowledgeBaseUID, "writer")
 		if err != nil {
 			return nil, err
 		}
 		if !granted {
-			return nil, fmt.Errorf("no permission to process knowledge base file.fileUID:%s err: %w", kbf.UID, customerror.ErrNoPermission)
+			return nil, fmt.Errorf("no permission to process catalog file.fileUID:%s err: %w", kbf.UID, customerror.ErrNoPermission)
 		}
 	}
 
@@ -400,7 +400,7 @@ func (ph *PublicHandler) ProcessKnowledgeBaseFiles(ctx context.Context, req *art
 			FileUid:       file.UID.String(),
 			OwnerUid:      file.Owner.String(),
 			CreatorUid:    file.CreatorUID.String(),
-			KbUid:         file.KnowledgeBaseUID.String(),
+			CatalogUid:    file.KnowledgeBaseUID.String(),
 			Name:          file.Name,
 			Type:          artifactpb.FileType(artifactpb.FileType_value[file.Type]),
 			CreateTime:    timestamppb.New(*file.CreateTime),
@@ -408,7 +408,7 @@ func (ph *PublicHandler) ProcessKnowledgeBaseFiles(ctx context.Context, req *art
 			ProcessStatus: artifactpb.FileProcessStatus(artifactpb.FileProcessStatus_value[file.ProcessStatus]),
 		})
 	}
-	return &artifactpb.ProcessKnowledgeBaseFilesResponse{
+	return &artifactpb.ProcessCatalogFilesResponse{
 		Files: resFiles,
 	}, nil
 }

@@ -27,7 +27,7 @@ func (s *Service) SimilarityChunksSearch(ctx context.Context, caller uuid.UUID, 
 	log.Info("vectorize text", zap.Duration("duration", time.Since(t)))
 	t = time.Now()
 	// get kb by kb_id and owner uid
-	kb, err := s.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, req.KbId)
+	kb, err := s.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, req.CatalogId)
 	if err != nil {
 		log.Error("failed to get knowledge base by owner and id", zap.Error(err))
 		return nil, fmt.Errorf("failed to get knowledge base by owner and id. err: %w", err)
