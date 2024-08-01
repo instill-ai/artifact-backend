@@ -351,16 +351,48 @@ func (ph *PublicHandler) DeleteCatalog(ctx context.Context, req *artifactpb.Dele
 		return nil, fmt.Errorf(ErrorDeleteKnowledgeBaseMsg, customerror.ErrNoPermission)
 	}
 
-	deletedKb, err := ph.service.Repository.DeleteKnowledgeBase(ctx, ns.NsUID.String(), req.CatalogId)
-	if err != nil {
-		return nil, err
-	}
-	err = ph.service.ACLClient.Purge(ctx, "knowledgebase", deletedKb.UID)
+	err = ph.service.ACLClient.Purge(ctx, "knowledgebase", kb.UID)
 	if err != nil {
 		log.Error("failed to purge catalog", zap.Error(err))
 		return nil, fmt.Errorf(ErrorDeleteKnowledgeBaseMsg, err)
 	}
 
+	//  delete collection milvus
+	err = ph.service.MilvusClient.DropKnowledgeBaseCollection(ctx, kb.UID.String())
+	if err != nil {
+		log.Error("failed to drop collection in milvus", zap.Error(err))
+	}
+	//  delete files in minIO
+	err = <-ph.service.MinIO.DeleteKnowledgeBase(ctx, kb.UID.String())
+	if err != nil {
+		log.Error("failed to delete files in minIO", zap.Error(err))
+	}
+	//  delete database in postgres
+	err = ph.service.Repository.DeleteAllKnowledgeBaseFiles(ctx, kb.UID.String())
+	if err != nil {
+		log.Error("failed to delete files in postgres", zap.Error(err))
+	}
+	//  delete converted files in postgres
+	err = ph.service.Repository.DeleteAllConvertedFilesinKb(ctx, kb.UID)
+	if err != nil {
+		log.Error("failed to delete converted files in postgres", zap.Error(err))
+	}
+	//  delete all chunks in postgres
+	err = ph.service.Repository.HardDeleteChunksByKbUID(ctx, kb.UID)
+	if err != nil {
+		log.Error("failed to delete chunks in postgres", zap.Error(err))
+	}
+
+	//  delete all embedding in postgres
+	err = ph.service.Repository.HardDeleteEmbeddingsByKbUID(ctx, kb.UID)
+	if err != nil {
+		log.Error("failed to delete embeddings in postgres", zap.Error(err))
+	}
+
+	deletedKb, err := ph.service.Repository.DeleteKnowledgeBase(ctx, ns.NsUID.String(), req.CatalogId)
+	if err != nil {
+		return nil, err
+	}
 	return &artifactpb.DeleteCatalogResponse{
 		Catalog: &artifactpb.Catalog{
 			Name:                deletedKb.Name,

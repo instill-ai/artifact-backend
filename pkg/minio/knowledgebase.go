@@ -19,7 +19,20 @@ type KnowledgeBaseI interface {
 	GetConvertedFilePathInKnowledgeBase(kbUID, ConvertedFileUID, fileExt string) string
 	// GetChunkPathInKnowledgeBase returns the path of the chunk in MinIO.
 	GetChunkPathInKnowledgeBase(kbUID, chunkUID string) string
+	// DeleteKnowledgeBase deletes all files in the knowledge base.
+	DeleteKnowledgeBase(ctx context.Context, kbUID string) chan error
+	// DeleteAllConvertedFilesInKb deletes converted files in the knowledge base.
+	DeleteAllConvertedFilesInKb(ctx context.Context, kbUID string) chan error
+	// DeleteAllUploadedFilesInKb deletes uploaded files in the knowledge base.
+	DeleteAllUploadedFilesInKb(ctx context.Context, kbUID string) chan error
+	// DeleteAllChunksInKb deletes chunks in the knowledge base.
+	DeleteAllChunksInKb(ctx context.Context, kbUID string) chan error
 }
+
+// prefix
+const uploadedFilePrefix = "/uploaded-file/"
+const convertedFilePrefix = "/converted-file/"
+const chunkPrefix = "/chunk/"
 
 // SaveConvertedFile saves a converted file to MinIO with the appropriate MIME type.
 func (m *Minio) SaveConvertedFile(ctx context.Context, kbUID, convertedFileUID, fileExt string, content []byte) error {
@@ -68,14 +81,47 @@ func (m *Minio) SaveChunks(ctx context.Context, kbUID string, chunks map[ChunkUI
 	return nil
 }
 
+// Delete all files in the knowledge base
+func (m *Minio) DeleteKnowledgeBase(ctx context.Context, kbUID string) chan error {
+	// List all objects in the knowledge base
+	err := m.DeleteFilesWithPrefix(ctx, kbUID)
+	return err
+}
+
+// Delete converted files in the knowledge base
+func (m *Minio) DeleteAllConvertedFilesInKb(ctx context.Context, kbUID string) chan error {
+	// List all objects in the knowledge base
+	err := m.DeleteFilesWithPrefix(ctx, kbUID+convertedFilePrefix)
+
+	return err
+}
+
+// Delete uploaded files in the knowledge base
+func (m *Minio) DeleteAllUploadedFilesInKb(ctx context.Context, kbUID string) chan error {
+	// List all objects in the knowledge base
+	err := m.DeleteFilesWithPrefix(ctx, kbUID+uploadedFilePrefix)
+
+	return err
+}
+
+// Delete chunks in the knowledge base
+func (m *Minio) DeleteAllChunksInKb(ctx context.Context, kbUID string) chan error {
+	// List all objects in the knowledge base
+	err := m.DeleteFilesWithPrefix(ctx, kbUID+chunkPrefix)
+
+	return err
+}
+
+
+
 func (m *Minio) GetUploadedFilePathInKnowledgeBase(kbUID, dest string) string {
-	return kbUID + "/uploaded-file/" + dest
+	return kbUID + uploadedFilePrefix + dest
 }
 
 func (m *Minio) GetConvertedFilePathInKnowledgeBase(kbUID, ConvertedFileUID, fileExt string) string {
-	return kbUID + "/converted-file/" + ConvertedFileUID + "." + fileExt
+	return kbUID + convertedFilePrefix + ConvertedFileUID + "." + fileExt
 }
 
 func (m *Minio) GetChunkPathInKnowledgeBase(kbUID, chunkUID string) string {
-	return kbUID + "/chunk/" + chunkUID + ".txt"
+	return kbUID + chunkPrefix + chunkUID + ".txt"
 }

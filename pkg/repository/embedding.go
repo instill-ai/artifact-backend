@@ -18,8 +18,11 @@ type EmbeddingI interface {
 	UpsertEmbeddings(ctx context.Context, embeddings []Embedding, externalServiceCall func(embUIDs []string) error) ([]Embedding, error)
 	DeleteEmbeddingsBySource(ctx context.Context, sourceTable string, sourceUID uuid.UUID) error
 	DeleteEmbeddingsByUIDs(ctx context.Context, embUIDs []uuid.UUID) error
+	HardDeleteEmbeddingsByKbUID(ctx context.Context, kbUID uuid.UUID) error
+	HardDeleteEmbeddingsByKbFileUID(ctx context.Context, kbFileUID uuid.UUID) error
 	// GetEmbeddingByUIDs fetches embeddings by their UIDs.
 	GetEmbeddingByUIDs(ctx context.Context, embUIDs []uuid.UUID) ([]Embedding, error)
+	ListEmbeddingsByKbFileUID(ctx context.Context, kbFileUID uuid.UUID) ([]Embedding, error)
 }
 type Embedding struct {
 	UID uuid.UUID `gorm:"column:uid;type:uuid;default:gen_random_uuid();primaryKey" json:"uid"`
@@ -92,6 +95,8 @@ type EmbeddingColumns struct {
 	Collection  string
 	CreateTime  string
 	UpdateTime  string
+	KbUID       string
+	KbFileUID   string
 }
 
 var EmbeddingColumn = EmbeddingColumns{
@@ -102,6 +107,8 @@ var EmbeddingColumn = EmbeddingColumns{
 	Collection:  "collection",
 	CreateTime:  "create_time",
 	UpdateTime:  "update_time",
+	KbUID:       "kb_uid",
+	KbFileUID:   "kb_file_uid",
 }
 
 // TableName returns the table name of the Embedding
@@ -169,6 +176,28 @@ func (r *Repository) GetEmbeddingByUIDs(ctx context.Context, embUIDs []uuid.UUID
 	var embeddings []Embedding
 	where := fmt.Sprintf("%s IN (?)", EmbeddingColumn.UID)
 	if err := r.db.WithContext(ctx).Where(where, embUIDs).Find(&embeddings).Error; err != nil {
+		return nil, err
+	}
+	return embeddings, nil
+}
+
+// HardDeleteEmbeddingsByKbUID deletes all the embeddings associated with a certain kbUID.
+func (r *Repository) HardDeleteEmbeddingsByKbUID(ctx context.Context, kbUID uuid.UUID) error {
+	where := fmt.Sprintf("%s = ?", EmbeddingColumn.KbUID)
+	return r.db.WithContext(ctx).Where(where, kbUID).Unscoped().Delete(&Embedding{}).Error
+}
+
+// HardDeleteEmbeddingsByKbFileUID deletes all the embeddings associated with a certain kbFileUID.
+func (r *Repository) HardDeleteEmbeddingsByKbFileUID(ctx context.Context, kbFileUID uuid.UUID) error {
+	where := fmt.Sprintf("%s = ?", EmbeddingColumn.KbFileUID)
+	return r.db.WithContext(ctx).Where(where, kbFileUID).Unscoped().Delete(&Embedding{}).Error
+}
+
+// ListEmbeddingsByKbFileUID fetches embeddings by their kbFileUID.
+func (r *Repository) ListEmbeddingsByKbFileUID(ctx context.Context, kbFileUID uuid.UUID) ([]Embedding, error) {
+	var embeddings []Embedding
+	where := fmt.Sprintf("%s = ?", EmbeddingColumn.KbFileUID)
+	if err := r.db.WithContext(ctx).Where(where, kbFileUID).Find(&embeddings).Error; err != nil {
 		return nil, err
 	}
 	return embeddings, nil

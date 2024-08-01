@@ -17,9 +17,14 @@ type TextChunkI interface {
 	DeleteAndCreateChunks(ctx context.Context, sourceTable string, sourceUID uuid.UUID, chunks []*TextChunk, externalServiceCall func(chunkUIDs []string) (map[string]any, error)) ([]*TextChunk, error)
 	DeleteChunksBySource(ctx context.Context, sourceTable string, sourceUID uuid.UUID) error
 	DeleteChunksByUIDs(ctx context.Context, chunkUIDs []uuid.UUID) error
+	// HardDeleteChunksByKbUID deletes all the chunks associated with a certain kbUID.
+	HardDeleteChunksByKbUID(ctx context.Context, kbUID uuid.UUID) error
+	// HardDeleteChunksByKbFileUID deletes all the chunks associated with a certain kbFileUID.
+	HardDeleteChunksByKbFileUID(ctx context.Context, kbFileUID uuid.UUID) error
 	GetTextChunksBySource(ctx context.Context, sourceTable string, sourceUID uuid.UUID) ([]TextChunk, error)
 	GetChunksByUIDs(ctx context.Context, chunkUIDs []uuid.UUID) ([]TextChunk, error)
 	GetTotalTokensByListKBUIDs(ctx context.Context, kbUIDs []uuid.UUID) (map[uuid.UUID]int, error)
+	ListChunksByKbFileUID(ctx context.Context, kbFileUID uuid.UUID) ([]TextChunk, error)
 	GetFilesTotalTokens(ctx context.Context, sources map[FileUID]struct {
 		SourceTable SourceTable
 		SourceUID   SourceUID
@@ -66,6 +71,8 @@ type TextChunkColumns struct {
 	Order       string
 	CreateTime  string
 	UpdateTime  string
+	KbUID       string
+	KbFileUID   string
 }
 
 var TextChunkColumn = TextChunkColumns{
@@ -80,6 +87,8 @@ var TextChunkColumn = TextChunkColumns{
 	Order:       "in_order",
 	CreateTime:  "create_time",
 	UpdateTime:  "update_time",
+	KbUID:       "kb_uid",
+	KbFileUID:   "kb_file_uid",
 }
 
 // TableName returns the table name of the TextChunk
@@ -337,4 +346,26 @@ func (r *Repository) GetChunksByUIDs(ctx context.Context, chunkUIDs []uuid.UUID)
 		return nil, err
 	}
 	return chunks, nil
+}
+
+// HardDeleteChunksByKbUID deletes all the chunks associated with a certain kbUID.
+func (r *Repository) HardDeleteChunksByKbUID(ctx context.Context, kbUID uuid.UUID) error {
+	where := fmt.Sprintf("%s = ?", TextChunkColumn.KbUID)
+	return r.db.WithContext(ctx).Where(where, kbUID).Unscoped().Delete(&TextChunk{}).Error
+}
+
+// ListChunksByKbFileUID returns the list of chunks by kbFileUID
+func (r *Repository) ListChunksByKbFileUID(ctx context.Context, kbFileUID uuid.UUID) ([]TextChunk, error) {
+	var chunks []TextChunk
+	where := fmt.Sprintf("%s = ?", TextChunkColumn.KbFileUID)
+	if err := r.db.WithContext(ctx).Where(where, kbFileUID).Find(&chunks).Error; err != nil {
+		return nil, err
+	}
+	return chunks, nil
+}
+
+// HardDeleteChunksByKbFileUID deletes all the chunks associated with a certain kbFileUID.
+func (r *Repository) HardDeleteChunksByKbFileUID(ctx context.Context, kbFileUID uuid.UUID) error {
+	where := fmt.Sprintf("%s = ?", TextChunkColumn.KbFileUID)
+	return r.db.WithContext(ctx).Where(where, kbFileUID).Unscoped().Delete(&TextChunk{}).Error
 }

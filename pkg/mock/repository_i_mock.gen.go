@@ -44,6 +44,18 @@ type RepositoryIMock struct {
 	beforeCreateKnowledgeBaseFileCounter uint64
 	CreateKnowledgeBaseFileMock          mRepositoryIMockCreateKnowledgeBaseFile
 
+	funcDeleteAllConvertedFilesinKb          func(ctx context.Context, kbUID uuid.UUID) (err error)
+	inspectFuncDeleteAllConvertedFilesinKb   func(ctx context.Context, kbUID uuid.UUID)
+	afterDeleteAllConvertedFilesinKbCounter  uint64
+	beforeDeleteAllConvertedFilesinKbCounter uint64
+	DeleteAllConvertedFilesinKbMock          mRepositoryIMockDeleteAllConvertedFilesinKb
+
+	funcDeleteAllKnowledgeBaseFiles          func(ctx context.Context, kbUID string) (err error)
+	inspectFuncDeleteAllKnowledgeBaseFiles   func(ctx context.Context, kbUID string)
+	afterDeleteAllKnowledgeBaseFilesCounter  uint64
+	beforeDeleteAllKnowledgeBaseFilesCounter uint64
+	DeleteAllKnowledgeBaseFilesMock          mRepositoryIMockDeleteAllKnowledgeBaseFiles
+
 	funcDeleteAndCreateChunks          func(ctx context.Context, sourceTable string, sourceUID uuid.UUID, chunks []*mm_repository.TextChunk, externalServiceCall func(chunkUIDs []string) (map[string]any, error)) (tpa1 []*mm_repository.TextChunk, err error)
 	inspectFuncDeleteAndCreateChunks   func(ctx context.Context, sourceTable string, sourceUID uuid.UUID, chunks []*mm_repository.TextChunk, externalServiceCall func(chunkUIDs []string) (map[string]any, error))
 	afterDeleteAndCreateChunksCounter  uint64
@@ -203,6 +215,36 @@ type RepositoryIMock struct {
 	beforeGetTruthSourceByFileUIDCounter uint64
 	GetTruthSourceByFileUIDMock          mRepositoryIMockGetTruthSourceByFileUID
 
+	funcHardDeleteChunksByKbFileUID          func(ctx context.Context, kbFileUID uuid.UUID) (err error)
+	inspectFuncHardDeleteChunksByKbFileUID   func(ctx context.Context, kbFileUID uuid.UUID)
+	afterHardDeleteChunksByKbFileUIDCounter  uint64
+	beforeHardDeleteChunksByKbFileUIDCounter uint64
+	HardDeleteChunksByKbFileUIDMock          mRepositoryIMockHardDeleteChunksByKbFileUID
+
+	funcHardDeleteChunksByKbUID          func(ctx context.Context, kbUID uuid.UUID) (err error)
+	inspectFuncHardDeleteChunksByKbUID   func(ctx context.Context, kbUID uuid.UUID)
+	afterHardDeleteChunksByKbUIDCounter  uint64
+	beforeHardDeleteChunksByKbUIDCounter uint64
+	HardDeleteChunksByKbUIDMock          mRepositoryIMockHardDeleteChunksByKbUID
+
+	funcHardDeleteConvertedFileByFileUID          func(ctx context.Context, fileUID uuid.UUID) (err error)
+	inspectFuncHardDeleteConvertedFileByFileUID   func(ctx context.Context, fileUID uuid.UUID)
+	afterHardDeleteConvertedFileByFileUIDCounter  uint64
+	beforeHardDeleteConvertedFileByFileUIDCounter uint64
+	HardDeleteConvertedFileByFileUIDMock          mRepositoryIMockHardDeleteConvertedFileByFileUID
+
+	funcHardDeleteEmbeddingsByKbFileUID          func(ctx context.Context, kbFileUID uuid.UUID) (err error)
+	inspectFuncHardDeleteEmbeddingsByKbFileUID   func(ctx context.Context, kbFileUID uuid.UUID)
+	afterHardDeleteEmbeddingsByKbFileUIDCounter  uint64
+	beforeHardDeleteEmbeddingsByKbFileUIDCounter uint64
+	HardDeleteEmbeddingsByKbFileUIDMock          mRepositoryIMockHardDeleteEmbeddingsByKbFileUID
+
+	funcHardDeleteEmbeddingsByKbUID          func(ctx context.Context, kbUID uuid.UUID) (err error)
+	inspectFuncHardDeleteEmbeddingsByKbUID   func(ctx context.Context, kbUID uuid.UUID)
+	afterHardDeleteEmbeddingsByKbUIDCounter  uint64
+	beforeHardDeleteEmbeddingsByKbUIDCounter uint64
+	HardDeleteEmbeddingsByKbUIDMock          mRepositoryIMockHardDeleteEmbeddingsByKbUID
+
 	funcIncreaseKnowledgeBaseUsage          func(ctx context.Context, kbUID string, amount int) (err error)
 	inspectFuncIncreaseKnowledgeBaseUsage   func(ctx context.Context, kbUID string, amount int)
 	afterIncreaseKnowledgeBaseUsageCounter  uint64
@@ -214,6 +256,18 @@ type RepositoryIMock struct {
 	afterKnowledgeBaseFileTableNameCounter  uint64
 	beforeKnowledgeBaseFileTableNameCounter uint64
 	KnowledgeBaseFileTableNameMock          mRepositoryIMockKnowledgeBaseFileTableName
+
+	funcListChunksByKbFileUID          func(ctx context.Context, kbFileUID uuid.UUID) (ta1 []mm_repository.TextChunk, err error)
+	inspectFuncListChunksByKbFileUID   func(ctx context.Context, kbFileUID uuid.UUID)
+	afterListChunksByKbFileUIDCounter  uint64
+	beforeListChunksByKbFileUIDCounter uint64
+	ListChunksByKbFileUIDMock          mRepositoryIMockListChunksByKbFileUID
+
+	funcListEmbeddingsByKbFileUID          func(ctx context.Context, kbFileUID uuid.UUID) (ea1 []mm_repository.Embedding, err error)
+	inspectFuncListEmbeddingsByKbFileUID   func(ctx context.Context, kbFileUID uuid.UUID)
+	afterListEmbeddingsByKbFileUIDCounter  uint64
+	beforeListEmbeddingsByKbFileUIDCounter uint64
+	ListEmbeddingsByKbFileUIDMock          mRepositoryIMockListEmbeddingsByKbFileUID
 
 	funcListKnowledgeBaseFiles          func(ctx context.Context, uid string, ownerUID string, kbUID string, pageSize int32, nextPageToken string, filesUID []string) (ka1 []mm_repository.KnowledgeBaseFile, i1 int, s1 string, err error)
 	inspectFuncListKnowledgeBaseFiles   func(ctx context.Context, uid string, ownerUID string, kbUID string, pageSize int32, nextPageToken string, filesUID []string)
@@ -289,6 +343,12 @@ func NewRepositoryIMock(t minimock.Tester) *RepositoryIMock {
 	m.CreateKnowledgeBaseFileMock = mRepositoryIMockCreateKnowledgeBaseFile{mock: m}
 	m.CreateKnowledgeBaseFileMock.callArgs = []*RepositoryIMockCreateKnowledgeBaseFileParams{}
 
+	m.DeleteAllConvertedFilesinKbMock = mRepositoryIMockDeleteAllConvertedFilesinKb{mock: m}
+	m.DeleteAllConvertedFilesinKbMock.callArgs = []*RepositoryIMockDeleteAllConvertedFilesinKbParams{}
+
+	m.DeleteAllKnowledgeBaseFilesMock = mRepositoryIMockDeleteAllKnowledgeBaseFiles{mock: m}
+	m.DeleteAllKnowledgeBaseFilesMock.callArgs = []*RepositoryIMockDeleteAllKnowledgeBaseFilesParams{}
+
 	m.DeleteAndCreateChunksMock = mRepositoryIMockDeleteAndCreateChunks{mock: m}
 	m.DeleteAndCreateChunksMock.callArgs = []*RepositoryIMockDeleteAndCreateChunksParams{}
 
@@ -361,10 +421,31 @@ func NewRepositoryIMock(t minimock.Tester) *RepositoryIMock {
 	m.GetTruthSourceByFileUIDMock = mRepositoryIMockGetTruthSourceByFileUID{mock: m}
 	m.GetTruthSourceByFileUIDMock.callArgs = []*RepositoryIMockGetTruthSourceByFileUIDParams{}
 
+	m.HardDeleteChunksByKbFileUIDMock = mRepositoryIMockHardDeleteChunksByKbFileUID{mock: m}
+	m.HardDeleteChunksByKbFileUIDMock.callArgs = []*RepositoryIMockHardDeleteChunksByKbFileUIDParams{}
+
+	m.HardDeleteChunksByKbUIDMock = mRepositoryIMockHardDeleteChunksByKbUID{mock: m}
+	m.HardDeleteChunksByKbUIDMock.callArgs = []*RepositoryIMockHardDeleteChunksByKbUIDParams{}
+
+	m.HardDeleteConvertedFileByFileUIDMock = mRepositoryIMockHardDeleteConvertedFileByFileUID{mock: m}
+	m.HardDeleteConvertedFileByFileUIDMock.callArgs = []*RepositoryIMockHardDeleteConvertedFileByFileUIDParams{}
+
+	m.HardDeleteEmbeddingsByKbFileUIDMock = mRepositoryIMockHardDeleteEmbeddingsByKbFileUID{mock: m}
+	m.HardDeleteEmbeddingsByKbFileUIDMock.callArgs = []*RepositoryIMockHardDeleteEmbeddingsByKbFileUIDParams{}
+
+	m.HardDeleteEmbeddingsByKbUIDMock = mRepositoryIMockHardDeleteEmbeddingsByKbUID{mock: m}
+	m.HardDeleteEmbeddingsByKbUIDMock.callArgs = []*RepositoryIMockHardDeleteEmbeddingsByKbUIDParams{}
+
 	m.IncreaseKnowledgeBaseUsageMock = mRepositoryIMockIncreaseKnowledgeBaseUsage{mock: m}
 	m.IncreaseKnowledgeBaseUsageMock.callArgs = []*RepositoryIMockIncreaseKnowledgeBaseUsageParams{}
 
 	m.KnowledgeBaseFileTableNameMock = mRepositoryIMockKnowledgeBaseFileTableName{mock: m}
+
+	m.ListChunksByKbFileUIDMock = mRepositoryIMockListChunksByKbFileUID{mock: m}
+	m.ListChunksByKbFileUIDMock.callArgs = []*RepositoryIMockListChunksByKbFileUIDParams{}
+
+	m.ListEmbeddingsByKbFileUIDMock = mRepositoryIMockListEmbeddingsByKbFileUID{mock: m}
+	m.ListEmbeddingsByKbFileUIDMock.callArgs = []*RepositoryIMockListEmbeddingsByKbFileUIDParams{}
 
 	m.ListKnowledgeBaseFilesMock = mRepositoryIMockListKnowledgeBaseFiles{mock: m}
 	m.ListKnowledgeBaseFilesMock.callArgs = []*RepositoryIMockListKnowledgeBaseFilesParams{}
@@ -1556,6 +1637,614 @@ func (m *RepositoryIMock) MinimockCreateKnowledgeBaseFileInspect() {
 	if !m.CreateKnowledgeBaseFileMock.invocationsDone() && afterCreateKnowledgeBaseFileCounter > 0 {
 		m.t.Errorf("Expected %d calls to RepositoryIMock.CreateKnowledgeBaseFile but found %d calls",
 			mm_atomic.LoadUint64(&m.CreateKnowledgeBaseFileMock.expectedInvocations), afterCreateKnowledgeBaseFileCounter)
+	}
+}
+
+type mRepositoryIMockDeleteAllConvertedFilesinKb struct {
+	mock               *RepositoryIMock
+	defaultExpectation *RepositoryIMockDeleteAllConvertedFilesinKbExpectation
+	expectations       []*RepositoryIMockDeleteAllConvertedFilesinKbExpectation
+
+	callArgs []*RepositoryIMockDeleteAllConvertedFilesinKbParams
+	mutex    sync.RWMutex
+
+	expectedInvocations uint64
+}
+
+// RepositoryIMockDeleteAllConvertedFilesinKbExpectation specifies expectation struct of the RepositoryI.DeleteAllConvertedFilesinKb
+type RepositoryIMockDeleteAllConvertedFilesinKbExpectation struct {
+	mock      *RepositoryIMock
+	params    *RepositoryIMockDeleteAllConvertedFilesinKbParams
+	paramPtrs *RepositoryIMockDeleteAllConvertedFilesinKbParamPtrs
+	results   *RepositoryIMockDeleteAllConvertedFilesinKbResults
+	Counter   uint64
+}
+
+// RepositoryIMockDeleteAllConvertedFilesinKbParams contains parameters of the RepositoryI.DeleteAllConvertedFilesinKb
+type RepositoryIMockDeleteAllConvertedFilesinKbParams struct {
+	ctx   context.Context
+	kbUID uuid.UUID
+}
+
+// RepositoryIMockDeleteAllConvertedFilesinKbParamPtrs contains pointers to parameters of the RepositoryI.DeleteAllConvertedFilesinKb
+type RepositoryIMockDeleteAllConvertedFilesinKbParamPtrs struct {
+	ctx   *context.Context
+	kbUID *uuid.UUID
+}
+
+// RepositoryIMockDeleteAllConvertedFilesinKbResults contains results of the RepositoryI.DeleteAllConvertedFilesinKb
+type RepositoryIMockDeleteAllConvertedFilesinKbResults struct {
+	err error
+}
+
+// Expect sets up expected params for RepositoryI.DeleteAllConvertedFilesinKb
+func (mmDeleteAllConvertedFilesinKb *mRepositoryIMockDeleteAllConvertedFilesinKb) Expect(ctx context.Context, kbUID uuid.UUID) *mRepositoryIMockDeleteAllConvertedFilesinKb {
+	if mmDeleteAllConvertedFilesinKb.mock.funcDeleteAllConvertedFilesinKb != nil {
+		mmDeleteAllConvertedFilesinKb.mock.t.Fatalf("RepositoryIMock.DeleteAllConvertedFilesinKb mock is already set by Set")
+	}
+
+	if mmDeleteAllConvertedFilesinKb.defaultExpectation == nil {
+		mmDeleteAllConvertedFilesinKb.defaultExpectation = &RepositoryIMockDeleteAllConvertedFilesinKbExpectation{}
+	}
+
+	if mmDeleteAllConvertedFilesinKb.defaultExpectation.paramPtrs != nil {
+		mmDeleteAllConvertedFilesinKb.mock.t.Fatalf("RepositoryIMock.DeleteAllConvertedFilesinKb mock is already set by ExpectParams functions")
+	}
+
+	mmDeleteAllConvertedFilesinKb.defaultExpectation.params = &RepositoryIMockDeleteAllConvertedFilesinKbParams{ctx, kbUID}
+	for _, e := range mmDeleteAllConvertedFilesinKb.expectations {
+		if minimock.Equal(e.params, mmDeleteAllConvertedFilesinKb.defaultExpectation.params) {
+			mmDeleteAllConvertedFilesinKb.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmDeleteAllConvertedFilesinKb.defaultExpectation.params)
+		}
+	}
+
+	return mmDeleteAllConvertedFilesinKb
+}
+
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.DeleteAllConvertedFilesinKb
+func (mmDeleteAllConvertedFilesinKb *mRepositoryIMockDeleteAllConvertedFilesinKb) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockDeleteAllConvertedFilesinKb {
+	if mmDeleteAllConvertedFilesinKb.mock.funcDeleteAllConvertedFilesinKb != nil {
+		mmDeleteAllConvertedFilesinKb.mock.t.Fatalf("RepositoryIMock.DeleteAllConvertedFilesinKb mock is already set by Set")
+	}
+
+	if mmDeleteAllConvertedFilesinKb.defaultExpectation == nil {
+		mmDeleteAllConvertedFilesinKb.defaultExpectation = &RepositoryIMockDeleteAllConvertedFilesinKbExpectation{}
+	}
+
+	if mmDeleteAllConvertedFilesinKb.defaultExpectation.params != nil {
+		mmDeleteAllConvertedFilesinKb.mock.t.Fatalf("RepositoryIMock.DeleteAllConvertedFilesinKb mock is already set by Expect")
+	}
+
+	if mmDeleteAllConvertedFilesinKb.defaultExpectation.paramPtrs == nil {
+		mmDeleteAllConvertedFilesinKb.defaultExpectation.paramPtrs = &RepositoryIMockDeleteAllConvertedFilesinKbParamPtrs{}
+	}
+	mmDeleteAllConvertedFilesinKb.defaultExpectation.paramPtrs.ctx = &ctx
+
+	return mmDeleteAllConvertedFilesinKb
+}
+
+// ExpectKbUIDParam2 sets up expected param kbUID for RepositoryI.DeleteAllConvertedFilesinKb
+func (mmDeleteAllConvertedFilesinKb *mRepositoryIMockDeleteAllConvertedFilesinKb) ExpectKbUIDParam2(kbUID uuid.UUID) *mRepositoryIMockDeleteAllConvertedFilesinKb {
+	if mmDeleteAllConvertedFilesinKb.mock.funcDeleteAllConvertedFilesinKb != nil {
+		mmDeleteAllConvertedFilesinKb.mock.t.Fatalf("RepositoryIMock.DeleteAllConvertedFilesinKb mock is already set by Set")
+	}
+
+	if mmDeleteAllConvertedFilesinKb.defaultExpectation == nil {
+		mmDeleteAllConvertedFilesinKb.defaultExpectation = &RepositoryIMockDeleteAllConvertedFilesinKbExpectation{}
+	}
+
+	if mmDeleteAllConvertedFilesinKb.defaultExpectation.params != nil {
+		mmDeleteAllConvertedFilesinKb.mock.t.Fatalf("RepositoryIMock.DeleteAllConvertedFilesinKb mock is already set by Expect")
+	}
+
+	if mmDeleteAllConvertedFilesinKb.defaultExpectation.paramPtrs == nil {
+		mmDeleteAllConvertedFilesinKb.defaultExpectation.paramPtrs = &RepositoryIMockDeleteAllConvertedFilesinKbParamPtrs{}
+	}
+	mmDeleteAllConvertedFilesinKb.defaultExpectation.paramPtrs.kbUID = &kbUID
+
+	return mmDeleteAllConvertedFilesinKb
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.DeleteAllConvertedFilesinKb
+func (mmDeleteAllConvertedFilesinKb *mRepositoryIMockDeleteAllConvertedFilesinKb) Inspect(f func(ctx context.Context, kbUID uuid.UUID)) *mRepositoryIMockDeleteAllConvertedFilesinKb {
+	if mmDeleteAllConvertedFilesinKb.mock.inspectFuncDeleteAllConvertedFilesinKb != nil {
+		mmDeleteAllConvertedFilesinKb.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.DeleteAllConvertedFilesinKb")
+	}
+
+	mmDeleteAllConvertedFilesinKb.mock.inspectFuncDeleteAllConvertedFilesinKb = f
+
+	return mmDeleteAllConvertedFilesinKb
+}
+
+// Return sets up results that will be returned by RepositoryI.DeleteAllConvertedFilesinKb
+func (mmDeleteAllConvertedFilesinKb *mRepositoryIMockDeleteAllConvertedFilesinKb) Return(err error) *RepositoryIMock {
+	if mmDeleteAllConvertedFilesinKb.mock.funcDeleteAllConvertedFilesinKb != nil {
+		mmDeleteAllConvertedFilesinKb.mock.t.Fatalf("RepositoryIMock.DeleteAllConvertedFilesinKb mock is already set by Set")
+	}
+
+	if mmDeleteAllConvertedFilesinKb.defaultExpectation == nil {
+		mmDeleteAllConvertedFilesinKb.defaultExpectation = &RepositoryIMockDeleteAllConvertedFilesinKbExpectation{mock: mmDeleteAllConvertedFilesinKb.mock}
+	}
+	mmDeleteAllConvertedFilesinKb.defaultExpectation.results = &RepositoryIMockDeleteAllConvertedFilesinKbResults{err}
+	return mmDeleteAllConvertedFilesinKb.mock
+}
+
+// Set uses given function f to mock the RepositoryI.DeleteAllConvertedFilesinKb method
+func (mmDeleteAllConvertedFilesinKb *mRepositoryIMockDeleteAllConvertedFilesinKb) Set(f func(ctx context.Context, kbUID uuid.UUID) (err error)) *RepositoryIMock {
+	if mmDeleteAllConvertedFilesinKb.defaultExpectation != nil {
+		mmDeleteAllConvertedFilesinKb.mock.t.Fatalf("Default expectation is already set for the RepositoryI.DeleteAllConvertedFilesinKb method")
+	}
+
+	if len(mmDeleteAllConvertedFilesinKb.expectations) > 0 {
+		mmDeleteAllConvertedFilesinKb.mock.t.Fatalf("Some expectations are already set for the RepositoryI.DeleteAllConvertedFilesinKb method")
+	}
+
+	mmDeleteAllConvertedFilesinKb.mock.funcDeleteAllConvertedFilesinKb = f
+	return mmDeleteAllConvertedFilesinKb.mock
+}
+
+// When sets expectation for the RepositoryI.DeleteAllConvertedFilesinKb which will trigger the result defined by the following
+// Then helper
+func (mmDeleteAllConvertedFilesinKb *mRepositoryIMockDeleteAllConvertedFilesinKb) When(ctx context.Context, kbUID uuid.UUID) *RepositoryIMockDeleteAllConvertedFilesinKbExpectation {
+	if mmDeleteAllConvertedFilesinKb.mock.funcDeleteAllConvertedFilesinKb != nil {
+		mmDeleteAllConvertedFilesinKb.mock.t.Fatalf("RepositoryIMock.DeleteAllConvertedFilesinKb mock is already set by Set")
+	}
+
+	expectation := &RepositoryIMockDeleteAllConvertedFilesinKbExpectation{
+		mock:   mmDeleteAllConvertedFilesinKb.mock,
+		params: &RepositoryIMockDeleteAllConvertedFilesinKbParams{ctx, kbUID},
+	}
+	mmDeleteAllConvertedFilesinKb.expectations = append(mmDeleteAllConvertedFilesinKb.expectations, expectation)
+	return expectation
+}
+
+// Then sets up RepositoryI.DeleteAllConvertedFilesinKb return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockDeleteAllConvertedFilesinKbExpectation) Then(err error) *RepositoryIMock {
+	e.results = &RepositoryIMockDeleteAllConvertedFilesinKbResults{err}
+	return e.mock
+}
+
+// Times sets number of times RepositoryI.DeleteAllConvertedFilesinKb should be invoked
+func (mmDeleteAllConvertedFilesinKb *mRepositoryIMockDeleteAllConvertedFilesinKb) Times(n uint64) *mRepositoryIMockDeleteAllConvertedFilesinKb {
+	if n == 0 {
+		mmDeleteAllConvertedFilesinKb.mock.t.Fatalf("Times of RepositoryIMock.DeleteAllConvertedFilesinKb mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmDeleteAllConvertedFilesinKb.expectedInvocations, n)
+	return mmDeleteAllConvertedFilesinKb
+}
+
+func (mmDeleteAllConvertedFilesinKb *mRepositoryIMockDeleteAllConvertedFilesinKb) invocationsDone() bool {
+	if len(mmDeleteAllConvertedFilesinKb.expectations) == 0 && mmDeleteAllConvertedFilesinKb.defaultExpectation == nil && mmDeleteAllConvertedFilesinKb.mock.funcDeleteAllConvertedFilesinKb == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmDeleteAllConvertedFilesinKb.mock.afterDeleteAllConvertedFilesinKbCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmDeleteAllConvertedFilesinKb.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// DeleteAllConvertedFilesinKb implements repository.RepositoryI
+func (mmDeleteAllConvertedFilesinKb *RepositoryIMock) DeleteAllConvertedFilesinKb(ctx context.Context, kbUID uuid.UUID) (err error) {
+	mm_atomic.AddUint64(&mmDeleteAllConvertedFilesinKb.beforeDeleteAllConvertedFilesinKbCounter, 1)
+	defer mm_atomic.AddUint64(&mmDeleteAllConvertedFilesinKb.afterDeleteAllConvertedFilesinKbCounter, 1)
+
+	if mmDeleteAllConvertedFilesinKb.inspectFuncDeleteAllConvertedFilesinKb != nil {
+		mmDeleteAllConvertedFilesinKb.inspectFuncDeleteAllConvertedFilesinKb(ctx, kbUID)
+	}
+
+	mm_params := RepositoryIMockDeleteAllConvertedFilesinKbParams{ctx, kbUID}
+
+	// Record call args
+	mmDeleteAllConvertedFilesinKb.DeleteAllConvertedFilesinKbMock.mutex.Lock()
+	mmDeleteAllConvertedFilesinKb.DeleteAllConvertedFilesinKbMock.callArgs = append(mmDeleteAllConvertedFilesinKb.DeleteAllConvertedFilesinKbMock.callArgs, &mm_params)
+	mmDeleteAllConvertedFilesinKb.DeleteAllConvertedFilesinKbMock.mutex.Unlock()
+
+	for _, e := range mmDeleteAllConvertedFilesinKb.DeleteAllConvertedFilesinKbMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmDeleteAllConvertedFilesinKb.DeleteAllConvertedFilesinKbMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmDeleteAllConvertedFilesinKb.DeleteAllConvertedFilesinKbMock.defaultExpectation.Counter, 1)
+		mm_want := mmDeleteAllConvertedFilesinKb.DeleteAllConvertedFilesinKbMock.defaultExpectation.params
+		mm_want_ptrs := mmDeleteAllConvertedFilesinKb.DeleteAllConvertedFilesinKbMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryIMockDeleteAllConvertedFilesinKbParams{ctx, kbUID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmDeleteAllConvertedFilesinKb.t.Errorf("RepositoryIMock.DeleteAllConvertedFilesinKb got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.kbUID != nil && !minimock.Equal(*mm_want_ptrs.kbUID, mm_got.kbUID) {
+				mmDeleteAllConvertedFilesinKb.t.Errorf("RepositoryIMock.DeleteAllConvertedFilesinKb got unexpected parameter kbUID, want: %#v, got: %#v%s\n", *mm_want_ptrs.kbUID, mm_got.kbUID, minimock.Diff(*mm_want_ptrs.kbUID, mm_got.kbUID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmDeleteAllConvertedFilesinKb.t.Errorf("RepositoryIMock.DeleteAllConvertedFilesinKb got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmDeleteAllConvertedFilesinKb.DeleteAllConvertedFilesinKbMock.defaultExpectation.results
+		if mm_results == nil {
+			mmDeleteAllConvertedFilesinKb.t.Fatal("No results are set for the RepositoryIMock.DeleteAllConvertedFilesinKb")
+		}
+		return (*mm_results).err
+	}
+	if mmDeleteAllConvertedFilesinKb.funcDeleteAllConvertedFilesinKb != nil {
+		return mmDeleteAllConvertedFilesinKb.funcDeleteAllConvertedFilesinKb(ctx, kbUID)
+	}
+	mmDeleteAllConvertedFilesinKb.t.Fatalf("Unexpected call to RepositoryIMock.DeleteAllConvertedFilesinKb. %v %v", ctx, kbUID)
+	return
+}
+
+// DeleteAllConvertedFilesinKbAfterCounter returns a count of finished RepositoryIMock.DeleteAllConvertedFilesinKb invocations
+func (mmDeleteAllConvertedFilesinKb *RepositoryIMock) DeleteAllConvertedFilesinKbAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmDeleteAllConvertedFilesinKb.afterDeleteAllConvertedFilesinKbCounter)
+}
+
+// DeleteAllConvertedFilesinKbBeforeCounter returns a count of RepositoryIMock.DeleteAllConvertedFilesinKb invocations
+func (mmDeleteAllConvertedFilesinKb *RepositoryIMock) DeleteAllConvertedFilesinKbBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmDeleteAllConvertedFilesinKb.beforeDeleteAllConvertedFilesinKbCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryIMock.DeleteAllConvertedFilesinKb.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmDeleteAllConvertedFilesinKb *mRepositoryIMockDeleteAllConvertedFilesinKb) Calls() []*RepositoryIMockDeleteAllConvertedFilesinKbParams {
+	mmDeleteAllConvertedFilesinKb.mutex.RLock()
+
+	argCopy := make([]*RepositoryIMockDeleteAllConvertedFilesinKbParams, len(mmDeleteAllConvertedFilesinKb.callArgs))
+	copy(argCopy, mmDeleteAllConvertedFilesinKb.callArgs)
+
+	mmDeleteAllConvertedFilesinKb.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockDeleteAllConvertedFilesinKbDone returns true if the count of the DeleteAllConvertedFilesinKb invocations corresponds
+// the number of defined expectations
+func (m *RepositoryIMock) MinimockDeleteAllConvertedFilesinKbDone() bool {
+	for _, e := range m.DeleteAllConvertedFilesinKbMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.DeleteAllConvertedFilesinKbMock.invocationsDone()
+}
+
+// MinimockDeleteAllConvertedFilesinKbInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockDeleteAllConvertedFilesinKbInspect() {
+	for _, e := range m.DeleteAllConvertedFilesinKbMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryIMock.DeleteAllConvertedFilesinKb with params: %#v", *e.params)
+		}
+	}
+
+	afterDeleteAllConvertedFilesinKbCounter := mm_atomic.LoadUint64(&m.afterDeleteAllConvertedFilesinKbCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.DeleteAllConvertedFilesinKbMock.defaultExpectation != nil && afterDeleteAllConvertedFilesinKbCounter < 1 {
+		if m.DeleteAllConvertedFilesinKbMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to RepositoryIMock.DeleteAllConvertedFilesinKb")
+		} else {
+			m.t.Errorf("Expected call to RepositoryIMock.DeleteAllConvertedFilesinKb with params: %#v", *m.DeleteAllConvertedFilesinKbMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcDeleteAllConvertedFilesinKb != nil && afterDeleteAllConvertedFilesinKbCounter < 1 {
+		m.t.Error("Expected call to RepositoryIMock.DeleteAllConvertedFilesinKb")
+	}
+
+	if !m.DeleteAllConvertedFilesinKbMock.invocationsDone() && afterDeleteAllConvertedFilesinKbCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.DeleteAllConvertedFilesinKb but found %d calls",
+			mm_atomic.LoadUint64(&m.DeleteAllConvertedFilesinKbMock.expectedInvocations), afterDeleteAllConvertedFilesinKbCounter)
+	}
+}
+
+type mRepositoryIMockDeleteAllKnowledgeBaseFiles struct {
+	mock               *RepositoryIMock
+	defaultExpectation *RepositoryIMockDeleteAllKnowledgeBaseFilesExpectation
+	expectations       []*RepositoryIMockDeleteAllKnowledgeBaseFilesExpectation
+
+	callArgs []*RepositoryIMockDeleteAllKnowledgeBaseFilesParams
+	mutex    sync.RWMutex
+
+	expectedInvocations uint64
+}
+
+// RepositoryIMockDeleteAllKnowledgeBaseFilesExpectation specifies expectation struct of the RepositoryI.DeleteAllKnowledgeBaseFiles
+type RepositoryIMockDeleteAllKnowledgeBaseFilesExpectation struct {
+	mock      *RepositoryIMock
+	params    *RepositoryIMockDeleteAllKnowledgeBaseFilesParams
+	paramPtrs *RepositoryIMockDeleteAllKnowledgeBaseFilesParamPtrs
+	results   *RepositoryIMockDeleteAllKnowledgeBaseFilesResults
+	Counter   uint64
+}
+
+// RepositoryIMockDeleteAllKnowledgeBaseFilesParams contains parameters of the RepositoryI.DeleteAllKnowledgeBaseFiles
+type RepositoryIMockDeleteAllKnowledgeBaseFilesParams struct {
+	ctx   context.Context
+	kbUID string
+}
+
+// RepositoryIMockDeleteAllKnowledgeBaseFilesParamPtrs contains pointers to parameters of the RepositoryI.DeleteAllKnowledgeBaseFiles
+type RepositoryIMockDeleteAllKnowledgeBaseFilesParamPtrs struct {
+	ctx   *context.Context
+	kbUID *string
+}
+
+// RepositoryIMockDeleteAllKnowledgeBaseFilesResults contains results of the RepositoryI.DeleteAllKnowledgeBaseFiles
+type RepositoryIMockDeleteAllKnowledgeBaseFilesResults struct {
+	err error
+}
+
+// Expect sets up expected params for RepositoryI.DeleteAllKnowledgeBaseFiles
+func (mmDeleteAllKnowledgeBaseFiles *mRepositoryIMockDeleteAllKnowledgeBaseFiles) Expect(ctx context.Context, kbUID string) *mRepositoryIMockDeleteAllKnowledgeBaseFiles {
+	if mmDeleteAllKnowledgeBaseFiles.mock.funcDeleteAllKnowledgeBaseFiles != nil {
+		mmDeleteAllKnowledgeBaseFiles.mock.t.Fatalf("RepositoryIMock.DeleteAllKnowledgeBaseFiles mock is already set by Set")
+	}
+
+	if mmDeleteAllKnowledgeBaseFiles.defaultExpectation == nil {
+		mmDeleteAllKnowledgeBaseFiles.defaultExpectation = &RepositoryIMockDeleteAllKnowledgeBaseFilesExpectation{}
+	}
+
+	if mmDeleteAllKnowledgeBaseFiles.defaultExpectation.paramPtrs != nil {
+		mmDeleteAllKnowledgeBaseFiles.mock.t.Fatalf("RepositoryIMock.DeleteAllKnowledgeBaseFiles mock is already set by ExpectParams functions")
+	}
+
+	mmDeleteAllKnowledgeBaseFiles.defaultExpectation.params = &RepositoryIMockDeleteAllKnowledgeBaseFilesParams{ctx, kbUID}
+	for _, e := range mmDeleteAllKnowledgeBaseFiles.expectations {
+		if minimock.Equal(e.params, mmDeleteAllKnowledgeBaseFiles.defaultExpectation.params) {
+			mmDeleteAllKnowledgeBaseFiles.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmDeleteAllKnowledgeBaseFiles.defaultExpectation.params)
+		}
+	}
+
+	return mmDeleteAllKnowledgeBaseFiles
+}
+
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.DeleteAllKnowledgeBaseFiles
+func (mmDeleteAllKnowledgeBaseFiles *mRepositoryIMockDeleteAllKnowledgeBaseFiles) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockDeleteAllKnowledgeBaseFiles {
+	if mmDeleteAllKnowledgeBaseFiles.mock.funcDeleteAllKnowledgeBaseFiles != nil {
+		mmDeleteAllKnowledgeBaseFiles.mock.t.Fatalf("RepositoryIMock.DeleteAllKnowledgeBaseFiles mock is already set by Set")
+	}
+
+	if mmDeleteAllKnowledgeBaseFiles.defaultExpectation == nil {
+		mmDeleteAllKnowledgeBaseFiles.defaultExpectation = &RepositoryIMockDeleteAllKnowledgeBaseFilesExpectation{}
+	}
+
+	if mmDeleteAllKnowledgeBaseFiles.defaultExpectation.params != nil {
+		mmDeleteAllKnowledgeBaseFiles.mock.t.Fatalf("RepositoryIMock.DeleteAllKnowledgeBaseFiles mock is already set by Expect")
+	}
+
+	if mmDeleteAllKnowledgeBaseFiles.defaultExpectation.paramPtrs == nil {
+		mmDeleteAllKnowledgeBaseFiles.defaultExpectation.paramPtrs = &RepositoryIMockDeleteAllKnowledgeBaseFilesParamPtrs{}
+	}
+	mmDeleteAllKnowledgeBaseFiles.defaultExpectation.paramPtrs.ctx = &ctx
+
+	return mmDeleteAllKnowledgeBaseFiles
+}
+
+// ExpectKbUIDParam2 sets up expected param kbUID for RepositoryI.DeleteAllKnowledgeBaseFiles
+func (mmDeleteAllKnowledgeBaseFiles *mRepositoryIMockDeleteAllKnowledgeBaseFiles) ExpectKbUIDParam2(kbUID string) *mRepositoryIMockDeleteAllKnowledgeBaseFiles {
+	if mmDeleteAllKnowledgeBaseFiles.mock.funcDeleteAllKnowledgeBaseFiles != nil {
+		mmDeleteAllKnowledgeBaseFiles.mock.t.Fatalf("RepositoryIMock.DeleteAllKnowledgeBaseFiles mock is already set by Set")
+	}
+
+	if mmDeleteAllKnowledgeBaseFiles.defaultExpectation == nil {
+		mmDeleteAllKnowledgeBaseFiles.defaultExpectation = &RepositoryIMockDeleteAllKnowledgeBaseFilesExpectation{}
+	}
+
+	if mmDeleteAllKnowledgeBaseFiles.defaultExpectation.params != nil {
+		mmDeleteAllKnowledgeBaseFiles.mock.t.Fatalf("RepositoryIMock.DeleteAllKnowledgeBaseFiles mock is already set by Expect")
+	}
+
+	if mmDeleteAllKnowledgeBaseFiles.defaultExpectation.paramPtrs == nil {
+		mmDeleteAllKnowledgeBaseFiles.defaultExpectation.paramPtrs = &RepositoryIMockDeleteAllKnowledgeBaseFilesParamPtrs{}
+	}
+	mmDeleteAllKnowledgeBaseFiles.defaultExpectation.paramPtrs.kbUID = &kbUID
+
+	return mmDeleteAllKnowledgeBaseFiles
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.DeleteAllKnowledgeBaseFiles
+func (mmDeleteAllKnowledgeBaseFiles *mRepositoryIMockDeleteAllKnowledgeBaseFiles) Inspect(f func(ctx context.Context, kbUID string)) *mRepositoryIMockDeleteAllKnowledgeBaseFiles {
+	if mmDeleteAllKnowledgeBaseFiles.mock.inspectFuncDeleteAllKnowledgeBaseFiles != nil {
+		mmDeleteAllKnowledgeBaseFiles.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.DeleteAllKnowledgeBaseFiles")
+	}
+
+	mmDeleteAllKnowledgeBaseFiles.mock.inspectFuncDeleteAllKnowledgeBaseFiles = f
+
+	return mmDeleteAllKnowledgeBaseFiles
+}
+
+// Return sets up results that will be returned by RepositoryI.DeleteAllKnowledgeBaseFiles
+func (mmDeleteAllKnowledgeBaseFiles *mRepositoryIMockDeleteAllKnowledgeBaseFiles) Return(err error) *RepositoryIMock {
+	if mmDeleteAllKnowledgeBaseFiles.mock.funcDeleteAllKnowledgeBaseFiles != nil {
+		mmDeleteAllKnowledgeBaseFiles.mock.t.Fatalf("RepositoryIMock.DeleteAllKnowledgeBaseFiles mock is already set by Set")
+	}
+
+	if mmDeleteAllKnowledgeBaseFiles.defaultExpectation == nil {
+		mmDeleteAllKnowledgeBaseFiles.defaultExpectation = &RepositoryIMockDeleteAllKnowledgeBaseFilesExpectation{mock: mmDeleteAllKnowledgeBaseFiles.mock}
+	}
+	mmDeleteAllKnowledgeBaseFiles.defaultExpectation.results = &RepositoryIMockDeleteAllKnowledgeBaseFilesResults{err}
+	return mmDeleteAllKnowledgeBaseFiles.mock
+}
+
+// Set uses given function f to mock the RepositoryI.DeleteAllKnowledgeBaseFiles method
+func (mmDeleteAllKnowledgeBaseFiles *mRepositoryIMockDeleteAllKnowledgeBaseFiles) Set(f func(ctx context.Context, kbUID string) (err error)) *RepositoryIMock {
+	if mmDeleteAllKnowledgeBaseFiles.defaultExpectation != nil {
+		mmDeleteAllKnowledgeBaseFiles.mock.t.Fatalf("Default expectation is already set for the RepositoryI.DeleteAllKnowledgeBaseFiles method")
+	}
+
+	if len(mmDeleteAllKnowledgeBaseFiles.expectations) > 0 {
+		mmDeleteAllKnowledgeBaseFiles.mock.t.Fatalf("Some expectations are already set for the RepositoryI.DeleteAllKnowledgeBaseFiles method")
+	}
+
+	mmDeleteAllKnowledgeBaseFiles.mock.funcDeleteAllKnowledgeBaseFiles = f
+	return mmDeleteAllKnowledgeBaseFiles.mock
+}
+
+// When sets expectation for the RepositoryI.DeleteAllKnowledgeBaseFiles which will trigger the result defined by the following
+// Then helper
+func (mmDeleteAllKnowledgeBaseFiles *mRepositoryIMockDeleteAllKnowledgeBaseFiles) When(ctx context.Context, kbUID string) *RepositoryIMockDeleteAllKnowledgeBaseFilesExpectation {
+	if mmDeleteAllKnowledgeBaseFiles.mock.funcDeleteAllKnowledgeBaseFiles != nil {
+		mmDeleteAllKnowledgeBaseFiles.mock.t.Fatalf("RepositoryIMock.DeleteAllKnowledgeBaseFiles mock is already set by Set")
+	}
+
+	expectation := &RepositoryIMockDeleteAllKnowledgeBaseFilesExpectation{
+		mock:   mmDeleteAllKnowledgeBaseFiles.mock,
+		params: &RepositoryIMockDeleteAllKnowledgeBaseFilesParams{ctx, kbUID},
+	}
+	mmDeleteAllKnowledgeBaseFiles.expectations = append(mmDeleteAllKnowledgeBaseFiles.expectations, expectation)
+	return expectation
+}
+
+// Then sets up RepositoryI.DeleteAllKnowledgeBaseFiles return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockDeleteAllKnowledgeBaseFilesExpectation) Then(err error) *RepositoryIMock {
+	e.results = &RepositoryIMockDeleteAllKnowledgeBaseFilesResults{err}
+	return e.mock
+}
+
+// Times sets number of times RepositoryI.DeleteAllKnowledgeBaseFiles should be invoked
+func (mmDeleteAllKnowledgeBaseFiles *mRepositoryIMockDeleteAllKnowledgeBaseFiles) Times(n uint64) *mRepositoryIMockDeleteAllKnowledgeBaseFiles {
+	if n == 0 {
+		mmDeleteAllKnowledgeBaseFiles.mock.t.Fatalf("Times of RepositoryIMock.DeleteAllKnowledgeBaseFiles mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmDeleteAllKnowledgeBaseFiles.expectedInvocations, n)
+	return mmDeleteAllKnowledgeBaseFiles
+}
+
+func (mmDeleteAllKnowledgeBaseFiles *mRepositoryIMockDeleteAllKnowledgeBaseFiles) invocationsDone() bool {
+	if len(mmDeleteAllKnowledgeBaseFiles.expectations) == 0 && mmDeleteAllKnowledgeBaseFiles.defaultExpectation == nil && mmDeleteAllKnowledgeBaseFiles.mock.funcDeleteAllKnowledgeBaseFiles == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmDeleteAllKnowledgeBaseFiles.mock.afterDeleteAllKnowledgeBaseFilesCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmDeleteAllKnowledgeBaseFiles.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// DeleteAllKnowledgeBaseFiles implements repository.RepositoryI
+func (mmDeleteAllKnowledgeBaseFiles *RepositoryIMock) DeleteAllKnowledgeBaseFiles(ctx context.Context, kbUID string) (err error) {
+	mm_atomic.AddUint64(&mmDeleteAllKnowledgeBaseFiles.beforeDeleteAllKnowledgeBaseFilesCounter, 1)
+	defer mm_atomic.AddUint64(&mmDeleteAllKnowledgeBaseFiles.afterDeleteAllKnowledgeBaseFilesCounter, 1)
+
+	if mmDeleteAllKnowledgeBaseFiles.inspectFuncDeleteAllKnowledgeBaseFiles != nil {
+		mmDeleteAllKnowledgeBaseFiles.inspectFuncDeleteAllKnowledgeBaseFiles(ctx, kbUID)
+	}
+
+	mm_params := RepositoryIMockDeleteAllKnowledgeBaseFilesParams{ctx, kbUID}
+
+	// Record call args
+	mmDeleteAllKnowledgeBaseFiles.DeleteAllKnowledgeBaseFilesMock.mutex.Lock()
+	mmDeleteAllKnowledgeBaseFiles.DeleteAllKnowledgeBaseFilesMock.callArgs = append(mmDeleteAllKnowledgeBaseFiles.DeleteAllKnowledgeBaseFilesMock.callArgs, &mm_params)
+	mmDeleteAllKnowledgeBaseFiles.DeleteAllKnowledgeBaseFilesMock.mutex.Unlock()
+
+	for _, e := range mmDeleteAllKnowledgeBaseFiles.DeleteAllKnowledgeBaseFilesMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmDeleteAllKnowledgeBaseFiles.DeleteAllKnowledgeBaseFilesMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmDeleteAllKnowledgeBaseFiles.DeleteAllKnowledgeBaseFilesMock.defaultExpectation.Counter, 1)
+		mm_want := mmDeleteAllKnowledgeBaseFiles.DeleteAllKnowledgeBaseFilesMock.defaultExpectation.params
+		mm_want_ptrs := mmDeleteAllKnowledgeBaseFiles.DeleteAllKnowledgeBaseFilesMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryIMockDeleteAllKnowledgeBaseFilesParams{ctx, kbUID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmDeleteAllKnowledgeBaseFiles.t.Errorf("RepositoryIMock.DeleteAllKnowledgeBaseFiles got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.kbUID != nil && !minimock.Equal(*mm_want_ptrs.kbUID, mm_got.kbUID) {
+				mmDeleteAllKnowledgeBaseFiles.t.Errorf("RepositoryIMock.DeleteAllKnowledgeBaseFiles got unexpected parameter kbUID, want: %#v, got: %#v%s\n", *mm_want_ptrs.kbUID, mm_got.kbUID, minimock.Diff(*mm_want_ptrs.kbUID, mm_got.kbUID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmDeleteAllKnowledgeBaseFiles.t.Errorf("RepositoryIMock.DeleteAllKnowledgeBaseFiles got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmDeleteAllKnowledgeBaseFiles.DeleteAllKnowledgeBaseFilesMock.defaultExpectation.results
+		if mm_results == nil {
+			mmDeleteAllKnowledgeBaseFiles.t.Fatal("No results are set for the RepositoryIMock.DeleteAllKnowledgeBaseFiles")
+		}
+		return (*mm_results).err
+	}
+	if mmDeleteAllKnowledgeBaseFiles.funcDeleteAllKnowledgeBaseFiles != nil {
+		return mmDeleteAllKnowledgeBaseFiles.funcDeleteAllKnowledgeBaseFiles(ctx, kbUID)
+	}
+	mmDeleteAllKnowledgeBaseFiles.t.Fatalf("Unexpected call to RepositoryIMock.DeleteAllKnowledgeBaseFiles. %v %v", ctx, kbUID)
+	return
+}
+
+// DeleteAllKnowledgeBaseFilesAfterCounter returns a count of finished RepositoryIMock.DeleteAllKnowledgeBaseFiles invocations
+func (mmDeleteAllKnowledgeBaseFiles *RepositoryIMock) DeleteAllKnowledgeBaseFilesAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmDeleteAllKnowledgeBaseFiles.afterDeleteAllKnowledgeBaseFilesCounter)
+}
+
+// DeleteAllKnowledgeBaseFilesBeforeCounter returns a count of RepositoryIMock.DeleteAllKnowledgeBaseFiles invocations
+func (mmDeleteAllKnowledgeBaseFiles *RepositoryIMock) DeleteAllKnowledgeBaseFilesBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmDeleteAllKnowledgeBaseFiles.beforeDeleteAllKnowledgeBaseFilesCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryIMock.DeleteAllKnowledgeBaseFiles.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmDeleteAllKnowledgeBaseFiles *mRepositoryIMockDeleteAllKnowledgeBaseFiles) Calls() []*RepositoryIMockDeleteAllKnowledgeBaseFilesParams {
+	mmDeleteAllKnowledgeBaseFiles.mutex.RLock()
+
+	argCopy := make([]*RepositoryIMockDeleteAllKnowledgeBaseFilesParams, len(mmDeleteAllKnowledgeBaseFiles.callArgs))
+	copy(argCopy, mmDeleteAllKnowledgeBaseFiles.callArgs)
+
+	mmDeleteAllKnowledgeBaseFiles.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockDeleteAllKnowledgeBaseFilesDone returns true if the count of the DeleteAllKnowledgeBaseFiles invocations corresponds
+// the number of defined expectations
+func (m *RepositoryIMock) MinimockDeleteAllKnowledgeBaseFilesDone() bool {
+	for _, e := range m.DeleteAllKnowledgeBaseFilesMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.DeleteAllKnowledgeBaseFilesMock.invocationsDone()
+}
+
+// MinimockDeleteAllKnowledgeBaseFilesInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockDeleteAllKnowledgeBaseFilesInspect() {
+	for _, e := range m.DeleteAllKnowledgeBaseFilesMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryIMock.DeleteAllKnowledgeBaseFiles with params: %#v", *e.params)
+		}
+	}
+
+	afterDeleteAllKnowledgeBaseFilesCounter := mm_atomic.LoadUint64(&m.afterDeleteAllKnowledgeBaseFilesCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.DeleteAllKnowledgeBaseFilesMock.defaultExpectation != nil && afterDeleteAllKnowledgeBaseFilesCounter < 1 {
+		if m.DeleteAllKnowledgeBaseFilesMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to RepositoryIMock.DeleteAllKnowledgeBaseFiles")
+		} else {
+			m.t.Errorf("Expected call to RepositoryIMock.DeleteAllKnowledgeBaseFiles with params: %#v", *m.DeleteAllKnowledgeBaseFilesMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcDeleteAllKnowledgeBaseFiles != nil && afterDeleteAllKnowledgeBaseFilesCounter < 1 {
+		m.t.Error("Expected call to RepositoryIMock.DeleteAllKnowledgeBaseFiles")
+	}
+
+	if !m.DeleteAllKnowledgeBaseFilesMock.invocationsDone() && afterDeleteAllKnowledgeBaseFilesCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.DeleteAllKnowledgeBaseFiles but found %d calls",
+			mm_atomic.LoadUint64(&m.DeleteAllKnowledgeBaseFilesMock.expectedInvocations), afterDeleteAllKnowledgeBaseFilesCounter)
 	}
 }
 
@@ -9158,6 +9847,1526 @@ func (m *RepositoryIMock) MinimockGetTruthSourceByFileUIDInspect() {
 	}
 }
 
+type mRepositoryIMockHardDeleteChunksByKbFileUID struct {
+	mock               *RepositoryIMock
+	defaultExpectation *RepositoryIMockHardDeleteChunksByKbFileUIDExpectation
+	expectations       []*RepositoryIMockHardDeleteChunksByKbFileUIDExpectation
+
+	callArgs []*RepositoryIMockHardDeleteChunksByKbFileUIDParams
+	mutex    sync.RWMutex
+
+	expectedInvocations uint64
+}
+
+// RepositoryIMockHardDeleteChunksByKbFileUIDExpectation specifies expectation struct of the RepositoryI.HardDeleteChunksByKbFileUID
+type RepositoryIMockHardDeleteChunksByKbFileUIDExpectation struct {
+	mock      *RepositoryIMock
+	params    *RepositoryIMockHardDeleteChunksByKbFileUIDParams
+	paramPtrs *RepositoryIMockHardDeleteChunksByKbFileUIDParamPtrs
+	results   *RepositoryIMockHardDeleteChunksByKbFileUIDResults
+	Counter   uint64
+}
+
+// RepositoryIMockHardDeleteChunksByKbFileUIDParams contains parameters of the RepositoryI.HardDeleteChunksByKbFileUID
+type RepositoryIMockHardDeleteChunksByKbFileUIDParams struct {
+	ctx       context.Context
+	kbFileUID uuid.UUID
+}
+
+// RepositoryIMockHardDeleteChunksByKbFileUIDParamPtrs contains pointers to parameters of the RepositoryI.HardDeleteChunksByKbFileUID
+type RepositoryIMockHardDeleteChunksByKbFileUIDParamPtrs struct {
+	ctx       *context.Context
+	kbFileUID *uuid.UUID
+}
+
+// RepositoryIMockHardDeleteChunksByKbFileUIDResults contains results of the RepositoryI.HardDeleteChunksByKbFileUID
+type RepositoryIMockHardDeleteChunksByKbFileUIDResults struct {
+	err error
+}
+
+// Expect sets up expected params for RepositoryI.HardDeleteChunksByKbFileUID
+func (mmHardDeleteChunksByKbFileUID *mRepositoryIMockHardDeleteChunksByKbFileUID) Expect(ctx context.Context, kbFileUID uuid.UUID) *mRepositoryIMockHardDeleteChunksByKbFileUID {
+	if mmHardDeleteChunksByKbFileUID.mock.funcHardDeleteChunksByKbFileUID != nil {
+		mmHardDeleteChunksByKbFileUID.mock.t.Fatalf("RepositoryIMock.HardDeleteChunksByKbFileUID mock is already set by Set")
+	}
+
+	if mmHardDeleteChunksByKbFileUID.defaultExpectation == nil {
+		mmHardDeleteChunksByKbFileUID.defaultExpectation = &RepositoryIMockHardDeleteChunksByKbFileUIDExpectation{}
+	}
+
+	if mmHardDeleteChunksByKbFileUID.defaultExpectation.paramPtrs != nil {
+		mmHardDeleteChunksByKbFileUID.mock.t.Fatalf("RepositoryIMock.HardDeleteChunksByKbFileUID mock is already set by ExpectParams functions")
+	}
+
+	mmHardDeleteChunksByKbFileUID.defaultExpectation.params = &RepositoryIMockHardDeleteChunksByKbFileUIDParams{ctx, kbFileUID}
+	for _, e := range mmHardDeleteChunksByKbFileUID.expectations {
+		if minimock.Equal(e.params, mmHardDeleteChunksByKbFileUID.defaultExpectation.params) {
+			mmHardDeleteChunksByKbFileUID.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmHardDeleteChunksByKbFileUID.defaultExpectation.params)
+		}
+	}
+
+	return mmHardDeleteChunksByKbFileUID
+}
+
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.HardDeleteChunksByKbFileUID
+func (mmHardDeleteChunksByKbFileUID *mRepositoryIMockHardDeleteChunksByKbFileUID) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockHardDeleteChunksByKbFileUID {
+	if mmHardDeleteChunksByKbFileUID.mock.funcHardDeleteChunksByKbFileUID != nil {
+		mmHardDeleteChunksByKbFileUID.mock.t.Fatalf("RepositoryIMock.HardDeleteChunksByKbFileUID mock is already set by Set")
+	}
+
+	if mmHardDeleteChunksByKbFileUID.defaultExpectation == nil {
+		mmHardDeleteChunksByKbFileUID.defaultExpectation = &RepositoryIMockHardDeleteChunksByKbFileUIDExpectation{}
+	}
+
+	if mmHardDeleteChunksByKbFileUID.defaultExpectation.params != nil {
+		mmHardDeleteChunksByKbFileUID.mock.t.Fatalf("RepositoryIMock.HardDeleteChunksByKbFileUID mock is already set by Expect")
+	}
+
+	if mmHardDeleteChunksByKbFileUID.defaultExpectation.paramPtrs == nil {
+		mmHardDeleteChunksByKbFileUID.defaultExpectation.paramPtrs = &RepositoryIMockHardDeleteChunksByKbFileUIDParamPtrs{}
+	}
+	mmHardDeleteChunksByKbFileUID.defaultExpectation.paramPtrs.ctx = &ctx
+
+	return mmHardDeleteChunksByKbFileUID
+}
+
+// ExpectKbFileUIDParam2 sets up expected param kbFileUID for RepositoryI.HardDeleteChunksByKbFileUID
+func (mmHardDeleteChunksByKbFileUID *mRepositoryIMockHardDeleteChunksByKbFileUID) ExpectKbFileUIDParam2(kbFileUID uuid.UUID) *mRepositoryIMockHardDeleteChunksByKbFileUID {
+	if mmHardDeleteChunksByKbFileUID.mock.funcHardDeleteChunksByKbFileUID != nil {
+		mmHardDeleteChunksByKbFileUID.mock.t.Fatalf("RepositoryIMock.HardDeleteChunksByKbFileUID mock is already set by Set")
+	}
+
+	if mmHardDeleteChunksByKbFileUID.defaultExpectation == nil {
+		mmHardDeleteChunksByKbFileUID.defaultExpectation = &RepositoryIMockHardDeleteChunksByKbFileUIDExpectation{}
+	}
+
+	if mmHardDeleteChunksByKbFileUID.defaultExpectation.params != nil {
+		mmHardDeleteChunksByKbFileUID.mock.t.Fatalf("RepositoryIMock.HardDeleteChunksByKbFileUID mock is already set by Expect")
+	}
+
+	if mmHardDeleteChunksByKbFileUID.defaultExpectation.paramPtrs == nil {
+		mmHardDeleteChunksByKbFileUID.defaultExpectation.paramPtrs = &RepositoryIMockHardDeleteChunksByKbFileUIDParamPtrs{}
+	}
+	mmHardDeleteChunksByKbFileUID.defaultExpectation.paramPtrs.kbFileUID = &kbFileUID
+
+	return mmHardDeleteChunksByKbFileUID
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.HardDeleteChunksByKbFileUID
+func (mmHardDeleteChunksByKbFileUID *mRepositoryIMockHardDeleteChunksByKbFileUID) Inspect(f func(ctx context.Context, kbFileUID uuid.UUID)) *mRepositoryIMockHardDeleteChunksByKbFileUID {
+	if mmHardDeleteChunksByKbFileUID.mock.inspectFuncHardDeleteChunksByKbFileUID != nil {
+		mmHardDeleteChunksByKbFileUID.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.HardDeleteChunksByKbFileUID")
+	}
+
+	mmHardDeleteChunksByKbFileUID.mock.inspectFuncHardDeleteChunksByKbFileUID = f
+
+	return mmHardDeleteChunksByKbFileUID
+}
+
+// Return sets up results that will be returned by RepositoryI.HardDeleteChunksByKbFileUID
+func (mmHardDeleteChunksByKbFileUID *mRepositoryIMockHardDeleteChunksByKbFileUID) Return(err error) *RepositoryIMock {
+	if mmHardDeleteChunksByKbFileUID.mock.funcHardDeleteChunksByKbFileUID != nil {
+		mmHardDeleteChunksByKbFileUID.mock.t.Fatalf("RepositoryIMock.HardDeleteChunksByKbFileUID mock is already set by Set")
+	}
+
+	if mmHardDeleteChunksByKbFileUID.defaultExpectation == nil {
+		mmHardDeleteChunksByKbFileUID.defaultExpectation = &RepositoryIMockHardDeleteChunksByKbFileUIDExpectation{mock: mmHardDeleteChunksByKbFileUID.mock}
+	}
+	mmHardDeleteChunksByKbFileUID.defaultExpectation.results = &RepositoryIMockHardDeleteChunksByKbFileUIDResults{err}
+	return mmHardDeleteChunksByKbFileUID.mock
+}
+
+// Set uses given function f to mock the RepositoryI.HardDeleteChunksByKbFileUID method
+func (mmHardDeleteChunksByKbFileUID *mRepositoryIMockHardDeleteChunksByKbFileUID) Set(f func(ctx context.Context, kbFileUID uuid.UUID) (err error)) *RepositoryIMock {
+	if mmHardDeleteChunksByKbFileUID.defaultExpectation != nil {
+		mmHardDeleteChunksByKbFileUID.mock.t.Fatalf("Default expectation is already set for the RepositoryI.HardDeleteChunksByKbFileUID method")
+	}
+
+	if len(mmHardDeleteChunksByKbFileUID.expectations) > 0 {
+		mmHardDeleteChunksByKbFileUID.mock.t.Fatalf("Some expectations are already set for the RepositoryI.HardDeleteChunksByKbFileUID method")
+	}
+
+	mmHardDeleteChunksByKbFileUID.mock.funcHardDeleteChunksByKbFileUID = f
+	return mmHardDeleteChunksByKbFileUID.mock
+}
+
+// When sets expectation for the RepositoryI.HardDeleteChunksByKbFileUID which will trigger the result defined by the following
+// Then helper
+func (mmHardDeleteChunksByKbFileUID *mRepositoryIMockHardDeleteChunksByKbFileUID) When(ctx context.Context, kbFileUID uuid.UUID) *RepositoryIMockHardDeleteChunksByKbFileUIDExpectation {
+	if mmHardDeleteChunksByKbFileUID.mock.funcHardDeleteChunksByKbFileUID != nil {
+		mmHardDeleteChunksByKbFileUID.mock.t.Fatalf("RepositoryIMock.HardDeleteChunksByKbFileUID mock is already set by Set")
+	}
+
+	expectation := &RepositoryIMockHardDeleteChunksByKbFileUIDExpectation{
+		mock:   mmHardDeleteChunksByKbFileUID.mock,
+		params: &RepositoryIMockHardDeleteChunksByKbFileUIDParams{ctx, kbFileUID},
+	}
+	mmHardDeleteChunksByKbFileUID.expectations = append(mmHardDeleteChunksByKbFileUID.expectations, expectation)
+	return expectation
+}
+
+// Then sets up RepositoryI.HardDeleteChunksByKbFileUID return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockHardDeleteChunksByKbFileUIDExpectation) Then(err error) *RepositoryIMock {
+	e.results = &RepositoryIMockHardDeleteChunksByKbFileUIDResults{err}
+	return e.mock
+}
+
+// Times sets number of times RepositoryI.HardDeleteChunksByKbFileUID should be invoked
+func (mmHardDeleteChunksByKbFileUID *mRepositoryIMockHardDeleteChunksByKbFileUID) Times(n uint64) *mRepositoryIMockHardDeleteChunksByKbFileUID {
+	if n == 0 {
+		mmHardDeleteChunksByKbFileUID.mock.t.Fatalf("Times of RepositoryIMock.HardDeleteChunksByKbFileUID mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmHardDeleteChunksByKbFileUID.expectedInvocations, n)
+	return mmHardDeleteChunksByKbFileUID
+}
+
+func (mmHardDeleteChunksByKbFileUID *mRepositoryIMockHardDeleteChunksByKbFileUID) invocationsDone() bool {
+	if len(mmHardDeleteChunksByKbFileUID.expectations) == 0 && mmHardDeleteChunksByKbFileUID.defaultExpectation == nil && mmHardDeleteChunksByKbFileUID.mock.funcHardDeleteChunksByKbFileUID == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmHardDeleteChunksByKbFileUID.mock.afterHardDeleteChunksByKbFileUIDCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmHardDeleteChunksByKbFileUID.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// HardDeleteChunksByKbFileUID implements repository.RepositoryI
+func (mmHardDeleteChunksByKbFileUID *RepositoryIMock) HardDeleteChunksByKbFileUID(ctx context.Context, kbFileUID uuid.UUID) (err error) {
+	mm_atomic.AddUint64(&mmHardDeleteChunksByKbFileUID.beforeHardDeleteChunksByKbFileUIDCounter, 1)
+	defer mm_atomic.AddUint64(&mmHardDeleteChunksByKbFileUID.afterHardDeleteChunksByKbFileUIDCounter, 1)
+
+	if mmHardDeleteChunksByKbFileUID.inspectFuncHardDeleteChunksByKbFileUID != nil {
+		mmHardDeleteChunksByKbFileUID.inspectFuncHardDeleteChunksByKbFileUID(ctx, kbFileUID)
+	}
+
+	mm_params := RepositoryIMockHardDeleteChunksByKbFileUIDParams{ctx, kbFileUID}
+
+	// Record call args
+	mmHardDeleteChunksByKbFileUID.HardDeleteChunksByKbFileUIDMock.mutex.Lock()
+	mmHardDeleteChunksByKbFileUID.HardDeleteChunksByKbFileUIDMock.callArgs = append(mmHardDeleteChunksByKbFileUID.HardDeleteChunksByKbFileUIDMock.callArgs, &mm_params)
+	mmHardDeleteChunksByKbFileUID.HardDeleteChunksByKbFileUIDMock.mutex.Unlock()
+
+	for _, e := range mmHardDeleteChunksByKbFileUID.HardDeleteChunksByKbFileUIDMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmHardDeleteChunksByKbFileUID.HardDeleteChunksByKbFileUIDMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmHardDeleteChunksByKbFileUID.HardDeleteChunksByKbFileUIDMock.defaultExpectation.Counter, 1)
+		mm_want := mmHardDeleteChunksByKbFileUID.HardDeleteChunksByKbFileUIDMock.defaultExpectation.params
+		mm_want_ptrs := mmHardDeleteChunksByKbFileUID.HardDeleteChunksByKbFileUIDMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryIMockHardDeleteChunksByKbFileUIDParams{ctx, kbFileUID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmHardDeleteChunksByKbFileUID.t.Errorf("RepositoryIMock.HardDeleteChunksByKbFileUID got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.kbFileUID != nil && !minimock.Equal(*mm_want_ptrs.kbFileUID, mm_got.kbFileUID) {
+				mmHardDeleteChunksByKbFileUID.t.Errorf("RepositoryIMock.HardDeleteChunksByKbFileUID got unexpected parameter kbFileUID, want: %#v, got: %#v%s\n", *mm_want_ptrs.kbFileUID, mm_got.kbFileUID, minimock.Diff(*mm_want_ptrs.kbFileUID, mm_got.kbFileUID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmHardDeleteChunksByKbFileUID.t.Errorf("RepositoryIMock.HardDeleteChunksByKbFileUID got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmHardDeleteChunksByKbFileUID.HardDeleteChunksByKbFileUIDMock.defaultExpectation.results
+		if mm_results == nil {
+			mmHardDeleteChunksByKbFileUID.t.Fatal("No results are set for the RepositoryIMock.HardDeleteChunksByKbFileUID")
+		}
+		return (*mm_results).err
+	}
+	if mmHardDeleteChunksByKbFileUID.funcHardDeleteChunksByKbFileUID != nil {
+		return mmHardDeleteChunksByKbFileUID.funcHardDeleteChunksByKbFileUID(ctx, kbFileUID)
+	}
+	mmHardDeleteChunksByKbFileUID.t.Fatalf("Unexpected call to RepositoryIMock.HardDeleteChunksByKbFileUID. %v %v", ctx, kbFileUID)
+	return
+}
+
+// HardDeleteChunksByKbFileUIDAfterCounter returns a count of finished RepositoryIMock.HardDeleteChunksByKbFileUID invocations
+func (mmHardDeleteChunksByKbFileUID *RepositoryIMock) HardDeleteChunksByKbFileUIDAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmHardDeleteChunksByKbFileUID.afterHardDeleteChunksByKbFileUIDCounter)
+}
+
+// HardDeleteChunksByKbFileUIDBeforeCounter returns a count of RepositoryIMock.HardDeleteChunksByKbFileUID invocations
+func (mmHardDeleteChunksByKbFileUID *RepositoryIMock) HardDeleteChunksByKbFileUIDBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmHardDeleteChunksByKbFileUID.beforeHardDeleteChunksByKbFileUIDCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryIMock.HardDeleteChunksByKbFileUID.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmHardDeleteChunksByKbFileUID *mRepositoryIMockHardDeleteChunksByKbFileUID) Calls() []*RepositoryIMockHardDeleteChunksByKbFileUIDParams {
+	mmHardDeleteChunksByKbFileUID.mutex.RLock()
+
+	argCopy := make([]*RepositoryIMockHardDeleteChunksByKbFileUIDParams, len(mmHardDeleteChunksByKbFileUID.callArgs))
+	copy(argCopy, mmHardDeleteChunksByKbFileUID.callArgs)
+
+	mmHardDeleteChunksByKbFileUID.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockHardDeleteChunksByKbFileUIDDone returns true if the count of the HardDeleteChunksByKbFileUID invocations corresponds
+// the number of defined expectations
+func (m *RepositoryIMock) MinimockHardDeleteChunksByKbFileUIDDone() bool {
+	for _, e := range m.HardDeleteChunksByKbFileUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.HardDeleteChunksByKbFileUIDMock.invocationsDone()
+}
+
+// MinimockHardDeleteChunksByKbFileUIDInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockHardDeleteChunksByKbFileUIDInspect() {
+	for _, e := range m.HardDeleteChunksByKbFileUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryIMock.HardDeleteChunksByKbFileUID with params: %#v", *e.params)
+		}
+	}
+
+	afterHardDeleteChunksByKbFileUIDCounter := mm_atomic.LoadUint64(&m.afterHardDeleteChunksByKbFileUIDCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.HardDeleteChunksByKbFileUIDMock.defaultExpectation != nil && afterHardDeleteChunksByKbFileUIDCounter < 1 {
+		if m.HardDeleteChunksByKbFileUIDMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to RepositoryIMock.HardDeleteChunksByKbFileUID")
+		} else {
+			m.t.Errorf("Expected call to RepositoryIMock.HardDeleteChunksByKbFileUID with params: %#v", *m.HardDeleteChunksByKbFileUIDMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcHardDeleteChunksByKbFileUID != nil && afterHardDeleteChunksByKbFileUIDCounter < 1 {
+		m.t.Error("Expected call to RepositoryIMock.HardDeleteChunksByKbFileUID")
+	}
+
+	if !m.HardDeleteChunksByKbFileUIDMock.invocationsDone() && afterHardDeleteChunksByKbFileUIDCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.HardDeleteChunksByKbFileUID but found %d calls",
+			mm_atomic.LoadUint64(&m.HardDeleteChunksByKbFileUIDMock.expectedInvocations), afterHardDeleteChunksByKbFileUIDCounter)
+	}
+}
+
+type mRepositoryIMockHardDeleteChunksByKbUID struct {
+	mock               *RepositoryIMock
+	defaultExpectation *RepositoryIMockHardDeleteChunksByKbUIDExpectation
+	expectations       []*RepositoryIMockHardDeleteChunksByKbUIDExpectation
+
+	callArgs []*RepositoryIMockHardDeleteChunksByKbUIDParams
+	mutex    sync.RWMutex
+
+	expectedInvocations uint64
+}
+
+// RepositoryIMockHardDeleteChunksByKbUIDExpectation specifies expectation struct of the RepositoryI.HardDeleteChunksByKbUID
+type RepositoryIMockHardDeleteChunksByKbUIDExpectation struct {
+	mock      *RepositoryIMock
+	params    *RepositoryIMockHardDeleteChunksByKbUIDParams
+	paramPtrs *RepositoryIMockHardDeleteChunksByKbUIDParamPtrs
+	results   *RepositoryIMockHardDeleteChunksByKbUIDResults
+	Counter   uint64
+}
+
+// RepositoryIMockHardDeleteChunksByKbUIDParams contains parameters of the RepositoryI.HardDeleteChunksByKbUID
+type RepositoryIMockHardDeleteChunksByKbUIDParams struct {
+	ctx   context.Context
+	kbUID uuid.UUID
+}
+
+// RepositoryIMockHardDeleteChunksByKbUIDParamPtrs contains pointers to parameters of the RepositoryI.HardDeleteChunksByKbUID
+type RepositoryIMockHardDeleteChunksByKbUIDParamPtrs struct {
+	ctx   *context.Context
+	kbUID *uuid.UUID
+}
+
+// RepositoryIMockHardDeleteChunksByKbUIDResults contains results of the RepositoryI.HardDeleteChunksByKbUID
+type RepositoryIMockHardDeleteChunksByKbUIDResults struct {
+	err error
+}
+
+// Expect sets up expected params for RepositoryI.HardDeleteChunksByKbUID
+func (mmHardDeleteChunksByKbUID *mRepositoryIMockHardDeleteChunksByKbUID) Expect(ctx context.Context, kbUID uuid.UUID) *mRepositoryIMockHardDeleteChunksByKbUID {
+	if mmHardDeleteChunksByKbUID.mock.funcHardDeleteChunksByKbUID != nil {
+		mmHardDeleteChunksByKbUID.mock.t.Fatalf("RepositoryIMock.HardDeleteChunksByKbUID mock is already set by Set")
+	}
+
+	if mmHardDeleteChunksByKbUID.defaultExpectation == nil {
+		mmHardDeleteChunksByKbUID.defaultExpectation = &RepositoryIMockHardDeleteChunksByKbUIDExpectation{}
+	}
+
+	if mmHardDeleteChunksByKbUID.defaultExpectation.paramPtrs != nil {
+		mmHardDeleteChunksByKbUID.mock.t.Fatalf("RepositoryIMock.HardDeleteChunksByKbUID mock is already set by ExpectParams functions")
+	}
+
+	mmHardDeleteChunksByKbUID.defaultExpectation.params = &RepositoryIMockHardDeleteChunksByKbUIDParams{ctx, kbUID}
+	for _, e := range mmHardDeleteChunksByKbUID.expectations {
+		if minimock.Equal(e.params, mmHardDeleteChunksByKbUID.defaultExpectation.params) {
+			mmHardDeleteChunksByKbUID.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmHardDeleteChunksByKbUID.defaultExpectation.params)
+		}
+	}
+
+	return mmHardDeleteChunksByKbUID
+}
+
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.HardDeleteChunksByKbUID
+func (mmHardDeleteChunksByKbUID *mRepositoryIMockHardDeleteChunksByKbUID) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockHardDeleteChunksByKbUID {
+	if mmHardDeleteChunksByKbUID.mock.funcHardDeleteChunksByKbUID != nil {
+		mmHardDeleteChunksByKbUID.mock.t.Fatalf("RepositoryIMock.HardDeleteChunksByKbUID mock is already set by Set")
+	}
+
+	if mmHardDeleteChunksByKbUID.defaultExpectation == nil {
+		mmHardDeleteChunksByKbUID.defaultExpectation = &RepositoryIMockHardDeleteChunksByKbUIDExpectation{}
+	}
+
+	if mmHardDeleteChunksByKbUID.defaultExpectation.params != nil {
+		mmHardDeleteChunksByKbUID.mock.t.Fatalf("RepositoryIMock.HardDeleteChunksByKbUID mock is already set by Expect")
+	}
+
+	if mmHardDeleteChunksByKbUID.defaultExpectation.paramPtrs == nil {
+		mmHardDeleteChunksByKbUID.defaultExpectation.paramPtrs = &RepositoryIMockHardDeleteChunksByKbUIDParamPtrs{}
+	}
+	mmHardDeleteChunksByKbUID.defaultExpectation.paramPtrs.ctx = &ctx
+
+	return mmHardDeleteChunksByKbUID
+}
+
+// ExpectKbUIDParam2 sets up expected param kbUID for RepositoryI.HardDeleteChunksByKbUID
+func (mmHardDeleteChunksByKbUID *mRepositoryIMockHardDeleteChunksByKbUID) ExpectKbUIDParam2(kbUID uuid.UUID) *mRepositoryIMockHardDeleteChunksByKbUID {
+	if mmHardDeleteChunksByKbUID.mock.funcHardDeleteChunksByKbUID != nil {
+		mmHardDeleteChunksByKbUID.mock.t.Fatalf("RepositoryIMock.HardDeleteChunksByKbUID mock is already set by Set")
+	}
+
+	if mmHardDeleteChunksByKbUID.defaultExpectation == nil {
+		mmHardDeleteChunksByKbUID.defaultExpectation = &RepositoryIMockHardDeleteChunksByKbUIDExpectation{}
+	}
+
+	if mmHardDeleteChunksByKbUID.defaultExpectation.params != nil {
+		mmHardDeleteChunksByKbUID.mock.t.Fatalf("RepositoryIMock.HardDeleteChunksByKbUID mock is already set by Expect")
+	}
+
+	if mmHardDeleteChunksByKbUID.defaultExpectation.paramPtrs == nil {
+		mmHardDeleteChunksByKbUID.defaultExpectation.paramPtrs = &RepositoryIMockHardDeleteChunksByKbUIDParamPtrs{}
+	}
+	mmHardDeleteChunksByKbUID.defaultExpectation.paramPtrs.kbUID = &kbUID
+
+	return mmHardDeleteChunksByKbUID
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.HardDeleteChunksByKbUID
+func (mmHardDeleteChunksByKbUID *mRepositoryIMockHardDeleteChunksByKbUID) Inspect(f func(ctx context.Context, kbUID uuid.UUID)) *mRepositoryIMockHardDeleteChunksByKbUID {
+	if mmHardDeleteChunksByKbUID.mock.inspectFuncHardDeleteChunksByKbUID != nil {
+		mmHardDeleteChunksByKbUID.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.HardDeleteChunksByKbUID")
+	}
+
+	mmHardDeleteChunksByKbUID.mock.inspectFuncHardDeleteChunksByKbUID = f
+
+	return mmHardDeleteChunksByKbUID
+}
+
+// Return sets up results that will be returned by RepositoryI.HardDeleteChunksByKbUID
+func (mmHardDeleteChunksByKbUID *mRepositoryIMockHardDeleteChunksByKbUID) Return(err error) *RepositoryIMock {
+	if mmHardDeleteChunksByKbUID.mock.funcHardDeleteChunksByKbUID != nil {
+		mmHardDeleteChunksByKbUID.mock.t.Fatalf("RepositoryIMock.HardDeleteChunksByKbUID mock is already set by Set")
+	}
+
+	if mmHardDeleteChunksByKbUID.defaultExpectation == nil {
+		mmHardDeleteChunksByKbUID.defaultExpectation = &RepositoryIMockHardDeleteChunksByKbUIDExpectation{mock: mmHardDeleteChunksByKbUID.mock}
+	}
+	mmHardDeleteChunksByKbUID.defaultExpectation.results = &RepositoryIMockHardDeleteChunksByKbUIDResults{err}
+	return mmHardDeleteChunksByKbUID.mock
+}
+
+// Set uses given function f to mock the RepositoryI.HardDeleteChunksByKbUID method
+func (mmHardDeleteChunksByKbUID *mRepositoryIMockHardDeleteChunksByKbUID) Set(f func(ctx context.Context, kbUID uuid.UUID) (err error)) *RepositoryIMock {
+	if mmHardDeleteChunksByKbUID.defaultExpectation != nil {
+		mmHardDeleteChunksByKbUID.mock.t.Fatalf("Default expectation is already set for the RepositoryI.HardDeleteChunksByKbUID method")
+	}
+
+	if len(mmHardDeleteChunksByKbUID.expectations) > 0 {
+		mmHardDeleteChunksByKbUID.mock.t.Fatalf("Some expectations are already set for the RepositoryI.HardDeleteChunksByKbUID method")
+	}
+
+	mmHardDeleteChunksByKbUID.mock.funcHardDeleteChunksByKbUID = f
+	return mmHardDeleteChunksByKbUID.mock
+}
+
+// When sets expectation for the RepositoryI.HardDeleteChunksByKbUID which will trigger the result defined by the following
+// Then helper
+func (mmHardDeleteChunksByKbUID *mRepositoryIMockHardDeleteChunksByKbUID) When(ctx context.Context, kbUID uuid.UUID) *RepositoryIMockHardDeleteChunksByKbUIDExpectation {
+	if mmHardDeleteChunksByKbUID.mock.funcHardDeleteChunksByKbUID != nil {
+		mmHardDeleteChunksByKbUID.mock.t.Fatalf("RepositoryIMock.HardDeleteChunksByKbUID mock is already set by Set")
+	}
+
+	expectation := &RepositoryIMockHardDeleteChunksByKbUIDExpectation{
+		mock:   mmHardDeleteChunksByKbUID.mock,
+		params: &RepositoryIMockHardDeleteChunksByKbUIDParams{ctx, kbUID},
+	}
+	mmHardDeleteChunksByKbUID.expectations = append(mmHardDeleteChunksByKbUID.expectations, expectation)
+	return expectation
+}
+
+// Then sets up RepositoryI.HardDeleteChunksByKbUID return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockHardDeleteChunksByKbUIDExpectation) Then(err error) *RepositoryIMock {
+	e.results = &RepositoryIMockHardDeleteChunksByKbUIDResults{err}
+	return e.mock
+}
+
+// Times sets number of times RepositoryI.HardDeleteChunksByKbUID should be invoked
+func (mmHardDeleteChunksByKbUID *mRepositoryIMockHardDeleteChunksByKbUID) Times(n uint64) *mRepositoryIMockHardDeleteChunksByKbUID {
+	if n == 0 {
+		mmHardDeleteChunksByKbUID.mock.t.Fatalf("Times of RepositoryIMock.HardDeleteChunksByKbUID mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmHardDeleteChunksByKbUID.expectedInvocations, n)
+	return mmHardDeleteChunksByKbUID
+}
+
+func (mmHardDeleteChunksByKbUID *mRepositoryIMockHardDeleteChunksByKbUID) invocationsDone() bool {
+	if len(mmHardDeleteChunksByKbUID.expectations) == 0 && mmHardDeleteChunksByKbUID.defaultExpectation == nil && mmHardDeleteChunksByKbUID.mock.funcHardDeleteChunksByKbUID == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmHardDeleteChunksByKbUID.mock.afterHardDeleteChunksByKbUIDCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmHardDeleteChunksByKbUID.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// HardDeleteChunksByKbUID implements repository.RepositoryI
+func (mmHardDeleteChunksByKbUID *RepositoryIMock) HardDeleteChunksByKbUID(ctx context.Context, kbUID uuid.UUID) (err error) {
+	mm_atomic.AddUint64(&mmHardDeleteChunksByKbUID.beforeHardDeleteChunksByKbUIDCounter, 1)
+	defer mm_atomic.AddUint64(&mmHardDeleteChunksByKbUID.afterHardDeleteChunksByKbUIDCounter, 1)
+
+	if mmHardDeleteChunksByKbUID.inspectFuncHardDeleteChunksByKbUID != nil {
+		mmHardDeleteChunksByKbUID.inspectFuncHardDeleteChunksByKbUID(ctx, kbUID)
+	}
+
+	mm_params := RepositoryIMockHardDeleteChunksByKbUIDParams{ctx, kbUID}
+
+	// Record call args
+	mmHardDeleteChunksByKbUID.HardDeleteChunksByKbUIDMock.mutex.Lock()
+	mmHardDeleteChunksByKbUID.HardDeleteChunksByKbUIDMock.callArgs = append(mmHardDeleteChunksByKbUID.HardDeleteChunksByKbUIDMock.callArgs, &mm_params)
+	mmHardDeleteChunksByKbUID.HardDeleteChunksByKbUIDMock.mutex.Unlock()
+
+	for _, e := range mmHardDeleteChunksByKbUID.HardDeleteChunksByKbUIDMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmHardDeleteChunksByKbUID.HardDeleteChunksByKbUIDMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmHardDeleteChunksByKbUID.HardDeleteChunksByKbUIDMock.defaultExpectation.Counter, 1)
+		mm_want := mmHardDeleteChunksByKbUID.HardDeleteChunksByKbUIDMock.defaultExpectation.params
+		mm_want_ptrs := mmHardDeleteChunksByKbUID.HardDeleteChunksByKbUIDMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryIMockHardDeleteChunksByKbUIDParams{ctx, kbUID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmHardDeleteChunksByKbUID.t.Errorf("RepositoryIMock.HardDeleteChunksByKbUID got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.kbUID != nil && !minimock.Equal(*mm_want_ptrs.kbUID, mm_got.kbUID) {
+				mmHardDeleteChunksByKbUID.t.Errorf("RepositoryIMock.HardDeleteChunksByKbUID got unexpected parameter kbUID, want: %#v, got: %#v%s\n", *mm_want_ptrs.kbUID, mm_got.kbUID, minimock.Diff(*mm_want_ptrs.kbUID, mm_got.kbUID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmHardDeleteChunksByKbUID.t.Errorf("RepositoryIMock.HardDeleteChunksByKbUID got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmHardDeleteChunksByKbUID.HardDeleteChunksByKbUIDMock.defaultExpectation.results
+		if mm_results == nil {
+			mmHardDeleteChunksByKbUID.t.Fatal("No results are set for the RepositoryIMock.HardDeleteChunksByKbUID")
+		}
+		return (*mm_results).err
+	}
+	if mmHardDeleteChunksByKbUID.funcHardDeleteChunksByKbUID != nil {
+		return mmHardDeleteChunksByKbUID.funcHardDeleteChunksByKbUID(ctx, kbUID)
+	}
+	mmHardDeleteChunksByKbUID.t.Fatalf("Unexpected call to RepositoryIMock.HardDeleteChunksByKbUID. %v %v", ctx, kbUID)
+	return
+}
+
+// HardDeleteChunksByKbUIDAfterCounter returns a count of finished RepositoryIMock.HardDeleteChunksByKbUID invocations
+func (mmHardDeleteChunksByKbUID *RepositoryIMock) HardDeleteChunksByKbUIDAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmHardDeleteChunksByKbUID.afterHardDeleteChunksByKbUIDCounter)
+}
+
+// HardDeleteChunksByKbUIDBeforeCounter returns a count of RepositoryIMock.HardDeleteChunksByKbUID invocations
+func (mmHardDeleteChunksByKbUID *RepositoryIMock) HardDeleteChunksByKbUIDBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmHardDeleteChunksByKbUID.beforeHardDeleteChunksByKbUIDCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryIMock.HardDeleteChunksByKbUID.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmHardDeleteChunksByKbUID *mRepositoryIMockHardDeleteChunksByKbUID) Calls() []*RepositoryIMockHardDeleteChunksByKbUIDParams {
+	mmHardDeleteChunksByKbUID.mutex.RLock()
+
+	argCopy := make([]*RepositoryIMockHardDeleteChunksByKbUIDParams, len(mmHardDeleteChunksByKbUID.callArgs))
+	copy(argCopy, mmHardDeleteChunksByKbUID.callArgs)
+
+	mmHardDeleteChunksByKbUID.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockHardDeleteChunksByKbUIDDone returns true if the count of the HardDeleteChunksByKbUID invocations corresponds
+// the number of defined expectations
+func (m *RepositoryIMock) MinimockHardDeleteChunksByKbUIDDone() bool {
+	for _, e := range m.HardDeleteChunksByKbUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.HardDeleteChunksByKbUIDMock.invocationsDone()
+}
+
+// MinimockHardDeleteChunksByKbUIDInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockHardDeleteChunksByKbUIDInspect() {
+	for _, e := range m.HardDeleteChunksByKbUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryIMock.HardDeleteChunksByKbUID with params: %#v", *e.params)
+		}
+	}
+
+	afterHardDeleteChunksByKbUIDCounter := mm_atomic.LoadUint64(&m.afterHardDeleteChunksByKbUIDCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.HardDeleteChunksByKbUIDMock.defaultExpectation != nil && afterHardDeleteChunksByKbUIDCounter < 1 {
+		if m.HardDeleteChunksByKbUIDMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to RepositoryIMock.HardDeleteChunksByKbUID")
+		} else {
+			m.t.Errorf("Expected call to RepositoryIMock.HardDeleteChunksByKbUID with params: %#v", *m.HardDeleteChunksByKbUIDMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcHardDeleteChunksByKbUID != nil && afterHardDeleteChunksByKbUIDCounter < 1 {
+		m.t.Error("Expected call to RepositoryIMock.HardDeleteChunksByKbUID")
+	}
+
+	if !m.HardDeleteChunksByKbUIDMock.invocationsDone() && afterHardDeleteChunksByKbUIDCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.HardDeleteChunksByKbUID but found %d calls",
+			mm_atomic.LoadUint64(&m.HardDeleteChunksByKbUIDMock.expectedInvocations), afterHardDeleteChunksByKbUIDCounter)
+	}
+}
+
+type mRepositoryIMockHardDeleteConvertedFileByFileUID struct {
+	mock               *RepositoryIMock
+	defaultExpectation *RepositoryIMockHardDeleteConvertedFileByFileUIDExpectation
+	expectations       []*RepositoryIMockHardDeleteConvertedFileByFileUIDExpectation
+
+	callArgs []*RepositoryIMockHardDeleteConvertedFileByFileUIDParams
+	mutex    sync.RWMutex
+
+	expectedInvocations uint64
+}
+
+// RepositoryIMockHardDeleteConvertedFileByFileUIDExpectation specifies expectation struct of the RepositoryI.HardDeleteConvertedFileByFileUID
+type RepositoryIMockHardDeleteConvertedFileByFileUIDExpectation struct {
+	mock      *RepositoryIMock
+	params    *RepositoryIMockHardDeleteConvertedFileByFileUIDParams
+	paramPtrs *RepositoryIMockHardDeleteConvertedFileByFileUIDParamPtrs
+	results   *RepositoryIMockHardDeleteConvertedFileByFileUIDResults
+	Counter   uint64
+}
+
+// RepositoryIMockHardDeleteConvertedFileByFileUIDParams contains parameters of the RepositoryI.HardDeleteConvertedFileByFileUID
+type RepositoryIMockHardDeleteConvertedFileByFileUIDParams struct {
+	ctx     context.Context
+	fileUID uuid.UUID
+}
+
+// RepositoryIMockHardDeleteConvertedFileByFileUIDParamPtrs contains pointers to parameters of the RepositoryI.HardDeleteConvertedFileByFileUID
+type RepositoryIMockHardDeleteConvertedFileByFileUIDParamPtrs struct {
+	ctx     *context.Context
+	fileUID *uuid.UUID
+}
+
+// RepositoryIMockHardDeleteConvertedFileByFileUIDResults contains results of the RepositoryI.HardDeleteConvertedFileByFileUID
+type RepositoryIMockHardDeleteConvertedFileByFileUIDResults struct {
+	err error
+}
+
+// Expect sets up expected params for RepositoryI.HardDeleteConvertedFileByFileUID
+func (mmHardDeleteConvertedFileByFileUID *mRepositoryIMockHardDeleteConvertedFileByFileUID) Expect(ctx context.Context, fileUID uuid.UUID) *mRepositoryIMockHardDeleteConvertedFileByFileUID {
+	if mmHardDeleteConvertedFileByFileUID.mock.funcHardDeleteConvertedFileByFileUID != nil {
+		mmHardDeleteConvertedFileByFileUID.mock.t.Fatalf("RepositoryIMock.HardDeleteConvertedFileByFileUID mock is already set by Set")
+	}
+
+	if mmHardDeleteConvertedFileByFileUID.defaultExpectation == nil {
+		mmHardDeleteConvertedFileByFileUID.defaultExpectation = &RepositoryIMockHardDeleteConvertedFileByFileUIDExpectation{}
+	}
+
+	if mmHardDeleteConvertedFileByFileUID.defaultExpectation.paramPtrs != nil {
+		mmHardDeleteConvertedFileByFileUID.mock.t.Fatalf("RepositoryIMock.HardDeleteConvertedFileByFileUID mock is already set by ExpectParams functions")
+	}
+
+	mmHardDeleteConvertedFileByFileUID.defaultExpectation.params = &RepositoryIMockHardDeleteConvertedFileByFileUIDParams{ctx, fileUID}
+	for _, e := range mmHardDeleteConvertedFileByFileUID.expectations {
+		if minimock.Equal(e.params, mmHardDeleteConvertedFileByFileUID.defaultExpectation.params) {
+			mmHardDeleteConvertedFileByFileUID.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmHardDeleteConvertedFileByFileUID.defaultExpectation.params)
+		}
+	}
+
+	return mmHardDeleteConvertedFileByFileUID
+}
+
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.HardDeleteConvertedFileByFileUID
+func (mmHardDeleteConvertedFileByFileUID *mRepositoryIMockHardDeleteConvertedFileByFileUID) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockHardDeleteConvertedFileByFileUID {
+	if mmHardDeleteConvertedFileByFileUID.mock.funcHardDeleteConvertedFileByFileUID != nil {
+		mmHardDeleteConvertedFileByFileUID.mock.t.Fatalf("RepositoryIMock.HardDeleteConvertedFileByFileUID mock is already set by Set")
+	}
+
+	if mmHardDeleteConvertedFileByFileUID.defaultExpectation == nil {
+		mmHardDeleteConvertedFileByFileUID.defaultExpectation = &RepositoryIMockHardDeleteConvertedFileByFileUIDExpectation{}
+	}
+
+	if mmHardDeleteConvertedFileByFileUID.defaultExpectation.params != nil {
+		mmHardDeleteConvertedFileByFileUID.mock.t.Fatalf("RepositoryIMock.HardDeleteConvertedFileByFileUID mock is already set by Expect")
+	}
+
+	if mmHardDeleteConvertedFileByFileUID.defaultExpectation.paramPtrs == nil {
+		mmHardDeleteConvertedFileByFileUID.defaultExpectation.paramPtrs = &RepositoryIMockHardDeleteConvertedFileByFileUIDParamPtrs{}
+	}
+	mmHardDeleteConvertedFileByFileUID.defaultExpectation.paramPtrs.ctx = &ctx
+
+	return mmHardDeleteConvertedFileByFileUID
+}
+
+// ExpectFileUIDParam2 sets up expected param fileUID for RepositoryI.HardDeleteConvertedFileByFileUID
+func (mmHardDeleteConvertedFileByFileUID *mRepositoryIMockHardDeleteConvertedFileByFileUID) ExpectFileUIDParam2(fileUID uuid.UUID) *mRepositoryIMockHardDeleteConvertedFileByFileUID {
+	if mmHardDeleteConvertedFileByFileUID.mock.funcHardDeleteConvertedFileByFileUID != nil {
+		mmHardDeleteConvertedFileByFileUID.mock.t.Fatalf("RepositoryIMock.HardDeleteConvertedFileByFileUID mock is already set by Set")
+	}
+
+	if mmHardDeleteConvertedFileByFileUID.defaultExpectation == nil {
+		mmHardDeleteConvertedFileByFileUID.defaultExpectation = &RepositoryIMockHardDeleteConvertedFileByFileUIDExpectation{}
+	}
+
+	if mmHardDeleteConvertedFileByFileUID.defaultExpectation.params != nil {
+		mmHardDeleteConvertedFileByFileUID.mock.t.Fatalf("RepositoryIMock.HardDeleteConvertedFileByFileUID mock is already set by Expect")
+	}
+
+	if mmHardDeleteConvertedFileByFileUID.defaultExpectation.paramPtrs == nil {
+		mmHardDeleteConvertedFileByFileUID.defaultExpectation.paramPtrs = &RepositoryIMockHardDeleteConvertedFileByFileUIDParamPtrs{}
+	}
+	mmHardDeleteConvertedFileByFileUID.defaultExpectation.paramPtrs.fileUID = &fileUID
+
+	return mmHardDeleteConvertedFileByFileUID
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.HardDeleteConvertedFileByFileUID
+func (mmHardDeleteConvertedFileByFileUID *mRepositoryIMockHardDeleteConvertedFileByFileUID) Inspect(f func(ctx context.Context, fileUID uuid.UUID)) *mRepositoryIMockHardDeleteConvertedFileByFileUID {
+	if mmHardDeleteConvertedFileByFileUID.mock.inspectFuncHardDeleteConvertedFileByFileUID != nil {
+		mmHardDeleteConvertedFileByFileUID.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.HardDeleteConvertedFileByFileUID")
+	}
+
+	mmHardDeleteConvertedFileByFileUID.mock.inspectFuncHardDeleteConvertedFileByFileUID = f
+
+	return mmHardDeleteConvertedFileByFileUID
+}
+
+// Return sets up results that will be returned by RepositoryI.HardDeleteConvertedFileByFileUID
+func (mmHardDeleteConvertedFileByFileUID *mRepositoryIMockHardDeleteConvertedFileByFileUID) Return(err error) *RepositoryIMock {
+	if mmHardDeleteConvertedFileByFileUID.mock.funcHardDeleteConvertedFileByFileUID != nil {
+		mmHardDeleteConvertedFileByFileUID.mock.t.Fatalf("RepositoryIMock.HardDeleteConvertedFileByFileUID mock is already set by Set")
+	}
+
+	if mmHardDeleteConvertedFileByFileUID.defaultExpectation == nil {
+		mmHardDeleteConvertedFileByFileUID.defaultExpectation = &RepositoryIMockHardDeleteConvertedFileByFileUIDExpectation{mock: mmHardDeleteConvertedFileByFileUID.mock}
+	}
+	mmHardDeleteConvertedFileByFileUID.defaultExpectation.results = &RepositoryIMockHardDeleteConvertedFileByFileUIDResults{err}
+	return mmHardDeleteConvertedFileByFileUID.mock
+}
+
+// Set uses given function f to mock the RepositoryI.HardDeleteConvertedFileByFileUID method
+func (mmHardDeleteConvertedFileByFileUID *mRepositoryIMockHardDeleteConvertedFileByFileUID) Set(f func(ctx context.Context, fileUID uuid.UUID) (err error)) *RepositoryIMock {
+	if mmHardDeleteConvertedFileByFileUID.defaultExpectation != nil {
+		mmHardDeleteConvertedFileByFileUID.mock.t.Fatalf("Default expectation is already set for the RepositoryI.HardDeleteConvertedFileByFileUID method")
+	}
+
+	if len(mmHardDeleteConvertedFileByFileUID.expectations) > 0 {
+		mmHardDeleteConvertedFileByFileUID.mock.t.Fatalf("Some expectations are already set for the RepositoryI.HardDeleteConvertedFileByFileUID method")
+	}
+
+	mmHardDeleteConvertedFileByFileUID.mock.funcHardDeleteConvertedFileByFileUID = f
+	return mmHardDeleteConvertedFileByFileUID.mock
+}
+
+// When sets expectation for the RepositoryI.HardDeleteConvertedFileByFileUID which will trigger the result defined by the following
+// Then helper
+func (mmHardDeleteConvertedFileByFileUID *mRepositoryIMockHardDeleteConvertedFileByFileUID) When(ctx context.Context, fileUID uuid.UUID) *RepositoryIMockHardDeleteConvertedFileByFileUIDExpectation {
+	if mmHardDeleteConvertedFileByFileUID.mock.funcHardDeleteConvertedFileByFileUID != nil {
+		mmHardDeleteConvertedFileByFileUID.mock.t.Fatalf("RepositoryIMock.HardDeleteConvertedFileByFileUID mock is already set by Set")
+	}
+
+	expectation := &RepositoryIMockHardDeleteConvertedFileByFileUIDExpectation{
+		mock:   mmHardDeleteConvertedFileByFileUID.mock,
+		params: &RepositoryIMockHardDeleteConvertedFileByFileUIDParams{ctx, fileUID},
+	}
+	mmHardDeleteConvertedFileByFileUID.expectations = append(mmHardDeleteConvertedFileByFileUID.expectations, expectation)
+	return expectation
+}
+
+// Then sets up RepositoryI.HardDeleteConvertedFileByFileUID return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockHardDeleteConvertedFileByFileUIDExpectation) Then(err error) *RepositoryIMock {
+	e.results = &RepositoryIMockHardDeleteConvertedFileByFileUIDResults{err}
+	return e.mock
+}
+
+// Times sets number of times RepositoryI.HardDeleteConvertedFileByFileUID should be invoked
+func (mmHardDeleteConvertedFileByFileUID *mRepositoryIMockHardDeleteConvertedFileByFileUID) Times(n uint64) *mRepositoryIMockHardDeleteConvertedFileByFileUID {
+	if n == 0 {
+		mmHardDeleteConvertedFileByFileUID.mock.t.Fatalf("Times of RepositoryIMock.HardDeleteConvertedFileByFileUID mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmHardDeleteConvertedFileByFileUID.expectedInvocations, n)
+	return mmHardDeleteConvertedFileByFileUID
+}
+
+func (mmHardDeleteConvertedFileByFileUID *mRepositoryIMockHardDeleteConvertedFileByFileUID) invocationsDone() bool {
+	if len(mmHardDeleteConvertedFileByFileUID.expectations) == 0 && mmHardDeleteConvertedFileByFileUID.defaultExpectation == nil && mmHardDeleteConvertedFileByFileUID.mock.funcHardDeleteConvertedFileByFileUID == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmHardDeleteConvertedFileByFileUID.mock.afterHardDeleteConvertedFileByFileUIDCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmHardDeleteConvertedFileByFileUID.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// HardDeleteConvertedFileByFileUID implements repository.RepositoryI
+func (mmHardDeleteConvertedFileByFileUID *RepositoryIMock) HardDeleteConvertedFileByFileUID(ctx context.Context, fileUID uuid.UUID) (err error) {
+	mm_atomic.AddUint64(&mmHardDeleteConvertedFileByFileUID.beforeHardDeleteConvertedFileByFileUIDCounter, 1)
+	defer mm_atomic.AddUint64(&mmHardDeleteConvertedFileByFileUID.afterHardDeleteConvertedFileByFileUIDCounter, 1)
+
+	if mmHardDeleteConvertedFileByFileUID.inspectFuncHardDeleteConvertedFileByFileUID != nil {
+		mmHardDeleteConvertedFileByFileUID.inspectFuncHardDeleteConvertedFileByFileUID(ctx, fileUID)
+	}
+
+	mm_params := RepositoryIMockHardDeleteConvertedFileByFileUIDParams{ctx, fileUID}
+
+	// Record call args
+	mmHardDeleteConvertedFileByFileUID.HardDeleteConvertedFileByFileUIDMock.mutex.Lock()
+	mmHardDeleteConvertedFileByFileUID.HardDeleteConvertedFileByFileUIDMock.callArgs = append(mmHardDeleteConvertedFileByFileUID.HardDeleteConvertedFileByFileUIDMock.callArgs, &mm_params)
+	mmHardDeleteConvertedFileByFileUID.HardDeleteConvertedFileByFileUIDMock.mutex.Unlock()
+
+	for _, e := range mmHardDeleteConvertedFileByFileUID.HardDeleteConvertedFileByFileUIDMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmHardDeleteConvertedFileByFileUID.HardDeleteConvertedFileByFileUIDMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmHardDeleteConvertedFileByFileUID.HardDeleteConvertedFileByFileUIDMock.defaultExpectation.Counter, 1)
+		mm_want := mmHardDeleteConvertedFileByFileUID.HardDeleteConvertedFileByFileUIDMock.defaultExpectation.params
+		mm_want_ptrs := mmHardDeleteConvertedFileByFileUID.HardDeleteConvertedFileByFileUIDMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryIMockHardDeleteConvertedFileByFileUIDParams{ctx, fileUID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmHardDeleteConvertedFileByFileUID.t.Errorf("RepositoryIMock.HardDeleteConvertedFileByFileUID got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.fileUID != nil && !minimock.Equal(*mm_want_ptrs.fileUID, mm_got.fileUID) {
+				mmHardDeleteConvertedFileByFileUID.t.Errorf("RepositoryIMock.HardDeleteConvertedFileByFileUID got unexpected parameter fileUID, want: %#v, got: %#v%s\n", *mm_want_ptrs.fileUID, mm_got.fileUID, minimock.Diff(*mm_want_ptrs.fileUID, mm_got.fileUID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmHardDeleteConvertedFileByFileUID.t.Errorf("RepositoryIMock.HardDeleteConvertedFileByFileUID got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmHardDeleteConvertedFileByFileUID.HardDeleteConvertedFileByFileUIDMock.defaultExpectation.results
+		if mm_results == nil {
+			mmHardDeleteConvertedFileByFileUID.t.Fatal("No results are set for the RepositoryIMock.HardDeleteConvertedFileByFileUID")
+		}
+		return (*mm_results).err
+	}
+	if mmHardDeleteConvertedFileByFileUID.funcHardDeleteConvertedFileByFileUID != nil {
+		return mmHardDeleteConvertedFileByFileUID.funcHardDeleteConvertedFileByFileUID(ctx, fileUID)
+	}
+	mmHardDeleteConvertedFileByFileUID.t.Fatalf("Unexpected call to RepositoryIMock.HardDeleteConvertedFileByFileUID. %v %v", ctx, fileUID)
+	return
+}
+
+// HardDeleteConvertedFileByFileUIDAfterCounter returns a count of finished RepositoryIMock.HardDeleteConvertedFileByFileUID invocations
+func (mmHardDeleteConvertedFileByFileUID *RepositoryIMock) HardDeleteConvertedFileByFileUIDAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmHardDeleteConvertedFileByFileUID.afterHardDeleteConvertedFileByFileUIDCounter)
+}
+
+// HardDeleteConvertedFileByFileUIDBeforeCounter returns a count of RepositoryIMock.HardDeleteConvertedFileByFileUID invocations
+func (mmHardDeleteConvertedFileByFileUID *RepositoryIMock) HardDeleteConvertedFileByFileUIDBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmHardDeleteConvertedFileByFileUID.beforeHardDeleteConvertedFileByFileUIDCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryIMock.HardDeleteConvertedFileByFileUID.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmHardDeleteConvertedFileByFileUID *mRepositoryIMockHardDeleteConvertedFileByFileUID) Calls() []*RepositoryIMockHardDeleteConvertedFileByFileUIDParams {
+	mmHardDeleteConvertedFileByFileUID.mutex.RLock()
+
+	argCopy := make([]*RepositoryIMockHardDeleteConvertedFileByFileUIDParams, len(mmHardDeleteConvertedFileByFileUID.callArgs))
+	copy(argCopy, mmHardDeleteConvertedFileByFileUID.callArgs)
+
+	mmHardDeleteConvertedFileByFileUID.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockHardDeleteConvertedFileByFileUIDDone returns true if the count of the HardDeleteConvertedFileByFileUID invocations corresponds
+// the number of defined expectations
+func (m *RepositoryIMock) MinimockHardDeleteConvertedFileByFileUIDDone() bool {
+	for _, e := range m.HardDeleteConvertedFileByFileUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.HardDeleteConvertedFileByFileUIDMock.invocationsDone()
+}
+
+// MinimockHardDeleteConvertedFileByFileUIDInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockHardDeleteConvertedFileByFileUIDInspect() {
+	for _, e := range m.HardDeleteConvertedFileByFileUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryIMock.HardDeleteConvertedFileByFileUID with params: %#v", *e.params)
+		}
+	}
+
+	afterHardDeleteConvertedFileByFileUIDCounter := mm_atomic.LoadUint64(&m.afterHardDeleteConvertedFileByFileUIDCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.HardDeleteConvertedFileByFileUIDMock.defaultExpectation != nil && afterHardDeleteConvertedFileByFileUIDCounter < 1 {
+		if m.HardDeleteConvertedFileByFileUIDMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to RepositoryIMock.HardDeleteConvertedFileByFileUID")
+		} else {
+			m.t.Errorf("Expected call to RepositoryIMock.HardDeleteConvertedFileByFileUID with params: %#v", *m.HardDeleteConvertedFileByFileUIDMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcHardDeleteConvertedFileByFileUID != nil && afterHardDeleteConvertedFileByFileUIDCounter < 1 {
+		m.t.Error("Expected call to RepositoryIMock.HardDeleteConvertedFileByFileUID")
+	}
+
+	if !m.HardDeleteConvertedFileByFileUIDMock.invocationsDone() && afterHardDeleteConvertedFileByFileUIDCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.HardDeleteConvertedFileByFileUID but found %d calls",
+			mm_atomic.LoadUint64(&m.HardDeleteConvertedFileByFileUIDMock.expectedInvocations), afterHardDeleteConvertedFileByFileUIDCounter)
+	}
+}
+
+type mRepositoryIMockHardDeleteEmbeddingsByKbFileUID struct {
+	mock               *RepositoryIMock
+	defaultExpectation *RepositoryIMockHardDeleteEmbeddingsByKbFileUIDExpectation
+	expectations       []*RepositoryIMockHardDeleteEmbeddingsByKbFileUIDExpectation
+
+	callArgs []*RepositoryIMockHardDeleteEmbeddingsByKbFileUIDParams
+	mutex    sync.RWMutex
+
+	expectedInvocations uint64
+}
+
+// RepositoryIMockHardDeleteEmbeddingsByKbFileUIDExpectation specifies expectation struct of the RepositoryI.HardDeleteEmbeddingsByKbFileUID
+type RepositoryIMockHardDeleteEmbeddingsByKbFileUIDExpectation struct {
+	mock      *RepositoryIMock
+	params    *RepositoryIMockHardDeleteEmbeddingsByKbFileUIDParams
+	paramPtrs *RepositoryIMockHardDeleteEmbeddingsByKbFileUIDParamPtrs
+	results   *RepositoryIMockHardDeleteEmbeddingsByKbFileUIDResults
+	Counter   uint64
+}
+
+// RepositoryIMockHardDeleteEmbeddingsByKbFileUIDParams contains parameters of the RepositoryI.HardDeleteEmbeddingsByKbFileUID
+type RepositoryIMockHardDeleteEmbeddingsByKbFileUIDParams struct {
+	ctx       context.Context
+	kbFileUID uuid.UUID
+}
+
+// RepositoryIMockHardDeleteEmbeddingsByKbFileUIDParamPtrs contains pointers to parameters of the RepositoryI.HardDeleteEmbeddingsByKbFileUID
+type RepositoryIMockHardDeleteEmbeddingsByKbFileUIDParamPtrs struct {
+	ctx       *context.Context
+	kbFileUID *uuid.UUID
+}
+
+// RepositoryIMockHardDeleteEmbeddingsByKbFileUIDResults contains results of the RepositoryI.HardDeleteEmbeddingsByKbFileUID
+type RepositoryIMockHardDeleteEmbeddingsByKbFileUIDResults struct {
+	err error
+}
+
+// Expect sets up expected params for RepositoryI.HardDeleteEmbeddingsByKbFileUID
+func (mmHardDeleteEmbeddingsByKbFileUID *mRepositoryIMockHardDeleteEmbeddingsByKbFileUID) Expect(ctx context.Context, kbFileUID uuid.UUID) *mRepositoryIMockHardDeleteEmbeddingsByKbFileUID {
+	if mmHardDeleteEmbeddingsByKbFileUID.mock.funcHardDeleteEmbeddingsByKbFileUID != nil {
+		mmHardDeleteEmbeddingsByKbFileUID.mock.t.Fatalf("RepositoryIMock.HardDeleteEmbeddingsByKbFileUID mock is already set by Set")
+	}
+
+	if mmHardDeleteEmbeddingsByKbFileUID.defaultExpectation == nil {
+		mmHardDeleteEmbeddingsByKbFileUID.defaultExpectation = &RepositoryIMockHardDeleteEmbeddingsByKbFileUIDExpectation{}
+	}
+
+	if mmHardDeleteEmbeddingsByKbFileUID.defaultExpectation.paramPtrs != nil {
+		mmHardDeleteEmbeddingsByKbFileUID.mock.t.Fatalf("RepositoryIMock.HardDeleteEmbeddingsByKbFileUID mock is already set by ExpectParams functions")
+	}
+
+	mmHardDeleteEmbeddingsByKbFileUID.defaultExpectation.params = &RepositoryIMockHardDeleteEmbeddingsByKbFileUIDParams{ctx, kbFileUID}
+	for _, e := range mmHardDeleteEmbeddingsByKbFileUID.expectations {
+		if minimock.Equal(e.params, mmHardDeleteEmbeddingsByKbFileUID.defaultExpectation.params) {
+			mmHardDeleteEmbeddingsByKbFileUID.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmHardDeleteEmbeddingsByKbFileUID.defaultExpectation.params)
+		}
+	}
+
+	return mmHardDeleteEmbeddingsByKbFileUID
+}
+
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.HardDeleteEmbeddingsByKbFileUID
+func (mmHardDeleteEmbeddingsByKbFileUID *mRepositoryIMockHardDeleteEmbeddingsByKbFileUID) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockHardDeleteEmbeddingsByKbFileUID {
+	if mmHardDeleteEmbeddingsByKbFileUID.mock.funcHardDeleteEmbeddingsByKbFileUID != nil {
+		mmHardDeleteEmbeddingsByKbFileUID.mock.t.Fatalf("RepositoryIMock.HardDeleteEmbeddingsByKbFileUID mock is already set by Set")
+	}
+
+	if mmHardDeleteEmbeddingsByKbFileUID.defaultExpectation == nil {
+		mmHardDeleteEmbeddingsByKbFileUID.defaultExpectation = &RepositoryIMockHardDeleteEmbeddingsByKbFileUIDExpectation{}
+	}
+
+	if mmHardDeleteEmbeddingsByKbFileUID.defaultExpectation.params != nil {
+		mmHardDeleteEmbeddingsByKbFileUID.mock.t.Fatalf("RepositoryIMock.HardDeleteEmbeddingsByKbFileUID mock is already set by Expect")
+	}
+
+	if mmHardDeleteEmbeddingsByKbFileUID.defaultExpectation.paramPtrs == nil {
+		mmHardDeleteEmbeddingsByKbFileUID.defaultExpectation.paramPtrs = &RepositoryIMockHardDeleteEmbeddingsByKbFileUIDParamPtrs{}
+	}
+	mmHardDeleteEmbeddingsByKbFileUID.defaultExpectation.paramPtrs.ctx = &ctx
+
+	return mmHardDeleteEmbeddingsByKbFileUID
+}
+
+// ExpectKbFileUIDParam2 sets up expected param kbFileUID for RepositoryI.HardDeleteEmbeddingsByKbFileUID
+func (mmHardDeleteEmbeddingsByKbFileUID *mRepositoryIMockHardDeleteEmbeddingsByKbFileUID) ExpectKbFileUIDParam2(kbFileUID uuid.UUID) *mRepositoryIMockHardDeleteEmbeddingsByKbFileUID {
+	if mmHardDeleteEmbeddingsByKbFileUID.mock.funcHardDeleteEmbeddingsByKbFileUID != nil {
+		mmHardDeleteEmbeddingsByKbFileUID.mock.t.Fatalf("RepositoryIMock.HardDeleteEmbeddingsByKbFileUID mock is already set by Set")
+	}
+
+	if mmHardDeleteEmbeddingsByKbFileUID.defaultExpectation == nil {
+		mmHardDeleteEmbeddingsByKbFileUID.defaultExpectation = &RepositoryIMockHardDeleteEmbeddingsByKbFileUIDExpectation{}
+	}
+
+	if mmHardDeleteEmbeddingsByKbFileUID.defaultExpectation.params != nil {
+		mmHardDeleteEmbeddingsByKbFileUID.mock.t.Fatalf("RepositoryIMock.HardDeleteEmbeddingsByKbFileUID mock is already set by Expect")
+	}
+
+	if mmHardDeleteEmbeddingsByKbFileUID.defaultExpectation.paramPtrs == nil {
+		mmHardDeleteEmbeddingsByKbFileUID.defaultExpectation.paramPtrs = &RepositoryIMockHardDeleteEmbeddingsByKbFileUIDParamPtrs{}
+	}
+	mmHardDeleteEmbeddingsByKbFileUID.defaultExpectation.paramPtrs.kbFileUID = &kbFileUID
+
+	return mmHardDeleteEmbeddingsByKbFileUID
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.HardDeleteEmbeddingsByKbFileUID
+func (mmHardDeleteEmbeddingsByKbFileUID *mRepositoryIMockHardDeleteEmbeddingsByKbFileUID) Inspect(f func(ctx context.Context, kbFileUID uuid.UUID)) *mRepositoryIMockHardDeleteEmbeddingsByKbFileUID {
+	if mmHardDeleteEmbeddingsByKbFileUID.mock.inspectFuncHardDeleteEmbeddingsByKbFileUID != nil {
+		mmHardDeleteEmbeddingsByKbFileUID.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.HardDeleteEmbeddingsByKbFileUID")
+	}
+
+	mmHardDeleteEmbeddingsByKbFileUID.mock.inspectFuncHardDeleteEmbeddingsByKbFileUID = f
+
+	return mmHardDeleteEmbeddingsByKbFileUID
+}
+
+// Return sets up results that will be returned by RepositoryI.HardDeleteEmbeddingsByKbFileUID
+func (mmHardDeleteEmbeddingsByKbFileUID *mRepositoryIMockHardDeleteEmbeddingsByKbFileUID) Return(err error) *RepositoryIMock {
+	if mmHardDeleteEmbeddingsByKbFileUID.mock.funcHardDeleteEmbeddingsByKbFileUID != nil {
+		mmHardDeleteEmbeddingsByKbFileUID.mock.t.Fatalf("RepositoryIMock.HardDeleteEmbeddingsByKbFileUID mock is already set by Set")
+	}
+
+	if mmHardDeleteEmbeddingsByKbFileUID.defaultExpectation == nil {
+		mmHardDeleteEmbeddingsByKbFileUID.defaultExpectation = &RepositoryIMockHardDeleteEmbeddingsByKbFileUIDExpectation{mock: mmHardDeleteEmbeddingsByKbFileUID.mock}
+	}
+	mmHardDeleteEmbeddingsByKbFileUID.defaultExpectation.results = &RepositoryIMockHardDeleteEmbeddingsByKbFileUIDResults{err}
+	return mmHardDeleteEmbeddingsByKbFileUID.mock
+}
+
+// Set uses given function f to mock the RepositoryI.HardDeleteEmbeddingsByKbFileUID method
+func (mmHardDeleteEmbeddingsByKbFileUID *mRepositoryIMockHardDeleteEmbeddingsByKbFileUID) Set(f func(ctx context.Context, kbFileUID uuid.UUID) (err error)) *RepositoryIMock {
+	if mmHardDeleteEmbeddingsByKbFileUID.defaultExpectation != nil {
+		mmHardDeleteEmbeddingsByKbFileUID.mock.t.Fatalf("Default expectation is already set for the RepositoryI.HardDeleteEmbeddingsByKbFileUID method")
+	}
+
+	if len(mmHardDeleteEmbeddingsByKbFileUID.expectations) > 0 {
+		mmHardDeleteEmbeddingsByKbFileUID.mock.t.Fatalf("Some expectations are already set for the RepositoryI.HardDeleteEmbeddingsByKbFileUID method")
+	}
+
+	mmHardDeleteEmbeddingsByKbFileUID.mock.funcHardDeleteEmbeddingsByKbFileUID = f
+	return mmHardDeleteEmbeddingsByKbFileUID.mock
+}
+
+// When sets expectation for the RepositoryI.HardDeleteEmbeddingsByKbFileUID which will trigger the result defined by the following
+// Then helper
+func (mmHardDeleteEmbeddingsByKbFileUID *mRepositoryIMockHardDeleteEmbeddingsByKbFileUID) When(ctx context.Context, kbFileUID uuid.UUID) *RepositoryIMockHardDeleteEmbeddingsByKbFileUIDExpectation {
+	if mmHardDeleteEmbeddingsByKbFileUID.mock.funcHardDeleteEmbeddingsByKbFileUID != nil {
+		mmHardDeleteEmbeddingsByKbFileUID.mock.t.Fatalf("RepositoryIMock.HardDeleteEmbeddingsByKbFileUID mock is already set by Set")
+	}
+
+	expectation := &RepositoryIMockHardDeleteEmbeddingsByKbFileUIDExpectation{
+		mock:   mmHardDeleteEmbeddingsByKbFileUID.mock,
+		params: &RepositoryIMockHardDeleteEmbeddingsByKbFileUIDParams{ctx, kbFileUID},
+	}
+	mmHardDeleteEmbeddingsByKbFileUID.expectations = append(mmHardDeleteEmbeddingsByKbFileUID.expectations, expectation)
+	return expectation
+}
+
+// Then sets up RepositoryI.HardDeleteEmbeddingsByKbFileUID return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockHardDeleteEmbeddingsByKbFileUIDExpectation) Then(err error) *RepositoryIMock {
+	e.results = &RepositoryIMockHardDeleteEmbeddingsByKbFileUIDResults{err}
+	return e.mock
+}
+
+// Times sets number of times RepositoryI.HardDeleteEmbeddingsByKbFileUID should be invoked
+func (mmHardDeleteEmbeddingsByKbFileUID *mRepositoryIMockHardDeleteEmbeddingsByKbFileUID) Times(n uint64) *mRepositoryIMockHardDeleteEmbeddingsByKbFileUID {
+	if n == 0 {
+		mmHardDeleteEmbeddingsByKbFileUID.mock.t.Fatalf("Times of RepositoryIMock.HardDeleteEmbeddingsByKbFileUID mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmHardDeleteEmbeddingsByKbFileUID.expectedInvocations, n)
+	return mmHardDeleteEmbeddingsByKbFileUID
+}
+
+func (mmHardDeleteEmbeddingsByKbFileUID *mRepositoryIMockHardDeleteEmbeddingsByKbFileUID) invocationsDone() bool {
+	if len(mmHardDeleteEmbeddingsByKbFileUID.expectations) == 0 && mmHardDeleteEmbeddingsByKbFileUID.defaultExpectation == nil && mmHardDeleteEmbeddingsByKbFileUID.mock.funcHardDeleteEmbeddingsByKbFileUID == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmHardDeleteEmbeddingsByKbFileUID.mock.afterHardDeleteEmbeddingsByKbFileUIDCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmHardDeleteEmbeddingsByKbFileUID.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// HardDeleteEmbeddingsByKbFileUID implements repository.RepositoryI
+func (mmHardDeleteEmbeddingsByKbFileUID *RepositoryIMock) HardDeleteEmbeddingsByKbFileUID(ctx context.Context, kbFileUID uuid.UUID) (err error) {
+	mm_atomic.AddUint64(&mmHardDeleteEmbeddingsByKbFileUID.beforeHardDeleteEmbeddingsByKbFileUIDCounter, 1)
+	defer mm_atomic.AddUint64(&mmHardDeleteEmbeddingsByKbFileUID.afterHardDeleteEmbeddingsByKbFileUIDCounter, 1)
+
+	if mmHardDeleteEmbeddingsByKbFileUID.inspectFuncHardDeleteEmbeddingsByKbFileUID != nil {
+		mmHardDeleteEmbeddingsByKbFileUID.inspectFuncHardDeleteEmbeddingsByKbFileUID(ctx, kbFileUID)
+	}
+
+	mm_params := RepositoryIMockHardDeleteEmbeddingsByKbFileUIDParams{ctx, kbFileUID}
+
+	// Record call args
+	mmHardDeleteEmbeddingsByKbFileUID.HardDeleteEmbeddingsByKbFileUIDMock.mutex.Lock()
+	mmHardDeleteEmbeddingsByKbFileUID.HardDeleteEmbeddingsByKbFileUIDMock.callArgs = append(mmHardDeleteEmbeddingsByKbFileUID.HardDeleteEmbeddingsByKbFileUIDMock.callArgs, &mm_params)
+	mmHardDeleteEmbeddingsByKbFileUID.HardDeleteEmbeddingsByKbFileUIDMock.mutex.Unlock()
+
+	for _, e := range mmHardDeleteEmbeddingsByKbFileUID.HardDeleteEmbeddingsByKbFileUIDMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmHardDeleteEmbeddingsByKbFileUID.HardDeleteEmbeddingsByKbFileUIDMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmHardDeleteEmbeddingsByKbFileUID.HardDeleteEmbeddingsByKbFileUIDMock.defaultExpectation.Counter, 1)
+		mm_want := mmHardDeleteEmbeddingsByKbFileUID.HardDeleteEmbeddingsByKbFileUIDMock.defaultExpectation.params
+		mm_want_ptrs := mmHardDeleteEmbeddingsByKbFileUID.HardDeleteEmbeddingsByKbFileUIDMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryIMockHardDeleteEmbeddingsByKbFileUIDParams{ctx, kbFileUID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmHardDeleteEmbeddingsByKbFileUID.t.Errorf("RepositoryIMock.HardDeleteEmbeddingsByKbFileUID got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.kbFileUID != nil && !minimock.Equal(*mm_want_ptrs.kbFileUID, mm_got.kbFileUID) {
+				mmHardDeleteEmbeddingsByKbFileUID.t.Errorf("RepositoryIMock.HardDeleteEmbeddingsByKbFileUID got unexpected parameter kbFileUID, want: %#v, got: %#v%s\n", *mm_want_ptrs.kbFileUID, mm_got.kbFileUID, minimock.Diff(*mm_want_ptrs.kbFileUID, mm_got.kbFileUID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmHardDeleteEmbeddingsByKbFileUID.t.Errorf("RepositoryIMock.HardDeleteEmbeddingsByKbFileUID got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmHardDeleteEmbeddingsByKbFileUID.HardDeleteEmbeddingsByKbFileUIDMock.defaultExpectation.results
+		if mm_results == nil {
+			mmHardDeleteEmbeddingsByKbFileUID.t.Fatal("No results are set for the RepositoryIMock.HardDeleteEmbeddingsByKbFileUID")
+		}
+		return (*mm_results).err
+	}
+	if mmHardDeleteEmbeddingsByKbFileUID.funcHardDeleteEmbeddingsByKbFileUID != nil {
+		return mmHardDeleteEmbeddingsByKbFileUID.funcHardDeleteEmbeddingsByKbFileUID(ctx, kbFileUID)
+	}
+	mmHardDeleteEmbeddingsByKbFileUID.t.Fatalf("Unexpected call to RepositoryIMock.HardDeleteEmbeddingsByKbFileUID. %v %v", ctx, kbFileUID)
+	return
+}
+
+// HardDeleteEmbeddingsByKbFileUIDAfterCounter returns a count of finished RepositoryIMock.HardDeleteEmbeddingsByKbFileUID invocations
+func (mmHardDeleteEmbeddingsByKbFileUID *RepositoryIMock) HardDeleteEmbeddingsByKbFileUIDAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmHardDeleteEmbeddingsByKbFileUID.afterHardDeleteEmbeddingsByKbFileUIDCounter)
+}
+
+// HardDeleteEmbeddingsByKbFileUIDBeforeCounter returns a count of RepositoryIMock.HardDeleteEmbeddingsByKbFileUID invocations
+func (mmHardDeleteEmbeddingsByKbFileUID *RepositoryIMock) HardDeleteEmbeddingsByKbFileUIDBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmHardDeleteEmbeddingsByKbFileUID.beforeHardDeleteEmbeddingsByKbFileUIDCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryIMock.HardDeleteEmbeddingsByKbFileUID.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmHardDeleteEmbeddingsByKbFileUID *mRepositoryIMockHardDeleteEmbeddingsByKbFileUID) Calls() []*RepositoryIMockHardDeleteEmbeddingsByKbFileUIDParams {
+	mmHardDeleteEmbeddingsByKbFileUID.mutex.RLock()
+
+	argCopy := make([]*RepositoryIMockHardDeleteEmbeddingsByKbFileUIDParams, len(mmHardDeleteEmbeddingsByKbFileUID.callArgs))
+	copy(argCopy, mmHardDeleteEmbeddingsByKbFileUID.callArgs)
+
+	mmHardDeleteEmbeddingsByKbFileUID.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockHardDeleteEmbeddingsByKbFileUIDDone returns true if the count of the HardDeleteEmbeddingsByKbFileUID invocations corresponds
+// the number of defined expectations
+func (m *RepositoryIMock) MinimockHardDeleteEmbeddingsByKbFileUIDDone() bool {
+	for _, e := range m.HardDeleteEmbeddingsByKbFileUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.HardDeleteEmbeddingsByKbFileUIDMock.invocationsDone()
+}
+
+// MinimockHardDeleteEmbeddingsByKbFileUIDInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockHardDeleteEmbeddingsByKbFileUIDInspect() {
+	for _, e := range m.HardDeleteEmbeddingsByKbFileUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryIMock.HardDeleteEmbeddingsByKbFileUID with params: %#v", *e.params)
+		}
+	}
+
+	afterHardDeleteEmbeddingsByKbFileUIDCounter := mm_atomic.LoadUint64(&m.afterHardDeleteEmbeddingsByKbFileUIDCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.HardDeleteEmbeddingsByKbFileUIDMock.defaultExpectation != nil && afterHardDeleteEmbeddingsByKbFileUIDCounter < 1 {
+		if m.HardDeleteEmbeddingsByKbFileUIDMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to RepositoryIMock.HardDeleteEmbeddingsByKbFileUID")
+		} else {
+			m.t.Errorf("Expected call to RepositoryIMock.HardDeleteEmbeddingsByKbFileUID with params: %#v", *m.HardDeleteEmbeddingsByKbFileUIDMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcHardDeleteEmbeddingsByKbFileUID != nil && afterHardDeleteEmbeddingsByKbFileUIDCounter < 1 {
+		m.t.Error("Expected call to RepositoryIMock.HardDeleteEmbeddingsByKbFileUID")
+	}
+
+	if !m.HardDeleteEmbeddingsByKbFileUIDMock.invocationsDone() && afterHardDeleteEmbeddingsByKbFileUIDCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.HardDeleteEmbeddingsByKbFileUID but found %d calls",
+			mm_atomic.LoadUint64(&m.HardDeleteEmbeddingsByKbFileUIDMock.expectedInvocations), afterHardDeleteEmbeddingsByKbFileUIDCounter)
+	}
+}
+
+type mRepositoryIMockHardDeleteEmbeddingsByKbUID struct {
+	mock               *RepositoryIMock
+	defaultExpectation *RepositoryIMockHardDeleteEmbeddingsByKbUIDExpectation
+	expectations       []*RepositoryIMockHardDeleteEmbeddingsByKbUIDExpectation
+
+	callArgs []*RepositoryIMockHardDeleteEmbeddingsByKbUIDParams
+	mutex    sync.RWMutex
+
+	expectedInvocations uint64
+}
+
+// RepositoryIMockHardDeleteEmbeddingsByKbUIDExpectation specifies expectation struct of the RepositoryI.HardDeleteEmbeddingsByKbUID
+type RepositoryIMockHardDeleteEmbeddingsByKbUIDExpectation struct {
+	mock      *RepositoryIMock
+	params    *RepositoryIMockHardDeleteEmbeddingsByKbUIDParams
+	paramPtrs *RepositoryIMockHardDeleteEmbeddingsByKbUIDParamPtrs
+	results   *RepositoryIMockHardDeleteEmbeddingsByKbUIDResults
+	Counter   uint64
+}
+
+// RepositoryIMockHardDeleteEmbeddingsByKbUIDParams contains parameters of the RepositoryI.HardDeleteEmbeddingsByKbUID
+type RepositoryIMockHardDeleteEmbeddingsByKbUIDParams struct {
+	ctx   context.Context
+	kbUID uuid.UUID
+}
+
+// RepositoryIMockHardDeleteEmbeddingsByKbUIDParamPtrs contains pointers to parameters of the RepositoryI.HardDeleteEmbeddingsByKbUID
+type RepositoryIMockHardDeleteEmbeddingsByKbUIDParamPtrs struct {
+	ctx   *context.Context
+	kbUID *uuid.UUID
+}
+
+// RepositoryIMockHardDeleteEmbeddingsByKbUIDResults contains results of the RepositoryI.HardDeleteEmbeddingsByKbUID
+type RepositoryIMockHardDeleteEmbeddingsByKbUIDResults struct {
+	err error
+}
+
+// Expect sets up expected params for RepositoryI.HardDeleteEmbeddingsByKbUID
+func (mmHardDeleteEmbeddingsByKbUID *mRepositoryIMockHardDeleteEmbeddingsByKbUID) Expect(ctx context.Context, kbUID uuid.UUID) *mRepositoryIMockHardDeleteEmbeddingsByKbUID {
+	if mmHardDeleteEmbeddingsByKbUID.mock.funcHardDeleteEmbeddingsByKbUID != nil {
+		mmHardDeleteEmbeddingsByKbUID.mock.t.Fatalf("RepositoryIMock.HardDeleteEmbeddingsByKbUID mock is already set by Set")
+	}
+
+	if mmHardDeleteEmbeddingsByKbUID.defaultExpectation == nil {
+		mmHardDeleteEmbeddingsByKbUID.defaultExpectation = &RepositoryIMockHardDeleteEmbeddingsByKbUIDExpectation{}
+	}
+
+	if mmHardDeleteEmbeddingsByKbUID.defaultExpectation.paramPtrs != nil {
+		mmHardDeleteEmbeddingsByKbUID.mock.t.Fatalf("RepositoryIMock.HardDeleteEmbeddingsByKbUID mock is already set by ExpectParams functions")
+	}
+
+	mmHardDeleteEmbeddingsByKbUID.defaultExpectation.params = &RepositoryIMockHardDeleteEmbeddingsByKbUIDParams{ctx, kbUID}
+	for _, e := range mmHardDeleteEmbeddingsByKbUID.expectations {
+		if minimock.Equal(e.params, mmHardDeleteEmbeddingsByKbUID.defaultExpectation.params) {
+			mmHardDeleteEmbeddingsByKbUID.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmHardDeleteEmbeddingsByKbUID.defaultExpectation.params)
+		}
+	}
+
+	return mmHardDeleteEmbeddingsByKbUID
+}
+
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.HardDeleteEmbeddingsByKbUID
+func (mmHardDeleteEmbeddingsByKbUID *mRepositoryIMockHardDeleteEmbeddingsByKbUID) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockHardDeleteEmbeddingsByKbUID {
+	if mmHardDeleteEmbeddingsByKbUID.mock.funcHardDeleteEmbeddingsByKbUID != nil {
+		mmHardDeleteEmbeddingsByKbUID.mock.t.Fatalf("RepositoryIMock.HardDeleteEmbeddingsByKbUID mock is already set by Set")
+	}
+
+	if mmHardDeleteEmbeddingsByKbUID.defaultExpectation == nil {
+		mmHardDeleteEmbeddingsByKbUID.defaultExpectation = &RepositoryIMockHardDeleteEmbeddingsByKbUIDExpectation{}
+	}
+
+	if mmHardDeleteEmbeddingsByKbUID.defaultExpectation.params != nil {
+		mmHardDeleteEmbeddingsByKbUID.mock.t.Fatalf("RepositoryIMock.HardDeleteEmbeddingsByKbUID mock is already set by Expect")
+	}
+
+	if mmHardDeleteEmbeddingsByKbUID.defaultExpectation.paramPtrs == nil {
+		mmHardDeleteEmbeddingsByKbUID.defaultExpectation.paramPtrs = &RepositoryIMockHardDeleteEmbeddingsByKbUIDParamPtrs{}
+	}
+	mmHardDeleteEmbeddingsByKbUID.defaultExpectation.paramPtrs.ctx = &ctx
+
+	return mmHardDeleteEmbeddingsByKbUID
+}
+
+// ExpectKbUIDParam2 sets up expected param kbUID for RepositoryI.HardDeleteEmbeddingsByKbUID
+func (mmHardDeleteEmbeddingsByKbUID *mRepositoryIMockHardDeleteEmbeddingsByKbUID) ExpectKbUIDParam2(kbUID uuid.UUID) *mRepositoryIMockHardDeleteEmbeddingsByKbUID {
+	if mmHardDeleteEmbeddingsByKbUID.mock.funcHardDeleteEmbeddingsByKbUID != nil {
+		mmHardDeleteEmbeddingsByKbUID.mock.t.Fatalf("RepositoryIMock.HardDeleteEmbeddingsByKbUID mock is already set by Set")
+	}
+
+	if mmHardDeleteEmbeddingsByKbUID.defaultExpectation == nil {
+		mmHardDeleteEmbeddingsByKbUID.defaultExpectation = &RepositoryIMockHardDeleteEmbeddingsByKbUIDExpectation{}
+	}
+
+	if mmHardDeleteEmbeddingsByKbUID.defaultExpectation.params != nil {
+		mmHardDeleteEmbeddingsByKbUID.mock.t.Fatalf("RepositoryIMock.HardDeleteEmbeddingsByKbUID mock is already set by Expect")
+	}
+
+	if mmHardDeleteEmbeddingsByKbUID.defaultExpectation.paramPtrs == nil {
+		mmHardDeleteEmbeddingsByKbUID.defaultExpectation.paramPtrs = &RepositoryIMockHardDeleteEmbeddingsByKbUIDParamPtrs{}
+	}
+	mmHardDeleteEmbeddingsByKbUID.defaultExpectation.paramPtrs.kbUID = &kbUID
+
+	return mmHardDeleteEmbeddingsByKbUID
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.HardDeleteEmbeddingsByKbUID
+func (mmHardDeleteEmbeddingsByKbUID *mRepositoryIMockHardDeleteEmbeddingsByKbUID) Inspect(f func(ctx context.Context, kbUID uuid.UUID)) *mRepositoryIMockHardDeleteEmbeddingsByKbUID {
+	if mmHardDeleteEmbeddingsByKbUID.mock.inspectFuncHardDeleteEmbeddingsByKbUID != nil {
+		mmHardDeleteEmbeddingsByKbUID.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.HardDeleteEmbeddingsByKbUID")
+	}
+
+	mmHardDeleteEmbeddingsByKbUID.mock.inspectFuncHardDeleteEmbeddingsByKbUID = f
+
+	return mmHardDeleteEmbeddingsByKbUID
+}
+
+// Return sets up results that will be returned by RepositoryI.HardDeleteEmbeddingsByKbUID
+func (mmHardDeleteEmbeddingsByKbUID *mRepositoryIMockHardDeleteEmbeddingsByKbUID) Return(err error) *RepositoryIMock {
+	if mmHardDeleteEmbeddingsByKbUID.mock.funcHardDeleteEmbeddingsByKbUID != nil {
+		mmHardDeleteEmbeddingsByKbUID.mock.t.Fatalf("RepositoryIMock.HardDeleteEmbeddingsByKbUID mock is already set by Set")
+	}
+
+	if mmHardDeleteEmbeddingsByKbUID.defaultExpectation == nil {
+		mmHardDeleteEmbeddingsByKbUID.defaultExpectation = &RepositoryIMockHardDeleteEmbeddingsByKbUIDExpectation{mock: mmHardDeleteEmbeddingsByKbUID.mock}
+	}
+	mmHardDeleteEmbeddingsByKbUID.defaultExpectation.results = &RepositoryIMockHardDeleteEmbeddingsByKbUIDResults{err}
+	return mmHardDeleteEmbeddingsByKbUID.mock
+}
+
+// Set uses given function f to mock the RepositoryI.HardDeleteEmbeddingsByKbUID method
+func (mmHardDeleteEmbeddingsByKbUID *mRepositoryIMockHardDeleteEmbeddingsByKbUID) Set(f func(ctx context.Context, kbUID uuid.UUID) (err error)) *RepositoryIMock {
+	if mmHardDeleteEmbeddingsByKbUID.defaultExpectation != nil {
+		mmHardDeleteEmbeddingsByKbUID.mock.t.Fatalf("Default expectation is already set for the RepositoryI.HardDeleteEmbeddingsByKbUID method")
+	}
+
+	if len(mmHardDeleteEmbeddingsByKbUID.expectations) > 0 {
+		mmHardDeleteEmbeddingsByKbUID.mock.t.Fatalf("Some expectations are already set for the RepositoryI.HardDeleteEmbeddingsByKbUID method")
+	}
+
+	mmHardDeleteEmbeddingsByKbUID.mock.funcHardDeleteEmbeddingsByKbUID = f
+	return mmHardDeleteEmbeddingsByKbUID.mock
+}
+
+// When sets expectation for the RepositoryI.HardDeleteEmbeddingsByKbUID which will trigger the result defined by the following
+// Then helper
+func (mmHardDeleteEmbeddingsByKbUID *mRepositoryIMockHardDeleteEmbeddingsByKbUID) When(ctx context.Context, kbUID uuid.UUID) *RepositoryIMockHardDeleteEmbeddingsByKbUIDExpectation {
+	if mmHardDeleteEmbeddingsByKbUID.mock.funcHardDeleteEmbeddingsByKbUID != nil {
+		mmHardDeleteEmbeddingsByKbUID.mock.t.Fatalf("RepositoryIMock.HardDeleteEmbeddingsByKbUID mock is already set by Set")
+	}
+
+	expectation := &RepositoryIMockHardDeleteEmbeddingsByKbUIDExpectation{
+		mock:   mmHardDeleteEmbeddingsByKbUID.mock,
+		params: &RepositoryIMockHardDeleteEmbeddingsByKbUIDParams{ctx, kbUID},
+	}
+	mmHardDeleteEmbeddingsByKbUID.expectations = append(mmHardDeleteEmbeddingsByKbUID.expectations, expectation)
+	return expectation
+}
+
+// Then sets up RepositoryI.HardDeleteEmbeddingsByKbUID return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockHardDeleteEmbeddingsByKbUIDExpectation) Then(err error) *RepositoryIMock {
+	e.results = &RepositoryIMockHardDeleteEmbeddingsByKbUIDResults{err}
+	return e.mock
+}
+
+// Times sets number of times RepositoryI.HardDeleteEmbeddingsByKbUID should be invoked
+func (mmHardDeleteEmbeddingsByKbUID *mRepositoryIMockHardDeleteEmbeddingsByKbUID) Times(n uint64) *mRepositoryIMockHardDeleteEmbeddingsByKbUID {
+	if n == 0 {
+		mmHardDeleteEmbeddingsByKbUID.mock.t.Fatalf("Times of RepositoryIMock.HardDeleteEmbeddingsByKbUID mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmHardDeleteEmbeddingsByKbUID.expectedInvocations, n)
+	return mmHardDeleteEmbeddingsByKbUID
+}
+
+func (mmHardDeleteEmbeddingsByKbUID *mRepositoryIMockHardDeleteEmbeddingsByKbUID) invocationsDone() bool {
+	if len(mmHardDeleteEmbeddingsByKbUID.expectations) == 0 && mmHardDeleteEmbeddingsByKbUID.defaultExpectation == nil && mmHardDeleteEmbeddingsByKbUID.mock.funcHardDeleteEmbeddingsByKbUID == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmHardDeleteEmbeddingsByKbUID.mock.afterHardDeleteEmbeddingsByKbUIDCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmHardDeleteEmbeddingsByKbUID.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// HardDeleteEmbeddingsByKbUID implements repository.RepositoryI
+func (mmHardDeleteEmbeddingsByKbUID *RepositoryIMock) HardDeleteEmbeddingsByKbUID(ctx context.Context, kbUID uuid.UUID) (err error) {
+	mm_atomic.AddUint64(&mmHardDeleteEmbeddingsByKbUID.beforeHardDeleteEmbeddingsByKbUIDCounter, 1)
+	defer mm_atomic.AddUint64(&mmHardDeleteEmbeddingsByKbUID.afterHardDeleteEmbeddingsByKbUIDCounter, 1)
+
+	if mmHardDeleteEmbeddingsByKbUID.inspectFuncHardDeleteEmbeddingsByKbUID != nil {
+		mmHardDeleteEmbeddingsByKbUID.inspectFuncHardDeleteEmbeddingsByKbUID(ctx, kbUID)
+	}
+
+	mm_params := RepositoryIMockHardDeleteEmbeddingsByKbUIDParams{ctx, kbUID}
+
+	// Record call args
+	mmHardDeleteEmbeddingsByKbUID.HardDeleteEmbeddingsByKbUIDMock.mutex.Lock()
+	mmHardDeleteEmbeddingsByKbUID.HardDeleteEmbeddingsByKbUIDMock.callArgs = append(mmHardDeleteEmbeddingsByKbUID.HardDeleteEmbeddingsByKbUIDMock.callArgs, &mm_params)
+	mmHardDeleteEmbeddingsByKbUID.HardDeleteEmbeddingsByKbUIDMock.mutex.Unlock()
+
+	for _, e := range mmHardDeleteEmbeddingsByKbUID.HardDeleteEmbeddingsByKbUIDMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmHardDeleteEmbeddingsByKbUID.HardDeleteEmbeddingsByKbUIDMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmHardDeleteEmbeddingsByKbUID.HardDeleteEmbeddingsByKbUIDMock.defaultExpectation.Counter, 1)
+		mm_want := mmHardDeleteEmbeddingsByKbUID.HardDeleteEmbeddingsByKbUIDMock.defaultExpectation.params
+		mm_want_ptrs := mmHardDeleteEmbeddingsByKbUID.HardDeleteEmbeddingsByKbUIDMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryIMockHardDeleteEmbeddingsByKbUIDParams{ctx, kbUID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmHardDeleteEmbeddingsByKbUID.t.Errorf("RepositoryIMock.HardDeleteEmbeddingsByKbUID got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.kbUID != nil && !minimock.Equal(*mm_want_ptrs.kbUID, mm_got.kbUID) {
+				mmHardDeleteEmbeddingsByKbUID.t.Errorf("RepositoryIMock.HardDeleteEmbeddingsByKbUID got unexpected parameter kbUID, want: %#v, got: %#v%s\n", *mm_want_ptrs.kbUID, mm_got.kbUID, minimock.Diff(*mm_want_ptrs.kbUID, mm_got.kbUID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmHardDeleteEmbeddingsByKbUID.t.Errorf("RepositoryIMock.HardDeleteEmbeddingsByKbUID got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmHardDeleteEmbeddingsByKbUID.HardDeleteEmbeddingsByKbUIDMock.defaultExpectation.results
+		if mm_results == nil {
+			mmHardDeleteEmbeddingsByKbUID.t.Fatal("No results are set for the RepositoryIMock.HardDeleteEmbeddingsByKbUID")
+		}
+		return (*mm_results).err
+	}
+	if mmHardDeleteEmbeddingsByKbUID.funcHardDeleteEmbeddingsByKbUID != nil {
+		return mmHardDeleteEmbeddingsByKbUID.funcHardDeleteEmbeddingsByKbUID(ctx, kbUID)
+	}
+	mmHardDeleteEmbeddingsByKbUID.t.Fatalf("Unexpected call to RepositoryIMock.HardDeleteEmbeddingsByKbUID. %v %v", ctx, kbUID)
+	return
+}
+
+// HardDeleteEmbeddingsByKbUIDAfterCounter returns a count of finished RepositoryIMock.HardDeleteEmbeddingsByKbUID invocations
+func (mmHardDeleteEmbeddingsByKbUID *RepositoryIMock) HardDeleteEmbeddingsByKbUIDAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmHardDeleteEmbeddingsByKbUID.afterHardDeleteEmbeddingsByKbUIDCounter)
+}
+
+// HardDeleteEmbeddingsByKbUIDBeforeCounter returns a count of RepositoryIMock.HardDeleteEmbeddingsByKbUID invocations
+func (mmHardDeleteEmbeddingsByKbUID *RepositoryIMock) HardDeleteEmbeddingsByKbUIDBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmHardDeleteEmbeddingsByKbUID.beforeHardDeleteEmbeddingsByKbUIDCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryIMock.HardDeleteEmbeddingsByKbUID.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmHardDeleteEmbeddingsByKbUID *mRepositoryIMockHardDeleteEmbeddingsByKbUID) Calls() []*RepositoryIMockHardDeleteEmbeddingsByKbUIDParams {
+	mmHardDeleteEmbeddingsByKbUID.mutex.RLock()
+
+	argCopy := make([]*RepositoryIMockHardDeleteEmbeddingsByKbUIDParams, len(mmHardDeleteEmbeddingsByKbUID.callArgs))
+	copy(argCopy, mmHardDeleteEmbeddingsByKbUID.callArgs)
+
+	mmHardDeleteEmbeddingsByKbUID.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockHardDeleteEmbeddingsByKbUIDDone returns true if the count of the HardDeleteEmbeddingsByKbUID invocations corresponds
+// the number of defined expectations
+func (m *RepositoryIMock) MinimockHardDeleteEmbeddingsByKbUIDDone() bool {
+	for _, e := range m.HardDeleteEmbeddingsByKbUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.HardDeleteEmbeddingsByKbUIDMock.invocationsDone()
+}
+
+// MinimockHardDeleteEmbeddingsByKbUIDInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockHardDeleteEmbeddingsByKbUIDInspect() {
+	for _, e := range m.HardDeleteEmbeddingsByKbUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryIMock.HardDeleteEmbeddingsByKbUID with params: %#v", *e.params)
+		}
+	}
+
+	afterHardDeleteEmbeddingsByKbUIDCounter := mm_atomic.LoadUint64(&m.afterHardDeleteEmbeddingsByKbUIDCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.HardDeleteEmbeddingsByKbUIDMock.defaultExpectation != nil && afterHardDeleteEmbeddingsByKbUIDCounter < 1 {
+		if m.HardDeleteEmbeddingsByKbUIDMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to RepositoryIMock.HardDeleteEmbeddingsByKbUID")
+		} else {
+			m.t.Errorf("Expected call to RepositoryIMock.HardDeleteEmbeddingsByKbUID with params: %#v", *m.HardDeleteEmbeddingsByKbUIDMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcHardDeleteEmbeddingsByKbUID != nil && afterHardDeleteEmbeddingsByKbUIDCounter < 1 {
+		m.t.Error("Expected call to RepositoryIMock.HardDeleteEmbeddingsByKbUID")
+	}
+
+	if !m.HardDeleteEmbeddingsByKbUIDMock.invocationsDone() && afterHardDeleteEmbeddingsByKbUIDCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.HardDeleteEmbeddingsByKbUID but found %d calls",
+			mm_atomic.LoadUint64(&m.HardDeleteEmbeddingsByKbUIDMock.expectedInvocations), afterHardDeleteEmbeddingsByKbUIDCounter)
+	}
+}
+
 type mRepositoryIMockIncreaseKnowledgeBaseUsage struct {
 	mock               *RepositoryIMock
 	defaultExpectation *RepositoryIMockIncreaseKnowledgeBaseUsageExpectation
@@ -9650,6 +11859,616 @@ func (m *RepositoryIMock) MinimockKnowledgeBaseFileTableNameInspect() {
 	if !m.KnowledgeBaseFileTableNameMock.invocationsDone() && afterKnowledgeBaseFileTableNameCounter > 0 {
 		m.t.Errorf("Expected %d calls to RepositoryIMock.KnowledgeBaseFileTableName but found %d calls",
 			mm_atomic.LoadUint64(&m.KnowledgeBaseFileTableNameMock.expectedInvocations), afterKnowledgeBaseFileTableNameCounter)
+	}
+}
+
+type mRepositoryIMockListChunksByKbFileUID struct {
+	mock               *RepositoryIMock
+	defaultExpectation *RepositoryIMockListChunksByKbFileUIDExpectation
+	expectations       []*RepositoryIMockListChunksByKbFileUIDExpectation
+
+	callArgs []*RepositoryIMockListChunksByKbFileUIDParams
+	mutex    sync.RWMutex
+
+	expectedInvocations uint64
+}
+
+// RepositoryIMockListChunksByKbFileUIDExpectation specifies expectation struct of the RepositoryI.ListChunksByKbFileUID
+type RepositoryIMockListChunksByKbFileUIDExpectation struct {
+	mock      *RepositoryIMock
+	params    *RepositoryIMockListChunksByKbFileUIDParams
+	paramPtrs *RepositoryIMockListChunksByKbFileUIDParamPtrs
+	results   *RepositoryIMockListChunksByKbFileUIDResults
+	Counter   uint64
+}
+
+// RepositoryIMockListChunksByKbFileUIDParams contains parameters of the RepositoryI.ListChunksByKbFileUID
+type RepositoryIMockListChunksByKbFileUIDParams struct {
+	ctx       context.Context
+	kbFileUID uuid.UUID
+}
+
+// RepositoryIMockListChunksByKbFileUIDParamPtrs contains pointers to parameters of the RepositoryI.ListChunksByKbFileUID
+type RepositoryIMockListChunksByKbFileUIDParamPtrs struct {
+	ctx       *context.Context
+	kbFileUID *uuid.UUID
+}
+
+// RepositoryIMockListChunksByKbFileUIDResults contains results of the RepositoryI.ListChunksByKbFileUID
+type RepositoryIMockListChunksByKbFileUIDResults struct {
+	ta1 []mm_repository.TextChunk
+	err error
+}
+
+// Expect sets up expected params for RepositoryI.ListChunksByKbFileUID
+func (mmListChunksByKbFileUID *mRepositoryIMockListChunksByKbFileUID) Expect(ctx context.Context, kbFileUID uuid.UUID) *mRepositoryIMockListChunksByKbFileUID {
+	if mmListChunksByKbFileUID.mock.funcListChunksByKbFileUID != nil {
+		mmListChunksByKbFileUID.mock.t.Fatalf("RepositoryIMock.ListChunksByKbFileUID mock is already set by Set")
+	}
+
+	if mmListChunksByKbFileUID.defaultExpectation == nil {
+		mmListChunksByKbFileUID.defaultExpectation = &RepositoryIMockListChunksByKbFileUIDExpectation{}
+	}
+
+	if mmListChunksByKbFileUID.defaultExpectation.paramPtrs != nil {
+		mmListChunksByKbFileUID.mock.t.Fatalf("RepositoryIMock.ListChunksByKbFileUID mock is already set by ExpectParams functions")
+	}
+
+	mmListChunksByKbFileUID.defaultExpectation.params = &RepositoryIMockListChunksByKbFileUIDParams{ctx, kbFileUID}
+	for _, e := range mmListChunksByKbFileUID.expectations {
+		if minimock.Equal(e.params, mmListChunksByKbFileUID.defaultExpectation.params) {
+			mmListChunksByKbFileUID.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmListChunksByKbFileUID.defaultExpectation.params)
+		}
+	}
+
+	return mmListChunksByKbFileUID
+}
+
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.ListChunksByKbFileUID
+func (mmListChunksByKbFileUID *mRepositoryIMockListChunksByKbFileUID) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockListChunksByKbFileUID {
+	if mmListChunksByKbFileUID.mock.funcListChunksByKbFileUID != nil {
+		mmListChunksByKbFileUID.mock.t.Fatalf("RepositoryIMock.ListChunksByKbFileUID mock is already set by Set")
+	}
+
+	if mmListChunksByKbFileUID.defaultExpectation == nil {
+		mmListChunksByKbFileUID.defaultExpectation = &RepositoryIMockListChunksByKbFileUIDExpectation{}
+	}
+
+	if mmListChunksByKbFileUID.defaultExpectation.params != nil {
+		mmListChunksByKbFileUID.mock.t.Fatalf("RepositoryIMock.ListChunksByKbFileUID mock is already set by Expect")
+	}
+
+	if mmListChunksByKbFileUID.defaultExpectation.paramPtrs == nil {
+		mmListChunksByKbFileUID.defaultExpectation.paramPtrs = &RepositoryIMockListChunksByKbFileUIDParamPtrs{}
+	}
+	mmListChunksByKbFileUID.defaultExpectation.paramPtrs.ctx = &ctx
+
+	return mmListChunksByKbFileUID
+}
+
+// ExpectKbFileUIDParam2 sets up expected param kbFileUID for RepositoryI.ListChunksByKbFileUID
+func (mmListChunksByKbFileUID *mRepositoryIMockListChunksByKbFileUID) ExpectKbFileUIDParam2(kbFileUID uuid.UUID) *mRepositoryIMockListChunksByKbFileUID {
+	if mmListChunksByKbFileUID.mock.funcListChunksByKbFileUID != nil {
+		mmListChunksByKbFileUID.mock.t.Fatalf("RepositoryIMock.ListChunksByKbFileUID mock is already set by Set")
+	}
+
+	if mmListChunksByKbFileUID.defaultExpectation == nil {
+		mmListChunksByKbFileUID.defaultExpectation = &RepositoryIMockListChunksByKbFileUIDExpectation{}
+	}
+
+	if mmListChunksByKbFileUID.defaultExpectation.params != nil {
+		mmListChunksByKbFileUID.mock.t.Fatalf("RepositoryIMock.ListChunksByKbFileUID mock is already set by Expect")
+	}
+
+	if mmListChunksByKbFileUID.defaultExpectation.paramPtrs == nil {
+		mmListChunksByKbFileUID.defaultExpectation.paramPtrs = &RepositoryIMockListChunksByKbFileUIDParamPtrs{}
+	}
+	mmListChunksByKbFileUID.defaultExpectation.paramPtrs.kbFileUID = &kbFileUID
+
+	return mmListChunksByKbFileUID
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.ListChunksByKbFileUID
+func (mmListChunksByKbFileUID *mRepositoryIMockListChunksByKbFileUID) Inspect(f func(ctx context.Context, kbFileUID uuid.UUID)) *mRepositoryIMockListChunksByKbFileUID {
+	if mmListChunksByKbFileUID.mock.inspectFuncListChunksByKbFileUID != nil {
+		mmListChunksByKbFileUID.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.ListChunksByKbFileUID")
+	}
+
+	mmListChunksByKbFileUID.mock.inspectFuncListChunksByKbFileUID = f
+
+	return mmListChunksByKbFileUID
+}
+
+// Return sets up results that will be returned by RepositoryI.ListChunksByKbFileUID
+func (mmListChunksByKbFileUID *mRepositoryIMockListChunksByKbFileUID) Return(ta1 []mm_repository.TextChunk, err error) *RepositoryIMock {
+	if mmListChunksByKbFileUID.mock.funcListChunksByKbFileUID != nil {
+		mmListChunksByKbFileUID.mock.t.Fatalf("RepositoryIMock.ListChunksByKbFileUID mock is already set by Set")
+	}
+
+	if mmListChunksByKbFileUID.defaultExpectation == nil {
+		mmListChunksByKbFileUID.defaultExpectation = &RepositoryIMockListChunksByKbFileUIDExpectation{mock: mmListChunksByKbFileUID.mock}
+	}
+	mmListChunksByKbFileUID.defaultExpectation.results = &RepositoryIMockListChunksByKbFileUIDResults{ta1, err}
+	return mmListChunksByKbFileUID.mock
+}
+
+// Set uses given function f to mock the RepositoryI.ListChunksByKbFileUID method
+func (mmListChunksByKbFileUID *mRepositoryIMockListChunksByKbFileUID) Set(f func(ctx context.Context, kbFileUID uuid.UUID) (ta1 []mm_repository.TextChunk, err error)) *RepositoryIMock {
+	if mmListChunksByKbFileUID.defaultExpectation != nil {
+		mmListChunksByKbFileUID.mock.t.Fatalf("Default expectation is already set for the RepositoryI.ListChunksByKbFileUID method")
+	}
+
+	if len(mmListChunksByKbFileUID.expectations) > 0 {
+		mmListChunksByKbFileUID.mock.t.Fatalf("Some expectations are already set for the RepositoryI.ListChunksByKbFileUID method")
+	}
+
+	mmListChunksByKbFileUID.mock.funcListChunksByKbFileUID = f
+	return mmListChunksByKbFileUID.mock
+}
+
+// When sets expectation for the RepositoryI.ListChunksByKbFileUID which will trigger the result defined by the following
+// Then helper
+func (mmListChunksByKbFileUID *mRepositoryIMockListChunksByKbFileUID) When(ctx context.Context, kbFileUID uuid.UUID) *RepositoryIMockListChunksByKbFileUIDExpectation {
+	if mmListChunksByKbFileUID.mock.funcListChunksByKbFileUID != nil {
+		mmListChunksByKbFileUID.mock.t.Fatalf("RepositoryIMock.ListChunksByKbFileUID mock is already set by Set")
+	}
+
+	expectation := &RepositoryIMockListChunksByKbFileUIDExpectation{
+		mock:   mmListChunksByKbFileUID.mock,
+		params: &RepositoryIMockListChunksByKbFileUIDParams{ctx, kbFileUID},
+	}
+	mmListChunksByKbFileUID.expectations = append(mmListChunksByKbFileUID.expectations, expectation)
+	return expectation
+}
+
+// Then sets up RepositoryI.ListChunksByKbFileUID return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockListChunksByKbFileUIDExpectation) Then(ta1 []mm_repository.TextChunk, err error) *RepositoryIMock {
+	e.results = &RepositoryIMockListChunksByKbFileUIDResults{ta1, err}
+	return e.mock
+}
+
+// Times sets number of times RepositoryI.ListChunksByKbFileUID should be invoked
+func (mmListChunksByKbFileUID *mRepositoryIMockListChunksByKbFileUID) Times(n uint64) *mRepositoryIMockListChunksByKbFileUID {
+	if n == 0 {
+		mmListChunksByKbFileUID.mock.t.Fatalf("Times of RepositoryIMock.ListChunksByKbFileUID mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmListChunksByKbFileUID.expectedInvocations, n)
+	return mmListChunksByKbFileUID
+}
+
+func (mmListChunksByKbFileUID *mRepositoryIMockListChunksByKbFileUID) invocationsDone() bool {
+	if len(mmListChunksByKbFileUID.expectations) == 0 && mmListChunksByKbFileUID.defaultExpectation == nil && mmListChunksByKbFileUID.mock.funcListChunksByKbFileUID == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmListChunksByKbFileUID.mock.afterListChunksByKbFileUIDCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmListChunksByKbFileUID.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// ListChunksByKbFileUID implements repository.RepositoryI
+func (mmListChunksByKbFileUID *RepositoryIMock) ListChunksByKbFileUID(ctx context.Context, kbFileUID uuid.UUID) (ta1 []mm_repository.TextChunk, err error) {
+	mm_atomic.AddUint64(&mmListChunksByKbFileUID.beforeListChunksByKbFileUIDCounter, 1)
+	defer mm_atomic.AddUint64(&mmListChunksByKbFileUID.afterListChunksByKbFileUIDCounter, 1)
+
+	if mmListChunksByKbFileUID.inspectFuncListChunksByKbFileUID != nil {
+		mmListChunksByKbFileUID.inspectFuncListChunksByKbFileUID(ctx, kbFileUID)
+	}
+
+	mm_params := RepositoryIMockListChunksByKbFileUIDParams{ctx, kbFileUID}
+
+	// Record call args
+	mmListChunksByKbFileUID.ListChunksByKbFileUIDMock.mutex.Lock()
+	mmListChunksByKbFileUID.ListChunksByKbFileUIDMock.callArgs = append(mmListChunksByKbFileUID.ListChunksByKbFileUIDMock.callArgs, &mm_params)
+	mmListChunksByKbFileUID.ListChunksByKbFileUIDMock.mutex.Unlock()
+
+	for _, e := range mmListChunksByKbFileUID.ListChunksByKbFileUIDMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.ta1, e.results.err
+		}
+	}
+
+	if mmListChunksByKbFileUID.ListChunksByKbFileUIDMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmListChunksByKbFileUID.ListChunksByKbFileUIDMock.defaultExpectation.Counter, 1)
+		mm_want := mmListChunksByKbFileUID.ListChunksByKbFileUIDMock.defaultExpectation.params
+		mm_want_ptrs := mmListChunksByKbFileUID.ListChunksByKbFileUIDMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryIMockListChunksByKbFileUIDParams{ctx, kbFileUID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmListChunksByKbFileUID.t.Errorf("RepositoryIMock.ListChunksByKbFileUID got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.kbFileUID != nil && !minimock.Equal(*mm_want_ptrs.kbFileUID, mm_got.kbFileUID) {
+				mmListChunksByKbFileUID.t.Errorf("RepositoryIMock.ListChunksByKbFileUID got unexpected parameter kbFileUID, want: %#v, got: %#v%s\n", *mm_want_ptrs.kbFileUID, mm_got.kbFileUID, minimock.Diff(*mm_want_ptrs.kbFileUID, mm_got.kbFileUID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmListChunksByKbFileUID.t.Errorf("RepositoryIMock.ListChunksByKbFileUID got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmListChunksByKbFileUID.ListChunksByKbFileUIDMock.defaultExpectation.results
+		if mm_results == nil {
+			mmListChunksByKbFileUID.t.Fatal("No results are set for the RepositoryIMock.ListChunksByKbFileUID")
+		}
+		return (*mm_results).ta1, (*mm_results).err
+	}
+	if mmListChunksByKbFileUID.funcListChunksByKbFileUID != nil {
+		return mmListChunksByKbFileUID.funcListChunksByKbFileUID(ctx, kbFileUID)
+	}
+	mmListChunksByKbFileUID.t.Fatalf("Unexpected call to RepositoryIMock.ListChunksByKbFileUID. %v %v", ctx, kbFileUID)
+	return
+}
+
+// ListChunksByKbFileUIDAfterCounter returns a count of finished RepositoryIMock.ListChunksByKbFileUID invocations
+func (mmListChunksByKbFileUID *RepositoryIMock) ListChunksByKbFileUIDAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmListChunksByKbFileUID.afterListChunksByKbFileUIDCounter)
+}
+
+// ListChunksByKbFileUIDBeforeCounter returns a count of RepositoryIMock.ListChunksByKbFileUID invocations
+func (mmListChunksByKbFileUID *RepositoryIMock) ListChunksByKbFileUIDBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmListChunksByKbFileUID.beforeListChunksByKbFileUIDCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryIMock.ListChunksByKbFileUID.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmListChunksByKbFileUID *mRepositoryIMockListChunksByKbFileUID) Calls() []*RepositoryIMockListChunksByKbFileUIDParams {
+	mmListChunksByKbFileUID.mutex.RLock()
+
+	argCopy := make([]*RepositoryIMockListChunksByKbFileUIDParams, len(mmListChunksByKbFileUID.callArgs))
+	copy(argCopy, mmListChunksByKbFileUID.callArgs)
+
+	mmListChunksByKbFileUID.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockListChunksByKbFileUIDDone returns true if the count of the ListChunksByKbFileUID invocations corresponds
+// the number of defined expectations
+func (m *RepositoryIMock) MinimockListChunksByKbFileUIDDone() bool {
+	for _, e := range m.ListChunksByKbFileUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.ListChunksByKbFileUIDMock.invocationsDone()
+}
+
+// MinimockListChunksByKbFileUIDInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockListChunksByKbFileUIDInspect() {
+	for _, e := range m.ListChunksByKbFileUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryIMock.ListChunksByKbFileUID with params: %#v", *e.params)
+		}
+	}
+
+	afterListChunksByKbFileUIDCounter := mm_atomic.LoadUint64(&m.afterListChunksByKbFileUIDCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.ListChunksByKbFileUIDMock.defaultExpectation != nil && afterListChunksByKbFileUIDCounter < 1 {
+		if m.ListChunksByKbFileUIDMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to RepositoryIMock.ListChunksByKbFileUID")
+		} else {
+			m.t.Errorf("Expected call to RepositoryIMock.ListChunksByKbFileUID with params: %#v", *m.ListChunksByKbFileUIDMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcListChunksByKbFileUID != nil && afterListChunksByKbFileUIDCounter < 1 {
+		m.t.Error("Expected call to RepositoryIMock.ListChunksByKbFileUID")
+	}
+
+	if !m.ListChunksByKbFileUIDMock.invocationsDone() && afterListChunksByKbFileUIDCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.ListChunksByKbFileUID but found %d calls",
+			mm_atomic.LoadUint64(&m.ListChunksByKbFileUIDMock.expectedInvocations), afterListChunksByKbFileUIDCounter)
+	}
+}
+
+type mRepositoryIMockListEmbeddingsByKbFileUID struct {
+	mock               *RepositoryIMock
+	defaultExpectation *RepositoryIMockListEmbeddingsByKbFileUIDExpectation
+	expectations       []*RepositoryIMockListEmbeddingsByKbFileUIDExpectation
+
+	callArgs []*RepositoryIMockListEmbeddingsByKbFileUIDParams
+	mutex    sync.RWMutex
+
+	expectedInvocations uint64
+}
+
+// RepositoryIMockListEmbeddingsByKbFileUIDExpectation specifies expectation struct of the RepositoryI.ListEmbeddingsByKbFileUID
+type RepositoryIMockListEmbeddingsByKbFileUIDExpectation struct {
+	mock      *RepositoryIMock
+	params    *RepositoryIMockListEmbeddingsByKbFileUIDParams
+	paramPtrs *RepositoryIMockListEmbeddingsByKbFileUIDParamPtrs
+	results   *RepositoryIMockListEmbeddingsByKbFileUIDResults
+	Counter   uint64
+}
+
+// RepositoryIMockListEmbeddingsByKbFileUIDParams contains parameters of the RepositoryI.ListEmbeddingsByKbFileUID
+type RepositoryIMockListEmbeddingsByKbFileUIDParams struct {
+	ctx       context.Context
+	kbFileUID uuid.UUID
+}
+
+// RepositoryIMockListEmbeddingsByKbFileUIDParamPtrs contains pointers to parameters of the RepositoryI.ListEmbeddingsByKbFileUID
+type RepositoryIMockListEmbeddingsByKbFileUIDParamPtrs struct {
+	ctx       *context.Context
+	kbFileUID *uuid.UUID
+}
+
+// RepositoryIMockListEmbeddingsByKbFileUIDResults contains results of the RepositoryI.ListEmbeddingsByKbFileUID
+type RepositoryIMockListEmbeddingsByKbFileUIDResults struct {
+	ea1 []mm_repository.Embedding
+	err error
+}
+
+// Expect sets up expected params for RepositoryI.ListEmbeddingsByKbFileUID
+func (mmListEmbeddingsByKbFileUID *mRepositoryIMockListEmbeddingsByKbFileUID) Expect(ctx context.Context, kbFileUID uuid.UUID) *mRepositoryIMockListEmbeddingsByKbFileUID {
+	if mmListEmbeddingsByKbFileUID.mock.funcListEmbeddingsByKbFileUID != nil {
+		mmListEmbeddingsByKbFileUID.mock.t.Fatalf("RepositoryIMock.ListEmbeddingsByKbFileUID mock is already set by Set")
+	}
+
+	if mmListEmbeddingsByKbFileUID.defaultExpectation == nil {
+		mmListEmbeddingsByKbFileUID.defaultExpectation = &RepositoryIMockListEmbeddingsByKbFileUIDExpectation{}
+	}
+
+	if mmListEmbeddingsByKbFileUID.defaultExpectation.paramPtrs != nil {
+		mmListEmbeddingsByKbFileUID.mock.t.Fatalf("RepositoryIMock.ListEmbeddingsByKbFileUID mock is already set by ExpectParams functions")
+	}
+
+	mmListEmbeddingsByKbFileUID.defaultExpectation.params = &RepositoryIMockListEmbeddingsByKbFileUIDParams{ctx, kbFileUID}
+	for _, e := range mmListEmbeddingsByKbFileUID.expectations {
+		if minimock.Equal(e.params, mmListEmbeddingsByKbFileUID.defaultExpectation.params) {
+			mmListEmbeddingsByKbFileUID.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmListEmbeddingsByKbFileUID.defaultExpectation.params)
+		}
+	}
+
+	return mmListEmbeddingsByKbFileUID
+}
+
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.ListEmbeddingsByKbFileUID
+func (mmListEmbeddingsByKbFileUID *mRepositoryIMockListEmbeddingsByKbFileUID) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockListEmbeddingsByKbFileUID {
+	if mmListEmbeddingsByKbFileUID.mock.funcListEmbeddingsByKbFileUID != nil {
+		mmListEmbeddingsByKbFileUID.mock.t.Fatalf("RepositoryIMock.ListEmbeddingsByKbFileUID mock is already set by Set")
+	}
+
+	if mmListEmbeddingsByKbFileUID.defaultExpectation == nil {
+		mmListEmbeddingsByKbFileUID.defaultExpectation = &RepositoryIMockListEmbeddingsByKbFileUIDExpectation{}
+	}
+
+	if mmListEmbeddingsByKbFileUID.defaultExpectation.params != nil {
+		mmListEmbeddingsByKbFileUID.mock.t.Fatalf("RepositoryIMock.ListEmbeddingsByKbFileUID mock is already set by Expect")
+	}
+
+	if mmListEmbeddingsByKbFileUID.defaultExpectation.paramPtrs == nil {
+		mmListEmbeddingsByKbFileUID.defaultExpectation.paramPtrs = &RepositoryIMockListEmbeddingsByKbFileUIDParamPtrs{}
+	}
+	mmListEmbeddingsByKbFileUID.defaultExpectation.paramPtrs.ctx = &ctx
+
+	return mmListEmbeddingsByKbFileUID
+}
+
+// ExpectKbFileUIDParam2 sets up expected param kbFileUID for RepositoryI.ListEmbeddingsByKbFileUID
+func (mmListEmbeddingsByKbFileUID *mRepositoryIMockListEmbeddingsByKbFileUID) ExpectKbFileUIDParam2(kbFileUID uuid.UUID) *mRepositoryIMockListEmbeddingsByKbFileUID {
+	if mmListEmbeddingsByKbFileUID.mock.funcListEmbeddingsByKbFileUID != nil {
+		mmListEmbeddingsByKbFileUID.mock.t.Fatalf("RepositoryIMock.ListEmbeddingsByKbFileUID mock is already set by Set")
+	}
+
+	if mmListEmbeddingsByKbFileUID.defaultExpectation == nil {
+		mmListEmbeddingsByKbFileUID.defaultExpectation = &RepositoryIMockListEmbeddingsByKbFileUIDExpectation{}
+	}
+
+	if mmListEmbeddingsByKbFileUID.defaultExpectation.params != nil {
+		mmListEmbeddingsByKbFileUID.mock.t.Fatalf("RepositoryIMock.ListEmbeddingsByKbFileUID mock is already set by Expect")
+	}
+
+	if mmListEmbeddingsByKbFileUID.defaultExpectation.paramPtrs == nil {
+		mmListEmbeddingsByKbFileUID.defaultExpectation.paramPtrs = &RepositoryIMockListEmbeddingsByKbFileUIDParamPtrs{}
+	}
+	mmListEmbeddingsByKbFileUID.defaultExpectation.paramPtrs.kbFileUID = &kbFileUID
+
+	return mmListEmbeddingsByKbFileUID
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.ListEmbeddingsByKbFileUID
+func (mmListEmbeddingsByKbFileUID *mRepositoryIMockListEmbeddingsByKbFileUID) Inspect(f func(ctx context.Context, kbFileUID uuid.UUID)) *mRepositoryIMockListEmbeddingsByKbFileUID {
+	if mmListEmbeddingsByKbFileUID.mock.inspectFuncListEmbeddingsByKbFileUID != nil {
+		mmListEmbeddingsByKbFileUID.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.ListEmbeddingsByKbFileUID")
+	}
+
+	mmListEmbeddingsByKbFileUID.mock.inspectFuncListEmbeddingsByKbFileUID = f
+
+	return mmListEmbeddingsByKbFileUID
+}
+
+// Return sets up results that will be returned by RepositoryI.ListEmbeddingsByKbFileUID
+func (mmListEmbeddingsByKbFileUID *mRepositoryIMockListEmbeddingsByKbFileUID) Return(ea1 []mm_repository.Embedding, err error) *RepositoryIMock {
+	if mmListEmbeddingsByKbFileUID.mock.funcListEmbeddingsByKbFileUID != nil {
+		mmListEmbeddingsByKbFileUID.mock.t.Fatalf("RepositoryIMock.ListEmbeddingsByKbFileUID mock is already set by Set")
+	}
+
+	if mmListEmbeddingsByKbFileUID.defaultExpectation == nil {
+		mmListEmbeddingsByKbFileUID.defaultExpectation = &RepositoryIMockListEmbeddingsByKbFileUIDExpectation{mock: mmListEmbeddingsByKbFileUID.mock}
+	}
+	mmListEmbeddingsByKbFileUID.defaultExpectation.results = &RepositoryIMockListEmbeddingsByKbFileUIDResults{ea1, err}
+	return mmListEmbeddingsByKbFileUID.mock
+}
+
+// Set uses given function f to mock the RepositoryI.ListEmbeddingsByKbFileUID method
+func (mmListEmbeddingsByKbFileUID *mRepositoryIMockListEmbeddingsByKbFileUID) Set(f func(ctx context.Context, kbFileUID uuid.UUID) (ea1 []mm_repository.Embedding, err error)) *RepositoryIMock {
+	if mmListEmbeddingsByKbFileUID.defaultExpectation != nil {
+		mmListEmbeddingsByKbFileUID.mock.t.Fatalf("Default expectation is already set for the RepositoryI.ListEmbeddingsByKbFileUID method")
+	}
+
+	if len(mmListEmbeddingsByKbFileUID.expectations) > 0 {
+		mmListEmbeddingsByKbFileUID.mock.t.Fatalf("Some expectations are already set for the RepositoryI.ListEmbeddingsByKbFileUID method")
+	}
+
+	mmListEmbeddingsByKbFileUID.mock.funcListEmbeddingsByKbFileUID = f
+	return mmListEmbeddingsByKbFileUID.mock
+}
+
+// When sets expectation for the RepositoryI.ListEmbeddingsByKbFileUID which will trigger the result defined by the following
+// Then helper
+func (mmListEmbeddingsByKbFileUID *mRepositoryIMockListEmbeddingsByKbFileUID) When(ctx context.Context, kbFileUID uuid.UUID) *RepositoryIMockListEmbeddingsByKbFileUIDExpectation {
+	if mmListEmbeddingsByKbFileUID.mock.funcListEmbeddingsByKbFileUID != nil {
+		mmListEmbeddingsByKbFileUID.mock.t.Fatalf("RepositoryIMock.ListEmbeddingsByKbFileUID mock is already set by Set")
+	}
+
+	expectation := &RepositoryIMockListEmbeddingsByKbFileUIDExpectation{
+		mock:   mmListEmbeddingsByKbFileUID.mock,
+		params: &RepositoryIMockListEmbeddingsByKbFileUIDParams{ctx, kbFileUID},
+	}
+	mmListEmbeddingsByKbFileUID.expectations = append(mmListEmbeddingsByKbFileUID.expectations, expectation)
+	return expectation
+}
+
+// Then sets up RepositoryI.ListEmbeddingsByKbFileUID return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockListEmbeddingsByKbFileUIDExpectation) Then(ea1 []mm_repository.Embedding, err error) *RepositoryIMock {
+	e.results = &RepositoryIMockListEmbeddingsByKbFileUIDResults{ea1, err}
+	return e.mock
+}
+
+// Times sets number of times RepositoryI.ListEmbeddingsByKbFileUID should be invoked
+func (mmListEmbeddingsByKbFileUID *mRepositoryIMockListEmbeddingsByKbFileUID) Times(n uint64) *mRepositoryIMockListEmbeddingsByKbFileUID {
+	if n == 0 {
+		mmListEmbeddingsByKbFileUID.mock.t.Fatalf("Times of RepositoryIMock.ListEmbeddingsByKbFileUID mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmListEmbeddingsByKbFileUID.expectedInvocations, n)
+	return mmListEmbeddingsByKbFileUID
+}
+
+func (mmListEmbeddingsByKbFileUID *mRepositoryIMockListEmbeddingsByKbFileUID) invocationsDone() bool {
+	if len(mmListEmbeddingsByKbFileUID.expectations) == 0 && mmListEmbeddingsByKbFileUID.defaultExpectation == nil && mmListEmbeddingsByKbFileUID.mock.funcListEmbeddingsByKbFileUID == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmListEmbeddingsByKbFileUID.mock.afterListEmbeddingsByKbFileUIDCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmListEmbeddingsByKbFileUID.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// ListEmbeddingsByKbFileUID implements repository.RepositoryI
+func (mmListEmbeddingsByKbFileUID *RepositoryIMock) ListEmbeddingsByKbFileUID(ctx context.Context, kbFileUID uuid.UUID) (ea1 []mm_repository.Embedding, err error) {
+	mm_atomic.AddUint64(&mmListEmbeddingsByKbFileUID.beforeListEmbeddingsByKbFileUIDCounter, 1)
+	defer mm_atomic.AddUint64(&mmListEmbeddingsByKbFileUID.afterListEmbeddingsByKbFileUIDCounter, 1)
+
+	if mmListEmbeddingsByKbFileUID.inspectFuncListEmbeddingsByKbFileUID != nil {
+		mmListEmbeddingsByKbFileUID.inspectFuncListEmbeddingsByKbFileUID(ctx, kbFileUID)
+	}
+
+	mm_params := RepositoryIMockListEmbeddingsByKbFileUIDParams{ctx, kbFileUID}
+
+	// Record call args
+	mmListEmbeddingsByKbFileUID.ListEmbeddingsByKbFileUIDMock.mutex.Lock()
+	mmListEmbeddingsByKbFileUID.ListEmbeddingsByKbFileUIDMock.callArgs = append(mmListEmbeddingsByKbFileUID.ListEmbeddingsByKbFileUIDMock.callArgs, &mm_params)
+	mmListEmbeddingsByKbFileUID.ListEmbeddingsByKbFileUIDMock.mutex.Unlock()
+
+	for _, e := range mmListEmbeddingsByKbFileUID.ListEmbeddingsByKbFileUIDMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.ea1, e.results.err
+		}
+	}
+
+	if mmListEmbeddingsByKbFileUID.ListEmbeddingsByKbFileUIDMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmListEmbeddingsByKbFileUID.ListEmbeddingsByKbFileUIDMock.defaultExpectation.Counter, 1)
+		mm_want := mmListEmbeddingsByKbFileUID.ListEmbeddingsByKbFileUIDMock.defaultExpectation.params
+		mm_want_ptrs := mmListEmbeddingsByKbFileUID.ListEmbeddingsByKbFileUIDMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryIMockListEmbeddingsByKbFileUIDParams{ctx, kbFileUID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmListEmbeddingsByKbFileUID.t.Errorf("RepositoryIMock.ListEmbeddingsByKbFileUID got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.kbFileUID != nil && !minimock.Equal(*mm_want_ptrs.kbFileUID, mm_got.kbFileUID) {
+				mmListEmbeddingsByKbFileUID.t.Errorf("RepositoryIMock.ListEmbeddingsByKbFileUID got unexpected parameter kbFileUID, want: %#v, got: %#v%s\n", *mm_want_ptrs.kbFileUID, mm_got.kbFileUID, minimock.Diff(*mm_want_ptrs.kbFileUID, mm_got.kbFileUID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmListEmbeddingsByKbFileUID.t.Errorf("RepositoryIMock.ListEmbeddingsByKbFileUID got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmListEmbeddingsByKbFileUID.ListEmbeddingsByKbFileUIDMock.defaultExpectation.results
+		if mm_results == nil {
+			mmListEmbeddingsByKbFileUID.t.Fatal("No results are set for the RepositoryIMock.ListEmbeddingsByKbFileUID")
+		}
+		return (*mm_results).ea1, (*mm_results).err
+	}
+	if mmListEmbeddingsByKbFileUID.funcListEmbeddingsByKbFileUID != nil {
+		return mmListEmbeddingsByKbFileUID.funcListEmbeddingsByKbFileUID(ctx, kbFileUID)
+	}
+	mmListEmbeddingsByKbFileUID.t.Fatalf("Unexpected call to RepositoryIMock.ListEmbeddingsByKbFileUID. %v %v", ctx, kbFileUID)
+	return
+}
+
+// ListEmbeddingsByKbFileUIDAfterCounter returns a count of finished RepositoryIMock.ListEmbeddingsByKbFileUID invocations
+func (mmListEmbeddingsByKbFileUID *RepositoryIMock) ListEmbeddingsByKbFileUIDAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmListEmbeddingsByKbFileUID.afterListEmbeddingsByKbFileUIDCounter)
+}
+
+// ListEmbeddingsByKbFileUIDBeforeCounter returns a count of RepositoryIMock.ListEmbeddingsByKbFileUID invocations
+func (mmListEmbeddingsByKbFileUID *RepositoryIMock) ListEmbeddingsByKbFileUIDBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmListEmbeddingsByKbFileUID.beforeListEmbeddingsByKbFileUIDCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryIMock.ListEmbeddingsByKbFileUID.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmListEmbeddingsByKbFileUID *mRepositoryIMockListEmbeddingsByKbFileUID) Calls() []*RepositoryIMockListEmbeddingsByKbFileUIDParams {
+	mmListEmbeddingsByKbFileUID.mutex.RLock()
+
+	argCopy := make([]*RepositoryIMockListEmbeddingsByKbFileUIDParams, len(mmListEmbeddingsByKbFileUID.callArgs))
+	copy(argCopy, mmListEmbeddingsByKbFileUID.callArgs)
+
+	mmListEmbeddingsByKbFileUID.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockListEmbeddingsByKbFileUIDDone returns true if the count of the ListEmbeddingsByKbFileUID invocations corresponds
+// the number of defined expectations
+func (m *RepositoryIMock) MinimockListEmbeddingsByKbFileUIDDone() bool {
+	for _, e := range m.ListEmbeddingsByKbFileUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.ListEmbeddingsByKbFileUIDMock.invocationsDone()
+}
+
+// MinimockListEmbeddingsByKbFileUIDInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockListEmbeddingsByKbFileUIDInspect() {
+	for _, e := range m.ListEmbeddingsByKbFileUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryIMock.ListEmbeddingsByKbFileUID with params: %#v", *e.params)
+		}
+	}
+
+	afterListEmbeddingsByKbFileUIDCounter := mm_atomic.LoadUint64(&m.afterListEmbeddingsByKbFileUIDCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.ListEmbeddingsByKbFileUIDMock.defaultExpectation != nil && afterListEmbeddingsByKbFileUIDCounter < 1 {
+		if m.ListEmbeddingsByKbFileUIDMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to RepositoryIMock.ListEmbeddingsByKbFileUID")
+		} else {
+			m.t.Errorf("Expected call to RepositoryIMock.ListEmbeddingsByKbFileUID with params: %#v", *m.ListEmbeddingsByKbFileUIDMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcListEmbeddingsByKbFileUID != nil && afterListEmbeddingsByKbFileUIDCounter < 1 {
+		m.t.Error("Expected call to RepositoryIMock.ListEmbeddingsByKbFileUID")
+	}
+
+	if !m.ListEmbeddingsByKbFileUIDMock.invocationsDone() && afterListEmbeddingsByKbFileUIDCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.ListEmbeddingsByKbFileUID but found %d calls",
+			mm_atomic.LoadUint64(&m.ListEmbeddingsByKbFileUIDMock.expectedInvocations), afterListEmbeddingsByKbFileUIDCounter)
 	}
 }
 
@@ -12522,6 +15341,10 @@ func (m *RepositoryIMock) MinimockFinish() {
 
 			m.MinimockCreateKnowledgeBaseFileInspect()
 
+			m.MinimockDeleteAllConvertedFilesinKbInspect()
+
+			m.MinimockDeleteAllKnowledgeBaseFilesInspect()
+
 			m.MinimockDeleteAndCreateChunksInspect()
 
 			m.MinimockDeleteChunksBySourceInspect()
@@ -12570,9 +15393,23 @@ func (m *RepositoryIMock) MinimockFinish() {
 
 			m.MinimockGetTruthSourceByFileUIDInspect()
 
+			m.MinimockHardDeleteChunksByKbFileUIDInspect()
+
+			m.MinimockHardDeleteChunksByKbUIDInspect()
+
+			m.MinimockHardDeleteConvertedFileByFileUIDInspect()
+
+			m.MinimockHardDeleteEmbeddingsByKbFileUIDInspect()
+
+			m.MinimockHardDeleteEmbeddingsByKbUIDInspect()
+
 			m.MinimockIncreaseKnowledgeBaseUsageInspect()
 
 			m.MinimockKnowledgeBaseFileTableNameInspect()
+
+			m.MinimockListChunksByKbFileUIDInspect()
+
+			m.MinimockListEmbeddingsByKbFileUIDInspect()
 
 			m.MinimockListKnowledgeBaseFilesInspect()
 
@@ -12619,6 +15456,8 @@ func (m *RepositoryIMock) minimockDone() bool {
 		m.MinimockCreateConvertedFileDone() &&
 		m.MinimockCreateKnowledgeBaseDone() &&
 		m.MinimockCreateKnowledgeBaseFileDone() &&
+		m.MinimockDeleteAllConvertedFilesinKbDone() &&
+		m.MinimockDeleteAllKnowledgeBaseFilesDone() &&
 		m.MinimockDeleteAndCreateChunksDone() &&
 		m.MinimockDeleteChunksBySourceDone() &&
 		m.MinimockDeleteChunksByUIDsDone() &&
@@ -12643,8 +15482,15 @@ func (m *RepositoryIMock) minimockDone() bool {
 		m.MinimockGetTotalChunksBySourcesDone() &&
 		m.MinimockGetTotalTokensByListKBUIDsDone() &&
 		m.MinimockGetTruthSourceByFileUIDDone() &&
+		m.MinimockHardDeleteChunksByKbFileUIDDone() &&
+		m.MinimockHardDeleteChunksByKbUIDDone() &&
+		m.MinimockHardDeleteConvertedFileByFileUIDDone() &&
+		m.MinimockHardDeleteEmbeddingsByKbFileUIDDone() &&
+		m.MinimockHardDeleteEmbeddingsByKbUIDDone() &&
 		m.MinimockIncreaseKnowledgeBaseUsageDone() &&
 		m.MinimockKnowledgeBaseFileTableNameDone() &&
+		m.MinimockListChunksByKbFileUIDDone() &&
+		m.MinimockListEmbeddingsByKbFileUIDDone() &&
 		m.MinimockListKnowledgeBaseFilesDone() &&
 		m.MinimockListKnowledgeBasesDone() &&
 		m.MinimockProcessKnowledgeBaseFilesDone() &&

@@ -23,6 +23,8 @@ type KnowledgeBaseFileI interface {
 	ListKnowledgeBaseFiles(ctx context.Context, uid string, ownerUID string, kbUID string, pageSize int32, nextPageToken string, filesUID []string) ([]KnowledgeBaseFile, int, string, error)
 	// DeleteKnowledgeBaseFile deletes the knowledge base file by file UID
 	DeleteKnowledgeBaseFile(ctx context.Context, fileUID string) error
+	// DeleteAllKnowledgeBaseFiles deletes all files in the knowledge base
+	DeleteAllKnowledgeBaseFiles(ctx context.Context, kbUID string) error
 	// ProcessKnowledgeBaseFiles updates the process status of the files
 	ProcessKnowledgeBaseFiles(ctx context.Context, fileUids []string) ([]KnowledgeBaseFile, error)
 	// GetNeedProcessFiles returns the files that are not yet processed
@@ -258,6 +260,17 @@ func (r *Repository) DeleteKnowledgeBaseFile(ctx context.Context, fileUID string
 	if err := r.db.WithContext(ctx).Model(&KnowledgeBaseFile{}).
 		Where(whereClause, fileUID).
 		Update(KnowledgeBaseFileColumn.DeleteTime, currentTime).Error; err != nil {
+		return err
+	}
+	return nil
+}
+
+// hard delete all files in the knowledge base
+func (r *Repository) DeleteAllKnowledgeBaseFiles(ctx context.Context, kbUID string) error {
+	whereClause := fmt.Sprintf("%v = ?", KnowledgeBaseFileColumn.KnowledgeBaseUID)
+	if err := r.db.WithContext(ctx).Model(&KnowledgeBaseFile{}).
+		Where(whereClause, kbUID).
+		Delete(&KnowledgeBaseFile{}).Error; err != nil {
 		return err
 	}
 	return nil

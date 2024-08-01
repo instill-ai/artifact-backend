@@ -23,6 +23,10 @@ type MinioI interface {
 	UploadBase64File(ctx context.Context, filePath string, base64Content string, fileMimeType string) (err error)
 	// deleteFile
 	DeleteFile(ctx context.Context, filePath string) (err error)
+	// deleteFiles
+	DeleteFiles(ctx context.Context, filePaths []string) chan error
+	// deleteFilesWithPrefix
+	DeleteFilesWithPrefix(ctx context.Context, prefix string) chan error
 	// GetFile
 	GetFile(ctx context.Context, filePath string) ([]byte, error)
 	// GetFilesByPaths
@@ -110,6 +114,32 @@ func (m *Minio) DeleteFile(ctx context.Context, filePathName string) (err error)
 	return nil
 }
 
+// delete bunch of files from minio
+func (m *Minio) DeleteFiles(ctx context.Context, filePathNames []string) chan error {
+	errCh := make(chan error, len(filePathNames))
+	log, err := log.GetZapLogger(ctx)
+	if err != nil {
+		errCh <- err
+		return errCh
+	}
+	// Delete the files from MinIO parallelly
+	var wg sync.WaitGroup
+	for _, filePathName := range filePathNames {
+		wg.Add(1)
+		go func(filePathName string, errCh chan error) {
+			defer wg.Done()
+			err := m.client.RemoveObject(m.bucket, filePathName)
+			if err != nil {
+				log.Error("Failed to delete file from MinIO", zap.Error(err))
+				errCh <- err
+				return
+			}
+		}(filePathName, errCh)
+	}
+	wg.Wait()
+	return errCh
+}
+
 func (m *Minio) GetFile(ctx context.Context, filePathName string) ([]byte, error) {
 	log, err := log.GetZapLogger(ctx)
 	if err != nil {
@@ -151,6 +181,7 @@ func (m *Minio) GetFilesByPaths(ctx context.Context, filePaths []string) ([]File
 	var wg sync.WaitGroup
 	files := make([]FileContent, len(filePaths))
 	errors := make([]error, len(filePaths))
+	var mu sync.Mutex
 
 	for i, path := range filePaths {
 		wg.Add(1)
@@ -160,7 +191,9 @@ func (m *Minio) GetFilesByPaths(ctx context.Context, filePaths []string) ([]File
 			obj, err := m.client.GetObject(m.bucket, filePath, minio.GetObjectOptions{})
 			if err != nil {
 				log.Error("Failed to get object from MinIO", zap.String("path", filePath), zap.Error(err))
+				mu.Lock()
 				errors[index] = err
+				mu.Unlock()
 				return
 			}
 			defer obj.Close()
@@ -190,4 +223,46 @@ func (m *Minio) GetFilesByPaths(ctx context.Context, filePaths []string) ([]File
 	}
 
 	return files, nil
+}
+
+// delete all files with the same prefix from MinIO
+func (m *Minio) DeleteFilesWithPrefix(ctx context.Context, prefix string) chan error {
+	errCh := make(chan error)
+	log, err := log.GetZapLogger(ctx)
+	if err != nil {
+		errCh <- err
+		close(errCh)
+		return errCh
+	}
+
+	// List all objects with the given prefix
+	objectCh := m.client.ListObjects(m.bucket, prefix, true, nil)
+
+	// Use a WaitGroup to wait for all deletions to complete
+	var wg sync.WaitGroup
+	for object := range objectCh {
+		if object.Err != nil {
+			log.Error("Failed to list object from MinIO", zap.Error(object.Err))
+			errCh <- object.Err
+			continue
+		}
+
+		wg.Add(1)
+		go func(objectName string) {
+			defer wg.Done()
+			err := m.client.RemoveObject(m.bucket, objectName)
+			if err != nil {
+				log.Error("Failed to delete object from MinIO", zap.String("object", objectName), zap.Error(err))
+				errCh <- err
+			}
+		}(object.Key)
+	}
+
+	// Wait for all deletions to complete
+	go func() {
+		wg.Wait()
+		close(errCh)
+	}()
+
+	return errCh
 }
