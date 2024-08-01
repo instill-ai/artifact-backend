@@ -280,14 +280,14 @@ func (wp *fileToEmbWorkerPool) processFile(ctx context.Context, file repository.
 		case artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_WAITING:
 			updatedFile, nextStatus, err := wp.processWaitingFile(ctx, file)
 			if err != nil {
-				return err
+				return fmt.Errorf("error processing waiting file: %w", err)
 			}
 			status = nextStatus
 			file = *updatedFile
 		case artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CONVERTING:
 			updatedFile, nextStatus, err := wp.processConvertingFile(ctx, file)
 			if err != nil {
-				return err
+				return fmt.Errorf("error processing converting file: %w", err)
 			}
 			status = nextStatus
 			file = *updatedFile
@@ -295,7 +295,7 @@ func (wp *fileToEmbWorkerPool) processFile(ctx context.Context, file repository.
 		case artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CHUNKING:
 			updatedFile, nextStatus, err := wp.processChunkingFile(ctx, file)
 			if err != nil {
-				return err
+				return fmt.Errorf("error processing chunking file: %w", err)
 			}
 			status = nextStatus
 			file = *updatedFile
@@ -303,7 +303,7 @@ func (wp *fileToEmbWorkerPool) processFile(ctx context.Context, file repository.
 		case artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_EMBEDDING:
 			updatedFile, nextStatus, err := wp.processEmbeddingFile(ctx, file)
 			if err != nil {
-				return err
+				return fmt.Errorf("error processing embedding file: %w", err)
 			}
 			status = nextStatus
 			file = *updatedFile

@@ -336,11 +336,42 @@ func (ph *PublicHandler) DeleteCatalogFile(
 		return nil, fmt.Errorf("file not found. err: %w", customerror.ErrNotFound)
 	}
 
+	//  delete the file from minio
+	objectPaths := []string{}
+	//  kb file in minio
+	objectPaths = append(objectPaths, files[0].Destination)
+	// converted file in minio
+	cf, err := ph.service.Repository.GetConvertedFileByFileUID(ctx, fuid)
+	if err == nil {
+		objectPaths = append(objectPaths, cf.Destination)
+	}
+	// chunks in minio
+	chunks, _ := ph.service.Repository.ListChunksByKbFileUID(ctx, fuid)
+	if len(chunks) > 0 {
+		for _, chunk := range chunks {
+			objectPaths = append(objectPaths, chunk.ContentDest)
+		}
+	}
+	//  delete the embeddings in milvus(need to delete first)
+	embUIDs := []string{}
+	embs, _ := ph.service.Repository.ListEmbeddingsByKbFileUID(ctx, fuid)
+	for _, emb := range embs {
+		embUIDs = append(embUIDs, emb.UID.String())
+	}
+	_ = ph.service.MilvusClient.DeleteEmbeddingsInKb(ctx, files[0].KnowledgeBaseUID.String(), embUIDs)
+
+	_ = ph.service.MinIO.DeleteFiles(ctx, objectPaths)
+	//  delete the converted file in postgres
+	_ = ph.service.Repository.HardDeleteConvertedFileByFileUID(ctx, fuid)
+	//  delete the chunks in postgres
+	_ = ph.service.Repository.HardDeleteChunksByKbFileUID(ctx, fuid)
+	//  delete the embeddings in postgres
+	_ = ph.service.Repository.HardDeleteEmbeddingsByKbFileUID(ctx, fuid)
+	// delete the file in postgres
 	err = ph.service.Repository.DeleteKnowledgeBaseFile(ctx, req.FileUid)
 	if err != nil {
 		return nil, err
 	}
-
 	// decrease catalog usage
 	err = ph.service.Repository.IncreaseKnowledgeBaseUsage(ctx, files[0].KnowledgeBaseUID.String(), int(-files[0].Size))
 	if err != nil {

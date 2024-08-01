@@ -207,7 +207,7 @@ package milvus
 // 		t.Fatalf("Failed to get Milvus version: %v", err)
 // 	}
 // 	fmt.Printf("Successfully connected to Milvus! Health: %v, Version: %v\n", h, v)
-// 	err = mc.DeleteEmbedding(context.TODO(), "kb_gary_test_kb_1", []string{"5a51f2d5-9587-4472-9be2-67fd200145f3", "uid2"})
+// 	err = mc.DeleteEmbedding(context.TODO(), "kb_73f6b9aa_0399_4f16_bca7_6b8b75fede32", []string{"aa4631e3-f936-48e4-bc2e-06c4eb629376"})
 // 	if err != nil {
 // 		t.Fatalf("Failed to delete embeddings: %v", err)
 // 	}
@@ -240,7 +240,7 @@ package milvus
 // 	dummyVector[0] = 1
 // 	topK := 2
 // 	batchVector := [][]float32{dummyVector}
-// 	embeddings, err := mc.SearchEmbeddings(context.TODO(), collectionName, batchVector, topK)
+// 	embeddings, err := mc.SearchSimilarEmbeddings(context.TODO(), collectionName, batchVector, topK)
 // 	if err != nil {
 // 		t.Fatalf("Failed to search embeddings: %v", err)
 // 	}

@@ -19,10 +19,13 @@ type MilvusClientI interface {
 	InsertVectorsToKnowledgeBaseCollection(ctx context.Context, kbUID string, embeddings []Embedding) error
 	GetAllCollectionNames(ctx context.Context) ([]*entity.Collection, error)
 	DeleteCollection(ctx context.Context, collectionName string) error
+	// drop knowledge base collection
+	DropKnowledgeBaseCollection(ctx context.Context, kbUID string) error
 	ListEmbeddings(ctx context.Context, collectionName string) ([]Embedding, error)
 	SearchSimilarEmbeddings(ctx context.Context, collectionName string, vectors [][]float32, topK int) ([][]SimilarEmbedding, error)
 	SearchSimilarEmbeddingsInKB(ctx context.Context, kbUID string, vectors [][]float32, topK int) ([][]SimilarEmbedding, error)
 	DeleteEmbedding(ctx context.Context, collectionName string, embeddingUID []string) error
+	DeleteEmbeddingsInKb(ctx context.Context, kbUID string, embeddingUID []string) error
 	// GetKnowledgeBaseCollectionName returns the collection name for a knowledge base
 	GetKnowledgeBaseCollectionName(kbUID string) string
 	Close()
@@ -304,6 +307,12 @@ func (m *MilvusClient) DeleteEmbedding(ctx context.Context, collectionName strin
 	return err
 }
 
+// DeleteEmbeddingsInKb
+func (m *MilvusClient) DeleteEmbeddingsInKb(ctx context.Context, kbUID string, embeddingUID []string) error {
+	collectionName := m.GetKnowledgeBaseCollectionName(kbUID)
+	return m.DeleteEmbedding(ctx, collectionName, embeddingUID)
+}
+
 type SimilarEmbedding struct {
 	Embedding
 	Score float32
@@ -423,4 +432,10 @@ func (m *MilvusClient) GetKnowledgeBaseCollectionName(kbUID string) string {
 func (m *MilvusClient) SearchSimilarEmbeddingsInKB(ctx context.Context, kbUID string, vectors [][]float32, topK int) ([][]SimilarEmbedding, error) {
 	collectionName := m.GetKnowledgeBaseCollectionName(kbUID)
 	return m.SearchSimilarEmbeddings(ctx, collectionName, vectors, topK)
+}
+
+// Drop KnowledgeBaseCollection
+func (m *MilvusClient) DropKnowledgeBaseCollection(ctx context.Context, kbUID string) error {
+	collectionName := m.GetKnowledgeBaseCollectionName(kbUID)
+	return m.DeleteCollection(ctx, collectionName)
 }

@@ -51,7 +51,7 @@ func (s *Service) ConvertPDFToMD(ctx context.Context, caller uuid.UUID, pdfBase6
 	result, err := getConvertResult(resp)
 	if err != nil {
 		logger.Error("failed to get convert result", zap.Error(err))
-		return "", err
+		return "", fmt.Errorf("failed to get convert result: %w", err)
 	}
 	return result, nil
 }
@@ -162,7 +162,7 @@ func (s *Service) SplitText(ctx context.Context, caller uuid.UUID, text string) 
 	}
 	result, err := GetChunksFromResponse(res)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get chunks from response: %w", err)
 	}
 	return result, nil
 }
@@ -202,7 +202,7 @@ func (s *Service) VectorizeText(ctx context.Context, caller uuid.UUID, texts []s
         }
         result, err := GetVectorFromResponse(res)
         if err != nil {
-            return nil, err
+            return nil, fmt.Errorf("failed to get vector from response: %w", err)
         }
         allResults = append(allResults, result...)
     }

@@ -14,6 +14,8 @@ type ConvertedFileI interface {
 	ConvertedFileTableName() string
 	CreateConvertedFile(ctx context.Context, cf ConvertedFile, callExternalService func(convertedFileUID uuid.UUID) (map[string]any, error)) (*ConvertedFile, error)
 	DeleteConvertedFile(ctx context.Context, uid uuid.UUID) error
+	DeleteAllConvertedFilesinKb(ctx context.Context, kbUID uuid.UUID) error
+	HardDeleteConvertedFileByFileUID(ctx context.Context, fileUID uuid.UUID) error
 	GetConvertedFileByFileUID(ctx context.Context, fileUID uuid.UUID) (*ConvertedFile, error)
 }
 
@@ -137,11 +139,37 @@ func (r *Repository) DeleteConvertedFile(ctx context.Context, uid uuid.UUID) err
 	return nil
 }
 
+// DeleteAllConvertedFilesinKb deletes all the records in the knowledge base
+func (r *Repository) DeleteAllConvertedFilesinKb(ctx context.Context, kbUID uuid.UUID) error {
+	err := r.db.Transaction(func(tx *gorm.DB) error {
+		// Specify the condition to find the record by its UID
+		where := fmt.Sprintf("%s = ?", ConvertedFileColumn.KbUID)
+		if err := tx.Where(where, kbUID).Delete(&ConvertedFile{}).Error; err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // UpdateConvertedFile updates the record by UID using update map.
 func (r *Repository) UpdateConvertedFile(ctx context.Context, uid uuid.UUID, update map[string]any) error {
 	// Specify the condition to find the record by its UID
 	where := fmt.Sprintf("%s = ?", ConvertedFileColumn.UID)
 	if err := r.db.WithContext(ctx).Model(&ConvertedFile{}).Where(where, uid).Updates(update).Error; err != nil {
+		return err
+	}
+	return nil
+}
+
+// HardDeleteConvertedFileByFileUID deletes the record by file UID
+func (r *Repository) HardDeleteConvertedFileByFileUID(ctx context.Context, fileUID uuid.UUID) error {
+	// Specify the condition to find the record by its UID
+	where := fmt.Sprintf("%s = ?", ConvertedFileColumn.FileUID)
+	if err := r.db.WithContext(ctx).Where(where, fileUID).Unscoped().Delete(&ConvertedFile{}).Error; err != nil {
 		return err
 	}
 	return nil
