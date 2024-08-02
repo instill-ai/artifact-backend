@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.8.1-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.8.0-alpha...v0.8.1-alpha) (2024-08-01)
+
+
+### Bug Fixes
+
+* **catalog:** call embedding with max 32 size batch ([#60](https://github.com/instill-ai/artifact-backend/issues/60)) ([e6b25ec](https://github.com/instill-ai/artifact-backend/commit/e6b25ecd02655c351e78b25086ce5f866f4ab134))
+* **catalog:** max 3 catalog per namespace ([#58](https://github.com/instill-ai/artifact-backend/issues/58)) ([786790c](https://github.com/instill-ai/artifact-backend/commit/786790cbd57afb4a93d331fbcecab4c60a243af5))
+* **catalog:** when delete catalog and file, also delete the artifact ([#61](https://github.com/instill-ai/artifact-backend/issues/61)) ([cf6ecc3](https://github.com/instill-ai/artifact-backend/commit/cf6ecc3132dc3bcfeedfe6a72bdba54d94090cc5))
+
 ## [0.8.0-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.7.0-alpha...v0.8.0-alpha) (2024-08-01)
 
 
