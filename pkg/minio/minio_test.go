@@ -30,3 +30,16 @@ package minio
 // 	}
 // 	fmt.Println("mimeType: ", mimeType)
 // }
+
+// func TestDuplicateCreateSameBucket(t *testing.T) {
+// 	fmt.Println("Starting TestDuplicateCreateSameBucket")
+// 	err := testMinioClient.client.MakeBucket("test-bucket-2", "us-east-1")
+// 	if err != nil {
+// 		t.Fatalf("failed to create first bucket: %v", err)
+// 	}
+// 	err = testMinioClient.client.MakeBucket("test-bucket-3", "us-east-1")
+// 	if err != nil {
+// 		t.Fatalf("failed to create second bucket: %v", err)
+// 	}
+
+// }
