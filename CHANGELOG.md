@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.9.0-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.8.1-alpha...v0.9.0-alpha) (2024-08-05)
+
+
+### Features
+
+* **catelog:** make topK default 5 ([#62](https://github.com/instill-ai/artifact-backend/issues/62)) ([02259e1](https://github.com/instill-ai/artifact-backend/commit/02259e18eceaedf5996a1a7626c057007b9cedeb))
+
+
+### Bug Fixes
+
+* **catalog:** list file api's page token ([#64](https://github.com/instill-ai/artifact-backend/issues/64)) ([ac56be0](https://github.com/instill-ai/artifact-backend/commit/ac56be0cbd1155bfad8da04946c2a90280ffb865))
+
 ## [0.8.1-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.8.0-alpha...v0.8.1-alpha) (2024-08-01)
 
 
