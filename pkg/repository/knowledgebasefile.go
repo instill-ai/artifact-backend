@@ -227,17 +227,25 @@ func (r *Repository) ListKnowledgeBaseFiles(ctx context.Context, uid string, own
 	} else if pageSize <= 0 {
 		pageSize = 10
 	}
-
-	query = query.Limit(int(pageSize))
+	pageSizeAddOne:= pageSize +  1 // to get the next page token
+	query = query.Limit(int(pageSizeAddOne))
 
 	if nextPageToken != "" {
-		// Assuming next_page_token is the `create_time` timestamp of the last record from the previous page
-		if parsedTime, err := time.Parse(time.RFC3339, nextPageToken); err == nil {
-			whereClause := fmt.Sprintf("%v > ?", KnowledgeBaseFileColumn.CreateTime)
-			query = query.Where(whereClause, parsedTime)
-		} else {
-			return nil, 0, "", fmt.Errorf("invalid next_page_token format(RFC3339): %v", err)
+		tokenUUID, err := uuid.FromString(nextPageToken)
+		if err != nil {
+			return nil, 0, "", fmt.Errorf("invalid next_page_token format(UUID): %v", err)
 		}
+		// Assuming next_page_token is the `uid` of the last record from the previous page
+		kbfs, err := r.GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{tokenUUID})
+		if err != nil {
+			return nil, 0, "", fmt.Errorf("failed to get knowledge base files by next page token: %v", err)
+		}
+		if len(kbfs) == 0 {
+			return nil, 0, "", fmt.Errorf("no knowledge base file found by next page token")
+		}
+		// whereClause
+		whereClause := fmt.Sprintf("%v >= ?", KnowledgeBaseFileColumn.CreateTime)
+		query = query.Where(whereClause, kbfs[0].CreateTime)
 	}
 
 	// Fetch the records
@@ -247,8 +255,9 @@ func (r *Repository) ListKnowledgeBaseFiles(ctx context.Context, uid string, own
 
 	// Determine the next page token
 	newNextPageToken := ""
-	if len(kbs) > 0 {
-		newNextPageToken = kbs[len(kbs)-1].CreateTime.Format(time.RFC3339)
+	if len(kbs) == int(pageSizeAddOne) {
+		newNextPageToken = kbs[pageSizeAddOne-1].UID.String()
+		kbs = kbs[:pageSizeAddOne-1]
 	}
 	return kbs, int(totalCount), newNextPageToken, nil
 }
