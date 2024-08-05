@@ -23,6 +23,8 @@ type MilvusClientI interface {
 	DropKnowledgeBaseCollection(ctx context.Context, kbUID string) error
 	ListEmbeddings(ctx context.Context, collectionName string) ([]Embedding, error)
 	SearchSimilarEmbeddings(ctx context.Context, collectionName string, vectors [][]float32, topK int) ([][]SimilarEmbedding, error)
+	// SearchSimilarEmbeddingsInKB search similar embeddings in knowledge base.
+	// The topK has default value 5
 	SearchSimilarEmbeddingsInKB(ctx context.Context, kbUID string, vectors [][]float32, topK int) ([][]SimilarEmbedding, error)
 	DeleteEmbedding(ctx context.Context, collectionName string, embeddingUID []string) error
 	DeleteEmbeddingsInKb(ctx context.Context, kbUID string, embeddingUID []string) error
@@ -319,7 +321,12 @@ type SimilarEmbedding struct {
 }
 
 // SearchSimilarEmbeddings searches for embeddings similar to the input vector
+// topk has default value 5, when topk <= 0, it will be set to 5.
 func (m *MilvusClient) SearchSimilarEmbeddings(ctx context.Context, collectionName string, vectors [][]float32, topK int) ([][]SimilarEmbedding, error) {
+	// set default topK
+	if topK <= 0 {
+		topK = 5
+	}
 	log, err := logger.GetZapLogger(ctx)
 	if err != nil {
 		log.Error("failed to get logger", zap.Error(err))
