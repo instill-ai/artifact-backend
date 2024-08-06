@@ -32,6 +32,13 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 		return nil, err
 	}
 
+	// determine the file type by its extension
+	req.File.Type = DetermineFileType(req.File.Name)
+	if req.File.Type == artifactpb.FileType_FILE_TYPE_UNSPECIFIED {
+		return nil, fmt.Errorf("file extension is not supported. name: %s err: %w",
+			req.File.Name, customerror.ErrInvalidArgument)
+	}
+
 	if strings.Contains(req.File.Name, "/") {
 		return nil, fmt.Errorf("file name cannot contain '/'. err: %w", customerror.ErrInvalidArgument)
 	}
@@ -91,7 +98,7 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 			Size:             fileSize,
 		}
 
-		// create catalog file
+		// create catalog file in database
 		res, err = ph.service.Repository.CreateKnowledgeBaseFile(ctx, kbFile, func(FileUID string) error {
 			// upload file to minio
 			err := ph.service.MinIO.UploadBase64File(ctx, destination, req.File.Content, fileTypeConvertToMime(req.File.Type))
@@ -175,23 +182,9 @@ func checkUploadKnowledgeBaseFileRequest(req *artifactpb.UploadCatalogFileReques
 		return fmt.Errorf("file name is required. err: %w", ErrCheckRequiredFields)
 	} else if req.File.Content == "" {
 		return fmt.Errorf("file content is required. err: %w", ErrCheckRequiredFields)
-	} else if req.File.Type == 0 {
-		return fmt.Errorf("file type is required. err: %w", ErrCheckRequiredFields)
-	} else if !checkValidFileType(req.File.Type) {
-		return fmt.Errorf("file type is not supported. err: %w", customerror.ErrInvalidArgument)
 	}
 
 	return nil
-}
-
-// check if type in pdf, markdown or text
-func checkValidFileType(t artifactpb.FileType) bool {
-	if t == artifactpb.FileType_FILE_TYPE_PDF ||
-		t == artifactpb.FileType_FILE_TYPE_MARKDOWN ||
-		t == artifactpb.FileType_FILE_TYPE_TEXT {
-		return true
-	}
-	return false
 }
 
 func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.ListCatalogFilesRequest) (*artifactpb.ListCatalogFilesResponse, error) {
@@ -452,7 +445,39 @@ func fileTypeConvertToMime(t artifactpb.FileType) string {
 		return "text/markdown"
 	case artifactpb.FileType_FILE_TYPE_TEXT:
 		return "text/plain"
+	case artifactpb.FileType_FILE_TYPE_DOC:
+		return "application/msword"
+	case artifactpb.FileType_FILE_TYPE_DOCX:
+		return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+	case artifactpb.FileType_FILE_TYPE_HTML:
+		return "text/html"
+	case artifactpb.FileType_FILE_TYPE_PPT:
+		return "application/vnd.ms-powerpoint"
+	case artifactpb.FileType_FILE_TYPE_PPTX:
+		return "application/vnd.openxmlformats-officedocument.presentationml.presentation"
 	default:
 		return "application/octet-stream"
 	}
+}
+
+// DetermineFileType determine the file type by its extension
+func DetermineFileType(fileName string) artifactpb.FileType {
+	if strings.HasSuffix(fileName, ".pdf") {
+		return artifactpb.FileType_FILE_TYPE_PDF
+	} else if strings.HasSuffix(fileName, ".md") {
+		return artifactpb.FileType_FILE_TYPE_MARKDOWN
+	} else if strings.HasSuffix(fileName, ".txt") {
+		return artifactpb.FileType_FILE_TYPE_TEXT
+	} else if strings.HasSuffix(fileName, ".doc") {
+		return artifactpb.FileType_FILE_TYPE_DOC
+	} else if strings.HasSuffix(fileName, ".docx") {
+		return artifactpb.FileType_FILE_TYPE_DOCX
+	} else if strings.HasSuffix(fileName, ".html") {
+		return artifactpb.FileType_FILE_TYPE_HTML
+	} else if strings.HasSuffix(fileName, ".ppt") {
+		return artifactpb.FileType_FILE_TYPE_PPT
+	} else if strings.HasSuffix(fileName, ".pptx") {
+		return artifactpb.FileType_FILE_TYPE_PPTX
+	}
+	return artifactpb.FileType_FILE_TYPE_UNSPECIFIED
 }
