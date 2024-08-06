@@ -227,7 +227,7 @@ func (r *Repository) ListKnowledgeBaseFiles(ctx context.Context, uid string, own
 	} else if pageSize <= 0 {
 		pageSize = 10
 	}
-	pageSizeAddOne:= pageSize +  1 // to get the next page token
+	pageSizeAddOne := pageSize + 1 // to get the next page token
 	query = query.Limit(int(pageSizeAddOne))
 
 	if nextPageToken != "" {
@@ -401,7 +401,12 @@ func (r *Repository) GetSourceTableAndUIDByFileUIDs(ctx context.Context, files [
 				SourceTable: r.KnowledgeBaseFileTableName(),
 				SourceUID:   file.UID,
 			}
-		case artifactpb.FileType_FILE_TYPE_PDF.String():
+		case artifactpb.FileType_FILE_TYPE_PDF.String(),
+			artifactpb.FileType_FILE_TYPE_HTML.String(),
+			artifactpb.FileType_FILE_TYPE_DOC.String(),
+			artifactpb.FileType_FILE_TYPE_DOCX.String(),
+			artifactpb.FileType_FILE_TYPE_PPT.String(),
+			artifactpb.FileType_FILE_TYPE_PPTX.String():
 			convertedFile, err := r.GetConvertedFileByFileUID(ctx, file.UID)
 			if err != nil {
 				if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -483,7 +488,12 @@ func (r *Repository) GetTruthSourceByFileUID(ctx context.Context, fileUID uuid.U
 		dest = file.Destination
 		createTime = *file.CreateTime
 	// if the file type is pdf, get the converted file destination
-	case artifactpb.FileType_FILE_TYPE_PDF.String():
+	case artifactpb.FileType_FILE_TYPE_PDF.String(),
+		artifactpb.FileType_FILE_TYPE_HTML.String(),
+		artifactpb.FileType_FILE_TYPE_DOC.String(),
+		artifactpb.FileType_FILE_TYPE_DOCX.String(),
+		artifactpb.FileType_FILE_TYPE_PPT.String(),
+		artifactpb.FileType_FILE_TYPE_PPTX.String():
 		convertedFile, err := r.GetConvertedFileByFileUID(ctx, fileUID)
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {

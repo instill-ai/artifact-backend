@@ -45,7 +45,7 @@ func (ph *PublicHandler) ListChunks(ctx context.Context, req *artifactpb.ListChu
 	}
 	if !granted {
 		log.Error("no permission list chunks", zap.String("user_id", authUID), zap.String("kb_id", kbf.KnowledgeBaseUID.String()))
-		return nil, fmt.Errorf(ErrorDeleteKnowledgeBaseMsg, customerror.ErrNoPermission)
+		return nil, fmt.Errorf("no permission list chunks. err: %w", customerror.ErrNoPermission)
 	}
 	sources, err := ph.service.Repository.GetSourceTableAndUIDByFileUIDs(ctx, []repository.KnowledgeBaseFile{kbf})
 	if err != nil {
@@ -110,7 +110,7 @@ func (ph *PublicHandler) UpdateChunk(ctx context.Context, req *artifactpb.Update
 	}
 	if !granted {
 		log.Error("no permission update chunks", zap.String("user_id", authUID), zap.String("kb_id", chunk.KbUID.String()))
-		return nil, fmt.Errorf(ErrorDeleteKnowledgeBaseMsg, customerror.ErrNoPermission)
+		return nil, fmt.Errorf("no permission update chunks. err: %w", customerror.ErrNoPermission)
 	}
 
 	retrievable := req.Retrievable
@@ -164,7 +164,8 @@ func (ph *PublicHandler) GetSourceFile(ctx context.Context, req *artifactpb.GetS
 	}
 	if !granted {
 		log.Error("no permission get source file in GetSourceFile", zap.String("user_id", authUID), zap.String("kb_id", source.KbUID.String()))
-		return nil, fmt.Errorf(ErrorDeleteKnowledgeBaseMsg, customerror.ErrNoPermission)
+
+		return nil, fmt.Errorf("no permission get source file in GetSourceFile. err %w. kbUID: %s. user:%s", customerror.ErrNoPermission, source.KbUID.String(), authUID)
 	}
 
 	// get the source file content from minIO using dest of source
