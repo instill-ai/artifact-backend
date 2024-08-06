@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.1-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.9.0-alpha...v0.9.1-alpha) (2024-08-06)
+
+
+### Bug Fixes
+
+* **catalog:** fix topk to topK ([#65](https://github.com/instill-ai/artifact-backend/issues/65)) ([5ff89fe](https://github.com/instill-ai/artifact-backend/commit/5ff89fee57b2983c746ddde9d5b4c8a75cc6c78b))
+
 ## [0.9.0-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.8.1-alpha...v0.9.0-alpha) (2024-08-05)
 
 
