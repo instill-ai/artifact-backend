@@ -63,8 +63,8 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
 	}
 	if !granted {
-		log.Error("no permission to delete catalog")
-		return nil, fmt.Errorf(ErrorDeleteKnowledgeBaseMsg, customerror.ErrNoPermission)
+		log.Error("no permission to upload file in catalog")
+		return nil, fmt.Errorf("no permission to upload file. %w", customerror.ErrNoPermission)
 	}
 
 	// upload file to minio and database
@@ -219,8 +219,8 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
 	}
 	if !granted {
-		log.Error("no permission to delete catalog")
-		return nil, fmt.Errorf(ErrorDeleteKnowledgeBaseMsg, customerror.ErrNoPermission)
+		log.Error("no permission to list catalog files")
+		return nil, fmt.Errorf("no permission to list catalog files. %w", customerror.ErrNoPermission)
 	}
 
 	// fetch the catalog files
@@ -307,8 +307,8 @@ func (ph *PublicHandler) DeleteCatalogFile(
 		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
 	}
 	if !granted {
-		log.Error("no permission to delete catalog")
-		return nil, fmt.Errorf(ErrorDeleteKnowledgeBaseMsg, customerror.ErrNoPermission)
+		log.Error("no permission to delete catalog file")
+		return nil, fmt.Errorf("no permission to delete catalog file. err: %w", customerror.ErrNoPermission)
 	}
 	// check if file uid is empty
 	if req.FileUid == "" {

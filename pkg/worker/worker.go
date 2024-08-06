@@ -331,7 +331,12 @@ func (wp *fileToEmbWorkerPool) processWaitingFile(ctx context.Context, file repo
 	switch file.Type {
 
 	// Deal with pdf files
-	case artifactpb.FileType_name[int32(artifactpb.FileType_FILE_TYPE_PDF)]:
+	case artifactpb.FileType_FILE_TYPE_PDF.String(),
+		artifactpb.FileType_FILE_TYPE_DOC.String(),
+		artifactpb.FileType_FILE_TYPE_DOCX.String(),
+		artifactpb.FileType_FILE_TYPE_PPT.String(),
+		artifactpb.FileType_FILE_TYPE_PPTX.String(),
+		artifactpb.FileType_FILE_TYPE_HTML.String():
 
 		updateMap := map[string]interface{}{
 			repository.KnowledgeBaseFileColumn.ProcessStatus: artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CONVERTING)],
@@ -378,7 +383,7 @@ func (wp *fileToEmbWorkerPool) processConvertingFile(ctx context.Context, file r
 	base64Data := base64.StdEncoding.EncodeToString(data)
 
 	// convert the pdf file to md
-	convertedMD, err := wp.svc.ConvertPDFToMD(ctx, file.CreatorUID, base64Data)
+	convertedMD, err := wp.svc.ConvertPDFToMD(ctx, file.CreatorUID, base64Data, artifactpb.FileType(artifactpb.FileType_value[file.Type]))
 	if err != nil {
 		logger.Error("Failed to convert pdf to md.", zap.String("File path", fileInMinIOPath))
 		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
@@ -419,7 +424,12 @@ func (wp *fileToEmbWorkerPool) processChunkingFile(ctx context.Context, file rep
 	// check the file type
 	switch file.Type {
 	// get the file from minIO (check destination from converted file table) and call the chunking pipeline
-	case artifactpb.FileType_name[int32(artifactpb.FileType_FILE_TYPE_PDF)]:
+	case artifactpb.FileType_FILE_TYPE_PDF.String(),
+		artifactpb.FileType_FILE_TYPE_DOC.String(),
+		artifactpb.FileType_FILE_TYPE_DOCX.String(),
+		artifactpb.FileType_FILE_TYPE_PPT.String(),
+		artifactpb.FileType_FILE_TYPE_PPTX.String(),
+		artifactpb.FileType_FILE_TYPE_HTML.String():
 		// get the converted file metadata from database
 		convertedFile, err := wp.svc.Repository.GetConvertedFileByFileUID(ctx, file.UID)
 		if err != nil {
@@ -540,7 +550,12 @@ func (wp *fileToEmbWorkerPool) processEmbeddingFile(ctx context.Context, file re
 	var sourceTable string
 	var sourceUID uuid.UUID
 	switch file.Type {
-	case artifactpb.FileType_name[int32(artifactpb.FileType_FILE_TYPE_PDF)]:
+	case artifactpb.FileType_FILE_TYPE_PDF.String(),
+		artifactpb.FileType_FILE_TYPE_HTML.String(),
+		artifactpb.FileType_FILE_TYPE_DOC.String(),
+		artifactpb.FileType_FILE_TYPE_DOCX.String(),
+		artifactpb.FileType_FILE_TYPE_PPT.String(),
+		artifactpb.FileType_FILE_TYPE_PPTX.String():
 		// set the sourceTable and sourceUID
 		convertedFile, err := wp.svc.Repository.GetConvertedFileByFileUID(ctx, file.UID)
 		if err != nil {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/gofrs/uuid"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
+	artifactv1alpha "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	pipelinev1beta "github.com/instill-ai/protogen-go/vdp/pipeline/v1beta"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/metadata"
@@ -16,9 +17,9 @@ import (
 const chunkLength = 800
 const chunkOverlap = 200
 const NamespaceID = "preset"
-const PDFToMDVersion = "v1.0.0"
-const MdSplitVersion = "v1.0.1"
-const TextSplitVersion = "v1.0.0"
+const PDFToMDVersion = "v1.1.1"
+const MdSplitVersion = "v2.0.0"
+const TextSplitVersion = "v2.0.0"
 const TextEmbedVersion = "v1.1.0"
 const ConverPDFToMDPipelineID = "indexing-convert-pdf"
 const MdSplitPipelineID = "indexing-split-markdown"
@@ -26,10 +27,26 @@ const TextSplitPipelineID = "indexing-split-text"
 const TextEmbedPipelineID = "indexing-embed"
 
 // ConvertPDFToMD using converting pipeline to convert PDF to MD and consume caller's credits
-func (s *Service) ConvertPDFToMD(ctx context.Context, caller uuid.UUID, pdfBase64 string) (string, error) {
+func (s *Service) ConvertPDFToMD(ctx context.Context, caller uuid.UUID, pdfBase64 string, fileType artifactv1alpha.FileType) (string, error) {
 	logger, _ := logger.GetZapLogger(ctx)
 	md := metadata.New(map[string]string{"Instill-User-Uid": caller.String(), "Instill-Auth-Type": "user"})
 	ctx = metadata.NewOutgoingContext(ctx, md)
+	prefix := ""
+	if fileType == artifactv1alpha.FileType_FILE_TYPE_PDF {
+		prefix = "data:application/pdf;base64,"
+	} else if fileType == artifactv1alpha.FileType_FILE_TYPE_DOCX {
+		prefix = "data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,"
+	} else if fileType == artifactv1alpha.FileType_FILE_TYPE_DOC {
+		prefix = "data:application/msword;base64,"
+	} else if fileType == artifactv1alpha.FileType_FILE_TYPE_PPT {
+		prefix = "data:application/vnd.ms-powerpoint;base64,"
+	} else if fileType == artifactv1alpha.FileType_FILE_TYPE_PPTX {
+		prefix = "data:application/vnd.openxmlformats-officedocument.presentationml.presentation;base64,"
+	} else if fileType == artifactv1alpha.FileType_FILE_TYPE_HTML {
+		prefix = "data:text/html;base64,"
+	} else if fileType == artifactv1alpha.FileType_FILE_TYPE_TEXT {
+		prefix = "data:text/plain;base64,"
+	}
 
 	req := &pipelinev1beta.TriggerNamespacePipelineReleaseRequest{
 		NamespaceId: NamespaceID,
@@ -38,7 +55,7 @@ func (s *Service) ConvertPDFToMD(ctx context.Context, caller uuid.UUID, pdfBase6
 		Inputs: []*structpb.Struct{
 			{
 				Fields: map[string]*structpb.Value{
-					"document_input": {Kind: &structpb.Value_StringValue{StringValue: pdfBase64}},
+					"document_input": {Kind: &structpb.Value_StringValue{StringValue: prefix + pdfBase64}},
 				},
 			},
 		},
@@ -115,6 +132,7 @@ func GetChunksFromResponse(resp *pipelinev1beta.TriggerNamespacePipelineReleaseR
 		return nil, errors.New("response is nil or has no outputs")
 	}
 	splitResult, ok := resp.Outputs[0].GetFields()["split_result"]
+
 	if !ok {
 		return nil, errors.New("split_result not found in the output fields")
 	}
@@ -128,10 +146,12 @@ func GetChunksFromResponse(resp *pipelinev1beta.TriggerNamespacePipelineReleaseR
 		endPos := int(v.GetStructValue().Fields["end-position"].GetNumberValue())
 		startPos := int(v.GetStructValue().Fields["start-position"].GetNumberValue())
 		text := v.GetStructValue().Fields["text"].GetStringValue()
+		tokenCount := int(v.GetStructValue().Fields["token-count"].GetNumberValue())
 		chunks = append(chunks, Chunk{
-			End:   endPos,
-			Start: startPos,
-			Text:  text,
+			End:    endPos,
+			Start:  startPos,
+			Text:   text,
+			Tokens: tokenCount,
 		})
 	}
 	return chunks, nil
@@ -149,9 +169,9 @@ func (s *Service) SplitText(ctx context.Context, caller uuid.UUID, text string) 
 		Inputs: []*structpb.Struct{
 			{
 				Fields: map[string]*structpb.Value{
-					"text_input":    {Kind: &structpb.Value_StringValue{StringValue: text}},
-					"chunk_length":  {Kind: &structpb.Value_NumberValue{NumberValue: chunkLength}},
-					"chunk_overlap": {Kind: &structpb.Value_NumberValue{NumberValue: chunkOverlap}},
+					"text_input":       {Kind: &structpb.Value_StringValue{StringValue: text}},
+					"max_chunk_length": {Kind: &structpb.Value_NumberValue{NumberValue: chunkLength}},
+					"chunk_overlap":    {Kind: &structpb.Value_NumberValue{NumberValue: chunkOverlap}},
 				},
 			},
 		},
@@ -169,45 +189,45 @@ func (s *Service) SplitText(ctx context.Context, caller uuid.UUID, text string) 
 
 // VectorizeText using embedding pipeline to vectorize text and consume caller's credits
 func (s *Service) VectorizeText(ctx context.Context, caller uuid.UUID, texts []string) ([][]float32, error) {
-    const maxBatchSize = 32
-    md := metadata.New(map[string]string{"Instill-User-Uid": caller.String(), "Instill-Auth-Type": "user"})
-    ctx = metadata.NewOutgoingContext(ctx, md)
-    var allResults [][]float32
+	const maxBatchSize = 32
+	md := metadata.New(map[string]string{"Instill-User-Uid": caller.String(), "Instill-Auth-Type": "user"})
+	ctx = metadata.NewOutgoingContext(ctx, md)
+	var allResults [][]float32
 
-    for i := 0; i < len(texts); i += maxBatchSize {
-        end := i + maxBatchSize
-        if end > len(texts) {
-            end = len(texts)
-        }
-        batch := texts[i:end]
+	for i := 0; i < len(texts); i += maxBatchSize {
+		end := i + maxBatchSize
+		if end > len(texts) {
+			end = len(texts)
+		}
+		batch := texts[i:end]
 
-        inputs := make([]*structpb.Struct, 0, len(batch))
-        for _, text := range batch {
-            inputs = append(inputs, &structpb.Struct{
-                Fields: map[string]*structpb.Value{
-                    "chunk_input": {Kind: &structpb.Value_StringValue{StringValue: text}},
-                },
-            })
-        }
+		inputs := make([]*structpb.Struct, 0, len(batch))
+		for _, text := range batch {
+			inputs = append(inputs, &structpb.Struct{
+				Fields: map[string]*structpb.Value{
+					"chunk_input": {Kind: &structpb.Value_StringValue{StringValue: text}},
+				},
+			})
+		}
 
-        req := &pipelinev1beta.TriggerNamespacePipelineReleaseRequest{
-            NamespaceId: NamespaceID,
-            PipelineId:  TextEmbedPipelineID,
-            ReleaseId:   TextEmbedVersion,
-            Inputs:      inputs,
-        }
-        res, err := s.PipelinePub.TriggerNamespacePipelineRelease(ctx, req)
-        if err != nil {
-            return nil, fmt.Errorf("failed to trigger %s pipeline. err:%w", TextEmbedPipelineID, err)
-        }
-        result, err := GetVectorFromResponse(res)
-        if err != nil {
-            return nil, fmt.Errorf("failed to get vector from response: %w", err)
-        }
-        allResults = append(allResults, result...)
-    }
+		req := &pipelinev1beta.TriggerNamespacePipelineReleaseRequest{
+			NamespaceId: NamespaceID,
+			PipelineId:  TextEmbedPipelineID,
+			ReleaseId:   TextEmbedVersion,
+			Inputs:      inputs,
+		}
+		res, err := s.PipelinePub.TriggerNamespacePipelineRelease(ctx, req)
+		if err != nil {
+			return nil, fmt.Errorf("failed to trigger %s pipeline. err:%w", TextEmbedPipelineID, err)
+		}
+		result, err := GetVectorFromResponse(res)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get vector from response: %w", err)
+		}
+		allResults = append(allResults, result...)
+	}
 
-    return allResults, nil
+	return allResults, nil
 }
 
 // GetVectorFromResponse converts the pipeline response into a slice of float32.
