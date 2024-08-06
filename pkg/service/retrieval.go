@@ -36,7 +36,7 @@ func (s *Service) SimilarityChunksSearch(ctx context.Context, caller uuid.UUID, 
 	t = time.Now()
 
 	// search similar embeddings in kb
-	simEmbeddings, err := s.MilvusClient.SearchSimilarEmbeddingsInKB(ctx, kb.UID.String(), textVector, int(req.Topk))
+	simEmbeddings, err := s.MilvusClient.SearchSimilarEmbeddingsInKB(ctx, kb.UID.String(), textVector, int(req.TopK))
 	if err != nil {
 		log.Error("failed to search similar embeddings in kb", zap.Error(err))
 		return nil, fmt.Errorf("failed to search similar embeddings in kb. err: %w", err)
