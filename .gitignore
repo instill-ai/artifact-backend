@@ -125,3 +125,14 @@ test_pdf_base64.txt
 cmd/main/__debug_bin*
 .test
 test_converted_pdf_.md
+test.doc
+test.docx
+test.html
+test.ppt
+test.pptx
+
+test.doc.txt
+test.docx.txt
+test.html.txt
+test.ppt.txt
+test.pptx.txt
