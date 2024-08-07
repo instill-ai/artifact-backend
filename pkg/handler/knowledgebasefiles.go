@@ -14,12 +14,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// 15MB
-const maxFileSize = 15 * 1024 * 1024
-
-// 1GB
-const KnowledgeBaseMaxUsage = 1024 * 1024 * 1024
-
 func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.UploadCatalogFileRequest) (*artifactpb.UploadCatalogFileResponse, error) {
 	log, _ := logger.GetZapLogger(ctx)
 	authUID, err := getUserUIDFromContext(ctx)
@@ -67,6 +61,22 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 		return nil, fmt.Errorf("no permission to upload file. %w", customerror.ErrNoPermission)
 	}
 
+	// get all kbs in the namespace
+	kbs, err := ph.service.Repository.ListKnowledgeBases(ctx, ns.NsUID.String())
+	if err != nil {
+		log.Error("failed to list catalog", zap.Error(err))
+		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
+	}
+	totalUsageInNamespace := int64(0)
+	for _, kb := range kbs {
+		totalUsageInNamespace += kb.Usage
+	}
+	// get tier of the namespace
+	tier, err := ph.service.GetNamespaceTierByNsID(ctx, ns.NsID)
+	if err != nil {
+		log.Error("failed to get namespace tier", zap.Error(err))
+		return nil, fmt.Errorf("failed to get namespace tier. err: %w", err)
+	}
 	// upload file to minio and database
 	var res *repository.KnowledgeBaseFile
 	{
@@ -77,13 +87,14 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 		}
 
 		fileSize, _ := getFileSize(req.File.Content)
-		// check if file size is more than 15MB
-		if fileSize > maxFileSize {
-			return nil, fmt.Errorf("file size is more than 15MB. err: %w", customerror.ErrInvalidArgument)
+		// check if file size is more than 150MB
+		if fileSize > int64(tier.GetMaxUploadFileSize()) {
+			return nil, fmt.Errorf("file size is more than %v. err: %w", tier.GetMaxUploadFileSize(), customerror.ErrInvalidArgument)
 		}
 
-		if kb.Usage+fileSize > KnowledgeBaseMaxUsage {
-			return nil, fmt.Errorf("catalog 1 GB exceeded. err: %w", customerror.ErrInvalidArgument)
+		// check if total usage in namespace
+		if totalUsageInNamespace+fileSize > int64(tier.GetFileStorageTotalQuota()) {
+			return nil, fmt.Errorf("file storage totalquota exceeded. err: %w", customerror.ErrInvalidArgument)
 		}
 
 		destination := ph.service.MinIO.GetUploadedFilePathInKnowledgeBase(kb.UID.String(), req.File.Name)
