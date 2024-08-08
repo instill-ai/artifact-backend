@@ -63,8 +63,15 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 		log.Error("failed to get catalog count", zap.Error(err))
 		return nil, fmt.Errorf(ErrorCreateKnowledgeBaseMsg, err)
 	}
-	if kbCount >= KnowledgeBaseMaxCount {
-		err := fmt.Errorf("user has reached the 3 maximum number of catalogs: %v. ", kbCount)
+	tier, err := ph.service.GetNamespaceTier(ctx, ns)
+	if err != nil {
+		log.Error("failed to get namespace tier", zap.Error(err))
+		return nil, fmt.Errorf(ErrorCreateKnowledgeBaseMsg, err)
+	}
+	if kbCount >= int64(tier.GetPrivateCatalogLimit()) {
+		err := fmt.Errorf(
+			"user has reached the %v maximum number of catalogs. current tier:%v ",
+			tier.GetPrivateCatalogLimit(), tier)
 		return nil, err
 	}
 
