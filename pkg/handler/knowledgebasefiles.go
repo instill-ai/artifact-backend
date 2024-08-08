@@ -72,7 +72,7 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 		totalUsageInNamespace += kb.Usage
 	}
 	// get tier of the namespace
-	tier, err := ph.service.GetNamespaceTierByNsID(ctx, ns.NsID)
+	tier, err := ph.service.GetNamespaceTier(ctx, ns)
 	if err != nil {
 		log.Error("failed to get namespace tier", zap.Error(err))
 		return nil, fmt.Errorf("failed to get namespace tier. err: %w", err)
@@ -87,14 +87,21 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 		}
 
 		fileSize, _ := getFileSize(req.File.Content)
+
 		// check if file size is more than 150MB
 		if fileSize > int64(tier.GetMaxUploadFileSize()) {
-			return nil, fmt.Errorf("file size is more than %v. err: %w", tier.GetMaxUploadFileSize(), customerror.ErrInvalidArgument)
+			return nil, fmt.Errorf(
+				"file size is more than %v. err: %w",
+				tier.GetMaxUploadFileSize(),
+				customerror.ErrInvalidArgument)
 		}
 
 		// check if total usage in namespace
-		if totalUsageInNamespace+fileSize > int64(tier.GetFileStorageTotalQuota()) {
-			return nil, fmt.Errorf("file storage totalquota exceeded. err: %w", customerror.ErrInvalidArgument)
+		quota, humanReadable := tier.GetFileStorageTotalQuota()
+		if totalUsageInNamespace+fileSize > int64(quota) {
+			return nil, fmt.Errorf(
+				"file storage totalquota exceeded. max: %v. tier:%v, err: %w",
+				humanReadable, tier.String(), customerror.ErrInvalidArgument)
 		}
 
 		destination := ph.service.MinIO.GetUploadedFilePathInKnowledgeBase(kb.UID.String(), req.File.Name)
