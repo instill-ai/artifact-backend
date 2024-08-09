@@ -79,8 +79,10 @@ package grpcclient
 // 	md := metadata.New(map[string]string{"Instill-User-Uid": "admin", "Instill-Auth-Type": "user"})
 // 	ctx := metadata.NewOutgoingContext(context.Background(), md)
 // 	pipelinePublicServiceClient := pipelinev1beta.NewPipelinePublicServiceClient(pipelinePublicGrpcConn)
-// 	req := &pipelinev1beta.TriggerOrganizationPipelineReleaseRequest{
-// 		Name: "organizations/preset/pipelines/indexing-embed/releases/v1.1.0",
+// 	req := &pipelinev1beta.TriggerNamespacePipelineReleaseRequest{
+// 		NamespaceId: "preset",
+// 		PipelineId:  "indexing-embed",
+// 		ReleaseId:   "v1.0.0",
 // 		Data: []*pipelinev1beta.TriggerData{
 // 			{
 // 				Variable: &structpb.Struct{
@@ -99,7 +101,7 @@ package grpcclient
 // 		},
 // 		Inputs: []*structpb.Struct{{Fields: map[string]*structpb.Value{"chunk_input": {Kind: &structpb.Value_StringValue{StringValue: "test"}}}}},
 // 	}
-// 	res, err := pipelinePublicServiceClient.TriggerOrganizationPipelineRelease(ctx, req)
+// 	res, err := pipelinePublicServiceClient.TriggerNamespacePipelineRelease(ctx, req)
 // 	if err != nil {
 // 		t.Fatalf("failed to trigger pipeline: %v", err)
 // 	}
@@ -291,4 +293,47 @@ package grpcclient
 // 		fmt.Println("startPos", startPos)
 // 		fmt.Println("text", text[:10])
 // 	}
+// }
+
+// // test question answering pipeline on ce
+// func TestCEPresetQAReleaseRequest(t *testing.T) {
+// 	// print the current folder
+// 	dir, err := os.Getwd()
+// 	if err != nil {
+// 		fmt.Println(err)
+// 	}
+// 	fmt.Println("current working director:", dir)
+// 	pipelinePublicGrpcConn, err := NewGRPCConn("localhost:8081", "", "")
+// 	if err != nil {
+// 		t.Fatalf("failed to create grpc connection: %v", err)
+// 	}
+// 	defer pipelinePublicGrpcConn.Close()
+// 	// Replace "your-user-uid" with the actual UID you want to send
+// 	md := metadata.New(map[string]string{
+// 		"Instill-User-Uid":      "admin",
+// 		"Instill-Auth-Type":     "user",
+// 		"Instill-Requester-Uid": "",
+// 	})
+// 	ctx := metadata.NewOutgoingContext(context.Background(), md)
+// 	pipelinePublicServiceClient := pipelinev1beta.NewPipelinePublicServiceClient(pipelinePublicGrpcConn)
+
+// 	req := &pipelinev1beta.TriggerNamespacePipelineReleaseRequest{
+// 		NamespaceId: "preset",
+// 		PipelineId:  "retrieving-qna",
+// 		ReleaseId:   "v1.1.0",
+// 		Inputs: []*structpb.Struct{
+// 			{
+// 				Fields: map[string]*structpb.Value{
+// 					"retrieved_chunk": {Kind: &structpb.Value_StringValue{StringValue: "file's name is ABC"}},
+// 					"user_question":   {Kind: &structpb.Value_StringValue{StringValue: "What is the name of the file?"}},
+// 				},
+// 			},
+// 		},
+// 	}
+// 	res, err := pipelinePublicServiceClient.TriggerNamespacePipelineRelease(ctx, req)
+// 	if err != nil {
+// 		t.Fatalf("failed to trigger pipeline: %v", err)
+// 	}
+// 	t.Logf("pipeline triggered successfully")
+// 	fmt.Println("QA result\n", res.Outputs[0].GetFields()["assistant_reply"].GetStringValue())
 // }

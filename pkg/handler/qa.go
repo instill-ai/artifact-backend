@@ -6,28 +6,32 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
+	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/customerror"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
+	"github.com/instill-ai/artifact-backend/pkg/resource"
 	"github.com/instill-ai/artifact-backend/pkg/service"
 	artifactv1alpha "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	"go.uber.org/zap"
 )
 
-func (ph *PublicHandler) SimilarityChunksSearch(
-	ctx context.Context, req *artifactv1alpha.SimilarityChunksSearchRequest) (
-	*artifactv1alpha.SimilarityChunksSearchResponse,
+// TODO
+func (ph *PublicHandler) QuestionAnswering(
+	ctx context.Context,
+	req *artifactv1alpha.QuestionAnsweringRequest) (
+	*artifactv1alpha.QuestionAnsweringResponse,
 	error) {
 
 	log, _ := logger.GetZapLogger(ctx)
 
-	uid, err := getUserUIDFromContext(ctx)
+	authUser, err := getUserUIDFromContext(ctx)
 	if err != nil {
 		log.Error("failed to get user id from header", zap.Error(err))
 		return nil, fmt.Errorf("failed to get user id from header: %v. err: %w", err, customerror.ErrUnauthenticated)
 	}
 	// turn uid to uuid
-	uidUUID, err := uuid.FromString(uid)
+	authUserUUID, err := uuid.FromString(authUser)
 	if err != nil {
 		log.Error("failed to parse user id", zap.Error(err))
 		return nil, fmt.Errorf("failed to parse user id: %v. err: %w", err, customerror.ErrUnauthenticated)
@@ -43,8 +47,8 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 	ownerUID := ns.NsUID
 	kb, err := ph.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID.String(), req.CatalogId)
 	if err != nil {
-		log.Error("failed to get catalog by owner and kb id", zap.Error(err))
-		return nil, fmt.Errorf("failed to get catalog by owner and kb id. err: %w", err)
+		log.Error("failed to get catalog by namespace and catalog id", zap.Error(err))
+		return nil, fmt.Errorf("failed to get catalog by namespace and catalog id. err: %w", err)
 	}
 	log.Info("get catalog by owner and kb id", zap.Duration("duration", time.Since(t)))
 	t = time.Now()
@@ -55,15 +59,36 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 		return nil, fmt.Errorf("failed to check permission. err: %w", err)
 	}
 	if !granted {
-		log.Error("permission denied", zap.String("user_id", uid), zap.String("kb_id", kb.UID.String()))
+		log.Error("permission denied", zap.String("user_id", authUser), zap.String("kb_id", kb.UID.String()))
 		return nil, fmt.Errorf("SimilarityChunksSearch permission denied. err: %w", service.ErrNoPermission)
 	}
 	log.Info("check permission", zap.Duration("duration", time.Since(t)))
 	t = time.Now()
+	// check auth user has access to the requester
+	err = ph.service.ACLClient.CheckRequesterPermission(ctx)
+	if err != nil {
+		log.Error("failed to check requester permission", zap.Error(err))
+		return nil, fmt.Errorf("failed to check requester permission. err: %w", err)
+	}
+
 	// retrieve the chunks based on the similarity
-	// FIXME: requesterUID is not set correctly
-	requesterUID := uuid.Nil
-	simChunksScroes, err := ph.service.SimilarityChunksSearch(ctx, uidUUID, requesterUID, ownerUID.String(), req)
+	scReq := &artifactv1alpha.SimilarityChunksSearchRequest{
+		TextPrompt:  req.GetQuestion(),
+		TopK:        uint32(req.GetTopK()),
+		CatalogId:   req.GetCatalogId(),
+		NamespaceId: req.GetNamespaceId(),
+	}
+
+	requester := resource.GetRequestSingleHeader(ctx, constant.HeaderRequesterUIDKey)
+	requesterUUID := uuid.Nil
+	if requester != "" {
+		requesterUUID, err = uuid.FromString(requester)
+		if err != nil {
+			log.Error("failed to parse requester id", zap.Error(err))
+			return nil, fmt.Errorf("failed to parse requester uid: %v. err: %w", err, customerror.ErrUnauthenticated)
+		}
+	}
+	simChunksScroes, err := ph.service.SimilarityChunksSearch(ctx, authUserUUID, requesterUUID, ownerUID.String(), scReq)
 	if err != nil {
 		log.Error("failed to get similarity chunks", zap.Error(err))
 		return nil, fmt.Errorf("failed to get similarity chunks. err: %w", err)
@@ -129,5 +154,14 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 			SourceFile:      fileUIDMapName[chunk.KbFileUID],
 		})
 	}
-	return &artifactv1alpha.SimilarityChunksSearchResponse{SimilarChunks: simChunks}, nil
+	chunksForQA := make([]string, 0, len(simChunks))
+	for _, simChunk := range simChunks {
+		chunksForQA = append(chunksForQA, simChunk.TextContent)
+	}
+	answer, err := ph.service.QuestionAnsweringPipe(ctx, authUserUUID, requesterUUID, req.Question, chunksForQA)
+	if err != nil {
+		log.Error("failed to get question answering response", zap.Error(err))
+		return nil, fmt.Errorf("failed to get question answering response. err: %w", err)
+	}
+	return &artifactv1alpha.QuestionAnsweringResponse{SimilarChunks: simChunks, Answer: answer}, nil
 }
