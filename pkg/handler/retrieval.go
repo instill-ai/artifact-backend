@@ -6,9 +6,11 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
+	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/customerror"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
+	"github.com/instill-ai/artifact-backend/pkg/resource"
 	"github.com/instill-ai/artifact-backend/pkg/service"
 	artifactv1alpha "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	"go.uber.org/zap"
@@ -60,9 +62,15 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 	}
 	log.Info("check permission", zap.Duration("duration", time.Since(t)))
 	t = time.Now()
+	// check auth user has access to the requester
+	err = ph.service.ACLClient.CheckRequesterPermission(ctx)
+	if err != nil {
+		log.Error("failed to check requester permission", zap.Error(err))
+		return nil, fmt.Errorf("failed to check requester permission. err: %w", err)
+	}
+	reqUIDString := resource.GetRequestSingleHeader(ctx, constant.HeaderRequesterUIDKey)
+	requesterUID := uuid.FromStringOrNil(reqUIDString)
 	// retrieve the chunks based on the similarity
-	// FIXME: requesterUID is not set correctly
-	requesterUID := uuid.Nil
 	simChunksScroes, err := ph.service.SimilarityChunksSearch(ctx, uidUUID, requesterUID, ownerUID.String(), req)
 	if err != nil {
 		log.Error("failed to get similarity chunks", zap.Error(err))

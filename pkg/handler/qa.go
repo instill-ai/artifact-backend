@@ -16,7 +16,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// TODO
+
 func (ph *PublicHandler) QuestionAnswering(
 	ctx context.Context,
 	req *artifactv1alpha.QuestionAnsweringRequest) (

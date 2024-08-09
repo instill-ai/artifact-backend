@@ -6,9 +6,11 @@ import (
 	"strings"
 
 	"github.com/gofrs/uuid"
+	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/customerror"
 	"github.com/instill-ai/artifact-backend/pkg/logger" // Add this import
 	"github.com/instill-ai/artifact-backend/pkg/repository"
+	"github.com/instill-ai/artifact-backend/pkg/resource"
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -396,12 +398,8 @@ func (ph *PublicHandler) DeleteCatalogFile(
 }
 
 func (ph *PublicHandler) ProcessCatalogFiles(ctx context.Context, req *artifactpb.ProcessCatalogFilesRequest) (*artifactpb.ProcessCatalogFilesResponse, error) {
-	// uid, err := getUserIDFromContext(ctx)
-	// if err != nil {
-	// 	err := fmt.Errorf("failed to get user id from header: %v. err: %w", err, customerror.ErrUnauthenticated)
-	// 	return nil, err
-	// }
 
+	log, _ := logger.GetZapLogger(ctx)
 	// ACL - check if the uid can process file. ACL.
 	// chekc the fiels's kb_uid and use kb_uid to check if user has write permission
 	fileUUIDs := make([]uuid.UUID, 0, len(req.FileUids))
@@ -430,7 +428,17 @@ func (ph *PublicHandler) ProcessCatalogFiles(ctx context.Context, req *artifactp
 		}
 	}
 
-	files, err := ph.service.Repository.ProcessKnowledgeBaseFiles(ctx, req.FileUids)
+	// check auth user has access to the requester
+	err = ph.service.ACLClient.CheckRequesterPermission(ctx)
+	if err != nil {
+		log.Error("failed to check requester permission", zap.Error(err))
+		return nil, fmt.Errorf("failed to check requester permission. err: %w", err)
+	}
+
+	requesterUID := resource.GetRequestSingleHeader(ctx, constant.HeaderRequesterUIDKey)
+	requesterUUID := uuid.FromStringOrNil(requesterUID)
+
+	files, err := ph.service.Repository.ProcessKnowledgeBaseFiles(ctx, req.FileUids, requesterUUID)
 	if err != nil {
 		return nil, err
 	}
