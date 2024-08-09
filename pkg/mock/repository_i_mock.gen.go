@@ -12,7 +12,7 @@ import (
 	"github.com/gojuno/minimock/v3"
 	mm_repository "github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
-	pb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	pb  "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
 // RepositoryIMock implements repository.RepositoryI
@@ -281,8 +281,8 @@ type RepositoryIMock struct {
 	beforeListKnowledgeBasesCounter uint64
 	ListKnowledgeBasesMock          mRepositoryIMockListKnowledgeBases
 
-	funcProcessKnowledgeBaseFiles          func(ctx context.Context, fileUids []string) (ka1 []mm_repository.KnowledgeBaseFile, err error)
-	inspectFuncProcessKnowledgeBaseFiles   func(ctx context.Context, fileUids []string)
+	funcProcessKnowledgeBaseFiles          func(ctx context.Context, fileUIDs []string, requester uuid.UUID) (ka1 []mm_repository.KnowledgeBaseFile, err error)
+	inspectFuncProcessKnowledgeBaseFiles   func(ctx context.Context, fileUIDs []string, requester uuid.UUID)
 	afterProcessKnowledgeBaseFilesCounter  uint64
 	beforeProcessKnowledgeBaseFilesCounter uint64
 	ProcessKnowledgeBaseFilesMock          mRepositoryIMockProcessKnowledgeBaseFiles
@@ -13246,14 +13246,16 @@ type RepositoryIMockProcessKnowledgeBaseFilesExpectation struct {
 
 // RepositoryIMockProcessKnowledgeBaseFilesParams contains parameters of the RepositoryI.ProcessKnowledgeBaseFiles
 type RepositoryIMockProcessKnowledgeBaseFilesParams struct {
-	ctx      context.Context
-	fileUids []string
+	ctx       context.Context
+	fileUIDs  []string
+	requester uuid.UUID
 }
 
 // RepositoryIMockProcessKnowledgeBaseFilesParamPtrs contains pointers to parameters of the RepositoryI.ProcessKnowledgeBaseFiles
 type RepositoryIMockProcessKnowledgeBaseFilesParamPtrs struct {
-	ctx      *context.Context
-	fileUids *[]string
+	ctx       *context.Context
+	fileUIDs  *[]string
+	requester *uuid.UUID
 }
 
 // RepositoryIMockProcessKnowledgeBaseFilesResults contains results of the RepositoryI.ProcessKnowledgeBaseFiles
@@ -13263,7 +13265,7 @@ type RepositoryIMockProcessKnowledgeBaseFilesResults struct {
 }
 
 // Expect sets up expected params for RepositoryI.ProcessKnowledgeBaseFiles
-func (mmProcessKnowledgeBaseFiles *mRepositoryIMockProcessKnowledgeBaseFiles) Expect(ctx context.Context, fileUids []string) *mRepositoryIMockProcessKnowledgeBaseFiles {
+func (mmProcessKnowledgeBaseFiles *mRepositoryIMockProcessKnowledgeBaseFiles) Expect(ctx context.Context, fileUIDs []string, requester uuid.UUID) *mRepositoryIMockProcessKnowledgeBaseFiles {
 	if mmProcessKnowledgeBaseFiles.mock.funcProcessKnowledgeBaseFiles != nil {
 		mmProcessKnowledgeBaseFiles.mock.t.Fatalf("RepositoryIMock.ProcessKnowledgeBaseFiles mock is already set by Set")
 	}
@@ -13276,7 +13278,7 @@ func (mmProcessKnowledgeBaseFiles *mRepositoryIMockProcessKnowledgeBaseFiles) Ex
 		mmProcessKnowledgeBaseFiles.mock.t.Fatalf("RepositoryIMock.ProcessKnowledgeBaseFiles mock is already set by ExpectParams functions")
 	}
 
-	mmProcessKnowledgeBaseFiles.defaultExpectation.params = &RepositoryIMockProcessKnowledgeBaseFilesParams{ctx, fileUids}
+	mmProcessKnowledgeBaseFiles.defaultExpectation.params = &RepositoryIMockProcessKnowledgeBaseFilesParams{ctx, fileUIDs, requester}
 	for _, e := range mmProcessKnowledgeBaseFiles.expectations {
 		if minimock.Equal(e.params, mmProcessKnowledgeBaseFiles.defaultExpectation.params) {
 			mmProcessKnowledgeBaseFiles.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmProcessKnowledgeBaseFiles.defaultExpectation.params)
@@ -13308,8 +13310,8 @@ func (mmProcessKnowledgeBaseFiles *mRepositoryIMockProcessKnowledgeBaseFiles) Ex
 	return mmProcessKnowledgeBaseFiles
 }
 
-// ExpectFileUidsParam2 sets up expected param fileUids for RepositoryI.ProcessKnowledgeBaseFiles
-func (mmProcessKnowledgeBaseFiles *mRepositoryIMockProcessKnowledgeBaseFiles) ExpectFileUidsParam2(fileUids []string) *mRepositoryIMockProcessKnowledgeBaseFiles {
+// ExpectFileUIDsParam2 sets up expected param fileUIDs for RepositoryI.ProcessKnowledgeBaseFiles
+func (mmProcessKnowledgeBaseFiles *mRepositoryIMockProcessKnowledgeBaseFiles) ExpectFileUIDsParam2(fileUIDs []string) *mRepositoryIMockProcessKnowledgeBaseFiles {
 	if mmProcessKnowledgeBaseFiles.mock.funcProcessKnowledgeBaseFiles != nil {
 		mmProcessKnowledgeBaseFiles.mock.t.Fatalf("RepositoryIMock.ProcessKnowledgeBaseFiles mock is already set by Set")
 	}
@@ -13325,13 +13327,35 @@ func (mmProcessKnowledgeBaseFiles *mRepositoryIMockProcessKnowledgeBaseFiles) Ex
 	if mmProcessKnowledgeBaseFiles.defaultExpectation.paramPtrs == nil {
 		mmProcessKnowledgeBaseFiles.defaultExpectation.paramPtrs = &RepositoryIMockProcessKnowledgeBaseFilesParamPtrs{}
 	}
-	mmProcessKnowledgeBaseFiles.defaultExpectation.paramPtrs.fileUids = &fileUids
+	mmProcessKnowledgeBaseFiles.defaultExpectation.paramPtrs.fileUIDs = &fileUIDs
+
+	return mmProcessKnowledgeBaseFiles
+}
+
+// ExpectRequesterParam3 sets up expected param requester for RepositoryI.ProcessKnowledgeBaseFiles
+func (mmProcessKnowledgeBaseFiles *mRepositoryIMockProcessKnowledgeBaseFiles) ExpectRequesterParam3(requester uuid.UUID) *mRepositoryIMockProcessKnowledgeBaseFiles {
+	if mmProcessKnowledgeBaseFiles.mock.funcProcessKnowledgeBaseFiles != nil {
+		mmProcessKnowledgeBaseFiles.mock.t.Fatalf("RepositoryIMock.ProcessKnowledgeBaseFiles mock is already set by Set")
+	}
+
+	if mmProcessKnowledgeBaseFiles.defaultExpectation == nil {
+		mmProcessKnowledgeBaseFiles.defaultExpectation = &RepositoryIMockProcessKnowledgeBaseFilesExpectation{}
+	}
+
+	if mmProcessKnowledgeBaseFiles.defaultExpectation.params != nil {
+		mmProcessKnowledgeBaseFiles.mock.t.Fatalf("RepositoryIMock.ProcessKnowledgeBaseFiles mock is already set by Expect")
+	}
+
+	if mmProcessKnowledgeBaseFiles.defaultExpectation.paramPtrs == nil {
+		mmProcessKnowledgeBaseFiles.defaultExpectation.paramPtrs = &RepositoryIMockProcessKnowledgeBaseFilesParamPtrs{}
+	}
+	mmProcessKnowledgeBaseFiles.defaultExpectation.paramPtrs.requester = &requester
 
 	return mmProcessKnowledgeBaseFiles
 }
 
 // Inspect accepts an inspector function that has same arguments as the RepositoryI.ProcessKnowledgeBaseFiles
-func (mmProcessKnowledgeBaseFiles *mRepositoryIMockProcessKnowledgeBaseFiles) Inspect(f func(ctx context.Context, fileUids []string)) *mRepositoryIMockProcessKnowledgeBaseFiles {
+func (mmProcessKnowledgeBaseFiles *mRepositoryIMockProcessKnowledgeBaseFiles) Inspect(f func(ctx context.Context, fileUIDs []string, requester uuid.UUID)) *mRepositoryIMockProcessKnowledgeBaseFiles {
 	if mmProcessKnowledgeBaseFiles.mock.inspectFuncProcessKnowledgeBaseFiles != nil {
 		mmProcessKnowledgeBaseFiles.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.ProcessKnowledgeBaseFiles")
 	}
@@ -13355,7 +13379,7 @@ func (mmProcessKnowledgeBaseFiles *mRepositoryIMockProcessKnowledgeBaseFiles) Re
 }
 
 // Set uses given function f to mock the RepositoryI.ProcessKnowledgeBaseFiles method
-func (mmProcessKnowledgeBaseFiles *mRepositoryIMockProcessKnowledgeBaseFiles) Set(f func(ctx context.Context, fileUids []string) (ka1 []mm_repository.KnowledgeBaseFile, err error)) *RepositoryIMock {
+func (mmProcessKnowledgeBaseFiles *mRepositoryIMockProcessKnowledgeBaseFiles) Set(f func(ctx context.Context, fileUIDs []string, requester uuid.UUID) (ka1 []mm_repository.KnowledgeBaseFile, err error)) *RepositoryIMock {
 	if mmProcessKnowledgeBaseFiles.defaultExpectation != nil {
 		mmProcessKnowledgeBaseFiles.mock.t.Fatalf("Default expectation is already set for the RepositoryI.ProcessKnowledgeBaseFiles method")
 	}
@@ -13370,14 +13394,14 @@ func (mmProcessKnowledgeBaseFiles *mRepositoryIMockProcessKnowledgeBaseFiles) Se
 
 // When sets expectation for the RepositoryI.ProcessKnowledgeBaseFiles which will trigger the result defined by the following
 // Then helper
-func (mmProcessKnowledgeBaseFiles *mRepositoryIMockProcessKnowledgeBaseFiles) When(ctx context.Context, fileUids []string) *RepositoryIMockProcessKnowledgeBaseFilesExpectation {
+func (mmProcessKnowledgeBaseFiles *mRepositoryIMockProcessKnowledgeBaseFiles) When(ctx context.Context, fileUIDs []string, requester uuid.UUID) *RepositoryIMockProcessKnowledgeBaseFilesExpectation {
 	if mmProcessKnowledgeBaseFiles.mock.funcProcessKnowledgeBaseFiles != nil {
 		mmProcessKnowledgeBaseFiles.mock.t.Fatalf("RepositoryIMock.ProcessKnowledgeBaseFiles mock is already set by Set")
 	}
 
 	expectation := &RepositoryIMockProcessKnowledgeBaseFilesExpectation{
 		mock:   mmProcessKnowledgeBaseFiles.mock,
-		params: &RepositoryIMockProcessKnowledgeBaseFilesParams{ctx, fileUids},
+		params: &RepositoryIMockProcessKnowledgeBaseFilesParams{ctx, fileUIDs, requester},
 	}
 	mmProcessKnowledgeBaseFiles.expectations = append(mmProcessKnowledgeBaseFiles.expectations, expectation)
 	return expectation
@@ -13410,15 +13434,15 @@ func (mmProcessKnowledgeBaseFiles *mRepositoryIMockProcessKnowledgeBaseFiles) in
 }
 
 // ProcessKnowledgeBaseFiles implements repository.RepositoryI
-func (mmProcessKnowledgeBaseFiles *RepositoryIMock) ProcessKnowledgeBaseFiles(ctx context.Context, fileUids []string) (ka1 []mm_repository.KnowledgeBaseFile, err error) {
+func (mmProcessKnowledgeBaseFiles *RepositoryIMock) ProcessKnowledgeBaseFiles(ctx context.Context, fileUIDs []string, requester uuid.UUID) (ka1 []mm_repository.KnowledgeBaseFile, err error) {
 	mm_atomic.AddUint64(&mmProcessKnowledgeBaseFiles.beforeProcessKnowledgeBaseFilesCounter, 1)
 	defer mm_atomic.AddUint64(&mmProcessKnowledgeBaseFiles.afterProcessKnowledgeBaseFilesCounter, 1)
 
 	if mmProcessKnowledgeBaseFiles.inspectFuncProcessKnowledgeBaseFiles != nil {
-		mmProcessKnowledgeBaseFiles.inspectFuncProcessKnowledgeBaseFiles(ctx, fileUids)
+		mmProcessKnowledgeBaseFiles.inspectFuncProcessKnowledgeBaseFiles(ctx, fileUIDs, requester)
 	}
 
-	mm_params := RepositoryIMockProcessKnowledgeBaseFilesParams{ctx, fileUids}
+	mm_params := RepositoryIMockProcessKnowledgeBaseFilesParams{ctx, fileUIDs, requester}
 
 	// Record call args
 	mmProcessKnowledgeBaseFiles.ProcessKnowledgeBaseFilesMock.mutex.Lock()
@@ -13437,7 +13461,7 @@ func (mmProcessKnowledgeBaseFiles *RepositoryIMock) ProcessKnowledgeBaseFiles(ct
 		mm_want := mmProcessKnowledgeBaseFiles.ProcessKnowledgeBaseFilesMock.defaultExpectation.params
 		mm_want_ptrs := mmProcessKnowledgeBaseFiles.ProcessKnowledgeBaseFilesMock.defaultExpectation.paramPtrs
 
-		mm_got := RepositoryIMockProcessKnowledgeBaseFilesParams{ctx, fileUids}
+		mm_got := RepositoryIMockProcessKnowledgeBaseFilesParams{ctx, fileUIDs, requester}
 
 		if mm_want_ptrs != nil {
 
@@ -13445,8 +13469,12 @@ func (mmProcessKnowledgeBaseFiles *RepositoryIMock) ProcessKnowledgeBaseFiles(ct
 				mmProcessKnowledgeBaseFiles.t.Errorf("RepositoryIMock.ProcessKnowledgeBaseFiles got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
 			}
 
-			if mm_want_ptrs.fileUids != nil && !minimock.Equal(*mm_want_ptrs.fileUids, mm_got.fileUids) {
-				mmProcessKnowledgeBaseFiles.t.Errorf("RepositoryIMock.ProcessKnowledgeBaseFiles got unexpected parameter fileUids, want: %#v, got: %#v%s\n", *mm_want_ptrs.fileUids, mm_got.fileUids, minimock.Diff(*mm_want_ptrs.fileUids, mm_got.fileUids))
+			if mm_want_ptrs.fileUIDs != nil && !minimock.Equal(*mm_want_ptrs.fileUIDs, mm_got.fileUIDs) {
+				mmProcessKnowledgeBaseFiles.t.Errorf("RepositoryIMock.ProcessKnowledgeBaseFiles got unexpected parameter fileUIDs, want: %#v, got: %#v%s\n", *mm_want_ptrs.fileUIDs, mm_got.fileUIDs, minimock.Diff(*mm_want_ptrs.fileUIDs, mm_got.fileUIDs))
+			}
+
+			if mm_want_ptrs.requester != nil && !minimock.Equal(*mm_want_ptrs.requester, mm_got.requester) {
+				mmProcessKnowledgeBaseFiles.t.Errorf("RepositoryIMock.ProcessKnowledgeBaseFiles got unexpected parameter requester, want: %#v, got: %#v%s\n", *mm_want_ptrs.requester, mm_got.requester, minimock.Diff(*mm_want_ptrs.requester, mm_got.requester))
 			}
 
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
@@ -13460,9 +13488,9 @@ func (mmProcessKnowledgeBaseFiles *RepositoryIMock) ProcessKnowledgeBaseFiles(ct
 		return (*mm_results).ka1, (*mm_results).err
 	}
 	if mmProcessKnowledgeBaseFiles.funcProcessKnowledgeBaseFiles != nil {
-		return mmProcessKnowledgeBaseFiles.funcProcessKnowledgeBaseFiles(ctx, fileUids)
+		return mmProcessKnowledgeBaseFiles.funcProcessKnowledgeBaseFiles(ctx, fileUIDs, requester)
 	}
-	mmProcessKnowledgeBaseFiles.t.Fatalf("Unexpected call to RepositoryIMock.ProcessKnowledgeBaseFiles. %v %v", ctx, fileUids)
+	mmProcessKnowledgeBaseFiles.t.Fatalf("Unexpected call to RepositoryIMock.ProcessKnowledgeBaseFiles. %v %v %v", ctx, fileUIDs, requester)
 	return
 }
 

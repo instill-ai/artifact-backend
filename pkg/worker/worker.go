@@ -383,8 +383,7 @@ func (wp *fileToEmbWorkerPool) processConvertingFile(ctx context.Context, file r
 	base64Data := base64.StdEncoding.EncodeToString(data)
 
 	// convert the pdf file to md
-	// FIXME: requesterUID is not set correctly
-	requesterUID := uuid.Nil
+	requesterUID := file.RequesterUID
 	convertedMD, err := wp.svc.ConvertPDFToMDPipe(ctx, file.CreatorUID, requesterUID, base64Data, artifactpb.FileType(artifactpb.FileType_value[file.Type]))
 	if err != nil {
 		logger.Error("Failed to convert pdf to md.", zap.String("File path", fileInMinIOPath))
@@ -445,8 +444,7 @@ func (wp *fileToEmbWorkerPool) processChunkingFile(ctx context.Context, file rep
 			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
 		}
 		// call the markdown chunking pipeline
-		// FIXME: requesterUID is not set correctly
-		requesterUID := uuid.Nil
+		requesterUID := file.RequesterUID
 		chunks, err := wp.svc.SplitMarkdownPipe(ctx, file.CreatorUID, requesterUID, string(convertedFileData))
 		if err != nil {
 			logger.Error("Failed to get chunks from converted file.", zap.String("Converted file uid", convertedFile.UID.String()))
@@ -480,8 +478,7 @@ func (wp *fileToEmbWorkerPool) processChunkingFile(ctx context.Context, file rep
 		}
 
 		//  Call the text chunking pipeline
-		// FIXME: requesterUID is not set correctly
-		requesterUID := uuid.Nil
+		requesterUID := file.RequesterUID
 		chunks, err := wp.svc.SplitTextPipe(ctx, file.CreatorUID, requesterUID, string(originalFile))
 		if err != nil {
 			logger.Error("Failed to get chunks from original file.", zap.String("File uid", file.UID.String()))
@@ -512,8 +509,7 @@ func (wp *fileToEmbWorkerPool) processChunkingFile(ctx context.Context, file rep
 		}
 
 		//  Call the text chunking pipeline
-		// FIXME: requesterUID is not set correctly
-		requesterUID := uuid.Nil
+		requesterUID := file.RequesterUID
 		chunks, err := wp.svc.SplitMarkdownPipe(ctx, file.CreatorUID, requesterUID, string(originalFile))
 		if err != nil {
 			logger.Error("Failed to get chunks from original file.", zap.String("File uid", file.UID.String()))
@@ -602,8 +598,7 @@ func (wp *fileToEmbWorkerPool) processEmbeddingFile(ctx context.Context, file re
 		texts[i] = string(f.Content)
 	}
 	// call the embedding pipeline
-	// FIXME
-	requesterUID := uuid.Nil
+	requesterUID := file.RequesterUID
 	vectors, err := wp.svc.VectorizeTextPipe(ctx, file.CreatorUID, requesterUID, texts)
 	// vectors, err := mockVectorizeText(ctx, file.CreatorUID, texts)
 	if err != nil {

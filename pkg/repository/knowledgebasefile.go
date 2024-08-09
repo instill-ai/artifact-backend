@@ -26,7 +26,7 @@ type KnowledgeBaseFileI interface {
 	// DeleteAllKnowledgeBaseFiles deletes all files in the knowledge base
 	DeleteAllKnowledgeBaseFiles(ctx context.Context, kbUID string) error
 	// ProcessKnowledgeBaseFiles updates the process status of the files
-	ProcessKnowledgeBaseFiles(ctx context.Context, fileUids []string) ([]KnowledgeBaseFile, error)
+	ProcessKnowledgeBaseFiles(ctx context.Context, fileUIDs []string, requester uuid.UUID) ([]KnowledgeBaseFile, error)
 	// GetNeedProcessFiles returns the files that are not yet processed
 	GetNeedProcessFiles(ctx context.Context) []KnowledgeBaseFile
 	// UpdateKnowledgeBaseFile updates the data and retrieves the latest data
@@ -67,6 +67,8 @@ type KnowledgeBaseFile struct {
 	DeleteTime *time.Time `gorm:"column:delete_time" json:"delete_time"`
 	// Size
 	Size int64 `gorm:"column:size" json:"size"`
+	// Process requester UID
+	RequesterUID uuid.UUID `gorm:"column:requester_uid;type:uuid;"`
 	// This filed is not stored in the database. It is used to unmarshal the ExtraMetaData field
 	ExtraMetaDataUnmarshal *ExtraMetaData `gorm:"-" json:"extra_meta_data_unmarshal"`
 }
@@ -89,6 +91,8 @@ type KnowledgeBaseFileColumns struct {
 	ExtraMetaData    string
 	UpdateTime       string
 	DeleteTime       string
+	RequesterUID     string
+	Size             string
 }
 
 var KnowledgeBaseFileColumn = KnowledgeBaseFileColumns{
@@ -104,6 +108,8 @@ var KnowledgeBaseFileColumn = KnowledgeBaseFileColumns{
 	CreateTime:       "create_time",
 	UpdateTime:       "update_time",
 	DeleteTime:       "delete_time",
+	Size:             "size",
+	RequesterUID:     "requester_uid",
 }
 
 // ExtraMetaDataMarshal marshals the ExtraMetaData struct to a JSON string
@@ -159,7 +165,8 @@ func (r *Repository) KnowledgeBaseFileTableName() string {
 func (r *Repository) CreateKnowledgeBaseFile(ctx context.Context, kb KnowledgeBaseFile, externalServiceCall func(FileUID string) error) (*KnowledgeBaseFile, error) {
 	// check if the file already exists in the same knowledge base and not delete
 	var existingFile KnowledgeBaseFile
-	whereClause := fmt.Sprintf("%s = ? AND %s = ? AND %v is NULL", KnowledgeBaseFileColumn.KnowledgeBaseUID, KnowledgeBaseFileColumn.Name, KnowledgeBaseFileColumn.DeleteTime)
+	whereClause := fmt.Sprintf("%s = ? AND %s = ? AND %v is NULL",
+		KnowledgeBaseFileColumn.KnowledgeBaseUID, KnowledgeBaseFileColumn.Name, KnowledgeBaseFileColumn.DeleteTime)
 	if err := r.db.Where(whereClause, kb.KnowledgeBaseUID, kb.Name).First(&existingFile).Error; err != nil {
 		if err != gorm.ErrRecordNotFound {
 			return nil, err
@@ -286,12 +293,18 @@ func (r *Repository) DeleteAllKnowledgeBaseFiles(ctx context.Context, kbUID stri
 }
 
 // ProcessKnowledgeBaseFiles updates the process status of the files
-func (r *Repository) ProcessKnowledgeBaseFiles(ctx context.Context, fileUIDs []string) ([]KnowledgeBaseFile, error) {
+func (r *Repository) ProcessKnowledgeBaseFiles(
+	ctx context.Context, fileUIDs []string, requester uuid.UUID) (
+		[]KnowledgeBaseFile, error) {
 	// Update the process status of the files
 	waitingStatus := artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_WAITING)]
+	updates := map[string]interface{}{
+		KnowledgeBaseFileColumn.ProcessStatus: waitingStatus,
+		KnowledgeBaseFileColumn.RequesterUID:  requester,
+	}
 	if err := r.db.WithContext(ctx).Model(&KnowledgeBaseFile{}).
 		Where(KnowledgeBaseFileColumn.UID+" IN ?", fileUIDs).
-		Update(KnowledgeBaseFileColumn.ProcessStatus, waitingStatus).Error; err != nil {
+		Updates(updates).Error; err != nil {
 		return nil, err
 	}
 

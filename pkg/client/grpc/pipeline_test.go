@@ -68,7 +68,6 @@ package grpcclient
 // //	     -H 'content-type: application/json' \
 // //	     -d '{"inputs":[{"chunk_input":"test"}]}'
 // //
-// // TODO: embed pipeline fail on ce
 // func TestCEPresetEmbeddingPipelineReleaseRequest(t *testing.T) {
 // 	pipelinePublicGrpcConn, err := NewGRPCConn("localhost:8081", "", "")
 // 	if err != nil {
