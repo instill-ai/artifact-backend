@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/gofrs/uuid"
+	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	artifactv1alpha "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	pipelinev1beta "github.com/instill-ai/protogen-go/vdp/pipeline/v1beta"
@@ -21,15 +22,29 @@ const PDFToMDVersion = "v1.1.1"
 const MdSplitVersion = "v2.0.0"
 const TextSplitVersion = "v2.0.0"
 const TextEmbedVersion = "v1.1.0"
+const QAVersion = "v1.1.0"
 const ConverPDFToMDPipelineID = "indexing-convert-pdf"
 const MdSplitPipelineID = "indexing-split-markdown"
 const TextSplitPipelineID = "indexing-split-text"
 const TextEmbedPipelineID = "indexing-embed"
+const RetrievingQnA = "retrieving-qna"
 
-// ConvertPDFToMD using converting pipeline to convert PDF to MD and consume caller's credits
-func (s *Service) ConvertPDFToMD(ctx context.Context, caller uuid.UUID, pdfBase64 string, fileType artifactv1alpha.FileType) (string, error) {
+// ConvertPDFToMDPipe using converting pipeline to convert PDF to MD and consume caller's credits
+func (s *Service) ConvertPDFToMDPipe(ctx context.Context, caller uuid.UUID, requester uuid.UUID, pdfBase64 string, fileType artifactv1alpha.FileType) (string, error) {
 	logger, _ := logger.GetZapLogger(ctx)
-	md := metadata.New(map[string]string{"Instill-User-Uid": caller.String(), "Instill-Auth-Type": "user"})
+	var md metadata.MD
+	if requester != uuid.Nil {
+		md = metadata.New(map[string]string{
+			constant.HeaderUserUIDKey:      caller.String(),
+			constant.HeaderAuthTypeKey:     "user",
+			constant.HeaderRequesterUIDKey: requester.String(),
+		})
+	} else {
+		md = metadata.New(map[string]string{
+			constant.HeaderUserUIDKey:  caller.String(),
+			constant.HeaderAuthTypeKey: "user",
+		})
+	}
 	ctx = metadata.NewOutgoingContext(ctx, md)
 	prefix := ""
 	if fileType == artifactv1alpha.FileType_FILE_TYPE_PDF {
@@ -97,9 +112,21 @@ type Chunk = struct {
 	Tokens int
 }
 
-// SplitMarkdown using splitting pipeline to split markdown and consume caller's credits
-func (s *Service) SplitMarkdown(ctx context.Context, caller uuid.UUID, markdown string) ([]Chunk, error) {
-	md := metadata.New(map[string]string{"Instill-User-Uid": caller.String(), "Instill-Auth-Type": "user"})
+// SplitMarkdownPipe using splitting pipeline to split markdown and consume caller's credits
+func (s *Service) SplitMarkdownPipe(ctx context.Context, caller uuid.UUID, requester uuid.UUID, markdown string) ([]Chunk, error) {
+	var md metadata.MD
+	if requester != uuid.Nil {
+		md = metadata.New(map[string]string{
+			constant.HeaderUserUIDKey:      caller.String(),
+			constant.HeaderAuthTypeKey:     "user",
+			constant.HeaderRequesterUIDKey: requester.String(),
+		})
+	} else {
+		md = metadata.New(map[string]string{
+			constant.HeaderUserUIDKey:  caller.String(),
+			constant.HeaderAuthTypeKey: "user",
+		})
+	}
 	ctx = metadata.NewOutgoingContext(ctx, md)
 	req := &pipelinev1beta.TriggerNamespacePipelineReleaseRequest{
 		NamespaceId: NamespaceID,
@@ -157,9 +184,21 @@ func GetChunksFromResponse(resp *pipelinev1beta.TriggerNamespacePipelineReleaseR
 	return chunks, nil
 }
 
-// SplitText using splitting pipeline to split text and consume caller's credits
-func (s *Service) SplitText(ctx context.Context, caller uuid.UUID, text string) ([]Chunk, error) {
-	md := metadata.New(map[string]string{"Instill-User-Uid": caller.String(), "Instill-Auth-Type": "user"})
+// SplitTextPipe using splitting pipeline to split text and consume caller's credits
+func (s *Service) SplitTextPipe(ctx context.Context, caller uuid.UUID, requester uuid.UUID, text string) ([]Chunk, error) {
+	var md metadata.MD
+	if requester != uuid.Nil {
+		md = metadata.New(map[string]string{
+			constant.HeaderUserUIDKey:      caller.String(),
+			constant.HeaderAuthTypeKey:     "user",
+			constant.HeaderRequesterUIDKey: requester.String(),
+		})
+	} else {
+		md = metadata.New(map[string]string{
+			constant.HeaderUserUIDKey:  caller.String(),
+			constant.HeaderAuthTypeKey: "user",
+		})
+	}
 	ctx = metadata.NewOutgoingContext(ctx, md)
 	req := &pipelinev1beta.TriggerNamespacePipelineReleaseRequest{
 		NamespaceId: NamespaceID,
@@ -187,10 +226,22 @@ func (s *Service) SplitText(ctx context.Context, caller uuid.UUID, text string) 
 	return result, nil
 }
 
-// VectorizeText using embedding pipeline to vectorize text and consume caller's credits
-func (s *Service) VectorizeText(ctx context.Context, caller uuid.UUID, texts []string) ([][]float32, error) {
+// VectorizeTextPipe using embedding pipeline to vectorize text and consume caller's credits
+func (s *Service) VectorizeTextPipe(ctx context.Context, caller uuid.UUID, requester uuid.UUID, texts []string) ([][]float32, error) {
 	const maxBatchSize = 32
-	md := metadata.New(map[string]string{"Instill-User-Uid": caller.String(), "Instill-Auth-Type": "user"})
+	var md metadata.MD
+	if requester != uuid.Nil {
+		md = metadata.New(map[string]string{
+			constant.HeaderUserUIDKey:      caller.String(),
+			constant.HeaderAuthTypeKey:     "user",
+			constant.HeaderRequesterUIDKey: requester.String(),
+		})
+	} else {
+		md = metadata.New(map[string]string{
+			constant.HeaderUserUIDKey:  caller.String(),
+			constant.HeaderAuthTypeKey: "user",
+		})
+	}
 	ctx = metadata.NewOutgoingContext(ctx, md)
 	var allResults [][]float32
 
@@ -255,4 +306,46 @@ func GetVectorFromResponse(resp *pipelinev1beta.TriggerNamespacePipelineReleaseR
 	}
 
 	return vectors, nil
+}
+
+// VectorizeText using embedding pipeline to vectorize text and consume caller's credits
+func (s *Service) QuestionAnsweringPipe(ctx context.Context, caller uuid.UUID, requester uuid.UUID, question string, simchunks []string) (string, error) {
+	var md metadata.MD
+	if requester != uuid.Nil {
+		md = metadata.New(map[string]string{
+			constant.HeaderUserUIDKey:      caller.String(),
+			constant.HeaderAuthTypeKey:     "user",
+			constant.HeaderRequesterUIDKey: requester.String(),
+		})
+	} else {
+		md = metadata.New(map[string]string{
+			constant.HeaderUserUIDKey:  caller.String(),
+			constant.HeaderAuthTypeKey: "user",
+		})
+	}
+	// create a retired chunk var that combines all the chunks by /n/n
+	retrievedChunk := ""
+	for _, chunk := range simchunks {
+		retrievedChunk += chunk + "\n\n"
+	}
+	ctx = metadata.NewOutgoingContext(ctx, md)
+	req := &pipelinev1beta.TriggerNamespacePipelineReleaseRequest{
+		NamespaceId: NamespaceID,
+		PipelineId:  RetrievingQnA,
+		ReleaseId:   QAVersion,
+		Inputs: []*structpb.Struct{
+			{
+				Fields: map[string]*structpb.Value{
+					"retrieved_chunk": {Kind: &structpb.Value_StringValue{StringValue: retrievedChunk}},
+					"user_question":   {Kind: &structpb.Value_StringValue{StringValue: question}},
+				},
+			},
+		},
+	}
+	res, err := s.PipelinePub.TriggerNamespacePipelineRelease(ctx, req)
+	if err != nil {
+		return "", fmt.Errorf("failed to trigger %s pipeline. err:%w", RetrievingQnA, err)
+	}
+	reply := res.Outputs[0].GetFields()["assistant_reply"].GetStringValue()
+	return reply, nil
 }

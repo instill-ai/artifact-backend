@@ -350,3 +350,32 @@ func (c *ACLClient) ListPermissions(ctx context.Context, objectType string, role
 
 	return objectUIDs, nil
 }
+
+// checkRequesterPermission validates that the authenticated user can make
+// requests on behalf of the resource identified by the requester UID.
+func (c *ACLClient) CheckRequesterPermission(ctx context.Context) error {
+	authType := resource.GetRequestSingleHeader(ctx, constant.HeaderAuthTypeKey)
+	if authType != "user" {
+		// Only authenticated users can switch namespaces.
+		return fmt.Errorf("unauthenticated user")
+	}
+	requester := resource.GetRequestSingleHeader(ctx, constant.HeaderRequesterUIDKey)
+	authenticatedUser := resource.GetRequestSingleHeader(ctx, constant.HeaderUserUIDKey)
+	if requester == "" || authenticatedUser == requester {
+		// Request doesn't contain impersonation.
+		return nil
+	}
+
+	// The only impersonation that's currently implemented is switching to an
+	// organization namespace.
+	isMember, err := c.CheckPermission(ctx, "organization", uuid.FromStringOrNil(requester), "member")
+	if err != nil {
+		return fmt.Errorf("checking organization membership: %w", err)
+	}
+
+	if !isMember {
+		return fmt.Errorf("authenticated user doesn't belong to requester organization")
+	}
+
+	return nil
+}

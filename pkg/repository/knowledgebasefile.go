@@ -165,7 +165,7 @@ func (r *Repository) CreateKnowledgeBaseFile(ctx context.Context, kb KnowledgeBa
 			return nil, err
 		}
 	} else {
-		return nil, fmt.Errorf("file already exists in the knowledge base. file: {%v}", kb.Name)
+		return nil, fmt.Errorf("file already exists in the catalog. file: {%v}", kb.Name)
 	}
 
 	exist, err := r.checkIfKnowledgeBaseExists(ctx, kb.KnowledgeBaseUID.String())
@@ -173,7 +173,7 @@ func (r *Repository) CreateKnowledgeBaseFile(ctx context.Context, kb KnowledgeBa
 		return nil, err
 	}
 	if !exist {
-		return nil, fmt.Errorf("knowledge base does not exist. kb.uid:{%v}", kb.KnowledgeBaseUID.String())
+		return nil, fmt.Errorf("catalog does not exist. catalog.uid:{%v}", kb.KnowledgeBaseUID.String())
 	}
 
 	// kb.ExtraMetaData = "{}"
@@ -238,10 +238,10 @@ func (r *Repository) ListKnowledgeBaseFiles(ctx context.Context, uid string, own
 		// Assuming next_page_token is the `uid` of the last record from the previous page
 		kbfs, err := r.GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{tokenUUID})
 		if err != nil {
-			return nil, 0, "", fmt.Errorf("failed to get knowledge base files by next page token: %v", err)
+			return nil, 0, "", fmt.Errorf("failed to get catalog files by next page token: %v", err)
 		}
 		if len(kbfs) == 0 {
-			return nil, 0, "", fmt.Errorf("no knowledge base file found by next page token")
+			return nil, 0, "", fmt.Errorf("no catalog file found by next page token")
 		}
 		// whereClause
 		whereClause := fmt.Sprintf("%v >= ?", KnowledgeBaseFileColumn.CreateTime)
@@ -274,7 +274,7 @@ func (r *Repository) DeleteKnowledgeBaseFile(ctx context.Context, fileUID string
 	return nil
 }
 
-// hard delete all files in the knowledge base
+// hard delete all files in the catalog
 func (r *Repository) DeleteAllKnowledgeBaseFiles(ctx context.Context, kbUID string) error {
 	whereClause := fmt.Sprintf("%v = ?", KnowledgeBaseFileColumn.KnowledgeBaseUID)
 	if err := r.db.WithContext(ctx).Model(&KnowledgeBaseFile{}).
@@ -349,7 +349,7 @@ func (r *Repository) UpdateKnowledgeBaseFile(ctx context.Context, fileUID string
 	return &updatedFile, nil
 }
 
-// CountFilesByListKnowledgeBaseUID returns the number of files associated with the knowledge base UID
+// CountFilesByListKnowledgeBaseUID returns the number of files associated with the catalog UID
 func (r *Repository) GetCountFilesByListKnowledgeBaseUID(ctx context.Context, kbUIDs []uuid.UUID) (map[uuid.UUID]int64, error) {
 	var results []struct {
 		KnowledgeBaseUID uuid.UUID `gorm:"column:kb_uid"`
