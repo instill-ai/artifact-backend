@@ -226,8 +226,8 @@ func (s *Service) SplitTextPipe(ctx context.Context, caller uuid.UUID, requester
 	return result, nil
 }
 
-// VectorizeTextPipe using embedding pipeline to vectorize text and consume caller's credits
-func (s *Service) VectorizeTextPipe(ctx context.Context, caller uuid.UUID, requester uuid.UUID, texts []string) ([][]float32, error) {
+// EmbeddingTextPipe using embedding pipeline to vectorize text and consume caller's credits
+func (s *Service) EmbeddingTextPipe(ctx context.Context, caller uuid.UUID, requester uuid.UUID, texts []string) ([][]float32, error) {
 	const maxBatchSize = 32
 	var md metadata.MD
 	if requester != uuid.Nil {

@@ -12,6 +12,7 @@ import (
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type KnowledgeBaseFileI interface {
@@ -21,6 +22,10 @@ type KnowledgeBaseFileI interface {
 	CreateKnowledgeBaseFile(ctx context.Context, kb KnowledgeBaseFile, externalServiceCall func(FileUID string) error) (*KnowledgeBaseFile, error)
 	// ListKnowledgeBaseFiles lists the knowledge base files by owner UID, knowledge base UID, and page size
 	ListKnowledgeBaseFiles(ctx context.Context, uid string, ownerUID string, kbUID string, pageSize int32, nextPageToken string, filesUID []string) ([]KnowledgeBaseFile, int, string, error)
+	// GetKnowledgebaseFileByKbUIDAndFileID returns the knowledge base file by knowledge base ID and file ID
+	GetKnowledgebaseFileByKbUIDAndFileID(ctx context.Context, kbUID uuid.UUID, fileID string) (*KnowledgeBaseFile, error)
+	// GetKnowledgeBaseFilesByFileUIDs returns the knowledge base files by file UIDs
+	GetKnowledgeBaseFilesByFileUIDs(ctx context.Context, fileUIDs []uuid.UUID, columns ...string) ([]KnowledgeBaseFile, error)
 	// DeleteKnowledgeBaseFile deletes the knowledge base file by file UID
 	DeleteKnowledgeBaseFile(ctx context.Context, fileUID string) error
 	// DeleteAllKnowledgeBaseFiles deletes all files in the knowledge base
@@ -38,10 +43,10 @@ type KnowledgeBaseFileI interface {
 		SourceTable string
 		SourceUID   uuid.UUID
 	}, error)
-	// GetKnowledgeBaseFilesByFileUIDs returns the knowledge base files by file UIDs
-	GetKnowledgeBaseFilesByFileUIDs(ctx context.Context, fileUIDs []uuid.UUID, columns ...string) ([]KnowledgeBaseFile, error)
 	// GetTruthSourceByFileUID returns the truth source file destination of minIO by file UID
 	GetTruthSourceByFileUID(ctx context.Context, fileUID uuid.UUID) (*SourceMeta, error)
+	// UpdateExtraMetaData updates the extra meta data of the knowledge base file
+	UpdateExtraMetaData(ctx context.Context, fileUID uuid.UUID, failureReason, convertingPipe, chunkingPipe, embeddingPipe string) error
 }
 
 type KbUID = uuid.UUID
@@ -74,7 +79,10 @@ type KnowledgeBaseFile struct {
 }
 
 type ExtraMetaData struct {
-	FaileReason string `json:"fail_reason"`
+	FailReason     string `json:"fail_reason"`
+	ConvertingPipe string `json:"converting_pipe"`
+	EmbeddingPipe  string `json:"embedding_pipe"`
+	ChunkingPipe   string `json:"chunking_pipe"`
 }
 
 // table columns map
@@ -295,7 +303,7 @@ func (r *Repository) DeleteAllKnowledgeBaseFiles(ctx context.Context, kbUID stri
 // ProcessKnowledgeBaseFiles updates the process status of the files
 func (r *Repository) ProcessKnowledgeBaseFiles(
 	ctx context.Context, fileUIDs []string, requester uuid.UUID) (
-		[]KnowledgeBaseFile, error) {
+	[]KnowledgeBaseFile, error) {
 	// Update the process status of the files
 	waitingStatus := artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_WAITING)]
 	updates := map[string]interface{}{
@@ -472,6 +480,20 @@ func (r *Repository) GetKnowledgeBaseFilesByFileUIDs(
 	return files, nil
 }
 
+// GetKnowledgebaseFileByKbIDAndFileID returns the knowledge base file by knowledge base ID and file ID
+func (r *Repository) GetKnowledgebaseFileByKbUIDAndFileID(ctx context.Context, kbUID uuid.UUID, fileID string) (*KnowledgeBaseFile, error) {
+	var file KnowledgeBaseFile
+	where := fmt.Sprintf("%v = ? AND %v = ? AND %v IS NULL",
+		KnowledgeBaseFileColumn.KnowledgeBaseUID, KnowledgeBaseFileColumn.Name, KnowledgeBaseFileColumn.DeleteTime)
+	if err := r.db.WithContext(ctx).Where(where, kbUID, fileID).First(&file).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, fmt.Errorf("file not found by catalog ID: %v and file ID: %v", kbUID, fileID)
+		}
+		return nil, err
+	}
+	return &file, nil
+}
+
 type SourceMeta struct {
 	KbUID      uuid.UUID
 	Dest       string
@@ -479,6 +501,8 @@ type SourceMeta struct {
 }
 
 // GetTruthSourceByFileUID returns the truth source file destination of minIO by file UID
+// and support all file type. if the file type is text or markdown, the destination is the file destination.
+// if the file type is pdf, get the converted file destination
 func (r *Repository) GetTruthSourceByFileUID(ctx context.Context, fileUID uuid.UUID) (*SourceMeta, error) {
 	logger, _ := logger.GetZapLogger(ctx)
 	// get the file type by file uid
@@ -529,4 +553,59 @@ func (r *Repository) GetTruthSourceByFileUID(ctx context.Context, fileUID uuid.U
 		CreateTime: createTime,
 		KbUID:      kbUID,
 	}, nil
+}
+
+// UpdateExtraMetaData fetch the knowledge base file and lock the row for update,
+// it will keep the original data and only update the provided params
+// parameters: `fileUID` is the file UID, `failedReason` is the reason for the failure,
+// `convertingPipe` is the converting pipe name, `embeddingPipe` is the embedding pipe name,
+// `chunkingPipe` is the chunking pipe name.
+func (r *Repository) UpdateExtraMetaData(ctx context.Context, fileUID uuid.UUID, failureReason, convertingPipe, chunkingPipe, embeddingPipe string) error {
+	var kb KnowledgeBaseFile
+
+	// Use GORM's Transaction function
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Lock the row for update within the transaction
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where(KnowledgeBaseFileColumn.UID+" = ?", fileUID).First(&kb).Error; err != nil {
+			return err
+		}
+
+		// Unmarshal the existing ExtraMetaData
+		if err := kb.ExtraMetaDataUnmarshalFunc(); err != nil {
+			return err
+		}
+
+		// Update the ExtraMetaData fields
+		if kb.ExtraMetaDataUnmarshal == nil {
+			kb.ExtraMetaDataUnmarshal = &ExtraMetaData{}
+		}
+		if failureReason != "" {
+			kb.ExtraMetaDataUnmarshal.FailReason = failureReason
+		}
+		if convertingPipe != "" {
+			kb.ExtraMetaDataUnmarshal.ConvertingPipe = convertingPipe
+		}
+		if chunkingPipe != "" {
+			kb.ExtraMetaDataUnmarshal.ChunkingPipe = chunkingPipe
+		}
+		if embeddingPipe != "" {
+			kb.ExtraMetaDataUnmarshal.EmbeddingPipe = embeddingPipe
+		}
+
+		// Marshal the updated ExtraMetaData
+		if err := kb.ExtraMetaDataMarshal(); err != nil {
+			return err
+		}
+
+		// Save the updated KnowledgeBaseFile within the transaction
+		if err := tx.Save(&kb).Error; err != nil {
+			return err
+		}
+
+		// Returning nil commits the transaction
+		return nil
+	})
+
+	// Return the result of the transaction (either nil or an error)
+	return err
 }
