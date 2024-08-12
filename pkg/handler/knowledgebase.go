@@ -358,6 +358,7 @@ func (ph *PublicHandler) DeleteCatalog(ctx context.Context, req *artifactpb.Dele
 		return nil, fmt.Errorf(ErrorDeleteKnowledgeBaseMsg, customerror.ErrNoPermission)
 	}
 
+	// delete acl
 	err = ph.service.ACLClient.Purge(ctx, "knowledgebase", kb.UID)
 	if err != nil {
 		log.Error("failed to purge catalog", zap.Error(err))
