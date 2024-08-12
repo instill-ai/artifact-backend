@@ -7,7 +7,7 @@ import (
 func TestKnowledgeBaseFile_ExtraMetaDataMarshal(t *testing.T) {
 	kf := KnowledgeBaseFile{
 		ExtraMetaDataUnmarshal: &ExtraMetaData{
-			FaileReason: "Some reason",
+			FailReason: "Some reason",
 		},
 	}
 
@@ -16,7 +16,7 @@ func TestKnowledgeBaseFile_ExtraMetaDataMarshal(t *testing.T) {
 		t.Errorf("Unexpected error: %v", err)
 	}
 
-	expected := `{"fail_reason":"Some reason"}`
+	expected := `{"fail_reason":"Some reason","converting_pipe":"","embedding_pipe":"","chunking_pipe":""}`
 	if kf.ExtraMetaData != expected {
 		t.Errorf("Expected ExtraMetaData to be %q, but got %q", expected, kf.ExtraMetaData)
 	}
@@ -29,8 +29,8 @@ func TestKnowledgeBaseFile_ExtraMetaDataUnmarshal_Empty(t *testing.T) {
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
-	if kf.ExtraMetaDataUnmarshal.FaileReason != "some reason" {
-		t.Errorf("Expected FaileReason to be %q, but got %q", "some reason", kf.ExtraMetaDataUnmarshal.FaileReason)
+	if kf.ExtraMetaDataUnmarshal.FailReason != "some reason" {
+		t.Errorf("Expected FaileReason to be %q, but got %q", "some reason", kf.ExtraMetaDataUnmarshal.FailReason)
 	}
 }
 

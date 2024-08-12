@@ -19,7 +19,7 @@ type SimChunk struct {
 func (s *Service) SimilarityChunksSearch(ctx context.Context, caller uuid.UUID, requester uuid.UUID, ownerUID string, req *artifactv1alpha.SimilarityChunksSearchRequest) ([]SimChunk, error) {
 	log, _ := logger.GetZapLogger(ctx)
 	t := time.Now()
-	textVector, err := s.VectorizeTextPipe(ctx, caller, requester, []string{req.TextPrompt})
+	textVector, err := s.EmbeddingTextPipe(ctx, caller, requester, []string{req.TextPrompt})
 	if err != nil {
 		log.Error("failed to vectorize text", zap.Error(err))
 		return nil, fmt.Errorf("failed to vectorize text. err: %w", err)
