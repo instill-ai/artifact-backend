@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"github.com/gofrs/uuid"
 	"github.com/instill-ai/artifact-backend/pkg/customerror"
@@ -65,6 +66,10 @@ func (ph *PublicHandler) ListChunks(ctx context.Context, req *artifactpb.ListChu
 		return nil, fmt.Errorf("failed to get text chunks by source: %w ", err)
 
 	}
+	// reorder the chunks by order
+	sort.Slice(chunks, func(i, j int) bool {
+		return chunks[i].InOrder < chunks[j].InOrder
+	})
 
 	res := make([]*artifactpb.Chunk, 0, len(chunks))
 	for _, chunk := range chunks {

@@ -123,6 +123,8 @@ func (c *ACLClient) SetOwner(ctx context.Context, objectType string, objectUID u
 		ownerType = "user"
 	} else if ownerType == "organizations" {
 		ownerType = "organization"
+	} else {
+		return fmt.Errorf("invalid owner type")
 	}
 	data, err := c.getClient(ctx, ReadMode).Read(ctx, &openfga.ReadRequest{
 		StoreId: c.storeID,
