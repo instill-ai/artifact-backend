@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.10.0-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.9.1-alpha...v0.10.0-alpha) (2024-08-12)
+
+
+### Features
+
+* **catalog:** add file catalog api ([#73](https://github.com/instill-ai/artifact-backend/issues/73)) ([c30317f](https://github.com/instill-ai/artifact-backend/commit/c30317fb9d57d695ca2330d52154e4e75874eb0c))
+* **catalog:** check the user tier for catalog limit ([#70](https://github.com/instill-ai/artifact-backend/issues/70)) ([d35a96f](https://github.com/instill-ai/artifact-backend/commit/d35a96ff6e738ef511d2ecacf203e32cf7c87aa8))
+* **catalog:** sort the chunk ([#74](https://github.com/instill-ai/artifact-backend/issues/74)) ([c434cbd](https://github.com/instill-ai/artifact-backend/commit/c434cbd855394dad6a58022629fa5b53a7e7796e))
+* **catalog:** support different file-to-embedding process ([#69](https://github.com/instill-ai/artifact-backend/issues/69)) ([7f40dc1](https://github.com/instill-ai/artifact-backend/commit/7f40dc1c1083ffcbef8c09c5d9e407c5c8498ce8))
+* **catalog:** support more file type to uplaod ([#67](https://github.com/instill-ai/artifact-backend/issues/67)) ([2d3c705](https://github.com/instill-ai/artifact-backend/commit/2d3c705428b73354c986509f288afae883c4cb44))
+* **catalog:** support question answering ([#71](https://github.com/instill-ai/artifact-backend/issues/71)) ([a540c93](https://github.com/instill-ai/artifact-backend/commit/a540c9321b91645704546d084fc89f237fd12e26))
+
+
+### Bug Fixes
+
+* **catalog:** add requester when calling pipeline ([#72](https://github.com/instill-ai/artifact-backend/issues/72)) ([0880d91](https://github.com/instill-ai/artifact-backend/commit/0880d91f449ce35ca7a8f0d51c13206e9201f2c1))
+
 ## [0.9.1-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.9.0-alpha...v0.9.1-alpha) (2024-08-06)
 
 
