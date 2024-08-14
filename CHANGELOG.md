@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.1-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.10.0-alpha...v0.10.1-alpha) (2024-08-14)
+
+
+### Bug Fixes
+
+* **catalog:** fix the catalog permission issue ([#75](https://github.com/instill-ai/artifact-backend/issues/75)) ([2db2ce3](https://github.com/instill-ai/artifact-backend/commit/2db2ce3563dbe5d6eee72f0b69ae40f5766d3fe4))
+
 ## [0.10.0-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.9.1-alpha...v0.10.0-alpha) (2024-08-12)
 
 
