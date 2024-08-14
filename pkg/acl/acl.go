@@ -160,6 +160,7 @@ func (c *ACLClient) SetOwner(ctx context.Context, objectType string, objectUID u
 	return nil
 }
 
+// Note: may move this to service layer due to it is specific to knowledge base
 func (c *ACLClient) SetKnowledgeBasePermission(ctx context.Context, kbUID uuid.UUID, user, role string, enable bool) error {
 	var err error
 	_ = c.DeleteKnowledgeBasePermission(ctx, kbUID, user)
@@ -188,6 +189,7 @@ func (c *ACLClient) SetKnowledgeBasePermission(ctx context.Context, kbUID uuid.U
 
 func (c *ACLClient) DeleteKnowledgeBasePermission(ctx context.Context, kbUID uuid.UUID, user string) error {
 
+	// delete all roles
 	for _, role := range []string{"admin", "writer", "executor", "reader"} {
 		_, _ = c.getClient(ctx, WriteMode).Write(ctx, &openfga.WriteRequest{
 			StoreId:              c.storeID,
@@ -207,6 +209,7 @@ func (c *ACLClient) DeleteKnowledgeBasePermission(ctx context.Context, kbUID uui
 	return nil
 }
 
+// Note: may move this to service layer due to it is specific to knowledge base
 func (c *ACLClient) SetPublicKnowledgeBasePermission(ctx context.Context, kbUID uuid.UUID) error {
 	for _, t := range []string{"user", "visitor"} {
 		err := c.SetKnowledgeBasePermission(ctx, kbUID, fmt.Sprintf("%s:*", t), "reader", true)
@@ -222,8 +225,10 @@ func (c *ACLClient) SetPublicKnowledgeBasePermission(ctx context.Context, kbUID 
 	return nil
 }
 
+// Note: may move this to service layer due to it is specific to knowledge base
 func (c *ACLClient) DeletePublicKnowledgeBasePermission(ctx context.Context, kbUID uuid.UUID) error {
 	for _, t := range []string{"user", "visitor"} {
+		// delete user:* and visitor:* from all roles
 		err := c.DeleteKnowledgeBasePermission(ctx, kbUID, fmt.Sprintf("%s:*", t))
 		if err != nil {
 			return err
@@ -233,6 +238,7 @@ func (c *ACLClient) DeletePublicKnowledgeBasePermission(ctx context.Context, kbU
 	return nil
 }
 
+// delete all permissions of the object
 func (c *ACLClient) Purge(ctx context.Context, objectType string, objectUID uuid.UUID) error {
 
 	data, err := c.getClient(ctx, ReadMode).Read(ctx, &openfga.ReadRequest{
