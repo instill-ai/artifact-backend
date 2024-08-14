@@ -365,11 +365,6 @@ func (ph *PublicHandler) DeleteCatalog(ctx context.Context, req *artifactpb.Dele
 		return nil, fmt.Errorf(ErrorDeleteKnowledgeBaseMsg, err)
 	}
 
-	//  delete collection milvus
-	err = ph.service.MilvusClient.DropKnowledgeBaseCollection(ctx, kb.UID.String())
-	if err != nil {
-		log.Error("failed to drop collection in milvus", zap.Error(err))
-	}
 	//  delete files in minIO
 	err = <-ph.service.MinIO.DeleteKnowledgeBase(ctx, kb.UID.String())
 	if err != nil {
@@ -401,6 +396,13 @@ func (ph *PublicHandler) DeleteCatalog(ctx context.Context, req *artifactpb.Dele
 	if err != nil {
 		return nil, err
 	}
+
+	// delete acl. Note: we need to delete the acl after deleting the catalog
+	err = ph.service.ACLClient.Purge(ctx, "knowledgebase", kb.UID)
+	if err != nil {
+		log.Error("failed to purge catalog", zap.Error(err))
+	}
+
 	return &artifactpb.DeleteCatalogResponse{
 		Catalog: &artifactpb.Catalog{
 			Name:                deletedKb.Name,
