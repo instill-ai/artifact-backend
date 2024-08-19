@@ -45,7 +45,7 @@ func (ph *PublicHandler) QuestionAnswering(
 	log.Info("get namespace by ns id", zap.Duration("duration", time.Since(t)))
 	t = time.Now()
 	ownerUID := ns.NsUID
-	kb, err := ph.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID.String(), req.CatalogId)
+	kb, err := ph.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, req.CatalogId)
 	if err != nil {
 		log.Error("failed to get catalog by namespace and catalog id", zap.Error(err))
 		return nil, fmt.Errorf("failed to get catalog by namespace and catalog id. err: %w", err)
@@ -88,7 +88,7 @@ func (ph *PublicHandler) QuestionAnswering(
 			return nil, fmt.Errorf("failed to parse requester uid: %v. err: %w", err, customerror.ErrUnauthenticated)
 		}
 	}
-	simChunksScroes, err := ph.service.SimilarityChunksSearch(ctx, authUserUUID, requesterUUID, ownerUID.String(), scReq)
+	simChunksScroes, err := ph.service.SimilarityChunksSearch(ctx, authUserUUID, requesterUUID, ownerUID, scReq)
 	if err != nil {
 		log.Error("failed to get similarity chunks", zap.Error(err))
 		return nil, fmt.Errorf("failed to get similarity chunks. err: %w", err)

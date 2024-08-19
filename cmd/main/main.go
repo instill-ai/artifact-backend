@@ -83,6 +83,10 @@ func grpcHandlerFunc(grpcServer *grpc.Server, gwHandler http.Handler) http.Handl
 }
 
 func main() {
+	// gorm's autoUpdate will use local timezone by default, so we need to set it to UTC
+	time.Local = time.UTC
+
+	// Initialize config
 	if err := config.Init(); err != nil {
 		log.Fatal(err.Error())
 	}

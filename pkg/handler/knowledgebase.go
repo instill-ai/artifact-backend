@@ -87,16 +87,6 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 		return nil, fmt.Errorf(msg, req.Name, customerror.ErrInvalidArgument)
 	}
 
-	// // get the owner uid from the mgmt service
-	// var ownerUUID string
-	// {
-	// 	// get the owner uid from the mgmt service
-	// 	ownerUUID, err = ph.getOwnerUID(ctx, req.OwnerId)
-	// 	if err != nil {
-	// 		log.Error("failed to get owner uid", zap.Error(err))
-	// 		return nil, err
-	// 	}
-	// }
 
 	creatorUUID, err := uuid.FromString(authUID)
 	if err != nil {
@@ -262,7 +252,7 @@ func (ph *PublicHandler) UpdateCatalog(ctx context.Context, req *artifactpb.Upda
 		return nil, fmt.Errorf("failed to get namespace. err: %w", err)
 	}
 	// ACL - check user's permission to update catalog
-	kb, err := ph.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID.String(), req.CatalogId)
+	kb, err := ph.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.CatalogId)
 	if err != nil {
 		log.Error("failed to get catalog", zap.Error(err))
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
@@ -343,7 +333,7 @@ func (ph *PublicHandler) DeleteCatalog(ctx context.Context, req *artifactpb.Dele
 		return nil, fmt.Errorf("failed to get namespace. err: %w", err)
 	}
 	// ACL - check user's permission to write catalog
-	kb, err := ph.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID.String(), req.CatalogId)
+	kb, err := ph.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.CatalogId)
 	if err != nil {
 		log.Error("failed to get catalog", zap.Error(err))
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
