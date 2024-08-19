@@ -18,7 +18,7 @@ type KnowledgeBaseI interface {
 	ListKnowledgeBases(ctx context.Context, ownerUID string) ([]KnowledgeBase, error)
 	UpdateKnowledgeBase(ctx context.Context, ownerUID string, kb KnowledgeBase) (*KnowledgeBase, error)
 	DeleteKnowledgeBase(ctx context.Context, ownerUID, kbID string) (*KnowledgeBase, error)
-	GetKnowledgeBaseByOwnerAndKbID(ctx context.Context, ownerUID string, kbID string) (*KnowledgeBase, error)
+	GetKnowledgeBaseByOwnerAndKbID(ctx context.Context, ownerUID uuid.UUID, kbID string) (*KnowledgeBase, error)
 	GetKnowledgeBaseCountByOwner(ctx context.Context, ownerUID string) (int64, error)
 	IncreaseKnowledgeBaseUsage(ctx context.Context, kbUID string, amount int) error
 }
@@ -247,7 +247,7 @@ func (r *Repository) checkIfKnowledgeBaseExists(ctx context.Context, kbUID strin
 }
 
 // get the knowledge base by (owner, kb_id)
-func (r *Repository) GetKnowledgeBaseByOwnerAndKbID(ctx context.Context, owner string, kbID string) (*KnowledgeBase, error) {
+func (r *Repository) GetKnowledgeBaseByOwnerAndKbID(ctx context.Context, owner uuid.UUID, kbID string) (*KnowledgeBase, error) {
 	var existingKB KnowledgeBase
 	whereString := fmt.Sprintf("%v = ? AND %v = ? AND %v is NULL", KnowledgeBaseColumn.Owner, KnowledgeBaseColumn.KbID, KnowledgeBaseColumn.DeleteTime)
 	if err := r.db.WithContext(ctx).Where(whereString, owner, kbID).First(&existingKB).Error; err != nil {

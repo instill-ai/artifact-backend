@@ -40,6 +40,8 @@ type Relation struct {
 	Relation string
 }
 
+const CatalogObject = "knowledgebase"
+
 func NewACLClient(wc openfga.OpenFGAServiceClient, rc openfga.OpenFGAServiceClient, redisClient *redis.Client) ACLClient {
 	if rc == nil {
 		rc = wc

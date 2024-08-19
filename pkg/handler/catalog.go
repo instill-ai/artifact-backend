@@ -36,7 +36,7 @@ func (ph *PublicHandler) GetFileCatalog(ctx context.Context, req *artifactpb.Get
 			log.Error("failed to get namespace by ns id", zap.Error(err))
 			return nil, fmt.Errorf("failed to get namespace by ns id. err: %w", err)
 		}
-		kb, err := ph.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID.String(), req.CatalogId)
+		kb, err := ph.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.CatalogId)
 		if err != nil {
 			log.Error("failed to get knowledge base by owner and kb id", zap.Error(err))
 			return nil, fmt.Errorf("failed to get catalog by namepsace and catalog id. err: %w", err)

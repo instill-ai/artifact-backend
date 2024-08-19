@@ -7,7 +7,7 @@ import (
 
 	"github.com/gofrs/uuid"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
-	artifactv1alpha "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	artifactPb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	"go.uber.org/zap"
 )
 
@@ -16,7 +16,7 @@ type SimChunk struct {
 	Score    float32
 }
 
-func (s *Service) SimilarityChunksSearch(ctx context.Context, caller uuid.UUID, requester uuid.UUID, ownerUID string, req *artifactv1alpha.SimilarityChunksSearchRequest) ([]SimChunk, error) {
+func (s *Service) SimilarityChunksSearch(ctx context.Context, caller uuid.UUID, requester uuid.UUID, ownerUID uuid.UUID, req *artifactPb.SimilarityChunksSearchRequest) ([]SimChunk, error) {
 	log, _ := logger.GetZapLogger(ctx)
 	t := time.Now()
 	textVector, err := s.EmbeddingTextPipe(ctx, caller, requester, []string{req.TextPrompt})
