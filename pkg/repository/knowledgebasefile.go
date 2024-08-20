@@ -427,7 +427,8 @@ func (r *Repository) GetSourceTableAndUIDByFileUIDs(ctx context.Context, files [
 			artifactpb.FileType_FILE_TYPE_DOC.String(),
 			artifactpb.FileType_FILE_TYPE_DOCX.String(),
 			artifactpb.FileType_FILE_TYPE_PPT.String(),
-			artifactpb.FileType_FILE_TYPE_PPTX.String():
+			artifactpb.FileType_FILE_TYPE_PPTX.String(),
+			artifactpb.FileType_FILE_TYPE_XLSX.String():
 			convertedFile, err := r.GetConvertedFileByFileUID(ctx, file.UID)
 			if err != nil {
 				if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -530,7 +531,8 @@ func (r *Repository) GetTruthSourceByFileUID(ctx context.Context, fileUID uuid.U
 		artifactpb.FileType_FILE_TYPE_DOC.String(),
 		artifactpb.FileType_FILE_TYPE_DOCX.String(),
 		artifactpb.FileType_FILE_TYPE_PPT.String(),
-		artifactpb.FileType_FILE_TYPE_PPTX.String():
+		artifactpb.FileType_FILE_TYPE_PPTX.String(),
+		artifactpb.FileType_FILE_TYPE_XLSX.String():
 		convertedFile, err := r.GetConvertedFileByFileUID(ctx, fileUID)
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {

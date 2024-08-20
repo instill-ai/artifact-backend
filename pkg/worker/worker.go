@@ -334,7 +334,8 @@ func (wp *fileToEmbWorkerPool) processWaitingFile(ctx context.Context, file repo
 		artifactpb.FileType_FILE_TYPE_DOCX.String(),
 		artifactpb.FileType_FILE_TYPE_PPT.String(),
 		artifactpb.FileType_FILE_TYPE_PPTX.String(),
-		artifactpb.FileType_FILE_TYPE_HTML.String():
+		artifactpb.FileType_FILE_TYPE_HTML.String(),
+		artifactpb.FileType_FILE_TYPE_XLSX.String():
 
 		updateMap := map[string]interface{}{
 			repository.KnowledgeBaseFileColumn.ProcessStatus: artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CONVERTING)],
@@ -395,7 +396,7 @@ func (wp *fileToEmbWorkerPool) processConvertingFile(ctx context.Context, file r
 		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
 	}
 	// save the converting pipeline metadata into database
-	convertingPipelineMetadata := service.NamespaceID + "/" + service.ConverPDFToMDPipelineID + "@" + service.PDFToMDVersion
+	convertingPipelineMetadata := service.NamespaceID + "/" + service.ConvertPDFToMDPipelineID + "@" + service.PDFToMDVersion
 	err = wp.svc.Repository.UpdateExtraMetaData(ctx, file.UID, "", convertingPipelineMetadata, "", "")
 	if err != nil {
 		logger.Error("Failed to save converting pipeline metadata.", zap.String("File uid:", file.UID.String()))
@@ -436,7 +437,8 @@ func (wp *fileToEmbWorkerPool) processChunkingFile(ctx context.Context, file rep
 		artifactpb.FileType_FILE_TYPE_DOCX.String(),
 		artifactpb.FileType_FILE_TYPE_PPT.String(),
 		artifactpb.FileType_FILE_TYPE_PPTX.String(),
-		artifactpb.FileType_FILE_TYPE_HTML.String():
+		artifactpb.FileType_FILE_TYPE_HTML.String(),
+		artifactpb.FileType_FILE_TYPE_XLSX.String():
 		// get the converted file metadata from database
 		convertedFile, err := wp.svc.Repository.GetConvertedFileByFileUID(ctx, file.UID)
 		if err != nil {
