@@ -118,9 +118,18 @@ func (c *ACLClient) getClient(ctx context.Context, mode Mode) openfga.OpenFGASer
 	}
 	return c.writeClient
 }
-
+// SetOwner sets the owner of a given object. It first normalizes the ownerType to its singular form,
+// then checks if the owner already exists in the database. If the owner does not exist, it writes the new owner to the database.
+// Parameters:
+// - ctx: context for managing request-scoped values, cancellation, and deadlines.
+// - objectType: the type of the object (e.g., "pipeline", "_model", "knowledgebase").
+// - objectUID: the unique identifier of the object.
+// - ownerType: the type of the owner (e.g., "users", "organizations").
+// - ownerUID: the unique identifier of the owner.
+// Returns an error if the ownerType is invalid, if there is an error reading from or writing to the database, or nil if successful.
 func (c *ACLClient) SetOwner(ctx context.Context, objectType string, objectUID uuid.UUID, ownerType string, ownerUID uuid.UUID) error {
 	var err error
+	// Normalize ownerType to singular form. because in our openfga, the owner/organization type is singular
 	if ownerType == "users" {
 		ownerType = "user"
 	} else if ownerType == "organizations" {
@@ -128,6 +137,7 @@ func (c *ACLClient) SetOwner(ctx context.Context, objectType string, objectUID u
 	} else {
 		return fmt.Errorf("invalid owner type")
 	}
+	// Check if the owner already exists
 	data, err := c.getClient(ctx, ReadMode).Read(ctx, &openfga.ReadRequest{
 		StoreId: c.storeID,
 		TupleKey: &openfga.ReadRequestTupleKey{
@@ -143,6 +153,7 @@ func (c *ACLClient) SetOwner(ctx context.Context, objectType string, objectUID u
 		return nil
 	}
 
+	// Write the new owner
 	_, err = c.getClient(ctx, WriteMode).Write(ctx, &openfga.WriteRequest{
 		StoreId:              c.storeID,
 		AuthorizationModelId: c.authorizationModelID,
@@ -240,9 +251,11 @@ func (c *ACLClient) DeletePublicKnowledgeBasePermission(ctx context.Context, kbU
 	return nil
 }
 
-// delete all permissions of the object
+// Purge deletes all permissions associated with the specified object type and object UID.
+// It reads all the tuples related to the object and then deletes each one.
 func (c *ACLClient) Purge(ctx context.Context, objectType string, objectUID uuid.UUID) error {
 
+	// Read all tuples related to the specified object
 	data, err := c.getClient(ctx, ReadMode).Read(ctx, &openfga.ReadRequest{
 		StoreId: c.storeID,
 		TupleKey: &openfga.ReadRequestTupleKey{
@@ -252,6 +265,8 @@ func (c *ACLClient) Purge(ctx context.Context, objectType string, objectUID uuid
 	if err != nil {
 		return err
 	}
+
+	// Iterate over each tuple and delete it
 	for _, data := range data.Tuples {
 		_, err = c.getClient(ctx, WriteMode).Write(ctx, &openfga.WriteRequest{
 			StoreId:              c.storeID,
@@ -274,20 +289,29 @@ func (c *ACLClient) Purge(ctx context.Context, objectType string, objectUID uuid
 	return nil
 }
 
+// CheckPermission verifies if a user or visitor has a specific role for a given object.
+// It retrieves the user type and user UID from the request context headers, constructs a CheckRequest,
+// and sends it to the OpenFGA client to check the permission.
 func (c *ACLClient) CheckPermission(ctx context.Context, objectType string, objectUID uuid.UUID, role string) (bool, error) {
-
+	// Retrieve the user type from the request context headers
 	userType := resource.GetRequestSingleHeader(ctx, constant.HeaderAuthTypeKey)
 	userUID := ""
+
+	// Determine the user UID based on the user type
 	if userType == "user" {
+		// If the user type is "user", get the user UID from the corresponding header
 		userUID = resource.GetRequestSingleHeader(ctx, constant.HeaderUserUIDKey)
 	} else {
+		// If the user type is not "user", assume it is "visitor" and get the visitor UID from the corresponding header
 		userUID = resource.GetRequestSingleHeader(ctx, constant.HeaderVisitorUIDKey)
 	}
 
+	// Check if the user UID is empty and return an error if it is
 	if userUID == "" {
 		return false, fmt.Errorf("userUID is empty in check permission")
 	}
 
+	// Create a CheckRequest to verify the user's permission for the specified object and role
 	data, err := c.getClient(ctx, ReadMode).Check(ctx, &openfga.CheckRequest{
 		StoreId:              c.storeID,
 		AuthorizationModelId: c.authorizationModelID,
@@ -298,9 +322,11 @@ func (c *ACLClient) CheckPermission(ctx context.Context, objectType string, obje
 		},
 	})
 	if err != nil {
+		// Return false and the error if the CheckRequest fails
 		return false, err
 	}
 
+	// Return the result of the permission check
 	return data.Allowed, nil
 }
 
