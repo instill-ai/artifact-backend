@@ -8,7 +8,7 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
-	artifactv1alpha "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	artifactPb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	pipelinev1beta "github.com/instill-ai/protogen-go/vdp/pipeline/v1beta"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/metadata"
@@ -23,14 +23,14 @@ const MdSplitVersion = "v2.0.0"
 const TextSplitVersion = "v2.0.0"
 const TextEmbedVersion = "v1.1.0"
 const QAVersion = "v1.1.0"
-const ConverPDFToMDPipelineID = "indexing-convert-pdf"
+const ConvertPDFToMDPipelineID = "indexing-convert-pdf"
 const MdSplitPipelineID = "indexing-split-markdown"
 const TextSplitPipelineID = "indexing-split-text"
 const TextEmbedPipelineID = "indexing-embed"
 const RetrievingQnA = "retrieving-qna"
 
 // ConvertPDFToMDPipe using converting pipeline to convert PDF to MD and consume caller's credits
-func (s *Service) ConvertPDFToMDPipe(ctx context.Context, caller uuid.UUID, requester uuid.UUID, pdfBase64 string, fileType artifactv1alpha.FileType) (string, error) {
+func (s *Service) ConvertPDFToMDPipe(ctx context.Context, caller uuid.UUID, requester uuid.UUID, pdfBase64 string, fileType artifactPb.FileType) (string, error) {
 	logger, _ := logger.GetZapLogger(ctx)
 	var md metadata.MD
 	if requester != uuid.Nil {
@@ -47,25 +47,27 @@ func (s *Service) ConvertPDFToMDPipe(ctx context.Context, caller uuid.UUID, requ
 	}
 	ctx = metadata.NewOutgoingContext(ctx, md)
 	prefix := ""
-	if fileType == artifactv1alpha.FileType_FILE_TYPE_PDF {
+	if fileType == artifactPb.FileType_FILE_TYPE_PDF {
 		prefix = "data:application/pdf;base64,"
-	} else if fileType == artifactv1alpha.FileType_FILE_TYPE_DOCX {
+	} else if fileType == artifactPb.FileType_FILE_TYPE_DOCX {
 		prefix = "data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,"
-	} else if fileType == artifactv1alpha.FileType_FILE_TYPE_DOC {
+	} else if fileType == artifactPb.FileType_FILE_TYPE_DOC {
 		prefix = "data:application/msword;base64,"
-	} else if fileType == artifactv1alpha.FileType_FILE_TYPE_PPT {
+	} else if fileType == artifactPb.FileType_FILE_TYPE_PPT {
 		prefix = "data:application/vnd.ms-powerpoint;base64,"
-	} else if fileType == artifactv1alpha.FileType_FILE_TYPE_PPTX {
+	} else if fileType == artifactPb.FileType_FILE_TYPE_PPTX {
 		prefix = "data:application/vnd.openxmlformats-officedocument.presentationml.presentation;base64,"
-	} else if fileType == artifactv1alpha.FileType_FILE_TYPE_HTML {
+	} else if fileType == artifactPb.FileType_FILE_TYPE_HTML {
 		prefix = "data:text/html;base64,"
-	} else if fileType == artifactv1alpha.FileType_FILE_TYPE_TEXT {
+	} else if fileType == artifactPb.FileType_FILE_TYPE_TEXT {
 		prefix = "data:text/plain;base64,"
+	} else if fileType == artifactPb.FileType_FILE_TYPE_XLSX {
+		prefix = "data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,"
 	}
 
 	req := &pipelinev1beta.TriggerNamespacePipelineReleaseRequest{
 		NamespaceId: NamespaceID,
-		PipelineId:  ConverPDFToMDPipelineID,
+		PipelineId:  ConvertPDFToMDPipelineID,
 		ReleaseId:   PDFToMDVersion,
 		Inputs: []*structpb.Struct{
 			{
@@ -78,7 +80,7 @@ func (s *Service) ConvertPDFToMDPipe(ctx context.Context, caller uuid.UUID, requ
 	resp, err := s.PipelinePub.TriggerNamespacePipelineRelease(ctx, req)
 	if err != nil {
 		logger.Error("failed to trigger pipeline", zap.Error(err))
-		return "", fmt.Errorf("failed to trigger %s pipeline: %w", ConverPDFToMDPipelineID, err)
+		return "", fmt.Errorf("failed to trigger %s pipeline: %w", ConvertPDFToMDPipelineID, err)
 	}
 	result, err := getConvertResult(resp)
 	if err != nil {

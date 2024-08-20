@@ -28,8 +28,9 @@ package grpcclient
 // 	md := metadata.New(map[string]string{"Instill-User-Uid": "admin", "Instill-Auth-Type": "user"})
 // 	ctx := metadata.NewOutgoingContext(context.Background(), md)
 // 	pipelinePublicServiceClient := pipelinev1beta.NewPipelinePublicServiceClient(pipelinePublicGrpcConn)
-// 	req := &pipelinev1beta.TriggerUserPipelineRequest{
-// 		Name: "users/admin/pipelines/test-grpc-calling",
+// 	req := &pipelinev1beta.TriggerAsyncNamespacePipelineRequest{
+// 		NamespaceId: "admin",
+// 		PipelineId:  "test-grpc-calling",
 // 		Data: []*pipelinev1beta.TriggerData{
 // 			{
 // 				Variable: &structpb.Struct{
@@ -47,7 +48,7 @@ package grpcclient
 // 			},
 // 		},
 // 	}
-// 	res, err := pipelinePublicServiceClient.TriggerUserPipeline(ctx, req)
+// 	res, err := pipelinePublicServiceClient.TriggerAsyncNamespacePipeline(ctx, req)
 // 	if err != nil {
 // 		t.Fatalf("failed to trigger pipeline: %v", err)
 // 	}
@@ -67,7 +68,6 @@ package grpcclient
 // //	     -H 'accept: application/json' \
 // //	     -H 'content-type: application/json' \
 // //	     -d '{"inputs":[{"chunk_input":"test"}]}'
-// //
 // func TestCEPresetEmbeddingPipelineReleaseRequest(t *testing.T) {
 // 	pipelinePublicGrpcConn, err := NewGRPCConn("localhost:8081", "", "")
 // 	if err != nil {
@@ -81,7 +81,7 @@ package grpcclient
 // 	req := &pipelinev1beta.TriggerNamespacePipelineReleaseRequest{
 // 		NamespaceId: "preset",
 // 		PipelineId:  "indexing-embed",
-// 		ReleaseId:   "v1.0.0",
+// 		ReleaseId:   "v1.1.1",
 // 		Data: []*pipelinev1beta.TriggerData{
 // 			{
 // 				Variable: &structpb.Struct{
@@ -115,6 +115,8 @@ package grpcclient
 // }
 
 // func TestCEPresetConvertPDF2MdPipeReleaseRequest(t *testing.T) {
+// 	testFile := "../../../test.xlsx"
+// 	resultFile := "../../../test_converted_xlsx_.md"
 // 	// print the current folder
 // 	dir, err := os.Getwd()
 // 	if err != nil {
@@ -131,22 +133,30 @@ package grpcclient
 // 	ctx := metadata.NewOutgoingContext(context.Background(), md)
 // 	pipelinePublicServiceClient := pipelinev1beta.NewPipelinePublicServiceClient(pipelinePublicGrpcConn)
 
-// 	base64PDF, err := readFileToBase64("../../../test_.pdf")
+// 	base64PDF, err := readFileToBase64(testFile)
 // 	if err != nil {
 // 		t.Fatalf("failed to read pdf file: %v", err)
 // 	}
-// 	req := &pipelinev1beta.TriggerOrganizationPipelineReleaseRequest{
-// 		Name:   "organizations/preset/pipelines/indexing-convert-pdf/releases/v1.0.0",
-// 		Inputs: []*structpb.Struct{{Fields: map[string]*structpb.Value{"document_input": {Kind: &structpb.Value_StringValue{StringValue: base64PDF}}}}},
+// 	req := &pipelinev1beta.TriggerNamespacePipelineReleaseRequest{
+// 		NamespaceId: service.NamespaceID,
+// 		PipelineId:  service.ConvertPDFToMDPipelineID,
+// 		ReleaseId:   service.PDFToMDVersion,
+// 		Inputs:      []*structpb.Struct{{Fields: map[string]*structpb.Value{"document_input": {Kind: &structpb.Value_StringValue{StringValue: base64PDF}}}}},
 // 	}
-// 	res, err := pipelinePublicServiceClient.TriggerOrganizationPipelineRelease(ctx, req)
+// 	res, err := pipelinePublicServiceClient.TriggerNamespacePipelineRelease(ctx, req)
 // 	if err != nil {
 // 		t.Fatalf("failed to trigger pipeline: %v", err)
 // 	}
 // 	t.Logf("pipeline triggered successfully")
-// 	fmt.Println("convert result\n", res.Outputs[0].GetFields()["convert_result"].GetStringValue()[:100])
+// 	// check if the string is length of 100
+// 	if len(res.Outputs[0].GetFields()["convert_result"].GetStringValue()) >= 100 {
+// 		fmt.Println("convert result\n", res.Outputs[0].GetFields()["convert_result"].GetStringValue()[:100])
+// 	} else {
+// 		// print the whole string
+// 		fmt.Println("convert result\n", res.Outputs[0].GetFields()["convert_result"].GetStringValue())
+// 	}
 // 	// store the result to a file
-// 	err = os.WriteFile("../../../test_converted_pdf_.md", []byte(res.Outputs[0].GetFields()["convert_result"].GetStringValue()), 0644)
+// 	err = os.WriteFile(resultFile, []byte(res.Outputs[0].GetFields()["convert_result"].GetStringValue()), 0644)
 // 	if err != nil {
 // 		t.Fatalf("failed to write file: %v", err)
 // 	}
@@ -196,8 +206,10 @@ package grpcclient
 // 	if err != nil {
 // 		t.Fatalf("failed to read pdf file: %v", err)
 // 	}
-// 	req := &pipelinev1beta.TriggerOrganizationPipelineReleaseRequest{
-// 		Name: "organizations/preset/pipelines/indexing-split-markdown/releases/v1.0.1",
+// 	req := &pipelinev1beta.TriggerNamespacePipelineReleaseRequest{
+// 		NamespaceId: service.NamespaceID,
+// 		PipelineId:  service.MdSplitPipelineID,
+// 		ReleaseId:   service.MdSplitVersion,
 // 		Inputs: []*structpb.Struct{
 // 			{
 // 				Fields: map[string]*structpb.Value{
@@ -208,7 +220,7 @@ package grpcclient
 // 			},
 // 		},
 // 	}
-// 	res, err := pipelinePublicServiceClient.TriggerOrganizationPipelineRelease(ctx, req)
+// 	res, err := pipelinePublicServiceClient.TriggerNamespacePipelineRelease(ctx, req)
 // 	if err != nil {
 // 		t.Fatalf("failed to trigger pipeline: %v", err)
 // 	}
@@ -266,8 +278,10 @@ package grpcclient
 // 	if err != nil {
 // 		t.Fatalf("failed to read pdf file: %v", err)
 // 	}
-// 	req := &pipelinev1beta.TriggerOrganizationPipelineReleaseRequest{
-// 		Name: "organizations/preset/pipelines/indexing-split-text/releases/v1.0.0",
+// 	req := &pipelinev1beta.TriggerNamespacePipelineReleaseRequest{
+// 		NamespaceId: service.NamespaceID,
+// 		PipelineId:  service.TextSplitPipelineID,
+// 		ReleaseId:   service.TextSplitVersion,
 // 		Inputs: []*structpb.Struct{
 // 			{
 // 				Fields: map[string]*structpb.Value{
@@ -278,7 +292,7 @@ package grpcclient
 // 			},
 // 		},
 // 	}
-// 	res, err := pipelinePublicServiceClient.TriggerOrganizationPipelineRelease(ctx, req)
+// 	res, err := pipelinePublicServiceClient.TriggerNamespacePipelineRelease(ctx, req)
 // 	if err != nil {
 // 		t.Fatalf("failed to trigger pipeline: %v", err)
 // 	}
@@ -317,9 +331,9 @@ package grpcclient
 // 	pipelinePublicServiceClient := pipelinev1beta.NewPipelinePublicServiceClient(pipelinePublicGrpcConn)
 
 // 	req := &pipelinev1beta.TriggerNamespacePipelineReleaseRequest{
-// 		NamespaceId: "preset",
-// 		PipelineId:  "retrieving-qna",
-// 		ReleaseId:   "v1.1.0",
+// 		NamespaceId: service.NamespaceID,
+// 		PipelineId:  service.RetrievingQnA,
+// 		ReleaseId:   service.QAVersion,
 // 		Inputs: []*structpb.Struct{
 // 			{
 // 				Fields: map[string]*structpb.Value{

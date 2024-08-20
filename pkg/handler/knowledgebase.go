@@ -87,7 +87,6 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 		return nil, fmt.Errorf(msg, req.Name, customerror.ErrInvalidArgument)
 	}
 
-
 	creatorUUID, err := uuid.FromString(authUID)
 	if err != nil {
 		log.Error("failed to parse creator uid", zap.String("uid", authUID), zap.Error(err))
@@ -214,7 +213,7 @@ func (ph *PublicHandler) ListCatalogs(ctx context.Context, req *artifactpb.ListC
 			CreateTime:          kb.CreateTime.String(),
 			UpdateTime:          kb.UpdateTime.String(),
 			OwnerName:           kb.Owner,
-			ConvertingPipelines: []string{service.NamespaceID + "/" + service.ConverPDFToMDPipelineID},
+			ConvertingPipelines: []string{service.NamespaceID + "/" + service.ConvertPDFToMDPipelineID},
 			SplittingPipelines: []string{
 				service.NamespaceID + "/" + service.TextSplitPipelineID,
 				service.NamespaceID + "/" + service.MdSplitPipelineID},
@@ -303,7 +302,7 @@ func (ph *PublicHandler) UpdateCatalog(ctx context.Context, req *artifactpb.Upda
 			CreateTime:          kb.CreateTime.String(),
 			UpdateTime:          kb.UpdateTime.String(),
 			OwnerName:           kb.Owner,
-			ConvertingPipelines: []string{service.NamespaceID + "/" + service.ConverPDFToMDPipelineID},
+			ConvertingPipelines: []string{service.NamespaceID + "/" + service.ConvertPDFToMDPipelineID},
 			SplittingPipelines: []string{
 				service.NamespaceID + "/" + service.TextSplitPipelineID,
 				service.NamespaceID + "/" + service.MdSplitPipelineID},

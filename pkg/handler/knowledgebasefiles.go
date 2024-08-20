@@ -481,6 +481,8 @@ func fileTypeConvertToMime(t artifactpb.FileType) string {
 		return "application/vnd.ms-powerpoint"
 	case artifactpb.FileType_FILE_TYPE_PPTX:
 		return "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+	case artifactpb.FileType_FILE_TYPE_XLSX:
+		return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 	default:
 		return "application/octet-stream"
 	}
@@ -504,6 +506,8 @@ func DetermineFileType(fileName string) artifactpb.FileType {
 		return artifactpb.FileType_FILE_TYPE_PPT
 	} else if strings.HasSuffix(fileName, ".pptx") {
 		return artifactpb.FileType_FILE_TYPE_PPTX
+	} else if strings.HasSuffix(fileName, ".xlsx") {
+		return artifactpb.FileType_FILE_TYPE_XLSX
 	}
 	return artifactpb.FileType_FILE_TYPE_UNSPECIFIED
 }
