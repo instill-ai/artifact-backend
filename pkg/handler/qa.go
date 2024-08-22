@@ -12,15 +12,15 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/resource"
 	"github.com/instill-ai/artifact-backend/pkg/service"
-	artifactv1alpha "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	artifactPb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	"go.uber.org/zap"
 )
 
 
 func (ph *PublicHandler) QuestionAnswering(
 	ctx context.Context,
-	req *artifactv1alpha.QuestionAnsweringRequest) (
-	*artifactv1alpha.QuestionAnsweringResponse,
+	req *artifactPb.QuestionAnsweringRequest) (
+	*artifactPb.QuestionAnsweringResponse,
 	error) {
 
 	log, _ := logger.GetZapLogger(ctx)
@@ -72,7 +72,7 @@ func (ph *PublicHandler) QuestionAnswering(
 	}
 
 	// retrieve the chunks based on the similarity
-	scReq := &artifactv1alpha.SimilarityChunksSearchRequest{
+	scReq := &artifactPb.SimilarityChunksSearchRequest{
 		TextPrompt:  req.GetQuestion(),
 		TopK:        uint32(req.GetTopK()),
 		CatalogId:   req.GetCatalogId(),
@@ -88,13 +88,13 @@ func (ph *PublicHandler) QuestionAnswering(
 			return nil, fmt.Errorf("failed to parse requester uid: %v. err: %w", err, customerror.ErrUnauthenticated)
 		}
 	}
-	simChunksScroes, err := ph.service.SimilarityChunksSearch(ctx, authUserUUID, requesterUUID, ownerUID, scReq)
+	simChunksScores, err := ph.service.SimilarityChunksSearch(ctx, authUserUUID, requesterUUID, ownerUID, scReq)
 	if err != nil {
 		log.Error("failed to get similarity chunks", zap.Error(err))
 		return nil, fmt.Errorf("failed to get similarity chunks. err: %w", err)
 	}
 	var chunkUIDs []uuid.UUID
-	for _, simChunk := range simChunksScroes {
+	for _, simChunk := range simChunksScores {
 		chunkUIDs = append(chunkUIDs, simChunk.ChunkUID)
 	}
 	log.Info("get similarity chunks", zap.Duration("duration", time.Since(t)))
@@ -142,14 +142,14 @@ func (ph *PublicHandler) QuestionAnswering(
 	log.Info("get catalog files by file uids", zap.Duration("duration", time.Since(t)))
 
 	// prepare the response
-	simChunks := make([]*artifactv1alpha.SimilarityChunk, 0, len(chunks))
+	simChunks := make([]*artifactPb.SimilarityChunk, 0, len(chunks))
 	for i, chunk := range chunks {
 		if !chunk.Retrievable {
 			continue
 		}
-		simChunks = append(simChunks, &artifactv1alpha.SimilarityChunk{
+		simChunks = append(simChunks, &artifactPb.SimilarityChunk{
 			ChunkUid:        chunk.UID.String(),
-			SimilarityScore: float32(simChunksScroes[i].Score),
+			SimilarityScore: float32(simChunksScores[i].Score),
 			TextContent:     string(chunkContents[i].Content),
 			SourceFile:      fileUIDMapName[chunk.KbFileUID],
 		})
@@ -163,5 +163,5 @@ func (ph *PublicHandler) QuestionAnswering(
 		log.Error("failed to get question answering response", zap.Error(err))
 		return nil, fmt.Errorf("failed to get question answering response. err: %w", err)
 	}
-	return &artifactv1alpha.QuestionAnsweringResponse{SimilarChunks: simChunks, Answer: answer}, nil
+	return &artifactPb.QuestionAnsweringResponse{SimilarChunks: simChunks, Answer: answer}, nil
 }
