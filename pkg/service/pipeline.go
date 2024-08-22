@@ -9,7 +9,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	artifactPb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
-	pipelinev1beta "github.com/instill-ai/protogen-go/vdp/pipeline/v1beta"
+	pipelinePb "github.com/instill-ai/protogen-go/vdp/pipeline/v1beta"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -22,7 +22,7 @@ const PDFToMDVersion = "v1.1.1"
 const MdSplitVersion = "v2.0.0"
 const TextSplitVersion = "v2.0.0"
 const TextEmbedVersion = "v1.1.0"
-const QAVersion = "v1.1.0"
+const QAVersion = "v1.2.0"
 const ConvertPDFToMDPipelineID = "indexing-convert-pdf"
 const MdSplitPipelineID = "indexing-split-markdown"
 const TextSplitPipelineID = "indexing-split-text"
@@ -65,7 +65,7 @@ func (s *Service) ConvertPDFToMDPipe(ctx context.Context, caller uuid.UUID, requ
 		prefix = "data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,"
 	}
 
-	req := &pipelinev1beta.TriggerNamespacePipelineReleaseRequest{
+	req := &pipelinePb.TriggerNamespacePipelineReleaseRequest{
 		NamespaceId: NamespaceID,
 		PipelineId:  ConvertPDFToMDPipelineID,
 		ReleaseId:   PDFToMDVersion,
@@ -92,7 +92,7 @@ func (s *Service) ConvertPDFToMDPipe(ctx context.Context, caller uuid.UUID, requ
 
 // Helper function to safely extract the "convert_result" from the response.
 // It checks if the index and key are available to avoid nil pointer issues.
-func getConvertResult(resp *pipelinev1beta.TriggerNamespacePipelineReleaseResponse) (string, error) {
+func getConvertResult(resp *pipelinePb.TriggerNamespacePipelineReleaseResponse) (string, error) {
 	if resp == nil || len(resp.Outputs) == 0 {
 		return "", errors.New("response is nil or has no outputs")
 	}
@@ -130,7 +130,7 @@ func (s *Service) SplitMarkdownPipe(ctx context.Context, caller uuid.UUID, reque
 		})
 	}
 	ctx = metadata.NewOutgoingContext(ctx, md)
-	req := &pipelinev1beta.TriggerNamespacePipelineReleaseRequest{
+	req := &pipelinePb.TriggerNamespacePipelineReleaseRequest{
 		NamespaceId: NamespaceID,
 		PipelineId:  MdSplitPipelineID,
 		ReleaseId:   MdSplitVersion,
@@ -156,7 +156,7 @@ func (s *Service) SplitMarkdownPipe(ctx context.Context, caller uuid.UUID, reque
 }
 
 // GetChunksFromResponse converts the pipeline response into a slice of Chunk.
-func GetChunksFromResponse(resp *pipelinev1beta.TriggerNamespacePipelineReleaseResponse) ([]Chunk, error) {
+func GetChunksFromResponse(resp *pipelinePb.TriggerNamespacePipelineReleaseResponse) ([]Chunk, error) {
 	if resp == nil || len(resp.Outputs) == 0 {
 		return nil, errors.New("response is nil or has no outputs")
 	}
@@ -202,7 +202,7 @@ func (s *Service) SplitTextPipe(ctx context.Context, caller uuid.UUID, requester
 		})
 	}
 	ctx = metadata.NewOutgoingContext(ctx, md)
-	req := &pipelinev1beta.TriggerNamespacePipelineReleaseRequest{
+	req := &pipelinePb.TriggerNamespacePipelineReleaseRequest{
 		NamespaceId: NamespaceID,
 		PipelineId:  TextSplitPipelineID,
 		ReleaseId:   TextSplitVersion,
@@ -228,7 +228,7 @@ func (s *Service) SplitTextPipe(ctx context.Context, caller uuid.UUID, requester
 	return result, nil
 }
 
-// EmbeddingTextPipe using embedding pipeline to vectorize text and consume caller's credits
+// EmbeddingTextPipe using embedding pipeline to embed text and consume caller's credits
 func (s *Service) EmbeddingTextPipe(ctx context.Context, caller uuid.UUID, requester uuid.UUID, texts []string) ([][]float32, error) {
 	const maxBatchSize = 32
 	var md metadata.MD
@@ -263,7 +263,7 @@ func (s *Service) EmbeddingTextPipe(ctx context.Context, caller uuid.UUID, reque
 			})
 		}
 
-		req := &pipelinev1beta.TriggerNamespacePipelineReleaseRequest{
+		req := &pipelinePb.TriggerNamespacePipelineReleaseRequest{
 			NamespaceId: NamespaceID,
 			PipelineId:  TextEmbedPipelineID,
 			ReleaseId:   TextEmbedVersion,
@@ -284,7 +284,7 @@ func (s *Service) EmbeddingTextPipe(ctx context.Context, caller uuid.UUID, reque
 }
 
 // GetVectorFromResponse converts the pipeline response into a slice of float32.
-func GetVectorFromResponse(resp *pipelinev1beta.TriggerNamespacePipelineReleaseResponse) ([][]float32, error) {
+func GetVectorFromResponse(resp *pipelinePb.TriggerNamespacePipelineReleaseResponse) ([][]float32, error) {
 	if resp == nil || len(resp.Outputs) == 0 {
 		return nil, errors.New("response is nil or has no outputs")
 	}
@@ -310,8 +310,8 @@ func GetVectorFromResponse(resp *pipelinev1beta.TriggerNamespacePipelineReleaseR
 	return vectors, nil
 }
 
-// VectorizeText using embedding pipeline to vectorize text and consume caller's credits
-func (s *Service) QuestionAnsweringPipe(ctx context.Context, caller uuid.UUID, requester uuid.UUID, question string, simchunks []string) (string, error) {
+// VectoringText using embedding pipeline to vector text and consume caller's credits
+func (s *Service) QuestionAnsweringPipe(ctx context.Context, caller uuid.UUID, requester uuid.UUID, question string, simChunks []string) (string, error) {
 	var md metadata.MD
 	if requester != uuid.Nil {
 		md = metadata.New(map[string]string{
@@ -327,11 +327,11 @@ func (s *Service) QuestionAnsweringPipe(ctx context.Context, caller uuid.UUID, r
 	}
 	// create a retired chunk var that combines all the chunks by /n/n
 	retrievedChunk := ""
-	for _, chunk := range simchunks {
+	for _, chunk := range simChunks {
 		retrievedChunk += chunk + "\n\n"
 	}
 	ctx = metadata.NewOutgoingContext(ctx, md)
-	req := &pipelinev1beta.TriggerNamespacePipelineReleaseRequest{
+	req := &pipelinePb.TriggerNamespacePipelineReleaseRequest{
 		NamespaceId: NamespaceID,
 		PipelineId:  RetrievingQnA,
 		ReleaseId:   QAVersion,
