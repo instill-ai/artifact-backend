@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.11.0-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.10.1-alpha...v0.11.0-alpha) (2024-08-26)
+
+
+### Features
+
+* **catalog:** implement conversation and message api ([#77](https://github.com/instill-ai/artifact-backend/issues/77)) ([e02b1f1](https://github.com/instill-ai/artifact-backend/commit/e02b1f1e80f9f34993860ef48a727bcfb3df2a56))
+* **catalog:** order asc in create time ([#80](https://github.com/instill-ai/artifact-backend/issues/80)) ([98348e9](https://github.com/instill-ai/artifact-backend/commit/98348e93fa0b96e64a849f0242503373efddc0ec))
+* **catalog:** support xlsx ([#79](https://github.com/instill-ai/artifact-backend/issues/79)) ([f1e2505](https://github.com/instill-ai/artifact-backend/commit/f1e25055ca0dd9a4015ab7b903ba910d2279d898))
+* **catalog:** update the pipeline that ask endpoint use ([#83](https://github.com/instill-ai/artifact-backend/issues/83)) ([b5bbc75](https://github.com/instill-ai/artifact-backend/commit/b5bbc7520837999fbc1de6aa93b6aa99e244f44c))
+* **catalog:** update the proto-go ([#82](https://github.com/instill-ai/artifact-backend/issues/82)) ([94fa708](https://github.com/instill-ai/artifact-backend/commit/94fa708b0ff275cbb97877ad7d82dd9fa31f1c52))
+
+
+### Bug Fixes
+
+* **artifact:** use correct version of proto ([#84](https://github.com/instill-ai/artifact-backend/issues/84)) ([cba7e06](https://github.com/instill-ai/artifact-backend/commit/cba7e06851c6bf7ae96924428de93b0c9622ee56))
+
 ## [0.10.1-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.10.0-alpha...v0.10.1-alpha) (2024-08-14)
 
 
