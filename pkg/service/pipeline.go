@@ -229,7 +229,9 @@ func (s *Service) SplitTextPipe(ctx context.Context, caller uuid.UUID, requester
 	return result, nil
 }
 
-// EmbeddingTextPipeV2 calls the embedding pipeline to embed texts concurrently, processing up to 32 texts at a time.
+// EmbeddingTextPipe uses the embedding pipeline to convert text into vectors and consume caller's credits.
+// It processes the input texts in batches, triggers the embedding pipeline for each batch, and collects the results.
+// The function returns a 2D slice of float32 representing the vectors for the input texts.
 func (s *Service) EmbeddingTextPipe(ctx context.Context, caller uuid.UUID, requester uuid.UUID, texts []string) ([][]float32, error) {
 	ctx, ctxCancel := context.WithCancel(ctx)
 	defer ctxCancel()
