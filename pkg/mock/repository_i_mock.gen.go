@@ -12,7 +12,7 @@ import (
 	"github.com/gojuno/minimock/v3"
 	mm_repository "github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
-	pb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	 pb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
 // RepositoryIMock implements repository.RepositoryI
@@ -377,11 +377,11 @@ type RepositoryIMock struct {
 	beforeUpdateConversationByUpdateMapCounter uint64
 	UpdateConversationByUpdateMapMock          mRepositoryIMockUpdateConversationByUpdateMap
 
-	funcUpdateExtraMetaData          func(ctx context.Context, fileUID uuid.UUID, failureReason string, convertingPipe string, chunkingPipe string, embeddingPipe string) (err error)
-	inspectFuncUpdateExtraMetaData   func(ctx context.Context, fileUID uuid.UUID, failureReason string, convertingPipe string, chunkingPipe string, embeddingPipe string)
-	afterUpdateExtraMetaDataCounter  uint64
-	beforeUpdateExtraMetaDataCounter uint64
-	UpdateExtraMetaDataMock          mRepositoryIMockUpdateExtraMetaData
+	funcUpdateKbFileExtraMetaData          func(ctx context.Context, fileUID uuid.UUID, failureReason string, convertingPipe string, chunkingPipe string, embeddingPipe string, processingTime *int64, convertingTime *int64, chunkingTime *int64, embeddingTime *int64) (err error)
+	inspectFuncUpdateKbFileExtraMetaData   func(ctx context.Context, fileUID uuid.UUID, failureReason string, convertingPipe string, chunkingPipe string, embeddingPipe string, processingTime *int64, convertingTime *int64, chunkingTime *int64, embeddingTime *int64)
+	afterUpdateKbFileExtraMetaDataCounter  uint64
+	beforeUpdateKbFileExtraMetaDataCounter uint64
+	UpdateKbFileExtraMetaDataMock          mRepositoryIMockUpdateKbFileExtraMetaData
 
 	funcUpdateKnowledgeBase          func(ctx context.Context, ownerUID string, kb mm_repository.KnowledgeBase) (kp1 *mm_repository.KnowledgeBase, err error)
 	inspectFuncUpdateKnowledgeBase   func(ctx context.Context, ownerUID string, kb mm_repository.KnowledgeBase)
@@ -594,8 +594,8 @@ func NewRepositoryIMock(t minimock.Tester) *RepositoryIMock {
 	m.UpdateConversationByUpdateMapMock = mRepositoryIMockUpdateConversationByUpdateMap{mock: m}
 	m.UpdateConversationByUpdateMapMock.callArgs = []*RepositoryIMockUpdateConversationByUpdateMapParams{}
 
-	m.UpdateExtraMetaDataMock = mRepositoryIMockUpdateExtraMetaData{mock: m}
-	m.UpdateExtraMetaDataMock.callArgs = []*RepositoryIMockUpdateExtraMetaDataParams{}
+	m.UpdateKbFileExtraMetaDataMock = mRepositoryIMockUpdateKbFileExtraMetaData{mock: m}
+	m.UpdateKbFileExtraMetaDataMock.callArgs = []*RepositoryIMockUpdateKbFileExtraMetaDataParams{}
 
 	m.UpdateKnowledgeBaseMock = mRepositoryIMockUpdateKnowledgeBase{mock: m}
 	m.UpdateKnowledgeBaseMock.callArgs = []*RepositoryIMockUpdateKnowledgeBaseParams{}
@@ -18298,419 +18298,531 @@ func (m *RepositoryIMock) MinimockUpdateConversationByUpdateMapInspect() {
 	}
 }
 
-type mRepositoryIMockUpdateExtraMetaData struct {
+type mRepositoryIMockUpdateKbFileExtraMetaData struct {
 	mock               *RepositoryIMock
-	defaultExpectation *RepositoryIMockUpdateExtraMetaDataExpectation
-	expectations       []*RepositoryIMockUpdateExtraMetaDataExpectation
+	defaultExpectation *RepositoryIMockUpdateKbFileExtraMetaDataExpectation
+	expectations       []*RepositoryIMockUpdateKbFileExtraMetaDataExpectation
 
-	callArgs []*RepositoryIMockUpdateExtraMetaDataParams
+	callArgs []*RepositoryIMockUpdateKbFileExtraMetaDataParams
 	mutex    sync.RWMutex
 
 	expectedInvocations uint64
 }
 
-// RepositoryIMockUpdateExtraMetaDataExpectation specifies expectation struct of the RepositoryI.UpdateExtraMetaData
-type RepositoryIMockUpdateExtraMetaDataExpectation struct {
+// RepositoryIMockUpdateKbFileExtraMetaDataExpectation specifies expectation struct of the RepositoryI.UpdateKbFileExtraMetaData
+type RepositoryIMockUpdateKbFileExtraMetaDataExpectation struct {
 	mock      *RepositoryIMock
-	params    *RepositoryIMockUpdateExtraMetaDataParams
-	paramPtrs *RepositoryIMockUpdateExtraMetaDataParamPtrs
-	results   *RepositoryIMockUpdateExtraMetaDataResults
+	params    *RepositoryIMockUpdateKbFileExtraMetaDataParams
+	paramPtrs *RepositoryIMockUpdateKbFileExtraMetaDataParamPtrs
+	results   *RepositoryIMockUpdateKbFileExtraMetaDataResults
 	Counter   uint64
 }
 
-// RepositoryIMockUpdateExtraMetaDataParams contains parameters of the RepositoryI.UpdateExtraMetaData
-type RepositoryIMockUpdateExtraMetaDataParams struct {
+// RepositoryIMockUpdateKbFileExtraMetaDataParams contains parameters of the RepositoryI.UpdateKbFileExtraMetaData
+type RepositoryIMockUpdateKbFileExtraMetaDataParams struct {
 	ctx            context.Context
 	fileUID        uuid.UUID
 	failureReason  string
 	convertingPipe string
 	chunkingPipe   string
 	embeddingPipe  string
+	processingTime *int64
+	convertingTime *int64
+	chunkingTime   *int64
+	embeddingTime  *int64
 }
 
-// RepositoryIMockUpdateExtraMetaDataParamPtrs contains pointers to parameters of the RepositoryI.UpdateExtraMetaData
-type RepositoryIMockUpdateExtraMetaDataParamPtrs struct {
+// RepositoryIMockUpdateKbFileExtraMetaDataParamPtrs contains pointers to parameters of the RepositoryI.UpdateKbFileExtraMetaData
+type RepositoryIMockUpdateKbFileExtraMetaDataParamPtrs struct {
 	ctx            *context.Context
 	fileUID        *uuid.UUID
 	failureReason  *string
 	convertingPipe *string
 	chunkingPipe   *string
 	embeddingPipe  *string
+	processingTime **int64
+	convertingTime **int64
+	chunkingTime   **int64
+	embeddingTime  **int64
 }
 
-// RepositoryIMockUpdateExtraMetaDataResults contains results of the RepositoryI.UpdateExtraMetaData
-type RepositoryIMockUpdateExtraMetaDataResults struct {
+// RepositoryIMockUpdateKbFileExtraMetaDataResults contains results of the RepositoryI.UpdateKbFileExtraMetaData
+type RepositoryIMockUpdateKbFileExtraMetaDataResults struct {
 	err error
 }
 
-// Expect sets up expected params for RepositoryI.UpdateExtraMetaData
-func (mmUpdateExtraMetaData *mRepositoryIMockUpdateExtraMetaData) Expect(ctx context.Context, fileUID uuid.UUID, failureReason string, convertingPipe string, chunkingPipe string, embeddingPipe string) *mRepositoryIMockUpdateExtraMetaData {
-	if mmUpdateExtraMetaData.mock.funcUpdateExtraMetaData != nil {
-		mmUpdateExtraMetaData.mock.t.Fatalf("RepositoryIMock.UpdateExtraMetaData mock is already set by Set")
+// Expect sets up expected params for RepositoryI.UpdateKbFileExtraMetaData
+func (mmUpdateKbFileExtraMetaData *mRepositoryIMockUpdateKbFileExtraMetaData) Expect(ctx context.Context, fileUID uuid.UUID, failureReason string, convertingPipe string, chunkingPipe string, embeddingPipe string, processingTime *int64, convertingTime *int64, chunkingTime *int64, embeddingTime *int64) *mRepositoryIMockUpdateKbFileExtraMetaData {
+	if mmUpdateKbFileExtraMetaData.mock.funcUpdateKbFileExtraMetaData != nil {
+		mmUpdateKbFileExtraMetaData.mock.t.Fatalf("RepositoryIMock.UpdateKbFileExtraMetaData mock is already set by Set")
 	}
 
-	if mmUpdateExtraMetaData.defaultExpectation == nil {
-		mmUpdateExtraMetaData.defaultExpectation = &RepositoryIMockUpdateExtraMetaDataExpectation{}
+	if mmUpdateKbFileExtraMetaData.defaultExpectation == nil {
+		mmUpdateKbFileExtraMetaData.defaultExpectation = &RepositoryIMockUpdateKbFileExtraMetaDataExpectation{}
 	}
 
-	if mmUpdateExtraMetaData.defaultExpectation.paramPtrs != nil {
-		mmUpdateExtraMetaData.mock.t.Fatalf("RepositoryIMock.UpdateExtraMetaData mock is already set by ExpectParams functions")
+	if mmUpdateKbFileExtraMetaData.defaultExpectation.paramPtrs != nil {
+		mmUpdateKbFileExtraMetaData.mock.t.Fatalf("RepositoryIMock.UpdateKbFileExtraMetaData mock is already set by ExpectParams functions")
 	}
 
-	mmUpdateExtraMetaData.defaultExpectation.params = &RepositoryIMockUpdateExtraMetaDataParams{ctx, fileUID, failureReason, convertingPipe, chunkingPipe, embeddingPipe}
-	for _, e := range mmUpdateExtraMetaData.expectations {
-		if minimock.Equal(e.params, mmUpdateExtraMetaData.defaultExpectation.params) {
-			mmUpdateExtraMetaData.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmUpdateExtraMetaData.defaultExpectation.params)
+	mmUpdateKbFileExtraMetaData.defaultExpectation.params = &RepositoryIMockUpdateKbFileExtraMetaDataParams{ctx, fileUID, failureReason, convertingPipe, chunkingPipe, embeddingPipe, processingTime, convertingTime, chunkingTime, embeddingTime}
+	for _, e := range mmUpdateKbFileExtraMetaData.expectations {
+		if minimock.Equal(e.params, mmUpdateKbFileExtraMetaData.defaultExpectation.params) {
+			mmUpdateKbFileExtraMetaData.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmUpdateKbFileExtraMetaData.defaultExpectation.params)
 		}
 	}
 
-	return mmUpdateExtraMetaData
+	return mmUpdateKbFileExtraMetaData
 }
 
-// ExpectCtxParam1 sets up expected param ctx for RepositoryI.UpdateExtraMetaData
-func (mmUpdateExtraMetaData *mRepositoryIMockUpdateExtraMetaData) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockUpdateExtraMetaData {
-	if mmUpdateExtraMetaData.mock.funcUpdateExtraMetaData != nil {
-		mmUpdateExtraMetaData.mock.t.Fatalf("RepositoryIMock.UpdateExtraMetaData mock is already set by Set")
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.UpdateKbFileExtraMetaData
+func (mmUpdateKbFileExtraMetaData *mRepositoryIMockUpdateKbFileExtraMetaData) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockUpdateKbFileExtraMetaData {
+	if mmUpdateKbFileExtraMetaData.mock.funcUpdateKbFileExtraMetaData != nil {
+		mmUpdateKbFileExtraMetaData.mock.t.Fatalf("RepositoryIMock.UpdateKbFileExtraMetaData mock is already set by Set")
 	}
 
-	if mmUpdateExtraMetaData.defaultExpectation == nil {
-		mmUpdateExtraMetaData.defaultExpectation = &RepositoryIMockUpdateExtraMetaDataExpectation{}
+	if mmUpdateKbFileExtraMetaData.defaultExpectation == nil {
+		mmUpdateKbFileExtraMetaData.defaultExpectation = &RepositoryIMockUpdateKbFileExtraMetaDataExpectation{}
 	}
 
-	if mmUpdateExtraMetaData.defaultExpectation.params != nil {
-		mmUpdateExtraMetaData.mock.t.Fatalf("RepositoryIMock.UpdateExtraMetaData mock is already set by Expect")
+	if mmUpdateKbFileExtraMetaData.defaultExpectation.params != nil {
+		mmUpdateKbFileExtraMetaData.mock.t.Fatalf("RepositoryIMock.UpdateKbFileExtraMetaData mock is already set by Expect")
 	}
 
-	if mmUpdateExtraMetaData.defaultExpectation.paramPtrs == nil {
-		mmUpdateExtraMetaData.defaultExpectation.paramPtrs = &RepositoryIMockUpdateExtraMetaDataParamPtrs{}
+	if mmUpdateKbFileExtraMetaData.defaultExpectation.paramPtrs == nil {
+		mmUpdateKbFileExtraMetaData.defaultExpectation.paramPtrs = &RepositoryIMockUpdateKbFileExtraMetaDataParamPtrs{}
 	}
-	mmUpdateExtraMetaData.defaultExpectation.paramPtrs.ctx = &ctx
+	mmUpdateKbFileExtraMetaData.defaultExpectation.paramPtrs.ctx = &ctx
 
-	return mmUpdateExtraMetaData
+	return mmUpdateKbFileExtraMetaData
 }
 
-// ExpectFileUIDParam2 sets up expected param fileUID for RepositoryI.UpdateExtraMetaData
-func (mmUpdateExtraMetaData *mRepositoryIMockUpdateExtraMetaData) ExpectFileUIDParam2(fileUID uuid.UUID) *mRepositoryIMockUpdateExtraMetaData {
-	if mmUpdateExtraMetaData.mock.funcUpdateExtraMetaData != nil {
-		mmUpdateExtraMetaData.mock.t.Fatalf("RepositoryIMock.UpdateExtraMetaData mock is already set by Set")
+// ExpectFileUIDParam2 sets up expected param fileUID for RepositoryI.UpdateKbFileExtraMetaData
+func (mmUpdateKbFileExtraMetaData *mRepositoryIMockUpdateKbFileExtraMetaData) ExpectFileUIDParam2(fileUID uuid.UUID) *mRepositoryIMockUpdateKbFileExtraMetaData {
+	if mmUpdateKbFileExtraMetaData.mock.funcUpdateKbFileExtraMetaData != nil {
+		mmUpdateKbFileExtraMetaData.mock.t.Fatalf("RepositoryIMock.UpdateKbFileExtraMetaData mock is already set by Set")
 	}
 
-	if mmUpdateExtraMetaData.defaultExpectation == nil {
-		mmUpdateExtraMetaData.defaultExpectation = &RepositoryIMockUpdateExtraMetaDataExpectation{}
+	if mmUpdateKbFileExtraMetaData.defaultExpectation == nil {
+		mmUpdateKbFileExtraMetaData.defaultExpectation = &RepositoryIMockUpdateKbFileExtraMetaDataExpectation{}
 	}
 
-	if mmUpdateExtraMetaData.defaultExpectation.params != nil {
-		mmUpdateExtraMetaData.mock.t.Fatalf("RepositoryIMock.UpdateExtraMetaData mock is already set by Expect")
+	if mmUpdateKbFileExtraMetaData.defaultExpectation.params != nil {
+		mmUpdateKbFileExtraMetaData.mock.t.Fatalf("RepositoryIMock.UpdateKbFileExtraMetaData mock is already set by Expect")
 	}
 
-	if mmUpdateExtraMetaData.defaultExpectation.paramPtrs == nil {
-		mmUpdateExtraMetaData.defaultExpectation.paramPtrs = &RepositoryIMockUpdateExtraMetaDataParamPtrs{}
+	if mmUpdateKbFileExtraMetaData.defaultExpectation.paramPtrs == nil {
+		mmUpdateKbFileExtraMetaData.defaultExpectation.paramPtrs = &RepositoryIMockUpdateKbFileExtraMetaDataParamPtrs{}
 	}
-	mmUpdateExtraMetaData.defaultExpectation.paramPtrs.fileUID = &fileUID
+	mmUpdateKbFileExtraMetaData.defaultExpectation.paramPtrs.fileUID = &fileUID
 
-	return mmUpdateExtraMetaData
+	return mmUpdateKbFileExtraMetaData
 }
 
-// ExpectFailureReasonParam3 sets up expected param failureReason for RepositoryI.UpdateExtraMetaData
-func (mmUpdateExtraMetaData *mRepositoryIMockUpdateExtraMetaData) ExpectFailureReasonParam3(failureReason string) *mRepositoryIMockUpdateExtraMetaData {
-	if mmUpdateExtraMetaData.mock.funcUpdateExtraMetaData != nil {
-		mmUpdateExtraMetaData.mock.t.Fatalf("RepositoryIMock.UpdateExtraMetaData mock is already set by Set")
+// ExpectFailureReasonParam3 sets up expected param failureReason for RepositoryI.UpdateKbFileExtraMetaData
+func (mmUpdateKbFileExtraMetaData *mRepositoryIMockUpdateKbFileExtraMetaData) ExpectFailureReasonParam3(failureReason string) *mRepositoryIMockUpdateKbFileExtraMetaData {
+	if mmUpdateKbFileExtraMetaData.mock.funcUpdateKbFileExtraMetaData != nil {
+		mmUpdateKbFileExtraMetaData.mock.t.Fatalf("RepositoryIMock.UpdateKbFileExtraMetaData mock is already set by Set")
 	}
 
-	if mmUpdateExtraMetaData.defaultExpectation == nil {
-		mmUpdateExtraMetaData.defaultExpectation = &RepositoryIMockUpdateExtraMetaDataExpectation{}
+	if mmUpdateKbFileExtraMetaData.defaultExpectation == nil {
+		mmUpdateKbFileExtraMetaData.defaultExpectation = &RepositoryIMockUpdateKbFileExtraMetaDataExpectation{}
 	}
 
-	if mmUpdateExtraMetaData.defaultExpectation.params != nil {
-		mmUpdateExtraMetaData.mock.t.Fatalf("RepositoryIMock.UpdateExtraMetaData mock is already set by Expect")
+	if mmUpdateKbFileExtraMetaData.defaultExpectation.params != nil {
+		mmUpdateKbFileExtraMetaData.mock.t.Fatalf("RepositoryIMock.UpdateKbFileExtraMetaData mock is already set by Expect")
 	}
 
-	if mmUpdateExtraMetaData.defaultExpectation.paramPtrs == nil {
-		mmUpdateExtraMetaData.defaultExpectation.paramPtrs = &RepositoryIMockUpdateExtraMetaDataParamPtrs{}
+	if mmUpdateKbFileExtraMetaData.defaultExpectation.paramPtrs == nil {
+		mmUpdateKbFileExtraMetaData.defaultExpectation.paramPtrs = &RepositoryIMockUpdateKbFileExtraMetaDataParamPtrs{}
 	}
-	mmUpdateExtraMetaData.defaultExpectation.paramPtrs.failureReason = &failureReason
+	mmUpdateKbFileExtraMetaData.defaultExpectation.paramPtrs.failureReason = &failureReason
 
-	return mmUpdateExtraMetaData
+	return mmUpdateKbFileExtraMetaData
 }
 
-// ExpectConvertingPipeParam4 sets up expected param convertingPipe for RepositoryI.UpdateExtraMetaData
-func (mmUpdateExtraMetaData *mRepositoryIMockUpdateExtraMetaData) ExpectConvertingPipeParam4(convertingPipe string) *mRepositoryIMockUpdateExtraMetaData {
-	if mmUpdateExtraMetaData.mock.funcUpdateExtraMetaData != nil {
-		mmUpdateExtraMetaData.mock.t.Fatalf("RepositoryIMock.UpdateExtraMetaData mock is already set by Set")
+// ExpectConvertingPipeParam4 sets up expected param convertingPipe for RepositoryI.UpdateKbFileExtraMetaData
+func (mmUpdateKbFileExtraMetaData *mRepositoryIMockUpdateKbFileExtraMetaData) ExpectConvertingPipeParam4(convertingPipe string) *mRepositoryIMockUpdateKbFileExtraMetaData {
+	if mmUpdateKbFileExtraMetaData.mock.funcUpdateKbFileExtraMetaData != nil {
+		mmUpdateKbFileExtraMetaData.mock.t.Fatalf("RepositoryIMock.UpdateKbFileExtraMetaData mock is already set by Set")
 	}
 
-	if mmUpdateExtraMetaData.defaultExpectation == nil {
-		mmUpdateExtraMetaData.defaultExpectation = &RepositoryIMockUpdateExtraMetaDataExpectation{}
+	if mmUpdateKbFileExtraMetaData.defaultExpectation == nil {
+		mmUpdateKbFileExtraMetaData.defaultExpectation = &RepositoryIMockUpdateKbFileExtraMetaDataExpectation{}
 	}
 
-	if mmUpdateExtraMetaData.defaultExpectation.params != nil {
-		mmUpdateExtraMetaData.mock.t.Fatalf("RepositoryIMock.UpdateExtraMetaData mock is already set by Expect")
+	if mmUpdateKbFileExtraMetaData.defaultExpectation.params != nil {
+		mmUpdateKbFileExtraMetaData.mock.t.Fatalf("RepositoryIMock.UpdateKbFileExtraMetaData mock is already set by Expect")
 	}
 
-	if mmUpdateExtraMetaData.defaultExpectation.paramPtrs == nil {
-		mmUpdateExtraMetaData.defaultExpectation.paramPtrs = &RepositoryIMockUpdateExtraMetaDataParamPtrs{}
+	if mmUpdateKbFileExtraMetaData.defaultExpectation.paramPtrs == nil {
+		mmUpdateKbFileExtraMetaData.defaultExpectation.paramPtrs = &RepositoryIMockUpdateKbFileExtraMetaDataParamPtrs{}
 	}
-	mmUpdateExtraMetaData.defaultExpectation.paramPtrs.convertingPipe = &convertingPipe
+	mmUpdateKbFileExtraMetaData.defaultExpectation.paramPtrs.convertingPipe = &convertingPipe
 
-	return mmUpdateExtraMetaData
+	return mmUpdateKbFileExtraMetaData
 }
 
-// ExpectChunkingPipeParam5 sets up expected param chunkingPipe for RepositoryI.UpdateExtraMetaData
-func (mmUpdateExtraMetaData *mRepositoryIMockUpdateExtraMetaData) ExpectChunkingPipeParam5(chunkingPipe string) *mRepositoryIMockUpdateExtraMetaData {
-	if mmUpdateExtraMetaData.mock.funcUpdateExtraMetaData != nil {
-		mmUpdateExtraMetaData.mock.t.Fatalf("RepositoryIMock.UpdateExtraMetaData mock is already set by Set")
+// ExpectChunkingPipeParam5 sets up expected param chunkingPipe for RepositoryI.UpdateKbFileExtraMetaData
+func (mmUpdateKbFileExtraMetaData *mRepositoryIMockUpdateKbFileExtraMetaData) ExpectChunkingPipeParam5(chunkingPipe string) *mRepositoryIMockUpdateKbFileExtraMetaData {
+	if mmUpdateKbFileExtraMetaData.mock.funcUpdateKbFileExtraMetaData != nil {
+		mmUpdateKbFileExtraMetaData.mock.t.Fatalf("RepositoryIMock.UpdateKbFileExtraMetaData mock is already set by Set")
 	}
 
-	if mmUpdateExtraMetaData.defaultExpectation == nil {
-		mmUpdateExtraMetaData.defaultExpectation = &RepositoryIMockUpdateExtraMetaDataExpectation{}
+	if mmUpdateKbFileExtraMetaData.defaultExpectation == nil {
+		mmUpdateKbFileExtraMetaData.defaultExpectation = &RepositoryIMockUpdateKbFileExtraMetaDataExpectation{}
 	}
 
-	if mmUpdateExtraMetaData.defaultExpectation.params != nil {
-		mmUpdateExtraMetaData.mock.t.Fatalf("RepositoryIMock.UpdateExtraMetaData mock is already set by Expect")
+	if mmUpdateKbFileExtraMetaData.defaultExpectation.params != nil {
+		mmUpdateKbFileExtraMetaData.mock.t.Fatalf("RepositoryIMock.UpdateKbFileExtraMetaData mock is already set by Expect")
 	}
 
-	if mmUpdateExtraMetaData.defaultExpectation.paramPtrs == nil {
-		mmUpdateExtraMetaData.defaultExpectation.paramPtrs = &RepositoryIMockUpdateExtraMetaDataParamPtrs{}
+	if mmUpdateKbFileExtraMetaData.defaultExpectation.paramPtrs == nil {
+		mmUpdateKbFileExtraMetaData.defaultExpectation.paramPtrs = &RepositoryIMockUpdateKbFileExtraMetaDataParamPtrs{}
 	}
-	mmUpdateExtraMetaData.defaultExpectation.paramPtrs.chunkingPipe = &chunkingPipe
+	mmUpdateKbFileExtraMetaData.defaultExpectation.paramPtrs.chunkingPipe = &chunkingPipe
 
-	return mmUpdateExtraMetaData
+	return mmUpdateKbFileExtraMetaData
 }
 
-// ExpectEmbeddingPipeParam6 sets up expected param embeddingPipe for RepositoryI.UpdateExtraMetaData
-func (mmUpdateExtraMetaData *mRepositoryIMockUpdateExtraMetaData) ExpectEmbeddingPipeParam6(embeddingPipe string) *mRepositoryIMockUpdateExtraMetaData {
-	if mmUpdateExtraMetaData.mock.funcUpdateExtraMetaData != nil {
-		mmUpdateExtraMetaData.mock.t.Fatalf("RepositoryIMock.UpdateExtraMetaData mock is already set by Set")
+// ExpectEmbeddingPipeParam6 sets up expected param embeddingPipe for RepositoryI.UpdateKbFileExtraMetaData
+func (mmUpdateKbFileExtraMetaData *mRepositoryIMockUpdateKbFileExtraMetaData) ExpectEmbeddingPipeParam6(embeddingPipe string) *mRepositoryIMockUpdateKbFileExtraMetaData {
+	if mmUpdateKbFileExtraMetaData.mock.funcUpdateKbFileExtraMetaData != nil {
+		mmUpdateKbFileExtraMetaData.mock.t.Fatalf("RepositoryIMock.UpdateKbFileExtraMetaData mock is already set by Set")
 	}
 
-	if mmUpdateExtraMetaData.defaultExpectation == nil {
-		mmUpdateExtraMetaData.defaultExpectation = &RepositoryIMockUpdateExtraMetaDataExpectation{}
+	if mmUpdateKbFileExtraMetaData.defaultExpectation == nil {
+		mmUpdateKbFileExtraMetaData.defaultExpectation = &RepositoryIMockUpdateKbFileExtraMetaDataExpectation{}
 	}
 
-	if mmUpdateExtraMetaData.defaultExpectation.params != nil {
-		mmUpdateExtraMetaData.mock.t.Fatalf("RepositoryIMock.UpdateExtraMetaData mock is already set by Expect")
+	if mmUpdateKbFileExtraMetaData.defaultExpectation.params != nil {
+		mmUpdateKbFileExtraMetaData.mock.t.Fatalf("RepositoryIMock.UpdateKbFileExtraMetaData mock is already set by Expect")
 	}
 
-	if mmUpdateExtraMetaData.defaultExpectation.paramPtrs == nil {
-		mmUpdateExtraMetaData.defaultExpectation.paramPtrs = &RepositoryIMockUpdateExtraMetaDataParamPtrs{}
+	if mmUpdateKbFileExtraMetaData.defaultExpectation.paramPtrs == nil {
+		mmUpdateKbFileExtraMetaData.defaultExpectation.paramPtrs = &RepositoryIMockUpdateKbFileExtraMetaDataParamPtrs{}
 	}
-	mmUpdateExtraMetaData.defaultExpectation.paramPtrs.embeddingPipe = &embeddingPipe
+	mmUpdateKbFileExtraMetaData.defaultExpectation.paramPtrs.embeddingPipe = &embeddingPipe
 
-	return mmUpdateExtraMetaData
+	return mmUpdateKbFileExtraMetaData
 }
 
-// Inspect accepts an inspector function that has same arguments as the RepositoryI.UpdateExtraMetaData
-func (mmUpdateExtraMetaData *mRepositoryIMockUpdateExtraMetaData) Inspect(f func(ctx context.Context, fileUID uuid.UUID, failureReason string, convertingPipe string, chunkingPipe string, embeddingPipe string)) *mRepositoryIMockUpdateExtraMetaData {
-	if mmUpdateExtraMetaData.mock.inspectFuncUpdateExtraMetaData != nil {
-		mmUpdateExtraMetaData.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.UpdateExtraMetaData")
+// ExpectProcessingTimeParam7 sets up expected param processingTime for RepositoryI.UpdateKbFileExtraMetaData
+func (mmUpdateKbFileExtraMetaData *mRepositoryIMockUpdateKbFileExtraMetaData) ExpectProcessingTimeParam7(processingTime *int64) *mRepositoryIMockUpdateKbFileExtraMetaData {
+	if mmUpdateKbFileExtraMetaData.mock.funcUpdateKbFileExtraMetaData != nil {
+		mmUpdateKbFileExtraMetaData.mock.t.Fatalf("RepositoryIMock.UpdateKbFileExtraMetaData mock is already set by Set")
 	}
 
-	mmUpdateExtraMetaData.mock.inspectFuncUpdateExtraMetaData = f
+	if mmUpdateKbFileExtraMetaData.defaultExpectation == nil {
+		mmUpdateKbFileExtraMetaData.defaultExpectation = &RepositoryIMockUpdateKbFileExtraMetaDataExpectation{}
+	}
 
-	return mmUpdateExtraMetaData
+	if mmUpdateKbFileExtraMetaData.defaultExpectation.params != nil {
+		mmUpdateKbFileExtraMetaData.mock.t.Fatalf("RepositoryIMock.UpdateKbFileExtraMetaData mock is already set by Expect")
+	}
+
+	if mmUpdateKbFileExtraMetaData.defaultExpectation.paramPtrs == nil {
+		mmUpdateKbFileExtraMetaData.defaultExpectation.paramPtrs = &RepositoryIMockUpdateKbFileExtraMetaDataParamPtrs{}
+	}
+	mmUpdateKbFileExtraMetaData.defaultExpectation.paramPtrs.processingTime = &processingTime
+
+	return mmUpdateKbFileExtraMetaData
 }
 
-// Return sets up results that will be returned by RepositoryI.UpdateExtraMetaData
-func (mmUpdateExtraMetaData *mRepositoryIMockUpdateExtraMetaData) Return(err error) *RepositoryIMock {
-	if mmUpdateExtraMetaData.mock.funcUpdateExtraMetaData != nil {
-		mmUpdateExtraMetaData.mock.t.Fatalf("RepositoryIMock.UpdateExtraMetaData mock is already set by Set")
+// ExpectConvertingTimeParam8 sets up expected param convertingTime for RepositoryI.UpdateKbFileExtraMetaData
+func (mmUpdateKbFileExtraMetaData *mRepositoryIMockUpdateKbFileExtraMetaData) ExpectConvertingTimeParam8(convertingTime *int64) *mRepositoryIMockUpdateKbFileExtraMetaData {
+	if mmUpdateKbFileExtraMetaData.mock.funcUpdateKbFileExtraMetaData != nil {
+		mmUpdateKbFileExtraMetaData.mock.t.Fatalf("RepositoryIMock.UpdateKbFileExtraMetaData mock is already set by Set")
 	}
 
-	if mmUpdateExtraMetaData.defaultExpectation == nil {
-		mmUpdateExtraMetaData.defaultExpectation = &RepositoryIMockUpdateExtraMetaDataExpectation{mock: mmUpdateExtraMetaData.mock}
+	if mmUpdateKbFileExtraMetaData.defaultExpectation == nil {
+		mmUpdateKbFileExtraMetaData.defaultExpectation = &RepositoryIMockUpdateKbFileExtraMetaDataExpectation{}
 	}
-	mmUpdateExtraMetaData.defaultExpectation.results = &RepositoryIMockUpdateExtraMetaDataResults{err}
-	return mmUpdateExtraMetaData.mock
+
+	if mmUpdateKbFileExtraMetaData.defaultExpectation.params != nil {
+		mmUpdateKbFileExtraMetaData.mock.t.Fatalf("RepositoryIMock.UpdateKbFileExtraMetaData mock is already set by Expect")
+	}
+
+	if mmUpdateKbFileExtraMetaData.defaultExpectation.paramPtrs == nil {
+		mmUpdateKbFileExtraMetaData.defaultExpectation.paramPtrs = &RepositoryIMockUpdateKbFileExtraMetaDataParamPtrs{}
+	}
+	mmUpdateKbFileExtraMetaData.defaultExpectation.paramPtrs.convertingTime = &convertingTime
+
+	return mmUpdateKbFileExtraMetaData
 }
 
-// Set uses given function f to mock the RepositoryI.UpdateExtraMetaData method
-func (mmUpdateExtraMetaData *mRepositoryIMockUpdateExtraMetaData) Set(f func(ctx context.Context, fileUID uuid.UUID, failureReason string, convertingPipe string, chunkingPipe string, embeddingPipe string) (err error)) *RepositoryIMock {
-	if mmUpdateExtraMetaData.defaultExpectation != nil {
-		mmUpdateExtraMetaData.mock.t.Fatalf("Default expectation is already set for the RepositoryI.UpdateExtraMetaData method")
+// ExpectChunkingTimeParam9 sets up expected param chunkingTime for RepositoryI.UpdateKbFileExtraMetaData
+func (mmUpdateKbFileExtraMetaData *mRepositoryIMockUpdateKbFileExtraMetaData) ExpectChunkingTimeParam9(chunkingTime *int64) *mRepositoryIMockUpdateKbFileExtraMetaData {
+	if mmUpdateKbFileExtraMetaData.mock.funcUpdateKbFileExtraMetaData != nil {
+		mmUpdateKbFileExtraMetaData.mock.t.Fatalf("RepositoryIMock.UpdateKbFileExtraMetaData mock is already set by Set")
 	}
 
-	if len(mmUpdateExtraMetaData.expectations) > 0 {
-		mmUpdateExtraMetaData.mock.t.Fatalf("Some expectations are already set for the RepositoryI.UpdateExtraMetaData method")
+	if mmUpdateKbFileExtraMetaData.defaultExpectation == nil {
+		mmUpdateKbFileExtraMetaData.defaultExpectation = &RepositoryIMockUpdateKbFileExtraMetaDataExpectation{}
 	}
 
-	mmUpdateExtraMetaData.mock.funcUpdateExtraMetaData = f
-	return mmUpdateExtraMetaData.mock
+	if mmUpdateKbFileExtraMetaData.defaultExpectation.params != nil {
+		mmUpdateKbFileExtraMetaData.mock.t.Fatalf("RepositoryIMock.UpdateKbFileExtraMetaData mock is already set by Expect")
+	}
+
+	if mmUpdateKbFileExtraMetaData.defaultExpectation.paramPtrs == nil {
+		mmUpdateKbFileExtraMetaData.defaultExpectation.paramPtrs = &RepositoryIMockUpdateKbFileExtraMetaDataParamPtrs{}
+	}
+	mmUpdateKbFileExtraMetaData.defaultExpectation.paramPtrs.chunkingTime = &chunkingTime
+
+	return mmUpdateKbFileExtraMetaData
 }
 
-// When sets expectation for the RepositoryI.UpdateExtraMetaData which will trigger the result defined by the following
+// ExpectEmbeddingTimeParam10 sets up expected param embeddingTime for RepositoryI.UpdateKbFileExtraMetaData
+func (mmUpdateKbFileExtraMetaData *mRepositoryIMockUpdateKbFileExtraMetaData) ExpectEmbeddingTimeParam10(embeddingTime *int64) *mRepositoryIMockUpdateKbFileExtraMetaData {
+	if mmUpdateKbFileExtraMetaData.mock.funcUpdateKbFileExtraMetaData != nil {
+		mmUpdateKbFileExtraMetaData.mock.t.Fatalf("RepositoryIMock.UpdateKbFileExtraMetaData mock is already set by Set")
+	}
+
+	if mmUpdateKbFileExtraMetaData.defaultExpectation == nil {
+		mmUpdateKbFileExtraMetaData.defaultExpectation = &RepositoryIMockUpdateKbFileExtraMetaDataExpectation{}
+	}
+
+	if mmUpdateKbFileExtraMetaData.defaultExpectation.params != nil {
+		mmUpdateKbFileExtraMetaData.mock.t.Fatalf("RepositoryIMock.UpdateKbFileExtraMetaData mock is already set by Expect")
+	}
+
+	if mmUpdateKbFileExtraMetaData.defaultExpectation.paramPtrs == nil {
+		mmUpdateKbFileExtraMetaData.defaultExpectation.paramPtrs = &RepositoryIMockUpdateKbFileExtraMetaDataParamPtrs{}
+	}
+	mmUpdateKbFileExtraMetaData.defaultExpectation.paramPtrs.embeddingTime = &embeddingTime
+
+	return mmUpdateKbFileExtraMetaData
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.UpdateKbFileExtraMetaData
+func (mmUpdateKbFileExtraMetaData *mRepositoryIMockUpdateKbFileExtraMetaData) Inspect(f func(ctx context.Context, fileUID uuid.UUID, failureReason string, convertingPipe string, chunkingPipe string, embeddingPipe string, processingTime *int64, convertingTime *int64, chunkingTime *int64, embeddingTime *int64)) *mRepositoryIMockUpdateKbFileExtraMetaData {
+	if mmUpdateKbFileExtraMetaData.mock.inspectFuncUpdateKbFileExtraMetaData != nil {
+		mmUpdateKbFileExtraMetaData.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.UpdateKbFileExtraMetaData")
+	}
+
+	mmUpdateKbFileExtraMetaData.mock.inspectFuncUpdateKbFileExtraMetaData = f
+
+	return mmUpdateKbFileExtraMetaData
+}
+
+// Return sets up results that will be returned by RepositoryI.UpdateKbFileExtraMetaData
+func (mmUpdateKbFileExtraMetaData *mRepositoryIMockUpdateKbFileExtraMetaData) Return(err error) *RepositoryIMock {
+	if mmUpdateKbFileExtraMetaData.mock.funcUpdateKbFileExtraMetaData != nil {
+		mmUpdateKbFileExtraMetaData.mock.t.Fatalf("RepositoryIMock.UpdateKbFileExtraMetaData mock is already set by Set")
+	}
+
+	if mmUpdateKbFileExtraMetaData.defaultExpectation == nil {
+		mmUpdateKbFileExtraMetaData.defaultExpectation = &RepositoryIMockUpdateKbFileExtraMetaDataExpectation{mock: mmUpdateKbFileExtraMetaData.mock}
+	}
+	mmUpdateKbFileExtraMetaData.defaultExpectation.results = &RepositoryIMockUpdateKbFileExtraMetaDataResults{err}
+	return mmUpdateKbFileExtraMetaData.mock
+}
+
+// Set uses given function f to mock the RepositoryI.UpdateKbFileExtraMetaData method
+func (mmUpdateKbFileExtraMetaData *mRepositoryIMockUpdateKbFileExtraMetaData) Set(f func(ctx context.Context, fileUID uuid.UUID, failureReason string, convertingPipe string, chunkingPipe string, embeddingPipe string, processingTime *int64, convertingTime *int64, chunkingTime *int64, embeddingTime *int64) (err error)) *RepositoryIMock {
+	if mmUpdateKbFileExtraMetaData.defaultExpectation != nil {
+		mmUpdateKbFileExtraMetaData.mock.t.Fatalf("Default expectation is already set for the RepositoryI.UpdateKbFileExtraMetaData method")
+	}
+
+	if len(mmUpdateKbFileExtraMetaData.expectations) > 0 {
+		mmUpdateKbFileExtraMetaData.mock.t.Fatalf("Some expectations are already set for the RepositoryI.UpdateKbFileExtraMetaData method")
+	}
+
+	mmUpdateKbFileExtraMetaData.mock.funcUpdateKbFileExtraMetaData = f
+	return mmUpdateKbFileExtraMetaData.mock
+}
+
+// When sets expectation for the RepositoryI.UpdateKbFileExtraMetaData which will trigger the result defined by the following
 // Then helper
-func (mmUpdateExtraMetaData *mRepositoryIMockUpdateExtraMetaData) When(ctx context.Context, fileUID uuid.UUID, failureReason string, convertingPipe string, chunkingPipe string, embeddingPipe string) *RepositoryIMockUpdateExtraMetaDataExpectation {
-	if mmUpdateExtraMetaData.mock.funcUpdateExtraMetaData != nil {
-		mmUpdateExtraMetaData.mock.t.Fatalf("RepositoryIMock.UpdateExtraMetaData mock is already set by Set")
+func (mmUpdateKbFileExtraMetaData *mRepositoryIMockUpdateKbFileExtraMetaData) When(ctx context.Context, fileUID uuid.UUID, failureReason string, convertingPipe string, chunkingPipe string, embeddingPipe string, processingTime *int64, convertingTime *int64, chunkingTime *int64, embeddingTime *int64) *RepositoryIMockUpdateKbFileExtraMetaDataExpectation {
+	if mmUpdateKbFileExtraMetaData.mock.funcUpdateKbFileExtraMetaData != nil {
+		mmUpdateKbFileExtraMetaData.mock.t.Fatalf("RepositoryIMock.UpdateKbFileExtraMetaData mock is already set by Set")
 	}
 
-	expectation := &RepositoryIMockUpdateExtraMetaDataExpectation{
-		mock:   mmUpdateExtraMetaData.mock,
-		params: &RepositoryIMockUpdateExtraMetaDataParams{ctx, fileUID, failureReason, convertingPipe, chunkingPipe, embeddingPipe},
+	expectation := &RepositoryIMockUpdateKbFileExtraMetaDataExpectation{
+		mock:   mmUpdateKbFileExtraMetaData.mock,
+		params: &RepositoryIMockUpdateKbFileExtraMetaDataParams{ctx, fileUID, failureReason, convertingPipe, chunkingPipe, embeddingPipe, processingTime, convertingTime, chunkingTime, embeddingTime},
 	}
-	mmUpdateExtraMetaData.expectations = append(mmUpdateExtraMetaData.expectations, expectation)
+	mmUpdateKbFileExtraMetaData.expectations = append(mmUpdateKbFileExtraMetaData.expectations, expectation)
 	return expectation
 }
 
-// Then sets up RepositoryI.UpdateExtraMetaData return parameters for the expectation previously defined by the When method
-func (e *RepositoryIMockUpdateExtraMetaDataExpectation) Then(err error) *RepositoryIMock {
-	e.results = &RepositoryIMockUpdateExtraMetaDataResults{err}
+// Then sets up RepositoryI.UpdateKbFileExtraMetaData return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockUpdateKbFileExtraMetaDataExpectation) Then(err error) *RepositoryIMock {
+	e.results = &RepositoryIMockUpdateKbFileExtraMetaDataResults{err}
 	return e.mock
 }
 
-// Times sets number of times RepositoryI.UpdateExtraMetaData should be invoked
-func (mmUpdateExtraMetaData *mRepositoryIMockUpdateExtraMetaData) Times(n uint64) *mRepositoryIMockUpdateExtraMetaData {
+// Times sets number of times RepositoryI.UpdateKbFileExtraMetaData should be invoked
+func (mmUpdateKbFileExtraMetaData *mRepositoryIMockUpdateKbFileExtraMetaData) Times(n uint64) *mRepositoryIMockUpdateKbFileExtraMetaData {
 	if n == 0 {
-		mmUpdateExtraMetaData.mock.t.Fatalf("Times of RepositoryIMock.UpdateExtraMetaData mock can not be zero")
+		mmUpdateKbFileExtraMetaData.mock.t.Fatalf("Times of RepositoryIMock.UpdateKbFileExtraMetaData mock can not be zero")
 	}
-	mm_atomic.StoreUint64(&mmUpdateExtraMetaData.expectedInvocations, n)
-	return mmUpdateExtraMetaData
+	mm_atomic.StoreUint64(&mmUpdateKbFileExtraMetaData.expectedInvocations, n)
+	return mmUpdateKbFileExtraMetaData
 }
 
-func (mmUpdateExtraMetaData *mRepositoryIMockUpdateExtraMetaData) invocationsDone() bool {
-	if len(mmUpdateExtraMetaData.expectations) == 0 && mmUpdateExtraMetaData.defaultExpectation == nil && mmUpdateExtraMetaData.mock.funcUpdateExtraMetaData == nil {
+func (mmUpdateKbFileExtraMetaData *mRepositoryIMockUpdateKbFileExtraMetaData) invocationsDone() bool {
+	if len(mmUpdateKbFileExtraMetaData.expectations) == 0 && mmUpdateKbFileExtraMetaData.defaultExpectation == nil && mmUpdateKbFileExtraMetaData.mock.funcUpdateKbFileExtraMetaData == nil {
 		return true
 	}
 
-	totalInvocations := mm_atomic.LoadUint64(&mmUpdateExtraMetaData.mock.afterUpdateExtraMetaDataCounter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmUpdateExtraMetaData.expectedInvocations)
+	totalInvocations := mm_atomic.LoadUint64(&mmUpdateKbFileExtraMetaData.mock.afterUpdateKbFileExtraMetaDataCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmUpdateKbFileExtraMetaData.expectedInvocations)
 
 	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
 }
 
-// UpdateExtraMetaData implements repository.RepositoryI
-func (mmUpdateExtraMetaData *RepositoryIMock) UpdateExtraMetaData(ctx context.Context, fileUID uuid.UUID, failureReason string, convertingPipe string, chunkingPipe string, embeddingPipe string) (err error) {
-	mm_atomic.AddUint64(&mmUpdateExtraMetaData.beforeUpdateExtraMetaDataCounter, 1)
-	defer mm_atomic.AddUint64(&mmUpdateExtraMetaData.afterUpdateExtraMetaDataCounter, 1)
+// UpdateKbFileExtraMetaData implements repository.RepositoryI
+func (mmUpdateKbFileExtraMetaData *RepositoryIMock) UpdateKbFileExtraMetaData(ctx context.Context, fileUID uuid.UUID, failureReason string, convertingPipe string, chunkingPipe string, embeddingPipe string, processingTime *int64, convertingTime *int64, chunkingTime *int64, embeddingTime *int64) (err error) {
+	mm_atomic.AddUint64(&mmUpdateKbFileExtraMetaData.beforeUpdateKbFileExtraMetaDataCounter, 1)
+	defer mm_atomic.AddUint64(&mmUpdateKbFileExtraMetaData.afterUpdateKbFileExtraMetaDataCounter, 1)
 
-	if mmUpdateExtraMetaData.inspectFuncUpdateExtraMetaData != nil {
-		mmUpdateExtraMetaData.inspectFuncUpdateExtraMetaData(ctx, fileUID, failureReason, convertingPipe, chunkingPipe, embeddingPipe)
+	if mmUpdateKbFileExtraMetaData.inspectFuncUpdateKbFileExtraMetaData != nil {
+		mmUpdateKbFileExtraMetaData.inspectFuncUpdateKbFileExtraMetaData(ctx, fileUID, failureReason, convertingPipe, chunkingPipe, embeddingPipe, processingTime, convertingTime, chunkingTime, embeddingTime)
 	}
 
-	mm_params := RepositoryIMockUpdateExtraMetaDataParams{ctx, fileUID, failureReason, convertingPipe, chunkingPipe, embeddingPipe}
+	mm_params := RepositoryIMockUpdateKbFileExtraMetaDataParams{ctx, fileUID, failureReason, convertingPipe, chunkingPipe, embeddingPipe, processingTime, convertingTime, chunkingTime, embeddingTime}
 
 	// Record call args
-	mmUpdateExtraMetaData.UpdateExtraMetaDataMock.mutex.Lock()
-	mmUpdateExtraMetaData.UpdateExtraMetaDataMock.callArgs = append(mmUpdateExtraMetaData.UpdateExtraMetaDataMock.callArgs, &mm_params)
-	mmUpdateExtraMetaData.UpdateExtraMetaDataMock.mutex.Unlock()
+	mmUpdateKbFileExtraMetaData.UpdateKbFileExtraMetaDataMock.mutex.Lock()
+	mmUpdateKbFileExtraMetaData.UpdateKbFileExtraMetaDataMock.callArgs = append(mmUpdateKbFileExtraMetaData.UpdateKbFileExtraMetaDataMock.callArgs, &mm_params)
+	mmUpdateKbFileExtraMetaData.UpdateKbFileExtraMetaDataMock.mutex.Unlock()
 
-	for _, e := range mmUpdateExtraMetaData.UpdateExtraMetaDataMock.expectations {
+	for _, e := range mmUpdateKbFileExtraMetaData.UpdateKbFileExtraMetaDataMock.expectations {
 		if minimock.Equal(*e.params, mm_params) {
 			mm_atomic.AddUint64(&e.Counter, 1)
 			return e.results.err
 		}
 	}
 
-	if mmUpdateExtraMetaData.UpdateExtraMetaDataMock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmUpdateExtraMetaData.UpdateExtraMetaDataMock.defaultExpectation.Counter, 1)
-		mm_want := mmUpdateExtraMetaData.UpdateExtraMetaDataMock.defaultExpectation.params
-		mm_want_ptrs := mmUpdateExtraMetaData.UpdateExtraMetaDataMock.defaultExpectation.paramPtrs
+	if mmUpdateKbFileExtraMetaData.UpdateKbFileExtraMetaDataMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmUpdateKbFileExtraMetaData.UpdateKbFileExtraMetaDataMock.defaultExpectation.Counter, 1)
+		mm_want := mmUpdateKbFileExtraMetaData.UpdateKbFileExtraMetaDataMock.defaultExpectation.params
+		mm_want_ptrs := mmUpdateKbFileExtraMetaData.UpdateKbFileExtraMetaDataMock.defaultExpectation.paramPtrs
 
-		mm_got := RepositoryIMockUpdateExtraMetaDataParams{ctx, fileUID, failureReason, convertingPipe, chunkingPipe, embeddingPipe}
+		mm_got := RepositoryIMockUpdateKbFileExtraMetaDataParams{ctx, fileUID, failureReason, convertingPipe, chunkingPipe, embeddingPipe, processingTime, convertingTime, chunkingTime, embeddingTime}
 
 		if mm_want_ptrs != nil {
 
 			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
-				mmUpdateExtraMetaData.t.Errorf("RepositoryIMock.UpdateExtraMetaData got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+				mmUpdateKbFileExtraMetaData.t.Errorf("RepositoryIMock.UpdateKbFileExtraMetaData got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
 			}
 
 			if mm_want_ptrs.fileUID != nil && !minimock.Equal(*mm_want_ptrs.fileUID, mm_got.fileUID) {
-				mmUpdateExtraMetaData.t.Errorf("RepositoryIMock.UpdateExtraMetaData got unexpected parameter fileUID, want: %#v, got: %#v%s\n", *mm_want_ptrs.fileUID, mm_got.fileUID, minimock.Diff(*mm_want_ptrs.fileUID, mm_got.fileUID))
+				mmUpdateKbFileExtraMetaData.t.Errorf("RepositoryIMock.UpdateKbFileExtraMetaData got unexpected parameter fileUID, want: %#v, got: %#v%s\n", *mm_want_ptrs.fileUID, mm_got.fileUID, minimock.Diff(*mm_want_ptrs.fileUID, mm_got.fileUID))
 			}
 
 			if mm_want_ptrs.failureReason != nil && !minimock.Equal(*mm_want_ptrs.failureReason, mm_got.failureReason) {
-				mmUpdateExtraMetaData.t.Errorf("RepositoryIMock.UpdateExtraMetaData got unexpected parameter failureReason, want: %#v, got: %#v%s\n", *mm_want_ptrs.failureReason, mm_got.failureReason, minimock.Diff(*mm_want_ptrs.failureReason, mm_got.failureReason))
+				mmUpdateKbFileExtraMetaData.t.Errorf("RepositoryIMock.UpdateKbFileExtraMetaData got unexpected parameter failureReason, want: %#v, got: %#v%s\n", *mm_want_ptrs.failureReason, mm_got.failureReason, minimock.Diff(*mm_want_ptrs.failureReason, mm_got.failureReason))
 			}
 
 			if mm_want_ptrs.convertingPipe != nil && !minimock.Equal(*mm_want_ptrs.convertingPipe, mm_got.convertingPipe) {
-				mmUpdateExtraMetaData.t.Errorf("RepositoryIMock.UpdateExtraMetaData got unexpected parameter convertingPipe, want: %#v, got: %#v%s\n", *mm_want_ptrs.convertingPipe, mm_got.convertingPipe, minimock.Diff(*mm_want_ptrs.convertingPipe, mm_got.convertingPipe))
+				mmUpdateKbFileExtraMetaData.t.Errorf("RepositoryIMock.UpdateKbFileExtraMetaData got unexpected parameter convertingPipe, want: %#v, got: %#v%s\n", *mm_want_ptrs.convertingPipe, mm_got.convertingPipe, minimock.Diff(*mm_want_ptrs.convertingPipe, mm_got.convertingPipe))
 			}
 
 			if mm_want_ptrs.chunkingPipe != nil && !minimock.Equal(*mm_want_ptrs.chunkingPipe, mm_got.chunkingPipe) {
-				mmUpdateExtraMetaData.t.Errorf("RepositoryIMock.UpdateExtraMetaData got unexpected parameter chunkingPipe, want: %#v, got: %#v%s\n", *mm_want_ptrs.chunkingPipe, mm_got.chunkingPipe, minimock.Diff(*mm_want_ptrs.chunkingPipe, mm_got.chunkingPipe))
+				mmUpdateKbFileExtraMetaData.t.Errorf("RepositoryIMock.UpdateKbFileExtraMetaData got unexpected parameter chunkingPipe, want: %#v, got: %#v%s\n", *mm_want_ptrs.chunkingPipe, mm_got.chunkingPipe, minimock.Diff(*mm_want_ptrs.chunkingPipe, mm_got.chunkingPipe))
 			}
 
 			if mm_want_ptrs.embeddingPipe != nil && !minimock.Equal(*mm_want_ptrs.embeddingPipe, mm_got.embeddingPipe) {
-				mmUpdateExtraMetaData.t.Errorf("RepositoryIMock.UpdateExtraMetaData got unexpected parameter embeddingPipe, want: %#v, got: %#v%s\n", *mm_want_ptrs.embeddingPipe, mm_got.embeddingPipe, minimock.Diff(*mm_want_ptrs.embeddingPipe, mm_got.embeddingPipe))
+				mmUpdateKbFileExtraMetaData.t.Errorf("RepositoryIMock.UpdateKbFileExtraMetaData got unexpected parameter embeddingPipe, want: %#v, got: %#v%s\n", *mm_want_ptrs.embeddingPipe, mm_got.embeddingPipe, minimock.Diff(*mm_want_ptrs.embeddingPipe, mm_got.embeddingPipe))
+			}
+
+			if mm_want_ptrs.processingTime != nil && !minimock.Equal(*mm_want_ptrs.processingTime, mm_got.processingTime) {
+				mmUpdateKbFileExtraMetaData.t.Errorf("RepositoryIMock.UpdateKbFileExtraMetaData got unexpected parameter processingTime, want: %#v, got: %#v%s\n", *mm_want_ptrs.processingTime, mm_got.processingTime, minimock.Diff(*mm_want_ptrs.processingTime, mm_got.processingTime))
+			}
+
+			if mm_want_ptrs.convertingTime != nil && !minimock.Equal(*mm_want_ptrs.convertingTime, mm_got.convertingTime) {
+				mmUpdateKbFileExtraMetaData.t.Errorf("RepositoryIMock.UpdateKbFileExtraMetaData got unexpected parameter convertingTime, want: %#v, got: %#v%s\n", *mm_want_ptrs.convertingTime, mm_got.convertingTime, minimock.Diff(*mm_want_ptrs.convertingTime, mm_got.convertingTime))
+			}
+
+			if mm_want_ptrs.chunkingTime != nil && !minimock.Equal(*mm_want_ptrs.chunkingTime, mm_got.chunkingTime) {
+				mmUpdateKbFileExtraMetaData.t.Errorf("RepositoryIMock.UpdateKbFileExtraMetaData got unexpected parameter chunkingTime, want: %#v, got: %#v%s\n", *mm_want_ptrs.chunkingTime, mm_got.chunkingTime, minimock.Diff(*mm_want_ptrs.chunkingTime, mm_got.chunkingTime))
+			}
+
+			if mm_want_ptrs.embeddingTime != nil && !minimock.Equal(*mm_want_ptrs.embeddingTime, mm_got.embeddingTime) {
+				mmUpdateKbFileExtraMetaData.t.Errorf("RepositoryIMock.UpdateKbFileExtraMetaData got unexpected parameter embeddingTime, want: %#v, got: %#v%s\n", *mm_want_ptrs.embeddingTime, mm_got.embeddingTime, minimock.Diff(*mm_want_ptrs.embeddingTime, mm_got.embeddingTime))
 			}
 
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
-			mmUpdateExtraMetaData.t.Errorf("RepositoryIMock.UpdateExtraMetaData got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+			mmUpdateKbFileExtraMetaData.t.Errorf("RepositoryIMock.UpdateKbFileExtraMetaData got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
 		}
 
-		mm_results := mmUpdateExtraMetaData.UpdateExtraMetaDataMock.defaultExpectation.results
+		mm_results := mmUpdateKbFileExtraMetaData.UpdateKbFileExtraMetaDataMock.defaultExpectation.results
 		if mm_results == nil {
-			mmUpdateExtraMetaData.t.Fatal("No results are set for the RepositoryIMock.UpdateExtraMetaData")
+			mmUpdateKbFileExtraMetaData.t.Fatal("No results are set for the RepositoryIMock.UpdateKbFileExtraMetaData")
 		}
 		return (*mm_results).err
 	}
-	if mmUpdateExtraMetaData.funcUpdateExtraMetaData != nil {
-		return mmUpdateExtraMetaData.funcUpdateExtraMetaData(ctx, fileUID, failureReason, convertingPipe, chunkingPipe, embeddingPipe)
+	if mmUpdateKbFileExtraMetaData.funcUpdateKbFileExtraMetaData != nil {
+		return mmUpdateKbFileExtraMetaData.funcUpdateKbFileExtraMetaData(ctx, fileUID, failureReason, convertingPipe, chunkingPipe, embeddingPipe, processingTime, convertingTime, chunkingTime, embeddingTime)
 	}
-	mmUpdateExtraMetaData.t.Fatalf("Unexpected call to RepositoryIMock.UpdateExtraMetaData. %v %v %v %v %v %v", ctx, fileUID, failureReason, convertingPipe, chunkingPipe, embeddingPipe)
+	mmUpdateKbFileExtraMetaData.t.Fatalf("Unexpected call to RepositoryIMock.UpdateKbFileExtraMetaData. %v %v %v %v %v %v %v %v %v %v", ctx, fileUID, failureReason, convertingPipe, chunkingPipe, embeddingPipe, processingTime, convertingTime, chunkingTime, embeddingTime)
 	return
 }
 
-// UpdateExtraMetaDataAfterCounter returns a count of finished RepositoryIMock.UpdateExtraMetaData invocations
-func (mmUpdateExtraMetaData *RepositoryIMock) UpdateExtraMetaDataAfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmUpdateExtraMetaData.afterUpdateExtraMetaDataCounter)
+// UpdateKbFileExtraMetaDataAfterCounter returns a count of finished RepositoryIMock.UpdateKbFileExtraMetaData invocations
+func (mmUpdateKbFileExtraMetaData *RepositoryIMock) UpdateKbFileExtraMetaDataAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateKbFileExtraMetaData.afterUpdateKbFileExtraMetaDataCounter)
 }
 
-// UpdateExtraMetaDataBeforeCounter returns a count of RepositoryIMock.UpdateExtraMetaData invocations
-func (mmUpdateExtraMetaData *RepositoryIMock) UpdateExtraMetaDataBeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmUpdateExtraMetaData.beforeUpdateExtraMetaDataCounter)
+// UpdateKbFileExtraMetaDataBeforeCounter returns a count of RepositoryIMock.UpdateKbFileExtraMetaData invocations
+func (mmUpdateKbFileExtraMetaData *RepositoryIMock) UpdateKbFileExtraMetaDataBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateKbFileExtraMetaData.beforeUpdateKbFileExtraMetaDataCounter)
 }
 
-// Calls returns a list of arguments used in each call to RepositoryIMock.UpdateExtraMetaData.
+// Calls returns a list of arguments used in each call to RepositoryIMock.UpdateKbFileExtraMetaData.
 // The list is in the same order as the calls were made (i.e. recent calls have a higher index)
-func (mmUpdateExtraMetaData *mRepositoryIMockUpdateExtraMetaData) Calls() []*RepositoryIMockUpdateExtraMetaDataParams {
-	mmUpdateExtraMetaData.mutex.RLock()
+func (mmUpdateKbFileExtraMetaData *mRepositoryIMockUpdateKbFileExtraMetaData) Calls() []*RepositoryIMockUpdateKbFileExtraMetaDataParams {
+	mmUpdateKbFileExtraMetaData.mutex.RLock()
 
-	argCopy := make([]*RepositoryIMockUpdateExtraMetaDataParams, len(mmUpdateExtraMetaData.callArgs))
-	copy(argCopy, mmUpdateExtraMetaData.callArgs)
+	argCopy := make([]*RepositoryIMockUpdateKbFileExtraMetaDataParams, len(mmUpdateKbFileExtraMetaData.callArgs))
+	copy(argCopy, mmUpdateKbFileExtraMetaData.callArgs)
 
-	mmUpdateExtraMetaData.mutex.RUnlock()
+	mmUpdateKbFileExtraMetaData.mutex.RUnlock()
 
 	return argCopy
 }
 
-// MinimockUpdateExtraMetaDataDone returns true if the count of the UpdateExtraMetaData invocations corresponds
+// MinimockUpdateKbFileExtraMetaDataDone returns true if the count of the UpdateKbFileExtraMetaData invocations corresponds
 // the number of defined expectations
-func (m *RepositoryIMock) MinimockUpdateExtraMetaDataDone() bool {
-	for _, e := range m.UpdateExtraMetaDataMock.expectations {
+func (m *RepositoryIMock) MinimockUpdateKbFileExtraMetaDataDone() bool {
+	for _, e := range m.UpdateKbFileExtraMetaDataMock.expectations {
 		if mm_atomic.LoadUint64(&e.Counter) < 1 {
 			return false
 		}
 	}
 
-	return m.UpdateExtraMetaDataMock.invocationsDone()
+	return m.UpdateKbFileExtraMetaDataMock.invocationsDone()
 }
 
-// MinimockUpdateExtraMetaDataInspect logs each unmet expectation
-func (m *RepositoryIMock) MinimockUpdateExtraMetaDataInspect() {
-	for _, e := range m.UpdateExtraMetaDataMock.expectations {
+// MinimockUpdateKbFileExtraMetaDataInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockUpdateKbFileExtraMetaDataInspect() {
+	for _, e := range m.UpdateKbFileExtraMetaDataMock.expectations {
 		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Errorf("Expected call to RepositoryIMock.UpdateExtraMetaData with params: %#v", *e.params)
+			m.t.Errorf("Expected call to RepositoryIMock.UpdateKbFileExtraMetaData with params: %#v", *e.params)
 		}
 	}
 
-	afterUpdateExtraMetaDataCounter := mm_atomic.LoadUint64(&m.afterUpdateExtraMetaDataCounter)
+	afterUpdateKbFileExtraMetaDataCounter := mm_atomic.LoadUint64(&m.afterUpdateKbFileExtraMetaDataCounter)
 	// if default expectation was set then invocations count should be greater than zero
-	if m.UpdateExtraMetaDataMock.defaultExpectation != nil && afterUpdateExtraMetaDataCounter < 1 {
-		if m.UpdateExtraMetaDataMock.defaultExpectation.params == nil {
-			m.t.Error("Expected call to RepositoryIMock.UpdateExtraMetaData")
+	if m.UpdateKbFileExtraMetaDataMock.defaultExpectation != nil && afterUpdateKbFileExtraMetaDataCounter < 1 {
+		if m.UpdateKbFileExtraMetaDataMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to RepositoryIMock.UpdateKbFileExtraMetaData")
 		} else {
-			m.t.Errorf("Expected call to RepositoryIMock.UpdateExtraMetaData with params: %#v", *m.UpdateExtraMetaDataMock.defaultExpectation.params)
+			m.t.Errorf("Expected call to RepositoryIMock.UpdateKbFileExtraMetaData with params: %#v", *m.UpdateKbFileExtraMetaDataMock.defaultExpectation.params)
 		}
 	}
 	// if func was set then invocations count should be greater than zero
-	if m.funcUpdateExtraMetaData != nil && afterUpdateExtraMetaDataCounter < 1 {
-		m.t.Error("Expected call to RepositoryIMock.UpdateExtraMetaData")
+	if m.funcUpdateKbFileExtraMetaData != nil && afterUpdateKbFileExtraMetaDataCounter < 1 {
+		m.t.Error("Expected call to RepositoryIMock.UpdateKbFileExtraMetaData")
 	}
 
-	if !m.UpdateExtraMetaDataMock.invocationsDone() && afterUpdateExtraMetaDataCounter > 0 {
-		m.t.Errorf("Expected %d calls to RepositoryIMock.UpdateExtraMetaData but found %d calls",
-			mm_atomic.LoadUint64(&m.UpdateExtraMetaDataMock.expectedInvocations), afterUpdateExtraMetaDataCounter)
+	if !m.UpdateKbFileExtraMetaDataMock.invocationsDone() && afterUpdateKbFileExtraMetaDataCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.UpdateKbFileExtraMetaData but found %d calls",
+			mm_atomic.LoadUint64(&m.UpdateKbFileExtraMetaDataMock.expectedInvocations), afterUpdateKbFileExtraMetaDataCounter)
 	}
 }
 
@@ -20774,7 +20886,7 @@ func (m *RepositoryIMock) MinimockFinish() {
 
 			m.MinimockUpdateConversationByUpdateMapInspect()
 
-			m.MinimockUpdateExtraMetaDataInspect()
+			m.MinimockUpdateKbFileExtraMetaDataInspect()
 
 			m.MinimockUpdateKnowledgeBaseInspect()
 
@@ -20868,7 +20980,7 @@ func (m *RepositoryIMock) minimockDone() bool {
 		m.MinimockTextChunkTableNameDone() &&
 		m.MinimockUpdateChunkDone() &&
 		m.MinimockUpdateConversationByUpdateMapDone() &&
-		m.MinimockUpdateExtraMetaDataDone() &&
+		m.MinimockUpdateKbFileExtraMetaDataDone() &&
 		m.MinimockUpdateKnowledgeBaseDone() &&
 		m.MinimockUpdateKnowledgeBaseFileDone() &&
 		m.MinimockUpdateMessageDone() &&

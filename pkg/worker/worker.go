@@ -45,21 +45,21 @@ func NewFileToEmbWorkerPool(ctx context.Context, svc *service.Service, nums int)
 	}
 }
 
-func (wp *fileToEmbWorkerPool) Start(ctx context.Context) {
-	logger, _ := logger.GetZapLogger(ctx)
+func (wp *fileToEmbWorkerPool) Start() {
+	logger, _ := logger.GetZapLogger(wp.ctx)
 	for i := 0; i < wp.numberOfWorkers; i++ {
 		wp.wg.Add(1)
-		go wp.startWorker(ctx, i+1)
+		go wp.startWorker(wp.ctx, i+1)
 	}
 	// start dispatcher
 	wp.wg.Add(1)
-	go wp.startDispatcher(ctx)
+	go wp.startDispatcher()
 	logger.Info("Worker pool started")
 }
 
 // dispatcher is responsible for dispatching the incomplete file to the worker
-func (wp *fileToEmbWorkerPool) startDispatcher(ctx context.Context) {
-	logger, _ := logger.GetZapLogger(ctx)
+func (wp *fileToEmbWorkerPool) startDispatcher() {
+	logger, _ := logger.GetZapLogger(wp.ctx)
 	defer wp.wg.Done()
 	ticker := time.NewTicker(periodOfDispatcher)
 	defer ticker.Stop()
@@ -67,19 +67,19 @@ func (wp *fileToEmbWorkerPool) startDispatcher(ctx context.Context) {
 	logger.Info("Worker dispatcher started")
 	for {
 		select {
-		case <-ctx.Done():
+		case <-wp.ctx.Done():
 			// Context is done, exit the dispatcher
 			fmt.Println("Dispatcher received termination signal")
 			return
 		case <-ticker.C:
 			// Periodically check for incomplete files
-			incompleteFiles := wp.svc.Repository.GetNeedProcessFiles(ctx)
+			incompleteFiles := wp.svc.Repository.GetNeedProcessFiles(wp.ctx)
 			// Check if any of the incomplete files have active workers
 			fileUID := make([]string, len(incompleteFiles))
 			for i, file := range incompleteFiles {
 				fileUID[i] = file.UID.String()
 			}
-			nonExistentKeys := wp.checkRegisteredFilesWorker(ctx, fileUID)
+			nonExistentKeys := wp.checkRegisteredFilesWorker(wp.ctx, fileUID)
 
 			// Dispatch the files that do not have active workers
 			incompleteAndNonRegisteredFiles := make([]repository.KnowledgeBaseFile, 0)
@@ -91,7 +91,7 @@ func (wp *fileToEmbWorkerPool) startDispatcher(ctx context.Context) {
 
 			for _, file := range incompleteAndNonRegisteredFiles {
 				select {
-				case <-ctx.Done():
+				case <-wp.ctx.Done():
 					fmt.Println("Dispatcher received termination signal while dispatching")
 					return
 				case wp.channel <- file:
@@ -146,11 +146,12 @@ func (wp *fileToEmbWorkerPool) startWorker(ctx context.Context, workerID int) {
 			// start file processing tracing
 			fmt.Printf("Worker %d processing file: %s\n", workerID, file.UID.String())
 
-			// process file
+			// process
+			t0 := time.Now()
 			err := wp.processFile(ctx, file)
 			if err != nil {
 				fmt.Printf("Error processing file: %s, error: %v\n", file.UID.String(), err)
-				err = wp.svc.Repository.UpdateExtraMetaData(ctx, file.UID, err.Error(), "", "", "")
+				err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, err.Error(), "", "", "", nil, nil, nil, nil)
 				if err != nil {
 					fmt.Printf("Error marshaling extra metadata: %v\n", err)
 				}
@@ -162,6 +163,11 @@ func (wp *fileToEmbWorkerPool) startWorker(ctx context.Context, workerID int) {
 				}
 			} else {
 				fmt.Printf("Worker %d finished processing fileUID: %s\n", workerID, file.UID.String())
+			}
+			processingTime := int64(time.Since(t0).Seconds())
+			err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", "", "", &processingTime, nil, nil, nil)
+			if err != nil {
+				fmt.Printf("Error updating file extra metadata: %v\n", err)
 			}
 			// cancel the lifetime extend helper when the file is processed
 			stopRegisterFunc()
@@ -181,11 +187,11 @@ func (wp *fileToEmbWorkerPool) GraceFulStop() {
 
 type stopRegisterWorkerFunc func()
 
-// registerFileWorker registers a file worker in the worker pool.
-// It sets a worker key in Redis with the given fileUID and workerLifetime.
-// It returns a stopRegisterWorkerFunc that can be used to cancel the worker's lifetime extension and remove the worker key from Redis.
-// period: second
-// workerLifetime: second
+// registerFileWorker registers a file worker in the worker pool and sets a worker key in Redis with the given fileUID and workerLifetime.
+// It periodically extends the worker's lifetime in Redis until the worker is done processing.
+// It returns a boolean indicating success and a stopRegisterWorkerFunc that can be used to cancel the worker's lifetime extension and remove the worker key from Redis.
+// period: duration between lifetime extensions
+// workerLifetime: total duration the worker key should be kept in Redis
 func (wp *fileToEmbWorkerPool) registerFileWorker(ctx context.Context, fileUID string, period time.Duration, workerLifetime time.Duration) (bool, stopRegisterWorkerFunc) {
 	ok, err := wp.svc.RedisClient.SetNX(ctx, getWorkerKey(fileUID), "1", workerLifetime).Result()
 	if err != nil {
@@ -265,8 +271,9 @@ func (wp *fileToEmbWorkerPool) checkRegisteredFilesWorker(ctx context.Context, f
 	return nonExistentKeys
 }
 
-// process file using state machine
+// processFile handles the processing of a file through various stages using a state machine.
 func (wp *fileToEmbWorkerPool) processFile(ctx context.Context, file repository.KnowledgeBaseFile) error {
+	// logger, _ := logger.GetZapLogger(ctx)
 	var status artifactpb.FileProcessStatus
 	if statusInt, ok := artifactpb.FileProcessStatus_value[file.ProcessStatus]; !ok {
 		return fmt.Errorf("invalid process status: %v", file.ProcessStatus)
@@ -283,28 +290,46 @@ func (wp *fileToEmbWorkerPool) processFile(ctx context.Context, file repository.
 			status = nextStatus
 			file = *updatedFile
 		case artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CONVERTING:
+			t0 := time.Now()
 			updatedFile, nextStatus, err := wp.processConvertingFile(ctx, file)
 			if err != nil {
 				return fmt.Errorf("error processing converting file: %w", err)
 			}
 			status = nextStatus
 			file = *updatedFile
+			convertingTime := int64(time.Since(t0).Seconds())
+			err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", "", "", nil, &convertingTime, nil, nil)
+			if err != nil {
+				fmt.Printf("Error updating file extra metadata: %v\n", err)
+			}
 
 		case artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CHUNKING:
+			t0 := time.Now()
 			updatedFile, nextStatus, err := wp.processChunkingFile(ctx, file)
 			if err != nil {
 				return fmt.Errorf("error processing chunking file: %w", err)
 			}
 			status = nextStatus
 			file = *updatedFile
+			chunkingTime := int64(time.Since(t0).Seconds())
+			err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", "", "", nil, nil, &chunkingTime, nil)
+			if err != nil {
+				fmt.Printf("Error updating file extra metadata: %v\n", err)
+			}
 
 		case artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_EMBEDDING:
+			t0 := time.Now()
 			updatedFile, nextStatus, err := wp.processEmbeddingFile(ctx, file)
 			if err != nil {
 				return fmt.Errorf("error processing embedding file: %w", err)
 			}
 			status = nextStatus
 			file = *updatedFile
+			embeddingTime := int64(time.Since(t0).Seconds())
+			err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", "", "", nil, nil, nil, &embeddingTime)
+			if err != nil {
+				fmt.Printf("Error updating file extra metadata: %v\n", err)
+			}
 
 		case artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED:
 			err := wp.processCompletedFile(ctx, file)
@@ -316,19 +341,19 @@ func (wp *fileToEmbWorkerPool) processFile(ctx context.Context, file repository.
 	}
 }
 
-// processWaitingFile checks the file type and determines the next status based on it.
-// If the file type is pdf, it moves to the converting status.
-// If the file type is txt or md, it moves to the chunking status.
-// If the file type is neither pdf, txt, nor md, it returns an error.
+// processWaitingFile determines the next status based on the file type.
+// For pdf, doc, docx, ppt, pptx, html, and xlsx files, it transitions to the converting status.
+// For text and markdown files, it transitions to the chunking status.
+// For unsupported file types, it returns an error.
 func (wp *fileToEmbWorkerPool) processWaitingFile(ctx context.Context, file repository.KnowledgeBaseFile) (updatedFile *repository.KnowledgeBaseFile, nextStatus artifactpb.FileProcessStatus, err error) {
 	// check if file process status is waiting
 	if file.ProcessStatus != artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_WAITING)] {
 		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, fmt.Errorf("file process status should be waiting. status: %v", file.ProcessStatus)
 	}
 
+	// Determine the next status based on the file type.
 	switch file.Type {
-
-	// Deal with pdf files
+	// For pdf, doc, docx, ppt, pptx, html, and xlsx files, it transitions to the converting status.
 	case artifactpb.FileType_FILE_TYPE_PDF.String(),
 		artifactpb.FileType_FILE_TYPE_DOC.String(),
 		artifactpb.FileType_FILE_TYPE_DOCX.String(),
@@ -346,7 +371,7 @@ func (wp *fileToEmbWorkerPool) processWaitingFile(ctx context.Context, file repo
 		}
 		return updatedFile, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CONVERTING, nil
 
-	// Deal with text and markdown files
+	// For text and markdown files, it transitions to the chunking status.
 	case artifactpb.FileType_name[int32(artifactpb.FileType_FILE_TYPE_TEXT)],
 		artifactpb.FileType_name[int32(artifactpb.FileType_FILE_TYPE_MARKDOWN)]:
 
@@ -364,11 +389,11 @@ func (wp *fileToEmbWorkerPool) processWaitingFile(ctx context.Context, file repo
 	}
 }
 
-// if it is pdf and file in converting status, get the file from minIO,
-// convert it to md using pdf-to-markdown pipeline. then move to chunking status
-// save the converted file into object storage and metadata into database
-// update the file status to chunking status in database
-// if it is not pdf, return error
+// processConvertingFile processes a file with converting status.
+// If the file is a PDF, it retrieves the file from MinIO, converts it to Markdown using the PDF-to-Markdown pipeline, and then transitions to chunking status.
+// The converted file is saved into object storage and the metadata is updated in the database.
+// Finally, the file status is updated to chunking in the database.
+// If the file is not a PDF, it returns an error.
 func (wp *fileToEmbWorkerPool) processConvertingFile(ctx context.Context, file repository.KnowledgeBaseFile) (updatedFile *repository.KnowledgeBaseFile, nextStatus artifactpb.FileProcessStatus, err error) {
 	logger, _ := logger.GetZapLogger(ctx)
 	fileInMinIOPath := file.Destination
@@ -383,7 +408,7 @@ func (wp *fileToEmbWorkerPool) processConvertingFile(ctx context.Context, file r
 
 	// convert the pdf file to md
 	requesterUID := file.RequesterUID
-	convertedMD, err := wp.svc.ConvertPDFToMDPipe(ctx, file.CreatorUID, requesterUID, base64Data, artifactpb.FileType(artifactpb.FileType_value[file.Type]))
+	convertedMD, err := wp.svc.ConvertToMDPipe(ctx, file.CreatorUID, requesterUID, base64Data, artifactpb.FileType(artifactpb.FileType_value[file.Type]))
 	if err != nil {
 		logger.Error("Failed to convert pdf to md.", zap.String("File path", fileInMinIOPath))
 		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
@@ -397,7 +422,7 @@ func (wp *fileToEmbWorkerPool) processConvertingFile(ctx context.Context, file r
 	}
 	// save the converting pipeline metadata into database
 	convertingPipelineMetadata := service.NamespaceID + "/" + service.ConvertPDFToMDPipelineID + "@" + service.PDFToMDVersion
-	err = wp.svc.Repository.UpdateExtraMetaData(ctx, file.UID, "", convertingPipelineMetadata, "", "")
+	err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", convertingPipelineMetadata, "", "", nil, nil, nil, nil)
 	if err != nil {
 		logger.Error("Failed to save converting pipeline metadata.", zap.String("File uid:", file.UID.String()))
 		return nil,
@@ -417,11 +442,11 @@ func (wp *fileToEmbWorkerPool) processConvertingFile(ctx context.Context, file r
 	return updatedFile, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CHUNKING, nil
 }
 
-// check if the file status is chunking,
-// if it is pdf get the md-converted file from minIO, then call the chunking pipeline
-// if it is text or md,file from minIO, then call the chunking pipeline
-// save the chunks into object storage and metadata into database
-// update the file status to embedding in database
+// Processes a file with the status "chunking".
+// If the file is a PDF or other document type, it retrieves the converted file from MinIO and calls the markdown chunking pipeline.
+// If the file is a text or markdown file, it retrieves the file from MinIO and calls the respective chunking pipeline.
+// The resulting chunks are saved into object storage and metadata is updated in the database.
+// Finally, the file status is updated to "embedding" in the database.
 func (wp *fileToEmbWorkerPool) processChunkingFile(ctx context.Context, file repository.KnowledgeBaseFile) (*repository.KnowledgeBaseFile, artifactpb.FileProcessStatus, error) {
 	logger, _ := logger.GetZapLogger(ctx)
 	logger.Info("Processing chunking status file.", zap.String("File uid", file.UID.String()))
@@ -467,7 +492,7 @@ func (wp *fileToEmbWorkerPool) processChunkingFile(ctx context.Context, file rep
 		}
 		// save chunking pipeline metadata into file's extra metadata
 		chunkingPipelineMetadata := service.NamespaceID + "/" + service.MdSplitPipelineID + "@" + service.MdSplitVersion
-		err = wp.svc.Repository.UpdateExtraMetaData(ctx, file.UID, "", "", chunkingPipelineMetadata, "")
+		err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", chunkingPipelineMetadata, "", nil, nil, nil, nil)
 		if err != nil {
 			logger.Error("Failed to save chunking pipeline metadata.", zap.String("File uid:", file.UID.String()))
 			return nil,
@@ -509,7 +534,7 @@ func (wp *fileToEmbWorkerPool) processChunkingFile(ctx context.Context, file rep
 		}
 		// save chunking pipeline metadata into file's extra metadata
 		chunkingPipelineMetadata := service.NamespaceID + "/" + service.TextSplitPipelineID + "@" + service.TextSplitVersion
-		err = wp.svc.Repository.UpdateExtraMetaData(ctx, file.UID, "", "", chunkingPipelineMetadata, "")
+		err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", chunkingPipelineMetadata, "", nil, nil, nil, nil)
 		if err != nil {
 			logger.Error("Failed to save chunking pipeline metadata.", zap.String("File uid:", file.UID.String()))
 			return nil,
@@ -550,7 +575,7 @@ func (wp *fileToEmbWorkerPool) processChunkingFile(ctx context.Context, file rep
 
 		// save chunking pipeline metadata into file's extra metadata
 		chunkingPipelineMetadata := service.NamespaceID + "/" + service.MdSplitPipelineID + "@" + service.MdSplitVersion
-		err = wp.svc.Repository.UpdateExtraMetaData(ctx, file.UID, "", "", chunkingPipelineMetadata, "")
+		err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", chunkingPipelineMetadata, "", nil, nil, nil, nil)
 		if err != nil {
 			logger.Error("Failed to save chunking pipeline metadata.", zap.String("File uid:", file.UID.String()))
 			return nil,
@@ -574,10 +599,9 @@ func (wp *fileToEmbWorkerPool) processChunkingFile(ctx context.Context, file rep
 
 }
 
-// check the file status is embedding
-// if it is pdf, txt, or md, all get the chunks from minIO, then call the embedding pipeline
-// save the embedding into vector database and metadata into database
-// update the file status to completed in database
+// processEmbeddingFile processes a file with embedding status.
+// It retrieves chunks from MinIO, calls the embedding pipeline, saves the embeddings into the vector database and metadata into the database,
+// and updates the file status to completed in the database.
 func (wp *fileToEmbWorkerPool) processEmbeddingFile(ctx context.Context, file repository.KnowledgeBaseFile) (updatedFile *repository.KnowledgeBaseFile, nextStatus artifactpb.FileProcessStatus, err error) {
 	logger, _ := logger.GetZapLogger(ctx)
 	// check the file status is embedding
@@ -597,7 +621,6 @@ func (wp *fileToEmbWorkerPool) processEmbeddingFile(ctx context.Context, file re
 		logger.Error("Failed to get embeddings from chunks.", zap.String("SourceTable", sourceTable), zap.String("SourceUID", sourceUID.String()))
 		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
 	}
-
 	// save the embeddings into milvus and metadata into database
 	collection := wp.svc.MilvusClient.GetKnowledgeBaseCollectionName(file.KnowledgeBaseUID.String())
 	embeddings := make([]repository.Embedding, len(vectors))
@@ -619,7 +642,7 @@ func (wp *fileToEmbWorkerPool) processEmbeddingFile(ctx context.Context, file re
 
 	// save embedding pipeline metadata into file's extra metadata
 	embeddingPipelineMetadata := service.NamespaceID + "/" + service.TextEmbedPipelineID + "@" + service.TextEmbedVersion
-	err = wp.svc.Repository.UpdateExtraMetaData(ctx, file.UID, "", "", "", embeddingPipelineMetadata)
+	err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", "", embeddingPipelineMetadata, nil, nil, nil, nil)
 	if err != nil {
 		logger.Error("Failed to save embedding pipeline metadata.", zap.String("File uid:", file.UID.String()))
 		return nil,
@@ -639,14 +662,15 @@ func (wp *fileToEmbWorkerPool) processEmbeddingFile(ctx context.Context, file re
 	return updatedFile, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED, nil
 }
 
-// check the file status is completed. maybe just print the info and currently do nothing.
+// processCompletedFile logs the completion of the file-to-embeddings process.
+// It checks if the file status is completed and logs the information.
 func (wp *fileToEmbWorkerPool) processCompletedFile(ctx context.Context, file repository.KnowledgeBaseFile) error {
 	logger, _ := logger.GetZapLogger(ctx)
 	logger.Info("File to embeddings process completed.", zap.String("File uid", file.UID.String()))
 	return nil
 }
 
-// save converted file into object storage and metadata into database
+// saveConvertedFile saves a converted file into object storage and updates the metadata in the database.
 func (wp *fileToEmbWorkerPool) saveConvertedFile(ctx context.Context, kbUID, fileUID uuid.UUID, name string, convertedFile []byte) error {
 	logger, _ := logger.GetZapLogger(ctx)
 	_, err := wp.svc.Repository.CreateConvertedFile(
@@ -677,7 +701,7 @@ type chunk = struct {
 	Tokens int
 }
 
-// save chunk into object storage and metadata into database
+// saveChunks saves chunks into object storage and updates the metadata in the database.
 func (wp *fileToEmbWorkerPool) saveChunks(ctx context.Context, kbUID string, kbFileUID uuid.UUID, sourceTable string, sourceUID uuid.UUID, chunks []chunk) error {
 	logger, _ := logger.GetZapLogger(ctx)
 	textChunks := make([]*repository.TextChunk, len(chunks))
@@ -694,7 +718,7 @@ func (wp *fileToEmbWorkerPool) saveChunks(ctx context.Context, kbUID string, kbF
 			SourceTable: sourceTable,
 			StartPos:    c.Start,
 			EndPos:      c.End,
-			ContentDest: "not set yet becasue we need to save the chunks in db to get the uid",
+			ContentDest: "not set yet because we need to save the chunks in db to get the uid",
 			Tokens:      c.Tokens,
 			Retrievable: true,
 			InOrder:     i,
@@ -735,7 +759,7 @@ type MilvusEmbedding struct {
 	Vector       []float32
 }
 
-// save embedding into vector database and metadata into database
+// saveEmbeddings saves embeddings into the vector database and updates the metadata in the database.
 func (wp *fileToEmbWorkerPool) saveEmbeddings(ctx context.Context, kbUID string, embeddings []repository.Embedding) error {
 	logger, _ := logger.GetZapLogger(ctx)
 	externalServiceCall := func(embUIDs []string) error {
@@ -772,6 +796,7 @@ func getWorkerKey(fileUID string) string {
 }
 
 // mockVectorizeText is a mock implementation of the VectorizeText function.
+// It generates mock vectors for the given texts.
 //
 //nolint:unused
 func mockVectorizeText(_ context.Context, _ uuid.UUID, texts []string) ([][]float32, error) {

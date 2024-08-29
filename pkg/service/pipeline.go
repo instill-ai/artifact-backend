@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/gofrs/uuid"
 	"github.com/instill-ai/artifact-backend/pkg/constant"
@@ -29,8 +30,8 @@ const TextSplitPipelineID = "indexing-split-text"
 const TextEmbedPipelineID = "indexing-embed"
 const RetrievingQnA = "retrieving-qna"
 
-// ConvertPDFToMDPipe using converting pipeline to convert PDF to MD and consume caller's credits
-func (s *Service) ConvertPDFToMDPipe(ctx context.Context, caller uuid.UUID, requester uuid.UUID, pdfBase64 string, fileType artifactPb.FileType) (string, error) {
+// ConvertToMDPipe using converting pipeline to convert some file type to MD and consume caller's credits
+func (s *Service) ConvertToMDPipe(ctx context.Context, caller uuid.UUID, requester uuid.UUID, pdfBase64 string, fileType artifactPb.FileType) (string, error) {
 	logger, _ := logger.GetZapLogger(ctx)
 	var md metadata.MD
 	if requester != uuid.Nil {
@@ -228,8 +229,10 @@ func (s *Service) SplitTextPipe(ctx context.Context, caller uuid.UUID, requester
 	return result, nil
 }
 
-// EmbeddingTextPipe using embedding pipeline to embed text and consume caller's credits
+// EmbeddingTextPipeV2 calls the embedding pipeline to embed texts concurrently, processing up to 32 texts at a time.
 func (s *Service) EmbeddingTextPipe(ctx context.Context, caller uuid.UUID, requester uuid.UUID, texts []string) ([][]float32, error) {
+	ctx, ctxCancel := context.WithCancel(ctx)
+	defer ctxCancel()
 	const maxBatchSize = 32
 	var md metadata.MD
 	if requester != uuid.Nil {
@@ -244,52 +247,102 @@ func (s *Service) EmbeddingTextPipe(ctx context.Context, caller uuid.UUID, reque
 			constant.HeaderAuthTypeKey: "user",
 		})
 	}
-	ctx = metadata.NewOutgoingContext(ctx, md)
-	var allResults [][]float32
 
+	var allResults [][]float32
+	var wg sync.WaitGroup
+	errChan := make(chan error, len(texts)/maxBatchSize+1)
+	resultsChan := make(chan struct {
+		index  int
+		result [][]float32
+	}, len(texts)/maxBatchSize+1)
+
+	// Loop through the texts in batches of maxBatchSize (32).
+	// For each batch, create a new goroutine to process the batch concurrently.
+	// In each goroutine:
+	// - Create a new context with metadata.
+	// - Prepare the inputs for the pipeline request.
+	// - Trigger the pipeline and get the response.
+	// - Extract the vector from the response.
+	// - Send the result to the results channel.
+	// If an error occurs, send the error to the error channel.
 	for i := 0; i < len(texts); i += maxBatchSize {
 		end := i + maxBatchSize
 		if end > len(texts) {
 			end = len(texts)
 		}
 		batch := texts[i:end]
+		batchIndex := i / maxBatchSize
 
-		inputs := make([]*structpb.Struct, 0, len(batch))
-		for _, text := range batch {
-			inputs = append(inputs, &structpb.Struct{
-				Fields: map[string]*structpb.Value{
-					"chunk_input": {Kind: &structpb.Value_StringValue{StringValue: text}},
-				},
-			})
-		}
+		wg.Add(1)
+		go func(batch []string, index int) {
+			ctx_ := metadata.NewOutgoingContext(ctx, md)
+			defer wg.Done()
 
-		req := &pipelinePb.TriggerNamespacePipelineReleaseRequest{
-			NamespaceId: NamespaceID,
-			PipelineId:  TextEmbedPipelineID,
-			ReleaseId:   TextEmbedVersion,
-			Inputs:      inputs,
-		}
-		res, err := s.PipelinePub.TriggerNamespacePipelineRelease(ctx, req)
-		if err != nil {
-			return nil, fmt.Errorf("failed to trigger %s pipeline. err:%w", TextEmbedPipelineID, err)
-		}
-		result, err := GetVectorFromResponse(res)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get vector from response: %w", err)
-		}
+			inputs := make([]*structpb.Struct, 0, len(batch))
+			for _, text := range batch {
+				inputs = append(inputs, &structpb.Struct{
+					Fields: map[string]*structpb.Value{
+						"chunk_input": {Kind: &structpb.Value_StringValue{StringValue: text}},
+					},
+				})
+			}
+
+			req := &pipelinePb.TriggerNamespacePipelineReleaseRequest{
+				NamespaceId: NamespaceID,
+				PipelineId:  TextEmbedPipelineID,
+				ReleaseId:   TextEmbedVersion,
+				Inputs:      inputs,
+			}
+			res, err := s.PipelinePub.TriggerNamespacePipelineRelease(ctx_, req)
+			if err != nil {
+				errChan <- fmt.Errorf("failed to trigger %s pipeline. err:%w", TextEmbedPipelineID, err)
+				ctxCancel()
+				return
+			}
+			result, err := GetVectorsFromResponse(res)
+			if err != nil {
+				errChan <- fmt.Errorf("failed to get vector from response: %w", err)
+				ctxCancel()
+				return
+			}
+
+			resultsChan <- struct {
+				index  int
+				result [][]float32
+			}{index: index, result: result}
+		}(batch, batchIndex)
+	}
+
+	// wait for all the goroutines to finish
+	go func() {
+		wg.Wait()
+		close(resultsChan)
+		close(errChan)
+	}()
+	// collect the results in the order of the input texts
+	orderedResults := make([][][]float32, len(texts)/maxBatchSize+1)
+	for res := range resultsChan {
+		orderedResults[res.index] = res.result
+	}
+
+	// flatten the ordered results
+	for _, result := range orderedResults {
 		allResults = append(allResults, result...)
 	}
 
+	if len(errChan) > 0 {
+		return nil, <-errChan
+	}
 	return allResults, nil
 }
 
-// GetVectorFromResponse converts the pipeline response into a slice of float32.
-func GetVectorFromResponse(resp *pipelinePb.TriggerNamespacePipelineReleaseResponse) ([][]float32, error) {
+// GetVectorsFromResponse converts the pipeline response into a slice of float32.
+func GetVectorsFromResponse(resp *pipelinePb.TriggerNamespacePipelineReleaseResponse) ([][]float32, error) {
 	if resp == nil || len(resp.Outputs) == 0 {
 		return nil, errors.New("response is nil or has no outputs")
 	}
 
-	var vectors [][]float32
+	vectors := make([][]float32, 0, len(resp.Outputs))
 	for _, output := range resp.Outputs {
 		embedResult, ok := output.GetFields()["embed_result"]
 		if !ok {

@@ -7,6 +7,7 @@ package grpcclient
 // 	"io"
 // 	"os"
 // 	"testing"
+// 	"time"
 
 // 	"github.com/instill-ai/artifact-backend/pkg/service"
 // 	pipelinev1beta "github.com/instill-ai/protogen-go/vdp/pipeline/v1beta"
@@ -79,32 +80,27 @@ package grpcclient
 // 	ctx := metadata.NewOutgoingContext(context.Background(), md)
 // 	pipelinePublicServiceClient := pipelinev1beta.NewPipelinePublicServiceClient(pipelinePublicGrpcConn)
 // 	req := &pipelinev1beta.TriggerNamespacePipelineReleaseRequest{
-// 		NamespaceId: "preset",
-// 		PipelineId:  "indexing-embed",
-// 		ReleaseId:   "v1.1.1",
-// 		Data: []*pipelinev1beta.TriggerData{
-// 			{
-// 				Variable: &structpb.Struct{
-// 					Fields: map[string]*structpb.Value{
-// 						"chunk_input": {
-// 							Kind: &structpb.Value_StringValue{
-// 								StringValue: "test",
-// 							},
-// 						},
-// 					},
-// 				},
-// 				Secret: map[string]string{
-// 					"key": "value",
-// 				},
-// 			},
+// 		NamespaceId: service.NamespaceID,
+// 		PipelineId:  service.TextEmbedPipelineID,
+// 		ReleaseId:   service.TextEmbedVersion,
+// 		Inputs: []*structpb.Struct{
+// 			{Fields: map[string]*structpb.Value{"chunk_input": {Kind: &structpb.Value_StringValue{StringValue: "test"}}}},
+// 			{Fields: map[string]*structpb.Value{"chunk_input": {Kind: &structpb.Value_StringValue{StringValue: "test"}}}},
+// 			{Fields: map[string]*structpb.Value{"chunk_input": {Kind: &structpb.Value_StringValue{StringValue: "test"}}}},
+// 			{Fields: map[string]*structpb.Value{"chunk_input": {Kind: &structpb.Value_StringValue{StringValue: "test"}}}},
+// 			// {Fields: map[string]*structpb.Value{"chunk_input": {Kind: &structpb.Value_StringValue{StringValue: "test"}}}},
+// 			// {Fields: map[string]*structpb.Value{"chunk_input": {Kind: &structpb.Value_StringValue{StringValue: "test"}}}},
 // 		},
-// 		Inputs: []*structpb.Struct{{Fields: map[string]*structpb.Value{"chunk_input": {Kind: &structpb.Value_StringValue{StringValue: "test"}}}}},
 // 	}
+// 	// print the time of calling pipeline
+// 	startTime := time.Now()
 // 	res, err := pipelinePublicServiceClient.TriggerNamespacePipelineRelease(ctx, req)
 // 	if err != nil {
 // 		t.Fatalf("failed to trigger pipeline: %v", err)
 // 	}
-// 	vector, err := service.GetVectorFromResponse(res)
+// 	elapsedTime := time.Since(startTime)
+// 	fmt.Println("elapsed time:", elapsedTime)
+// 	vector, err := service.GetVectorsFromResponse(res)
 // 	if err != nil {
 // 		t.Fatalf("failed to trigger pipeline: %v", err)
 // 	}
@@ -202,7 +198,7 @@ package grpcclient
 // 	ctx := metadata.NewOutgoingContext(context.Background(), md)
 // 	pipelinePublicServiceClient := pipelinev1beta.NewPipelinePublicServiceClient(pipelinePublicGrpcConn)
 
-// 	mdString, err := readMdToString("../../../test_converted_pdf_.md")
+// 	mdString, err := readMdToString("../../../test_files/test_converted_pdf_.md")
 // 	if err != nil {
 // 		t.Fatalf("failed to read pdf file: %v", err)
 // 	}

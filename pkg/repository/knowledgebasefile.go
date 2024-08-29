@@ -45,8 +45,8 @@ type KnowledgeBaseFileI interface {
 	}, error)
 	// GetTruthSourceByFileUID returns the truth source file destination of minIO by file UID
 	GetTruthSourceByFileUID(ctx context.Context, fileUID uuid.UUID) (*SourceMeta, error)
-	// UpdateExtraMetaData updates the extra meta data of the knowledge base file
-	UpdateExtraMetaData(ctx context.Context, fileUID uuid.UUID, failureReason, convertingPipe, chunkingPipe, embeddingPipe string) error
+	// UpdateKbFileExtraMetaData updates the extra meta data of the knowledge base file
+	UpdateKbFileExtraMetaData(ctx context.Context, fileUID uuid.UUID, failureReason, convertingPipe, chunkingPipe, embeddingPipe string, processingTime, convertingTime, chunkingTime, embeddingTime *int64) error
 }
 
 type KbUID = uuid.UUID
@@ -83,6 +83,10 @@ type ExtraMetaData struct {
 	ConvertingPipe string `json:"converting_pipe"`
 	EmbeddingPipe  string `json:"embedding_pipe"`
 	ChunkingPipe   string `json:"chunking_pipe"`
+	ProcessingTime int64  `json:"processing_time"`
+	ConvertingTime int64  `json:"converting_time"`
+	ChunkingTime   int64  `json:"chunking_time"`
+	EmbeddingTime  int64  `json:"embedding_time"`
 }
 
 // table columns map
@@ -134,7 +138,7 @@ func (kf *KnowledgeBaseFile) ExtraMetaDataMarshal() error {
 	return nil
 }
 
-// ExtraMetaDataUnmarshal unmarshals the ExtraMetaData JSON string to a struct
+// ExtraMetaDataUnmarshal unmarshal the ExtraMetaData JSON string to a struct
 func (kf *KnowledgeBaseFile) ExtraMetaDataUnmarshalFunc() error {
 	var data ExtraMetaData
 	if kf.ExtraMetaData == "" {
@@ -560,12 +564,20 @@ func (r *Repository) GetTruthSourceByFileUID(ctx context.Context, fileUID uuid.U
 	}, nil
 }
 
-// UpdateExtraMetaData fetch the knowledge base file and lock the row for update,
+// UpdateKbFileExtraMetaData fetch the knowledge base file and lock the row for update,
 // it will keep the original data and only update the provided params
 // parameters: `fileUID` is the file UID, `failedReason` is the reason for the failure,
 // `convertingPipe` is the converting pipe name, `embeddingPipe` is the embedding pipe name,
-// `chunkingPipe` is the chunking pipe name.
-func (r *Repository) UpdateExtraMetaData(ctx context.Context, fileUID uuid.UUID, failureReason, convertingPipe, chunkingPipe, embeddingPipe string) error {
+// `chunkingPipe` is the chunking pipe name, `embeddingPipe` is the embedding pipe name.
+// `processingTime` is the processing time, `chunkingTime` is the chunking time, `embeddingTime` is the embedding time.
+func (r *Repository) UpdateKbFileExtraMetaData(
+	ctx context.Context,
+	fileUID uuid.UUID,
+	failureReason,
+	convertingPipe,
+	chunkingPipe,
+	embeddingPipe string,
+	processingTime, convertingTime, chunkingTime, embeddingTime *int64) error {
 	var kb KnowledgeBaseFile
 
 	// Use GORM's Transaction function
@@ -596,7 +608,18 @@ func (r *Repository) UpdateExtraMetaData(ctx context.Context, fileUID uuid.UUID,
 		if embeddingPipe != "" {
 			kb.ExtraMetaDataUnmarshal.EmbeddingPipe = embeddingPipe
 		}
-
+		if processingTime != nil {
+			kb.ExtraMetaDataUnmarshal.ProcessingTime = *processingTime
+		}
+		if convertingTime != nil {
+			kb.ExtraMetaDataUnmarshal.ConvertingTime = *convertingTime
+		}
+		if chunkingTime != nil {
+			kb.ExtraMetaDataUnmarshal.ChunkingTime = *chunkingTime
+		}
+		if embeddingTime != nil {
+			kb.ExtraMetaDataUnmarshal.EmbeddingTime = *embeddingTime
+		}
 		// Marshal the updated ExtraMetaData
 		if err := kb.ExtraMetaDataMarshal(); err != nil {
 			return err
