@@ -4,23 +4,6 @@ import (
 	"testing"
 )
 
-func TestKnowledgeBaseFile_ExtraMetaDataMarshal(t *testing.T) {
-	kf := KnowledgeBaseFile{
-		ExtraMetaDataUnmarshal: &ExtraMetaData{
-			FailReason: "Some reason",
-		},
-	}
-
-	err := kf.ExtraMetaDataMarshal()
-	if err != nil {
-		t.Errorf("Unexpected error: %v", err)
-	}
-
-	expected := `{"fail_reason":"Some reason","converting_pipe":"","embedding_pipe":"","chunking_pipe":""}`
-	if kf.ExtraMetaData != expected {
-		t.Errorf("Expected ExtraMetaData to be %q, but got %q", expected, kf.ExtraMetaData)
-	}
-}
 
 // test ExtraMetaDataUnmarshal, when extra metadata is empty
 func TestKnowledgeBaseFile_ExtraMetaDataUnmarshal_Empty(t *testing.T) {

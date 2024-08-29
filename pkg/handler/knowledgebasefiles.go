@@ -102,7 +102,7 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 		quota, humanReadable := tier.GetFileStorageTotalQuota()
 		if totalUsageInNamespace+fileSize > int64(quota) {
 			return nil, fmt.Errorf(
-				"file storage totalquota exceeded. max: %v. tier:%v, err: %w",
+				"file storage total quota exceeded. max: %v. tier:%v, err: %w",
 				humanReadable, tier.String(), customerror.ErrInvalidArgument)
 		}
 
@@ -335,13 +335,13 @@ func (ph *PublicHandler) DeleteCatalogFile(
 		return nil, fmt.Errorf("file uid is required. err: %w", customerror.ErrInvalidArgument)
 	}
 
-	fuid, err := uuid.FromString(req.FileUid)
+	fUID, err := uuid.FromString(req.FileUid)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse file uid. err: %w", customerror.ErrInvalidArgument)
 	}
 
 	// get the file by uid
-	files, err := ph.service.Repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{fuid})
+	files, err := ph.service.Repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{fUID})
 	if err != nil {
 		return nil, err
 	}
@@ -354,12 +354,12 @@ func (ph *PublicHandler) DeleteCatalogFile(
 	//  kb file in minio
 	objectPaths = append(objectPaths, files[0].Destination)
 	// converted file in minio
-	cf, err := ph.service.Repository.GetConvertedFileByFileUID(ctx, fuid)
+	cf, err := ph.service.Repository.GetConvertedFileByFileUID(ctx, fUID)
 	if err == nil {
 		objectPaths = append(objectPaths, cf.Destination)
 	}
 	// chunks in minio
-	chunks, _ := ph.service.Repository.ListChunksByKbFileUID(ctx, fuid)
+	chunks, _ := ph.service.Repository.ListChunksByKbFileUID(ctx, fUID)
 	if len(chunks) > 0 {
 		for _, chunk := range chunks {
 			objectPaths = append(objectPaths, chunk.ContentDest)
@@ -367,20 +367,20 @@ func (ph *PublicHandler) DeleteCatalogFile(
 	}
 	//  delete the embeddings in milvus(need to delete first)
 	embUIDs := []string{}
-	embs, _ := ph.service.Repository.ListEmbeddingsByKbFileUID(ctx, fuid)
-	for _, emb := range embs {
+	embeddings, _ := ph.service.Repository.ListEmbeddingsByKbFileUID(ctx, fUID)
+	for _, emb := range embeddings {
 		embUIDs = append(embUIDs, emb.UID.String())
 	}
 	_ = ph.service.MilvusClient.DeleteEmbeddingsInKb(ctx, files[0].KnowledgeBaseUID.String(), embUIDs)
 
 	_ = ph.service.MinIO.DeleteFiles(ctx, objectPaths)
-	//  delete the converted file in postgres
-	_ = ph.service.Repository.HardDeleteConvertedFileByFileUID(ctx, fuid)
-	//  delete the chunks in postgres
-	_ = ph.service.Repository.HardDeleteChunksByKbFileUID(ctx, fuid)
-	//  delete the embeddings in postgres
-	_ = ph.service.Repository.HardDeleteEmbeddingsByKbFileUID(ctx, fuid)
-	// delete the file in postgres
+	//  delete the converted file in postgreSQL
+	_ = ph.service.Repository.HardDeleteConvertedFileByFileUID(ctx, fUID)
+	//  delete the chunks in postgreSQL
+	_ = ph.service.Repository.HardDeleteChunksByKbFileUID(ctx, fUID)
+	//  delete the embeddings in postgreSQL
+	_ = ph.service.Repository.HardDeleteEmbeddingsByKbFileUID(ctx, fUID)
+	// delete the file in postgreSQL
 	err = ph.service.Repository.DeleteKnowledgeBaseFile(ctx, req.FileUid)
 	if err != nil {
 		return nil, err
@@ -401,14 +401,14 @@ func (ph *PublicHandler) ProcessCatalogFiles(ctx context.Context, req *artifactp
 
 	log, _ := logger.GetZapLogger(ctx)
 	// ACL - check if the uid can process file. ACL.
-	// chekc the fiels's kb_uid and use kb_uid to check if user has write permission
+	// check the file's kb_uid and use kb_uid to check if user has write permission
 	fileUUIDs := make([]uuid.UUID, 0, len(req.FileUids))
 	for _, fileUID := range req.FileUids {
-		fuid, err := uuid.FromString(fileUID)
+		fUID, err := uuid.FromString(fileUID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse file uid. err: %w", customerror.ErrInvalidArgument)
 		}
-		fileUUIDs = append(fileUUIDs, fuid)
+		fileUUIDs = append(fileUUIDs, fUID)
 	}
 	kbfs, err := ph.service.Repository.GetKnowledgeBaseFilesByFileUIDs(ctx, fileUUIDs)
 	if err != nil {
