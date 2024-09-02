@@ -9,6 +9,7 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
+	"github.com/instill-ai/artifact-backend/pkg/utils"
 	artifactPb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	pipelinePb "github.com/instill-ai/protogen-go/vdp/pipeline/v1beta"
 	"go.uber.org/zap"
@@ -276,43 +277,45 @@ func (s *Service) EmbeddingTextPipe(ctx context.Context, caller uuid.UUID, reque
 		batchIndex := i / maxBatchSize
 
 		wg.Add(1)
-		go func(batch []string, index int) {
-			ctx_ := metadata.NewOutgoingContext(ctx, md)
-			defer wg.Done()
+		go utils.GoRecover(func() {
+			func(batch []string, index int) {
+				ctx_ := metadata.NewOutgoingContext(ctx, md)
+				defer wg.Done()
 
-			inputs := make([]*structpb.Struct, 0, len(batch))
-			for _, text := range batch {
-				inputs = append(inputs, &structpb.Struct{
-					Fields: map[string]*structpb.Value{
-						"chunk_input": {Kind: &structpb.Value_StringValue{StringValue: text}},
-					},
-				})
-			}
+				inputs := make([]*structpb.Struct, 0, len(batch))
+				for _, text := range batch {
+					inputs = append(inputs, &structpb.Struct{
+						Fields: map[string]*structpb.Value{
+							"chunk_input": {Kind: &structpb.Value_StringValue{StringValue: text}},
+						},
+					})
+				}
 
-			req := &pipelinePb.TriggerNamespacePipelineReleaseRequest{
-				NamespaceId: NamespaceID,
-				PipelineId:  TextEmbedPipelineID,
-				ReleaseId:   TextEmbedVersion,
-				Inputs:      inputs,
-			}
-			res, err := s.PipelinePub.TriggerNamespacePipelineRelease(ctx_, req)
-			if err != nil {
-				errChan <- fmt.Errorf("failed to trigger %s pipeline. err:%w", TextEmbedPipelineID, err)
-				ctxCancel()
-				return
-			}
-			result, err := GetVectorsFromResponse(res)
-			if err != nil {
-				errChan <- fmt.Errorf("failed to get vector from response: %w", err)
-				ctxCancel()
-				return
-			}
+				req := &pipelinePb.TriggerNamespacePipelineReleaseRequest{
+					NamespaceId: NamespaceID,
+					PipelineId:  TextEmbedPipelineID,
+					ReleaseId:   TextEmbedVersion,
+					Inputs:      inputs,
+				}
+				res, err := s.PipelinePub.TriggerNamespacePipelineRelease(ctx_, req)
+				if err != nil {
+					errChan <- fmt.Errorf("failed to trigger %s pipeline. err:%w", TextEmbedPipelineID, err)
+					ctxCancel()
+					return
+				}
+				result, err := GetVectorsFromResponse(res)
+				if err != nil {
+					errChan <- fmt.Errorf("failed to get vector from response: %w", err)
+					ctxCancel()
+					return
+				}
 
-			resultsChan <- struct {
-				index  int
-				result [][]float32
-			}{index: index, result: result}
-		}(batch, batchIndex)
+				resultsChan <- struct {
+					index  int
+					result [][]float32
+				}{index: index, result: result}
+			}(batch, batchIndex)
+		}, fmt.Sprintf("EmbeddingTextPipe %d-%d", i, end))
 	}
 
 	// wait for all the goroutines to finish

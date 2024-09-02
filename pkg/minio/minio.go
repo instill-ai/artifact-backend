@@ -12,6 +12,7 @@ import (
 
 	"github.com/instill-ai/artifact-backend/config"
 	log "github.com/instill-ai/artifact-backend/pkg/logger"
+	"github.com/instill-ai/artifact-backend/pkg/utils"
 
 	"github.com/minio/minio-go"
 	"go.uber.org/zap"
@@ -122,19 +123,22 @@ func (m *Minio) DeleteFiles(ctx context.Context, filePathNames []string) chan er
 		errCh <- err
 		return errCh
 	}
-	// Delete the files from MinIO parallelly
+	// Delete the files from MinIO parallel
 	var wg sync.WaitGroup
 	for _, filePathName := range filePathNames {
 		wg.Add(1)
-		go func(filePathName string, errCh chan error) {
-			defer wg.Done()
-			err := m.client.RemoveObject(m.bucket, filePathName)
-			if err != nil {
-				log.Error("Failed to delete file from MinIO", zap.Error(err))
-				errCh <- err
-				return
-			}
-		}(filePathName, errCh)
+		go utils.GoRecover(
+			func() {
+				func(filePathName string, errCh chan error) {
+					defer wg.Done()
+					err := m.client.RemoveObject(m.bucket, filePathName)
+					if err != nil {
+						log.Error("Failed to delete file from MinIO", zap.Error(err))
+						errCh <- err
+						return
+					}
+				}(filePathName, errCh)
+			}, fmt.Sprintf("DeleteFiles %s", filePathName))
 	}
 	wg.Wait()
 	return errCh
@@ -185,32 +189,33 @@ func (m *Minio) GetFilesByPaths(ctx context.Context, filePaths []string) ([]File
 
 	for i, path := range filePaths {
 		wg.Add(1)
-		go func(index int, filePath string) {
-			defer wg.Done()
+		go utils.GoRecover(func() {
+			func(index int, filePath string) {
+				defer wg.Done()
+				obj, err := m.client.GetObject(m.bucket, filePath, minio.GetObjectOptions{})
+				if err != nil {
+					log.Error("Failed to get object from MinIO", zap.String("path", filePath), zap.Error(err))
+					mu.Lock()
+					errors[index] = err
+					mu.Unlock()
+					return
+				}
+				defer obj.Close()
 
-			obj, err := m.client.GetObject(m.bucket, filePath, minio.GetObjectOptions{})
-			if err != nil {
-				log.Error("Failed to get object from MinIO", zap.String("path", filePath), zap.Error(err))
-				mu.Lock()
-				errors[index] = err
-				mu.Unlock()
-				return
-			}
-			defer obj.Close()
+				var buffer bytes.Buffer
+				_, err = io.Copy(&buffer, obj)
+				if err != nil {
+					log.Error("Failed to read object content", zap.String("path", filePath), zap.Error(err))
+					errors[index] = err
+					return
+				}
 
-			var buffer bytes.Buffer
-			_, err = io.Copy(&buffer, obj)
-			if err != nil {
-				log.Error("Failed to read object content", zap.String("path", filePath), zap.Error(err))
-				errors[index] = err
-				return
-			}
-
-			files[index] = FileContent{
-				Name:    filepath.Base(filePath),
-				Content: buffer.Bytes(),
-			}
-		}(i, path)
+				files[index] = FileContent{
+					Name:    filepath.Base(filePath),
+					Content: buffer.Bytes(),
+				}
+			}(i, path)
+		}, fmt.Sprintf("GetFilesByPaths %s", path))
 	}
 
 	wg.Wait()
@@ -248,14 +253,16 @@ func (m *Minio) DeleteFilesWithPrefix(ctx context.Context, prefix string) chan e
 		}
 
 		wg.Add(1)
-		go func(objectName string) {
-			defer wg.Done()
-			err := m.client.RemoveObject(m.bucket, objectName)
-			if err != nil {
-				log.Error("Failed to delete object from MinIO", zap.String("object", objectName), zap.Error(err))
-				errCh <- err
-			}
-		}(object.Key)
+		go utils.GoRecover(func() {
+			func(objectName string) {
+				defer wg.Done()
+				err := m.client.RemoveObject(m.bucket, objectName)
+				if err != nil {
+					log.Error("Failed to delete object from MinIO", zap.String("object", objectName), zap.Error(err))
+					errCh <- err
+				}
+			}(object.Key)
+		}, fmt.Sprintf("DeleteFilesWithPrefix %s", object.Key))
 	}
 
 	// Wait for all deletions to complete

@@ -10,6 +10,7 @@ import (
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
+	"github.com/instill-ai/artifact-backend/pkg/utils"
 	"github.com/instill-ai/x/repo"
 
 	mgmtPB "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
@@ -147,14 +148,15 @@ func (u *usage) StartReporter(ctx context.Context) {
 		logger.Error(err.Error())
 		return
 	}
-
-	go func() {
-		time.Sleep(5 * time.Second)
-		err := usageClient.StartReporter(ctx, u.artifactReporter, usagePB.Session_SERVICE_ARTIFACT, config.Config.Server.Edition, u.version, defaultOwnerUID, u.RetrieveArtifactUsageData)
-		if err != nil {
-			logger.Error(fmt.Sprintf("unable to start reporter: %v\n", err))
-		}
-	}()
+	go utils.GoRecover(func() {
+		func() {
+			time.Sleep(5 * time.Second)
+			err := usageClient.StartReporter(ctx, u.artifactReporter, usagePB.Session_SERVICE_ARTIFACT, config.Config.Server.Edition, u.version, defaultOwnerUID, u.RetrieveArtifactUsageData)
+			if err != nil {
+				logger.Error(fmt.Sprintf("unable to start reporter: %v\n", err))
+			}
+		}()
+	}, "UsageReporter")
 }
 
 func (u *usage) TriggerSingleReporter(ctx context.Context) {
