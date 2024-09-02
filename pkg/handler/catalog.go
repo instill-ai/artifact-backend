@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 
 	"github.com/gofrs/uuid"
@@ -39,7 +40,7 @@ func (ph *PublicHandler) GetFileCatalog(ctx context.Context, req *artifactpb.Get
 		kb, err := ph.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.CatalogId)
 		if err != nil {
 			log.Error("failed to get knowledge base by owner and kb id", zap.Error(err))
-			return nil, fmt.Errorf("failed to get catalog by namepsace and catalog id. err: %w", err)
+			return nil, fmt.Errorf("failed to get catalog by namespace and catalog id. err: %w", err)
 		}
 
 		kbFile, err = ph.service.Repository.GetKnowledgebaseFileByKbUIDAndFileID(ctx, kb.UID, fileID)
@@ -78,7 +79,7 @@ func (ph *PublicHandler) GetFileCatalog(ctx context.Context, req *artifactpb.Get
 			customerror.ErrNoPermission, kbFile.KnowledgeBaseUID.String(), authUID)
 	}
 
-	// get sourecfile
+	// get source file
 	source, err := ph.service.Repository.GetTruthSourceByFileUID(ctx, kbFile.UID)
 	if err != nil {
 		log.Error("failed to get truth source by file uid", zap.Error(err))
@@ -93,7 +94,7 @@ func (ph *PublicHandler) GetFileCatalog(ctx context.Context, req *artifactpb.Get
 	}
 
 	// get chunks
-	// NOTE: in the future, we may supprot other types of segment, e.g. image, audio, etc.
+	// NOTE: in the future, we may support other types of segment, e.g. image, audio, etc.
 	_, _, textChunks, chunkUIDToContent, _, err := ph.service.GetChunksByFile(ctx, kbFile)
 	if err != nil {
 		log.Error("failed to get chunks", zap.Error(err))
@@ -102,21 +103,22 @@ func (ph *PublicHandler) GetFileCatalog(ctx context.Context, req *artifactpb.Get
 
 	pbChunks := make([]*artifactpb.GetFileCatalogResponse_Chunk, 0, len(textChunks))
 
-	// get emneddings
+	// get embeddings
 	embeddings, err := ph.service.Repository.ListEmbeddingsByKbFileUID(ctx, kbFile.UID)
 	if err != nil {
 		log.Error("failed to get embeddings", zap.Error(err))
 		return nil, fmt.Errorf("failed to get embeddings. err: %w", err)
 	}
-	// map embeddings to chunks
+	// map chunks to embeddings
 	embeddingMap := make(map[uuid.UUID]repository.Embedding)
 
 	// NOTE: in the future if we support embeddings for other types of source, we need to filter here
-	targetSourceTabel := ph.service.Repository.TextChunkTableName()
+	targetSourceTable := ph.service.Repository.TextChunkTableName()
 	for _, embedding := range embeddings {
-		if embedding.SourceTable != targetSourceTabel {
+		if embedding.SourceTable != targetSourceTable {
 			continue
 		}
+		// map chunk uid to embedding
 		embeddingMap[embedding.SourceUID] = embedding
 	}
 
@@ -154,7 +156,20 @@ func (ph *PublicHandler) GetFileCatalog(ctx context.Context, req *artifactpb.Get
 	for _, chunk := range pbChunks {
 		totalTokens += chunk.TokensNum
 	}
+
+	// Retrieve the original file content from MinIO
+	originalContent, err := ph.service.MinIO.GetFile(ctx, kbFile.Destination)
+	if err != nil {
+		log.Error("failed to get original file from minio", zap.Error(err))
+		return nil, fmt.Errorf("failed to get original file from minio. err: %w", err)
+	}
+
+	// Encode the original content to base64
+	originalDataBase64 := base64.StdEncoding.EncodeToString(originalContent)
+
+	// Add the originalData field to the response
 	return &artifactpb.GetFileCatalogResponse{
+		OriginalData: originalDataBase64,
 		Metadata: &artifactpb.GetFileCatalogResponse_Metadata{
 			FileUid:           kbFile.UID.String(),
 			FileId:            kbFile.Name,
