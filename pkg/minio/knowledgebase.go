@@ -5,14 +5,16 @@ import (
 	"encoding/base64"
 	"fmt"
 	"sync"
+
+	"github.com/instill-ai/artifact-backend/pkg/utils"
 )
 
 // KnowledgeBaseI is the interface for knowledge base related operations.
 type KnowledgeBaseI interface {
 	// SaveConvertedFile saves a converted file to MinIO with the appropriate MIME type.
 	SaveConvertedFile(ctx context.Context, kbUID, convertedFileUID, fileExt string, content []byte) error
-	// SaveChunks saves batch of chunks(text files) to MinIO.
-	SaveChunks(ctx context.Context, kbUID string, chunks map[ChunkUIDType]ChunkContentType) error
+	// SaveTextChunks saves batch of chunks(text files) to MinIO.
+	SaveTextChunks(ctx context.Context, kbUID string, chunks map[ChunkUIDType]ChunkContentType) error
 	// GetUploadedFilePathInKnowledgeBase returns the path of the uploaded file in MinIO.
 	GetUploadedFilePathInKnowledgeBase(kbUID, dest string) string
 	// GetConvertedFilePathInKnowledgeBase returns the path of the converted file in MinIO.
@@ -52,22 +54,24 @@ func (m *Minio) SaveConvertedFile(ctx context.Context, kbUID, convertedFileUID, 
 type ChunkUIDType string
 type ChunkContentType []byte
 
-// SaveChunks saves batch of chunks(text files) to MinIO.
-func (m *Minio) SaveChunks(ctx context.Context, kbUID string, chunks map[ChunkUIDType]ChunkContentType) error {
+// SaveTextChunks saves batch of chunks(text files) to MinIO.
+func (m *Minio) SaveTextChunks(ctx context.Context, kbUID string, chunks map[ChunkUIDType]ChunkContentType) error {
 	var wg sync.WaitGroup
 	errorUIDChan := make(chan string, len(chunks))
 	for chunkUID, chunkContent := range chunks {
 		wg.Add(1)
-		go func(chunkUID ChunkUIDType, chunkContent ChunkContentType) {
-			defer wg.Done()
-			filePathName := m.GetChunkPathInKnowledgeBase(kbUID, string(chunkUID))
+		go utils.GoRecover(func() {
+			func(chunkUID ChunkUIDType, chunkContent ChunkContentType) {
+				defer wg.Done()
+				filePathName := m.GetChunkPathInKnowledgeBase(kbUID, string(chunkUID))
 
-			err := m.UploadBase64File(ctx, filePathName, base64.StdEncoding.EncodeToString(chunkContent), "text/plain")
-			if err != nil {
-				errorUIDChan <- string(chunkUID)
-				return
-			}
-		}(chunkUID, chunkContent)
+				err := m.UploadBase64File(ctx, filePathName, base64.StdEncoding.EncodeToString(chunkContent), "text/plain")
+				if err != nil {
+					errorUIDChan <- string(chunkUID)
+					return
+				}
+			}(chunkUID, chunkContent)
+		}, fmt.Sprintf("SaveTextChunks %s", chunkUID))
 	}
 	wg.Wait()
 	close(errorUIDChan)
@@ -111,8 +115,6 @@ func (m *Minio) DeleteAllChunksInKb(ctx context.Context, kbUID string) chan erro
 
 	return err
 }
-
-
 
 func (m *Minio) GetUploadedFilePathInKnowledgeBase(kbUID, dest string) string {
 	return kbUID + uploadedFilePrefix + dest

@@ -45,6 +45,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	servicePkg "github.com/instill-ai/artifact-backend/pkg/service"
 	"github.com/instill-ai/artifact-backend/pkg/usage"
+	"github.com/instill-ai/artifact-backend/pkg/utils"
 	"github.com/instill-ai/artifact-backend/pkg/worker"
 
 	grpcClient "github.com/instill-ai/artifact-backend/pkg/client/grpc"
@@ -192,7 +193,7 @@ func main() {
 		if usageServiceClientConn != nil {
 			defer usageServiceClientConn.Close()
 			logger.Info("try to start usage reporter")
-			go func() {
+			go utils.GoRecover(func() {
 				for {
 					usg = usage.NewUsage(ctx, mgmtPrivateServiceClient, redisClient, usageServiceClient)
 					if usg != nil {
@@ -203,7 +204,7 @@ func main() {
 					logger.Warn("retry to start usage reporter after 5 minutes")
 					time.Sleep(5 * time.Minute)
 				}
-			}()
+			}, "Usage Reporter")
 		}
 	}
 
@@ -321,11 +322,11 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 	influxDBClient, influxDBWriteClient := httpClient.NewInfluxDBClient(ctx)
 
 	influxErrCh := influxDBWriteClient.Errors()
-	go func() {
+	go utils.GoRecover(func() {
 		for err := range influxErrCh {
 			logger.Error(fmt.Sprintf("write to bucket %s error: %s\n", config.Config.InfluxDB.Bucket, err.Error()))
 		}
-	}()
+	}, "InfluxDB")
 
 	// Initialize repository
 	db := database.GetSharedConnection()

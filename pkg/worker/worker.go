@@ -14,6 +14,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/service"
+	"github.com/instill-ai/artifact-backend/pkg/utils"
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -49,11 +50,15 @@ func (wp *fileToEmbWorkerPool) Start() {
 	logger, _ := logger.GetZapLogger(wp.ctx)
 	for i := 0; i < wp.numberOfWorkers; i++ {
 		wp.wg.Add(1)
-		go wp.startWorker(wp.ctx, i+1)
+		go utils.GoRecover(func() {
+			wp.startWorker(wp.ctx, i+1)
+		}, fmt.Sprintf("Worker %d", i+1))
 	}
 	// start dispatcher
 	wp.wg.Add(1)
-	go wp.startDispatcher()
+	go utils.GoRecover(func() {
+		wp.startDispatcher()
+	}, "Dispatcher")
 	logger.Info("Worker pool started")
 }
 
@@ -733,7 +738,7 @@ func (wp *fileToEmbWorkerPool) saveChunks(ctx context.Context, kbUID string, kbF
 			for i, uid := range chunkUIDs {
 				chunksForMinIO[minio.ChunkUIDType(uid)] = minio.ChunkContentType([]byte(chunks[i].Text))
 			}
-			err := wp.svc.MinIO.SaveChunks(ctx, kbUID, chunksForMinIO)
+			err := wp.svc.MinIO.SaveTextChunks(ctx, kbUID, chunksForMinIO)
 			if err != nil {
 				logger.Error("Failed to save chunks into object storage.", zap.String("SourceUID", sourceUID.String()))
 				return nil, err
