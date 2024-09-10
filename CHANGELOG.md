@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.12.0-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.11.0-alpha...v0.12.0-alpha) (2024-09-04)
+
+
+### Features
+
+* **catalog:** support concurrent text to embedding process ([#85](https://github.com/instill-ai/artifact-backend/issues/85)) ([12d313c](https://github.com/instill-ai/artifact-backend/commit/12d313ce6d4d6d55c74e7aa053c110a67b21ece6))
+* **catalog:** support originalData return ([#87](https://github.com/instill-ai/artifact-backend/issues/87)) ([eb0c7fd](https://github.com/instill-ai/artifact-backend/commit/eb0c7fd989dfea056037c6a083503e7a22c4fc04))
+
 ## [0.11.0-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.10.1-alpha...v0.11.0-alpha) (2024-08-26)
 
 
