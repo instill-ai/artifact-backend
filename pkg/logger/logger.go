@@ -18,29 +18,32 @@ var once sync.Once
 var core zapcore.Core
 
 // GetZapLogger returns an instance of zap logger
+// GetZapLogger returns an instance of zap logger
+// It configures the logger based on the application's debug mode and sets up appropriate log levels and output destinations.
+// The function also adds a hook to inject logs into OpenTelemetry traces.
 func GetZapLogger(ctx context.Context) (*zap.Logger, error) {
 	var err error
 	once.Do(func() {
-		// debug and info level enabler
+		// Enable debug and info level logs
 		debugInfoLevel := zap.LevelEnablerFunc(func(level zapcore.Level) bool {
 			return level == zapcore.DebugLevel || level == zapcore.InfoLevel
 		})
 
-		// info level enabler
+		// Enable only info level logs
 		infoLevel := zap.LevelEnablerFunc(func(level zapcore.Level) bool {
 			return level == zapcore.InfoLevel
 		})
 
-		// warn, error and fatal level enabler
+		// Enable warn, error, and fatal level logs
 		warnErrorFatalLevel := zap.LevelEnablerFunc(func(level zapcore.Level) bool {
 			return level == zapcore.WarnLevel || level == zapcore.ErrorLevel || level == zapcore.FatalLevel
 		})
 
-		// write syncers
+		// Set up write syncers for stdout and stderr
 		stdoutSyncer := zapcore.Lock(os.Stdout)
 		stderrSyncer := zapcore.Lock(os.Stderr)
 
-		// tee core
+		// Configure the logger core based on debug mode
 		if config.Config.Server.Debug {
 			core = zapcore.NewTee(
 				zapcore.NewCore(
@@ -69,8 +72,8 @@ func GetZapLogger(ctx context.Context) (*zap.Logger, error) {
 			)
 		}
 	})
-	// finally construct the logger with the tee core
-	// and add hooks to inject logs to traces
+
+	// Construct the logger with the configured core and add hooks
 	logger := zap.New(core).WithOptions(
 		zap.Hooks(func(entry zapcore.Entry) error {
 			span := trace.SpanFromContext(ctx)
@@ -78,6 +81,7 @@ func GetZapLogger(ctx context.Context) (*zap.Logger, error) {
 				return nil
 			}
 
+			// Add log entry as an event to the current span
 			span.AddEvent("log", trace.WithAttributes(
 				attribute.KeyValue{
 					Key:   "log.severity",
@@ -88,8 +92,10 @@ func GetZapLogger(ctx context.Context) (*zap.Logger, error) {
 					Value: attribute.StringValue(entry.Message),
 				},
 			))
+
+			// Set span status based on log level
 			if entry.Level >= zap.ErrorLevel {
-				span.SetStatus(codes.Error, string(entry.Message))
+				span.SetStatus(codes.Error, entry.Message)
 			} else {
 				span.SetStatus(codes.Ok, "")
 			}
@@ -97,8 +103,9 @@ func GetZapLogger(ctx context.Context) (*zap.Logger, error) {
 			return nil
 		}),
 		zap.AddCaller(),
+		// Uncomment the following line to add stack traces for error logs
 		// zap.AddStacktrace(zapcore.ErrorLevel),
-		)
+	)
 
 	return logger, err
 }

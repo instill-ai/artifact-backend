@@ -15,6 +15,7 @@ import (
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"gorm.io/gorm"
 )
 
 func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.UploadCatalogFileRequest) (*artifactpb.UploadCatalogFileResponse, error) {
@@ -353,41 +354,77 @@ func (ph *PublicHandler) DeleteCatalogFile(
 	// TODO: need to use clean worker in the future
 	go utils.GoRecover(
 		func() {
-			// to prevent parent context from being cancelled, create a new context
+			// Create a new context to prevent the parent context from being cancelled
 			ctx := context.TODO()
-			//  delete the file from minio
+			allPass := true
+			// Delete the file from MinIO
 			objectPaths := []string{}
-			//  kb file in minio
+			// Add the knowledge base file in MinIO to the list of objects to delete
 			objectPaths = append(objectPaths, files[0].Destination)
-			// converted file in minio
+			// Add the converted file in MinIO to the list of objects to delete
 			cf, err := ph.service.Repository.GetConvertedFileByFileUID(ctx, fUID)
-			if err == nil {
+			if err != nil {
+				if err != gorm.ErrRecordNotFound {
+					log.Error("failed to get converted file by file uid", zap.Error(err))
+					allPass = false
+				}
+			} else if cf != nil {
 				objectPaths = append(objectPaths, cf.Destination)
 			}
-			// chunks in minio
-			chunks, _ := ph.service.Repository.ListChunksByKbFileUID(ctx, fUID)
-			if len(chunks) > 0 {
+			// Add the chunks in MinIO to the list of objects to delete
+			chunks, err := ph.service.Repository.ListChunksByKbFileUID(ctx, fUID)
+			if err != nil {
+				log.Error("failed to get chunks by kb file uid", zap.Error(err))
+				allPass = false
+			} else if len(chunks) > 0 {
 				for _, chunk := range chunks {
 					objectPaths = append(objectPaths, chunk.ContentDest)
 				}
 			}
-			//  delete the embeddings in milvus(need to delete first)
+			// Delete the embeddings in Milvus (this better to be done first)
 			embUIDs := []string{}
 			embeddings, _ := ph.service.Repository.ListEmbeddingsByKbFileUID(ctx, fUID)
 			for _, emb := range embeddings {
 				embUIDs = append(embUIDs, emb.UID.String())
 			}
-			_ = ph.service.MilvusClient.DeleteEmbeddingsInKb(ctx, files[0].KnowledgeBaseUID.String(), embUIDs)
+			err = ph.service.MilvusClient.DeleteEmbeddingsInKb(ctx, files[0].KnowledgeBaseUID.String(), embUIDs)
+			if err != nil {
+				log.Error("failed to delete embeddings in milvus", zap.Error(err))
+				allPass = false
+			}
 
-			_ = ph.service.MinIO.DeleteFiles(ctx, objectPaths)
-			//  delete the converted file in postgreSQL
-			_ = ph.service.Repository.HardDeleteConvertedFileByFileUID(ctx, fUID)
-			//  delete the chunks in postgreSQL
-			_ = ph.service.Repository.HardDeleteChunksByKbFileUID(ctx, fUID)
-			//  delete the embeddings in postgreSQL
-			_ = ph.service.Repository.HardDeleteEmbeddingsByKbFileUID(ctx, fUID)
-			// print success message and file uid
-			log.Info("Successfully deleted file from minio, database and milvus", zap.String("file_uid", fUID.String()))
+			// Delete the files in MinIO
+			errChan := ph.service.MinIO.DeleteFiles(ctx, objectPaths)
+			for err := range errChan {
+				if err != nil {
+					log.Error("failed to delete files in minio", zap.Error(err))
+					allPass = false
+				}
+			}
+			// Delete the converted file in PostgreSQL
+			err = ph.service.Repository.HardDeleteConvertedFileByFileUID(ctx, fUID)
+			if err != nil {
+				log.Error("failed to delete converted file in postgreSQL", zap.Error(err))
+				allPass = false
+			}
+			// Delete the chunks in PostgreSQL
+			err = ph.service.Repository.HardDeleteChunksByKbFileUID(ctx, fUID)
+			if err != nil {
+				log.Error("failed to delete chunks in postgreSQL", zap.Error(err))
+				allPass = false
+			}
+			// Delete the embeddings in PostgreSQL
+			err = ph.service.Repository.HardDeleteEmbeddingsByKbFileUID(ctx, fUID)
+			if err != nil {
+				log.Error("failed to delete embeddings in postgreSQL", zap.Error(err))
+				allPass = false
+			}
+			if allPass {
+				// Log success message and file UID
+				log.Info("DeleteCatalogFile: successfully deleted file from minio, database and milvus", zap.String("file_uid", fUID.String()))
+			} else {
+				log.Error("DeleteCatalogFile: failed to delete file from minio, database and milvus", zap.String("file_uid", fUID.String()))
+			}
 		},
 		"DeleteCatalogFile",
 	)

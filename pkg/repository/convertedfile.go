@@ -14,7 +14,7 @@ type ConvertedFileI interface {
 	ConvertedFileTableName() string
 	CreateConvertedFile(ctx context.Context, cf ConvertedFile, callExternalService func(convertedFileUID uuid.UUID) (map[string]any, error)) (*ConvertedFile, error)
 	DeleteConvertedFile(ctx context.Context, uid uuid.UUID) error
-	DeleteAllConvertedFilesinKb(ctx context.Context, kbUID uuid.UUID) error
+	DeleteAllConvertedFilesInKb(ctx context.Context, kbUID uuid.UUID) error
 	HardDeleteConvertedFileByFileUID(ctx context.Context, fileUID uuid.UUID) error
 	GetConvertedFileByFileUID(ctx context.Context, fileUID uuid.UUID) (*ConvertedFile, error)
 }
@@ -139,8 +139,8 @@ func (r *Repository) DeleteConvertedFile(ctx context.Context, uid uuid.UUID) err
 	return nil
 }
 
-// DeleteAllConvertedFilesinKb deletes all the records in the knowledge base
-func (r *Repository) DeleteAllConvertedFilesinKb(ctx context.Context, kbUID uuid.UUID) error {
+// DeleteAllConvertedFilesInKb deletes all the records in the knowledge base
+func (r *Repository) DeleteAllConvertedFilesInKb(ctx context.Context, kbUID uuid.UUID) error {
 	err := r.db.Transaction(func(tx *gorm.DB) error {
 		// Specify the condition to find the record by its UID
 		where := fmt.Sprintf("%s = ?", ConvertedFileColumn.KbUID)
