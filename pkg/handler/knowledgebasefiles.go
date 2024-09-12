@@ -11,6 +11,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/logger" // Add this import
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/resource"
+	"github.com/instill-ai/artifact-backend/pkg/utils"
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -349,37 +350,46 @@ func (ph *PublicHandler) DeleteCatalogFile(
 		return nil, fmt.Errorf("file not found. err: %w", customerror.ErrNotFound)
 	}
 
-	//  delete the file from minio
-	objectPaths := []string{}
-	//  kb file in minio
-	objectPaths = append(objectPaths, files[0].Destination)
-	// converted file in minio
-	cf, err := ph.service.Repository.GetConvertedFileByFileUID(ctx, fUID)
-	if err == nil {
-		objectPaths = append(objectPaths, cf.Destination)
-	}
-	// chunks in minio
-	chunks, _ := ph.service.Repository.ListChunksByKbFileUID(ctx, fUID)
-	if len(chunks) > 0 {
-		for _, chunk := range chunks {
-			objectPaths = append(objectPaths, chunk.ContentDest)
-		}
-	}
-	//  delete the embeddings in milvus(need to delete first)
-	embUIDs := []string{}
-	embeddings, _ := ph.service.Repository.ListEmbeddingsByKbFileUID(ctx, fUID)
-	for _, emb := range embeddings {
-		embUIDs = append(embUIDs, emb.UID.String())
-	}
-	_ = ph.service.MilvusClient.DeleteEmbeddingsInKb(ctx, files[0].KnowledgeBaseUID.String(), embUIDs)
+	// TODO: need to use clean worker in the future
+	go utils.GoRecover(
+		func() {
+			//  delete the file from minio
+			objectPaths := []string{}
+			//  kb file in minio
+			objectPaths = append(objectPaths, files[0].Destination)
+			// converted file in minio
+			cf, err := ph.service.Repository.GetConvertedFileByFileUID(ctx, fUID)
+			if err == nil {
+				objectPaths = append(objectPaths, cf.Destination)
+			}
+			// chunks in minio
+			chunks, _ := ph.service.Repository.ListChunksByKbFileUID(ctx, fUID)
+			if len(chunks) > 0 {
+				for _, chunk := range chunks {
+					objectPaths = append(objectPaths, chunk.ContentDest)
+				}
+			}
+			//  delete the embeddings in milvus(need to delete first)
+			embUIDs := []string{}
+			embeddings, _ := ph.service.Repository.ListEmbeddingsByKbFileUID(ctx, fUID)
+			for _, emb := range embeddings {
+				embUIDs = append(embUIDs, emb.UID.String())
+			}
+			_ = ph.service.MilvusClient.DeleteEmbeddingsInKb(ctx, files[0].KnowledgeBaseUID.String(), embUIDs)
 
-	_ = ph.service.MinIO.DeleteFiles(ctx, objectPaths)
-	//  delete the converted file in postgreSQL
-	_ = ph.service.Repository.HardDeleteConvertedFileByFileUID(ctx, fUID)
-	//  delete the chunks in postgreSQL
-	_ = ph.service.Repository.HardDeleteChunksByKbFileUID(ctx, fUID)
-	//  delete the embeddings in postgreSQL
-	_ = ph.service.Repository.HardDeleteEmbeddingsByKbFileUID(ctx, fUID)
+			_ = ph.service.MinIO.DeleteFiles(ctx, objectPaths)
+			//  delete the converted file in postgreSQL
+			_ = ph.service.Repository.HardDeleteConvertedFileByFileUID(ctx, fUID)
+			//  delete the chunks in postgreSQL
+			_ = ph.service.Repository.HardDeleteChunksByKbFileUID(ctx, fUID)
+			//  delete the embeddings in postgreSQL
+			_ = ph.service.Repository.HardDeleteEmbeddingsByKbFileUID(ctx, fUID)
+			// print success message and file uid
+			log.Info("Successfully deleted file from minio, database and milvus", zap.String("file_uid", fUID.String()))
+		},
+		"DeleteCatalogFile",
+	)
+
 	// delete the file in postgreSQL
 	err = ph.service.Repository.DeleteKnowledgeBaseFile(ctx, req.FileUid)
 	if err != nil {
