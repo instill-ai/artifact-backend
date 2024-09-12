@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.1-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.13.0-alpha...v0.13.1-alpha) (2024-09-12)
+
+
+### Bug Fixes
+
+* **artifact:** fix ctx issue ([#91](https://github.com/instill-ai/artifact-backend/issues/91)) ([1c61d69](https://github.com/instill-ai/artifact-backend/commit/1c61d69c9b91ca27a3a321170aaee47f9f28a593))
+
 ## [0.13.0-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.12.0-alpha...v0.13.0-alpha) (2024-09-12)
 
 
