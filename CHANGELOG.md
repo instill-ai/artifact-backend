@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.0-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.12.0-alpha...v0.13.0-alpha) (2024-09-12)
+
+
+### Features
+
+* **artifact:** add minIO retry and file deletion ([#89](https://github.com/instill-ai/artifact-backend/issues/89)) ([8f391f0](https://github.com/instill-ai/artifact-backend/commit/8f391f01b73e67fb3d3646865545ad48f8a3cb9f))
+
 ## [0.12.0-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.11.0-alpha...v0.12.0-alpha) (2024-09-04)
 
 
