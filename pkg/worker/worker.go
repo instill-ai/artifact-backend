@@ -616,9 +616,18 @@ func (wp *fileToEmbWorkerPool) processEmbeddingFile(ctx context.Context, file re
 
 	sourceTable, sourceUID, chunks, _, texts, err := wp.svc.GetChunksByFile(ctx, &file)
 	if err != nil {
-		logger.Error("Failed to get chunks from database.", zap.String("SourceUID", sourceUID.String()))
-		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
+		logger.Error("Failed to get chunks from database first time.", zap.String("SourceUID", sourceUID.String()))
+		// TODO: investigate minIO failure. Last-Modified time format not recognized. Please report this issue at https://github.com/minio/minio-go/issues.
+		// retry once when get chunks failed
+		time.Sleep(1 * time.Second)
+		logger.Info("Retrying to get chunks from database.", zap.String("SourceUID", sourceUID.String()))
+		sourceTable, sourceUID, chunks, _, texts, err = wp.svc.GetChunksByFile(ctx, &file)
+		if err != nil {
+			logger.Error("Failed to get chunks from database second time.", zap.String("SourceUID", sourceUID.String()))
+			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
+		}
 	}
+
 	// call the embedding pipeline
 	requesterUID := file.RequesterUID
 	vectors, err := wp.svc.EmbeddingTextPipe(ctx, file.CreatorUID, requesterUID, texts)
