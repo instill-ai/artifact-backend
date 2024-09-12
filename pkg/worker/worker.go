@@ -415,7 +415,7 @@ func (wp *fileToEmbWorkerPool) processConvertingFile(ctx context.Context, file r
 	requesterUID := file.RequesterUID
 	convertedMD, err := wp.svc.ConvertToMDPipe(ctx, file.CreatorUID, requesterUID, base64Data, artifactpb.FileType(artifactpb.FileType_value[file.Type]))
 	if err != nil {
-		logger.Error("Failed to convert pdf to md.", zap.String("File path", fileInMinIOPath))
+		logger.Error("Failed to convert pdf to md using pdf-to-md pipeline.", zap.String("File path", fileInMinIOPath))
 		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
 	}
 
@@ -485,7 +485,7 @@ func (wp *fileToEmbWorkerPool) processChunkingFile(ctx context.Context, file rep
 		requesterUID := file.RequesterUID
 		chunks, err := wp.svc.SplitMarkdownPipe(ctx, file.CreatorUID, requesterUID, string(convertedFileData))
 		if err != nil {
-			logger.Error("Failed to get chunks from converted file.", zap.String("Converted file uid", convertedFile.UID.String()))
+			logger.Error("Failed to get chunks from converted file using markdown chunking pipeline.", zap.String("Converted file uid", convertedFile.UID.String()))
 			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
 		}
 
@@ -632,7 +632,7 @@ func (wp *fileToEmbWorkerPool) processEmbeddingFile(ctx context.Context, file re
 	requesterUID := file.RequesterUID
 	vectors, err := wp.svc.EmbeddingTextPipe(ctx, file.CreatorUID, requesterUID, texts)
 	if err != nil {
-		logger.Error("Failed to get embeddings from chunks.", zap.String("SourceTable", sourceTable), zap.String("SourceUID", sourceUID.String()))
+		logger.Error("Failed to get embeddings from chunks. using embedding pipeline", zap.String("SourceTable", sourceTable), zap.String("SourceUID", sourceUID.String()))
 		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
 	}
 	// save the embeddings into milvus and metadata into database
