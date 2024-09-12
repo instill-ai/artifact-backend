@@ -353,6 +353,8 @@ func (ph *PublicHandler) DeleteCatalogFile(
 	// TODO: need to use clean worker in the future
 	go utils.GoRecover(
 		func() {
+			// to prevent parent context from being cancelled, create a new context
+			ctx := context.TODO()
 			//  delete the file from minio
 			objectPaths := []string{}
 			//  kb file in minio
