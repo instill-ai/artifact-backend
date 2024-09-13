@@ -235,6 +235,7 @@ func main() {
 	privatePort := fmt.Sprintf(":%d", config.Config.Server.PrivatePort)
 	// Wait for interrupt signal to gracefully shutdown the server with a timeout of 5 seconds.
 	errSig := make(chan error)
+	defer close(errSig)
 
 	go func() {
 		privateListener, err := net.Listen("tcp", privatePort)
@@ -266,11 +267,13 @@ func main() {
 	// kill -2 is syscall.SIGINT
 	// kill -9 is syscall.SIGKILL but can't be catch, so don't need add it
 	quitSig := make(chan os.Signal, 1)
+	defer close(quitSig)
 	signal.Notify(quitSig, syscall.SIGINT, syscall.SIGTERM)
 
 	select {
 	case err := <-errSig:
 		logger.Error(fmt.Sprintf("Fatal error: %v\n", err))
+		os.Exit(1)
 	case <-quitSig:
 		// if config.Config.Server.Usage.Enabled && usg != nil {
 		// 	usg.TriggerSingleReporter(ctx)
@@ -278,9 +281,9 @@ func main() {
 		logger.Info("Shutting down server...")
 		publicGrpcS.GracefulStop()
 		wp.GraceFulStop()
-		logger.Info("server shutdown 1")
+		logger.Info("server shutdown due to signal")
+		os.Exit(0)
 	}
-	fmt.Println("server shutdown 2")
 }
 
 func newClients(ctx context.Context, logger *zap.Logger) (

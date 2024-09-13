@@ -15,6 +15,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/service"
+	"github.com/instill-ai/artifact-backend/pkg/utils"
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
@@ -347,50 +348,79 @@ func (ph *PublicHandler) DeleteCatalog(ctx context.Context, req *artifactpb.Dele
 		return nil, fmt.Errorf(ErrorDeleteKnowledgeBaseMsg, customerror.ErrNoPermission)
 	}
 
-	// delete acl
-	err = ph.service.ACLClient.Purge(ctx, "knowledgebase", kb.UID)
-	if err != nil {
-		log.Error("failed to purge catalog", zap.Error(err))
-		return nil, fmt.Errorf(ErrorDeleteKnowledgeBaseMsg, err)
-	}
+	startSignal := make(chan bool)
+	// TODO: in the future, we should delete the catalog using clean up worker
+	go utils.GoRecover(func() {
+		ctx := context.TODO()
+		log, _ := logger.GetZapLogger(ctx)
+		// wait for the catalog to be deleted in postgres
+		canStart := <-startSignal
+		if !canStart {
+			log.Error("failed to delete catalog in background", zap.String("catalog_id", kb.UID.String()))
+			return
+		}
+		log.Info("DeleteCatalog starts in background", zap.String("catalog_id", kb.UID.String()))
+		allPass := true
+		//  delete files in minIO
+		err = <-ph.service.MinIO.DeleteKnowledgeBase(ctx, kb.UID.String())
+		if err != nil {
+			log.Error("failed to delete files in minIO in background", zap.Error(err))
+			allPass = false
+		}
 
-	//  delete files in minIO
-	err = <-ph.service.MinIO.DeleteKnowledgeBase(ctx, kb.UID.String())
-	if err != nil {
-		log.Error("failed to delete files in minIO", zap.Error(err))
-	}
-	//  delete database in postgres
-	err = ph.service.Repository.DeleteAllKnowledgeBaseFiles(ctx, kb.UID.String())
-	if err != nil {
-		log.Error("failed to delete files in postgres", zap.Error(err))
-	}
-	//  delete converted files in postgres
-	err = ph.service.Repository.DeleteAllConvertedFilesinKb(ctx, kb.UID)
-	if err != nil {
-		log.Error("failed to delete converted files in postgres", zap.Error(err))
-	}
-	//  delete all chunks in postgres
-	err = ph.service.Repository.HardDeleteChunksByKbUID(ctx, kb.UID)
-	if err != nil {
-		log.Error("failed to delete chunks in postgres", zap.Error(err))
-	}
+		// delete the collection in milvus
+		err = ph.service.MilvusClient.DropKnowledgeBaseCollection(ctx, kb.UID.String())
+		if err != nil {
+			log.Error("failed to delete collection in milvus in background", zap.Error(err))
+			allPass = false
+		}
 
-	//  delete all embedding in postgres
-	err = ph.service.Repository.HardDeleteEmbeddingsByKbUID(ctx, kb.UID)
-	if err != nil {
-		log.Error("failed to delete embeddings in postgres", zap.Error(err))
-	}
+		//  delete all files in postgres
+		err = ph.service.Repository.DeleteAllKnowledgeBaseFiles(ctx, kb.UID.String())
+		if err != nil {
+			log.Error("failed to delete files in postgres in background", zap.Error(err))
+			allPass = false
+		}
+		//  delete converted files in postgres
+		err = ph.service.Repository.DeleteAllConvertedFilesInKb(ctx, kb.UID)
+		if err != nil {
+			log.Error("failed to delete converted files in postgres in background", zap.Error(err))
+			allPass = false
+		}
+		//  delete all chunks in postgres
+		err = ph.service.Repository.HardDeleteChunksByKbUID(ctx, kb.UID)
+		if err != nil {
+			log.Error("failed to delete chunks in postgres in background", zap.Error(err))
+			allPass = false
+		}
+
+		//  delete all embedding in postgres
+		err = ph.service.Repository.HardDeleteEmbeddingsByKbUID(ctx, kb.UID)
+		if err != nil {
+			log.Error("failed to delete embeddings in postgres in background", zap.Error(err))
+			allPass = false
+		}
+		// delete acl. Note: we need to delete the acl after deleting the catalog
+		err = ph.service.ACLClient.Purge(ctx, "knowledgebase", kb.UID)
+		if err != nil {
+			log.Error("failed to purge catalog", zap.Error(err))
+			allPass = false
+		}
+		if allPass {
+			log.Info("successfully deleted catalog in background", zap.String("catalog_id", kb.UID.String()))
+		} else {
+			log.Error("failed to delete catalog in background", zap.String("catalog_id", kb.UID.String()))
+		}
+	}, "DeleteCatalog")
 
 	deletedKb, err := ph.service.Repository.DeleteKnowledgeBase(ctx, ns.NsUID.String(), req.CatalogId)
 	if err != nil {
+		log.Error("failed to delete catalog", zap.Error(err))
+		startSignal <- false
 		return nil, err
 	}
-
-	// delete acl. Note: we need to delete the acl after deleting the catalog
-	err = ph.service.ACLClient.Purge(ctx, "knowledgebase", kb.UID)
-	if err != nil {
-		log.Error("failed to purge catalog", zap.Error(err))
-	}
+	// start the background deletion
+	startSignal <- true
 
 	return &artifactpb.DeleteCatalogResponse{
 		Catalog: &artifactpb.Catalog{

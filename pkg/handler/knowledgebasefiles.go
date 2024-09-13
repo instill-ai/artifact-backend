@@ -15,6 +15,7 @@ import (
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"gorm.io/gorm"
 )
 
 func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.UploadCatalogFileRequest) (*artifactpb.UploadCatalogFileResponse, error) {
@@ -135,8 +136,9 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 			return nil, err
 		}
 
-		// increase catalog usage
-		err = ph.service.Repository.IncreaseKnowledgeBaseUsage(ctx, kb.UID.String(), int(fileSize))
+		// increase catalog usage. need to increase after the file is created.
+		// Note: in the future, we need to increase the usage in transaction with creating the file.
+		err = ph.service.Repository.IncreaseKnowledgeBaseUsage(ctx, nil, kb.UID.String(), int(fileSize))
 		if err != nil {
 			log.Error("failed to increase catalog usage", zap.Error(err))
 			return nil, err
@@ -318,14 +320,16 @@ func (ph *PublicHandler) DeleteCatalogFile(
 
 	// ACL - check user's permission to write catalog of kb file
 	kbfs, err := ph.service.Repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{uuid.FromStringOrNil(req.FileUid)})
-	if err != nil && len(kbfs) == 0 {
-		log.Error("failed to get catalog", zap.Error(err))
-		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
+	if err != nil {
+		log.Error("failed to get catalog files", zap.Error(err))
+		return nil, fmt.Errorf("failed to get catalog files. err: %w", err)
+	} else if len(kbfs) == 0 {
+		return nil, fmt.Errorf("file not found. err: %w", customerror.ErrNotFound)
 	}
 	granted, err := ph.service.ACLClient.CheckPermission(ctx, "knowledgebase", kbfs[0].KnowledgeBaseUID, "writer")
 	if err != nil {
 		log.Error("failed to check permission", zap.Error(err))
-		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
+		return nil, fmt.Errorf("failed to check permission. err: %w", err)
 	}
 	if !granted {
 		log.Error("no permission to delete catalog file")
@@ -345,66 +349,106 @@ func (ph *PublicHandler) DeleteCatalogFile(
 	files, err := ph.service.Repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{fUID})
 	if err != nil {
 		return nil, err
-	}
-	if len(files) == 0 {
+	} else if len(files) == 0 {
 		return nil, fmt.Errorf("file not found. err: %w", customerror.ErrNotFound)
 	}
 
+	startSignal := make(chan bool)
 	// TODO: need to use clean worker in the future
 	go utils.GoRecover(
 		func() {
-			// to prevent parent context from being cancelled, create a new context
+			// Create a new context to prevent the parent context from being cancelled
 			ctx := context.TODO()
-			//  delete the file from minio
+			log, _ := logger.GetZapLogger(ctx)
+			canStart := <-startSignal
+			if !canStart {
+				log.Info("DeleteCatalogFile: received stop signal")
+				return
+			}
+			log.Info("DeleteCatalogFile: start deleting file from minio, database and milvus")
+			allPass := true
+			// Delete the file from MinIO
 			objectPaths := []string{}
-			//  kb file in minio
+			// Add the knowledge base file in MinIO to the list of objects to delete
 			objectPaths = append(objectPaths, files[0].Destination)
-			// converted file in minio
+			// Add the converted file in MinIO to the list of objects to delete
 			cf, err := ph.service.Repository.GetConvertedFileByFileUID(ctx, fUID)
-			if err == nil {
+			if err != nil {
+				if err != gorm.ErrRecordNotFound {
+					log.Error("failed to get converted file by file uid", zap.Error(err))
+					allPass = false
+				}
+			} else if cf != nil {
 				objectPaths = append(objectPaths, cf.Destination)
 			}
-			// chunks in minio
-			chunks, _ := ph.service.Repository.ListChunksByKbFileUID(ctx, fUID)
-			if len(chunks) > 0 {
+			// Add the chunks in MinIO to the list of objects to delete
+			chunks, err := ph.service.Repository.ListChunksByKbFileUID(ctx, fUID)
+			if err != nil {
+				log.Error("failed to get chunks by kb file uid", zap.Error(err))
+				allPass = false
+			} else if len(chunks) > 0 {
 				for _, chunk := range chunks {
 					objectPaths = append(objectPaths, chunk.ContentDest)
 				}
 			}
-			//  delete the embeddings in milvus(need to delete first)
+			// Delete the embeddings in Milvus (this better to be done first)
 			embUIDs := []string{}
 			embeddings, _ := ph.service.Repository.ListEmbeddingsByKbFileUID(ctx, fUID)
 			for _, emb := range embeddings {
 				embUIDs = append(embUIDs, emb.UID.String())
 			}
-			_ = ph.service.MilvusClient.DeleteEmbeddingsInKb(ctx, files[0].KnowledgeBaseUID.String(), embUIDs)
+			err = ph.service.MilvusClient.DeleteEmbeddingsInKb(ctx, files[0].KnowledgeBaseUID.String(), embUIDs)
+			if err != nil {
+				log.Error("failed to delete embeddings in milvus", zap.Error(err))
+				allPass = false
+			}
 
-			_ = ph.service.MinIO.DeleteFiles(ctx, objectPaths)
-			//  delete the converted file in postgreSQL
-			_ = ph.service.Repository.HardDeleteConvertedFileByFileUID(ctx, fUID)
-			//  delete the chunks in postgreSQL
-			_ = ph.service.Repository.HardDeleteChunksByKbFileUID(ctx, fUID)
-			//  delete the embeddings in postgreSQL
-			_ = ph.service.Repository.HardDeleteEmbeddingsByKbFileUID(ctx, fUID)
-			// print success message and file uid
-			log.Info("Successfully deleted file from minio, database and milvus", zap.String("file_uid", fUID.String()))
+			// Delete the files in MinIO
+			errChan := ph.service.MinIO.DeleteFiles(ctx, objectPaths)
+			for err := range errChan {
+				if err != nil {
+					log.Error("failed to delete files in minio", zap.Error(err))
+					allPass = false
+				}
+			}
+			// Delete the converted file in PostgreSQL
+			err = ph.service.Repository.HardDeleteConvertedFileByFileUID(ctx, fUID)
+			if err != nil {
+				log.Error("failed to delete converted file in postgreSQL", zap.Error(err))
+				allPass = false
+			}
+			// Delete the chunks in PostgreSQL
+			err = ph.service.Repository.HardDeleteChunksByKbFileUID(ctx, fUID)
+			if err != nil {
+				log.Error("failed to delete chunks in postgreSQL", zap.Error(err))
+				allPass = false
+			}
+			// Delete the embeddings in PostgreSQL
+			err = ph.service.Repository.HardDeleteEmbeddingsByKbFileUID(ctx, fUID)
+			if err != nil {
+				log.Error("failed to delete embeddings in postgreSQL", zap.Error(err))
+				allPass = false
+			}
+			if allPass {
+				log.Info("DeleteCatalogFile: successfully deleted file from minio, database and milvus", zap.String("file_uid", fUID.String()))
+			} else {
+				log.Error("DeleteCatalogFile: failed to delete file from minio, database and milvus", zap.String("file_uid", fUID.String()))
+			}
 		},
 		"DeleteCatalogFile",
 	)
 
-	// delete the file in postgreSQL
-	err = ph.service.Repository.DeleteKnowledgeBaseFile(ctx, req.FileUid)
+	err = ph.service.Repository.DeleteKnowledgeBaseFileAndDecreaseUsage(ctx, fUID)
 	if err != nil {
+		log.Error("failed to delete knowledge base file and decrease usage", zap.Error(err))
+		startSignal <- false
 		return nil, err
 	}
-	// decrease catalog usage
-	err = ph.service.Repository.IncreaseKnowledgeBaseUsage(ctx, files[0].KnowledgeBaseUID.String(), int(-files[0].Size))
-	if err != nil {
-		return nil, err
-	}
+	// start the background deletion
+	startSignal <- true
 
 	return &artifactpb.DeleteCatalogFileResponse{
-		FileUid: req.FileUid,
+		FileUid: fUID.String(),
 	}, nil
 
 }
@@ -425,8 +469,7 @@ func (ph *PublicHandler) ProcessCatalogFiles(ctx context.Context, req *artifactp
 	kbfs, err := ph.service.Repository.GetKnowledgeBaseFilesByFileUIDs(ctx, fileUUIDs)
 	if err != nil {
 		return nil, err
-	}
-	if len(kbfs) == 0 {
+	} else if len(kbfs) == 0 {
 		return nil, fmt.Errorf("file not found. err: %w", customerror.ErrNotFound)
 	}
 	// check write permission for the catalog

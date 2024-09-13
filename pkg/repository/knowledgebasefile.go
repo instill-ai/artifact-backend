@@ -47,6 +47,8 @@ type KnowledgeBaseFileI interface {
 	GetTruthSourceByFileUID(ctx context.Context, fileUID uuid.UUID) (*SourceMeta, error)
 	// UpdateKbFileExtraMetaData updates the extra meta data of the knowledge base file
 	UpdateKbFileExtraMetaData(ctx context.Context, fileUID uuid.UUID, failureReason, convertingPipe, chunkingPipe, embeddingPipe string, processingTime, convertingTime, chunkingTime, embeddingTime *int64) error
+	// DeleteKnowledgeBaseFileAndDecreaseUsage deletes the knowledge base file and decreases the knowledge base usage
+	DeleteKnowledgeBaseFileAndDecreaseUsage(ctx context.Context, fileUID uuid.UUID) error
 }
 
 type KbUID = uuid.UUID
@@ -258,8 +260,7 @@ func (r *Repository) ListKnowledgeBaseFiles(ctx context.Context, uid string, own
 		kbfs, err := r.GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{tokenUUID})
 		if err != nil {
 			return nil, 0, "", fmt.Errorf("failed to get catalog files by next page token: %v", err)
-		}
-		if len(kbfs) == 0 {
+		} else if len(kbfs) == 0 {
 			return nil, 0, "", fmt.Errorf("no catalog file found by next page token")
 		}
 		// whereClause
@@ -469,7 +470,7 @@ func (r *Repository) GetKnowledgeBaseFilesByFileUIDs(
 	for _, uid := range fileUIDs {
 		stringUIDs = append(stringUIDs, uid.String())
 	}
-	where := fmt.Sprintf("%v IN ?", KnowledgeBaseFileColumn.UID)
+	where := fmt.Sprintf("%v IN ? AND %v IS NULL", KnowledgeBaseFileColumn.UID, KnowledgeBaseFileColumn.DeleteTime)
 	query := r.db.WithContext(ctx)
 	if len(columns) > 0 {
 		query = query.Select(columns)
@@ -636,4 +637,30 @@ func (r *Repository) UpdateKbFileExtraMetaData(
 
 	// Return the result of the transaction (either nil or an error)
 	return err
+}
+
+// DeleteKnowledgeBaseFileAndDecreaseUsage delete the knowledge base file and decrease the knowledge base usage
+func (r *Repository) DeleteKnowledgeBaseFileAndDecreaseUsage(ctx context.Context, fileUID uuid.UUID) error {
+	currentTime := time.Now()
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// get the knowledge base file
+		file, err := r.GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{fileUID}, KnowledgeBaseFileColumn.KnowledgeBaseUID, KnowledgeBaseFileColumn.Size)
+		if err != nil {
+			return err
+		} else if len(file) == 0 {
+			return fmt.Errorf("file not found by file uid: %v", fileUID)
+		}
+		whereClause := fmt.Sprintf("%v = ? AND %v is NULL", KnowledgeBaseFileColumn.UID, KnowledgeBaseFileColumn.DeleteTime)
+		if err := tx.Model(&KnowledgeBaseFile{}).
+			Where(whereClause, fileUID).
+			Update(KnowledgeBaseFileColumn.DeleteTime, currentTime).Error; err != nil {
+			return err
+		}
+		// decrease the knowledge base usage
+		err = r.IncreaseKnowledgeBaseUsage(ctx, tx, file[0].KnowledgeBaseUID.String(), int(-file[0].Size))
+		if err != nil {
+			return err
+		}
+		return nil
+	})
 }

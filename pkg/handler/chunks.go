@@ -32,8 +32,7 @@ func (ph *PublicHandler) ListChunks(ctx context.Context, req *artifactpb.ListChu
 	if err != nil {
 		log.Error("failed to get knowledge base files by file uids", zap.Error(err))
 		return nil, fmt.Errorf("failed to get knowledge base files by file uids")
-	}
-	if len(kbfs) == 0 {
+	} else if len(kbfs) == 0 {
 		log.Error("no files found for the given file uids")
 		return nil, fmt.Errorf("no files found for the given file uids: %v. err: %w", fileUIDs, customerror.ErrNotFound)
 	}

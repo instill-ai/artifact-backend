@@ -319,11 +319,9 @@ func (s *Service) EmbeddingTextPipe(ctx context.Context, caller uuid.UUID, reque
 	}
 
 	// wait for all the goroutines to finish
-	go func() {
-		wg.Wait()
-		close(resultsChan)
-		close(errChan)
-	}()
+	wg.Wait()
+	close(resultsChan)
+	close(errChan)
 	// collect the results in the order of the input texts
 	orderedResults := make([][][]float32, len(texts)/maxBatchSize+1)
 	for res := range resultsChan {

@@ -12,7 +12,8 @@ import (
 	"github.com/gojuno/minimock/v3"
 	mm_repository "github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
-	 pb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	"gorm.io/gorm"
+	pb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
 // RepositoryIMock implements repository.RepositoryI
@@ -62,11 +63,11 @@ type RepositoryIMock struct {
 	beforeCreateMessageCounter uint64
 	CreateMessageMock          mRepositoryIMockCreateMessage
 
-	funcDeleteAllConvertedFilesinKb          func(ctx context.Context, kbUID uuid.UUID) (err error)
-	inspectFuncDeleteAllConvertedFilesinKb   func(ctx context.Context, kbUID uuid.UUID)
-	afterDeleteAllConvertedFilesinKbCounter  uint64
-	beforeDeleteAllConvertedFilesinKbCounter uint64
-	DeleteAllConvertedFilesinKbMock          mRepositoryIMockDeleteAllConvertedFilesinKb
+	funcDeleteAllConvertedFilesInKb          func(ctx context.Context, kbUID uuid.UUID) (err error)
+	inspectFuncDeleteAllConvertedFilesInKb   func(ctx context.Context, kbUID uuid.UUID)
+	afterDeleteAllConvertedFilesInKbCounter  uint64
+	beforeDeleteAllConvertedFilesInKbCounter uint64
+	DeleteAllConvertedFilesInKbMock          mRepositoryIMockDeleteAllConvertedFilesInKb
 
 	funcDeleteAllKnowledgeBaseFiles          func(ctx context.Context, kbUID string) (err error)
 	inspectFuncDeleteAllKnowledgeBaseFiles   func(ctx context.Context, kbUID string)
@@ -121,6 +122,12 @@ type RepositoryIMock struct {
 	afterDeleteKnowledgeBaseFileCounter  uint64
 	beforeDeleteKnowledgeBaseFileCounter uint64
 	DeleteKnowledgeBaseFileMock          mRepositoryIMockDeleteKnowledgeBaseFile
+
+	funcDeleteKnowledgeBaseFileAndDecreaseUsage          func(ctx context.Context, fileUID uuid.UUID) (err error)
+	inspectFuncDeleteKnowledgeBaseFileAndDecreaseUsage   func(ctx context.Context, fileUID uuid.UUID)
+	afterDeleteKnowledgeBaseFileAndDecreaseUsageCounter  uint64
+	beforeDeleteKnowledgeBaseFileAndDecreaseUsageCounter uint64
+	DeleteKnowledgeBaseFileAndDecreaseUsageMock          mRepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsage
 
 	funcDeleteMessage          func(ctx context.Context, messageUID uuid.UUID) (err error)
 	inspectFuncDeleteMessage   func(ctx context.Context, messageUID uuid.UUID)
@@ -293,8 +300,8 @@ type RepositoryIMock struct {
 	beforeHardDeleteEmbeddingsByKbUIDCounter uint64
 	HardDeleteEmbeddingsByKbUIDMock          mRepositoryIMockHardDeleteEmbeddingsByKbUID
 
-	funcIncreaseKnowledgeBaseUsage          func(ctx context.Context, kbUID string, amount int) (err error)
-	inspectFuncIncreaseKnowledgeBaseUsage   func(ctx context.Context, kbUID string, amount int)
+	funcIncreaseKnowledgeBaseUsage          func(ctx context.Context, tx *gorm.DB, kbUID string, amount int) (err error)
+	inspectFuncIncreaseKnowledgeBaseUsage   func(ctx context.Context, tx *gorm.DB, kbUID string, amount int)
 	afterIncreaseKnowledgeBaseUsageCounter  uint64
 	beforeIncreaseKnowledgeBaseUsageCounter uint64
 	IncreaseKnowledgeBaseUsageMock          mRepositoryIMockIncreaseKnowledgeBaseUsage
@@ -447,8 +454,8 @@ func NewRepositoryIMock(t minimock.Tester) *RepositoryIMock {
 	m.CreateMessageMock = mRepositoryIMockCreateMessage{mock: m}
 	m.CreateMessageMock.callArgs = []*RepositoryIMockCreateMessageParams{}
 
-	m.DeleteAllConvertedFilesinKbMock = mRepositoryIMockDeleteAllConvertedFilesinKb{mock: m}
-	m.DeleteAllConvertedFilesinKbMock.callArgs = []*RepositoryIMockDeleteAllConvertedFilesinKbParams{}
+	m.DeleteAllConvertedFilesInKbMock = mRepositoryIMockDeleteAllConvertedFilesInKb{mock: m}
+	m.DeleteAllConvertedFilesInKbMock.callArgs = []*RepositoryIMockDeleteAllConvertedFilesInKbParams{}
 
 	m.DeleteAllKnowledgeBaseFilesMock = mRepositoryIMockDeleteAllKnowledgeBaseFiles{mock: m}
 	m.DeleteAllKnowledgeBaseFilesMock.callArgs = []*RepositoryIMockDeleteAllKnowledgeBaseFilesParams{}
@@ -476,6 +483,9 @@ func NewRepositoryIMock(t minimock.Tester) *RepositoryIMock {
 
 	m.DeleteKnowledgeBaseFileMock = mRepositoryIMockDeleteKnowledgeBaseFile{mock: m}
 	m.DeleteKnowledgeBaseFileMock.callArgs = []*RepositoryIMockDeleteKnowledgeBaseFileParams{}
+
+	m.DeleteKnowledgeBaseFileAndDecreaseUsageMock = mRepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsage{mock: m}
+	m.DeleteKnowledgeBaseFileAndDecreaseUsageMock.callArgs = []*RepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsageParams{}
 
 	m.DeleteMessageMock = mRepositoryIMockDeleteMessage{mock: m}
 	m.DeleteMessageMock.callArgs = []*RepositoryIMockDeleteMessageParams{}
@@ -2555,307 +2565,307 @@ func (m *RepositoryIMock) MinimockCreateMessageInspect() {
 	}
 }
 
-type mRepositoryIMockDeleteAllConvertedFilesinKb struct {
+type mRepositoryIMockDeleteAllConvertedFilesInKb struct {
 	mock               *RepositoryIMock
-	defaultExpectation *RepositoryIMockDeleteAllConvertedFilesinKbExpectation
-	expectations       []*RepositoryIMockDeleteAllConvertedFilesinKbExpectation
+	defaultExpectation *RepositoryIMockDeleteAllConvertedFilesInKbExpectation
+	expectations       []*RepositoryIMockDeleteAllConvertedFilesInKbExpectation
 
-	callArgs []*RepositoryIMockDeleteAllConvertedFilesinKbParams
+	callArgs []*RepositoryIMockDeleteAllConvertedFilesInKbParams
 	mutex    sync.RWMutex
 
 	expectedInvocations uint64
 }
 
-// RepositoryIMockDeleteAllConvertedFilesinKbExpectation specifies expectation struct of the RepositoryI.DeleteAllConvertedFilesinKb
-type RepositoryIMockDeleteAllConvertedFilesinKbExpectation struct {
+// RepositoryIMockDeleteAllConvertedFilesInKbExpectation specifies expectation struct of the RepositoryI.DeleteAllConvertedFilesInKb
+type RepositoryIMockDeleteAllConvertedFilesInKbExpectation struct {
 	mock      *RepositoryIMock
-	params    *RepositoryIMockDeleteAllConvertedFilesinKbParams
-	paramPtrs *RepositoryIMockDeleteAllConvertedFilesinKbParamPtrs
-	results   *RepositoryIMockDeleteAllConvertedFilesinKbResults
+	params    *RepositoryIMockDeleteAllConvertedFilesInKbParams
+	paramPtrs *RepositoryIMockDeleteAllConvertedFilesInKbParamPtrs
+	results   *RepositoryIMockDeleteAllConvertedFilesInKbResults
 	Counter   uint64
 }
 
-// RepositoryIMockDeleteAllConvertedFilesinKbParams contains parameters of the RepositoryI.DeleteAllConvertedFilesinKb
-type RepositoryIMockDeleteAllConvertedFilesinKbParams struct {
+// RepositoryIMockDeleteAllConvertedFilesInKbParams contains parameters of the RepositoryI.DeleteAllConvertedFilesInKb
+type RepositoryIMockDeleteAllConvertedFilesInKbParams struct {
 	ctx   context.Context
 	kbUID uuid.UUID
 }
 
-// RepositoryIMockDeleteAllConvertedFilesinKbParamPtrs contains pointers to parameters of the RepositoryI.DeleteAllConvertedFilesinKb
-type RepositoryIMockDeleteAllConvertedFilesinKbParamPtrs struct {
+// RepositoryIMockDeleteAllConvertedFilesInKbParamPtrs contains pointers to parameters of the RepositoryI.DeleteAllConvertedFilesInKb
+type RepositoryIMockDeleteAllConvertedFilesInKbParamPtrs struct {
 	ctx   *context.Context
 	kbUID *uuid.UUID
 }
 
-// RepositoryIMockDeleteAllConvertedFilesinKbResults contains results of the RepositoryI.DeleteAllConvertedFilesinKb
-type RepositoryIMockDeleteAllConvertedFilesinKbResults struct {
+// RepositoryIMockDeleteAllConvertedFilesInKbResults contains results of the RepositoryI.DeleteAllConvertedFilesInKb
+type RepositoryIMockDeleteAllConvertedFilesInKbResults struct {
 	err error
 }
 
-// Expect sets up expected params for RepositoryI.DeleteAllConvertedFilesinKb
-func (mmDeleteAllConvertedFilesinKb *mRepositoryIMockDeleteAllConvertedFilesinKb) Expect(ctx context.Context, kbUID uuid.UUID) *mRepositoryIMockDeleteAllConvertedFilesinKb {
-	if mmDeleteAllConvertedFilesinKb.mock.funcDeleteAllConvertedFilesinKb != nil {
-		mmDeleteAllConvertedFilesinKb.mock.t.Fatalf("RepositoryIMock.DeleteAllConvertedFilesinKb mock is already set by Set")
+// Expect sets up expected params for RepositoryI.DeleteAllConvertedFilesInKb
+func (mmDeleteAllConvertedFilesInKb *mRepositoryIMockDeleteAllConvertedFilesInKb) Expect(ctx context.Context, kbUID uuid.UUID) *mRepositoryIMockDeleteAllConvertedFilesInKb {
+	if mmDeleteAllConvertedFilesInKb.mock.funcDeleteAllConvertedFilesInKb != nil {
+		mmDeleteAllConvertedFilesInKb.mock.t.Fatalf("RepositoryIMock.DeleteAllConvertedFilesInKb mock is already set by Set")
 	}
 
-	if mmDeleteAllConvertedFilesinKb.defaultExpectation == nil {
-		mmDeleteAllConvertedFilesinKb.defaultExpectation = &RepositoryIMockDeleteAllConvertedFilesinKbExpectation{}
+	if mmDeleteAllConvertedFilesInKb.defaultExpectation == nil {
+		mmDeleteAllConvertedFilesInKb.defaultExpectation = &RepositoryIMockDeleteAllConvertedFilesInKbExpectation{}
 	}
 
-	if mmDeleteAllConvertedFilesinKb.defaultExpectation.paramPtrs != nil {
-		mmDeleteAllConvertedFilesinKb.mock.t.Fatalf("RepositoryIMock.DeleteAllConvertedFilesinKb mock is already set by ExpectParams functions")
+	if mmDeleteAllConvertedFilesInKb.defaultExpectation.paramPtrs != nil {
+		mmDeleteAllConvertedFilesInKb.mock.t.Fatalf("RepositoryIMock.DeleteAllConvertedFilesInKb mock is already set by ExpectParams functions")
 	}
 
-	mmDeleteAllConvertedFilesinKb.defaultExpectation.params = &RepositoryIMockDeleteAllConvertedFilesinKbParams{ctx, kbUID}
-	for _, e := range mmDeleteAllConvertedFilesinKb.expectations {
-		if minimock.Equal(e.params, mmDeleteAllConvertedFilesinKb.defaultExpectation.params) {
-			mmDeleteAllConvertedFilesinKb.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmDeleteAllConvertedFilesinKb.defaultExpectation.params)
+	mmDeleteAllConvertedFilesInKb.defaultExpectation.params = &RepositoryIMockDeleteAllConvertedFilesInKbParams{ctx, kbUID}
+	for _, e := range mmDeleteAllConvertedFilesInKb.expectations {
+		if minimock.Equal(e.params, mmDeleteAllConvertedFilesInKb.defaultExpectation.params) {
+			mmDeleteAllConvertedFilesInKb.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmDeleteAllConvertedFilesInKb.defaultExpectation.params)
 		}
 	}
 
-	return mmDeleteAllConvertedFilesinKb
+	return mmDeleteAllConvertedFilesInKb
 }
 
-// ExpectCtxParam1 sets up expected param ctx for RepositoryI.DeleteAllConvertedFilesinKb
-func (mmDeleteAllConvertedFilesinKb *mRepositoryIMockDeleteAllConvertedFilesinKb) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockDeleteAllConvertedFilesinKb {
-	if mmDeleteAllConvertedFilesinKb.mock.funcDeleteAllConvertedFilesinKb != nil {
-		mmDeleteAllConvertedFilesinKb.mock.t.Fatalf("RepositoryIMock.DeleteAllConvertedFilesinKb mock is already set by Set")
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.DeleteAllConvertedFilesInKb
+func (mmDeleteAllConvertedFilesInKb *mRepositoryIMockDeleteAllConvertedFilesInKb) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockDeleteAllConvertedFilesInKb {
+	if mmDeleteAllConvertedFilesInKb.mock.funcDeleteAllConvertedFilesInKb != nil {
+		mmDeleteAllConvertedFilesInKb.mock.t.Fatalf("RepositoryIMock.DeleteAllConvertedFilesInKb mock is already set by Set")
 	}
 
-	if mmDeleteAllConvertedFilesinKb.defaultExpectation == nil {
-		mmDeleteAllConvertedFilesinKb.defaultExpectation = &RepositoryIMockDeleteAllConvertedFilesinKbExpectation{}
+	if mmDeleteAllConvertedFilesInKb.defaultExpectation == nil {
+		mmDeleteAllConvertedFilesInKb.defaultExpectation = &RepositoryIMockDeleteAllConvertedFilesInKbExpectation{}
 	}
 
-	if mmDeleteAllConvertedFilesinKb.defaultExpectation.params != nil {
-		mmDeleteAllConvertedFilesinKb.mock.t.Fatalf("RepositoryIMock.DeleteAllConvertedFilesinKb mock is already set by Expect")
+	if mmDeleteAllConvertedFilesInKb.defaultExpectation.params != nil {
+		mmDeleteAllConvertedFilesInKb.mock.t.Fatalf("RepositoryIMock.DeleteAllConvertedFilesInKb mock is already set by Expect")
 	}
 
-	if mmDeleteAllConvertedFilesinKb.defaultExpectation.paramPtrs == nil {
-		mmDeleteAllConvertedFilesinKb.defaultExpectation.paramPtrs = &RepositoryIMockDeleteAllConvertedFilesinKbParamPtrs{}
+	if mmDeleteAllConvertedFilesInKb.defaultExpectation.paramPtrs == nil {
+		mmDeleteAllConvertedFilesInKb.defaultExpectation.paramPtrs = &RepositoryIMockDeleteAllConvertedFilesInKbParamPtrs{}
 	}
-	mmDeleteAllConvertedFilesinKb.defaultExpectation.paramPtrs.ctx = &ctx
+	mmDeleteAllConvertedFilesInKb.defaultExpectation.paramPtrs.ctx = &ctx
 
-	return mmDeleteAllConvertedFilesinKb
+	return mmDeleteAllConvertedFilesInKb
 }
 
-// ExpectKbUIDParam2 sets up expected param kbUID for RepositoryI.DeleteAllConvertedFilesinKb
-func (mmDeleteAllConvertedFilesinKb *mRepositoryIMockDeleteAllConvertedFilesinKb) ExpectKbUIDParam2(kbUID uuid.UUID) *mRepositoryIMockDeleteAllConvertedFilesinKb {
-	if mmDeleteAllConvertedFilesinKb.mock.funcDeleteAllConvertedFilesinKb != nil {
-		mmDeleteAllConvertedFilesinKb.mock.t.Fatalf("RepositoryIMock.DeleteAllConvertedFilesinKb mock is already set by Set")
+// ExpectKbUIDParam2 sets up expected param kbUID for RepositoryI.DeleteAllConvertedFilesInKb
+func (mmDeleteAllConvertedFilesInKb *mRepositoryIMockDeleteAllConvertedFilesInKb) ExpectKbUIDParam2(kbUID uuid.UUID) *mRepositoryIMockDeleteAllConvertedFilesInKb {
+	if mmDeleteAllConvertedFilesInKb.mock.funcDeleteAllConvertedFilesInKb != nil {
+		mmDeleteAllConvertedFilesInKb.mock.t.Fatalf("RepositoryIMock.DeleteAllConvertedFilesInKb mock is already set by Set")
 	}
 
-	if mmDeleteAllConvertedFilesinKb.defaultExpectation == nil {
-		mmDeleteAllConvertedFilesinKb.defaultExpectation = &RepositoryIMockDeleteAllConvertedFilesinKbExpectation{}
+	if mmDeleteAllConvertedFilesInKb.defaultExpectation == nil {
+		mmDeleteAllConvertedFilesInKb.defaultExpectation = &RepositoryIMockDeleteAllConvertedFilesInKbExpectation{}
 	}
 
-	if mmDeleteAllConvertedFilesinKb.defaultExpectation.params != nil {
-		mmDeleteAllConvertedFilesinKb.mock.t.Fatalf("RepositoryIMock.DeleteAllConvertedFilesinKb mock is already set by Expect")
+	if mmDeleteAllConvertedFilesInKb.defaultExpectation.params != nil {
+		mmDeleteAllConvertedFilesInKb.mock.t.Fatalf("RepositoryIMock.DeleteAllConvertedFilesInKb mock is already set by Expect")
 	}
 
-	if mmDeleteAllConvertedFilesinKb.defaultExpectation.paramPtrs == nil {
-		mmDeleteAllConvertedFilesinKb.defaultExpectation.paramPtrs = &RepositoryIMockDeleteAllConvertedFilesinKbParamPtrs{}
+	if mmDeleteAllConvertedFilesInKb.defaultExpectation.paramPtrs == nil {
+		mmDeleteAllConvertedFilesInKb.defaultExpectation.paramPtrs = &RepositoryIMockDeleteAllConvertedFilesInKbParamPtrs{}
 	}
-	mmDeleteAllConvertedFilesinKb.defaultExpectation.paramPtrs.kbUID = &kbUID
+	mmDeleteAllConvertedFilesInKb.defaultExpectation.paramPtrs.kbUID = &kbUID
 
-	return mmDeleteAllConvertedFilesinKb
+	return mmDeleteAllConvertedFilesInKb
 }
 
-// Inspect accepts an inspector function that has same arguments as the RepositoryI.DeleteAllConvertedFilesinKb
-func (mmDeleteAllConvertedFilesinKb *mRepositoryIMockDeleteAllConvertedFilesinKb) Inspect(f func(ctx context.Context, kbUID uuid.UUID)) *mRepositoryIMockDeleteAllConvertedFilesinKb {
-	if mmDeleteAllConvertedFilesinKb.mock.inspectFuncDeleteAllConvertedFilesinKb != nil {
-		mmDeleteAllConvertedFilesinKb.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.DeleteAllConvertedFilesinKb")
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.DeleteAllConvertedFilesInKb
+func (mmDeleteAllConvertedFilesInKb *mRepositoryIMockDeleteAllConvertedFilesInKb) Inspect(f func(ctx context.Context, kbUID uuid.UUID)) *mRepositoryIMockDeleteAllConvertedFilesInKb {
+	if mmDeleteAllConvertedFilesInKb.mock.inspectFuncDeleteAllConvertedFilesInKb != nil {
+		mmDeleteAllConvertedFilesInKb.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.DeleteAllConvertedFilesInKb")
 	}
 
-	mmDeleteAllConvertedFilesinKb.mock.inspectFuncDeleteAllConvertedFilesinKb = f
+	mmDeleteAllConvertedFilesInKb.mock.inspectFuncDeleteAllConvertedFilesInKb = f
 
-	return mmDeleteAllConvertedFilesinKb
+	return mmDeleteAllConvertedFilesInKb
 }
 
-// Return sets up results that will be returned by RepositoryI.DeleteAllConvertedFilesinKb
-func (mmDeleteAllConvertedFilesinKb *mRepositoryIMockDeleteAllConvertedFilesinKb) Return(err error) *RepositoryIMock {
-	if mmDeleteAllConvertedFilesinKb.mock.funcDeleteAllConvertedFilesinKb != nil {
-		mmDeleteAllConvertedFilesinKb.mock.t.Fatalf("RepositoryIMock.DeleteAllConvertedFilesinKb mock is already set by Set")
+// Return sets up results that will be returned by RepositoryI.DeleteAllConvertedFilesInKb
+func (mmDeleteAllConvertedFilesInKb *mRepositoryIMockDeleteAllConvertedFilesInKb) Return(err error) *RepositoryIMock {
+	if mmDeleteAllConvertedFilesInKb.mock.funcDeleteAllConvertedFilesInKb != nil {
+		mmDeleteAllConvertedFilesInKb.mock.t.Fatalf("RepositoryIMock.DeleteAllConvertedFilesInKb mock is already set by Set")
 	}
 
-	if mmDeleteAllConvertedFilesinKb.defaultExpectation == nil {
-		mmDeleteAllConvertedFilesinKb.defaultExpectation = &RepositoryIMockDeleteAllConvertedFilesinKbExpectation{mock: mmDeleteAllConvertedFilesinKb.mock}
+	if mmDeleteAllConvertedFilesInKb.defaultExpectation == nil {
+		mmDeleteAllConvertedFilesInKb.defaultExpectation = &RepositoryIMockDeleteAllConvertedFilesInKbExpectation{mock: mmDeleteAllConvertedFilesInKb.mock}
 	}
-	mmDeleteAllConvertedFilesinKb.defaultExpectation.results = &RepositoryIMockDeleteAllConvertedFilesinKbResults{err}
-	return mmDeleteAllConvertedFilesinKb.mock
+	mmDeleteAllConvertedFilesInKb.defaultExpectation.results = &RepositoryIMockDeleteAllConvertedFilesInKbResults{err}
+	return mmDeleteAllConvertedFilesInKb.mock
 }
 
-// Set uses given function f to mock the RepositoryI.DeleteAllConvertedFilesinKb method
-func (mmDeleteAllConvertedFilesinKb *mRepositoryIMockDeleteAllConvertedFilesinKb) Set(f func(ctx context.Context, kbUID uuid.UUID) (err error)) *RepositoryIMock {
-	if mmDeleteAllConvertedFilesinKb.defaultExpectation != nil {
-		mmDeleteAllConvertedFilesinKb.mock.t.Fatalf("Default expectation is already set for the RepositoryI.DeleteAllConvertedFilesinKb method")
+// Set uses given function f to mock the RepositoryI.DeleteAllConvertedFilesInKb method
+func (mmDeleteAllConvertedFilesInKb *mRepositoryIMockDeleteAllConvertedFilesInKb) Set(f func(ctx context.Context, kbUID uuid.UUID) (err error)) *RepositoryIMock {
+	if mmDeleteAllConvertedFilesInKb.defaultExpectation != nil {
+		mmDeleteAllConvertedFilesInKb.mock.t.Fatalf("Default expectation is already set for the RepositoryI.DeleteAllConvertedFilesInKb method")
 	}
 
-	if len(mmDeleteAllConvertedFilesinKb.expectations) > 0 {
-		mmDeleteAllConvertedFilesinKb.mock.t.Fatalf("Some expectations are already set for the RepositoryI.DeleteAllConvertedFilesinKb method")
+	if len(mmDeleteAllConvertedFilesInKb.expectations) > 0 {
+		mmDeleteAllConvertedFilesInKb.mock.t.Fatalf("Some expectations are already set for the RepositoryI.DeleteAllConvertedFilesInKb method")
 	}
 
-	mmDeleteAllConvertedFilesinKb.mock.funcDeleteAllConvertedFilesinKb = f
-	return mmDeleteAllConvertedFilesinKb.mock
+	mmDeleteAllConvertedFilesInKb.mock.funcDeleteAllConvertedFilesInKb = f
+	return mmDeleteAllConvertedFilesInKb.mock
 }
 
-// When sets expectation for the RepositoryI.DeleteAllConvertedFilesinKb which will trigger the result defined by the following
+// When sets expectation for the RepositoryI.DeleteAllConvertedFilesInKb which will trigger the result defined by the following
 // Then helper
-func (mmDeleteAllConvertedFilesinKb *mRepositoryIMockDeleteAllConvertedFilesinKb) When(ctx context.Context, kbUID uuid.UUID) *RepositoryIMockDeleteAllConvertedFilesinKbExpectation {
-	if mmDeleteAllConvertedFilesinKb.mock.funcDeleteAllConvertedFilesinKb != nil {
-		mmDeleteAllConvertedFilesinKb.mock.t.Fatalf("RepositoryIMock.DeleteAllConvertedFilesinKb mock is already set by Set")
+func (mmDeleteAllConvertedFilesInKb *mRepositoryIMockDeleteAllConvertedFilesInKb) When(ctx context.Context, kbUID uuid.UUID) *RepositoryIMockDeleteAllConvertedFilesInKbExpectation {
+	if mmDeleteAllConvertedFilesInKb.mock.funcDeleteAllConvertedFilesInKb != nil {
+		mmDeleteAllConvertedFilesInKb.mock.t.Fatalf("RepositoryIMock.DeleteAllConvertedFilesInKb mock is already set by Set")
 	}
 
-	expectation := &RepositoryIMockDeleteAllConvertedFilesinKbExpectation{
-		mock:   mmDeleteAllConvertedFilesinKb.mock,
-		params: &RepositoryIMockDeleteAllConvertedFilesinKbParams{ctx, kbUID},
+	expectation := &RepositoryIMockDeleteAllConvertedFilesInKbExpectation{
+		mock:   mmDeleteAllConvertedFilesInKb.mock,
+		params: &RepositoryIMockDeleteAllConvertedFilesInKbParams{ctx, kbUID},
 	}
-	mmDeleteAllConvertedFilesinKb.expectations = append(mmDeleteAllConvertedFilesinKb.expectations, expectation)
+	mmDeleteAllConvertedFilesInKb.expectations = append(mmDeleteAllConvertedFilesInKb.expectations, expectation)
 	return expectation
 }
 
-// Then sets up RepositoryI.DeleteAllConvertedFilesinKb return parameters for the expectation previously defined by the When method
-func (e *RepositoryIMockDeleteAllConvertedFilesinKbExpectation) Then(err error) *RepositoryIMock {
-	e.results = &RepositoryIMockDeleteAllConvertedFilesinKbResults{err}
+// Then sets up RepositoryI.DeleteAllConvertedFilesInKb return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockDeleteAllConvertedFilesInKbExpectation) Then(err error) *RepositoryIMock {
+	e.results = &RepositoryIMockDeleteAllConvertedFilesInKbResults{err}
 	return e.mock
 }
 
-// Times sets number of times RepositoryI.DeleteAllConvertedFilesinKb should be invoked
-func (mmDeleteAllConvertedFilesinKb *mRepositoryIMockDeleteAllConvertedFilesinKb) Times(n uint64) *mRepositoryIMockDeleteAllConvertedFilesinKb {
+// Times sets number of times RepositoryI.DeleteAllConvertedFilesInKb should be invoked
+func (mmDeleteAllConvertedFilesInKb *mRepositoryIMockDeleteAllConvertedFilesInKb) Times(n uint64) *mRepositoryIMockDeleteAllConvertedFilesInKb {
 	if n == 0 {
-		mmDeleteAllConvertedFilesinKb.mock.t.Fatalf("Times of RepositoryIMock.DeleteAllConvertedFilesinKb mock can not be zero")
+		mmDeleteAllConvertedFilesInKb.mock.t.Fatalf("Times of RepositoryIMock.DeleteAllConvertedFilesInKb mock can not be zero")
 	}
-	mm_atomic.StoreUint64(&mmDeleteAllConvertedFilesinKb.expectedInvocations, n)
-	return mmDeleteAllConvertedFilesinKb
+	mm_atomic.StoreUint64(&mmDeleteAllConvertedFilesInKb.expectedInvocations, n)
+	return mmDeleteAllConvertedFilesInKb
 }
 
-func (mmDeleteAllConvertedFilesinKb *mRepositoryIMockDeleteAllConvertedFilesinKb) invocationsDone() bool {
-	if len(mmDeleteAllConvertedFilesinKb.expectations) == 0 && mmDeleteAllConvertedFilesinKb.defaultExpectation == nil && mmDeleteAllConvertedFilesinKb.mock.funcDeleteAllConvertedFilesinKb == nil {
+func (mmDeleteAllConvertedFilesInKb *mRepositoryIMockDeleteAllConvertedFilesInKb) invocationsDone() bool {
+	if len(mmDeleteAllConvertedFilesInKb.expectations) == 0 && mmDeleteAllConvertedFilesInKb.defaultExpectation == nil && mmDeleteAllConvertedFilesInKb.mock.funcDeleteAllConvertedFilesInKb == nil {
 		return true
 	}
 
-	totalInvocations := mm_atomic.LoadUint64(&mmDeleteAllConvertedFilesinKb.mock.afterDeleteAllConvertedFilesinKbCounter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmDeleteAllConvertedFilesinKb.expectedInvocations)
+	totalInvocations := mm_atomic.LoadUint64(&mmDeleteAllConvertedFilesInKb.mock.afterDeleteAllConvertedFilesInKbCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmDeleteAllConvertedFilesInKb.expectedInvocations)
 
 	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
 }
 
-// DeleteAllConvertedFilesinKb implements repository.RepositoryI
-func (mmDeleteAllConvertedFilesinKb *RepositoryIMock) DeleteAllConvertedFilesinKb(ctx context.Context, kbUID uuid.UUID) (err error) {
-	mm_atomic.AddUint64(&mmDeleteAllConvertedFilesinKb.beforeDeleteAllConvertedFilesinKbCounter, 1)
-	defer mm_atomic.AddUint64(&mmDeleteAllConvertedFilesinKb.afterDeleteAllConvertedFilesinKbCounter, 1)
+// DeleteAllConvertedFilesInKb implements repository.RepositoryI
+func (mmDeleteAllConvertedFilesInKb *RepositoryIMock) DeleteAllConvertedFilesInKb(ctx context.Context, kbUID uuid.UUID) (err error) {
+	mm_atomic.AddUint64(&mmDeleteAllConvertedFilesInKb.beforeDeleteAllConvertedFilesInKbCounter, 1)
+	defer mm_atomic.AddUint64(&mmDeleteAllConvertedFilesInKb.afterDeleteAllConvertedFilesInKbCounter, 1)
 
-	if mmDeleteAllConvertedFilesinKb.inspectFuncDeleteAllConvertedFilesinKb != nil {
-		mmDeleteAllConvertedFilesinKb.inspectFuncDeleteAllConvertedFilesinKb(ctx, kbUID)
+	if mmDeleteAllConvertedFilesInKb.inspectFuncDeleteAllConvertedFilesInKb != nil {
+		mmDeleteAllConvertedFilesInKb.inspectFuncDeleteAllConvertedFilesInKb(ctx, kbUID)
 	}
 
-	mm_params := RepositoryIMockDeleteAllConvertedFilesinKbParams{ctx, kbUID}
+	mm_params := RepositoryIMockDeleteAllConvertedFilesInKbParams{ctx, kbUID}
 
 	// Record call args
-	mmDeleteAllConvertedFilesinKb.DeleteAllConvertedFilesinKbMock.mutex.Lock()
-	mmDeleteAllConvertedFilesinKb.DeleteAllConvertedFilesinKbMock.callArgs = append(mmDeleteAllConvertedFilesinKb.DeleteAllConvertedFilesinKbMock.callArgs, &mm_params)
-	mmDeleteAllConvertedFilesinKb.DeleteAllConvertedFilesinKbMock.mutex.Unlock()
+	mmDeleteAllConvertedFilesInKb.DeleteAllConvertedFilesInKbMock.mutex.Lock()
+	mmDeleteAllConvertedFilesInKb.DeleteAllConvertedFilesInKbMock.callArgs = append(mmDeleteAllConvertedFilesInKb.DeleteAllConvertedFilesInKbMock.callArgs, &mm_params)
+	mmDeleteAllConvertedFilesInKb.DeleteAllConvertedFilesInKbMock.mutex.Unlock()
 
-	for _, e := range mmDeleteAllConvertedFilesinKb.DeleteAllConvertedFilesinKbMock.expectations {
+	for _, e := range mmDeleteAllConvertedFilesInKb.DeleteAllConvertedFilesInKbMock.expectations {
 		if minimock.Equal(*e.params, mm_params) {
 			mm_atomic.AddUint64(&e.Counter, 1)
 			return e.results.err
 		}
 	}
 
-	if mmDeleteAllConvertedFilesinKb.DeleteAllConvertedFilesinKbMock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmDeleteAllConvertedFilesinKb.DeleteAllConvertedFilesinKbMock.defaultExpectation.Counter, 1)
-		mm_want := mmDeleteAllConvertedFilesinKb.DeleteAllConvertedFilesinKbMock.defaultExpectation.params
-		mm_want_ptrs := mmDeleteAllConvertedFilesinKb.DeleteAllConvertedFilesinKbMock.defaultExpectation.paramPtrs
+	if mmDeleteAllConvertedFilesInKb.DeleteAllConvertedFilesInKbMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmDeleteAllConvertedFilesInKb.DeleteAllConvertedFilesInKbMock.defaultExpectation.Counter, 1)
+		mm_want := mmDeleteAllConvertedFilesInKb.DeleteAllConvertedFilesInKbMock.defaultExpectation.params
+		mm_want_ptrs := mmDeleteAllConvertedFilesInKb.DeleteAllConvertedFilesInKbMock.defaultExpectation.paramPtrs
 
-		mm_got := RepositoryIMockDeleteAllConvertedFilesinKbParams{ctx, kbUID}
+		mm_got := RepositoryIMockDeleteAllConvertedFilesInKbParams{ctx, kbUID}
 
 		if mm_want_ptrs != nil {
 
 			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
-				mmDeleteAllConvertedFilesinKb.t.Errorf("RepositoryIMock.DeleteAllConvertedFilesinKb got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+				mmDeleteAllConvertedFilesInKb.t.Errorf("RepositoryIMock.DeleteAllConvertedFilesInKb got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
 			}
 
 			if mm_want_ptrs.kbUID != nil && !minimock.Equal(*mm_want_ptrs.kbUID, mm_got.kbUID) {
-				mmDeleteAllConvertedFilesinKb.t.Errorf("RepositoryIMock.DeleteAllConvertedFilesinKb got unexpected parameter kbUID, want: %#v, got: %#v%s\n", *mm_want_ptrs.kbUID, mm_got.kbUID, minimock.Diff(*mm_want_ptrs.kbUID, mm_got.kbUID))
+				mmDeleteAllConvertedFilesInKb.t.Errorf("RepositoryIMock.DeleteAllConvertedFilesInKb got unexpected parameter kbUID, want: %#v, got: %#v%s\n", *mm_want_ptrs.kbUID, mm_got.kbUID, minimock.Diff(*mm_want_ptrs.kbUID, mm_got.kbUID))
 			}
 
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
-			mmDeleteAllConvertedFilesinKb.t.Errorf("RepositoryIMock.DeleteAllConvertedFilesinKb got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+			mmDeleteAllConvertedFilesInKb.t.Errorf("RepositoryIMock.DeleteAllConvertedFilesInKb got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
 		}
 
-		mm_results := mmDeleteAllConvertedFilesinKb.DeleteAllConvertedFilesinKbMock.defaultExpectation.results
+		mm_results := mmDeleteAllConvertedFilesInKb.DeleteAllConvertedFilesInKbMock.defaultExpectation.results
 		if mm_results == nil {
-			mmDeleteAllConvertedFilesinKb.t.Fatal("No results are set for the RepositoryIMock.DeleteAllConvertedFilesinKb")
+			mmDeleteAllConvertedFilesInKb.t.Fatal("No results are set for the RepositoryIMock.DeleteAllConvertedFilesInKb")
 		}
 		return (*mm_results).err
 	}
-	if mmDeleteAllConvertedFilesinKb.funcDeleteAllConvertedFilesinKb != nil {
-		return mmDeleteAllConvertedFilesinKb.funcDeleteAllConvertedFilesinKb(ctx, kbUID)
+	if mmDeleteAllConvertedFilesInKb.funcDeleteAllConvertedFilesInKb != nil {
+		return mmDeleteAllConvertedFilesInKb.funcDeleteAllConvertedFilesInKb(ctx, kbUID)
 	}
-	mmDeleteAllConvertedFilesinKb.t.Fatalf("Unexpected call to RepositoryIMock.DeleteAllConvertedFilesinKb. %v %v", ctx, kbUID)
+	mmDeleteAllConvertedFilesInKb.t.Fatalf("Unexpected call to RepositoryIMock.DeleteAllConvertedFilesInKb. %v %v", ctx, kbUID)
 	return
 }
 
-// DeleteAllConvertedFilesinKbAfterCounter returns a count of finished RepositoryIMock.DeleteAllConvertedFilesinKb invocations
-func (mmDeleteAllConvertedFilesinKb *RepositoryIMock) DeleteAllConvertedFilesinKbAfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmDeleteAllConvertedFilesinKb.afterDeleteAllConvertedFilesinKbCounter)
+// DeleteAllConvertedFilesInKbAfterCounter returns a count of finished RepositoryIMock.DeleteAllConvertedFilesInKb invocations
+func (mmDeleteAllConvertedFilesInKb *RepositoryIMock) DeleteAllConvertedFilesInKbAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmDeleteAllConvertedFilesInKb.afterDeleteAllConvertedFilesInKbCounter)
 }
 
-// DeleteAllConvertedFilesinKbBeforeCounter returns a count of RepositoryIMock.DeleteAllConvertedFilesinKb invocations
-func (mmDeleteAllConvertedFilesinKb *RepositoryIMock) DeleteAllConvertedFilesinKbBeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmDeleteAllConvertedFilesinKb.beforeDeleteAllConvertedFilesinKbCounter)
+// DeleteAllConvertedFilesInKbBeforeCounter returns a count of RepositoryIMock.DeleteAllConvertedFilesInKb invocations
+func (mmDeleteAllConvertedFilesInKb *RepositoryIMock) DeleteAllConvertedFilesInKbBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmDeleteAllConvertedFilesInKb.beforeDeleteAllConvertedFilesInKbCounter)
 }
 
-// Calls returns a list of arguments used in each call to RepositoryIMock.DeleteAllConvertedFilesinKb.
+// Calls returns a list of arguments used in each call to RepositoryIMock.DeleteAllConvertedFilesInKb.
 // The list is in the same order as the calls were made (i.e. recent calls have a higher index)
-func (mmDeleteAllConvertedFilesinKb *mRepositoryIMockDeleteAllConvertedFilesinKb) Calls() []*RepositoryIMockDeleteAllConvertedFilesinKbParams {
-	mmDeleteAllConvertedFilesinKb.mutex.RLock()
+func (mmDeleteAllConvertedFilesInKb *mRepositoryIMockDeleteAllConvertedFilesInKb) Calls() []*RepositoryIMockDeleteAllConvertedFilesInKbParams {
+	mmDeleteAllConvertedFilesInKb.mutex.RLock()
 
-	argCopy := make([]*RepositoryIMockDeleteAllConvertedFilesinKbParams, len(mmDeleteAllConvertedFilesinKb.callArgs))
-	copy(argCopy, mmDeleteAllConvertedFilesinKb.callArgs)
+	argCopy := make([]*RepositoryIMockDeleteAllConvertedFilesInKbParams, len(mmDeleteAllConvertedFilesInKb.callArgs))
+	copy(argCopy, mmDeleteAllConvertedFilesInKb.callArgs)
 
-	mmDeleteAllConvertedFilesinKb.mutex.RUnlock()
+	mmDeleteAllConvertedFilesInKb.mutex.RUnlock()
 
 	return argCopy
 }
 
-// MinimockDeleteAllConvertedFilesinKbDone returns true if the count of the DeleteAllConvertedFilesinKb invocations corresponds
+// MinimockDeleteAllConvertedFilesInKbDone returns true if the count of the DeleteAllConvertedFilesInKb invocations corresponds
 // the number of defined expectations
-func (m *RepositoryIMock) MinimockDeleteAllConvertedFilesinKbDone() bool {
-	for _, e := range m.DeleteAllConvertedFilesinKbMock.expectations {
+func (m *RepositoryIMock) MinimockDeleteAllConvertedFilesInKbDone() bool {
+	for _, e := range m.DeleteAllConvertedFilesInKbMock.expectations {
 		if mm_atomic.LoadUint64(&e.Counter) < 1 {
 			return false
 		}
 	}
 
-	return m.DeleteAllConvertedFilesinKbMock.invocationsDone()
+	return m.DeleteAllConvertedFilesInKbMock.invocationsDone()
 }
 
-// MinimockDeleteAllConvertedFilesinKbInspect logs each unmet expectation
-func (m *RepositoryIMock) MinimockDeleteAllConvertedFilesinKbInspect() {
-	for _, e := range m.DeleteAllConvertedFilesinKbMock.expectations {
+// MinimockDeleteAllConvertedFilesInKbInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockDeleteAllConvertedFilesInKbInspect() {
+	for _, e := range m.DeleteAllConvertedFilesInKbMock.expectations {
 		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Errorf("Expected call to RepositoryIMock.DeleteAllConvertedFilesinKb with params: %#v", *e.params)
+			m.t.Errorf("Expected call to RepositoryIMock.DeleteAllConvertedFilesInKb with params: %#v", *e.params)
 		}
 	}
 
-	afterDeleteAllConvertedFilesinKbCounter := mm_atomic.LoadUint64(&m.afterDeleteAllConvertedFilesinKbCounter)
+	afterDeleteAllConvertedFilesInKbCounter := mm_atomic.LoadUint64(&m.afterDeleteAllConvertedFilesInKbCounter)
 	// if default expectation was set then invocations count should be greater than zero
-	if m.DeleteAllConvertedFilesinKbMock.defaultExpectation != nil && afterDeleteAllConvertedFilesinKbCounter < 1 {
-		if m.DeleteAllConvertedFilesinKbMock.defaultExpectation.params == nil {
-			m.t.Error("Expected call to RepositoryIMock.DeleteAllConvertedFilesinKb")
+	if m.DeleteAllConvertedFilesInKbMock.defaultExpectation != nil && afterDeleteAllConvertedFilesInKbCounter < 1 {
+		if m.DeleteAllConvertedFilesInKbMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to RepositoryIMock.DeleteAllConvertedFilesInKb")
 		} else {
-			m.t.Errorf("Expected call to RepositoryIMock.DeleteAllConvertedFilesinKb with params: %#v", *m.DeleteAllConvertedFilesinKbMock.defaultExpectation.params)
+			m.t.Errorf("Expected call to RepositoryIMock.DeleteAllConvertedFilesInKb with params: %#v", *m.DeleteAllConvertedFilesInKbMock.defaultExpectation.params)
 		}
 	}
 	// if func was set then invocations count should be greater than zero
-	if m.funcDeleteAllConvertedFilesinKb != nil && afterDeleteAllConvertedFilesinKbCounter < 1 {
-		m.t.Error("Expected call to RepositoryIMock.DeleteAllConvertedFilesinKb")
+	if m.funcDeleteAllConvertedFilesInKb != nil && afterDeleteAllConvertedFilesInKbCounter < 1 {
+		m.t.Error("Expected call to RepositoryIMock.DeleteAllConvertedFilesInKb")
 	}
 
-	if !m.DeleteAllConvertedFilesinKbMock.invocationsDone() && afterDeleteAllConvertedFilesinKbCounter > 0 {
-		m.t.Errorf("Expected %d calls to RepositoryIMock.DeleteAllConvertedFilesinKb but found %d calls",
-			mm_atomic.LoadUint64(&m.DeleteAllConvertedFilesinKbMock.expectedInvocations), afterDeleteAllConvertedFilesinKbCounter)
+	if !m.DeleteAllConvertedFilesInKbMock.invocationsDone() && afterDeleteAllConvertedFilesInKbCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.DeleteAllConvertedFilesInKb but found %d calls",
+			mm_atomic.LoadUint64(&m.DeleteAllConvertedFilesInKbMock.expectedInvocations), afterDeleteAllConvertedFilesInKbCounter)
 	}
 }
 
@@ -5762,6 +5772,310 @@ func (m *RepositoryIMock) MinimockDeleteKnowledgeBaseFileInspect() {
 	if !m.DeleteKnowledgeBaseFileMock.invocationsDone() && afterDeleteKnowledgeBaseFileCounter > 0 {
 		m.t.Errorf("Expected %d calls to RepositoryIMock.DeleteKnowledgeBaseFile but found %d calls",
 			mm_atomic.LoadUint64(&m.DeleteKnowledgeBaseFileMock.expectedInvocations), afterDeleteKnowledgeBaseFileCounter)
+	}
+}
+
+type mRepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsage struct {
+	mock               *RepositoryIMock
+	defaultExpectation *RepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsageExpectation
+	expectations       []*RepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsageExpectation
+
+	callArgs []*RepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsageParams
+	mutex    sync.RWMutex
+
+	expectedInvocations uint64
+}
+
+// RepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsageExpectation specifies expectation struct of the RepositoryI.DeleteKnowledgeBaseFileAndDecreaseUsage
+type RepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsageExpectation struct {
+	mock      *RepositoryIMock
+	params    *RepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsageParams
+	paramPtrs *RepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsageParamPtrs
+	results   *RepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsageResults
+	Counter   uint64
+}
+
+// RepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsageParams contains parameters of the RepositoryI.DeleteKnowledgeBaseFileAndDecreaseUsage
+type RepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsageParams struct {
+	ctx     context.Context
+	fileUID uuid.UUID
+}
+
+// RepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsageParamPtrs contains pointers to parameters of the RepositoryI.DeleteKnowledgeBaseFileAndDecreaseUsage
+type RepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsageParamPtrs struct {
+	ctx     *context.Context
+	fileUID *uuid.UUID
+}
+
+// RepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsageResults contains results of the RepositoryI.DeleteKnowledgeBaseFileAndDecreaseUsage
+type RepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsageResults struct {
+	err error
+}
+
+// Expect sets up expected params for RepositoryI.DeleteKnowledgeBaseFileAndDecreaseUsage
+func (mmDeleteKnowledgeBaseFileAndDecreaseUsage *mRepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsage) Expect(ctx context.Context, fileUID uuid.UUID) *mRepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsage {
+	if mmDeleteKnowledgeBaseFileAndDecreaseUsage.mock.funcDeleteKnowledgeBaseFileAndDecreaseUsage != nil {
+		mmDeleteKnowledgeBaseFileAndDecreaseUsage.mock.t.Fatalf("RepositoryIMock.DeleteKnowledgeBaseFileAndDecreaseUsage mock is already set by Set")
+	}
+
+	if mmDeleteKnowledgeBaseFileAndDecreaseUsage.defaultExpectation == nil {
+		mmDeleteKnowledgeBaseFileAndDecreaseUsage.defaultExpectation = &RepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsageExpectation{}
+	}
+
+	if mmDeleteKnowledgeBaseFileAndDecreaseUsage.defaultExpectation.paramPtrs != nil {
+		mmDeleteKnowledgeBaseFileAndDecreaseUsage.mock.t.Fatalf("RepositoryIMock.DeleteKnowledgeBaseFileAndDecreaseUsage mock is already set by ExpectParams functions")
+	}
+
+	mmDeleteKnowledgeBaseFileAndDecreaseUsage.defaultExpectation.params = &RepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsageParams{ctx, fileUID}
+	for _, e := range mmDeleteKnowledgeBaseFileAndDecreaseUsage.expectations {
+		if minimock.Equal(e.params, mmDeleteKnowledgeBaseFileAndDecreaseUsage.defaultExpectation.params) {
+			mmDeleteKnowledgeBaseFileAndDecreaseUsage.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmDeleteKnowledgeBaseFileAndDecreaseUsage.defaultExpectation.params)
+		}
+	}
+
+	return mmDeleteKnowledgeBaseFileAndDecreaseUsage
+}
+
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.DeleteKnowledgeBaseFileAndDecreaseUsage
+func (mmDeleteKnowledgeBaseFileAndDecreaseUsage *mRepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsage) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsage {
+	if mmDeleteKnowledgeBaseFileAndDecreaseUsage.mock.funcDeleteKnowledgeBaseFileAndDecreaseUsage != nil {
+		mmDeleteKnowledgeBaseFileAndDecreaseUsage.mock.t.Fatalf("RepositoryIMock.DeleteKnowledgeBaseFileAndDecreaseUsage mock is already set by Set")
+	}
+
+	if mmDeleteKnowledgeBaseFileAndDecreaseUsage.defaultExpectation == nil {
+		mmDeleteKnowledgeBaseFileAndDecreaseUsage.defaultExpectation = &RepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsageExpectation{}
+	}
+
+	if mmDeleteKnowledgeBaseFileAndDecreaseUsage.defaultExpectation.params != nil {
+		mmDeleteKnowledgeBaseFileAndDecreaseUsage.mock.t.Fatalf("RepositoryIMock.DeleteKnowledgeBaseFileAndDecreaseUsage mock is already set by Expect")
+	}
+
+	if mmDeleteKnowledgeBaseFileAndDecreaseUsage.defaultExpectation.paramPtrs == nil {
+		mmDeleteKnowledgeBaseFileAndDecreaseUsage.defaultExpectation.paramPtrs = &RepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsageParamPtrs{}
+	}
+	mmDeleteKnowledgeBaseFileAndDecreaseUsage.defaultExpectation.paramPtrs.ctx = &ctx
+
+	return mmDeleteKnowledgeBaseFileAndDecreaseUsage
+}
+
+// ExpectFileUIDParam2 sets up expected param fileUID for RepositoryI.DeleteKnowledgeBaseFileAndDecreaseUsage
+func (mmDeleteKnowledgeBaseFileAndDecreaseUsage *mRepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsage) ExpectFileUIDParam2(fileUID uuid.UUID) *mRepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsage {
+	if mmDeleteKnowledgeBaseFileAndDecreaseUsage.mock.funcDeleteKnowledgeBaseFileAndDecreaseUsage != nil {
+		mmDeleteKnowledgeBaseFileAndDecreaseUsage.mock.t.Fatalf("RepositoryIMock.DeleteKnowledgeBaseFileAndDecreaseUsage mock is already set by Set")
+	}
+
+	if mmDeleteKnowledgeBaseFileAndDecreaseUsage.defaultExpectation == nil {
+		mmDeleteKnowledgeBaseFileAndDecreaseUsage.defaultExpectation = &RepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsageExpectation{}
+	}
+
+	if mmDeleteKnowledgeBaseFileAndDecreaseUsage.defaultExpectation.params != nil {
+		mmDeleteKnowledgeBaseFileAndDecreaseUsage.mock.t.Fatalf("RepositoryIMock.DeleteKnowledgeBaseFileAndDecreaseUsage mock is already set by Expect")
+	}
+
+	if mmDeleteKnowledgeBaseFileAndDecreaseUsage.defaultExpectation.paramPtrs == nil {
+		mmDeleteKnowledgeBaseFileAndDecreaseUsage.defaultExpectation.paramPtrs = &RepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsageParamPtrs{}
+	}
+	mmDeleteKnowledgeBaseFileAndDecreaseUsage.defaultExpectation.paramPtrs.fileUID = &fileUID
+
+	return mmDeleteKnowledgeBaseFileAndDecreaseUsage
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.DeleteKnowledgeBaseFileAndDecreaseUsage
+func (mmDeleteKnowledgeBaseFileAndDecreaseUsage *mRepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsage) Inspect(f func(ctx context.Context, fileUID uuid.UUID)) *mRepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsage {
+	if mmDeleteKnowledgeBaseFileAndDecreaseUsage.mock.inspectFuncDeleteKnowledgeBaseFileAndDecreaseUsage != nil {
+		mmDeleteKnowledgeBaseFileAndDecreaseUsage.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.DeleteKnowledgeBaseFileAndDecreaseUsage")
+	}
+
+	mmDeleteKnowledgeBaseFileAndDecreaseUsage.mock.inspectFuncDeleteKnowledgeBaseFileAndDecreaseUsage = f
+
+	return mmDeleteKnowledgeBaseFileAndDecreaseUsage
+}
+
+// Return sets up results that will be returned by RepositoryI.DeleteKnowledgeBaseFileAndDecreaseUsage
+func (mmDeleteKnowledgeBaseFileAndDecreaseUsage *mRepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsage) Return(err error) *RepositoryIMock {
+	if mmDeleteKnowledgeBaseFileAndDecreaseUsage.mock.funcDeleteKnowledgeBaseFileAndDecreaseUsage != nil {
+		mmDeleteKnowledgeBaseFileAndDecreaseUsage.mock.t.Fatalf("RepositoryIMock.DeleteKnowledgeBaseFileAndDecreaseUsage mock is already set by Set")
+	}
+
+	if mmDeleteKnowledgeBaseFileAndDecreaseUsage.defaultExpectation == nil {
+		mmDeleteKnowledgeBaseFileAndDecreaseUsage.defaultExpectation = &RepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsageExpectation{mock: mmDeleteKnowledgeBaseFileAndDecreaseUsage.mock}
+	}
+	mmDeleteKnowledgeBaseFileAndDecreaseUsage.defaultExpectation.results = &RepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsageResults{err}
+	return mmDeleteKnowledgeBaseFileAndDecreaseUsage.mock
+}
+
+// Set uses given function f to mock the RepositoryI.DeleteKnowledgeBaseFileAndDecreaseUsage method
+func (mmDeleteKnowledgeBaseFileAndDecreaseUsage *mRepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsage) Set(f func(ctx context.Context, fileUID uuid.UUID) (err error)) *RepositoryIMock {
+	if mmDeleteKnowledgeBaseFileAndDecreaseUsage.defaultExpectation != nil {
+		mmDeleteKnowledgeBaseFileAndDecreaseUsage.mock.t.Fatalf("Default expectation is already set for the RepositoryI.DeleteKnowledgeBaseFileAndDecreaseUsage method")
+	}
+
+	if len(mmDeleteKnowledgeBaseFileAndDecreaseUsage.expectations) > 0 {
+		mmDeleteKnowledgeBaseFileAndDecreaseUsage.mock.t.Fatalf("Some expectations are already set for the RepositoryI.DeleteKnowledgeBaseFileAndDecreaseUsage method")
+	}
+
+	mmDeleteKnowledgeBaseFileAndDecreaseUsage.mock.funcDeleteKnowledgeBaseFileAndDecreaseUsage = f
+	return mmDeleteKnowledgeBaseFileAndDecreaseUsage.mock
+}
+
+// When sets expectation for the RepositoryI.DeleteKnowledgeBaseFileAndDecreaseUsage which will trigger the result defined by the following
+// Then helper
+func (mmDeleteKnowledgeBaseFileAndDecreaseUsage *mRepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsage) When(ctx context.Context, fileUID uuid.UUID) *RepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsageExpectation {
+	if mmDeleteKnowledgeBaseFileAndDecreaseUsage.mock.funcDeleteKnowledgeBaseFileAndDecreaseUsage != nil {
+		mmDeleteKnowledgeBaseFileAndDecreaseUsage.mock.t.Fatalf("RepositoryIMock.DeleteKnowledgeBaseFileAndDecreaseUsage mock is already set by Set")
+	}
+
+	expectation := &RepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsageExpectation{
+		mock:   mmDeleteKnowledgeBaseFileAndDecreaseUsage.mock,
+		params: &RepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsageParams{ctx, fileUID},
+	}
+	mmDeleteKnowledgeBaseFileAndDecreaseUsage.expectations = append(mmDeleteKnowledgeBaseFileAndDecreaseUsage.expectations, expectation)
+	return expectation
+}
+
+// Then sets up RepositoryI.DeleteKnowledgeBaseFileAndDecreaseUsage return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsageExpectation) Then(err error) *RepositoryIMock {
+	e.results = &RepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsageResults{err}
+	return e.mock
+}
+
+// Times sets number of times RepositoryI.DeleteKnowledgeBaseFileAndDecreaseUsage should be invoked
+func (mmDeleteKnowledgeBaseFileAndDecreaseUsage *mRepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsage) Times(n uint64) *mRepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsage {
+	if n == 0 {
+		mmDeleteKnowledgeBaseFileAndDecreaseUsage.mock.t.Fatalf("Times of RepositoryIMock.DeleteKnowledgeBaseFileAndDecreaseUsage mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmDeleteKnowledgeBaseFileAndDecreaseUsage.expectedInvocations, n)
+	return mmDeleteKnowledgeBaseFileAndDecreaseUsage
+}
+
+func (mmDeleteKnowledgeBaseFileAndDecreaseUsage *mRepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsage) invocationsDone() bool {
+	if len(mmDeleteKnowledgeBaseFileAndDecreaseUsage.expectations) == 0 && mmDeleteKnowledgeBaseFileAndDecreaseUsage.defaultExpectation == nil && mmDeleteKnowledgeBaseFileAndDecreaseUsage.mock.funcDeleteKnowledgeBaseFileAndDecreaseUsage == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmDeleteKnowledgeBaseFileAndDecreaseUsage.mock.afterDeleteKnowledgeBaseFileAndDecreaseUsageCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmDeleteKnowledgeBaseFileAndDecreaseUsage.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// DeleteKnowledgeBaseFileAndDecreaseUsage implements repository.RepositoryI
+func (mmDeleteKnowledgeBaseFileAndDecreaseUsage *RepositoryIMock) DeleteKnowledgeBaseFileAndDecreaseUsage(ctx context.Context, fileUID uuid.UUID) (err error) {
+	mm_atomic.AddUint64(&mmDeleteKnowledgeBaseFileAndDecreaseUsage.beforeDeleteKnowledgeBaseFileAndDecreaseUsageCounter, 1)
+	defer mm_atomic.AddUint64(&mmDeleteKnowledgeBaseFileAndDecreaseUsage.afterDeleteKnowledgeBaseFileAndDecreaseUsageCounter, 1)
+
+	if mmDeleteKnowledgeBaseFileAndDecreaseUsage.inspectFuncDeleteKnowledgeBaseFileAndDecreaseUsage != nil {
+		mmDeleteKnowledgeBaseFileAndDecreaseUsage.inspectFuncDeleteKnowledgeBaseFileAndDecreaseUsage(ctx, fileUID)
+	}
+
+	mm_params := RepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsageParams{ctx, fileUID}
+
+	// Record call args
+	mmDeleteKnowledgeBaseFileAndDecreaseUsage.DeleteKnowledgeBaseFileAndDecreaseUsageMock.mutex.Lock()
+	mmDeleteKnowledgeBaseFileAndDecreaseUsage.DeleteKnowledgeBaseFileAndDecreaseUsageMock.callArgs = append(mmDeleteKnowledgeBaseFileAndDecreaseUsage.DeleteKnowledgeBaseFileAndDecreaseUsageMock.callArgs, &mm_params)
+	mmDeleteKnowledgeBaseFileAndDecreaseUsage.DeleteKnowledgeBaseFileAndDecreaseUsageMock.mutex.Unlock()
+
+	for _, e := range mmDeleteKnowledgeBaseFileAndDecreaseUsage.DeleteKnowledgeBaseFileAndDecreaseUsageMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmDeleteKnowledgeBaseFileAndDecreaseUsage.DeleteKnowledgeBaseFileAndDecreaseUsageMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmDeleteKnowledgeBaseFileAndDecreaseUsage.DeleteKnowledgeBaseFileAndDecreaseUsageMock.defaultExpectation.Counter, 1)
+		mm_want := mmDeleteKnowledgeBaseFileAndDecreaseUsage.DeleteKnowledgeBaseFileAndDecreaseUsageMock.defaultExpectation.params
+		mm_want_ptrs := mmDeleteKnowledgeBaseFileAndDecreaseUsage.DeleteKnowledgeBaseFileAndDecreaseUsageMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsageParams{ctx, fileUID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmDeleteKnowledgeBaseFileAndDecreaseUsage.t.Errorf("RepositoryIMock.DeleteKnowledgeBaseFileAndDecreaseUsage got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.fileUID != nil && !minimock.Equal(*mm_want_ptrs.fileUID, mm_got.fileUID) {
+				mmDeleteKnowledgeBaseFileAndDecreaseUsage.t.Errorf("RepositoryIMock.DeleteKnowledgeBaseFileAndDecreaseUsage got unexpected parameter fileUID, want: %#v, got: %#v%s\n", *mm_want_ptrs.fileUID, mm_got.fileUID, minimock.Diff(*mm_want_ptrs.fileUID, mm_got.fileUID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmDeleteKnowledgeBaseFileAndDecreaseUsage.t.Errorf("RepositoryIMock.DeleteKnowledgeBaseFileAndDecreaseUsage got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmDeleteKnowledgeBaseFileAndDecreaseUsage.DeleteKnowledgeBaseFileAndDecreaseUsageMock.defaultExpectation.results
+		if mm_results == nil {
+			mmDeleteKnowledgeBaseFileAndDecreaseUsage.t.Fatal("No results are set for the RepositoryIMock.DeleteKnowledgeBaseFileAndDecreaseUsage")
+		}
+		return (*mm_results).err
+	}
+	if mmDeleteKnowledgeBaseFileAndDecreaseUsage.funcDeleteKnowledgeBaseFileAndDecreaseUsage != nil {
+		return mmDeleteKnowledgeBaseFileAndDecreaseUsage.funcDeleteKnowledgeBaseFileAndDecreaseUsage(ctx, fileUID)
+	}
+	mmDeleteKnowledgeBaseFileAndDecreaseUsage.t.Fatalf("Unexpected call to RepositoryIMock.DeleteKnowledgeBaseFileAndDecreaseUsage. %v %v", ctx, fileUID)
+	return
+}
+
+// DeleteKnowledgeBaseFileAndDecreaseUsageAfterCounter returns a count of finished RepositoryIMock.DeleteKnowledgeBaseFileAndDecreaseUsage invocations
+func (mmDeleteKnowledgeBaseFileAndDecreaseUsage *RepositoryIMock) DeleteKnowledgeBaseFileAndDecreaseUsageAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmDeleteKnowledgeBaseFileAndDecreaseUsage.afterDeleteKnowledgeBaseFileAndDecreaseUsageCounter)
+}
+
+// DeleteKnowledgeBaseFileAndDecreaseUsageBeforeCounter returns a count of RepositoryIMock.DeleteKnowledgeBaseFileAndDecreaseUsage invocations
+func (mmDeleteKnowledgeBaseFileAndDecreaseUsage *RepositoryIMock) DeleteKnowledgeBaseFileAndDecreaseUsageBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmDeleteKnowledgeBaseFileAndDecreaseUsage.beforeDeleteKnowledgeBaseFileAndDecreaseUsageCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryIMock.DeleteKnowledgeBaseFileAndDecreaseUsage.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmDeleteKnowledgeBaseFileAndDecreaseUsage *mRepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsage) Calls() []*RepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsageParams {
+	mmDeleteKnowledgeBaseFileAndDecreaseUsage.mutex.RLock()
+
+	argCopy := make([]*RepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsageParams, len(mmDeleteKnowledgeBaseFileAndDecreaseUsage.callArgs))
+	copy(argCopy, mmDeleteKnowledgeBaseFileAndDecreaseUsage.callArgs)
+
+	mmDeleteKnowledgeBaseFileAndDecreaseUsage.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockDeleteKnowledgeBaseFileAndDecreaseUsageDone returns true if the count of the DeleteKnowledgeBaseFileAndDecreaseUsage invocations corresponds
+// the number of defined expectations
+func (m *RepositoryIMock) MinimockDeleteKnowledgeBaseFileAndDecreaseUsageDone() bool {
+	for _, e := range m.DeleteKnowledgeBaseFileAndDecreaseUsageMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.DeleteKnowledgeBaseFileAndDecreaseUsageMock.invocationsDone()
+}
+
+// MinimockDeleteKnowledgeBaseFileAndDecreaseUsageInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockDeleteKnowledgeBaseFileAndDecreaseUsageInspect() {
+	for _, e := range m.DeleteKnowledgeBaseFileAndDecreaseUsageMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryIMock.DeleteKnowledgeBaseFileAndDecreaseUsage with params: %#v", *e.params)
+		}
+	}
+
+	afterDeleteKnowledgeBaseFileAndDecreaseUsageCounter := mm_atomic.LoadUint64(&m.afterDeleteKnowledgeBaseFileAndDecreaseUsageCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.DeleteKnowledgeBaseFileAndDecreaseUsageMock.defaultExpectation != nil && afterDeleteKnowledgeBaseFileAndDecreaseUsageCounter < 1 {
+		if m.DeleteKnowledgeBaseFileAndDecreaseUsageMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to RepositoryIMock.DeleteKnowledgeBaseFileAndDecreaseUsage")
+		} else {
+			m.t.Errorf("Expected call to RepositoryIMock.DeleteKnowledgeBaseFileAndDecreaseUsage with params: %#v", *m.DeleteKnowledgeBaseFileAndDecreaseUsageMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcDeleteKnowledgeBaseFileAndDecreaseUsage != nil && afterDeleteKnowledgeBaseFileAndDecreaseUsageCounter < 1 {
+		m.t.Error("Expected call to RepositoryIMock.DeleteKnowledgeBaseFileAndDecreaseUsage")
+	}
+
+	if !m.DeleteKnowledgeBaseFileAndDecreaseUsageMock.invocationsDone() && afterDeleteKnowledgeBaseFileAndDecreaseUsageCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.DeleteKnowledgeBaseFileAndDecreaseUsage but found %d calls",
+			mm_atomic.LoadUint64(&m.DeleteKnowledgeBaseFileAndDecreaseUsageMock.expectedInvocations), afterDeleteKnowledgeBaseFileAndDecreaseUsageCounter)
 	}
 }
 
@@ -13913,6 +14227,7 @@ type RepositoryIMockIncreaseKnowledgeBaseUsageExpectation struct {
 // RepositoryIMockIncreaseKnowledgeBaseUsageParams contains parameters of the RepositoryI.IncreaseKnowledgeBaseUsage
 type RepositoryIMockIncreaseKnowledgeBaseUsageParams struct {
 	ctx    context.Context
+	tx     *gorm.DB
 	kbUID  string
 	amount int
 }
@@ -13920,6 +14235,7 @@ type RepositoryIMockIncreaseKnowledgeBaseUsageParams struct {
 // RepositoryIMockIncreaseKnowledgeBaseUsageParamPtrs contains pointers to parameters of the RepositoryI.IncreaseKnowledgeBaseUsage
 type RepositoryIMockIncreaseKnowledgeBaseUsageParamPtrs struct {
 	ctx    *context.Context
+	tx     **gorm.DB
 	kbUID  *string
 	amount *int
 }
@@ -13930,7 +14246,7 @@ type RepositoryIMockIncreaseKnowledgeBaseUsageResults struct {
 }
 
 // Expect sets up expected params for RepositoryI.IncreaseKnowledgeBaseUsage
-func (mmIncreaseKnowledgeBaseUsage *mRepositoryIMockIncreaseKnowledgeBaseUsage) Expect(ctx context.Context, kbUID string, amount int) *mRepositoryIMockIncreaseKnowledgeBaseUsage {
+func (mmIncreaseKnowledgeBaseUsage *mRepositoryIMockIncreaseKnowledgeBaseUsage) Expect(ctx context.Context, tx *gorm.DB, kbUID string, amount int) *mRepositoryIMockIncreaseKnowledgeBaseUsage {
 	if mmIncreaseKnowledgeBaseUsage.mock.funcIncreaseKnowledgeBaseUsage != nil {
 		mmIncreaseKnowledgeBaseUsage.mock.t.Fatalf("RepositoryIMock.IncreaseKnowledgeBaseUsage mock is already set by Set")
 	}
@@ -13943,7 +14259,7 @@ func (mmIncreaseKnowledgeBaseUsage *mRepositoryIMockIncreaseKnowledgeBaseUsage) 
 		mmIncreaseKnowledgeBaseUsage.mock.t.Fatalf("RepositoryIMock.IncreaseKnowledgeBaseUsage mock is already set by ExpectParams functions")
 	}
 
-	mmIncreaseKnowledgeBaseUsage.defaultExpectation.params = &RepositoryIMockIncreaseKnowledgeBaseUsageParams{ctx, kbUID, amount}
+	mmIncreaseKnowledgeBaseUsage.defaultExpectation.params = &RepositoryIMockIncreaseKnowledgeBaseUsageParams{ctx, tx, kbUID, amount}
 	for _, e := range mmIncreaseKnowledgeBaseUsage.expectations {
 		if minimock.Equal(e.params, mmIncreaseKnowledgeBaseUsage.defaultExpectation.params) {
 			mmIncreaseKnowledgeBaseUsage.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmIncreaseKnowledgeBaseUsage.defaultExpectation.params)
@@ -13975,8 +14291,30 @@ func (mmIncreaseKnowledgeBaseUsage *mRepositoryIMockIncreaseKnowledgeBaseUsage) 
 	return mmIncreaseKnowledgeBaseUsage
 }
 
-// ExpectKbUIDParam2 sets up expected param kbUID for RepositoryI.IncreaseKnowledgeBaseUsage
-func (mmIncreaseKnowledgeBaseUsage *mRepositoryIMockIncreaseKnowledgeBaseUsage) ExpectKbUIDParam2(kbUID string) *mRepositoryIMockIncreaseKnowledgeBaseUsage {
+// ExpectTxParam2 sets up expected param tx for RepositoryI.IncreaseKnowledgeBaseUsage
+func (mmIncreaseKnowledgeBaseUsage *mRepositoryIMockIncreaseKnowledgeBaseUsage) ExpectTxParam2(tx *gorm.DB) *mRepositoryIMockIncreaseKnowledgeBaseUsage {
+	if mmIncreaseKnowledgeBaseUsage.mock.funcIncreaseKnowledgeBaseUsage != nil {
+		mmIncreaseKnowledgeBaseUsage.mock.t.Fatalf("RepositoryIMock.IncreaseKnowledgeBaseUsage mock is already set by Set")
+	}
+
+	if mmIncreaseKnowledgeBaseUsage.defaultExpectation == nil {
+		mmIncreaseKnowledgeBaseUsage.defaultExpectation = &RepositoryIMockIncreaseKnowledgeBaseUsageExpectation{}
+	}
+
+	if mmIncreaseKnowledgeBaseUsage.defaultExpectation.params != nil {
+		mmIncreaseKnowledgeBaseUsage.mock.t.Fatalf("RepositoryIMock.IncreaseKnowledgeBaseUsage mock is already set by Expect")
+	}
+
+	if mmIncreaseKnowledgeBaseUsage.defaultExpectation.paramPtrs == nil {
+		mmIncreaseKnowledgeBaseUsage.defaultExpectation.paramPtrs = &RepositoryIMockIncreaseKnowledgeBaseUsageParamPtrs{}
+	}
+	mmIncreaseKnowledgeBaseUsage.defaultExpectation.paramPtrs.tx = &tx
+
+	return mmIncreaseKnowledgeBaseUsage
+}
+
+// ExpectKbUIDParam3 sets up expected param kbUID for RepositoryI.IncreaseKnowledgeBaseUsage
+func (mmIncreaseKnowledgeBaseUsage *mRepositoryIMockIncreaseKnowledgeBaseUsage) ExpectKbUIDParam3(kbUID string) *mRepositoryIMockIncreaseKnowledgeBaseUsage {
 	if mmIncreaseKnowledgeBaseUsage.mock.funcIncreaseKnowledgeBaseUsage != nil {
 		mmIncreaseKnowledgeBaseUsage.mock.t.Fatalf("RepositoryIMock.IncreaseKnowledgeBaseUsage mock is already set by Set")
 	}
@@ -13997,8 +14335,8 @@ func (mmIncreaseKnowledgeBaseUsage *mRepositoryIMockIncreaseKnowledgeBaseUsage) 
 	return mmIncreaseKnowledgeBaseUsage
 }
 
-// ExpectAmountParam3 sets up expected param amount for RepositoryI.IncreaseKnowledgeBaseUsage
-func (mmIncreaseKnowledgeBaseUsage *mRepositoryIMockIncreaseKnowledgeBaseUsage) ExpectAmountParam3(amount int) *mRepositoryIMockIncreaseKnowledgeBaseUsage {
+// ExpectAmountParam4 sets up expected param amount for RepositoryI.IncreaseKnowledgeBaseUsage
+func (mmIncreaseKnowledgeBaseUsage *mRepositoryIMockIncreaseKnowledgeBaseUsage) ExpectAmountParam4(amount int) *mRepositoryIMockIncreaseKnowledgeBaseUsage {
 	if mmIncreaseKnowledgeBaseUsage.mock.funcIncreaseKnowledgeBaseUsage != nil {
 		mmIncreaseKnowledgeBaseUsage.mock.t.Fatalf("RepositoryIMock.IncreaseKnowledgeBaseUsage mock is already set by Set")
 	}
@@ -14020,7 +14358,7 @@ func (mmIncreaseKnowledgeBaseUsage *mRepositoryIMockIncreaseKnowledgeBaseUsage) 
 }
 
 // Inspect accepts an inspector function that has same arguments as the RepositoryI.IncreaseKnowledgeBaseUsage
-func (mmIncreaseKnowledgeBaseUsage *mRepositoryIMockIncreaseKnowledgeBaseUsage) Inspect(f func(ctx context.Context, kbUID string, amount int)) *mRepositoryIMockIncreaseKnowledgeBaseUsage {
+func (mmIncreaseKnowledgeBaseUsage *mRepositoryIMockIncreaseKnowledgeBaseUsage) Inspect(f func(ctx context.Context, tx *gorm.DB, kbUID string, amount int)) *mRepositoryIMockIncreaseKnowledgeBaseUsage {
 	if mmIncreaseKnowledgeBaseUsage.mock.inspectFuncIncreaseKnowledgeBaseUsage != nil {
 		mmIncreaseKnowledgeBaseUsage.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.IncreaseKnowledgeBaseUsage")
 	}
@@ -14044,7 +14382,7 @@ func (mmIncreaseKnowledgeBaseUsage *mRepositoryIMockIncreaseKnowledgeBaseUsage) 
 }
 
 // Set uses given function f to mock the RepositoryI.IncreaseKnowledgeBaseUsage method
-func (mmIncreaseKnowledgeBaseUsage *mRepositoryIMockIncreaseKnowledgeBaseUsage) Set(f func(ctx context.Context, kbUID string, amount int) (err error)) *RepositoryIMock {
+func (mmIncreaseKnowledgeBaseUsage *mRepositoryIMockIncreaseKnowledgeBaseUsage) Set(f func(ctx context.Context, tx *gorm.DB, kbUID string, amount int) (err error)) *RepositoryIMock {
 	if mmIncreaseKnowledgeBaseUsage.defaultExpectation != nil {
 		mmIncreaseKnowledgeBaseUsage.mock.t.Fatalf("Default expectation is already set for the RepositoryI.IncreaseKnowledgeBaseUsage method")
 	}
@@ -14059,14 +14397,14 @@ func (mmIncreaseKnowledgeBaseUsage *mRepositoryIMockIncreaseKnowledgeBaseUsage) 
 
 // When sets expectation for the RepositoryI.IncreaseKnowledgeBaseUsage which will trigger the result defined by the following
 // Then helper
-func (mmIncreaseKnowledgeBaseUsage *mRepositoryIMockIncreaseKnowledgeBaseUsage) When(ctx context.Context, kbUID string, amount int) *RepositoryIMockIncreaseKnowledgeBaseUsageExpectation {
+func (mmIncreaseKnowledgeBaseUsage *mRepositoryIMockIncreaseKnowledgeBaseUsage) When(ctx context.Context, tx *gorm.DB, kbUID string, amount int) *RepositoryIMockIncreaseKnowledgeBaseUsageExpectation {
 	if mmIncreaseKnowledgeBaseUsage.mock.funcIncreaseKnowledgeBaseUsage != nil {
 		mmIncreaseKnowledgeBaseUsage.mock.t.Fatalf("RepositoryIMock.IncreaseKnowledgeBaseUsage mock is already set by Set")
 	}
 
 	expectation := &RepositoryIMockIncreaseKnowledgeBaseUsageExpectation{
 		mock:   mmIncreaseKnowledgeBaseUsage.mock,
-		params: &RepositoryIMockIncreaseKnowledgeBaseUsageParams{ctx, kbUID, amount},
+		params: &RepositoryIMockIncreaseKnowledgeBaseUsageParams{ctx, tx, kbUID, amount},
 	}
 	mmIncreaseKnowledgeBaseUsage.expectations = append(mmIncreaseKnowledgeBaseUsage.expectations, expectation)
 	return expectation
@@ -14099,15 +14437,15 @@ func (mmIncreaseKnowledgeBaseUsage *mRepositoryIMockIncreaseKnowledgeBaseUsage) 
 }
 
 // IncreaseKnowledgeBaseUsage implements repository.RepositoryI
-func (mmIncreaseKnowledgeBaseUsage *RepositoryIMock) IncreaseKnowledgeBaseUsage(ctx context.Context, kbUID string, amount int) (err error) {
+func (mmIncreaseKnowledgeBaseUsage *RepositoryIMock) IncreaseKnowledgeBaseUsage(ctx context.Context, tx *gorm.DB, kbUID string, amount int) (err error) {
 	mm_atomic.AddUint64(&mmIncreaseKnowledgeBaseUsage.beforeIncreaseKnowledgeBaseUsageCounter, 1)
 	defer mm_atomic.AddUint64(&mmIncreaseKnowledgeBaseUsage.afterIncreaseKnowledgeBaseUsageCounter, 1)
 
 	if mmIncreaseKnowledgeBaseUsage.inspectFuncIncreaseKnowledgeBaseUsage != nil {
-		mmIncreaseKnowledgeBaseUsage.inspectFuncIncreaseKnowledgeBaseUsage(ctx, kbUID, amount)
+		mmIncreaseKnowledgeBaseUsage.inspectFuncIncreaseKnowledgeBaseUsage(ctx, tx, kbUID, amount)
 	}
 
-	mm_params := RepositoryIMockIncreaseKnowledgeBaseUsageParams{ctx, kbUID, amount}
+	mm_params := RepositoryIMockIncreaseKnowledgeBaseUsageParams{ctx, tx, kbUID, amount}
 
 	// Record call args
 	mmIncreaseKnowledgeBaseUsage.IncreaseKnowledgeBaseUsageMock.mutex.Lock()
@@ -14126,12 +14464,16 @@ func (mmIncreaseKnowledgeBaseUsage *RepositoryIMock) IncreaseKnowledgeBaseUsage(
 		mm_want := mmIncreaseKnowledgeBaseUsage.IncreaseKnowledgeBaseUsageMock.defaultExpectation.params
 		mm_want_ptrs := mmIncreaseKnowledgeBaseUsage.IncreaseKnowledgeBaseUsageMock.defaultExpectation.paramPtrs
 
-		mm_got := RepositoryIMockIncreaseKnowledgeBaseUsageParams{ctx, kbUID, amount}
+		mm_got := RepositoryIMockIncreaseKnowledgeBaseUsageParams{ctx, tx, kbUID, amount}
 
 		if mm_want_ptrs != nil {
 
 			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
 				mmIncreaseKnowledgeBaseUsage.t.Errorf("RepositoryIMock.IncreaseKnowledgeBaseUsage got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.tx != nil && !minimock.Equal(*mm_want_ptrs.tx, mm_got.tx) {
+				mmIncreaseKnowledgeBaseUsage.t.Errorf("RepositoryIMock.IncreaseKnowledgeBaseUsage got unexpected parameter tx, want: %#v, got: %#v%s\n", *mm_want_ptrs.tx, mm_got.tx, minimock.Diff(*mm_want_ptrs.tx, mm_got.tx))
 			}
 
 			if mm_want_ptrs.kbUID != nil && !minimock.Equal(*mm_want_ptrs.kbUID, mm_got.kbUID) {
@@ -14153,9 +14495,9 @@ func (mmIncreaseKnowledgeBaseUsage *RepositoryIMock) IncreaseKnowledgeBaseUsage(
 		return (*mm_results).err
 	}
 	if mmIncreaseKnowledgeBaseUsage.funcIncreaseKnowledgeBaseUsage != nil {
-		return mmIncreaseKnowledgeBaseUsage.funcIncreaseKnowledgeBaseUsage(ctx, kbUID, amount)
+		return mmIncreaseKnowledgeBaseUsage.funcIncreaseKnowledgeBaseUsage(ctx, tx, kbUID, amount)
 	}
-	mmIncreaseKnowledgeBaseUsage.t.Fatalf("Unexpected call to RepositoryIMock.IncreaseKnowledgeBaseUsage. %v %v %v", ctx, kbUID, amount)
+	mmIncreaseKnowledgeBaseUsage.t.Fatalf("Unexpected call to RepositoryIMock.IncreaseKnowledgeBaseUsage. %v %v %v %v", ctx, tx, kbUID, amount)
 	return
 }
 
@@ -20786,7 +21128,7 @@ func (m *RepositoryIMock) MinimockFinish() {
 
 			m.MinimockCreateMessageInspect()
 
-			m.MinimockDeleteAllConvertedFilesinKbInspect()
+			m.MinimockDeleteAllConvertedFilesInKbInspect()
 
 			m.MinimockDeleteAllKnowledgeBaseFilesInspect()
 
@@ -20805,6 +21147,8 @@ func (m *RepositoryIMock) MinimockFinish() {
 			m.MinimockDeleteKnowledgeBaseInspect()
 
 			m.MinimockDeleteKnowledgeBaseFileInspect()
+
+			m.MinimockDeleteKnowledgeBaseFileAndDecreaseUsageInspect()
 
 			m.MinimockDeleteMessageInspect()
 
@@ -20930,7 +21274,7 @@ func (m *RepositoryIMock) minimockDone() bool {
 		m.MinimockCreateKnowledgeBaseDone() &&
 		m.MinimockCreateKnowledgeBaseFileDone() &&
 		m.MinimockCreateMessageDone() &&
-		m.MinimockDeleteAllConvertedFilesinKbDone() &&
+		m.MinimockDeleteAllConvertedFilesInKbDone() &&
 		m.MinimockDeleteAllKnowledgeBaseFilesDone() &&
 		m.MinimockDeleteAndCreateChunksDone() &&
 		m.MinimockDeleteChunksBySourceDone() &&
@@ -20940,6 +21284,7 @@ func (m *RepositoryIMock) minimockDone() bool {
 		m.MinimockDeleteEmbeddingsByUIDsDone() &&
 		m.MinimockDeleteKnowledgeBaseDone() &&
 		m.MinimockDeleteKnowledgeBaseFileDone() &&
+		m.MinimockDeleteKnowledgeBaseFileAndDecreaseUsageDone() &&
 		m.MinimockDeleteMessageDone() &&
 		m.MinimockDeleteRepositoryTagDone() &&
 		m.MinimockGetChunksByUIDsDone() &&
