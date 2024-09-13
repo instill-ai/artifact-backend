@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.2-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.13.1-alpha...v0.13.2-alpha) (2024-09-13)
+
+
+### Bug Fixes
+
+* **artifact:** improve catalog deletion slow issue ([#93](https://github.com/instill-ai/artifact-backend/issues/93)) ([0bbf3f2](https://github.com/instill-ai/artifact-backend/commit/0bbf3f2a72b2ffce7a5ed87d049d26c673fd2af2))
+
 ## [0.13.1-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.13.0-alpha...v0.13.1-alpha) (2024-09-12)
 
 
