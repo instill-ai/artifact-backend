@@ -21,7 +21,7 @@ func IsAuditEvent(eventName string) bool {
 func GoRecover(f func(), name string) {
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Println("panic occurred at: ", name, "panic: \n", r)
+			fmt.Println("\x1b[31m", "panic occurred at: \n", name, "\npanic: \n", r, "\x1b[0m")
 		}
 	}()
 	f()

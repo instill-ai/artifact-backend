@@ -118,6 +118,7 @@ func (m *Minio) DeleteFile(ctx context.Context, filePathName string) (err error)
 // delete bunch of files from minio
 func (m *Minio) DeleteFiles(ctx context.Context, filePathNames []string) chan error {
 	errCh := make(chan error, len(filePathNames))
+	defer close(errCh)
 	log, err := log.GetZapLogger(ctx)
 	if err != nil {
 		errCh <- err
@@ -233,10 +234,10 @@ func (m *Minio) GetFilesByPaths(ctx context.Context, filePaths []string) ([]File
 // delete all files with the same prefix from MinIO
 func (m *Minio) DeleteFilesWithPrefix(ctx context.Context, prefix string) chan error {
 	errCh := make(chan error)
+	defer close(errCh)
 	log, err := log.GetZapLogger(ctx)
 	if err != nil {
 		errCh <- err
-		close(errCh)
 		return errCh
 	}
 
@@ -266,10 +267,7 @@ func (m *Minio) DeleteFilesWithPrefix(ctx context.Context, prefix string) chan e
 	}
 
 	// Wait for all deletions to complete
-	go func() {
-		wg.Wait()
-		close(errCh)
-	}()
+	wg.Wait()
 
 	return errCh
 }

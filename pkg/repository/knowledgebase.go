@@ -20,7 +20,7 @@ type KnowledgeBaseI interface {
 	DeleteKnowledgeBase(ctx context.Context, ownerUID, kbID string) (*KnowledgeBase, error)
 	GetKnowledgeBaseByOwnerAndKbID(ctx context.Context, ownerUID uuid.UUID, kbID string) (*KnowledgeBase, error)
 	GetKnowledgeBaseCountByOwner(ctx context.Context, ownerUID string) (int64, error)
-	IncreaseKnowledgeBaseUsage(ctx context.Context, kbUID string, amount int) error
+	IncreaseKnowledgeBaseUsage(ctx context.Context, tx *gorm.DB, kbUID string, amount int) error
 }
 
 type KnowledgeBase struct {
@@ -267,11 +267,14 @@ func (r *Repository) GetKnowledgeBaseCountByOwner(ctx context.Context, owner str
 }
 
 // IncreaseKnowledgeBaseUsage increments the usage count of a KnowledgeBase record by a specified amount.
-func (r *Repository) IncreaseKnowledgeBaseUsage(ctx context.Context, kbUID string, amount int) error {
+func (r *Repository) IncreaseKnowledgeBaseUsage(ctx context.Context, tx *gorm.DB, kbUID string, amount int) error {
+	if tx == nil {
+		tx = r.db.WithContext(ctx)
+	}
 	// Increment the usage count of the KnowledgeBase record by the specified amount
 	where := fmt.Sprintf("%v = ?", KnowledgeBaseColumn.UID)
 	expr := fmt.Sprintf("%v + ?", KnowledgeBaseColumn.Usage)
-	if err := r.db.WithContext(ctx).Model(&KnowledgeBase{}).Where(where, kbUID).Update(KnowledgeBaseColumn.Usage, gorm.Expr(expr, amount)).Error; err != nil {
+	if err := tx.WithContext(ctx).Model(&KnowledgeBase{}).Where(where, kbUID).Update(KnowledgeBaseColumn.Usage, gorm.Expr(expr, amount)).Error; err != nil {
 		return err
 	}
 	return nil

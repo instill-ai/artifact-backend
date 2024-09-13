@@ -136,8 +136,9 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 			return nil, err
 		}
 
-		// increase catalog usage
-		err = ph.service.Repository.IncreaseKnowledgeBaseUsage(ctx, kb.UID.String(), int(fileSize))
+		// increase catalog usage. need to increase after the file is created.
+		// Note: in the future, we need to increase the usage in transaction with creating the file.
+		err = ph.service.Repository.IncreaseKnowledgeBaseUsage(ctx, nil, kb.UID.String(), int(fileSize))
 		if err != nil {
 			log.Error("failed to increase catalog usage", zap.Error(err))
 			return nil, err
@@ -319,14 +320,16 @@ func (ph *PublicHandler) DeleteCatalogFile(
 
 	// ACL - check user's permission to write catalog of kb file
 	kbfs, err := ph.service.Repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{uuid.FromStringOrNil(req.FileUid)})
-	if err != nil && len(kbfs) == 0 {
-		log.Error("failed to get catalog", zap.Error(err))
-		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
+	if err != nil {
+		log.Error("failed to get catalog files", zap.Error(err))
+		return nil, fmt.Errorf("failed to get catalog files. err: %w", err)
+	} else if len(kbfs) == 0 {
+		return nil, fmt.Errorf("file not found. err: %w", customerror.ErrNotFound)
 	}
 	granted, err := ph.service.ACLClient.CheckPermission(ctx, "knowledgebase", kbfs[0].KnowledgeBaseUID, "writer")
 	if err != nil {
 		log.Error("failed to check permission", zap.Error(err))
-		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
+		return nil, fmt.Errorf("failed to check permission. err: %w", err)
 	}
 	if !granted {
 		log.Error("no permission to delete catalog file")
@@ -346,16 +349,23 @@ func (ph *PublicHandler) DeleteCatalogFile(
 	files, err := ph.service.Repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{fUID})
 	if err != nil {
 		return nil, err
-	}
-	if len(files) == 0 {
+	} else if len(files) == 0 {
 		return nil, fmt.Errorf("file not found. err: %w", customerror.ErrNotFound)
 	}
 
+	startSignal := make(chan bool)
 	// TODO: need to use clean worker in the future
 	go utils.GoRecover(
 		func() {
 			// Create a new context to prevent the parent context from being cancelled
 			ctx := context.TODO()
+			log, _ := logger.GetZapLogger(ctx)
+			canStart := <-startSignal
+			if !canStart {
+				log.Info("DeleteCatalogFile: received stop signal")
+				return
+			}
+			log.Info("DeleteCatalogFile: start deleting file from minio, database and milvus")
 			allPass := true
 			// Delete the file from MinIO
 			objectPaths := []string{}
@@ -420,7 +430,6 @@ func (ph *PublicHandler) DeleteCatalogFile(
 				allPass = false
 			}
 			if allPass {
-				// Log success message and file UID
 				log.Info("DeleteCatalogFile: successfully deleted file from minio, database and milvus", zap.String("file_uid", fUID.String()))
 			} else {
 				log.Error("DeleteCatalogFile: failed to delete file from minio, database and milvus", zap.String("file_uid", fUID.String()))
@@ -429,19 +438,17 @@ func (ph *PublicHandler) DeleteCatalogFile(
 		"DeleteCatalogFile",
 	)
 
-	// delete the file in postgreSQL
-	err = ph.service.Repository.DeleteKnowledgeBaseFile(ctx, req.FileUid)
+	err = ph.service.Repository.DeleteKnowledgeBaseFileAndDecreaseUsage(ctx, fUID)
 	if err != nil {
+		log.Error("failed to delete knowledge base file and decrease usage", zap.Error(err))
+		startSignal <- false
 		return nil, err
 	}
-	// decrease catalog usage
-	err = ph.service.Repository.IncreaseKnowledgeBaseUsage(ctx, files[0].KnowledgeBaseUID.String(), int(-files[0].Size))
-	if err != nil {
-		return nil, err
-	}
+	// start the background deletion
+	startSignal <- true
 
 	return &artifactpb.DeleteCatalogFileResponse{
-		FileUid: req.FileUid,
+		FileUid: fUID.String(),
 	}, nil
 
 }
@@ -462,8 +469,7 @@ func (ph *PublicHandler) ProcessCatalogFiles(ctx context.Context, req *artifactp
 	kbfs, err := ph.service.Repository.GetKnowledgeBaseFilesByFileUIDs(ctx, fileUUIDs)
 	if err != nil {
 		return nil, err
-	}
-	if len(kbfs) == 0 {
+	} else if len(kbfs) == 0 {
 		return nil, fmt.Errorf("file not found. err: %w", customerror.ErrNotFound)
 	}
 	// check write permission for the catalog

@@ -54,8 +54,7 @@ func (ph *PublicHandler) GetFileCatalog(ctx context.Context, req *artifactpb.Get
 		if err != nil {
 			log.Error("failed to get file by file uid", zap.Error(err))
 			return nil, fmt.Errorf("failed to get file by file uid. err: %w", err)
-		}
-		if len(kbfs) == 0 {
+		} else if len(kbfs) == 0 {
 			log.Error("no file found by file uid", zap.String("file_uid", fileUID.String()))
 			return nil, fmt.Errorf("no file found by file uid: %s", fileUID.String())
 		}

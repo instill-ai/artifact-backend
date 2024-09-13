@@ -2,16 +2,17 @@ package logger
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"sync"
 
+	"github.com/instill-ai/artifact-backend/config"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
+	"go.uber.org/zap/buffer"
 	"go.uber.org/zap/zapcore"
-
-	"github.com/instill-ai/artifact-backend/config"
 )
 
 var once sync.Once
@@ -47,12 +48,12 @@ func GetZapLogger(ctx context.Context) (*zap.Logger, error) {
 		if config.Config.Server.Debug {
 			core = zapcore.NewTee(
 				zapcore.NewCore(
-					zapcore.NewJSONEncoder(zap.NewDevelopmentEncoderConfig()),
+					NewColoredJSONEncoder(zapcore.NewJSONEncoder(getJSONEncoderConfig(true))),
 					stdoutSyncer,
 					debugInfoLevel,
 				),
 				zapcore.NewCore(
-					zapcore.NewJSONEncoder(zap.NewDevelopmentEncoderConfig()),
+					NewColoredJSONEncoder(zapcore.NewJSONEncoder(getJSONEncoderConfig(true))),
 					stderrSyncer,
 					warnErrorFatalLevel,
 				),
@@ -60,12 +61,12 @@ func GetZapLogger(ctx context.Context) (*zap.Logger, error) {
 		} else {
 			core = zapcore.NewTee(
 				zapcore.NewCore(
-					zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()),
+					NewColoredJSONEncoder(zapcore.NewJSONEncoder(getJSONEncoderConfig(false))),
 					stdoutSyncer,
 					infoLevel,
 				),
 				zapcore.NewCore(
-					zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()),
+					NewColoredJSONEncoder(zapcore.NewJSONEncoder(getJSONEncoderConfig(false))),
 					stderrSyncer,
 					warnErrorFatalLevel,
 				),
@@ -108,4 +109,54 @@ func GetZapLogger(ctx context.Context) (*zap.Logger, error) {
 	)
 
 	return logger, err
+}
+
+func getJSONEncoderConfig(development bool) zapcore.EncoderConfig {
+	encoderConfig := zap.NewProductionEncoderConfig()
+	if development {
+		encoderConfig = zap.NewDevelopmentEncoderConfig()
+	}
+	encoderConfig.EncodeLevel = zapcore.CapitalLevelEncoder
+	encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	return encoderConfig
+}
+
+type ColoredJSONEncoder struct {
+	zapcore.Encoder
+}
+
+func NewColoredJSONEncoder(encoder zapcore.Encoder) zapcore.Encoder {
+	return &ColoredJSONEncoder{Encoder: encoder}
+}
+
+func (e *ColoredJSONEncoder) EncodeEntry(entry zapcore.Entry, fields []zapcore.Field) (*buffer.Buffer, error) {
+	buf, err := e.Encoder.EncodeEntry(entry, fields)
+	if err != nil {
+		return nil, err
+	}
+
+	var logMap map[string]interface{}
+	err = json.Unmarshal(buf.Bytes(), &logMap)
+	if err != nil {
+		return buf, nil
+	}
+
+	colorCode := "\x1b[37m" // Default to white
+	switch entry.Level {
+	case zapcore.DebugLevel:
+		colorCode = "\x1b[34m" // Blue
+	case zapcore.InfoLevel:
+		colorCode = "\x1b[32m" // Green
+	case zapcore.WarnLevel:
+		colorCode = "\x1b[33m" // Yellow
+	case zapcore.ErrorLevel:
+		colorCode = "\x1b[31m" // Red
+	case zapcore.FatalLevel:
+		colorCode = "\x1b[35m" // Magenta
+	}
+	coloredJSON := colorCode + buf.String() + "\x1b[0m"
+
+	newBuf := buffer.NewPool().Get()
+	newBuf.AppendString(coloredJSON)
+	return newBuf, nil
 }
