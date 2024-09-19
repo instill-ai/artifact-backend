@@ -107,9 +107,9 @@ func (wp *fileToEmbWorkerPool) startDispatcher() {
 				default:
 					select {
 					case wp.channel <- file:
-						fmt.Printf("Dispatcher dispatched file. fileUID: %s\n", file.UID.String())
+						logger.Info("Dispatcher dispatched file.", zap.String("fileUID", file.UID.String()))
 					default:
-						fmt.Println("channel is full, skip dispatching remaining files")
+						logger.Debug("channel is full, skip dispatching remaining files.", zap.String("fileUID", file.UID.String()))
 						break dispatchLoop
 					}
 				}
