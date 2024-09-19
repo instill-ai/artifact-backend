@@ -127,6 +127,10 @@ func (r *Repository) UpsertEmbeddings(
 	logger, _ := logger.GetZapLogger(ctx)
 	// Start a transaction
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if len(embeddings) == 0 {
+			logger.Warn("no embeddings to upsert")
+			return nil
+		}
 		// Upsert the embeddings
 		if err := tx.Clauses(clause.OnConflict{
 			Columns:   []clause.Column{{Name: EmbeddingColumn.SourceTable}, {Name: EmbeddingColumn.SourceUID}}, // Unique column that triggers the upsert

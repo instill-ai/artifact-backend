@@ -154,7 +154,14 @@ func (s *Service) SplitMarkdownPipe(ctx context.Context, caller uuid.UUID, reque
 	if err != nil {
 		return nil, err
 	}
-	return result, nil
+	// remove the empty chunk
+	var filteredResult []Chunk
+	for _, chunk := range result {
+		if chunk.Text != "" {
+			filteredResult = append(filteredResult, chunk)
+		}
+	}
+	return filteredResult, nil
 }
 
 // GetChunksFromResponse converts the pipeline response into a slice of Chunk.

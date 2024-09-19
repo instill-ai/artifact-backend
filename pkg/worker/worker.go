@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"runtime/debug"
 	"sync"
@@ -25,6 +26,8 @@ const extensionHelperPeriod = 5 * time.Second
 const workerLifetime = 45 * time.Second
 const workerPrefix = "worker-processing-file-"
 
+var ErrFileStatusNotMatch = errors.New("file status not match")
+
 type fileToEmbWorkerPool struct {
 	numberOfWorkers int
 	svc             *service.Service
@@ -39,10 +42,11 @@ func NewFileToEmbWorkerPool(ctx context.Context, svc *service.Service, nums int)
 	return &fileToEmbWorkerPool{
 		numberOfWorkers: nums,
 		svc:             svc,
-		channel:         make(chan repository.KnowledgeBaseFile, 100),
-		wg:              sync.WaitGroup{},
-		ctx:             ctx,
-		cancel:          cancel,
+		// channel is un-buffered because we dont want the out of date file to be processed
+		channel: make(chan repository.KnowledgeBaseFile),
+		wg:      sync.WaitGroup{},
+		ctx:     ctx,
+		cancel:  cancel,
 	}
 }
 
@@ -80,11 +84,11 @@ func (wp *fileToEmbWorkerPool) startDispatcher() {
 			// Periodically check for incomplete files
 			incompleteFiles := wp.svc.Repository.GetNeedProcessFiles(wp.ctx)
 			// Check if any of the incomplete files have active workers
-			fileUID := make([]string, len(incompleteFiles))
+			fileUIDs := make([]string, len(incompleteFiles))
 			for i, file := range incompleteFiles {
-				fileUID[i] = file.UID.String()
+				fileUIDs[i] = file.UID.String()
 			}
-			nonExistentKeys := wp.checkRegisteredFilesWorker(wp.ctx, fileUID)
+			nonExistentKeys := wp.checkRegisteredFilesWorker(wp.ctx, fileUIDs)
 
 			// Dispatch the files that do not have active workers
 			incompleteAndNonRegisteredFiles := make([]repository.KnowledgeBaseFile, 0)
@@ -94,15 +98,23 @@ func (wp *fileToEmbWorkerPool) startDispatcher() {
 				}
 			}
 
+		dispatchLoop:
 			for _, file := range incompleteAndNonRegisteredFiles {
 				select {
 				case <-wp.ctx.Done():
 					fmt.Println("Dispatcher received termination signal while dispatching")
 					return
-				case wp.channel <- file:
-					fmt.Printf("Dispatcher dispatched file. fileUID: %s\n", file.UID.String())
+				default:
+					select {
+					case wp.channel <- file:
+						fmt.Printf("Dispatcher dispatched file. fileUID: %s\n", file.UID.String())
+					default:
+						fmt.Println("channel is full, skip dispatching remaining files")
+						break dispatchLoop
+					}
 				}
 			}
+
 		}
 	}
 }
@@ -144,8 +156,16 @@ func (wp *fileToEmbWorkerPool) startWorker(ctx context.Context, workerID int) {
 
 			// register file process worker in redis and extend the lifetime
 			ok, stopRegisterFunc := wp.registerFileWorker(ctx, file.UID.String(), extensionHelperPeriod, workerLifetime)
-
 			if !ok {
+				continue
+			}
+			// check if the file is already processed
+			// Because the file is from the dispatcher, the file status is guaranteed to be incomplete
+			// but when the worker wakes up and tries to process the file, the file status might have been updated by other workers.
+			// So we need to check the file status again to ensure the file is still same as when the worker wakes up
+			err := wp.checkFileStatus(ctx, file)
+			if err != nil {
+				logger.Warn("File status not match. skip processing", zap.String("file uid", file.UID.String()), zap.Error(err))
 				continue
 			}
 			// start file processing tracing
@@ -153,9 +173,10 @@ func (wp *fileToEmbWorkerPool) startWorker(ctx context.Context, workerID int) {
 
 			// process
 			t0 := time.Now()
-			err := wp.processFile(ctx, file)
+			err = wp.processFile(ctx, file)
+
 			if err != nil {
-				fmt.Printf("Error processing file: %s, error: %v\n", file.UID.String(), err)
+				logger.Error("Error processing file", zap.String("file uid", file.UID.String()), zap.Error(err))
 				err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, err.Error(), "", "", "", nil, nil, nil, nil)
 				if err != nil {
 					fmt.Printf("Error marshaling extra metadata: %v\n", err)
@@ -204,7 +225,7 @@ func (wp *fileToEmbWorkerPool) registerFileWorker(ctx context.Context, fileUID s
 		return false, nil
 	}
 	if !ok {
-		fmt.Printf("File is already being processed in redis. fileUID: %s\n", fileUID)
+		fmt.Printf("Key exists in redis, file is already being processed by worker. fileUID: %s\n", fileUID)
 		return false, nil
 	}
 	ctx, lifetimeHelperCancel := context.WithCancel(ctx)
@@ -285,6 +306,13 @@ func (wp *fileToEmbWorkerPool) processFile(ctx context.Context, file repository.
 	} else {
 		status = artifactpb.FileProcessStatus(statusInt)
 	}
+
+	// check if the file is already processed
+	err := wp.checkFileStatus(ctx, file)
+	if err != nil {
+		return err
+	}
+
 	for {
 		switch status {
 		case artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_WAITING:
@@ -303,7 +331,7 @@ func (wp *fileToEmbWorkerPool) processFile(ctx context.Context, file repository.
 			status = nextStatus
 			file = *updatedFile
 			convertingTime := int64(time.Since(t0).Seconds())
-			err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", "", "", nil, &convertingTime, nil, nil)
+			err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", "", "", &convertingTime, nil, nil, nil)
 			if err != nil {
 				fmt.Printf("Error updating file extra metadata: %v\n", err)
 			}
@@ -401,6 +429,7 @@ func (wp *fileToEmbWorkerPool) processWaitingFile(ctx context.Context, file repo
 // If the file is not a PDF, it returns an error.
 func (wp *fileToEmbWorkerPool) processConvertingFile(ctx context.Context, file repository.KnowledgeBaseFile) (updatedFile *repository.KnowledgeBaseFile, nextStatus artifactpb.FileProcessStatus, err error) {
 	logger, _ := logger.GetZapLogger(ctx)
+
 	fileInMinIOPath := file.Destination
 	data, err := wp.svc.MinIO.GetFile(ctx, fileInMinIOPath)
 	if err != nil {
@@ -571,6 +600,7 @@ func (wp *fileToEmbWorkerPool) processChunkingFile(ctx context.Context, file rep
 			logger.Error("Failed to get chunks from original file.", zap.String("File uid", file.UID.String()))
 			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
 		}
+
 		//  Save the chunks into object storage(minIO) and metadata into database
 		err = wp.saveChunks(ctx, file.KnowledgeBaseUID.String(), file.UID, wp.svc.Repository.KnowledgeBaseFileTableName(), file.UID, chunks)
 		if err != nil {
@@ -720,7 +750,7 @@ func (wp *fileToEmbWorkerPool) saveChunks(ctx context.Context, kbUID string, kbF
 	logger, _ := logger.GetZapLogger(ctx)
 	textChunks := make([]*repository.TextChunk, len(chunks))
 
-	// turn kbuid to uuid no must parse
+	// turn kbUid to uuid no must parse
 	kbUIDuuid, err := uuid.FromString(kbUID)
 	if err != nil {
 		logger.Error("Failed to parse kbUID to uuid.", zap.String("KbUID", kbUID))
@@ -802,6 +832,24 @@ func (wp *fileToEmbWorkerPool) saveEmbeddings(ctx context.Context, kbUID string,
 	// info how many embeddings saved in which kb
 	logger.Info("Embeddings saved into vector database and metadata into database.",
 		zap.String("KbUID", kbUID), zap.Int("Embeddings count", len(embeddings)))
+	return nil
+}
+
+// checkFileStatus checks if the file status from argument is the same as the file in database
+func (wp *fileToEmbWorkerPool) checkFileStatus(ctx context.Context, file repository.KnowledgeBaseFile) error {
+	dbFiles, err := wp.svc.Repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{file.UID})
+	if err != nil {
+		return err
+	}
+	if len(dbFiles) == 0 {
+		return fmt.Errorf("file uid not found in database. file uid: %s", file.UID)
+	}
+	// if the file's status from argument is not the same as the file in database, skip the processing
+	// because the file in argument is not the latest file in database. Instead, it is from the queue.
+	if dbFiles[0].ProcessStatus != file.ProcessStatus {
+		err := fmt.Errorf("%w - file uid: %s, database file status: %v, file status in argument: %v", ErrFileStatusNotMatch, file.UID, dbFiles[0].ProcessStatus, file.ProcessStatus)
+		return err
+	}
 	return nil
 }
 
