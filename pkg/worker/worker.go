@@ -310,7 +310,7 @@ func (wp *fileToEmbWorkerPool) checkRegisteredFilesWorker(ctx context.Context, f
 
 // processFile handles the processing of a file through various stages using a state machine.
 func (wp *fileToEmbWorkerPool) processFile(ctx context.Context, file repository.KnowledgeBaseFile) error {
-	// logger, _ := logger.GetZapLogger(ctx)
+	logger, _ := logger.GetZapLogger(ctx)
 	var status artifactpb.FileProcessStatus
 	if statusInt, ok := artifactpb.FileProcessStatus_value[file.ProcessStatus]; !ok {
 		return fmt.Errorf("invalid process status: %v", file.ProcessStatus)
@@ -342,9 +342,9 @@ func (wp *fileToEmbWorkerPool) processFile(ctx context.Context, file repository.
 			status = nextStatus
 			file = *updatedFile
 			convertingTime := int64(time.Since(t0).Seconds())
-			err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", "", "", &convertingTime, nil, nil, nil)
+			err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", "", "", nil, &convertingTime, nil, nil)
 			if err != nil {
-				fmt.Printf("Error updating file extra metadata: %v\n", err)
+				logger.Error("Error updating file extra metadata", zap.Error(err))
 			}
 
 		case artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CHUNKING:
@@ -358,7 +358,7 @@ func (wp *fileToEmbWorkerPool) processFile(ctx context.Context, file repository.
 			chunkingTime := int64(time.Since(t0).Seconds())
 			err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", "", "", nil, nil, &chunkingTime, nil)
 			if err != nil {
-				fmt.Printf("Error updating file extra metadata: %v\n", err)
+				logger.Error("Error updating file extra metadata", zap.Error(err))
 			}
 
 		case artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_EMBEDDING:
@@ -372,7 +372,7 @@ func (wp *fileToEmbWorkerPool) processFile(ctx context.Context, file repository.
 			embeddingTime := int64(time.Since(t0).Seconds())
 			err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", "", "", nil, nil, nil, &embeddingTime)
 			if err != nil {
-				fmt.Printf("Error updating file extra metadata: %v\n", err)
+				logger.Error("Error updating file extra metadata", zap.Error(err))
 			}
 
 		case artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED:
