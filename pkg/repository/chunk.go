@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
+	"github.com/instill-ai/artifact-backend/pkg/logger"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -100,6 +102,7 @@ func (r *Repository) TextChunkTableName() string {
 // a certain source table and sourceUID, then batch inserts the new chunks
 // within a transaction.
 func (r *Repository) DeleteAndCreateChunks(ctx context.Context, sourceTable string, sourceUID uuid.UUID, chunks []*TextChunk, externalServiceCall func(chunkUIDs []string) (map[string]any, error)) ([]*TextChunk, error) {
+	logger, _ := logger.GetZapLogger(ctx)
 	// Start a transaction
 	err := r.db.Transaction(func(tx *gorm.DB) error {
 		// Delete existing chunks
@@ -108,8 +111,13 @@ func (r *Repository) DeleteAndCreateChunks(ctx context.Context, sourceTable stri
 			return err
 		}
 
+		if len(chunks) == 0 {
+			logger.Warn("no chunks to create")
+			return nil
+		}
 		// Batch insert new chunks
 		if err := tx.WithContext(ctx).Create(&chunks).Error; err != nil {
+			logger.Error("error creating chunks: ", zap.Error(err))
 			return err
 		}
 
