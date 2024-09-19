@@ -157,6 +157,9 @@ func (wp *fileToEmbWorkerPool) startWorker(ctx context.Context, workerID int) {
 			// register file process worker in redis and extend the lifetime
 			ok, stopRegisterFunc := wp.registerFileWorker(ctx, file.UID.String(), extensionHelperPeriod, workerLifetime)
 			if !ok {
+				if stopRegisterFunc != nil {
+					stopRegisterFunc()
+				}
 				continue
 			}
 			// check if the file is already processed
@@ -166,6 +169,9 @@ func (wp *fileToEmbWorkerPool) startWorker(ctx context.Context, workerID int) {
 			err := wp.checkFileStatus(ctx, file)
 			if err != nil {
 				logger.Warn("File status not match. skip processing", zap.String("file uid", file.UID.String()), zap.Error(err))
+				if stopRegisterFunc != nil {
+					stopRegisterFunc()
+				}
 				continue
 			}
 			// start file processing tracing
@@ -218,15 +224,19 @@ type stopRegisterWorkerFunc func()
 // It returns a boolean indicating success and a stopRegisterWorkerFunc that can be used to cancel the worker's lifetime extension and remove the worker key from Redis.
 // period: duration between lifetime extensions
 // workerLifetime: total duration the worker key should be kept in Redis
-func (wp *fileToEmbWorkerPool) registerFileWorker(ctx context.Context, fileUID string, period time.Duration, workerLifetime time.Duration) (bool, stopRegisterWorkerFunc) {
+func (wp *fileToEmbWorkerPool) registerFileWorker(ctx context.Context, fileUID string, period time.Duration, workerLifetime time.Duration) (ok bool, stopRegisterWorker stopRegisterWorkerFunc) {
+	logger, _ := logger.GetZapLogger(ctx)
+	stopRegisterWorker = func() {
+		logger.Warn("stopRegisterWorkerFunc is not implemented yet")
+	}
 	ok, err := wp.svc.RedisClient.SetNX(ctx, getWorkerKey(fileUID), "1", workerLifetime).Result()
 	if err != nil {
-		fmt.Printf("Error when setting worker key in redis. Error: %v\n", err)
-		return false, nil
+		logger.Error("Error when setting worker key in redis", zap.Error(err))
+		return
 	}
 	if !ok {
-		fmt.Printf("Key exists in redis, file is already being processed by worker. fileUID: %s\n", fileUID)
-		return false, nil
+		logger.Warn("Key exists in redis, file is already being processed by worker", zap.String("fileUID", fileUID))
+		return
 	}
 	ctx, lifetimeHelperCancel := context.WithCancel(ctx)
 
@@ -238,14 +248,14 @@ func (wp *fileToEmbWorkerPool) registerFileWorker(ctx context.Context, fileUID s
 			select {
 			case <-ctx.Done():
 				// Context is done, exit the worker
-				fmt.Printf("Finish %v's lifetime extend helper received termination signal\n", getWorkerKey(fileUID))
+				logger.Debug("Finish worker lifetime extend helper received termination signal", zap.String("worker", getWorkerKey(fileUID)))
 				return
 			case <-ticker.C:
 				// extend the lifetime of the worker
-				fmt.Printf("Extending %v's lifetime: %v \n", getWorkerKey(fileUID), workerLifetime)
+				logger.Debug("Extending worker lifetime", zap.String("worker", getWorkerKey(fileUID)), zap.Duration("lifetime", workerLifetime))
 				err := wp.svc.RedisClient.Expire(ctx, getWorkerKey(fileUID), workerLifetime).Err()
 				if err != nil {
-					fmt.Printf("Error when extending worker lifetime in redis. Error: %v, worker: %v\n", err, getWorkerKey(fileUID))
+					logger.Error("Error when extending worker lifetime in redis", zap.Error(err), zap.String("worker", getWorkerKey(fileUID)))
 					return
 				}
 			}
@@ -254,7 +264,7 @@ func (wp *fileToEmbWorkerPool) registerFileWorker(ctx context.Context, fileUID s
 	go lifetimeExtHelper(ctx)
 
 	// stopRegisterWorker function will cancel the lifetimeExtHelper and remove the worker key in redis
-	stopRegisterWorker := func() {
+	stopRegisterWorker = func() {
 		lifetimeHelperCancel()
 		wp.svc.RedisClient.Del(ctx, getWorkerKey(fileUID))
 	}
@@ -264,6 +274,7 @@ func (wp *fileToEmbWorkerPool) registerFileWorker(ctx context.Context, fileUID s
 
 // checkFileWorker checks if any of the provided fileUIDs have active workers
 func (wp *fileToEmbWorkerPool) checkRegisteredFilesWorker(ctx context.Context, fileUIDs []string) map[string]struct{} {
+	logger, _ := logger.GetZapLogger(ctx)
 	pipe := wp.svc.RedisClient.Pipeline()
 
 	// Create a map to hold the results
@@ -278,7 +289,7 @@ func (wp *fileToEmbWorkerPool) checkRegisteredFilesWorker(ctx context.Context, f
 	// Execute the pipeline
 	_, err := pipe.Exec(ctx)
 	if err != nil {
-		fmt.Println("Error executing pipeline:", err)
+		logger.Error("Error executing redis pipeline", zap.Error(err))
 		return nil
 	}
 
@@ -287,7 +298,7 @@ func (wp *fileToEmbWorkerPool) checkRegisteredFilesWorker(ctx context.Context, f
 	for fileUID, result := range results {
 		exists, err := result.Result()
 		if err != nil {
-			fmt.Printf("Error getting result for %s: %v\n", fileUID, err)
+			logger.Error("Error getting result for %s", zap.String("fileUID", fileUID), zap.Error(err))
 			return nil
 		}
 		if exists == 0 {
