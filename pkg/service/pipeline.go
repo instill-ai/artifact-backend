@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 
@@ -98,15 +97,15 @@ func (s *Service) ConvertToMDPipe(ctx context.Context, caller uuid.UUID, request
 // It checks if the index and key are available to avoid nil pointer issues.
 func getConvertResult(resp *pipelinePb.TriggerNamespacePipelineReleaseResponse) (string, error) {
 	if resp == nil || len(resp.Outputs) == 0 {
-		return "", errors.New("response is nil or has no outputs")
+		return "", fmt.Errorf("response is nil or has no outputs. resp: %v", resp)
 	}
 	fields := resp.Outputs[0].GetFields()
 	if fields == nil {
-		return "", errors.New("fields in the output are nil")
+		return "", fmt.Errorf("fields in the output are nil. resp: %v", resp)
 	}
 	convertResult, ok := fields["convert_result"]
 	if !ok {
-		return "", errors.New("convert_result not found in the output fields")
+		return "", fmt.Errorf("convert_result not found in the output fields. resp: %v", resp)
 	}
 	return convertResult.GetStringValue(), nil
 }
@@ -169,16 +168,16 @@ func (s *Service) SplitMarkdownPipe(ctx context.Context, caller uuid.UUID, reque
 // GetChunksFromResponse converts the pipeline response into a slice of Chunk.
 func GetChunksFromResponse(resp *pipelinePb.TriggerNamespacePipelineReleaseResponse) ([]Chunk, error) {
 	if resp == nil || len(resp.Outputs) == 0 {
-		return nil, errors.New("response is nil or has no outputs")
+		return nil, fmt.Errorf("response is nil or has no outputs. resp: %v", resp)
 	}
 	splitResult, ok := resp.Outputs[0].GetFields()["split_result"]
 
 	if !ok {
-		return nil, errors.New("split_result not found in the output fields")
+		return nil, fmt.Errorf("split_result not found in the output fields. resp: %v", resp)
 	}
 	listValue := splitResult.GetListValue()
 	if listValue == nil {
-		return nil, errors.New("split_result is not a list")
+		return nil, fmt.Errorf("split_result is not a list. resp: %v", resp)
 	}
 
 	var chunks []Chunk
@@ -351,18 +350,18 @@ func (s *Service) EmbeddingTextPipe(ctx context.Context, caller uuid.UUID, reque
 // GetVectorsFromResponse converts the pipeline response into a slice of float32.
 func GetVectorsFromResponse(resp *pipelinePb.TriggerNamespacePipelineReleaseResponse) ([][]float32, error) {
 	if resp == nil || len(resp.Outputs) == 0 {
-		return nil, errors.New("response is nil or has no outputs")
+		return nil, fmt.Errorf("response is nil or has no outputs. resp: %v", resp)
 	}
 
 	vectors := make([][]float32, 0, len(resp.Outputs))
 	for _, output := range resp.Outputs {
 		embedResult, ok := output.GetFields()["embed_result"]
 		if !ok {
-			return nil, errors.New("embed_result not found in the output fields")
+			return nil, fmt.Errorf("embed_result not found in the output fields. resp: %v", resp)
 		}
 		listValue := embedResult.GetListValue()
 		if listValue == nil {
-			return nil, errors.New("embed_result is not a list")
+			return nil, fmt.Errorf("embed_result is not a list. resp: %v", resp)
 		}
 
 		vector := make([]float32, 0, len(listValue.GetValues()))
