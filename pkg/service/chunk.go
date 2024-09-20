@@ -33,7 +33,8 @@ func (s *Service) GetChunksByFile(ctx context.Context, file *repository.Knowledg
 		artifactpb.FileType_FILE_TYPE_PPT.String(),
 		artifactpb.FileType_FILE_TYPE_PPTX.String(),
 		artifactpb.FileType_FILE_TYPE_XLSX.String(),
-		artifactpb.FileType_FILE_TYPE_XLS.String():
+		artifactpb.FileType_FILE_TYPE_XLS.String(),
+		artifactpb.FileType_FILE_TYPE_CSV.String():
 		// set the sourceTable and sourceUID
 		convertedFile, err := s.Repository.GetConvertedFileByFileUID(ctx, file.UID)
 		if err != nil {
