@@ -65,6 +65,8 @@ func (s *Service) ConvertToMDPipe(ctx context.Context, caller uuid.UUID, request
 		prefix = "data:text/plain;base64,"
 	} else if fileType == artifactPb.FileType_FILE_TYPE_XLSX {
 		prefix = "data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,"
+	} else if fileType == artifactPb.FileType_FILE_TYPE_XLS {
+		prefix = "data:application/vnd.ms-excel;base64,"
 	}
 
 	req := &pipelinePb.TriggerNamespacePipelineReleaseRequest{
