@@ -207,6 +207,7 @@ func (ph *PublicHandler) ListCatalogs(ctx context.Context, req *artifactpb.ListC
 	kbs := make([]*artifactpb.Catalog, len(dbData))
 	for i, kb := range dbData {
 		kbs[i] = &artifactpb.Catalog{
+			CatalogUid:          kb.UID.String(),
 			Name:                kb.Name,
 			CatalogId:           kb.KbID,
 			Description:         kb.Description,
