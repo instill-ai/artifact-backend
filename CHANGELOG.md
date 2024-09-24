@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.15.0-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.14.0-alpha...v0.15.0-alpha) (2024-09-24)
+
+
+### Features
+
+* **artifact:** add response from pipeline when calling fails ([#100](https://github.com/instill-ai/artifact-backend/issues/100)) ([0eef0cc](https://github.com/instill-ai/artifact-backend/commit/0eef0ccf76e1730b3f6891c8710ba46e067a296b))
+* **artifact:** support csv file type upload and some improvements ([#101](https://github.com/instill-ai/artifact-backend/issues/101)) ([ac2eb86](https://github.com/instill-ai/artifact-backend/commit/ac2eb86a420796fffca26de4222ff8da642b40a5))
+* **artifact:** support xls ([#99](https://github.com/instill-ai/artifact-backend/issues/99)) ([ae30e81](https://github.com/instill-ai/artifact-backend/commit/ae30e816132e5d7589b30411b67529457f0610bd))
+* **catalog:** add catalog uid in list catalog api ([289fcfa](https://github.com/instill-ai/artifact-backend/commit/289fcfa6bc29224834f4ef55213b567f0c1c42a7))
+
+
+### Bug Fixes
+
+* **artifact:** fix retry file process ([#97](https://github.com/instill-ai/artifact-backend/issues/97)) ([97ff707](https://github.com/instill-ai/artifact-backend/commit/97ff7076a33f4b7f38042a996be2e99ad4f32a00))
+
+
+### Miscellaneous Chores
+
+* release 1.15.0 ([4ac1378](https://github.com/instill-ai/artifact-backend/commit/4ac13789dc390425df8d24e76ecc1226a14ca78f))
+* release 1.15.0-alpha ([4770a4a](https://github.com/instill-ai/artifact-backend/commit/4770a4a8d7bc9b5a94c613aabb57cd87cd77321c))
+* release v0.15.0-alpha ([636702d](https://github.com/instill-ai/artifact-backend/commit/636702d63ca030784dacb6358bce7ec878f7996f))
+
 ## [0.14.0-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.13.2-alpha...v0.14.0-alpha) (2024-09-13)
 
 
