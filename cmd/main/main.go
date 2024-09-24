@@ -15,8 +15,6 @@ import (
 	"time"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
-	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
-	openfga "github.com/openfga/api/proto/openfga/v1"
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/contrib/propagators/b3"
 	"go.opentelemetry.io/otel"
@@ -34,6 +32,8 @@ import (
 	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpcZap "github.com/grpc-ecosystem/go-grpc-middleware/logging/zap"
 	grpcRecovery "github.com/grpc-ecosystem/go-grpc-middleware/recovery"
+	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
+	openfga "github.com/openfga/api/proto/openfga/v1"
 
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/acl"
@@ -42,8 +42,8 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/middleware"
 	"github.com/instill-ai/artifact-backend/pkg/milvus"
+	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
-	servicePkg "github.com/instill-ai/artifact-backend/pkg/service"
 	"github.com/instill-ai/artifact-backend/pkg/usage"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
 	"github.com/instill-ai/artifact-backend/pkg/worker"
@@ -52,7 +52,8 @@ import (
 	httpClient "github.com/instill-ai/artifact-backend/pkg/client/http"
 	database "github.com/instill-ai/artifact-backend/pkg/db"
 	customOtel "github.com/instill-ai/artifact-backend/pkg/logger/otel"
-	minio "github.com/instill-ai/artifact-backend/pkg/minio"
+	servicePkg "github.com/instill-ai/artifact-backend/pkg/service"
+
 	artifactPB "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	mgmtPB "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
 	pipelinePB "github.com/instill-ai/protogen-go/vdp/pipeline/v1beta"

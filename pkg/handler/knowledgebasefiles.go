@@ -4,18 +4,22 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/gofrs/uuid"
+	"go.uber.org/zap"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/timestamppb"
+	"gorm.io/gorm"
+
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/customerror"
 	"github.com/instill-ai/artifact-backend/pkg/logger" // Add this import
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/resource"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
+
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
-	"go.uber.org/zap"
-	"google.golang.org/protobuf/types/known/timestamppb"
-	"gorm.io/gorm"
 )
 
 func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.UploadCatalogFileRequest) (*artifactpb.UploadCatalogFileResponse, error) {
@@ -40,6 +44,8 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 	if strings.Contains(req.File.Name, "/") {
 		return nil, fmt.Errorf("file name cannot contain '/'. err: %w", customerror.ErrInvalidArgument)
 	}
+	startTime := time.Now()
+
 	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
 	if err != nil {
 		log.Error(
@@ -64,6 +70,19 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 		log.Error("no permission to upload file in catalog")
 		return nil, fmt.Errorf("no permission to upload file. %w", customerror.ErrNoPermission)
 	}
+
+	// requestBackup := req
+	// requestBackup.File.Content = ""
+	// payload, err := protojson.Marshal(requestBackup)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	catalogRun := ph.logCatalogRunStart(ctx, kb.UID, repository.RunAction(artifactpb.CatalogRunAction_CATALOG_RUN_ACTION_CREATE_FILE), &startTime, nil)
+	defer func() {
+		if err != nil {
+			ph.logCatalogRunError(ctx, catalogRun.UID, err, startTime)
+		}
+	}()
 
 	// get all kbs in the namespace
 	kbs, err := ph.service.Repository.ListKnowledgeBases(ctx, ns.NsUID.String())
@@ -119,6 +138,10 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 			ProcessStatus:    artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_NOTSTARTED)],
 			Size:             fileSize,
 		}
+		catalogRun.FileUIDs = append(catalogRun.FileUIDs, kbFile.UID.String())
+		if repoErr := ph.service.Repository.UpdateCatalogRun(ctx, catalogRun.UID, &repository.CatalogRun{FileUIDs: catalogRun.FileUIDs}); repoErr != nil {
+			log.Error("UpdateCatalogRun failed", zap.Error(repoErr), zap.String("catalogRunUID", catalogRun.UID.String()))
+		}
 
 		// create catalog file in database
 		res, err = ph.service.Repository.CreateKnowledgeBaseFile(ctx, kbFile, func(FileUID string) error {
@@ -144,6 +167,8 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 			return nil, err
 		}
 	}
+
+	ph.logCatalogRunCompleted(ctx, catalogRun.UID, startTime)
 
 	return &artifactpb.UploadCatalogFileResponse{
 		File: &artifactpb.File{
@@ -344,6 +369,17 @@ func (ph *PublicHandler) DeleteCatalogFile(
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse file uid. err: %w", customerror.ErrInvalidArgument)
 	}
+	startTime := time.Now()
+
+	payload, err := protojson.Marshal(req)
+	if err != nil {
+		return nil, err
+	}
+	catalogRun := ph.logCatalogRunStart(ctx, kbfs[0].KnowledgeBaseUID, repository.RunAction(artifactpb.CatalogRunAction_CATALOG_RUN_ACTION_DELETE_FILE), &startTime, payload)
+	catalogRun.FileUIDs = []string{fUID.String()}
+	if repoErr := ph.service.Repository.UpdateCatalogRun(ctx, catalogRun.UID, &repository.CatalogRun{FileUIDs: catalogRun.FileUIDs}); repoErr != nil {
+		log.Error("UpdateCatalogRun failed", zap.Error(repoErr), zap.String("catalogRunUID", catalogRun.UID.String()))
+	}
 
 	// get the file by uid
 	files, err := ph.service.Repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{fUID})
@@ -365,6 +401,14 @@ func (ph *PublicHandler) DeleteCatalogFile(
 				log.Info("DeleteCatalogFile: received stop signal")
 				return
 			}
+			defer func() {
+				if err != nil {
+					ph.logCatalogRunError(ctx, catalogRun.UID, err, startTime)
+				} else {
+					ph.logCatalogRunCompleted(ctx, catalogRun.UID, startTime)
+				}
+			}()
+
 			log.Info("DeleteCatalogFile: start deleting file from minio, database and milvus")
 			allPass := true
 			// Delete the file from MinIO
@@ -442,6 +486,7 @@ func (ph *PublicHandler) DeleteCatalogFile(
 	if err != nil {
 		log.Error("failed to delete knowledge base file and decrease usage", zap.Error(err))
 		startSignal <- false
+		ph.logCatalogRunError(ctx, catalogRun.UID, err, startTime)
 		return nil, err
 	}
 	// start the background deletion
@@ -489,6 +534,21 @@ func (ph *PublicHandler) ProcessCatalogFiles(ctx context.Context, req *artifactp
 		log.Error("failed to check requester permission", zap.Error(err))
 		return nil, fmt.Errorf("failed to check requester permission. err: %w", err)
 	}
+	startTime := time.Now()
+
+	payload, err := protojson.Marshal(req)
+	if err != nil {
+		return nil, err
+	}
+	catalogRun := ph.logCatalogRunStart(ctx, kbfs[0].KnowledgeBaseUID, repository.RunAction(artifactpb.CatalogRunAction_CATALOG_RUN_ACTION_PROCESS_FILE), &startTime, payload)
+	if repoErr := ph.service.Repository.UpdateCatalogRun(ctx, catalogRun.UID, &repository.CatalogRun{FileUIDs: req.FileUids}); repoErr != nil {
+		log.Error("UpdateCatalogRun failed", zap.Error(repoErr), zap.String("catalogRunUID", catalogRun.UID.String()))
+	}
+	defer func() {
+		if err != nil {
+			ph.logCatalogRunError(ctx, catalogRun.UID, err, startTime)
+		}
+	}()
 
 	requesterUID := resource.GetRequestSingleHeader(ctx, constant.HeaderRequesterUIDKey)
 	requesterUUID := uuid.FromStringOrNil(requesterUID)
@@ -513,6 +573,8 @@ func (ph *PublicHandler) ProcessCatalogFiles(ctx context.Context, req *artifactp
 			ProcessStatus: artifactpb.FileProcessStatus(artifactpb.FileProcessStatus_value[file.ProcessStatus]),
 		})
 	}
+
+	ph.logCatalogRunCompleted(ctx, catalogRun.UID, startTime)
 	return &artifactpb.ProcessCatalogFilesResponse{
 		Files: resFiles,
 	}, nil
