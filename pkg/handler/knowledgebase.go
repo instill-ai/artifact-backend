@@ -5,17 +5,20 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-
-	"go.uber.org/zap"
-	"google.golang.org/grpc/metadata"
+	"time"
 
 	"github.com/gofrs/uuid"
+	"go.uber.org/zap"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/encoding/protojson"
+
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/customerror"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/service"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
+
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
@@ -36,6 +39,7 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 		err := fmt.Errorf("failed to get user id from header: %v. err: %w", err, customerror.ErrUnauthenticated)
 		return nil, err
 	}
+	startTime := time.Now()
 
 	// ACL  check user's permission to create catalog in the user or org context(namespace)
 	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
@@ -132,6 +136,13 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 	if err != nil {
 		return nil, err
 	}
+
+	payload, err := protojson.Marshal(req)
+	if err != nil {
+		return nil, err
+	}
+	catalogRun := ph.logCatalogRunStart(ctx, dbData.UID, repository.RunAction(artifactpb.CatalogRunAction_CATALOG_RUN_ACTION_CREATE), &startTime, payload)
+	ph.logCatalogRunCompleted(ctx, catalogRun.UID, startTime)
 
 	return &artifactpb.CreateCatalogResponse{
 		Catalog: &artifactpb.Catalog{
@@ -243,6 +254,8 @@ func (ph *PublicHandler) UpdateCatalog(ctx context.Context, req *artifactpb.Upda
 		return nil, fmt.Errorf("kb_id is empty. err: %w", ErrCheckRequiredFields)
 	}
 
+	startTime := time.Now()
+
 	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
 	if err != nil {
 		log.Error(
@@ -267,6 +280,17 @@ func (ph *PublicHandler) UpdateCatalog(ctx context.Context, req *artifactpb.Upda
 		log.Error("no permission to update catalog")
 		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, customerror.ErrNoPermission)
 	}
+
+	payload, err := protojson.Marshal(req)
+	if err != nil {
+		return nil, err
+	}
+	catalogRun := ph.logCatalogRunStart(ctx, kb.UID, repository.RunAction(artifactpb.CatalogRunAction_CATALOG_RUN_ACTION_UPDATE), &startTime, payload)
+	defer func() {
+		if err != nil {
+			ph.logCatalogRunError(ctx, catalogRun.UID, err, startTime)
+		}
+	}()
 
 	// update catalog
 	kb, err = ph.service.Repository.UpdateKnowledgeBase(
@@ -294,6 +318,8 @@ func (ph *PublicHandler) UpdateCatalog(ctx context.Context, req *artifactpb.Upda
 		log.Error("failed to get token counts", zap.Error(err))
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
+
+	ph.logCatalogRunCompleted(ctx, catalogRun.UID, startTime)
 	// populate response
 	return &artifactpb.UpdateCatalogResponse{
 		Catalog: &artifactpb.Catalog{
@@ -324,6 +350,8 @@ func (ph *PublicHandler) DeleteCatalog(ctx context.Context, req *artifactpb.Dele
 		return nil, err
 	}
 
+	startTime := time.Now()
+
 	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
 	if err != nil {
 		log.Error(
@@ -349,6 +377,12 @@ func (ph *PublicHandler) DeleteCatalog(ctx context.Context, req *artifactpb.Dele
 		return nil, fmt.Errorf(ErrorDeleteKnowledgeBaseMsg, customerror.ErrNoPermission)
 	}
 
+	payload, err := protojson.Marshal(req)
+	if err != nil {
+		return nil, err
+	}
+	catalogRun := ph.logCatalogRunStart(ctx, kb.UID, repository.RunAction(artifactpb.CatalogRunAction_CATALOG_RUN_ACTION_DELETE), &startTime, payload)
+
 	startSignal := make(chan bool)
 	// TODO: in the future, we should delete the catalog using clean up worker
 	go utils.GoRecover(func() {
@@ -362,6 +396,15 @@ func (ph *PublicHandler) DeleteCatalog(ctx context.Context, req *artifactpb.Dele
 		}
 		log.Info("DeleteCatalog starts in background", zap.String("catalog_id", kb.UID.String()))
 		allPass := true
+
+		defer func() {
+			if err != nil {
+				ph.logCatalogRunError(ctx, catalogRun.UID, err, startTime)
+			} else {
+				ph.logCatalogRunCompleted(ctx, catalogRun.UID, startTime)
+
+			}
+		}()
 		//  delete files in minIO
 		err = <-ph.service.MinIO.DeleteKnowledgeBase(ctx, kb.UID.String())
 		if err != nil {
@@ -417,7 +460,8 @@ func (ph *PublicHandler) DeleteCatalog(ctx context.Context, req *artifactpb.Dele
 	deletedKb, err := ph.service.Repository.DeleteKnowledgeBase(ctx, ns.NsUID.String(), req.CatalogId)
 	if err != nil {
 		log.Error("failed to delete catalog", zap.Error(err))
-		startSignal <- false
+		startSignal <- false // todo: maybe only start the go routine when err == nil
+		ph.logCatalogRunError(ctx, catalogRun.UID, err, startTime)
 		return nil, err
 	}
 	// start the background deletion

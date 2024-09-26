@@ -121,3 +121,4 @@ tmp
 .DS_Store
 cmd/main/__debug_bin*
 /test_files/
+.idea
