@@ -14,9 +14,22 @@ Please refer to the [Instill Artifact API Reference](https://openapi.instill.tec
 
 ## Contributing
 
-Please refer to the [Contributing Guidelines](./.github/CONTRIBUTING.md) for more details.
+We welcome contributions from the community! Whether you're a developer,
+designer, writer, or user, there are multiple ways to contribute:
 
-## Community support
+### Issue Guidelines
+
+We foster a friendly and inclusive environment for issue reporting. Before
+creating an issue, check if it already exists. Use clear language and provide
+reproducible steps for bugs. Accurately tag the issue (bug, improvement,
+question, etc.).
+
+### Code Contributions
+
+Please refer to the [Contributing Guidelines](./.github/CONTRIBUTING.md) for
+more details. Your code-driven innovations are more than welcome!
+
+## Community
 
 Please refer to the [community](https://github.com/instill-ai/community) repository.
 
