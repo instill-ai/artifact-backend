@@ -2,7 +2,15 @@
 
 [![Integration Test](https://github.com/instill-ai/artifact-backend/actions/workflows/integration-test.yml/badge.svg)](https://github.com/instill-ai/artifact-backend/actions/workflows/integration-test.yml)
 
-`artifact-backend` manages all stateful resources for [Instill Core](https://github.com/instill-ai/instill-core).
+💾 `Instill Artifact` orchestrates unstructured data to transform documents (e.g., HTML, PDF, CSV, PPTX, DOC), images (e.g., JPG, PNG, TIFF), audio (e.g., WAV, MP3 ) and video (e.g., MP4, MOV) into Instill Catalog - a unified AI-ready format. Instill Catalog is more than just a Knowledge Base; it is an Augmented Data Catalog for unstructured data and AI that ensures your data is clean, curated, and prepared for all of your future AI and Retrieval-Augmented Generation (RAG) needs.
+
+## Documentation
+
+Please refer to the [Instill Artifact Documentation](https://www.instill.tech/docs/artifact/introduction) for more details.
+
+## API Reference
+
+Please refer to the [Instill Artifact API Reference](https://openapi.instill.tech/reference/artifactpublicservice_listcatalogs) for more details.
 
 ## Contributing
 
