@@ -14,6 +14,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/service"
 	artifactPb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	"go.uber.org/zap"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func (ph *PublicHandler) SimilarityChunksSearch(
@@ -135,6 +136,15 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 			SimilarityScore: float32(simChunksScores[i].Score),
 			TextContent:     string(chunkContents[i].Content),
 			SourceFile:      fileUIDMapName[chunk.KbFileUID],
+			ChunkMetadata: &artifactPb.Chunk{
+				ChunkUid:        chunk.UID.String(),
+				Retrievable:     chunk.Retrievable,
+				StartPos:        uint32(chunk.StartPos),
+				EndPos:          uint32(chunk.EndPos),
+				Tokens:          uint32(chunk.Tokens),
+				CreateTime:      timestamppb.New(*chunk.CreateTime),
+				OriginalFileUid: chunk.KbFileUID.String(),
+			},
 		})
 	}
 	return &artifactPb.SimilarityChunksSearchResponse{SimilarChunks: simChunks}, nil
