@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.16.0-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.15.0-alpha...v0.16.0-alpha) (2024-10-03)
+
+
+### Features
+
+* **catalog:** add chunk metadata in api ([#104](https://github.com/instill-ai/artifact-backend/issues/104)) ([ebef89b](https://github.com/instill-ai/artifact-backend/commit/ebef89b78ada8867bab7e5376d9ea933b7980071))
+
+
+### Bug Fixes
+
+* **artifact:** increase grpc message size ([#106](https://github.com/instill-ai/artifact-backend/issues/106)) ([bceee68](https://github.com/instill-ai/artifact-backend/commit/bceee68c1f7cb1347376132255b358e4bd7d7383))
+
 ## [0.15.0-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.14.0-alpha...v0.15.0-alpha) (2024-09-24)
 
 
