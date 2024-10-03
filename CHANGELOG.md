@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.1-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.16.0-alpha...v0.16.1-alpha) (2024-10-03)
+
+
+### Bug Fixes
+
+* increase max payload size ([#107](https://github.com/instill-ai/artifact-backend/issues/107)) ([61b2187](https://github.com/instill-ai/artifact-backend/commit/61b21876518681c71a7f903d5b9361db03df83cf))
+
 ## [0.16.0-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.15.0-alpha...v0.16.0-alpha) (2024-10-03)
 
 
