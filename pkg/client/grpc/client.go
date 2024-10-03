@@ -1,12 +1,11 @@
 package grpcclient
 
 import (
+	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 )
-
-const maxPayloadSize = 1024 * 1024 * 32
 
 func NewGRPCConn(server, cert, key string) (*grpc.ClientConn, error) {
 	var creds credentials.TransportCredentials
@@ -23,8 +22,8 @@ func NewGRPCConn(server, cert, key string) (*grpc.ClientConn, error) {
 	opts := []grpc.DialOption{
 		grpc.WithTransportCredentials(creds),
 		grpc.WithDefaultCallOptions(
-			grpc.MaxCallRecvMsgSize(maxPayloadSize),
-			grpc.MaxCallSendMsgSize(maxPayloadSize),
+			grpc.MaxCallRecvMsgSize(constant.MaxPayloadSize),
+			grpc.MaxCallSendMsgSize(constant.MaxPayloadSize),
 		),
 	}
 
