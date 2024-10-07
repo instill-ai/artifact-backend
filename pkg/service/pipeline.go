@@ -359,11 +359,11 @@ func GetVectorsFromResponse(resp *pipelinePb.TriggerNamespacePipelineReleaseResp
 	for _, output := range resp.Outputs {
 		embedResult, ok := output.GetFields()["embed_result"]
 		if !ok {
-			return nil, fmt.Errorf("embed_result not found in the output fields. resp: %v", resp)
+			return nil, fmt.Errorf("embed_result not found in the output fields. output: %v", output)
 		}
 		listValue := embedResult.GetListValue()
 		if listValue == nil {
-			return nil, fmt.Errorf("embed_result is not a list. resp: %v", resp)
+			return nil, fmt.Errorf("embed_result is not a list. output: %v", output)
 		}
 
 		vector := make([]float32, 0, len(listValue.GetValues()))

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/instill-ai/artifact-backend/config"
 	log "github.com/instill-ai/artifact-backend/pkg/logger"
@@ -92,9 +93,16 @@ func (m *Minio) UploadBase64File(ctx context.Context, filePathName string, base6
 	// Upload the content to MinIO
 	size := int64(len(decodedContent))
 	// Create the file path with folder structure
-	_, err = m.client.PutObjectWithContext(ctx, m.bucket, filePathName, contentReader, size, minio.PutObjectOptions{ContentType: fileMimeType})
+	for i := 0; i < 3; i++ {
+		_, err = m.client.PutObjectWithContext(ctx, m.bucket, filePathName, contentReader, size, minio.PutObjectOptions{ContentType: fileMimeType})
+		if err == nil {
+			break
+		}
+		log.Error("Failed to upload file to MinIO, retrying...", zap.String("attempt", fmt.Sprintf("%d", i+1)), zap.Error(err))
+		time.Sleep(1 * time.Second)
+	}
 	if err != nil {
-		log.Error("Failed to upload file to MinIO", zap.Error(err))
+		log.Error("Failed to upload file to MinIO after retries", zap.Error(err))
 		return err
 	}
 	return nil
@@ -107,7 +115,14 @@ func (m *Minio) DeleteFile(ctx context.Context, filePathName string) (err error)
 		return err
 	}
 	// Delete the file from MinIO
-	err = m.client.RemoveObject(m.bucket, filePathName)
+	for attempt := 1; attempt <= 3; attempt++ {
+		err = m.client.RemoveObject(m.bucket, filePathName)
+		if err == nil {
+			break
+		}
+		log.Error("Failed to delete file from MinIO, retrying...", zap.String("filePathName", filePathName), zap.Int("attempt", attempt), zap.Error(err))
+		time.Sleep(time.Duration(attempt) * time.Second)
+	}
 	if err != nil {
 		log.Error("Failed to delete file from MinIO", zap.Error(err))
 		return err
@@ -132,7 +147,15 @@ func (m *Minio) DeleteFiles(ctx context.Context, filePathNames []string) chan er
 			func() {
 				func(filePathName string, errCh chan error) {
 					defer wg.Done()
-					err := m.client.RemoveObject(m.bucket, filePathName)
+					var err error
+					for attempt := 1; attempt <= 3; attempt++ {
+						err = m.client.RemoveObject(m.bucket, filePathName)
+						if err == nil {
+							break
+						}
+						log.Error("Failed to delete file from MinIO, retrying...", zap.String("filePathName", filePathName), zap.Int("attempt", attempt), zap.Error(err))
+						time.Sleep(time.Duration(attempt) * time.Second)
+					}
 					if err != nil {
 						log.Error("Failed to delete file from MinIO", zap.Error(err))
 						errCh <- err
@@ -151,10 +174,18 @@ func (m *Minio) GetFile(ctx context.Context, filePathName string) ([]byte, error
 		return nil, err
 	}
 
-	// Get the object using the client
-	object, err := m.client.GetObject(m.bucket, filePathName, minio.GetObjectOptions{})
+	// Get the object using the client with three attempts and proper time delay
+	var object *minio.Object
+	for attempt := 1; attempt <= 3; attempt++ {
+		object, err = m.client.GetObject(m.bucket, filePathName, minio.GetObjectOptions{})
+		if err == nil {
+			break
+		}
+		log.Error("Failed to get file from MinIO, retrying...", zap.String("filePathName", filePathName), zap.Int("attempt", attempt), zap.Error(err))
+		time.Sleep(time.Duration(attempt) * time.Second)
+	}
 	if err != nil {
-		log.Error("Failed to get file from MinIO", zap.Error(err))
+		log.Error("Failed to get file from MinIO after 3 attempts", zap.String("filePathName", filePathName), zap.Error(err))
 		return nil, err
 	}
 	defer object.Close()
@@ -184,21 +215,27 @@ func (m *Minio) GetFilesByPaths(ctx context.Context, filePaths []string) ([]File
 	}
 
 	var wg sync.WaitGroup
-	files := make([]FileContent, len(filePaths))
-	errors := make([]error, len(filePaths))
-	var mu sync.Mutex
+	fileCh := make(chan FileContent, len(filePaths))
+	errorCh := make(chan error, len(filePaths))
 
-	for i, path := range filePaths {
+	for _, path := range filePaths {
 		wg.Add(1)
 		go utils.GoRecover(func() {
-			func(index int, filePath string) {
+			func(filePath string) {
 				defer wg.Done()
-				obj, err := m.client.GetObject(m.bucket, filePath, minio.GetObjectOptions{})
+				var obj *minio.Object
+				var err error
+				for attempt := 1; attempt <= 3; attempt++ {
+					obj, err = m.client.GetObject(m.bucket, filePath, minio.GetObjectOptions{})
+					if err == nil {
+						break
+					}
+					log.Error("Failed to get object from MinIO, retrying...", zap.String("path", filePath), zap.Int("attempt", attempt), zap.Error(err))
+					time.Sleep(time.Duration(attempt) * time.Second)
+				}
 				if err != nil {
 					log.Error("Failed to get object from MinIO", zap.String("path", filePath), zap.Error(err))
-					mu.Lock()
-					errors[index] = err
-					mu.Unlock()
+					errorCh <- err
 					return
 				}
 				defer obj.Close()
@@ -207,22 +244,28 @@ func (m *Minio) GetFilesByPaths(ctx context.Context, filePaths []string) ([]File
 				_, err = io.Copy(&buffer, obj)
 				if err != nil {
 					log.Error("Failed to read object content", zap.String("path", filePath), zap.Error(err))
-					errors[index] = err
+					errorCh <- err
 					return
 				}
-
-				files[index] = FileContent{
+				fileCh <- FileContent{
 					Name:    filepath.Base(filePath),
 					Content: buffer.Bytes(),
 				}
-			}(i, path)
+			}(path)
 		}, fmt.Sprintf("GetFilesByPaths %s", path))
 	}
 
 	wg.Wait()
+	close(fileCh)
+	close(errorCh)
+
+	var files []FileContent
+	for file := range fileCh {
+		files = append(files, file)
+	}
 
 	// Check if any errors occurred
-	for _, err := range errors {
+	for err := range errorCh {
 		if err != nil {
 			return nil, err
 		}
@@ -257,7 +300,15 @@ func (m *Minio) DeleteFilesWithPrefix(ctx context.Context, prefix string) chan e
 		go utils.GoRecover(func() {
 			func(objectName string) {
 				defer wg.Done()
-				err := m.client.RemoveObject(m.bucket, objectName)
+				var err error
+				for attempt := 1; attempt <= 3; attempt++ {
+					err = m.client.RemoveObject(m.bucket, objectName)
+					if err == nil {
+						break
+					}
+					log.Error("Failed to delete object from MinIO, retrying...", zap.String("object", objectName), zap.Int("attempt", attempt), zap.Error(err))
+					time.Sleep(time.Duration(attempt) * time.Second)
+				}
 				if err != nil {
 					log.Error("Failed to delete object from MinIO", zap.String("object", objectName), zap.Error(err))
 					errCh <- err

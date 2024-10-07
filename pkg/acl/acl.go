@@ -369,7 +369,7 @@ func (c *ACLClient) ListPermissions(ctx context.Context, objectType string, role
 		Relation:             role,
 		Type:                 objectType,
 	})
-	//  TODO: handle error when no model is created
+	//  TODO: handle error when no auth model is created
 	if err != nil {
 		if statusErr, ok := status.FromError(err); ok {
 			if statusErr.Code() == codes.Code(openfga.ErrorCode_type_not_found) {

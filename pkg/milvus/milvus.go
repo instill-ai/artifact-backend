@@ -144,14 +144,17 @@ func (m *MilvusClient) CreateKnowledgeBaseCollection(ctx context.Context, kbUID 
 
 // InsertVectorsToKnowledgeBaseCollection
 func (m *MilvusClient) InsertVectorsToKnowledgeBaseCollection(ctx context.Context, kbUID string, embeddings []Embedding) error {
+	logger, _ := logger.GetZapLogger(ctx)
 	collectionName := m.GetKnowledgeBaseCollectionName(kbUID)
 
 	// Check if the collection exists
 	has, err := m.c.HasCollection(ctx, collectionName)
 	if err != nil {
+		logger.Error("Failed to check collection existence", zap.Error(err))
 		return fmt.Errorf("failed to check collection existence: %w", err)
 	}
 	if !has {
+		logger.Error("Collection does not exist", zap.String("collection", collectionName))
 		return fmt.Errorf("collection %s does not exist", collectionName)
 	}
 
@@ -180,18 +183,36 @@ func (m *MilvusClient) InsertVectorsToKnowledgeBaseCollection(ctx context.Contex
 		entity.NewColumnFloatVector(KbCollectionFiledEmbedding, VectorDim, vectors),
 	}
 
-	// Insert the data
-	_, err = m.c.Upsert(ctx, collectionName, "", columns...)
+	// Insert the data with retry
+	maxRetries := 3
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		_, err = m.c.Upsert(ctx, collectionName, "", columns...)
+		if err == nil {
+			break
+		}
+		logger.Warn("Failed to insert vectors, retrying", zap.Int("attempt", attempt), zap.Error(err))
+		time.Sleep(time.Second * time.Duration(attempt))
+	}
 	if err != nil {
+		logger.Error("Failed to insert vectors after retries", zap.Error(err))
 		return fmt.Errorf("failed to insert vectors: %w", err)
 	}
 
-	// Optionally, you can flush the collection to ensure the data is persisted
-	err = m.c.Flush(ctx, collectionName, false)
+	// Flush the collection with retry
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		err = m.c.Flush(ctx, collectionName, false)
+		if err == nil {
+			break
+		}
+		logger.Warn("Failed to flush collection, retrying", zap.Int("attempt", attempt), zap.Error(err))
+		time.Sleep(time.Second * time.Duration(attempt))
+	}
 	if err != nil {
+		logger.Error("Failed to flush collection after retries", zap.Error(err))
 		return fmt.Errorf("failed to flush collection after insertion: %w", err)
 	}
 
+	logger.Info("Successfully inserted and flushed vectors", zap.String("collection", collectionName))
 	return nil
 }
 

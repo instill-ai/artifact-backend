@@ -90,7 +90,7 @@ func (u *usage) RetrieveArtifactUsageData() interface{} {
 
 		// Roll all artifact resources on a user
 		// for _, user := range userResp.GetUsers() {
-		//TODO: implement the logic to retrieve the artifact usage data
+		//TODO: implement the logic to retrieve the app usage data
 		// }
 
 		if userResp.NextPageToken == "" {
@@ -115,7 +115,7 @@ func (u *usage) RetrieveArtifactUsageData() interface{} {
 
 		// Roll all artifact resources on an org
 		// for _, org := range orgResp.GetOrganizations() {
-		//TODO: implement the logic to retrieve the artifact usage data
+		//TODO: implement the logic to retrieve the app usage data
 		// }
 
 		if orgResp.NextPageToken == "" {
