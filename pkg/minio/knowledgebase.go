@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
+	"go.uber.org/zap"
 )
 
 // KnowledgeBaseI is the interface for knowledge base related operations.
@@ -56,8 +58,13 @@ type ChunkContentType []byte
 
 // SaveTextChunks saves batch of chunks(text files) to MinIO.
 func (m *Minio) SaveTextChunks(ctx context.Context, kbUID string, chunks map[ChunkUIDType]ChunkContentType) error {
+	logger, _ := logger.GetZapLogger(ctx)
 	var wg sync.WaitGroup
-	errorUIDChan := make(chan string, len(chunks))
+	type ChunkError struct {
+		ChunkUID     string
+		ErrorMessage string
+	}
+	errorUIDChan := make(chan ChunkError, len(chunks))
 	for chunkUID, chunkContent := range chunks {
 		wg.Add(1)
 		go utils.GoRecover(func() {
@@ -67,7 +74,8 @@ func (m *Minio) SaveTextChunks(ctx context.Context, kbUID string, chunks map[Chu
 
 				err := m.UploadBase64File(ctx, filePathName, base64.StdEncoding.EncodeToString(chunkContent), "text/plain")
 				if err != nil {
-					errorUIDChan <- string(chunkUID)
+					logger.Error("Failed to upload chunk after retries", zap.String("chunkUID", string(chunkUID)), zap.Error(err))
+					errorUIDChan <- ChunkError{ChunkUID: string(chunkUID), ErrorMessage: err.Error()}
 					return
 				}
 			}(chunkUID, chunkContent)
@@ -75,11 +83,12 @@ func (m *Minio) SaveTextChunks(ctx context.Context, kbUID string, chunks map[Chu
 	}
 	wg.Wait()
 	close(errorUIDChan)
-	var errStr []string
+	var errStr []ChunkError
 	for err := range errorUIDChan {
 		errStr = append(errStr, err)
 	}
 	if len(errStr) > 0 {
+		logger.Error("Failed to upload chunks", zap.Any("ChunkError", errStr))
 		return fmt.Errorf("failed to upload chunks: %v", errStr)
 	}
 	return nil

@@ -6,16 +6,18 @@ import (
 	"strings"
 
 	"github.com/gofrs/uuid"
-	"github.com/instill-ai/artifact-backend/pkg/constant"
-	"github.com/instill-ai/artifact-backend/pkg/customerror"
-	"github.com/instill-ai/artifact-backend/pkg/logger" // Add this import
-	"github.com/instill-ai/artifact-backend/pkg/repository"
-	"github.com/instill-ai/artifact-backend/pkg/resource"
-	"github.com/instill-ai/artifact-backend/pkg/utils"
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"gorm.io/gorm"
+
+	"github.com/instill-ai/artifact-backend/pkg/constant"
+	"github.com/instill-ai/artifact-backend/pkg/customerror"
+	"github.com/instill-ai/artifact-backend/pkg/logger"
+	"github.com/instill-ai/artifact-backend/pkg/repository"
+	"github.com/instill-ai/artifact-backend/pkg/resource"
+	"github.com/instill-ai/artifact-backend/pkg/utils"
+
+	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
 func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.UploadCatalogFileRequest) (*artifactpb.UploadCatalogFileResponse, error) {
@@ -29,7 +31,11 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 	if err != nil {
 		return nil, err
 	}
-
+	// check file name length based on character count
+	if len(req.File.Name) > 255 {
+		return nil, fmt.Errorf("file name is too long. max length is 255. name: %s err: %w",
+			req.File.Name, customerror.ErrInvalidArgument)
+	}
 	// determine the file type by its extension
 	req.File.Type = DetermineFileType(req.File.Name)
 	if req.File.Type == artifactpb.FileType_FILE_TYPE_UNSPECIFIED {

@@ -45,7 +45,6 @@ func (s *Service) GetNamespaceByNsID(ctx context.Context, nsID string) (*resourc
 	return &ns, nil
 }
 
-// TODO: GetNamespaceTierByNsID: in the future, this logic should be removed in CE. Because CE does not have subscription
 // GetNamespaceTierByNsID returns the tier of the namespace given the namespace ID
 func (s *Service) GetNamespaceTierByNsID(ctx context.Context, nsID string) (Tier, error) {
 	ns, err := s.GetNamespaceByNsID(ctx, nsID)
@@ -55,7 +54,6 @@ func (s *Service) GetNamespaceTierByNsID(ctx context.Context, nsID string) (Tier
 	return s.GetNamespaceTier(ctx, ns)
 }
 
-// TODO: GetNamespaceTier: in the future, this logic should be removed in CE. Because CE does not have subscription
 func (s *Service) GetNamespaceTier(ctx context.Context, ns *resource.Namespace) (Tier, error) {
 	log, _ := logger.GetZapLogger(ctx)
 	switch ns.NsType {
