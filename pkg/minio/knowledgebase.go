@@ -59,6 +59,7 @@ type ChunkContentType []byte
 
 // SaveTextChunks saves batch of chunks(text files) to MinIO.
 // rate limiting is implemented to avoid overwhelming the MinIO server.
+// rate limiting is implemented to avoid overwhelming the MinIO server.
 func (m *Minio) SaveTextChunks(ctx context.Context, kbUID string, chunks map[ChunkUIDType]ChunkContentType) error {
 	logger, _ := logger.GetZapLogger(ctx)
 	var wg sync.WaitGroup
