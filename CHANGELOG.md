@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.17.0-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.16.1-alpha...v0.17.0-alpha) (2024-10-08)
+
+
+### Features
+
+* **artifact:** add retry in minIO and milvus ([#109](https://github.com/instill-ai/artifact-backend/issues/109)) ([c5bbf5f](https://github.com/instill-ai/artifact-backend/commit/c5bbf5f146fb843ea4a364f04c1b0e059b3a68b4))
+
+
+### Bug Fixes
+
+* **artifact:** add simple rate limiting to use minIO ([#111](https://github.com/instill-ai/artifact-backend/issues/111)) ([25043e0](https://github.com/instill-ai/artifact-backend/commit/25043e0f841f4618b569cdc892c20d5d7ca19006))
+
 ## [0.16.1-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.16.0-alpha...v0.16.1-alpha) (2024-10-03)
 
 
