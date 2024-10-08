@@ -6,9 +6,10 @@ import (
 	"fmt"
 	"sync"
 
+	"go.uber.org/zap"
+
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
-	"go.uber.org/zap"
 )
 
 // KnowledgeBaseI is the interface for knowledge base related operations.
@@ -68,6 +69,7 @@ func (m *Minio) SaveTextChunks(ctx context.Context, kbUID string, chunks map[Chu
 	errorUIDChan := make(chan ChunkError, len(chunks))
 
 	counter := 0
+	maxConcurrentUploads := 50
 	for chunkUID, chunkContent := range chunks {
 		wg.Add(1)
 		go utils.GoRecover(
@@ -86,7 +88,7 @@ func (m *Minio) SaveTextChunks(ctx context.Context, kbUID string, chunks map[Chu
 			}, fmt.Sprintf("SaveTextChunks %s", chunkUID))
 
 		counter++
-		if counter == 5 {
+		if counter == maxConcurrentUploads {
 			wg.Wait()
 			counter = 0
 		}
