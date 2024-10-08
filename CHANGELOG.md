@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.18.0-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.17.0-alpha...v0.18.0-alpha) (2024-10-08)
+
+
+### Features
+
+* add pipeline metadata in error message ([#112](https://github.com/instill-ai/artifact-backend/issues/112)) ([d0a5875](https://github.com/instill-ai/artifact-backend/commit/d0a58755608dad3ab339e613b5fb58efe16ffd50))
+
 ## [0.17.0-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.16.1-alpha...v0.17.0-alpha) (2024-10-08)
 
 
