@@ -6,9 +6,10 @@ import (
 	"fmt"
 	"sync"
 
+	"go.uber.org/zap"
+
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
-	"go.uber.org/zap"
 )
 
 // KnowledgeBaseI is the interface for knowledge base related operations.
@@ -57,6 +58,7 @@ type ChunkUIDType string
 type ChunkContentType []byte
 
 // SaveTextChunks saves batch of chunks(text files) to MinIO.
+// rate limiting is implemented to avoid overwhelming the MinIO server.
 func (m *Minio) SaveTextChunks(ctx context.Context, kbUID string, chunks map[ChunkUIDType]ChunkContentType) error {
 	logger, _ := logger.GetZapLogger(ctx)
 	var wg sync.WaitGroup
@@ -65,21 +67,31 @@ func (m *Minio) SaveTextChunks(ctx context.Context, kbUID string, chunks map[Chu
 		ErrorMessage string
 	}
 	errorUIDChan := make(chan ChunkError, len(chunks))
+
+	counter := 0
+	maxConcurrentUploads := 50
 	for chunkUID, chunkContent := range chunks {
 		wg.Add(1)
-		go utils.GoRecover(func() {
-			func(chunkUID ChunkUIDType, chunkContent ChunkContentType) {
-				defer wg.Done()
-				filePathName := m.GetChunkPathInKnowledgeBase(kbUID, string(chunkUID))
+		go utils.GoRecover(
+			func() {
+				func(chunkUID ChunkUIDType, chunkContent ChunkContentType) {
+					defer wg.Done()
+					filePathName := m.GetChunkPathInKnowledgeBase(kbUID, string(chunkUID))
 
-				err := m.UploadBase64File(ctx, filePathName, base64.StdEncoding.EncodeToString(chunkContent), "text/plain")
-				if err != nil {
-					logger.Error("Failed to upload chunk after retries", zap.String("chunkUID", string(chunkUID)), zap.Error(err))
-					errorUIDChan <- ChunkError{ChunkUID: string(chunkUID), ErrorMessage: err.Error()}
-					return
-				}
-			}(chunkUID, chunkContent)
-		}, fmt.Sprintf("SaveTextChunks %s", chunkUID))
+					err := m.UploadBase64File(ctx, filePathName, base64.StdEncoding.EncodeToString(chunkContent), "text/plain")
+					if err != nil {
+						logger.Error("Failed to upload chunk after retries", zap.String("chunkUID", string(chunkUID)), zap.Error(err))
+						errorUIDChan <- ChunkError{ChunkUID: string(chunkUID), ErrorMessage: err.Error()}
+						return
+					}
+				}(chunkUID, chunkContent)
+			}, fmt.Sprintf("SaveTextChunks %s", chunkUID))
+
+		counter++
+		if counter == maxConcurrentUploads {
+			wg.Wait()
+			counter = 0
+		}
 	}
 	wg.Wait()
 	close(errorUIDChan)
