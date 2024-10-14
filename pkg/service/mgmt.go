@@ -67,7 +67,7 @@ func (s *Service) GetNamespaceTier(ctx context.Context, ns *resource.Namespace) 
 			if ok && statusError.Code() == codes.Unimplemented {
 				// Handle the case where the method is not implemented on the server
 				log.Warn("GetUserSubscriptionAdmin is not implemented. Assuming enterprise tier")
-				return TierEntriprise, nil
+				return TierEnterprise, nil
 			} else {
 				// Handle other errors
 				return "", fmt.Errorf("failed to get user subscription: %w", err)
@@ -90,7 +90,7 @@ func (s *Service) GetNamespaceTier(ctx context.Context, ns *resource.Namespace) 
 			if ok && statusError.Code() == codes.Unimplemented {
 				// handle the case where the method is not implemented on the server
 				log.Warn("GetUserSubscriptionAdmin is not implemented. Assuming enterprise tier")
-				return TierEntriprise, nil
+				return TierEnterprise, nil
 			} else {
 				// handle other errors
 				return "", fmt.Errorf("failed to get organization subscription: %w", err)
@@ -102,7 +102,7 @@ func (s *Service) GetNamespaceTier(ctx context.Context, ns *resource.Namespace) 
 		} else if sub.GetSubscription().Plan == mgmtPB.OrganizationSubscription_PLAN_TEAM {
 			return TierTeam, nil
 		} else if sub.GetSubscription().Plan == mgmtPB.OrganizationSubscription_PLAN_ENTERPRISE {
-			return TierEntriprise, nil
+			return TierEnterprise, nil
 		}
 		return "", fmt.Errorf("unknown organization subscription plan: %v", sub.GetSubscription().Plan)
 	default:
@@ -116,7 +116,7 @@ const (
 	TierFree       Tier = "free"
 	TierPro        Tier = "pro"
 	TierTeam       Tier = "team"
-	TierEntriprise Tier = "enterprise"
+	TierEnterprise Tier = "enterprise"
 )
 
 func (t Tier) String() string {
@@ -132,7 +132,7 @@ func (t Tier) GetPrivateCatalogLimit() int {
 	case TierTeam:
 		// unlimited
 		return math.MaxInt
-	case TierEntriprise:
+	case TierEnterprise:
 		// unlimited
 		return math.MaxInt
 
@@ -154,7 +154,7 @@ func (t Tier) GetFileStorageTotalQuota() (int, string) {
 	case TierTeam:
 		// 2GB
 		return 2 * gb, "2GB"
-	case TierEntriprise:
+	case TierEnterprise:
 		// unlimited
 		return math.MaxInt, "unlimited"
 	}

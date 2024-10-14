@@ -119,7 +119,8 @@ type Chunk = struct {
 	Tokens int
 }
 
-// SplitMarkdownPipe using splitting pipeline to split markdown and consume caller's credits
+// SplitMarkdownPipe triggers the markdown splitting pipeline, processes the markdown text, and deducts credits from the caller's account.
+// It sets up the necessary metadata, triggers the pipeline, and processes the response to return the non-empty chunks.
 func (s *Service) SplitMarkdownPipe(ctx context.Context, caller uuid.UUID, requester uuid.UUID, markdown string) ([]Chunk, error) {
 	var md metadata.MD
 	if requester != uuid.Nil {
@@ -157,7 +158,8 @@ func (s *Service) SplitMarkdownPipe(ctx context.Context, caller uuid.UUID, reque
 	if err != nil {
 		return nil, err
 	}
-	// remove the empty chunk
+	// remove the empty chunk.
+	// note: this is a workaround for the pipeline bug that sometimes returns empty chunks.
 	var filteredResult []Chunk
 	for _, chunk := range result {
 		if chunk.Text != "" {
@@ -198,7 +200,8 @@ func GetChunksFromResponse(resp *pipelinePb.TriggerNamespacePipelineReleaseRespo
 	return chunks, nil
 }
 
-// SplitTextPipe using splitting pipeline to split text and consume caller's credits
+// SplitTextPipe splits the input text into chunks using the splitting pipeline and consumes the caller's credits.
+// It sets up the necessary metadata, triggers the pipeline, and processes the response to return the non-empty chunks.
 func (s *Service) SplitTextPipe(ctx context.Context, caller uuid.UUID, requester uuid.UUID, text string) ([]Chunk, error) {
 	var md metadata.MD
 	if requester != uuid.Nil {
@@ -237,7 +240,15 @@ func (s *Service) SplitTextPipe(ctx context.Context, caller uuid.UUID, requester
 	if err != nil {
 		return nil, fmt.Errorf("failed to get chunks from response: %w", err)
 	}
-	return result, nil
+	// remove the empty chunk.
+	// note: this is a workaround for the pipeline bug that sometimes returns empty chunks.
+	var filteredResult []Chunk
+	for _, chunk := range result {
+		if chunk.Text != "" {
+			filteredResult = append(filteredResult, chunk)
+		}
+	}
+	return filteredResult, nil
 }
 
 // EmbeddingTextPipe uses the embedding pipeline to convert text into vectors and consume caller's credits.
