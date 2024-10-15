@@ -203,6 +203,7 @@ func (m *Minio) GetFile(ctx context.Context, filePathName string) ([]byte, error
 
 // FileContent represents a file and its content
 type FileContent struct {
+	Index   int
 	Name    string
 	Content []byte
 }
@@ -218,10 +219,10 @@ func (m *Minio) GetFilesByPaths(ctx context.Context, filePaths []string) ([]File
 	fileCh := make(chan FileContent, len(filePaths))
 	errorCh := make(chan error, len(filePaths))
 
-	for _, path := range filePaths {
+	for i, path := range filePaths {
 		wg.Add(1)
 		go utils.GoRecover(func() {
-			func(filePath string) {
+			func(i int, filePath string) {
 				defer wg.Done()
 				var obj *minio.Object
 				var err error
@@ -248,10 +249,11 @@ func (m *Minio) GetFilesByPaths(ctx context.Context, filePaths []string) ([]File
 					return
 				}
 				fileCh <- FileContent{
+					Index:   i,
 					Name:    filepath.Base(filePath),
 					Content: buffer.Bytes(),
 				}
-			}(path)
+			}(i, path)
 		}, fmt.Sprintf("GetFilesByPaths %s", path))
 	}
 
@@ -259,9 +261,9 @@ func (m *Minio) GetFilesByPaths(ctx context.Context, filePaths []string) ([]File
 	close(fileCh)
 	close(errorCh)
 
-	var files []FileContent
+	files := make([]FileContent, len(filePaths))
 	for file := range fileCh {
-		files = append(files, file)
+		files[file.Index] = file
 	}
 
 	// Check if any errors occurred
