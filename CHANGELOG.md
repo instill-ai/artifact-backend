@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.18.0-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.17.0-alpha...v0.18.0-alpha) (2024-10-15)
+
+
+### Features
+
+* add check on text prompt ([#115](https://github.com/instill-ai/artifact-backend/issues/115)) ([b612e82](https://github.com/instill-ai/artifact-backend/commit/b612e8246e869e511ded8315b77ca695a189db69))
+* add pipeline metadata in error message ([#112](https://github.com/instill-ai/artifact-backend/issues/112)) ([d0a5875](https://github.com/instill-ai/artifact-backend/commit/d0a58755608dad3ab339e613b5fb58efe16ffd50))
+
+
+### Bug Fixes
+
+* **artifact:** fix minio "get file by path" ([#116](https://github.com/instill-ai/artifact-backend/issues/116)) ([25cf426](https://github.com/instill-ai/artifact-backend/commit/25cf4263c08699a266c1162f2a9c690a732106cd))
+* ignore empty chunk from  chunk pipeline ([#114](https://github.com/instill-ai/artifact-backend/issues/114)) ([983374f](https://github.com/instill-ai/artifact-backend/commit/983374f732e6e3276128e1ff2c7e658e830e79ce))
+
 ## [0.17.0-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.16.1-alpha...v0.17.0-alpha) (2024-10-08)
 
 
