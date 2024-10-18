@@ -13,6 +13,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/customerror"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
+	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/resource"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
@@ -129,7 +130,7 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 		// create catalog file in database
 		res, err = ph.service.Repository.CreateKnowledgeBaseFile(ctx, kbFile, func(FileUID string) error {
 			// upload file to minio
-			err := ph.service.MinIO.UploadBase64File(ctx, destination, req.File.Content, fileTypeConvertToMime(req.File.Type))
+			err := ph.service.MinIO.UploadBase64File(ctx, minio.KnowledgeBaseBucketName, destination, req.File.Content, fileTypeConvertToMime(req.File.Type))
 			if err != nil {
 				return err
 			}
@@ -410,7 +411,7 @@ func (ph *PublicHandler) DeleteCatalogFile(
 			}
 
 			// Delete the files in MinIO
-			errChan := ph.service.MinIO.DeleteFiles(ctx, objectPaths)
+			errChan := ph.service.MinIO.DeleteFiles(ctx, minio.KnowledgeBaseBucketName, objectPaths)
 			for err := range errChan {
 				if err != nil {
 					log.Error("failed to delete files in minio", zap.Error(err))

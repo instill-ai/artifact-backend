@@ -444,7 +444,7 @@ func (wp *fileToEmbWorkerPool) processConvertingFile(ctx context.Context, file r
 	logger, _ := logger.GetZapLogger(ctx)
 
 	fileInMinIOPath := file.Destination
-	data, err := wp.svc.MinIO.GetFile(ctx, fileInMinIOPath)
+	data, err := wp.svc.MinIO.GetFile(ctx, minio.KnowledgeBaseBucketName, fileInMinIOPath)
 	if err != nil {
 		logger.Error("Failed to get file from minIO.", zap.String("File path", fileInMinIOPath))
 		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
@@ -521,7 +521,7 @@ func (wp *fileToEmbWorkerPool) processChunkingFile(ctx context.Context, file rep
 			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
 		}
 		// get the converted file from minIO
-		convertedFileData, err := wp.svc.MinIO.GetFile(ctx, convertedFile.Destination)
+		convertedFileData, err := wp.svc.MinIO.GetFile(ctx, minio.KnowledgeBaseBucketName, convertedFile.Destination)
 		if err != nil {
 			logger.Error("Failed to get converted file from minIO.", zap.String("Converted file uid", convertedFile.UID.String()))
 			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
@@ -563,7 +563,7 @@ func (wp *fileToEmbWorkerPool) processChunkingFile(ctx context.Context, file rep
 	case artifactpb.FileType_name[int32(artifactpb.FileType_FILE_TYPE_TEXT)]:
 
 		//  Get file from minIO
-		originalFile, err := wp.svc.MinIO.GetFile(ctx, file.Destination)
+		originalFile, err := wp.svc.MinIO.GetFile(ctx, minio.KnowledgeBaseBucketName, file.Destination)
 		if err != nil {
 			logger.Error("Failed to get file from minIO.", zap.String("File uid", file.UID.String()))
 			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
@@ -603,7 +603,7 @@ func (wp *fileToEmbWorkerPool) processChunkingFile(ctx context.Context, file rep
 		return updatedFile, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_EMBEDDING, nil
 	case artifactpb.FileType_name[int32(artifactpb.FileType_FILE_TYPE_MARKDOWN)]:
 		//  Get file from minIO
-		originalFile, err := wp.svc.MinIO.GetFile(ctx, file.Destination)
+		originalFile, err := wp.svc.MinIO.GetFile(ctx, minio.KnowledgeBaseBucketName, file.Destination)
 		if err != nil {
 			logger.Error("Failed to get file from minIO.", zap.String("File uid", file.UID.String()))
 			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err

@@ -22,25 +22,31 @@ import (
 type MinioI interface {
 	GetClient() *minio.Client
 	// uploadFile
-	UploadBase64File(ctx context.Context, filePath string, base64Content string, fileMimeType string) (err error)
+	UploadBase64File(ctx context.Context, bucket string, filePath string, base64Content string, fileMimeType string) (err error)
 	// deleteFile
-	DeleteFile(ctx context.Context, filePath string) (err error)
+	DeleteFile(ctx context.Context, bucket string, filePath string) (err error)
 	// deleteFiles
-	DeleteFiles(ctx context.Context, filePaths []string) chan error
+	DeleteFiles(ctx context.Context, bucket string, filePaths []string) chan error
 	// deleteFilesWithPrefix
-	DeleteFilesWithPrefix(ctx context.Context, prefix string) chan error
+	DeleteFilesWithPrefix(ctx context.Context, bucket string, prefix string) chan error
 	// GetFile
-	GetFile(ctx context.Context, filePath string) ([]byte, error)
+	GetFile(ctx context.Context, bucket string, filePath string) ([]byte, error)
 	// GetFilesByPaths
-	GetFilesByPaths(ctx context.Context, filePaths []string) ([]FileContent, error)
+	GetFilesByPaths(ctx context.Context, bucket string, filePaths []string) ([]FileContent, error)
 	// KnowledgeBase
 	KnowledgeBaseI
 }
 
 type Minio struct {
-	client *minio.Client
-	bucket string
+	client              *minio.Client
 }
+
+const (
+	// Note: this bucket is for storing the blob of the file and not changeable
+	// in different environment so we dont put it in config
+	BlobBucketName = "instill-ai-blob"
+	KnowledgeBaseBucketName = "instill-ai-knowledge-bases"
+)
 
 func NewMinioClientAndInitBucket(cfg config.MinioConfig) (*Minio, error) {
 	fmt.Printf("Initializing Minio client and bucket\n")
@@ -59,26 +65,42 @@ func NewMinioClientAndInitBucket(cfg config.MinioConfig) (*Minio, error) {
 			zap.String("pwd", cfg.RootPwd), zap.Error(err))
 		return nil, err
 	}
-	err = client.MakeBucket(cfg.BucketName, "us-east-1")
+	// create bucket if not exists for knowledge base
+	err = client.MakeBucket(KnowledgeBaseBucketName, "us-east-1")
 	if err != nil {
 		// Check if the bucket already exists
-		exists, errBucketExists := client.BucketExists(cfg.BucketName)
+		exists, errBucketExists := client.BucketExists(KnowledgeBaseBucketName)
 		if errBucketExists == nil && exists {
-			log.Info("Bucket already exists", zap.String("bucket", cfg.BucketName), zap.Error(err))
+			log.Info("Bucket already exists", zap.String("bucket", KnowledgeBaseBucketName), zap.Error(err))
 		} else {
 			log.Fatal(err.Error(), zap.Error(err))
 		}
 	} else {
-		log.Info("Successfully created bucket", zap.String("bucket", cfg.BucketName))
+		log.Info("Successfully created bucket", zap.String("bucket", KnowledgeBaseBucketName))
 	}
-	return &Minio{client: client, bucket: cfg.BucketName}, nil
+
+	// create bucket if not exists for blob
+	err = client.MakeBucket(BlobBucketName, "us-east-1")
+	if err != nil {
+		// Check if the bucket already exists
+		exists, errBucketExists := client.BucketExists(BlobBucketName)
+		if errBucketExists == nil && exists {
+			log.Info("Bucket already exists", zap.String("bucket", BlobBucketName), zap.Error(err))
+		} else {
+			log.Fatal(err.Error(), zap.Error(err))
+		}
+	} else {
+		log.Info("Successfully created bucket", zap.String("bucket", BlobBucketName))
+	}
+
+	return &Minio{client: client}, nil
 }
 
 func (m *Minio) GetClient() *minio.Client {
 	return m.client
 }
 
-func (m *Minio) UploadBase64File(ctx context.Context, filePathName string, base64Content string, fileMimeType string) (err error) {
+func (m *Minio) UploadBase64File(ctx context.Context, bucket string, filePathName string, base64Content string, fileMimeType string) (err error) {
 	log, err := log.GetZapLogger(ctx)
 	if err != nil {
 		return err
@@ -94,7 +116,7 @@ func (m *Minio) UploadBase64File(ctx context.Context, filePathName string, base6
 	size := int64(len(decodedContent))
 	// Create the file path with folder structure
 	for i := 0; i < 3; i++ {
-		_, err = m.client.PutObjectWithContext(ctx, m.bucket, filePathName, contentReader, size, minio.PutObjectOptions{ContentType: fileMimeType})
+		_, err = m.client.PutObjectWithContext(ctx, bucket, filePathName, contentReader, size, minio.PutObjectOptions{ContentType: fileMimeType})
 		if err == nil {
 			break
 		}
@@ -109,14 +131,14 @@ func (m *Minio) UploadBase64File(ctx context.Context, filePathName string, base6
 }
 
 // delete the file from minio
-func (m *Minio) DeleteFile(ctx context.Context, filePathName string) (err error) {
+func (m *Minio) DeleteFile(ctx context.Context, bucket string, filePathName string) (err error) {
 	log, err := log.GetZapLogger(ctx)
 	if err != nil {
 		return err
 	}
 	// Delete the file from MinIO
 	for attempt := 1; attempt <= 3; attempt++ {
-		err = m.client.RemoveObject(m.bucket, filePathName)
+		err = m.client.RemoveObject(bucket, filePathName)
 		if err == nil {
 			break
 		}
@@ -131,7 +153,7 @@ func (m *Minio) DeleteFile(ctx context.Context, filePathName string) (err error)
 }
 
 // delete bunch of files from minio
-func (m *Minio) DeleteFiles(ctx context.Context, filePathNames []string) chan error {
+func (m *Minio) DeleteFiles(ctx context.Context, bucket string, filePathNames []string) chan error {
 	errCh := make(chan error, len(filePathNames))
 	defer close(errCh)
 	log, err := log.GetZapLogger(ctx)
@@ -141,15 +163,18 @@ func (m *Minio) DeleteFiles(ctx context.Context, filePathNames []string) chan er
 	}
 	// Delete the files from MinIO parallel
 	var wg sync.WaitGroup
+	sem := make(chan struct{}, 10) // Rate limit to 10 concurrent deletions
 	for _, filePathName := range filePathNames {
 		wg.Add(1)
+		sem <- struct{}{} // Acquire a token
 		go utils.GoRecover(
 			func() {
 				func(filePathName string, errCh chan error) {
 					defer wg.Done()
+					defer func() { <-sem }() // Release the token
 					var err error
 					for attempt := 1; attempt <= 3; attempt++ {
-						err = m.client.RemoveObject(m.bucket, filePathName)
+						err = m.client.RemoveObject(bucket, filePathName)
 						if err == nil {
 							break
 						}
@@ -168,7 +193,7 @@ func (m *Minio) DeleteFiles(ctx context.Context, filePathNames []string) chan er
 	return errCh
 }
 
-func (m *Minio) GetFile(ctx context.Context, filePathName string) ([]byte, error) {
+func (m *Minio) GetFile(ctx context.Context, bucket string, filePathName string) ([]byte, error) {
 	log, err := log.GetZapLogger(ctx)
 	if err != nil {
 		return nil, err
@@ -177,7 +202,7 @@ func (m *Minio) GetFile(ctx context.Context, filePathName string) ([]byte, error
 	// Get the object using the client with three attempts and proper time delay
 	var object *minio.Object
 	for attempt := 1; attempt <= 3; attempt++ {
-		object, err = m.client.GetObject(m.bucket, filePathName, minio.GetObjectOptions{})
+		object, err = m.client.GetObject(bucket, filePathName, minio.GetObjectOptions{})
 		if err == nil {
 			break
 		}
@@ -209,7 +234,7 @@ type FileContent struct {
 }
 
 // GetFiles retrieves the contents of specified files from MinIO
-func (m *Minio) GetFilesByPaths(ctx context.Context, filePaths []string) ([]FileContent, error) {
+func (m *Minio) GetFilesByPaths(ctx context.Context, bucket string, filePaths []string) ([]FileContent, error) {
 	log, err := log.GetZapLogger(ctx)
 	if err != nil {
 		return nil, err
@@ -219,15 +244,18 @@ func (m *Minio) GetFilesByPaths(ctx context.Context, filePaths []string) ([]File
 	fileCh := make(chan FileContent, len(filePaths))
 	errorCh := make(chan error, len(filePaths))
 
+	sem := make(chan struct{}, 10) // Rate limit to 10 concurrent requests
 	for i, path := range filePaths {
 		wg.Add(1)
+		sem <- struct{}{} // Acquire a token
 		go utils.GoRecover(func() {
 			func(i int, filePath string) {
 				defer wg.Done()
+				defer func() { <-sem }() // Release the token
 				var obj *minio.Object
 				var err error
 				for attempt := 1; attempt <= 3; attempt++ {
-					obj, err = m.client.GetObject(m.bucket, filePath, minio.GetObjectOptions{})
+					obj, err = m.client.GetObject(bucket, filePath, minio.GetObjectOptions{})
 					if err == nil {
 						break
 					}
@@ -277,7 +305,7 @@ func (m *Minio) GetFilesByPaths(ctx context.Context, filePaths []string) ([]File
 }
 
 // delete all files with the same prefix from MinIO
-func (m *Minio) DeleteFilesWithPrefix(ctx context.Context, prefix string) chan error {
+func (m *Minio) DeleteFilesWithPrefix(ctx context.Context, bucket string, prefix string) chan error {
 	errCh := make(chan error)
 	defer close(errCh)
 	log, err := log.GetZapLogger(ctx)
@@ -287,10 +315,12 @@ func (m *Minio) DeleteFilesWithPrefix(ctx context.Context, prefix string) chan e
 	}
 
 	// List all objects with the given prefix
-	objectCh := m.client.ListObjects(m.bucket, prefix, true, nil)
+	objectCh := m.client.ListObjects(bucket, prefix, true, nil)
 
 	// Use a WaitGroup to wait for all deletions to complete
 	var wg sync.WaitGroup
+	sem := make(chan struct{}, 10) // Rate limit to 10 concurrent deletions
+
 	for object := range objectCh {
 		if object.Err != nil {
 			log.Error("Failed to list object from MinIO", zap.Error(object.Err))
@@ -299,12 +329,14 @@ func (m *Minio) DeleteFilesWithPrefix(ctx context.Context, prefix string) chan e
 		}
 
 		wg.Add(1)
+		sem <- struct{}{} // Acquire a token
 		go utils.GoRecover(func() {
 			func(objectName string) {
 				defer wg.Done()
+				defer func() { <-sem }() // Release the token
 				var err error
 				for attempt := 1; attempt <= 3; attempt++ {
-					err = m.client.RemoveObject(m.bucket, objectName)
+					err = m.client.RemoveObject(bucket, objectName)
 					if err == nil {
 						break
 					}

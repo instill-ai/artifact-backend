@@ -11,6 +11,8 @@ type RepositoryI interface {
 	ConvertedFileI
 	TextChunkI
 	EmbeddingI
+	ObjectI
+	ObjectURLI
 }
 
 // Repository implements Artifact storage functions in PostgreSQL.
