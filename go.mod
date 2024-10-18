@@ -8,6 +8,7 @@ require (
 	github.com/gofrs/uuid v4.4.0+incompatible
 	github.com/gojuno/minimock/v3 v3.3.6
 	github.com/golang-migrate/migrate/v4 v4.17.0
+	github.com/google/go-cmp v0.6.0
 	github.com/grpc-ecosystem/go-grpc-middleware v1.3.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.19.1
 	github.com/influxdata/influxdb-client-go/v2 v2.12.3
@@ -46,7 +47,6 @@ require (
 	github.com/getsentry/sentry-go v0.12.0 // indirect
 	github.com/go-ini/ini v1.67.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
-	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/milvus-io/milvus-proto/go-api/v2 v2.4.3 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/tidwall/gjson v1.14.4 // indirect
