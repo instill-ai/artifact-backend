@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.19.0-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.18.0-alpha...v0.19.0-alpha) (2024-10-18)
+
+
+### Features
+
+* **blob:** implement GetUploadURL in service lib ([#119](https://github.com/instill-ai/artifact-backend/issues/119)) ([931b1ca](https://github.com/instill-ai/artifact-backend/commit/931b1caab47256531ec3e7e83812777c9484f7f3))
+* **blob:** implement object and object url repository ([#117](https://github.com/instill-ai/artifact-backend/issues/117)) ([4107ad1](https://github.com/instill-ai/artifact-backend/commit/4107ad18f8aedf307e81f7aaf5c282691fe32f51))
+
 ## [0.18.0-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.17.0-alpha...v0.18.0-alpha) (2024-10-15)
 
 
