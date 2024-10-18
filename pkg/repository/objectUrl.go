@@ -26,7 +26,7 @@ type ObjectURL struct {
 	UID            uuid.UUID `gorm:"column:uid;type:uuid;default:gen_random_uuid();primaryKey" json:"uid"`
 	NamespaceUID   uuid.UUID `gorm:"column:namespace_uid;type:uuid;not null" json:"namespace_uid"`
 	ObjectUID      uuid.UUID `gorm:"column:object_uid;type:uuid;not null" json:"object_uid"`
-	URLExpireAt    time.Time `gorm:"column:url_expire_at;not null" json:"url_expire_at"`
+	URLExpireAt    time.Time `gorm:"column:url_expire_at" json:"url_expire_at"`
 	MinioURLPath   string    `gorm:"column:minio_url_path;type:text;not null" json:"minio_url_path"`
 	EncodedURLPath string    `gorm:"column:encoded_url_path;type:text;not null" json:"encoded_url_path"`
 	// download or upload
@@ -68,8 +68,8 @@ var ObjectURLColumn = ObjectURLColumns{
 }
 
 const (
-	objectURLTypeDownload = "download"
-	objectURLTypeUpload   = "upload"
+	ObjectURLTypeDownload = "download"
+	ObjectURLTypeUpload   = "upload"
 )
 
 
@@ -151,7 +151,7 @@ func (r *Repository) GetObjectURLCountByObject(ctx context.Context, objectUID uu
 func (r *Repository) GetObjectUploadURL(ctx context.Context, objectUID uuid.UUID) (*ObjectURL, error) {
 	var objectURL ObjectURL
 	whereString := fmt.Sprintf("%v = ? AND %v = ? AND %v IS NULL", ObjectURLColumn.ObjectUID, ObjectURLColumn.Type, ObjectURLColumn.DeleteTime)
-	if err := r.db.WithContext(ctx).Where(whereString, objectUID, objectURLTypeUpload).First(&objectURL).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where(whereString, objectUID, ObjectURLTypeUpload).First(&objectURL).Error; err != nil {
 		return nil, err
 	}
 	return &objectURL, nil
@@ -161,7 +161,7 @@ func (r *Repository) GetObjectUploadURL(ctx context.Context, objectUID uuid.UUID
 func (r *Repository) GetObjectDownloadURL(ctx context.Context, objectUID uuid.UUID) (*ObjectURL, error) {
 	var objectURL ObjectURL
 	whereString := fmt.Sprintf("%v = ? AND %v = ? AND %v IS NULL", ObjectURLColumn.ObjectUID, ObjectURLColumn.Type, ObjectURLColumn.DeleteTime)
-	if err := r.db.WithContext(ctx).Where(whereString, objectUID, objectURLTypeDownload).First(&objectURL).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where(whereString, objectUID, ObjectURLTypeDownload).First(&objectURL).Error; err != nil {
 		return nil, err
 	}
 	return &objectURL, nil

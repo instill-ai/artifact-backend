@@ -2,9 +2,9 @@ BEGIN;
 -- Create object table
 CREATE TABLE IF NOT EXISTS object (
     uid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name VARCHAR(1040) NOT NULL,
-    size BIGINT NOT NULL,
-    content_type VARCHAR(255) NOT NULL,
+    name VARCHAR(1040),
+    size BIGINT ,
+    content_type VARCHAR(255),
     namespace_uid UUID NOT NULL,
     creator_uid UUID NOT NULL,
     is_uploaded BOOLEAN NOT NULL DEFAULT FALSE,
@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS object_url (
     uid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     namespace_uid UUID NOT NULL,
     object_uid UUID NOT NULL REFERENCES object(uid) ON DELETE CASCADE,
-    url_expire_at TIMESTAMP NOT NULL,
+    url_expire_at TIMESTAMP ,
     minio_url_path TEXT NOT NULL,
     encoded_url_path TEXT NOT NULL,
     type VARCHAR(10) NOT NULL CHECK (type IN ('upload', 'download')),
