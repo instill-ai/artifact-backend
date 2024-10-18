@@ -22,7 +22,7 @@ database:
   host: pg-sql
   port: 5432
   name: artifact
-  version: 16
+  version: 17
   timezone: Etc/UTC
   pool:
     idleconnections: 5
@@ -71,7 +71,6 @@ minio:
   port: 9000
   rootuser: minioadmin
   rootpwd: minioadmin
-  bucketname: instill-ai-knowledge-bases
 milvus:
   host: milvus
   port: 19530

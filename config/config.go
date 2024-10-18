@@ -143,11 +143,10 @@ type RegistryConfig struct {
 
 // MinioConfig is the minio configuration.
 type MinioConfig struct {
-	Host       string `koanf:"host"`
-	Port       string `koanf:"port"`
-	RootUser   string `koanf:"rootuser"`
-	RootPwd    string `koanf:"rootpwd"`
-	BucketName string `koanf:"bucketname"`
+	Host                    string `koanf:"host"`
+	Port                    string `koanf:"port"`
+	RootUser                string `koanf:"rootuser"`
+	RootPwd                 string `koanf:"rootpwd"`
 }
 
 // MilvusConfig is the milvus configuration.

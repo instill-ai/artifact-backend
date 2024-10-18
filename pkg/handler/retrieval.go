@@ -9,6 +9,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/customerror"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
+	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/resource"
 	"github.com/instill-ai/artifact-backend/pkg/service"
@@ -97,7 +98,7 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 	log.Info("get chunks by uids", zap.Duration("duration", time.Since(t)))
 	t = time.Now()
 	// fetch the chunks content from minio
-	chunkContents, err := ph.service.MinIO.GetFilesByPaths(ctx, chunkFilePaths)
+	chunkContents, err := ph.service.MinIO.GetFilesByPaths(ctx, minio.KnowledgeBaseBucketName, chunkFilePaths)
 	if err != nil {
 		log.Error("failed to get chunks content", zap.Error(err))
 		return nil, fmt.Errorf("failed to get chunks content. err: %w", err)

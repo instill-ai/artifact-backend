@@ -47,7 +47,7 @@ func (m *Minio) SaveConvertedFile(ctx context.Context, kbUID, convertedFileUID, 
 		mimeType = "text/markdown"
 	}
 
-	err := m.UploadBase64File(ctx, filePathName, base64.StdEncoding.EncodeToString(content), mimeType)
+	err := m.UploadBase64File(ctx, KnowledgeBaseBucketName, filePathName, base64.StdEncoding.EncodeToString(content), mimeType)
 	if err != nil {
 		return err
 	}
@@ -79,7 +79,7 @@ func (m *Minio) SaveTextChunks(ctx context.Context, kbUID string, chunks map[Chu
 					defer wg.Done()
 					filePathName := m.GetChunkPathInKnowledgeBase(kbUID, string(chunkUID))
 
-					err := m.UploadBase64File(ctx, filePathName, base64.StdEncoding.EncodeToString(chunkContent), "text/plain")
+					err := m.UploadBase64File(ctx, KnowledgeBaseBucketName, filePathName, base64.StdEncoding.EncodeToString(chunkContent), "text/plain")
 					if err != nil {
 						logger.Error("Failed to upload chunk after retries", zap.String("chunkUID", string(chunkUID)), zap.Error(err))
 						errorUIDChan <- ChunkError{ChunkUID: string(chunkUID), ErrorMessage: err.Error()}
@@ -110,14 +110,14 @@ func (m *Minio) SaveTextChunks(ctx context.Context, kbUID string, chunks map[Chu
 // Delete all files in the knowledge base
 func (m *Minio) DeleteKnowledgeBase(ctx context.Context, kbUID string) chan error {
 	// List all objects in the knowledge base
-	err := m.DeleteFilesWithPrefix(ctx, kbUID)
+	err := m.DeleteFilesWithPrefix(ctx, KnowledgeBaseBucketName, kbUID)
 	return err
 }
 
 // Delete converted files in the knowledge base
 func (m *Minio) DeleteAllConvertedFilesInKb(ctx context.Context, kbUID string) chan error {
 	// List all objects in the knowledge base
-	err := m.DeleteFilesWithPrefix(ctx, kbUID+convertedFilePrefix)
+	err := m.DeleteFilesWithPrefix(ctx, KnowledgeBaseBucketName, kbUID+convertedFilePrefix)
 
 	return err
 }
@@ -125,7 +125,7 @@ func (m *Minio) DeleteAllConvertedFilesInKb(ctx context.Context, kbUID string) c
 // Delete uploaded files in the knowledge base
 func (m *Minio) DeleteAllUploadedFilesInKb(ctx context.Context, kbUID string) chan error {
 	// List all objects in the knowledge base
-	err := m.DeleteFilesWithPrefix(ctx, kbUID+uploadedFilePrefix)
+	err := m.DeleteFilesWithPrefix(ctx, KnowledgeBaseBucketName, kbUID+uploadedFilePrefix)
 
 	return err
 }
@@ -133,7 +133,7 @@ func (m *Minio) DeleteAllUploadedFilesInKb(ctx context.Context, kbUID string) ch
 // Delete chunks in the knowledge base
 func (m *Minio) DeleteAllChunksInKb(ctx context.Context, kbUID string) chan error {
 	// List all objects in the knowledge base
-	err := m.DeleteFilesWithPrefix(ctx, kbUID+chunkPrefix)
+	err := m.DeleteFilesWithPrefix(ctx, KnowledgeBaseBucketName, kbUID+chunkPrefix)
 
 	return err
 }

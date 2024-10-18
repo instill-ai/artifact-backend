@@ -13,6 +13,7 @@ import (
 	mm_repository "github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
 	"gorm.io/gorm"
+
 	pb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
@@ -44,6 +45,18 @@ type RepositoryIMock struct {
 	afterCreateKnowledgeBaseFileCounter  uint64
 	beforeCreateKnowledgeBaseFileCounter uint64
 	CreateKnowledgeBaseFileMock          mRepositoryIMockCreateKnowledgeBaseFile
+
+	funcCreateObject          func(ctx context.Context, obj mm_repository.Object) (op1 *mm_repository.Object, err error)
+	inspectFuncCreateObject   func(ctx context.Context, obj mm_repository.Object)
+	afterCreateObjectCounter  uint64
+	beforeCreateObjectCounter uint64
+	CreateObjectMock          mRepositoryIMockCreateObject
+
+	funcCreateObjectUrl          func(ctx context.Context, objectUrl mm_repository.ObjectURL) (op1 *mm_repository.ObjectURL, err error)
+	inspectFuncCreateObjectUrl   func(ctx context.Context, objectUrl mm_repository.ObjectURL)
+	afterCreateObjectUrlCounter  uint64
+	beforeCreateObjectUrlCounter uint64
+	CreateObjectUrlMock          mRepositoryIMockCreateObjectUrl
 
 	funcDeleteAllConvertedFilesInKb          func(ctx context.Context, kbUID uuid.UUID) (err error)
 	inspectFuncDeleteAllConvertedFilesInKb   func(ctx context.Context, kbUID uuid.UUID)
@@ -110,6 +123,18 @@ type RepositoryIMock struct {
 	afterDeleteKnowledgeBaseFileAndDecreaseUsageCounter  uint64
 	beforeDeleteKnowledgeBaseFileAndDecreaseUsageCounter uint64
 	DeleteKnowledgeBaseFileAndDecreaseUsageMock          mRepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsage
+
+	funcDeleteObject          func(ctx context.Context, uid uuid.UUID) (err error)
+	inspectFuncDeleteObject   func(ctx context.Context, uid uuid.UUID)
+	afterDeleteObjectCounter  uint64
+	beforeDeleteObjectCounter uint64
+	DeleteObjectMock          mRepositoryIMockDeleteObject
+
+	funcDeleteObjectUrl          func(ctx context.Context, uid uuid.UUID) (err error)
+	inspectFuncDeleteObjectUrl   func(ctx context.Context, uid uuid.UUID)
+	afterDeleteObjectUrlCounter  uint64
+	beforeDeleteObjectUrlCounter uint64
+	DeleteObjectUrlMock          mRepositoryIMockDeleteObjectUrl
 
 	funcDeleteRepositoryTag          func(ctx context.Context, s1 string) (err error)
 	inspectFuncDeleteRepositoryTag   func(ctx context.Context, s1 string)
@@ -182,6 +207,36 @@ type RepositoryIMock struct {
 	afterGetNeedProcessFilesCounter  uint64
 	beforeGetNeedProcessFilesCounter uint64
 	GetNeedProcessFilesMock          mRepositoryIMockGetNeedProcessFiles
+
+	funcGetObjectByUID          func(ctx context.Context, uid uuid.UUID) (op1 *mm_repository.Object, err error)
+	inspectFuncGetObjectByUID   func(ctx context.Context, uid uuid.UUID)
+	afterGetObjectByUIDCounter  uint64
+	beforeGetObjectByUIDCounter uint64
+	GetObjectByUIDMock          mRepositoryIMockGetObjectByUID
+
+	funcGetObjectDownloadUrl          func(ctx context.Context, objectUID uuid.UUID) (op1 *mm_repository.ObjectURL, err error)
+	inspectFuncGetObjectDownloadUrl   func(ctx context.Context, objectUID uuid.UUID)
+	afterGetObjectDownloadUrlCounter  uint64
+	beforeGetObjectDownloadUrlCounter uint64
+	GetObjectDownloadUrlMock          mRepositoryIMockGetObjectDownloadUrl
+
+	funcGetObjectUploadUrl          func(ctx context.Context, objectUID uuid.UUID) (op1 *mm_repository.ObjectURL, err error)
+	inspectFuncGetObjectUploadUrl   func(ctx context.Context, objectUID uuid.UUID)
+	afterGetObjectUploadUrlCounter  uint64
+	beforeGetObjectUploadUrlCounter uint64
+	GetObjectUploadUrlMock          mRepositoryIMockGetObjectUploadUrl
+
+	funcGetObjectUrlByUID          func(ctx context.Context, uid uuid.UUID) (op1 *mm_repository.ObjectURL, err error)
+	inspectFuncGetObjectUrlByUID   func(ctx context.Context, uid uuid.UUID)
+	afterGetObjectUrlByUIDCounter  uint64
+	beforeGetObjectUrlByUIDCounter uint64
+	GetObjectUrlByUIDMock          mRepositoryIMockGetObjectUrlByUID
+
+	funcGetObjectUrlCountByObject          func(ctx context.Context, objectUID uuid.UUID) (i1 int64, err error)
+	inspectFuncGetObjectUrlCountByObject   func(ctx context.Context, objectUID uuid.UUID)
+	afterGetObjectUrlCountByObjectCounter  uint64
+	beforeGetObjectUrlCountByObjectCounter uint64
+	GetObjectUrlCountByObjectMock          mRepositoryIMockGetObjectUrlCountByObject
 
 	funcGetRepositoryTag          func(ctx context.Context, r1 utils.RepositoryTagName) (rp1 *pb.RepositoryTag, err error)
 	inspectFuncGetRepositoryTag   func(ctx context.Context, r1 utils.RepositoryTagName)
@@ -270,6 +325,18 @@ type RepositoryIMock struct {
 	beforeKnowledgeBaseFileTableNameCounter uint64
 	KnowledgeBaseFileTableNameMock          mRepositoryIMockKnowledgeBaseFileTableName
 
+	funcListAllObjectUrls          func(ctx context.Context, namespaceUID uuid.UUID, objectUID uuid.UUID) (oa1 []mm_repository.ObjectURL, err error)
+	inspectFuncListAllObjectUrls   func(ctx context.Context, namespaceUID uuid.UUID, objectUID uuid.UUID)
+	afterListAllObjectUrlsCounter  uint64
+	beforeListAllObjectUrlsCounter uint64
+	ListAllObjectUrlsMock          mRepositoryIMockListAllObjectUrls
+
+	funcListAllObjects          func(ctx context.Context, namespaceUID uuid.UUID, creatorUID uuid.UUID) (oa1 []mm_repository.Object, err error)
+	inspectFuncListAllObjects   func(ctx context.Context, namespaceUID uuid.UUID, creatorUID uuid.UUID)
+	afterListAllObjectsCounter  uint64
+	beforeListAllObjectsCounter uint64
+	ListAllObjectsMock          mRepositoryIMockListAllObjects
+
 	funcListChunksByKbFileUID          func(ctx context.Context, kbFileUID uuid.UUID) (ta1 []mm_repository.TextChunk, err error)
 	inspectFuncListChunksByKbFileUID   func(ctx context.Context, kbFileUID uuid.UUID)
 	afterListChunksByKbFileUIDCounter  uint64
@@ -330,6 +397,18 @@ type RepositoryIMock struct {
 	beforeUpdateKnowledgeBaseFileCounter uint64
 	UpdateKnowledgeBaseFileMock          mRepositoryIMockUpdateKnowledgeBaseFile
 
+	funcUpdateObject          func(ctx context.Context, obj mm_repository.Object) (op1 *mm_repository.Object, err error)
+	inspectFuncUpdateObject   func(ctx context.Context, obj mm_repository.Object)
+	afterUpdateObjectCounter  uint64
+	beforeUpdateObjectCounter uint64
+	UpdateObjectMock          mRepositoryIMockUpdateObject
+
+	funcUpdateObjectUrl          func(ctx context.Context, objectUrl mm_repository.ObjectURL) (op1 *mm_repository.ObjectURL, err error)
+	inspectFuncUpdateObjectUrl   func(ctx context.Context, objectUrl mm_repository.ObjectURL)
+	afterUpdateObjectUrlCounter  uint64
+	beforeUpdateObjectUrlCounter uint64
+	UpdateObjectUrlMock          mRepositoryIMockUpdateObjectUrl
+
 	funcUpsertEmbeddings          func(ctx context.Context, embeddings []mm_repository.Embedding, externalServiceCall func(embUIDs []string) error) (ea1 []mm_repository.Embedding, err error)
 	inspectFuncUpsertEmbeddings   func(ctx context.Context, embeddings []mm_repository.Embedding, externalServiceCall func(embUIDs []string) error)
 	afterUpsertEmbeddingsCounter  uint64
@@ -361,6 +440,12 @@ func NewRepositoryIMock(t minimock.Tester) *RepositoryIMock {
 
 	m.CreateKnowledgeBaseFileMock = mRepositoryIMockCreateKnowledgeBaseFile{mock: m}
 	m.CreateKnowledgeBaseFileMock.callArgs = []*RepositoryIMockCreateKnowledgeBaseFileParams{}
+
+	m.CreateObjectMock = mRepositoryIMockCreateObject{mock: m}
+	m.CreateObjectMock.callArgs = []*RepositoryIMockCreateObjectParams{}
+
+	m.CreateObjectUrlMock = mRepositoryIMockCreateObjectUrl{mock: m}
+	m.CreateObjectUrlMock.callArgs = []*RepositoryIMockCreateObjectUrlParams{}
 
 	m.DeleteAllConvertedFilesInKbMock = mRepositoryIMockDeleteAllConvertedFilesInKb{mock: m}
 	m.DeleteAllConvertedFilesInKbMock.callArgs = []*RepositoryIMockDeleteAllConvertedFilesInKbParams{}
@@ -395,6 +480,12 @@ func NewRepositoryIMock(t minimock.Tester) *RepositoryIMock {
 	m.DeleteKnowledgeBaseFileAndDecreaseUsageMock = mRepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsage{mock: m}
 	m.DeleteKnowledgeBaseFileAndDecreaseUsageMock.callArgs = []*RepositoryIMockDeleteKnowledgeBaseFileAndDecreaseUsageParams{}
 
+	m.DeleteObjectMock = mRepositoryIMockDeleteObject{mock: m}
+	m.DeleteObjectMock.callArgs = []*RepositoryIMockDeleteObjectParams{}
+
+	m.DeleteObjectUrlMock = mRepositoryIMockDeleteObjectUrl{mock: m}
+	m.DeleteObjectUrlMock.callArgs = []*RepositoryIMockDeleteObjectUrlParams{}
+
 	m.DeleteRepositoryTagMock = mRepositoryIMockDeleteRepositoryTag{mock: m}
 	m.DeleteRepositoryTagMock.callArgs = []*RepositoryIMockDeleteRepositoryTagParams{}
 
@@ -427,6 +518,21 @@ func NewRepositoryIMock(t minimock.Tester) *RepositoryIMock {
 
 	m.GetNeedProcessFilesMock = mRepositoryIMockGetNeedProcessFiles{mock: m}
 	m.GetNeedProcessFilesMock.callArgs = []*RepositoryIMockGetNeedProcessFilesParams{}
+
+	m.GetObjectByUIDMock = mRepositoryIMockGetObjectByUID{mock: m}
+	m.GetObjectByUIDMock.callArgs = []*RepositoryIMockGetObjectByUIDParams{}
+
+	m.GetObjectDownloadUrlMock = mRepositoryIMockGetObjectDownloadUrl{mock: m}
+	m.GetObjectDownloadUrlMock.callArgs = []*RepositoryIMockGetObjectDownloadUrlParams{}
+
+	m.GetObjectUploadUrlMock = mRepositoryIMockGetObjectUploadUrl{mock: m}
+	m.GetObjectUploadUrlMock.callArgs = []*RepositoryIMockGetObjectUploadUrlParams{}
+
+	m.GetObjectUrlByUIDMock = mRepositoryIMockGetObjectUrlByUID{mock: m}
+	m.GetObjectUrlByUIDMock.callArgs = []*RepositoryIMockGetObjectUrlByUIDParams{}
+
+	m.GetObjectUrlCountByObjectMock = mRepositoryIMockGetObjectUrlCountByObject{mock: m}
+	m.GetObjectUrlCountByObjectMock.callArgs = []*RepositoryIMockGetObjectUrlCountByObjectParams{}
 
 	m.GetRepositoryTagMock = mRepositoryIMockGetRepositoryTag{mock: m}
 	m.GetRepositoryTagMock.callArgs = []*RepositoryIMockGetRepositoryTagParams{}
@@ -466,6 +572,12 @@ func NewRepositoryIMock(t minimock.Tester) *RepositoryIMock {
 
 	m.KnowledgeBaseFileTableNameMock = mRepositoryIMockKnowledgeBaseFileTableName{mock: m}
 
+	m.ListAllObjectUrlsMock = mRepositoryIMockListAllObjectUrls{mock: m}
+	m.ListAllObjectUrlsMock.callArgs = []*RepositoryIMockListAllObjectUrlsParams{}
+
+	m.ListAllObjectsMock = mRepositoryIMockListAllObjects{mock: m}
+	m.ListAllObjectsMock.callArgs = []*RepositoryIMockListAllObjectsParams{}
+
 	m.ListChunksByKbFileUIDMock = mRepositoryIMockListChunksByKbFileUID{mock: m}
 	m.ListChunksByKbFileUIDMock.callArgs = []*RepositoryIMockListChunksByKbFileUIDParams{}
 
@@ -494,6 +606,12 @@ func NewRepositoryIMock(t minimock.Tester) *RepositoryIMock {
 
 	m.UpdateKnowledgeBaseFileMock = mRepositoryIMockUpdateKnowledgeBaseFile{mock: m}
 	m.UpdateKnowledgeBaseFileMock.callArgs = []*RepositoryIMockUpdateKnowledgeBaseFileParams{}
+
+	m.UpdateObjectMock = mRepositoryIMockUpdateObject{mock: m}
+	m.UpdateObjectMock.callArgs = []*RepositoryIMockUpdateObjectParams{}
+
+	m.UpdateObjectUrlMock = mRepositoryIMockUpdateObjectUrl{mock: m}
+	m.UpdateObjectUrlMock.callArgs = []*RepositoryIMockUpdateObjectUrlParams{}
 
 	m.UpsertEmbeddingsMock = mRepositoryIMockUpsertEmbeddings{mock: m}
 	m.UpsertEmbeddingsMock.callArgs = []*RepositoryIMockUpsertEmbeddingsParams{}
@@ -1665,6 +1783,616 @@ func (m *RepositoryIMock) MinimockCreateKnowledgeBaseFileInspect() {
 	if !m.CreateKnowledgeBaseFileMock.invocationsDone() && afterCreateKnowledgeBaseFileCounter > 0 {
 		m.t.Errorf("Expected %d calls to RepositoryIMock.CreateKnowledgeBaseFile but found %d calls",
 			mm_atomic.LoadUint64(&m.CreateKnowledgeBaseFileMock.expectedInvocations), afterCreateKnowledgeBaseFileCounter)
+	}
+}
+
+type mRepositoryIMockCreateObject struct {
+	mock               *RepositoryIMock
+	defaultExpectation *RepositoryIMockCreateObjectExpectation
+	expectations       []*RepositoryIMockCreateObjectExpectation
+
+	callArgs []*RepositoryIMockCreateObjectParams
+	mutex    sync.RWMutex
+
+	expectedInvocations uint64
+}
+
+// RepositoryIMockCreateObjectExpectation specifies expectation struct of the RepositoryI.CreateObject
+type RepositoryIMockCreateObjectExpectation struct {
+	mock      *RepositoryIMock
+	params    *RepositoryIMockCreateObjectParams
+	paramPtrs *RepositoryIMockCreateObjectParamPtrs
+	results   *RepositoryIMockCreateObjectResults
+	Counter   uint64
+}
+
+// RepositoryIMockCreateObjectParams contains parameters of the RepositoryI.CreateObject
+type RepositoryIMockCreateObjectParams struct {
+	ctx context.Context
+	obj mm_repository.Object
+}
+
+// RepositoryIMockCreateObjectParamPtrs contains pointers to parameters of the RepositoryI.CreateObject
+type RepositoryIMockCreateObjectParamPtrs struct {
+	ctx *context.Context
+	obj *mm_repository.Object
+}
+
+// RepositoryIMockCreateObjectResults contains results of the RepositoryI.CreateObject
+type RepositoryIMockCreateObjectResults struct {
+	op1 *mm_repository.Object
+	err error
+}
+
+// Expect sets up expected params for RepositoryI.CreateObject
+func (mmCreateObject *mRepositoryIMockCreateObject) Expect(ctx context.Context, obj mm_repository.Object) *mRepositoryIMockCreateObject {
+	if mmCreateObject.mock.funcCreateObject != nil {
+		mmCreateObject.mock.t.Fatalf("RepositoryIMock.CreateObject mock is already set by Set")
+	}
+
+	if mmCreateObject.defaultExpectation == nil {
+		mmCreateObject.defaultExpectation = &RepositoryIMockCreateObjectExpectation{}
+	}
+
+	if mmCreateObject.defaultExpectation.paramPtrs != nil {
+		mmCreateObject.mock.t.Fatalf("RepositoryIMock.CreateObject mock is already set by ExpectParams functions")
+	}
+
+	mmCreateObject.defaultExpectation.params = &RepositoryIMockCreateObjectParams{ctx, obj}
+	for _, e := range mmCreateObject.expectations {
+		if minimock.Equal(e.params, mmCreateObject.defaultExpectation.params) {
+			mmCreateObject.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmCreateObject.defaultExpectation.params)
+		}
+	}
+
+	return mmCreateObject
+}
+
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.CreateObject
+func (mmCreateObject *mRepositoryIMockCreateObject) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockCreateObject {
+	if mmCreateObject.mock.funcCreateObject != nil {
+		mmCreateObject.mock.t.Fatalf("RepositoryIMock.CreateObject mock is already set by Set")
+	}
+
+	if mmCreateObject.defaultExpectation == nil {
+		mmCreateObject.defaultExpectation = &RepositoryIMockCreateObjectExpectation{}
+	}
+
+	if mmCreateObject.defaultExpectation.params != nil {
+		mmCreateObject.mock.t.Fatalf("RepositoryIMock.CreateObject mock is already set by Expect")
+	}
+
+	if mmCreateObject.defaultExpectation.paramPtrs == nil {
+		mmCreateObject.defaultExpectation.paramPtrs = &RepositoryIMockCreateObjectParamPtrs{}
+	}
+	mmCreateObject.defaultExpectation.paramPtrs.ctx = &ctx
+
+	return mmCreateObject
+}
+
+// ExpectObjParam2 sets up expected param obj for RepositoryI.CreateObject
+func (mmCreateObject *mRepositoryIMockCreateObject) ExpectObjParam2(obj mm_repository.Object) *mRepositoryIMockCreateObject {
+	if mmCreateObject.mock.funcCreateObject != nil {
+		mmCreateObject.mock.t.Fatalf("RepositoryIMock.CreateObject mock is already set by Set")
+	}
+
+	if mmCreateObject.defaultExpectation == nil {
+		mmCreateObject.defaultExpectation = &RepositoryIMockCreateObjectExpectation{}
+	}
+
+	if mmCreateObject.defaultExpectation.params != nil {
+		mmCreateObject.mock.t.Fatalf("RepositoryIMock.CreateObject mock is already set by Expect")
+	}
+
+	if mmCreateObject.defaultExpectation.paramPtrs == nil {
+		mmCreateObject.defaultExpectation.paramPtrs = &RepositoryIMockCreateObjectParamPtrs{}
+	}
+	mmCreateObject.defaultExpectation.paramPtrs.obj = &obj
+
+	return mmCreateObject
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.CreateObject
+func (mmCreateObject *mRepositoryIMockCreateObject) Inspect(f func(ctx context.Context, obj mm_repository.Object)) *mRepositoryIMockCreateObject {
+	if mmCreateObject.mock.inspectFuncCreateObject != nil {
+		mmCreateObject.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.CreateObject")
+	}
+
+	mmCreateObject.mock.inspectFuncCreateObject = f
+
+	return mmCreateObject
+}
+
+// Return sets up results that will be returned by RepositoryI.CreateObject
+func (mmCreateObject *mRepositoryIMockCreateObject) Return(op1 *mm_repository.Object, err error) *RepositoryIMock {
+	if mmCreateObject.mock.funcCreateObject != nil {
+		mmCreateObject.mock.t.Fatalf("RepositoryIMock.CreateObject mock is already set by Set")
+	}
+
+	if mmCreateObject.defaultExpectation == nil {
+		mmCreateObject.defaultExpectation = &RepositoryIMockCreateObjectExpectation{mock: mmCreateObject.mock}
+	}
+	mmCreateObject.defaultExpectation.results = &RepositoryIMockCreateObjectResults{op1, err}
+	return mmCreateObject.mock
+}
+
+// Set uses given function f to mock the RepositoryI.CreateObject method
+func (mmCreateObject *mRepositoryIMockCreateObject) Set(f func(ctx context.Context, obj mm_repository.Object) (op1 *mm_repository.Object, err error)) *RepositoryIMock {
+	if mmCreateObject.defaultExpectation != nil {
+		mmCreateObject.mock.t.Fatalf("Default expectation is already set for the RepositoryI.CreateObject method")
+	}
+
+	if len(mmCreateObject.expectations) > 0 {
+		mmCreateObject.mock.t.Fatalf("Some expectations are already set for the RepositoryI.CreateObject method")
+	}
+
+	mmCreateObject.mock.funcCreateObject = f
+	return mmCreateObject.mock
+}
+
+// When sets expectation for the RepositoryI.CreateObject which will trigger the result defined by the following
+// Then helper
+func (mmCreateObject *mRepositoryIMockCreateObject) When(ctx context.Context, obj mm_repository.Object) *RepositoryIMockCreateObjectExpectation {
+	if mmCreateObject.mock.funcCreateObject != nil {
+		mmCreateObject.mock.t.Fatalf("RepositoryIMock.CreateObject mock is already set by Set")
+	}
+
+	expectation := &RepositoryIMockCreateObjectExpectation{
+		mock:   mmCreateObject.mock,
+		params: &RepositoryIMockCreateObjectParams{ctx, obj},
+	}
+	mmCreateObject.expectations = append(mmCreateObject.expectations, expectation)
+	return expectation
+}
+
+// Then sets up RepositoryI.CreateObject return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockCreateObjectExpectation) Then(op1 *mm_repository.Object, err error) *RepositoryIMock {
+	e.results = &RepositoryIMockCreateObjectResults{op1, err}
+	return e.mock
+}
+
+// Times sets number of times RepositoryI.CreateObject should be invoked
+func (mmCreateObject *mRepositoryIMockCreateObject) Times(n uint64) *mRepositoryIMockCreateObject {
+	if n == 0 {
+		mmCreateObject.mock.t.Fatalf("Times of RepositoryIMock.CreateObject mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmCreateObject.expectedInvocations, n)
+	return mmCreateObject
+}
+
+func (mmCreateObject *mRepositoryIMockCreateObject) invocationsDone() bool {
+	if len(mmCreateObject.expectations) == 0 && mmCreateObject.defaultExpectation == nil && mmCreateObject.mock.funcCreateObject == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmCreateObject.mock.afterCreateObjectCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmCreateObject.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// CreateObject implements repository.RepositoryI
+func (mmCreateObject *RepositoryIMock) CreateObject(ctx context.Context, obj mm_repository.Object) (op1 *mm_repository.Object, err error) {
+	mm_atomic.AddUint64(&mmCreateObject.beforeCreateObjectCounter, 1)
+	defer mm_atomic.AddUint64(&mmCreateObject.afterCreateObjectCounter, 1)
+
+	if mmCreateObject.inspectFuncCreateObject != nil {
+		mmCreateObject.inspectFuncCreateObject(ctx, obj)
+	}
+
+	mm_params := RepositoryIMockCreateObjectParams{ctx, obj}
+
+	// Record call args
+	mmCreateObject.CreateObjectMock.mutex.Lock()
+	mmCreateObject.CreateObjectMock.callArgs = append(mmCreateObject.CreateObjectMock.callArgs, &mm_params)
+	mmCreateObject.CreateObjectMock.mutex.Unlock()
+
+	for _, e := range mmCreateObject.CreateObjectMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.op1, e.results.err
+		}
+	}
+
+	if mmCreateObject.CreateObjectMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmCreateObject.CreateObjectMock.defaultExpectation.Counter, 1)
+		mm_want := mmCreateObject.CreateObjectMock.defaultExpectation.params
+		mm_want_ptrs := mmCreateObject.CreateObjectMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryIMockCreateObjectParams{ctx, obj}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmCreateObject.t.Errorf("RepositoryIMock.CreateObject got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.obj != nil && !minimock.Equal(*mm_want_ptrs.obj, mm_got.obj) {
+				mmCreateObject.t.Errorf("RepositoryIMock.CreateObject got unexpected parameter obj, want: %#v, got: %#v%s\n", *mm_want_ptrs.obj, mm_got.obj, minimock.Diff(*mm_want_ptrs.obj, mm_got.obj))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmCreateObject.t.Errorf("RepositoryIMock.CreateObject got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmCreateObject.CreateObjectMock.defaultExpectation.results
+		if mm_results == nil {
+			mmCreateObject.t.Fatal("No results are set for the RepositoryIMock.CreateObject")
+		}
+		return (*mm_results).op1, (*mm_results).err
+	}
+	if mmCreateObject.funcCreateObject != nil {
+		return mmCreateObject.funcCreateObject(ctx, obj)
+	}
+	mmCreateObject.t.Fatalf("Unexpected call to RepositoryIMock.CreateObject. %v %v", ctx, obj)
+	return
+}
+
+// CreateObjectAfterCounter returns a count of finished RepositoryIMock.CreateObject invocations
+func (mmCreateObject *RepositoryIMock) CreateObjectAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmCreateObject.afterCreateObjectCounter)
+}
+
+// CreateObjectBeforeCounter returns a count of RepositoryIMock.CreateObject invocations
+func (mmCreateObject *RepositoryIMock) CreateObjectBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmCreateObject.beforeCreateObjectCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryIMock.CreateObject.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmCreateObject *mRepositoryIMockCreateObject) Calls() []*RepositoryIMockCreateObjectParams {
+	mmCreateObject.mutex.RLock()
+
+	argCopy := make([]*RepositoryIMockCreateObjectParams, len(mmCreateObject.callArgs))
+	copy(argCopy, mmCreateObject.callArgs)
+
+	mmCreateObject.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockCreateObjectDone returns true if the count of the CreateObject invocations corresponds
+// the number of defined expectations
+func (m *RepositoryIMock) MinimockCreateObjectDone() bool {
+	for _, e := range m.CreateObjectMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.CreateObjectMock.invocationsDone()
+}
+
+// MinimockCreateObjectInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockCreateObjectInspect() {
+	for _, e := range m.CreateObjectMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryIMock.CreateObject with params: %#v", *e.params)
+		}
+	}
+
+	afterCreateObjectCounter := mm_atomic.LoadUint64(&m.afterCreateObjectCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.CreateObjectMock.defaultExpectation != nil && afterCreateObjectCounter < 1 {
+		if m.CreateObjectMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to RepositoryIMock.CreateObject")
+		} else {
+			m.t.Errorf("Expected call to RepositoryIMock.CreateObject with params: %#v", *m.CreateObjectMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcCreateObject != nil && afterCreateObjectCounter < 1 {
+		m.t.Error("Expected call to RepositoryIMock.CreateObject")
+	}
+
+	if !m.CreateObjectMock.invocationsDone() && afterCreateObjectCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.CreateObject but found %d calls",
+			mm_atomic.LoadUint64(&m.CreateObjectMock.expectedInvocations), afterCreateObjectCounter)
+	}
+}
+
+type mRepositoryIMockCreateObjectUrl struct {
+	mock               *RepositoryIMock
+	defaultExpectation *RepositoryIMockCreateObjectUrlExpectation
+	expectations       []*RepositoryIMockCreateObjectUrlExpectation
+
+	callArgs []*RepositoryIMockCreateObjectUrlParams
+	mutex    sync.RWMutex
+
+	expectedInvocations uint64
+}
+
+// RepositoryIMockCreateObjectUrlExpectation specifies expectation struct of the RepositoryI.CreateObjectUrl
+type RepositoryIMockCreateObjectUrlExpectation struct {
+	mock      *RepositoryIMock
+	params    *RepositoryIMockCreateObjectUrlParams
+	paramPtrs *RepositoryIMockCreateObjectUrlParamPtrs
+	results   *RepositoryIMockCreateObjectUrlResults
+	Counter   uint64
+}
+
+// RepositoryIMockCreateObjectUrlParams contains parameters of the RepositoryI.CreateObjectUrl
+type RepositoryIMockCreateObjectUrlParams struct {
+	ctx       context.Context
+	objectUrl mm_repository.ObjectURL
+}
+
+// RepositoryIMockCreateObjectUrlParamPtrs contains pointers to parameters of the RepositoryI.CreateObjectUrl
+type RepositoryIMockCreateObjectUrlParamPtrs struct {
+	ctx       *context.Context
+	objectUrl *mm_repository.ObjectURL
+}
+
+// RepositoryIMockCreateObjectUrlResults contains results of the RepositoryI.CreateObjectUrl
+type RepositoryIMockCreateObjectUrlResults struct {
+	op1 *mm_repository.ObjectURL
+	err error
+}
+
+// Expect sets up expected params for RepositoryI.CreateObjectUrl
+func (mmCreateObjectUrl *mRepositoryIMockCreateObjectUrl) Expect(ctx context.Context, objectUrl mm_repository.ObjectURL) *mRepositoryIMockCreateObjectUrl {
+	if mmCreateObjectUrl.mock.funcCreateObjectUrl != nil {
+		mmCreateObjectUrl.mock.t.Fatalf("RepositoryIMock.CreateObjectUrl mock is already set by Set")
+	}
+
+	if mmCreateObjectUrl.defaultExpectation == nil {
+		mmCreateObjectUrl.defaultExpectation = &RepositoryIMockCreateObjectUrlExpectation{}
+	}
+
+	if mmCreateObjectUrl.defaultExpectation.paramPtrs != nil {
+		mmCreateObjectUrl.mock.t.Fatalf("RepositoryIMock.CreateObjectUrl mock is already set by ExpectParams functions")
+	}
+
+	mmCreateObjectUrl.defaultExpectation.params = &RepositoryIMockCreateObjectUrlParams{ctx, objectUrl}
+	for _, e := range mmCreateObjectUrl.expectations {
+		if minimock.Equal(e.params, mmCreateObjectUrl.defaultExpectation.params) {
+			mmCreateObjectUrl.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmCreateObjectUrl.defaultExpectation.params)
+		}
+	}
+
+	return mmCreateObjectUrl
+}
+
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.CreateObjectUrl
+func (mmCreateObjectUrl *mRepositoryIMockCreateObjectUrl) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockCreateObjectUrl {
+	if mmCreateObjectUrl.mock.funcCreateObjectUrl != nil {
+		mmCreateObjectUrl.mock.t.Fatalf("RepositoryIMock.CreateObjectUrl mock is already set by Set")
+	}
+
+	if mmCreateObjectUrl.defaultExpectation == nil {
+		mmCreateObjectUrl.defaultExpectation = &RepositoryIMockCreateObjectUrlExpectation{}
+	}
+
+	if mmCreateObjectUrl.defaultExpectation.params != nil {
+		mmCreateObjectUrl.mock.t.Fatalf("RepositoryIMock.CreateObjectUrl mock is already set by Expect")
+	}
+
+	if mmCreateObjectUrl.defaultExpectation.paramPtrs == nil {
+		mmCreateObjectUrl.defaultExpectation.paramPtrs = &RepositoryIMockCreateObjectUrlParamPtrs{}
+	}
+	mmCreateObjectUrl.defaultExpectation.paramPtrs.ctx = &ctx
+
+	return mmCreateObjectUrl
+}
+
+// ExpectObjectUrlParam2 sets up expected param objectUrl for RepositoryI.CreateObjectUrl
+func (mmCreateObjectUrl *mRepositoryIMockCreateObjectUrl) ExpectObjectUrlParam2(objectUrl mm_repository.ObjectURL) *mRepositoryIMockCreateObjectUrl {
+	if mmCreateObjectUrl.mock.funcCreateObjectUrl != nil {
+		mmCreateObjectUrl.mock.t.Fatalf("RepositoryIMock.CreateObjectUrl mock is already set by Set")
+	}
+
+	if mmCreateObjectUrl.defaultExpectation == nil {
+		mmCreateObjectUrl.defaultExpectation = &RepositoryIMockCreateObjectUrlExpectation{}
+	}
+
+	if mmCreateObjectUrl.defaultExpectation.params != nil {
+		mmCreateObjectUrl.mock.t.Fatalf("RepositoryIMock.CreateObjectUrl mock is already set by Expect")
+	}
+
+	if mmCreateObjectUrl.defaultExpectation.paramPtrs == nil {
+		mmCreateObjectUrl.defaultExpectation.paramPtrs = &RepositoryIMockCreateObjectUrlParamPtrs{}
+	}
+	mmCreateObjectUrl.defaultExpectation.paramPtrs.objectUrl = &objectUrl
+
+	return mmCreateObjectUrl
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.CreateObjectUrl
+func (mmCreateObjectUrl *mRepositoryIMockCreateObjectUrl) Inspect(f func(ctx context.Context, objectUrl mm_repository.ObjectURL)) *mRepositoryIMockCreateObjectUrl {
+	if mmCreateObjectUrl.mock.inspectFuncCreateObjectUrl != nil {
+		mmCreateObjectUrl.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.CreateObjectUrl")
+	}
+
+	mmCreateObjectUrl.mock.inspectFuncCreateObjectUrl = f
+
+	return mmCreateObjectUrl
+}
+
+// Return sets up results that will be returned by RepositoryI.CreateObjectUrl
+func (mmCreateObjectUrl *mRepositoryIMockCreateObjectUrl) Return(op1 *mm_repository.ObjectURL, err error) *RepositoryIMock {
+	if mmCreateObjectUrl.mock.funcCreateObjectUrl != nil {
+		mmCreateObjectUrl.mock.t.Fatalf("RepositoryIMock.CreateObjectUrl mock is already set by Set")
+	}
+
+	if mmCreateObjectUrl.defaultExpectation == nil {
+		mmCreateObjectUrl.defaultExpectation = &RepositoryIMockCreateObjectUrlExpectation{mock: mmCreateObjectUrl.mock}
+	}
+	mmCreateObjectUrl.defaultExpectation.results = &RepositoryIMockCreateObjectUrlResults{op1, err}
+	return mmCreateObjectUrl.mock
+}
+
+// Set uses given function f to mock the RepositoryI.CreateObjectUrl method
+func (mmCreateObjectUrl *mRepositoryIMockCreateObjectUrl) Set(f func(ctx context.Context, objectUrl mm_repository.ObjectURL) (op1 *mm_repository.ObjectURL, err error)) *RepositoryIMock {
+	if mmCreateObjectUrl.defaultExpectation != nil {
+		mmCreateObjectUrl.mock.t.Fatalf("Default expectation is already set for the RepositoryI.CreateObjectUrl method")
+	}
+
+	if len(mmCreateObjectUrl.expectations) > 0 {
+		mmCreateObjectUrl.mock.t.Fatalf("Some expectations are already set for the RepositoryI.CreateObjectUrl method")
+	}
+
+	mmCreateObjectUrl.mock.funcCreateObjectUrl = f
+	return mmCreateObjectUrl.mock
+}
+
+// When sets expectation for the RepositoryI.CreateObjectUrl which will trigger the result defined by the following
+// Then helper
+func (mmCreateObjectUrl *mRepositoryIMockCreateObjectUrl) When(ctx context.Context, objectUrl mm_repository.ObjectURL) *RepositoryIMockCreateObjectUrlExpectation {
+	if mmCreateObjectUrl.mock.funcCreateObjectUrl != nil {
+		mmCreateObjectUrl.mock.t.Fatalf("RepositoryIMock.CreateObjectUrl mock is already set by Set")
+	}
+
+	expectation := &RepositoryIMockCreateObjectUrlExpectation{
+		mock:   mmCreateObjectUrl.mock,
+		params: &RepositoryIMockCreateObjectUrlParams{ctx, objectUrl},
+	}
+	mmCreateObjectUrl.expectations = append(mmCreateObjectUrl.expectations, expectation)
+	return expectation
+}
+
+// Then sets up RepositoryI.CreateObjectUrl return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockCreateObjectUrlExpectation) Then(op1 *mm_repository.ObjectURL, err error) *RepositoryIMock {
+	e.results = &RepositoryIMockCreateObjectUrlResults{op1, err}
+	return e.mock
+}
+
+// Times sets number of times RepositoryI.CreateObjectUrl should be invoked
+func (mmCreateObjectUrl *mRepositoryIMockCreateObjectUrl) Times(n uint64) *mRepositoryIMockCreateObjectUrl {
+	if n == 0 {
+		mmCreateObjectUrl.mock.t.Fatalf("Times of RepositoryIMock.CreateObjectUrl mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmCreateObjectUrl.expectedInvocations, n)
+	return mmCreateObjectUrl
+}
+
+func (mmCreateObjectUrl *mRepositoryIMockCreateObjectUrl) invocationsDone() bool {
+	if len(mmCreateObjectUrl.expectations) == 0 && mmCreateObjectUrl.defaultExpectation == nil && mmCreateObjectUrl.mock.funcCreateObjectUrl == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmCreateObjectUrl.mock.afterCreateObjectUrlCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmCreateObjectUrl.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// CreateObjectUrl implements repository.RepositoryI
+func (mmCreateObjectUrl *RepositoryIMock) CreateObjectUrl(ctx context.Context, objectUrl mm_repository.ObjectURL) (op1 *mm_repository.ObjectURL, err error) {
+	mm_atomic.AddUint64(&mmCreateObjectUrl.beforeCreateObjectUrlCounter, 1)
+	defer mm_atomic.AddUint64(&mmCreateObjectUrl.afterCreateObjectUrlCounter, 1)
+
+	if mmCreateObjectUrl.inspectFuncCreateObjectUrl != nil {
+		mmCreateObjectUrl.inspectFuncCreateObjectUrl(ctx, objectUrl)
+	}
+
+	mm_params := RepositoryIMockCreateObjectUrlParams{ctx, objectUrl}
+
+	// Record call args
+	mmCreateObjectUrl.CreateObjectUrlMock.mutex.Lock()
+	mmCreateObjectUrl.CreateObjectUrlMock.callArgs = append(mmCreateObjectUrl.CreateObjectUrlMock.callArgs, &mm_params)
+	mmCreateObjectUrl.CreateObjectUrlMock.mutex.Unlock()
+
+	for _, e := range mmCreateObjectUrl.CreateObjectUrlMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.op1, e.results.err
+		}
+	}
+
+	if mmCreateObjectUrl.CreateObjectUrlMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmCreateObjectUrl.CreateObjectUrlMock.defaultExpectation.Counter, 1)
+		mm_want := mmCreateObjectUrl.CreateObjectUrlMock.defaultExpectation.params
+		mm_want_ptrs := mmCreateObjectUrl.CreateObjectUrlMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryIMockCreateObjectUrlParams{ctx, objectUrl}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmCreateObjectUrl.t.Errorf("RepositoryIMock.CreateObjectUrl got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.objectUrl != nil && !minimock.Equal(*mm_want_ptrs.objectUrl, mm_got.objectUrl) {
+				mmCreateObjectUrl.t.Errorf("RepositoryIMock.CreateObjectUrl got unexpected parameter objectUrl, want: %#v, got: %#v%s\n", *mm_want_ptrs.objectUrl, mm_got.objectUrl, minimock.Diff(*mm_want_ptrs.objectUrl, mm_got.objectUrl))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmCreateObjectUrl.t.Errorf("RepositoryIMock.CreateObjectUrl got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmCreateObjectUrl.CreateObjectUrlMock.defaultExpectation.results
+		if mm_results == nil {
+			mmCreateObjectUrl.t.Fatal("No results are set for the RepositoryIMock.CreateObjectUrl")
+		}
+		return (*mm_results).op1, (*mm_results).err
+	}
+	if mmCreateObjectUrl.funcCreateObjectUrl != nil {
+		return mmCreateObjectUrl.funcCreateObjectUrl(ctx, objectUrl)
+	}
+	mmCreateObjectUrl.t.Fatalf("Unexpected call to RepositoryIMock.CreateObjectUrl. %v %v", ctx, objectUrl)
+	return
+}
+
+// CreateObjectUrlAfterCounter returns a count of finished RepositoryIMock.CreateObjectUrl invocations
+func (mmCreateObjectUrl *RepositoryIMock) CreateObjectUrlAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmCreateObjectUrl.afterCreateObjectUrlCounter)
+}
+
+// CreateObjectUrlBeforeCounter returns a count of RepositoryIMock.CreateObjectUrl invocations
+func (mmCreateObjectUrl *RepositoryIMock) CreateObjectUrlBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmCreateObjectUrl.beforeCreateObjectUrlCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryIMock.CreateObjectUrl.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmCreateObjectUrl *mRepositoryIMockCreateObjectUrl) Calls() []*RepositoryIMockCreateObjectUrlParams {
+	mmCreateObjectUrl.mutex.RLock()
+
+	argCopy := make([]*RepositoryIMockCreateObjectUrlParams, len(mmCreateObjectUrl.callArgs))
+	copy(argCopy, mmCreateObjectUrl.callArgs)
+
+	mmCreateObjectUrl.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockCreateObjectUrlDone returns true if the count of the CreateObjectUrl invocations corresponds
+// the number of defined expectations
+func (m *RepositoryIMock) MinimockCreateObjectUrlDone() bool {
+	for _, e := range m.CreateObjectUrlMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.CreateObjectUrlMock.invocationsDone()
+}
+
+// MinimockCreateObjectUrlInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockCreateObjectUrlInspect() {
+	for _, e := range m.CreateObjectUrlMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryIMock.CreateObjectUrl with params: %#v", *e.params)
+		}
+	}
+
+	afterCreateObjectUrlCounter := mm_atomic.LoadUint64(&m.afterCreateObjectUrlCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.CreateObjectUrlMock.defaultExpectation != nil && afterCreateObjectUrlCounter < 1 {
+		if m.CreateObjectUrlMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to RepositoryIMock.CreateObjectUrl")
+		} else {
+			m.t.Errorf("Expected call to RepositoryIMock.CreateObjectUrl with params: %#v", *m.CreateObjectUrlMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcCreateObjectUrl != nil && afterCreateObjectUrlCounter < 1 {
+		m.t.Error("Expected call to RepositoryIMock.CreateObjectUrl")
+	}
+
+	if !m.CreateObjectUrlMock.invocationsDone() && afterCreateObjectUrlCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.CreateObjectUrl but found %d calls",
+			mm_atomic.LoadUint64(&m.CreateObjectUrlMock.expectedInvocations), afterCreateObjectUrlCounter)
 	}
 }
 
@@ -5182,6 +5910,614 @@ func (m *RepositoryIMock) MinimockDeleteKnowledgeBaseFileAndDecreaseUsageInspect
 	}
 }
 
+type mRepositoryIMockDeleteObject struct {
+	mock               *RepositoryIMock
+	defaultExpectation *RepositoryIMockDeleteObjectExpectation
+	expectations       []*RepositoryIMockDeleteObjectExpectation
+
+	callArgs []*RepositoryIMockDeleteObjectParams
+	mutex    sync.RWMutex
+
+	expectedInvocations uint64
+}
+
+// RepositoryIMockDeleteObjectExpectation specifies expectation struct of the RepositoryI.DeleteObject
+type RepositoryIMockDeleteObjectExpectation struct {
+	mock      *RepositoryIMock
+	params    *RepositoryIMockDeleteObjectParams
+	paramPtrs *RepositoryIMockDeleteObjectParamPtrs
+	results   *RepositoryIMockDeleteObjectResults
+	Counter   uint64
+}
+
+// RepositoryIMockDeleteObjectParams contains parameters of the RepositoryI.DeleteObject
+type RepositoryIMockDeleteObjectParams struct {
+	ctx context.Context
+	uid uuid.UUID
+}
+
+// RepositoryIMockDeleteObjectParamPtrs contains pointers to parameters of the RepositoryI.DeleteObject
+type RepositoryIMockDeleteObjectParamPtrs struct {
+	ctx *context.Context
+	uid *uuid.UUID
+}
+
+// RepositoryIMockDeleteObjectResults contains results of the RepositoryI.DeleteObject
+type RepositoryIMockDeleteObjectResults struct {
+	err error
+}
+
+// Expect sets up expected params for RepositoryI.DeleteObject
+func (mmDeleteObject *mRepositoryIMockDeleteObject) Expect(ctx context.Context, uid uuid.UUID) *mRepositoryIMockDeleteObject {
+	if mmDeleteObject.mock.funcDeleteObject != nil {
+		mmDeleteObject.mock.t.Fatalf("RepositoryIMock.DeleteObject mock is already set by Set")
+	}
+
+	if mmDeleteObject.defaultExpectation == nil {
+		mmDeleteObject.defaultExpectation = &RepositoryIMockDeleteObjectExpectation{}
+	}
+
+	if mmDeleteObject.defaultExpectation.paramPtrs != nil {
+		mmDeleteObject.mock.t.Fatalf("RepositoryIMock.DeleteObject mock is already set by ExpectParams functions")
+	}
+
+	mmDeleteObject.defaultExpectation.params = &RepositoryIMockDeleteObjectParams{ctx, uid}
+	for _, e := range mmDeleteObject.expectations {
+		if minimock.Equal(e.params, mmDeleteObject.defaultExpectation.params) {
+			mmDeleteObject.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmDeleteObject.defaultExpectation.params)
+		}
+	}
+
+	return mmDeleteObject
+}
+
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.DeleteObject
+func (mmDeleteObject *mRepositoryIMockDeleteObject) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockDeleteObject {
+	if mmDeleteObject.mock.funcDeleteObject != nil {
+		mmDeleteObject.mock.t.Fatalf("RepositoryIMock.DeleteObject mock is already set by Set")
+	}
+
+	if mmDeleteObject.defaultExpectation == nil {
+		mmDeleteObject.defaultExpectation = &RepositoryIMockDeleteObjectExpectation{}
+	}
+
+	if mmDeleteObject.defaultExpectation.params != nil {
+		mmDeleteObject.mock.t.Fatalf("RepositoryIMock.DeleteObject mock is already set by Expect")
+	}
+
+	if mmDeleteObject.defaultExpectation.paramPtrs == nil {
+		mmDeleteObject.defaultExpectation.paramPtrs = &RepositoryIMockDeleteObjectParamPtrs{}
+	}
+	mmDeleteObject.defaultExpectation.paramPtrs.ctx = &ctx
+
+	return mmDeleteObject
+}
+
+// ExpectUidParam2 sets up expected param uid for RepositoryI.DeleteObject
+func (mmDeleteObject *mRepositoryIMockDeleteObject) ExpectUidParam2(uid uuid.UUID) *mRepositoryIMockDeleteObject {
+	if mmDeleteObject.mock.funcDeleteObject != nil {
+		mmDeleteObject.mock.t.Fatalf("RepositoryIMock.DeleteObject mock is already set by Set")
+	}
+
+	if mmDeleteObject.defaultExpectation == nil {
+		mmDeleteObject.defaultExpectation = &RepositoryIMockDeleteObjectExpectation{}
+	}
+
+	if mmDeleteObject.defaultExpectation.params != nil {
+		mmDeleteObject.mock.t.Fatalf("RepositoryIMock.DeleteObject mock is already set by Expect")
+	}
+
+	if mmDeleteObject.defaultExpectation.paramPtrs == nil {
+		mmDeleteObject.defaultExpectation.paramPtrs = &RepositoryIMockDeleteObjectParamPtrs{}
+	}
+	mmDeleteObject.defaultExpectation.paramPtrs.uid = &uid
+
+	return mmDeleteObject
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.DeleteObject
+func (mmDeleteObject *mRepositoryIMockDeleteObject) Inspect(f func(ctx context.Context, uid uuid.UUID)) *mRepositoryIMockDeleteObject {
+	if mmDeleteObject.mock.inspectFuncDeleteObject != nil {
+		mmDeleteObject.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.DeleteObject")
+	}
+
+	mmDeleteObject.mock.inspectFuncDeleteObject = f
+
+	return mmDeleteObject
+}
+
+// Return sets up results that will be returned by RepositoryI.DeleteObject
+func (mmDeleteObject *mRepositoryIMockDeleteObject) Return(err error) *RepositoryIMock {
+	if mmDeleteObject.mock.funcDeleteObject != nil {
+		mmDeleteObject.mock.t.Fatalf("RepositoryIMock.DeleteObject mock is already set by Set")
+	}
+
+	if mmDeleteObject.defaultExpectation == nil {
+		mmDeleteObject.defaultExpectation = &RepositoryIMockDeleteObjectExpectation{mock: mmDeleteObject.mock}
+	}
+	mmDeleteObject.defaultExpectation.results = &RepositoryIMockDeleteObjectResults{err}
+	return mmDeleteObject.mock
+}
+
+// Set uses given function f to mock the RepositoryI.DeleteObject method
+func (mmDeleteObject *mRepositoryIMockDeleteObject) Set(f func(ctx context.Context, uid uuid.UUID) (err error)) *RepositoryIMock {
+	if mmDeleteObject.defaultExpectation != nil {
+		mmDeleteObject.mock.t.Fatalf("Default expectation is already set for the RepositoryI.DeleteObject method")
+	}
+
+	if len(mmDeleteObject.expectations) > 0 {
+		mmDeleteObject.mock.t.Fatalf("Some expectations are already set for the RepositoryI.DeleteObject method")
+	}
+
+	mmDeleteObject.mock.funcDeleteObject = f
+	return mmDeleteObject.mock
+}
+
+// When sets expectation for the RepositoryI.DeleteObject which will trigger the result defined by the following
+// Then helper
+func (mmDeleteObject *mRepositoryIMockDeleteObject) When(ctx context.Context, uid uuid.UUID) *RepositoryIMockDeleteObjectExpectation {
+	if mmDeleteObject.mock.funcDeleteObject != nil {
+		mmDeleteObject.mock.t.Fatalf("RepositoryIMock.DeleteObject mock is already set by Set")
+	}
+
+	expectation := &RepositoryIMockDeleteObjectExpectation{
+		mock:   mmDeleteObject.mock,
+		params: &RepositoryIMockDeleteObjectParams{ctx, uid},
+	}
+	mmDeleteObject.expectations = append(mmDeleteObject.expectations, expectation)
+	return expectation
+}
+
+// Then sets up RepositoryI.DeleteObject return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockDeleteObjectExpectation) Then(err error) *RepositoryIMock {
+	e.results = &RepositoryIMockDeleteObjectResults{err}
+	return e.mock
+}
+
+// Times sets number of times RepositoryI.DeleteObject should be invoked
+func (mmDeleteObject *mRepositoryIMockDeleteObject) Times(n uint64) *mRepositoryIMockDeleteObject {
+	if n == 0 {
+		mmDeleteObject.mock.t.Fatalf("Times of RepositoryIMock.DeleteObject mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmDeleteObject.expectedInvocations, n)
+	return mmDeleteObject
+}
+
+func (mmDeleteObject *mRepositoryIMockDeleteObject) invocationsDone() bool {
+	if len(mmDeleteObject.expectations) == 0 && mmDeleteObject.defaultExpectation == nil && mmDeleteObject.mock.funcDeleteObject == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmDeleteObject.mock.afterDeleteObjectCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmDeleteObject.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// DeleteObject implements repository.RepositoryI
+func (mmDeleteObject *RepositoryIMock) DeleteObject(ctx context.Context, uid uuid.UUID) (err error) {
+	mm_atomic.AddUint64(&mmDeleteObject.beforeDeleteObjectCounter, 1)
+	defer mm_atomic.AddUint64(&mmDeleteObject.afterDeleteObjectCounter, 1)
+
+	if mmDeleteObject.inspectFuncDeleteObject != nil {
+		mmDeleteObject.inspectFuncDeleteObject(ctx, uid)
+	}
+
+	mm_params := RepositoryIMockDeleteObjectParams{ctx, uid}
+
+	// Record call args
+	mmDeleteObject.DeleteObjectMock.mutex.Lock()
+	mmDeleteObject.DeleteObjectMock.callArgs = append(mmDeleteObject.DeleteObjectMock.callArgs, &mm_params)
+	mmDeleteObject.DeleteObjectMock.mutex.Unlock()
+
+	for _, e := range mmDeleteObject.DeleteObjectMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmDeleteObject.DeleteObjectMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmDeleteObject.DeleteObjectMock.defaultExpectation.Counter, 1)
+		mm_want := mmDeleteObject.DeleteObjectMock.defaultExpectation.params
+		mm_want_ptrs := mmDeleteObject.DeleteObjectMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryIMockDeleteObjectParams{ctx, uid}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmDeleteObject.t.Errorf("RepositoryIMock.DeleteObject got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.uid != nil && !minimock.Equal(*mm_want_ptrs.uid, mm_got.uid) {
+				mmDeleteObject.t.Errorf("RepositoryIMock.DeleteObject got unexpected parameter uid, want: %#v, got: %#v%s\n", *mm_want_ptrs.uid, mm_got.uid, minimock.Diff(*mm_want_ptrs.uid, mm_got.uid))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmDeleteObject.t.Errorf("RepositoryIMock.DeleteObject got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmDeleteObject.DeleteObjectMock.defaultExpectation.results
+		if mm_results == nil {
+			mmDeleteObject.t.Fatal("No results are set for the RepositoryIMock.DeleteObject")
+		}
+		return (*mm_results).err
+	}
+	if mmDeleteObject.funcDeleteObject != nil {
+		return mmDeleteObject.funcDeleteObject(ctx, uid)
+	}
+	mmDeleteObject.t.Fatalf("Unexpected call to RepositoryIMock.DeleteObject. %v %v", ctx, uid)
+	return
+}
+
+// DeleteObjectAfterCounter returns a count of finished RepositoryIMock.DeleteObject invocations
+func (mmDeleteObject *RepositoryIMock) DeleteObjectAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmDeleteObject.afterDeleteObjectCounter)
+}
+
+// DeleteObjectBeforeCounter returns a count of RepositoryIMock.DeleteObject invocations
+func (mmDeleteObject *RepositoryIMock) DeleteObjectBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmDeleteObject.beforeDeleteObjectCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryIMock.DeleteObject.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmDeleteObject *mRepositoryIMockDeleteObject) Calls() []*RepositoryIMockDeleteObjectParams {
+	mmDeleteObject.mutex.RLock()
+
+	argCopy := make([]*RepositoryIMockDeleteObjectParams, len(mmDeleteObject.callArgs))
+	copy(argCopy, mmDeleteObject.callArgs)
+
+	mmDeleteObject.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockDeleteObjectDone returns true if the count of the DeleteObject invocations corresponds
+// the number of defined expectations
+func (m *RepositoryIMock) MinimockDeleteObjectDone() bool {
+	for _, e := range m.DeleteObjectMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.DeleteObjectMock.invocationsDone()
+}
+
+// MinimockDeleteObjectInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockDeleteObjectInspect() {
+	for _, e := range m.DeleteObjectMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryIMock.DeleteObject with params: %#v", *e.params)
+		}
+	}
+
+	afterDeleteObjectCounter := mm_atomic.LoadUint64(&m.afterDeleteObjectCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.DeleteObjectMock.defaultExpectation != nil && afterDeleteObjectCounter < 1 {
+		if m.DeleteObjectMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to RepositoryIMock.DeleteObject")
+		} else {
+			m.t.Errorf("Expected call to RepositoryIMock.DeleteObject with params: %#v", *m.DeleteObjectMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcDeleteObject != nil && afterDeleteObjectCounter < 1 {
+		m.t.Error("Expected call to RepositoryIMock.DeleteObject")
+	}
+
+	if !m.DeleteObjectMock.invocationsDone() && afterDeleteObjectCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.DeleteObject but found %d calls",
+			mm_atomic.LoadUint64(&m.DeleteObjectMock.expectedInvocations), afterDeleteObjectCounter)
+	}
+}
+
+type mRepositoryIMockDeleteObjectUrl struct {
+	mock               *RepositoryIMock
+	defaultExpectation *RepositoryIMockDeleteObjectUrlExpectation
+	expectations       []*RepositoryIMockDeleteObjectUrlExpectation
+
+	callArgs []*RepositoryIMockDeleteObjectUrlParams
+	mutex    sync.RWMutex
+
+	expectedInvocations uint64
+}
+
+// RepositoryIMockDeleteObjectUrlExpectation specifies expectation struct of the RepositoryI.DeleteObjectUrl
+type RepositoryIMockDeleteObjectUrlExpectation struct {
+	mock      *RepositoryIMock
+	params    *RepositoryIMockDeleteObjectUrlParams
+	paramPtrs *RepositoryIMockDeleteObjectUrlParamPtrs
+	results   *RepositoryIMockDeleteObjectUrlResults
+	Counter   uint64
+}
+
+// RepositoryIMockDeleteObjectUrlParams contains parameters of the RepositoryI.DeleteObjectUrl
+type RepositoryIMockDeleteObjectUrlParams struct {
+	ctx context.Context
+	uid uuid.UUID
+}
+
+// RepositoryIMockDeleteObjectUrlParamPtrs contains pointers to parameters of the RepositoryI.DeleteObjectUrl
+type RepositoryIMockDeleteObjectUrlParamPtrs struct {
+	ctx *context.Context
+	uid *uuid.UUID
+}
+
+// RepositoryIMockDeleteObjectUrlResults contains results of the RepositoryI.DeleteObjectUrl
+type RepositoryIMockDeleteObjectUrlResults struct {
+	err error
+}
+
+// Expect sets up expected params for RepositoryI.DeleteObjectUrl
+func (mmDeleteObjectUrl *mRepositoryIMockDeleteObjectUrl) Expect(ctx context.Context, uid uuid.UUID) *mRepositoryIMockDeleteObjectUrl {
+	if mmDeleteObjectUrl.mock.funcDeleteObjectUrl != nil {
+		mmDeleteObjectUrl.mock.t.Fatalf("RepositoryIMock.DeleteObjectUrl mock is already set by Set")
+	}
+
+	if mmDeleteObjectUrl.defaultExpectation == nil {
+		mmDeleteObjectUrl.defaultExpectation = &RepositoryIMockDeleteObjectUrlExpectation{}
+	}
+
+	if mmDeleteObjectUrl.defaultExpectation.paramPtrs != nil {
+		mmDeleteObjectUrl.mock.t.Fatalf("RepositoryIMock.DeleteObjectUrl mock is already set by ExpectParams functions")
+	}
+
+	mmDeleteObjectUrl.defaultExpectation.params = &RepositoryIMockDeleteObjectUrlParams{ctx, uid}
+	for _, e := range mmDeleteObjectUrl.expectations {
+		if minimock.Equal(e.params, mmDeleteObjectUrl.defaultExpectation.params) {
+			mmDeleteObjectUrl.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmDeleteObjectUrl.defaultExpectation.params)
+		}
+	}
+
+	return mmDeleteObjectUrl
+}
+
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.DeleteObjectUrl
+func (mmDeleteObjectUrl *mRepositoryIMockDeleteObjectUrl) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockDeleteObjectUrl {
+	if mmDeleteObjectUrl.mock.funcDeleteObjectUrl != nil {
+		mmDeleteObjectUrl.mock.t.Fatalf("RepositoryIMock.DeleteObjectUrl mock is already set by Set")
+	}
+
+	if mmDeleteObjectUrl.defaultExpectation == nil {
+		mmDeleteObjectUrl.defaultExpectation = &RepositoryIMockDeleteObjectUrlExpectation{}
+	}
+
+	if mmDeleteObjectUrl.defaultExpectation.params != nil {
+		mmDeleteObjectUrl.mock.t.Fatalf("RepositoryIMock.DeleteObjectUrl mock is already set by Expect")
+	}
+
+	if mmDeleteObjectUrl.defaultExpectation.paramPtrs == nil {
+		mmDeleteObjectUrl.defaultExpectation.paramPtrs = &RepositoryIMockDeleteObjectUrlParamPtrs{}
+	}
+	mmDeleteObjectUrl.defaultExpectation.paramPtrs.ctx = &ctx
+
+	return mmDeleteObjectUrl
+}
+
+// ExpectUidParam2 sets up expected param uid for RepositoryI.DeleteObjectUrl
+func (mmDeleteObjectUrl *mRepositoryIMockDeleteObjectUrl) ExpectUidParam2(uid uuid.UUID) *mRepositoryIMockDeleteObjectUrl {
+	if mmDeleteObjectUrl.mock.funcDeleteObjectUrl != nil {
+		mmDeleteObjectUrl.mock.t.Fatalf("RepositoryIMock.DeleteObjectUrl mock is already set by Set")
+	}
+
+	if mmDeleteObjectUrl.defaultExpectation == nil {
+		mmDeleteObjectUrl.defaultExpectation = &RepositoryIMockDeleteObjectUrlExpectation{}
+	}
+
+	if mmDeleteObjectUrl.defaultExpectation.params != nil {
+		mmDeleteObjectUrl.mock.t.Fatalf("RepositoryIMock.DeleteObjectUrl mock is already set by Expect")
+	}
+
+	if mmDeleteObjectUrl.defaultExpectation.paramPtrs == nil {
+		mmDeleteObjectUrl.defaultExpectation.paramPtrs = &RepositoryIMockDeleteObjectUrlParamPtrs{}
+	}
+	mmDeleteObjectUrl.defaultExpectation.paramPtrs.uid = &uid
+
+	return mmDeleteObjectUrl
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.DeleteObjectUrl
+func (mmDeleteObjectUrl *mRepositoryIMockDeleteObjectUrl) Inspect(f func(ctx context.Context, uid uuid.UUID)) *mRepositoryIMockDeleteObjectUrl {
+	if mmDeleteObjectUrl.mock.inspectFuncDeleteObjectUrl != nil {
+		mmDeleteObjectUrl.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.DeleteObjectUrl")
+	}
+
+	mmDeleteObjectUrl.mock.inspectFuncDeleteObjectUrl = f
+
+	return mmDeleteObjectUrl
+}
+
+// Return sets up results that will be returned by RepositoryI.DeleteObjectUrl
+func (mmDeleteObjectUrl *mRepositoryIMockDeleteObjectUrl) Return(err error) *RepositoryIMock {
+	if mmDeleteObjectUrl.mock.funcDeleteObjectUrl != nil {
+		mmDeleteObjectUrl.mock.t.Fatalf("RepositoryIMock.DeleteObjectUrl mock is already set by Set")
+	}
+
+	if mmDeleteObjectUrl.defaultExpectation == nil {
+		mmDeleteObjectUrl.defaultExpectation = &RepositoryIMockDeleteObjectUrlExpectation{mock: mmDeleteObjectUrl.mock}
+	}
+	mmDeleteObjectUrl.defaultExpectation.results = &RepositoryIMockDeleteObjectUrlResults{err}
+	return mmDeleteObjectUrl.mock
+}
+
+// Set uses given function f to mock the RepositoryI.DeleteObjectUrl method
+func (mmDeleteObjectUrl *mRepositoryIMockDeleteObjectUrl) Set(f func(ctx context.Context, uid uuid.UUID) (err error)) *RepositoryIMock {
+	if mmDeleteObjectUrl.defaultExpectation != nil {
+		mmDeleteObjectUrl.mock.t.Fatalf("Default expectation is already set for the RepositoryI.DeleteObjectUrl method")
+	}
+
+	if len(mmDeleteObjectUrl.expectations) > 0 {
+		mmDeleteObjectUrl.mock.t.Fatalf("Some expectations are already set for the RepositoryI.DeleteObjectUrl method")
+	}
+
+	mmDeleteObjectUrl.mock.funcDeleteObjectUrl = f
+	return mmDeleteObjectUrl.mock
+}
+
+// When sets expectation for the RepositoryI.DeleteObjectUrl which will trigger the result defined by the following
+// Then helper
+func (mmDeleteObjectUrl *mRepositoryIMockDeleteObjectUrl) When(ctx context.Context, uid uuid.UUID) *RepositoryIMockDeleteObjectUrlExpectation {
+	if mmDeleteObjectUrl.mock.funcDeleteObjectUrl != nil {
+		mmDeleteObjectUrl.mock.t.Fatalf("RepositoryIMock.DeleteObjectUrl mock is already set by Set")
+	}
+
+	expectation := &RepositoryIMockDeleteObjectUrlExpectation{
+		mock:   mmDeleteObjectUrl.mock,
+		params: &RepositoryIMockDeleteObjectUrlParams{ctx, uid},
+	}
+	mmDeleteObjectUrl.expectations = append(mmDeleteObjectUrl.expectations, expectation)
+	return expectation
+}
+
+// Then sets up RepositoryI.DeleteObjectUrl return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockDeleteObjectUrlExpectation) Then(err error) *RepositoryIMock {
+	e.results = &RepositoryIMockDeleteObjectUrlResults{err}
+	return e.mock
+}
+
+// Times sets number of times RepositoryI.DeleteObjectUrl should be invoked
+func (mmDeleteObjectUrl *mRepositoryIMockDeleteObjectUrl) Times(n uint64) *mRepositoryIMockDeleteObjectUrl {
+	if n == 0 {
+		mmDeleteObjectUrl.mock.t.Fatalf("Times of RepositoryIMock.DeleteObjectUrl mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmDeleteObjectUrl.expectedInvocations, n)
+	return mmDeleteObjectUrl
+}
+
+func (mmDeleteObjectUrl *mRepositoryIMockDeleteObjectUrl) invocationsDone() bool {
+	if len(mmDeleteObjectUrl.expectations) == 0 && mmDeleteObjectUrl.defaultExpectation == nil && mmDeleteObjectUrl.mock.funcDeleteObjectUrl == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmDeleteObjectUrl.mock.afterDeleteObjectUrlCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmDeleteObjectUrl.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// DeleteObjectUrl implements repository.RepositoryI
+func (mmDeleteObjectUrl *RepositoryIMock) DeleteObjectUrl(ctx context.Context, uid uuid.UUID) (err error) {
+	mm_atomic.AddUint64(&mmDeleteObjectUrl.beforeDeleteObjectUrlCounter, 1)
+	defer mm_atomic.AddUint64(&mmDeleteObjectUrl.afterDeleteObjectUrlCounter, 1)
+
+	if mmDeleteObjectUrl.inspectFuncDeleteObjectUrl != nil {
+		mmDeleteObjectUrl.inspectFuncDeleteObjectUrl(ctx, uid)
+	}
+
+	mm_params := RepositoryIMockDeleteObjectUrlParams{ctx, uid}
+
+	// Record call args
+	mmDeleteObjectUrl.DeleteObjectUrlMock.mutex.Lock()
+	mmDeleteObjectUrl.DeleteObjectUrlMock.callArgs = append(mmDeleteObjectUrl.DeleteObjectUrlMock.callArgs, &mm_params)
+	mmDeleteObjectUrl.DeleteObjectUrlMock.mutex.Unlock()
+
+	for _, e := range mmDeleteObjectUrl.DeleteObjectUrlMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmDeleteObjectUrl.DeleteObjectUrlMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmDeleteObjectUrl.DeleteObjectUrlMock.defaultExpectation.Counter, 1)
+		mm_want := mmDeleteObjectUrl.DeleteObjectUrlMock.defaultExpectation.params
+		mm_want_ptrs := mmDeleteObjectUrl.DeleteObjectUrlMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryIMockDeleteObjectUrlParams{ctx, uid}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmDeleteObjectUrl.t.Errorf("RepositoryIMock.DeleteObjectUrl got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.uid != nil && !minimock.Equal(*mm_want_ptrs.uid, mm_got.uid) {
+				mmDeleteObjectUrl.t.Errorf("RepositoryIMock.DeleteObjectUrl got unexpected parameter uid, want: %#v, got: %#v%s\n", *mm_want_ptrs.uid, mm_got.uid, minimock.Diff(*mm_want_ptrs.uid, mm_got.uid))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmDeleteObjectUrl.t.Errorf("RepositoryIMock.DeleteObjectUrl got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmDeleteObjectUrl.DeleteObjectUrlMock.defaultExpectation.results
+		if mm_results == nil {
+			mmDeleteObjectUrl.t.Fatal("No results are set for the RepositoryIMock.DeleteObjectUrl")
+		}
+		return (*mm_results).err
+	}
+	if mmDeleteObjectUrl.funcDeleteObjectUrl != nil {
+		return mmDeleteObjectUrl.funcDeleteObjectUrl(ctx, uid)
+	}
+	mmDeleteObjectUrl.t.Fatalf("Unexpected call to RepositoryIMock.DeleteObjectUrl. %v %v", ctx, uid)
+	return
+}
+
+// DeleteObjectUrlAfterCounter returns a count of finished RepositoryIMock.DeleteObjectUrl invocations
+func (mmDeleteObjectUrl *RepositoryIMock) DeleteObjectUrlAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmDeleteObjectUrl.afterDeleteObjectUrlCounter)
+}
+
+// DeleteObjectUrlBeforeCounter returns a count of RepositoryIMock.DeleteObjectUrl invocations
+func (mmDeleteObjectUrl *RepositoryIMock) DeleteObjectUrlBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmDeleteObjectUrl.beforeDeleteObjectUrlCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryIMock.DeleteObjectUrl.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmDeleteObjectUrl *mRepositoryIMockDeleteObjectUrl) Calls() []*RepositoryIMockDeleteObjectUrlParams {
+	mmDeleteObjectUrl.mutex.RLock()
+
+	argCopy := make([]*RepositoryIMockDeleteObjectUrlParams, len(mmDeleteObjectUrl.callArgs))
+	copy(argCopy, mmDeleteObjectUrl.callArgs)
+
+	mmDeleteObjectUrl.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockDeleteObjectUrlDone returns true if the count of the DeleteObjectUrl invocations corresponds
+// the number of defined expectations
+func (m *RepositoryIMock) MinimockDeleteObjectUrlDone() bool {
+	for _, e := range m.DeleteObjectUrlMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.DeleteObjectUrlMock.invocationsDone()
+}
+
+// MinimockDeleteObjectUrlInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockDeleteObjectUrlInspect() {
+	for _, e := range m.DeleteObjectUrlMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryIMock.DeleteObjectUrl with params: %#v", *e.params)
+		}
+	}
+
+	afterDeleteObjectUrlCounter := mm_atomic.LoadUint64(&m.afterDeleteObjectUrlCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.DeleteObjectUrlMock.defaultExpectation != nil && afterDeleteObjectUrlCounter < 1 {
+		if m.DeleteObjectUrlMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to RepositoryIMock.DeleteObjectUrl")
+		} else {
+			m.t.Errorf("Expected call to RepositoryIMock.DeleteObjectUrl with params: %#v", *m.DeleteObjectUrlMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcDeleteObjectUrl != nil && afterDeleteObjectUrlCounter < 1 {
+		m.t.Error("Expected call to RepositoryIMock.DeleteObjectUrl")
+	}
+
+	if !m.DeleteObjectUrlMock.invocationsDone() && afterDeleteObjectUrlCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.DeleteObjectUrl but found %d calls",
+			mm_atomic.LoadUint64(&m.DeleteObjectUrlMock.expectedInvocations), afterDeleteObjectUrlCounter)
+	}
+}
+
 type mRepositoryIMockDeleteRepositoryTag struct {
 	mock               *RepositoryIMock
 	defaultExpectation *RepositoryIMockDeleteRepositoryTagExpectation
@@ -8612,6 +9948,1531 @@ func (m *RepositoryIMock) MinimockGetNeedProcessFilesInspect() {
 	if !m.GetNeedProcessFilesMock.invocationsDone() && afterGetNeedProcessFilesCounter > 0 {
 		m.t.Errorf("Expected %d calls to RepositoryIMock.GetNeedProcessFiles but found %d calls",
 			mm_atomic.LoadUint64(&m.GetNeedProcessFilesMock.expectedInvocations), afterGetNeedProcessFilesCounter)
+	}
+}
+
+type mRepositoryIMockGetObjectByUID struct {
+	mock               *RepositoryIMock
+	defaultExpectation *RepositoryIMockGetObjectByUIDExpectation
+	expectations       []*RepositoryIMockGetObjectByUIDExpectation
+
+	callArgs []*RepositoryIMockGetObjectByUIDParams
+	mutex    sync.RWMutex
+
+	expectedInvocations uint64
+}
+
+// RepositoryIMockGetObjectByUIDExpectation specifies expectation struct of the RepositoryI.GetObjectByUID
+type RepositoryIMockGetObjectByUIDExpectation struct {
+	mock      *RepositoryIMock
+	params    *RepositoryIMockGetObjectByUIDParams
+	paramPtrs *RepositoryIMockGetObjectByUIDParamPtrs
+	results   *RepositoryIMockGetObjectByUIDResults
+	Counter   uint64
+}
+
+// RepositoryIMockGetObjectByUIDParams contains parameters of the RepositoryI.GetObjectByUID
+type RepositoryIMockGetObjectByUIDParams struct {
+	ctx context.Context
+	uid uuid.UUID
+}
+
+// RepositoryIMockGetObjectByUIDParamPtrs contains pointers to parameters of the RepositoryI.GetObjectByUID
+type RepositoryIMockGetObjectByUIDParamPtrs struct {
+	ctx *context.Context
+	uid *uuid.UUID
+}
+
+// RepositoryIMockGetObjectByUIDResults contains results of the RepositoryI.GetObjectByUID
+type RepositoryIMockGetObjectByUIDResults struct {
+	op1 *mm_repository.Object
+	err error
+}
+
+// Expect sets up expected params for RepositoryI.GetObjectByUID
+func (mmGetObjectByUID *mRepositoryIMockGetObjectByUID) Expect(ctx context.Context, uid uuid.UUID) *mRepositoryIMockGetObjectByUID {
+	if mmGetObjectByUID.mock.funcGetObjectByUID != nil {
+		mmGetObjectByUID.mock.t.Fatalf("RepositoryIMock.GetObjectByUID mock is already set by Set")
+	}
+
+	if mmGetObjectByUID.defaultExpectation == nil {
+		mmGetObjectByUID.defaultExpectation = &RepositoryIMockGetObjectByUIDExpectation{}
+	}
+
+	if mmGetObjectByUID.defaultExpectation.paramPtrs != nil {
+		mmGetObjectByUID.mock.t.Fatalf("RepositoryIMock.GetObjectByUID mock is already set by ExpectParams functions")
+	}
+
+	mmGetObjectByUID.defaultExpectation.params = &RepositoryIMockGetObjectByUIDParams{ctx, uid}
+	for _, e := range mmGetObjectByUID.expectations {
+		if minimock.Equal(e.params, mmGetObjectByUID.defaultExpectation.params) {
+			mmGetObjectByUID.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetObjectByUID.defaultExpectation.params)
+		}
+	}
+
+	return mmGetObjectByUID
+}
+
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.GetObjectByUID
+func (mmGetObjectByUID *mRepositoryIMockGetObjectByUID) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockGetObjectByUID {
+	if mmGetObjectByUID.mock.funcGetObjectByUID != nil {
+		mmGetObjectByUID.mock.t.Fatalf("RepositoryIMock.GetObjectByUID mock is already set by Set")
+	}
+
+	if mmGetObjectByUID.defaultExpectation == nil {
+		mmGetObjectByUID.defaultExpectation = &RepositoryIMockGetObjectByUIDExpectation{}
+	}
+
+	if mmGetObjectByUID.defaultExpectation.params != nil {
+		mmGetObjectByUID.mock.t.Fatalf("RepositoryIMock.GetObjectByUID mock is already set by Expect")
+	}
+
+	if mmGetObjectByUID.defaultExpectation.paramPtrs == nil {
+		mmGetObjectByUID.defaultExpectation.paramPtrs = &RepositoryIMockGetObjectByUIDParamPtrs{}
+	}
+	mmGetObjectByUID.defaultExpectation.paramPtrs.ctx = &ctx
+
+	return mmGetObjectByUID
+}
+
+// ExpectUidParam2 sets up expected param uid for RepositoryI.GetObjectByUID
+func (mmGetObjectByUID *mRepositoryIMockGetObjectByUID) ExpectUidParam2(uid uuid.UUID) *mRepositoryIMockGetObjectByUID {
+	if mmGetObjectByUID.mock.funcGetObjectByUID != nil {
+		mmGetObjectByUID.mock.t.Fatalf("RepositoryIMock.GetObjectByUID mock is already set by Set")
+	}
+
+	if mmGetObjectByUID.defaultExpectation == nil {
+		mmGetObjectByUID.defaultExpectation = &RepositoryIMockGetObjectByUIDExpectation{}
+	}
+
+	if mmGetObjectByUID.defaultExpectation.params != nil {
+		mmGetObjectByUID.mock.t.Fatalf("RepositoryIMock.GetObjectByUID mock is already set by Expect")
+	}
+
+	if mmGetObjectByUID.defaultExpectation.paramPtrs == nil {
+		mmGetObjectByUID.defaultExpectation.paramPtrs = &RepositoryIMockGetObjectByUIDParamPtrs{}
+	}
+	mmGetObjectByUID.defaultExpectation.paramPtrs.uid = &uid
+
+	return mmGetObjectByUID
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.GetObjectByUID
+func (mmGetObjectByUID *mRepositoryIMockGetObjectByUID) Inspect(f func(ctx context.Context, uid uuid.UUID)) *mRepositoryIMockGetObjectByUID {
+	if mmGetObjectByUID.mock.inspectFuncGetObjectByUID != nil {
+		mmGetObjectByUID.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.GetObjectByUID")
+	}
+
+	mmGetObjectByUID.mock.inspectFuncGetObjectByUID = f
+
+	return mmGetObjectByUID
+}
+
+// Return sets up results that will be returned by RepositoryI.GetObjectByUID
+func (mmGetObjectByUID *mRepositoryIMockGetObjectByUID) Return(op1 *mm_repository.Object, err error) *RepositoryIMock {
+	if mmGetObjectByUID.mock.funcGetObjectByUID != nil {
+		mmGetObjectByUID.mock.t.Fatalf("RepositoryIMock.GetObjectByUID mock is already set by Set")
+	}
+
+	if mmGetObjectByUID.defaultExpectation == nil {
+		mmGetObjectByUID.defaultExpectation = &RepositoryIMockGetObjectByUIDExpectation{mock: mmGetObjectByUID.mock}
+	}
+	mmGetObjectByUID.defaultExpectation.results = &RepositoryIMockGetObjectByUIDResults{op1, err}
+	return mmGetObjectByUID.mock
+}
+
+// Set uses given function f to mock the RepositoryI.GetObjectByUID method
+func (mmGetObjectByUID *mRepositoryIMockGetObjectByUID) Set(f func(ctx context.Context, uid uuid.UUID) (op1 *mm_repository.Object, err error)) *RepositoryIMock {
+	if mmGetObjectByUID.defaultExpectation != nil {
+		mmGetObjectByUID.mock.t.Fatalf("Default expectation is already set for the RepositoryI.GetObjectByUID method")
+	}
+
+	if len(mmGetObjectByUID.expectations) > 0 {
+		mmGetObjectByUID.mock.t.Fatalf("Some expectations are already set for the RepositoryI.GetObjectByUID method")
+	}
+
+	mmGetObjectByUID.mock.funcGetObjectByUID = f
+	return mmGetObjectByUID.mock
+}
+
+// When sets expectation for the RepositoryI.GetObjectByUID which will trigger the result defined by the following
+// Then helper
+func (mmGetObjectByUID *mRepositoryIMockGetObjectByUID) When(ctx context.Context, uid uuid.UUID) *RepositoryIMockGetObjectByUIDExpectation {
+	if mmGetObjectByUID.mock.funcGetObjectByUID != nil {
+		mmGetObjectByUID.mock.t.Fatalf("RepositoryIMock.GetObjectByUID mock is already set by Set")
+	}
+
+	expectation := &RepositoryIMockGetObjectByUIDExpectation{
+		mock:   mmGetObjectByUID.mock,
+		params: &RepositoryIMockGetObjectByUIDParams{ctx, uid},
+	}
+	mmGetObjectByUID.expectations = append(mmGetObjectByUID.expectations, expectation)
+	return expectation
+}
+
+// Then sets up RepositoryI.GetObjectByUID return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockGetObjectByUIDExpectation) Then(op1 *mm_repository.Object, err error) *RepositoryIMock {
+	e.results = &RepositoryIMockGetObjectByUIDResults{op1, err}
+	return e.mock
+}
+
+// Times sets number of times RepositoryI.GetObjectByUID should be invoked
+func (mmGetObjectByUID *mRepositoryIMockGetObjectByUID) Times(n uint64) *mRepositoryIMockGetObjectByUID {
+	if n == 0 {
+		mmGetObjectByUID.mock.t.Fatalf("Times of RepositoryIMock.GetObjectByUID mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetObjectByUID.expectedInvocations, n)
+	return mmGetObjectByUID
+}
+
+func (mmGetObjectByUID *mRepositoryIMockGetObjectByUID) invocationsDone() bool {
+	if len(mmGetObjectByUID.expectations) == 0 && mmGetObjectByUID.defaultExpectation == nil && mmGetObjectByUID.mock.funcGetObjectByUID == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetObjectByUID.mock.afterGetObjectByUIDCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetObjectByUID.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetObjectByUID implements repository.RepositoryI
+func (mmGetObjectByUID *RepositoryIMock) GetObjectByUID(ctx context.Context, uid uuid.UUID) (op1 *mm_repository.Object, err error) {
+	mm_atomic.AddUint64(&mmGetObjectByUID.beforeGetObjectByUIDCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetObjectByUID.afterGetObjectByUIDCounter, 1)
+
+	if mmGetObjectByUID.inspectFuncGetObjectByUID != nil {
+		mmGetObjectByUID.inspectFuncGetObjectByUID(ctx, uid)
+	}
+
+	mm_params := RepositoryIMockGetObjectByUIDParams{ctx, uid}
+
+	// Record call args
+	mmGetObjectByUID.GetObjectByUIDMock.mutex.Lock()
+	mmGetObjectByUID.GetObjectByUIDMock.callArgs = append(mmGetObjectByUID.GetObjectByUIDMock.callArgs, &mm_params)
+	mmGetObjectByUID.GetObjectByUIDMock.mutex.Unlock()
+
+	for _, e := range mmGetObjectByUID.GetObjectByUIDMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.op1, e.results.err
+		}
+	}
+
+	if mmGetObjectByUID.GetObjectByUIDMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetObjectByUID.GetObjectByUIDMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetObjectByUID.GetObjectByUIDMock.defaultExpectation.params
+		mm_want_ptrs := mmGetObjectByUID.GetObjectByUIDMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryIMockGetObjectByUIDParams{ctx, uid}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetObjectByUID.t.Errorf("RepositoryIMock.GetObjectByUID got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.uid != nil && !minimock.Equal(*mm_want_ptrs.uid, mm_got.uid) {
+				mmGetObjectByUID.t.Errorf("RepositoryIMock.GetObjectByUID got unexpected parameter uid, want: %#v, got: %#v%s\n", *mm_want_ptrs.uid, mm_got.uid, minimock.Diff(*mm_want_ptrs.uid, mm_got.uid))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetObjectByUID.t.Errorf("RepositoryIMock.GetObjectByUID got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetObjectByUID.GetObjectByUIDMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetObjectByUID.t.Fatal("No results are set for the RepositoryIMock.GetObjectByUID")
+		}
+		return (*mm_results).op1, (*mm_results).err
+	}
+	if mmGetObjectByUID.funcGetObjectByUID != nil {
+		return mmGetObjectByUID.funcGetObjectByUID(ctx, uid)
+	}
+	mmGetObjectByUID.t.Fatalf("Unexpected call to RepositoryIMock.GetObjectByUID. %v %v", ctx, uid)
+	return
+}
+
+// GetObjectByUIDAfterCounter returns a count of finished RepositoryIMock.GetObjectByUID invocations
+func (mmGetObjectByUID *RepositoryIMock) GetObjectByUIDAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetObjectByUID.afterGetObjectByUIDCounter)
+}
+
+// GetObjectByUIDBeforeCounter returns a count of RepositoryIMock.GetObjectByUID invocations
+func (mmGetObjectByUID *RepositoryIMock) GetObjectByUIDBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetObjectByUID.beforeGetObjectByUIDCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryIMock.GetObjectByUID.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetObjectByUID *mRepositoryIMockGetObjectByUID) Calls() []*RepositoryIMockGetObjectByUIDParams {
+	mmGetObjectByUID.mutex.RLock()
+
+	argCopy := make([]*RepositoryIMockGetObjectByUIDParams, len(mmGetObjectByUID.callArgs))
+	copy(argCopy, mmGetObjectByUID.callArgs)
+
+	mmGetObjectByUID.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetObjectByUIDDone returns true if the count of the GetObjectByUID invocations corresponds
+// the number of defined expectations
+func (m *RepositoryIMock) MinimockGetObjectByUIDDone() bool {
+	for _, e := range m.GetObjectByUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetObjectByUIDMock.invocationsDone()
+}
+
+// MinimockGetObjectByUIDInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockGetObjectByUIDInspect() {
+	for _, e := range m.GetObjectByUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryIMock.GetObjectByUID with params: %#v", *e.params)
+		}
+	}
+
+	afterGetObjectByUIDCounter := mm_atomic.LoadUint64(&m.afterGetObjectByUIDCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetObjectByUIDMock.defaultExpectation != nil && afterGetObjectByUIDCounter < 1 {
+		if m.GetObjectByUIDMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to RepositoryIMock.GetObjectByUID")
+		} else {
+			m.t.Errorf("Expected call to RepositoryIMock.GetObjectByUID with params: %#v", *m.GetObjectByUIDMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetObjectByUID != nil && afterGetObjectByUIDCounter < 1 {
+		m.t.Error("Expected call to RepositoryIMock.GetObjectByUID")
+	}
+
+	if !m.GetObjectByUIDMock.invocationsDone() && afterGetObjectByUIDCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.GetObjectByUID but found %d calls",
+			mm_atomic.LoadUint64(&m.GetObjectByUIDMock.expectedInvocations), afterGetObjectByUIDCounter)
+	}
+}
+
+type mRepositoryIMockGetObjectDownloadUrl struct {
+	mock               *RepositoryIMock
+	defaultExpectation *RepositoryIMockGetObjectDownloadUrlExpectation
+	expectations       []*RepositoryIMockGetObjectDownloadUrlExpectation
+
+	callArgs []*RepositoryIMockGetObjectDownloadUrlParams
+	mutex    sync.RWMutex
+
+	expectedInvocations uint64
+}
+
+// RepositoryIMockGetObjectDownloadUrlExpectation specifies expectation struct of the RepositoryI.GetObjectDownloadUrl
+type RepositoryIMockGetObjectDownloadUrlExpectation struct {
+	mock      *RepositoryIMock
+	params    *RepositoryIMockGetObjectDownloadUrlParams
+	paramPtrs *RepositoryIMockGetObjectDownloadUrlParamPtrs
+	results   *RepositoryIMockGetObjectDownloadUrlResults
+	Counter   uint64
+}
+
+// RepositoryIMockGetObjectDownloadUrlParams contains parameters of the RepositoryI.GetObjectDownloadUrl
+type RepositoryIMockGetObjectDownloadUrlParams struct {
+	ctx       context.Context
+	objectUID uuid.UUID
+}
+
+// RepositoryIMockGetObjectDownloadUrlParamPtrs contains pointers to parameters of the RepositoryI.GetObjectDownloadUrl
+type RepositoryIMockGetObjectDownloadUrlParamPtrs struct {
+	ctx       *context.Context
+	objectUID *uuid.UUID
+}
+
+// RepositoryIMockGetObjectDownloadUrlResults contains results of the RepositoryI.GetObjectDownloadUrl
+type RepositoryIMockGetObjectDownloadUrlResults struct {
+	op1 *mm_repository.ObjectURL
+	err error
+}
+
+// Expect sets up expected params for RepositoryI.GetObjectDownloadUrl
+func (mmGetObjectDownloadUrl *mRepositoryIMockGetObjectDownloadUrl) Expect(ctx context.Context, objectUID uuid.UUID) *mRepositoryIMockGetObjectDownloadUrl {
+	if mmGetObjectDownloadUrl.mock.funcGetObjectDownloadUrl != nil {
+		mmGetObjectDownloadUrl.mock.t.Fatalf("RepositoryIMock.GetObjectDownloadUrl mock is already set by Set")
+	}
+
+	if mmGetObjectDownloadUrl.defaultExpectation == nil {
+		mmGetObjectDownloadUrl.defaultExpectation = &RepositoryIMockGetObjectDownloadUrlExpectation{}
+	}
+
+	if mmGetObjectDownloadUrl.defaultExpectation.paramPtrs != nil {
+		mmGetObjectDownloadUrl.mock.t.Fatalf("RepositoryIMock.GetObjectDownloadUrl mock is already set by ExpectParams functions")
+	}
+
+	mmGetObjectDownloadUrl.defaultExpectation.params = &RepositoryIMockGetObjectDownloadUrlParams{ctx, objectUID}
+	for _, e := range mmGetObjectDownloadUrl.expectations {
+		if minimock.Equal(e.params, mmGetObjectDownloadUrl.defaultExpectation.params) {
+			mmGetObjectDownloadUrl.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetObjectDownloadUrl.defaultExpectation.params)
+		}
+	}
+
+	return mmGetObjectDownloadUrl
+}
+
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.GetObjectDownloadUrl
+func (mmGetObjectDownloadUrl *mRepositoryIMockGetObjectDownloadUrl) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockGetObjectDownloadUrl {
+	if mmGetObjectDownloadUrl.mock.funcGetObjectDownloadUrl != nil {
+		mmGetObjectDownloadUrl.mock.t.Fatalf("RepositoryIMock.GetObjectDownloadUrl mock is already set by Set")
+	}
+
+	if mmGetObjectDownloadUrl.defaultExpectation == nil {
+		mmGetObjectDownloadUrl.defaultExpectation = &RepositoryIMockGetObjectDownloadUrlExpectation{}
+	}
+
+	if mmGetObjectDownloadUrl.defaultExpectation.params != nil {
+		mmGetObjectDownloadUrl.mock.t.Fatalf("RepositoryIMock.GetObjectDownloadUrl mock is already set by Expect")
+	}
+
+	if mmGetObjectDownloadUrl.defaultExpectation.paramPtrs == nil {
+		mmGetObjectDownloadUrl.defaultExpectation.paramPtrs = &RepositoryIMockGetObjectDownloadUrlParamPtrs{}
+	}
+	mmGetObjectDownloadUrl.defaultExpectation.paramPtrs.ctx = &ctx
+
+	return mmGetObjectDownloadUrl
+}
+
+// ExpectObjectUIDParam2 sets up expected param objectUID for RepositoryI.GetObjectDownloadUrl
+func (mmGetObjectDownloadUrl *mRepositoryIMockGetObjectDownloadUrl) ExpectObjectUIDParam2(objectUID uuid.UUID) *mRepositoryIMockGetObjectDownloadUrl {
+	if mmGetObjectDownloadUrl.mock.funcGetObjectDownloadUrl != nil {
+		mmGetObjectDownloadUrl.mock.t.Fatalf("RepositoryIMock.GetObjectDownloadUrl mock is already set by Set")
+	}
+
+	if mmGetObjectDownloadUrl.defaultExpectation == nil {
+		mmGetObjectDownloadUrl.defaultExpectation = &RepositoryIMockGetObjectDownloadUrlExpectation{}
+	}
+
+	if mmGetObjectDownloadUrl.defaultExpectation.params != nil {
+		mmGetObjectDownloadUrl.mock.t.Fatalf("RepositoryIMock.GetObjectDownloadUrl mock is already set by Expect")
+	}
+
+	if mmGetObjectDownloadUrl.defaultExpectation.paramPtrs == nil {
+		mmGetObjectDownloadUrl.defaultExpectation.paramPtrs = &RepositoryIMockGetObjectDownloadUrlParamPtrs{}
+	}
+	mmGetObjectDownloadUrl.defaultExpectation.paramPtrs.objectUID = &objectUID
+
+	return mmGetObjectDownloadUrl
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.GetObjectDownloadUrl
+func (mmGetObjectDownloadUrl *mRepositoryIMockGetObjectDownloadUrl) Inspect(f func(ctx context.Context, objectUID uuid.UUID)) *mRepositoryIMockGetObjectDownloadUrl {
+	if mmGetObjectDownloadUrl.mock.inspectFuncGetObjectDownloadUrl != nil {
+		mmGetObjectDownloadUrl.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.GetObjectDownloadUrl")
+	}
+
+	mmGetObjectDownloadUrl.mock.inspectFuncGetObjectDownloadUrl = f
+
+	return mmGetObjectDownloadUrl
+}
+
+// Return sets up results that will be returned by RepositoryI.GetObjectDownloadUrl
+func (mmGetObjectDownloadUrl *mRepositoryIMockGetObjectDownloadUrl) Return(op1 *mm_repository.ObjectURL, err error) *RepositoryIMock {
+	if mmGetObjectDownloadUrl.mock.funcGetObjectDownloadUrl != nil {
+		mmGetObjectDownloadUrl.mock.t.Fatalf("RepositoryIMock.GetObjectDownloadUrl mock is already set by Set")
+	}
+
+	if mmGetObjectDownloadUrl.defaultExpectation == nil {
+		mmGetObjectDownloadUrl.defaultExpectation = &RepositoryIMockGetObjectDownloadUrlExpectation{mock: mmGetObjectDownloadUrl.mock}
+	}
+	mmGetObjectDownloadUrl.defaultExpectation.results = &RepositoryIMockGetObjectDownloadUrlResults{op1, err}
+	return mmGetObjectDownloadUrl.mock
+}
+
+// Set uses given function f to mock the RepositoryI.GetObjectDownloadUrl method
+func (mmGetObjectDownloadUrl *mRepositoryIMockGetObjectDownloadUrl) Set(f func(ctx context.Context, objectUID uuid.UUID) (op1 *mm_repository.ObjectURL, err error)) *RepositoryIMock {
+	if mmGetObjectDownloadUrl.defaultExpectation != nil {
+		mmGetObjectDownloadUrl.mock.t.Fatalf("Default expectation is already set for the RepositoryI.GetObjectDownloadUrl method")
+	}
+
+	if len(mmGetObjectDownloadUrl.expectations) > 0 {
+		mmGetObjectDownloadUrl.mock.t.Fatalf("Some expectations are already set for the RepositoryI.GetObjectDownloadUrl method")
+	}
+
+	mmGetObjectDownloadUrl.mock.funcGetObjectDownloadUrl = f
+	return mmGetObjectDownloadUrl.mock
+}
+
+// When sets expectation for the RepositoryI.GetObjectDownloadUrl which will trigger the result defined by the following
+// Then helper
+func (mmGetObjectDownloadUrl *mRepositoryIMockGetObjectDownloadUrl) When(ctx context.Context, objectUID uuid.UUID) *RepositoryIMockGetObjectDownloadUrlExpectation {
+	if mmGetObjectDownloadUrl.mock.funcGetObjectDownloadUrl != nil {
+		mmGetObjectDownloadUrl.mock.t.Fatalf("RepositoryIMock.GetObjectDownloadUrl mock is already set by Set")
+	}
+
+	expectation := &RepositoryIMockGetObjectDownloadUrlExpectation{
+		mock:   mmGetObjectDownloadUrl.mock,
+		params: &RepositoryIMockGetObjectDownloadUrlParams{ctx, objectUID},
+	}
+	mmGetObjectDownloadUrl.expectations = append(mmGetObjectDownloadUrl.expectations, expectation)
+	return expectation
+}
+
+// Then sets up RepositoryI.GetObjectDownloadUrl return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockGetObjectDownloadUrlExpectation) Then(op1 *mm_repository.ObjectURL, err error) *RepositoryIMock {
+	e.results = &RepositoryIMockGetObjectDownloadUrlResults{op1, err}
+	return e.mock
+}
+
+// Times sets number of times RepositoryI.GetObjectDownloadUrl should be invoked
+func (mmGetObjectDownloadUrl *mRepositoryIMockGetObjectDownloadUrl) Times(n uint64) *mRepositoryIMockGetObjectDownloadUrl {
+	if n == 0 {
+		mmGetObjectDownloadUrl.mock.t.Fatalf("Times of RepositoryIMock.GetObjectDownloadUrl mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetObjectDownloadUrl.expectedInvocations, n)
+	return mmGetObjectDownloadUrl
+}
+
+func (mmGetObjectDownloadUrl *mRepositoryIMockGetObjectDownloadUrl) invocationsDone() bool {
+	if len(mmGetObjectDownloadUrl.expectations) == 0 && mmGetObjectDownloadUrl.defaultExpectation == nil && mmGetObjectDownloadUrl.mock.funcGetObjectDownloadUrl == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetObjectDownloadUrl.mock.afterGetObjectDownloadUrlCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetObjectDownloadUrl.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetObjectDownloadUrl implements repository.RepositoryI
+func (mmGetObjectDownloadUrl *RepositoryIMock) GetObjectDownloadUrl(ctx context.Context, objectUID uuid.UUID) (op1 *mm_repository.ObjectURL, err error) {
+	mm_atomic.AddUint64(&mmGetObjectDownloadUrl.beforeGetObjectDownloadUrlCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetObjectDownloadUrl.afterGetObjectDownloadUrlCounter, 1)
+
+	if mmGetObjectDownloadUrl.inspectFuncGetObjectDownloadUrl != nil {
+		mmGetObjectDownloadUrl.inspectFuncGetObjectDownloadUrl(ctx, objectUID)
+	}
+
+	mm_params := RepositoryIMockGetObjectDownloadUrlParams{ctx, objectUID}
+
+	// Record call args
+	mmGetObjectDownloadUrl.GetObjectDownloadUrlMock.mutex.Lock()
+	mmGetObjectDownloadUrl.GetObjectDownloadUrlMock.callArgs = append(mmGetObjectDownloadUrl.GetObjectDownloadUrlMock.callArgs, &mm_params)
+	mmGetObjectDownloadUrl.GetObjectDownloadUrlMock.mutex.Unlock()
+
+	for _, e := range mmGetObjectDownloadUrl.GetObjectDownloadUrlMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.op1, e.results.err
+		}
+	}
+
+	if mmGetObjectDownloadUrl.GetObjectDownloadUrlMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetObjectDownloadUrl.GetObjectDownloadUrlMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetObjectDownloadUrl.GetObjectDownloadUrlMock.defaultExpectation.params
+		mm_want_ptrs := mmGetObjectDownloadUrl.GetObjectDownloadUrlMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryIMockGetObjectDownloadUrlParams{ctx, objectUID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetObjectDownloadUrl.t.Errorf("RepositoryIMock.GetObjectDownloadUrl got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.objectUID != nil && !minimock.Equal(*mm_want_ptrs.objectUID, mm_got.objectUID) {
+				mmGetObjectDownloadUrl.t.Errorf("RepositoryIMock.GetObjectDownloadUrl got unexpected parameter objectUID, want: %#v, got: %#v%s\n", *mm_want_ptrs.objectUID, mm_got.objectUID, minimock.Diff(*mm_want_ptrs.objectUID, mm_got.objectUID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetObjectDownloadUrl.t.Errorf("RepositoryIMock.GetObjectDownloadUrl got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetObjectDownloadUrl.GetObjectDownloadUrlMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetObjectDownloadUrl.t.Fatal("No results are set for the RepositoryIMock.GetObjectDownloadUrl")
+		}
+		return (*mm_results).op1, (*mm_results).err
+	}
+	if mmGetObjectDownloadUrl.funcGetObjectDownloadUrl != nil {
+		return mmGetObjectDownloadUrl.funcGetObjectDownloadUrl(ctx, objectUID)
+	}
+	mmGetObjectDownloadUrl.t.Fatalf("Unexpected call to RepositoryIMock.GetObjectDownloadUrl. %v %v", ctx, objectUID)
+	return
+}
+
+// GetObjectDownloadUrlAfterCounter returns a count of finished RepositoryIMock.GetObjectDownloadUrl invocations
+func (mmGetObjectDownloadUrl *RepositoryIMock) GetObjectDownloadUrlAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetObjectDownloadUrl.afterGetObjectDownloadUrlCounter)
+}
+
+// GetObjectDownloadUrlBeforeCounter returns a count of RepositoryIMock.GetObjectDownloadUrl invocations
+func (mmGetObjectDownloadUrl *RepositoryIMock) GetObjectDownloadUrlBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetObjectDownloadUrl.beforeGetObjectDownloadUrlCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryIMock.GetObjectDownloadUrl.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetObjectDownloadUrl *mRepositoryIMockGetObjectDownloadUrl) Calls() []*RepositoryIMockGetObjectDownloadUrlParams {
+	mmGetObjectDownloadUrl.mutex.RLock()
+
+	argCopy := make([]*RepositoryIMockGetObjectDownloadUrlParams, len(mmGetObjectDownloadUrl.callArgs))
+	copy(argCopy, mmGetObjectDownloadUrl.callArgs)
+
+	mmGetObjectDownloadUrl.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetObjectDownloadUrlDone returns true if the count of the GetObjectDownloadUrl invocations corresponds
+// the number of defined expectations
+func (m *RepositoryIMock) MinimockGetObjectDownloadUrlDone() bool {
+	for _, e := range m.GetObjectDownloadUrlMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetObjectDownloadUrlMock.invocationsDone()
+}
+
+// MinimockGetObjectDownloadUrlInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockGetObjectDownloadUrlInspect() {
+	for _, e := range m.GetObjectDownloadUrlMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryIMock.GetObjectDownloadUrl with params: %#v", *e.params)
+		}
+	}
+
+	afterGetObjectDownloadUrlCounter := mm_atomic.LoadUint64(&m.afterGetObjectDownloadUrlCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetObjectDownloadUrlMock.defaultExpectation != nil && afterGetObjectDownloadUrlCounter < 1 {
+		if m.GetObjectDownloadUrlMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to RepositoryIMock.GetObjectDownloadUrl")
+		} else {
+			m.t.Errorf("Expected call to RepositoryIMock.GetObjectDownloadUrl with params: %#v", *m.GetObjectDownloadUrlMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetObjectDownloadUrl != nil && afterGetObjectDownloadUrlCounter < 1 {
+		m.t.Error("Expected call to RepositoryIMock.GetObjectDownloadUrl")
+	}
+
+	if !m.GetObjectDownloadUrlMock.invocationsDone() && afterGetObjectDownloadUrlCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.GetObjectDownloadUrl but found %d calls",
+			mm_atomic.LoadUint64(&m.GetObjectDownloadUrlMock.expectedInvocations), afterGetObjectDownloadUrlCounter)
+	}
+}
+
+type mRepositoryIMockGetObjectUploadUrl struct {
+	mock               *RepositoryIMock
+	defaultExpectation *RepositoryIMockGetObjectUploadUrlExpectation
+	expectations       []*RepositoryIMockGetObjectUploadUrlExpectation
+
+	callArgs []*RepositoryIMockGetObjectUploadUrlParams
+	mutex    sync.RWMutex
+
+	expectedInvocations uint64
+}
+
+// RepositoryIMockGetObjectUploadUrlExpectation specifies expectation struct of the RepositoryI.GetObjectUploadUrl
+type RepositoryIMockGetObjectUploadUrlExpectation struct {
+	mock      *RepositoryIMock
+	params    *RepositoryIMockGetObjectUploadUrlParams
+	paramPtrs *RepositoryIMockGetObjectUploadUrlParamPtrs
+	results   *RepositoryIMockGetObjectUploadUrlResults
+	Counter   uint64
+}
+
+// RepositoryIMockGetObjectUploadUrlParams contains parameters of the RepositoryI.GetObjectUploadUrl
+type RepositoryIMockGetObjectUploadUrlParams struct {
+	ctx       context.Context
+	objectUID uuid.UUID
+}
+
+// RepositoryIMockGetObjectUploadUrlParamPtrs contains pointers to parameters of the RepositoryI.GetObjectUploadUrl
+type RepositoryIMockGetObjectUploadUrlParamPtrs struct {
+	ctx       *context.Context
+	objectUID *uuid.UUID
+}
+
+// RepositoryIMockGetObjectUploadUrlResults contains results of the RepositoryI.GetObjectUploadUrl
+type RepositoryIMockGetObjectUploadUrlResults struct {
+	op1 *mm_repository.ObjectURL
+	err error
+}
+
+// Expect sets up expected params for RepositoryI.GetObjectUploadUrl
+func (mmGetObjectUploadUrl *mRepositoryIMockGetObjectUploadUrl) Expect(ctx context.Context, objectUID uuid.UUID) *mRepositoryIMockGetObjectUploadUrl {
+	if mmGetObjectUploadUrl.mock.funcGetObjectUploadUrl != nil {
+		mmGetObjectUploadUrl.mock.t.Fatalf("RepositoryIMock.GetObjectUploadUrl mock is already set by Set")
+	}
+
+	if mmGetObjectUploadUrl.defaultExpectation == nil {
+		mmGetObjectUploadUrl.defaultExpectation = &RepositoryIMockGetObjectUploadUrlExpectation{}
+	}
+
+	if mmGetObjectUploadUrl.defaultExpectation.paramPtrs != nil {
+		mmGetObjectUploadUrl.mock.t.Fatalf("RepositoryIMock.GetObjectUploadUrl mock is already set by ExpectParams functions")
+	}
+
+	mmGetObjectUploadUrl.defaultExpectation.params = &RepositoryIMockGetObjectUploadUrlParams{ctx, objectUID}
+	for _, e := range mmGetObjectUploadUrl.expectations {
+		if minimock.Equal(e.params, mmGetObjectUploadUrl.defaultExpectation.params) {
+			mmGetObjectUploadUrl.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetObjectUploadUrl.defaultExpectation.params)
+		}
+	}
+
+	return mmGetObjectUploadUrl
+}
+
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.GetObjectUploadUrl
+func (mmGetObjectUploadUrl *mRepositoryIMockGetObjectUploadUrl) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockGetObjectUploadUrl {
+	if mmGetObjectUploadUrl.mock.funcGetObjectUploadUrl != nil {
+		mmGetObjectUploadUrl.mock.t.Fatalf("RepositoryIMock.GetObjectUploadUrl mock is already set by Set")
+	}
+
+	if mmGetObjectUploadUrl.defaultExpectation == nil {
+		mmGetObjectUploadUrl.defaultExpectation = &RepositoryIMockGetObjectUploadUrlExpectation{}
+	}
+
+	if mmGetObjectUploadUrl.defaultExpectation.params != nil {
+		mmGetObjectUploadUrl.mock.t.Fatalf("RepositoryIMock.GetObjectUploadUrl mock is already set by Expect")
+	}
+
+	if mmGetObjectUploadUrl.defaultExpectation.paramPtrs == nil {
+		mmGetObjectUploadUrl.defaultExpectation.paramPtrs = &RepositoryIMockGetObjectUploadUrlParamPtrs{}
+	}
+	mmGetObjectUploadUrl.defaultExpectation.paramPtrs.ctx = &ctx
+
+	return mmGetObjectUploadUrl
+}
+
+// ExpectObjectUIDParam2 sets up expected param objectUID for RepositoryI.GetObjectUploadUrl
+func (mmGetObjectUploadUrl *mRepositoryIMockGetObjectUploadUrl) ExpectObjectUIDParam2(objectUID uuid.UUID) *mRepositoryIMockGetObjectUploadUrl {
+	if mmGetObjectUploadUrl.mock.funcGetObjectUploadUrl != nil {
+		mmGetObjectUploadUrl.mock.t.Fatalf("RepositoryIMock.GetObjectUploadUrl mock is already set by Set")
+	}
+
+	if mmGetObjectUploadUrl.defaultExpectation == nil {
+		mmGetObjectUploadUrl.defaultExpectation = &RepositoryIMockGetObjectUploadUrlExpectation{}
+	}
+
+	if mmGetObjectUploadUrl.defaultExpectation.params != nil {
+		mmGetObjectUploadUrl.mock.t.Fatalf("RepositoryIMock.GetObjectUploadUrl mock is already set by Expect")
+	}
+
+	if mmGetObjectUploadUrl.defaultExpectation.paramPtrs == nil {
+		mmGetObjectUploadUrl.defaultExpectation.paramPtrs = &RepositoryIMockGetObjectUploadUrlParamPtrs{}
+	}
+	mmGetObjectUploadUrl.defaultExpectation.paramPtrs.objectUID = &objectUID
+
+	return mmGetObjectUploadUrl
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.GetObjectUploadUrl
+func (mmGetObjectUploadUrl *mRepositoryIMockGetObjectUploadUrl) Inspect(f func(ctx context.Context, objectUID uuid.UUID)) *mRepositoryIMockGetObjectUploadUrl {
+	if mmGetObjectUploadUrl.mock.inspectFuncGetObjectUploadUrl != nil {
+		mmGetObjectUploadUrl.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.GetObjectUploadUrl")
+	}
+
+	mmGetObjectUploadUrl.mock.inspectFuncGetObjectUploadUrl = f
+
+	return mmGetObjectUploadUrl
+}
+
+// Return sets up results that will be returned by RepositoryI.GetObjectUploadUrl
+func (mmGetObjectUploadUrl *mRepositoryIMockGetObjectUploadUrl) Return(op1 *mm_repository.ObjectURL, err error) *RepositoryIMock {
+	if mmGetObjectUploadUrl.mock.funcGetObjectUploadUrl != nil {
+		mmGetObjectUploadUrl.mock.t.Fatalf("RepositoryIMock.GetObjectUploadUrl mock is already set by Set")
+	}
+
+	if mmGetObjectUploadUrl.defaultExpectation == nil {
+		mmGetObjectUploadUrl.defaultExpectation = &RepositoryIMockGetObjectUploadUrlExpectation{mock: mmGetObjectUploadUrl.mock}
+	}
+	mmGetObjectUploadUrl.defaultExpectation.results = &RepositoryIMockGetObjectUploadUrlResults{op1, err}
+	return mmGetObjectUploadUrl.mock
+}
+
+// Set uses given function f to mock the RepositoryI.GetObjectUploadUrl method
+func (mmGetObjectUploadUrl *mRepositoryIMockGetObjectUploadUrl) Set(f func(ctx context.Context, objectUID uuid.UUID) (op1 *mm_repository.ObjectURL, err error)) *RepositoryIMock {
+	if mmGetObjectUploadUrl.defaultExpectation != nil {
+		mmGetObjectUploadUrl.mock.t.Fatalf("Default expectation is already set for the RepositoryI.GetObjectUploadUrl method")
+	}
+
+	if len(mmGetObjectUploadUrl.expectations) > 0 {
+		mmGetObjectUploadUrl.mock.t.Fatalf("Some expectations are already set for the RepositoryI.GetObjectUploadUrl method")
+	}
+
+	mmGetObjectUploadUrl.mock.funcGetObjectUploadUrl = f
+	return mmGetObjectUploadUrl.mock
+}
+
+// When sets expectation for the RepositoryI.GetObjectUploadUrl which will trigger the result defined by the following
+// Then helper
+func (mmGetObjectUploadUrl *mRepositoryIMockGetObjectUploadUrl) When(ctx context.Context, objectUID uuid.UUID) *RepositoryIMockGetObjectUploadUrlExpectation {
+	if mmGetObjectUploadUrl.mock.funcGetObjectUploadUrl != nil {
+		mmGetObjectUploadUrl.mock.t.Fatalf("RepositoryIMock.GetObjectUploadUrl mock is already set by Set")
+	}
+
+	expectation := &RepositoryIMockGetObjectUploadUrlExpectation{
+		mock:   mmGetObjectUploadUrl.mock,
+		params: &RepositoryIMockGetObjectUploadUrlParams{ctx, objectUID},
+	}
+	mmGetObjectUploadUrl.expectations = append(mmGetObjectUploadUrl.expectations, expectation)
+	return expectation
+}
+
+// Then sets up RepositoryI.GetObjectUploadUrl return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockGetObjectUploadUrlExpectation) Then(op1 *mm_repository.ObjectURL, err error) *RepositoryIMock {
+	e.results = &RepositoryIMockGetObjectUploadUrlResults{op1, err}
+	return e.mock
+}
+
+// Times sets number of times RepositoryI.GetObjectUploadUrl should be invoked
+func (mmGetObjectUploadUrl *mRepositoryIMockGetObjectUploadUrl) Times(n uint64) *mRepositoryIMockGetObjectUploadUrl {
+	if n == 0 {
+		mmGetObjectUploadUrl.mock.t.Fatalf("Times of RepositoryIMock.GetObjectUploadUrl mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetObjectUploadUrl.expectedInvocations, n)
+	return mmGetObjectUploadUrl
+}
+
+func (mmGetObjectUploadUrl *mRepositoryIMockGetObjectUploadUrl) invocationsDone() bool {
+	if len(mmGetObjectUploadUrl.expectations) == 0 && mmGetObjectUploadUrl.defaultExpectation == nil && mmGetObjectUploadUrl.mock.funcGetObjectUploadUrl == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetObjectUploadUrl.mock.afterGetObjectUploadUrlCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetObjectUploadUrl.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetObjectUploadUrl implements repository.RepositoryI
+func (mmGetObjectUploadUrl *RepositoryIMock) GetObjectUploadUrl(ctx context.Context, objectUID uuid.UUID) (op1 *mm_repository.ObjectURL, err error) {
+	mm_atomic.AddUint64(&mmGetObjectUploadUrl.beforeGetObjectUploadUrlCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetObjectUploadUrl.afterGetObjectUploadUrlCounter, 1)
+
+	if mmGetObjectUploadUrl.inspectFuncGetObjectUploadUrl != nil {
+		mmGetObjectUploadUrl.inspectFuncGetObjectUploadUrl(ctx, objectUID)
+	}
+
+	mm_params := RepositoryIMockGetObjectUploadUrlParams{ctx, objectUID}
+
+	// Record call args
+	mmGetObjectUploadUrl.GetObjectUploadUrlMock.mutex.Lock()
+	mmGetObjectUploadUrl.GetObjectUploadUrlMock.callArgs = append(mmGetObjectUploadUrl.GetObjectUploadUrlMock.callArgs, &mm_params)
+	mmGetObjectUploadUrl.GetObjectUploadUrlMock.mutex.Unlock()
+
+	for _, e := range mmGetObjectUploadUrl.GetObjectUploadUrlMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.op1, e.results.err
+		}
+	}
+
+	if mmGetObjectUploadUrl.GetObjectUploadUrlMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetObjectUploadUrl.GetObjectUploadUrlMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetObjectUploadUrl.GetObjectUploadUrlMock.defaultExpectation.params
+		mm_want_ptrs := mmGetObjectUploadUrl.GetObjectUploadUrlMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryIMockGetObjectUploadUrlParams{ctx, objectUID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetObjectUploadUrl.t.Errorf("RepositoryIMock.GetObjectUploadUrl got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.objectUID != nil && !minimock.Equal(*mm_want_ptrs.objectUID, mm_got.objectUID) {
+				mmGetObjectUploadUrl.t.Errorf("RepositoryIMock.GetObjectUploadUrl got unexpected parameter objectUID, want: %#v, got: %#v%s\n", *mm_want_ptrs.objectUID, mm_got.objectUID, minimock.Diff(*mm_want_ptrs.objectUID, mm_got.objectUID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetObjectUploadUrl.t.Errorf("RepositoryIMock.GetObjectUploadUrl got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetObjectUploadUrl.GetObjectUploadUrlMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetObjectUploadUrl.t.Fatal("No results are set for the RepositoryIMock.GetObjectUploadUrl")
+		}
+		return (*mm_results).op1, (*mm_results).err
+	}
+	if mmGetObjectUploadUrl.funcGetObjectUploadUrl != nil {
+		return mmGetObjectUploadUrl.funcGetObjectUploadUrl(ctx, objectUID)
+	}
+	mmGetObjectUploadUrl.t.Fatalf("Unexpected call to RepositoryIMock.GetObjectUploadUrl. %v %v", ctx, objectUID)
+	return
+}
+
+// GetObjectUploadUrlAfterCounter returns a count of finished RepositoryIMock.GetObjectUploadUrl invocations
+func (mmGetObjectUploadUrl *RepositoryIMock) GetObjectUploadUrlAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetObjectUploadUrl.afterGetObjectUploadUrlCounter)
+}
+
+// GetObjectUploadUrlBeforeCounter returns a count of RepositoryIMock.GetObjectUploadUrl invocations
+func (mmGetObjectUploadUrl *RepositoryIMock) GetObjectUploadUrlBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetObjectUploadUrl.beforeGetObjectUploadUrlCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryIMock.GetObjectUploadUrl.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetObjectUploadUrl *mRepositoryIMockGetObjectUploadUrl) Calls() []*RepositoryIMockGetObjectUploadUrlParams {
+	mmGetObjectUploadUrl.mutex.RLock()
+
+	argCopy := make([]*RepositoryIMockGetObjectUploadUrlParams, len(mmGetObjectUploadUrl.callArgs))
+	copy(argCopy, mmGetObjectUploadUrl.callArgs)
+
+	mmGetObjectUploadUrl.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetObjectUploadUrlDone returns true if the count of the GetObjectUploadUrl invocations corresponds
+// the number of defined expectations
+func (m *RepositoryIMock) MinimockGetObjectUploadUrlDone() bool {
+	for _, e := range m.GetObjectUploadUrlMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetObjectUploadUrlMock.invocationsDone()
+}
+
+// MinimockGetObjectUploadUrlInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockGetObjectUploadUrlInspect() {
+	for _, e := range m.GetObjectUploadUrlMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryIMock.GetObjectUploadUrl with params: %#v", *e.params)
+		}
+	}
+
+	afterGetObjectUploadUrlCounter := mm_atomic.LoadUint64(&m.afterGetObjectUploadUrlCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetObjectUploadUrlMock.defaultExpectation != nil && afterGetObjectUploadUrlCounter < 1 {
+		if m.GetObjectUploadUrlMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to RepositoryIMock.GetObjectUploadUrl")
+		} else {
+			m.t.Errorf("Expected call to RepositoryIMock.GetObjectUploadUrl with params: %#v", *m.GetObjectUploadUrlMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetObjectUploadUrl != nil && afterGetObjectUploadUrlCounter < 1 {
+		m.t.Error("Expected call to RepositoryIMock.GetObjectUploadUrl")
+	}
+
+	if !m.GetObjectUploadUrlMock.invocationsDone() && afterGetObjectUploadUrlCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.GetObjectUploadUrl but found %d calls",
+			mm_atomic.LoadUint64(&m.GetObjectUploadUrlMock.expectedInvocations), afterGetObjectUploadUrlCounter)
+	}
+}
+
+type mRepositoryIMockGetObjectUrlByUID struct {
+	mock               *RepositoryIMock
+	defaultExpectation *RepositoryIMockGetObjectUrlByUIDExpectation
+	expectations       []*RepositoryIMockGetObjectUrlByUIDExpectation
+
+	callArgs []*RepositoryIMockGetObjectUrlByUIDParams
+	mutex    sync.RWMutex
+
+	expectedInvocations uint64
+}
+
+// RepositoryIMockGetObjectUrlByUIDExpectation specifies expectation struct of the RepositoryI.GetObjectUrlByUID
+type RepositoryIMockGetObjectUrlByUIDExpectation struct {
+	mock      *RepositoryIMock
+	params    *RepositoryIMockGetObjectUrlByUIDParams
+	paramPtrs *RepositoryIMockGetObjectUrlByUIDParamPtrs
+	results   *RepositoryIMockGetObjectUrlByUIDResults
+	Counter   uint64
+}
+
+// RepositoryIMockGetObjectUrlByUIDParams contains parameters of the RepositoryI.GetObjectUrlByUID
+type RepositoryIMockGetObjectUrlByUIDParams struct {
+	ctx context.Context
+	uid uuid.UUID
+}
+
+// RepositoryIMockGetObjectUrlByUIDParamPtrs contains pointers to parameters of the RepositoryI.GetObjectUrlByUID
+type RepositoryIMockGetObjectUrlByUIDParamPtrs struct {
+	ctx *context.Context
+	uid *uuid.UUID
+}
+
+// RepositoryIMockGetObjectUrlByUIDResults contains results of the RepositoryI.GetObjectUrlByUID
+type RepositoryIMockGetObjectUrlByUIDResults struct {
+	op1 *mm_repository.ObjectURL
+	err error
+}
+
+// Expect sets up expected params for RepositoryI.GetObjectUrlByUID
+func (mmGetObjectUrlByUID *mRepositoryIMockGetObjectUrlByUID) Expect(ctx context.Context, uid uuid.UUID) *mRepositoryIMockGetObjectUrlByUID {
+	if mmGetObjectUrlByUID.mock.funcGetObjectUrlByUID != nil {
+		mmGetObjectUrlByUID.mock.t.Fatalf("RepositoryIMock.GetObjectUrlByUID mock is already set by Set")
+	}
+
+	if mmGetObjectUrlByUID.defaultExpectation == nil {
+		mmGetObjectUrlByUID.defaultExpectation = &RepositoryIMockGetObjectUrlByUIDExpectation{}
+	}
+
+	if mmGetObjectUrlByUID.defaultExpectation.paramPtrs != nil {
+		mmGetObjectUrlByUID.mock.t.Fatalf("RepositoryIMock.GetObjectUrlByUID mock is already set by ExpectParams functions")
+	}
+
+	mmGetObjectUrlByUID.defaultExpectation.params = &RepositoryIMockGetObjectUrlByUIDParams{ctx, uid}
+	for _, e := range mmGetObjectUrlByUID.expectations {
+		if minimock.Equal(e.params, mmGetObjectUrlByUID.defaultExpectation.params) {
+			mmGetObjectUrlByUID.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetObjectUrlByUID.defaultExpectation.params)
+		}
+	}
+
+	return mmGetObjectUrlByUID
+}
+
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.GetObjectUrlByUID
+func (mmGetObjectUrlByUID *mRepositoryIMockGetObjectUrlByUID) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockGetObjectUrlByUID {
+	if mmGetObjectUrlByUID.mock.funcGetObjectUrlByUID != nil {
+		mmGetObjectUrlByUID.mock.t.Fatalf("RepositoryIMock.GetObjectUrlByUID mock is already set by Set")
+	}
+
+	if mmGetObjectUrlByUID.defaultExpectation == nil {
+		mmGetObjectUrlByUID.defaultExpectation = &RepositoryIMockGetObjectUrlByUIDExpectation{}
+	}
+
+	if mmGetObjectUrlByUID.defaultExpectation.params != nil {
+		mmGetObjectUrlByUID.mock.t.Fatalf("RepositoryIMock.GetObjectUrlByUID mock is already set by Expect")
+	}
+
+	if mmGetObjectUrlByUID.defaultExpectation.paramPtrs == nil {
+		mmGetObjectUrlByUID.defaultExpectation.paramPtrs = &RepositoryIMockGetObjectUrlByUIDParamPtrs{}
+	}
+	mmGetObjectUrlByUID.defaultExpectation.paramPtrs.ctx = &ctx
+
+	return mmGetObjectUrlByUID
+}
+
+// ExpectUidParam2 sets up expected param uid for RepositoryI.GetObjectUrlByUID
+func (mmGetObjectUrlByUID *mRepositoryIMockGetObjectUrlByUID) ExpectUidParam2(uid uuid.UUID) *mRepositoryIMockGetObjectUrlByUID {
+	if mmGetObjectUrlByUID.mock.funcGetObjectUrlByUID != nil {
+		mmGetObjectUrlByUID.mock.t.Fatalf("RepositoryIMock.GetObjectUrlByUID mock is already set by Set")
+	}
+
+	if mmGetObjectUrlByUID.defaultExpectation == nil {
+		mmGetObjectUrlByUID.defaultExpectation = &RepositoryIMockGetObjectUrlByUIDExpectation{}
+	}
+
+	if mmGetObjectUrlByUID.defaultExpectation.params != nil {
+		mmGetObjectUrlByUID.mock.t.Fatalf("RepositoryIMock.GetObjectUrlByUID mock is already set by Expect")
+	}
+
+	if mmGetObjectUrlByUID.defaultExpectation.paramPtrs == nil {
+		mmGetObjectUrlByUID.defaultExpectation.paramPtrs = &RepositoryIMockGetObjectUrlByUIDParamPtrs{}
+	}
+	mmGetObjectUrlByUID.defaultExpectation.paramPtrs.uid = &uid
+
+	return mmGetObjectUrlByUID
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.GetObjectUrlByUID
+func (mmGetObjectUrlByUID *mRepositoryIMockGetObjectUrlByUID) Inspect(f func(ctx context.Context, uid uuid.UUID)) *mRepositoryIMockGetObjectUrlByUID {
+	if mmGetObjectUrlByUID.mock.inspectFuncGetObjectUrlByUID != nil {
+		mmGetObjectUrlByUID.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.GetObjectUrlByUID")
+	}
+
+	mmGetObjectUrlByUID.mock.inspectFuncGetObjectUrlByUID = f
+
+	return mmGetObjectUrlByUID
+}
+
+// Return sets up results that will be returned by RepositoryI.GetObjectUrlByUID
+func (mmGetObjectUrlByUID *mRepositoryIMockGetObjectUrlByUID) Return(op1 *mm_repository.ObjectURL, err error) *RepositoryIMock {
+	if mmGetObjectUrlByUID.mock.funcGetObjectUrlByUID != nil {
+		mmGetObjectUrlByUID.mock.t.Fatalf("RepositoryIMock.GetObjectUrlByUID mock is already set by Set")
+	}
+
+	if mmGetObjectUrlByUID.defaultExpectation == nil {
+		mmGetObjectUrlByUID.defaultExpectation = &RepositoryIMockGetObjectUrlByUIDExpectation{mock: mmGetObjectUrlByUID.mock}
+	}
+	mmGetObjectUrlByUID.defaultExpectation.results = &RepositoryIMockGetObjectUrlByUIDResults{op1, err}
+	return mmGetObjectUrlByUID.mock
+}
+
+// Set uses given function f to mock the RepositoryI.GetObjectUrlByUID method
+func (mmGetObjectUrlByUID *mRepositoryIMockGetObjectUrlByUID) Set(f func(ctx context.Context, uid uuid.UUID) (op1 *mm_repository.ObjectURL, err error)) *RepositoryIMock {
+	if mmGetObjectUrlByUID.defaultExpectation != nil {
+		mmGetObjectUrlByUID.mock.t.Fatalf("Default expectation is already set for the RepositoryI.GetObjectUrlByUID method")
+	}
+
+	if len(mmGetObjectUrlByUID.expectations) > 0 {
+		mmGetObjectUrlByUID.mock.t.Fatalf("Some expectations are already set for the RepositoryI.GetObjectUrlByUID method")
+	}
+
+	mmGetObjectUrlByUID.mock.funcGetObjectUrlByUID = f
+	return mmGetObjectUrlByUID.mock
+}
+
+// When sets expectation for the RepositoryI.GetObjectUrlByUID which will trigger the result defined by the following
+// Then helper
+func (mmGetObjectUrlByUID *mRepositoryIMockGetObjectUrlByUID) When(ctx context.Context, uid uuid.UUID) *RepositoryIMockGetObjectUrlByUIDExpectation {
+	if mmGetObjectUrlByUID.mock.funcGetObjectUrlByUID != nil {
+		mmGetObjectUrlByUID.mock.t.Fatalf("RepositoryIMock.GetObjectUrlByUID mock is already set by Set")
+	}
+
+	expectation := &RepositoryIMockGetObjectUrlByUIDExpectation{
+		mock:   mmGetObjectUrlByUID.mock,
+		params: &RepositoryIMockGetObjectUrlByUIDParams{ctx, uid},
+	}
+	mmGetObjectUrlByUID.expectations = append(mmGetObjectUrlByUID.expectations, expectation)
+	return expectation
+}
+
+// Then sets up RepositoryI.GetObjectUrlByUID return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockGetObjectUrlByUIDExpectation) Then(op1 *mm_repository.ObjectURL, err error) *RepositoryIMock {
+	e.results = &RepositoryIMockGetObjectUrlByUIDResults{op1, err}
+	return e.mock
+}
+
+// Times sets number of times RepositoryI.GetObjectUrlByUID should be invoked
+func (mmGetObjectUrlByUID *mRepositoryIMockGetObjectUrlByUID) Times(n uint64) *mRepositoryIMockGetObjectUrlByUID {
+	if n == 0 {
+		mmGetObjectUrlByUID.mock.t.Fatalf("Times of RepositoryIMock.GetObjectUrlByUID mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetObjectUrlByUID.expectedInvocations, n)
+	return mmGetObjectUrlByUID
+}
+
+func (mmGetObjectUrlByUID *mRepositoryIMockGetObjectUrlByUID) invocationsDone() bool {
+	if len(mmGetObjectUrlByUID.expectations) == 0 && mmGetObjectUrlByUID.defaultExpectation == nil && mmGetObjectUrlByUID.mock.funcGetObjectUrlByUID == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetObjectUrlByUID.mock.afterGetObjectUrlByUIDCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetObjectUrlByUID.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetObjectUrlByUID implements repository.RepositoryI
+func (mmGetObjectUrlByUID *RepositoryIMock) GetObjectUrlByUID(ctx context.Context, uid uuid.UUID) (op1 *mm_repository.ObjectURL, err error) {
+	mm_atomic.AddUint64(&mmGetObjectUrlByUID.beforeGetObjectUrlByUIDCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetObjectUrlByUID.afterGetObjectUrlByUIDCounter, 1)
+
+	if mmGetObjectUrlByUID.inspectFuncGetObjectUrlByUID != nil {
+		mmGetObjectUrlByUID.inspectFuncGetObjectUrlByUID(ctx, uid)
+	}
+
+	mm_params := RepositoryIMockGetObjectUrlByUIDParams{ctx, uid}
+
+	// Record call args
+	mmGetObjectUrlByUID.GetObjectUrlByUIDMock.mutex.Lock()
+	mmGetObjectUrlByUID.GetObjectUrlByUIDMock.callArgs = append(mmGetObjectUrlByUID.GetObjectUrlByUIDMock.callArgs, &mm_params)
+	mmGetObjectUrlByUID.GetObjectUrlByUIDMock.mutex.Unlock()
+
+	for _, e := range mmGetObjectUrlByUID.GetObjectUrlByUIDMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.op1, e.results.err
+		}
+	}
+
+	if mmGetObjectUrlByUID.GetObjectUrlByUIDMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetObjectUrlByUID.GetObjectUrlByUIDMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetObjectUrlByUID.GetObjectUrlByUIDMock.defaultExpectation.params
+		mm_want_ptrs := mmGetObjectUrlByUID.GetObjectUrlByUIDMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryIMockGetObjectUrlByUIDParams{ctx, uid}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetObjectUrlByUID.t.Errorf("RepositoryIMock.GetObjectUrlByUID got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.uid != nil && !minimock.Equal(*mm_want_ptrs.uid, mm_got.uid) {
+				mmGetObjectUrlByUID.t.Errorf("RepositoryIMock.GetObjectUrlByUID got unexpected parameter uid, want: %#v, got: %#v%s\n", *mm_want_ptrs.uid, mm_got.uid, minimock.Diff(*mm_want_ptrs.uid, mm_got.uid))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetObjectUrlByUID.t.Errorf("RepositoryIMock.GetObjectUrlByUID got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetObjectUrlByUID.GetObjectUrlByUIDMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetObjectUrlByUID.t.Fatal("No results are set for the RepositoryIMock.GetObjectUrlByUID")
+		}
+		return (*mm_results).op1, (*mm_results).err
+	}
+	if mmGetObjectUrlByUID.funcGetObjectUrlByUID != nil {
+		return mmGetObjectUrlByUID.funcGetObjectUrlByUID(ctx, uid)
+	}
+	mmGetObjectUrlByUID.t.Fatalf("Unexpected call to RepositoryIMock.GetObjectUrlByUID. %v %v", ctx, uid)
+	return
+}
+
+// GetObjectUrlByUIDAfterCounter returns a count of finished RepositoryIMock.GetObjectUrlByUID invocations
+func (mmGetObjectUrlByUID *RepositoryIMock) GetObjectUrlByUIDAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetObjectUrlByUID.afterGetObjectUrlByUIDCounter)
+}
+
+// GetObjectUrlByUIDBeforeCounter returns a count of RepositoryIMock.GetObjectUrlByUID invocations
+func (mmGetObjectUrlByUID *RepositoryIMock) GetObjectUrlByUIDBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetObjectUrlByUID.beforeGetObjectUrlByUIDCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryIMock.GetObjectUrlByUID.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetObjectUrlByUID *mRepositoryIMockGetObjectUrlByUID) Calls() []*RepositoryIMockGetObjectUrlByUIDParams {
+	mmGetObjectUrlByUID.mutex.RLock()
+
+	argCopy := make([]*RepositoryIMockGetObjectUrlByUIDParams, len(mmGetObjectUrlByUID.callArgs))
+	copy(argCopy, mmGetObjectUrlByUID.callArgs)
+
+	mmGetObjectUrlByUID.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetObjectUrlByUIDDone returns true if the count of the GetObjectUrlByUID invocations corresponds
+// the number of defined expectations
+func (m *RepositoryIMock) MinimockGetObjectUrlByUIDDone() bool {
+	for _, e := range m.GetObjectUrlByUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetObjectUrlByUIDMock.invocationsDone()
+}
+
+// MinimockGetObjectUrlByUIDInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockGetObjectUrlByUIDInspect() {
+	for _, e := range m.GetObjectUrlByUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryIMock.GetObjectUrlByUID with params: %#v", *e.params)
+		}
+	}
+
+	afterGetObjectUrlByUIDCounter := mm_atomic.LoadUint64(&m.afterGetObjectUrlByUIDCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetObjectUrlByUIDMock.defaultExpectation != nil && afterGetObjectUrlByUIDCounter < 1 {
+		if m.GetObjectUrlByUIDMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to RepositoryIMock.GetObjectUrlByUID")
+		} else {
+			m.t.Errorf("Expected call to RepositoryIMock.GetObjectUrlByUID with params: %#v", *m.GetObjectUrlByUIDMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetObjectUrlByUID != nil && afterGetObjectUrlByUIDCounter < 1 {
+		m.t.Error("Expected call to RepositoryIMock.GetObjectUrlByUID")
+	}
+
+	if !m.GetObjectUrlByUIDMock.invocationsDone() && afterGetObjectUrlByUIDCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.GetObjectUrlByUID but found %d calls",
+			mm_atomic.LoadUint64(&m.GetObjectUrlByUIDMock.expectedInvocations), afterGetObjectUrlByUIDCounter)
+	}
+}
+
+type mRepositoryIMockGetObjectUrlCountByObject struct {
+	mock               *RepositoryIMock
+	defaultExpectation *RepositoryIMockGetObjectUrlCountByObjectExpectation
+	expectations       []*RepositoryIMockGetObjectUrlCountByObjectExpectation
+
+	callArgs []*RepositoryIMockGetObjectUrlCountByObjectParams
+	mutex    sync.RWMutex
+
+	expectedInvocations uint64
+}
+
+// RepositoryIMockGetObjectUrlCountByObjectExpectation specifies expectation struct of the RepositoryI.GetObjectUrlCountByObject
+type RepositoryIMockGetObjectUrlCountByObjectExpectation struct {
+	mock      *RepositoryIMock
+	params    *RepositoryIMockGetObjectUrlCountByObjectParams
+	paramPtrs *RepositoryIMockGetObjectUrlCountByObjectParamPtrs
+	results   *RepositoryIMockGetObjectUrlCountByObjectResults
+	Counter   uint64
+}
+
+// RepositoryIMockGetObjectUrlCountByObjectParams contains parameters of the RepositoryI.GetObjectUrlCountByObject
+type RepositoryIMockGetObjectUrlCountByObjectParams struct {
+	ctx       context.Context
+	objectUID uuid.UUID
+}
+
+// RepositoryIMockGetObjectUrlCountByObjectParamPtrs contains pointers to parameters of the RepositoryI.GetObjectUrlCountByObject
+type RepositoryIMockGetObjectUrlCountByObjectParamPtrs struct {
+	ctx       *context.Context
+	objectUID *uuid.UUID
+}
+
+// RepositoryIMockGetObjectUrlCountByObjectResults contains results of the RepositoryI.GetObjectUrlCountByObject
+type RepositoryIMockGetObjectUrlCountByObjectResults struct {
+	i1  int64
+	err error
+}
+
+// Expect sets up expected params for RepositoryI.GetObjectUrlCountByObject
+func (mmGetObjectUrlCountByObject *mRepositoryIMockGetObjectUrlCountByObject) Expect(ctx context.Context, objectUID uuid.UUID) *mRepositoryIMockGetObjectUrlCountByObject {
+	if mmGetObjectUrlCountByObject.mock.funcGetObjectUrlCountByObject != nil {
+		mmGetObjectUrlCountByObject.mock.t.Fatalf("RepositoryIMock.GetObjectUrlCountByObject mock is already set by Set")
+	}
+
+	if mmGetObjectUrlCountByObject.defaultExpectation == nil {
+		mmGetObjectUrlCountByObject.defaultExpectation = &RepositoryIMockGetObjectUrlCountByObjectExpectation{}
+	}
+
+	if mmGetObjectUrlCountByObject.defaultExpectation.paramPtrs != nil {
+		mmGetObjectUrlCountByObject.mock.t.Fatalf("RepositoryIMock.GetObjectUrlCountByObject mock is already set by ExpectParams functions")
+	}
+
+	mmGetObjectUrlCountByObject.defaultExpectation.params = &RepositoryIMockGetObjectUrlCountByObjectParams{ctx, objectUID}
+	for _, e := range mmGetObjectUrlCountByObject.expectations {
+		if minimock.Equal(e.params, mmGetObjectUrlCountByObject.defaultExpectation.params) {
+			mmGetObjectUrlCountByObject.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetObjectUrlCountByObject.defaultExpectation.params)
+		}
+	}
+
+	return mmGetObjectUrlCountByObject
+}
+
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.GetObjectUrlCountByObject
+func (mmGetObjectUrlCountByObject *mRepositoryIMockGetObjectUrlCountByObject) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockGetObjectUrlCountByObject {
+	if mmGetObjectUrlCountByObject.mock.funcGetObjectUrlCountByObject != nil {
+		mmGetObjectUrlCountByObject.mock.t.Fatalf("RepositoryIMock.GetObjectUrlCountByObject mock is already set by Set")
+	}
+
+	if mmGetObjectUrlCountByObject.defaultExpectation == nil {
+		mmGetObjectUrlCountByObject.defaultExpectation = &RepositoryIMockGetObjectUrlCountByObjectExpectation{}
+	}
+
+	if mmGetObjectUrlCountByObject.defaultExpectation.params != nil {
+		mmGetObjectUrlCountByObject.mock.t.Fatalf("RepositoryIMock.GetObjectUrlCountByObject mock is already set by Expect")
+	}
+
+	if mmGetObjectUrlCountByObject.defaultExpectation.paramPtrs == nil {
+		mmGetObjectUrlCountByObject.defaultExpectation.paramPtrs = &RepositoryIMockGetObjectUrlCountByObjectParamPtrs{}
+	}
+	mmGetObjectUrlCountByObject.defaultExpectation.paramPtrs.ctx = &ctx
+
+	return mmGetObjectUrlCountByObject
+}
+
+// ExpectObjectUIDParam2 sets up expected param objectUID for RepositoryI.GetObjectUrlCountByObject
+func (mmGetObjectUrlCountByObject *mRepositoryIMockGetObjectUrlCountByObject) ExpectObjectUIDParam2(objectUID uuid.UUID) *mRepositoryIMockGetObjectUrlCountByObject {
+	if mmGetObjectUrlCountByObject.mock.funcGetObjectUrlCountByObject != nil {
+		mmGetObjectUrlCountByObject.mock.t.Fatalf("RepositoryIMock.GetObjectUrlCountByObject mock is already set by Set")
+	}
+
+	if mmGetObjectUrlCountByObject.defaultExpectation == nil {
+		mmGetObjectUrlCountByObject.defaultExpectation = &RepositoryIMockGetObjectUrlCountByObjectExpectation{}
+	}
+
+	if mmGetObjectUrlCountByObject.defaultExpectation.params != nil {
+		mmGetObjectUrlCountByObject.mock.t.Fatalf("RepositoryIMock.GetObjectUrlCountByObject mock is already set by Expect")
+	}
+
+	if mmGetObjectUrlCountByObject.defaultExpectation.paramPtrs == nil {
+		mmGetObjectUrlCountByObject.defaultExpectation.paramPtrs = &RepositoryIMockGetObjectUrlCountByObjectParamPtrs{}
+	}
+	mmGetObjectUrlCountByObject.defaultExpectation.paramPtrs.objectUID = &objectUID
+
+	return mmGetObjectUrlCountByObject
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.GetObjectUrlCountByObject
+func (mmGetObjectUrlCountByObject *mRepositoryIMockGetObjectUrlCountByObject) Inspect(f func(ctx context.Context, objectUID uuid.UUID)) *mRepositoryIMockGetObjectUrlCountByObject {
+	if mmGetObjectUrlCountByObject.mock.inspectFuncGetObjectUrlCountByObject != nil {
+		mmGetObjectUrlCountByObject.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.GetObjectUrlCountByObject")
+	}
+
+	mmGetObjectUrlCountByObject.mock.inspectFuncGetObjectUrlCountByObject = f
+
+	return mmGetObjectUrlCountByObject
+}
+
+// Return sets up results that will be returned by RepositoryI.GetObjectUrlCountByObject
+func (mmGetObjectUrlCountByObject *mRepositoryIMockGetObjectUrlCountByObject) Return(i1 int64, err error) *RepositoryIMock {
+	if mmGetObjectUrlCountByObject.mock.funcGetObjectUrlCountByObject != nil {
+		mmGetObjectUrlCountByObject.mock.t.Fatalf("RepositoryIMock.GetObjectUrlCountByObject mock is already set by Set")
+	}
+
+	if mmGetObjectUrlCountByObject.defaultExpectation == nil {
+		mmGetObjectUrlCountByObject.defaultExpectation = &RepositoryIMockGetObjectUrlCountByObjectExpectation{mock: mmGetObjectUrlCountByObject.mock}
+	}
+	mmGetObjectUrlCountByObject.defaultExpectation.results = &RepositoryIMockGetObjectUrlCountByObjectResults{i1, err}
+	return mmGetObjectUrlCountByObject.mock
+}
+
+// Set uses given function f to mock the RepositoryI.GetObjectUrlCountByObject method
+func (mmGetObjectUrlCountByObject *mRepositoryIMockGetObjectUrlCountByObject) Set(f func(ctx context.Context, objectUID uuid.UUID) (i1 int64, err error)) *RepositoryIMock {
+	if mmGetObjectUrlCountByObject.defaultExpectation != nil {
+		mmGetObjectUrlCountByObject.mock.t.Fatalf("Default expectation is already set for the RepositoryI.GetObjectUrlCountByObject method")
+	}
+
+	if len(mmGetObjectUrlCountByObject.expectations) > 0 {
+		mmGetObjectUrlCountByObject.mock.t.Fatalf("Some expectations are already set for the RepositoryI.GetObjectUrlCountByObject method")
+	}
+
+	mmGetObjectUrlCountByObject.mock.funcGetObjectUrlCountByObject = f
+	return mmGetObjectUrlCountByObject.mock
+}
+
+// When sets expectation for the RepositoryI.GetObjectUrlCountByObject which will trigger the result defined by the following
+// Then helper
+func (mmGetObjectUrlCountByObject *mRepositoryIMockGetObjectUrlCountByObject) When(ctx context.Context, objectUID uuid.UUID) *RepositoryIMockGetObjectUrlCountByObjectExpectation {
+	if mmGetObjectUrlCountByObject.mock.funcGetObjectUrlCountByObject != nil {
+		mmGetObjectUrlCountByObject.mock.t.Fatalf("RepositoryIMock.GetObjectUrlCountByObject mock is already set by Set")
+	}
+
+	expectation := &RepositoryIMockGetObjectUrlCountByObjectExpectation{
+		mock:   mmGetObjectUrlCountByObject.mock,
+		params: &RepositoryIMockGetObjectUrlCountByObjectParams{ctx, objectUID},
+	}
+	mmGetObjectUrlCountByObject.expectations = append(mmGetObjectUrlCountByObject.expectations, expectation)
+	return expectation
+}
+
+// Then sets up RepositoryI.GetObjectUrlCountByObject return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockGetObjectUrlCountByObjectExpectation) Then(i1 int64, err error) *RepositoryIMock {
+	e.results = &RepositoryIMockGetObjectUrlCountByObjectResults{i1, err}
+	return e.mock
+}
+
+// Times sets number of times RepositoryI.GetObjectUrlCountByObject should be invoked
+func (mmGetObjectUrlCountByObject *mRepositoryIMockGetObjectUrlCountByObject) Times(n uint64) *mRepositoryIMockGetObjectUrlCountByObject {
+	if n == 0 {
+		mmGetObjectUrlCountByObject.mock.t.Fatalf("Times of RepositoryIMock.GetObjectUrlCountByObject mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetObjectUrlCountByObject.expectedInvocations, n)
+	return mmGetObjectUrlCountByObject
+}
+
+func (mmGetObjectUrlCountByObject *mRepositoryIMockGetObjectUrlCountByObject) invocationsDone() bool {
+	if len(mmGetObjectUrlCountByObject.expectations) == 0 && mmGetObjectUrlCountByObject.defaultExpectation == nil && mmGetObjectUrlCountByObject.mock.funcGetObjectUrlCountByObject == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetObjectUrlCountByObject.mock.afterGetObjectUrlCountByObjectCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetObjectUrlCountByObject.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetObjectUrlCountByObject implements repository.RepositoryI
+func (mmGetObjectUrlCountByObject *RepositoryIMock) GetObjectUrlCountByObject(ctx context.Context, objectUID uuid.UUID) (i1 int64, err error) {
+	mm_atomic.AddUint64(&mmGetObjectUrlCountByObject.beforeGetObjectUrlCountByObjectCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetObjectUrlCountByObject.afterGetObjectUrlCountByObjectCounter, 1)
+
+	if mmGetObjectUrlCountByObject.inspectFuncGetObjectUrlCountByObject != nil {
+		mmGetObjectUrlCountByObject.inspectFuncGetObjectUrlCountByObject(ctx, objectUID)
+	}
+
+	mm_params := RepositoryIMockGetObjectUrlCountByObjectParams{ctx, objectUID}
+
+	// Record call args
+	mmGetObjectUrlCountByObject.GetObjectUrlCountByObjectMock.mutex.Lock()
+	mmGetObjectUrlCountByObject.GetObjectUrlCountByObjectMock.callArgs = append(mmGetObjectUrlCountByObject.GetObjectUrlCountByObjectMock.callArgs, &mm_params)
+	mmGetObjectUrlCountByObject.GetObjectUrlCountByObjectMock.mutex.Unlock()
+
+	for _, e := range mmGetObjectUrlCountByObject.GetObjectUrlCountByObjectMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.i1, e.results.err
+		}
+	}
+
+	if mmGetObjectUrlCountByObject.GetObjectUrlCountByObjectMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetObjectUrlCountByObject.GetObjectUrlCountByObjectMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetObjectUrlCountByObject.GetObjectUrlCountByObjectMock.defaultExpectation.params
+		mm_want_ptrs := mmGetObjectUrlCountByObject.GetObjectUrlCountByObjectMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryIMockGetObjectUrlCountByObjectParams{ctx, objectUID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetObjectUrlCountByObject.t.Errorf("RepositoryIMock.GetObjectUrlCountByObject got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.objectUID != nil && !minimock.Equal(*mm_want_ptrs.objectUID, mm_got.objectUID) {
+				mmGetObjectUrlCountByObject.t.Errorf("RepositoryIMock.GetObjectUrlCountByObject got unexpected parameter objectUID, want: %#v, got: %#v%s\n", *mm_want_ptrs.objectUID, mm_got.objectUID, minimock.Diff(*mm_want_ptrs.objectUID, mm_got.objectUID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetObjectUrlCountByObject.t.Errorf("RepositoryIMock.GetObjectUrlCountByObject got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetObjectUrlCountByObject.GetObjectUrlCountByObjectMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetObjectUrlCountByObject.t.Fatal("No results are set for the RepositoryIMock.GetObjectUrlCountByObject")
+		}
+		return (*mm_results).i1, (*mm_results).err
+	}
+	if mmGetObjectUrlCountByObject.funcGetObjectUrlCountByObject != nil {
+		return mmGetObjectUrlCountByObject.funcGetObjectUrlCountByObject(ctx, objectUID)
+	}
+	mmGetObjectUrlCountByObject.t.Fatalf("Unexpected call to RepositoryIMock.GetObjectUrlCountByObject. %v %v", ctx, objectUID)
+	return
+}
+
+// GetObjectUrlCountByObjectAfterCounter returns a count of finished RepositoryIMock.GetObjectUrlCountByObject invocations
+func (mmGetObjectUrlCountByObject *RepositoryIMock) GetObjectUrlCountByObjectAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetObjectUrlCountByObject.afterGetObjectUrlCountByObjectCounter)
+}
+
+// GetObjectUrlCountByObjectBeforeCounter returns a count of RepositoryIMock.GetObjectUrlCountByObject invocations
+func (mmGetObjectUrlCountByObject *RepositoryIMock) GetObjectUrlCountByObjectBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetObjectUrlCountByObject.beforeGetObjectUrlCountByObjectCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryIMock.GetObjectUrlCountByObject.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetObjectUrlCountByObject *mRepositoryIMockGetObjectUrlCountByObject) Calls() []*RepositoryIMockGetObjectUrlCountByObjectParams {
+	mmGetObjectUrlCountByObject.mutex.RLock()
+
+	argCopy := make([]*RepositoryIMockGetObjectUrlCountByObjectParams, len(mmGetObjectUrlCountByObject.callArgs))
+	copy(argCopy, mmGetObjectUrlCountByObject.callArgs)
+
+	mmGetObjectUrlCountByObject.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetObjectUrlCountByObjectDone returns true if the count of the GetObjectUrlCountByObject invocations corresponds
+// the number of defined expectations
+func (m *RepositoryIMock) MinimockGetObjectUrlCountByObjectDone() bool {
+	for _, e := range m.GetObjectUrlCountByObjectMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetObjectUrlCountByObjectMock.invocationsDone()
+}
+
+// MinimockGetObjectUrlCountByObjectInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockGetObjectUrlCountByObjectInspect() {
+	for _, e := range m.GetObjectUrlCountByObjectMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryIMock.GetObjectUrlCountByObject with params: %#v", *e.params)
+		}
+	}
+
+	afterGetObjectUrlCountByObjectCounter := mm_atomic.LoadUint64(&m.afterGetObjectUrlCountByObjectCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetObjectUrlCountByObjectMock.defaultExpectation != nil && afterGetObjectUrlCountByObjectCounter < 1 {
+		if m.GetObjectUrlCountByObjectMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to RepositoryIMock.GetObjectUrlCountByObject")
+		} else {
+			m.t.Errorf("Expected call to RepositoryIMock.GetObjectUrlCountByObject with params: %#v", *m.GetObjectUrlCountByObjectMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetObjectUrlCountByObject != nil && afterGetObjectUrlCountByObjectCounter < 1 {
+		m.t.Error("Expected call to RepositoryIMock.GetObjectUrlCountByObject")
+	}
+
+	if !m.GetObjectUrlCountByObjectMock.invocationsDone() && afterGetObjectUrlCountByObjectCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.GetObjectUrlCountByObject but found %d calls",
+			mm_atomic.LoadUint64(&m.GetObjectUrlCountByObjectMock.expectedInvocations), afterGetObjectUrlCountByObjectCounter)
 	}
 }
 
@@ -12555,6 +15416,672 @@ func (m *RepositoryIMock) MinimockKnowledgeBaseFileTableNameInspect() {
 	}
 }
 
+type mRepositoryIMockListAllObjectUrls struct {
+	mock               *RepositoryIMock
+	defaultExpectation *RepositoryIMockListAllObjectUrlsExpectation
+	expectations       []*RepositoryIMockListAllObjectUrlsExpectation
+
+	callArgs []*RepositoryIMockListAllObjectUrlsParams
+	mutex    sync.RWMutex
+
+	expectedInvocations uint64
+}
+
+// RepositoryIMockListAllObjectUrlsExpectation specifies expectation struct of the RepositoryI.ListAllObjectUrls
+type RepositoryIMockListAllObjectUrlsExpectation struct {
+	mock      *RepositoryIMock
+	params    *RepositoryIMockListAllObjectUrlsParams
+	paramPtrs *RepositoryIMockListAllObjectUrlsParamPtrs
+	results   *RepositoryIMockListAllObjectUrlsResults
+	Counter   uint64
+}
+
+// RepositoryIMockListAllObjectUrlsParams contains parameters of the RepositoryI.ListAllObjectUrls
+type RepositoryIMockListAllObjectUrlsParams struct {
+	ctx          context.Context
+	namespaceUID uuid.UUID
+	objectUID    uuid.UUID
+}
+
+// RepositoryIMockListAllObjectUrlsParamPtrs contains pointers to parameters of the RepositoryI.ListAllObjectUrls
+type RepositoryIMockListAllObjectUrlsParamPtrs struct {
+	ctx          *context.Context
+	namespaceUID *uuid.UUID
+	objectUID    *uuid.UUID
+}
+
+// RepositoryIMockListAllObjectUrlsResults contains results of the RepositoryI.ListAllObjectUrls
+type RepositoryIMockListAllObjectUrlsResults struct {
+	oa1 []mm_repository.ObjectURL
+	err error
+}
+
+// Expect sets up expected params for RepositoryI.ListAllObjectUrls
+func (mmListAllObjectUrls *mRepositoryIMockListAllObjectUrls) Expect(ctx context.Context, namespaceUID uuid.UUID, objectUID uuid.UUID) *mRepositoryIMockListAllObjectUrls {
+	if mmListAllObjectUrls.mock.funcListAllObjectUrls != nil {
+		mmListAllObjectUrls.mock.t.Fatalf("RepositoryIMock.ListAllObjectUrls mock is already set by Set")
+	}
+
+	if mmListAllObjectUrls.defaultExpectation == nil {
+		mmListAllObjectUrls.defaultExpectation = &RepositoryIMockListAllObjectUrlsExpectation{}
+	}
+
+	if mmListAllObjectUrls.defaultExpectation.paramPtrs != nil {
+		mmListAllObjectUrls.mock.t.Fatalf("RepositoryIMock.ListAllObjectUrls mock is already set by ExpectParams functions")
+	}
+
+	mmListAllObjectUrls.defaultExpectation.params = &RepositoryIMockListAllObjectUrlsParams{ctx, namespaceUID, objectUID}
+	for _, e := range mmListAllObjectUrls.expectations {
+		if minimock.Equal(e.params, mmListAllObjectUrls.defaultExpectation.params) {
+			mmListAllObjectUrls.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmListAllObjectUrls.defaultExpectation.params)
+		}
+	}
+
+	return mmListAllObjectUrls
+}
+
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.ListAllObjectUrls
+func (mmListAllObjectUrls *mRepositoryIMockListAllObjectUrls) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockListAllObjectUrls {
+	if mmListAllObjectUrls.mock.funcListAllObjectUrls != nil {
+		mmListAllObjectUrls.mock.t.Fatalf("RepositoryIMock.ListAllObjectUrls mock is already set by Set")
+	}
+
+	if mmListAllObjectUrls.defaultExpectation == nil {
+		mmListAllObjectUrls.defaultExpectation = &RepositoryIMockListAllObjectUrlsExpectation{}
+	}
+
+	if mmListAllObjectUrls.defaultExpectation.params != nil {
+		mmListAllObjectUrls.mock.t.Fatalf("RepositoryIMock.ListAllObjectUrls mock is already set by Expect")
+	}
+
+	if mmListAllObjectUrls.defaultExpectation.paramPtrs == nil {
+		mmListAllObjectUrls.defaultExpectation.paramPtrs = &RepositoryIMockListAllObjectUrlsParamPtrs{}
+	}
+	mmListAllObjectUrls.defaultExpectation.paramPtrs.ctx = &ctx
+
+	return mmListAllObjectUrls
+}
+
+// ExpectNamespaceUIDParam2 sets up expected param namespaceUID for RepositoryI.ListAllObjectUrls
+func (mmListAllObjectUrls *mRepositoryIMockListAllObjectUrls) ExpectNamespaceUIDParam2(namespaceUID uuid.UUID) *mRepositoryIMockListAllObjectUrls {
+	if mmListAllObjectUrls.mock.funcListAllObjectUrls != nil {
+		mmListAllObjectUrls.mock.t.Fatalf("RepositoryIMock.ListAllObjectUrls mock is already set by Set")
+	}
+
+	if mmListAllObjectUrls.defaultExpectation == nil {
+		mmListAllObjectUrls.defaultExpectation = &RepositoryIMockListAllObjectUrlsExpectation{}
+	}
+
+	if mmListAllObjectUrls.defaultExpectation.params != nil {
+		mmListAllObjectUrls.mock.t.Fatalf("RepositoryIMock.ListAllObjectUrls mock is already set by Expect")
+	}
+
+	if mmListAllObjectUrls.defaultExpectation.paramPtrs == nil {
+		mmListAllObjectUrls.defaultExpectation.paramPtrs = &RepositoryIMockListAllObjectUrlsParamPtrs{}
+	}
+	mmListAllObjectUrls.defaultExpectation.paramPtrs.namespaceUID = &namespaceUID
+
+	return mmListAllObjectUrls
+}
+
+// ExpectObjectUIDParam3 sets up expected param objectUID for RepositoryI.ListAllObjectUrls
+func (mmListAllObjectUrls *mRepositoryIMockListAllObjectUrls) ExpectObjectUIDParam3(objectUID uuid.UUID) *mRepositoryIMockListAllObjectUrls {
+	if mmListAllObjectUrls.mock.funcListAllObjectUrls != nil {
+		mmListAllObjectUrls.mock.t.Fatalf("RepositoryIMock.ListAllObjectUrls mock is already set by Set")
+	}
+
+	if mmListAllObjectUrls.defaultExpectation == nil {
+		mmListAllObjectUrls.defaultExpectation = &RepositoryIMockListAllObjectUrlsExpectation{}
+	}
+
+	if mmListAllObjectUrls.defaultExpectation.params != nil {
+		mmListAllObjectUrls.mock.t.Fatalf("RepositoryIMock.ListAllObjectUrls mock is already set by Expect")
+	}
+
+	if mmListAllObjectUrls.defaultExpectation.paramPtrs == nil {
+		mmListAllObjectUrls.defaultExpectation.paramPtrs = &RepositoryIMockListAllObjectUrlsParamPtrs{}
+	}
+	mmListAllObjectUrls.defaultExpectation.paramPtrs.objectUID = &objectUID
+
+	return mmListAllObjectUrls
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.ListAllObjectUrls
+func (mmListAllObjectUrls *mRepositoryIMockListAllObjectUrls) Inspect(f func(ctx context.Context, namespaceUID uuid.UUID, objectUID uuid.UUID)) *mRepositoryIMockListAllObjectUrls {
+	if mmListAllObjectUrls.mock.inspectFuncListAllObjectUrls != nil {
+		mmListAllObjectUrls.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.ListAllObjectUrls")
+	}
+
+	mmListAllObjectUrls.mock.inspectFuncListAllObjectUrls = f
+
+	return mmListAllObjectUrls
+}
+
+// Return sets up results that will be returned by RepositoryI.ListAllObjectUrls
+func (mmListAllObjectUrls *mRepositoryIMockListAllObjectUrls) Return(oa1 []mm_repository.ObjectURL, err error) *RepositoryIMock {
+	if mmListAllObjectUrls.mock.funcListAllObjectUrls != nil {
+		mmListAllObjectUrls.mock.t.Fatalf("RepositoryIMock.ListAllObjectUrls mock is already set by Set")
+	}
+
+	if mmListAllObjectUrls.defaultExpectation == nil {
+		mmListAllObjectUrls.defaultExpectation = &RepositoryIMockListAllObjectUrlsExpectation{mock: mmListAllObjectUrls.mock}
+	}
+	mmListAllObjectUrls.defaultExpectation.results = &RepositoryIMockListAllObjectUrlsResults{oa1, err}
+	return mmListAllObjectUrls.mock
+}
+
+// Set uses given function f to mock the RepositoryI.ListAllObjectUrls method
+func (mmListAllObjectUrls *mRepositoryIMockListAllObjectUrls) Set(f func(ctx context.Context, namespaceUID uuid.UUID, objectUID uuid.UUID) (oa1 []mm_repository.ObjectURL, err error)) *RepositoryIMock {
+	if mmListAllObjectUrls.defaultExpectation != nil {
+		mmListAllObjectUrls.mock.t.Fatalf("Default expectation is already set for the RepositoryI.ListAllObjectUrls method")
+	}
+
+	if len(mmListAllObjectUrls.expectations) > 0 {
+		mmListAllObjectUrls.mock.t.Fatalf("Some expectations are already set for the RepositoryI.ListAllObjectUrls method")
+	}
+
+	mmListAllObjectUrls.mock.funcListAllObjectUrls = f
+	return mmListAllObjectUrls.mock
+}
+
+// When sets expectation for the RepositoryI.ListAllObjectUrls which will trigger the result defined by the following
+// Then helper
+func (mmListAllObjectUrls *mRepositoryIMockListAllObjectUrls) When(ctx context.Context, namespaceUID uuid.UUID, objectUID uuid.UUID) *RepositoryIMockListAllObjectUrlsExpectation {
+	if mmListAllObjectUrls.mock.funcListAllObjectUrls != nil {
+		mmListAllObjectUrls.mock.t.Fatalf("RepositoryIMock.ListAllObjectUrls mock is already set by Set")
+	}
+
+	expectation := &RepositoryIMockListAllObjectUrlsExpectation{
+		mock:   mmListAllObjectUrls.mock,
+		params: &RepositoryIMockListAllObjectUrlsParams{ctx, namespaceUID, objectUID},
+	}
+	mmListAllObjectUrls.expectations = append(mmListAllObjectUrls.expectations, expectation)
+	return expectation
+}
+
+// Then sets up RepositoryI.ListAllObjectUrls return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockListAllObjectUrlsExpectation) Then(oa1 []mm_repository.ObjectURL, err error) *RepositoryIMock {
+	e.results = &RepositoryIMockListAllObjectUrlsResults{oa1, err}
+	return e.mock
+}
+
+// Times sets number of times RepositoryI.ListAllObjectUrls should be invoked
+func (mmListAllObjectUrls *mRepositoryIMockListAllObjectUrls) Times(n uint64) *mRepositoryIMockListAllObjectUrls {
+	if n == 0 {
+		mmListAllObjectUrls.mock.t.Fatalf("Times of RepositoryIMock.ListAllObjectUrls mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmListAllObjectUrls.expectedInvocations, n)
+	return mmListAllObjectUrls
+}
+
+func (mmListAllObjectUrls *mRepositoryIMockListAllObjectUrls) invocationsDone() bool {
+	if len(mmListAllObjectUrls.expectations) == 0 && mmListAllObjectUrls.defaultExpectation == nil && mmListAllObjectUrls.mock.funcListAllObjectUrls == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmListAllObjectUrls.mock.afterListAllObjectUrlsCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmListAllObjectUrls.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// ListAllObjectUrls implements repository.RepositoryI
+func (mmListAllObjectUrls *RepositoryIMock) ListAllObjectUrls(ctx context.Context, namespaceUID uuid.UUID, objectUID uuid.UUID) (oa1 []mm_repository.ObjectURL, err error) {
+	mm_atomic.AddUint64(&mmListAllObjectUrls.beforeListAllObjectUrlsCounter, 1)
+	defer mm_atomic.AddUint64(&mmListAllObjectUrls.afterListAllObjectUrlsCounter, 1)
+
+	if mmListAllObjectUrls.inspectFuncListAllObjectUrls != nil {
+		mmListAllObjectUrls.inspectFuncListAllObjectUrls(ctx, namespaceUID, objectUID)
+	}
+
+	mm_params := RepositoryIMockListAllObjectUrlsParams{ctx, namespaceUID, objectUID}
+
+	// Record call args
+	mmListAllObjectUrls.ListAllObjectUrlsMock.mutex.Lock()
+	mmListAllObjectUrls.ListAllObjectUrlsMock.callArgs = append(mmListAllObjectUrls.ListAllObjectUrlsMock.callArgs, &mm_params)
+	mmListAllObjectUrls.ListAllObjectUrlsMock.mutex.Unlock()
+
+	for _, e := range mmListAllObjectUrls.ListAllObjectUrlsMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.oa1, e.results.err
+		}
+	}
+
+	if mmListAllObjectUrls.ListAllObjectUrlsMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmListAllObjectUrls.ListAllObjectUrlsMock.defaultExpectation.Counter, 1)
+		mm_want := mmListAllObjectUrls.ListAllObjectUrlsMock.defaultExpectation.params
+		mm_want_ptrs := mmListAllObjectUrls.ListAllObjectUrlsMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryIMockListAllObjectUrlsParams{ctx, namespaceUID, objectUID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmListAllObjectUrls.t.Errorf("RepositoryIMock.ListAllObjectUrls got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.namespaceUID != nil && !minimock.Equal(*mm_want_ptrs.namespaceUID, mm_got.namespaceUID) {
+				mmListAllObjectUrls.t.Errorf("RepositoryIMock.ListAllObjectUrls got unexpected parameter namespaceUID, want: %#v, got: %#v%s\n", *mm_want_ptrs.namespaceUID, mm_got.namespaceUID, minimock.Diff(*mm_want_ptrs.namespaceUID, mm_got.namespaceUID))
+			}
+
+			if mm_want_ptrs.objectUID != nil && !minimock.Equal(*mm_want_ptrs.objectUID, mm_got.objectUID) {
+				mmListAllObjectUrls.t.Errorf("RepositoryIMock.ListAllObjectUrls got unexpected parameter objectUID, want: %#v, got: %#v%s\n", *mm_want_ptrs.objectUID, mm_got.objectUID, minimock.Diff(*mm_want_ptrs.objectUID, mm_got.objectUID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmListAllObjectUrls.t.Errorf("RepositoryIMock.ListAllObjectUrls got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmListAllObjectUrls.ListAllObjectUrlsMock.defaultExpectation.results
+		if mm_results == nil {
+			mmListAllObjectUrls.t.Fatal("No results are set for the RepositoryIMock.ListAllObjectUrls")
+		}
+		return (*mm_results).oa1, (*mm_results).err
+	}
+	if mmListAllObjectUrls.funcListAllObjectUrls != nil {
+		return mmListAllObjectUrls.funcListAllObjectUrls(ctx, namespaceUID, objectUID)
+	}
+	mmListAllObjectUrls.t.Fatalf("Unexpected call to RepositoryIMock.ListAllObjectUrls. %v %v %v", ctx, namespaceUID, objectUID)
+	return
+}
+
+// ListAllObjectUrlsAfterCounter returns a count of finished RepositoryIMock.ListAllObjectUrls invocations
+func (mmListAllObjectUrls *RepositoryIMock) ListAllObjectUrlsAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmListAllObjectUrls.afterListAllObjectUrlsCounter)
+}
+
+// ListAllObjectUrlsBeforeCounter returns a count of RepositoryIMock.ListAllObjectUrls invocations
+func (mmListAllObjectUrls *RepositoryIMock) ListAllObjectUrlsBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmListAllObjectUrls.beforeListAllObjectUrlsCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryIMock.ListAllObjectUrls.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmListAllObjectUrls *mRepositoryIMockListAllObjectUrls) Calls() []*RepositoryIMockListAllObjectUrlsParams {
+	mmListAllObjectUrls.mutex.RLock()
+
+	argCopy := make([]*RepositoryIMockListAllObjectUrlsParams, len(mmListAllObjectUrls.callArgs))
+	copy(argCopy, mmListAllObjectUrls.callArgs)
+
+	mmListAllObjectUrls.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockListAllObjectUrlsDone returns true if the count of the ListAllObjectUrls invocations corresponds
+// the number of defined expectations
+func (m *RepositoryIMock) MinimockListAllObjectUrlsDone() bool {
+	for _, e := range m.ListAllObjectUrlsMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.ListAllObjectUrlsMock.invocationsDone()
+}
+
+// MinimockListAllObjectUrlsInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockListAllObjectUrlsInspect() {
+	for _, e := range m.ListAllObjectUrlsMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryIMock.ListAllObjectUrls with params: %#v", *e.params)
+		}
+	}
+
+	afterListAllObjectUrlsCounter := mm_atomic.LoadUint64(&m.afterListAllObjectUrlsCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.ListAllObjectUrlsMock.defaultExpectation != nil && afterListAllObjectUrlsCounter < 1 {
+		if m.ListAllObjectUrlsMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to RepositoryIMock.ListAllObjectUrls")
+		} else {
+			m.t.Errorf("Expected call to RepositoryIMock.ListAllObjectUrls with params: %#v", *m.ListAllObjectUrlsMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcListAllObjectUrls != nil && afterListAllObjectUrlsCounter < 1 {
+		m.t.Error("Expected call to RepositoryIMock.ListAllObjectUrls")
+	}
+
+	if !m.ListAllObjectUrlsMock.invocationsDone() && afterListAllObjectUrlsCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.ListAllObjectUrls but found %d calls",
+			mm_atomic.LoadUint64(&m.ListAllObjectUrlsMock.expectedInvocations), afterListAllObjectUrlsCounter)
+	}
+}
+
+type mRepositoryIMockListAllObjects struct {
+	mock               *RepositoryIMock
+	defaultExpectation *RepositoryIMockListAllObjectsExpectation
+	expectations       []*RepositoryIMockListAllObjectsExpectation
+
+	callArgs []*RepositoryIMockListAllObjectsParams
+	mutex    sync.RWMutex
+
+	expectedInvocations uint64
+}
+
+// RepositoryIMockListAllObjectsExpectation specifies expectation struct of the RepositoryI.ListAllObjects
+type RepositoryIMockListAllObjectsExpectation struct {
+	mock      *RepositoryIMock
+	params    *RepositoryIMockListAllObjectsParams
+	paramPtrs *RepositoryIMockListAllObjectsParamPtrs
+	results   *RepositoryIMockListAllObjectsResults
+	Counter   uint64
+}
+
+// RepositoryIMockListAllObjectsParams contains parameters of the RepositoryI.ListAllObjects
+type RepositoryIMockListAllObjectsParams struct {
+	ctx          context.Context
+	namespaceUID uuid.UUID
+	creatorUID   uuid.UUID
+}
+
+// RepositoryIMockListAllObjectsParamPtrs contains pointers to parameters of the RepositoryI.ListAllObjects
+type RepositoryIMockListAllObjectsParamPtrs struct {
+	ctx          *context.Context
+	namespaceUID *uuid.UUID
+	creatorUID   *uuid.UUID
+}
+
+// RepositoryIMockListAllObjectsResults contains results of the RepositoryI.ListAllObjects
+type RepositoryIMockListAllObjectsResults struct {
+	oa1 []mm_repository.Object
+	err error
+}
+
+// Expect sets up expected params for RepositoryI.ListAllObjects
+func (mmListAllObjects *mRepositoryIMockListAllObjects) Expect(ctx context.Context, namespaceUID uuid.UUID, creatorUID uuid.UUID) *mRepositoryIMockListAllObjects {
+	if mmListAllObjects.mock.funcListAllObjects != nil {
+		mmListAllObjects.mock.t.Fatalf("RepositoryIMock.ListAllObjects mock is already set by Set")
+	}
+
+	if mmListAllObjects.defaultExpectation == nil {
+		mmListAllObjects.defaultExpectation = &RepositoryIMockListAllObjectsExpectation{}
+	}
+
+	if mmListAllObjects.defaultExpectation.paramPtrs != nil {
+		mmListAllObjects.mock.t.Fatalf("RepositoryIMock.ListAllObjects mock is already set by ExpectParams functions")
+	}
+
+	mmListAllObjects.defaultExpectation.params = &RepositoryIMockListAllObjectsParams{ctx, namespaceUID, creatorUID}
+	for _, e := range mmListAllObjects.expectations {
+		if minimock.Equal(e.params, mmListAllObjects.defaultExpectation.params) {
+			mmListAllObjects.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmListAllObjects.defaultExpectation.params)
+		}
+	}
+
+	return mmListAllObjects
+}
+
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.ListAllObjects
+func (mmListAllObjects *mRepositoryIMockListAllObjects) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockListAllObjects {
+	if mmListAllObjects.mock.funcListAllObjects != nil {
+		mmListAllObjects.mock.t.Fatalf("RepositoryIMock.ListAllObjects mock is already set by Set")
+	}
+
+	if mmListAllObjects.defaultExpectation == nil {
+		mmListAllObjects.defaultExpectation = &RepositoryIMockListAllObjectsExpectation{}
+	}
+
+	if mmListAllObjects.defaultExpectation.params != nil {
+		mmListAllObjects.mock.t.Fatalf("RepositoryIMock.ListAllObjects mock is already set by Expect")
+	}
+
+	if mmListAllObjects.defaultExpectation.paramPtrs == nil {
+		mmListAllObjects.defaultExpectation.paramPtrs = &RepositoryIMockListAllObjectsParamPtrs{}
+	}
+	mmListAllObjects.defaultExpectation.paramPtrs.ctx = &ctx
+
+	return mmListAllObjects
+}
+
+// ExpectNamespaceUIDParam2 sets up expected param namespaceUID for RepositoryI.ListAllObjects
+func (mmListAllObjects *mRepositoryIMockListAllObjects) ExpectNamespaceUIDParam2(namespaceUID uuid.UUID) *mRepositoryIMockListAllObjects {
+	if mmListAllObjects.mock.funcListAllObjects != nil {
+		mmListAllObjects.mock.t.Fatalf("RepositoryIMock.ListAllObjects mock is already set by Set")
+	}
+
+	if mmListAllObjects.defaultExpectation == nil {
+		mmListAllObjects.defaultExpectation = &RepositoryIMockListAllObjectsExpectation{}
+	}
+
+	if mmListAllObjects.defaultExpectation.params != nil {
+		mmListAllObjects.mock.t.Fatalf("RepositoryIMock.ListAllObjects mock is already set by Expect")
+	}
+
+	if mmListAllObjects.defaultExpectation.paramPtrs == nil {
+		mmListAllObjects.defaultExpectation.paramPtrs = &RepositoryIMockListAllObjectsParamPtrs{}
+	}
+	mmListAllObjects.defaultExpectation.paramPtrs.namespaceUID = &namespaceUID
+
+	return mmListAllObjects
+}
+
+// ExpectCreatorUIDParam3 sets up expected param creatorUID for RepositoryI.ListAllObjects
+func (mmListAllObjects *mRepositoryIMockListAllObjects) ExpectCreatorUIDParam3(creatorUID uuid.UUID) *mRepositoryIMockListAllObjects {
+	if mmListAllObjects.mock.funcListAllObjects != nil {
+		mmListAllObjects.mock.t.Fatalf("RepositoryIMock.ListAllObjects mock is already set by Set")
+	}
+
+	if mmListAllObjects.defaultExpectation == nil {
+		mmListAllObjects.defaultExpectation = &RepositoryIMockListAllObjectsExpectation{}
+	}
+
+	if mmListAllObjects.defaultExpectation.params != nil {
+		mmListAllObjects.mock.t.Fatalf("RepositoryIMock.ListAllObjects mock is already set by Expect")
+	}
+
+	if mmListAllObjects.defaultExpectation.paramPtrs == nil {
+		mmListAllObjects.defaultExpectation.paramPtrs = &RepositoryIMockListAllObjectsParamPtrs{}
+	}
+	mmListAllObjects.defaultExpectation.paramPtrs.creatorUID = &creatorUID
+
+	return mmListAllObjects
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.ListAllObjects
+func (mmListAllObjects *mRepositoryIMockListAllObjects) Inspect(f func(ctx context.Context, namespaceUID uuid.UUID, creatorUID uuid.UUID)) *mRepositoryIMockListAllObjects {
+	if mmListAllObjects.mock.inspectFuncListAllObjects != nil {
+		mmListAllObjects.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.ListAllObjects")
+	}
+
+	mmListAllObjects.mock.inspectFuncListAllObjects = f
+
+	return mmListAllObjects
+}
+
+// Return sets up results that will be returned by RepositoryI.ListAllObjects
+func (mmListAllObjects *mRepositoryIMockListAllObjects) Return(oa1 []mm_repository.Object, err error) *RepositoryIMock {
+	if mmListAllObjects.mock.funcListAllObjects != nil {
+		mmListAllObjects.mock.t.Fatalf("RepositoryIMock.ListAllObjects mock is already set by Set")
+	}
+
+	if mmListAllObjects.defaultExpectation == nil {
+		mmListAllObjects.defaultExpectation = &RepositoryIMockListAllObjectsExpectation{mock: mmListAllObjects.mock}
+	}
+	mmListAllObjects.defaultExpectation.results = &RepositoryIMockListAllObjectsResults{oa1, err}
+	return mmListAllObjects.mock
+}
+
+// Set uses given function f to mock the RepositoryI.ListAllObjects method
+func (mmListAllObjects *mRepositoryIMockListAllObjects) Set(f func(ctx context.Context, namespaceUID uuid.UUID, creatorUID uuid.UUID) (oa1 []mm_repository.Object, err error)) *RepositoryIMock {
+	if mmListAllObjects.defaultExpectation != nil {
+		mmListAllObjects.mock.t.Fatalf("Default expectation is already set for the RepositoryI.ListAllObjects method")
+	}
+
+	if len(mmListAllObjects.expectations) > 0 {
+		mmListAllObjects.mock.t.Fatalf("Some expectations are already set for the RepositoryI.ListAllObjects method")
+	}
+
+	mmListAllObjects.mock.funcListAllObjects = f
+	return mmListAllObjects.mock
+}
+
+// When sets expectation for the RepositoryI.ListAllObjects which will trigger the result defined by the following
+// Then helper
+func (mmListAllObjects *mRepositoryIMockListAllObjects) When(ctx context.Context, namespaceUID uuid.UUID, creatorUID uuid.UUID) *RepositoryIMockListAllObjectsExpectation {
+	if mmListAllObjects.mock.funcListAllObjects != nil {
+		mmListAllObjects.mock.t.Fatalf("RepositoryIMock.ListAllObjects mock is already set by Set")
+	}
+
+	expectation := &RepositoryIMockListAllObjectsExpectation{
+		mock:   mmListAllObjects.mock,
+		params: &RepositoryIMockListAllObjectsParams{ctx, namespaceUID, creatorUID},
+	}
+	mmListAllObjects.expectations = append(mmListAllObjects.expectations, expectation)
+	return expectation
+}
+
+// Then sets up RepositoryI.ListAllObjects return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockListAllObjectsExpectation) Then(oa1 []mm_repository.Object, err error) *RepositoryIMock {
+	e.results = &RepositoryIMockListAllObjectsResults{oa1, err}
+	return e.mock
+}
+
+// Times sets number of times RepositoryI.ListAllObjects should be invoked
+func (mmListAllObjects *mRepositoryIMockListAllObjects) Times(n uint64) *mRepositoryIMockListAllObjects {
+	if n == 0 {
+		mmListAllObjects.mock.t.Fatalf("Times of RepositoryIMock.ListAllObjects mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmListAllObjects.expectedInvocations, n)
+	return mmListAllObjects
+}
+
+func (mmListAllObjects *mRepositoryIMockListAllObjects) invocationsDone() bool {
+	if len(mmListAllObjects.expectations) == 0 && mmListAllObjects.defaultExpectation == nil && mmListAllObjects.mock.funcListAllObjects == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmListAllObjects.mock.afterListAllObjectsCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmListAllObjects.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// ListAllObjects implements repository.RepositoryI
+func (mmListAllObjects *RepositoryIMock) ListAllObjects(ctx context.Context, namespaceUID uuid.UUID, creatorUID uuid.UUID) (oa1 []mm_repository.Object, err error) {
+	mm_atomic.AddUint64(&mmListAllObjects.beforeListAllObjectsCounter, 1)
+	defer mm_atomic.AddUint64(&mmListAllObjects.afterListAllObjectsCounter, 1)
+
+	if mmListAllObjects.inspectFuncListAllObjects != nil {
+		mmListAllObjects.inspectFuncListAllObjects(ctx, namespaceUID, creatorUID)
+	}
+
+	mm_params := RepositoryIMockListAllObjectsParams{ctx, namespaceUID, creatorUID}
+
+	// Record call args
+	mmListAllObjects.ListAllObjectsMock.mutex.Lock()
+	mmListAllObjects.ListAllObjectsMock.callArgs = append(mmListAllObjects.ListAllObjectsMock.callArgs, &mm_params)
+	mmListAllObjects.ListAllObjectsMock.mutex.Unlock()
+
+	for _, e := range mmListAllObjects.ListAllObjectsMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.oa1, e.results.err
+		}
+	}
+
+	if mmListAllObjects.ListAllObjectsMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmListAllObjects.ListAllObjectsMock.defaultExpectation.Counter, 1)
+		mm_want := mmListAllObjects.ListAllObjectsMock.defaultExpectation.params
+		mm_want_ptrs := mmListAllObjects.ListAllObjectsMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryIMockListAllObjectsParams{ctx, namespaceUID, creatorUID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmListAllObjects.t.Errorf("RepositoryIMock.ListAllObjects got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.namespaceUID != nil && !minimock.Equal(*mm_want_ptrs.namespaceUID, mm_got.namespaceUID) {
+				mmListAllObjects.t.Errorf("RepositoryIMock.ListAllObjects got unexpected parameter namespaceUID, want: %#v, got: %#v%s\n", *mm_want_ptrs.namespaceUID, mm_got.namespaceUID, minimock.Diff(*mm_want_ptrs.namespaceUID, mm_got.namespaceUID))
+			}
+
+			if mm_want_ptrs.creatorUID != nil && !minimock.Equal(*mm_want_ptrs.creatorUID, mm_got.creatorUID) {
+				mmListAllObjects.t.Errorf("RepositoryIMock.ListAllObjects got unexpected parameter creatorUID, want: %#v, got: %#v%s\n", *mm_want_ptrs.creatorUID, mm_got.creatorUID, minimock.Diff(*mm_want_ptrs.creatorUID, mm_got.creatorUID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmListAllObjects.t.Errorf("RepositoryIMock.ListAllObjects got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmListAllObjects.ListAllObjectsMock.defaultExpectation.results
+		if mm_results == nil {
+			mmListAllObjects.t.Fatal("No results are set for the RepositoryIMock.ListAllObjects")
+		}
+		return (*mm_results).oa1, (*mm_results).err
+	}
+	if mmListAllObjects.funcListAllObjects != nil {
+		return mmListAllObjects.funcListAllObjects(ctx, namespaceUID, creatorUID)
+	}
+	mmListAllObjects.t.Fatalf("Unexpected call to RepositoryIMock.ListAllObjects. %v %v %v", ctx, namespaceUID, creatorUID)
+	return
+}
+
+// ListAllObjectsAfterCounter returns a count of finished RepositoryIMock.ListAllObjects invocations
+func (mmListAllObjects *RepositoryIMock) ListAllObjectsAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmListAllObjects.afterListAllObjectsCounter)
+}
+
+// ListAllObjectsBeforeCounter returns a count of RepositoryIMock.ListAllObjects invocations
+func (mmListAllObjects *RepositoryIMock) ListAllObjectsBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmListAllObjects.beforeListAllObjectsCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryIMock.ListAllObjects.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmListAllObjects *mRepositoryIMockListAllObjects) Calls() []*RepositoryIMockListAllObjectsParams {
+	mmListAllObjects.mutex.RLock()
+
+	argCopy := make([]*RepositoryIMockListAllObjectsParams, len(mmListAllObjects.callArgs))
+	copy(argCopy, mmListAllObjects.callArgs)
+
+	mmListAllObjects.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockListAllObjectsDone returns true if the count of the ListAllObjects invocations corresponds
+// the number of defined expectations
+func (m *RepositoryIMock) MinimockListAllObjectsDone() bool {
+	for _, e := range m.ListAllObjectsMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.ListAllObjectsMock.invocationsDone()
+}
+
+// MinimockListAllObjectsInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockListAllObjectsInspect() {
+	for _, e := range m.ListAllObjectsMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryIMock.ListAllObjects with params: %#v", *e.params)
+		}
+	}
+
+	afterListAllObjectsCounter := mm_atomic.LoadUint64(&m.afterListAllObjectsCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.ListAllObjectsMock.defaultExpectation != nil && afterListAllObjectsCounter < 1 {
+		if m.ListAllObjectsMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to RepositoryIMock.ListAllObjects")
+		} else {
+			m.t.Errorf("Expected call to RepositoryIMock.ListAllObjects with params: %#v", *m.ListAllObjectsMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcListAllObjects != nil && afterListAllObjectsCounter < 1 {
+		m.t.Error("Expected call to RepositoryIMock.ListAllObjects")
+	}
+
+	if !m.ListAllObjectsMock.invocationsDone() && afterListAllObjectsCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.ListAllObjects but found %d calls",
+			mm_atomic.LoadUint64(&m.ListAllObjectsMock.expectedInvocations), afterListAllObjectsCounter)
+	}
+}
+
 type mRepositoryIMockListChunksByKbFileUID struct {
 	mock               *RepositoryIMock
 	defaultExpectation *RepositoryIMockListChunksByKbFileUIDExpectation
@@ -15940,6 +19467,616 @@ func (m *RepositoryIMock) MinimockUpdateKnowledgeBaseFileInspect() {
 	}
 }
 
+type mRepositoryIMockUpdateObject struct {
+	mock               *RepositoryIMock
+	defaultExpectation *RepositoryIMockUpdateObjectExpectation
+	expectations       []*RepositoryIMockUpdateObjectExpectation
+
+	callArgs []*RepositoryIMockUpdateObjectParams
+	mutex    sync.RWMutex
+
+	expectedInvocations uint64
+}
+
+// RepositoryIMockUpdateObjectExpectation specifies expectation struct of the RepositoryI.UpdateObject
+type RepositoryIMockUpdateObjectExpectation struct {
+	mock      *RepositoryIMock
+	params    *RepositoryIMockUpdateObjectParams
+	paramPtrs *RepositoryIMockUpdateObjectParamPtrs
+	results   *RepositoryIMockUpdateObjectResults
+	Counter   uint64
+}
+
+// RepositoryIMockUpdateObjectParams contains parameters of the RepositoryI.UpdateObject
+type RepositoryIMockUpdateObjectParams struct {
+	ctx context.Context
+	obj mm_repository.Object
+}
+
+// RepositoryIMockUpdateObjectParamPtrs contains pointers to parameters of the RepositoryI.UpdateObject
+type RepositoryIMockUpdateObjectParamPtrs struct {
+	ctx *context.Context
+	obj *mm_repository.Object
+}
+
+// RepositoryIMockUpdateObjectResults contains results of the RepositoryI.UpdateObject
+type RepositoryIMockUpdateObjectResults struct {
+	op1 *mm_repository.Object
+	err error
+}
+
+// Expect sets up expected params for RepositoryI.UpdateObject
+func (mmUpdateObject *mRepositoryIMockUpdateObject) Expect(ctx context.Context, obj mm_repository.Object) *mRepositoryIMockUpdateObject {
+	if mmUpdateObject.mock.funcUpdateObject != nil {
+		mmUpdateObject.mock.t.Fatalf("RepositoryIMock.UpdateObject mock is already set by Set")
+	}
+
+	if mmUpdateObject.defaultExpectation == nil {
+		mmUpdateObject.defaultExpectation = &RepositoryIMockUpdateObjectExpectation{}
+	}
+
+	if mmUpdateObject.defaultExpectation.paramPtrs != nil {
+		mmUpdateObject.mock.t.Fatalf("RepositoryIMock.UpdateObject mock is already set by ExpectParams functions")
+	}
+
+	mmUpdateObject.defaultExpectation.params = &RepositoryIMockUpdateObjectParams{ctx, obj}
+	for _, e := range mmUpdateObject.expectations {
+		if minimock.Equal(e.params, mmUpdateObject.defaultExpectation.params) {
+			mmUpdateObject.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmUpdateObject.defaultExpectation.params)
+		}
+	}
+
+	return mmUpdateObject
+}
+
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.UpdateObject
+func (mmUpdateObject *mRepositoryIMockUpdateObject) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockUpdateObject {
+	if mmUpdateObject.mock.funcUpdateObject != nil {
+		mmUpdateObject.mock.t.Fatalf("RepositoryIMock.UpdateObject mock is already set by Set")
+	}
+
+	if mmUpdateObject.defaultExpectation == nil {
+		mmUpdateObject.defaultExpectation = &RepositoryIMockUpdateObjectExpectation{}
+	}
+
+	if mmUpdateObject.defaultExpectation.params != nil {
+		mmUpdateObject.mock.t.Fatalf("RepositoryIMock.UpdateObject mock is already set by Expect")
+	}
+
+	if mmUpdateObject.defaultExpectation.paramPtrs == nil {
+		mmUpdateObject.defaultExpectation.paramPtrs = &RepositoryIMockUpdateObjectParamPtrs{}
+	}
+	mmUpdateObject.defaultExpectation.paramPtrs.ctx = &ctx
+
+	return mmUpdateObject
+}
+
+// ExpectObjParam2 sets up expected param obj for RepositoryI.UpdateObject
+func (mmUpdateObject *mRepositoryIMockUpdateObject) ExpectObjParam2(obj mm_repository.Object) *mRepositoryIMockUpdateObject {
+	if mmUpdateObject.mock.funcUpdateObject != nil {
+		mmUpdateObject.mock.t.Fatalf("RepositoryIMock.UpdateObject mock is already set by Set")
+	}
+
+	if mmUpdateObject.defaultExpectation == nil {
+		mmUpdateObject.defaultExpectation = &RepositoryIMockUpdateObjectExpectation{}
+	}
+
+	if mmUpdateObject.defaultExpectation.params != nil {
+		mmUpdateObject.mock.t.Fatalf("RepositoryIMock.UpdateObject mock is already set by Expect")
+	}
+
+	if mmUpdateObject.defaultExpectation.paramPtrs == nil {
+		mmUpdateObject.defaultExpectation.paramPtrs = &RepositoryIMockUpdateObjectParamPtrs{}
+	}
+	mmUpdateObject.defaultExpectation.paramPtrs.obj = &obj
+
+	return mmUpdateObject
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.UpdateObject
+func (mmUpdateObject *mRepositoryIMockUpdateObject) Inspect(f func(ctx context.Context, obj mm_repository.Object)) *mRepositoryIMockUpdateObject {
+	if mmUpdateObject.mock.inspectFuncUpdateObject != nil {
+		mmUpdateObject.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.UpdateObject")
+	}
+
+	mmUpdateObject.mock.inspectFuncUpdateObject = f
+
+	return mmUpdateObject
+}
+
+// Return sets up results that will be returned by RepositoryI.UpdateObject
+func (mmUpdateObject *mRepositoryIMockUpdateObject) Return(op1 *mm_repository.Object, err error) *RepositoryIMock {
+	if mmUpdateObject.mock.funcUpdateObject != nil {
+		mmUpdateObject.mock.t.Fatalf("RepositoryIMock.UpdateObject mock is already set by Set")
+	}
+
+	if mmUpdateObject.defaultExpectation == nil {
+		mmUpdateObject.defaultExpectation = &RepositoryIMockUpdateObjectExpectation{mock: mmUpdateObject.mock}
+	}
+	mmUpdateObject.defaultExpectation.results = &RepositoryIMockUpdateObjectResults{op1, err}
+	return mmUpdateObject.mock
+}
+
+// Set uses given function f to mock the RepositoryI.UpdateObject method
+func (mmUpdateObject *mRepositoryIMockUpdateObject) Set(f func(ctx context.Context, obj mm_repository.Object) (op1 *mm_repository.Object, err error)) *RepositoryIMock {
+	if mmUpdateObject.defaultExpectation != nil {
+		mmUpdateObject.mock.t.Fatalf("Default expectation is already set for the RepositoryI.UpdateObject method")
+	}
+
+	if len(mmUpdateObject.expectations) > 0 {
+		mmUpdateObject.mock.t.Fatalf("Some expectations are already set for the RepositoryI.UpdateObject method")
+	}
+
+	mmUpdateObject.mock.funcUpdateObject = f
+	return mmUpdateObject.mock
+}
+
+// When sets expectation for the RepositoryI.UpdateObject which will trigger the result defined by the following
+// Then helper
+func (mmUpdateObject *mRepositoryIMockUpdateObject) When(ctx context.Context, obj mm_repository.Object) *RepositoryIMockUpdateObjectExpectation {
+	if mmUpdateObject.mock.funcUpdateObject != nil {
+		mmUpdateObject.mock.t.Fatalf("RepositoryIMock.UpdateObject mock is already set by Set")
+	}
+
+	expectation := &RepositoryIMockUpdateObjectExpectation{
+		mock:   mmUpdateObject.mock,
+		params: &RepositoryIMockUpdateObjectParams{ctx, obj},
+	}
+	mmUpdateObject.expectations = append(mmUpdateObject.expectations, expectation)
+	return expectation
+}
+
+// Then sets up RepositoryI.UpdateObject return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockUpdateObjectExpectation) Then(op1 *mm_repository.Object, err error) *RepositoryIMock {
+	e.results = &RepositoryIMockUpdateObjectResults{op1, err}
+	return e.mock
+}
+
+// Times sets number of times RepositoryI.UpdateObject should be invoked
+func (mmUpdateObject *mRepositoryIMockUpdateObject) Times(n uint64) *mRepositoryIMockUpdateObject {
+	if n == 0 {
+		mmUpdateObject.mock.t.Fatalf("Times of RepositoryIMock.UpdateObject mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmUpdateObject.expectedInvocations, n)
+	return mmUpdateObject
+}
+
+func (mmUpdateObject *mRepositoryIMockUpdateObject) invocationsDone() bool {
+	if len(mmUpdateObject.expectations) == 0 && mmUpdateObject.defaultExpectation == nil && mmUpdateObject.mock.funcUpdateObject == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmUpdateObject.mock.afterUpdateObjectCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmUpdateObject.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// UpdateObject implements repository.RepositoryI
+func (mmUpdateObject *RepositoryIMock) UpdateObject(ctx context.Context, obj mm_repository.Object) (op1 *mm_repository.Object, err error) {
+	mm_atomic.AddUint64(&mmUpdateObject.beforeUpdateObjectCounter, 1)
+	defer mm_atomic.AddUint64(&mmUpdateObject.afterUpdateObjectCounter, 1)
+
+	if mmUpdateObject.inspectFuncUpdateObject != nil {
+		mmUpdateObject.inspectFuncUpdateObject(ctx, obj)
+	}
+
+	mm_params := RepositoryIMockUpdateObjectParams{ctx, obj}
+
+	// Record call args
+	mmUpdateObject.UpdateObjectMock.mutex.Lock()
+	mmUpdateObject.UpdateObjectMock.callArgs = append(mmUpdateObject.UpdateObjectMock.callArgs, &mm_params)
+	mmUpdateObject.UpdateObjectMock.mutex.Unlock()
+
+	for _, e := range mmUpdateObject.UpdateObjectMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.op1, e.results.err
+		}
+	}
+
+	if mmUpdateObject.UpdateObjectMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmUpdateObject.UpdateObjectMock.defaultExpectation.Counter, 1)
+		mm_want := mmUpdateObject.UpdateObjectMock.defaultExpectation.params
+		mm_want_ptrs := mmUpdateObject.UpdateObjectMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryIMockUpdateObjectParams{ctx, obj}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmUpdateObject.t.Errorf("RepositoryIMock.UpdateObject got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.obj != nil && !minimock.Equal(*mm_want_ptrs.obj, mm_got.obj) {
+				mmUpdateObject.t.Errorf("RepositoryIMock.UpdateObject got unexpected parameter obj, want: %#v, got: %#v%s\n", *mm_want_ptrs.obj, mm_got.obj, minimock.Diff(*mm_want_ptrs.obj, mm_got.obj))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmUpdateObject.t.Errorf("RepositoryIMock.UpdateObject got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmUpdateObject.UpdateObjectMock.defaultExpectation.results
+		if mm_results == nil {
+			mmUpdateObject.t.Fatal("No results are set for the RepositoryIMock.UpdateObject")
+		}
+		return (*mm_results).op1, (*mm_results).err
+	}
+	if mmUpdateObject.funcUpdateObject != nil {
+		return mmUpdateObject.funcUpdateObject(ctx, obj)
+	}
+	mmUpdateObject.t.Fatalf("Unexpected call to RepositoryIMock.UpdateObject. %v %v", ctx, obj)
+	return
+}
+
+// UpdateObjectAfterCounter returns a count of finished RepositoryIMock.UpdateObject invocations
+func (mmUpdateObject *RepositoryIMock) UpdateObjectAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateObject.afterUpdateObjectCounter)
+}
+
+// UpdateObjectBeforeCounter returns a count of RepositoryIMock.UpdateObject invocations
+func (mmUpdateObject *RepositoryIMock) UpdateObjectBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateObject.beforeUpdateObjectCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryIMock.UpdateObject.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmUpdateObject *mRepositoryIMockUpdateObject) Calls() []*RepositoryIMockUpdateObjectParams {
+	mmUpdateObject.mutex.RLock()
+
+	argCopy := make([]*RepositoryIMockUpdateObjectParams, len(mmUpdateObject.callArgs))
+	copy(argCopy, mmUpdateObject.callArgs)
+
+	mmUpdateObject.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockUpdateObjectDone returns true if the count of the UpdateObject invocations corresponds
+// the number of defined expectations
+func (m *RepositoryIMock) MinimockUpdateObjectDone() bool {
+	for _, e := range m.UpdateObjectMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.UpdateObjectMock.invocationsDone()
+}
+
+// MinimockUpdateObjectInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockUpdateObjectInspect() {
+	for _, e := range m.UpdateObjectMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryIMock.UpdateObject with params: %#v", *e.params)
+		}
+	}
+
+	afterUpdateObjectCounter := mm_atomic.LoadUint64(&m.afterUpdateObjectCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.UpdateObjectMock.defaultExpectation != nil && afterUpdateObjectCounter < 1 {
+		if m.UpdateObjectMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to RepositoryIMock.UpdateObject")
+		} else {
+			m.t.Errorf("Expected call to RepositoryIMock.UpdateObject with params: %#v", *m.UpdateObjectMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcUpdateObject != nil && afterUpdateObjectCounter < 1 {
+		m.t.Error("Expected call to RepositoryIMock.UpdateObject")
+	}
+
+	if !m.UpdateObjectMock.invocationsDone() && afterUpdateObjectCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.UpdateObject but found %d calls",
+			mm_atomic.LoadUint64(&m.UpdateObjectMock.expectedInvocations), afterUpdateObjectCounter)
+	}
+}
+
+type mRepositoryIMockUpdateObjectUrl struct {
+	mock               *RepositoryIMock
+	defaultExpectation *RepositoryIMockUpdateObjectUrlExpectation
+	expectations       []*RepositoryIMockUpdateObjectUrlExpectation
+
+	callArgs []*RepositoryIMockUpdateObjectUrlParams
+	mutex    sync.RWMutex
+
+	expectedInvocations uint64
+}
+
+// RepositoryIMockUpdateObjectUrlExpectation specifies expectation struct of the RepositoryI.UpdateObjectUrl
+type RepositoryIMockUpdateObjectUrlExpectation struct {
+	mock      *RepositoryIMock
+	params    *RepositoryIMockUpdateObjectUrlParams
+	paramPtrs *RepositoryIMockUpdateObjectUrlParamPtrs
+	results   *RepositoryIMockUpdateObjectUrlResults
+	Counter   uint64
+}
+
+// RepositoryIMockUpdateObjectUrlParams contains parameters of the RepositoryI.UpdateObjectUrl
+type RepositoryIMockUpdateObjectUrlParams struct {
+	ctx       context.Context
+	objectUrl mm_repository.ObjectURL
+}
+
+// RepositoryIMockUpdateObjectUrlParamPtrs contains pointers to parameters of the RepositoryI.UpdateObjectUrl
+type RepositoryIMockUpdateObjectUrlParamPtrs struct {
+	ctx       *context.Context
+	objectUrl *mm_repository.ObjectURL
+}
+
+// RepositoryIMockUpdateObjectUrlResults contains results of the RepositoryI.UpdateObjectUrl
+type RepositoryIMockUpdateObjectUrlResults struct {
+	op1 *mm_repository.ObjectURL
+	err error
+}
+
+// Expect sets up expected params for RepositoryI.UpdateObjectUrl
+func (mmUpdateObjectUrl *mRepositoryIMockUpdateObjectUrl) Expect(ctx context.Context, objectUrl mm_repository.ObjectURL) *mRepositoryIMockUpdateObjectUrl {
+	if mmUpdateObjectUrl.mock.funcUpdateObjectUrl != nil {
+		mmUpdateObjectUrl.mock.t.Fatalf("RepositoryIMock.UpdateObjectUrl mock is already set by Set")
+	}
+
+	if mmUpdateObjectUrl.defaultExpectation == nil {
+		mmUpdateObjectUrl.defaultExpectation = &RepositoryIMockUpdateObjectUrlExpectation{}
+	}
+
+	if mmUpdateObjectUrl.defaultExpectation.paramPtrs != nil {
+		mmUpdateObjectUrl.mock.t.Fatalf("RepositoryIMock.UpdateObjectUrl mock is already set by ExpectParams functions")
+	}
+
+	mmUpdateObjectUrl.defaultExpectation.params = &RepositoryIMockUpdateObjectUrlParams{ctx, objectUrl}
+	for _, e := range mmUpdateObjectUrl.expectations {
+		if minimock.Equal(e.params, mmUpdateObjectUrl.defaultExpectation.params) {
+			mmUpdateObjectUrl.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmUpdateObjectUrl.defaultExpectation.params)
+		}
+	}
+
+	return mmUpdateObjectUrl
+}
+
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.UpdateObjectUrl
+func (mmUpdateObjectUrl *mRepositoryIMockUpdateObjectUrl) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockUpdateObjectUrl {
+	if mmUpdateObjectUrl.mock.funcUpdateObjectUrl != nil {
+		mmUpdateObjectUrl.mock.t.Fatalf("RepositoryIMock.UpdateObjectUrl mock is already set by Set")
+	}
+
+	if mmUpdateObjectUrl.defaultExpectation == nil {
+		mmUpdateObjectUrl.defaultExpectation = &RepositoryIMockUpdateObjectUrlExpectation{}
+	}
+
+	if mmUpdateObjectUrl.defaultExpectation.params != nil {
+		mmUpdateObjectUrl.mock.t.Fatalf("RepositoryIMock.UpdateObjectUrl mock is already set by Expect")
+	}
+
+	if mmUpdateObjectUrl.defaultExpectation.paramPtrs == nil {
+		mmUpdateObjectUrl.defaultExpectation.paramPtrs = &RepositoryIMockUpdateObjectUrlParamPtrs{}
+	}
+	mmUpdateObjectUrl.defaultExpectation.paramPtrs.ctx = &ctx
+
+	return mmUpdateObjectUrl
+}
+
+// ExpectObjectUrlParam2 sets up expected param objectUrl for RepositoryI.UpdateObjectUrl
+func (mmUpdateObjectUrl *mRepositoryIMockUpdateObjectUrl) ExpectObjectUrlParam2(objectUrl mm_repository.ObjectURL) *mRepositoryIMockUpdateObjectUrl {
+	if mmUpdateObjectUrl.mock.funcUpdateObjectUrl != nil {
+		mmUpdateObjectUrl.mock.t.Fatalf("RepositoryIMock.UpdateObjectUrl mock is already set by Set")
+	}
+
+	if mmUpdateObjectUrl.defaultExpectation == nil {
+		mmUpdateObjectUrl.defaultExpectation = &RepositoryIMockUpdateObjectUrlExpectation{}
+	}
+
+	if mmUpdateObjectUrl.defaultExpectation.params != nil {
+		mmUpdateObjectUrl.mock.t.Fatalf("RepositoryIMock.UpdateObjectUrl mock is already set by Expect")
+	}
+
+	if mmUpdateObjectUrl.defaultExpectation.paramPtrs == nil {
+		mmUpdateObjectUrl.defaultExpectation.paramPtrs = &RepositoryIMockUpdateObjectUrlParamPtrs{}
+	}
+	mmUpdateObjectUrl.defaultExpectation.paramPtrs.objectUrl = &objectUrl
+
+	return mmUpdateObjectUrl
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.UpdateObjectUrl
+func (mmUpdateObjectUrl *mRepositoryIMockUpdateObjectUrl) Inspect(f func(ctx context.Context, objectUrl mm_repository.ObjectURL)) *mRepositoryIMockUpdateObjectUrl {
+	if mmUpdateObjectUrl.mock.inspectFuncUpdateObjectUrl != nil {
+		mmUpdateObjectUrl.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.UpdateObjectUrl")
+	}
+
+	mmUpdateObjectUrl.mock.inspectFuncUpdateObjectUrl = f
+
+	return mmUpdateObjectUrl
+}
+
+// Return sets up results that will be returned by RepositoryI.UpdateObjectUrl
+func (mmUpdateObjectUrl *mRepositoryIMockUpdateObjectUrl) Return(op1 *mm_repository.ObjectURL, err error) *RepositoryIMock {
+	if mmUpdateObjectUrl.mock.funcUpdateObjectUrl != nil {
+		mmUpdateObjectUrl.mock.t.Fatalf("RepositoryIMock.UpdateObjectUrl mock is already set by Set")
+	}
+
+	if mmUpdateObjectUrl.defaultExpectation == nil {
+		mmUpdateObjectUrl.defaultExpectation = &RepositoryIMockUpdateObjectUrlExpectation{mock: mmUpdateObjectUrl.mock}
+	}
+	mmUpdateObjectUrl.defaultExpectation.results = &RepositoryIMockUpdateObjectUrlResults{op1, err}
+	return mmUpdateObjectUrl.mock
+}
+
+// Set uses given function f to mock the RepositoryI.UpdateObjectUrl method
+func (mmUpdateObjectUrl *mRepositoryIMockUpdateObjectUrl) Set(f func(ctx context.Context, objectUrl mm_repository.ObjectURL) (op1 *mm_repository.ObjectURL, err error)) *RepositoryIMock {
+	if mmUpdateObjectUrl.defaultExpectation != nil {
+		mmUpdateObjectUrl.mock.t.Fatalf("Default expectation is already set for the RepositoryI.UpdateObjectUrl method")
+	}
+
+	if len(mmUpdateObjectUrl.expectations) > 0 {
+		mmUpdateObjectUrl.mock.t.Fatalf("Some expectations are already set for the RepositoryI.UpdateObjectUrl method")
+	}
+
+	mmUpdateObjectUrl.mock.funcUpdateObjectUrl = f
+	return mmUpdateObjectUrl.mock
+}
+
+// When sets expectation for the RepositoryI.UpdateObjectUrl which will trigger the result defined by the following
+// Then helper
+func (mmUpdateObjectUrl *mRepositoryIMockUpdateObjectUrl) When(ctx context.Context, objectUrl mm_repository.ObjectURL) *RepositoryIMockUpdateObjectUrlExpectation {
+	if mmUpdateObjectUrl.mock.funcUpdateObjectUrl != nil {
+		mmUpdateObjectUrl.mock.t.Fatalf("RepositoryIMock.UpdateObjectUrl mock is already set by Set")
+	}
+
+	expectation := &RepositoryIMockUpdateObjectUrlExpectation{
+		mock:   mmUpdateObjectUrl.mock,
+		params: &RepositoryIMockUpdateObjectUrlParams{ctx, objectUrl},
+	}
+	mmUpdateObjectUrl.expectations = append(mmUpdateObjectUrl.expectations, expectation)
+	return expectation
+}
+
+// Then sets up RepositoryI.UpdateObjectUrl return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockUpdateObjectUrlExpectation) Then(op1 *mm_repository.ObjectURL, err error) *RepositoryIMock {
+	e.results = &RepositoryIMockUpdateObjectUrlResults{op1, err}
+	return e.mock
+}
+
+// Times sets number of times RepositoryI.UpdateObjectUrl should be invoked
+func (mmUpdateObjectUrl *mRepositoryIMockUpdateObjectUrl) Times(n uint64) *mRepositoryIMockUpdateObjectUrl {
+	if n == 0 {
+		mmUpdateObjectUrl.mock.t.Fatalf("Times of RepositoryIMock.UpdateObjectUrl mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmUpdateObjectUrl.expectedInvocations, n)
+	return mmUpdateObjectUrl
+}
+
+func (mmUpdateObjectUrl *mRepositoryIMockUpdateObjectUrl) invocationsDone() bool {
+	if len(mmUpdateObjectUrl.expectations) == 0 && mmUpdateObjectUrl.defaultExpectation == nil && mmUpdateObjectUrl.mock.funcUpdateObjectUrl == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmUpdateObjectUrl.mock.afterUpdateObjectUrlCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmUpdateObjectUrl.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// UpdateObjectUrl implements repository.RepositoryI
+func (mmUpdateObjectUrl *RepositoryIMock) UpdateObjectUrl(ctx context.Context, objectUrl mm_repository.ObjectURL) (op1 *mm_repository.ObjectURL, err error) {
+	mm_atomic.AddUint64(&mmUpdateObjectUrl.beforeUpdateObjectUrlCounter, 1)
+	defer mm_atomic.AddUint64(&mmUpdateObjectUrl.afterUpdateObjectUrlCounter, 1)
+
+	if mmUpdateObjectUrl.inspectFuncUpdateObjectUrl != nil {
+		mmUpdateObjectUrl.inspectFuncUpdateObjectUrl(ctx, objectUrl)
+	}
+
+	mm_params := RepositoryIMockUpdateObjectUrlParams{ctx, objectUrl}
+
+	// Record call args
+	mmUpdateObjectUrl.UpdateObjectUrlMock.mutex.Lock()
+	mmUpdateObjectUrl.UpdateObjectUrlMock.callArgs = append(mmUpdateObjectUrl.UpdateObjectUrlMock.callArgs, &mm_params)
+	mmUpdateObjectUrl.UpdateObjectUrlMock.mutex.Unlock()
+
+	for _, e := range mmUpdateObjectUrl.UpdateObjectUrlMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.op1, e.results.err
+		}
+	}
+
+	if mmUpdateObjectUrl.UpdateObjectUrlMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmUpdateObjectUrl.UpdateObjectUrlMock.defaultExpectation.Counter, 1)
+		mm_want := mmUpdateObjectUrl.UpdateObjectUrlMock.defaultExpectation.params
+		mm_want_ptrs := mmUpdateObjectUrl.UpdateObjectUrlMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryIMockUpdateObjectUrlParams{ctx, objectUrl}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmUpdateObjectUrl.t.Errorf("RepositoryIMock.UpdateObjectUrl got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.objectUrl != nil && !minimock.Equal(*mm_want_ptrs.objectUrl, mm_got.objectUrl) {
+				mmUpdateObjectUrl.t.Errorf("RepositoryIMock.UpdateObjectUrl got unexpected parameter objectUrl, want: %#v, got: %#v%s\n", *mm_want_ptrs.objectUrl, mm_got.objectUrl, minimock.Diff(*mm_want_ptrs.objectUrl, mm_got.objectUrl))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmUpdateObjectUrl.t.Errorf("RepositoryIMock.UpdateObjectUrl got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmUpdateObjectUrl.UpdateObjectUrlMock.defaultExpectation.results
+		if mm_results == nil {
+			mmUpdateObjectUrl.t.Fatal("No results are set for the RepositoryIMock.UpdateObjectUrl")
+		}
+		return (*mm_results).op1, (*mm_results).err
+	}
+	if mmUpdateObjectUrl.funcUpdateObjectUrl != nil {
+		return mmUpdateObjectUrl.funcUpdateObjectUrl(ctx, objectUrl)
+	}
+	mmUpdateObjectUrl.t.Fatalf("Unexpected call to RepositoryIMock.UpdateObjectUrl. %v %v", ctx, objectUrl)
+	return
+}
+
+// UpdateObjectUrlAfterCounter returns a count of finished RepositoryIMock.UpdateObjectUrl invocations
+func (mmUpdateObjectUrl *RepositoryIMock) UpdateObjectUrlAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateObjectUrl.afterUpdateObjectUrlCounter)
+}
+
+// UpdateObjectUrlBeforeCounter returns a count of RepositoryIMock.UpdateObjectUrl invocations
+func (mmUpdateObjectUrl *RepositoryIMock) UpdateObjectUrlBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateObjectUrl.beforeUpdateObjectUrlCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryIMock.UpdateObjectUrl.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmUpdateObjectUrl *mRepositoryIMockUpdateObjectUrl) Calls() []*RepositoryIMockUpdateObjectUrlParams {
+	mmUpdateObjectUrl.mutex.RLock()
+
+	argCopy := make([]*RepositoryIMockUpdateObjectUrlParams, len(mmUpdateObjectUrl.callArgs))
+	copy(argCopy, mmUpdateObjectUrl.callArgs)
+
+	mmUpdateObjectUrl.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockUpdateObjectUrlDone returns true if the count of the UpdateObjectUrl invocations corresponds
+// the number of defined expectations
+func (m *RepositoryIMock) MinimockUpdateObjectUrlDone() bool {
+	for _, e := range m.UpdateObjectUrlMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.UpdateObjectUrlMock.invocationsDone()
+}
+
+// MinimockUpdateObjectUrlInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockUpdateObjectUrlInspect() {
+	for _, e := range m.UpdateObjectUrlMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryIMock.UpdateObjectUrl with params: %#v", *e.params)
+		}
+	}
+
+	afterUpdateObjectUrlCounter := mm_atomic.LoadUint64(&m.afterUpdateObjectUrlCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.UpdateObjectUrlMock.defaultExpectation != nil && afterUpdateObjectUrlCounter < 1 {
+		if m.UpdateObjectUrlMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to RepositoryIMock.UpdateObjectUrl")
+		} else {
+			m.t.Errorf("Expected call to RepositoryIMock.UpdateObjectUrl with params: %#v", *m.UpdateObjectUrlMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcUpdateObjectUrl != nil && afterUpdateObjectUrlCounter < 1 {
+		m.t.Error("Expected call to RepositoryIMock.UpdateObjectUrl")
+	}
+
+	if !m.UpdateObjectUrlMock.invocationsDone() && afterUpdateObjectUrlCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.UpdateObjectUrl but found %d calls",
+			mm_atomic.LoadUint64(&m.UpdateObjectUrlMock.expectedInvocations), afterUpdateObjectUrlCounter)
+	}
+}
+
 type mRepositoryIMockUpsertEmbeddings struct {
 	mock               *RepositoryIMock
 	defaultExpectation *RepositoryIMockUpsertEmbeddingsExpectation
@@ -16590,6 +20727,10 @@ func (m *RepositoryIMock) MinimockFinish() {
 
 			m.MinimockCreateKnowledgeBaseFileInspect()
 
+			m.MinimockCreateObjectInspect()
+
+			m.MinimockCreateObjectUrlInspect()
+
 			m.MinimockDeleteAllConvertedFilesInKbInspect()
 
 			m.MinimockDeleteAllKnowledgeBaseFilesInspect()
@@ -16612,6 +20753,10 @@ func (m *RepositoryIMock) MinimockFinish() {
 
 			m.MinimockDeleteKnowledgeBaseFileAndDecreaseUsageInspect()
 
+			m.MinimockDeleteObjectInspect()
+
+			m.MinimockDeleteObjectUrlInspect()
+
 			m.MinimockDeleteRepositoryTagInspect()
 
 			m.MinimockGetChunksByUIDsInspect()
@@ -16633,6 +20778,16 @@ func (m *RepositoryIMock) MinimockFinish() {
 			m.MinimockGetKnowledgebaseFileByKbUIDAndFileIDInspect()
 
 			m.MinimockGetNeedProcessFilesInspect()
+
+			m.MinimockGetObjectByUIDInspect()
+
+			m.MinimockGetObjectDownloadUrlInspect()
+
+			m.MinimockGetObjectUploadUrlInspect()
+
+			m.MinimockGetObjectUrlByUIDInspect()
+
+			m.MinimockGetObjectUrlCountByObjectInspect()
 
 			m.MinimockGetRepositoryTagInspect()
 
@@ -16660,6 +20815,10 @@ func (m *RepositoryIMock) MinimockFinish() {
 
 			m.MinimockKnowledgeBaseFileTableNameInspect()
 
+			m.MinimockListAllObjectUrlsInspect()
+
+			m.MinimockListAllObjectsInspect()
+
 			m.MinimockListChunksByKbFileUIDInspect()
 
 			m.MinimockListEmbeddingsByKbFileUIDInspect()
@@ -16679,6 +20838,10 @@ func (m *RepositoryIMock) MinimockFinish() {
 			m.MinimockUpdateKnowledgeBaseInspect()
 
 			m.MinimockUpdateKnowledgeBaseFileInspect()
+
+			m.MinimockUpdateObjectInspect()
+
+			m.MinimockUpdateObjectUrlInspect()
 
 			m.MinimockUpsertEmbeddingsInspect()
 
@@ -16711,6 +20874,8 @@ func (m *RepositoryIMock) minimockDone() bool {
 		m.MinimockCreateConvertedFileDone() &&
 		m.MinimockCreateKnowledgeBaseDone() &&
 		m.MinimockCreateKnowledgeBaseFileDone() &&
+		m.MinimockCreateObjectDone() &&
+		m.MinimockCreateObjectUrlDone() &&
 		m.MinimockDeleteAllConvertedFilesInKbDone() &&
 		m.MinimockDeleteAllKnowledgeBaseFilesDone() &&
 		m.MinimockDeleteAndCreateChunksDone() &&
@@ -16722,6 +20887,8 @@ func (m *RepositoryIMock) minimockDone() bool {
 		m.MinimockDeleteKnowledgeBaseDone() &&
 		m.MinimockDeleteKnowledgeBaseFileDone() &&
 		m.MinimockDeleteKnowledgeBaseFileAndDecreaseUsageDone() &&
+		m.MinimockDeleteObjectDone() &&
+		m.MinimockDeleteObjectUrlDone() &&
 		m.MinimockDeleteRepositoryTagDone() &&
 		m.MinimockGetChunksByUIDsDone() &&
 		m.MinimockGetConvertedFileByFileUIDDone() &&
@@ -16733,6 +20900,11 @@ func (m *RepositoryIMock) minimockDone() bool {
 		m.MinimockGetKnowledgeBaseFilesByFileUIDsDone() &&
 		m.MinimockGetKnowledgebaseFileByKbUIDAndFileIDDone() &&
 		m.MinimockGetNeedProcessFilesDone() &&
+		m.MinimockGetObjectByUIDDone() &&
+		m.MinimockGetObjectDownloadUrlDone() &&
+		m.MinimockGetObjectUploadUrlDone() &&
+		m.MinimockGetObjectUrlByUIDDone() &&
+		m.MinimockGetObjectUrlCountByObjectDone() &&
 		m.MinimockGetRepositoryTagDone() &&
 		m.MinimockGetSourceTableAndUIDByFileUIDsDone() &&
 		m.MinimockGetTextChunksBySourceDone() &&
@@ -16746,6 +20918,8 @@ func (m *RepositoryIMock) minimockDone() bool {
 		m.MinimockHardDeleteEmbeddingsByKbUIDDone() &&
 		m.MinimockIncreaseKnowledgeBaseUsageDone() &&
 		m.MinimockKnowledgeBaseFileTableNameDone() &&
+		m.MinimockListAllObjectUrlsDone() &&
+		m.MinimockListAllObjectsDone() &&
 		m.MinimockListChunksByKbFileUIDDone() &&
 		m.MinimockListEmbeddingsByKbFileUIDDone() &&
 		m.MinimockListKnowledgeBaseFilesDone() &&
@@ -16756,6 +20930,8 @@ func (m *RepositoryIMock) minimockDone() bool {
 		m.MinimockUpdateKbFileExtraMetaDataDone() &&
 		m.MinimockUpdateKnowledgeBaseDone() &&
 		m.MinimockUpdateKnowledgeBaseFileDone() &&
+		m.MinimockUpdateObjectDone() &&
+		m.MinimockUpdateObjectUrlDone() &&
 		m.MinimockUpsertEmbeddingsDone() &&
 		m.MinimockUpsertRepositoryTagDone()
 }

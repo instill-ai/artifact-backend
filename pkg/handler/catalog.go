@@ -8,6 +8,7 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/instill-ai/artifact-backend/pkg/customerror"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
+	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	"go.uber.org/zap"
@@ -86,7 +87,7 @@ func (ph *PublicHandler) GetFileCatalog(ctx context.Context, req *artifactpb.Get
 	}
 
 	// get the source file sourceContent from minIO using dest of source
-	sourceContent, err := ph.service.MinIO.GetFile(ctx, source.Dest)
+	sourceContent, err := ph.service.MinIO.GetFile(ctx, minio.KnowledgeBaseBucketName, source.Dest)
 	if err != nil {
 		log.Error("failed to get file from minio", zap.Error(err))
 		return nil, fmt.Errorf("failed to get file from minio. err: %w", err)
@@ -157,7 +158,7 @@ func (ph *PublicHandler) GetFileCatalog(ctx context.Context, req *artifactpb.Get
 	}
 
 	// Retrieve the original file content from MinIO
-	originalContent, err := ph.service.MinIO.GetFile(ctx, kbFile.Destination)
+	originalContent, err := ph.service.MinIO.GetFile(ctx, minio.KnowledgeBaseBucketName, kbFile.Destination)
 	if err != nil {
 		log.Error("failed to get original file from minio", zap.Error(err))
 		return nil, fmt.Errorf("failed to get original file from minio. err: %w", err)
