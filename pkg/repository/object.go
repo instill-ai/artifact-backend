@@ -19,12 +19,12 @@ type ObjectI interface {
 
 type Object struct {
 	UID          uuid.UUID `gorm:"column:uid;type:uuid;default:gen_random_uuid();primaryKey" json:"uid"`
-	Name         string    `gorm:"column:name;size:1040;not null" json:"name"`
-	Size         int64     `gorm:"column:size;not null" json:"size"`
-	ContentType  string    `gorm:"column:content_type;size:255;not null" json:"content_type"`
-	NamespaceUID uuid.UUID `gorm:"column:namespace_uid;type:uuid;not null" json:"namespace_uid"`
-	CreatorUID   uuid.UUID `gorm:"column:creator_uid;type:uuid;not null" json:"creator_uid"`
-	IsUploaded   bool      `gorm:"column:is_uploaded;not null;default:false" json:"is_uploaded"`
+	Name         string    `gorm:"column:name;size:1040" json:"name"`
+	Size             int64      `gorm:"column:size;" json:"size"`
+	ContentType      string    `gorm:"column:content_type;size:255" json:"content_type"`
+	NamespaceUID     uuid.UUID `gorm:"column:namespace_uid;type:uuid;not null" json:"namespace_uid"`
+	CreatorUID       uuid.UUID `gorm:"column:creator_uid;type:uuid;not null" json:"creator_uid"`
+	IsUploaded       bool      `gorm:"column:is_uploaded;not null;default:false" json:"is_uploaded"`
 	// BucketName/ns:<nid>/obj:<uid>
 	Destination      string     `gorm:"column:destination;size:255" json:"destination"`
 	ObjectExpireDays *int       `gorm:"column:object_expire_days" json:"object_expire_days"`

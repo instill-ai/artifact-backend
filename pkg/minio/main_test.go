@@ -19,7 +19,6 @@ package minio
 // 		Port:       "19000",
 // 		RootUser:   "minioadmin",
 // 		RootPwd:    "minioadmin",
-// 		BucketName: "instill-ai-knowledge-bases",
 // 	})
 //     if err != nil {
 //         log.Fatalf("Failed to initialize Minio client for testing: %v", err)

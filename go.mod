@@ -6,6 +6,7 @@ require (
 	github.com/frankban/quicktest v1.14.6
 	github.com/go-resty/resty/v2 v2.12.0
 	github.com/gofrs/uuid v4.4.0+incompatible
+	github.com/gogo/status v1.1.0
 	github.com/gojuno/minimock/v3 v3.3.6
 	github.com/golang-migrate/migrate/v4 v4.17.0
 	github.com/google/go-cmp v0.6.0
@@ -46,6 +47,7 @@ require (
 	github.com/envoyproxy/protoc-gen-validate v1.0.4 // indirect
 	github.com/getsentry/sentry-go v0.12.0 // indirect
 	github.com/go-ini/ini v1.67.0 // indirect
+	github.com/gogo/googleapis v1.4.1 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/milvus-io/milvus-proto/go-api/v2 v2.4.3 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect

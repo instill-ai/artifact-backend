@@ -35,16 +35,18 @@ type MinioI interface {
 	GetFilesByPaths(ctx context.Context, bucket string, filePaths []string) ([]FileContent, error)
 	// KnowledgeBase
 	KnowledgeBaseI
+	// Object
+	ObjectI
 }
 
 type Minio struct {
-	client              *minio.Client
+	client *minio.Client
 }
 
 const (
 	// Note: this bucket is for storing the blob of the file and not changeable
 	// in different environment so we dont put it in config
-	BlobBucketName = "instill-ai-blob"
+	BlobBucketName          = "instill-ai-blob"
 	KnowledgeBaseBucketName = "instill-ai-knowledge-bases"
 )
 
