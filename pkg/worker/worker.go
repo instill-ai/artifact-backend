@@ -710,7 +710,6 @@ func (wp *fileToEmbWorkerPool) processEmbeddingFile(ctx context.Context, file re
 		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
 	}
 
-
 	// update the file status to complete status in database
 	updateMap := map[string]interface{}{
 		repository.KnowledgeBaseFileColumn.ProcessStatus: artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED)],
