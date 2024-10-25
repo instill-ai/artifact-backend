@@ -3,7 +3,7 @@ BEGIN;
 CREATE TABLE IF NOT EXISTS object (
     uid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(1040),
-    size BIGINT ,
+    size BIGINT,
     content_type VARCHAR(255),
     namespace_uid UUID NOT NULL,
     creator_uid UUID NOT NULL,
@@ -57,4 +57,10 @@ COMMENT ON COLUMN object_url.update_time IS 'Timestamp when the object url was l
 COMMENT ON COLUMN object_url.delete_time IS 'Timestamp when the object url was deleted';
 -- Create indexes
 CREATE INDEX IF NOT EXISTS idx_namespace_uid_object_uid ON object_url(namespace_uid, object_uid);
+-- Create a unique index for encoded_url_path
+CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_encoded_url_path ON object_url(encoded_url_path);
+
+-- Add comment for the new index
+COMMENT ON INDEX idx_unique_encoded_url_path IS 'Ensures uniqueness of encoded URL paths across all object URLs';
+
 COMMIT;

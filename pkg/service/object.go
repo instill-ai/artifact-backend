@@ -2,13 +2,16 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"path"
+	"strings"
 	"time"
 
 	"github.com/gofrs/uuid"
 	"github.com/gogo/status"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
-	"github.com/instill-ai/artifact-backend/pkg/minio"
+	minio_local "github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
@@ -17,12 +20,18 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+// error type for object
+var (
+	ErrObjectNotUploaded = errors.New("object is not uploaded yet")
+)
+
 // GetUploadURL get the upload url of the object
 // this function will create a new object and object_url record in the database
 func (s *Service) GetUploadURL(
 	ctx context.Context,
 	req *artifactpb.GetObjectUploadURLRequest,
 	namespaceUID uuid.UUID,
+	namespaceID string,
 	creatorUID uuid.UUID,
 ) (*artifactpb.GetObjectUploadURLResponse, error) {
 	log, _ := logger.GetZapLogger(ctx)
@@ -30,6 +39,12 @@ func (s *Service) GetUploadURL(
 	if req.GetObjectName() == "" {
 		log.Error("name cannot be empty")
 		return nil, status.Errorf(codes.InvalidArgument, "name cannot be empty")
+	}
+
+	// check if name is longer than 400 characters
+	if len(req.GetObjectName()) > 400 {
+		log.Error("name should not be longer than 400 characters")
+		return nil, status.Errorf(codes.InvalidArgument, "name should not be longer than 400 characters")
 	}
 
 	// check expiration_time is valid. if it is lower than 60, we will use 60 as the expiration_time
@@ -66,7 +81,7 @@ func (s *Service) GetUploadURL(
 	}
 
 	// get path of the object
-	minioPath := minio.GetBlobObjectPath(createdObject.NamespaceUID, createdObject.UID)
+	minioPath := minio_local.GetBlobObjectPath(createdObject.NamespaceUID, createdObject.UID)
 	// update the object destination
 	createdObject.Destination = minioPath
 	_, err = s.Repository.UpdateObject(ctx, *createdObject)
@@ -76,7 +91,7 @@ func (s *Service) GetUploadURL(
 	}
 
 	// get presigned url for uploading object
-	presignedURL, err := s.MinIO.MakePresignedURLForUpload(ctx, namespaceUID, createdObject.UID, time.Duration(req.GetUrlExpireDays())*time.Hour*24)
+	presignedURL, err := s.MinIO.GetPresignedURLForUpload(ctx, namespaceUID, createdObject.UID, time.Duration(req.GetUrlExpireDays())*time.Hour*24)
 	if err != nil {
 		log.Error("failed to make presigned url for upload", zap.Error(err))
 		return nil, status.Errorf(codes.Internal, "failed to make presigned url for upload: %v", err)
@@ -100,48 +115,144 @@ func (s *Service) GetUploadURL(
 		log.Error("failed to create object url", zap.Error(err))
 		return nil, status.Errorf(codes.Internal, "failed to create object url: %v", err)
 	}
-	createdObjectURL.EncodedURLPath = getEncodedMinioURLPath(createdObjectURL.UID)
-	_, err = s.Repository.UpdateObjectURL(ctx, *createdObjectURL)
+
+	// update the encoded_url_path
+	createdObjectURL.EncodedURLPath = EncodedMinioURLPath(namespaceID, createdObjectURL.UID)
+	updatedObjectURL, err := s.Repository.UpdateObjectURL(ctx, *createdObjectURL)
 	if err != nil {
 		log.Error("failed to update object url", zap.Error(err))
 		return nil, status.Errorf(codes.Internal, "failed to update object url: %v", err)
 	}
 
-	objectInProto := turnObjectInDBToObjectInProto(createdObject)
+	objectInProto := repository.TurnObjectInDBToObjectInProto(createdObject)
 
 	return &artifactpb.GetObjectUploadURLResponse{
-		UploadUrl:   createdObjectURL.EncodedURLPath,
-		UrlExpireAt: timestamppb.New(createdObjectURL.URLExpireAt),
+		UploadUrl:   updatedObjectURL.EncodedURLPath,
+		UrlExpireAt: timestamppb.New(updatedObjectURL.URLExpireAt),
 		Object:      objectInProto,
 	}, nil
 }
 
-// getEncodedMinioURLPath get the encoded minio url path
-func getEncodedMinioURLPath(objectURLUUID uuid.UUID) string {
-	return "/" + "v1alpha" + "/" + "object-urls" + "/" + objectURLUUID.String()
+// GetDownloadURL gets the download url of the object
+// this function will create a new object_url record in the database for downloading
+func (s *Service) GetDownloadURL(
+	ctx context.Context,
+	req *artifactpb.GetObjectDownloadURLRequest,
+	namespaceUID uuid.UUID,
+	namespaceID string,
+) (*artifactpb.GetObjectDownloadURLResponse, error) {
+	log, _ := logger.GetZapLogger(ctx)
+	objectUID, err := uuid.FromString(req.GetObjectUid())
+	if err != nil {
+		log.Error("failed to parse object uid", zap.Error(err))
+		return nil, status.Errorf(codes.InvalidArgument, "failed to parse object uid: %v", err)
+	}
+	// Get the object from database
+	object, err := s.Repository.GetObjectByUID(ctx, objectUID)
+	if err != nil {
+		log.Error("failed to get object", zap.Error(err))
+		return nil, status.Errorf(codes.NotFound, "object not found: %v", err)
+	}
+
+	// Verify namespace matches
+	if object.NamespaceUID != namespaceUID {
+		log.Error("namespace mismatch")
+		return nil, status.Error(codes.PermissionDenied, "namespace mismatch")
+	}
+
+	if !object.IsUploaded {
+		return nil, ErrObjectNotUploaded
+	}
+
+	// Check URL expiration days
+	urlExpireDays := req.GetUrlExpireDays()
+	if urlExpireDays < 1 {
+		urlExpireDays = 1
+	}
+	if urlExpireDays > 7 {
+		urlExpireDays = 7
+	}
+
+	// Get presigned URL for downloading object
+	presignedURL, err := s.MinIO.GetPresignedURLForDownload(
+		ctx,
+		object.NamespaceUID,
+		object.UID,
+		time.Duration(urlExpireDays)*time.Hour*24,
+	)
+	if err != nil {
+		log.Error("failed to make presigned url for download", zap.Error(err))
+		return nil, status.Errorf(codes.Internal, "failed to make presigned url for download: %v", err)
+	}
+
+	// Remove the protocol and host from the presignedURL
+	presignedURLPathQuery := presignedURL.Path + "?" + presignedURL.RawQuery
+
+	// Create object_url for download
+	objectURL := &repository.ObjectURL{
+		NamespaceUID:   object.NamespaceUID,
+		ObjectUID:      object.UID,
+		URLExpireAt:    time.Now().UTC().Add(time.Duration(urlExpireDays) * time.Hour * 24),
+		MinioURLPath:   presignedURLPathQuery,
+		EncodedURLPath: "",
+		Type:           repository.ObjectURLTypeDownload,
+	}
+
+	createdObjectURL, err := s.Repository.CreateObjectURL(ctx, *objectURL)
+	if err != nil {
+		log.Error("failed to create object url", zap.Error(err))
+		return nil, status.Errorf(codes.Internal, "failed to create object url: %v", err)
+	}
+
+	// update the encoded_url_path
+	createdObjectURL.EncodedURLPath = EncodedMinioURLPath(namespaceID, createdObjectURL.UID)
+	updatedObjectURL, err := s.Repository.UpdateObjectURL(ctx, *createdObjectURL)
+	if err != nil {
+		log.Error("failed to update object url", zap.Error(err))
+		return nil, status.Errorf(codes.Internal, "failed to update object url: %v", err)
+	}
+
+	objectInProto := repository.TurnObjectInDBToObjectInProto(object)
+
+	return &artifactpb.GetObjectDownloadURLResponse{
+		DownloadUrl: updatedObjectURL.EncodedURLPath,
+		UrlExpireAt: timestamppb.New(updatedObjectURL.URLExpireAt),
+		Object:      objectInProto,
+	}, nil
 }
 
-// turn object in db to object in proto
-func turnObjectInDBToObjectInProto(object *repository.Object) *artifactpb.Object {
-	objectInProto := &artifactpb.Object{
-		Uid:              object.UID.String(),
-		NamespaceUid:     object.NamespaceUID.String(),
-		Name:             object.Name,
-		Creator:          object.CreatorUID.String(),
-		ContentType:      object.ContentType,
-		Size:             object.Size,
-		IsUploaded:       object.IsUploaded,
-		Path:             &object.Destination,
-		ObjectExpireDays: int32(*object.ObjectExpireDays),
-		CreatedTime:      timestamppb.New(object.CreateTime),
-		UpdatedTime:      timestamppb.New(object.UpdateTime),
+// EncodedMinioURLPath get the encoded minio url path
+func EncodedMinioURLPath(namespaceID string, objectURLUUID uuid.UUID) string {
+
+	// Construct the path
+	urlPath := path.Join("v1alpha", "namespaces", namespaceID, "blob-urls", objectURLUUID.String())
+
+	// Ensure the path starts with a forward slash
+	return "/" + urlPath
+}
+
+// DecodeMinioURLPath decodes the minio URL path into namespaceID and objectName
+func DecodeMinioURLPath(encodedURLPath string) (namespaceID string, objectURLUUID uuid.UUID, err error) {
+	// Remove leading slash if present
+	encodedURLPath = strings.TrimPrefix(encodedURLPath, "/")
+
+	// Split the path into components
+	parts := strings.Split(encodedURLPath, "/")
+
+	// Check if we have the expected number of parts
+	if len(parts) != 5 || parts[0] != "v1alpha" || parts[2] != "blob-urls" {
+		return "", uuid.Nil, fmt.Errorf("invalid URL format")
 	}
-	if object.LastModifiedTime != nil &&
-		!object.LastModifiedTime.IsZero() &&
-		object.LastModifiedTime.Format(time.RFC3339) != "1970-01-01T00:00:00Z" {
-		lastModifiedTime := timestamppb.New(*object.LastModifiedTime)
-		fmt.Println("lastModifiedTime.Format(time.RFC3339)", object.LastModifiedTime.Format(time.RFC3339))
-		objectInProto.LastModifiedTime = lastModifiedTime
+
+	// Extract namespaceID and objectName
+	namespaceID = parts[1]
+	objectURLUUIDString := parts[4]
+
+	// parse objectURLUUID
+	objectURLUUID, err = uuid.FromString(objectURLUUIDString)
+	if err != nil {
+		return "", uuid.Nil, fmt.Errorf("failed to parse object URL UUID: %v", err)
 	}
-	return objectInProto
+
+	return namespaceID, objectURLUUID, nil
 }

@@ -6,7 +6,10 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"gorm.io/gorm"
+
+	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
 type ObjectI interface {
@@ -15,16 +18,17 @@ type ObjectI interface {
 	UpdateObject(ctx context.Context, obj Object) (*Object, error)
 	DeleteObject(ctx context.Context, uid uuid.UUID) error
 	GetObjectByUID(ctx context.Context, uid uuid.UUID) (*Object, error)
+	UpdateObjectByUpdateMap(ctx context.Context, objUID uuid.UUID, updateMap map[string]any) (*Object, error)
 }
 
 type Object struct {
 	UID          uuid.UUID `gorm:"column:uid;type:uuid;default:gen_random_uuid();primaryKey" json:"uid"`
 	Name         string    `gorm:"column:name;size:1040" json:"name"`
-	Size             int64      `gorm:"column:size;" json:"size"`
-	ContentType      string    `gorm:"column:content_type;size:255" json:"content_type"`
-	NamespaceUID     uuid.UUID `gorm:"column:namespace_uid;type:uuid;not null" json:"namespace_uid"`
-	CreatorUID       uuid.UUID `gorm:"column:creator_uid;type:uuid;not null" json:"creator_uid"`
-	IsUploaded       bool      `gorm:"column:is_uploaded;not null;default:false" json:"is_uploaded"`
+	Size         int64     `gorm:"column:size;" json:"size"`
+	ContentType  string    `gorm:"column:content_type;size:255" json:"content_type"`
+	NamespaceUID uuid.UUID `gorm:"column:namespace_uid;type:uuid;not null" json:"namespace_uid"`
+	CreatorUID   uuid.UUID `gorm:"column:creator_uid;type:uuid;not null" json:"creator_uid"`
+	IsUploaded   bool      `gorm:"column:is_uploaded;not null;default:false" json:"is_uploaded"`
 	// BucketName/ns:<nid>/obj:<uid>
 	Destination      string     `gorm:"column:destination;size:255" json:"destination"`
 	ObjectExpireDays *int       `gorm:"column:object_expire_days" json:"object_expire_days"`
@@ -128,4 +132,27 @@ func (r *Repository) GetObjectByUID(ctx context.Context, uid uuid.UUID) (*Object
 		return nil, err
 	}
 	return &obj, nil
+}
+
+// TurnObjectInDBToObjectInProto turns the object in db to the object in proto
+func TurnObjectInDBToObjectInProto(obj *Object) *artifactpb.Object {
+	protoObj := &artifactpb.Object{
+		Uid:          obj.UID.String(),
+		NamespaceUid: obj.NamespaceUID.String(),
+		Name:         obj.Name,
+		Size:         obj.Size,
+		ContentType:  obj.ContentType,
+		Creator:      obj.CreatorUID.String(),
+		Path:         &obj.Destination,
+		IsUploaded:   obj.IsUploaded,
+		CreatedTime:  timestamppb.New(obj.CreateTime),
+		UpdatedTime:  timestamppb.New(obj.UpdateTime),
+	}
+	if obj.LastModifiedTime != nil {
+		protoObj.LastModifiedTime = timestamppb.New(*obj.LastModifiedTime)
+	}
+	if obj.ObjectExpireDays != nil {
+		protoObj.ObjectExpireDays = int32(*obj.ObjectExpireDays)
+	}
+	return protoObj
 }

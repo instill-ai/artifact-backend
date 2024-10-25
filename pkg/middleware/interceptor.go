@@ -19,6 +19,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/acl"
 	"github.com/instill-ai/artifact-backend/pkg/customerror"
 	"github.com/instill-ai/artifact-backend/pkg/handler"
+	"github.com/instill-ai/artifact-backend/pkg/service"
 	"github.com/instill-ai/x/errmsg"
 )
 
@@ -120,8 +121,10 @@ func AsGRPCError(err error) error {
 
 	case
 		errors.Is(err, customerror.ErrRateLimiting):
-
 		code = codes.ResourceExhausted
+	case
+		errors.Is(err, service.ErrObjectNotUploaded):
+		code = codes.Unavailable
 	default:
 		code = codes.Unknown
 	}
