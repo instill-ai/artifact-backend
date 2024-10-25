@@ -1,6 +1,8 @@
 package minio
 
+// Note: this test can only be run locally with minio server
 // import (
+// 	"bytes"
 // 	"context"
 // 	"fmt"
 // 	"io"
@@ -38,10 +40,15 @@ package minio
 // 	if err != nil {
 // 		t.Fatalf("failed to create objectUUID: %v", err)
 // 	}
-// 	presignedURL, err := testMinioClient.MakePresignedURLForUpload(context.TODO(), namespaceUUID, objectUUID, 1*time.Hour)
+// 	presignedURL, err := testMinioClient.GetPresignedURLForUpload(context.TODO(), namespaceUUID, objectUUID, 1*time.Hour)
 // 	if err != nil {
 // 		t.Fatalf("failed to make presigned URL for upload: %v", err)
 // 	}
+// 	path := presignedURL.Path
+// 	query := presignedURL.RawQuery
+// 	fmt.Println("presignedURL: ", presignedURL.String())
+// 	fmt.Println("path: ", path)
+// 	fmt.Println("query: ", query)
 // 	// just get path and query from presignedURL
 // 	// parsedURL, err := url.Parse(presignedURL)
 // 	// if err != nil {
@@ -63,6 +70,12 @@ package minio
 // 	fmt.Println("resp code: ", resp.StatusCode)
 // 	// resp range in header
 // 	fmt.Println("resp range: ", resp.Header.Get("Content-Range"))
+// 	// print the resp all headers. with key and value
+// 	fmt.Println("resp header: ")
+// 	for key, value := range resp.Header {
+// 		// value is a slice of string, print the combined string
+// 		fmt.Println("  ", key, ": ", strings.Join(value, ","))
+// 	}
 // 	// read the body 100 bytes at a time until EOF
 // 	buf := make([]byte, 100)
 // 	for {
@@ -70,10 +83,11 @@ package minio
 // 		if err != nil && err != io.EOF {
 // 			t.Fatalf("failed to read response body: %v", err)
 // 		}
-// 		fmt.Println("read: ", string(buf[:n]))
 // 		if err == io.EOF {
+// 			fmt.Println("EOF already reached")
 // 			break
 // 		}
+// 		fmt.Println("read buf: ", string(buf[:n]))
 // 	}
 
 // 	// check if the file is uploaded to the Minio bucket
@@ -107,6 +121,95 @@ package minio
 
 // // TestMinio_TestMakePresignedURLForDownload
 // func TestMinio_TestMakePresignedURLForDownload(t *testing.T) {
+// 	// Set up test environment
+// 	log.Println("Setting up Minio client for testing")
+// 	testMinioClient, err := NewMinioClientAndInitBucket(config.MinioConfig{
+// 		Host:     "localhost",
+// 		Port:     "19000",
+// 		RootUser: "minioadmin",
+// 		RootPwd:  "minioadmin",
+// 	})
+// 	if err != nil {
+// 		t.Fatalf("Failed to initialize Minio client for testing: %v", err)
+// 	}
+
+// 	// Create test data
+// 	namespaceUUID, err := uuid.NewV4()
+// 	if err != nil {
+// 		t.Fatalf("Failed to create namespaceUUID: %v", err)
+// 	}
+// 	objectUUID, err := uuid.NewV4()
+// 	if err != nil {
+// 		t.Fatalf("Failed to create objectUUID: %v", err)
+// 	}
+// 	testContent := []byte("test content for download")
+
+// 	// Upload test file to Minio
+// 	_, err = testMinioClient.client.PutObject(BlobBucketName, GetBlobObjectPath(namespaceUUID, objectUUID), bytes.NewReader(testContent), int64(len(testContent)), minio.PutObjectOptions{ContentType: "text/plain"})
+// 	if err != nil {
+// 		t.Fatalf("Failed to upload test object: %v", err)
+// 	}
+
+// 	// Test GetPresignedURLForDownload
+// 	ctx := context.Background()
+// 	presignedURL, err := testMinioClient.GetPresignedURLForDownload(ctx, namespaceUUID, objectUUID, time.Hour)
+// 	if err != nil {
+// 		t.Fatalf("Failed to get presigned URL for download: %v", err)
+// 	}
+
+// 	// Verify the presigned URL
+// 	if presignedURL == nil {
+// 		t.Fatal("Presigned URL is nil")
+// 	}
+// 	if !strings.Contains(presignedURL.Path, GetBlobObjectPath(namespaceUUID, objectUUID)) {
+// 		t.Errorf("Presigned URL path does not contain expected object path. Got: %s", presignedURL.Path)
+// 	}
+
+// 	// Use the presigned URL to download the object
+// 	req, err := http.NewRequest("GET", presignedURL.String(), nil)
+// 	if err != nil {
+// 		t.Fatalf("Failed to create request: %v", err)
+// 	}
+
+// 	// Test with range header
+// 	req.Header.Set("Range", "bytes=0-9")
+
+// 	client := &http.Client{}
+// 	resp, err := client.Do(req)
+// 	if err != nil {
+// 		t.Fatalf("Failed to download object using presigned URL: %v", err)
+// 	}
+// 	defer resp.Body.Close()
+
+// 	if resp.StatusCode != http.StatusPartialContent {
+// 		t.Errorf("Unexpected status code. Expected 206, got: %d", resp.StatusCode)
+// 	}
+
+// 	// print the resp all headers. with key and value
+// 	fmt.Println("resp header: ")
+// 	for key, value := range resp.Header {
+// 		// value is a slice of string, print the combined string
+// 		fmt.Println("  ", key, ": ", strings.Join(value, ","))
+// 	}
+
+// 	downloadedContent, err := io.ReadAll(resp.Body)
+// 	if err != nil {
+// 		t.Fatalf("Failed to read downloaded content: %v", err)
+// 	}
+
+// 	// print the downloaded content
+// 	fmt.Println("downloadedContent: ", string(downloadedContent))
+
+// 	expectedContent := testContent[:10]
+// 	if !bytes.Equal(downloadedContent, expectedContent) {
+// 		t.Errorf("Downloaded content does not match expected content. Expected: %s, Got: %s", string(expectedContent), string(downloadedContent))
+// 	}
+
+// 	// Clean up: delete the test file from the Minio bucket
+// 	err = testMinioClient.client.RemoveObject(BlobBucketName, GetBlobObjectPath(namespaceUUID, objectUUID))
+// 	if err != nil {
+// 		t.Fatalf("Failed to delete test object: %v", err)
+// 	}
 // }
 
 // // TestMinio_TestMultiPartUpload

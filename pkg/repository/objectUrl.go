@@ -6,7 +6,10 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"gorm.io/gorm"
+
+	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
 type ObjectURLI interface {
@@ -18,6 +21,7 @@ type ObjectURLI interface {
 	GetObjectURLCountByObject(ctx context.Context, objectUID uuid.UUID) (int64, error)
 	GetObjectUploadURL(ctx context.Context, objectUID uuid.UUID) (*ObjectURL, error)
 	GetObjectDownloadURL(ctx context.Context, objectUID uuid.UUID) (*ObjectURL, error)
+	GetObjectURLByEncodedURLPath(ctx context.Context, encodedURLPath string) (*ObjectURL, error)
 }
 
 // ObjectURL represents the object_url table in the database.
@@ -165,4 +169,34 @@ func (r *Repository) GetObjectDownloadURL(ctx context.Context, objectUID uuid.UU
 		return nil, err
 	}
 	return &objectURL, nil
+}
+
+// GetObjectURLByEncodedURLPath gets the objectURL by the encodedURLPath
+func (r *Repository) GetObjectURLByEncodedURLPath(ctx context.Context, encodedURLPath string) (*ObjectURL, error) {
+	var objectURL ObjectURL
+	if err := r.db.WithContext(ctx).Where(ObjectURLColumn.EncodedURLPath, encodedURLPath).First(&objectURL).Error; err != nil {
+		return nil, err
+	}
+	return &objectURL, nil
+}
+
+// turn objectURL to pb.GetObjectURLResponse
+func TurnObjectURLToResponse(objectURL *ObjectURL) *artifactpb.GetObjectURLResponse {
+	response := &artifactpb.GetObjectURLResponse{
+		ObjectUrl: &artifactpb.ObjectURL{
+			Uid:            objectURL.UID.String(),
+			NamespaceUid:   objectURL.NamespaceUID.String(),
+			ObjectUid:      objectURL.ObjectUID.String(),
+			UrlExpireAt:    timestamppb.New(objectURL.URLExpireAt),
+			MinioUrlPath:   objectURL.MinioURLPath,
+			EncodedUrlPath: objectURL.EncodedURLPath,
+			Type:           objectURL.Type,
+			CreateTime:     timestamppb.New(objectURL.CreateTime),
+			UpdateTime:     timestamppb.New(objectURL.UpdateTime),
+		},
+	}
+	if objectURL.DeleteTime != nil {
+		response.ObjectUrl.DeleteTime = timestamppb.New(*objectURL.DeleteTime)
+	}
+	return response
 }

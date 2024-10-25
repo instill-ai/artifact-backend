@@ -8,6 +8,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/resource"
 )
 
+// CheckNamespacePermission checks if the user has permission to access the namespace.
 func (s *Service) CheckNamespacePermission(ctx context.Context, ns *resource.Namespace) error {
 	// TODO: optimize ACL model
 	if ns.NsType == "organizations" {

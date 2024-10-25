@@ -14,14 +14,14 @@ import (
 
 // ObjectI is the interface for object-related operations.
 type ObjectI interface {
-	// MakePresignedURLForUpload creates a presigned URL for uploading an object.
-	MakePresignedURLForUpload(ctx context.Context, namespaceUUID uuid.UUID, objectUUID uuid.UUID, expiration time.Duration) (*url.URL, error)
-	// MakePresignedURLForDownload creates a presigned URL for downloading an object.
-	MakePresignedURLForDownload(ctx context.Context, namespaceUUID uuid.UUID, objectUUID uuid.UUID, expiration time.Duration) (*url.URL, error)
+	// GetPresignedURLForUpload creates a presigned URL for uploading an object.
+	GetPresignedURLForUpload(ctx context.Context, namespaceUUID uuid.UUID, objectUUID uuid.UUID, urlExpiration time.Duration) (*url.URL, error)
+	// GetPresignedURLForDownload creates a presigned URL for downloading an object.
+	GetPresignedURLForDownload(ctx context.Context, namespaceUUID uuid.UUID, objectUUID uuid.UUID, urlExpiration time.Duration) (*url.URL, error)
 }
 
-// MakePresignedURLForUpload creates a presigned URL for uploading an object.
-func (m *Minio) MakePresignedURLForUpload(ctx context.Context, namespaceUUID uuid.UUID, objectUUID uuid.UUID, expiration time.Duration) (*url.URL, error) {
+// GetPresignedURLForUpload creates a presigned URL for uploading an object.
+func (m *Minio) GetPresignedURLForUpload(ctx context.Context, namespaceUUID uuid.UUID, objectUUID uuid.UUID, expiration time.Duration) (*url.URL, error) {
 	log, err := logger.GetZapLogger(ctx)
 	if err != nil {
 		return nil, err
@@ -40,8 +40,8 @@ func (m *Minio) MakePresignedURLForUpload(ctx context.Context, namespaceUUID uui
 	return presignedURL, nil
 }
 
-// MakePresignedURLForDownload creates a presigned URL for downloading an object.
-func (m *Minio) MakePresignedURLForDownload(ctx context.Context, namespaceUUID uuid.UUID, objectUUID uuid.UUID, expiration time.Duration) (*url.URL, error) {
+// GetPresignedURLForDownload creates a presigned URL for downloading an object.
+func (m *Minio) GetPresignedURLForDownload(ctx context.Context, namespaceUUID uuid.UUID, objectUUID uuid.UUID, expiration time.Duration) (*url.URL, error) {
 	log, err := logger.GetZapLogger(ctx)
 	if err != nil {
 		return nil, err
