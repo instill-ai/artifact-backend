@@ -454,7 +454,7 @@ func (wp *fileToEmbWorkerPool) processConvertingFile(ctx context.Context, file r
 	base64Data := base64.StdEncoding.EncodeToString(data)
 
 	// save the converting pipeline metadata into database
-	convertingPipelineMetadata := service.NamespaceID + "/" + service.ConvertPDFToMDPipelineID + "@" + service.PDFToMDVersion
+	convertingPipelineMetadata := service.NamespaceID + "/" + service.ConvertDocToMDPipelineID + "@" + service.DocToMDVersion
 	err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", convertingPipelineMetadata, "", "", nil, nil, nil, nil)
 	if err != nil {
 		logger.Error("Failed to save converting pipeline metadata.", zap.String("File uid:", file.UID.String()))
@@ -541,7 +541,7 @@ func (wp *fileToEmbWorkerPool) processChunkingFile(ctx context.Context, file rep
 			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
 		}
 		// save chunking pipeline metadata into file's extra metadata
-		chunkingPipelineMetadata := service.NamespaceID + "/" + service.MdSplitPipelineID + "@" + service.MdSplitVersion
+		chunkingPipelineMetadata := service.NamespaceID + "/" + service.MdChunkPipelineID + "@" + service.MdSplitVersion
 		err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", chunkingPipelineMetadata, "", nil, nil, nil, nil)
 		if err != nil {
 			logger.Error("Failed to save chunking pipeline metadata.", zap.String("File uid:", file.UID.String()))
@@ -583,7 +583,7 @@ func (wp *fileToEmbWorkerPool) processChunkingFile(ctx context.Context, file rep
 			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
 		}
 		// save chunking pipeline metadata into file's extra metadata
-		chunkingPipelineMetadata := service.NamespaceID + "/" + service.TextSplitPipelineID + "@" + service.TextSplitVersion
+		chunkingPipelineMetadata := service.NamespaceID + "/" + service.TextChunkPipelineID + "@" + service.TextSplitVersion
 		err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", chunkingPipelineMetadata, "", nil, nil, nil, nil)
 		if err != nil {
 			logger.Error("Failed to save chunking pipeline metadata.", zap.String("File uid:", file.UID.String()))
@@ -610,7 +610,7 @@ func (wp *fileToEmbWorkerPool) processChunkingFile(ctx context.Context, file rep
 		}
 
 		// save chunking pipeline metadata into file's extra metadata
-		chunkingPipelineMetadata := service.NamespaceID + "/" + service.MdSplitPipelineID + "@" + service.MdSplitVersion
+		chunkingPipelineMetadata := service.NamespaceID + "/" + service.MdChunkPipelineID + "@" + service.MdSplitVersion
 		err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", chunkingPipelineMetadata, "", nil, nil, nil, nil)
 		if err != nil {
 			logger.Error("Failed to save chunking pipeline metadata.", zap.String("File uid:", file.UID.String()))
