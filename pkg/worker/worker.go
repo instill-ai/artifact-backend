@@ -652,9 +652,34 @@ func (wp *fileToEmbWorkerPool) processChunkingFile(ctx context.Context, file rep
 
 }
 
-// processEmbeddingFile processes a file with embedding status.
-// It retrieves chunks from MinIO, calls the embedding pipeline, saves the embeddings into the vector database and metadata into the database,
-// and updates the file status to completed in the database.
+// processEmbeddingFile processes a file that is ready for embedding by:
+// 1. Validating the file's process status is "EMBEDDING"
+// 2. Retrieving text chunks from MinIO storage and database metadata
+//   - Will retry once if initial chunk retrieval fails
+//
+// 3. Updating file metadata with embedding pipeline version info
+//   - Uses TextEmbedPipelineID and TextEmbedVersion from service config
+//
+// 4. Calling the embedding pipeline to generate vectors from text chunks
+//   - Uses file creator and requester UIDs for pipeline execution
+//
+// 5. Saving embeddings to vector database (Milvus) and metadata to SQL database
+//   - Creates embeddings collection named after knowledge base UID
+//   - Links embeddings to source text chunks and file metadata
+//
+// 6. Updating file status to "COMPLETED" in database
+//
+// Parameters:
+//   - ctx: Context for the operation
+//   - file: KnowledgeBaseFile struct containing file metadata
+//
+// Returns:
+//   - updatedFile: Updated KnowledgeBaseFile after processing
+//   - nextStatus: Next file process status (COMPLETED if successful)
+//   - err: Error if any step fails
+//
+// The function handles errors at each step and returns appropriate status codes.
+// If chunk retrieval fails initially, it will retry once after a 1 second delay.
 func (wp *fileToEmbWorkerPool) processEmbeddingFile(ctx context.Context, file repository.KnowledgeBaseFile) (updatedFile *repository.KnowledgeBaseFile, nextStatus artifactpb.FileProcessStatus, err error) {
 	logger, _ := logger.GetZapLogger(ctx)
 	// check the file status is embedding
@@ -822,34 +847,74 @@ type MilvusEmbedding struct {
 }
 
 // saveEmbeddings saves embeddings into the vector database and updates the metadata in the database.
+// Processes embeddings in batches of 50 to avoid timeout issues.
+const batchSize = 50
+
 func (wp *fileToEmbWorkerPool) saveEmbeddings(ctx context.Context, kbUID string, embeddings []repository.Embedding) error {
 	logger, _ := logger.GetZapLogger(ctx)
-	externalServiceCall := func(embUIDs []string) error {
-		// save the embeddings into vector database
-		milvusEmbeddings := make([]milvus.Embedding, len(embeddings))
-		for i, emb := range embeddings {
-			milvusEmbeddings[i] = milvus.Embedding{
-				SourceTable:  emb.SourceTable,
-				SourceUID:    emb.SourceUID.String(),
-				EmbeddingUID: emb.UID.String(),
-				Vector:       emb.Vector,
-			}
-		}
-		err := wp.svc.MilvusClient.InsertVectorsToKnowledgeBaseCollection(ctx, kbUID, milvusEmbeddings)
-		if err != nil {
-			logger.Error("Failed to save embeddings into vector database.", zap.String("KbUID", kbUID))
-			return err
-		}
+	if len(embeddings) == 0 {
+		logger.Debug("No embeddings to save")
 		return nil
 	}
-	_, err := wp.svc.Repository.UpsertEmbeddings(ctx, embeddings, externalServiceCall)
-	if err != nil {
-		logger.Error("Failed to save embeddings into vector database and metadata into database.", zap.String("KbUID", kbUID))
-		return err
+
+	totalEmbeddings := len(embeddings)
+
+	// Process embeddings in batches
+	for i := 0; i < totalEmbeddings; i += batchSize {
+		// Add context check
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("context cancelled while processing embeddings: %w", err)
+		}
+
+		end := i + batchSize
+		if end > totalEmbeddings {
+			end = totalEmbeddings
+		}
+
+		currentBatch := embeddings[i:end]
+
+		externalServiceCall := func(_ []string) error {
+			// save the embeddings into vector database
+			milvusEmbeddings := make([]milvus.Embedding, len(currentBatch))
+			for j, emb := range currentBatch {
+				milvusEmbeddings[j] = milvus.Embedding{
+					SourceTable:  emb.SourceTable,
+					SourceUID:    emb.SourceUID.String(),
+					EmbeddingUID: emb.UID.String(),
+					Vector:       emb.Vector,
+				}
+			}
+			err := wp.svc.MilvusClient.InsertVectorsToKnowledgeBaseCollection(ctx, kbUID, milvusEmbeddings)
+			if err != nil {
+				logger.Error("Failed to save embeddings batch into vector database.",
+					zap.String("KbUID", kbUID),
+					zap.Int("batch", i/batchSize+1),
+					zap.Int("batchSize", len(currentBatch)))
+				return err
+			}
+			return nil
+		}
+
+		_, err := wp.svc.Repository.UpsertEmbeddings(ctx, currentBatch, externalServiceCall)
+		if err != nil {
+			logger.Error("Failed to save embeddings batch into vector database and metadata into database.",
+				zap.String("KbUID", kbUID),
+				zap.Int("batch", i/batchSize+1),
+				zap.Int("batchSize", len(currentBatch)))
+			return err
+		}
+
+		logger.Info("Embeddings batch saved successfully",
+			zap.String("KbUID", kbUID),
+			zap.Int("batch", i/batchSize+1),
+			zap.Int("batchSize", len(currentBatch)),
+			zap.Int("progress", end),
+			zap.Int("total", totalEmbeddings))
 	}
-	// info how many embeddings saved in which kb
-	logger.Info("Embeddings saved into vector database and metadata into database.",
-		zap.String("KbUID", kbUID), zap.Int("Embeddings count", len(embeddings)))
+
+	logger.Info("All embeddings saved into vector database and metadata into database.",
+		zap.String("KbUID", kbUID),
+		zap.Int("total embeddings", totalEmbeddings))
 	return nil
 }
 
