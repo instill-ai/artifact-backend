@@ -117,14 +117,15 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 
 		destination := ph.service.MinIO.GetUploadedFilePathInKnowledgeBase(kb.UID.String(), req.File.Name)
 		kbFile := repository.KnowledgeBaseFile{
-			Name:             req.File.Name,
-			Type:             artifactpb.FileType_name[int32(req.File.Type)],
-			Owner:            ns.NsUID,
-			CreatorUID:       creatorUID,
-			KnowledgeBaseUID: kb.UID,
-			Destination:      destination,
-			ProcessStatus:    artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_NOTSTARTED)],
-			Size:             fileSize,
+			Name:                      req.File.Name,
+			Type:                      artifactpb.FileType_name[int32(req.File.Type)],
+			Owner:                     ns.NsUID,
+			CreatorUID:                creatorUID,
+			KnowledgeBaseUID:          kb.UID,
+			Destination:               destination,
+			ProcessStatus:             artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_NOTSTARTED)],
+			Size:                      fileSize,
+			ExternalMetadataUnmarshal: req.File.ExternalMetadata,
 		}
 
 		// create catalog file in database
@@ -154,18 +155,19 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 
 	return &artifactpb.UploadCatalogFileResponse{
 		File: &artifactpb.File{
-			FileUid:       res.UID.String(),
-			OwnerUid:      res.Owner.String(),
-			CreatorUid:    res.CreatorUID.String(),
-			CatalogUid:    res.KnowledgeBaseUID.String(),
-			Name:          res.Name,
-			Type:          req.File.Type,
-			CreateTime:    timestamppb.New(*res.CreateTime),
-			UpdateTime:    timestamppb.New(*res.UpdateTime),
-			ProcessStatus: artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_NOTSTARTED,
-			Size:          res.Size,
-			TotalChunks:   0,
-			TotalTokens:   0,
+			FileUid:          res.UID.String(),
+			OwnerUid:         res.Owner.String(),
+			CreatorUid:       res.CreatorUID.String(),
+			CatalogUid:       res.KnowledgeBaseUID.String(),
+			Name:             res.Name,
+			Type:             req.File.Type,
+			CreateTime:       timestamppb.New(*res.CreateTime),
+			UpdateTime:       timestamppb.New(*res.UpdateTime),
+			ProcessStatus:    artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_NOTSTARTED,
+			Size:             res.Size,
+			TotalChunks:      0,
+			TotalTokens:      0,
+			ExternalMetadata: res.ExternalMetadataUnmarshal,
 		},
 	}, nil
 }
@@ -290,18 +292,19 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 		nextPageToken = nextToken
 		for _, kbFile := range kbFiles {
 			files = append(files, &artifactpb.File{
-				FileUid:       kbFile.UID.String(),
-				OwnerUid:      kbFile.Owner.String(),
-				CreatorUid:    kbFile.CreatorUID.String(),
-				CatalogUid:    kbFile.KnowledgeBaseUID.String(),
-				Name:          kbFile.Name,
-				Type:          artifactpb.FileType(artifactpb.FileType_value[kbFile.Type]),
-				CreateTime:    timestamppb.New(*kbFile.CreateTime),
-				UpdateTime:    timestamppb.New(*kbFile.UpdateTime),
-				ProcessStatus: artifactpb.FileProcessStatus(artifactpb.FileProcessStatus_value[kbFile.ProcessStatus]),
-				Size:          kbFile.Size,
-				TotalChunks:   int32(totalChunks[kbFile.UID]),
-				TotalTokens:   int32(totalTokens[kbFile.UID]),
+				FileUid:          kbFile.UID.String(),
+				OwnerUid:         kbFile.Owner.String(),
+				CreatorUid:       kbFile.CreatorUID.String(),
+				CatalogUid:       kbFile.KnowledgeBaseUID.String(),
+				Name:             kbFile.Name,
+				Type:             artifactpb.FileType(artifactpb.FileType_value[kbFile.Type]),
+				CreateTime:       timestamppb.New(*kbFile.CreateTime),
+				UpdateTime:       timestamppb.New(*kbFile.UpdateTime),
+				ProcessStatus:    artifactpb.FileProcessStatus(artifactpb.FileProcessStatus_value[kbFile.ProcessStatus]),
+				Size:             kbFile.Size,
+				ExternalMetadata: kbFile.ExternalMetadataUnmarshal,
+				TotalChunks:      int32(totalChunks[kbFile.UID]),
+				TotalTokens:      int32(totalTokens[kbFile.UID]),
 			})
 		}
 	}
