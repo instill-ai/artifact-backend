@@ -11,6 +11,8 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	"go.uber.org/zap"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/structpb"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -66,6 +68,7 @@ type KnowledgeBaseFile struct {
 	// Process status is defined in the grpc proto file
 	ProcessStatus string `gorm:"column:process_status;size:100;not null" json:"process_status"`
 	// Note: use ExtraMetaDataMarshal method to marshal and unmarshal. do not populate this field directly
+	// this field is used internally for the extra meta data of the file
 	ExtraMetaData string `gorm:"column:extra_meta_data;type:jsonb" json:"extra_meta_data"`
 	// Content not used yet
 	Content    []byte     `gorm:"column:content;type:bytea" json:"content"`
@@ -78,6 +81,10 @@ type KnowledgeBaseFile struct {
 	RequesterUID uuid.UUID `gorm:"column:requester_uid;type:uuid;"`
 	// This filed is not stored in the database. It is used to unmarshal the ExtraMetaData field
 	ExtraMetaDataUnmarshal *ExtraMetaData `gorm:"-" json:"extra_meta_data_unmarshal"`
+	// this field is used to let external service store the external metadata of file.
+	ExternalMetadata string `gorm:"column:external_metadata;type:jsonb" json:"external_metadata"`
+	// This field is not stored in the database. It is used to unmarshal the ExternalMetadata field
+	ExternalMetadataUnmarshal *structpb.Struct `gorm:"-" json:"external_metadata_unmarshal"`
 }
 
 type ExtraMetaData struct {
@@ -107,6 +114,7 @@ type KnowledgeBaseFileColumns struct {
 	DeleteTime       string
 	RequesterUID     string
 	Size             string
+	ExternalMetadata string
 }
 
 var KnowledgeBaseFileColumn = KnowledgeBaseFileColumns{
@@ -124,6 +132,7 @@ var KnowledgeBaseFileColumn = KnowledgeBaseFileColumns{
 	DeleteTime:       "delete_time",
 	Size:             "size",
 	RequesterUID:     "requester_uid",
+	ExternalMetadata: "external_metadata",
 }
 
 // ExtraMetaDataMarshal marshals the ExtraMetaData struct to a JSON string
@@ -154,21 +163,65 @@ func (kf *KnowledgeBaseFile) ExtraMetaDataUnmarshalFunc() error {
 	return nil
 }
 
+// ExternalMetadataToJSON converts structpb.Struct to JSON string for DB storage
+func (kf *KnowledgeBaseFile) ExternalMetadataToJSON() error {
+	if kf.ExternalMetadataUnmarshal == nil {
+		kf.ExternalMetadata = "{}"
+		return nil
+	}
+
+	jsonBytes, err := protojson.Marshal(kf.ExternalMetadataUnmarshal)
+	if err != nil {
+		return fmt.Errorf("failed to marshal external metadata to JSON: %v", err)
+	}
+
+	kf.ExternalMetadata = string(jsonBytes)
+	return nil
+}
+
+// JSONToExternalMetadata converts JSON string from DB to structpb.Struct
+func (kf *KnowledgeBaseFile) JSONToExternalMetadata() error {
+	if kf.ExternalMetadata == "" {
+		kf.ExternalMetadataUnmarshal = nil
+		return nil
+	}
+
+	s := &structpb.Struct{}
+	if err := protojson.Unmarshal([]byte(kf.ExternalMetadata), s); err != nil {
+		return fmt.Errorf("failed to unmarshal external metadata from JSON: %v", err)
+	}
+
+	kf.ExternalMetadataUnmarshal = s
+	return nil
+}
+
 // GORM hooks
 func (kf *KnowledgeBaseFile) BeforeCreate(tx *gorm.DB) (err error) {
-	return kf.ExtraMetaDataMarshal()
+	if err := kf.ExtraMetaDataMarshal(); err != nil {
+		return err
+	}
+	return kf.ExternalMetadataToJSON()
 }
 
 func (kf *KnowledgeBaseFile) BeforeSave(tx *gorm.DB) (err error) {
-	return kf.ExtraMetaDataMarshal()
+	if err := kf.ExtraMetaDataMarshal(); err != nil {
+		return err
+	}
+	return kf.ExternalMetadataToJSON()
 }
 
 func (kf *KnowledgeBaseFile) BeforeUpdate(tx *gorm.DB) (err error) {
-	return kf.ExtraMetaDataMarshal()
+	if err := kf.ExtraMetaDataMarshal(); err != nil {
+		return err
+	}
+	return kf.ExternalMetadataToJSON()
 }
 
 func (kf *KnowledgeBaseFile) AfterFind(tx *gorm.DB) (err error) {
-	return kf.ExtraMetaDataUnmarshalFunc()
+	if err := kf.ExtraMetaDataUnmarshalFunc(); err != nil {
+		return err
+	}
+	return kf.JSONToExternalMetadata()
 }
 
 // KnowledgeBaseFileTableName returns the table name of the KnowledgeBaseFile

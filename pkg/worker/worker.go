@@ -526,6 +526,8 @@ func (wp *fileToEmbWorkerPool) processChunkingFile(ctx context.Context, file rep
 			logger.Error("Failed to get converted file from minIO.", zap.String("Converted file uid", convertedFile.UID.String()))
 			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
 		}
+
+		// TODO: some file use splitTextPipe and some use splitMarkdownPipe
 		// call the markdown chunking pipeline
 		requesterUID := file.RequesterUID
 		chunks, err := wp.svc.SplitMarkdownPipe(ctx, file.CreatorUID, requesterUID, string(convertedFileData))
