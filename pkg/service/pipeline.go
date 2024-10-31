@@ -20,13 +20,13 @@ const chunkLength = 1024
 const chunkOverlap = 200
 const NamespaceID = "preset"
 
-
 // Note: this pipeline is for the old indexing pipeline
 const ConvertDocToMDPipelineID = "indexing-convert-pdf"
 const DocToMDVersion = "v1.1.1"
 
 // TODO: the pipeline id is not correct, need to update the pipeline id
 const ConvertDocToMDPipelineID2 = "indexing-advanced-convert-doc"
+
 // TODO: the version is not correct, need to update the version
 const DocToMDVersion2 = "v1.0.1"
 
@@ -300,13 +300,29 @@ func (s *Service) SplitTextPipe(ctx context.Context, caller uuid.UUID, requester
 	return filteredResult, nil
 }
 
-// EmbeddingTextPipe uses the embedding pipeline to convert text into vectors and consume caller's credits.
-// It processes the input texts in batches, triggers the embedding pipeline for each batch, and collects the results.
-// The function returns a 2D slice of float32 representing the vectors for the input texts.
+// EmbeddingTextPipe converts multiple text inputs into vector embeddings using a pipeline service.
+// It processes texts in parallel batches for efficiency while managing resource usage.
+//
+// Parameters:
+//   - ctx: Context for the operation
+//   - caller: UUID of the calling user
+//   - requester: UUID of the requesting entity (optional)
+//   - texts: Slice of strings to be converted to embeddings
+//
+// Returns:
+//   - [][]float32: 2D slice where each inner slice is a vector embedding
+//   - error: Any error encountered during processing
+//
+// The function:
+//   - Processes texts in batches of 32
+//   - Limits concurrent processing to 5 goroutines
+//   - Maintains input order in the output
+//   - Cancels all operations if any batch fails
 func (s *Service) EmbeddingTextPipe(ctx context.Context, caller uuid.UUID, requester uuid.UUID, texts []string) ([][]float32, error) {
 	ctx, ctxCancel := context.WithCancel(ctx)
 	defer ctxCancel()
 	const maxBatchSize = 32
+	const maxConcurrentGoroutines = 5
 	var md metadata.MD
 	if requester != uuid.Nil {
 		md = metadata.New(map[string]string{
@@ -338,7 +354,10 @@ func (s *Service) EmbeddingTextPipe(ctx context.Context, caller uuid.UUID, reque
 	// - Extract the vector from the response.
 	// - Send the result to the results channel.
 	// If an error occurs, send the error to the error channel.
+	// Create a semaphore channel to limit concurrent goroutines to maxConcurrentGoroutines
+	sem := make(chan struct{}, maxConcurrentGoroutines)
 	for i := 0; i < len(texts); i += maxBatchSize {
+
 		end := i + maxBatchSize
 		if end > len(texts) {
 			end = len(texts)
@@ -346,11 +365,17 @@ func (s *Service) EmbeddingTextPipe(ctx context.Context, caller uuid.UUID, reque
 		batch := texts[i:end]
 		batchIndex := i / maxBatchSize
 
+
+		// Acquire semaphore before starting goroutine
+		sem <- struct{}{}
 		wg.Add(1)
 		go utils.GoRecover(func() {
+			// Release semaphore when goroutine completes
+			defer func() { <-sem }()
+			defer wg.Done()
+
 			func(batch []string, index int) {
 				ctx_ := metadata.NewOutgoingContext(ctx, md)
-				defer wg.Done()
 
 				inputs := make([]*structpb.Struct, 0, len(batch))
 				for _, text := range batch {
