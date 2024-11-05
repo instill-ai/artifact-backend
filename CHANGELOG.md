@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.20.0-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.19.0-alpha...v0.20.0-alpha) (2024-11-05)
+
+
+### Features
+
+* **catalog:** allow external service to store file metadata ([#123](https://github.com/instill-ai/artifact-backend/issues/123)) ([6c97540](https://github.com/instill-ai/artifact-backend/commit/6c975408b6aabfb0c49aed0fb33e40150bbd9615))
+* revert the converting pipeline ([#126](https://github.com/instill-ai/artifact-backend/issues/126)) ([b481227](https://github.com/instill-ai/artifact-backend/commit/b4812270457b5380c03ac3541f9fe198d64be852))
+
+
+### Performance Improvements
+
+* **catalog:** enhance the stability of embeddings saving ([#125](https://github.com/instill-ai/artifact-backend/issues/125)) ([17e6868](https://github.com/instill-ai/artifact-backend/commit/17e68684c99798d27ecc46496f7cbfcffa4b86b1))
+
 ## [0.19.0-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.18.0-alpha...v0.19.0-alpha) (2024-10-29)
 
 
