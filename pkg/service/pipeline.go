@@ -24,11 +24,11 @@ const NamespaceID = "preset"
 const ConvertDocToMDPipelineID = "indexing-convert-pdf"
 const DocToMDVersion = "v1.1.1"
 
-// TODO: the pipeline id is not correct, need to update the pipeline id
-const ConvertDocToMDPipelineID2 = "indexing-advanced-convert-doc"
+// TODO: we revert to the old pipeline. it will change to the new pipeline later.
+const ConvertDocToMDPipelineID2 = "indexing-convert-pdf"
 
-// TODO: the version is not correct, need to update the version
-const DocToMDVersion2 = "v1.0.1"
+// TODO: we need to update the version after the new pipeline is ready
+const DocToMDVersion2 = "v1.1.1"
 
 const MdChunkPipelineID = "indexing-split-markdown"
 const MdSplitVersion = "v2.0.0"
