@@ -41,7 +41,7 @@ const QAPipelineID = "retrieving-qna"
 const QAVersion = "v1.2.0"
 
 // ConvertToMDPipe using converting pipeline to convert some file type to MD and consume caller's credits
-func (s *Service) ConvertToMDPipe(ctx context.Context, caller uuid.UUID, requester uuid.UUID, fileBase64 string, fileType artifactPb.FileType) (string, error) {
+func (s *Service) ConvertToMDPipe(ctx context.Context, fileUID uuid.UUID, caller uuid.UUID, requester uuid.UUID, fileBase64 string, fileType artifactPb.FileType) (string, error) {
 	logger, _ := logger.GetZapLogger(ctx)
 	var md metadata.MD
 	if requester != uuid.Nil {
@@ -71,20 +71,28 @@ func (s *Service) ConvertToMDPipe(ctx context.Context, caller uuid.UUID, request
 		artifactPb.FileType_FILE_TYPE_DOCX,
 		artifactPb.FileType_FILE_TYPE_DOC,
 		artifactPb.FileType_FILE_TYPE_PPT,
-		artifactPb.FileType_FILE_TYPE_PPTX,
-		artifactPb.FileType_FILE_TYPE_HTML:
+		artifactPb.FileType_FILE_TYPE_PPTX:
 		pipelineID = ConvertDocToMDPipelineID2
 		version = DocToMDVersion2
 
 	// Spreadsheet types and others use the original pipeline
 	case artifactPb.FileType_FILE_TYPE_XLSX,
 		artifactPb.FileType_FILE_TYPE_XLS,
-		artifactPb.FileType_FILE_TYPE_CSV:
+		artifactPb.FileType_FILE_TYPE_CSV,
+		artifactPb.FileType_FILE_TYPE_HTML:
 		pipelineID = ConvertDocToMDPipelineID
 		version = DocToMDVersion
 
 	default:
 		return "", fmt.Errorf("unsupported file type: %v", fileType)
+	}
+
+	// save the converting pipeline metadata into database
+	convertingPipelineMetadata := NamespaceID + "/" + pipelineID + "@" + version
+	err := s.Repository.UpdateKbFileExtraMetaData(ctx, fileUID, "", convertingPipelineMetadata, "", "", nil, nil, nil, nil)
+	if err != nil {
+		logger.Error("Failed to save converting pipeline metadata.", zap.String("File uid:", fileUID.String()))
+		return "", fmt.Errorf("failed to save converting pipeline metadata: %w", err)
 	}
 
 	req := &pipelinePb.TriggerNamespacePipelineReleaseRequest{

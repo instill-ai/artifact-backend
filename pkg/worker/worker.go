@@ -453,19 +453,9 @@ func (wp *fileToEmbWorkerPool) processConvertingFile(ctx context.Context, file r
 	// encode data to base64
 	base64Data := base64.StdEncoding.EncodeToString(data)
 
-	// save the converting pipeline metadata into database
-	convertingPipelineMetadata := service.NamespaceID + "/" + service.ConvertDocToMDPipelineID + "@" + service.DocToMDVersion
-	err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", convertingPipelineMetadata, "", "", nil, nil, nil, nil)
-	if err != nil {
-		logger.Error("Failed to save converting pipeline metadata.", zap.String("File uid:", file.UID.String()))
-		return nil,
-			artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED,
-			fmt.Errorf("failed to save converting pipeline metadata: %w", err)
-	}
-
 	// convert the pdf file to md
 	requesterUID := file.RequesterUID
-	convertedMD, err := wp.svc.ConvertToMDPipe(ctx, file.CreatorUID, requesterUID, base64Data, artifactpb.FileType(artifactpb.FileType_value[file.Type]))
+	convertedMD, err := wp.svc.ConvertToMDPipe(ctx, file.UID, file.CreatorUID, requesterUID, base64Data, artifactpb.FileType(artifactpb.FileType_value[file.Type]))
 	if err != nil {
 		logger.Error("Failed to convert pdf to md using pdf-to-md pipeline.", zap.String("File path", fileInMinIOPath))
 		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
@@ -558,15 +548,15 @@ func (wp *fileToEmbWorkerPool) processChunkingFile(ctx context.Context, file rep
 		switch file.Type {
 		case artifactpb.FileType_FILE_TYPE_XLSX.String(),
 			artifactpb.FileType_FILE_TYPE_XLS.String(),
-			artifactpb.FileType_FILE_TYPE_CSV.String():
+			artifactpb.FileType_FILE_TYPE_CSV.String(),
+			artifactpb.FileType_FILE_TYPE_HTML.String():
 			requesterUID := file.RequesterUID
 			chunks, err = wp.svc.SplitMarkdownPipe(ctx, file.CreatorUID, requesterUID, string(convertedFileData))
 		case artifactpb.FileType_FILE_TYPE_PDF.String(),
 			artifactpb.FileType_FILE_TYPE_DOCX.String(),
 			artifactpb.FileType_FILE_TYPE_DOC.String(),
 			artifactpb.FileType_FILE_TYPE_PPTX.String(),
-			artifactpb.FileType_FILE_TYPE_PPT.String(),
-			artifactpb.FileType_FILE_TYPE_HTML.String():
+			artifactpb.FileType_FILE_TYPE_PPT.String():
 			requesterUID := file.RequesterUID
 			chunks, err = wp.svc.SplitTextPipe(ctx, file.CreatorUID, requesterUID, string(convertedFileData))
 		}
