@@ -490,11 +490,37 @@ func (wp *fileToEmbWorkerPool) processConvertingFile(ctx context.Context, file r
 	return updatedFile, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CHUNKING, nil
 }
 
-// Processes a file with the status "chunking".
-// If the file is a PDF or other document type, it retrieves the converted file from MinIO and calls the markdown chunking pipeline.
-// If the file is a text or markdown file, it retrieves the file from MinIO and calls the respective chunking pipeline.
-// The resulting chunks are saved into object storage and metadata is updated in the database.
-// Finally, the file status is updated to "embedding" in the database.
+// Processes a file with the status "chunking" by splitting it into text chunks.
+// The processing varies by file type:
+//
+// For PDF, DOC, DOCX, PPT, PPTX, HTML, XLSX, XLS, CSV:
+// - Retrieves converted file from MinIO
+// - For spreadsheet files (XLSX, XLS, CSV): Uses markdown chunking pipeline
+// - For other document types: Uses text chunking pipeline
+//
+// For TEXT files:
+// - Retrieves original file from MinIO
+// - Uses text chunking pipeline
+//
+// For MARKDOWN files:
+// - Retrieves original file from MinIO
+// - Uses markdown chunking pipeline
+//
+// For all file types:
+// - Saves chunks to object storage
+// - Updates metadata in database with chunking pipeline info
+// - Updates file status to "embedding"
+//
+// Parameters:
+//   - ctx: Context for the operation
+//   - file: KnowledgeBaseFile struct containing file metadata
+//
+// Returns:
+//   - updatedFile: Updated KnowledgeBaseFile after processing
+//   - nextStatus: Next file process status (EMBEDDING if successful)
+//   - err: Error if any step fails
+//
+// The function handles errors at each step and returns appropriate status codes.
 func (wp *fileToEmbWorkerPool) processChunkingFile(ctx context.Context, file repository.KnowledgeBaseFile) (*repository.KnowledgeBaseFile, artifactpb.FileProcessStatus, error) {
 	logger, _ := logger.GetZapLogger(ctx)
 	logger.Info("Processing chunking status file.", zap.String("File uid", file.UID.String()))
@@ -527,10 +553,23 @@ func (wp *fileToEmbWorkerPool) processChunkingFile(ctx context.Context, file rep
 			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
 		}
 
-		// TODO: some file use splitTextPipe and some use splitMarkdownPipe
 		// call the markdown chunking pipeline
-		requesterUID := file.RequesterUID
-		chunks, err := wp.svc.SplitMarkdownPipe(ctx, file.CreatorUID, requesterUID, string(convertedFileData))
+		chunks := []service.Chunk{}
+		switch file.Type {
+		case artifactpb.FileType_FILE_TYPE_XLSX.String(),
+			artifactpb.FileType_FILE_TYPE_XLS.String(),
+			artifactpb.FileType_FILE_TYPE_CSV.String():
+			requesterUID := file.RequesterUID
+			chunks, err = wp.svc.SplitMarkdownPipe(ctx, file.CreatorUID, requesterUID, string(convertedFileData))
+		case artifactpb.FileType_FILE_TYPE_PDF.String(),
+			artifactpb.FileType_FILE_TYPE_DOCX.String(),
+			artifactpb.FileType_FILE_TYPE_DOC.String(),
+			artifactpb.FileType_FILE_TYPE_PPTX.String(),
+			artifactpb.FileType_FILE_TYPE_PPT.String(),
+			artifactpb.FileType_FILE_TYPE_HTML.String():
+			requesterUID := file.RequesterUID
+			chunks, err = wp.svc.SplitTextPipe(ctx, file.CreatorUID, requesterUID, string(convertedFileData))
+		}
 		if err != nil {
 			logger.Error("Failed to get chunks from converted file using markdown chunking pipeline.", zap.String("Converted file uid", convertedFile.UID.String()))
 			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err

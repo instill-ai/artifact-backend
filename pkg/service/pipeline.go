@@ -20,15 +20,13 @@ const chunkLength = 1024
 const chunkOverlap = 200
 const NamespaceID = "preset"
 
-// Note: this pipeline is for the old indexing pipeline
+// Note: this pipeline is for the old indexing pipeline having convert_result
 const ConvertDocToMDPipelineID = "indexing-convert-pdf"
 const DocToMDVersion = "v1.1.1"
 
-// TODO: we revert to the old pipeline. it will change to the new pipeline later.
-const ConvertDocToMDPipelineID2 = "indexing-convert-pdf"
-
-// TODO: we need to update the version after the new pipeline is ready
-const DocToMDVersion2 = "v1.1.1"
+// Note: this pipeline is for the new indexing pipeline having convert_result or convert_result2
+const ConvertDocToMDPipelineID2 = "indexing-advanced-convert-doc"
+const DocToMDVersion2 = "v1.2.0"
 
 const MdChunkPipelineID = "indexing-split-markdown"
 const MdSplitVersion = "v2.0.0"
@@ -144,8 +142,9 @@ func getFileTypePrefix(fileType artifactPb.FileType) string {
 	}
 }
 
-// Helper function to safely extract the "convert_result" from the response.
-// It checks if the index and key are available to avoid nil pointer issues.
+// getConvertResult extracts the conversion result from the pipeline response.
+// It first checks for a non-empty "convert_result" field, then falls back to "convert_result2".
+// Returns an error if neither field contains valid data or if the response structure is invalid.
 func getConvertResult(resp *pipelinePb.TriggerNamespacePipelineReleaseResponse) (string, error) {
 	if resp == nil || len(resp.Outputs) == 0 {
 		return "", fmt.Errorf("response is nil or has no outputs. resp: %v", resp)
@@ -155,10 +154,14 @@ func getConvertResult(resp *pipelinePb.TriggerNamespacePipelineReleaseResponse) 
 		return "", fmt.Errorf("fields in the output are nil. resp: %v", resp)
 	}
 	convertResult, ok := fields["convert_result"]
-	if !ok {
-		return "", fmt.Errorf("convert_result not found in the output fields. resp: %v", resp)
+	if ok && convertResult.GetStringValue() != "" {
+		return convertResult.GetStringValue(), nil
 	}
-	return convertResult.GetStringValue(), nil
+	convertResult2, ok2 := fields["convert_result2"]
+	if ok2 && convertResult2.GetStringValue() != "" {
+		return convertResult2.GetStringValue(), nil
+	}
+	return "", fmt.Errorf("convert_result or convert_result2 not found in the output fields. resp: %v", resp)
 }
 
 type Chunk = struct {
@@ -364,7 +367,6 @@ func (s *Service) EmbeddingTextPipe(ctx context.Context, caller uuid.UUID, reque
 		}
 		batch := texts[i:end]
 		batchIndex := i / maxBatchSize
-
 
 		// Acquire semaphore before starting goroutine
 		sem <- struct{}{}
