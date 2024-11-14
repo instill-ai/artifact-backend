@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.21.0-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.20.0-alpha...v0.21.0-alpha) (2024-11-14)
+
+
+### Features
+
+* **artifact:** adopt the advanced converting pipeline ([#127](https://github.com/instill-ai/artifact-backend/issues/127)) ([b5be01b](https://github.com/instill-ai/artifact-backend/commit/b5be01bca87700aa923f31d8250f6a218ad36f91))
+* **blob:** add domain in objecturl ([#130](https://github.com/instill-ai/artifact-backend/issues/130)) ([63c24df](https://github.com/instill-ai/artifact-backend/commit/63c24df9d900d4f15e0e2e42e5e00a88602130be))
+
+
+### Bug Fixes
+
+* **artifact:** update htlm file process ([#129](https://github.com/instill-ai/artifact-backend/issues/129)) ([279c241](https://github.com/instill-ai/artifact-backend/commit/279c241668b9040ceb30104fc2b692062ccce9ed))
+
 ## [0.20.0-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.19.0-alpha...v0.20.0-alpha) (2024-11-05)
 
 
