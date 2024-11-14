@@ -31,6 +31,7 @@ type AppConfig struct {
 	Minio                 MinioConfig           `koanf:"minio"`
 	Milvus                MilvusConfig          `koanf:"milvus"`
 	FileToEmbeddingWorker FileToEmbeddingWorker `koanf:"filetoembeddingworker"`
+	Blob                  BlobConfig            `koanf:"blob"`
 }
 
 // OpenFGA config
@@ -157,6 +158,10 @@ type MilvusConfig struct {
 
 type FileToEmbeddingWorker struct {
 	NumberOfWorkers int `koanf:"numberofworkers"`
+}
+
+type BlobConfig struct {
+	HostPort string `koanf:"hostport"`
 }
 
 // Init - Assign global config to decoded config struct
