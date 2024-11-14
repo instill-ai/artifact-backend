@@ -10,6 +10,7 @@ import (
 
 	"github.com/gofrs/uuid"
 	"github.com/gogo/status"
+	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	minio_local "github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
@@ -228,7 +229,7 @@ func EncodedMinioURLPath(namespaceID string, objectURLUUID uuid.UUID) string {
 	urlPath := path.Join("v1alpha", "namespaces", namespaceID, "blob-urls", objectURLUUID.String())
 
 	// Ensure the path starts with a forward slash
-	return "/" + urlPath
+	return config.Config.Blob.HostPort + "/" + urlPath
 }
 
 // DecodeMinioURLPath decodes the minio URL path into namespaceID and objectName
