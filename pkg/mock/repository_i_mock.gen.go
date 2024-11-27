@@ -13,6 +13,7 @@ import (
 	mm_repository "github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
 	"gorm.io/gorm"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	pb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
@@ -183,8 +184,8 @@ type RepositoryIMock struct {
 	beforeGetKnowledgeBaseByOwnerAndKbIDCounter uint64
 	GetKnowledgeBaseByOwnerAndKbIDMock          mRepositoryIMockGetKnowledgeBaseByOwnerAndKbID
 
-	funcGetKnowledgeBaseCountByOwner          func(ctx context.Context, ownerUID string) (i1 int64, err error)
-	inspectFuncGetKnowledgeBaseCountByOwner   func(ctx context.Context, ownerUID string)
+	funcGetKnowledgeBaseCountByOwner          func(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType) (i1 int64, err error)
+	inspectFuncGetKnowledgeBaseCountByOwner   func(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType)
 	afterGetKnowledgeBaseCountByOwnerCounter  uint64
 	beforeGetKnowledgeBaseCountByOwnerCounter uint64
 	GetKnowledgeBaseCountByOwnerMock          mRepositoryIMockGetKnowledgeBaseCountByOwner
@@ -365,6 +366,12 @@ type RepositoryIMock struct {
 	afterListKnowledgeBasesCounter  uint64
 	beforeListKnowledgeBasesCounter uint64
 	ListKnowledgeBasesMock          mRepositoryIMockListKnowledgeBases
+
+	funcListKnowledgeBasesByCatalogType          func(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType) (ka1 []mm_repository.KnowledgeBase, err error)
+	inspectFuncListKnowledgeBasesByCatalogType   func(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType)
+	afterListKnowledgeBasesByCatalogTypeCounter  uint64
+	beforeListKnowledgeBasesByCatalogTypeCounter uint64
+	ListKnowledgeBasesByCatalogTypeMock          mRepositoryIMockListKnowledgeBasesByCatalogType
 
 	funcProcessKnowledgeBaseFiles          func(ctx context.Context, fileUIDs []string, requester uuid.UUID) (ka1 []mm_repository.KnowledgeBaseFile, err error)
 	inspectFuncProcessKnowledgeBaseFiles   func(ctx context.Context, fileUIDs []string, requester uuid.UUID)
@@ -603,6 +610,9 @@ func NewRepositoryIMock(t minimock.Tester) *RepositoryIMock {
 
 	m.ListKnowledgeBasesMock = mRepositoryIMockListKnowledgeBases{mock: m}
 	m.ListKnowledgeBasesMock.callArgs = []*RepositoryIMockListKnowledgeBasesParams{}
+
+	m.ListKnowledgeBasesByCatalogTypeMock = mRepositoryIMockListKnowledgeBasesByCatalogType{mock: m}
+	m.ListKnowledgeBasesByCatalogTypeMock.callArgs = []*RepositoryIMockListKnowledgeBasesByCatalogTypeParams{}
 
 	m.ProcessKnowledgeBaseFilesMock = mRepositoryIMockProcessKnowledgeBaseFiles{mock: m}
 	m.ProcessKnowledgeBaseFilesMock.callArgs = []*RepositoryIMockProcessKnowledgeBaseFilesParams{}
@@ -8743,14 +8753,16 @@ type RepositoryIMockGetKnowledgeBaseCountByOwnerExpectation struct {
 
 // RepositoryIMockGetKnowledgeBaseCountByOwnerParams contains parameters of the RepositoryI.GetKnowledgeBaseCountByOwner
 type RepositoryIMockGetKnowledgeBaseCountByOwnerParams struct {
-	ctx      context.Context
-	ownerUID string
+	ctx         context.Context
+	ownerUID    string
+	catalogType artifactpb.CatalogType
 }
 
 // RepositoryIMockGetKnowledgeBaseCountByOwnerParamPtrs contains pointers to parameters of the RepositoryI.GetKnowledgeBaseCountByOwner
 type RepositoryIMockGetKnowledgeBaseCountByOwnerParamPtrs struct {
-	ctx      *context.Context
-	ownerUID *string
+	ctx         *context.Context
+	ownerUID    *string
+	catalogType *artifactpb.CatalogType
 }
 
 // RepositoryIMockGetKnowledgeBaseCountByOwnerResults contains results of the RepositoryI.GetKnowledgeBaseCountByOwner
@@ -8760,7 +8772,7 @@ type RepositoryIMockGetKnowledgeBaseCountByOwnerResults struct {
 }
 
 // Expect sets up expected params for RepositoryI.GetKnowledgeBaseCountByOwner
-func (mmGetKnowledgeBaseCountByOwner *mRepositoryIMockGetKnowledgeBaseCountByOwner) Expect(ctx context.Context, ownerUID string) *mRepositoryIMockGetKnowledgeBaseCountByOwner {
+func (mmGetKnowledgeBaseCountByOwner *mRepositoryIMockGetKnowledgeBaseCountByOwner) Expect(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType) *mRepositoryIMockGetKnowledgeBaseCountByOwner {
 	if mmGetKnowledgeBaseCountByOwner.mock.funcGetKnowledgeBaseCountByOwner != nil {
 		mmGetKnowledgeBaseCountByOwner.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBaseCountByOwner mock is already set by Set")
 	}
@@ -8773,7 +8785,7 @@ func (mmGetKnowledgeBaseCountByOwner *mRepositoryIMockGetKnowledgeBaseCountByOwn
 		mmGetKnowledgeBaseCountByOwner.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBaseCountByOwner mock is already set by ExpectParams functions")
 	}
 
-	mmGetKnowledgeBaseCountByOwner.defaultExpectation.params = &RepositoryIMockGetKnowledgeBaseCountByOwnerParams{ctx, ownerUID}
+	mmGetKnowledgeBaseCountByOwner.defaultExpectation.params = &RepositoryIMockGetKnowledgeBaseCountByOwnerParams{ctx, ownerUID, catalogType}
 	for _, e := range mmGetKnowledgeBaseCountByOwner.expectations {
 		if minimock.Equal(e.params, mmGetKnowledgeBaseCountByOwner.defaultExpectation.params) {
 			mmGetKnowledgeBaseCountByOwner.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetKnowledgeBaseCountByOwner.defaultExpectation.params)
@@ -8827,8 +8839,30 @@ func (mmGetKnowledgeBaseCountByOwner *mRepositoryIMockGetKnowledgeBaseCountByOwn
 	return mmGetKnowledgeBaseCountByOwner
 }
 
+// ExpectCatalogTypeParam3 sets up expected param catalogType for RepositoryI.GetKnowledgeBaseCountByOwner
+func (mmGetKnowledgeBaseCountByOwner *mRepositoryIMockGetKnowledgeBaseCountByOwner) ExpectCatalogTypeParam3(catalogType artifactpb.CatalogType) *mRepositoryIMockGetKnowledgeBaseCountByOwner {
+	if mmGetKnowledgeBaseCountByOwner.mock.funcGetKnowledgeBaseCountByOwner != nil {
+		mmGetKnowledgeBaseCountByOwner.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBaseCountByOwner mock is already set by Set")
+	}
+
+	if mmGetKnowledgeBaseCountByOwner.defaultExpectation == nil {
+		mmGetKnowledgeBaseCountByOwner.defaultExpectation = &RepositoryIMockGetKnowledgeBaseCountByOwnerExpectation{}
+	}
+
+	if mmGetKnowledgeBaseCountByOwner.defaultExpectation.params != nil {
+		mmGetKnowledgeBaseCountByOwner.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBaseCountByOwner mock is already set by Expect")
+	}
+
+	if mmGetKnowledgeBaseCountByOwner.defaultExpectation.paramPtrs == nil {
+		mmGetKnowledgeBaseCountByOwner.defaultExpectation.paramPtrs = &RepositoryIMockGetKnowledgeBaseCountByOwnerParamPtrs{}
+	}
+	mmGetKnowledgeBaseCountByOwner.defaultExpectation.paramPtrs.catalogType = &catalogType
+
+	return mmGetKnowledgeBaseCountByOwner
+}
+
 // Inspect accepts an inspector function that has same arguments as the RepositoryI.GetKnowledgeBaseCountByOwner
-func (mmGetKnowledgeBaseCountByOwner *mRepositoryIMockGetKnowledgeBaseCountByOwner) Inspect(f func(ctx context.Context, ownerUID string)) *mRepositoryIMockGetKnowledgeBaseCountByOwner {
+func (mmGetKnowledgeBaseCountByOwner *mRepositoryIMockGetKnowledgeBaseCountByOwner) Inspect(f func(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType)) *mRepositoryIMockGetKnowledgeBaseCountByOwner {
 	if mmGetKnowledgeBaseCountByOwner.mock.inspectFuncGetKnowledgeBaseCountByOwner != nil {
 		mmGetKnowledgeBaseCountByOwner.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.GetKnowledgeBaseCountByOwner")
 	}
@@ -8852,7 +8886,7 @@ func (mmGetKnowledgeBaseCountByOwner *mRepositoryIMockGetKnowledgeBaseCountByOwn
 }
 
 // Set uses given function f to mock the RepositoryI.GetKnowledgeBaseCountByOwner method
-func (mmGetKnowledgeBaseCountByOwner *mRepositoryIMockGetKnowledgeBaseCountByOwner) Set(f func(ctx context.Context, ownerUID string) (i1 int64, err error)) *RepositoryIMock {
+func (mmGetKnowledgeBaseCountByOwner *mRepositoryIMockGetKnowledgeBaseCountByOwner) Set(f func(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType) (i1 int64, err error)) *RepositoryIMock {
 	if mmGetKnowledgeBaseCountByOwner.defaultExpectation != nil {
 		mmGetKnowledgeBaseCountByOwner.mock.t.Fatalf("Default expectation is already set for the RepositoryI.GetKnowledgeBaseCountByOwner method")
 	}
@@ -8867,14 +8901,14 @@ func (mmGetKnowledgeBaseCountByOwner *mRepositoryIMockGetKnowledgeBaseCountByOwn
 
 // When sets expectation for the RepositoryI.GetKnowledgeBaseCountByOwner which will trigger the result defined by the following
 // Then helper
-func (mmGetKnowledgeBaseCountByOwner *mRepositoryIMockGetKnowledgeBaseCountByOwner) When(ctx context.Context, ownerUID string) *RepositoryIMockGetKnowledgeBaseCountByOwnerExpectation {
+func (mmGetKnowledgeBaseCountByOwner *mRepositoryIMockGetKnowledgeBaseCountByOwner) When(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType) *RepositoryIMockGetKnowledgeBaseCountByOwnerExpectation {
 	if mmGetKnowledgeBaseCountByOwner.mock.funcGetKnowledgeBaseCountByOwner != nil {
 		mmGetKnowledgeBaseCountByOwner.mock.t.Fatalf("RepositoryIMock.GetKnowledgeBaseCountByOwner mock is already set by Set")
 	}
 
 	expectation := &RepositoryIMockGetKnowledgeBaseCountByOwnerExpectation{
 		mock:   mmGetKnowledgeBaseCountByOwner.mock,
-		params: &RepositoryIMockGetKnowledgeBaseCountByOwnerParams{ctx, ownerUID},
+		params: &RepositoryIMockGetKnowledgeBaseCountByOwnerParams{ctx, ownerUID, catalogType},
 	}
 	mmGetKnowledgeBaseCountByOwner.expectations = append(mmGetKnowledgeBaseCountByOwner.expectations, expectation)
 	return expectation
@@ -8907,15 +8941,15 @@ func (mmGetKnowledgeBaseCountByOwner *mRepositoryIMockGetKnowledgeBaseCountByOwn
 }
 
 // GetKnowledgeBaseCountByOwner implements repository.RepositoryI
-func (mmGetKnowledgeBaseCountByOwner *RepositoryIMock) GetKnowledgeBaseCountByOwner(ctx context.Context, ownerUID string) (i1 int64, err error) {
+func (mmGetKnowledgeBaseCountByOwner *RepositoryIMock) GetKnowledgeBaseCountByOwner(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType) (i1 int64, err error) {
 	mm_atomic.AddUint64(&mmGetKnowledgeBaseCountByOwner.beforeGetKnowledgeBaseCountByOwnerCounter, 1)
 	defer mm_atomic.AddUint64(&mmGetKnowledgeBaseCountByOwner.afterGetKnowledgeBaseCountByOwnerCounter, 1)
 
 	if mmGetKnowledgeBaseCountByOwner.inspectFuncGetKnowledgeBaseCountByOwner != nil {
-		mmGetKnowledgeBaseCountByOwner.inspectFuncGetKnowledgeBaseCountByOwner(ctx, ownerUID)
+		mmGetKnowledgeBaseCountByOwner.inspectFuncGetKnowledgeBaseCountByOwner(ctx, ownerUID, catalogType)
 	}
 
-	mm_params := RepositoryIMockGetKnowledgeBaseCountByOwnerParams{ctx, ownerUID}
+	mm_params := RepositoryIMockGetKnowledgeBaseCountByOwnerParams{ctx, ownerUID, catalogType}
 
 	// Record call args
 	mmGetKnowledgeBaseCountByOwner.GetKnowledgeBaseCountByOwnerMock.mutex.Lock()
@@ -8934,7 +8968,7 @@ func (mmGetKnowledgeBaseCountByOwner *RepositoryIMock) GetKnowledgeBaseCountByOw
 		mm_want := mmGetKnowledgeBaseCountByOwner.GetKnowledgeBaseCountByOwnerMock.defaultExpectation.params
 		mm_want_ptrs := mmGetKnowledgeBaseCountByOwner.GetKnowledgeBaseCountByOwnerMock.defaultExpectation.paramPtrs
 
-		mm_got := RepositoryIMockGetKnowledgeBaseCountByOwnerParams{ctx, ownerUID}
+		mm_got := RepositoryIMockGetKnowledgeBaseCountByOwnerParams{ctx, ownerUID, catalogType}
 
 		if mm_want_ptrs != nil {
 
@@ -8944,6 +8978,10 @@ func (mmGetKnowledgeBaseCountByOwner *RepositoryIMock) GetKnowledgeBaseCountByOw
 
 			if mm_want_ptrs.ownerUID != nil && !minimock.Equal(*mm_want_ptrs.ownerUID, mm_got.ownerUID) {
 				mmGetKnowledgeBaseCountByOwner.t.Errorf("RepositoryIMock.GetKnowledgeBaseCountByOwner got unexpected parameter ownerUID, want: %#v, got: %#v%s\n", *mm_want_ptrs.ownerUID, mm_got.ownerUID, minimock.Diff(*mm_want_ptrs.ownerUID, mm_got.ownerUID))
+			}
+
+			if mm_want_ptrs.catalogType != nil && !minimock.Equal(*mm_want_ptrs.catalogType, mm_got.catalogType) {
+				mmGetKnowledgeBaseCountByOwner.t.Errorf("RepositoryIMock.GetKnowledgeBaseCountByOwner got unexpected parameter catalogType, want: %#v, got: %#v%s\n", *mm_want_ptrs.catalogType, mm_got.catalogType, minimock.Diff(*mm_want_ptrs.catalogType, mm_got.catalogType))
 			}
 
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
@@ -8957,9 +8995,9 @@ func (mmGetKnowledgeBaseCountByOwner *RepositoryIMock) GetKnowledgeBaseCountByOw
 		return (*mm_results).i1, (*mm_results).err
 	}
 	if mmGetKnowledgeBaseCountByOwner.funcGetKnowledgeBaseCountByOwner != nil {
-		return mmGetKnowledgeBaseCountByOwner.funcGetKnowledgeBaseCountByOwner(ctx, ownerUID)
+		return mmGetKnowledgeBaseCountByOwner.funcGetKnowledgeBaseCountByOwner(ctx, ownerUID, catalogType)
 	}
-	mmGetKnowledgeBaseCountByOwner.t.Fatalf("Unexpected call to RepositoryIMock.GetKnowledgeBaseCountByOwner. %v %v", ctx, ownerUID)
+	mmGetKnowledgeBaseCountByOwner.t.Fatalf("Unexpected call to RepositoryIMock.GetKnowledgeBaseCountByOwner. %v %v %v", ctx, ownerUID, catalogType)
 	return
 }
 
@@ -17766,6 +17804,339 @@ func (m *RepositoryIMock) MinimockListKnowledgeBasesInspect() {
 	}
 }
 
+type mRepositoryIMockListKnowledgeBasesByCatalogType struct {
+	mock               *RepositoryIMock
+	defaultExpectation *RepositoryIMockListKnowledgeBasesByCatalogTypeExpectation
+	expectations       []*RepositoryIMockListKnowledgeBasesByCatalogTypeExpectation
+
+	callArgs []*RepositoryIMockListKnowledgeBasesByCatalogTypeParams
+	mutex    sync.RWMutex
+
+	expectedInvocations uint64
+}
+
+// RepositoryIMockListKnowledgeBasesByCatalogTypeExpectation specifies expectation struct of the RepositoryI.ListKnowledgeBasesByCatalogType
+type RepositoryIMockListKnowledgeBasesByCatalogTypeExpectation struct {
+	mock      *RepositoryIMock
+	params    *RepositoryIMockListKnowledgeBasesByCatalogTypeParams
+	paramPtrs *RepositoryIMockListKnowledgeBasesByCatalogTypeParamPtrs
+	results   *RepositoryIMockListKnowledgeBasesByCatalogTypeResults
+	Counter   uint64
+}
+
+// RepositoryIMockListKnowledgeBasesByCatalogTypeParams contains parameters of the RepositoryI.ListKnowledgeBasesByCatalogType
+type RepositoryIMockListKnowledgeBasesByCatalogTypeParams struct {
+	ctx         context.Context
+	ownerUID    string
+	catalogType artifactpb.CatalogType
+}
+
+// RepositoryIMockListKnowledgeBasesByCatalogTypeParamPtrs contains pointers to parameters of the RepositoryI.ListKnowledgeBasesByCatalogType
+type RepositoryIMockListKnowledgeBasesByCatalogTypeParamPtrs struct {
+	ctx         *context.Context
+	ownerUID    *string
+	catalogType *artifactpb.CatalogType
+}
+
+// RepositoryIMockListKnowledgeBasesByCatalogTypeResults contains results of the RepositoryI.ListKnowledgeBasesByCatalogType
+type RepositoryIMockListKnowledgeBasesByCatalogTypeResults struct {
+	ka1 []mm_repository.KnowledgeBase
+	err error
+}
+
+// Expect sets up expected params for RepositoryI.ListKnowledgeBasesByCatalogType
+func (mmListKnowledgeBasesByCatalogType *mRepositoryIMockListKnowledgeBasesByCatalogType) Expect(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType) *mRepositoryIMockListKnowledgeBasesByCatalogType {
+	if mmListKnowledgeBasesByCatalogType.mock.funcListKnowledgeBasesByCatalogType != nil {
+		mmListKnowledgeBasesByCatalogType.mock.t.Fatalf("RepositoryIMock.ListKnowledgeBasesByCatalogType mock is already set by Set")
+	}
+
+	if mmListKnowledgeBasesByCatalogType.defaultExpectation == nil {
+		mmListKnowledgeBasesByCatalogType.defaultExpectation = &RepositoryIMockListKnowledgeBasesByCatalogTypeExpectation{}
+	}
+
+	if mmListKnowledgeBasesByCatalogType.defaultExpectation.paramPtrs != nil {
+		mmListKnowledgeBasesByCatalogType.mock.t.Fatalf("RepositoryIMock.ListKnowledgeBasesByCatalogType mock is already set by ExpectParams functions")
+	}
+
+	mmListKnowledgeBasesByCatalogType.defaultExpectation.params = &RepositoryIMockListKnowledgeBasesByCatalogTypeParams{ctx, ownerUID, catalogType}
+	for _, e := range mmListKnowledgeBasesByCatalogType.expectations {
+		if minimock.Equal(e.params, mmListKnowledgeBasesByCatalogType.defaultExpectation.params) {
+			mmListKnowledgeBasesByCatalogType.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmListKnowledgeBasesByCatalogType.defaultExpectation.params)
+		}
+	}
+
+	return mmListKnowledgeBasesByCatalogType
+}
+
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.ListKnowledgeBasesByCatalogType
+func (mmListKnowledgeBasesByCatalogType *mRepositoryIMockListKnowledgeBasesByCatalogType) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockListKnowledgeBasesByCatalogType {
+	if mmListKnowledgeBasesByCatalogType.mock.funcListKnowledgeBasesByCatalogType != nil {
+		mmListKnowledgeBasesByCatalogType.mock.t.Fatalf("RepositoryIMock.ListKnowledgeBasesByCatalogType mock is already set by Set")
+	}
+
+	if mmListKnowledgeBasesByCatalogType.defaultExpectation == nil {
+		mmListKnowledgeBasesByCatalogType.defaultExpectation = &RepositoryIMockListKnowledgeBasesByCatalogTypeExpectation{}
+	}
+
+	if mmListKnowledgeBasesByCatalogType.defaultExpectation.params != nil {
+		mmListKnowledgeBasesByCatalogType.mock.t.Fatalf("RepositoryIMock.ListKnowledgeBasesByCatalogType mock is already set by Expect")
+	}
+
+	if mmListKnowledgeBasesByCatalogType.defaultExpectation.paramPtrs == nil {
+		mmListKnowledgeBasesByCatalogType.defaultExpectation.paramPtrs = &RepositoryIMockListKnowledgeBasesByCatalogTypeParamPtrs{}
+	}
+	mmListKnowledgeBasesByCatalogType.defaultExpectation.paramPtrs.ctx = &ctx
+
+	return mmListKnowledgeBasesByCatalogType
+}
+
+// ExpectOwnerUIDParam2 sets up expected param ownerUID for RepositoryI.ListKnowledgeBasesByCatalogType
+func (mmListKnowledgeBasesByCatalogType *mRepositoryIMockListKnowledgeBasesByCatalogType) ExpectOwnerUIDParam2(ownerUID string) *mRepositoryIMockListKnowledgeBasesByCatalogType {
+	if mmListKnowledgeBasesByCatalogType.mock.funcListKnowledgeBasesByCatalogType != nil {
+		mmListKnowledgeBasesByCatalogType.mock.t.Fatalf("RepositoryIMock.ListKnowledgeBasesByCatalogType mock is already set by Set")
+	}
+
+	if mmListKnowledgeBasesByCatalogType.defaultExpectation == nil {
+		mmListKnowledgeBasesByCatalogType.defaultExpectation = &RepositoryIMockListKnowledgeBasesByCatalogTypeExpectation{}
+	}
+
+	if mmListKnowledgeBasesByCatalogType.defaultExpectation.params != nil {
+		mmListKnowledgeBasesByCatalogType.mock.t.Fatalf("RepositoryIMock.ListKnowledgeBasesByCatalogType mock is already set by Expect")
+	}
+
+	if mmListKnowledgeBasesByCatalogType.defaultExpectation.paramPtrs == nil {
+		mmListKnowledgeBasesByCatalogType.defaultExpectation.paramPtrs = &RepositoryIMockListKnowledgeBasesByCatalogTypeParamPtrs{}
+	}
+	mmListKnowledgeBasesByCatalogType.defaultExpectation.paramPtrs.ownerUID = &ownerUID
+
+	return mmListKnowledgeBasesByCatalogType
+}
+
+// ExpectCatalogTypeParam3 sets up expected param catalogType for RepositoryI.ListKnowledgeBasesByCatalogType
+func (mmListKnowledgeBasesByCatalogType *mRepositoryIMockListKnowledgeBasesByCatalogType) ExpectCatalogTypeParam3(catalogType artifactpb.CatalogType) *mRepositoryIMockListKnowledgeBasesByCatalogType {
+	if mmListKnowledgeBasesByCatalogType.mock.funcListKnowledgeBasesByCatalogType != nil {
+		mmListKnowledgeBasesByCatalogType.mock.t.Fatalf("RepositoryIMock.ListKnowledgeBasesByCatalogType mock is already set by Set")
+	}
+
+	if mmListKnowledgeBasesByCatalogType.defaultExpectation == nil {
+		mmListKnowledgeBasesByCatalogType.defaultExpectation = &RepositoryIMockListKnowledgeBasesByCatalogTypeExpectation{}
+	}
+
+	if mmListKnowledgeBasesByCatalogType.defaultExpectation.params != nil {
+		mmListKnowledgeBasesByCatalogType.mock.t.Fatalf("RepositoryIMock.ListKnowledgeBasesByCatalogType mock is already set by Expect")
+	}
+
+	if mmListKnowledgeBasesByCatalogType.defaultExpectation.paramPtrs == nil {
+		mmListKnowledgeBasesByCatalogType.defaultExpectation.paramPtrs = &RepositoryIMockListKnowledgeBasesByCatalogTypeParamPtrs{}
+	}
+	mmListKnowledgeBasesByCatalogType.defaultExpectation.paramPtrs.catalogType = &catalogType
+
+	return mmListKnowledgeBasesByCatalogType
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.ListKnowledgeBasesByCatalogType
+func (mmListKnowledgeBasesByCatalogType *mRepositoryIMockListKnowledgeBasesByCatalogType) Inspect(f func(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType)) *mRepositoryIMockListKnowledgeBasesByCatalogType {
+	if mmListKnowledgeBasesByCatalogType.mock.inspectFuncListKnowledgeBasesByCatalogType != nil {
+		mmListKnowledgeBasesByCatalogType.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.ListKnowledgeBasesByCatalogType")
+	}
+
+	mmListKnowledgeBasesByCatalogType.mock.inspectFuncListKnowledgeBasesByCatalogType = f
+
+	return mmListKnowledgeBasesByCatalogType
+}
+
+// Return sets up results that will be returned by RepositoryI.ListKnowledgeBasesByCatalogType
+func (mmListKnowledgeBasesByCatalogType *mRepositoryIMockListKnowledgeBasesByCatalogType) Return(ka1 []mm_repository.KnowledgeBase, err error) *RepositoryIMock {
+	if mmListKnowledgeBasesByCatalogType.mock.funcListKnowledgeBasesByCatalogType != nil {
+		mmListKnowledgeBasesByCatalogType.mock.t.Fatalf("RepositoryIMock.ListKnowledgeBasesByCatalogType mock is already set by Set")
+	}
+
+	if mmListKnowledgeBasesByCatalogType.defaultExpectation == nil {
+		mmListKnowledgeBasesByCatalogType.defaultExpectation = &RepositoryIMockListKnowledgeBasesByCatalogTypeExpectation{mock: mmListKnowledgeBasesByCatalogType.mock}
+	}
+	mmListKnowledgeBasesByCatalogType.defaultExpectation.results = &RepositoryIMockListKnowledgeBasesByCatalogTypeResults{ka1, err}
+	return mmListKnowledgeBasesByCatalogType.mock
+}
+
+// Set uses given function f to mock the RepositoryI.ListKnowledgeBasesByCatalogType method
+func (mmListKnowledgeBasesByCatalogType *mRepositoryIMockListKnowledgeBasesByCatalogType) Set(f func(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType) (ka1 []mm_repository.KnowledgeBase, err error)) *RepositoryIMock {
+	if mmListKnowledgeBasesByCatalogType.defaultExpectation != nil {
+		mmListKnowledgeBasesByCatalogType.mock.t.Fatalf("Default expectation is already set for the RepositoryI.ListKnowledgeBasesByCatalogType method")
+	}
+
+	if len(mmListKnowledgeBasesByCatalogType.expectations) > 0 {
+		mmListKnowledgeBasesByCatalogType.mock.t.Fatalf("Some expectations are already set for the RepositoryI.ListKnowledgeBasesByCatalogType method")
+	}
+
+	mmListKnowledgeBasesByCatalogType.mock.funcListKnowledgeBasesByCatalogType = f
+	return mmListKnowledgeBasesByCatalogType.mock
+}
+
+// When sets expectation for the RepositoryI.ListKnowledgeBasesByCatalogType which will trigger the result defined by the following
+// Then helper
+func (mmListKnowledgeBasesByCatalogType *mRepositoryIMockListKnowledgeBasesByCatalogType) When(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType) *RepositoryIMockListKnowledgeBasesByCatalogTypeExpectation {
+	if mmListKnowledgeBasesByCatalogType.mock.funcListKnowledgeBasesByCatalogType != nil {
+		mmListKnowledgeBasesByCatalogType.mock.t.Fatalf("RepositoryIMock.ListKnowledgeBasesByCatalogType mock is already set by Set")
+	}
+
+	expectation := &RepositoryIMockListKnowledgeBasesByCatalogTypeExpectation{
+		mock:   mmListKnowledgeBasesByCatalogType.mock,
+		params: &RepositoryIMockListKnowledgeBasesByCatalogTypeParams{ctx, ownerUID, catalogType},
+	}
+	mmListKnowledgeBasesByCatalogType.expectations = append(mmListKnowledgeBasesByCatalogType.expectations, expectation)
+	return expectation
+}
+
+// Then sets up RepositoryI.ListKnowledgeBasesByCatalogType return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockListKnowledgeBasesByCatalogTypeExpectation) Then(ka1 []mm_repository.KnowledgeBase, err error) *RepositoryIMock {
+	e.results = &RepositoryIMockListKnowledgeBasesByCatalogTypeResults{ka1, err}
+	return e.mock
+}
+
+// Times sets number of times RepositoryI.ListKnowledgeBasesByCatalogType should be invoked
+func (mmListKnowledgeBasesByCatalogType *mRepositoryIMockListKnowledgeBasesByCatalogType) Times(n uint64) *mRepositoryIMockListKnowledgeBasesByCatalogType {
+	if n == 0 {
+		mmListKnowledgeBasesByCatalogType.mock.t.Fatalf("Times of RepositoryIMock.ListKnowledgeBasesByCatalogType mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmListKnowledgeBasesByCatalogType.expectedInvocations, n)
+	return mmListKnowledgeBasesByCatalogType
+}
+
+func (mmListKnowledgeBasesByCatalogType *mRepositoryIMockListKnowledgeBasesByCatalogType) invocationsDone() bool {
+	if len(mmListKnowledgeBasesByCatalogType.expectations) == 0 && mmListKnowledgeBasesByCatalogType.defaultExpectation == nil && mmListKnowledgeBasesByCatalogType.mock.funcListKnowledgeBasesByCatalogType == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmListKnowledgeBasesByCatalogType.mock.afterListKnowledgeBasesByCatalogTypeCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmListKnowledgeBasesByCatalogType.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// ListKnowledgeBasesByCatalogType implements repository.RepositoryI
+func (mmListKnowledgeBasesByCatalogType *RepositoryIMock) ListKnowledgeBasesByCatalogType(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType) (ka1 []mm_repository.KnowledgeBase, err error) {
+	mm_atomic.AddUint64(&mmListKnowledgeBasesByCatalogType.beforeListKnowledgeBasesByCatalogTypeCounter, 1)
+	defer mm_atomic.AddUint64(&mmListKnowledgeBasesByCatalogType.afterListKnowledgeBasesByCatalogTypeCounter, 1)
+
+	if mmListKnowledgeBasesByCatalogType.inspectFuncListKnowledgeBasesByCatalogType != nil {
+		mmListKnowledgeBasesByCatalogType.inspectFuncListKnowledgeBasesByCatalogType(ctx, ownerUID, catalogType)
+	}
+
+	mm_params := RepositoryIMockListKnowledgeBasesByCatalogTypeParams{ctx, ownerUID, catalogType}
+
+	// Record call args
+	mmListKnowledgeBasesByCatalogType.ListKnowledgeBasesByCatalogTypeMock.mutex.Lock()
+	mmListKnowledgeBasesByCatalogType.ListKnowledgeBasesByCatalogTypeMock.callArgs = append(mmListKnowledgeBasesByCatalogType.ListKnowledgeBasesByCatalogTypeMock.callArgs, &mm_params)
+	mmListKnowledgeBasesByCatalogType.ListKnowledgeBasesByCatalogTypeMock.mutex.Unlock()
+
+	for _, e := range mmListKnowledgeBasesByCatalogType.ListKnowledgeBasesByCatalogTypeMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.ka1, e.results.err
+		}
+	}
+
+	if mmListKnowledgeBasesByCatalogType.ListKnowledgeBasesByCatalogTypeMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmListKnowledgeBasesByCatalogType.ListKnowledgeBasesByCatalogTypeMock.defaultExpectation.Counter, 1)
+		mm_want := mmListKnowledgeBasesByCatalogType.ListKnowledgeBasesByCatalogTypeMock.defaultExpectation.params
+		mm_want_ptrs := mmListKnowledgeBasesByCatalogType.ListKnowledgeBasesByCatalogTypeMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryIMockListKnowledgeBasesByCatalogTypeParams{ctx, ownerUID, catalogType}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmListKnowledgeBasesByCatalogType.t.Errorf("RepositoryIMock.ListKnowledgeBasesByCatalogType got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.ownerUID != nil && !minimock.Equal(*mm_want_ptrs.ownerUID, mm_got.ownerUID) {
+				mmListKnowledgeBasesByCatalogType.t.Errorf("RepositoryIMock.ListKnowledgeBasesByCatalogType got unexpected parameter ownerUID, want: %#v, got: %#v%s\n", *mm_want_ptrs.ownerUID, mm_got.ownerUID, minimock.Diff(*mm_want_ptrs.ownerUID, mm_got.ownerUID))
+			}
+
+			if mm_want_ptrs.catalogType != nil && !minimock.Equal(*mm_want_ptrs.catalogType, mm_got.catalogType) {
+				mmListKnowledgeBasesByCatalogType.t.Errorf("RepositoryIMock.ListKnowledgeBasesByCatalogType got unexpected parameter catalogType, want: %#v, got: %#v%s\n", *mm_want_ptrs.catalogType, mm_got.catalogType, minimock.Diff(*mm_want_ptrs.catalogType, mm_got.catalogType))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmListKnowledgeBasesByCatalogType.t.Errorf("RepositoryIMock.ListKnowledgeBasesByCatalogType got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmListKnowledgeBasesByCatalogType.ListKnowledgeBasesByCatalogTypeMock.defaultExpectation.results
+		if mm_results == nil {
+			mmListKnowledgeBasesByCatalogType.t.Fatal("No results are set for the RepositoryIMock.ListKnowledgeBasesByCatalogType")
+		}
+		return (*mm_results).ka1, (*mm_results).err
+	}
+	if mmListKnowledgeBasesByCatalogType.funcListKnowledgeBasesByCatalogType != nil {
+		return mmListKnowledgeBasesByCatalogType.funcListKnowledgeBasesByCatalogType(ctx, ownerUID, catalogType)
+	}
+	mmListKnowledgeBasesByCatalogType.t.Fatalf("Unexpected call to RepositoryIMock.ListKnowledgeBasesByCatalogType. %v %v %v", ctx, ownerUID, catalogType)
+	return
+}
+
+// ListKnowledgeBasesByCatalogTypeAfterCounter returns a count of finished RepositoryIMock.ListKnowledgeBasesByCatalogType invocations
+func (mmListKnowledgeBasesByCatalogType *RepositoryIMock) ListKnowledgeBasesByCatalogTypeAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmListKnowledgeBasesByCatalogType.afterListKnowledgeBasesByCatalogTypeCounter)
+}
+
+// ListKnowledgeBasesByCatalogTypeBeforeCounter returns a count of RepositoryIMock.ListKnowledgeBasesByCatalogType invocations
+func (mmListKnowledgeBasesByCatalogType *RepositoryIMock) ListKnowledgeBasesByCatalogTypeBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmListKnowledgeBasesByCatalogType.beforeListKnowledgeBasesByCatalogTypeCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryIMock.ListKnowledgeBasesByCatalogType.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmListKnowledgeBasesByCatalogType *mRepositoryIMockListKnowledgeBasesByCatalogType) Calls() []*RepositoryIMockListKnowledgeBasesByCatalogTypeParams {
+	mmListKnowledgeBasesByCatalogType.mutex.RLock()
+
+	argCopy := make([]*RepositoryIMockListKnowledgeBasesByCatalogTypeParams, len(mmListKnowledgeBasesByCatalogType.callArgs))
+	copy(argCopy, mmListKnowledgeBasesByCatalogType.callArgs)
+
+	mmListKnowledgeBasesByCatalogType.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockListKnowledgeBasesByCatalogTypeDone returns true if the count of the ListKnowledgeBasesByCatalogType invocations corresponds
+// the number of defined expectations
+func (m *RepositoryIMock) MinimockListKnowledgeBasesByCatalogTypeDone() bool {
+	for _, e := range m.ListKnowledgeBasesByCatalogTypeMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.ListKnowledgeBasesByCatalogTypeMock.invocationsDone()
+}
+
+// MinimockListKnowledgeBasesByCatalogTypeInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockListKnowledgeBasesByCatalogTypeInspect() {
+	for _, e := range m.ListKnowledgeBasesByCatalogTypeMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryIMock.ListKnowledgeBasesByCatalogType with params: %#v", *e.params)
+		}
+	}
+
+	afterListKnowledgeBasesByCatalogTypeCounter := mm_atomic.LoadUint64(&m.afterListKnowledgeBasesByCatalogTypeCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.ListKnowledgeBasesByCatalogTypeMock.defaultExpectation != nil && afterListKnowledgeBasesByCatalogTypeCounter < 1 {
+		if m.ListKnowledgeBasesByCatalogTypeMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to RepositoryIMock.ListKnowledgeBasesByCatalogType")
+		} else {
+			m.t.Errorf("Expected call to RepositoryIMock.ListKnowledgeBasesByCatalogType with params: %#v", *m.ListKnowledgeBasesByCatalogTypeMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcListKnowledgeBasesByCatalogType != nil && afterListKnowledgeBasesByCatalogTypeCounter < 1 {
+		m.t.Error("Expected call to RepositoryIMock.ListKnowledgeBasesByCatalogType")
+	}
+
+	if !m.ListKnowledgeBasesByCatalogTypeMock.invocationsDone() && afterListKnowledgeBasesByCatalogTypeCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.ListKnowledgeBasesByCatalogType but found %d calls",
+			mm_atomic.LoadUint64(&m.ListKnowledgeBasesByCatalogTypeMock.expectedInvocations), afterListKnowledgeBasesByCatalogTypeCounter)
+	}
+}
+
 type mRepositoryIMockProcessKnowledgeBaseFiles struct {
 	mock               *RepositoryIMock
 	defaultExpectation *RepositoryIMockProcessKnowledgeBaseFilesExpectation
@@ -21484,6 +21855,8 @@ func (m *RepositoryIMock) MinimockFinish() {
 
 			m.MinimockListKnowledgeBasesInspect()
 
+			m.MinimockListKnowledgeBasesByCatalogTypeInspect()
+
 			m.MinimockProcessKnowledgeBaseFilesInspect()
 
 			m.MinimockTextChunkTableNameInspect()
@@ -21584,6 +21957,7 @@ func (m *RepositoryIMock) minimockDone() bool {
 		m.MinimockListEmbeddingsByKbFileUIDDone() &&
 		m.MinimockListKnowledgeBaseFilesDone() &&
 		m.MinimockListKnowledgeBasesDone() &&
+		m.MinimockListKnowledgeBasesByCatalogTypeDone() &&
 		m.MinimockProcessKnowledgeBaseFilesDone() &&
 		m.MinimockTextChunkTableNameDone() &&
 		m.MinimockUpdateChunkDone() &&

@@ -59,7 +59,7 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 	// check if user has reached the maximum number of catalogs
 	// note: the simple implementation have race condition to bypass the check,
 	// but it is okay for now
-	kbCount, err := ph.service.Repository.GetKnowledgeBaseCountByOwner(ctx, ns.NsUID.String())
+	kbCount, err := ph.service.Repository.GetKnowledgeBaseCountByOwner(ctx, ns.NsUID.String(), artifactpb.CatalogType_CATALOG_TYPE_PERSISTENT)
 	if err != nil {
 		log.Error("failed to get catalog count", zap.Error(err))
 		return nil, fmt.Errorf(ErrorCreateKnowledgeBaseMsg, err)
@@ -117,6 +117,11 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 		return nil
 	}
 
+	// if catalog type is not set, set it to persistent
+	if req.GetType() == artifactpb.CatalogType_CATALOG_TYPE_UNSPECIFIED {
+		req.Type = artifactpb.CatalogType_CATALOG_TYPE_PERSISTENT
+	}
+
 	// create catalog
 	dbData, err := ph.service.Repository.CreateKnowledgeBase(ctx,
 		repository.KnowledgeBase{
@@ -127,6 +132,7 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 			Tags:        req.Tags,
 			Owner:       ns.NsUID.String(),
 			CreatorUID:  creatorUUID,
+			CatalogType: req.GetType().String(),
 		}, callExternalService,
 	)
 	if err != nil {
@@ -135,20 +141,29 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 
 	return &artifactpb.CreateCatalogResponse{
 		Catalog: &artifactpb.Catalog{
-			Name:                dbData.Name,
-			CatalogId:           dbData.KbID,
-			Description:         dbData.Description,
-			Tags:                dbData.Tags,
-			OwnerName:           dbData.Owner,
-			CreateTime:          dbData.CreateTime.String(),
-			UpdateTime:          dbData.UpdateTime.String(),
-			ConvertingPipelines: []string{"preset/indexing-convert-pdf"},
-			SplittingPipelines:  []string{"preset/indexing-split-text", "preset/indexing-split-markdown"},
-			EmbeddingPipelines:  []string{"preset/indexing-embed"},
-			DownstreamApps:      []string{},
-			TotalFiles:          0,
-			TotalTokens:         0,
-			UsedStorage:         0,
+			Name:        dbData.Name,
+			CatalogUid:  dbData.UID.String(),
+			CatalogId:   dbData.KbID,
+			Description: dbData.Description,
+			Tags:        dbData.Tags,
+			OwnerName:   dbData.Owner,
+			CreateTime:  dbData.CreateTime.String(),
+			UpdateTime:  dbData.UpdateTime.String(),
+			ConvertingPipelines: []string{
+				service.NamespaceID + "/" + service.ConvertDocToMDPipelineID + "@" + service.DocToMDVersion,
+				service.NamespaceID + "/" + service.ConvertDocToMDPipelineID2 + "@" + service.DocToMDVersion2,
+			},
+			SplittingPipelines: []string{
+				service.NamespaceID + "/" + service.TextChunkPipelineID + "@" + service.TextSplitVersion,
+				service.NamespaceID + "/" + service.MdChunkPipelineID + "@" + service.MdSplitVersion,
+			},
+			EmbeddingPipelines: []string{
+				service.NamespaceID + "/" + service.TextEmbedPipelineID + "@" + service.TextEmbedVersion,
+			},
+			DownstreamApps: []string{},
+			TotalFiles:     0,
+			TotalTokens:    0,
+			UsedStorage:    0,
 		},
 	}, nil
 }
@@ -183,7 +198,7 @@ func (ph *PublicHandler) ListCatalogs(ctx context.Context, req *artifactpb.ListC
 		return nil, fmt.Errorf("failed to check namespace permission. err:%w", err)
 	}
 
-	dbData, err := ph.service.Repository.ListKnowledgeBases(ctx, ns.NsUID.String())
+	dbData, err := ph.service.Repository.ListKnowledgeBasesByCatalogType(ctx, ns.NsUID.String(), artifactpb.CatalogType_CATALOG_TYPE_PERSISTENT)
 	if err != nil {
 		log.Error("failed to get catalogs", zap.Error(err))
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
@@ -207,23 +222,29 @@ func (ph *PublicHandler) ListCatalogs(ctx context.Context, req *artifactpb.ListC
 	kbs := make([]*artifactpb.Catalog, len(dbData))
 	for i, kb := range dbData {
 		kbs[i] = &artifactpb.Catalog{
-			CatalogUid:          kb.UID.String(),
-			Name:                kb.Name,
-			CatalogId:           kb.KbID,
-			Description:         kb.Description,
-			Tags:                kb.Tags,
-			CreateTime:          kb.CreateTime.String(),
-			UpdateTime:          kb.UpdateTime.String(),
-			OwnerName:           kb.Owner,
-			ConvertingPipelines: []string{service.NamespaceID + "/" + service.ConvertDocToMDPipelineID},
+			CatalogUid:  kb.UID.String(),
+			Name:        kb.Name,
+			CatalogId:   kb.KbID,
+			Description: kb.Description,
+			Tags:        kb.Tags,
+			CreateTime:  kb.CreateTime.String(),
+			UpdateTime:  kb.UpdateTime.String(),
+			OwnerName:   kb.Owner,
+			ConvertingPipelines: []string{
+				service.NamespaceID + "/" + service.ConvertDocToMDPipelineID + "@" + service.DocToMDVersion,
+				service.NamespaceID + "/" + service.ConvertDocToMDPipelineID2 + "@" + service.DocToMDVersion2,
+			},
 			SplittingPipelines: []string{
-				service.NamespaceID + "/" + service.TextChunkPipelineID,
-				service.NamespaceID + "/" + service.MdChunkPipelineID},
-			EmbeddingPipelines: []string{service.NamespaceID + "/" + service.TextEmbedPipelineID},
-			DownstreamApps:     []string{},
-			TotalFiles:         uint32(fileCounts[kb.UID]),
-			TotalTokens:        uint32(tokenCounts[kb.UID]),
-			UsedStorage:        uint64(kb.Usage),
+				service.NamespaceID + "/" + service.TextChunkPipelineID + "@" + service.TextSplitVersion,
+				service.NamespaceID + "/" + service.MdChunkPipelineID + "@" + service.MdSplitVersion,
+			},
+			EmbeddingPipelines: []string{
+				service.NamespaceID + "/" + service.TextEmbedPipelineID + "@" + service.TextEmbedVersion,
+			},
+			DownstreamApps: []string{},
+			TotalFiles:     uint32(fileCounts[kb.UID]),
+			TotalTokens:    uint32(tokenCounts[kb.UID]),
+			UsedStorage:    uint64(kb.Usage),
 		}
 	}
 	return &artifactpb.ListCatalogsResponse{
@@ -241,7 +262,7 @@ func (ph *PublicHandler) UpdateCatalog(ctx context.Context, req *artifactpb.Upda
 	if req.CatalogId == "" {
 		log.Error("kb_id is empty", zap.Error(ErrCheckRequiredFields))
 		return nil, fmt.Errorf("kb_id is empty. err: %w", ErrCheckRequiredFields)
-	}
+}
 
 	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
 	if err != nil {
