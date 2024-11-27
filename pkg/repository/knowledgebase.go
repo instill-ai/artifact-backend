@@ -10,16 +10,18 @@ import (
 
 	"github.com/gofrs/uuid"
 	"github.com/instill-ai/artifact-backend/pkg/customerror"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	"gorm.io/gorm"
 )
 
 type KnowledgeBaseI interface {
 	CreateKnowledgeBase(ctx context.Context, kb KnowledgeBase, externalService func(kbUID string) error) (*KnowledgeBase, error)
 	ListKnowledgeBases(ctx context.Context, ownerUID string) ([]KnowledgeBase, error)
+	ListKnowledgeBasesByCatalogType(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType) ([]KnowledgeBase, error)
 	UpdateKnowledgeBase(ctx context.Context, ownerUID string, kb KnowledgeBase) (*KnowledgeBase, error)
 	DeleteKnowledgeBase(ctx context.Context, ownerUID, kbID string) (*KnowledgeBase, error)
 	GetKnowledgeBaseByOwnerAndKbID(ctx context.Context, ownerUID uuid.UUID, kbID string) (*KnowledgeBase, error)
-	GetKnowledgeBaseCountByOwner(ctx context.Context, ownerUID string) (int64, error)
+	GetKnowledgeBaseCountByOwner(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType) (int64, error)
 	IncreaseKnowledgeBaseUsage(ctx context.Context, tx *gorm.DB, kbUID string, amount int) error
 }
 
@@ -37,6 +39,8 @@ type KnowledgeBase struct {
 	// creator
 	CreatorUID uuid.UUID `gorm:"column:creator_uid;type:uuid;not null" json:"creator_uid"`
 	Usage      int64     `gorm:"column:usage;not null;default:0" json:"usage"`
+	// this type is defined in artifact/artifact/v1alpha/catalog.proto
+	CatalogType string `gorm:"column:catalog_type;size:255" json:"catalog_type"`
 }
 
 // table columns map
@@ -51,6 +55,7 @@ type KnowledgeBaseColumns struct {
 	UpdateTime  string
 	DeleteTime  string
 	Usage       string
+	CatalogType string
 }
 
 var KnowledgeBaseColumn = KnowledgeBaseColumns{
@@ -64,6 +69,7 @@ var KnowledgeBaseColumn = KnowledgeBaseColumns{
 	UpdateTime:  "update_time",
 	DeleteTime:  "delete_time",
 	Usage:       "usage",
+	CatalogType: "catalog_type",
 }
 
 // TagsArray is a custom type to handle PostgreSQL VARCHAR(255)[] arrays.
@@ -150,6 +156,18 @@ func (r *Repository) ListKnowledgeBases(ctx context.Context, owner string) ([]Kn
 	// Exclude records where DeleteTime is not null and filter by owner
 	whereString := fmt.Sprintf("%v IS NULL AND %v = ?", KnowledgeBaseColumn.DeleteTime, KnowledgeBaseColumn.Owner)
 	if err := r.db.WithContext(ctx).Where(whereString, owner).Find(&knowledgeBases).Error; err != nil {
+		return nil, err
+	}
+
+	return knowledgeBases, nil
+}
+
+// ListKnowledgeBasesByCatalogType fetches all KnowledgeBase records from the database, excluding soft-deleted ones.
+func (r *Repository) ListKnowledgeBasesByCatalogType(ctx context.Context, owner string, catalogType artifactpb.CatalogType) ([]KnowledgeBase, error) {
+	var knowledgeBases []KnowledgeBase
+	// Exclude records where DeleteTime is not null and filter by owner
+	whereString := fmt.Sprintf("%v IS NULL AND %v = ? AND %v = ?", KnowledgeBaseColumn.DeleteTime, KnowledgeBaseColumn.Owner, KnowledgeBaseColumn.CatalogType)
+	if err := r.db.WithContext(ctx).Where(whereString, owner, catalogType.String()).Find(&knowledgeBases).Error; err != nil {
 		return nil, err
 	}
 
@@ -257,10 +275,10 @@ func (r *Repository) GetKnowledgeBaseByOwnerAndKbID(ctx context.Context, owner u
 }
 
 // get the count of knowledge bases by owner
-func (r *Repository) GetKnowledgeBaseCountByOwner(ctx context.Context, owner string) (int64, error) {
+func (r *Repository) GetKnowledgeBaseCountByOwner(ctx context.Context, owner string, catalogType artifactpb.CatalogType) (int64, error) {
 	var count int64
-	whereString := fmt.Sprintf("%v = ? AND %v is NULL", KnowledgeBaseColumn.Owner, KnowledgeBaseColumn.DeleteTime)
-	if err := r.db.WithContext(ctx).Model(&KnowledgeBase{}).Where(whereString, owner).Count(&count).Error; err != nil {
+	whereString := fmt.Sprintf("%v = ? AND %v is NULL AND %v = ?", KnowledgeBaseColumn.Owner, KnowledgeBaseColumn.DeleteTime, KnowledgeBaseColumn.CatalogType)
+	if err := r.db.WithContext(ctx).Model(&KnowledgeBase{}).Where(whereString, owner, catalogType.String()).Count(&count).Error; err != nil {
 		return 0, err
 	}
 	return count, nil
