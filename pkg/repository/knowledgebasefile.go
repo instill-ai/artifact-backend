@@ -559,9 +559,12 @@ func (r *Repository) GetKnowledgebaseFileByKbUIDAndFileID(ctx context.Context, k
 }
 
 type SourceMeta struct {
-	KbUID      uuid.UUID
-	Dest       string
-	CreateTime time.Time
+	OriginalFileUID uuid.UUID
+	OriginalFileName string
+	KbUID           uuid.UUID
+	Dest            string
+	CreateTime      time.Time
+	UpdateTime      time.Time
 }
 
 // GetTruthSourceByFileUID returns the truth source file destination of minIO by file UID
@@ -579,15 +582,19 @@ func (r *Repository) GetTruthSourceByFileUID(ctx context.Context, fileUID uuid.U
 		return nil, err
 	}
 	// assign truth source file destination and create time
+	originalFileUID := file.UID
+	originalFileName := file.Name
 	var kbUID uuid.UUID
 	var dest string
 	var createTime time.Time
+	var updateTime time.Time
 	switch file.Type {
 	// if the file type is text or markdown, the destination is the file destination
 	case artifactpb.FileType_FILE_TYPE_TEXT.String(), artifactpb.FileType_FILE_TYPE_MARKDOWN.String():
 		kbUID = file.KnowledgeBaseUID
 		dest = file.Destination
 		createTime = *file.CreateTime
+		updateTime = *file.UpdateTime
 	// if the file type is pdf, get the converted file destination
 	case artifactpb.FileType_FILE_TYPE_PDF.String(),
 		artifactpb.FileType_FILE_TYPE_HTML.String(),
@@ -613,12 +620,16 @@ func (r *Repository) GetTruthSourceByFileUID(ctx context.Context, fileUID uuid.U
 		kbUID = convertedFile.KbUID
 		dest = convertedFile.Destination
 		createTime = *convertedFile.CreateTime
+		updateTime = *convertedFile.UpdateTime
 	}
 
 	return &SourceMeta{
-		Dest:       dest,
-		CreateTime: createTime,
-		KbUID:      kbUID,
+		OriginalFileUID: originalFileUID,
+		OriginalFileName: originalFileName,
+		Dest:            dest,
+		CreateTime:      createTime,
+		UpdateTime:      updateTime,
+		KbUID:           kbUID,
 	}, nil
 }
 

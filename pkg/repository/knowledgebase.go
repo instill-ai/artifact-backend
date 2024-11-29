@@ -23,6 +23,7 @@ type KnowledgeBaseI interface {
 	GetKnowledgeBaseByOwnerAndKbID(ctx context.Context, ownerUID uuid.UUID, kbID string) (*KnowledgeBase, error)
 	GetKnowledgeBaseCountByOwner(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType) (int64, error)
 	IncreaseKnowledgeBaseUsage(ctx context.Context, tx *gorm.DB, kbUID string, amount int) error
+	GetKnowledgeBasesByUIDs(ctx context.Context, kbUIDs []uuid.UUID) ([]KnowledgeBase, error)
 }
 
 type KnowledgeBase struct {
@@ -296,4 +297,14 @@ func (r *Repository) IncreaseKnowledgeBaseUsage(ctx context.Context, tx *gorm.DB
 		return err
 	}
 	return nil
+}
+
+// get the knowledge bases by uids
+func (r *Repository) GetKnowledgeBasesByUIDs(ctx context.Context, kbUIDs []uuid.UUID) ([]KnowledgeBase, error) {
+	var knowledgeBases []KnowledgeBase
+	whereString := fmt.Sprintf("%v IN (?) AND %v IS NULL", KnowledgeBaseColumn.UID, KnowledgeBaseColumn.DeleteTime)
+	if err := r.db.WithContext(ctx).Where(whereString, kbUIDs).Find(&knowledgeBases).Error; err != nil {
+		return nil, err
+	}
+	return knowledgeBases, nil
 }
