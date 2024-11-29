@@ -15,6 +15,19 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+// convertToProtoChunk
+func convertToProtoChunk(chunk repository.TextChunk) *artifactpb.Chunk {
+	return &artifactpb.Chunk{
+		ChunkUid:        chunk.UID.String(),
+		Retrievable:     chunk.Retrievable,
+		StartPos:        uint32(chunk.StartPos),
+		EndPos:          uint32(chunk.EndPos),
+		Tokens:          uint32(chunk.Tokens),
+		CreateTime:      timestamppb.New(*chunk.CreateTime),
+		OriginalFileUid: chunk.KbFileUID.String(),
+	}
+}
+
 func (ph *PublicHandler) ListChunks(ctx context.Context, req *artifactpb.ListChunksRequest) (*artifactpb.ListChunksResponse, error) {
 	log, _ := logger.GetZapLogger(ctx)
 	authUID, err := getUserUIDFromContext(ctx)
@@ -73,19 +86,74 @@ func (ph *PublicHandler) ListChunks(ctx context.Context, req *artifactpb.ListChu
 
 	res := make([]*artifactpb.Chunk, 0, len(chunks))
 	for _, chunk := range chunks {
-		res = append(res, &artifactpb.Chunk{
-			ChunkUid:        chunk.UID.String(),
-			Retrievable:     chunk.Retrievable,
-			StartPos:        uint32(chunk.StartPos),
-			EndPos:          uint32(chunk.EndPos),
-			Tokens:          uint32(chunk.Tokens),
-			CreateTime:      timestamppb.New(*chunk.CreateTime),
-			OriginalFileUid: kbf.UID.String(),
-		})
+		res = append(res, convertToProtoChunk(chunk))
 	}
 
 	return &artifactpb.ListChunksResponse{
 		Chunks: res,
+	}, nil
+}
+
+func (ph *PublicHandler) SearchChunks(ctx context.Context, req *artifactpb.SearchChunksRequest) (*artifactpb.SearchChunksResponse, error) {
+	log, _ := logger.GetZapLogger(ctx)
+	_, err := getUserUIDFromContext(ctx)
+	if err != nil {
+		log.Error("failed to get user id from header", zap.Error(err))
+		return nil, fmt.Errorf("failed to get user id from header: %v. err: %w", err, customerror.ErrUnauthenticated)
+	}
+	// check if user can access the namespace
+	ns, err := ph.service.GetNamespaceAndCheckPermission(ctx, req.NamespaceId)
+	if err != nil {
+		log.Error("failed to get namespace and check permission", zap.Error(err))
+		return nil, fmt.Errorf("failed to get namespace and check permission: %w", err)
+	}
+
+	chunkUIDs := make([]uuid.UUID, 0, len(req.ChunkUids))
+	for _, chunkUID := range req.ChunkUids {
+		chunkUID, err := uuid.FromString(chunkUID)
+		if err != nil {
+			log.Error("failed to parse chunk uid", zap.Error(err))
+			return nil, fmt.Errorf("failed to parse chunk uid: %w", err)
+		}
+		chunkUIDs = append(chunkUIDs, chunkUID)
+	}
+	// check if the chunkUIs is more than 20
+	if len(chunkUIDs) > 25 {
+		log.Error("chunk uids is more than 20", zap.Int("chunk_uids_count", len(chunkUIDs)))
+		return nil, fmt.Errorf("chunk uids is more than 20")
+	}
+	chunks, err := ph.service.Repository.GetChunksByUIDs(ctx, chunkUIDs)
+	if err != nil {
+		log.Error("failed to get chunks by uids", zap.Error(err))
+		return nil, fmt.Errorf("failed to get chunks by uids: %w", err)
+	}
+
+	// get the kbUIDs from chunks
+	kbUIDs := make([]uuid.UUID, 0, len(chunks))
+	for _, chunk := range chunks {
+		kbUIDs = append(kbUIDs, chunk.KbUID)
+	}
+	// use kbUIDs to get the knowledge bases
+	knowledgeBases, err := ph.service.Repository.GetKnowledgeBasesByUIDs(ctx, kbUIDs)
+	if err != nil {
+		log.Error("failed to get knowledge bases by uids", zap.Error(err))
+		return nil, fmt.Errorf("failed to get knowledge bases by uids: %w", err)
+	}
+	// check if the chunks's knowledge base's owner(namespace uid) is the same as namespace uuid in path
+	for _, knowledgeBase := range knowledgeBases {
+		if knowledgeBase.Owner != ns.NsUID.String() {
+			log.Error("chunks's namespace is not the same as namespace in path", zap.String("namespace_id_in_path", ns.NsUID.String()), zap.String("namespace_id_in_chunks", knowledgeBase.Owner))
+			return nil, fmt.Errorf("chunks's namespace is not the same as namespace in path")
+		}
+	}
+
+	// populate the response
+	protoChunks := make([]*artifactpb.Chunk, 0, len(chunks))
+	for _, chunk := range chunks {
+		protoChunks = append(protoChunks, convertToProtoChunk(chunk))
+	}
+	return &artifactpb.SearchChunksResponse{
+		Chunks: protoChunks,
 	}, nil
 }
 
@@ -131,15 +199,7 @@ func (ph *PublicHandler) UpdateChunk(ctx context.Context, req *artifactpb.Update
 
 	return &artifactpb.UpdateChunkResponse{
 		// Populate the response fields appropriately
-		Chunk: &artifactpb.Chunk{
-			ChunkUid:    chunk.UID.String(),
-			Retrievable: chunk.Retrievable,
-			StartPos:    uint32(chunk.StartPos),
-			EndPos:      uint32(chunk.EndPos),
-			Tokens:      uint32(chunk.Tokens),
-			CreateTime:  timestamppb.New(*chunk.CreateTime),
-			// OriginalFileUid: chunk.FileUID.String(),
-		},
+		Chunk: convertToProtoChunk(*chunk),
 	}, nil
 }
 
@@ -187,5 +247,73 @@ func (ph *PublicHandler) GetSourceFile(ctx context.Context, req *artifactpb.GetS
 			CreateTime: timestamppb.New(source.CreateTime),
 			UpdateTime: timestamppb.New(source.CreateTime),
 		},
+	}, nil
+}
+
+// SearchSourceFiles
+func (ph *PublicHandler) SearchSourceFiles(ctx context.Context, req *artifactpb.SearchSourceFilesRequest) (*artifactpb.SearchSourceFilesResponse, error) {
+	log, _ := logger.GetZapLogger(ctx)
+	authUID, err := getUserUIDFromContext(ctx)
+	if err != nil {
+		log.Error("failed to get user id from header", zap.Error(err))
+		return nil, fmt.Errorf("failed to get user id from header: %v. err: %w", err, customerror.ErrUnauthenticated)
+	}
+
+	// Check if user can access the namespace
+	_, err = ph.service.GetNamespaceAndCheckPermission(ctx, req.NamespaceId)
+	if err != nil {
+		log.Error("failed to get namespace and check permission", zap.Error(err))
+		return nil, fmt.Errorf("failed to get namespace and check permission: %w", err)
+	}
+
+	fileUIDs := make([]uuid.UUID, 0, len(req.FileUids))
+	for _, fileUID := range req.FileUids {
+		uid, err := uuid.FromString(fileUID)
+		if err != nil {
+			log.Error("failed to parse file uid", zap.Error(err))
+			return nil, fmt.Errorf("failed to parse file uid: %v. err: %w", err, customerror.ErrInvalidArgument)
+		}
+		fileUIDs = append(fileUIDs, uid)
+	}
+
+	sources := make([]*artifactpb.SourceFile, 0, len(fileUIDs))
+	for _, fileUID := range fileUIDs {
+		source, err := ph.service.Repository.GetTruthSourceByFileUID(ctx, fileUID)
+		if err != nil {
+			log.Error("failed to get truth source by file uid", zap.Error(err))
+			return nil, fmt.Errorf("failed to get truth source by file uid. err: %w", err)
+		}
+
+		// ACL check for each source file
+		granted, err := ph.service.ACLClient.CheckPermission(ctx, "knowledgebase", source.KbUID, "reader")
+		if err != nil {
+			log.Error("failed to check permission", zap.Error(err))
+			return nil, fmt.Errorf("failed to check permission. err: %w", err)
+		}
+		if !granted {
+			log.Error("no permission to access source file",
+				zap.String("user_uid", authUID),
+				zap.String("kb_uid", source.KbUID.String()))
+			return nil, fmt.Errorf("no permission to access source file. err: %w. user_uid: %s. kb_uid: %s", customerror.ErrNoPermission, authUID, source.KbUID.String())
+		}
+
+		// Get file content from MinIO
+		content, err := ph.service.MinIO.GetFile(ctx, minio.KnowledgeBaseBucketName, source.Dest)
+		if err != nil {
+			log.Error("failed to get file from minio", zap.Error(err))
+			continue
+		}
+
+		sources = append(sources, &artifactpb.SourceFile{
+			OriginalFileUid:  source.OriginalFileUID.String(),
+			OriginalFileName: source.OriginalFileName,
+			Content:          string(content),
+			CreateTime:       timestamppb.New(source.CreateTime),
+			UpdateTime:       timestamppb.New(source.UpdateTime),
+		})
+	}
+
+	return &artifactpb.SearchSourceFilesResponse{
+		SourceFiles: sources,
 	}, nil
 }

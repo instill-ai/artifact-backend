@@ -44,3 +44,15 @@ func (s *Service) CheckCatalogUserPermission(ctx context.Context, nsID, catalogI
 
 	return ns, catalog, nil
 }
+
+func (s *Service) GetNamespaceAndCheckPermission(ctx context.Context, nsID string) (*resource.Namespace, error) {
+	ns, err := s.GetNamespaceByNsID(ctx, nsID)
+	if err != nil {
+		return nil, err
+	}
+	err = s.CheckNamespacePermission(ctx, ns)
+	if err != nil {
+		return nil, err
+	}
+	return ns, nil
+}

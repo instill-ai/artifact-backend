@@ -41,7 +41,7 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
 	if err != nil {
 		log.Error(
-			"failed to check namespace permission",
+			"failed to get namespace",
 			zap.Error(err),
 			zap.String("owner_id(ns_id)", req.GetNamespaceId()),
 			zap.String("auth_uid", authUID))
