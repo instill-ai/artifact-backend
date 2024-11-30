@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.22.0-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.21.0-alpha...v0.22.0-alpha) (2024-11-30)
+
+
+### Features
+
+* **artifact:** implement fast indexing for temporary catalog ([#134](https://github.com/instill-ai/artifact-backend/issues/134)) ([f7dd6d5](https://github.com/instill-ai/artifact-backend/commit/f7dd6d5ab60f03ff92637e31ea7aa7ae5261728f))
+* **artifact:** implement search chunks and sources ([#133](https://github.com/instill-ai/artifact-backend/issues/133)) ([8f1c966](https://github.com/instill-ai/artifact-backend/commit/8f1c966a925de6e5528a68b74dfa60ce853735f5))
+* **artifact:** support ephemeral catalog ([#131](https://github.com/instill-ai/artifact-backend/issues/131)) ([4ed0edd](https://github.com/instill-ai/artifact-backend/commit/4ed0edd779e8b593b129269b7774994aba11b420))
+
 ## [0.21.0-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.20.0-alpha...v0.21.0-alpha) (2024-11-14)
 
 
