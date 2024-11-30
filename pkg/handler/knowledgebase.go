@@ -154,11 +154,11 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 				service.NamespaceID + "/" + service.ConvertDocToMDPipelineID2 + "@" + service.DocToMDVersion2,
 			},
 			SplittingPipelines: []string{
-				service.NamespaceID + "/" + service.TextChunkPipelineID + "@" + service.TextSplitVersion,
-				service.NamespaceID + "/" + service.MdChunkPipelineID + "@" + service.MdSplitVersion,
+				service.NamespaceID + "/" + service.ChunkTextPipelineID + "@" + service.ChunkTextVersion,
+				service.NamespaceID + "/" + service.ChunkMdPipelineID + "@" + service.ChunkMdVersion,
 			},
 			EmbeddingPipelines: []string{
-				service.NamespaceID + "/" + service.TextEmbedPipelineID + "@" + service.TextEmbedVersion,
+				service.NamespaceID + "/" + service.EmbedTextPipelineID + "@" + service.EmbedTextVersion,
 			},
 			DownstreamApps: []string{},
 			TotalFiles:     0,
@@ -235,11 +235,11 @@ func (ph *PublicHandler) ListCatalogs(ctx context.Context, req *artifactpb.ListC
 				service.NamespaceID + "/" + service.ConvertDocToMDPipelineID2 + "@" + service.DocToMDVersion2,
 			},
 			SplittingPipelines: []string{
-				service.NamespaceID + "/" + service.TextChunkPipelineID + "@" + service.TextSplitVersion,
-				service.NamespaceID + "/" + service.MdChunkPipelineID + "@" + service.MdSplitVersion,
+				service.NamespaceID + "/" + service.ChunkTextPipelineID + "@" + service.ChunkTextVersion,
+				service.NamespaceID + "/" + service.ChunkMdPipelineID + "@" + service.ChunkMdVersion,
 			},
 			EmbeddingPipelines: []string{
-				service.NamespaceID + "/" + service.TextEmbedPipelineID + "@" + service.TextEmbedVersion,
+				service.NamespaceID + "/" + service.EmbedTextPipelineID + "@" + service.EmbedTextVersion,
 			},
 			DownstreamApps: []string{},
 			TotalFiles:     uint32(fileCounts[kb.UID]),
@@ -262,7 +262,7 @@ func (ph *PublicHandler) UpdateCatalog(ctx context.Context, req *artifactpb.Upda
 	if req.CatalogId == "" {
 		log.Error("kb_id is empty", zap.Error(ErrCheckRequiredFields))
 		return nil, fmt.Errorf("kb_id is empty. err: %w", ErrCheckRequiredFields)
-}
+	}
 
 	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
 	if err != nil {
@@ -318,22 +318,28 @@ func (ph *PublicHandler) UpdateCatalog(ctx context.Context, req *artifactpb.Upda
 	// populate response
 	return &artifactpb.UpdateCatalogResponse{
 		Catalog: &artifactpb.Catalog{
-			Name:                kb.Name,
-			CatalogId:           kb.KbID,
-			Description:         kb.Description,
-			Tags:                kb.Tags,
-			CreateTime:          kb.CreateTime.String(),
-			UpdateTime:          kb.UpdateTime.String(),
-			OwnerName:           kb.Owner,
-			ConvertingPipelines: []string{service.NamespaceID + "/" + service.ConvertDocToMDPipelineID},
+			Name:        kb.Name,
+			CatalogId:   kb.KbID,
+			Description: kb.Description,
+			Tags:        kb.Tags,
+			CreateTime:  kb.CreateTime.String(),
+			UpdateTime:  kb.UpdateTime.String(),
+			OwnerName:   kb.Owner,
+			ConvertingPipelines: []string{
+				service.NamespaceID + "/" + service.ConvertDocToMDPipelineID,
+				service.NamespaceID + "/" + service.ConvertDocToMDPipelineID2,
+			},
 			SplittingPipelines: []string{
-				service.NamespaceID + "/" + service.TextChunkPipelineID,
-				service.NamespaceID + "/" + service.MdChunkPipelineID},
-			EmbeddingPipelines: []string{service.NamespaceID + "/" + service.TextEmbedPipelineID},
-			DownstreamApps:     []string{},
-			TotalFiles:         uint32(fileCounts[kb.UID]),
-			TotalTokens:        uint32(tokenCounts[kb.UID]),
-			UsedStorage:        uint64(kb.Usage),
+				service.NamespaceID + "/" + service.ChunkTextPipelineID,
+				service.NamespaceID + "/" + service.ChunkMdPipelineID,
+			},
+			EmbeddingPipelines: []string{
+				service.NamespaceID + "/" + service.EmbedTextPipelineID,
+			},
+			DownstreamApps: []string{},
+			TotalFiles:     uint32(fileCounts[kb.UID]),
+			TotalTokens:    uint32(tokenCounts[kb.UID]),
+			UsedStorage:    uint64(kb.Usage),
 		},
 	}, nil
 }

@@ -208,8 +208,8 @@ type RepositoryIMock struct {
 	beforeGetKnowledgebaseFileByKbUIDAndFileIDCounter uint64
 	GetKnowledgebaseFileByKbUIDAndFileIDMock          mRepositoryIMockGetKnowledgebaseFileByKbUIDAndFileID
 
-	funcGetNeedProcessFiles          func(ctx context.Context) (ka1 []mm_repository.KnowledgeBaseFile)
-	inspectFuncGetNeedProcessFiles   func(ctx context.Context)
+	funcGetNeedProcessFiles          func(ctx context.Context, catalogType artifactpb.CatalogType) (ka1 []mm_repository.KnowledgeBaseFile)
+	inspectFuncGetNeedProcessFiles   func(ctx context.Context, catalogType artifactpb.CatalogType)
 	afterGetNeedProcessFilesCounter  uint64
 	beforeGetNeedProcessFilesCounter uint64
 	GetNeedProcessFilesMock          mRepositoryIMockGetNeedProcessFiles
@@ -10066,12 +10066,14 @@ type RepositoryIMockGetNeedProcessFilesExpectation struct {
 
 // RepositoryIMockGetNeedProcessFilesParams contains parameters of the RepositoryI.GetNeedProcessFiles
 type RepositoryIMockGetNeedProcessFilesParams struct {
-	ctx context.Context
+	ctx         context.Context
+	catalogType artifactpb.CatalogType
 }
 
 // RepositoryIMockGetNeedProcessFilesParamPtrs contains pointers to parameters of the RepositoryI.GetNeedProcessFiles
 type RepositoryIMockGetNeedProcessFilesParamPtrs struct {
-	ctx *context.Context
+	ctx         *context.Context
+	catalogType *artifactpb.CatalogType
 }
 
 // RepositoryIMockGetNeedProcessFilesResults contains results of the RepositoryI.GetNeedProcessFiles
@@ -10080,7 +10082,7 @@ type RepositoryIMockGetNeedProcessFilesResults struct {
 }
 
 // Expect sets up expected params for RepositoryI.GetNeedProcessFiles
-func (mmGetNeedProcessFiles *mRepositoryIMockGetNeedProcessFiles) Expect(ctx context.Context) *mRepositoryIMockGetNeedProcessFiles {
+func (mmGetNeedProcessFiles *mRepositoryIMockGetNeedProcessFiles) Expect(ctx context.Context, catalogType artifactpb.CatalogType) *mRepositoryIMockGetNeedProcessFiles {
 	if mmGetNeedProcessFiles.mock.funcGetNeedProcessFiles != nil {
 		mmGetNeedProcessFiles.mock.t.Fatalf("RepositoryIMock.GetNeedProcessFiles mock is already set by Set")
 	}
@@ -10093,7 +10095,7 @@ func (mmGetNeedProcessFiles *mRepositoryIMockGetNeedProcessFiles) Expect(ctx con
 		mmGetNeedProcessFiles.mock.t.Fatalf("RepositoryIMock.GetNeedProcessFiles mock is already set by ExpectParams functions")
 	}
 
-	mmGetNeedProcessFiles.defaultExpectation.params = &RepositoryIMockGetNeedProcessFilesParams{ctx}
+	mmGetNeedProcessFiles.defaultExpectation.params = &RepositoryIMockGetNeedProcessFilesParams{ctx, catalogType}
 	for _, e := range mmGetNeedProcessFiles.expectations {
 		if minimock.Equal(e.params, mmGetNeedProcessFiles.defaultExpectation.params) {
 			mmGetNeedProcessFiles.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetNeedProcessFiles.defaultExpectation.params)
@@ -10125,8 +10127,30 @@ func (mmGetNeedProcessFiles *mRepositoryIMockGetNeedProcessFiles) ExpectCtxParam
 	return mmGetNeedProcessFiles
 }
 
+// ExpectCatalogTypeParam2 sets up expected param catalogType for RepositoryI.GetNeedProcessFiles
+func (mmGetNeedProcessFiles *mRepositoryIMockGetNeedProcessFiles) ExpectCatalogTypeParam2(catalogType artifactpb.CatalogType) *mRepositoryIMockGetNeedProcessFiles {
+	if mmGetNeedProcessFiles.mock.funcGetNeedProcessFiles != nil {
+		mmGetNeedProcessFiles.mock.t.Fatalf("RepositoryIMock.GetNeedProcessFiles mock is already set by Set")
+	}
+
+	if mmGetNeedProcessFiles.defaultExpectation == nil {
+		mmGetNeedProcessFiles.defaultExpectation = &RepositoryIMockGetNeedProcessFilesExpectation{}
+	}
+
+	if mmGetNeedProcessFiles.defaultExpectation.params != nil {
+		mmGetNeedProcessFiles.mock.t.Fatalf("RepositoryIMock.GetNeedProcessFiles mock is already set by Expect")
+	}
+
+	if mmGetNeedProcessFiles.defaultExpectation.paramPtrs == nil {
+		mmGetNeedProcessFiles.defaultExpectation.paramPtrs = &RepositoryIMockGetNeedProcessFilesParamPtrs{}
+	}
+	mmGetNeedProcessFiles.defaultExpectation.paramPtrs.catalogType = &catalogType
+
+	return mmGetNeedProcessFiles
+}
+
 // Inspect accepts an inspector function that has same arguments as the RepositoryI.GetNeedProcessFiles
-func (mmGetNeedProcessFiles *mRepositoryIMockGetNeedProcessFiles) Inspect(f func(ctx context.Context)) *mRepositoryIMockGetNeedProcessFiles {
+func (mmGetNeedProcessFiles *mRepositoryIMockGetNeedProcessFiles) Inspect(f func(ctx context.Context, catalogType artifactpb.CatalogType)) *mRepositoryIMockGetNeedProcessFiles {
 	if mmGetNeedProcessFiles.mock.inspectFuncGetNeedProcessFiles != nil {
 		mmGetNeedProcessFiles.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.GetNeedProcessFiles")
 	}
@@ -10150,7 +10174,7 @@ func (mmGetNeedProcessFiles *mRepositoryIMockGetNeedProcessFiles) Return(ka1 []m
 }
 
 // Set uses given function f to mock the RepositoryI.GetNeedProcessFiles method
-func (mmGetNeedProcessFiles *mRepositoryIMockGetNeedProcessFiles) Set(f func(ctx context.Context) (ka1 []mm_repository.KnowledgeBaseFile)) *RepositoryIMock {
+func (mmGetNeedProcessFiles *mRepositoryIMockGetNeedProcessFiles) Set(f func(ctx context.Context, catalogType artifactpb.CatalogType) (ka1 []mm_repository.KnowledgeBaseFile)) *RepositoryIMock {
 	if mmGetNeedProcessFiles.defaultExpectation != nil {
 		mmGetNeedProcessFiles.mock.t.Fatalf("Default expectation is already set for the RepositoryI.GetNeedProcessFiles method")
 	}
@@ -10165,14 +10189,14 @@ func (mmGetNeedProcessFiles *mRepositoryIMockGetNeedProcessFiles) Set(f func(ctx
 
 // When sets expectation for the RepositoryI.GetNeedProcessFiles which will trigger the result defined by the following
 // Then helper
-func (mmGetNeedProcessFiles *mRepositoryIMockGetNeedProcessFiles) When(ctx context.Context) *RepositoryIMockGetNeedProcessFilesExpectation {
+func (mmGetNeedProcessFiles *mRepositoryIMockGetNeedProcessFiles) When(ctx context.Context, catalogType artifactpb.CatalogType) *RepositoryIMockGetNeedProcessFilesExpectation {
 	if mmGetNeedProcessFiles.mock.funcGetNeedProcessFiles != nil {
 		mmGetNeedProcessFiles.mock.t.Fatalf("RepositoryIMock.GetNeedProcessFiles mock is already set by Set")
 	}
 
 	expectation := &RepositoryIMockGetNeedProcessFilesExpectation{
 		mock:   mmGetNeedProcessFiles.mock,
-		params: &RepositoryIMockGetNeedProcessFilesParams{ctx},
+		params: &RepositoryIMockGetNeedProcessFilesParams{ctx, catalogType},
 	}
 	mmGetNeedProcessFiles.expectations = append(mmGetNeedProcessFiles.expectations, expectation)
 	return expectation
@@ -10205,15 +10229,15 @@ func (mmGetNeedProcessFiles *mRepositoryIMockGetNeedProcessFiles) invocationsDon
 }
 
 // GetNeedProcessFiles implements repository.RepositoryI
-func (mmGetNeedProcessFiles *RepositoryIMock) GetNeedProcessFiles(ctx context.Context) (ka1 []mm_repository.KnowledgeBaseFile) {
+func (mmGetNeedProcessFiles *RepositoryIMock) GetNeedProcessFiles(ctx context.Context, catalogType artifactpb.CatalogType) (ka1 []mm_repository.KnowledgeBaseFile) {
 	mm_atomic.AddUint64(&mmGetNeedProcessFiles.beforeGetNeedProcessFilesCounter, 1)
 	defer mm_atomic.AddUint64(&mmGetNeedProcessFiles.afterGetNeedProcessFilesCounter, 1)
 
 	if mmGetNeedProcessFiles.inspectFuncGetNeedProcessFiles != nil {
-		mmGetNeedProcessFiles.inspectFuncGetNeedProcessFiles(ctx)
+		mmGetNeedProcessFiles.inspectFuncGetNeedProcessFiles(ctx, catalogType)
 	}
 
-	mm_params := RepositoryIMockGetNeedProcessFilesParams{ctx}
+	mm_params := RepositoryIMockGetNeedProcessFilesParams{ctx, catalogType}
 
 	// Record call args
 	mmGetNeedProcessFiles.GetNeedProcessFilesMock.mutex.Lock()
@@ -10232,12 +10256,16 @@ func (mmGetNeedProcessFiles *RepositoryIMock) GetNeedProcessFiles(ctx context.Co
 		mm_want := mmGetNeedProcessFiles.GetNeedProcessFilesMock.defaultExpectation.params
 		mm_want_ptrs := mmGetNeedProcessFiles.GetNeedProcessFilesMock.defaultExpectation.paramPtrs
 
-		mm_got := RepositoryIMockGetNeedProcessFilesParams{ctx}
+		mm_got := RepositoryIMockGetNeedProcessFilesParams{ctx, catalogType}
 
 		if mm_want_ptrs != nil {
 
 			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
 				mmGetNeedProcessFiles.t.Errorf("RepositoryIMock.GetNeedProcessFiles got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.catalogType != nil && !minimock.Equal(*mm_want_ptrs.catalogType, mm_got.catalogType) {
+				mmGetNeedProcessFiles.t.Errorf("RepositoryIMock.GetNeedProcessFiles got unexpected parameter catalogType, want: %#v, got: %#v%s\n", *mm_want_ptrs.catalogType, mm_got.catalogType, minimock.Diff(*mm_want_ptrs.catalogType, mm_got.catalogType))
 			}
 
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
@@ -10251,9 +10279,9 @@ func (mmGetNeedProcessFiles *RepositoryIMock) GetNeedProcessFiles(ctx context.Co
 		return (*mm_results).ka1
 	}
 	if mmGetNeedProcessFiles.funcGetNeedProcessFiles != nil {
-		return mmGetNeedProcessFiles.funcGetNeedProcessFiles(ctx)
+		return mmGetNeedProcessFiles.funcGetNeedProcessFiles(ctx, catalogType)
 	}
-	mmGetNeedProcessFiles.t.Fatalf("Unexpected call to RepositoryIMock.GetNeedProcessFiles. %v", ctx)
+	mmGetNeedProcessFiles.t.Fatalf("Unexpected call to RepositoryIMock.GetNeedProcessFiles. %v %v", ctx, catalogType)
 	return
 }
 

@@ -16,8 +16,12 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
-const chunkLength = 1024
-const chunkOverlap = 200
+const maxChunkLengthForPersistentCatalog = 1024
+const maxChunkLengthForTempCatalog = 7000
+
+const chunkOverlapForPersistentCatalog = 200
+const chunkOverlapForTempCatalog = 700
+
 const NamespaceID = "preset"
 
 // Note: this pipeline is for the old indexing pipeline having convert_result
@@ -26,22 +30,22 @@ const DocToMDVersion = "v1.1.1"
 
 // Note: this pipeline is for the new indexing pipeline having convert_result or convert_result2
 const ConvertDocToMDPipelineID2 = "indexing-advanced-convert-doc"
-const DocToMDVersion2 = "v1.2.0"
+const DocToMDVersion2 = "v1.3.0"
 
-const MdChunkPipelineID = "indexing-split-markdown"
-const MdSplitVersion = "v2.0.0"
+const ChunkMdPipelineID = "indexing-split-markdown"
+const ChunkMdVersion = "v2.0.0"
 
-const TextChunkPipelineID = "indexing-split-text"
-const TextSplitVersion = "v2.0.0"
+const ChunkTextPipelineID = "indexing-split-text"
+const ChunkTextVersion = "v2.0.0"
 
-const TextEmbedPipelineID = "indexing-embed"
-const TextEmbedVersion = "v1.1.0"
+const EmbedTextPipelineID = "indexing-embed"
+const EmbedTextVersion = "v1.1.0"
 
 const QAPipelineID = "retrieving-qna"
 const QAVersion = "v1.2.0"
 
-// ConvertToMDPipe using converting pipeline to convert some file type to MD and consume caller's credits
-func (s *Service) ConvertToMDPipe(ctx context.Context, fileUID uuid.UUID, caller uuid.UUID, requester uuid.UUID, fileBase64 string, fileType artifactPb.FileType) (string, error) {
+// ConvertToMDPipeForFilesInPersistentCatalog using converting pipeline to convert some file type to MD and consume caller's credits
+func (s *Service) ConvertToMDPipeForFilesInPersistentCatalog(ctx context.Context, fileUID uuid.UUID, caller uuid.UUID, requester uuid.UUID, fileBase64 string, fileType artifactPb.FileType) (string, error) {
 	logger, _ := logger.GetZapLogger(ctx)
 	var md metadata.MD
 	if requester != uuid.Nil {
@@ -77,6 +81,84 @@ func (s *Service) ConvertToMDPipe(ctx context.Context, fileUID uuid.UUID, caller
 
 	// Spreadsheet types and others use the original pipeline
 	case artifactPb.FileType_FILE_TYPE_XLSX,
+		artifactPb.FileType_FILE_TYPE_XLS,
+		artifactPb.FileType_FILE_TYPE_CSV,
+		artifactPb.FileType_FILE_TYPE_HTML:
+		pipelineID = ConvertDocToMDPipelineID
+		version = DocToMDVersion
+
+	default:
+		return "", fmt.Errorf("unsupported file type: %v", fileType)
+	}
+
+	// save the converting pipeline metadata into database
+	convertingPipelineMetadata := NamespaceID + "/" + pipelineID + "@" + version
+	err := s.Repository.UpdateKbFileExtraMetaData(ctx, fileUID, "", convertingPipelineMetadata, "", "", nil, nil, nil, nil)
+	if err != nil {
+		logger.Error("Failed to save converting pipeline metadata.", zap.String("File uid:", fileUID.String()))
+		return "", fmt.Errorf("failed to save converting pipeline metadata: %w", err)
+	}
+
+	req := &pipelinePb.TriggerNamespacePipelineReleaseRequest{
+		NamespaceId: NamespaceID,
+		PipelineId:  pipelineID,
+		ReleaseId:   version,
+		Inputs: []*structpb.Struct{
+			{
+				Fields: map[string]*structpb.Value{
+					"document_input": {Kind: &structpb.Value_StringValue{StringValue: prefix + fileBase64}},
+				},
+			},
+		},
+	}
+
+	resp, err := s.PipelinePub.TriggerNamespacePipelineRelease(ctx, req)
+	if err != nil {
+		logger.Error("failed to trigger pipeline", zap.Error(err))
+		return "", fmt.Errorf("failed to trigger %s pipeline: %w", pipelineID, err)
+	}
+
+	result, err := getConvertResult(resp)
+	if err != nil {
+		logger.Error("failed to get convert result", zap.Error(err))
+		return "", fmt.Errorf("failed to get convert result: %w", err)
+	}
+	return result, nil
+}
+
+// ConvertToMDPipeForFilesInTempCatalog using converting pipeline to convert some file type to MD and consume caller's credits
+func (s *Service) ConvertToMDPipeForFilesInTempCatalog(ctx context.Context, fileUID uuid.UUID, caller uuid.UUID, requester uuid.UUID, fileBase64 string, fileType artifactPb.FileType) (string, error) {
+	logger, _ := logger.GetZapLogger(ctx)
+	var md metadata.MD
+	if requester != uuid.Nil {
+		md = metadata.New(map[string]string{
+			constant.HeaderUserUIDKey:      caller.String(),
+			constant.HeaderAuthTypeKey:     "user",
+			constant.HeaderRequesterUIDKey: requester.String(),
+		})
+	} else {
+		md = metadata.New(map[string]string{
+			constant.HeaderUserUIDKey:  caller.String(),
+			constant.HeaderAuthTypeKey: "user",
+		})
+	}
+	ctx = metadata.NewOutgoingContext(ctx, md)
+
+	// Get the appropriate prefix for the file type
+	prefix := getFileTypePrefix(fileType)
+
+	// Determine which pipeline and version to use based on file type
+	var pipelineID string
+	var version string
+
+	switch fileType {
+	// Document types use the new pipeline
+	case artifactPb.FileType_FILE_TYPE_PDF,
+		artifactPb.FileType_FILE_TYPE_DOCX,
+		artifactPb.FileType_FILE_TYPE_DOC,
+		artifactPb.FileType_FILE_TYPE_PPT,
+		artifactPb.FileType_FILE_TYPE_PPTX,
+		artifactPb.FileType_FILE_TYPE_XLSX,
 		artifactPb.FileType_FILE_TYPE_XLS,
 		artifactPb.FileType_FILE_TYPE_CSV,
 		artifactPb.FileType_FILE_TYPE_HTML:
@@ -179,9 +261,9 @@ type Chunk = struct {
 	Tokens int
 }
 
-// SplitMarkdownPipe triggers the markdown splitting pipeline, processes the markdown text, and deducts credits from the caller's account.
+// ChunkMarkdownPipe triggers the markdown splitting pipeline, processes the markdown text, and deducts credits from the caller's account.
 // It sets up the necessary metadata, triggers the pipeline, and processes the response to return the non-empty chunks.
-func (s *Service) SplitMarkdownPipe(ctx context.Context, caller uuid.UUID, requester uuid.UUID, markdown string) ([]Chunk, error) {
+func (s *Service) ChunkMarkdownPipe(ctx context.Context, caller uuid.UUID, requester uuid.UUID, markdown string) ([]Chunk, error) {
 	var md metadata.MD
 	if requester != uuid.Nil {
 		md = metadata.New(map[string]string{
@@ -198,21 +280,21 @@ func (s *Service) SplitMarkdownPipe(ctx context.Context, caller uuid.UUID, reque
 	ctx = metadata.NewOutgoingContext(ctx, md)
 	req := &pipelinePb.TriggerNamespacePipelineReleaseRequest{
 		NamespaceId: NamespaceID,
-		PipelineId:  MdChunkPipelineID,
-		ReleaseId:   MdSplitVersion,
+		PipelineId:  ChunkMdPipelineID,
+		ReleaseId:   ChunkMdVersion,
 		Inputs: []*structpb.Struct{
 			{
 				Fields: map[string]*structpb.Value{
 					"md_input":         {Kind: &structpb.Value_StringValue{StringValue: markdown}},
-					"max_chunk_length": {Kind: &structpb.Value_NumberValue{NumberValue: chunkLength}},
-					"chunk_overlap":    {Kind: &structpb.Value_NumberValue{NumberValue: chunkOverlap}},
+					"max_chunk_length": {Kind: &structpb.Value_NumberValue{NumberValue: maxChunkLengthForPersistentCatalog}},
+					"chunk_overlap":    {Kind: &structpb.Value_NumberValue{NumberValue: chunkOverlapForPersistentCatalog}},
 				},
 			},
 		},
 	}
 	res, err := s.PipelinePub.TriggerNamespacePipelineRelease(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to trigger %s pipeline. err:%w", MdChunkPipelineID, err)
+		return nil, fmt.Errorf("failed to trigger %s pipeline. err:%w", ChunkMdPipelineID, err)
 	}
 	result, err := GetChunksFromResponse(res)
 	if err != nil {
@@ -260,9 +342,9 @@ func GetChunksFromResponse(resp *pipelinePb.TriggerNamespacePipelineReleaseRespo
 	return chunks, nil
 }
 
-// SplitTextPipe splits the input text into chunks using the splitting pipeline and consumes the caller's credits.
+// ChunkTextPipeForPersistentCatalog splits the input text into chunks using the splitting pipeline and consumes the caller's credits.
 // It sets up the necessary metadata, triggers the pipeline, and processes the response to return the non-empty chunks.
-func (s *Service) SplitTextPipe(ctx context.Context, caller uuid.UUID, requester uuid.UUID, text string) ([]Chunk, error) {
+func (s *Service) ChunkTextPipeForPersistentCatalog(ctx context.Context, caller uuid.UUID, requester uuid.UUID, text string) ([]Chunk, error) {
 	var md metadata.MD
 	if requester != uuid.Nil {
 		md = metadata.New(map[string]string{
@@ -279,22 +361,73 @@ func (s *Service) SplitTextPipe(ctx context.Context, caller uuid.UUID, requester
 	ctx = metadata.NewOutgoingContext(ctx, md)
 	req := &pipelinePb.TriggerNamespacePipelineReleaseRequest{
 		NamespaceId: NamespaceID,
-		PipelineId:  TextChunkPipelineID,
-		ReleaseId:   TextSplitVersion,
+		PipelineId:  ChunkTextPipelineID,
+		ReleaseId:   ChunkTextVersion,
 
 		Inputs: []*structpb.Struct{
 			{
 				Fields: map[string]*structpb.Value{
 					"text_input":       {Kind: &structpb.Value_StringValue{StringValue: text}},
-					"max_chunk_length": {Kind: &structpb.Value_NumberValue{NumberValue: chunkLength}},
-					"chunk_overlap":    {Kind: &structpb.Value_NumberValue{NumberValue: chunkOverlap}},
+					"max_chunk_length": {Kind: &structpb.Value_NumberValue{NumberValue: maxChunkLengthForPersistentCatalog}},
+					"chunk_overlap":    {Kind: &structpb.Value_NumberValue{NumberValue: chunkOverlapForPersistentCatalog}},
 				},
 			},
 		},
 	}
 	res, err := s.PipelinePub.TriggerNamespacePipelineRelease(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to trigger %s pipeline. err:%w", TextChunkPipelineID, err)
+		return nil, fmt.Errorf("failed to trigger %s pipeline. err:%w", ChunkTextPipelineID, err)
+	}
+	result, err := GetChunksFromResponse(res)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get chunks from response: %w", err)
+	}
+	// remove the empty chunk.
+	// note: this is a workaround for the pipeline bug that sometimes returns empty chunks.
+	var filteredResult []Chunk
+	for _, chunk := range result {
+		if chunk.Text != "" {
+			filteredResult = append(filteredResult, chunk)
+		}
+	}
+	return filteredResult, nil
+}
+
+// ChunkTextPipeForTempCatalog splits the input text into chunks using the splitting pipeline and consumes the caller's credits.
+// It sets up the necessary metadata, triggers the pipeline, and processes the response to return the non-empty chunks.
+func (s *Service) ChunkTextPipeForTempCatalog(ctx context.Context, caller uuid.UUID, requester uuid.UUID, text string) ([]Chunk, error) {
+	var md metadata.MD
+	if requester != uuid.Nil {
+		md = metadata.New(map[string]string{
+			constant.HeaderUserUIDKey:      caller.String(),
+			constant.HeaderAuthTypeKey:     "user",
+			constant.HeaderRequesterUIDKey: requester.String(),
+		})
+	} else {
+		md = metadata.New(map[string]string{
+			constant.HeaderUserUIDKey:  caller.String(),
+			constant.HeaderAuthTypeKey: "user",
+		})
+	}
+	ctx = metadata.NewOutgoingContext(ctx, md)
+	req := &pipelinePb.TriggerNamespacePipelineReleaseRequest{
+		NamespaceId: NamespaceID,
+		PipelineId:  ChunkTextPipelineID,
+		ReleaseId:   ChunkTextVersion,
+
+		Inputs: []*structpb.Struct{
+			{
+				Fields: map[string]*structpb.Value{
+					"text_input":       {Kind: &structpb.Value_StringValue{StringValue: text}},
+					"max_chunk_length": {Kind: &structpb.Value_NumberValue{NumberValue: maxChunkLengthForTempCatalog}},
+					"chunk_overlap":    {Kind: &structpb.Value_NumberValue{NumberValue: chunkOverlapForTempCatalog}},
+				},
+			},
+		},
+	}
+	res, err := s.PipelinePub.TriggerNamespacePipelineRelease(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to trigger %s pipeline. err:%w", ChunkTextPipelineID, err)
 	}
 	result, err := GetChunksFromResponse(res)
 	if err != nil {
@@ -398,13 +531,13 @@ func (s *Service) EmbeddingTextPipe(ctx context.Context, caller uuid.UUID, reque
 
 				req := &pipelinePb.TriggerNamespacePipelineReleaseRequest{
 					NamespaceId: NamespaceID,
-					PipelineId:  TextEmbedPipelineID,
-					ReleaseId:   TextEmbedVersion,
+					PipelineId:  EmbedTextPipelineID,
+					ReleaseId:   EmbedTextVersion,
 					Inputs:      inputs,
 				}
 				res, err := s.PipelinePub.TriggerNamespacePipelineRelease(ctx_, req)
 				if err != nil {
-					errChan <- fmt.Errorf("failed to trigger %s pipeline. err:%w", TextEmbedPipelineID, err)
+					errChan <- fmt.Errorf("failed to trigger %s pipeline. err:%w", EmbedTextPipelineID, err)
 					ctxCancel()
 					return
 				}

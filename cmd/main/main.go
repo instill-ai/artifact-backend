@@ -182,9 +182,13 @@ func main() {
 		}),
 	)
 
-	// activate file-to-embeddings worker pool
-	wp := worker.NewFileToEmbWorkerPool(ctx, service, config.Config.FileToEmbeddingWorker.NumberOfWorkers)
+	// activate persistent catalog file-to-embeddings worker pool
+	wp := worker.NewPersistentCatalogFileToEmbWorkerPool(ctx, service, config.Config.FileToEmbeddingWorker.NumberOfWorkers, artifactPB.CatalogType_CATALOG_TYPE_PERSISTENT)
 	wp.Start()
+
+	// activate temp(ephemeral) catalog file-to-embeddings worker pool
+	wpTemp := worker.NewTempCatalogFileToEmbWorkerPool(ctx, service, config.Config.FileToEmbeddingWorker.NumberOfWorkers, artifactPB.CatalogType_CATALOG_TYPE_EPHEMERAL)
+	wpTemp.Start()
 
 	// Start usage reporter
 	var usg usage.Usage
