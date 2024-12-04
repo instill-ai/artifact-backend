@@ -26,7 +26,7 @@ const DocToMDVersion = "v1.1.1"
 
 // Note: this pipeline is for the new indexing pipeline having convert_result or convert_result2
 const ConvertDocToMDPipelineID2 = "indexing-advanced-convert-doc"
-const DocToMDVersion2 = "v1.2.0"
+const DocToMDVersion2 = "v1.3.1"
 
 const MdChunkPipelineID = "indexing-split-markdown"
 const MdSplitVersion = "v2.0.0"
@@ -103,6 +103,7 @@ func (s *Service) ConvertToMDPipe(ctx context.Context, fileUID uuid.UUID, caller
 			{
 				Fields: map[string]*structpb.Value{
 					"document_input": {Kind: &structpb.Value_StringValue{StringValue: prefix + fileBase64}},
+					"vlm_model":      {Kind: &structpb.Value_StringValue{StringValue: "gpt-4o"}},
 				},
 			},
 		},
