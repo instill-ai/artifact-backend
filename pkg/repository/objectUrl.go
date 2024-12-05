@@ -14,6 +14,7 @@ import (
 
 type ObjectURLI interface {
 	CreateObjectURL(ctx context.Context, objectURL ObjectURL) (*ObjectURL, error)
+	CreateObjectURLWithUIDInEncodedURLPath(ctx context.Context, objectURL ObjectURL, namespaceID string, EncodedMinioURLPath func(namespaceID string, objectURLUUID uuid.UUID) string) (*ObjectURL, error)
 	ListAllObjectURLs(ctx context.Context, namespaceUID, objectUID uuid.UUID) ([]ObjectURL, error)
 	UpdateObjectURL(ctx context.Context, objectURL ObjectURL) (*ObjectURL, error)
 	DeleteObjectURL(ctx context.Context, uid uuid.UUID) error
@@ -76,7 +77,6 @@ const (
 	ObjectURLTypeUpload   = "upload"
 )
 
-
 // CreateObjectURL inserts a new ObjectURL record into the database.
 func (r *Repository) CreateObjectURL(ctx context.Context, objectURL ObjectURL) (*ObjectURL, error) {
 	if err := r.db.WithContext(ctx).Create(&objectURL).Error; err != nil {
@@ -101,6 +101,39 @@ func (r *Repository) UpdateObjectURL(ctx context.Context, objectURL ObjectURL) (
 		return nil, err
 	}
 	return &objectURL, nil
+}
+
+// CreateObjectURLWithUIDInEncodedURLPath creates an ObjectURL record in the database with the UID in the encoded_url_path.
+func (r *Repository) CreateObjectURLWithUIDInEncodedURLPath(ctx context.Context, objectURL ObjectURL,namespaceID string, EncodedMinioURLPath func(namespaceID string, objectURLUUID uuid.UUID) string) (*ObjectURL, error) {
+	var result ObjectURL
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Create the initial object URL
+		if err := tx.Create(&objectURL).Error; err != nil {
+			return err
+		}
+
+		// Update the encoded_url_path to include the UID
+		updateMap := map[string]interface{}{
+			ObjectURLColumn.EncodedURLPath: EncodedMinioURLPath(namespaceID, objectURL.UID),
+		}
+
+		if err := tx.Model(&objectURL).Updates(updateMap).Error; err != nil {
+			return err
+		}
+
+		// Fetch the final result
+		if err := tx.Where(ObjectURLColumn.UID, objectURL.UID).First(&result).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &result, nil
 }
 
 // UpdateObjectURLByUpdateMap updates an ObjectURL record in the database.

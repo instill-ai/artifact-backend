@@ -58,6 +58,12 @@ type RepositoryIMock struct {
 	beforeCreateObjectURLCounter uint64
 	CreateObjectURLMock          mRepositoryIMockCreateObjectURL
 
+	funcCreateObjectURLWithUIDInEncodedURLPath          func(ctx context.Context, objectURL mm_repository.ObjectURL, namespaceID string, EncodedMinioURLPath func(namespaceID string, objectURLUUID uuid.UUID) string) (op1 *mm_repository.ObjectURL, err error)
+	inspectFuncCreateObjectURLWithUIDInEncodedURLPath   func(ctx context.Context, objectURL mm_repository.ObjectURL, namespaceID string, EncodedMinioURLPath func(namespaceID string, objectURLUUID uuid.UUID) string)
+	afterCreateObjectURLWithUIDInEncodedURLPathCounter  uint64
+	beforeCreateObjectURLWithUIDInEncodedURLPathCounter uint64
+	CreateObjectURLWithUIDInEncodedURLPathMock          mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath
+
 	funcDeleteAllConvertedFilesInKb          func(ctx context.Context, kbUID uuid.UUID) (err error)
 	inspectFuncDeleteAllConvertedFilesInKb   func(ctx context.Context, kbUID uuid.UUID)
 	afterDeleteAllConvertedFilesInKbCounter  uint64
@@ -470,6 +476,9 @@ func NewRepositoryIMock(t minimock.Tester) *RepositoryIMock {
 
 	m.CreateObjectURLMock = mRepositoryIMockCreateObjectURL{mock: m}
 	m.CreateObjectURLMock.callArgs = []*RepositoryIMockCreateObjectURLParams{}
+
+	m.CreateObjectURLWithUIDInEncodedURLPathMock = mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath{mock: m}
+	m.CreateObjectURLWithUIDInEncodedURLPathMock.callArgs = []*RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathParams{}
 
 	m.DeleteAllConvertedFilesInKbMock = mRepositoryIMockDeleteAllConvertedFilesInKb{mock: m}
 	m.DeleteAllConvertedFilesInKbMock.callArgs = []*RepositoryIMockDeleteAllConvertedFilesInKbParams{}
@@ -2429,6 +2438,367 @@ func (m *RepositoryIMock) MinimockCreateObjectURLInspect() {
 	if !m.CreateObjectURLMock.invocationsDone() && afterCreateObjectURLCounter > 0 {
 		m.t.Errorf("Expected %d calls to RepositoryIMock.CreateObjectURL but found %d calls",
 			mm_atomic.LoadUint64(&m.CreateObjectURLMock.expectedInvocations), afterCreateObjectURLCounter)
+	}
+}
+
+type mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath struct {
+	mock               *RepositoryIMock
+	defaultExpectation *RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathExpectation
+	expectations       []*RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathExpectation
+
+	callArgs []*RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathParams
+	mutex    sync.RWMutex
+
+	expectedInvocations uint64
+}
+
+// RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathExpectation specifies expectation struct of the RepositoryI.CreateObjectURLWithUIDInEncodedURLPath
+type RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathExpectation struct {
+	mock      *RepositoryIMock
+	params    *RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathParams
+	paramPtrs *RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathParamPtrs
+	results   *RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathResults
+	Counter   uint64
+}
+
+// RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathParams contains parameters of the RepositoryI.CreateObjectURLWithUIDInEncodedURLPath
+type RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathParams struct {
+	ctx                 context.Context
+	objectURL           mm_repository.ObjectURL
+	namespaceID         string
+	EncodedMinioURLPath func(namespaceID string, objectURLUUID uuid.UUID) string
+}
+
+// RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathParamPtrs contains pointers to parameters of the RepositoryI.CreateObjectURLWithUIDInEncodedURLPath
+type RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathParamPtrs struct {
+	ctx                 *context.Context
+	objectURL           *mm_repository.ObjectURL
+	namespaceID         *string
+	EncodedMinioURLPath *func(namespaceID string, objectURLUUID uuid.UUID) string
+}
+
+// RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathResults contains results of the RepositoryI.CreateObjectURLWithUIDInEncodedURLPath
+type RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathResults struct {
+	op1 *mm_repository.ObjectURL
+	err error
+}
+
+// Expect sets up expected params for RepositoryI.CreateObjectURLWithUIDInEncodedURLPath
+func (mmCreateObjectURLWithUIDInEncodedURLPath *mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath) Expect(ctx context.Context, objectURL mm_repository.ObjectURL, namespaceID string, EncodedMinioURLPath func(namespaceID string, objectURLUUID uuid.UUID) string) *mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath {
+	if mmCreateObjectURLWithUIDInEncodedURLPath.mock.funcCreateObjectURLWithUIDInEncodedURLPath != nil {
+		mmCreateObjectURLWithUIDInEncodedURLPath.mock.t.Fatalf("RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath mock is already set by Set")
+	}
+
+	if mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation == nil {
+		mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation = &RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathExpectation{}
+	}
+
+	if mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation.paramPtrs != nil {
+		mmCreateObjectURLWithUIDInEncodedURLPath.mock.t.Fatalf("RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath mock is already set by ExpectParams functions")
+	}
+
+	mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation.params = &RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathParams{ctx, objectURL, namespaceID, EncodedMinioURLPath}
+	for _, e := range mmCreateObjectURLWithUIDInEncodedURLPath.expectations {
+		if minimock.Equal(e.params, mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation.params) {
+			mmCreateObjectURLWithUIDInEncodedURLPath.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation.params)
+		}
+	}
+
+	return mmCreateObjectURLWithUIDInEncodedURLPath
+}
+
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.CreateObjectURLWithUIDInEncodedURLPath
+func (mmCreateObjectURLWithUIDInEncodedURLPath *mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath {
+	if mmCreateObjectURLWithUIDInEncodedURLPath.mock.funcCreateObjectURLWithUIDInEncodedURLPath != nil {
+		mmCreateObjectURLWithUIDInEncodedURLPath.mock.t.Fatalf("RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath mock is already set by Set")
+	}
+
+	if mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation == nil {
+		mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation = &RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathExpectation{}
+	}
+
+	if mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation.params != nil {
+		mmCreateObjectURLWithUIDInEncodedURLPath.mock.t.Fatalf("RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath mock is already set by Expect")
+	}
+
+	if mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation.paramPtrs == nil {
+		mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation.paramPtrs = &RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathParamPtrs{}
+	}
+	mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation.paramPtrs.ctx = &ctx
+
+	return mmCreateObjectURLWithUIDInEncodedURLPath
+}
+
+// ExpectObjectURLParam2 sets up expected param objectURL for RepositoryI.CreateObjectURLWithUIDInEncodedURLPath
+func (mmCreateObjectURLWithUIDInEncodedURLPath *mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath) ExpectObjectURLParam2(objectURL mm_repository.ObjectURL) *mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath {
+	if mmCreateObjectURLWithUIDInEncodedURLPath.mock.funcCreateObjectURLWithUIDInEncodedURLPath != nil {
+		mmCreateObjectURLWithUIDInEncodedURLPath.mock.t.Fatalf("RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath mock is already set by Set")
+	}
+
+	if mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation == nil {
+		mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation = &RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathExpectation{}
+	}
+
+	if mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation.params != nil {
+		mmCreateObjectURLWithUIDInEncodedURLPath.mock.t.Fatalf("RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath mock is already set by Expect")
+	}
+
+	if mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation.paramPtrs == nil {
+		mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation.paramPtrs = &RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathParamPtrs{}
+	}
+	mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation.paramPtrs.objectURL = &objectURL
+
+	return mmCreateObjectURLWithUIDInEncodedURLPath
+}
+
+// ExpectNamespaceIDParam3 sets up expected param namespaceID for RepositoryI.CreateObjectURLWithUIDInEncodedURLPath
+func (mmCreateObjectURLWithUIDInEncodedURLPath *mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath) ExpectNamespaceIDParam3(namespaceID string) *mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath {
+	if mmCreateObjectURLWithUIDInEncodedURLPath.mock.funcCreateObjectURLWithUIDInEncodedURLPath != nil {
+		mmCreateObjectURLWithUIDInEncodedURLPath.mock.t.Fatalf("RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath mock is already set by Set")
+	}
+
+	if mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation == nil {
+		mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation = &RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathExpectation{}
+	}
+
+	if mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation.params != nil {
+		mmCreateObjectURLWithUIDInEncodedURLPath.mock.t.Fatalf("RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath mock is already set by Expect")
+	}
+
+	if mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation.paramPtrs == nil {
+		mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation.paramPtrs = &RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathParamPtrs{}
+	}
+	mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation.paramPtrs.namespaceID = &namespaceID
+
+	return mmCreateObjectURLWithUIDInEncodedURLPath
+}
+
+// ExpectEncodedMinioURLPathParam4 sets up expected param EncodedMinioURLPath for RepositoryI.CreateObjectURLWithUIDInEncodedURLPath
+func (mmCreateObjectURLWithUIDInEncodedURLPath *mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath) ExpectEncodedMinioURLPathParam4(EncodedMinioURLPath func(namespaceID string, objectURLUUID uuid.UUID) string) *mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath {
+	if mmCreateObjectURLWithUIDInEncodedURLPath.mock.funcCreateObjectURLWithUIDInEncodedURLPath != nil {
+		mmCreateObjectURLWithUIDInEncodedURLPath.mock.t.Fatalf("RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath mock is already set by Set")
+	}
+
+	if mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation == nil {
+		mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation = &RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathExpectation{}
+	}
+
+	if mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation.params != nil {
+		mmCreateObjectURLWithUIDInEncodedURLPath.mock.t.Fatalf("RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath mock is already set by Expect")
+	}
+
+	if mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation.paramPtrs == nil {
+		mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation.paramPtrs = &RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathParamPtrs{}
+	}
+	mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation.paramPtrs.EncodedMinioURLPath = &EncodedMinioURLPath
+
+	return mmCreateObjectURLWithUIDInEncodedURLPath
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.CreateObjectURLWithUIDInEncodedURLPath
+func (mmCreateObjectURLWithUIDInEncodedURLPath *mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath) Inspect(f func(ctx context.Context, objectURL mm_repository.ObjectURL, namespaceID string, EncodedMinioURLPath func(namespaceID string, objectURLUUID uuid.UUID) string)) *mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath {
+	if mmCreateObjectURLWithUIDInEncodedURLPath.mock.inspectFuncCreateObjectURLWithUIDInEncodedURLPath != nil {
+		mmCreateObjectURLWithUIDInEncodedURLPath.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath")
+	}
+
+	mmCreateObjectURLWithUIDInEncodedURLPath.mock.inspectFuncCreateObjectURLWithUIDInEncodedURLPath = f
+
+	return mmCreateObjectURLWithUIDInEncodedURLPath
+}
+
+// Return sets up results that will be returned by RepositoryI.CreateObjectURLWithUIDInEncodedURLPath
+func (mmCreateObjectURLWithUIDInEncodedURLPath *mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath) Return(op1 *mm_repository.ObjectURL, err error) *RepositoryIMock {
+	if mmCreateObjectURLWithUIDInEncodedURLPath.mock.funcCreateObjectURLWithUIDInEncodedURLPath != nil {
+		mmCreateObjectURLWithUIDInEncodedURLPath.mock.t.Fatalf("RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath mock is already set by Set")
+	}
+
+	if mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation == nil {
+		mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation = &RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathExpectation{mock: mmCreateObjectURLWithUIDInEncodedURLPath.mock}
+	}
+	mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation.results = &RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathResults{op1, err}
+	return mmCreateObjectURLWithUIDInEncodedURLPath.mock
+}
+
+// Set uses given function f to mock the RepositoryI.CreateObjectURLWithUIDInEncodedURLPath method
+func (mmCreateObjectURLWithUIDInEncodedURLPath *mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath) Set(f func(ctx context.Context, objectURL mm_repository.ObjectURL, namespaceID string, EncodedMinioURLPath func(namespaceID string, objectURLUUID uuid.UUID) string) (op1 *mm_repository.ObjectURL, err error)) *RepositoryIMock {
+	if mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation != nil {
+		mmCreateObjectURLWithUIDInEncodedURLPath.mock.t.Fatalf("Default expectation is already set for the RepositoryI.CreateObjectURLWithUIDInEncodedURLPath method")
+	}
+
+	if len(mmCreateObjectURLWithUIDInEncodedURLPath.expectations) > 0 {
+		mmCreateObjectURLWithUIDInEncodedURLPath.mock.t.Fatalf("Some expectations are already set for the RepositoryI.CreateObjectURLWithUIDInEncodedURLPath method")
+	}
+
+	mmCreateObjectURLWithUIDInEncodedURLPath.mock.funcCreateObjectURLWithUIDInEncodedURLPath = f
+	return mmCreateObjectURLWithUIDInEncodedURLPath.mock
+}
+
+// When sets expectation for the RepositoryI.CreateObjectURLWithUIDInEncodedURLPath which will trigger the result defined by the following
+// Then helper
+func (mmCreateObjectURLWithUIDInEncodedURLPath *mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath) When(ctx context.Context, objectURL mm_repository.ObjectURL, namespaceID string, EncodedMinioURLPath func(namespaceID string, objectURLUUID uuid.UUID) string) *RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathExpectation {
+	if mmCreateObjectURLWithUIDInEncodedURLPath.mock.funcCreateObjectURLWithUIDInEncodedURLPath != nil {
+		mmCreateObjectURLWithUIDInEncodedURLPath.mock.t.Fatalf("RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath mock is already set by Set")
+	}
+
+	expectation := &RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathExpectation{
+		mock:   mmCreateObjectURLWithUIDInEncodedURLPath.mock,
+		params: &RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathParams{ctx, objectURL, namespaceID, EncodedMinioURLPath},
+	}
+	mmCreateObjectURLWithUIDInEncodedURLPath.expectations = append(mmCreateObjectURLWithUIDInEncodedURLPath.expectations, expectation)
+	return expectation
+}
+
+// Then sets up RepositoryI.CreateObjectURLWithUIDInEncodedURLPath return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathExpectation) Then(op1 *mm_repository.ObjectURL, err error) *RepositoryIMock {
+	e.results = &RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathResults{op1, err}
+	return e.mock
+}
+
+// Times sets number of times RepositoryI.CreateObjectURLWithUIDInEncodedURLPath should be invoked
+func (mmCreateObjectURLWithUIDInEncodedURLPath *mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath) Times(n uint64) *mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath {
+	if n == 0 {
+		mmCreateObjectURLWithUIDInEncodedURLPath.mock.t.Fatalf("Times of RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmCreateObjectURLWithUIDInEncodedURLPath.expectedInvocations, n)
+	return mmCreateObjectURLWithUIDInEncodedURLPath
+}
+
+func (mmCreateObjectURLWithUIDInEncodedURLPath *mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath) invocationsDone() bool {
+	if len(mmCreateObjectURLWithUIDInEncodedURLPath.expectations) == 0 && mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation == nil && mmCreateObjectURLWithUIDInEncodedURLPath.mock.funcCreateObjectURLWithUIDInEncodedURLPath == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmCreateObjectURLWithUIDInEncodedURLPath.mock.afterCreateObjectURLWithUIDInEncodedURLPathCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmCreateObjectURLWithUIDInEncodedURLPath.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// CreateObjectURLWithUIDInEncodedURLPath implements repository.RepositoryI
+func (mmCreateObjectURLWithUIDInEncodedURLPath *RepositoryIMock) CreateObjectURLWithUIDInEncodedURLPath(ctx context.Context, objectURL mm_repository.ObjectURL, namespaceID string, EncodedMinioURLPath func(namespaceID string, objectURLUUID uuid.UUID) string) (op1 *mm_repository.ObjectURL, err error) {
+	mm_atomic.AddUint64(&mmCreateObjectURLWithUIDInEncodedURLPath.beforeCreateObjectURLWithUIDInEncodedURLPathCounter, 1)
+	defer mm_atomic.AddUint64(&mmCreateObjectURLWithUIDInEncodedURLPath.afterCreateObjectURLWithUIDInEncodedURLPathCounter, 1)
+
+	if mmCreateObjectURLWithUIDInEncodedURLPath.inspectFuncCreateObjectURLWithUIDInEncodedURLPath != nil {
+		mmCreateObjectURLWithUIDInEncodedURLPath.inspectFuncCreateObjectURLWithUIDInEncodedURLPath(ctx, objectURL, namespaceID, EncodedMinioURLPath)
+	}
+
+	mm_params := RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathParams{ctx, objectURL, namespaceID, EncodedMinioURLPath}
+
+	// Record call args
+	mmCreateObjectURLWithUIDInEncodedURLPath.CreateObjectURLWithUIDInEncodedURLPathMock.mutex.Lock()
+	mmCreateObjectURLWithUIDInEncodedURLPath.CreateObjectURLWithUIDInEncodedURLPathMock.callArgs = append(mmCreateObjectURLWithUIDInEncodedURLPath.CreateObjectURLWithUIDInEncodedURLPathMock.callArgs, &mm_params)
+	mmCreateObjectURLWithUIDInEncodedURLPath.CreateObjectURLWithUIDInEncodedURLPathMock.mutex.Unlock()
+
+	for _, e := range mmCreateObjectURLWithUIDInEncodedURLPath.CreateObjectURLWithUIDInEncodedURLPathMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.op1, e.results.err
+		}
+	}
+
+	if mmCreateObjectURLWithUIDInEncodedURLPath.CreateObjectURLWithUIDInEncodedURLPathMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmCreateObjectURLWithUIDInEncodedURLPath.CreateObjectURLWithUIDInEncodedURLPathMock.defaultExpectation.Counter, 1)
+		mm_want := mmCreateObjectURLWithUIDInEncodedURLPath.CreateObjectURLWithUIDInEncodedURLPathMock.defaultExpectation.params
+		mm_want_ptrs := mmCreateObjectURLWithUIDInEncodedURLPath.CreateObjectURLWithUIDInEncodedURLPathMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathParams{ctx, objectURL, namespaceID, EncodedMinioURLPath}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmCreateObjectURLWithUIDInEncodedURLPath.t.Errorf("RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.objectURL != nil && !minimock.Equal(*mm_want_ptrs.objectURL, mm_got.objectURL) {
+				mmCreateObjectURLWithUIDInEncodedURLPath.t.Errorf("RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath got unexpected parameter objectURL, want: %#v, got: %#v%s\n", *mm_want_ptrs.objectURL, mm_got.objectURL, minimock.Diff(*mm_want_ptrs.objectURL, mm_got.objectURL))
+			}
+
+			if mm_want_ptrs.namespaceID != nil && !minimock.Equal(*mm_want_ptrs.namespaceID, mm_got.namespaceID) {
+				mmCreateObjectURLWithUIDInEncodedURLPath.t.Errorf("RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath got unexpected parameter namespaceID, want: %#v, got: %#v%s\n", *mm_want_ptrs.namespaceID, mm_got.namespaceID, minimock.Diff(*mm_want_ptrs.namespaceID, mm_got.namespaceID))
+			}
+
+			if mm_want_ptrs.EncodedMinioURLPath != nil && !minimock.Equal(*mm_want_ptrs.EncodedMinioURLPath, mm_got.EncodedMinioURLPath) {
+				mmCreateObjectURLWithUIDInEncodedURLPath.t.Errorf("RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath got unexpected parameter EncodedMinioURLPath, want: %#v, got: %#v%s\n", *mm_want_ptrs.EncodedMinioURLPath, mm_got.EncodedMinioURLPath, minimock.Diff(*mm_want_ptrs.EncodedMinioURLPath, mm_got.EncodedMinioURLPath))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmCreateObjectURLWithUIDInEncodedURLPath.t.Errorf("RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmCreateObjectURLWithUIDInEncodedURLPath.CreateObjectURLWithUIDInEncodedURLPathMock.defaultExpectation.results
+		if mm_results == nil {
+			mmCreateObjectURLWithUIDInEncodedURLPath.t.Fatal("No results are set for the RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath")
+		}
+		return (*mm_results).op1, (*mm_results).err
+	}
+	if mmCreateObjectURLWithUIDInEncodedURLPath.funcCreateObjectURLWithUIDInEncodedURLPath != nil {
+		return mmCreateObjectURLWithUIDInEncodedURLPath.funcCreateObjectURLWithUIDInEncodedURLPath(ctx, objectURL, namespaceID, EncodedMinioURLPath)
+	}
+	mmCreateObjectURLWithUIDInEncodedURLPath.t.Fatalf("Unexpected call to RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath. %v %v %v %v", ctx, objectURL, namespaceID, EncodedMinioURLPath)
+	return
+}
+
+// CreateObjectURLWithUIDInEncodedURLPathAfterCounter returns a count of finished RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath invocations
+func (mmCreateObjectURLWithUIDInEncodedURLPath *RepositoryIMock) CreateObjectURLWithUIDInEncodedURLPathAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmCreateObjectURLWithUIDInEncodedURLPath.afterCreateObjectURLWithUIDInEncodedURLPathCounter)
+}
+
+// CreateObjectURLWithUIDInEncodedURLPathBeforeCounter returns a count of RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath invocations
+func (mmCreateObjectURLWithUIDInEncodedURLPath *RepositoryIMock) CreateObjectURLWithUIDInEncodedURLPathBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmCreateObjectURLWithUIDInEncodedURLPath.beforeCreateObjectURLWithUIDInEncodedURLPathCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmCreateObjectURLWithUIDInEncodedURLPath *mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath) Calls() []*RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathParams {
+	mmCreateObjectURLWithUIDInEncodedURLPath.mutex.RLock()
+
+	argCopy := make([]*RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathParams, len(mmCreateObjectURLWithUIDInEncodedURLPath.callArgs))
+	copy(argCopy, mmCreateObjectURLWithUIDInEncodedURLPath.callArgs)
+
+	mmCreateObjectURLWithUIDInEncodedURLPath.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockCreateObjectURLWithUIDInEncodedURLPathDone returns true if the count of the CreateObjectURLWithUIDInEncodedURLPath invocations corresponds
+// the number of defined expectations
+func (m *RepositoryIMock) MinimockCreateObjectURLWithUIDInEncodedURLPathDone() bool {
+	for _, e := range m.CreateObjectURLWithUIDInEncodedURLPathMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.CreateObjectURLWithUIDInEncodedURLPathMock.invocationsDone()
+}
+
+// MinimockCreateObjectURLWithUIDInEncodedURLPathInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockCreateObjectURLWithUIDInEncodedURLPathInspect() {
+	for _, e := range m.CreateObjectURLWithUIDInEncodedURLPathMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath with params: %#v", *e.params)
+		}
+	}
+
+	afterCreateObjectURLWithUIDInEncodedURLPathCounter := mm_atomic.LoadUint64(&m.afterCreateObjectURLWithUIDInEncodedURLPathCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.CreateObjectURLWithUIDInEncodedURLPathMock.defaultExpectation != nil && afterCreateObjectURLWithUIDInEncodedURLPathCounter < 1 {
+		if m.CreateObjectURLWithUIDInEncodedURLPathMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath")
+		} else {
+			m.t.Errorf("Expected call to RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath with params: %#v", *m.CreateObjectURLWithUIDInEncodedURLPathMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcCreateObjectURLWithUIDInEncodedURLPath != nil && afterCreateObjectURLWithUIDInEncodedURLPathCounter < 1 {
+		m.t.Error("Expected call to RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath")
+	}
+
+	if !m.CreateObjectURLWithUIDInEncodedURLPathMock.invocationsDone() && afterCreateObjectURLWithUIDInEncodedURLPathCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath but found %d calls",
+			mm_atomic.LoadUint64(&m.CreateObjectURLWithUIDInEncodedURLPathMock.expectedInvocations), afterCreateObjectURLWithUIDInEncodedURLPathCounter)
 	}
 }
 
@@ -22099,6 +22469,8 @@ func (m *RepositoryIMock) MinimockFinish() {
 
 			m.MinimockCreateObjectURLInspect()
 
+			m.MinimockCreateObjectURLWithUIDInEncodedURLPathInspect()
+
 			m.MinimockDeleteAllConvertedFilesInKbInspect()
 
 			m.MinimockDeleteAllKnowledgeBaseFilesInspect()
@@ -22252,6 +22624,7 @@ func (m *RepositoryIMock) minimockDone() bool {
 		m.MinimockCreateKnowledgeBaseFileDone() &&
 		m.MinimockCreateObjectDone() &&
 		m.MinimockCreateObjectURLDone() &&
+		m.MinimockCreateObjectURLWithUIDInEncodedURLPathDone() &&
 		m.MinimockDeleteAllConvertedFilesInKbDone() &&
 		m.MinimockDeleteAllKnowledgeBaseFilesDone() &&
 		m.MinimockDeleteAndCreateChunksDone() &&
