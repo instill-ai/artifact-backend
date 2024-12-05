@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.22.1-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.22.0-alpha...v0.22.1-alpha) (2024-12-05)
+
+
+### Bug Fixes
+
+* **artifact:** fix advanced index pipeline ([#135](https://github.com/instill-ai/artifact-backend/issues/135)) ([be3010e](https://github.com/instill-ai/artifact-backend/commit/be3010ea106076f19b3d6895d5b3c11efad905d3))
+* **blob:** fix concurrently create url issue ([#137](https://github.com/instill-ai/artifact-backend/issues/137)) ([bbce00f](https://github.com/instill-ai/artifact-backend/commit/bbce00f05c0411c17c9c6a87063b413f841fe2e1))
+
 ## [0.22.0-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.21.0-alpha...v0.22.0-alpha) (2024-11-30)
 
 
