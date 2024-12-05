@@ -111,25 +111,17 @@ func (s *Service) GetUploadURL(
 		Type:           repository.ObjectURLTypeUpload,
 	}
 
-	createdObjectURL, err := s.Repository.CreateObjectURL(ctx, *objectURL)
+	createdObjectURL, err := s.Repository.CreateObjectURLWithUIDInEncodedURLPath(ctx, *objectURL, namespaceID, EncodedMinioURLPath)
 	if err != nil {
 		log.Error("failed to create object url", zap.Error(err))
 		return nil, status.Errorf(codes.Internal, "failed to create object url: %v", err)
 	}
 
-	// update the encoded_url_path
-	createdObjectURL.EncodedURLPath = EncodedMinioURLPath(namespaceID, createdObjectURL.UID)
-	updatedObjectURL, err := s.Repository.UpdateObjectURL(ctx, *createdObjectURL)
-	if err != nil {
-		log.Error("failed to update object url", zap.Error(err))
-		return nil, status.Errorf(codes.Internal, "failed to update object url: %v", err)
-	}
-
 	objectInProto := repository.TurnObjectInDBToObjectInProto(createdObject)
 
 	return &artifactpb.GetObjectUploadURLResponse{
-		UploadUrl:   updatedObjectURL.EncodedURLPath,
-		UrlExpireAt: timestamppb.New(updatedObjectURL.URLExpireAt),
+		UploadUrl:   createdObjectURL.EncodedURLPath,
+		UrlExpireAt: timestamppb.New(createdObjectURL.URLExpireAt),
 		Object:      objectInProto,
 	}, nil
 }
@@ -199,25 +191,17 @@ func (s *Service) GetDownloadURL(
 		Type:           repository.ObjectURLTypeDownload,
 	}
 
-	createdObjectURL, err := s.Repository.CreateObjectURL(ctx, *objectURL)
+	createdObjectURL, err := s.Repository.CreateObjectURLWithUIDInEncodedURLPath(ctx, *objectURL, namespaceID, EncodedMinioURLPath)
 	if err != nil {
 		log.Error("failed to create object url", zap.Error(err))
 		return nil, status.Errorf(codes.Internal, "failed to create object url: %v", err)
 	}
 
-	// update the encoded_url_path
-	createdObjectURL.EncodedURLPath = EncodedMinioURLPath(namespaceID, createdObjectURL.UID)
-	updatedObjectURL, err := s.Repository.UpdateObjectURL(ctx, *createdObjectURL)
-	if err != nil {
-		log.Error("failed to update object url", zap.Error(err))
-		return nil, status.Errorf(codes.Internal, "failed to update object url: %v", err)
-	}
-
 	objectInProto := repository.TurnObjectInDBToObjectInProto(object)
 
 	return &artifactpb.GetObjectDownloadURLResponse{
-		DownloadUrl: updatedObjectURL.EncodedURLPath,
-		UrlExpireAt: timestamppb.New(updatedObjectURL.URLExpireAt),
+		DownloadUrl: createdObjectURL.EncodedURLPath,
+		UrlExpireAt: timestamppb.New(createdObjectURL.URLExpireAt),
 		Object:      objectInProto,
 	}, nil
 }
