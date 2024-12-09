@@ -64,6 +64,7 @@ type KnowledgeBaseFile struct {
 	Name             string    `gorm:"column:name;size:255;not null" json:"name"`
 	// Type is defined in the grpc proto file
 	Type        string `gorm:"column:type;not null" json:"type"`
+	// Destination is the path in the MinIO bucket
 	Destination string `gorm:"column:destination;size:255;not null" json:"destination"`
 	// Process status is defined in the grpc proto file
 	ProcessStatus string `gorm:"column:process_status;size:100;not null" json:"process_status"`
