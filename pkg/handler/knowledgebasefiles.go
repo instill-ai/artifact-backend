@@ -220,7 +220,6 @@ func checkUploadKnowledgeBaseFileRequest(req *artifactpb.UploadCatalogFileReques
 	return nil
 }
 
-// TODO: launch the artifact cloud to test this
 // MoveFileToCatalog moves a file from one catalog to another within the same namespace.
 // It copies the file content and metadata to the target catalog and deletes
 // the file from the source catalog.
@@ -468,7 +467,7 @@ func (ph *PublicHandler) DeleteCatalogFile(
 	}
 
 	startSignal := make(chan bool)
-	// TODO: need to use clean worker in the future
+	// TODO: need to use clean worker to prevent the service from being restarted before the file is deleted
 	go utils.GoRecover(
 		func() {
 			// Create a new context to prevent the parent context from being cancelled
