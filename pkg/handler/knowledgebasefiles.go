@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"strings"
 
@@ -217,6 +218,109 @@ func checkUploadKnowledgeBaseFileRequest(req *artifactpb.UploadCatalogFileReques
 	}
 
 	return nil
+}
+
+// TODO: launch the artifact cloud to test this
+// MoveFileToCatalog moves a file from one catalog to another within the same namespace.
+// It copies the file content and metadata to the target catalog and deletes
+// the file from the source catalog.
+func (ph *PublicHandler) MoveFileToCatalog(ctx context.Context, req *artifactpb.MoveFileToCatalogRequest) (*artifactpb.MoveFileToCatalogResponse, error) {
+	log, _ := logger.GetZapLogger(ctx)
+
+	// Validate authentication and request parameters
+	_, err := getUserUIDFromContext(ctx)
+	if err != nil {
+		err := fmt.Errorf("failed to get user uid from header: %v. err: %w", err, customerror.ErrUnauthenticated)
+		return nil, err
+	}
+	if req.FileUid == "" {
+		return nil, fmt.Errorf("file uid is required. err: %w", customerror.ErrInvalidArgument)
+	}
+	if req.ToCatalogId == "" {
+		return nil, fmt.Errorf("to catalog id is required. err: %w", customerror.ErrInvalidArgument)
+	}
+
+	// Step 1: Verify source file exists and check namespace permissions
+	sourceFiles, err := ph.service.Repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{uuid.FromStringOrNil(req.FileUid)})
+	if err != nil || len(sourceFiles) == 0 {
+		log.Error("file not found", zap.Error(err))
+		return nil, fmt.Errorf("file not found. err: %w", customerror.ErrNotFound)
+	}
+
+	sourceFile := sourceFiles[0]
+	// Verify namespace exists and get its details
+	reqNamespace, err := ph.service.GetNamespaceByNsID(ctx, req.NamespaceId)
+	if err != nil {
+		log.Error("failed to get namespace uid from source file", zap.Error(err))
+		return nil, fmt.Errorf("failed to get namespace uid from source file. err: %w", err)
+	}
+	// Ensure file movement occurs within the same namespace
+	if reqNamespace.NsUID.String() != sourceFile.Owner.String() {
+		return nil, fmt.Errorf("source file is not in the same namespace. err: %w", customerror.ErrInvalidArgument)
+	}
+
+	// Step 2: Verify target catalog exists
+	targetCatalog, err := ph.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, reqNamespace.NsUID, req.ToCatalogId)
+	if err != nil {
+		log.Error("target catalog not found", zap.Error(err))
+		return nil, fmt.Errorf("target catalog not found. err: %w", err)
+	}
+
+	// Step 3: Retrieve file content from MinIO storage
+	fileContent, err := ph.service.MinIO.GetFile(ctx, minio.KnowledgeBaseBucketName, sourceFile.Destination)
+	if err != nil {
+		log.Error("failed to get file content from MinIO", zap.Error(err))
+		return nil, fmt.Errorf("failed to get file content from MinIO. err: %w", err)
+	}
+
+	// Prepare file content and metadata for upload
+	fileContentBase64 := base64.StdEncoding.EncodeToString(fileContent)
+	fileType := artifactpb.FileType(artifactpb.FileType_value[sourceFile.Type])
+	externalMetadata := sourceFile.ExternalMetadataUnmarshal
+
+	// Step 4: Create file in target catalog
+	uploadReq := &artifactpb.UploadCatalogFileRequest{
+		NamespaceId: req.NamespaceId,
+		CatalogId:   targetCatalog.KbID,
+		File: &artifactpb.File{
+			Name:             sourceFile.Name,
+			Content:          fileContentBase64,
+			Type:             fileType,
+			ExternalMetadata: externalMetadata,
+		},
+	}
+
+	uploadResp, err := ph.UploadCatalogFile(ctx, uploadReq)
+	if err != nil {
+		log.Error("failed to upload file to target catalog", zap.Error(err))
+		return nil, fmt.Errorf("failed to upload file to target catalog. err: %w", err)
+	}
+
+	// process the file
+	processReq := &artifactpb.ProcessCatalogFilesRequest{
+		FileUids: []string{uploadResp.File.FileUid},
+	}
+	_, err = ph.ProcessCatalogFiles(ctx, processReq)
+	if err != nil {
+		log.Error("failed to process file", zap.Error(err))
+		return nil, fmt.Errorf("failed to process file. err: %w", err)
+	}
+
+	// Step 5: delete the source file
+	deleteReq := &artifactpb.DeleteCatalogFileRequest{
+		FileUid: sourceFile.UID.String(),
+	}
+	_, err = ph.DeleteCatalogFile(ctx, deleteReq)
+	if err != nil {
+		log.Error("failed to delete file from original catalog",
+			zap.String("file_uid", sourceFile.UID.String()),
+			zap.Error(err))
+	}
+
+	// Return the UID of the newly created file
+	return &artifactpb.MoveFileToCatalogResponse{
+		FileUid: uploadResp.File.FileUid,
+	}, nil
 }
 
 func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.ListCatalogFilesRequest) (*artifactpb.ListCatalogFilesResponse, error) {
