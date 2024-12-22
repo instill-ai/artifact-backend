@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.23.0-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.22.0-alpha...v0.23.0-alpha) (2024-12-22)
+
+
+### Features
+
+* **artifact:** add move file endpoint ([#138](https://github.com/instill-ai/artifact-backend/issues/138)) ([107dcf0](https://github.com/instill-ai/artifact-backend/commit/107dcf062bd0ccca1602b34cf3fddb80599c4006))
+
+
+### Bug Fixes
+
+* **artifact:** fix advanced index pipeline ([#135](https://github.com/instill-ai/artifact-backend/issues/135)) ([be3010e](https://github.com/instill-ai/artifact-backend/commit/be3010ea106076f19b3d6895d5b3c11efad905d3))
+* **artifact:** upgrade net package to fix vulnerability ([#140](https://github.com/instill-ai/artifact-backend/issues/140)) ([9fe2769](https://github.com/instill-ai/artifact-backend/commit/9fe2769842512b7940c164eea1af18d6f0c5e5e0))
+* **blob:** fix concurrently create url issue ([#137](https://github.com/instill-ai/artifact-backend/issues/137)) ([bbce00f](https://github.com/instill-ai/artifact-backend/commit/bbce00f05c0411c17c9c6a87063b413f841fe2e1))
+
 ## [0.22.0-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.21.0-alpha...v0.22.0-alpha) (2024-11-30)
 
 
