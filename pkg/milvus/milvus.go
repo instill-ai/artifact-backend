@@ -6,10 +6,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/milvus-io/milvus-sdk-go/v2/client"
 	"github.com/milvus-io/milvus-sdk-go/v2/entity"
 	"go.uber.org/zap"
+
+	"github.com/instill-ai/artifact-backend/pkg/logger"
 )
 
 type MilvusClientI interface {

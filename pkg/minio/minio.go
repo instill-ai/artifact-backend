@@ -11,12 +11,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/instill-ai/artifact-backend/config"
-	log "github.com/instill-ai/artifact-backend/pkg/logger"
-	"github.com/instill-ai/artifact-backend/pkg/utils"
-
 	"github.com/minio/minio-go"
 	"go.uber.org/zap"
+
+	"github.com/instill-ai/artifact-backend/config"
+	"github.com/instill-ai/artifact-backend/pkg/utils"
+
+	log "github.com/instill-ai/artifact-backend/pkg/logger"
 )
 
 type MinioI interface {

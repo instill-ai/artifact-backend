@@ -6,7 +6,7 @@ import (
 
 	artifact "github.com/instill-ai/artifact-backend/pkg/service"
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
-	healthcheckPB "github.com/instill-ai/protogen-go/common/healthcheck/v1beta"
+	healthcheckpb "github.com/instill-ai/protogen-go/common/healthcheck/v1beta"
 )
 
 // PublicHandler handles public API
@@ -27,8 +27,8 @@ func NewPublicHandler(ctx context.Context, service *artifact.Service) artifactpb
 func (ph *PublicHandler) Liveness(_ context.Context, _ *artifactpb.LivenessRequest) (*artifactpb.LivenessResponse, error) {
 	fmt.Println("Liveness")
 	return &artifactpb.LivenessResponse{
-		HealthCheckResponse: &healthcheckPB.HealthCheckResponse{
-			Status: healthcheckPB.HealthCheckResponse_SERVING_STATUS_SERVING,
+		HealthCheckResponse: &healthcheckpb.HealthCheckResponse{
+			Status: healthcheckpb.HealthCheckResponse_SERVING_STATUS_SERVING,
 		},
 	}, nil
 }
@@ -36,8 +36,8 @@ func (ph *PublicHandler) Liveness(_ context.Context, _ *artifactpb.LivenessReque
 // Readiness returns the state of the service.
 func (ph *PublicHandler) Readiness(_ context.Context, _ *artifactpb.ReadinessRequest) (*artifactpb.ReadinessResponse, error) {
 	return &artifactpb.ReadinessResponse{
-		HealthCheckResponse: &healthcheckPB.HealthCheckResponse{
-			Status: healthcheckPB.HealthCheckResponse_SERVING_STATUS_SERVING,
+		HealthCheckResponse: &healthcheckpb.HealthCheckResponse{
+			Status: healthcheckpb.HealthCheckResponse_SERVING_STATUS_SERVING,
 		},
 	}, nil
 }

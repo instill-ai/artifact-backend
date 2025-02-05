@@ -12,6 +12,7 @@ import (
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
+
 	pb "github.com/instill-ai/protogen-go/core/usage/v1beta"
 )
 

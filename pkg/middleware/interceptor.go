@@ -13,8 +13,8 @@ import (
 	"google.golang.org/grpc/status"
 	"gorm.io/gorm"
 
-	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
-	grpc_recovery "github.com/grpc-ecosystem/go-grpc-middleware/recovery"
+	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	grpcrecovery "github.com/grpc-ecosystem/go-grpc-middleware/recovery"
 
 	"github.com/instill-ai/artifact-backend/pkg/acl"
 	"github.com/instill-ai/artifact-backend/pkg/customerror"
@@ -24,8 +24,8 @@ import (
 )
 
 // RecoveryInterceptorOpt - panic handler
-func RecoveryInterceptorOpt() grpc_recovery.Option {
-	return grpc_recovery.WithRecoveryHandler(func(p interface{}) (err error) {
+func RecoveryInterceptorOpt() grpcrecovery.Option {
+	return grpcrecovery.WithRecoveryHandler(func(p interface{}) (err error) {
 		debug.PrintStack()
 		return status.Errorf(codes.Unknown, "panic triggered: %v", p)
 	})
@@ -53,7 +53,7 @@ func StreamAppendMetadataInterceptor(srv interface{}, stream grpc.ServerStream, 
 	}
 
 	newCtx := metadata.NewIncomingContext(stream.Context(), md)
-	wrapped := grpc_middleware.WrapServerStream(stream)
+	wrapped := grpcmiddleware.WrapServerStream(stream)
 	wrapped.WrappedContext = newCtx
 
 	err := handler(srv, wrapped)

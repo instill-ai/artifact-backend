@@ -7,13 +7,14 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
+	"github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
+
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/milvus"
 	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/service"
-	"github.com/redis/go-redis/v9"
-	"go.uber.org/zap"
 )
 
 const periodOfDispatcher = 5 * time.Second
@@ -157,7 +158,6 @@ func saveConvertedFile(ctx context.Context, svc *service.Service, kbUID, fileUID
 
 	return nil
 }
-
 
 type chunk = struct {
 	End    int

@@ -8,13 +8,15 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
-	"github.com/instill-ai/artifact-backend/pkg/logger"
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/structpb"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+
+	"github.com/instill-ai/artifact-backend/pkg/logger"
+
+	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
 type KnowledgeBaseFileI interface {
@@ -63,7 +65,7 @@ type KnowledgeBaseFile struct {
 	CreatorUID       uuid.UUID `gorm:"column:creator_uid;type:uuid;not null" json:"creator_uid"`
 	Name             string    `gorm:"column:name;size:255;not null" json:"name"`
 	// Type is defined in the grpc proto file
-	Type        string `gorm:"column:type;not null" json:"type"`
+	Type string `gorm:"column:type;not null" json:"type"`
 	// Destination is the path in the MinIO bucket
 	Destination string `gorm:"column:destination;size:255;not null" json:"destination"`
 	// Process status is defined in the grpc proto file
