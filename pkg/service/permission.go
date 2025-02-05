@@ -4,12 +4,13 @@ import (
 	"context"
 	"fmt"
 
+	"go.uber.org/zap"
+
 	"github.com/instill-ai/artifact-backend/pkg/acl"
 	"github.com/instill-ai/artifact-backend/pkg/customerror"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/resource"
-	"go.uber.org/zap"
 )
 
 func (s *Service) CheckCatalogUserPermission(ctx context.Context, nsID, catalogID, authUID string) (*resource.Namespace, *repository.KnowledgeBase, error) {

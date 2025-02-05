@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/gofrs/uuid"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
-	"github.com/gofrs/uuid"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 

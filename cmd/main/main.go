@@ -15,8 +15,6 @@ import (
 	"time"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
-	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
-	openfga "github.com/openfga/api/proto/openfga/v1"
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/contrib/propagators/b3"
 	"go.opentelemetry.io/otel"
@@ -31,9 +29,11 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"gorm.io/gorm"
 
-	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
-	grpcZap "github.com/grpc-ecosystem/go-grpc-middleware/logging/zap"
-	grpcRecovery "github.com/grpc-ecosystem/go-grpc-middleware/recovery"
+	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	grpczap "github.com/grpc-ecosystem/go-grpc-middleware/logging/zap"
+	grpcrecovery "github.com/grpc-ecosystem/go-grpc-middleware/recovery"
+	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
+	openfga "github.com/openfga/api/proto/openfga/v1"
 
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/acl"
@@ -43,19 +43,20 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/middleware"
 	"github.com/instill-ai/artifact-backend/pkg/milvus"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
-	servicePkg "github.com/instill-ai/artifact-backend/pkg/service"
+
 	"github.com/instill-ai/artifact-backend/pkg/usage"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
 	"github.com/instill-ai/artifact-backend/pkg/worker"
 
-	grpcClient "github.com/instill-ai/artifact-backend/pkg/client/grpc"
-	httpClient "github.com/instill-ai/artifact-backend/pkg/client/http"
+	grpcclient "github.com/instill-ai/artifact-backend/pkg/client/grpc"
+	httpclient "github.com/instill-ai/artifact-backend/pkg/client/http"
 	database "github.com/instill-ai/artifact-backend/pkg/db"
-	customOtel "github.com/instill-ai/artifact-backend/pkg/logger/otel"
+	customotel "github.com/instill-ai/artifact-backend/pkg/logger/otel"
 	minio "github.com/instill-ai/artifact-backend/pkg/minio"
-	artifactPB "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
-	mgmtPB "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
-	pipelinePB "github.com/instill-ai/protogen-go/vdp/pipeline/v1beta"
+	servicepkg "github.com/instill-ai/artifact-backend/pkg/service"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	mgmtpb "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
+	pipelinepb "github.com/instill-ai/protogen-go/pipeline/pipeline/v1beta"
 )
 
 var propagator propagation.TextMapPropagator
@@ -95,7 +96,7 @@ func main() {
 	// setup tracing and metrics
 	ctx, cancel := context.WithCancel(context.Background())
 
-	tp, err := customOtel.SetupTracing(ctx, "artifact-backend")
+	tp, err := customotel.SetupTracing(ctx, "artifact-backend")
 	if err != nil {
 		panic(err)
 	}
@@ -116,7 +117,7 @@ func main() {
 	}()
 
 	// verbosity 3 will avoid [transport] from emitting
-	grpcZap.ReplaceGrpcLoggerV2WithVerbosity(logger, 3)
+	grpczap.ReplaceGrpcLoggerV2WithVerbosity(logger, 3)
 
 	// Initialize clients needed for service
 	pipelinePublicServiceClient, pipelinePublicGrpcConn, _, mgmtPublicServiceClientConn, mgmtPrivateServiceClient, mgmtPrivateServiceGrpcConn,
@@ -141,12 +142,12 @@ func main() {
 	}
 
 	// Initialize service
-	service := servicePkg.NewService(
+	service := servicepkg.NewService(
 		repository.NewRepository(db),
 		minioClient,
 		mgmtPrivateServiceClient,
 		pipelinePublicServiceClient,
-		httpClient.NewRegistryClient(ctx),
+		httpclient.NewRegistryClient(ctx),
 		redisClient,
 		milvusClient,
 		aclClient)
@@ -155,14 +156,14 @@ func main() {
 
 	publicGrpcS := grpc.NewServer(grpcServerOpts...)
 	reflection.Register(publicGrpcS)
-	artifactPB.RegisterArtifactPublicServiceServer(
+	artifactpb.RegisterArtifactPublicServiceServer(
 		publicGrpcS,
 		handler.NewPublicHandler(ctx, service),
 	)
 
 	privateGrpcS := grpc.NewServer(grpcServerOpts...)
 	reflection.Register(privateGrpcS)
-	artifactPB.RegisterArtifactPrivateServiceServer(
+	artifactpb.RegisterArtifactPrivateServiceServer(
 		privateGrpcS,
 		handler.NewPrivateHandler(ctx, service),
 	)
@@ -183,17 +184,17 @@ func main() {
 	)
 
 	// activate persistent catalog file-to-embeddings worker pool
-	wp := worker.NewPersistentCatalogFileToEmbWorkerPool(ctx, service, config.Config.FileToEmbeddingWorker.NumberOfWorkers, artifactPB.CatalogType_CATALOG_TYPE_PERSISTENT)
+	wp := worker.NewPersistentCatalogFileToEmbWorkerPool(ctx, service, config.Config.FileToEmbeddingWorker.NumberOfWorkers, artifactpb.CatalogType_CATALOG_TYPE_PERSISTENT)
 	wp.Start()
 
 	// activate temp(ephemeral) catalog file-to-embeddings worker pool
-	wpTemp := worker.NewTempCatalogFileToEmbWorkerPool(ctx, service, config.Config.FileToEmbeddingWorker.NumberOfWorkers, artifactPB.CatalogType_CATALOG_TYPE_EPHEMERAL)
+	wpTemp := worker.NewTempCatalogFileToEmbWorkerPool(ctx, service, config.Config.FileToEmbeddingWorker.NumberOfWorkers, artifactpb.CatalogType_CATALOG_TYPE_EPHEMERAL)
 	wpTemp.Start()
 
 	// Start usage reporter
 	var usg usage.Usage
 	if config.Config.Server.Usage.Enabled {
-		usageServiceClient, usageServiceClientConn := grpcClient.NewUsageClient(ctx)
+		usageServiceClient, usageServiceClientConn := grpcclient.NewUsageClient(ctx)
 		if usageServiceClientConn != nil {
 			defer usageServiceClientConn.Close()
 			logger.Info("try to start usage reporter")
@@ -220,7 +221,7 @@ func main() {
 		dialOpts = []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(constant.MaxPayloadSize), grpc.MaxCallSendMsgSize(constant.MaxPayloadSize))}
 	}
 
-	if err := artifactPB.RegisterArtifactPublicServiceHandlerFromEndpoint(ctx, publicServeMux, fmt.Sprintf(":%v", config.Config.Server.PublicPort), dialOpts); err != nil {
+	if err := artifactpb.RegisterArtifactPublicServiceHandlerFromEndpoint(ctx, publicServeMux, fmt.Sprintf(":%v", config.Config.Server.PublicPort), dialOpts); err != nil {
 		logger.Fatal(err.Error())
 	}
 	var tlsConfig *tls.Config
@@ -291,11 +292,11 @@ func main() {
 }
 
 func newClients(ctx context.Context, logger *zap.Logger) (
-	pipelinePB.PipelinePublicServiceClient,
+	pipelinepb.PipelinePublicServiceClient,
 	*grpc.ClientConn,
-	mgmtPB.MgmtPublicServiceClient,
+	mgmtpb.MgmtPublicServiceClient,
 	*grpc.ClientConn,
-	mgmtPB.MgmtPrivateServiceClient,
+	mgmtpb.MgmtPrivateServiceClient,
 	*grpc.ClientConn,
 	*redis.Client,
 	influxdb2.Client,
@@ -308,7 +309,7 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 ) {
 
 	// init pipeline grpc client
-	pipelinePublicGrpcConn, err := grpcClient.NewGRPCConn(
+	pipelinePublicGrpcConn, err := grpcclient.NewGRPCConn(
 		fmt.Sprintf("%v:%v", config.Config.PipelineBackend.Host,
 			config.Config.PipelineBackend.PublicPort),
 		config.Config.PipelineBackend.HTTPS.Cert,
@@ -316,17 +317,17 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 	if err != nil {
 		logger.Fatal(fmt.Sprintf("failed to create pipeline public grpc client: %v", err))
 	}
-	pipelinePublicServiceClient := pipelinePB.NewPipelinePublicServiceClient(pipelinePublicGrpcConn)
+	pipelinePublicServiceClient := pipelinepb.NewPipelinePublicServiceClient(pipelinePublicGrpcConn)
 
 	// initialize mgmt clients
-	mgmtPrivateServiceClient, mgmtPrivateServiceClientConn := grpcClient.NewMGMTPrivateClient(ctx)
-	mgmtPublicServiceClient, mgmtPublicServiceClientConn := grpcClient.NewMGMTPublicClient(ctx)
+	mgmtPrivateServiceClient, mgmtPrivateServiceClientConn := grpcclient.NewMGMTPrivateClient(ctx)
+	mgmtPublicServiceClient, mgmtPublicServiceClientConn := grpcclient.NewMGMTPublicClient(ctx)
 
 	// Initialize redis client
 	redisClient := redis.NewClient(&config.Config.Cache.Redis.RedisOptions)
 
 	// Initialize InfluxDB client
-	influxDBClient, influxDBWriteClient := httpClient.NewInfluxDBClient(ctx)
+	influxDBClient, influxDBWriteClient := httpclient.NewInfluxDBClient(ctx)
 
 	influxErrCh := influxDBWriteClient.Errors()
 	go utils.GoRecover(func() {
@@ -366,8 +367,8 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 
 func newGrpcOptionAndCreds(logger *zap.Logger) ([]grpc.ServerOption, credentials.TransportCredentials) {
 	// Shared options for the logger, with a custom gRPC code to log level function.
-	opts := []grpcZap.Option{
-		grpcZap.WithDecider(func(fullMethodName string, err error) bool {
+	opts := []grpczap.Option{
+		grpczap.WithDecider(func(fullMethodName string, err error) bool {
 			// will not log gRPC calls if it was a call to liveness or readiness and no error was raised
 			if err == nil {
 				if match, _ := regexp.MatchString("artifact.artifact.v1alpha.ArtifactPublicService/.*ness$", fullMethodName); match {
@@ -383,15 +384,15 @@ func newGrpcOptionAndCreds(logger *zap.Logger) ([]grpc.ServerOption, credentials
 		}),
 	}
 	grpcServerOpts := []grpc.ServerOption{
-		grpc.StreamInterceptor(grpcMiddleware.ChainStreamServer(
+		grpc.StreamInterceptor(grpcmiddleware.ChainStreamServer(
 			middleware.StreamAppendMetadataInterceptor,
-			grpcZap.StreamServerInterceptor(logger, opts...),
-			grpcRecovery.StreamServerInterceptor(middleware.RecoveryInterceptorOpt()),
+			grpczap.StreamServerInterceptor(logger, opts...),
+			grpcrecovery.StreamServerInterceptor(middleware.RecoveryInterceptorOpt()),
 		)),
-		grpc.UnaryInterceptor(grpcMiddleware.ChainUnaryServer(
+		grpc.UnaryInterceptor(grpcmiddleware.ChainUnaryServer(
 			middleware.UnaryAppendMetadataAndErrorCodeInterceptor,
-			grpcZap.UnaryServerInterceptor(logger, opts...),
-			grpcRecovery.UnaryServerInterceptor(middleware.RecoveryInterceptorOpt()),
+			grpczap.UnaryServerInterceptor(logger, opts...),
+			grpcrecovery.UnaryServerInterceptor(middleware.RecoveryInterceptorOpt()),
 		)),
 	}
 

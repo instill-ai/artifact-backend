@@ -6,18 +6,19 @@ import (
 	"math"
 
 	"github.com/gofrs/uuid"
+	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/resource"
-	mgmtPB "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
-	"go.uber.org/zap"
+
+	mgmtpb "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
 )
 
 func (s *Service) GetNamespaceByNsID(ctx context.Context, nsID string) (*resource.Namespace, error) {
 	log, _ := logger.GetZapLogger(ctx)
-	nsRes, err := s.MgmtPrv.CheckNamespaceAdmin(ctx, &mgmtPB.CheckNamespaceAdminRequest{
+	nsRes, err := s.MgmtPrv.CheckNamespaceAdmin(ctx, &mgmtpb.CheckNamespaceAdminRequest{
 		Id: nsID,
 	},
 	)
@@ -29,9 +30,9 @@ func (s *Service) GetNamespaceByNsID(ctx context.Context, nsID string) (*resourc
 	ownerUUIDParsed := uuid.FromStringOrNil(ownerUUID)
 
 	var nsType resource.NamespaceType
-	if nsRes.GetType().String() == mgmtPB.CheckNamespaceAdminResponse_NAMESPACE_ORGANIZATION.String() {
+	if nsRes.GetType().String() == mgmtpb.CheckNamespaceAdminResponse_NAMESPACE_ORGANIZATION.String() {
 		nsType = resource.Organization
-	} else if nsRes.GetType().String() == mgmtPB.CheckNamespaceAdminResponse_NAMESPACE_USER.String() {
+	} else if nsRes.GetType().String() == mgmtpb.CheckNamespaceAdminResponse_NAMESPACE_USER.String() {
 		nsType = resource.User
 	} else {
 		err := fmt.Errorf("unknown namespace type: %v", nsRes.GetType().String())
@@ -58,7 +59,7 @@ func (s *Service) GetNamespaceTier(ctx context.Context, ns *resource.Namespace) 
 	log, _ := logger.GetZapLogger(ctx)
 	switch ns.NsType {
 	case resource.User:
-		sub, err := s.MgmtPrv.GetUserSubscriptionAdmin(ctx, &mgmtPB.GetUserSubscriptionAdminRequest{
+		sub, err := s.MgmtPrv.GetUserSubscriptionAdmin(ctx, &mgmtpb.GetUserSubscriptionAdminRequest{
 			UserId: ns.NsID,
 		})
 		if err != nil {
@@ -74,14 +75,14 @@ func (s *Service) GetNamespaceTier(ctx context.Context, ns *resource.Namespace) 
 
 			}
 		}
-		if sub.GetSubscription().Plan == mgmtPB.UserSubscription_PLAN_FREE {
+		if sub.GetSubscription().Plan == mgmtpb.UserSubscription_PLAN_FREE {
 			return TierFree, nil
-		} else if sub.GetSubscription().Plan == mgmtPB.UserSubscription_PLAN_PRO {
+		} else if sub.GetSubscription().Plan == mgmtpb.UserSubscription_PLAN_PRO {
 			return TierPro, nil
 		}
 		return "", fmt.Errorf("unknown user subscription plan: %v", sub.GetSubscription().Plan)
 	case resource.Organization:
-		sub, err := s.MgmtPrv.GetOrganizationSubscriptionAdmin(ctx, &mgmtPB.GetOrganizationSubscriptionAdminRequest{
+		sub, err := s.MgmtPrv.GetOrganizationSubscriptionAdmin(ctx, &mgmtpb.GetOrganizationSubscriptionAdminRequest{
 			OrganizationId: ns.NsID,
 		})
 		if err != nil {
@@ -97,11 +98,11 @@ func (s *Service) GetNamespaceTier(ctx context.Context, ns *resource.Namespace) 
 
 			}
 		}
-		if sub.GetSubscription().Plan == mgmtPB.OrganizationSubscription_PLAN_FREE {
+		if sub.GetSubscription().Plan == mgmtpb.OrganizationSubscription_PLAN_FREE {
 			return TierFree, nil
-		} else if sub.GetSubscription().Plan == mgmtPB.OrganizationSubscription_PLAN_TEAM {
+		} else if sub.GetSubscription().Plan == mgmtpb.OrganizationSubscription_PLAN_TEAM {
 			return TierTeam, nil
-		} else if sub.GetSubscription().Plan == mgmtPB.OrganizationSubscription_PLAN_ENTERPRISE {
+		} else if sub.GetSubscription().Plan == mgmtpb.OrganizationSubscription_PLAN_ENTERPRISE {
 			return TierEnterprise, nil
 		}
 		return "", fmt.Errorf("unknown organization subscription plan: %v", sub.GetSubscription().Plan)

@@ -8,8 +8,9 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
-	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"go.uber.org/zap"
+
+	"github.com/instill-ai/artifact-backend/pkg/logger"
 )
 
 // ObjectI is the interface for object-related operations.

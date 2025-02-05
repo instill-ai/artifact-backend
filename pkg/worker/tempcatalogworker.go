@@ -9,13 +9,15 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
+	"go.uber.org/zap"
+
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/service"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
+
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
-	"go.uber.org/zap"
 )
 
 type tempCatalogFileToEmbWorkerPool struct {

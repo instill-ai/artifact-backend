@@ -10,15 +10,17 @@ import (
 
 	"github.com/gofrs/uuid"
 	"github.com/gogo/status"
-	"github.com/instill-ai/artifact-backend/config"
-	"github.com/instill-ai/artifact-backend/pkg/logger"
-	minio_local "github.com/instill-ai/artifact-backend/pkg/minio"
-	"github.com/instill-ai/artifact-backend/pkg/repository"
-	"github.com/instill-ai/artifact-backend/pkg/utils"
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/types/known/timestamppb"
+
+	"github.com/instill-ai/artifact-backend/config"
+	"github.com/instill-ai/artifact-backend/pkg/logger"
+	"github.com/instill-ai/artifact-backend/pkg/repository"
+	"github.com/instill-ai/artifact-backend/pkg/utils"
+
+	miniolocal "github.com/instill-ai/artifact-backend/pkg/minio"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
 // error type for object
@@ -82,7 +84,7 @@ func (s *Service) GetUploadURL(
 	}
 
 	// get path of the object
-	minioPath := minio_local.GetBlobObjectPath(createdObject.NamespaceUID, createdObject.UID)
+	minioPath := miniolocal.GetBlobObjectPath(createdObject.NamespaceUID, createdObject.UID)
 	// update the object destination
 	createdObject.Destination = minioPath
 	_, err = s.Repository.UpdateObject(ctx, *createdObject)

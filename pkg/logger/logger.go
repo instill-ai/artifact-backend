@@ -6,13 +6,14 @@ import (
 	"os"
 	"sync"
 
-	"github.com/instill-ai/artifact-backend/config"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"go.uber.org/zap/buffer"
 	"go.uber.org/zap/zapcore"
+
+	"github.com/instill-ai/artifact-backend/config"
 )
 
 var once sync.Once

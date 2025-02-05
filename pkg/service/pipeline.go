@@ -6,14 +6,16 @@ import (
 	"sync"
 
 	"github.com/gofrs/uuid"
-	"github.com/instill-ai/artifact-backend/pkg/constant"
-	"github.com/instill-ai/artifact-backend/pkg/logger"
-	"github.com/instill-ai/artifact-backend/pkg/utils"
-	artifactPb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
-	pipelinePb "github.com/instill-ai/protogen-go/vdp/pipeline/v1beta"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/structpb"
+
+	"github.com/instill-ai/artifact-backend/pkg/constant"
+	"github.com/instill-ai/artifact-backend/pkg/logger"
+	"github.com/instill-ai/artifact-backend/pkg/utils"
+
+	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	pipelinepb "github.com/instill-ai/protogen-go/pipeline/pipeline/v1beta"
 )
 
 const maxChunkLengthForPersistentCatalog = 1024
@@ -45,7 +47,7 @@ const QAPipelineID = "retrieving-qna"
 const QAVersion = "v1.2.0"
 
 // ConvertToMDPipeForFilesInPersistentCatalog using converting pipeline to convert some file type to MD and consume caller's credits
-func (s *Service) ConvertToMDPipeForFilesInPersistentCatalog(ctx context.Context, fileUID uuid.UUID, caller uuid.UUID, requester uuid.UUID, fileBase64 string, fileType artifactPb.FileType) (string, error) {
+func (s *Service) ConvertToMDPipeForFilesInPersistentCatalog(ctx context.Context, fileUID uuid.UUID, caller uuid.UUID, requester uuid.UUID, fileBase64 string, fileType artifactpb.FileType) (string, error) {
 	logger, _ := logger.GetZapLogger(ctx)
 	var md metadata.MD
 	if requester != uuid.Nil {
@@ -71,19 +73,19 @@ func (s *Service) ConvertToMDPipeForFilesInPersistentCatalog(ctx context.Context
 
 	switch fileType {
 	// Document types use the new pipeline
-	case artifactPb.FileType_FILE_TYPE_PDF,
-		artifactPb.FileType_FILE_TYPE_DOCX,
-		artifactPb.FileType_FILE_TYPE_DOC,
-		artifactPb.FileType_FILE_TYPE_PPT,
-		artifactPb.FileType_FILE_TYPE_PPTX:
+	case artifactpb.FileType_FILE_TYPE_PDF,
+		artifactpb.FileType_FILE_TYPE_DOCX,
+		artifactpb.FileType_FILE_TYPE_DOC,
+		artifactpb.FileType_FILE_TYPE_PPT,
+		artifactpb.FileType_FILE_TYPE_PPTX:
 		pipelineID = ConvertDocToMDPipelineID2
 		version = DocToMDVersion2
 
 	// Spreadsheet types and others use the original pipeline
-	case artifactPb.FileType_FILE_TYPE_XLSX,
-		artifactPb.FileType_FILE_TYPE_XLS,
-		artifactPb.FileType_FILE_TYPE_CSV,
-		artifactPb.FileType_FILE_TYPE_HTML:
+	case artifactpb.FileType_FILE_TYPE_XLSX,
+		artifactpb.FileType_FILE_TYPE_XLS,
+		artifactpb.FileType_FILE_TYPE_CSV,
+		artifactpb.FileType_FILE_TYPE_HTML:
 		pipelineID = ConvertDocToMDPipelineID
 		version = DocToMDVersion
 
@@ -99,7 +101,7 @@ func (s *Service) ConvertToMDPipeForFilesInPersistentCatalog(ctx context.Context
 		return "", fmt.Errorf("failed to save converting pipeline metadata: %w", err)
 	}
 
-	req := &pipelinePb.TriggerNamespacePipelineReleaseRequest{
+	req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
 		NamespaceId: NamespaceID,
 		PipelineId:  pipelineID,
 		ReleaseId:   version,
@@ -128,7 +130,7 @@ func (s *Service) ConvertToMDPipeForFilesInPersistentCatalog(ctx context.Context
 }
 
 // ConvertToMDPipeForFilesInTempCatalog using converting pipeline to convert some file type to MD and consume caller's credits
-func (s *Service) ConvertToMDPipeForFilesInTempCatalog(ctx context.Context, fileUID uuid.UUID, caller uuid.UUID, requester uuid.UUID, fileBase64 string, fileType artifactPb.FileType) (string, error) {
+func (s *Service) ConvertToMDPipeForFilesInTempCatalog(ctx context.Context, fileUID uuid.UUID, caller uuid.UUID, requester uuid.UUID, fileBase64 string, fileType artifactpb.FileType) (string, error) {
 	logger, _ := logger.GetZapLogger(ctx)
 	var md metadata.MD
 	if requester != uuid.Nil {
@@ -154,15 +156,15 @@ func (s *Service) ConvertToMDPipeForFilesInTempCatalog(ctx context.Context, file
 
 	switch fileType {
 	// Document types use the new pipeline
-	case artifactPb.FileType_FILE_TYPE_PDF,
-		artifactPb.FileType_FILE_TYPE_DOCX,
-		artifactPb.FileType_FILE_TYPE_DOC,
-		artifactPb.FileType_FILE_TYPE_PPT,
-		artifactPb.FileType_FILE_TYPE_PPTX,
-		artifactPb.FileType_FILE_TYPE_XLSX,
-		artifactPb.FileType_FILE_TYPE_XLS,
-		artifactPb.FileType_FILE_TYPE_CSV,
-		artifactPb.FileType_FILE_TYPE_HTML:
+	case artifactpb.FileType_FILE_TYPE_PDF,
+		artifactpb.FileType_FILE_TYPE_DOCX,
+		artifactpb.FileType_FILE_TYPE_DOC,
+		artifactpb.FileType_FILE_TYPE_PPT,
+		artifactpb.FileType_FILE_TYPE_PPTX,
+		artifactpb.FileType_FILE_TYPE_XLSX,
+		artifactpb.FileType_FILE_TYPE_XLS,
+		artifactpb.FileType_FILE_TYPE_CSV,
+		artifactpb.FileType_FILE_TYPE_HTML:
 		pipelineID = ConvertDocToMDPipelineID
 		version = DocToMDVersion
 
@@ -178,7 +180,7 @@ func (s *Service) ConvertToMDPipeForFilesInTempCatalog(ctx context.Context, file
 		return "", fmt.Errorf("failed to save converting pipeline metadata: %w", err)
 	}
 
-	req := &pipelinePb.TriggerNamespacePipelineReleaseRequest{
+	req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
 		NamespaceId: NamespaceID,
 		PipelineId:  pipelineID,
 		ReleaseId:   version,
@@ -206,27 +208,27 @@ func (s *Service) ConvertToMDPipeForFilesInTempCatalog(ctx context.Context, file
 }
 
 // getFileTypePrefix returns the appropriate prefix for the given file type
-func getFileTypePrefix(fileType artifactPb.FileType) string {
+func getFileTypePrefix(fileType artifactpb.FileType) string {
 	switch fileType {
-	case artifactPb.FileType_FILE_TYPE_PDF:
+	case artifactpb.FileType_FILE_TYPE_PDF:
 		return "data:application/pdf;base64,"
-	case artifactPb.FileType_FILE_TYPE_DOCX:
+	case artifactpb.FileType_FILE_TYPE_DOCX:
 		return "data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,"
-	case artifactPb.FileType_FILE_TYPE_DOC:
+	case artifactpb.FileType_FILE_TYPE_DOC:
 		return "data:application/msword;base64,"
-	case artifactPb.FileType_FILE_TYPE_PPT:
+	case artifactpb.FileType_FILE_TYPE_PPT:
 		return "data:application/vnd.ms-powerpoint;base64,"
-	case artifactPb.FileType_FILE_TYPE_PPTX:
+	case artifactpb.FileType_FILE_TYPE_PPTX:
 		return "data:application/vnd.openxmlformats-officedocument.presentationml.presentation;base64,"
-	case artifactPb.FileType_FILE_TYPE_HTML:
+	case artifactpb.FileType_FILE_TYPE_HTML:
 		return "data:text/html;base64,"
-	case artifactPb.FileType_FILE_TYPE_TEXT:
+	case artifactpb.FileType_FILE_TYPE_TEXT:
 		return "data:text/plain;base64,"
-	case artifactPb.FileType_FILE_TYPE_XLSX:
+	case artifactpb.FileType_FILE_TYPE_XLSX:
 		return "data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,"
-	case artifactPb.FileType_FILE_TYPE_XLS:
+	case artifactpb.FileType_FILE_TYPE_XLS:
 		return "data:application/vnd.ms-excel;base64,"
-	case artifactPb.FileType_FILE_TYPE_CSV:
+	case artifactpb.FileType_FILE_TYPE_CSV:
 		return "data:text/csv;base64,"
 	default:
 		return ""
@@ -236,7 +238,7 @@ func getFileTypePrefix(fileType artifactPb.FileType) string {
 // getConvertResult extracts the conversion result from the pipeline response.
 // It first checks for a non-empty "convert_result" field, then falls back to "convert_result2".
 // Returns an error if neither field contains valid data or if the response structure is invalid.
-func getConvertResult(resp *pipelinePb.TriggerNamespacePipelineReleaseResponse) (string, error) {
+func getConvertResult(resp *pipelinepb.TriggerNamespacePipelineReleaseResponse) (string, error) {
 	if resp == nil || len(resp.Outputs) == 0 {
 		return "", fmt.Errorf("response is nil or has no outputs. resp: %v", resp)
 	}
@@ -279,7 +281,7 @@ func (s *Service) ChunkMarkdownPipe(ctx context.Context, caller uuid.UUID, reque
 		})
 	}
 	ctx = metadata.NewOutgoingContext(ctx, md)
-	req := &pipelinePb.TriggerNamespacePipelineReleaseRequest{
+	req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
 		NamespaceId: NamespaceID,
 		PipelineId:  ChunkMdPipelineID,
 		ReleaseId:   ChunkMdVersion,
@@ -313,7 +315,7 @@ func (s *Service) ChunkMarkdownPipe(ctx context.Context, caller uuid.UUID, reque
 }
 
 // GetChunksFromResponse converts the pipeline response into a slice of Chunk.
-func GetChunksFromResponse(resp *pipelinePb.TriggerNamespacePipelineReleaseResponse) ([]Chunk, error) {
+func GetChunksFromResponse(resp *pipelinepb.TriggerNamespacePipelineReleaseResponse) ([]Chunk, error) {
 	if resp == nil || len(resp.Outputs) == 0 {
 		return nil, fmt.Errorf("response is nil or has no outputs. resp: %v", resp)
 	}
@@ -360,7 +362,7 @@ func (s *Service) ChunkTextPipeForPersistentCatalog(ctx context.Context, caller 
 		})
 	}
 	ctx = metadata.NewOutgoingContext(ctx, md)
-	req := &pipelinePb.TriggerNamespacePipelineReleaseRequest{
+	req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
 		NamespaceId: NamespaceID,
 		PipelineId:  ChunkTextPipelineID,
 		ReleaseId:   ChunkTextVersion,
@@ -411,7 +413,7 @@ func (s *Service) ChunkTextPipeForTempCatalog(ctx context.Context, caller uuid.U
 		})
 	}
 	ctx = metadata.NewOutgoingContext(ctx, md)
-	req := &pipelinePb.TriggerNamespacePipelineReleaseRequest{
+	req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
 		NamespaceId: NamespaceID,
 		PipelineId:  ChunkTextPipelineID,
 		ReleaseId:   ChunkTextVersion,
@@ -530,7 +532,7 @@ func (s *Service) EmbeddingTextPipe(ctx context.Context, caller uuid.UUID, reque
 					})
 				}
 
-				req := &pipelinePb.TriggerNamespacePipelineReleaseRequest{
+				req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
 					NamespaceId: NamespaceID,
 					PipelineId:  EmbedTextPipelineID,
 					ReleaseId:   EmbedTextVersion,
@@ -579,7 +581,7 @@ func (s *Service) EmbeddingTextPipe(ctx context.Context, caller uuid.UUID, reque
 }
 
 // GetVectorsFromResponse converts the pipeline response into a slice of float32.
-func GetVectorsFromResponse(resp *pipelinePb.TriggerNamespacePipelineReleaseResponse) ([][]float32, error) {
+func GetVectorsFromResponse(resp *pipelinepb.TriggerNamespacePipelineReleaseResponse) ([][]float32, error) {
 	if resp == nil || len(resp.Outputs) == 0 {
 		return nil, fmt.Errorf("response is nil or has no outputs. resp: %v", resp)
 	}
@@ -626,7 +628,7 @@ func (s *Service) QuestionAnsweringPipe(ctx context.Context, caller uuid.UUID, r
 		retrievedChunk += chunk + "\n\n"
 	}
 	ctx = metadata.NewOutgoingContext(ctx, md)
-	req := &pipelinePb.TriggerNamespacePipelineReleaseRequest{
+	req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
 		NamespaceId: NamespaceID,
 		PipelineId:  QAPipelineID,
 		ReleaseId:   QAVersion,

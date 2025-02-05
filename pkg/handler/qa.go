@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
+	"go.uber.org/zap"
+
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/customerror"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
@@ -13,10 +15,9 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/resource"
 	"github.com/instill-ai/artifact-backend/pkg/service"
-	artifactPb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
-	"go.uber.org/zap"
-)
 
+	artifactPb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+)
 
 func (ph *PublicHandler) QuestionAnswering(
 	ctx context.Context,

@@ -3,12 +3,14 @@ package repository
 import (
 	"context"
 
-	customerror "github.com/instill-ai/artifact-backend/pkg/customerror"
-	"github.com/instill-ai/artifact-backend/pkg/utils"
-	pb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+
+	"github.com/instill-ai/artifact-backend/pkg/utils"
+
+	customerror "github.com/instill-ai/artifact-backend/pkg/customerror"
+	pb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
 // TagI

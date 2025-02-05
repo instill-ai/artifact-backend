@@ -6,9 +6,11 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
-	"github.com/instill-ai/artifact-backend/pkg/logger"
-	artifactPb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	"go.uber.org/zap"
+
+	"github.com/instill-ai/artifact-backend/pkg/logger"
+
+	artifactPb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
 type SimChunk struct {

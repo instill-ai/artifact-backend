@@ -7,7 +7,7 @@ import (
 
 	"github.com/instill-ai/artifact-backend/pkg/utils"
 
-	mgmtPB "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
+	mgmtpb "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
 )
 
 type Option func(l logMessage) logMessage
@@ -75,7 +75,7 @@ func SetMetadata(m string) Option {
 func NewLogMessage(
 	span trace.Span,
 	logID string,
-	user *mgmtPB.User,
+	user *mgmtpb.User,
 	eventName string,
 	options ...Option,
 ) []byte {

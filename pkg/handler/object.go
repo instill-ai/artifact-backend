@@ -4,11 +4,12 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/gofrs/uuid"
 	"go.uber.org/zap"
 
-	"github.com/gofrs/uuid"
 	"github.com/instill-ai/artifact-backend/pkg/customerror"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
+
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 

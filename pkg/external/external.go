@@ -18,12 +18,12 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 
-	mgmtPB "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
-	usagePB "github.com/instill-ai/protogen-go/core/usage/v1beta"
+	mgmtpb "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
+	usagepb "github.com/instill-ai/protogen-go/core/usage/v1beta"
 )
 
 // InitMgmtPrivateServiceClient initialises a MgmtPrivateServiceClient instance
-func InitMgmtPrivateServiceClient(ctx context.Context) (mgmtPB.MgmtPrivateServiceClient, *grpc.ClientConn) {
+func InitMgmtPrivateServiceClient(ctx context.Context) (mgmtpb.MgmtPrivateServiceClient, *grpc.ClientConn) {
 	logger, _ := logger.GetZapLogger(ctx)
 
 	var clientDialOpts grpc.DialOption
@@ -43,10 +43,10 @@ func InitMgmtPrivateServiceClient(ctx context.Context) (mgmtPB.MgmtPrivateServic
 		return nil, nil
 	}
 
-	return mgmtPB.NewMgmtPrivateServiceClient(clientConn), clientConn
+	return mgmtpb.NewMgmtPrivateServiceClient(clientConn), clientConn
 }
 
-func InitMgmtPublicServiceClient(ctx context.Context) (mgmtPB.MgmtPublicServiceClient, *grpc.ClientConn) {
+func InitMgmtPublicServiceClient(ctx context.Context) (mgmtpb.MgmtPublicServiceClient, *grpc.ClientConn) {
 	logger, _ := logger.GetZapLogger(ctx)
 
 	var clientDialOpts grpc.DialOption
@@ -66,11 +66,11 @@ func InitMgmtPublicServiceClient(ctx context.Context) (mgmtPB.MgmtPublicServiceC
 		return nil, nil
 	}
 
-	return mgmtPB.NewMgmtPublicServiceClient(clientConn), clientConn
+	return mgmtpb.NewMgmtPublicServiceClient(clientConn), clientConn
 }
 
 // InitUsageServiceClient initialises a UsageServiceClient instance (no mTLS)
-func InitUsageServiceClient(ctx context.Context) (usagePB.UsageServiceClient, *grpc.ClientConn) {
+func InitUsageServiceClient(ctx context.Context) (usagepb.UsageServiceClient, *grpc.ClientConn) {
 	logger, _ := logger.GetZapLogger(ctx)
 
 	var clientDialOpts grpc.DialOption
@@ -88,7 +88,7 @@ func InitUsageServiceClient(ctx context.Context) (usagePB.UsageServiceClient, *g
 		return nil, nil
 	}
 
-	return usagePB.NewUsageServiceClient(clientConn), clientConn
+	return usagepb.NewUsageServiceClient(clientConn), clientConn
 }
 
 // InitInfluxDBServiceClient initialises a InfluxDBServiceClient instance

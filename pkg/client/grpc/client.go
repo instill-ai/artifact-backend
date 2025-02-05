@@ -1,10 +1,11 @@
 package grpcclient
 
 import (
-	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+
+	"github.com/instill-ai/artifact-backend/pkg/constant"
 )
 
 func NewGRPCConn(server, cert, key string) (*grpc.ClientConn, error) {

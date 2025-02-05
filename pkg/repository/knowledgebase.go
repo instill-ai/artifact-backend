@@ -9,9 +9,11 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
-	"github.com/instill-ai/artifact-backend/pkg/customerror"
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	"gorm.io/gorm"
+
+	"github.com/instill-ai/artifact-backend/pkg/customerror"
+
+	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
 type KnowledgeBaseI interface {

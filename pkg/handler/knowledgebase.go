@@ -6,16 +6,17 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/gofrs/uuid"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/metadata"
 
-	"github.com/gofrs/uuid"
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/customerror"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/service"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
+
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 

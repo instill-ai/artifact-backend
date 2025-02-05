@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/redis/go-redis/v9"
+
 	"github.com/instill-ai/artifact-backend/pkg/acl"
 	"github.com/instill-ai/artifact-backend/pkg/customerror"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
@@ -13,10 +15,10 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
+
 	pb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
-	mgmtPB "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
-	pipelinev1beta "github.com/instill-ai/protogen-go/vdp/pipeline/v1beta"
-	"github.com/redis/go-redis/v9"
+	mgmtpb "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
+	pipelinepb "github.com/instill-ai/protogen-go/pipeline/pipeline/v1beta"
 )
 
 const (
@@ -28,8 +30,8 @@ const (
 type Service struct {
 	Repository     repository.RepositoryI
 	MinIO          minio.MinioI
-	MgmtPrv        mgmtPB.MgmtPrivateServiceClient
-	PipelinePub    pipelinev1beta.PipelinePublicServiceClient
+	MgmtPrv        mgmtpb.MgmtPrivateServiceClient
+	PipelinePub    pipelinepb.PipelinePublicServiceClient
 	registryClient RegistryClient
 	// refactor: we need redis interface in the future to mock the redis client
 	RedisClient  *redis.Client
@@ -41,8 +43,8 @@ type Service struct {
 func NewService(
 	r repository.RepositoryI,
 	mc minio.MinioI,
-	mgmtPrv mgmtPB.MgmtPrivateServiceClient,
-	pipelinePub pipelinev1beta.PipelinePublicServiceClient,
+	mgmtPrv mgmtpb.MgmtPrivateServiceClient,
+	pipelinePub pipelinepb.PipelinePublicServiceClient,
 	rgc RegistryClient,
 	rc *redis.Client,
 	milvusClient milvus.MilvusClientI,

@@ -8,10 +8,11 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
-	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+
+	"github.com/instill-ai/artifact-backend/pkg/logger"
 )
 
 type TextChunkI interface {

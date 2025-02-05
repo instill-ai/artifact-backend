@@ -6,13 +6,15 @@ import (
 	"sort"
 
 	"github.com/gofrs/uuid"
+	"go.uber.org/zap"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	"github.com/instill-ai/artifact-backend/pkg/customerror"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
+
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
-	"go.uber.org/zap"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // convertToProtoChunk

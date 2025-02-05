@@ -8,16 +8,17 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
-	"github.com/instill-ai/artifact-backend/config"
-	"github.com/instill-ai/artifact-backend/pkg/constant"
-	"google.golang.org/grpc/status"
-
-	"github.com/instill-ai/artifact-backend/pkg/resource"
-	openfga "github.com/openfga/api/proto/openfga/v1"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
+
+	openfga "github.com/openfga/api/proto/openfga/v1"
+
+	"github.com/instill-ai/artifact-backend/config"
+	"github.com/instill-ai/artifact-backend/pkg/constant"
+	"github.com/instill-ai/artifact-backend/pkg/resource"
 )
 
 type ACLClient struct {
@@ -118,6 +119,7 @@ func (c *ACLClient) getClient(ctx context.Context, mode Mode) openfga.OpenFGASer
 	}
 	return c.writeClient
 }
+
 // SetOwner sets the owner of a given object. It first normalizes the ownerType to its singular form,
 // then checks if the owner already exists in the database. If the owner does not exist, it writes the new owner to the database.
 // Parameters:
