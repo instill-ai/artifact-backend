@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"embed"
 	"fmt"
 	"sync"
 
@@ -17,6 +18,9 @@ import (
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	pipelinepb "github.com/instill-ai/protogen-go/pipeline/pipeline/v1beta"
 )
+
+//go:embed preset/pipelines/*
+var PresetPipelinesFS embed.FS
 
 const maxChunkLengthForPersistentCatalog = 1024
 const maxChunkLengthForTempCatalog = 7000
@@ -45,6 +49,18 @@ const EmbedTextVersion = "v1.1.0"
 
 const QAPipelineID = "retrieving-qna"
 const QAVersion = "v1.2.0"
+
+var PresetPipelinesList = []struct {
+	ID      string
+	Version string
+}{
+	{ID: ConvertDocToMDPipelineID, Version: DocToMDVersion},
+	{ID: ConvertDocToMDPipelineID2, Version: DocToMDVersion2},
+	{ID: ChunkMdPipelineID, Version: ChunkMdVersion},
+	{ID: ChunkTextPipelineID, Version: ChunkTextVersion},
+	{ID: EmbedTextPipelineID, Version: EmbedTextVersion},
+	{ID: QAPipelineID, Version: QAVersion},
+}
 
 // ConvertToMDPipeForFilesInPersistentCatalog using converting pipeline to convert some file type to MD and consume caller's credits
 func (s *Service) ConvertToMDPipeForFilesInPersistentCatalog(ctx context.Context, fileUID uuid.UUID, caller uuid.UUID, requester uuid.UUID, fileBase64 string, fileType artifactpb.FileType) (string, error) {
