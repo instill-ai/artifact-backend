@@ -66,11 +66,6 @@ func main() {
 		id := presetPipeline.ID
 		version := presetPipeline.Version
 
-		_, err = pipelinePublicServiceClient.GetNamespacePipeline(ctx, &pipelinepb.GetNamespacePipelineRequest{
-			NamespaceId: PresetNamespaceID,
-			PipelineId:  id,
-		})
-
 		descriptionContent, err := service.PresetPipelinesFS.ReadFile(filepath.Join("preset/pipelines", id, version, "description.md"))
 		if err != nil {
 			log.Printf("Failed to read description.md for %s/%s: %v", id, version, err)
