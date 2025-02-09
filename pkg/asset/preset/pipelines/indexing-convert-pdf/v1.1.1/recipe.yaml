@@ -1,0 +1,16 @@
+version: v1beta
+component:
+  document-converter:
+    type: document
+    task: TASK_CONVERT_TO_MARKDOWN
+    input:
+      document: ${variable.document_input}
+variable:
+  document_input:
+    title: document-input
+    description: Upload a document (PDF/DOCX/DOC/PPTX/PPT/HTML)
+    format: file
+output:
+  convert_result:
+    title: convert-result
+    value: ${document-converter.output.body}

@@ -1,0 +1,19 @@
+version: v1beta
+component:
+  openai-embedder:
+    type: openai
+    task: TASK_TEXT_EMBEDDINGS
+    input:
+      model: text-embedding-3-small
+      text: ${variable.chunk_input}
+    setup:
+      api-key: ${secret.INSTILL_SECRET}
+variable:
+  chunk_input:
+    title: chunk-input
+    format: string
+    instill-ui-multiline: true
+output:
+  embed_result:
+    title: embed-result
+    value: ${openai-embedder.output.embedding}
