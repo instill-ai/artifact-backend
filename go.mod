@@ -49,7 +49,6 @@ require (
 	github.com/go-ini/ini v1.67.0 // indirect
 	github.com/gogo/googleapis v1.4.1 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
-	github.com/launchdarkly/go-semver v1.0.3 // indirect
 	github.com/milvus-io/milvus-proto/go-api/v2 v2.4.3 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/tidwall/gjson v1.14.4 // indirect
