@@ -24,7 +24,9 @@ func main() {
 
 	ctx := context.Background()
 
-	config.Init()
+	if err := config.Init(); err != nil {
+		log.Fatalf("failed to initialize config: %v", err)
+	}
 
 	pipelinePublicGrpcConn, err := grpcclient.NewGRPCConn(
 		fmt.Sprintf("%v:%v", config.Config.PipelineBackend.Host,
