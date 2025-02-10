@@ -3,11 +3,11 @@ variable:
   document_input:
     title: document-input
     description: Upload a document (PDF/DOCX/DOC/PPTX/PPT)
-    format: file
+    type: file
   vlm_model:
     title: vlm-model
     description: OpenAI VLM to read images e.g., gpt-4o-mini or gpt-4o
-    format: string
+    type: string
 component:
   pages-to-images:
     type: document

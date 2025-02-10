@@ -40,12 +40,12 @@ variable:
   retrieved_chunk:
     title: retrieved-chunk
     description: chunks search result, using \n\n to combine all the relevant chunk texts
-    format: string
+    type: string
     instill-ui-multiline: true
   user_question:
     title: user-question
     description: user query (single-turn)
-    format: string
+    type: string
     instill-ui-multiline: true
 output:
   assistant_reply:

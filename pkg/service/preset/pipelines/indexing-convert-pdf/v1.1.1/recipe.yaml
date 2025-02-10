@@ -9,7 +9,7 @@ variable:
   document_input:
     title: document-input
     description: Upload a document (PDF/DOCX/DOC/PPTX/PPT/HTML)
-    format: file
+    type: file
 output:
   convert_result:
     title: convert-result
