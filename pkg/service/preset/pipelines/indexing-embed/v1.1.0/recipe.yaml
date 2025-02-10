@@ -11,7 +11,7 @@ component:
 variable:
   chunk_input:
     title: chunk-input
-    format: string
+    type: string
     instill-ui-multiline: true
 output:
   embed_result:

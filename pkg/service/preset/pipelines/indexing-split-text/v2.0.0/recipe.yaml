@@ -16,15 +16,15 @@ variable:
   chunk_overlap:
     title: chunk-overlap
     description: number of tokens that overlap between consecutive chunks
-    format: number
+    type: number
     instill-ui-order: 2
   max_chunk_length:
     title: max-chunk-length
     description: splitting maximum tokens size
-    format: number
+    type: number
   text_input:
     title: text-input
-    format: string
+    type: string
     instill-ui-order: 1
     instill-ui-multiline: true
 output:
