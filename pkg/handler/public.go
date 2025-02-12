@@ -7,20 +7,22 @@ import (
 	artifact "github.com/instill-ai/artifact-backend/pkg/service"
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	healthcheckpb "github.com/instill-ai/protogen-go/common/healthcheck/v1beta"
+	"go.uber.org/zap"
 )
 
 // PublicHandler handles public API
 type PublicHandler struct {
 	artifactpb.UnimplementedArtifactPublicServiceServer
-	ctx     context.Context
 	service *artifact.Service
+	log     *zap.Logger
 }
 
 // NewPublicHandler initiates a handler instance
-func NewPublicHandler(ctx context.Context, service *artifact.Service) artifactpb.ArtifactPublicServiceServer {
+func NewPublicHandler(service *artifact.Service, log *zap.Logger) *PublicHandler {
 	return &PublicHandler{
-		ctx:     ctx,
-		service: service}
+		service: service,
+		log:     log,
+	}
 }
 
 // Liveness returns the health of the service.

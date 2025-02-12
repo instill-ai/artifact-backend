@@ -104,5 +104,3 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20240528184218-531527333157 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-// replace github.com/instill-ai/protogen-go => ./protogen-go
