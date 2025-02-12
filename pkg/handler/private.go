@@ -9,7 +9,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
-	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 
 	artifact "github.com/instill-ai/artifact-backend/pkg/service"
@@ -22,12 +21,14 @@ var tracer = otel.Tracer("artifact-backend.private-handler.tracer")
 type PrivateHandler struct {
 	pb.UnimplementedArtifactPrivateServiceServer
 	service *artifact.Service
+	log     *zap.Logger
 }
 
 // NewPrivateHandler returns an initialized private handler.
-func NewPrivateHandler(_ context.Context, s *artifact.Service) pb.ArtifactPrivateServiceServer {
+func NewPrivateHandler(s *artifact.Service, log *zap.Logger) *PrivateHandler {
 	return &PrivateHandler{
 		service: s,
+		log:     log,
 	}
 }
 
@@ -37,15 +38,13 @@ func (h *PrivateHandler) ListRepositoryTags(ctx context.Context, req *pb.ListRep
 	ctx, span := tracer.Start(ctx, "ListRepositoryTags", trace.WithSpanKind(trace.SpanKindServer))
 	defer span.End()
 
-	logger, _ := logger.GetZapLogger(ctx)
-
 	resp, err := h.service.ListRepositoryTags(ctx, req)
 	if err != nil {
 		span.SetStatus(1, err.Error())
 		return nil, err
 	}
 
-	logger.Info("ListRepositoryTags")
+	h.log.Info("ListRepositoryTags")
 	return resp, nil
 }
 
@@ -55,15 +54,13 @@ func (h *PrivateHandler) CreateRepositoryTag(ctx context.Context, req *pb.Create
 	ctx, span := tracer.Start(ctx, "CreateRepositoryTag", trace.WithSpanKind(trace.SpanKindServer))
 	defer span.End()
 
-	logger, _ := logger.GetZapLogger(ctx)
-
 	resp, err := h.service.CreateRepositoryTag(ctx, req)
 	if err != nil {
 		span.SetStatus(1, err.Error())
 		return nil, err
 	}
 
-	logger.Info("CreateRepositoryTag")
+	h.log.Info("CreateRepositoryTag")
 	return resp, nil
 }
 
@@ -72,15 +69,13 @@ func (h *PrivateHandler) GetRepositoryTag(ctx context.Context, req *pb.GetReposi
 	ctx, span := tracer.Start(ctx, "GetRepositoryTag", trace.WithSpanKind(trace.SpanKindServer))
 	defer span.End()
 
-	logger, _ := logger.GetZapLogger(ctx)
-
 	resp, err := h.service.GetRepositoryTag(ctx, req)
 	if err != nil {
 		span.SetStatus(1, err.Error())
 		return nil, err
 	}
 
-	logger.Info("GeteRepositoryTag")
+	h.log.Info("GeteRepositoryTag")
 	return resp, nil
 }
 
@@ -89,15 +84,13 @@ func (h *PrivateHandler) DeleteRepositoryTag(ctx context.Context, req *pb.Delete
 	ctx, span := tracer.Start(ctx, "DeleteRepositoryTag", trace.WithSpanKind(trace.SpanKindServer))
 	defer span.End()
 
-	logger, _ := logger.GetZapLogger(ctx)
-
 	resp, err := h.service.DeleteRepositoryTag(ctx, req)
 	if err != nil {
 		span.SetStatus(1, err.Error())
 		return nil, err
 	}
 
-	logger.Info("DeleteRepositoryTag")
+	h.log.Info("DeleteRepositoryTag")
 	return resp, nil
 }
 
@@ -105,8 +98,6 @@ func (h *PrivateHandler) DeleteRepositoryTag(ctx context.Context, req *pb.Delete
 func (h *PrivateHandler) GetObjectURL(ctx context.Context, req *pb.GetObjectURLRequest) (*pb.GetObjectURLResponse, error) {
 	ctx, span := tracer.Start(ctx, "GetObjectURL", trace.WithSpanKind(trace.SpanKindServer))
 	defer span.End()
-
-	logger, _ := logger.GetZapLogger(ctx)
 
 	// check if both UID and EncodedURLPath, one of them is provided
 	if req.GetUid() != "" && req.GetEncodedUrlPath() != "" {
@@ -120,14 +111,14 @@ func (h *PrivateHandler) GetObjectURL(ctx context.Context, req *pb.GetObjectURLR
 		resp, err = h.service.Repository.GetObjectURLByUID(ctx, objectURLUID)
 		if err != nil {
 			span.SetStatus(1, err.Error())
-			logger.Error("GetObjectURL", zap.Error(err))
+			h.log.Error("GetObjectURL", zap.Error(err))
 			return nil, fmt.Errorf("cannot get object URL by UID: %w", err)
 		}
 	} else if req.GetEncodedUrlPath() != "" {
 		resp, err = h.service.Repository.GetObjectURLByEncodedURLPath(ctx, req.GetEncodedUrlPath())
 		if err != nil {
 			span.SetStatus(1, err.Error())
-			logger.Error("GetObjectURL", zap.Error(err))
+			h.log.Error("GetObjectURL", zap.Error(err))
 			return nil, fmt.Errorf("cannot get object URL by encoded URL path: %w", err)
 		}
 	}
@@ -139,19 +130,17 @@ func (h *PrivateHandler) GetObject(ctx context.Context, req *pb.GetObjectRequest
 	ctx, span := tracer.Start(ctx, "GetObject", trace.WithSpanKind(trace.SpanKindServer))
 	defer span.End()
 
-	logger, _ := logger.GetZapLogger(ctx)
-
 	objectUID, err := uuid.FromString(req.GetUid())
 	if err != nil {
 		span.SetStatus(1, err.Error())
-		logger.Error("GetObject", zap.Error(err))
+		h.log.Error("GetObject", zap.Error(err))
 		return nil, err
 	}
 
 	obj, err := h.service.Repository.GetObjectByUID(ctx, objectUID)
 	if err != nil {
 		span.SetStatus(1, err.Error())
-		logger.Error("GetObject", zap.Error(err))
+		h.log.Error("GetObject", zap.Error(err))
 		return nil, err
 	}
 
@@ -169,12 +158,10 @@ func (h *PrivateHandler) UpdateObject(ctx context.Context, req *pb.UpdateObjectR
 	ctx, span := tracer.Start(ctx, "UpdateObject", trace.WithSpanKind(trace.SpanKindServer))
 	defer span.End()
 
-	logger, _ := logger.GetZapLogger(ctx)
-
 	objectUID, err := uuid.FromString(req.GetUid())
 	if err != nil {
 		span.SetStatus(1, err.Error())
-		logger.Error("UpdateObject", zap.Error(err))
+		h.log.Error("UpdateObject", zap.Error(err))
 		return nil, fmt.Errorf("invalid object UID: %w", err)
 	}
 
@@ -196,7 +183,7 @@ func (h *PrivateHandler) UpdateObject(ctx context.Context, req *pb.UpdateObjectR
 	updatedObject, err := h.service.Repository.UpdateObjectByUpdateMap(ctx, objectUID, updateMap)
 	if err != nil {
 		span.SetStatus(1, err.Error())
-		logger.Error("UpdateObject", zap.Error(err))
+		h.log.Error("UpdateObject", zap.Error(err))
 		return nil, fmt.Errorf("failed to update object: %w", err)
 	}
 
