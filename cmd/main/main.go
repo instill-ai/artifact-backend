@@ -156,17 +156,14 @@ func main() {
 
 	publicGrpcS := grpc.NewServer(grpcServerOpts...)
 	reflection.Register(publicGrpcS)
-	artifactpb.RegisterArtifactPublicServiceServer(
-		publicGrpcS,
-		handler.NewPublicHandler(ctx, service),
-	)
+	publicHandler := handler.NewPublicHandler(service, logger)
+	artifactpb.RegisterArtifactPublicServiceServer(publicGrpcS, publicHandler)
 
 	privateGrpcS := grpc.NewServer(grpcServerOpts...)
 	reflection.Register(privateGrpcS)
-	artifactpb.RegisterArtifactPrivateServiceServer(
-		privateGrpcS,
-		handler.NewPrivateHandler(ctx, service),
-	)
+
+	privateHandler := handler.NewPrivateHandler(service, logger)
+	artifactpb.RegisterArtifactPrivateServiceServer(privateGrpcS, privateHandler)
 
 	publicServeMux := runtime.NewServeMux(
 		runtime.WithForwardResponseOption(middleware.HTTPResponseModifier),
