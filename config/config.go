@@ -67,6 +67,9 @@ type ServerConfig struct {
 		MaxWorkflowRetry   int32 `koanf:"maxworkflowretry"`
 		MaxActivityRetry   int32 `koanf:"maxactivityretry"`
 	}
+
+	// IngestMinIOLogs enables the MinIO audit log webhook.
+	IngestMinIOLogs bool `koanf:"logminioaudit"`
 }
 
 // DatabaseConfig related to database
@@ -144,10 +147,10 @@ type RegistryConfig struct {
 
 // MinioConfig is the minio configuration.
 type MinioConfig struct {
-	Host                    string `koanf:"host"`
-	Port                    string `koanf:"port"`
-	RootUser                string `koanf:"rootuser"`
-	RootPwd                 string `koanf:"rootpwd"`
+	Host     string `koanf:"host"`
+	Port     string `koanf:"port"`
+	RootUser string `koanf:"rootuser"`
+	RootPwd  string `koanf:"rootpwd"`
 }
 
 // MilvusConfig is the milvus configuration.
