@@ -50,7 +50,7 @@ type KnowledgeBaseFileI interface {
 	// GetTruthSourceByFileUID returns the truth source file destination of minIO by file UID
 	GetTruthSourceByFileUID(ctx context.Context, fileUID uuid.UUID) (*SourceMeta, error)
 	// UpdateKbFileExtraMetaData updates the extra meta data of the knowledge base file
-	UpdateKbFileExtraMetaData(ctx context.Context, fileUID uuid.UUID, failureReason, convertingPipe, chunkingPipe, embeddingPipe string, processingTime, convertingTime, chunkingTime, embeddingTime *int64) error
+	UpdateKbFileExtraMetaData(ctx context.Context, fileUID uuid.UUID, failureReason, convertingPipe, summarizinPipe, chunkingPipe, embeddingPipe string, processingTime, convertingTime, summarizingTime, chunkingTime, embeddingTime *int64) error
 	// DeleteKnowledgeBaseFileAndDecreaseUsage deletes the knowledge base file and decreases the knowledge base usage
 	DeleteKnowledgeBaseFileAndDecreaseUsage(ctx context.Context, fileUID uuid.UUID) error
 }
@@ -74,7 +74,9 @@ type KnowledgeBaseFile struct {
 	// this field is used internally for the extra meta data of the file
 	ExtraMetaData string `gorm:"column:extra_meta_data;type:jsonb" json:"extra_meta_data"`
 	// Content not used yet
-	Content    []byte     `gorm:"column:content;type:bytea" json:"content"`
+	Content []byte `gorm:"column:content;type:bytea" json:"content"`
+	// File summary
+	Summary    []byte     `gorm:"column:summary;type:bytea" json:"summary"`
 	CreateTime *time.Time `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
 	UpdateTime *time.Time `gorm:"column:update_time;not null;autoUpdateTime" json:"update_time"` // Use autoUpdateTime
 	DeleteTime *time.Time `gorm:"column:delete_time" json:"delete_time"`
@@ -91,14 +93,16 @@ type KnowledgeBaseFile struct {
 }
 
 type ExtraMetaData struct {
-	FailReason     string `json:"fail_reason"`
-	ConvertingPipe string `json:"converting_pipe"`
-	EmbeddingPipe  string `json:"embedding_pipe"`
-	ChunkingPipe   string `json:"chunking_pipe"`
-	ProcessingTime int64  `json:"processing_time"`
-	ConvertingTime int64  `json:"converting_time"`
-	ChunkingTime   int64  `json:"chunking_time"`
-	EmbeddingTime  int64  `json:"embedding_time"`
+	FailReason      string `json:"fail_reason"`
+	ConvertingPipe  string `json:"converting_pipe"`
+	SummarizingPipe string `json:"summarizing_pipe"`
+	EmbeddingPipe   string `json:"embedding_pipe"`
+	ChunkingPipe    string `json:"chunking_pipe"`
+	ProcessingTime  int64  `json:"processing_time"`
+	ConvertingTime  int64  `json:"converting_time"`
+	SummarizingTime int64  `json:"summarizing_time"`
+	ChunkingTime    int64  `json:"chunking_time"`
+	EmbeddingTime   int64  `json:"embedding_time"`
 }
 
 // table columns map
@@ -113,6 +117,8 @@ type KnowledgeBaseFileColumns struct {
 	ProcessStatus    string
 	CreateTime       string
 	ExtraMetaData    string
+	Content          string
+	Summary          string
 	UpdateTime       string
 	DeleteTime       string
 	RequesterUID     string
@@ -130,6 +136,7 @@ var KnowledgeBaseFileColumn = KnowledgeBaseFileColumns{
 	Destination:      "destination",
 	ProcessStatus:    "process_status",
 	ExtraMetaData:    "extra_meta_data",
+	Summary:          "summary",
 	CreateTime:       "create_time",
 	UpdateTime:       "update_time",
 	DeleteTime:       "delete_time",
@@ -683,9 +690,10 @@ func (r *Repository) UpdateKbFileExtraMetaData(
 	fileUID uuid.UUID,
 	failureReason,
 	convertingPipe,
+	summarizingPipe,
 	chunkingPipe,
 	embeddingPipe string,
-	processingTime, convertingTime, chunkingTime, embeddingTime *int64) error {
+	processingTime, summarizingTime, convertingTime, chunkingTime, embeddingTime *int64) error {
 	var kb KnowledgeBaseFile
 
 	// Use GORM's Transaction function
@@ -710,6 +718,9 @@ func (r *Repository) UpdateKbFileExtraMetaData(
 		if convertingPipe != "" {
 			kb.ExtraMetaDataUnmarshal.ConvertingPipe = convertingPipe
 		}
+		if summarizingPipe != "" {
+			kb.ExtraMetaDataUnmarshal.SummarizingPipe = summarizingPipe
+		}
 		if chunkingPipe != "" {
 			kb.ExtraMetaDataUnmarshal.ChunkingPipe = chunkingPipe
 		}
@@ -721,6 +732,9 @@ func (r *Repository) UpdateKbFileExtraMetaData(
 		}
 		if convertingTime != nil {
 			kb.ExtraMetaDataUnmarshal.ConvertingTime = *convertingTime
+		}
+		if summarizingTime != nil {
+			kb.ExtraMetaDataUnmarshal.SummarizingTime = *summarizingTime
 		}
 		if chunkingTime != nil {
 			kb.ExtraMetaDataUnmarshal.ChunkingTime = *chunkingTime

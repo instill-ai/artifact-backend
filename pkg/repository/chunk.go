@@ -58,8 +58,10 @@ type TextChunk struct {
 	CreateTime  *time.Time `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
 	UpdateTime  *time.Time `gorm:"column:update_time;not null;default:CURRENT_TIMESTAMP" json:"update_time"`
 	// KbUID is the knowledge base UID
-	KbUID     uuid.UUID `gorm:"column:kb_uid;type:uuid" json:"kb_uid"`
-	KbFileUID uuid.UUID `gorm:"column:kb_file_uid;type:uuid" json:"kb_file_uid"`
+	KbUID       uuid.UUID `gorm:"column:kb_uid;type:uuid" json:"kb_uid"`
+	KbFileUID   uuid.UUID `gorm:"column:kb_file_uid;type:uuid" json:"kb_file_uid"`
+	FileType    string    `gorm:"column:file_type;size:255;not null" json:"file_type"`
+	ContentType string    `gorm:"column:content_type;size:255;not null" json:"content_type"`
 }
 
 type TextChunkColumns struct {
@@ -76,6 +78,8 @@ type TextChunkColumns struct {
 	UpdateTime  string
 	KbUID       string
 	KbFileUID   string
+	FileType    string
+	ContentType string
 }
 
 var TextChunkColumn = TextChunkColumns{
@@ -92,6 +96,8 @@ var TextChunkColumn = TextChunkColumns{
 	UpdateTime:  "update_time",
 	KbUID:       "kb_uid",
 	KbFileUID:   "kb_file_uid",
+	FileType:    "file_type",
+	ContentType: "content_type",
 }
 
 // TableName returns the table name of the TextChunk

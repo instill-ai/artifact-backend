@@ -37,7 +37,7 @@ component:
     type: iterator
     range:
       start: 0
-      stop: ${batch-images.output.data:length} 
+      stop: ${batch-images.output.data:length}
     component:
       merge-batch-markdown:
         type: json
@@ -90,7 +90,7 @@ component:
     type: iterator
     range:
       start: 0
-      stop: ${batch-images.output.data:length} 
+      stop: ${batch-images.output.data:length}
     component:
       document-ocr:
         type: openai

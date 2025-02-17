@@ -37,6 +37,8 @@ type Embedding struct {
 	UpdateTime  *time.Time `gorm:"column:update_time;not null;default:CURRENT_TIMESTAMP" json:"update_time"`
 	KbUID       uuid.UUID  `gorm:"column:kb_uid;type:uuid;not null" json:"kb_uid"`
 	KbFileUID   uuid.UUID  `gorm:"column:kb_file_uid;type:uuid;not null" json:"kb_file_uid"`
+	FileType    string     `gorm:"column:file_type;size:255;not null" json:"file_type"`
+	ContentType string     `gorm:"column:content_type;size:255;not null" json:"content_type"`
 }
 
 type Vector []float32
@@ -98,6 +100,8 @@ type EmbeddingColumns struct {
 	UpdateTime  string
 	KbUID       string
 	KbFileUID   string
+	FileType    string
+	ContentType string
 }
 
 var EmbeddingColumn = EmbeddingColumns{
@@ -110,6 +114,8 @@ var EmbeddingColumn = EmbeddingColumns{
 	UpdateTime:  "update_time",
 	KbUID:       "kb_uid",
 	KbFileUID:   "kb_file_uid",
+	FileType:    "file_type",
+	ContentType: "content_type",
 }
 
 // TableName returns the table name of the Embedding
