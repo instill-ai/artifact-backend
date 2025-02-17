@@ -66,7 +66,8 @@ func NewMinioClientAndInitBucket(cfg miniox.Config) (*Minio, error) {
 		log.Error("cannot connect to minio",
 			zap.String("host:port", cfg.Host+":"+cfg.Port),
 			zap.String("user", cfg.User),
-			zap.String("pwd", cfg.Password), zap.Error(err))
+			zap.Error(err),
+		)
 		return nil, err
 	}
 	// create bucket if not exists for knowledge base
