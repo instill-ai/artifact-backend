@@ -22,11 +22,11 @@ import (
 //go:embed preset/pipelines/*
 var PresetPipelinesFS embed.FS
 
-const maxChunkLengthForPersistentCatalog = 1024
-const maxChunkLengthForTempCatalog = 7000
+const maxChunkLengthForMarkdownCatalog = 1024
+const maxChunkLengthForTextCatalog = 7000
 
-const chunkOverlapForPersistentCatalog = 200
-const chunkOverlapForTempCatalog = 700
+const chunkOverlapForMarkdowntCatalog = 200
+const chunkOverlapForTextCatalog = 700
 
 const NamespaceID = "preset"
 
@@ -37,6 +37,9 @@ const DocToMDVersion = "v1.1.1"
 // Note: this pipeline is for the new indexing pipeline having convert_result or convert_result2
 const ConvertDocToMDPipelineID2 = "indexing-advanced-convert-doc"
 const DocToMDVersion2 = "v1.3.1"
+
+const GenerateSummaryPipelineID = "indexing-generate-summary"
+const GenerateSummaryVersion = "v1.0.0"
 
 const ChunkMdPipelineID = "indexing-split-markdown"
 const ChunkMdVersion = "v2.0.0"
@@ -56,6 +59,7 @@ var PresetPipelinesList = []struct {
 }{
 	{ID: ConvertDocToMDPipelineID, Version: DocToMDVersion},
 	{ID: ConvertDocToMDPipelineID2, Version: DocToMDVersion2},
+	{ID: GenerateSummaryPipelineID, Version: GenerateSummaryVersion},
 	{ID: ChunkMdPipelineID, Version: ChunkMdVersion},
 	{ID: ChunkTextPipelineID, Version: ChunkTextVersion},
 	{ID: EmbedTextPipelineID, Version: EmbedTextVersion},
@@ -98,12 +102,12 @@ func (s *Service) ConvertToMDPipeForFilesInPersistentCatalog(ctx context.Context
 		version = DocToMDVersion2
 
 	// Spreadsheet types and others use the original pipeline
-	case artifactpb.FileType_FILE_TYPE_XLSX,
-		artifactpb.FileType_FILE_TYPE_XLS,
-		artifactpb.FileType_FILE_TYPE_CSV,
-		artifactpb.FileType_FILE_TYPE_HTML:
-		pipelineID = ConvertDocToMDPipelineID
-		version = DocToMDVersion
+	// case artifactpb.FileType_FILE_TYPE_XLSX,
+	// 	artifactpb.FileType_FILE_TYPE_XLS,
+	// 	artifactpb.FileType_FILE_TYPE_CSV,
+	// 	artifactpb.FileType_FILE_TYPE_HTML:
+	// 	pipelineID = ConvertDocToMDPipelineID
+	// 	version = DocToMDVersion
 
 	default:
 		return "", fmt.Errorf("unsupported file type: %v", fileType)
@@ -111,7 +115,7 @@ func (s *Service) ConvertToMDPipeForFilesInPersistentCatalog(ctx context.Context
 
 	// save the converting pipeline metadata into database
 	convertingPipelineMetadata := NamespaceID + "/" + pipelineID + "@" + version
-	err := s.Repository.UpdateKbFileExtraMetaData(ctx, fileUID, "", convertingPipelineMetadata, "", "", nil, nil, nil, nil)
+	err := s.Repository.UpdateKbFileExtraMetaData(ctx, fileUID, "", convertingPipelineMetadata, "", "", "", nil, nil, nil, nil, nil)
 	if err != nil {
 		logger.Error("Failed to save converting pipeline metadata.", zap.String("File uid:", fileUID.String()))
 		return "", fmt.Errorf("failed to save converting pipeline metadata: %w", err)
@@ -176,11 +180,12 @@ func (s *Service) ConvertToMDPipeForFilesInTempCatalog(ctx context.Context, file
 		artifactpb.FileType_FILE_TYPE_DOCX,
 		artifactpb.FileType_FILE_TYPE_DOC,
 		artifactpb.FileType_FILE_TYPE_PPT,
-		artifactpb.FileType_FILE_TYPE_PPTX,
-		artifactpb.FileType_FILE_TYPE_XLSX,
-		artifactpb.FileType_FILE_TYPE_XLS,
-		artifactpb.FileType_FILE_TYPE_CSV,
-		artifactpb.FileType_FILE_TYPE_HTML:
+		artifactpb.FileType_FILE_TYPE_PPTX:
+		// unsupported for now, will be parse directly into table in the future without indedxing
+		// artifactpb.FileType_FILE_TYPE_XLSX,
+		// artifactpb.FileType_FILE_TYPE_XLS,
+		// artifactpb.FileType_FILE_TYPE_CSV,
+		// artifactpb.FileType_FILE_TYPE_HTML:
 		pipelineID = ConvertDocToMDPipelineID
 		version = DocToMDVersion
 
@@ -190,7 +195,7 @@ func (s *Service) ConvertToMDPipeForFilesInTempCatalog(ctx context.Context, file
 
 	// save the converting pipeline metadata into database
 	convertingPipelineMetadata := NamespaceID + "/" + pipelineID + "@" + version
-	err := s.Repository.UpdateKbFileExtraMetaData(ctx, fileUID, "", convertingPipelineMetadata, "", "", nil, nil, nil, nil)
+	err := s.Repository.UpdateKbFileExtraMetaData(ctx, fileUID, "", convertingPipelineMetadata, "", "", "", nil, nil, nil, nil, nil)
 	if err != nil {
 		logger.Error("Failed to save converting pipeline metadata.", zap.String("File uid:", fileUID.String()))
 		return "", fmt.Errorf("failed to save converting pipeline metadata: %w", err)
@@ -280,9 +285,73 @@ type Chunk = struct {
 	Tokens int
 }
 
+// GenerateSummary triggers the generate summary pipeline, processes markdown/text, and deducts credits from the caller's account.
+// It generate summary from content.
+func (s *Service) GenerateSummary(ctx context.Context, caller uuid.UUID, requester uuid.UUID, content, fileType string) (string, error) {
+	var md metadata.MD
+	if requester != uuid.Nil {
+		md = metadata.New(map[string]string{
+			constant.HeaderUserUIDKey:      caller.String(),
+			constant.HeaderAuthTypeKey:     "user",
+			constant.HeaderRequesterUIDKey: requester.String(),
+		})
+	} else {
+		md = metadata.New(map[string]string{
+			constant.HeaderUserUIDKey:  caller.String(),
+			constant.HeaderAuthTypeKey: "user",
+		})
+	}
+
+	ctx = metadata.NewOutgoingContext(ctx, md)
+	req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
+		NamespaceId: NamespaceID,
+		PipelineId:  GenerateSummaryPipelineID,
+		ReleaseId:   GenerateSummaryVersion,
+		Data: []*pipelinepb.TriggerData{
+			{Variable: &structpb.Struct{Fields: map[string]*structpb.Value{
+				"file_type": {Kind: &structpb.Value_StringValue{StringValue: fileType}},
+				"context":   {Kind: &structpb.Value_StringValue{StringValue: content}},
+				"llm_model": {Kind: &structpb.Value_StringValue{StringValue: "gpt-4o-mini"}},
+			}}}},
+	}
+
+	resp, err := s.PipelinePub.TriggerNamespacePipelineRelease(ctx, req)
+	if err != nil {
+		return "", fmt.Errorf("failed to trigger %s pipeline. err:%w", GenerateSummaryPipelineID, err)
+	}
+	result, err := getGenerateSummaryResult(resp)
+	if err != nil {
+		return "", err
+	}
+
+	return result, nil
+}
+
+// getGenerateSummaryResult extracts the conversion result from the pipeline response.
+// It first checks for a non-empty "convert_result" field, then falls back to "convert_result2".
+// Returns an error if neither field contains valid data or if the response structure is invalid.
+func getGenerateSummaryResult(resp *pipelinepb.TriggerNamespacePipelineReleaseResponse) (string, error) {
+	if resp == nil || len(resp.Outputs) == 0 {
+		return "", fmt.Errorf("response is nil or has no outputs. resp: %v", resp)
+	}
+	fields := resp.Outputs[0].GetFields()
+	if fields == nil {
+		return "", fmt.Errorf("fields in the output are nil. resp: %v", resp)
+	}
+	convertResult, ok := fields["summary_from_long_text"]
+	if ok && convertResult.GetStringValue() != "" {
+		return convertResult.GetStringValue(), nil
+	}
+	convertResult2, ok2 := fields["summary_from_short_text"]
+	if ok2 && convertResult2.GetStringValue() != "" {
+		return convertResult2.GetStringValue(), nil
+	}
+	return "", fmt.Errorf("summary_from_short_text and summary_from_long_text not found in the output fields. resp: %v", resp)
+}
+
 // ChunkMarkdownPipe triggers the markdown splitting pipeline, processes the markdown text, and deducts credits from the caller's account.
 // It sets up the necessary metadata, triggers the pipeline, and processes the response to return the non-empty chunks.
-func (s *Service) ChunkMarkdownPipe(ctx context.Context, caller uuid.UUID, requester uuid.UUID, markdown string) ([]Chunk, error) {
+func (s *Service) ChunkMarkdownPipeForPersistentCatalog(ctx context.Context, caller uuid.UUID, requester uuid.UUID, markdown string) ([]Chunk, error) {
 	var md metadata.MD
 	if requester != uuid.Nil {
 		md = metadata.New(map[string]string{
@@ -305,8 +374,58 @@ func (s *Service) ChunkMarkdownPipe(ctx context.Context, caller uuid.UUID, reque
 			{
 				Fields: map[string]*structpb.Value{
 					"md_input":         {Kind: &structpb.Value_StringValue{StringValue: markdown}},
-					"max_chunk_length": {Kind: &structpb.Value_NumberValue{NumberValue: maxChunkLengthForPersistentCatalog}},
-					"chunk_overlap":    {Kind: &structpb.Value_NumberValue{NumberValue: chunkOverlapForPersistentCatalog}},
+					"max_chunk_length": {Kind: &structpb.Value_NumberValue{NumberValue: maxChunkLengthForMarkdownCatalog}},
+					"chunk_overlap":    {Kind: &structpb.Value_NumberValue{NumberValue: chunkOverlapForMarkdowntCatalog}},
+				},
+			},
+		},
+	}
+	res, err := s.PipelinePub.TriggerNamespacePipelineRelease(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to trigger %s pipeline. err:%w", ChunkMdPipelineID, err)
+	}
+	result, err := GetChunksFromResponse(res)
+	if err != nil {
+		return nil, err
+	}
+	// remove the empty chunk.
+	// note: this is a workaround for the pipeline bug that sometimes returns empty chunks.
+	var filteredResult []Chunk
+	for _, chunk := range result {
+		if chunk.Text != "" {
+			filteredResult = append(filteredResult, chunk)
+		}
+	}
+	return filteredResult, nil
+}
+
+// ChunkMarkdownPipe triggers the markdown splitting pipeline, processes the markdown text, and deducts credits from the caller's account.
+// It sets up the necessary metadata, triggers the pipeline, and processes the response to return the non-empty chunks.
+func (s *Service) ChunkMarkdownPipeForTempCatalog(ctx context.Context, caller uuid.UUID, requester uuid.UUID, markdown string) ([]Chunk, error) {
+	var md metadata.MD
+	if requester != uuid.Nil {
+		md = metadata.New(map[string]string{
+			constant.HeaderUserUIDKey:      caller.String(),
+			constant.HeaderAuthTypeKey:     "user",
+			constant.HeaderRequesterUIDKey: requester.String(),
+		})
+	} else {
+		md = metadata.New(map[string]string{
+			constant.HeaderUserUIDKey:  caller.String(),
+			constant.HeaderAuthTypeKey: "user",
+		})
+	}
+	ctx = metadata.NewOutgoingContext(ctx, md)
+	req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
+		NamespaceId: NamespaceID,
+		PipelineId:  ChunkMdPipelineID,
+		ReleaseId:   ChunkMdVersion,
+		Inputs: []*structpb.Struct{
+			{
+				Fields: map[string]*structpb.Value{
+					"md_input":         {Kind: &structpb.Value_StringValue{StringValue: markdown}},
+					"max_chunk_length": {Kind: &structpb.Value_NumberValue{NumberValue: maxChunkLengthForMarkdownCatalog}},
+					"chunk_overlap":    {Kind: &structpb.Value_NumberValue{NumberValue: chunkOverlapForMarkdowntCatalog}},
 				},
 			},
 		},
@@ -387,8 +506,8 @@ func (s *Service) ChunkTextPipeForPersistentCatalog(ctx context.Context, caller 
 			{
 				Fields: map[string]*structpb.Value{
 					"text_input":       {Kind: &structpb.Value_StringValue{StringValue: text}},
-					"max_chunk_length": {Kind: &structpb.Value_NumberValue{NumberValue: maxChunkLengthForPersistentCatalog}},
-					"chunk_overlap":    {Kind: &structpb.Value_NumberValue{NumberValue: chunkOverlapForPersistentCatalog}},
+					"max_chunk_length": {Kind: &structpb.Value_NumberValue{NumberValue: maxChunkLengthForTextCatalog}},
+					"chunk_overlap":    {Kind: &structpb.Value_NumberValue{NumberValue: chunkOverlapForTextCatalog}},
 				},
 			},
 		},
@@ -438,8 +557,8 @@ func (s *Service) ChunkTextPipeForTempCatalog(ctx context.Context, caller uuid.U
 			{
 				Fields: map[string]*structpb.Value{
 					"text_input":       {Kind: &structpb.Value_StringValue{StringValue: text}},
-					"max_chunk_length": {Kind: &structpb.Value_NumberValue{NumberValue: maxChunkLengthForTempCatalog}},
-					"chunk_overlap":    {Kind: &structpb.Value_NumberValue{NumberValue: chunkOverlapForTempCatalog}},
+					"max_chunk_length": {Kind: &structpb.Value_NumberValue{NumberValue: maxChunkLengthForTextCatalog}},
+					"chunk_overlap":    {Kind: &structpb.Value_NumberValue{NumberValue: chunkOverlapForTextCatalog}},
 				},
 			},
 		},

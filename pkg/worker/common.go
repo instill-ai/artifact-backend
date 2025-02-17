@@ -22,6 +22,19 @@ const extensionHelperPeriod = 5 * time.Second
 const workerLifetime = 45 * time.Second
 const workerPrefix = "worker-processing-file-"
 
+type FileType string
+
+var DocumentFileType FileType = "document"
+var VideoFileType FileType = "video"
+var ImageFileType FileType = "image"
+var AudioFileType FileType = "audio"
+
+type ContentType string
+
+var ChunkContentType ContentType = "chunk"
+var SummaryContentType ContentType = "summary"
+var AugmentedContentType ContentType = "augmented"
+
 var ErrFileStatusNotMatch = errors.New("file status not match")
 
 func getWorkerKey(fileUID string) string {
@@ -167,9 +180,10 @@ type chunk = struct {
 }
 
 // saveChunks saves chunks into object storage and updates the metadata in the database.
-func saveChunks(ctx context.Context, svc *service.Service, kbUID string, kbFileUID uuid.UUID, sourceTable string, sourceUID uuid.UUID, chunks []chunk) error {
+func saveChunks(ctx context.Context, svc *service.Service, kbUID string, kbFileUID uuid.UUID, sourceTable string, sourceUID uuid.UUID, summaryChunks, contetChunks []chunk, fileType string) error {
 	logger, _ := logger.GetZapLogger(ctx)
-	textChunks := make([]*repository.TextChunk, len(chunks))
+	textChunks := make([]*repository.TextChunk, len(summaryChunks)+len(contetChunks))
+	texts := make([]string, len(summaryChunks)+len(contetChunks))
 
 	// turn kbUid to uuid no must parse
 	kbUIDuuid, err := uuid.FromString(kbUID)
@@ -177,7 +191,7 @@ func saveChunks(ctx context.Context, svc *service.Service, kbUID string, kbFileU
 		logger.Error("Failed to parse kbUID to uuid.", zap.String("KbUID", kbUID))
 		return err
 	}
-	for i, c := range chunks {
+	for i, c := range summaryChunks {
 		textChunks[i] = &repository.TextChunk{
 			SourceUID:   sourceUID,
 			SourceTable: sourceTable,
@@ -189,14 +203,35 @@ func saveChunks(ctx context.Context, svc *service.Service, kbUID string, kbFileU
 			InOrder:     i,
 			KbUID:       kbUIDuuid,
 			KbFileUID:   kbFileUID,
+			FileType:    fileType,
+			ContentType: string(SummaryContentType),
 		}
+		texts[i] = c.Text
+	}
+	for i, c := range contetChunks {
+		ii := i + len(summaryChunks)
+		textChunks[ii] = &repository.TextChunk{
+			SourceUID:   sourceUID,
+			SourceTable: sourceTable,
+			StartPos:    c.Start,
+			EndPos:      c.End,
+			ContentDest: "not set yet because we need to save the chunks in db to get the uid",
+			Tokens:      c.Tokens,
+			Retrievable: true,
+			InOrder:     ii,
+			KbUID:       kbUIDuuid,
+			KbFileUID:   kbFileUID,
+			FileType:    fileType,
+			ContentType: string(ChunkContentType),
+		}
+		texts[ii] = c.Text
 	}
 	_, err = svc.Repository.DeleteAndCreateChunks(ctx, sourceTable, sourceUID, textChunks,
 		func(chunkUIDs []string) (map[string]any, error) {
 			// save the chunksForMinIO into object storage
 			chunksForMinIO := make(map[minio.ChunkUIDType]minio.ChunkContentType, len(textChunks))
 			for i, uid := range chunkUIDs {
-				chunksForMinIO[minio.ChunkUIDType(uid)] = minio.ChunkContentType([]byte(chunks[i].Text))
+				chunksForMinIO[minio.ChunkUIDType(uid)] = minio.ChunkContentType([]byte(texts[i]))
 			}
 			err := svc.MinIO.SaveTextChunks(ctx, kbUID, chunksForMinIO)
 			if err != nil {
@@ -217,18 +252,11 @@ func saveChunks(ctx context.Context, svc *service.Service, kbUID string, kbFileU
 	return nil
 }
 
-type MilvusEmbedding struct {
-	SourceTable  string
-	SourceUID    string
-	EmbeddingUID string
-	Vector       []float32
-}
-
 // saveEmbeddings saves embeddings into the vector database and updates the metadata in the database.
 // Processes embeddings in batches of 50 to avoid timeout issues.
 const batchSize = 50
 
-func saveEmbeddings(ctx context.Context, svc *service.Service, kbUID string, embeddings []repository.Embedding) error {
+func saveEmbeddings(ctx context.Context, svc *service.Service, kbUID string, embeddings []repository.Embedding, fileName string) error {
 	logger, _ := logger.GetZapLogger(ctx)
 	if len(embeddings) == 0 {
 		logger.Debug("No embeddings to save")
@@ -260,6 +288,9 @@ func saveEmbeddings(ctx context.Context, svc *service.Service, kbUID string, emb
 					SourceUID:    emb.SourceUID.String(),
 					EmbeddingUID: emb.UID.String(),
 					Vector:       emb.Vector,
+					FileName:     fileName,
+					FileType:     emb.FileType,
+					ContentType:  emb.ContentType,
 				}
 			}
 			err := svc.MilvusClient.InsertVectorsToKnowledgeBaseCollection(ctx, kbUID, milvusEmbeddings)

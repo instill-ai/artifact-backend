@@ -10,6 +10,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/gofrs/uuid"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
@@ -176,7 +177,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) startWorker(ctx context.Context,
 
 			if err != nil {
 				logger.Error("Error processing file", zap.String("file uid", file.UID.String()), zap.Error(err))
-				err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, err.Error(), "", "", "", nil, nil, nil, nil)
+				err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, err.Error(), "", "", "", "", nil, nil, nil, nil, nil)
 				if err != nil {
 					fmt.Printf("Error marshaling extra metadata: %v\n", err)
 				}
@@ -190,7 +191,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) startWorker(ctx context.Context,
 				fmt.Printf("Worker %d finished processing fileUID: %s\n", workerID, file.UID.String())
 			}
 			processingTime := int64(time.Since(t0).Seconds())
-			err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", "", "", &processingTime, nil, nil, nil)
+			err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", "", "", "", &processingTime, nil, nil, nil, nil)
 			if err != nil {
 				fmt.Printf("Error updating file extra metadata: %v\n", err)
 			}
@@ -237,6 +238,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processFile(ctx context.Context,
 			}
 			status = nextStatus
 			file = *updatedFile
+
 		case artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CONVERTING:
 			t0 := time.Now()
 			updatedFile, nextStatus, err := wp.processConvertingFile(ctx, file)
@@ -246,7 +248,21 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processFile(ctx context.Context,
 			status = nextStatus
 			file = *updatedFile
 			convertingTime := int64(time.Since(t0).Seconds())
-			err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", "", "", nil, &convertingTime, nil, nil)
+			err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", "", "", "", nil, &convertingTime, nil, nil, nil)
+			if err != nil {
+				logger.Error("Error updating file extra metadata", zap.Error(err))
+			}
+
+		case artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_SUMMARIZING:
+			t0 := time.Now()
+			updatedFile, nextStatus, err := wp.procesSummarizingFile(ctx, file)
+			if err != nil {
+				return fmt.Errorf("error processing converting file: %w", err)
+			}
+			status = nextStatus
+			file = *updatedFile
+			summarizingTime := int64(time.Since(t0).Seconds())
+			err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", "", "", "", nil, nil, &summarizingTime, nil, nil)
 			if err != nil {
 				logger.Error("Error updating file extra metadata", zap.Error(err))
 			}
@@ -260,7 +276,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processFile(ctx context.Context,
 			status = nextStatus
 			file = *updatedFile
 			chunkingTime := int64(time.Since(t0).Seconds())
-			err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", "", "", nil, nil, &chunkingTime, nil)
+			err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", "", "", "", nil, nil, nil, &chunkingTime, nil)
 			if err != nil {
 				logger.Error("Error updating file extra metadata", zap.Error(err))
 			}
@@ -274,7 +290,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processFile(ctx context.Context,
 			status = nextStatus
 			file = *updatedFile
 			embeddingTime := int64(time.Since(t0).Seconds())
-			err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", "", "", nil, nil, nil, &embeddingTime)
+			err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", "", "", "", nil, nil, nil, nil, &embeddingTime)
 			if err != nil {
 				logger.Error("Error updating file extra metadata", zap.Error(err))
 			}
@@ -306,11 +322,11 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processWaitingFile(ctx context.C
 		artifactpb.FileType_FILE_TYPE_DOC.String(),
 		artifactpb.FileType_FILE_TYPE_DOCX.String(),
 		artifactpb.FileType_FILE_TYPE_PPT.String(),
-		artifactpb.FileType_FILE_TYPE_PPTX.String(),
-		artifactpb.FileType_FILE_TYPE_HTML.String(),
-		artifactpb.FileType_FILE_TYPE_XLSX.String(),
-		artifactpb.FileType_FILE_TYPE_XLS.String(),
-		artifactpb.FileType_FILE_TYPE_CSV.String():
+		artifactpb.FileType_FILE_TYPE_PPTX.String():
+		// artifactpb.FileType_FILE_TYPE_HTML.String(),
+		// artifactpb.FileType_FILE_TYPE_XLSX.String(),
+		// artifactpb.FileType_FILE_TYPE_XLS.String(),
+		// artifactpb.FileType_FILE_TYPE_CSV.String():
 		// update the file status to converting status in database
 		updateMap := map[string]interface{}{
 			repository.KnowledgeBaseFileColumn.ProcessStatus: artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CONVERTING)],
@@ -321,18 +337,18 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processWaitingFile(ctx context.C
 		}
 		return updatedFile, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CONVERTING, nil
 
-	// For text and markdown files, it transitions to the chunking status.
+	// For text and markdown files, it transitions to the summarizing status.
 	case artifactpb.FileType_name[int32(artifactpb.FileType_FILE_TYPE_TEXT)],
 		artifactpb.FileType_name[int32(artifactpb.FileType_FILE_TYPE_MARKDOWN)]:
 
 		updateMap := map[string]interface{}{
-			repository.KnowledgeBaseFileColumn.ProcessStatus: artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CHUNKING)],
+			repository.KnowledgeBaseFileColumn.ProcessStatus: artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_SUMMARIZING)],
 		}
 		updatedFile, err := wp.svc.Repository.UpdateKnowledgeBaseFile(ctx, file.UID.String(), updateMap)
 		if err != nil {
 			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
 		}
-		return updatedFile, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CHUNKING, nil
+		return updatedFile, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_SUMMARIZING, nil
 
 	default:
 		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, fmt.Errorf("unsupported file type in processWaitingFile: %v", file.Type)
@@ -373,7 +389,89 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processConvertingFile(ctx contex
 	}
 	// update the file status to chunking status in database
 	updateMap := map[string]interface{}{
+		repository.KnowledgeBaseFileColumn.ProcessStatus: artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_SUMMARIZING)],
+	}
+	updatedFile, err = wp.svc.Repository.UpdateKnowledgeBaseFile(ctx, file.UID.String(), updateMap)
+	if err != nil {
+		logger.Error("Failed to update file status.", zap.String("File uid", file.UID.String()))
+		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
+	}
+
+	return updatedFile, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_SUMMARIZING, nil
+}
+
+// procesSummarizingFile processes a file with summarizing status.
+// If the file is a PDF, it retrieves the file from MinIO, converts it to Markdown using the PDF-to-Markdown pipeline, and then transitions to chunking status.
+// The converted file is saved into object storage and the metadata is updated in the database.
+// Finally, the file status is updated to chunking in the database.
+// If the file is not a PDF, it returns an error.
+func (wp *persistentCatalogFileToEmbWorkerPool) procesSummarizingFile(ctx context.Context, file repository.KnowledgeBaseFile) (updatedFile *repository.KnowledgeBaseFile, nextStatus artifactpb.FileProcessStatus, err error) {
+	logger, _ := logger.GetZapLogger(ctx)
+	logger.Info("Processing summarizing status file.", zap.String("File uid", file.UID.String()))
+
+	// check the file status is summarizing
+	if file.ProcessStatus != artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_SUMMARIZING)] {
+		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, fmt.Errorf("file process status should be summarizing. status: %v", file.ProcessStatus)
+	}
+
+	var fileData []byte
+
+	// Get file data based on type
+	switch file.Type {
+	case artifactpb.FileType_FILE_TYPE_PDF.String(),
+		artifactpb.FileType_FILE_TYPE_DOC.String(),
+		artifactpb.FileType_FILE_TYPE_DOCX.String(),
+		artifactpb.FileType_FILE_TYPE_PPT.String(),
+		artifactpb.FileType_FILE_TYPE_PPTX.String():
+		// artifactpb.FileType_FILE_TYPE_HTML.String(),
+		// artifactpb.FileType_FILE_TYPE_XLSX.String(),
+		// artifactpb.FileType_FILE_TYPE_XLS.String(),
+		// artifactpb.FileType_FILE_TYPE_CSV.String():
+		// Get converted file for document types
+		convertedFile, err := wp.svc.Repository.GetConvertedFileByFileUID(ctx, file.UID)
+		if err != nil {
+			logger.Error("Failed to get converted file metadata.", zap.String("File uid", file.UID.String()))
+			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
+		}
+		fileData, err = wp.svc.MinIO.GetFile(ctx, minio.KnowledgeBaseBucketName, convertedFile.Destination)
+		if err != nil {
+			logger.Error("Failed to get converted file from minIO.", zap.String("Converted file uid", convertedFile.UID.String()))
+			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
+		}
+
+	case artifactpb.FileType_FILE_TYPE_TEXT.String(),
+		artifactpb.FileType_FILE_TYPE_MARKDOWN.String():
+		// Get original file for text/markdown types
+		fileData, err = wp.svc.MinIO.GetFile(ctx, minio.KnowledgeBaseBucketName, file.Destination)
+		if err != nil {
+			logger.Error("Failed to get file from minIO.", zap.String("File uid", file.UID.String()))
+			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
+		}
+
+	default:
+		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, fmt.Errorf("unsupported file type in processChunkingFile: %v", file.Type)
+	}
+
+	// Common processing for all file types
+	requesterUID := file.RequesterUID
+	summary, err := wp.svc.GenerateSummary(ctx, file.CreatorUID, requesterUID, string(fileData), string(DocumentFileType))
+	if err != nil {
+		logger.Error("Failed to generate summary from file.", zap.String("File uid", file.UID.String()))
+		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
+	}
+
+	// Update file's summarizing pipeline metadata
+	summarizingPipelineMetadata := service.NamespaceID + "/" + service.GenerateSummaryPipelineID + "@" + service.GenerateSummaryVersion
+	err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", summarizingPipelineMetadata, "", "", nil, nil, nil, nil, nil)
+	if err != nil {
+		logger.Error("Failed to save summarizing pipeline metadata.", zap.String("File uid:", file.UID.String()))
+		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, fmt.Errorf("failed to save summarizing pipeline metadata: %w", err)
+	}
+
+	// Update file status
+	updateMap := map[string]interface{}{
 		repository.KnowledgeBaseFileColumn.ProcessStatus: artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CHUNKING)],
+		repository.KnowledgeBaseFileColumn.Summary:       []byte(summary),
 	}
 	updatedFile, err = wp.svc.Repository.UpdateKnowledgeBaseFile(ctx, file.UID.String(), updateMap)
 	if err != nil {
@@ -418,170 +516,119 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processConvertingFile(ctx contex
 func (wp *persistentCatalogFileToEmbWorkerPool) processChunkingFile(ctx context.Context, file repository.KnowledgeBaseFile) (*repository.KnowledgeBaseFile, artifactpb.FileProcessStatus, error) {
 	logger, _ := logger.GetZapLogger(ctx)
 	logger.Info("Processing chunking status file.", zap.String("File uid", file.UID.String()))
+
 	// check the file status is chunking
 	if file.ProcessStatus != artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CHUNKING)] {
 		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, fmt.Errorf("file process status should be chunking. status: %v", file.ProcessStatus)
 	}
-	// check the file type
+
+	var fileData []byte
+	var sourceTable string
+	var sourceUID uuid.UUID
+	var err error
+	var contentChunks []service.Chunk
+
+	requesterUID := file.RequesterUID
+
+	// Get file data based on type
 	switch file.Type {
-	// get the file from minIO (check destination from converted file table) and call the chunking pipeline
 	case artifactpb.FileType_FILE_TYPE_PDF.String(),
 		artifactpb.FileType_FILE_TYPE_DOC.String(),
 		artifactpb.FileType_FILE_TYPE_DOCX.String(),
 		artifactpb.FileType_FILE_TYPE_PPT.String(),
-		artifactpb.FileType_FILE_TYPE_PPTX.String(),
-		artifactpb.FileType_FILE_TYPE_HTML.String(),
-		artifactpb.FileType_FILE_TYPE_XLSX.String(),
-		artifactpb.FileType_FILE_TYPE_XLS.String(),
-		artifactpb.FileType_FILE_TYPE_CSV.String():
-		// get the converted file metadata from database
+		artifactpb.FileType_FILE_TYPE_PPTX.String():
+		// artifactpb.FileType_FILE_TYPE_HTML.String(),
+		// artifactpb.FileType_FILE_TYPE_XLSX.String(),
+		// artifactpb.FileType_FILE_TYPE_XLS.String(),
+		// artifactpb.FileType_FILE_TYPE_CSV.String():
+		// Get converted file for document types
 		convertedFile, err := wp.svc.Repository.GetConvertedFileByFileUID(ctx, file.UID)
 		if err != nil {
 			logger.Error("Failed to get converted file metadata.", zap.String("File uid", file.UID.String()))
 			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
 		}
-		// get the converted file from minIO
-		convertedFileData, err := wp.svc.MinIO.GetFile(ctx, minio.KnowledgeBaseBucketName, convertedFile.Destination)
+		fileData, err = wp.svc.MinIO.GetFile(ctx, minio.KnowledgeBaseBucketName, convertedFile.Destination)
 		if err != nil {
 			logger.Error("Failed to get converted file from minIO.", zap.String("Converted file uid", convertedFile.UID.String()))
 			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
 		}
+		sourceTable = wp.svc.Repository.ConvertedFileTableName()
+		sourceUID = convertedFile.UID
 
-		// call the markdown chunking pipeline
-		chunks := []service.Chunk{}
-		switch file.Type {
-		case artifactpb.FileType_FILE_TYPE_XLSX.String(),
-			artifactpb.FileType_FILE_TYPE_XLS.String(),
-			artifactpb.FileType_FILE_TYPE_CSV.String(),
-			artifactpb.FileType_FILE_TYPE_HTML.String():
-			requesterUID := file.RequesterUID
-			chunks, err = wp.svc.ChunkMarkdownPipe(ctx, file.CreatorUID, requesterUID, string(convertedFileData))
-		case artifactpb.FileType_FILE_TYPE_PDF.String(),
-			artifactpb.FileType_FILE_TYPE_DOCX.String(),
-			artifactpb.FileType_FILE_TYPE_DOC.String(),
-			artifactpb.FileType_FILE_TYPE_PPTX.String(),
-			artifactpb.FileType_FILE_TYPE_PPT.String():
-			requesterUID := file.RequesterUID
-			chunks, err = wp.svc.ChunkTextPipeForPersistentCatalog(ctx, file.CreatorUID, requesterUID, string(convertedFileData))
-		}
+		contentChunks, err = wp.svc.ChunkMarkdownPipeForPersistentCatalog(ctx, file.CreatorUID, requesterUID, string(fileData))
 		if err != nil {
-			logger.Error("Failed to get chunks from converted file using markdown chunking pipeline.", zap.String("Converted file uid", convertedFile.UID.String()))
+			logger.Error("Failed to get chunks from file.", zap.String("File uid", file.UID.String()))
 			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
 		}
 
-		//  Save the chunks into object storage(minIO) and metadata into database
-		err = saveChunks(ctx, wp.svc, file.KnowledgeBaseUID.String(), file.UID, wp.svc.Repository.ConvertedFileTableName(), convertedFile.UID, chunks)
-		if err != nil {
-			logger.Error("Failed to save chunks into object storage and metadata into database.", zap.String("File uid", file.UID.String()))
-			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
-		}
-		// save chunking pipeline metadata into file's extra metadata
-		chunkingPipelineMetadata := service.NamespaceID + "/" + service.ChunkMdPipelineID + "@" + service.ChunkMdVersion
-		err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", chunkingPipelineMetadata, "", nil, nil, nil, nil)
-		if err != nil {
-			logger.Error("Failed to save chunking pipeline metadata.", zap.String("File uid:", file.UID.String()))
-			return nil,
-				artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED,
-				fmt.Errorf("failed to save chunking pipeline metadata: %w", err)
-		}
-		// update the file status to embedding status in database
-		updateMap := map[string]interface{}{
-			repository.KnowledgeBaseFileColumn.ProcessStatus: artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_EMBEDDING)],
-		}
-		updatedFile, err := wp.svc.Repository.UpdateKnowledgeBaseFile(ctx, file.UID.String(), updateMap)
-		if err != nil {
-			logger.Error("Failed to update file status.", zap.String("File uid", file.UID.String()))
-			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
-		}
-		return updatedFile, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_EMBEDDING, nil
-
-	case artifactpb.FileType_name[int32(artifactpb.FileType_FILE_TYPE_TEXT)]:
-
-		//  Get file from minIO
-		originalFile, err := wp.svc.MinIO.GetFile(ctx, minio.KnowledgeBaseBucketName, file.Destination)
+	case artifactpb.FileType_FILE_TYPE_MARKDOWN.String():
+		// Get original file for markdown types
+		fileData, err = wp.svc.MinIO.GetFile(ctx, minio.KnowledgeBaseBucketName, file.Destination)
 		if err != nil {
 			logger.Error("Failed to get file from minIO.", zap.String("File uid", file.UID.String()))
 			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
 		}
+		sourceTable = wp.svc.Repository.KnowledgeBaseFileTableName()
+		sourceUID = file.UID
 
-		//  Call the text chunking pipeline
-		requesterUID := file.RequesterUID
-		chunks, err := wp.svc.ChunkTextPipeForPersistentCatalog(ctx, file.CreatorUID, requesterUID, string(originalFile))
+		contentChunks, err = wp.svc.ChunkMarkdownPipeForPersistentCatalog(ctx, file.CreatorUID, requesterUID, string(fileData))
 		if err != nil {
-			logger.Error("Failed to get chunks from original file.", zap.String("File uid", file.UID.String()))
+			logger.Error("Failed to get chunks from file.", zap.String("File uid", file.UID.String()))
 			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
 		}
-		//  Save the chunks into object storage(minIO) and metadata into database
-		err = saveChunks(ctx, wp.svc, file.KnowledgeBaseUID.String(), file.UID, wp.svc.Repository.KnowledgeBaseFileTableName(), file.UID, chunks)
-		if err != nil {
-			logger.Error("Failed to save chunks into object storage and metadata into database.", zap.String("File uid", file.UID.String()))
-			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
-		}
-		// save chunking pipeline metadata into file's extra metadata
-		chunkingPipelineMetadata := service.NamespaceID + "/" + service.ChunkTextPipelineID + "@" + service.ChunkTextVersion
-		err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", chunkingPipelineMetadata, "", nil, nil, nil, nil)
-		if err != nil {
-			logger.Error("Failed to save chunking pipeline metadata.", zap.String("File uid:", file.UID.String()))
-			return nil,
-				artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED,
-				fmt.Errorf("failed to save chunking pipeline metadata: %w", err)
-		}
-		// update the file status to embedding status in database
-		updateMap := map[string]interface{}{
-			repository.KnowledgeBaseFileColumn.ProcessStatus: artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_EMBEDDING)],
-		}
-		updatedFile, err := wp.svc.Repository.UpdateKnowledgeBaseFile(ctx, file.UID.String(), updateMap)
-		if err != nil {
-			logger.Error("Failed to update file status.", zap.String("File uid", file.UID.String()))
-			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
-		}
-		return updatedFile, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_EMBEDDING, nil
-	case artifactpb.FileType_name[int32(artifactpb.FileType_FILE_TYPE_MARKDOWN)]:
-		//  Get file from minIO
-		originalFile, err := wp.svc.MinIO.GetFile(ctx, minio.KnowledgeBaseBucketName, file.Destination)
+
+	case artifactpb.FileType_FILE_TYPE_TEXT.String():
+		// Get original file for text types
+		fileData, err = wp.svc.MinIO.GetFile(ctx, minio.KnowledgeBaseBucketName, file.Destination)
 		if err != nil {
 			logger.Error("Failed to get file from minIO.", zap.String("File uid", file.UID.String()))
 			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
 		}
+		sourceTable = wp.svc.Repository.KnowledgeBaseFileTableName()
+		sourceUID = file.UID
 
-		// save chunking pipeline metadata into file's extra metadata
-		chunkingPipelineMetadata := service.NamespaceID + "/" + service.ChunkMdPipelineID + "@" + service.ChunkMdVersion
-		err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", chunkingPipelineMetadata, "", nil, nil, nil, nil)
+		contentChunks, err = wp.svc.ChunkTextPipeForPersistentCatalog(ctx, file.CreatorUID, requesterUID, string(fileData))
 		if err != nil {
-			logger.Error("Failed to save chunking pipeline metadata.", zap.String("File uid:", file.UID.String()))
-			return nil,
-				artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED,
-				fmt.Errorf("failed to save chunking pipeline metadata: %w", err)
-		}
-
-		//  Call the text chunking pipeline
-		requesterUID := file.RequesterUID
-		chunks, err := wp.svc.ChunkMarkdownPipe(ctx, file.CreatorUID, requesterUID, string(originalFile))
-		if err != nil {
-			logger.Error("Failed to get chunks from original file.", zap.String("File uid", file.UID.String()))
+			logger.Error("Failed to get chunks from file.", zap.String("File uid", file.UID.String()))
 			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
 		}
 
-		//  Save the chunks into object storage(minIO) and metadata into database
-		err = saveChunks(ctx, wp.svc, file.KnowledgeBaseUID.String(), file.UID, wp.svc.Repository.KnowledgeBaseFileTableName(), file.UID, chunks)
-		if err != nil {
-			logger.Error("Failed to save chunks into object storage and metadata into database.", zap.String("File uid", file.UID.String()))
-			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
-		}
-
-		// update the file status to embedding status in database
-		updateMap := map[string]interface{}{
-			repository.KnowledgeBaseFileColumn.ProcessStatus: artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_EMBEDDING)],
-		}
-		updatedFile, err := wp.svc.Repository.UpdateKnowledgeBaseFile(ctx, file.UID.String(), updateMap)
-		if err != nil {
-			logger.Error("Failed to update file status.", zap.String("File uid", file.UID.String()))
-			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
-		}
-		return updatedFile, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_EMBEDDING, nil
 	default:
 		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, fmt.Errorf("unsupported file type in processChunkingFile: %v", file.Type)
 	}
+
+	summaryChunks, err := wp.svc.ChunkTextPipeForPersistentCatalog(ctx, file.CreatorUID, requesterUID, string(file.Summary))
+	if err != nil {
+		logger.Error("Failed to get chunks from file.", zap.String("File uid", file.UID.String()))
+		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
+	}
+
+	// Save chunks and update metadata
+	err = saveChunks(ctx, wp.svc, file.KnowledgeBaseUID.String(), file.UID, sourceTable, sourceUID, summaryChunks, contentChunks, string(DocumentFileType))
+	if err != nil {
+		logger.Error("Failed to save chunks into object storage and metadata into database.", zap.String("File uid", file.UID.String()))
+		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
+	}
+
+	// Update file's chunking pipeline metadata
+	chunkingPipelineMetadata := service.NamespaceID + "/" + service.ChunkTextPipelineID + "@" + service.ChunkTextVersion
+	err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", "", chunkingPipelineMetadata, "", nil, nil, nil, nil, nil)
+	if err != nil {
+		logger.Error("Failed to save chunking pipeline metadata.", zap.String("File uid:", file.UID.String()))
+		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, fmt.Errorf("failed to save chunking pipeline metadata: %w", err)
+	}
+
+	// Update file status
+	updateMap := map[string]interface{}{
+		repository.KnowledgeBaseFileColumn.ProcessStatus: artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_EMBEDDING)],
+	}
+	updatedFile, err := wp.svc.Repository.UpdateKnowledgeBaseFile(ctx, file.UID.String(), updateMap)
+	if err != nil {
+		logger.Error("Failed to update file status.", zap.String("File uid", file.UID.String()))
+		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
+	}
+
+	return updatedFile, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_EMBEDDING, nil
 
 }
 
@@ -636,7 +683,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processEmbeddingFile(ctx context
 
 	// save embedding pipeline metadata into file's extra metadata
 	embeddingPipelineMetadata := service.NamespaceID + "/" + service.EmbedTextPipelineID + "@" + service.EmbedTextVersion
-	err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", "", embeddingPipelineMetadata, nil, nil, nil, nil)
+	err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", "", "", embeddingPipelineMetadata, nil, nil, nil, nil, nil)
 	if err != nil {
 		logger.Error("Failed to save embedding pipeline metadata.", zap.String("File uid:", file.UID.String()))
 		return nil,
@@ -662,9 +709,11 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processEmbeddingFile(ctx context
 			Collection:  collection,
 			KbUID:       file.KnowledgeBaseUID,
 			KbFileUID:   file.UID,
+			FileType:    chunks[i].FileType,
+			ContentType: chunks[i].ContentType,
 		}
 	}
-	err = saveEmbeddings(ctx, wp.svc, file.KnowledgeBaseUID.String(), embeddings)
+	err = saveEmbeddings(ctx, wp.svc, file.KnowledgeBaseUID.String(), embeddings, file.Name)
 	if err != nil {
 		logger.Error("Failed to save embeddings into vector database and metadata into database.", zap.String("SourceUID", sourceUID.String()))
 		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err

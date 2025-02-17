@@ -57,13 +57,19 @@ type Embedding struct {
 	SourceUID    string
 	EmbeddingUID string
 	Vector       []float32
+	FileName     string
+	FileType     string
+	ContentType  string
 }
 
 const (
-	KbCollectionFiledSourceTable  = "source_table"
-	KbCollectionFiledSourceUID    = "source_uid"
-	KbCollectionFiledEmbeddingUID = "embedding_uid"
-	KbCollectionFiledEmbedding    = "embedding"
+	KbCollectionFieldSourceTable  = "source_table"
+	KbCollectionFieldSourceUID    = "source_uid"
+	KbCollectionFieldEmbeddingUID = "embedding_uid"
+	KbCollectionFieldEmbedding    = "embedding"
+	KbCollectionFieldFileName     = "file_name"
+	KbCollectionFieldFileType     = "file_type"
+	KbCollectionFieldContentType  = "content_type"
 )
 
 func NewMilvusClient(ctx context.Context, host, port string) (MilvusClientI, error) {
@@ -115,10 +121,13 @@ func (m *MilvusClient) CreateKnowledgeBaseCollection(ctx context.Context, kbUID 
 		CollectionName: collectionName,
 		Description:    "",
 		Fields: []*entity.Field{
-			{Name: KbCollectionFiledSourceTable, DataType: entity.FieldTypeVarChar, TypeParams: map[string]string{"max_length": "255"}},
-			{Name: KbCollectionFiledSourceUID, DataType: entity.FieldTypeVarChar, TypeParams: map[string]string{"max_length": "255"}},
-			{Name: KbCollectionFiledEmbeddingUID, DataType: entity.FieldTypeVarChar, PrimaryKey: true, TypeParams: map[string]string{"max_length": "255"}},
-			{Name: KbCollectionFiledEmbedding, DataType: entity.FieldTypeFloatVector, TypeParams: map[string]string{"dim": vectorDim}},
+			{Name: KbCollectionFieldSourceTable, DataType: entity.FieldTypeVarChar, TypeParams: map[string]string{"max_length": "255"}},
+			{Name: KbCollectionFieldSourceUID, DataType: entity.FieldTypeVarChar, TypeParams: map[string]string{"max_length": "255"}},
+			{Name: KbCollectionFieldEmbeddingUID, DataType: entity.FieldTypeVarChar, PrimaryKey: true, TypeParams: map[string]string{"max_length": "255"}},
+			{Name: KbCollectionFieldEmbedding, DataType: entity.FieldTypeFloatVector, TypeParams: map[string]string{"dim": vectorDim}},
+			{Name: KbCollectionFieldFileName, DataType: entity.FieldTypeVarChar, TypeParams: map[string]string{"max_length": "255"}},
+			{Name: KbCollectionFieldFileType, DataType: entity.FieldTypeVarChar, TypeParams: map[string]string{"max_length": "255"}},
+			{Name: KbCollectionFieldContentType, DataType: entity.FieldTypeVarChar, TypeParams: map[string]string{"max_length": "255"}},
 		},
 	}
 
@@ -134,7 +143,7 @@ func (m *MilvusClient) CreateKnowledgeBaseCollection(ctx context.Context, kbUID 
 		return fmt.Errorf("failed to create index: %w", err)
 	}
 
-	err = m.c.CreateIndex(ctx, collectionName, KbCollectionFiledEmbedding, index, false)
+	err = m.c.CreateIndex(ctx, collectionName, KbCollectionFieldEmbedding, index, false)
 	if err != nil {
 		return fmt.Errorf("failed to create index: %w", err)
 	}
@@ -165,11 +174,17 @@ func (m *MilvusClient) InsertVectorsToKnowledgeBaseCollection(ctx context.Contex
 	sourceUIDs := make([]string, vectorCount)
 	embeddingUIDs := make([]string, vectorCount) // Use the provided embeddingUID instead of generating a new one
 	vectors := make([][]float32, vectorCount)
+	fileNames := make([]string, vectorCount)
+	fileTypes := make([]string, vectorCount)
+	contentTypes := make([]string, vectorCount)
 
 	for i, embedding := range embeddings {
 		sourceTables[i] = embedding.SourceTable
 		sourceUIDs[i] = embedding.SourceUID
 		embeddingUIDs[i] = embedding.EmbeddingUID // Use the embeddingUID from the input struct
+		fileNames[i] = embedding.FileName
+		fileTypes[i] = embedding.FileType
+		contentTypes[i] = embedding.ContentType
 		vectors[i] = make([]float32, len(embedding.Vector))
 		for j, val := range embedding.Vector {
 			vectors[i][j] = float32(val)
@@ -178,10 +193,13 @@ func (m *MilvusClient) InsertVectorsToKnowledgeBaseCollection(ctx context.Contex
 
 	// Create the columns for insertion
 	columns := []entity.Column{
-		entity.NewColumnVarChar(KbCollectionFiledSourceTable, sourceTables),
-		entity.NewColumnVarChar(KbCollectionFiledSourceUID, sourceUIDs),
-		entity.NewColumnVarChar(KbCollectionFiledEmbeddingUID, embeddingUIDs),
-		entity.NewColumnFloatVector(KbCollectionFiledEmbedding, VectorDim, vectors),
+		entity.NewColumnVarChar(KbCollectionFieldSourceTable, sourceTables),
+		entity.NewColumnVarChar(KbCollectionFieldSourceUID, sourceUIDs),
+		entity.NewColumnVarChar(KbCollectionFieldEmbeddingUID, embeddingUIDs),
+		entity.NewColumnFloatVector(KbCollectionFieldEmbedding, VectorDim, vectors),
+		entity.NewColumnVarChar(KbCollectionFieldFileName, fileNames),
+		entity.NewColumnVarChar(KbCollectionFieldFileType, fileTypes),
+		entity.NewColumnVarChar(KbCollectionFieldContentType, contentTypes),
 	}
 
 	// Insert the data with retry
@@ -274,22 +292,22 @@ func (m *MilvusClient) ListEmbeddings(ctx context.Context, collectionName string
 		}
 
 		// Extract embeddings from the query result
-		embeddingUIDs, err := getStringData(queryResult.GetColumn(KbCollectionFiledEmbeddingUID))
+		embeddingUIDs, err := getStringData(queryResult.GetColumn(KbCollectionFieldEmbeddingUID))
 		if err != nil {
 			return nil, fmt.Errorf("error with embedding_uid column: %w", err)
 		}
 
-		sourceTables, err := getStringData(queryResult.GetColumn(KbCollectionFiledSourceTable))
+		sourceTables, err := getStringData(queryResult.GetColumn(KbCollectionFieldSourceTable))
 		if err != nil {
 			return nil, fmt.Errorf("error with source_table column: %w", err)
 		}
 
-		sourceUIDs, err := getStringData(queryResult.GetColumn(KbCollectionFiledSourceUID))
+		sourceUIDs, err := getStringData(queryResult.GetColumn(KbCollectionFieldSourceUID))
 		if err != nil {
 			return nil, fmt.Errorf("error with source_uid column: %w", err)
 		}
 
-		vectors, ok := queryResult.GetColumn(KbCollectionFiledEmbedding).(*entity.ColumnFloatVector)
+		vectors, ok := queryResult.GetColumn(KbCollectionFieldEmbedding).(*entity.ColumnFloatVector)
 		if !ok {
 			return nil, fmt.Errorf("unexpected type for embedding column: %T", queryResult[3])
 		}
@@ -391,11 +409,11 @@ func (m *MilvusClient) SearchSimilarEmbeddings(ctx context.Context, collectionNa
 	}
 	results, err := m.c.Search(
 		ctx, collectionName, nil, "", []string{
-			KbCollectionFiledSourceTable,
-			KbCollectionFiledSourceUID,
-			KbCollectionFiledEmbeddingUID,
-			KbCollectionFiledEmbedding,
-		}, milvusVectors, KbCollectionFiledEmbedding, MetricType, topK, sp)
+			KbCollectionFieldSourceTable,
+			KbCollectionFieldSourceUID,
+			KbCollectionFieldEmbeddingUID,
+			KbCollectionFieldEmbedding,
+		}, milvusVectors, KbCollectionFieldEmbedding, MetricType, topK, sp)
 	if err != nil {
 		log.Error("failed to search embeddings", zap.Error(err))
 		return nil, fmt.Errorf("failed to search embeddings: %w", err)
@@ -407,23 +425,23 @@ func (m *MilvusClient) SearchSimilarEmbeddings(ctx context.Context, collectionNa
 		if result.ResultCount == 0 {
 			continue
 		}
-		sourceTables, err := getStringData(result.Fields.GetColumn(KbCollectionFiledSourceTable))
+		sourceTables, err := getStringData(result.Fields.GetColumn(KbCollectionFieldSourceTable))
 		if err != nil {
 			log.Error("error with source_table column", zap.Error(err))
 			return nil, fmt.Errorf("error with source_table column: %w", err)
 		}
 
-		sourceUIDs, err := getStringData(result.Fields.GetColumn(KbCollectionFiledSourceUID))
+		sourceUIDs, err := getStringData(result.Fields.GetColumn(KbCollectionFieldSourceUID))
 		if err != nil {
 			log.Error("error with source_uid column", zap.Error(err))
 			return nil, fmt.Errorf("error with source_uid column: %w", err)
 		}
-		embeddingUIDs, err := getStringData(result.Fields.GetColumn(KbCollectionFiledEmbeddingUID))
+		embeddingUIDs, err := getStringData(result.Fields.GetColumn(KbCollectionFieldEmbeddingUID))
 		if err != nil {
 			log.Error("error with embedding_uid column", zap.Error(err))
 			return nil, fmt.Errorf("error with embedding_uid column: %w", err)
 		}
-		vectors := result.Fields.GetColumn(KbCollectionFiledEmbedding).(*entity.ColumnFloatVector)
+		vectors := result.Fields.GetColumn(KbCollectionFieldEmbedding).(*entity.ColumnFloatVector)
 		scores := result.Scores
 		tempVectors := []SimilarEmbedding{}
 		for i := 0; i < len(sourceTables); i++ {

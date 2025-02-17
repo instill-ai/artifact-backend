@@ -199,6 +199,9 @@ func getPipelineIDs(kbf *repository.KnowledgeBaseFile) []string {
 	if kbf.ExtraMetaDataUnmarshal.ConvertingPipe != "" {
 		pipes = append(pipes, kbf.ExtraMetaDataUnmarshal.ConvertingPipe)
 	}
+	if kbf.ExtraMetaDataUnmarshal.SummarizingPipe != "" {
+		pipes = append(pipes, kbf.ExtraMetaDataUnmarshal.SummarizingPipe)
+	}
 	if kbf.ExtraMetaDataUnmarshal.ChunkingPipe != "" {
 		pipes = append(pipes, kbf.ExtraMetaDataUnmarshal.ChunkingPipe)
 	}
