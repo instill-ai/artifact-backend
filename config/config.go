@@ -12,6 +12,8 @@ import (
 	"github.com/knadh/koanf/providers/env"
 	"github.com/knadh/koanf/providers/file"
 	"github.com/redis/go-redis/v9"
+
+	miniox "github.com/instill-ai/x/minio"
 )
 
 // Config - Global variable to export
@@ -28,7 +30,7 @@ type AppConfig struct {
 	PipelineBackend       PipelineBackendConfig `koanf:"pipelinebackend"`
 	Registry              RegistryConfig        `koanf:"registry"`
 	OpenFGA               OpenFGAConfig         `koanf:"openfga"`
-	Minio                 MinioConfig           `koanf:"minio"`
+	Minio                 miniox.Config         `koanf:"minio"`
 	Milvus                MilvusConfig          `koanf:"milvus"`
 	FileToEmbeddingWorker FileToEmbeddingWorker `koanf:"filetoembeddingworker"`
 	Blob                  BlobConfig            `koanf:"blob"`
@@ -143,14 +145,6 @@ type PipelineBackendConfig struct {
 type RegistryConfig struct {
 	Host string `koanf:"host"`
 	Port int    `koanf:"port"`
-}
-
-// MinioConfig is the minio configuration.
-type MinioConfig struct {
-	Host     string `koanf:"host"`
-	Port     string `koanf:"port"`
-	RootUser string `koanf:"rootuser"`
-	RootPwd  string `koanf:"rootpwd"`
 }
 
 // MilvusConfig is the milvus configuration.

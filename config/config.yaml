@@ -70,8 +70,8 @@ openfga:
 minio:
   host: minio
   port: 9000
-  rootuser: minioadmin
-  rootpwd: minioadmin
+  user: minioadmin
+  password: minioadmin
 milvus:
   host: milvus
   port: 19530

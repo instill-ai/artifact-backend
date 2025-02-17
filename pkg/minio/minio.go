@@ -14,10 +14,10 @@ import (
 	"github.com/minio/minio-go"
 	"go.uber.org/zap"
 
-	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
 
 	log "github.com/instill-ai/artifact-backend/pkg/logger"
+	miniox "github.com/instill-ai/x/minio"
 )
 
 type MinioI interface {
@@ -51,21 +51,23 @@ const (
 	KnowledgeBaseBucketName = "instill-ai-knowledge-bases"
 )
 
-func NewMinioClientAndInitBucket(cfg config.MinioConfig) (*Minio, error) {
+func NewMinioClientAndInitBucket(cfg miniox.Config) (*Minio, error) {
 	fmt.Printf("Initializing Minio client and bucket\n")
-	// cfg := config.Config.Minio
 	log, err := log.GetZapLogger(context.Background())
 	if err != nil {
 		return nil, err
 	}
-	client, err := minio.New(cfg.Host+":"+cfg.Port, cfg.RootUser, cfg.RootPwd, false)
+
+	// TODO: we should use instill-ai/x/minio.NewMinioClientAndInitBucket.
+	client, err := minio.New(cfg.Host+":"+cfg.Port, cfg.User, cfg.Password, false)
 	if err != nil {
 		fmt.Printf("Initializing Minio client and bucket\n")
 		// log connection error
 		log.Error("cannot connect to minio",
 			zap.String("host:port", cfg.Host+":"+cfg.Port),
-			zap.String("user", cfg.RootUser),
-			zap.String("pwd", cfg.RootPwd), zap.Error(err))
+			zap.String("user", cfg.User),
+			zap.Error(err),
+		)
 		return nil, err
 	}
 	// create bucket if not exists for knowledge base
