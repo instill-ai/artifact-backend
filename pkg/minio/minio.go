@@ -52,50 +52,44 @@ const (
 )
 
 func NewMinioClientAndInitBucket(cfg miniox.Config) (*Minio, error) {
-	fmt.Printf("Initializing Minio client and bucket\n")
 	log, err := log.GetZapLogger(context.Background())
 	if err != nil {
 		return nil, err
 	}
 
+	log = log.With(
+		zap.String("host:port", cfg.Host+":"+cfg.Port),
+		zap.String("user", cfg.User),
+	)
+
+	log.Info("Initializing MinIO client and bucket")
+
 	// TODO: we should use instill-ai/x/minio.NewMinioClientAndInitBucket.
 	client, err := minio.New(cfg.Host+":"+cfg.Port, cfg.User, cfg.Password, false)
 	if err != nil {
-		fmt.Printf("Initializing Minio client and bucket\n")
 		// log connection error
-		log.Error("cannot connect to minio",
-			zap.String("host:port", cfg.Host+":"+cfg.Port),
-			zap.String("user", cfg.User),
-			zap.Error(err),
-		)
-		return nil, err
-	}
-	// create bucket if not exists for knowledge base
-	err = client.MakeBucket(KnowledgeBaseBucketName, "us-east-1")
-	if err != nil {
-		// Check if the bucket already exists
-		exists, errBucketExists := client.BucketExists(KnowledgeBaseBucketName)
-		if errBucketExists == nil && exists {
-			log.Info("Bucket already exists", zap.String("bucket", KnowledgeBaseBucketName), zap.Error(err))
-		} else {
-			log.Fatal(err.Error(), zap.Error(err))
-		}
-	} else {
-		log.Info("Successfully created bucket", zap.String("bucket", KnowledgeBaseBucketName))
+		log.Error("Cannot connect to MinIO", zap.Error(err))
+		return nil, fmt.Errorf("connecting to MinIO: %w", err)
 	}
 
-	// create bucket if not exists for blob
-	err = client.MakeBucket(BlobBucketName, "us-east-1")
-	if err != nil {
-		// Check if the bucket already exists
-		exists, errBucketExists := client.BucketExists(BlobBucketName)
-		if errBucketExists == nil && exists {
-			log.Info("Bucket already exists", zap.String("bucket", BlobBucketName), zap.Error(err))
-		} else {
-			log.Fatal(err.Error(), zap.Error(err))
+	// create bucket if not exists for knowledge base
+	for _, bucket := range []string{KnowledgeBaseBucketName, BlobBucketName} {
+		log := log.With(zap.String("bucket", bucket))
+
+		exists, err := client.BucketExists(bucket)
+		if err != nil {
+			return nil, fmt.Errorf("checking bucket existence: %w", err)
 		}
-	} else {
-		log.Info("Successfully created bucket", zap.String("bucket", BlobBucketName))
+
+		if !exists {
+			err = client.MakeBucket(bucket, miniox.Location)
+			if err != nil {
+				return nil, fmt.Errorf("creating bucket: %w", err)
+			}
+			log.Info("Successfully created bucket", zap.String("bucket", bucket))
+		} else {
+			log.Info("Bucket already exists", zap.String("bucket", bucket))
+		}
 	}
 
 	return &Minio{client: client}, nil
