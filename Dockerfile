@@ -8,21 +8,27 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go mod download
 COPY . .
 
-ARG SERVICE_NAME TARGETOS TARGETARCH
+ARG SERVICE_NAME SERVICE_VERSION TARGETOS TARGETARCH
 
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    GOOS=$TARGETOS GOARCH=$TARGETARCH CGO_ENABLED=0 go build -o /${SERVICE_NAME} ./cmd/main
+    GOOS=$TARGETOS GOARCH=$TARGETARCH CGO_ENABLED=0 \
+    go build -ldflags "-X main.version=${SERVICE_VERSION} -X main.serviceName=${SERVICE_NAME}" \
+    -o /${SERVICE_NAME} ./cmd/main
 
 # Build the migration tool
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    GOOS=$TARGETOS GOARCH=$TARGETARCH CGO_ENABLED=0 go build -o /${SERVICE_NAME}-migrate ./cmd/migration
+    GOOS=$TARGETOS GOARCH=$TARGETARCH CGO_ENABLED=0 \
+    go build -ldflags "-X main.version=${SERVICE_VERSION} -X main.serviceName=${SERVICE_NAME}-init" \
+    -o /${SERVICE_NAME}-migrate ./cmd/migration
 
 # Build the init tool
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    GOOS=$TARGETOS GOARCH=$TARGETARCH CGO_ENABLED=0 go build -o /${SERVICE_NAME}-init ./cmd/init
+    GOOS=$TARGETOS GOARCH=$TARGETARCH CGO_ENABLED=0 \
+    go build -ldflags "-X main.version=${SERVICE_VERSION} -X main.serviceName=${SERVICE_NAME}-init" \
+    -o /${SERVICE_NAME}-init ./cmd/init
 
 
 FROM golang:1.23.4

@@ -56,9 +56,14 @@ import (
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	mgmtpb "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
 	pipelinepb "github.com/instill-ai/protogen-go/pipeline/pipeline/v1beta"
+	miniox "github.com/instill-ai/x/minio"
 )
 
 var propagator propagation.TextMapPropagator
+
+// These variables might be overridden at buildtime.
+var version = "dev"
+var serviceName = "artifact-backend"
 
 // grpcHandlerFunc handles incoming HTTP requests and routes them to either the gRPC server or the gateway handler.
 // It wraps the handler function with h2c.NewHandler to support HTTP/2 requests.
@@ -369,7 +374,14 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 	db := database.GetSharedConnection()
 
 	// Initialize Minio client
-	minioClient, err := minio.NewMinioClientAndInitBucket(config.Config.Minio)
+	minioClient, err := minio.NewMinioClientAndInitBucket(miniox.ClientParams{
+		Config: config.Config.Minio,
+		Logger: logger,
+		AppInfo: miniox.AppInfo{
+			Name:    serviceName,
+			Version: version,
+		},
+	})
 	if err != nil {
 		logger.Fatal(fmt.Sprintf("failed to create minio client: %v", err))
 	}
