@@ -258,11 +258,8 @@ func main() {
 		logger.Fatal(err.Error())
 	}
 
-	if config.Config.Server.IngestMinIOLogs {
-		err := privateServeMux.HandlePath("POST", "/v1alpha/minio-audit", privateHandler.IngestMinIOAuditLogs)
-		if err != nil {
-			logger.Fatal("Failed to set up MinIO audit endpoint", zap.Error(err))
-		}
+	if err := privateServeMux.HandlePath("POST", "/v1alpha/minio-audit", privateHandler.IngestMinIOAuditLogs); err != nil {
+		logger.Fatal("Failed to set up MinIO audit endpoint", zap.Error(err))
 	}
 
 	privateHTTPServer := &http.Server{

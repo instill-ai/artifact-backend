@@ -69,9 +69,6 @@ type ServerConfig struct {
 		MaxWorkflowRetry   int32 `koanf:"maxworkflowretry"`
 		MaxActivityRetry   int32 `koanf:"maxactivityretry"`
 	}
-
-	// IngestMinIOLogs enables the MinIO audit log webhook.
-	IngestMinIOLogs bool `koanf:"logminioaudit"`
 }
 
 // DatabaseConfig related to database
