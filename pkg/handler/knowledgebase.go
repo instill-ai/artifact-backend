@@ -152,7 +152,9 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 			UpdateTime:  dbData.UpdateTime.String(),
 			ConvertingPipelines: []string{
 				service.NamespaceID + "/" + service.ConvertDocToMDPipelineID + "@" + service.DocToMDVersion,
-				service.NamespaceID + "/" + service.ConvertDocToMDPipelineID2 + "@" + service.DocToMDVersion2,
+			},
+			SummarizingPipelines: []string{
+				service.NamespaceID + "/" + service.GenerateSummaryPipelineID + "@" + service.GenerateSummaryVersion,
 			},
 			SplittingPipelines: []string{
 				service.NamespaceID + "/" + service.ChunkTextPipelineID + "@" + service.ChunkTextVersion,
@@ -233,7 +235,9 @@ func (ph *PublicHandler) ListCatalogs(ctx context.Context, req *artifactpb.ListC
 			OwnerName:   kb.Owner,
 			ConvertingPipelines: []string{
 				service.NamespaceID + "/" + service.ConvertDocToMDPipelineID + "@" + service.DocToMDVersion,
-				service.NamespaceID + "/" + service.ConvertDocToMDPipelineID2 + "@" + service.DocToMDVersion2,
+			},
+			SummarizingPipelines: []string{
+				service.NamespaceID + "/" + service.GenerateSummaryPipelineID + "@" + service.GenerateSummaryVersion,
 			},
 			SplittingPipelines: []string{
 				service.NamespaceID + "/" + service.ChunkTextPipelineID + "@" + service.ChunkTextVersion,
@@ -328,7 +332,9 @@ func (ph *PublicHandler) UpdateCatalog(ctx context.Context, req *artifactpb.Upda
 			OwnerName:   kb.Owner,
 			ConvertingPipelines: []string{
 				service.NamespaceID + "/" + service.ConvertDocToMDPipelineID,
-				service.NamespaceID + "/" + service.ConvertDocToMDPipelineID2,
+			},
+			SummarizingPipelines: []string{
+				service.NamespaceID + "/" + service.GenerateSummaryPipelineID + "@" + service.GenerateSummaryVersion,
 			},
 			SplittingPipelines: []string{
 				service.NamespaceID + "/" + service.ChunkTextPipelineID,

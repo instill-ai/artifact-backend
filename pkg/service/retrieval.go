@@ -8,6 +8,7 @@ import (
 	"github.com/gofrs/uuid"
 	"go.uber.org/zap"
 
+	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 
 	artifactPb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
@@ -41,8 +42,34 @@ func (s *Service) SimilarityChunksSearch(ctx context.Context, caller uuid.UUID, 
 	log.Info("get knowledge base by owner and id", zap.Duration("duration", time.Since(t)))
 	t = time.Now()
 
+	var fileType constant.FileType
+	var contentType constant.ContentType
+	switch req.FileMediaType {
+	case artifactPb.FileMediaType_FILE_MEDIA_TYPE_DOCUMENT:
+		fileType = constant.DocumentFileType
+	case artifactPb.FileMediaType_FILE_MEDIA_TYPE_UNSPECIFIED:
+		fileType = ""
+	default:
+		log.Error(fmt.Sprintf("unsupported file type: %v", req.FileMediaType))
+		return nil, fmt.Errorf("unsupported file type: %v", req.FileMediaType)
+	}
+
+	switch req.ContentType {
+	case artifactPb.ContentType_CONTENT_TYPE_CHUNK:
+		contentType = constant.ChunkContentType
+	case artifactPb.ContentType_CONTENT_TYPE_SUMMARY:
+		contentType = constant.SummaryContentType
+	case artifactPb.ContentType_CONTENT_TYPE_AUGMENTED:
+		contentType = constant.AugmentedContentType
+	case artifactPb.ContentType_CONTENT_TYPE_UNSPECIFIED:
+		contentType = ""
+	default:
+		log.Error(fmt.Sprintf("unsupported content type: %v", req.ContentType))
+		return nil, fmt.Errorf("unsupported content type: %v", req.ContentType)
+	}
+
 	// search similar embeddings in kb
-	simEmbeddings, err := s.MilvusClient.SearchSimilarEmbeddingsInKB(ctx, kb.UID.String(), textVector, int(req.TopK))
+	simEmbeddings, err := s.MilvusClient.SearchSimilarEmbeddingsInKB(ctx, kb.UID.String(), textVector, int(req.TopK), req.FileName, string(fileType), string(contentType))
 	if err != nil {
 		log.Error("failed to search similar embeddings in kb", zap.Error(err))
 		return nil, fmt.Errorf("failed to search similar embeddings in kb. err: %w", err)
