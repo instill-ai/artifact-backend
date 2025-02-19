@@ -8,6 +8,13 @@ import (
 	"go.uber.org/zap"
 )
 
+// We're interested in the audit logs related to user data, handled by the
+// Instill AI services. Milvus also interacts with MinIO, which generates noise
+// when tracking the operations in the buckets that contain user data.
+// TODO: In the future we might want to use different MinIO instances for the
+// *-backend services and for Milvus.
+const excludedMinIOBucket = "core-milvus"
+
 type minIOAuditLog struct {
 	Time string `json:"time"`
 	API  struct {
@@ -46,7 +53,14 @@ func (h *PrivateHandler) IngestMinIOAuditLogs(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	h.log.Info("MinIO audit log", zap.Any("body", auditLog))
+	go func() {
+		if auditLog.API.Bucket == excludedMinIOBucket {
+			return
+		}
+
+		h.log.Info("MinIO audit log", zap.Any("body", auditLog))
+
+	}()
 
 	w.WriteHeader(http.StatusOK)
 }
