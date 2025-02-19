@@ -16,7 +16,6 @@ server:
     maxworkflowtimeout: 3600 # in seconds
     maxworkflowretry: 1
     maxactivityretry: 3
-  logminioaudit: true
 database:
   username: postgres
   password: password
