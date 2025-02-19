@@ -30,13 +30,9 @@ const chunkOverlapForTextCatalog = 700
 
 const NamespaceID = "preset"
 
-// Note: this pipeline is for the old indexing pipeline having convert_result
-const ConvertDocToMDPipelineID = "indexing-convert-pdf"
-const DocToMDVersion = "v1.1.1"
-
 // Note: this pipeline is for the new indexing pipeline having convert_result or convert_result2
-const ConvertDocToMDPipelineID2 = "indexing-advanced-convert-doc"
-const DocToMDVersion2 = "v1.3.1"
+const ConvertDocToMDPipelineID = "indexing-advanced-convert-doc"
+const DocToMDVersion = "v1.3.1"
 
 const GenerateSummaryPipelineID = "indexing-generate-summary"
 const GenerateSummaryVersion = "v1.0.0"
@@ -58,7 +54,6 @@ var PresetPipelinesList = []struct {
 	Version string
 }{
 	{ID: ConvertDocToMDPipelineID, Version: DocToMDVersion},
-	{ID: ConvertDocToMDPipelineID2, Version: DocToMDVersion2},
 	{ID: GenerateSummaryPipelineID, Version: GenerateSummaryVersion},
 	{ID: ChunkMdPipelineID, Version: ChunkMdVersion},
 	{ID: ChunkTextPipelineID, Version: ChunkTextVersion},
@@ -98,8 +93,8 @@ func (s *Service) ConvertToMDPipeForFilesInPersistentCatalog(ctx context.Context
 		artifactpb.FileType_FILE_TYPE_DOC,
 		artifactpb.FileType_FILE_TYPE_PPT,
 		artifactpb.FileType_FILE_TYPE_PPTX:
-		pipelineID = ConvertDocToMDPipelineID2
-		version = DocToMDVersion2
+		pipelineID = ConvertDocToMDPipelineID
+		version = DocToMDVersion
 
 	// Spreadsheet types and others use the original pipeline
 	// case artifactpb.FileType_FILE_TYPE_XLSX,

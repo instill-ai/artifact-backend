@@ -23,10 +23,10 @@ type MilvusClientI interface {
 	// drop knowledge base collection
 	DropKnowledgeBaseCollection(ctx context.Context, kbUID string) error
 	ListEmbeddings(ctx context.Context, collectionName string) ([]Embedding, error)
-	SearchSimilarEmbeddings(ctx context.Context, collectionName string, vectors [][]float32, topK int) ([][]SimilarEmbedding, error)
+	SearchSimilarEmbeddings(ctx context.Context, collectionName string, vectors [][]float32, topK int, fileName, fileType, contentType string) ([][]SimilarEmbedding, error)
 	// SearchSimilarEmbeddingsInKB search similar embeddings in knowledge base.
 	// The topK has default value 5
-	SearchSimilarEmbeddingsInKB(ctx context.Context, kbUID string, vectors [][]float32, topK int) ([][]SimilarEmbedding, error)
+	SearchSimilarEmbeddingsInKB(ctx context.Context, kbUID string, vectors [][]float32, topK int, fileName, fileType, contentType string) ([][]SimilarEmbedding, error)
 	DeleteEmbedding(ctx context.Context, collectionName string, embeddingUID []string) error
 	DeleteEmbeddingsInKb(ctx context.Context, kbUID string, embeddingUID []string) error
 	// GetKnowledgeBaseCollectionName returns the collection name for a knowledge base
@@ -282,7 +282,15 @@ func (m *MilvusClient) ListEmbeddings(ctx context.Context, collectionName string
 
 	for {
 		// Perform a query to get a batch of embeddings
-		queryResult, err := m.c.Query(ctx, collectionName, nil, "", []string{"embedding_uid", "source_table", "source_uid", "embedding"}, client.WithOffset(offset), client.WithLimit(limit))
+		queryResult, err := m.c.Query(ctx, collectionName, nil, "", []string{
+			KbCollectionFieldSourceTable,
+			KbCollectionFieldSourceUID,
+			KbCollectionFieldEmbeddingUID,
+			KbCollectionFieldEmbedding,
+			KbCollectionFieldFileName,
+			KbCollectionFieldFileType,
+			KbCollectionFieldContentType,
+		}, client.WithOffset(offset), client.WithLimit(limit))
 		if err != nil {
 			return nil, fmt.Errorf("failed to query embeddings: %w", err)
 		}
@@ -362,11 +370,23 @@ type SimilarEmbedding struct {
 
 // SearchSimilarEmbeddings searches for embeddings similar to the input vector
 // topk has default value 5, when topk <= 0, it will be set to 5.
-func (m *MilvusClient) SearchSimilarEmbeddings(ctx context.Context, collectionName string, vectors [][]float32, topK int) ([][]SimilarEmbedding, error) {
+func (m *MilvusClient) SearchSimilarEmbeddings(ctx context.Context, collectionName string, vectors [][]float32, topK int, fileName, fileType, contentType string) ([][]SimilarEmbedding, error) {
 	// set default topK
 	if topK <= 0 {
 		topK = 5
 	}
+	// set filter string
+	var filterStrs []string
+	if fileName != "" {
+		filterStrs = append(filterStrs, fmt.Sprintf("file_name == '%s'", fileName))
+	}
+	if fileType != "" {
+		filterStrs = append(filterStrs, fmt.Sprintf("file_type == '%s'", fileType))
+	}
+	if contentType != "" {
+		filterStrs = append(filterStrs, fmt.Sprintf("content_type == '%s'", contentType))
+	}
+
 	log, err := logger.GetZapLogger(ctx)
 	if err != nil {
 		log.Error("failed to get logger", zap.Error(err))
@@ -408,12 +428,25 @@ func (m *MilvusClient) SearchSimilarEmbeddings(ctx context.Context, collectionNa
 		return nil, fmt.Errorf("failed to create search param: %w", err)
 	}
 	results, err := m.c.Search(
-		ctx, collectionName, nil, "", []string{
+		ctx,
+		collectionName,
+		nil,
+		strings.Join(filterStrs, " and "),
+		[]string{
 			KbCollectionFieldSourceTable,
 			KbCollectionFieldSourceUID,
 			KbCollectionFieldEmbeddingUID,
 			KbCollectionFieldEmbedding,
-		}, milvusVectors, KbCollectionFieldEmbedding, MetricType, topK, sp)
+			KbCollectionFieldFileName,
+			KbCollectionFieldFileType,
+			KbCollectionFieldContentType,
+		},
+		milvusVectors,
+		KbCollectionFieldEmbedding,
+		MetricType,
+		topK,
+		sp,
+	)
 	if err != nil {
 		log.Error("failed to search embeddings", zap.Error(err))
 		return nil, fmt.Errorf("failed to search embeddings: %w", err)
@@ -476,9 +509,9 @@ func (m *MilvusClient) GetKnowledgeBaseCollectionName(kbUID string) string {
 }
 
 // GetSimilarEmbeddingsInKB
-func (m *MilvusClient) SearchSimilarEmbeddingsInKB(ctx context.Context, kbUID string, vectors [][]float32, topK int) ([][]SimilarEmbedding, error) {
+func (m *MilvusClient) SearchSimilarEmbeddingsInKB(ctx context.Context, kbUID string, vectors [][]float32, topK int, fileName, fileType, contentType string) ([][]SimilarEmbedding, error) {
 	collectionName := m.GetKnowledgeBaseCollectionName(kbUID)
-	return m.SearchSimilarEmbeddings(ctx, collectionName, vectors, topK)
+	return m.SearchSimilarEmbeddings(ctx, collectionName, vectors, topK, fileName, fileType, contentType)
 }
 
 // Drop KnowledgeBaseCollection

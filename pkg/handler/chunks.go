@@ -9,6 +9,7 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/customerror"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/minio"
@@ -19,6 +20,17 @@ import (
 
 // convertToProtoChunk
 func convertToProtoChunk(chunk repository.TextChunk) *artifactpb.Chunk {
+	var contentType artifactpb.ContentType
+
+	switch chunk.ContentType {
+	case string(constant.SummaryContentType):
+		contentType = artifactpb.ContentType_CONTENT_TYPE_SUMMARY
+	case string(constant.ChunkContentType):
+		contentType = artifactpb.ContentType_CONTENT_TYPE_CHUNK
+	case string(constant.AugmentedContentType):
+		contentType = artifactpb.ContentType_CONTENT_TYPE_AUGMENTED
+	}
+
 	return &artifactpb.Chunk{
 		ChunkUid:        chunk.UID.String(),
 		Retrievable:     chunk.Retrievable,
@@ -27,6 +39,7 @@ func convertToProtoChunk(chunk repository.TextChunk) *artifactpb.Chunk {
 		Tokens:          uint32(chunk.Tokens),
 		CreateTime:      timestamppb.New(*chunk.CreateTime),
 		OriginalFileUid: chunk.KbFileUID.String(),
+		ContentType:     contentType,
 	}
 }
 

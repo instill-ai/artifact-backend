@@ -134,6 +134,18 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 		if !chunk.Retrievable {
 			continue
 		}
+		var contentType artifactPb.ContentType
+		switch chunk.ContentType {
+		case string(constant.ChunkContentType):
+			contentType = artifactPb.ContentType_CONTENT_TYPE_CHUNK
+		case string(constant.SummaryContentType):
+			contentType = artifactPb.ContentType_CONTENT_TYPE_SUMMARY
+		case string(constant.AugmentedContentType):
+			contentType = artifactPb.ContentType_CONTENT_TYPE_AUGMENTED
+		default:
+			contentType = artifactPb.ContentType_CONTENT_TYPE_UNSPECIFIED
+
+		}
 		simChunks = append(simChunks, &artifactPb.SimilarityChunk{
 			ChunkUid:        chunk.UID.String(),
 			SimilarityScore: float32(simChunksScores[i].Score),
@@ -147,6 +159,7 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 				Tokens:          uint32(chunk.Tokens),
 				CreateTime:      timestamppb.New(*chunk.CreateTime),
 				OriginalFileUid: chunk.KbFileUID.String(),
+				ContentType:     contentType,
 			},
 		})
 	}

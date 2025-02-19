@@ -11,6 +11,7 @@ import (
 	"github.com/gofrs/uuid"
 	"go.uber.org/zap"
 
+	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
@@ -452,7 +453,7 @@ func (wp *tempCatalogFileToEmbWorkerPool) procesSummarizingFile(ctx context.Cont
 
 	// Common processing for all file types
 	requesterUID := file.RequesterUID
-	summary, err := wp.svc.GenerateSummary(ctx, file.CreatorUID, requesterUID, string(fileData), string(DocumentFileType))
+	summary, err := wp.svc.GenerateSummary(ctx, file.CreatorUID, requesterUID, string(fileData), string(constant.DocumentFileType))
 	if err != nil {
 		logger.Error("Failed to generate summary from file.", zap.String("File uid", file.UID.String()))
 		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
@@ -599,7 +600,7 @@ func (wp *tempCatalogFileToEmbWorkerPool) processChunkingFilesInTempCatalog(ctx 
 	}
 
 	// Save chunks and update metadata
-	err = saveChunks(ctx, wp.svc, file.KnowledgeBaseUID.String(), file.UID, sourceTable, sourceUID, summaryChunks, contentChunks, string(DocumentFileType))
+	err = saveChunks(ctx, wp.svc, file.KnowledgeBaseUID.String(), file.UID, sourceTable, sourceUID, summaryChunks, contentChunks, string(constant.DocumentFileType))
 	if err != nil {
 		logger.Error("Failed to save chunks into object storage and metadata into database.", zap.String("File uid", file.UID.String()))
 		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err

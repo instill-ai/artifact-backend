@@ -10,6 +10,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
+	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/milvus"
 	"github.com/instill-ai/artifact-backend/pkg/minio"
@@ -21,19 +22,6 @@ const periodOfDispatcher = 5 * time.Second
 const extensionHelperPeriod = 5 * time.Second
 const workerLifetime = 45 * time.Second
 const workerPrefix = "worker-processing-file-"
-
-type FileType string
-
-var DocumentFileType FileType = "document"
-var VideoFileType FileType = "video"
-var ImageFileType FileType = "image"
-var AudioFileType FileType = "audio"
-
-type ContentType string
-
-var ChunkContentType ContentType = "chunk"
-var SummaryContentType ContentType = "summary"
-var AugmentedContentType ContentType = "augmented"
 
 var ErrFileStatusNotMatch = errors.New("file status not match")
 
@@ -195,8 +183,8 @@ func saveChunks(ctx context.Context, svc *service.Service, kbUID string, kbFileU
 		textChunks[i] = &repository.TextChunk{
 			SourceUID:   sourceUID,
 			SourceTable: sourceTable,
-			StartPos:    c.Start,
-			EndPos:      c.End,
+			StartPos:    0,
+			EndPos:      0,
 			ContentDest: "not set yet because we need to save the chunks in db to get the uid",
 			Tokens:      c.Tokens,
 			Retrievable: true,
@@ -204,7 +192,7 @@ func saveChunks(ctx context.Context, svc *service.Service, kbUID string, kbFileU
 			KbUID:       kbUIDuuid,
 			KbFileUID:   kbFileUID,
 			FileType:    fileType,
-			ContentType: string(SummaryContentType),
+			ContentType: string(constant.SummaryContentType),
 		}
 		texts[i] = c.Text
 	}
@@ -222,7 +210,7 @@ func saveChunks(ctx context.Context, svc *service.Service, kbUID string, kbFileU
 			KbUID:       kbUIDuuid,
 			KbFileUID:   kbFileUID,
 			FileType:    fileType,
-			ContentType: string(ChunkContentType),
+			ContentType: string(constant.ChunkContentType),
 		}
 		texts[ii] = c.Text
 	}
