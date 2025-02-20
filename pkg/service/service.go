@@ -18,6 +18,7 @@ import (
 
 	pb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	mgmtpb "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
+	modelpb "github.com/instill-ai/protogen-go/model/model/v1alpha"
 	pipelinepb "github.com/instill-ai/protogen-go/pipeline/pipeline/v1beta"
 )
 
@@ -32,6 +33,7 @@ type Service struct {
 	MinIO          minio.MinioI
 	MgmtPrv        mgmtpb.MgmtPrivateServiceClient
 	PipelinePub    pipelinepb.PipelinePublicServiceClient
+	ModelPub       modelpb.ModelPublicServiceClient
 	registryClient RegistryClient
 	// refactor: we need redis interface in the future to mock the redis client
 	RedisClient  *redis.Client
@@ -45,6 +47,7 @@ func NewService(
 	mc minio.MinioI,
 	mgmtPrv mgmtpb.MgmtPrivateServiceClient,
 	pipelinePub pipelinepb.PipelinePublicServiceClient,
+	modelPub modelpb.ModelPublicServiceClient,
 	rgc RegistryClient,
 	rc *redis.Client,
 	milvusClient milvus.MilvusClientI,
@@ -57,6 +60,7 @@ func NewService(
 		MinIO:          mc,
 		MgmtPrv:        mgmtPrv,
 		PipelinePub:    pipelinePub,
+		ModelPub:       modelPub,
 		registryClient: rgc,
 		RedisClient:    rc,
 		MilvusClient:   milvusClient,

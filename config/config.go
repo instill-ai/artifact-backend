@@ -28,6 +28,7 @@ type AppConfig struct {
 	Log                   LogConfig             `koanf:"log"`
 	MgmtBackend           MgmtBackendConfig     `koanf:"mgmtbackend"`
 	PipelineBackend       PipelineBackendConfig `koanf:"pipelinebackend"`
+	ModelBackend          ModelBackendConfig    `koanf:"modelbackend"`
 	Registry              RegistryConfig        `koanf:"registry"`
 	OpenFGA               OpenFGAConfig         `koanf:"openfga"`
 	Minio                 miniox.Config         `koanf:"minio"`
@@ -132,6 +133,18 @@ type PipelineBackendConfig struct {
 	Host        string `koanf:"host"`
 	PublicPort  int    `koanf:"publicport"`
 	PrivatePort int    `koanf:"privateport"`
+	HTTPS       struct {
+		Cert string `koanf:"cert"`
+		Key  string `koanf:"key"`
+	}
+}
+
+// ModelBackendConfig related to model-backend
+type ModelBackendConfig struct {
+	Host        string `koanf:"host"`
+	PublicPort  int    `koanf:"publicport"`
+	PrivatePort int    `koanf:"privateport"`
+	Namespace   string `koanf:"namespace"`
 	HTTPS       struct {
 		Cert string `koanf:"cert"`
 		Key  string `koanf:"key"`

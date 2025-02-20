@@ -11,6 +11,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/gofrs/uuid"
+	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/minio"
@@ -376,10 +377,17 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processConvertingFile(ctx contex
 
 	// convert the pdf file to md
 	requesterUID := file.RequesterUID
-	convertedMD, err := wp.svc.ConvertToMDPipeForFilesInPersistentCatalog(ctx, file.UID, file.CreatorUID, requesterUID, base64Data, artifactpb.FileType(artifactpb.FileType_value[file.Type]))
+	convertedMD, err := wp.svc.ConvertToMDModel(ctx, file.UID, file.CreatorUID, requesterUID, base64Data, artifactpb.FileType(artifactpb.FileType_value[file.Type]))
 	if err != nil {
 		logger.Error("Failed to convert pdf to md using pdf-to-md pipeline.", zap.String("File path", fileInMinIOPath))
 		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
+	}
+
+	convertingModelMetadata := config.Config.ModelBackend.Namespace + "/" + service.ConvertDocToMDModelID + "@" + service.ConvertDocToMDModelVersion
+	err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", convertingModelMetadata, "", "", "", nil, nil, nil, nil, nil)
+	if err != nil {
+		logger.Error("Failed to save converting pipeline metadata.", zap.String("File uid:", file.UID.String()))
+		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, fmt.Errorf("failed to save converting model metadata: %w", err)
 	}
 
 	// save the converted file into object storage and metadata into database

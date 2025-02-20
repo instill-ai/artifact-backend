@@ -60,6 +60,14 @@ pipelinebackend:
   https:
     cert:
     key:
+modelbackend:
+  host: model-backend
+  publicport: 8083
+  privateport: 3083
+  namespace: admin
+  https:
+    cert:
+    key:
 registry:
   host: registry
   port: 5000

@@ -374,7 +374,7 @@ func (wp *tempCatalogFileToEmbWorkerPool) processConvertingFile(ctx context.Cont
 
 	// convert the pdf file to md
 	requesterUID := file.RequesterUID
-	convertedMD, err := wp.svc.ConvertToMDPipeForFilesInTempCatalog(ctx, file.UID, file.CreatorUID, requesterUID, base64Data, artifactpb.FileType(artifactpb.FileType_value[file.Type]))
+	convertedMD, err := wp.svc.ConvertToMDModel(ctx, file.UID, file.CreatorUID, requesterUID, base64Data, artifactpb.FileType(artifactpb.FileType_value[file.Type]))
 	if err != nil {
 		logger.Error("Failed to convert pdf to md using pdf-to-md pipeline.", zap.String("File path", fileInMinIOPath))
 		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err

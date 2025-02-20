@@ -31,4 +31,3 @@ type ContentType string
 var ChunkContentType ContentType = "chunk"
 var SummaryContentType ContentType = "summary"
 var AugmentedContentType ContentType = "augmented"
-
