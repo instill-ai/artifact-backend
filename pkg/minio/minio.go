@@ -6,18 +6,18 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
-	"net"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/minio/minio-go"
+	"github.com/minio/minio-go/v7"
 	"go.uber.org/zap"
 
 	"github.com/instill-ai/artifact-backend/pkg/utils"
 
 	miniox "github.com/instill-ai/x/minio"
+	resourcex "github.com/instill-ai/x/resource"
 )
 
 type MinioI interface {
@@ -51,50 +51,49 @@ const (
 	KnowledgeBaseBucketName = "instill-ai-knowledge-bases"
 )
 
-func NewMinioClientAndInitBucket(params miniox.ClientParams) (*Minio, error) {
-	cfg := params.Config
-	log := params.Logger.With(
-		zap.String("host:port", cfg.Host+":"+cfg.Port),
-		zap.String("user", cfg.User),
+func NewMinioClientAndInitBucket(ctx context.Context, params miniox.ClientParams) (*Minio, error) {
+	params.Logger = params.Logger.With(
+		zap.String("host:port", params.Config.Host+":"+params.Config.Port),
+		zap.String("user", params.Config.User),
 	)
 
-	log.Info("Initializing MinIO client and bucket")
-
-	// TODO: we should use instill-ai/x/minio.NewMinioClientAndInitBucket.
-	// TODO: we should add the user UID headers when present.
-	endpoint := net.JoinHostPort(cfg.Host, cfg.Port)
-	client, err := minio.New(endpoint, cfg.User, cfg.Password, false)
+	// We'll initialise a client and create the knowledge base bucket. Then,
+	// we'll create the blob bucket.
+	// TODO we should have one client per bucket. And use x/minio's public
+	// methods instead of the internal client.
+	kbParams := params
+	kbParams.Config.BucketName = KnowledgeBaseBucketName
+	xClient, err := miniox.NewMinIOClientAndInitBucket(ctx, kbParams)
 	if err != nil {
-		// log connection error
-		log.Error("Cannot connect to MinIO", zap.Error(err))
 		return nil, fmt.Errorf("connecting to MinIO: %w", err)
 	}
 
-	client.SetAppInfo(params.AppInfo.Name, params.AppInfo.Version)
+	client := xClient.Client()
 
-	// create bucket if not exists for knowledge base
-	for _, bucket := range []string{KnowledgeBaseBucketName, BlobBucketName} {
-		log := log.With(zap.String("bucket", bucket))
+	// Create blob bucket if it doesn't exist
+	{
+		log := params.Logger.With(zap.String("bucket", BlobBucketName))
 
-		exists, err := client.BucketExists(bucket)
+		exists, err := client.BucketExists(ctx, BlobBucketName)
 		if err != nil {
 			return nil, fmt.Errorf("checking bucket existence: %w", err)
 		}
 
 		if !exists {
-			err = client.MakeBucket(bucket, miniox.Location)
-			if err != nil {
+			if err := client.MakeBucket(ctx, BlobBucketName, minio.MakeBucketOptions{
+				Region: miniox.Location,
+			}); err != nil {
 				return nil, fmt.Errorf("creating bucket: %w", err)
 			}
-			log.Info("Successfully created bucket", zap.String("bucket", bucket))
+			log.Info("Successfully created bucket")
 		} else {
-			log.Info("Bucket already exists", zap.String("bucket", bucket))
+			log.Info("Bucket already exists")
 		}
 	}
 
 	return &Minio{
 		client: client,
-		logger: log,
+		logger: params.Logger,
 	}, nil
 }
 
@@ -110,7 +109,18 @@ func (m *Minio) UploadBase64File(ctx context.Context, bucket string, filePathNam
 	size := int64(len(decodedContent))
 	// Create the file path with folder structure
 	for i := 0; i < 3; i++ {
-		_, err = m.client.PutObjectWithContext(ctx, bucket, filePathName, contentReader, size, minio.PutObjectOptions{ContentType: fileMimeType})
+		_,
+			err = m.client.PutObject(
+			ctx,
+			bucket,
+			filePathName,
+			contentReader,
+			size,
+			minio.PutObjectOptions{
+				ContentType:  fileMimeType,
+				UserMetadata: map[string]string{miniox.MinIOHeaderUserUID: m.authenticatedUser(ctx)},
+			},
+		)
 		if err == nil {
 			break
 		}
@@ -128,7 +138,7 @@ func (m *Minio) UploadBase64File(ctx context.Context, bucket string, filePathNam
 func (m *Minio) DeleteFile(ctx context.Context, bucket string, filePathName string) (err error) {
 	// Delete the file from MinIO
 	for attempt := 1; attempt <= 3; attempt++ {
-		err = m.client.RemoveObject(bucket, filePathName)
+		err = m.client.RemoveObject(ctx, bucket, filePathName, minio.RemoveObjectOptions{})
 		if err == nil {
 			break
 		}
@@ -159,7 +169,7 @@ func (m *Minio) DeleteFiles(ctx context.Context, bucket string, filePathNames []
 					defer func() { <-sem }() // Release the token
 					var err error
 					for attempt := 1; attempt <= 3; attempt++ {
-						err = m.client.RemoveObject(bucket, filePathName)
+						err = m.client.RemoveObject(ctx, bucket, filePathName, minio.RemoveObjectOptions{})
 						if err == nil {
 							break
 						}
@@ -183,7 +193,9 @@ func (m *Minio) GetFile(ctx context.Context, bucket string, filePathName string)
 	var object *minio.Object
 	var err error
 	for attempt := 1; attempt <= 3; attempt++ {
-		object, err = m.client.GetObject(bucket, filePathName, minio.GetObjectOptions{})
+		opts := minio.GetObjectOptions{}
+		opts.Set(miniox.MinIOHeaderUserUID, m.authenticatedUser(ctx))
+		object, err = m.client.GetObject(ctx, bucket, filePathName, opts)
 		if err == nil {
 			break
 		}
@@ -231,7 +243,9 @@ func (m *Minio) GetFilesByPaths(ctx context.Context, bucket string, filePaths []
 				var obj *minio.Object
 				var err error
 				for attempt := 1; attempt <= 3; attempt++ {
-					obj, err = m.client.GetObject(bucket, filePath, minio.GetObjectOptions{})
+					opts := minio.GetObjectOptions{}
+					opts.Set(miniox.MinIOHeaderUserUID, m.authenticatedUser(ctx))
+					obj, err = m.client.GetObject(ctx, bucket, filePath, opts)
 					if err == nil {
 						break
 					}
@@ -286,7 +300,12 @@ func (m *Minio) DeleteFilesWithPrefix(ctx context.Context, bucket string, prefix
 	defer close(errCh)
 
 	// List all objects with the given prefix
-	objectCh := m.client.ListObjects(bucket, prefix, true, nil)
+	opts := minio.ListObjectsOptions{
+		Prefix:    prefix,
+		Recursive: true,
+	}
+	opts.Set(miniox.MinIOHeaderUserUID, m.authenticatedUser(ctx))
+	objectCh := m.client.ListObjects(ctx, bucket, opts)
 
 	// Use a WaitGroup to wait for all deletions to complete
 	var wg sync.WaitGroup
@@ -307,7 +326,7 @@ func (m *Minio) DeleteFilesWithPrefix(ctx context.Context, bucket string, prefix
 				defer func() { <-sem }() // Release the token
 				var err error
 				for attempt := 1; attempt <= 3; attempt++ {
-					err = m.client.RemoveObject(bucket, objectName)
+					err = m.client.RemoveObject(ctx, bucket, objectName, minio.RemoveObjectOptions{})
 					if err == nil {
 						break
 					}
@@ -326,4 +345,12 @@ func (m *Minio) DeleteFilesWithPrefix(ctx context.Context, bucket string, prefix
 	wg.Wait()
 
 	return errCh
+}
+
+// Depending on the request, this might yield an empty userUID value.
+// TODO we should make the user UID an explicit param in the methods that need
+// this information and make sure that the clients provide it.
+func (m *Minio) authenticatedUser(ctx context.Context) string {
+	_, userUID := resourcex.GetRequesterUIDAndUserUID(ctx)
+	return userUID.String()
 }
