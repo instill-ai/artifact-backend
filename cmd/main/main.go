@@ -371,7 +371,7 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 	db := database.GetSharedConnection()
 
 	// Initialize Minio client
-	minioClient, err := minio.NewMinioClientAndInitBucket(miniox.ClientParams{
+	minioClient, err := minio.NewMinioClientAndInitBucket(ctx, miniox.ClientParams{
 		Config: config.Config.Minio,
 		Logger: logger,
 		AppInfo: miniox.AppInfo{

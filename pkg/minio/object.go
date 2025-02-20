@@ -31,8 +31,9 @@ func (m *Minio) GetPresignedURLForUpload(ctx context.Context, namespaceUUID uuid
 	if expiration > time.Hour*24*7 {
 		return nil, errors.New("expiration time must be within 1sec to 7 days")
 	}
-	// Get presigned URL for uploading object
-	presignedURL, err := m.client.PresignedPutObject(BlobBucketName, GetBlobObjectPath(namespaceUUID, objectUUID), expiration)
+	// Get presigned URL for uploading object.
+	// TODO add presigned headers for origin and user UID.
+	presignedURL, err := m.client.PresignedPutObject(ctx, BlobBucketName, GetBlobObjectPath(namespaceUUID, objectUUID), expiration)
 	if err != nil {
 		log.Error("Failed to make presigned URL for upload", zap.Error(err))
 		return nil, err
@@ -53,7 +54,7 @@ func (m *Minio) GetPresignedURLForDownload(ctx context.Context, namespaceUUID uu
 	}
 
 	// Get presigned URL for downloading object
-	presignedURL, err := m.client.PresignedGetObject(BlobBucketName, GetBlobObjectPath(namespaceUUID, objectUUID), expiration, url.Values{})
+	presignedURL, err := m.client.PresignedGetObject(ctx, BlobBucketName, GetBlobObjectPath(namespaceUUID, objectUUID), expiration, url.Values{})
 	if err != nil {
 		log.Error("Failed to make presigned URL for download", zap.Error(err))
 		return nil, err
