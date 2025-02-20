@@ -61,8 +61,8 @@ var PresetPipelinesList = []struct {
 	{ID: QAPipelineID, Version: QAVersion},
 }
 
-// ConvertToMDPipeForFiles using converting pipeline to convert some file type to MD and consume caller's credits
-func (s *Service) ConvertToMDPipeForFiles(ctx context.Context, fileUID uuid.UUID, caller uuid.UUID, requester uuid.UUID, fileBase64 string, fileType artifactpb.FileType) (string, error) {
+// ConvertToMDPipe using converting pipeline to convert some file type to MD and consume caller's credits
+func (s *Service) ConvertToMDPipe(ctx context.Context, fileUID uuid.UUID, caller uuid.UUID, requester uuid.UUID, fileBase64 string, fileType artifactpb.FileType) (string, error) {
 	logger, _ := logger.GetZapLogger(ctx)
 	var md metadata.MD
 	if requester != uuid.Nil {
@@ -134,6 +134,13 @@ func (s *Service) ConvertToMDPipeForFiles(ctx context.Context, fileUID uuid.UUID
 	if err != nil {
 		logger.Error("failed to trigger pipeline", zap.Error(err))
 		return "", fmt.Errorf("failed to trigger %s pipeline: %w", pipelineID, err)
+	}
+
+	convertingModelMetadata := NamespaceID + "/" + ConvertDocToMDModelID + "@" + ConvertDocToMDModelVersion
+	err = s.Repository.UpdateKbFileExtraMetaData(ctx, fileUID, "", convertingModelMetadata, "", "", "", nil, nil, nil, nil, nil)
+	if err != nil {
+		logger.Error("Failed to save converting pipeline metadata.", zap.String("File uid:", fileUID.String()))
+		return "", fmt.Errorf("failed to save converting model metadata: %w", err)
 	}
 
 	result, err := getConvertResult(resp)
