@@ -10,7 +10,6 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 
@@ -42,8 +41,9 @@ func (s *Service) ConvertToMDModel(ctx context.Context, fileUID uuid.UUID, calle
 	// Get the appropriate prefix for the file type
 	prefix := getFileTypePrefix(fileType)
 
+	namespaceID := "admin"
 	req := &modelpb.TriggerNamespaceModelRequest{
-		NamespaceId: config.Config.ModelBackend.Namespace,
+		NamespaceId: namespaceID,
 		ModelId:     ConvertDocToMDModelID,
 		Version:     ConvertDocToMDModelVersion,
 		TaskInputs: []*structpb.Struct{
@@ -63,8 +63,20 @@ func (s *Service) ConvertToMDModel(ctx context.Context, fileUID uuid.UUID, calle
 
 	resp, err := s.ModelPub.TriggerNamespaceModel(ctx, req)
 	if err != nil {
-		logger.Error("failed to trigger model", zap.Error(err))
-		return "", fmt.Errorf("failed to trigger %s model: %w", ConvertDocToMDModelID, err)
+		namespaceID = "instill"
+		req.NamespaceId = namespaceID
+		resp, err = s.ModelPub.TriggerNamespaceModel(ctx, req)
+		if err != nil {
+			logger.Error(fmt.Sprintf("failed to trigger %s model", ConvertDocToMDModelID), zap.Error(err))
+			return "", fmt.Errorf("failed to trigger %s model: %w", ConvertDocToMDModelID, err)
+		}
+	}
+
+	convertingModelMetadata := namespaceID + "/" + ConvertDocToMDModelID + "@" + ConvertDocToMDModelVersion
+	err = s.Repository.UpdateKbFileExtraMetaData(ctx, fileUID, "", convertingModelMetadata, "", "", "", nil, nil, nil, nil, nil)
+	if err != nil {
+		logger.Error("Failed to save converting pipeline metadata.", zap.String("File uid:", fileUID.String()))
+		return "", fmt.Errorf("failed to save converting model metadata: %w", err)
 	}
 
 	result, err := getModelConvertResult(resp)
