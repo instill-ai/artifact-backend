@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc/metadata"
 
+	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/customerror"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
@@ -151,7 +152,7 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 			CreateTime:  dbData.CreateTime.String(),
 			UpdateTime:  dbData.UpdateTime.String(),
 			ConvertingPipelines: []string{
-				service.NamespaceID + "/" + service.ConvertDocToMDPipelineID + "@" + service.DocToMDVersion,
+				config.Config.ModelBackend.Namespace + "/" + service.ChunkMdPipelineID + "@" + service.ConvertDocToMDModelVersion,
 			},
 			SummarizingPipelines: []string{
 				service.NamespaceID + "/" + service.GenerateSummaryPipelineID + "@" + service.GenerateSummaryVersion,
@@ -234,7 +235,7 @@ func (ph *PublicHandler) ListCatalogs(ctx context.Context, req *artifactpb.ListC
 			UpdateTime:  kb.UpdateTime.String(),
 			OwnerName:   kb.Owner,
 			ConvertingPipelines: []string{
-				service.NamespaceID + "/" + service.ConvertDocToMDPipelineID + "@" + service.DocToMDVersion,
+				config.Config.ModelBackend.Namespace + "/" + service.ChunkMdPipelineID + "@" + service.ConvertDocToMDModelVersion,
 			},
 			SummarizingPipelines: []string{
 				service.NamespaceID + "/" + service.GenerateSummaryPipelineID + "@" + service.GenerateSummaryVersion,
@@ -331,7 +332,7 @@ func (ph *PublicHandler) UpdateCatalog(ctx context.Context, req *artifactpb.Upda
 			UpdateTime:  kb.UpdateTime.String(),
 			OwnerName:   kb.Owner,
 			ConvertingPipelines: []string{
-				service.NamespaceID + "/" + service.ConvertDocToMDPipelineID,
+				config.Config.ModelBackend.Namespace + "/" + service.ChunkMdPipelineID + "@" + service.ConvertDocToMDModelVersion,
 			},
 			SummarizingPipelines: []string{
 				service.NamespaceID + "/" + service.GenerateSummaryPipelineID + "@" + service.GenerateSummaryVersion,

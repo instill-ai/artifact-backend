@@ -693,7 +693,7 @@ func (r *Repository) UpdateKbFileExtraMetaData(
 	summarizingPipe,
 	chunkingPipe,
 	embeddingPipe string,
-	processingTime, summarizingTime, convertingTime, chunkingTime, embeddingTime *int64) error {
+	processingTime, convertingTime, summarizingTime, chunkingTime, embeddingTime *int64) error {
 	var kb KnowledgeBaseFile
 
 	// Use GORM's Transaction function
