@@ -564,7 +564,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processChunkingFile(ctx context.
 		sourceTable = wp.svc.Repository.ConvertedFileTableName()
 		sourceUID = convertedFile.UID
 
-		contentChunks, err = wp.svc.ChunkMarkdownPipeForPersistentCatalog(ctx, file.CreatorUID, requesterUID, string(fileData))
+		contentChunks, err = wp.svc.ChunkMarkdownPipe(ctx, file.CreatorUID, requesterUID, string(fileData))
 		if err != nil {
 			logger.Error("Failed to get chunks from file.", zap.String("File uid", file.UID.String()))
 			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
@@ -580,7 +580,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processChunkingFile(ctx context.
 		sourceTable = wp.svc.Repository.KnowledgeBaseFileTableName()
 		sourceUID = file.UID
 
-		contentChunks, err = wp.svc.ChunkMarkdownPipeForPersistentCatalog(ctx, file.CreatorUID, requesterUID, string(fileData))
+		contentChunks, err = wp.svc.ChunkMarkdownPipe(ctx, file.CreatorUID, requesterUID, string(fileData))
 		if err != nil {
 			logger.Error("Failed to get chunks from file.", zap.String("File uid", file.UID.String()))
 			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
@@ -596,7 +596,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processChunkingFile(ctx context.
 		sourceTable = wp.svc.Repository.KnowledgeBaseFileTableName()
 		sourceUID = file.UID
 
-		contentChunks, err = wp.svc.ChunkTextPipeForPersistentCatalog(ctx, file.CreatorUID, requesterUID, string(fileData))
+		contentChunks, err = wp.svc.ChunkTextPipe(ctx, file.CreatorUID, requesterUID, string(fileData))
 		if err != nil {
 			logger.Error("Failed to get chunks from file.", zap.String("File uid", file.UID.String()))
 			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
@@ -606,7 +606,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processChunkingFile(ctx context.
 		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, fmt.Errorf("unsupported file type in processChunkingFile: %v", file.Type)
 	}
 
-	summaryChunks, err := wp.svc.ChunkTextPipeForPersistentCatalog(ctx, file.CreatorUID, requesterUID, string(file.Summary))
+	summaryChunks, err := wp.svc.ChunkTextPipe(ctx, file.CreatorUID, requesterUID, string(file.Summary))
 	if err != nil {
 		logger.Error("Failed to get chunks from file.", zap.String("File uid", file.UID.String()))
 		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
