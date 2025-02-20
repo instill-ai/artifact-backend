@@ -208,10 +208,6 @@ func main() {
 	wp := worker.NewPersistentCatalogFileToEmbWorkerPool(ctx, service, config.Config.FileToEmbeddingWorker.NumberOfWorkers, artifactpb.CatalogType_CATALOG_TYPE_PERSISTENT)
 	wp.Start()
 
-	// activate temp(ephemeral) catalog file-to-embeddings worker pool
-	wpTemp := worker.NewTempCatalogFileToEmbWorkerPool(ctx, service, config.Config.FileToEmbeddingWorker.NumberOfWorkers, artifactpb.CatalogType_CATALOG_TYPE_EPHEMERAL)
-	wpTemp.Start()
-
 	// Start usage reporter
 	var usg usage.Usage
 	if config.Config.Server.Usage.Enabled {
