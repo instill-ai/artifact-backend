@@ -104,7 +104,7 @@ func (r *Repository) UpdateObjectURL(ctx context.Context, objectURL ObjectURL) (
 }
 
 // CreateObjectURLWithUIDInEncodedURLPath creates an ObjectURL record in the database with the UID in the encoded_url_path.
-func (r *Repository) CreateObjectURLWithUIDInEncodedURLPath(ctx context.Context, objectURL ObjectURL,namespaceID string, EncodedMinioURLPath func(namespaceID string, objectURLUUID uuid.UUID) string) (*ObjectURL, error) {
+func (r *Repository) CreateObjectURLWithUIDInEncodedURLPath(ctx context.Context, objectURL ObjectURL, namespaceID string, EncodedMinioURLPath func(namespaceID string, objectURLUUID uuid.UUID) string) (*ObjectURL, error) {
 	var result ObjectURL
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// Create the initial object URL

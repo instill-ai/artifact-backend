@@ -48,7 +48,7 @@ const (
 	// Note: this bucket is for storing the blob of the file and not changeable
 	// in different environment so we dont put it in config
 	BlobBucketName          = "instill-ai-blob"
-	KnowledgeBaseBucketName = "instill-ai-knowledge-bases"
+	KnowledgeBaseBucketName = "instill-ai-blob"
 )
 
 func NewMinioClientAndInitBucket(ctx context.Context, params miniox.ClientParams) (*Minio, error) {
