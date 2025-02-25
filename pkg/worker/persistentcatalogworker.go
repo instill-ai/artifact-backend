@@ -365,7 +365,8 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processConvertingFile(ctx contex
 	logger, _ := logger.GetZapLogger(ctx)
 
 	fileInMinIOPath := file.Destination
-	data, err := wp.svc.MinIO.GetFile(ctx, minio.KnowledgeBaseBucketName, fileInMinIOPath)
+	bucket := checkIfUploadedByBlobURL(fileInMinIOPath)
+	data, err := wp.svc.MinIO.GetFile(ctx, bucket, fileInMinIOPath)
 	if err != nil {
 		logger.Error("Failed to get file from minIO.", zap.String("File path", fileInMinIOPath))
 		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
@@ -445,8 +446,11 @@ func (wp *persistentCatalogFileToEmbWorkerPool) procesSummarizingFile(ctx contex
 
 	case artifactpb.FileType_FILE_TYPE_TEXT.String(),
 		artifactpb.FileType_FILE_TYPE_MARKDOWN.String():
+
+		fileInMinIOPath := file.Destination
+		bucket := checkIfUploadedByBlobURL(fileInMinIOPath)
 		// Get original file for text/markdown types
-		fileData, err = wp.svc.MinIO.GetFile(ctx, minio.KnowledgeBaseBucketName, file.Destination)
+		fileData, err = wp.svc.MinIO.GetFile(ctx, bucket, fileInMinIOPath)
 		if err != nil {
 			logger.Error("Failed to get file from minIO.", zap.String("File uid", file.UID.String()))
 			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
@@ -567,7 +571,9 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processChunkingFile(ctx context.
 
 	case artifactpb.FileType_FILE_TYPE_MARKDOWN.String():
 		// Get original file for markdown types
-		fileData, err = wp.svc.MinIO.GetFile(ctx, minio.KnowledgeBaseBucketName, file.Destination)
+		fileInMinIOPath := file.Destination
+		bucket := checkIfUploadedByBlobURL(fileInMinIOPath)
+		fileData, err = wp.svc.MinIO.GetFile(ctx, bucket, fileInMinIOPath)
 		if err != nil {
 			logger.Error("Failed to get file from minIO.", zap.String("File uid", file.UID.String()))
 			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
@@ -583,7 +589,9 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processChunkingFile(ctx context.
 
 	case artifactpb.FileType_FILE_TYPE_TEXT.String():
 		// Get original file for text types
-		fileData, err = wp.svc.MinIO.GetFile(ctx, minio.KnowledgeBaseBucketName, file.Destination)
+		fileInMinIOPath := file.Destination
+		bucket := checkIfUploadedByBlobURL(fileInMinIOPath)
+		fileData, err = wp.svc.MinIO.GetFile(ctx, bucket, fileInMinIOPath)
 		if err != nil {
 			logger.Error("Failed to get file from minIO.", zap.String("File uid", file.UID.String()))
 			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
