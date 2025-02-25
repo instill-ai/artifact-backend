@@ -29,25 +29,12 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 		err := fmt.Errorf("failed to get user id from header: %v. err: %w", err, customerror.ErrUnauthenticated)
 		return nil, err
 	}
-	err = checkUploadKnowledgeBaseFileRequest(req)
+
+	hasObject, err := checkUploadKnowledgeBaseFileRequest(req)
 	if err != nil {
 		return nil, err
 	}
-	// check file name length based on character count
-	if len(req.File.Name) > 255 {
-		return nil, fmt.Errorf("file name is too long. max length is 255. name: %s err: %w",
-			req.File.Name, customerror.ErrInvalidArgument)
-	}
-	// determine the file type by its extension
-	req.File.Type = DetermineFileType(req.File.Name)
-	if req.File.Type == artifactpb.FileType_FILE_TYPE_UNSPECIFIED {
-		return nil, fmt.Errorf("file extension is not supported. name: %s err: %w",
-			req.File.Name, customerror.ErrInvalidArgument)
-	}
 
-	if strings.Contains(req.File.Name, "/") {
-		return nil, fmt.Errorf("file name cannot contain '/'. err: %w", customerror.ErrInvalidArgument)
-	}
 	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
 	if err != nil {
 		log.Error(
@@ -89,9 +76,26 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 		log.Error("failed to get namespace tier", zap.Error(err))
 		return nil, fmt.Errorf("failed to get namespace tier. err: %w", err)
 	}
+
 	// upload file to minio and database
 	var res *repository.KnowledgeBaseFile
-	{
+	if !hasObject {
+		// check file name length based on character count
+		if len(req.File.Name) > 255 {
+			return nil, fmt.Errorf("file name is too long. max length is 255. name: %s err: %w",
+				req.File.Name, customerror.ErrInvalidArgument)
+		}
+		// determine the file type by its extension
+		req.File.Type = DetermineFileType(req.File.Name)
+		if req.File.Type == artifactpb.FileType_FILE_TYPE_UNSPECIFIED {
+			return nil, fmt.Errorf("file extension is not supported. name: %s err: %w",
+				req.File.Name, customerror.ErrInvalidArgument)
+		}
+
+		if strings.Contains(req.File.Name, "/") {
+			return nil, fmt.Errorf("file name cannot contain '/'. err: %w", customerror.ErrInvalidArgument)
+		}
+
 		creatorUID, err := uuid.FromString(authUID)
 		if err != nil {
 			log.Error("failed to parse creator uid", zap.Error(err))
@@ -152,8 +156,64 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 			log.Error("failed to increase catalog usage", zap.Error(err))
 			return nil, err
 		}
-	}
+	} else {
+		object, err := ph.service.Repository.GetObjectByUID(ctx, uuid.FromStringOrNil(req.GetFile().GetObjectUid()))
+		if err != nil {
+			log.Error("failed to get catalog object with provided UID", zap.Error(err))
+			return nil, err
+		}
 
+		if !object.IsUploaded {
+			log.Error("file has not been uploaded yet")
+			return nil, fmt.Errorf("file has not been uploaded yet")
+		}
+
+		// check if file size is more than 150MB
+		if object.Size > int64(tier.GetMaxUploadFileSize()) {
+			return nil, fmt.Errorf(
+				"file size is more than %v. err: %w",
+				tier.GetMaxUploadFileSize(),
+				customerror.ErrInvalidArgument)
+		}
+
+		// check if total usage in namespace
+		quota, humanReadable := tier.GetFileStorageTotalQuota()
+		if totalUsageInNamespace+object.Size > int64(quota) {
+			return nil, fmt.Errorf(
+				"file storage total quota exceeded. max: %v. tier:%v, err: %w",
+				humanReadable, tier.String(), customerror.ErrInvalidArgument)
+		}
+
+		req.File.Type = DetermineFileType(object.Name)
+
+		kbFile := repository.KnowledgeBaseFile{
+			Name:                      object.Name,
+			Type:                      req.File.Type.String(),
+			Owner:                     ns.NsUID,
+			CreatorUID:                object.CreatorUID,
+			KnowledgeBaseUID:          kb.UID,
+			Destination:               object.Destination,
+			ProcessStatus:             artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_NOTSTARTED)],
+			Size:                      object.Size,
+			ExternalMetadataUnmarshal: req.File.ExternalMetadata,
+		}
+
+		// create catalog file in database
+		res, err = ph.service.Repository.CreateKnowledgeBaseFile(ctx, kbFile, nil)
+
+		if err != nil {
+			log.Error("failed to create catalog file", zap.Error(err))
+			return nil, err
+		}
+
+		// increase catalog usage. need to increase after the file is created.
+		// Note: in the future, we need to increase the usage in transaction with creating the file.
+		err = ph.service.Repository.IncreaseKnowledgeBaseUsage(ctx, nil, kb.UID.String(), int(object.Size))
+		if err != nil {
+			log.Error("failed to increase catalog usage", zap.Error(err))
+			return nil, err
+		}
+	}
 	return &artifactpb.UploadCatalogFileResponse{
 		File: &artifactpb.File{
 			FileUid:          res.UID.String(),
@@ -169,6 +229,7 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 			TotalChunks:      0,
 			TotalTokens:      0,
 			ExternalMetadata: res.ExternalMetadataUnmarshal,
+			ObjectUid:        req.File.ObjectUid,
 		},
 	}, nil
 }
@@ -204,20 +265,23 @@ func getFileSize(base64String string) (int64, string) {
 	return int64(decodedSize), fmt.Sprintf("%.1f %cB", size, "KMGTPE"[exp])
 }
 
-func checkUploadKnowledgeBaseFileRequest(req *artifactpb.UploadCatalogFileRequest) error {
+// Check if objectUID is provided, and all other required fields if not
+func checkUploadKnowledgeBaseFileRequest(req *artifactpb.UploadCatalogFileRequest) (bool, error) {
 	if req.GetNamespaceId() == "" {
-		return fmt.Errorf("owner uid is required. err: %w", ErrCheckRequiredFields)
+		return false, fmt.Errorf("owner uid is required. err: %w", ErrCheckRequiredFields)
 	} else if req.CatalogId == "" {
-		return fmt.Errorf("catalog uid is required. err: %w", ErrCheckRequiredFields)
+		return false, fmt.Errorf("catalog uid is required. err: %w", ErrCheckRequiredFields)
 	} else if req.File == nil {
-		return fmt.Errorf("file is required. err: %w", ErrCheckRequiredFields)
+		return false, fmt.Errorf("file is required. err: %w", ErrCheckRequiredFields)
+	} else if req.File.GetObjectUid() != "" {
+		return true, nil
 	} else if req.File.Name == "" {
-		return fmt.Errorf("file name is required. err: %w", ErrCheckRequiredFields)
+		return false, fmt.Errorf("file name is required. err: %w", ErrCheckRequiredFields)
 	} else if req.File.Content == "" {
-		return fmt.Errorf("file content is required. err: %w", ErrCheckRequiredFields)
+		return false, fmt.Errorf("file content is required. err: %w", ErrCheckRequiredFields)
 	}
 
-	return nil
+	return false, nil
 }
 
 // MoveFileToCatalog moves a file from one catalog to another within the same namespace.
@@ -394,6 +458,9 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 		totalSize = size
 		nextPageToken = nextToken
 		for _, kbFile := range kbFiles {
+
+			objectUID := uuid.FromStringOrNil(strings.TrimPrefix(strings.Split(kbFile.Destination, "/")[1], "obj-"))
+
 			files = append(files, &artifactpb.File{
 				FileUid:          kbFile.UID.String(),
 				OwnerUid:         kbFile.Owner.String(),
@@ -408,6 +475,7 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 				ExternalMetadata: kbFile.ExternalMetadataUnmarshal,
 				TotalChunks:      int32(totalChunks[kbFile.UID]),
 				TotalTokens:      int32(totalTokens[kbFile.UID]),
+				ObjectUid:        objectUID.String(),
 			})
 		}
 	}
@@ -614,6 +682,9 @@ func (ph *PublicHandler) ProcessCatalogFiles(ctx context.Context, req *artifactp
 	// populate the files into response
 	var resFiles []*artifactpb.File
 	for _, file := range files {
+
+		objectUID := uuid.FromStringOrNil(strings.TrimPrefix(strings.Split(file.Destination, "/")[1], "obj-"))
+
 		resFiles = append(resFiles, &artifactpb.File{
 			FileUid:       file.UID.String(),
 			OwnerUid:      file.Owner.String(),
@@ -624,6 +695,7 @@ func (ph *PublicHandler) ProcessCatalogFiles(ctx context.Context, req *artifactp
 			CreateTime:    timestamppb.New(*file.CreateTime),
 			UpdateTime:    timestamppb.New(*file.UpdateTime),
 			ProcessStatus: artifactpb.FileProcessStatus(artifactpb.FileProcessStatus_value[file.ProcessStatus]),
+			ObjectUid:     objectUID.String(),
 		})
 	}
 	return &artifactpb.ProcessCatalogFilesResponse{
