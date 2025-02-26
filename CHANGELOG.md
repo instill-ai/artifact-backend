@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.23.1-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.23.0-alpha...v0.23.1-alpha) (2025-02-26)
+
+
+### Bug Fixes
+
+* **search:** support metadata-less embeddings search ([#159](https://github.com/instill-ai/artifact-backend/issues/159)) ([c124dcc](https://github.com/instill-ai/artifact-backend/commit/c124dcc4953cd14bfe7f64726f3ad56caa0e6606))
+
 ## [0.23.0-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.22.0-alpha...v0.23.0-alpha) (2025-02-25)
 
 
