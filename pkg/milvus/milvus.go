@@ -197,9 +197,19 @@ func (m *MilvusClient) InsertVectorsToKnowledgeBaseCollection(ctx context.Contex
 		entity.NewColumnVarChar(KbCollectionFieldSourceUID, sourceUIDs),
 		entity.NewColumnVarChar(KbCollectionFieldEmbeddingUID, embeddingUIDs),
 		entity.NewColumnFloatVector(KbCollectionFieldEmbedding, VectorDim, vectors),
-		entity.NewColumnVarChar(KbCollectionFieldFileName, fileNames),
-		entity.NewColumnVarChar(KbCollectionFieldFileType, fileTypes),
-		entity.NewColumnVarChar(KbCollectionFieldContentType, contentTypes),
+	}
+
+	hasMetadata, err := m.checkMetadataField(ctx, collectionName)
+	if err != nil {
+		logger.Error("Failed to check metadata existence", zap.Error(err))
+		return fmt.Errorf("failed to check metadata existence: %w", err)
+	}
+
+	if hasMetadata {
+		columns = append(columns,
+			entity.NewColumnVarChar(KbCollectionFieldFileName, fileNames),
+			entity.NewColumnVarChar(KbCollectionFieldFileType, fileTypes),
+			entity.NewColumnVarChar(KbCollectionFieldContentType, contentTypes))
 	}
 
 	// Insert the data with retry
@@ -281,16 +291,28 @@ func (m *MilvusClient) ListEmbeddings(ctx context.Context, collectionName string
 	limit := int64(1000) // Adjust this based on your needs and memory constraints
 
 	for {
-		// Perform a query to get a batch of embeddings
-		queryResult, err := m.c.Query(ctx, collectionName, nil, "", []string{
+
+		fields := []string{
 			KbCollectionFieldSourceTable,
 			KbCollectionFieldSourceUID,
 			KbCollectionFieldEmbeddingUID,
 			KbCollectionFieldEmbedding,
-			KbCollectionFieldFileName,
-			KbCollectionFieldFileType,
-			KbCollectionFieldContentType,
-		}, client.WithOffset(offset), client.WithLimit(limit))
+		}
+
+		hasMetadata, err := m.checkMetadataField(ctx, collectionName)
+		if err != nil {
+			return nil, fmt.Errorf("failed to check metadata: %w", err)
+		}
+
+		if hasMetadata {
+			fields = append(fields,
+				KbCollectionFieldFileName,
+				KbCollectionFieldFileType,
+				KbCollectionFieldContentType)
+		}
+
+		// Perform a query to get a batch of embeddings
+		queryResult, err := m.c.Query(ctx, collectionName, nil, "", fields, client.WithOffset(offset), client.WithLimit(limit))
 		if err != nil {
 			return nil, fmt.Errorf("failed to query embeddings: %w", err)
 		}
@@ -371,27 +393,17 @@ type SimilarEmbedding struct {
 // SearchSimilarEmbeddings searches for embeddings similar to the input vector
 // topk has default value 5, when topk <= 0, it will be set to 5.
 func (m *MilvusClient) SearchSimilarEmbeddings(ctx context.Context, collectionName string, vectors [][]float32, topK int, fileName, fileType, contentType string) ([][]SimilarEmbedding, error) {
-	// set default topK
-	if topK <= 0 {
-		topK = 5
-	}
-	// set filter string
-	var filterStrs []string
-	if fileName != "" {
-		filterStrs = append(filterStrs, fmt.Sprintf("file_name == '%s'", fileName))
-	}
-	if fileType != "" {
-		filterStrs = append(filterStrs, fmt.Sprintf("file_type == '%s'", fileType))
-	}
-	if contentType != "" {
-		filterStrs = append(filterStrs, fmt.Sprintf("content_type == '%s'", contentType))
-	}
-
 	log, err := logger.GetZapLogger(ctx)
 	if err != nil {
 		log.Error("failed to get logger", zap.Error(err))
 		return nil, fmt.Errorf("failed to get logger: %w", err)
 	}
+
+	// set default topK
+	if topK <= 0 {
+		topK = 5
+	}
+
 	t := time.Now()
 	// Check if the collection exists
 	has, err := m.c.HasCollection(ctx, collectionName)
@@ -412,15 +424,45 @@ func (m *MilvusClient) SearchSimilarEmbeddings(ctx context.Context, collectionNa
 		log.Error("failed to load collection", zap.Error(err))
 		return nil, fmt.Errorf("failed to load collection: %w", err)
 	}
+	log.Info("load collection", zap.Duration("duration", time.Since(t)))
+
+	hasMetadata, err := m.checkMetadataField(ctx, collectionName)
+	if err != nil {
+		log.Error("failed to describe collection", zap.Error(err))
+		return nil, fmt.Errorf("failed to describe collection: %w", err)
+	}
+
+	outputFields := []string{
+		KbCollectionFieldSourceTable,
+		KbCollectionFieldSourceUID,
+		KbCollectionFieldEmbeddingUID,
+		KbCollectionFieldEmbedding,
+	}
+	var filterStrs []string
+	if hasMetadata {
+		// set filter string
+		if fileName != "" {
+			filterStrs = append(filterStrs, fmt.Sprintf("file_name == '%s'", fileName))
+		}
+		if fileType != "" {
+			filterStrs = append(filterStrs, fmt.Sprintf("file_type == '%s'", fileType))
+		}
+		if contentType != "" {
+			filterStrs = append(filterStrs, fmt.Sprintf("content_type == '%s'", contentType))
+		}
+		outputFields = append(outputFields,
+			KbCollectionFieldFileName,
+			KbCollectionFieldFileType,
+			KbCollectionFieldContentType)
+	}
+
+	t = time.Now()
 	// Convert the input vector to float32
 	milvusVectors := make([]entity.Vector, len(vectors))
 	// milvus search vector support batch search, but we just need one vector
 	for i, v := range vectors {
 		milvusVectors[i] = entity.FloatVector(v)
 	}
-	log.Info("load collection", zap.Duration("duration", time.Since(t)))
-	t = time.Now()
-
 	// Perform the search
 	sp, err := entity.NewIndexSCANNSearchParam(Nprobe, ReorderK)
 	if err != nil {
@@ -432,15 +474,7 @@ func (m *MilvusClient) SearchSimilarEmbeddings(ctx context.Context, collectionNa
 		collectionName,
 		nil,
 		strings.Join(filterStrs, " and "),
-		[]string{
-			KbCollectionFieldSourceTable,
-			KbCollectionFieldSourceUID,
-			KbCollectionFieldEmbeddingUID,
-			KbCollectionFieldEmbedding,
-			KbCollectionFieldFileName,
-			KbCollectionFieldFileType,
-			KbCollectionFieldContentType,
-		},
+		outputFields,
 		milvusVectors,
 		KbCollectionFieldEmbedding,
 		MetricType,
@@ -518,4 +552,19 @@ func (m *MilvusClient) SearchSimilarEmbeddingsInKB(ctx context.Context, kbUID st
 func (m *MilvusClient) DropKnowledgeBaseCollection(ctx context.Context, kbUID string) error {
 	collectionName := m.GetKnowledgeBaseCollectionName(kbUID)
 	return m.DeleteCollection(ctx, collectionName)
+}
+
+func (m *MilvusClient) checkMetadataField(ctx context.Context, collectionName string) (bool, error) {
+	collDesc, err := m.c.DescribeCollection(ctx, collectionName)
+	if err != nil {
+		return false, fmt.Errorf("failed to describe collection: %w", err)
+	}
+
+	var existingFields = map[string]bool{}
+	for _, field := range collDesc.Schema.Fields {
+		existingFields[field.Name] = true
+	}
+	return existingFields[KbCollectionFieldFileName] &&
+		existingFields[KbCollectionFieldFileType] &&
+		existingFields[KbCollectionFieldContentType], nil
 }
