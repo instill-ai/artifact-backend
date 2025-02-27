@@ -8,29 +8,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// We're interested in the audit logs related to user data, handled by the
-// Instill AI services. Milvus also interacts with MinIO, which generates noise
-// when tracking the operations in the buckets that contain user data.
-// TODO: In the future we might want to use different MinIO instances for the
-// *-backend services and for Milvus.
-const excludedMinIOBucket = "core-milvus"
-
-type minIOAuditLog struct {
-	Time string `json:"time"`
-	API  struct {
-		Name   string `json:"name"`
-		Bucket string `json:"bucket"`
-		Object string `json:"object"`
-		Status string `json:"status"`
-	} `json:"api"`
-	RemoteHost    string `json:"remotehost"`
-	AccessKey     string `json:"accessKey"`
-	UserAgent     string `json:"userAgent"`
-	RequestHeader struct {
-		InstillUserUID string `json:"X-Amz-Meta-Instill-User-Uid,omitempty"`
-	} `json:"requestHeader,omitempty"`
-}
-
 // IngestMinIOAuditLogs receives and logs the MinIO audit logs in order to
 // track which actions are performed and by whom on MinIO.
 // The server's audit log webhook points to this endpoint so, even if is placed
@@ -54,7 +31,7 @@ func (h *PrivateHandler) IngestMinIOAuditLogs(w http.ResponseWriter, r *http.Req
 	}
 
 	go func() {
-		if auditLog.API.Bucket == excludedMinIOBucket {
+		if auditLog.isExcluded() {
 			return
 		}
 
@@ -63,4 +40,37 @@ func (h *PrivateHandler) IngestMinIOAuditLogs(w http.ResponseWriter, r *http.Req
 	}()
 
 	w.WriteHeader(http.StatusOK)
+}
+
+type minIOAuditLog struct {
+	Time string `json:"time"`
+	API  struct {
+		Name   string `json:"name"`
+		Bucket string `json:"bucket"`
+		Object string `json:"object"`
+		Status string `json:"status"`
+	} `json:"api"`
+	RemoteHost    string `json:"remotehost"`
+	AccessKey     string `json:"accessKey"`
+	UserAgent     string `json:"userAgent"`
+	RequestHeader struct {
+		InstillUserUID string `json:"X-Amz-Meta-Instill-User-Uid,omitempty"`
+	} `json:"requestHeader,omitempty"`
+}
+
+const (
+	// We're interested in the audit logs related to user data, handled by the
+	// Instill AI services. Milvus also interacts with MinIO, which generates noise
+	// when tracking the operations in the buckets that contain user data.
+	// TODO: In the future we might want to use different MinIO instances for the
+	// *-backend services and for Milvus.
+	excludedMinIOBucket = "core-milvus"
+	// We use bucket lifecycle rules to expire objects automatically. MinIO
+	// will report this action when it expires an object, but it doesn't
+	// reflect any action from our services, so we filter these logs out.
+	excludedActionILM = "ILMExpiry"
+)
+
+func (l minIOAuditLog) isExcluded() bool {
+	return l.API.Bucket == excludedMinIOBucket || l.API.Name == excludedActionILM
 }
