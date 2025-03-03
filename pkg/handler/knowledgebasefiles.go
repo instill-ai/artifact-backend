@@ -759,3 +759,30 @@ func DetermineFileType(fileName string) artifactpb.FileType {
 	}
 	return artifactpb.FileType_FILE_TYPE_UNSPECIFIED
 }
+
+// GetFileSummary
+func (ph *PublicHandler) GetFileSummary(ctx context.Context, req *artifactpb.GetFileSummaryRequest) (*artifactpb.GetFileSummaryResponse, error) {
+	log, _ := logger.GetZapLogger(ctx)
+	_, err := getUserUIDFromContext(ctx)
+	if err != nil {
+		log.Error("failed to get user id from header", zap.Error(err))
+		return nil, fmt.Errorf("failed to get user id from header: %v. err: %w", err, customerror.ErrUnauthenticated)
+	}
+
+	// Check if user can access the namespace
+	_, err = ph.service.GetNamespaceAndCheckPermission(ctx, req.NamespaceId)
+	if err != nil {
+		log.Error("failed to get namespace and check permission", zap.Error(err))
+		return nil, fmt.Errorf("failed to get namespace and check permission: %w", err)
+	}
+
+	kbFiles, err := ph.service.Repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{uuid.FromStringOrNil(req.FileUid)}, repository.KnowledgeBaseFileColumn.Summary)
+	if err != nil || len(kbFiles) == 0 {
+		log.Error("file not found", zap.Error(err))
+		return nil, fmt.Errorf("file not found. err: %w", customerror.ErrNotFound)
+	}
+
+	return &artifactpb.GetFileSummaryResponse{
+		Summary: string(kbFiles[0].Summary),
+	}, nil
+}

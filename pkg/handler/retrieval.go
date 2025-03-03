@@ -17,12 +17,12 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/resource"
 	"github.com/instill-ai/artifact-backend/pkg/service"
 
-	artifactPb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
 func (ph *PublicHandler) SimilarityChunksSearch(
-	ctx context.Context, req *artifactPb.SimilarityChunksSearchRequest) (
-	*artifactPb.SimilarityChunksSearchResponse,
+	ctx context.Context, req *artifactpb.SimilarityChunksSearchRequest) (
+	*artifactpb.SimilarityChunksSearchResponse,
 	error) {
 
 	log, _ := logger.GetZapLogger(ctx)
@@ -129,29 +129,29 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 	log.Info("get catalog files by file uids", zap.Duration("duration", time.Since(t)))
 
 	// prepare the response
-	simChunks := make([]*artifactPb.SimilarityChunk, 0, len(chunks))
+	simChunks := make([]*artifactpb.SimilarityChunk, 0, len(chunks))
 	for i, chunk := range chunks {
 		if !chunk.Retrievable {
 			continue
 		}
-		var contentType artifactPb.ContentType
+		var contentType artifactpb.ContentType
 		switch chunk.ContentType {
 		case string(constant.ChunkContentType):
-			contentType = artifactPb.ContentType_CONTENT_TYPE_CHUNK
+			contentType = artifactpb.ContentType_CONTENT_TYPE_CHUNK
 		case string(constant.SummaryContentType):
-			contentType = artifactPb.ContentType_CONTENT_TYPE_SUMMARY
+			contentType = artifactpb.ContentType_CONTENT_TYPE_SUMMARY
 		case string(constant.AugmentedContentType):
-			contentType = artifactPb.ContentType_CONTENT_TYPE_AUGMENTED
+			contentType = artifactpb.ContentType_CONTENT_TYPE_AUGMENTED
 		default:
-			contentType = artifactPb.ContentType_CONTENT_TYPE_UNSPECIFIED
+			contentType = artifactpb.ContentType_CONTENT_TYPE_UNSPECIFIED
 
 		}
-		simChunks = append(simChunks, &artifactPb.SimilarityChunk{
+		simChunks = append(simChunks, &artifactpb.SimilarityChunk{
 			ChunkUid:        chunk.UID.String(),
 			SimilarityScore: float32(simChunksScores[i].Score),
 			TextContent:     string(chunkContents[i].Content),
 			SourceFile:      fileUIDMapName[chunk.KbFileUID],
-			ChunkMetadata: &artifactPb.Chunk{
+			ChunkMetadata: &artifactpb.Chunk{
 				ChunkUid:        chunk.UID.String(),
 				Retrievable:     chunk.Retrievable,
 				StartPos:        uint32(chunk.StartPos),
@@ -163,5 +163,5 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 			},
 		})
 	}
-	return &artifactPb.SimilarityChunksSearchResponse{SimilarChunks: simChunks}, nil
+	return &artifactpb.SimilarityChunksSearchResponse{SimilarChunks: simChunks}, nil
 }
