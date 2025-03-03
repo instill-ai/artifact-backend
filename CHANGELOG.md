@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.24.0-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.23.1-alpha...v0.24.0-alpha) (2025-03-03)
+
+
+### Features
+
+* **artifact:** implement get summary endpoint ([#162](https://github.com/instill-ai/artifact-backend/issues/162)) ([decfaf7](https://github.com/instill-ai/artifact-backend/commit/decfaf78d914ea4ebd4d682411f2d83c497c9e87))
+
 ## [0.23.1-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.23.0-alpha...v0.23.1-alpha) (2025-02-26)
 
 
