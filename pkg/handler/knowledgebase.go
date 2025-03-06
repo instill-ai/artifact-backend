@@ -22,6 +22,8 @@ import (
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
+var alphabet = "abcdefghijklmnopqrstuvwxyz"
+
 type ErrorMsg map[int]string
 
 const ErrorCreateKnowledgeBaseMsg = "failed to create catalog: %w"
@@ -500,11 +502,10 @@ func isValidName(name string) bool {
 }
 
 func generateID() string {
-	var alphabet = "abcdefghijklmnopqrstuvwxyz"
-	rand.Seed(time.Now().UnixNano())
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	id := make([]byte, 8)
 	for i := range id {
-		id[i] = alphabet[rand.Intn(len(alphabet))]
+		id[i] = alphabet[r.Intn(len(alphabet))]
 	}
 
 	return string(id)
