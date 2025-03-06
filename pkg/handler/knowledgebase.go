@@ -3,8 +3,10 @@ package handler
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/gofrs/uuid"
 	"go.uber.org/zap"
@@ -79,8 +81,7 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 
 	// check name if it is empty
 	if req.Name == "" {
-		err := fmt.Errorf("name is required. err: %w", ErrCheckRequiredFields)
-		return nil, err
+		req.Name = generateID()
 	}
 	nameOk := isValidName(req.Name)
 	if !nameOk {
@@ -496,4 +497,15 @@ func isValidName(name string) bool {
 	re := regexp.MustCompile(pattern)
 	// Match the name against the regular expression
 	return re.MatchString(name)
+}
+
+func generateID() string {
+	var alphabet = "abcdefghijklmnopqrstuvwxyz"
+	rand.Seed(time.Now().UnixNano())
+	id := make([]byte, 8)
+	for i := range id {
+		id[i] = alphabet[rand.Intn(len(alphabet))]
+	}
+
+	return string(id)
 }
