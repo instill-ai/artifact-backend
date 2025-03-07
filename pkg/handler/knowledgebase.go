@@ -61,25 +61,27 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 			zap.String("auth_uid", authUID))
 		return nil, fmt.Errorf(ErrorCreateKnowledgeBaseMsg, err)
 	}
+
+	// NO CATALOG LIMIT
 	// check if user has reached the maximum number of catalogs
 	// note: the simple implementation have race condition to bypass the check,
 	// but it is okay for now
-	kbCount, err := ph.service.Repository.GetKnowledgeBaseCountByOwner(ctx, ns.NsUID.String(), artifactpb.CatalogType_CATALOG_TYPE_PERSISTENT)
-	if err != nil {
-		log.Error("failed to get catalog count", zap.Error(err))
-		return nil, fmt.Errorf(ErrorCreateKnowledgeBaseMsg, err)
-	}
-	tier, err := ph.service.GetNamespaceTier(ctx, ns)
-	if err != nil {
-		log.Error("failed to get namespace tier", zap.Error(err))
-		return nil, fmt.Errorf(ErrorCreateKnowledgeBaseMsg, err)
-	}
-	if kbCount >= int64(tier.GetPrivateCatalogLimit()) {
-		err := fmt.Errorf(
-			"user has reached the %v maximum number of catalogs. current tier:%v ",
-			tier.GetPrivateCatalogLimit(), tier)
-		return nil, err
-	}
+	// kbCount, err := ph.service.Repository.GetKnowledgeBaseCountByOwner(ctx, ns.NsUID.String(), artifactpb.CatalogType_CATALOG_TYPE_PERSISTENT)
+	// if err != nil {
+	// 	log.Error("failed to get catalog count", zap.Error(err))
+	// 	return nil, fmt.Errorf(ErrorCreateKnowledgeBaseMsg, err)
+	// }
+	// tier, err := ph.service.GetNamespaceTier(ctx, ns)
+	// if err != nil {
+	// 	log.Error("failed to get namespace tier", zap.Error(err))
+	// 	return nil, fmt.Errorf(ErrorCreateKnowledgeBaseMsg, err)
+	// }
+	// if kbCount >= int64(tier.GetPrivateCatalogLimit()) {
+	// 	err := fmt.Errorf(
+	// 		"user has reached the %v maximum number of catalogs. current tier:%v ",
+	// 		tier.GetPrivateCatalogLimit(), tier)
+	// 	return nil, err
+	// }
 
 	// check name if it is empty
 	if req.Name == "" {

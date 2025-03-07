@@ -112,13 +112,14 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 				customerror.ErrInvalidArgument)
 		}
 
+		// NO LIMIT ON TOTAL STORAGE USE
 		// check if total usage in namespace
-		quota, humanReadable := tier.GetFileStorageTotalQuota()
-		if totalUsageInNamespace+fileSize > int64(quota) {
-			return nil, fmt.Errorf(
-				"file storage total quota exceeded. max: %v. tier:%v, err: %w",
-				humanReadable, tier.String(), customerror.ErrInvalidArgument)
-		}
+		// quota, humanReadable := tier.GetFileStorageTotalQuota()
+		// if totalUsageInNamespace+fileSize > int64(quota) {
+		// 	return nil, fmt.Errorf(
+		// 		"file storage total quota exceeded. max: %v. tier:%v, err: %w",
+		// 		humanReadable, tier.String(), customerror.ErrInvalidArgument)
+		// }
 
 		destination := ph.service.MinIO.GetUploadedFilePathInKnowledgeBase(kb.UID.String(), req.File.Name)
 		kbFile := repository.KnowledgeBaseFile{
@@ -176,13 +177,13 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 				customerror.ErrInvalidArgument)
 		}
 
-		// check if total usage in namespace
-		quota, humanReadable := tier.GetFileStorageTotalQuota()
-		if totalUsageInNamespace+object.Size > int64(quota) {
-			return nil, fmt.Errorf(
-				"file storage total quota exceeded. max: %v. tier:%v, err: %w",
-				humanReadable, tier.String(), customerror.ErrInvalidArgument)
-		}
+		// NO LIMIT ON TOTAL STORAGE USE
+		// quota, humanReadable := tier.GetFileStorageTotalQuota()
+		// if totalUsageInNamespace+object.Size > int64(quota) {
+		// 	return nil, fmt.Errorf(
+		// 		"file storage total quota exceeded. max: %v. tier:%v, err: %w",
+		// 		humanReadable, tier.String(), customerror.ErrInvalidArgument)
+		// }
 
 		req.File.Type = DetermineFileType(object.Name)
 
