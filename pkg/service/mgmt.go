@@ -163,7 +163,7 @@ func (t Tier) GetFileStorageTotalQuota() (int, string) {
 }
 
 // GetMaxUploadFileSize returns the maximum file size allowed for the given tier
-// all tier has the same max file size. 150mb
+// all tier has the same max file size. 512mb
 func (t Tier) GetMaxUploadFileSize() int {
-	return 150 * mb
+	return 512 * mb
 }
