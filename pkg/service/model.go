@@ -63,7 +63,7 @@ func (s *Service) ConvertToMDModel(ctx context.Context, fileUID uuid.UUID, calle
 
 	resp, err := s.ModelPub.TriggerNamespaceModel(ctx, req)
 	if err != nil {
-		namespaceID = "instill"
+		namespaceID = "instill-ai"
 		req.NamespaceId = namespaceID
 		resp, err = s.ModelPub.TriggerNamespaceModel(ctx, req)
 		if err != nil {
