@@ -1,6 +1,7 @@
 module github.com/instill-ai/artifact-backend
 
-go 1.22.5
+go 1.23.0
+
 toolchain go1.23.7
 
 require (
@@ -15,7 +16,7 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.22.0
 	github.com/influxdata/influxdb-client-go/v2 v2.12.3
 	github.com/instill-ai/protogen-go v0.3.3-alpha.0.20250303182453-a52401a76b2b
-	github.com/instill-ai/usage-client v0.3.0-alpha.0.20240319060111-4a3a39f2fd61
+	github.com/instill-ai/usage-client v0.3.0-alpha.0.20250313022849-49504d982f18
 	github.com/instill-ai/x v0.7.0-alpha
 	github.com/knadh/koanf v1.5.0
 	github.com/milvus-io/milvus-sdk-go/v2 v2.4.1

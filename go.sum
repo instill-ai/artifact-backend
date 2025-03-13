@@ -353,8 +353,8 @@ github.com/influxdata/line-protocol v0.0.0-20200327222509-2487e7298839 h1:W9WBk7
 github.com/influxdata/line-protocol v0.0.0-20200327222509-2487e7298839/go.mod h1:xaLFMmpvUxqXtVkUJfg9QmT88cDaCJ3ZKgdZ78oO8Qo=
 github.com/instill-ai/protogen-go v0.3.3-alpha.0.20250303182453-a52401a76b2b h1:7erHiGMeqoarw3XgzgAV5jZUnssiu3QPchh3aJy5PFs=
 github.com/instill-ai/protogen-go v0.3.3-alpha.0.20250303182453-a52401a76b2b/go.mod h1:fusT92ceR5+GVn1LT5mT4XcOq1DlemBjpb6JpodLLdc=
-github.com/instill-ai/usage-client v0.3.0-alpha.0.20240319060111-4a3a39f2fd61 h1:smPTvmXDhn/QC7y/TPXyMTqbbRd0gvzmFgWBChwTfhE=
-github.com/instill-ai/usage-client v0.3.0-alpha.0.20240319060111-4a3a39f2fd61/go.mod h1:/TAHs4ybuylk5icuy+MQtHRc4XUnIyXzeNKxX9qDFhw=
+github.com/instill-ai/usage-client v0.3.0-alpha.0.20250313022849-49504d982f18 h1:RFdRDODY4qMTTIcKm4TBMpYhxDGFCql6HQ7oocA+WeQ=
+github.com/instill-ai/usage-client v0.3.0-alpha.0.20250313022849-49504d982f18/go.mod h1:/B+Irg9TYBlP+X79GZ+yvPxFvC+7fbRL7APNGiJlDSk=
 github.com/instill-ai/x v0.7.0-alpha h1:THv1AOP7uVK7WaQxSM8tC5lFeyKtk6256nFznYkMy88=
 github.com/instill-ai/x v0.7.0-alpha/go.mod h1:enKH4l5DeQCo7IN9cvkncHuascS57JoMwTJcuEnRHAw=
 github.com/iris-contrib/blackfriday v2.0.0+incompatible/go.mod h1:UzZ2bDEoaSGPbkg6SAB4att1aAwTmVIx/5gCVqeyUdI=
