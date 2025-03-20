@@ -9,6 +9,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
+	"github.com/instill-ai/artifact-backend/pkg/logger"
+	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 
 	artifact "github.com/instill-ai/artifact-backend/pkg/service"
@@ -189,5 +191,51 @@ func (h *PrivateHandler) UpdateObject(ctx context.Context, req *pb.UpdateObjectR
 
 	return &pb.UpdateObjectResponse{
 		Object: repository.TurnObjectInDBToObjectInProto(updatedObject),
+	}, nil
+}
+
+func (h *PrivateHandler) GetChatFile(ctx context.Context, req *pb.GetChatFileRequest) (*pb.GetChatFileResponse, error) {
+	log, _ := logger.GetZapLogger(ctx)
+
+	// use catalog id and file id to get kbFile
+	fileID := req.FileId
+	if fileID == "" {
+		log.Error("file id is empty", zap.String("file_id", fileID))
+		return nil, fmt.Errorf("need either file uid or file id is")
+	}
+	ns, err := h.service.GetNamespaceByNsID(ctx, req.NamespaceId)
+	if err != nil {
+		log.Error("failed to get namespace by ns id", zap.Error(err))
+		return nil, fmt.Errorf("failed to get namespace by ns id. err: %w", err)
+	}
+	kb, err := h.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.CatalogId)
+	if err != nil {
+		log.Error("failed to get knowledge base by owner and kb id", zap.Error(err))
+		return nil, fmt.Errorf("failed to get catalog by namespace and catalog id. err: %w", err)
+	}
+
+	kbFile, err := h.service.Repository.GetKnowledgebaseFileByKbUIDAndFileID(ctx, kb.UID, fileID)
+	if err != nil {
+		log.Error("failed to get file by file id", zap.Error(err))
+		return nil, fmt.Errorf("failed to get file by file id. err: %w", err)
+	}
+
+	// get source file
+	source, err := h.service.Repository.GetTruthSourceByFileUID(ctx, kbFile.UID)
+	if err != nil {
+		log.Error("failed to get truth source by file uid", zap.Error(err))
+		return nil, fmt.Errorf("failed to get truth source by file uid. err: %w", err)
+	}
+
+	// get the source file sourceContent from minIO using dest of source
+	sourceContent, err := h.service.MinIO.GetFile(ctx, minio.KnowledgeBaseBucketName, source.Dest)
+	if err != nil {
+		log.Error("failed to get file from minio", zap.Error(err))
+		return nil, fmt.Errorf("failed to get file from minio. err: %w", err)
+	}
+
+	// Add the originalData field to the response
+	return &pb.GetChatFileResponse{
+		Markdown: sourceContent,
 	}, nil
 }
