@@ -22,7 +22,7 @@ require (
 	github.com/milvus-io/milvus-sdk-go/v2 v2.4.1
 	github.com/minio/minio-go/v7 v7.0.87
 	github.com/openfga/api/proto v0.0.0-20240723155248-7e5be7b65c27
-	github.com/redis/go-redis/v9 v9.5.3
+	github.com/redis/go-redis/v9 v9.5.5
 	go.opentelemetry.io/contrib/propagators/b3 v1.17.0
 	go.opentelemetry.io/otel v1.16.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v0.39.0
