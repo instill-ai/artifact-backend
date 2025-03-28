@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.24.0-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.23.1-alpha...v0.24.0-alpha) (2025-03-28)
+
+
+### Features
+
+* **artifact:** implement get summary endpoint ([#162](https://github.com/instill-ai/artifact-backend/issues/162)) ([decfaf7](https://github.com/instill-ai/artifact-backend/commit/decfaf78d914ea4ebd4d682411f2d83c497c9e87))
+* **handler:** add get chat file ([#168](https://github.com/instill-ai/artifact-backend/issues/168)) ([704c4b8](https://github.com/instill-ai/artifact-backend/commit/704c4b8a31b96c3151c66acfc289004ddc05ba15))
+
 ## [0.23.1-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.23.0-alpha...v0.23.1-alpha) (2025-02-26)
 
 
