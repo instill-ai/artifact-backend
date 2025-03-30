@@ -462,6 +462,15 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 
 			objectUID := uuid.FromStringOrNil(strings.TrimPrefix(strings.Split(kbFile.Destination, "/")[1], "obj-"))
 
+			response, err := ph.service.GetDownloadURL(ctx, &artifactpb.GetObjectDownloadURLRequest{
+				NamespaceId: ns.NsID,
+				ObjectUid:   objectUID.String(),
+			}, ns.NsUID, ns.NsID)
+			if err != nil {
+				log.Error("failed to get download URL", zap.Error(err))
+				return nil, fmt.Errorf("failed to get download URL. err: %w", err)
+			}
+
 			files = append(files, &artifactpb.File{
 				FileUid:          kbFile.UID.String(),
 				OwnerUid:         kbFile.Owner.String(),
@@ -477,6 +486,8 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 				TotalChunks:      int32(totalChunks[kbFile.UID]),
 				TotalTokens:      int32(totalTokens[kbFile.UID]),
 				ObjectUid:        objectUID.String(),
+				Summary:          string(kbFile.Summary),
+				DownloadUrl:      response.GetDownloadUrl(),
 			})
 		}
 	}
@@ -487,6 +498,30 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 		NextPageToken: nextPageToken,
 		Filter:        req.Filter,
 	}, nil
+}
+
+func (ph *PublicHandler) GetCatalogFile(ctx context.Context, req *artifactpb.GetCatalogFileRequest) (*artifactpb.GetCatalogFileResponse, error) {
+
+	files, err := ph.ListCatalogFiles(ctx, &artifactpb.ListCatalogFilesRequest{
+		NamespaceId: req.NamespaceId,
+		CatalogId:   req.CatalogId,
+		PageSize:    1,
+		PageToken:   "",
+		Filter: &artifactpb.ListCatalogFilesFilter{
+			FileUids: []string{req.FileUid},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(files.Files) == 0 {
+		return nil, fmt.Errorf("file not found. err: %w", customerror.ErrNotFound)
+	}
+
+	return &artifactpb.GetCatalogFileResponse{
+		File: files.Files[0],
+	}, nil
+
 }
 
 func (ph *PublicHandler) DeleteCatalogFile(
