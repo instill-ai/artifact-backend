@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.24.1-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.24.0-alpha...v0.24.1-alpha) (2025-03-30)
+
+
+### Miscellaneous Chores
+
+* release v0.24.1-alpha ([569fc59](https://github.com/instill-ai/artifact-backend/commit/569fc59a6cc3c92a6e1de33568d38ea9556aa5d7))
+
 ## [0.24.0-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.23.1-alpha...v0.24.0-alpha) (2025-03-28)
 
 
