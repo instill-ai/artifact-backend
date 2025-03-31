@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.24.2-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.24.1-alpha...v0.24.2-alpha) (2025-03-31)
+
+
+### Bug Fixes
+
+* **handler:** fix embedded downloadURL bug ([#171](https://github.com/instill-ai/artifact-backend/issues/171)) ([0c9a908](https://github.com/instill-ai/artifact-backend/commit/0c9a9084f67590201bc8554a98f27f6b1f3c228c))
+
 ## [0.24.1-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.24.0-alpha...v0.24.1-alpha) (2025-03-30)
 
 
