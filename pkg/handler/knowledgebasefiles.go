@@ -462,13 +462,13 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 
 			objectUID := uuid.FromStringOrNil(strings.TrimPrefix(strings.Split(kbFile.Destination, "/")[1], "obj-"))
 
+			downloadURL := ""
 			response, err := ph.service.GetDownloadURL(ctx, &artifactpb.GetObjectDownloadURLRequest{
 				NamespaceId: ns.NsID,
 				ObjectUid:   objectUID.String(),
 			}, ns.NsUID, ns.NsID)
-			if err != nil {
-				log.Error("failed to get download URL", zap.Error(err))
-				return nil, fmt.Errorf("failed to get download URL. err: %w", err)
+			if err == nil {
+				downloadURL = response.GetDownloadUrl()
 			}
 
 			files = append(files, &artifactpb.File{
@@ -487,7 +487,7 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 				TotalTokens:      int32(totalTokens[kbFile.UID]),
 				ObjectUid:        objectUID.String(),
 				Summary:          string(kbFile.Summary),
-				DownloadUrl:      response.GetDownloadUrl(),
+				DownloadUrl:      downloadURL,
 			})
 		}
 	}
