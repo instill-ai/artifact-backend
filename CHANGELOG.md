@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.24.3-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.24.2-alpha...v0.24.3-alpha) (2025-04-16)
+
+
+### Bug Fixes
+
+* **chunk:** prevent the full table query ([#173](https://github.com/instill-ai/artifact-backend/issues/173)) ([e33ed18](https://github.com/instill-ai/artifact-backend/commit/e33ed1816b8cd61865117b9d67bbd97cee729a9a))
+
 ## [0.24.2-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.24.1-alpha...v0.24.2-alpha) (2025-03-31)
 
 
