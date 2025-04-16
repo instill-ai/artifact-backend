@@ -233,6 +233,9 @@ func (r *Repository) GetFilesTotalTokens(ctx context.Context, sources map[FileUI
 	SourceUID   SourceUID
 }) (map[FileUID]int, error) {
 	result := make(map[FileUID]int)
+	if len(sources) == 0 {
+		return result, nil
+	}
 
 	// Prepare the conditions for the query
 	var conditions []string
@@ -282,6 +285,9 @@ func (r *Repository) GetTotalChunksBySources(ctx context.Context, sources map[Fi
 	SourceUID   SourceUID
 }) (map[FileUID]int, error) {
 	result := make(map[FileUID]int)
+	if len(sources) == 0 {
+		return result, nil
+	}
 
 	// Prepare the conditions for the query
 	var conditions []string
