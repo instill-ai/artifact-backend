@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.24.4-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.24.3-alpha...v0.24.4-alpha) (2025-04-23)
+
+
+### Bug Fixes
+
+* resolve the issue where non-document files cannot be processed ([#176](https://github.com/instill-ai/artifact-backend/issues/176)) ([9db1b57](https://github.com/instill-ai/artifact-backend/commit/9db1b576aaa9f4db05957dc6ca77c18b35809514))
+
 ## [0.24.3-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.24.2-alpha...v0.24.3-alpha) (2025-04-16)
 
 
