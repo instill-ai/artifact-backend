@@ -323,11 +323,11 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processWaitingFile(ctx context.C
 		artifactpb.FileType_FILE_TYPE_DOC.String(),
 		artifactpb.FileType_FILE_TYPE_DOCX.String(),
 		artifactpb.FileType_FILE_TYPE_PPT.String(),
-		artifactpb.FileType_FILE_TYPE_PPTX.String():
-		// artifactpb.FileType_FILE_TYPE_HTML.String(),
-		// artifactpb.FileType_FILE_TYPE_XLSX.String(),
-		// artifactpb.FileType_FILE_TYPE_XLS.String(),
-		// artifactpb.FileType_FILE_TYPE_CSV.String():
+		artifactpb.FileType_FILE_TYPE_PPTX.String(),
+		artifactpb.FileType_FILE_TYPE_HTML.String(),
+		artifactpb.FileType_FILE_TYPE_XLSX.String(),
+		artifactpb.FileType_FILE_TYPE_XLS.String(),
+		artifactpb.FileType_FILE_TYPE_CSV.String():
 		// update the file status to converting status in database
 		updateMap := map[string]interface{}{
 			repository.KnowledgeBaseFileColumn.ProcessStatus: artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CONVERTING)],
@@ -377,9 +377,23 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processConvertingFile(ctx contex
 
 	// convert the pdf file to md
 	requesterUID := file.RequesterUID
-	convertedMD, err := wp.svc.ConvertToMDModel(ctx, file.UID, file.CreatorUID, requesterUID, base64Data, artifactpb.FileType(artifactpb.FileType_value[file.Type]))
-	if err != nil {
-		logger.Error("Failed to convert pdf to md using docling model, fallback to pipeline.")
+
+	var convertedMD string
+	switch file.Type {
+	case artifactpb.FileType_FILE_TYPE_PDF.String(),
+		artifactpb.FileType_FILE_TYPE_DOC.String(),
+		artifactpb.FileType_FILE_TYPE_DOCX.String(),
+		artifactpb.FileType_FILE_TYPE_PPT.String(),
+		artifactpb.FileType_FILE_TYPE_PPTX.String():
+		convertedMD, err = wp.svc.ConvertToMDModel(ctx, file.UID, file.CreatorUID, requesterUID, base64Data, artifactpb.FileType(artifactpb.FileType_value[file.Type]))
+		if err != nil {
+			logger.Error("Failed to convert pdf to md using docling model, fallback to pipeline.")
+			if convertedMD, err = wp.svc.ConvertToMDPipe(ctx, file.UID, file.CreatorUID, requesterUID, base64Data, artifactpb.FileType(artifactpb.FileType_value[file.Type])); err != nil {
+				logger.Error("Failed to convert pdf to md using pdf-to-md pipeline.", zap.String("File path", fileInMinIOPath))
+				return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
+			}
+		}
+	default:
 		if convertedMD, err = wp.svc.ConvertToMDPipe(ctx, file.UID, file.CreatorUID, requesterUID, base64Data, artifactpb.FileType(artifactpb.FileType_value[file.Type])); err != nil {
 			logger.Error("Failed to convert pdf to md using pdf-to-md pipeline.", zap.String("File path", fileInMinIOPath))
 			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
@@ -427,11 +441,11 @@ func (wp *persistentCatalogFileToEmbWorkerPool) procesSummarizingFile(ctx contex
 		artifactpb.FileType_FILE_TYPE_DOC.String(),
 		artifactpb.FileType_FILE_TYPE_DOCX.String(),
 		artifactpb.FileType_FILE_TYPE_PPT.String(),
-		artifactpb.FileType_FILE_TYPE_PPTX.String():
-		// artifactpb.FileType_FILE_TYPE_HTML.String(),
-		// artifactpb.FileType_FILE_TYPE_XLSX.String(),
-		// artifactpb.FileType_FILE_TYPE_XLS.String(),
-		// artifactpb.FileType_FILE_TYPE_CSV.String():
+		artifactpb.FileType_FILE_TYPE_PPTX.String(),
+		artifactpb.FileType_FILE_TYPE_HTML.String(),
+		artifactpb.FileType_FILE_TYPE_XLSX.String(),
+		artifactpb.FileType_FILE_TYPE_XLS.String(),
+		artifactpb.FileType_FILE_TYPE_CSV.String():
 		// Get converted file for document types
 		convertedFile, err := wp.svc.Repository.GetConvertedFileByFileUID(ctx, file.UID)
 		if err != nil {
@@ -544,11 +558,11 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processChunkingFile(ctx context.
 		artifactpb.FileType_FILE_TYPE_DOC.String(),
 		artifactpb.FileType_FILE_TYPE_DOCX.String(),
 		artifactpb.FileType_FILE_TYPE_PPT.String(),
-		artifactpb.FileType_FILE_TYPE_PPTX.String():
-		// artifactpb.FileType_FILE_TYPE_HTML.String(),
-		// artifactpb.FileType_FILE_TYPE_XLSX.String(),
-		// artifactpb.FileType_FILE_TYPE_XLS.String(),
-		// artifactpb.FileType_FILE_TYPE_CSV.String():
+		artifactpb.FileType_FILE_TYPE_PPTX.String(),
+		artifactpb.FileType_FILE_TYPE_HTML.String(),
+		artifactpb.FileType_FILE_TYPE_XLSX.String(),
+		artifactpb.FileType_FILE_TYPE_XLS.String(),
+		artifactpb.FileType_FILE_TYPE_CSV.String():
 		// Get converted file for document types
 		convertedFile, err := wp.svc.Repository.GetConvertedFileByFileUID(ctx, file.UID)
 		if err != nil {
