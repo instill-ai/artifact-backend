@@ -34,6 +34,9 @@ const NamespaceID = "preset"
 const ConvertDocToMDPipelineID = "indexing-advanced-convert-doc"
 const DocToMDVersion = "v1.3.1"
 
+const ConvertDocToMDStandardPipelineID = "indexing-convert-pdf"
+const DocToMDStandardVersion = "v1.1.1"
+
 const GenerateSummaryPipelineID = "indexing-generate-summary"
 const GenerateSummaryVersion = "v1.0.0"
 
@@ -54,6 +57,7 @@ var PresetPipelinesList = []struct {
 	Version string
 }{
 	{ID: ConvertDocToMDPipelineID, Version: DocToMDVersion},
+	{ID: ConvertDocToMDStandardPipelineID, Version: DocToMDStandardVersion},
 	{ID: GenerateSummaryPipelineID, Version: GenerateSummaryVersion},
 	{ID: ChunkMdPipelineID, Version: ChunkMdVersion},
 	{ID: ChunkTextPipelineID, Version: ChunkTextVersion},
@@ -86,6 +90,7 @@ func (s *Service) ConvertToMDPipe(ctx context.Context, fileUID uuid.UUID, caller
 	var pipelineID string
 	var version string
 
+	var inputs []*structpb.Struct
 	switch fileType {
 	// Document types use the new pipeline
 	case artifactpb.FileType_FILE_TYPE_PDF,
@@ -95,14 +100,28 @@ func (s *Service) ConvertToMDPipe(ctx context.Context, fileUID uuid.UUID, caller
 		artifactpb.FileType_FILE_TYPE_PPTX:
 		pipelineID = ConvertDocToMDPipelineID
 		version = DocToMDVersion
-
+		inputs = []*structpb.Struct{
+			{
+				Fields: map[string]*structpb.Value{
+					"document_input": {Kind: &structpb.Value_StringValue{StringValue: prefix + fileBase64}},
+					"vlm_model":      {Kind: &structpb.Value_StringValue{StringValue: "gpt-4o"}},
+				},
+			},
+		}
 	// Spreadsheet types and others use the original pipeline
-	// case artifactpb.FileType_FILE_TYPE_XLSX,
-	// 	artifactpb.FileType_FILE_TYPE_XLS,
-	// 	artifactpb.FileType_FILE_TYPE_CSV,
-	// 	artifactpb.FileType_FILE_TYPE_HTML:
-	// 	pipelineID = ConvertDocToMDPipelineID
-	// 	version = DocToMDVersion
+	case artifactpb.FileType_FILE_TYPE_XLSX,
+		artifactpb.FileType_FILE_TYPE_XLS,
+		artifactpb.FileType_FILE_TYPE_CSV,
+		artifactpb.FileType_FILE_TYPE_HTML:
+		pipelineID = ConvertDocToMDStandardPipelineID
+		version = DocToMDStandardVersion
+		inputs = []*structpb.Struct{
+			{
+				Fields: map[string]*structpb.Value{
+					"document_input": {Kind: &structpb.Value_StringValue{StringValue: prefix + fileBase64}},
+				},
+			},
+		}
 
 	default:
 		return "", fmt.Errorf("unsupported file type: %v", fileType)
@@ -120,14 +139,7 @@ func (s *Service) ConvertToMDPipe(ctx context.Context, fileUID uuid.UUID, caller
 		NamespaceId: NamespaceID,
 		PipelineId:  pipelineID,
 		ReleaseId:   version,
-		Inputs: []*structpb.Struct{
-			{
-				Fields: map[string]*structpb.Value{
-					"document_input": {Kind: &structpb.Value_StringValue{StringValue: prefix + fileBase64}},
-					"vlm_model":      {Kind: &structpb.Value_StringValue{StringValue: "gpt-4o"}},
-				},
-			},
-		},
+		Inputs:      inputs,
 	}
 
 	resp, err := s.PipelinePub.TriggerNamespacePipelineRelease(ctx, req)
