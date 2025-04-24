@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.24.5-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.24.4-alpha...v0.24.5-alpha) (2025-04-24)
+
+
+### Bug Fixes
+
+* **artifact:** use VLM pipeline to convert ppt/pptx files ([#178](https://github.com/instill-ai/artifact-backend/issues/178)) ([1de8aa1](https://github.com/instill-ai/artifact-backend/commit/1de8aa1a7368aece9492a891ba9801642e129ad0))
+
 ## [0.24.4-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.24.3-alpha...v0.24.4-alpha) (2025-04-23)
 
 
