@@ -382,9 +382,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processConvertingFile(ctx contex
 	switch file.Type {
 	case artifactpb.FileType_FILE_TYPE_PDF.String(),
 		artifactpb.FileType_FILE_TYPE_DOC.String(),
-		artifactpb.FileType_FILE_TYPE_DOCX.String(),
-		artifactpb.FileType_FILE_TYPE_PPT.String(),
-		artifactpb.FileType_FILE_TYPE_PPTX.String():
+		artifactpb.FileType_FILE_TYPE_DOCX.String():
 		convertedMD, err = wp.svc.ConvertToMDModel(ctx, file.UID, file.CreatorUID, requesterUID, base64Data, artifactpb.FileType(artifactpb.FileType_value[file.Type]))
 		if err != nil {
 			logger.Error("Failed to convert pdf to md using docling model, fallback to pipeline.")
