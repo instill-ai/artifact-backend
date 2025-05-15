@@ -23,6 +23,7 @@ require (
 	github.com/minio/minio-go/v7 v7.0.87
 	github.com/openfga/api/proto v0.0.0-20240723155248-7e5be7b65c27
 	github.com/redis/go-redis/v9 v9.5.5
+	github.com/unidoc/unipdf/v3 v3.44.0
 	go.opentelemetry.io/contrib/propagators/b3 v1.17.0
 	go.opentelemetry.io/otel v1.16.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v0.39.0
@@ -60,9 +61,16 @@ require (
 	github.com/minio/crc64nvme v1.0.1 // indirect
 	github.com/minio/md5-simd v1.1.2 // indirect
 	github.com/rs/xid v1.6.0 // indirect
+	github.com/sirupsen/logrus v1.9.2 // indirect
+	github.com/stretchr/testify v1.10.0 // indirect
 	github.com/tidwall/gjson v1.14.4 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.0 // indirect
+	github.com/unidoc/pkcs7 v0.1.0 // indirect
+	github.com/unidoc/timestamp v0.0.0-20200412005513-91597fd3793a // indirect
+	github.com/unidoc/unitype v0.2.1 // indirect
+	golang.org/x/image v0.0.0-20211028202545-6944b10bf410 // indirect
+	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 )
 
 require (
