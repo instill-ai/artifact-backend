@@ -162,6 +162,7 @@ func (s *Service) ConvertToMDModel(ctx context.Context, fileUID uuid.UUID, calle
 
 	resp, err := s.ModelPub.TriggerNamespaceModel(ctx, req)
 	if err != nil {
+		logger.Warn("Failed to trigger admin/docling, falling back to instill-ai/docling", zap.Error(err))
 		namespaceID = "instill-ai"
 		req.NamespaceId = namespaceID
 		resp, err = s.ModelPub.TriggerNamespaceModel(ctx, req)
@@ -169,6 +170,8 @@ func (s *Service) ConvertToMDModel(ctx context.Context, fileUID uuid.UUID, calle
 			logger.Error(fmt.Sprintf("failed to trigger %s model", ConvertDocToMDModelID), zap.Error(err))
 			return "", fmt.Errorf("failed to trigger %s model: %w", ConvertDocToMDModelID, err)
 		}
+	} else {
+		logger.Info("Successfully triggered admin/docling model")
 	}
 
 	convertingModelMetadata := namespaceID + "/" + ConvertDocToMDModelID + "@" + ConvertDocToMDModelVersion
