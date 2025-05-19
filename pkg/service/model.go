@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/gofrs/uuid"
@@ -13,14 +14,13 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 
-	"bytes"
 	"encoding/base64"
 	"sync"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	modelpb "github.com/instill-ai/protogen-go/model/model/v1alpha"
 
-	"github.com/unidoc/unipdf/v3/model"
+	"github.com/pdfcpu/pdfcpu/pkg/api"
 )
 
 const ConvertDocToMDModelID = "docling"
@@ -28,35 +28,49 @@ const ConvertDocToMDModelVersion = "v0.1.0"
 
 // splitPDFIntoBatches splits a PDF into batches of n pages each and returns a slice of base64-encoded sub-PDFs
 func splitPDFIntoBatches(pdfData []byte, batchSize int) ([]string, error) {
-	r, err := model.NewPdfReader(bytes.NewReader(pdfData))
+	// Write the input PDF to a temporary file
+	inputFile, err := os.CreateTemp("", "input-*.pdf")
 	if err != nil {
 		return nil, err
 	}
-	nPages, err := r.GetNumPages()
+	defer os.Remove(inputFile.Name())
+	if _, err := inputFile.Write(pdfData); err != nil {
+		return nil, err
+	}
+	inputFile.Close()
+
+	// Read number of pages
+	ctx, err := api.ReadContextFile(inputFile.Name())
 	if err != nil {
 		return nil, err
 	}
+	nPages := ctx.PageCount
+
 	var batches []string
 	for i := 0; i < nPages; i += batchSize {
 		end := i + batchSize
 		if end > nPages {
 			end = nPages
 		}
-		w := model.NewPdfWriter()
-		for j := i + 1; j <= end; j++ {
-			page, err := r.GetPage(j)
-			if err != nil {
-				return nil, err
-			}
-			if err := w.AddPage(page); err != nil {
-				return nil, err
-			}
-		}
-		buf := new(strings.Builder)
-		if err := w.Write(buf); err != nil {
+		// Create a range string, e.g. "1-5"
+		pageRange := fmt.Sprintf("%d-%d", i+1, end)
+		outputFile, err := os.CreateTemp("", "output-*.pdf")
+		if err != nil {
 			return nil, err
 		}
-		batches = append(batches, base64.StdEncoding.EncodeToString([]byte(buf.String())))
+		outputFile.Close()
+		defer os.Remove(outputFile.Name())
+
+		// Extract the page range
+		if err := api.ExtractPagesFile(inputFile.Name(), outputFile.Name(), []string{pageRange}, nil); err != nil {
+			return nil, err
+		}
+		// Read the output PDF and encode as base64
+		outData, err := os.ReadFile(outputFile.Name())
+		if err != nil {
+			return nil, err
+		}
+		batches = append(batches, base64.StdEncoding.EncodeToString(outData))
 	}
 	return batches, nil
 }
