@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/gofrs/uuid"
@@ -28,19 +29,28 @@ const ConvertDocToMDModelVersion = "v0.1.0"
 
 // splitPDFIntoBatches splits a PDF into batches of n pages each and returns a slice of base64-encoded sub-PDFs
 func splitPDFIntoBatches(pdfData []byte, batchSize int) ([]string, error) {
+	// Create a temporary directory
+	tempDir, err := os.MkdirTemp("", "pdfcpu-*")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create temp directory: %w", err)
+	}
+	defer os.RemoveAll(tempDir)
+
 	// Write the input PDF to a temporary file
-	inputFile, err := os.CreateTemp("", "input-*.pdf")
+	inputFile, err := os.CreateTemp(tempDir, "input-*.pdf")
 	if err != nil {
 		return nil, err
 	}
-	defer os.Remove(inputFile.Name())
+	inputFilePath := inputFile.Name()
 	if _, err := inputFile.Write(pdfData); err != nil {
+		inputFile.Close()
 		return nil, err
 	}
 	inputFile.Close()
+	defer os.Remove(inputFilePath)
 
 	// Read number of pages
-	ctx, err := api.ReadContextFile(inputFile.Name())
+	ctx, err := api.ReadContextFile(inputFilePath)
 	if err != nil {
 		return nil, err
 	}
@@ -54,23 +64,19 @@ func splitPDFIntoBatches(pdfData []byte, batchSize int) ([]string, error) {
 		}
 		// Create a range string, e.g. "1-5"
 		pageRange := fmt.Sprintf("%d-%d", i+1, end)
-		outputFile, err := os.CreateTemp("", "output-*.pdf")
-		if err != nil {
-			return nil, err
-		}
-		outputFile.Close()
-		defer os.Remove(outputFile.Name())
+		outputFilePath := filepath.Join(tempDir, fmt.Sprintf("output-%d-%d.pdf", i+1, end))
 
 		// Extract the page range
-		if err := api.ExtractPagesFile(inputFile.Name(), outputFile.Name(), []string{pageRange}, nil); err != nil {
+		if err := api.ExtractPagesFile(inputFilePath, outputFilePath, []string{pageRange}, nil); err != nil {
 			return nil, err
 		}
 		// Read the output PDF and encode as base64
-		outData, err := os.ReadFile(outputFile.Name())
+		outData, err := os.ReadFile(outputFilePath)
 		if err != nil {
 			return nil, err
 		}
 		batches = append(batches, base64.StdEncoding.EncodeToString(outData))
+		os.Remove(outputFilePath)
 	}
 	return batches, nil
 }
