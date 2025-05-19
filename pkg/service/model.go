@@ -69,8 +69,8 @@ func splitPDFIntoBatches(pdfData []byte, batchSize int) ([]string, error) {
 		pageRange := fmt.Sprintf("%d-%d", i+1, end)
 		outputFilePath := filepath.Join(tempDir, fmt.Sprintf("output-%d-%d.pdf", i+1, end))
 
-		// Extract the page range
-		if err := api.ExtractPagesFile(inputFilePath, outputFilePath, []string{pageRange}, nil); err != nil {
+		// Extract the page range using TrimFile instead of ExtractPagesFile
+		if err := api.TrimFile(inputFilePath, outputFilePath, []string{pageRange}, nil); err != nil {
 			return nil, err
 		}
 		// Read the output PDF and encode as base64
