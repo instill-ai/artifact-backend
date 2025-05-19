@@ -36,6 +36,9 @@ func splitPDFIntoBatches(pdfData []byte, batchSize int) ([]string, error) {
 	}
 	defer os.RemoveAll(tempDir)
 
+	// Prevent pdfcpu from trying to write out $HOME/.config/pdfcpu
+	api.DisableConfigDir()
+
 	// Write the input PDF to a temporary file
 	inputFile, err := os.CreateTemp(tempDir, "input-*.pdf")
 	if err != nil {
