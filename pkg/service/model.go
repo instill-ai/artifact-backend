@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/gofrs/uuid"
 	"go.uber.org/zap"
@@ -105,111 +106,100 @@ func (s *Service) ConvertToMDModel(ctx context.Context, fileUID uuid.UUID, calle
 	// Get the appropriate prefix for the file type
 	prefix := getFileTypePrefix(fileType)
 
-	// If PDF, split into batches and process in parallel
+	// Prepare files to process (as a slice of base64 strings)
+	var filesToProcess []string
+	var err error
+
+	// For PDFs, split into batches; for other file types, process as a single item
 	if fileType == artifactpb.FileType_FILE_TYPE_PDF {
 		pdfData, err := base64.StdEncoding.DecodeString(fileBase64)
 		if err != nil {
-			logger.Error("Failed to decode base64 PDF", zap.Error(err))
-			return "", err
+			return "", fmt.Errorf("decoding base64 PDF: %w", err)
 		}
-		batches, err := splitPDFIntoBatches(pdfData, 5)
+		filesToProcess, err = splitPDFIntoBatches(pdfData, 5)
 		if err != nil {
-			logger.Error("Failed to split PDF into batches", zap.Error(err))
-			return "", err
-		}
-		results := make([]string, len(batches))
-		errCh := make(chan error, len(batches))
-		var wg sync.WaitGroup
-		for i, b64 := range batches {
-			wg.Add(1)
-			go func(idx int, b64 string) {
-				defer wg.Done()
-				req := &modelpb.TriggerNamespaceModelRequest{
-					NamespaceId: "admin",
-					ModelId:     ConvertDocToMDModelID,
-					Version:     ConvertDocToMDModelVersion,
-					TaskInputs: []*structpb.Struct{
-						{
-							Fields: map[string]*structpb.Value{
-								"data": {Kind: &structpb.Value_StructValue{
-									StructValue: &structpb.Struct{
-										Fields: map[string]*structpb.Value{
-											"doc_content": {Kind: &structpb.Value_StringValue{StringValue: prefix + b64}},
-										},
-									},
-								}},
-							},
-						},
-					},
-				}
-				resp, err := s.ModelPub.TriggerNamespaceModel(ctx, req)
-				if err != nil {
-					errCh <- err
-					return
-				}
-				result, err := getModelConvertResult(resp)
-				if err != nil {
-					errCh <- err
-					return
-				}
-				results[idx] = result
-			}(i, b64)
-		}
-		wg.Wait()
-		close(errCh)
-		if len(errCh) > 0 {
-			return "", <-errCh
-		}
-		return strings.Join(results, "\n"), nil
-	}
-
-	namespaceID := "admin"
-	req := &modelpb.TriggerNamespaceModelRequest{
-		NamespaceId: namespaceID,
-		ModelId:     ConvertDocToMDModelID,
-		Version:     ConvertDocToMDModelVersion,
-		TaskInputs: []*structpb.Struct{
-			{
-				Fields: map[string]*structpb.Value{
-					"data": {Kind: &structpb.Value_StructValue{
-						StructValue: &structpb.Struct{
-							Fields: map[string]*structpb.Value{
-								"doc_content": {Kind: &structpb.Value_StringValue{StringValue: prefix + fileBase64}},
-							},
-						},
-					}},
-				},
-			},
-		},
-	}
-
-	resp, err := s.ModelPub.TriggerNamespaceModel(ctx, req)
-	if err != nil {
-		logger.Warn("Failed to trigger admin/docling, falling back to instill-ai/docling", zap.Error(err))
-		namespaceID = "instill-ai"
-		req.NamespaceId = namespaceID
-		resp, err = s.ModelPub.TriggerNamespaceModel(ctx, req)
-		if err != nil {
-			logger.Error(fmt.Sprintf("failed to trigger %s model", ConvertDocToMDModelID), zap.Error(err))
-			return "", fmt.Errorf("failed to trigger %s model: %w", ConvertDocToMDModelID, err)
+			return "", fmt.Errorf("splitting PDF into batches: %w", err)
 		}
 	} else {
-		logger.Info("Successfully triggered admin/docling model")
+		filesToProcess = []string{fileBase64}
 	}
 
+	// Process all files (or batches for PDFs)
+	results := make([]string, len(filesToProcess))
+	errCh := make(chan error, len(filesToProcess))
+	var wg sync.WaitGroup
+
+	namespaceID := "admin"
+
+	for i, b64 := range filesToProcess {
+		wg.Add(1)
+		go func(idx int, b64 string) {
+			defer wg.Done()
+
+			// Add timeout to the model trigger requests
+			triggerCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			defer cancel()
+
+			req := &modelpb.TriggerNamespaceModelRequest{
+				NamespaceId: namespaceID,
+				ModelId:     ConvertDocToMDModelID,
+				Version:     ConvertDocToMDModelVersion,
+				TaskInputs: []*structpb.Struct{
+					{
+						Fields: map[string]*structpb.Value{
+							"data": {Kind: &structpb.Value_StructValue{
+								StructValue: &structpb.Struct{
+									Fields: map[string]*structpb.Value{
+										"doc_content": {Kind: &structpb.Value_StringValue{StringValue: prefix + b64}},
+									},
+								},
+							}},
+						},
+					},
+				},
+			}
+
+			resp, err := s.ModelPub.TriggerNamespaceModel(triggerCtx, req)
+			if err != nil {
+				// If admin namespace fails, try instill-ai namespace
+				if idx == 0 { // Only log once for the first batch
+					logger.Warn("Failed to trigger admin/docling, falling back to instill-ai/docling", zap.Error(err))
+				}
+				req.NamespaceId = "instill-ai"
+				resp, err = s.ModelPub.TriggerNamespaceModel(triggerCtx, req)
+				if err != nil {
+					errCh <- fmt.Errorf("failed to trigger %s model: %w", ConvertDocToMDModelID, err)
+					return
+				}
+				namespaceID = "instill-ai" // Update for metadata
+			} else if idx == 0 { // Only log once for the first batch
+				logger.Info("Successfully triggered admin/docling model")
+			}
+
+			result, err := getModelConvertResult(resp)
+			if err != nil {
+				errCh <- err
+				return
+			}
+			results[idx] = result
+		}(i, b64)
+	}
+
+	wg.Wait()
+	close(errCh)
+
+	if len(errCh) > 0 {
+		return "", <-errCh
+	}
+
+	// Save metadata about the model used (only needs to happen once)
 	convertingModelMetadata := namespaceID + "/" + ConvertDocToMDModelID + "@" + ConvertDocToMDModelVersion
 	err = s.Repository.UpdateKbFileExtraMetaData(ctx, fileUID, "", convertingModelMetadata, "", "", "", nil, nil, nil, nil, nil)
 	if err != nil {
-		logger.Error("Failed to save converting pipeline metadata.", zap.String("File uid:", fileUID.String()))
 		return "", fmt.Errorf("failed to save converting model metadata: %w", err)
 	}
 
-	result, err := getModelConvertResult(resp)
-	if err != nil {
-		logger.Error("failed to get convert result", zap.Error(err))
-		return "", fmt.Errorf("failed to get convert result: %w", err)
-	}
-	return result, nil
+	return strings.Join(results, "\n"), nil
 }
 
 func getModelConvertResult(resp *modelpb.TriggerNamespaceModelResponse) (string, error) {
