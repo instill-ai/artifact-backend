@@ -87,6 +87,10 @@ func splitPDFIntoBatches(pdfData []byte, batchSize int) ([]string, error) {
 
 // ConvertToMDModel using docling model to convert some file type to MD and consume caller's credits
 func (s *Service) ConvertToMDModel(ctx context.Context, fileUID uuid.UUID, caller uuid.UUID, requester uuid.UUID, fileBase64 string, fileType artifactpb.FileType) (string, error) {
+	// Add overall operation timeout
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+
 	logger, _ := logger.GetZapLogger(ctx)
 	var md metadata.MD
 	if requester != uuid.Nil {
@@ -129,15 +133,40 @@ func (s *Service) ConvertToMDModel(ctx context.Context, fileUID uuid.UUID, calle
 	errCh := make(chan error, len(filesToProcess))
 	var wg sync.WaitGroup
 
+	// Add a done channel to handle context cancellation
+	done := make(chan struct{})
+	defer close(done)
+
 	namespaceID := "admin"
+
+	// Start a goroutine to watch for context cancellation
+	go func() {
+		select {
+		case <-ctx.Done():
+			// If context is cancelled, put the error in the error channel
+			errCh <- ctx.Err()
+		case <-done:
+			// Operation completed normally
+			return
+		}
+	}()
 
 	for i, b64 := range filesToProcess {
 		wg.Add(1)
 		go func(idx int, b64 string) {
 			defer wg.Done()
 
-			// Add timeout to the model trigger requests
-			triggerCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			select {
+			case <-ctx.Done():
+				// If parent context is already cancelled, don't proceed
+				errCh <- ctx.Err()
+				return
+			default:
+				// Continue with processing
+			}
+
+			// Increase the timeout for larger files (optional)
+			triggerCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 			defer cancel()
 
 			req := &modelpb.TriggerNamespaceModelRequest{
@@ -243,11 +272,34 @@ func (s *Service) ConvertToMDModel(ctx context.Context, fileUID uuid.UUID, calle
 		}(i, b64)
 	}
 
-	wg.Wait()
+	// Use a channel to signal when wait group is done
+	waitDone := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(waitDone)
+	}()
+
+	// Wait for either completion or timeout
+	select {
+	case <-waitDone:
+		// All goroutines completed
+	case <-ctx.Done():
+		// Context timed out or was cancelled
+		return "", ctx.Err()
+	}
+
 	close(errCh)
 
-	if len(errCh) > 0 {
-		return "", <-errCh
+	// Collect all errors instead of just the first one
+	var allErrors []error
+	for err := range errCh {
+		allErrors = append(allErrors, err)
+	}
+
+	if len(allErrors) > 0 {
+		// Combine errors or return the first one with context
+		return "", fmt.Errorf("encountered %d errors during processing, first error: %w",
+			len(allErrors), allErrors[0])
 	}
 
 	// Save metadata about the model used (only needs to happen once)
