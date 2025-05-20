@@ -159,21 +159,79 @@ func (s *Service) ConvertToMDModel(ctx context.Context, fileUID uuid.UUID, calle
 				},
 			}
 
-			resp, err := s.ModelPub.TriggerNamespaceModel(triggerCtx, req)
-			if err != nil {
-				// If admin namespace fails, try instill-ai namespace
-				if idx == 0 { // Only log once for the first batch
-					logger.Warn("Failed to trigger admin/docling, falling back to instill-ai/docling", zap.Error(err))
-				}
-				req.NamespaceId = "instill-ai"
+			// Retry mechanism parameters
+			maxRetries := 3
+			retryCount := 0
+			var resp *modelpb.TriggerNamespaceModelResponse
+			var err error
+
+			// Retry loop for admin namespace
+			for retryCount < maxRetries {
 				resp, err = s.ModelPub.TriggerNamespaceModel(triggerCtx, req)
+				if err == nil {
+					// If successful, break out of the retry loop
+					if idx == 0 || retryCount > 0 { // Log on first batch or when we had to retry
+						logger.Info("Successfully triggered admin/docling model", zap.Int("retry", retryCount))
+					}
+					break
+				}
+
+				retryCount++
+				if retryCount < maxRetries {
+					// Log retry attempt
+					logger.Warn("Retrying admin/docling model trigger",
+						zap.Int("attempt", retryCount),
+						zap.Int("maxRetries", maxRetries),
+						zap.Error(err))
+
+					// Wait before retrying (with exponential backoff)
+					backoffTime := time.Duration(retryCount*retryCount) * 500 * time.Millisecond
+					time.Sleep(backoffTime)
+				}
+			}
+
+			// If all retries failed, attempt fallback to instill-ai namespace
+			if err != nil {
+				// If admin namespace fails after all retries, try instill-ai namespace
+				if idx == 0 { // Only log once for the first batch
+					logger.Warn("Failed to trigger admin/docling after retries, falling back to instill-ai/docling",
+						zap.Int("retries", retryCount),
+						zap.Error(err))
+				}
+
+				req.NamespaceId = "instill-ai"
+
+				// Reset retry count for instill-ai namespace
+				retryCount = 0
+
+				// Retry loop for instill-ai namespace
+				for retryCount < maxRetries {
+					resp, err = s.ModelPub.TriggerNamespaceModel(triggerCtx, req)
+					if err == nil {
+						// If successful, break out of the retry loop
+						namespaceID = "instill-ai" // Update for metadata
+						break
+					}
+
+					retryCount++
+					if retryCount < maxRetries {
+						// Log retry attempt
+						logger.Warn("Retrying instill-ai/docling model trigger",
+							zap.Int("attempt", retryCount),
+							zap.Int("maxRetries", maxRetries),
+							zap.Error(err))
+
+						// Wait before retrying (with exponential backoff)
+						backoffTime := time.Duration(retryCount*retryCount) * 500 * time.Millisecond
+						time.Sleep(backoffTime)
+					}
+				}
+
+				// If all retries failed for both namespaces
 				if err != nil {
-					errCh <- fmt.Errorf("failed to trigger %s model: %w", ConvertDocToMDModelID, err)
+					errCh <- fmt.Errorf("failed to trigger %s model after all retries: %w", ConvertDocToMDModelID, err)
 					return
 				}
-				namespaceID = "instill-ai" // Update for metadata
-			} else if idx == 0 { // Only log once for the first batch
-				logger.Info("Successfully triggered admin/docling model")
 			}
 
 			result, err := getModelConvertResult(resp)
