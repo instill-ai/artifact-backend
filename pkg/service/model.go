@@ -2,10 +2,12 @@ package service
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gofrs/uuid"
@@ -13,16 +15,13 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	pdfcpu "github.com/pdfcpu/pdfcpu/pkg/api"
+
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 
-	"encoding/base64"
-	"sync"
-
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	modelpb "github.com/instill-ai/protogen-go/model/model/v1alpha"
-
-	"github.com/pdfcpu/pdfcpu/pkg/api"
 )
 
 const ConvertDocToMDModelID = "docling"
@@ -38,7 +37,7 @@ func splitPDFIntoBatches(pdfData []byte, batchSize int) ([]string, error) {
 	defer os.RemoveAll(tempDir)
 
 	// Prevent pdfcpu from trying to write out $HOME/.config/pdfcpu
-	api.DisableConfigDir()
+	pdfcpu.DisableConfigDir()
 
 	// Write the input PDF to a temporary file
 	inputFile, err := os.CreateTemp(tempDir, "input-*.pdf")
@@ -54,7 +53,7 @@ func splitPDFIntoBatches(pdfData []byte, batchSize int) ([]string, error) {
 	defer os.Remove(inputFilePath)
 
 	// Read number of pages
-	ctx, err := api.ReadContextFile(inputFilePath)
+	ctx, err := pdfcpu.ReadContextFile(inputFilePath)
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +70,7 @@ func splitPDFIntoBatches(pdfData []byte, batchSize int) ([]string, error) {
 		outputFilePath := filepath.Join(tempDir, fmt.Sprintf("output-%d-%d.pdf", i+1, end))
 
 		// Extract the page range using TrimFile instead of ExtractPagesFile
-		if err := api.TrimFile(inputFilePath, outputFilePath, []string{pageRange}, nil); err != nil {
+		if err := pdfcpu.TrimFile(inputFilePath, outputFilePath, []string{pageRange}, nil); err != nil {
 			return nil, err
 		}
 		// Read the output PDF and encode as base64
@@ -120,7 +119,7 @@ func (s *Service) ConvertToMDModel(ctx context.Context, fileUID uuid.UUID, calle
 		if err != nil {
 			return "", fmt.Errorf("decoding base64 PDF: %w", err)
 		}
-		filesToProcess, err = splitPDFIntoBatches(pdfData, 5)
+		filesToProcess, err = splitPDFIntoBatches(pdfData, 8)
 		if err != nil {
 			return "", fmt.Errorf("splitting PDF into batches: %w", err)
 		}
