@@ -1,28 +1,28 @@
 package service
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
-	"os"
-	"path/filepath"
+	"io"
+	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gofrs/uuid"
+	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	pdfcpu "github.com/pdfcpu/pdfcpu/pkg/api"
+
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
-
-	"encoding/base64"
-	"sync"
-
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	modelpb "github.com/instill-ai/protogen-go/model/model/v1alpha"
-
-	"github.com/pdfcpu/pdfcpu/pkg/api"
 )
 
 const ConvertDocToMDModelID = "docling"
@@ -30,31 +30,15 @@ const ConvertDocToMDModelVersion = "v0.1.0"
 
 // splitPDFIntoBatches splits a PDF into batches of n pages each and returns a slice of base64-encoded sub-PDFs
 func splitPDFIntoBatches(pdfData []byte, batchSize int) ([]string, error) {
-	// Create a temporary directory
-	tempDir, err := os.MkdirTemp("", "pdfcpu-*")
-	if err != nil {
-		return nil, fmt.Errorf("failed to create temp directory: %w", err)
-	}
-	defer os.RemoveAll(tempDir)
-
 	// Prevent pdfcpu from trying to write out $HOME/.config/pdfcpu
-	api.DisableConfigDir()
+	pdfcpu.DisableConfigDir()
 
-	// Write the input PDF to a temporary file
-	inputFile, err := os.CreateTemp(tempDir, "input-*.pdf")
-	if err != nil {
-		return nil, err
-	}
-	inputFilePath := inputFile.Name()
-	if _, err := inputFile.Write(pdfData); err != nil {
-		inputFile.Close()
-		return nil, err
-	}
-	inputFile.Close()
-	defer os.Remove(inputFilePath)
+	// Create a default configuration
+	modelConf := model.NewDefaultConfiguration()
 
-	// Read number of pages
-	ctx, err := api.ReadContextFile(inputFilePath)
+	// Read the PDF from memory
+	in := bytes.NewReader(pdfData)
+	ctx, err := pdfcpu.ReadContext(in, modelConf)
 	if err != nil {
 		return nil, err
 	}
@@ -68,20 +52,24 @@ func splitPDFIntoBatches(pdfData []byte, batchSize int) ([]string, error) {
 		}
 		// Create a range string, e.g. "1-5"
 		pageRange := fmt.Sprintf("%d-%d", i+1, end)
-		outputFilePath := filepath.Join(tempDir, fmt.Sprintf("output-%d-%d.pdf", i+1, end))
 
-		// Extract the page range using TrimFile instead of ExtractPagesFile
-		if err := api.TrimFile(inputFilePath, outputFilePath, []string{pageRange}, nil); err != nil {
-			return nil, err
+		// Reset reader to beginning of file
+		if _, err := in.Seek(0, io.SeekStart); err != nil {
+			return nil, fmt.Errorf("seeking to start of PDF: %w", err)
 		}
-		// Read the output PDF and encode as base64
-		outData, err := os.ReadFile(outputFilePath)
-		if err != nil {
-			return nil, err
+
+		// Create buffer for output
+		out := new(bytes.Buffer)
+
+		// Extract the page range directly to memory
+		if err := pdfcpu.Trim(in, out, []string{pageRange}, modelConf); err != nil {
+			return nil, fmt.Errorf("trimming pages %s: %w", pageRange, err)
 		}
-		batches = append(batches, base64.StdEncoding.EncodeToString(outData))
-		os.Remove(outputFilePath)
+
+		// Encode the PDF data to base64
+		batches = append(batches, base64.StdEncoding.EncodeToString(out.Bytes()))
 	}
+
 	return batches, nil
 }
 
@@ -120,7 +108,7 @@ func (s *Service) ConvertToMDModel(ctx context.Context, fileUID uuid.UUID, calle
 		if err != nil {
 			return "", fmt.Errorf("decoding base64 PDF: %w", err)
 		}
-		filesToProcess, err = splitPDFIntoBatches(pdfData, 5)
+		filesToProcess, err = splitPDFIntoBatches(pdfData, 12)
 		if err != nil {
 			return "", fmt.Errorf("splitting PDF into batches: %w", err)
 		}
@@ -128,10 +116,21 @@ func (s *Service) ConvertToMDModel(ctx context.Context, fileUID uuid.UUID, calle
 		filesToProcess = []string{fileBase64}
 	}
 
-	// Process all files (or batches for PDFs)
+	// TODO: use Temporal to manage the concurrency here - see Instill Core Github issue #1235
+
+	// Calculate appropriate number of workers based on system resources
+	// Use 75% of available CPUs or the number of tasks, whichever is smaller
+	numWorkers := runtime.NumCPU() * 3 / 4
+	if numWorkers < 1 {
+		numWorkers = 1
+	}
+	if len(filesToProcess) < numWorkers {
+		numWorkers = len(filesToProcess)
+	}
+
+	// Process all files (or batches for PDFs) using a worker pool
 	results := make([]string, len(filesToProcess))
 	errCh := make(chan error, len(filesToProcess))
-	var wg sync.WaitGroup
 
 	// Add a done channel to handle context cancellation
 	done := make(chan struct{})
@@ -151,126 +150,26 @@ func (s *Service) ConvertToMDModel(ctx context.Context, fileUID uuid.UUID, calle
 		}
 	}()
 
-	for i, b64 := range filesToProcess {
+	// Create a pool of worker goroutines
+	var wg sync.WaitGroup
+
+	// Create job channel with buffer size equal to number of tasks
+	jobs := make(chan jobTask, len(filesToProcess))
+
+	// Launch worker pool
+	for w := 0; w < numWorkers; w++ {
 		wg.Add(1)
-		go func(idx int, b64 string) {
-			defer wg.Done()
-
-			select {
-			case <-ctx.Done():
-				// If parent context is already cancelled, don't proceed
-				errCh <- ctx.Err()
-				return
-			default:
-				// Continue with processing
-			}
-
-			// Increase the timeout for larger files (optional)
-			triggerCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
-			defer cancel()
-
-			req := &modelpb.TriggerNamespaceModelRequest{
-				NamespaceId: namespaceID,
-				ModelId:     ConvertDocToMDModelID,
-				Version:     ConvertDocToMDModelVersion,
-				TaskInputs: []*structpb.Struct{
-					{
-						Fields: map[string]*structpb.Value{
-							"data": {Kind: &structpb.Value_StructValue{
-								StructValue: &structpb.Struct{
-									Fields: map[string]*structpb.Value{
-										"doc_content": {Kind: &structpb.Value_StringValue{StringValue: prefix + b64}},
-									},
-								},
-							}},
-						},
-					},
-				},
-			}
-
-			// Retry mechanism parameters
-			maxRetries := 3
-			retryCount := 0
-			var resp *modelpb.TriggerNamespaceModelResponse
-			var err error
-
-			// Retry loop for admin namespace
-			for retryCount < maxRetries {
-				resp, err = s.ModelPub.TriggerNamespaceModel(triggerCtx, req)
-				if err == nil {
-					// If successful, break out of the retry loop
-					if idx == 0 || retryCount > 0 { // Log on first batch or when we had to retry
-						logger.Info("Successfully triggered admin/docling model", zap.Int("retry", retryCount))
-					}
-					break
-				}
-
-				retryCount++
-				if retryCount < maxRetries {
-					// Log retry attempt
-					logger.Warn("Retrying admin/docling model trigger",
-						zap.Int("attempt", retryCount),
-						zap.Int("maxRetries", maxRetries),
-						zap.Error(err))
-
-					// Wait before retrying (with exponential backoff)
-					backoffTime := time.Duration(retryCount*retryCount) * 500 * time.Millisecond
-					time.Sleep(backoffTime)
-				}
-			}
-
-			// If all retries failed, attempt fallback to instill-ai namespace
-			if err != nil {
-				// If admin namespace fails after all retries, try instill-ai namespace
-				if idx == 0 { // Only log once for the first batch
-					logger.Warn("Failed to trigger admin/docling after retries, falling back to instill-ai/docling",
-						zap.Int("retries", retryCount),
-						zap.Error(err))
-				}
-
-				req.NamespaceId = "instill-ai"
-
-				// Reset retry count for instill-ai namespace
-				retryCount = 0
-
-				// Retry loop for instill-ai namespace
-				for retryCount < maxRetries {
-					resp, err = s.ModelPub.TriggerNamespaceModel(triggerCtx, req)
-					if err == nil {
-						// If successful, break out of the retry loop
-						namespaceID = "instill-ai" // Update for metadata
-						break
-					}
-
-					retryCount++
-					if retryCount < maxRetries {
-						// Log retry attempt
-						logger.Warn("Retrying instill-ai/docling model trigger",
-							zap.Int("attempt", retryCount),
-							zap.Int("maxRetries", maxRetries),
-							zap.Error(err))
-
-						// Wait before retrying (with exponential backoff)
-						backoffTime := time.Duration(retryCount*retryCount) * 500 * time.Millisecond
-						time.Sleep(backoffTime)
-					}
-				}
-
-				// If all retries failed for both namespaces
-				if err != nil {
-					errCh <- fmt.Errorf("failed to trigger %s model after all retries: %w", ConvertDocToMDModelID, err)
-					return
-				}
-			}
-
-			result, err := getModelConvertResult(resp)
-			if err != nil {
-				errCh <- err
-				return
-			}
-			results[idx] = result
-		}(i, b64)
+		go worker(ctx, &wg, jobs, results, errCh, prefix, namespaceID, ConvertDocToMDModelID, ConvertDocToMDModelVersion, s, logger)
 	}
+
+	// Send jobs to the worker pool
+	for i, b64 := range filesToProcess {
+		jobs <- jobTask{
+			index: i,
+			data:  b64,
+		}
+	}
+	close(jobs) // All jobs have been sent
 
 	// Use a channel to signal when wait group is done
 	waitDone := make(chan struct{})
@@ -310,6 +209,109 @@ func (s *Service) ConvertToMDModel(ctx context.Context, fileUID uuid.UUID, calle
 	}
 
 	return strings.Join(results, "\n"), nil
+}
+
+// jobTask represents a single batch processing task
+type jobTask struct {
+	index int    // index in the results array
+	data  string // base64 encoded batch data
+}
+
+// worker processes PDF batch conversion tasks from the jobs channel
+func worker(
+	ctx context.Context,
+	wg *sync.WaitGroup,
+	jobs <-chan jobTask,
+	results []string,
+	errCh chan<- error,
+	prefix string,
+	namespaceID string,
+	modelID string,
+	modelVersion string,
+	s *Service,
+	logger *zap.Logger,
+) {
+	defer wg.Done()
+
+	for job := range jobs {
+		// Check if context is cancelled before processing
+		select {
+		case <-ctx.Done():
+			errCh <- ctx.Err()
+			return
+		default:
+			// Continue with processing
+		}
+
+		// Set timeout for this specific task
+		triggerCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+
+		// Process the batch
+		result, err := processBatch(triggerCtx, job.data, prefix, namespaceID, modelID, modelVersion, job.index, s, logger)
+		cancel() // Always cancel the context
+
+		if err != nil {
+			errCh <- err
+			continue
+		}
+
+		// Store result
+		results[job.index] = result
+	}
+}
+
+// processBatch handles the conversion of a single PDF batch to markdown
+func processBatch(
+	ctx context.Context,
+	base64Data string,
+	prefix string,
+	namespaceID string,
+	modelID string,
+	modelVersion string,
+	idx int,
+	s *Service,
+	logger *zap.Logger,
+) (string, error) {
+	req := &modelpb.TriggerNamespaceModelRequest{
+		NamespaceId: namespaceID,
+		ModelId:     modelID,
+		Version:     modelVersion,
+		TaskInputs: []*structpb.Struct{
+			{
+				Fields: map[string]*structpb.Value{
+					"data": {Kind: &structpb.Value_StructValue{
+						StructValue: &structpb.Struct{
+							Fields: map[string]*structpb.Value{
+								"doc_content": {Kind: &structpb.Value_StringValue{StringValue: prefix + base64Data}},
+							},
+						},
+					}},
+				},
+			},
+		},
+	}
+
+	// Make the API call
+	resp, err := s.ModelPub.TriggerNamespaceModel(ctx, req)
+	if err != nil {
+		// If admin namespace fails, try instill-ai namespace as fallback
+		if namespaceID == "admin" {
+			if idx == 0 { // Only log once for the first batch
+				logger.Warn("Failed to trigger admin/docling, falling back to instill-ai/docling",
+					zap.Error(err))
+			}
+
+			req.NamespaceId = "instill-ai"
+			resp, err = s.ModelPub.TriggerNamespaceModel(ctx, req)
+			if err != nil {
+				return "", fmt.Errorf("failed to trigger %s model with fallback: %w", modelID, err)
+			}
+		} else {
+			return "", fmt.Errorf("failed to trigger %s model: %w", modelID, err)
+		}
+	}
+
+	return getModelConvertResult(resp)
 }
 
 func getModelConvertResult(resp *modelpb.TriggerNamespaceModelResponse) (string, error) {
