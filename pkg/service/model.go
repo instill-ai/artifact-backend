@@ -194,7 +194,6 @@ func (s *Service) ConvertToMDModel(ctx context.Context, fileUID uuid.UUID, calle
 					// Continue with processing
 				}
 
-				// Increase the timeout for larger files (optional)
 				triggerCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 				defer cancel()
 
@@ -217,118 +216,35 @@ func (s *Service) ConvertToMDModel(ctx context.Context, fileUID uuid.UUID, calle
 					},
 				}
 
-				// Retry mechanism parameters
-				maxRetries := 3
-				retryCount := 0
-				var resp *modelpb.TriggerNamespaceModelResponse
-				var err error
+				// Try admin namespace first
+				resp, err := s.ModelPub.TriggerNamespaceModel(triggerCtx, req)
 
-				// Retry loop for admin namespace
-				for retryCount < maxRetries {
-					// Check if we're getting close to the timeout and extend it for retries
-					if retryCount > 0 {
-						// Create a new context with extended timeout for retries
-						cancel() // Cancel the previous context
-						// Scale timeout based on retry count - add 30 seconds per retry
-						extendedTimeout := 60*time.Second + time.Duration(retryCount)*30*time.Second
-						triggerCtx, cancel = context.WithTimeout(ctx, extendedTimeout)
-						defer cancel()
-
-						logger.Info("Extended timeout for retry",
-							zap.Int("worker", workerId),
-							zap.Int("retry", retryCount),
-							zap.Duration("timeout", extendedTimeout))
-					}
-
-					resp, err = s.ModelPub.TriggerNamespaceModel(triggerCtx, req)
-					if err == nil {
-						// If successful, break out of the retry loop
-						if j.idx == 0 || retryCount > 0 { // Log on first batch or when we had to retry
-							logger.Info("Successfully triggered admin/docling model",
-								zap.Int("worker", workerId),
-								zap.Int("batch", j.idx),
-								zap.Int("retry", retryCount))
-						}
-						break
-					}
-
-					retryCount++
-					if retryCount < maxRetries {
-						// Log retry attempt
-						logger.Warn("Retrying admin/docling model trigger",
-							zap.Int("worker", workerId),
-							zap.Int("batch", j.idx),
-							zap.Int("attempt", retryCount),
-							zap.Int("maxRetries", maxRetries),
-							zap.Error(err))
-
-						// Wait before retrying (with exponential backoff)
-						backoffTime := time.Duration(retryCount*retryCount) * 500 * time.Millisecond
-						time.Sleep(backoffTime)
-					}
-				}
-
-				// If all retries failed, attempt fallback to instill-ai namespace
+				// If admin namespace fails, try instill-ai namespace
 				if err != nil {
-					// If admin namespace fails after all retries, try instill-ai namespace
-					if j.idx == 0 { // Only log once for the first batch
-						logger.Warn("Failed to trigger admin/docling after retries, falling back to instill-ai/docling",
-							zap.Int("worker", workerId),
-							zap.Int("batch", j.idx),
-							zap.Int("retries", retryCount),
-							zap.Error(err))
-					}
+					logger.Warn("Failed to trigger admin/docling, falling back to instill-ai/docling",
+						zap.Int("worker", workerId),
+						zap.Int("batch", j.idx),
+						zap.Error(err))
 
 					req.NamespaceId = "instill-ai"
+					resp, err = s.ModelPub.TriggerNamespaceModel(triggerCtx, req)
 
-					// Reset retry count for instill-ai namespace
-					retryCount = 0
-
-					// Retry loop for instill-ai namespace
-					for retryCount < maxRetries {
-						// Check if we're getting close to the timeout and extend it for retries
-						if retryCount > 0 {
-							// Create a new context with extended timeout for retries
-							cancel() // Cancel the previous context
-							// Scale timeout based on retry count - add 30 seconds per retry
-							extendedTimeout := 60*time.Second + time.Duration(retryCount)*30*time.Second
-							triggerCtx, cancel = context.WithTimeout(ctx, extendedTimeout)
-							defer cancel()
-
-							logger.Info("Extended timeout for instill-ai retry",
-								zap.Int("worker", workerId),
-								zap.Int("retry", retryCount),
-								zap.Duration("timeout", extendedTimeout))
-						}
-
-						resp, err = s.ModelPub.TriggerNamespaceModel(triggerCtx, req)
-						if err == nil {
-							// If successful, break out of the retry loop
-							namespaceID = "instill-ai" // Update for metadata
-							break
-						}
-
-						retryCount++
-						if retryCount < maxRetries {
-							// Log retry attempt
-							logger.Warn("Retrying instill-ai/docling model trigger",
-								zap.Int("worker", workerId),
-								zap.Int("batch", j.idx),
-								zap.Int("attempt", retryCount),
-								zap.Int("maxRetries", maxRetries),
-								zap.Error(err))
-
-							// Wait before retrying (with exponential backoff)
-							backoffTime := time.Duration(retryCount*retryCount) * 500 * time.Millisecond
-							time.Sleep(backoffTime)
-						}
+					if err == nil {
+						namespaceID = "instill-ai" // Update for metadata
+						logger.Info("Successfully triggered instill-ai/docling model fallback",
+							zap.Int("worker", workerId),
+							zap.Int("batch", j.idx))
 					}
+				} else {
+					logger.Info("Successfully triggered admin/docling model",
+						zap.Int("worker", workerId),
+						zap.Int("batch", j.idx))
+				}
 
-					// If all retries failed for both namespaces
-					if err != nil {
-						errCh <- fmt.Errorf("failed to trigger %s model after all retries: %w", ConvertDocToMDModelID, err)
-						return
-					}
+				// If both namespaces failed
+				if err != nil {
+					errCh <- fmt.Errorf("failed to trigger %s model: %w", ConvertDocToMDModelID, err)
+					return
 				}
 
 				result, err := getModelConvertResult(resp)
