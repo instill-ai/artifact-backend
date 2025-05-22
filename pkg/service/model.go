@@ -178,7 +178,7 @@ func (s *Service) ConvertToMDModel(ctx context.Context, fileUID uuid.UUID, calle
 
 	logger.Info("Starting worker pool", zap.Int("numWorkers", workerCount), zap.Int("totalBatches", len(filesToProcess)))
 
-	for i := 0; i < workerCount; i++ {
+	for i := range workerCount {
 		wg.Add(1)
 		go func(workerId int) {
 			defer wg.Done()
