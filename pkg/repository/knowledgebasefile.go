@@ -10,10 +10,12 @@ import (
 	"github.com/gofrs/uuid"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
+	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
@@ -203,6 +205,22 @@ func (kf *KnowledgeBaseFile) JSONToExternalMetadata() error {
 
 	kf.ExternalMetadataUnmarshal = s
 	return nil
+}
+
+// PublicExternalMetadataUnmarshal returns a copy of the file's
+// ExternalMetadataUnmarshal property with the private fields removed.
+// ExternalMetadata is used internally to propagate the context from a file
+// request in the server (e.g. upload) to the worker, but such information
+// shouldn't be exposed publicly.
+func (kf *KnowledgeBaseFile) PublicExternalMetadataUnmarshal() *structpb.Struct {
+	original := kf.ExternalMetadataUnmarshal
+	if original == nil || original.Fields[constant.MetadataRequestKey] == nil {
+		return original
+	}
+
+	md := proto.Clone(original).(*structpb.Struct)
+	delete(md.Fields, constant.MetadataRequestKey)
+	return md
 }
 
 // GORM hooks

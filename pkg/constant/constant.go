@@ -31,3 +31,7 @@ type ContentType string
 var ChunkContentType ContentType = "chunk"
 var SummaryContentType ContentType = "summary"
 var AugmentedContentType ContentType = "augmented"
+
+// MetadataRequestKey is the key where the file upload request metadata is
+// stored in the ExternalMetadata property of a file.
+const MetadataRequestKey = "instill-request"

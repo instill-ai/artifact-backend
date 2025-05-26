@@ -94,18 +94,16 @@ func (s *Service) ConvertToMDModel(ctx context.Context, fileUID uuid.UUID, calle
 	defer cancel()
 
 	logger, _ := logger.GetZapLogger(ctx)
-	var md metadata.MD
-	if requester != uuid.Nil {
-		md = metadata.New(map[string]string{
-			constant.HeaderUserUIDKey:      caller.String(),
-			constant.HeaderAuthTypeKey:     "user",
-			constant.HeaderRequesterUIDKey: requester.String(),
-		})
-	} else {
-		md = metadata.New(map[string]string{
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		pairs := map[string]string{
 			constant.HeaderUserUIDKey:  caller.String(),
 			constant.HeaderAuthTypeKey: "user",
-		})
+		}
+		if requester != uuid.Nil {
+			pairs[constant.HeaderRequesterUIDKey] = requester.String()
+		}
+		md = metadata.New(pairs)
 	}
 	ctx = metadata.NewOutgoingContext(ctx, md)
 

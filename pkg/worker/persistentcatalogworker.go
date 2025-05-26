@@ -3,12 +3,15 @@ package worker
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"runtime/debug"
 	"sync"
 	"time"
 
 	"go.uber.org/zap"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/gofrs/uuid"
 	"github.com/instill-ai/artifact-backend/pkg/constant"
@@ -145,9 +148,17 @@ func (wp *persistentCatalogFileToEmbWorkerPool) startWorker(ctx context.Context,
 		case file, ok := <-wp.channel:
 			if !ok {
 				// Job channel is closed, exit the worker
-				fmt.Printf("Job channel closed, worker %d exiting\n", workerID)
+				logger.Info("Job channel closed, exiting worker", zap.Int("workerID", workerID))
 				return
 			}
+
+			// Include file request metadata in the context
+			md, err := extractRequestFromMetadata(file.ExternalMetadataUnmarshal)
+			if err != nil {
+				logger.Error("Failed to propagate request context", zap.Error(err))
+				continue
+			}
+			ctx := metadata.NewIncomingContext(ctx, md)
 
 			// register file process worker in redis and extend the lifetime
 			ok, stopRegisterFunc := registerFileWorker(ctx, wp.svc, file.UID.String(), extensionHelperPeriod, workerLifetime)
@@ -161,7 +172,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) startWorker(ctx context.Context,
 			// Because the file is from the dispatcher, the file status is guaranteed to be incomplete
 			// but when the worker wakes up and tries to process the file, the file status might have been updated by other workers.
 			// So we need to check the file status again to ensure the file is still same as when the worker wakes up
-			err := checkFileStatus(ctx, wp.svc, file)
+			err = checkFileStatus(ctx, wp.svc, file)
 			if err != nil {
 				logger.Warn("File status not match. skip processing", zap.String("file uid", file.UID.String()), zap.Error(err))
 				if stopRegisterFunc != nil {
@@ -761,4 +772,26 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processCompletedFile(ctx context
 	logger, _ := logger.GetZapLogger(ctx)
 	logger.Info("File to embeddings process completed.", zap.String("File uid", file.UID.String()))
 	return nil
+}
+
+func extractRequestFromMetadata(externalMetadata *structpb.Struct) (metadata.MD, error) {
+	md := metadata.MD{}
+	if externalMetadata == nil {
+		return md, nil
+	}
+
+	// In order to simplify the code translating metadata.MD <->
+	// structpb.Struct, JSON marshalling is used. This is less efficient than
+	// leveraging the knowledge about the metadata structure (a
+	// map[string][]string), but readability has been prioritized.
+	j, err := externalMetadata.Fields[constant.MetadataRequestKey].GetStructValue().MarshalJSON()
+	if err != nil {
+		return nil, fmt.Errorf("marshalling metadata: %w", err)
+	}
+
+	if err := json.Unmarshal(j, &md); err != nil {
+		return nil, fmt.Errorf("unmarshalling metadata: %w", err)
+	}
+
+	return md, nil
 }
