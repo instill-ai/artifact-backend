@@ -12,12 +12,10 @@ import (
 
 	"github.com/gofrs/uuid"
 	"go.uber.org/zap"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	pdfcpu "github.com/pdfcpu/pdfcpu/pkg/api"
 
-	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
@@ -94,18 +92,6 @@ func (s *Service) ConvertToMDModel(ctx context.Context, fileUID uuid.UUID, calle
 	defer cancel()
 
 	logger, _ := logger.GetZapLogger(ctx)
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		pairs := map[string]string{
-			constant.HeaderUserUIDKey:  caller.String(),
-			constant.HeaderAuthTypeKey: "user",
-		}
-		if requester != uuid.Nil {
-			pairs[constant.HeaderRequesterUIDKey] = requester.String()
-		}
-		md = metadata.New(pairs)
-	}
-	ctx = metadata.NewOutgoingContext(ctx, md)
 
 	// Get the appropriate prefix for the file type
 	prefix := getFileTypePrefix(fileType)

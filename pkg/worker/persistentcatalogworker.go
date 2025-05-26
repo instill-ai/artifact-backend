@@ -158,7 +158,29 @@ func (wp *persistentCatalogFileToEmbWorkerPool) startWorker(ctx context.Context,
 				logger.Error("Failed to propagate request context", zap.Error(err))
 				continue
 			}
+
+			// TODO this fallback block can be removed once we make sure that
+			// every file file is stored with the request context.
+			if len(md) == 0 {
+				pairs := map[string]string{
+					constant.HeaderUserUIDKey:  file.CreatorUID.String(),
+					constant.HeaderAuthTypeKey: "user",
+				}
+				if file.RequesterUID != uuid.Nil {
+					pairs[constant.HeaderRequesterUIDKey] = file.RequesterUID.String()
+				}
+				md = metadata.New(pairs)
+			}
+
+			// We place the metadata in the incoming context as a propagation
+			// of the original request context. This is used by packages like
+			// instill-ai/x/resource to extract information from the context.
 			ctx := metadata.NewIncomingContext(ctx, md)
+
+			// The metadata is placed in the outgoing context as a way to
+			// propagate the request context to downstream services like
+			// pipeline or model.
+			ctx = metadata.NewOutgoingContext(ctx, md)
 
 			// register file process worker in redis and extend the lifetime
 			ok, stopRegisterFunc := registerFileWorker(ctx, wp.svc, file.UID.String(), extensionHelperPeriod, workerLifetime)
@@ -397,13 +419,13 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processConvertingFile(ctx contex
 		convertedMD, err = wp.svc.ConvertToMDModel(ctx, file.UID, file.CreatorUID, requesterUID, base64Data, artifactpb.FileType(artifactpb.FileType_value[file.Type]))
 		if err != nil {
 			logger.Error("Failed to convert pdf to md using docling model, fallback to pipeline.")
-			if convertedMD, err = wp.svc.ConvertToMDPipe(ctx, file.UID, file.CreatorUID, requesterUID, base64Data, artifactpb.FileType(artifactpb.FileType_value[file.Type])); err != nil {
+			if convertedMD, err = wp.svc.ConvertToMDPipe(ctx, file.UID, base64Data, artifactpb.FileType(artifactpb.FileType_value[file.Type])); err != nil {
 				logger.Error("Failed to convert pdf to md using pdf-to-md pipeline.", zap.String("File path", fileInMinIOPath))
 				return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
 			}
 		}
 	default:
-		if convertedMD, err = wp.svc.ConvertToMDPipe(ctx, file.UID, file.CreatorUID, requesterUID, base64Data, artifactpb.FileType(artifactpb.FileType_value[file.Type])); err != nil {
+		if convertedMD, err = wp.svc.ConvertToMDPipe(ctx, file.UID, base64Data, artifactpb.FileType(artifactpb.FileType_value[file.Type])); err != nil {
 			logger.Error("Failed to convert pdf to md using pdf-to-md pipeline.", zap.String("File path", fileInMinIOPath))
 			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
 		}
@@ -484,8 +506,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) procesSummarizingFile(ctx contex
 	}
 
 	// Common processing for all file types
-	requesterUID := file.RequesterUID
-	summary, err := wp.svc.GenerateSummary(ctx, file.CreatorUID, requesterUID, string(fileData), string(constant.DocumentFileType))
+	summary, err := wp.svc.GenerateSummary(ctx, string(fileData), string(constant.DocumentFileType))
 	if err != nil {
 		logger.Error("Failed to generate summary from file.", zap.String("File uid", file.UID.String()))
 		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
@@ -559,8 +580,6 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processChunkingFile(ctx context.
 	var err error
 	var contentChunks []service.Chunk
 
-	requesterUID := file.RequesterUID
-
 	// Get file data based on type
 	switch file.Type {
 	case artifactpb.FileType_FILE_TYPE_PDF.String(),
@@ -586,7 +605,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processChunkingFile(ctx context.
 		sourceTable = wp.svc.Repository.ConvertedFileTableName()
 		sourceUID = convertedFile.UID
 
-		contentChunks, err = wp.svc.ChunkMarkdownPipe(ctx, file.CreatorUID, requesterUID, string(fileData))
+		contentChunks, err = wp.svc.ChunkMarkdownPipe(ctx, string(fileData))
 		if err != nil {
 			logger.Error("Failed to get chunks from file.", zap.String("File uid", file.UID.String()))
 			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
@@ -604,7 +623,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processChunkingFile(ctx context.
 		sourceTable = wp.svc.Repository.KnowledgeBaseFileTableName()
 		sourceUID = file.UID
 
-		contentChunks, err = wp.svc.ChunkMarkdownPipe(ctx, file.CreatorUID, requesterUID, string(fileData))
+		contentChunks, err = wp.svc.ChunkMarkdownPipe(ctx, string(fileData))
 		if err != nil {
 			logger.Error("Failed to get chunks from file.", zap.String("File uid", file.UID.String()))
 			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
@@ -622,7 +641,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processChunkingFile(ctx context.
 		sourceTable = wp.svc.Repository.KnowledgeBaseFileTableName()
 		sourceUID = file.UID
 
-		contentChunks, err = wp.svc.ChunkTextPipe(ctx, file.CreatorUID, requesterUID, string(fileData))
+		contentChunks, err = wp.svc.ChunkTextPipe(ctx, string(fileData))
 		if err != nil {
 			logger.Error("Failed to get chunks from file.", zap.String("File uid", file.UID.String()))
 			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
@@ -632,7 +651,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processChunkingFile(ctx context.
 		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, fmt.Errorf("unsupported file type in processChunkingFile: %v", file.Type)
 	}
 
-	summaryChunks, err := wp.svc.ChunkTextPipe(ctx, file.CreatorUID, requesterUID, string(file.Summary))
+	summaryChunks, err := wp.svc.ChunkTextPipe(ctx, string(file.Summary))
 	if err != nil {
 		logger.Error("Failed to get chunks from file.", zap.String("File uid", file.UID.String()))
 		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
@@ -727,8 +746,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processEmbeddingFile(ctx context
 	}
 
 	// call the embedding pipeline
-	requesterUID := file.RequesterUID
-	vectors, err := wp.svc.EmbeddingTextPipe(ctx, file.CreatorUID, requesterUID, texts)
+	vectors, err := wp.svc.EmbeddingTextPipe(ctx, texts)
 	if err != nil {
 		logger.Error("Failed to get embeddings from chunks. using embedding pipeline", zap.String("SourceTable", sourceTable), zap.String("SourceUID", sourceUID.String()))
 		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err

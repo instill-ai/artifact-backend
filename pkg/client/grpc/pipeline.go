@@ -13,17 +13,17 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/middleware"
 
-	pb "github.com/instill-ai/protogen-go/model/model/v1alpha"
+	pb "github.com/instill-ai/protogen-go/pipeline/pipeline/v1beta"
 )
 
-// NewModelPublicClient returns an initialized gRPC client for the Model public
+// NewPipelinePublicClient returns an initialized gRPC client for the Pipeline public
 // API.
-func NewModelPublicClient(ctx context.Context) (pb.ModelPublicServiceClient, *grpc.ClientConn) {
+func NewPipelinePublicClient(ctx context.Context) (pb.PipelinePublicServiceClient, *grpc.ClientConn) {
 	logger, _ := logger.GetZapLogger(ctx)
 
 	credDialOpt := grpc.WithTransportCredentials(insecure.NewCredentials())
-	if config.Config.ModelBackend.HTTPS.Cert != "" && config.Config.ModelBackend.HTTPS.Key != "" {
-		creds, err := credentials.NewServerTLSFromFile(config.Config.ModelBackend.HTTPS.Cert, config.Config.ModelBackend.HTTPS.Key)
+	if config.Config.PipelineBackend.HTTPS.Cert != "" && config.Config.PipelineBackend.HTTPS.Key != "" {
+		creds, err := credentials.NewServerTLSFromFile(config.Config.PipelineBackend.HTTPS.Cert, config.Config.PipelineBackend.HTTPS.Key)
 		if err != nil {
 			logger.Fatal(err.Error())
 		}
@@ -31,18 +31,16 @@ func NewModelPublicClient(ctx context.Context) (pb.ModelPublicServiceClient, *gr
 	}
 
 	clientConn, err := grpc.NewClient(
-		fmt.Sprintf("%v:%v", config.Config.ModelBackend.Host, config.Config.ModelBackend.PublicPort),
+		fmt.Sprintf("%v:%v", config.Config.PipelineBackend.Host, config.Config.PipelineBackend.PublicPort),
 		credDialOpt,
 		grpc.WithUnaryInterceptor(middleware.MetadataPropagatorInterceptor),
-		grpc.WithDefaultCallOptions(
-			grpc.MaxCallRecvMsgSize(constant.MaxPayloadSize),
-			grpc.MaxCallSendMsgSize(constant.MaxPayloadSize),
-		),
+		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(constant.MaxPayloadSize),
+			grpc.MaxCallSendMsgSize(constant.MaxPayloadSize)),
 	)
 	if err != nil {
 		logger.Error(err.Error())
 		return nil, nil
 	}
 
-	return pb.NewModelPublicServiceClient(clientConn), clientConn
+	return pb.NewPipelinePublicServiceClient(clientConn), clientConn
 }

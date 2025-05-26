@@ -8,12 +8,9 @@ import (
 	"github.com/gofrs/uuid"
 	"go.uber.org/zap"
 
-	"github.com/instill-ai/artifact-backend/pkg/constant"
-	"github.com/instill-ai/artifact-backend/pkg/customerror"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
-	"github.com/instill-ai/artifact-backend/pkg/resource"
 	"github.com/instill-ai/artifact-backend/pkg/service"
 
 	artifactPb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
@@ -27,17 +24,6 @@ func (ph *PublicHandler) QuestionAnswering(
 
 	log, _ := logger.GetZapLogger(ctx)
 
-	authUser, err := getUserUIDFromContext(ctx)
-	if err != nil {
-		log.Error("failed to get user id from header", zap.Error(err))
-		return nil, fmt.Errorf("failed to get user id from header: %v. err: %w", err, customerror.ErrUnauthenticated)
-	}
-	// turn uid to uuid
-	authUserUUID, err := uuid.FromString(authUser)
-	if err != nil {
-		log.Error("failed to parse user id", zap.Error(err))
-		return nil, fmt.Errorf("failed to parse user id: %v. err: %w", err, customerror.ErrUnauthenticated)
-	}
 	t := time.Now()
 	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
 	if err != nil {
@@ -61,7 +47,6 @@ func (ph *PublicHandler) QuestionAnswering(
 		return nil, fmt.Errorf("failed to check permission. err: %w", err)
 	}
 	if !granted {
-		log.Error("permission denied", zap.String("user_id", authUser), zap.String("kb_id", kb.UID.String()))
 		return nil, fmt.Errorf("SimilarityChunksSearch permission denied. err: %w", service.ErrNoPermission)
 	}
 	log.Info("check permission", zap.Duration("duration", time.Since(t)))
@@ -81,16 +66,7 @@ func (ph *PublicHandler) QuestionAnswering(
 		NamespaceId: req.GetNamespaceId(),
 	}
 
-	requester := resource.GetRequestSingleHeader(ctx, constant.HeaderRequesterUIDKey)
-	requesterUUID := uuid.Nil
-	if requester != "" {
-		requesterUUID, err = uuid.FromString(requester)
-		if err != nil {
-			log.Error("failed to parse requester id", zap.Error(err))
-			return nil, fmt.Errorf("failed to parse requester uid: %v. err: %w", err, customerror.ErrUnauthenticated)
-		}
-	}
-	simChunksScores, err := ph.service.SimilarityChunksSearch(ctx, authUserUUID, requesterUUID, ownerUID, scReq)
+	simChunksScores, err := ph.service.SimilarityChunksSearch(ctx, ownerUID, scReq)
 	if err != nil {
 		log.Error("failed to get similarity chunks", zap.Error(err))
 		return nil, fmt.Errorf("failed to get similarity chunks. err: %w", err)
@@ -160,7 +136,7 @@ func (ph *PublicHandler) QuestionAnswering(
 	for _, simChunk := range simChunks {
 		chunksForQA = append(chunksForQA, simChunk.TextContent)
 	}
-	answer, err := ph.service.QuestionAnsweringPipe(ctx, authUserUUID, requesterUUID, req.Question, chunksForQA)
+	answer, err := ph.service.QuestionAnsweringPipe(ctx, req.Question, chunksForQA)
 	if err != nil {
 		log.Error("failed to get question answering response", zap.Error(err))
 		return nil, fmt.Errorf("failed to get question answering response. err: %w", err)

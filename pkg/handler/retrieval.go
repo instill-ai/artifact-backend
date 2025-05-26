@@ -10,34 +10,20 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/instill-ai/artifact-backend/pkg/constant"
-	"github.com/instill-ai/artifact-backend/pkg/customerror"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
-	"github.com/instill-ai/artifact-backend/pkg/resource"
 	"github.com/instill-ai/artifact-backend/pkg/service"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
 func (ph *PublicHandler) SimilarityChunksSearch(
-	ctx context.Context, req *artifactpb.SimilarityChunksSearchRequest) (
-	*artifactpb.SimilarityChunksSearchResponse,
-	error) {
-
+	ctx context.Context,
+	req *artifactpb.SimilarityChunksSearchRequest,
+) (*artifactpb.SimilarityChunksSearchResponse, error) {
 	log, _ := logger.GetZapLogger(ctx)
 
-	uid, err := getUserUIDFromContext(ctx)
-	if err != nil {
-		log.Error("failed to get user id from header", zap.Error(err))
-		return nil, fmt.Errorf("failed to get user id from header: %v. err: %w", err, customerror.ErrUnauthenticated)
-	}
-	// turn uid to uuid
-	uidUUID, err := uuid.FromString(uid)
-	if err != nil {
-		log.Error("failed to parse user id", zap.Error(err))
-		return nil, fmt.Errorf("failed to parse user id: %v. err: %w", err, customerror.ErrUnauthenticated)
-	}
 	t := time.Now()
 	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
 	if err != nil {
@@ -61,7 +47,6 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 		return nil, fmt.Errorf("failed to check permission. err: %w", err)
 	}
 	if !granted {
-		log.Error("permission denied", zap.String("user_id", uid), zap.String("kb_id", kb.UID.String()))
 		return nil, fmt.Errorf("SimilarityChunksSearch permission denied. err: %w", service.ErrNoPermission)
 	}
 	log.Info("check permission", zap.Duration("duration", time.Since(t)))
@@ -72,10 +57,8 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 		log.Error("failed to check requester permission", zap.Error(err))
 		return nil, fmt.Errorf("failed to check requester permission. err: %w", err)
 	}
-	reqUIDString := resource.GetRequestSingleHeader(ctx, constant.HeaderRequesterUIDKey)
-	requesterUID := uuid.FromStringOrNil(reqUIDString)
 	// retrieve the chunks based on the similarity
-	simChunksScores, err := ph.service.SimilarityChunksSearch(ctx, uidUUID, requesterUID, ownerUID, req)
+	simChunksScores, err := ph.service.SimilarityChunksSearch(ctx, ownerUID, req)
 	if err != nil {
 		log.Error("failed to get similarity chunks", zap.Error(err))
 		return nil, fmt.Errorf("failed to get similarity chunks. err: %w", err)
