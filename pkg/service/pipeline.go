@@ -8,10 +8,8 @@ import (
 
 	"github.com/gofrs/uuid"
 	"go.uber.org/zap"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
 
@@ -66,22 +64,8 @@ var PresetPipelinesList = []struct {
 }
 
 // ConvertToMDPipe using converting pipeline to convert some file type to MD and consume caller's credits
-func (s *Service) ConvertToMDPipe(ctx context.Context, fileUID uuid.UUID, caller uuid.UUID, requester uuid.UUID, fileBase64 string, fileType artifactpb.FileType) (string, error) {
+func (s *Service) ConvertToMDPipe(ctx context.Context, fileUID uuid.UUID, fileBase64 string, fileType artifactpb.FileType) (string, error) {
 	logger, _ := logger.GetZapLogger(ctx)
-	var md metadata.MD
-	if requester != uuid.Nil {
-		md = metadata.New(map[string]string{
-			constant.HeaderUserUIDKey:      caller.String(),
-			constant.HeaderAuthTypeKey:     "user",
-			constant.HeaderRequesterUIDKey: requester.String(),
-		})
-	} else {
-		md = metadata.New(map[string]string{
-			constant.HeaderUserUIDKey:  caller.String(),
-			constant.HeaderAuthTypeKey: "user",
-		})
-	}
-	ctx = metadata.NewOutgoingContext(ctx, md)
 
 	// Get the appropriate prefix for the file type
 	prefix := getFileTypePrefix(fileType)
@@ -222,22 +206,7 @@ type Chunk = struct {
 
 // GenerateSummary triggers the generate summary pipeline, processes markdown/text, and deducts credits from the caller's account.
 // It generate summary from content.
-func (s *Service) GenerateSummary(ctx context.Context, caller uuid.UUID, requester uuid.UUID, content, fileType string) (string, error) {
-	var md metadata.MD
-	if requester != uuid.Nil {
-		md = metadata.New(map[string]string{
-			constant.HeaderUserUIDKey:      caller.String(),
-			constant.HeaderAuthTypeKey:     "user",
-			constant.HeaderRequesterUIDKey: requester.String(),
-		})
-	} else {
-		md = metadata.New(map[string]string{
-			constant.HeaderUserUIDKey:  caller.String(),
-			constant.HeaderAuthTypeKey: "user",
-		})
-	}
-
-	ctx = metadata.NewOutgoingContext(ctx, md)
+func (s *Service) GenerateSummary(ctx context.Context, content, fileType string) (string, error) {
 	req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
 		NamespaceId: NamespaceID,
 		PipelineId:  GenerateSummaryPipelineID,
@@ -286,21 +255,7 @@ func getGenerateSummaryResult(resp *pipelinepb.TriggerNamespacePipelineReleaseRe
 
 // ChunkMarkdownPipe triggers the markdown splitting pipeline, processes the markdown text, and deducts credits from the caller's account.
 // It sets up the necessary metadata, triggers the pipeline, and processes the response to return the non-empty chunks.
-func (s *Service) ChunkMarkdownPipe(ctx context.Context, caller uuid.UUID, requester uuid.UUID, markdown string) ([]Chunk, error) {
-	var md metadata.MD
-	if requester != uuid.Nil {
-		md = metadata.New(map[string]string{
-			constant.HeaderUserUIDKey:      caller.String(),
-			constant.HeaderAuthTypeKey:     "user",
-			constant.HeaderRequesterUIDKey: requester.String(),
-		})
-	} else {
-		md = metadata.New(map[string]string{
-			constant.HeaderUserUIDKey:  caller.String(),
-			constant.HeaderAuthTypeKey: "user",
-		})
-	}
-	ctx = metadata.NewOutgoingContext(ctx, md)
+func (s *Service) ChunkMarkdownPipe(ctx context.Context, markdown string) ([]Chunk, error) {
 	req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
 		NamespaceId: NamespaceID,
 		PipelineId:  ChunkMdPipelineID,
@@ -367,21 +322,7 @@ func GetChunksFromResponse(resp *pipelinepb.TriggerNamespacePipelineReleaseRespo
 
 // ChunkTextPipe splits the input text into chunks using the splitting pipeline and consumes the caller's credits.
 // It sets up the necessary metadata, triggers the pipeline, and processes the response to return the non-empty chunks.
-func (s *Service) ChunkTextPipe(ctx context.Context, caller uuid.UUID, requester uuid.UUID, text string) ([]Chunk, error) {
-	var md metadata.MD
-	if requester != uuid.Nil {
-		md = metadata.New(map[string]string{
-			constant.HeaderUserUIDKey:      caller.String(),
-			constant.HeaderAuthTypeKey:     "user",
-			constant.HeaderRequesterUIDKey: requester.String(),
-		})
-	} else {
-		md = metadata.New(map[string]string{
-			constant.HeaderUserUIDKey:  caller.String(),
-			constant.HeaderAuthTypeKey: "user",
-		})
-	}
-	ctx = metadata.NewOutgoingContext(ctx, md)
+func (s *Service) ChunkTextPipe(ctx context.Context, text string) ([]Chunk, error) {
 	req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
 		NamespaceId: NamespaceID,
 		PipelineId:  ChunkTextPipelineID,
@@ -434,25 +375,11 @@ func (s *Service) ChunkTextPipe(ctx context.Context, caller uuid.UUID, requester
 //   - Limits concurrent processing to 5 goroutines
 //   - Maintains input order in the output
 //   - Cancels all operations if any batch fails
-func (s *Service) EmbeddingTextPipe(ctx context.Context, caller uuid.UUID, requester uuid.UUID, texts []string) ([][]float32, error) {
+func (s *Service) EmbeddingTextPipe(ctx context.Context, texts []string) ([][]float32, error) {
 	ctx, ctxCancel := context.WithCancel(ctx)
 	defer ctxCancel()
 	const maxBatchSize = 32
 	const maxConcurrentGoroutines = 5
-	var md metadata.MD
-	if requester != uuid.Nil {
-		md = metadata.New(map[string]string{
-			constant.HeaderUserUIDKey:      caller.String(),
-			constant.HeaderAuthTypeKey:     "user",
-			constant.HeaderRequesterUIDKey: requester.String(),
-		})
-	} else {
-		md = metadata.New(map[string]string{
-			constant.HeaderUserUIDKey:  caller.String(),
-			constant.HeaderAuthTypeKey: "user",
-		})
-	}
-
 	var allResults [][]float32
 	var wg sync.WaitGroup
 	errChan := make(chan error, len(texts)/maxBatchSize+1)
@@ -490,8 +417,6 @@ func (s *Service) EmbeddingTextPipe(ctx context.Context, caller uuid.UUID, reque
 			defer wg.Done()
 
 			func(batch []string, index int) {
-				ctx_ := metadata.NewOutgoingContext(ctx, md)
-
 				inputs := make([]*structpb.Struct, 0, len(batch))
 				for _, text := range batch {
 					inputs = append(inputs, &structpb.Struct{
@@ -507,7 +432,7 @@ func (s *Service) EmbeddingTextPipe(ctx context.Context, caller uuid.UUID, reque
 					ReleaseId:   EmbedTextVersion,
 					Inputs:      inputs,
 				}
-				res, err := s.PipelinePub.TriggerNamespacePipelineRelease(ctx_, req)
+				res, err := s.PipelinePub.TriggerNamespacePipelineRelease(ctx, req)
 				if err != nil {
 					errChan <- fmt.Errorf("failed to trigger %s pipeline. err:%w", EmbedTextPipelineID, err)
 					ctxCancel()
@@ -577,26 +502,12 @@ func GetVectorsFromResponse(resp *pipelinepb.TriggerNamespacePipelineReleaseResp
 }
 
 // VectoringText using embedding pipeline to vector text and consume caller's credits
-func (s *Service) QuestionAnsweringPipe(ctx context.Context, caller uuid.UUID, requester uuid.UUID, question string, simChunks []string) (string, error) {
-	var md metadata.MD
-	if requester != uuid.Nil {
-		md = metadata.New(map[string]string{
-			constant.HeaderUserUIDKey:      caller.String(),
-			constant.HeaderAuthTypeKey:     "user",
-			constant.HeaderRequesterUIDKey: requester.String(),
-		})
-	} else {
-		md = metadata.New(map[string]string{
-			constant.HeaderUserUIDKey:  caller.String(),
-			constant.HeaderAuthTypeKey: "user",
-		})
-	}
+func (s *Service) QuestionAnsweringPipe(ctx context.Context, question string, simChunks []string) (string, error) {
 	// create a retired chunk var that combines all the chunks by /n/n
 	retrievedChunk := ""
 	for _, chunk := range simChunks {
 		retrievedChunk += chunk + "\n\n"
 	}
-	ctx = metadata.NewOutgoingContext(ctx, md)
 	req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
 		NamespaceId: NamespaceID,
 		PipelineId:  QAPipelineID,

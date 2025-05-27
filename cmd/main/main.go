@@ -343,16 +343,9 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 ) {
 
 	// init pipeline grpc client
-	pipelinePublicGrpcConn, err := grpcclient.NewGRPCConn(
-		fmt.Sprintf("%v:%v", config.Config.PipelineBackend.Host,
-			config.Config.PipelineBackend.PublicPort),
-		config.Config.PipelineBackend.HTTPS.Cert,
-		config.Config.PipelineBackend.HTTPS.Key)
-	if err != nil {
-		logger.Fatal(fmt.Sprintf("failed to create pipeline public grpc client: %v", err))
-	}
-	pipelinePublicServiceClient := pipelinepb.NewPipelinePublicServiceClient(pipelinePublicGrpcConn)
+	pipelinePublicServiceClient, pipelinePublicServiceClientConn := grpcclient.NewPipelinePublicClient(ctx)
 
+	// init model grpc client
 	modelPublicServiceClient, modelPublicServiceClientConn := grpcclient.NewModelPublicClient(ctx)
 
 	// initialize mgmt clients
@@ -405,7 +398,7 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 
 	}
 	aclClient := acl.NewACLClient(fgaClient, fgaReplicaClient, redisClient)
-	return pipelinePublicServiceClient, pipelinePublicGrpcConn, modelPublicServiceClient, modelPublicServiceClientConn, mgmtPublicServiceClient, mgmtPrivateServiceClientConn, mgmtPrivateServiceClient, mgmtPublicServiceClientConn, redisClient, influxDBClient, db, minioClient, milvusClient, aclClient, fgaClientConn, fgaReplicaClientConn
+	return pipelinePublicServiceClient, pipelinePublicServiceClientConn, modelPublicServiceClient, modelPublicServiceClientConn, mgmtPublicServiceClient, mgmtPrivateServiceClientConn, mgmtPrivateServiceClient, mgmtPublicServiceClientConn, redisClient, influxDBClient, db, minioClient, milvusClient, aclClient, fgaClientConn, fgaReplicaClientConn
 }
 
 func newGrpcOptionAndCreds(logger *zap.Logger) ([]grpc.ServerOption, credentials.TransportCredentials) {

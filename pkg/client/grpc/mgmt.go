@@ -11,6 +11,7 @@ import (
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
+	"github.com/instill-ai/artifact-backend/pkg/middleware"
 
 	pb "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
 )
@@ -20,24 +21,19 @@ import (
 func NewMGMTPrivateClient(ctx context.Context) (pb.MgmtPrivateServiceClient, *grpc.ClientConn) {
 	logger, _ := logger.GetZapLogger(ctx)
 
-	var clientDialOpts grpc.DialOption
+	credDialOpt := grpc.WithTransportCredentials(insecure.NewCredentials())
 	if config.Config.MgmtBackend.HTTPS.Cert != "" && config.Config.MgmtBackend.HTTPS.Key != "" {
 		creds, err := credentials.NewServerTLSFromFile(config.Config.MgmtBackend.HTTPS.Cert, config.Config.MgmtBackend.HTTPS.Key)
 		if err != nil {
 			logger.Fatal(err.Error())
 		}
-		clientDialOpts = grpc.WithTransportCredentials(creds)
-	} else {
-		clientDialOpts = grpc.WithTransportCredentials(insecure.NewCredentials())
+		credDialOpt = grpc.WithTransportCredentials(creds)
 	}
 
 	clientConn, err := grpc.NewClient(
-		fmt.Sprintf(
-			"%v:%v",
-			config.Config.MgmtBackend.Host,
-			config.Config.MgmtBackend.PrivatePort,
-		),
-		clientDialOpts,
+		fmt.Sprintf("%v:%v", config.Config.MgmtBackend.Host, config.Config.MgmtBackend.PrivatePort),
+		credDialOpt,
+		grpc.WithUnaryInterceptor(middleware.MetadataPropagatorInterceptor),
 		grpc.WithDefaultCallOptions(
 			grpc.MaxCallRecvMsgSize(constant.MaxPayloadSize),
 			grpc.MaxCallSendMsgSize(constant.MaxPayloadSize),
@@ -56,18 +52,22 @@ func NewMGMTPrivateClient(ctx context.Context) (pb.MgmtPrivateServiceClient, *gr
 func NewMGMTPublicClient(ctx context.Context) (pb.MgmtPublicServiceClient, *grpc.ClientConn) {
 	logger, _ := logger.GetZapLogger(ctx)
 
-	var clientDialOpts grpc.DialOption
+	credDialOpt := grpc.WithTransportCredentials(insecure.NewCredentials())
 	if config.Config.MgmtBackend.HTTPS.Cert != "" && config.Config.MgmtBackend.HTTPS.Key != "" {
 		creds, err := credentials.NewServerTLSFromFile(config.Config.MgmtBackend.HTTPS.Cert, config.Config.MgmtBackend.HTTPS.Key)
 		if err != nil {
 			logger.Fatal(err.Error())
 		}
-		clientDialOpts = grpc.WithTransportCredentials(creds)
-	} else {
-		clientDialOpts = grpc.WithTransportCredentials(insecure.NewCredentials())
+		credDialOpt = grpc.WithTransportCredentials(creds)
 	}
 
-	clientConn, err := grpc.NewClient(fmt.Sprintf("%v:%v", config.Config.MgmtBackend.Host, config.Config.MgmtBackend.PublicPort), clientDialOpts, grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(constant.MaxPayloadSize), grpc.MaxCallSendMsgSize(constant.MaxPayloadSize)))
+	clientConn, err := grpc.NewClient(
+		fmt.Sprintf("%v:%v", config.Config.MgmtBackend.Host, config.Config.MgmtBackend.PublicPort),
+		credDialOpt,
+		grpc.WithUnaryInterceptor(middleware.MetadataPropagatorInterceptor),
+		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(constant.MaxPayloadSize),
+			grpc.MaxCallSendMsgSize(constant.MaxPayloadSize)),
+	)
 	if err != nil {
 		logger.Error(err.Error())
 		return nil, nil

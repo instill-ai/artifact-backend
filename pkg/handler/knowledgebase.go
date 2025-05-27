@@ -12,7 +12,6 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc/metadata"
 
-	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/customerror"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
@@ -20,6 +19,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/utils"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	constantx "github.com/instill-ai/x/constant"
 )
 
 var alphabet = "abcdefghijklmnopqrstuvwxyz"
@@ -485,7 +485,7 @@ func (ph *PublicHandler) DeleteCatalog(ctx context.Context, req *artifactpb.Dele
 }
 func getUserUIDFromContext(ctx context.Context) (string, error) {
 	md, _ := metadata.FromIncomingContext(ctx)
-	if v, ok := md[strings.ToLower(constant.HeaderUserUIDKey)]; ok {
+	if v, ok := md[strings.ToLower(constantx.HeaderUserUIDKey)]; ok {
 		return v[0], nil
 	}
 	return "", fmt.Errorf("user id not found in context. err: %w", customerror.ErrUnauthenticated)

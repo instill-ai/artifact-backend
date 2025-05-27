@@ -3,11 +3,14 @@ package handler
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"strings"
 
 	"github.com/gofrs/uuid"
 	"go.uber.org/zap"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"gorm.io/gorm"
 
@@ -16,10 +19,11 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
-	"github.com/instill-ai/artifact-backend/pkg/resource"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
+	"github.com/instill-ai/x/resource"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	constantx "github.com/instill-ai/x/constant"
 )
 
 func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.UploadCatalogFileRequest) (*artifactpb.UploadCatalogFileResponse, error) {
@@ -77,6 +81,17 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 		return nil, fmt.Errorf("failed to get namespace tier. err: %w", err)
 	}
 
+	// Because file processing is done by the worker, which pulls records from
+	// the database, we need to use the file ExternalMetadata field in the file
+	// to propagate the context.
+	//
+	// This field will be used internally and should be transparent to API
+	// users.
+	md, err := appendRequestMetadata(ctx, req.GetFile().GetExternalMetadata())
+	if err != nil {
+		return nil, fmt.Errorf("appending request metadata to context: %w", err)
+	}
+
 	// upload file to minio and database
 	var res *repository.KnowledgeBaseFile
 	if !hasObject {
@@ -131,7 +146,7 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 			Destination:               destination,
 			ProcessStatus:             artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_NOTSTARTED)],
 			Size:                      fileSize,
-			ExternalMetadataUnmarshal: req.File.ExternalMetadata,
+			ExternalMetadataUnmarshal: md,
 		}
 
 		// create catalog file in database
@@ -196,7 +211,7 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 			Destination:               object.Destination,
 			ProcessStatus:             artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_NOTSTARTED)],
 			Size:                      object.Size,
-			ExternalMetadataUnmarshal: req.File.ExternalMetadata,
+			ExternalMetadataUnmarshal: md,
 		}
 
 		// create catalog file in database
@@ -215,6 +230,7 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 			return nil, err
 		}
 	}
+
 	return &artifactpb.UploadCatalogFileResponse{
 		File: &artifactpb.File{
 			FileUid:          res.UID.String(),
@@ -229,10 +245,42 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 			Size:             res.Size,
 			TotalChunks:      0,
 			TotalTokens:      0,
-			ExternalMetadata: res.ExternalMetadataUnmarshal,
+			ExternalMetadata: res.PublicExternalMetadataUnmarshal(),
 			ObjectUid:        req.File.ObjectUid,
 		},
 	}, nil
+}
+
+// appendRequestMetadata appends the gRPC metadata present in the context to
+// the provided ExternalMetadata under the key constant.MetadataRequestKey.
+func appendRequestMetadata(ctx context.Context, externalMetadata *structpb.Struct) (*structpb.Struct, error) {
+	if externalMetadata == nil {
+		externalMetadata = &structpb.Struct{
+			Fields: make(map[string]*structpb.Value, 1),
+		}
+	}
+
+	md, hasMetadata := metadata.FromIncomingContext(ctx)
+	if !hasMetadata {
+		return externalMetadata, nil
+	}
+
+	// In order to simplify the code translating metadata.MD <->
+	// structpb.Struct, JSON marshalling is used. This is less efficient than
+	// leveraging the knowledge about the metadata structure (a
+	// map[string][]string), but readability has been prioritized.
+	j, err := json.Marshal(md)
+	if err != nil {
+		return nil, fmt.Errorf("marshalling metadata: %w", err)
+	}
+
+	mdStruct := new(structpb.Struct)
+	if err := mdStruct.UnmarshalJSON(j); err != nil {
+		return nil, fmt.Errorf("unmarshalling metadata into struct: %w", err)
+	}
+
+	externalMetadata.Fields[constant.MetadataRequestKey] = structpb.NewStructValue(mdStruct)
+	return externalMetadata, nil
 }
 
 // getFileSize returns the size of the file in bytes and a human-readable string
@@ -340,7 +388,7 @@ func (ph *PublicHandler) MoveFileToCatalog(ctx context.Context, req *artifactpb.
 	// Prepare file content and metadata for upload
 	fileContentBase64 := base64.StdEncoding.EncodeToString(fileContent)
 	fileType := artifactpb.FileType(artifactpb.FileType_value[sourceFile.Type])
-	externalMetadata := sourceFile.ExternalMetadataUnmarshal
+	externalMetadata := sourceFile.PublicExternalMetadataUnmarshal()
 
 	// Step 4: Create file in target catalog
 	uploadReq := &artifactpb.UploadCatalogFileRequest{
@@ -482,7 +530,7 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 				UpdateTime:       timestamppb.New(*kbFile.UpdateTime),
 				ProcessStatus:    artifactpb.FileProcessStatus(artifactpb.FileProcessStatus_value[kbFile.ProcessStatus]),
 				Size:             kbFile.Size,
-				ExternalMetadata: kbFile.ExternalMetadataUnmarshal,
+				ExternalMetadata: kbFile.PublicExternalMetadataUnmarshal(),
 				TotalChunks:      int32(totalChunks[kbFile.UID]),
 				TotalTokens:      int32(totalTokens[kbFile.UID]),
 				ObjectUid:        objectUID.String(),
@@ -707,7 +755,7 @@ func (ph *PublicHandler) ProcessCatalogFiles(ctx context.Context, req *artifactp
 		return nil, fmt.Errorf("failed to check requester permission. err: %w", err)
 	}
 
-	requesterUID := resource.GetRequestSingleHeader(ctx, constant.HeaderRequesterUIDKey)
+	requesterUID := resource.GetRequestSingleHeader(ctx, constantx.HeaderRequesterUIDKey)
 	requesterUUID := uuid.FromStringOrNil(requesterUID)
 
 	files, err := ph.service.Repository.ProcessKnowledgeBaseFiles(ctx, req.FileUids, requesterUUID)

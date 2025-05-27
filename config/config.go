@@ -193,7 +193,7 @@ func Init() error {
 			"CFG_",
 			".",
 			func(k string, v string) (string, interface{}) {
-				key := strings.Replace(strings.ToLower(strings.TrimPrefix(k, "CFG_")), "_", ".", -1)
+				key := strings.ReplaceAll(strings.ToLower(strings.TrimPrefix(k, "CFG_")), "_", ".")
 				if strings.Contains(v, ",") {
 					return key, strings.Split(strings.TrimSpace(v), ",")
 				}

@@ -5,8 +5,10 @@ import (
 
 	"github.com/gofrs/uuid"
 
-	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/resource"
+	"github.com/instill-ai/x/constant"
+
+	resourcex "github.com/instill-ai/x/resource"
 )
 
 // CheckNamespacePermission checks if the user has permission to access the namespace.
@@ -22,7 +24,7 @@ func (s *Service) CheckNamespacePermission(ctx context.Context, ns *resource.Nam
 			return ErrNoPermission
 		}
 		// check if the user is the owner of the namespace
-	} else if ns.NsUID != uuid.FromStringOrNil(resource.GetRequestSingleHeader(ctx, constant.HeaderUserUIDKey)) {
+	} else if ns.NsUID != uuid.FromStringOrNil(resourcex.GetRequestSingleHeader(ctx, constant.HeaderUserUIDKey)) {
 		return ErrNoPermission
 	}
 	return nil

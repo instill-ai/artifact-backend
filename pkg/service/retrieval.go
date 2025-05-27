@@ -19,14 +19,15 @@ type SimChunk struct {
 	Score    float32
 }
 
-func (s *Service) SimilarityChunksSearch(ctx context.Context, caller uuid.UUID, requester uuid.UUID, ownerUID uuid.UUID, req *artifactPb.SimilarityChunksSearchRequest) ([]SimChunk, error) {
+// SimilarityChunksSearch ...
+func (s *Service) SimilarityChunksSearch(ctx context.Context, ownerUID uuid.UUID, req *artifactPb.SimilarityChunksSearchRequest) ([]SimChunk, error) {
 	log, _ := logger.GetZapLogger(ctx)
 	t := time.Now()
 	// check if text prompt is empty
 	if req.TextPrompt == "" {
 		return nil, fmt.Errorf("text prompt is empty in SimilarityChunksSearch")
 	}
-	textVector, err := s.EmbeddingTextPipe(ctx, caller, requester, []string{req.TextPrompt})
+	textVector, err := s.EmbeddingTextPipe(ctx, []string{req.TextPrompt})
 	if err != nil {
 		log.Error("failed to vectorize text", zap.Error(err))
 		return nil, fmt.Errorf("failed to vectorize text. err: %w", err)

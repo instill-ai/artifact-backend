@@ -18,7 +18,9 @@ import (
 
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/constant"
-	"github.com/instill-ai/artifact-backend/pkg/resource"
+	"github.com/instill-ai/x/resource"
+
+	constantx "github.com/instill-ai/x/constant"
 )
 
 type ACLClient struct {
@@ -99,7 +101,7 @@ func InitOpenFGAClient(ctx context.Context, host string, port int) (openfga.Open
 }
 
 func (c *ACLClient) getClient(ctx context.Context, mode Mode) openfga.OpenFGAServiceClient {
-	userUID := resource.GetRequestSingleHeader(ctx, constant.HeaderUserUIDKey)
+	userUID := resource.GetRequestSingleHeader(ctx, constantx.HeaderUserUIDKey)
 	if c.redisClient == nil {
 		return c.writeClient
 	}
@@ -131,14 +133,17 @@ func (c *ACLClient) getClient(ctx context.Context, mode Mode) openfga.OpenFGASer
 // Returns an error if the ownerType is invalid, if there is an error reading from or writing to the database, or nil if successful.
 func (c *ACLClient) SetOwner(ctx context.Context, objectType string, objectUID uuid.UUID, ownerType string, ownerUID uuid.UUID) error {
 	var err error
-	// Normalize ownerType to singular form. because in our openfga, the owner/organization type is singular
-	if ownerType == "users" {
+	// Normalize ownerType to singular form. because in our openfga, the
+	// owner/organization type is singular.
+	switch ownerType {
+	case "users":
 		ownerType = "user"
-	} else if ownerType == "organizations" {
+	case "organizations":
 		ownerType = "organization"
-	} else {
+	default:
 		return fmt.Errorf("invalid owner type")
 	}
+
 	// Check if the owner already exists
 	data, err := c.getClient(ctx, ReadMode).Read(ctx, &openfga.ReadRequest{
 		StoreId: c.storeID,
@@ -296,16 +301,16 @@ func (c *ACLClient) Purge(ctx context.Context, objectType string, objectUID uuid
 // and sends it to the OpenFGA client to check the permission.
 func (c *ACLClient) CheckPermission(ctx context.Context, objectType string, objectUID uuid.UUID, role string) (bool, error) {
 	// Retrieve the user type from the request context headers
-	userType := resource.GetRequestSingleHeader(ctx, constant.HeaderAuthTypeKey)
+	userType := resource.GetRequestSingleHeader(ctx, constantx.HeaderAuthTypeKey)
 	userUID := ""
 
 	// Determine the user UID based on the user type
 	if userType == "user" {
 		// If the user type is "user", get the user UID from the corresponding header
-		userUID = resource.GetRequestSingleHeader(ctx, constant.HeaderUserUIDKey)
+		userUID = resource.GetRequestSingleHeader(ctx, constantx.HeaderUserUIDKey)
 	} else {
 		// If the user type is not "user", assume it is "visitor" and get the visitor UID from the corresponding header
-		userUID = resource.GetRequestSingleHeader(ctx, constant.HeaderVisitorUIDKey)
+		userUID = resource.GetRequestSingleHeader(ctx, constantx.HeaderVisitorUIDKey)
 	}
 
 	// Check if the user UID is empty and return an error if it is
@@ -351,13 +356,13 @@ func (c *ACLClient) CheckPublicExecutable(ctx context.Context, objectType string
 
 func (c *ACLClient) ListPermissions(ctx context.Context, objectType string, role string, isPublic bool) ([]uuid.UUID, error) {
 
-	userType := resource.GetRequestSingleHeader(ctx, constant.HeaderAuthTypeKey)
+	userType := resource.GetRequestSingleHeader(ctx, constantx.HeaderAuthTypeKey)
 	userUIDStr := ""
 	if userType == "user" {
-		userUIDStr = resource.GetRequestSingleHeader(ctx, constant.HeaderUserUIDKey)
+		userUIDStr = resource.GetRequestSingleHeader(ctx, constantx.HeaderUserUIDKey)
 
 	} else {
-		userUIDStr = resource.GetRequestSingleHeader(ctx, constant.HeaderVisitorUIDKey)
+		userUIDStr = resource.GetRequestSingleHeader(ctx, constantx.HeaderVisitorUIDKey)
 	}
 
 	if isPublic {
@@ -392,13 +397,13 @@ func (c *ACLClient) ListPermissions(ctx context.Context, objectType string, role
 // checkRequesterPermission validates that the authenticated user can make
 // requests on behalf of the resource identified by the requester UID.
 func (c *ACLClient) CheckRequesterPermission(ctx context.Context) error {
-	authType := resource.GetRequestSingleHeader(ctx, constant.HeaderAuthTypeKey)
+	authType := resource.GetRequestSingleHeader(ctx, constantx.HeaderAuthTypeKey)
 	if authType != "user" {
 		// Only authenticated users can switch namespaces.
 		return fmt.Errorf("unauthenticated user")
 	}
-	requester := resource.GetRequestSingleHeader(ctx, constant.HeaderRequesterUIDKey)
-	authenticatedUser := resource.GetRequestSingleHeader(ctx, constant.HeaderUserUIDKey)
+	requester := resource.GetRequestSingleHeader(ctx, constantx.HeaderRequesterUIDKey)
+	authenticatedUser := resource.GetRequestSingleHeader(ctx, constantx.HeaderUserUIDKey)
 	if requester == "" || authenticatedUser == requester {
 		// Request doesn't contain impersonation.
 		return nil

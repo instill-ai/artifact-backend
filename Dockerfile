@@ -1,4 +1,5 @@
-FROM golang:1.23.4 AS build
+ARG GOLANG_VERSION=1.24.2
+FROM golang:${GOLANG_VERSION}-bullseye AS build
 
 WORKDIR /src
 
