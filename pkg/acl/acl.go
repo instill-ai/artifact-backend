@@ -131,14 +131,17 @@ func (c *ACLClient) getClient(ctx context.Context, mode Mode) openfga.OpenFGASer
 // Returns an error if the ownerType is invalid, if there is an error reading from or writing to the database, or nil if successful.
 func (c *ACLClient) SetOwner(ctx context.Context, objectType string, objectUID uuid.UUID, ownerType string, ownerUID uuid.UUID) error {
 	var err error
-	// Normalize ownerType to singular form. because in our openfga, the owner/organization type is singular
-	if ownerType == "users" {
+	// Normalize ownerType to singular form. because in our openfga, the
+	// owner/organization type is singular.
+	switch ownerType {
+	case "users":
 		ownerType = "user"
-	} else if ownerType == "organizations" {
+	case "organizations":
 		ownerType = "organization"
-	} else {
+	default:
 		return fmt.Errorf("invalid owner type")
 	}
+
 	// Check if the owner already exists
 	data, err := c.getClient(ctx, ReadMode).Read(ctx, &openfga.ReadRequest{
 		StoreId: c.storeID,
