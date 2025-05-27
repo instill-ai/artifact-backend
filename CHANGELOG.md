@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.25.0-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.24.5-alpha...v0.25.0-alpha) (2025-05-27)
+
+
+### Features
+
+* **kbfile:** use ExternalMetadata to hold request context ([#183](https://github.com/instill-ai/artifact-backend/issues/183)) ([f0e9f5c](https://github.com/instill-ai/artifact-backend/commit/f0e9f5cb47432bfea274b535a7ebf9109980d285))
+
+
+### Performance Improvements
+
+* batch pdf files as input to docling model ([#180](https://github.com/instill-ai/artifact-backend/issues/180)) ([fa0f526](https://github.com/instill-ai/artifact-backend/commit/fa0f526599cedcf029f2cd55d6aac5ab4adfc300))
+
 ## [0.24.5-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.24.4-alpha...v0.24.5-alpha) (2025-04-24)
 
 
