@@ -22,6 +22,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/utils"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	constantx "github.com/instill-ai/x/constant"
 )
 
 type persistentCatalogFileToEmbWorkerPool struct {
@@ -163,11 +164,11 @@ func (wp *persistentCatalogFileToEmbWorkerPool) startWorker(ctx context.Context,
 			// every file file is stored with the request context.
 			if len(md) == 0 {
 				pairs := map[string]string{
-					constant.HeaderUserUIDKey:  file.CreatorUID.String(),
-					constant.HeaderAuthTypeKey: "user",
+					constantx.HeaderUserUIDKey:  file.CreatorUID.String(),
+					constantx.HeaderAuthTypeKey: "user",
 				}
 				if file.RequesterUID != uuid.Nil {
-					pairs[constant.HeaderRequesterUIDKey] = file.RequesterUID.String()
+					pairs[constantx.HeaderRequesterUIDKey] = file.RequesterUID.String()
 				}
 				md = metadata.New(pairs)
 			}

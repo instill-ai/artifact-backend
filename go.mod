@@ -17,7 +17,7 @@ require (
 	github.com/influxdata/influxdb-client-go/v2 v2.12.3
 	github.com/instill-ai/protogen-go v0.3.3-alpha.0.20250330053232-8078e4975698
 	github.com/instill-ai/usage-client v0.3.0-alpha.0.20250313022849-49504d982f18
-	github.com/instill-ai/x v0.7.0-alpha
+	github.com/instill-ai/x v0.8.0-alpha.0.20250522164415-9172edd336bb
 	github.com/knadh/koanf v1.5.0
 	github.com/milvus-io/milvus-sdk-go/v2 v2.4.1
 	github.com/minio/minio-go/v7 v7.0.87
@@ -37,7 +37,7 @@ require (
 	golang.org/x/net v0.38.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240814211410-ddb44dafa142
 	google.golang.org/grpc v1.66.0
-	google.golang.org/protobuf v1.34.2
+	google.golang.org/protobuf v1.36.1
 	gorm.io/driver/postgres v1.4.5
 	gorm.io/gorm v1.24.7-0.20230306060331-85eaf9eeda11
 )

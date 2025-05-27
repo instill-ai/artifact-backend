@@ -359,8 +359,8 @@ github.com/instill-ai/protogen-go v0.3.3-alpha.0.20250330053232-8078e4975698 h1:
 github.com/instill-ai/protogen-go v0.3.3-alpha.0.20250330053232-8078e4975698/go.mod h1:FuQL8siq3GgUFUlvKUKmLv3bgHxEVPeNfOZWQKRdPg0=
 github.com/instill-ai/usage-client v0.3.0-alpha.0.20250313022849-49504d982f18 h1:RFdRDODY4qMTTIcKm4TBMpYhxDGFCql6HQ7oocA+WeQ=
 github.com/instill-ai/usage-client v0.3.0-alpha.0.20250313022849-49504d982f18/go.mod h1:/B+Irg9TYBlP+X79GZ+yvPxFvC+7fbRL7APNGiJlDSk=
-github.com/instill-ai/x v0.7.0-alpha h1:THv1AOP7uVK7WaQxSM8tC5lFeyKtk6256nFznYkMy88=
-github.com/instill-ai/x v0.7.0-alpha/go.mod h1:enKH4l5DeQCo7IN9cvkncHuascS57JoMwTJcuEnRHAw=
+github.com/instill-ai/x v0.8.0-alpha.0.20250522164415-9172edd336bb h1:lrHTet3MB9ctNTvY/H8qcyiHd1vdTRqzUMkGsh5/Pp8=
+github.com/instill-ai/x v0.8.0-alpha.0.20250522164415-9172edd336bb/go.mod h1:uzCqJuS/AuCPiY8HhzQpz7I3L5pJfIZZNw/euT6SfHE=
 github.com/iris-contrib/blackfriday v2.0.0+incompatible/go.mod h1:UzZ2bDEoaSGPbkg6SAB4att1aAwTmVIx/5gCVqeyUdI=
 github.com/iris-contrib/go.uuid v2.0.0+incompatible/go.mod h1:iz2lgM/1UnEf1kP0L/+fafWORmlnuysV2EMP8MW+qe0=
 github.com/iris-contrib/jade v1.1.3/go.mod h1:H/geBymxJhShH5kecoiOCSssPX7QWYH7UaeZTSWddIk=
@@ -1142,8 +1142,8 @@ google.golang.org/protobuf v1.25.0/go.mod h1:9JNX74DMeImyA3h4bdi1ymwjUzf21/xIlba
 google.golang.org/protobuf v1.26.0-rc.1/go.mod h1:jlhhOSvTdKEhbULTjvd4ARK9grFBp09yW+WbY/TyQbw=
 google.golang.org/protobuf v1.26.0/go.mod h1:9q0QmTI4eRPtz6boOQmLYwt+qCgq0jsYwAQnmE0givc=
 google.golang.org/protobuf v1.27.1/go.mod h1:9q0QmTI4eRPtz6boOQmLYwt+qCgq0jsYwAQnmE0givc=
-google.golang.org/protobuf v1.34.2 h1:6xV6lTsCfpGD21XK49h7MhtcApnLqkfYgPcdHftf6hg=
-google.golang.org/protobuf v1.34.2/go.mod h1:qYOHts0dSfpeUzUFpOMr/WGzszTmLH+DiWniOlNbLDw=
+google.golang.org/protobuf v1.36.1 h1:yBPeRvTftaleIgM3PZ/WBIZ7XM/eEYAaEyCwvyjq/gk=
+google.golang.org/protobuf v1.36.1/go.mod h1:9fA7Ob0pmnwhb644+1+CVWFRbNajQ6iRojtC/QF5bRE=
 gopkg.in/alecthomas/kingpin.v2 v2.2.6/go.mod h1:FMv+mEhP44yOT+4EoQTLFTRgOQ1FBLkstjWtayDeSgw=
 gopkg.in/asn1-ber.v1 v1.0.0-20181015200546-f715ec2f112d/go.mod h1:cuepJuh7vyXfUyUwEgHQXw849cJrilpS5NeIjOWESAw=
 gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
