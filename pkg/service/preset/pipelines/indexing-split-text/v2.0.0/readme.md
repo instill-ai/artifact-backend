@@ -2,7 +2,7 @@
 
 ## Pipeline Overview
 
-This pipeline is designed to demonstrate the second step of the RAG indexing phase, which involves splitting text into smaller chunks. This pipeline takes a single text (from a previous step pipeline such as [indexing-extract](https://instill.tech/leochen5/pipelines/indexing-extract)) and splits it into smaller chunks based on specified split parameters. This makes it a default pipeline for Step 2 in a Knowledge Base application (text -> chunks).
+This pipeline is designed to demonstrate the second step of the RAG indexing phase, which involves splitting text into smaller chunks. This pipeline takes a single text (from a previous step pipeline such as [indexing-extract](https://instill-ai.com/leochen5/pipelines/indexing-extract)) and splits it into smaller chunks based on specified split parameters. This makes it a default pipeline for Step 2 in a Knowledge Base application (text -> chunks).
 
 This example uses a **recursive** strategy (ref: [recursive_text_splitter](https://python.langchain.com/v0.2/docs/how_to/recursive_text_splitter/)) to split long text.
 

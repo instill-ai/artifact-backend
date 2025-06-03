@@ -6,11 +6,11 @@
 
 ## Documentation
 
-Please refer to the [Instill Artifact Documentation](https://www.instill.tech/docs/artifact/introduction) for more details.
+Please refer to the [Instill Artifact Documentation](https://www.instill-ai.dev/docs/artifact/introduction) for more details.
 
 ## API Reference
 
-Please refer to the [Instill Artifact API Reference](https://openapi.instill.tech/reference/artifactpublicservice_listcatalogs) for more details.
+Please refer to the [Instill Artifact API Reference](https://openapi.instill-ai.dev/reference/artifact) for more details.
 
 ## Contributing
 

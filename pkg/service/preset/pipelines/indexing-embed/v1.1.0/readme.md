@@ -2,7 +2,7 @@
 
 ## Pipeline Overview
 
-This pipeline is designed to demonstrate the third step of the RAG indexing phase, which involves converting each text chunk into an embedding vector for storage in a vector database. This pipeline takes a single chunk string (from a previous step pipeline such as [indexing-split-markdown](https://instill.tech/leochen5/pipelines/indexing-split-markdown) or [indexing-split-text](https://instill.tech/leochen5/pipelines/indexing-split-text)) and embeds each small chunk into a vector. This makes it a default pipeline for Step 3 in a Knowledge Base application (chunk -> vector).
+This pipeline is designed to demonstrate the third step of the RAG indexing phase, which involves converting each text chunk into an embedding vector for storage in a vector database. This pipeline takes a single chunk string (from a previous step pipeline such as [indexing-split-markdown](https://instill-ai.com/leochen5/pipelines/indexing-split-markdown) or [indexing-split-text](https://instill-ai.com/leochen5/pipelines/indexing-split-text)) and embeds each small chunk into a vector. This makes it a default pipeline for Step 3 in a Knowledge Base application (chunk -> vector).
 
 In this example, we use the OpenAI embedding model (text-embedding-3-small) to vectorize the text string, resulting in a 1536-dimension vector.
 
@@ -12,7 +12,7 @@ To use this pipeline, you simply need to provide a chunk string as input. The pi
 
 **Input:**
 
-* `chunk-input`: Extracted text from Step 2 ([indexing-split-markdown](https://instill.tech/leochen5/pipelines/indexing-split-markdown) or [indexing-split-text](https://instill.tech/leochen5/pipelines/indexing-split-text)) or directly input a text string to test
+* `chunk-input`: Extracted text from Step 2 ([indexing-split-markdown](https://instill-ai.com/leochen5/pipelines/indexing-split-markdown) or [indexing-split-text](https://instill-ai.com/leochen5/pipelines/indexing-split-text)) or directly input a text string to test
 
 **Output:**
 
