@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.25.0-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.24.5-alpha...v0.25.0-alpha) (2025-06-03)
+
+
+### Features
+
+* **kbfile:** use ExternalMetadata to hold request context ([#183](https://github.com/instill-ai/artifact-backend/issues/183)) ([f0e9f5c](https://github.com/instill-ai/artifact-backend/commit/f0e9f5cb47432bfea274b535a7ebf9109980d285))
+
+
+### Miscellaneous
+
+* **domain:** update production domain ([#184](https://github.com/instill-ai/artifact-backend/issues/184)) ([e83f8d6](https://github.com/instill-ai/artifact-backend/commit/e83f8d6fe3f548987bb216722fbf6056993e34ba))
+* rollback parsing logic ([#185](https://github.com/instill-ai/artifact-backend/issues/185)) ([5a9af09](https://github.com/instill-ai/artifact-backend/commit/5a9af0987e0d41897b9ffd59c07ef83f44fe45e6))
+
 ## [0.24.5-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.24.4-alpha...v0.24.5-alpha) (2025-04-24)
 
 
