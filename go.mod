@@ -22,7 +22,6 @@ require (
 	github.com/milvus-io/milvus-sdk-go/v2 v2.4.1
 	github.com/minio/minio-go/v7 v7.0.87
 	github.com/openfga/api/proto v0.0.0-20240723155248-7e5be7b65c27
-	github.com/pdfcpu/pdfcpu v0.6.0
 	github.com/redis/go-redis/v9 v9.5.5
 	go.opentelemetry.io/contrib/propagators/b3 v1.17.0
 	go.opentelemetry.io/otel v1.16.0
@@ -55,21 +54,15 @@ require (
 	github.com/gogo/googleapis v1.4.1 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/hhrutter/lzw v1.0.0 // indirect
-	github.com/hhrutter/tiff v1.0.1 // indirect
 	github.com/klauspost/compress v1.17.11 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.9 // indirect
-	github.com/mattn/go-runewidth v0.0.15 // indirect
 	github.com/milvus-io/milvus-proto/go-api/v2 v2.4.3 // indirect
 	github.com/minio/crc64nvme v1.0.1 // indirect
 	github.com/minio/md5-simd v1.1.2 // indirect
-	github.com/rivo/uniseg v0.4.4 // indirect
 	github.com/rs/xid v1.6.0 // indirect
 	github.com/tidwall/gjson v1.14.4 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.0 // indirect
-	golang.org/x/image v0.12.0 // indirect
-	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
 
 require (
