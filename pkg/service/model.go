@@ -19,7 +19,7 @@ const ConvertDocToMDModelID = "docling"
 const ConvertDocToMDModelVersion = "v0.1.0"
 
 // ConvertToMDModel using docling model to convert some file type to MD and consume caller's credits
-func (s *Service) ConvertToMDModel(ctx context.Context, fileUID uuid.UUID, caller uuid.UUID, requester uuid.UUID, fileBase64 string, fileType artifactpb.FileType) (string, error) {
+func (s *Service) ConvertToMDModel(ctx context.Context, fileUID uuid.UUID, fileBase64 string, fileType artifactpb.FileType) (string, error) {
 	logger, _ := logger.GetZapLogger(ctx)
 
 	// Get the appropriate prefix for the file type
