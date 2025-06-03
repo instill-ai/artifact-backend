@@ -7,11 +7,9 @@ import (
 
 	"github.com/gofrs/uuid"
 	"go.uber.org/zap"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/instill-ai/artifact-backend/pkg/logger"
-	constantx "github.com/instill-ai/x/constant"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	modelpb "github.com/instill-ai/protogen-go/model/model/v1alpha"
@@ -23,20 +21,6 @@ const ConvertDocToMDModelVersion = "v0.1.0"
 // ConvertToMDModel using docling model to convert some file type to MD and consume caller's credits
 func (s *Service) ConvertToMDModel(ctx context.Context, fileUID uuid.UUID, caller uuid.UUID, requester uuid.UUID, fileBase64 string, fileType artifactpb.FileType) (string, error) {
 	logger, _ := logger.GetZapLogger(ctx)
-	var md metadata.MD
-	if requester != uuid.Nil {
-		md = metadata.New(map[string]string{
-			constantx.HeaderUserUIDKey:      caller.String(),
-			constantx.HeaderAuthTypeKey:     "user",
-			constantx.HeaderRequesterUIDKey: requester.String(),
-		})
-	} else {
-		md = metadata.New(map[string]string{
-			constantx.HeaderUserUIDKey:  caller.String(),
-			constantx.HeaderAuthTypeKey: "user",
-		})
-	}
-	ctx = metadata.NewOutgoingContext(ctx, md)
 
 	// Get the appropriate prefix for the file type
 	prefix := getFileTypePrefix(fileType)
