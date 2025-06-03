@@ -10,8 +10,8 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
+	constantx "github.com/instill-ai/x/constant"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	modelpb "github.com/instill-ai/protogen-go/model/model/v1alpha"
@@ -26,14 +26,14 @@ func (s *Service) ConvertToMDModel(ctx context.Context, fileUID uuid.UUID, calle
 	var md metadata.MD
 	if requester != uuid.Nil {
 		md = metadata.New(map[string]string{
-			constant.HeaderUserUIDKey:      caller.String(),
-			constant.HeaderAuthTypeKey:     "user",
-			constant.HeaderRequesterUIDKey: requester.String(),
+			constantx.HeaderUserUIDKey:      caller.String(),
+			constantx.HeaderAuthTypeKey:     "user",
+			constantx.HeaderRequesterUIDKey: requester.String(),
 		})
 	} else {
 		md = metadata.New(map[string]string{
-			constant.HeaderUserUIDKey:  caller.String(),
-			constant.HeaderAuthTypeKey: "user",
+			constantx.HeaderUserUIDKey:  caller.String(),
+			constantx.HeaderAuthTypeKey: "user",
 		})
 	}
 	ctx = metadata.NewOutgoingContext(ctx, md)
