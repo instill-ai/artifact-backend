@@ -2,7 +2,7 @@
 
 ## Pipeline Overview
 
-This pipeline is designed to demonstrate the second step of the RAG indexing phase, which involves splitting text into smaller chunks. This pipeline takes a single markdown string (from a previous step pipeline such as [indexing-convert-pdf](https://instill.tech/leochen5/pipelines/indexing-convert-pdf)) and splits it into smaller chunks based on specified split parameters. This makes it a default pipeline for Step 2 in a Knowledge Base application (markdown -> chunks).
+This pipeline is designed to demonstrate the second step of the RAG indexing phase, which involves splitting text into smaller chunks. This pipeline takes a single markdown string (from a previous step pipeline such as [indexing-convert-pdf](https://instill-ai.com/leochen5/pipelines/indexing-convert-pdf)) and splits it into smaller chunks based on specified split parameters. This makes it a default pipeline for Step 2 in a Knowledge Base application (markdown -> chunks).
 
 This example uses the Markdown strategy (ref: [markdown_header_metadata](https://python.langchain.com/v0.1/docs/modules/data_connection/document_transformers/markdown_header_metadata/)) to split a long markdown string.
 
@@ -12,7 +12,7 @@ To use this pipeline, you simply need to provide a markdown string as input, alo
 
 **Input:**
 
-* `md-input`: Extracted text from Step 1 [indexing-convert-pdf](https://instill.tech/leochen5/pipelines/indexing-convert-pdf) or input a markdown string
+* `md-input`: Extracted text from Step 1 [indexing-convert-pdf](https://instill-ai.com/leochen5/pipelines/indexing-convert-pdf) or input a markdown string
 * `max-chunk-length`: Specifies the maximum size of each chunk in terms of the number of tokens.
 * `chunk-overlap`: Determines the number of tokens that overlap between consecutive chunks.
 
