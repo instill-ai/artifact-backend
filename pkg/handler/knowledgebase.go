@@ -156,18 +156,19 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 			CreateTime:  dbData.CreateTime.String(),
 			UpdateTime:  dbData.UpdateTime.String(),
 			ConvertingPipelines: []string{
-				"instill/" + service.ConvertDocToMDModelID + "@" + service.ConvertDocToMDModelVersion,
-				service.NamespaceID + "/" + service.ConvertDocToMDPipelineID + "@" + service.DocToMDVersion,
+				// Docling conversion is temporarily disabled.
+				// "instill/" + service.ConvertDocToMDModelID + "@" + service.ConvertDocToMDModelVersion,
+				service.ConvertDocToMDPipeline.Name(),
 			},
 			SummarizingPipelines: []string{
-				service.NamespaceID + "/" + service.GenerateSummaryPipelineID + "@" + service.GenerateSummaryVersion,
+				service.GenerateSummaryPipeline.Name(),
 			},
 			SplittingPipelines: []string{
-				service.NamespaceID + "/" + service.ChunkTextPipelineID + "@" + service.ChunkTextVersion,
-				service.NamespaceID + "/" + service.ChunkMdPipelineID + "@" + service.ChunkMdVersion,
+				service.ChunkTextPipeline.Name(),
+				service.ChunkMDPipeline.Name(),
 			},
 			EmbeddingPipelines: []string{
-				service.NamespaceID + "/" + service.EmbedTextPipelineID + "@" + service.EmbedTextVersion,
+				service.EmbedTextPipeline.Name(),
 			},
 			DownstreamApps: []string{},
 			TotalFiles:     0,
@@ -240,18 +241,19 @@ func (ph *PublicHandler) ListCatalogs(ctx context.Context, req *artifactpb.ListC
 			UpdateTime:  kb.UpdateTime.String(),
 			OwnerName:   kb.Owner,
 			ConvertingPipelines: []string{
-				"instill/" + service.ConvertDocToMDModelID + "@" + service.ConvertDocToMDModelVersion,
-				service.NamespaceID + "/" + service.ConvertDocToMDPipelineID + "@" + service.DocToMDVersion,
+				// Docling conversion is temporarily disabled.
+				// "instill/" + service.ConvertDocToMDModelID + "@" + service.ConvertDocToMDModelVersion,
+				service.ConvertDocToMDPipeline.Name(),
 			},
 			SummarizingPipelines: []string{
-				service.NamespaceID + "/" + service.GenerateSummaryPipelineID + "@" + service.GenerateSummaryVersion,
+				service.GenerateSummaryPipeline.Name(),
 			},
 			SplittingPipelines: []string{
-				service.NamespaceID + "/" + service.ChunkTextPipelineID + "@" + service.ChunkTextVersion,
-				service.NamespaceID + "/" + service.ChunkMdPipelineID + "@" + service.ChunkMdVersion,
+				service.ChunkTextPipeline.Name(),
+				service.ChunkMDPipeline.Name(),
 			},
 			EmbeddingPipelines: []string{
-				service.NamespaceID + "/" + service.EmbedTextPipelineID + "@" + service.EmbedTextVersion,
+				service.EmbedTextPipeline.Name(),
 			},
 			DownstreamApps: []string{},
 			TotalFiles:     uint32(fileCounts[kb.UID]),
@@ -338,18 +340,19 @@ func (ph *PublicHandler) UpdateCatalog(ctx context.Context, req *artifactpb.Upda
 			UpdateTime:  kb.UpdateTime.String(),
 			OwnerName:   kb.Owner,
 			ConvertingPipelines: []string{
-				"instill/" + service.ConvertDocToMDModelID + "@" + service.ConvertDocToMDModelVersion,
-				service.NamespaceID + "/" + service.ConvertDocToMDPipelineID + "@" + service.DocToMDVersion,
+				// Docling conversion is temporarily disabled.
+				// "instill/" + service.ConvertDocToMDModelID + "@" + service.ConvertDocToMDModelVersion,
+				service.ConvertDocToMDPipeline.Name(),
 			},
 			SummarizingPipelines: []string{
-				service.NamespaceID + "/" + service.GenerateSummaryPipelineID + "@" + service.GenerateSummaryVersion,
+				service.GenerateSummaryPipeline.Name(),
 			},
 			SplittingPipelines: []string{
-				service.NamespaceID + "/" + service.ChunkTextPipelineID,
-				service.NamespaceID + "/" + service.ChunkMdPipelineID,
+				service.ChunkTextPipeline.Name(),
+				service.ChunkMDPipeline.Name(),
 			},
 			EmbeddingPipelines: []string{
-				service.NamespaceID + "/" + service.EmbedTextPipelineID,
+				service.EmbedTextPipeline.Name(),
 			},
 			DownstreamApps: []string{},
 			TotalFiles:     uint32(fileCounts[kb.UID]),

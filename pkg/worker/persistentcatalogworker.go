@@ -517,8 +517,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) procesSummarizingFile(ctx contex
 	}
 
 	// Update file's summarizing pipeline metadata
-	summarizingPipelineMetadata := service.NamespaceID + "/" + service.GenerateSummaryPipelineID + "@" + service.GenerateSummaryVersion
-	err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", summarizingPipelineMetadata, "", "", nil, nil, nil, nil, nil)
+	err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", service.GenerateSummaryPipeline.Name(), "", "", nil, nil, nil, nil, nil)
 	if err != nil {
 		logger.Error("Failed to save summarizing pipeline metadata.", zap.String("File uid:", file.UID.String()))
 		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, fmt.Errorf("failed to save summarizing pipeline metadata: %w", err)
@@ -669,8 +668,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processChunkingFile(ctx context.
 	}
 
 	// Update file's chunking pipeline metadata
-	chunkingPipelineMetadata := service.NamespaceID + "/" + service.ChunkTextPipelineID + "@" + service.ChunkTextVersion
-	err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", "", chunkingPipelineMetadata, "", nil, nil, nil, nil, nil)
+	err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", "", service.ChunkTextPipeline.Name(), "", nil, nil, nil, nil, nil)
 	if err != nil {
 		logger.Error("Failed to save chunking pipeline metadata.", zap.String("File uid:", file.UID.String()))
 		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, fmt.Errorf("failed to save chunking pipeline metadata: %w", err)
@@ -740,8 +738,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processEmbeddingFile(ctx context
 	}
 
 	// save embedding pipeline metadata into file's extra metadata
-	embeddingPipelineMetadata := service.NamespaceID + "/" + service.EmbedTextPipelineID + "@" + service.EmbedTextVersion
-	err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", "", "", embeddingPipelineMetadata, nil, nil, nil, nil, nil)
+	err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", "", "", service.EmbedTextPipeline.Name(), nil, nil, nil, nil, nil)
 	if err != nil {
 		logger.Error("Failed to save embedding pipeline metadata.", zap.String("File uid:", file.UID.String()))
 		return nil,
