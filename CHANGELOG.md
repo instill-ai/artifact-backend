@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.25.1-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.25.0-alpha...v0.25.1-alpha) (2025-06-10)
+
+
+### Bug Fixes
+
+* **subscription:** update enum for starter plan ([#188](https://github.com/instill-ai/artifact-backend/issues/188)) ([304325c](https://github.com/instill-ai/artifact-backend/commit/304325c13ba46d29f55feea64d6127af1c654c9c))
+
+
+### Miscellaneous
+
+* **kbfile:** do not convert files using Docling model ([#186](https://github.com/instill-ai/artifact-backend/issues/186)) ([b411242](https://github.com/instill-ai/artifact-backend/commit/b411242e89f1963d7c66f26c302ad3d4af24d0f5))
+* **kbfile:** use Docling for file conversion' ([#189](https://github.com/instill-ai/artifact-backend/issues/189)) ([a81e31d](https://github.com/instill-ai/artifact-backend/commit/a81e31dd548f6d45a202122f773e4d35bcb1694c))
+
 ## [0.25.0-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.24.5-alpha...v0.25.0-alpha) (2025-06-03)
 
 
