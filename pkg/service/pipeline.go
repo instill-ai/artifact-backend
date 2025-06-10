@@ -132,6 +132,13 @@ func (s *Service) ConvertToMDPipe(ctx context.Context, fileUID uuid.UUID, fileBa
 		return "", fmt.Errorf("failed to trigger %s pipeline: %w", pipelineID, err)
 	}
 
+	convertingModelMetadata := NamespaceID + "/" + ConvertDocToMDModelID + "@" + ConvertDocToMDModelVersion
+	err = s.Repository.UpdateKbFileExtraMetaData(ctx, fileUID, "", convertingModelMetadata, "", "", "", nil, nil, nil, nil, nil)
+	if err != nil {
+		logger.Error("Failed to save converting pipeline metadata.", zap.String("File uid:", fileUID.String()))
+		return "", fmt.Errorf("failed to save converting model metadata: %w", err)
+	}
+
 	result, err := getConvertResult(resp)
 	if err != nil {
 		logger.Error("failed to get convert result", zap.Error(err))
