@@ -4,10 +4,12 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/gofrs/uuid"
 	"go.uber.org/zap"
+	"golang.org/x/mod/semver"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/instill-ai/artifact-backend/pkg/logger"
@@ -38,6 +40,32 @@ type PipelineRelease struct {
 // Name returns a human-readable, unique identifier for a pipeline release.
 func (pr PipelineRelease) Name() string {
 	return pr.Namespace + "/" + pr.ID + "@" + pr.Version
+}
+
+// PipelineReleaseFromName parses a PipelineRelease from its name, with the
+// format {namespace}/{id}@{version}.
+func PipelineReleaseFromName(name string) (PipelineRelease, error) {
+	pr := PipelineRelease{}
+
+	parts := strings.Split(name, "/")
+	if len(parts) != 2 {
+		return pr, fmt.Errorf("name must have the format {namespace}/{id}@{version}")
+	}
+	pr.Namespace = parts[0]
+
+	idVersion := strings.Split(parts[1], "@")
+	if len(idVersion) != 2 {
+		return pr, fmt.Errorf("name must have the format {namespace}/{id}@{version}")
+	}
+
+	pr.ID = idVersion[0]
+	pr.Version = idVersion[1]
+
+	if !semver.IsValid(pr.Version) {
+		return pr, fmt.Errorf("version must be valid SemVer 2.0.0")
+	}
+
+	return pr, nil
 }
 
 var (
@@ -105,21 +133,36 @@ var (
 	}
 )
 
-// ConvertToMDPipe using converting pipeline to convert some file type to MD and consume caller's credits
-func (s *Service) ConvertToMDPipe(ctx context.Context, fileUID uuid.UUID, fileBase64 string, fileType artifactpb.FileType) (string, error) {
+// ConvertToMDPipe converts a file into Markdown by triggering a converting
+// pipeline.
+//   - If the file has a document type extension (pdf, doc[x], ppt[x]) the
+//     client may specify a slice of pipelines, which will be triggered in
+//     order until a successful trigger produces a non-empty result.
+//   - If no pipelines are specified, ConvertDocToMDPipeline will be used by
+//     default.
+//   - Non-document files will use ConvertDocToMDStandardPipeline, as these
+//     types tend to be trivial to convert and can use a deterministic pipeline
+//     instead of a custom one that improves the conversion performance.
+func (s *Service) ConvertToMDPipe(
+	ctx context.Context,
+	fileUID uuid.UUID,
+	fileBase64 string,
+	fileType artifactpb.FileType,
+	pipelines []PipelineRelease,
+) (string, error) {
+
 	logger, _ := logger.GetZapLogger(ctx)
 
 	// Get the appropriate prefix for the file type
 	prefix := getFileTypePrefix(fileType)
 
-	// Determine which pipeline and version to use based on file type
-	var pipeline PipelineRelease
 	input := &structpb.Struct{
 		Fields: map[string]*structpb.Value{
 			"document_input": structpb.NewStringValue(prefix + fileBase64),
 		},
 	}
 
+	// Determine which pipeline and version to use based on file type
 	switch fileType {
 	// Document types use the new pipeline
 	case artifactpb.FileType_FILE_TYPE_PDF,
@@ -128,8 +171,17 @@ func (s *Service) ConvertToMDPipe(ctx context.Context, fileUID uuid.UUID, fileBa
 		artifactpb.FileType_FILE_TYPE_PPT,
 		artifactpb.FileType_FILE_TYPE_PPTX:
 
-		pipeline = ConvertDocToMDPipeline
-		input.Fields["vlm_model"] = structpb.NewStringValue("gpt-4o")
+		if len(pipelines) == 0 {
+			// Custom pipelines only take the document input, but the default
+			// (and historical) one needs the model to be set.
+			//
+			// NOTE: this means that we can't pass the default
+			// ConvertDocToMDPipeline as a custom pipeline, we'd be missing the
+			// VLM model setting. Validation when creating a catalog should
+			// prevent this.
+			pipelines = []PipelineRelease{ConvertDocToMDPipeline}
+			input.Fields["vlm_model"] = structpb.NewStringValue("gpt-4o")
+		}
 
 	// Spreadsheet types and others use the original pipeline
 	case artifactpb.FileType_FILE_TYPE_XLSX,
@@ -137,37 +189,43 @@ func (s *Service) ConvertToMDPipe(ctx context.Context, fileUID uuid.UUID, fileBa
 		artifactpb.FileType_FILE_TYPE_CSV,
 		artifactpb.FileType_FILE_TYPE_HTML:
 
-		pipeline = ConvertDocToMDStandardPipeline
+		pipelines = []PipelineRelease{ConvertDocToMDStandardPipeline}
 
 	default:
 		return "", fmt.Errorf("unsupported file type: %v", fileType)
 	}
 
-	// save the converting pipeline metadata into database
-	err := s.Repository.UpdateKbFileExtraMetaData(ctx, fileUID, "", pipeline.Name(), "", "", "", nil, nil, nil, nil, nil)
-	if err != nil {
-		logger.Error("Failed to save converting pipeline metadata.", zap.String("File uid:", fileUID.String()))
-		return "", fmt.Errorf("failed to save converting pipeline metadata: %w", err)
+	for _, pipeline := range pipelines {
+		req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
+			NamespaceId: pipeline.Namespace,
+			PipelineId:  pipeline.ID,
+			ReleaseId:   pipeline.Version,
+			Inputs:      []*structpb.Struct{input},
+		}
+
+		resp, err := s.PipelinePub.TriggerNamespacePipelineRelease(ctx, req)
+		if err != nil {
+			return "", fmt.Errorf("triggering %s pipeline: %w", pipeline.ID, err)
+		}
+
+		result, err := getConvertResult(resp)
+		if err != nil {
+			return "", fmt.Errorf("getting conversion result: %w", err)
+		}
+		if result == "" {
+			logger.Info("Conversion pipeline didn't yield results", zap.String("pipeline", pipeline.Name()))
+			continue
+		}
+
+		// save the converting pipeline metadata into database
+		if err := s.Repository.UpdateKbFileExtraMetaData(ctx, fileUID, "", pipeline.Name(), "", "", "", nil, nil, nil, nil, nil); err != nil {
+			return "", fmt.Errorf("saving converting pipeline in file metadata: %w", err)
+		}
+
+		return result, nil
 	}
 
-	req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
-		NamespaceId: pipeline.Namespace,
-		PipelineId:  pipeline.ID,
-		ReleaseId:   pipeline.Version,
-		Inputs:      []*structpb.Struct{input},
-	}
-
-	resp, err := s.PipelinePub.TriggerNamespacePipelineRelease(ctx, req)
-	if err != nil {
-		return "", fmt.Errorf("failed to trigger %s pipeline: %w", pipeline.ID, err)
-	}
-
-	result, err := getConvertResult(resp)
-	if err != nil {
-		return "", fmt.Errorf("failed to get convert result: %w", err)
-	}
-
-	return result, nil
+	return "", fmt.Errorf("conversion pipelines didn't produce any result")
 }
 
 // getFileTypePrefix returns the appropriate prefix for the given file type
@@ -209,6 +267,7 @@ func getConvertResult(resp *pipelinepb.TriggerNamespacePipelineReleaseResponse) 
 	if fields == nil {
 		return "", fmt.Errorf("fields in the output are nil. resp: %v", resp)
 	}
+
 	convertResult, ok := fields["convert_result"]
 	if ok && convertResult.GetStringValue() != "" {
 		return convertResult.GetStringValue(), nil
@@ -217,7 +276,8 @@ func getConvertResult(resp *pipelinepb.TriggerNamespacePipelineReleaseResponse) 
 	if ok2 && convertResult2.GetStringValue() != "" {
 		return convertResult2.GetStringValue(), nil
 	}
-	return "", fmt.Errorf("convert_result or convert_result2 not found in the output fields. resp: %v", resp)
+
+	return "", nil
 }
 
 type Chunk = struct {
