@@ -77,7 +77,7 @@ func (s *Service) GetNamespaceTier(ctx context.Context, ns *resource.Namespace) 
 		}
 		if sub.GetSubscription().Plan == mgmtpb.UserSubscription_PLAN_FREE {
 			return TierFree, nil
-		} else if sub.GetSubscription().Plan == mgmtpb.UserSubscription_PLAN_STARTER {
+		} else if sub.GetSubscription().Plan == mgmtpb.UserSubscription_PLAN_PRO {
 			return TierPro, nil
 		}
 		return "", fmt.Errorf("unknown user subscription plan: %v", sub.GetSubscription().Plan)
