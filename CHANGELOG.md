@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.25.2-rc](https://github.com/instill-ai/artifact-backend/compare/v0.25.1-alpha...v0.25.2-rc) (2025-06-11)
+
+
+### Miscellaneous
+
+* **kbfile:** do not convert files using Docling model ([#190](https://github.com/instill-ai/artifact-backend/issues/190)) ([0ca41fc](https://github.com/instill-ai/artifact-backend/commit/0ca41fc72afb2b5b98b96b975d199550d8f41612))
+* **main:** release v0.25.2-rc ([#193](https://github.com/instill-ai/artifact-backend/issues/193)) ([8a9bd86](https://github.com/instill-ai/artifact-backend/commit/8a9bd86196e206b921d5681a48d6dcc24a92b848))
+* **subscription:** keep Pro plan until next release ([#192](https://github.com/instill-ai/artifact-backend/issues/192)) ([2ee3a07](https://github.com/instill-ai/artifact-backend/commit/2ee3a07c8b949fd73e7f8db631a91068ed8e0e6a))
+
 ## [0.25.1-alpha](https://github.com/instill-ai/artifact-backend/compare/v0.25.0-alpha...v0.25.1-alpha) (2025-06-10)
 
 
