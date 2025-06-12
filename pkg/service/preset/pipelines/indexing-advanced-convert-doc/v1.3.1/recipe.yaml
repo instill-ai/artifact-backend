@@ -84,7 +84,7 @@ component:
 
             Return only the enhanced/revised Markdown text. Do NOT output any code block symbols (```) and header/footer of each page.
           temperature: 0
-          top-p: 1
+          top-p: 0.01
     output-elements:
       result: ${refine-markdown.output.texts[0]}
     condition: ${pages-to-markdown.output.body} != ""
@@ -135,7 +135,7 @@ component:
             4. Include alternative text descriptions for any images, focusing on concise summaries.
             5. Return only the extracted and formatted Markdown content, with no additional commentary or code block markers.
           temperature: 0
-          top-p: 1
+          top-p: 0.01
     output-elements:
       result: ${document-ocr.output.texts[0]}
     condition: ${pages-to-markdown.output.body} == ""
