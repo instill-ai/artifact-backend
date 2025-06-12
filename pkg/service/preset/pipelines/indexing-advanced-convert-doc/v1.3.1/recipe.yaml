@@ -24,13 +24,13 @@ component:
     type: collection
     input:
       data: ${pages-to-images.output.images}
-      size: 4 # ${variable.image-batch-size}
+      size: 2 # ${variable.image-batch-size}
     task: TASK_SPLIT
   batch-markdown:
     type: collection
     input:
       data: ${pages-to-markdown.output.markdowns}
-      size: 4 # ${variable.image-batch-size}
+      size: 2 # ${variable.image-batch-size}
     task: TASK_SPLIT
     condition: ${pages-to-markdown.output.body} != ""
   vlm-refine-markdown:
@@ -62,9 +62,11 @@ component:
 
             **Guidelines**:
             1. **Text and Formatting**: Ensure all informative text and details are included. Correct any errors in the Markdown text (e.g., line break (\n), position, symbol, punctuation, etc.), maintaining proper structure and sentence with appropriate headings and formatting.
-            2. **Tables**: Format tables using pipes and dashes, ensuring completeness and alignment. Merge tables across images if necessary.
-            3. **Images**: Add descriptions for each image, accurately reflecting their content. For diagrams or charts, provide detailed descriptions of elements and data.
+            2. **Tables**: Format tables using pipes and dashes, ensuring completeness and alignment.
+            3. **Images**: Add descriptions for each image contained in the document, accurately reflecting their content. For diagrams or charts, provide detailed descriptions of elements and data.
             4. **Consistency**: Maintain consistent formatting and terminology throughout. Ensure the document is coherent, especially between heading levels.
+
+            Finally, make sure that the Markdown text contains detailed descriptions of each image, diagram or graph.
 
             Just output the enhanced Markdown text directly, without additional explanations or code block symbols (e.g., ```):
           response-format:
@@ -82,7 +84,7 @@ component:
 
             Return only the enhanced/revised Markdown text. Do NOT output any code block symbols (```) and header/footer of each page.
           temperature: 0
-          top-p: 0.95
+          top-p: 1
     output-elements:
       result: ${refine-markdown.output.texts[0]}
     condition: ${pages-to-markdown.output.body} != ""
@@ -100,7 +102,7 @@ component:
           images: ${batch-images.output.data[i]}
           n: 1
           prompt: |-
-            Use the provided document images to perform OCR and output the extracted text in Markdown format. Structure the content accurately based on headings, paragraphs, lists, tables, and other elements observed in the images. Ensure a high level of faithfulness to the text and layout in the images.
+            Use the provided document images to perform OCR and output the extracted text in Markdown format. Structure the content accurately based on headings, paragraphs, lists, tables, and other elements observed in the images. Ensure a high level of faithfulness to the text and layout in the image.
 
             Requirements:
 
@@ -110,25 +112,27 @@ component:
               Apply inline formatting like bold or italics where appropriate.
             2. Tables:
               If tables are present, structure them using Markdown syntax, with pipes (|) for columns and dashes (---) for separating headers.
-              Ensure all table rows and columns are included, aligning accurately with the image.
+              Ensure all table rows and columns are included, aligning accurately with the images.
             3. Images and Descriptions:
-              For any images in the document, include concise descriptions of the content or purpose of the image based on visual cues.
+              For any images within the document, include concise descriptions of the content or purpose of the image based on visual cues.
             4. Accuracy and Completeness:
               Extract and include all text elements, including side notes or captions, while maintaining logical flow and organization.
               Avoid omitting any content or adding speculative information.
+
+            Finally, make sure that the Markdown text contains detailed descriptions of each image, diagram or graph.
 
             Markdown-formatted output:
           response-format:
             type: text
           system-message: |-
-            You are an OCR system tasked with accurately extracting and formatting document text from images into Markdown. Capture all visible text and structure it logically, ensuring the final Markdown format mirrors the original content without additions or omissions.
+            You are an OCR system tasked with accurately extracting and formatting document text from an images into Markdown. Capture all visible text and structure it logically, ensuring the final Markdown format mirrors the original content without additions or omissions.
 
             Instructions:
 
             1. Extract text exactly as seen in the images and organize it using Markdown formatting.
             2. Properly structure headings, lists, and paragraphs based on document layout.
             3. Format tables with Markdown syntax, ensuring all rows and columns are represented.
-            4. Include alt-text descriptions for any images, focusing on concise summaries.
+            4. Include alternative text descriptions for any images, focusing on concise summaries.
             5. Return only the extracted and formatted Markdown content, with no additional commentary or code block markers.
           temperature: 0
           top-p: 1
