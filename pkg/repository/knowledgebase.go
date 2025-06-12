@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
+	"github.com/lib/pq"
 	"gorm.io/gorm"
 
 	"github.com/instill-ai/artifact-backend/pkg/customerror"
@@ -26,6 +27,7 @@ type KnowledgeBaseI interface {
 	GetKnowledgeBaseCountByOwner(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType) (int64, error)
 	IncreaseKnowledgeBaseUsage(ctx context.Context, tx *gorm.DB, kbUID string, amount int) error
 	GetKnowledgeBasesByUIDs(ctx context.Context, kbUIDs []uuid.UUID) ([]KnowledgeBase, error)
+	GetKnowledgeBaseByUID(context.Context, uuid.UUID) (*KnowledgeBase, error)
 }
 
 type KnowledgeBase struct {
@@ -44,6 +46,8 @@ type KnowledgeBase struct {
 	Usage      int64     `gorm:"column:usage;not null;default:0" json:"usage"`
 	// this type is defined in artifact/artifact/v1alpha/catalog.proto
 	CatalogType string `gorm:"column:catalog_type;size:255" json:"catalog_type"`
+
+	ConvertingPipelines pq.StringArray `gorm:"column:converting_pipelines;type:varchar(255)[]" json:"converting_pipelines"`
 }
 
 // table columns map
@@ -301,7 +305,7 @@ func (r *Repository) IncreaseKnowledgeBaseUsage(ctx context.Context, tx *gorm.DB
 	return nil
 }
 
-// get the knowledge bases by uids
+// GetKnowledgeBasesByUIDs fetches a slice of knowledge bases by UID.
 func (r *Repository) GetKnowledgeBasesByUIDs(ctx context.Context, kbUIDs []uuid.UUID) ([]KnowledgeBase, error) {
 	var knowledgeBases []KnowledgeBase
 	whereString := fmt.Sprintf("%v IN (?) AND %v IS NULL", KnowledgeBaseColumn.UID, KnowledgeBaseColumn.DeleteTime)
@@ -309,4 +313,11 @@ func (r *Repository) GetKnowledgeBasesByUIDs(ctx context.Context, kbUIDs []uuid.
 		return nil, err
 	}
 	return knowledgeBases, nil
+}
+
+// GetKnowledgeBaseByUID fetches a knowledge base by its primary key.
+func (r *Repository) GetKnowledgeBaseByUID(ctx context.Context, uid uuid.UUID) (*KnowledgeBase, error) {
+	kb := new(KnowledgeBase)
+	err := r.db.WithContext(ctx).Where("uid = ?", uid).First(kb).Error
+	return kb, err
 }

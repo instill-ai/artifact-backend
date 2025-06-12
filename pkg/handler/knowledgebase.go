@@ -128,53 +128,60 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 		req.Type = artifactpb.CatalogType_CATALOG_TYPE_PERSISTENT
 	}
 
+	// Read conversion pipelines from request.
+	// TODO jvallesm: validate existence, permissions & recipe of provided
+	// pipelines.
+	convertingPipelines := req.GetConvertingPipelines()
+
 	// create catalog
 	dbData, err := ph.service.Repository.CreateKnowledgeBase(ctx,
 		repository.KnowledgeBase{
 			Name: req.Name,
 			// make name as kbID
-			KbID:        req.Name,
-			Description: req.Description,
-			Tags:        req.Tags,
-			Owner:       ns.NsUID.String(),
-			CreatorUID:  creatorUUID,
-			CatalogType: req.GetType().String(),
+			KbID:                req.Name,
+			Description:         req.Description,
+			Tags:                req.Tags,
+			Owner:               ns.NsUID.String(),
+			CreatorUID:          creatorUUID,
+			CatalogType:         req.GetType().String(),
+			ConvertingPipelines: convertingPipelines,
 		}, callExternalService,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	return &artifactpb.CreateCatalogResponse{
-		Catalog: &artifactpb.Catalog{
-			Name:        dbData.Name,
-			CatalogUid:  dbData.UID.String(),
-			CatalogId:   dbData.KbID,
-			Description: dbData.Description,
-			Tags:        dbData.Tags,
-			OwnerName:   dbData.Owner,
-			CreateTime:  dbData.CreateTime.String(),
-			UpdateTime:  dbData.UpdateTime.String(),
-			ConvertingPipelines: []string{
-				"instill/" + service.ConvertDocToMDModelID + "@" + service.ConvertDocToMDModelVersion,
-				service.NamespaceID + "/" + service.ConvertDocToMDPipelineID + "@" + service.DocToMDVersion,
-			},
-			SummarizingPipelines: []string{
-				service.NamespaceID + "/" + service.GenerateSummaryPipelineID + "@" + service.GenerateSummaryVersion,
-			},
-			SplittingPipelines: []string{
-				service.NamespaceID + "/" + service.ChunkTextPipelineID + "@" + service.ChunkTextVersion,
-				service.NamespaceID + "/" + service.ChunkMdPipelineID + "@" + service.ChunkMdVersion,
-			},
-			EmbeddingPipelines: []string{
-				service.NamespaceID + "/" + service.EmbedTextPipelineID + "@" + service.EmbedTextVersion,
-			},
-			DownstreamApps: []string{},
-			TotalFiles:     0,
-			TotalTokens:    0,
-			UsedStorage:    0,
+	catalog := &artifactpb.Catalog{
+		Name:                dbData.Name,
+		CatalogUid:          dbData.UID.String(),
+		CatalogId:           dbData.KbID,
+		Description:         dbData.Description,
+		Tags:                dbData.Tags,
+		OwnerName:           dbData.Owner,
+		CreateTime:          dbData.CreateTime.String(),
+		UpdateTime:          dbData.UpdateTime.String(),
+		ConvertingPipelines: dbData.ConvertingPipelines,
+		SummarizingPipelines: []string{
+			service.GenerateSummaryPipeline.Name(),
 		},
-	}, nil
+		SplittingPipelines: []string{
+			service.ChunkTextPipeline.Name(),
+			service.ChunkMDPipeline.Name(),
+		},
+		EmbeddingPipelines: []string{
+			service.EmbedTextPipeline.Name(),
+		},
+		DownstreamApps: []string{},
+		TotalFiles:     0,
+		TotalTokens:    0,
+		UsedStorage:    0,
+	}
+
+	if len(dbData.ConvertingPipelines) == 0 {
+		catalog.ConvertingPipelines = defaultConvertingPipelines()
+	}
+
+	return &artifactpb.CreateCatalogResponse{Catalog: catalog}, nil
 }
 
 func (ph *PublicHandler) ListCatalogs(ctx context.Context, req *artifactpb.ListCatalogsRequest) (*artifactpb.ListCatalogsResponse, error) {
@@ -231,33 +238,35 @@ func (ph *PublicHandler) ListCatalogs(ctx context.Context, req *artifactpb.ListC
 	kbs := make([]*artifactpb.Catalog, len(dbData))
 	for i, kb := range dbData {
 		kbs[i] = &artifactpb.Catalog{
-			CatalogUid:  kb.UID.String(),
-			Name:        kb.Name,
-			CatalogId:   kb.KbID,
-			Description: kb.Description,
-			Tags:        kb.Tags,
-			CreateTime:  kb.CreateTime.String(),
-			UpdateTime:  kb.UpdateTime.String(),
-			OwnerName:   kb.Owner,
-			ConvertingPipelines: []string{
-				"instill/" + service.ConvertDocToMDModelID + "@" + service.ConvertDocToMDModelVersion,
-				service.NamespaceID + "/" + service.ConvertDocToMDPipelineID + "@" + service.DocToMDVersion,
-			},
+			CatalogUid:          kb.UID.String(),
+			Name:                kb.Name,
+			CatalogId:           kb.KbID,
+			Description:         kb.Description,
+			Tags:                kb.Tags,
+			CreateTime:          kb.CreateTime.String(),
+			UpdateTime:          kb.UpdateTime.String(),
+			OwnerName:           kb.Owner,
+			ConvertingPipelines: kb.ConvertingPipelines,
 			SummarizingPipelines: []string{
-				service.NamespaceID + "/" + service.GenerateSummaryPipelineID + "@" + service.GenerateSummaryVersion,
+				service.GenerateSummaryPipeline.Name(),
 			},
 			SplittingPipelines: []string{
-				service.NamespaceID + "/" + service.ChunkTextPipelineID + "@" + service.ChunkTextVersion,
-				service.NamespaceID + "/" + service.ChunkMdPipelineID + "@" + service.ChunkMdVersion,
+				service.ChunkTextPipeline.Name(),
+				service.ChunkMDPipeline.Name(),
 			},
 			EmbeddingPipelines: []string{
-				service.NamespaceID + "/" + service.EmbedTextPipelineID + "@" + service.EmbedTextVersion,
+				service.EmbedTextPipeline.Name(),
 			},
 			DownstreamApps: []string{},
 			TotalFiles:     uint32(fileCounts[kb.UID]),
 			TotalTokens:    uint32(tokenCounts[kb.UID]),
 			UsedStorage:    uint64(kb.Usage),
 		}
+
+		if len(kb.ConvertingPipelines) == 0 {
+			kbs[i].ConvertingPipelines = defaultConvertingPipelines()
+		}
+
 	}
 	return &artifactpb.ListCatalogsResponse{
 		Catalogs: kbs,
@@ -327,36 +336,38 @@ func (ph *PublicHandler) UpdateCatalog(ctx context.Context, req *artifactpb.Upda
 		log.Error("failed to get token counts", zap.Error(err))
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
+
 	// populate response
-	return &artifactpb.UpdateCatalogResponse{
-		Catalog: &artifactpb.Catalog{
-			Name:        kb.Name,
-			CatalogId:   kb.KbID,
-			Description: kb.Description,
-			Tags:        kb.Tags,
-			CreateTime:  kb.CreateTime.String(),
-			UpdateTime:  kb.UpdateTime.String(),
-			OwnerName:   kb.Owner,
-			ConvertingPipelines: []string{
-				"instill/" + service.ConvertDocToMDModelID + "@" + service.ConvertDocToMDModelVersion,
-				service.NamespaceID + "/" + service.ConvertDocToMDPipelineID + "@" + service.DocToMDVersion,
-			},
-			SummarizingPipelines: []string{
-				service.NamespaceID + "/" + service.GenerateSummaryPipelineID + "@" + service.GenerateSummaryVersion,
-			},
-			SplittingPipelines: []string{
-				service.NamespaceID + "/" + service.ChunkTextPipelineID,
-				service.NamespaceID + "/" + service.ChunkMdPipelineID,
-			},
-			EmbeddingPipelines: []string{
-				service.NamespaceID + "/" + service.EmbedTextPipelineID,
-			},
-			DownstreamApps: []string{},
-			TotalFiles:     uint32(fileCounts[kb.UID]),
-			TotalTokens:    uint32(tokenCounts[kb.UID]),
-			UsedStorage:    uint64(kb.Usage),
+	catalog := &artifactpb.Catalog{
+		Name:                kb.Name,
+		CatalogId:           kb.KbID,
+		Description:         kb.Description,
+		Tags:                kb.Tags,
+		CreateTime:          kb.CreateTime.String(),
+		UpdateTime:          kb.UpdateTime.String(),
+		OwnerName:           kb.Owner,
+		ConvertingPipelines: kb.ConvertingPipelines,
+		SummarizingPipelines: []string{
+			service.GenerateSummaryPipeline.Name(),
 		},
-	}, nil
+		SplittingPipelines: []string{
+			service.ChunkTextPipeline.Name(),
+			service.ChunkMDPipeline.Name(),
+		},
+		EmbeddingPipelines: []string{
+			service.EmbedTextPipeline.Name(),
+		},
+		DownstreamApps: []string{},
+		TotalFiles:     uint32(fileCounts[kb.UID]),
+		TotalTokens:    uint32(tokenCounts[kb.UID]),
+		UsedStorage:    uint64(kb.Usage),
+	}
+
+	if len(kb.ConvertingPipelines) == 0 {
+		catalog.ConvertingPipelines = defaultConvertingPipelines()
+	}
+
+	return &artifactpb.UpdateCatalogResponse{Catalog: catalog}, nil
 }
 func (ph *PublicHandler) DeleteCatalog(ctx context.Context, req *artifactpb.DeleteCatalogRequest) (*artifactpb.DeleteCatalogResponse, error) {
 	log, _ := logger.GetZapLogger(ctx)
@@ -511,4 +522,16 @@ func generateID() string {
 	}
 
 	return string(id)
+}
+
+// defaultConvertingPipelines returns the converting pipelines used when the
+// catalog doesn't specify any. These aren't stored because they have custom
+// flows (e.g., triggering a model instead of a pipeline or passing extra
+// arguments).
+func defaultConvertingPipelines() []string {
+	return []string{
+		// Docling conversion is temporarily disabled.
+		// "instill/" + service.ConvertDocToMDModelID + "@" + service.ConvertDocToMDModelVersion,
+		service.ConvertDocToMDPipeline.Name(),
+	}
 }

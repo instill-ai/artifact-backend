@@ -4,10 +4,12 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/gofrs/uuid"
 	"go.uber.org/zap"
+	"golang.org/x/mod/semver"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/instill-ai/artifact-backend/pkg/logger"
@@ -26,55 +28,141 @@ const maxChunkLengthForTextCatalog = 7000
 const chunkOverlapForMarkdowntCatalog = 200
 const chunkOverlapForTextCatalog = 700
 
-const NamespaceID = "preset"
+const defaultNamespaceID = "preset"
 
-// Note: this pipeline is for the new indexing pipeline having convert_result or convert_result2
-const ConvertDocToMDPipelineID = "indexing-advanced-convert-doc"
-const DocToMDVersion = "v1.3.1"
-
-const ConvertDocToMDStandardPipelineID = "indexing-convert-pdf"
-const DocToMDStandardVersion = "v1.1.1"
-
-const GenerateSummaryPipelineID = "indexing-generate-summary"
-const GenerateSummaryVersion = "v1.0.0"
-
-const ChunkMdPipelineID = "indexing-split-markdown"
-const ChunkMdVersion = "v2.0.0"
-
-const ChunkTextPipelineID = "indexing-split-text"
-const ChunkTextVersion = "v2.0.0"
-
-const EmbedTextPipelineID = "indexing-embed"
-const EmbedTextVersion = "v1.1.0"
-
-const QAPipelineID = "retrieving-qna"
-const QAVersion = "v1.2.0"
-
-var PresetPipelinesList = []struct {
-	ID      string
-	Version string
-}{
-	{ID: ConvertDocToMDPipelineID, Version: DocToMDVersion},
-	{ID: ConvertDocToMDStandardPipelineID, Version: DocToMDStandardVersion},
-	{ID: GenerateSummaryPipelineID, Version: GenerateSummaryVersion},
-	{ID: ChunkMdPipelineID, Version: ChunkMdVersion},
-	{ID: ChunkTextPipelineID, Version: ChunkTextVersion},
-	{ID: EmbedTextPipelineID, Version: EmbedTextVersion},
-	{ID: QAPipelineID, Version: QAVersion},
+// PipelineRelease identifies a pipeline used in catalog file processing.
+type PipelineRelease struct {
+	Namespace string
+	ID        string
+	Version   string
 }
 
-// ConvertToMDPipe using converting pipeline to convert some file type to MD and consume caller's credits
-func (s *Service) ConvertToMDPipe(ctx context.Context, fileUID uuid.UUID, fileBase64 string, fileType artifactpb.FileType) (string, error) {
+// Name returns a human-readable, unique identifier for a pipeline release.
+func (pr PipelineRelease) Name() string {
+	return pr.Namespace + "/" + pr.ID + "@" + pr.Version
+}
+
+// PipelineReleaseFromName parses a PipelineRelease from its name, with the
+// format {namespace}/{id}@{version}.
+func PipelineReleaseFromName(name string) (PipelineRelease, error) {
+	pr := PipelineRelease{}
+
+	parts := strings.Split(name, "/")
+	if len(parts) != 2 {
+		return pr, fmt.Errorf("name must have the format {namespace}/{id}@{version}")
+	}
+	pr.Namespace = parts[0]
+
+	idVersion := strings.Split(parts[1], "@")
+	if len(idVersion) != 2 {
+		return pr, fmt.Errorf("name must have the format {namespace}/{id}@{version}")
+	}
+
+	pr.ID = idVersion[0]
+	pr.Version = idVersion[1]
+
+	if !semver.IsValid(pr.Version) {
+		return pr, fmt.Errorf("version must be valid SemVer 2.0.0")
+	}
+
+	return pr, nil
+}
+
+var (
+	// ConvertDocToMDPipeline is the default conversion pipeline for documents.
+	// Note: this pipeline is for the new indexing pipeline having
+	// convert_result or convert_result2
+	ConvertDocToMDPipeline = PipelineRelease{
+		Namespace: defaultNamespaceID,
+		ID:        "indexing-advanced-convert-doc",
+		Version:   "v1.3.1",
+	}
+
+	// ConvertDocToMDStandardPipeline is the default conversion pipeline for
+	// non-document files (e.g. CSV).
+	ConvertDocToMDStandardPipeline = PipelineRelease{
+		Namespace: defaultNamespaceID,
+		ID:        "indexing-convert-pdf",
+		Version:   "v1.1.1",
+	}
+
+	// GenerateSummaryPipeline is the default pipeline for summarizing text.
+	GenerateSummaryPipeline = PipelineRelease{
+		Namespace: defaultNamespaceID,
+		ID:        "indexing-generate-summary",
+		Version:   "v1.0.0",
+	}
+
+	// ChunkMDPipeline is the default pipeline for chunking Markdown.
+	ChunkMDPipeline = PipelineRelease{
+		Namespace: defaultNamespaceID,
+		ID:        "indexing-split-markdown",
+		Version:   "v2.0.0",
+	}
+
+	// ChunkTextPipeline is the default pipeline for chunking text.
+	ChunkTextPipeline = PipelineRelease{
+		Namespace: defaultNamespaceID,
+		ID:        "indexing-split-text",
+		Version:   "v2.0.0",
+	}
+
+	// EmbedTextPipeline is the defualt pipeline for embedding text.
+	EmbedTextPipeline = PipelineRelease{
+		Namespace: defaultNamespaceID,
+		ID:        "indexing-embed",
+		Version:   "v1.1.0",
+	}
+
+	// QAPipeline is the default pipeline for question & answering.
+	QAPipeline = PipelineRelease{
+		Namespace: defaultNamespaceID,
+		ID:        "retrieving-qna",
+		Version:   "v1.2.0",
+	}
+
+	// PresetPipelinesList contains the preset pipelines used in catalogs.
+	PresetPipelinesList = []PipelineRelease{
+		ConvertDocToMDPipeline,
+		ConvertDocToMDStandardPipeline,
+		GenerateSummaryPipeline,
+		ChunkMDPipeline,
+		ChunkTextPipeline,
+		EmbedTextPipeline,
+		QAPipeline,
+	}
+)
+
+// ConvertToMDPipe converts a file into Markdown by triggering a converting
+// pipeline.
+//   - If the file has a document type extension (pdf, doc[x], ppt[x]) the
+//     client may specify a slice of pipelines, which will be triggered in
+//     order until a successful trigger produces a non-empty result.
+//   - If no pipelines are specified, ConvertDocToMDPipeline will be used by
+//     default.
+//   - Non-document files will use ConvertDocToMDStandardPipeline, as these
+//     types tend to be trivial to convert and can use a deterministic pipeline
+//     instead of a custom one that improves the conversion performance.
+func (s *Service) ConvertToMDPipe(
+	ctx context.Context,
+	fileUID uuid.UUID,
+	fileBase64 string,
+	fileType artifactpb.FileType,
+	pipelines []PipelineRelease,
+) (string, error) {
+
 	logger, _ := logger.GetZapLogger(ctx)
 
 	// Get the appropriate prefix for the file type
 	prefix := getFileTypePrefix(fileType)
 
-	// Determine which pipeline and version to use based on file type
-	var pipelineID string
-	var version string
+	input := &structpb.Struct{
+		Fields: map[string]*structpb.Value{
+			"document_input": structpb.NewStringValue(prefix + fileBase64),
+		},
+	}
 
-	var inputs []*structpb.Struct
+	// Determine which pipeline and version to use based on file type
 	switch fileType {
 	// Document types use the new pipeline
 	case artifactpb.FileType_FILE_TYPE_PDF,
@@ -82,62 +170,62 @@ func (s *Service) ConvertToMDPipe(ctx context.Context, fileUID uuid.UUID, fileBa
 		artifactpb.FileType_FILE_TYPE_DOC,
 		artifactpb.FileType_FILE_TYPE_PPT,
 		artifactpb.FileType_FILE_TYPE_PPTX:
-		pipelineID = ConvertDocToMDPipelineID
-		version = DocToMDVersion
-		inputs = []*structpb.Struct{
-			{
-				Fields: map[string]*structpb.Value{
-					"document_input": {Kind: &structpb.Value_StringValue{StringValue: prefix + fileBase64}},
-					"vlm_model":      {Kind: &structpb.Value_StringValue{StringValue: "gpt-4o"}},
-				},
-			},
+
+		if len(pipelines) == 0 {
+			// Custom pipelines only take the document input, but the default
+			// (and historical) one needs the model to be set.
+			//
+			// NOTE: this means that we can't pass the default
+			// ConvertDocToMDPipeline as a custom pipeline, we'd be missing the
+			// VLM model setting. Validation when creating a catalog should
+			// prevent this.
+			pipelines = []PipelineRelease{ConvertDocToMDPipeline}
+			input.Fields["vlm_model"] = structpb.NewStringValue("gpt-4o")
 		}
+
 	// Spreadsheet types and others use the original pipeline
 	case artifactpb.FileType_FILE_TYPE_XLSX,
 		artifactpb.FileType_FILE_TYPE_XLS,
 		artifactpb.FileType_FILE_TYPE_CSV,
 		artifactpb.FileType_FILE_TYPE_HTML:
-		pipelineID = ConvertDocToMDStandardPipelineID
-		version = DocToMDStandardVersion
-		inputs = []*structpb.Struct{
-			{
-				Fields: map[string]*structpb.Value{
-					"document_input": {Kind: &structpb.Value_StringValue{StringValue: prefix + fileBase64}},
-				},
-			},
-		}
+
+		pipelines = []PipelineRelease{ConvertDocToMDStandardPipeline}
 
 	default:
 		return "", fmt.Errorf("unsupported file type: %v", fileType)
 	}
 
-	// save the converting pipeline metadata into database
-	convertingPipelineMetadata := NamespaceID + "/" + pipelineID + "@" + version
-	err := s.Repository.UpdateKbFileExtraMetaData(ctx, fileUID, "", convertingPipelineMetadata, "", "", "", nil, nil, nil, nil, nil)
-	if err != nil {
-		logger.Error("Failed to save converting pipeline metadata.", zap.String("File uid:", fileUID.String()))
-		return "", fmt.Errorf("failed to save converting pipeline metadata: %w", err)
+	for _, pipeline := range pipelines {
+		req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
+			NamespaceId: pipeline.Namespace,
+			PipelineId:  pipeline.ID,
+			ReleaseId:   pipeline.Version,
+			Inputs:      []*structpb.Struct{input},
+		}
+
+		resp, err := s.PipelinePub.TriggerNamespacePipelineRelease(ctx, req)
+		if err != nil {
+			return "", fmt.Errorf("triggering %s pipeline: %w", pipeline.ID, err)
+		}
+
+		result, err := getConvertResult(resp)
+		if err != nil {
+			return "", fmt.Errorf("getting conversion result: %w", err)
+		}
+		if result == "" {
+			logger.Info("Conversion pipeline didn't yield results", zap.String("pipeline", pipeline.Name()))
+			continue
+		}
+
+		// save the converting pipeline metadata into database
+		if err := s.Repository.UpdateKbFileExtraMetaData(ctx, fileUID, "", pipeline.Name(), "", "", "", nil, nil, nil, nil, nil); err != nil {
+			return "", fmt.Errorf("saving converting pipeline in file metadata: %w", err)
+		}
+
+		return result, nil
 	}
 
-	req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
-		NamespaceId: NamespaceID,
-		PipelineId:  pipelineID,
-		ReleaseId:   version,
-		Inputs:      inputs,
-	}
-
-	resp, err := s.PipelinePub.TriggerNamespacePipelineRelease(ctx, req)
-	if err != nil {
-		logger.Error("failed to trigger pipeline", zap.Error(err))
-		return "", fmt.Errorf("failed to trigger %s pipeline: %w", pipelineID, err)
-	}
-
-	result, err := getConvertResult(resp)
-	if err != nil {
-		logger.Error("failed to get convert result", zap.Error(err))
-		return "", fmt.Errorf("failed to get convert result: %w", err)
-	}
-	return result, nil
+	return "", fmt.Errorf("conversion pipelines didn't produce any result")
 }
 
 // getFileTypePrefix returns the appropriate prefix for the given file type
@@ -179,6 +267,7 @@ func getConvertResult(resp *pipelinepb.TriggerNamespacePipelineReleaseResponse) 
 	if fields == nil {
 		return "", fmt.Errorf("fields in the output are nil. resp: %v", resp)
 	}
+
 	convertResult, ok := fields["convert_result"]
 	if ok && convertResult.GetStringValue() != "" {
 		return convertResult.GetStringValue(), nil
@@ -187,7 +276,8 @@ func getConvertResult(resp *pipelinepb.TriggerNamespacePipelineReleaseResponse) 
 	if ok2 && convertResult2.GetStringValue() != "" {
 		return convertResult2.GetStringValue(), nil
 	}
-	return "", fmt.Errorf("convert_result or convert_result2 not found in the output fields. resp: %v", resp)
+
+	return "", nil
 }
 
 type Chunk = struct {
@@ -201,20 +291,20 @@ type Chunk = struct {
 // It generate summary from content.
 func (s *Service) GenerateSummary(ctx context.Context, content, fileType string) (string, error) {
 	req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
-		NamespaceId: NamespaceID,
-		PipelineId:  GenerateSummaryPipelineID,
-		ReleaseId:   GenerateSummaryVersion,
+		NamespaceId: GenerateSummaryPipeline.Namespace,
+		PipelineId:  GenerateSummaryPipeline.ID,
+		ReleaseId:   GenerateSummaryPipeline.Version,
 		Data: []*pipelinepb.TriggerData{
 			{Variable: &structpb.Struct{Fields: map[string]*structpb.Value{
-				"file_type": {Kind: &structpb.Value_StringValue{StringValue: fileType}},
-				"context":   {Kind: &structpb.Value_StringValue{StringValue: content}},
-				"llm_model": {Kind: &structpb.Value_StringValue{StringValue: "gpt-4o-mini"}},
+				"file_type": structpb.NewStringValue(fileType),
+				"context":   structpb.NewStringValue(content),
+				"llm_model": structpb.NewStringValue("gpt-4o-mini"),
 			}}}},
 	}
 
 	resp, err := s.PipelinePub.TriggerNamespacePipelineRelease(ctx, req)
 	if err != nil {
-		return "", fmt.Errorf("failed to trigger %s pipeline. err:%w", GenerateSummaryPipelineID, err)
+		return "", fmt.Errorf("failed to trigger %s pipeline. err:%w", GenerateSummaryPipeline.ID, err)
 	}
 	result, err := getGenerateSummaryResult(resp)
 	if err != nil {
@@ -250,22 +340,22 @@ func getGenerateSummaryResult(resp *pipelinepb.TriggerNamespacePipelineReleaseRe
 // It sets up the necessary metadata, triggers the pipeline, and processes the response to return the non-empty chunks.
 func (s *Service) ChunkMarkdownPipe(ctx context.Context, markdown string) ([]Chunk, error) {
 	req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
-		NamespaceId: NamespaceID,
-		PipelineId:  ChunkMdPipelineID,
-		ReleaseId:   ChunkMdVersion,
+		NamespaceId: ChunkMDPipeline.Namespace,
+		PipelineId:  ChunkMDPipeline.ID,
+		ReleaseId:   ChunkMDPipeline.Version,
 		Inputs: []*structpb.Struct{
 			{
 				Fields: map[string]*structpb.Value{
-					"md_input":         {Kind: &structpb.Value_StringValue{StringValue: markdown}},
-					"max_chunk_length": {Kind: &structpb.Value_NumberValue{NumberValue: maxChunkLengthForMarkdownCatalog}},
-					"chunk_overlap":    {Kind: &structpb.Value_NumberValue{NumberValue: chunkOverlapForMarkdowntCatalog}},
+					"md_input":         structpb.NewStringValue(markdown),
+					"max_chunk_length": structpb.NewNumberValue(maxChunkLengthForMarkdownCatalog),
+					"chunk_overlap":    structpb.NewNumberValue(chunkOverlapForMarkdowntCatalog),
 				},
 			},
 		},
 	}
 	res, err := s.PipelinePub.TriggerNamespacePipelineRelease(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to trigger %s pipeline. err:%w", ChunkMdPipelineID, err)
+		return nil, fmt.Errorf("failed to trigger %s pipeline. err:%w", ChunkMDPipeline.ID, err)
 	}
 	result, err := GetChunksFromResponse(res)
 	if err != nil {
@@ -317,23 +407,23 @@ func GetChunksFromResponse(resp *pipelinepb.TriggerNamespacePipelineReleaseRespo
 // It sets up the necessary metadata, triggers the pipeline, and processes the response to return the non-empty chunks.
 func (s *Service) ChunkTextPipe(ctx context.Context, text string) ([]Chunk, error) {
 	req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
-		NamespaceId: NamespaceID,
-		PipelineId:  ChunkTextPipelineID,
-		ReleaseId:   ChunkTextVersion,
+		NamespaceId: ChunkTextPipeline.Namespace,
+		PipelineId:  ChunkTextPipeline.ID,
+		ReleaseId:   ChunkTextPipeline.Version,
 
 		Inputs: []*structpb.Struct{
 			{
 				Fields: map[string]*structpb.Value{
-					"text_input":       {Kind: &structpb.Value_StringValue{StringValue: text}},
-					"max_chunk_length": {Kind: &structpb.Value_NumberValue{NumberValue: maxChunkLengthForTextCatalog}},
-					"chunk_overlap":    {Kind: &structpb.Value_NumberValue{NumberValue: chunkOverlapForTextCatalog}},
+					"text_input":       structpb.NewStringValue(text),
+					"max_chunk_length": structpb.NewNumberValue(maxChunkLengthForTextCatalog),
+					"chunk_overlap":    structpb.NewNumberValue(chunkOverlapForTextCatalog),
 				},
 			},
 		},
 	}
 	res, err := s.PipelinePub.TriggerNamespacePipelineRelease(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to trigger %s pipeline. err:%w", ChunkTextPipelineID, err)
+		return nil, fmt.Errorf("failed to trigger %s pipeline. err:%w", ChunkTextPipeline.ID, err)
 	}
 	result, err := GetChunksFromResponse(res)
 	if err != nil {
@@ -414,20 +504,20 @@ func (s *Service) EmbeddingTextPipe(ctx context.Context, texts []string) ([][]fl
 				for _, text := range batch {
 					inputs = append(inputs, &structpb.Struct{
 						Fields: map[string]*structpb.Value{
-							"chunk_input": {Kind: &structpb.Value_StringValue{StringValue: text}},
+							"chunk_input": structpb.NewStringValue(text),
 						},
 					})
 				}
 
 				req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
-					NamespaceId: NamespaceID,
-					PipelineId:  EmbedTextPipelineID,
-					ReleaseId:   EmbedTextVersion,
+					NamespaceId: EmbedTextPipeline.Namespace,
+					PipelineId:  EmbedTextPipeline.ID,
+					ReleaseId:   EmbedTextPipeline.Version,
 					Inputs:      inputs,
 				}
 				res, err := s.PipelinePub.TriggerNamespacePipelineRelease(ctx, req)
 				if err != nil {
-					errChan <- fmt.Errorf("failed to trigger %s pipeline. err:%w", EmbedTextPipelineID, err)
+					errChan <- fmt.Errorf("failed to trigger %s pipeline. err:%w", EmbedTextPipeline.ID, err)
 					ctxCancel()
 					return
 				}
@@ -502,21 +592,21 @@ func (s *Service) QuestionAnsweringPipe(ctx context.Context, question string, si
 		retrievedChunk += chunk + "\n\n"
 	}
 	req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
-		NamespaceId: NamespaceID,
-		PipelineId:  QAPipelineID,
-		ReleaseId:   QAVersion,
+		NamespaceId: QAPipeline.Namespace,
+		PipelineId:  QAPipeline.ID,
+		ReleaseId:   QAPipeline.Version,
 		Inputs: []*structpb.Struct{
 			{
 				Fields: map[string]*structpb.Value{
-					"retrieved_chunk": {Kind: &structpb.Value_StringValue{StringValue: retrievedChunk}},
-					"user_question":   {Kind: &structpb.Value_StringValue{StringValue: question}},
+					"retrieved_chunk": structpb.NewStringValue(retrievedChunk),
+					"user_question":   structpb.NewStringValue(question),
 				},
 			},
 		},
 	}
 	res, err := s.PipelinePub.TriggerNamespacePipelineRelease(ctx, req)
 	if err != nil {
-		return "", fmt.Errorf("failed to trigger %s pipeline. err:%w", QAPipelineID, err)
+		return "", fmt.Errorf("failed to trigger %s pipeline. err:%w", QAPipeline.ID, err)
 	}
 	reply := res.Outputs[0].GetFields()["assistant_reply"].GetStringValue()
 	return reply, nil

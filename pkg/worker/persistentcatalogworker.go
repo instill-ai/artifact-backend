@@ -399,15 +399,39 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processConvertingFile(ctx contex
 	logger, _ := logger.GetZapLogger(ctx)
 
 	fileInMinIOPath := file.Destination
+
+	// TODO jvallesm: we should only return errors in these child methods and
+	// centralize logging in wp.processFile.
+	logger = logger.With(
+		zap.String("fileUID", file.UID.String()),
+		zap.String("filePath", fileInMinIOPath),
+	)
+
 	bucket := checkIfUploadedByBlobURL(fileInMinIOPath)
 	data, err := wp.svc.MinIO.GetFile(ctx, bucket, fileInMinIOPath)
 	if err != nil {
-		logger.Error("Failed to get file from minIO.", zap.String("File path", fileInMinIOPath))
+		logger.Error("Failed to get file from minIO")
 		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
 	}
 
 	// encode data to base64
 	base64Data := base64.StdEncoding.EncodeToString(data)
+
+	// Read converting pipelines from catalog.
+	kb, err := wp.svc.Repository.GetKnowledgeBaseByUID(ctx, file.KnowledgeBaseUID)
+	if err != nil {
+		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, fmt.Errorf("fetching parent catalog: %w", err)
+	}
+
+	convertingPipelines := make([]service.PipelineRelease, 0, len(kb.ConvertingPipelines))
+	for _, pipelineName := range kb.ConvertingPipelines {
+		pipeline, err := service.PipelineReleaseFromName(pipelineName)
+		if err != nil {
+			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, fmt.Errorf("parsing pipeline name: %w", err)
+		}
+
+		convertingPipelines = append(convertingPipelines, pipeline)
+	}
 
 	// convert the pdf file to md
 	var convertedMD string
@@ -423,22 +447,28 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processConvertingFile(ctx contex
 			if err != nil {
 				logger.Error("Failed to convert pdf to md using docling model, fallback to pipeline.")
 				if convertedMD, err = wp.svc.ConvertToMDPipe(ctx, file.UID, base64Data, artifactpb.FileType(artifactpb.FileType_value[file.Type])); err != nil {
-					logger.Error("Failed to convert pdf to md using pdf-to-md pipeline.", zap.String("File path", fileInMinIOPath))
+					logger.Error("Failed to convert pdf to md using pdf-to-md pipeline")
 					return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
 				}
 			}
 	*/
 	default:
-		if convertedMD, err = wp.svc.ConvertToMDPipe(ctx, file.UID, base64Data, artifactpb.FileType(artifactpb.FileType_value[file.Type])); err != nil {
-			logger.Error("Failed to convert pdf to md using pdf-to-md pipeline.", zap.String("File path", fileInMinIOPath))
-			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
+		convertedMD, err = wp.svc.ConvertToMDPipe(
+			ctx,
+			file.UID,
+			base64Data,
+			artifactpb.FileType(artifactpb.FileType_value[file.Type]),
+			convertingPipelines,
+		)
+		if err != nil {
+			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, fmt.Errorf("converting file to Markdown: %w", err)
 		}
 	}
 
 	// save the converted file into object storage and metadata into database
 	err = saveConvertedFile(ctx, wp.svc, file.KnowledgeBaseUID, file.UID, "converted_"+file.Name, []byte(convertedMD))
 	if err != nil {
-		logger.Error("Failed to save converted data.", zap.String("File path", fileInMinIOPath))
+		logger.Error("Failed to save converted data")
 		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
 	}
 	// update the file status to chunking status in database
@@ -447,7 +477,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processConvertingFile(ctx contex
 	}
 	updatedFile, err = wp.svc.Repository.UpdateKnowledgeBaseFile(ctx, file.UID.String(), updateMap)
 	if err != nil {
-		logger.Error("Failed to update file status.", zap.String("File uid", file.UID.String()))
+		logger.Error("Failed to update file status")
 		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
 	}
 
@@ -517,8 +547,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) procesSummarizingFile(ctx contex
 	}
 
 	// Update file's summarizing pipeline metadata
-	summarizingPipelineMetadata := service.NamespaceID + "/" + service.GenerateSummaryPipelineID + "@" + service.GenerateSummaryVersion
-	err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", summarizingPipelineMetadata, "", "", nil, nil, nil, nil, nil)
+	err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", service.GenerateSummaryPipeline.Name(), "", "", nil, nil, nil, nil, nil)
 	if err != nil {
 		logger.Error("Failed to save summarizing pipeline metadata.", zap.String("File uid:", file.UID.String()))
 		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, fmt.Errorf("failed to save summarizing pipeline metadata: %w", err)
@@ -669,8 +698,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processChunkingFile(ctx context.
 	}
 
 	// Update file's chunking pipeline metadata
-	chunkingPipelineMetadata := service.NamespaceID + "/" + service.ChunkTextPipelineID + "@" + service.ChunkTextVersion
-	err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", "", chunkingPipelineMetadata, "", nil, nil, nil, nil, nil)
+	err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", "", service.ChunkTextPipeline.Name(), "", nil, nil, nil, nil, nil)
 	if err != nil {
 		logger.Error("Failed to save chunking pipeline metadata.", zap.String("File uid:", file.UID.String()))
 		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, fmt.Errorf("failed to save chunking pipeline metadata: %w", err)
@@ -740,8 +768,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processEmbeddingFile(ctx context
 	}
 
 	// save embedding pipeline metadata into file's extra metadata
-	embeddingPipelineMetadata := service.NamespaceID + "/" + service.EmbedTextPipelineID + "@" + service.EmbedTextVersion
-	err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", "", "", embeddingPipelineMetadata, nil, nil, nil, nil, nil)
+	err = wp.svc.Repository.UpdateKbFileExtraMetaData(ctx, file.UID, "", "", "", "", service.EmbedTextPipeline.Name(), nil, nil, nil, nil, nil)
 	if err != nil {
 		logger.Error("Failed to save embedding pipeline metadata.", zap.String("File uid:", file.UID.String()))
 		return nil,

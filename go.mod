@@ -15,7 +15,7 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.22.0
 	github.com/influxdata/influxdb-client-go/v2 v2.12.3
-	github.com/instill-ai/protogen-go v0.3.3-alpha.0.20250604083457-5b596b498aa8
+	github.com/instill-ai/protogen-go v0.3.3-alpha.0.20250612072847-040eeef754c0
 	github.com/instill-ai/usage-client v0.3.0-alpha.0.20250313022849-49504d982f18
 	github.com/instill-ai/x v0.8.0-alpha.0.20250522164415-9172edd336bb
 	github.com/knadh/koanf v1.5.0
@@ -33,6 +33,7 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v0.39.0
 	go.opentelemetry.io/otel/trace v1.16.0
 	go.uber.org/zap v1.26.0
+	golang.org/x/mod v0.17.0
 	golang.org/x/net v0.38.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240814211410-ddb44dafa142
 	google.golang.org/grpc v1.66.0
@@ -91,7 +92,7 @@ require (
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/kr/text v0.2.0 // indirect
-	github.com/lib/pq v1.10.9 // indirect
+	github.com/lib/pq v1.10.9
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
