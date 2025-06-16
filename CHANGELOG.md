@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.26.0-rc](https://github.com/instill-ai/artifact-backend/compare/v0.25.2-rc...v0.26.0-rc) (2025-06-16)
+
+
+### Features
+
+* **catalog:** specify document conversion pipelines in catalog creation ([#197](https://github.com/instill-ai/artifact-backend/issues/197)) ([08e124e](https://github.com/instill-ai/artifact-backend/commit/08e124ef5e591298e6f4729369a115f33e94ab6b))
+
+
+### Bug Fixes
+
+* **subscription:** update enum for starter plan ([#194](https://github.com/instill-ai/artifact-backend/issues/194)) ([922e2ff](https://github.com/instill-ai/artifact-backend/commit/922e2ffd8525639c68ddb73d8287242d7a7f6aba))
+
 ## [0.25.2-rc](https://github.com/instill-ai/artifact-backend/compare/v0.25.1-alpha...v0.25.2-rc) (2025-06-11)
 
 
