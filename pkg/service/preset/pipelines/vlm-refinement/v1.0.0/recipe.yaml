@@ -1,0 +1,87 @@
+version: v1beta
+variable:
+  document-page-images:
+    title: Document Page Images
+    description: Document whole page images
+    type: array:image
+  document-page-markdowns:
+    title: Document Page Markdowns
+    description: Per-page Markdown
+    type: array:string
+component:
+  batch-images:
+    type: collection
+    input:
+      data: ${variable.document-page-images}
+      size: 2
+    task: TASK_SPLIT
+  batch-markdown:
+    type: collection
+    input:
+      data: ${variable.document-page-markdowns}
+      size: 2
+    task: TASK_SPLIT
+  vlm-refine-markdown:
+    type: iterator
+    range:
+      start: 0
+      stop: ${batch-images.output.data:length}
+    component:
+      merge-batch-markdown:
+        type: json
+        input:
+          json-value: ${batch-markdown.output.data[i]}
+          jq-filter: join("\n")
+        task: TASK_JQ
+      refine-markdown:
+        type: openai
+        task: TASK_TEXT_GENERATION
+        input:
+          model: gpt-4o
+          images: ${batch-images.output.data[i]}
+          n: 1
+          prompt: |-
+            Conduct OCR to extract all text from the document images. Follow the guidelines below to enhance and correct the Drafted Markdown content based on these images. Ensure strict alignment with the images and Drafted Markdown Content, making only necessary corrections to improve accuracy and formatting.
+
+            **Drafted Markdown Content**:
+            ```
+            ${merge-batch-markdown.output.results}
+            ```
+
+            **Guidelines**:
+            1. **Text and Formatting**: Ensure all informative text and details are included. Correct any errors in the Markdown text (e.g., line break (\n), position, symbol, punctuation, etc.), maintaining proper structure and sentence with appropriate headings and formatting.
+            2. **Tables**: Format tables using pipes and dashes, ensuring completeness and alignment.
+            3. **Images**: Add descriptions for each image contained in the document, accurately reflecting their content. For diagrams or charts, provide detailed descriptions of elements and data.
+            4. **Consistency**: Maintain consistent formatting and terminology throughout. Ensure the document is coherent, especially between heading levels.
+
+            Finally, make sure that the Markdown text contains detailed descriptions of each image, diagram or graph.
+
+            Just output the enhanced Markdown text directly, without additional explanations or code block symbols (e.g., ```):
+          response-format:
+            type: text
+          system-message: |-
+            Your task is to enhance and revise the provided Markdown text by accurately reflecting the content visible in the document images. Make only the necessary corrections to ensure accuracy, formatting, and completeness, without adding speculative content. Do not remove any text from the Drafted Markdown content.
+
+            **Instructions:**
+            1. **Review and Compare**: Carefully examine the details in both the document images and the Drafted Markdown content. Ensure all text from the images is included in your revised Markdown.
+            2. **Correct Formatting**: Fix any Markdown formatting errors while preserving all existing text, headings, lists, math formulas (LaTeX), tables, charts and inline formatting.
+            3. **Detail Extraction**: Ensure all bullet points, numbered lists, Chinese numbers/lists, and tables are complete and properly formatted. Pay special attention to the beginning of the document (i.e., texts in the beginning of Drafted Markdown Content).
+            4. **Image Descriptions**: Add accurate descriptions for all images in detail using Markdown syntax, reflecting the content without assumptions.
+            5. **Avoid Omissions**: Do not omit any text from the original document (i.e., drafted markdown content), especially at the beginning of the pages. Ensure all content is extracted for completeness.
+            6. **Output Requirements**: Provide the enhanced Markdown text without any code block markers or additional instructions.
+
+            Return only the enhanced/revised Markdown text. Do NOT output any code block symbols (```) and header/footer of each page.
+          temperature: 0
+          top-p: 0.01
+    output-elements:
+      result: ${refine-markdown.output.texts[0]}
+  merge-markdown-refinement:
+    type: json
+    input:
+      json-value: ${vlm-refine-markdown.output.result}
+      jq-filter: join("\n")
+    task: TASK_JQ
+output:
+  converted-markdown:
+    title: Converted Markdown
+    value: ${merge-markdown-refinement.output.results[0]}
