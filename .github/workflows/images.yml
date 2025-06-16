@@ -2,6 +2,13 @@ name: Build and Push Images
 
 on:
   workflow_call:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "README.md"
+    tags:
+      - "*-rc"
   release:
     types: [published]
 
@@ -9,7 +16,7 @@ jobs:
   docker-hub:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           token: ${{ secrets.botGitHubToken }}
 
@@ -19,7 +26,7 @@ jobs:
           envFile: .env
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+        uses: docker/setup-buildx-action@v3
 
       - name: Login to DockerHub
         uses: docker/login-action@v3
@@ -29,20 +36,20 @@ jobs:
 
       - name: Build and push (latest)
         if: github.ref == 'refs/heads/main'
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@v6
         with:
           platforms: linux/amd64,linux/arm64
           context: .
           push: true
           build-args: |
-            SERVICE_NAME=artifact-backend
+            SERVICE_NAME=${{ env.SERVICE_NAME }}
             SERVICE_VERSION=${{ github.sha }}
           tags: instill/artifact-backend:latest
           cache-from: type=registry,ref=instill/artifact-backend:buildcache
           cache-to: type=registry,ref=instill/artifact-backend:buildcache,mode=max
 
       - name: Set Versions
-        if: github.event_name == 'release'
+        if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')
         uses: actions/github-script@v6
         id: set_version
         with:
@@ -52,15 +59,15 @@ jobs:
             core.setOutput('tag', tag)
             core.setOutput('no_v_tag', no_v_tag)
 
-      - name: Build and push (release)
-        if: github.event_name == 'release'
-        uses: docker/build-push-action@v3
+      - name: Build and push (rc/release)
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'release'
+        uses: docker/build-push-action@v6
         with:
           platforms: linux/amd64,linux/arm64
           context: .
           push: true
           build-args: |
-            SERVICE_NAME=artifact-backend
+            SERVICE_NAME=${{ env.SERVICE_NAME }}
             SERVICE_VERSION=${{steps.set_version.outputs.no_v_tag}}
           tags: instill/artifact-backend:${{steps.set_version.outputs.no_v_tag}}
           cache-from: type=registry,ref=instill/artifact-backend:buildcache
