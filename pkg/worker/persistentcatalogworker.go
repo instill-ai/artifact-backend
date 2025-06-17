@@ -178,11 +178,6 @@ func (wp *persistentCatalogFileToEmbWorkerPool) startWorker(ctx context.Context,
 			// instill-ai/x/resource to extract information from the context.
 			ctx := metadata.NewIncomingContext(ctx, md)
 
-			// The metadata is placed in the outgoing context as a way to
-			// propagate the request context to downstream services like
-			// pipeline or model.
-			ctx = metadata.NewOutgoingContext(ctx, md)
-
 			// register file process worker in redis and extend the lifetime
 			ok, stopRegisterFunc := registerFileWorker(ctx, wp.svc, file.UID.String(), extensionHelperPeriod, workerLifetime)
 			if !ok {
