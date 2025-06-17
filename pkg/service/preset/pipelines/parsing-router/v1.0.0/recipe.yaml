@@ -4,16 +4,21 @@ variable:
     title: Document Input
     description: Upload a document (PDF/DOCX/DOC/PPTX/PPT)
     type: file
-  api_url:
-    title: API Gateway URL
-    description: |-
-      The base URL for Instill Core's API gateway.
-      This makes the same recipe work on different environments (local, cluster).
+  pipeline_url:
+    title: Pipeline URL
+    description: pipeline-backend's (internal) public API URL
     type: string
-  api_key:
-    title: API Key
-    description: |-
-      A valid API key for the API gateway URL.
+  model_url:
+    title: Model URL
+    description: model-backend's (internal) public API URL
+    type: string
+  user_uid:
+    title: User UID
+    description: The UID of the authenticated user.
+    type: string
+  requester_uid:
+    title: Requester UID
+    description: The UID of the namespace requesting the trigger.
     type: string
 component:
   pages-to-images:
@@ -96,7 +101,14 @@ component:
     type: http
     task: TASK_POST
     input:
-      endpoint-url: ${variable.api_url}/v1beta/namespaces/preset/pipelines/vlm-refinement/releases/v1.0.0/trigger
+      endpoint-url: ${variable.pipeline_url}/v1beta/namespaces/preset/pipelines/vlm-refinement/releases/v1.0.0/trigger
+      header:
+        Instill-User-Uid:
+          - ${variable.user_uid}
+        Instill-Requester-Uid:
+          - ${variable.requester_uid}
+        Instill-Auth-Type:
+          - user
       body:
         data:
           - variable:
@@ -105,13 +117,19 @@ component:
     condition: ${string-to-json.output.json.selectedCategory} == "Visual Language Model Pipeline" && ${heuristic.output.body} != ""
     setup:
       authentication:
-        auth-type: BEARER_TOKEN
-        token: ${variable.api_key}
+        auth-type: NO_AUTH
   vlm-ocr:
     type: http
     task: TASK_POST
     input:
-      endpoint-url: ${variable.api_url}/v1beta/namespaces/preset/pipelines/vlm-ocr/releases/v1.0.0/trigger
+      endpoint-url: ${variable.pipeline_url}/v1beta/namespaces/preset/pipelines/vlm-ocr/releases/v1.0.0/trigger
+      header:
+        Instill-User-Uid:
+          - ${variable.user_uid}
+        Instill-Requester-Uid:
+          - ${variable.requester_uid}
+        Instill-Auth-Type:
+          - user
       body:
         data:
           - variable:
@@ -119,13 +137,19 @@ component:
     condition: ${string-to-json.output.json.selectedCategory} == "Visual Language Model Pipeline" && ${heuristic.output.body} == ""
     setup:
       authentication:
-        auth-type: BEARER_TOKEN
-        token: ${variable.api_key}
+        auth-type: NO_AUTH
   docling:
     type: http
     task: TASK_POST
     input:
-      endpoint-url: ${variable.api_url}/v1alpha/namespaces/instill-ai/models/docling/versions/v0.1.0/trigger
+      endpoint-url: ${variable.model_url}/v1alpha/namespaces/instill-ai/models/docling/versions/v0.1.0/trigger
+      header:
+        Instill-User-Uid:
+          - ${variable.user_uid}
+        Instill-Requester-Uid:
+          - ${variable.requester_uid}
+        Instill-Auth-Type:
+          - user
       body: |-
         {
             "taskInputs": [
@@ -139,8 +163,7 @@ component:
     condition: ${string-to-json.output.json.selectedCategory} == "Docling Model"
     setup:
       authentication:
-        auth-type: BEARER_TOKEN
-        token: ${variable.api_key}
+        auth-type: NO_AUTH
 output:
   parsing-strategy:
     title: Parsing Strategy

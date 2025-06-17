@@ -235,12 +235,15 @@ func (s *Service) ConvertToMDPipe(
 		if resource.GetRequestSingleHeader(ctx, constant.HeaderBackendKey) == constant.AgentBackend {
 			pipelines = []PipelineRelease{ConvertDocToMDRouterPipeline}
 
-			// TODO jvallesm: we're relying in an API key set in the
-			// configuration, which means all the requests are tied to a single
-			// user. We should update the recipe to call the _internal_
-			// services and pass the Instill User and Requester headers.
-			input.Fields["api_url"] = structpb.NewStringValue(config.Config.APIGateway.URL)
-			input.Fields["api_key"] = structpb.NewStringValue(config.Config.APIGateway.Token)
+			pipelineURL := fmt.Sprintf("http://%s:%d", config.Config.PipelineBackend.Host, config.Config.PipelineBackend.PublicPort)
+			input.Fields["pipeline_url"] = structpb.NewStringValue(pipelineURL)
+
+			modelURL := fmt.Sprintf("http://%s:%d", config.Config.ModelBackend.Host, config.Config.ModelBackend.PublicPort)
+			input.Fields["model_url"] = structpb.NewStringValue(modelURL)
+
+			requesterUID, userUID := resource.GetRequesterUIDAndUserUID(ctx)
+			input.Fields["user_uid"] = structpb.NewStringValue(userUID.String())
+			input.Fields["requester_uid"] = structpb.NewStringValue(requesterUID.String())
 
 			getConvertResult = routedConvertResultParser
 

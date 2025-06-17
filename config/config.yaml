@@ -86,5 +86,3 @@ filetoembeddingworker:
   numberofworkers: 2
 blob:
   hostport: http://localhost:8080
-apigateway:
-  url: http://api-gateway:8080

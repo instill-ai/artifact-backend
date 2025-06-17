@@ -35,7 +35,6 @@ type AppConfig struct {
 	Milvus                MilvusConfig          `koanf:"milvus"`
 	FileToEmbeddingWorker FileToEmbeddingWorker `koanf:"filetoembeddingworker"`
 	Blob                  BlobConfig            `koanf:"blob"`
-	APIGateway            APIGatewayConfig      `koanf:"apigateway"`
 }
 
 // OpenFGA config
@@ -170,12 +169,6 @@ type FileToEmbeddingWorker struct {
 
 type BlobConfig struct {
 	HostPort string `koanf:"hostport"`
-}
-
-// APIGateway defines a way to call the public Instill API Gateway.
-type APIGatewayConfig struct {
-	URL   string `koanf:"url"`
-	Token string `koanf:"token"`
 }
 
 // Init - Assign global config to decoded config struct
