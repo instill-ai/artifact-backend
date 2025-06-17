@@ -244,6 +244,7 @@ func (s *Service) ConvertToMDPipe(
 			requesterUID, userUID := resource.GetRequesterUIDAndUserUID(ctx)
 			input.Fields["user_uid"] = structpb.NewStringValue(userUID.String())
 			input.Fields["requester_uid"] = structpb.NewStringValue(requesterUID.String())
+			input.Fields["instill_backend"] = structpb.NewStringValue(constant.AgentBackend)
 
 			getConvertResult = routedConvertResultParser
 

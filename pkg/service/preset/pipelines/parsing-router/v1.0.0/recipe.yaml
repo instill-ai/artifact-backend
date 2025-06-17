@@ -18,7 +18,13 @@ variable:
     type: string
   requester_uid:
     title: Requester UID
-    description: The UID of the namespace requesting the trigger.
+    description: (Optional) The UID of the namespace requesting the trigger.
+    type: string
+  instill_backend:
+    title: Instill Backend
+    description: |-
+      (Optional) Identifies the source of the pipeline trigger and propagates
+      it to downstream services like pipeline or model via the HTTP component.
     type: string
 component:
   pages-to-images:
@@ -109,6 +115,8 @@ component:
           - ${variable.requester_uid}
         Instill-Auth-Type:
           - user
+        Instill-Backend:
+          - ${variable.instill_backend}
       body:
         data:
           - variable:
@@ -130,6 +138,8 @@ component:
           - ${variable.requester_uid}
         Instill-Auth-Type:
           - user
+        Instill-Backend:
+          - ${variable.instill_backend}
       body:
         data:
           - variable:
@@ -150,6 +160,8 @@ component:
           - ${variable.requester_uid}
         Instill-Auth-Type:
           - user
+        Instill-Backend:
+          - ${variable.instill_backend}
       body: |-
         {
             "taskInputs": [
