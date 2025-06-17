@@ -46,32 +46,3 @@ func NewMGMTPrivateClient(ctx context.Context) (pb.MgmtPrivateServiceClient, *gr
 
 	return pb.NewMgmtPrivateServiceClient(clientConn), clientConn
 }
-
-// NewMGMTPublicClient returns an initialized gRPC client for the MGMT public
-// API.
-func NewMGMTPublicClient(ctx context.Context) (pb.MgmtPublicServiceClient, *grpc.ClientConn) {
-	logger, _ := logger.GetZapLogger(ctx)
-
-	credDialOpt := grpc.WithTransportCredentials(insecure.NewCredentials())
-	if config.Config.MgmtBackend.HTTPS.Cert != "" && config.Config.MgmtBackend.HTTPS.Key != "" {
-		creds, err := credentials.NewServerTLSFromFile(config.Config.MgmtBackend.HTTPS.Cert, config.Config.MgmtBackend.HTTPS.Key)
-		if err != nil {
-			logger.Fatal(err.Error())
-		}
-		credDialOpt = grpc.WithTransportCredentials(creds)
-	}
-
-	clientConn, err := grpc.NewClient(
-		fmt.Sprintf("%v:%v", config.Config.MgmtBackend.Host, config.Config.MgmtBackend.PublicPort),
-		credDialOpt,
-		grpc.WithUnaryInterceptor(middleware.MetadataPropagatorInterceptor),
-		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(constant.MaxPayloadSize),
-			grpc.MaxCallSendMsgSize(constant.MaxPayloadSize)),
-	)
-	if err != nil {
-		logger.Error(err.Error())
-		return nil, nil
-	}
-
-	return pb.NewMgmtPublicServiceClient(clientConn), clientConn
-}

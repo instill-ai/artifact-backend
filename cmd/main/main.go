@@ -55,7 +55,6 @@ import (
 	servicepkg "github.com/instill-ai/artifact-backend/pkg/service"
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	mgmtpb "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
-	modelpb "github.com/instill-ai/protogen-go/model/model/v1alpha"
 	pipelinepb "github.com/instill-ai/protogen-go/pipeline/pipeline/v1beta"
 	miniox "github.com/instill-ai/x/minio"
 )
@@ -125,16 +124,10 @@ func main() {
 	grpczap.ReplaceGrpcLoggerV2WithVerbosity(logger, 3)
 
 	// Initialize clients needed for service
-	pipelinePublicServiceClient, pipelinePublicGrpcConn, modelPublicServiceClient, modelPublicGrpcConn, _, mgmtPublicServiceClientConn, mgmtPrivateServiceClient, mgmtPrivateServiceGrpcConn,
+	pipelinePublicServiceClient, pipelinePublicGrpcConn, mgmtPrivateServiceClient, mgmtPrivateServiceGrpcConn,
 		redisClient, influxDBClient, db, minioClient, milvusClient, aclClient, fgaClientConn, fgaReplicaClientConn := newClients(ctx, logger)
 	if pipelinePublicGrpcConn != nil {
 		defer pipelinePublicGrpcConn.Close()
-	}
-	if modelPublicGrpcConn != nil {
-		defer modelPublicGrpcConn.Close()
-	}
-	if mgmtPublicServiceClientConn != nil {
-		defer mgmtPublicServiceClientConn.Close()
 	}
 	if mgmtPrivateServiceGrpcConn != nil {
 		defer mgmtPrivateServiceGrpcConn.Close()
@@ -155,7 +148,6 @@ func main() {
 		minioClient,
 		mgmtPrivateServiceClient,
 		pipelinePublicServiceClient,
-		modelPublicServiceClient,
 		httpclient.NewRegistryClient(ctx),
 		redisClient,
 		milvusClient,
@@ -326,10 +318,6 @@ func main() {
 func newClients(ctx context.Context, logger *zap.Logger) (
 	pipelinepb.PipelinePublicServiceClient,
 	*grpc.ClientConn,
-	modelpb.ModelPublicServiceClient,
-	*grpc.ClientConn,
-	mgmtpb.MgmtPublicServiceClient,
-	*grpc.ClientConn,
 	mgmtpb.MgmtPrivateServiceClient,
 	*grpc.ClientConn,
 	*redis.Client,
@@ -345,12 +333,8 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 	// init pipeline grpc client
 	pipelinePublicServiceClient, pipelinePublicServiceClientConn := grpcclient.NewPipelinePublicClient(ctx)
 
-	// init model grpc client
-	modelPublicServiceClient, modelPublicServiceClientConn := grpcclient.NewModelPublicClient(ctx)
-
 	// initialize mgmt clients
 	mgmtPrivateServiceClient, mgmtPrivateServiceClientConn := grpcclient.NewMGMTPrivateClient(ctx)
-	mgmtPublicServiceClient, mgmtPublicServiceClientConn := grpcclient.NewMGMTPublicClient(ctx)
 
 	// Initialize redis client
 	redisClient := redis.NewClient(&config.Config.Cache.Redis.RedisOptions)
@@ -398,7 +382,8 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 
 	}
 	aclClient := acl.NewACLClient(fgaClient, fgaReplicaClient, redisClient)
-	return pipelinePublicServiceClient, pipelinePublicServiceClientConn, modelPublicServiceClient, modelPublicServiceClientConn, mgmtPublicServiceClient, mgmtPrivateServiceClientConn, mgmtPrivateServiceClient, mgmtPublicServiceClientConn, redisClient, influxDBClient, db, minioClient, milvusClient, aclClient, fgaClientConn, fgaReplicaClientConn
+
+	return pipelinePublicServiceClient, pipelinePublicServiceClientConn, mgmtPrivateServiceClient, mgmtPrivateServiceClientConn, redisClient, influxDBClient, db, minioClient, milvusClient, aclClient, fgaClientConn, fgaReplicaClientConn
 }
 
 func newGrpcOptionAndCreds(logger *zap.Logger) ([]grpc.ServerOption, credentials.TransportCredentials) {

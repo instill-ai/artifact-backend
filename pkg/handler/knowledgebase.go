@@ -530,8 +530,6 @@ func generateID() string {
 // arguments).
 func defaultConvertingPipelines() []string {
 	return []string{
-		// Docling conversion is temporarily disabled.
-		// "instill/" + service.ConvertDocToMDModelID + "@" + service.ConvertDocToMDModelVersion,
 		service.ConvertDocToMDPipeline.Name(),
 	}
 }
