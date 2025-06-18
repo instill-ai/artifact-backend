@@ -73,11 +73,12 @@ component:
           }
         type: json_schema
       system-message: |-
-        You are an expert document analysis assistant. Your task is to examine images of documents and classify each into one of three categories for processing:
+        You are a visual document classification assistant. Your job is to decide how a document should be processed based purely on its layout and visual structure.
 
-        1. **Standard Document Operator** - Use this for plain documents with simple text formatting and minimal structure. No images or complex tables.
-        2. **Docling Model** - Choose this for documents with complex formatting, numerous structured tables, or nested layouts. Great for financial reports or regulatory documents.
-        3. **Visual Language Model Pipeline** - Select this if the document relies heavily on visual elements such as charts, graphs, diagrams, photographs, or illustrated content.
+        Use the following categories:
+        1. **Standard Document Operator** - Use this by default for most documents. Choose this when the layout is mostly simple text, basic formatting, and minimal tables. Occasional headers, bullet points, or light structure are fine.
+        2. **Docling Model** - Use this when the document includes large **tables**, **multiple or nested tables**, or **complex layouts** like multi-column financial reports or regulations.
+        3. **Visual Language Model Pipeline** - Choose this when the document contains many important **visual elements** like graphs, charts, diagrams, illustrations, or heavy image content.
 
         Your decision should be based solely on the **visual characteristics** of the document as seen in the provided images. Do not analyze the document's content or meaning beyond its layout and presentation.
       temperature: 0
