@@ -12,8 +12,11 @@ import (
 	"golang.org/x/mod/semver"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/instill-ai/artifact-backend/config"
+	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
+	"github.com/instill-ai/x/resource"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	pipelinepb "github.com/instill-ai/protogen-go/pipeline/pipeline/v1beta"
@@ -69,6 +72,36 @@ func PipelineReleaseFromName(name string) (PipelineRelease, error) {
 }
 
 var (
+	// ConvertDocToMDRouterPipeline is a pipeline that routes the document
+	// conversion to different parsers (heuristic, fast, docling, vlm-ocr,
+	// vlm-refinement) depending on the document characteristics.
+	// NOTE: this pipeline depends on the existence of pipelines and models, so
+	// it will only be used on Instill Agent requests.
+	// TODO jvallesm: we need an artifact-backend-ee distribution to avoid such
+	// conditional routing.
+	ConvertDocToMDRouterPipeline = PipelineRelease{
+		Namespace: defaultNamespaceID,
+		ID:        "parsing-router",
+		Version:   "v1.0.0",
+	}
+
+	// ConvertDocVLM is used by ConvertDocToMDRouterPipeline to extract
+	// Markdown from a set of images.
+	ConvertDocVLM = PipelineRelease{
+		Namespace: defaultNamespaceID,
+		ID:        "vlm-ocr",
+		Version:   "v1.0.0",
+	}
+
+	// ConvertDocVLMRefinement is used by ConvertDocToMDRouterPipeline to
+	// enhance a heuristic document-to-Markdown conversion using a VLM and
+	// a set of images from the document.
+	ConvertDocVLMRefinement = PipelineRelease{
+		Namespace: defaultNamespaceID,
+		ID:        "vlm-refinement",
+		Version:   "v1.0.0",
+	}
+
 	// ConvertDocToMDPipeline is the default conversion pipeline for documents.
 	// Note: this pipeline is for the new indexing pipeline having
 	// convert_result or convert_result2
@@ -130,6 +163,11 @@ var (
 		ChunkTextPipeline,
 		EmbedTextPipeline,
 		QAPipeline,
+
+		// Agent-only pipelines.
+		ConvertDocToMDRouterPipeline,
+		ConvertDocVLM,
+		ConvertDocVLMRefinement,
 	}
 )
 
@@ -162,27 +200,10 @@ func (s *Service) ConvertToMDPipe(
 		},
 	}
 
+	getConvertResult := simpleConvertResultParser
+
 	// Determine which pipeline and version to use based on file type
 	switch fileType {
-	// Document types use the new pipeline
-	case artifactpb.FileType_FILE_TYPE_PDF,
-		artifactpb.FileType_FILE_TYPE_DOCX,
-		artifactpb.FileType_FILE_TYPE_DOC,
-		artifactpb.FileType_FILE_TYPE_PPT,
-		artifactpb.FileType_FILE_TYPE_PPTX:
-
-		if len(pipelines) == 0 {
-			// Custom pipelines only take the document input, but the default
-			// (and historical) one needs the model to be set.
-			//
-			// NOTE: this means that we can't pass the default
-			// ConvertDocToMDPipeline as a custom pipeline, we'd be missing the
-			// VLM model setting. Validation when creating a catalog should
-			// prevent this.
-			pipelines = []PipelineRelease{ConvertDocToMDPipeline}
-			input.Fields["vlm_model"] = structpb.NewStringValue("gpt-4o")
-		}
-
 	// Spreadsheet types and others use the original pipeline
 	case artifactpb.FileType_FILE_TYPE_XLSX,
 		artifactpb.FileType_FILE_TYPE_XLS,
@@ -190,6 +211,55 @@ func (s *Service) ConvertToMDPipe(
 		artifactpb.FileType_FILE_TYPE_HTML:
 
 		pipelines = []PipelineRelease{ConvertDocToMDStandardPipeline}
+
+	// Document types use the conversion pipeline configured in the catalog, if
+	// present, or the default one for documents (parsing-router if the request
+	// comes from Instill Agent, the advanced conversion pipeline otherwise).
+	case artifactpb.FileType_FILE_TYPE_PDF,
+		artifactpb.FileType_FILE_TYPE_DOCX,
+		artifactpb.FileType_FILE_TYPE_DOC,
+		artifactpb.FileType_FILE_TYPE_PPT,
+		artifactpb.FileType_FILE_TYPE_PPTX:
+
+		if len(pipelines) != 0 {
+			break
+		}
+
+		// Instill Agent requests are identified by the HeaderBackendKey in the
+		// request metadata.
+		// TODO jvallesm: a better way to implement this would be by setting
+		// the parsing router pipeline as the conversion pipeline when creating
+		// the catalog from agent. However, since the input isn't the default
+		// one (taking only `document_input`, we'd still need to handle the
+		// fields here.
+		if resource.GetRequestSingleHeader(ctx, constant.HeaderBackendKey) == constant.AgentBackend {
+			pipelines = []PipelineRelease{ConvertDocToMDRouterPipeline}
+
+			pipelineURL := fmt.Sprintf("http://%s:%d", config.Config.PipelineBackend.Host, config.Config.PipelineBackend.PublicPort)
+			input.Fields["pipeline_url"] = structpb.NewStringValue(pipelineURL)
+
+			modelURL := fmt.Sprintf("http://%s:%d", config.Config.ModelBackend.Host, config.Config.ModelBackend.PublicPort)
+			input.Fields["model_url"] = structpb.NewStringValue(modelURL)
+
+			requesterUID, userUID := resource.GetRequesterUIDAndUserUID(ctx)
+			input.Fields["user_uid"] = structpb.NewStringValue(userUID.String())
+			input.Fields["requester_uid"] = structpb.NewStringValue(requesterUID.String())
+			input.Fields["instill_backend"] = structpb.NewStringValue(constant.AgentBackend)
+
+			getConvertResult = routedConvertResultParser
+
+			break
+		}
+
+		// Custom pipelines only take the document input, but the default
+		// (and historical) one needs the model to be set.
+		//
+		// NOTE: this means that we can't pass the default
+		// ConvertDocToMDPipeline as a custom pipeline, we'd be missing the
+		// VLM model setting. Validation when creating a catalog should
+		// prevent this.
+		pipelines = []PipelineRelease{ConvertDocToMDPipeline}
+		input.Fields["vlm_model"] = structpb.NewStringValue("gpt-4o")
 
 	default:
 		return "", fmt.Errorf("unsupported file type: %v", fileType)
@@ -256,10 +326,12 @@ func getFileTypePrefix(fileType artifactpb.FileType) string {
 	}
 }
 
-// getConvertResult extracts the conversion result from the pipeline response.
-// It first checks for a non-empty "convert_result" field, then falls back to "convert_result2".
-// Returns an error if neither field contains valid data or if the response structure is invalid.
-func getConvertResult(resp *pipelinepb.TriggerNamespacePipelineReleaseResponse) (string, error) {
+// simpleConvertResultParser extracts the conversion result from the pipeline
+// response. It first checks for a non-empty "convert_result" field, then falls
+// back to "convert_result2".
+// Returns an error if neither field contains valid data or if the response
+// structure is invalid.
+func simpleConvertResultParser(resp *pipelinepb.TriggerNamespacePipelineReleaseResponse) (string, error) {
 	if resp == nil || len(resp.Outputs) == 0 {
 		return "", fmt.Errorf("response is nil or has no outputs. resp: %v", resp)
 	}
@@ -275,6 +347,62 @@ func getConvertResult(resp *pipelinepb.TriggerNamespacePipelineReleaseResponse) 
 	convertResult2, ok2 := fields["convert_result2"]
 	if ok2 && convertResult2.GetStringValue() != "" {
 		return convertResult2.GetStringValue(), nil
+	}
+
+	return "", nil
+}
+
+func joinPBListOfStrings(list *structpb.ListValue) string {
+	values := list.GetValues()
+	asStrings := make([]string, len(values))
+	for i, v := range values {
+		asStrings[i] = v.GetStringValue()
+	}
+
+	return strings.Join(asStrings, "")
+
+}
+
+// routedConvertResultParser extracts the conversion result from the
+// parsing-router pipeline response. This pipeline returns the result in
+// different fields depending on the chosen conversion method, which is also
+// returned so the correct result can be selected.
+// Returns an error if neither field contains valid data or if the response
+// structure is invalid.
+func routedConvertResultParser(resp *pipelinepb.TriggerNamespacePipelineReleaseResponse) (string, error) {
+	if resp == nil || len(resp.Outputs) == 0 {
+		return "", fmt.Errorf("response is nil or has no outputs")
+	}
+	fields := resp.Outputs[0].GetFields()
+	if fields == nil {
+		return "", fmt.Errorf("fields in the output are nil")
+	}
+
+	parsingStrategy := fields["parsing-strategy"]
+
+	switch parsingStrategy.GetStringValue() {
+	case "Standard Document Operator":
+		return joinPBListOfStrings(fields["heuristic"].GetListValue()), nil
+	case "Docling Model":
+		doclingOutput := fields["docling"].GetStructValue().GetFields()
+
+		// Not used at the moment:
+		// extractedImages := fields["extracted_images"]
+		// pagesWithImages := fields["pages_with_images"]
+		mdPages := doclingOutput["markdown_pages"].GetListValue()
+
+		return joinPBListOfStrings(mdPages), nil
+	case "Visual Language Model Pipeline":
+		if result := fields["vlm-ocr"].GetStringValue(); result != "" {
+			return result, nil
+		}
+
+		if result := fields["vlm-refinement"].GetStringValue(); result != "" {
+			return result, nil
+		}
+
+	default:
+		return "", fmt.Errorf("unrecognized parsing strategy %s", parsingStrategy.GetStringValue())
 	}
 
 	return "", nil

@@ -178,11 +178,6 @@ func (wp *persistentCatalogFileToEmbWorkerPool) startWorker(ctx context.Context,
 			// instill-ai/x/resource to extract information from the context.
 			ctx := metadata.NewIncomingContext(ctx, md)
 
-			// The metadata is placed in the outgoing context as a way to
-			// propagate the request context to downstream services like
-			// pipeline or model.
-			ctx = metadata.NewOutgoingContext(ctx, md)
-
 			// register file process worker in redis and extend the lifetime
 			ok, stopRegisterFunc := registerFileWorker(ctx, wp.svc, file.UID.String(), extensionHelperPeriod, workerLifetime)
 			if !ok {
@@ -434,35 +429,15 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processConvertingFile(ctx contex
 	}
 
 	// convert the pdf file to md
-	var convertedMD string
-	switch file.Type {
-	// The model-backend conversion method has been disabled temporarily.
-	// This will be a feature in Instill Agent and, on Instill Core, users
-	// will be able to select the conversion pipeline.
-	/*
-		case artifactpb.FileType_FILE_TYPE_PDF.String(),
-			artifactpb.FileType_FILE_TYPE_DOC.String(),
-			artifactpb.FileType_FILE_TYPE_DOCX.String():
-			convertedMD, err = wp.svc.ConvertToMDModel(ctx, file.UID, base64Data, artifactpb.FileType(artifactpb.FileType_value[file.Type]))
-			if err != nil {
-				logger.Error("Failed to convert pdf to md using docling model, fallback to pipeline.")
-				if convertedMD, err = wp.svc.ConvertToMDPipe(ctx, file.UID, base64Data, artifactpb.FileType(artifactpb.FileType_value[file.Type])); err != nil {
-					logger.Error("Failed to convert pdf to md using pdf-to-md pipeline")
-					return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
-				}
-			}
-	*/
-	default:
-		convertedMD, err = wp.svc.ConvertToMDPipe(
-			ctx,
-			file.UID,
-			base64Data,
-			artifactpb.FileType(artifactpb.FileType_value[file.Type]),
-			convertingPipelines,
-		)
-		if err != nil {
-			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, fmt.Errorf("converting file to Markdown: %w", err)
-		}
+	convertedMD, err := wp.svc.ConvertToMDPipe(
+		ctx,
+		file.UID,
+		base64Data,
+		artifactpb.FileType(artifactpb.FileType_value[file.Type]),
+		convertingPipelines,
+	)
+	if err != nil {
+		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, fmt.Errorf("converting file to Markdown: %w", err)
 	}
 
 	// save the converted file into object storage and metadata into database
