@@ -136,7 +136,14 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 		// 		humanReadable, tier.String(), customerror.ErrInvalidArgument)
 		// }
 
-		destination := ph.service.MinIO.GetUploadedFilePathInKnowledgeBase(kb.UID.String(), req.File.Name)
+		// upload the file to MinIO and create the object in the object table
+		objectUID, err := ph.uploadBase64FileToMinIO(ctx, ns.NsID, ns.NsUID, creatorUID, req.File.Name, req.File.Content, req.File.Type)
+		if err != nil {
+			log.Error("failed to get upload URL", zap.Error(err))
+			return nil, fmt.Errorf("failed to get upload URL. err: %w", err)
+		}
+		destination := minio.GetBlobObjectPath(ns.NsUID, objectUID)
+
 		kbFile := repository.KnowledgeBaseFile{
 			Name:                      req.File.Name,
 			Type:                      artifactpb.FileType_name[int32(req.File.Type)],
@@ -150,16 +157,7 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 		}
 
 		// create catalog file in database
-		res, err = ph.service.Repository.CreateKnowledgeBaseFile(ctx, kbFile, func(FileUID string) error {
-			// upload file to minio
-			err := ph.service.MinIO.UploadBase64File(ctx, minio.KnowledgeBaseBucketName, destination, req.File.Content, fileTypeConvertToMime(req.File.Type))
-			if err != nil {
-				return err
-			}
-
-			return nil
-		})
-
+		res, err = ph.service.Repository.CreateKnowledgeBaseFile(ctx, kbFile, nil)
 		if err != nil {
 			log.Error("failed to create catalog file", zap.Error(err))
 			return nil, err
@@ -509,6 +507,48 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 		for _, kbFile := range kbFiles {
 
 			objectUID := uuid.FromStringOrNil(strings.TrimPrefix(strings.Split(kbFile.Destination, "/")[1], "obj-"))
+
+			// Runtime migration for legacy files: files uploaded before the new object-based flow
+			// were stored in the "uploaded-file" folder.
+			// This migration:
+			// 1. Downloads the file from the old location
+			// 2. Re-uploads it using the new object-based flow
+			// 3. Updates the catalog file destination to reference the new object
+			// This ensures consistent data structure across both upload flows.
+			// This runtime migration will happen only once for each file.
+			//
+			// TODO: this is just a temporary solution, our Console need to
+			// adopt the new flow. So the old flow can be deprecated and
+			// removed.
+			if strings.Split(kbFile.Destination, "/")[1] == "uploaded-file" {
+
+				fileName := strings.Split(kbFile.Destination, "/")[2]
+
+				content, err := ph.service.MinIO.GetFile(ctx, minio.KnowledgeBaseBucketName, kbFile.Destination)
+				if err != nil {
+					log.Error("failed to get file", zap.Error(err))
+					return nil, err
+				}
+				contentBase64 := base64.StdEncoding.EncodeToString(content)
+				fileType := artifactpb.FileType(artifactpb.FileType_value[kbFile.Type])
+
+				objectUID, err = ph.uploadBase64FileToMinIO(ctx, ns.NsID, ns.NsUID, ns.NsUID, fileName, contentBase64, fileType)
+				if err != nil {
+					log.Error("failed to upload file to MinIO", zap.Error(err))
+					return nil, err
+				}
+
+				newDestination := minio.GetBlobObjectPath(ns.NsUID, objectUID)
+				fmt.Println("newDestination", newDestination)
+				_, err = ph.service.Repository.UpdateKnowledgeBaseFile(ctx, kbFile.UID.String(), map[string]any{
+					repository.KnowledgeBaseFileColumn.Destination: newDestination,
+				})
+				if err != nil {
+					log.Error("failed to update object", zap.Error(err))
+					return nil, err
+				}
+
+			}
 
 			downloadURL := ""
 			response, err := ph.service.GetDownloadURL(ctx, &artifactpb.GetObjectDownloadURLRequest{
@@ -869,4 +909,54 @@ func (ph *PublicHandler) GetFileSummary(ctx context.Context, req *artifactpb.Get
 	return &artifactpb.GetFileSummaryResponse{
 		Summary: string(kbFiles[0].Summary),
 	}, nil
+}
+
+// uploadBase64FileToMinIO uploads a base64-encoded file to MinIO and updates the object in the database.
+//
+// This function bridges the legacy upload flow with the new upload flow:
+// - Legacy flow: Users upload files directly without using the getUploadUrl API, bypassing object creation in the object table
+// - New flow: Users first get an upload URL, create an object in the object table, then bind the catalog file to this object
+//
+// This middleware enables legacy uploads to maintain compatibility with the new data structure by:
+// 1. Using the getUploadUrl API to obtain object UID and destination
+// 2. Uploading the base64 file to MinIO
+// 3. Creating the object record in the database
+//
+// This ensures both flows result in the same consistent data structure.
+func (ph *PublicHandler) uploadBase64FileToMinIO(ctx context.Context, nsID string, nsUID, creatorUID uuid.UUID, fileName string, content string, fileType artifactpb.FileType) (uuid.UUID, error) {
+	log, _ := logger.GetZapLogger(ctx)
+	response, err := ph.service.GetUploadURL(ctx, &artifactpb.GetObjectUploadURLRequest{
+		NamespaceId: nsID,
+		ObjectName:  fileName,
+	}, nsUID, fileName, creatorUID)
+	if err != nil {
+		log.Error("failed to get upload URL", zap.Error(err))
+		return uuid.Nil, fmt.Errorf("failed to get upload URL. err: %w", err)
+	}
+	objectUID := uuid.FromStringOrNil(response.Object.Uid)
+	destination := minio.GetBlobObjectPath(nsUID, objectUID)
+	err = ph.service.MinIO.UploadBase64File(ctx, minio.BlobBucketName, destination, content, fileTypeConvertToMime(fileType))
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("failed to upload file to MinIO. err: %w", err)
+	}
+	decodedContent, err := base64.StdEncoding.DecodeString(content)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("failed to decode file content. err: %w", err)
+	}
+	objectSize := int64(len(decodedContent))
+
+	object, err := ph.service.Repository.GetObjectByUID(ctx, objectUID)
+	if err != nil {
+		log.Error("failed to get object by uid", zap.Error(err))
+		return uuid.Nil, fmt.Errorf("failed to get object by uid. err: %w", err)
+	}
+	object.Size = objectSize
+	object.IsUploaded = true
+
+	_, err = ph.service.Repository.UpdateObject(ctx, *object)
+	if err != nil {
+		log.Error("failed to update object", zap.Error(err))
+		return uuid.Nil, fmt.Errorf("failed to update object. err: %w", err)
+	}
+	return objectUID, nil
 }
