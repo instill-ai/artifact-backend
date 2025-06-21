@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.26.1](https://github.com/instill-ai/artifact-backend/compare/v0.26.0...v0.26.1) (2025-06-21)
+
+
+### Features
+
+* **conversion:** parse documents with automatic classification on Agent requests ([#201](https://github.com/instill-ai/artifact-backend/issues/201)) ([7b96f1b](https://github.com/instill-ai/artifact-backend/commit/7b96f1b620e40167a58304c07a67bf047e527bd8))
+
+
+### Bug Fixes
+
+* **preset:** use docling converter in document component ([#204](https://github.com/instill-ai/artifact-backend/issues/204)) ([0fe3e6a](https://github.com/instill-ai/artifact-backend/commit/0fe3e6ad4f32e27f65af2e533b0465d4bd2b3ecb))
+
 ## [0.26.0](https://github.com/instill-ai/artifact-backend/compare/v0.25.2-rc...v0.26.0) (2025-06-18)
 
 
