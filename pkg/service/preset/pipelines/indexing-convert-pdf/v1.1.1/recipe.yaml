@@ -5,7 +5,6 @@ component:
     task: TASK_CONVERT_TO_MARKDOWN
     input:
       document: ${variable.document_input}
-      converter: docling
 variable:
   document_input:
     title: document-input
