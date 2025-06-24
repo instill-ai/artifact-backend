@@ -88,6 +88,9 @@ component:
     input:
       string: ${router.output.texts[0]}
     task: TASK_UNMARSHAL
+  # The heuristic component will be executed regardless of the router output.
+  # It will be used to refine the VLM method, or as a fallback for the Docling
+  # method if the model is offline.
   heuristic:
     type: document
     task: TASK_CONVERT_TO_MARKDOWN
@@ -97,7 +100,6 @@ component:
       display-all-page-image: false
       resolution: 300
       converter: pdfplumber
-    condition: ${string-to-json.output.json.selectedCategory} != "Docling Model"
   get-encoded-images:
     type: iterator
     input: ${pages-to-images.output.images}

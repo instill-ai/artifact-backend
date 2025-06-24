@@ -378,11 +378,14 @@ func routedConvertResultParser(resp *pipelinepb.TriggerNamespacePipelineReleaseR
 		return "", fmt.Errorf("fields in the output are nil")
 	}
 
+	// The heuristic method result should always be computed, so it will be
+	// used as the fallback by other methods.
+	result := joinPBListOfStrings(fields["heuristic"].GetListValue())
 	parsingStrategy := fields["parsing-strategy"]
 
 	switch parsingStrategy.GetStringValue() {
 	case "Standard Document Operator":
-		return joinPBListOfStrings(fields["heuristic"].GetListValue()), nil
+		return result, nil
 	case "Docling Model":
 		doclingOutput := fields["docling"].GetStructValue().GetFields()
 
@@ -391,7 +394,9 @@ func routedConvertResultParser(resp *pipelinepb.TriggerNamespacePipelineReleaseR
 		// pagesWithImages := fields["pages_with_images"]
 		mdPages := doclingOutput["markdown_pages"].GetListValue()
 
-		return joinPBListOfStrings(mdPages), nil
+		if result := joinPBListOfStrings(mdPages); result != "" {
+			return result, nil
+		}
 	case "Visual Language Model Pipeline":
 		if result := fields["vlm-ocr"].GetStringValue(); result != "" {
 			return result, nil
@@ -400,12 +405,11 @@ func routedConvertResultParser(resp *pipelinepb.TriggerNamespacePipelineReleaseR
 		if result := fields["vlm-refinement"].GetStringValue(); result != "" {
 			return result, nil
 		}
-
 	default:
-		return "", fmt.Errorf("unrecognized parsing strategy %s", parsingStrategy.GetStringValue())
+		return "", fmt.Errorf("unrecognized parsing strategy: %s", parsingStrategy.GetStringValue())
 	}
 
-	return "", nil
+	return result, nil
 }
 
 type Chunk = struct {
