@@ -11,48 +11,41 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
-	"github.com/instill-ai/x/repo"
 
-	mgmtpb "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
-	usagepb "github.com/instill-ai/protogen-go/core/usage/v1beta"
-	usageclient "github.com/instill-ai/usage-client/client"
-	usagereporter "github.com/instill-ai/usage-client/reporter"
+	mgmtPB "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
+	usagePB "github.com/instill-ai/protogen-go/core/usage/v1beta"
+	usageClient "github.com/instill-ai/usage-client/client"
+	usageReporter "github.com/instill-ai/usage-client/reporter"
 )
 
 // Usage interface
 type Usage interface {
-	RetrieveArtifactUsageData() interface{}
+	RetrieveArtifactUsageData() any
 	StartReporter(ctx context.Context)
 	TriggerSingleReporter(ctx context.Context)
 }
 
 type usage struct {
-	mgmtPrivateServiceClient mgmtpb.MgmtPrivateServiceClient
+	mgmtPrivateServiceClient mgmtPB.MgmtPrivateServiceClient
 	redisClient              *redis.Client
-	artifactReporter         usagereporter.Reporter
-	version                  string
+	artifactReporter         usageReporter.Reporter
+	serviceVersion           string
 }
 
 const maxPageSize = 100
 
 // NewUsage initiates a usage instance
-func NewUsage(ctx context.Context, mu mgmtpb.MgmtPrivateServiceClient, rc *redis.Client, usc usagepb.UsageServiceClient) Usage {
+func NewUsage(ctx context.Context, mu mgmtPB.MgmtPrivateServiceClient, rc *redis.Client, usc usagePB.UsageServiceClient, serviceVersion string) Usage {
 	logger, _ := logger.GetZapLogger(ctx)
 
-	version, err := repo.ReadReleaseManifest("release-please/manifest.json")
-	if err != nil {
-		logger.Error(err.Error())
-		return nil
-	}
-
 	var defaultOwnerUID string
-	if resp, err := mu.GetUserAdmin(ctx, &mgmtpb.GetUserAdminRequest{UserId: constant.DefaultUserID}); err == nil {
+	if resp, err := mu.GetUserAdmin(ctx, &mgmtPB.GetUserAdminRequest{UserId: constant.DefaultUserID}); err == nil {
 		defaultOwnerUID = resp.GetUser().GetUid()
 	} else {
 		logger.Error(err.Error())
 	}
 
-	artifactReporter, err := usageclient.InitReporter(ctx, usc, usagepb.Session_SERVICE_ARTIFACT, config.Config.Server.Edition, version, defaultOwnerUID)
+	artifactReporter, err := usageClient.InitReporter(ctx, usc, usagePB.Session_SERVICE_ARTIFACT, config.Config.Server.Edition, serviceVersion, defaultOwnerUID)
 	if err != nil {
 		logger.Error(err.Error())
 		return nil
@@ -62,7 +55,7 @@ func NewUsage(ctx context.Context, mu mgmtpb.MgmtPrivateServiceClient, rc *redis
 		mgmtPrivateServiceClient: mu,
 		redisClient:              rc,
 		artifactReporter:         artifactReporter,
-		version:                  version,
+		serviceVersion:           serviceVersion,
 	}
 }
 
@@ -73,13 +66,13 @@ func (u *usage) RetrieveArtifactUsageData() interface{} {
 
 	logger.Debug("Retrieve usage data...")
 
-	pbArtifactUsageData := []*usagepb.ArtifactUsageData_UserUsageData{}
+	pbArtifactUsageData := []*usagePB.ArtifactUsageData_UserUsageData{}
 
 	// Roll over all users and update the metrics with the cached uuid
 	userPageToken := ""
 	userPageSizeMax := int32(maxPageSize)
 	for {
-		userResp, err := u.mgmtPrivateServiceClient.ListUsersAdmin(ctx, &mgmtpb.ListUsersAdminRequest{
+		userResp, err := u.mgmtPrivateServiceClient.ListUsersAdmin(ctx, &mgmtPB.ListUsersAdminRequest{
 			PageSize:  &userPageSizeMax,
 			PageToken: &userPageToken,
 		})
@@ -104,7 +97,7 @@ func (u *usage) RetrieveArtifactUsageData() interface{} {
 	orgPageToken := ""
 	orgPageSizeMax := int32(maxPageSize)
 	for {
-		orgResp, err := u.mgmtPrivateServiceClient.ListOrganizationsAdmin(ctx, &mgmtpb.ListOrganizationsAdminRequest{
+		orgResp, err := u.mgmtPrivateServiceClient.ListOrganizationsAdmin(ctx, &mgmtPB.ListOrganizationsAdminRequest{
 			PageSize:  &orgPageSizeMax,
 			PageToken: &orgPageToken,
 		})
@@ -127,8 +120,8 @@ func (u *usage) RetrieveArtifactUsageData() interface{} {
 
 	logger.Debug("Send retrieved usage data...")
 
-	return &usagepb.SessionReport_ArtifactUsageData{
-		ArtifactUsageData: &usagepb.ArtifactUsageData{
+	return &usagePB.SessionReport_ArtifactUsageData{
+		ArtifactUsageData: &usagePB.ArtifactUsageData{
 			Usages: pbArtifactUsageData,
 		},
 	}
@@ -142,7 +135,7 @@ func (u *usage) StartReporter(ctx context.Context) {
 	logger, _ := logger.GetZapLogger(ctx)
 
 	var defaultOwnerUID string
-	if resp, err := u.mgmtPrivateServiceClient.GetUserAdmin(ctx, &mgmtpb.GetUserAdminRequest{UserId: constant.DefaultUserID}); err == nil {
+	if resp, err := u.mgmtPrivateServiceClient.GetUserAdmin(ctx, &mgmtPB.GetUserAdminRequest{UserId: constant.DefaultUserID}); err == nil {
 		defaultOwnerUID = resp.GetUser().GetUid()
 	} else {
 		logger.Error(err.Error())
@@ -151,7 +144,7 @@ func (u *usage) StartReporter(ctx context.Context) {
 	go utils.GoRecover(func() {
 		func() {
 			time.Sleep(5 * time.Second)
-			err := usageclient.StartReporter(ctx, u.artifactReporter, usagepb.Session_SERVICE_ARTIFACT, config.Config.Server.Edition, u.version, defaultOwnerUID, u.RetrieveArtifactUsageData)
+			err := usageClient.StartReporter(ctx, u.artifactReporter, usagePB.Session_SERVICE_ARTIFACT, config.Config.Server.Edition, u.serviceVersion, defaultOwnerUID, u.RetrieveArtifactUsageData)
 			if err != nil {
 				logger.Error(fmt.Sprintf("unable to start reporter: %v\n", err))
 			}
@@ -167,14 +160,14 @@ func (u *usage) TriggerSingleReporter(ctx context.Context) {
 	logger, _ := logger.GetZapLogger(ctx)
 
 	var defaultOwnerUID string
-	if resp, err := u.mgmtPrivateServiceClient.GetUserAdmin(ctx, &mgmtpb.GetUserAdminRequest{UserId: constant.DefaultUserID}); err == nil {
+	if resp, err := u.mgmtPrivateServiceClient.GetUserAdmin(ctx, &mgmtPB.GetUserAdminRequest{UserId: constant.DefaultUserID}); err == nil {
 		defaultOwnerUID = resp.GetUser().GetUid()
 	} else {
 		logger.Error(err.Error())
 		return
 	}
 
-	err := usageclient.SingleReporter(ctx, u.artifactReporter, usagepb.Session_SERVICE_ARTIFACT, config.Config.Server.Edition, u.version, defaultOwnerUID, u.RetrieveArtifactUsageData())
+	err := usageClient.SingleReporter(ctx, u.artifactReporter, usagePB.Session_SERVICE_ARTIFACT, config.Config.Server.Edition, u.serviceVersion, defaultOwnerUID, u.RetrieveArtifactUsageData())
 	if err != nil {
 		logger.Error(fmt.Sprintf("unable to trigger single reporter: %v\n", err))
 	}

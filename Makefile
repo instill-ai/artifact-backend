@@ -11,7 +11,7 @@ export
 .PHONY: dev
 dev:							## Run dev container
 	@docker compose ls -q | grep -q "instill-core" && true || \
-		(echo "Error: Run \"make latest PROFILE=artifact ITMODE_ENABLED=true\" in core repository (https://github.com/instill-ai/core) in your local machine first." && exit 1)
+		(echo "Error: Run \"make latest\" in instill-core repository (https://github.com/instill-ai/instill-core) in your local machine first and run \"docker rm -f ${SERVICE_NAME}\"." && exit 1)
 	@docker inspect --type container ${SERVICE_NAME} >/dev/null 2>&1 && echo "A container named ${SERVICE_NAME} is already running." || \
 		echo "Run dev container ${SERVICE_NAME}. To stop it, run \"make stop\"."
 	@docker run -d --rm \
@@ -20,20 +20,21 @@ dev:							## Run dev container
 		--network instill-network \
 		--name ${SERVICE_NAME} \
 		instill/${SERVICE_NAME}:dev
-.PHONY: run-local
-run-local:
-	@if docker inspect --type container ${SERVICE_NAME} >/dev/null 2>&1; then \
-		echo "A container named ${SERVICE_NAME} is already running. \nRestarting..."; \
-		make rm; \
-	fi
+
+.PHONY: latest
+latest:
+	@docker compose ls -q | grep -q "instill-core" && true || \
+		(echo "Error: Run \"make latest\" in instill-core repository (https://github.com/instill-ai/instill-core) in your local machine first and run \"docker rm -f ${SERVICE_NAME}\"." && exit 1)
+	@docker inspect --type container ${SERVICE_NAME} >/dev/null 2>&1 && echo "A container named ${SERVICE_NAME} is already running."
 	@docker run -it --rm \
 		-p ${SERVICE_PORT}:${SERVICE_PORT} \
 		--network instill-network \
 		--name ${SERVICE_NAME} \
-		instill/${SERVICE_NAME}:local \
+		instill/${SERVICE_NAME}:latest \
 		/bin/sh -c "\
-		./artifact-backend-migrate && \
-		./artifact-backend \
+		./${SERVICE_NAME}-migrate && \
+		./${SERVICE_NAME}-init && \
+		./${SERVICE_NAME} \
 		"
 
 .PHONY: logs
@@ -51,22 +52,19 @@ rm:								## Remove container
 .PHONY: top
 top:							## Display all running service processes
 	@docker top ${SERVICE_NAME}
-.PHONY: build
-build:							## Build dev docker image
-	@docker build \
-		--build-arg SERVICE_NAME=${SERVICE_NAME} \
-		--build-arg GOLANG_VERSION=${GOLANG_VERSION} \
-		--build-arg K6_VERSION=${K6_VERSION} \
-		-f Dockerfile.dev  -t instill/${SERVICE_NAME}:dev .
 
-.PHONY: build-local
-build-local:							## Build dev docker image
+.PHONY: build-dev
+build-dev: ## Build dev docker image
 	@docker build \
-		--no-cache \
 		--build-arg SERVICE_NAME=${SERVICE_NAME} \
-		--build-arg GOLANG_VERSION=${GOLANG_VERSION} \
 		--build-arg K6_VERSION=${K6_VERSION} \
-		-f Dockerfile  -t instill/${SERVICE_NAME}:local .
+		-f Dockerfile.dev -t instill/${SERVICE_NAME}:dev .
+
+.PHONY: build-latest
+build-latest: ## Build latest docker image
+	@docker build \
+		--build-arg SERVICE_NAME=${SERVICE_NAME} \
+		-t instill/${SERVICE_NAME}:latest .
 
 .PHONY: go-gen
 go-gen:       					## Generate codes

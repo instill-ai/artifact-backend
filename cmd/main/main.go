@@ -59,11 +59,13 @@ import (
 	miniox "github.com/instill-ai/x/minio"
 )
 
-var propagator propagation.TextMapPropagator
+var (
+	// These variables might be overridden at buildtime.
+	serviceVersion = "dev"
+	serviceName    = "artifact-backend"
 
-// These variables might be overridden at buildtime.
-var version = "dev"
-var serviceName = "artifact-backend"
+	propagator propagation.TextMapPropagator
+)
 
 // grpcHandlerFunc handles incoming HTTP requests and routes them to either the gRPC server or the gateway handler.
 // It wraps the handler function with h2c.NewHandler to support HTTP/2 requests.
@@ -209,7 +211,7 @@ func main() {
 			logger.Info("try to start usage reporter")
 			go utils.GoRecover(func() {
 				for {
-					usg = usage.NewUsage(ctx, mgmtPrivateServiceClient, redisClient, usageServiceClient)
+					usg = usage.NewUsage(ctx, mgmtPrivateServiceClient, redisClient, usageServiceClient, serviceVersion)
 					if usg != nil {
 						usg.StartReporter(ctx)
 						logger.Info("usage reporter started")
@@ -358,7 +360,7 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 		Logger: logger,
 		AppInfo: miniox.AppInfo{
 			Name:    serviceName,
-			Version: version,
+			Version: serviceVersion,
 		},
 	})
 	if err != nil {
