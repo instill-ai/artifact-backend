@@ -349,8 +349,10 @@ func (r *Repository) ListKnowledgeBaseFiles(ctx context.Context, uid string, own
 		query = query.Where(whereClause, kbfs[0].CreateTime)
 	}
 
-	// Order by create time
-	query = query.Order(fmt.Sprintf("%v ASC", KnowledgeBaseFileColumn.CreateTime))
+	// Order by create time DESC
+	// TODO INS-8162: the repository method (and the upstream handler) should
+	// take an `ordering` parameter so clients can choose the sorting.
+	query = query.Order(fmt.Sprintf("%v DESC", KnowledgeBaseFileColumn.CreateTime))
 
 	// Fetch the records
 	if err := query.Find(&kbs).Error; err != nil {
