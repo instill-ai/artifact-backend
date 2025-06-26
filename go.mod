@@ -1,8 +1,6 @@
 module github.com/instill-ai/artifact-backend
 
-go 1.23.0
-
-toolchain go1.23.7
+go 1.24.2
 
 require (
 	github.com/frankban/quicktest v1.14.6
@@ -15,8 +13,8 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.22.0
 	github.com/influxdata/influxdb-client-go/v2 v2.12.3
-	github.com/instill-ai/protogen-go v0.3.3-alpha.0.20250612072847-040eeef754c0
-	github.com/instill-ai/usage-client v0.3.0-alpha.0.20250313022849-49504d982f18
+	github.com/instill-ai/protogen-go v0.3.3-alpha.0.20250626141501-c8e22cc2e0b6
+	github.com/instill-ai/usage-client v0.3.0-alpha.0.20250626142928-89526ea95ca7
 	github.com/instill-ai/x v0.8.0-alpha.0.20250522164415-9172edd336bb
 	github.com/knadh/koanf v1.5.0
 	github.com/milvus-io/milvus-sdk-go/v2 v2.4.1
@@ -32,7 +30,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.16.0
 	go.opentelemetry.io/otel/sdk/metric v0.39.0
 	go.opentelemetry.io/otel/trace v1.16.0
-	go.uber.org/zap v1.26.0
+	go.uber.org/zap v1.27.0
 	golang.org/x/mod v0.17.0
 	golang.org/x/net v0.38.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240814211410-ddb44dafa142
@@ -64,9 +62,6 @@ require (
 	github.com/tidwall/gjson v1.14.4 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.0 // indirect
-)
-
-require (
 	github.com/catalinc/hashcash v0.0.0-20220723060415-5e3ec3e24f67 // indirect
 	github.com/cenkalti/backoff/v4 v4.2.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect

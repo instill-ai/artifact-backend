@@ -1,50 +1,45 @@
 ARG GOLANG_VERSION=1.24.2
-FROM golang:${GOLANG_VERSION}-bullseye AS build
+FROM golang:${GOLANG_VERSION} AS build
 
-WORKDIR /src
-
-COPY go.mod go.sum ./
-
-RUN --mount=type=cache,target=/go/pkg/mod \
-    go mod download
-COPY . .
+WORKDIR /build
 
 ARG SERVICE_NAME SERVICE_VERSION TARGETOS TARGETARCH
 
-RUN --mount=type=cache,target=/go/pkg/mod \
+RUN --mount=type=bind,target=. \
+    --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     GOOS=$TARGETOS GOARCH=$TARGETARCH CGO_ENABLED=0 \
-    go build -ldflags "-X main.version=${SERVICE_VERSION} -X main.serviceName=${SERVICE_NAME}" \
+    go build -ldflags "-X main.serviceVersion=${SERVICE_VERSION} -X main.serviceName=${SERVICE_NAME}" \
     -o /${SERVICE_NAME} ./cmd/main
 
-# Build the migration tool
-RUN --mount=type=cache,target=/go/pkg/mod \
+RUN --mount=type=bind,target=. \
+    --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     GOOS=$TARGETOS GOARCH=$TARGETARCH CGO_ENABLED=0 \
-    go build -ldflags "-X main.version=${SERVICE_VERSION} -X main.serviceName=${SERVICE_NAME}-init" \
+    go build -ldflags "-X main.serviceVersion=${SERVICE_VERSION} -X main.serviceName=${SERVICE_NAME}-init" \
     -o /${SERVICE_NAME}-migrate ./cmd/migration
 
-# Build the init tool
-RUN --mount=type=cache,target=/go/pkg/mod \
+RUN --mount=type=bind,target=. \
+    --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     GOOS=$TARGETOS GOARCH=$TARGETARCH CGO_ENABLED=0 \
-    go build -ldflags "-X main.version=${SERVICE_VERSION} -X main.serviceName=${SERVICE_NAME}-init" \
+    go build -ldflags "-X main.serviceVersion=${SERVICE_VERSION} -X main.serviceName=${SERVICE_NAME}-init" \
     -o /${SERVICE_NAME}-init ./cmd/init
 
-
-FROM golang:1.23.4
+FROM golang:${GOLANG_VERSION}
 
 USER nobody:nogroup
 
-ARG SERVICE_NAME
+ARG SERVICE_NAME SERVICE_VERSION
 
 WORKDIR /${SERVICE_NAME}
 
-COPY --from=docker:dind-rootless --chown=nobody:nogroup /usr/local/bin/docker /usr/local/bin
-
-COPY --from=build --chown=nobody:nogroup /src/config ./config
-COPY --from=build --chown=nobody:nogroup /src/release-please ./release-please
-COPY --from=build --chown=nobody:nogroup /src/pkg/db/migration ./pkg/db/migration
 COPY --from=build --chown=nobody:nogroup /${SERVICE_NAME}-migrate ./
 COPY --from=build --chown=nobody:nogroup /${SERVICE_NAME}-init ./
 COPY --from=build --chown=nobody:nogroup /${SERVICE_NAME} ./
+
+COPY --chown=nobody:nogroup ./config ./config
+COPY --chown=nobody:nogroup ./pkg/db/migration ./pkg/db/migration
+
+ENV SERVICE_NAME=${SERVICE_NAME}
+ENV SERVICE_VERSION=${SERVICE_VERSION}
