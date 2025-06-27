@@ -8,22 +8,25 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/middleware"
+	"github.com/instill-ai/x/client"
 
 	pb "github.com/instill-ai/protogen-go/pipeline/pipeline/v1beta"
 )
 
 // NewPipelinePublicClient returns an initialized gRPC client for the Pipeline public
 // API.
-func NewPipelinePublicClient(ctx context.Context) (pb.PipelinePublicServiceClient, *grpc.ClientConn) {
+func NewPipelinePublicClient(
+	ctx context.Context,
+	svc client.ServiceConfig,
+) (pb.PipelinePublicServiceClient, *grpc.ClientConn) {
 	logger, _ := logger.GetZapLogger(ctx)
 
 	credDialOpt := grpc.WithTransportCredentials(insecure.NewCredentials())
-	if config.Config.PipelineBackend.HTTPS.Cert != "" && config.Config.PipelineBackend.HTTPS.Key != "" {
-		creds, err := credentials.NewServerTLSFromFile(config.Config.PipelineBackend.HTTPS.Cert, config.Config.PipelineBackend.HTTPS.Key)
+	if svc.HTTPS.Cert != "" && svc.HTTPS.Key != "" {
+		creds, err := credentials.NewServerTLSFromFile(svc.HTTPS.Cert, svc.HTTPS.Key)
 		if err != nil {
 			logger.Fatal(err.Error())
 		}
@@ -31,7 +34,7 @@ func NewPipelinePublicClient(ctx context.Context) (pb.PipelinePublicServiceClien
 	}
 
 	clientConn, err := grpc.NewClient(
-		fmt.Sprintf("%v:%v", config.Config.PipelineBackend.Host, config.Config.PipelineBackend.PublicPort),
+		fmt.Sprintf("%v:%v", svc.Host, svc.PublicPort),
 		credDialOpt,
 		grpc.WithUnaryInterceptor(middleware.MetadataPropagatorInterceptor),
 		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(constant.MaxPayloadSize),

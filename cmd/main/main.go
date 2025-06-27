@@ -333,7 +333,7 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 ) {
 
 	// init pipeline grpc client
-	pipelinePublicServiceClient, pipelinePublicServiceClientConn := grpcclient.NewPipelinePublicClient(ctx)
+	pipelinePublicServiceClient, pipelinePublicServiceClientConn := grpcclient.NewPipelinePublicClient(ctx, config.Config.PipelineBackend)
 
 	// initialize mgmt clients
 	mgmtPrivateServiceClient, mgmtPrivateServiceClientConn := grpcclient.NewMGMTPrivateClient(ctx)
