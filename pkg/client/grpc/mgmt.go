@@ -9,9 +9,9 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/instill-ai/artifact-backend/config"
-	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/middleware"
+	"github.com/instill-ai/x/client"
 
 	pb "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
 )
@@ -35,8 +35,8 @@ func NewMGMTPrivateClient(ctx context.Context) (pb.MgmtPrivateServiceClient, *gr
 		credDialOpt,
 		grpc.WithUnaryInterceptor(middleware.MetadataPropagatorInterceptor),
 		grpc.WithDefaultCallOptions(
-			grpc.MaxCallRecvMsgSize(constant.MaxPayloadSize),
-			grpc.MaxCallSendMsgSize(constant.MaxPayloadSize),
+			grpc.MaxCallRecvMsgSize(client.MaxPayloadSize),
+			grpc.MaxCallSendMsgSize(client.MaxPayloadSize),
 		),
 	)
 	if err != nil {

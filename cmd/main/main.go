@@ -36,16 +36,15 @@ import (
 
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/acl"
-	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/handler"
 	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/middleware"
 	"github.com/instill-ai/artifact-backend/pkg/milvus"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
-
 	"github.com/instill-ai/artifact-backend/pkg/usage"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
 	"github.com/instill-ai/artifact-backend/pkg/worker"
+	"github.com/instill-ai/x/client"
 
 	grpcclient "github.com/instill-ai/artifact-backend/pkg/client/grpc"
 	httpclient "github.com/instill-ai/artifact-backend/pkg/client/http"
@@ -227,9 +226,9 @@ func main() {
 	// Start gRPC server
 	var dialOpts []grpc.DialOption
 	if config.Config.Server.HTTPS.Cert != "" && config.Config.Server.HTTPS.Key != "" {
-		dialOpts = []grpc.DialOption{grpc.WithTransportCredentials(creds), grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(constant.MaxPayloadSize), grpc.MaxCallSendMsgSize(constant.MaxPayloadSize))}
+		dialOpts = []grpc.DialOption{grpc.WithTransportCredentials(creds), grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(client.MaxPayloadSize), grpc.MaxCallSendMsgSize(client.MaxPayloadSize))}
 	} else {
-		dialOpts = []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(constant.MaxPayloadSize), grpc.MaxCallSendMsgSize(constant.MaxPayloadSize))}
+		dialOpts = []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(client.MaxPayloadSize), grpc.MaxCallSendMsgSize(client.MaxPayloadSize))}
 	}
 
 	if err := artifactpb.RegisterArtifactPublicServiceHandlerFromEndpoint(ctx, publicServeMux, fmt.Sprintf(":%v", config.Config.Server.PublicPort), dialOpts); err != nil {
@@ -430,7 +429,7 @@ func newGrpcOptionAndCreds(logger *zap.Logger) ([]grpc.ServerOption, credentials
 		grpcServerOpts = append(grpcServerOpts, grpc.Creds(creds))
 	}
 
-	grpcServerOpts = append(grpcServerOpts, grpc.MaxRecvMsgSize(constant.MaxPayloadSize))
-	grpcServerOpts = append(grpcServerOpts, grpc.MaxSendMsgSize(constant.MaxPayloadSize))
+	grpcServerOpts = append(grpcServerOpts, grpc.MaxRecvMsgSize(client.MaxPayloadSize))
+	grpcServerOpts = append(grpcServerOpts, grpc.MaxSendMsgSize(client.MaxPayloadSize))
 	return grpcServerOpts, creds
 }
