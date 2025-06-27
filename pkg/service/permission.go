@@ -8,13 +8,13 @@ import (
 
 	"github.com/instill-ai/artifact-backend/pkg/acl"
 	"github.com/instill-ai/artifact-backend/pkg/customerror"
-	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/resource"
+	"github.com/instill-ai/x/log"
 )
 
 func (s *Service) CheckCatalogUserPermission(ctx context.Context, nsID, catalogID, authUID string) (*resource.Namespace, *repository.KnowledgeBase, error) {
-	log, _ := logger.GetZapLogger(ctx)
+	log, _ := log.GetZapLogger(ctx)
 	// ACL - check user's permission to create conversation in the namespace
 	ns, err := s.GetNamespaceByNsID(ctx, nsID)
 	if err != nil {

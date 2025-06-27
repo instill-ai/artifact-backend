@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/instill-ai/artifact-backend/pkg/constant"
-	"github.com/instill-ai/artifact-backend/pkg/logger"
+	"github.com/instill-ai/x/log"
 
 	artifactPb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
@@ -21,7 +21,7 @@ type SimChunk struct {
 
 // SimilarityChunksSearch ...
 func (s *Service) SimilarityChunksSearch(ctx context.Context, ownerUID uuid.UUID, req *artifactPb.SimilarityChunksSearchRequest) ([]SimChunk, error) {
-	log, _ := logger.GetZapLogger(ctx)
+	log, _ := log.GetZapLogger(ctx)
 	t := time.Now()
 	// check if text prompt is empty
 	if req.TextPrompt == "" {

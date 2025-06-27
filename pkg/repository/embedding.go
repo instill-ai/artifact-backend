@@ -12,7 +12,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	"github.com/instill-ai/artifact-backend/pkg/logger"
+	"github.com/instill-ai/x/log"
 )
 
 type EmbeddingI interface {
@@ -131,7 +131,7 @@ func (r *Repository) UpsertEmbeddings(
 	externalServiceCall func(embUIDs []string) error,
 ) ([]Embedding, error) {
 	// get logger
-	logger, _ := logger.GetZapLogger(ctx)
+	logger, _ := log.GetZapLogger(ctx)
 	// Start a transaction
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if len(embeddings) == 0 {

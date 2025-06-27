@@ -15,11 +15,11 @@ import (
 
 	"github.com/gofrs/uuid"
 	"github.com/instill-ai/artifact-backend/pkg/constant"
-	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/service"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
+	"github.com/instill-ai/x/log"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	constantx "github.com/instill-ai/x/constant"
@@ -50,7 +50,7 @@ func NewPersistentCatalogFileToEmbWorkerPool(ctx context.Context, svc *service.S
 }
 
 func (wp *persistentCatalogFileToEmbWorkerPool) Start() {
-	logger, _ := logger.GetZapLogger(wp.ctx)
+	logger, _ := log.GetZapLogger(wp.ctx)
 	for i := 0; i < wp.numberOfWorkers; i++ {
 		wp.wg.Add(1)
 		go utils.GoRecover(func() {
@@ -67,7 +67,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) Start() {
 
 // dispatcher is responsible for dispatching the incomplete file to the worker
 func (wp *persistentCatalogFileToEmbWorkerPool) startDispatcher() {
-	logger, _ := logger.GetZapLogger(wp.ctx)
+	logger, _ := log.GetZapLogger(wp.ctx)
 	defer wp.wg.Done()
 	ticker := time.NewTicker(periodOfDispatcher)
 	defer ticker.Stop()
@@ -124,7 +124,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) startDispatcher() {
 // pros: less connection to pipeline service and less resource consumption
 
 func (wp *persistentCatalogFileToEmbWorkerPool) startWorker(ctx context.Context, workerID int) {
-	logger, _ := logger.GetZapLogger(ctx)
+	logger, _ := log.GetZapLogger(ctx)
 	logger.Info("Worker started", zap.Int("WorkerID", workerID))
 	defer wp.wg.Done()
 	// Defer a function to catch panics
@@ -233,7 +233,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) startWorker(ctx context.Context,
 
 // stop
 func (wp *persistentCatalogFileToEmbWorkerPool) GraceFulStop() {
-	logger, _ := logger.GetZapLogger(wp.ctx)
+	logger, _ := log.GetZapLogger(wp.ctx)
 	logger.Info("Worker pool received termination signal")
 	close(wp.channel)
 	wp.cancel()
@@ -245,7 +245,7 @@ type stopRegisterWorkerFunc func()
 
 // processFile handles the processing of a file through various stages using a state machine.
 func (wp *persistentCatalogFileToEmbWorkerPool) processFile(ctx context.Context, file repository.KnowledgeBaseFile) error {
-	logger, _ := logger.GetZapLogger(ctx)
+	logger, _ := log.GetZapLogger(ctx)
 	var status artifactpb.FileProcessStatus
 	if statusInt, ok := artifactpb.FileProcessStatus_value[file.ProcessStatus]; !ok {
 		return fmt.Errorf("invalid process status: %v", file.ProcessStatus)
@@ -391,7 +391,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processWaitingFile(ctx context.C
 // Finally, the file status is updated to chunking in the database.
 // If the file is not a PDF, it returns an error.
 func (wp *persistentCatalogFileToEmbWorkerPool) processConvertingFile(ctx context.Context, file repository.KnowledgeBaseFile) (updatedFile *repository.KnowledgeBaseFile, nextStatus artifactpb.FileProcessStatus, err error) {
-	logger, _ := logger.GetZapLogger(ctx)
+	logger, _ := log.GetZapLogger(ctx)
 
 	fileInMinIOPath := file.Destination
 
@@ -465,7 +465,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processConvertingFile(ctx contex
 // Finally, the file status is updated to chunking in the database.
 // If the file is not a PDF, it returns an error.
 func (wp *persistentCatalogFileToEmbWorkerPool) procesSummarizingFile(ctx context.Context, file repository.KnowledgeBaseFile) (updatedFile *repository.KnowledgeBaseFile, nextStatus artifactpb.FileProcessStatus, err error) {
-	logger, _ := logger.GetZapLogger(ctx)
+	logger, _ := log.GetZapLogger(ctx)
 	logger.Info("Processing summarizing status file.", zap.String("File uid", file.UID.String()))
 
 	// check the file status is summarizing
@@ -574,7 +574,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) procesSummarizingFile(ctx contex
 //
 // The function handles errors at each step and returns appropriate status codes.
 func (wp *persistentCatalogFileToEmbWorkerPool) processChunkingFile(ctx context.Context, file repository.KnowledgeBaseFile) (*repository.KnowledgeBaseFile, artifactpb.FileProcessStatus, error) {
-	logger, _ := logger.GetZapLogger(ctx)
+	logger, _ := log.GetZapLogger(ctx)
 	logger.Info("Processing chunking status file.", zap.String("File uid", file.UID.String()))
 
 	// check the file status is chunking
@@ -722,7 +722,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processChunkingFile(ctx context.
 // The function handles errors at each step and returns appropriate status codes.
 // If chunk retrieval fails initially, it will retry once after a 1 second delay.
 func (wp *persistentCatalogFileToEmbWorkerPool) processEmbeddingFile(ctx context.Context, file repository.KnowledgeBaseFile) (updatedFile *repository.KnowledgeBaseFile, nextStatus artifactpb.FileProcessStatus, err error) {
-	logger, _ := logger.GetZapLogger(ctx)
+	logger, _ := log.GetZapLogger(ctx)
 	// check the file status is embedding
 	if file.ProcessStatus != artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_EMBEDDING)] {
 		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, fmt.Errorf("file process status should be embedding. status: %v", file.ProcessStatus)
@@ -793,7 +793,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processEmbeddingFile(ctx context
 // processCompletedFile logs the completion of the file-to-embeddings process.
 // It checks if the file status is completed and logs the information.
 func (wp *persistentCatalogFileToEmbWorkerPool) processCompletedFile(ctx context.Context, file repository.KnowledgeBaseFile) error {
-	logger, _ := logger.GetZapLogger(ctx)
+	logger, _ := log.GetZapLogger(ctx)
 	logger.Info("File to embeddings process completed.", zap.String("File uid", file.UID.String()))
 	return nil
 }

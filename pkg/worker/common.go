@@ -11,11 +11,11 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/instill-ai/artifact-backend/pkg/constant"
-	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/milvus"
 	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/service"
+	"github.com/instill-ai/x/log"
 )
 
 const periodOfDispatcher = 5 * time.Second
@@ -53,7 +53,7 @@ func checkFileStatus(ctx context.Context, svc *service.Service, file repository.
 // period: duration between lifetime extensions
 // workerLifetime: total duration the worker key should be kept in Redis
 func registerFileWorker(ctx context.Context, svc *service.Service, fileUID string, period time.Duration, workerLifetime time.Duration) (ok bool, stopRegisterWorker stopRegisterWorkerFunc) {
-	logger, _ := logger.GetZapLogger(ctx)
+	logger, _ := log.GetZapLogger(ctx)
 	stopRegisterWorker = func() {
 		logger.Warn("stopRegisterWorkerFunc is not implemented yet")
 	}
@@ -102,7 +102,7 @@ func registerFileWorker(ctx context.Context, svc *service.Service, fileUID strin
 
 // checkFileWorker checks if any of the provided fileUIDs have active workers
 func checkRegisteredFilesWorker(ctx context.Context, svc *service.Service, fileUIDs []string) map[string]struct{} {
-	logger, _ := logger.GetZapLogger(ctx)
+	logger, _ := log.GetZapLogger(ctx)
 	pipe := svc.RedisClient.Pipeline()
 
 	// Create a map to hold the results
@@ -138,7 +138,7 @@ func checkRegisteredFilesWorker(ctx context.Context, svc *service.Service, fileU
 
 // saveConvertedFile saves a converted file into object storage and updates the metadata in the database.
 func saveConvertedFile(ctx context.Context, svc *service.Service, kbUID, fileUID uuid.UUID, name string, convertedFile []byte) error {
-	logger, _ := logger.GetZapLogger(ctx)
+	logger, _ := log.GetZapLogger(ctx)
 	_, err := svc.Repository.CreateConvertedFile(
 		ctx,
 		repository.ConvertedFile{KbUID: kbUID, FileUID: fileUID, Name: name, Type: "text/markdown", Destination: "destination"},
@@ -169,7 +169,7 @@ type chunk = struct {
 
 // saveChunks saves chunks into object storage and updates the metadata in the database.
 func saveChunks(ctx context.Context, svc *service.Service, kbUID string, kbFileUID uuid.UUID, sourceTable string, sourceUID uuid.UUID, summaryChunks, contetChunks []chunk, fileType string) error {
-	logger, _ := logger.GetZapLogger(ctx)
+	logger, _ := log.GetZapLogger(ctx)
 	textChunks := make([]*repository.TextChunk, len(summaryChunks)+len(contetChunks))
 	texts := make([]string, len(summaryChunks)+len(contetChunks))
 
@@ -245,7 +245,7 @@ func saveChunks(ctx context.Context, svc *service.Service, kbUID string, kbFileU
 const batchSize = 50
 
 func saveEmbeddings(ctx context.Context, svc *service.Service, kbUID string, embeddings []repository.Embedding, fileName string) error {
-	logger, _ := logger.GetZapLogger(ctx)
+	logger, _ := log.GetZapLogger(ctx)
 	if len(embeddings) == 0 {
 		logger.Debug("No embeddings to save")
 		return nil

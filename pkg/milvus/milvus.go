@@ -10,7 +10,7 @@ import (
 	"github.com/milvus-io/milvus-sdk-go/v2/entity"
 	"go.uber.org/zap"
 
-	"github.com/instill-ai/artifact-backend/pkg/logger"
+	"github.com/instill-ai/x/log"
 )
 
 type MilvusClientI interface {
@@ -102,7 +102,7 @@ func (m *MilvusClient) GetHealth(ctx context.Context) (bool, error) {
 
 // CreateKnowledgeBaseCollection
 func (m *MilvusClient) CreateKnowledgeBaseCollection(ctx context.Context, kbUID string) error {
-	logger, _ := logger.GetZapLogger(ctx)
+	logger, _ := log.GetZapLogger(ctx)
 	collectionName := m.GetKnowledgeBaseCollectionName(kbUID)
 
 	// 1. Check if the collection already exists
@@ -154,7 +154,7 @@ func (m *MilvusClient) CreateKnowledgeBaseCollection(ctx context.Context, kbUID 
 
 // InsertVectorsToKnowledgeBaseCollection
 func (m *MilvusClient) InsertVectorsToKnowledgeBaseCollection(ctx context.Context, kbUID string, embeddings []Embedding) error {
-	logger, _ := logger.GetZapLogger(ctx)
+	logger, _ := log.GetZapLogger(ctx)
 	collectionName := m.GetKnowledgeBaseCollectionName(kbUID)
 
 	// Check if the collection exists
@@ -393,9 +393,9 @@ type SimilarEmbedding struct {
 // SearchSimilarEmbeddings searches for embeddings similar to the input vector
 // topk has default value 5, when topk <= 0, it will be set to 5.
 func (m *MilvusClient) SearchSimilarEmbeddings(ctx context.Context, collectionName string, vectors [][]float32, topK int, fileName, fileType, contentType string) ([][]SimilarEmbedding, error) {
-	log, err := logger.GetZapLogger(ctx)
+	logger, err := log.GetZapLogger(ctx)
 	if err != nil {
-		log.Error("failed to get logger", zap.Error(err))
+		logger.Error("failed to get logger", zap.Error(err))
 		return nil, fmt.Errorf("failed to get logger: %w", err)
 	}
 
@@ -408,27 +408,27 @@ func (m *MilvusClient) SearchSimilarEmbeddings(ctx context.Context, collectionNa
 	// Check if the collection exists
 	has, err := m.c.HasCollection(ctx, collectionName)
 	if err != nil {
-		log.Error("failed to check collection existence", zap.Error(err))
+		logger.Error("failed to check collection existence", zap.Error(err))
 		return nil, fmt.Errorf("failed to check collection existence: %w", err)
 	}
 	if !has {
-		log.Error("collection does not exist", zap.String("collection_name", collectionName))
+		logger.Error("collection does not exist", zap.String("collection_name", collectionName))
 		return nil, fmt.Errorf("collection %s does not exist", collectionName)
 	}
-	log.Info("check collection existence", zap.Duration("duration", time.Since(t)))
+	logger.Info("check collection existence", zap.Duration("duration", time.Since(t)))
 	t = time.Now()
 
 	// Load the collection if it's not already loaded
 	err = m.c.LoadCollection(ctx, collectionName, false)
 	if err != nil {
-		log.Error("failed to load collection", zap.Error(err))
+		logger.Error("failed to load collection", zap.Error(err))
 		return nil, fmt.Errorf("failed to load collection: %w", err)
 	}
-	log.Info("load collection", zap.Duration("duration", time.Since(t)))
+	logger.Info("load collection", zap.Duration("duration", time.Since(t)))
 
 	hasMetadata, err := m.checkMetadataField(ctx, collectionName)
 	if err != nil {
-		log.Error("failed to describe collection", zap.Error(err))
+		logger.Error("failed to describe collection", zap.Error(err))
 		return nil, fmt.Errorf("failed to describe collection: %w", err)
 	}
 
@@ -466,7 +466,7 @@ func (m *MilvusClient) SearchSimilarEmbeddings(ctx context.Context, collectionNa
 	// Perform the search
 	sp, err := entity.NewIndexSCANNSearchParam(Nprobe, ReorderK)
 	if err != nil {
-		log.Error("failed to create search param", zap.Error(err))
+		logger.Error("failed to create search param", zap.Error(err))
 		return nil, fmt.Errorf("failed to create search param: %w", err)
 	}
 	results, err := m.c.Search(
@@ -482,10 +482,10 @@ func (m *MilvusClient) SearchSimilarEmbeddings(ctx context.Context, collectionNa
 		sp,
 	)
 	if err != nil {
-		log.Error("failed to search embeddings", zap.Error(err))
+		logger.Error("failed to search embeddings", zap.Error(err))
 		return nil, fmt.Errorf("failed to search embeddings: %w", err)
 	}
-	log.Info("search embeddings", zap.Duration("duration", time.Since(t)))
+	logger.Info("search embeddings", zap.Duration("duration", time.Since(t)))
 	// Extract the embeddings from the search results
 	var embeddings [][]SimilarEmbedding
 	for _, result := range results {
@@ -494,18 +494,18 @@ func (m *MilvusClient) SearchSimilarEmbeddings(ctx context.Context, collectionNa
 		}
 		sourceTables, err := getStringData(result.Fields.GetColumn(KbCollectionFieldSourceTable))
 		if err != nil {
-			log.Error("error with source_table column", zap.Error(err))
+			logger.Error("error with source_table column", zap.Error(err))
 			return nil, fmt.Errorf("error with source_table column: %w", err)
 		}
 
 		sourceUIDs, err := getStringData(result.Fields.GetColumn(KbCollectionFieldSourceUID))
 		if err != nil {
-			log.Error("error with source_uid column", zap.Error(err))
+			logger.Error("error with source_uid column", zap.Error(err))
 			return nil, fmt.Errorf("error with source_uid column: %w", err)
 		}
 		embeddingUIDs, err := getStringData(result.Fields.GetColumn(KbCollectionFieldEmbeddingUID))
 		if err != nil {
-			log.Error("error with embedding_uid column", zap.Error(err))
+			logger.Error("error with embedding_uid column", zap.Error(err))
 			return nil, fmt.Errorf("error with embedding_uid column: %w", err)
 		}
 		vectors := result.Fields.GetColumn(KbCollectionFieldEmbedding).(*entity.ColumnFloatVector)

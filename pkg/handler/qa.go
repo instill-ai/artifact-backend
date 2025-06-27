@@ -8,10 +8,10 @@ import (
 	"github.com/gofrs/uuid"
 	"go.uber.org/zap"
 
-	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/service"
+	"github.com/instill-ai/x/log"
 
 	artifactPb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
@@ -22,7 +22,7 @@ func (ph *PublicHandler) QuestionAnswering(
 	*artifactPb.QuestionAnsweringResponse,
 	error) {
 
-	log, _ := logger.GetZapLogger(ctx)
+	log, _ := log.GetZapLogger(ctx)
 
 	t := time.Now()
 	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())

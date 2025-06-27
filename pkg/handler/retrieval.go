@@ -10,10 +10,10 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/instill-ai/artifact-backend/pkg/constant"
-	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/service"
+	"github.com/instill-ai/x/log"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
@@ -22,7 +22,7 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 	ctx context.Context,
 	req *artifactpb.SimilarityChunksSearchRequest,
 ) (*artifactpb.SimilarityChunksSearchResponse, error) {
-	log, _ := logger.GetZapLogger(ctx)
+	log, _ := log.GetZapLogger(ctx)
 
 	t := time.Now()
 	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())

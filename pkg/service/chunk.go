@@ -7,9 +7,9 @@ import (
 	"github.com/gofrs/uuid"
 	"go.uber.org/zap"
 
-	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
+	"github.com/instill-ai/x/log"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
@@ -22,7 +22,7 @@ type SourceIDType = uuid.UUID
 // GetChunksByFile returns the chunks of a file
 func (s *Service) GetChunksByFile(ctx context.Context, file *repository.KnowledgeBaseFile) (
 	SourceTableType, SourceIDType, []repository.TextChunk, map[ChunkUIDType]ContentType, []string, error) {
-	logger, _ := logger.GetZapLogger(ctx)
+	logger, _ := log.GetZapLogger(ctx)
 	// check the file type
 	// if it is pdf, sourceTable is converted file table, sourceUID is converted file UID
 	// if it is txt or md, sourceTable is knowledge base file table, sourceUID is knowledge base file UID

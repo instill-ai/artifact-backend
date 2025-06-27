@@ -9,9 +9,9 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
-	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
+	"github.com/instill-ai/x/log"
 
 	artifact "github.com/instill-ai/artifact-backend/pkg/service"
 	pb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
@@ -195,7 +195,7 @@ func (h *PrivateHandler) UpdateObject(ctx context.Context, req *pb.UpdateObjectR
 }
 
 func (h *PrivateHandler) GetChatFile(ctx context.Context, req *pb.GetChatFileRequest) (*pb.GetChatFileResponse, error) {
-	log, _ := logger.GetZapLogger(ctx)
+	log, _ := log.GetZapLogger(ctx)
 
 	// use catalog id and file id to get kbFile
 	fileID := req.FileId

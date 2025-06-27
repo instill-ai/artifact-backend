@@ -10,15 +10,15 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/instill-ai/artifact-backend/config"
-	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/x/client"
+	"github.com/instill-ai/x/log"
 
 	pb "github.com/instill-ai/protogen-go/core/usage/v1beta"
 )
 
 // NewUsageClient returns an intialized gRPC client for the Usage API.
 func NewUsageClient(ctx context.Context) (pb.UsageServiceClient, *grpc.ClientConn) {
-	logger, _ := logger.GetZapLogger(ctx)
+	logger, _ := log.GetZapLogger(ctx)
 
 	var clientDialOpts grpc.DialOption
 	var err error

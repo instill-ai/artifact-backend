@@ -11,7 +11,7 @@ import (
 	"github.com/gofrs/uuid"
 	"go.uber.org/zap"
 
-	"github.com/instill-ai/artifact-backend/pkg/logger"
+	"github.com/instill-ai/x/log"
 )
 
 // ObjectI is the interface for object-related operations.
@@ -24,7 +24,7 @@ type ObjectI interface {
 
 // GetPresignedURLForUpload creates a presigned URL for uploading an object.
 func (m *Minio) GetPresignedURLForUpload(ctx context.Context, namespaceUUID uuid.UUID, objectUUID uuid.UUID, expiration time.Duration) (*url.URL, error) {
-	log, err := logger.GetZapLogger(ctx)
+	log, err := log.GetZapLogger(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +52,7 @@ func (m *Minio) GetPresignedURLForUpload(ctx context.Context, namespaceUUID uuid
 
 // GetPresignedURLForDownload creates a presigned URL for downloading an object.
 func (m *Minio) GetPresignedURLForDownload(ctx context.Context, namespaceUUID uuid.UUID, objectUUID uuid.UUID, expiration time.Duration) (*url.URL, error) {
-	log, err := logger.GetZapLogger(ctx)
+	log, err := log.GetZapLogger(ctx)
 	if err != nil {
 		return nil, err
 	}

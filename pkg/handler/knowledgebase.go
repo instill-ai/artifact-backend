@@ -13,10 +13,10 @@ import (
 	"google.golang.org/grpc/metadata"
 
 	"github.com/instill-ai/artifact-backend/pkg/customerror"
-	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/service"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
+	"github.com/instill-ai/x/log"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	constantx "github.com/instill-ai/x/constant"
@@ -35,7 +35,7 @@ const ErrorDeleteKnowledgeBaseMsg = "failed to delete catalog: %w"
 const KnowledgeBaseMaxCount = 3
 
 func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.CreateCatalogRequest) (*artifactpb.CreateCatalogResponse, error) {
-	log, _ := logger.GetZapLogger(ctx)
+	logger, _ := log.GetZapLogger(ctx)
 	authUID, err := getUserUIDFromContext(ctx)
 	if err != nil {
 		err := fmt.Errorf("failed to get user id from header: %v. err: %w", err, customerror.ErrUnauthenticated)
@@ -45,7 +45,7 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 	// ACL  check user's permission to create catalog in the user or org context(namespace)
 	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
 	if err != nil {
-		log.Error(
+		logger.Error(
 			"failed to get namespace",
 			zap.Error(err),
 			zap.String("owner_id(ns_id)", req.GetNamespaceId()),
@@ -54,7 +54,7 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 	}
 	err = ph.service.CheckNamespacePermission(ctx, ns)
 	if err != nil {
-		log.Error(
+		logger.Error(
 			"failed to check namespace permission",
 			zap.Error(err),
 			zap.String("owner_id(ns_id)", req.GetNamespaceId()),
@@ -68,12 +68,12 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 	// but it is okay for now
 	// kbCount, err := ph.service.Repository.GetKnowledgeBaseCountByOwner(ctx, ns.NsUID.String(), artifactpb.CatalogType_CATALOG_TYPE_PERSISTENT)
 	// if err != nil {
-	// 	log.Error("failed to get catalog count", zap.Error(err))
+	// 	logger.Error("failed to get catalog count", zap.Error(err))
 	// 	return nil, fmt.Errorf(ErrorCreateKnowledgeBaseMsg, err)
 	// }
 	// tier, err := ph.service.GetNamespaceTier(ctx, ns)
 	// if err != nil {
-	// 	log.Error("failed to get namespace tier", zap.Error(err))
+	// 	logger.Error("failed to get namespace tier", zap.Error(err))
 	// 	return nil, fmt.Errorf(ErrorCreateKnowledgeBaseMsg, err)
 	// }
 	// if kbCount >= int64(tier.GetPrivateCatalogLimit()) {
@@ -96,7 +96,7 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 
 	creatorUUID, err := uuid.FromString(authUID)
 	if err != nil {
-		log.Error("failed to parse creator uid", zap.String("uid", authUID), zap.Error(err))
+		logger.Error("failed to parse creator uid", zap.String("uid", authUID), zap.Error(err))
 		return nil, err
 	}
 
@@ -104,19 +104,19 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 	callExternalService := func(kbUID string) error {
 		err := ph.service.MilvusClient.CreateKnowledgeBaseCollection(ctx, kbUID)
 		if err != nil {
-			log.Error("failed to create collection in milvus", zap.Error(err))
+			logger.Error("failed to create collection in milvus", zap.Error(err))
 			return err
 		}
 
 		// set the owner of the catalog
 		kbUIDuuid, err := uuid.FromString(kbUID)
 		if err != nil {
-			log.Error("failed to parse kb uid", zap.String("kb_uid", kbUID), zap.Error(err))
+			logger.Error("failed to parse kb uid", zap.String("kb_uid", kbUID), zap.Error(err))
 			return err
 		}
 		err = ph.service.ACLClient.SetOwner(ctx, "knowledgebase", kbUIDuuid, string(ns.NsType), ns.NsUID)
 		if err != nil {
-			log.Error("failed to set owner in openFAG", zap.Error(err))
+			logger.Error("failed to set owner in openFAG", zap.Error(err))
 			return err
 		}
 
@@ -185,7 +185,7 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 }
 
 func (ph *PublicHandler) ListCatalogs(ctx context.Context, req *artifactpb.ListCatalogsRequest) (*artifactpb.ListCatalogsResponse, error) {
-	log, _ := logger.GetZapLogger(ctx)
+	log, _ := log.GetZapLogger(ctx)
 	// get user id from context
 	authUID, err := getUserUIDFromContext(ctx)
 	if err != nil {
@@ -273,7 +273,7 @@ func (ph *PublicHandler) ListCatalogs(ctx context.Context, req *artifactpb.ListC
 	}, nil
 }
 func (ph *PublicHandler) UpdateCatalog(ctx context.Context, req *artifactpb.UpdateCatalogRequest) (*artifactpb.UpdateCatalogResponse, error) {
-	log, _ := logger.GetZapLogger(ctx)
+	log, _ := log.GetZapLogger(ctx)
 	authUID, err := getUserUIDFromContext(ctx)
 	if err != nil {
 		log.Error("failed to get user id from header", zap.Error(err))
@@ -370,7 +370,7 @@ func (ph *PublicHandler) UpdateCatalog(ctx context.Context, req *artifactpb.Upda
 	return &artifactpb.UpdateCatalogResponse{Catalog: catalog}, nil
 }
 func (ph *PublicHandler) DeleteCatalog(ctx context.Context, req *artifactpb.DeleteCatalogRequest) (*artifactpb.DeleteCatalogResponse, error) {
-	log, _ := logger.GetZapLogger(ctx)
+	logger, _ := log.GetZapLogger(ctx)
 	authUID, err := getUserUIDFromContext(ctx)
 	if err != nil {
 
@@ -379,7 +379,7 @@ func (ph *PublicHandler) DeleteCatalog(ctx context.Context, req *artifactpb.Dele
 
 	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
 	if err != nil {
-		log.Error(
+		logger.Error(
 			"failed to get namespace ",
 			zap.Error(err),
 			zap.String("owner_id(ns_id)", req.GetNamespaceId()),
@@ -389,16 +389,16 @@ func (ph *PublicHandler) DeleteCatalog(ctx context.Context, req *artifactpb.Dele
 	// ACL - check user's permission to write catalog
 	kb, err := ph.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.CatalogId)
 	if err != nil {
-		log.Error("failed to get catalog", zap.Error(err))
+		logger.Error("failed to get catalog", zap.Error(err))
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
 	granted, err := ph.service.ACLClient.CheckPermission(ctx, "knowledgebase", kb.UID, "writer")
 	if err != nil {
-		log.Error("failed to check permission", zap.Error(err))
+		logger.Error("failed to check permission", zap.Error(err))
 		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
 	}
 	if !granted {
-		log.Error("no permission to delete catalog")
+		logger.Error("no permission to delete catalog")
 		return nil, fmt.Errorf(ErrorDeleteKnowledgeBaseMsg, customerror.ErrNoPermission)
 	}
 
@@ -406,70 +406,70 @@ func (ph *PublicHandler) DeleteCatalog(ctx context.Context, req *artifactpb.Dele
 	// TODO: in the future, we should delete the catalog using clean up worker
 	go utils.GoRecover(func() {
 		ctx := context.TODO()
-		log, _ := logger.GetZapLogger(ctx)
+		logger, _ := log.GetZapLogger(ctx)
 		// wait for the catalog to be deleted in postgres
 		canStart := <-startSignal
 		if !canStart {
-			log.Error("failed to delete catalog in background", zap.String("catalog_id", kb.UID.String()))
+			logger.Error("failed to delete catalog in background", zap.String("catalog_id", kb.UID.String()))
 			return
 		}
-		log.Info("DeleteCatalog starts in background", zap.String("catalog_id", kb.UID.String()))
+		logger.Info("DeleteCatalog starts in background", zap.String("catalog_id", kb.UID.String()))
 		allPass := true
 		//  delete files in minIO
 		err = <-ph.service.MinIO.DeleteKnowledgeBase(ctx, kb.UID.String())
 		if err != nil {
-			log.Error("failed to delete files in minIO in background", zap.Error(err))
+			logger.Error("failed to delete files in minIO in background", zap.Error(err))
 			allPass = false
 		}
 
 		// delete the collection in milvus
 		err = ph.service.MilvusClient.DropKnowledgeBaseCollection(ctx, kb.UID.String())
 		if err != nil {
-			log.Error("failed to delete collection in milvus in background", zap.Error(err))
+			logger.Error("failed to delete collection in milvus in background", zap.Error(err))
 			allPass = false
 		}
 
 		//  delete all files in postgres
 		err = ph.service.Repository.DeleteAllKnowledgeBaseFiles(ctx, kb.UID.String())
 		if err != nil {
-			log.Error("failed to delete files in postgres in background", zap.Error(err))
+			logger.Error("failed to delete files in postgres in background", zap.Error(err))
 			allPass = false
 		}
 		//  delete converted files in postgres
 		err = ph.service.Repository.DeleteAllConvertedFilesInKb(ctx, kb.UID)
 		if err != nil {
-			log.Error("failed to delete converted files in postgres in background", zap.Error(err))
+			logger.Error("failed to delete converted files in postgres in background", zap.Error(err))
 			allPass = false
 		}
 		//  delete all chunks in postgres
 		err = ph.service.Repository.HardDeleteChunksByKbUID(ctx, kb.UID)
 		if err != nil {
-			log.Error("failed to delete chunks in postgres in background", zap.Error(err))
+			logger.Error("failed to delete chunks in postgres in background", zap.Error(err))
 			allPass = false
 		}
 
 		//  delete all embedding in postgres
 		err = ph.service.Repository.HardDeleteEmbeddingsByKbUID(ctx, kb.UID)
 		if err != nil {
-			log.Error("failed to delete embeddings in postgres in background", zap.Error(err))
+			logger.Error("failed to delete embeddings in postgres in background", zap.Error(err))
 			allPass = false
 		}
 		// delete acl. Note: we need to delete the acl after deleting the catalog
 		err = ph.service.ACLClient.Purge(ctx, "knowledgebase", kb.UID)
 		if err != nil {
-			log.Error("failed to purge catalog", zap.Error(err))
+			logger.Error("failed to purge catalog", zap.Error(err))
 			allPass = false
 		}
 		if allPass {
-			log.Info("successfully deleted catalog in background", zap.String("catalog_id", kb.UID.String()))
+			logger.Info("successfully deleted catalog in background", zap.String("catalog_id", kb.UID.String()))
 		} else {
-			log.Error("failed to delete catalog in background", zap.String("catalog_id", kb.UID.String()))
+			logger.Error("failed to delete catalog in background", zap.String("catalog_id", kb.UID.String()))
 		}
 	}, "DeleteCatalog")
 
 	deletedKb, err := ph.service.Repository.DeleteKnowledgeBase(ctx, ns.NsUID.String(), req.CatalogId)
 	if err != nil {
-		log.Error("failed to delete catalog", zap.Error(err))
+		logger.Error("failed to delete catalog", zap.Error(err))
 		startSignal <- false
 		return nil, err
 	}

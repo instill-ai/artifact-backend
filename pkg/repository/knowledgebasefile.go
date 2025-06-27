@@ -16,7 +16,7 @@ import (
 	"gorm.io/gorm/clause"
 
 	"github.com/instill-ai/artifact-backend/pkg/constant"
-	"github.com/instill-ai/artifact-backend/pkg/logger"
+	"github.com/instill-ai/x/log"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
@@ -532,7 +532,7 @@ func (r *Repository) GetSourceTableAndUIDByFileUIDs(ctx context.Context, files [
 		SourceTable string
 		SourceUID   uuid.UUID
 	}, error) {
-	logger, _ := logger.GetZapLogger(ctx)
+	logger, _ := log.GetZapLogger(ctx)
 	result := make(map[uuid.UUID]struct {
 		SourceTable string
 		SourceUID   uuid.UUID
@@ -637,7 +637,7 @@ type SourceMeta struct {
 // and support all file type. if the file type is text or markdown, the destination is the file destination.
 // if the file type is pdf, get the converted file destination
 func (r *Repository) GetTruthSourceByFileUID(ctx context.Context, fileUID uuid.UUID) (*SourceMeta, error) {
-	logger, _ := logger.GetZapLogger(ctx)
+	logger, _ := log.GetZapLogger(ctx)
 	// get the file type by file uid
 	var file KnowledgeBaseFile
 	where := fmt.Sprintf("%v = ?", KnowledgeBaseFileColumn.UID)

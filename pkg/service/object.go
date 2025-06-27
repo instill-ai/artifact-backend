@@ -13,9 +13,9 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/instill-ai/artifact-backend/config"
-	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
+	"github.com/instill-ai/x/log"
 
 	miniolocal "github.com/instill-ai/artifact-backend/pkg/minio"
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
@@ -35,7 +35,7 @@ func (s *Service) GetUploadURL(
 	namespaceID string,
 	creatorUID uuid.UUID,
 ) (*artifactpb.GetObjectUploadURLResponse, error) {
-	log, _ := logger.GetZapLogger(ctx)
+	log, _ := log.GetZapLogger(ctx)
 	// name cannot be empty
 	if req.GetObjectName() == "" {
 		log.Error("name cannot be empty")
@@ -134,7 +134,7 @@ func (s *Service) GetDownloadURL(
 	namespaceUID uuid.UUID,
 	namespaceID string,
 ) (*artifactpb.GetObjectDownloadURLResponse, error) {
-	log, _ := logger.GetZapLogger(ctx)
+	log, _ := log.GetZapLogger(ctx)
 	objectUID, err := uuid.FromString(req.GetObjectUid())
 	if err != nil {
 		log.Error("failed to parse object uid", zap.Error(err))

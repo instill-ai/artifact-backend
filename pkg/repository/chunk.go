@@ -12,7 +12,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	"github.com/instill-ai/artifact-backend/pkg/logger"
+	"github.com/instill-ai/x/log"
 )
 
 type TextChunkI interface {
@@ -109,7 +109,7 @@ func (r *Repository) TextChunkTableName() string {
 // a certain source table and sourceUID, then batch inserts the new chunks
 // within a transaction.
 func (r *Repository) DeleteAndCreateChunks(ctx context.Context, sourceTable string, sourceUID uuid.UUID, chunks []*TextChunk, externalServiceCall func(chunkUIDs []string) (map[string]any, error)) ([]*TextChunk, error) {
-	logger, _ := logger.GetZapLogger(ctx)
+	logger, _ := log.GetZapLogger(ctx)
 	// Start a transaction
 	err := r.db.Transaction(func(tx *gorm.DB) error {
 		// Delete existing chunks
