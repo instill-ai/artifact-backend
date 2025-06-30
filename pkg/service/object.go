@@ -111,7 +111,7 @@ func (s *Service) GetUploadURL(
 		return nil, status.Errorf(codes.Internal, "failed to encode blob url: %v", err)
 	}
 
-	expireAtTs, err := getExpireAtTs(presignedURL)
+	expireAtTS, err := getExpireAtTS(presignedURL)
 	if err != nil {
 		log.Error("failed to get expire at ts", zap.Error(err))
 		return nil, status.Errorf(codes.Internal, "failed to get expire at ts: %v", err)
@@ -119,7 +119,7 @@ func (s *Service) GetUploadURL(
 
 	return &artifactpb.GetObjectUploadURLResponse{
 		UploadUrl:   uploadURL,
-		UrlExpireAt: timestamppb.New(expireAtTs),
+		UrlExpireAt: timestamppb.New(expireAtTS),
 		Object:      repository.TurnObjectInDBToObjectInProto(createdObject),
 	}, nil
 }
@@ -196,7 +196,7 @@ func (s *Service) GetDownloadURL(
 		return nil, status.Errorf(codes.Internal, "failed to encode blob url: %v", err)
 	}
 
-	expireAtTs, err := getExpireAtTs(presignedURL)
+	expireAtTS, err := getExpireAtTS(presignedURL)
 	if err != nil {
 		log.Error("failed to get expire at ts", zap.Error(err))
 		return nil, status.Errorf(codes.Internal, "failed to get expire at ts: %v", err)
@@ -206,7 +206,7 @@ func (s *Service) GetDownloadURL(
 
 	return &artifactpb.GetObjectDownloadURLResponse{
 		DownloadUrl: downloadURL,
-		UrlExpireAt: timestamppb.New(expireAtTs),
+		UrlExpireAt: timestamppb.New(expireAtTS),
 		Object:      objectInProto,
 	}, nil
 }
@@ -255,16 +255,16 @@ func encodeBlobURL(presignedURL *url.URL) (string, error) {
 	return u.String(), nil
 }
 
-func getExpireAtTs(presignedURL *url.URL) (time.Time, error) {
+func getExpireAtTS(presignedURL *url.URL) (time.Time, error) {
 	issuedAt := presignedURL.Query().Get("X-Amz-Date")
 	expireTimeSeconds, err := strconv.Atoi(presignedURL.Query().Get("X-Amz-Expires"))
 	if err != nil {
 		return time.Time{}, err
 	}
-	issuedAtTs, err := time.Parse("20060102T150405Z", issuedAt)
+	issuedAtTS, err := time.Parse("20060102T150405Z", issuedAt)
 	if err != nil {
 		return time.Time{}, err
 	}
-	expireAtTs := issuedAtTs.Add(time.Duration(expireTimeSeconds) * time.Second)
-	return expireAtTs, nil
+	expireAtTS := issuedAtTS.Add(time.Duration(expireTimeSeconds) * time.Second)
+	return expireAtTS, nil
 }
