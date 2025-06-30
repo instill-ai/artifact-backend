@@ -3,6 +3,7 @@ package config
 import (
 	"flag"
 	"log"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -50,6 +51,19 @@ type OpenFGAConfig struct {
 	} `koanf:"replica"`
 }
 
+type URL struct {
+	url.URL
+}
+
+func (u *URL) UnmarshalText(text []byte) error {
+	parsed, err := url.Parse(string(text))
+	if err != nil {
+		return err
+	}
+	u.URL = *parsed
+	return nil
+}
+
 // ServerConfig defines HTTP server configurations
 type ServerConfig struct {
 	PublicPort  int `koanf:"publicport"`
@@ -72,6 +86,7 @@ type ServerConfig struct {
 		MaxWorkflowRetry   int32 `koanf:"maxworkflowretry"`
 		MaxActivityRetry   int32 `koanf:"maxactivityretry"`
 	}
+	InstillCoreHost URL `koanf:"instillcorehost"`
 }
 
 // DatabaseConfig related to database
