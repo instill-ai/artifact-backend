@@ -10,14 +10,14 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/resource"
+	"github.com/instill-ai/x/log"
 
 	mgmtpb "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
 )
 
 func (s *Service) GetNamespaceByNsID(ctx context.Context, nsID string) (*resource.Namespace, error) {
-	log, _ := logger.GetZapLogger(ctx)
+	log, _ := log.GetZapLogger(ctx)
 	nsRes, err := s.MgmtPrv.CheckNamespaceAdmin(ctx, &mgmtpb.CheckNamespaceAdminRequest{
 		Id: nsID,
 	},
@@ -56,7 +56,7 @@ func (s *Service) GetNamespaceTierByNsID(ctx context.Context, nsID string) (Tier
 }
 
 func (s *Service) GetNamespaceTier(ctx context.Context, ns *resource.Namespace) (Tier, error) {
-	log, _ := logger.GetZapLogger(ctx)
+	log, _ := log.GetZapLogger(ctx)
 	switch ns.NsType {
 	case resource.User:
 		sub, err := s.MgmtPrv.GetUserSubscriptionAdmin(ctx, &mgmtpb.GetUserSubscriptionAdminRequest{

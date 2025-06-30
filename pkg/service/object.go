@@ -3,9 +3,7 @@ package service
 import (
 	"context"
 	"errors"
-	"fmt"
 	"path"
-	"strings"
 	"time"
 
 	"github.com/gofrs/uuid"
@@ -15,9 +13,9 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/instill-ai/artifact-backend/config"
-	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
+	"github.com/instill-ai/x/log"
 
 	miniolocal "github.com/instill-ai/artifact-backend/pkg/minio"
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
@@ -37,7 +35,7 @@ func (s *Service) GetUploadURL(
 	namespaceID string,
 	creatorUID uuid.UUID,
 ) (*artifactpb.GetObjectUploadURLResponse, error) {
-	log, _ := logger.GetZapLogger(ctx)
+	log, _ := log.GetZapLogger(ctx)
 	// name cannot be empty
 	if req.GetObjectName() == "" {
 		log.Error("name cannot be empty")
@@ -136,7 +134,7 @@ func (s *Service) GetDownloadURL(
 	namespaceUID uuid.UUID,
 	namespaceID string,
 ) (*artifactpb.GetObjectDownloadURLResponse, error) {
-	log, _ := logger.GetZapLogger(ctx)
+	log, _ := log.GetZapLogger(ctx)
 	objectUID, err := uuid.FromString(req.GetObjectUid())
 	if err != nil {
 		log.Error("failed to parse object uid", zap.Error(err))
@@ -216,30 +214,4 @@ func EncodedMinioURLPath(namespaceID string, objectURLUUID uuid.UUID) string {
 
 	// Ensure the path starts with a forward slash
 	return config.Config.Blob.HostPort + "/" + urlPath
-}
-
-// DecodeMinioURLPath decodes the minio URL path into namespaceID and objectName
-func DecodeMinioURLPath(encodedURLPath string) (namespaceID string, objectURLUUID uuid.UUID, err error) {
-	// Remove leading slash if present
-	encodedURLPath = strings.TrimPrefix(encodedURLPath, "/")
-
-	// Split the path into components
-	parts := strings.Split(encodedURLPath, "/")
-
-	// Check if we have the expected number of parts
-	if len(parts) != 5 || parts[0] != "v1alpha" || parts[2] != "blob-urls" {
-		return "", uuid.Nil, fmt.Errorf("invalid URL format")
-	}
-
-	// Extract namespaceID and objectName
-	namespaceID = parts[1]
-	objectURLUUIDString := parts[4]
-
-	// parse objectURLUUID
-	objectURLUUID, err = uuid.FromString(objectURLUUIDString)
-	if err != nil {
-		return "", uuid.Nil, fmt.Errorf("failed to parse object URL UUID: %v", err)
-	}
-
-	return namespaceID, objectURLUUID, nil
 }

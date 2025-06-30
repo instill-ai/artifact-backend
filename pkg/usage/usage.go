@@ -9,8 +9,8 @@ import (
 
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/constant"
-	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
+	"github.com/instill-ai/x/log"
 
 	mgmtpb "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
 	usagepb "github.com/instill-ai/protogen-go/core/usage/v1beta"
@@ -36,7 +36,7 @@ const maxPageSize = 100
 
 // NewUsage initiates a usage instance
 func NewUsage(ctx context.Context, mu mgmtpb.MgmtPrivateServiceClient, rc *redis.Client, usc usagepb.UsageServiceClient, serviceVersion string) Usage {
-	logger, _ := logger.GetZapLogger(ctx)
+	logger, _ := log.GetZapLogger(ctx)
 
 	var defaultOwnerUID string
 	if resp, err := mu.GetUserAdmin(ctx, &mgmtpb.GetUserAdminRequest{UserId: constant.DefaultUserID}); err == nil {
@@ -62,7 +62,7 @@ func NewUsage(ctx context.Context, mu mgmtpb.MgmtPrivateServiceClient, rc *redis
 func (u *usage) RetrieveArtifactUsageData() interface{} {
 
 	ctx := context.Background()
-	logger, _ := logger.GetZapLogger(ctx)
+	logger, _ := log.GetZapLogger(ctx)
 
 	logger.Debug("Retrieve usage data...")
 
@@ -132,7 +132,7 @@ func (u *usage) StartReporter(ctx context.Context) {
 		return
 	}
 
-	logger, _ := logger.GetZapLogger(ctx)
+	logger, _ := log.GetZapLogger(ctx)
 
 	var defaultOwnerUID string
 	if resp, err := u.mgmtPrivateServiceClient.GetUserAdmin(ctx, &mgmtpb.GetUserAdminRequest{UserId: constant.DefaultUserID}); err == nil {
@@ -157,7 +157,7 @@ func (u *usage) TriggerSingleReporter(ctx context.Context) {
 		return
 	}
 
-	logger, _ := logger.GetZapLogger(ctx)
+	logger, _ := log.GetZapLogger(ctx)
 
 	var defaultOwnerUID string
 	if resp, err := u.mgmtPrivateServiceClient.GetUserAdmin(ctx, &mgmtpb.GetUserAdminRequest{UserId: constant.DefaultUserID}); err == nil {

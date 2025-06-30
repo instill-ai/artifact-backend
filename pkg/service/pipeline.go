@@ -14,8 +14,8 @@ import (
 
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/constant"
-	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
+	"github.com/instill-ai/x/log"
 	"github.com/instill-ai/x/resource"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
@@ -189,7 +189,7 @@ func (s *Service) ConvertToMDPipe(
 	pipelines []PipelineRelease,
 ) (string, error) {
 
-	logger, _ := logger.GetZapLogger(ctx)
+	logger, _ := log.GetZapLogger(ctx)
 
 	// Get the appropriate prefix for the file type
 	prefix := getFileTypePrefix(fileType)

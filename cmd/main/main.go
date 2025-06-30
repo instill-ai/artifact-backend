@@ -31,21 +31,18 @@ import (
 	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpczap "github.com/grpc-ecosystem/go-grpc-middleware/logging/zap"
 	grpcrecovery "github.com/grpc-ecosystem/go-grpc-middleware/recovery"
-	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
 	openfga "github.com/openfga/api/proto/openfga/v1"
 
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/acl"
-	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/handler"
-	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/middleware"
 	"github.com/instill-ai/artifact-backend/pkg/milvus"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
-
 	"github.com/instill-ai/artifact-backend/pkg/usage"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
 	"github.com/instill-ai/artifact-backend/pkg/worker"
+	"github.com/instill-ai/x/client"
 
 	grpcclient "github.com/instill-ai/artifact-backend/pkg/client/grpc"
 	httpclient "github.com/instill-ai/artifact-backend/pkg/client/http"
@@ -56,6 +53,8 @@ import (
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	mgmtpb "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
 	pipelinepb "github.com/instill-ai/protogen-go/pipeline/pipeline/v1beta"
+	grpcclientx "github.com/instill-ai/x/client/grpc"
+	logx "github.com/instill-ai/x/log"
 	miniox "github.com/instill-ai/x/minio"
 )
 
@@ -116,7 +115,8 @@ func main() {
 	)
 	defer cancel()
 
-	logger, _ := logger.GetZapLogger(ctx)
+	logx.Debug = config.Config.Server.Debug
+	logger, _ := logx.GetZapLogger(ctx)
 	defer func() {
 		// can't handle the error due to https://github.com/uber-go/zap/issues/880
 		_ = logger.Sync()
@@ -126,23 +126,9 @@ func main() {
 	grpczap.ReplaceGrpcLoggerV2WithVerbosity(logger, 3)
 
 	// Initialize clients needed for service
-	pipelinePublicServiceClient, pipelinePublicGrpcConn, mgmtPrivateServiceClient, mgmtPrivateServiceGrpcConn,
-		redisClient, influxDBClient, db, minioClient, milvusClient, aclClient, fgaClientConn, fgaReplicaClientConn := newClients(ctx, logger)
-	if pipelinePublicGrpcConn != nil {
-		defer pipelinePublicGrpcConn.Close()
-	}
-	if mgmtPrivateServiceGrpcConn != nil {
-		defer mgmtPrivateServiceGrpcConn.Close()
-	}
-	defer redisClient.Close()
-	defer influxDBClient.Close()
-	defer database.Close(db)
-	if fgaClientConn != nil {
-		defer fgaClientConn.Close()
-	}
-	if fgaReplicaClientConn != nil {
-		defer fgaReplicaClientConn.Close()
-	}
+	pipelinePublicServiceClient, mgmtPrivateServiceClient,
+		redisClient, db, minioClient, milvusClient, aclClient, closer := newClients(ctx, logger)
+	defer closer()
 
 	// Initialize service
 	service := servicepkg.NewService(
@@ -227,9 +213,9 @@ func main() {
 	// Start gRPC server
 	var dialOpts []grpc.DialOption
 	if config.Config.Server.HTTPS.Cert != "" && config.Config.Server.HTTPS.Key != "" {
-		dialOpts = []grpc.DialOption{grpc.WithTransportCredentials(creds), grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(constant.MaxPayloadSize), grpc.MaxCallSendMsgSize(constant.MaxPayloadSize))}
+		dialOpts = []grpc.DialOption{grpc.WithTransportCredentials(creds), grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(client.MaxPayloadSize), grpc.MaxCallSendMsgSize(client.MaxPayloadSize))}
 	} else {
-		dialOpts = []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(constant.MaxPayloadSize), grpc.MaxCallSendMsgSize(constant.MaxPayloadSize))}
+		dialOpts = []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(client.MaxPayloadSize), grpc.MaxCallSendMsgSize(client.MaxPayloadSize))}
 	}
 
 	if err := artifactpb.RegisterArtifactPublicServiceHandlerFromEndpoint(ctx, publicServeMux, fmt.Sprintf(":%v", config.Config.Server.PublicPort), dialOpts); err != nil {
@@ -319,40 +305,40 @@ func main() {
 
 func newClients(ctx context.Context, logger *zap.Logger) (
 	pipelinepb.PipelinePublicServiceClient,
-	*grpc.ClientConn,
 	mgmtpb.MgmtPrivateServiceClient,
-	*grpc.ClientConn,
 	*redis.Client,
-	influxdb2.Client,
 	*gorm.DB,
 	*minio.Minio,
 	milvus.MilvusClientI,
 	acl.ACLClient,
-	*grpc.ClientConn,
-	*grpc.ClientConn,
+	func(),
 ) {
+	closeFuncs := map[string]func() error{}
 
 	// init pipeline grpc client
-	pipelinePublicServiceClient, pipelinePublicServiceClientConn := grpcclient.NewPipelinePublicClient(ctx)
+	pipelinePublicServiceClient, pclose, err := grpcclientx.NewPipelinePublicClient(config.Config.PipelineBackend)
+	if err != nil {
+		logger.Fatal("Failed to initialize pipeline client", zap.Error(err))
+	}
+	closeFuncs["pipeline"] = pclose
 
 	// initialize mgmt clients
-	mgmtPrivateServiceClient, mgmtPrivateServiceClientConn := grpcclient.NewMGMTPrivateClient(ctx)
+	mgmtPrivateServiceClient, mclose, err := grpcclientx.NewMGMTPrivateClient(config.Config.MgmtBackend)
+	if err != nil {
+		logger.Fatal("Failed to initialize mgmt client", zap.Error(err))
+	}
+	closeFuncs["mgmt"] = mclose
 
 	// Initialize redis client
 	redisClient := redis.NewClient(&config.Config.Cache.Redis.RedisOptions)
-
-	// Initialize InfluxDB client
-	influxDBClient, influxDBWriteClient := httpclient.NewInfluxDBClient(ctx)
-
-	influxErrCh := influxDBWriteClient.Errors()
-	go utils.GoRecover(func() {
-		for err := range influxErrCh {
-			logger.Error(fmt.Sprintf("write to bucket %s error: %s\n", config.Config.InfluxDB.Bucket, err.Error()))
-		}
-	}, "InfluxDB")
+	closeFuncs["redis"] = redisClient.Close
 
 	// Initialize repository
 	db := database.GetSharedConnection()
+	closeFuncs["database"] = func() error {
+		database.Close(db)
+		return nil
+	}
 
 	// Initialize Minio client
 	minioClient, err := minio.NewMinioClientAndInitBucket(ctx, miniox.ClientParams{
@@ -375,17 +361,26 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 
 	// Init ACL client
 	fgaClient, fgaClientConn := acl.InitOpenFGAClient(ctx, config.Config.OpenFGA.Host, config.Config.OpenFGA.Port)
+	closeFuncs["fga"] = fgaClientConn.Close
 
 	var fgaReplicaClient openfga.OpenFGAServiceClient
-	var fgaReplicaClientConn *grpc.ClientConn
 	if config.Config.OpenFGA.Replica.Host != "" {
-
+		var fgaReplicaClientConn *grpc.ClientConn
 		fgaReplicaClient, fgaReplicaClientConn = acl.InitOpenFGAClient(ctx, config.Config.OpenFGA.Replica.Host, config.Config.OpenFGA.Replica.Port)
-
+		closeFuncs["fgaReplica"] = fgaReplicaClientConn.Close
 	}
+
 	aclClient := acl.NewACLClient(fgaClient, fgaReplicaClient, redisClient)
 
-	return pipelinePublicServiceClient, pipelinePublicServiceClientConn, mgmtPrivateServiceClient, mgmtPrivateServiceClientConn, redisClient, influxDBClient, db, minioClient, milvusClient, aclClient, fgaClientConn, fgaReplicaClientConn
+	closer := func() {
+		for conn, fn := range closeFuncs {
+			if err := fn(); err != nil {
+				logger.Error("Failed to close conn", zap.Error(err), zap.String("conn", conn))
+			}
+		}
+	}
+
+	return pipelinePublicServiceClient, mgmtPrivateServiceClient, redisClient, db, minioClient, milvusClient, aclClient, closer
 }
 
 func newGrpcOptionAndCreds(logger *zap.Logger) ([]grpc.ServerOption, credentials.TransportCredentials) {
@@ -430,7 +425,7 @@ func newGrpcOptionAndCreds(logger *zap.Logger) ([]grpc.ServerOption, credentials
 		grpcServerOpts = append(grpcServerOpts, grpc.Creds(creds))
 	}
 
-	grpcServerOpts = append(grpcServerOpts, grpc.MaxRecvMsgSize(constant.MaxPayloadSize))
-	grpcServerOpts = append(grpcServerOpts, grpc.MaxSendMsgSize(constant.MaxPayloadSize))
+	grpcServerOpts = append(grpcServerOpts, grpc.MaxRecvMsgSize(client.MaxPayloadSize))
+	grpcServerOpts = append(grpcServerOpts, grpc.MaxSendMsgSize(client.MaxPayloadSize))
 	return grpcServerOpts, creds
 }

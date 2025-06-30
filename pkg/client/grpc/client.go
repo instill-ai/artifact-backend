@@ -5,7 +5,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/instill-ai/artifact-backend/pkg/constant"
+	"github.com/instill-ai/x/client"
 )
 
 func NewGRPCConn(server, cert, key string) (*grpc.ClientConn, error) {
@@ -23,8 +23,8 @@ func NewGRPCConn(server, cert, key string) (*grpc.ClientConn, error) {
 	opts := []grpc.DialOption{
 		grpc.WithTransportCredentials(creds),
 		grpc.WithDefaultCallOptions(
-			grpc.MaxCallRecvMsgSize(constant.MaxPayloadSize),
-			grpc.MaxCallSendMsgSize(constant.MaxPayloadSize),
+			grpc.MaxCallRecvMsgSize(client.MaxPayloadSize),
+			grpc.MaxCallSendMsgSize(client.MaxPayloadSize),
 		),
 	}
 

@@ -16,7 +16,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/instill-ai/artifact-backend/pkg/logger"
+	"github.com/instill-ai/x/log"
 )
 
 // HTTPResponseModifier is a callback function for gRPC-Gateway runtime.WithForwardResponseOption
@@ -49,7 +49,7 @@ func ErrorHandler(ctx context.Context, mux *runtime.ServeMux, marshaler runtime.
 	)
 	defer span.End()
 
-	logger, _ := logger.GetZapLogger(ctx)
+	logger, _ := log.GetZapLogger(ctx)
 
 	// return Internal when Marshal failed
 	const fallback = `{"code": 13, "message": "failed to marshal error message"}`

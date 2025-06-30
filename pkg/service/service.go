@@ -10,11 +10,11 @@ import (
 
 	"github.com/instill-ai/artifact-backend/pkg/acl"
 	"github.com/instill-ai/artifact-backend/pkg/customerror"
-	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/milvus"
 	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
+	"github.com/instill-ai/x/log"
 
 	pb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	mgmtpb "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
@@ -87,7 +87,7 @@ func (s *Service) populateMissingRepositoryTags(ctx context.Context, name utils.
 // remote distribution registry.
 func (s *Service) ListRepositoryTags(ctx context.Context, req *pb.ListRepositoryTagsRequest) (*pb.ListRepositoryTagsResponse, error) {
 
-	logger, _ := logger.GetZapLogger(ctx)
+	logger, _ := log.GetZapLogger(ctx)
 
 	pageSize := pageSizeInRange(req.GetPageSize())
 	page := pageInRange(req.GetPage())
@@ -189,7 +189,7 @@ func (s *Service) CreateRepositoryTag(ctx context.Context, req *pb.CreateReposit
 
 // GetRepositoryTag retrieve the information of a repository tag.
 func (s *Service) GetRepositoryTag(ctx context.Context, req *pb.GetRepositoryTagRequest) (*pb.GetRepositoryTagResponse, error) {
-	logger, _ := logger.GetZapLogger(ctx)
+	logger, _ := log.GetZapLogger(ctx)
 
 	name := utils.RepositoryTagName(req.GetName())
 	repo, id, err := name.ExtractRepositoryAndID()

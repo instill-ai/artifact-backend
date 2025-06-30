@@ -16,10 +16,10 @@ import (
 
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/customerror"
-	"github.com/instill-ai/artifact-backend/pkg/logger"
 	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
+	"github.com/instill-ai/x/log"
 	"github.com/instill-ai/x/resource"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
@@ -27,7 +27,7 @@ import (
 )
 
 func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.UploadCatalogFileRequest) (*artifactpb.UploadCatalogFileResponse, error) {
-	log, _ := logger.GetZapLogger(ctx)
+	log, _ := log.GetZapLogger(ctx)
 	authUID, err := getUserUIDFromContext(ctx)
 	if err != nil {
 		err := fmt.Errorf("failed to get user id from header: %v. err: %w", err, customerror.ErrUnauthenticated)
@@ -335,7 +335,7 @@ func checkUploadKnowledgeBaseFileRequest(req *artifactpb.UploadCatalogFileReques
 // It copies the file content and metadata to the target catalog and deletes
 // the file from the source catalog.
 func (ph *PublicHandler) MoveFileToCatalog(ctx context.Context, req *artifactpb.MoveFileToCatalogRequest) (*artifactpb.MoveFileToCatalogResponse, error) {
-	log, _ := logger.GetZapLogger(ctx)
+	log, _ := log.GetZapLogger(ctx)
 
 	// Validate authentication and request parameters
 	_, err := getUserUIDFromContext(ctx)
@@ -435,7 +435,7 @@ func (ph *PublicHandler) MoveFileToCatalog(ctx context.Context, req *artifactpb.
 
 func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.ListCatalogFilesRequest) (*artifactpb.ListCatalogFilesResponse, error) {
 
-	log, _ := logger.GetZapLogger(ctx)
+	log, _ := log.GetZapLogger(ctx)
 	authUID, err := getUserUIDFromContext(ctx)
 	if err != nil {
 		log.Error("failed to get user id from header", zap.Error(err))
@@ -616,7 +616,7 @@ func (ph *PublicHandler) DeleteCatalogFile(
 	ctx context.Context,
 	req *artifactpb.DeleteCatalogFileRequest) (
 	*artifactpb.DeleteCatalogFileResponse, error) {
-	log, _ := logger.GetZapLogger(ctx)
+	logger, _ := log.GetZapLogger(ctx)
 	// authUID, err := getUserUIDFromContext(ctx)
 	// if err != nil {
 	// 	err := fmt.Errorf("failed to get user id from header: %v. err: %w", err, customerror.ErrUnauthenticated)
@@ -626,18 +626,18 @@ func (ph *PublicHandler) DeleteCatalogFile(
 	// ACL - check user's permission to write catalog of kb file
 	kbfs, err := ph.service.Repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{uuid.FromStringOrNil(req.FileUid)})
 	if err != nil {
-		log.Error("failed to get catalog files", zap.Error(err))
+		logger.Error("failed to get catalog files", zap.Error(err))
 		return nil, fmt.Errorf("failed to get catalog files. err: %w", err)
 	} else if len(kbfs) == 0 {
 		return nil, fmt.Errorf("file not found. err: %w", customerror.ErrNotFound)
 	}
 	granted, err := ph.service.ACLClient.CheckPermission(ctx, "knowledgebase", kbfs[0].KnowledgeBaseUID, "writer")
 	if err != nil {
-		log.Error("failed to check permission", zap.Error(err))
+		logger.Error("failed to check permission", zap.Error(err))
 		return nil, fmt.Errorf("failed to check permission. err: %w", err)
 	}
 	if !granted {
-		log.Error("no permission to delete catalog file")
+		logger.Error("no permission to delete catalog file")
 		return nil, fmt.Errorf("no permission to delete catalog file. err: %w", customerror.ErrNoPermission)
 	}
 	// check if file uid is empty
@@ -664,13 +664,13 @@ func (ph *PublicHandler) DeleteCatalogFile(
 		func() {
 			// Create a new context to prevent the parent context from being cancelled
 			ctx := context.TODO()
-			log, _ := logger.GetZapLogger(ctx)
+			logger, _ := log.GetZapLogger(ctx)
 			canStart := <-startSignal
 			if !canStart {
-				log.Info("DeleteCatalogFile: received stop signal")
+				logger.Info("DeleteCatalogFile: received stop signal")
 				return
 			}
-			log.Info("DeleteCatalogFile: start deleting file from minio, database and milvus")
+			logger.Info("DeleteCatalogFile: start deleting file from minio, database and milvus")
 			allPass := true
 			// Delete the file from MinIO
 			objectPaths := []string{}
@@ -680,7 +680,7 @@ func (ph *PublicHandler) DeleteCatalogFile(
 			cf, err := ph.service.Repository.GetConvertedFileByFileUID(ctx, fUID)
 			if err != nil {
 				if err != gorm.ErrRecordNotFound {
-					log.Error("failed to get converted file by file uid", zap.Error(err))
+					logger.Error("failed to get converted file by file uid", zap.Error(err))
 					allPass = false
 				}
 			} else if cf != nil {
@@ -689,7 +689,7 @@ func (ph *PublicHandler) DeleteCatalogFile(
 			// Add the chunks in MinIO to the list of objects to delete
 			chunks, err := ph.service.Repository.ListChunksByKbFileUID(ctx, fUID)
 			if err != nil {
-				log.Error("failed to get chunks by kb file uid", zap.Error(err))
+				logger.Error("failed to get chunks by kb file uid", zap.Error(err))
 				allPass = false
 			} else if len(chunks) > 0 {
 				for _, chunk := range chunks {
@@ -704,7 +704,7 @@ func (ph *PublicHandler) DeleteCatalogFile(
 			}
 			err = ph.service.MilvusClient.DeleteEmbeddingsInKb(ctx, files[0].KnowledgeBaseUID.String(), embUIDs)
 			if err != nil {
-				log.Error("failed to delete embeddings in milvus", zap.Error(err))
+				logger.Error("failed to delete embeddings in milvus", zap.Error(err))
 				allPass = false
 			}
 
@@ -712,32 +712,32 @@ func (ph *PublicHandler) DeleteCatalogFile(
 			errChan := ph.service.MinIO.DeleteFiles(ctx, minio.KnowledgeBaseBucketName, objectPaths)
 			for err := range errChan {
 				if err != nil {
-					log.Error("failed to delete files in minio", zap.Error(err))
+					logger.Error("failed to delete files in minio", zap.Error(err))
 					allPass = false
 				}
 			}
 			// Delete the converted file in PostgreSQL
 			err = ph.service.Repository.HardDeleteConvertedFileByFileUID(ctx, fUID)
 			if err != nil {
-				log.Error("failed to delete converted file in postgreSQL", zap.Error(err))
+				logger.Error("failed to delete converted file in postgreSQL", zap.Error(err))
 				allPass = false
 			}
 			// Delete the chunks in PostgreSQL
 			err = ph.service.Repository.HardDeleteChunksByKbFileUID(ctx, fUID)
 			if err != nil {
-				log.Error("failed to delete chunks in postgreSQL", zap.Error(err))
+				logger.Error("failed to delete chunks in postgreSQL", zap.Error(err))
 				allPass = false
 			}
 			// Delete the embeddings in PostgreSQL
 			err = ph.service.Repository.HardDeleteEmbeddingsByKbFileUID(ctx, fUID)
 			if err != nil {
-				log.Error("failed to delete embeddings in postgreSQL", zap.Error(err))
+				logger.Error("failed to delete embeddings in postgreSQL", zap.Error(err))
 				allPass = false
 			}
 			if allPass {
-				log.Info("DeleteCatalogFile: successfully deleted file from minio, database and milvus", zap.String("file_uid", fUID.String()))
+				logger.Info("DeleteCatalogFile: successfully deleted file from minio, database and milvus", zap.String("file_uid", fUID.String()))
 			} else {
-				log.Error("DeleteCatalogFile: failed to delete file from minio, database and milvus", zap.String("file_uid", fUID.String()))
+				logger.Error("DeleteCatalogFile: failed to delete file from minio, database and milvus", zap.String("file_uid", fUID.String()))
 			}
 		},
 		"DeleteCatalogFile",
@@ -745,7 +745,7 @@ func (ph *PublicHandler) DeleteCatalogFile(
 
 	err = ph.service.Repository.DeleteKnowledgeBaseFileAndDecreaseUsage(ctx, fUID)
 	if err != nil {
-		log.Error("failed to delete knowledge base file and decrease usage", zap.Error(err))
+		logger.Error("failed to delete knowledge base file and decrease usage", zap.Error(err))
 		startSignal <- false
 		return nil, err
 	}
@@ -760,7 +760,7 @@ func (ph *PublicHandler) DeleteCatalogFile(
 
 func (ph *PublicHandler) ProcessCatalogFiles(ctx context.Context, req *artifactpb.ProcessCatalogFilesRequest) (*artifactpb.ProcessCatalogFilesResponse, error) {
 
-	log, _ := logger.GetZapLogger(ctx)
+	log, _ := log.GetZapLogger(ctx)
 	// ACL - check if the uid can process file. ACL.
 	// check the file's kb_uid and use kb_uid to check if user has write permission
 	fileUUIDs := make([]uuid.UUID, 0, len(req.FileUids))
@@ -886,7 +886,7 @@ func DetermineFileType(fileName string) artifactpb.FileType {
 
 // GetFileSummary
 func (ph *PublicHandler) GetFileSummary(ctx context.Context, req *artifactpb.GetFileSummaryRequest) (*artifactpb.GetFileSummaryResponse, error) {
-	log, _ := logger.GetZapLogger(ctx)
+	log, _ := log.GetZapLogger(ctx)
 	_, err := getUserUIDFromContext(ctx)
 	if err != nil {
 		log.Error("failed to get user id from header", zap.Error(err))
@@ -924,7 +924,7 @@ func (ph *PublicHandler) GetFileSummary(ctx context.Context, req *artifactpb.Get
 //
 // This ensures both flows result in the same consistent data structure.
 func (ph *PublicHandler) uploadBase64FileToMinIO(ctx context.Context, nsID string, nsUID, creatorUID uuid.UUID, fileName string, content string, fileType artifactpb.FileType) (uuid.UUID, error) {
-	log, _ := logger.GetZapLogger(ctx)
+	log, _ := log.GetZapLogger(ctx)
 	response, err := ph.service.GetUploadURL(ctx, &artifactpb.GetObjectUploadURLRequest{
 		NamespaceId: nsID,
 		ObjectName:  fileName,
