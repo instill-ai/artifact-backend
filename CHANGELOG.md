@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.27.0](https://github.com/instill-ai/artifact-backend/compare/v0.26.0...v0.27.0) (2025-07-01)
+
+
+### Features
+
+* **catalog:** specify document conversion pipelines in catalog update ([#214](https://github.com/instill-ai/artifact-backend/issues/214)) ([8737661](https://github.com/instill-ai/artifact-backend/commit/87376615c9ce9edb14eee3e7367a5badb09462e0))
+* **conversion:** parse documents with automatic classification on Agent requests ([#201](https://github.com/instill-ai/artifact-backend/issues/201)) ([7b96f1b](https://github.com/instill-ai/artifact-backend/commit/7b96f1b620e40167a58304c07a67bf047e527bd8))
+
+
+### Bug Fixes
+
+* **handler:** fix the empty download link for files uploaded in legacy way ([#205](https://github.com/instill-ai/artifact-backend/issues/205)) ([4f64edc](https://github.com/instill-ai/artifact-backend/commit/4f64edc0f4d650a161baede6c246574b8b3a48fc))
+* **preset:** revert use of docling converter in document component ([#206](https://github.com/instill-ai/artifact-backend/issues/206)) ([9e43ca1](https://github.com/instill-ai/artifact-backend/commit/9e43ca1d083655d9002ef3540d07cf819b0c2823))
+* **preset:** revert use of docling converter in document component ([#207](https://github.com/instill-ai/artifact-backend/issues/207)) ([b567575](https://github.com/instill-ai/artifact-backend/commit/b567575b16782d59c327d21cc85821717f0cd99d))
+* **preset:** use docling converter in document component ([#204](https://github.com/instill-ai/artifact-backend/issues/204)) ([0fe3e6a](https://github.com/instill-ai/artifact-backend/commit/0fe3e6ad4f32e27f65af2e533b0465d4bd2b3ecb))
+
+
+### Miscellaneous
+
+* **conversion:** fallback to heuristic method on parsing-router pipeline ([#208](https://github.com/instill-ai/artifact-backend/issues/208)) ([6222063](https://github.com/instill-ai/artifact-backend/commit/62220637a41e2c5e9633f6097d8787c1aeadbbad))
+* **deadcode:** remove deadcode and extract gRPC clients ([#211](https://github.com/instill-ai/artifact-backend/issues/211)) ([bb89ce6](https://github.com/instill-ai/artifact-backend/commit/bb89ce61e4734b7604f17b6e1fed02769a1ca61f))
+* **kbfile:** sort catalog files by descending creation time ([#209](https://github.com/instill-ai/artifact-backend/issues/209)) ([c7684a1](https://github.com/instill-ai/artifact-backend/commit/c7684a19fedbe239bb1a624c925b807fbf861f9a))
+* **main:** release v0.27.0 ([#213](https://github.com/instill-ai/artifact-backend/issues/213)) ([5a9bf1e](https://github.com/instill-ai/artifact-backend/commit/5a9bf1e11f17ff38468e8e0ce5e4f0fb598cded5))
+
 ## [0.26.0](https://github.com/instill-ai/artifact-backend/compare/v0.25.2-rc...v0.26.0) (2025-06-18)
 
 
