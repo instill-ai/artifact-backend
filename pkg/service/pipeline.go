@@ -2,14 +2,11 @@ package service
 
 import (
 	"context"
-	"embed"
 	"fmt"
-	"strings"
 	"sync"
 
 	"github.com/gofrs/uuid"
 	"go.uber.org/zap"
-	"golang.org/x/mod/semver"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/instill-ai/artifact-backend/config"
@@ -22,154 +19,11 @@ import (
 	pipelinepb "github.com/instill-ai/protogen-go/pipeline/pipeline/v1beta"
 )
 
-//go:embed preset/pipelines/*
-var PresetPipelinesFS embed.FS
-
 const maxChunkLengthForMarkdownCatalog = 1024
 const maxChunkLengthForTextCatalog = 7000
 
 const chunkOverlapForMarkdowntCatalog = 200
 const chunkOverlapForTextCatalog = 700
-
-const defaultNamespaceID = "preset"
-
-// PipelineRelease identifies a pipeline used in catalog file processing.
-type PipelineRelease struct {
-	Namespace string
-	ID        string
-	Version   string
-}
-
-// Name returns a human-readable, unique identifier for a pipeline release.
-func (pr PipelineRelease) Name() string {
-	return pr.Namespace + "/" + pr.ID + "@" + pr.Version
-}
-
-// PipelineReleaseFromName parses a PipelineRelease from its name, with the
-// format {namespace}/{id}@{version}.
-func PipelineReleaseFromName(name string) (PipelineRelease, error) {
-	pr := PipelineRelease{}
-
-	parts := strings.Split(name, "/")
-	if len(parts) != 2 {
-		return pr, fmt.Errorf("name must have the format {namespace}/{id}@{version}")
-	}
-	pr.Namespace = parts[0]
-
-	idVersion := strings.Split(parts[1], "@")
-	if len(idVersion) != 2 {
-		return pr, fmt.Errorf("name must have the format {namespace}/{id}@{version}")
-	}
-
-	pr.ID = idVersion[0]
-	pr.Version = idVersion[1]
-
-	if !semver.IsValid(pr.Version) {
-		return pr, fmt.Errorf("version must be valid SemVer 2.0.0")
-	}
-
-	return pr, nil
-}
-
-var (
-	// ConvertDocToMDRouterPipeline is a pipeline that routes the document
-	// conversion to different parsers (heuristic, fast, docling, vlm-ocr,
-	// vlm-refinement) depending on the document characteristics.
-	// NOTE: this pipeline depends on the existence of pipelines and models, so
-	// it will only be used on Instill Agent requests.
-	// TODO jvallesm: we need an artifact-backend-ee distribution to avoid such
-	// conditional routing.
-	ConvertDocToMDRouterPipeline = PipelineRelease{
-		Namespace: defaultNamespaceID,
-		ID:        "parsing-router",
-		Version:   "v1.0.0",
-	}
-
-	// ConvertDocVLM is used by ConvertDocToMDRouterPipeline to extract
-	// Markdown from a set of images.
-	ConvertDocVLM = PipelineRelease{
-		Namespace: defaultNamespaceID,
-		ID:        "vlm-ocr",
-		Version:   "v1.0.0",
-	}
-
-	// ConvertDocVLMRefinement is used by ConvertDocToMDRouterPipeline to
-	// enhance a heuristic document-to-Markdown conversion using a VLM and
-	// a set of images from the document.
-	ConvertDocVLMRefinement = PipelineRelease{
-		Namespace: defaultNamespaceID,
-		ID:        "vlm-refinement",
-		Version:   "v1.0.0",
-	}
-
-	// ConvertDocToMDPipeline is the default conversion pipeline for documents.
-	// Note: this pipeline is for the new indexing pipeline having
-	// convert_result or convert_result2
-	ConvertDocToMDPipeline = PipelineRelease{
-		Namespace: defaultNamespaceID,
-		ID:        "indexing-advanced-convert-doc",
-		Version:   "v1.3.1",
-	}
-
-	// ConvertDocToMDStandardPipeline is the default conversion pipeline for
-	// non-document files (e.g. CSV).
-	ConvertDocToMDStandardPipeline = PipelineRelease{
-		Namespace: defaultNamespaceID,
-		ID:        "indexing-convert-pdf",
-		Version:   "v1.1.1",
-	}
-
-	// GenerateSummaryPipeline is the default pipeline for summarizing text.
-	GenerateSummaryPipeline = PipelineRelease{
-		Namespace: defaultNamespaceID,
-		ID:        "indexing-generate-summary",
-		Version:   "v1.0.0",
-	}
-
-	// ChunkMDPipeline is the default pipeline for chunking Markdown.
-	ChunkMDPipeline = PipelineRelease{
-		Namespace: defaultNamespaceID,
-		ID:        "indexing-split-markdown",
-		Version:   "v2.0.0",
-	}
-
-	// ChunkTextPipeline is the default pipeline for chunking text.
-	ChunkTextPipeline = PipelineRelease{
-		Namespace: defaultNamespaceID,
-		ID:        "indexing-split-text",
-		Version:   "v2.0.0",
-	}
-
-	// EmbedTextPipeline is the defualt pipeline for embedding text.
-	EmbedTextPipeline = PipelineRelease{
-		Namespace: defaultNamespaceID,
-		ID:        "indexing-embed",
-		Version:   "v1.1.0",
-	}
-
-	// QAPipeline is the default pipeline for question & answering.
-	QAPipeline = PipelineRelease{
-		Namespace: defaultNamespaceID,
-		ID:        "retrieving-qna",
-		Version:   "v1.2.0",
-	}
-
-	// PresetPipelinesList contains the preset pipelines used in catalogs.
-	PresetPipelinesList = []PipelineRelease{
-		ConvertDocToMDPipeline,
-		ConvertDocToMDStandardPipeline,
-		GenerateSummaryPipeline,
-		ChunkMDPipeline,
-		ChunkTextPipeline,
-		EmbedTextPipeline,
-		QAPipeline,
-
-		// Agent-only pipelines.
-		ConvertDocToMDRouterPipeline,
-		ConvertDocVLM,
-		ConvertDocVLMRefinement,
-	}
-)
 
 // ConvertToMDPipe converts a file into Markdown by triggering a converting
 // pipeline.
