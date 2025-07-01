@@ -297,12 +297,10 @@ func (ph *PublicHandler) UpdateCatalog(ctx context.Context, req *artifactpb.Upda
 	// ACL - check user's permission to update catalog
 	kb, err := ph.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.CatalogId)
 	if err != nil {
-		log.Error("failed to get catalog", zap.Error(err))
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
 	granted, err := ph.service.ACLClient.CheckPermission(ctx, "knowledgebase", kb.UID, "writer")
 	if err != nil {
-		log.Error("failed to check permission", zap.Error(err))
 		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
 	}
 	if !granted {
@@ -313,27 +311,27 @@ func (ph *PublicHandler) UpdateCatalog(ctx context.Context, req *artifactpb.Upda
 	// update catalog
 	kb, err = ph.service.Repository.UpdateKnowledgeBase(
 		ctx,
+		req.GetCatalogId(),
 		ns.NsUID.String(),
 		repository.KnowledgeBase{
-			// Name:        req.KbId,
-			KbID:        req.CatalogId,
-			Description: req.Description,
-			Tags:        req.Tags,
-			Owner:       ns.NsUID.String(),
+			Description: req.GetDescription(),
+			Tags:        req.GetTags(),
+
+			// TODO jvallesm: validate existence, permissions & recipe of provided
+			// pipelines.
+			ConvertingPipelines: req.GetConvertingPipelines(),
 		},
 	)
 	if err != nil {
-		log.Error("failed to update catalog", zap.Error(err))
-		return nil, err
+		return nil, fmt.Errorf("updating catalog: %w", err)
 	}
+
 	fileCounts, err := ph.service.Repository.GetCountFilesByListKnowledgeBaseUID(ctx, []uuid.UUID{kb.UID})
 	if err != nil {
-		log.Error("failed to get file counts", zap.Error(err))
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
 	tokenCounts, err := ph.service.Repository.GetTotalTokensByListKBUIDs(ctx, []uuid.UUID{kb.UID})
 	if err != nil {
-		log.Error("failed to get token counts", zap.Error(err))
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
 
