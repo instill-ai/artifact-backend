@@ -11,6 +11,7 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/lib/pq"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"github.com/instill-ai/artifact-backend/pkg/customerror"
 
@@ -21,7 +22,7 @@ type KnowledgeBaseI interface {
 	CreateKnowledgeBase(ctx context.Context, kb KnowledgeBase, externalService func(kbUID string) error) (*KnowledgeBase, error)
 	ListKnowledgeBases(ctx context.Context, ownerUID string) ([]KnowledgeBase, error)
 	ListKnowledgeBasesByCatalogType(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType) ([]KnowledgeBase, error)
-	UpdateKnowledgeBase(ctx context.Context, ownerUID string, kb KnowledgeBase) (*KnowledgeBase, error)
+	UpdateKnowledgeBase(ctx context.Context, id, ownerUID string, kb KnowledgeBase) (*KnowledgeBase, error)
 	DeleteKnowledgeBase(ctx context.Context, ownerUID, kbID string) (*KnowledgeBase, error)
 	GetKnowledgeBaseByOwnerAndKbID(ctx context.Context, ownerUID uuid.UUID, kbID string) (*KnowledgeBase, error)
 	GetKnowledgeBaseCountByOwner(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType) (int64, error)
@@ -181,40 +182,30 @@ func (r *Repository) ListKnowledgeBasesByCatalogType(ctx context.Context, owner 
 	return knowledgeBases, nil
 }
 
-// UpdateKnowledgeBase updates a KnowledgeBase record in the database except for CreateTime and DeleteTime.
-func (r *Repository) UpdateKnowledgeBase(ctx context.Context, owner string, kb KnowledgeBase) (*KnowledgeBase, error) {
-	// Fetch the existing record to ensure it exists and to get the CreateTime and DeleteTime fields
-	var existingKB KnowledgeBase
+// UpdateKnowledgeBase updates a KnowledgeBase record in the database. The
+// modifiable fields are description, tags and conversion pipelines.
+func (r *Repository) UpdateKnowledgeBase(ctx context.Context, id, owner string, kb KnowledgeBase) (*KnowledgeBase, error) {
+	where := fmt.Sprintf("%s = ? AND %s = ? AND %s is NULL", KnowledgeBaseColumn.KbID, KnowledgeBaseFileColumn.Owner, KnowledgeBaseColumn.DeleteTime)
 
-	// Find the KnowledgeBase record by ID
-	conds := fmt.Sprintf("%s = ? AND %s = ? AND %s is NULL", KnowledgeBaseColumn.KbID, KnowledgeBaseFileColumn.Owner, KnowledgeBaseColumn.DeleteTime)
-	// Find the KnowledgeBase record by ID
-	if err := r.db.WithContext(ctx).Where(conds, kb.KbID, kb.Owner).First(&existingKB).Error; err != nil {
+	// Update the specific fields of the record. Empty fields will be ignored.
+	updatedKB := new(KnowledgeBase)
+	err := r.db.WithContext(ctx).
+		Clauses(clause.Returning{}).
+		Model(&updatedKB).
+		Where(where, id, owner).
+		Updates(KnowledgeBase{
+			Description:         kb.Description,
+			Tags:                kb.Tags,
+			ConvertingPipelines: kb.ConvertingPipelines,
+		}).Error
+	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("knowledge base ID not found. kb_id: %v, owner_uid: %v", kb.KbID, owner)
+			return nil, fmt.Errorf("knowledge base %s/%s not found", id, owner)
 		}
-		return nil, err
+		return nil, fmt.Errorf("updating record: %w", err)
 	}
 
-	// Update the specific fields of the record
-	if err := r.db.WithContext(ctx).Model(&existingKB).Updates(map[string]interface{}{
-		// "kb_id":        kb.KbID,
-		// KnowledgeBaseColumn.Owner:       kb.Owner,
-		// KnowledgeBaseColumn.Name:        kb.Name,
-		KnowledgeBaseColumn.Description: kb.Description,
-		KnowledgeBaseColumn.Tags:        kb.Tags,
-	}).Error; err != nil {
-		return nil, err
-	}
-	// Fetch the updated record
-	var updatedKB KnowledgeBase
-	if err := r.db.WithContext(ctx).Where(conds, kb.KbID, kb.Owner).First(&updatedKB).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("knowledge base name id not found: %v. err: %w", kb.KbID, gorm.ErrRecordNotFound)
-		}
-		return nil, err
-	}
-	return &updatedKB, nil
+	return updatedKB, nil
 }
 
 // DeleteKnowledgeBase sets the DeleteTime to the current time to perform a soft delete.
