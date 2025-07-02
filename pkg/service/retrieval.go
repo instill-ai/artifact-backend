@@ -20,7 +20,7 @@ type SimChunk struct {
 }
 
 // SimilarityChunksSearch ...
-func (s *Service) SimilarityChunksSearch(ctx context.Context, ownerUID uuid.UUID, req *artifactPb.SimilarityChunksSearchRequest) ([]SimChunk, error) {
+func (s *service) SimilarityChunksSearch(ctx context.Context, ownerUID uuid.UUID, req *artifactPb.SimilarityChunksSearchRequest) ([]SimChunk, error) {
 	log, _ := log.GetZapLogger(ctx)
 	t := time.Now()
 	// check if text prompt is empty
@@ -35,7 +35,7 @@ func (s *Service) SimilarityChunksSearch(ctx context.Context, ownerUID uuid.UUID
 	log.Info("vectorize text", zap.Duration("duration", time.Since(t)))
 	t = time.Now()
 	// get kb by kb_id and owner uid
-	kb, err := s.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, req.CatalogId)
+	kb, err := s.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, req.CatalogId)
 	if err != nil {
 		log.Error("failed to get knowledge base by owner and id", zap.Error(err))
 		return nil, fmt.Errorf("failed to get knowledge base by owner and id. err: %w", err)
@@ -70,7 +70,7 @@ func (s *Service) SimilarityChunksSearch(ctx context.Context, ownerUID uuid.UUID
 	}
 
 	// search similar embeddings in kb
-	simEmbeddings, err := s.MilvusClient.SearchSimilarEmbeddingsInKB(ctx, kb.UID.String(), textVector, int(req.TopK), req.FileName, string(fileType), string(contentType))
+	simEmbeddings, err := s.milvusClient.SearchSimilarEmbeddingsInKB(ctx, kb.UID.String(), textVector, int(req.TopK), req.FileName, string(fileType), string(contentType))
 	if err != nil {
 		log.Error("failed to search similar embeddings in kb", zap.Error(err))
 		return nil, fmt.Errorf("failed to search similar embeddings in kb. err: %w", err)
@@ -83,7 +83,7 @@ func (s *Service) SimilarityChunksSearch(ctx context.Context, ownerUID uuid.UUID
 		return []SimChunk{}, nil
 	}
 	for _, simEmb := range simEmbeddings[0] {
-		if simEmb.SourceTable != s.Repository.TextChunkTableName() {
+		if simEmb.SourceTable != s.repository.TextChunkTableName() {
 			continue
 		}
 		simChunkUID, err := uuid.FromString(simEmb.SourceUID)

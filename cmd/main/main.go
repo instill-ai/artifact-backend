@@ -139,7 +139,8 @@ func main() {
 		httpclient.NewRegistryClient(ctx),
 		redisClient,
 		milvusClient,
-		aclClient)
+		aclClient,
+	)
 
 	grpcServerOpts, creds := newGrpcOptionAndCreds(logger)
 
@@ -310,7 +311,7 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 	*gorm.DB,
 	*minio.Minio,
 	milvus.MilvusClientI,
-	acl.ACLClient,
+	*acl.ACLClient,
 	func(),
 ) {
 	closeFuncs := map[string]func() error{}

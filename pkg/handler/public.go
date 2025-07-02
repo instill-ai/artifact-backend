@@ -13,12 +13,12 @@ import (
 // PublicHandler handles public API
 type PublicHandler struct {
 	artifactpb.UnimplementedArtifactPublicServiceServer
-	service *artifact.Service
+	service artifact.Service
 	log     *zap.Logger
 }
 
 // NewPublicHandler initiates a handler instance
-func NewPublicHandler(service *artifact.Service, log *zap.Logger) *PublicHandler {
+func NewPublicHandler(service artifact.Service, log *zap.Logger) *PublicHandler {
 	return &PublicHandler{
 		service: service,
 		log:     log,

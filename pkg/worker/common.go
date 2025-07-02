@@ -30,8 +30,8 @@ func getWorkerKey(fileUID string) string {
 }
 
 // checkFileStatus checks if the file status from argument is the same as the file in database
-func checkFileStatus(ctx context.Context, svc *service.Service, file repository.KnowledgeBaseFile) error {
-	dbFiles, err := svc.Repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{file.UID})
+func checkFileStatus(ctx context.Context, svc service.Service, file repository.KnowledgeBaseFile) error {
+	dbFiles, err := svc.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{file.UID})
 	if err != nil {
 		return err
 	}
@@ -52,12 +52,12 @@ func checkFileStatus(ctx context.Context, svc *service.Service, file repository.
 // It returns a boolean indicating success and a stopRegisterWorkerFunc that can be used to cancel the worker's lifetime extension and remove the worker key from Redis.
 // period: duration between lifetime extensions
 // workerLifetime: total duration the worker key should be kept in Redis
-func registerFileWorker(ctx context.Context, svc *service.Service, fileUID string, period time.Duration, workerLifetime time.Duration) (ok bool, stopRegisterWorker stopRegisterWorkerFunc) {
+func registerFileWorker(ctx context.Context, svc service.Service, fileUID string, period time.Duration, workerLifetime time.Duration) (ok bool, stopRegisterWorker stopRegisterWorkerFunc) {
 	logger, _ := log.GetZapLogger(ctx)
 	stopRegisterWorker = func() {
 		logger.Warn("stopRegisterWorkerFunc is not implemented yet")
 	}
-	ok, err := svc.RedisClient.SetNX(ctx, getWorkerKey(fileUID), "1", workerLifetime).Result()
+	ok, err := svc.RedisClient().SetNX(ctx, getWorkerKey(fileUID), "1", workerLifetime).Result()
 	if err != nil {
 		logger.Error("Error when setting worker key in redis", zap.Error(err))
 		return
@@ -81,7 +81,7 @@ func registerFileWorker(ctx context.Context, svc *service.Service, fileUID strin
 			case <-ticker.C:
 				// extend the lifetime of the worker
 				logger.Debug("Extending worker lifetime", zap.String("worker", getWorkerKey(fileUID)), zap.Duration("lifetime", workerLifetime))
-				err := svc.RedisClient.Expire(ctx, getWorkerKey(fileUID), workerLifetime).Err()
+				err := svc.RedisClient().Expire(ctx, getWorkerKey(fileUID), workerLifetime).Err()
 				if err != nil {
 					logger.Error("Error when extending worker lifetime in redis", zap.Error(err), zap.String("worker", getWorkerKey(fileUID)))
 					return
@@ -94,16 +94,16 @@ func registerFileWorker(ctx context.Context, svc *service.Service, fileUID strin
 	// stopRegisterWorker function will cancel the lifetimeExtHelper and remove the worker key in redis
 	stopRegisterWorker = func() {
 		lifetimeHelperCancel()
-		svc.RedisClient.Del(ctx, getWorkerKey(fileUID))
+		svc.RedisClient().Del(ctx, getWorkerKey(fileUID))
 	}
 
 	return true, stopRegisterWorker
 }
 
 // checkFileWorker checks if any of the provided fileUIDs have active workers
-func checkRegisteredFilesWorker(ctx context.Context, svc *service.Service, fileUIDs []string) map[string]struct{} {
+func checkRegisteredFilesWorker(ctx context.Context, svc service.Service, fileUIDs []string) map[string]struct{} {
 	logger, _ := log.GetZapLogger(ctx)
-	pipe := svc.RedisClient.Pipeline()
+	pipe := svc.RedisClient().Pipeline()
 
 	// Create a map to hold the results
 	results := make(map[string]*redis.IntCmd)
@@ -137,19 +137,19 @@ func checkRegisteredFilesWorker(ctx context.Context, svc *service.Service, fileU
 }
 
 // saveConvertedFile saves a converted file into object storage and updates the metadata in the database.
-func saveConvertedFile(ctx context.Context, svc *service.Service, kbUID, fileUID uuid.UUID, name string, convertedFile []byte) error {
+func saveConvertedFile(ctx context.Context, svc service.Service, kbUID, fileUID uuid.UUID, name string, convertedFile []byte) error {
 	logger, _ := log.GetZapLogger(ctx)
-	_, err := svc.Repository.CreateConvertedFile(
+	_, err := svc.Repository().CreateConvertedFile(
 		ctx,
 		repository.ConvertedFile{KbUID: kbUID, FileUID: fileUID, Name: name, Type: "text/markdown", Destination: "destination"},
 		func(convertedFileUID uuid.UUID) (map[string]any, error) {
 			// save the converted file into object storage
-			err := svc.MinIO.SaveConvertedFile(ctx, kbUID.String(), convertedFileUID.String(), "md", convertedFile)
+			err := svc.MinIO().SaveConvertedFile(ctx, kbUID.String(), convertedFileUID.String(), "md", convertedFile)
 			if err != nil {
 				return nil, err
 			}
 			output := make(map[string]any)
-			output[repository.ConvertedFileColumn.Destination] = svc.MinIO.GetConvertedFilePathInKnowledgeBase(kbUID.String(), convertedFileUID.String(), "md")
+			output[repository.ConvertedFileColumn.Destination] = svc.MinIO().GetConvertedFilePathInKnowledgeBase(kbUID.String(), convertedFileUID.String(), "md")
 			return output, nil
 		})
 	if err != nil {
@@ -168,7 +168,7 @@ type chunk = struct {
 }
 
 // saveChunks saves chunks into object storage and updates the metadata in the database.
-func saveChunks(ctx context.Context, svc *service.Service, kbUID string, kbFileUID uuid.UUID, sourceTable string, sourceUID uuid.UUID, summaryChunks, contetChunks []chunk, fileType string) error {
+func saveChunks(ctx context.Context, svc service.Service, kbUID string, kbFileUID uuid.UUID, sourceTable string, sourceUID uuid.UUID, summaryChunks, contetChunks []chunk, fileType string) error {
 	logger, _ := log.GetZapLogger(ctx)
 	textChunks := make([]*repository.TextChunk, len(summaryChunks)+len(contetChunks))
 	texts := make([]string, len(summaryChunks)+len(contetChunks))
@@ -214,21 +214,21 @@ func saveChunks(ctx context.Context, svc *service.Service, kbUID string, kbFileU
 		}
 		texts[ii] = c.Text
 	}
-	_, err = svc.Repository.DeleteAndCreateChunks(ctx, sourceTable, sourceUID, textChunks,
+	_, err = svc.Repository().DeleteAndCreateChunks(ctx, sourceTable, sourceUID, textChunks,
 		func(chunkUIDs []string) (map[string]any, error) {
 			// save the chunksForMinIO into object storage
 			chunksForMinIO := make(map[minio.ChunkUIDType]minio.ChunkContentType, len(textChunks))
 			for i, uid := range chunkUIDs {
 				chunksForMinIO[minio.ChunkUIDType(uid)] = minio.ChunkContentType([]byte(texts[i]))
 			}
-			err := svc.MinIO.SaveTextChunks(ctx, kbUID, chunksForMinIO)
+			err := svc.MinIO().SaveTextChunks(ctx, kbUID, chunksForMinIO)
 			if err != nil {
 				logger.Error("Failed to save chunks into object storage.", zap.String("SourceUID", sourceUID.String()))
 				return nil, err
 			}
 			chunkDestMap := make(map[string]any, len(chunkUIDs))
 			for _, chunkUID := range chunkUIDs {
-				chunkDestMap[chunkUID] = svc.MinIO.GetChunkPathInKnowledgeBase(kbUID, string(chunkUID))
+				chunkDestMap[chunkUID] = svc.MinIO().GetChunkPathInKnowledgeBase(kbUID, string(chunkUID))
 			}
 			return chunkDestMap, nil
 		},
@@ -244,7 +244,7 @@ func saveChunks(ctx context.Context, svc *service.Service, kbUID string, kbFileU
 // Processes embeddings in batches of 50 to avoid timeout issues.
 const batchSize = 50
 
-func saveEmbeddings(ctx context.Context, svc *service.Service, kbUID string, embeddings []repository.Embedding, fileName string) error {
+func saveEmbeddings(ctx context.Context, svc service.Service, kbUID string, embeddings []repository.Embedding, fileName string) error {
 	logger, _ := log.GetZapLogger(ctx)
 	if len(embeddings) == 0 {
 		logger.Debug("No embeddings to save")
@@ -281,7 +281,7 @@ func saveEmbeddings(ctx context.Context, svc *service.Service, kbUID string, emb
 					ContentType:  emb.ContentType,
 				}
 			}
-			err := svc.MilvusClient.InsertVectorsToKnowledgeBaseCollection(ctx, kbUID, milvusEmbeddings)
+			err := svc.MilvusClient().InsertVectorsToKnowledgeBaseCollection(ctx, kbUID, milvusEmbeddings)
 			if err != nil {
 				logger.Error("Failed to save embeddings batch into vector database.",
 					zap.String("KbUID", kbUID),
@@ -292,7 +292,7 @@ func saveEmbeddings(ctx context.Context, svc *service.Service, kbUID string, emb
 			return nil
 		}
 
-		_, err := svc.Repository.UpsertEmbeddings(ctx, currentBatch, externalServiceCall)
+		_, err := svc.Repository().UpsertEmbeddings(ctx, currentBatch, externalServiceCall)
 		if err != nil {
 			logger.Error("Failed to save embeddings batch into vector database and metadata into database.",
 				zap.String("KbUID", kbUID),

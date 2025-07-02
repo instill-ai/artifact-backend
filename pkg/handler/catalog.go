@@ -40,20 +40,20 @@ func (ph *PublicHandler) GetFileCatalog(ctx context.Context, req *artifactpb.Get
 			log.Error("failed to get namespace by ns id", zap.Error(err))
 			return nil, fmt.Errorf("failed to get namespace by ns id. err: %w", err)
 		}
-		kb, err := ph.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.CatalogId)
+		kb, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.CatalogId)
 		if err != nil {
 			log.Error("failed to get knowledge base by owner and kb id", zap.Error(err))
 			return nil, fmt.Errorf("failed to get catalog by namespace and catalog id. err: %w", err)
 		}
 
-		kbFile, err = ph.service.Repository.GetKnowledgebaseFileByKbUIDAndFileID(ctx, kb.UID, fileID)
+		kbFile, err = ph.service.Repository().GetKnowledgebaseFileByKbUIDAndFileID(ctx, kb.UID, fileID)
 		if err != nil {
 			log.Error("failed to get file by file id", zap.Error(err))
 			return nil, fmt.Errorf("failed to get file by file id. err: %w", err)
 		}
 	} else {
 		// use file uid to get kbFile
-		kbfs, err := ph.service.Repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{fileUID})
+		kbfs, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{fileUID})
 		if err != nil {
 			log.Error("failed to get file by file uid", zap.Error(err))
 			return nil, fmt.Errorf("failed to get file by file uid. err: %w", err)
@@ -65,7 +65,7 @@ func (ph *PublicHandler) GetFileCatalog(ctx context.Context, req *artifactpb.Get
 	}
 
 	// ACL - check if the user(uid from context) has access to the knowledge base of source file.
-	granted, err := ph.service.ACLClient.CheckPermission(ctx, "knowledgebase", kbFile.KnowledgeBaseUID, "reader")
+	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kbFile.KnowledgeBaseUID, "reader")
 	if err != nil {
 		log.Error("failed to check permission in GetSourceFile", zap.Error(err))
 		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
@@ -82,14 +82,14 @@ func (ph *PublicHandler) GetFileCatalog(ctx context.Context, req *artifactpb.Get
 	}
 
 	// get source file
-	source, err := ph.service.Repository.GetTruthSourceByFileUID(ctx, kbFile.UID)
+	source, err := ph.service.Repository().GetTruthSourceByFileUID(ctx, kbFile.UID)
 	if err != nil {
 		log.Error("failed to get truth source by file uid", zap.Error(err))
 		return nil, fmt.Errorf("failed to get truth source by file uid. err: %w", err)
 	}
 
 	// get the source file sourceContent from minIO using dest of source
-	sourceContent, err := ph.service.MinIO.GetFile(ctx, minio.KnowledgeBaseBucketName, source.Dest)
+	sourceContent, err := ph.service.MinIO().GetFile(ctx, minio.KnowledgeBaseBucketName, source.Dest)
 	if err != nil {
 		log.Error("failed to get file from minio", zap.Error(err))
 		return nil, fmt.Errorf("failed to get file from minio. err: %w", err)
@@ -106,7 +106,7 @@ func (ph *PublicHandler) GetFileCatalog(ctx context.Context, req *artifactpb.Get
 	pbChunks := make([]*artifactpb.GetFileCatalogResponse_Chunk, 0, len(textChunks))
 
 	// get embeddings
-	embeddings, err := ph.service.Repository.ListEmbeddingsByKbFileUID(ctx, kbFile.UID)
+	embeddings, err := ph.service.Repository().ListEmbeddingsByKbFileUID(ctx, kbFile.UID)
 	if err != nil {
 		log.Error("failed to get embeddings", zap.Error(err))
 		return nil, fmt.Errorf("failed to get embeddings. err: %w", err)
@@ -115,7 +115,7 @@ func (ph *PublicHandler) GetFileCatalog(ctx context.Context, req *artifactpb.Get
 	embeddingMap := make(map[uuid.UUID]repository.Embedding)
 
 	// NOTE: in the future if we support embeddings for other types of source, we need to filter here
-	targetSourceTable := ph.service.Repository.TextChunkTableName()
+	targetSourceTable := ph.service.Repository().TextChunkTableName()
 	for _, embedding := range embeddings {
 		if embedding.SourceTable != targetSourceTable {
 			continue
@@ -160,7 +160,7 @@ func (ph *PublicHandler) GetFileCatalog(ctx context.Context, req *artifactpb.Get
 	}
 
 	// Retrieve the original file content from MinIO
-	originalContent, err := ph.service.MinIO.GetFile(ctx, minio.KnowledgeBaseBucketName, kbFile.Destination)
+	originalContent, err := ph.service.MinIO().GetFile(ctx, minio.KnowledgeBaseBucketName, kbFile.Destination)
 	if err != nil {
 		log.Error("failed to get original file from minio", zap.Error(err))
 		return nil, fmt.Errorf("failed to get original file from minio. err: %w", err)

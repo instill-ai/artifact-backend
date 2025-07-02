@@ -33,7 +33,7 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 	log.Info("get namespace by ns id", zap.Duration("duration", time.Since(t)))
 	t = time.Now()
 	ownerUID := ns.NsUID
-	kb, err := ph.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, req.CatalogId)
+	kb, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, req.CatalogId)
 	if err != nil {
 		log.Error("failed to get catalog by owner and kb id", zap.Error(err))
 		return nil, fmt.Errorf("failed to get catalog by owner and kb id. err: %w", err)
@@ -41,7 +41,7 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 	log.Info("get catalog by owner and kb id", zap.Duration("duration", time.Since(t)))
 	t = time.Now()
 	// ACL : check user has access to the catalog
-	granted, err := ph.service.ACLClient.CheckPermission(ctx, "knowledgebase", kb.UID, "reader")
+	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kb.UID, "reader")
 	if err != nil {
 		log.Error("failed to check permission", zap.Error(err))
 		return nil, fmt.Errorf("failed to check permission. err: %w", err)
@@ -52,7 +52,7 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 	log.Info("check permission", zap.Duration("duration", time.Since(t)))
 	t = time.Now()
 	// check auth user has access to the requester
-	err = ph.service.ACLClient.CheckRequesterPermission(ctx)
+	err = ph.service.ACLClient().CheckRequesterPermission(ctx)
 	if err != nil {
 		log.Error("failed to check requester permission", zap.Error(err))
 		return nil, fmt.Errorf("failed to check requester permission. err: %w", err)
@@ -70,7 +70,7 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 	log.Info("get similarity chunks", zap.Duration("duration", time.Since(t)))
 	t = time.Now()
 	// fetch the chunks metadata
-	chunks, err := ph.service.Repository.GetChunksByUIDs(ctx, chunkUIDs)
+	chunks, err := ph.service.Repository().GetChunksByUIDs(ctx, chunkUIDs)
 	if err != nil {
 		log.Error("failed to get chunks by uids", zap.Error(err))
 		return nil, fmt.Errorf("failed to get chunks by uids. err: %w", err)
@@ -83,7 +83,7 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 	log.Info("get chunks by uids", zap.Duration("duration", time.Since(t)))
 	t = time.Now()
 	// fetch the chunks content from minio
-	chunkContents, err := ph.service.MinIO.GetFilesByPaths(ctx, minio.KnowledgeBaseBucketName, chunkFilePaths)
+	chunkContents, err := ph.service.MinIO().GetFilesByPaths(ctx, minio.KnowledgeBaseBucketName, chunkFilePaths)
 	if err != nil {
 		log.Error("failed to get chunks content", zap.Error(err))
 		return nil, fmt.Errorf("failed to get chunks content. err: %w", err)
@@ -100,7 +100,7 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 		fileUids = append(fileUids, fileUID)
 	}
 	t = time.Now()
-	files, err := ph.service.Repository.GetKnowledgeBaseFilesByFileUIDs(
+	files, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(
 		ctx, fileUids, repository.KnowledgeBaseFileColumn.UID, repository.KnowledgeBaseFileColumn.Name)
 	if err != nil {
 		log.Error("failed to get catalog files by file uids", zap.Error(err))

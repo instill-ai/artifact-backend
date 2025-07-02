@@ -20,8 +20,15 @@ type SourceTableType = string
 type SourceIDType = uuid.UUID
 
 // GetChunksByFile returns the chunks of a file
-func (s *Service) GetChunksByFile(ctx context.Context, file *repository.KnowledgeBaseFile) (
-	SourceTableType, SourceIDType, []repository.TextChunk, map[ChunkUIDType]ContentType, []string, error) {
+func (s *service) GetChunksByFile(ctx context.Context, file *repository.KnowledgeBaseFile) (
+	SourceTableType,
+	SourceIDType,
+	[]repository.TextChunk,
+	map[ChunkUIDType]ContentType,
+	[]string,
+	error,
+) {
+
 	logger, _ := log.GetZapLogger(ctx)
 	// check the file type
 	// if it is pdf, sourceTable is converted file table, sourceUID is converted file UID
@@ -39,23 +46,23 @@ func (s *Service) GetChunksByFile(ctx context.Context, file *repository.Knowledg
 		artifactpb.FileType_FILE_TYPE_XLS.String(),
 		artifactpb.FileType_FILE_TYPE_CSV.String():
 		// set the sourceTable and sourceUID
-		convertedFile, err := s.Repository.GetConvertedFileByFileUID(ctx, file.UID)
+		convertedFile, err := s.repository.GetConvertedFileByFileUID(ctx, file.UID)
 		if err != nil {
 			logger.Error("Failed to get converted file metadata.", zap.String("File uid", file.UID.String()))
 			return sourceTable, sourceUID, nil, nil, nil, err
 		}
-		sourceTable = s.Repository.ConvertedFileTableName()
+		sourceTable = s.repository.ConvertedFileTableName()
 		sourceUID = convertedFile.UID
 	case artifactpb.FileType_name[int32(artifactpb.FileType_FILE_TYPE_TEXT)],
 		artifactpb.FileType_name[int32(artifactpb.FileType_FILE_TYPE_MARKDOWN)]:
 		// set the sourceTable and sourceUID
-		sourceTable = s.Repository.KnowledgeBaseFileTableName()
+		sourceTable = s.repository.KnowledgeBaseFileTableName()
 		sourceUID = file.UID
 	default:
 		return sourceTable, sourceUID, nil, nil, nil, fmt.Errorf("unsupported file type: %s", file.Type)
 	}
 	// get the chunks's path
-	chunks, err := s.Repository.GetTextChunksBySource(ctx, sourceTable, sourceUID)
+	chunks, err := s.repository.GetTextChunksBySource(ctx, sourceTable, sourceUID)
 	if err != nil {
 		logger.Error("Failed to get chunks from database.", zap.String("SourceUID", sourceUID.String()))
 		return sourceTable, sourceUID, nil, nil, nil, err
@@ -65,7 +72,7 @@ func (s *Service) GetChunksByFile(ctx context.Context, file *repository.Knowledg
 	for i, c := range chunks {
 		chunksPaths[i] = c.ContentDest
 	}
-	chunkFiles, err := s.MinIO.GetFilesByPaths(ctx, minio.KnowledgeBaseBucketName, chunksPaths)
+	chunkFiles, err := s.minIO.GetFilesByPaths(ctx, minio.KnowledgeBaseBucketName, chunksPaths)
 	if err != nil {
 		// log error source table and source UID
 		logger.Error("Failed to get chunks from minIO.", zap.String("SourceTable", sourceTable), zap.String("SourceUID", sourceUID.String()))
