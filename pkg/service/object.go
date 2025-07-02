@@ -247,9 +247,13 @@ func encodeBlobURL(presignedURL *url.URL) (string, error) {
 	if err != nil {
 		return "", status.Errorf(codes.Internal, "failed to join path: %v", err)
 	}
+	instillCoreHost, err := url.Parse(config.Config.Server.InstillCoreHost)
+	if err != nil {
+		return "", status.Errorf(codes.Internal, "failed to parse instill core host: %v", err)
+	}
 	u := url.URL{
-		Scheme: config.Config.Server.InstillCoreHost.Scheme,
-		Host:   config.Config.Server.InstillCoreHost.Host,
+		Scheme: instillCoreHost.Scheme,
+		Host:   instillCoreHost.Host,
 		Path:   path,
 	}
 	return u.String(), nil
