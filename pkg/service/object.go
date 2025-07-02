@@ -152,16 +152,16 @@ func (s *Service) GetDownloadURL(
 	}
 
 	if !object.IsUploaded {
-		if strings.HasPrefix(object.Destination, "ns-") {
-			_, err := s.MinIO.GetFile(ctx, miniolocal.BlobBucketName, object.Destination)
-			if err != nil {
-				log.Error("failed to get file", zap.Error(err))
-				return nil, status.Errorf(codes.Internal, "failed to get file: %v", err)
-			}
-			object.IsUploaded = true
-		} else {
+		if !strings.HasPrefix(object.Destination, "ns-") {
 			return nil, ErrObjectNotUploaded
 		}
+
+		_, err := s.MinIO.GetFile(ctx, miniolocal.BlobBucketName, object.Destination)
+		if err != nil {
+			log.Error("failed to get file", zap.Error(err))
+			return nil, status.Errorf(codes.Internal, "failed to get file: %v", err)
+		}
+		object.IsUploaded = true
 
 	}
 
