@@ -13,7 +13,7 @@ import (
 	"github.com/instill-ai/x/log"
 )
 
-func (s *Service) CheckCatalogUserPermission(ctx context.Context, nsID, catalogID, authUID string) (*resource.Namespace, *repository.KnowledgeBase, error) {
+func (s *service) CheckCatalogUserPermission(ctx context.Context, nsID, catalogID, authUID string) (*resource.Namespace, *repository.KnowledgeBase, error) {
 	log, _ := log.GetZapLogger(ctx)
 	// ACL - check user's permission to create conversation in the namespace
 	ns, err := s.GetNamespaceByNsID(ctx, nsID)
@@ -28,12 +28,12 @@ func (s *Service) CheckCatalogUserPermission(ctx context.Context, nsID, catalogI
 	}
 
 	// Check if the catalog exists
-	catalog, err := s.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, catalogID)
+	catalog, err := s.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, catalogID)
 	if err != nil {
 		log.Error("failed to get catalog", zap.Error(err))
 		return nil, nil, fmt.Errorf("failed to get catalog: %w", err)
 	}
-	granted, err := s.ACLClient.CheckPermission(ctx, acl.CatalogObject, catalog.UID, "writer")
+	granted, err := s.aclClient.CheckPermission(ctx, acl.CatalogObject, catalog.UID, "writer")
 	if err != nil {
 		log.Error("failed to check permission", zap.Error(err))
 
@@ -46,7 +46,7 @@ func (s *Service) CheckCatalogUserPermission(ctx context.Context, nsID, catalogI
 	return ns, catalog, nil
 }
 
-func (s *Service) GetNamespaceAndCheckPermission(ctx context.Context, nsID string) (*resource.Namespace, error) {
+func (s *service) GetNamespaceAndCheckPermission(ctx context.Context, nsID string) (*resource.Namespace, error) {
 	ns, err := s.GetNamespaceByNsID(ctx, nsID)
 	if err != nil {
 		return nil, err

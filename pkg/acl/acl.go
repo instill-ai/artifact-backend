@@ -45,7 +45,7 @@ type Relation struct {
 
 const CatalogObject = "knowledgebase"
 
-func NewACLClient(wc openfga.OpenFGAServiceClient, rc openfga.OpenFGAServiceClient, redisClient *redis.Client) ACLClient {
+func NewACLClient(wc openfga.OpenFGAServiceClient, rc openfga.OpenFGAServiceClient, redisClient *redis.Client) *ACLClient {
 	if rc == nil {
 		rc = wc
 	}
@@ -73,7 +73,7 @@ func NewACLClient(wc openfga.OpenFGAServiceClient, rc openfga.OpenFGAServiceClie
 	// latest model. i.e. restart the service.
 	modelID := modelResp.AuthorizationModels[0].Id
 
-	return ACLClient{
+	return &ACLClient{
 		writeClient:          wc,
 		readClient:           rc,
 		redisClient:          redisClient,

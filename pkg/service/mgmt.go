@@ -16,9 +16,9 @@ import (
 	mgmtpb "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
 )
 
-func (s *Service) GetNamespaceByNsID(ctx context.Context, nsID string) (*resource.Namespace, error) {
+func (s *service) GetNamespaceByNsID(ctx context.Context, nsID string) (*resource.Namespace, error) {
 	log, _ := log.GetZapLogger(ctx)
-	nsRes, err := s.MgmtPrv.CheckNamespaceAdmin(ctx, &mgmtpb.CheckNamespaceAdminRequest{
+	nsRes, err := s.mgmtPrv.CheckNamespaceAdmin(ctx, &mgmtpb.CheckNamespaceAdminRequest{
 		Id: nsID,
 	},
 	)
@@ -47,7 +47,7 @@ func (s *Service) GetNamespaceByNsID(ctx context.Context, nsID string) (*resourc
 }
 
 // GetNamespaceTierByNsID returns the tier of the namespace given the namespace ID
-func (s *Service) GetNamespaceTierByNsID(ctx context.Context, nsID string) (Tier, error) {
+func (s *service) GetNamespaceTierByNsID(ctx context.Context, nsID string) (Tier, error) {
 	ns, err := s.GetNamespaceByNsID(ctx, nsID)
 	if err != nil {
 		return "", fmt.Errorf("failed to get namespace: %w", err)
@@ -55,11 +55,11 @@ func (s *Service) GetNamespaceTierByNsID(ctx context.Context, nsID string) (Tier
 	return s.GetNamespaceTier(ctx, ns)
 }
 
-func (s *Service) GetNamespaceTier(ctx context.Context, ns *resource.Namespace) (Tier, error) {
+func (s *service) GetNamespaceTier(ctx context.Context, ns *resource.Namespace) (Tier, error) {
 	log, _ := log.GetZapLogger(ctx)
 	switch ns.NsType {
 	case resource.User:
-		sub, err := s.MgmtPrv.GetUserSubscriptionAdmin(ctx, &mgmtpb.GetUserSubscriptionAdminRequest{
+		sub, err := s.mgmtPrv.GetUserSubscriptionAdmin(ctx, &mgmtpb.GetUserSubscriptionAdminRequest{
 			UserId: ns.NsID,
 		})
 		if err != nil {
@@ -82,7 +82,7 @@ func (s *Service) GetNamespaceTier(ctx context.Context, ns *resource.Namespace) 
 		}
 		return "", fmt.Errorf("unknown user subscription plan: %v", sub.GetSubscription().Plan)
 	case resource.Organization:
-		sub, err := s.MgmtPrv.GetOrganizationSubscriptionAdmin(ctx, &mgmtpb.GetOrganizationSubscriptionAdminRequest{
+		sub, err := s.mgmtPrv.GetOrganizationSubscriptionAdmin(ctx, &mgmtpb.GetOrganizationSubscriptionAdminRequest{
 			OrganizationId: ns.NsID,
 		})
 		if err != nil {

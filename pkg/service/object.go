@@ -34,7 +34,7 @@ const blobURLPath = "/v1alpha/blob-urls"
 
 // GetUploadURL get the upload url of the object
 // this function will create a new object and object_url record in the database
-func (s *Service) GetUploadURL(
+func (s *service) GetUploadURL(
 	ctx context.Context,
 	req *artifactpb.GetObjectUploadURLRequest,
 	namespaceUID uuid.UUID,
@@ -81,7 +81,7 @@ func (s *Service) GetUploadURL(
 	}
 
 	// create object
-	createdObject, err := s.Repository.CreateObject(ctx, *object)
+	createdObject, err := s.repository.CreateObject(ctx, *object)
 	if err != nil {
 		log.Error("failed to create object", zap.Error(err))
 		return nil, status.Errorf(codes.Internal, "failed to create object: %v", err)
@@ -91,7 +91,7 @@ func (s *Service) GetUploadURL(
 	minioPath := miniolocal.GetBlobObjectPath(createdObject.NamespaceUID, createdObject.UID)
 	// update the object destination
 	createdObject.Destination = minioPath
-	_, err = s.Repository.UpdateObject(ctx, *createdObject)
+	_, err = s.repository.UpdateObject(ctx, *createdObject)
 	if err != nil {
 		log.Error("failed to update object", zap.Error(err))
 		return nil, status.Errorf(codes.Internal, "failed to update object: %v", err)
@@ -99,7 +99,7 @@ func (s *Service) GetUploadURL(
 
 	// get presigned url for uploading object
 	expirationTime := time.Duration(req.GetUrlExpireDays()) * time.Hour * 24
-	presignedURL, err := s.MinIO.GetPresignedURLForUpload(ctx, namespaceUID, createdObject.UID, req.GetObjectName(), expirationTime)
+	presignedURL, err := s.minIO.GetPresignedURLForUpload(ctx, namespaceUID, createdObject.UID, req.GetObjectName(), expirationTime)
 	if err != nil {
 		log.Error("failed to make presigned url for upload", zap.Error(err))
 		return nil, status.Errorf(codes.Internal, "failed to make presigned url for upload: %v", err)
@@ -126,7 +126,7 @@ func (s *Service) GetUploadURL(
 
 // GetDownloadURL gets the download url of the object
 // this function will create a new object_url record in the database for downloading
-func (s *Service) GetDownloadURL(
+func (s *service) GetDownloadURL(
 	ctx context.Context,
 	req *artifactpb.GetObjectDownloadURLRequest,
 	namespaceUID uuid.UUID,
@@ -139,7 +139,7 @@ func (s *Service) GetDownloadURL(
 		return nil, status.Errorf(codes.InvalidArgument, "failed to parse object uid: %v", err)
 	}
 	// Get the object from database
-	object, err := s.Repository.GetObjectByUID(ctx, objectUID)
+	object, err := s.repository.GetObjectByUID(ctx, objectUID)
 	if err != nil {
 		log.Error("failed to get object", zap.Error(err))
 		return nil, status.Errorf(codes.NotFound, "object not found: %v", err)
@@ -156,7 +156,7 @@ func (s *Service) GetDownloadURL(
 			return nil, ErrObjectNotUploaded
 		}
 
-		_, err := s.MinIO.GetFile(ctx, miniolocal.BlobBucketName, object.Destination)
+		_, err := s.minIO.GetFile(ctx, miniolocal.BlobBucketName, object.Destination)
 		if err != nil {
 			log.Error("failed to get file", zap.Error(err))
 			return nil, status.Errorf(codes.Internal, "failed to get file: %v", err)
@@ -177,7 +177,7 @@ func (s *Service) GetDownloadURL(
 	expirationTime := time.Duration(urlExpireDays) * time.Hour * 24
 
 	// Get presigned URL for downloading object
-	presignedURL, err := s.MinIO.GetPresignedURLForDownload(
+	presignedURL, err := s.minIO.GetPresignedURLForDownload(
 		ctx,
 		object.NamespaceUID,
 		object.UID,

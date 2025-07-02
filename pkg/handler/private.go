@@ -22,12 +22,12 @@ var tracer = otel.Tracer("artifact-backend.private-handler.tracer")
 // PrivateHandler handles the private Artifact endpoints.
 type PrivateHandler struct {
 	pb.UnimplementedArtifactPrivateServiceServer
-	service *artifact.Service
+	service artifact.Service
 	log     *zap.Logger
 }
 
 // NewPrivateHandler returns an initialized private handler.
-func NewPrivateHandler(s *artifact.Service, log *zap.Logger) *PrivateHandler {
+func NewPrivateHandler(s artifact.Service, log *zap.Logger) *PrivateHandler {
 	return &PrivateHandler{
 		service: s,
 		log:     log,
@@ -110,14 +110,14 @@ func (h *PrivateHandler) GetObjectURL(ctx context.Context, req *pb.GetObjectURLR
 	var err error
 	objectURLUID := uuid.FromStringOrNil(req.GetUid())
 	if objectURLUID != uuid.Nil {
-		resp, err = h.service.Repository.GetObjectURLByUID(ctx, objectURLUID)
+		resp, err = h.service.Repository().GetObjectURLByUID(ctx, objectURLUID)
 		if err != nil {
 			span.SetStatus(1, err.Error())
 			h.log.Error("GetObjectURL", zap.Error(err))
 			return nil, fmt.Errorf("cannot get object URL by UID: %w", err)
 		}
 	} else if req.GetEncodedUrlPath() != "" {
-		resp, err = h.service.Repository.GetObjectURLByEncodedURLPath(ctx, req.GetEncodedUrlPath())
+		resp, err = h.service.Repository().GetObjectURLByEncodedURLPath(ctx, req.GetEncodedUrlPath())
 		if err != nil {
 			span.SetStatus(1, err.Error())
 			h.log.Error("GetObjectURL", zap.Error(err))
@@ -139,7 +139,7 @@ func (h *PrivateHandler) GetObject(ctx context.Context, req *pb.GetObjectRequest
 		return nil, err
 	}
 
-	obj, err := h.service.Repository.GetObjectByUID(ctx, objectUID)
+	obj, err := h.service.Repository().GetObjectByUID(ctx, objectUID)
 	if err != nil {
 		span.SetStatus(1, err.Error())
 		h.log.Error("GetObject", zap.Error(err))
@@ -182,7 +182,7 @@ func (h *PrivateHandler) UpdateObject(ctx context.Context, req *pb.UpdateObjectR
 		updateMap[repository.ObjectColumn.LastModifiedTime] = req.LastModifiedTime.AsTime()
 	}
 
-	updatedObject, err := h.service.Repository.UpdateObjectByUpdateMap(ctx, objectUID, updateMap)
+	updatedObject, err := h.service.Repository().UpdateObjectByUpdateMap(ctx, objectUID, updateMap)
 	if err != nil {
 		span.SetStatus(1, err.Error())
 		h.log.Error("UpdateObject", zap.Error(err))
@@ -208,27 +208,27 @@ func (h *PrivateHandler) GetChatFile(ctx context.Context, req *pb.GetChatFileReq
 		log.Error("failed to get namespace by ns id", zap.Error(err))
 		return nil, fmt.Errorf("failed to get namespace by ns id. err: %w", err)
 	}
-	kb, err := h.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.CatalogId)
+	kb, err := h.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.CatalogId)
 	if err != nil {
 		log.Error("failed to get knowledge base by owner and kb id", zap.Error(err))
 		return nil, fmt.Errorf("failed to get catalog by namespace and catalog id. err: %w", err)
 	}
 
-	kbFile, err := h.service.Repository.GetKnowledgebaseFileByKbUIDAndFileID(ctx, kb.UID, fileID)
+	kbFile, err := h.service.Repository().GetKnowledgebaseFileByKbUIDAndFileID(ctx, kb.UID, fileID)
 	if err != nil {
 		log.Error("failed to get file by file id", zap.Error(err))
 		return nil, fmt.Errorf("failed to get file by file id. err: %w", err)
 	}
 
 	// get source file
-	source, err := h.service.Repository.GetTruthSourceByFileUID(ctx, kbFile.UID)
+	source, err := h.service.Repository().GetTruthSourceByFileUID(ctx, kbFile.UID)
 	if err != nil {
 		log.Error("failed to get truth source by file uid", zap.Error(err))
 		return nil, fmt.Errorf("failed to get truth source by file uid. err: %w", err)
 	}
 
 	// get the source file sourceContent from minIO using dest of source
-	sourceContent, err := h.service.MinIO.GetFile(ctx, minio.KnowledgeBaseBucketName, source.Dest)
+	sourceContent, err := h.service.MinIO().GetFile(ctx, minio.KnowledgeBaseBucketName, source.Dest)
 	if err != nil {
 		log.Error("failed to get file from minio", zap.Error(err))
 		return nil, fmt.Errorf("failed to get file from minio. err: %w", err)

@@ -49,12 +49,12 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 		return nil, fmt.Errorf("failed to get namespace. err: %w", err)
 	}
 	// ACL - check user's permission to write catalog
-	kb, err := ph.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.CatalogId)
+	kb, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.CatalogId)
 	if err != nil {
 		log.Error("failed to get catalog", zap.Error(err))
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
-	granted, err := ph.service.ACLClient.CheckPermission(ctx, "knowledgebase", kb.UID, "writer")
+	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kb.UID, "writer")
 	if err != nil {
 		log.Error("failed to check permission", zap.Error(err))
 		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
@@ -65,7 +65,7 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 	}
 
 	// get all kbs in the namespace
-	kbs, err := ph.service.Repository.ListKnowledgeBases(ctx, ns.NsUID.String())
+	kbs, err := ph.service.Repository().ListKnowledgeBases(ctx, ns.NsUID.String())
 	if err != nil {
 		log.Error("failed to list catalog", zap.Error(err))
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
@@ -157,7 +157,7 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 		}
 
 		// create catalog file in database
-		res, err = ph.service.Repository.CreateKnowledgeBaseFile(ctx, kbFile, nil)
+		res, err = ph.service.Repository().CreateKnowledgeBaseFile(ctx, kbFile, nil)
 		if err != nil {
 			log.Error("failed to create catalog file", zap.Error(err))
 			return nil, err
@@ -165,13 +165,13 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 
 		// increase catalog usage. need to increase after the file is created.
 		// Note: in the future, we need to increase the usage in transaction with creating the file.
-		err = ph.service.Repository.IncreaseKnowledgeBaseUsage(ctx, nil, kb.UID.String(), int(fileSize))
+		err = ph.service.Repository().IncreaseKnowledgeBaseUsage(ctx, nil, kb.UID.String(), int(fileSize))
 		if err != nil {
 			log.Error("failed to increase catalog usage", zap.Error(err))
 			return nil, err
 		}
 	} else {
-		object, err := ph.service.Repository.GetObjectByUID(ctx, uuid.FromStringOrNil(req.GetFile().GetObjectUid()))
+		object, err := ph.service.Repository().GetObjectByUID(ctx, uuid.FromStringOrNil(req.GetFile().GetObjectUid()))
 		if err != nil {
 			log.Error("failed to get catalog object with provided UID", zap.Error(err))
 			return nil, err
@@ -213,7 +213,7 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 		}
 
 		// create catalog file in database
-		res, err = ph.service.Repository.CreateKnowledgeBaseFile(ctx, kbFile, nil)
+		res, err = ph.service.Repository().CreateKnowledgeBaseFile(ctx, kbFile, nil)
 
 		if err != nil {
 			log.Error("failed to create catalog file", zap.Error(err))
@@ -222,7 +222,7 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 
 		// increase catalog usage. need to increase after the file is created.
 		// Note: in the future, we need to increase the usage in transaction with creating the file.
-		err = ph.service.Repository.IncreaseKnowledgeBaseUsage(ctx, nil, kb.UID.String(), int(object.Size))
+		err = ph.service.Repository().IncreaseKnowledgeBaseUsage(ctx, nil, kb.UID.String(), int(object.Size))
 		if err != nil {
 			log.Error("failed to increase catalog usage", zap.Error(err))
 			return nil, err
@@ -351,7 +351,7 @@ func (ph *PublicHandler) MoveFileToCatalog(ctx context.Context, req *artifactpb.
 	}
 
 	// Step 1: Verify source file exists and check namespace permissions
-	sourceFiles, err := ph.service.Repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{uuid.FromStringOrNil(req.FileUid)})
+	sourceFiles, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{uuid.FromStringOrNil(req.FileUid)})
 	if err != nil || len(sourceFiles) == 0 {
 		log.Error("file not found", zap.Error(err))
 		return nil, fmt.Errorf("file not found. err: %w", customerror.ErrNotFound)
@@ -370,14 +370,14 @@ func (ph *PublicHandler) MoveFileToCatalog(ctx context.Context, req *artifactpb.
 	}
 
 	// Step 2: Verify target catalog exists
-	targetCatalog, err := ph.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, reqNamespace.NsUID, req.ToCatalogId)
+	targetCatalog, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, reqNamespace.NsUID, req.ToCatalogId)
 	if err != nil {
 		log.Error("target catalog not found", zap.Error(err))
 		return nil, fmt.Errorf("target catalog not found. err: %w", err)
 	}
 
 	// Step 3: Retrieve file content from MinIO storage
-	fileContent, err := ph.service.MinIO.GetFile(ctx, minio.KnowledgeBaseBucketName, sourceFile.Destination)
+	fileContent, err := ph.service.MinIO().GetFile(ctx, minio.KnowledgeBaseBucketName, sourceFile.Destination)
 	if err != nil {
 		log.Error("failed to get file content from MinIO", zap.Error(err))
 		return nil, fmt.Errorf("failed to get file content from MinIO. err: %w", err)
@@ -454,12 +454,12 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 		return nil, fmt.Errorf("failed to get namespace. err: %w", err)
 	}
 	// ACL - check user's permission to write catalog
-	kb, err := ph.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.CatalogId)
+	kb, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.CatalogId)
 	if err != nil {
 		log.Error("failed to get catalog", zap.Error(err))
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
-	granted, err := ph.service.ACLClient.CheckPermission(ctx, "knowledgebase", kb.UID, "reader")
+	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kb.UID, "reader")
 	if err != nil {
 		log.Error("failed to check permission", zap.Error(err))
 		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
@@ -479,25 +479,25 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 				FileUids: []string{},
 			}
 		}
-		kbFiles, size, nextToken, err := ph.service.Repository.ListKnowledgeBaseFiles(ctx, authUID, ns.NsUID.String(), kb.UID.String(), req.PageSize, req.PageToken, req.Filter.FileUids)
+		kbFiles, size, nextToken, err := ph.service.Repository().ListKnowledgeBaseFiles(ctx, authUID, ns.NsUID.String(), kb.UID.String(), req.PageSize, req.PageToken, req.Filter.FileUids)
 		if err != nil {
 			log.Error("failed to list catalog files", zap.Error(err))
 			return nil, err
 		}
 		// get the tokens and chunks using the source table and source uid
-		sources, err := ph.service.Repository.GetSourceTableAndUIDByFileUIDs(ctx, kbFiles)
+		sources, err := ph.service.Repository().GetSourceTableAndUIDByFileUIDs(ctx, kbFiles)
 		if err != nil {
 			log.Error("failed to find source table and source uid by file uid", zap.Error(err))
 			return nil, err
 		}
 
-		totalTokens, err := ph.service.Repository.GetFilesTotalTokens(ctx, sources)
+		totalTokens, err := ph.service.Repository().GetFilesTotalTokens(ctx, sources)
 		if err != nil {
 			log.Error("failed to get files total tokens", zap.Error(err))
 			return nil, err
 		}
 
-		totalChunks, err := ph.service.Repository.GetTotalChunksBySources(ctx, sources)
+		totalChunks, err := ph.service.Repository().GetTotalChunksBySources(ctx, sources)
 		if err != nil {
 			log.Error("failed to get files total chunks", zap.Error(err))
 			return nil, err
@@ -524,7 +524,7 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 
 				fileName := strings.Split(kbFile.Destination, "/")[2]
 
-				content, err := ph.service.MinIO.GetFile(ctx, minio.KnowledgeBaseBucketName, kbFile.Destination)
+				content, err := ph.service.MinIO().GetFile(ctx, minio.KnowledgeBaseBucketName, kbFile.Destination)
 				if err != nil {
 					log.Error("failed to get file", zap.Error(err))
 					return nil, err
@@ -540,7 +540,7 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 
 				newDestination := minio.GetBlobObjectPath(ns.NsUID, objectUID)
 				fmt.Println("newDestination", newDestination)
-				_, err = ph.service.Repository.UpdateKnowledgeBaseFile(ctx, kbFile.UID.String(), map[string]any{
+				_, err = ph.service.Repository().UpdateKnowledgeBaseFile(ctx, kbFile.UID.String(), map[string]any{
 					repository.KnowledgeBaseFileColumn.Destination: newDestination,
 				})
 				if err != nil {
@@ -624,14 +624,14 @@ func (ph *PublicHandler) DeleteCatalogFile(
 	// }
 
 	// ACL - check user's permission to write catalog of kb file
-	kbfs, err := ph.service.Repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{uuid.FromStringOrNil(req.FileUid)})
+	kbfs, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{uuid.FromStringOrNil(req.FileUid)})
 	if err != nil {
 		logger.Error("failed to get catalog files", zap.Error(err))
 		return nil, fmt.Errorf("failed to get catalog files. err: %w", err)
 	} else if len(kbfs) == 0 {
 		return nil, fmt.Errorf("file not found. err: %w", customerror.ErrNotFound)
 	}
-	granted, err := ph.service.ACLClient.CheckPermission(ctx, "knowledgebase", kbfs[0].KnowledgeBaseUID, "writer")
+	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kbfs[0].KnowledgeBaseUID, "writer")
 	if err != nil {
 		logger.Error("failed to check permission", zap.Error(err))
 		return nil, fmt.Errorf("failed to check permission. err: %w", err)
@@ -651,7 +651,7 @@ func (ph *PublicHandler) DeleteCatalogFile(
 	}
 
 	// get the file by uid
-	files, err := ph.service.Repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{fUID})
+	files, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{fUID})
 	if err != nil {
 		return nil, err
 	} else if len(files) == 0 {
@@ -677,7 +677,7 @@ func (ph *PublicHandler) DeleteCatalogFile(
 			// Add the knowledge base file in MinIO to the list of objects to delete
 			objectPaths = append(objectPaths, files[0].Destination)
 			// Add the converted file in MinIO to the list of objects to delete
-			cf, err := ph.service.Repository.GetConvertedFileByFileUID(ctx, fUID)
+			cf, err := ph.service.Repository().GetConvertedFileByFileUID(ctx, fUID)
 			if err != nil {
 				if err != gorm.ErrRecordNotFound {
 					logger.Error("failed to get converted file by file uid", zap.Error(err))
@@ -687,7 +687,7 @@ func (ph *PublicHandler) DeleteCatalogFile(
 				objectPaths = append(objectPaths, cf.Destination)
 			}
 			// Add the chunks in MinIO to the list of objects to delete
-			chunks, err := ph.service.Repository.ListChunksByKbFileUID(ctx, fUID)
+			chunks, err := ph.service.Repository().ListChunksByKbFileUID(ctx, fUID)
 			if err != nil {
 				logger.Error("failed to get chunks by kb file uid", zap.Error(err))
 				allPass = false
@@ -698,18 +698,18 @@ func (ph *PublicHandler) DeleteCatalogFile(
 			}
 			// Delete the embeddings in Milvus (this better to be done first)
 			embUIDs := []string{}
-			embeddings, _ := ph.service.Repository.ListEmbeddingsByKbFileUID(ctx, fUID)
+			embeddings, _ := ph.service.Repository().ListEmbeddingsByKbFileUID(ctx, fUID)
 			for _, emb := range embeddings {
 				embUIDs = append(embUIDs, emb.UID.String())
 			}
-			err = ph.service.MilvusClient.DeleteEmbeddingsInKb(ctx, files[0].KnowledgeBaseUID.String(), embUIDs)
+			err = ph.service.MilvusClient().DeleteEmbeddingsInKb(ctx, files[0].KnowledgeBaseUID.String(), embUIDs)
 			if err != nil {
 				logger.Error("failed to delete embeddings in milvus", zap.Error(err))
 				allPass = false
 			}
 
 			// Delete the files in MinIO
-			errChan := ph.service.MinIO.DeleteFiles(ctx, minio.KnowledgeBaseBucketName, objectPaths)
+			errChan := ph.service.MinIO().DeleteFiles(ctx, minio.KnowledgeBaseBucketName, objectPaths)
 			for err := range errChan {
 				if err != nil {
 					logger.Error("failed to delete files in minio", zap.Error(err))
@@ -717,19 +717,19 @@ func (ph *PublicHandler) DeleteCatalogFile(
 				}
 			}
 			// Delete the converted file in PostgreSQL
-			err = ph.service.Repository.HardDeleteConvertedFileByFileUID(ctx, fUID)
+			err = ph.service.Repository().HardDeleteConvertedFileByFileUID(ctx, fUID)
 			if err != nil {
 				logger.Error("failed to delete converted file in postgreSQL", zap.Error(err))
 				allPass = false
 			}
 			// Delete the chunks in PostgreSQL
-			err = ph.service.Repository.HardDeleteChunksByKbFileUID(ctx, fUID)
+			err = ph.service.Repository().HardDeleteChunksByKbFileUID(ctx, fUID)
 			if err != nil {
 				logger.Error("failed to delete chunks in postgreSQL", zap.Error(err))
 				allPass = false
 			}
 			// Delete the embeddings in PostgreSQL
-			err = ph.service.Repository.HardDeleteEmbeddingsByKbFileUID(ctx, fUID)
+			err = ph.service.Repository().HardDeleteEmbeddingsByKbFileUID(ctx, fUID)
 			if err != nil {
 				logger.Error("failed to delete embeddings in postgreSQL", zap.Error(err))
 				allPass = false
@@ -743,7 +743,7 @@ func (ph *PublicHandler) DeleteCatalogFile(
 		"DeleteCatalogFile",
 	)
 
-	err = ph.service.Repository.DeleteKnowledgeBaseFileAndDecreaseUsage(ctx, fUID)
+	err = ph.service.Repository().DeleteKnowledgeBaseFileAndDecreaseUsage(ctx, fUID)
 	if err != nil {
 		logger.Error("failed to delete knowledge base file and decrease usage", zap.Error(err))
 		startSignal <- false
@@ -771,7 +771,7 @@ func (ph *PublicHandler) ProcessCatalogFiles(ctx context.Context, req *artifactp
 		}
 		fileUUIDs = append(fileUUIDs, fUID)
 	}
-	kbfs, err := ph.service.Repository.GetKnowledgeBaseFilesByFileUIDs(ctx, fileUUIDs)
+	kbfs, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, fileUUIDs)
 	if err != nil {
 		return nil, err
 	} else if len(kbfs) == 0 {
@@ -779,7 +779,7 @@ func (ph *PublicHandler) ProcessCatalogFiles(ctx context.Context, req *artifactp
 	}
 	// check write permission for the catalog
 	for _, kbf := range kbfs {
-		granted, err := ph.service.ACLClient.CheckPermission(ctx, "knowledgebase", kbf.KnowledgeBaseUID, "writer")
+		granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kbf.KnowledgeBaseUID, "writer")
 		if err != nil {
 			return nil, err
 		}
@@ -789,7 +789,7 @@ func (ph *PublicHandler) ProcessCatalogFiles(ctx context.Context, req *artifactp
 	}
 
 	// check auth user has access to the requester
-	err = ph.service.ACLClient.CheckRequesterPermission(ctx)
+	err = ph.service.ACLClient().CheckRequesterPermission(ctx)
 	if err != nil {
 		log.Error("failed to check requester permission", zap.Error(err))
 		return nil, fmt.Errorf("failed to check requester permission. err: %w", err)
@@ -798,7 +798,7 @@ func (ph *PublicHandler) ProcessCatalogFiles(ctx context.Context, req *artifactp
 	requesterUID := resource.GetRequestSingleHeader(ctx, constantx.HeaderRequesterUIDKey)
 	requesterUUID := uuid.FromStringOrNil(requesterUID)
 
-	files, err := ph.service.Repository.ProcessKnowledgeBaseFiles(ctx, req.FileUids, requesterUUID)
+	files, err := ph.service.Repository().ProcessKnowledgeBaseFiles(ctx, req.FileUids, requesterUUID)
 	if err != nil {
 		return nil, err
 	}
@@ -900,7 +900,7 @@ func (ph *PublicHandler) GetFileSummary(ctx context.Context, req *artifactpb.Get
 		return nil, fmt.Errorf("failed to get namespace and check permission: %w", err)
 	}
 
-	kbFiles, err := ph.service.Repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{uuid.FromStringOrNil(req.FileUid)}, repository.KnowledgeBaseFileColumn.Summary)
+	kbFiles, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{uuid.FromStringOrNil(req.FileUid)}, repository.KnowledgeBaseFileColumn.Summary)
 	if err != nil || len(kbFiles) == 0 {
 		log.Error("file not found", zap.Error(err))
 		return nil, fmt.Errorf("file not found. err: %w", customerror.ErrNotFound)
@@ -935,7 +935,7 @@ func (ph *PublicHandler) uploadBase64FileToMinIO(ctx context.Context, nsID strin
 	}
 	objectUID := uuid.FromStringOrNil(response.Object.Uid)
 	destination := minio.GetBlobObjectPath(nsUID, objectUID)
-	err = ph.service.MinIO.UploadBase64File(ctx, minio.BlobBucketName, destination, content, fileTypeConvertToMime(fileType))
+	err = ph.service.MinIO().UploadBase64File(ctx, minio.BlobBucketName, destination, content, fileTypeConvertToMime(fileType))
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("failed to upload file to MinIO. err: %w", err)
 	}
@@ -945,7 +945,7 @@ func (ph *PublicHandler) uploadBase64FileToMinIO(ctx context.Context, nsID strin
 	}
 	objectSize := int64(len(decodedContent))
 
-	object, err := ph.service.Repository.GetObjectByUID(ctx, objectUID)
+	object, err := ph.service.Repository().GetObjectByUID(ctx, objectUID)
 	if err != nil {
 		log.Error("failed to get object by uid", zap.Error(err))
 		return uuid.Nil, fmt.Errorf("failed to get object by uid. err: %w", err)
@@ -953,7 +953,7 @@ func (ph *PublicHandler) uploadBase64FileToMinIO(ctx context.Context, nsID strin
 	object.Size = objectSize
 	object.IsUploaded = true
 
-	_, err = ph.service.Repository.UpdateObject(ctx, *object)
+	_, err = ph.service.Repository().UpdateObject(ctx, *object)
 	if err != nil {
 		log.Error("failed to update object", zap.Error(err))
 		return uuid.Nil, fmt.Errorf("failed to update object. err: %w", err)

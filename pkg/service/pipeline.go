@@ -35,7 +35,7 @@ const chunkOverlapForTextCatalog = 700
 //   - Non-document files will use ConvertDocToMDStandardPipeline, as these
 //     types tend to be trivial to convert and can use a deterministic pipeline
 //     instead of a custom one that improves the conversion performance.
-func (s *Service) ConvertToMDPipe(
+func (s *service) ConvertToMDPipe(
 	ctx context.Context,
 	fileUID uuid.UUID,
 	fileBase64 string,
@@ -46,7 +46,7 @@ func (s *Service) ConvertToMDPipe(
 	logger, _ := log.GetZapLogger(ctx)
 
 	// Get the appropriate prefix for the file type
-	prefix := getFileTypePrefix(fileType)
+	prefix := GetFileTypePrefix(fileType)
 
 	input := &structpb.Struct{
 		Fields: map[string]*structpb.Value{
@@ -127,7 +127,7 @@ func (s *Service) ConvertToMDPipe(
 			Inputs:      []*structpb.Struct{input},
 		}
 
-		resp, err := s.PipelinePub.TriggerNamespacePipelineRelease(ctx, req)
+		resp, err := s.pipelinePub.TriggerNamespacePipelineRelease(ctx, req)
 		if err != nil {
 			return "", fmt.Errorf("triggering %s pipeline: %w", pipeline.ID, err)
 		}
@@ -142,7 +142,7 @@ func (s *Service) ConvertToMDPipe(
 		}
 
 		// save the converting pipeline metadata into database
-		if err := s.Repository.UpdateKbFileExtraMetaData(ctx, fileUID, "", pipeline.Name(), "", "", "", nil, nil, nil, nil, nil); err != nil {
+		if err := s.repository.UpdateKbFileExtraMetaData(ctx, fileUID, "", pipeline.Name(), "", "", "", nil, nil, nil, nil, nil); err != nil {
 			return "", fmt.Errorf("saving converting pipeline in file metadata: %w", err)
 		}
 
@@ -152,8 +152,8 @@ func (s *Service) ConvertToMDPipe(
 	return "", fmt.Errorf("conversion pipelines didn't produce any result")
 }
 
-// getFileTypePrefix returns the appropriate prefix for the given file type
-func getFileTypePrefix(fileType artifactpb.FileType) string {
+// GetFileTypePrefix returns the appropriate prefix for the given file type
+func GetFileTypePrefix(fileType artifactpb.FileType) string {
 	switch fileType {
 	case artifactpb.FileType_FILE_TYPE_PDF:
 		return "data:application/pdf;base64,"
@@ -275,7 +275,7 @@ type Chunk = struct {
 
 // GenerateSummary triggers the generate summary pipeline, processes markdown/text, and deducts credits from the caller's account.
 // It generate summary from content.
-func (s *Service) GenerateSummary(ctx context.Context, content, fileType string) (string, error) {
+func (s *service) GenerateSummary(ctx context.Context, content, fileType string) (string, error) {
 	req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
 		NamespaceId: GenerateSummaryPipeline.Namespace,
 		PipelineId:  GenerateSummaryPipeline.ID,
@@ -288,7 +288,7 @@ func (s *Service) GenerateSummary(ctx context.Context, content, fileType string)
 			}}}},
 	}
 
-	resp, err := s.PipelinePub.TriggerNamespacePipelineRelease(ctx, req)
+	resp, err := s.pipelinePub.TriggerNamespacePipelineRelease(ctx, req)
 	if err != nil {
 		return "", fmt.Errorf("failed to trigger %s pipeline. err:%w", GenerateSummaryPipeline.ID, err)
 	}
@@ -324,7 +324,7 @@ func getGenerateSummaryResult(resp *pipelinepb.TriggerNamespacePipelineReleaseRe
 
 // ChunkMarkdownPipe triggers the markdown splitting pipeline, processes the markdown text, and deducts credits from the caller's account.
 // It sets up the necessary metadata, triggers the pipeline, and processes the response to return the non-empty chunks.
-func (s *Service) ChunkMarkdownPipe(ctx context.Context, markdown string) ([]Chunk, error) {
+func (s *service) ChunkMarkdownPipe(ctx context.Context, markdown string) ([]Chunk, error) {
 	req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
 		NamespaceId: ChunkMDPipeline.Namespace,
 		PipelineId:  ChunkMDPipeline.ID,
@@ -339,7 +339,7 @@ func (s *Service) ChunkMarkdownPipe(ctx context.Context, markdown string) ([]Chu
 			},
 		},
 	}
-	res, err := s.PipelinePub.TriggerNamespacePipelineRelease(ctx, req)
+	res, err := s.pipelinePub.TriggerNamespacePipelineRelease(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to trigger %s pipeline. err:%w", ChunkMDPipeline.ID, err)
 	}
@@ -391,7 +391,7 @@ func GetChunksFromResponse(resp *pipelinepb.TriggerNamespacePipelineReleaseRespo
 
 // ChunkTextPipe splits the input text into chunks using the splitting pipeline and consumes the caller's credits.
 // It sets up the necessary metadata, triggers the pipeline, and processes the response to return the non-empty chunks.
-func (s *Service) ChunkTextPipe(ctx context.Context, text string) ([]Chunk, error) {
+func (s *service) ChunkTextPipe(ctx context.Context, text string) ([]Chunk, error) {
 	req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
 		NamespaceId: ChunkTextPipeline.Namespace,
 		PipelineId:  ChunkTextPipeline.ID,
@@ -407,7 +407,7 @@ func (s *Service) ChunkTextPipe(ctx context.Context, text string) ([]Chunk, erro
 			},
 		},
 	}
-	res, err := s.PipelinePub.TriggerNamespacePipelineRelease(ctx, req)
+	res, err := s.pipelinePub.TriggerNamespacePipelineRelease(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to trigger %s pipeline. err:%w", ChunkTextPipeline.ID, err)
 	}
@@ -444,7 +444,7 @@ func (s *Service) ChunkTextPipe(ctx context.Context, text string) ([]Chunk, erro
 //   - Limits concurrent processing to 5 goroutines
 //   - Maintains input order in the output
 //   - Cancels all operations if any batch fails
-func (s *Service) EmbeddingTextPipe(ctx context.Context, texts []string) ([][]float32, error) {
+func (s *service) EmbeddingTextPipe(ctx context.Context, texts []string) ([][]float32, error) {
 	ctx, ctxCancel := context.WithCancel(ctx)
 	defer ctxCancel()
 	const maxBatchSize = 32
@@ -501,7 +501,7 @@ func (s *Service) EmbeddingTextPipe(ctx context.Context, texts []string) ([][]fl
 					ReleaseId:   EmbedTextPipeline.Version,
 					Inputs:      inputs,
 				}
-				res, err := s.PipelinePub.TriggerNamespacePipelineRelease(ctx, req)
+				res, err := s.pipelinePub.TriggerNamespacePipelineRelease(ctx, req)
 				if err != nil {
 					errChan <- fmt.Errorf("failed to trigger %s pipeline. err:%w", EmbedTextPipeline.ID, err)
 					ctxCancel()
@@ -571,7 +571,7 @@ func GetVectorsFromResponse(resp *pipelinepb.TriggerNamespacePipelineReleaseResp
 }
 
 // VectoringText using embedding pipeline to vector text and consume caller's credits
-func (s *Service) QuestionAnsweringPipe(ctx context.Context, question string, simChunks []string) (string, error) {
+func (s *service) QuestionAnsweringPipe(ctx context.Context, question string, simChunks []string) (string, error) {
 	// create a retired chunk var that combines all the chunks by /n/n
 	retrievedChunk := ""
 	for _, chunk := range simChunks {
@@ -590,7 +590,7 @@ func (s *Service) QuestionAnsweringPipe(ctx context.Context, question string, si
 			},
 		},
 	}
-	res, err := s.PipelinePub.TriggerNamespacePipelineRelease(ctx, req)
+	res, err := s.pipelinePub.TriggerNamespacePipelineRelease(ctx, req)
 	if err != nil {
 		return "", fmt.Errorf("failed to trigger %s pipeline. err:%w", QAPipeline.ID, err)
 	}

@@ -12,11 +12,11 @@ import (
 )
 
 // CheckNamespacePermission checks if the user has permission to access the namespace.
-func (s *Service) CheckNamespacePermission(ctx context.Context, ns *resource.Namespace) error {
+func (s *service) CheckNamespacePermission(ctx context.Context, ns *resource.Namespace) error {
 	// TODO: optimize ACL model
 	if ns.NsType == "organizations" {
 		// check if the user is a member of the organization
-		granted, err := s.ACLClient.CheckPermission(ctx, "organization", ns.NsUID, "member")
+		granted, err := s.aclClient.CheckPermission(ctx, "organization", ns.NsUID, "member")
 		if err != nil {
 			return err
 		}
@@ -28,4 +28,29 @@ func (s *Service) CheckNamespacePermission(ctx context.Context, ns *resource.Nam
 		return ErrNoPermission
 	}
 	return nil
+}
+
+const (
+	defaultPageSize = 10
+	maxPageSize     = 100
+)
+
+func pageInRange(page int32) int {
+	if page <= 0 {
+		return 0
+	}
+
+	return int(page)
+}
+
+func pageSizeInRange(pageSize int32) int {
+	if pageSize <= 0 {
+		return defaultPageSize
+	}
+
+	if pageSize > maxPageSize {
+		return maxPageSize
+	}
+
+	return int(pageSize)
 }

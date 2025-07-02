@@ -102,7 +102,7 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 
 	// external service call - create catalog collection and set ACL in openFAG
 	callExternalService := func(kbUID string) error {
-		err := ph.service.MilvusClient.CreateKnowledgeBaseCollection(ctx, kbUID)
+		err := ph.service.MilvusClient().CreateKnowledgeBaseCollection(ctx, kbUID)
 		if err != nil {
 			logger.Error("failed to create collection in milvus", zap.Error(err))
 			return err
@@ -114,7 +114,7 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 			logger.Error("failed to parse kb uid", zap.String("kb_uid", kbUID), zap.Error(err))
 			return err
 		}
-		err = ph.service.ACLClient.SetOwner(ctx, "knowledgebase", kbUIDuuid, string(ns.NsType), ns.NsUID)
+		err = ph.service.ACLClient().SetOwner(ctx, "knowledgebase", kbUIDuuid, string(ns.NsType), ns.NsUID)
 		if err != nil {
 			logger.Error("failed to set owner in openFAG", zap.Error(err))
 			return err
@@ -133,8 +133,14 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 	// pipelines.
 	convertingPipelines := req.GetConvertingPipelines()
 
+	/*
+		if err := ph.service.ValidateConvertingPipelines(convertingPipelines); err != nil {
+			return nil, fmt.Errorf("validating pipelines: %w")
+		}
+	*/
+
 	// create catalog
-	dbData, err := ph.service.Repository.CreateKnowledgeBase(ctx,
+	dbData, err := ph.service.Repository().CreateKnowledgeBase(ctx,
 		repository.KnowledgeBase{
 			Name: req.Name,
 			// make name as kbID
@@ -214,7 +220,7 @@ func (ph *PublicHandler) ListCatalogs(ctx context.Context, req *artifactpb.ListC
 		return nil, fmt.Errorf("failed to check namespace permission. err:%w", err)
 	}
 
-	dbData, err := ph.service.Repository.ListKnowledgeBasesByCatalogType(ctx, ns.NsUID.String(), artifactpb.CatalogType_CATALOG_TYPE_PERSISTENT)
+	dbData, err := ph.service.Repository().ListKnowledgeBasesByCatalogType(ctx, ns.NsUID.String(), artifactpb.CatalogType_CATALOG_TYPE_PERSISTENT)
 	if err != nil {
 		log.Error("failed to get catalogs", zap.Error(err))
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
@@ -225,12 +231,12 @@ func (ph *PublicHandler) ListCatalogs(ctx context.Context, req *artifactpb.ListC
 		kbUIDuuid[i] = kb.UID
 	}
 
-	fileCounts, err := ph.service.Repository.GetCountFilesByListKnowledgeBaseUID(ctx, kbUIDuuid)
+	fileCounts, err := ph.service.Repository().GetCountFilesByListKnowledgeBaseUID(ctx, kbUIDuuid)
 	if err != nil {
 		log.Error("failed to get file counts", zap.Error(err))
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
-	tokenCounts, err := ph.service.Repository.GetTotalTokensByListKBUIDs(ctx, kbUIDuuid)
+	tokenCounts, err := ph.service.Repository().GetTotalTokensByListKBUIDs(ctx, kbUIDuuid)
 	if err != nil {
 		log.Error("failed to get token counts", zap.Error(err))
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
@@ -295,11 +301,11 @@ func (ph *PublicHandler) UpdateCatalog(ctx context.Context, req *artifactpb.Upda
 		return nil, fmt.Errorf("failed to get namespace. err: %w", err)
 	}
 	// ACL - check user's permission to update catalog
-	kb, err := ph.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.CatalogId)
+	kb, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.CatalogId)
 	if err != nil {
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
-	granted, err := ph.service.ACLClient.CheckPermission(ctx, "knowledgebase", kb.UID, "writer")
+	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kb.UID, "writer")
 	if err != nil {
 		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
 	}
@@ -309,7 +315,7 @@ func (ph *PublicHandler) UpdateCatalog(ctx context.Context, req *artifactpb.Upda
 	}
 
 	// update catalog
-	kb, err = ph.service.Repository.UpdateKnowledgeBase(
+	kb, err = ph.service.Repository().UpdateKnowledgeBase(
 		ctx,
 		req.GetCatalogId(),
 		ns.NsUID.String(),
@@ -326,11 +332,11 @@ func (ph *PublicHandler) UpdateCatalog(ctx context.Context, req *artifactpb.Upda
 		return nil, fmt.Errorf("updating catalog: %w", err)
 	}
 
-	fileCounts, err := ph.service.Repository.GetCountFilesByListKnowledgeBaseUID(ctx, []uuid.UUID{kb.UID})
+	fileCounts, err := ph.service.Repository().GetCountFilesByListKnowledgeBaseUID(ctx, []uuid.UUID{kb.UID})
 	if err != nil {
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
-	tokenCounts, err := ph.service.Repository.GetTotalTokensByListKBUIDs(ctx, []uuid.UUID{kb.UID})
+	tokenCounts, err := ph.service.Repository().GetTotalTokensByListKBUIDs(ctx, []uuid.UUID{kb.UID})
 	if err != nil {
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
@@ -385,12 +391,12 @@ func (ph *PublicHandler) DeleteCatalog(ctx context.Context, req *artifactpb.Dele
 		return nil, fmt.Errorf("failed to get namespace. err: %w", err)
 	}
 	// ACL - check user's permission to write catalog
-	kb, err := ph.service.Repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.CatalogId)
+	kb, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.CatalogId)
 	if err != nil {
 		logger.Error("failed to get catalog", zap.Error(err))
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
-	granted, err := ph.service.ACLClient.CheckPermission(ctx, "knowledgebase", kb.UID, "writer")
+	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kb.UID, "writer")
 	if err != nil {
 		logger.Error("failed to check permission", zap.Error(err))
 		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
@@ -414,46 +420,46 @@ func (ph *PublicHandler) DeleteCatalog(ctx context.Context, req *artifactpb.Dele
 		logger.Info("DeleteCatalog starts in background", zap.String("catalog_id", kb.UID.String()))
 		allPass := true
 		//  delete files in minIO
-		err = <-ph.service.MinIO.DeleteKnowledgeBase(ctx, kb.UID.String())
+		err = <-ph.service.MinIO().DeleteKnowledgeBase(ctx, kb.UID.String())
 		if err != nil {
 			logger.Error("failed to delete files in minIO in background", zap.Error(err))
 			allPass = false
 		}
 
 		// delete the collection in milvus
-		err = ph.service.MilvusClient.DropKnowledgeBaseCollection(ctx, kb.UID.String())
+		err = ph.service.MilvusClient().DropKnowledgeBaseCollection(ctx, kb.UID.String())
 		if err != nil {
 			logger.Error("failed to delete collection in milvus in background", zap.Error(err))
 			allPass = false
 		}
 
 		//  delete all files in postgres
-		err = ph.service.Repository.DeleteAllKnowledgeBaseFiles(ctx, kb.UID.String())
+		err = ph.service.Repository().DeleteAllKnowledgeBaseFiles(ctx, kb.UID.String())
 		if err != nil {
 			logger.Error("failed to delete files in postgres in background", zap.Error(err))
 			allPass = false
 		}
 		//  delete converted files in postgres
-		err = ph.service.Repository.DeleteAllConvertedFilesInKb(ctx, kb.UID)
+		err = ph.service.Repository().DeleteAllConvertedFilesInKb(ctx, kb.UID)
 		if err != nil {
 			logger.Error("failed to delete converted files in postgres in background", zap.Error(err))
 			allPass = false
 		}
 		//  delete all chunks in postgres
-		err = ph.service.Repository.HardDeleteChunksByKbUID(ctx, kb.UID)
+		err = ph.service.Repository().HardDeleteChunksByKbUID(ctx, kb.UID)
 		if err != nil {
 			logger.Error("failed to delete chunks in postgres in background", zap.Error(err))
 			allPass = false
 		}
 
 		//  delete all embedding in postgres
-		err = ph.service.Repository.HardDeleteEmbeddingsByKbUID(ctx, kb.UID)
+		err = ph.service.Repository().HardDeleteEmbeddingsByKbUID(ctx, kb.UID)
 		if err != nil {
 			logger.Error("failed to delete embeddings in postgres in background", zap.Error(err))
 			allPass = false
 		}
 		// delete acl. Note: we need to delete the acl after deleting the catalog
-		err = ph.service.ACLClient.Purge(ctx, "knowledgebase", kb.UID)
+		err = ph.service.ACLClient().Purge(ctx, "knowledgebase", kb.UID)
 		if err != nil {
 			logger.Error("failed to purge catalog", zap.Error(err))
 			allPass = false
@@ -465,7 +471,7 @@ func (ph *PublicHandler) DeleteCatalog(ctx context.Context, req *artifactpb.Dele
 		}
 	}, "DeleteCatalog")
 
-	deletedKb, err := ph.service.Repository.DeleteKnowledgeBase(ctx, ns.NsUID.String(), req.CatalogId)
+	deletedKb, err := ph.service.Repository().DeleteKnowledgeBase(ctx, ns.NsUID.String(), req.CatalogId)
 	if err != nil {
 		logger.Error("failed to delete catalog", zap.Error(err))
 		startSignal <- false
