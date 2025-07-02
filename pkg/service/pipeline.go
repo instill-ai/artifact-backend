@@ -9,11 +9,8 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	"github.com/instill-ai/artifact-backend/config"
-	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
 	"github.com/instill-ai/x/log"
-	"github.com/instill-ai/x/resource"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	pipelinepb "github.com/instill-ai/protogen-go/pipeline/pipeline/v1beta"
@@ -54,8 +51,6 @@ func (s *service) ConvertToMDPipe(
 		},
 	}
 
-	getConvertResult := simpleConvertResultParser
-
 	// Determine which pipeline and version to use based on file type
 	switch fileType {
 	// Spreadsheet types and others use the original pipeline
@@ -76,32 +71,6 @@ func (s *service) ConvertToMDPipe(
 		artifactpb.FileType_FILE_TYPE_PPTX:
 
 		if len(pipelines) != 0 {
-			break
-		}
-
-		// Instill Agent requests are identified by the HeaderBackendKey in the
-		// request metadata.
-		// TODO jvallesm: a better way to implement this would be by setting
-		// the parsing router pipeline as the conversion pipeline when creating
-		// the catalog from agent. However, since the input isn't the default
-		// one (taking only `document_input`, we'd still need to handle the
-		// fields here.
-		if resource.GetRequestSingleHeader(ctx, constant.HeaderBackendKey) == constant.AgentBackend {
-			pipelines = []PipelineRelease{ConvertDocToMDRouterPipeline}
-
-			pipelineURL := fmt.Sprintf("http://%s:%d", config.Config.PipelineBackend.Host, config.Config.PipelineBackend.PublicPort)
-			input.Fields["pipeline_url"] = structpb.NewStringValue(pipelineURL)
-
-			modelURL := fmt.Sprintf("http://%s:%d", config.Config.ModelBackend.Host, config.Config.ModelBackend.PublicPort)
-			input.Fields["model_url"] = structpb.NewStringValue(modelURL)
-
-			requesterUID, userUID := resource.GetRequesterUIDAndUserUID(ctx)
-			input.Fields["user_uid"] = structpb.NewStringValue(userUID.String())
-			input.Fields["requester_uid"] = structpb.NewStringValue(requesterUID.String())
-			input.Fields["instill_backend"] = structpb.NewStringValue(constant.AgentBackend)
-
-			getConvertResult = routedConvertResultParser
-
 			break
 		}
 
@@ -132,7 +101,7 @@ func (s *service) ConvertToMDPipe(
 			return "", fmt.Errorf("triggering %s pipeline: %w", pipeline.ID, err)
 		}
 
-		result, err := getConvertResult(resp)
+		result, err := convertResultParser(resp)
 		if err != nil {
 			return "", fmt.Errorf("getting conversion result: %w", err)
 		}
@@ -180,12 +149,12 @@ func GetFileTypePrefix(fileType artifactpb.FileType) string {
 	}
 }
 
-// simpleConvertResultParser extracts the conversion result from the pipeline
+// convertResultParser extracts the conversion result from the pipeline
 // response. It first checks for a non-empty "convert_result" field, then falls
 // back to "convert_result2".
 // Returns an error if neither field contains valid data or if the response
 // structure is invalid.
-func simpleConvertResultParser(resp *pipelinepb.TriggerNamespacePipelineReleaseResponse) (string, error) {
+func convertResultParser(resp *pipelinepb.TriggerNamespacePipelineReleaseResponse) (string, error) {
 	if resp == nil || len(resp.Outputs) == 0 {
 		return "", fmt.Errorf("response is nil or has no outputs. resp: %v", resp)
 	}
@@ -204,66 +173,6 @@ func simpleConvertResultParser(resp *pipelinepb.TriggerNamespacePipelineReleaseR
 	}
 
 	return "", nil
-}
-
-func joinPBListOfStrings(list *structpb.ListValue) string {
-	values := list.GetValues()
-	asStrings := make([]string, len(values))
-	for i, v := range values {
-		asStrings[i] = v.GetStringValue()
-	}
-
-	return strings.Join(asStrings, "")
-
-}
-
-// routedConvertResultParser extracts the conversion result from the
-// parsing-router pipeline response. This pipeline returns the result in
-// different fields depending on the chosen conversion method, which is also
-// returned so the correct result can be selected.
-// Returns an error if neither field contains valid data or if the response
-// structure is invalid.
-func routedConvertResultParser(resp *pipelinepb.TriggerNamespacePipelineReleaseResponse) (string, error) {
-	if resp == nil || len(resp.Outputs) == 0 {
-		return "", fmt.Errorf("response is nil or has no outputs")
-	}
-	fields := resp.Outputs[0].GetFields()
-	if fields == nil {
-		return "", fmt.Errorf("fields in the output are nil")
-	}
-
-	// The heuristic method result should always be computed, so it will be
-	// used as the fallback by other methods.
-	result := joinPBListOfStrings(fields["heuristic"].GetListValue())
-	parsingStrategy := fields["parsing-strategy"]
-
-	switch parsingStrategy.GetStringValue() {
-	case "Standard Document Operator":
-		return result, nil
-	case "Docling Model":
-		doclingOutput := fields["docling"].GetStructValue().GetFields()
-
-		// Not used at the moment:
-		// extractedImages := fields["extracted_images"]
-		// pagesWithImages := fields["pages_with_images"]
-		mdPages := doclingOutput["markdown_pages"].GetListValue()
-
-		if result := joinPBListOfStrings(mdPages); result != "" {
-			return result, nil
-		}
-	case "Visual Language Model Pipeline":
-		if result := fields["vlm-ocr"].GetStringValue(); result != "" {
-			return result, nil
-		}
-
-		if result := fields["vlm-refinement"].GetStringValue(); result != "" {
-			return result, nil
-		}
-	default:
-		return "", fmt.Errorf("unrecognized parsing strategy: %s", parsingStrategy.GetStringValue())
-	}
-
-	return result, nil
 }
 
 type Chunk = struct {
