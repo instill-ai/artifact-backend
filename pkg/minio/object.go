@@ -17,13 +17,15 @@ import (
 // ObjectI is the interface for object-related operations.
 type ObjectI interface {
 	// GetPresignedURLForUpload creates a presigned URL for uploading an object.
-	GetPresignedURLForUpload(ctx context.Context, namespaceUUID uuid.UUID, objectUUID uuid.UUID, urlExpiration time.Duration) (*url.URL, error)
+	GetPresignedURLForUpload(ctx context.Context, namespaceUUID uuid.UUID, objectUUID uuid.UUID, filename string, urlExpiration time.Duration) (*url.URL, error)
 	// GetPresignedURLForDownload creates a presigned URL for downloading an object.
-	GetPresignedURLForDownload(ctx context.Context, namespaceUUID uuid.UUID, objectUUID uuid.UUID, urlExpiration time.Duration) (*url.URL, error)
+	// TODO: the filename and contentType can be removed from the args, we can
+	// get them directly from the object metadata in MinIO.
+	GetPresignedURLForDownload(ctx context.Context, namespaceUUID uuid.UUID, objectUUID uuid.UUID, filename string, contentType string, urlExpiration time.Duration) (*url.URL, error)
 }
 
 // GetPresignedURLForUpload creates a presigned URL for uploading an object.
-func (m *Minio) GetPresignedURLForUpload(ctx context.Context, namespaceUUID uuid.UUID, objectUUID uuid.UUID, expiration time.Duration) (*url.URL, error) {
+func (m *Minio) GetPresignedURLForUpload(ctx context.Context, namespaceUUID uuid.UUID, objectUUID uuid.UUID, filename string, expiration time.Duration) (*url.URL, error) {
 	log, err := log.GetZapLogger(ctx)
 	if err != nil {
 		return nil, err
@@ -32,6 +34,12 @@ func (m *Minio) GetPresignedURLForUpload(ctx context.Context, namespaceUUID uuid
 	if expiration > time.Hour*24*7 {
 		return nil, errors.New("expiration time must be within 1sec to 7 days")
 	}
+
+	// When using the presigned URL for uploading, we can set the
+	// x-amz-meta-original-filename header to be the original filename of the
+	// object.
+	reqParams := url.Values{}
+	reqParams.Set("x-amz-meta-original-filename", filename)
 	// Get presigned URL for uploading object.
 	presignedURL, err := m.client.PresignHeader(
 		ctx,
@@ -39,7 +47,7 @@ func (m *Minio) GetPresignedURLForUpload(ctx context.Context, namespaceUUID uuid
 		BlobBucketName,
 		GetBlobObjectPath(namespaceUUID, objectUUID),
 		expiration,
-		nil,
+		reqParams,
 		m.presignHeaders(),
 	)
 	if err != nil {
@@ -51,7 +59,7 @@ func (m *Minio) GetPresignedURLForUpload(ctx context.Context, namespaceUUID uuid
 }
 
 // GetPresignedURLForDownload creates a presigned URL for downloading an object.
-func (m *Minio) GetPresignedURLForDownload(ctx context.Context, namespaceUUID uuid.UUID, objectUUID uuid.UUID, expiration time.Duration) (*url.URL, error) {
+func (m *Minio) GetPresignedURLForDownload(ctx context.Context, namespaceUUID uuid.UUID, objectUUID uuid.UUID, filename string, contentType string, expiration time.Duration) (*url.URL, error) {
 	log, err := log.GetZapLogger(ctx)
 	if err != nil {
 		return nil, err
@@ -61,6 +69,11 @@ func (m *Minio) GetPresignedURLForDownload(ctx context.Context, namespaceUUID uu
 		return nil, errors.New("expiration time must be within 1sec to 7 days")
 	}
 
+	// These headers will be used to set the content-disposition and content-type headers when downloading the object.
+	reqParams := url.Values{}
+	reqParams.Set("response-content-disposition", fmt.Sprintf(`inline; filename="%s"`, filename))
+	reqParams.Set("response-content-type", contentType)
+
 	// Get presigned URL for downloading object
 	presignedURL, err := m.client.PresignHeader(
 		ctx,
@@ -68,7 +81,7 @@ func (m *Minio) GetPresignedURLForDownload(ctx context.Context, namespaceUUID uu
 		BlobBucketName,
 		GetBlobObjectPath(namespaceUUID, objectUUID),
 		expiration,
-		nil,
+		reqParams,
 		m.presignHeaders(),
 	)
 	if err != nil {

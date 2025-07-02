@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-playground/validator"
 	"github.com/knadh/koanf"
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/env"
@@ -72,6 +73,7 @@ type ServerConfig struct {
 		MaxWorkflowRetry   int32 `koanf:"maxworkflowretry"`
 		MaxActivityRetry   int32 `koanf:"maxactivityretry"`
 	}
+	InstillCoreHost string `koanf:"instillcorehost" validate:"url"`
 }
 
 // DatabaseConfig related to database
@@ -182,5 +184,9 @@ func Init() error {
 
 // ValidateConfig is for custom validation rules for the configuration
 func ValidateConfig(cfg *AppConfig) error {
+	validate := validator.New()
+	if err := validate.Struct(cfg); err != nil {
+		return err
+	}
 	return nil
 }

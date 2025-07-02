@@ -4,6 +4,7 @@ go 1.24.4
 
 require (
 	github.com/frankban/quicktest v1.14.6
+	github.com/go-playground/validator v9.31.0+incompatible
 	github.com/go-resty/resty/v2 v2.16.5
 	github.com/gofrs/uuid v4.4.0+incompatible
 	github.com/gogo/status v1.1.1
@@ -38,6 +39,11 @@ require (
 
 require (
 	github.com/cenkalti/backoff/v5 v5.0.2 // indirect
+	github.com/gabriel-vasile/mimetype v1.4.8 // indirect
+	github.com/go-playground/locales v0.14.1 // indirect
+	github.com/go-playground/universal-translator v0.18.1 // indirect
+	github.com/go-playground/validator/v10 v10.27.0 // indirect
+	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/philhofer/fwd v1.1.3-0.20240916144458-20a13a1f6b7c // indirect
 	github.com/tinylib/msgp v1.3.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect

@@ -2,8 +2,12 @@ package service
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
+	"net/url"
 	"path"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gofrs/uuid"
@@ -25,6 +29,8 @@ import (
 var (
 	ErrObjectNotUploaded = errors.New("object is not uploaded yet")
 )
+
+const blobURLPath = "/v1alpha/blob-urls"
 
 // GetUploadURL get the upload url of the object
 // this function will create a new object and object_url record in the database
@@ -92,37 +98,29 @@ func (s *Service) GetUploadURL(
 	}
 
 	// get presigned url for uploading object
-	presignedURL, err := s.MinIO.GetPresignedURLForUpload(ctx, namespaceUID, createdObject.UID, time.Duration(req.GetUrlExpireDays())*time.Hour*24)
+	expirationTime := time.Duration(req.GetUrlExpireDays()) * time.Hour * 24
+	presignedURL, err := s.MinIO.GetPresignedURLForUpload(ctx, namespaceUID, createdObject.UID, req.GetObjectName(), expirationTime)
 	if err != nil {
 		log.Error("failed to make presigned url for upload", zap.Error(err))
 		return nil, status.Errorf(codes.Internal, "failed to make presigned url for upload: %v", err)
 	}
 
-	// remove the protocol and host from the presignedURL
-	presignedURLPathQuery := presignedURL.Path + "?" + presignedURL.RawQuery
-
-	// create object_url and update the encoded_url_path
-	objectURL := &repository.ObjectURL{
-		NamespaceUID:   createdObject.NamespaceUID,
-		ObjectUID:      createdObject.UID,
-		URLExpireAt:    time.Now().UTC().Add(time.Duration(req.GetUrlExpireDays()) * time.Hour * 24),
-		MinioURLPath:   presignedURLPathQuery,
-		EncodedURLPath: "",
-		Type:           repository.ObjectURLTypeUpload,
-	}
-
-	createdObjectURL, err := s.Repository.CreateObjectURLWithUIDInEncodedURLPath(ctx, *objectURL, namespaceID, EncodedMinioURLPath)
+	uploadURL, err := encodeBlobURL(presignedURL)
 	if err != nil {
-		log.Error("failed to create object url", zap.Error(err))
-		return nil, status.Errorf(codes.Internal, "failed to create object url: %v", err)
+		log.Error("failed to encode blob url", zap.Error(err))
+		return nil, status.Errorf(codes.Internal, "failed to encode blob url: %v", err)
 	}
 
-	objectInProto := repository.TurnObjectInDBToObjectInProto(createdObject)
+	expireAtTS, err := getExpireAtTS(presignedURL)
+	if err != nil {
+		log.Error("failed to get expire at ts", zap.Error(err))
+		return nil, status.Errorf(codes.Internal, "failed to get expire at ts: %v", err)
+	}
 
 	return &artifactpb.GetObjectUploadURLResponse{
-		UploadUrl:   createdObjectURL.EncodedURLPath,
-		UrlExpireAt: timestamppb.New(createdObjectURL.URLExpireAt),
-		Object:      objectInProto,
+		UploadUrl:   uploadURL,
+		UrlExpireAt: timestamppb.New(expireAtTS),
+		Object:      repository.TurnObjectInDBToObjectInProto(createdObject),
 	}, nil
 }
 
@@ -154,7 +152,17 @@ func (s *Service) GetDownloadURL(
 	}
 
 	if !object.IsUploaded {
-		return nil, ErrObjectNotUploaded
+		if !strings.HasPrefix(object.Destination, "ns-") {
+			return nil, ErrObjectNotUploaded
+		}
+
+		_, err := s.MinIO.GetFile(ctx, miniolocal.BlobBucketName, object.Destination)
+		if err != nil {
+			log.Error("failed to get file", zap.Error(err))
+			return nil, status.Errorf(codes.Internal, "failed to get file: %v", err)
+		}
+		object.IsUploaded = true
+
 	}
 
 	// Check URL expiration days
@@ -166,42 +174,39 @@ func (s *Service) GetDownloadURL(
 		urlExpireDays = 7
 	}
 
+	expirationTime := time.Duration(urlExpireDays) * time.Hour * 24
+
 	// Get presigned URL for downloading object
 	presignedURL, err := s.MinIO.GetPresignedURLForDownload(
 		ctx,
 		object.NamespaceUID,
 		object.UID,
-		time.Duration(urlExpireDays)*time.Hour*24,
+		object.Name,
+		object.ContentType,
+		expirationTime,
 	)
 	if err != nil {
 		log.Error("failed to make presigned url for download", zap.Error(err))
 		return nil, status.Errorf(codes.Internal, "failed to make presigned url for download: %v", err)
 	}
 
-	// Remove the protocol and host from the presignedURL
-	presignedURLPathQuery := presignedURL.Path + "?" + presignedURL.RawQuery
-
-	// Create object_url for download
-	objectURL := &repository.ObjectURL{
-		NamespaceUID:   object.NamespaceUID,
-		ObjectUID:      object.UID,
-		URLExpireAt:    time.Now().UTC().Add(time.Duration(urlExpireDays) * time.Hour * 24),
-		MinioURLPath:   presignedURLPathQuery,
-		EncodedURLPath: "",
-		Type:           repository.ObjectURLTypeDownload,
+	downloadURL, err := encodeBlobURL(presignedURL)
+	if err != nil {
+		log.Error("failed to encode blob url", zap.Error(err))
+		return nil, status.Errorf(codes.Internal, "failed to encode blob url: %v", err)
 	}
 
-	createdObjectURL, err := s.Repository.CreateObjectURLWithUIDInEncodedURLPath(ctx, *objectURL, namespaceID, EncodedMinioURLPath)
+	expireAtTS, err := getExpireAtTS(presignedURL)
 	if err != nil {
-		log.Error("failed to create object url", zap.Error(err))
-		return nil, status.Errorf(codes.Internal, "failed to create object url: %v", err)
+		log.Error("failed to get expire at ts", zap.Error(err))
+		return nil, status.Errorf(codes.Internal, "failed to get expire at ts: %v", err)
 	}
 
 	objectInProto := repository.TurnObjectInDBToObjectInProto(object)
 
 	return &artifactpb.GetObjectDownloadURLResponse{
-		DownloadUrl: createdObjectURL.EncodedURLPath,
-		UrlExpireAt: timestamppb.New(createdObjectURL.URLExpireAt),
+		DownloadUrl: downloadURL,
+		UrlExpireAt: timestamppb.New(expireAtTS),
 		Object:      objectInProto,
 	}, nil
 }
@@ -214,4 +219,56 @@ func EncodedMinioURLPath(namespaceID string, objectURLUUID uuid.UUID) string {
 
 	// Ensure the path starts with a forward slash
 	return config.Config.Blob.HostPort + "/" + urlPath
+}
+
+// encodeBlobURL encodes the presigned URL to a blob URL. The presigned URL
+// provided by MinIO is a self-contained URL that can be used to upload or
+// download the object. The structure follows the AWS S3 presigned URL format,
+// which consists of query parameters including signature.
+//
+// To make the URL easier to use in different use cases, we encode the presigned
+// URL to a base64 string in the format:
+// schema://host:port/v1alpha/blob-urls/base64_encoded_presigned_url
+//
+// This approach is inspired by MinIO WebUI, which uses the same base64 encoding
+// for presigned URLs when generating shareable links. Benefits of this
+// approach:
+//  1. The URL remains self-contained and signed.
+//  2. No query parameters in the URL, making it easier to use in different
+//     contexts (e.g., as a query parameter of another endpoint).
+//  3. Provides basic encapsulation for the presigned URL.
+//  4. Simplifies proxy implementation in the API gateway - the gateway can
+//     directly decode the base64 string to the presigned URL and forward the
+//     request to MinIO.
+func encodeBlobURL(presignedURL *url.URL) (string, error) {
+	presignedURLBase64 := base64.StdEncoding.EncodeToString([]byte(presignedURL.String()))
+
+	path, err := url.JoinPath(blobURLPath, presignedURLBase64)
+	if err != nil {
+		return "", status.Errorf(codes.Internal, "failed to join path: %v", err)
+	}
+	instillCoreHost, err := url.Parse(config.Config.Server.InstillCoreHost)
+	if err != nil {
+		return "", status.Errorf(codes.Internal, "failed to parse instill core host: %v", err)
+	}
+	u := url.URL{
+		Scheme: instillCoreHost.Scheme,
+		Host:   instillCoreHost.Host,
+		Path:   path,
+	}
+	return u.String(), nil
+}
+
+func getExpireAtTS(presignedURL *url.URL) (time.Time, error) {
+	issuedAt := presignedURL.Query().Get("X-Amz-Date")
+	expireTimeSeconds, err := strconv.Atoi(presignedURL.Query().Get("X-Amz-Expires"))
+	if err != nil {
+		return time.Time{}, err
+	}
+	issuedAtTS, err := time.Parse("20060102T150405Z", issuedAt)
+	if err != nil {
+		return time.Time{}, err
+	}
+	expireAtTS := issuedAtTS.Add(time.Duration(expireTimeSeconds) * time.Second)
+	return expireAtTS, nil
 }

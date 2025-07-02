@@ -12,11 +12,10 @@ import (
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
+// TODO: the ObjectURL will be fully removed in the future, we will use the
+// presigned URL instead.
 type ObjectURLI interface {
-	CreateObjectURL(ctx context.Context, objectURL ObjectURL) (*ObjectURL, error)
-	CreateObjectURLWithUIDInEncodedURLPath(ctx context.Context, objectURL ObjectURL, namespaceID string, EncodedMinioURLPath func(namespaceID string, objectURLUUID uuid.UUID) string) (*ObjectURL, error)
 	ListAllObjectURLs(ctx context.Context, namespaceUID, objectUID uuid.UUID) ([]ObjectURL, error)
-	UpdateObjectURL(ctx context.Context, objectURL ObjectURL) (*ObjectURL, error)
 	DeleteObjectURL(ctx context.Context, uid uuid.UUID) error
 	GetObjectURLByUID(ctx context.Context, uid uuid.UUID) (*ObjectURL, error)
 	GetObjectURLCountByObject(ctx context.Context, objectUID uuid.UUID) (int64, error)
@@ -77,14 +76,6 @@ const (
 	ObjectURLTypeUpload   = "upload"
 )
 
-// CreateObjectURL inserts a new ObjectURL record into the database.
-func (r *Repository) CreateObjectURL(ctx context.Context, objectURL ObjectURL) (*ObjectURL, error) {
-	if err := r.db.WithContext(ctx).Create(&objectURL).Error; err != nil {
-		return nil, err
-	}
-	return &objectURL, nil
-}
-
 // ListAllObjectURLs fetches all ObjectURL records from the database for a given namespace and object, excluding soft-deleted ones.
 func (r *Repository) ListAllObjectURLs(ctx context.Context, namespaceUID, objectUID uuid.UUID) ([]ObjectURL, error) {
 	var objectURLs []ObjectURL
@@ -93,14 +84,6 @@ func (r *Repository) ListAllObjectURLs(ctx context.Context, namespaceUID, object
 		return nil, err
 	}
 	return objectURLs, nil
-}
-
-// UpdateObjectURL updates an ObjectURL record in the database.
-func (r *Repository) UpdateObjectURL(ctx context.Context, objectURL ObjectURL) (*ObjectURL, error) {
-	if err := r.db.WithContext(ctx).Save(&objectURL).Error; err != nil {
-		return nil, err
-	}
-	return &objectURL, nil
 }
 
 // CreateObjectURLWithUIDInEncodedURLPath creates an ObjectURL record in the database with the UID in the encoded_url_path.
@@ -134,24 +117,6 @@ func (r *Repository) CreateObjectURLWithUIDInEncodedURLPath(ctx context.Context,
 	}
 
 	return &result, nil
-}
-
-// UpdateObjectURLByUpdateMap updates an ObjectURL record in the database.
-func (r *Repository) UpdateObjectURLByUpdateMap(ctx context.Context, objectURLUID uuid.UUID, updateMap map[string]any) (*ObjectURL, error) {
-	var objectURL ObjectURL
-	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where(ObjectURLColumn.UID, objectURLUID).Updates(updateMap).Error; err != nil {
-			return err
-		}
-		if err := tx.Where(ObjectURLColumn.UID, objectURLUID).First(&objectURL).Error; err != nil {
-			return err
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return &objectURL, nil
 }
 
 // DeleteObjectURL performs a soft delete on an ObjectURL record.
