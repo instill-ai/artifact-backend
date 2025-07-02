@@ -178,8 +178,17 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 		}
 
 		if !object.IsUploaded {
-			log.Error("file has not been uploaded yet")
-			return nil, fmt.Errorf("file has not been uploaded yet")
+			if !strings.HasPrefix(object.Destination, "ns-") {
+				return nil, fmt.Errorf("file has not been uploaded yet")
+			}
+
+			// check if file exists in minio
+			_, err := ph.service.MinIO().GetFile(ctx, minio.BlobBucketName, object.Destination)
+			if err != nil {
+				log.Error("failed to get file from minio", zap.Error(err))
+				return nil, err
+			}
+			object.IsUploaded = true
 		}
 
 		// check if file size is more than 150MB
