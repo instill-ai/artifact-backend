@@ -7,7 +7,7 @@ import (
 	"github.com/gofrs/uuid"
 	"go.uber.org/zap"
 
-	"github.com/instill-ai/artifact-backend/pkg/customerror"
+	"github.com/instill-ai/artifact-backend/pkg/errors"
 	"github.com/instill-ai/x/log"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
@@ -18,7 +18,7 @@ func (ph *PublicHandler) GetObjectUploadURL(ctx context.Context, req *artifactpb
 	log, _ := log.GetZapLogger(ctx)
 	authUID, err := getUserUIDFromContext(ctx)
 	if err != nil {
-		err := fmt.Errorf("failed to get user id from header: %v. err: %w", err, customerror.ErrUnauthenticated)
+		err := fmt.Errorf("failed to get user id from header: %v. err: %w", err, errors.ErrUnauthenticated)
 		return nil, err
 	}
 	creatorUID, err := uuid.FromString(authUID)
@@ -61,7 +61,7 @@ func (ph *PublicHandler) GetObjectDownloadURL(ctx context.Context, req *artifact
 	log, _ := log.GetZapLogger(ctx)
 	authUID, err := getUserUIDFromContext(ctx)
 	if err != nil {
-		err := fmt.Errorf("failed to get user id from header: %v. err: %w", err, customerror.ErrUnauthenticated)
+		err := fmt.Errorf("failed to get user id from header: %v. err: %w", err, errors.ErrUnauthenticated)
 		return nil, err
 	}
 

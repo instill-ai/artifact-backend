@@ -10,11 +10,11 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/instill-ai/artifact-backend/pkg/constant"
-	"github.com/instill-ai/artifact-backend/pkg/customerror"
 	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/x/log"
 
+	errdomain "github.com/instill-ai/artifact-backend/pkg/errors"
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
@@ -45,15 +45,11 @@ func convertToProtoChunk(chunk repository.TextChunk) *artifactpb.Chunk {
 
 func (ph *PublicHandler) ListChunks(ctx context.Context, req *artifactpb.ListChunksRequest) (*artifactpb.ListChunksResponse, error) {
 	log, _ := log.GetZapLogger(ctx)
-	authUID, err := getUserUIDFromContext(ctx)
-	if err != nil {
-		log.Error("failed to get user id from header", zap.Error(err))
-		return nil, fmt.Errorf("failed to get user id from header: %v. err: %w", err, customerror.ErrUnauthenticated)
-	}
+
 	fileUID, err := uuid.FromString(req.FileUid)
 	if err != nil {
 		log.Error("failed to parse file uid", zap.Error(err))
-		return nil, fmt.Errorf("failed to parse file uid: %v. err: %w", err, customerror.ErrInvalidArgument)
+		return nil, fmt.Errorf("failed to parse file uid: %v. err: %w", err, errdomain.ErrInvalidArgument)
 	}
 
 	fileUIDs := []uuid.UUID{fileUID}
@@ -63,7 +59,7 @@ func (ph *PublicHandler) ListChunks(ctx context.Context, req *artifactpb.ListChu
 		return nil, fmt.Errorf("failed to get knowledge base files by file uids")
 	} else if len(kbfs) == 0 {
 		log.Error("no files found for the given file uids")
-		return nil, fmt.Errorf("no files found for the given file uids: %v. err: %w", fileUIDs, customerror.ErrNotFound)
+		return nil, fmt.Errorf("no files found for the given file uids: %v. err: %w", fileUIDs, errdomain.ErrNotFound)
 	}
 	kbf := kbfs[0]
 	// ACL - check user's permission to read knowledge base
@@ -73,8 +69,7 @@ func (ph *PublicHandler) ListChunks(ctx context.Context, req *artifactpb.ListChu
 		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
 	}
 	if !granted {
-		log.Error("no permission list chunks", zap.String("user_id", authUID), zap.String("kb_id", kbf.KnowledgeBaseUID.String()))
-		return nil, fmt.Errorf("no permission list chunks. err: %w", customerror.ErrNoPermission)
+		return nil, fmt.Errorf("%w: no permission over catalog", errdomain.ErrUnauthorized)
 	}
 	sources, err := ph.service.Repository().GetSourceTableAndUIDByFileUIDs(ctx, []repository.KnowledgeBaseFile{kbf})
 	if err != nil {
@@ -114,7 +109,7 @@ func (ph *PublicHandler) SearchChunks(ctx context.Context, req *artifactpb.Searc
 	_, err := getUserUIDFromContext(ctx)
 	if err != nil {
 		log.Error("failed to get user id from header", zap.Error(err))
-		return nil, fmt.Errorf("failed to get user id from header: %v. err: %w", err, customerror.ErrUnauthenticated)
+		return nil, fmt.Errorf("failed to get user id from header: %v. err: %w", err, errdomain.ErrUnauthenticated)
 	}
 	// check if user can access the namespace
 	ns, err := ph.service.GetNamespaceAndCheckPermission(ctx, req.NamespaceId)
@@ -174,11 +169,6 @@ func (ph *PublicHandler) SearchChunks(ctx context.Context, req *artifactpb.Searc
 
 func (ph *PublicHandler) UpdateChunk(ctx context.Context, req *artifactpb.UpdateChunkRequest) (*artifactpb.UpdateChunkResponse, error) {
 	log, _ := log.GetZapLogger(ctx)
-	authUID, err := getUserUIDFromContext(ctx)
-	if err != nil {
-		log.Error("failed to get user id from header", zap.Error(err))
-		return nil, fmt.Errorf("failed to get user id from header: %v. err: %w", err, customerror.ErrUnauthenticated)
-	}
 
 	chunks, err := ph.service.Repository().GetChunksByUIDs(ctx, []uuid.UUID{uuid.FromStringOrNil(req.ChunkUid)})
 	if err != nil {
@@ -187,7 +177,7 @@ func (ph *PublicHandler) UpdateChunk(ctx context.Context, req *artifactpb.Update
 	}
 	if len(chunks) == 0 {
 		log.Error("no chunks found for the given chunk uids")
-		return nil, fmt.Errorf("no chunks found for the given chunk uids: %v. err: %w", req.ChunkUid, customerror.ErrNotFound)
+		return nil, fmt.Errorf("no chunks found for the given chunk uids: %v. err: %w", req.ChunkUid, errdomain.ErrNotFound)
 	}
 	chunk := &chunks[0]
 	// ACL - check user's permission to write knowledge base of chunks
@@ -197,8 +187,7 @@ func (ph *PublicHandler) UpdateChunk(ctx context.Context, req *artifactpb.Update
 		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
 	}
 	if !granted {
-		log.Error("no permission update chunks", zap.String("user_id", authUID), zap.String("kb_id", chunk.KbUID.String()))
-		return nil, fmt.Errorf("no permission update chunks. err: %w", customerror.ErrNoPermission)
+		return nil, fmt.Errorf("%w: no permission over catalog", errdomain.ErrUnauthorized)
 	}
 
 	retrievable := req.Retrievable
@@ -220,15 +209,11 @@ func (ph *PublicHandler) UpdateChunk(ctx context.Context, req *artifactpb.Update
 
 func (ph *PublicHandler) GetSourceFile(ctx context.Context, req *artifactpb.GetSourceFileRequest) (*artifactpb.GetSourceFileResponse, error) {
 	log, _ := log.GetZapLogger(ctx)
-	authUID, err := getUserUIDFromContext(ctx)
-	if err != nil {
-		log.Error("failed to get user id from header", zap.Error(err))
-		return nil, fmt.Errorf("failed to get user id from header: %v. err: %w", err, customerror.ErrUnauthenticated)
-	}
+
 	fileUID, err := uuid.FromString(req.FileUid)
 	if err != nil {
 		log.Error("failed to parse file uid", zap.Error(err))
-		return nil, fmt.Errorf("failed to parse file uid: %v. err: %w", err, customerror.ErrInvalidArgument)
+		return nil, fmt.Errorf("failed to parse file uid: %v. err: %w", err, errdomain.ErrInvalidArgument)
 	}
 
 	source, err := ph.service.Repository().GetTruthSourceByFileUID(ctx, fileUID)
@@ -243,9 +228,7 @@ func (ph *PublicHandler) GetSourceFile(ctx context.Context, req *artifactpb.GetS
 		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
 	}
 	if !granted {
-		log.Error("no permission get source file in GetSourceFile", zap.String("user_id", authUID), zap.String("kb_id", source.KbUID.String()))
-
-		return nil, fmt.Errorf("no permission get source file in GetSourceFile. err %w. kbUID: %s. user:%s", customerror.ErrNoPermission, source.KbUID.String(), authUID)
+		return nil, fmt.Errorf("%w: no permission over catalog", errdomain.ErrUnauthorized)
 	}
 
 	// get the source file content from minIO using dest of source
@@ -268,14 +251,9 @@ func (ph *PublicHandler) GetSourceFile(ctx context.Context, req *artifactpb.GetS
 // SearchSourceFiles
 func (ph *PublicHandler) SearchSourceFiles(ctx context.Context, req *artifactpb.SearchSourceFilesRequest) (*artifactpb.SearchSourceFilesResponse, error) {
 	log, _ := log.GetZapLogger(ctx)
-	authUID, err := getUserUIDFromContext(ctx)
-	if err != nil {
-		log.Error("failed to get user id from header", zap.Error(err))
-		return nil, fmt.Errorf("failed to get user id from header: %v. err: %w", err, customerror.ErrUnauthenticated)
-	}
 
 	// Check if user can access the namespace
-	_, err = ph.service.GetNamespaceAndCheckPermission(ctx, req.NamespaceId)
+	_, err := ph.service.GetNamespaceAndCheckPermission(ctx, req.NamespaceId)
 	if err != nil {
 		log.Error("failed to get namespace and check permission", zap.Error(err))
 		return nil, fmt.Errorf("failed to get namespace and check permission: %w", err)
@@ -286,7 +264,7 @@ func (ph *PublicHandler) SearchSourceFiles(ctx context.Context, req *artifactpb.
 		uid, err := uuid.FromString(fileUID)
 		if err != nil {
 			log.Error("failed to parse file uid", zap.Error(err))
-			return nil, fmt.Errorf("failed to parse file uid: %v. err: %w", err, customerror.ErrInvalidArgument)
+			return nil, fmt.Errorf("failed to parse file uid: %v. err: %w", err, errdomain.ErrInvalidArgument)
 		}
 		fileUIDs = append(fileUIDs, uid)
 	}
@@ -302,14 +280,10 @@ func (ph *PublicHandler) SearchSourceFiles(ctx context.Context, req *artifactpb.
 		// ACL check for each source file
 		granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", source.KbUID, "reader")
 		if err != nil {
-			log.Error("failed to check permission", zap.Error(err))
-			return nil, fmt.Errorf("failed to check permission. err: %w", err)
+			return nil, fmt.Errorf("checking permission: %w", err)
 		}
 		if !granted {
-			log.Error("no permission to access source file",
-				zap.String("user_uid", authUID),
-				zap.String("kb_uid", source.KbUID.String()))
-			return nil, fmt.Errorf("no permission to access source file. err: %w. user_uid: %s. kb_uid: %s", customerror.ErrNoPermission, authUID, source.KbUID.String())
+			return nil, fmt.Errorf("%w: no permission over catalog", errdomain.ErrUnauthorized)
 		}
 
 		// Get file content from MinIO

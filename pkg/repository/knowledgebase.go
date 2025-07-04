@@ -13,8 +13,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	"github.com/instill-ai/artifact-backend/pkg/customerror"
-
+	errdomain "github.com/instill-ai/artifact-backend/pkg/errors"
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
@@ -130,7 +129,7 @@ func (r *Repository) CreateKnowledgeBase(ctx context.Context, kb KnowledgeBase, 
 			return err
 		}
 		if KbIDExists {
-			return fmt.Errorf("knowledge base name already exists. err: %w", customerror.ErrInvalidArgument)
+			return fmt.Errorf("knowledge base name already exists. err: %w", errdomain.ErrInvalidArgument)
 		}
 
 		// Create a new KnowledgeBase record

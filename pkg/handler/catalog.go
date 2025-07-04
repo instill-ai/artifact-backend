@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/instill-ai/artifact-backend/pkg/customerror"
+	"github.com/instill-ai/artifact-backend/pkg/errors"
 	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/x/log"
@@ -19,11 +19,7 @@ import (
 
 func (ph *PublicHandler) GetFileCatalog(ctx context.Context, req *artifactpb.GetFileCatalogRequest) (*artifactpb.GetFileCatalogResponse, error) {
 	log, _ := log.GetZapLogger(ctx)
-	authUID, err := getUserUIDFromContext(ctx)
-	if err != nil {
-		log.Error("failed to get user id from header", zap.Error(err))
-		return nil, fmt.Errorf("failed to get user id from header: %v. err: %w", err, customerror.ErrUnauthenticated)
-	}
+
 	fileUID := uuid.FromStringOrNil(req.FileUid)
 
 	// get kbFile by kbFile uid or catalog uid and kbFile id(name)
@@ -32,34 +28,29 @@ func (ph *PublicHandler) GetFileCatalog(ctx context.Context, req *artifactpb.Get
 		// use catalog id and file id to get kbFile
 		fileID := req.FileId
 		if fileID == "" {
-			log.Error("file id is empty", zap.String("file_id", fileID))
-			return nil, fmt.Errorf("need either file uid or file id is")
+			return nil, fmt.Errorf("%w: need either file UID or file ID", errors.ErrInvalidArgument)
 		}
+
 		ns, err := ph.service.GetNamespaceByNsID(ctx, req.NamespaceId)
 		if err != nil {
-			log.Error("failed to get namespace by ns id", zap.Error(err))
-			return nil, fmt.Errorf("failed to get namespace by ns id. err: %w", err)
+			return nil, fmt.Errorf("fetching namespace: %w", err)
 		}
 		kb, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.CatalogId)
 		if err != nil {
-			log.Error("failed to get knowledge base by owner and kb id", zap.Error(err))
-			return nil, fmt.Errorf("failed to get catalog by namespace and catalog id. err: %w", err)
+			return nil, fmt.Errorf("fetching catalog: %w", err)
 		}
 
 		kbFile, err = ph.service.Repository().GetKnowledgebaseFileByKbUIDAndFileID(ctx, kb.UID, fileID)
 		if err != nil {
-			log.Error("failed to get file by file id", zap.Error(err))
-			return nil, fmt.Errorf("failed to get file by file id. err: %w", err)
+			return nil, fmt.Errorf("fetching file: %w", err)
 		}
 	} else {
 		// use file uid to get kbFile
 		kbfs, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{fileUID})
 		if err != nil {
-			log.Error("failed to get file by file uid", zap.Error(err))
-			return nil, fmt.Errorf("failed to get file by file uid. err: %w", err)
+			return nil, fmt.Errorf("fetching file from repository: %w", err)
 		} else if len(kbfs) == 0 {
-			log.Error("no file found by file uid", zap.String("file_uid", fileUID.String()))
-			return nil, fmt.Errorf("no file found by file uid: %s", fileUID.String())
+			return nil, fmt.Errorf("fetching file from repository: %w", errors.ErrNotFound)
 		}
 		kbFile = &(kbfs[0])
 	}
@@ -67,40 +58,29 @@ func (ph *PublicHandler) GetFileCatalog(ctx context.Context, req *artifactpb.Get
 	// ACL - check if the user(uid from context) has access to the knowledge base of source file.
 	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kbFile.KnowledgeBaseUID, "reader")
 	if err != nil {
-		log.Error("failed to check permission in GetSourceFile", zap.Error(err))
 		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
 	}
 	if !granted {
-		log.Error(
-			"no permission get source file in GetSourceFile",
-			zap.String("user_id", authUID),
-			zap.String("kb_id", kbFile.KnowledgeBaseUID.String()))
-
-		return nil, fmt.Errorf(
-			"no permission get file catalog. err %w. catalog UID: %s. user:%s",
-			customerror.ErrNoPermission, kbFile.KnowledgeBaseUID.String(), authUID)
+		return nil, fmt.Errorf("%w: no permission over catalog", errors.ErrUnauthorized)
 	}
 
 	// get source file
 	source, err := ph.service.Repository().GetTruthSourceByFileUID(ctx, kbFile.UID)
 	if err != nil {
-		log.Error("failed to get truth source by file uid", zap.Error(err))
-		return nil, fmt.Errorf("failed to get truth source by file uid. err: %w", err)
+		return nil, fmt.Errorf("fetching truth source: %w", err)
 	}
 
 	// get the source file sourceContent from minIO using dest of source
 	sourceContent, err := ph.service.MinIO().GetFile(ctx, minio.KnowledgeBaseBucketName, source.Dest)
 	if err != nil {
-		log.Error("failed to get file from minio", zap.Error(err))
-		return nil, fmt.Errorf("failed to get file from minio. err: %w", err)
+		return nil, fmt.Errorf("getting file from blob storage: %w", err)
 	}
 
 	// get chunks
 	// NOTE: in the future, we may support other types of segment, e.g. image, audio, etc.
 	_, _, textChunks, chunkUIDToContent, _, err := ph.service.GetChunksByFile(ctx, kbFile)
 	if err != nil {
-		log.Error("failed to get chunks", zap.Error(err))
-		return nil, fmt.Errorf("failed to get chunks. err: %w", fmt.Errorf("failed to get chunks. err: %w", err))
+		return nil, fmt.Errorf("fetching file chunks: %w", err)
 	}
 
 	pbChunks := make([]*artifactpb.GetFileCatalogResponse_Chunk, 0, len(textChunks))
@@ -108,8 +88,7 @@ func (ph *PublicHandler) GetFileCatalog(ctx context.Context, req *artifactpb.Get
 	// get embeddings
 	embeddings, err := ph.service.Repository().ListEmbeddingsByKbFileUID(ctx, kbFile.UID)
 	if err != nil {
-		log.Error("failed to get embeddings", zap.Error(err))
-		return nil, fmt.Errorf("failed to get embeddings. err: %w", err)
+		return nil, fmt.Errorf("getting file embeddings: %w", err)
 	}
 	// map chunks to embeddings
 	embeddingMap := make(map[uuid.UUID]repository.Embedding)
@@ -125,13 +104,14 @@ func (ph *PublicHandler) GetFileCatalog(ctx context.Context, req *artifactpb.Get
 	}
 
 	for _, chunk := range textChunks {
+		log := log.With(zap.String("chunkUID", chunk.UID.String()))
 		embedding, ok := embeddingMap[chunk.UID]
 		if !ok {
-			log.Error("embedding not found for chunk", zap.String("chunk_uid", chunk.UID.String()))
+			log.Error("Couldn't find embedding for chunk")
 		}
 		content, ok := chunkUIDToContent[chunk.UID]
 		if !ok {
-			log.Error("content not found for chunk", zap.String("chunk_uid", chunk.UID.String()))
+			log.Error("Couldn't find content for chunk")
 		}
 		var createTime *timestamppb.Timestamp = nil
 		if chunk.CreateTime != nil {
@@ -160,12 +140,9 @@ func (ph *PublicHandler) GetFileCatalog(ctx context.Context, req *artifactpb.Get
 	}
 
 	// Retrieve the original file content from MinIO
-	minIOPath := kbFile.Destination
-	bucket := minio.BucketFromDestination(minIOPath)
-	originalContent, err := ph.service.MinIO().GetFile(ctx, bucket, minIOPath)
+	originalContent, err := ph.service.MinIO().GetFile(ctx, minio.KnowledgeBaseBucketName, kbFile.Destination)
 	if err != nil {
-		log.Error("failed to get original file from minio", zap.Error(err))
-		return nil, fmt.Errorf("failed to get original file from minio. err: %w", err)
+		return nil, fmt.Errorf("fetching original file from blob: %w", err)
 	}
 
 	// Encode the original content to base64
