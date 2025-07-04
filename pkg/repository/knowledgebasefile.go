@@ -28,8 +28,6 @@ type KnowledgeBaseFileI interface {
 	CreateKnowledgeBaseFile(ctx context.Context, kb KnowledgeBaseFile, externalServiceCall func(fileUID string) error) (*KnowledgeBaseFile, error)
 	// ListKnowledgeBaseFiles lists the knowledge base files by owner UID, knowledge base UID, and page size
 	ListKnowledgeBaseFiles(ctx context.Context, uid string, ownerUID string, kbUID string, pageSize int32, nextPageToken string, filesUID []string) ([]KnowledgeBaseFile, int, string, error)
-	// GetKnowledgebaseFileByKbUIDAndFileID returns the knowledge base file by knowledge base ID and file ID
-	GetKnowledgebaseFileByKbUIDAndFileID(ctx context.Context, kbUID uuid.UUID, fileID string) (*KnowledgeBaseFile, error)
 	// GetKnowledgeBaseFilesByFileUIDs returns the knowledge base files by file UIDs
 	GetKnowledgeBaseFilesByFileUIDs(ctx context.Context, fileUIDs []uuid.UUID, columns ...string) ([]KnowledgeBaseFile, error)
 	// DeleteKnowledgeBaseFile deletes the knowledge base file by file UID
@@ -55,6 +53,13 @@ type KnowledgeBaseFileI interface {
 	UpdateKbFileExtraMetaData(ctx context.Context, fileUID uuid.UUID, failureReason, convertingPipe, summarizinPipe, chunkingPipe, embeddingPipe string, processingTime, convertingTime, summarizingTime, chunkingTime, embeddingTime *int64) error
 	// DeleteKnowledgeBaseFileAndDecreaseUsage deletes the knowledge base file and decreases the knowledge base usage
 	DeleteKnowledgeBaseFileAndDecreaseUsage(ctx context.Context, fileUID uuid.UUID) error
+
+	// Deprecated methods
+
+	// GetKnowledgebaseFileByKbUIDAndFileID returns the knowledge base file by
+	// knowledge base ID and file ID. File ID (filename) isn't unique by
+	// catalog anymore, so this method is deprecated. Files should be identified by their UID.
+	GetKnowledgebaseFileByKbUIDAndFileID(ctx context.Context, kbUID uuid.UUID, fileID string) (*KnowledgeBaseFile, error)
 }
 
 type KbUID = uuid.UUID
@@ -614,20 +619,6 @@ func (r *Repository) GetKnowledgeBaseFilesByFileUIDs(
 	return files, nil
 }
 
-// GetKnowledgebaseFileByKbIDAndFileID returns the knowledge base file by knowledge base ID and file ID
-func (r *Repository) GetKnowledgebaseFileByKbUIDAndFileID(ctx context.Context, kbUID uuid.UUID, fileID string) (*KnowledgeBaseFile, error) {
-	var file KnowledgeBaseFile
-	where := fmt.Sprintf("%v = ? AND %v = ? AND %v IS NULL",
-		KnowledgeBaseFileColumn.KnowledgeBaseUID, KnowledgeBaseFileColumn.Name, KnowledgeBaseFileColumn.DeleteTime)
-	if err := r.db.WithContext(ctx).Where(where, kbUID, fileID).First(&file).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return nil, fmt.Errorf("file not found by catalog ID: %v and file ID: %v", kbUID, fileID)
-		}
-		return nil, err
-	}
-	return &file, nil
-}
-
 type SourceMeta struct {
 	OriginalFileUID  uuid.UUID
 	OriginalFileName string
@@ -642,14 +633,12 @@ type SourceMeta struct {
 // if the file type is pdf, get the converted file destination
 func (r *Repository) GetTruthSourceByFileUID(ctx context.Context, fileUID uuid.UUID) (*SourceMeta, error) {
 	logger, _ := log.GetZapLogger(ctx)
+
 	// get the file type by file uid
 	var file KnowledgeBaseFile
 	where := fmt.Sprintf("%v = ?", KnowledgeBaseFileColumn.UID)
 	if err := r.db.WithContext(ctx).Where(where, fileUID).First(&file).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return nil, fmt.Errorf("file not found by file uid: %v", fileUID)
-		}
-		return nil, err
+		return nil, fmt.Errorf("fetching file: %w", err)
 	}
 	// assign truth source file destination and create time
 	originalFileUID := file.UID
@@ -808,4 +797,20 @@ func (r *Repository) DeleteKnowledgeBaseFileAndDecreaseUsage(ctx context.Context
 		}
 		return nil
 	})
+}
+
+// GetKnowledgebaseFileByKbUIDAndFileID returns the knowledge base file by
+// knowledge base ID and file ID.
+// NOTE: this method is deprecated, files should be accessed by UID.
+func (r *Repository) GetKnowledgebaseFileByKbUIDAndFileID(ctx context.Context, kbUID uuid.UUID, fileID string) (*KnowledgeBaseFile, error) {
+	var file KnowledgeBaseFile
+	where := fmt.Sprintf("%v = ? AND %v = ? AND %v IS NULL",
+		KnowledgeBaseFileColumn.KnowledgeBaseUID, KnowledgeBaseFileColumn.Name, KnowledgeBaseFileColumn.DeleteTime)
+	if err := r.db.WithContext(ctx).Where(where, kbUID, fileID).First(&file).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, fmt.Errorf("file not found by catalog ID: %v and file ID: %v", kbUID, fileID)
+		}
+		return nil, err
+	}
+	return &file, nil
 }

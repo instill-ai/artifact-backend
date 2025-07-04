@@ -194,6 +194,27 @@ func (h *PrivateHandler) UpdateObject(ctx context.Context, req *pb.UpdateObjectR
 	}, nil
 }
 
+// GetFileAsMarkdown returns the Markdown representation of a file.
+func (h *PrivateHandler) GetFileAsMarkdown(ctx context.Context, req *pb.GetFileAsMarkdownRequest) (*pb.GetFileAsMarkdownResponse, error) {
+	fileUID := uuid.FromStringOrNil(req.GetFileUid())
+	source, err := h.service.Repository().GetTruthSourceByFileUID(ctx, fileUID)
+	if err != nil {
+		return nil, fmt.Errorf("fetching truth source: %w", err)
+	}
+
+	// get the source file sourceContent from minIO using dest of source
+	sourceContent, err := h.service.MinIO().GetFile(ctx, minio.KnowledgeBaseBucketName, source.Dest)
+	if err != nil {
+		return nil, fmt.Errorf("getting source file from blob storage: %w", err)
+	}
+
+	return &pb.GetFileAsMarkdownResponse{Markdown: string(sourceContent)}, nil
+}
+
+// GetChatFile returns the Markdown representation of a file.
+// This method is deprecated and GetFileAsMarkdown should be used instead.
+// TODO: As soon as clients update to GetFileAsMarkdown, this endpoint should
+// be be removed.
 func (h *PrivateHandler) GetChatFile(ctx context.Context, req *pb.GetChatFileRequest) (*pb.GetChatFileResponse, error) {
 	log, _ := log.GetZapLogger(ctx)
 
