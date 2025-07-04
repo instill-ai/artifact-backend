@@ -402,7 +402,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processConvertingFile(ctx contex
 		zap.String("filePath", fileInMinIOPath),
 	)
 
-	bucket := checkIfUploadedByBlobURL(fileInMinIOPath)
+	bucket := minio.BucketFromDestination(fileInMinIOPath)
 	data, err := wp.svc.MinIO().GetFile(ctx, bucket, fileInMinIOPath)
 	if err != nil {
 		logger.Error("Failed to get file from minIO")
@@ -502,7 +502,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) procesSummarizingFile(ctx contex
 		artifactpb.FileType_FILE_TYPE_MARKDOWN.String():
 
 		fileInMinIOPath := file.Destination
-		bucket := checkIfUploadedByBlobURL(fileInMinIOPath)
+		bucket := minio.BucketFromDestination(fileInMinIOPath)
 		// Get original file for text/markdown types
 		fileData, err = wp.svc.MinIO().GetFile(ctx, bucket, fileInMinIOPath)
 		if err != nil {
@@ -622,7 +622,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processChunkingFile(ctx context.
 	case artifactpb.FileType_FILE_TYPE_MARKDOWN.String():
 		// Get original file for markdown types
 		fileInMinIOPath := file.Destination
-		bucket := checkIfUploadedByBlobURL(fileInMinIOPath)
+		bucket := minio.BucketFromDestination(fileInMinIOPath)
 		fileData, err = wp.svc.MinIO().GetFile(ctx, bucket, fileInMinIOPath)
 		if err != nil {
 			logger.Error("Failed to get file from minIO.", zap.String("File uid", file.UID.String()))
@@ -640,7 +640,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processChunkingFile(ctx context.
 	case artifactpb.FileType_FILE_TYPE_TEXT.String():
 		// Get original file for text types
 		fileInMinIOPath := file.Destination
-		bucket := checkIfUploadedByBlobURL(fileInMinIOPath)
+		bucket := minio.BucketFromDestination(fileInMinIOPath)
 		fileData, err = wp.svc.MinIO().GetFile(ctx, bucket, fileInMinIOPath)
 		if err != nil {
 			logger.Error("Failed to get file from minIO.", zap.String("File uid", file.UID.String()))
