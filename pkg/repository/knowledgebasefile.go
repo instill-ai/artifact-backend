@@ -25,7 +25,7 @@ type KnowledgeBaseFileI interface {
 	// KnowledgeBaseFileTableName returns the table name of the KnowledgeBaseFile
 	KnowledgeBaseFileTableName() string
 	// CreateKnowledgeBaseFile creates a new knowledge base file
-	CreateKnowledgeBaseFile(ctx context.Context, kb KnowledgeBaseFile, externalServiceCall func(FileUID string) error) (*KnowledgeBaseFile, error)
+	CreateKnowledgeBaseFile(ctx context.Context, kb KnowledgeBaseFile, externalServiceCall func(fileUID string) error) (*KnowledgeBaseFile, error)
 	// ListKnowledgeBaseFiles lists the knowledge base files by owner UID, knowledge base UID, and page size
 	ListKnowledgeBaseFiles(ctx context.Context, uid string, ownerUID string, kbUID string, pageSize int32, nextPageToken string, filesUID []string) ([]KnowledgeBaseFile, int, string, error)
 	// GetKnowledgebaseFileByKbUIDAndFileID returns the knowledge base file by knowledge base ID and file ID
@@ -257,7 +257,7 @@ func (r *Repository) KnowledgeBaseFileTableName() string {
 	return "knowledge_base_file"
 }
 
-func (r *Repository) CreateKnowledgeBaseFile(ctx context.Context, kb KnowledgeBaseFile, externalServiceCall func(FileUID string) error) (*KnowledgeBaseFile, error) {
+func (r *Repository) CreateKnowledgeBaseFile(ctx context.Context, kb KnowledgeBaseFile, externalServiceCall func(fileUID string) error) (*KnowledgeBaseFile, error) {
 	// check if the file already exists in the same knowledge base and not delete
 	var existingFile KnowledgeBaseFile
 	whereClause := fmt.Sprintf("%s = ? AND %s = ? AND %v is NULL",
@@ -584,7 +584,11 @@ func (r *Repository) GetSourceTableAndUIDByFileUIDs(ctx context.Context, files [
 }
 
 func (r *Repository) GetKnowledgeBaseFilesByFileUIDs(
-	ctx context.Context, fileUIDs []uuid.UUID, columns ...string) ([]KnowledgeBaseFile, error) {
+	ctx context.Context,
+	fileUIDs []uuid.UUID,
+	columns ...string,
+) ([]KnowledgeBaseFile, error) {
+
 	var files []KnowledgeBaseFile
 	// Convert UUIDs to strings as GORM works with strings in queries
 	var stringUIDs []string
