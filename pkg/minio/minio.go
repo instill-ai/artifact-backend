@@ -15,9 +15,9 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/instill-ai/artifact-backend/pkg/utils"
+	"github.com/instill-ai/x/resource"
 
 	miniox "github.com/instill-ai/x/minio"
-	resourcex "github.com/instill-ai/x/resource"
 )
 
 type MinioI interface {
@@ -351,6 +351,17 @@ func (m *Minio) DeleteFilesWithPrefix(ctx context.Context, bucket string, prefix
 // TODO we should make the user UID an explicit param in the methods that need
 // this information and make sure that the clients provide it.
 func (m *Minio) authenticatedUser(ctx context.Context) string {
-	_, userUID := resourcex.GetRequesterUIDAndUserUID(ctx)
+	_, userUID := resource.GetRequesterUIDAndUserUID(ctx)
 	return userUID.String()
+}
+
+// BucketFromDestination infers the bucket from the file destination string.
+// Since there's a runtime migration for the object-based flow, this is used to
+// retrieve files that might not have been updated their destination yet.
+func BucketFromDestination(destination string) string {
+	if strings.Contains(destination, "uploaded-file") {
+		return KnowledgeBaseBucketName
+	}
+
+	return BlobBucketName
 }

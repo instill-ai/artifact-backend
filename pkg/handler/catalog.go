@@ -160,7 +160,9 @@ func (ph *PublicHandler) GetFileCatalog(ctx context.Context, req *artifactpb.Get
 	}
 
 	// Retrieve the original file content from MinIO
-	originalContent, err := ph.service.MinIO().GetFile(ctx, minio.KnowledgeBaseBucketName, kbFile.Destination)
+	minIOPath := kbFile.Destination
+	bucket := minio.BucketFromDestination(minIOPath)
+	originalContent, err := ph.service.MinIO().GetFile(ctx, bucket, minIOPath)
 	if err != nil {
 		log.Error("failed to get original file from minio", zap.Error(err))
 		return nil, fmt.Errorf("failed to get original file from minio. err: %w", err)
