@@ -14,7 +14,7 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.26.3
 	github.com/instill-ai/protogen-go v0.3.3-alpha.0.20250701144349-953c6318807e
-	github.com/instill-ai/usage-client v0.3.0-alpha.0.20250626142928-89526ea95ca7
+	github.com/instill-ai/usage-client v0.4.0
 	github.com/instill-ai/x v0.8.0-alpha.0.20250630064356-d3b28166753a
 	github.com/knadh/koanf v1.5.0
 	github.com/milvus-io/milvus-sdk-go/v2 v2.4.1
