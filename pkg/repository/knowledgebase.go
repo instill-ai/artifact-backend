@@ -18,7 +18,7 @@ import (
 )
 
 type KnowledgeBaseI interface {
-	CreateKnowledgeBase(ctx context.Context, kb KnowledgeBase, externalService func(kbUID string) error) (*KnowledgeBase, error)
+	CreateKnowledgeBase(ctx context.Context, kb KnowledgeBase, externalService func(kbUID uuid.UUID) error) (*KnowledgeBase, error)
 	ListKnowledgeBases(ctx context.Context, ownerUID string) ([]KnowledgeBase, error)
 	ListKnowledgeBasesByCatalogType(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType) ([]KnowledgeBase, error)
 	UpdateKnowledgeBase(ctx context.Context, id, ownerUID string, kb KnowledgeBase) (*KnowledgeBase, error)
@@ -120,7 +120,7 @@ func formatPostgresArray(tags []string) string {
 }
 
 // CreateKnowledgeBase inserts a new KnowledgeBase record into the database.
-func (r *Repository) CreateKnowledgeBase(ctx context.Context, kb KnowledgeBase, externalService func(kbUID string) error) (*KnowledgeBase, error) {
+func (r *Repository) CreateKnowledgeBase(ctx context.Context, kb KnowledgeBase, externalService func(kbUID uuid.UUID) error) (*KnowledgeBase, error) {
 	// Start a database transaction
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// check if the name is unique in the owner's knowledge bases
@@ -142,7 +142,7 @@ func (r *Repository) CreateKnowledgeBase(ctx context.Context, kb KnowledgeBase, 
 
 		// Call the external service
 		if externalService != nil {
-			if err := externalService(kb.UID.String()); err != nil {
+			if err := externalService(kb.UID); err != nil {
 				return err
 			}
 		}

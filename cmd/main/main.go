@@ -39,6 +39,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/middleware"
 	"github.com/instill-ai/artifact-backend/pkg/milvus"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
+	"github.com/instill-ai/artifact-backend/pkg/service"
 	"github.com/instill-ai/artifact-backend/pkg/usage"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
 	"github.com/instill-ai/artifact-backend/pkg/worker"
@@ -49,7 +50,6 @@ import (
 	database "github.com/instill-ai/artifact-backend/pkg/db"
 	customotel "github.com/instill-ai/artifact-backend/pkg/logger/otel"
 	minio "github.com/instill-ai/artifact-backend/pkg/minio"
-	servicepkg "github.com/instill-ai/artifact-backend/pkg/service"
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	mgmtpb "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
 	pipelinepb "github.com/instill-ai/protogen-go/pipeline/pipeline/v1beta"
@@ -127,18 +127,18 @@ func main() {
 
 	// Initialize clients needed for service
 	pipelinePublicServiceClient, mgmtPrivateServiceClient,
-		redisClient, db, minioClient, milvusClient, aclClient, closer := newClients(ctx, logger)
+		redisClient, db, minioClient, vectorDB, aclClient, closer := newClients(ctx, logger)
 	defer closer()
 
 	// Initialize service
-	service := servicepkg.NewService(
+	svc := service.NewService(
 		repository.NewRepository(db),
 		minioClient,
 		mgmtPrivateServiceClient,
 		pipelinePublicServiceClient,
 		httpclient.NewRegistryClient(ctx),
 		redisClient,
-		milvusClient,
+		vectorDB,
 		aclClient,
 	)
 
@@ -146,13 +146,13 @@ func main() {
 
 	publicGrpcS := grpc.NewServer(grpcServerOpts...)
 	reflection.Register(publicGrpcS)
-	publicHandler := handler.NewPublicHandler(service, logger)
+	publicHandler := handler.NewPublicHandler(svc, logger)
 	artifactpb.RegisterArtifactPublicServiceServer(publicGrpcS, publicHandler)
 
 	privateGrpcS := grpc.NewServer(grpcServerOpts...)
 	reflection.Register(privateGrpcS)
 
-	privateHandler := handler.NewPrivateHandler(service, logger)
+	privateHandler := handler.NewPrivateHandler(svc, logger)
 	artifactpb.RegisterArtifactPrivateServiceServer(privateGrpcS, privateHandler)
 
 	publicServeMux := runtime.NewServeMux(
@@ -186,7 +186,7 @@ func main() {
 	)
 
 	// activate persistent catalog file-to-embeddings worker pool
-	wp := worker.NewPersistentCatalogFileToEmbWorkerPool(ctx, service, config.Config.FileToEmbeddingWorker.NumberOfWorkers, artifactpb.CatalogType_CATALOG_TYPE_PERSISTENT)
+	wp := worker.NewPersistentCatalogFileToEmbWorkerPool(ctx, svc, config.Config.FileToEmbeddingWorker.NumberOfWorkers, artifactpb.CatalogType_CATALOG_TYPE_PERSISTENT)
 	wp.Start()
 
 	// Start usage reporter
@@ -310,7 +310,7 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 	*redis.Client,
 	*gorm.DB,
 	*minio.Minio,
-	milvus.MilvusClientI,
+	service.VectorDatabase,
 	*acl.ACLClient,
 	func(),
 ) {
@@ -355,10 +355,11 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 	}
 
 	// Initialize milvus client
-	milvusClient, err := milvus.NewMilvusClient(ctx, config.Config.Milvus.Host, config.Config.Milvus.Port)
+	vectorDB, vclose, err := milvus.NewVectorDatabase(ctx, config.Config.Milvus.Host, config.Config.Milvus.Port)
 	if err != nil {
 		logger.Fatal(fmt.Sprintf("failed to create milvus client: %v", err))
 	}
+	closeFuncs["milvus"] = vclose
 
 	// Init ACL client
 	fgaClient, fgaClientConn := acl.InitOpenFGAClient(ctx, config.Config.OpenFGA.Host, config.Config.OpenFGA.Port)
@@ -381,7 +382,7 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 		}
 	}
 
-	return pipelinePublicServiceClient, mgmtPrivateServiceClient, redisClient, db, minioClient, milvusClient, aclClient, closer
+	return pipelinePublicServiceClient, mgmtPrivateServiceClient, redisClient, db, minioClient, vectorDB, aclClient, closer
 }
 
 func newGrpcOptionAndCreds(logger *zap.Logger) ([]grpc.ServerOption, credentials.TransportCredentials) {

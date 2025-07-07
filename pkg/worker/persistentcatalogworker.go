@@ -758,7 +758,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processEmbeddingFile(ctx context
 		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
 	}
 	// save the embeddings into milvus and metadata into database
-	collection := wp.svc.MilvusClient().GetKnowledgeBaseCollectionName(file.KnowledgeBaseUID.String())
+	collection := service.KBCollectionName(file.KnowledgeBaseUID)
 	embeddings := make([]repository.Embedding, len(vectors))
 	for i, v := range vectors {
 		embeddings[i] = repository.Embedding{
@@ -772,7 +772,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processEmbeddingFile(ctx context
 			ContentType: chunks[i].ContentType,
 		}
 	}
-	err = saveEmbeddings(ctx, wp.svc, file.KnowledgeBaseUID.String(), embeddings, file.Name)
+	err = saveEmbeddings(ctx, wp.svc, file.KnowledgeBaseUID, embeddings, file.Name)
 	if err != nil {
 		logger.Error("Failed to save embeddings into vector database and metadata into database.", zap.String("SourceUID", sourceUID.String()))
 		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err

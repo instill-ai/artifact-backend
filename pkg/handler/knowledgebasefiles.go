@@ -16,9 +16,9 @@ import (
 
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/errors"
-	errdomain "github.com/instill-ai/artifact-backend/pkg/errors"
 	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
+	"github.com/instill-ai/artifact-backend/pkg/service"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
 	"github.com/instill-ai/x/log"
 	"github.com/instill-ai/x/resource"
@@ -709,7 +709,7 @@ func (ph *PublicHandler) DeleteCatalogFile(
 			for _, emb := range embeddings {
 				embUIDs = append(embUIDs, emb.UID.String())
 			}
-			err = ph.service.MilvusClient().DeleteEmbeddingsInKb(ctx, files[0].KnowledgeBaseUID.String(), embUIDs)
+			err = ph.service.VectorDB().DeleteEmbeddingsInCollection(ctx, service.KBCollectionName(files[0].KnowledgeBaseUID), embUIDs)
 			if err != nil {
 				logger.Error("failed to delete embeddings in milvus", zap.Error(err))
 				allPass = false

@@ -13,7 +13,6 @@ import (
 	"google.golang.org/grpc/metadata"
 
 	"github.com/instill-ai/artifact-backend/pkg/errors"
-	errdomain "github.com/instill-ai/artifact-backend/pkg/errors"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/service"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
@@ -102,23 +101,16 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 	}
 
 	// external service call - create catalog collection and set ACL in openFAG
-	callExternalService := func(kbUID string) error {
-		err := ph.service.MilvusClient().CreateKnowledgeBaseCollection(ctx, kbUID)
+	callExternalService := func(kbUID uuid.UUID) error {
+		err := ph.service.VectorDB().CreateCollection(ctx, service.KBCollectionName(kbUID))
 		if err != nil {
-			logger.Error("failed to create collection in milvus", zap.Error(err))
-			return err
+			return fmt.Errorf("creating vector database collection: %w", err)
 		}
 
 		// set the owner of the catalog
-		kbUIDuuid, err := uuid.FromString(kbUID)
+		err = ph.service.ACLClient().SetOwner(ctx, "knowledgebase", kbUID, string(ns.NsType), ns.NsUID)
 		if err != nil {
-			logger.Error("failed to parse kb uid", zap.String("kb_uid", kbUID), zap.Error(err))
-			return err
-		}
-		err = ph.service.ACLClient().SetOwner(ctx, "knowledgebase", kbUIDuuid, string(ns.NsType), ns.NsUID)
-		if err != nil {
-			logger.Error("failed to set owner in openFAG", zap.Error(err))
-			return err
+			return fmt.Errorf("setting catalog owner: %w", err)
 		}
 
 		return nil
@@ -141,7 +133,8 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 	*/
 
 	// create catalog
-	dbData, err := ph.service.Repository().CreateKnowledgeBase(ctx,
+	dbData, err := ph.service.Repository().CreateKnowledgeBase(
+		ctx,
 		repository.KnowledgeBase{
 			Name: req.Name,
 			// make name as kbID
@@ -152,7 +145,8 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 			CreatorUID:          creatorUUID,
 			CatalogType:         req.GetType().String(),
 			ConvertingPipelines: convertingPipelines,
-		}, callExternalService,
+		},
+		callExternalService,
 	)
 	if err != nil {
 		return nil, err
@@ -426,7 +420,7 @@ func (ph *PublicHandler) DeleteCatalog(ctx context.Context, req *artifactpb.Dele
 		}
 
 		// delete the collection in milvus
-		err = ph.service.MilvusClient().DropKnowledgeBaseCollection(ctx, kb.UID.String())
+		err = ph.service.VectorDB().DropCollection(ctx, service.KBCollectionName(kb.UID))
 		if err != nil {
 			logger.Error("failed to delete collection in milvus in background", zap.Error(err))
 			allPass = false
