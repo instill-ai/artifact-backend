@@ -6,12 +6,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gofrs/uuid"
 	"github.com/milvus-io/milvus-sdk-go/v2/client"
 	"github.com/milvus-io/milvus-sdk-go/v2/entity"
 	"go.uber.org/zap"
 
 	"github.com/instill-ai/artifact-backend/pkg/service"
 	"github.com/instill-ai/x/log"
+
+	errdomain "github.com/instill-ai/artifact-backend/pkg/errors"
 )
 
 const (
@@ -27,6 +30,7 @@ const (
 	kbCollectionFieldSourceUID    = "source_uid"
 	kbCollectionFieldEmbeddingUID = "embedding_uid"
 	kbCollectionFieldEmbedding    = "embedding"
+	kbCollectionFieldFileUID      = "file_uid"
 	kbCollectionFieldFileName     = "file_name"
 	kbCollectionFieldFileType     = "file_type"
 	kbCollectionFieldContentType  = "content_type"
@@ -48,14 +52,15 @@ func NewVectorDatabase(ctx context.Context, host, port string) (db service.Vecto
 
 func (m *milvusClient) CreateCollection(ctx context.Context, collectionName string) error {
 	logger, _ := log.GetZapLogger(ctx)
+	logger = logger.With(zap.String("collection_name", collectionName))
 
 	// 1. Check if the collection already exists
 	has, err := m.c.HasCollection(ctx, collectionName)
 	if err != nil {
-		return fmt.Errorf("failed to check collection existence: %w", err)
+		return fmt.Errorf("checking collection existence: %w", err)
 	}
 	if has {
-		logger.Info("Collection already exists", zap.String("collection_name", collectionName))
+		logger.Info("Skipping collection creation: already exists.")
 		return nil
 	}
 
@@ -69,6 +74,7 @@ func (m *milvusClient) CreateCollection(ctx context.Context, collectionName stri
 			{Name: kbCollectionFieldSourceUID, DataType: entity.FieldTypeVarChar, TypeParams: map[string]string{"max_length": "255"}},
 			{Name: kbCollectionFieldEmbeddingUID, DataType: entity.FieldTypeVarChar, PrimaryKey: true, TypeParams: map[string]string{"max_length": "255"}},
 			{Name: kbCollectionFieldEmbedding, DataType: entity.FieldTypeFloatVector, TypeParams: map[string]string{"dim": vectorDim}},
+			{Name: kbCollectionFieldFileUID, DataType: entity.FieldTypeVarChar, TypeParams: map[string]string{"max_length": "255"}},
 			{Name: kbCollectionFieldFileName, DataType: entity.FieldTypeVarChar, TypeParams: map[string]string{"max_length": "255"}},
 			{Name: kbCollectionFieldFileType, DataType: entity.FieldTypeVarChar, TypeParams: map[string]string{"max_length": "255"}},
 			{Name: kbCollectionFieldContentType, DataType: entity.FieldTypeVarChar, TypeParams: map[string]string{"max_length": "255"}},
@@ -77,37 +83,35 @@ func (m *milvusClient) CreateCollection(ctx context.Context, collectionName stri
 
 	err = m.c.CreateCollection(ctx, schema, 1)
 	if err != nil {
-		return fmt.Errorf("failed to create collection: %w", err)
+		return fmt.Errorf("creating collection: %w", err)
 	}
 
 	// 3. Create index
 	index, err := entity.NewIndexSCANN(metricType, scaNNList, withRaw)
 	if err != nil {
-		logger.Error("Failed to create index", zap.Error(err))
-		return fmt.Errorf("failed to create index: %w", err)
+		return fmt.Errorf("building index: %w", err)
 	}
 
 	err = m.c.CreateIndex(ctx, collectionName, kbCollectionFieldEmbedding, index, false)
 	if err != nil {
-		return fmt.Errorf("failed to create index: %w", err)
+		return fmt.Errorf("creating index: %w", err)
 	}
 
-	logger.Info("Collection created successfully", zap.String("collection_name", collectionName))
+	logger.Info("Collection created successfully.")
 	return nil
 }
 
 func (m *milvusClient) InsertVectorsInCollection(ctx context.Context, collectionName string, embeddings []service.Embedding) error {
 	logger, _ := log.GetZapLogger(ctx)
+	logger = logger.With(zap.String("collection_name", collectionName))
 
 	// Check if the collection exists
 	has, err := m.c.HasCollection(ctx, collectionName)
 	if err != nil {
-		logger.Error("Failed to check collection existence", zap.Error(err))
-		return fmt.Errorf("failed to check collection existence: %w", err)
+		return fmt.Errorf("checking collection existence: %w", err)
 	}
 	if !has {
-		logger.Error("Collection does not exist", zap.String("collection", collectionName))
-		return fmt.Errorf("collection %s does not exist", collectionName)
+		return fmt.Errorf("checking collection existence: %w", errdomain.ErrNotFound)
 	}
 
 	// Prepare the data for insertion
@@ -116,6 +120,7 @@ func (m *milvusClient) InsertVectorsInCollection(ctx context.Context, collection
 	sourceUIDs := make([]string, vectorCount)
 	embeddingUIDs := make([]string, vectorCount) // Use the provided embeddingUID instead of generating a new one
 	vectors := make([][]float32, vectorCount)
+	fileUIDs := make([]string, vectorCount)
 	fileNames := make([]string, vectorCount)
 	fileTypes := make([]string, vectorCount)
 	contentTypes := make([]string, vectorCount)
@@ -124,6 +129,7 @@ func (m *milvusClient) InsertVectorsInCollection(ctx context.Context, collection
 		sourceTables[i] = embedding.SourceTable
 		sourceUIDs[i] = embedding.SourceUID
 		embeddingUIDs[i] = embedding.EmbeddingUID // Use the embeddingUID from the input struct
+		fileUIDs[i] = embedding.FileUID.String()
 		fileNames[i] = embedding.FileName
 		fileTypes[i] = embedding.FileType
 		contentTypes[i] = embedding.ContentType
@@ -141,17 +147,21 @@ func (m *milvusClient) InsertVectorsInCollection(ctx context.Context, collection
 		entity.NewColumnFloatVector(kbCollectionFieldEmbedding, vectorDim, vectors),
 	}
 
-	hasMetadata, err := m.checkMetadataField(ctx, collectionName)
+	hasMetadata, hasFileUID, err := m.checkMetadataFields(ctx, collectionName)
 	if err != nil {
-		logger.Error("Failed to check metadata existence", zap.Error(err))
-		return fmt.Errorf("failed to check metadata existence: %w", err)
+		return fmt.Errorf("checking metadata fields: %w", err)
 	}
 
 	if hasMetadata {
 		columns = append(columns,
 			entity.NewColumnVarChar(kbCollectionFieldFileName, fileNames),
 			entity.NewColumnVarChar(kbCollectionFieldFileType, fileTypes),
-			entity.NewColumnVarChar(kbCollectionFieldContentType, contentTypes))
+			entity.NewColumnVarChar(kbCollectionFieldContentType, contentTypes),
+		)
+	}
+
+	if hasFileUID {
+		columns = append(columns, entity.NewColumnVarChar(kbCollectionFieldFileUID, fileUIDs))
 	}
 
 	// Insert the data with retry
@@ -165,8 +175,7 @@ func (m *milvusClient) InsertVectorsInCollection(ctx context.Context, collection
 		time.Sleep(time.Second * time.Duration(attempt))
 	}
 	if err != nil {
-		logger.Error("Failed to insert vectors after retries", zap.Error(err))
-		return fmt.Errorf("failed to insert vectors: %w", err)
+		return fmt.Errorf("inserting vectors: %w", err)
 	}
 
 	// Flush the collection with retry
@@ -179,11 +188,10 @@ func (m *milvusClient) InsertVectorsInCollection(ctx context.Context, collection
 		time.Sleep(time.Second * time.Duration(attempt))
 	}
 	if err != nil {
-		logger.Error("Failed to flush collection after retries", zap.Error(err))
-		return fmt.Errorf("failed to flush collection after insertion: %w", err)
+		return fmt.Errorf("flushing collection after insertion: %w", err)
 	}
 
-	logger.Info("Successfully inserted and flushed vectors", zap.String("collection", collectionName))
+	logger.Info("Successfully inserted and flushed vectors")
 	return nil
 }
 
@@ -209,36 +217,36 @@ func (m *milvusClient) SimilarVectorsInCollection(ctx context.Context, p service
 	collectionName := p.CollectionID
 	vectors := p.Vectors
 	topK := int(p.TopK)
+	fileUID := p.FileUID
 	fileName := p.FileName
 	fileType := p.FileType
 	contentType := p.ContentType
+
+	logger = logger.With(zap.String("collection_name", collectionName))
 
 	// Check if the collection exists
 	t := time.Now()
 	has, err := m.c.HasCollection(ctx, collectionName)
 	if err != nil {
-		logger.Error("failed to check collection existence", zap.Error(err))
-		return nil, fmt.Errorf("failed to check collection existence: %w", err)
+		return nil, fmt.Errorf("checking collection existence: %w", err)
 	}
 	if !has {
-		logger.Error("collection does not exist", zap.String("collection_name", collectionName))
-		return nil, fmt.Errorf("collection %s does not exist", collectionName)
+		return nil, fmt.Errorf("checking collection existence: %w", errdomain.ErrNotFound)
 	}
-	logger.Info("check collection existence", zap.Duration("duration", time.Since(t)))
+
+	logger.Info("Existence check.", zap.Duration("duration", time.Since(t)))
 	t = time.Now()
 
 	// Load the collection if it's not already loaded
 	err = m.c.LoadCollection(ctx, collectionName, false)
 	if err != nil {
-		logger.Error("failed to load collection", zap.Error(err))
-		return nil, fmt.Errorf("failed to load collection: %w", err)
+		return nil, fmt.Errorf("loading collection: %w", err)
 	}
-	logger.Info("load collection", zap.Duration("duration", time.Since(t)))
+	logger.Info("Collection load.", zap.Duration("duration", time.Since(t)))
 
-	hasMetadata, err := m.checkMetadataField(ctx, collectionName)
+	hasMetadata, hasFileUID, err := m.checkMetadataFields(ctx, collectionName)
 	if err != nil {
-		logger.Error("failed to describe collection", zap.Error(err))
-		return nil, fmt.Errorf("failed to describe collection: %w", err)
+		return nil, fmt.Errorf("checking metadata fields: %w", err)
 	}
 
 	outputFields := []string{
@@ -249,17 +257,23 @@ func (m *milvusClient) SimilarVectorsInCollection(ctx context.Context, p service
 	}
 	var filterStrs []string
 	if hasMetadata {
-		// TODO filter by UID && add to hasmetadata
-		if fileName != "" {
-			filterStrs = append(filterStrs, fmt.Sprintf("file_name == '%s'", fileName))
+		if hasFileUID {
+			if fileUID != uuid.Nil {
+				filterStrs = append(filterStrs, fmt.Sprintf("%s == '%s'", kbCollectionFieldFileUID, fileUID.String()))
+			}
+		} else if fileName != "" {
+			filterStrs = append(filterStrs, fmt.Sprintf("%s == '%s'", kbCollectionFieldFileName, fileName))
 		}
+
 		if fileType != "" {
-			filterStrs = append(filterStrs, fmt.Sprintf("file_type == '%s'", fileType))
+			filterStrs = append(filterStrs, fmt.Sprintf("%s == '%s'", kbCollectionFieldFileType, fileType))
 		}
 		if contentType != "" {
-			filterStrs = append(filterStrs, fmt.Sprintf("content_type == '%s'", contentType))
+			filterStrs = append(filterStrs, fmt.Sprintf("%s == '%s'", kbCollectionFieldContentType, contentType))
 		}
+
 		outputFields = append(outputFields,
+			kbCollectionFieldFileUID,
 			kbCollectionFieldFileName,
 			kbCollectionFieldFileType,
 			kbCollectionFieldContentType)
@@ -275,8 +289,7 @@ func (m *milvusClient) SimilarVectorsInCollection(ctx context.Context, p service
 	// Perform the search
 	sp, err := entity.NewIndexSCANNSearchParam(nProbe, reorderK)
 	if err != nil {
-		logger.Error("failed to create search param", zap.Error(err))
-		return nil, fmt.Errorf("failed to create search param: %w", err)
+		return nil, fmt.Errorf("creating search param: %w", err)
 	}
 	results, err := m.c.Search(
 		ctx,
@@ -291,10 +304,10 @@ func (m *milvusClient) SimilarVectorsInCollection(ctx context.Context, p service
 		sp,
 	)
 	if err != nil {
-		logger.Error("failed to search embeddings", zap.Error(err))
-		return nil, fmt.Errorf("failed to search embeddings: %w", err)
+		return nil, fmt.Errorf("searching embeddings: %w", err)
 	}
-	logger.Info("search embeddings", zap.Duration("duration", time.Since(t)))
+	logger.Info("Embeddings search.", zap.Duration("duration", time.Since(t)))
+
 	// Extract the embeddings from the search results
 	var embeddings [][]service.SimilarEmbedding
 	for _, result := range results {
@@ -303,19 +316,16 @@ func (m *milvusClient) SimilarVectorsInCollection(ctx context.Context, p service
 		}
 		sourceTables, err := getStringData(result.Fields.GetColumn(kbCollectionFieldSourceTable))
 		if err != nil {
-			logger.Error("error with source_table column", zap.Error(err))
-			return nil, fmt.Errorf("error with source_table column: %w", err)
+			return nil, fmt.Errorf("getting source table column value: %w", err)
 		}
 
 		sourceUIDs, err := getStringData(result.Fields.GetColumn(kbCollectionFieldSourceUID))
 		if err != nil {
-			logger.Error("error with source_uid column", zap.Error(err))
-			return nil, fmt.Errorf("error with source_uid column: %w", err)
+			return nil, fmt.Errorf("getting source UID column value: %w", err)
 		}
 		embeddingUIDs, err := getStringData(result.Fields.GetColumn(kbCollectionFieldEmbeddingUID))
 		if err != nil {
-			logger.Error("error with embedding_uid column", zap.Error(err))
-			return nil, fmt.Errorf("error with embedding_uid column: %w", err)
+			return nil, fmt.Errorf("getting embedding UID column value: %w", err)
 		}
 		vectors := result.Fields.GetColumn(kbCollectionFieldEmbedding).(*entity.ColumnFloatVector)
 		scores := result.Scores
@@ -340,19 +350,27 @@ func (m *milvusClient) DropCollection(ctx context.Context, collectionName string
 	return m.c.DropCollection(ctx, collectionName)
 }
 
-func (m *milvusClient) checkMetadataField(ctx context.Context, collectionName string) (bool, error) {
+// checkMetadataFields returns whether the collection schema has metadata
+// fields. Additionally, it checks the file UID metadata field separately as it
+// was introduced later and certain legacy collections don't have it.
+func (m *milvusClient) checkMetadataFields(ctx context.Context, collectionName string) (hasMetadata, hasFileUID bool, _ error) {
 	collDesc, err := m.c.DescribeCollection(ctx, collectionName)
 	if err != nil {
-		return false, fmt.Errorf("failed to describe collection: %w", err)
+		return false, false, fmt.Errorf("describing collection: %w", err)
 	}
 
 	var existingFields = map[string]bool{}
 	for _, field := range collDesc.Schema.Fields {
 		existingFields[field.Name] = true
 	}
-	return existingFields[kbCollectionFieldFileName] &&
+
+	hasMetadata = existingFields[kbCollectionFieldFileName] &&
 		existingFields[kbCollectionFieldFileType] &&
-		existingFields[kbCollectionFieldContentType], nil
+		existingFields[kbCollectionFieldContentType]
+
+	hasFileUID = existingFields[kbCollectionFieldFileUID]
+
+	return hasMetadata, hasFileUID, nil
 }
 
 func getStringData(col entity.Column) ([]string, error) {

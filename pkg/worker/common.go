@@ -284,6 +284,7 @@ func saveEmbeddings(ctx context.Context, svc service.Service, kbUID uuid.UUID, e
 					SourceUID:    emb.SourceUID.String(),
 					EmbeddingUID: emb.UID.String(),
 					Vector:       emb.Vector,
+					FileUID:      emb.KbFileUID,
 					FileName:     fileName,
 					FileType:     emb.FileType,
 					ContentType:  emb.ContentType,

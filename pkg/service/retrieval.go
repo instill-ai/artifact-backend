@@ -9,9 +9,10 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/instill-ai/artifact-backend/pkg/constant"
+	"github.com/instill-ai/artifact-backend/pkg/errors"
 	"github.com/instill-ai/x/log"
 
-	artifactPb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
 type SimChunk struct {
@@ -20,7 +21,7 @@ type SimChunk struct {
 }
 
 // SimilarityChunksSearch ...
-func (s *service) SimilarityChunksSearch(ctx context.Context, ownerUID uuid.UUID, req *artifactPb.SimilarityChunksSearchRequest) ([]SimChunk, error) {
+func (s *service) SimilarityChunksSearch(ctx context.Context, ownerUID uuid.UUID, req *artifactpb.SimilarityChunksSearchRequest) ([]SimChunk, error) {
 	log, _ := log.GetZapLogger(ctx)
 	t := time.Now()
 	// check if text prompt is empty
@@ -47,9 +48,9 @@ func (s *service) SimilarityChunksSearch(ctx context.Context, ownerUID uuid.UUID
 
 	var fileType constant.FileType
 	switch req.GetFileMediaType() {
-	case artifactPb.FileMediaType_FILE_MEDIA_TYPE_DOCUMENT:
+	case artifactpb.FileMediaType_FILE_MEDIA_TYPE_DOCUMENT:
 		fileType = constant.DocumentFileType
-	case artifactPb.FileMediaType_FILE_MEDIA_TYPE_UNSPECIFIED:
+	case artifactpb.FileMediaType_FILE_MEDIA_TYPE_UNSPECIFIED:
 		fileType = ""
 	default:
 		return nil, fmt.Errorf("unsupported file type: %v", req.GetFileMediaType())
@@ -57,16 +58,39 @@ func (s *service) SimilarityChunksSearch(ctx context.Context, ownerUID uuid.UUID
 
 	var contentType constant.ContentType
 	switch req.GetContentType() {
-	case artifactPb.ContentType_CONTENT_TYPE_CHUNK:
+	case artifactpb.ContentType_CONTENT_TYPE_CHUNK:
 		contentType = constant.ChunkContentType
-	case artifactPb.ContentType_CONTENT_TYPE_SUMMARY:
+	case artifactpb.ContentType_CONTENT_TYPE_SUMMARY:
 		contentType = constant.SummaryContentType
-	case artifactPb.ContentType_CONTENT_TYPE_AUGMENTED:
+	case artifactpb.ContentType_CONTENT_TYPE_AUGMENTED:
 		contentType = constant.AugmentedContentType
-	case artifactPb.ContentType_CONTENT_TYPE_UNSPECIFIED:
+	case artifactpb.ContentType_CONTENT_TYPE_UNSPECIFIED:
 		contentType = ""
 	default:
 		return nil, fmt.Errorf("unsupported content type: %v", req.GetContentType())
+	}
+
+	var fileName string
+	var fileUID uuid.UUID
+	if req.GetFileUid() != "" {
+		fileUID = uuid.FromStringOrNil(req.GetFileUid())
+		kbfs, err := s.repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{fileUID})
+		switch {
+		case err != nil:
+			return nil, fmt.Errorf("fetching file from repository: %w", err)
+		case len(kbfs) == 0:
+			return nil, fmt.Errorf("fetching file from repository: %w", errors.ErrNotFound)
+		}
+
+		fileName = kbfs[0].Name
+	} else if req.GetFileName() != "" {
+		fileName = req.GetFileName()
+		kbf, err := s.repository.GetKnowledgebaseFileByKbUIDAndFileID(ctx, kb.UID, fileName)
+		if err != nil {
+			return nil, fmt.Errorf("fetching kb file: %w", err)
+		}
+
+		fileUID = kbf.UID
 	}
 
 	topK := req.GetTopK()
@@ -77,7 +101,8 @@ func (s *service) SimilarityChunksSearch(ctx context.Context, ownerUID uuid.UUID
 		CollectionID: KBCollectionName(kb.UID),
 		Vectors:      textVector,
 		TopK:         topK,
-		FileName:     req.GetFileName(),
+		FileUID:      fileUID,
+		FileName:     fileName,
 		FileType:     string(fileType),
 		ContentType:  string(contentType),
 	}

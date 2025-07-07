@@ -14,7 +14,7 @@ type Embedding struct {
 	SourceUID    string
 	EmbeddingUID string
 	Vector       []float32
-	FileUID      string
+	FileUID      uuid.UUID
 	FileName     string
 	FileType     string
 	ContentType  string
@@ -32,9 +32,19 @@ type SimilarVectorSearchParam struct {
 	CollectionID string
 	Vectors      [][]float32
 	TopK         uint32
-	FileName     string
+	FileUID      uuid.UUID
 	FileType     string
 	ContentType  string
+
+	// The filename filter was implemented back when the filename in a catalog was
+	// unique, which isn't the case anymore. Using this filter might yield
+	// unexpected results if there are several files with the same name in the
+	// collection.
+	// We need this field, however, as a fallback for collections that don't
+	// have a file UID in the schema. Some collections have rigid schemas
+	// without dynamic fields, so the original schema (with filename) couldn't
+	// be extended and backfilled to have a file UID.
+	FileName string
 }
 
 // VectorDatabase implements the use necesasry cases to interact with a vector
