@@ -11,6 +11,7 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 
 	"github.com/instill-ai/artifact-backend/config"
+	"github.com/instill-ai/artifact-backend/pkg/db"
 )
 
 func dbExistsOrCreate(databaseConfig config.DatabaseConfig) error {
@@ -78,7 +79,7 @@ func main() {
 		panic(err)
 	}
 
-	expectedVersion := databaseConfig.Version
+	expectedVersion := db.TargetSchemaVersion
 	curVersion, dirty, err := m.Version()
 	if err != nil && curVersion != 0 {
 		panic(err)

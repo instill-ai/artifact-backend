@@ -263,27 +263,14 @@ func (r *Repository) KnowledgeBaseFileTableName() string {
 }
 
 func (r *Repository) CreateKnowledgeBaseFile(ctx context.Context, kb KnowledgeBaseFile, externalServiceCall func(fileUID string) error) (*KnowledgeBaseFile, error) {
-	// check if the file already exists in the same knowledge base and not delete
-	var existingFile KnowledgeBaseFile
-	whereClause := fmt.Sprintf("%s = ? AND %s = ? AND %v is NULL",
-		KnowledgeBaseFileColumn.KnowledgeBaseUID, KnowledgeBaseFileColumn.Name, KnowledgeBaseFileColumn.DeleteTime)
-	if err := r.db.Where(whereClause, kb.KnowledgeBaseUID, kb.Name).First(&existingFile).Error; err != nil {
-		if err != gorm.ErrRecordNotFound {
-			return nil, err
-		}
-	} else {
-		return nil, fmt.Errorf("file already exists in the catalog. file: {%v}", kb.Name)
-	}
-
-	exist, err := r.checkIfKnowledgeBaseExists(ctx, kb.KnowledgeBaseUID.String())
+	exists, err := r.checkIfKnowledgeBaseExists(ctx, kb.KnowledgeBaseUID)
 	if err != nil {
-		return nil, err
-	}
-	if !exist {
-		return nil, fmt.Errorf("catalog does not exist. catalog.uid:{%v}", kb.KnowledgeBaseUID.String())
+		return nil, fmt.Errorf("checking knowledge base existence: %w", err)
 	}
 
-	// kb.ExtraMetaData = "{}"
+	if !exists {
+		return nil, fmt.Errorf("catalog does not exist")
+	}
 
 	// Use a transaction to create the knowledge base file and call the external service
 	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {

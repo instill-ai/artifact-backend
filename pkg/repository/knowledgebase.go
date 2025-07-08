@@ -248,17 +248,18 @@ func (r *Repository) checkIfKbIDUnique(ctx context.Context, owner string, kbID s
 }
 
 // check if knowledge base exists by kb_uid
-func (r *Repository) checkIfKnowledgeBaseExists(ctx context.Context, kbUID string) (bool, error) {
-	var existingKB KnowledgeBase
+func (r *Repository) checkIfKnowledgeBaseExists(ctx context.Context, kbUID uuid.UUID) (bool, error) {
 	whereString := fmt.Sprintf("%v = ? AND %s is NULL", KnowledgeBaseColumn.UID, KnowledgeBaseColumn.DeleteTime)
-	if err := r.db.WithContext(ctx).Where(whereString, kbUID).First(&existingKB).Error; err != nil {
+	err := r.db.WithContext(ctx).Where(whereString, kbUID).First(&KnowledgeBase{}).Error
+	if err != nil {
 		if err != gorm.ErrRecordNotFound {
 			return false, err
 		}
-	} else {
-		return true, nil
+
+		return false, nil
 	}
-	return false, nil
+
+	return true, nil
 }
 
 // get the knowledge base by (owner, kb_id)

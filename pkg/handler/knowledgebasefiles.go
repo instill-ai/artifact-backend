@@ -101,7 +101,7 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 				req.File.Name, errors.ErrInvalidArgument)
 		}
 		// determine the file type by its extension
-		req.File.Type = DetermineFileType(req.File.Name)
+		req.File.Type = determineFileType(req.File.Name)
 		if req.File.Type == artifactpb.FileType_FILE_TYPE_UNSPECIFIED {
 			return nil, fmt.Errorf("file extension is not supported. name: %s err: %w",
 				req.File.Name, errors.ErrInvalidArgument)
@@ -207,7 +207,7 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 		// 		humanReadable, tier.String(), errors.ErrInvalidArgument)
 		// }
 
-		req.File.Type = DetermineFileType(object.Name)
+		req.File.Type = determineFileType(object.Name)
 
 		kbFile := repository.KnowledgeBaseFile{
 			Name:                      object.Name,
@@ -225,16 +225,14 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 		res, err = ph.service.Repository().CreateKnowledgeBaseFile(ctx, kbFile, nil)
 
 		if err != nil {
-			log.Error("failed to create catalog file", zap.Error(err))
-			return nil, err
+			return nil, fmt.Errorf("creating catalog file: %w", err)
 		}
 
 		// increase catalog usage. need to increase after the file is created.
 		// Note: in the future, we need to increase the usage in transaction with creating the file.
 		err = ph.service.Repository().IncreaseKnowledgeBaseUsage(ctx, nil, kb.UID.String(), int(object.Size))
 		if err != nil {
-			log.Error("failed to increase catalog usage", zap.Error(err))
-			return nil, err
+			return nil, fmt.Errorf("increasing catalog usage: %w", err)
 		}
 	}
 
@@ -863,8 +861,7 @@ func fileTypeConvertToMime(t artifactpb.FileType) string {
 	}
 }
 
-// DetermineFileType determine the file type by its extension
-func DetermineFileType(fileName string) artifactpb.FileType {
+func determineFileType(fileName string) artifactpb.FileType {
 	if strings.HasSuffix(fileName, ".pdf") {
 		return artifactpb.FileType_FILE_TYPE_PDF
 	} else if strings.HasSuffix(fileName, ".md") {
