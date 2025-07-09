@@ -9,9 +9,10 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/instill-ai/artifact-backend/pkg/constant"
+	"github.com/instill-ai/artifact-backend/pkg/errors"
 	"github.com/instill-ai/x/log"
 
-	artifactPb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
 type SimChunk struct {
@@ -20,7 +21,7 @@ type SimChunk struct {
 }
 
 // SimilarityChunksSearch ...
-func (s *service) SimilarityChunksSearch(ctx context.Context, ownerUID uuid.UUID, req *artifactPb.SimilarityChunksSearchRequest) ([]SimChunk, error) {
+func (s *service) SimilarityChunksSearch(ctx context.Context, ownerUID uuid.UUID, req *artifactpb.SimilarityChunksSearchRequest) ([]SimChunk, error) {
 	log, _ := log.GetZapLogger(ctx)
 	t := time.Now()
 	// check if text prompt is empty
@@ -41,41 +42,77 @@ func (s *service) SimilarityChunksSearch(ctx context.Context, ownerUID uuid.UUID
 		return nil, fmt.Errorf("failed to get knowledge base by owner and id. err: %w", err)
 	}
 	log.Info("get knowledge base by owner and id", zap.Duration("duration", time.Since(t)))
+
+	// Search similar embeddings in KB.
 	t = time.Now()
 
 	var fileType constant.FileType
-	var contentType constant.ContentType
-	switch req.FileMediaType {
-	case artifactPb.FileMediaType_FILE_MEDIA_TYPE_DOCUMENT:
+	switch req.GetFileMediaType() {
+	case artifactpb.FileMediaType_FILE_MEDIA_TYPE_DOCUMENT:
 		fileType = constant.DocumentFileType
-	case artifactPb.FileMediaType_FILE_MEDIA_TYPE_UNSPECIFIED:
+	case artifactpb.FileMediaType_FILE_MEDIA_TYPE_UNSPECIFIED:
 		fileType = ""
 	default:
-		log.Error(fmt.Sprintf("unsupported file type: %v", req.FileMediaType))
-		return nil, fmt.Errorf("unsupported file type: %v", req.FileMediaType)
+		return nil, fmt.Errorf("unsupported file type: %v", req.GetFileMediaType())
 	}
 
-	switch req.ContentType {
-	case artifactPb.ContentType_CONTENT_TYPE_CHUNK:
+	var contentType constant.ContentType
+	switch req.GetContentType() {
+	case artifactpb.ContentType_CONTENT_TYPE_CHUNK:
 		contentType = constant.ChunkContentType
-	case artifactPb.ContentType_CONTENT_TYPE_SUMMARY:
+	case artifactpb.ContentType_CONTENT_TYPE_SUMMARY:
 		contentType = constant.SummaryContentType
-	case artifactPb.ContentType_CONTENT_TYPE_AUGMENTED:
+	case artifactpb.ContentType_CONTENT_TYPE_AUGMENTED:
 		contentType = constant.AugmentedContentType
-	case artifactPb.ContentType_CONTENT_TYPE_UNSPECIFIED:
+	case artifactpb.ContentType_CONTENT_TYPE_UNSPECIFIED:
 		contentType = ""
 	default:
-		log.Error(fmt.Sprintf("unsupported content type: %v", req.ContentType))
-		return nil, fmt.Errorf("unsupported content type: %v", req.ContentType)
+		return nil, fmt.Errorf("unsupported content type: %v", req.GetContentType())
 	}
 
-	// search similar embeddings in kb
-	simEmbeddings, err := s.milvusClient.SearchSimilarEmbeddingsInKB(ctx, kb.UID.String(), textVector, int(req.TopK), req.FileName, string(fileType), string(contentType))
-	if err != nil {
-		log.Error("failed to search similar embeddings in kb", zap.Error(err))
-		return nil, fmt.Errorf("failed to search similar embeddings in kb. err: %w", err)
+	var fileName string
+	var fileUID uuid.UUID
+	if req.GetFileUid() != "" {
+		fileUID = uuid.FromStringOrNil(req.GetFileUid())
+		kbfs, err := s.repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{fileUID})
+		switch {
+		case err != nil:
+			return nil, fmt.Errorf("fetching file from repository: %w", err)
+		case len(kbfs) == 0:
+			return nil, fmt.Errorf("fetching file from repository: %w", errors.ErrNotFound)
+		}
+
+		fileName = kbfs[0].Name
+	} else if req.GetFileName() != "" {
+		fileName = req.GetFileName()
+		kbf, err := s.repository.GetKnowledgebaseFileByKbUIDAndFileID(ctx, kb.UID, fileName)
+		if err != nil {
+			return nil, fmt.Errorf("fetching kb file: %w", err)
+		}
+
+		fileUID = kbf.UID
 	}
-	log.Info("search similar embeddings in kb", zap.Duration("duration", time.Since(t)))
+
+	topK := req.GetTopK()
+	if topK == 0 {
+		topK = 5
+	}
+	searchParam := SimilarVectorSearchParam{
+		CollectionID: KBCollectionName(kb.UID),
+		Vectors:      textVector,
+		TopK:         topK,
+		FileUID:      fileUID,
+		FileName:     fileName,
+		FileType:     string(fileType),
+		ContentType:  string(contentType),
+	}
+
+	simEmbeddings, err := s.vectorDB.SimilarVectorsInCollection(ctx, searchParam)
+	if err != nil {
+		return nil, fmt.Errorf("searching similar embeddings in KB: %w", err)
+	}
+
+	log.Info("Search similar embeddings in KB", zap.Duration("duration", time.Since(t)))
 
 	// fetch chunks by their UIDs
 	res := make([]SimChunk, 0, len(simEmbeddings))

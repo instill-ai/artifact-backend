@@ -7,7 +7,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/instill-ai/artifact-backend/pkg/acl"
-	"github.com/instill-ai/artifact-backend/pkg/customerror"
+	"github.com/instill-ai/artifact-backend/pkg/errors"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/resource"
 	"github.com/instill-ai/x/log"
@@ -40,7 +40,7 @@ func (s *service) CheckCatalogUserPermission(ctx context.Context, nsID, catalogI
 		return nil, nil, fmt.Errorf("failed to check permission. err: %w", err)
 	}
 	if !granted {
-		return nil, nil, fmt.Errorf("no permission. err: %w", customerror.ErrNoPermission)
+		return nil, nil, fmt.Errorf("no permission. err: %w", errors.ErrUnauthorized)
 	}
 
 	return ns, catalog, nil

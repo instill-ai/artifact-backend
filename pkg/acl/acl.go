@@ -20,6 +20,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/x/resource"
 
+	errdomain "github.com/instill-ai/artifact-backend/pkg/errors"
 	constantx "github.com/instill-ai/x/constant"
 )
 
@@ -315,7 +316,7 @@ func (c *ACLClient) CheckPermission(ctx context.Context, objectType string, obje
 
 	// Check if the user UID is empty and return an error if it is
 	if userUID == "" {
-		return false, fmt.Errorf("userUID is empty in check permission")
+		return false, fmt.Errorf("%w: userUID is empty in check permission", errdomain.ErrUnauthenticated)
 	}
 
 	// Create a CheckRequest to verify the user's permission for the specified object and role

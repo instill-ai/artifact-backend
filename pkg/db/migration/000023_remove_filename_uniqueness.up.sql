@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS idx_unique_kb_uid_name_delete_time;

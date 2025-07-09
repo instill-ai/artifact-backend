@@ -7,9 +7,9 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
+	"github.com/instill-ai/artifact-backend/pkg/errors"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
 
-	customerror "github.com/instill-ai/artifact-backend/pkg/customerror"
 	pb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
@@ -39,7 +39,7 @@ func (r *Repository) GetRepositoryTag(_ context.Context, name utils.RepositoryTa
 		First(record); result.Error != nil {
 
 		if result.Error == gorm.ErrRecordNotFound {
-			return nil, customerror.ErrNotFound
+			return nil, errors.ErrNotFound
 		}
 
 		return nil, result.Error
@@ -92,7 +92,7 @@ func (r *Repository) DeleteRepositoryTag(_ context.Context, digest string) error
 		Delete(record); result.Error != nil {
 
 		if result.Error == gorm.ErrRecordNotFound {
-			return customerror.ErrNotFound
+			return errors.ErrNotFound
 		}
 
 		return result.Error

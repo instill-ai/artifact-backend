@@ -7,7 +7,6 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/instill-ai/artifact-backend/pkg/acl"
-	"github.com/instill-ai/artifact-backend/pkg/milvus"
 	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/resource"
@@ -47,7 +46,7 @@ type Service interface {
 	Repository() repository.RepositoryI
 	MinIO() minio.MinioI
 	ACLClient() *acl.ACLClient
-	MilvusClient() milvus.MilvusClientI
+	VectorDB() VectorDatabase
 	RedisClient() *redis.Client
 }
 
@@ -58,7 +57,7 @@ type service struct {
 	pipelinePub    pipelinepb.PipelinePublicServiceClient
 	registryClient RegistryClient
 	redisClient    *redis.Client
-	milvusClient   milvus.MilvusClientI
+	vectorDB       VectorDatabase
 	aclClient      *acl.ACLClient
 }
 
@@ -70,7 +69,7 @@ func NewService(
 	pipelinePub pipelinepb.PipelinePublicServiceClient,
 	rgc RegistryClient,
 	rc *redis.Client,
-	milvusClient milvus.MilvusClientI,
+	vectorDB VectorDatabase,
 	aclClient *acl.ACLClient,
 ) Service {
 	return &service{
@@ -80,7 +79,7 @@ func NewService(
 		pipelinePub:    pipelinePub,
 		registryClient: rgc,
 		redisClient:    rc,
-		milvusClient:   milvusClient,
+		vectorDB:       vectorDB,
 		aclClient:      aclClient,
 	}
 }
@@ -88,5 +87,5 @@ func NewService(
 func (s *service) Repository() repository.RepositoryI { return s.repository }
 func (s *service) MinIO() minio.MinioI                { return s.minIO }
 func (s *service) ACLClient() *acl.ACLClient          { return s.aclClient }
-func (s *service) MilvusClient() milvus.MilvusClientI { return s.milvusClient }
 func (s *service) RedisClient() *redis.Client         { return s.redisClient }
+func (s *service) VectorDB() VectorDatabase           { return s.vectorDB }

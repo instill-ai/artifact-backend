@@ -11,7 +11,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/instill-ai/artifact-backend/pkg/constant"
-	"github.com/instill-ai/artifact-backend/pkg/milvus"
 	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/service"
@@ -244,14 +243,17 @@ func saveChunks(ctx context.Context, svc service.Service, kbUID string, kbFileUI
 // Processes embeddings in batches of 50 to avoid timeout issues.
 const batchSize = 50
 
-func saveEmbeddings(ctx context.Context, svc service.Service, kbUID string, embeddings []repository.Embedding, fileName string) error {
+func saveEmbeddings(ctx context.Context, svc service.Service, kbUID uuid.UUID, embeddings []repository.Embedding, fileName string) error {
 	logger, _ := log.GetZapLogger(ctx)
+	logger = logger.With(zap.String("KbUID", kbUID.String()))
+
 	if len(embeddings) == 0 {
 		logger.Debug("No embeddings to save")
 		return nil
 	}
 
 	totalEmbeddings := len(embeddings)
+	logger = logger.With(zap.Int("total", totalEmbeddings))
 
 	// Process embeddings in batches
 	for i := 0; i < totalEmbeddings; i += batchSize {
@@ -267,50 +269,42 @@ func saveEmbeddings(ctx context.Context, svc service.Service, kbUID string, embe
 
 		currentBatch := embeddings[i:end]
 
+		logger := logger.With(
+			zap.Int("batch", i/batchSize+1),
+			zap.Int("batchSize", len(currentBatch)),
+			zap.Int("progress", end),
+		)
+
 		externalServiceCall := func(_ []string) error {
 			// save the embeddings into vector database
-			milvusEmbeddings := make([]milvus.Embedding, len(currentBatch))
+			milvusEmbeddings := make([]service.Embedding, len(currentBatch))
 			for j, emb := range currentBatch {
-				milvusEmbeddings[j] = milvus.Embedding{
+				milvusEmbeddings[j] = service.Embedding{
 					SourceTable:  emb.SourceTable,
 					SourceUID:    emb.SourceUID.String(),
 					EmbeddingUID: emb.UID.String(),
 					Vector:       emb.Vector,
+					FileUID:      emb.KbFileUID,
 					FileName:     fileName,
 					FileType:     emb.FileType,
 					ContentType:  emb.ContentType,
 				}
 			}
-			err := svc.MilvusClient().InsertVectorsToKnowledgeBaseCollection(ctx, kbUID, milvusEmbeddings)
+			err := svc.VectorDB().InsertVectorsInCollection(ctx, service.KBCollectionName(kbUID), milvusEmbeddings)
 			if err != nil {
-				logger.Error("Failed to save embeddings batch into vector database.",
-					zap.String("KbUID", kbUID),
-					zap.Int("batch", i/batchSize+1),
-					zap.Int("batchSize", len(currentBatch)))
-				return err
+				return fmt.Errorf("saving embeddings in vector database: %w", err)
 			}
 			return nil
 		}
 
 		_, err := svc.Repository().UpsertEmbeddings(ctx, currentBatch, externalServiceCall)
 		if err != nil {
-			logger.Error("Failed to save embeddings batch into vector database and metadata into database.",
-				zap.String("KbUID", kbUID),
-				zap.Int("batch", i/batchSize+1),
-				zap.Int("batchSize", len(currentBatch)))
-			return err
+			return fmt.Errorf("saving embeddings metadata into database: %w", err)
 		}
 
-		logger.Info("Embeddings batch saved successfully",
-			zap.String("KbUID", kbUID),
-			zap.Int("batch", i/batchSize+1),
-			zap.Int("batchSize", len(currentBatch)),
-			zap.Int("progress", end),
-			zap.Int("total", totalEmbeddings))
+		logger.Info("Embeddings batch saved successfully")
 	}
 
-	logger.Info("All embeddings saved into vector database and metadata into database.",
-		zap.String("KbUID", kbUID),
-		zap.Int("total embeddings", totalEmbeddings))
+	logger.Info("All embeddings saved into vector database and metadata into database.")
 	return nil
 }

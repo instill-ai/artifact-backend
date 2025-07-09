@@ -83,7 +83,6 @@ type DatabaseConfig struct {
 	Host     string `koanf:"host"`
 	Port     int    `koanf:"port"`
 	Name     string `koanf:"name"`
-	Version  uint   `koanf:"version"`
 	TimeZone string `koanf:"timezone"`
 	Pool     struct {
 		IdleConnections int           `koanf:"idleconnections"`

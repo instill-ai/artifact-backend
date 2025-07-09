@@ -34,14 +34,14 @@ type RepositoryIMock struct {
 	beforeCreateConvertedFileCounter uint64
 	CreateConvertedFileMock          mRepositoryIMockCreateConvertedFile
 
-	funcCreateKnowledgeBase          func(ctx context.Context, kb mm_repository.KnowledgeBase, externalService func(kbUID string) error) (kp1 *mm_repository.KnowledgeBase, err error)
-	inspectFuncCreateKnowledgeBase   func(ctx context.Context, kb mm_repository.KnowledgeBase, externalService func(kbUID string) error)
+	funcCreateKnowledgeBase          func(ctx context.Context, kb mm_repository.KnowledgeBase, externalService func(kbUID uuid.UUID) error) (kp1 *mm_repository.KnowledgeBase, err error)
+	inspectFuncCreateKnowledgeBase   func(ctx context.Context, kb mm_repository.KnowledgeBase, externalService func(kbUID uuid.UUID) error)
 	afterCreateKnowledgeBaseCounter  uint64
 	beforeCreateKnowledgeBaseCounter uint64
 	CreateKnowledgeBaseMock          mRepositoryIMockCreateKnowledgeBase
 
-	funcCreateKnowledgeBaseFile          func(ctx context.Context, kb mm_repository.KnowledgeBaseFile, externalServiceCall func(FileUID string) error) (kp1 *mm_repository.KnowledgeBaseFile, err error)
-	inspectFuncCreateKnowledgeBaseFile   func(ctx context.Context, kb mm_repository.KnowledgeBaseFile, externalServiceCall func(FileUID string) error)
+	funcCreateKnowledgeBaseFile          func(ctx context.Context, kb mm_repository.KnowledgeBaseFile, externalServiceCall func(fileUID string) error) (kp1 *mm_repository.KnowledgeBaseFile, err error)
+	inspectFuncCreateKnowledgeBaseFile   func(ctx context.Context, kb mm_repository.KnowledgeBaseFile, externalServiceCall func(fileUID string) error)
 	afterCreateKnowledgeBaseFileCounter  uint64
 	beforeCreateKnowledgeBaseFileCounter uint64
 	CreateKnowledgeBaseFileMock          mRepositoryIMockCreateKnowledgeBaseFile
@@ -51,18 +51,6 @@ type RepositoryIMock struct {
 	afterCreateObjectCounter  uint64
 	beforeCreateObjectCounter uint64
 	CreateObjectMock          mRepositoryIMockCreateObject
-
-	funcCreateObjectURL          func(ctx context.Context, objectURL mm_repository.ObjectURL) (op1 *mm_repository.ObjectURL, err error)
-	inspectFuncCreateObjectURL   func(ctx context.Context, objectURL mm_repository.ObjectURL)
-	afterCreateObjectURLCounter  uint64
-	beforeCreateObjectURLCounter uint64
-	CreateObjectURLMock          mRepositoryIMockCreateObjectURL
-
-	funcCreateObjectURLWithUIDInEncodedURLPath          func(ctx context.Context, objectURL mm_repository.ObjectURL, namespaceID string, EncodedMinioURLPath func(namespaceID string, objectURLUUID uuid.UUID) string) (op1 *mm_repository.ObjectURL, err error)
-	inspectFuncCreateObjectURLWithUIDInEncodedURLPath   func(ctx context.Context, objectURL mm_repository.ObjectURL, namespaceID string, EncodedMinioURLPath func(namespaceID string, objectURLUUID uuid.UUID) string)
-	afterCreateObjectURLWithUIDInEncodedURLPathCounter  uint64
-	beforeCreateObjectURLWithUIDInEncodedURLPathCounter uint64
-	CreateObjectURLWithUIDInEncodedURLPathMock          mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath
 
 	funcDeleteAllConvertedFilesInKb          func(ctx context.Context, kbUID uuid.UUID) (err error)
 	inspectFuncDeleteAllConvertedFilesInKb   func(ctx context.Context, kbUID uuid.UUID)
@@ -439,12 +427,6 @@ type RepositoryIMock struct {
 	beforeUpdateObjectByUpdateMapCounter uint64
 	UpdateObjectByUpdateMapMock          mRepositoryIMockUpdateObjectByUpdateMap
 
-	funcUpdateObjectURL          func(ctx context.Context, objectURL mm_repository.ObjectURL) (op1 *mm_repository.ObjectURL, err error)
-	inspectFuncUpdateObjectURL   func(ctx context.Context, objectURL mm_repository.ObjectURL)
-	afterUpdateObjectURLCounter  uint64
-	beforeUpdateObjectURLCounter uint64
-	UpdateObjectURLMock          mRepositoryIMockUpdateObjectURL
-
 	funcUpsertEmbeddings          func(ctx context.Context, embeddings []mm_repository.Embedding, externalServiceCall func(embUIDs []string) error) (ea1 []mm_repository.Embedding, err error)
 	inspectFuncUpsertEmbeddings   func(ctx context.Context, embeddings []mm_repository.Embedding, externalServiceCall func(embUIDs []string) error)
 	afterUpsertEmbeddingsCounter  uint64
@@ -479,12 +461,6 @@ func NewRepositoryIMock(t minimock.Tester) *RepositoryIMock {
 
 	m.CreateObjectMock = mRepositoryIMockCreateObject{mock: m}
 	m.CreateObjectMock.callArgs = []*RepositoryIMockCreateObjectParams{}
-
-	m.CreateObjectURLMock = mRepositoryIMockCreateObjectURL{mock: m}
-	m.CreateObjectURLMock.callArgs = []*RepositoryIMockCreateObjectURLParams{}
-
-	m.CreateObjectURLWithUIDInEncodedURLPathMock = mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath{mock: m}
-	m.CreateObjectURLWithUIDInEncodedURLPathMock.callArgs = []*RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathParams{}
 
 	m.DeleteAllConvertedFilesInKbMock = mRepositoryIMockDeleteAllConvertedFilesInKb{mock: m}
 	m.DeleteAllConvertedFilesInKbMock.callArgs = []*RepositoryIMockDeleteAllConvertedFilesInKbParams{}
@@ -663,9 +639,6 @@ func NewRepositoryIMock(t minimock.Tester) *RepositoryIMock {
 
 	m.UpdateObjectByUpdateMapMock = mRepositoryIMockUpdateObjectByUpdateMap{mock: m}
 	m.UpdateObjectByUpdateMapMock.callArgs = []*RepositoryIMockUpdateObjectByUpdateMapParams{}
-
-	m.UpdateObjectURLMock = mRepositoryIMockUpdateObjectURL{mock: m}
-	m.UpdateObjectURLMock.callArgs = []*RepositoryIMockUpdateObjectURLParams{}
 
 	m.UpsertEmbeddingsMock = mRepositoryIMockUpsertEmbeddings{mock: m}
 	m.UpsertEmbeddingsMock.callArgs = []*RepositoryIMockUpsertEmbeddingsParams{}
@@ -1231,14 +1204,14 @@ type RepositoryIMockCreateKnowledgeBaseExpectation struct {
 type RepositoryIMockCreateKnowledgeBaseParams struct {
 	ctx             context.Context
 	kb              mm_repository.KnowledgeBase
-	externalService func(kbUID string) error
+	externalService func(kbUID uuid.UUID) error
 }
 
 // RepositoryIMockCreateKnowledgeBaseParamPtrs contains pointers to parameters of the RepositoryI.CreateKnowledgeBase
 type RepositoryIMockCreateKnowledgeBaseParamPtrs struct {
 	ctx             *context.Context
 	kb              *mm_repository.KnowledgeBase
-	externalService *func(kbUID string) error
+	externalService *func(kbUID uuid.UUID) error
 }
 
 // RepositoryIMockCreateKnowledgeBaseResults contains results of the RepositoryI.CreateKnowledgeBase
@@ -1258,7 +1231,7 @@ func (mmCreateKnowledgeBase *mRepositoryIMockCreateKnowledgeBase) Optional() *mR
 }
 
 // Expect sets up expected params for RepositoryI.CreateKnowledgeBase
-func (mmCreateKnowledgeBase *mRepositoryIMockCreateKnowledgeBase) Expect(ctx context.Context, kb mm_repository.KnowledgeBase, externalService func(kbUID string) error) *mRepositoryIMockCreateKnowledgeBase {
+func (mmCreateKnowledgeBase *mRepositoryIMockCreateKnowledgeBase) Expect(ctx context.Context, kb mm_repository.KnowledgeBase, externalService func(kbUID uuid.UUID) error) *mRepositoryIMockCreateKnowledgeBase {
 	if mmCreateKnowledgeBase.mock.funcCreateKnowledgeBase != nil {
 		mmCreateKnowledgeBase.mock.t.Fatalf("RepositoryIMock.CreateKnowledgeBase mock is already set by Set")
 	}
@@ -1326,7 +1299,7 @@ func (mmCreateKnowledgeBase *mRepositoryIMockCreateKnowledgeBase) ExpectKbParam2
 }
 
 // ExpectExternalServiceParam3 sets up expected param externalService for RepositoryI.CreateKnowledgeBase
-func (mmCreateKnowledgeBase *mRepositoryIMockCreateKnowledgeBase) ExpectExternalServiceParam3(externalService func(kbUID string) error) *mRepositoryIMockCreateKnowledgeBase {
+func (mmCreateKnowledgeBase *mRepositoryIMockCreateKnowledgeBase) ExpectExternalServiceParam3(externalService func(kbUID uuid.UUID) error) *mRepositoryIMockCreateKnowledgeBase {
 	if mmCreateKnowledgeBase.mock.funcCreateKnowledgeBase != nil {
 		mmCreateKnowledgeBase.mock.t.Fatalf("RepositoryIMock.CreateKnowledgeBase mock is already set by Set")
 	}
@@ -1348,7 +1321,7 @@ func (mmCreateKnowledgeBase *mRepositoryIMockCreateKnowledgeBase) ExpectExternal
 }
 
 // Inspect accepts an inspector function that has same arguments as the RepositoryI.CreateKnowledgeBase
-func (mmCreateKnowledgeBase *mRepositoryIMockCreateKnowledgeBase) Inspect(f func(ctx context.Context, kb mm_repository.KnowledgeBase, externalService func(kbUID string) error)) *mRepositoryIMockCreateKnowledgeBase {
+func (mmCreateKnowledgeBase *mRepositoryIMockCreateKnowledgeBase) Inspect(f func(ctx context.Context, kb mm_repository.KnowledgeBase, externalService func(kbUID uuid.UUID) error)) *mRepositoryIMockCreateKnowledgeBase {
 	if mmCreateKnowledgeBase.mock.inspectFuncCreateKnowledgeBase != nil {
 		mmCreateKnowledgeBase.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.CreateKnowledgeBase")
 	}
@@ -1372,7 +1345,7 @@ func (mmCreateKnowledgeBase *mRepositoryIMockCreateKnowledgeBase) Return(kp1 *mm
 }
 
 // Set uses given function f to mock the RepositoryI.CreateKnowledgeBase method
-func (mmCreateKnowledgeBase *mRepositoryIMockCreateKnowledgeBase) Set(f func(ctx context.Context, kb mm_repository.KnowledgeBase, externalService func(kbUID string) error) (kp1 *mm_repository.KnowledgeBase, err error)) *RepositoryIMock {
+func (mmCreateKnowledgeBase *mRepositoryIMockCreateKnowledgeBase) Set(f func(ctx context.Context, kb mm_repository.KnowledgeBase, externalService func(kbUID uuid.UUID) error) (kp1 *mm_repository.KnowledgeBase, err error)) *RepositoryIMock {
 	if mmCreateKnowledgeBase.defaultExpectation != nil {
 		mmCreateKnowledgeBase.mock.t.Fatalf("Default expectation is already set for the RepositoryI.CreateKnowledgeBase method")
 	}
@@ -1387,7 +1360,7 @@ func (mmCreateKnowledgeBase *mRepositoryIMockCreateKnowledgeBase) Set(f func(ctx
 
 // When sets expectation for the RepositoryI.CreateKnowledgeBase which will trigger the result defined by the following
 // Then helper
-func (mmCreateKnowledgeBase *mRepositoryIMockCreateKnowledgeBase) When(ctx context.Context, kb mm_repository.KnowledgeBase, externalService func(kbUID string) error) *RepositoryIMockCreateKnowledgeBaseExpectation {
+func (mmCreateKnowledgeBase *mRepositoryIMockCreateKnowledgeBase) When(ctx context.Context, kb mm_repository.KnowledgeBase, externalService func(kbUID uuid.UUID) error) *RepositoryIMockCreateKnowledgeBaseExpectation {
 	if mmCreateKnowledgeBase.mock.funcCreateKnowledgeBase != nil {
 		mmCreateKnowledgeBase.mock.t.Fatalf("RepositoryIMock.CreateKnowledgeBase mock is already set by Set")
 	}
@@ -1427,7 +1400,7 @@ func (mmCreateKnowledgeBase *mRepositoryIMockCreateKnowledgeBase) invocationsDon
 }
 
 // CreateKnowledgeBase implements repository.RepositoryI
-func (mmCreateKnowledgeBase *RepositoryIMock) CreateKnowledgeBase(ctx context.Context, kb mm_repository.KnowledgeBase, externalService func(kbUID string) error) (kp1 *mm_repository.KnowledgeBase, err error) {
+func (mmCreateKnowledgeBase *RepositoryIMock) CreateKnowledgeBase(ctx context.Context, kb mm_repository.KnowledgeBase, externalService func(kbUID uuid.UUID) error) (kp1 *mm_repository.KnowledgeBase, err error) {
 	mm_atomic.AddUint64(&mmCreateKnowledgeBase.beforeCreateKnowledgeBaseCounter, 1)
 	defer mm_atomic.AddUint64(&mmCreateKnowledgeBase.afterCreateKnowledgeBaseCounter, 1)
 
@@ -1580,14 +1553,14 @@ type RepositoryIMockCreateKnowledgeBaseFileExpectation struct {
 type RepositoryIMockCreateKnowledgeBaseFileParams struct {
 	ctx                 context.Context
 	kb                  mm_repository.KnowledgeBaseFile
-	externalServiceCall func(FileUID string) error
+	externalServiceCall func(fileUID string) error
 }
 
 // RepositoryIMockCreateKnowledgeBaseFileParamPtrs contains pointers to parameters of the RepositoryI.CreateKnowledgeBaseFile
 type RepositoryIMockCreateKnowledgeBaseFileParamPtrs struct {
 	ctx                 *context.Context
 	kb                  *mm_repository.KnowledgeBaseFile
-	externalServiceCall *func(FileUID string) error
+	externalServiceCall *func(fileUID string) error
 }
 
 // RepositoryIMockCreateKnowledgeBaseFileResults contains results of the RepositoryI.CreateKnowledgeBaseFile
@@ -1607,7 +1580,7 @@ func (mmCreateKnowledgeBaseFile *mRepositoryIMockCreateKnowledgeBaseFile) Option
 }
 
 // Expect sets up expected params for RepositoryI.CreateKnowledgeBaseFile
-func (mmCreateKnowledgeBaseFile *mRepositoryIMockCreateKnowledgeBaseFile) Expect(ctx context.Context, kb mm_repository.KnowledgeBaseFile, externalServiceCall func(FileUID string) error) *mRepositoryIMockCreateKnowledgeBaseFile {
+func (mmCreateKnowledgeBaseFile *mRepositoryIMockCreateKnowledgeBaseFile) Expect(ctx context.Context, kb mm_repository.KnowledgeBaseFile, externalServiceCall func(fileUID string) error) *mRepositoryIMockCreateKnowledgeBaseFile {
 	if mmCreateKnowledgeBaseFile.mock.funcCreateKnowledgeBaseFile != nil {
 		mmCreateKnowledgeBaseFile.mock.t.Fatalf("RepositoryIMock.CreateKnowledgeBaseFile mock is already set by Set")
 	}
@@ -1675,7 +1648,7 @@ func (mmCreateKnowledgeBaseFile *mRepositoryIMockCreateKnowledgeBaseFile) Expect
 }
 
 // ExpectExternalServiceCallParam3 sets up expected param externalServiceCall for RepositoryI.CreateKnowledgeBaseFile
-func (mmCreateKnowledgeBaseFile *mRepositoryIMockCreateKnowledgeBaseFile) ExpectExternalServiceCallParam3(externalServiceCall func(FileUID string) error) *mRepositoryIMockCreateKnowledgeBaseFile {
+func (mmCreateKnowledgeBaseFile *mRepositoryIMockCreateKnowledgeBaseFile) ExpectExternalServiceCallParam3(externalServiceCall func(fileUID string) error) *mRepositoryIMockCreateKnowledgeBaseFile {
 	if mmCreateKnowledgeBaseFile.mock.funcCreateKnowledgeBaseFile != nil {
 		mmCreateKnowledgeBaseFile.mock.t.Fatalf("RepositoryIMock.CreateKnowledgeBaseFile mock is already set by Set")
 	}
@@ -1697,7 +1670,7 @@ func (mmCreateKnowledgeBaseFile *mRepositoryIMockCreateKnowledgeBaseFile) Expect
 }
 
 // Inspect accepts an inspector function that has same arguments as the RepositoryI.CreateKnowledgeBaseFile
-func (mmCreateKnowledgeBaseFile *mRepositoryIMockCreateKnowledgeBaseFile) Inspect(f func(ctx context.Context, kb mm_repository.KnowledgeBaseFile, externalServiceCall func(FileUID string) error)) *mRepositoryIMockCreateKnowledgeBaseFile {
+func (mmCreateKnowledgeBaseFile *mRepositoryIMockCreateKnowledgeBaseFile) Inspect(f func(ctx context.Context, kb mm_repository.KnowledgeBaseFile, externalServiceCall func(fileUID string) error)) *mRepositoryIMockCreateKnowledgeBaseFile {
 	if mmCreateKnowledgeBaseFile.mock.inspectFuncCreateKnowledgeBaseFile != nil {
 		mmCreateKnowledgeBaseFile.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.CreateKnowledgeBaseFile")
 	}
@@ -1721,7 +1694,7 @@ func (mmCreateKnowledgeBaseFile *mRepositoryIMockCreateKnowledgeBaseFile) Return
 }
 
 // Set uses given function f to mock the RepositoryI.CreateKnowledgeBaseFile method
-func (mmCreateKnowledgeBaseFile *mRepositoryIMockCreateKnowledgeBaseFile) Set(f func(ctx context.Context, kb mm_repository.KnowledgeBaseFile, externalServiceCall func(FileUID string) error) (kp1 *mm_repository.KnowledgeBaseFile, err error)) *RepositoryIMock {
+func (mmCreateKnowledgeBaseFile *mRepositoryIMockCreateKnowledgeBaseFile) Set(f func(ctx context.Context, kb mm_repository.KnowledgeBaseFile, externalServiceCall func(fileUID string) error) (kp1 *mm_repository.KnowledgeBaseFile, err error)) *RepositoryIMock {
 	if mmCreateKnowledgeBaseFile.defaultExpectation != nil {
 		mmCreateKnowledgeBaseFile.mock.t.Fatalf("Default expectation is already set for the RepositoryI.CreateKnowledgeBaseFile method")
 	}
@@ -1736,7 +1709,7 @@ func (mmCreateKnowledgeBaseFile *mRepositoryIMockCreateKnowledgeBaseFile) Set(f 
 
 // When sets expectation for the RepositoryI.CreateKnowledgeBaseFile which will trigger the result defined by the following
 // Then helper
-func (mmCreateKnowledgeBaseFile *mRepositoryIMockCreateKnowledgeBaseFile) When(ctx context.Context, kb mm_repository.KnowledgeBaseFile, externalServiceCall func(FileUID string) error) *RepositoryIMockCreateKnowledgeBaseFileExpectation {
+func (mmCreateKnowledgeBaseFile *mRepositoryIMockCreateKnowledgeBaseFile) When(ctx context.Context, kb mm_repository.KnowledgeBaseFile, externalServiceCall func(fileUID string) error) *RepositoryIMockCreateKnowledgeBaseFileExpectation {
 	if mmCreateKnowledgeBaseFile.mock.funcCreateKnowledgeBaseFile != nil {
 		mmCreateKnowledgeBaseFile.mock.t.Fatalf("RepositoryIMock.CreateKnowledgeBaseFile mock is already set by Set")
 	}
@@ -1776,7 +1749,7 @@ func (mmCreateKnowledgeBaseFile *mRepositoryIMockCreateKnowledgeBaseFile) invoca
 }
 
 // CreateKnowledgeBaseFile implements repository.RepositoryI
-func (mmCreateKnowledgeBaseFile *RepositoryIMock) CreateKnowledgeBaseFile(ctx context.Context, kb mm_repository.KnowledgeBaseFile, externalServiceCall func(FileUID string) error) (kp1 *mm_repository.KnowledgeBaseFile, err error) {
+func (mmCreateKnowledgeBaseFile *RepositoryIMock) CreateKnowledgeBaseFile(ctx context.Context, kb mm_repository.KnowledgeBaseFile, externalServiceCall func(fileUID string) error) (kp1 *mm_repository.KnowledgeBaseFile, err error) {
 	mm_atomic.AddUint64(&mmCreateKnowledgeBaseFile.beforeCreateKnowledgeBaseFileCounter, 1)
 	defer mm_atomic.AddUint64(&mmCreateKnowledgeBaseFile.afterCreateKnowledgeBaseFileCounter, 1)
 
@@ -2222,704 +2195,6 @@ func (m *RepositoryIMock) MinimockCreateObjectInspect() {
 	if !m.CreateObjectMock.invocationsDone() && afterCreateObjectCounter > 0 {
 		m.t.Errorf("Expected %d calls to RepositoryIMock.CreateObject but found %d calls",
 			mm_atomic.LoadUint64(&m.CreateObjectMock.expectedInvocations), afterCreateObjectCounter)
-	}
-}
-
-type mRepositoryIMockCreateObjectURL struct {
-	optional           bool
-	mock               *RepositoryIMock
-	defaultExpectation *RepositoryIMockCreateObjectURLExpectation
-	expectations       []*RepositoryIMockCreateObjectURLExpectation
-
-	callArgs []*RepositoryIMockCreateObjectURLParams
-	mutex    sync.RWMutex
-
-	expectedInvocations uint64
-}
-
-// RepositoryIMockCreateObjectURLExpectation specifies expectation struct of the RepositoryI.CreateObjectURL
-type RepositoryIMockCreateObjectURLExpectation struct {
-	mock      *RepositoryIMock
-	params    *RepositoryIMockCreateObjectURLParams
-	paramPtrs *RepositoryIMockCreateObjectURLParamPtrs
-	results   *RepositoryIMockCreateObjectURLResults
-	Counter   uint64
-}
-
-// RepositoryIMockCreateObjectURLParams contains parameters of the RepositoryI.CreateObjectURL
-type RepositoryIMockCreateObjectURLParams struct {
-	ctx       context.Context
-	objectURL mm_repository.ObjectURL
-}
-
-// RepositoryIMockCreateObjectURLParamPtrs contains pointers to parameters of the RepositoryI.CreateObjectURL
-type RepositoryIMockCreateObjectURLParamPtrs struct {
-	ctx       *context.Context
-	objectURL *mm_repository.ObjectURL
-}
-
-// RepositoryIMockCreateObjectURLResults contains results of the RepositoryI.CreateObjectURL
-type RepositoryIMockCreateObjectURLResults struct {
-	op1 *mm_repository.ObjectURL
-	err error
-}
-
-// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
-// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
-// Optional() makes method check to work in '0 or more' mode.
-// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
-// catch the problems when the expected method call is totally skipped during test run.
-func (mmCreateObjectURL *mRepositoryIMockCreateObjectURL) Optional() *mRepositoryIMockCreateObjectURL {
-	mmCreateObjectURL.optional = true
-	return mmCreateObjectURL
-}
-
-// Expect sets up expected params for RepositoryI.CreateObjectURL
-func (mmCreateObjectURL *mRepositoryIMockCreateObjectURL) Expect(ctx context.Context, objectURL mm_repository.ObjectURL) *mRepositoryIMockCreateObjectURL {
-	if mmCreateObjectURL.mock.funcCreateObjectURL != nil {
-		mmCreateObjectURL.mock.t.Fatalf("RepositoryIMock.CreateObjectURL mock is already set by Set")
-	}
-
-	if mmCreateObjectURL.defaultExpectation == nil {
-		mmCreateObjectURL.defaultExpectation = &RepositoryIMockCreateObjectURLExpectation{}
-	}
-
-	if mmCreateObjectURL.defaultExpectation.paramPtrs != nil {
-		mmCreateObjectURL.mock.t.Fatalf("RepositoryIMock.CreateObjectURL mock is already set by ExpectParams functions")
-	}
-
-	mmCreateObjectURL.defaultExpectation.params = &RepositoryIMockCreateObjectURLParams{ctx, objectURL}
-	for _, e := range mmCreateObjectURL.expectations {
-		if minimock.Equal(e.params, mmCreateObjectURL.defaultExpectation.params) {
-			mmCreateObjectURL.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmCreateObjectURL.defaultExpectation.params)
-		}
-	}
-
-	return mmCreateObjectURL
-}
-
-// ExpectCtxParam1 sets up expected param ctx for RepositoryI.CreateObjectURL
-func (mmCreateObjectURL *mRepositoryIMockCreateObjectURL) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockCreateObjectURL {
-	if mmCreateObjectURL.mock.funcCreateObjectURL != nil {
-		mmCreateObjectURL.mock.t.Fatalf("RepositoryIMock.CreateObjectURL mock is already set by Set")
-	}
-
-	if mmCreateObjectURL.defaultExpectation == nil {
-		mmCreateObjectURL.defaultExpectation = &RepositoryIMockCreateObjectURLExpectation{}
-	}
-
-	if mmCreateObjectURL.defaultExpectation.params != nil {
-		mmCreateObjectURL.mock.t.Fatalf("RepositoryIMock.CreateObjectURL mock is already set by Expect")
-	}
-
-	if mmCreateObjectURL.defaultExpectation.paramPtrs == nil {
-		mmCreateObjectURL.defaultExpectation.paramPtrs = &RepositoryIMockCreateObjectURLParamPtrs{}
-	}
-	mmCreateObjectURL.defaultExpectation.paramPtrs.ctx = &ctx
-
-	return mmCreateObjectURL
-}
-
-// ExpectObjectURLParam2 sets up expected param objectURL for RepositoryI.CreateObjectURL
-func (mmCreateObjectURL *mRepositoryIMockCreateObjectURL) ExpectObjectURLParam2(objectURL mm_repository.ObjectURL) *mRepositoryIMockCreateObjectURL {
-	if mmCreateObjectURL.mock.funcCreateObjectURL != nil {
-		mmCreateObjectURL.mock.t.Fatalf("RepositoryIMock.CreateObjectURL mock is already set by Set")
-	}
-
-	if mmCreateObjectURL.defaultExpectation == nil {
-		mmCreateObjectURL.defaultExpectation = &RepositoryIMockCreateObjectURLExpectation{}
-	}
-
-	if mmCreateObjectURL.defaultExpectation.params != nil {
-		mmCreateObjectURL.mock.t.Fatalf("RepositoryIMock.CreateObjectURL mock is already set by Expect")
-	}
-
-	if mmCreateObjectURL.defaultExpectation.paramPtrs == nil {
-		mmCreateObjectURL.defaultExpectation.paramPtrs = &RepositoryIMockCreateObjectURLParamPtrs{}
-	}
-	mmCreateObjectURL.defaultExpectation.paramPtrs.objectURL = &objectURL
-
-	return mmCreateObjectURL
-}
-
-// Inspect accepts an inspector function that has same arguments as the RepositoryI.CreateObjectURL
-func (mmCreateObjectURL *mRepositoryIMockCreateObjectURL) Inspect(f func(ctx context.Context, objectURL mm_repository.ObjectURL)) *mRepositoryIMockCreateObjectURL {
-	if mmCreateObjectURL.mock.inspectFuncCreateObjectURL != nil {
-		mmCreateObjectURL.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.CreateObjectURL")
-	}
-
-	mmCreateObjectURL.mock.inspectFuncCreateObjectURL = f
-
-	return mmCreateObjectURL
-}
-
-// Return sets up results that will be returned by RepositoryI.CreateObjectURL
-func (mmCreateObjectURL *mRepositoryIMockCreateObjectURL) Return(op1 *mm_repository.ObjectURL, err error) *RepositoryIMock {
-	if mmCreateObjectURL.mock.funcCreateObjectURL != nil {
-		mmCreateObjectURL.mock.t.Fatalf("RepositoryIMock.CreateObjectURL mock is already set by Set")
-	}
-
-	if mmCreateObjectURL.defaultExpectation == nil {
-		mmCreateObjectURL.defaultExpectation = &RepositoryIMockCreateObjectURLExpectation{mock: mmCreateObjectURL.mock}
-	}
-	mmCreateObjectURL.defaultExpectation.results = &RepositoryIMockCreateObjectURLResults{op1, err}
-	return mmCreateObjectURL.mock
-}
-
-// Set uses given function f to mock the RepositoryI.CreateObjectURL method
-func (mmCreateObjectURL *mRepositoryIMockCreateObjectURL) Set(f func(ctx context.Context, objectURL mm_repository.ObjectURL) (op1 *mm_repository.ObjectURL, err error)) *RepositoryIMock {
-	if mmCreateObjectURL.defaultExpectation != nil {
-		mmCreateObjectURL.mock.t.Fatalf("Default expectation is already set for the RepositoryI.CreateObjectURL method")
-	}
-
-	if len(mmCreateObjectURL.expectations) > 0 {
-		mmCreateObjectURL.mock.t.Fatalf("Some expectations are already set for the RepositoryI.CreateObjectURL method")
-	}
-
-	mmCreateObjectURL.mock.funcCreateObjectURL = f
-	return mmCreateObjectURL.mock
-}
-
-// When sets expectation for the RepositoryI.CreateObjectURL which will trigger the result defined by the following
-// Then helper
-func (mmCreateObjectURL *mRepositoryIMockCreateObjectURL) When(ctx context.Context, objectURL mm_repository.ObjectURL) *RepositoryIMockCreateObjectURLExpectation {
-	if mmCreateObjectURL.mock.funcCreateObjectURL != nil {
-		mmCreateObjectURL.mock.t.Fatalf("RepositoryIMock.CreateObjectURL mock is already set by Set")
-	}
-
-	expectation := &RepositoryIMockCreateObjectURLExpectation{
-		mock:   mmCreateObjectURL.mock,
-		params: &RepositoryIMockCreateObjectURLParams{ctx, objectURL},
-	}
-	mmCreateObjectURL.expectations = append(mmCreateObjectURL.expectations, expectation)
-	return expectation
-}
-
-// Then sets up RepositoryI.CreateObjectURL return parameters for the expectation previously defined by the When method
-func (e *RepositoryIMockCreateObjectURLExpectation) Then(op1 *mm_repository.ObjectURL, err error) *RepositoryIMock {
-	e.results = &RepositoryIMockCreateObjectURLResults{op1, err}
-	return e.mock
-}
-
-// Times sets number of times RepositoryI.CreateObjectURL should be invoked
-func (mmCreateObjectURL *mRepositoryIMockCreateObjectURL) Times(n uint64) *mRepositoryIMockCreateObjectURL {
-	if n == 0 {
-		mmCreateObjectURL.mock.t.Fatalf("Times of RepositoryIMock.CreateObjectURL mock can not be zero")
-	}
-	mm_atomic.StoreUint64(&mmCreateObjectURL.expectedInvocations, n)
-	return mmCreateObjectURL
-}
-
-func (mmCreateObjectURL *mRepositoryIMockCreateObjectURL) invocationsDone() bool {
-	if len(mmCreateObjectURL.expectations) == 0 && mmCreateObjectURL.defaultExpectation == nil && mmCreateObjectURL.mock.funcCreateObjectURL == nil {
-		return true
-	}
-
-	totalInvocations := mm_atomic.LoadUint64(&mmCreateObjectURL.mock.afterCreateObjectURLCounter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmCreateObjectURL.expectedInvocations)
-
-	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
-}
-
-// CreateObjectURL implements repository.RepositoryI
-func (mmCreateObjectURL *RepositoryIMock) CreateObjectURL(ctx context.Context, objectURL mm_repository.ObjectURL) (op1 *mm_repository.ObjectURL, err error) {
-	mm_atomic.AddUint64(&mmCreateObjectURL.beforeCreateObjectURLCounter, 1)
-	defer mm_atomic.AddUint64(&mmCreateObjectURL.afterCreateObjectURLCounter, 1)
-
-	if mmCreateObjectURL.inspectFuncCreateObjectURL != nil {
-		mmCreateObjectURL.inspectFuncCreateObjectURL(ctx, objectURL)
-	}
-
-	mm_params := RepositoryIMockCreateObjectURLParams{ctx, objectURL}
-
-	// Record call args
-	mmCreateObjectURL.CreateObjectURLMock.mutex.Lock()
-	mmCreateObjectURL.CreateObjectURLMock.callArgs = append(mmCreateObjectURL.CreateObjectURLMock.callArgs, &mm_params)
-	mmCreateObjectURL.CreateObjectURLMock.mutex.Unlock()
-
-	for _, e := range mmCreateObjectURL.CreateObjectURLMock.expectations {
-		if minimock.Equal(*e.params, mm_params) {
-			mm_atomic.AddUint64(&e.Counter, 1)
-			return e.results.op1, e.results.err
-		}
-	}
-
-	if mmCreateObjectURL.CreateObjectURLMock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmCreateObjectURL.CreateObjectURLMock.defaultExpectation.Counter, 1)
-		mm_want := mmCreateObjectURL.CreateObjectURLMock.defaultExpectation.params
-		mm_want_ptrs := mmCreateObjectURL.CreateObjectURLMock.defaultExpectation.paramPtrs
-
-		mm_got := RepositoryIMockCreateObjectURLParams{ctx, objectURL}
-
-		if mm_want_ptrs != nil {
-
-			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
-				mmCreateObjectURL.t.Errorf("RepositoryIMock.CreateObjectURL got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
-			}
-
-			if mm_want_ptrs.objectURL != nil && !minimock.Equal(*mm_want_ptrs.objectURL, mm_got.objectURL) {
-				mmCreateObjectURL.t.Errorf("RepositoryIMock.CreateObjectURL got unexpected parameter objectURL, want: %#v, got: %#v%s\n", *mm_want_ptrs.objectURL, mm_got.objectURL, minimock.Diff(*mm_want_ptrs.objectURL, mm_got.objectURL))
-			}
-
-		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
-			mmCreateObjectURL.t.Errorf("RepositoryIMock.CreateObjectURL got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
-		}
-
-		mm_results := mmCreateObjectURL.CreateObjectURLMock.defaultExpectation.results
-		if mm_results == nil {
-			mmCreateObjectURL.t.Fatal("No results are set for the RepositoryIMock.CreateObjectURL")
-		}
-		return (*mm_results).op1, (*mm_results).err
-	}
-	if mmCreateObjectURL.funcCreateObjectURL != nil {
-		return mmCreateObjectURL.funcCreateObjectURL(ctx, objectURL)
-	}
-	mmCreateObjectURL.t.Fatalf("Unexpected call to RepositoryIMock.CreateObjectURL. %v %v", ctx, objectURL)
-	return
-}
-
-// CreateObjectURLAfterCounter returns a count of finished RepositoryIMock.CreateObjectURL invocations
-func (mmCreateObjectURL *RepositoryIMock) CreateObjectURLAfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmCreateObjectURL.afterCreateObjectURLCounter)
-}
-
-// CreateObjectURLBeforeCounter returns a count of RepositoryIMock.CreateObjectURL invocations
-func (mmCreateObjectURL *RepositoryIMock) CreateObjectURLBeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmCreateObjectURL.beforeCreateObjectURLCounter)
-}
-
-// Calls returns a list of arguments used in each call to RepositoryIMock.CreateObjectURL.
-// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
-func (mmCreateObjectURL *mRepositoryIMockCreateObjectURL) Calls() []*RepositoryIMockCreateObjectURLParams {
-	mmCreateObjectURL.mutex.RLock()
-
-	argCopy := make([]*RepositoryIMockCreateObjectURLParams, len(mmCreateObjectURL.callArgs))
-	copy(argCopy, mmCreateObjectURL.callArgs)
-
-	mmCreateObjectURL.mutex.RUnlock()
-
-	return argCopy
-}
-
-// MinimockCreateObjectURLDone returns true if the count of the CreateObjectURL invocations corresponds
-// the number of defined expectations
-func (m *RepositoryIMock) MinimockCreateObjectURLDone() bool {
-	if m.CreateObjectURLMock.optional {
-		// Optional methods provide '0 or more' call count restriction.
-		return true
-	}
-
-	for _, e := range m.CreateObjectURLMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			return false
-		}
-	}
-
-	return m.CreateObjectURLMock.invocationsDone()
-}
-
-// MinimockCreateObjectURLInspect logs each unmet expectation
-func (m *RepositoryIMock) MinimockCreateObjectURLInspect() {
-	for _, e := range m.CreateObjectURLMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Errorf("Expected call to RepositoryIMock.CreateObjectURL with params: %#v", *e.params)
-		}
-	}
-
-	afterCreateObjectURLCounter := mm_atomic.LoadUint64(&m.afterCreateObjectURLCounter)
-	// if default expectation was set then invocations count should be greater than zero
-	if m.CreateObjectURLMock.defaultExpectation != nil && afterCreateObjectURLCounter < 1 {
-		if m.CreateObjectURLMock.defaultExpectation.params == nil {
-			m.t.Error("Expected call to RepositoryIMock.CreateObjectURL")
-		} else {
-			m.t.Errorf("Expected call to RepositoryIMock.CreateObjectURL with params: %#v", *m.CreateObjectURLMock.defaultExpectation.params)
-		}
-	}
-	// if func was set then invocations count should be greater than zero
-	if m.funcCreateObjectURL != nil && afterCreateObjectURLCounter < 1 {
-		m.t.Error("Expected call to RepositoryIMock.CreateObjectURL")
-	}
-
-	if !m.CreateObjectURLMock.invocationsDone() && afterCreateObjectURLCounter > 0 {
-		m.t.Errorf("Expected %d calls to RepositoryIMock.CreateObjectURL but found %d calls",
-			mm_atomic.LoadUint64(&m.CreateObjectURLMock.expectedInvocations), afterCreateObjectURLCounter)
-	}
-}
-
-type mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath struct {
-	optional           bool
-	mock               *RepositoryIMock
-	defaultExpectation *RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathExpectation
-	expectations       []*RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathExpectation
-
-	callArgs []*RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathParams
-	mutex    sync.RWMutex
-
-	expectedInvocations uint64
-}
-
-// RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathExpectation specifies expectation struct of the RepositoryI.CreateObjectURLWithUIDInEncodedURLPath
-type RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathExpectation struct {
-	mock      *RepositoryIMock
-	params    *RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathParams
-	paramPtrs *RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathParamPtrs
-	results   *RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathResults
-	Counter   uint64
-}
-
-// RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathParams contains parameters of the RepositoryI.CreateObjectURLWithUIDInEncodedURLPath
-type RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathParams struct {
-	ctx                 context.Context
-	objectURL           mm_repository.ObjectURL
-	namespaceID         string
-	EncodedMinioURLPath func(namespaceID string, objectURLUUID uuid.UUID) string
-}
-
-// RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathParamPtrs contains pointers to parameters of the RepositoryI.CreateObjectURLWithUIDInEncodedURLPath
-type RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathParamPtrs struct {
-	ctx                 *context.Context
-	objectURL           *mm_repository.ObjectURL
-	namespaceID         *string
-	EncodedMinioURLPath *func(namespaceID string, objectURLUUID uuid.UUID) string
-}
-
-// RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathResults contains results of the RepositoryI.CreateObjectURLWithUIDInEncodedURLPath
-type RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathResults struct {
-	op1 *mm_repository.ObjectURL
-	err error
-}
-
-// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
-// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
-// Optional() makes method check to work in '0 or more' mode.
-// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
-// catch the problems when the expected method call is totally skipped during test run.
-func (mmCreateObjectURLWithUIDInEncodedURLPath *mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath) Optional() *mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath {
-	mmCreateObjectURLWithUIDInEncodedURLPath.optional = true
-	return mmCreateObjectURLWithUIDInEncodedURLPath
-}
-
-// Expect sets up expected params for RepositoryI.CreateObjectURLWithUIDInEncodedURLPath
-func (mmCreateObjectURLWithUIDInEncodedURLPath *mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath) Expect(ctx context.Context, objectURL mm_repository.ObjectURL, namespaceID string, EncodedMinioURLPath func(namespaceID string, objectURLUUID uuid.UUID) string) *mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath {
-	if mmCreateObjectURLWithUIDInEncodedURLPath.mock.funcCreateObjectURLWithUIDInEncodedURLPath != nil {
-		mmCreateObjectURLWithUIDInEncodedURLPath.mock.t.Fatalf("RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath mock is already set by Set")
-	}
-
-	if mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation == nil {
-		mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation = &RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathExpectation{}
-	}
-
-	if mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation.paramPtrs != nil {
-		mmCreateObjectURLWithUIDInEncodedURLPath.mock.t.Fatalf("RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath mock is already set by ExpectParams functions")
-	}
-
-	mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation.params = &RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathParams{ctx, objectURL, namespaceID, EncodedMinioURLPath}
-	for _, e := range mmCreateObjectURLWithUIDInEncodedURLPath.expectations {
-		if minimock.Equal(e.params, mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation.params) {
-			mmCreateObjectURLWithUIDInEncodedURLPath.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation.params)
-		}
-	}
-
-	return mmCreateObjectURLWithUIDInEncodedURLPath
-}
-
-// ExpectCtxParam1 sets up expected param ctx for RepositoryI.CreateObjectURLWithUIDInEncodedURLPath
-func (mmCreateObjectURLWithUIDInEncodedURLPath *mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath {
-	if mmCreateObjectURLWithUIDInEncodedURLPath.mock.funcCreateObjectURLWithUIDInEncodedURLPath != nil {
-		mmCreateObjectURLWithUIDInEncodedURLPath.mock.t.Fatalf("RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath mock is already set by Set")
-	}
-
-	if mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation == nil {
-		mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation = &RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathExpectation{}
-	}
-
-	if mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation.params != nil {
-		mmCreateObjectURLWithUIDInEncodedURLPath.mock.t.Fatalf("RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath mock is already set by Expect")
-	}
-
-	if mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation.paramPtrs == nil {
-		mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation.paramPtrs = &RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathParamPtrs{}
-	}
-	mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation.paramPtrs.ctx = &ctx
-
-	return mmCreateObjectURLWithUIDInEncodedURLPath
-}
-
-// ExpectObjectURLParam2 sets up expected param objectURL for RepositoryI.CreateObjectURLWithUIDInEncodedURLPath
-func (mmCreateObjectURLWithUIDInEncodedURLPath *mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath) ExpectObjectURLParam2(objectURL mm_repository.ObjectURL) *mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath {
-	if mmCreateObjectURLWithUIDInEncodedURLPath.mock.funcCreateObjectURLWithUIDInEncodedURLPath != nil {
-		mmCreateObjectURLWithUIDInEncodedURLPath.mock.t.Fatalf("RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath mock is already set by Set")
-	}
-
-	if mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation == nil {
-		mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation = &RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathExpectation{}
-	}
-
-	if mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation.params != nil {
-		mmCreateObjectURLWithUIDInEncodedURLPath.mock.t.Fatalf("RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath mock is already set by Expect")
-	}
-
-	if mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation.paramPtrs == nil {
-		mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation.paramPtrs = &RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathParamPtrs{}
-	}
-	mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation.paramPtrs.objectURL = &objectURL
-
-	return mmCreateObjectURLWithUIDInEncodedURLPath
-}
-
-// ExpectNamespaceIDParam3 sets up expected param namespaceID for RepositoryI.CreateObjectURLWithUIDInEncodedURLPath
-func (mmCreateObjectURLWithUIDInEncodedURLPath *mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath) ExpectNamespaceIDParam3(namespaceID string) *mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath {
-	if mmCreateObjectURLWithUIDInEncodedURLPath.mock.funcCreateObjectURLWithUIDInEncodedURLPath != nil {
-		mmCreateObjectURLWithUIDInEncodedURLPath.mock.t.Fatalf("RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath mock is already set by Set")
-	}
-
-	if mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation == nil {
-		mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation = &RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathExpectation{}
-	}
-
-	if mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation.params != nil {
-		mmCreateObjectURLWithUIDInEncodedURLPath.mock.t.Fatalf("RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath mock is already set by Expect")
-	}
-
-	if mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation.paramPtrs == nil {
-		mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation.paramPtrs = &RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathParamPtrs{}
-	}
-	mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation.paramPtrs.namespaceID = &namespaceID
-
-	return mmCreateObjectURLWithUIDInEncodedURLPath
-}
-
-// ExpectEncodedMinioURLPathParam4 sets up expected param EncodedMinioURLPath for RepositoryI.CreateObjectURLWithUIDInEncodedURLPath
-func (mmCreateObjectURLWithUIDInEncodedURLPath *mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath) ExpectEncodedMinioURLPathParam4(EncodedMinioURLPath func(namespaceID string, objectURLUUID uuid.UUID) string) *mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath {
-	if mmCreateObjectURLWithUIDInEncodedURLPath.mock.funcCreateObjectURLWithUIDInEncodedURLPath != nil {
-		mmCreateObjectURLWithUIDInEncodedURLPath.mock.t.Fatalf("RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath mock is already set by Set")
-	}
-
-	if mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation == nil {
-		mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation = &RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathExpectation{}
-	}
-
-	if mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation.params != nil {
-		mmCreateObjectURLWithUIDInEncodedURLPath.mock.t.Fatalf("RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath mock is already set by Expect")
-	}
-
-	if mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation.paramPtrs == nil {
-		mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation.paramPtrs = &RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathParamPtrs{}
-	}
-	mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation.paramPtrs.EncodedMinioURLPath = &EncodedMinioURLPath
-
-	return mmCreateObjectURLWithUIDInEncodedURLPath
-}
-
-// Inspect accepts an inspector function that has same arguments as the RepositoryI.CreateObjectURLWithUIDInEncodedURLPath
-func (mmCreateObjectURLWithUIDInEncodedURLPath *mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath) Inspect(f func(ctx context.Context, objectURL mm_repository.ObjectURL, namespaceID string, EncodedMinioURLPath func(namespaceID string, objectURLUUID uuid.UUID) string)) *mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath {
-	if mmCreateObjectURLWithUIDInEncodedURLPath.mock.inspectFuncCreateObjectURLWithUIDInEncodedURLPath != nil {
-		mmCreateObjectURLWithUIDInEncodedURLPath.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath")
-	}
-
-	mmCreateObjectURLWithUIDInEncodedURLPath.mock.inspectFuncCreateObjectURLWithUIDInEncodedURLPath = f
-
-	return mmCreateObjectURLWithUIDInEncodedURLPath
-}
-
-// Return sets up results that will be returned by RepositoryI.CreateObjectURLWithUIDInEncodedURLPath
-func (mmCreateObjectURLWithUIDInEncodedURLPath *mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath) Return(op1 *mm_repository.ObjectURL, err error) *RepositoryIMock {
-	if mmCreateObjectURLWithUIDInEncodedURLPath.mock.funcCreateObjectURLWithUIDInEncodedURLPath != nil {
-		mmCreateObjectURLWithUIDInEncodedURLPath.mock.t.Fatalf("RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath mock is already set by Set")
-	}
-
-	if mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation == nil {
-		mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation = &RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathExpectation{mock: mmCreateObjectURLWithUIDInEncodedURLPath.mock}
-	}
-	mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation.results = &RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathResults{op1, err}
-	return mmCreateObjectURLWithUIDInEncodedURLPath.mock
-}
-
-// Set uses given function f to mock the RepositoryI.CreateObjectURLWithUIDInEncodedURLPath method
-func (mmCreateObjectURLWithUIDInEncodedURLPath *mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath) Set(f func(ctx context.Context, objectURL mm_repository.ObjectURL, namespaceID string, EncodedMinioURLPath func(namespaceID string, objectURLUUID uuid.UUID) string) (op1 *mm_repository.ObjectURL, err error)) *RepositoryIMock {
-	if mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation != nil {
-		mmCreateObjectURLWithUIDInEncodedURLPath.mock.t.Fatalf("Default expectation is already set for the RepositoryI.CreateObjectURLWithUIDInEncodedURLPath method")
-	}
-
-	if len(mmCreateObjectURLWithUIDInEncodedURLPath.expectations) > 0 {
-		mmCreateObjectURLWithUIDInEncodedURLPath.mock.t.Fatalf("Some expectations are already set for the RepositoryI.CreateObjectURLWithUIDInEncodedURLPath method")
-	}
-
-	mmCreateObjectURLWithUIDInEncodedURLPath.mock.funcCreateObjectURLWithUIDInEncodedURLPath = f
-	return mmCreateObjectURLWithUIDInEncodedURLPath.mock
-}
-
-// When sets expectation for the RepositoryI.CreateObjectURLWithUIDInEncodedURLPath which will trigger the result defined by the following
-// Then helper
-func (mmCreateObjectURLWithUIDInEncodedURLPath *mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath) When(ctx context.Context, objectURL mm_repository.ObjectURL, namespaceID string, EncodedMinioURLPath func(namespaceID string, objectURLUUID uuid.UUID) string) *RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathExpectation {
-	if mmCreateObjectURLWithUIDInEncodedURLPath.mock.funcCreateObjectURLWithUIDInEncodedURLPath != nil {
-		mmCreateObjectURLWithUIDInEncodedURLPath.mock.t.Fatalf("RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath mock is already set by Set")
-	}
-
-	expectation := &RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathExpectation{
-		mock:   mmCreateObjectURLWithUIDInEncodedURLPath.mock,
-		params: &RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathParams{ctx, objectURL, namespaceID, EncodedMinioURLPath},
-	}
-	mmCreateObjectURLWithUIDInEncodedURLPath.expectations = append(mmCreateObjectURLWithUIDInEncodedURLPath.expectations, expectation)
-	return expectation
-}
-
-// Then sets up RepositoryI.CreateObjectURLWithUIDInEncodedURLPath return parameters for the expectation previously defined by the When method
-func (e *RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathExpectation) Then(op1 *mm_repository.ObjectURL, err error) *RepositoryIMock {
-	e.results = &RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathResults{op1, err}
-	return e.mock
-}
-
-// Times sets number of times RepositoryI.CreateObjectURLWithUIDInEncodedURLPath should be invoked
-func (mmCreateObjectURLWithUIDInEncodedURLPath *mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath) Times(n uint64) *mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath {
-	if n == 0 {
-		mmCreateObjectURLWithUIDInEncodedURLPath.mock.t.Fatalf("Times of RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath mock can not be zero")
-	}
-	mm_atomic.StoreUint64(&mmCreateObjectURLWithUIDInEncodedURLPath.expectedInvocations, n)
-	return mmCreateObjectURLWithUIDInEncodedURLPath
-}
-
-func (mmCreateObjectURLWithUIDInEncodedURLPath *mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath) invocationsDone() bool {
-	if len(mmCreateObjectURLWithUIDInEncodedURLPath.expectations) == 0 && mmCreateObjectURLWithUIDInEncodedURLPath.defaultExpectation == nil && mmCreateObjectURLWithUIDInEncodedURLPath.mock.funcCreateObjectURLWithUIDInEncodedURLPath == nil {
-		return true
-	}
-
-	totalInvocations := mm_atomic.LoadUint64(&mmCreateObjectURLWithUIDInEncodedURLPath.mock.afterCreateObjectURLWithUIDInEncodedURLPathCounter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmCreateObjectURLWithUIDInEncodedURLPath.expectedInvocations)
-
-	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
-}
-
-// CreateObjectURLWithUIDInEncodedURLPath implements repository.RepositoryI
-func (mmCreateObjectURLWithUIDInEncodedURLPath *RepositoryIMock) CreateObjectURLWithUIDInEncodedURLPath(ctx context.Context, objectURL mm_repository.ObjectURL, namespaceID string, EncodedMinioURLPath func(namespaceID string, objectURLUUID uuid.UUID) string) (op1 *mm_repository.ObjectURL, err error) {
-	mm_atomic.AddUint64(&mmCreateObjectURLWithUIDInEncodedURLPath.beforeCreateObjectURLWithUIDInEncodedURLPathCounter, 1)
-	defer mm_atomic.AddUint64(&mmCreateObjectURLWithUIDInEncodedURLPath.afterCreateObjectURLWithUIDInEncodedURLPathCounter, 1)
-
-	if mmCreateObjectURLWithUIDInEncodedURLPath.inspectFuncCreateObjectURLWithUIDInEncodedURLPath != nil {
-		mmCreateObjectURLWithUIDInEncodedURLPath.inspectFuncCreateObjectURLWithUIDInEncodedURLPath(ctx, objectURL, namespaceID, EncodedMinioURLPath)
-	}
-
-	mm_params := RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathParams{ctx, objectURL, namespaceID, EncodedMinioURLPath}
-
-	// Record call args
-	mmCreateObjectURLWithUIDInEncodedURLPath.CreateObjectURLWithUIDInEncodedURLPathMock.mutex.Lock()
-	mmCreateObjectURLWithUIDInEncodedURLPath.CreateObjectURLWithUIDInEncodedURLPathMock.callArgs = append(mmCreateObjectURLWithUIDInEncodedURLPath.CreateObjectURLWithUIDInEncodedURLPathMock.callArgs, &mm_params)
-	mmCreateObjectURLWithUIDInEncodedURLPath.CreateObjectURLWithUIDInEncodedURLPathMock.mutex.Unlock()
-
-	for _, e := range mmCreateObjectURLWithUIDInEncodedURLPath.CreateObjectURLWithUIDInEncodedURLPathMock.expectations {
-		if minimock.Equal(*e.params, mm_params) {
-			mm_atomic.AddUint64(&e.Counter, 1)
-			return e.results.op1, e.results.err
-		}
-	}
-
-	if mmCreateObjectURLWithUIDInEncodedURLPath.CreateObjectURLWithUIDInEncodedURLPathMock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmCreateObjectURLWithUIDInEncodedURLPath.CreateObjectURLWithUIDInEncodedURLPathMock.defaultExpectation.Counter, 1)
-		mm_want := mmCreateObjectURLWithUIDInEncodedURLPath.CreateObjectURLWithUIDInEncodedURLPathMock.defaultExpectation.params
-		mm_want_ptrs := mmCreateObjectURLWithUIDInEncodedURLPath.CreateObjectURLWithUIDInEncodedURLPathMock.defaultExpectation.paramPtrs
-
-		mm_got := RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathParams{ctx, objectURL, namespaceID, EncodedMinioURLPath}
-
-		if mm_want_ptrs != nil {
-
-			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
-				mmCreateObjectURLWithUIDInEncodedURLPath.t.Errorf("RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
-			}
-
-			if mm_want_ptrs.objectURL != nil && !minimock.Equal(*mm_want_ptrs.objectURL, mm_got.objectURL) {
-				mmCreateObjectURLWithUIDInEncodedURLPath.t.Errorf("RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath got unexpected parameter objectURL, want: %#v, got: %#v%s\n", *mm_want_ptrs.objectURL, mm_got.objectURL, minimock.Diff(*mm_want_ptrs.objectURL, mm_got.objectURL))
-			}
-
-			if mm_want_ptrs.namespaceID != nil && !minimock.Equal(*mm_want_ptrs.namespaceID, mm_got.namespaceID) {
-				mmCreateObjectURLWithUIDInEncodedURLPath.t.Errorf("RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath got unexpected parameter namespaceID, want: %#v, got: %#v%s\n", *mm_want_ptrs.namespaceID, mm_got.namespaceID, minimock.Diff(*mm_want_ptrs.namespaceID, mm_got.namespaceID))
-			}
-
-			if mm_want_ptrs.EncodedMinioURLPath != nil && !minimock.Equal(*mm_want_ptrs.EncodedMinioURLPath, mm_got.EncodedMinioURLPath) {
-				mmCreateObjectURLWithUIDInEncodedURLPath.t.Errorf("RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath got unexpected parameter EncodedMinioURLPath, want: %#v, got: %#v%s\n", *mm_want_ptrs.EncodedMinioURLPath, mm_got.EncodedMinioURLPath, minimock.Diff(*mm_want_ptrs.EncodedMinioURLPath, mm_got.EncodedMinioURLPath))
-			}
-
-		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
-			mmCreateObjectURLWithUIDInEncodedURLPath.t.Errorf("RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
-		}
-
-		mm_results := mmCreateObjectURLWithUIDInEncodedURLPath.CreateObjectURLWithUIDInEncodedURLPathMock.defaultExpectation.results
-		if mm_results == nil {
-			mmCreateObjectURLWithUIDInEncodedURLPath.t.Fatal("No results are set for the RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath")
-		}
-		return (*mm_results).op1, (*mm_results).err
-	}
-	if mmCreateObjectURLWithUIDInEncodedURLPath.funcCreateObjectURLWithUIDInEncodedURLPath != nil {
-		return mmCreateObjectURLWithUIDInEncodedURLPath.funcCreateObjectURLWithUIDInEncodedURLPath(ctx, objectURL, namespaceID, EncodedMinioURLPath)
-	}
-	mmCreateObjectURLWithUIDInEncodedURLPath.t.Fatalf("Unexpected call to RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath. %v %v %v %v", ctx, objectURL, namespaceID, EncodedMinioURLPath)
-	return
-}
-
-// CreateObjectURLWithUIDInEncodedURLPathAfterCounter returns a count of finished RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath invocations
-func (mmCreateObjectURLWithUIDInEncodedURLPath *RepositoryIMock) CreateObjectURLWithUIDInEncodedURLPathAfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmCreateObjectURLWithUIDInEncodedURLPath.afterCreateObjectURLWithUIDInEncodedURLPathCounter)
-}
-
-// CreateObjectURLWithUIDInEncodedURLPathBeforeCounter returns a count of RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath invocations
-func (mmCreateObjectURLWithUIDInEncodedURLPath *RepositoryIMock) CreateObjectURLWithUIDInEncodedURLPathBeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmCreateObjectURLWithUIDInEncodedURLPath.beforeCreateObjectURLWithUIDInEncodedURLPathCounter)
-}
-
-// Calls returns a list of arguments used in each call to RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath.
-// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
-func (mmCreateObjectURLWithUIDInEncodedURLPath *mRepositoryIMockCreateObjectURLWithUIDInEncodedURLPath) Calls() []*RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathParams {
-	mmCreateObjectURLWithUIDInEncodedURLPath.mutex.RLock()
-
-	argCopy := make([]*RepositoryIMockCreateObjectURLWithUIDInEncodedURLPathParams, len(mmCreateObjectURLWithUIDInEncodedURLPath.callArgs))
-	copy(argCopy, mmCreateObjectURLWithUIDInEncodedURLPath.callArgs)
-
-	mmCreateObjectURLWithUIDInEncodedURLPath.mutex.RUnlock()
-
-	return argCopy
-}
-
-// MinimockCreateObjectURLWithUIDInEncodedURLPathDone returns true if the count of the CreateObjectURLWithUIDInEncodedURLPath invocations corresponds
-// the number of defined expectations
-func (m *RepositoryIMock) MinimockCreateObjectURLWithUIDInEncodedURLPathDone() bool {
-	if m.CreateObjectURLWithUIDInEncodedURLPathMock.optional {
-		// Optional methods provide '0 or more' call count restriction.
-		return true
-	}
-
-	for _, e := range m.CreateObjectURLWithUIDInEncodedURLPathMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			return false
-		}
-	}
-
-	return m.CreateObjectURLWithUIDInEncodedURLPathMock.invocationsDone()
-}
-
-// MinimockCreateObjectURLWithUIDInEncodedURLPathInspect logs each unmet expectation
-func (m *RepositoryIMock) MinimockCreateObjectURLWithUIDInEncodedURLPathInspect() {
-	for _, e := range m.CreateObjectURLWithUIDInEncodedURLPathMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Errorf("Expected call to RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath with params: %#v", *e.params)
-		}
-	}
-
-	afterCreateObjectURLWithUIDInEncodedURLPathCounter := mm_atomic.LoadUint64(&m.afterCreateObjectURLWithUIDInEncodedURLPathCounter)
-	// if default expectation was set then invocations count should be greater than zero
-	if m.CreateObjectURLWithUIDInEncodedURLPathMock.defaultExpectation != nil && afterCreateObjectURLWithUIDInEncodedURLPathCounter < 1 {
-		if m.CreateObjectURLWithUIDInEncodedURLPathMock.defaultExpectation.params == nil {
-			m.t.Error("Expected call to RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath")
-		} else {
-			m.t.Errorf("Expected call to RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath with params: %#v", *m.CreateObjectURLWithUIDInEncodedURLPathMock.defaultExpectation.params)
-		}
-	}
-	// if func was set then invocations count should be greater than zero
-	if m.funcCreateObjectURLWithUIDInEncodedURLPath != nil && afterCreateObjectURLWithUIDInEncodedURLPathCounter < 1 {
-		m.t.Error("Expected call to RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath")
-	}
-
-	if !m.CreateObjectURLWithUIDInEncodedURLPathMock.invocationsDone() && afterCreateObjectURLWithUIDInEncodedURLPathCounter > 0 {
-		m.t.Errorf("Expected %d calls to RepositoryIMock.CreateObjectURLWithUIDInEncodedURLPath but found %d calls",
-			mm_atomic.LoadUint64(&m.CreateObjectURLWithUIDInEncodedURLPathMock.expectedInvocations), afterCreateObjectURLWithUIDInEncodedURLPathCounter)
 	}
 }
 
@@ -22980,327 +22255,6 @@ func (m *RepositoryIMock) MinimockUpdateObjectByUpdateMapInspect() {
 	}
 }
 
-type mRepositoryIMockUpdateObjectURL struct {
-	optional           bool
-	mock               *RepositoryIMock
-	defaultExpectation *RepositoryIMockUpdateObjectURLExpectation
-	expectations       []*RepositoryIMockUpdateObjectURLExpectation
-
-	callArgs []*RepositoryIMockUpdateObjectURLParams
-	mutex    sync.RWMutex
-
-	expectedInvocations uint64
-}
-
-// RepositoryIMockUpdateObjectURLExpectation specifies expectation struct of the RepositoryI.UpdateObjectURL
-type RepositoryIMockUpdateObjectURLExpectation struct {
-	mock      *RepositoryIMock
-	params    *RepositoryIMockUpdateObjectURLParams
-	paramPtrs *RepositoryIMockUpdateObjectURLParamPtrs
-	results   *RepositoryIMockUpdateObjectURLResults
-	Counter   uint64
-}
-
-// RepositoryIMockUpdateObjectURLParams contains parameters of the RepositoryI.UpdateObjectURL
-type RepositoryIMockUpdateObjectURLParams struct {
-	ctx       context.Context
-	objectURL mm_repository.ObjectURL
-}
-
-// RepositoryIMockUpdateObjectURLParamPtrs contains pointers to parameters of the RepositoryI.UpdateObjectURL
-type RepositoryIMockUpdateObjectURLParamPtrs struct {
-	ctx       *context.Context
-	objectURL *mm_repository.ObjectURL
-}
-
-// RepositoryIMockUpdateObjectURLResults contains results of the RepositoryI.UpdateObjectURL
-type RepositoryIMockUpdateObjectURLResults struct {
-	op1 *mm_repository.ObjectURL
-	err error
-}
-
-// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
-// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
-// Optional() makes method check to work in '0 or more' mode.
-// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
-// catch the problems when the expected method call is totally skipped during test run.
-func (mmUpdateObjectURL *mRepositoryIMockUpdateObjectURL) Optional() *mRepositoryIMockUpdateObjectURL {
-	mmUpdateObjectURL.optional = true
-	return mmUpdateObjectURL
-}
-
-// Expect sets up expected params for RepositoryI.UpdateObjectURL
-func (mmUpdateObjectURL *mRepositoryIMockUpdateObjectURL) Expect(ctx context.Context, objectURL mm_repository.ObjectURL) *mRepositoryIMockUpdateObjectURL {
-	if mmUpdateObjectURL.mock.funcUpdateObjectURL != nil {
-		mmUpdateObjectURL.mock.t.Fatalf("RepositoryIMock.UpdateObjectURL mock is already set by Set")
-	}
-
-	if mmUpdateObjectURL.defaultExpectation == nil {
-		mmUpdateObjectURL.defaultExpectation = &RepositoryIMockUpdateObjectURLExpectation{}
-	}
-
-	if mmUpdateObjectURL.defaultExpectation.paramPtrs != nil {
-		mmUpdateObjectURL.mock.t.Fatalf("RepositoryIMock.UpdateObjectURL mock is already set by ExpectParams functions")
-	}
-
-	mmUpdateObjectURL.defaultExpectation.params = &RepositoryIMockUpdateObjectURLParams{ctx, objectURL}
-	for _, e := range mmUpdateObjectURL.expectations {
-		if minimock.Equal(e.params, mmUpdateObjectURL.defaultExpectation.params) {
-			mmUpdateObjectURL.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmUpdateObjectURL.defaultExpectation.params)
-		}
-	}
-
-	return mmUpdateObjectURL
-}
-
-// ExpectCtxParam1 sets up expected param ctx for RepositoryI.UpdateObjectURL
-func (mmUpdateObjectURL *mRepositoryIMockUpdateObjectURL) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockUpdateObjectURL {
-	if mmUpdateObjectURL.mock.funcUpdateObjectURL != nil {
-		mmUpdateObjectURL.mock.t.Fatalf("RepositoryIMock.UpdateObjectURL mock is already set by Set")
-	}
-
-	if mmUpdateObjectURL.defaultExpectation == nil {
-		mmUpdateObjectURL.defaultExpectation = &RepositoryIMockUpdateObjectURLExpectation{}
-	}
-
-	if mmUpdateObjectURL.defaultExpectation.params != nil {
-		mmUpdateObjectURL.mock.t.Fatalf("RepositoryIMock.UpdateObjectURL mock is already set by Expect")
-	}
-
-	if mmUpdateObjectURL.defaultExpectation.paramPtrs == nil {
-		mmUpdateObjectURL.defaultExpectation.paramPtrs = &RepositoryIMockUpdateObjectURLParamPtrs{}
-	}
-	mmUpdateObjectURL.defaultExpectation.paramPtrs.ctx = &ctx
-
-	return mmUpdateObjectURL
-}
-
-// ExpectObjectURLParam2 sets up expected param objectURL for RepositoryI.UpdateObjectURL
-func (mmUpdateObjectURL *mRepositoryIMockUpdateObjectURL) ExpectObjectURLParam2(objectURL mm_repository.ObjectURL) *mRepositoryIMockUpdateObjectURL {
-	if mmUpdateObjectURL.mock.funcUpdateObjectURL != nil {
-		mmUpdateObjectURL.mock.t.Fatalf("RepositoryIMock.UpdateObjectURL mock is already set by Set")
-	}
-
-	if mmUpdateObjectURL.defaultExpectation == nil {
-		mmUpdateObjectURL.defaultExpectation = &RepositoryIMockUpdateObjectURLExpectation{}
-	}
-
-	if mmUpdateObjectURL.defaultExpectation.params != nil {
-		mmUpdateObjectURL.mock.t.Fatalf("RepositoryIMock.UpdateObjectURL mock is already set by Expect")
-	}
-
-	if mmUpdateObjectURL.defaultExpectation.paramPtrs == nil {
-		mmUpdateObjectURL.defaultExpectation.paramPtrs = &RepositoryIMockUpdateObjectURLParamPtrs{}
-	}
-	mmUpdateObjectURL.defaultExpectation.paramPtrs.objectURL = &objectURL
-
-	return mmUpdateObjectURL
-}
-
-// Inspect accepts an inspector function that has same arguments as the RepositoryI.UpdateObjectURL
-func (mmUpdateObjectURL *mRepositoryIMockUpdateObjectURL) Inspect(f func(ctx context.Context, objectURL mm_repository.ObjectURL)) *mRepositoryIMockUpdateObjectURL {
-	if mmUpdateObjectURL.mock.inspectFuncUpdateObjectURL != nil {
-		mmUpdateObjectURL.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.UpdateObjectURL")
-	}
-
-	mmUpdateObjectURL.mock.inspectFuncUpdateObjectURL = f
-
-	return mmUpdateObjectURL
-}
-
-// Return sets up results that will be returned by RepositoryI.UpdateObjectURL
-func (mmUpdateObjectURL *mRepositoryIMockUpdateObjectURL) Return(op1 *mm_repository.ObjectURL, err error) *RepositoryIMock {
-	if mmUpdateObjectURL.mock.funcUpdateObjectURL != nil {
-		mmUpdateObjectURL.mock.t.Fatalf("RepositoryIMock.UpdateObjectURL mock is already set by Set")
-	}
-
-	if mmUpdateObjectURL.defaultExpectation == nil {
-		mmUpdateObjectURL.defaultExpectation = &RepositoryIMockUpdateObjectURLExpectation{mock: mmUpdateObjectURL.mock}
-	}
-	mmUpdateObjectURL.defaultExpectation.results = &RepositoryIMockUpdateObjectURLResults{op1, err}
-	return mmUpdateObjectURL.mock
-}
-
-// Set uses given function f to mock the RepositoryI.UpdateObjectURL method
-func (mmUpdateObjectURL *mRepositoryIMockUpdateObjectURL) Set(f func(ctx context.Context, objectURL mm_repository.ObjectURL) (op1 *mm_repository.ObjectURL, err error)) *RepositoryIMock {
-	if mmUpdateObjectURL.defaultExpectation != nil {
-		mmUpdateObjectURL.mock.t.Fatalf("Default expectation is already set for the RepositoryI.UpdateObjectURL method")
-	}
-
-	if len(mmUpdateObjectURL.expectations) > 0 {
-		mmUpdateObjectURL.mock.t.Fatalf("Some expectations are already set for the RepositoryI.UpdateObjectURL method")
-	}
-
-	mmUpdateObjectURL.mock.funcUpdateObjectURL = f
-	return mmUpdateObjectURL.mock
-}
-
-// When sets expectation for the RepositoryI.UpdateObjectURL which will trigger the result defined by the following
-// Then helper
-func (mmUpdateObjectURL *mRepositoryIMockUpdateObjectURL) When(ctx context.Context, objectURL mm_repository.ObjectURL) *RepositoryIMockUpdateObjectURLExpectation {
-	if mmUpdateObjectURL.mock.funcUpdateObjectURL != nil {
-		mmUpdateObjectURL.mock.t.Fatalf("RepositoryIMock.UpdateObjectURL mock is already set by Set")
-	}
-
-	expectation := &RepositoryIMockUpdateObjectURLExpectation{
-		mock:   mmUpdateObjectURL.mock,
-		params: &RepositoryIMockUpdateObjectURLParams{ctx, objectURL},
-	}
-	mmUpdateObjectURL.expectations = append(mmUpdateObjectURL.expectations, expectation)
-	return expectation
-}
-
-// Then sets up RepositoryI.UpdateObjectURL return parameters for the expectation previously defined by the When method
-func (e *RepositoryIMockUpdateObjectURLExpectation) Then(op1 *mm_repository.ObjectURL, err error) *RepositoryIMock {
-	e.results = &RepositoryIMockUpdateObjectURLResults{op1, err}
-	return e.mock
-}
-
-// Times sets number of times RepositoryI.UpdateObjectURL should be invoked
-func (mmUpdateObjectURL *mRepositoryIMockUpdateObjectURL) Times(n uint64) *mRepositoryIMockUpdateObjectURL {
-	if n == 0 {
-		mmUpdateObjectURL.mock.t.Fatalf("Times of RepositoryIMock.UpdateObjectURL mock can not be zero")
-	}
-	mm_atomic.StoreUint64(&mmUpdateObjectURL.expectedInvocations, n)
-	return mmUpdateObjectURL
-}
-
-func (mmUpdateObjectURL *mRepositoryIMockUpdateObjectURL) invocationsDone() bool {
-	if len(mmUpdateObjectURL.expectations) == 0 && mmUpdateObjectURL.defaultExpectation == nil && mmUpdateObjectURL.mock.funcUpdateObjectURL == nil {
-		return true
-	}
-
-	totalInvocations := mm_atomic.LoadUint64(&mmUpdateObjectURL.mock.afterUpdateObjectURLCounter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmUpdateObjectURL.expectedInvocations)
-
-	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
-}
-
-// UpdateObjectURL implements repository.RepositoryI
-func (mmUpdateObjectURL *RepositoryIMock) UpdateObjectURL(ctx context.Context, objectURL mm_repository.ObjectURL) (op1 *mm_repository.ObjectURL, err error) {
-	mm_atomic.AddUint64(&mmUpdateObjectURL.beforeUpdateObjectURLCounter, 1)
-	defer mm_atomic.AddUint64(&mmUpdateObjectURL.afterUpdateObjectURLCounter, 1)
-
-	if mmUpdateObjectURL.inspectFuncUpdateObjectURL != nil {
-		mmUpdateObjectURL.inspectFuncUpdateObjectURL(ctx, objectURL)
-	}
-
-	mm_params := RepositoryIMockUpdateObjectURLParams{ctx, objectURL}
-
-	// Record call args
-	mmUpdateObjectURL.UpdateObjectURLMock.mutex.Lock()
-	mmUpdateObjectURL.UpdateObjectURLMock.callArgs = append(mmUpdateObjectURL.UpdateObjectURLMock.callArgs, &mm_params)
-	mmUpdateObjectURL.UpdateObjectURLMock.mutex.Unlock()
-
-	for _, e := range mmUpdateObjectURL.UpdateObjectURLMock.expectations {
-		if minimock.Equal(*e.params, mm_params) {
-			mm_atomic.AddUint64(&e.Counter, 1)
-			return e.results.op1, e.results.err
-		}
-	}
-
-	if mmUpdateObjectURL.UpdateObjectURLMock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmUpdateObjectURL.UpdateObjectURLMock.defaultExpectation.Counter, 1)
-		mm_want := mmUpdateObjectURL.UpdateObjectURLMock.defaultExpectation.params
-		mm_want_ptrs := mmUpdateObjectURL.UpdateObjectURLMock.defaultExpectation.paramPtrs
-
-		mm_got := RepositoryIMockUpdateObjectURLParams{ctx, objectURL}
-
-		if mm_want_ptrs != nil {
-
-			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
-				mmUpdateObjectURL.t.Errorf("RepositoryIMock.UpdateObjectURL got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
-			}
-
-			if mm_want_ptrs.objectURL != nil && !minimock.Equal(*mm_want_ptrs.objectURL, mm_got.objectURL) {
-				mmUpdateObjectURL.t.Errorf("RepositoryIMock.UpdateObjectURL got unexpected parameter objectURL, want: %#v, got: %#v%s\n", *mm_want_ptrs.objectURL, mm_got.objectURL, minimock.Diff(*mm_want_ptrs.objectURL, mm_got.objectURL))
-			}
-
-		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
-			mmUpdateObjectURL.t.Errorf("RepositoryIMock.UpdateObjectURL got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
-		}
-
-		mm_results := mmUpdateObjectURL.UpdateObjectURLMock.defaultExpectation.results
-		if mm_results == nil {
-			mmUpdateObjectURL.t.Fatal("No results are set for the RepositoryIMock.UpdateObjectURL")
-		}
-		return (*mm_results).op1, (*mm_results).err
-	}
-	if mmUpdateObjectURL.funcUpdateObjectURL != nil {
-		return mmUpdateObjectURL.funcUpdateObjectURL(ctx, objectURL)
-	}
-	mmUpdateObjectURL.t.Fatalf("Unexpected call to RepositoryIMock.UpdateObjectURL. %v %v", ctx, objectURL)
-	return
-}
-
-// UpdateObjectURLAfterCounter returns a count of finished RepositoryIMock.UpdateObjectURL invocations
-func (mmUpdateObjectURL *RepositoryIMock) UpdateObjectURLAfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmUpdateObjectURL.afterUpdateObjectURLCounter)
-}
-
-// UpdateObjectURLBeforeCounter returns a count of RepositoryIMock.UpdateObjectURL invocations
-func (mmUpdateObjectURL *RepositoryIMock) UpdateObjectURLBeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmUpdateObjectURL.beforeUpdateObjectURLCounter)
-}
-
-// Calls returns a list of arguments used in each call to RepositoryIMock.UpdateObjectURL.
-// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
-func (mmUpdateObjectURL *mRepositoryIMockUpdateObjectURL) Calls() []*RepositoryIMockUpdateObjectURLParams {
-	mmUpdateObjectURL.mutex.RLock()
-
-	argCopy := make([]*RepositoryIMockUpdateObjectURLParams, len(mmUpdateObjectURL.callArgs))
-	copy(argCopy, mmUpdateObjectURL.callArgs)
-
-	mmUpdateObjectURL.mutex.RUnlock()
-
-	return argCopy
-}
-
-// MinimockUpdateObjectURLDone returns true if the count of the UpdateObjectURL invocations corresponds
-// the number of defined expectations
-func (m *RepositoryIMock) MinimockUpdateObjectURLDone() bool {
-	if m.UpdateObjectURLMock.optional {
-		// Optional methods provide '0 or more' call count restriction.
-		return true
-	}
-
-	for _, e := range m.UpdateObjectURLMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			return false
-		}
-	}
-
-	return m.UpdateObjectURLMock.invocationsDone()
-}
-
-// MinimockUpdateObjectURLInspect logs each unmet expectation
-func (m *RepositoryIMock) MinimockUpdateObjectURLInspect() {
-	for _, e := range m.UpdateObjectURLMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Errorf("Expected call to RepositoryIMock.UpdateObjectURL with params: %#v", *e.params)
-		}
-	}
-
-	afterUpdateObjectURLCounter := mm_atomic.LoadUint64(&m.afterUpdateObjectURLCounter)
-	// if default expectation was set then invocations count should be greater than zero
-	if m.UpdateObjectURLMock.defaultExpectation != nil && afterUpdateObjectURLCounter < 1 {
-		if m.UpdateObjectURLMock.defaultExpectation.params == nil {
-			m.t.Error("Expected call to RepositoryIMock.UpdateObjectURL")
-		} else {
-			m.t.Errorf("Expected call to RepositoryIMock.UpdateObjectURL with params: %#v", *m.UpdateObjectURLMock.defaultExpectation.params)
-		}
-	}
-	// if func was set then invocations count should be greater than zero
-	if m.funcUpdateObjectURL != nil && afterUpdateObjectURLCounter < 1 {
-		m.t.Error("Expected call to RepositoryIMock.UpdateObjectURL")
-	}
-
-	if !m.UpdateObjectURLMock.invocationsDone() && afterUpdateObjectURLCounter > 0 {
-		m.t.Errorf("Expected %d calls to RepositoryIMock.UpdateObjectURL but found %d calls",
-			mm_atomic.LoadUint64(&m.UpdateObjectURLMock.expectedInvocations), afterUpdateObjectURLCounter)
-	}
-}
-
 type mRepositoryIMockUpsertEmbeddings struct {
 	optional           bool
 	mock               *RepositoryIMock
@@ -23985,10 +22939,6 @@ func (m *RepositoryIMock) MinimockFinish() {
 
 			m.MinimockCreateObjectInspect()
 
-			m.MinimockCreateObjectURLInspect()
-
-			m.MinimockCreateObjectURLWithUIDInEncodedURLPathInspect()
-
 			m.MinimockDeleteAllConvertedFilesInKbInspect()
 
 			m.MinimockDeleteAllKnowledgeBaseFilesInspect()
@@ -24109,8 +23059,6 @@ func (m *RepositoryIMock) MinimockFinish() {
 
 			m.MinimockUpdateObjectByUpdateMapInspect()
 
-			m.MinimockUpdateObjectURLInspect()
-
 			m.MinimockUpsertEmbeddingsInspect()
 
 			m.MinimockUpsertRepositoryTagInspect()
@@ -24142,8 +23090,6 @@ func (m *RepositoryIMock) minimockDone() bool {
 		m.MinimockCreateKnowledgeBaseDone() &&
 		m.MinimockCreateKnowledgeBaseFileDone() &&
 		m.MinimockCreateObjectDone() &&
-		m.MinimockCreateObjectURLDone() &&
-		m.MinimockCreateObjectURLWithUIDInEncodedURLPathDone() &&
 		m.MinimockDeleteAllConvertedFilesInKbDone() &&
 		m.MinimockDeleteAllKnowledgeBaseFilesDone() &&
 		m.MinimockDeleteAndCreateChunksDone() &&
@@ -24204,7 +23150,6 @@ func (m *RepositoryIMock) minimockDone() bool {
 		m.MinimockUpdateKnowledgeBaseFileDone() &&
 		m.MinimockUpdateObjectDone() &&
 		m.MinimockUpdateObjectByUpdateMapDone() &&
-		m.MinimockUpdateObjectURLDone() &&
 		m.MinimockUpsertEmbeddingsDone() &&
 		m.MinimockUpsertRepositoryTagDone()
 }

@@ -13,13 +13,12 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	"github.com/instill-ai/artifact-backend/pkg/customerror"
-
+	errdomain "github.com/instill-ai/artifact-backend/pkg/errors"
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
 type KnowledgeBaseI interface {
-	CreateKnowledgeBase(ctx context.Context, kb KnowledgeBase, externalService func(kbUID string) error) (*KnowledgeBase, error)
+	CreateKnowledgeBase(ctx context.Context, kb KnowledgeBase, externalService func(kbUID uuid.UUID) error) (*KnowledgeBase, error)
 	ListKnowledgeBases(ctx context.Context, ownerUID string) ([]KnowledgeBase, error)
 	ListKnowledgeBasesByCatalogType(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType) ([]KnowledgeBase, error)
 	UpdateKnowledgeBase(ctx context.Context, id, ownerUID string, kb KnowledgeBase) (*KnowledgeBase, error)
@@ -121,7 +120,7 @@ func formatPostgresArray(tags []string) string {
 }
 
 // CreateKnowledgeBase inserts a new KnowledgeBase record into the database.
-func (r *Repository) CreateKnowledgeBase(ctx context.Context, kb KnowledgeBase, externalService func(kbUID string) error) (*KnowledgeBase, error) {
+func (r *Repository) CreateKnowledgeBase(ctx context.Context, kb KnowledgeBase, externalService func(kbUID uuid.UUID) error) (*KnowledgeBase, error) {
 	// Start a database transaction
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// check if the name is unique in the owner's knowledge bases
@@ -130,7 +129,7 @@ func (r *Repository) CreateKnowledgeBase(ctx context.Context, kb KnowledgeBase, 
 			return err
 		}
 		if KbIDExists {
-			return fmt.Errorf("knowledge base name already exists. err: %w", customerror.ErrInvalidArgument)
+			return fmt.Errorf("knowledge base name already exists. err: %w", errdomain.ErrInvalidArgument)
 		}
 
 		// Create a new KnowledgeBase record
@@ -143,7 +142,7 @@ func (r *Repository) CreateKnowledgeBase(ctx context.Context, kb KnowledgeBase, 
 
 		// Call the external service
 		if externalService != nil {
-			if err := externalService(kb.UID.String()); err != nil {
+			if err := externalService(kb.UID); err != nil {
 				return err
 			}
 		}
@@ -249,17 +248,18 @@ func (r *Repository) checkIfKbIDUnique(ctx context.Context, owner string, kbID s
 }
 
 // check if knowledge base exists by kb_uid
-func (r *Repository) checkIfKnowledgeBaseExists(ctx context.Context, kbUID string) (bool, error) {
-	var existingKB KnowledgeBase
+func (r *Repository) checkIfKnowledgeBaseExists(ctx context.Context, kbUID uuid.UUID) (bool, error) {
 	whereString := fmt.Sprintf("%v = ? AND %s is NULL", KnowledgeBaseColumn.UID, KnowledgeBaseColumn.DeleteTime)
-	if err := r.db.WithContext(ctx).Where(whereString, kbUID).First(&existingKB).Error; err != nil {
+	err := r.db.WithContext(ctx).Where(whereString, kbUID).First(&KnowledgeBase{}).Error
+	if err != nil {
 		if err != gorm.ErrRecordNotFound {
 			return false, err
 		}
-	} else {
-		return true, nil
+
+		return false, nil
 	}
-	return false, nil
+
+	return true, nil
 }
 
 // get the knowledge base by (owner, kb_id)

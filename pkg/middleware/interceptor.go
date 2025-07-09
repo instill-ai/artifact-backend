@@ -17,10 +17,11 @@ import (
 	grpcrecovery "github.com/grpc-ecosystem/go-grpc-middleware/recovery"
 
 	"github.com/instill-ai/artifact-backend/pkg/acl"
-	"github.com/instill-ai/artifact-backend/pkg/customerror"
 	"github.com/instill-ai/artifact-backend/pkg/handler"
 	"github.com/instill-ai/artifact-backend/pkg/service"
 	"github.com/instill-ai/x/errmsg"
+
+	errdomain "github.com/instill-ai/artifact-backend/pkg/errors"
 )
 
 // RecoveryInterceptorOpt - panic handler
@@ -87,12 +88,13 @@ func AsGRPCError(err error) error {
 	switch {
 	case
 		errors.As(err, &pgErr) && pgErr.Code == "23505",
-		errors.Is(err, gorm.ErrDuplicatedKey):
+		errors.Is(err, gorm.ErrDuplicatedKey),
+		errors.Is(err, errdomain.ErrAlreadyExists):
 
 		code = codes.AlreadyExists
 	case
 		errors.Is(err, gorm.ErrRecordNotFound),
-		errors.Is(err, customerror.ErrNotFound),
+		errors.Is(err, errdomain.ErrNotFound),
 		errors.Is(err, acl.ErrMembershipNotFound):
 
 		code = codes.NotFound
@@ -101,26 +103,26 @@ func AsGRPCError(err error) error {
 		errors.Is(err, handler.ErrCheckUpdateImmutableFields),
 		errors.Is(err, handler.ErrCheckOutputOnlyFields),
 		errors.Is(err, handler.ErrCheckRequiredFields),
-		errors.Is(err, customerror.ErrExceedMaxBatchSize),
+		errors.Is(err, errdomain.ErrExceedMaxBatchSize),
 		errors.Is(err, handler.ErrFieldMask),
 		errors.Is(err, handler.ErrResourceID),
 		errors.Is(err, handler.ErrSematicVersion),
 		errors.Is(err, handler.ErrConnectorNamespace),
 		errors.Is(err, handler.ErrUpdateMask),
 		errors.Is(err, handler.ErrInvalidKnowledgeBaseName),
-		errors.Is(err, customerror.ErrInvalidArgument):
+		errors.Is(err, errdomain.ErrInvalidArgument):
 		code = codes.InvalidArgument
 	case
-		errors.Is(err, customerror.ErrNoPermission):
+		errors.Is(err, errdomain.ErrUnauthorized):
 
 		code = codes.PermissionDenied
 	case
-		errors.Is(err, customerror.ErrUnauthenticated):
+		errors.Is(err, errdomain.ErrUnauthenticated):
 
 		code = codes.Unauthenticated
 
 	case
-		errors.Is(err, customerror.ErrRateLimiting):
+		errors.Is(err, errdomain.ErrRateLimiting):
 		code = codes.ResourceExhausted
 	case
 		errors.Is(err, service.ErrObjectNotUploaded):

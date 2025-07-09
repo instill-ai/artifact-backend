@@ -11,6 +11,9 @@ import (
 	"github.com/instill-ai/artifact-backend/config"
 )
 
+// TargetSchemaVersion determines the database schema version.
+const TargetSchemaVersion uint = 23
+
 var db *gorm.DB
 var once sync.Once
 

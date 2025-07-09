@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/instill-ai/artifact-backend/pkg/customerror"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
 	"github.com/instill-ai/x/log"
 
+	errdomain "github.com/instill-ai/artifact-backend/pkg/errors"
 	pb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
@@ -69,7 +69,7 @@ func (s *service) GetRepositoryTag(ctx context.Context, req *pb.GetRepositoryTag
 
 	rt, err := s.repository.GetRepositoryTag(ctx, name)
 	if err != nil {
-		if !errors.Is(err, customerror.ErrNotFound) {
+		if !errors.Is(err, errdomain.ErrNotFound) {
 			return nil, err
 		}
 		rt, err = s.populateMissingRepositoryTags(ctx, name, repo, id)
@@ -118,7 +118,7 @@ func (s *service) ListRepositoryTags(ctx context.Context, req *pb.ListRepository
 		name := utils.NewRepositoryTagName(repo, id)
 		rt, err := s.repository.GetRepositoryTag(ctx, name)
 		if err != nil {
-			if !errors.Is(err, customerror.ErrNotFound) {
+			if !errors.Is(err, errdomain.ErrNotFound) {
 				return nil, fmt.Errorf("failed to fetch tag %s: %w", id, err)
 			}
 

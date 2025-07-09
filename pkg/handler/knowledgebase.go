@@ -12,14 +12,14 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc/metadata"
 
-	"github.com/instill-ai/artifact-backend/pkg/customerror"
+	"github.com/instill-ai/artifact-backend/pkg/errors"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/service"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
+	"github.com/instill-ai/x/constant"
 	"github.com/instill-ai/x/log"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
-	constantx "github.com/instill-ai/x/constant"
 )
 
 var alphabet = "abcdefghijklmnopqrstuvwxyz"
@@ -38,7 +38,7 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 	logger, _ := log.GetZapLogger(ctx)
 	authUID, err := getUserUIDFromContext(ctx)
 	if err != nil {
-		err := fmt.Errorf("failed to get user id from header: %v. err: %w", err, customerror.ErrUnauthenticated)
+		err := fmt.Errorf("failed to get user id from header: %v. err: %w", err, errors.ErrUnauthenticated)
 		return nil, err
 	}
 
@@ -91,7 +91,7 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 	if !nameOk {
 		msg := "the catalog name should be lowercase without any space or special character besides the hyphen, " +
 			"it can not start with number or hyphen, and should be less than 32 characters. name: %v. err: %w"
-		return nil, fmt.Errorf(msg, req.Name, customerror.ErrInvalidArgument)
+		return nil, fmt.Errorf(msg, req.Name, errors.ErrInvalidArgument)
 	}
 
 	creatorUUID, err := uuid.FromString(authUID)
@@ -101,23 +101,16 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 	}
 
 	// external service call - create catalog collection and set ACL in openFAG
-	callExternalService := func(kbUID string) error {
-		err := ph.service.MilvusClient().CreateKnowledgeBaseCollection(ctx, kbUID)
+	callExternalService := func(kbUID uuid.UUID) error {
+		err := ph.service.VectorDB().CreateCollection(ctx, service.KBCollectionName(kbUID))
 		if err != nil {
-			logger.Error("failed to create collection in milvus", zap.Error(err))
-			return err
+			return fmt.Errorf("creating vector database collection: %w", err)
 		}
 
 		// set the owner of the catalog
-		kbUIDuuid, err := uuid.FromString(kbUID)
+		err = ph.service.ACLClient().SetOwner(ctx, "knowledgebase", kbUID, string(ns.NsType), ns.NsUID)
 		if err != nil {
-			logger.Error("failed to parse kb uid", zap.String("kb_uid", kbUID), zap.Error(err))
-			return err
-		}
-		err = ph.service.ACLClient().SetOwner(ctx, "knowledgebase", kbUIDuuid, string(ns.NsType), ns.NsUID)
-		if err != nil {
-			logger.Error("failed to set owner in openFAG", zap.Error(err))
-			return err
+			return fmt.Errorf("setting catalog owner: %w", err)
 		}
 
 		return nil
@@ -140,7 +133,8 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 	*/
 
 	// create catalog
-	dbData, err := ph.service.Repository().CreateKnowledgeBase(ctx,
+	dbData, err := ph.service.Repository().CreateKnowledgeBase(
+		ctx,
 		repository.KnowledgeBase{
 			Name: req.Name,
 			// make name as kbID
@@ -151,7 +145,8 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 			CreatorUID:          creatorUUID,
 			CatalogType:         req.GetType().String(),
 			ConvertingPipelines: convertingPipelines,
-		}, callExternalService,
+		},
+		callExternalService,
 	)
 	if err != nil {
 		return nil, err
@@ -310,8 +305,7 @@ func (ph *PublicHandler) UpdateCatalog(ctx context.Context, req *artifactpb.Upda
 		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
 	}
 	if !granted {
-		log.Error("no permission to update catalog")
-		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, customerror.ErrNoPermission)
+		return nil, fmt.Errorf("%w: no permission over catalog", errors.ErrUnauthorized)
 	}
 
 	// update catalog
@@ -402,8 +396,7 @@ func (ph *PublicHandler) DeleteCatalog(ctx context.Context, req *artifactpb.Dele
 		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
 	}
 	if !granted {
-		logger.Error("no permission to delete catalog")
-		return nil, fmt.Errorf(ErrorDeleteKnowledgeBaseMsg, customerror.ErrNoPermission)
+		return nil, fmt.Errorf("%w: no permission over catalog", errors.ErrUnauthorized)
 	}
 
 	startSignal := make(chan bool)
@@ -427,7 +420,7 @@ func (ph *PublicHandler) DeleteCatalog(ctx context.Context, req *artifactpb.Dele
 		}
 
 		// delete the collection in milvus
-		err = ph.service.MilvusClient().DropKnowledgeBaseCollection(ctx, kb.UID.String())
+		err = ph.service.VectorDB().DropCollection(ctx, service.KBCollectionName(kb.UID))
 		if err != nil {
 			logger.Error("failed to delete collection in milvus in background", zap.Error(err))
 			allPass = false
@@ -500,10 +493,10 @@ func (ph *PublicHandler) DeleteCatalog(ctx context.Context, req *artifactpb.Dele
 }
 func getUserUIDFromContext(ctx context.Context) (string, error) {
 	md, _ := metadata.FromIncomingContext(ctx)
-	if v, ok := md[strings.ToLower(constantx.HeaderUserUIDKey)]; ok {
+	if v, ok := md[strings.ToLower(constant.HeaderUserUIDKey)]; ok {
 		return v[0], nil
 	}
-	return "", fmt.Errorf("user id not found in context. err: %w", customerror.ErrUnauthenticated)
+	return "", fmt.Errorf("user id not found in context. err: %w", errors.ErrUnauthenticated)
 }
 
 // The ID should be lowercase without any space or special character besides
