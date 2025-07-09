@@ -257,10 +257,18 @@ func (m *milvusClient) SimilarVectorsInCollection(ctx context.Context, p service
 	}
 	var filterStrs []string
 	if hasMetadata {
+		outputFields = append(
+			outputFields,
+			kbCollectionFieldFileName,
+			kbCollectionFieldFileType,
+			kbCollectionFieldContentType,
+		)
+
 		if hasFileUID {
 			if fileUID != uuid.Nil {
 				filterStrs = append(filterStrs, fmt.Sprintf("%s == '%s'", kbCollectionFieldFileUID, fileUID.String()))
 			}
+			outputFields = append(outputFields, kbCollectionFieldFileUID)
 		} else if fileName != "" {
 			filterStrs = append(filterStrs, fmt.Sprintf("%s == '%s'", kbCollectionFieldFileName, fileName))
 		}
@@ -268,15 +276,10 @@ func (m *milvusClient) SimilarVectorsInCollection(ctx context.Context, p service
 		if fileType != "" {
 			filterStrs = append(filterStrs, fmt.Sprintf("%s == '%s'", kbCollectionFieldFileType, fileType))
 		}
+
 		if contentType != "" {
 			filterStrs = append(filterStrs, fmt.Sprintf("%s == '%s'", kbCollectionFieldContentType, contentType))
 		}
-
-		outputFields = append(outputFields,
-			kbCollectionFieldFileUID,
-			kbCollectionFieldFileName,
-			kbCollectionFieldFileType,
-			kbCollectionFieldContentType)
 	}
 
 	t = time.Now()
