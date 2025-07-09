@@ -241,7 +241,7 @@ func EncodedMinioURLPath(namespaceID string, objectURLUUID uuid.UUID) string {
 //     directly decode the base64 string to the presigned URL and forward the
 //     request to MinIO.
 func encodeBlobURL(presignedURL *url.URL) (string, error) {
-	presignedURLBase64 := base64.StdEncoding.EncodeToString([]byte(presignedURL.String()))
+	presignedURLBase64 := base64.URLEncoding.EncodeToString([]byte(presignedURL.String()))
 
 	path, err := url.JoinPath(blobURLPath, presignedURLBase64)
 	if err != nil {
