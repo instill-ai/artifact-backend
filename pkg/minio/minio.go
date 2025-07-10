@@ -33,6 +33,8 @@ type MinioI interface {
 	GetFile(ctx context.Context, bucket string, filePath string) ([]byte, error)
 	// GetFilesByPaths
 	GetFilesByPaths(ctx context.Context, bucket string, filePaths []string) ([]FileContent, error)
+	// GetFileMetadata: get the metadata of the file
+	GetFileMetadata(ctx context.Context, bucket string, filePath string) (*minio.ObjectInfo, error)
 	// KnowledgeBase
 	KnowledgeBaseI
 	// Object
@@ -217,6 +219,14 @@ func (m *Minio) GetFile(ctx context.Context, bucket string, filePathName string)
 	}
 
 	return buf.Bytes(), nil
+}
+
+func (m *Minio) GetFileMetadata(ctx context.Context, bucket string, filePathName string) (*minio.ObjectInfo, error) {
+	object, err := m.client.StatObject(ctx, bucket, filePathName, minio.StatObjectOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return &object, nil
 }
 
 // FileContent represents a file and its content
