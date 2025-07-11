@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.27.1](https://github.com/instill-ai/artifact-backend/compare/v0.27.0...v0.27.1) (2025-07-11)
+
+
+### Features
+
+* **file:** allow duplicate filenames ([#218](https://github.com/instill-ai/artifact-backend/issues/218)) ([a1b3049](https://github.com/instill-ai/artifact-backend/commit/a1b304956149799eb6eee713584b214b1b96b260))
+* **object:** directly use MinIO pre-signed URL for uploading and downloading objects ([#212](https://github.com/instill-ai/artifact-backend/issues/212)) ([cb81c9b](https://github.com/instill-ai/artifact-backend/commit/cb81c9b184b6356b917d0f42c806b558c57c9590))
+
+
+### Bug Fixes
+
+* **handler:** fix wrong IsUploaded check ([#217](https://github.com/instill-ai/artifact-backend/issues/217)) ([0f71810](https://github.com/instill-ai/artifact-backend/commit/0f71810e41af290ad20b5b1e10e725ecd8b0254a))
+* **milvus:** retrieve file_uid metadata only when present in schema ([#220](https://github.com/instill-ai/artifact-backend/issues/220)) ([aae7d94](https://github.com/instill-ai/artifact-backend/commit/aae7d941de3a13e64ca1f4e8b14fe3fa793d20db))
+* **service:** fix the wrong object size ([#222](https://github.com/instill-ai/artifact-backend/issues/222)) ([fa26ce0](https://github.com/instill-ai/artifact-backend/commit/fa26ce08350704c9d1f58f7c7f3754aea3505325))
+* **service:** use base64.URLEncoding to encode the blob URL ([#221](https://github.com/instill-ai/artifact-backend/issues/221)) ([25b8b41](https://github.com/instill-ai/artifact-backend/commit/25b8b417e8c9dbf7a0ea8c0f4d74f9b2dc904d21))
+
+
+### Miscellaneous
+
+* **codehealth:** refactor pipeline init and service ([#216](https://github.com/instill-ai/artifact-backend/issues/216)) ([765d5cc](https://github.com/instill-ai/artifact-backend/commit/765d5cc29b458cbb98a575d0d6b8385393abcd64))
+* **dep:** bump up usage-client version ([#219](https://github.com/instill-ai/artifact-backend/issues/219)) ([b1b123d](https://github.com/instill-ai/artifact-backend/commit/b1b123d70d888054b93524cc08e52221a3331c8d))
+
 ## [0.27.0](https://github.com/instill-ai/artifact-backend/compare/v0.26.0...v0.27.0) (2025-07-01)
 
 
