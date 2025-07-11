@@ -156,13 +156,15 @@ func (s *service) GetDownloadURL(
 			return nil, ErrObjectNotUploaded
 		}
 
-		_, err := s.minIO.GetFile(ctx, miniolocal.BlobBucketName, object.Destination)
+		objectInfo, err := s.minIO.GetFileMetadata(ctx, miniolocal.BlobBucketName, object.Destination)
 		if err != nil {
 			log.Error("failed to get file", zap.Error(err))
 			return nil, status.Errorf(codes.Internal, "failed to get file: %v", err)
 		}
 		object.IsUploaded = true
-
+		object.Size = objectInfo.Size
+		object.LastModifiedTime = &objectInfo.LastModified
+		object.ContentType = objectInfo.ContentType
 	}
 
 	// Check URL expiration days
