@@ -15,17 +15,18 @@ import (
 // In the future, this might be extracted to a dedicated service or a lambda /
 // cloud run function.
 func (h *PrivateHandler) IngestMinIOAuditLogs(w http.ResponseWriter, r *http.Request, _ map[string]string) {
+
 	body, err := io.ReadAll(r.Body)
 	defer r.Body.Close()
 	if err != nil {
-		h.log.Error("Failed to read MinIO audit log body", zap.Error(err))
+		h.logger.Error("Failed to read MinIO audit log body", zap.Error(err))
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	var auditLog minIOAuditLog
 	if err := json.Unmarshal(body, &auditLog); err != nil {
-		h.log.Error("Failed to unmarshal MinIO audit log", zap.Error(err))
+		h.logger.Error("Failed to unmarshal MinIO audit log", zap.Error(err))
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -35,7 +36,7 @@ func (h *PrivateHandler) IngestMinIOAuditLogs(w http.ResponseWriter, r *http.Req
 			return
 		}
 
-		h.log.Info("MinIO audit log", zap.Any("body", auditLog))
+		h.logger.Info("MinIO audit log", zap.Any("body", auditLog))
 
 	}()
 

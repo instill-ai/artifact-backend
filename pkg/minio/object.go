@@ -11,7 +11,7 @@ import (
 	"github.com/gofrs/uuid"
 	"go.uber.org/zap"
 
-	"github.com/instill-ai/x/log"
+	logx "github.com/instill-ai/x/log"
 )
 
 // ObjectI is the interface for object-related operations.
@@ -26,7 +26,7 @@ type ObjectI interface {
 
 // GetPresignedURLForUpload creates a presigned URL for uploading an object.
 func (m *Minio) GetPresignedURLForUpload(ctx context.Context, namespaceUUID uuid.UUID, objectUUID uuid.UUID, filename string, expiration time.Duration) (*url.URL, error) {
-	log, err := log.GetZapLogger(ctx)
+	logger, err := logx.GetZapLogger(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +51,7 @@ func (m *Minio) GetPresignedURLForUpload(ctx context.Context, namespaceUUID uuid
 		m.presignHeaders(),
 	)
 	if err != nil {
-		log.Error("Failed to make presigned URL for upload", zap.Error(err))
+		logger.Error("Failed to make presigned URL for upload", zap.Error(err))
 		return nil, err
 	}
 
@@ -60,7 +60,7 @@ func (m *Minio) GetPresignedURLForUpload(ctx context.Context, namespaceUUID uuid
 
 // GetPresignedURLForDownload creates a presigned URL for downloading an object.
 func (m *Minio) GetPresignedURLForDownload(ctx context.Context, namespaceUUID uuid.UUID, objectUUID uuid.UUID, filename string, contentType string, expiration time.Duration) (*url.URL, error) {
-	log, err := log.GetZapLogger(ctx)
+	logger, err := logx.GetZapLogger(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +85,7 @@ func (m *Minio) GetPresignedURLForDownload(ctx context.Context, namespaceUUID uu
 		m.presignHeaders(),
 	)
 	if err != nil {
-		log.Error("Failed to make presigned URL for download", zap.Error(err))
+		logger.Error("Failed to make presigned URL for download", zap.Error(err))
 		return nil, err
 	}
 

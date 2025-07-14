@@ -10,6 +10,7 @@ import (
 	"github.com/go-playground/validator"
 	"github.com/knadh/koanf"
 	"github.com/knadh/koanf/parsers/yaml"
+	"github.com/knadh/koanf/providers/confmap"
 	"github.com/knadh/koanf/providers/env"
 	"github.com/knadh/koanf/providers/file"
 	"github.com/redis/go-redis/v9"
@@ -28,7 +29,7 @@ type AppConfig struct {
 	Database              DatabaseConfig        `koanf:"database"`
 	InfluxDB              InfluxDBConfig        `koanf:"influxdb"`
 	Cache                 CacheConfig           `koanf:"cache"`
-	Log                   LogConfig             `koanf:"log"`
+	OTELCollector         OTELCollectorConfig   `koanf:"otelcollector"`
 	MgmtBackend           client.ServiceConfig  `koanf:"mgmtbackend"`
 	PipelineBackend       client.ServiceConfig  `koanf:"pipelinebackend"`
 	ModelBackend          client.ServiceConfig  `koanf:"modelbackend"`
@@ -40,7 +41,7 @@ type AppConfig struct {
 	Blob                  BlobConfig            `koanf:"blob"`
 }
 
-// OpenFGA config
+// OpenFGAConfig is the openfga configuration.
 type OpenFGAConfig struct {
 	Host    string `koanf:"host"`
 	Port    int    `koanf:"port"`
@@ -104,13 +105,11 @@ type InfluxDBConfig struct {
 	}
 }
 
-// LogConfig related to logging
-type LogConfig struct {
-	External      bool `koanf:"external"`
-	OtelCollector struct {
-		Host string `koanf:"host"`
-		Port string `koanf:"port"`
-	}
+// OTELCollectorConfig related to OTEL collector
+type OTELCollectorConfig struct {
+	Enable bool   `koanf:"enable"`
+	Host   string `koanf:"host"`
+	Port   int    `koanf:"port"`
 }
 
 // CacheConfig related to Redis
@@ -132,45 +131,39 @@ type MilvusConfig struct {
 	Port string `koanf:"port"`
 }
 
+// FileToEmbeddingWorker is the file to embedding worker configuration.
 type FileToEmbeddingWorker struct {
 	NumberOfWorkers int `koanf:"numberofworkers"`
 }
 
+// BlobConfig is the blob configuration.
 type BlobConfig struct {
 	HostPort string `koanf:"hostport"`
 }
 
 // Init - Assign global config to decoded config struct
-func Init() error {
+func Init(filePath string) error {
 	k := koanf.New(".")
 	parser := yaml.Parser()
-	fs := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
-	fileRelativePath := fs.String("file", "config/config.yaml", "configuration file")
-	err := fs.Parse(os.Args[1:])
-	if err != nil {
-		log.Fatal(err.Error())
-	}
-	if err := k.Load(
-		file.Provider(*fileRelativePath),
-		parser,
-	); err != nil {
+
+	if err := k.Load(confmap.Provider(map[string]any{
+		"database.replica.replicationtimeframe": 60,
+		"openfga.replica.replicationtimeframe":  60,
+	}, "."), nil); err != nil {
 		log.Fatal(err.Error())
 	}
 
-	if err := k.Load(
-		env.ProviderWithValue(
-			"CFG_",
-			".",
-			func(k string, v string) (string, interface{}) {
-				key := strings.ReplaceAll(strings.ToLower(strings.TrimPrefix(k, "CFG_")), "_", ".")
-				if strings.Contains(v, ",") {
-					return key, strings.Split(strings.TrimSpace(v), ",")
-				}
-				return key, v
-			},
-		),
-		nil,
-	); err != nil {
+	if err := k.Load(file.Provider(filePath), parser); err != nil {
+		log.Fatal(err.Error())
+	}
+
+	if err := k.Load(env.ProviderWithValue("CFG_", ".", func(s string, v string) (string, any) {
+		key := strings.ReplaceAll(strings.ToLower(strings.TrimPrefix(s, "CFG_")), "_", ".")
+		if strings.Contains(v, ",") {
+			return key, strings.Split(strings.TrimSpace(v), ",")
+		}
+		return key, v
+	}), nil); err != nil {
 		return err
 	}
 
@@ -188,4 +181,16 @@ func ValidateConfig(cfg *AppConfig) error {
 		return err
 	}
 	return nil
+}
+
+var defaultConfigPath = "config/config.yaml"
+
+// ParseConfigFlag allows clients to specify the relative path to the file from
+// which the configuration will be loaded.
+func ParseConfigFlag() string {
+	fs := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+	configPath := fs.String("file", defaultConfigPath, "configuration file")
+	flag.Parse()
+
+	return *configPath
 }

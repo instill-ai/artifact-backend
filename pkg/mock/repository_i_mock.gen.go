@@ -391,8 +391,8 @@ type RepositoryIMock struct {
 	beforeTextChunkTableNameCounter uint64
 	TextChunkTableNameMock          mRepositoryIMockTextChunkTableName
 
-	funcUpdateChunk          func(ctx context.Context, chunkUID string, updates map[string]interface{}) (tp1 *mm_repository.TextChunk, err error)
-	inspectFuncUpdateChunk   func(ctx context.Context, chunkUID string, updates map[string]interface{})
+	funcUpdateChunk          func(ctx context.Context, chunkUID string, updates map[string]any) (tp1 *mm_repository.TextChunk, err error)
+	inspectFuncUpdateChunk   func(ctx context.Context, chunkUID string, updates map[string]any)
 	afterUpdateChunkCounter  uint64
 	beforeUpdateChunkCounter uint64
 	UpdateChunkMock          mRepositoryIMockUpdateChunk
@@ -409,8 +409,8 @@ type RepositoryIMock struct {
 	beforeUpdateKnowledgeBaseCounter uint64
 	UpdateKnowledgeBaseMock          mRepositoryIMockUpdateKnowledgeBase
 
-	funcUpdateKnowledgeBaseFile          func(ctx context.Context, fileUID string, updateMap map[string]interface{}) (kp1 *mm_repository.KnowledgeBaseFile, err error)
-	inspectFuncUpdateKnowledgeBaseFile   func(ctx context.Context, fileUID string, updateMap map[string]interface{})
+	funcUpdateKnowledgeBaseFile          func(ctx context.Context, fileUID string, updateMap map[string]any) (kp1 *mm_repository.KnowledgeBaseFile, err error)
+	inspectFuncUpdateKnowledgeBaseFile   func(ctx context.Context, fileUID string, updateMap map[string]any)
 	afterUpdateKnowledgeBaseFileCounter  uint64
 	beforeUpdateKnowledgeBaseFileCounter uint64
 	UpdateKnowledgeBaseFileMock          mRepositoryIMockUpdateKnowledgeBaseFile
@@ -19935,14 +19935,14 @@ type RepositoryIMockUpdateChunkExpectation struct {
 type RepositoryIMockUpdateChunkParams struct {
 	ctx      context.Context
 	chunkUID string
-	updates  map[string]interface{}
+	updates  map[string]any
 }
 
 // RepositoryIMockUpdateChunkParamPtrs contains pointers to parameters of the RepositoryI.UpdateChunk
 type RepositoryIMockUpdateChunkParamPtrs struct {
 	ctx      *context.Context
 	chunkUID *string
-	updates  *map[string]interface{}
+	updates  *map[string]any
 }
 
 // RepositoryIMockUpdateChunkResults contains results of the RepositoryI.UpdateChunk
@@ -19962,7 +19962,7 @@ func (mmUpdateChunk *mRepositoryIMockUpdateChunk) Optional() *mRepositoryIMockUp
 }
 
 // Expect sets up expected params for RepositoryI.UpdateChunk
-func (mmUpdateChunk *mRepositoryIMockUpdateChunk) Expect(ctx context.Context, chunkUID string, updates map[string]interface{}) *mRepositoryIMockUpdateChunk {
+func (mmUpdateChunk *mRepositoryIMockUpdateChunk) Expect(ctx context.Context, chunkUID string, updates map[string]any) *mRepositoryIMockUpdateChunk {
 	if mmUpdateChunk.mock.funcUpdateChunk != nil {
 		mmUpdateChunk.mock.t.Fatalf("RepositoryIMock.UpdateChunk mock is already set by Set")
 	}
@@ -20030,7 +20030,7 @@ func (mmUpdateChunk *mRepositoryIMockUpdateChunk) ExpectChunkUIDParam2(chunkUID 
 }
 
 // ExpectUpdatesParam3 sets up expected param updates for RepositoryI.UpdateChunk
-func (mmUpdateChunk *mRepositoryIMockUpdateChunk) ExpectUpdatesParam3(updates map[string]interface{}) *mRepositoryIMockUpdateChunk {
+func (mmUpdateChunk *mRepositoryIMockUpdateChunk) ExpectUpdatesParam3(updates map[string]any) *mRepositoryIMockUpdateChunk {
 	if mmUpdateChunk.mock.funcUpdateChunk != nil {
 		mmUpdateChunk.mock.t.Fatalf("RepositoryIMock.UpdateChunk mock is already set by Set")
 	}
@@ -20052,7 +20052,7 @@ func (mmUpdateChunk *mRepositoryIMockUpdateChunk) ExpectUpdatesParam3(updates ma
 }
 
 // Inspect accepts an inspector function that has same arguments as the RepositoryI.UpdateChunk
-func (mmUpdateChunk *mRepositoryIMockUpdateChunk) Inspect(f func(ctx context.Context, chunkUID string, updates map[string]interface{})) *mRepositoryIMockUpdateChunk {
+func (mmUpdateChunk *mRepositoryIMockUpdateChunk) Inspect(f func(ctx context.Context, chunkUID string, updates map[string]any)) *mRepositoryIMockUpdateChunk {
 	if mmUpdateChunk.mock.inspectFuncUpdateChunk != nil {
 		mmUpdateChunk.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.UpdateChunk")
 	}
@@ -20076,7 +20076,7 @@ func (mmUpdateChunk *mRepositoryIMockUpdateChunk) Return(tp1 *mm_repository.Text
 }
 
 // Set uses given function f to mock the RepositoryI.UpdateChunk method
-func (mmUpdateChunk *mRepositoryIMockUpdateChunk) Set(f func(ctx context.Context, chunkUID string, updates map[string]interface{}) (tp1 *mm_repository.TextChunk, err error)) *RepositoryIMock {
+func (mmUpdateChunk *mRepositoryIMockUpdateChunk) Set(f func(ctx context.Context, chunkUID string, updates map[string]any) (tp1 *mm_repository.TextChunk, err error)) *RepositoryIMock {
 	if mmUpdateChunk.defaultExpectation != nil {
 		mmUpdateChunk.mock.t.Fatalf("Default expectation is already set for the RepositoryI.UpdateChunk method")
 	}
@@ -20091,7 +20091,7 @@ func (mmUpdateChunk *mRepositoryIMockUpdateChunk) Set(f func(ctx context.Context
 
 // When sets expectation for the RepositoryI.UpdateChunk which will trigger the result defined by the following
 // Then helper
-func (mmUpdateChunk *mRepositoryIMockUpdateChunk) When(ctx context.Context, chunkUID string, updates map[string]interface{}) *RepositoryIMockUpdateChunkExpectation {
+func (mmUpdateChunk *mRepositoryIMockUpdateChunk) When(ctx context.Context, chunkUID string, updates map[string]any) *RepositoryIMockUpdateChunkExpectation {
 	if mmUpdateChunk.mock.funcUpdateChunk != nil {
 		mmUpdateChunk.mock.t.Fatalf("RepositoryIMock.UpdateChunk mock is already set by Set")
 	}
@@ -20131,7 +20131,7 @@ func (mmUpdateChunk *mRepositoryIMockUpdateChunk) invocationsDone() bool {
 }
 
 // UpdateChunk implements repository.RepositoryI
-func (mmUpdateChunk *RepositoryIMock) UpdateChunk(ctx context.Context, chunkUID string, updates map[string]interface{}) (tp1 *mm_repository.TextChunk, err error) {
+func (mmUpdateChunk *RepositoryIMock) UpdateChunk(ctx context.Context, chunkUID string, updates map[string]any) (tp1 *mm_repository.TextChunk, err error) {
 	mm_atomic.AddUint64(&mmUpdateChunk.beforeUpdateChunkCounter, 1)
 	defer mm_atomic.AddUint64(&mmUpdateChunk.afterUpdateChunkCounter, 1)
 
@@ -21261,14 +21261,14 @@ type RepositoryIMockUpdateKnowledgeBaseFileExpectation struct {
 type RepositoryIMockUpdateKnowledgeBaseFileParams struct {
 	ctx       context.Context
 	fileUID   string
-	updateMap map[string]interface{}
+	updateMap map[string]any
 }
 
 // RepositoryIMockUpdateKnowledgeBaseFileParamPtrs contains pointers to parameters of the RepositoryI.UpdateKnowledgeBaseFile
 type RepositoryIMockUpdateKnowledgeBaseFileParamPtrs struct {
 	ctx       *context.Context
 	fileUID   *string
-	updateMap *map[string]interface{}
+	updateMap *map[string]any
 }
 
 // RepositoryIMockUpdateKnowledgeBaseFileResults contains results of the RepositoryI.UpdateKnowledgeBaseFile
@@ -21288,7 +21288,7 @@ func (mmUpdateKnowledgeBaseFile *mRepositoryIMockUpdateKnowledgeBaseFile) Option
 }
 
 // Expect sets up expected params for RepositoryI.UpdateKnowledgeBaseFile
-func (mmUpdateKnowledgeBaseFile *mRepositoryIMockUpdateKnowledgeBaseFile) Expect(ctx context.Context, fileUID string, updateMap map[string]interface{}) *mRepositoryIMockUpdateKnowledgeBaseFile {
+func (mmUpdateKnowledgeBaseFile *mRepositoryIMockUpdateKnowledgeBaseFile) Expect(ctx context.Context, fileUID string, updateMap map[string]any) *mRepositoryIMockUpdateKnowledgeBaseFile {
 	if mmUpdateKnowledgeBaseFile.mock.funcUpdateKnowledgeBaseFile != nil {
 		mmUpdateKnowledgeBaseFile.mock.t.Fatalf("RepositoryIMock.UpdateKnowledgeBaseFile mock is already set by Set")
 	}
@@ -21356,7 +21356,7 @@ func (mmUpdateKnowledgeBaseFile *mRepositoryIMockUpdateKnowledgeBaseFile) Expect
 }
 
 // ExpectUpdateMapParam3 sets up expected param updateMap for RepositoryI.UpdateKnowledgeBaseFile
-func (mmUpdateKnowledgeBaseFile *mRepositoryIMockUpdateKnowledgeBaseFile) ExpectUpdateMapParam3(updateMap map[string]interface{}) *mRepositoryIMockUpdateKnowledgeBaseFile {
+func (mmUpdateKnowledgeBaseFile *mRepositoryIMockUpdateKnowledgeBaseFile) ExpectUpdateMapParam3(updateMap map[string]any) *mRepositoryIMockUpdateKnowledgeBaseFile {
 	if mmUpdateKnowledgeBaseFile.mock.funcUpdateKnowledgeBaseFile != nil {
 		mmUpdateKnowledgeBaseFile.mock.t.Fatalf("RepositoryIMock.UpdateKnowledgeBaseFile mock is already set by Set")
 	}
@@ -21378,7 +21378,7 @@ func (mmUpdateKnowledgeBaseFile *mRepositoryIMockUpdateKnowledgeBaseFile) Expect
 }
 
 // Inspect accepts an inspector function that has same arguments as the RepositoryI.UpdateKnowledgeBaseFile
-func (mmUpdateKnowledgeBaseFile *mRepositoryIMockUpdateKnowledgeBaseFile) Inspect(f func(ctx context.Context, fileUID string, updateMap map[string]interface{})) *mRepositoryIMockUpdateKnowledgeBaseFile {
+func (mmUpdateKnowledgeBaseFile *mRepositoryIMockUpdateKnowledgeBaseFile) Inspect(f func(ctx context.Context, fileUID string, updateMap map[string]any)) *mRepositoryIMockUpdateKnowledgeBaseFile {
 	if mmUpdateKnowledgeBaseFile.mock.inspectFuncUpdateKnowledgeBaseFile != nil {
 		mmUpdateKnowledgeBaseFile.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.UpdateKnowledgeBaseFile")
 	}
@@ -21402,7 +21402,7 @@ func (mmUpdateKnowledgeBaseFile *mRepositoryIMockUpdateKnowledgeBaseFile) Return
 }
 
 // Set uses given function f to mock the RepositoryI.UpdateKnowledgeBaseFile method
-func (mmUpdateKnowledgeBaseFile *mRepositoryIMockUpdateKnowledgeBaseFile) Set(f func(ctx context.Context, fileUID string, updateMap map[string]interface{}) (kp1 *mm_repository.KnowledgeBaseFile, err error)) *RepositoryIMock {
+func (mmUpdateKnowledgeBaseFile *mRepositoryIMockUpdateKnowledgeBaseFile) Set(f func(ctx context.Context, fileUID string, updateMap map[string]any) (kp1 *mm_repository.KnowledgeBaseFile, err error)) *RepositoryIMock {
 	if mmUpdateKnowledgeBaseFile.defaultExpectation != nil {
 		mmUpdateKnowledgeBaseFile.mock.t.Fatalf("Default expectation is already set for the RepositoryI.UpdateKnowledgeBaseFile method")
 	}
@@ -21417,7 +21417,7 @@ func (mmUpdateKnowledgeBaseFile *mRepositoryIMockUpdateKnowledgeBaseFile) Set(f 
 
 // When sets expectation for the RepositoryI.UpdateKnowledgeBaseFile which will trigger the result defined by the following
 // Then helper
-func (mmUpdateKnowledgeBaseFile *mRepositoryIMockUpdateKnowledgeBaseFile) When(ctx context.Context, fileUID string, updateMap map[string]interface{}) *RepositoryIMockUpdateKnowledgeBaseFileExpectation {
+func (mmUpdateKnowledgeBaseFile *mRepositoryIMockUpdateKnowledgeBaseFile) When(ctx context.Context, fileUID string, updateMap map[string]any) *RepositoryIMockUpdateKnowledgeBaseFileExpectation {
 	if mmUpdateKnowledgeBaseFile.mock.funcUpdateKnowledgeBaseFile != nil {
 		mmUpdateKnowledgeBaseFile.mock.t.Fatalf("RepositoryIMock.UpdateKnowledgeBaseFile mock is already set by Set")
 	}
@@ -21457,7 +21457,7 @@ func (mmUpdateKnowledgeBaseFile *mRepositoryIMockUpdateKnowledgeBaseFile) invoca
 }
 
 // UpdateKnowledgeBaseFile implements repository.RepositoryI
-func (mmUpdateKnowledgeBaseFile *RepositoryIMock) UpdateKnowledgeBaseFile(ctx context.Context, fileUID string, updateMap map[string]interface{}) (kp1 *mm_repository.KnowledgeBaseFile, err error) {
+func (mmUpdateKnowledgeBaseFile *RepositoryIMock) UpdateKnowledgeBaseFile(ctx context.Context, fileUID string, updateMap map[string]any) (kp1 *mm_repository.KnowledgeBaseFile, err error) {
 	mm_atomic.AddUint64(&mmUpdateKnowledgeBaseFile.beforeUpdateKnowledgeBaseFileCounter, 1)
 	defer mm_atomic.AddUint64(&mmUpdateKnowledgeBaseFile.afterUpdateKnowledgeBaseFileCounter, 1)
 

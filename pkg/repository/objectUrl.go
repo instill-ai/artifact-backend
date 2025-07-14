@@ -96,7 +96,7 @@ func (r *Repository) CreateObjectURLWithUIDInEncodedURLPath(ctx context.Context,
 		}
 
 		// Update the encoded_url_path to include the UID
-		updateMap := map[string]interface{}{
+		updateMap := map[string]any{
 			ObjectURLColumn.EncodedURLPath: EncodedMinioURLPath(namespaceID, objectURL.UID),
 		}
 

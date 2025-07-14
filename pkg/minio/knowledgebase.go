@@ -9,7 +9,8 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/instill-ai/artifact-backend/pkg/utils"
-	"github.com/instill-ai/x/log"
+
+	logx "github.com/instill-ai/x/log"
 )
 
 // KnowledgeBaseI is the interface for knowledge base related operations.
@@ -61,7 +62,7 @@ type ChunkContentType []byte
 // rate limiting is implemented to avoid overwhelming the MinIO server.
 // rate limiting is implemented to avoid overwhelming the MinIO server.
 func (m *Minio) SaveTextChunks(ctx context.Context, kbUID string, chunks map[ChunkUIDType]ChunkContentType) error {
-	logger, _ := log.GetZapLogger(ctx)
+	logger, _ := logx.GetZapLogger(ctx)
 	var wg sync.WaitGroup
 	type ChunkError struct {
 		ChunkUID     string

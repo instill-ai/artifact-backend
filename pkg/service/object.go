@@ -19,10 +19,10 @@ import (
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
-	"github.com/instill-ai/x/log"
 
 	miniolocal "github.com/instill-ai/artifact-backend/pkg/minio"
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	logx "github.com/instill-ai/x/log"
 )
 
 // error type for object
@@ -41,16 +41,16 @@ func (s *service) GetUploadURL(
 	namespaceID string,
 	creatorUID uuid.UUID,
 ) (*artifactpb.GetObjectUploadURLResponse, error) {
-	log, _ := log.GetZapLogger(ctx)
+	logger, _ := logx.GetZapLogger(ctx)
 	// name cannot be empty
 	if req.GetObjectName() == "" {
-		log.Error("name cannot be empty")
+		logger.Error("name cannot be empty")
 		return nil, status.Errorf(codes.InvalidArgument, "name cannot be empty")
 	}
 
 	// check if name is longer than 400 characters
 	if len(req.GetObjectName()) > 400 {
-		log.Error("name should not be longer than 400 characters")
+		logger.Error("name should not be longer than 400 characters")
 		return nil, status.Errorf(codes.InvalidArgument, "name should not be longer than 400 characters")
 	}
 
@@ -83,7 +83,7 @@ func (s *service) GetUploadURL(
 	// create object
 	createdObject, err := s.repository.CreateObject(ctx, *object)
 	if err != nil {
-		log.Error("failed to create object", zap.Error(err))
+		logger.Error("failed to create object", zap.Error(err))
 		return nil, status.Errorf(codes.Internal, "failed to create object: %v", err)
 	}
 
@@ -93,7 +93,7 @@ func (s *service) GetUploadURL(
 	createdObject.Destination = minioPath
 	_, err = s.repository.UpdateObject(ctx, *createdObject)
 	if err != nil {
-		log.Error("failed to update object", zap.Error(err))
+		logger.Error("failed to update object", zap.Error(err))
 		return nil, status.Errorf(codes.Internal, "failed to update object: %v", err)
 	}
 
@@ -101,19 +101,19 @@ func (s *service) GetUploadURL(
 	expirationTime := time.Duration(req.GetUrlExpireDays()) * time.Hour * 24
 	presignedURL, err := s.minIO.GetPresignedURLForUpload(ctx, namespaceUID, createdObject.UID, req.GetObjectName(), expirationTime)
 	if err != nil {
-		log.Error("failed to make presigned url for upload", zap.Error(err))
+		logger.Error("failed to make presigned url for upload", zap.Error(err))
 		return nil, status.Errorf(codes.Internal, "failed to make presigned url for upload: %v", err)
 	}
 
 	uploadURL, err := encodeBlobURL(presignedURL)
 	if err != nil {
-		log.Error("failed to encode blob url", zap.Error(err))
+		logger.Error("failed to encode blob url", zap.Error(err))
 		return nil, status.Errorf(codes.Internal, "failed to encode blob url: %v", err)
 	}
 
 	expireAtTS, err := getExpireAtTS(presignedURL)
 	if err != nil {
-		log.Error("failed to get expire at ts", zap.Error(err))
+		logger.Error("failed to get expire at ts", zap.Error(err))
 		return nil, status.Errorf(codes.Internal, "failed to get expire at ts: %v", err)
 	}
 
@@ -132,22 +132,22 @@ func (s *service) GetDownloadURL(
 	namespaceUID uuid.UUID,
 	namespaceID string,
 ) (*artifactpb.GetObjectDownloadURLResponse, error) {
-	log, _ := log.GetZapLogger(ctx)
+	logger, _ := logx.GetZapLogger(ctx)
 	objectUID, err := uuid.FromString(req.GetObjectUid())
 	if err != nil {
-		log.Error("failed to parse object uid", zap.Error(err))
+		logger.Error("failed to parse object uid", zap.Error(err))
 		return nil, status.Errorf(codes.InvalidArgument, "failed to parse object uid: %v", err)
 	}
 	// Get the object from database
 	object, err := s.repository.GetObjectByUID(ctx, objectUID)
 	if err != nil {
-		log.Error("failed to get object", zap.Error(err))
+		logger.Error("failed to get object", zap.Error(err))
 		return nil, status.Errorf(codes.NotFound, "object not found: %v", err)
 	}
 
 	// Verify namespace matches
 	if object.NamespaceUID != namespaceUID {
-		log.Error("namespace mismatch")
+		logger.Error("namespace mismatch")
 		return nil, status.Error(codes.PermissionDenied, "namespace mismatch")
 	}
 
@@ -158,7 +158,7 @@ func (s *service) GetDownloadURL(
 
 		objectInfo, err := s.minIO.GetFileMetadata(ctx, miniolocal.BlobBucketName, object.Destination)
 		if err != nil {
-			log.Error("failed to get file", zap.Error(err))
+			logger.Error("failed to get file", zap.Error(err))
 			return nil, status.Errorf(codes.Internal, "failed to get file: %v", err)
 		}
 		object.IsUploaded = true
@@ -188,19 +188,19 @@ func (s *service) GetDownloadURL(
 		expirationTime,
 	)
 	if err != nil {
-		log.Error("failed to make presigned url for download", zap.Error(err))
+		logger.Error("failed to make presigned url for download", zap.Error(err))
 		return nil, status.Errorf(codes.Internal, "failed to make presigned url for download: %v", err)
 	}
 
 	downloadURL, err := encodeBlobURL(presignedURL)
 	if err != nil {
-		log.Error("failed to encode blob url", zap.Error(err))
+		logger.Error("failed to encode blob url", zap.Error(err))
 		return nil, status.Errorf(codes.Internal, "failed to encode blob url: %v", err)
 	}
 
 	expireAtTS, err := getExpireAtTS(presignedURL)
 	if err != nil {
-		log.Error("failed to get expire at ts", zap.Error(err))
+		logger.Error("failed to get expire at ts", zap.Error(err))
 		return nil, status.Errorf(codes.Internal, "failed to get expire at ts: %v", err)
 	}
 

@@ -9,9 +9,9 @@ import (
 
 	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
-	"github.com/instill-ai/x/log"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	logx "github.com/instill-ai/x/log"
 )
 
 type ChunkUIDType = uuid.UUID
@@ -29,7 +29,7 @@ func (s *service) GetChunksByFile(ctx context.Context, file *repository.Knowledg
 	error,
 ) {
 
-	logger, _ := log.GetZapLogger(ctx)
+	logger, _ := logx.GetZapLogger(ctx)
 	// check the file type
 	// if it is pdf, sourceTable is converted file table, sourceUID is converted file UID
 	// if it is txt or md, sourceTable is knowledge base file table, sourceUID is knowledge base file UID

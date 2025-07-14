@@ -12,7 +12,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	"github.com/instill-ai/x/log"
+	logx "github.com/instill-ai/x/log"
 )
 
 type TextChunkI interface {
@@ -37,7 +37,7 @@ type TextChunkI interface {
 		SourceTable SourceTable
 		SourceUID   SourceUID
 	}) (map[FileUID]int, error)
-	UpdateChunk(ctx context.Context, chunkUID string, updates map[string]interface{}) (*TextChunk, error)
+	UpdateChunk(ctx context.Context, chunkUID string, updates map[string]any) (*TextChunk, error)
 }
 
 // currently, we use minio to store the chunk but in the future, we may just get the content from the source
@@ -109,7 +109,7 @@ func (r *Repository) TextChunkTableName() string {
 // a certain source table and sourceUID, then batch inserts the new chunks
 // within a transaction.
 func (r *Repository) DeleteAndCreateChunks(ctx context.Context, sourceTable string, sourceUID uuid.UUID, chunks []*TextChunk, externalServiceCall func(chunkUIDs []string) (map[string]any, error)) ([]*TextChunk, error) {
-	logger, _ := log.GetZapLogger(ctx)
+	logger, _ := logx.GetZapLogger(ctx)
 	// Start a transaction
 	err := r.db.Transaction(func(tx *gorm.DB) error {
 		// Delete existing chunks
@@ -239,7 +239,7 @@ func (r *Repository) GetFilesTotalTokens(ctx context.Context, sources map[FileUI
 
 	// Prepare the conditions for the query
 	var conditions []string
-	var values []interface{}
+	var values []any
 
 	for _, source := range sources {
 		conditions = append(conditions, "(source_table = ? AND source_uid = ?)")
@@ -291,7 +291,7 @@ func (r *Repository) GetTotalChunksBySources(ctx context.Context, sources map[Fi
 
 	// Prepare the conditions for the query
 	var conditions []string
-	var values []interface{}
+	var values []any
 
 	for _, source := range sources {
 		conditions = append(conditions, "(source_table = ? AND source_uid = ?)")
@@ -332,7 +332,7 @@ func (r *Repository) GetTotalChunksBySources(ctx context.Context, sources map[Fi
 }
 
 // UpdateChunk updates a specific chunk identified by chunkUID with the provided updates map.
-func (r *Repository) UpdateChunk(ctx context.Context, chunkUID string, updates map[string]interface{}) (*TextChunk, error) {
+func (r *Repository) UpdateChunk(ctx context.Context, chunkUID string, updates map[string]any) (*TextChunk, error) {
 	// Fetch the existing chunk to ensure it exists
 	var existingChunk TextChunk
 	where := fmt.Sprintf("%s = ?", TextChunkColumn.UID)

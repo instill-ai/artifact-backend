@@ -41,11 +41,10 @@ cache:
   redis:
     redisoptions:
       addr: redis:6379
-log:
-  external: false
-  otelcollector:
-    host: otel-collector
-    port: 8095
+otelcollector:
+  enable: false
+  host: otel-collector
+  port: 4317
 mgmtbackend:
   host: mgmt-backend
   publicport: 8084

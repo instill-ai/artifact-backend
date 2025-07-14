@@ -7,18 +7,19 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/instill-ai/artifact-backend/pkg/acl"
-	"github.com/instill-ai/artifact-backend/pkg/errors"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/resource"
-	"github.com/instill-ai/x/log"
+
+	errorsx "github.com/instill-ai/x/errors"
+	logx "github.com/instill-ai/x/log"
 )
 
 func (s *service) CheckCatalogUserPermission(ctx context.Context, nsID, catalogID, authUID string) (*resource.Namespace, *repository.KnowledgeBase, error) {
-	log, _ := log.GetZapLogger(ctx)
+	logger, _ := logx.GetZapLogger(ctx)
 	// ACL - check user's permission to create conversation in the namespace
 	ns, err := s.GetNamespaceByNsID(ctx, nsID)
 	if err != nil {
-		log.Error(
+		logger.Error(
 			"failed to get namespace",
 			zap.Error(err),
 			zap.String("namespace_id", nsID),
@@ -30,17 +31,17 @@ func (s *service) CheckCatalogUserPermission(ctx context.Context, nsID, catalogI
 	// Check if the catalog exists
 	catalog, err := s.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, catalogID)
 	if err != nil {
-		log.Error("failed to get catalog", zap.Error(err))
+		logger.Error("failed to get catalog", zap.Error(err))
 		return nil, nil, fmt.Errorf("failed to get catalog: %w", err)
 	}
 	granted, err := s.aclClient.CheckPermission(ctx, acl.CatalogObject, catalog.UID, "writer")
 	if err != nil {
-		log.Error("failed to check permission", zap.Error(err))
+		logger.Error("failed to check permission", zap.Error(err))
 
 		return nil, nil, fmt.Errorf("failed to check permission. err: %w", err)
 	}
 	if !granted {
-		return nil, nil, fmt.Errorf("no permission. err: %w", errors.ErrUnauthorized)
+		return nil, nil, fmt.Errorf("no permission. err: %w", errorsx.ErrUnauthorized)
 	}
 
 	return ns, catalog, nil

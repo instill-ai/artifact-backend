@@ -54,6 +54,7 @@ const (
 )
 
 func NewMinioClientAndInitBucket(ctx context.Context, params miniox.ClientParams) (*Minio, error) {
+
 	params.Logger = params.Logger.With(
 		zap.String("host:port", params.Config.Host+":"+params.Config.Port),
 		zap.String("user", params.Config.User),

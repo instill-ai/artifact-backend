@@ -12,9 +12,9 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/instill-ai/artifact-backend/pkg/service"
-	"github.com/instill-ai/x/log"
 
-	errdomain "github.com/instill-ai/artifact-backend/pkg/errors"
+	errorsx "github.com/instill-ai/x/errors"
+	logx "github.com/instill-ai/x/log"
 )
 
 const (
@@ -51,7 +51,7 @@ func NewVectorDatabase(ctx context.Context, host, port string) (db service.Vecto
 }
 
 func (m *milvusClient) CreateCollection(ctx context.Context, collectionName string) error {
-	logger, _ := log.GetZapLogger(ctx)
+	logger, _ := logx.GetZapLogger(ctx)
 	logger = logger.With(zap.String("collection_name", collectionName))
 
 	// 1. Check if the collection already exists
@@ -102,7 +102,7 @@ func (m *milvusClient) CreateCollection(ctx context.Context, collectionName stri
 }
 
 func (m *milvusClient) InsertVectorsInCollection(ctx context.Context, collectionName string, embeddings []service.Embedding) error {
-	logger, _ := log.GetZapLogger(ctx)
+	logger, _ := logx.GetZapLogger(ctx)
 	logger = logger.With(zap.String("collection_name", collectionName))
 
 	// Check if the collection exists
@@ -111,7 +111,7 @@ func (m *milvusClient) InsertVectorsInCollection(ctx context.Context, collection
 		return fmt.Errorf("checking collection existence: %w", err)
 	}
 	if !has {
-		return fmt.Errorf("checking collection existence: %w", errdomain.ErrNotFound)
+		return fmt.Errorf("checking collection existence: %w", errorsx.ErrNotFound)
 	}
 
 	// Prepare the data for insertion
@@ -212,7 +212,7 @@ func (m *milvusClient) DeleteEmbeddingsInCollection(ctx context.Context, collect
 }
 
 func (m *milvusClient) SimilarVectorsInCollection(ctx context.Context, p service.SimilarVectorSearchParam) ([][]service.SimilarEmbedding, error) {
-	logger, _ := log.GetZapLogger(ctx)
+	logger, _ := logx.GetZapLogger(ctx)
 
 	collectionName := p.CollectionID
 	vectors := p.Vectors
@@ -231,7 +231,7 @@ func (m *milvusClient) SimilarVectorsInCollection(ctx context.Context, p service
 		return nil, fmt.Errorf("checking collection existence: %w", err)
 	}
 	if !has {
-		return nil, fmt.Errorf("checking collection existence: %w", errdomain.ErrNotFound)
+		return nil, fmt.Errorf("checking collection existence: %w", errorsx.ErrNotFound)
 	}
 
 	logger.Info("Existence check.", zap.Duration("duration", time.Since(t)))

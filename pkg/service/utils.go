@@ -8,6 +8,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/resource"
 	"github.com/instill-ai/x/constant"
 
+	errorsx "github.com/instill-ai/x/errors"
 	resourcex "github.com/instill-ai/x/resource"
 )
 
@@ -21,11 +22,11 @@ func (s *service) CheckNamespacePermission(ctx context.Context, ns *resource.Nam
 			return err
 		}
 		if !granted {
-			return ErrNoPermission
+			return errorsx.ErrUnauthenticated
 		}
 		// check if the user is the owner of the namespace
 	} else if ns.NsUID != uuid.FromStringOrNil(resourcex.GetRequestSingleHeader(ctx, constant.HeaderUserUIDKey)) {
-		return ErrNoPermission
+		return errorsx.ErrUnauthenticated
 	}
 	return nil
 }

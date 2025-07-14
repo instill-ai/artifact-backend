@@ -12,7 +12,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	"github.com/instill-ai/x/log"
+	logx "github.com/instill-ai/x/log"
 )
 
 type EmbeddingI interface {
@@ -54,7 +54,7 @@ func (v Vector) Value() (driver.Value, error) {
 	return string(r), nil
 }
 
-func (v *Vector) Scan(value interface{}) error {
+func (v *Vector) Scan(value any) error {
 	if value == nil {
 		*v = nil
 		return nil
@@ -131,7 +131,7 @@ func (r *Repository) UpsertEmbeddings(
 	externalServiceCall func(embUIDs []string) error,
 ) ([]Embedding, error) {
 	// get logger
-	logger, _ := log.GetZapLogger(ctx)
+	logger, _ := logx.GetZapLogger(ctx)
 	// Start a transaction
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if len(embeddings) == 0 {

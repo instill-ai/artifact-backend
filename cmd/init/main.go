@@ -2,41 +2,57 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"log"
 	"time"
 
 	"go.uber.org/zap"
 	"google.golang.org/grpc/metadata"
 
+	grpczap "github.com/grpc-ecosystem/go-grpc-middleware/logging/zap"
+
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/service"
-	"github.com/instill-ai/x/log"
 
-	grpcclient "github.com/instill-ai/artifact-backend/pkg/client/grpc"
 	pipelinepb "github.com/instill-ai/protogen-go/pipeline/pipeline/v1beta"
+	clientx "github.com/instill-ai/x/client"
+	clientgrpcx "github.com/instill-ai/x/client/grpc"
+	logx "github.com/instill-ai/x/log"
 )
 
 func main() {
 	ctx := context.Background()
 
-	log.Debug = config.Config.Server.Debug
-	logger, _ := log.GetZapLogger(ctx)
-
-	if err := config.Init(); err != nil {
-		logger.Fatal("Failed to initialize config", zap.Error(err))
+	if err := config.Init(config.ParseConfigFlag()); err != nil {
+		log.Fatal(err.Error())
 	}
 
-	pipelinePublicGrpcConn, err := grpcclient.NewGRPCConn(
-		fmt.Sprintf("%v:%v", config.Config.PipelineBackend.Host,
-			config.Config.PipelineBackend.PublicPort),
-		config.Config.PipelineBackend.HTTPS.Cert,
-		config.Config.PipelineBackend.HTTPS.Key)
+	logx.Debug = config.Config.Server.Debug
+	logger, _ := logx.GetZapLogger(context.Background())
+	defer func() {
+		// can't handle the error due to https://github.com/uber-go/zap/issues/880
+		_ = logger.Sync()
+	}()
+
+	// Set gRPC logging based on debug mode
+	if config.Config.Server.Debug {
+		grpczap.ReplaceGrpcLoggerV2WithVerbosity(logger, 0) // All logs
+	} else {
+		grpczap.ReplaceGrpcLoggerV2WithVerbosity(logger, 3) // verbosity 3 will avoid [transport] from emitting
+	}
+
+	pipelinePublicServiceClient, pipelinePublicClose, err := clientgrpcx.NewClient[pipelinepb.PipelinePublicServiceClient](
+		clientgrpcx.WithServiceConfig(clientx.ServiceConfig{
+			Host:       config.Config.PipelineBackend.Host,
+			PublicPort: config.Config.PipelineBackend.PublicPort,
+		}),
+		clientgrpcx.WithSetOTELClientHandler(config.Config.OTELCollector.Enable),
+	)
 	if err != nil {
-		logger.Fatal("Failed to create pipeline client", zap.Error(err))
+		logger.Fatal("failed to create pipeline public service client", zap.Error(err))
 	}
 	defer func() {
-		if err := pipelinePublicGrpcConn.Close(); err != nil {
-			logger.Error("Failed to close pipeline client", zap.Error(err))
+		if err := pipelinePublicClose(); err != nil {
+			logger.Error("failed to close pipeline public service client", zap.Error(err))
 		}
 	}()
 
@@ -46,7 +62,7 @@ func main() {
 
 	upserter := &service.PipelineReleaseUpserter{
 		FS:                          service.PresetPipelinesFS,
-		PipelinePublicServiceClient: pipelinepb.NewPipelinePublicServiceClient(pipelinePublicGrpcConn),
+		PipelinePublicServiceClient: pipelinePublicServiceClient,
 	}
 
 	for _, pr := range service.PresetPipelinesList {
