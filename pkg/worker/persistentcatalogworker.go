@@ -19,10 +19,10 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/service"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
-	"github.com/instill-ai/x/log"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	constantx "github.com/instill-ai/x/constant"
+	logx "github.com/instill-ai/x/log"
 )
 
 type persistentCatalogFileToEmbWorkerPool struct {
@@ -50,7 +50,7 @@ func NewPersistentCatalogFileToEmbWorkerPool(ctx context.Context, svc service.Se
 }
 
 func (wp *persistentCatalogFileToEmbWorkerPool) Start() {
-	logger, _ := log.GetZapLogger(wp.ctx)
+	logger, _ := logx.GetZapLogger(wp.ctx)
 	for i := 0; i < wp.numberOfWorkers; i++ {
 		wp.wg.Add(1)
 		go utils.GoRecover(func() {
@@ -67,7 +67,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) Start() {
 
 // dispatcher is responsible for dispatching the incomplete file to the worker
 func (wp *persistentCatalogFileToEmbWorkerPool) startDispatcher() {
-	logger, _ := log.GetZapLogger(wp.ctx)
+	logger, _ := logx.GetZapLogger(wp.ctx)
 	defer wp.wg.Done()
 	ticker := time.NewTicker(periodOfDispatcher)
 	defer ticker.Stop()
@@ -124,7 +124,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) startDispatcher() {
 // pros: less connection to pipeline service and less resource consumption
 
 func (wp *persistentCatalogFileToEmbWorkerPool) startWorker(ctx context.Context, workerID int) {
-	logger, _ := log.GetZapLogger(ctx)
+	logger, _ := logx.GetZapLogger(ctx)
 	logger.Info("Worker started", zap.Int("WorkerID", workerID))
 	defer wp.wg.Done()
 	// Defer a function to catch panics
@@ -211,7 +211,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) startWorker(ctx context.Context,
 				if err != nil {
 					fmt.Printf("Error marshaling extra metadata: %v\n", err)
 				}
-				_, err := wp.svc.Repository().UpdateKnowledgeBaseFile(ctx, file.UID.String(), map[string]interface{}{
+				_, err := wp.svc.Repository().UpdateKnowledgeBaseFile(ctx, file.UID.String(), map[string]any{
 					repository.KnowledgeBaseFileColumn.ProcessStatus: artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_FAILED.String(),
 				})
 				if err != nil {
@@ -233,7 +233,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) startWorker(ctx context.Context,
 
 // stop
 func (wp *persistentCatalogFileToEmbWorkerPool) GraceFulStop() {
-	logger, _ := log.GetZapLogger(wp.ctx)
+	logger, _ := logx.GetZapLogger(wp.ctx)
 	logger.Info("Worker pool received termination signal")
 	close(wp.channel)
 	wp.cancel()
@@ -245,7 +245,7 @@ type stopRegisterWorkerFunc func()
 
 // processFile handles the processing of a file through various stages using a state machine.
 func (wp *persistentCatalogFileToEmbWorkerPool) processFile(ctx context.Context, file repository.KnowledgeBaseFile) error {
-	logger, _ := log.GetZapLogger(ctx)
+	logger, _ := logx.GetZapLogger(ctx)
 	var status artifactpb.FileProcessStatus
 	if statusInt, ok := artifactpb.FileProcessStatus_value[file.ProcessStatus]; !ok {
 		return fmt.Errorf("invalid process status: %v", file.ProcessStatus)
@@ -358,7 +358,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processWaitingFile(ctx context.C
 		artifactpb.FileType_FILE_TYPE_XLS.String(),
 		artifactpb.FileType_FILE_TYPE_CSV.String():
 		// update the file status to converting status in database
-		updateMap := map[string]interface{}{
+		updateMap := map[string]any{
 			repository.KnowledgeBaseFileColumn.ProcessStatus: artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CONVERTING)],
 		}
 		updatedFile, err := wp.svc.Repository().UpdateKnowledgeBaseFile(ctx, file.UID.String(), updateMap)
@@ -371,7 +371,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processWaitingFile(ctx context.C
 	case artifactpb.FileType_name[int32(artifactpb.FileType_FILE_TYPE_TEXT)],
 		artifactpb.FileType_name[int32(artifactpb.FileType_FILE_TYPE_MARKDOWN)]:
 
-		updateMap := map[string]interface{}{
+		updateMap := map[string]any{
 			repository.KnowledgeBaseFileColumn.ProcessStatus: artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_SUMMARIZING)],
 		}
 		updatedFile, err := wp.svc.Repository().UpdateKnowledgeBaseFile(ctx, file.UID.String(), updateMap)
@@ -391,7 +391,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processWaitingFile(ctx context.C
 // Finally, the file status is updated to chunking in the database.
 // If the file is not a PDF, it returns an error.
 func (wp *persistentCatalogFileToEmbWorkerPool) processConvertingFile(ctx context.Context, file repository.KnowledgeBaseFile) (updatedFile *repository.KnowledgeBaseFile, nextStatus artifactpb.FileProcessStatus, err error) {
-	logger, _ := log.GetZapLogger(ctx)
+	logger, _ := logx.GetZapLogger(ctx)
 
 	fileInMinIOPath := file.Destination
 
@@ -447,7 +447,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processConvertingFile(ctx contex
 		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
 	}
 	// update the file status to chunking status in database
-	updateMap := map[string]interface{}{
+	updateMap := map[string]any{
 		repository.KnowledgeBaseFileColumn.ProcessStatus: artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_SUMMARIZING)],
 	}
 	updatedFile, err = wp.svc.Repository().UpdateKnowledgeBaseFile(ctx, file.UID.String(), updateMap)
@@ -465,7 +465,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processConvertingFile(ctx contex
 // Finally, the file status is updated to chunking in the database.
 // If the file is not a PDF, it returns an error.
 func (wp *persistentCatalogFileToEmbWorkerPool) procesSummarizingFile(ctx context.Context, file repository.KnowledgeBaseFile) (updatedFile *repository.KnowledgeBaseFile, nextStatus artifactpb.FileProcessStatus, err error) {
-	logger, _ := log.GetZapLogger(ctx)
+	logger, _ := logx.GetZapLogger(ctx)
 	logger.Info("Processing summarizing status file.", zap.String("File uid", file.UID.String()))
 
 	// check the file status is summarizing
@@ -529,7 +529,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) procesSummarizingFile(ctx contex
 	}
 
 	// Update file status
-	updateMap := map[string]interface{}{
+	updateMap := map[string]any{
 		repository.KnowledgeBaseFileColumn.ProcessStatus: artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CHUNKING)],
 		repository.KnowledgeBaseFileColumn.Summary:       []byte(summary),
 	}
@@ -574,7 +574,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) procesSummarizingFile(ctx contex
 //
 // The function handles errors at each step and returns appropriate status codes.
 func (wp *persistentCatalogFileToEmbWorkerPool) processChunkingFile(ctx context.Context, file repository.KnowledgeBaseFile) (*repository.KnowledgeBaseFile, artifactpb.FileProcessStatus, error) {
-	logger, _ := log.GetZapLogger(ctx)
+	logger, _ := logx.GetZapLogger(ctx)
 	logger.Info("Processing chunking status file.", zap.String("File uid", file.UID.String()))
 
 	// check the file status is chunking
@@ -680,7 +680,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processChunkingFile(ctx context.
 	}
 
 	// Update file status
-	updateMap := map[string]interface{}{
+	updateMap := map[string]any{
 		repository.KnowledgeBaseFileColumn.ProcessStatus: artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_EMBEDDING)],
 	}
 	updatedFile, err := wp.svc.Repository().UpdateKnowledgeBaseFile(ctx, file.UID.String(), updateMap)
@@ -722,7 +722,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processChunkingFile(ctx context.
 // The function handles errors at each step and returns appropriate status codes.
 // If chunk retrieval fails initially, it will retry once after a 1 second delay.
 func (wp *persistentCatalogFileToEmbWorkerPool) processEmbeddingFile(ctx context.Context, file repository.KnowledgeBaseFile) (updatedFile *repository.KnowledgeBaseFile, nextStatus artifactpb.FileProcessStatus, err error) {
-	logger, _ := log.GetZapLogger(ctx)
+	logger, _ := logx.GetZapLogger(ctx)
 	// check the file status is embedding
 	if file.ProcessStatus != artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_EMBEDDING)] {
 		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, fmt.Errorf("file process status should be embedding. status: %v", file.ProcessStatus)
@@ -779,7 +779,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processEmbeddingFile(ctx context
 	}
 
 	// update the file status to complete status in database
-	updateMap := map[string]interface{}{
+	updateMap := map[string]any{
 		repository.KnowledgeBaseFileColumn.ProcessStatus: artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED)],
 	}
 	updatedFile, err = wp.svc.Repository().UpdateKnowledgeBaseFile(ctx, file.UID.String(), updateMap)
@@ -793,7 +793,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processEmbeddingFile(ctx context
 // processCompletedFile logs the completion of the file-to-embeddings process.
 // It checks if the file status is completed and logs the information.
 func (wp *persistentCatalogFileToEmbWorkerPool) processCompletedFile(ctx context.Context, file repository.KnowledgeBaseFile) error {
-	logger, _ := log.GetZapLogger(ctx)
+	logger, _ := logx.GetZapLogger(ctx)
 	logger.Info("File to embeddings process completed.", zap.String("File uid", file.UID.String()))
 	return nil
 }

@@ -7,10 +7,10 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	"github.com/instill-ai/artifact-backend/pkg/errors"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
 
-	pb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	errorsx "github.com/instill-ai/x/errors"
 )
 
 // TagI
@@ -19,15 +19,15 @@ import (
 //
 // UpsertRepositoryTag(context.Context, *artifactpb.RepositoryTag) (*artifactpb.RepositoryTag, error)
 type TagI interface {
-	GetRepositoryTag(context.Context, utils.RepositoryTagName) (*pb.RepositoryTag, error)
-	UpsertRepositoryTag(context.Context, *pb.RepositoryTag) (*pb.RepositoryTag, error)
+	GetRepositoryTag(context.Context, utils.RepositoryTagName) (*artifactpb.RepositoryTag, error)
+	UpsertRepositoryTag(context.Context, *artifactpb.RepositoryTag) (*artifactpb.RepositoryTag, error)
 	DeleteRepositoryTag(context.Context, string) error
 }
 
 // GetRepositoryTag fetches the tag information from the repository_tag table.
 // The name param is the resource name of the tag, e.g.
 // `repositories/admin/hello-world/tags/0.1.1-beta`.
-func (r *Repository) GetRepositoryTag(_ context.Context, name utils.RepositoryTagName) (*pb.RepositoryTag, error) {
+func (r *Repository) GetRepositoryTag(_ context.Context, name utils.RepositoryTagName) (*artifactpb.RepositoryTag, error) {
 	repo, tagID, err := name.ExtractRepositoryAndID()
 	if err != nil {
 		return nil, err
@@ -39,13 +39,13 @@ func (r *Repository) GetRepositoryTag(_ context.Context, name utils.RepositoryTa
 		First(record); result.Error != nil {
 
 		if result.Error == gorm.ErrRecordNotFound {
-			return nil, errors.ErrNotFound
+			return nil, errorsx.ErrNotFound
 		}
 
 		return nil, result.Error
 	}
 
-	return &pb.RepositoryTag{
+	return &artifactpb.RepositoryTag{
 		Name:       string(name),
 		Id:         tagID,
 		Digest:     record.Digest,
@@ -55,7 +55,7 @@ func (r *Repository) GetRepositoryTag(_ context.Context, name utils.RepositoryTa
 
 // UpsertRepositoryTag stores the provided tag information in the database. The
 // update timestamp will be generated on insertion.
-func (r *Repository) UpsertRepositoryTag(_ context.Context, tag *pb.RepositoryTag) (*pb.RepositoryTag, error) {
+func (r *Repository) UpsertRepositoryTag(_ context.Context, tag *artifactpb.RepositoryTag) (*artifactpb.RepositoryTag, error) {
 	repo, tagID, err := utils.RepositoryTagName(tag.GetName()).ExtractRepositoryAndID()
 	if err != nil {
 		return nil, err
@@ -74,7 +74,7 @@ func (r *Repository) UpsertRepositoryTag(_ context.Context, tag *pb.RepositoryTa
 		return nil, result.Error
 	}
 
-	return &pb.RepositoryTag{
+	return &artifactpb.RepositoryTag{
 		Name:       tag.GetName(),
 		Id:         tag.GetId(),
 		Digest:     record.Digest,
@@ -92,7 +92,7 @@ func (r *Repository) DeleteRepositoryTag(_ context.Context, digest string) error
 		Delete(record); result.Error != nil {
 
 		if result.Error == gorm.ErrRecordNotFound {
-			return errors.ErrNotFound
+			return errorsx.ErrNotFound
 		}
 
 		return result.Error

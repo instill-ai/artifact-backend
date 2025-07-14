@@ -12,11 +12,11 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/instill-ai/artifact-backend/pkg/errors"
 	"github.com/instill-ai/artifact-backend/pkg/mock"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	errorsx "github.com/instill-ai/x/errors"
 )
 
 const repo = "krule-wombat/llava-34b"
@@ -121,7 +121,7 @@ func TestService_ListRepositoryTags(t *testing.T) {
 			registryTags:      tagIDs,
 			repoTags:          want[:2],
 			registryDigestErr: fmt.Errorf("foo"),
-			repoErr:           fmt.Errorf("repo error: %w", errors.ErrNotFound),
+			repoErr:           fmt.Errorf("repo error: %w", errorsx.ErrNotFound),
 			wantTags:          wantWithEmptyOptional[:2],
 		},
 		{

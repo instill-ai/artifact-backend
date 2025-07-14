@@ -6,21 +6,22 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
 
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
-	"github.com/instill-ai/x/log"
 
 	mgmtpb "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
 	usagepb "github.com/instill-ai/protogen-go/core/usage/v1beta"
 	usageclient "github.com/instill-ai/usage-client/client"
 	usagereporter "github.com/instill-ai/usage-client/reporter"
+	logx "github.com/instill-ai/x/log"
 )
 
 // Usage interface
 type Usage interface {
-	RetrieveArtifactUsageData() any
+	RetrieveUsageData() any
 	StartReporter(ctx context.Context)
 	TriggerSingleReporter(ctx context.Context)
 }
@@ -28,7 +29,7 @@ type Usage interface {
 type usage struct {
 	mgmtPrivateServiceClient mgmtpb.MgmtPrivateServiceClient
 	redisClient              *redis.Client
-	artifactReporter         usagereporter.Reporter
+	reporter                 usagereporter.Reporter
 	serviceVersion           string
 }
 
@@ -36,33 +37,34 @@ const maxPageSize = 100
 
 // NewUsage initiates a usage instance
 func NewUsage(ctx context.Context, mu mgmtpb.MgmtPrivateServiceClient, rc *redis.Client, usc usagepb.UsageServiceClient, serviceVersion string) Usage {
-	logger, _ := log.GetZapLogger(ctx)
+	logger, _ := logx.GetZapLogger(ctx)
 
 	var defaultOwnerUID string
 	if resp, err := mu.GetUserAdmin(ctx, &mgmtpb.GetUserAdminRequest{UserId: constant.DefaultUserID}); err == nil {
 		defaultOwnerUID = resp.GetUser().GetUid()
 	} else {
-		logger.Error(err.Error())
+		logger.Error("Failed to get default user, usage reporter will not start", zap.Error(err))
+		return nil // Return nil instead of continuing with empty defaultOwnerUID
 	}
 
 	artifactReporter, err := usageclient.InitReporter(ctx, usc, usagepb.Session_SERVICE_ARTIFACT, config.Config.Server.Edition, serviceVersion, defaultOwnerUID)
 	if err != nil {
-		logger.Error(err.Error())
+		logger.Error("Failed to initialize artifact reporter", zap.Error(err))
 		return nil
 	}
 
 	return &usage{
 		mgmtPrivateServiceClient: mu,
 		redisClient:              rc,
-		artifactReporter:         artifactReporter,
+		reporter:                 artifactReporter,
 		serviceVersion:           serviceVersion,
 	}
 }
 
-func (u *usage) RetrieveArtifactUsageData() interface{} {
+func (u *usage) RetrieveUsageData() any {
 
 	ctx := context.Background()
-	logger, _ := log.GetZapLogger(ctx)
+	logger, _ := logx.GetZapLogger(ctx)
 
 	logger.Debug("Retrieve usage data...")
 
@@ -70,10 +72,10 @@ func (u *usage) RetrieveArtifactUsageData() interface{} {
 
 	// Roll over all users and update the metrics with the cached uuid
 	userPageToken := ""
-	userPageSizeMax := int32(maxPageSize)
+	pageSizeMax := int32(maxPageSize)
 	for {
 		userResp, err := u.mgmtPrivateServiceClient.ListUsersAdmin(ctx, &mgmtpb.ListUsersAdminRequest{
-			PageSize:  &userPageSizeMax,
+			PageSize:  &pageSizeMax,
 			PageToken: &userPageToken,
 		})
 		if err != nil {
@@ -82,9 +84,12 @@ func (u *usage) RetrieveArtifactUsageData() interface{} {
 		}
 
 		// Roll all artifact resources on a user
-		// for _, user := range userResp.GetUsers() {
-		//TODO: implement the logic to retrieve the app usage data
-		// }
+		for _, user := range userResp.GetUsers() {
+			pbArtifactUsageData = append(pbArtifactUsageData, &usagepb.ArtifactUsageData_UserUsageData{
+				OwnerUid:  user.GetUid(),
+				OwnerType: mgmtpb.OwnerType_OWNER_TYPE_USER,
+			})
+		}
 
 		if userResp.NextPageToken == "" {
 			break
@@ -95,10 +100,9 @@ func (u *usage) RetrieveArtifactUsageData() interface{} {
 
 	// Roll over all orgs and update the metrics with the cached uuid
 	orgPageToken := ""
-	orgPageSizeMax := int32(maxPageSize)
 	for {
 		orgResp, err := u.mgmtPrivateServiceClient.ListOrganizationsAdmin(ctx, &mgmtpb.ListOrganizationsAdminRequest{
-			PageSize:  &orgPageSizeMax,
+			PageSize:  &pageSizeMax,
 			PageToken: &orgPageToken,
 		})
 		if err != nil {
@@ -106,10 +110,13 @@ func (u *usage) RetrieveArtifactUsageData() interface{} {
 			break
 		}
 
-		// Roll all artifact resources on an org
-		// for _, org := range orgResp.GetOrganizations() {
-		//TODO: implement the logic to retrieve the app usage data
-		// }
+		// Roll all model resources on an org
+		for _, org := range orgResp.GetOrganizations() {
+			pbArtifactUsageData = append(pbArtifactUsageData, &usagepb.ArtifactUsageData_UserUsageData{
+				OwnerUid:  org.GetUid(),
+				OwnerType: mgmtpb.OwnerType_OWNER_TYPE_ORGANIZATION,
+			})
+		}
 
 		if orgResp.NextPageToken == "" {
 			break
@@ -128,11 +135,11 @@ func (u *usage) RetrieveArtifactUsageData() interface{} {
 }
 
 func (u *usage) StartReporter(ctx context.Context) {
-	if u.artifactReporter == nil {
+	if u.reporter == nil {
 		return
 	}
 
-	logger, _ := log.GetZapLogger(ctx)
+	logger, _ := logx.GetZapLogger(ctx)
 
 	var defaultOwnerUID string
 	if resp, err := u.mgmtPrivateServiceClient.GetUserAdmin(ctx, &mgmtpb.GetUserAdminRequest{UserId: constant.DefaultUserID}); err == nil {
@@ -144,7 +151,7 @@ func (u *usage) StartReporter(ctx context.Context) {
 	go utils.GoRecover(func() {
 		func() {
 			time.Sleep(5 * time.Second)
-			err := usageclient.StartReporter(ctx, u.artifactReporter, usagepb.Session_SERVICE_ARTIFACT, config.Config.Server.Edition, u.serviceVersion, defaultOwnerUID, u.RetrieveArtifactUsageData)
+			err := usageclient.StartReporter(ctx, u.reporter, usagepb.Session_SERVICE_ARTIFACT, config.Config.Server.Edition, u.serviceVersion, defaultOwnerUID, u.RetrieveUsageData)
 			if err != nil {
 				logger.Error(fmt.Sprintf("unable to start reporter: %v\n", err))
 			}
@@ -153,11 +160,11 @@ func (u *usage) StartReporter(ctx context.Context) {
 }
 
 func (u *usage) TriggerSingleReporter(ctx context.Context) {
-	if u.artifactReporter == nil {
+	if u.reporter == nil {
 		return
 	}
 
-	logger, _ := log.GetZapLogger(ctx)
+	logger, _ := logx.GetZapLogger(ctx)
 
 	var defaultOwnerUID string
 	if resp, err := u.mgmtPrivateServiceClient.GetUserAdmin(ctx, &mgmtpb.GetUserAdminRequest{UserId: constant.DefaultUserID}); err == nil {
@@ -167,7 +174,7 @@ func (u *usage) TriggerSingleReporter(ctx context.Context) {
 		return
 	}
 
-	err := usageclient.SingleReporter(ctx, u.artifactReporter, usagepb.Session_SERVICE_ARTIFACT, config.Config.Server.Edition, u.serviceVersion, defaultOwnerUID, u.RetrieveArtifactUsageData())
+	err := usageclient.SingleReporter(ctx, u.reporter, usagepb.Session_SERVICE_ARTIFACT, config.Config.Server.Edition, u.serviceVersion, defaultOwnerUID, u.RetrieveUsageData())
 	if err != nil {
 		logger.Error(fmt.Sprintf("unable to trigger single reporter: %v\n", err))
 	}

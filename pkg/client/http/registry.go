@@ -9,7 +9,8 @@ import (
 	"github.com/go-resty/resty/v2"
 
 	"github.com/instill-ai/artifact-backend/config"
-	"github.com/instill-ai/x/log"
+
+	logx "github.com/instill-ai/x/log"
 )
 
 const (
@@ -25,11 +26,11 @@ type RegistryClient struct {
 
 // NewRegistryClient returns an initialized registry HTTP client.
 func NewRegistryClient(ctx context.Context) *RegistryClient {
-	l, _ := log.GetZapLogger(ctx)
+	logger, _ := logx.GetZapLogger(ctx)
 	baseURL := fmt.Sprintf("http://%s:%d", config.Config.Registry.Host, config.Config.Registry.Port)
 
 	r := resty.New().
-		SetLogger(l.Sugar()).
+		SetLogger(logger.Sugar()).
 		SetBaseURL(baseURL).
 		SetTimeout(reqTimeout).
 		SetTransport(&http.Transport{

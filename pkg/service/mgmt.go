@@ -11,19 +11,19 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/instill-ai/artifact-backend/pkg/resource"
-	"github.com/instill-ai/x/log"
 
 	mgmtpb "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
+	logx "github.com/instill-ai/x/log"
 )
 
 func (s *service) GetNamespaceByNsID(ctx context.Context, nsID string) (*resource.Namespace, error) {
-	log, _ := log.GetZapLogger(ctx)
+	logger, _ := logx.GetZapLogger(ctx)
 	nsRes, err := s.mgmtPrv.CheckNamespaceAdmin(ctx, &mgmtpb.CheckNamespaceAdminRequest{
 		Id: nsID,
 	},
 	)
 	if err != nil {
-		log.Error("failed to check namespace", zap.Error(err))
+		logger.Error("failed to check namespace", zap.Error(err))
 		return nil, fmt.Errorf("failed to check namespace: %w", err)
 	}
 	ownerUUID := nsRes.GetUid()
@@ -56,7 +56,7 @@ func (s *service) GetNamespaceTierByNsID(ctx context.Context, nsID string) (Tier
 }
 
 func (s *service) GetNamespaceTier(ctx context.Context, ns *resource.Namespace) (Tier, error) {
-	log, _ := log.GetZapLogger(ctx)
+	logger, _ := logx.GetZapLogger(ctx)
 	switch ns.NsType {
 	case resource.User:
 		sub, err := s.mgmtPrv.GetUserSubscriptionAdmin(ctx, &mgmtpb.GetUserSubscriptionAdminRequest{
@@ -67,7 +67,7 @@ func (s *service) GetNamespaceTier(ctx context.Context, ns *resource.Namespace) 
 			statusError, ok := status.FromError(err)
 			if ok && statusError.Code() == codes.Unimplemented {
 				// Handle the case where the method is not implemented on the server
-				log.Warn("GetUserSubscriptionAdmin is not implemented. Assuming enterprise tier")
+				logger.Warn("GetUserSubscriptionAdmin is not implemented. Assuming enterprise tier")
 				return TierEnterprise, nil
 			} else {
 				// Handle other errors
@@ -90,7 +90,7 @@ func (s *service) GetNamespaceTier(ctx context.Context, ns *resource.Namespace) 
 			statusError, ok := status.FromError(err)
 			if ok && statusError.Code() == codes.Unimplemented {
 				// handle the case where the method is not implemented on the server
-				log.Warn("GetUserSubscriptionAdmin is not implemented. Assuming enterprise tier")
+				logger.Warn("GetUserSubscriptionAdmin is not implemented. Assuming enterprise tier")
 				return TierEnterprise, nil
 			} else {
 				// handle other errors

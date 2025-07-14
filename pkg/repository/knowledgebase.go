@@ -13,8 +13,8 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	errdomain "github.com/instill-ai/artifact-backend/pkg/errors"
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	errorsx "github.com/instill-ai/x/errors"
 )
 
 type KnowledgeBaseI interface {
@@ -83,7 +83,7 @@ var KnowledgeBaseColumn = KnowledgeBaseColumns{
 type TagsArray []string
 
 // Scan implements the Scanner interface for TagsArray.
-func (tags *TagsArray) Scan(value interface{}) error {
+func (tags *TagsArray) Scan(value any) error {
 	if value == nil {
 		*tags = []string{}
 		return nil
@@ -129,7 +129,7 @@ func (r *Repository) CreateKnowledgeBase(ctx context.Context, kb KnowledgeBase, 
 			return err
 		}
 		if KbIDExists {
-			return fmt.Errorf("knowledge base name already exists. err: %w", errdomain.ErrInvalidArgument)
+			return fmt.Errorf("knowledge base name already exists. err: %w", errorsx.ErrInvalidArgument)
 		}
 
 		// Create a new KnowledgeBase record

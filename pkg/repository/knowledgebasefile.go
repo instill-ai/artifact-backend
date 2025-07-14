@@ -16,9 +16,9 @@ import (
 	"gorm.io/gorm/clause"
 
 	"github.com/instill-ai/artifact-backend/pkg/constant"
-	"github.com/instill-ai/x/log"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	logx "github.com/instill-ai/x/log"
 )
 
 type KnowledgeBaseFileI interface {
@@ -39,7 +39,7 @@ type KnowledgeBaseFileI interface {
 	// GetNeedProcessFiles returns the files that are not yet processed
 	GetNeedProcessFiles(ctx context.Context, catalogType artifactpb.CatalogType) []KnowledgeBaseFile
 	// UpdateKnowledgeBaseFile updates the data and retrieves the latest data
-	UpdateKnowledgeBaseFile(ctx context.Context, fileUID string, updateMap map[string]interface{}) (*KnowledgeBaseFile, error)
+	UpdateKnowledgeBaseFile(ctx context.Context, fileUID string, updateMap map[string]any) (*KnowledgeBaseFile, error)
 	// GetCountFilesByListKnowledgeBaseUID returns the number of files associated with the knowledge base UID
 	GetCountFilesByListKnowledgeBaseUID(ctx context.Context, kbUIDs []KbUID) (map[KbUID]int64, error)
 	// GetSourceTableAndUIDByFileUIDs returns the source table and uid by file UID list
@@ -389,7 +389,7 @@ func (r *Repository) ProcessKnowledgeBaseFiles(
 	[]KnowledgeBaseFile, error) {
 	// Update the process status of the files
 	waitingStatus := artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_WAITING)]
-	updates := map[string]interface{}{
+	updates := map[string]any{
 		KnowledgeBaseFileColumn.ProcessStatus: waitingStatus,
 		KnowledgeBaseFileColumn.RequesterUID:  requester,
 	}
@@ -462,7 +462,7 @@ func (r *Repository) GetNeedProcessFiles(ctx context.Context, catalogType artifa
 }
 
 // UpdateKnowledgeBaseFile updates the data and retrieves the latest data
-func (r *Repository) UpdateKnowledgeBaseFile(ctx context.Context, fileUID string, updateMap map[string]interface{}) (*KnowledgeBaseFile, error) {
+func (r *Repository) UpdateKnowledgeBaseFile(ctx context.Context, fileUID string, updateMap map[string]any) (*KnowledgeBaseFile, error) {
 	var updatedFile KnowledgeBaseFile
 
 	// Use a transaction to update and then fetch the latest data
@@ -524,7 +524,7 @@ func (r *Repository) GetSourceTableAndUIDByFileUIDs(ctx context.Context, files [
 		SourceTable string
 		SourceUID   uuid.UUID
 	}, error) {
-	logger, _ := log.GetZapLogger(ctx)
+	logger, _ := logx.GetZapLogger(ctx)
 	result := make(map[uuid.UUID]struct {
 		SourceTable string
 		SourceUID   uuid.UUID
@@ -619,7 +619,7 @@ type SourceMeta struct {
 // and support all file type. if the file type is text or markdown, the destination is the file destination.
 // if the file type is pdf, get the converted file destination
 func (r *Repository) GetTruthSourceByFileUID(ctx context.Context, fileUID uuid.UUID) (*SourceMeta, error) {
-	logger, _ := log.GetZapLogger(ctx)
+	logger, _ := logx.GetZapLogger(ctx)
 
 	// get the file type by file uid
 	var file KnowledgeBaseFile

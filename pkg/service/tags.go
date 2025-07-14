@@ -7,13 +7,13 @@ import (
 	"strings"
 
 	"github.com/instill-ai/artifact-backend/pkg/utils"
-	"github.com/instill-ai/x/log"
 
-	errdomain "github.com/instill-ai/artifact-backend/pkg/errors"
-	pb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	errorsx "github.com/instill-ai/x/errors"
+	logx "github.com/instill-ai/x/log"
 )
 
-func (s *service) DeleteRepositoryTag(ctx context.Context, req *pb.DeleteRepositoryTagRequest) (*pb.DeleteRepositoryTagResponse, error) {
+func (s *service) DeleteRepositoryTag(ctx context.Context, req *artifactpb.DeleteRepositoryTagRequest) (*artifactpb.DeleteRepositoryTagResponse, error) {
 	name := utils.RepositoryTagName(req.GetName())
 	repo, id, err := name.ExtractRepositoryAndID()
 	if err != nil {
@@ -33,12 +33,12 @@ func (s *service) DeleteRepositoryTag(ctx context.Context, req *pb.DeleteReposit
 		return nil, err
 	}
 
-	return &pb.DeleteRepositoryTagResponse{}, nil
+	return &artifactpb.DeleteRepositoryTagResponse{}, nil
 }
 
 // CreateRepositoryTag stores the tag information of a pushed repository
 // content.
-func (s *service) CreateRepositoryTag(ctx context.Context, req *pb.CreateRepositoryTagRequest) (*pb.CreateRepositoryTagResponse, error) {
+func (s *service) CreateRepositoryTag(ctx context.Context, req *artifactpb.CreateRepositoryTagRequest) (*artifactpb.CreateRepositoryTagResponse, error) {
 	name := utils.RepositoryTagName(req.GetTag().GetName())
 	_, id, err := name.ExtractRepositoryAndID()
 	if err != nil || id != req.GetTag().GetId() {
@@ -54,12 +54,12 @@ func (s *service) CreateRepositoryTag(ctx context.Context, req *pb.CreateReposit
 		return nil, fmt.Errorf("failed to upsert tag %s: %w", tag.GetId(), err)
 	}
 
-	return &pb.CreateRepositoryTagResponse{Tag: storedTag}, nil
+	return &artifactpb.CreateRepositoryTagResponse{Tag: storedTag}, nil
 }
 
 // GetRepositoryTag retrieve the information of a repository tag.
-func (s *service) GetRepositoryTag(ctx context.Context, req *pb.GetRepositoryTagRequest) (*pb.GetRepositoryTagResponse, error) {
-	logger, _ := log.GetZapLogger(ctx)
+func (s *service) GetRepositoryTag(ctx context.Context, req *artifactpb.GetRepositoryTagRequest) (*artifactpb.GetRepositoryTagResponse, error) {
+	logger, _ := logx.GetZapLogger(ctx)
 
 	name := utils.RepositoryTagName(req.GetName())
 	repo, id, err := name.ExtractRepositoryAndID()
@@ -69,7 +69,7 @@ func (s *service) GetRepositoryTag(ctx context.Context, req *pb.GetRepositoryTag
 
 	rt, err := s.repository.GetRepositoryTag(ctx, name)
 	if err != nil {
-		if !errors.Is(err, errdomain.ErrNotFound) {
+		if !errors.Is(err, errorsx.ErrNotFound) {
 			return nil, err
 		}
 		rt, err = s.populateMissingRepositoryTags(ctx, name, repo, id)
@@ -79,13 +79,13 @@ func (s *service) GetRepositoryTag(ctx context.Context, req *pb.GetRepositoryTag
 		}
 	}
 
-	return &pb.GetRepositoryTagResponse{Tag: rt}, nil
+	return &artifactpb.GetRepositoryTagResponse{Tag: rt}, nil
 }
 
 // ListRepositoryTags fetches and paginates the tags of a repository in a
 // remote distribution registry.
-func (s *service) ListRepositoryTags(ctx context.Context, req *pb.ListRepositoryTagsRequest) (*pb.ListRepositoryTagsResponse, error) {
-	logger, _ := log.GetZapLogger(ctx)
+func (s *service) ListRepositoryTags(ctx context.Context, req *artifactpb.ListRepositoryTagsRequest) (*artifactpb.ListRepositoryTagsResponse, error) {
+	logger, _ := logx.GetZapLogger(ctx)
 
 	pageSize := pageSizeInRange(req.GetPageSize())
 	page := pageInRange(req.GetPage())
@@ -113,12 +113,12 @@ func (s *service) ListRepositoryTags(ctx context.Context, req *pb.ListRepository
 		paginatedIDs = tagIDs[idx0:idx1]
 	}
 
-	tags := make([]*pb.RepositoryTag, 0, len(paginatedIDs))
+	tags := make([]*artifactpb.RepositoryTag, 0, len(paginatedIDs))
 	for _, id := range paginatedIDs {
 		name := utils.NewRepositoryTagName(repo, id)
 		rt, err := s.repository.GetRepositoryTag(ctx, name)
 		if err != nil {
-			if !errors.Is(err, errdomain.ErrNotFound) {
+			if !errors.Is(err, errorsx.ErrNotFound) {
 				return nil, fmt.Errorf("failed to fetch tag %s: %w", id, err)
 			}
 
@@ -129,14 +129,14 @@ func (s *service) ListRepositoryTags(ctx context.Context, req *pb.ListRepository
 			rt, err = s.populateMissingRepositoryTags(ctx, name, repo, id)
 			if err != nil {
 				logger.Warn(fmt.Sprintf("Create missing tag record error: %v", err))
-				rt = &pb.RepositoryTag{Name: string(name), Id: id}
+				rt = &artifactpb.RepositoryTag{Name: string(name), Id: id}
 			}
 		}
 
 		tags = append(tags, rt)
 	}
 
-	return &pb.ListRepositoryTagsResponse{
+	return &artifactpb.ListRepositoryTagsResponse{
 		PageSize:  int32(pageSize),
 		Page:      int32(page),
 		TotalSize: int32(totalSize),
@@ -144,14 +144,14 @@ func (s *service) ListRepositoryTags(ctx context.Context, req *pb.ListRepository
 	}, nil
 }
 
-func (s *service) populateMissingRepositoryTags(ctx context.Context, name utils.RepositoryTagName, repo string, id string) (*pb.RepositoryTag, error) {
+func (s *service) populateMissingRepositoryTags(ctx context.Context, name utils.RepositoryTagName, repo string, id string) (*artifactpb.RepositoryTag, error) {
 	digest, err := s.registryClient.GetTagDigest(ctx, repo, id)
 	if err != nil {
 		return nil, err
 	}
-	rt := &pb.RepositoryTag{Name: string(name), Id: id, Digest: digest}
-	if _, err := s.CreateRepositoryTag(ctx, &pb.CreateRepositoryTagRequest{
-		Tag: &pb.RepositoryTag{
+	rt := &artifactpb.RepositoryTag{Name: string(name), Id: id, Digest: digest}
+	if _, err := s.CreateRepositoryTag(ctx, &artifactpb.CreateRepositoryTagRequest{
+		Tag: &artifactpb.RepositoryTag{
 			Name:   string(name),
 			Id:     id,
 			Digest: digest,

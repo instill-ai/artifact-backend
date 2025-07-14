@@ -9,10 +9,10 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/instill-ai/artifact-backend/pkg/constant"
-	"github.com/instill-ai/artifact-backend/pkg/errors"
-	"github.com/instill-ai/x/log"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	errorsx "github.com/instill-ai/x/errors"
+	logx "github.com/instill-ai/x/log"
 )
 
 type SimChunk struct {
@@ -22,7 +22,7 @@ type SimChunk struct {
 
 // SimilarityChunksSearch ...
 func (s *service) SimilarityChunksSearch(ctx context.Context, ownerUID uuid.UUID, req *artifactpb.SimilarityChunksSearchRequest) ([]SimChunk, error) {
-	log, _ := log.GetZapLogger(ctx)
+	logger, _ := logx.GetZapLogger(ctx)
 	t := time.Now()
 	// check if text prompt is empty
 	if req.TextPrompt == "" {
@@ -30,18 +30,18 @@ func (s *service) SimilarityChunksSearch(ctx context.Context, ownerUID uuid.UUID
 	}
 	textVector, err := s.EmbeddingTextPipe(ctx, []string{req.TextPrompt})
 	if err != nil {
-		log.Error("failed to vectorize text", zap.Error(err))
+		logger.Error("failed to vectorize text", zap.Error(err))
 		return nil, fmt.Errorf("failed to vectorize text. err: %w", err)
 	}
-	log.Info("vectorize text", zap.Duration("duration", time.Since(t)))
+	logger.Info("vectorize text", zap.Duration("duration", time.Since(t)))
 	t = time.Now()
 	// get kb by kb_id and owner uid
 	kb, err := s.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, req.CatalogId)
 	if err != nil {
-		log.Error("failed to get knowledge base by owner and id", zap.Error(err))
+		logger.Error("failed to get knowledge base by owner and id", zap.Error(err))
 		return nil, fmt.Errorf("failed to get knowledge base by owner and id. err: %w", err)
 	}
-	log.Info("get knowledge base by owner and id", zap.Duration("duration", time.Since(t)))
+	logger.Info("get knowledge base by owner and id", zap.Duration("duration", time.Since(t)))
 
 	// Search similar embeddings in KB.
 	t = time.Now()
@@ -79,7 +79,7 @@ func (s *service) SimilarityChunksSearch(ctx context.Context, ownerUID uuid.UUID
 		case err != nil:
 			return nil, fmt.Errorf("fetching file from repository: %w", err)
 		case len(kbfs) == 0:
-			return nil, fmt.Errorf("fetching file from repository: %w", errors.ErrNotFound)
+			return nil, fmt.Errorf("fetching file from repository: %w", errorsx.ErrNotFound)
 		}
 
 		fileName = kbfs[0].Name
@@ -112,7 +112,7 @@ func (s *service) SimilarityChunksSearch(ctx context.Context, ownerUID uuid.UUID
 		return nil, fmt.Errorf("searching similar embeddings in KB: %w", err)
 	}
 
-	log.Info("Search similar embeddings in KB", zap.Duration("duration", time.Since(t)))
+	logger.Info("Search similar embeddings in KB", zap.Duration("duration", time.Since(t)))
 
 	// fetch chunks by their UIDs
 	res := make([]SimChunk, 0, len(simEmbeddings))
@@ -125,7 +125,7 @@ func (s *service) SimilarityChunksSearch(ctx context.Context, ownerUID uuid.UUID
 		}
 		simChunkUID, err := uuid.FromString(simEmb.SourceUID)
 		if err != nil {
-			log.Error("failed to parse chunk uid", zap.Error(err))
+			logger.Error("failed to parse chunk uid", zap.Error(err))
 			return nil, fmt.Errorf("failed to parse chunk uid: %v. err: %w", simEmb.SourceUID, err)
 		}
 		res = append(res, SimChunk{

@@ -10,10 +10,10 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/instill-ai/artifact-backend/pkg/utils"
-	"github.com/instill-ai/x/log"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	pipelinepb "github.com/instill-ai/protogen-go/pipeline/pipeline/v1beta"
+	logx "github.com/instill-ai/x/log"
 )
 
 const maxChunkLengthForMarkdownCatalog = 1024
@@ -40,7 +40,7 @@ func (s *service) ConvertToMDPipe(
 	pipelines []PipelineRelease,
 ) (string, error) {
 
-	logger, _ := log.GetZapLogger(ctx)
+	logger, _ := logx.GetZapLogger(ctx)
 
 	// Get the appropriate prefix for the file type
 	prefix := GetFileTypePrefix(fileType)

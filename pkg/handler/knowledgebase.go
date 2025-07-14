@@ -12,14 +12,14 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc/metadata"
 
-	"github.com/instill-ai/artifact-backend/pkg/errors"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/service"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
 	"github.com/instill-ai/x/constant"
-	"github.com/instill-ai/x/log"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	errorsx "github.com/instill-ai/x/errors"
+	logx "github.com/instill-ai/x/log"
 )
 
 var alphabet = "abcdefghijklmnopqrstuvwxyz"
@@ -35,10 +35,10 @@ const ErrorDeleteKnowledgeBaseMsg = "failed to delete catalog: %w"
 const KnowledgeBaseMaxCount = 3
 
 func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.CreateCatalogRequest) (*artifactpb.CreateCatalogResponse, error) {
-	logger, _ := log.GetZapLogger(ctx)
+	logger, _ := logx.GetZapLogger(ctx)
 	authUID, err := getUserUIDFromContext(ctx)
 	if err != nil {
-		err := fmt.Errorf("failed to get user id from header: %v. err: %w", err, errors.ErrUnauthenticated)
+		err := fmt.Errorf("failed to get user id from header: %v. err: %w", err, errorsx.ErrUnauthenticated)
 		return nil, err
 	}
 
@@ -91,7 +91,7 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 	if !nameOk {
 		msg := "the catalog name should be lowercase without any space or special character besides the hyphen, " +
 			"it can not start with number or hyphen, and should be less than 32 characters. name: %v. err: %w"
-		return nil, fmt.Errorf(msg, req.Name, errors.ErrInvalidArgument)
+		return nil, fmt.Errorf(msg, req.Name, errorsx.ErrInvalidArgument)
 	}
 
 	creatorUUID, err := uuid.FromString(authUID)
@@ -186,7 +186,7 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 }
 
 func (ph *PublicHandler) ListCatalogs(ctx context.Context, req *artifactpb.ListCatalogsRequest) (*artifactpb.ListCatalogsResponse, error) {
-	log, _ := log.GetZapLogger(ctx)
+	logger, _ := logx.GetZapLogger(ctx)
 	// get user id from context
 	authUID, err := getUserUIDFromContext(ctx)
 	if err != nil {
@@ -198,7 +198,7 @@ func (ph *PublicHandler) ListCatalogs(ctx context.Context, req *artifactpb.ListC
 	// the user or org context(namespace)
 	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
 	if err != nil {
-		log.Error(
+		logger.Error(
 			"failed to get namespace ",
 			zap.Error(err),
 			zap.String("owner_id(ns_id)", req.GetNamespaceId()),
@@ -207,7 +207,7 @@ func (ph *PublicHandler) ListCatalogs(ctx context.Context, req *artifactpb.ListC
 	}
 	err = ph.service.CheckNamespacePermission(ctx, ns)
 	if err != nil {
-		log.Error(
+		logger.Error(
 			"failed to check namespace permission",
 			zap.Error(err),
 			zap.String("owner_id(ns_id)", req.GetNamespaceId()),
@@ -217,7 +217,7 @@ func (ph *PublicHandler) ListCatalogs(ctx context.Context, req *artifactpb.ListC
 
 	dbData, err := ph.service.Repository().ListKnowledgeBasesByCatalogType(ctx, ns.NsUID.String(), artifactpb.CatalogType_CATALOG_TYPE_PERSISTENT)
 	if err != nil {
-		log.Error("failed to get catalogs", zap.Error(err))
+		logger.Error("failed to get catalogs", zap.Error(err))
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
 
@@ -228,12 +228,12 @@ func (ph *PublicHandler) ListCatalogs(ctx context.Context, req *artifactpb.ListC
 
 	fileCounts, err := ph.service.Repository().GetCountFilesByListKnowledgeBaseUID(ctx, kbUIDuuid)
 	if err != nil {
-		log.Error("failed to get file counts", zap.Error(err))
+		logger.Error("failed to get file counts", zap.Error(err))
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
 	tokenCounts, err := ph.service.Repository().GetTotalTokensByListKBUIDs(ctx, kbUIDuuid)
 	if err != nil {
-		log.Error("failed to get token counts", zap.Error(err))
+		logger.Error("failed to get token counts", zap.Error(err))
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
 	kbs := make([]*artifactpb.Catalog, len(dbData))
@@ -274,21 +274,21 @@ func (ph *PublicHandler) ListCatalogs(ctx context.Context, req *artifactpb.ListC
 	}, nil
 }
 func (ph *PublicHandler) UpdateCatalog(ctx context.Context, req *artifactpb.UpdateCatalogRequest) (*artifactpb.UpdateCatalogResponse, error) {
-	log, _ := log.GetZapLogger(ctx)
+	logger, _ := logx.GetZapLogger(ctx)
 	authUID, err := getUserUIDFromContext(ctx)
 	if err != nil {
-		log.Error("failed to get user id from header", zap.Error(err))
+		logger.Error("failed to get user id from header", zap.Error(err))
 		return nil, err
 	}
 	// check name if it is empty
 	if req.CatalogId == "" {
-		log.Error("kb_id is empty", zap.Error(ErrCheckRequiredFields))
-		return nil, fmt.Errorf("kb_id is empty. err: %w", ErrCheckRequiredFields)
+		logger.Error("kb_id is empty", zap.Error(errorsx.ErrInvalidArgument))
+		return nil, fmt.Errorf("kb_id is empty. err: %w", errorsx.ErrInvalidArgument)
 	}
 
 	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
 	if err != nil {
-		log.Error(
+		logger.Error(
 			"failed to get namespace ",
 			zap.Error(err),
 			zap.String("owner_id(ns_id)", req.GetNamespaceId()),
@@ -305,7 +305,7 @@ func (ph *PublicHandler) UpdateCatalog(ctx context.Context, req *artifactpb.Upda
 		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
 	}
 	if !granted {
-		return nil, fmt.Errorf("%w: no permission over catalog", errors.ErrUnauthorized)
+		return nil, fmt.Errorf("%w: no permission over catalog", errorsx.ErrUnauthorized)
 	}
 
 	// update catalog
@@ -368,7 +368,7 @@ func (ph *PublicHandler) UpdateCatalog(ctx context.Context, req *artifactpb.Upda
 	return &artifactpb.UpdateCatalogResponse{Catalog: catalog}, nil
 }
 func (ph *PublicHandler) DeleteCatalog(ctx context.Context, req *artifactpb.DeleteCatalogRequest) (*artifactpb.DeleteCatalogResponse, error) {
-	logger, _ := log.GetZapLogger(ctx)
+	logger, _ := logx.GetZapLogger(ctx)
 	authUID, err := getUserUIDFromContext(ctx)
 	if err != nil {
 
@@ -396,14 +396,14 @@ func (ph *PublicHandler) DeleteCatalog(ctx context.Context, req *artifactpb.Dele
 		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
 	}
 	if !granted {
-		return nil, fmt.Errorf("%w: no permission over catalog", errors.ErrUnauthorized)
+		return nil, fmt.Errorf("%w: no permission over catalog", errorsx.ErrUnauthorized)
 	}
 
 	startSignal := make(chan bool)
 	// TODO: in the future, we should delete the catalog using clean up worker
 	go utils.GoRecover(func() {
 		ctx := context.TODO()
-		logger, _ := log.GetZapLogger(ctx)
+		logger, _ := logx.GetZapLogger(ctx)
 		// wait for the catalog to be deleted in postgres
 		canStart := <-startSignal
 		if !canStart {
@@ -496,7 +496,7 @@ func getUserUIDFromContext(ctx context.Context) (string, error) {
 	if v, ok := md[strings.ToLower(constant.HeaderUserUIDKey)]; ok {
 		return v[0], nil
 	}
-	return "", fmt.Errorf("user id not found in context. err: %w", errors.ErrUnauthenticated)
+	return "", fmt.Errorf("user id not found in context. err: %w", errorsx.ErrUnauthenticated)
 }
 
 // The ID should be lowercase without any space or special character besides

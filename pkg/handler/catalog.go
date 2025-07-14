@@ -9,18 +9,18 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/instill-ai/artifact-backend/pkg/errors"
 	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
-	"github.com/instill-ai/x/log"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	errorsx "github.com/instill-ai/x/errors"
+	logx "github.com/instill-ai/x/log"
 )
 
 // GetFileCatalog returns a view of the file within the catalog, with the text
 // and chunks it generated after being processed.
 func (ph *PublicHandler) GetFileCatalog(ctx context.Context, req *artifactpb.GetFileCatalogRequest) (*artifactpb.GetFileCatalogResponse, error) {
-	log, _ := log.GetZapLogger(ctx)
+	logger, _ := logx.GetZapLogger(ctx)
 
 	// ACL - check if the user(uid from context) has access to the knowledge
 	// base of source file.
@@ -39,7 +39,7 @@ func (ph *PublicHandler) GetFileCatalog(ctx context.Context, req *artifactpb.Get
 	case err != nil:
 		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
 	case !granted:
-		return nil, fmt.Errorf("%w: no permission over catalog", errors.ErrUnauthorized)
+		return nil, fmt.Errorf("%w: no permission over catalog", errorsx.ErrUnauthorized)
 	}
 
 	fileUID := uuid.FromStringOrNil(req.GetFileUid())
@@ -48,7 +48,7 @@ func (ph *PublicHandler) GetFileCatalog(ctx context.Context, req *artifactpb.Get
 	case err != nil:
 		return nil, fmt.Errorf("fetching file from repository: %w", err)
 	case len(kbfs) == 0 || kbfs[0].KnowledgeBaseUID != kb.UID:
-		return nil, fmt.Errorf("fetching file from repository: %w", errors.ErrNotFound)
+		return nil, fmt.Errorf("fetching file from repository: %w", errorsx.ErrNotFound)
 	}
 
 	kbFile := &(kbfs[0])
@@ -96,16 +96,16 @@ func (ph *PublicHandler) GetFileCatalog(ctx context.Context, req *artifactpb.Get
 	}
 
 	for _, chunk := range textChunks {
-		log := log.With(zap.String("chunkUID", chunk.UID.String()))
+		logger := logger.With(zap.String("chunkUID", chunk.UID.String()))
 
 		embedding, ok := embeddingMap[chunk.UID]
 		if !ok {
-			log.Error("Couldn't find embedding for chunk")
+			logger.Error("Couldn't find embedding for chunk")
 		}
 
 		content, ok := chunkUIDToContent[chunk.UID]
 		if !ok {
-			log.Error("Couldn't find content for chunk")
+			logger.Error("Couldn't find content for chunk")
 		}
 
 		var createTime *timestamppb.Timestamp
