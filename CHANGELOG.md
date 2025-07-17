@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.28.1](https://github.com/instill-ai/artifact-backend/compare/v0.28.0...v0.28.1) (2025-07-17)
+
+
+### Miscellaneous
+
+* **mgmt:** use new subscription states ([#225](https://github.com/instill-ai/artifact-backend/issues/225)) ([d3b60cf](https://github.com/instill-ai/artifact-backend/commit/d3b60cfd5609a6766db7a5c696f938fb2b62914f))
+
 ## [0.28.0](https://github.com/instill-ai/artifact-backend/compare/v0.27.0...v0.28.0) (2025-07-16)
 
 
