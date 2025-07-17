@@ -12,13 +12,13 @@ import (
 
 	"github.com/instill-ai/artifact-backend/pkg/resource"
 
-	mgmtpb "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
+	pb "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
 	logx "github.com/instill-ai/x/log"
 )
 
 func (s *service) GetNamespaceByNsID(ctx context.Context, nsID string) (*resource.Namespace, error) {
 	logger, _ := logx.GetZapLogger(ctx)
-	nsRes, err := s.mgmtPrv.CheckNamespaceAdmin(ctx, &mgmtpb.CheckNamespaceAdminRequest{
+	nsRes, err := s.mgmtPrv.CheckNamespaceAdmin(ctx, &pb.CheckNamespaceAdminRequest{
 		Id: nsID,
 	},
 	)
@@ -30,9 +30,9 @@ func (s *service) GetNamespaceByNsID(ctx context.Context, nsID string) (*resourc
 	ownerUUIDParsed := uuid.FromStringOrNil(ownerUUID)
 
 	var nsType resource.NamespaceType
-	if nsRes.GetType().String() == mgmtpb.CheckNamespaceAdminResponse_NAMESPACE_ORGANIZATION.String() {
+	if nsRes.GetType().String() == pb.CheckNamespaceAdminResponse_NAMESPACE_ORGANIZATION.String() {
 		nsType = resource.Organization
-	} else if nsRes.GetType().String() == mgmtpb.CheckNamespaceAdminResponse_NAMESPACE_USER.String() {
+	} else if nsRes.GetType().String() == pb.CheckNamespaceAdminResponse_NAMESPACE_USER.String() {
 		nsType = resource.User
 	} else {
 		err := fmt.Errorf("unknown namespace type: %v", nsRes.GetType().String())
@@ -46,89 +46,100 @@ func (s *service) GetNamespaceByNsID(ctx context.Context, nsID string) (*resourc
 	return &ns, nil
 }
 
-// GetNamespaceTierByNsID returns the tier of the namespace given the namespace ID
-func (s *service) GetNamespaceTierByNsID(ctx context.Context, nsID string) (Tier, error) {
-	ns, err := s.GetNamespaceByNsID(ctx, nsID)
-	if err != nil {
-		return "", fmt.Errorf("failed to get namespace: %w", err)
-	}
-	return s.GetNamespaceTier(ctx, ns)
-}
-
 func (s *service) GetNamespaceTier(ctx context.Context, ns *resource.Namespace) (Tier, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 	switch ns.NsType {
 	case resource.User:
-		sub, err := s.mgmtPrv.GetUserSubscriptionAdmin(ctx, &mgmtpb.GetUserSubscriptionAdminRequest{
+		sub, err := s.mgmtPrv.GetUserSubscriptionAdmin(ctx, &pb.GetUserSubscriptionAdminRequest{
 			UserId: ns.NsID,
 		})
 		if err != nil {
 			// because CE does not have subscription, mgmt service will return Unimplemented error
+			// TODO this logic should be moved out of the CE repo.
+
 			statusError, ok := status.FromError(err)
 			if ok && statusError.Code() == codes.Unimplemented {
 				// Handle the case where the method is not implemented on the server
 				logger.Warn("GetUserSubscriptionAdmin is not implemented. Assuming enterprise tier")
 				return TierEnterprise, nil
-			} else {
-				// Handle other errors
-				return "", fmt.Errorf("failed to get user subscription: %w", err)
+			}
 
+			// Handle other errors
+			return "", fmt.Errorf("failed to get user subscription: %w", err)
+		}
+		switch sub.GetSubscription().GetPlan() {
+		case pb.UserSubscription_PLAN_STARTER:
+			switch sub.GetSubscription().GetDetail().GetStatus() {
+			case pb.StripeSubscriptionDetail_STATUS_TRIALING, pb.StripeSubscriptionDetail_STATUS_ACTIVE:
+				return TierStarter, nil
+			default:
+				return TierFree, nil
 			}
 		}
-		if sub.GetSubscription().Plan == mgmtpb.UserSubscription_PLAN_FREE {
-			return TierFree, nil
-		} else if sub.GetSubscription().Plan == mgmtpb.UserSubscription_PLAN_STARTER {
-			return TierPro, nil
-		}
-		return "", fmt.Errorf("unknown user subscription plan: %v", sub.GetSubscription().Plan)
 	case resource.Organization:
-		sub, err := s.mgmtPrv.GetOrganizationSubscriptionAdmin(ctx, &mgmtpb.GetOrganizationSubscriptionAdminRequest{
+		sub, err := s.mgmtPrv.GetOrganizationSubscriptionAdmin(ctx, &pb.GetOrganizationSubscriptionAdminRequest{
 			OrganizationId: ns.NsID,
 		})
 		if err != nil {
 			// because CE does not have subscription, mgmt service will return Unimplemented error
+			// TODO this logic should be moved out of the CE repo.
+
 			statusError, ok := status.FromError(err)
 			if ok && statusError.Code() == codes.Unimplemented {
 				// handle the case where the method is not implemented on the server
 				logger.Warn("GetUserSubscriptionAdmin is not implemented. Assuming enterprise tier")
 				return TierEnterprise, nil
-			} else {
-				// handle other errors
-				return "", fmt.Errorf("failed to get organization subscription: %w", err)
-
 			}
+
+			// handle other errors
+			return "", fmt.Errorf("failed to get organization subscription: %w", err)
 		}
-		if sub.GetSubscription().Plan == mgmtpb.OrganizationSubscription_PLAN_FREE {
-			return TierFree, nil
-		} else if sub.GetSubscription().Plan == mgmtpb.OrganizationSubscription_PLAN_TEAM {
-			return TierTeam, nil
-		} else if sub.GetSubscription().Plan == mgmtpb.OrganizationSubscription_PLAN_ENTERPRISE {
+
+		switch sub.GetSubscription().GetPlan() {
+		case pb.OrganizationSubscription_PLAN_ENTERPRISE:
 			return TierEnterprise, nil
+		case pb.OrganizationSubscription_PLAN_TEAM:
+			switch sub.GetSubscription().GetDetail().GetStatus() {
+			case pb.StripeSubscriptionDetail_STATUS_TRIALING, pb.StripeSubscriptionDetail_STATUS_ACTIVE:
+				return TierTeam, nil
+			default:
+				return TierFree, nil
+			}
+		default:
+			return TierFree, nil
 		}
-		return "", fmt.Errorf("unknown organization subscription plan: %v", sub.GetSubscription().Plan)
-	default:
-		return "", fmt.Errorf("unknown namespace type: %v", ns.NsType)
 	}
+
+	return "", fmt.Errorf("unknown namespace type: %v", ns.NsType)
 }
 
+// Tier defines the subscription plan of an owner.
 type Tier string
 
 const (
-	TierFree       Tier = "free"
-	TierPro        Tier = "pro"
-	TierTeam       Tier = "team"
+	// TierFree is a view-only mode for subscriptions that have been cancelled
+	// or that have expired their free trial.
+	TierFree Tier = "free"
+	// TierStarter is the individual subscription.
+	TierStarter Tier = "starter"
+	// TierTeam is an organization subscription for small teams.
+	TierTeam Tier = "team"
+	// TierEnterprise is an organization subscription for large teams and
+	// volumes.
 	TierEnterprise Tier = "enterprise"
 )
 
+// String returns the string value of Tier.
 func (t Tier) String() string {
 	return string(t)
 }
 
+// GetPrivateCatalogLimit returns the max files in a catalog.
 func (t Tier) GetPrivateCatalogLimit() int {
 	switch t {
 	case TierFree:
 		return 10
-	case TierPro:
+	case TierStarter:
 		return 50
 	case TierTeam:
 		// unlimited
@@ -144,12 +155,13 @@ func (t Tier) GetPrivateCatalogLimit() int {
 const mb = 1024 * 1024
 const gb = 1024 * 1024 * 1024
 
+// GetFileStorageTotalQuota returns the storage quota, in bytes.
 func (t Tier) GetFileStorageTotalQuota() (int, string) {
 	switch t {
 	case TierFree:
 		// 50MB
 		return 50 * mb, "50MB"
-	case TierPro:
+	case TierStarter:
 		// 500MB
 		return 500 * mb, "500MB"
 	case TierTeam:
@@ -162,8 +174,9 @@ func (t Tier) GetFileStorageTotalQuota() (int, string) {
 	return 0, "0"
 }
 
-// GetMaxUploadFileSize returns the maximum file size allowed for the given tier
-// all tier has the same max file size. 512mb
+// GetMaxUploadFileSize returns the maximum file size allowed for the given
+// tier.
+// All tiers have the same max file size: 512mb.
 func (t Tier) GetMaxUploadFileSize() int {
 	return 512 * mb
 }
