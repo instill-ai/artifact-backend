@@ -75,6 +75,8 @@ func (s *service) GetNamespaceTier(ctx context.Context, ns *resource.Namespace) 
 			default:
 				return TierFree, nil
 			}
+		default:
+			return TierFree, nil
 		}
 	case resource.Organization:
 		sub, err := s.mgmtPrv.GetOrganizationSubscriptionAdmin(ctx, &pb.GetOrganizationSubscriptionAdminRequest{
