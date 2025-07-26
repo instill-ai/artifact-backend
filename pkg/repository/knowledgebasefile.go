@@ -337,7 +337,7 @@ func (r *Repository) ListKnowledgeBaseFiles(ctx context.Context, uid string, own
 			return nil, 0, "", fmt.Errorf("no catalog file found by next page token")
 		}
 		// whereClause
-		whereClause := fmt.Sprintf("%v >= ?", KnowledgeBaseFileColumn.CreateTime)
+		whereClause := fmt.Sprintf("%v <= ?", KnowledgeBaseFileColumn.CreateTime)
 		query = query.Where(whereClause, kbfs[0].CreateTime)
 	}
 

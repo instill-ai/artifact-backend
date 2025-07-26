@@ -589,6 +589,7 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 	return &artifactpb.ListCatalogFilesResponse{
 		Files:         files,
 		TotalSize:     int32(totalSize),
+		PageSize:      int32(len(files)),
 		NextPageToken: nextPageToken,
 		Filter:        req.Filter,
 	}, nil
