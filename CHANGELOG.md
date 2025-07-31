@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.29.0](https://github.com/instill-ai/artifact-backend/compare/v0.28.0...v0.29.0) (2025-07-31)
+
+
+### Bug Fixes
+
+* **repository:** fix wrong page token handling ([#230](https://github.com/instill-ai/artifact-backend/issues/230)) ([2eec4ad](https://github.com/instill-ai/artifact-backend/commit/2eec4ade34058cb9cf041a6fd7df94596b87f85f))
+* **service:** the user without tier will fallback to TierFree ([#229](https://github.com/instill-ai/artifact-backend/issues/229)) ([54ca6df](https://github.com/instill-ai/artifact-backend/commit/54ca6df12d0366c2acaefd760076d0bebe1aa97d))
+
+
+### Miscellaneous
+
+* **mgmt:** use new subscription states ([#225](https://github.com/instill-ai/artifact-backend/issues/225)) ([d3b60cf](https://github.com/instill-ai/artifact-backend/commit/d3b60cfd5609a6766db7a5c696f938fb2b62914f))
+* release v0.29.0 ([8ecb604](https://github.com/instill-ai/artifact-backend/commit/8ecb604f0cae17aac90475ce47860d30ccb17794))
+
 ## [0.28.0](https://github.com/instill-ai/artifact-backend/compare/v0.27.0...v0.28.0) (2025-07-16)
 
 
