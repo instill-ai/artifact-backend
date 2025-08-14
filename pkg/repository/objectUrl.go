@@ -7,7 +7,6 @@ import (
 
 	"github.com/gofrs/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"gorm.io/gorm"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
@@ -84,39 +83,6 @@ func (r *Repository) ListAllObjectURLs(ctx context.Context, namespaceUID, object
 		return nil, err
 	}
 	return objectURLs, nil
-}
-
-// CreateObjectURLWithUIDInEncodedURLPath creates an ObjectURL record in the database with the UID in the encoded_url_path.
-func (r *Repository) CreateObjectURLWithUIDInEncodedURLPath(ctx context.Context, objectURL ObjectURL, namespaceID string, EncodedMinioURLPath func(namespaceID string, objectURLUUID uuid.UUID) string) (*ObjectURL, error) {
-	var result ObjectURL
-	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		// Create the initial object URL
-		if err := tx.Create(&objectURL).Error; err != nil {
-			return err
-		}
-
-		// Update the encoded_url_path to include the UID
-		updateMap := map[string]any{
-			ObjectURLColumn.EncodedURLPath: EncodedMinioURLPath(namespaceID, objectURL.UID),
-		}
-
-		if err := tx.Model(&objectURL).Updates(updateMap).Error; err != nil {
-			return err
-		}
-
-		// Fetch the final result
-		if err := tx.Where(ObjectURLColumn.UID, objectURL.UID).First(&result).Error; err != nil {
-			return err
-		}
-
-		return nil
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	return &result, nil
 }
 
 // DeleteObjectURL performs a soft delete on an ObjectURL record.

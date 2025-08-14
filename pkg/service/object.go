@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"net/url"
-	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -211,16 +210,6 @@ func (s *service) GetDownloadURL(
 		UrlExpireAt: timestamppb.New(expireAtTS),
 		Object:      objectInProto,
 	}, nil
-}
-
-// EncodedMinioURLPath get the encoded minio url path
-func EncodedMinioURLPath(namespaceID string, objectURLUUID uuid.UUID) string {
-
-	// Construct the path
-	urlPath := path.Join("v1alpha", "namespaces", namespaceID, "blob-urls", objectURLUUID.String())
-
-	// Ensure the path starts with a forward slash
-	return config.Config.Blob.HostPort + "/" + urlPath
 }
 
 // encodeBlobURL encodes the presigned URL to a blob URL. The presigned URL
