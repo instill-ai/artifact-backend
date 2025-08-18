@@ -86,15 +86,20 @@ func (m *milvusClient) CreateCollection(ctx context.Context, collectionName stri
 		return fmt.Errorf("creating collection: %w", err)
 	}
 
-	// 3. Create index
-	index, err := entity.NewIndexSCANN(metricType, scaNNList, withRaw)
+	// 3. Create indexes
+	vectorIdx, err := entity.NewIndexSCANN(metricType, scaNNList, withRaw)
 	if err != nil {
 		return fmt.Errorf("building index: %w", err)
 	}
 
-	err = m.c.CreateIndex(ctx, collectionName, kbCollectionFieldEmbedding, index, false)
-	if err != nil {
-		return fmt.Errorf("creating index: %w", err)
+	for field, idx := range map[string]entity.Index{
+		kbCollectionFieldEmbedding: vectorIdx,
+		kbCollectionFieldFileUID:   entity.NewScalarIndexWithType(entity.Inverted),
+	} {
+		err = m.c.CreateIndex(ctx, collectionName, field, idx, false)
+		if err != nil {
+			return fmt.Errorf("creating index for field %s: %w", field, err)
+		}
 	}
 
 	logger.Info("Collection created successfully.")
