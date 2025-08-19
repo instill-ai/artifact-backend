@@ -19,8 +19,6 @@ type KnowledgeBaseI interface {
 	SaveConvertedFile(ctx context.Context, kbUID, convertedFileUID, fileExt string, content []byte) error
 	// SaveTextChunks saves batch of chunks(text files) to MinIO.
 	SaveTextChunks(ctx context.Context, kbUID string, chunks map[ChunkUIDType]ChunkContentType) error
-	// GetUploadedFilePathInKnowledgeBase returns the path of the uploaded file in MinIO.
-	GetUploadedFilePathInKnowledgeBase(kbUID, dest string) string
 	// GetConvertedFilePathInKnowledgeBase returns the path of the converted file in MinIO.
 	GetConvertedFilePathInKnowledgeBase(kbUID, ConvertedFileUID, fileExt string) string
 	// GetChunkPathInKnowledgeBase returns the path of the chunk in MinIO.
@@ -137,10 +135,6 @@ func (m *Minio) DeleteAllChunksInKb(ctx context.Context, kbUID string) chan erro
 	err := m.DeleteFilesWithPrefix(ctx, KnowledgeBaseBucketName, kbUID+chunkPrefix)
 
 	return err
-}
-
-func (m *Minio) GetUploadedFilePathInKnowledgeBase(kbUID, dest string) string {
-	return kbUID + uploadedFilePrefix + dest
 }
 
 func (m *Minio) GetConvertedFilePathInKnowledgeBase(kbUID, ConvertedFileUID, fileExt string) string {

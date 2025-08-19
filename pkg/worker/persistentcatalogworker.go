@@ -331,6 +331,8 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processFile(ctx context.Context,
 				return err
 			}
 			return nil
+		default:
+			return fmt.Errorf("unhandled status %s", status.String())
 		}
 	}
 }

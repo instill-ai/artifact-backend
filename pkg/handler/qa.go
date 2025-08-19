@@ -16,12 +16,12 @@ import (
 	logx "github.com/instill-ai/x/log"
 )
 
+// QuestionAnswering provides the response to the prompted question, returning
+// contextual information like the chunks used to build the answer.
 func (ph *PublicHandler) QuestionAnswering(
 	ctx context.Context,
-	req *artifactPb.QuestionAnsweringRequest) (
-	*artifactPb.QuestionAnsweringResponse,
-	error) {
-
+	req *artifactPb.QuestionAnsweringRequest,
+) (*artifactPb.QuestionAnsweringResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 
 	t := time.Now()
@@ -64,6 +64,7 @@ func (ph *PublicHandler) QuestionAnswering(
 		TopK:        uint32(req.GetTopK()),
 		CatalogId:   req.GetCatalogId(),
 		NamespaceId: req.GetNamespaceId(),
+		FileUids:    req.GetFileUids(),
 	}
 
 	simChunksScores, err := ph.service.SimilarityChunksSearch(ctx, ownerUID, scReq)

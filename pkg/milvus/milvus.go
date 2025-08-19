@@ -86,15 +86,20 @@ func (m *milvusClient) CreateCollection(ctx context.Context, collectionName stri
 		return fmt.Errorf("creating collection: %w", err)
 	}
 
-	// 3. Create index
-	index, err := entity.NewIndexSCANN(metricType, scaNNList, withRaw)
+	// 3. Create indexes
+	vectorIdx, err := entity.NewIndexSCANN(metricType, scaNNList, withRaw)
 	if err != nil {
 		return fmt.Errorf("building index: %w", err)
 	}
 
-	err = m.c.CreateIndex(ctx, collectionName, kbCollectionFieldEmbedding, index, false)
-	if err != nil {
-		return fmt.Errorf("creating index: %w", err)
+	for field, idx := range map[string]entity.Index{
+		kbCollectionFieldEmbedding: vectorIdx,
+		kbCollectionFieldFileUID:   entity.NewScalarIndexWithType(entity.Inverted),
+	} {
+		err = m.c.CreateIndex(ctx, collectionName, field, idx, false)
+		if err != nil {
+			return fmt.Errorf("creating index for field %s: %w", field, err)
+		}
 	}
 
 	logger.Info("Collection created successfully.")
@@ -211,16 +216,27 @@ func (m *milvusClient) DeleteEmbeddingsInCollection(ctx context.Context, collect
 	return err
 }
 
+func (m *milvusClient) fileUIDFilter(fileUIDs []uuid.UUID) string {
+	validUIDs := make([]string, 0, len(fileUIDs))
+	for _, uid := range fileUIDs {
+		if uid.IsNil() {
+			continue
+		}
+		validUIDs = append(validUIDs, `"`+uid.String()+`"`)
+	}
+
+	if len(validUIDs) == 0 {
+		return ""
+	}
+
+	return fmt.Sprintf("%s in [%s]", kbCollectionFieldFileUID, strings.Join(validUIDs, ","))
+}
+
 func (m *milvusClient) SimilarVectorsInCollection(ctx context.Context, p service.SimilarVectorSearchParam) ([][]service.SimilarEmbedding, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 
 	collectionName := p.CollectionID
-	vectors := p.Vectors
 	topK := int(p.TopK)
-	fileUID := p.FileUID
-	fileName := p.FileName
-	fileType := p.FileType
-	contentType := p.ContentType
 
 	logger = logger.With(zap.String("collection_name", collectionName))
 
@@ -265,28 +281,33 @@ func (m *milvusClient) SimilarVectorsInCollection(ctx context.Context, p service
 		)
 
 		if hasFileUID {
-			if fileUID != uuid.Nil {
-				filterStrs = append(filterStrs, fmt.Sprintf("%s == '%s'", kbCollectionFieldFileUID, fileUID.String()))
-			}
 			outputFields = append(outputFields, kbCollectionFieldFileUID)
-		} else if fileName != "" {
-			filterStrs = append(filterStrs, fmt.Sprintf("%s == '%s'", kbCollectionFieldFileName, fileName))
+
+			filter := m.fileUIDFilter(p.FileUIDs)
+			if filter != "" {
+				filterStrs = append(filterStrs, filter)
+			}
+		} else if len(p.FileNames) > 0 {
+			// Filename filter is only used for backwards compatibility in
+			// collections that lack the file UID metadata.
+			filter := fmt.Sprintf(`%s in ["%s"]`, kbCollectionFieldFileName, strings.Join(p.FileNames, `","`))
+			filterStrs = append(filterStrs, filter)
 		}
 
-		if fileType != "" {
-			filterStrs = append(filterStrs, fmt.Sprintf("%s == '%s'", kbCollectionFieldFileType, fileType))
+		if p.FileType != "" {
+			filterStrs = append(filterStrs, fmt.Sprintf("%s == '%s'", kbCollectionFieldFileType, p.FileType))
 		}
 
-		if contentType != "" {
-			filterStrs = append(filterStrs, fmt.Sprintf("%s == '%s'", kbCollectionFieldContentType, contentType))
+		if p.ContentType != "" {
+			filterStrs = append(filterStrs, fmt.Sprintf("%s == '%s'", kbCollectionFieldContentType, p.ContentType))
 		}
 	}
 
 	t = time.Now()
 	// Convert the input vector to float32
-	milvusVectors := make([]entity.Vector, len(vectors))
+	milvusVectors := make([]entity.Vector, len(p.Vectors))
 	// milvus search vector support batch search, but we just need one vector
-	for i, v := range vectors {
+	for i, v := range p.Vectors {
 		milvusVectors[i] = entity.FloatVector(v)
 	}
 	// Perform the search
@@ -351,6 +372,11 @@ func (m *milvusClient) SimilarVectorsInCollection(ctx context.Context, p service
 
 func (m *milvusClient) DropCollection(ctx context.Context, collectionName string) error {
 	return m.c.DropCollection(ctx, collectionName)
+}
+
+func (m *milvusClient) CheckFileUIDMetadata(ctx context.Context, collectionName string) (bool, error) {
+	_, hasFileUID, err := m.checkMetadataFields(ctx, collectionName)
+	return hasFileUID, err
 }
 
 // checkMetadataFields returns whether the collection schema has metadata
