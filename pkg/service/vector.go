@@ -32,7 +32,7 @@ type SimilarVectorSearchParam struct {
 	CollectionID string
 	Vectors      [][]float32
 	TopK         uint32
-	FileUID      uuid.UUID
+	FileUIDs     []uuid.UUID
 	FileType     string
 	ContentType  string
 
@@ -44,7 +44,7 @@ type SimilarVectorSearchParam struct {
 	// have a file UID in the schema. Some collections have rigid schemas
 	// without dynamic fields, so the original schema (with filename) couldn't
 	// be extended and backfilled to have a file UID.
-	FileName string
+	FileNames []string
 }
 
 // VectorDatabase implements the use necesasry cases to interact with a vector
@@ -55,6 +55,10 @@ type VectorDatabase interface {
 	DropCollection(_ context.Context, id string) error
 	SimilarVectorsInCollection(context.Context, SimilarVectorSearchParam) ([][]SimilarEmbedding, error)
 	DeleteEmbeddingsInCollection(_ context.Context, collID string, embeddingUID []string) error
+	// CheckFileUIDMetadata checks if the collection has the file UID metadata
+	// field, which wasn't introduced since the beginning and is not present in
+	// legacy collections.
+	CheckFileUIDMetadata(_ context.Context, collectionID string) (bool, error)
 }
 
 const kbCollectionPrefix = "kb_"

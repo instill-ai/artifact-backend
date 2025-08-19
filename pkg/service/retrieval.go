@@ -3,16 +3,12 @@ package service
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/gofrs/uuid"
-	"go.uber.org/zap"
 
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
-	errorsx "github.com/instill-ai/x/errors"
-	logx "github.com/instill-ai/x/log"
 )
 
 type SimChunk struct {
@@ -20,32 +16,22 @@ type SimChunk struct {
 	Score    float32
 }
 
-// SimilarityChunksSearch ...
 func (s *service) SimilarityChunksSearch(ctx context.Context, ownerUID uuid.UUID, req *artifactpb.SimilarityChunksSearchRequest) ([]SimChunk, error) {
-	logger, _ := logx.GetZapLogger(ctx)
-	t := time.Now()
-	// check if text prompt is empty
 	if req.TextPrompt == "" {
-		return nil, fmt.Errorf("text prompt is empty in SimilarityChunksSearch")
+		return nil, fmt.Errorf("empty text prompt")
 	}
+
 	textVector, err := s.EmbeddingTextPipe(ctx, []string{req.TextPrompt})
 	if err != nil {
-		logger.Error("failed to vectorize text", zap.Error(err))
-		return nil, fmt.Errorf("failed to vectorize text. err: %w", err)
+		return nil, fmt.Errorf("vectorizing text: %w", err)
 	}
-	logger.Info("vectorize text", zap.Duration("duration", time.Since(t)))
-	t = time.Now()
-	// get kb by kb_id and owner uid
+
 	kb, err := s.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, req.CatalogId)
 	if err != nil {
-		logger.Error("failed to get knowledge base by owner and id", zap.Error(err))
-		return nil, fmt.Errorf("failed to get knowledge base by owner and id. err: %w", err)
+		return nil, fmt.Errorf("fetching knowledge base: %w", err)
 	}
-	logger.Info("get knowledge base by owner and id", zap.Duration("duration", time.Since(t)))
 
 	// Search similar embeddings in KB.
-	t = time.Now()
-
 	var fileType constant.FileType
 	switch req.GetFileMediaType() {
 	case artifactpb.FileMediaType_FILE_MEDIA_TYPE_DOCUMENT:
@@ -70,49 +56,66 @@ func (s *service) SimilarityChunksSearch(ctx context.Context, ownerUID uuid.UUID
 		return nil, fmt.Errorf("unsupported content type: %v", req.GetContentType())
 	}
 
-	var fileName string
-	var fileUID uuid.UUID
-	if req.GetFileUid() != "" {
-		fileUID = uuid.FromStringOrNil(req.GetFileUid())
-		kbfs, err := s.repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{fileUID})
-		switch {
-		case err != nil:
-			return nil, fmt.Errorf("fetching file from repository: %w", err)
-		case len(kbfs) == 0:
-			return nil, fmt.Errorf("fetching file from repository: %w", errorsx.ErrNotFound)
-		}
+	fileUIDs := make([]uuid.UUID, 0, len(req.GetFileUids()))
+	for _, uid := range req.GetFileUids() {
+		fileUIDs = append(fileUIDs, uuid.FromStringOrNil(uid))
+	}
 
-		fileName = kbfs[0].Name
-	} else if req.GetFileName() != "" {
-		fileName = req.GetFileName()
-		kbf, err := s.repository.GetKnowledgebaseFileByKbUIDAndFileID(ctx, kb.UID, fileName)
+	// The FileUid field is deprecated and used only when FileUids aren't
+	// present.
+	if len(fileUIDs) == 0 && req.GetFileUid() != "" {
+		fileUIDs = append(fileUIDs, uuid.FromStringOrNil(req.GetFileUid()))
+	}
+
+	// The FileName field is deprecated and used only in absence of the file UID
+	// params.
+	if len(fileUIDs) == 0 && req.GetFileName() != "" {
+		file, err := s.repository.GetKnowledgebaseFileByKbUIDAndFileID(ctx, kb.UID, req.GetFileName())
 		if err != nil {
 			return nil, fmt.Errorf("fetching kb file: %w", err)
 		}
 
-		fileUID = kbf.UID
+		fileUIDs = append(fileUIDs, file.UID)
 	}
 
 	topK := req.GetTopK()
 	if topK == 0 {
 		topK = 5
 	}
-	searchParam := SimilarVectorSearchParam{
+	sp := SimilarVectorSearchParam{
 		CollectionID: KBCollectionName(kb.UID),
 		Vectors:      textVector,
 		TopK:         topK,
-		FileUID:      fileUID,
-		FileName:     fileName,
+		FileUIDs:     fileUIDs,
 		FileType:     string(fileType),
 		ContentType:  string(contentType),
 	}
 
-	simEmbeddings, err := s.vectorDB.SimilarVectorsInCollection(ctx, searchParam)
+	// By default we'll filter the chunk search with the file UID metadata.
+	// However, certain legacy collections lack this field. In that case, we'll
+	// filter by filename. This field isn't indexed, so performance might be
+	// affected.
+	hasFileUID, err := s.vectorDB.CheckFileUIDMetadata(ctx, sp.CollectionID)
+	if err != nil {
+		return nil, fmt.Errorf("checkin collection metadata: %w", err)
+	}
+
+	if !hasFileUID {
+		files, err := s.repository.GetKnowledgeBaseFilesByFileUIDs(ctx, fileUIDs)
+		if err != nil {
+			return nil, fmt.Errorf("fetching files: %w", err)
+		}
+
+		sp.FileNames = make([]string, 0, len(files))
+		for _, file := range files {
+			sp.FileNames = append(sp.FileNames, file.Name)
+		}
+	}
+
+	simEmbeddings, err := s.vectorDB.SimilarVectorsInCollection(ctx, sp)
 	if err != nil {
 		return nil, fmt.Errorf("searching similar embeddings in KB: %w", err)
 	}
-
-	logger.Info("Search similar embeddings in KB", zap.Duration("duration", time.Since(t)))
 
 	// fetch chunks by their UIDs
 	res := make([]SimChunk, 0, len(simEmbeddings))
@@ -125,8 +128,7 @@ func (s *service) SimilarityChunksSearch(ctx context.Context, ownerUID uuid.UUID
 		}
 		simChunkUID, err := uuid.FromString(simEmb.SourceUID)
 		if err != nil {
-			logger.Error("failed to parse chunk uid", zap.Error(err))
-			return nil, fmt.Errorf("failed to parse chunk uid: %v. err: %w", simEmb.SourceUID, err)
+			return nil, fmt.Errorf("invalid chunk uid %s", simEmb.SourceUID)
 		}
 		res = append(res, SimChunk{
 			ChunkUID: simChunkUID,
