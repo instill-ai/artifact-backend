@@ -61,23 +61,6 @@ func (s *service) SimilarityChunksSearch(ctx context.Context, ownerUID uuid.UUID
 		fileUIDs = append(fileUIDs, uuid.FromStringOrNil(uid))
 	}
 
-	// The FileUid field is deprecated and used only when FileUids aren't
-	// present.
-	if len(fileUIDs) == 0 && req.GetFileUid() != "" {
-		fileUIDs = append(fileUIDs, uuid.FromStringOrNil(req.GetFileUid()))
-	}
-
-	// The FileName field is deprecated and used only in absence of the file UID
-	// params.
-	if len(fileUIDs) == 0 && req.GetFileName() != "" {
-		file, err := s.repository.GetKnowledgebaseFileByKbUIDAndFileID(ctx, kb.UID, req.GetFileName())
-		if err != nil {
-			return nil, fmt.Errorf("fetching kb file: %w", err)
-		}
-
-		fileUIDs = append(fileUIDs, file.UID)
-	}
-
 	topK := req.GetTopK()
 	if topK == 0 {
 		topK = 5
