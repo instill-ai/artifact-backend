@@ -152,6 +152,16 @@ var KnowledgeBaseFileColumn = KnowledgeBaseFileColumns{
 	ExternalMetadata: "external_metadata",
 }
 
+// ConvertingPipeline extracts the conversion pipeline, if present, from the
+// file metadata.
+func (kf KnowledgeBaseFile) ConvertingPipeline() *string {
+	if kf.ExtraMetaDataUnmarshal == nil || kf.ExtraMetaDataUnmarshal.ConvertingPipe == "" {
+		return nil
+	}
+
+	return &kf.ExtraMetaDataUnmarshal.ConvertingPipe
+}
+
 // ExtraMetaDataMarshal marshals the ExtraMetaData struct to a JSON string
 func (kf *KnowledgeBaseFile) ExtraMetaDataMarshal() error {
 	if kf.ExtraMetaDataUnmarshal == nil {

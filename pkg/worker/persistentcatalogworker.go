@@ -420,14 +420,29 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processConvertingFile(ctx contex
 		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, fmt.Errorf("fetching parent catalog: %w", err)
 	}
 
-	convertingPipelines := make([]service.PipelineRelease, 0, len(kb.ConvertingPipelines))
-	for _, pipelineName := range kb.ConvertingPipelines {
-		pipeline, err := service.PipelineReleaseFromName(pipelineName)
+	convertingPipelines := make([]service.PipelineRelease, 0, len(kb.ConvertingPipelines)+1)
+
+	fileConvertingPipeName := file.ExtraMetaDataUnmarshal.ConvertingPipe
+	if fileConvertingPipeName != "" {
+		fileConvertingPipeline, err := service.PipelineReleaseFromName(fileConvertingPipeName)
 		if err != nil {
 			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, fmt.Errorf("parsing pipeline name: %w", err)
 		}
 
-		convertingPipelines = append(convertingPipelines, pipeline)
+		convertingPipelines = append(convertingPipelines, fileConvertingPipeline)
+	}
+
+	for _, pipelineName := range kb.ConvertingPipelines {
+		if pipelineName == fileConvertingPipeName {
+			continue
+		}
+
+		catalogConvertingPipeline, err := service.PipelineReleaseFromName(pipelineName)
+		if err != nil {
+			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, fmt.Errorf("parsing pipeline name: %w", err)
+		}
+
+		convertingPipelines = append(convertingPipelines, catalogConvertingPipeline)
 	}
 
 	// convert the pdf file to md
