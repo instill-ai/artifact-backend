@@ -49,8 +49,8 @@ type KnowledgeBaseFileI interface {
 	}, error)
 	// GetTruthSourceByFileUID returns the truth source file destination of minIO by file UID
 	GetTruthSourceByFileUID(ctx context.Context, fileUID uuid.UUID) (*SourceMeta, error)
-	// UpdateKbFileExtraMetaData updates the extra meta data of the knowledge base file
-	UpdateKbFileExtraMetaData(ctx context.Context, fileUID uuid.UUID, failureReason, convertingPipe, summarizinPipe, chunkingPipe, embeddingPipe string, processingTime, convertingTime, summarizingTime, chunkingTime, embeddingTime *int64) error
+	// UpdateKBFileMetadata updates the metadata fields of a knowledge base file.
+	UpdateKBFileMetadata(_ context.Context, fileUID uuid.UUID, _ ExtraMetaData) error
 	// DeleteKnowledgeBaseFileAndDecreaseUsage deletes the knowledge base file and decreases the knowledge base usage
 	DeleteKnowledgeBaseFileAndDecreaseUsage(ctx context.Context, fileUID uuid.UUID) error
 
@@ -689,84 +689,78 @@ func (r *Repository) GetTruthSourceByFileUID(ctx context.Context, fileUID uuid.U
 	}, nil
 }
 
-// UpdateKbFileExtraMetaData fetch the knowledge base file and lock the row for update,
-// it will keep the original data and only update the provided params
-// parameters: `fileUID` is the file UID, `failedReason` is the reason for the failure,
-// `convertingPipe` is the converting pipe name, `embeddingPipe` is the embedding pipe name,
-// `chunkingPipe` is the chunking pipe name, `embeddingPipe` is the embedding pipe name.
-// `processingTime` is the processing time, `chunkingTime` is the chunking time, `embeddingTime` is the embedding time.
-func (r *Repository) UpdateKbFileExtraMetaData(
-	ctx context.Context,
-	fileUID uuid.UUID,
-	failureReason,
-	convertingPipe,
-	summarizingPipe,
-	chunkingPipe,
-	embeddingPipe string,
-	processingTime, convertingTime, summarizingTime, chunkingTime, embeddingTime *int64) error {
-	var kb KnowledgeBaseFile
-
-	// Use GORM's Transaction function
+// UpdateKBFileMetadata updates the metadata fields of a knowledge base file.
+// Only the nonzero values in the request will be used in the update, keeping
+// the existing values for the rest of the fields.
+// This method performs an update lock in the record to avoid collisions with
+// other requests.
+func (r *Repository) UpdateKBFileMetadata(ctx context.Context, fileUID uuid.UUID, updates ExtraMetaData) error {
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var file KnowledgeBaseFile
+
 		// Lock the row for update within the transaction
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where(KnowledgeBaseFileColumn.UID+" = ?", fileUID).First(&kb).Error; err != nil {
-			return err
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where(KnowledgeBaseFileColumn.UID+" = ?", fileUID).
+			First(&file).Error
+
+		if err != nil {
+			return fmt.Errorf("fetching file: %w", err)
 		}
 
-		// Unmarshal the existing ExtraMetaData
-		if err := kb.ExtraMetaDataUnmarshalFunc(); err != nil {
-			return err
+		// Unmarshal the existing metadata.
+		if err := file.ExtraMetaDataUnmarshalFunc(); err != nil {
+			return fmt.Errorf("extracting metadata: %w", err)
 		}
 
-		// Update the ExtraMetaData fields
-		if kb.ExtraMetaDataUnmarshal == nil {
-			kb.ExtraMetaDataUnmarshal = &ExtraMetaData{}
+		// Update the ExtraMetaData fields.
+		if file.ExtraMetaDataUnmarshal == nil {
+			file.ExtraMetaDataUnmarshal = &ExtraMetaData{}
 		}
-		if failureReason != "" {
-			kb.ExtraMetaDataUnmarshal.FailReason = failureReason
+
+		if updates.FailReason != "" {
+			file.ExtraMetaDataUnmarshal.FailReason = updates.FailReason
 		}
-		if convertingPipe != "" {
-			kb.ExtraMetaDataUnmarshal.ConvertingPipe = convertingPipe
+		if updates.ConvertingPipe != "" {
+			file.ExtraMetaDataUnmarshal.ConvertingPipe = updates.ConvertingPipe
 		}
-		if summarizingPipe != "" {
-			kb.ExtraMetaDataUnmarshal.SummarizingPipe = summarizingPipe
+		if updates.SummarizingPipe != "" {
+			file.ExtraMetaDataUnmarshal.SummarizingPipe = updates.SummarizingPipe
 		}
-		if chunkingPipe != "" {
-			kb.ExtraMetaDataUnmarshal.ChunkingPipe = chunkingPipe
+		if updates.ChunkingPipe != "" {
+			file.ExtraMetaDataUnmarshal.ChunkingPipe = updates.ChunkingPipe
 		}
-		if embeddingPipe != "" {
-			kb.ExtraMetaDataUnmarshal.EmbeddingPipe = embeddingPipe
+		if updates.EmbeddingPipe != "" {
+			file.ExtraMetaDataUnmarshal.EmbeddingPipe = updates.EmbeddingPipe
 		}
-		if processingTime != nil {
-			kb.ExtraMetaDataUnmarshal.ProcessingTime = *processingTime
+		if updates.ProcessingTime != 0 {
+			file.ExtraMetaDataUnmarshal.ProcessingTime = updates.ProcessingTime
 		}
-		if convertingTime != nil {
-			kb.ExtraMetaDataUnmarshal.ConvertingTime = *convertingTime
+		if updates.ConvertingTime != 0 {
+			file.ExtraMetaDataUnmarshal.ConvertingTime = updates.ConvertingTime
 		}
-		if summarizingTime != nil {
-			kb.ExtraMetaDataUnmarshal.SummarizingTime = *summarizingTime
+		if updates.SummarizingTime != 0 {
+			file.ExtraMetaDataUnmarshal.SummarizingTime = updates.SummarizingTime
 		}
-		if chunkingTime != nil {
-			kb.ExtraMetaDataUnmarshal.ChunkingTime = *chunkingTime
+		if updates.ChunkingTime != 0 {
+			file.ExtraMetaDataUnmarshal.ChunkingTime = updates.ChunkingTime
 		}
-		if embeddingTime != nil {
-			kb.ExtraMetaDataUnmarshal.EmbeddingTime = *embeddingTime
+		if updates.EmbeddingTime != 0 {
+			file.ExtraMetaDataUnmarshal.EmbeddingTime = updates.EmbeddingTime
 		}
-		// Marshal the updated ExtraMetaData
-		if err := kb.ExtraMetaDataMarshal(); err != nil {
-			return err
+
+		// Marshal the updated ExtraMetaData.
+		if err := file.ExtraMetaDataMarshal(); err != nil {
+			return fmt.Errorf("marshalling metadata: %w", err)
 		}
 
 		// Save the updated KnowledgeBaseFile within the transaction
-		if err := tx.Save(&kb).Error; err != nil {
-			return err
+		if err := tx.Save(&file).Error; err != nil {
+			return fmt.Errorf("storing record: %w", err)
 		}
 
-		// Returning nil commits the transaction
 		return nil
 	})
 
-	// Return the result of the transaction (either nil or an error)
 	return err
 }
 
