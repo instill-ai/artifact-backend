@@ -9,6 +9,7 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
@@ -111,7 +112,8 @@ func (s *service) ConvertToMDPipe(
 		}
 
 		// save the converting pipeline metadata into database
-		if err := s.repository.UpdateKbFileExtraMetaData(ctx, fileUID, "", pipeline.Name(), "", "", "", nil, nil, nil, nil, nil); err != nil {
+		mdUpdate := repository.ExtraMetaData{ConvertingPipe: pipeline.Name()}
+		if err := s.repository.UpdateKBFileMetadata(ctx, fileUID, mdUpdate); err != nil {
 			return "", fmt.Errorf("saving converting pipeline in file metadata: %w", err)
 		}
 

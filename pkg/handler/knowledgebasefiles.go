@@ -27,6 +27,7 @@ import (
 	logx "github.com/instill-ai/x/log"
 )
 
+// UploadCatalogFile adds a file to a catalog.
 func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.UploadCatalogFileRequest) (*artifactpb.UploadCatalogFileResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 	authUID, err := getUserUIDFromContext(ctx)
@@ -93,7 +94,31 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 	}
 
 	// upload file to minio and database
-	var res *repository.KnowledgeBaseFile
+	kbFile := repository.KnowledgeBaseFile{
+		Name:                      req.GetFile().GetName(),
+		Type:                      req.File.Type.String(),
+		Owner:                     ns.NsUID,
+		KnowledgeBaseUID:          kb.UID,
+		ProcessStatus:             artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_NOTSTARTED.String(),
+		ExternalMetadataUnmarshal: md,
+	}
+
+	if req.GetFile().GetConvertingPipeline() != "" {
+		// TODO jvallesm: validate existence, permissions & recipe of provided
+		// pipeline.
+		if _, err := service.PipelineReleaseFromName(req.GetFile().GetConvertingPipeline()); err != nil {
+			err = fmt.Errorf("%w: invalid conversion pipeline format: %w", errorsx.ErrInvalidArgument, err)
+			return nil, errorsx.AddMessage(
+				err,
+				`Conversion pipeline must have the format "{namespaceID}/{pipelineID}@{version}"`,
+			)
+		}
+
+		kbFile.ExtraMetaDataUnmarshal = &repository.ExtraMetaData{
+			ConvertingPipe: req.GetFile().GetConvertingPipeline(),
+		}
+	}
+
 	if !hasObject {
 		// check file name length based on character count
 		if len(req.File.Name) > 255 {
@@ -144,32 +169,9 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 		}
 		destination := minio.GetBlobObjectPath(ns.NsUID, objectUID)
 
-		kbFile := repository.KnowledgeBaseFile{
-			Name:                      req.File.Name,
-			Type:                      artifactpb.FileType_name[int32(req.File.Type)],
-			Owner:                     ns.NsUID,
-			CreatorUID:                creatorUID,
-			KnowledgeBaseUID:          kb.UID,
-			Destination:               destination,
-			ProcessStatus:             artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_NOTSTARTED)],
-			Size:                      fileSize,
-			ExternalMetadataUnmarshal: md,
-		}
-
-		// create catalog file in database
-		res, err = ph.service.Repository().CreateKnowledgeBaseFile(ctx, kbFile, nil)
-		if err != nil {
-			logger.Error("failed to create catalog file", zap.Error(err))
-			return nil, err
-		}
-
-		// increase catalog usage. need to increase after the file is created.
-		// Note: in the future, we need to increase the usage in transaction with creating the file.
-		err = ph.service.Repository().IncreaseKnowledgeBaseUsage(ctx, nil, kb.UID.String(), int(fileSize))
-		if err != nil {
-			logger.Error("failed to increase catalog usage", zap.Error(err))
-			return nil, err
-		}
+		kbFile.CreatorUID = creatorUID
+		kbFile.Destination = destination
+		kbFile.Size = fileSize
 	} else {
 		object, err := ph.service.Repository().GetObjectByUID(ctx, uuid.FromStringOrNil(req.GetFile().GetObjectUid()))
 		if err != nil {
@@ -209,49 +211,42 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 
 		req.File.Type = determineFileType(object.Name)
 
-		kbFile := repository.KnowledgeBaseFile{
-			Name:                      object.Name,
-			Type:                      req.File.Type.String(),
-			Owner:                     ns.NsUID,
-			CreatorUID:                object.CreatorUID,
-			KnowledgeBaseUID:          kb.UID,
-			Destination:               object.Destination,
-			ProcessStatus:             artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_NOTSTARTED)],
-			Size:                      object.Size,
-			ExternalMetadataUnmarshal: md,
-		}
+		kbFile.Type = req.File.Type.String()
+		kbFile.CreatorUID = object.CreatorUID
+		kbFile.Destination = object.Destination
+		kbFile.Size = object.Size
+	}
 
-		// create catalog file in database
-		res, err = ph.service.Repository().CreateKnowledgeBaseFile(ctx, kbFile, nil)
+	// create catalog file in database
+	res, err := ph.service.Repository().CreateKnowledgeBaseFile(ctx, kbFile, nil)
+	if err != nil {
+		return nil, fmt.Errorf("creating catalog file: %w", err)
+	}
 
-		if err != nil {
-			return nil, fmt.Errorf("creating catalog file: %w", err)
-		}
-
-		// increase catalog usage. need to increase after the file is created.
-		// Note: in the future, we need to increase the usage in transaction with creating the file.
-		err = ph.service.Repository().IncreaseKnowledgeBaseUsage(ctx, nil, kb.UID.String(), int(object.Size))
-		if err != nil {
-			return nil, fmt.Errorf("increasing catalog usage: %w", err)
-		}
+	// increase catalog usage. need to increase after the file is created.
+	// TODO: increase the usage in transaction with creating the file.
+	err = ph.service.Repository().IncreaseKnowledgeBaseUsage(ctx, nil, kb.UID.String(), int(kbFile.Size))
+	if err != nil {
+		return nil, fmt.Errorf("increasing catalog usage: %w", err)
 	}
 
 	return &artifactpb.UploadCatalogFileResponse{
 		File: &artifactpb.File{
-			FileUid:          res.UID.String(),
-			OwnerUid:         res.Owner.String(),
-			CreatorUid:       res.CreatorUID.String(),
-			CatalogUid:       res.KnowledgeBaseUID.String(),
-			Name:             res.Name,
-			Type:             req.File.Type,
-			CreateTime:       timestamppb.New(*res.CreateTime),
-			UpdateTime:       timestamppb.New(*res.UpdateTime),
-			ProcessStatus:    artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_NOTSTARTED,
-			Size:             res.Size,
-			TotalChunks:      0,
-			TotalTokens:      0,
-			ExternalMetadata: res.PublicExternalMetadataUnmarshal(),
-			ObjectUid:        req.File.ObjectUid,
+			FileUid:            res.UID.String(),
+			OwnerUid:           res.Owner.String(),
+			CreatorUid:         res.CreatorUID.String(),
+			CatalogUid:         res.KnowledgeBaseUID.String(),
+			Name:               res.Name,
+			Type:               req.File.Type,
+			CreateTime:         timestamppb.New(*res.CreateTime),
+			UpdateTime:         timestamppb.New(*res.UpdateTime),
+			ProcessStatus:      artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_NOTSTARTED,
+			Size:               res.Size,
+			TotalChunks:        0,
+			TotalTokens:        0,
+			ExternalMetadata:   res.PublicExternalMetadataUnmarshal(),
+			ObjectUid:          req.File.ObjectUid,
+			ConvertingPipeline: res.ConvertingPipeline(),
 		},
 	}, nil
 }
@@ -320,22 +315,29 @@ func getFileSize(base64String string) (int64, string) {
 }
 
 // Check if objectUID is provided, and all other required fields if not
-func checkUploadKnowledgeBaseFileRequest(req *artifactpb.UploadCatalogFileRequest) (bool, error) {
+func checkUploadKnowledgeBaseFileRequest(req *artifactpb.UploadCatalogFileRequest) (hasObject bool, _ error) {
 	if req.GetNamespaceId() == "" {
-		return false, fmt.Errorf("owner uid is required. err: %w", errorsx.ErrInvalidArgument)
-	} else if req.CatalogId == "" {
-		return false, fmt.Errorf("catalog uid is required. err: %w", errorsx.ErrInvalidArgument)
-	} else if req.File == nil {
-		return false, fmt.Errorf("file is required. err: %w", errorsx.ErrInvalidArgument)
-	} else if req.File.GetObjectUid() != "" {
-		return true, nil
-	} else if req.File.Name == "" {
-		return false, fmt.Errorf("file name is required. err: %w", errorsx.ErrInvalidArgument)
-	} else if req.File.Content == "" {
-		return false, fmt.Errorf("file content is required. err: %w", errorsx.ErrInvalidArgument)
+		return false, fmt.Errorf("%w: owner UID is required", errorsx.ErrInvalidArgument)
 	}
 
-	return false, nil
+	if req.GetCatalogId() == "" {
+		return false, fmt.Errorf("%w: catalog UID is required", errorsx.ErrInvalidArgument)
+	}
+
+	if req.GetFile().GetObjectUid() == "" {
+		// File upload doesn't reference object, so request must contain the
+		// file contents.
+		if req.GetFile().GetName() == "" {
+			return false, fmt.Errorf("%w: file name is required", errorsx.ErrInvalidArgument)
+		}
+		if req.GetFile().GetContent() == "" {
+			return false, fmt.Errorf("%w: file content is required", errorsx.ErrInvalidArgument)
+		}
+
+		return false, nil
+	}
+
+	return true, nil
 }
 
 // MoveFileToCatalog moves a file from one catalog to another within the same namespace.
@@ -527,7 +529,6 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 			// adopt the new flow. So the old flow can be deprecated and
 			// removed.
 			if strings.Split(kbFile.Destination, "/")[1] == "uploaded-file" {
-
 				fileName := strings.Split(kbFile.Destination, "/")[2]
 
 				content, err := ph.service.MinIO().GetFile(ctx, minio.KnowledgeBaseBucketName, kbFile.Destination)
@@ -566,22 +567,23 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 			}
 
 			files = append(files, &artifactpb.File{
-				FileUid:          kbFile.UID.String(),
-				OwnerUid:         kbFile.Owner.String(),
-				CreatorUid:       kbFile.CreatorUID.String(),
-				CatalogUid:       kbFile.KnowledgeBaseUID.String(),
-				Name:             kbFile.Name,
-				Type:             artifactpb.FileType(artifactpb.FileType_value[kbFile.Type]),
-				CreateTime:       timestamppb.New(*kbFile.CreateTime),
-				UpdateTime:       timestamppb.New(*kbFile.UpdateTime),
-				ProcessStatus:    artifactpb.FileProcessStatus(artifactpb.FileProcessStatus_value[kbFile.ProcessStatus]),
-				Size:             kbFile.Size,
-				ExternalMetadata: kbFile.PublicExternalMetadataUnmarshal(),
-				TotalChunks:      int32(totalChunks[kbFile.UID]),
-				TotalTokens:      int32(totalTokens[kbFile.UID]),
-				ObjectUid:        objectUID.String(),
-				Summary:          string(kbFile.Summary),
-				DownloadUrl:      downloadURL,
+				FileUid:            kbFile.UID.String(),
+				OwnerUid:           kbFile.Owner.String(),
+				CreatorUid:         kbFile.CreatorUID.String(),
+				CatalogUid:         kbFile.KnowledgeBaseUID.String(),
+				Name:               kbFile.Name,
+				Type:               artifactpb.FileType(artifactpb.FileType_value[kbFile.Type]),
+				CreateTime:         timestamppb.New(*kbFile.CreateTime),
+				UpdateTime:         timestamppb.New(*kbFile.UpdateTime),
+				ProcessStatus:      artifactpb.FileProcessStatus(artifactpb.FileProcessStatus_value[kbFile.ProcessStatus]),
+				Size:               kbFile.Size,
+				ExternalMetadata:   kbFile.PublicExternalMetadataUnmarshal(),
+				TotalChunks:        int32(totalChunks[kbFile.UID]),
+				TotalTokens:        int32(totalTokens[kbFile.UID]),
+				ObjectUid:          objectUID.String(),
+				Summary:            string(kbFile.Summary),
+				DownloadUrl:        downloadURL,
+				ConvertingPipeline: kbFile.ConvertingPipeline(),
 			})
 		}
 	}
@@ -764,8 +766,9 @@ func (ph *PublicHandler) DeleteCatalogFile(
 
 }
 
+// ProcessCatalogFiles triggers the conversion, chunking, embedding and
+// summarizing process for a set of files.
 func (ph *PublicHandler) ProcessCatalogFiles(ctx context.Context, req *artifactpb.ProcessCatalogFilesRequest) (*artifactpb.ProcessCatalogFilesResponse, error) {
-
 	logger, _ := logx.GetZapLogger(ctx)
 	// ACL - check if the uid can process file. ACL.
 	// check the file's kb_uid and use kb_uid to check if user has write permission
@@ -816,16 +819,17 @@ func (ph *PublicHandler) ProcessCatalogFiles(ctx context.Context, req *artifactp
 		objectUID := uuid.FromStringOrNil(strings.TrimPrefix(strings.Split(file.Destination, "/")[1], "obj-"))
 
 		resFiles = append(resFiles, &artifactpb.File{
-			FileUid:       file.UID.String(),
-			OwnerUid:      file.Owner.String(),
-			CreatorUid:    file.CreatorUID.String(),
-			CatalogUid:    file.KnowledgeBaseUID.String(),
-			Name:          file.Name,
-			Type:          artifactpb.FileType(artifactpb.FileType_value[file.Type]),
-			CreateTime:    timestamppb.New(*file.CreateTime),
-			UpdateTime:    timestamppb.New(*file.UpdateTime),
-			ProcessStatus: artifactpb.FileProcessStatus(artifactpb.FileProcessStatus_value[file.ProcessStatus]),
-			ObjectUid:     objectUID.String(),
+			FileUid:            file.UID.String(),
+			OwnerUid:           file.Owner.String(),
+			CreatorUid:         file.CreatorUID.String(),
+			CatalogUid:         file.KnowledgeBaseUID.String(),
+			Name:               file.Name,
+			Type:               artifactpb.FileType(artifactpb.FileType_value[file.Type]),
+			CreateTime:         timestamppb.New(*file.CreateTime),
+			UpdateTime:         timestamppb.New(*file.UpdateTime),
+			ProcessStatus:      artifactpb.FileProcessStatus(artifactpb.FileProcessStatus_value[file.ProcessStatus]),
+			ObjectUid:          objectUID.String(),
+			ConvertingPipeline: file.ConvertingPipeline(),
 		})
 	}
 	return &artifactpb.ProcessCatalogFilesResponse{

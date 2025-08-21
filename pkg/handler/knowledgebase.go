@@ -125,6 +125,15 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 	// TODO jvallesm: validate existence, permissions & recipe of provided
 	// pipelines.
 	convertingPipelines := req.GetConvertingPipelines()
+	for _, pipelineName := range convertingPipelines {
+		if _, err := service.PipelineReleaseFromName(pipelineName); err != nil {
+			err = fmt.Errorf("%w: invalid conversion pipeline format: %w", errorsx.ErrInvalidArgument, err)
+			return nil, errorsx.AddMessage(
+				err,
+				`Conversion pipeline must have the format "{namespaceID}/{pipelineID}@{version}"`,
+			)
+		}
+	}
 
 	/*
 		if err := ph.service.ValidateConvertingPipelines(convertingPipelines); err != nil {
