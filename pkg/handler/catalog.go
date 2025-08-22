@@ -9,6 +9,7 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 
@@ -60,7 +61,7 @@ func (ph *PublicHandler) GetFileCatalog(ctx context.Context, req *artifactpb.Get
 	}
 
 	// Get the source file sourceContent from minIO using dest of source.
-	sourceContent, err := ph.service.MinIO().GetFile(ctx, minio.KnowledgeBaseBucketName, source.Dest)
+	sourceContent, err := ph.service.MinIO().GetFile(ctx, config.Config.Minio.BucketName, source.Dest)
 	if err != nil {
 		return nil, fmt.Errorf("getting file from blob storage: %w", err)
 	}

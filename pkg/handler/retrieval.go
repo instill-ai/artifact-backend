@@ -9,8 +9,8 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/constant"
-	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
@@ -81,7 +81,7 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 	}
 
 	// fetch the chunks content from blob storage
-	chunkContents, err := ph.service.MinIO().GetFilesByPaths(ctx, minio.KnowledgeBaseBucketName, chunkFilePaths)
+	chunkContents, err := ph.service.MinIO().GetFilesByPaths(ctx, config.Config.Minio.BucketName, chunkFilePaths)
 	if err != nil {
 		return nil, fmt.Errorf("fetching chunk contents: %w", err)
 	}

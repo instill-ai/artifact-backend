@@ -14,6 +14,7 @@ import (
 	"github.com/minio/minio-go/v7"
 	"go.uber.org/zap"
 
+	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
 	"github.com/instill-ai/x/resource"
 
@@ -47,10 +48,9 @@ type Minio struct {
 }
 
 const (
-	// Note: this bucket is for storing the blob of the file and not changeable
-	// in different environment so we dont put it in config
-	BlobBucketName          = "instill-ai-blob"
-	KnowledgeBaseBucketName = "instill-ai-knowledge-bases"
+	// BlobBucketName is used to interact with data upload by clients via
+	// presigned upload URLs.
+	BlobBucketName = "core-blob"
 )
 
 func NewMinioClientAndInitBucket(ctx context.Context, params miniox.ClientParams) (*Minio, error) {
@@ -65,7 +65,6 @@ func NewMinioClientAndInitBucket(ctx context.Context, params miniox.ClientParams
 	// TODO we should have one client per bucket. And use x/minio's public
 	// methods instead of the internal client.
 	kbParams := params
-	kbParams.Config.BucketName = KnowledgeBaseBucketName
 	xClient, err := miniox.NewMinIOClientAndInitBucket(ctx, kbParams)
 	if err != nil {
 		return nil, fmt.Errorf("connecting to MinIO: %w", err)
@@ -371,7 +370,7 @@ func (m *Minio) authenticatedUser(ctx context.Context) string {
 // retrieve files that might not have been updated their destination yet.
 func BucketFromDestination(destination string) string {
 	if strings.Contains(destination, "uploaded-file") {
-		return KnowledgeBaseBucketName
+		return config.Config.Minio.BucketName
 	}
 
 	return BlobBucketName

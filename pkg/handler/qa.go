@@ -8,7 +8,7 @@ import (
 	"github.com/gofrs/uuid"
 	"go.uber.org/zap"
 
-	"github.com/instill-ai/artifact-backend/pkg/minio"
+	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 
 	artifactPb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
@@ -92,7 +92,7 @@ func (ph *PublicHandler) QuestionAnswering(
 	logger.Info("get chunks by uids", zap.Duration("duration", time.Since(t)))
 	t = time.Now()
 	// fetch the chunks content from minio
-	chunkContents, err := ph.service.MinIO().GetFilesByPaths(ctx, minio.KnowledgeBaseBucketName, chunkFilePaths)
+	chunkContents, err := ph.service.MinIO().GetFilesByPaths(ctx, config.Config.Minio.BucketName, chunkFilePaths)
 	if err != nil {
 		logger.Error("failed to get chunks content", zap.Error(err))
 		return nil, fmt.Errorf("failed to get chunks content. err: %w", err)

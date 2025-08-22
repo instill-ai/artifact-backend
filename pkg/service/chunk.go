@@ -7,7 +7,7 @@ import (
 	"github.com/gofrs/uuid"
 	"go.uber.org/zap"
 
-	"github.com/instill-ai/artifact-backend/pkg/minio"
+	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
@@ -72,7 +72,7 @@ func (s *service) GetChunksByFile(ctx context.Context, file *repository.Knowledg
 	for i, c := range chunks {
 		chunksPaths[i] = c.ContentDest
 	}
-	chunkFiles, err := s.minIO.GetFilesByPaths(ctx, minio.KnowledgeBaseBucketName, chunksPaths)
+	chunkFiles, err := s.minIO.GetFilesByPaths(ctx, config.Config.Minio.BucketName, chunksPaths)
 	if err != nil {
 		// log error source table and source UID
 		logger.Error("Failed to get chunks from minIO.", zap.String("SourceTable", sourceTable), zap.String("SourceUID", sourceUID.String()))
