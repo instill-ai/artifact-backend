@@ -14,6 +14,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"gorm.io/gorm"
 
+	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
@@ -386,7 +387,7 @@ func (ph *PublicHandler) MoveFileToCatalog(ctx context.Context, req *artifactpb.
 	}
 
 	// Step 3: Retrieve file content from MinIO storage
-	fileContent, err := ph.service.MinIO().GetFile(ctx, minio.KnowledgeBaseBucketName, sourceFile.Destination)
+	fileContent, err := ph.service.MinIO().GetFile(ctx, config.Config.Minio.BucketName, sourceFile.Destination)
 	if err != nil {
 		logger.Error("failed to get file content from MinIO", zap.Error(err))
 		return nil, fmt.Errorf("failed to get file content from MinIO. err: %w", err)
@@ -531,7 +532,7 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 			if strings.Split(kbFile.Destination, "/")[1] == "uploaded-file" {
 				fileName := strings.Split(kbFile.Destination, "/")[2]
 
-				content, err := ph.service.MinIO().GetFile(ctx, minio.KnowledgeBaseBucketName, kbFile.Destination)
+				content, err := ph.service.MinIO().GetFile(ctx, config.Config.Minio.BucketName, kbFile.Destination)
 				if err != nil {
 					logger.Error("failed to get file", zap.Error(err))
 					return nil, err
@@ -717,7 +718,7 @@ func (ph *PublicHandler) DeleteCatalogFile(
 			}
 
 			// Delete the files in MinIO
-			errChan := ph.service.MinIO().DeleteFiles(ctx, minio.KnowledgeBaseBucketName, objectPaths)
+			errChan := ph.service.MinIO().DeleteFiles(ctx, config.Config.Minio.BucketName, objectPaths)
 			for err := range errChan {
 				if err != nil {
 					logger.Error("failed to delete files in minio", zap.Error(err))

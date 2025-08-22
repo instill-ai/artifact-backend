@@ -78,6 +78,7 @@ minio:
   port: 9000
   user: minioadmin
   password: minioadmin
+  bucketname: core-artifact
 milvus:
   host: milvus
   port: 19530

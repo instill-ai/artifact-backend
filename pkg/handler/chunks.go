@@ -9,8 +9,8 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/constant"
-	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
@@ -232,7 +232,7 @@ func (ph *PublicHandler) GetSourceFile(ctx context.Context, req *artifactpb.GetS
 	}
 
 	// get the source file content from minIO using dest of source
-	content, err := ph.service.MinIO().GetFile(ctx, minio.KnowledgeBaseBucketName, source.Dest)
+	content, err := ph.service.MinIO().GetFile(ctx, config.Config.Minio.BucketName, source.Dest)
 	if err != nil {
 		logger.Error("failed to get file from minio", zap.Error(err))
 		return nil, fmt.Errorf("failed to get file from minio. err: %w", err)
@@ -287,7 +287,7 @@ func (ph *PublicHandler) SearchSourceFiles(ctx context.Context, req *artifactpb.
 		}
 
 		// Get file content from MinIO
-		content, err := ph.service.MinIO().GetFile(ctx, minio.KnowledgeBaseBucketName, source.Dest)
+		content, err := ph.service.MinIO().GetFile(ctx, config.Config.Minio.BucketName, source.Dest)
 		if err != nil {
 			logger.Error("failed to get file from minio", zap.Error(err))
 			continue

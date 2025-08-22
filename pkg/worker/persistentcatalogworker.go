@@ -14,6 +14,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/gofrs/uuid"
+	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
@@ -509,7 +510,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) procesSummarizingFile(ctx contex
 			logger.Error("Failed to get converted file metadata.", zap.String("File uid", file.UID.String()))
 			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
 		}
-		fileData, err = wp.svc.MinIO().GetFile(ctx, minio.KnowledgeBaseBucketName, convertedFile.Destination)
+		fileData, err = wp.svc.MinIO().GetFile(ctx, config.Config.Minio.BucketName, convertedFile.Destination)
 		if err != nil {
 			logger.Error("Failed to get converted file from minIO.", zap.String("Converted file uid", convertedFile.UID.String()))
 			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
@@ -624,7 +625,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processChunkingFile(ctx context.
 			logger.Error("Failed to get converted file metadata.", zap.String("File uid", file.UID.String()))
 			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
 		}
-		fileData, err = wp.svc.MinIO().GetFile(ctx, minio.KnowledgeBaseBucketName, convertedFile.Destination)
+		fileData, err = wp.svc.MinIO().GetFile(ctx, config.Config.Minio.BucketName, convertedFile.Destination)
 		if err != nil {
 			logger.Error("Failed to get converted file from minIO.", zap.String("Converted file uid", convertedFile.UID.String()))
 			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err

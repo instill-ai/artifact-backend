@@ -7,7 +7,7 @@ import (
 	"github.com/gofrs/uuid"
 	"go.uber.org/zap"
 
-	"github.com/instill-ai/artifact-backend/pkg/minio"
+	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 
 	artifact "github.com/instill-ai/artifact-backend/pkg/service"
@@ -168,7 +168,7 @@ func (h *PrivateHandler) GetFileAsMarkdown(ctx context.Context, req *artifactpb.
 	}
 
 	// get the source file sourceContent from minIO using dest of source
-	sourceContent, err := h.service.MinIO().GetFile(ctx, minio.KnowledgeBaseBucketName, source.Dest)
+	sourceContent, err := h.service.MinIO().GetFile(ctx, config.Config.Minio.BucketName, source.Dest)
 	if err != nil {
 		return nil, fmt.Errorf("getting source file from blob storage: %w", err)
 	}
@@ -212,7 +212,7 @@ func (h *PrivateHandler) GetChatFile(ctx context.Context, req *artifactpb.GetCha
 	}
 
 	// get the source file sourceContent from minIO using dest of source
-	sourceContent, err := h.service.MinIO().GetFile(ctx, minio.KnowledgeBaseBucketName, source.Dest)
+	sourceContent, err := h.service.MinIO().GetFile(ctx, config.Config.Minio.BucketName, source.Dest)
 	if err != nil {
 		h.logger.Error("failed to get file from minio", zap.Error(err))
 		return nil, fmt.Errorf("failed to get file from minio. err: %w", err)
