@@ -210,12 +210,13 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 		// 		humanReadable, tier.String(), errorsx.ErrInvalidArgument)
 		// }
 
-		req.File.Type = determineFileType(object.Name)
-
-		kbFile.Type = req.File.Type.String()
+		kbFile.Name = object.Name
 		kbFile.CreatorUID = object.CreatorUID
 		kbFile.Destination = object.Destination
 		kbFile.Size = object.Size
+
+		req.File.Type = determineFileType(object.Name)
+		kbFile.Type = req.File.Type.String()
 	}
 
 	// create catalog file in database
