@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.30.0](https://github.com/instill-ai/artifact-backend/compare/v0.29.0...v0.30.0) (2025-08-26)
+
+
+### Features
+
+* **embedding:** filter embedding search with file UID list ([#232](https://github.com/instill-ai/artifact-backend/issues/232)) ([eb4585a](https://github.com/instill-ai/artifact-backend/commit/eb4585ad0766dbe70d58da23422cdcf126c4e559))
+* **file:** allow per-file conversion pipeline setting ([#234](https://github.com/instill-ai/artifact-backend/issues/234)) ([3b02e30](https://github.com/instill-ai/artifact-backend/commit/3b02e306d7b1645c513123b1d8a0184db4f793f9))
+
+
+### Bug Fixes
+
+* **kbfile:** use filename in object when uploading a new file by reference ([#236](https://github.com/instill-ai/artifact-backend/issues/236)) ([7133d10](https://github.com/instill-ai/artifact-backend/commit/7133d10abba9a88f2e9c4e5afbb9ba35270abd05))
+
+
+### Miscellaneous
+
+* **minio:** use new bucket names ([#235](https://github.com/instill-ai/artifact-backend/issues/235)) ([3dd4d9f](https://github.com/instill-ai/artifact-backend/commit/3dd4d9f6f3e9111b729435a5921466e45b72ab61))
+* release v0.30.0 ([#237](https://github.com/instill-ai/artifact-backend/issues/237)) ([dc211c6](https://github.com/instill-ai/artifact-backend/commit/dc211c681359a962d14e562c8179bfb11c8ecb3c))
+
 ## [0.29.0](https://github.com/instill-ai/artifact-backend/compare/v0.28.0...v0.29.0) (2025-07-31)
 
 
