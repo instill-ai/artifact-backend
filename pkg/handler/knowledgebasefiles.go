@@ -17,6 +17,7 @@ import (
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/minio"
+	"github.com/instill-ai/artifact-backend/pkg/acl"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/service"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
@@ -57,7 +58,7 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 		logger.Error("failed to get catalog", zap.Error(err))
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
-	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kb.UID, "writer")
+	granted, err := ph.service.ACLClient().CheckPermission(ctx, acl.ObjectTypeKnowledgeBase, kb.UID, "writer")
 	if err != nil {
 		logger.Error("failed to check permission", zap.Error(err))
 		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
@@ -470,7 +471,7 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 		logger.Error("failed to get catalog", zap.Error(err))
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
-	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kb.UID, "reader")
+	granted, err := ph.service.ACLClient().CheckPermission(ctx, acl.ObjectTypeKnowledgeBase, kb.UID, "reader")
 	if err != nil {
 		logger.Error("failed to check permission", zap.Error(err))
 		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
@@ -642,7 +643,7 @@ func (ph *PublicHandler) DeleteCatalogFile(
 	} else if len(kbfs) == 0 {
 		return nil, fmt.Errorf("file not found. err: %w", errorsx.ErrNotFound)
 	}
-	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kbfs[0].KnowledgeBaseUID, "writer")
+	granted, err := ph.service.ACLClient().CheckPermission(ctx, acl.ObjectTypeKnowledgeBase, kbfs[0].KnowledgeBaseUID, "writer")
 	if err != nil {
 		logger.Error("failed to check permission", zap.Error(err))
 		return nil, fmt.Errorf("failed to check permission. err: %w", err)
@@ -790,7 +791,7 @@ func (ph *PublicHandler) ProcessCatalogFiles(ctx context.Context, req *artifactp
 	}
 	// check write permission for the catalog
 	for _, kbf := range kbfs {
-		granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kbf.KnowledgeBaseUID, "writer")
+		granted, err := ph.service.ACLClient().CheckPermission(ctx, acl.ObjectTypeKnowledgeBase, kbf.KnowledgeBaseUID, "writer")
 		if err != nil {
 			return nil, err
 		}

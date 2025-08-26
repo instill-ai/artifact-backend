@@ -11,6 +11,7 @@ import (
 
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/minio"
+	"github.com/instill-ai/artifact-backend/pkg/acl"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
@@ -35,7 +36,7 @@ func (ph *PublicHandler) GetFileCatalog(ctx context.Context, req *artifactpb.Get
 		return nil, fmt.Errorf("fetching catalog: %w", err)
 	}
 
-	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kb.UID, "reader")
+	granted, err := ph.service.ACLClient().CheckPermission(ctx, acl.ObjectTypeKnowledgeBase, kb.UID, "reader")
 	switch {
 	case err != nil:
 		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)

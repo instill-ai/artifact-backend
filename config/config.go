@@ -16,8 +16,8 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/instill-ai/x/client"
-
 	miniox "github.com/instill-ai/x/minio"
+	openfgax "github.com/instill-ai/x/openfga"
 )
 
 // Config - Global variable to export
@@ -34,22 +34,11 @@ type AppConfig struct {
 	PipelineBackend       client.ServiceConfig  `koanf:"pipelinebackend"`
 	ModelBackend          client.ServiceConfig  `koanf:"modelbackend"`
 	Registry              RegistryConfig        `koanf:"registry"`
-	OpenFGA               OpenFGAConfig         `koanf:"openfga"`
+	OpenFGA               openfgax.Config       `koanf:"openfga"`
 	Minio                 miniox.Config         `koanf:"minio"`
 	Milvus                MilvusConfig          `koanf:"milvus"`
 	FileToEmbeddingWorker FileToEmbeddingWorker `koanf:"filetoembeddingworker"`
 	Blob                  BlobConfig            `koanf:"blob"`
-}
-
-// OpenFGAConfig is the openfga configuration.
-type OpenFGAConfig struct {
-	Host    string `koanf:"host"`
-	Port    int    `koanf:"port"`
-	Replica struct {
-		Host                 string `koanf:"host"`
-		Port                 int    `koanf:"port"`
-		ReplicationTimeFrame int    `koanf:"replicationtimeframe"` // in seconds
-	} `koanf:"replica"`
 }
 
 // ServerConfig defines HTTP server configurations

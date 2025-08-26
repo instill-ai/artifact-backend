@@ -22,7 +22,6 @@ import (
 	"gorm.io/gorm"
 
 	grpczap "github.com/grpc-ecosystem/go-grpc-middleware/logging/zap"
-	openfga "github.com/openfga/api/proto/openfga/v1"
 
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/acl"
@@ -45,6 +44,7 @@ import (
 	clientgrpcx "github.com/instill-ai/x/client/grpc"
 	logx "github.com/instill-ai/x/log"
 	miniox "github.com/instill-ai/x/minio"
+	openfgax "github.com/instill-ai/x/openfga"
 	otelx "github.com/instill-ai/x/otel"
 	servergrpcx "github.com/instill-ai/x/server/grpc"
 	gatewayx "github.com/instill-ai/x/server/grpc/gateway"
@@ -318,7 +318,7 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 	*gorm.DB,
 	*minio.Minio,
 	service.VectorDatabase,
-	*acl.ACLClient,
+	acl.ACLClientInterface,
 	func(),
 ) {
 	closeFuncs := map[string]func() error{}
@@ -378,18 +378,21 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 	}
 	closeFuncs["milvus"] = vclose
 
-	// Init ACL client
-	fgaClient, fgaClientConn := acl.InitOpenFGAClient(ctx, config.Config.OpenFGA.Host, config.Config.OpenFGA.Port)
-	closeFuncs["fga"] = fgaClientConn.Close
-
-	var fgaReplicaClient openfga.OpenFGAServiceClient
-	if config.Config.OpenFGA.Replica.Host != "" {
-		var fgaReplicaClientConn *grpc.ClientConn
-		fgaReplicaClient, fgaReplicaClientConn = acl.InitOpenFGAClient(ctx, config.Config.OpenFGA.Replica.Host, config.Config.OpenFGA.Replica.Port)
-		closeFuncs["fgaReplica"] = fgaReplicaClientConn.Close
+	// Initialize OpenFGA x/openfga client
+	fgaClient, err := openfgax.NewClient(openfgax.ClientParams{
+		Config: config.Config.OpenFGA,
+		Logger: logger,
+	})
+	if err != nil {
+		logger.Fatal("Failed to create OpenFGA client", zap.Error(err))
 	}
+	closeFuncs["fga"] = fgaClient.Close
 
-	aclClient := acl.NewACLClient(fgaClient, fgaReplicaClient, redisClient)
+	// Log that we have the client ready for future migration
+	logger.Info("OpenFGA x/openfga client initialized", zap.String("host", config.Config.OpenFGA.Host))
+
+	// Create ACL client wrapper
+	aclClient := acl.NewFGAClient(fgaClient)
 
 	closer := func() {
 		for conn, fn := range closeFuncs {

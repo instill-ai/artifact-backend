@@ -11,6 +11,7 @@ import (
 
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/constant"
+	"github.com/instill-ai/artifact-backend/pkg/acl"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
@@ -63,7 +64,7 @@ func (ph *PublicHandler) ListChunks(ctx context.Context, req *artifactpb.ListChu
 	}
 	kbf := kbfs[0]
 	// ACL - check user's permission to read knowledge base
-	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kbf.KnowledgeBaseUID, "reader")
+	granted, err := ph.service.ACLClient().CheckPermission(ctx, acl.ObjectTypeKnowledgeBase, kbf.KnowledgeBaseUID, "reader")
 	if err != nil {
 		logger.Error("failed to check permission", zap.Error(err))
 		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
@@ -181,7 +182,7 @@ func (ph *PublicHandler) UpdateChunk(ctx context.Context, req *artifactpb.Update
 	}
 	chunk := &chunks[0]
 	// ACL - check user's permission to write knowledge base of chunks
-	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", chunk.KbUID, "writer")
+	granted, err := ph.service.ACLClient().CheckPermission(ctx, acl.ObjectTypeKnowledgeBase, chunk.KbUID, "writer")
 	if err != nil {
 		logger.Error("failed to check permission", zap.Error(err))
 		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
@@ -222,7 +223,7 @@ func (ph *PublicHandler) GetSourceFile(ctx context.Context, req *artifactpb.GetS
 		return nil, fmt.Errorf("failed to get truth source by file uid. err: %w", err)
 	}
 	// ACL - check if the user(uid from context) has access to the knowledge base of source file.
-	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", source.KbUID, "writer")
+	granted, err := ph.service.ACLClient().CheckPermission(ctx, acl.ObjectTypeKnowledgeBase, source.KbUID, "writer")
 	if err != nil {
 		logger.Error("failed to check permission in GetSourceFile", zap.Error(err))
 		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
@@ -278,7 +279,7 @@ func (ph *PublicHandler) SearchSourceFiles(ctx context.Context, req *artifactpb.
 		}
 
 		// ACL check for each source file
-		granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", source.KbUID, "reader")
+		granted, err := ph.service.ACLClient().CheckPermission(ctx, acl.ObjectTypeKnowledgeBase, source.KbUID, "reader")
 		if err != nil {
 			return nil, fmt.Errorf("checking permission: %w", err)
 		}

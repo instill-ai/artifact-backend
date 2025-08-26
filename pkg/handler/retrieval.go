@@ -10,6 +10,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/instill-ai/artifact-backend/config"
+	"github.com/instill-ai/artifact-backend/pkg/acl"
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 
@@ -42,7 +43,7 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 	}
 
 	// ACL : check user has access to the catalog
-	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kb.UID, "reader")
+	granted, err := ph.service.ACLClient().CheckPermission(ctx, acl.ObjectTypeKnowledgeBase, kb.UID, "reader")
 	if err != nil {
 		return nil, fmt.Errorf("checking permissions: %w", err)
 	}

@@ -44,7 +44,7 @@ type Service interface {
 	// using these methods in them.
 	Repository() repository.RepositoryI
 	MinIO() minio.MinioI
-	ACLClient() *acl.ACLClient
+	ACLClient() acl.ACLClientInterface
 	VectorDB() VectorDatabase
 	RedisClient() *redis.Client
 }
@@ -57,7 +57,7 @@ type service struct {
 	registryClient RegistryClient
 	redisClient    *redis.Client
 	vectorDB       VectorDatabase
-	aclClient      *acl.ACLClient
+	aclClient      acl.ACLClientInterface
 }
 
 // NewService initiates a service instance
@@ -69,7 +69,7 @@ func NewService(
 	rgc RegistryClient,
 	rc *redis.Client,
 	vectorDB VectorDatabase,
-	aclClient *acl.ACLClient,
+	aclClient acl.ACLClientInterface,
 ) Service {
 	return &service{
 		repository:     r,
@@ -85,6 +85,6 @@ func NewService(
 
 func (s *service) Repository() repository.RepositoryI { return s.repository }
 func (s *service) MinIO() minio.MinioI                { return s.minIO }
-func (s *service) ACLClient() *acl.ACLClient          { return s.aclClient }
+func (s *service) ACLClient() acl.ACLClientInterface          { return s.aclClient }
 func (s *service) RedisClient() *redis.Client         { return s.redisClient }
 func (s *service) VectorDB() VectorDatabase           { return s.vectorDB }

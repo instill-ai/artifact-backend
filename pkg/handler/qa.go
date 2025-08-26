@@ -9,6 +9,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/instill-ai/artifact-backend/config"
+	"github.com/instill-ai/artifact-backend/pkg/acl"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 
 	artifactPb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
@@ -41,7 +42,7 @@ func (ph *PublicHandler) QuestionAnswering(
 	logger.Info("get catalog by owner and kb id", zap.Duration("duration", time.Since(t)))
 	t = time.Now()
 	// ACL : check user has access to the catalog
-	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kb.UID, "reader")
+	granted, err := ph.service.ACLClient().CheckPermission(ctx, acl.ObjectTypeKnowledgeBase, kb.UID, "reader")
 	if err != nil {
 		logger.Error("failed to check permission", zap.Error(err))
 		return nil, fmt.Errorf("failed to check permission. err: %w", err)

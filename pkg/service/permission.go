@@ -34,7 +34,7 @@ func (s *service) CheckCatalogUserPermission(ctx context.Context, nsID, catalogI
 		logger.Error("failed to get catalog", zap.Error(err))
 		return nil, nil, fmt.Errorf("failed to get catalog: %w", err)
 	}
-	granted, err := s.aclClient.CheckPermission(ctx, acl.CatalogObject, catalog.UID, "writer")
+	granted, err := s.aclClient.CheckPermission(ctx, acl.ObjectTypeKnowledgeBase, catalog.UID, "writer")
 	if err != nil {
 		logger.Error("failed to check permission", zap.Error(err))
 

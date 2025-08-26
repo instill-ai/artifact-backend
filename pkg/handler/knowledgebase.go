@@ -12,6 +12,7 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc/metadata"
 
+	"github.com/instill-ai/artifact-backend/pkg/acl"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/service"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
@@ -20,6 +21,7 @@ import (
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	errorsx "github.com/instill-ai/x/errors"
 	logx "github.com/instill-ai/x/log"
+	openfgax "github.com/instill-ai/x/openfga"
 )
 
 var alphabet = "abcdefghijklmnopqrstuvwxyz"
@@ -107,8 +109,15 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 			return fmt.Errorf("creating vector database collection: %w", err)
 		}
 
+		var ownerType openfgax.OwnerType
+		if string(ns.NsType) == "users" {
+			ownerType = openfgax.OwnerTypeUser
+		} else {
+			ownerType = openfgax.OwnerTypeOrganization
+		}
+
 		// set the owner of the catalog
-		err = ph.service.ACLClient().SetOwner(ctx, "knowledgebase", kbUID, string(ns.NsType), ns.NsUID)
+		err = ph.service.ACLClient().SetOwner(ctx, acl.ObjectTypeKnowledgeBase, kbUID, ownerType, ns.NsUID)
 		if err != nil {
 			return fmt.Errorf("setting catalog owner: %w", err)
 		}
@@ -309,7 +318,7 @@ func (ph *PublicHandler) UpdateCatalog(ctx context.Context, req *artifactpb.Upda
 	if err != nil {
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
-	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kb.UID, "writer")
+	granted, err := ph.service.ACLClient().CheckPermission(ctx, acl.ObjectTypeKnowledgeBase, kb.UID, "writer")
 	if err != nil {
 		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
 	}
@@ -399,7 +408,7 @@ func (ph *PublicHandler) DeleteCatalog(ctx context.Context, req *artifactpb.Dele
 		logger.Error("failed to get catalog", zap.Error(err))
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
-	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kb.UID, "writer")
+	granted, err := ph.service.ACLClient().CheckPermission(ctx, acl.ObjectTypeKnowledgeBase, kb.UID, "writer")
 	if err != nil {
 		logger.Error("failed to check permission", zap.Error(err))
 		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
@@ -461,7 +470,7 @@ func (ph *PublicHandler) DeleteCatalog(ctx context.Context, req *artifactpb.Dele
 			allPass = false
 		}
 		// delete acl. Note: we need to delete the acl after deleting the catalog
-		err = ph.service.ACLClient().Purge(ctx, "knowledgebase", kb.UID)
+		err = ph.service.ACLClient().Purge(ctx, acl.ObjectTypeKnowledgeBase, kb.UID)
 		if err != nil {
 			logger.Error("failed to purge catalog", zap.Error(err))
 			allPass = false
