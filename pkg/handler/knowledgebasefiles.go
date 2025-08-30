@@ -444,6 +444,7 @@ func (ph *PublicHandler) MoveFileToCatalog(ctx context.Context, req *artifactpb.
 	}, nil
 }
 
+// ListCatalogFiles lists the files in a catalog
 func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.ListCatalogFilesRequest) (*artifactpb.ListCatalogFilesResponse, error) {
 
 	logger, _ := logx.GetZapLogger(ctx)
@@ -599,6 +600,7 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 	}, nil
 }
 
+// GetCatalogFile gets a file in a catalog
 func (ph *PublicHandler) GetCatalogFile(ctx context.Context, req *artifactpb.GetCatalogFileRequest) (*artifactpb.GetCatalogFileResponse, error) {
 
 	files, err := ph.ListCatalogFiles(ctx, &artifactpb.ListCatalogFilesRequest{
@@ -869,33 +871,34 @@ func fileTypeConvertToMime(t artifactpb.FileType) string {
 }
 
 func determineFileType(fileName string) artifactpb.FileType {
-	if strings.HasSuffix(fileName, ".pdf") {
+	fileNameLower := strings.ToLower(fileName)
+	if strings.HasSuffix(fileNameLower, ".pdf") {
 		return artifactpb.FileType_FILE_TYPE_PDF
-	} else if strings.HasSuffix(fileName, ".md") {
+	} else if strings.HasSuffix(fileNameLower, ".md") {
 		return artifactpb.FileType_FILE_TYPE_MARKDOWN
-	} else if strings.HasSuffix(fileName, ".txt") {
+	} else if strings.HasSuffix(fileNameLower, ".txt") {
 		return artifactpb.FileType_FILE_TYPE_TEXT
-	} else if strings.HasSuffix(fileName, ".doc") {
+	} else if strings.HasSuffix(fileNameLower, ".doc") {
 		return artifactpb.FileType_FILE_TYPE_DOC
-	} else if strings.HasSuffix(fileName, ".docx") {
+	} else if strings.HasSuffix(fileNameLower, ".docx") {
 		return artifactpb.FileType_FILE_TYPE_DOCX
-	} else if strings.HasSuffix(fileName, ".html") {
+	} else if strings.HasSuffix(fileNameLower, ".html") {
 		return artifactpb.FileType_FILE_TYPE_HTML
-	} else if strings.HasSuffix(fileName, ".ppt") {
+	} else if strings.HasSuffix(fileNameLower, ".ppt") {
 		return artifactpb.FileType_FILE_TYPE_PPT
-	} else if strings.HasSuffix(fileName, ".pptx") {
+	} else if strings.HasSuffix(fileNameLower, ".pptx") {
 		return artifactpb.FileType_FILE_TYPE_PPTX
-	} else if strings.HasSuffix(fileName, ".xlsx") {
+	} else if strings.HasSuffix(fileNameLower, ".xlsx") {
 		return artifactpb.FileType_FILE_TYPE_XLSX
-	} else if strings.HasSuffix(fileName, ".xls") {
+	} else if strings.HasSuffix(fileNameLower, ".xls") {
 		return artifactpb.FileType_FILE_TYPE_XLS
-	} else if strings.HasSuffix(fileName, ".csv") {
+	} else if strings.HasSuffix(fileNameLower, ".csv") {
 		return artifactpb.FileType_FILE_TYPE_CSV
 	}
 	return artifactpb.FileType_FILE_TYPE_UNSPECIFIED
 }
 
-// GetFileSummary
+// GetFileSummary returns the summary of the file
 func (ph *PublicHandler) GetFileSummary(ctx context.Context, req *artifactpb.GetFileSummaryRequest) (*artifactpb.GetFileSummaryResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 	_, err := getUserUIDFromContext(ctx)
