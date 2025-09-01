@@ -410,7 +410,6 @@ func (ph *PublicHandler) MoveFileToCatalog(ctx context.Context, req *artifactpb.
 }
 
 func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.ListCatalogFilesRequest) (*artifactpb.ListCatalogFilesResponse, error) {
-
 	logger, _ := logx.GetZapLogger(ctx)
 	authUID, err := getUserUIDFromContext(ctx)
 	if err != nil {
@@ -445,121 +444,114 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 	}
 
 	// fetch the catalog files
-	var files []*artifactpb.File
-	var totalSize int
-	var nextPageToken string
-	{
-		if req.Filter == nil {
-			req.Filter = &artifactpb.ListCatalogFilesFilter{
-				FileUids: []string{},
+	if req.Filter == nil {
+		req.Filter = &artifactpb.ListCatalogFilesFilter{}
+	}
+
+	kbFileList, err := ph.service.Repository().ListKnowledgeBaseFiles(ctx, repository.KnowledgeBaseFileListParams{
+		OwnerUID:  ns.NsUID.String(),
+		KbUID:     kb.UID.String(),
+		PageSize:  int(req.GetPageSize()),
+		PageToken: req.GetPageToken(),
+		FileUIDs:  req.GetFilter().GetFileUids(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("fetching file list: %w", err)
+	}
+
+	// Get the tokens and chunks using the source table and source UID.
+	sources, err := ph.service.Repository().GetSourceTableAndUIDByFileUIDs(ctx, kbFileList.Files)
+	if err != nil {
+		return nil, fmt.Errorf("fetching sources: %w", err)
+	}
+
+	totalTokens, err := ph.service.Repository().GetFilesTotalTokens(ctx, sources)
+	if err != nil {
+		return nil, fmt.Errorf("fetching tokens: %w", err)
+	}
+
+	totalChunks, err := ph.service.Repository().GetTotalChunksBySources(ctx, sources)
+	if err != nil {
+		return nil, fmt.Errorf("fetching chunks: %w", err)
+	}
+
+	files := make([]*artifactpb.File, 0, len(kbFileList.Files))
+	for _, kbFile := range kbFileList.Files {
+		objectUID := uuid.FromStringOrNil(strings.TrimPrefix(strings.Split(kbFile.Destination, "/")[1], "obj-"))
+
+		// Runtime migration for legacy files: files uploaded before the new object-based flow
+		// were stored in the "uploaded-file" folder.
+		// This migration:
+		// 1. Downloads the file from the old location
+		// 2. Re-uploads it using the new object-based flow
+		// 3. Updates the catalog file destination to reference the new object
+		// This ensures consistent data structure across both upload flows.
+		// This runtime migration will happen only once for each file.
+		//
+		// TODO: this is just a temporary solution, our Console need to
+		// adopt the new flow. So the old flow can be deprecated and
+		// removed.
+		if strings.Split(kbFile.Destination, "/")[1] == "uploaded-file" {
+			fileName := strings.Split(kbFile.Destination, "/")[2]
+
+			content, err := ph.service.MinIO().GetFile(ctx, config.Config.Minio.BucketName, kbFile.Destination)
+			if err != nil {
+				return nil, fmt.Errorf("fetching file blob: %w", err)
 			}
-		}
-		kbFiles, size, nextToken, err := ph.service.Repository().ListKnowledgeBaseFiles(ctx, authUID, ns.NsUID.String(), kb.UID.String(), req.PageSize, req.PageToken, req.Filter.FileUids)
-		if err != nil {
-			logger.Error("failed to list catalog files", zap.Error(err))
-			return nil, err
-		}
-		// get the tokens and chunks using the source table and source uid
-		sources, err := ph.service.Repository().GetSourceTableAndUIDByFileUIDs(ctx, kbFiles)
-		if err != nil {
-			logger.Error("failed to find source table and source uid by file uid", zap.Error(err))
-			return nil, err
-		}
+			contentBase64 := base64.StdEncoding.EncodeToString(content)
+			fileType := artifactpb.FileType(artifactpb.FileType_value[kbFile.Type])
 
-		totalTokens, err := ph.service.Repository().GetFilesTotalTokens(ctx, sources)
-		if err != nil {
-			logger.Error("failed to get files total tokens", zap.Error(err))
-			return nil, err
-		}
-
-		totalChunks, err := ph.service.Repository().GetTotalChunksBySources(ctx, sources)
-		if err != nil {
-			logger.Error("failed to get files total chunks", zap.Error(err))
-			return nil, err
-		}
-		totalSize = size
-		nextPageToken = nextToken
-		for _, kbFile := range kbFiles {
-
-			objectUID := uuid.FromStringOrNil(strings.TrimPrefix(strings.Split(kbFile.Destination, "/")[1], "obj-"))
-
-			// Runtime migration for legacy files: files uploaded before the new object-based flow
-			// were stored in the "uploaded-file" folder.
-			// This migration:
-			// 1. Downloads the file from the old location
-			// 2. Re-uploads it using the new object-based flow
-			// 3. Updates the catalog file destination to reference the new object
-			// This ensures consistent data structure across both upload flows.
-			// This runtime migration will happen only once for each file.
-			//
-			// TODO: this is just a temporary solution, our Console need to
-			// adopt the new flow. So the old flow can be deprecated and
-			// removed.
-			if strings.Split(kbFile.Destination, "/")[1] == "uploaded-file" {
-				fileName := strings.Split(kbFile.Destination, "/")[2]
-
-				content, err := ph.service.MinIO().GetFile(ctx, config.Config.Minio.BucketName, kbFile.Destination)
-				if err != nil {
-					logger.Error("failed to get file", zap.Error(err))
-					return nil, err
-				}
-				contentBase64 := base64.StdEncoding.EncodeToString(content)
-				fileType := artifactpb.FileType(artifactpb.FileType_value[kbFile.Type])
-
-				objectUID, err = ph.uploadBase64FileToMinIO(ctx, ns.NsID, ns.NsUID, ns.NsUID, fileName, contentBase64, fileType)
-				if err != nil {
-					logger.Error("failed to upload file to MinIO", zap.Error(err))
-					return nil, err
-				}
-
-				newDestination := minio.GetBlobObjectPath(ns.NsUID, objectUID)
-				fmt.Println("newDestination", newDestination)
-				_, err = ph.service.Repository().UpdateKnowledgeBaseFile(ctx, kbFile.UID.String(), map[string]any{
-					repository.KnowledgeBaseFileColumn.Destination: newDestination,
-				})
-				if err != nil {
-					logger.Error("failed to update object", zap.Error(err))
-					return nil, err
-				}
-
+			objectUID, err = ph.uploadBase64FileToMinIO(ctx, ns.NsID, ns.NsUID, ns.NsUID, fileName, contentBase64, fileType)
+			if err != nil {
+				return nil, fmt.Errorf("uploading migrated file to MinIO: %w", err)
 			}
 
-			downloadURL := ""
-			response, err := ph.service.GetDownloadURL(ctx, &artifactpb.GetObjectDownloadURLRequest{
-				NamespaceId: ns.NsID,
-				ObjectUid:   objectUID.String(),
-			}, ns.NsUID, ns.NsID)
-			if err == nil {
-				downloadURL = response.GetDownloadUrl()
-			}
-
-			files = append(files, &artifactpb.File{
-				FileUid:            kbFile.UID.String(),
-				OwnerUid:           kbFile.Owner.String(),
-				CreatorUid:         kbFile.CreatorUID.String(),
-				CatalogUid:         kbFile.KnowledgeBaseUID.String(),
-				Name:               kbFile.Name,
-				Type:               artifactpb.FileType(artifactpb.FileType_value[kbFile.Type]),
-				CreateTime:         timestamppb.New(*kbFile.CreateTime),
-				UpdateTime:         timestamppb.New(*kbFile.UpdateTime),
-				ProcessStatus:      artifactpb.FileProcessStatus(artifactpb.FileProcessStatus_value[kbFile.ProcessStatus]),
-				Size:               kbFile.Size,
-				ExternalMetadata:   kbFile.PublicExternalMetadataUnmarshal(),
-				TotalChunks:        int32(totalChunks[kbFile.UID]),
-				TotalTokens:        int32(totalTokens[kbFile.UID]),
-				ObjectUid:          objectUID.String(),
-				Summary:            string(kbFile.Summary),
-				DownloadUrl:        downloadURL,
-				ConvertingPipeline: kbFile.ConvertingPipeline(),
+			newDestination := minio.GetBlobObjectPath(ns.NsUID, objectUID)
+			fmt.Println("newDestination", newDestination)
+			_, err = ph.service.Repository().UpdateKnowledgeBaseFile(ctx, kbFile.UID.String(), map[string]any{
+				repository.KnowledgeBaseFileColumn.Destination: newDestination,
 			})
+			if err != nil {
+				return nil, fmt.Errorf("updating migrated object: %w", err)
+			}
+
 		}
+
+		downloadURL := ""
+		response, err := ph.service.GetDownloadURL(ctx, &artifactpb.GetObjectDownloadURLRequest{
+			NamespaceId: ns.NsID,
+			ObjectUid:   objectUID.String(),
+		}, ns.NsUID, ns.NsID)
+		if err == nil {
+			downloadURL = response.GetDownloadUrl()
+		}
+
+		files = append(files, &artifactpb.File{
+			FileUid:            kbFile.UID.String(),
+			OwnerUid:           kbFile.Owner.String(),
+			CreatorUid:         kbFile.CreatorUID.String(),
+			CatalogUid:         kbFile.KnowledgeBaseUID.String(),
+			Name:               kbFile.Name,
+			Type:               artifactpb.FileType(artifactpb.FileType_value[kbFile.Type]),
+			CreateTime:         timestamppb.New(*kbFile.CreateTime),
+			UpdateTime:         timestamppb.New(*kbFile.UpdateTime),
+			ProcessStatus:      artifactpb.FileProcessStatus(artifactpb.FileProcessStatus_value[kbFile.ProcessStatus]),
+			Size:               kbFile.Size,
+			ExternalMetadata:   kbFile.PublicExternalMetadataUnmarshal(),
+			TotalChunks:        int32(totalChunks[kbFile.UID]),
+			TotalTokens:        int32(totalTokens[kbFile.UID]),
+			ObjectUid:          objectUID.String(),
+			Summary:            string(kbFile.Summary),
+			DownloadUrl:        downloadURL,
+			ConvertingPipeline: kbFile.ConvertingPipeline(),
+		})
 	}
 
 	return &artifactpb.ListCatalogFilesResponse{
 		Files:         files,
-		TotalSize:     int32(totalSize),
-		PageSize:      int32(len(files)),
-		NextPageToken: nextPageToken,
+		TotalSize:     int32(kbFileList.TotalCount),
+		PageSize:      int32(len(kbFileList.Files)),
+		NextPageToken: kbFileList.NextPageToken,
 		Filter:        req.Filter,
 	}, nil
 }
