@@ -76,12 +76,6 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 	for _, kb := range kbs {
 		totalUsageInNamespace += kb.Usage
 	}
-	// get tier of the namespace
-	tier, err := ph.service.GetNamespaceTier(ctx, ns)
-	if err != nil {
-		logger.Error("failed to get namespace tier", zap.Error(err))
-		return nil, fmt.Errorf("failed to get namespace tier. err: %w", err)
-	}
 
 	// Because file processing is done by the worker, which pulls records from
 	// the database, we need to use the file ExternalMetadata field in the file
@@ -129,49 +123,29 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 		// determine the file type by its extension
 		req.File.Type = determineFileType(req.File.Name)
 		if req.File.Type == artifactpb.FileType_FILE_TYPE_UNSPECIFIED {
-			return nil, fmt.Errorf("file extension is not supported. name: %s err: %w",
-				req.File.Name, errorsx.ErrInvalidArgument)
+			return nil, fmt.Errorf("%w: unsupported file extension", errorsx.ErrInvalidArgument)
 		}
 
 		if strings.Contains(req.File.Name, "/") {
-			return nil, fmt.Errorf("file name cannot contain '/'. err: %w", errorsx.ErrInvalidArgument)
+			return nil, fmt.Errorf("%w: file name cannot contain slashes ('/')", errorsx.ErrInvalidArgument)
 		}
 
 		creatorUID, err := uuid.FromString(authUID)
 		if err != nil {
-			logger.Error("failed to parse creator uid", zap.Error(err))
-			return nil, err
+			return nil, fmt.Errorf("parsing creator UID: %w", err)
 		}
-
-		fileSize, _ := getFileSize(req.File.Content)
-
-		// check if file size is more than 150MB
-		if fileSize > int64(tier.GetMaxUploadFileSize()) {
-			return nil, fmt.Errorf(
-				"file size is more than %v. err: %w",
-				tier.GetMaxUploadFileSize(),
-				errorsx.ErrInvalidArgument)
-		}
-
-		// NO LIMIT ON TOTAL STORAGE USE
-		// check if total usage in namespace
-		// quota, humanReadable := tier.GetFileStorageTotalQuota()
-		// if totalUsageInNamespace+fileSize > int64(quota) {
-		// 	return nil, fmt.Errorf(
-		// 		"file storage total quota exceeded. max: %v. tier:%v, err: %w",
-		// 		humanReadable, tier.String(), errorsx.ErrInvalidArgument)
-		// }
 
 		// upload the file to MinIO and create the object in the object table
 		objectUID, err := ph.uploadBase64FileToMinIO(ctx, ns.NsID, ns.NsUID, creatorUID, req.File.Name, req.File.Content, req.File.Type)
 		if err != nil {
-			logger.Error("failed to get upload URL", zap.Error(err))
-			return nil, fmt.Errorf("failed to get upload URL. err: %w", err)
+			return nil, fmt.Errorf("fetching upload URL: %w", err)
 		}
 		destination := minio.GetBlobObjectPath(ns.NsUID, objectUID)
 
 		kbFile.CreatorUID = creatorUID
 		kbFile.Destination = destination
+
+		fileSize, _ := getFileSize(req.File.Content)
 		kbFile.Size = fileSize
 	} else {
 		object, err := ph.service.Repository().GetObjectByUID(ctx, uuid.FromStringOrNil(req.GetFile().GetObjectUid()))
@@ -194,22 +168,6 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 			object.IsUploaded = true
 		}
 
-		// check if file size is more than 150MB
-		if object.Size > int64(tier.GetMaxUploadFileSize()) {
-			return nil, fmt.Errorf(
-				"file size is more than %v. err: %w",
-				tier.GetMaxUploadFileSize(),
-				errorsx.ErrInvalidArgument)
-		}
-
-		// NO LIMIT ON TOTAL STORAGE USE
-		// quota, humanReadable := tier.GetFileStorageTotalQuota()
-		// if totalUsageInNamespace+object.Size > int64(quota) {
-		// 	return nil, fmt.Errorf(
-		// 		"file storage total quota exceeded. max: %v. tier:%v, err: %w",
-		// 		humanReadable, tier.String(), errorsx.ErrInvalidArgument)
-		// }
-
 		kbFile.Name = object.Name
 		kbFile.CreatorUID = object.CreatorUID
 		kbFile.Destination = object.Destination
@@ -217,6 +175,13 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 
 		req.File.Type = determineFileType(object.Name)
 		kbFile.Type = req.File.Type.String()
+	}
+
+	maxSizeBytes := service.MaxUploadFileSizeMB << 10 << 10
+	if kbFile.Size > maxSizeBytes {
+		err := fmt.Errorf("%w: max file size exceeded", errorsx.ErrInvalidArgument)
+		msg := fmt.Sprintf("Uploaded files can not exceed %d MB.", service.MaxUploadFileSizeMB)
+		return nil, errorsx.AddMessage(err, msg)
 	}
 
 	// create catalog file in database
@@ -625,14 +590,9 @@ func (ph *PublicHandler) GetCatalogFile(ctx context.Context, req *artifactpb.Get
 
 func (ph *PublicHandler) DeleteCatalogFile(
 	ctx context.Context,
-	req *artifactpb.DeleteCatalogFileRequest) (
-	*artifactpb.DeleteCatalogFileResponse, error) {
+	req *artifactpb.DeleteCatalogFileRequest,
+) (*artifactpb.DeleteCatalogFileResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
-	// authUID, err := getUserUIDFromContext(ctx)
-	// if err != nil {
-	// 	err := fmt.Errorf("failed to get user id from header: %v. err: %w", err, errorsx.ErrUnauthenticated)
-	// 	return nil, err
-	// }
 
 	// ACL - check user's permission to write catalog of kb file
 	kbfs, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{uuid.FromStringOrNil(req.FileUid)})
