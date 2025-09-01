@@ -443,11 +443,6 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 		return nil, fmt.Errorf("%w: no permission over catalog", errorsx.ErrUnauthorized)
 	}
 
-	// fetch the catalog files
-	if req.Filter == nil {
-		req.Filter = &artifactpb.ListCatalogFilesFilter{}
-	}
-
 	kbFileList, err := ph.service.Repository().ListKnowledgeBaseFiles(ctx, repository.KnowledgeBaseFileListParams{
 		OwnerUID:  ns.NsUID.String(),
 		KbUID:     kb.UID.String(),
