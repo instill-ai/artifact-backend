@@ -75,15 +75,7 @@ func (s *service) ConvertToMDPipe(
 			break
 		}
 
-		// Custom pipelines only take the document input, but the default
-		// (and historical) one needs the model to be set.
-		//
-		// NOTE: this means that we can't pass the default
-		// ConvertDocToMDPipeline as a custom pipeline, we'd be missing the
-		// VLM model setting. Validation when creating a catalog should
-		// prevent this.
 		pipelines = []PipelineRelease{ConvertDocToMDPipeline}
-		input.Fields["vlm_model"] = structpb.NewStringValue("gpt-4o")
 
 	default:
 		return "", fmt.Errorf("unsupported file type: %v", fileType)

@@ -4,10 +4,6 @@ variable:
     title: document-input
     description: Upload a document (PDF/DOCX/DOC/PPTX/PPT)
     type: file
-  vlm_model:
-    title: vlm-model
-    description: OpenAI VLM to read images e.g., gpt-4o-mini or gpt-4o
-    type: string
 component:
   pages-to-images:
     type: document
@@ -49,7 +45,7 @@ component:
         type: openai
         task: TASK_TEXT_GENERATION
         input:
-          model: ${variable.vlm_model}
+          model: gpt-4o
           images: ${batch-images.output.data[i]}
           n: 1
           prompt: |-
@@ -98,7 +94,7 @@ component:
         type: openai
         task: TASK_TEXT_GENERATION
         input:
-          model: ${variable.vlm_model}
+          model: gpt-4o
           images: ${batch-images.output.data[i]}
           n: 1
           prompt: |-

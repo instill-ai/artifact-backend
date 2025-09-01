@@ -64,7 +64,7 @@ var (
 	ConvertDocToMDPipeline = PipelineRelease{
 		Namespace: DefaultNamespaceID,
 		ID:        "indexing-advanced-convert-doc",
-		Version:   "v1.3.1",
+		Version:   "v1.3.2",
 	}
 
 	// ConvertDocToMDStandardPipeline is the default conversion pipeline for
