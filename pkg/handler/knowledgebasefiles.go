@@ -444,11 +444,12 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 	}
 
 	kbFileList, err := ph.service.Repository().ListKnowledgeBaseFiles(ctx, repository.KnowledgeBaseFileListParams{
-		OwnerUID:  ns.NsUID.String(),
-		KbUID:     kb.UID.String(),
-		PageSize:  int(req.GetPageSize()),
-		PageToken: req.GetPageToken(),
-		FileUIDs:  req.GetFilter().GetFileUids(),
+		OwnerUID:      ns.NsUID.String(),
+		KbUID:         kb.UID.String(),
+		PageSize:      int(req.GetPageSize()),
+		PageToken:     req.GetPageToken(),
+		FileUIDs:      req.GetFilter().GetFileUids(),
+		ProcessStatus: req.GetFilter().GetProcessStatus(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("fetching file list: %w", err)

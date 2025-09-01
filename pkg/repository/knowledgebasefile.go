@@ -313,7 +313,8 @@ type KnowledgeBaseFileListParams struct {
 	KbUID    string
 
 	// Optional filters
-	FileUIDs []string
+	FileUIDs      []string
+	ProcessStatus artifactpb.FileProcessStatus
 
 	// Pagination
 	PageSize  int
@@ -340,6 +341,10 @@ func (r *Repository) ListKnowledgeBaseFiles(ctx context.Context, params Knowledg
 
 	if len(params.FileUIDs) > 0 {
 		q = q.Where("uid IN ?", params.FileUIDs)
+	}
+
+	if params.ProcessStatus != 0 {
+		q = q.Where("process_status = ?", params.ProcessStatus.String())
 	}
 
 	// Count the total number of matching records
