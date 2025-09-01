@@ -1,4 +1,4 @@
 package migration
 
 // TargetSchemaVersion determines the database schema version.
-const TargetSchemaVersion uint = 23
+const TargetSchemaVersion uint = 24
