@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.30.1](https://github.com/instill-ai/artifact-backend/compare/v0.30.0...v0.30.1) (2025-09-02)
+
+
+### Features
+
+* **conversion:** remove vlm_model variable from conversion pipeline ([#240](https://github.com/instill-ai/artifact-backend/issues/240)) ([1a2738a](https://github.com/instill-ai/artifact-backend/commit/1a2738a1abc9fa3e188f0f7479393e215ff320cb))
+* **kbfile:** add status filter to catalog file list ([#239](https://github.com/instill-ai/artifact-backend/issues/239)) ([d69c2df](https://github.com/instill-ai/artifact-backend/commit/d69c2df3656e68d0b8dd7a25ad75ea6647a1597b))
+
+
+### Bug Fixes
+
+* **catalog:** fix uploaded filename suffix uppercase issue ([#238](https://github.com/instill-ai/artifact-backend/issues/238)) ([72f8c71](https://github.com/instill-ai/artifact-backend/commit/72f8c719b15b88c83d553250ac27fb6ef97253b0))
+
+
+### Miscellaneous
+
+* release v0.30.1 ([#243](https://github.com/instill-ai/artifact-backend/issues/243)) ([185791a](https://github.com/instill-ai/artifact-backend/commit/185791a6d9945de5ea4812c4ac66872a711b7459))
+
 ## [0.30.0](https://github.com/instill-ai/artifact-backend/compare/v0.29.0...v0.30.0) (2025-08-26)
 
 
