@@ -24,12 +24,16 @@ import (
 	logx "github.com/instill-ai/x/log"
 )
 
+// MaxUploadFileSizeMB returns the maximum file size for artifact uploads, in
+// megabbytes. For now, this is a constant (512 Mb).
+const MaxUploadFileSizeMB int64 = 512
+
+const blobURLPath = "/v1alpha/blob-urls"
+
 // error type for object
 var (
 	ErrObjectNotUploaded = errors.New("object is not uploaded yet")
 )
-
-const blobURLPath = "/v1alpha/blob-urls"
 
 // GetUploadURL get the upload url of the object
 // this function will create a new object and object_url record in the database
