@@ -11,14 +11,17 @@ COPY --from=docker:dind-rootless --chown=nobody:nogroup /usr/local/bin/docker /u
 
 # -- install 3rd-party
 
-ARG TARGETOS TARGETARCH K6_VERSION
+ARG TARGETOS TARGETARCH K6_VERSION XK6_VERSION XK6_SQL_VERSION XK6_SQL_POSTGRES_VERSION
 
 # air
 RUN --mount=target=. --mount=type=cache,target=/root/.cache/go-build --mount=type=cache,target=/go/pkg GOOS=$TARGETOS GOARCH=$TARGETARCH go install github.com/cosmtrek/air@v1.49.0
 
 # k6
-ADD https://github.com/grafana/k6/releases/download/v${K6_VERSION}/k6-v${K6_VERSION}-linux-$TARGETARCH.tar.gz k6-v${K6_VERSION}-linux-$TARGETARCH.tar.gz
-RUN tar -xf k6-v${K6_VERSION}-linux-$TARGETARCH.tar.gz --strip-components 1 -C /usr/bin
+RUN --mount=target=. --mount=type=cache,target=/root/.cache/go-build --mount=type=cache,target=/go/pkg GOOS=$TARGETOS GOARCH=$TARGETARCH go install go.k6.io/xk6/cmd/xk6@v${XK6_VERSION}
+RUN --mount=target=. --mount=type=cache,target=/root/.cache/go-build --mount=type=cache,target=/go/pkg GOOS=$TARGETOS GOARCH=$TARGETARCH xk6 build v${K6_VERSION} \
+    --with github.com/grafana/xk6-sql@v${XK6_SQL_VERSION} \
+    --with github.com/grafana/xk6-sql-driver-postgres@v${XK6_SQL_POSTGRES_VERSION} \
+    --output /usr/bin/k6
 
 # -- set up Go
 COPY go.mod go.sum ./

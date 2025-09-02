@@ -98,12 +98,14 @@ jobs:
       - name: Launch Instill Core CE (commit hash)
         working-directory: instill-core
         run: |
+          f=".env.secrets.component.test"
+          printf 'CFG_COMPONENT_SECRETS_OPENAI_APIKEY=%s\n' "${{ secrets.OPENAIAPIKEY }}" >> "$f"
           make compose-dev EDITION=docker-ce:test ENV_SECRETS_COMPONENT=.env.secrets.component.test ARTIFACT_BACKEND_VERSION=${{ env.COMMIT_SHORT_SHA }}
 
       - name: Run integration-test
         working-directory: artifact-backend
         run: |
-          # make integration-test API_GATEWAY_URL=localhost:8080
+          make integration-test API_GATEWAY_URL=localhost:8080
 
       - name: Tear down Instill Core CE
         if: always()
