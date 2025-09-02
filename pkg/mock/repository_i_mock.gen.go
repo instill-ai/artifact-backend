@@ -414,9 +414,9 @@ type RepositoryIMock struct {
 	beforeListEmbeddingsByKbFileUIDCounter uint64
 	ListEmbeddingsByKbFileUIDMock          mRepositoryIMockListEmbeddingsByKbFileUID
 
-	funcListKnowledgeBaseFiles          func(ctx context.Context, k1 mm_repository.KnowledgeBaseFileListParams) (kp1 *mm_repository.KnowledgeBaseFileList, err error)
+	funcListKnowledgeBaseFiles          func(ctx context.Context, uid string, ownerUID string, kbUID string, pageSize int32, nextPageToken string, filesUID []string) (ka1 []mm_repository.KnowledgeBaseFile, i1 int, s1 string, err error)
 	funcListKnowledgeBaseFilesOrigin    string
-	inspectFuncListKnowledgeBaseFiles   func(ctx context.Context, k1 mm_repository.KnowledgeBaseFileListParams)
+	inspectFuncListKnowledgeBaseFiles   func(ctx context.Context, uid string, ownerUID string, kbUID string, pageSize int32, nextPageToken string, filesUID []string)
 	afterListKnowledgeBaseFilesCounter  uint64
 	beforeListKnowledgeBaseFilesCounter uint64
 	ListKnowledgeBaseFilesMock          mRepositoryIMockListKnowledgeBaseFiles
@@ -19553,27 +19553,44 @@ type RepositoryIMockListKnowledgeBaseFilesExpectation struct {
 
 // RepositoryIMockListKnowledgeBaseFilesParams contains parameters of the RepositoryI.ListKnowledgeBaseFiles
 type RepositoryIMockListKnowledgeBaseFilesParams struct {
-	ctx context.Context
-	k1  mm_repository.KnowledgeBaseFileListParams
+	ctx           context.Context
+	uid           string
+	ownerUID      string
+	kbUID         string
+	pageSize      int32
+	nextPageToken string
+	filesUID      []string
 }
 
 // RepositoryIMockListKnowledgeBaseFilesParamPtrs contains pointers to parameters of the RepositoryI.ListKnowledgeBaseFiles
 type RepositoryIMockListKnowledgeBaseFilesParamPtrs struct {
-	ctx *context.Context
-	k1  *mm_repository.KnowledgeBaseFileListParams
+	ctx           *context.Context
+	uid           *string
+	ownerUID      *string
+	kbUID         *string
+	pageSize      *int32
+	nextPageToken *string
+	filesUID      *[]string
 }
 
 // RepositoryIMockListKnowledgeBaseFilesResults contains results of the RepositoryI.ListKnowledgeBaseFiles
 type RepositoryIMockListKnowledgeBaseFilesResults struct {
-	kp1 *mm_repository.KnowledgeBaseFileList
+	ka1 []mm_repository.KnowledgeBaseFile
+	i1  int
+	s1  string
 	err error
 }
 
 // RepositoryIMockListKnowledgeBaseFilesOrigins contains origins of expectations of the RepositoryI.ListKnowledgeBaseFiles
 type RepositoryIMockListKnowledgeBaseFilesExpectationOrigins struct {
-	origin    string
-	originCtx string
-	originK1  string
+	origin              string
+	originCtx           string
+	originUid           string
+	originOwnerUID      string
+	originKbUID         string
+	originPageSize      string
+	originNextPageToken string
+	originFilesUID      string
 }
 
 // Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
@@ -19587,7 +19604,7 @@ func (mmListKnowledgeBaseFiles *mRepositoryIMockListKnowledgeBaseFiles) Optional
 }
 
 // Expect sets up expected params for RepositoryI.ListKnowledgeBaseFiles
-func (mmListKnowledgeBaseFiles *mRepositoryIMockListKnowledgeBaseFiles) Expect(ctx context.Context, k1 mm_repository.KnowledgeBaseFileListParams) *mRepositoryIMockListKnowledgeBaseFiles {
+func (mmListKnowledgeBaseFiles *mRepositoryIMockListKnowledgeBaseFiles) Expect(ctx context.Context, uid string, ownerUID string, kbUID string, pageSize int32, nextPageToken string, filesUID []string) *mRepositoryIMockListKnowledgeBaseFiles {
 	if mmListKnowledgeBaseFiles.mock.funcListKnowledgeBaseFiles != nil {
 		mmListKnowledgeBaseFiles.mock.t.Fatalf("RepositoryIMock.ListKnowledgeBaseFiles mock is already set by Set")
 	}
@@ -19600,7 +19617,7 @@ func (mmListKnowledgeBaseFiles *mRepositoryIMockListKnowledgeBaseFiles) Expect(c
 		mmListKnowledgeBaseFiles.mock.t.Fatalf("RepositoryIMock.ListKnowledgeBaseFiles mock is already set by ExpectParams functions")
 	}
 
-	mmListKnowledgeBaseFiles.defaultExpectation.params = &RepositoryIMockListKnowledgeBaseFilesParams{ctx, k1}
+	mmListKnowledgeBaseFiles.defaultExpectation.params = &RepositoryIMockListKnowledgeBaseFilesParams{ctx, uid, ownerUID, kbUID, pageSize, nextPageToken, filesUID}
 	mmListKnowledgeBaseFiles.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
 	for _, e := range mmListKnowledgeBaseFiles.expectations {
 		if minimock.Equal(e.params, mmListKnowledgeBaseFiles.defaultExpectation.params) {
@@ -19634,8 +19651,8 @@ func (mmListKnowledgeBaseFiles *mRepositoryIMockListKnowledgeBaseFiles) ExpectCt
 	return mmListKnowledgeBaseFiles
 }
 
-// ExpectK1Param2 sets up expected param k1 for RepositoryI.ListKnowledgeBaseFiles
-func (mmListKnowledgeBaseFiles *mRepositoryIMockListKnowledgeBaseFiles) ExpectK1Param2(k1 mm_repository.KnowledgeBaseFileListParams) *mRepositoryIMockListKnowledgeBaseFiles {
+// ExpectUidParam2 sets up expected param uid for RepositoryI.ListKnowledgeBaseFiles
+func (mmListKnowledgeBaseFiles *mRepositoryIMockListKnowledgeBaseFiles) ExpectUidParam2(uid string) *mRepositoryIMockListKnowledgeBaseFiles {
 	if mmListKnowledgeBaseFiles.mock.funcListKnowledgeBaseFiles != nil {
 		mmListKnowledgeBaseFiles.mock.t.Fatalf("RepositoryIMock.ListKnowledgeBaseFiles mock is already set by Set")
 	}
@@ -19651,14 +19668,129 @@ func (mmListKnowledgeBaseFiles *mRepositoryIMockListKnowledgeBaseFiles) ExpectK1
 	if mmListKnowledgeBaseFiles.defaultExpectation.paramPtrs == nil {
 		mmListKnowledgeBaseFiles.defaultExpectation.paramPtrs = &RepositoryIMockListKnowledgeBaseFilesParamPtrs{}
 	}
-	mmListKnowledgeBaseFiles.defaultExpectation.paramPtrs.k1 = &k1
-	mmListKnowledgeBaseFiles.defaultExpectation.expectationOrigins.originK1 = minimock.CallerInfo(1)
+	mmListKnowledgeBaseFiles.defaultExpectation.paramPtrs.uid = &uid
+	mmListKnowledgeBaseFiles.defaultExpectation.expectationOrigins.originUid = minimock.CallerInfo(1)
+
+	return mmListKnowledgeBaseFiles
+}
+
+// ExpectOwnerUIDParam3 sets up expected param ownerUID for RepositoryI.ListKnowledgeBaseFiles
+func (mmListKnowledgeBaseFiles *mRepositoryIMockListKnowledgeBaseFiles) ExpectOwnerUIDParam3(ownerUID string) *mRepositoryIMockListKnowledgeBaseFiles {
+	if mmListKnowledgeBaseFiles.mock.funcListKnowledgeBaseFiles != nil {
+		mmListKnowledgeBaseFiles.mock.t.Fatalf("RepositoryIMock.ListKnowledgeBaseFiles mock is already set by Set")
+	}
+
+	if mmListKnowledgeBaseFiles.defaultExpectation == nil {
+		mmListKnowledgeBaseFiles.defaultExpectation = &RepositoryIMockListKnowledgeBaseFilesExpectation{}
+	}
+
+	if mmListKnowledgeBaseFiles.defaultExpectation.params != nil {
+		mmListKnowledgeBaseFiles.mock.t.Fatalf("RepositoryIMock.ListKnowledgeBaseFiles mock is already set by Expect")
+	}
+
+	if mmListKnowledgeBaseFiles.defaultExpectation.paramPtrs == nil {
+		mmListKnowledgeBaseFiles.defaultExpectation.paramPtrs = &RepositoryIMockListKnowledgeBaseFilesParamPtrs{}
+	}
+	mmListKnowledgeBaseFiles.defaultExpectation.paramPtrs.ownerUID = &ownerUID
+	mmListKnowledgeBaseFiles.defaultExpectation.expectationOrigins.originOwnerUID = minimock.CallerInfo(1)
+
+	return mmListKnowledgeBaseFiles
+}
+
+// ExpectKbUIDParam4 sets up expected param kbUID for RepositoryI.ListKnowledgeBaseFiles
+func (mmListKnowledgeBaseFiles *mRepositoryIMockListKnowledgeBaseFiles) ExpectKbUIDParam4(kbUID string) *mRepositoryIMockListKnowledgeBaseFiles {
+	if mmListKnowledgeBaseFiles.mock.funcListKnowledgeBaseFiles != nil {
+		mmListKnowledgeBaseFiles.mock.t.Fatalf("RepositoryIMock.ListKnowledgeBaseFiles mock is already set by Set")
+	}
+
+	if mmListKnowledgeBaseFiles.defaultExpectation == nil {
+		mmListKnowledgeBaseFiles.defaultExpectation = &RepositoryIMockListKnowledgeBaseFilesExpectation{}
+	}
+
+	if mmListKnowledgeBaseFiles.defaultExpectation.params != nil {
+		mmListKnowledgeBaseFiles.mock.t.Fatalf("RepositoryIMock.ListKnowledgeBaseFiles mock is already set by Expect")
+	}
+
+	if mmListKnowledgeBaseFiles.defaultExpectation.paramPtrs == nil {
+		mmListKnowledgeBaseFiles.defaultExpectation.paramPtrs = &RepositoryIMockListKnowledgeBaseFilesParamPtrs{}
+	}
+	mmListKnowledgeBaseFiles.defaultExpectation.paramPtrs.kbUID = &kbUID
+	mmListKnowledgeBaseFiles.defaultExpectation.expectationOrigins.originKbUID = minimock.CallerInfo(1)
+
+	return mmListKnowledgeBaseFiles
+}
+
+// ExpectPageSizeParam5 sets up expected param pageSize for RepositoryI.ListKnowledgeBaseFiles
+func (mmListKnowledgeBaseFiles *mRepositoryIMockListKnowledgeBaseFiles) ExpectPageSizeParam5(pageSize int32) *mRepositoryIMockListKnowledgeBaseFiles {
+	if mmListKnowledgeBaseFiles.mock.funcListKnowledgeBaseFiles != nil {
+		mmListKnowledgeBaseFiles.mock.t.Fatalf("RepositoryIMock.ListKnowledgeBaseFiles mock is already set by Set")
+	}
+
+	if mmListKnowledgeBaseFiles.defaultExpectation == nil {
+		mmListKnowledgeBaseFiles.defaultExpectation = &RepositoryIMockListKnowledgeBaseFilesExpectation{}
+	}
+
+	if mmListKnowledgeBaseFiles.defaultExpectation.params != nil {
+		mmListKnowledgeBaseFiles.mock.t.Fatalf("RepositoryIMock.ListKnowledgeBaseFiles mock is already set by Expect")
+	}
+
+	if mmListKnowledgeBaseFiles.defaultExpectation.paramPtrs == nil {
+		mmListKnowledgeBaseFiles.defaultExpectation.paramPtrs = &RepositoryIMockListKnowledgeBaseFilesParamPtrs{}
+	}
+	mmListKnowledgeBaseFiles.defaultExpectation.paramPtrs.pageSize = &pageSize
+	mmListKnowledgeBaseFiles.defaultExpectation.expectationOrigins.originPageSize = minimock.CallerInfo(1)
+
+	return mmListKnowledgeBaseFiles
+}
+
+// ExpectNextPageTokenParam6 sets up expected param nextPageToken for RepositoryI.ListKnowledgeBaseFiles
+func (mmListKnowledgeBaseFiles *mRepositoryIMockListKnowledgeBaseFiles) ExpectNextPageTokenParam6(nextPageToken string) *mRepositoryIMockListKnowledgeBaseFiles {
+	if mmListKnowledgeBaseFiles.mock.funcListKnowledgeBaseFiles != nil {
+		mmListKnowledgeBaseFiles.mock.t.Fatalf("RepositoryIMock.ListKnowledgeBaseFiles mock is already set by Set")
+	}
+
+	if mmListKnowledgeBaseFiles.defaultExpectation == nil {
+		mmListKnowledgeBaseFiles.defaultExpectation = &RepositoryIMockListKnowledgeBaseFilesExpectation{}
+	}
+
+	if mmListKnowledgeBaseFiles.defaultExpectation.params != nil {
+		mmListKnowledgeBaseFiles.mock.t.Fatalf("RepositoryIMock.ListKnowledgeBaseFiles mock is already set by Expect")
+	}
+
+	if mmListKnowledgeBaseFiles.defaultExpectation.paramPtrs == nil {
+		mmListKnowledgeBaseFiles.defaultExpectation.paramPtrs = &RepositoryIMockListKnowledgeBaseFilesParamPtrs{}
+	}
+	mmListKnowledgeBaseFiles.defaultExpectation.paramPtrs.nextPageToken = &nextPageToken
+	mmListKnowledgeBaseFiles.defaultExpectation.expectationOrigins.originNextPageToken = minimock.CallerInfo(1)
+
+	return mmListKnowledgeBaseFiles
+}
+
+// ExpectFilesUIDParam7 sets up expected param filesUID for RepositoryI.ListKnowledgeBaseFiles
+func (mmListKnowledgeBaseFiles *mRepositoryIMockListKnowledgeBaseFiles) ExpectFilesUIDParam7(filesUID []string) *mRepositoryIMockListKnowledgeBaseFiles {
+	if mmListKnowledgeBaseFiles.mock.funcListKnowledgeBaseFiles != nil {
+		mmListKnowledgeBaseFiles.mock.t.Fatalf("RepositoryIMock.ListKnowledgeBaseFiles mock is already set by Set")
+	}
+
+	if mmListKnowledgeBaseFiles.defaultExpectation == nil {
+		mmListKnowledgeBaseFiles.defaultExpectation = &RepositoryIMockListKnowledgeBaseFilesExpectation{}
+	}
+
+	if mmListKnowledgeBaseFiles.defaultExpectation.params != nil {
+		mmListKnowledgeBaseFiles.mock.t.Fatalf("RepositoryIMock.ListKnowledgeBaseFiles mock is already set by Expect")
+	}
+
+	if mmListKnowledgeBaseFiles.defaultExpectation.paramPtrs == nil {
+		mmListKnowledgeBaseFiles.defaultExpectation.paramPtrs = &RepositoryIMockListKnowledgeBaseFilesParamPtrs{}
+	}
+	mmListKnowledgeBaseFiles.defaultExpectation.paramPtrs.filesUID = &filesUID
+	mmListKnowledgeBaseFiles.defaultExpectation.expectationOrigins.originFilesUID = minimock.CallerInfo(1)
 
 	return mmListKnowledgeBaseFiles
 }
 
 // Inspect accepts an inspector function that has same arguments as the RepositoryI.ListKnowledgeBaseFiles
-func (mmListKnowledgeBaseFiles *mRepositoryIMockListKnowledgeBaseFiles) Inspect(f func(ctx context.Context, k1 mm_repository.KnowledgeBaseFileListParams)) *mRepositoryIMockListKnowledgeBaseFiles {
+func (mmListKnowledgeBaseFiles *mRepositoryIMockListKnowledgeBaseFiles) Inspect(f func(ctx context.Context, uid string, ownerUID string, kbUID string, pageSize int32, nextPageToken string, filesUID []string)) *mRepositoryIMockListKnowledgeBaseFiles {
 	if mmListKnowledgeBaseFiles.mock.inspectFuncListKnowledgeBaseFiles != nil {
 		mmListKnowledgeBaseFiles.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.ListKnowledgeBaseFiles")
 	}
@@ -19669,7 +19801,7 @@ func (mmListKnowledgeBaseFiles *mRepositoryIMockListKnowledgeBaseFiles) Inspect(
 }
 
 // Return sets up results that will be returned by RepositoryI.ListKnowledgeBaseFiles
-func (mmListKnowledgeBaseFiles *mRepositoryIMockListKnowledgeBaseFiles) Return(kp1 *mm_repository.KnowledgeBaseFileList, err error) *RepositoryIMock {
+func (mmListKnowledgeBaseFiles *mRepositoryIMockListKnowledgeBaseFiles) Return(ka1 []mm_repository.KnowledgeBaseFile, i1 int, s1 string, err error) *RepositoryIMock {
 	if mmListKnowledgeBaseFiles.mock.funcListKnowledgeBaseFiles != nil {
 		mmListKnowledgeBaseFiles.mock.t.Fatalf("RepositoryIMock.ListKnowledgeBaseFiles mock is already set by Set")
 	}
@@ -19677,13 +19809,13 @@ func (mmListKnowledgeBaseFiles *mRepositoryIMockListKnowledgeBaseFiles) Return(k
 	if mmListKnowledgeBaseFiles.defaultExpectation == nil {
 		mmListKnowledgeBaseFiles.defaultExpectation = &RepositoryIMockListKnowledgeBaseFilesExpectation{mock: mmListKnowledgeBaseFiles.mock}
 	}
-	mmListKnowledgeBaseFiles.defaultExpectation.results = &RepositoryIMockListKnowledgeBaseFilesResults{kp1, err}
+	mmListKnowledgeBaseFiles.defaultExpectation.results = &RepositoryIMockListKnowledgeBaseFilesResults{ka1, i1, s1, err}
 	mmListKnowledgeBaseFiles.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
 	return mmListKnowledgeBaseFiles.mock
 }
 
 // Set uses given function f to mock the RepositoryI.ListKnowledgeBaseFiles method
-func (mmListKnowledgeBaseFiles *mRepositoryIMockListKnowledgeBaseFiles) Set(f func(ctx context.Context, k1 mm_repository.KnowledgeBaseFileListParams) (kp1 *mm_repository.KnowledgeBaseFileList, err error)) *RepositoryIMock {
+func (mmListKnowledgeBaseFiles *mRepositoryIMockListKnowledgeBaseFiles) Set(f func(ctx context.Context, uid string, ownerUID string, kbUID string, pageSize int32, nextPageToken string, filesUID []string) (ka1 []mm_repository.KnowledgeBaseFile, i1 int, s1 string, err error)) *RepositoryIMock {
 	if mmListKnowledgeBaseFiles.defaultExpectation != nil {
 		mmListKnowledgeBaseFiles.mock.t.Fatalf("Default expectation is already set for the RepositoryI.ListKnowledgeBaseFiles method")
 	}
@@ -19699,14 +19831,14 @@ func (mmListKnowledgeBaseFiles *mRepositoryIMockListKnowledgeBaseFiles) Set(f fu
 
 // When sets expectation for the RepositoryI.ListKnowledgeBaseFiles which will trigger the result defined by the following
 // Then helper
-func (mmListKnowledgeBaseFiles *mRepositoryIMockListKnowledgeBaseFiles) When(ctx context.Context, k1 mm_repository.KnowledgeBaseFileListParams) *RepositoryIMockListKnowledgeBaseFilesExpectation {
+func (mmListKnowledgeBaseFiles *mRepositoryIMockListKnowledgeBaseFiles) When(ctx context.Context, uid string, ownerUID string, kbUID string, pageSize int32, nextPageToken string, filesUID []string) *RepositoryIMockListKnowledgeBaseFilesExpectation {
 	if mmListKnowledgeBaseFiles.mock.funcListKnowledgeBaseFiles != nil {
 		mmListKnowledgeBaseFiles.mock.t.Fatalf("RepositoryIMock.ListKnowledgeBaseFiles mock is already set by Set")
 	}
 
 	expectation := &RepositoryIMockListKnowledgeBaseFilesExpectation{
 		mock:               mmListKnowledgeBaseFiles.mock,
-		params:             &RepositoryIMockListKnowledgeBaseFilesParams{ctx, k1},
+		params:             &RepositoryIMockListKnowledgeBaseFilesParams{ctx, uid, ownerUID, kbUID, pageSize, nextPageToken, filesUID},
 		expectationOrigins: RepositoryIMockListKnowledgeBaseFilesExpectationOrigins{origin: minimock.CallerInfo(1)},
 	}
 	mmListKnowledgeBaseFiles.expectations = append(mmListKnowledgeBaseFiles.expectations, expectation)
@@ -19714,8 +19846,8 @@ func (mmListKnowledgeBaseFiles *mRepositoryIMockListKnowledgeBaseFiles) When(ctx
 }
 
 // Then sets up RepositoryI.ListKnowledgeBaseFiles return parameters for the expectation previously defined by the When method
-func (e *RepositoryIMockListKnowledgeBaseFilesExpectation) Then(kp1 *mm_repository.KnowledgeBaseFileList, err error) *RepositoryIMock {
-	e.results = &RepositoryIMockListKnowledgeBaseFilesResults{kp1, err}
+func (e *RepositoryIMockListKnowledgeBaseFilesExpectation) Then(ka1 []mm_repository.KnowledgeBaseFile, i1 int, s1 string, err error) *RepositoryIMock {
+	e.results = &RepositoryIMockListKnowledgeBaseFilesResults{ka1, i1, s1, err}
 	return e.mock
 }
 
@@ -19741,17 +19873,17 @@ func (mmListKnowledgeBaseFiles *mRepositoryIMockListKnowledgeBaseFiles) invocati
 }
 
 // ListKnowledgeBaseFiles implements mm_repository.RepositoryI
-func (mmListKnowledgeBaseFiles *RepositoryIMock) ListKnowledgeBaseFiles(ctx context.Context, k1 mm_repository.KnowledgeBaseFileListParams) (kp1 *mm_repository.KnowledgeBaseFileList, err error) {
+func (mmListKnowledgeBaseFiles *RepositoryIMock) ListKnowledgeBaseFiles(ctx context.Context, uid string, ownerUID string, kbUID string, pageSize int32, nextPageToken string, filesUID []string) (ka1 []mm_repository.KnowledgeBaseFile, i1 int, s1 string, err error) {
 	mm_atomic.AddUint64(&mmListKnowledgeBaseFiles.beforeListKnowledgeBaseFilesCounter, 1)
 	defer mm_atomic.AddUint64(&mmListKnowledgeBaseFiles.afterListKnowledgeBaseFilesCounter, 1)
 
 	mmListKnowledgeBaseFiles.t.Helper()
 
 	if mmListKnowledgeBaseFiles.inspectFuncListKnowledgeBaseFiles != nil {
-		mmListKnowledgeBaseFiles.inspectFuncListKnowledgeBaseFiles(ctx, k1)
+		mmListKnowledgeBaseFiles.inspectFuncListKnowledgeBaseFiles(ctx, uid, ownerUID, kbUID, pageSize, nextPageToken, filesUID)
 	}
 
-	mm_params := RepositoryIMockListKnowledgeBaseFilesParams{ctx, k1}
+	mm_params := RepositoryIMockListKnowledgeBaseFilesParams{ctx, uid, ownerUID, kbUID, pageSize, nextPageToken, filesUID}
 
 	// Record call args
 	mmListKnowledgeBaseFiles.ListKnowledgeBaseFilesMock.mutex.Lock()
@@ -19761,7 +19893,7 @@ func (mmListKnowledgeBaseFiles *RepositoryIMock) ListKnowledgeBaseFiles(ctx cont
 	for _, e := range mmListKnowledgeBaseFiles.ListKnowledgeBaseFilesMock.expectations {
 		if minimock.Equal(*e.params, mm_params) {
 			mm_atomic.AddUint64(&e.Counter, 1)
-			return e.results.kp1, e.results.err
+			return e.results.ka1, e.results.i1, e.results.s1, e.results.err
 		}
 	}
 
@@ -19770,7 +19902,7 @@ func (mmListKnowledgeBaseFiles *RepositoryIMock) ListKnowledgeBaseFiles(ctx cont
 		mm_want := mmListKnowledgeBaseFiles.ListKnowledgeBaseFilesMock.defaultExpectation.params
 		mm_want_ptrs := mmListKnowledgeBaseFiles.ListKnowledgeBaseFilesMock.defaultExpectation.paramPtrs
 
-		mm_got := RepositoryIMockListKnowledgeBaseFilesParams{ctx, k1}
+		mm_got := RepositoryIMockListKnowledgeBaseFilesParams{ctx, uid, ownerUID, kbUID, pageSize, nextPageToken, filesUID}
 
 		if mm_want_ptrs != nil {
 
@@ -19779,9 +19911,34 @@ func (mmListKnowledgeBaseFiles *RepositoryIMock) ListKnowledgeBaseFiles(ctx cont
 					mmListKnowledgeBaseFiles.ListKnowledgeBaseFilesMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
 			}
 
-			if mm_want_ptrs.k1 != nil && !minimock.Equal(*mm_want_ptrs.k1, mm_got.k1) {
-				mmListKnowledgeBaseFiles.t.Errorf("RepositoryIMock.ListKnowledgeBaseFiles got unexpected parameter k1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmListKnowledgeBaseFiles.ListKnowledgeBaseFilesMock.defaultExpectation.expectationOrigins.originK1, *mm_want_ptrs.k1, mm_got.k1, minimock.Diff(*mm_want_ptrs.k1, mm_got.k1))
+			if mm_want_ptrs.uid != nil && !minimock.Equal(*mm_want_ptrs.uid, mm_got.uid) {
+				mmListKnowledgeBaseFiles.t.Errorf("RepositoryIMock.ListKnowledgeBaseFiles got unexpected parameter uid, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmListKnowledgeBaseFiles.ListKnowledgeBaseFilesMock.defaultExpectation.expectationOrigins.originUid, *mm_want_ptrs.uid, mm_got.uid, minimock.Diff(*mm_want_ptrs.uid, mm_got.uid))
+			}
+
+			if mm_want_ptrs.ownerUID != nil && !minimock.Equal(*mm_want_ptrs.ownerUID, mm_got.ownerUID) {
+				mmListKnowledgeBaseFiles.t.Errorf("RepositoryIMock.ListKnowledgeBaseFiles got unexpected parameter ownerUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmListKnowledgeBaseFiles.ListKnowledgeBaseFilesMock.defaultExpectation.expectationOrigins.originOwnerUID, *mm_want_ptrs.ownerUID, mm_got.ownerUID, minimock.Diff(*mm_want_ptrs.ownerUID, mm_got.ownerUID))
+			}
+
+			if mm_want_ptrs.kbUID != nil && !minimock.Equal(*mm_want_ptrs.kbUID, mm_got.kbUID) {
+				mmListKnowledgeBaseFiles.t.Errorf("RepositoryIMock.ListKnowledgeBaseFiles got unexpected parameter kbUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmListKnowledgeBaseFiles.ListKnowledgeBaseFilesMock.defaultExpectation.expectationOrigins.originKbUID, *mm_want_ptrs.kbUID, mm_got.kbUID, minimock.Diff(*mm_want_ptrs.kbUID, mm_got.kbUID))
+			}
+
+			if mm_want_ptrs.pageSize != nil && !minimock.Equal(*mm_want_ptrs.pageSize, mm_got.pageSize) {
+				mmListKnowledgeBaseFiles.t.Errorf("RepositoryIMock.ListKnowledgeBaseFiles got unexpected parameter pageSize, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmListKnowledgeBaseFiles.ListKnowledgeBaseFilesMock.defaultExpectation.expectationOrigins.originPageSize, *mm_want_ptrs.pageSize, mm_got.pageSize, minimock.Diff(*mm_want_ptrs.pageSize, mm_got.pageSize))
+			}
+
+			if mm_want_ptrs.nextPageToken != nil && !minimock.Equal(*mm_want_ptrs.nextPageToken, mm_got.nextPageToken) {
+				mmListKnowledgeBaseFiles.t.Errorf("RepositoryIMock.ListKnowledgeBaseFiles got unexpected parameter nextPageToken, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmListKnowledgeBaseFiles.ListKnowledgeBaseFilesMock.defaultExpectation.expectationOrigins.originNextPageToken, *mm_want_ptrs.nextPageToken, mm_got.nextPageToken, minimock.Diff(*mm_want_ptrs.nextPageToken, mm_got.nextPageToken))
+			}
+
+			if mm_want_ptrs.filesUID != nil && !minimock.Equal(*mm_want_ptrs.filesUID, mm_got.filesUID) {
+				mmListKnowledgeBaseFiles.t.Errorf("RepositoryIMock.ListKnowledgeBaseFiles got unexpected parameter filesUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmListKnowledgeBaseFiles.ListKnowledgeBaseFilesMock.defaultExpectation.expectationOrigins.originFilesUID, *mm_want_ptrs.filesUID, mm_got.filesUID, minimock.Diff(*mm_want_ptrs.filesUID, mm_got.filesUID))
 			}
 
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
@@ -19793,12 +19950,12 @@ func (mmListKnowledgeBaseFiles *RepositoryIMock) ListKnowledgeBaseFiles(ctx cont
 		if mm_results == nil {
 			mmListKnowledgeBaseFiles.t.Fatal("No results are set for the RepositoryIMock.ListKnowledgeBaseFiles")
 		}
-		return (*mm_results).kp1, (*mm_results).err
+		return (*mm_results).ka1, (*mm_results).i1, (*mm_results).s1, (*mm_results).err
 	}
 	if mmListKnowledgeBaseFiles.funcListKnowledgeBaseFiles != nil {
-		return mmListKnowledgeBaseFiles.funcListKnowledgeBaseFiles(ctx, k1)
+		return mmListKnowledgeBaseFiles.funcListKnowledgeBaseFiles(ctx, uid, ownerUID, kbUID, pageSize, nextPageToken, filesUID)
 	}
-	mmListKnowledgeBaseFiles.t.Fatalf("Unexpected call to RepositoryIMock.ListKnowledgeBaseFiles. %v %v", ctx, k1)
+	mmListKnowledgeBaseFiles.t.Fatalf("Unexpected call to RepositoryIMock.ListKnowledgeBaseFiles. %v %v %v %v %v %v %v", ctx, uid, ownerUID, kbUID, pageSize, nextPageToken, filesUID)
 	return
 }
 
