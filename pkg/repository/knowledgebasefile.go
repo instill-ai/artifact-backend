@@ -26,8 +26,8 @@ type KnowledgeBaseFileI interface {
 	KnowledgeBaseFileTableName() string
 	// CreateKnowledgeBaseFile creates a new knowledge base file
 	CreateKnowledgeBaseFile(ctx context.Context, kb KnowledgeBaseFile, externalServiceCall func(fileUID string) error) (*KnowledgeBaseFile, error)
-	// ListKnowledgeBaseFiles returns a list of knowledge base files.
-	ListKnowledgeBaseFiles(context.Context, KnowledgeBaseFileListParams) (*KnowledgeBaseFileList, error)
+	// ListKnowledgeBaseFiles lists the knowledge base files by owner UID, knowledge base UID, and page size
+	ListKnowledgeBaseFiles(ctx context.Context, uid string, ownerUID string, kbUID string, pageSize int32, nextPageToken string, filesUID []string) ([]KnowledgeBaseFile, int, string, error)
 	// GetKnowledgeBaseFilesByFileUIDs returns the knowledge base files by file UIDs
 	GetKnowledgeBaseFilesByFileUIDs(ctx context.Context, fileUIDs []uuid.UUID, columns ...string) ([]KnowledgeBaseFile, error)
 	// DeleteKnowledgeBaseFile deletes the knowledge base file by file UID
@@ -306,103 +306,68 @@ func (r *Repository) CreateKnowledgeBaseFile(ctx context.Context, kb KnowledgeBa
 	return &kb, nil
 }
 
-// KnowledgeBaseFileListParams contains the params to fetch a list of knowledge
-// base files.
-type KnowledgeBaseFileListParams struct {
-	OwnerUID string
-	KbUID    string
-
-	// Optional filters
-	FileUIDs      []string
-	ProcessStatus artifactpb.FileProcessStatus
-
-	// Pagination
-	PageSize  int
-	PageToken string
-}
-
-// KnowledgeBaseFileList contains a list of knowledge base files.
-type KnowledgeBaseFileList struct {
-	Files         []KnowledgeBaseFile
-	TotalCount    int
-	NextPageToken string
-}
-
-// ListKnowledgeBaseFiles returns a paginated list of files within a knowledge
-// base. The list can optionally be filtered by file UIDs or status.
-func (r *Repository) ListKnowledgeBaseFiles(ctx context.Context, params KnowledgeBaseFileListParams) (*KnowledgeBaseFileList, error) {
+func (r *Repository) ListKnowledgeBaseFiles(ctx context.Context, uid string, ownerUID string, kbUID string, pageSize int32, nextPageToken string, fileUIDs []string) ([]KnowledgeBaseFile, int, string, error) {
 	var kbs []KnowledgeBaseFile
 	var totalCount int64
 
-	q := r.db.Model(&KnowledgeBaseFile{}).
-		Where("owner = ?", params.OwnerUID).
-		Where("kb_uid = ?", params.KbUID).
-		Where("delete_time is NULL")
+	// Initial query with owner and knowledge base uid and delete time is null
+	whereClause := fmt.Sprintf("%v = ? AND %v = ? AND %v is NULL", KnowledgeBaseFileColumn.Owner, KnowledgeBaseFileColumn.KnowledgeBaseUID, KnowledgeBaseFileColumn.DeleteTime)
+	query := r.db.Model(&KnowledgeBaseFile{}).Where(whereClause, ownerUID, kbUID)
 
-	if len(params.FileUIDs) > 0 {
-		q = q.Where("uid IN ?", params.FileUIDs)
-	}
-
-	if params.ProcessStatus != 0 {
-		q = q.Where("process_status = ?", params.ProcessStatus.String())
+	// Apply file UID filter if provided
+	if len(fileUIDs) > 0 {
+		whereClause := fmt.Sprintf("%v IN ?", KnowledgeBaseFileColumn.UID)
+		query = query.Where(whereClause, fileUIDs)
 	}
 
 	// Count the total number of matching records
-	if err := q.Count(&totalCount).Error; err != nil {
-		return nil, err
+	if err := query.Count(&totalCount).Error; err != nil {
+		return nil, 0, "", err
 	}
 
 	// Apply pagination. page size's default value is 10 and cap to 100.
-	if params.PageSize <= 0 {
-		params.PageSize = 10
+	if pageSize > 100 {
+		pageSize = 100
+	} else if pageSize <= 0 {
+		pageSize = 10
 	}
+	pageSizeAddOne := pageSize + 1 // to get the next page token
+	query = query.Limit(int(pageSizeAddOne))
 
-	if params.PageSize > 100 {
-		params.PageSize = 100
-	}
-
-	// We fetch one extra record to build the next page token.
-	q = q.Limit(params.PageSize + 1)
-
-	if params.PageToken != "" {
-		tokenUUID, err := uuid.FromString(params.PageToken)
+	if nextPageToken != "" {
+		tokenUUID, err := uuid.FromString(nextPageToken)
 		if err != nil {
-			return nil, fmt.Errorf("invalid next page token format: %w", err)
+			return nil, 0, "", fmt.Errorf("invalid next_page_token format(UUID): %v", err)
 		}
-
-		// Next page token is the UID of the first record in the requested page.
+		// Assuming next_page_token is the `uid` of the last record from the previous page
 		kbfs, err := r.GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{tokenUUID})
 		if err != nil {
-			return nil, fmt.Errorf("building query from token: %w", err)
+			return nil, 0, "", fmt.Errorf("failed to get catalog files by next page token: %v", err)
+		} else if len(kbfs) == 0 {
+			return nil, 0, "", fmt.Errorf("no catalog file found by next page token")
 		}
-
-		if len(kbfs) == 0 {
-			return nil, fmt.Errorf("invalid next page token")
-		}
-
-		q = q.Where("create_time <= ?", kbfs[0].CreateTime)
+		// whereClause
+		whereClause := fmt.Sprintf("%v <= ?", KnowledgeBaseFileColumn.CreateTime)
+		query = query.Where(whereClause, kbfs[0].CreateTime)
 	}
 
+	// Order by create time DESC
 	// TODO INS-8162: the repository method (and the upstream handler) should
 	// take an `ordering` parameter so clients can choose the sorting.
-	q = q.Order("create_time DESC")
+	query = query.Order(fmt.Sprintf("%v DESC", KnowledgeBaseFileColumn.CreateTime))
 
 	// Fetch the records
-	if err := q.Find(&kbs).Error; err != nil {
-		return nil, fmt.Errorf("fetching records: %w", err)
+	if err := query.Find(&kbs).Error; err != nil {
+		return nil, 0, "", err
 	}
 
-	resp := &KnowledgeBaseFileList{
-		Files:      kbs,
-		TotalCount: int(totalCount),
+	// Determine the next page token
+	newNextPageToken := ""
+	if len(kbs) == int(pageSizeAddOne) {
+		newNextPageToken = kbs[pageSizeAddOne-1].UID.String()
+		kbs = kbs[:pageSizeAddOne-1]
 	}
-
-	if len(kbs) > params.PageSize {
-		resp.NextPageToken = kbs[params.PageSize].UID.String()
-		resp.Files = kbs[:params.PageSize]
-	}
-
-	return resp, nil
+	return kbs, int(totalCount), newNextPageToken, nil
 }
 
 // delete the file which is to set the delete time

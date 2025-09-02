@@ -13,7 +13,7 @@ require (
 	github.com/google/go-cmp v0.7.0
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.1
-	github.com/instill-ai/protogen-go v0.3.3-alpha.0.20250901141247-a88b66c21745
+	github.com/instill-ai/protogen-go v0.3.3-alpha.0.20250820133748-aa1f92e2cb3c
 	github.com/instill-ai/usage-client v0.4.0
 	github.com/instill-ai/x v0.9.0-alpha
 	github.com/knadh/koanf v1.5.0
