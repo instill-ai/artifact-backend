@@ -81,7 +81,15 @@ unit-test:       				## Run unit test
 
 .PHONY: integration-test
 integration-test:				## Run integration test
-	@exit 0
+	@TEST_FOLDER_ABS_PATH=${PWD} k6 run \
+		-e API_GATEWAY_PROTOCOL=${API_GATEWAY_PROTOCOL} -e API_GATEWAY_URL=${API_GATEWAY_URL} \
+		integration-test/grpc.js --no-usage-report --quiet
+	@TEST_FOLDER_ABS_PATH=${PWD} k6 run \
+		-e API_GATEWAY_PROTOCOL=${API_GATEWAY_PROTOCOL} 	-e API_GATEWAY_URL=${API_GATEWAY_URL} \
+		integration-test/rest.js --no-usage-report --quiet
+	@TEST_FOLDER_ABS_PATH=${PWD} k6 run \
+		-e API_GATEWAY_PROTOCOL=${API_GATEWAY_PROTOCOL} -e API_GATEWAY_URL=${API_GATEWAY_URL} \
+		integration-test/file-type.js --no-usage-report --quiet
 
 .PHONY: help
 help:       	 				## Show this help
