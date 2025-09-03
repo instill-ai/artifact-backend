@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.30.2](https://github.com/instill-ai/artifact-backend/compare/v0.30.1...v0.30.2) (2025-09-03)
+
+
+### Features
+
+* **kbfile:** add status filter to catalog file list ([#239](https://github.com/instill-ai/artifact-backend/issues/239)) ([#244](https://github.com/instill-ai/artifact-backend/issues/244)) ([1836e09](https://github.com/instill-ai/artifact-backend/commit/1836e0967fce89307e55b19c8497b9e90b5e7057))
+
+
+### Bug Fixes
+
+* **kbfile:** reprocessing fixes ([#246](https://github.com/instill-ai/artifact-backend/issues/246)) ([c4ec3a0](https://github.com/instill-ai/artifact-backend/commit/c4ec3a0e6edd9f137c6272f9b4dadb83e8cb51a2))
+
 ## [0.30.1](https://github.com/instill-ai/artifact-backend/compare/v0.30.0...v0.30.1) (2025-09-02)
 
 
