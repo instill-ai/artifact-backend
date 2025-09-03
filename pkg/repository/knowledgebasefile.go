@@ -430,24 +430,29 @@ func (r *Repository) DeleteAllKnowledgeBaseFiles(ctx context.Context, kbUID stri
 
 // ProcessKnowledgeBaseFiles updates the process status of the files
 func (r *Repository) ProcessKnowledgeBaseFiles(
-	ctx context.Context, fileUIDs []string, requester uuid.UUID) (
-	[]KnowledgeBaseFile, error) {
+	ctx context.Context,
+	fileUIDs []string,
+	requester uuid.UUID,
+) ([]KnowledgeBaseFile, error) {
+
+	db := r.db.WithContext(ctx)
+
 	// Update the process status of the files
-	waitingStatus := artifactpb.FileProcessStatus_name[int32(artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_WAITING)]
 	updates := map[string]any{
-		KnowledgeBaseFileColumn.ProcessStatus: waitingStatus,
-		KnowledgeBaseFileColumn.RequesterUID:  requester,
+		"process_status": artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_WAITING.String(),
+		"requester_uid":  requester,
+		// Clear previous failure reason
+		"extra_meta_data": gorm.Expr("COALESCE(extra_meta_data, '{}'::jsonb) || ?::jsonb", `{"fail_reason": ""}`),
 	}
-	if err := r.db.WithContext(ctx).Model(&KnowledgeBaseFile{}).
-		Where(KnowledgeBaseFileColumn.UID+" IN ?", fileUIDs).
-		Updates(updates).Error; err != nil {
-		return nil, err
+
+	if err := db.Model(&KnowledgeBaseFile{}).Where("uid IN ?", fileUIDs).Updates(updates).Error; err != nil {
+		return nil, fmt.Errorf("updating records: %w", err)
 	}
 
 	// Retrieve the updated records
 	var files []KnowledgeBaseFile
-	if err := r.db.WithContext(ctx).Where(KnowledgeBaseFileColumn.UID+" IN ?", fileUIDs).Find(&files).Error; err != nil {
-		return nil, err
+	if err := db.Where("uid IN ?", fileUIDs).Find(&files).Error; err != nil {
+		return nil, fmt.Errorf("retrieving updated records: %w", err)
 	}
 
 	return files, nil

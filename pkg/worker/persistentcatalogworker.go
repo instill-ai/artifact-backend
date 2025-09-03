@@ -434,7 +434,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processConvertingFile(ctx contex
 	}
 
 	for _, pipelineName := range kb.ConvertingPipelines {
-		if pipelineName == fileConvertingPipeName {
+		if len(pipelineName) == 0 || pipelineName == fileConvertingPipeName {
 			continue
 		}
 

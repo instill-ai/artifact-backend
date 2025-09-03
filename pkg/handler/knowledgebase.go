@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -101,24 +102,10 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 	}
 
 	// Read conversion pipelines from request.
-	// TODO jvallesm: validate existence, permissions & recipe of provided
-	// pipelines.
-	convertingPipelines := req.GetConvertingPipelines()
-	for _, pipelineName := range convertingPipelines {
-		if _, err := service.PipelineReleaseFromName(pipelineName); err != nil {
-			err = fmt.Errorf("%w: invalid conversion pipeline format: %w", errorsx.ErrInvalidArgument, err)
-			return nil, errorsx.AddMessage(
-				err,
-				`Conversion pipeline must have the format "{namespaceID}/{pipelineID}@{version}"`,
-			)
-		}
+	convertingPipelines, err := sanitizeConvertingPipelines(req.GetConvertingPipelines())
+	if err != nil {
+		return nil, err
 	}
-
-	/*
-		if err := ph.service.ValidateConvertingPipelines(convertingPipelines); err != nil {
-			return nil, fmt.Errorf("validating pipelines: %w")
-		}
-	*/
 
 	// create catalog
 	dbData, err := ph.service.Repository().CreateKnowledgeBase(
@@ -296,18 +283,20 @@ func (ph *PublicHandler) UpdateCatalog(ctx context.Context, req *artifactpb.Upda
 		return nil, fmt.Errorf("%w: no permission over catalog", errorsx.ErrUnauthorized)
 	}
 
+	convertingPipelines, err := sanitizeConvertingPipelines(req.GetConvertingPipelines())
+	if err != nil {
+		return nil, err
+	}
+
 	// update catalog
 	kb, err = ph.service.Repository().UpdateKnowledgeBase(
 		ctx,
 		req.GetCatalogId(),
 		ns.NsUID.String(),
 		repository.KnowledgeBase{
-			Description: req.GetDescription(),
-			Tags:        req.GetTags(),
-
-			// TODO jvallesm: validate existence, permissions & recipe of provided
-			// pipelines.
-			ConvertingPipelines: req.GetConvertingPipelines(),
+			Description:         req.GetDescription(),
+			Tags:                req.GetTags(),
+			ConvertingPipelines: convertingPipelines,
 		},
 	)
 	if err != nil {
@@ -349,12 +338,9 @@ func (ph *PublicHandler) UpdateCatalog(ctx context.Context, req *artifactpb.Upda
 		UsedStorage:    uint64(kb.Usage),
 	}
 
-	if len(kb.ConvertingPipelines) == 0 {
-		catalog.ConvertingPipelines = defaultConvertingPipelines()
-	}
-
 	return &artifactpb.UpdateCatalogResponse{Catalog: catalog}, nil
 }
+
 func (ph *PublicHandler) DeleteCatalog(ctx context.Context, req *artifactpb.DeleteCatalogRequest) (*artifactpb.DeleteCatalogResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 	authUID, err := getUserUIDFromContext(ctx)
@@ -517,4 +503,42 @@ func defaultConvertingPipelines() []string {
 	return []string{
 		service.ConvertDocToMDPipeline.Name(),
 	}
+}
+
+// sanitizeConvertingPipelines validates an input array of strings that
+// represent the conversion pipelines of a catalog. It checks the string format
+// is correct.
+// TODO we also want to validate the existence of the pipelines, permissions of
+// the requester over that pipeline and the validity of its recipe.
+func sanitizeConvertingPipelines(pipelines []string) ([]string, error) {
+	validPipelines := make([]string, 0, len(pipelines))
+	for _, pipelineName := range pipelines {
+		// Console passes an empty string to reset the catalog conversion
+		// pipeline to the default one.
+		if pipelineName == "" {
+			continue
+		}
+
+		// Remove duplicates.
+		if slices.Contains(validPipelines, pipelineName) {
+			continue
+		}
+
+		if _, err := service.PipelineReleaseFromName(pipelineName); err != nil {
+			err = fmt.Errorf("%w: invalid conversion pipeline format: %w", errorsx.ErrInvalidArgument, err)
+			return nil, errorsx.AddMessage(
+				err,
+				`Conversion pipeline must have the format "{namespaceID}/{pipelineID}@{version}"`,
+			)
+		}
+
+		validPipelines = append(validPipelines, pipelineName)
+
+	}
+
+	if len(validPipelines) == 0 {
+		validPipelines = defaultConvertingPipelines()
+	}
+
+	return validPipelines, nil
 }
