@@ -1,17 +1,22 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"os"
 
 	"github.com/golang-migrate/migrate/v4"
+	"go.uber.org/zap"
 
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/db/migration"
+
+	database "github.com/instill-ai/artifact-backend/pkg/db"
+	logx "github.com/instill-ai/x/log"
 )
 
 func dbExistsOrCreate(databaseConfig config.DatabaseConfig) error {
@@ -54,15 +59,25 @@ func dbExistsOrCreate(databaseConfig config.DatabaseConfig) error {
 
 	return nil
 }
-func main() {
 
+func main() {
 	if err := config.Init(config.ParseConfigFlag()); err != nil {
 		panic(err)
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	logx.Debug = config.Config.Server.Debug
+	logger, _ := logx.GetZapLogger(ctx)
+	defer func() {
+		// can't handle the error due to https://github.com/uber-go/zap/issues/880
+		_ = logger.Sync()
+	}()
+
 	databaseConfig := config.Config.Database
 	if err := dbExistsOrCreate(databaseConfig); err != nil {
-		panic(err)
+		logger.Fatal("Checking database existence", zap.Error(err))
 	}
 
 	dsn := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?%s",
@@ -74,39 +89,70 @@ func main() {
 		"sslmode=disable",
 	)
 
-	migrateFolder, _ := os.Getwd()
+	db := database.GetSharedConnection().WithContext(ctx)
+	codeMigrator := &migration.CodeMigrator{
+		Logger: logger,
+		DB:     db,
+	}
+
+	defer func() { database.Close(db) }()
+
+	if err := runMigration(dsn, migration.TargetSchemaVersion, codeMigrator.Migrate, logger); err != nil {
+		logger.Fatal("Running migration", zap.Error(err))
+	}
+}
+
+func runMigration(
+	dsn string,
+	expectedVersion uint,
+	execCode func(version uint) error,
+	logger *zap.Logger,
+) error {
+	migrateFolder, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("accessing base path: %w", err)
+	}
+
 	m, err := migrate.New(fmt.Sprintf("file:///%s/pkg/db/migration", migrateFolder), dsn)
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("creating migration: %w", err)
 	}
 
-	expectedVersion := migration.TargetSchemaVersion
 	curVersion, dirty, err := m.Version()
 	if err != nil && curVersion != 0 {
-		panic(err)
+		return fmt.Errorf("getting current version: %w", err)
 	}
 
-	fmt.Printf("Expected migration version is %d\n", expectedVersion)
-	fmt.Printf("The current schema version is %d, and dirty flag is %t\n", curVersion, dirty)
+	logger.Info("Running migration",
+		zap.Uint("expectedVersion", expectedVersion),
+		zap.Uint("currentVersion", curVersion),
+		zap.Bool("dirty", dirty),
+	)
+
 	if dirty {
-		panic("the database's dirty flag is set, please fix it")
+		return fmt.Errorf("database is dirty, please fix it")
 	}
 
 	step := curVersion
 	for {
 		if expectedVersion <= step {
-			fmt.Printf("Migration to version %d complete\n", expectedVersion)
+			logger.Info("Migration completed", zap.Uint("expectedVersion", expectedVersion))
 			break
 		}
 
-		fmt.Printf("Step up to version %d\n", step+1)
+		logger.Info("Step up", zap.Uint("step", step+1))
 		if err := m.Steps(1); err != nil {
-			panic(err)
+			return fmt.Errorf("stepping up: %w", err)
 		}
 
-		step, _, err = m.Version()
-		if err != nil {
-			panic(err)
+		if step, _, err = m.Version(); err != nil {
+			return fmt.Errorf("getting new version: %w", err)
+		}
+
+		if err := execCode(step); err != nil {
+			return fmt.Errorf("running associated code: %w", err)
 		}
 	}
+
+	return nil
 }
