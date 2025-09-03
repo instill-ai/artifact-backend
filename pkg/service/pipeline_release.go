@@ -96,7 +96,7 @@ var (
 		Version:   "v2.0.0",
 	}
 
-	// EmbedTextPipeline is the defualt pipeline for embedding text.
+	// EmbedTextPipeline is the default pipeline for embedding text.
 	EmbedTextPipeline = PipelineRelease{
 		Namespace: DefaultNamespaceID,
 		ID:        "indexing-embed",

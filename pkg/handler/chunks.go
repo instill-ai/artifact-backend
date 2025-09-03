@@ -11,6 +11,7 @@ import (
 
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/constant"
+	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
@@ -43,8 +44,14 @@ func convertToProtoChunk(chunk repository.TextChunk) *artifactpb.Chunk {
 	}
 }
 
+// ListChunks lists the chunks of a file
 func (ph *PublicHandler) ListChunks(ctx context.Context, req *artifactpb.ListChunksRequest) (*artifactpb.ListChunksResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
+	_, err := getUserUIDFromContext(ctx)
+	if err != nil {
+		err := fmt.Errorf("failed to get user id from header: %v. err: %w", err, errorsx.ErrUnauthenticated)
+		return nil, err
+	}
 
 	fileUID, err := uuid.FromString(req.FileUid)
 	if err != nil {
@@ -167,6 +174,7 @@ func (ph *PublicHandler) SearchChunks(ctx context.Context, req *artifactpb.Searc
 	}, nil
 }
 
+// UpdateChunk updates the retrievable of a chunk
 func (ph *PublicHandler) UpdateChunk(ctx context.Context, req *artifactpb.UpdateChunkRequest) (*artifactpb.UpdateChunkResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 
@@ -207,6 +215,7 @@ func (ph *PublicHandler) UpdateChunk(ctx context.Context, req *artifactpb.Update
 	}, nil
 }
 
+// GetSourceFile gets the source file of a chunk
 func (ph *PublicHandler) GetSourceFile(ctx context.Context, req *artifactpb.GetSourceFileRequest) (*artifactpb.GetSourceFileResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 
@@ -231,8 +240,17 @@ func (ph *PublicHandler) GetSourceFile(ctx context.Context, req *artifactpb.GetS
 		return nil, fmt.Errorf("%w: no permission over catalog", errorsx.ErrUnauthorized)
 	}
 
-	// get the source file content from minIO using dest of source
-	content, err := ph.service.MinIO().GetFile(ctx, config.Config.Minio.BucketName, source.Dest)
+	// Decide bucket based on file type: TEXT/MD -> blob; others -> artifact
+	kbfs, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{fileUID})
+	if err != nil || len(kbfs) == 0 {
+		logger.Error("failed to fetch file for bucket selection", zap.Error(err))
+		return nil, fmt.Errorf("failed to fetch file for bucket selection: %w", errorsx.ErrNotFound)
+	}
+	bucketName := config.Config.Minio.BucketName
+	if kbfs[0].Type == artifactpb.FileType_FILE_TYPE_TEXT.String() || kbfs[0].Type == artifactpb.FileType_FILE_TYPE_MARKDOWN.String() {
+		bucketName = minio.BlobBucketName
+	}
+	content, err := ph.service.MinIO().GetFile(ctx, bucketName, source.Dest)
 	if err != nil {
 		logger.Error("failed to get file from minio", zap.Error(err))
 		return nil, fmt.Errorf("failed to get file from minio. err: %w", err)
@@ -248,7 +266,7 @@ func (ph *PublicHandler) GetSourceFile(ctx context.Context, req *artifactpb.GetS
 	}, nil
 }
 
-// SearchSourceFiles
+// SearchSourceFiles searches the source files of a file
 func (ph *PublicHandler) SearchSourceFiles(ctx context.Context, req *artifactpb.SearchSourceFilesRequest) (*artifactpb.SearchSourceFilesResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 
@@ -287,7 +305,8 @@ func (ph *PublicHandler) SearchSourceFiles(ctx context.Context, req *artifactpb.
 		}
 
 		// Get file content from MinIO
-		content, err := ph.service.MinIO().GetFile(ctx, config.Config.Minio.BucketName, source.Dest)
+		bucket := minio.BucketFromDestination(source.Dest)
+		content, err := ph.service.MinIO().GetFile(ctx, bucket, source.Dest)
 		if err != nil {
 			logger.Error("failed to get file from minio", zap.Error(err))
 			continue
