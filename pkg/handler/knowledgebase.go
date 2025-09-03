@@ -35,6 +35,7 @@ const ErrorDeleteKnowledgeBaseMsg = "failed to delete catalog: %w"
 // Note: in the future, we might have different max count for different user types
 const KnowledgeBaseMaxCount = 3
 
+// CreateCatalog creates a catalog
 func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.CreateCatalogRequest) (*artifactpb.CreateCatalogResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 	authUID, err := getUserUIDFromContext(ctx)
@@ -160,6 +161,7 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 	return &artifactpb.CreateCatalogResponse{Catalog: catalog}, nil
 }
 
+// ListCatalogs lists the catalogs
 func (ph *PublicHandler) ListCatalogs(ctx context.Context, req *artifactpb.ListCatalogsRequest) (*artifactpb.ListCatalogsResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 	// get user id from context
@@ -248,6 +250,8 @@ func (ph *PublicHandler) ListCatalogs(ctx context.Context, req *artifactpb.ListC
 		Catalogs: kbs,
 	}, nil
 }
+
+// UpdateCatalog updates a catalog
 func (ph *PublicHandler) UpdateCatalog(ctx context.Context, req *artifactpb.UpdateCatalogRequest) (*artifactpb.UpdateCatalogResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 	authUID, err := getUserUIDFromContext(ctx)
@@ -341,6 +345,7 @@ func (ph *PublicHandler) UpdateCatalog(ctx context.Context, req *artifactpb.Upda
 	return &artifactpb.UpdateCatalogResponse{Catalog: catalog}, nil
 }
 
+// DeleteCatalog deletes a catalog
 func (ph *PublicHandler) DeleteCatalog(ctx context.Context, req *artifactpb.DeleteCatalogRequest) (*artifactpb.DeleteCatalogResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 	authUID, err := getUserUIDFromContext(ctx)
@@ -465,6 +470,7 @@ func (ph *PublicHandler) DeleteCatalog(ctx context.Context, req *artifactpb.Dele
 		},
 	}, nil
 }
+
 func getUserUIDFromContext(ctx context.Context) (string, error) {
 	md, _ := metadata.FromIncomingContext(ctx)
 	if v, ok := md[strings.ToLower(constant.HeaderUserUIDKey)]; ok {

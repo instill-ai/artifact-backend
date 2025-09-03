@@ -21,7 +21,7 @@ import (
 const maxChunkLengthForMarkdownCatalog = 1024
 const maxChunkLengthForTextCatalog = 7000
 
-const chunkOverlapForMarkdowntCatalog = 200
+const chunkOverlapForMarkdownCatalog = 200
 const chunkOverlapForTextCatalog = 700
 
 // ConvertToMDPipe converts a file into Markdown by triggering a converting
@@ -246,7 +246,7 @@ func (s *service) ChunkMarkdownPipe(ctx context.Context, markdown string) ([]Chu
 				Fields: map[string]*structpb.Value{
 					"md_input":         structpb.NewStringValue(markdown),
 					"max_chunk_length": structpb.NewNumberValue(maxChunkLengthForMarkdownCatalog),
-					"chunk_overlap":    structpb.NewNumberValue(chunkOverlapForMarkdowntCatalog),
+					"chunk_overlap":    structpb.NewNumberValue(chunkOverlapForMarkdownCatalog),
 				},
 			},
 		},

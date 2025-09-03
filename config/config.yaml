@@ -83,6 +83,6 @@ milvus:
   host: milvus
   port: 19530
 filetoembeddingworker:
-  numberofworkers: 2
+  numberofworkers: 32
 blob:
   hostport: http://localhost:8080
