@@ -60,8 +60,8 @@ func (ph *PublicHandler) GetFileCatalog(ctx context.Context, req *artifactpb.Get
 		return nil, fmt.Errorf("fetching truth source: %w", err)
 	}
 
-	// Get the source file sourceContent from minIO using dest of source.
-	sourceContent, err := ph.service.MinIO().GetFile(ctx, config.Config.Minio.BucketName, source.Dest)
+	// Get the source file sourceContent from MinIO using destination of source.
+	sourceContent, err := getFileWithBucketFallback(ctx, ph.service.MinIO(), config.Config.Minio.BucketName, source.Dest)
 	if err != nil {
 		return nil, fmt.Errorf("getting file from blob storage: %w", err)
 	}
@@ -140,8 +140,7 @@ func (ph *PublicHandler) GetFileCatalog(ctx context.Context, req *artifactpb.Get
 
 	// Retrieve the original file content from MinIO.
 	minIOPath := kbFile.Destination
-	bucket := minio.BucketFromDestination(minIOPath)
-	originalContent, err := ph.service.MinIO().GetFile(ctx, bucket, minIOPath)
+	originalContent, err := getFileWithBucketFallback(ctx, ph.service.MinIO(), config.Config.Minio.BucketName, minIOPath)
 	if err != nil {
 		return nil, fmt.Errorf("fetching original file from blob: %w", err)
 	}
@@ -187,4 +186,18 @@ func getPipelines(kbf *repository.KnowledgeBaseFile) []string {
 		pipes = append(pipes, kbf.ExtraMetaDataUnmarshal.EmbeddingPipe)
 	}
 	return pipes
+}
+
+// getFileWithBucketFallback tries the inferred bucket and, on failure, the alternative bucket.
+func getFileWithBucketFallback(ctx context.Context, m minio.MinioI, primaryBucket, path string) ([]byte, error) {
+	data, err := m.GetFile(ctx, primaryBucket, path)
+	if err == nil {
+		return data, nil
+	}
+	// decide alternative bucket
+	alt := config.Config.Minio.BucketName
+	if primaryBucket == alt {
+		alt = minio.BlobBucketName
+	}
+	return m.GetFile(ctx, alt, path)
 }

@@ -58,6 +58,9 @@ build-dev: ## Build dev docker image
 	@docker build \
 		--build-arg SERVICE_NAME=${SERVICE_NAME} \
 		--build-arg K6_VERSION=${K6_VERSION} \
+		--build-arg XK6_VERSION=${XK6_VERSION} \
+		--build-arg XK6_SQL_VERSION=${XK6_SQL_VERSION} \
+		--build-arg XK6_SQL_POSTGRES_VERSION=${XK6_SQL_POSTGRES_VERSION} \
 		-f Dockerfile.dev -t instill/${SERVICE_NAME}:dev .
 
 .PHONY: build-latest
@@ -81,7 +84,15 @@ unit-test:       				## Run unit test
 
 .PHONY: integration-test
 integration-test:				## Run integration test
-	@exit 0
+	@TEST_FOLDER_ABS_PATH=${PWD} k6 run \
+		-e API_GATEWAY_PROTOCOL=${API_GATEWAY_PROTOCOL} -e API_GATEWAY_URL=${API_GATEWAY_URL} \
+		integration-test/grpc.js --no-usage-report --quiet
+	@TEST_FOLDER_ABS_PATH=${PWD} k6 run \
+		-e API_GATEWAY_PROTOCOL=${API_GATEWAY_PROTOCOL} 	-e API_GATEWAY_URL=${API_GATEWAY_URL} \
+		integration-test/rest.js --no-usage-report --quiet
+	@TEST_FOLDER_ABS_PATH=${PWD} k6 run \
+		-e API_GATEWAY_PROTOCOL=${API_GATEWAY_PROTOCOL} -e API_GATEWAY_URL=${API_GATEWAY_URL} \
+		integration-test/file-type.js --no-usage-report --quiet
 
 .PHONY: help
 help:       	 				## Show this help

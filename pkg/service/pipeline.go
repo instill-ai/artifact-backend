@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/gofrs/uuid"
 	"go.uber.org/zap"
@@ -20,7 +21,7 @@ import (
 const maxChunkLengthForMarkdownCatalog = 1024
 const maxChunkLengthForTextCatalog = 7000
 
-const chunkOverlapForMarkdowntCatalog = 200
+const chunkOverlapForMarkdownCatalog = 200
 const chunkOverlapForTextCatalog = 700
 
 // ConvertToMDPipe converts a file into Markdown by triggering a converting
@@ -40,6 +41,9 @@ func (s *service) ConvertToMDPipe(
 	fileType artifactpb.FileType,
 	pipelines []PipelineRelease,
 ) (string, error) {
+
+	ctx, cancel := context.WithTimeout(ctx, 300*time.Second)
+	defer cancel()
 
 	logger, _ := logx.GetZapLogger(ctx)
 
@@ -169,6 +173,7 @@ func convertResultParser(resp *pipelinepb.TriggerNamespacePipelineReleaseRespons
 	return "", nil
 }
 
+// Chunk is a struct that represents a chunk of text.
 type Chunk = struct {
 	End    int
 	Start  int
@@ -179,6 +184,8 @@ type Chunk = struct {
 // GenerateSummary triggers the generate summary pipeline, processes markdown/text, and deducts credits from the caller's account.
 // It generate summary from content.
 func (s *service) GenerateSummary(ctx context.Context, content, fileType string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, 300*time.Second)
+	defer cancel()
 	req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
 		NamespaceId: GenerateSummaryPipeline.Namespace,
 		PipelineId:  GenerateSummaryPipeline.ID,
@@ -228,6 +235,8 @@ func getGenerateSummaryResult(resp *pipelinepb.TriggerNamespacePipelineReleaseRe
 // ChunkMarkdownPipe triggers the markdown splitting pipeline, processes the markdown text, and deducts credits from the caller's account.
 // It sets up the necessary metadata, triggers the pipeline, and processes the response to return the non-empty chunks.
 func (s *service) ChunkMarkdownPipe(ctx context.Context, markdown string) ([]Chunk, error) {
+	ctx, cancel := context.WithTimeout(ctx, 300*time.Second)
+	defer cancel()
 	req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
 		NamespaceId: ChunkMDPipeline.Namespace,
 		PipelineId:  ChunkMDPipeline.ID,
@@ -237,7 +246,7 @@ func (s *service) ChunkMarkdownPipe(ctx context.Context, markdown string) ([]Chu
 				Fields: map[string]*structpb.Value{
 					"md_input":         structpb.NewStringValue(markdown),
 					"max_chunk_length": structpb.NewNumberValue(maxChunkLengthForMarkdownCatalog),
-					"chunk_overlap":    structpb.NewNumberValue(chunkOverlapForMarkdowntCatalog),
+					"chunk_overlap":    structpb.NewNumberValue(chunkOverlapForMarkdownCatalog),
 				},
 			},
 		},
@@ -295,6 +304,8 @@ func GetChunksFromResponse(resp *pipelinepb.TriggerNamespacePipelineReleaseRespo
 // ChunkTextPipe splits the input text into chunks using the splitting pipeline and consumes the caller's credits.
 // It sets up the necessary metadata, triggers the pipeline, and processes the response to return the non-empty chunks.
 func (s *service) ChunkTextPipe(ctx context.Context, text string) ([]Chunk, error) {
+	ctx, cancel := context.WithTimeout(ctx, 300*time.Second)
+	defer cancel()
 	req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
 		NamespaceId: ChunkTextPipeline.Namespace,
 		PipelineId:  ChunkTextPipeline.ID,
@@ -404,7 +415,9 @@ func (s *service) EmbeddingTextPipe(ctx context.Context, texts []string) ([][]fl
 					ReleaseId:   EmbedTextPipeline.Version,
 					Inputs:      inputs,
 				}
-				res, err := s.pipelinePub.TriggerNamespacePipelineRelease(ctx, req)
+				cctx, cancel := context.WithTimeout(ctx, 300*time.Second)
+				defer cancel()
+				res, err := s.pipelinePub.TriggerNamespacePipelineRelease(cctx, req)
 				if err != nil {
 					errChan <- fmt.Errorf("failed to trigger %s pipeline. err:%w", EmbedTextPipeline.ID, err)
 					ctxCancel()
