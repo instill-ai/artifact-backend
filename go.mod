@@ -15,7 +15,7 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.1
 	github.com/instill-ai/protogen-go v0.3.3-alpha.0.20250901141247-a88b66c21745
 	github.com/instill-ai/usage-client v0.4.0
-	github.com/instill-ai/x v0.9.0-alpha
+	github.com/instill-ai/x v0.10.0-alpha
 	github.com/knadh/koanf v1.5.0
 	github.com/milvus-io/milvus-sdk-go/v2 v2.4.2
 	github.com/minio/minio-go/v7 v7.0.92
@@ -51,7 +51,7 @@ require (
 	go.opentelemetry.io/otel/sdk/log v0.13.0 // indirect
 	go.opentelemetry.io/otel/sdk/metric v1.37.0 // indirect
 	go.opentelemetry.io/otel/trace v1.37.0 // indirect
-	go.temporal.io/sdk v1.34.0 // indirect
+	go.temporal.io/sdk v1.35.0 // indirect
 	golang.org/x/sync v0.15.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250603155806-513f23925822 // indirect
 )
