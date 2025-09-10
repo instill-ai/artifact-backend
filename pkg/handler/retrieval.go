@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/gofrs/uuid"
@@ -129,7 +130,7 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 			contentType = artifactpb.ContentType_CONTENT_TYPE_UNSPECIFIED
 
 		}
-		simChunks = append(simChunks, &artifactpb.SimilarityChunk{
+		chunk := &artifactpb.SimilarityChunk{
 			ChunkUid:        chunk.UID.String(),
 			SimilarityScore: float32(simChunksScores[i].Score),
 			TextContent:     string(chunkContents[i].Content),
@@ -144,7 +145,22 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 				OriginalFileUid: chunk.KbFileUID.String(),
 				ContentType:     contentType,
 			},
-		})
+		}
+
+		if contentType == artifactpb.ContentType_CONTENT_TYPE_CHUNK && strings.HasSuffix(chunk.SourceFile, ".pdf") {
+			chunk.ChunkMetadata.Reference = &artifactpb.Chunk_Reference{
+				Start: &artifactpb.File_Position{
+					Unit:        artifactpb.File_Position_UNIT_PAGE,
+					Coordinates: []uint32{2},
+				},
+				End: &artifactpb.File_Position{
+					Unit:        artifactpb.File_Position_UNIT_PAGE,
+					Coordinates: []uint32{2},
+				},
+			}
+		}
+
+		simChunks = append(simChunks, chunk)
 	}
 
 	return &artifactpb.SimilarityChunksSearchResponse{SimilarChunks: simChunks}, nil

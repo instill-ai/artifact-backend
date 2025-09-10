@@ -523,7 +523,7 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 			downloadURL = response.GetDownloadUrl()
 		}
 
-		files = append(files, &artifactpb.File{
+		file := &artifactpb.File{
 			FileUid:            kbFile.UID.String(),
 			OwnerUid:           kbFile.Owner.String(),
 			CreatorUid:         kbFile.CreatorUID.String(),
@@ -541,7 +541,21 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 			Summary:            string(kbFile.Summary),
 			DownloadUrl:        downloadURL,
 			ConvertingPipeline: kbFile.ConvertingPipeline(),
-		})
+		}
+
+		// TODO: the converting step will extract the page length from the
+		// original file. We'll temporarily return static data so the frontend
+		// can use it to develop the file preview.
+		if file.ProcessStatus > artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CONVERTING &&
+			file.Type == artifactpb.FileType_FILE_TYPE_PDF {
+
+			file.Length = &artifactpb.File_Position{
+				Unit:        artifactpb.File_Position_UNIT_PAGE,
+				Coordinates: []uint32{4},
+			}
+		}
+
+		files = append(files, file)
 	}
 
 	return &artifactpb.ListCatalogFilesResponse{
