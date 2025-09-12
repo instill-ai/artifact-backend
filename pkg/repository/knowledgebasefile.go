@@ -110,6 +110,10 @@ type ExtraMetaData struct {
 	SummarizingTime int64  `json:"summarizing_time"`
 	ChunkingTime    int64  `json:"chunking_time"`
 	EmbeddingTime   int64  `json:"embedding_time"`
+
+	// Length of the file. The unit will depend on the filetype (e.g. pages,
+	// milliseconds).
+	Length []uint32 `json:"length,omitempty"`
 }
 
 // table columns map
@@ -786,6 +790,9 @@ func (r *Repository) UpdateKBFileMetadata(ctx context.Context, fileUID uuid.UUID
 		}
 		if updates.EmbeddingTime != 0 {
 			file.ExtraMetaDataUnmarshal.EmbeddingTime = updates.EmbeddingTime
+		}
+		if len(updates.Length) > 0 {
+			file.ExtraMetaDataUnmarshal.Length = updates.Length
 		}
 
 		// Marshal the updated ExtraMetaData.
