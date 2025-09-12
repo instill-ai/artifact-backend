@@ -79,7 +79,7 @@ func (s *service) ConvertToMDPipe(
 			break
 		}
 
-		pipelines = []PipelineRelease{ConvertDocToMDPipeline}
+		pipelines = DefaultConversionPipelines
 
 	default:
 		return "", fmt.Errorf("unsupported file type: %v", fileType)

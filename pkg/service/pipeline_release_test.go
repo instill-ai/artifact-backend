@@ -75,3 +75,69 @@ func TestPipelineReleaseFromName(t *testing.T) {
 		})
 	}
 }
+
+func TestPipelineRelease_Name(t *testing.T) {
+	c := qt.New(t)
+
+	got := PipelineRelease{
+		Namespace: "namespace",
+		ID:        "pipeline",
+		Version:   "v1.0.0",
+	}.Name()
+
+	c.Check(got, qt.Equals, "namespace/pipeline@v1.0.0")
+}
+
+func TestPipelineReleases_Names(t *testing.T) {
+	c := qt.New(t)
+
+	testcases := []struct {
+		name      string
+		pipelines PipelineReleases
+		want      []string
+	}{
+		{
+			name: "ok - single pipeline",
+			pipelines: PipelineReleases{
+				{
+					Namespace: "namespace",
+					ID:        "pipeline",
+					Version:   "v1.0.0",
+				},
+			},
+			want: []string{"namespace/pipeline@v1.0.0"},
+		},
+		{
+			name: "ok - multiple pipelines",
+			pipelines: PipelineReleases{
+				{
+					Namespace: "namespace1",
+					ID:        "pipeline1",
+					Version:   "v1.0.0",
+				},
+				{
+					Namespace: "namespace2",
+					ID:        "pipeline2",
+					Version:   "v2.1.0",
+				},
+				{
+					Namespace: "preset",
+					ID:        "indexing-embed",
+					Version:   "v1.1.0",
+				},
+			},
+			want: []string{
+				"namespace1/pipeline1@v1.0.0",
+				"namespace2/pipeline2@v2.1.0",
+				"preset/indexing-embed@v1.1.0",
+			},
+		},
+	}
+
+	for _, tc := range testcases {
+		c.Run(tc.name, func(c *qt.C) {
+			got := tc.pipelines.Names()
+			c.Check(got, qt.DeepEquals, tc.want)
+		})
+	}
+}

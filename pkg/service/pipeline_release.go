@@ -31,6 +31,20 @@ func (pr PipelineRelease) Name() string {
 	return pr.Namespace + "/" + pr.ID + "@" + pr.Version
 }
 
+// PipelineReleases is defined to implement common methods over pipeline
+// release lists.
+type PipelineReleases []PipelineRelease
+
+func (prs PipelineReleases) Names() []string {
+	names := make([]string, len(prs))
+	for i, pr := range prs {
+		names[i] = pr.Name()
+	}
+
+	return names
+
+}
+
 // PipelineReleaseFromName parses a PipelineRelease from its name, with the
 // format {namespace}/{id}@{version}.
 func PipelineReleaseFromName(name string) (PipelineRelease, error) {
@@ -62,9 +76,9 @@ var (
 	// Note: this pipeline is for the new indexing pipeline having
 	// convert_result or convert_result2
 	ConvertDocToMDPipeline = PipelineRelease{
-		Namespace: DefaultNamespaceID,
-		ID:        "indexing-advanced-convert-doc",
-		Version:   "v1.3.2",
+		Namespace: "jota",
+		ID:        "deterministic-conv-1",
+		Version:   "v1.0.0",
 	}
 
 	// ConvertDocToMDStandardPipeline is the default conversion pipeline for
@@ -111,7 +125,7 @@ var (
 	}
 
 	// PresetPipelinesList contains the preset pipelines used in catalogs.
-	PresetPipelinesList = []PipelineRelease{
+	PresetPipelinesList = PipelineReleases{
 		ConvertDocToMDPipeline,
 		ConvertDocToMDStandardPipeline,
 		GenerateSummaryPipeline,
@@ -120,6 +134,10 @@ var (
 		EmbedTextPipeline,
 		QAPipeline,
 	}
+
+	// DefaultConversionPipelines is the chain of pipelines used for converting
+	// documents to Markdown.
+	DefaultConversionPipelines = PipelineReleases{ConvertDocToMDPipeline}
 )
 
 // PipelineReleaseUpserter is used to upsert predefined pipeline releases into

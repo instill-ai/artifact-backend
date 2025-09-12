@@ -155,7 +155,7 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 	}
 
 	if len(dbData.ConvertingPipelines) == 0 {
-		catalog.ConvertingPipelines = defaultConvertingPipelines()
+		catalog.ConvertingPipelines = service.DefaultConversionPipelines.Names()
 	}
 
 	return &artifactpb.CreateCatalogResponse{Catalog: catalog}, nil
@@ -242,7 +242,7 @@ func (ph *PublicHandler) ListCatalogs(ctx context.Context, req *artifactpb.ListC
 		}
 
 		if len(kb.ConvertingPipelines) == 0 {
-			kbs[i].ConvertingPipelines = defaultConvertingPipelines()
+			kbs[i].ConvertingPipelines = service.DefaultConversionPipelines.Names()
 		}
 
 	}
@@ -501,16 +501,6 @@ func generateID() string {
 	return string(id)
 }
 
-// defaultConvertingPipelines returns the converting pipelines used when the
-// catalog doesn't specify any. These aren't stored because they have custom
-// flows (e.g., triggering a model instead of a pipeline or passing extra
-// arguments).
-func defaultConvertingPipelines() []string {
-	return []string{
-		service.ConvertDocToMDPipeline.Name(),
-	}
-}
-
 // sanitizeConvertingPipelines validates an input array of strings that
 // represent the conversion pipelines of a catalog. It checks the string format
 // is correct.
@@ -539,11 +529,6 @@ func sanitizeConvertingPipelines(pipelines []string) ([]string, error) {
 		}
 
 		validPipelines = append(validPipelines, pipelineName)
-
-	}
-
-	if len(validPipelines) == 0 {
-		validPipelines = defaultConvertingPipelines()
 	}
 
 	return validPipelines, nil
