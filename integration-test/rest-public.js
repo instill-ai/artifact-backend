@@ -323,17 +323,23 @@ export function CheckCatalog(data) {
     }
 
     for (const f of uploaded) {
+      var viewPath = `/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files?filter.fileUids=${f.fileUid}`
       // Get the catalog file view (file-specific) per API doc
-      const viewRes = http.request(
-        "GET",
-        `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}?file_uid=${f.fileUid}&fileUid=${f.fileUid}`,
-        null,
-        data.header
-      );
+      const viewRes = http.request("GET", artifactPublicHost + viewPath, null, data.header);
       if (viewRes.status !== 200) {
         try { console.log(`Catalog view failed (${f.type}) status=${viewRes.status} body=${JSON.stringify(viewRes.json())}`); } catch (e) { console.log(`Catalog view failed (${f.type}) status=${viewRes.status}`); }
       }
-      check(viewRes, { [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}?fileUid=${f.fileUid} 200 (${f.name}: ${f.type})`]: (r) => r.status === 200 });
+      check(viewRes, {
+        [`GET ${viewPath} 200 (${f.name}: ${f.type})`]: (r) => r.status === 200,
+        [`GET ${viewPath} file has name (${f.name}: ${f.type})`]: (r) =>  r.json().files[0].name === f.name,
+        [`GET ${viewPath} file process status is COMPLETED (${f.name}: ${f.type})`]: (r) =>  r.json().files[0].processStatus === "FILE_PROCESS_STATUS_COMPLETED",
+        [`GET ${viewPath} file has creatorUid (${f.name}: ${f.type})`]: (r) =>  r.json().files[0].creatorUid === data.expectedOwner.uid,
+        [`GET ${viewPath} file has size (${f.name}: ${f.type})`]: (r) =>  r.json().files[0].size > 0,
+        [`GET ${viewPath} file has totalChunks (${f.name}: ${f.type})`]: (r) =>  r.json().files[0].totalChunks > 0,
+        [`GET ${viewPath} file has totalTokens (${f.name}: ${f.type})`]: (r) =>  r.json().files[0].totalTokens > 0,
+        [`GET ${viewPath} file has summary (${f.name}: ${f.type})`]: (r) =>  r.json().files[0].summary > 0,
+        [`GET ${viewPath} file has downloadUrl (${f.name}: ${f.type})`]: (r) =>  r.json().files[0].downloadUrl.includes("v1alpha/blob-urls/"),
+      });
     }
 
     // List catalog files
