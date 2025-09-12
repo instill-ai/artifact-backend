@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.31.1](https://github.com/instill-ai/artifact-backend/compare/v0.31.0...v0.31.1) (2025-09-12)
+
+
+### Features
+
+* **chunk:** return page-level citation context in file list and similar chunk search ([#248](https://github.com/instill-ai/artifact-backend/issues/248)) ([5be7715](https://github.com/instill-ai/artifact-backend/commit/5be77156b89760829e2256ff419c7a2f57ca4736))
+
+
+### Bug Fixes
+
+* **conversion:** do not set default conversion pipeline in catalog record ([#250](https://github.com/instill-ai/artifact-backend/issues/250)) ([c629112](https://github.com/instill-ai/artifact-backend/commit/c6291123f07ad4a5c4cc33762b0985a1db99c775))
+
 ## [0.31.0](https://github.com/instill-ai/artifact-backend/compare/v0.30.1...v0.31.0) (2025-09-09)
 
 
