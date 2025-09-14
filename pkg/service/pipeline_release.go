@@ -76,9 +76,9 @@ var (
 	// Note: this pipeline is for the new indexing pipeline having
 	// convert_result or convert_result2
 	ConvertDocToMDPipeline = PipelineRelease{
-		Namespace: "jota",
-		ID:        "deterministic-conv-1",
-		Version:   "v1.0.0",
+		Namespace: DefaultNamespaceID,
+		ID:        "indexing-advanced-convert-doc",
+		Version:   "v1.3.2",
 	}
 
 	// ConvertDocToMDStandardPipeline is the default conversion pipeline for
