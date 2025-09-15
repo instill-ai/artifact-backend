@@ -543,15 +543,13 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 			ConvertingPipeline: kbFile.ConvertingPipeline(),
 		}
 
-		// TODO: the converting step will extract the page length from the
-		// original file. We'll temporarily return static data so the frontend
-		// can use it to develop the file preview.
-		if file.ProcessStatus > artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CONVERTING &&
-			file.Type == artifactpb.FileType_FILE_TYPE_PDF {
-
+		if kbFile.ExtraMetaDataUnmarshal != nil && kbFile.ExtraMetaDataUnmarshal.Length != nil {
 			file.Length = &artifactpb.File_Position{
+				// For now, only document conversion extracts page length, so
+				// we know the unit. When more types are supported, we'll need
+				// a service method that maps the file type to the length unit.
 				Unit:        artifactpb.File_Position_UNIT_PAGE,
-				Coordinates: []uint32{4},
+				Coordinates: kbFile.ExtraMetaDataUnmarshal.Length,
 			}
 		}
 

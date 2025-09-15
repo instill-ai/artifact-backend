@@ -19,7 +19,7 @@ import (
 // Service defines the Artifact domain use cases.
 type Service interface {
 	CheckNamespacePermission(context.Context, *resource.Namespace) error
-	ConvertToMDPipe(_ context.Context, fileUID uuid.UUID, fileBase64 string, _ artifactpb.FileType, _ []PipelineRelease) (string, error)
+	ConvertToMDPipe(context.Context, MDConversionParams) (*MDConversionResult, error)
 	GenerateSummary(_ context.Context, content, fileType string) (string, error)
 	ChunkMarkdownPipe(_ context.Context, markdown string) ([]Chunk, error)
 	ChunkTextPipe(_ context.Context, text string) ([]Chunk, error)

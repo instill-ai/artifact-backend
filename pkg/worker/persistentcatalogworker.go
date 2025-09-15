@@ -394,32 +394,13 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processWaitingFile(ctx context.C
 // The converted file is saved into object storage and the metadata is updated in the database.
 // Finally, the file status is updated to chunking in the database.
 // If the file is not a PDF, it returns an error.
-func (wp *persistentCatalogFileToEmbWorkerPool) processConvertingFile(ctx context.Context, file repository.KnowledgeBaseFile) (updatedFile *repository.KnowledgeBaseFile, nextStatus artifactpb.FileProcessStatus, err error) {
-	logger, _ := logx.GetZapLogger(ctx)
+func (wp *persistentCatalogFileToEmbWorkerPool) processConvertingFile(ctx context.Context, file repository.KnowledgeBaseFile) (updatedFile *repository.KnowledgeBaseFile, nextStatus artifactpb.FileProcessStatus, _ error) {
+	repo := wp.svc.Repository()
 
-	fileInMinIOPath := file.Destination
-
-	// TODO jvallesm: we should only return errors in these child methods and
-	// centralize logging in wp.processFile.
-	logger = logger.With(
-		zap.String("fileUID", file.UID.String()),
-		zap.String("filePath", fileInMinIOPath),
-	)
-
-	bucket := minio.BucketFromDestination(fileInMinIOPath)
-	data, err := wp.svc.MinIO().GetFile(ctx, bucket, fileInMinIOPath)
+	// Read converting pipelines from catalog and file records.
+	kb, err := repo.GetKnowledgeBaseByUID(ctx, file.KnowledgeBaseUID)
 	if err != nil {
-		logger.Error("Failed to get file from minIO")
-		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
-	}
-
-	// encode data to base64
-	base64Data := base64.StdEncoding.EncodeToString(data)
-
-	// Read converting pipelines from catalog.
-	kb, err := wp.svc.Repository().GetKnowledgeBaseByUID(ctx, file.KnowledgeBaseUID)
-	if err != nil {
-		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, fmt.Errorf("fetching parent catalog: %w", err)
+		return nil, 0, fmt.Errorf("fetching parent catalog: %w", err)
 	}
 
 	convertingPipelines := make([]service.PipelineRelease, 0, len(kb.ConvertingPipelines)+1)
@@ -428,7 +409,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processConvertingFile(ctx contex
 	if fileConvertingPipeName != "" {
 		fileConvertingPipeline, err := service.PipelineReleaseFromName(fileConvertingPipeName)
 		if err != nil {
-			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, fmt.Errorf("parsing pipeline name: %w", err)
+			return nil, 0, fmt.Errorf("parsing pipeline name: %w", err)
 		}
 
 		convertingPipelines = append(convertingPipelines, fileConvertingPipeline)
@@ -441,41 +422,56 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processConvertingFile(ctx contex
 
 		catalogConvertingPipeline, err := service.PipelineReleaseFromName(pipelineName)
 		if err != nil {
-			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, fmt.Errorf("parsing pipeline name: %w", err)
+			return nil, 0, fmt.Errorf("parsing pipeline name: %w", err)
 		}
 
 		convertingPipelines = append(convertingPipelines, catalogConvertingPipeline)
 	}
 
-	// convert the pdf file to md
-	convertedMD, err := wp.svc.ConvertToMDPipe(
-		ctx,
-		file.UID,
-		base64Data,
-		artifactpb.FileType(artifactpb.FileType_value[file.Type]),
-		convertingPipelines,
-	)
+	// Fetch file data.
+	bucket := minio.BucketFromDestination(file.Destination)
+	data, err := wp.svc.MinIO().GetFile(ctx, bucket, file.Destination)
 	if err != nil {
-		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, fmt.Errorf("converting file to Markdown: %w", err)
+		return nil, 0, fmt.Errorf("fetching file from MinIO: %w", err)
 	}
 
-	// save the converted file into object storage and metadata into database
-	err = saveConvertedFile(ctx, wp.svc, file.KnowledgeBaseUID, file.UID, "converted_"+file.Name, []byte(convertedMD))
+	// Convert the document to Markdown.
+	conversion, err := wp.svc.ConvertToMDPipe(ctx, service.MDConversionParams{
+		Base64Content: base64.StdEncoding.EncodeToString(data),
+		Type:          artifactpb.FileType(artifactpb.FileType_value[file.Type]),
+		Pipelines:     convertingPipelines,
+	})
 	if err != nil {
-		logger.Error("Failed to save converted data")
-		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
+		return nil, 0, fmt.Errorf("converting file to Markdown: %w", err)
 	}
-	// update the file status to chunking status in database
+
+	// Save the conversion metadata in the database and the converted string as
+	// a blob.
+	mdUpdate := repository.ExtraMetaData{
+		Length:         conversion.Length,
+		ConvertingPipe: conversion.PipelineRelease.Name(),
+	}
+	if err := repo.UpdateKBFileMetadata(ctx, file.UID, mdUpdate); err != nil {
+		return nil, 0, fmt.Errorf("saving file length file metadata: %w", err)
+	}
+
+	err = saveConvertedFile(ctx, wp.svc, file.KnowledgeBaseUID, file.UID, "converted_"+file.Name, []byte(conversion.Markdown))
+	if err != nil {
+		return nil, 0, fmt.Errorf("saving converted data: %w", err)
+	}
+
+	// Update file record with the next status.
+	nextStatus = artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_SUMMARIZING
 	updateMap := map[string]any{
-		repository.KnowledgeBaseFileColumn.ProcessStatus: artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_SUMMARIZING.String(),
-	}
-	updatedFile, err = wp.svc.Repository().UpdateKnowledgeBaseFile(ctx, file.UID.String(), updateMap)
-	if err != nil {
-		logger.Error("Failed to update file status")
-		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
+		repository.KnowledgeBaseFileColumn.ProcessStatus: nextStatus.String(),
 	}
 
-	return updatedFile, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_SUMMARIZING, nil
+	updatedFile, err = repo.UpdateKnowledgeBaseFile(ctx, file.UID.String(), updateMap)
+	if err != nil {
+		return nil, 0, fmt.Errorf("updating file status: %w", err)
+	}
+
+	return updatedFile, nextStatus, nil
 }
 
 // processSummarizingFile processes a file with summarizing status.
