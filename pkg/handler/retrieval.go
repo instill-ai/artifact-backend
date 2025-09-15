@@ -3,15 +3,12 @@ package handler
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/gofrs/uuid"
 	"go.uber.org/zap"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/instill-ai/artifact-backend/config"
-	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
@@ -118,49 +115,16 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 		if !chunk.Retrievable {
 			continue
 		}
-		var contentType artifactpb.ContentType
-		switch chunk.ContentType {
-		case string(constant.ChunkContentType):
-			contentType = artifactpb.ContentType_CONTENT_TYPE_CHUNK
-		case string(constant.SummaryContentType):
-			contentType = artifactpb.ContentType_CONTENT_TYPE_SUMMARY
-		case string(constant.AugmentedContentType):
-			contentType = artifactpb.ContentType_CONTENT_TYPE_AUGMENTED
-		default:
-			contentType = artifactpb.ContentType_CONTENT_TYPE_UNSPECIFIED
 
-		}
-		chunk := &artifactpb.SimilarityChunk{
+		pbChunk := &artifactpb.SimilarityChunk{
 			ChunkUid:        chunk.UID.String(),
 			SimilarityScore: float32(simChunksScores[i].Score),
 			TextContent:     string(chunkContents[i].Content),
 			SourceFile:      fileUIDMapName[chunk.KbFileUID],
-			ChunkMetadata: &artifactpb.Chunk{
-				ChunkUid:        chunk.UID.String(),
-				Retrievable:     chunk.Retrievable,
-				StartPos:        uint32(chunk.StartPos),
-				EndPos:          uint32(chunk.EndPos),
-				Tokens:          uint32(chunk.Tokens),
-				CreateTime:      timestamppb.New(*chunk.CreateTime),
-				OriginalFileUid: chunk.KbFileUID.String(),
-				ContentType:     contentType,
-			},
+			ChunkMetadata:   convertToProtoChunk(chunk),
 		}
 
-		if contentType == artifactpb.ContentType_CONTENT_TYPE_CHUNK && strings.HasSuffix(chunk.SourceFile, ".pdf") {
-			chunk.ChunkMetadata.Reference = &artifactpb.Chunk_Reference{
-				Start: &artifactpb.File_Position{
-					Unit:        artifactpb.File_Position_UNIT_PAGE,
-					Coordinates: []uint32{2},
-				},
-				End: &artifactpb.File_Position{
-					Unit:        artifactpb.File_Position_UNIT_PAGE,
-					Coordinates: []uint32{2},
-				},
-			}
-		}
-
-		simChunks = append(simChunks, chunk)
+		simChunks = append(simChunks, pbChunk)
 	}
 
 	return &artifactpb.SimilarityChunksSearchResponse{SimilarChunks: simChunks}, nil

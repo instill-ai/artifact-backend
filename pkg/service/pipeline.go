@@ -8,6 +8,7 @@ import (
 
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
@@ -49,11 +50,14 @@ func GetFileTypePrefix(fileType artifactpb.FileType) string {
 }
 
 // Chunk is a struct that represents a chunk of text.
-type Chunk = struct {
-	End    int
-	Start  int
-	Text   string
-	Tokens int
+type Chunk struct {
+	// Start and end contain the start and end positions of the chunk within
+	// the converted file.
+	Start     int
+	End       int
+	Text      string
+	Tokens    int
+	Reference *repository.ChunkReference
 }
 
 // GenerateSummary triggers the generate summary pipeline, processes markdown/text, and deducts credits from the caller's account.
