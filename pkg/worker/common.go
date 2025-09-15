@@ -136,25 +136,32 @@ func checkRegisteredFilesWorker(ctx context.Context, svc service.Service, fileUI
 	return nonExistentKeys
 }
 
-// saveConvertedFile saves a converted file into object storage and updates the metadata in the database.
-func saveConvertedFile(ctx context.Context, svc service.Service, kbUID, fileUID uuid.UUID, name string, convertedFile []byte) error {
-	logger, _ := logx.GetZapLogger(ctx)
-	_, err := svc.Repository().CreateConvertedFile(
-		ctx,
-		repository.ConvertedFile{KbUID: kbUID, FileUID: fileUID, Name: name, Type: "text/markdown", Destination: "destination"},
-		func(convertedFileUID uuid.UUID) (map[string]any, error) {
-			// save the converted file into object storage
-			err := svc.MinIO().SaveConvertedFile(ctx, kbUID.String(), convertedFileUID.String(), "md", convertedFile)
-			if err != nil {
-				return nil, err
-			}
-			output := make(map[string]any)
-			output[repository.ConvertedFileColumn.Destination] = svc.MinIO().GetConvertedFilePathInKnowledgeBase(kbUID.String(), convertedFileUID.String(), "md")
-			return output, nil
-		})
-	if err != nil {
-		logger.Error("Failed to save converted file into object storage and metadata into database.", zap.String("FileUID", fileUID.String()))
-		return err
+// saveConvertedFile saves a converted file into object storage and updates the
+// metadata in the database.
+func (wp *persistentCatalogFileToEmbWorkerPool) saveConvertedFile(ctx context.Context, kbUID, fileUID uuid.UUID, name string, conversion *service.MDConversionResult) error {
+	saveToMinIO := func(convertedFileUID uuid.UUID) (map[string]any, error) {
+		blobStorage := wp.svc.MinIO()
+		err := blobStorage.SaveConvertedFile(ctx, kbUID.String(), convertedFileUID.String(), "md", []byte(conversion.Markdown))
+		if err != nil {
+			return nil, fmt.Errorf("storing converted file as blob: %w", err)
+		}
+
+		output := make(map[string]any)
+		output[repository.ConvertedFileColumn.Destination] = blobStorage.GetConvertedFilePathInKnowledgeBase(kbUID.String(), convertedFileUID.String(), "md")
+
+		return output, nil
+	}
+
+	convertedFile := repository.ConvertedFile{
+		KbUID:        kbUID,
+		FileUID:      fileUID,
+		Name:         name,
+		Type:         "text/markdown",
+		Destination:  "destination",
+		PositionData: conversion.PositionData,
+	}
+	if _, err := wp.svc.Repository().CreateConvertedFile(ctx, convertedFile, saveToMinIO); err != nil {
+		return fmt.Errorf("storing converted file in repository: %w", err)
 	}
 
 	return nil

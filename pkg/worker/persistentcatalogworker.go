@@ -455,7 +455,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processConvertingFile(ctx contex
 		return nil, 0, fmt.Errorf("saving file length file metadata: %w", err)
 	}
 
-	err = saveConvertedFile(ctx, wp.svc, file.KnowledgeBaseUID, file.UID, "converted_"+file.Name, []byte(conversion.Markdown))
+	err = wp.saveConvertedFile(ctx, file.KnowledgeBaseUID, file.UID, "converted_"+file.Name, conversion)
 	if err != nil {
 		return nil, 0, fmt.Errorf("saving converted data: %w", err)
 	}
@@ -474,11 +474,9 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processConvertingFile(ctx contex
 	return updatedFile, nextStatus, nil
 }
 
-// processSummarizingFile processes a file with summarizing status.
-// If the file is a PDF, it retrieves the file from MinIO, converts it to Markdown using the PDF-to-Markdown pipeline, and then transitions to chunking status.
-// The converted file is saved into object storage and the metadata is updated in the database.
-// Finally, the file status is updated to chunking in the database.
-// If the file is not a PDF, it returns an error.
+// processSummarizingFile generates the summary of a converted file. After
+// updating the file record with the summary and metadata, it transitions to
+// the chunking state.
 func (wp *persistentCatalogFileToEmbWorkerPool) processSummarizingFile(ctx context.Context, file repository.KnowledgeBaseFile) (updatedFile *repository.KnowledgeBaseFile, nextStatus artifactpb.FileProcessStatus, err error) {
 	logger, _ := logx.GetZapLogger(ctx)
 	logger.Info("Processing summarizing status file.", zap.String("File uid", file.UID.String()))
