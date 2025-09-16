@@ -32,16 +32,51 @@ func convertToProtoChunk(chunk repository.TextChunk) *artifactpb.Chunk {
 		contentType = artifactpb.ContentType_CONTENT_TYPE_AUGMENTED
 	}
 
-	return &artifactpb.Chunk{
+	pbChunk := &artifactpb.Chunk{
 		ChunkUid:        chunk.UID.String(),
 		Retrievable:     chunk.Retrievable,
-		StartPos:        uint32(chunk.StartPos),
-		EndPos:          uint32(chunk.EndPos),
 		Tokens:          uint32(chunk.Tokens),
 		CreateTime:      timestamppb.New(*chunk.CreateTime),
 		OriginalFileUid: chunk.KbFileUID.String(),
 		ContentType:     contentType,
 	}
+
+	if pbChunk.ContentType != artifactpb.ContentType_CONTENT_TYPE_CHUNK {
+		return pbChunk
+	}
+
+	pbChunk.MarkdownReference = &artifactpb.Chunk_Reference{
+		Start: &artifactpb.File_Position{
+			Unit:        artifactpb.File_Position_UNIT_CHARACTER,
+			Coordinates: []uint32{uint32(chunk.StartPos)},
+		},
+		End: &artifactpb.File_Position{
+			Unit:        artifactpb.File_Position_UNIT_CHARACTER,
+			Coordinates: []uint32{uint32(chunk.EndPos)},
+		},
+	}
+
+	// StartPos and EndPos are deprecated in favor of MarkdownReference.
+	pbChunk.StartPos = uint32(chunk.StartPos)
+	pbChunk.EndPos = uint32(chunk.EndPos)
+
+	if chunk.Reference != nil && chunk.Reference.PageRange[0] != 0 && chunk.Reference.PageRange[1] != 0 {
+		// We only extract one kind of reference for now. When more file
+		// types are supported, we'll need to inspect the reference object
+		// to build the response correctly.
+		pbChunk.Reference = &artifactpb.Chunk_Reference{
+			Start: &artifactpb.File_Position{
+				Unit:        artifactpb.File_Position_UNIT_PAGE,
+				Coordinates: []uint32{chunk.Reference.PageRange[0]},
+			},
+			End: &artifactpb.File_Position{
+				Unit:        artifactpb.File_Position_UNIT_PAGE,
+				Coordinates: []uint32{chunk.Reference.PageRange[1]},
+			},
+		}
+	}
+
+	return pbChunk
 }
 
 // ListChunks lists the chunks of a file

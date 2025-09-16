@@ -8,6 +8,8 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/instill-ai/artifact-backend/pkg/repository"
+
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	pipelinepb "github.com/instill-ai/protogen-go/pipeline/pipeline/v1beta"
 	logx "github.com/instill-ai/x/log"
@@ -25,7 +27,7 @@ type MDConversionParams struct {
 // step.
 type MDConversionResult struct {
 	Markdown     string
-	PositionData *PositionData
+	PositionData *repository.PositionData
 
 	// Length of the file. The unit and dimensions will depend on the filetype
 	// (e.g. pages, milliseconds, pixels).
@@ -33,19 +35,6 @@ type MDConversionResult struct {
 
 	// PipelineRelease is the pipeline used for conversion.
 	PipelineRelease PipelineRelease
-}
-
-// PositionData contains metadata from the conversion step that will be used to
-// position the chunks extracted from the Markdown string within the original
-// file.
-//
-// When more filetypes are supported, this entity might evolve to accommodate
-// other kinds of positions (e.g. time markers mapping a character to a
-// duration).
-type PositionData struct {
-	// Page delimiters contains the position of the last character in each
-	// page.
-	PageDelimiters []int32
 }
 
 // convertResultParser extracts the conversion result from the pipeline

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/gofrs/uuid"
 	"go.uber.org/zap"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
@@ -40,16 +42,31 @@ type TextChunkI interface {
 	UpdateChunk(ctx context.Context, chunkUID string, updates map[string]any) (*TextChunk, error)
 }
 
-// currently, we use minio to store the chunk but in the future, we may just get the content from the source
-// and segment it using start and end on the fly which is more storage efficient.
+// ChunkReference contains the position information of the chunk within the
+// original file.
+type ChunkReference struct {
+	// PageRange contains the start and end pages of the chunk when the page
+	// belongs to a document. Positions in this case are are 1-indexed in order
+	// to align with the document visualization standards (e.g. page 4 of 4).
+	PageRange [2]uint32
+}
+
+// currently, we use minio to store the chunk but in the future, we may just
+// get the content from the source and segment it using start and end on the
+// fly which is more storage efficient.
 type TextChunk struct {
 	UID uuid.UUID `gorm:"column:uid;type:uuid;default:gen_random_uuid();primaryKey" json:"uid"`
-	// SourceUID is the UID of the source entity that the chunk is associated with. i.e. the UID of file or converted file etc.
-	// And SourceTable is the table name of the source entity.
+	// SourceUID is the UID of the source entity that the chunk is associated
+	// with. i.e. the UID of file or converted file etc. And SourceTable is the
+	// table name of the source entity.
 	SourceTable string    `gorm:"column:source_table;size:255;not null" json:"source_table"`
 	SourceUID   uuid.UUID `gorm:"column:source_uid;type:uuid;not null" json:"source_uid"`
 	StartPos    int       `gorm:"column:start_pos;not null" json:"start"`
 	EndPos      int       `gorm:"column:end_pos;not null" json:"end"`
+
+	ReferenceJSON datatypes.JSON  `gorm:"column:reference;type:jsonb" json:"reference_json"`
+	Reference     *ChunkReference `gorm:"-" json:"chunk_reference"`
+
 	// ContentDest is the destination path in minio
 	ContentDest string     `gorm:"column:content_dest;size:255;not null" json:"content_dest"`
 	Tokens      int        `gorm:"column:tokens;not null" json:"tokens"`
@@ -389,4 +406,38 @@ func (r *Repository) ListChunksByKbFileUID(ctx context.Context, kbFileUID uuid.U
 func (r *Repository) HardDeleteChunksByKbFileUID(ctx context.Context, kbFileUID uuid.UUID) error {
 	where := fmt.Sprintf("%s = ?", TextChunkColumn.KbFileUID)
 	return r.db.WithContext(ctx).Where(where, kbFileUID).Unscoped().Delete(&TextChunk{}).Error
+}
+
+// GORM hooks
+func (tc *TextChunk) fillReferenceJSON() (err error) {
+	if tc.Reference == nil {
+		return nil
+	}
+
+	tc.ReferenceJSON, err = json.Marshal(tc.Reference)
+	return err
+}
+
+func (tc *TextChunk) BeforeCreate(tx *gorm.DB) error {
+	return tc.fillReferenceJSON()
+}
+
+func (tc *TextChunk) BeforeSave(tx *gorm.DB) error {
+	return tc.fillReferenceJSON()
+}
+
+func (tc *TextChunk) BeforeUpdate(tx *gorm.DB) error {
+	return tc.fillReferenceJSON()
+}
+
+func (tc *TextChunk) AfterFind(tx *gorm.DB) error {
+	if tc.ReferenceJSON == nil {
+		return nil
+	}
+
+	if tc.Reference == nil {
+		tc.Reference = new(ChunkReference)
+	}
+
+	return json.Unmarshal(tc.ReferenceJSON, tc.Reference)
 }

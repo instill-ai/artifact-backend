@@ -2,11 +2,13 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
 
 	"github.com/gofrs/uuid"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -19,6 +21,23 @@ type ConvertedFileI interface {
 	GetConvertedFileByFileUID(ctx context.Context, fileUID uuid.UUID) (*ConvertedFile, error)
 }
 
+// PositionData contains metadata from the conversion step that will be used to
+// position the chunks extracted from the Markdown string within the original
+// file.
+//
+// When more filetypes are supported, this entity might evolve to accommodate
+// other kinds of positions (e.g. time markers mapping a character to a
+// duration).
+type PositionData struct {
+	// Page delimiters contains the byte length from the beginning of the
+	// document until the last character in a given page. The cumulative length
+	// of the pages is kept in order ease the positioning of the chunks within
+	// the original document.
+	// E.g., we can access the contents of a page as
+	// []rune(markdownStr)[pageDelimiters[i]:pageDelimiters[i+1]]
+	PageDelimiters []uint32 `json:"page_delimiters"`
+}
+
 type ConvertedFile struct {
 	UID   uuid.UUID `gorm:"column:uid;type:uuid;default:gen_random_uuid();primaryKey" json:"uid"`
 	KbUID uuid.UUID `gorm:"column:kb_uid;type:uuid;not null" json:"kb_uid"`
@@ -28,9 +47,13 @@ type ConvertedFile struct {
 	// MIME type
 	Type string `gorm:"column:type;size:100;not null" json:"type"`
 	// destination path in minio
-	Destination string     `gorm:"column:destination;size:255;not null" json:"destination"`
-	CreateTime  *time.Time `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
-	UpdateTime  *time.Time `gorm:"column:update_time;not null;default:CURRENT_TIMESTAMP;autoUpdateTime" json:"update_time"`
+	Destination string `gorm:"column:destination;size:255;not null" json:"destination"`
+
+	PositionDataJSON datatypes.JSON `gorm:"column:position_data;type:jsonb" json:"position_data_json"`
+	PositionData     *PositionData  `gorm:"-" json:"position_data"`
+
+	CreateTime *time.Time `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
+	UpdateTime *time.Time `gorm:"column:update_time;not null;default:CURRENT_TIMESTAMP;autoUpdateTime" json:"update_time"`
 }
 
 type ConvertedFileColumns struct {
@@ -173,4 +196,38 @@ func (r *Repository) HardDeleteConvertedFileByFileUID(ctx context.Context, fileU
 		return err
 	}
 	return nil
+}
+
+// GORM hooks
+func (cf *ConvertedFile) fillPositionDataJSON() (err error) {
+	if cf.PositionData == nil {
+		return nil
+	}
+
+	cf.PositionDataJSON, err = json.Marshal(cf.PositionData)
+	return err
+}
+
+func (cf *ConvertedFile) BeforeCreate(tx *gorm.DB) error {
+	return cf.fillPositionDataJSON()
+}
+
+func (cf *ConvertedFile) BeforeSave(tx *gorm.DB) error {
+	return cf.fillPositionDataJSON()
+}
+
+func (cf *ConvertedFile) BeforeUpdate(tx *gorm.DB) error {
+	return cf.fillPositionDataJSON()
+}
+
+func (cf *ConvertedFile) AfterFind(tx *gorm.DB) error {
+	if cf.PositionDataJSON == nil {
+		return nil
+	}
+
+	if cf.PositionData == nil {
+		cf.PositionData = new(PositionData)
+	}
+
+	return json.Unmarshal(cf.PositionDataJSON, cf.PositionData)
 }

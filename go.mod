@@ -26,14 +26,19 @@ require (
 	golang.org/x/net v0.41.0
 	google.golang.org/grpc v1.73.0
 	google.golang.org/protobuf v1.36.6
-	gorm.io/driver/postgres v1.4.5
+	gorm.io/datatypes v1.2.6
+	gorm.io/driver/postgres v1.5.0
 	gorm.io/gorm v1.30.0
 )
 
 require (
+	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.2 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
+	github.com/go-sql-driver/mysql v1.8.1 // indirect
+	github.com/jackc/pgx/v5 v5.5.5 // indirect
+	github.com/jackc/puddle/v2 v2.2.1 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/philhofer/fwd v1.1.3-0.20240916144458-20a13a1f6b7c // indirect
 	github.com/tinylib/msgp v1.3.0 // indirect
@@ -54,6 +59,7 @@ require (
 	go.temporal.io/sdk v1.35.0 // indirect
 	golang.org/x/sync v0.15.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250603155806-513f23925822 // indirect
+	gorm.io/driver/mysql v1.5.6 // indirect
 )
 
 require (
@@ -85,8 +91,6 @@ require (
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgproto3/v2 v2.3.3 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
-	github.com/jackc/pgtype v1.14.0 // indirect
-	github.com/jackc/pgx/v4 v4.18.2 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect

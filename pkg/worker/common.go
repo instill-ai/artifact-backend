@@ -136,49 +136,48 @@ func checkRegisteredFilesWorker(ctx context.Context, svc service.Service, fileUI
 	return nonExistentKeys
 }
 
-// saveConvertedFile saves a converted file into object storage and updates the metadata in the database.
-func saveConvertedFile(ctx context.Context, svc service.Service, kbUID, fileUID uuid.UUID, name string, convertedFile []byte) error {
-	logger, _ := logx.GetZapLogger(ctx)
-	_, err := svc.Repository().CreateConvertedFile(
-		ctx,
-		repository.ConvertedFile{KbUID: kbUID, FileUID: fileUID, Name: name, Type: "text/markdown", Destination: "destination"},
-		func(convertedFileUID uuid.UUID) (map[string]any, error) {
-			// save the converted file into object storage
-			err := svc.MinIO().SaveConvertedFile(ctx, kbUID.String(), convertedFileUID.String(), "md", convertedFile)
-			if err != nil {
-				return nil, err
-			}
-			output := make(map[string]any)
-			output[repository.ConvertedFileColumn.Destination] = svc.MinIO().GetConvertedFilePathInKnowledgeBase(kbUID.String(), convertedFileUID.String(), "md")
-			return output, nil
-		})
-	if err != nil {
-		logger.Error("Failed to save converted file into object storage and metadata into database.", zap.String("FileUID", fileUID.String()))
-		return err
+// saveConvertedFile saves a converted file into object storage and updates the
+// metadata in the database.
+func (wp *persistentCatalogFileToEmbWorkerPool) saveConvertedFile(ctx context.Context, kbUID, fileUID uuid.UUID, name string, conversion *service.MDConversionResult) error {
+	saveToMinIO := func(convertedFileUID uuid.UUID) (map[string]any, error) {
+		blobStorage := wp.svc.MinIO()
+		err := blobStorage.SaveConvertedFile(ctx, kbUID.String(), convertedFileUID.String(), "md", []byte(conversion.Markdown))
+		if err != nil {
+			return nil, fmt.Errorf("storing converted file as blob: %w", err)
+		}
+
+		output := make(map[string]any)
+		output[repository.ConvertedFileColumn.Destination] = blobStorage.GetConvertedFilePathInKnowledgeBase(kbUID.String(), convertedFileUID.String(), "md")
+
+		return output, nil
+	}
+
+	convertedFile := repository.ConvertedFile{
+		KbUID:        kbUID,
+		FileUID:      fileUID,
+		Name:         name,
+		Type:         "text/markdown",
+		Destination:  "destination",
+		PositionData: conversion.PositionData,
+	}
+	if _, err := wp.svc.Repository().CreateConvertedFile(ctx, convertedFile, saveToMinIO); err != nil {
+		return fmt.Errorf("storing converted file in repository: %w", err)
 	}
 
 	return nil
 }
 
-type chunk = struct {
-	End    int
-	Start  int
-	Text   string
-	Tokens int
-}
-
 // saveChunks saves chunks into object storage and updates the metadata in the database.
-func saveChunks(ctx context.Context, svc service.Service, kbUID string, kbFileUID uuid.UUID, sourceTable string, sourceUID uuid.UUID, summaryChunks, contetChunks []chunk, fileType string) error {
-	logger, _ := logx.GetZapLogger(ctx)
-	textChunks := make([]*repository.TextChunk, len(summaryChunks)+len(contetChunks))
-	texts := make([]string, len(summaryChunks)+len(contetChunks))
+func (wp *persistentCatalogFileToEmbWorkerPool) saveChunks(
+	ctx context.Context,
+	kbUID, kbFileUID, sourceUID uuid.UUID,
+	sourceTable string,
+	summaryChunks, contentChunks []service.Chunk,
+	fileType string,
+) error {
+	textChunks := make([]*repository.TextChunk, len(summaryChunks)+len(contentChunks))
+	texts := make([]string, len(summaryChunks)+len(contentChunks))
 
-	// turn kbUid to uuid no must parse
-	kbUIDuuid, err := uuid.FromString(kbUID)
-	if err != nil {
-		logger.Error("Failed to parse kbUID to uuid.", zap.String("KbUID", kbUID))
-		return err
-	}
 	for i, c := range summaryChunks {
 		textChunks[i] = &repository.TextChunk{
 			SourceUID:   sourceUID,
@@ -189,54 +188,58 @@ func saveChunks(ctx context.Context, svc service.Service, kbUID string, kbFileUI
 			Tokens:      c.Tokens,
 			Retrievable: true,
 			InOrder:     i,
-			KbUID:       kbUIDuuid,
+			KbUID:       kbUID,
 			KbFileUID:   kbFileUID,
 			FileType:    fileType,
 			ContentType: string(constant.SummaryContentType),
 		}
 		texts[i] = c.Text
 	}
-	for i, c := range contetChunks {
+	for i, c := range contentChunks {
 		ii := i + len(summaryChunks)
 		textChunks[ii] = &repository.TextChunk{
 			SourceUID:   sourceUID,
 			SourceTable: sourceTable,
 			StartPos:    c.Start,
 			EndPos:      c.End,
+			Reference:   c.Reference,
 			ContentDest: "not set yet because we need to save the chunks in db to get the uid",
 			Tokens:      c.Tokens,
 			Retrievable: true,
 			InOrder:     ii,
-			KbUID:       kbUIDuuid,
+			KbUID:       kbUID,
 			KbFileUID:   kbFileUID,
 			FileType:    fileType,
 			ContentType: string(constant.ChunkContentType),
 		}
+
 		texts[ii] = c.Text
 	}
-	_, err = svc.Repository().DeleteAndCreateChunks(ctx, sourceTable, sourceUID, textChunks,
-		func(chunkUIDs []string) (map[string]any, error) {
-			// save the chunksForMinIO into object storage
-			chunksForMinIO := make(map[minio.ChunkUIDType]minio.ChunkContentType, len(textChunks))
-			for i, uid := range chunkUIDs {
-				chunksForMinIO[minio.ChunkUIDType(uid)] = minio.ChunkContentType([]byte(texts[i]))
-			}
-			err := svc.MinIO().SaveTextChunks(ctx, kbUID, chunksForMinIO)
-			if err != nil {
-				logger.Error("Failed to save chunks into object storage.", zap.String("SourceUID", sourceUID.String()))
-				return nil, err
-			}
-			chunkDestMap := make(map[string]any, len(chunkUIDs))
-			for _, chunkUID := range chunkUIDs {
-				chunkDestMap[chunkUID] = svc.MinIO().GetChunkPathInKnowledgeBase(kbUID, string(chunkUID))
-			}
-			return chunkDestMap, nil
-		},
-	)
-	if err != nil {
-		logger.Error("Failed to save chunks into object storage and metadata into database.", zap.String("SourceUID", sourceUID.String()))
-		return err
+
+	saveToMinIO := func(chunkUIDs []string) (map[string]any, error) {
+		chunksForMinIO := make(map[minio.ChunkUIDType]minio.ChunkContentType, len(textChunks))
+		for i, uid := range chunkUIDs {
+			chunksForMinIO[minio.ChunkUIDType(uid)] = minio.ChunkContentType([]byte(texts[i]))
+		}
+
+		err := wp.svc.MinIO().SaveTextChunks(ctx, kbUID.String(), chunksForMinIO)
+		if err != nil {
+			return nil, fmt.Errorf("storing chunk blobs: %w", err)
+		}
+
+		chunkDestMap := make(map[string]any, len(chunkUIDs))
+		for _, chunkUID := range chunkUIDs {
+			chunkDestMap[chunkUID] = wp.svc.MinIO().GetChunkPathInKnowledgeBase(kbUID.String(), string(chunkUID))
+		}
+
+		return chunkDestMap, nil
 	}
+
+	_, err := wp.svc.Repository().DeleteAndCreateChunks(ctx, sourceTable, sourceUID, textChunks, saveToMinIO)
+	if err != nil {
+		return fmt.Errorf("storing chunk records in repository: %w", err)
+	}
+
 	return nil
 }
 
