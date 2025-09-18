@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.32.0](https://github.com/instill-ai/artifact-backend/compare/v0.31.1...v0.32.0) (2025-09-18)
+
+
+### Features
+
+* **chunking:** store page references with chunk records ([#255](https://github.com/instill-ai/artifact-backend/issues/255)) ([94d1e2e](https://github.com/instill-ai/artifact-backend/commit/94d1e2e10dae2e6f3a8fd97c86c06bae7353965f))
+* **kbfile:** return length in conversion step and store it as metadata ([#251](https://github.com/instill-ai/artifact-backend/issues/251)) ([4178d05](https://github.com/instill-ai/artifact-backend/commit/4178d05cdd966e97f95924626fb48ed83c5c4863))
+
+
+### Bug Fixes
+
+* **integration-test:** fix file summary check  ([#254](https://github.com/instill-ai/artifact-backend/issues/254)) ([6cccfc1](https://github.com/instill-ai/artifact-backend/commit/6cccfc1ccde4403ce91caf2cf8b11a3e4ea8f420))
+* **preset:** revert wrongful update in conversion pipeline ID ([#252](https://github.com/instill-ai/artifact-backend/issues/252)) ([0737b0c](https://github.com/instill-ai/artifact-backend/commit/0737b0c3363f697801ebb7f8e1ce98cd6b430440))
+
+
+### Miscellaneous
+
+* release v0.32.0 ([#256](https://github.com/instill-ai/artifact-backend/issues/256)) ([2e90cd4](https://github.com/instill-ai/artifact-backend/commit/2e90cd4677be65f8a6890455337dfe8eff2b9218))
+
 ## [0.31.1](https://github.com/instill-ai/artifact-backend/compare/v0.31.0...v0.31.1) (2025-09-12)
 
 
