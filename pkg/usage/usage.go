@@ -3,8 +3,10 @@ package usage
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/gofrs/uuid"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
@@ -40,11 +42,15 @@ func NewUsage(ctx context.Context, mu mgmtpb.MgmtPrivateServiceClient, rc *redis
 	logger, _ := logx.GetZapLogger(ctx)
 
 	var defaultOwnerUID string
-	if resp, err := mu.GetUserAdmin(ctx, &mgmtpb.GetUserAdminRequest{UserId: constant.DefaultUserID}); err == nil {
-		defaultOwnerUID = resp.GetUser().GetUid()
+	if user, err := mu.GetUserAdmin(ctx, &mgmtpb.GetUserAdminRequest{UserId: constant.DefaultUserID}); err == nil {
+		defaultOwnerUID = user.GetUser().GetUid()
+	} else if strings.Contains(err.Error(), "users/admin") {
+		// Only Instill Core CE has the default user "admin"
+		logger.Debug(fmt.Sprintf("error getting default user: %v, use a zero uuid as default owner uid", err))
+		defaultOwnerUID = uuid.Nil.String()
 	} else {
-		logger.Error("Failed to get default user, usage reporter will not start", zap.Error(err))
-		return nil // Return nil instead of continuing with empty defaultOwnerUID
+		logger.Error(err.Error())
+		return nil
 	}
 
 	artifactReporter, err := usageclient.InitReporter(ctx, usc, usagepb.Session_SERVICE_ARTIFACT, config.Config.Server.Edition, serviceVersion, defaultOwnerUID)
@@ -144,6 +150,10 @@ func (u *usage) StartReporter(ctx context.Context) {
 	var defaultOwnerUID string
 	if resp, err := u.mgmtPrivateServiceClient.GetUserAdmin(ctx, &mgmtpb.GetUserAdminRequest{UserId: constant.DefaultUserID}); err == nil {
 		defaultOwnerUID = resp.GetUser().GetUid()
+	} else if strings.Contains(err.Error(), "users/admin") {
+		// Only Instill Core CE has the default user "admin"
+		logger.Debug(fmt.Sprintf("error getting default user: %v, use a zero uuid as default owner uid", err))
+		defaultOwnerUID = uuid.Nil.String()
 	} else {
 		logger.Error(err.Error())
 		return
@@ -169,6 +179,10 @@ func (u *usage) TriggerSingleReporter(ctx context.Context) {
 	var defaultOwnerUID string
 	if resp, err := u.mgmtPrivateServiceClient.GetUserAdmin(ctx, &mgmtpb.GetUserAdminRequest{UserId: constant.DefaultUserID}); err == nil {
 		defaultOwnerUID = resp.GetUser().GetUid()
+	} else if strings.Contains(err.Error(), "users/admin") {
+		// Only Instill Core CE has the default user "admin"
+		logger.Debug(fmt.Sprintf("error getting default user: %v, use a zero uuid as default owner uid", err))
+		defaultOwnerUID = uuid.Nil.String()
 	} else {
 		logger.Error(err.Error())
 		return
