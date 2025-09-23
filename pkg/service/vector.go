@@ -55,6 +55,7 @@ type VectorDatabase interface {
 	DropCollection(_ context.Context, id string) error
 	SimilarVectorsInCollection(context.Context, SimilarVectorSearchParam) ([][]SimilarEmbedding, error)
 	DeleteEmbeddingsInCollection(_ context.Context, collID string, embeddingUID []string) error
+	DeleteEmbeddingsWithFileUID(_ context.Context, collID string, fileUID uuid.UUID) error
 	// CheckFileUIDMetadata checks if the collection has the file UID metadata
 	// field, which wasn't introduced since the beginning and is not present in
 	// legacy collections.

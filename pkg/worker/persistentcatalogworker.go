@@ -819,7 +819,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processEmbeddingFile(ctx context
 			ContentType: chunks[i].ContentType,
 		}
 	}
-	err = saveEmbeddings(ctx, wp.svc, file.KnowledgeBaseUID, embeddings, file.Name)
+	err = saveEmbeddings(ctx, wp.svc, file.KnowledgeBaseUID, file.UID, embeddings, file.Name)
 	if err != nil {
 		logger.Error("Failed to save embeddings into vector database and metadata into database.", zap.String("SourceUID", sourceUID.String()))
 		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err

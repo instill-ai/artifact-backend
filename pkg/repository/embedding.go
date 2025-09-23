@@ -8,22 +8,16 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
-	"go.uber.org/zap"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 
 	logx "github.com/instill-ai/x/log"
 )
 
 type EmbeddingI interface {
-	UpsertEmbeddings(ctx context.Context, embeddings []Embedding, externalServiceCall func(embUIDs []string) error) ([]Embedding, error)
-	DeleteEmbeddingsBySource(ctx context.Context, sourceTable string, sourceUID uuid.UUID) error
-	DeleteEmbeddingsByUIDs(ctx context.Context, embUIDs []uuid.UUID) error
-	HardDeleteEmbeddingsByKbUID(ctx context.Context, kbUID uuid.UUID) error
-	HardDeleteEmbeddingsByKbFileUID(ctx context.Context, kbFileUID uuid.UUID) error
-	// GetEmbeddingByUIDs fetches embeddings by their UIDs.
-	GetEmbeddingByUIDs(ctx context.Context, embUIDs []uuid.UUID) ([]Embedding, error)
-	ListEmbeddingsByKbFileUID(ctx context.Context, kbFileUID uuid.UUID) ([]Embedding, error)
+	DeleteAndCreateEmbeddings(_ context.Context, fileUID uuid.UUID, embeddings []Embedding, externalServiceCall func([]Embedding) error) ([]Embedding, error)
+	HardDeleteEmbeddingsByKbUID(_ context.Context, kbUID uuid.UUID) error
+	HardDeleteEmbeddingsByKbFileUID(_ context.Context, kbFileUID uuid.UUID) error
+	ListEmbeddingsByKbFileUID(_ context.Context, kbFileUID uuid.UUID) ([]Embedding, error)
 }
 type Embedding struct {
 	UID uuid.UUID `gorm:"column:uid;type:uuid;default:gen_random_uuid();primaryKey" json:"uid"`
@@ -123,39 +117,41 @@ func (Embedding) TableName() string {
 	return "embedding"
 }
 
-// UpsertEmbeddings upserts embeddings into the database. If externalServiceCall
-// is not nil, it will be called with the list of embedding UIDs.
-func (r *Repository) UpsertEmbeddings(
+// DeleteAndCreateEmbeddings inserts a set of new embeddings extracted from a
+// file into the database. Previous embeddings might exist, which indicates that
+// the file is being reprocessed. In that case, the existing embeddings are
+// deleted.  A function is passed as an argument as a way to call external
+// services (i.e., the vector database) within the upsert transaction.
+func (r *Repository) DeleteAndCreateEmbeddings(
 	ctx context.Context,
+	fileUID uuid.UUID,
 	embeddings []Embedding,
-	externalServiceCall func(embUIDs []string) error,
+	externalServiceCall func([]Embedding) error,
 ) ([]Embedding, error) {
-	// get logger
+
 	logger, _ := logx.GetZapLogger(ctx)
+
 	// Start a transaction
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if len(embeddings) == 0 {
-			logger.Warn("no embeddings to upsert")
-			return nil
-		}
-		// Upsert the embeddings
-		if err := tx.Clauses(clause.OnConflict{
-			Columns:   []clause.Column{{Name: EmbeddingColumn.SourceTable}, {Name: EmbeddingColumn.SourceUID}}, // Unique column that triggers the upsert
-			DoUpdates: clause.AssignmentColumns([]string{EmbeddingColumn.Vector}),                              // Fields to update on conflict
-		}).Create(&embeddings).Error; err != nil {
-			logger.Error("failed to upsert embeddings", zap.Error(err))
-			return fmt.Errorf("failed to upsert embeddings: %w", err)
+		// Delete existing embeddings
+		if err := tx.Where("kb_file_uid = ?", fileUID).Delete(&Embedding{}).Error; err != nil {
+			return fmt.Errorf("deleting existing embeddings: %w", err)
 		}
 
-		embUIDs := make([]string, len(embeddings))
-		for i, emb := range embeddings {
-			embUIDs[i] = emb.UID.String()
+		if len(embeddings) == 0 {
+			logger.Warn("no embeddings to upsert")
+			return nil // return nil to commit the transaction (DELETE was successful)
+		}
+
+		// Insert new embeddings. This will update the UIDs in the embedding
+		// slice.
+		if err := tx.Create(&embeddings).Error; err != nil {
+			return fmt.Errorf("creating embeddings: %w", err)
 		}
 
 		if externalServiceCall != nil {
-			if err := externalServiceCall(embUIDs); err != nil {
-				logger.Error("external service call failed in upsertEmbeddings", zap.Error(err))
-				return fmt.Errorf("external service call failed: %w", err)
+			if err := externalServiceCall(embeddings); err != nil {
+				return fmt.Errorf("calling external service: %w", err)
 			}
 		}
 
@@ -163,32 +159,9 @@ func (r *Repository) UpsertEmbeddings(
 	})
 
 	if err != nil {
-		logger.Error("upsertEmbeddings transaction failed", zap.Error(err))
 		return nil, fmt.Errorf("transaction failed: %w", err)
 	}
 
-	return embeddings, nil
-}
-
-// DeleteEmbeddingsBySource deletes all the embeddings associated with a certain source table and sourceUID.
-func (r *Repository) DeleteEmbeddingsBySource(ctx context.Context, sourceTable string, sourceUID uuid.UUID) error {
-	where := fmt.Sprintf("%s = ? AND %s = ?", EmbeddingColumn.SourceTable, EmbeddingColumn.SourceUID)
-	return r.db.WithContext(ctx).Where(where, sourceTable, sourceUID).Delete(&Embedding{}).Error
-}
-
-// DeleteEmbeddingsByUIDs deletes all the embeddings associated with a certain source table and sourceUID.
-func (r *Repository) DeleteEmbeddingsByUIDs(ctx context.Context, embUIDs []uuid.UUID) error {
-	where := fmt.Sprintf("%s IN (?)", EmbeddingColumn.UID)
-	return r.db.WithContext(ctx).Where(where, embUIDs).Delete(&Embedding{}).Error
-}
-
-// GetEmbeddingByUIDs fetches embeddings by their UIDs.
-func (r *Repository) GetEmbeddingByUIDs(ctx context.Context, embUIDs []uuid.UUID) ([]Embedding, error) {
-	var embeddings []Embedding
-	where := fmt.Sprintf("%s IN (?)", EmbeddingColumn.UID)
-	if err := r.db.WithContext(ctx).Where(where, embUIDs).Find(&embeddings).Error; err != nil {
-		return nil, err
-	}
 	return embeddings, nil
 }
 
