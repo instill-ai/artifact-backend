@@ -146,7 +146,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) saveConvertedFile(ctx context.Co
 			return "", fmt.Errorf("deleting existing converted file: %w", err)
 		}
 
-		dest, err := blobStorage.SaveConvertedFile(ctx, kbUID.String(), fileUID.String(), convertedFileUID.String(), "md", []byte(conversion.Markdown))
+		dest, err := blobStorage.SaveConvertedFile(ctx, kbUID, fileUID, convertedFileUID, "md", []byte(conversion.Markdown))
 		if err != nil {
 			return "", fmt.Errorf("storing converted file as blob: %w", err)
 		}
@@ -228,7 +228,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) saveChunks(
 			return nil, fmt.Errorf("deleting existing chunks: %w", err)
 		}
 
-		return wp.svc.MinIO().SaveTextChunks(ctx, kbUID.String(), kbFileUID.String(), chunksForMinIO)
+		return wp.svc.MinIO().SaveTextChunks(ctx, kbUID, kbFileUID, chunksForMinIO)
 	}
 
 	_, err := wp.svc.Repository().DeleteAndCreateChunks(ctx, kbFileUID, textChunks, saveToMinIO)
