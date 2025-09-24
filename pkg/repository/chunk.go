@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
-	"go.uber.org/zap"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -19,27 +18,32 @@ import (
 
 type TextChunkI interface {
 	TextChunkTableName() string
-	DeleteAndCreateChunks(ctx context.Context, sourceTable string, sourceUID uuid.UUID, chunks []*TextChunk, externalServiceCall func(chunkUIDs []string) (map[string]any, error)) ([]*TextChunk, error)
-	DeleteChunksBySource(ctx context.Context, sourceTable string, sourceUID uuid.UUID) error
-	DeleteChunksByUIDs(ctx context.Context, chunkUIDs []uuid.UUID) error
+
+	DeleteAndCreateChunks(
+		_ context.Context,
+		fileUID uuid.UUID,
+		chunks []*TextChunk,
+		externalServiceCall func(chunkUIDs []string) (destinations map[string]string, _ error),
+	) ([]*TextChunk, error)
+
 	// HardDeleteChunksByKbUID deletes all the chunks associated with a certain kbUID.
-	HardDeleteChunksByKbUID(ctx context.Context, kbUID uuid.UUID) error
+	HardDeleteChunksByKbUID(_ context.Context, kbUID uuid.UUID) error
 	// HardDeleteChunksByKbFileUID deletes all the chunks associated with a certain kbFileUID.
-	HardDeleteChunksByKbFileUID(ctx context.Context, kbFileUID uuid.UUID) error
-	GetTextChunksBySource(ctx context.Context, sourceTable string, sourceUID uuid.UUID) ([]TextChunk, error)
-	GetChunksByUIDs(ctx context.Context, chunkUIDs []uuid.UUID) ([]TextChunk, error)
-	GetTotalTokensByListKBUIDs(ctx context.Context, kbUIDs []uuid.UUID) (map[uuid.UUID]int, error)
-	ListChunksByKbFileUID(ctx context.Context, kbFileUID uuid.UUID) ([]TextChunk, error)
-	GetFilesTotalTokens(ctx context.Context, sources map[FileUID]struct {
+	HardDeleteChunksByKbFileUID(_ context.Context, kbFileUID uuid.UUID) error
+	GetTextChunksBySource(_ context.Context, sourceTable string, sourceUID uuid.UUID) ([]TextChunk, error)
+	GetChunksByUIDs(_ context.Context, chunkUIDs []uuid.UUID) ([]TextChunk, error)
+	GetTotalTokensByListKBUIDs(_ context.Context, kbUIDs []uuid.UUID) (map[uuid.UUID]int, error)
+	ListChunksByKbFileUID(_ context.Context, kbFileUID uuid.UUID) ([]TextChunk, error)
+	GetFilesTotalTokens(_ context.Context, sources map[FileUID]struct {
 		SourceTable SourceTable
 		SourceUID   SourceUID
 	}) (map[FileUID]int, error)
 	// GetTotalChunksBySources
-	GetTotalChunksBySources(ctx context.Context, sources map[FileUID]struct {
+	GetTotalChunksBySources(_ context.Context, sources map[FileUID]struct {
 		SourceTable SourceTable
 		SourceUID   SourceUID
 	}) (map[FileUID]int, error)
-	UpdateChunk(ctx context.Context, chunkUID string, updates map[string]any) (*TextChunk, error)
+	UpdateChunk(_ context.Context, chunkUID string, updates map[string]any) (*TextChunk, error)
 }
 
 // ChunkReference contains the position information of the chunk within the
@@ -125,24 +129,30 @@ func (r *Repository) TextChunkTableName() string {
 // DeleteAndCreateChunks deletes all the chunks associated with
 // a certain source table and sourceUID, then batch inserts the new chunks
 // within a transaction.
-func (r *Repository) DeleteAndCreateChunks(ctx context.Context, sourceTable string, sourceUID uuid.UUID, chunks []*TextChunk, externalServiceCall func(chunkUIDs []string) (map[string]any, error)) ([]*TextChunk, error) {
+func (r *Repository) DeleteAndCreateChunks(
+	ctx context.Context,
+	fileUID uuid.UUID,
+	chunks []*TextChunk,
+	externalServiceCall func(chunkUIDs []string) (destinations map[string]string, _ error),
+) ([]*TextChunk, error) {
 	logger, _ := logx.GetZapLogger(ctx)
+
 	// Start a transaction
-	err := r.db.Transaction(func(tx *gorm.DB) error {
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// Delete existing chunks
-		where := fmt.Sprintf("%s = ? AND %s = ?", TextChunkColumn.SourceTable, TextChunkColumn.SourceUID)
-		if err := tx.WithContext(ctx).Where(where, sourceTable, sourceUID).Delete(&TextChunk{}).Error; err != nil {
-			return err
+		err := tx.Where("kb_file_uid = ?", fileUID).Delete(&TextChunk{}).Error
+		if err != nil {
+			return fmt.Errorf("deleting existing chunks: %w", err)
 		}
 
 		if len(chunks) == 0 {
 			logger.Warn("no chunks to create")
-			return nil
+			return nil // return nil to commit the transaction (DELETE was successful)
 		}
+
 		// Batch insert new chunks
-		if err := tx.WithContext(ctx).Create(&chunks).Error; err != nil {
-			logger.Error("error creating chunks: ", zap.Error(err))
-			return err
+		if err := tx.Create(&chunks).Error; err != nil {
+			return fmt.Errorf("creating chunks: %w", err)
 		}
 
 		// Call external service function
@@ -157,9 +167,7 @@ func (r *Repository) DeleteAndCreateChunks(ctx context.Context, sourceTable stri
 				// update the content dest of each chunk
 				for _, chunk := range chunks {
 					if dest, ok := chunkDestMap[chunk.UID.String()]; ok {
-						if data, ok := dest.(string); ok {
-							chunk.ContentDest = data
-						}
+						chunk.ContentDest = dest
 					}
 				}
 			}
@@ -195,18 +203,6 @@ func BatchUpdateContentDest(ctx context.Context, tx *gorm.DB, chunks []*TextChun
 			}),
 		}).
 		Create(chunks).Error
-}
-
-// DeleteChunksBySource deletes all the chunks associated with a certain source table and sourceUID.
-func (r *Repository) DeleteChunksBySource(ctx context.Context, sourceTable string, sourceUID uuid.UUID) error {
-	where := fmt.Sprintf("%s = ? AND %s = ?", TextChunkColumn.SourceTable, TextChunkColumn.SourceUID)
-	return r.db.WithContext(ctx).Where(where, sourceTable, sourceUID).Delete(&TextChunk{}).Error
-}
-
-// DeleteChunksByUIDs deletes all the chunks associated with a certain source table and sourceUID.
-func (r *Repository) DeleteChunksByUIDs(ctx context.Context, chunkUIDs []uuid.UUID) error {
-	where := fmt.Sprintf("%s IN (?)", TextChunkColumn.UID)
-	return r.db.WithContext(ctx).Where(where, chunkUIDs).Delete(&TextChunk{}).Error
 }
 
 // GetTextChunksBySource returns the text chunks by source table and source UID

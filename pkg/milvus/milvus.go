@@ -200,6 +200,28 @@ func (m *milvusClient) InsertVectorsInCollection(ctx context.Context, collection
 	return nil
 }
 
+func (m *milvusClient) DeleteEmbeddingsWithFileUID(ctx context.Context, collectionName string, fileUID uuid.UUID) error {
+	_, hasFileUID, err := m.checkMetadataFields(ctx, collectionName)
+	if err != nil {
+		return fmt.Errorf("checking metadata fields: %w", err)
+	}
+
+	if !hasFileUID {
+		return nil
+	}
+
+	expr := fmt.Sprintf("%s == '%s'", kbCollectionFieldFileUID, fileUID.String())
+	if err := m.c.Delete(ctx, collectionName, "", expr); err != nil {
+		return fmt.Errorf("deleting embeddings: %w", err)
+	}
+
+	if err := m.c.Flush(ctx, collectionName, false); err != nil {
+		return fmt.Errorf("flushing collection after deletion: %w", err)
+	}
+
+	return nil
+}
+
 func (m *milvusClient) DeleteEmbeddingsInCollection(ctx context.Context, collectionName string, embeddingUID []string) error {
 	// Construct the delete expression
 	// The expression should be in the format: "embedding_uid in ['pk1', 'pk2', ...]"

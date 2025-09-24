@@ -3,9 +3,12 @@ package minio
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
+	"path/filepath"
 	"sync"
 
+	"github.com/gofrs/uuid"
 	"go.uber.org/zap"
 
 	"github.com/instill-ai/artifact-backend/config"
@@ -16,53 +19,60 @@ import (
 
 // KnowledgeBaseI is the interface for knowledge base related operations.
 type KnowledgeBaseI interface {
-	// SaveConvertedFile saves a converted file to MinIO with the appropriate MIME type.
-	SaveConvertedFile(ctx context.Context, kbUID, convertedFileUID, fileExt string, content []byte) error
+	// SaveConvertedFile saves a converted file to MinIO with the appropriate
+	// MIME type.
+	SaveConvertedFile(_ context.Context, kbUID, fileUID, convertedFileUID uuid.UUID, fileExt string, content []byte) (path string, _ error)
 	// SaveTextChunks saves batch of chunks(text files) to MinIO.
-	SaveTextChunks(ctx context.Context, kbUID string, chunks map[ChunkUIDType]ChunkContentType) error
-	// GetConvertedFilePathInKnowledgeBase returns the path of the converted file in MinIO.
-	GetConvertedFilePathInKnowledgeBase(kbUID, ConvertedFileUID, fileExt string) string
-	// GetChunkPathInKnowledgeBase returns the path of the chunk in MinIO.
-	GetChunkPathInKnowledgeBase(kbUID, chunkUID string) string
+	SaveTextChunks(_ context.Context, kbUID, fileUID uuid.UUID, chunks map[ChunkUIDType]ChunkContentType) (destinations map[string]string, _ error)
 	// DeleteKnowledgeBase deletes all files in the knowledge base.
-	DeleteKnowledgeBase(ctx context.Context, kbUID string) chan error
-	// DeleteAllConvertedFilesInKb deletes converted files in the knowledge base.
-	DeleteAllConvertedFilesInKb(ctx context.Context, kbUID string) chan error
-	// DeleteAllUploadedFilesInKb deletes uploaded files in the knowledge base.
-	DeleteAllUploadedFilesInKb(ctx context.Context, kbUID string) chan error
-	// DeleteAllChunksInKb deletes chunks in the knowledge base.
-	DeleteAllChunksInKb(ctx context.Context, kbUID string) chan error
+	DeleteKnowledgeBase(_ context.Context, kbUID uuid.UUID) chan error
+	// DeleteConvertedFileByFileUID deletes a converted file by file UID.
+	DeleteConvertedFileByFileUID(ctx context.Context, kbUID, fileUID uuid.UUID) error
+	// DeleteTextChunksByFileUID deletes all the chunks extracted from a file.
+	DeleteTextChunksByFileUID(ctx context.Context, kbUID, fileUID uuid.UUID) error
 }
 
-// prefix
-const uploadedFilePrefix = "/uploaded-file/"
-const convertedFilePrefix = "/converted-file/"
-const chunkPrefix = "/chunk/"
+const convertedFileDir = "converted-file"
+const chunkDir = "chunk"
 
-// SaveConvertedFile saves a converted file to MinIO with the appropriate MIME type.
-func (m *Minio) SaveConvertedFile(ctx context.Context, kbUID, convertedFileUID, fileExt string, content []byte) error {
-	filePathName := m.GetConvertedFilePathInKnowledgeBase(kbUID, convertedFileUID, fileExt)
+func convertedFileBasePath(kbUID, fileUID uuid.UUID) string {
+	return filepath.Join(kbUID.String(), fileUID.String(), convertedFileDir)
+}
+
+// SaveConvertedFile saves a converted file to MinIO with the appropriate MIME
+// type, returning the path of the saved file.
+func (m *Minio) SaveConvertedFile(ctx context.Context, kbUID, fileUID, convertedFileUID uuid.UUID, fileExt string, content []byte) (string, error) {
+	filename := convertedFileUID.String() + "." + fileExt
+	path := filepath.Join(convertedFileBasePath(kbUID, fileUID), filename)
+
 	mimeType := "application/octet-stream"
 	if fileExt == "md" {
 		mimeType = "text/markdown"
 	}
 
-	err := m.UploadBase64File(ctx, config.Config.Minio.BucketName, filePathName, base64.StdEncoding.EncodeToString(content), mimeType)
+	err := m.UploadBase64File(ctx, config.Config.Minio.BucketName, path, base64.StdEncoding.EncodeToString(content), mimeType)
 	if err != nil {
-		return err
+		return "", err
 	}
-	return nil
+
+	return path, nil
 }
 
 type ChunkUIDType string
 type ChunkContentType []byte
 
+func chunkBasePath(kbUID, fileUID uuid.UUID) string {
+	return filepath.Join(kbUID.String(), fileUID.String(), chunkDir)
+}
+
 // SaveTextChunks saves batch of chunks(text files) to MinIO.
 // rate limiting is implemented to avoid overwhelming the MinIO server.
-// rate limiting is implemented to avoid overwhelming the MinIO server.
-func (m *Minio) SaveTextChunks(ctx context.Context, kbUID string, chunks map[ChunkUIDType]ChunkContentType) error {
+func (m *Minio) SaveTextChunks(ctx context.Context, kbUID, fileUID uuid.UUID, chunks map[ChunkUIDType]ChunkContentType) (destinations map[string]string, _ error) {
 	logger, _ := logx.GetZapLogger(ctx)
 	var wg sync.WaitGroup
+	var mu sync.Mutex
+	destinations = make(map[string]string)
+
 	type ChunkError struct {
 		ChunkUID     string
 		ErrorMessage string
@@ -77,14 +87,19 @@ func (m *Minio) SaveTextChunks(ctx context.Context, kbUID string, chunks map[Chu
 			func() {
 				func(chunkUID ChunkUIDType, chunkContent ChunkContentType) {
 					defer wg.Done()
-					filePathName := m.GetChunkPathInKnowledgeBase(kbUID, string(chunkUID))
 
-					err := m.UploadBase64File(ctx, config.Config.Minio.BucketName, filePathName, base64.StdEncoding.EncodeToString(chunkContent), "text/plain")
+					path := filepath.Join(chunkBasePath(kbUID, fileUID), string(chunkUID)) + ".txt"
+					err := m.UploadBase64File(ctx, config.Config.Minio.BucketName, path, base64.StdEncoding.EncodeToString(chunkContent), "text/plain")
 					if err != nil {
 						logger.Error("Failed to upload chunk after retries", zap.String("chunkUID", string(chunkUID)), zap.Error(err))
 						errorUIDChan <- ChunkError{ChunkUID: string(chunkUID), ErrorMessage: err.Error()}
 						return
 					}
+
+					// Add successful chunk to destinations map
+					mu.Lock()
+					destinations[string(chunkUID)] = path
+					mu.Unlock()
 				}(chunkUID, chunkContent)
 			}, fmt.Sprintf("SaveTextChunks %s", chunkUID))
 
@@ -101,47 +116,38 @@ func (m *Minio) SaveTextChunks(ctx context.Context, kbUID string, chunks map[Chu
 		errStr = append(errStr, err)
 	}
 	if len(errStr) > 0 {
-		logger.Error("Failed to upload chunks", zap.Any("ChunkError", errStr))
-		return fmt.Errorf("failed to upload chunks: %v", errStr)
+		return nil, fmt.Errorf("failed to upload chunks: %v", errStr)
 	}
-	return nil
+	return destinations, nil
 }
 
 // Delete all files in the knowledge base
-func (m *Minio) DeleteKnowledgeBase(ctx context.Context, kbUID string) chan error {
+func (m *Minio) DeleteKnowledgeBase(ctx context.Context, kbUID uuid.UUID) chan error {
 	// List all objects in the knowledge base
-	err := m.DeleteFilesWithPrefix(ctx, config.Config.Minio.BucketName, kbUID)
+	err := m.DeleteFilesWithPrefix(ctx, config.Config.Minio.BucketName, kbUID.String())
 	return err
 }
 
-// Delete converted files in the knowledge base
-func (m *Minio) DeleteAllConvertedFilesInKb(ctx context.Context, kbUID string) chan error {
-	// List all objects in the knowledge base
-	err := m.DeleteFilesWithPrefix(ctx, config.Config.Minio.BucketName, kbUID+convertedFilePrefix)
+func (m *Minio) collectErrors(errChan chan error) error {
+	var errs []error
+	for err := range errChan {
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
 
-	return err
+	if len(errs) > 0 {
+		return errors.Join(errs[0])
+	}
+
+	return nil
 }
 
-// Delete uploaded files in the knowledge base
-func (m *Minio) DeleteAllUploadedFilesInKb(ctx context.Context, kbUID string) chan error {
-	// List all objects in the knowledge base
-	err := m.DeleteFilesWithPrefix(ctx, config.Config.Minio.BucketName, kbUID+uploadedFilePrefix)
+func (m *Minio) DeleteConvertedFileByFileUID(ctx context.Context, kbUID, fileUID uuid.UUID) error {
+	return m.collectErrors(m.DeleteFilesWithPrefix(ctx, config.Config.Minio.BucketName, convertedFileBasePath(kbUID, fileUID)))
 
-	return err
 }
 
-// Delete chunks in the knowledge base
-func (m *Minio) DeleteAllChunksInKb(ctx context.Context, kbUID string) chan error {
-	// List all objects in the knowledge base
-	err := m.DeleteFilesWithPrefix(ctx, config.Config.Minio.BucketName, kbUID+chunkPrefix)
-
-	return err
-}
-
-func (m *Minio) GetConvertedFilePathInKnowledgeBase(kbUID, ConvertedFileUID, fileExt string) string {
-	return kbUID + convertedFilePrefix + ConvertedFileUID + "." + fileExt
-}
-
-func (m *Minio) GetChunkPathInKnowledgeBase(kbUID, chunkUID string) string {
-	return kbUID + chunkPrefix + chunkUID + ".txt"
+func (m *Minio) DeleteTextChunksByFileUID(ctx context.Context, kbUID, fileUID uuid.UUID) error {
+	return m.collectErrors(m.DeleteFilesWithPrefix(ctx, config.Config.Minio.BucketName, chunkBasePath(kbUID, fileUID)))
 }

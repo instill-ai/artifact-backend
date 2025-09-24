@@ -139,17 +139,19 @@ func checkRegisteredFilesWorker(ctx context.Context, svc service.Service, fileUI
 // saveConvertedFile saves a converted file into object storage and updates the
 // metadata in the database.
 func (wp *persistentCatalogFileToEmbWorkerPool) saveConvertedFile(ctx context.Context, kbUID, fileUID uuid.UUID, name string, conversion *service.MDConversionResult) error {
-	saveToMinIO := func(convertedFileUID uuid.UUID) (map[string]any, error) {
+	saveToMinIO := func(convertedFileUID uuid.UUID) (string, error) {
 		blobStorage := wp.svc.MinIO()
-		err := blobStorage.SaveConvertedFile(ctx, kbUID.String(), convertedFileUID.String(), "md", []byte(conversion.Markdown))
-		if err != nil {
-			return nil, fmt.Errorf("storing converted file as blob: %w", err)
+
+		if err := blobStorage.DeleteConvertedFileByFileUID(ctx, kbUID, fileUID); err != nil {
+			return "", fmt.Errorf("deleting existing converted file: %w", err)
 		}
 
-		output := make(map[string]any)
-		output[repository.ConvertedFileColumn.Destination] = blobStorage.GetConvertedFilePathInKnowledgeBase(kbUID.String(), convertedFileUID.String(), "md")
+		dest, err := blobStorage.SaveConvertedFile(ctx, kbUID, fileUID, convertedFileUID, "md", []byte(conversion.Markdown))
+		if err != nil {
+			return "", fmt.Errorf("storing converted file as blob: %w", err)
+		}
 
-		return output, nil
+		return dest, nil
 	}
 
 	convertedFile := repository.ConvertedFile{
@@ -216,26 +218,20 @@ func (wp *persistentCatalogFileToEmbWorkerPool) saveChunks(
 		texts[ii] = c.Text
 	}
 
-	saveToMinIO := func(chunkUIDs []string) (map[string]any, error) {
+	saveToMinIO := func(chunkUIDs []string) (map[string]string, error) {
 		chunksForMinIO := make(map[minio.ChunkUIDType]minio.ChunkContentType, len(textChunks))
 		for i, uid := range chunkUIDs {
 			chunksForMinIO[minio.ChunkUIDType(uid)] = minio.ChunkContentType([]byte(texts[i]))
 		}
 
-		err := wp.svc.MinIO().SaveTextChunks(ctx, kbUID.String(), chunksForMinIO)
-		if err != nil {
-			return nil, fmt.Errorf("storing chunk blobs: %w", err)
+		if err := wp.svc.MinIO().DeleteTextChunksByFileUID(ctx, kbUID, kbFileUID); err != nil {
+			return nil, fmt.Errorf("deleting existing chunks: %w", err)
 		}
 
-		chunkDestMap := make(map[string]any, len(chunkUIDs))
-		for _, chunkUID := range chunkUIDs {
-			chunkDestMap[chunkUID] = wp.svc.MinIO().GetChunkPathInKnowledgeBase(kbUID.String(), string(chunkUID))
-		}
-
-		return chunkDestMap, nil
+		return wp.svc.MinIO().SaveTextChunks(ctx, kbUID, kbFileUID, chunksForMinIO)
 	}
 
-	_, err := wp.svc.Repository().DeleteAndCreateChunks(ctx, sourceTable, sourceUID, textChunks, saveToMinIO)
+	_, err := wp.svc.Repository().DeleteAndCreateChunks(ctx, kbFileUID, textChunks, saveToMinIO)
 	if err != nil {
 		return fmt.Errorf("storing chunk records in repository: %w", err)
 	}
@@ -243,11 +239,13 @@ func (wp *persistentCatalogFileToEmbWorkerPool) saveChunks(
 	return nil
 }
 
-// saveEmbeddings saves embeddings into the vector database and updates the metadata in the database.
-// Processes embeddings in batches of 50 to avoid timeout issues.
 const batchSize = 50
 
-func saveEmbeddings(ctx context.Context, svc service.Service, kbUID uuid.UUID, embeddings []repository.Embedding, fileName string) error {
+// saveEmbeddings saves a collection of embeddings extracted from a file into
+// the vector and relational databases. The process is done in batches to avoid
+// timeouts with the vector DB. If previous embeddings associated to the file
+// exist in either database, they're cleaned up.
+func saveEmbeddings(ctx context.Context, svc service.Service, kbUID, fileUID uuid.UUID, embeddings []repository.Embedding, fileName string) error {
 	logger, _ := logx.GetZapLogger(ctx)
 	logger = logger.With(zap.String("KbUID", kbUID.String()))
 
@@ -259,6 +257,12 @@ func saveEmbeddings(ctx context.Context, svc service.Service, kbUID uuid.UUID, e
 	totalEmbeddings := len(embeddings)
 	logger = logger.With(zap.Int("total", totalEmbeddings))
 
+	// Delete existing embeddings in the vector database
+	collection := service.KBCollectionName(kbUID)
+	if err := svc.VectorDB().DeleteEmbeddingsWithFileUID(ctx, collection, fileUID); err != nil {
+		return fmt.Errorf("deleting existing embeddings in vector database: %w", err)
+	}
+
 	// Process embeddings in batches
 	for i := 0; i < totalEmbeddings; i += batchSize {
 		// Add context check
@@ -266,11 +270,7 @@ func saveEmbeddings(ctx context.Context, svc service.Service, kbUID uuid.UUID, e
 			return fmt.Errorf("context cancelled while processing embeddings: %w", err)
 		}
 
-		end := i + batchSize
-		if end > totalEmbeddings {
-			end = totalEmbeddings
-		}
-
+		end := min(totalEmbeddings, i+batchSize)
 		currentBatch := embeddings[i:end]
 
 		logger := logger.With(
@@ -279,11 +279,11 @@ func saveEmbeddings(ctx context.Context, svc service.Service, kbUID uuid.UUID, e
 			zap.Int("progress", end),
 		)
 
-		externalServiceCall := func(_ []string) error {
+		externalServiceCall := func(insertedEmbeddings []repository.Embedding) error {
 			// save the embeddings into vector database
-			milvusEmbeddings := make([]service.Embedding, len(currentBatch))
-			for j, emb := range currentBatch {
-				milvusEmbeddings[j] = service.Embedding{
+			vectors := make([]service.Embedding, len(insertedEmbeddings))
+			for j, emb := range insertedEmbeddings {
+				vectors[j] = service.Embedding{
 					SourceTable:  emb.SourceTable,
 					SourceUID:    emb.SourceUID.String(),
 					EmbeddingUID: emb.UID.String(),
@@ -294,14 +294,14 @@ func saveEmbeddings(ctx context.Context, svc service.Service, kbUID uuid.UUID, e
 					ContentType:  emb.ContentType,
 				}
 			}
-			err := svc.VectorDB().InsertVectorsInCollection(ctx, service.KBCollectionName(kbUID), milvusEmbeddings)
-			if err != nil {
+			if err := svc.VectorDB().InsertVectorsInCollection(ctx, collection, vectors); err != nil {
 				return fmt.Errorf("saving embeddings in vector database: %w", err)
 			}
+
 			return nil
 		}
 
-		_, err := svc.Repository().UpsertEmbeddings(ctx, currentBatch, externalServiceCall)
+		_, err := svc.Repository().DeleteAndCreateEmbeddings(ctx, fileUID, currentBatch, externalServiceCall)
 		if err != nil {
 			return fmt.Errorf("saving embeddings metadata into database: %w", err)
 		}
