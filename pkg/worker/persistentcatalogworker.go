@@ -8,6 +8,7 @@ import (
 	"runtime/debug"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"go.uber.org/zap"
 	"google.golang.org/grpc/metadata"
@@ -344,9 +345,11 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processFile(ctx context.Context,
 // For text and markdown files, it transitions to the chunking status.
 // For unsupported file types, it returns an error.
 func (wp *persistentCatalogFileToEmbWorkerPool) processWaitingFile(ctx context.Context, file repository.KnowledgeBaseFile) (updatedFile *repository.KnowledgeBaseFile, nextStatus artifactpb.FileProcessStatus, err error) {
+	repo := wp.svc.Repository()
+
 	// check if file process status is waiting
 	if file.ProcessStatus != artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_WAITING.String() {
-		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, fmt.Errorf("file process status should be waiting. status: %v", file.ProcessStatus)
+		return nil, 0, fmt.Errorf("file process status should be waiting. status: %v", file.ProcessStatus)
 	}
 
 	// Determine the next status based on the file type.
@@ -365,9 +368,9 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processWaitingFile(ctx context.C
 		updateMap := map[string]any{
 			repository.KnowledgeBaseFileColumn.ProcessStatus: artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CONVERTING.String(),
 		}
-		updatedFile, err := wp.svc.Repository().UpdateKnowledgeBaseFile(ctx, file.UID.String(), updateMap)
+		updatedFile, err := repo.UpdateKnowledgeBaseFile(ctx, file.UID.String(), updateMap)
 		if err != nil {
-			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
+			return nil, 0, err
 		}
 		return updatedFile, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CONVERTING, nil
 
@@ -375,17 +378,31 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processWaitingFile(ctx context.C
 	case artifactpb.FileType_name[int32(artifactpb.FileType_FILE_TYPE_TEXT)],
 		artifactpb.FileType_name[int32(artifactpb.FileType_FILE_TYPE_MARKDOWN)]:
 
+		// Update the file metadata with the character length
+		bucket := minio.BucketFromDestination(file.Destination)
+		data, err := wp.svc.MinIO().GetFile(ctx, bucket, file.Destination)
+		if err != nil {
+			return nil, 0, fmt.Errorf("fetching file from MinIO: %w", err)
+		}
+		charCount := utf8.RuneCount(data)
+		mdUpdate := repository.ExtraMetaData{
+			Length: []uint32{uint32(charCount)},
+		}
+		if err := repo.UpdateKBFileMetadata(ctx, file.UID, mdUpdate); err != nil {
+			return nil, 0, fmt.Errorf("saving length metadata in file record: %w", err)
+		}
+
 		updateMap := map[string]any{
 			repository.KnowledgeBaseFileColumn.ProcessStatus: artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_SUMMARIZING.String(),
 		}
-		updatedFile, err := wp.svc.Repository().UpdateKnowledgeBaseFile(ctx, file.UID.String(), updateMap)
+		updatedFile, err := repo.UpdateKnowledgeBaseFile(ctx, file.UID.String(), updateMap)
 		if err != nil {
-			return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
+			return nil, 0, err
 		}
 		return updatedFile, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_SUMMARIZING, nil
 
 	default:
-		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, fmt.Errorf("unsupported file type in processWaitingFile: %v", file.Type)
+		return nil, 0, fmt.Errorf("unsupported file type in processWaitingFile: %v", file.Type)
 	}
 }
 

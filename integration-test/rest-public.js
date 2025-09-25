@@ -300,7 +300,7 @@ export function CheckCatalog(data) {
         lastBatch = http.batch(
           Array.from(pending).map((uid) => ({
             method: "GET",
-            url: `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${uid}?pageSize=100`,
+            url: `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${uid}`,
             params: data.header,
           }))
         );
@@ -313,6 +313,10 @@ export function CheckCatalog(data) {
             if (r.status === 200 && st === "FILE_PROCESS_STATUS_COMPLETED") {
               pending.delete(uid);
               completedCount++;
+            } else if (r.status === 200 && st === "FILE_PROCESS_STATUS_FAILED") {
+              // Abort test if any file fails
+              check(false, { [`File processing failed for ${body.file.name}`]: () => false });
+              return; // Exit the function immediately
             }
           } catch (e) { /* ignore */ }
         }
@@ -343,12 +347,21 @@ export function CheckCatalog(data) {
 
       // Check conversion pipeline and page information depending on the file type
       const isDocumentType = ["FILE_TYPE_PDF", "FILE_TYPE_DOC", "FILE_TYPE_DOCX", "FILE_TYPE_PPT", "FILE_TYPE_PPTX"].includes(f.type);
+      const isTextType = ["FILE_TYPE_TEXT", "FILE_TYPE_MARKDOWN"].includes(f.type);
 
       if (isDocumentType) {
         // For document types, check that length unit is pages and coordinates contain page count
         const fileData = viewRes.json().files[0];
         check(viewRes, {
           [`GET ${viewPath} file has length unit UNIT_PAGE (${f.name}: ${f.type})`]: () => fileData.length && fileData.length.unit === "UNIT_PAGE",
+          [`GET ${viewPath} file has length coordinates (${f.name}: ${f.type})`]: () => fileData.length && Array.isArray(fileData.length.coordinates) && fileData.length.coordinates.length > 0,
+          [`GET ${viewPath} file length coordinates is positive (${f.name}: ${f.type})`]: () => fileData.length && fileData.length.coordinates[0] > 0,
+        });
+      } else if (isTextType) {
+        // For text and markdown types, check that length unit is characters and coordinates contain character count
+        const fileData = viewRes.json().files[0];
+        check(viewRes, {
+          [`GET ${viewPath} file has length unit UNIT_CHARACTER (${f.name}: ${f.type})`]: () => fileData.length && fileData.length.unit === "UNIT_CHARACTER",
           [`GET ${viewPath} file has length coordinates (${f.name}: ${f.type})`]: () => fileData.length && Array.isArray(fileData.length.coordinates) && fileData.length.coordinates.length > 0,
           [`GET ${viewPath} file length coordinates is positive (${f.name}: ${f.type})`]: () => fileData.length && fileData.length.coordinates[0] > 0,
         });
