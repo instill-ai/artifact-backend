@@ -9,7 +9,6 @@ import "google/protobuf/timestamp.proto";
 
 // Object
 message Object {
-  option deprecated = true;
   // uid
   string uid = 1;
   // name of the object
@@ -40,7 +39,6 @@ message Object {
 
 // GetObjectUploadURLRequest
 message GetObjectUploadURLRequest {
-  option deprecated = true;
   // id of the namespace
   string namespace_id = 1 [(google.api.field_behavior) = REQUIRED];
   // name of the object with length limit to 1024 characters.
@@ -59,7 +57,6 @@ message GetObjectUploadURLRequest {
 
 // GetObjectUploadURLResponse
 message GetObjectUploadURLResponse {
-  option deprecated = true;
   // upload url
   string upload_url = 1;
   // expire at in UTC (UTC+0)
@@ -70,7 +67,6 @@ message GetObjectUploadURLResponse {
 
 // GetObjectDownloadURLRequest
 message GetObjectDownloadURLRequest {
-  option deprecated = true;
   // id of the namespace
   string namespace_id = 1 [(google.api.field_behavior) = REQUIRED];
   // uid of the object
@@ -82,7 +78,6 @@ message GetObjectDownloadURLRequest {
 
 // GetObjectDownloadURLResponse
 message GetObjectDownloadURLResponse {
-  option deprecated = true;
   // download url
   string download_url = 1;
   // expire at in UTC (UTC+0)

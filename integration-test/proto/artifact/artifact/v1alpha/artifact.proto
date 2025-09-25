@@ -415,6 +415,31 @@ enum FileType {
 
 // file
 message File {
+  // Position within a file, as coordinates in a a specific unit. The
+  // number of dimensions of the coordinate depends on the unit type.
+  message Position {
+    // Unit of measurement for a position within a file.
+    enum Unit {
+      // Unspecified.
+      UNIT_UNSPECIFIED = 0;
+      // Character positions (for Markdown and other text files).
+      UNIT_CHARACTER = 1;
+      // Page positions (for documents). For pages, positions are 1-indexed
+      // (e.g., page 4 of 4) to align with document visualization standards.
+      UNIT_PAGE = 2;
+      // Time positions in milliseconds (for audio/video files).
+      UNIT_TIME_MS = 3;
+      // Pixel positions (for images and other 2D content).
+      UNIT_PIXEL = 4;
+    }
+
+    // Unit of measurement for the position.
+    Unit unit = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
+
+    // Position value.
+    repeated uint32 coordinates = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+  }
+
   // file uid
   string file_uid = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
   // file name
@@ -484,6 +509,10 @@ message File {
   // (such files are typically trivial to convert and don't require a dedicated
   // pipeline to improve the conversion performance).
   optional string converting_pipeline = 21;
+  // Length of the file in the specified unit type. It is defined as the number
+  // of positions (the unit will depend on the file type) that can be accessed
+  // in the file.
+  Position length = 22 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 
 // upload file request
@@ -526,11 +555,13 @@ message ProcessCatalogFilesResponse {
   repeated File files = 1;
 }
 
-// list file filter
-// todo: support more parameters
+// ListCatalogFilesFilter contains a set of properties to filter a catalog file
+// list by.
 message ListCatalogFilesFilter {
-  // The file uids.
-  repeated string file_uids = 2 [(google.api.field_behavior) = OPTIONAL];
+  // File UIDs.
+  repeated string file_uids = 1 [(google.api.field_behavior) = OPTIONAL];
+  // Processing status of the files.
+  FileProcessStatus process_status = 2 [(google.api.field_behavior) = OPTIONAL];
 }
 
 // list files request
