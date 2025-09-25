@@ -210,13 +210,13 @@ func (m *milvusClient) DeleteEmbeddingsWithFileUID(ctx context.Context, collecti
 		return nil
 	}
 
+	if err = m.c.LoadCollection(ctx, collectionName, false); err != nil {
+		return fmt.Errorf("loading collection: %w", err)
+	}
+
 	expr := fmt.Sprintf("%s == '%s'", kbCollectionFieldFileUID, fileUID.String())
 	if err := m.c.Delete(ctx, collectionName, "", expr); err != nil {
 		return fmt.Errorf("deleting embeddings: %w", err)
-	}
-
-	if err := m.c.Flush(ctx, collectionName, false); err != nil {
-		return fmt.Errorf("flushing collection after deletion: %w", err)
 	}
 
 	return nil
