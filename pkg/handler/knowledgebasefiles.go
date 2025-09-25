@@ -544,11 +544,9 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 		}
 
 		if kbFile.ExtraMetaDataUnmarshal != nil && kbFile.ExtraMetaDataUnmarshal.Length != nil {
+			fileType := artifactpb.FileType(artifactpb.FileType_value[kbFile.Type])
 			file.Length = &artifactpb.File_Position{
-				// For now, only document conversion extracts page length, so
-				// we know the unit. When more types are supported, we'll need
-				// a service method that maps the file type to the length unit.
-				Unit:        artifactpb.File_Position_UNIT_PAGE,
+				Unit:        getPositionUnit(fileType),
 				Coordinates: kbFile.ExtraMetaDataUnmarshal.Length,
 			}
 		}
@@ -856,6 +854,27 @@ func determineFileType(fileName string) artifactpb.FileType {
 		return artifactpb.FileType_FILE_TYPE_CSV
 	}
 	return artifactpb.FileType_FILE_TYPE_UNSPECIFIED
+}
+
+// getPositionUnit returns the appropriate unit for file position based on file type
+func getPositionUnit(fileType artifactpb.FileType) artifactpb.File_Position_Unit {
+	switch fileType {
+	case artifactpb.FileType_FILE_TYPE_TEXT,
+		artifactpb.FileType_FILE_TYPE_MARKDOWN,
+		artifactpb.FileType_FILE_TYPE_HTML,
+		artifactpb.FileType_FILE_TYPE_CSV:
+		return artifactpb.File_Position_UNIT_CHARACTER
+	case artifactpb.FileType_FILE_TYPE_PDF,
+		artifactpb.FileType_FILE_TYPE_DOCX,
+		artifactpb.FileType_FILE_TYPE_DOC,
+		artifactpb.FileType_FILE_TYPE_PPT,
+		artifactpb.FileType_FILE_TYPE_PPTX,
+		artifactpb.FileType_FILE_TYPE_XLSX,
+		artifactpb.FileType_FILE_TYPE_XLS:
+		return artifactpb.File_Position_UNIT_PAGE
+	}
+
+	return artifactpb.File_Position_UNIT_UNSPECIFIED
 }
 
 // GetFileSummary returns the summary of the file
