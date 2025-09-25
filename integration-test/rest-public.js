@@ -340,6 +340,19 @@ export function CheckCatalog(data) {
         [`GET ${viewPath} file has summary (${f.name}: ${f.type})`]: (r) => r.json().files[0].summary.length > 0,
         [`GET ${viewPath} file has downloadUrl (${f.name}: ${f.type})`]: (r) => r.json().files[0].downloadUrl.includes("v1alpha/blob-urls/"),
       });
+
+      // Check conversion pipeline and page information depending on the file type
+      const isDocumentType = ["FILE_TYPE_PDF", "FILE_TYPE_DOC", "FILE_TYPE_DOCX", "FILE_TYPE_PPT", "FILE_TYPE_PPTX"].includes(f.type);
+
+      if (isDocumentType) {
+        // For document types, check that length unit is pages and coordinates contain page count
+        const fileData = viewRes.json().files[0];
+        check(viewRes, {
+          [`GET ${viewPath} file has length unit UNIT_PAGE (${f.name}: ${f.type})`]: () => fileData.length && fileData.length.unit === "UNIT_PAGE",
+          [`GET ${viewPath} file has length coordinates (${f.name}: ${f.type})`]: () => fileData.length && Array.isArray(fileData.length.coordinates) && fileData.length.coordinates.length > 0,
+          [`GET ${viewPath} file length coordinates is positive (${f.name}: ${f.type})`]: () => fileData.length && fileData.length.coordinates[0] > 0,
+        });
+      }
     }
 
     // List catalog files

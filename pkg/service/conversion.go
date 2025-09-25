@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"go.uber.org/zap"
@@ -39,27 +40,53 @@ type MDConversionResult struct {
 
 // convertResultParser extracts the conversion result from the pipeline
 // response. It first checks for a non-empty "convert_result" field, then falls
-// back to "convert_result2". Returns an error if neither field contains valid
-// data or if the response structure is invalid.
-func convertResultParser(resp *pipelinepb.TriggerNamespacePipelineReleaseResponse) (string, error) {
+// back to "convert_result2". It handles both single strings (for non-page-based
+// files) and arrays of strings (for page-based files). Returns an error if
+// neither field contains valid data or if the response structure is invalid.
+func convertResultParser(resp *pipelinepb.TriggerNamespacePipelineReleaseResponse) (*MDConversionResult, error) {
 	if resp == nil || len(resp.Outputs) == 0 {
-		return "", fmt.Errorf("response is nil or has no outputs. resp: %v", resp)
+		return nil, fmt.Errorf("response is nil or has no outputs. resp: %v", resp)
 	}
 	fields := resp.Outputs[0].GetFields()
 	if fields == nil {
-		return "", fmt.Errorf("fields in the output are nil. resp: %v", resp)
+		return nil, fmt.Errorf("fields in the output are nil. resp: %v", resp)
 	}
 
+	// Try convert_result first, then convert_result2 as fallback
+	suffix := "\n"
 	convertResult, ok := fields["convert_result"]
-	if ok && convertResult.GetStringValue() != "" {
-		return convertResult.GetStringValue(), nil
-	}
-	convertResult2, ok2 := fields["convert_result2"]
-	if ok2 && convertResult2.GetStringValue() != "" {
-		return convertResult2.GetStringValue(), nil
+	if !ok {
+		convertResult, ok = fields["convert_result2"]
+		if !ok {
+			return nil, fmt.Errorf("no conversion result fields found in response")
+		}
+
+		suffix = ""
 	}
 
-	return "", nil
+	// Check if it's a list (page-based files)
+	if list := convertResult.GetListValue(); list != nil {
+		pages := ProtoListToStrings(list, suffix)
+		if len(pages) == 0 {
+			return nil, fmt.Errorf("empty page list in conversion result")
+		}
+
+		return &MDConversionResult{
+			Markdown:     strings.Join(pages, ""),
+			Length:       []uint32{uint32(len(pages))},
+			PositionData: PositionDataFromPages(pages),
+		}, nil
+	}
+
+	// Check if it's a string (non-page-based files)
+	md := convertResult.GetStringValue()
+	if md == "" {
+		return nil, fmt.Errorf("empty markdown string in conversion result")
+	}
+	return &MDConversionResult{
+		Markdown: md,
+		// No length or position data for non-page-based files
+	}, nil
 }
 
 // ConvertToMDPipe converts a file into Markdown by triggering a converting
@@ -107,12 +134,17 @@ func (s *service) ConvertToMDPipe(ctx context.Context, p MDConversionParams) (*M
 		artifactpb.FileType_FILE_TYPE_PPT,
 		artifactpb.FileType_FILE_TYPE_PPTX:
 
-		if len(p.Pipelines) != 0 {
-			break
+		// If this is a reprocessing scenario with the default pipeline (same
+		// namespace and ID, but potentially different version), reprocess with
+		// the newest version of the default pipeline
+		reprocessWithDefaultPipeline := len(p.Pipelines) == 1 &&
+			p.Pipelines[0].Namespace == ConvertDocToMDPipeline.Namespace &&
+			p.Pipelines[0].ID == ConvertDocToMDPipeline.ID
+
+		//
+		if len(p.Pipelines) == 0 || reprocessWithDefaultPipeline {
+			p.Pipelines = DefaultConversionPipelines
 		}
-
-		p.Pipelines = DefaultConversionPipelines
-
 	default:
 		return nil, fmt.Errorf("unsupported file type: %v", p.Type)
 	}
@@ -130,27 +162,63 @@ func (s *service) ConvertToMDPipe(ctx context.Context, p MDConversionParams) (*M
 			return nil, fmt.Errorf("triggering %s pipeline: %w", pipeline.ID, err)
 		}
 
-		md, err := convertResultParser(resp)
+		result, err := convertResultParser(resp)
 		if err != nil {
 			return nil, fmt.Errorf("getting conversion result: %w", err)
 		}
 
-		if md == "" {
+		if result == nil || result.Markdown == "" {
 			logger.Info("Conversion pipeline didn't yield results", zap.String("pipeline", pipeline.Name()))
 			continue
 		}
 
-		return &MDConversionResult{
-			Markdown:        md,
-			PipelineRelease: pipeline,
-
-			// TODO jvallesm: read the length and position data from the
-			// pipeline results. First we'll update the conversion method
-			// interface and implement the changes in the clients. After
-			// verifying these are backwards-compatible, we'll implement the
-			// length and position extraction.
-		}, nil
+		// Set the pipeline release used for this conversion
+		result.PipelineRelease = pipeline
+		return result, nil
 	}
 
 	return nil, fmt.Errorf("conversion pipelines didn't produce any result")
+}
+
+// ProtoListToStrings returns a proto list of strings as a string slice. The empty
+// elements will be removed. A suffix can be passed, which will be appended to
+// all the elements but the last one. This will produce the same effect than
+// strings.Join(asStrings, suffix) in upstream code, but allows for page
+// delimiter extraction before that step.
+func ProtoListToStrings(list *structpb.ListValue, suffix string) []string {
+	values := list.GetValues()
+	asStrings := make([]string, 0, len(values))
+	for i, v := range values {
+		s := v.GetStringValue()
+		if s == "" {
+			continue
+		}
+
+		if len(suffix) > 0 && !strings.HasSuffix(s, suffix) && i < len(values)-1 {
+			s = s + suffix
+		}
+
+		asStrings = append(asStrings, s)
+	}
+
+	return asStrings
+}
+
+// PositionDataFromPages extracts the page delimiters from a list of pages.
+func PositionDataFromPages(pages []string) *repository.PositionData {
+	if len(pages) == 0 {
+		return nil
+	}
+
+	var offset uint32
+	positionData := &repository.PositionData{
+		PageDelimiters: make([]uint32, len(pages)),
+	}
+
+	for i, page := range pages {
+		offset += uint32(len([]rune(page)))
+		positionData.PageDelimiters[i] = offset
+	}
+
+	return positionData
 }

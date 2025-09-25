@@ -380,7 +380,6 @@ service ArtifactPublicService {
   //
   // Returns the upload URL of an object.
   rpc GetObjectUploadURL(GetObjectUploadURLRequest) returns (GetObjectUploadURLResponse) {
-    option deprecated = true;
     option (google.api.http) = {get: "/v1alpha/namespaces/{namespace_id}/object-upload-url"};
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       tags: "Artifact"
@@ -395,7 +394,6 @@ service ArtifactPublicService {
   //
   // Returns the download URL of an object.
   rpc GetObjectDownloadURL(GetObjectDownloadURLRequest) returns (GetObjectDownloadURLResponse) {
-    option deprecated = true;
     option (google.api.http) = {get: "/v1alpha/namespaces/{namespace_id}/object-download-url"};
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       tags: "Artifact"

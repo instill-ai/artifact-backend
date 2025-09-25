@@ -20,13 +20,13 @@ component:
     type: collection
     input:
       data: ${pages-to-images.output.images}
-      size: 2 # ${variable.image-batch-size}
+      size: 1
     task: TASK_SPLIT
   batch-markdown:
     type: collection
     input:
       data: ${pages-to-markdown.output.markdowns}
-      size: 2 # ${variable.image-batch-size}
+      size: 1
     task: TASK_SPLIT
     condition: ${pages-to-markdown.output.body} != ""
   vlm-refine-markdown:
@@ -35,12 +35,6 @@ component:
       start: 0
       stop: ${batch-images.output.data:length}
     component:
-      merge-batch-markdown:
-        type: json
-        input:
-          json-value: ${batch-markdown.output.data[i]}
-          jq-filter: join("\n")
-        task: TASK_JQ
       refine-markdown:
         type: openai
         task: TASK_TEXT_GENERATION
@@ -53,7 +47,7 @@ component:
 
             **Drafted Markdown Content**:
             ```
-            ${merge-batch-markdown.output.results}
+            ${batch-markdown.output.data[i]}
             ```
 
             **Guidelines**:
@@ -135,22 +129,10 @@ component:
     output-elements:
       result: ${document-ocr.output.texts[0]}
     condition: ${pages-to-markdown.output.body} == ""
-  merge-markdown-refinement:
-    type: json
-    input:
-      json-value: ${vlm-refine-markdown.output.result}
-      jq-filter: join("\n")
-    task: TASK_JQ
-  merge-markdown-ocr:
-    type: json
-    input:
-      json-value: ${vlm-document-ocr.output.result}
-      jq-filter: join("")
-    task: TASK_JQ
 output:
   convert_result:
     title: convert-result
-    value: ${merge-markdown-refinement.output.results[0]}
+    value: ${vlm-refine-markdown.output.result}
   convert_result2:
     title: convert-result2
-    value: ${merge-markdown-ocr.output.results[0]}
+    value: ${vlm-document-ocr.output.result}
