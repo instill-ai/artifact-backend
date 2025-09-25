@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"go.uber.org/zap"
@@ -153,4 +154,47 @@ func (s *service) ConvertToMDPipe(ctx context.Context, p MDConversionParams) (*M
 	}
 
 	return nil, fmt.Errorf("conversion pipelines didn't produce any result")
+}
+
+// ProtoListToStrings returns a proto list of strings as a string slice. The empty
+// elements will be removed. A suffix can be passed, which will be appended to
+// all the elements but the last one. This will produce the same effect than
+// strings.Join(asStrings, suffix) in upstream code, but allows for page
+// delimiter extraction before that step.
+func ProtoListToStrings(list *structpb.ListValue, suffix string) []string {
+	values := list.GetValues()
+	asStrings := make([]string, 0, len(values))
+	for i, v := range values {
+		s := v.GetStringValue()
+		if s == "" {
+			continue
+		}
+
+		if len(suffix) > 0 && !strings.HasSuffix(s, suffix) && i < len(values)-1 {
+			s = s + suffix
+		}
+
+		asStrings = append(asStrings, s)
+	}
+
+	return asStrings
+}
+
+// PositionDataFromPages extracts the page delimiters from a list of pages.
+func PositionDataFromPages(pages []string) *repository.PositionData {
+	if len(pages) == 0 {
+		return nil
+	}
+
+	var offset uint32
+	positionData := &repository.PositionData{
+		PageDelimiters: make([]uint32, len(pages)),
+	}
+
+	for i, page := range pages {
+		offset += uint32(len([]rune(page)))
+		positionData.PageDelimiters[i] = offset
+	}
+
+	return positionData
 }
