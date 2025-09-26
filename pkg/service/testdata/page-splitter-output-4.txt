@@ -1,0 +1,20 @@
+## 5. Joining forces with the tech industry
+
+Moving forward, the European Union strives to establish an active discussion with the technology industry to ensure the continued implementation and use of strong encryption technology. Law enforcement and judicial authorities must be able to access data in a lawful and targeted manner, in full respect of fundamental rights and data protection regime, while upholding cybersecurity. Technical solutions for gaining access to encrypted data must match the principles of legality, necessity, and proportionality.
+
+Since there is no single way of achieving the set goals, governments and industry need to work together to create this balance.
+
+## 6. Legal framework
+
+There is a need for a regulatory framework that safeguards fundamental rights and the advantages of end-to-end encryption and which allows law enforcement and judicial authorities to carry out their tasks. Possible solutions may need the support of service providers in a transparent and lawful manner, as well as improving the technical and tactical skills which the law enforcement and judicial authorities need to face the challenges of digitisation at a global scale. In line with the principle of proportionality, such measures should be prioritised.
+
+Developing technical tools aimed at supporting criminal proceedings could also be considered. Such technical tools should be subject to the principles outlined in this declaration.
+
+## 7. Innovative investigative capabilities
+
+It is of paramount importance that this matter is handled in a coordinated way at EU level in order to combine the efforts of all Member States and EU institutions and bodies to define and establish innovative approaches and best practice to respond to these challenges. Technical solutions anchored on the principles of necessity and proportionality should be developed in close consultation with service providers and the relevant authorities, while there should be no single prescribed technical solution to provide access to the encrypted data.
+
+---
+
+12143/20 MP/dk 4  
+JAI.1 LIMITE EN

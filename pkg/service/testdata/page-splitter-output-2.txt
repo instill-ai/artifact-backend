@@ -1,0 +1,21 @@
+## ANNEX
+
+### Draft Council Declaration on Encryption
+
+**Security through encryption and security despite encryption**
+
+1. **Preamble: Security through encryption and security despite encryption**
+
+   The European Union fully supports the development, implementation and use of strong encryption. Encryption is a necessary means of protecting fundamental rights and the digital security of governments, industry and society. At the same time, the European Union needs to preserve the ability of law enforcement and judicial authorities to exercise their lawful powers, both online and offline.
+
+   According to the European Council conclusions, 1-2 October 2020, EUCO 13/20, *the EU will leverage its tools and regulatory powers to help shape global rules and standards*. It was agreed to use funds under the Recovery and Resilience Facility to advance objectives such as *enhancing the EU’s ability to protect itself against cyber threats, to provide for a secure communication environment, especially through quantum encryption, and to ensure access to data for judicial and law enforcement purposes*.
+
+2. **Current use/state of encryption**
+
+   In today’s world, encryption technology is increasingly used in all areas of public and private life. This is a means to protect governments, civil society, citizens and industry by ensuring the privacy and security of communications and personal data: all parties benefit from high-performance encryption technology. Encryption has been identified by EU data protection authorities as an important tool contributing for instance to the protection of personal data transferred outside of the EU against (disproportionate) government access, which according to the Court of Justice is a legal requirement for data transfers[^1]. Not only is the user data on electronic devices encrypted, but more and more communication channels are also secured by end-to-end (E2E) encryption. The majority of instant messaging apps on online platforms have equally implemented end-to-end encryption.
+
+[^1]: Judgment of 16 July 2020 in Case C-311/18 Data Protection Commissioner v Facebook Ireland Ltd, Maximillian Schrems, ECLI:EU:C:2020:559
+
+---
+
+**Image Description**: The image contains a page from a document titled "ANNEX Draft Council Declaration on Encryption." It discusses the European Union's stance on encryption, emphasizing the balance between security through encryption and the need for law enforcement access. The document references European Council conclusions from October 2020 and highlights the importance of encryption in protecting personal data and communications.

@@ -116,9 +116,19 @@ func getGenerateSummaryResult(resp *pipelinepb.TriggerNamespacePipelineReleaseRe
 	return "", fmt.Errorf("summary_from_short_text and summary_from_long_text not found in the output fields. resp: %v", resp)
 }
 
-// ChunkMarkdownPipe triggers the markdown splitting pipeline, processes the markdown text, and deducts credits from the caller's account.
-// It sets up the necessary metadata, triggers the pipeline, and processes the response to return the non-empty chunks.
-func (s *service) ChunkMarkdownPipe(ctx context.Context, markdown string) ([]Chunk, error) {
+// ChunkingResult contains the information extracted from chunking a text.
+type ChunkingResult struct {
+	Chunks []Chunk
+
+	// PipelineRelease is the pipeline used for chunking
+	PipelineRelease PipelineRelease
+}
+
+// ChunkMarkdownPipe triggers the markdown splitting pipeline, processes the
+// markdown text, and deducts credits from the caller's account. It sets up the
+// necessary metadata, triggers the pipeline, and processes the response to
+// return the non-empty chunks.
+func (s *service) ChunkMarkdownPipe(ctx context.Context, markdown string) (*ChunkingResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, 300*time.Second)
 	defer cancel()
 	req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
@@ -139,7 +149,7 @@ func (s *service) ChunkMarkdownPipe(ctx context.Context, markdown string) ([]Chu
 	if err != nil {
 		return nil, fmt.Errorf("failed to trigger %s pipeline. err:%w", ChunkMDPipeline.ID, err)
 	}
-	result, err := GetChunksFromResponse(res)
+	result, err := getChunksFromResponse(res)
 	if err != nil {
 		return nil, err
 	}
@@ -151,11 +161,13 @@ func (s *service) ChunkMarkdownPipe(ctx context.Context, markdown string) ([]Chu
 			filteredResult = append(filteredResult, chunk)
 		}
 	}
-	return filteredResult, nil
+	return &ChunkingResult{
+		Chunks:          filteredResult,
+		PipelineRelease: ChunkMDPipeline,
+	}, nil
 }
 
-// GetChunksFromResponse converts the pipeline response into a slice of Chunk.
-func GetChunksFromResponse(resp *pipelinepb.TriggerNamespacePipelineReleaseResponse) ([]Chunk, error) {
+func getChunksFromResponse(resp *pipelinepb.TriggerNamespacePipelineReleaseResponse) ([]Chunk, error) {
 	if resp == nil || len(resp.Outputs) == 0 {
 		return nil, fmt.Errorf("response is nil or has no outputs. resp: %v", resp)
 	}
@@ -182,14 +194,18 @@ func GetChunksFromResponse(resp *pipelinepb.TriggerNamespacePipelineReleaseRespo
 			Tokens: tokenCount,
 		})
 	}
+
 	return chunks, nil
 }
 
-// ChunkTextPipe splits the input text into chunks using the splitting pipeline and consumes the caller's credits.
-// It sets up the necessary metadata, triggers the pipeline, and processes the response to return the non-empty chunks.
-func (s *service) ChunkTextPipe(ctx context.Context, text string) ([]Chunk, error) {
+// ChunkTextPipe splits the input text into chunks using the splitting pipeline
+// and consumes the caller's credits. It sets up the necessary metadata,
+// triggers the pipeline, and processes the response to return the non-empty
+// chunks.
+func (s *service) ChunkTextPipe(ctx context.Context, text string) (*ChunkingResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, 300*time.Second)
 	defer cancel()
+
 	req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
 		NamespaceId: ChunkTextPipeline.Namespace,
 		PipelineId:  ChunkTextPipeline.ID,
@@ -209,7 +225,7 @@ func (s *service) ChunkTextPipe(ctx context.Context, text string) ([]Chunk, erro
 	if err != nil {
 		return nil, fmt.Errorf("failed to trigger %s pipeline. err:%w", ChunkTextPipeline.ID, err)
 	}
-	result, err := GetChunksFromResponse(res)
+	result, err := getChunksFromResponse(res)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get chunks from response: %w", err)
 	}
@@ -221,7 +237,10 @@ func (s *service) ChunkTextPipe(ctx context.Context, text string) ([]Chunk, erro
 			filteredResult = append(filteredResult, chunk)
 		}
 	}
-	return filteredResult, nil
+	return &ChunkingResult{
+		Chunks:          filteredResult,
+		PipelineRelease: ChunkTextPipeline,
+	}, nil
 }
 
 // EmbeddingTextPipe converts multiple text inputs into vector embeddings using a pipeline service.

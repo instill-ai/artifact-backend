@@ -574,74 +574,28 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processSummarizingFile(ctx conte
 	return updatedFile, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CHUNKING, nil
 }
 
-// extractPageReferences extracts the location of a chunk (defined by its start
-// and end byte positions) in a document (defined by the byte delimiters of its
-// pages). The method assumes the chunk positions will be always less than the
-// biggest delimiter (the byte offset of the last character of the last page).
-// If that wasn't the case, (signaling a bug), the page range in the output
-// will be [0,0].
-func (wp *persistentCatalogFileToEmbWorkerPool) extractPageReferences(chunkStart, chunkEnd uint32, pageDelimiters []uint32) (pageStart, pageEnd uint32) {
-	// delimiter is the first byte of the next page.
-	for i, delimiter := range pageDelimiters {
-		if chunkStart < delimiter && pageStart == 0 {
-			pageStart = uint32(i + 1)
-		}
-
-		if chunkEnd < delimiter && pageEnd == 0 {
-			pageEnd = uint32(i + 1)
-		}
-
-		if pageStart != 0 && pageEnd != 0 {
-			break
-		}
-	}
-
-	return
-}
-
-// Processes a file with the status "chunking" by splitting it into text chunks.
+// Split the text extracted from a text file into chunks.
+//
 // The processing varies by file type:
-//
-// For PDF, DOC, DOCX, PPT, PPTX, HTML, XLSX, XLS, CSV:
-// - Retrieves converted file from MinIO
-// - For spreadsheet files (XLSX, XLS, CSV): Uses markdown chunking pipeline
-// - For other document types: Uses text chunking pipeline
-//
 // For TEXT files:
-// - Retrieves original file from MinIO
-// - Uses text chunking pipeline
+// - Text chunking pipeline
+// For PDF, DOC[X], PPT[X] (page-based documents):
+// - If the file has page delimiters, each page becomes a chunk.
+// - Otherwise, the markdown chunking pipeline is used.
+// For HTML, XLSX, XLS, CSV, MARKDOWN:
+// - The markdown chunking pipeline is used
 //
-// For MARKDOWN files:
-// - Retrieves original file from MinIO
-// - Uses markdown chunking pipeline
-//
-// For all file types:
-// - Saves chunks to object storage
-// - Updates metadata in database with chunking pipeline info
-// - Updates file status to "embedding"
-//
-// Parameters:
-//   - ctx: Context for the operation
-//   - file: KnowledgeBaseFile struct containing file metadata
-//
-// Returns:
-//   - updatedFile: Updated KnowledgeBaseFile after processing
-//   - nextStatus: Next file process status (EMBEDDING if successful)
-//   - err: Error if any step fails
-//
-// The function handles errors at each step and returns appropriate status codes.
+// After processing, the chunk content is stored as a blob and the rest of the
+// data is stored in the repository.
 func (wp *persistentCatalogFileToEmbWorkerPool) processChunkingFile(ctx context.Context, file repository.KnowledgeBaseFile) (*repository.KnowledgeBaseFile, artifactpb.FileProcessStatus, error) {
 	if file.ProcessStatus != artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CHUNKING.String() {
 		return nil, 0, fmt.Errorf("file process status should be chunking. status: %v", file.ProcessStatus)
 	}
 
-	var fileData []byte
-	var sourceTable string
+	var sourceTable, destination, bucket string
 	var sourceUID uuid.UUID
-	var err error
-	var contentChunks []service.Chunk
+	var chunkFn func(context.Context, string) (*service.ChunkingResult, error)
 
-	// Get file data based on type
 	switch file.Type {
 	case artifactpb.FileType_FILE_TYPE_PDF.String(),
 		artifactpb.FileType_FILE_TYPE_DOC.String(),
@@ -653,93 +607,87 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processChunkingFile(ctx context.
 		artifactpb.FileType_FILE_TYPE_XLS.String(),
 		artifactpb.FileType_FILE_TYPE_CSV.String():
 
-		// Get converted file for document types
 		convertedFile, err := wp.svc.Repository().GetConvertedFileByFileUID(ctx, file.UID)
 		if err != nil {
 			return nil, 0, fmt.Errorf("fetching converted file record: %w", err)
 		}
 
-		fileData, err = wp.svc.MinIO().GetFile(ctx, config.Config.Minio.BucketName, convertedFile.Destination)
-		if err != nil {
-			return nil, 0, fmt.Errorf("fetching converted file blob: %w", err)
-		}
-
 		sourceTable = wp.svc.Repository().ConvertedFileTableName()
 		sourceUID = convertedFile.UID
+		bucket = config.Config.Minio.BucketName
+		destination = convertedFile.Destination
 
-		contentChunks, err = wp.svc.ChunkMarkdownPipe(ctx, string(fileData))
-		if err != nil {
-			return nil, 0, fmt.Errorf("chunking converted file: %w", err)
+		// For non-page-based documents, or documents that haven't gone through
+		// page extraction, we use the markdown splitter pipeline.
+		if convertedFile.PositionData == nil || len(convertedFile.PositionData.PageDelimiters) == 0 {
+			chunkFn = wp.svc.ChunkMarkdownPipe
+			break
 		}
 
-		if convertedFile.PositionData != nil {
-			for i, chunk := range contentChunks {
-				pageStart, pageEnd := wp.extractPageReferences(
-					uint32(chunk.Start),
-					uint32(chunk.End),
-					convertedFile.PositionData.PageDelimiters,
-				)
+		splitter := service.PageSplitter{
+			PageDelimiters: convertedFile.PositionData.PageDelimiters,
+		}
 
-				if pageStart != 0 && pageEnd != 0 {
-					contentChunks[i].Reference = &repository.ChunkReference{
-						PageRange: [2]uint32{pageStart, pageEnd},
-					}
-				}
+		chunkFn = func(_ context.Context, content string) (*service.ChunkingResult, error) {
+			chunks, err := splitter.Split(content)
+			if err != nil {
+				return nil, err
 			}
+
+			return &service.ChunkingResult{Chunks: chunks}, nil
 		}
-	case artifactpb.FileType_FILE_TYPE_MARKDOWN.String():
-		// Get original file for markdown types
-		fileInMinIOPath := file.Destination
-		bucket := minio.BucketFromDestination(fileInMinIOPath)
-		fileData, err = wp.svc.MinIO().GetFile(ctx, bucket, fileInMinIOPath)
-		if err != nil {
-			return nil, 0, fmt.Errorf("fetching original file blob: %w", err)
-		}
+	case artifactpb.FileType_FILE_TYPE_MARKDOWN.String(),
+		artifactpb.FileType_FILE_TYPE_TEXT.String():
+
 		sourceTable = wp.svc.Repository().KnowledgeBaseFileTableName()
 		sourceUID = file.UID
+		destination = file.Destination
+		bucket = minio.BucketFromDestination(destination)
 
-		contentChunks, err = wp.svc.ChunkMarkdownPipe(ctx, string(fileData))
-		if err != nil {
-			return nil, 0, fmt.Errorf("chunking original file: %w", err)
+		chunkFn = wp.svc.ChunkTextPipe
+		if file.Type == artifactpb.FileType_FILE_TYPE_TEXT.String() {
+			chunkFn = wp.svc.ChunkMarkdownPipe
 		}
-
-	case artifactpb.FileType_FILE_TYPE_TEXT.String():
-		// Get original file for text types
-		fileInMinIOPath := file.Destination
-		bucket := minio.BucketFromDestination(fileInMinIOPath)
-		fileData, err = wp.svc.MinIO().GetFile(ctx, bucket, fileInMinIOPath)
-		if err != nil {
-			return nil, 0, fmt.Errorf("fetching original file blob: %w", err)
-		}
-		sourceTable = wp.svc.Repository().KnowledgeBaseFileTableName()
-		sourceUID = file.UID
-
-		contentChunks, err = wp.svc.ChunkTextPipe(ctx, string(fileData))
-		if err != nil {
-			return nil, 0, fmt.Errorf("chunking original file: %w", err)
-		}
-
 	default:
-		return nil, 0, fmt.Errorf("unsupported file type in processChunkingFile: %v", file.Type)
+		return nil, 0, fmt.Errorf("unsupported file type %s for chunking", file.Type)
 	}
 
-	summaryChunks, err := wp.svc.ChunkTextPipe(ctx, string(file.Summary))
+	fileData, err := wp.svc.MinIO().GetFile(ctx, bucket, destination)
+	if err != nil {
+		return nil, 0, fmt.Errorf("fetching file content: %w", err)
+	}
+
+	contentResult, err := chunkFn(ctx, string(fileData))
+	if err != nil {
+		return nil, 0, fmt.Errorf("chunking file content: %w", err)
+	}
+
+	summaryResult, err := wp.svc.ChunkTextPipe(ctx, string(file.Summary))
 	if err != nil {
 		return nil, 0, fmt.Errorf("chunking summary: %w", err)
 	}
 
 	// Save chunks and update metadata
-	err = wp.saveChunks(ctx, file.KnowledgeBaseUID, file.UID, sourceUID, sourceTable, summaryChunks, contentChunks, string(constant.DocumentFileType))
-	if err != nil {
+	if err := wp.saveChunks(
+		ctx,
+		file.KnowledgeBaseUID,
+		file.UID,
+		sourceUID,
+		sourceTable,
+		summaryResult.Chunks,
+		contentResult.Chunks,
+		string(constant.DocumentFileType),
+	); err != nil {
 		return nil, 0, fmt.Errorf("storing chunks: %w", err)
 	}
 
-	// Update file's chunking pipeline metadata
-	mdUpdate := repository.ExtraMetaData{
-		ChunkingPipe: service.ChunkTextPipeline.Name(),
-	}
-	if err = wp.svc.Repository().UpdateKBFileMetadata(ctx, file.UID, mdUpdate); err != nil {
-		return nil, 0, fmt.Errorf("saving chunking metadata in file record: %w", err)
+	if contentResult.PipelineRelease != (service.PipelineRelease{}) {
+		mdUpdate := repository.ExtraMetaData{
+			ChunkingPipe: contentResult.PipelineRelease.Name(),
+		}
+		if err = wp.svc.Repository().UpdateKBFileMetadata(ctx, file.UID, mdUpdate); err != nil {
+			return nil, 0, fmt.Errorf("saving chunking metadata in file record: %w", err)
+		}
 	}
 
 	// Update file status
