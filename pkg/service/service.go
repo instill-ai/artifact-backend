@@ -21,8 +21,8 @@ type Service interface {
 	CheckNamespacePermission(context.Context, *resource.Namespace) error
 	ConvertToMDPipe(context.Context, MDConversionParams) (*MDConversionResult, error)
 	GenerateSummary(_ context.Context, content, fileType string) (string, error)
-	ChunkMarkdownPipe(_ context.Context, markdown string) ([]Chunk, error)
-	ChunkTextPipe(_ context.Context, text string) ([]Chunk, error)
+	ChunkMarkdownPipe(_ context.Context, markdown string) (*ChunkingResult, error)
+	ChunkTextPipe(_ context.Context, text string) (*ChunkingResult, error)
 	EmbeddingTextPipe(_ context.Context, texts []string) ([][]float32, error)
 	QuestionAnsweringPipe(_ context.Context, question string, simChunks []string) (string, error)
 	SimilarityChunksSearch(_ context.Context, ownerUID uuid.UUID, _ *artifactpb.SimilarityChunksSearchRequest) ([]SimChunk, error)

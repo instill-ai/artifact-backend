@@ -1,0 +1,26 @@
+## 3. Challenges for Ensuring Public Safety
+
+The "digital life" is a source not only of great opportunities, but also of considerable challenges: the digitalisation of modern societies brings with it certain vulnerabilities and the potential for abuse in cyberspace. Thus criminals can make use of readily available, off-the-shelf encryption solutions conceived for legitimate purposes, including as part of their *modi operandi*.
+
+At the same time, law enforcement is increasingly dependent on access to electronic evidence to fight effectively terrorism, organised crime, child sexual abuse, particularly its online aspects or any cyber-enabled crime and bring criminals to justice.
+
+In practice, there are instances where encryption application renders analysis of the content of communications in the framework of access to electronic evidence extremely challenging.
+
+Independently of the technological environment of the day, it is therefore essential to preserve the powers of law enforcement and judicial authorities through lawful access to carry out their tasks, as prescribed and authorised by law. Such laws providing for the enforcement powers must always fully respect due process and other safeguards, as well as other freedoms and rights, in particular the right to respect for private life and communications and the right to the protection of personal data.
+
+## 4. Creating a Balance
+
+The principle of security through encryption and security despite encryption must be upheld in its entirety. The European Union continues to support strong encryption. Encryption is an anchor of confidence in digitalisation and should be promoted and developed.
+
+Protecting the privacy and security of communications through encryption and at the same time upholding the possibility for law enforcement and judicial authorities to lawfully access relevant data for legitimate, clearly defined purposes of fighting serious crimes, in the digital world, are extremely important. Any actions taken have to balance these interests carefully.
+
+---
+
+*Footnote:*
+
+2. iOCTA 2020, p. 25
+
+---
+
+12143/20 MP/dk 3  
+JAI.1 LIMITE EN
