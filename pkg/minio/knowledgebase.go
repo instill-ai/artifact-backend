@@ -25,7 +25,7 @@ type KnowledgeBaseI interface {
 	// SaveTextChunks saves batch of chunks(text files) to MinIO.
 	SaveTextChunks(_ context.Context, kbUID, fileUID uuid.UUID, chunks map[ChunkUIDType]ChunkContentType) (destinations map[string]string, _ error)
 	// DeleteKnowledgeBase deletes all files in the knowledge base.
-	DeleteKnowledgeBase(_ context.Context, kbUID uuid.UUID) chan error
+	DeleteKnowledgeBase(_ context.Context, kbUID uuid.UUID) error
 	// DeleteConvertedFileByFileUID deletes a converted file by file UID.
 	DeleteConvertedFileByFileUID(ctx context.Context, kbUID, fileUID uuid.UUID) error
 	// DeleteTextChunksByFileUID deletes all the chunks extracted from a file.
@@ -35,8 +35,12 @@ type KnowledgeBaseI interface {
 const convertedFileDir = "converted-file"
 const chunkDir = "chunk"
 
+func fileBasePath(kbUID, fileUID uuid.UUID) string {
+	return filepath.Join("kb-"+kbUID.String(), "file-"+fileUID.String())
+}
+
 func convertedFileBasePath(kbUID, fileUID uuid.UUID) string {
-	return filepath.Join(kbUID.String(), fileUID.String(), convertedFileDir)
+	return filepath.Join(fileBasePath(kbUID, fileUID), convertedFileDir)
 }
 
 // SaveConvertedFile saves a converted file to MinIO with the appropriate MIME
@@ -62,7 +66,7 @@ type ChunkUIDType string
 type ChunkContentType []byte
 
 func chunkBasePath(kbUID, fileUID uuid.UUID) string {
-	return filepath.Join(kbUID.String(), fileUID.String(), chunkDir)
+	return filepath.Join(fileBasePath(kbUID, fileUID), chunkDir)
 }
 
 // SaveTextChunks saves batch of chunks(text files) to MinIO.
@@ -121,11 +125,23 @@ func (m *Minio) SaveTextChunks(ctx context.Context, kbUID, fileUID uuid.UUID, ch
 	return destinations, nil
 }
 
-// Delete all files in the knowledge base
-func (m *Minio) DeleteKnowledgeBase(ctx context.Context, kbUID uuid.UUID) chan error {
-	// List all objects in the knowledge base
-	err := m.DeleteFilesWithPrefix(ctx, config.Config.Minio.BucketName, kbUID.String())
-	return err
+// DeleteKnowledgeBase removes all the blobs in the knowledge base.
+func (m *Minio) DeleteKnowledgeBase(ctx context.Context, kbUID uuid.UUID) error {
+	bucket := config.Config.Minio.BucketName
+	legacyPrefix := kbUID.String()
+
+	err := m.collectErrors(m.DeleteFilesWithPrefix(ctx, bucket, "kb-"+legacyPrefix))
+	if err != nil {
+		return fmt.Errorf("deleting catalog files: %w", err)
+	}
+
+	// Catalogs might have blobs in legacy paths.
+	err = m.collectErrors(m.DeleteFilesWithPrefix(ctx, bucket, legacyPrefix))
+	if err != nil {
+		return fmt.Errorf("deleting legacy catalog files: %w", err)
+	}
+
+	return nil
 }
 
 func (m *Minio) collectErrors(errChan chan error) error {
