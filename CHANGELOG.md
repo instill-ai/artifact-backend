@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.32.1](https://github.com/instill-ai/artifact-backend/compare/v0.32.0...v0.32.1) (2025-09-30)
+
+
+### Features
+
+* **chunking:** page by chunk when page delimiters are present ([#262](https://github.com/instill-ai/artifact-backend/issues/262)) ([13b766e](https://github.com/instill-ai/artifact-backend/commit/13b766ecdbe933dad419a9a5fd978c631589fbcd))
+* **conversion:** add char length to text files ([#261](https://github.com/instill-ai/artifact-backend/issues/261)) ([c92684f](https://github.com/instill-ai/artifact-backend/commit/c92684f4425cdf5d108552b2a2dbd6a9e3e2dc02))
+* **conversion:** extract pages in conversion step ([#260](https://github.com/instill-ai/artifact-backend/issues/260)) ([925dd1c](https://github.com/instill-ai/artifact-backend/commit/925dd1ce9fc3c040b4f98617f861016cfeb2c643))
+
+
+### Bug Fixes
+
+* **reprocess:** clean up data from previous file processing ([#259](https://github.com/instill-ai/artifact-backend/issues/259)) ([56f0368](https://github.com/instill-ai/artifact-backend/commit/56f036855cf6e13cff35b651de954e2e8bb6d5b8))
+* **usage:** add missing error filtering for users/admin ([#257](https://github.com/instill-ai/artifact-backend/issues/257)) ([c42ac14](https://github.com/instill-ai/artifact-backend/commit/c42ac14f87a1594406307d5511e5535f6bd07d62))
+
+
+### Miscellaneous
+
+* **blob:** make file blob paths more descriptive ([#263](https://github.com/instill-ai/artifact-backend/issues/263)) ([c23ad31](https://github.com/instill-ai/artifact-backend/commit/c23ad315f6e9b3e8decf6810edf67dab8fe9bd30))
+
 ## [0.32.0](https://github.com/instill-ai/artifact-backend/compare/v0.31.1...v0.32.0) (2025-09-18)
 
 
