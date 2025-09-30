@@ -392,8 +392,7 @@ func (ph *PublicHandler) DeleteCatalog(ctx context.Context, req *artifactpb.Dele
 		logger.Info("DeleteCatalog starts in background", zap.String("catalog_id", kb.UID.String()))
 		allPass := true
 		//  delete files in minIO
-		err = <-ph.service.MinIO().DeleteKnowledgeBase(ctx, kb.UID)
-		if err != nil {
+		if err := ph.service.MinIO().DeleteKnowledgeBase(ctx, kb.UID); err != nil {
 			logger.Error("failed to delete files in minIO in background", zap.Error(err))
 			allPass = false
 		}
