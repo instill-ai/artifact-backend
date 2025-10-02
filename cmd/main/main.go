@@ -23,6 +23,11 @@ import (
 
 	grpczap "github.com/grpc-ecosystem/go-grpc-middleware/logging/zap"
 	openfga "github.com/openfga/api/proto/openfga/v1"
+	temporalclient "go.temporal.io/sdk/client"
+
+	"go.opentelemetry.io/otel"
+	"go.temporal.io/sdk/contrib/opentelemetry"
+	"go.temporal.io/sdk/interceptor"
 
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/acl"
@@ -32,7 +37,6 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/service"
 	"github.com/instill-ai/artifact-backend/pkg/usage"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
-	"github.com/instill-ai/artifact-backend/pkg/worker"
 
 	httpclient "github.com/instill-ai/artifact-backend/pkg/client/http"
 	database "github.com/instill-ai/artifact-backend/pkg/db"
@@ -48,6 +52,7 @@ import (
 	otelx "github.com/instill-ai/x/otel"
 	servergrpcx "github.com/instill-ai/x/server/grpc"
 	gatewayx "github.com/instill-ai/x/server/grpc/gateway"
+	temporalx "github.com/instill-ai/x/temporal"
 )
 
 var (
@@ -132,7 +137,7 @@ func main() {
 
 	// Initialize clients needed for service
 	pipelinePublicServiceClient, mgmtPrivateServiceClient,
-		redisClient, db, minioClient, vectorDB, aclClient, closer := newClients(ctx, logger)
+		redisClient, db, minioClient, vectorDB, aclClient, temporalClient, closer := newClients(ctx, logger)
 	defer closer()
 
 	// Initialize service
@@ -145,6 +150,7 @@ func main() {
 		redisClient,
 		vectorDB,
 		aclClient,
+		temporalClient,
 	)
 
 	privateHandler := handler.NewPrivateHandler(svc, logger)
@@ -185,10 +191,6 @@ func main() {
 			},
 		}),
 	)
-
-	// activate persistent catalog file-to-embeddings worker pool
-	wp := worker.NewPersistentCatalogFileToEmbWorkerPool(ctx, svc, config.Config.FileToEmbeddingWorker.NumberOfWorkers, artifactpb.CatalogType_CATALOG_TYPE_PERSISTENT)
-	wp.Start()
 
 	// Start usage reporter
 	var usg usage.Usage
@@ -305,7 +307,6 @@ func main() {
 		}
 		logger.Info("Shutting down server...")
 		publicGrpcS.GracefulStop()
-		wp.GraceFulStop()
 		logger.Info("server shutdown due to signal")
 		os.Exit(0)
 	}
@@ -319,6 +320,7 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 	*minio.Minio,
 	service.VectorDatabase,
 	*acl.ACLClient,
+	temporalclient.Client,
 	func(),
 ) {
 	closeFuncs := map[string]func() error{}
@@ -391,6 +393,33 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 
 	aclClient := acl.NewACLClient(fgaClient, fgaReplicaClient, redisClient)
 
+	// Initialize Temporal client
+	temporalClientOptions, err := temporalx.ClientOptions(config.Config.Temporal, logger)
+	if err != nil {
+		logger.Fatal("Unable to build Temporal client options", zap.Error(err))
+	}
+
+	// Only add interceptor if tracing is enabled
+	if config.Config.OTELCollector.Enable {
+		temporalTracingInterceptor, err := opentelemetry.NewTracingInterceptor(opentelemetry.TracerOptions{
+			Tracer:            otel.Tracer(serviceName),
+			TextMapPropagator: otel.GetTextMapPropagator(),
+		})
+		if err != nil {
+			logger.Fatal("Unable to create temporal tracing interceptor", zap.Error(err))
+		}
+		temporalClientOptions.Interceptors = []interceptor.ClientInterceptor{temporalTracingInterceptor}
+	}
+
+	temporalClient, err := temporalclient.Dial(temporalClientOptions)
+	if err != nil {
+		logger.Fatal("Unable to create Temporal client", zap.Error(err))
+	}
+	closeFuncs["temporal"] = func() error {
+		temporalClient.Close()
+		return nil
+	}
+
 	closer := func() {
 		for conn, fn := range closeFuncs {
 			if err := fn(); err != nil {
@@ -399,5 +428,5 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 		}
 	}
 
-	return pipelinePublicServiceClient, mgmtPrivateServiceClient, redisClient, db, minioClient, vectorDB, aclClient, closer
+	return pipelinePublicServiceClient, mgmtPrivateServiceClient, redisClient, db, minioClient, vectorDB, aclClient, temporalClient, closer
 }

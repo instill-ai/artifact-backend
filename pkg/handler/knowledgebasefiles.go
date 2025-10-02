@@ -6,20 +6,22 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/gofrs/uuid"
+	"go.temporal.io/api/enums/v1"
+	"go.temporal.io/sdk/client"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"gorm.io/gorm"
 
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/service"
-	"github.com/instill-ai/artifact-backend/pkg/utils"
+	"github.com/instill-ai/artifact-backend/pkg/temporal"
 	"github.com/instill-ai/x/resource"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
@@ -615,11 +617,16 @@ func (ph *PublicHandler) GetCatalogFile(ctx context.Context, req *artifactpb.Get
 
 }
 
-func (ph *PublicHandler) DeleteCatalogFile(
-	ctx context.Context,
-	req *artifactpb.DeleteCatalogFileRequest,
-) (*artifactpb.DeleteCatalogFileResponse, error) {
+// DeleteCatalogFile deletes a file in a catalog
+func (ph *PublicHandler) DeleteCatalogFile(ctx context.Context, req *artifactpb.DeleteCatalogFileRequest) (*artifactpb.DeleteCatalogFileResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
+
+	// Get authenticated user UID for proper context in cleanup operations
+	authUID, err := getUserUIDFromContext(ctx)
+	if err != nil {
+		logger.Error("failed to get user id from header", zap.Error(err))
+		return nil, fmt.Errorf("failed to get user id from header: %v. err: %w", err, errorsx.ErrUnauthenticated)
+	}
 
 	// ACL - check user's permission to write catalog of kb file
 	kbfs, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{uuid.FromStringOrNil(req.FileUid)})
@@ -655,99 +662,55 @@ func (ph *PublicHandler) DeleteCatalogFile(
 		return nil, fmt.Errorf("file not found. err: %w", errorsx.ErrNotFound)
 	}
 
-	startSignal := make(chan bool)
-	// TODO: need to use clean worker to prevent the service from being restarted before the file is deleted
-	go utils.GoRecover(
-		func() {
-			// Create a new context to prevent the parent context from being cancelled
-			ctx := context.TODO()
-			logger, _ := logx.GetZapLogger(ctx)
-			canStart := <-startSignal
-			if !canStart {
-				logger.Info("DeleteCatalogFile: received stop signal")
-				return
-			}
-			logger.Info("DeleteCatalogFile: start deleting file from minio, database and milvus")
-			allPass := true
-			// Delete the file from MinIO
-			objectPaths := []string{}
-			// Add the knowledge base file in MinIO to the list of objects to delete
-			objectPaths = append(objectPaths, files[0].Destination)
-			// Add the converted file in MinIO to the list of objects to delete
-			cf, err := ph.service.Repository().GetConvertedFileByFileUID(ctx, fUID)
-			if err != nil {
-				if err != gorm.ErrRecordNotFound {
-					logger.Error("failed to get converted file by file uid", zap.Error(err))
-					allPass = false
-				}
-			} else if cf != nil {
-				objectPaths = append(objectPaths, cf.Destination)
-			}
-			// Add the chunks in MinIO to the list of objects to delete
-			chunks, err := ph.service.Repository().ListChunksByKbFileUID(ctx, fUID)
-			if err != nil {
-				logger.Error("failed to get chunks by kb file uid", zap.Error(err))
-				allPass = false
-			} else if len(chunks) > 0 {
-				for _, chunk := range chunks {
-					objectPaths = append(objectPaths, chunk.ContentDest)
-				}
-			}
-			// Delete the embeddings in Milvus (this better to be done first)
-			embUIDs := []string{}
-			embeddings, _ := ph.service.Repository().ListEmbeddingsByKbFileUID(ctx, fUID)
-			for _, emb := range embeddings {
-				embUIDs = append(embUIDs, emb.UID.String())
-			}
-			err = ph.service.VectorDB().DeleteEmbeddingsInCollection(ctx, files[0].KnowledgeBaseUID, embUIDs)
-			if err != nil {
-				logger.Error("failed to delete embeddings in milvus", zap.Error(err))
-				allPass = false
-			}
+	// Try to trigger cleanup workflow first - if this fails, we don't want to soft-delete
+	// the file record as it would leave orphaned resources
+	temporalClient := ph.service.TemporalClient()
+	if temporalClient != nil {
+		// Trigger cleanup workflow asynchronously
+		workflowID := fmt.Sprintf("cleanup-file-%s-%d", fUID.String(), time.Now().UnixNano())
+		workflowOptions := client.StartWorkflowOptions{
+			ID:                    workflowID,
+			TaskQueue:             temporal.TaskQueue,
+			WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
+		}
 
-			// Delete the files in MinIO
-			errChan := ph.service.MinIO().DeleteFiles(ctx, config.Config.Minio.BucketName, objectPaths)
-			for err := range errChan {
-				if err != nil {
-					logger.Error("failed to delete files in minio", zap.Error(err))
-					allPass = false
-				}
-			}
-			// Delete the converted file in PostgreSQL
-			err = ph.service.Repository().HardDeleteConvertedFileByFileUID(ctx, fUID)
-			if err != nil {
-				logger.Error("failed to delete converted file in postgreSQL", zap.Error(err))
-				allPass = false
-			}
-			// Delete the chunks in PostgreSQL
-			err = ph.service.Repository().HardDeleteChunksByKbFileUID(ctx, fUID)
-			if err != nil {
-				logger.Error("failed to delete chunks in postgreSQL", zap.Error(err))
-				allPass = false
-			}
-			// Delete the embeddings in PostgreSQL
-			err = ph.service.Repository().HardDeleteEmbeddingsByKbFileUID(ctx, fUID)
-			if err != nil {
-				logger.Error("failed to delete embeddings in postgreSQL", zap.Error(err))
-				allPass = false
-			}
-			if allPass {
-				logger.Info("DeleteCatalogFile: successfully deleted file from minio, database and milvus", zap.String("file_uid", fUID.String()))
-			} else {
-				logger.Error("DeleteCatalogFile: failed to delete file from minio, database and milvus", zap.String("file_uid", fUID.String()))
-			}
-		},
-		"DeleteCatalogFile",
-	)
+		param := temporal.CleanupFileWorkflowParam{
+			FileUID:             fUID.String(),
+			IncludeOriginalFile: true,
+			UserUID:             authUID,
+			WorkflowID:          workflowID,
+		}
 
+		_, err := temporalClient.ExecuteWorkflow(ctx, workflowOptions, "CleanupFileWorkflow", param)
+		if err != nil {
+			logger.Error("Failed to trigger cleanup workflow - aborting file deletion to prevent resource leaks",
+				zap.String("fileUID", fUID.String()),
+				zap.String("workflowID", workflowID),
+				zap.Error(err))
+			return nil, fmt.Errorf("failed to start cleanup workflow: %w", err)
+		}
+		logger.Info("Cleanup workflow triggered successfully",
+			zap.String("fileUID", fUID.String()),
+			zap.String("workflowID", workflowID))
+	} else {
+		// Temporal client is nil - perform immediate cleanup to prevent resource leaks
+		logger.Warn("Temporal client is nil, performing immediate cleanup",
+			zap.String("fileUID", fUID.String()))
+
+		if err := ph.performImmediateCleanup(ctx, files[0]); err != nil {
+			logger.Error("Failed to perform immediate cleanup",
+				zap.String("fileUID", fUID.String()),
+				zap.Error(err))
+			return nil, fmt.Errorf("failed to perform cleanup: %w", err)
+		}
+	}
+
+	// Only soft-delete the file record after cleanup is successfully initiated or completed
 	err = ph.service.Repository().DeleteKnowledgeBaseFileAndDecreaseUsage(ctx, fUID)
 	if err != nil {
 		logger.Error("failed to delete knowledge base file and decrease usage", zap.Error(err))
-		startSignal <- false
 		return nil, err
 	}
-	// start the background deletion
-	startSignal <- true
 
 	return &artifactpb.DeleteCatalogFileResponse{
 		FileUid: fUID.String(),
@@ -799,6 +762,35 @@ func (ph *PublicHandler) ProcessCatalogFiles(ctx context.Context, req *artifactp
 	files, err := ph.service.Repository().ProcessKnowledgeBaseFiles(ctx, req.FileUids, requesterUUID)
 	if err != nil {
 		return nil, err
+	}
+
+	// Trigger Temporal workflows for each file
+	temporalClient := ph.service.TemporalClient()
+	if temporalClient != nil {
+		for _, file := range files {
+			workflowID := fmt.Sprintf("process-file-%s", file.UID.String())
+			workflowOptions := client.StartWorkflowOptions{
+				ID:                    workflowID,
+				TaskQueue:             temporal.TaskQueue,
+				WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+			}
+
+			param := temporal.ProcessFileWorkflowParam{
+				FileUID:          file.UID.String(),
+				KnowledgeBaseUID: file.KnowledgeBaseUID.String(),
+				UserUID:          file.Owner.String(),
+				RequesterUID:     file.RequesterUID.String(),
+			}
+
+			_, err := temporalClient.ExecuteWorkflow(ctx, workflowOptions, "ProcessFileWorkflow", param)
+			if err != nil {
+				logger.Error("Failed to start file processing workflow",
+					zap.String("fileUID", file.UID.String()),
+					zap.String("workflowID", workflowID),
+					zap.Error(err))
+				// Continue processing other files even if one fails
+			}
+		}
 	}
 
 	// populate the files into response
@@ -987,4 +979,120 @@ func (ph *PublicHandler) UpdateCatalogFileTags(ctx context.Context, req *artifac
 	// Call the service layer to update the tags
 	// The service layer handles all validation, permission checks, and business logic
 	return ph.service.UpdateCatalogFileTags(ctx, req)
+}
+
+// performImmediateCleanup performs immediate cleanup of file resources when Temporal is unavailable
+// This serves as a fallback mechanism to prevent resource leaks
+func (ph *PublicHandler) performImmediateCleanup(ctx context.Context, file repository.KnowledgeBaseFile) error {
+	logger, _ := logx.GetZapLogger(ctx)
+	fileUID := file.UID
+	kbUID := file.KnowledgeBaseUID
+
+	logger.Info("Starting immediate cleanup of file resources",
+		zap.String("fileUID", fileUID.String()),
+		zap.String("kbUID", kbUID.String()))
+
+	var cleanupErrors []string
+
+	// 1. Cleanup original file from MinIO
+	if file.Destination != "" {
+		err := ph.service.MinIO().DeleteFile(ctx, config.Config.Minio.BucketName, file.Destination)
+		if err != nil {
+			logger.Error("Failed to delete original file from MinIO",
+				zap.String("fileUID", fileUID.String()),
+				zap.String("destination", file.Destination),
+				zap.Error(err))
+			cleanupErrors = append(cleanupErrors, fmt.Sprintf("original file: %v", err))
+		} else {
+			logger.Info("Deleted original file from MinIO",
+				zap.String("fileUID", fileUID.String()),
+				zap.String("destination", file.Destination))
+		}
+	}
+
+	// 2. Cleanup converted files if they exist
+	convertedFile, err := ph.service.Repository().GetConvertedFileByFileUID(ctx, fileUID)
+	if err == nil && convertedFile != nil {
+		err = ph.service.DeleteConvertedFileByFileUID(ctx, kbUID, fileUID)
+		if err != nil {
+			logger.Error("Failed to delete converted file from MinIO",
+				zap.String("fileUID", fileUID.String()),
+				zap.Error(err))
+			cleanupErrors = append(cleanupErrors, fmt.Sprintf("converted file: %v", err))
+		} else {
+			logger.Info("Deleted converted file from MinIO",
+				zap.String("fileUID", fileUID.String()))
+		}
+
+		// Delete the converted file record from database
+		err = ph.service.Repository().HardDeleteConvertedFileByFileUID(ctx, fileUID)
+		if err != nil {
+			logger.Error("Failed to delete converted file record",
+				zap.String("fileUID", fileUID.String()),
+				zap.Error(err))
+			cleanupErrors = append(cleanupErrors, fmt.Sprintf("converted file record: %v", err))
+		}
+	}
+
+	// 3. Cleanup text chunks if they exist
+	chunks, err := ph.service.Repository().ListChunksByKbFileUID(ctx, fileUID)
+	if err == nil && len(chunks) > 0 {
+		err = ph.service.DeleteTextChunksByFileUID(ctx, kbUID, fileUID)
+		if err != nil {
+			logger.Error("Failed to delete chunks from MinIO",
+				zap.String("fileUID", fileUID.String()),
+				zap.Int("chunkCount", len(chunks)),
+				zap.Error(err))
+			cleanupErrors = append(cleanupErrors, fmt.Sprintf("chunks: %v", err))
+		} else {
+			logger.Info("Deleted chunks from MinIO",
+				zap.String("fileUID", fileUID.String()),
+				zap.Int("chunkCount", len(chunks)))
+		}
+
+		// Delete chunk records from database
+		err = ph.service.Repository().HardDeleteChunksByKbFileUID(ctx, fileUID)
+		if err != nil {
+			logger.Error("Failed to delete chunk records",
+				zap.String("fileUID", fileUID.String()),
+				zap.Error(err))
+			cleanupErrors = append(cleanupErrors, fmt.Sprintf("chunk records: %v", err))
+		}
+	}
+
+	// 4. Cleanup embeddings if they exist
+	// This also cleans up any orphaned embeddings in Milvus that might not have database records
+	collection := service.KBCollectionName(kbUID)
+	err = ph.service.VectorDB().DeleteEmbeddingsWithFileUID(ctx, collection, fileUID)
+	if err != nil {
+		logger.Error("Failed to delete embeddings from Milvus",
+			zap.String("fileUID", fileUID.String()),
+			zap.Error(err))
+		cleanupErrors = append(cleanupErrors, fmt.Sprintf("embeddings in Milvus: %v", err))
+	} else {
+		logger.Info("Deleted embeddings from Milvus by fileUID",
+			zap.String("fileUID", fileUID.String()))
+	}
+
+	// Delete embedding records from database
+	err = ph.service.Repository().HardDeleteEmbeddingsByKbFileUID(ctx, fileUID)
+	if err != nil {
+		logger.Error("Failed to delete embedding records",
+			zap.String("fileUID", fileUID.String()),
+			zap.Error(err))
+		cleanupErrors = append(cleanupErrors, fmt.Sprintf("embedding records: %v", err))
+	}
+
+	// Log final results
+	if len(cleanupErrors) > 0 {
+		logger.Warn("Immediate cleanup completed with some errors",
+			zap.String("fileUID", fileUID.String()),
+			zap.Strings("errors", cleanupErrors))
+		// Return error to prevent file deletion if cleanup failed
+		return fmt.Errorf("cleanup failed with errors: %v", cleanupErrors)
+	}
+
+	logger.Info("Immediate cleanup completed successfully",
+		zap.String("fileUID", fileUID.String()))
+	return nil
 }

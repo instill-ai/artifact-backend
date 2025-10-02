@@ -69,6 +69,7 @@ export default function (data) {
   restPublic.CheckUpdateCatalog(data);
   restPublic.CheckDeleteCatalog(data);
   restPublic.CheckCatalog(data);
+  restPublic.CheckCleanupFiles(data);
 
   restPublicWithJwt.CheckCreateCatalogUnauthenticated(data);
   restPublicWithJwt.CheckListCatalogsUnauthenticated(data);

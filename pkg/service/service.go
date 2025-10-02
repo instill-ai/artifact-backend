@@ -6,10 +6,13 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/redis/go-redis/v9"
 
+	temporalclient "go.temporal.io/sdk/client"
+
 	"github.com/instill-ai/artifact-backend/pkg/acl"
 	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/resource"
+	"github.com/instill-ai/artifact-backend/pkg/temporal"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	mgmtpb "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
@@ -20,23 +23,32 @@ import (
 type Service interface {
 	CheckNamespacePermission(context.Context, *resource.Namespace) error
 	ConvertToMDPipe(context.Context, MDConversionParams) (*MDConversionResult, error)
-	GenerateSummary(_ context.Context, content, fileType string) (string, error)
-	ChunkMarkdownPipe(_ context.Context, markdown string) (*ChunkingResult, error)
-	ChunkTextPipe(_ context.Context, text string) (*ChunkingResult, error)
-	EmbeddingTextPipe(_ context.Context, texts []string) ([][]float32, error)
-	QuestionAnsweringPipe(_ context.Context, question string, simChunks []string) (string, error)
-	SimilarityChunksSearch(_ context.Context, ownerUID uuid.UUID, _ *artifactpb.SimilarityChunksSearchRequest) ([]SimChunk, error)
-	UpdateCatalogFileTags(_ context.Context, _ *artifactpb.UpdateCatalogFileTagsRequest) (*artifactpb.UpdateCatalogFileTagsResponse, error)
-	GetNamespaceByNsID(_ context.Context, nsID string) (*resource.Namespace, error)
+	GenerateSummary(context.Context, string, string) (string, error)
+	ChunkMarkdownPipe(context.Context, string) (*ChunkingResult, error)
+	ChunkTextPipe(context.Context, string) (*ChunkingResult, error)
+	EmbeddingTextBatch(context.Context, []string) ([][]float32, error)
+	EmbeddingTextPipe(context.Context, []string) ([][]float32, error)
+	QuestionAnsweringPipe(context.Context, string, []string) (string, error)
+	SimilarityChunksSearch(context.Context, uuid.UUID, *artifactpb.SimilarityChunksSearchRequest) ([]SimChunk, error)
+	UpdateCatalogFileTags(context.Context, *artifactpb.UpdateCatalogFileTagsRequest) (*artifactpb.UpdateCatalogFileTagsResponse, error)
+	GetNamespaceByNsID(context.Context, string) (*resource.Namespace, error)
 	GetChunksByFile(context.Context, *repository.KnowledgeBaseFile) (SourceTableType, SourceIDType, []repository.TextChunk, map[ChunkUIDType]ContentType, []string, error)
+	GetFilesByPaths(context.Context, string, []string) ([]temporal.FileContent, error)
+	DeleteFiles(context.Context, string, []string) error
+	DeleteFilesWithPrefix(context.Context, string, string) error
+	DeleteKnowledgeBase(context.Context, string) error
+	DeleteConvertedFileByFileUID(context.Context, uuid.UUID, uuid.UUID) error
+	DeleteTextChunksByFileUID(context.Context, uuid.UUID, uuid.UUID) error
+	SaveTextChunks(context.Context, uuid.UUID, uuid.UUID, map[string][]byte) (map[string]string, error)
+	TriggerCleanupKnowledgeBaseWorkflow(context.Context, string) error
 	ListRepositoryTags(context.Context, *artifactpb.ListRepositoryTagsRequest) (*artifactpb.ListRepositoryTagsResponse, error)
 	CreateRepositoryTag(context.Context, *artifactpb.CreateRepositoryTagRequest) (*artifactpb.CreateRepositoryTagResponse, error)
 	GetRepositoryTag(context.Context, *artifactpb.GetRepositoryTagRequest) (*artifactpb.GetRepositoryTagResponse, error)
 	DeleteRepositoryTag(context.Context, *artifactpb.DeleteRepositoryTagRequest) (*artifactpb.DeleteRepositoryTagResponse, error)
-	GetUploadURL(_ context.Context, _ *artifactpb.GetObjectUploadURLRequest, namespaceUID uuid.UUID, namespaceID string, creatorUID uuid.UUID) (*artifactpb.GetObjectUploadURLResponse, error)
-	GetDownloadURL(_ context.Context, _ *artifactpb.GetObjectDownloadURLRequest, namespaceUID uuid.UUID, namespaceID string) (*artifactpb.GetObjectDownloadURLResponse, error)
-	CheckCatalogUserPermission(_ context.Context, nsID, catalogID, authUID string) (*resource.Namespace, *repository.KnowledgeBase, error)
-	GetNamespaceAndCheckPermission(_ context.Context, nsID string) (*resource.Namespace, error)
+	GetUploadURL(context.Context, *artifactpb.GetObjectUploadURLRequest, uuid.UUID, string, uuid.UUID) (*artifactpb.GetObjectUploadURLResponse, error)
+	GetDownloadURL(context.Context, *artifactpb.GetObjectDownloadURLRequest, uuid.UUID, string) (*artifactpb.GetObjectDownloadURLResponse, error)
+	CheckCatalogUserPermission(context.Context, string, string, string) (*resource.Namespace, *repository.KnowledgeBase, error)
+	GetNamespaceAndCheckPermission(context.Context, string) (*resource.Namespace, error)
 
 	// TODO instead of exposing this dependencies, Service should expose use
 	// cases. We're drawing a line for now here in the refactor and take this
@@ -47,6 +59,7 @@ type Service interface {
 	ACLClient() *acl.ACLClient
 	VectorDB() VectorDatabase
 	RedisClient() *redis.Client
+	TemporalClient() temporalclient.Client
 }
 
 type service struct {
@@ -58,6 +71,7 @@ type service struct {
 	redisClient    *redis.Client
 	vectorDB       VectorDatabase
 	aclClient      *acl.ACLClient
+	temporalClient temporalclient.Client
 }
 
 // NewService initiates a service instance
@@ -70,6 +84,7 @@ func NewService(
 	rc *redis.Client,
 	vectorDB VectorDatabase,
 	aclClient *acl.ACLClient,
+	temporalClient temporalclient.Client,
 ) Service {
 	return &service{
 		repository:     r,
@@ -80,11 +95,13 @@ func NewService(
 		redisClient:    rc,
 		vectorDB:       vectorDB,
 		aclClient:      aclClient,
+		temporalClient: temporalClient,
 	}
 }
 
-func (s *service) Repository() repository.RepositoryI { return s.repository }
-func (s *service) MinIO() minio.MinioI                { return s.minIO }
-func (s *service) ACLClient() *acl.ACLClient          { return s.aclClient }
-func (s *service) RedisClient() *redis.Client         { return s.redisClient }
-func (s *service) VectorDB() VectorDatabase           { return s.vectorDB }
+func (s *service) Repository() repository.RepositoryI    { return s.repository }
+func (s *service) MinIO() minio.MinioI                   { return s.minIO }
+func (s *service) ACLClient() *acl.ACLClient             { return s.aclClient }
+func (s *service) RedisClient() *redis.Client            { return s.redisClient }
+func (s *service) VectorDB() VectorDatabase              { return s.vectorDB }
+func (s *service) TemporalClient() temporalclient.Client { return s.temporalClient }

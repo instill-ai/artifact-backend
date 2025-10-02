@@ -16,6 +16,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/instill-ai/x/client"
+	"github.com/instill-ai/x/temporal"
 
 	miniox "github.com/instill-ai/x/minio"
 )
@@ -25,20 +26,20 @@ var Config AppConfig
 
 // AppConfig defines
 type AppConfig struct {
-	Server                ServerConfig          `koanf:"server"`
-	Database              DatabaseConfig        `koanf:"database"`
-	InfluxDB              InfluxDBConfig        `koanf:"influxdb"`
-	Cache                 CacheConfig           `koanf:"cache"`
-	OTELCollector         OTELCollectorConfig   `koanf:"otelcollector"`
-	MgmtBackend           client.ServiceConfig  `koanf:"mgmtbackend"`
-	PipelineBackend       client.ServiceConfig  `koanf:"pipelinebackend"`
-	ModelBackend          client.ServiceConfig  `koanf:"modelbackend"`
-	Registry              RegistryConfig        `koanf:"registry"`
-	OpenFGA               OpenFGAConfig         `koanf:"openfga"`
-	Minio                 miniox.Config         `koanf:"minio"`
-	Milvus                MilvusConfig          `koanf:"milvus"`
-	FileToEmbeddingWorker FileToEmbeddingWorker `koanf:"filetoembeddingworker"`
-	Blob                  BlobConfig            `koanf:"blob"`
+	Server          ServerConfig          `koanf:"server"`
+	Database        DatabaseConfig        `koanf:"database"`
+	InfluxDB        InfluxDBConfig        `koanf:"influxdb"`
+	Temporal        temporal.ClientConfig `koanf:"temporal"`
+	Cache           CacheConfig           `koanf:"cache"`
+	OTELCollector   OTELCollectorConfig   `koanf:"otelcollector"`
+	MgmtBackend     client.ServiceConfig  `koanf:"mgmtbackend"`
+	PipelineBackend client.ServiceConfig  `koanf:"pipelinebackend"`
+	ModelBackend    client.ServiceConfig  `koanf:"modelbackend"`
+	Registry        RegistryConfig        `koanf:"registry"`
+	OpenFGA         OpenFGAConfig         `koanf:"openfga"`
+	Minio           miniox.Config         `koanf:"minio"`
+	Milvus          MilvusConfig          `koanf:"milvus"`
+	Blob            BlobConfig            `koanf:"blob"`
 }
 
 // OpenFGAConfig is the openfga configuration.
@@ -129,11 +130,6 @@ type RegistryConfig struct {
 type MilvusConfig struct {
 	Host string `koanf:"host"`
 	Port string `koanf:"port"`
-}
-
-// FileToEmbeddingWorker is the file to embedding worker configuration.
-type FileToEmbeddingWorker struct {
-	NumberOfWorkers int `koanf:"numberofworkers"`
 }
 
 // BlobConfig is the blob configuration.

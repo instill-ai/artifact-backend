@@ -26,6 +26,13 @@ RUN --mount=type=bind,target=. \
     go build -ldflags "-X main.serviceVersion=${SERVICE_VERSION} -X main.serviceName=${SERVICE_NAME}-init" \
     -o /${SERVICE_NAME}-init ./cmd/init
 
+RUN --mount=type=bind,target=. \
+    --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    GOOS=$TARGETOS GOARCH=$TARGETARCH CGO_ENABLED=0 \
+    go build -ldflags "-X main.serviceVersion=${SERVICE_VERSION} -X main.serviceName=${SERVICE_NAME}-worker" \
+    -o /${SERVICE_NAME}-worker ./cmd/worker
+
 FROM golang:${GOLANG_VERSION}
 
 USER nobody:nogroup
@@ -36,6 +43,7 @@ WORKDIR /${SERVICE_NAME}
 
 COPY --from=build --chown=nobody:nogroup /${SERVICE_NAME}-migrate ./
 COPY --from=build --chown=nobody:nogroup /${SERVICE_NAME}-init ./
+COPY --from=build --chown=nobody:nogroup /${SERVICE_NAME}-worker ./
 COPY --from=build --chown=nobody:nogroup /${SERVICE_NAME} ./
 
 COPY --chown=nobody:nogroup ./config ./config

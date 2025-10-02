@@ -78,8 +78,7 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 		chunkFilePaths = append(chunkFilePaths, chunk.ContentDest)
 	}
 
-	// fetch the chunks content from blob storage
-	chunkContents, err := ph.service.MinIO().GetFilesByPaths(ctx, config.Config.Minio.BucketName, chunkFilePaths)
+	chunkContents, err := ph.service.GetFilesByPaths(ctx, config.Config.Minio.BucketName, chunkFilePaths)
 	if err != nil {
 		return nil, fmt.Errorf("fetching chunk contents: %w", err)
 	}

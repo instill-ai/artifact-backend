@@ -1,0 +1,96 @@
+package worker
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/gofrs/uuid"
+	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/workflow"
+
+	artifacttemporal "github.com/instill-ai/artifact-backend/pkg/temporal"
+)
+
+// CleanupFileWorkflow handles cleanup operations for a specific file.
+// This workflow cleans up resources for a single file, including:
+// - Original file from MinIO (if IncludeOriginalFile is true)
+// - Converted files (markdown/text conversions)
+// - Text chunks
+// - Embeddings from both Milvus and Postgres
+// Use this when deleting individual files from a knowledge base.
+func (w *worker) CleanupFileWorkflow(ctx workflow.Context, param artifacttemporal.CleanupFileWorkflowParam) error {
+	logger := workflow.GetLogger(ctx)
+	logger.Info("Starting CleanupFileWorkflow",
+		"fileUID", param.FileUID,
+		"userUID", param.UserUID,
+		"workflowID", param.WorkflowID,
+		"includeOriginalFile", param.IncludeOriginalFile)
+
+	fileUID, err := uuid.FromString(param.FileUID)
+	if err != nil {
+		return fmt.Errorf("invalid file UID: %w", err)
+	}
+
+	activityOptions := workflow.ActivityOptions{
+		StartToCloseTimeout: 5 * time.Minute,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    time.Second,
+			BackoffCoefficient: 2.0,
+			MaximumInterval:    30 * time.Second,
+			MaximumAttempts:    3,
+		},
+	}
+	ctx = workflow.WithActivityOptions(ctx, activityOptions)
+
+	cleanupParam := &CleanupFilesActivityParam{
+		FileUID:             fileUID,
+		FileIDs:             []string{},
+		IncludeOriginalFile: param.IncludeOriginalFile,
+	}
+
+	err = workflow.ExecuteActivity(ctx, w.CleanupFilesActivity, cleanupParam).Get(ctx, nil)
+	if err != nil {
+		logger.Error("Failed to cleanup files", "error", err)
+		return fmt.Errorf("failed to cleanup files: %w", err)
+	}
+
+	logger.Info("CleanupFileWorkflow completed successfully",
+		"fileUID", param.FileUID,
+		"workflowID", param.WorkflowID)
+	return nil
+}
+
+// CleanupKnowledgeBaseWorkflow orchestrates the complete cleanup of an entire knowledge base.
+// This workflow performs a comprehensive cleanup of all knowledge base resources, including:
+// - All files from MinIO for the knowledge base
+// - Entire Milvus collection (all embeddings)
+// - All file records in Postgres
+// - All converted file records in Postgres
+// - All chunk records in Postgres
+// - All embedding records in Postgres
+// - ACL permissions for the knowledge base
+// Use this when deleting an entire knowledge base (not individual files).
+func (w *worker) CleanupKnowledgeBaseWorkflow(ctx workflow.Context, param artifacttemporal.CleanupKnowledgeBaseWorkflowParam) error {
+	logger := workflow.GetLogger(ctx)
+	logger.Info("Starting CleanupKnowledgeBaseWorkflow", "kbUID", param.KnowledgeBaseUID)
+
+	activityOptions := workflow.ActivityOptions{
+		StartToCloseTimeout: 10 * time.Minute,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    time.Second,
+			BackoffCoefficient: 2.0,
+			MaximumInterval:    100 * time.Second,
+			MaximumAttempts:    3,
+		},
+	}
+	ctx = workflow.WithActivityOptions(ctx, activityOptions)
+
+	err := workflow.ExecuteActivity(ctx, w.CleanupKnowledgeBaseActivity, param).Get(ctx, nil)
+	if err != nil {
+		logger.Error("CleanupKnowledgeBaseWorkflow failed", "error", err)
+		return err
+	}
+
+	logger.Info("CleanupKnowledgeBaseWorkflow completed successfully", "kbUID", param.KnowledgeBaseUID)
+	return nil
+}

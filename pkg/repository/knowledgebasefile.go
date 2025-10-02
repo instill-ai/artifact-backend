@@ -95,9 +95,9 @@ type KnowledgeBaseFile struct {
 	Size int64 `gorm:"column:size" json:"size"`
 	// Process requester UID
 	RequesterUID uuid.UUID `gorm:"column:requester_uid;type:uuid;"`
-	// This filed is not stored in the database. It is used to unmarshal the ExtraMetaData field
+	// This field is not stored in the database. It is used to unmarshal the ExtraMetaData field
 	ExtraMetaDataUnmarshal *ExtraMetaData `gorm:"-" json:"extra_meta_data_unmarshal"`
-	// this field is used to let external service store the external metadata of file.
+	// This field is used to let external service store the external metadata of file.
 	ExternalMetadata string `gorm:"column:external_metadata;type:jsonb" json:"external_metadata"`
 	// This field is not stored in the database. It is used to unmarshal the ExternalMetadata field
 	ExternalMetadataUnmarshal *structpb.Struct `gorm:"-" json:"external_metadata_unmarshal"`

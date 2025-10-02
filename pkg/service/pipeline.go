@@ -3,13 +3,14 @@ package service
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
+	"go.temporal.io/sdk/client"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/instill-ai/artifact-backend/pkg/repository"
-	"github.com/instill-ai/artifact-backend/pkg/utils"
+	"github.com/instill-ai/artifact-backend/pkg/temporal"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	pipelinepb "github.com/instill-ai/protogen-go/pipeline/pipeline/v1beta"
@@ -243,13 +244,61 @@ func (s *service) ChunkTextPipe(ctx context.Context, text string) (*ChunkingResu
 	}, nil
 }
 
-// EmbeddingTextPipe converts multiple text inputs into vector embeddings using a pipeline service.
+// EmbeddingTextBatch converts a single batch of text inputs into vector embeddings using a pipeline service.
+// This method is designed to be called by the EmbedTextsActivity in Temporal workflows.
+//
+// Parameters:
+//   - ctx: Context for the operation
+//   - texts: Slice of strings to be converted to embeddings (typically a batch of 32 or fewer)
+//
+// Returns:
+//   - [][]float32: 2D slice where each inner slice is a vector embedding
+//   - error: Any error encountered during processing
+func (s *service) EmbeddingTextBatch(ctx context.Context, texts []string) ([][]float32, error) {
+	if len(texts) == 0 {
+		return [][]float32{}, nil
+	}
+
+	// Prepare the inputs for the pipeline request
+	inputs := make([]*structpb.Struct, 0, len(texts))
+	for _, text := range texts {
+		inputs = append(inputs, &structpb.Struct{
+			Fields: map[string]*structpb.Value{
+				"chunk_input": structpb.NewStringValue(text),
+			},
+		})
+	}
+
+	// Trigger the embedding pipeline
+	req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
+		NamespaceId: EmbedTextPipeline.Namespace,
+		PipelineId:  EmbedTextPipeline.ID,
+		ReleaseId:   EmbedTextPipeline.Version,
+		Inputs:      inputs,
+	}
+
+	cctx, cancel := context.WithTimeout(ctx, 300*time.Second)
+	defer cancel()
+
+	res, err := s.pipelinePub.TriggerNamespacePipelineRelease(cctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to trigger %s pipeline: %w", EmbedTextPipeline.ID, err)
+	}
+
+	// Extract vectors from the response
+	vectors, err := GetVectorsFromResponse(res)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get vectors from response: %w", err)
+	}
+
+	return vectors, nil
+}
+
+// EmbeddingTextPipe converts multiple text inputs into vector embeddings using Temporal workflows.
 // It processes texts in parallel batches for efficiency while managing resource usage.
 //
 // Parameters:
 //   - ctx: Context for the operation
-//   - caller: UUID of the calling user
-//   - requester: UUID of the requesting entity (optional)
 //   - texts: Slice of strings to be converted to embeddings
 //
 // Returns:
@@ -257,109 +306,89 @@ func (s *service) ChunkTextPipe(ctx context.Context, text string) (*ChunkingResu
 //   - error: Any error encountered during processing
 //
 // The function:
-//   - Processes texts in batches of 32
-//   - Limits concurrent processing to 5 goroutines
+//   - When Temporal is available: uses Temporal workflow for all batch sizes
+//   - When Temporal is unavailable or fails: falls back to manual batching
+//   - Batches are processed in chunks of 32 texts
+//   - Concurrency is controlled at the Temporal worker level (not per-workflow)
 //   - Maintains input order in the output
-//   - Cancels all operations if any batch fails
+//   - Automatic retries via Temporal's retry policy
 func (s *service) EmbeddingTextPipe(ctx context.Context, texts []string) ([][]float32, error) {
-	ctx, ctxCancel := context.WithCancel(ctx)
-	defer ctxCancel()
-	const maxBatchSize = 32
-	const maxConcurrentGoroutines = 5
-	var allResults [][]float32
-	var wg sync.WaitGroup
-	errChan := make(chan error, len(texts)/maxBatchSize+1)
-	resultsChan := make(chan struct {
-		index  int
-		result [][]float32
-	}, len(texts)/maxBatchSize+1)
+	// If temporal client is not available, use manual batching
+	if s.temporalClient == nil {
+		return s.embeddingTextManualBatch(ctx, texts)
+	}
 
-	// Loop through the texts in batches of maxBatchSize (32).
-	// For each batch, create a new goroutine to process the batch concurrently.
-	// In each goroutine:
-	// - Create a new context with metadata.
-	// - Prepare the inputs for the pipeline request.
-	// - Trigger the pipeline and get the response.
-	// - Extract the vector from the response.
-	// - Send the result to the results channel.
-	// If an error occurs, send the error to the error channel.
-	// Create a semaphore channel to limit concurrent goroutines to maxConcurrentGoroutines
-	sem := make(chan struct{}, maxConcurrentGoroutines)
-	for i := 0; i < len(texts); i += maxBatchSize {
+	// Extract authentication metadata from context to pass to activities
+	var requestMetadata map[string][]string
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		requestMetadata = md
+	} else if md, ok := metadata.FromOutgoingContext(ctx); ok {
+		requestMetadata = md
+	}
 
-		end := i + maxBatchSize
-		if end > len(texts) {
-			end = len(texts)
-		}
+	// Use Temporal workflow when available
+	workflowID := fmt.Sprintf("embed-texts-%d-%d", time.Now().UnixNano(), len(texts))
+	workflowOptions := client.StartWorkflowOptions{
+		ID:        workflowID,
+		TaskQueue: temporal.TaskQueue,
+	}
+
+	param := temporal.EmbedTextsWorkflowParam{
+		Texts:           texts,
+		BatchSize:       32,
+		RequestMetadata: requestMetadata,
+	}
+
+	workflowRun, err := s.temporalClient.ExecuteWorkflow(ctx, workflowOptions, "EmbedTextsWorkflow", param)
+	if err != nil {
+		// Fallback to manual batching if workflow fails to start
+		return s.embeddingTextManualBatch(ctx, texts)
+	}
+
+	// Wait for the workflow to complete and get the results
+	var vectors [][]float32
+	err = workflowRun.Get(ctx, &vectors)
+	if err != nil {
+		// Fallback to manual batching if workflow execution fails
+		return s.embeddingTextManualBatch(ctx, texts)
+	}
+
+	return vectors, nil
+}
+
+// embeddingTextManualBatch processes text embeddings in batches without using Temporal.
+// This is used as a fallback when Temporal is unavailable or fails.
+//
+// Parameters:
+//   - ctx: Context for the operation
+//   - texts: Slice of strings to be converted to embeddings
+//
+// Returns:
+//   - [][]float32: 2D slice where each inner slice is a vector embedding
+//   - error: Any error encountered during processing
+func (s *service) embeddingTextManualBatch(ctx context.Context, texts []string) ([][]float32, error) {
+	const batchSize = 32
+
+	// For small batches, process directly
+	if len(texts) <= batchSize {
+		return s.EmbeddingTextBatch(ctx, texts)
+	}
+
+	// For large batches, process in chunks of 32
+	var allVectors [][]float32
+	for i := 0; i < len(texts); i += batchSize {
+		end := min(i+batchSize, len(texts))
+
 		batch := texts[i:end]
-		batchIndex := i / maxBatchSize
+		vectors, err := s.EmbeddingTextBatch(ctx, batch)
+		if err != nil {
+			return nil, fmt.Errorf("failed to process batch %d-%d: %w", i, end, err)
+		}
 
-		// Acquire semaphore before starting goroutine
-		sem <- struct{}{}
-		wg.Add(1)
-		go utils.GoRecover(func() {
-			// Release semaphore when goroutine completes
-			defer func() { <-sem }()
-			defer wg.Done()
-
-			func(batch []string, index int) {
-				inputs := make([]*structpb.Struct, 0, len(batch))
-				for _, text := range batch {
-					inputs = append(inputs, &structpb.Struct{
-						Fields: map[string]*structpb.Value{
-							"chunk_input": structpb.NewStringValue(text),
-						},
-					})
-				}
-
-				req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
-					NamespaceId: EmbedTextPipeline.Namespace,
-					PipelineId:  EmbedTextPipeline.ID,
-					ReleaseId:   EmbedTextPipeline.Version,
-					Inputs:      inputs,
-				}
-				cctx, cancel := context.WithTimeout(ctx, 300*time.Second)
-				defer cancel()
-				res, err := s.pipelinePub.TriggerNamespacePipelineRelease(cctx, req)
-				if err != nil {
-					errChan <- fmt.Errorf("failed to trigger %s pipeline. err:%w", EmbedTextPipeline.ID, err)
-					ctxCancel()
-					return
-				}
-				result, err := GetVectorsFromResponse(res)
-				if err != nil {
-					errChan <- fmt.Errorf("failed to get vector from response: %w", err)
-					ctxCancel()
-					return
-				}
-
-				resultsChan <- struct {
-					index  int
-					result [][]float32
-				}{index: index, result: result}
-			}(batch, batchIndex)
-		}, fmt.Sprintf("EmbeddingTextPipe %d-%d", i, end))
+		allVectors = append(allVectors, vectors...)
 	}
 
-	// wait for all the goroutines to finish
-	wg.Wait()
-	close(resultsChan)
-	close(errChan)
-	// collect the results in the order of the input texts
-	orderedResults := make([][][]float32, len(texts)/maxBatchSize+1)
-	for res := range resultsChan {
-		orderedResults[res.index] = res.result
-	}
-
-	// flatten the ordered results
-	for _, result := range orderedResults {
-		allResults = append(allResults, result...)
-	}
-
-	if len(errChan) > 0 {
-		return nil, <-errChan
-	}
-	return allResults, nil
+	return allVectors, nil
 }
 
 // GetVectorsFromResponse converts the pipeline response into a slice of float32.

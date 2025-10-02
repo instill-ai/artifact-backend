@@ -293,23 +293,6 @@ func (m *milvusClient) DeleteEmbeddingsWithFileUID(ctx context.Context, kbUID uu
 	return nil
 }
 
-func (m *milvusClient) DeleteEmbeddingsInCollection(ctx context.Context, kbUID uuid.UUID, embeddingUID []string) error {
-	collectionName := collectionName(kbUID)
-	// Construct the delete expression
-	// The expression should be in the format: "embedding_uid in ['pk1', 'pk2', ...]"
-	expr := fmt.Sprintf("embedding_uid in ['%s']", strings.Join(embeddingUID, "','"))
-
-	err := m.c.Delete(ctx, collectionName, "", expr)
-	if err != nil {
-		return fmt.Errorf("failed to delete embeddings: %w", err)
-	}
-	err = m.c.Flush(ctx, collectionName, false)
-	if err != nil {
-		return fmt.Errorf("failed to flush collection after deletion: %w", err)
-	}
-	return err
-}
-
 func (m *milvusClient) fileUIDFilter(fileUIDs []uuid.UUID) string {
 	validUIDs := make([]string, 0, len(fileUIDs))
 	for _, uid := range fileUIDs {

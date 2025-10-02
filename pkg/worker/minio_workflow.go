@@ -1,0 +1,180 @@
+package worker
+
+import (
+	"fmt"
+	"time"
+
+	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/workflow"
+
+	artifacttemporal "github.com/instill-ai/artifact-backend/pkg/temporal"
+)
+
+// SaveChunksWorkflow orchestrates parallel saving of multiple text chunks
+func (w *worker) SaveChunksWorkflow(ctx workflow.Context, param artifacttemporal.SaveChunksWorkflowParam) (map[string]string, error) {
+	logger := workflow.GetLogger(ctx)
+	logger.Info("Starting SaveChunksWorkflow",
+		"chunkCount", len(param.Chunks))
+
+	if len(param.Chunks) == 0 {
+		return make(map[string]string), nil
+	}
+
+	// Set activity options
+	activityOptions := workflow.ActivityOptions{
+		StartToCloseTimeout: 5 * time.Minute,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    time.Second,
+			BackoffCoefficient: 2.0,
+			MaximumInterval:    30 * time.Second,
+			MaximumAttempts:    3,
+		},
+	}
+	ctx = workflow.WithActivityOptions(ctx, activityOptions)
+
+	// Create activities for all chunks
+	type chunkFuture struct {
+		chunkUID string
+		future   workflow.Future
+	}
+	futures := make([]chunkFuture, 0, len(param.Chunks))
+
+	for chunkUID, chunkContent := range param.Chunks {
+		activityParam := &SaveChunkActivityParam{
+			KnowledgeBaseUID: param.KnowledgeBaseUID,
+			FileUID:          param.FileUID,
+			ChunkUID:         chunkUID,
+			ChunkContent:     chunkContent,
+		}
+
+		future := workflow.ExecuteActivity(ctx, w.SaveChunkActivity, activityParam)
+		futures = append(futures, chunkFuture{
+			chunkUID: chunkUID,
+			future:   future,
+		})
+	}
+
+	// Wait for all activities and collect results
+	destinations := make(map[string]string)
+	for _, cf := range futures {
+		var result SaveChunkActivityResult
+		if err := cf.future.Get(ctx, &result); err != nil {
+			logger.Error("Chunk save failed",
+				"chunkUID", cf.chunkUID,
+				"error", err)
+			return nil, fmt.Errorf("failed to save chunk %s: %w", cf.chunkUID, err)
+		}
+
+		destinations[result.ChunkUID] = result.Destination
+	}
+
+	logger.Info("SaveChunksWorkflow completed successfully",
+		"chunksSaved", len(destinations))
+
+	return destinations, nil
+}
+
+// DeleteFilesWorkflow orchestrates parallel deletion of multiple files
+func (w *worker) DeleteFilesWorkflow(ctx workflow.Context, param artifacttemporal.DeleteFilesWorkflowParam) error {
+	logger := workflow.GetLogger(ctx)
+	logger.Info("Starting DeleteFilesWorkflow",
+		"fileCount", len(param.FilePaths))
+
+	if len(param.FilePaths) == 0 {
+		return nil
+	}
+
+	// Set activity options
+	activityOptions := workflow.ActivityOptions{
+		StartToCloseTimeout: 5 * time.Minute,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    time.Second,
+			BackoffCoefficient: 2.0,
+			MaximumInterval:    30 * time.Second,
+			MaximumAttempts:    3,
+		},
+	}
+	ctx = workflow.WithActivityOptions(ctx, activityOptions)
+
+	// Create activities for all files
+	futures := make([]workflow.Future, len(param.FilePaths))
+	for i, filePath := range param.FilePaths {
+		activityParam := &DeleteFileActivityParam{
+			Bucket: param.Bucket,
+			Path:   filePath,
+		}
+
+		futures[i] = workflow.ExecuteActivity(ctx, w.DeleteFileActivity, activityParam)
+	}
+
+	// Wait for all deletions
+	for i, future := range futures {
+		if err := future.Get(ctx, nil); err != nil {
+			logger.Error("File deletion failed",
+				"path", param.FilePaths[i],
+				"error", err)
+			return fmt.Errorf("failed to delete file %s: %w", param.FilePaths[i], err)
+		}
+	}
+
+	logger.Info("DeleteFilesWorkflow completed successfully",
+		"filesDeleted", len(param.FilePaths))
+
+	return nil
+}
+
+// GetFilesWorkflow orchestrates parallel retrieval of multiple files
+func (w *worker) GetFilesWorkflow(ctx workflow.Context, param artifacttemporal.GetFilesWorkflowParam) ([]artifacttemporal.FileContent, error) {
+	logger := workflow.GetLogger(ctx)
+	logger.Info("Starting GetFilesWorkflow",
+		"fileCount", len(param.FilePaths))
+
+	if len(param.FilePaths) == 0 {
+		return []artifacttemporal.FileContent{}, nil
+	}
+
+	// Set activity options
+	activityOptions := workflow.ActivityOptions{
+		StartToCloseTimeout: 5 * time.Minute,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    time.Second,
+			BackoffCoefficient: 2.0,
+			MaximumInterval:    30 * time.Second,
+			MaximumAttempts:    3,
+		},
+	}
+	ctx = workflow.WithActivityOptions(ctx, activityOptions)
+
+	// Create activities for all files
+	futures := make([]workflow.Future, len(param.FilePaths))
+	for i, filePath := range param.FilePaths {
+		activityParam := &GetFileActivityParam{
+			Bucket: param.Bucket,
+			Path:   filePath,
+			Index:  i,
+		}
+
+		futures[i] = workflow.ExecuteActivity(ctx, w.GetFileActivity, activityParam)
+	}
+
+	// Wait for all retrievals and collect results in order
+	results := make([]artifacttemporal.FileContent, len(param.FilePaths))
+	for _, future := range futures {
+		var result GetFileActivityResult
+		if err := future.Get(ctx, &result); err != nil {
+			logger.Error("File retrieval failed", "error", err)
+			return nil, fmt.Errorf("failed to retrieve file: %w", err)
+		}
+
+		results[result.Index] = artifacttemporal.FileContent{
+			Index:   result.Index,
+			Name:    result.Name,
+			Content: result.Content,
+		}
+	}
+
+	logger.Info("GetFilesWorkflow completed successfully",
+		"filesRetrieved", len(results))
+
+	return results, nil
+}

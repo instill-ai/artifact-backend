@@ -72,7 +72,7 @@ func (s *service) GetChunksByFile(ctx context.Context, file *repository.Knowledg
 	for i, c := range chunks {
 		chunksPaths[i] = c.ContentDest
 	}
-	chunkFiles, err := s.minIO.GetFilesByPaths(ctx, config.Config.Minio.BucketName, chunksPaths)
+	chunkFiles, err := s.GetFilesByPaths(ctx, config.Config.Minio.BucketName, chunksPaths)
 	if err != nil {
 		// log error source table and source UID
 		logger.Error("Failed to get chunks from minIO.", zap.String("SourceTable", sourceTable), zap.String("SourceUID", sourceUID.String()))

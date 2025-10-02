@@ -91,8 +91,7 @@ func (ph *PublicHandler) QuestionAnswering(
 	}
 	logger.Info("get chunks by uids", zap.Duration("duration", time.Since(t)))
 	t = time.Now()
-	// fetch the chunks content from minio
-	chunkContents, err := ph.service.MinIO().GetFilesByPaths(ctx, config.Config.Minio.BucketName, chunkFilePaths)
+	chunkContents, err := ph.service.GetFilesByPaths(ctx, config.Config.Minio.BucketName, chunkFilePaths)
 	if err != nil {
 		logger.Error("failed to get chunks content", zap.Error(err))
 		return nil, fmt.Errorf("failed to get chunks content. err: %w", err)
