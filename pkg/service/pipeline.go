@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -329,8 +330,9 @@ func (s *service) EmbeddingTextPipe(ctx context.Context, texts []string) ([][]fl
 	// Use Temporal workflow when available
 	workflowID := fmt.Sprintf("embed-texts-%d-%d", time.Now().UnixNano(), len(texts))
 	workflowOptions := client.StartWorkflowOptions{
-		ID:        workflowID,
-		TaskQueue: temporal.TaskQueue,
+		ID:                    workflowID,
+		TaskQueue:             temporal.TaskQueue,
+		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
 	}
 
 	param := temporal.EmbedTextsWorkflowParam{

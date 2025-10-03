@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/gofrs/uuid"
 	"go.temporal.io/api/enums/v1"
@@ -666,8 +665,23 @@ func (ph *PublicHandler) DeleteCatalogFile(ctx context.Context, req *artifactpb.
 	// the file record as it would leave orphaned resources
 	temporalClient := ph.service.TemporalClient()
 	if temporalClient != nil {
+		// Cancel any ongoing processing workflow for this file
+		processWorkflowID := fmt.Sprintf("process-file-%s", fUID.String())
+		err := temporalClient.CancelWorkflow(ctx, processWorkflowID, "")
+		if err != nil {
+			logger.Warn("Failed to cancel ongoing processing workflow (may not exist)",
+				zap.String("fileUID", fUID.String()),
+				zap.String("workflowID", processWorkflowID),
+				zap.Error(err))
+			// Non-critical - continue with cleanup
+		} else {
+			logger.Info("Cancelled ongoing processing workflow",
+				zap.String("fileUID", fUID.String()),
+				zap.String("workflowID", processWorkflowID))
+		}
+
 		// Trigger cleanup workflow asynchronously
-		workflowID := fmt.Sprintf("cleanup-file-%s-%d", fUID.String(), time.Now().UnixNano())
+		workflowID := fmt.Sprintf("cleanup-file-%s", fUID.String())
 		workflowOptions := client.StartWorkflowOptions{
 			ID:                    workflowID,
 			TaskQueue:             temporal.TaskQueue,
@@ -681,7 +695,7 @@ func (ph *PublicHandler) DeleteCatalogFile(ctx context.Context, req *artifactpb.
 			WorkflowID:          workflowID,
 		}
 
-		_, err := temporalClient.ExecuteWorkflow(ctx, workflowOptions, "CleanupFileWorkflow", param)
+		_, err = temporalClient.ExecuteWorkflow(ctx, workflowOptions, "CleanupFileWorkflow", param)
 		if err != nil {
 			logger.Error("Failed to trigger cleanup workflow - aborting file deletion to prevent resource leaks",
 				zap.String("fileUID", fUID.String()),
@@ -768,12 +782,11 @@ func (ph *PublicHandler) ProcessCatalogFiles(ctx context.Context, req *artifactp
 	temporalClient := ph.service.TemporalClient()
 	if temporalClient != nil {
 		for _, file := range files {
-			// Include timestamp to allow reprocessing (multiple workflows for same file)
-			workflowID := fmt.Sprintf("process-file-%s-%d", file.UID.String(), time.Now().UnixNano())
+			workflowID := fmt.Sprintf("process-file-%s", file.UID.String())
 			workflowOptions := client.StartWorkflowOptions{
 				ID:                    workflowID,
 				TaskQueue:             temporal.TaskQueue,
-				WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+				WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
 			}
 
 			param := temporal.ProcessFileWorkflowParam{
