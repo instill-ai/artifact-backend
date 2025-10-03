@@ -37,6 +37,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/service"
 	"github.com/instill-ai/artifact-backend/pkg/usage"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
+	"github.com/instill-ai/artifact-backend/pkg/worker"
 
 	httpclient "github.com/instill-ai/artifact-backend/pkg/client/http"
 	database "github.com/instill-ai/artifact-backend/pkg/db"
@@ -141,6 +142,15 @@ func main() {
 	defer closer()
 
 	// Initialize service
+	// Initialize workflow implementations
+	processFileWorkflow := worker.NewProcessFileWorkflow(temporalClient)
+	cleanupFileWorkflow := worker.NewCleanupFileWorkflow(temporalClient)
+	cleanupKBWorkflow := worker.NewCleanupKnowledgeBaseWorkflow(temporalClient)
+	embedTextsWorkflow := worker.NewEmbedTextsWorkflow(temporalClient)
+	saveChunksWorkflow := worker.NewSaveChunksWorkflow(temporalClient)
+	deleteFilesWorkflow := worker.NewDeleteFilesWorkflow(temporalClient)
+	getFilesWorkflow := worker.NewGetFilesWorkflow(temporalClient)
+
 	svc := service.NewService(
 		repository.NewRepository(db),
 		minioClient,
@@ -150,7 +160,13 @@ func main() {
 		redisClient,
 		vectorDB,
 		aclClient,
-		temporalClient,
+		processFileWorkflow,
+		cleanupFileWorkflow,
+		cleanupKBWorkflow,
+		embedTextsWorkflow,
+		saveChunksWorkflow,
+		deleteFilesWorkflow,
+		getFilesWorkflow,
 	)
 
 	privateHandler := handler.NewPrivateHandler(svc, logger)

@@ -13,7 +13,7 @@ import (
 )
 
 // GetFileStatusActivity retrieves the current status of a file
-func (w *worker) GetFileStatusActivity(ctx context.Context, fileUID uuid.UUID) (artifactpb.FileProcessStatus, error) {
+func (w *Worker) GetFileStatusActivity(ctx context.Context, fileUID uuid.UUID) (artifactpb.FileProcessStatus, error) {
 	w.log.Info("Getting file status", zap.String("fileUID", fileUID.String()))
 
 	files, err := w.repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{fileUID})
@@ -36,7 +36,7 @@ func (w *worker) GetFileStatusActivity(ctx context.Context, fileUID uuid.UUID) (
 }
 
 // UpdateFileStatusActivity updates the file processing status
-func (w *worker) UpdateFileStatusActivity(ctx context.Context, param *UpdateFileStatusActivityParam) error {
+func (w *Worker) UpdateFileStatusActivity(ctx context.Context, param *UpdateFileStatusActivityParam) error {
 	w.log.Info("Updating file status",
 		zap.String("fileUID", param.FileUID.String()),
 		zap.String("status", param.Status.String()),
@@ -77,7 +77,7 @@ func (w *worker) UpdateFileStatusActivity(ctx context.Context, param *UpdateFile
 }
 
 // NotifyFileProcessedActivity handles notifications about file processing completion
-func (w *worker) NotifyFileProcessedActivity(ctx context.Context, param *NotifyFileProcessedActivityParam) error {
+func (w *Worker) NotifyFileProcessedActivity(ctx context.Context, param *NotifyFileProcessedActivityParam) error {
 	// TODO: Implement notification functionality
 	// Future enhancements could include:
 	// - Redis pub/sub notifications for real-time updates

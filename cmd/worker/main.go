@@ -32,7 +32,6 @@ import (
 
 	database "github.com/instill-ai/artifact-backend/pkg/db"
 	artifactminio "github.com/instill-ai/artifact-backend/pkg/minio"
-	artifacttemporal "github.com/instill-ai/artifact-backend/pkg/temporal"
 	artifactworker "github.com/instill-ai/artifact-backend/pkg/worker"
 	mgmtpb "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
 	pipelinepb "github.com/instill-ai/protogen-go/pipeline/pipeline/v1beta"
@@ -90,6 +89,16 @@ func main() {
 
 	// Initialize repository and service
 	repo := repository.NewRepository(db)
+
+	// Initialize workflow implementations
+	processFileWf := artifactworker.NewProcessFileWorkflow(temporalClient)
+	cleanupFileWf := artifactworker.NewCleanupFileWorkflow(temporalClient)
+	cleanupKBWf := artifactworker.NewCleanupKnowledgeBaseWorkflow(temporalClient)
+	embedTextsWf := artifactworker.NewEmbedTextsWorkflow(temporalClient)
+	saveChunksWf := artifactworker.NewSaveChunksWorkflow(temporalClient)
+	deleteFilesWf := artifactworker.NewDeleteFilesWorkflow(temporalClient)
+	getFilesWf := artifactworker.NewGetFilesWorkflow(temporalClient)
+
 	svc := service.NewService(
 		repo,
 		minioClient,
@@ -99,7 +108,13 @@ func main() {
 		redisClient,
 		vectorDB,
 		aclClient,
-		temporalClient,
+		processFileWf,
+		cleanupFileWf,
+		cleanupKBWf,
+		embedTextsWf,
+		saveChunksWf,
+		deleteFilesWf,
+		getFilesWf,
 	)
 
 	// Create worker
@@ -114,7 +129,7 @@ func main() {
 		logger.Fatal("Unable to create worker", zap.Error(err))
 	}
 
-	w := worker.New(temporalClient, artifacttemporal.TaskQueue, worker.Options{
+	w := worker.New(temporalClient, artifactworker.TaskQueue, worker.Options{
 		EnableSessionWorker:                    true,
 		WorkflowPanicPolicy:                    worker.BlockWorkflow,
 		WorkerStopTimeout:                      gracefulShutdownTimeout,

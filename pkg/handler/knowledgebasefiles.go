@@ -8,8 +8,6 @@ import (
 	"strings"
 
 	"github.com/gofrs/uuid"
-	"go.temporal.io/api/enums/v1"
-	"go.temporal.io/sdk/client"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -20,7 +18,6 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/service"
-	"github.com/instill-ai/artifact-backend/pkg/temporal"
 	"github.com/instill-ai/x/resource"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
@@ -663,39 +660,18 @@ func (ph *PublicHandler) DeleteCatalogFile(ctx context.Context, req *artifactpb.
 
 	// Try to trigger cleanup workflow first - if this fails, we don't want to soft-delete
 	// the file record as it would leave orphaned resources
-	temporalClient := ph.service.TemporalClient()
-	if temporalClient != nil {
-		// Cancel any ongoing processing workflow for this file
-		processWorkflowID := fmt.Sprintf("process-file-%s", fUID.String())
-		err := temporalClient.CancelWorkflow(ctx, processWorkflowID, "")
-		if err != nil {
-			logger.Warn("Failed to cancel ongoing processing workflow (may not exist)",
-				zap.String("fileUID", fUID.String()),
-				zap.String("workflowID", processWorkflowID),
-				zap.Error(err))
-			// Non-critical - continue with cleanup
-		} else {
-			logger.Info("Cancelled ongoing processing workflow",
-				zap.String("fileUID", fUID.String()),
-				zap.String("workflowID", processWorkflowID))
-		}
+	if ph.service.CleanupFileWorkflow() != nil {
+		// Generate workflow ID for tracking
+		workflowID := uuid.Must(uuid.NewV4()).String()
 
-		// Trigger cleanup workflow asynchronously
-		workflowID := fmt.Sprintf("cleanup-file-%s", fUID.String())
-		workflowOptions := client.StartWorkflowOptions{
-			ID:                    workflowID,
-			TaskQueue:             temporal.TaskQueue,
-			WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
-		}
-
-		param := temporal.CleanupFileWorkflowParam{
+		param := service.CleanupFileWorkflowParam{
 			FileUID:             fUID.String(),
 			IncludeOriginalFile: true,
 			UserUID:             authUID,
 			WorkflowID:          workflowID,
 		}
 
-		_, err = temporalClient.ExecuteWorkflow(ctx, workflowOptions, "CleanupFileWorkflow", param)
+		err = ph.service.CleanupFileWorkflow().Execute(ctx, param)
 		if err != nil {
 			logger.Error("Failed to trigger cleanup workflow - aborting file deletion to prevent resource leaks",
 				zap.String("fileUID", fUID.String()),
@@ -779,28 +755,19 @@ func (ph *PublicHandler) ProcessCatalogFiles(ctx context.Context, req *artifactp
 	}
 
 	// Trigger Temporal workflows for each file
-	temporalClient := ph.service.TemporalClient()
-	if temporalClient != nil {
+	if ph.service.ProcessFileWorkflow() != nil {
 		for _, file := range files {
-			workflowID := fmt.Sprintf("process-file-%s", file.UID.String())
-			workflowOptions := client.StartWorkflowOptions{
-				ID:                    workflowID,
-				TaskQueue:             temporal.TaskQueue,
-				WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
-			}
-
-			param := temporal.ProcessFileWorkflowParam{
+			param := service.ProcessFileWorkflowParam{
 				FileUID:          file.UID.String(),
 				KnowledgeBaseUID: file.KnowledgeBaseUID.String(),
 				UserUID:          file.Owner.String(),
 				RequesterUID:     file.RequesterUID.String(),
 			}
 
-			_, err := temporalClient.ExecuteWorkflow(ctx, workflowOptions, "ProcessFileWorkflow", param)
+			err := ph.service.ProcessFileWorkflow().Execute(ctx, param)
 			if err != nil {
 				logger.Error("Failed to start file processing workflow",
 					zap.String("fileUID", file.UID.String()),
-					zap.String("workflowID", workflowID),
 					zap.Error(err))
 				// Continue processing other files even if one fails
 			}

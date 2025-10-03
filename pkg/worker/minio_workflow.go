@@ -7,11 +7,11 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
-	artifacttemporal "github.com/instill-ai/artifact-backend/pkg/temporal"
+	"github.com/instill-ai/artifact-backend/pkg/service"
 )
 
 // SaveChunksWorkflow orchestrates parallel saving of multiple text chunks
-func (w *worker) SaveChunksWorkflow(ctx workflow.Context, param artifacttemporal.SaveChunksWorkflowParam) (map[string]string, error) {
+func (w *Worker) SaveChunksWorkflow(ctx workflow.Context, param service.SaveChunksWorkflowParam) (map[string]string, error) {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("Starting SaveChunksWorkflow",
 		"chunkCount", len(param.Chunks))
@@ -75,7 +75,7 @@ func (w *worker) SaveChunksWorkflow(ctx workflow.Context, param artifacttemporal
 }
 
 // DeleteFilesWorkflow orchestrates parallel deletion of multiple files
-func (w *worker) DeleteFilesWorkflow(ctx workflow.Context, param artifacttemporal.DeleteFilesWorkflowParam) error {
+func (w *Worker) DeleteFilesWorkflow(ctx workflow.Context, param service.DeleteFilesWorkflowParam) error {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("Starting DeleteFilesWorkflow",
 		"fileCount", len(param.FilePaths))
@@ -124,13 +124,13 @@ func (w *worker) DeleteFilesWorkflow(ctx workflow.Context, param artifacttempora
 }
 
 // GetFilesWorkflow orchestrates parallel retrieval of multiple files
-func (w *worker) GetFilesWorkflow(ctx workflow.Context, param artifacttemporal.GetFilesWorkflowParam) ([]artifacttemporal.FileContent, error) {
+func (w *Worker) GetFilesWorkflow(ctx workflow.Context, param service.GetFilesWorkflowParam) ([]service.FileContent, error) {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("Starting GetFilesWorkflow",
 		"fileCount", len(param.FilePaths))
 
 	if len(param.FilePaths) == 0 {
-		return []artifacttemporal.FileContent{}, nil
+		return []service.FileContent{}, nil
 	}
 
 	// Set activity options
@@ -158,7 +158,7 @@ func (w *worker) GetFilesWorkflow(ctx workflow.Context, param artifacttemporal.G
 	}
 
 	// Wait for all retrievals and collect results in order
-	results := make([]artifacttemporal.FileContent, len(param.FilePaths))
+	results := make([]service.FileContent, len(param.FilePaths))
 	for _, future := range futures {
 		var result GetFileActivityResult
 		if err := future.Get(ctx, &result); err != nil {
@@ -166,7 +166,7 @@ func (w *worker) GetFilesWorkflow(ctx workflow.Context, param artifacttemporal.G
 			return nil, fmt.Errorf("failed to retrieve file: %w", err)
 		}
 
-		results[result.Index] = artifacttemporal.FileContent{
+		results[result.Index] = service.FileContent{
 			Index:   result.Index,
 			Name:    result.Name,
 			Content: result.Content,

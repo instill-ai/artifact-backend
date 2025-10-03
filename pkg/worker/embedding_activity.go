@@ -9,7 +9,7 @@ import (
 )
 
 // EmbedTextsActivity handles embedding a single batch of texts
-func (w *worker) EmbedTextsActivity(ctx context.Context, param *EmbedTextsActivityParam) ([][]float32, error) {
+func (w *Worker) EmbedTextsActivity(ctx context.Context, param *EmbedTextsActivityParam) ([][]float32, error) {
 	w.log.Info("Starting EmbedTextsActivity",
 		zap.Int("batchSize", len(param.Texts)),
 		zap.Int("batchIndex", param.BatchIndex))

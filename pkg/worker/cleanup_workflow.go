@@ -8,7 +8,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
-	artifacttemporal "github.com/instill-ai/artifact-backend/pkg/temporal"
+	"github.com/instill-ai/artifact-backend/pkg/service"
 )
 
 // CleanupFileWorkflow handles cleanup operations for a specific file.
@@ -18,7 +18,7 @@ import (
 // - Text chunks
 // - Embeddings from both Milvus and Postgres
 // Use this when deleting individual files from a knowledge base.
-func (w *worker) CleanupFileWorkflow(ctx workflow.Context, param artifacttemporal.CleanupFileWorkflowParam) error {
+func (w *Worker) CleanupFileWorkflow(ctx workflow.Context, param service.CleanupFileWorkflowParam) error {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("Starting CleanupFileWorkflow",
 		"fileUID", param.FileUID,
@@ -70,7 +70,7 @@ func (w *worker) CleanupFileWorkflow(ctx workflow.Context, param artifacttempora
 // - All embedding records in Postgres
 // - ACL permissions for the knowledge base
 // Use this when deleting an entire knowledge base (not individual files).
-func (w *worker) CleanupKnowledgeBaseWorkflow(ctx workflow.Context, param artifacttemporal.CleanupKnowledgeBaseWorkflowParam) error {
+func (w *Worker) CleanupKnowledgeBaseWorkflow(ctx workflow.Context, param service.CleanupKnowledgeBaseWorkflowParam) error {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("Starting CleanupKnowledgeBaseWorkflow", "kbUID", param.KnowledgeBaseUID)
 

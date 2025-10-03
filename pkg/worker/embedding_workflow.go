@@ -7,11 +7,11 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
-	artifacttemporal "github.com/instill-ai/artifact-backend/pkg/temporal"
+	"github.com/instill-ai/artifact-backend/pkg/service"
 )
 
 // EmbedTextsWorkflow orchestrates parallel embedding of text batches
-func (w *worker) EmbedTextsWorkflow(ctx workflow.Context, param artifacttemporal.EmbedTextsWorkflowParam) ([][]float32, error) {
+func (w *Worker) EmbedTextsWorkflow(ctx workflow.Context, param service.EmbedTextsWorkflowParam) ([][]float32, error) {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("Starting EmbedTextsWorkflow",
 		"totalTexts", len(param.Texts),

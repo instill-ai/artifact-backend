@@ -3,40 +3,21 @@ package service
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/gofrs/uuid"
-	"go.temporal.io/sdk/client"
 
 	"github.com/instill-ai/artifact-backend/config"
-	"github.com/instill-ai/artifact-backend/pkg/temporal"
 )
 
-func (s *service) GetFilesByPaths(ctx context.Context, bucket string, filePaths []string) ([]temporal.FileContent, error) {
+func (s *service) GetFilesByPaths(ctx context.Context, bucket string, filePaths []string) ([]FileContent, error) {
 	if len(filePaths) == 0 {
-		return []temporal.FileContent{}, nil
+		return []FileContent{}, nil
 	}
 
-	workflowID := fmt.Sprintf("get-files-%d-%d", time.Now().UnixNano(), len(filePaths))
-	workflowOptions := client.StartWorkflowOptions{
-		ID:        workflowID,
-		TaskQueue: temporal.TaskQueue,
-	}
-
-	workflowRun, err := s.temporalClient.ExecuteWorkflow(ctx, workflowOptions, "GetFilesWorkflow", temporal.GetFilesWorkflowParam{
+	return s.getFilesWorkflow.Execute(ctx, GetFilesWorkflowParam{
 		Bucket:    bucket,
 		FilePaths: filePaths,
 	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to start get files workflow: %w", err)
-	}
-
-	var results []temporal.FileContent
-	if err = workflowRun.Get(ctx, &results); err != nil {
-		return nil, fmt.Errorf("get files workflow failed: %w", err)
-	}
-
-	return results, nil
 }
 
 func (s *service) DeleteFiles(ctx context.Context, bucket string, filePaths []string) error {
@@ -44,23 +25,10 @@ func (s *service) DeleteFiles(ctx context.Context, bucket string, filePaths []st
 		return nil
 	}
 
-	workflowID := fmt.Sprintf("delete-files-%d-%d", time.Now().UnixNano(), len(filePaths))
-	workflowRun, err := s.temporalClient.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
-		ID:        workflowID,
-		TaskQueue: temporal.TaskQueue,
-	}, "DeleteFilesWorkflow", temporal.DeleteFilesWorkflowParam{
+	return s.deleteFilesWorkflow.Execute(ctx, DeleteFilesWorkflowParam{
 		Bucket:    bucket,
 		FilePaths: filePaths,
 	})
-	if err != nil {
-		return fmt.Errorf("failed to start delete files workflow: %w", err)
-	}
-
-	if err = workflowRun.Get(ctx, nil); err != nil {
-		return fmt.Errorf("delete files workflow failed: %w", err)
-	}
-
-	return nil
 }
 
 func (s *service) DeleteFilesWithPrefix(ctx context.Context, bucket string, prefix string) error {
@@ -105,45 +73,20 @@ func (s *service) SaveTextChunks(ctx context.Context, kbUID, fileUID uuid.UUID, 
 		return map[string]string{}, nil
 	}
 
-	workflowID := fmt.Sprintf("save-chunks-%s-%d", fileUID.String(), time.Now().UnixNano())
-	workflowRun, err := s.temporalClient.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
-		ID:        workflowID,
-		TaskQueue: temporal.TaskQueue,
-	}, "SaveChunksWorkflow", temporal.SaveChunksWorkflowParam{
+	return s.saveChunksWorkflow.Execute(ctx, SaveChunksWorkflowParam{
 		KnowledgeBaseUID: kbUID,
 		FileUID:          fileUID,
 		Chunks:           chunks,
 	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to start save chunks workflow: %w", err)
-	}
-
-	var destinations map[string]string
-	if err = workflowRun.Get(ctx, &destinations); err != nil {
-		return nil, fmt.Errorf("save chunks workflow failed: %w", err)
-	}
-
-	return destinations, nil
 }
 
 func (s *service) TriggerCleanupKnowledgeBaseWorkflow(ctx context.Context, kbUID string) error {
-	if s.temporalClient == nil {
-		return fmt.Errorf("temporal client not available")
+	if s.cleanupKnowledgeBaseWorkflow == nil {
+		return fmt.Errorf("cleanup knowledge base workflow not available")
 	}
 
-	workflowID := fmt.Sprintf("cleanup-kb-%s-%d", kbUID, time.Now().UnixNano())
-	workflowRun, err := s.temporalClient.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
-		ID:        workflowID,
-		TaskQueue: temporal.TaskQueue,
-	}, "CleanupKnowledgeBaseWorkflow", temporal.CleanupKnowledgeBaseWorkflowParam{
+	// Fire-and-forget - start workflow but don't wait for completion
+	return s.cleanupKnowledgeBaseWorkflow.Execute(ctx, CleanupKnowledgeBaseWorkflowParam{
 		KnowledgeBaseUID: kbUID,
 	})
-	if err != nil {
-		return fmt.Errorf("failed to start cleanup knowledge base workflow: %w", err)
-	}
-
-	// Don't wait for completion - this is a fire-and-forget background operation
-	_ = workflowRun
-
-	return nil
 }

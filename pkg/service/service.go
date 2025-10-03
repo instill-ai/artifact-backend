@@ -6,18 +6,93 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/redis/go-redis/v9"
 
-	temporalclient "go.temporal.io/sdk/client"
-
 	"github.com/instill-ai/artifact-backend/pkg/acl"
 	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/resource"
-	"github.com/instill-ai/artifact-backend/pkg/temporal"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	mgmtpb "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
 	pipelinepb "github.com/instill-ai/protogen-go/pipeline/pipeline/v1beta"
 )
+
+// Workflow parameter types - these match the worker package types structurally
+
+type ProcessFileWorkflowParam struct {
+	FileUID          string
+	KnowledgeBaseUID string
+	UserUID          string
+	RequesterUID     string
+}
+
+type CleanupFileWorkflowParam struct {
+	FileUID             string
+	IncludeOriginalFile bool
+	UserUID             string
+	WorkflowID          string
+}
+
+type EmbedTextsWorkflowParam struct {
+	Texts           []string
+	BatchSize       int
+	RequestMetadata map[string][]string
+}
+
+type SaveChunksWorkflowParam struct {
+	KnowledgeBaseUID uuid.UUID
+	FileUID          uuid.UUID
+	Chunks           map[string][]byte
+}
+
+type DeleteFilesWorkflowParam struct {
+	Bucket    string
+	FilePaths []string
+}
+
+type GetFilesWorkflowParam struct {
+	Bucket    string
+	FilePaths []string
+}
+
+type FileContent struct {
+	Index   int
+	Name    string
+	Content []byte
+}
+
+type CleanupKnowledgeBaseWorkflowParam struct {
+	KnowledgeBaseUID string
+}
+
+// Workflow interfaces - these match the worker package interfaces structurally
+
+type ProcessFileWorkflow interface {
+	Execute(ctx context.Context, param ProcessFileWorkflowParam) error
+}
+
+type CleanupFileWorkflow interface {
+	Execute(ctx context.Context, param CleanupFileWorkflowParam) error
+}
+
+type CleanupKnowledgeBaseWorkflow interface {
+	Execute(ctx context.Context, param CleanupKnowledgeBaseWorkflowParam) error
+}
+
+type EmbedTextsWorkflow interface {
+	Execute(ctx context.Context, param EmbedTextsWorkflowParam) ([][]float32, error)
+}
+
+type SaveChunksWorkflow interface {
+	Execute(ctx context.Context, param SaveChunksWorkflowParam) (map[string]string, error)
+}
+
+type DeleteFilesWorkflow interface {
+	Execute(ctx context.Context, param DeleteFilesWorkflowParam) error
+}
+
+type GetFilesWorkflow interface {
+	Execute(ctx context.Context, param GetFilesWorkflowParam) ([]FileContent, error)
+}
 
 // Service defines the Artifact domain use cases.
 type Service interface {
@@ -33,7 +108,7 @@ type Service interface {
 	UpdateCatalogFileTags(context.Context, *artifactpb.UpdateCatalogFileTagsRequest) (*artifactpb.UpdateCatalogFileTagsResponse, error)
 	GetNamespaceByNsID(context.Context, string) (*resource.Namespace, error)
 	GetChunksByFile(context.Context, *repository.KnowledgeBaseFile) (SourceTableType, SourceIDType, []repository.TextChunk, map[ChunkUIDType]ContentType, []string, error)
-	GetFilesByPaths(context.Context, string, []string) ([]temporal.FileContent, error)
+	GetFilesByPaths(context.Context, string, []string) ([]FileContent, error)
 	DeleteFiles(context.Context, string, []string) error
 	DeleteFilesWithPrefix(context.Context, string, string) error
 	DeleteKnowledgeBase(context.Context, string) error
@@ -59,7 +134,15 @@ type Service interface {
 	ACLClient() *acl.ACLClient
 	VectorDB() VectorDatabase
 	RedisClient() *redis.Client
-	TemporalClient() temporalclient.Client
+
+	// Workflow interfaces for proper decoupling
+	ProcessFileWorkflow() ProcessFileWorkflow
+	CleanupFileWorkflow() CleanupFileWorkflow
+	CleanupKnowledgeBaseWorkflow() CleanupKnowledgeBaseWorkflow
+	EmbedTextsWorkflow() EmbedTextsWorkflow
+	SaveChunksWorkflow() SaveChunksWorkflow
+	DeleteFilesWorkflow() DeleteFilesWorkflow
+	GetFilesWorkflow() GetFilesWorkflow
 }
 
 type service struct {
@@ -71,7 +154,15 @@ type service struct {
 	redisClient    *redis.Client
 	vectorDB       VectorDatabase
 	aclClient      *acl.ACLClient
-	temporalClient temporalclient.Client
+
+	// Workflow implementations
+	processFileWorkflow            ProcessFileWorkflow
+	cleanupFileWorkflow            CleanupFileWorkflow
+	cleanupKnowledgeBaseWorkflow   CleanupKnowledgeBaseWorkflow
+	embedTextsWorkflow             EmbedTextsWorkflow
+	saveChunksWorkflow             SaveChunksWorkflow
+	deleteFilesWorkflow            DeleteFilesWorkflow
+	getFilesWorkflow               GetFilesWorkflow
 }
 
 // NewService initiates a service instance
@@ -84,18 +175,30 @@ func NewService(
 	rc *redis.Client,
 	vectorDB VectorDatabase,
 	aclClient *acl.ACLClient,
-	temporalClient temporalclient.Client,
+	processFileWorkflow ProcessFileWorkflow,
+	cleanupFileWorkflow CleanupFileWorkflow,
+	cleanupKnowledgeBaseWorkflow CleanupKnowledgeBaseWorkflow,
+	embedTextsWorkflow EmbedTextsWorkflow,
+	saveChunksWorkflow SaveChunksWorkflow,
+	deleteFilesWorkflow DeleteFilesWorkflow,
+	getFilesWorkflow GetFilesWorkflow,
 ) Service {
 	return &service{
-		repository:     r,
-		minIO:          mc,
-		mgmtPrv:        mgmtPrv,
-		pipelinePub:    pipelinePub,
-		registryClient: rgc,
-		redisClient:    rc,
-		vectorDB:       vectorDB,
-		aclClient:      aclClient,
-		temporalClient: temporalClient,
+		repository:                   r,
+		minIO:                        mc,
+		mgmtPrv:                      mgmtPrv,
+		pipelinePub:                  pipelinePub,
+		registryClient:               rgc,
+		redisClient:                  rc,
+		vectorDB:                     vectorDB,
+		aclClient:                    aclClient,
+		processFileWorkflow:          processFileWorkflow,
+		cleanupFileWorkflow:          cleanupFileWorkflow,
+		cleanupKnowledgeBaseWorkflow: cleanupKnowledgeBaseWorkflow,
+		embedTextsWorkflow:           embedTextsWorkflow,
+		saveChunksWorkflow:           saveChunksWorkflow,
+		deleteFilesWorkflow:          deleteFilesWorkflow,
+		getFilesWorkflow:             getFilesWorkflow,
 	}
 }
 
@@ -104,4 +207,32 @@ func (s *service) MinIO() minio.MinioI                   { return s.minIO }
 func (s *service) ACLClient() *acl.ACLClient             { return s.aclClient }
 func (s *service) RedisClient() *redis.Client            { return s.redisClient }
 func (s *service) VectorDB() VectorDatabase              { return s.vectorDB }
-func (s *service) TemporalClient() temporalclient.Client { return s.temporalClient }
+
+// Workflow getters
+func (s *service) ProcessFileWorkflow() ProcessFileWorkflow {
+	return s.processFileWorkflow
+}
+
+func (s *service) CleanupFileWorkflow() CleanupFileWorkflow {
+	return s.cleanupFileWorkflow
+}
+
+func (s *service) CleanupKnowledgeBaseWorkflow() CleanupKnowledgeBaseWorkflow {
+	return s.cleanupKnowledgeBaseWorkflow
+}
+
+func (s *service) EmbedTextsWorkflow() EmbedTextsWorkflow {
+	return s.embedTextsWorkflow
+}
+
+func (s *service) SaveChunksWorkflow() SaveChunksWorkflow {
+	return s.saveChunksWorkflow
+}
+
+func (s *service) DeleteFilesWorkflow() DeleteFilesWorkflow {
+	return s.deleteFilesWorkflow
+}
+
+func (s *service) GetFilesWorkflow() GetFilesWorkflow {
+	return s.getFilesWorkflow
+}

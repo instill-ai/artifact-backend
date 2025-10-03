@@ -12,7 +12,7 @@ import (
 )
 
 // SaveChunkActivity saves a single text chunk to MinIO
-func (w *worker) SaveChunkActivity(ctx context.Context, param *SaveChunkActivityParam) (*SaveChunkActivityResult, error) {
+func (w *Worker) SaveChunkActivity(ctx context.Context, param *SaveChunkActivityParam) (*SaveChunkActivityResult, error) {
 	w.log.Info("Starting SaveChunkActivity",
 		zap.String("chunkUID", param.ChunkUID))
 
@@ -46,7 +46,7 @@ func (w *worker) SaveChunkActivity(ctx context.Context, param *SaveChunkActivity
 }
 
 // DeleteFileActivity deletes a single file from MinIO
-func (w *worker) DeleteFileActivity(ctx context.Context, param *DeleteFileActivityParam) error {
+func (w *Worker) DeleteFileActivity(ctx context.Context, param *DeleteFileActivityParam) error {
 	w.log.Info("Starting DeleteFileActivity",
 		zap.String("bucket", param.Bucket),
 		zap.String("path", param.Path))
@@ -64,7 +64,7 @@ func (w *worker) DeleteFileActivity(ctx context.Context, param *DeleteFileActivi
 }
 
 // GetFileActivity retrieves a single file from MinIO
-func (w *worker) GetFileActivity(ctx context.Context, param *GetFileActivityParam) (*GetFileActivityResult, error) {
+func (w *Worker) GetFileActivity(ctx context.Context, param *GetFileActivityParam) (*GetFileActivityResult, error) {
 	w.log.Info("Starting GetFileActivity",
 		zap.String("bucket", param.Bucket),
 		zap.String("path", param.Path))

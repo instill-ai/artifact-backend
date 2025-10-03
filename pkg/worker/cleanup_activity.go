@@ -9,7 +9,6 @@ import (
 
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/service"
-	artifacttemporal "github.com/instill-ai/artifact-backend/pkg/temporal"
 )
 
 // CleanupFilesActivity cleans up files and resources for a specific file.
@@ -19,7 +18,7 @@ import (
 // - Converted files (markdown/text conversions)
 // - Text chunks
 // - Embeddings from both Milvus and Postgres
-func (w *worker) CleanupFilesActivity(ctx context.Context, param *CleanupFilesActivityParam) error {
+func (w *Worker) CleanupFilesActivity(ctx context.Context, param *CleanupFilesActivityParam) error {
 	w.log.Info("Starting cleanup of files",
 		zap.String("fileUID", param.FileUID.String()),
 		zap.Int("specificFileIDs", len(param.FileIDs)),
@@ -159,7 +158,7 @@ func (w *worker) CleanupFilesActivity(ctx context.Context, param *CleanupFilesAc
 // - Entire Milvus collection (all embeddings)
 // - All file, converted file, chunk, and embedding records in Postgres
 // - ACL permissions for the knowledge base
-func (w *worker) CleanupKnowledgeBaseActivity(ctx context.Context, param artifacttemporal.CleanupKnowledgeBaseWorkflowParam) error {
+func (w *Worker) CleanupKnowledgeBaseActivity(ctx context.Context, param service.CleanupKnowledgeBaseWorkflowParam) error {
 	logger := w.log.With(zap.String("kbUID", param.KnowledgeBaseUID))
 	logger.Info("Starting CleanupKnowledgeBaseActivity")
 

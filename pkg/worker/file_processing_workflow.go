@@ -8,12 +8,12 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
-	artifacttemporal "github.com/instill-ai/artifact-backend/pkg/temporal"
+	"github.com/instill-ai/artifact-backend/pkg/service"
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
 // ProcessFileWorkflow orchestrates the file processing pipeline using a state machine approach
-func (w *worker) ProcessFileWorkflow(ctx workflow.Context, param artifacttemporal.ProcessFileWorkflowParam) error {
+func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.ProcessFileWorkflowParam) error {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("Starting ProcessFileWorkflow", "fileUID", param.FileUID)
 

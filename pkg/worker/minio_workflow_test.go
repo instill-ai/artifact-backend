@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/instill-ai/artifact-backend/pkg/temporal"
+	"github.com/instill-ai/artifact-backend/pkg/service"
 )
 
 func TestSaveChunksWorkflowParam_Validation(t *testing.T) {
@@ -19,7 +19,7 @@ func TestSaveChunksWorkflowParam_Validation(t *testing.T) {
 		"chunk2": []byte("content2"),
 	}
 
-	param := temporal.SaveChunksWorkflowParam{
+	param := service.SaveChunksWorkflowParam{
 		KnowledgeBaseUID: kbUID,
 		FileUID:          fileUID,
 		Chunks:           chunks,
@@ -32,7 +32,7 @@ func TestSaveChunksWorkflowParam_Validation(t *testing.T) {
 }
 
 func TestDeleteFilesWorkflowParam_Validation(t *testing.T) {
-	param := temporal.DeleteFilesWorkflowParam{
+	param := service.DeleteFilesWorkflowParam{
 		Bucket:    "test-bucket",
 		FilePaths: []string{"file1.txt", "file2.txt"},
 	}
@@ -48,7 +48,7 @@ func TestGetFilesWorkflowParam_Validation(t *testing.T) {
 		"path/to/file2.txt",
 	}
 
-	param := temporal.GetFilesWorkflowParam{
+	param := service.GetFilesWorkflowParam{
 		Bucket:    "test-bucket",
 		FilePaths: filePaths,
 	}
@@ -59,7 +59,7 @@ func TestGetFilesWorkflowParam_Validation(t *testing.T) {
 }
 
 func TestSaveChunksWorkflow_EmptyChunks(t *testing.T) {
-	param := temporal.SaveChunksWorkflowParam{
+	param := service.SaveChunksWorkflowParam{
 		KnowledgeBaseUID: uuid.Must(uuid.NewV4()),
 		FileUID:          uuid.Must(uuid.NewV4()),
 		Chunks:           map[string][]byte{},
@@ -70,7 +70,7 @@ func TestSaveChunksWorkflow_EmptyChunks(t *testing.T) {
 }
 
 func TestDeleteFilesWorkflow_EmptyPaths(t *testing.T) {
-	param := temporal.DeleteFilesWorkflowParam{
+	param := service.DeleteFilesWorkflowParam{
 		Bucket:    "test-bucket",
 		FilePaths: []string{},
 	}

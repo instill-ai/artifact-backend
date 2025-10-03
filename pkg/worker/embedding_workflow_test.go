@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/instill-ai/artifact-backend/pkg/temporal"
+	"github.com/instill-ai/artifact-backend/pkg/service"
 )
 
 func TestEmbedTextsWorkflowParam_BatchCalculation(t *testing.T) {
@@ -49,7 +49,7 @@ func TestEmbedTextsWorkflowParam_BatchCalculation(t *testing.T) {
 				texts[i] = "test"
 			}
 
-			param := temporal.EmbedTextsWorkflowParam{
+			param := service.EmbedTextsWorkflowParam{
 				Texts:     texts,
 				BatchSize: tt.batchSize,
 			}
@@ -61,7 +61,7 @@ func TestEmbedTextsWorkflowParam_BatchCalculation(t *testing.T) {
 }
 
 func TestEmbedTextsWorkflowParam_DefaultBatchSize(t *testing.T) {
-	param := temporal.EmbedTextsWorkflowParam{
+	param := service.EmbedTextsWorkflowParam{
 		Texts:     make([]string, 100),
 		BatchSize: 0, // Will default to 32
 	}
@@ -75,7 +75,7 @@ func TestEmbedTextsWorkflowParam_DefaultBatchSize(t *testing.T) {
 }
 
 func TestEmbedTextsWorkflowParam_EmptyTexts(t *testing.T) {
-	param := temporal.EmbedTextsWorkflowParam{
+	param := service.EmbedTextsWorkflowParam{
 		Texts:     []string{},
 		BatchSize: 32,
 	}

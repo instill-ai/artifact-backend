@@ -60,7 +60,7 @@ func extractPageReferences(chunkStart, chunkEnd uint32, pageDelimiters []uint32)
 }
 
 // ConvertFileActivity handles file conversion operations
-func (w *worker) ConvertFileActivity(ctx context.Context, param *ConvertFileActivityParam) error {
+func (w *Worker) ConvertFileActivity(ctx context.Context, param *ConvertFileActivityParam) error {
 	w.log.Info("Starting ConvertFileActivity",
 		zap.String("fileUID", param.FileUID.String()),
 		zap.String("conversionType", param.ConversionType))
@@ -167,7 +167,7 @@ func (w *worker) ConvertFileActivity(ctx context.Context, param *ConvertFileActi
 }
 
 // ChunkFileActivity handles file chunking operations
-func (w *worker) ChunkFileActivity(ctx context.Context, param *ChunkFileActivityParam) error {
+func (w *Worker) ChunkFileActivity(ctx context.Context, param *ChunkFileActivityParam) error {
 	w.log.Info("Starting ChunkFileActivity",
 		zap.String("fileUID", param.FileUID.String()),
 		zap.Int("chunkSize", param.ChunkSize),
@@ -320,7 +320,7 @@ func (w *worker) ChunkFileActivity(ctx context.Context, param *ChunkFileActivity
 }
 
 // EmbedFileActivity handles file embedding operations
-func (w *worker) EmbedFileActivity(ctx context.Context, param *EmbedFileActivityParam) error {
+func (w *Worker) EmbedFileActivity(ctx context.Context, param *EmbedFileActivityParam) error {
 	w.log.Info("Starting EmbedFileActivity",
 		zap.String("fileUID", param.FileUID.String()),
 		zap.String("embeddingModel", param.EmbeddingModel))
@@ -388,7 +388,7 @@ func (w *worker) EmbedFileActivity(ctx context.Context, param *EmbedFileActivity
 }
 
 // GenerateSummaryActivity generates a summary for the file
-func (w *worker) GenerateSummaryActivity(ctx context.Context, param *GenerateSummaryActivityParam) error {
+func (w *Worker) GenerateSummaryActivity(ctx context.Context, param *GenerateSummaryActivityParam) error {
 	w.log.Info("Generating summary", zap.String("fileUID", param.FileUID.String()))
 
 	file, err := getFileByUID(ctx, w.repository, param.FileUID)
@@ -467,7 +467,7 @@ func (w *worker) GenerateSummaryActivity(ctx context.Context, param *GenerateSum
 }
 
 // ProcessWaitingFileActivity determines the next status based on file type
-func (w *worker) ProcessWaitingFileActivity(ctx context.Context, param *ProcessWaitingFileActivityParam) (artifactpb.FileProcessStatus, error) {
+func (w *Worker) ProcessWaitingFileActivity(ctx context.Context, param *ProcessWaitingFileActivityParam) (artifactpb.FileProcessStatus, error) {
 	w.log.Info("Processing waiting file", zap.String("fileUID", param.FileUID.String()))
 
 	file, err := getFileByUID(ctx, w.repository, param.FileUID)

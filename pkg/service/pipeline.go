@@ -5,13 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	"go.temporal.io/api/enums/v1"
-	"go.temporal.io/sdk/client"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/instill-ai/artifact-backend/pkg/repository"
-	"github.com/instill-ai/artifact-backend/pkg/temporal"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	pipelinepb "github.com/instill-ai/protogen-go/pipeline/pipeline/v1beta"
@@ -314,8 +311,8 @@ func (s *service) EmbeddingTextBatch(ctx context.Context, texts []string) ([][]f
 //   - Maintains input order in the output
 //   - Automatic retries via Temporal's retry policy
 func (s *service) EmbeddingTextPipe(ctx context.Context, texts []string) ([][]float32, error) {
-	// If temporal client is not available, use manual batching
-	if s.temporalClient == nil {
+	// If temporal workflow is not available, use manual batching
+	if s.embedTextsWorkflow == nil {
 		return s.embeddingTextManualBatch(ctx, texts)
 	}
 
@@ -327,31 +324,15 @@ func (s *service) EmbeddingTextPipe(ctx context.Context, texts []string) ([][]fl
 		requestMetadata = md
 	}
 
-	// Use Temporal workflow when available
-	workflowID := fmt.Sprintf("embed-texts-%d-%d", time.Now().UnixNano(), len(texts))
-	workflowOptions := client.StartWorkflowOptions{
-		ID:                    workflowID,
-		TaskQueue:             temporal.TaskQueue,
-		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
-	}
-
-	param := temporal.EmbedTextsWorkflowParam{
+	param := EmbedTextsWorkflowParam{
 		Texts:           texts,
 		BatchSize:       32,
 		RequestMetadata: requestMetadata,
 	}
 
-	workflowRun, err := s.temporalClient.ExecuteWorkflow(ctx, workflowOptions, "EmbedTextsWorkflow", param)
+	vectors, err := s.embedTextsWorkflow.Execute(ctx, param)
 	if err != nil {
-		// Fallback to manual batching if workflow fails to start
-		return s.embeddingTextManualBatch(ctx, texts)
-	}
-
-	// Wait for the workflow to complete and get the results
-	var vectors [][]float32
-	err = workflowRun.Get(ctx, &vectors)
-	if err != nil {
-		// Fallback to manual batching if workflow execution fails
+		// Fallback to manual batching if workflow fails
 		return s.embeddingTextManualBatch(ctx, texts)
 	}
 

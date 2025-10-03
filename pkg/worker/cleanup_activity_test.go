@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/instill-ai/artifact-backend/pkg/temporal"
+	"github.com/instill-ai/artifact-backend/pkg/service"
 )
 
 func TestCleanupFilesActivityParam_Validation(t *testing.T) {
@@ -59,7 +59,7 @@ func TestCleanupFilesActivityParam_Validation(t *testing.T) {
 func TestCleanupKnowledgeBaseWorkflowParam_Validation(t *testing.T) {
 	kbUID := uuid.Must(uuid.NewV4())
 
-	param := temporal.CleanupKnowledgeBaseWorkflowParam{
+	param := service.CleanupKnowledgeBaseWorkflowParam{
 		KnowledgeBaseUID: kbUID.String(),
 	}
 
