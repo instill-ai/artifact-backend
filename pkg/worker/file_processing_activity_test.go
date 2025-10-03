@@ -114,13 +114,11 @@ func TestConvertFileActivityParam_Validation(t *testing.T) {
 		FileUID:          fileUID,
 		KnowledgeBaseUID: kbUID,
 		UserUID:          userUID,
-		ConversionType:   "markdown",
 	}
 
 	require.NotNil(t, param)
 	assert.NotEqual(t, uuid.Nil, param.FileUID)
 	assert.NotEqual(t, uuid.Nil, param.KnowledgeBaseUID)
-	assert.Equal(t, "markdown", param.ConversionType)
 }
 
 func TestChunkFileActivityParam_Validation(t *testing.T) {

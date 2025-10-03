@@ -234,7 +234,6 @@ type ConvertFileActivityParam struct {
 	FileUID          uuid.UUID
 	KnowledgeBaseUID uuid.UUID
 	UserUID          uuid.UUID
-	ConversionType   string
 }
 
 // ChunkFileActivityParam defines the parameters for the ChunkFileActivity

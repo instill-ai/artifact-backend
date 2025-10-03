@@ -62,8 +62,7 @@ func extractPageReferences(chunkStart, chunkEnd uint32, pageDelimiters []uint32)
 // ConvertFileActivity handles file conversion operations
 func (w *Worker) ConvertFileActivity(ctx context.Context, param *ConvertFileActivityParam) error {
 	w.log.Info("Starting ConvertFileActivity",
-		zap.String("fileUID", param.FileUID.String()),
-		zap.String("conversionType", param.ConversionType))
+		zap.String("fileUID", param.FileUID.String()))
 
 	file, err := getFileByUID(ctx, w.repository, param.FileUID)
 	if err != nil {

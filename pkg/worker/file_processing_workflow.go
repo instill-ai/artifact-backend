@@ -120,7 +120,6 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 			FileUID:          fileUID,
 			KnowledgeBaseUID: knowledgeBaseUID,
 			UserUID:          userUID,
-			ConversionType:   "markdown",
 		}
 		err = workflow.ExecuteActivity(ctx, w.ConvertFileActivity, convertParam).Get(ctx, nil)
 		if err != nil {
