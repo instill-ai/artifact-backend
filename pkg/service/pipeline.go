@@ -304,18 +304,12 @@ func (s *service) EmbeddingTextBatch(ctx context.Context, texts []string) ([][]f
 //   - error: Any error encountered during processing
 //
 // The function:
-//   - When Temporal is available: uses Temporal workflow for all batch sizes
-//   - When Temporal is unavailable or fails: falls back to manual batching
+//   - Uses Temporal workflow for batch processing
 //   - Batches are processed in chunks of 32 texts
 //   - Concurrency is controlled at the Temporal worker level (not per-workflow)
 //   - Maintains input order in the output
 //   - Automatic retries via Temporal's retry policy
 func (s *service) EmbeddingTextPipe(ctx context.Context, texts []string) ([][]float32, error) {
-	// If temporal workflow is not available, use manual batching
-	if s.embedTextsWorkflow == nil {
-		return s.embeddingTextManualBatch(ctx, texts)
-	}
-
 	// Extract authentication metadata from context to pass to activities
 	var requestMetadata map[string][]string
 	if md, ok := metadata.FromIncomingContext(ctx); ok {
@@ -330,48 +324,7 @@ func (s *service) EmbeddingTextPipe(ctx context.Context, texts []string) ([][]fl
 		RequestMetadata: requestMetadata,
 	}
 
-	vectors, err := s.embedTextsWorkflow.Execute(ctx, param)
-	if err != nil {
-		// Fallback to manual batching if workflow fails
-		return s.embeddingTextManualBatch(ctx, texts)
-	}
-
-	return vectors, nil
-}
-
-// embeddingTextManualBatch processes text embeddings in batches without using Temporal.
-// This is used as a fallback when Temporal is unavailable or fails.
-//
-// Parameters:
-//   - ctx: Context for the operation
-//   - texts: Slice of strings to be converted to embeddings
-//
-// Returns:
-//   - [][]float32: 2D slice where each inner slice is a vector embedding
-//   - error: Any error encountered during processing
-func (s *service) embeddingTextManualBatch(ctx context.Context, texts []string) ([][]float32, error) {
-	const batchSize = 32
-
-	// For small batches, process directly
-	if len(texts) <= batchSize {
-		return s.EmbeddingTextBatch(ctx, texts)
-	}
-
-	// For large batches, process in chunks of 32
-	var allVectors [][]float32
-	for i := 0; i < len(texts); i += batchSize {
-		end := min(i+batchSize, len(texts))
-
-		batch := texts[i:end]
-		vectors, err := s.EmbeddingTextBatch(ctx, batch)
-		if err != nil {
-			return nil, fmt.Errorf("failed to process batch %d-%d: %w", i, end, err)
-		}
-
-		allVectors = append(allVectors, vectors...)
-	}
-
-	return allVectors, nil
+	return s.embedTextsWorkflow.Execute(ctx, param)
 }
 
 // GetVectorsFromResponse converts the pipeline response into a slice of float32.
