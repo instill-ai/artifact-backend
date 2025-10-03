@@ -75,20 +75,3 @@ func (w *Worker) UpdateFileStatusActivity(ctx context.Context, param *UpdateFile
 		zap.String("status", param.Status.String()))
 	return nil
 }
-
-// NotifyFileProcessedActivity handles notifications about file processing completion
-func (w *Worker) NotifyFileProcessedActivity(ctx context.Context, param *NotifyFileProcessedActivityParam) error {
-	// TODO: Implement notification functionality
-	// Future enhancements could include:
-	// - Redis pub/sub notifications for real-time updates
-	// - Webhook notifications to external systems
-	// - Email notifications for important status changes
-	// - Push notifications to mobile apps
-	// - Integration with notification preference settings
-
-	w.log.Info("File processing completed",
-		zap.String("fileUID", param.FileUID.String()),
-		zap.String("status", param.Status.String()))
-
-	return nil
-}

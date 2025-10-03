@@ -283,14 +283,6 @@ type UpdateFileStatusActivityParam struct {
 	Message string
 }
 
-// NotifyFileProcessedActivityParam defines the parameters for the NotifyFileProcessedActivity
-type NotifyFileProcessedActivityParam struct {
-	FileUID          uuid.UUID
-	KnowledgeBaseUID uuid.UUID
-	UserUID          uuid.UUID
-	Status           artifactpb.FileProcessStatus
-}
-
 // CleanupFilesActivityParam defines the parameters for the CleanupFilesActivity
 type CleanupFilesActivityParam struct {
 	FileUID             uuid.UUID

@@ -56,24 +56,6 @@ func TestUpdateFileStatusActivityParam_Validation(t *testing.T) {
 	}
 }
 
-func TestNotifyFileProcessedActivityParam_Validation(t *testing.T) {
-	fileUID := uuid.Must(uuid.NewV4())
-	kbUID := uuid.Must(uuid.NewV4())
-	userUID := uuid.Must(uuid.NewV4())
-
-	param := &NotifyFileProcessedActivityParam{
-		FileUID:          fileUID,
-		KnowledgeBaseUID: kbUID,
-		UserUID:          userUID,
-		Status:           artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED,
-	}
-
-	require.NotNil(t, param)
-	assert.NotEqual(t, uuid.Nil, param.FileUID)
-	assert.NotEqual(t, uuid.Nil, param.KnowledgeBaseUID)
-	assert.NotEqual(t, uuid.Nil, param.UserUID)
-}
-
 func TestFileProcessStatus_Values(t *testing.T) {
 	statuses := []artifactpb.FileProcessStatus{
 		artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_WAITING,

@@ -155,24 +155,13 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 		currentStatus = artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED
 	}
 
-	// Step 6: Update final status and notify
+	// Step 6: Update final status
 	if err := workflow.ExecuteActivity(ctx, w.UpdateFileStatusActivity, &UpdateFileStatusActivityParam{
 		FileUID: fileUID,
 		Status:  artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED,
 		Message: "File processing completed successfully",
 	}).Get(ctx, nil); err != nil {
 		return handleError("update final status", err)
-	}
-
-	// Step 7: Send notification (non-critical)
-	notifyParam := &NotifyFileProcessedActivityParam{
-		FileUID:          fileUID,
-		KnowledgeBaseUID: knowledgeBaseUID,
-		UserUID:          userUID,
-		Status:           artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED,
-	}
-	if err := workflow.ExecuteActivity(ctx, w.NotifyFileProcessedActivity, notifyParam).Get(ctx, nil); err != nil {
-		logger.Error("Failed to notify file processed (non-critical)", "error", err)
 	}
 
 	logger.Info("ProcessFileWorkflow completed successfully", "fileUID", param.FileUID)

@@ -174,7 +174,6 @@ func main() {
 	w.RegisterActivity(cw.GetFileStatusActivity)
 	w.RegisterActivity(cw.ProcessWaitingFileActivity)
 	w.RegisterActivity(cw.UpdateFileStatusActivity)
-	w.RegisterActivity(cw.NotifyFileProcessedActivity)
 	w.RegisterActivity(cw.CleanupFilesActivity)
 	w.RegisterActivity(cw.CleanupKnowledgeBaseActivity)
 
