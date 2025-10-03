@@ -32,7 +32,7 @@ func NewProcessFileWorkflow(temporalClient client.Client) service.ProcessFileWor
 }
 
 func (w *processFileWorkflow) Execute(ctx context.Context, param service.ProcessFileWorkflowParam) error {
-	workflowID := fmt.Sprintf("process-file-%s", param.FileUID)
+	workflowID := fmt.Sprintf("process-file-%s", param.FileUID.String())
 	workflowOptions := client.StartWorkflowOptions{
 		ID:                    workflowID,
 		TaskQueue:             TaskQueue,
@@ -53,7 +53,7 @@ func NewCleanupFileWorkflow(temporalClient client.Client) service.CleanupFileWor
 }
 
 func (w *cleanupFileWorkflow) Execute(ctx context.Context, param service.CleanupFileWorkflowParam) error {
-	workflowID := fmt.Sprintf("cleanup-file-%s", param.FileUID)
+	workflowID := fmt.Sprintf("cleanup-file-%s", param.FileUID.String())
 	workflowOptions := client.StartWorkflowOptions{
 		ID:                    workflowID,
 		TaskQueue:             TaskQueue,
@@ -74,7 +74,7 @@ func NewCleanupKnowledgeBaseWorkflow(temporalClient client.Client) service.Clean
 }
 
 func (w *cleanupKnowledgeBaseWorkflow) Execute(ctx context.Context, param service.CleanupKnowledgeBaseWorkflowParam) error {
-	workflowID := fmt.Sprintf("cleanup-kb-%s", param.KnowledgeBaseUID)
+	workflowID := fmt.Sprintf("cleanup-kb-%s", param.KnowledgeBaseUID.String())
 	workflowOptions := client.StartWorkflowOptions{
 		ID:                    workflowID,
 		TaskQueue:             TaskQueue,

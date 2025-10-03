@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gofrs/uuid"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
@@ -16,25 +15,13 @@ import (
 // ProcessFileWorkflow orchestrates the file processing pipeline using a state machine approach
 func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.ProcessFileWorkflowParam) error {
 	logger := workflow.GetLogger(ctx)
-	logger.Info("Starting ProcessFileWorkflow", "fileUID", param.FileUID)
+	logger.Info("Starting ProcessFileWorkflow", "fileUID", param.FileUID.String())
 
-	// Parse UUIDs from strings
-	fileUID, err := uuid.FromString(param.FileUID)
-	if err != nil {
-		return fmt.Errorf("invalid file UID: %w", err)
-	}
-	knowledgeBaseUID, err := uuid.FromString(param.KnowledgeBaseUID)
-	if err != nil {
-		return fmt.Errorf("invalid knowledge base UID: %w", err)
-	}
-	userUID, err := uuid.FromString(param.UserUID)
-	if err != nil {
-		return fmt.Errorf("invalid user UID: %w", err)
-	}
-	requesterUID, err := uuid.FromString(param.RequesterUID)
-	if err != nil {
-		return fmt.Errorf("invalid requester UID: %w", err)
-	}
+	// Extract UUIDs from parameters
+	fileUID := param.FileUID
+	knowledgeBaseUID := param.KnowledgeBaseUID
+	userUID := param.UserUID
+	requesterUID := param.RequesterUID
 
 	// Set workflow options
 	activityOptions := workflow.ActivityOptions{
@@ -77,8 +64,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 
 	// Get current file status to determine starting point
 	var currentStatus artifactpb.FileProcessStatus
-	err = workflow.ExecuteActivity(ctx, w.GetFileStatusActivity, fileUID).Get(ctx, &currentStatus)
-	if err != nil {
+	if err := workflow.ExecuteActivity(ctx, w.GetFileStatusActivity, fileUID).Get(ctx, &currentStatus); err != nil {
 		return handleError("get file status", err)
 	}
 
@@ -108,8 +94,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 			UserUID:          userUID,
 			RequesterUID:     requesterUID,
 		}
-		err = workflow.ExecuteActivity(ctx, w.ProcessWaitingFileActivity, processWaitingParam).Get(ctx, &currentStatus)
-		if err != nil {
+		if err := workflow.ExecuteActivity(ctx, w.ProcessWaitingFileActivity, processWaitingParam).Get(ctx, &currentStatus); err != nil {
 			return handleError("process waiting file", err)
 		}
 	}
@@ -121,8 +106,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 			KnowledgeBaseUID: knowledgeBaseUID,
 			UserUID:          userUID,
 		}
-		err = workflow.ExecuteActivity(ctx, w.ConvertFileActivity, convertParam).Get(ctx, nil)
-		if err != nil {
+		if err := workflow.ExecuteActivity(ctx, w.ConvertFileActivity, convertParam).Get(ctx, nil); err != nil {
 			return handleError("file conversion", err)
 		}
 		currentStatus = artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_SUMMARIZING
@@ -136,8 +120,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 			UserUID:          userUID,
 			RequesterUID:     requesterUID,
 		}
-		err = workflow.ExecuteActivity(ctx, w.GenerateSummaryActivity, generateSummaryParam).Get(ctx, nil)
-		if err != nil {
+		if err := workflow.ExecuteActivity(ctx, w.GenerateSummaryActivity, generateSummaryParam).Get(ctx, nil); err != nil {
 			return handleError("summary generation", err)
 		}
 		currentStatus = artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CHUNKING
@@ -152,8 +135,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 			ChunkSize:        1000,
 			ChunkOverlap:     200,
 		}
-		err = workflow.ExecuteActivity(ctx, w.ChunkFileActivity, chunkParam).Get(ctx, nil)
-		if err != nil {
+		if err := workflow.ExecuteActivity(ctx, w.ChunkFileActivity, chunkParam).Get(ctx, nil); err != nil {
 			return handleError("file chunking", err)
 		}
 		currentStatus = artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_EMBEDDING
@@ -167,20 +149,18 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 			UserUID:          userUID,
 			EmbeddingModel:   "text-embedding-ada-002",
 		}
-		err = workflow.ExecuteActivity(ctx, w.EmbedFileActivity, embedParam).Get(ctx, nil)
-		if err != nil {
+		if err := workflow.ExecuteActivity(ctx, w.EmbedFileActivity, embedParam).Get(ctx, nil); err != nil {
 			return handleError("file embedding", err)
 		}
 		currentStatus = artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED
 	}
 
 	// Step 6: Update final status and notify
-	err = workflow.ExecuteActivity(ctx, w.UpdateFileStatusActivity, &UpdateFileStatusActivityParam{
+	if err := workflow.ExecuteActivity(ctx, w.UpdateFileStatusActivity, &UpdateFileStatusActivityParam{
 		FileUID: fileUID,
 		Status:  artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED,
 		Message: "File processing completed successfully",
-	}).Get(ctx, nil)
-	if err != nil {
+	}).Get(ctx, nil); err != nil {
 		return handleError("update final status", err)
 	}
 
@@ -191,8 +171,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 		UserUID:          userUID,
 		Status:           artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED,
 	}
-	err = workflow.ExecuteActivity(ctx, w.NotifyFileProcessedActivity, notifyParam).Get(ctx, nil)
-	if err != nil {
+	if err := workflow.ExecuteActivity(ctx, w.NotifyFileProcessedActivity, notifyParam).Get(ctx, nil); err != nil {
 		logger.Error("Failed to notify file processed (non-critical)", "error", err)
 	}
 

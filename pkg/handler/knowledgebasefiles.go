@@ -665,9 +665,9 @@ func (ph *PublicHandler) DeleteCatalogFile(ctx context.Context, req *artifactpb.
 		workflowID := uuid.Must(uuid.NewV4()).String()
 
 		param := service.CleanupFileWorkflowParam{
-			FileUID:             fUID.String(),
+			FileUID:             fUID,
 			IncludeOriginalFile: true,
-			UserUID:             authUID,
+			UserUID:             uuid.FromStringOrNil(authUID),
 			WorkflowID:          workflowID,
 		}
 
@@ -758,10 +758,10 @@ func (ph *PublicHandler) ProcessCatalogFiles(ctx context.Context, req *artifactp
 	if ph.service.ProcessFileWorkflow() != nil {
 		for _, file := range files {
 			param := service.ProcessFileWorkflowParam{
-				FileUID:          file.UID.String(),
-				KnowledgeBaseUID: file.KnowledgeBaseUID.String(),
-				UserUID:          file.Owner.String(),
-				RequesterUID:     file.RequesterUID.String(),
+				FileUID:          file.UID,
+				KnowledgeBaseUID: file.KnowledgeBaseUID,
+				UserUID:          file.Owner,
+				RequesterUID:     file.RequesterUID,
 			}
 
 			err := ph.service.ProcessFileWorkflow().Execute(ctx, param)

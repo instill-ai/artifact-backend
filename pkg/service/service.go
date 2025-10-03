@@ -20,17 +20,17 @@ import (
 
 // ProcessFileWorkflowParam defines the parameters for the ProcessFileWorkflow
 type ProcessFileWorkflowParam struct {
-	FileUID          string
-	KnowledgeBaseUID string
-	UserUID          string
-	RequesterUID     string
+	FileUID          uuid.UUID
+	KnowledgeBaseUID uuid.UUID
+	UserUID          uuid.UUID
+	RequesterUID     uuid.UUID
 }
 
 // CleanupFileWorkflowParam defines the parameters for the CleanupFileWorkflow
 type CleanupFileWorkflowParam struct {
-	FileUID             string
+	FileUID             uuid.UUID
 	IncludeOriginalFile bool
-	UserUID             string
+	UserUID             uuid.UUID
 	WorkflowID          string
 }
 
@@ -69,7 +69,7 @@ type FileContent struct {
 
 // CleanupKnowledgeBaseWorkflowParam defines the parameters for the CleanupKnowledgeBaseWorkflow
 type CleanupKnowledgeBaseWorkflowParam struct {
-	KnowledgeBaseUID string
+	KnowledgeBaseUID uuid.UUID
 }
 
 // Workflow interfaces - these match the worker package interfaces structurally

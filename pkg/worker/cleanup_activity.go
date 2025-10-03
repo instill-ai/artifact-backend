@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/gofrs/uuid"
 	"go.uber.org/zap"
 
 	"github.com/instill-ai/artifact-backend/config"
@@ -159,20 +158,17 @@ func (w *Worker) CleanupFilesActivity(ctx context.Context, param *CleanupFilesAc
 // - All file, converted file, chunk, and embedding records in Postgres
 // - ACL permissions for the knowledge base
 func (w *Worker) CleanupKnowledgeBaseActivity(ctx context.Context, param service.CleanupKnowledgeBaseWorkflowParam) error {
-	logger := w.log.With(zap.String("kbUID", param.KnowledgeBaseUID))
+	logger := w.log.With(zap.String("kbUID", param.KnowledgeBaseUID.String()))
 	logger.Info("Starting CleanupKnowledgeBaseActivity")
 
-	kbUUID, err := uuid.FromString(param.KnowledgeBaseUID)
-	if err != nil {
-		return fmt.Errorf("invalid knowledge base UID: %w", err)
-	}
+	kbUUID := param.KnowledgeBaseUID
 
 	allPass := true
 	errors := []string{}
 
 	// 1. Delete files from MinIO
 	logger.Info("Deleting files from MinIO")
-	if err := w.service.DeleteKnowledgeBase(ctx, param.KnowledgeBaseUID); err != nil {
+	if err := w.service.DeleteKnowledgeBase(ctx, kbUUID.String()); err != nil {
 		logger.Error("Failed to delete files in MinIO", zap.Error(err))
 		errors = append(errors, fmt.Sprintf("MinIO deletion: %v", err))
 		allPass = false
@@ -188,7 +184,7 @@ func (w *Worker) CleanupKnowledgeBaseActivity(ctx context.Context, param service
 
 	// 3. Delete all files in Postgres
 	logger.Info("Deleting files in Postgres")
-	if err := w.repository.DeleteAllKnowledgeBaseFiles(ctx, param.KnowledgeBaseUID); err != nil {
+	if err := w.repository.DeleteAllKnowledgeBaseFiles(ctx, kbUUID.String()); err != nil {
 		logger.Error("Failed to delete files in Postgres", zap.Error(err))
 		errors = append(errors, fmt.Sprintf("Postgres files deletion: %v", err))
 		allPass = false

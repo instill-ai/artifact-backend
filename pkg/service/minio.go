@@ -86,7 +86,12 @@ func (s *service) TriggerCleanupKnowledgeBaseWorkflow(ctx context.Context, kbUID
 	}
 
 	// Fire-and-forget - start workflow but don't wait for completion
+	kbUUID, err := uuid.FromString(kbUID)
+	if err != nil {
+		return fmt.Errorf("invalid knowledge base UID: %w", err)
+	}
+
 	return s.cleanupKnowledgeBaseWorkflow.Execute(ctx, CleanupKnowledgeBaseWorkflowParam{
-		KnowledgeBaseUID: kbUID,
+		KnowledgeBaseUID: kbUUID,
 	})
 }

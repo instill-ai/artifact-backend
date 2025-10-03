@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gofrs/uuid"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
@@ -21,15 +20,12 @@ import (
 func (w *Worker) CleanupFileWorkflow(ctx workflow.Context, param service.CleanupFileWorkflowParam) error {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("Starting CleanupFileWorkflow",
-		"fileUID", param.FileUID,
-		"userUID", param.UserUID,
+		"fileUID", param.FileUID.String(),
+		"userUID", param.UserUID.String(),
 		"workflowID", param.WorkflowID,
 		"includeOriginalFile", param.IncludeOriginalFile)
 
-	fileUID, err := uuid.FromString(param.FileUID)
-	if err != nil {
-		return fmt.Errorf("invalid file UID: %w", err)
-	}
+	fileUID := param.FileUID
 
 	activityOptions := workflow.ActivityOptions{
 		StartToCloseTimeout: 5 * time.Minute,
@@ -48,14 +44,14 @@ func (w *Worker) CleanupFileWorkflow(ctx workflow.Context, param service.Cleanup
 		IncludeOriginalFile: param.IncludeOriginalFile,
 	}
 
-	err = workflow.ExecuteActivity(ctx, w.CleanupFilesActivity, cleanupParam).Get(ctx, nil)
+	err := workflow.ExecuteActivity(ctx, w.CleanupFilesActivity, cleanupParam).Get(ctx, nil)
 	if err != nil {
 		logger.Error("Failed to cleanup files", "error", err)
 		return fmt.Errorf("failed to cleanup files: %w", err)
 	}
 
 	logger.Info("CleanupFileWorkflow completed successfully",
-		"fileUID", param.FileUID,
+		"fileUID", param.FileUID.String(),
 		"workflowID", param.WorkflowID)
 	return nil
 }
@@ -72,7 +68,7 @@ func (w *Worker) CleanupFileWorkflow(ctx workflow.Context, param service.Cleanup
 // Use this when deleting an entire knowledge base (not individual files).
 func (w *Worker) CleanupKnowledgeBaseWorkflow(ctx workflow.Context, param service.CleanupKnowledgeBaseWorkflowParam) error {
 	logger := workflow.GetLogger(ctx)
-	logger.Info("Starting CleanupKnowledgeBaseWorkflow", "kbUID", param.KnowledgeBaseUID)
+	logger.Info("Starting CleanupKnowledgeBaseWorkflow", "kbUID", param.KnowledgeBaseUID.String())
 
 	activityOptions := workflow.ActivityOptions{
 		StartToCloseTimeout: 10 * time.Minute,
@@ -91,6 +87,6 @@ func (w *Worker) CleanupKnowledgeBaseWorkflow(ctx workflow.Context, param servic
 		return err
 	}
 
-	logger.Info("CleanupKnowledgeBaseWorkflow completed successfully", "kbUID", param.KnowledgeBaseUID)
+	logger.Info("CleanupKnowledgeBaseWorkflow completed successfully", "kbUID", param.KnowledgeBaseUID.String())
 	return nil
 }

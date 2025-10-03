@@ -60,16 +60,14 @@ func TestCleanupKnowledgeBaseWorkflowParam_Validation(t *testing.T) {
 	kbUID := uuid.Must(uuid.NewV4())
 
 	param := service.CleanupKnowledgeBaseWorkflowParam{
-		KnowledgeBaseUID: kbUID.String(),
+		KnowledgeBaseUID: kbUID,
 	}
 
 	require.NotNil(t, param)
-	assert.NotEmpty(t, param.KnowledgeBaseUID)
+	assert.NotEqual(t, uuid.Nil, param.KnowledgeBaseUID)
 
-	// Validate UUID format
-	parsedUID, err := uuid.FromString(param.KnowledgeBaseUID)
-	require.NoError(t, err)
-	assert.Equal(t, kbUID, parsedUID)
+	// Validate UUID
+	assert.Equal(t, kbUID, param.KnowledgeBaseUID)
 }
 
 func TestCleanupFilesActivity_EmptyFiles(t *testing.T) {
