@@ -156,8 +156,8 @@ export function CheckDeleteCatalog(client, data) {
   });
 }
 
-export function CheckDeleteCatalogFile(client, data) {
-  const groupName = "Artifact API: Delete file with cleanup (gRPC)";
+export function CheckCleanupOnFileDeletion(client, data) {
+  const groupName = "Artifact API: Cleanup intermediate files when file deleted (gRPC)";
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 

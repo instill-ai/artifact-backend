@@ -10,6 +10,9 @@ import { artifactPublicHost } from "./const.js";
 import * as constant from "./const.js";
 import * as restPublic from './rest-public.js';
 import * as restPublicWithJwt from './rest-public-with-jwt.js';
+import { CheckFileReprocessing } from './rest-public-file-reprocess.js';
+import { CheckKnowledgeBaseDeletion } from './rest-public-kb-delete.js';
+import { CheckKnowledgeBaseEndToEndFileProcessing } from './rest-public-kb-e2e-file-process.js';
 
 export let options = {
   setupTimeout: '300s',
@@ -63,13 +66,15 @@ export default function (data) {
     });
   }
 
+  CheckKnowledgeBaseDeletion(data);
+  CheckFileReprocessing(data);
+  CheckKnowledgeBaseEndToEndFileProcessing(data);
+
   restPublic.CheckCreateCatalog(data);
   restPublic.CheckListCatalogs(data);
   restPublic.CheckGetCatalog(data);
   restPublic.CheckUpdateCatalog(data);
   restPublic.CheckDeleteCatalog(data);
-  restPublic.CheckCatalog(data);
-  restPublic.CheckCleanupFiles(data);
 
   restPublicWithJwt.CheckCreateCatalogUnauthenticated(data);
   restPublicWithJwt.CheckListCatalogsUnauthenticated(data);
@@ -111,11 +116,9 @@ export function teardown(data) {
       }
     }
 
-    var q = `DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`;
-    constant.db.exec(q);
-
-    q = `DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`;
-    constant.db.exec(q);
+    // Use .query() for DELETE statements (not .exec() which returns driver internals)
+    constant.db.query(`DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`);
+    constant.db.query(`DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`);
 
     constant.db.close();
   });

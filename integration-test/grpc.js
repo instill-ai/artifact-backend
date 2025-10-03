@@ -129,7 +129,7 @@ export default function (data) {
   grpcPublic.CheckUploadCatalogFile(publicClient, data);
   grpcPublic.CheckListCatalogFiles(publicClient, data);
   grpcPublic.CheckGetCatalogFile(publicClient, data);
-  grpcPublic.CheckDeleteCatalogFile(publicClient, data);
+  grpcPublic.CheckCleanupOnFileDeletion(publicClient, data);
 
   // JWT variants for file operations
   grpcPublicWithJwt.CheckUploadCatalogFile(publicClient, data);

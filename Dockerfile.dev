@@ -21,7 +21,18 @@ RUN --mount=target=. --mount=type=cache,target=/root/.cache/go-build --mount=typ
 RUN --mount=target=. --mount=type=cache,target=/root/.cache/go-build --mount=type=cache,target=/go/pkg GOOS=$TARGETOS GOARCH=$TARGETARCH xk6 build v${K6_VERSION} \
     --with github.com/grafana/xk6-sql@v${XK6_SQL_VERSION} \
     --with github.com/grafana/xk6-sql-driver-postgres@v${XK6_SQL_POSTGRES_VERSION} \
+    --with github.com/grafana/xk6-exec@latest \
     --output /usr/bin/k6
+
+# MinIO Client (mc) for integration tests to verify blob storage
+RUN curl -fsSL https://dl.min.io/client/mc/release/linux-${TARGETARCH}/mc -o /usr/bin/mc && \
+    chmod +x /usr/bin/mc
+
+# Milvus CLI for integration tests to verify vector storage
+# Install Python 3 and pip if not already installed
+RUN apt-get update && apt-get install -y python3 python3-pip && rm -rf /var/lib/apt/lists/*
+# Install pymilvus
+RUN pip3 install pymilvus>=2.4.3
 
 # -- set up Go
 COPY go.mod go.sum ./

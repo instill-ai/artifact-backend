@@ -156,3 +156,88 @@ export function validateFileGRPC(file, isPrivate) {
 
   return true;
 }
+
+// ============================================================================
+// Storage Verification Helpers for Reprocessing Tests
+// ============================================================================
+
+import exec from 'k6/x/exec';
+import * as constant from './const.js';
+
+/**
+ * Count MinIO objects directly using MinIO CLI (mc)
+ * Provides direct verification of blob storage
+ *
+ * @param {string} kbUID - Knowledge base (catalog) UUID
+ * @param {string} fileUID - File UUID
+ * @param {string} objectType - Type of MinIO object ('converted-file' or 'chunk')
+ * @returns {number} Count of objects (0 = no objects, -1 = error)
+ */
+export function countMinioObjects(kbUID, fileUID, objectType) {
+  // Construct the MinIO path prefix based on object type
+  // Format: kb-{kbUID}/file-{fileUID}/{objectType}/
+  const prefix = `kb-${kbUID}/file-${fileUID}/${objectType}/`;
+
+  try {
+    // Execute the shell script to count MinIO objects
+    const result = exec.command('sh', [
+      `${__ENV.TEST_FOLDER_ABS_PATH}/integration-test/count-minio-objects.sh`,
+      constant.minioConfig.bucket,
+      prefix
+    ]);
+
+    // Parse the output (should be a number)
+    const count = parseInt(result.trim());
+    return isNaN(count) ? 0 : count;
+  } catch (e) {
+    console.error(`Failed to count MinIO objects for ${prefix}: ${e}`);
+    return -1; // Return -1 to indicate error (not 0, which means "no objects")
+  }
+}
+
+/**
+ * Count embeddings in the database for a specific file
+ * Verifies vector data consistency in Postgres (Milvus vectors are referenced here)
+ *
+ * @param {string} fileUid - File UUID
+ * @returns {number} Count of embedding records
+ */
+export function countEmbeddings(fileUid) {
+  try {
+    const results = constant.db.query(`SELECT uid FROM embedding WHERE kb_file_uid = '${fileUid}'`);
+    // results is an array of row objects
+    return results ? results.length : 0;
+  } catch (e) {
+    console.error(`Failed to count embeddings for file ${fileUid}: ${e}`);
+    return 0;
+  }
+}
+
+/**
+ * Count vectors in Milvus collection for a specific file
+ * Verifies actual vector data in Milvus (not just database references)
+ *
+ * @param {string} kbUID - Knowledge base (catalog) UUID
+ * @param {string} fileUID - File UUID
+ * @returns {number} Count of vectors (0 = no vectors, -1 = error)
+ */
+export function countMilvusVectors(kbUID, fileUID) {
+  // Convert kbUID to Milvus collection name format: kb_{uuid_with_underscores}
+  const collectionName = `kb_${kbUID.replace(/-/g, '_')}`;
+
+  try {
+    // Execute the shell script to count Milvus vectors using milvus_cli
+    const result = exec.command('sh', [
+      `${__ENV.TEST_FOLDER_ABS_PATH}/integration-test/count-milvus-vectors.sh`,
+      collectionName,
+      fileUID
+    ]);
+
+    // Parse the output (should be a number)
+    const count = parseInt(result.trim());
+    return isNaN(count) ? 0 : count;
+  } catch (e) {
+    console.error(`Failed to count Milvus vectors for file ${fileUID} in collection ${collectionName}: ${e}`);
+    return -1; // Return -1 to indicate error (not 0, which means "no vectors")
+  }
+}

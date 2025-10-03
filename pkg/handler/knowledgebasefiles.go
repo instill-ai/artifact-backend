@@ -768,7 +768,8 @@ func (ph *PublicHandler) ProcessCatalogFiles(ctx context.Context, req *artifactp
 	temporalClient := ph.service.TemporalClient()
 	if temporalClient != nil {
 		for _, file := range files {
-			workflowID := fmt.Sprintf("process-file-%s", file.UID.String())
+			// Include timestamp to allow reprocessing (multiple workflows for same file)
+			workflowID := fmt.Sprintf("process-file-%s-%d", file.UID.String(), time.Now().UnixNano())
 			workflowOptions := client.StartWorkflowOptions{
 				ID:                    workflowID,
 				TaskQueue:             temporal.TaskQueue,

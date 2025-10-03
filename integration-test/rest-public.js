@@ -50,7 +50,7 @@ export function CheckCreateCatalog(data) {
         cat && typeof updateTime === 'string' && updateTime.length > 0,
     });
 
-    const created = json.catalog;
+    let created = json.catalog;
     if (!created || !(created.catalogId)) {
       const listRes = http.request("GET", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, data.header);
       try {

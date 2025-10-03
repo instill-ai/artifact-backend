@@ -119,7 +119,27 @@ func (w *worker) ConvertFileActivity(ctx context.Context, param *ConvertFileActi
 		return fmt.Errorf("converting file to Markdown: %w", err)
 	}
 
-	// Save converted file first before updating metadata
+	// Clean up old converted file from MinIO if reprocessing (before saving new one)
+	// The database record will be deleted by CreateConvertedFile, but we need to clean up MinIO
+	oldConvertedFile, err := w.repository.GetConvertedFileByFileUID(ctx, param.FileUID)
+	if err == nil && oldConvertedFile != nil && oldConvertedFile.Destination != "" {
+		w.log.Info("Deleting old converted file before creating new one (reprocessing)",
+			zap.String("fileUID", param.FileUID.String()),
+			zap.String("oldConvertedFileUID", oldConvertedFile.UID.String()),
+			zap.String("oldDestination", oldConvertedFile.Destination))
+
+		// Delete old converted file from MinIO
+		deleteErr := w.service.MinIO().DeleteFile(ctx, config.Config.Minio.BucketName, oldConvertedFile.Destination)
+		if deleteErr != nil {
+			w.log.Warn("Failed to delete old converted file from MinIO (continuing with new file creation)",
+				zap.String("fileUID", param.FileUID.String()),
+				zap.String("oldDestination", oldConvertedFile.Destination),
+				zap.Error(deleteErr))
+			// Don't fail the activity - the old file will become orphaned but new processing can continue
+		}
+	}
+
+	// Save new converted file (database cleanup is handled by CreateConvertedFile)
 	err = saveConvertedFile(ctx, w.service, param.KnowledgeBaseUID, param.FileUID, "converted_"+file.Name, conversion)
 	if err != nil {
 		return fmt.Errorf("saving converted data: %w", err)
@@ -254,6 +274,26 @@ func (w *worker) ChunkFileActivity(ctx context.Context, param *ChunkFileActivity
 		return fmt.Errorf("chunking summary: %w", err)
 	}
 
+	// Clean up old chunks from MinIO if reprocessing (before saving new ones)
+	// The database records will be deleted by DeleteAndCreateChunks, but we need to clean up MinIO blobs
+	oldChunks, err := w.repository.ListChunksByKbFileUID(ctx, param.FileUID)
+	if err == nil && len(oldChunks) > 0 {
+		w.log.Info("Deleting old chunks before creating new ones (reprocessing)",
+			zap.String("fileUID", param.FileUID.String()),
+			zap.Int("oldChunkCount", len(oldChunks)))
+
+		// Delete old chunks from MinIO
+		deleteErr := w.service.DeleteTextChunksByFileUID(ctx, param.KnowledgeBaseUID, param.FileUID)
+		if deleteErr != nil {
+			w.log.Warn("Failed to delete old chunks from MinIO (continuing with new chunk creation)",
+				zap.String("fileUID", param.FileUID.String()),
+				zap.Int("oldChunkCount", len(oldChunks)),
+				zap.Error(deleteErr))
+			// Don't fail the activity - the old chunks will become orphaned but new processing can continue
+		}
+	}
+
+	// Save new chunks (database cleanup is handled by DeleteAndCreateChunks)
 	err = saveChunks(ctx, w.service, param.KnowledgeBaseUID, param.FileUID, sourceUID, sourceTable, summaryChunkingResult.Chunks, contentChunks, string(constant.DocumentFileType))
 	if err != nil {
 		return fmt.Errorf("storing chunks: %w", err)
