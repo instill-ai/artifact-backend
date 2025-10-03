@@ -82,6 +82,19 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 		return handleError("get file status", err)
 	}
 
+	// If file is already completed or in intermediate state, this might be a reprocessing request
+	// In that case, treat it as WAITING to restart the full pipeline
+	if currentStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED ||
+		currentStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CONVERTING ||
+		currentStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_SUMMARIZING ||
+		currentStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CHUNKING ||
+		currentStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_EMBEDDING {
+		logger.Info("File is in completed/intermediate state, resetting to WAITING for reprocessing",
+			"currentStatus", currentStatus.String(),
+			"fileUID", param.FileUID)
+		currentStatus = artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_WAITING
+	}
+
 	// If file is already failed, don't process
 	if currentStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_FAILED {
 		return fmt.Errorf("file processing already failed")

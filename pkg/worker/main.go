@@ -32,12 +32,11 @@ func NewProcessFileWorkflow(temporalClient client.Client) service.ProcessFileWor
 }
 
 func (w *processFileWorkflow) Execute(ctx context.Context, param service.ProcessFileWorkflowParam) error {
-	// Include timestamp to allow reprocessing (multiple workflows for same file)
-	workflowID := fmt.Sprintf("process-file-%s-%d", param.FileUID, time.Now().UnixNano())
+	workflowID := fmt.Sprintf("process-file-%s", param.FileUID)
 	workflowOptions := client.StartWorkflowOptions{
 		ID:                    workflowID,
 		TaskQueue:             TaskQueue,
-		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
+		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 	}
 
 	_, err := w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, new(Worker).ProcessFileWorkflow, param)
@@ -58,7 +57,7 @@ func (w *cleanupFileWorkflow) Execute(ctx context.Context, param service.Cleanup
 	workflowOptions := client.StartWorkflowOptions{
 		ID:                    workflowID,
 		TaskQueue:             TaskQueue,
-		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
+		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 	}
 
 	_, err := w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, new(Worker).CleanupFileWorkflow, param)
@@ -75,10 +74,11 @@ func NewCleanupKnowledgeBaseWorkflow(temporalClient client.Client) service.Clean
 }
 
 func (w *cleanupKnowledgeBaseWorkflow) Execute(ctx context.Context, param service.CleanupKnowledgeBaseWorkflowParam) error {
-	workflowID := fmt.Sprintf("cleanup-kb-%s-%d", param.KnowledgeBaseUID, time.Now().UnixNano())
+	workflowID := fmt.Sprintf("cleanup-kb-%s", param.KnowledgeBaseUID)
 	workflowOptions := client.StartWorkflowOptions{
-		ID:        workflowID,
-		TaskQueue: TaskQueue,
+		ID:                    workflowID,
+		TaskQueue:             TaskQueue,
+		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 	}
 
 	_, err := w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, new(Worker).CleanupKnowledgeBaseWorkflow, param)
@@ -99,7 +99,7 @@ func (w *embedTextsWorkflow) Execute(ctx context.Context, param service.EmbedTex
 	workflowOptions := client.StartWorkflowOptions{
 		ID:                    workflowID,
 		TaskQueue:             TaskQueue,
-		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
+		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 	}
 
 	workflowRun, err := w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, new(Worker).EmbedTextsWorkflow, param)
@@ -125,10 +125,11 @@ func NewSaveChunksWorkflow(temporalClient client.Client) service.SaveChunksWorkf
 }
 
 func (w *saveChunksWorkflow) Execute(ctx context.Context, param service.SaveChunksWorkflowParam) (map[string]string, error) {
-	workflowID := fmt.Sprintf("save-chunks-%s-%d", param.FileUID.String(), time.Now().UnixNano())
+	workflowID := fmt.Sprintf("save-chunks-%s", param.FileUID.String())
 	workflowOptions := client.StartWorkflowOptions{
-		ID:        workflowID,
-		TaskQueue: TaskQueue,
+		ID:                    workflowID,
+		TaskQueue:             TaskQueue,
+		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 	}
 
 	workflowRun, err := w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, new(Worker).SaveChunksWorkflow, param)
@@ -156,8 +157,9 @@ func NewDeleteFilesWorkflow(temporalClient client.Client) service.DeleteFilesWor
 func (w *deleteFilesWorkflow) Execute(ctx context.Context, param service.DeleteFilesWorkflowParam) error {
 	workflowID := fmt.Sprintf("delete-files-%d-%d", time.Now().UnixNano(), len(param.FilePaths))
 	workflowOptions := client.StartWorkflowOptions{
-		ID:        workflowID,
-		TaskQueue: TaskQueue,
+		ID:                    workflowID,
+		TaskQueue:             TaskQueue,
+		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 	}
 
 	workflowRun, err := w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, new(Worker).DeleteFilesWorkflow, param)
@@ -184,8 +186,9 @@ func NewGetFilesWorkflow(temporalClient client.Client) service.GetFilesWorkflow 
 func (w *getFilesWorkflow) Execute(ctx context.Context, param service.GetFilesWorkflowParam) ([]service.FileContent, error) {
 	workflowID := fmt.Sprintf("get-files-%d-%d", time.Now().UnixNano(), len(param.FilePaths))
 	workflowOptions := client.StartWorkflowOptions{
-		ID:        workflowID,
-		TaskQueue: TaskQueue,
+		ID:                    workflowID,
+		TaskQueue:             TaskQueue,
+		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 	}
 
 	workflowRun, err := w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, new(Worker).GetFilesWorkflow, param)
