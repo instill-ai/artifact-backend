@@ -116,9 +116,8 @@ export function teardown(data) {
       }
     }
 
-    // Use .query() for DELETE statements (not .exec() which returns driver internals)
-    constant.db.query(`DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`);
-    constant.db.query(`DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`);
+    constant.db.exec(`DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`);
+    constant.db.exec(`DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`);
 
     constant.db.close();
   });
