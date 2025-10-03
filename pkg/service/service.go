@@ -18,6 +18,7 @@ import (
 
 // Workflow parameter types - these match the worker package types structurally
 
+// ProcessFileWorkflowParam defines the parameters for the ProcessFileWorkflow
 type ProcessFileWorkflowParam struct {
 	FileUID          string
 	KnowledgeBaseUID string
@@ -25,6 +26,7 @@ type ProcessFileWorkflowParam struct {
 	RequesterUID     string
 }
 
+// CleanupFileWorkflowParam defines the parameters for the CleanupFileWorkflow
 type CleanupFileWorkflowParam struct {
 	FileUID             string
 	IncludeOriginalFile bool
@@ -32,64 +34,77 @@ type CleanupFileWorkflowParam struct {
 	WorkflowID          string
 }
 
+// EmbedTextsWorkflowParam defines the parameters for the EmbedTextsWorkflow
 type EmbedTextsWorkflowParam struct {
 	Texts           []string
 	BatchSize       int
 	RequestMetadata map[string][]string
 }
 
+// SaveChunksWorkflowParam defines the parameters for the SaveChunksWorkflow
 type SaveChunksWorkflowParam struct {
 	KnowledgeBaseUID uuid.UUID
 	FileUID          uuid.UUID
 	Chunks           map[string][]byte
 }
 
+// DeleteFilesWorkflowParam defines the parameters for the DeleteFilesWorkflow
 type DeleteFilesWorkflowParam struct {
 	Bucket    string
 	FilePaths []string
 }
 
+// GetFilesWorkflowParam defines the parameters for the GetFilesWorkflow
 type GetFilesWorkflowParam struct {
 	Bucket    string
 	FilePaths []string
 }
 
+// FileContent defines the content of a file
 type FileContent struct {
 	Index   int
 	Name    string
 	Content []byte
 }
 
+// CleanupKnowledgeBaseWorkflowParam defines the parameters for the CleanupKnowledgeBaseWorkflow
 type CleanupKnowledgeBaseWorkflowParam struct {
 	KnowledgeBaseUID string
 }
 
 // Workflow interfaces - these match the worker package interfaces structurally
 
+// ProcessFileWorkflow interface
 type ProcessFileWorkflow interface {
 	Execute(ctx context.Context, param ProcessFileWorkflowParam) error
 }
 
+// CleanupFileWorkflow interface
 type CleanupFileWorkflow interface {
 	Execute(ctx context.Context, param CleanupFileWorkflowParam) error
 }
 
+// CleanupKnowledgeBaseWorkflow interface
 type CleanupKnowledgeBaseWorkflow interface {
 	Execute(ctx context.Context, param CleanupKnowledgeBaseWorkflowParam) error
 }
 
+// EmbedTextsWorkflow interface
 type EmbedTextsWorkflow interface {
 	Execute(ctx context.Context, param EmbedTextsWorkflowParam) ([][]float32, error)
 }
 
+// SaveChunksWorkflow interface
 type SaveChunksWorkflow interface {
 	Execute(ctx context.Context, param SaveChunksWorkflowParam) (map[string]string, error)
 }
 
+// DeleteFilesWorkflow interface
 type DeleteFilesWorkflow interface {
 	Execute(ctx context.Context, param DeleteFilesWorkflowParam) error
 }
 
+// GetFilesWorkflow interface
 type GetFilesWorkflow interface {
 	Execute(ctx context.Context, param GetFilesWorkflowParam) ([]FileContent, error)
 }
@@ -156,13 +171,13 @@ type service struct {
 	aclClient      *acl.ACLClient
 
 	// Workflow implementations
-	processFileWorkflow            ProcessFileWorkflow
-	cleanupFileWorkflow            CleanupFileWorkflow
-	cleanupKnowledgeBaseWorkflow   CleanupKnowledgeBaseWorkflow
-	embedTextsWorkflow             EmbedTextsWorkflow
-	saveChunksWorkflow             SaveChunksWorkflow
-	deleteFilesWorkflow            DeleteFilesWorkflow
-	getFilesWorkflow               GetFilesWorkflow
+	processFileWorkflow          ProcessFileWorkflow
+	cleanupFileWorkflow          CleanupFileWorkflow
+	cleanupKnowledgeBaseWorkflow CleanupKnowledgeBaseWorkflow
+	embedTextsWorkflow           EmbedTextsWorkflow
+	saveChunksWorkflow           SaveChunksWorkflow
+	deleteFilesWorkflow          DeleteFilesWorkflow
+	getFilesWorkflow             GetFilesWorkflow
 }
 
 // NewService initiates a service instance
@@ -202,11 +217,11 @@ func NewService(
 	}
 }
 
-func (s *service) Repository() repository.RepositoryI    { return s.repository }
-func (s *service) MinIO() minio.MinioI                   { return s.minIO }
-func (s *service) ACLClient() *acl.ACLClient             { return s.aclClient }
-func (s *service) RedisClient() *redis.Client            { return s.redisClient }
-func (s *service) VectorDB() VectorDatabase              { return s.vectorDB }
+func (s *service) Repository() repository.RepositoryI { return s.repository }
+func (s *service) MinIO() minio.MinioI                { return s.minIO }
+func (s *service) ACLClient() *acl.ACLClient          { return s.aclClient }
+func (s *service) RedisClient() *redis.Client         { return s.redisClient }
+func (s *service) VectorDB() VectorDatabase           { return s.vectorDB }
 
 // Workflow getters
 func (s *service) ProcessFileWorkflow() ProcessFileWorkflow {
