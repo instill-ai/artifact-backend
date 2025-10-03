@@ -241,3 +241,113 @@ export function countMilvusVectors(kbUID, fileUID) {
     return -1; // Return -1 to indicate error (not 0, which means "no vectors")
   }
 }
+
+// ============================================================================
+// Polling Helpers for Eventual Consistency
+// ============================================================================
+
+import { sleep } from 'k6';
+
+/**
+ * Poll MinIO until objects appear or timeout
+ * Handles eventual consistency of S3/MinIO storage
+ *
+ * @param {string} kbUID - Knowledge base UUID
+ * @param {string} fileUID - File UUID
+ * @param {string} objectType - Type of object ('converted-file' or 'chunk')
+ * @param {number} maxWaitSeconds - Maximum seconds to wait (default: 10)
+ * @returns {number} Final count of objects
+ */
+export function pollMinioObjects(kbUID, fileUID, objectType, maxWaitSeconds = 10) {
+  for (let i = 0; i < maxWaitSeconds; i++) {
+    const count = countMinioObjects(kbUID, fileUID, objectType);
+    if (count > 0) {
+      return count;
+    }
+    if (i < maxWaitSeconds - 1) {
+      sleep(1);
+    }
+  }
+  // Final attempt after waiting
+  return countMinioObjects(kbUID, fileUID, objectType);
+}
+
+/**
+ * Poll database embeddings until they appear or timeout
+ * Handles transaction commit delays
+ *
+ * @param {string} fileUid - File UUID
+ * @param {number} maxWaitSeconds - Maximum seconds to wait (default: 10)
+ * @returns {number} Final count of embeddings
+ */
+export function pollEmbeddings(fileUid, maxWaitSeconds = 10) {
+  for (let i = 0; i < maxWaitSeconds; i++) {
+    const count = countEmbeddings(fileUid);
+    if (count > 0) {
+      return count;
+    }
+    if (i < maxWaitSeconds - 1) {
+      sleep(1);
+    }
+  }
+  // Final attempt after waiting
+  return countEmbeddings(fileUid);
+}
+
+/**
+ * Poll Milvus vectors until they appear or timeout
+ * Handles Milvus indexing and eventual consistency
+ *
+ * @param {string} kbUID - Knowledge base UUID
+ * @param {string} fileUID - File UUID
+ * @param {number} maxWaitSeconds - Maximum seconds to wait (default: 10)
+ * @returns {number} Final count of vectors
+ */
+export function pollMilvusVectors(kbUID, fileUID, maxWaitSeconds = 10) {
+  for (let i = 0; i < maxWaitSeconds; i++) {
+    const count = countMilvusVectors(kbUID, fileUID);
+    if (count > 0) {
+      return count;
+    }
+    if (i < maxWaitSeconds - 1) {
+      sleep(1);
+    }
+  }
+  // Final attempt after waiting
+  return countMilvusVectors(kbUID, fileUID);
+}
+
+/**
+ * Poll all storage systems until data appears or timeout
+ * Comprehensive check for MinIO, Postgres, and Milvus consistency
+ *
+ * @param {string} kbUID - Knowledge base UUID
+ * @param {string} fileUID - File UUID
+ * @param {boolean} expectConverted - Whether to check for converted files (false for text files)
+ * @param {number} maxWaitSeconds - Maximum seconds to wait per storage system (default: 10)
+ * @returns {object} Counts from all storage systems { converted, chunks, embeddings, vectors }
+ */
+export function pollAllStorageSystems(kbUID, fileUID, expectConverted = true, maxWaitSeconds = 10) {
+  const results = {
+    converted: 0,
+    chunks: 0,
+    embeddings: 0,
+    vectors: 0,
+  };
+
+  // Poll MinIO for converted files (if expected)
+  if (expectConverted) {
+    results.converted = pollMinioObjects(kbUID, fileUID, 'converted-file', maxWaitSeconds);
+  }
+
+  // Poll MinIO for chunks (always expected)
+  results.chunks = pollMinioObjects(kbUID, fileUID, 'chunk', maxWaitSeconds);
+
+  // Poll database embeddings
+  results.embeddings = pollEmbeddings(fileUID, maxWaitSeconds);
+
+  // Poll Milvus vectors
+  results.vectors = pollMilvusVectors(kbUID, fileUID, maxWaitSeconds);
+
+  return results;
+}

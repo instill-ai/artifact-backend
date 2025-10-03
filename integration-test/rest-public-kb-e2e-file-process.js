@@ -379,10 +379,8 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
     }
 
     // Step 11: Verify storage layer resources (MinIO, Postgres, Milvus)
-    // Wait briefly for asynchronous writes to complete
-    sleep(2);
-
-    // Count total resources across all files
+    // Poll storage systems to handle eventual consistency
+    // This is especially important with 13 files being processed concurrently
     let totalMinioConverted = 0;
     let totalMinioChunks = 0;
     let totalEmbeddings = 0;
@@ -390,11 +388,11 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
 
     for (const f of uploaded) {
       const minioCounts = {
-        converted: helper.countMinioObjects(catalogUid, f.fileUid, 'converted-file'),
-        chunks: helper.countMinioObjects(catalogUid, f.fileUid, 'chunk'),
+        converted: helper.pollMinioObjects(catalogUid, f.fileUid, 'converted-file', 10),
+        chunks: helper.pollMinioObjects(catalogUid, f.fileUid, 'chunk', 10),
       };
-      const embeddings = helper.countEmbeddings(f.fileUid);
-      const vectors = helper.countMilvusVectors(catalogUid, f.fileUid);
+      const embeddings = helper.pollEmbeddings(f.fileUid, 10);
+      const vectors = helper.pollMilvusVectors(catalogUid, f.fileUid, 10);
 
       totalMinioConverted += minioCounts.converted;
       totalMinioChunks += minioCounts.chunks;

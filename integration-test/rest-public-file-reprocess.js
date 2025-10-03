@@ -141,23 +141,20 @@ export function CheckFileReprocessing(data) {
     }
 
     // Step 4: Verify intermediate data created after first processing (BASELINE COUNT)
-    // Wait briefly for asynchronous writes to complete (MinIO and Milvus)
-    sleep(2);
-
-    // Count blobs using MinIO CLI (direct storage verification)
-    // PDF files create both:
-    // - converted-file at: kb-{uid}/file-{uid}/converted-file/
-    // - chunks at: kb-{uid}/file-{uid}/chunk/
+    // Poll storage systems until data appears (handles eventual consistency)
+    // MinIO: S3 list operations may show stale data immediately after writes
+    // Milvus: Vector inserts need time to be indexed and become queryable
+    // This polling approach fixes race conditions that caused intermittent test failures
     const minioBlobsAfterFirst = {
-      converted: helper.countMinioObjects(catalogUid, fileUid, 'converted-file'),
-      chunks: helper.countMinioObjects(catalogUid, fileUid, 'chunk'),
+      converted: helper.pollMinioObjects(catalogUid, fileUid, 'converted-file', 10),
+      chunks: helper.pollMinioObjects(catalogUid, fileUid, 'chunk', 10),
     };
 
-    // Count embeddings in database (Postgres references)
-    const embeddingsAfterFirst = helper.countEmbeddings(fileUid);
+    // Poll database embeddings (handles transaction commit delays)
+    const embeddingsAfterFirst = helper.pollEmbeddings(fileUid, 10);
 
-    // Count vectors in Milvus (actual vector storage)
-    const milvusVectorsAfterFirst = helper.countMilvusVectors(catalogUid, fileUid);
+    // Poll Milvus vectors (handles indexing delays - can take 5-10 seconds)
+    const milvusVectorsAfterFirst = helper.pollMilvusVectors(catalogUid, fileUid, 10);
 
     check(minioBlobsAfterFirst, {
       "Reprocess: MinIO has converted file blob after first processing": (r) => r.converted > 0,
@@ -243,17 +240,15 @@ export function CheckFileReprocessing(data) {
     }
 
     // Step 6: Verify all intermediate data after reprocessing (FINAL COUNT)
-    // Wait briefly for asynchronous writes to complete (MinIO and Milvus)
+    // Poll storage systems again to handle eventual consistency after reprocessing
     // IMPORTANT: Must count BEFORE catalog deletion, which triggers cleanup workflow
-    sleep(2);
-
     const minioBlobsAfterSecond = {
-      converted: helper.countMinioObjects(catalogUid, fileUid, 'converted-file'),
-      chunks: helper.countMinioObjects(catalogUid, fileUid, 'chunk'),
+      converted: helper.pollMinioObjects(catalogUid, fileUid, 'converted-file', 10),
+      chunks: helper.pollMinioObjects(catalogUid, fileUid, 'chunk', 10),
     };
 
-    const embeddingsAfterSecond = helper.countEmbeddings(fileUid);
-    const milvusVectorsAfterSecond = helper.countMilvusVectors(catalogUid, fileUid);
+    const embeddingsAfterSecond = helper.pollEmbeddings(fileUid, 10);
+    const milvusVectorsAfterSecond = helper.pollMilvusVectors(catalogUid, fileUid, 10);
 
     check(minioBlobsAfterSecond, {
       "Reprocess: MinIO still has converted file blob after reprocessing": (r) => r.converted > 0,

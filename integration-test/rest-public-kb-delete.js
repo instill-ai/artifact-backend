@@ -145,20 +145,15 @@ export function CheckKnowledgeBaseDeletion(data) {
     }
 
     // Step 4: Verify all resources exist BEFORE deletion (BASELINE)
-    // Wait briefly for asynchronous writes to complete (MinIO and Milvus)
-    sleep(2);
-
-    // Count blobs using MinIO CLI (direct storage verification)
+    // Poll storage systems until data appears (handles eventual consistency)
     const minioBlobsBeforeDelete = {
-      converted: helper.countMinioObjects(catalogUid, fileUid, 'converted-file'),
-      chunks: helper.countMinioObjects(catalogUid, fileUid, 'chunk'),
+      converted: helper.pollMinioObjects(catalogUid, fileUid, 'converted-file', 10),
+      chunks: helper.pollMinioObjects(catalogUid, fileUid, 'chunk', 10),
     };
 
-    // Count embeddings in database (Postgres references)
-    const embeddingsBeforeDelete = helper.countEmbeddings(fileUid);
-
-    // Count vectors in Milvus (actual vector storage)
-    const milvusVectorsBeforeDelete = helper.countMilvusVectors(catalogUid, fileUid);
+    // Poll database embeddings and Milvus vectors
+    const embeddingsBeforeDelete = helper.pollEmbeddings(fileUid, 10);
+    const milvusVectorsBeforeDelete = helper.pollMilvusVectors(catalogUid, fileUid, 10);
 
     // Verify all resources exist (this proves our cleanup test is valid)
     check(minioBlobsBeforeDelete, {
