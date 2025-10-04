@@ -69,6 +69,15 @@ func (w *Worker) ConvertFileActivity(ctx context.Context, param *ConvertFileActi
 		return err
 	}
 
+	// Update status to CONVERTING at the beginning (after confirming file exists)
+	updateMap := map[string]any{
+		repository.KnowledgeBaseFileColumn.ProcessStatus: artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CONVERTING.String(),
+	}
+	if _, err := w.repository.UpdateKnowledgeBaseFile(ctx, param.FileUID.String(), updateMap); err != nil {
+		w.log.Warn("Failed to update file status (file may be deleted)", zap.Error(err))
+		// Continue anyway - file might have been deleted during processing
+	}
+
 	authCtx, err := createAuthenticatedContext(ctx, file.ExternalMetadataUnmarshal)
 	if err != nil {
 		w.log.Warn("Failed to create authenticated context, using original context", zap.Error(err))
@@ -144,21 +153,13 @@ func (w *Worker) ConvertFileActivity(ctx context.Context, param *ConvertFileActi
 		return fmt.Errorf("saving converted data: %w", err)
 	}
 
-	// Update metadata and process status together after file is saved
+	// Update metadata after file is saved
 	mdUpdate := repository.ExtraMetaData{
 		Length:         conversion.Length,
 		ConvertingPipe: conversion.PipelineRelease.Name(),
 	}
 	if err := w.repository.UpdateKBFileMetadata(ctx, param.FileUID, mdUpdate); err != nil {
 		return fmt.Errorf("saving conversion metadata in file record: %w", err)
-	}
-
-	updateMap := map[string]any{
-		repository.KnowledgeBaseFileColumn.ProcessStatus: artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_SUMMARIZING.String(),
-	}
-	_, err = w.repository.UpdateKnowledgeBaseFile(ctx, param.FileUID.String(), updateMap)
-	if err != nil {
-		return fmt.Errorf("updating file process status: %w", err)
 	}
 
 	w.log.Info("File conversion completed", zap.String("fileUID", param.FileUID.String()))
@@ -175,6 +176,15 @@ func (w *Worker) ChunkFileActivity(ctx context.Context, param *ChunkFileActivity
 	file, err := getFileByUID(ctx, w.repository, param.FileUID)
 	if err != nil {
 		return err
+	}
+
+	// Update status to CHUNKING at the beginning (after confirming file exists)
+	updateMap := map[string]any{
+		repository.KnowledgeBaseFileColumn.ProcessStatus: artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CHUNKING.String(),
+	}
+	if _, err := w.repository.UpdateKnowledgeBaseFile(ctx, param.FileUID.String(), updateMap); err != nil {
+		w.log.Warn("Failed to update file status (file may be deleted)", zap.Error(err))
+		// Continue anyway - file might have been deleted during processing
 	}
 
 	authCtx, err := createAuthenticatedContext(ctx, file.ExternalMetadataUnmarshal)
@@ -305,15 +315,6 @@ func (w *Worker) ChunkFileActivity(ctx context.Context, param *ChunkFileActivity
 		return fmt.Errorf("saving chunking metadata in file record: %w", err)
 	}
 
-	// Update status to EMBEDDING
-	updateMap := map[string]any{
-		repository.KnowledgeBaseFileColumn.ProcessStatus: artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_EMBEDDING.String(),
-	}
-	_, err = w.repository.UpdateKnowledgeBaseFile(ctx, param.FileUID.String(), updateMap)
-	if err != nil {
-		return fmt.Errorf("updating file process status: %w", err)
-	}
-
 	w.log.Info("File chunking completed", zap.String("fileUID", param.FileUID.String()))
 	return nil
 }
@@ -327,6 +328,15 @@ func (w *Worker) EmbedFileActivity(ctx context.Context, param *EmbedFileActivity
 	file, err := getFileByUID(ctx, w.repository, param.FileUID)
 	if err != nil {
 		return err
+	}
+
+	// Update status to EMBEDDING at the beginning (after confirming file exists)
+	updateMap := map[string]any{
+		repository.KnowledgeBaseFileColumn.ProcessStatus: artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_EMBEDDING.String(),
+	}
+	if _, err := w.repository.UpdateKnowledgeBaseFile(ctx, param.FileUID.String(), updateMap); err != nil {
+		w.log.Warn("Failed to update file status (file may be deleted)", zap.Error(err))
+		// Continue anyway - file might have been deleted during processing
 	}
 
 	sourceTable, sourceUID, chunks, _, texts, err := w.service.GetChunksByFile(ctx, &file)
@@ -395,6 +405,15 @@ func (w *Worker) GenerateSummaryActivity(ctx context.Context, param *GenerateSum
 		return err
 	}
 
+	// Update status to SUMMARIZING at the beginning (after confirming file exists)
+	updateMap := map[string]any{
+		repository.KnowledgeBaseFileColumn.ProcessStatus: artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_SUMMARIZING.String(),
+	}
+	if _, err := w.repository.UpdateKnowledgeBaseFile(ctx, param.FileUID.String(), updateMap); err != nil {
+		w.log.Warn("Failed to update file status (file may be deleted)", zap.Error(err))
+		// Continue anyway - file might have been deleted during processing
+	}
+
 	authCtx, err := createAuthenticatedContext(ctx, file.ExternalMetadataUnmarshal)
 	if err != nil {
 		w.log.Warn("Failed to create authenticated context, using original context", zap.Error(err))
@@ -451,14 +470,13 @@ func (w *Worker) GenerateSummaryActivity(ctx context.Context, param *GenerateSum
 		return fmt.Errorf("failed to save summarizing pipeline metadata: %w", err)
 	}
 
-	updateMap := map[string]any{
-		repository.KnowledgeBaseFileColumn.ProcessStatus: artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CHUNKING.String(),
-		repository.KnowledgeBaseFileColumn.Summary:       []byte(summary),
+	updateMap = map[string]any{
+		repository.KnowledgeBaseFileColumn.Summary: []byte(summary),
 	}
 	_, err = w.repository.UpdateKnowledgeBaseFile(ctx, param.FileUID.String(), updateMap)
 	if err != nil {
-		w.log.Error("Failed to update file status.", zap.String("File uid", param.FileUID.String()))
-		return fmt.Errorf("failed to update file status: %w", err)
+		w.log.Error("Failed to update file summary.", zap.String("File uid", param.FileUID.String()))
+		return fmt.Errorf("failed to update file summary: %w", err)
 	}
 
 	w.log.Info("Summary generation completed", zap.String("fileUID", param.FileUID.String()))
@@ -508,14 +526,6 @@ func (w *Worker) ProcessWaitingFileActivity(ctx context.Context, param *ProcessW
 
 	default:
 		return artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, fmt.Errorf("unsupported file type in ProcessWaitingFileActivity: %v", file.Type)
-	}
-
-	updateMap := map[string]any{
-		repository.KnowledgeBaseFileColumn.ProcessStatus: nextStatus.String(),
-	}
-	_, err = w.repository.UpdateKnowledgeBaseFile(ctx, param.FileUID.String(), updateMap)
-	if err != nil {
-		return artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, fmt.Errorf("failed to update file status: %w", err)
 	}
 
 	w.log.Info("Waiting file processed", zap.String("fileUID", param.FileUID.String()), zap.String("nextStatus", nextStatus.String()))
