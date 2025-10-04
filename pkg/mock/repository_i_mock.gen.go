@@ -28,12 +28,12 @@ type RepositoryIMock struct {
 	beforeConvertedFileTableNameCounter uint64
 	ConvertedFileTableNameMock          mRepositoryIMockConvertedFileTableName
 
-	funcCreateConvertedFile          func(ctx context.Context, cf mm_repository.ConvertedFile, callExternalService func(convertedFileUID uuid.UUID) (dest string, _ error)) (cp1 *mm_repository.ConvertedFile, err error)
-	funcCreateConvertedFileOrigin    string
-	inspectFuncCreateConvertedFile   func(ctx context.Context, cf mm_repository.ConvertedFile, callExternalService func(convertedFileUID uuid.UUID) (dest string, _ error))
-	afterCreateConvertedFileCounter  uint64
-	beforeCreateConvertedFileCounter uint64
-	CreateConvertedFileMock          mRepositoryIMockCreateConvertedFile
+	funcCreateConvertedFileWithDestination          func(ctx context.Context, cf mm_repository.ConvertedFile) (cp1 *mm_repository.ConvertedFile, err error)
+	funcCreateConvertedFileWithDestinationOrigin    string
+	inspectFuncCreateConvertedFileWithDestination   func(ctx context.Context, cf mm_repository.ConvertedFile)
+	afterCreateConvertedFileWithDestinationCounter  uint64
+	beforeCreateConvertedFileWithDestinationCounter uint64
+	CreateConvertedFileWithDestinationMock          mRepositoryIMockCreateConvertedFileWithDestination
 
 	funcCreateKnowledgeBase          func(ctx context.Context, kb mm_repository.KnowledgeBase, externalService func(kbUID uuid.UUID) error) (kp1 *mm_repository.KnowledgeBase, err error)
 	funcCreateKnowledgeBaseOrigin    string
@@ -435,6 +435,13 @@ type RepositoryIMock struct {
 	beforeUpdateChunkDestinationsCounter uint64
 	UpdateChunkDestinationsMock          mRepositoryIMockUpdateChunkDestinations
 
+	funcUpdateConvertedFile          func(ctx context.Context, uid uuid.UUID, update map[string]any) (err error)
+	funcUpdateConvertedFileOrigin    string
+	inspectFuncUpdateConvertedFile   func(ctx context.Context, uid uuid.UUID, update map[string]any)
+	afterUpdateConvertedFileCounter  uint64
+	beforeUpdateConvertedFileCounter uint64
+	UpdateConvertedFileMock          mRepositoryIMockUpdateConvertedFile
+
 	funcUpdateKBFileMetadata          func(ctx context.Context, fileUID uuid.UUID, e1 mm_repository.ExtraMetaData) (err error)
 	funcUpdateKBFileMetadataOrigin    string
 	inspectFuncUpdateKBFileMetadata   func(ctx context.Context, fileUID uuid.UUID, e1 mm_repository.ExtraMetaData)
@@ -495,8 +502,8 @@ func NewRepositoryIMock(t minimock.Tester) *RepositoryIMock {
 
 	m.ConvertedFileTableNameMock = mRepositoryIMockConvertedFileTableName{mock: m}
 
-	m.CreateConvertedFileMock = mRepositoryIMockCreateConvertedFile{mock: m}
-	m.CreateConvertedFileMock.callArgs = []*RepositoryIMockCreateConvertedFileParams{}
+	m.CreateConvertedFileWithDestinationMock = mRepositoryIMockCreateConvertedFileWithDestination{mock: m}
+	m.CreateConvertedFileWithDestinationMock.callArgs = []*RepositoryIMockCreateConvertedFileWithDestinationParams{}
 
 	m.CreateKnowledgeBaseMock = mRepositoryIMockCreateKnowledgeBase{mock: m}
 	m.CreateKnowledgeBaseMock.callArgs = []*RepositoryIMockCreateKnowledgeBaseParams{}
@@ -660,6 +667,9 @@ func NewRepositoryIMock(t minimock.Tester) *RepositoryIMock {
 
 	m.UpdateChunkDestinationsMock = mRepositoryIMockUpdateChunkDestinations{mock: m}
 	m.UpdateChunkDestinationsMock.callArgs = []*RepositoryIMockUpdateChunkDestinationsParams{}
+
+	m.UpdateConvertedFileMock = mRepositoryIMockUpdateConvertedFile{mock: m}
+	m.UpdateConvertedFileMock.callArgs = []*RepositoryIMockUpdateConvertedFileParams{}
 
 	m.UpdateKBFileMetadataMock = mRepositoryIMockUpdateKBFileMetadata{mock: m}
 	m.UpdateKBFileMetadataMock.callArgs = []*RepositoryIMockUpdateKBFileMetadataParams{}
@@ -873,56 +883,53 @@ func (m *RepositoryIMock) MinimockConvertedFileTableNameInspect() {
 	}
 }
 
-type mRepositoryIMockCreateConvertedFile struct {
+type mRepositoryIMockCreateConvertedFileWithDestination struct {
 	optional           bool
 	mock               *RepositoryIMock
-	defaultExpectation *RepositoryIMockCreateConvertedFileExpectation
-	expectations       []*RepositoryIMockCreateConvertedFileExpectation
+	defaultExpectation *RepositoryIMockCreateConvertedFileWithDestinationExpectation
+	expectations       []*RepositoryIMockCreateConvertedFileWithDestinationExpectation
 
-	callArgs []*RepositoryIMockCreateConvertedFileParams
+	callArgs []*RepositoryIMockCreateConvertedFileWithDestinationParams
 	mutex    sync.RWMutex
 
 	expectedInvocations       uint64
 	expectedInvocationsOrigin string
 }
 
-// RepositoryIMockCreateConvertedFileExpectation specifies expectation struct of the RepositoryI.CreateConvertedFile
-type RepositoryIMockCreateConvertedFileExpectation struct {
+// RepositoryIMockCreateConvertedFileWithDestinationExpectation specifies expectation struct of the RepositoryI.CreateConvertedFileWithDestination
+type RepositoryIMockCreateConvertedFileWithDestinationExpectation struct {
 	mock               *RepositoryIMock
-	params             *RepositoryIMockCreateConvertedFileParams
-	paramPtrs          *RepositoryIMockCreateConvertedFileParamPtrs
-	expectationOrigins RepositoryIMockCreateConvertedFileExpectationOrigins
-	results            *RepositoryIMockCreateConvertedFileResults
+	params             *RepositoryIMockCreateConvertedFileWithDestinationParams
+	paramPtrs          *RepositoryIMockCreateConvertedFileWithDestinationParamPtrs
+	expectationOrigins RepositoryIMockCreateConvertedFileWithDestinationExpectationOrigins
+	results            *RepositoryIMockCreateConvertedFileWithDestinationResults
 	returnOrigin       string
 	Counter            uint64
 }
 
-// RepositoryIMockCreateConvertedFileParams contains parameters of the RepositoryI.CreateConvertedFile
-type RepositoryIMockCreateConvertedFileParams struct {
-	ctx                 context.Context
-	cf                  mm_repository.ConvertedFile
-	callExternalService func(convertedFileUID uuid.UUID) (dest string, _ error)
+// RepositoryIMockCreateConvertedFileWithDestinationParams contains parameters of the RepositoryI.CreateConvertedFileWithDestination
+type RepositoryIMockCreateConvertedFileWithDestinationParams struct {
+	ctx context.Context
+	cf  mm_repository.ConvertedFile
 }
 
-// RepositoryIMockCreateConvertedFileParamPtrs contains pointers to parameters of the RepositoryI.CreateConvertedFile
-type RepositoryIMockCreateConvertedFileParamPtrs struct {
-	ctx                 *context.Context
-	cf                  *mm_repository.ConvertedFile
-	callExternalService *func(convertedFileUID uuid.UUID) (dest string, _ error)
+// RepositoryIMockCreateConvertedFileWithDestinationParamPtrs contains pointers to parameters of the RepositoryI.CreateConvertedFileWithDestination
+type RepositoryIMockCreateConvertedFileWithDestinationParamPtrs struct {
+	ctx *context.Context
+	cf  *mm_repository.ConvertedFile
 }
 
-// RepositoryIMockCreateConvertedFileResults contains results of the RepositoryI.CreateConvertedFile
-type RepositoryIMockCreateConvertedFileResults struct {
+// RepositoryIMockCreateConvertedFileWithDestinationResults contains results of the RepositoryI.CreateConvertedFileWithDestination
+type RepositoryIMockCreateConvertedFileWithDestinationResults struct {
 	cp1 *mm_repository.ConvertedFile
 	err error
 }
 
-// RepositoryIMockCreateConvertedFileOrigins contains origins of expectations of the RepositoryI.CreateConvertedFile
-type RepositoryIMockCreateConvertedFileExpectationOrigins struct {
-	origin                    string
-	originCtx                 string
-	originCf                  string
-	originCallExternalService string
+// RepositoryIMockCreateConvertedFileWithDestinationOrigins contains origins of expectations of the RepositoryI.CreateConvertedFileWithDestination
+type RepositoryIMockCreateConvertedFileWithDestinationExpectationOrigins struct {
+	origin    string
+	originCtx string
+	originCf  string
 }
 
 // Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
@@ -930,320 +937,292 @@ type RepositoryIMockCreateConvertedFileExpectationOrigins struct {
 // Optional() makes method check to work in '0 or more' mode.
 // It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
 // catch the problems when the expected method call is totally skipped during test run.
-func (mmCreateConvertedFile *mRepositoryIMockCreateConvertedFile) Optional() *mRepositoryIMockCreateConvertedFile {
-	mmCreateConvertedFile.optional = true
-	return mmCreateConvertedFile
+func (mmCreateConvertedFileWithDestination *mRepositoryIMockCreateConvertedFileWithDestination) Optional() *mRepositoryIMockCreateConvertedFileWithDestination {
+	mmCreateConvertedFileWithDestination.optional = true
+	return mmCreateConvertedFileWithDestination
 }
 
-// Expect sets up expected params for RepositoryI.CreateConvertedFile
-func (mmCreateConvertedFile *mRepositoryIMockCreateConvertedFile) Expect(ctx context.Context, cf mm_repository.ConvertedFile, callExternalService func(convertedFileUID uuid.UUID) (dest string, _ error)) *mRepositoryIMockCreateConvertedFile {
-	if mmCreateConvertedFile.mock.funcCreateConvertedFile != nil {
-		mmCreateConvertedFile.mock.t.Fatalf("RepositoryIMock.CreateConvertedFile mock is already set by Set")
+// Expect sets up expected params for RepositoryI.CreateConvertedFileWithDestination
+func (mmCreateConvertedFileWithDestination *mRepositoryIMockCreateConvertedFileWithDestination) Expect(ctx context.Context, cf mm_repository.ConvertedFile) *mRepositoryIMockCreateConvertedFileWithDestination {
+	if mmCreateConvertedFileWithDestination.mock.funcCreateConvertedFileWithDestination != nil {
+		mmCreateConvertedFileWithDestination.mock.t.Fatalf("RepositoryIMock.CreateConvertedFileWithDestination mock is already set by Set")
 	}
 
-	if mmCreateConvertedFile.defaultExpectation == nil {
-		mmCreateConvertedFile.defaultExpectation = &RepositoryIMockCreateConvertedFileExpectation{}
+	if mmCreateConvertedFileWithDestination.defaultExpectation == nil {
+		mmCreateConvertedFileWithDestination.defaultExpectation = &RepositoryIMockCreateConvertedFileWithDestinationExpectation{}
 	}
 
-	if mmCreateConvertedFile.defaultExpectation.paramPtrs != nil {
-		mmCreateConvertedFile.mock.t.Fatalf("RepositoryIMock.CreateConvertedFile mock is already set by ExpectParams functions")
+	if mmCreateConvertedFileWithDestination.defaultExpectation.paramPtrs != nil {
+		mmCreateConvertedFileWithDestination.mock.t.Fatalf("RepositoryIMock.CreateConvertedFileWithDestination mock is already set by ExpectParams functions")
 	}
 
-	mmCreateConvertedFile.defaultExpectation.params = &RepositoryIMockCreateConvertedFileParams{ctx, cf, callExternalService}
-	mmCreateConvertedFile.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
-	for _, e := range mmCreateConvertedFile.expectations {
-		if minimock.Equal(e.params, mmCreateConvertedFile.defaultExpectation.params) {
-			mmCreateConvertedFile.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmCreateConvertedFile.defaultExpectation.params)
+	mmCreateConvertedFileWithDestination.defaultExpectation.params = &RepositoryIMockCreateConvertedFileWithDestinationParams{ctx, cf}
+	mmCreateConvertedFileWithDestination.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmCreateConvertedFileWithDestination.expectations {
+		if minimock.Equal(e.params, mmCreateConvertedFileWithDestination.defaultExpectation.params) {
+			mmCreateConvertedFileWithDestination.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmCreateConvertedFileWithDestination.defaultExpectation.params)
 		}
 	}
 
-	return mmCreateConvertedFile
+	return mmCreateConvertedFileWithDestination
 }
 
-// ExpectCtxParam1 sets up expected param ctx for RepositoryI.CreateConvertedFile
-func (mmCreateConvertedFile *mRepositoryIMockCreateConvertedFile) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockCreateConvertedFile {
-	if mmCreateConvertedFile.mock.funcCreateConvertedFile != nil {
-		mmCreateConvertedFile.mock.t.Fatalf("RepositoryIMock.CreateConvertedFile mock is already set by Set")
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.CreateConvertedFileWithDestination
+func (mmCreateConvertedFileWithDestination *mRepositoryIMockCreateConvertedFileWithDestination) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockCreateConvertedFileWithDestination {
+	if mmCreateConvertedFileWithDestination.mock.funcCreateConvertedFileWithDestination != nil {
+		mmCreateConvertedFileWithDestination.mock.t.Fatalf("RepositoryIMock.CreateConvertedFileWithDestination mock is already set by Set")
 	}
 
-	if mmCreateConvertedFile.defaultExpectation == nil {
-		mmCreateConvertedFile.defaultExpectation = &RepositoryIMockCreateConvertedFileExpectation{}
+	if mmCreateConvertedFileWithDestination.defaultExpectation == nil {
+		mmCreateConvertedFileWithDestination.defaultExpectation = &RepositoryIMockCreateConvertedFileWithDestinationExpectation{}
 	}
 
-	if mmCreateConvertedFile.defaultExpectation.params != nil {
-		mmCreateConvertedFile.mock.t.Fatalf("RepositoryIMock.CreateConvertedFile mock is already set by Expect")
+	if mmCreateConvertedFileWithDestination.defaultExpectation.params != nil {
+		mmCreateConvertedFileWithDestination.mock.t.Fatalf("RepositoryIMock.CreateConvertedFileWithDestination mock is already set by Expect")
 	}
 
-	if mmCreateConvertedFile.defaultExpectation.paramPtrs == nil {
-		mmCreateConvertedFile.defaultExpectation.paramPtrs = &RepositoryIMockCreateConvertedFileParamPtrs{}
+	if mmCreateConvertedFileWithDestination.defaultExpectation.paramPtrs == nil {
+		mmCreateConvertedFileWithDestination.defaultExpectation.paramPtrs = &RepositoryIMockCreateConvertedFileWithDestinationParamPtrs{}
 	}
-	mmCreateConvertedFile.defaultExpectation.paramPtrs.ctx = &ctx
-	mmCreateConvertedFile.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+	mmCreateConvertedFileWithDestination.defaultExpectation.paramPtrs.ctx = &ctx
+	mmCreateConvertedFileWithDestination.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
 
-	return mmCreateConvertedFile
+	return mmCreateConvertedFileWithDestination
 }
 
-// ExpectCfParam2 sets up expected param cf for RepositoryI.CreateConvertedFile
-func (mmCreateConvertedFile *mRepositoryIMockCreateConvertedFile) ExpectCfParam2(cf mm_repository.ConvertedFile) *mRepositoryIMockCreateConvertedFile {
-	if mmCreateConvertedFile.mock.funcCreateConvertedFile != nil {
-		mmCreateConvertedFile.mock.t.Fatalf("RepositoryIMock.CreateConvertedFile mock is already set by Set")
+// ExpectCfParam2 sets up expected param cf for RepositoryI.CreateConvertedFileWithDestination
+func (mmCreateConvertedFileWithDestination *mRepositoryIMockCreateConvertedFileWithDestination) ExpectCfParam2(cf mm_repository.ConvertedFile) *mRepositoryIMockCreateConvertedFileWithDestination {
+	if mmCreateConvertedFileWithDestination.mock.funcCreateConvertedFileWithDestination != nil {
+		mmCreateConvertedFileWithDestination.mock.t.Fatalf("RepositoryIMock.CreateConvertedFileWithDestination mock is already set by Set")
 	}
 
-	if mmCreateConvertedFile.defaultExpectation == nil {
-		mmCreateConvertedFile.defaultExpectation = &RepositoryIMockCreateConvertedFileExpectation{}
+	if mmCreateConvertedFileWithDestination.defaultExpectation == nil {
+		mmCreateConvertedFileWithDestination.defaultExpectation = &RepositoryIMockCreateConvertedFileWithDestinationExpectation{}
 	}
 
-	if mmCreateConvertedFile.defaultExpectation.params != nil {
-		mmCreateConvertedFile.mock.t.Fatalf("RepositoryIMock.CreateConvertedFile mock is already set by Expect")
+	if mmCreateConvertedFileWithDestination.defaultExpectation.params != nil {
+		mmCreateConvertedFileWithDestination.mock.t.Fatalf("RepositoryIMock.CreateConvertedFileWithDestination mock is already set by Expect")
 	}
 
-	if mmCreateConvertedFile.defaultExpectation.paramPtrs == nil {
-		mmCreateConvertedFile.defaultExpectation.paramPtrs = &RepositoryIMockCreateConvertedFileParamPtrs{}
+	if mmCreateConvertedFileWithDestination.defaultExpectation.paramPtrs == nil {
+		mmCreateConvertedFileWithDestination.defaultExpectation.paramPtrs = &RepositoryIMockCreateConvertedFileWithDestinationParamPtrs{}
 	}
-	mmCreateConvertedFile.defaultExpectation.paramPtrs.cf = &cf
-	mmCreateConvertedFile.defaultExpectation.expectationOrigins.originCf = minimock.CallerInfo(1)
+	mmCreateConvertedFileWithDestination.defaultExpectation.paramPtrs.cf = &cf
+	mmCreateConvertedFileWithDestination.defaultExpectation.expectationOrigins.originCf = minimock.CallerInfo(1)
 
-	return mmCreateConvertedFile
+	return mmCreateConvertedFileWithDestination
 }
 
-// ExpectCallExternalServiceParam3 sets up expected param callExternalService for RepositoryI.CreateConvertedFile
-func (mmCreateConvertedFile *mRepositoryIMockCreateConvertedFile) ExpectCallExternalServiceParam3(callExternalService func(convertedFileUID uuid.UUID) (dest string, _ error)) *mRepositoryIMockCreateConvertedFile {
-	if mmCreateConvertedFile.mock.funcCreateConvertedFile != nil {
-		mmCreateConvertedFile.mock.t.Fatalf("RepositoryIMock.CreateConvertedFile mock is already set by Set")
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.CreateConvertedFileWithDestination
+func (mmCreateConvertedFileWithDestination *mRepositoryIMockCreateConvertedFileWithDestination) Inspect(f func(ctx context.Context, cf mm_repository.ConvertedFile)) *mRepositoryIMockCreateConvertedFileWithDestination {
+	if mmCreateConvertedFileWithDestination.mock.inspectFuncCreateConvertedFileWithDestination != nil {
+		mmCreateConvertedFileWithDestination.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.CreateConvertedFileWithDestination")
 	}
 
-	if mmCreateConvertedFile.defaultExpectation == nil {
-		mmCreateConvertedFile.defaultExpectation = &RepositoryIMockCreateConvertedFileExpectation{}
-	}
+	mmCreateConvertedFileWithDestination.mock.inspectFuncCreateConvertedFileWithDestination = f
 
-	if mmCreateConvertedFile.defaultExpectation.params != nil {
-		mmCreateConvertedFile.mock.t.Fatalf("RepositoryIMock.CreateConvertedFile mock is already set by Expect")
-	}
-
-	if mmCreateConvertedFile.defaultExpectation.paramPtrs == nil {
-		mmCreateConvertedFile.defaultExpectation.paramPtrs = &RepositoryIMockCreateConvertedFileParamPtrs{}
-	}
-	mmCreateConvertedFile.defaultExpectation.paramPtrs.callExternalService = &callExternalService
-	mmCreateConvertedFile.defaultExpectation.expectationOrigins.originCallExternalService = minimock.CallerInfo(1)
-
-	return mmCreateConvertedFile
+	return mmCreateConvertedFileWithDestination
 }
 
-// Inspect accepts an inspector function that has same arguments as the RepositoryI.CreateConvertedFile
-func (mmCreateConvertedFile *mRepositoryIMockCreateConvertedFile) Inspect(f func(ctx context.Context, cf mm_repository.ConvertedFile, callExternalService func(convertedFileUID uuid.UUID) (dest string, _ error))) *mRepositoryIMockCreateConvertedFile {
-	if mmCreateConvertedFile.mock.inspectFuncCreateConvertedFile != nil {
-		mmCreateConvertedFile.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.CreateConvertedFile")
+// Return sets up results that will be returned by RepositoryI.CreateConvertedFileWithDestination
+func (mmCreateConvertedFileWithDestination *mRepositoryIMockCreateConvertedFileWithDestination) Return(cp1 *mm_repository.ConvertedFile, err error) *RepositoryIMock {
+	if mmCreateConvertedFileWithDestination.mock.funcCreateConvertedFileWithDestination != nil {
+		mmCreateConvertedFileWithDestination.mock.t.Fatalf("RepositoryIMock.CreateConvertedFileWithDestination mock is already set by Set")
 	}
 
-	mmCreateConvertedFile.mock.inspectFuncCreateConvertedFile = f
-
-	return mmCreateConvertedFile
+	if mmCreateConvertedFileWithDestination.defaultExpectation == nil {
+		mmCreateConvertedFileWithDestination.defaultExpectation = &RepositoryIMockCreateConvertedFileWithDestinationExpectation{mock: mmCreateConvertedFileWithDestination.mock}
+	}
+	mmCreateConvertedFileWithDestination.defaultExpectation.results = &RepositoryIMockCreateConvertedFileWithDestinationResults{cp1, err}
+	mmCreateConvertedFileWithDestination.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmCreateConvertedFileWithDestination.mock
 }
 
-// Return sets up results that will be returned by RepositoryI.CreateConvertedFile
-func (mmCreateConvertedFile *mRepositoryIMockCreateConvertedFile) Return(cp1 *mm_repository.ConvertedFile, err error) *RepositoryIMock {
-	if mmCreateConvertedFile.mock.funcCreateConvertedFile != nil {
-		mmCreateConvertedFile.mock.t.Fatalf("RepositoryIMock.CreateConvertedFile mock is already set by Set")
+// Set uses given function f to mock the RepositoryI.CreateConvertedFileWithDestination method
+func (mmCreateConvertedFileWithDestination *mRepositoryIMockCreateConvertedFileWithDestination) Set(f func(ctx context.Context, cf mm_repository.ConvertedFile) (cp1 *mm_repository.ConvertedFile, err error)) *RepositoryIMock {
+	if mmCreateConvertedFileWithDestination.defaultExpectation != nil {
+		mmCreateConvertedFileWithDestination.mock.t.Fatalf("Default expectation is already set for the RepositoryI.CreateConvertedFileWithDestination method")
 	}
 
-	if mmCreateConvertedFile.defaultExpectation == nil {
-		mmCreateConvertedFile.defaultExpectation = &RepositoryIMockCreateConvertedFileExpectation{mock: mmCreateConvertedFile.mock}
+	if len(mmCreateConvertedFileWithDestination.expectations) > 0 {
+		mmCreateConvertedFileWithDestination.mock.t.Fatalf("Some expectations are already set for the RepositoryI.CreateConvertedFileWithDestination method")
 	}
-	mmCreateConvertedFile.defaultExpectation.results = &RepositoryIMockCreateConvertedFileResults{cp1, err}
-	mmCreateConvertedFile.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
-	return mmCreateConvertedFile.mock
+
+	mmCreateConvertedFileWithDestination.mock.funcCreateConvertedFileWithDestination = f
+	mmCreateConvertedFileWithDestination.mock.funcCreateConvertedFileWithDestinationOrigin = minimock.CallerInfo(1)
+	return mmCreateConvertedFileWithDestination.mock
 }
 
-// Set uses given function f to mock the RepositoryI.CreateConvertedFile method
-func (mmCreateConvertedFile *mRepositoryIMockCreateConvertedFile) Set(f func(ctx context.Context, cf mm_repository.ConvertedFile, callExternalService func(convertedFileUID uuid.UUID) (dest string, _ error)) (cp1 *mm_repository.ConvertedFile, err error)) *RepositoryIMock {
-	if mmCreateConvertedFile.defaultExpectation != nil {
-		mmCreateConvertedFile.mock.t.Fatalf("Default expectation is already set for the RepositoryI.CreateConvertedFile method")
-	}
-
-	if len(mmCreateConvertedFile.expectations) > 0 {
-		mmCreateConvertedFile.mock.t.Fatalf("Some expectations are already set for the RepositoryI.CreateConvertedFile method")
-	}
-
-	mmCreateConvertedFile.mock.funcCreateConvertedFile = f
-	mmCreateConvertedFile.mock.funcCreateConvertedFileOrigin = minimock.CallerInfo(1)
-	return mmCreateConvertedFile.mock
-}
-
-// When sets expectation for the RepositoryI.CreateConvertedFile which will trigger the result defined by the following
+// When sets expectation for the RepositoryI.CreateConvertedFileWithDestination which will trigger the result defined by the following
 // Then helper
-func (mmCreateConvertedFile *mRepositoryIMockCreateConvertedFile) When(ctx context.Context, cf mm_repository.ConvertedFile, callExternalService func(convertedFileUID uuid.UUID) (dest string, _ error)) *RepositoryIMockCreateConvertedFileExpectation {
-	if mmCreateConvertedFile.mock.funcCreateConvertedFile != nil {
-		mmCreateConvertedFile.mock.t.Fatalf("RepositoryIMock.CreateConvertedFile mock is already set by Set")
+func (mmCreateConvertedFileWithDestination *mRepositoryIMockCreateConvertedFileWithDestination) When(ctx context.Context, cf mm_repository.ConvertedFile) *RepositoryIMockCreateConvertedFileWithDestinationExpectation {
+	if mmCreateConvertedFileWithDestination.mock.funcCreateConvertedFileWithDestination != nil {
+		mmCreateConvertedFileWithDestination.mock.t.Fatalf("RepositoryIMock.CreateConvertedFileWithDestination mock is already set by Set")
 	}
 
-	expectation := &RepositoryIMockCreateConvertedFileExpectation{
-		mock:               mmCreateConvertedFile.mock,
-		params:             &RepositoryIMockCreateConvertedFileParams{ctx, cf, callExternalService},
-		expectationOrigins: RepositoryIMockCreateConvertedFileExpectationOrigins{origin: minimock.CallerInfo(1)},
+	expectation := &RepositoryIMockCreateConvertedFileWithDestinationExpectation{
+		mock:               mmCreateConvertedFileWithDestination.mock,
+		params:             &RepositoryIMockCreateConvertedFileWithDestinationParams{ctx, cf},
+		expectationOrigins: RepositoryIMockCreateConvertedFileWithDestinationExpectationOrigins{origin: minimock.CallerInfo(1)},
 	}
-	mmCreateConvertedFile.expectations = append(mmCreateConvertedFile.expectations, expectation)
+	mmCreateConvertedFileWithDestination.expectations = append(mmCreateConvertedFileWithDestination.expectations, expectation)
 	return expectation
 }
 
-// Then sets up RepositoryI.CreateConvertedFile return parameters for the expectation previously defined by the When method
-func (e *RepositoryIMockCreateConvertedFileExpectation) Then(cp1 *mm_repository.ConvertedFile, err error) *RepositoryIMock {
-	e.results = &RepositoryIMockCreateConvertedFileResults{cp1, err}
+// Then sets up RepositoryI.CreateConvertedFileWithDestination return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockCreateConvertedFileWithDestinationExpectation) Then(cp1 *mm_repository.ConvertedFile, err error) *RepositoryIMock {
+	e.results = &RepositoryIMockCreateConvertedFileWithDestinationResults{cp1, err}
 	return e.mock
 }
 
-// Times sets number of times RepositoryI.CreateConvertedFile should be invoked
-func (mmCreateConvertedFile *mRepositoryIMockCreateConvertedFile) Times(n uint64) *mRepositoryIMockCreateConvertedFile {
+// Times sets number of times RepositoryI.CreateConvertedFileWithDestination should be invoked
+func (mmCreateConvertedFileWithDestination *mRepositoryIMockCreateConvertedFileWithDestination) Times(n uint64) *mRepositoryIMockCreateConvertedFileWithDestination {
 	if n == 0 {
-		mmCreateConvertedFile.mock.t.Fatalf("Times of RepositoryIMock.CreateConvertedFile mock can not be zero")
+		mmCreateConvertedFileWithDestination.mock.t.Fatalf("Times of RepositoryIMock.CreateConvertedFileWithDestination mock can not be zero")
 	}
-	mm_atomic.StoreUint64(&mmCreateConvertedFile.expectedInvocations, n)
-	mmCreateConvertedFile.expectedInvocationsOrigin = minimock.CallerInfo(1)
-	return mmCreateConvertedFile
+	mm_atomic.StoreUint64(&mmCreateConvertedFileWithDestination.expectedInvocations, n)
+	mmCreateConvertedFileWithDestination.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmCreateConvertedFileWithDestination
 }
 
-func (mmCreateConvertedFile *mRepositoryIMockCreateConvertedFile) invocationsDone() bool {
-	if len(mmCreateConvertedFile.expectations) == 0 && mmCreateConvertedFile.defaultExpectation == nil && mmCreateConvertedFile.mock.funcCreateConvertedFile == nil {
+func (mmCreateConvertedFileWithDestination *mRepositoryIMockCreateConvertedFileWithDestination) invocationsDone() bool {
+	if len(mmCreateConvertedFileWithDestination.expectations) == 0 && mmCreateConvertedFileWithDestination.defaultExpectation == nil && mmCreateConvertedFileWithDestination.mock.funcCreateConvertedFileWithDestination == nil {
 		return true
 	}
 
-	totalInvocations := mm_atomic.LoadUint64(&mmCreateConvertedFile.mock.afterCreateConvertedFileCounter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmCreateConvertedFile.expectedInvocations)
+	totalInvocations := mm_atomic.LoadUint64(&mmCreateConvertedFileWithDestination.mock.afterCreateConvertedFileWithDestinationCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmCreateConvertedFileWithDestination.expectedInvocations)
 
 	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
 }
 
-// CreateConvertedFile implements mm_repository.RepositoryI
-func (mmCreateConvertedFile *RepositoryIMock) CreateConvertedFile(ctx context.Context, cf mm_repository.ConvertedFile, callExternalService func(convertedFileUID uuid.UUID) (dest string, _ error)) (cp1 *mm_repository.ConvertedFile, err error) {
-	mm_atomic.AddUint64(&mmCreateConvertedFile.beforeCreateConvertedFileCounter, 1)
-	defer mm_atomic.AddUint64(&mmCreateConvertedFile.afterCreateConvertedFileCounter, 1)
+// CreateConvertedFileWithDestination implements mm_repository.RepositoryI
+func (mmCreateConvertedFileWithDestination *RepositoryIMock) CreateConvertedFileWithDestination(ctx context.Context, cf mm_repository.ConvertedFile) (cp1 *mm_repository.ConvertedFile, err error) {
+	mm_atomic.AddUint64(&mmCreateConvertedFileWithDestination.beforeCreateConvertedFileWithDestinationCounter, 1)
+	defer mm_atomic.AddUint64(&mmCreateConvertedFileWithDestination.afterCreateConvertedFileWithDestinationCounter, 1)
 
-	mmCreateConvertedFile.t.Helper()
+	mmCreateConvertedFileWithDestination.t.Helper()
 
-	if mmCreateConvertedFile.inspectFuncCreateConvertedFile != nil {
-		mmCreateConvertedFile.inspectFuncCreateConvertedFile(ctx, cf, callExternalService)
+	if mmCreateConvertedFileWithDestination.inspectFuncCreateConvertedFileWithDestination != nil {
+		mmCreateConvertedFileWithDestination.inspectFuncCreateConvertedFileWithDestination(ctx, cf)
 	}
 
-	mm_params := RepositoryIMockCreateConvertedFileParams{ctx, cf, callExternalService}
+	mm_params := RepositoryIMockCreateConvertedFileWithDestinationParams{ctx, cf}
 
 	// Record call args
-	mmCreateConvertedFile.CreateConvertedFileMock.mutex.Lock()
-	mmCreateConvertedFile.CreateConvertedFileMock.callArgs = append(mmCreateConvertedFile.CreateConvertedFileMock.callArgs, &mm_params)
-	mmCreateConvertedFile.CreateConvertedFileMock.mutex.Unlock()
+	mmCreateConvertedFileWithDestination.CreateConvertedFileWithDestinationMock.mutex.Lock()
+	mmCreateConvertedFileWithDestination.CreateConvertedFileWithDestinationMock.callArgs = append(mmCreateConvertedFileWithDestination.CreateConvertedFileWithDestinationMock.callArgs, &mm_params)
+	mmCreateConvertedFileWithDestination.CreateConvertedFileWithDestinationMock.mutex.Unlock()
 
-	for _, e := range mmCreateConvertedFile.CreateConvertedFileMock.expectations {
+	for _, e := range mmCreateConvertedFileWithDestination.CreateConvertedFileWithDestinationMock.expectations {
 		if minimock.Equal(*e.params, mm_params) {
 			mm_atomic.AddUint64(&e.Counter, 1)
 			return e.results.cp1, e.results.err
 		}
 	}
 
-	if mmCreateConvertedFile.CreateConvertedFileMock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmCreateConvertedFile.CreateConvertedFileMock.defaultExpectation.Counter, 1)
-		mm_want := mmCreateConvertedFile.CreateConvertedFileMock.defaultExpectation.params
-		mm_want_ptrs := mmCreateConvertedFile.CreateConvertedFileMock.defaultExpectation.paramPtrs
+	if mmCreateConvertedFileWithDestination.CreateConvertedFileWithDestinationMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmCreateConvertedFileWithDestination.CreateConvertedFileWithDestinationMock.defaultExpectation.Counter, 1)
+		mm_want := mmCreateConvertedFileWithDestination.CreateConvertedFileWithDestinationMock.defaultExpectation.params
+		mm_want_ptrs := mmCreateConvertedFileWithDestination.CreateConvertedFileWithDestinationMock.defaultExpectation.paramPtrs
 
-		mm_got := RepositoryIMockCreateConvertedFileParams{ctx, cf, callExternalService}
+		mm_got := RepositoryIMockCreateConvertedFileWithDestinationParams{ctx, cf}
 
 		if mm_want_ptrs != nil {
 
 			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
-				mmCreateConvertedFile.t.Errorf("RepositoryIMock.CreateConvertedFile got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmCreateConvertedFile.CreateConvertedFileMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+				mmCreateConvertedFileWithDestination.t.Errorf("RepositoryIMock.CreateConvertedFileWithDestination got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCreateConvertedFileWithDestination.CreateConvertedFileWithDestinationMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
 			}
 
 			if mm_want_ptrs.cf != nil && !minimock.Equal(*mm_want_ptrs.cf, mm_got.cf) {
-				mmCreateConvertedFile.t.Errorf("RepositoryIMock.CreateConvertedFile got unexpected parameter cf, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmCreateConvertedFile.CreateConvertedFileMock.defaultExpectation.expectationOrigins.originCf, *mm_want_ptrs.cf, mm_got.cf, minimock.Diff(*mm_want_ptrs.cf, mm_got.cf))
-			}
-
-			if mm_want_ptrs.callExternalService != nil && !minimock.Equal(*mm_want_ptrs.callExternalService, mm_got.callExternalService) {
-				mmCreateConvertedFile.t.Errorf("RepositoryIMock.CreateConvertedFile got unexpected parameter callExternalService, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmCreateConvertedFile.CreateConvertedFileMock.defaultExpectation.expectationOrigins.originCallExternalService, *mm_want_ptrs.callExternalService, mm_got.callExternalService, minimock.Diff(*mm_want_ptrs.callExternalService, mm_got.callExternalService))
+				mmCreateConvertedFileWithDestination.t.Errorf("RepositoryIMock.CreateConvertedFileWithDestination got unexpected parameter cf, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCreateConvertedFileWithDestination.CreateConvertedFileWithDestinationMock.defaultExpectation.expectationOrigins.originCf, *mm_want_ptrs.cf, mm_got.cf, minimock.Diff(*mm_want_ptrs.cf, mm_got.cf))
 			}
 
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
-			mmCreateConvertedFile.t.Errorf("RepositoryIMock.CreateConvertedFile got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-				mmCreateConvertedFile.CreateConvertedFileMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+			mmCreateConvertedFileWithDestination.t.Errorf("RepositoryIMock.CreateConvertedFileWithDestination got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmCreateConvertedFileWithDestination.CreateConvertedFileWithDestinationMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
 		}
 
-		mm_results := mmCreateConvertedFile.CreateConvertedFileMock.defaultExpectation.results
+		mm_results := mmCreateConvertedFileWithDestination.CreateConvertedFileWithDestinationMock.defaultExpectation.results
 		if mm_results == nil {
-			mmCreateConvertedFile.t.Fatal("No results are set for the RepositoryIMock.CreateConvertedFile")
+			mmCreateConvertedFileWithDestination.t.Fatal("No results are set for the RepositoryIMock.CreateConvertedFileWithDestination")
 		}
 		return (*mm_results).cp1, (*mm_results).err
 	}
-	if mmCreateConvertedFile.funcCreateConvertedFile != nil {
-		return mmCreateConvertedFile.funcCreateConvertedFile(ctx, cf, callExternalService)
+	if mmCreateConvertedFileWithDestination.funcCreateConvertedFileWithDestination != nil {
+		return mmCreateConvertedFileWithDestination.funcCreateConvertedFileWithDestination(ctx, cf)
 	}
-	mmCreateConvertedFile.t.Fatalf("Unexpected call to RepositoryIMock.CreateConvertedFile. %v %v %v", ctx, cf, callExternalService)
+	mmCreateConvertedFileWithDestination.t.Fatalf("Unexpected call to RepositoryIMock.CreateConvertedFileWithDestination. %v %v", ctx, cf)
 	return
 }
 
-// CreateConvertedFileAfterCounter returns a count of finished RepositoryIMock.CreateConvertedFile invocations
-func (mmCreateConvertedFile *RepositoryIMock) CreateConvertedFileAfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmCreateConvertedFile.afterCreateConvertedFileCounter)
+// CreateConvertedFileWithDestinationAfterCounter returns a count of finished RepositoryIMock.CreateConvertedFileWithDestination invocations
+func (mmCreateConvertedFileWithDestination *RepositoryIMock) CreateConvertedFileWithDestinationAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmCreateConvertedFileWithDestination.afterCreateConvertedFileWithDestinationCounter)
 }
 
-// CreateConvertedFileBeforeCounter returns a count of RepositoryIMock.CreateConvertedFile invocations
-func (mmCreateConvertedFile *RepositoryIMock) CreateConvertedFileBeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmCreateConvertedFile.beforeCreateConvertedFileCounter)
+// CreateConvertedFileWithDestinationBeforeCounter returns a count of RepositoryIMock.CreateConvertedFileWithDestination invocations
+func (mmCreateConvertedFileWithDestination *RepositoryIMock) CreateConvertedFileWithDestinationBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmCreateConvertedFileWithDestination.beforeCreateConvertedFileWithDestinationCounter)
 }
 
-// Calls returns a list of arguments used in each call to RepositoryIMock.CreateConvertedFile.
+// Calls returns a list of arguments used in each call to RepositoryIMock.CreateConvertedFileWithDestination.
 // The list is in the same order as the calls were made (i.e. recent calls have a higher index)
-func (mmCreateConvertedFile *mRepositoryIMockCreateConvertedFile) Calls() []*RepositoryIMockCreateConvertedFileParams {
-	mmCreateConvertedFile.mutex.RLock()
+func (mmCreateConvertedFileWithDestination *mRepositoryIMockCreateConvertedFileWithDestination) Calls() []*RepositoryIMockCreateConvertedFileWithDestinationParams {
+	mmCreateConvertedFileWithDestination.mutex.RLock()
 
-	argCopy := make([]*RepositoryIMockCreateConvertedFileParams, len(mmCreateConvertedFile.callArgs))
-	copy(argCopy, mmCreateConvertedFile.callArgs)
+	argCopy := make([]*RepositoryIMockCreateConvertedFileWithDestinationParams, len(mmCreateConvertedFileWithDestination.callArgs))
+	copy(argCopy, mmCreateConvertedFileWithDestination.callArgs)
 
-	mmCreateConvertedFile.mutex.RUnlock()
+	mmCreateConvertedFileWithDestination.mutex.RUnlock()
 
 	return argCopy
 }
 
-// MinimockCreateConvertedFileDone returns true if the count of the CreateConvertedFile invocations corresponds
+// MinimockCreateConvertedFileWithDestinationDone returns true if the count of the CreateConvertedFileWithDestination invocations corresponds
 // the number of defined expectations
-func (m *RepositoryIMock) MinimockCreateConvertedFileDone() bool {
-	if m.CreateConvertedFileMock.optional {
+func (m *RepositoryIMock) MinimockCreateConvertedFileWithDestinationDone() bool {
+	if m.CreateConvertedFileWithDestinationMock.optional {
 		// Optional methods provide '0 or more' call count restriction.
 		return true
 	}
 
-	for _, e := range m.CreateConvertedFileMock.expectations {
+	for _, e := range m.CreateConvertedFileWithDestinationMock.expectations {
 		if mm_atomic.LoadUint64(&e.Counter) < 1 {
 			return false
 		}
 	}
 
-	return m.CreateConvertedFileMock.invocationsDone()
+	return m.CreateConvertedFileWithDestinationMock.invocationsDone()
 }
 
-// MinimockCreateConvertedFileInspect logs each unmet expectation
-func (m *RepositoryIMock) MinimockCreateConvertedFileInspect() {
-	for _, e := range m.CreateConvertedFileMock.expectations {
+// MinimockCreateConvertedFileWithDestinationInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockCreateConvertedFileWithDestinationInspect() {
+	for _, e := range m.CreateConvertedFileWithDestinationMock.expectations {
 		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Errorf("Expected call to RepositoryIMock.CreateConvertedFile at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+			m.t.Errorf("Expected call to RepositoryIMock.CreateConvertedFileWithDestination at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
 		}
 	}
 
-	afterCreateConvertedFileCounter := mm_atomic.LoadUint64(&m.afterCreateConvertedFileCounter)
+	afterCreateConvertedFileWithDestinationCounter := mm_atomic.LoadUint64(&m.afterCreateConvertedFileWithDestinationCounter)
 	// if default expectation was set then invocations count should be greater than zero
-	if m.CreateConvertedFileMock.defaultExpectation != nil && afterCreateConvertedFileCounter < 1 {
-		if m.CreateConvertedFileMock.defaultExpectation.params == nil {
-			m.t.Errorf("Expected call to RepositoryIMock.CreateConvertedFile at\n%s", m.CreateConvertedFileMock.defaultExpectation.returnOrigin)
+	if m.CreateConvertedFileWithDestinationMock.defaultExpectation != nil && afterCreateConvertedFileWithDestinationCounter < 1 {
+		if m.CreateConvertedFileWithDestinationMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryIMock.CreateConvertedFileWithDestination at\n%s", m.CreateConvertedFileWithDestinationMock.defaultExpectation.returnOrigin)
 		} else {
-			m.t.Errorf("Expected call to RepositoryIMock.CreateConvertedFile at\n%s with params: %#v", m.CreateConvertedFileMock.defaultExpectation.expectationOrigins.origin, *m.CreateConvertedFileMock.defaultExpectation.params)
+			m.t.Errorf("Expected call to RepositoryIMock.CreateConvertedFileWithDestination at\n%s with params: %#v", m.CreateConvertedFileWithDestinationMock.defaultExpectation.expectationOrigins.origin, *m.CreateConvertedFileWithDestinationMock.defaultExpectation.params)
 		}
 	}
 	// if func was set then invocations count should be greater than zero
-	if m.funcCreateConvertedFile != nil && afterCreateConvertedFileCounter < 1 {
-		m.t.Errorf("Expected call to RepositoryIMock.CreateConvertedFile at\n%s", m.funcCreateConvertedFileOrigin)
+	if m.funcCreateConvertedFileWithDestination != nil && afterCreateConvertedFileWithDestinationCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryIMock.CreateConvertedFileWithDestination at\n%s", m.funcCreateConvertedFileWithDestinationOrigin)
 	}
 
-	if !m.CreateConvertedFileMock.invocationsDone() && afterCreateConvertedFileCounter > 0 {
-		m.t.Errorf("Expected %d calls to RepositoryIMock.CreateConvertedFile at\n%s but found %d calls",
-			mm_atomic.LoadUint64(&m.CreateConvertedFileMock.expectedInvocations), m.CreateConvertedFileMock.expectedInvocationsOrigin, afterCreateConvertedFileCounter)
+	if !m.CreateConvertedFileWithDestinationMock.invocationsDone() && afterCreateConvertedFileWithDestinationCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.CreateConvertedFileWithDestination at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.CreateConvertedFileWithDestinationMock.expectedInvocations), m.CreateConvertedFileWithDestinationMock.expectedInvocationsOrigin, afterCreateConvertedFileWithDestinationCounter)
 	}
 }
 
@@ -20434,6 +20413,379 @@ func (m *RepositoryIMock) MinimockUpdateChunkDestinationsInspect() {
 	}
 }
 
+type mRepositoryIMockUpdateConvertedFile struct {
+	optional           bool
+	mock               *RepositoryIMock
+	defaultExpectation *RepositoryIMockUpdateConvertedFileExpectation
+	expectations       []*RepositoryIMockUpdateConvertedFileExpectation
+
+	callArgs []*RepositoryIMockUpdateConvertedFileParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryIMockUpdateConvertedFileExpectation specifies expectation struct of the RepositoryI.UpdateConvertedFile
+type RepositoryIMockUpdateConvertedFileExpectation struct {
+	mock               *RepositoryIMock
+	params             *RepositoryIMockUpdateConvertedFileParams
+	paramPtrs          *RepositoryIMockUpdateConvertedFileParamPtrs
+	expectationOrigins RepositoryIMockUpdateConvertedFileExpectationOrigins
+	results            *RepositoryIMockUpdateConvertedFileResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryIMockUpdateConvertedFileParams contains parameters of the RepositoryI.UpdateConvertedFile
+type RepositoryIMockUpdateConvertedFileParams struct {
+	ctx    context.Context
+	uid    uuid.UUID
+	update map[string]any
+}
+
+// RepositoryIMockUpdateConvertedFileParamPtrs contains pointers to parameters of the RepositoryI.UpdateConvertedFile
+type RepositoryIMockUpdateConvertedFileParamPtrs struct {
+	ctx    *context.Context
+	uid    *uuid.UUID
+	update *map[string]any
+}
+
+// RepositoryIMockUpdateConvertedFileResults contains results of the RepositoryI.UpdateConvertedFile
+type RepositoryIMockUpdateConvertedFileResults struct {
+	err error
+}
+
+// RepositoryIMockUpdateConvertedFileOrigins contains origins of expectations of the RepositoryI.UpdateConvertedFile
+type RepositoryIMockUpdateConvertedFileExpectationOrigins struct {
+	origin       string
+	originCtx    string
+	originUid    string
+	originUpdate string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmUpdateConvertedFile *mRepositoryIMockUpdateConvertedFile) Optional() *mRepositoryIMockUpdateConvertedFile {
+	mmUpdateConvertedFile.optional = true
+	return mmUpdateConvertedFile
+}
+
+// Expect sets up expected params for RepositoryI.UpdateConvertedFile
+func (mmUpdateConvertedFile *mRepositoryIMockUpdateConvertedFile) Expect(ctx context.Context, uid uuid.UUID, update map[string]any) *mRepositoryIMockUpdateConvertedFile {
+	if mmUpdateConvertedFile.mock.funcUpdateConvertedFile != nil {
+		mmUpdateConvertedFile.mock.t.Fatalf("RepositoryIMock.UpdateConvertedFile mock is already set by Set")
+	}
+
+	if mmUpdateConvertedFile.defaultExpectation == nil {
+		mmUpdateConvertedFile.defaultExpectation = &RepositoryIMockUpdateConvertedFileExpectation{}
+	}
+
+	if mmUpdateConvertedFile.defaultExpectation.paramPtrs != nil {
+		mmUpdateConvertedFile.mock.t.Fatalf("RepositoryIMock.UpdateConvertedFile mock is already set by ExpectParams functions")
+	}
+
+	mmUpdateConvertedFile.defaultExpectation.params = &RepositoryIMockUpdateConvertedFileParams{ctx, uid, update}
+	mmUpdateConvertedFile.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmUpdateConvertedFile.expectations {
+		if minimock.Equal(e.params, mmUpdateConvertedFile.defaultExpectation.params) {
+			mmUpdateConvertedFile.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmUpdateConvertedFile.defaultExpectation.params)
+		}
+	}
+
+	return mmUpdateConvertedFile
+}
+
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.UpdateConvertedFile
+func (mmUpdateConvertedFile *mRepositoryIMockUpdateConvertedFile) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockUpdateConvertedFile {
+	if mmUpdateConvertedFile.mock.funcUpdateConvertedFile != nil {
+		mmUpdateConvertedFile.mock.t.Fatalf("RepositoryIMock.UpdateConvertedFile mock is already set by Set")
+	}
+
+	if mmUpdateConvertedFile.defaultExpectation == nil {
+		mmUpdateConvertedFile.defaultExpectation = &RepositoryIMockUpdateConvertedFileExpectation{}
+	}
+
+	if mmUpdateConvertedFile.defaultExpectation.params != nil {
+		mmUpdateConvertedFile.mock.t.Fatalf("RepositoryIMock.UpdateConvertedFile mock is already set by Expect")
+	}
+
+	if mmUpdateConvertedFile.defaultExpectation.paramPtrs == nil {
+		mmUpdateConvertedFile.defaultExpectation.paramPtrs = &RepositoryIMockUpdateConvertedFileParamPtrs{}
+	}
+	mmUpdateConvertedFile.defaultExpectation.paramPtrs.ctx = &ctx
+	mmUpdateConvertedFile.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmUpdateConvertedFile
+}
+
+// ExpectUidParam2 sets up expected param uid for RepositoryI.UpdateConvertedFile
+func (mmUpdateConvertedFile *mRepositoryIMockUpdateConvertedFile) ExpectUidParam2(uid uuid.UUID) *mRepositoryIMockUpdateConvertedFile {
+	if mmUpdateConvertedFile.mock.funcUpdateConvertedFile != nil {
+		mmUpdateConvertedFile.mock.t.Fatalf("RepositoryIMock.UpdateConvertedFile mock is already set by Set")
+	}
+
+	if mmUpdateConvertedFile.defaultExpectation == nil {
+		mmUpdateConvertedFile.defaultExpectation = &RepositoryIMockUpdateConvertedFileExpectation{}
+	}
+
+	if mmUpdateConvertedFile.defaultExpectation.params != nil {
+		mmUpdateConvertedFile.mock.t.Fatalf("RepositoryIMock.UpdateConvertedFile mock is already set by Expect")
+	}
+
+	if mmUpdateConvertedFile.defaultExpectation.paramPtrs == nil {
+		mmUpdateConvertedFile.defaultExpectation.paramPtrs = &RepositoryIMockUpdateConvertedFileParamPtrs{}
+	}
+	mmUpdateConvertedFile.defaultExpectation.paramPtrs.uid = &uid
+	mmUpdateConvertedFile.defaultExpectation.expectationOrigins.originUid = minimock.CallerInfo(1)
+
+	return mmUpdateConvertedFile
+}
+
+// ExpectUpdateParam3 sets up expected param update for RepositoryI.UpdateConvertedFile
+func (mmUpdateConvertedFile *mRepositoryIMockUpdateConvertedFile) ExpectUpdateParam3(update map[string]any) *mRepositoryIMockUpdateConvertedFile {
+	if mmUpdateConvertedFile.mock.funcUpdateConvertedFile != nil {
+		mmUpdateConvertedFile.mock.t.Fatalf("RepositoryIMock.UpdateConvertedFile mock is already set by Set")
+	}
+
+	if mmUpdateConvertedFile.defaultExpectation == nil {
+		mmUpdateConvertedFile.defaultExpectation = &RepositoryIMockUpdateConvertedFileExpectation{}
+	}
+
+	if mmUpdateConvertedFile.defaultExpectation.params != nil {
+		mmUpdateConvertedFile.mock.t.Fatalf("RepositoryIMock.UpdateConvertedFile mock is already set by Expect")
+	}
+
+	if mmUpdateConvertedFile.defaultExpectation.paramPtrs == nil {
+		mmUpdateConvertedFile.defaultExpectation.paramPtrs = &RepositoryIMockUpdateConvertedFileParamPtrs{}
+	}
+	mmUpdateConvertedFile.defaultExpectation.paramPtrs.update = &update
+	mmUpdateConvertedFile.defaultExpectation.expectationOrigins.originUpdate = minimock.CallerInfo(1)
+
+	return mmUpdateConvertedFile
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.UpdateConvertedFile
+func (mmUpdateConvertedFile *mRepositoryIMockUpdateConvertedFile) Inspect(f func(ctx context.Context, uid uuid.UUID, update map[string]any)) *mRepositoryIMockUpdateConvertedFile {
+	if mmUpdateConvertedFile.mock.inspectFuncUpdateConvertedFile != nil {
+		mmUpdateConvertedFile.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.UpdateConvertedFile")
+	}
+
+	mmUpdateConvertedFile.mock.inspectFuncUpdateConvertedFile = f
+
+	return mmUpdateConvertedFile
+}
+
+// Return sets up results that will be returned by RepositoryI.UpdateConvertedFile
+func (mmUpdateConvertedFile *mRepositoryIMockUpdateConvertedFile) Return(err error) *RepositoryIMock {
+	if mmUpdateConvertedFile.mock.funcUpdateConvertedFile != nil {
+		mmUpdateConvertedFile.mock.t.Fatalf("RepositoryIMock.UpdateConvertedFile mock is already set by Set")
+	}
+
+	if mmUpdateConvertedFile.defaultExpectation == nil {
+		mmUpdateConvertedFile.defaultExpectation = &RepositoryIMockUpdateConvertedFileExpectation{mock: mmUpdateConvertedFile.mock}
+	}
+	mmUpdateConvertedFile.defaultExpectation.results = &RepositoryIMockUpdateConvertedFileResults{err}
+	mmUpdateConvertedFile.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmUpdateConvertedFile.mock
+}
+
+// Set uses given function f to mock the RepositoryI.UpdateConvertedFile method
+func (mmUpdateConvertedFile *mRepositoryIMockUpdateConvertedFile) Set(f func(ctx context.Context, uid uuid.UUID, update map[string]any) (err error)) *RepositoryIMock {
+	if mmUpdateConvertedFile.defaultExpectation != nil {
+		mmUpdateConvertedFile.mock.t.Fatalf("Default expectation is already set for the RepositoryI.UpdateConvertedFile method")
+	}
+
+	if len(mmUpdateConvertedFile.expectations) > 0 {
+		mmUpdateConvertedFile.mock.t.Fatalf("Some expectations are already set for the RepositoryI.UpdateConvertedFile method")
+	}
+
+	mmUpdateConvertedFile.mock.funcUpdateConvertedFile = f
+	mmUpdateConvertedFile.mock.funcUpdateConvertedFileOrigin = minimock.CallerInfo(1)
+	return mmUpdateConvertedFile.mock
+}
+
+// When sets expectation for the RepositoryI.UpdateConvertedFile which will trigger the result defined by the following
+// Then helper
+func (mmUpdateConvertedFile *mRepositoryIMockUpdateConvertedFile) When(ctx context.Context, uid uuid.UUID, update map[string]any) *RepositoryIMockUpdateConvertedFileExpectation {
+	if mmUpdateConvertedFile.mock.funcUpdateConvertedFile != nil {
+		mmUpdateConvertedFile.mock.t.Fatalf("RepositoryIMock.UpdateConvertedFile mock is already set by Set")
+	}
+
+	expectation := &RepositoryIMockUpdateConvertedFileExpectation{
+		mock:               mmUpdateConvertedFile.mock,
+		params:             &RepositoryIMockUpdateConvertedFileParams{ctx, uid, update},
+		expectationOrigins: RepositoryIMockUpdateConvertedFileExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmUpdateConvertedFile.expectations = append(mmUpdateConvertedFile.expectations, expectation)
+	return expectation
+}
+
+// Then sets up RepositoryI.UpdateConvertedFile return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockUpdateConvertedFileExpectation) Then(err error) *RepositoryIMock {
+	e.results = &RepositoryIMockUpdateConvertedFileResults{err}
+	return e.mock
+}
+
+// Times sets number of times RepositoryI.UpdateConvertedFile should be invoked
+func (mmUpdateConvertedFile *mRepositoryIMockUpdateConvertedFile) Times(n uint64) *mRepositoryIMockUpdateConvertedFile {
+	if n == 0 {
+		mmUpdateConvertedFile.mock.t.Fatalf("Times of RepositoryIMock.UpdateConvertedFile mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmUpdateConvertedFile.expectedInvocations, n)
+	mmUpdateConvertedFile.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmUpdateConvertedFile
+}
+
+func (mmUpdateConvertedFile *mRepositoryIMockUpdateConvertedFile) invocationsDone() bool {
+	if len(mmUpdateConvertedFile.expectations) == 0 && mmUpdateConvertedFile.defaultExpectation == nil && mmUpdateConvertedFile.mock.funcUpdateConvertedFile == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmUpdateConvertedFile.mock.afterUpdateConvertedFileCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmUpdateConvertedFile.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// UpdateConvertedFile implements mm_repository.RepositoryI
+func (mmUpdateConvertedFile *RepositoryIMock) UpdateConvertedFile(ctx context.Context, uid uuid.UUID, update map[string]any) (err error) {
+	mm_atomic.AddUint64(&mmUpdateConvertedFile.beforeUpdateConvertedFileCounter, 1)
+	defer mm_atomic.AddUint64(&mmUpdateConvertedFile.afterUpdateConvertedFileCounter, 1)
+
+	mmUpdateConvertedFile.t.Helper()
+
+	if mmUpdateConvertedFile.inspectFuncUpdateConvertedFile != nil {
+		mmUpdateConvertedFile.inspectFuncUpdateConvertedFile(ctx, uid, update)
+	}
+
+	mm_params := RepositoryIMockUpdateConvertedFileParams{ctx, uid, update}
+
+	// Record call args
+	mmUpdateConvertedFile.UpdateConvertedFileMock.mutex.Lock()
+	mmUpdateConvertedFile.UpdateConvertedFileMock.callArgs = append(mmUpdateConvertedFile.UpdateConvertedFileMock.callArgs, &mm_params)
+	mmUpdateConvertedFile.UpdateConvertedFileMock.mutex.Unlock()
+
+	for _, e := range mmUpdateConvertedFile.UpdateConvertedFileMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmUpdateConvertedFile.UpdateConvertedFileMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmUpdateConvertedFile.UpdateConvertedFileMock.defaultExpectation.Counter, 1)
+		mm_want := mmUpdateConvertedFile.UpdateConvertedFileMock.defaultExpectation.params
+		mm_want_ptrs := mmUpdateConvertedFile.UpdateConvertedFileMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryIMockUpdateConvertedFileParams{ctx, uid, update}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmUpdateConvertedFile.t.Errorf("RepositoryIMock.UpdateConvertedFile got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateConvertedFile.UpdateConvertedFileMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.uid != nil && !minimock.Equal(*mm_want_ptrs.uid, mm_got.uid) {
+				mmUpdateConvertedFile.t.Errorf("RepositoryIMock.UpdateConvertedFile got unexpected parameter uid, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateConvertedFile.UpdateConvertedFileMock.defaultExpectation.expectationOrigins.originUid, *mm_want_ptrs.uid, mm_got.uid, minimock.Diff(*mm_want_ptrs.uid, mm_got.uid))
+			}
+
+			if mm_want_ptrs.update != nil && !minimock.Equal(*mm_want_ptrs.update, mm_got.update) {
+				mmUpdateConvertedFile.t.Errorf("RepositoryIMock.UpdateConvertedFile got unexpected parameter update, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateConvertedFile.UpdateConvertedFileMock.defaultExpectation.expectationOrigins.originUpdate, *mm_want_ptrs.update, mm_got.update, minimock.Diff(*mm_want_ptrs.update, mm_got.update))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmUpdateConvertedFile.t.Errorf("RepositoryIMock.UpdateConvertedFile got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmUpdateConvertedFile.UpdateConvertedFileMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmUpdateConvertedFile.UpdateConvertedFileMock.defaultExpectation.results
+		if mm_results == nil {
+			mmUpdateConvertedFile.t.Fatal("No results are set for the RepositoryIMock.UpdateConvertedFile")
+		}
+		return (*mm_results).err
+	}
+	if mmUpdateConvertedFile.funcUpdateConvertedFile != nil {
+		return mmUpdateConvertedFile.funcUpdateConvertedFile(ctx, uid, update)
+	}
+	mmUpdateConvertedFile.t.Fatalf("Unexpected call to RepositoryIMock.UpdateConvertedFile. %v %v %v", ctx, uid, update)
+	return
+}
+
+// UpdateConvertedFileAfterCounter returns a count of finished RepositoryIMock.UpdateConvertedFile invocations
+func (mmUpdateConvertedFile *RepositoryIMock) UpdateConvertedFileAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateConvertedFile.afterUpdateConvertedFileCounter)
+}
+
+// UpdateConvertedFileBeforeCounter returns a count of RepositoryIMock.UpdateConvertedFile invocations
+func (mmUpdateConvertedFile *RepositoryIMock) UpdateConvertedFileBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateConvertedFile.beforeUpdateConvertedFileCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryIMock.UpdateConvertedFile.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmUpdateConvertedFile *mRepositoryIMockUpdateConvertedFile) Calls() []*RepositoryIMockUpdateConvertedFileParams {
+	mmUpdateConvertedFile.mutex.RLock()
+
+	argCopy := make([]*RepositoryIMockUpdateConvertedFileParams, len(mmUpdateConvertedFile.callArgs))
+	copy(argCopy, mmUpdateConvertedFile.callArgs)
+
+	mmUpdateConvertedFile.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockUpdateConvertedFileDone returns true if the count of the UpdateConvertedFile invocations corresponds
+// the number of defined expectations
+func (m *RepositoryIMock) MinimockUpdateConvertedFileDone() bool {
+	if m.UpdateConvertedFileMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.UpdateConvertedFileMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.UpdateConvertedFileMock.invocationsDone()
+}
+
+// MinimockUpdateConvertedFileInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockUpdateConvertedFileInspect() {
+	for _, e := range m.UpdateConvertedFileMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryIMock.UpdateConvertedFile at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterUpdateConvertedFileCounter := mm_atomic.LoadUint64(&m.afterUpdateConvertedFileCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.UpdateConvertedFileMock.defaultExpectation != nil && afterUpdateConvertedFileCounter < 1 {
+		if m.UpdateConvertedFileMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryIMock.UpdateConvertedFile at\n%s", m.UpdateConvertedFileMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryIMock.UpdateConvertedFile at\n%s with params: %#v", m.UpdateConvertedFileMock.defaultExpectation.expectationOrigins.origin, *m.UpdateConvertedFileMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcUpdateConvertedFile != nil && afterUpdateConvertedFileCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryIMock.UpdateConvertedFile at\n%s", m.funcUpdateConvertedFileOrigin)
+	}
+
+	if !m.UpdateConvertedFileMock.invocationsDone() && afterUpdateConvertedFileCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.UpdateConvertedFile at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.UpdateConvertedFileMock.expectedInvocations), m.UpdateConvertedFileMock.expectedInvocationsOrigin, afterUpdateConvertedFileCounter)
+	}
+}
+
 type mRepositoryIMockUpdateKBFileMetadata struct {
 	optional           bool
 	mock               *RepositoryIMock
@@ -23025,7 +23377,7 @@ func (m *RepositoryIMock) MinimockFinish() {
 		if !m.minimockDone() {
 			m.MinimockConvertedFileTableNameInspect()
 
-			m.MinimockCreateConvertedFileInspect()
+			m.MinimockCreateConvertedFileWithDestinationInspect()
 
 			m.MinimockCreateKnowledgeBaseInspect()
 
@@ -23137,6 +23489,8 @@ func (m *RepositoryIMock) MinimockFinish() {
 
 			m.MinimockUpdateChunkDestinationsInspect()
 
+			m.MinimockUpdateConvertedFileInspect()
+
 			m.MinimockUpdateKBFileMetadataInspect()
 
 			m.MinimockUpdateKnowledgeBaseInspect()
@@ -23174,7 +23528,7 @@ func (m *RepositoryIMock) minimockDone() bool {
 	done := true
 	return done &&
 		m.MinimockConvertedFileTableNameDone() &&
-		m.MinimockCreateConvertedFileDone() &&
+		m.MinimockCreateConvertedFileWithDestinationDone() &&
 		m.MinimockCreateKnowledgeBaseDone() &&
 		m.MinimockCreateKnowledgeBaseFileDone() &&
 		m.MinimockCreateObjectDone() &&
@@ -23230,6 +23584,7 @@ func (m *RepositoryIMock) minimockDone() bool {
 		m.MinimockTextChunkTableNameDone() &&
 		m.MinimockUpdateChunkDone() &&
 		m.MinimockUpdateChunkDestinationsDone() &&
+		m.MinimockUpdateConvertedFileDone() &&
 		m.MinimockUpdateKBFileMetadataDone() &&
 		m.MinimockUpdateKnowledgeBaseDone() &&
 		m.MinimockUpdateKnowledgeBaseFileDone() &&

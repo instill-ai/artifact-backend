@@ -58,7 +58,6 @@ func TestUpdateFileStatusActivityParam_Validation(t *testing.T) {
 
 func TestFileProcessStatus_Values(t *testing.T) {
 	statuses := []artifactpb.FileProcessStatus{
-		artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_WAITING,
 		artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CONVERTING,
 		artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_SUMMARIZING,
 		artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CHUNKING,

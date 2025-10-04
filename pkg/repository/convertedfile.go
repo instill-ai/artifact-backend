@@ -13,7 +13,9 @@ import (
 
 type ConvertedFileI interface {
 	ConvertedFileTableName() string
-	CreateConvertedFile(ctx context.Context, cf ConvertedFile, callExternalService func(convertedFileUID uuid.UUID) (dest string, _ error)) (*ConvertedFile, error)
+
+	CreateConvertedFileWithDestination(ctx context.Context, cf ConvertedFile) (*ConvertedFile, error)
+	UpdateConvertedFile(ctx context.Context, uid uuid.UUID, update map[string]any) error
 	DeleteConvertedFile(ctx context.Context, uid uuid.UUID) error
 	DeleteAllConvertedFilesInKb(ctx context.Context, kbUID uuid.UUID) error
 	HardDeleteConvertedFileByFileUID(ctx context.Context, fileUID uuid.UUID) error
@@ -82,14 +84,17 @@ func (r *Repository) ConvertedFileTableName() string {
 	return "converted_file"
 }
 
-func (r *Repository) CreateConvertedFile(ctx context.Context, cf ConvertedFile, callExternalService func(convertedFileUID uuid.UUID) (dest string, _ error)) (*ConvertedFile, error) {
+// CreateConvertedFileWithDestination creates a converted file record with a known destination.
+// This method properly decouples database operations from external storage operations.
+// It handles deletion of any existing converted file for the same file_uid (for reprocessing).
+func (r *Repository) CreateConvertedFileWithDestination(ctx context.Context, cf ConvertedFile) (*ConvertedFile, error) {
 	err := r.db.Transaction(func(tx *gorm.DB) error {
 		// There may already be a converted file (if we're reprocessing a file).
 		if err := tx.Where("file_uid = ?", cf.FileUID).Delete(&ConvertedFile{}).Error; err != nil {
 			return err
 		}
 
-		// Create the new ConvertedFile
+		// Create the new ConvertedFile with the provided destination
 		if err := tx.Create(&cf).Error; err != nil {
 			return err
 		}
@@ -97,21 +102,6 @@ func (r *Repository) CreateConvertedFile(ctx context.Context, cf ConvertedFile, 
 		// Check if UID was generated after create
 		if cf.UID == uuid.Nil {
 			return fmt.Errorf("did not get UID after create")
-		}
-
-		if callExternalService != nil {
-			// Call the external service using the created record's UID
-			if dest, err := callExternalService(cf.UID); err != nil {
-				// If the external service returns an error, return the error to
-				// trigger a rollback
-				return err
-			} else {
-				// get dest from output and update the record
-				update := map[string]any{ConvertedFileColumn.Destination: dest}
-				if err := tx.Model(&cf).Updates(update).Error; err != nil {
-					return err
-				}
-			}
 		}
 
 		return nil

@@ -6,11 +6,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gofrs/uuid"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
+	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
@@ -160,17 +162,95 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 			logger.Warn("Failed to cleanup old converted file (continuing)", "error", err)
 		}
 
-		// 2e. Save converted file to DB + MinIO (single transaction)
-		// For TEXT/MARKDOWN files, this creates a record pointing to the original file
-		if err := workflow.ExecuteActivity(ctx, w.SaveConvertedFileActivity, &SaveConvertedFileActivityParam{
-			KnowledgeBaseUID:    knowledgeBaseUID,
-			FileUID:             fileUID,
-			FileName:            "converted_" + metadata.File.Name,
-			ConversionResult:    &conversionResult,
-			OriginalDestination: metadata.File.Destination,
-			FileType:            artifactpb.FileType(artifactpb.FileType_value[metadata.File.Type]),
-		}).Get(ctx, nil); err != nil {
-			return handleError("save converted file", err)
+		// 2e. Save converted file using separate activities to decouple DB and MinIO operations
+		fileType := artifactpb.FileType(artifactpb.FileType_value[metadata.File.Type])
+
+		// For TEXT/MARKDOWN files, create a record pointing to the original file (no MinIO upload)
+		if fileType == artifactpb.FileType_FILE_TYPE_TEXT || fileType == artifactpb.FileType_FILE_TYPE_MARKDOWN {
+			logger.Info("Creating DB record for TEXT/MARKDOWN file")
+
+			// Generate UUID for the converted file
+			convertedFileUID, uuidErr := uuid.NewV4()
+			if uuidErr != nil {
+				return handleError("generate converted file UUID", uuidErr)
+			}
+
+			if err := workflow.ExecuteActivity(ctx, w.CreateConvertedFileRecordActivity, &CreateConvertedFileRecordActivityParam{
+				KnowledgeBaseUID: knowledgeBaseUID,
+				FileUID:          fileUID,
+				ConvertedFileUID: convertedFileUID,
+				FileName:         "converted_" + metadata.File.Name,
+				Destination:      metadata.File.Destination, // Point to original file
+				PositionData:     nil,                       // No position data for text files
+			}).Get(ctx, nil); err != nil {
+				return handleError("create converted file record", err)
+			}
+		} else {
+			// For other files: Create DB record -> Upload to MinIO -> Update destination
+			// This properly decouples operations with compensating transactions
+			logger.Info("Saving converted file with separate DB and MinIO operations")
+
+			// Step 1: Generate UUID for the converted file
+			convertedFileUID, uuidErr := uuid.NewV4()
+			if uuidErr != nil {
+				return handleError("generate converted file UUID", uuidErr)
+			}
+
+			// Step 2: Create DB record with placeholder destination
+			if err := workflow.ExecuteActivity(ctx, w.CreateConvertedFileRecordActivity, &CreateConvertedFileRecordActivityParam{
+				KnowledgeBaseUID: knowledgeBaseUID,
+				FileUID:          fileUID,
+				ConvertedFileUID: convertedFileUID,
+				FileName:         "converted_" + metadata.File.Name,
+				Destination:      "placeholder-pending-upload", // Placeholder
+				PositionData:     conversionResult.PositionData,
+			}).Get(ctx, nil); err != nil {
+				return handleError("create converted file record", err)
+			}
+
+			// Step 3: Upload to MinIO
+			var uploadResult UploadConvertedFileToMinIOActivityResult
+			if err := workflow.ExecuteActivity(ctx, w.UploadConvertedFileToMinIOActivity, &UploadConvertedFileToMinIOActivityParam{
+				KnowledgeBaseUID: knowledgeBaseUID,
+				FileUID:          fileUID,
+				ConvertedFileUID: convertedFileUID,
+				Content:          conversionResult.Markdown,
+			}).Get(ctx, &uploadResult); err != nil {
+				// Compensating transaction: Delete the DB record since upload failed
+				logger.Warn("MinIO upload failed, deleting DB record", "error", err)
+				if cleanupErr := workflow.ExecuteActivity(ctx, w.DeleteConvertedFileRecordActivity, &DeleteConvertedFileRecordActivityParam{
+					ConvertedFileUID: convertedFileUID,
+				}).Get(ctx, nil); cleanupErr != nil {
+					logger.Error("Failed to cleanup DB record after upload failure", "error", cleanupErr)
+				}
+				return handleError("upload converted file to MinIO", err)
+			}
+
+			// Step 4: Update DB record with actual destination
+			if err := workflow.ExecuteActivity(ctx, w.UpdateConvertedFileDestinationActivity, &UpdateConvertedFileDestinationActivityParam{
+				ConvertedFileUID: convertedFileUID,
+				Destination:      uploadResult.Destination,
+			}).Get(ctx, nil); err != nil {
+				// Compensating transactions: Delete both MinIO file and DB record
+				logger.Warn("Failed to update destination, cleaning up MinIO and DB", "error", err)
+
+				// Delete MinIO file
+				if cleanupErr := workflow.ExecuteActivity(ctx, w.DeleteConvertedFileFromMinIOActivity, &DeleteConvertedFileFromMinIOActivityParam{
+					Bucket:      config.Config.Minio.BucketName,
+					Destination: uploadResult.Destination,
+				}).Get(ctx, nil); cleanupErr != nil {
+					logger.Error("Failed to cleanup MinIO file after destination update failure", "error", cleanupErr)
+				}
+
+				// Delete DB record
+				if cleanupErr := workflow.ExecuteActivity(ctx, w.DeleteConvertedFileRecordActivity, &DeleteConvertedFileRecordActivityParam{
+					ConvertedFileUID: convertedFileUID,
+				}).Get(ctx, nil); cleanupErr != nil {
+					logger.Error("Failed to cleanup DB record after destination update failure", "error", cleanupErr)
+				}
+
+				return handleError("update converted file destination", err)
+			}
 		}
 
 		// 2f. Update file metadata (single DB write)

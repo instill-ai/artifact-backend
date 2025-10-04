@@ -102,14 +102,49 @@ type CleanupOldConvertedFileActivityParam struct {
 	FileUID uuid.UUID
 }
 
-// SaveConvertedFileActivityParam for saving converted file to DB + MinIO
-type SaveConvertedFileActivityParam struct {
-	KnowledgeBaseUID    uuid.UUID
-	FileUID             uuid.UUID
-	FileName            string
-	ConversionResult    *ConvertToMarkdownActivityResult
-	OriginalDestination string              // Used for TEXT/MARKDOWN files to point to original file
-	FileType            artifactpb.FileType // Used to determine if we need to save to MinIO
+// CreateConvertedFileRecordActivityParam for creating a converted file DB record
+type CreateConvertedFileRecordActivityParam struct {
+	KnowledgeBaseUID uuid.UUID
+	FileUID          uuid.UUID
+	ConvertedFileUID uuid.UUID
+	FileName         string
+	Destination      string                   // Known destination (for TEXT/MARKDOWN: original file, for others: determined MinIO path)
+	PositionData     *repository.PositionData // Position data from conversion
+}
+
+// CreateConvertedFileRecordActivityResult returns the created converted file UID
+type CreateConvertedFileRecordActivityResult struct {
+	ConvertedFileUID uuid.UUID
+}
+
+// UploadConvertedFileToMinIOActivityParam for uploading converted file to MinIO
+type UploadConvertedFileToMinIOActivityParam struct {
+	KnowledgeBaseUID uuid.UUID
+	FileUID          uuid.UUID
+	ConvertedFileUID uuid.UUID
+	Content          string // Markdown content to upload
+}
+
+// UploadConvertedFileToMinIOActivityResult returns the actual MinIO destination
+type UploadConvertedFileToMinIOActivityResult struct {
+	Destination string
+}
+
+// DeleteConvertedFileRecordActivityParam for deleting a converted file DB record (compensating transaction)
+type DeleteConvertedFileRecordActivityParam struct {
+	ConvertedFileUID uuid.UUID
+}
+
+// DeleteConvertedFileFromMinIOActivityParam for deleting a converted file from MinIO (compensating transaction)
+type DeleteConvertedFileFromMinIOActivityParam struct {
+	Bucket      string
+	Destination string
+}
+
+// UpdateConvertedFileDestinationActivityParam for updating the converted file destination in DB
+type UpdateConvertedFileDestinationActivityParam struct {
+	ConvertedFileUID uuid.UUID
+	Destination      string
 }
 
 // UpdateConversionMetadataActivityParam for updating file metadata after conversion
@@ -301,63 +336,124 @@ func (w *Worker) CleanupOldConvertedFileActivity(ctx context.Context, param *Cle
 	return nil
 }
 
-// SaveConvertedFileActivity saves converted file to DB and MinIO
-// For TEXT/MARKDOWN files, it creates a record pointing to the original file without saving new content
-// This is a single transactional operation (DB + MinIO save is handled atomically by repository)
-func (w *Worker) SaveConvertedFileActivity(ctx context.Context, param *SaveConvertedFileActivityParam) error {
-	w.log.Info("SaveConvertedFileActivity: Saving converted file",
+// CreateConvertedFileRecordActivity creates a DB record for the converted file
+// This is a separate activity from the MinIO upload to properly decouple DB and storage operations
+// Returns the created converted file UID
+func (w *Worker) CreateConvertedFileRecordActivity(ctx context.Context, param *CreateConvertedFileRecordActivityParam) (*CreateConvertedFileRecordActivityResult, error) {
+	w.log.Info("CreateConvertedFileRecordActivity: Creating DB record",
 		zap.String("fileUID", param.FileUID.String()),
-		zap.String("fileType", param.FileType.String()))
+		zap.String("convertedFileUID", param.ConvertedFileUID.String()))
 
-	// For TEXT/MARKDOWN files, create a converted file record pointing to the original file
-	if param.FileType == artifactpb.FileType_FILE_TYPE_TEXT ||
-		param.FileType == artifactpb.FileType_FILE_TYPE_MARKDOWN {
-
-		w.log.Info("SaveConvertedFileActivity: Text file, creating record with original destination",
-			zap.String("originalDestination", param.OriginalDestination),
-			zap.String("fileUID", param.FileUID.String()))
-
-		// Create a no-op MinIO save function that returns the original destination
-		noOpSave := func(convertedFileUID uuid.UUID) (string, error) {
-			return param.OriginalDestination, nil
-		}
-
-		convertedFile := repository.ConvertedFile{
-			KbUID:        param.KnowledgeBaseUID,
-			FileUID:      param.FileUID,
-			Name:         param.FileName,
-			Type:         "text/markdown",
-			Destination:  "placeholder", // Will be replaced by noOpSave callback
-			PositionData: nil,           // No position data for text files
-		}
-
-		createdFile, err := w.service.Repository().CreateConvertedFile(ctx, convertedFile, noOpSave)
-		if err != nil {
-			w.log.Error("SaveConvertedFileActivity: Failed to create converted file record",
-				zap.String("fileUID", param.FileUID.String()),
-				zap.Error(err))
-			return fmt.Errorf("failed to create converted file record: %w", err)
-		}
-
-		w.log.Info("SaveConvertedFileActivity: Converted file record created successfully",
-			zap.String("fileUID", param.FileUID.String()),
-			zap.String("convertedFileUID", createdFile.UID.String()),
-			zap.String("destination", createdFile.Destination))
-		return nil
+	convertedFile := repository.ConvertedFile{
+		UID:          param.ConvertedFileUID,
+		KbUID:        param.KnowledgeBaseUID,
+		FileUID:      param.FileUID,
+		Name:         param.FileName,
+		Type:         "text/markdown",
+		Destination:  param.Destination,
+		PositionData: param.PositionData,
 	}
 
-	// For other file types, use the helper function which handles DB + MinIO save atomically
-	err := saveConvertedFile(ctx, w.service, param.KnowledgeBaseUID, param.FileUID, param.FileName, &service.MDConversionResult{
-		Markdown:        param.ConversionResult.Markdown,
-		PositionData:    param.ConversionResult.PositionData,
-		Length:          param.ConversionResult.Length,
-		PipelineRelease: param.ConversionResult.PipelineRelease,
-	})
+	createdFile, err := w.service.Repository().CreateConvertedFileWithDestination(ctx, convertedFile)
 	if err != nil {
-		return fmt.Errorf("failed to save converted file: %w", err)
+		w.log.Error("CreateConvertedFileRecordActivity: Failed to create DB record",
+			zap.String("fileUID", param.FileUID.String()),
+			zap.Error(err))
+		return nil, fmt.Errorf("failed to create converted file record: %w", err)
 	}
 
-	w.log.Info("SaveConvertedFileActivity: Converted file saved successfully")
+	w.log.Info("CreateConvertedFileRecordActivity: DB record created successfully",
+		zap.String("convertedFileUID", createdFile.UID.String()))
+
+	return &CreateConvertedFileRecordActivityResult{
+		ConvertedFileUID: createdFile.UID,
+	}, nil
+}
+
+// UploadConvertedFileToMinIOActivity uploads the converted file content to MinIO
+// This is a separate activity from the DB record creation to properly decouple operations
+func (w *Worker) UploadConvertedFileToMinIOActivity(ctx context.Context, param *UploadConvertedFileToMinIOActivityParam) (*UploadConvertedFileToMinIOActivityResult, error) {
+	w.log.Info("UploadConvertedFileToMinIOActivity: Uploading to MinIO",
+		zap.String("convertedFileUID", param.ConvertedFileUID.String()))
+
+	blobStorage := w.service.MinIO()
+	destination, err := blobStorage.SaveConvertedFile(
+		ctx,
+		param.KnowledgeBaseUID,
+		param.FileUID,
+		param.ConvertedFileUID,
+		"md",
+		[]byte(param.Content),
+	)
+	if err != nil {
+		w.log.Error("UploadConvertedFileToMinIOActivity: Failed to upload to MinIO",
+			zap.Error(err))
+		return nil, fmt.Errorf("failed to upload converted file to MinIO: %w", err)
+	}
+
+	w.log.Info("UploadConvertedFileToMinIOActivity: Upload successful",
+		zap.String("destination", destination))
+
+	return &UploadConvertedFileToMinIOActivityResult{
+		Destination: destination,
+	}, nil
+}
+
+// DeleteConvertedFileRecordActivity deletes a converted file DB record
+// This is used as a compensating transaction when MinIO upload fails
+func (w *Worker) DeleteConvertedFileRecordActivity(ctx context.Context, param *DeleteConvertedFileRecordActivityParam) error {
+	w.log.Info("DeleteConvertedFileRecordActivity: Deleting DB record",
+		zap.String("convertedFileUID", param.ConvertedFileUID.String()))
+
+	err := w.repository.DeleteConvertedFile(ctx, param.ConvertedFileUID)
+	if err != nil {
+		w.log.Error("DeleteConvertedFileRecordActivity: Failed to delete DB record",
+			zap.String("convertedFileUID", param.ConvertedFileUID.String()),
+			zap.Error(err))
+		return fmt.Errorf("failed to delete converted file record: %w", err)
+	}
+
+	w.log.Info("DeleteConvertedFileRecordActivity: DB record deleted successfully")
+	return nil
+}
+
+// UpdateConvertedFileDestinationActivity updates the DB record with the actual MinIO destination
+// This is called after successful MinIO upload to update the placeholder destination
+func (w *Worker) UpdateConvertedFileDestinationActivity(ctx context.Context, param *UpdateConvertedFileDestinationActivityParam) error {
+	w.log.Info("UpdateConvertedFileDestinationActivity: Updating destination",
+		zap.String("convertedFileUID", param.ConvertedFileUID.String()),
+		zap.String("destination", param.Destination))
+
+	// Update the destination
+	update := map[string]any{"destination": param.Destination}
+	err := w.repository.UpdateConvertedFile(ctx, param.ConvertedFileUID, update)
+	if err != nil {
+		w.log.Error("UpdateConvertedFileDestinationActivity: Failed to update destination",
+			zap.String("convertedFileUID", param.ConvertedFileUID.String()),
+			zap.Error(err))
+		return fmt.Errorf("failed to update converted file destination: %w", err)
+	}
+
+	w.log.Info("UpdateConvertedFileDestinationActivity: Destination updated successfully")
+	return nil
+}
+
+// DeleteConvertedFileFromMinIOActivity deletes a converted file from MinIO
+// This is used as a compensating transaction when DB operations fail after successful upload
+func (w *Worker) DeleteConvertedFileFromMinIOActivity(ctx context.Context, param *DeleteConvertedFileFromMinIOActivityParam) error {
+	w.log.Info("DeleteConvertedFileFromMinIOActivity: Deleting file from MinIO",
+		zap.String("destination", param.Destination))
+
+	blobStorage := w.service.MinIO()
+	err := blobStorage.DeleteFile(ctx, param.Bucket, param.Destination)
+	if err != nil {
+		w.log.Error("DeleteConvertedFileFromMinIOActivity: Failed to delete from MinIO",
+			zap.String("destination", param.Destination),
+			zap.Error(err))
+		return fmt.Errorf("failed to delete converted file from MinIO: %w", err)
+	}
+
+	w.log.Info("DeleteConvertedFileFromMinIOActivity: File deleted successfully from MinIO")
 	return nil
 }
 

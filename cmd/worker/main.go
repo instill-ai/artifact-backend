@@ -190,7 +190,11 @@ func main() {
 	w.RegisterActivity(cw.GetFileContentActivity)
 	w.RegisterActivity(cw.ConvertToMarkdownActivity)
 	w.RegisterActivity(cw.CleanupOldConvertedFileActivity)
-	w.RegisterActivity(cw.SaveConvertedFileActivity)
+	w.RegisterActivity(cw.CreateConvertedFileRecordActivity)
+	w.RegisterActivity(cw.UploadConvertedFileToMinIOActivity)
+	w.RegisterActivity(cw.UpdateConvertedFileDestinationActivity)
+	w.RegisterActivity(cw.DeleteConvertedFileRecordActivity)
+	w.RegisterActivity(cw.DeleteConvertedFileFromMinIOActivity)
 	w.RegisterActivity(cw.UpdateConversionMetadataActivity)
 	// Chunking Phase
 	w.RegisterActivity(cw.GetConvertedFileForChunkingActivity)

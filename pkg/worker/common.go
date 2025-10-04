@@ -30,32 +30,6 @@ func getFileByUID(ctx context.Context, repo repository.RepositoryI, fileUID uuid
 	return files[0], nil
 }
 
-func saveConvertedFile(ctx context.Context, svc service.Service, kbUID, fileUID uuid.UUID, name string, conversion *service.MDConversionResult) error {
-	saveToMinIO := func(convertedFileUID uuid.UUID) (string, error) {
-		blobStorage := svc.MinIO()
-		dest, err := blobStorage.SaveConvertedFile(ctx, kbUID, fileUID, convertedFileUID, "md", []byte(conversion.Markdown))
-		if err != nil {
-			return "", fmt.Errorf("storing converted file as blob: %w", err)
-		}
-
-		return dest, nil
-	}
-
-	convertedFile := repository.ConvertedFile{
-		KbUID:        kbUID,
-		FileUID:      fileUID,
-		Name:         name,
-		Type:         "text/markdown",
-		Destination:  "destination",
-		PositionData: conversion.PositionData,
-	}
-	if _, err := svc.Repository().CreateConvertedFile(ctx, convertedFile, saveToMinIO); err != nil {
-		return fmt.Errorf("storing converted file in repository: %w", err)
-	}
-
-	return nil
-}
-
 // saveChunksToDBOnly saves chunks to database with placeholder destinations.
 // Returns a map of chunkUID -> chunk content that needs to be saved to MinIO.
 func saveChunksToDBOnly(
