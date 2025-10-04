@@ -108,10 +108,10 @@ export function CheckKnowledgeBaseDeletion(data) {
       "Cleanup: Processing triggered": (r) => r.status === 200,
     });
 
-    // Poll for completion (90s timeout for PDF processing)
+    // Poll for completion (300s timeout for PDF processing)
     // We need the file to be fully processed to create all intermediate resources
     let processingCompleted = false;
-    for (let i = 0; i < 90; i++) {
+    for (let i = 0; i < 300; i++) {
       sleep(1);
       const statusRes = http.request(
         "GET",

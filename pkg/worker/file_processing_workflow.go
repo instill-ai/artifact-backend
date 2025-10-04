@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gofrs/uuid"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
@@ -49,8 +48,6 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 	// Extract UUIDs from parameters
 	fileUID := param.FileUID
 	knowledgeBaseUID := param.KnowledgeBaseUID
-	userUID := param.UserUID
-	requesterUID := param.RequesterUID
 
 	// Set workflow options
 	activityOptions := workflow.ActivityOptions{
@@ -91,33 +88,18 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 	}
 
 	// Handle different starting statuses:
-	// - COMPLETED: Full reprocessing from start
+	// - COMPLETED: Full reprocessing from start (go to CONVERTING)
 	// - CONVERTING/SUMMARIZING/CHUNKING/EMBEDDING: Resume from that step (retry/reconciliation)
 	// - FAILED: Don't process (requires manual intervention to set status to desired step)
-	// - WAITING: Normal flow
 	if startStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED {
-		logger.Info("File completed, reprocessing from start",
-			"fileUID", param.FileUID)
-		startStatus = artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_WAITING
+		logger.Info("File completed or waiting, starting at CONVERTING",
+			"fileUID", param.FileUID,
+			"previousStatus", startStatus.String())
+		startStatus = artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CONVERTING
 	}
 
 	if startStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_FAILED {
 		return fmt.Errorf("file processing previously failed - update status to desired step to retry")
-	}
-
-	// Step 1: Determine processing path based on file type
-	if startStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_WAITING {
-		processWaitingParam := &ProcessWaitingFileActivityParam{
-			FileUID:          fileUID,
-			KnowledgeBaseUID: knowledgeBaseUID,
-			UserUID:          userUID,
-			RequesterUID:     requesterUID,
-		}
-		var nextStatus artifactpb.FileProcessStatus
-		if err := workflow.ExecuteActivity(ctx, w.ProcessWaitingFileActivity, processWaitingParam).Get(ctx, &nextStatus); err != nil {
-			return handleError("process waiting file", err)
-		}
-		startStatus = nextStatus
 	}
 
 	// Process file through pipeline steps using fallthrough pattern
@@ -179,20 +161,28 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 		}
 
 		// 2e. Save converted file to DB + MinIO (single transaction)
+		// For TEXT/MARKDOWN files, this creates a record pointing to the original file
 		if err := workflow.ExecuteActivity(ctx, w.SaveConvertedFileActivity, &SaveConvertedFileActivityParam{
-			KnowledgeBaseUID: knowledgeBaseUID,
-			FileUID:          fileUID,
-			FileName:         "converted_" + metadata.File.Name,
-			ConversionResult: &conversionResult,
+			KnowledgeBaseUID:    knowledgeBaseUID,
+			FileUID:             fileUID,
+			FileName:            "converted_" + metadata.File.Name,
+			ConversionResult:    &conversionResult,
+			OriginalDestination: metadata.File.Destination,
+			FileType:            artifactpb.FileType(artifactpb.FileType_value[metadata.File.Type]),
 		}).Get(ctx, nil); err != nil {
 			return handleError("save converted file", err)
 		}
 
 		// 2f. Update file metadata (single DB write)
+		// For TEXT/MARKDOWN files, don't store pipeline info since no pipeline was used
+		pipelineName := ""
+		if conversionResult.PipelineRelease.ID != "" {
+			pipelineName = conversionResult.PipelineRelease.Name()
+		}
 		if err := workflow.ExecuteActivity(ctx, w.UpdateConversionMetadataActivity, &UpdateConversionMetadataActivityParam{
 			FileUID:  fileUID,
 			Length:   conversionResult.Length,
-			Pipeline: conversionResult.PipelineRelease.Name(),
+			Pipeline: pipelineName,
 		}).Get(ctx, nil); err != nil {
 			return handleError("update conversion metadata", err)
 		}
@@ -245,7 +235,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 		if err := workflow.ExecuteActivity(ctx, w.GenerateSummaryFromPipelineActivity, &GenerateSummaryFromPipelineActivityParam{
 			Content:     summaryContent.Content,
 			FileName:    fileMeta.File.Name,
-			RequesterID: requesterUID.String(),
+			RequesterID: param.RequesterUID.String(),
 			Metadata:    summaryContent.Metadata,
 		}).Get(ctx, &summaryResult); err != nil {
 			return handleError("generate summary", err)
@@ -290,59 +280,27 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 			return handleError("get file metadata for chunking", err)
 		}
 
-		// Determine source based on file type
-		var sourceTable string
-		var sourceUID uuid.UUID
-		var contentToChunk []byte
-		var positionData *GetConvertedFileForChunkingActivityResult
-		var isMarkdown bool
-
-		fileType := fileInfo.File.Type
-		switch fileType {
-		case artifactpb.FileType_FILE_TYPE_PDF.String(),
-			artifactpb.FileType_FILE_TYPE_DOC.String(),
-			artifactpb.FileType_FILE_TYPE_DOCX.String(),
-			artifactpb.FileType_FILE_TYPE_PPT.String(),
-			artifactpb.FileType_FILE_TYPE_PPTX.String(),
-			artifactpb.FileType_FILE_TYPE_HTML.String(),
-			artifactpb.FileType_FILE_TYPE_XLSX.String(),
-			artifactpb.FileType_FILE_TYPE_XLS.String(),
-			artifactpb.FileType_FILE_TYPE_CSV.String():
-
-			// 4c. Get converted file for document types
-			if err := workflow.ExecuteActivity(ctx, w.GetConvertedFileForChunkingActivity, &GetConvertedFileForChunkingActivityParam{
-				FileUID: fileUID,
-			}).Get(ctx, &positionData); err != nil {
-				return handleError("get converted file for chunking", err)
-			}
-			contentToChunk = positionData.Content
-			sourceTable = positionData.SourceTable
-			sourceUID = positionData.SourceUID
-			isMarkdown = true
-
-		default:
-			// 4d. Get original file for text/markdown types
-			bucket := minio.BucketFromDestination(fileInfo.File.Destination)
-			var originalFile GetOriginalFileForChunkingActivityResult
-			if err := workflow.ExecuteActivity(ctx, w.GetOriginalFileForChunkingActivity, &GetOriginalFileForChunkingActivityParam{
-				FileUID:     fileUID,
-				Bucket:      bucket,
-				Destination: fileInfo.File.Destination,
-				Metadata:    fileInfo.ExternalMetadata,
-			}).Get(ctx, &originalFile); err != nil {
-				return handleError("get original file for chunking", err)
-			}
-			contentToChunk = originalFile.Content
-			sourceTable = originalFile.SourceTable
-			sourceUID = originalFile.SourceUID
-			isMarkdown = (fileType == artifactpb.FileType_FILE_TYPE_MARKDOWN.String())
+		// 4b. Get converted file - ALL files now have a converted file record
+		// (TEXT/MARKDOWN files have a record pointing to the original file)
+		var convertedFile GetConvertedFileForChunkingActivityResult
+		if err := workflow.ExecuteActivity(ctx, w.GetConvertedFileForChunkingActivity, &GetConvertedFileForChunkingActivityParam{
+			FileUID: fileUID,
+		}).Get(ctx, &convertedFile); err != nil {
+			return handleError("get converted file for chunking", err)
 		}
 
+		contentToChunk := convertedFile.Content
+		sourceTable := convertedFile.SourceTable
+		sourceUID := convertedFile.SourceUID
+		positionData := &convertedFile
+		fileType := fileInfo.File.Type
+
 		// 4e. Chunk content (THE KEY EXTERNAL API CALL - expensive, benefits most from isolated retry)
+		// All converted files are markdown (or treated as such)
 		var contentChunks ChunkContentActivityResult
 		if err := workflow.ExecuteActivity(ctx, w.ChunkContentActivity, &ChunkContentActivityParam{
 			Content:      contentToChunk,
-			IsMarkdown:   isMarkdown,
+			IsMarkdown:   true, // All converted files are markdown
 			ChunkSize:    1000,
 			ChunkOverlap: 200,
 			Metadata:     fileInfo.ExternalMetadata,

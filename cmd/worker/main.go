@@ -167,7 +167,6 @@ func main() {
 
 	// Register utility activities
 	w.RegisterActivity(cw.GetFileStatusActivity)
-	w.RegisterActivity(cw.ProcessWaitingFileActivity)
 	w.RegisterActivity(cw.UpdateFileStatusActivity)
 
 	// Register cleanup activities - File cleanup
@@ -195,7 +194,6 @@ func main() {
 	w.RegisterActivity(cw.UpdateConversionMetadataActivity)
 	// Chunking Phase
 	w.RegisterActivity(cw.GetConvertedFileForChunkingActivity)
-	w.RegisterActivity(cw.GetOriginalFileForChunkingActivity)
 	w.RegisterActivity(cw.ChunkContentActivity)
 	w.RegisterActivity(cw.SaveChunksToDBActivity)
 	w.RegisterActivity(cw.UpdateChunkingMetadataActivity)

@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/gofrs/uuid"
 	"go.uber.org/zap"
@@ -10,7 +9,6 @@ import (
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	logx "github.com/instill-ai/x/log"
 )
 
@@ -30,37 +28,19 @@ func (s *service) GetChunksByFile(ctx context.Context, file *repository.Knowledg
 ) {
 
 	logger, _ := logx.GetZapLogger(ctx)
-	// check the file type
-	// if it is pdf, sourceTable is converted file table, sourceUID is converted file UID
-	// if it is txt or md, sourceTable is knowledge base file table, sourceUID is knowledge base file UID
+	// After the refactoring, ALL file types (including TEXT/MARKDOWN) now use converted_file as source
+	// TEXT/MARKDOWN files have converted file records pointing to the original file
 	var sourceTable string
 	var sourceUID uuid.UUID
-	switch file.Type {
-	case artifactpb.FileType_FILE_TYPE_PDF.String(),
-		artifactpb.FileType_FILE_TYPE_HTML.String(),
-		artifactpb.FileType_FILE_TYPE_DOC.String(),
-		artifactpb.FileType_FILE_TYPE_DOCX.String(),
-		artifactpb.FileType_FILE_TYPE_PPT.String(),
-		artifactpb.FileType_FILE_TYPE_PPTX.String(),
-		artifactpb.FileType_FILE_TYPE_XLSX.String(),
-		artifactpb.FileType_FILE_TYPE_XLS.String(),
-		artifactpb.FileType_FILE_TYPE_CSV.String():
-		// set the sourceTable and sourceUID
-		convertedFile, err := s.repository.GetConvertedFileByFileUID(ctx, file.UID)
-		if err != nil {
-			logger.Error("Failed to get converted file metadata.", zap.String("File uid", file.UID.String()))
-			return sourceTable, sourceUID, nil, nil, nil, err
-		}
-		sourceTable = s.repository.ConvertedFileTableName()
-		sourceUID = convertedFile.UID
-	case artifactpb.FileType_name[int32(artifactpb.FileType_FILE_TYPE_TEXT)],
-		artifactpb.FileType_name[int32(artifactpb.FileType_FILE_TYPE_MARKDOWN)]:
-		// set the sourceTable and sourceUID
-		sourceTable = s.repository.KnowledgeBaseFileTableName()
-		sourceUID = file.UID
-	default:
-		return sourceTable, sourceUID, nil, nil, nil, fmt.Errorf("unsupported file type: %s", file.Type)
+
+	// Get converted file for all types
+	convertedFile, err := s.repository.GetConvertedFileByFileUID(ctx, file.UID)
+	if err != nil {
+		logger.Error("Failed to get converted file metadata.", zap.String("File uid", file.UID.String()))
+		return sourceTable, sourceUID, nil, nil, nil, err
 	}
+	sourceTable = s.repository.ConvertedFileTableName()
+	sourceUID = convertedFile.UID
 	// get the chunks's path
 	chunks, err := s.repository.GetTextChunksBySource(ctx, sourceTable, sourceUID)
 	if err != nil {

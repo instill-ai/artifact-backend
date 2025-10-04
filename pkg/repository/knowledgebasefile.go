@@ -483,7 +483,7 @@ func (r *Repository) ProcessKnowledgeBaseFiles(
 
 	// Update the process status of the files
 	updates := map[string]any{
-		"process_status": artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_WAITING.String(),
+		"process_status": artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CONVERTING.String(),
 		"requester_uid":  requester,
 		// Clear previous failure reason
 		"extra_meta_data": gorm.Expr("COALESCE(extra_meta_data, '{}'::jsonb) || ?::jsonb", `{"fail_reason": ""}`),
@@ -510,8 +510,8 @@ func (r *Repository) GetNeedProcessFiles(ctx context.Context, catalogType artifa
 	whereClause := fmt.Sprintf("%v IN ? AND %v is null", KnowledgeBaseFileColumn.ProcessStatus, KnowledgeBaseFileColumn.DeleteTime)
 	if err := r.db.WithContext(ctx).Where(
 		whereClause, []string{
-			artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_WAITING.String(),
 			artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CONVERTING.String(),
+			artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_SUMMARIZING.String(),
 			artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_EMBEDDING.String(),
 			artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CHUNKING.String(),
 		}).
@@ -625,44 +625,30 @@ func (r *Repository) GetSourceTableAndUIDByFileUIDs(ctx context.Context, files [
 	})
 	for _, file := range files {
 		// find the source table and source uid by file uid
-		// check if the file is is text or markdown
-		switch file.Type {
-		case artifactpb.FileType_FILE_TYPE_TEXT.String(), artifactpb.FileType_FILE_TYPE_MARKDOWN.String():
-			result[file.UID] = struct {
-				SourceTable string
-				SourceUID   uuid.UUID
-			}{
-				SourceTable: r.KnowledgeBaseFileTableName(),
-				SourceUID:   file.UID,
+		// All file types now use converted_file as the source after the refactoring
+		// TEXT/MARKDOWN files also have converted file records (pointing to original files)
+		convertedFile, err := r.GetConvertedFileByFileUID(ctx, file.UID)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				// Skip files without converted records (shouldn't happen for COMPLETED files)
+				logger.Warn("no converted file found for file",
+					zap.String("fileUID", file.UID.String()),
+					zap.String("fileType", file.Type))
+				continue
+			} else {
+				logger.Error("failed to get converted file by file uid", zap.Error(err))
+				return map[uuid.UUID]struct {
+					SourceTable string
+					SourceUID   uuid.UUID
+				}{}, err
 			}
-		case artifactpb.FileType_FILE_TYPE_PDF.String(),
-			artifactpb.FileType_FILE_TYPE_HTML.String(),
-			artifactpb.FileType_FILE_TYPE_DOC.String(),
-			artifactpb.FileType_FILE_TYPE_DOCX.String(),
-			artifactpb.FileType_FILE_TYPE_PPT.String(),
-			artifactpb.FileType_FILE_TYPE_PPTX.String(),
-			artifactpb.FileType_FILE_TYPE_XLSX.String(),
-			artifactpb.FileType_FILE_TYPE_XLS.String(),
-			artifactpb.FileType_FILE_TYPE_CSV.String():
-			convertedFile, err := r.GetConvertedFileByFileUID(ctx, file.UID)
-			if err != nil {
-				if errors.Is(err, gorm.ErrRecordNotFound) {
-					continue
-				} else {
-					logger.Error("failed to get converted file by file uid", zap.Error(err))
-					return map[uuid.UUID]struct {
-						SourceTable string
-						SourceUID   uuid.UUID
-					}{}, err
-				}
-			}
-			result[file.UID] = struct {
-				SourceTable string
-				SourceUID   uuid.UUID
-			}{
-				SourceTable: r.ConvertedFileTableName(),
-				SourceUID:   convertedFile.UID,
-			}
+		}
+		result[file.UID] = struct {
+			SourceTable string
+			SourceUID   uuid.UUID
+		}{
+			SourceTable: r.ConvertedFileTableName(),
+			SourceUID:   convertedFile.UID,
 		}
 	}
 
