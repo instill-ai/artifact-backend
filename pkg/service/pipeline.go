@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"go.temporal.io/sdk/activity"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/structpb"
 
@@ -304,13 +305,24 @@ func (s *service) EmbeddingTextBatch(ctx context.Context, texts []string) ([][]f
 //   - error: Any error encountered during processing
 //
 // The function:
-//   - Uses Temporal workflow for batch processing
+//   - Uses Temporal workflow for batch processing when called from non-activity context
+//   - Falls back to EmbeddingTextBatch when called from within a Temporal activity to avoid nested workflows
 //   - Batches are processed in chunks of 32 texts
 //   - Concurrency is controlled at the Temporal worker level (not per-workflow)
 //   - Maintains input order in the output
 //   - Automatic retries via Temporal's retry policy
 func (s *service) EmbeddingTextPipe(ctx context.Context, texts []string) ([][]float32, error) {
+	// Check if we're running inside a Temporal activity
+	// If so, we cannot start a new workflow (nested workflows are not supported)
+	// In this case, fall back to the synchronous batch method
+	if isActivityContext(ctx) {
+		// We're inside an activity - use the synchronous batch method
+		return s.EmbeddingTextBatch(ctx, texts)
+	}
+
+	// Not in an activity context - proceed with workflow execution
 	// Extract authentication metadata from context to pass to activities
+	// Prioritize incoming metadata over outgoing to preserve authentication details
 	var requestMetadata map[string][]string
 	if md, ok := metadata.FromIncomingContext(ctx); ok {
 		requestMetadata = md
@@ -325,6 +337,23 @@ func (s *service) EmbeddingTextPipe(ctx context.Context, texts []string) ([][]fl
 	}
 
 	return s.embedTextsWorkflow.Execute(ctx, param)
+}
+
+// isActivityContext checks if the context is from a Temporal activity
+// Returns true if we're inside an activity, false otherwise
+func isActivityContext(ctx context.Context) (result bool) {
+	// activity.GetInfo will panic if not in an activity context
+	// We catch the panic and return false
+	defer func() {
+		if r := recover(); r != nil {
+			// Not in an activity context
+			result = false
+		}
+	}()
+
+	// If GetInfo doesn't panic, we're in an activity context
+	_ = activity.GetInfo(ctx)
+	return true
 }
 
 // GetVectorsFromResponse converts the pipeline response into a slice of float32.

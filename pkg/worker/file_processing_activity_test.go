@@ -3,10 +3,12 @@ package worker
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	qt "github.com/frankban/quicktest"
 )
 
 func TestExtractPageReferences(t *testing.T) {
+	c := qt.New(t)
+
 	tests := []struct {
 		name           string
 		chunkStart     uint32
@@ -58,15 +60,17 @@ func TestExtractPageReferences(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+		c.Run(tt.name, func(c *qt.C) {
 			start, end := extractPageReferences(tt.chunkStart, tt.chunkEnd, tt.pageDelimiters)
-			assert.Equal(t, tt.expectedStart, start)
-			assert.Equal(t, tt.expectedEnd, end)
+			c.Assert(start, qt.Equals, tt.expectedStart)
+			c.Assert(end, qt.Equals, tt.expectedEnd)
 		})
 	}
 }
 
 func TestProcessWaitingFileActivity_FileTypeConversion(t *testing.T) {
+	c := qt.New(t)
+
 	tests := []struct {
 		name                string
 		fileType            string
@@ -95,33 +99,10 @@ func TestProcessWaitingFileActivity_FileTypeConversion(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+		c.Run(tt.name, func(c *qt.C) {
 			// This test validates the business logic of file type routing
 			// Full integration would require repository and service mocks
-			assert.NotEmpty(t, tt.fileType, "fileType should not be empty")
+			c.Assert(tt.fileType, qt.Not(qt.Equals), "")
 		})
 	}
 }
-
-// Mock-based tests would go here with minimock
-// Example structure:
-/*
-func TestConvertFileActivity_Success(t *testing.T) {
-	ctx := context.Background()
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockRepo := mock.NewRepositoryIMock(t)
-	mockService := mock.NewServiceMock(t)
-
-	w := &worker{
-		repository: mockRepo,
-		service: mockService,
-		log: zap.NewNop(),
-	}
-
-	// Set up expectations
-	// Execute activity
-	// Assert results
-}
-*/

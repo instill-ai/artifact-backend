@@ -3,7 +3,6 @@ package worker
 import (
 	"go.uber.org/zap"
 
-	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/service"
 )
 
@@ -12,23 +11,27 @@ const TaskQueue = "artifact-backend"
 
 // Config defines the configuration for the worker
 type Config struct {
-	Repository repository.RepositoryI
-	Service    service.Service
+	Service service.Service
 }
 
 // Worker implements the Temporal worker with all workflows and activities
 type Worker struct {
-	repository repository.RepositoryI
-	service    service.Service
-	log        *zap.Logger
+	service service.Service
+	log     *zap.Logger
 }
 
 // New creates a new worker instance
 func New(config Config, log *zap.Logger) (*Worker, error) {
 	w := &Worker{
-		repository: config.Repository,
-		service:    config.Service,
-		log:        log,
+		service: config.Service,
+		log:     log,
 	}
 	return w, nil
+}
+
+// SetService updates the worker's service instance.
+// This is used during initialization to resolve the circular dependency
+// between Worker, workflow wrappers, and Service.
+func (w *Worker) SetService(svc service.Service) {
+	w.service = svc
 }

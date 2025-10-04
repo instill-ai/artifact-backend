@@ -24,11 +24,15 @@ import (
 
 type processFileWorkflow struct {
 	temporalClient client.Client
+	worker         *Worker
 }
 
 // NewProcessFileWorkflow creates a new ProcessFileWorkflow instance
-func NewProcessFileWorkflow(temporalClient client.Client) service.ProcessFileWorkflow {
-	return &processFileWorkflow{temporalClient: temporalClient}
+func NewProcessFileWorkflow(temporalClient client.Client, worker *Worker) service.ProcessFileWorkflow {
+	return &processFileWorkflow{
+		temporalClient: temporalClient,
+		worker:         worker,
+	}
 }
 
 func (w *processFileWorkflow) Execute(ctx context.Context, param service.ProcessFileWorkflowParam) error {
@@ -39,7 +43,7 @@ func (w *processFileWorkflow) Execute(ctx context.Context, param service.Process
 		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 	}
 
-	_, err := w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, new(Worker).ProcessFileWorkflow, param)
+	_, err := w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, w.worker.ProcessFileWorkflow, param)
 	return err
 }
 
@@ -79,13 +83,20 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 		}).Get(ctx, nil)
 		if statusErr != nil {
 			logger.Error("Failed to update file status to FAILED", "statusError", statusErr)
+			// Even if we can't update the status, return nil to prevent Temporal retries.
+			// The workflow will complete, but the file status may not reflect the failure.
+			// This is preferable to triggering automatic retries which conflict with our
+			// manual intervention model.
+		} else {
+			logger.Info("File marked as FAILED, workflow completing without retry", "stage", stage)
 		}
 
 		// Note: We don't clean up intermediate files on error to allow resuming from the failed step.
 		// Cleanup happens automatically on reprocessing (each activity cleans up old data before creating new).
 
-		// Return a user-friendly error message without Temporal overhead
-		return fmt.Errorf("%s: %s", stage, errMsg)
+		// Always return nil to complete workflow successfully and prevent Temporal's automatic retries.
+		// The file requires manual intervention (reprocessing) to continue.
+		return nil
 	}
 
 	// Get current file status to determine starting point
@@ -96,8 +107,8 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 
 	// Handle different starting statuses:
 	// - COMPLETED: Full reprocessing from start (go to CONVERTING)
+	// - FAILED: Full reprocessing from start (go to CONVERTING)
 	// - CONVERTING/SUMMARIZING/CHUNKING/EMBEDDING: Resume from that step (retry/reconciliation)
-	// - FAILED: Don't process (requires manual intervention to set status to desired step)
 	if startStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED {
 		logger.Info("File completed or waiting, starting at CONVERTING",
 			"fileUID", param.FileUID,
@@ -106,7 +117,10 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 	}
 
 	if startStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_FAILED {
-		return fmt.Errorf("file processing previously failed - update status to desired step to retry")
+		logger.Info("File previously failed, restarting from CONVERTING",
+			"fileUID", param.FileUID,
+			"previousStatus", startStatus.String())
+		startStatus = artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CONVERTING
 	}
 
 	// Process file through pipeline steps using fallthrough pattern
@@ -160,11 +174,12 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 			return handleError("convert to markdown", err)
 		}
 
-		// 2d. Cleanup old converted file if exists (idempotent, won't fail workflow)
+		// 2d. Cleanup old converted file if exists
+		// Note: Activity is idempotent - succeeds if no file exists, fails only on real errors (network, etc.)
 		if err := workflow.ExecuteActivity(ctx, w.CleanupOldConvertedFileActivity, &CleanupOldConvertedFileActivityParam{
 			FileUID: fileUID,
 		}).Get(ctx, nil); err != nil {
-			logger.Warn("Failed to cleanup old converted file (continuing)", "error", err)
+			return handleError("cleanup old converted file", err)
 		}
 
 		// 2e. Save converted file using separate activities to decouple DB and MinIO operations
@@ -207,7 +222,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 				FileUID:          fileUID,
 				ConvertedFileUID: convertedFileUID,
 				FileName:         "converted_" + metadata.File.Name,
-				Destination:      "placeholder-pending-upload", // Placeholder
+				Destination:      fmt.Sprintf("placeholder-pending-upload-%s", convertedFileUID.String()), // Unique placeholder per file
 				PositionData:     conversionResult.PositionData,
 			}).Get(ctx, nil); err != nil {
 				return handleError("create converted file record", err)
@@ -318,10 +333,10 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 		// 3c. Generate summary (THE KEY EXTERNAL API CALL - expensive, benefits most from isolated retry)
 		var summaryResult GenerateSummaryFromPipelineActivityResult
 		if err := workflow.ExecuteActivity(ctx, w.GenerateSummaryFromPipelineActivity, &GenerateSummaryFromPipelineActivityParam{
-			Content:     summaryContent.Content,
-			FileName:    fileMeta.File.Name,
-			RequesterID: param.RequesterUID.String(),
-			Metadata:    summaryContent.Metadata,
+			Content:  summaryContent.Content,
+			FileName: fileMeta.File.Name,
+			FileType: fileMeta.File.Type,
+			Metadata: summaryContent.Metadata,
 		}).Get(ctx, &summaryResult); err != nil {
 			return handleError("generate summary", err)
 		}

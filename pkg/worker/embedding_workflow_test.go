@@ -3,13 +3,14 @@ package worker
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	qt "github.com/frankban/quicktest"
 
 	"github.com/instill-ai/artifact-backend/pkg/service"
 )
 
 func TestEmbedTextsWorkflowParam_BatchCalculation(t *testing.T) {
+	c := qt.New(t)
+
 	tests := []struct {
 		name            string
 		totalTexts      int
@@ -43,7 +44,7 @@ func TestEmbedTextsWorkflowParam_BatchCalculation(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+		c.Run(tt.name, func(c *qt.C) {
 			texts := make([]string, tt.totalTexts)
 			for i := range texts {
 				texts[i] = "test"
@@ -55,12 +56,14 @@ func TestEmbedTextsWorkflowParam_BatchCalculation(t *testing.T) {
 			}
 
 			calculatedBatches := (len(param.Texts) + param.BatchSize - 1) / param.BatchSize
-			assert.Equal(t, tt.expectedBatches, calculatedBatches)
+			c.Assert(calculatedBatches, qt.Equals, tt.expectedBatches)
 		})
 	}
 }
 
 func TestEmbedTextsWorkflowParam_DefaultBatchSize(t *testing.T) {
+	c := qt.New(t)
+
 	param := service.EmbedTextsWorkflowParam{
 		Texts:     make([]string, 100),
 		BatchSize: 0, // Will default to 32
@@ -71,15 +74,16 @@ func TestEmbedTextsWorkflowParam_DefaultBatchSize(t *testing.T) {
 		batchSize = 32
 	}
 
-	assert.Equal(t, 32, batchSize)
+	c.Assert(batchSize, qt.Equals, 32)
 }
 
 func TestEmbedTextsWorkflowParam_EmptyTexts(t *testing.T) {
+	c := qt.New(t)
+
 	param := service.EmbedTextsWorkflowParam{
 		Texts:     []string{},
 		BatchSize: 32,
 	}
 
-	require.NotNil(t, param.Texts)
-	assert.Len(t, param.Texts, 0)
+	c.Assert(param.Texts, qt.HasLen, 0)
 }

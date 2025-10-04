@@ -35,7 +35,6 @@ func getFileByUID(ctx context.Context, repo repository.RepositoryI, fileUID uuid
 // Returns a map of chunkUID -> chunk content that needs to be saved to MinIO.
 func saveChunksToDBOnly(
 	ctx context.Context,
-	svc service.Service,
 	repo repository.RepositoryI,
 	kbUID, kbFileUID, sourceUID uuid.UUID,
 	sourceTable string,

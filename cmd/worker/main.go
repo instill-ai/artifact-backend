@@ -87,17 +87,30 @@ func main() {
 		redisClient, db, minioClient, vectorDB, aclClient, temporalClient, closeClients := newClients(ctx, logger)
 	defer closeClients()
 
-	// Initialize repository and service
+	// Create worker instance first (without service dependencies for now)
+	// We'll set up the service layer after creating workflow wrappers
+	cw, err := artifactworker.New(
+		artifactworker.Config{
+			Service: nil, // Will be set after service is created
+		},
+		logger,
+	)
+	if err != nil {
+		logger.Fatal("Unable to create worker", zap.Error(err))
+	}
+
+	// Initialize workflow implementations with the worker instance
+	processFileWf := artifactworker.NewProcessFileWorkflow(temporalClient, cw)
+	cleanupFileWf := artifactworker.NewCleanupFileWorkflow(temporalClient, cw)
+	cleanupKBWf := artifactworker.NewCleanupKnowledgeBaseWorkflow(temporalClient, cw)
+	embedTextsWf := artifactworker.NewEmbedTextsWorkflow(temporalClient, cw)
+	deleteFilesWf := artifactworker.NewDeleteFilesWorkflow(temporalClient, cw)
+	getFilesWf := artifactworker.NewGetFilesWorkflow(temporalClient, cw)
+
+	// Initialize repository
 	repo := repository.NewRepository(db)
 
-	// Initialize workflow implementations
-	processFileWf := artifactworker.NewProcessFileWorkflow(temporalClient)
-	cleanupFileWf := artifactworker.NewCleanupFileWorkflow(temporalClient)
-	cleanupKBWf := artifactworker.NewCleanupKnowledgeBaseWorkflow(temporalClient)
-	embedTextsWf := artifactworker.NewEmbedTextsWorkflow(temporalClient)
-	deleteFilesWf := artifactworker.NewDeleteFilesWorkflow(temporalClient)
-	getFilesWf := artifactworker.NewGetFilesWorkflow(temporalClient)
-
+	// Create service with workflow implementations
 	svc := service.NewService(
 		repo,
 		minioClient,
@@ -115,17 +128,9 @@ func main() {
 		getFilesWf,
 	)
 
-	// Create worker
-	cw, err := artifactworker.New(
-		artifactworker.Config{
-			Repository: repo,
-			Service:    svc,
-		},
-		logger,
-	)
-	if err != nil {
-		logger.Fatal("Unable to create worker", zap.Error(err))
-	}
+	// Update the worker instance with the service
+	// (the workflow wrappers already have a reference to this worker)
+	cw.SetService(svc)
 
 	w := worker.New(temporalClient, artifactworker.TaskQueue, worker.Options{
 		EnableSessionWorker:                    true,

@@ -163,7 +163,7 @@ func (w *Worker) GetFileMetadataActivity(ctx context.Context, param *GetFileMeta
 		zap.String("fileUID", param.FileUID.String()))
 
 	// Get file metadata
-	files, err := w.repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{param.FileUID})
+	files, err := w.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{param.FileUID})
 	if err != nil {
 		return nil, temporal.NewApplicationErrorWithCause(
 			errorsx.MessageOrErr(err),
@@ -188,7 +188,7 @@ func (w *Worker) GetFileMetadataActivity(ctx context.Context, param *GetFileMeta
 	file := files[0]
 
 	// Get knowledge base configuration
-	kb, err := w.repository.GetKnowledgeBaseByUID(ctx, param.KnowledgeBaseUID)
+	kb, err := w.service.Repository().GetKnowledgeBaseByUID(ctx, param.KnowledgeBaseUID)
 	if err != nil {
 		return nil, temporal.NewApplicationErrorWithCause(
 			errorsx.MessageOrErr(err),
@@ -253,8 +253,11 @@ func (w *Worker) GetFileContentActivity(ctx context.Context, param *GetFileConte
 		var err error
 		authCtx, err = createAuthenticatedContext(ctx, param.Metadata)
 		if err != nil {
-			w.log.Warn("Failed to create authenticated context, using original", zap.Error(err))
-			authCtx = ctx
+			return nil, temporal.NewApplicationErrorWithCause(
+				fmt.Sprintf("Failed to create authenticated context: %s", errorsx.MessageOrErr(err)),
+				getFileContentActivityError,
+				err,
+			)
 		}
 	}
 
@@ -305,8 +308,11 @@ func (w *Worker) ConvertToMarkdownActivity(ctx context.Context, param *ConvertTo
 		var err error
 		authCtx, err = createAuthenticatedContext(ctx, param.Metadata)
 		if err != nil {
-			w.log.Warn("Failed to create authenticated context, using original", zap.Error(err))
-			authCtx = ctx
+			return nil, temporal.NewApplicationErrorWithCause(
+				fmt.Sprintf("Failed to create authenticated context: %s", errorsx.MessageOrErr(err)),
+				convertFileActivityError,
+				err,
+			)
 		}
 	}
 
@@ -342,7 +348,7 @@ func (w *Worker) CleanupOldConvertedFileActivity(ctx context.Context, param *Cle
 		zap.String("fileUID", param.FileUID.String()))
 
 	// Check if old converted file exists
-	oldConvertedFile, err := w.repository.GetConvertedFileByFileUID(ctx, param.FileUID)
+	oldConvertedFile, err := w.service.Repository().GetConvertedFileByFileUID(ctx, param.FileUID)
 	if err != nil || oldConvertedFile == nil || oldConvertedFile.Destination == "" {
 		// No old file to clean up - this is fine
 		w.log.Info("CleanupOldConvertedFileActivity: No old converted file found")
@@ -354,13 +360,18 @@ func (w *Worker) CleanupOldConvertedFileActivity(ctx context.Context, param *Cle
 		zap.String("destination", oldConvertedFile.Destination))
 
 	// Delete from MinIO
+	// Note: MinIO DeleteFile is idempotent - if file doesn't exist, it succeeds.
+	// Any error returned here is a real error (network, permissions, etc.) that should be retried.
 	err = w.service.MinIO().DeleteFile(ctx, config.Config.Minio.BucketName, oldConvertedFile.Destination)
 	if err != nil {
-		// Log warning but don't fail - orphaned files are acceptable
-		w.log.Warn("Failed to delete old converted file from MinIO (continuing)",
+		w.log.Error("CleanupOldConvertedFileActivity: Failed to delete old converted file from MinIO",
 			zap.String("destination", oldConvertedFile.Destination),
 			zap.Error(err))
-		return nil // Don't fail the activity
+		return temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to delete old converted file: %s", errorsx.MessageOrErr(err)),
+			cleanupOldConvertedFileActivityError,
+			err,
+		)
 	}
 
 	w.log.Info("CleanupOldConvertedFileActivity: Old file deleted successfully")
@@ -444,7 +455,7 @@ func (w *Worker) DeleteConvertedFileRecordActivity(ctx context.Context, param *D
 	w.log.Info("DeleteConvertedFileRecordActivity: Deleting DB record",
 		zap.String("convertedFileUID", param.ConvertedFileUID.String()))
 
-	err := w.repository.DeleteConvertedFile(ctx, param.ConvertedFileUID)
+	err := w.service.Repository().DeleteConvertedFile(ctx, param.ConvertedFileUID)
 	if err != nil {
 		w.log.Error("DeleteConvertedFileRecordActivity: Failed to delete DB record",
 			zap.String("convertedFileUID", param.ConvertedFileUID.String()),
@@ -469,7 +480,7 @@ func (w *Worker) UpdateConvertedFileDestinationActivity(ctx context.Context, par
 
 	// Update the destination
 	update := map[string]any{"destination": param.Destination}
-	err := w.repository.UpdateConvertedFile(ctx, param.ConvertedFileUID, update)
+	err := w.service.Repository().UpdateConvertedFile(ctx, param.ConvertedFileUID, update)
 	if err != nil {
 		w.log.Error("UpdateConvertedFileDestinationActivity: Failed to update destination",
 			zap.String("convertedFileUID", param.ConvertedFileUID.String()),
@@ -519,7 +530,7 @@ func (w *Worker) UpdateConversionMetadataActivity(ctx context.Context, param *Up
 		ConvertingPipe: param.Pipeline,
 	}
 
-	err := w.repository.UpdateKBFileMetadata(ctx, param.FileUID, mdUpdate)
+	err := w.service.Repository().UpdateKBFileMetadata(ctx, param.FileUID, mdUpdate)
 	if err != nil {
 		// If file not found, it may have been deleted during processing - this is OK
 		if err.Error() == "record not found" || err.Error() == "fetching file: record not found" {
@@ -597,7 +608,7 @@ func (w *Worker) GetConvertedFileForChunkingActivity(ctx context.Context, param 
 		zap.String("fileUID", param.FileUID.String()))
 
 	// Get converted file metadata from DB
-	convertedFile, err := w.repository.GetConvertedFileByFileUID(ctx, param.FileUID)
+	convertedFile, err := w.service.Repository().GetConvertedFileByFileUID(ctx, param.FileUID)
 	if err != nil {
 		return nil, temporal.NewApplicationErrorWithCause(
 			fmt.Sprintf("Failed to get converted file: %s", errorsx.MessageOrErr(err)),
@@ -607,7 +618,7 @@ func (w *Worker) GetConvertedFileForChunkingActivity(ctx context.Context, param 
 	}
 
 	// Get file to access external metadata for authentication
-	file, err := getFileByUID(ctx, w.repository, param.FileUID)
+	file, err := getFileByUID(ctx, w.service.Repository(), param.FileUID)
 	if err != nil {
 		return nil, temporal.NewApplicationErrorWithCause(
 			fmt.Sprintf("Failed to get file metadata: %s", errorsx.MessageOrErr(err)),
@@ -622,8 +633,11 @@ func (w *Worker) GetConvertedFileForChunkingActivity(ctx context.Context, param 
 		var authErr error
 		authCtx, authErr = createAuthenticatedContext(ctx, file.ExternalMetadataUnmarshal)
 		if authErr != nil {
-			w.log.Warn("Failed to create authenticated context, using original", zap.Error(authErr))
-			authCtx = ctx
+			return nil, temporal.NewApplicationErrorWithCause(
+				fmt.Sprintf("Failed to create authenticated context: %s", errorsx.MessageOrErr(authErr)),
+				getConvertedFileActivityError,
+				authErr,
+			)
 		}
 	}
 
@@ -665,7 +679,7 @@ func (w *Worker) GetConvertedFileForChunkingActivity(ctx context.Context, param 
 
 	return &GetConvertedFileForChunkingActivityResult{
 		Content:      fileData,
-		SourceTable:  w.repository.ConvertedFileTableName(),
+		SourceTable:  w.service.Repository().ConvertedFileTableName(),
 		SourceUID:    convertedFile.UID,
 		PositionData: convertedFile.PositionData,
 	}, nil
@@ -684,8 +698,11 @@ func (w *Worker) ChunkContentActivity(ctx context.Context, param *ChunkContentAc
 		var err error
 		authCtx, err = createAuthenticatedContext(ctx, param.Metadata)
 		if err != nil {
-			w.log.Warn("Failed to create authenticated context, using original", zap.Error(err))
-			authCtx = ctx
+			return nil, temporal.NewApplicationErrorWithCause(
+				fmt.Sprintf("Failed to create authenticated context: %s", errorsx.MessageOrErr(err)),
+				chunkContentActivityError,
+				err,
+			)
 		}
 	}
 
@@ -722,17 +739,22 @@ func (w *Worker) SaveChunksToDBActivity(ctx context.Context, param *SaveChunksTo
 		zap.Int("contentChunkCount", len(param.ContentChunks)))
 
 	// First, delete old chunks from MinIO (for reprocessing)
-	// This is idempotent - if no chunks exist, it's a no-op
+	// Note: DeleteTextChunksByFileUID is idempotent - if no chunks exist, it returns empty list (no error).
+	// Any error returned here is a real error (network, MinIO unavailable, etc.) that should be retried.
 	err := w.service.DeleteTextChunksByFileUID(ctx, param.KnowledgeBaseUID, param.FileUID)
 	if err != nil {
-		// Log warning but don't fail - old chunks might not exist
-		w.log.Warn("SaveChunksToDBActivity: Failed to delete old chunks from MinIO (continuing)",
+		w.log.Error("SaveChunksToDBActivity: Failed to delete old chunks from MinIO",
 			zap.String("fileUID", param.FileUID.String()),
 			zap.Error(err))
+		return nil, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to delete old chunks: %s", errorsx.MessageOrErr(err)),
+			saveChunksDBActivityError,
+			err,
+		)
 	}
 
 	// Use helper function from common.go
-	chunksToSave, err := saveChunksToDBOnly(ctx, w.service, w.repository,
+	chunksToSave, err := saveChunksToDBOnly(ctx, w.service.Repository(),
 		param.KnowledgeBaseUID, param.FileUID, param.SourceUID, param.SourceTable,
 		param.SummaryChunks, param.ContentChunks, param.FileType)
 	if err != nil {
@@ -761,7 +783,7 @@ func (w *Worker) UpdateChunkingMetadataActivity(ctx context.Context, param *Upda
 		ChunkingPipe: param.Pipeline,
 	}
 
-	err := w.repository.UpdateKBFileMetadata(ctx, param.FileUID, mdUpdate)
+	err := w.service.Repository().UpdateKBFileMetadata(ctx, param.FileUID, mdUpdate)
 	if err != nil {
 		// If file not found, it may have been deleted during processing - this is OK
 		if err.Error() == "record not found" || err.Error() == "fetching file: record not found" {
@@ -799,10 +821,10 @@ type GetFileContentForSummaryActivityResult struct {
 
 // GenerateSummaryFromPipelineActivityParam for external summarization pipeline call
 type GenerateSummaryFromPipelineActivityParam struct {
-	Content     []byte
-	FileName    string
-	RequesterID string
-	Metadata    *structpb.Struct
+	Content  []byte
+	FileName string
+	FileType string
+	Metadata *structpb.Struct
 }
 
 // GenerateSummaryFromPipelineActivityResult contains the generated summary
@@ -831,8 +853,11 @@ func (w *Worker) GetFileContentForSummaryActivity(ctx context.Context, param *Ge
 		var err error
 		authCtx, err = createAuthenticatedContext(ctx, param.Metadata)
 		if err != nil {
-			w.log.Warn("Failed to create authenticated context, using original", zap.Error(err))
-			authCtx = ctx
+			return nil, temporal.NewApplicationErrorWithCause(
+				fmt.Sprintf("Failed to create authenticated context: %s", errorsx.MessageOrErr(err)),
+				getFileContentSummaryActivityError,
+				err,
+			)
 		}
 	}
 
@@ -852,7 +877,7 @@ func (w *Worker) GetFileContentForSummaryActivity(ctx context.Context, param *Ge
 		artifactpb.FileType_FILE_TYPE_CSV.String():
 
 		// Get converted file
-		convertedFile, err := w.repository.GetConvertedFileByFileUID(ctx, param.FileUID)
+		convertedFile, err := w.service.Repository().GetConvertedFileByFileUID(ctx, param.FileUID)
 		if err != nil {
 			return nil, temporal.NewApplicationErrorWithCause(
 				fmt.Sprintf("Failed to get converted file: %s", errorsx.MessageOrErr(err)),
@@ -902,13 +927,16 @@ func (w *Worker) GenerateSummaryFromPipelineActivity(ctx context.Context, param 
 		var err error
 		authCtx, err = createAuthenticatedContext(ctx, param.Metadata)
 		if err != nil {
-			w.log.Warn("Failed to create authenticated context, using original", zap.Error(err))
-			authCtx = ctx
+			return nil, temporal.NewApplicationErrorWithCause(
+				fmt.Sprintf("Failed to create authenticated context: %s", errorsx.MessageOrErr(err)),
+				generateSummaryActivityError,
+				err,
+			)
 		}
 	}
 
 	// Call the summarization pipeline - THIS IS THE KEY EXTERNAL CALL
-	summary, err := w.service.GenerateSummary(authCtx, string(param.Content), param.RequesterID)
+	summary, err := w.service.GenerateSummary(authCtx, string(param.Content), param.FileType)
 	if err != nil {
 		return nil, temporal.NewApplicationErrorWithCause(
 			fmt.Sprintf("Summary generation failed: %s", errorsx.MessageOrErr(err)),
@@ -937,7 +965,7 @@ func (w *Worker) SaveSummaryActivity(ctx context.Context, param *SaveSummaryActi
 		repository.KnowledgeBaseFileColumn.Summary: param.Summary,
 	}
 
-	_, err := w.repository.UpdateKnowledgeBaseFile(ctx, param.FileUID.String(), updateMap)
+	_, err := w.service.Repository().UpdateKnowledgeBaseFile(ctx, param.FileUID.String(), updateMap)
 	if err != nil {
 		// If file not found, it may have been deleted during processing - this is OK
 		if err.Error() == "record not found" {
@@ -956,7 +984,7 @@ func (w *Worker) SaveSummaryActivity(ctx context.Context, param *SaveSummaryActi
 	mdUpdate := repository.ExtraMetaData{
 		SummarizingPipe: param.Pipeline,
 	}
-	err = w.repository.UpdateKBFileMetadata(ctx, param.FileUID, mdUpdate)
+	err = w.service.Repository().UpdateKBFileMetadata(ctx, param.FileUID, mdUpdate)
 	if err != nil {
 		// If file not found, it may have been deleted during processing - this is OK
 		if err.Error() == "record not found" || err.Error() == "fetching file: record not found" {

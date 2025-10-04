@@ -75,7 +75,7 @@ func (w *Worker) GetChunksForEmbeddingActivity(ctx context.Context, param *GetCh
 		zap.String("fileUID", param.FileUID.String()))
 
 	// Get file
-	files, err := w.repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{param.FileUID})
+	files, err := w.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{param.FileUID})
 	if err != nil || len(files) == 0 {
 		return nil, temporal.NewApplicationErrorWithCause(
 			fmt.Sprintf("Failed to get file: %s", errorsx.MessageOrErr(err)),
@@ -121,8 +121,11 @@ func (w *Worker) GenerateEmbeddingsActivity(ctx context.Context, param *Generate
 		var err error
 		authCtx, err = createAuthenticatedContext(ctx, param.Metadata)
 		if err != nil {
-			w.log.Warn("Failed to create authenticated context, using original", zap.Error(err))
-			authCtx = ctx
+			return nil, temporal.NewApplicationErrorWithCause(
+				fmt.Sprintf("Failed to create authenticated context: %s", errorsx.MessageOrErr(err)),
+				generateEmbeddingsActivityError,
+				err,
+			)
 		}
 	}
 
@@ -175,7 +178,7 @@ func (w *Worker) UpdateEmbeddingMetadataActivity(ctx context.Context, param *Upd
 		EmbeddingPipe: param.Pipeline,
 	}
 
-	err := w.repository.UpdateKBFileMetadata(ctx, param.FileUID, mdUpdate)
+	err := w.service.Repository().UpdateKBFileMetadata(ctx, param.FileUID, mdUpdate)
 	if err != nil {
 		// If file not found, it may have been deleted during processing - this is OK
 		if err.Error() == "record not found" || err.Error() == "fetching file: record not found" {

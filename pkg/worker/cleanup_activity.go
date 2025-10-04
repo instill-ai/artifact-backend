@@ -46,7 +46,7 @@ func (w *Worker) DeleteOriginalFileActivity(ctx context.Context, param *DeleteOr
 		zap.String("fileUID", param.FileUID.String()))
 
 	// Fetch file record to get destination
-	files, err := w.repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{param.FileUID})
+	files, err := w.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{param.FileUID})
 	if err != nil || len(files) == 0 {
 		w.log.Info("DeleteOriginalFileActivity: File not found, may have been deleted already",
 			zap.String("fileUID", param.FileUID.String()))
@@ -80,7 +80,7 @@ func (w *Worker) DeleteConvertedFileActivity(ctx context.Context, param *DeleteC
 		zap.String("fileUID", param.FileUID.String()))
 
 	// Check if converted file exists and get KB UID from it
-	convertedFile, err := w.repository.GetConvertedFileByFileUID(ctx, param.FileUID)
+	convertedFile, err := w.service.Repository().GetConvertedFileByFileUID(ctx, param.FileUID)
 	if err != nil {
 		w.log.Info("DeleteConvertedFileActivity: No converted file found, skipping",
 			zap.String("fileUID", param.FileUID.String()))
@@ -102,7 +102,7 @@ func (w *Worker) DeleteConvertedFileActivity(ctx context.Context, param *DeleteC
 		zap.String("kbUID", convertedFile.KbUID.String()))
 
 	// Delete record from DB
-	err = w.repository.HardDeleteConvertedFileByFileUID(ctx, param.FileUID)
+	err = w.service.Repository().HardDeleteConvertedFileByFileUID(ctx, param.FileUID)
 	if err != nil {
 		return temporal.NewApplicationErrorWithCause(
 			fmt.Sprintf("Failed to delete converted file record: %s", errorsx.MessageOrErr(err)),
@@ -121,7 +121,7 @@ func (w *Worker) DeleteChunksFromMinIOActivity(ctx context.Context, param *Delet
 		zap.String("fileUID", param.FileUID.String()))
 
 	// Check if chunks exist and get KB UID from them
-	chunks, err := w.repository.ListChunksByKbFileUID(ctx, param.FileUID)
+	chunks, err := w.service.Repository().ListChunksByKbFileUID(ctx, param.FileUID)
 	if err != nil || len(chunks) == 0 {
 		w.log.Info("DeleteChunksFromMinIOActivity: No chunks found, skipping",
 			zap.String("fileUID", param.FileUID.String()))
@@ -146,7 +146,7 @@ func (w *Worker) DeleteChunksFromMinIOActivity(ctx context.Context, param *Delet
 		zap.String("kbUID", kbUID.String()))
 
 	// Delete records from DB
-	err = w.repository.HardDeleteChunksByKbFileUID(ctx, param.FileUID)
+	err = w.service.Repository().HardDeleteChunksByKbFileUID(ctx, param.FileUID)
 	if err != nil {
 		return temporal.NewApplicationErrorWithCause(
 			fmt.Sprintf("Failed to delete chunk records: %s", errorsx.MessageOrErr(err)),
@@ -166,7 +166,7 @@ func (w *Worker) DeleteEmbeddingsFromVectorDBActivity(ctx context.Context, param
 		zap.String("fileUID", param.FileUID.String()))
 
 	// Get embeddings to extract KB UID
-	embeddings, err := w.repository.ListEmbeddingsByKbFileUID(ctx, param.FileUID)
+	embeddings, err := w.service.Repository().ListEmbeddingsByKbFileUID(ctx, param.FileUID)
 	if err != nil || len(embeddings) == 0 {
 		w.log.Info("DeleteEmbeddingsFromVectorDBActivity: No embeddings found, skipping",
 			zap.String("fileUID", param.FileUID.String()))
@@ -198,7 +198,7 @@ func (w *Worker) DeleteEmbeddingsFromVectorDBActivity(ctx context.Context, param
 	}
 
 	// Delete records from DB
-	err = w.repository.HardDeleteEmbeddingsByKbFileUID(ctx, param.FileUID)
+	err = w.service.Repository().HardDeleteEmbeddingsByKbFileUID(ctx, param.FileUID)
 	if err != nil {
 		return temporal.NewApplicationErrorWithCause(
 			fmt.Sprintf("Failed to delete embedding records: %s", errorsx.MessageOrErr(err)),
@@ -296,7 +296,7 @@ func (w *Worker) DeleteKBFileRecordsActivity(ctx context.Context, param *DeleteK
 	w.log.Info("DeleteKBFileRecordsActivity: Deleting file records",
 		zap.String("kbUID", param.KnowledgeBaseUID.String()))
 
-	err := w.repository.DeleteAllKnowledgeBaseFiles(ctx, param.KnowledgeBaseUID.String())
+	err := w.service.Repository().DeleteAllKnowledgeBaseFiles(ctx, param.KnowledgeBaseUID.String())
 	if err != nil {
 		return temporal.NewApplicationErrorWithCause(
 			fmt.Sprintf("Failed to delete file records: %s", errorsx.MessageOrErr(err)),
@@ -314,7 +314,7 @@ func (w *Worker) DeleteKBConvertedFileRecordsActivity(ctx context.Context, param
 	w.log.Info("DeleteKBConvertedFileRecordsActivity: Deleting converted file records",
 		zap.String("kbUID", param.KnowledgeBaseUID.String()))
 
-	err := w.repository.DeleteAllConvertedFilesInKb(ctx, param.KnowledgeBaseUID)
+	err := w.service.Repository().DeleteAllConvertedFilesInKb(ctx, param.KnowledgeBaseUID)
 	if err != nil {
 		return temporal.NewApplicationErrorWithCause(
 			fmt.Sprintf("Failed to delete converted file records: %s", errorsx.MessageOrErr(err)),
@@ -332,7 +332,7 @@ func (w *Worker) DeleteKBChunkRecordsActivity(ctx context.Context, param *Delete
 	w.log.Info("DeleteKBChunkRecordsActivity: Deleting chunk records",
 		zap.String("kbUID", param.KnowledgeBaseUID.String()))
 
-	err := w.repository.HardDeleteChunksByKbUID(ctx, param.KnowledgeBaseUID)
+	err := w.service.Repository().HardDeleteChunksByKbUID(ctx, param.KnowledgeBaseUID)
 	if err != nil {
 		return temporal.NewApplicationErrorWithCause(
 			fmt.Sprintf("Failed to delete chunk records: %s", errorsx.MessageOrErr(err)),
@@ -350,7 +350,7 @@ func (w *Worker) DeleteKBEmbeddingRecordsActivity(ctx context.Context, param *De
 	w.log.Info("DeleteKBEmbeddingRecordsActivity: Deleting embedding records",
 		zap.String("kbUID", param.KnowledgeBaseUID.String()))
 
-	err := w.repository.HardDeleteEmbeddingsByKbUID(ctx, param.KnowledgeBaseUID)
+	err := w.service.Repository().HardDeleteEmbeddingsByKbUID(ctx, param.KnowledgeBaseUID)
 	if err != nil {
 		return temporal.NewApplicationErrorWithCause(
 			fmt.Sprintf("Failed to delete embedding records: %s", errorsx.MessageOrErr(err)),

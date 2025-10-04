@@ -17,11 +17,15 @@ import (
 
 type embedTextsWorkflow struct {
 	temporalClient client.Client
+	worker         *Worker
 }
 
 // NewEmbedTextsWorkflow creates a new EmbedTextsWorkflow instance
-func NewEmbedTextsWorkflow(temporalClient client.Client) service.EmbedTextsWorkflow {
-	return &embedTextsWorkflow{temporalClient: temporalClient}
+func NewEmbedTextsWorkflow(temporalClient client.Client, worker *Worker) service.EmbedTextsWorkflow {
+	return &embedTextsWorkflow{
+		temporalClient: temporalClient,
+		worker:         worker,
+	}
 }
 
 func (w *embedTextsWorkflow) Execute(ctx context.Context, param service.EmbedTextsWorkflowParam) ([][]float32, error) {
@@ -32,7 +36,7 @@ func (w *embedTextsWorkflow) Execute(ctx context.Context, param service.EmbedTex
 		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 	}
 
-	workflowRun, err := w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, new(Worker).EmbedTextsWorkflow, param)
+	workflowRun, err := w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, w.worker.EmbedTextsWorkflow, param)
 	if err != nil {
 		return nil, fmt.Errorf("failed to start embed texts workflow: %s", errorsx.MessageOrErr(err))
 	}

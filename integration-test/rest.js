@@ -17,7 +17,7 @@ import { CheckKnowledgeBaseEndToEndFileProcessing } from './rest-public-kb-e2e-f
 export let options = {
   setupTimeout: '5s',
   iterations: 1,
-  maxDuration: '60m',
+  duration: '60m',
   insecureSkipTLSVerify: true,
   thresholds: {
     checks: ["rate == 1.0"],

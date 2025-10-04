@@ -141,17 +141,32 @@ func main() {
 		redisClient, db, minioClient, vectorDB, aclClient, temporalClient, closer := newClients(ctx, logger)
 	defer closer()
 
-	// Initialize service
-	// Initialize workflow implementations
-	processFileWorkflow := worker.NewProcessFileWorkflow(temporalClient)
-	cleanupFileWorkflow := worker.NewCleanupFileWorkflow(temporalClient)
-	cleanupKBWorkflow := worker.NewCleanupKnowledgeBaseWorkflow(temporalClient)
-	embedTextsWorkflow := worker.NewEmbedTextsWorkflow(temporalClient)
-	deleteFilesWorkflow := worker.NewDeleteFilesWorkflow(temporalClient)
-	getFilesWorkflow := worker.NewGetFilesWorkflow(temporalClient)
+	// Initialize repository
+	repo := repository.NewRepository(db)
 
+	// Create worker instance first (without service dependencies for now)
+	// We'll set up the service layer after creating workflow wrappers
+	w, err := worker.New(
+		worker.Config{
+			Service: nil, // Will be set after service is created
+		},
+		logger,
+	)
+	if err != nil {
+		logger.Fatal("Unable to create worker", zap.Error(err))
+	}
+
+	// Initialize workflow implementations with the worker instance
+	processFileWorkflow := worker.NewProcessFileWorkflow(temporalClient, w)
+	cleanupFileWorkflow := worker.NewCleanupFileWorkflow(temporalClient, w)
+	cleanupKBWorkflow := worker.NewCleanupKnowledgeBaseWorkflow(temporalClient, w)
+	embedTextsWorkflow := worker.NewEmbedTextsWorkflow(temporalClient, w)
+	deleteFilesWorkflow := worker.NewDeleteFilesWorkflow(temporalClient, w)
+	getFilesWorkflow := worker.NewGetFilesWorkflow(temporalClient, w)
+
+	// Create service with workflow implementations
 	svc := service.NewService(
-		repository.NewRepository(db),
+		repo,
 		minioClient,
 		mgmtPrivateServiceClient,
 		pipelinePublicServiceClient,
@@ -166,6 +181,10 @@ func main() {
 		deleteFilesWorkflow,
 		getFilesWorkflow,
 	)
+
+	// Update the worker instance with the service
+	// (the workflow wrappers already have a reference to this worker)
+	w.SetService(svc)
 
 	privateHandler := handler.NewPrivateHandler(svc, logger)
 	artifactpb.RegisterArtifactPrivateServiceServer(

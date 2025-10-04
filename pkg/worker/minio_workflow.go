@@ -17,11 +17,15 @@ import (
 
 type deleteFilesWorkflow struct {
 	temporalClient client.Client
+	worker         *Worker
 }
 
 // NewDeleteFilesWorkflow creates a new DeleteFilesWorkflow instance
-func NewDeleteFilesWorkflow(temporalClient client.Client) service.DeleteFilesWorkflow {
-	return &deleteFilesWorkflow{temporalClient: temporalClient}
+func NewDeleteFilesWorkflow(temporalClient client.Client, worker *Worker) service.DeleteFilesWorkflow {
+	return &deleteFilesWorkflow{
+		temporalClient: temporalClient,
+		worker:         worker,
+	}
 }
 
 func (w *deleteFilesWorkflow) Execute(ctx context.Context, param service.DeleteFilesWorkflowParam) error {
@@ -32,7 +36,7 @@ func (w *deleteFilesWorkflow) Execute(ctx context.Context, param service.DeleteF
 		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 	}
 
-	workflowRun, err := w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, new(Worker).DeleteFilesWorkflow, param)
+	workflowRun, err := w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, w.worker.DeleteFilesWorkflow, param)
 	if err != nil {
 		return fmt.Errorf("failed to start delete files workflow: %s", errorsx.MessageOrErr(err))
 	}
@@ -46,11 +50,15 @@ func (w *deleteFilesWorkflow) Execute(ctx context.Context, param service.DeleteF
 
 type getFilesWorkflow struct {
 	temporalClient client.Client
+	worker         *Worker
 }
 
 // NewGetFilesWorkflow creates a new GetFilesWorkflow instance
-func NewGetFilesWorkflow(temporalClient client.Client) service.GetFilesWorkflow {
-	return &getFilesWorkflow{temporalClient: temporalClient}
+func NewGetFilesWorkflow(temporalClient client.Client, worker *Worker) service.GetFilesWorkflow {
+	return &getFilesWorkflow{
+		temporalClient: temporalClient,
+		worker:         worker,
+	}
 }
 
 func (w *getFilesWorkflow) Execute(ctx context.Context, param service.GetFilesWorkflowParam) ([]service.FileContent, error) {
@@ -61,7 +69,7 @@ func (w *getFilesWorkflow) Execute(ctx context.Context, param service.GetFilesWo
 		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 	}
 
-	workflowRun, err := w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, new(Worker).GetFilesWorkflow, param)
+	workflowRun, err := w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, w.worker.GetFilesWorkflow, param)
 	if err != nil {
 		return nil, fmt.Errorf("failed to start get files workflow: %s", errorsx.MessageOrErr(err))
 	}

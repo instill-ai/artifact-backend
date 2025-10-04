@@ -18,11 +18,15 @@ import (
 
 type cleanupFileWorkflow struct {
 	temporalClient client.Client
+	worker         *Worker
 }
 
 // NewCleanupFileWorkflow creates a new CleanupFileWorkflow instance
-func NewCleanupFileWorkflow(temporalClient client.Client) service.CleanupFileWorkflow {
-	return &cleanupFileWorkflow{temporalClient: temporalClient}
+func NewCleanupFileWorkflow(temporalClient client.Client, worker *Worker) service.CleanupFileWorkflow {
+	return &cleanupFileWorkflow{
+		temporalClient: temporalClient,
+		worker:         worker,
+	}
 }
 
 func (w *cleanupFileWorkflow) Execute(ctx context.Context, param service.CleanupFileWorkflowParam) error {
@@ -33,7 +37,7 @@ func (w *cleanupFileWorkflow) Execute(ctx context.Context, param service.Cleanup
 		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 	}
 
-	_, err := w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, new(Worker).CleanupFileWorkflow, param)
+	_, err := w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, w.worker.CleanupFileWorkflow, param)
 	if err != nil {
 		return fmt.Errorf("failed to start cleanup file workflow: %s", errorsx.MessageOrErr(err))
 	}
@@ -42,11 +46,15 @@ func (w *cleanupFileWorkflow) Execute(ctx context.Context, param service.Cleanup
 
 type cleanupKnowledgeBaseWorkflow struct {
 	temporalClient client.Client
+	worker         *Worker
 }
 
 // NewCleanupKnowledgeBaseWorkflow creates a new CleanupKnowledgeBaseWorkflow instance
-func NewCleanupKnowledgeBaseWorkflow(temporalClient client.Client) service.CleanupKnowledgeBaseWorkflow {
-	return &cleanupKnowledgeBaseWorkflow{temporalClient: temporalClient}
+func NewCleanupKnowledgeBaseWorkflow(temporalClient client.Client, worker *Worker) service.CleanupKnowledgeBaseWorkflow {
+	return &cleanupKnowledgeBaseWorkflow{
+		temporalClient: temporalClient,
+		worker:         worker,
+	}
 }
 
 func (w *cleanupKnowledgeBaseWorkflow) Execute(ctx context.Context, param service.CleanupKnowledgeBaseWorkflowParam) error {
@@ -57,7 +65,7 @@ func (w *cleanupKnowledgeBaseWorkflow) Execute(ctx context.Context, param servic
 		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 	}
 
-	_, err := w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, new(Worker).CleanupKnowledgeBaseWorkflow, param)
+	_, err := w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, w.worker.CleanupKnowledgeBaseWorkflow, param)
 	if err != nil {
 		return fmt.Errorf("failed to start cleanup knowledge base workflow: %s", errorsx.MessageOrErr(err))
 	}
@@ -92,6 +100,10 @@ func (w *Worker) CleanupFileWorkflow(ctx workflow.Context, param service.Cleanup
 	}
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
 
+	// Collect errors to ensure we attempt all cleanup operations
+	// but still report failures
+	var errors []string
+
 	// Step 1: Delete original file if requested
 	// The activity will fetch file metadata to get destination and bucket
 	if param.IncludeOriginalFile {
@@ -100,7 +112,9 @@ func (w *Worker) CleanupFileWorkflow(ctx workflow.Context, param service.Cleanup
 			Bucket:  config.Config.Minio.BucketName,
 		}).Get(ctx, nil)
 		if err != nil {
-			logger.Warn("Failed to delete original file, continuing",
+			errMsg := fmt.Sprintf("delete original file: %s", errorsx.MessageOrErr(err))
+			errors = append(errors, errMsg)
+			logger.Error("Failed to delete original file",
 				"fileUID", fileUID.String(),
 				"error", err.Error())
 		}
@@ -111,7 +125,9 @@ func (w *Worker) CleanupFileWorkflow(ctx workflow.Context, param service.Cleanup
 		FileUID: fileUID,
 	}).Get(ctx, nil)
 	if err != nil {
-		logger.Warn("Failed to delete converted file, continuing",
+		errMsg := fmt.Sprintf("delete converted file: %s", errorsx.MessageOrErr(err))
+		errors = append(errors, errMsg)
+		logger.Error("Failed to delete converted file",
 			"fileUID", fileUID.String(),
 			"error", err.Error())
 	}
@@ -121,7 +137,9 @@ func (w *Worker) CleanupFileWorkflow(ctx workflow.Context, param service.Cleanup
 		FileUID: fileUID,
 	}).Get(ctx, nil)
 	if err != nil {
-		logger.Warn("Failed to delete chunks, continuing",
+		errMsg := fmt.Sprintf("delete chunks: %s", errorsx.MessageOrErr(err))
+		errors = append(errors, errMsg)
+		logger.Error("Failed to delete chunks",
 			"fileUID", fileUID.String(),
 			"error", err.Error())
 	}
@@ -132,9 +150,21 @@ func (w *Worker) CleanupFileWorkflow(ctx workflow.Context, param service.Cleanup
 		FileUID: fileUID,
 	}).Get(ctx, nil)
 	if err != nil {
-		logger.Warn("Failed to delete embeddings, continuing",
+		errMsg := fmt.Sprintf("delete embeddings: %s", errorsx.MessageOrErr(err))
+		errors = append(errors, errMsg)
+		logger.Error("Failed to delete embeddings",
 			"fileUID", fileUID.String(),
 			"error", err.Error())
+	}
+
+	// If any cleanup operation failed, return an error
+	if len(errors) > 0 {
+		logger.Error("CleanupFileWorkflow completed with errors",
+			"fileUID", param.FileUID.String(),
+			"workflowID", param.WorkflowID,
+			"errorCount", len(errors),
+			"errors", errors)
+		return fmt.Errorf("cleanup failed with %d error(s): %v", len(errors), errors)
 	}
 
 	logger.Info("CleanupFileWorkflow completed successfully",
@@ -170,12 +200,18 @@ func (w *Worker) CleanupKnowledgeBaseWorkflow(ctx workflow.Context, param servic
 	}
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
 
+	// Collect errors to ensure we attempt all cleanup operations
+	// but still report failures
+	var errors []string
+
 	// Step 1: Delete all files from MinIO
 	err := workflow.ExecuteActivity(ctx, w.DeleteKBFilesFromMinIOActivity, &DeleteKBFilesFromMinIOActivityParam{
 		KnowledgeBaseUID: kbUID,
 	}).Get(ctx, nil)
 	if err != nil {
-		logger.Warn("Failed to delete files from MinIO, continuing",
+		errMsg := fmt.Sprintf("delete files from MinIO: %s", errorsx.MessageOrErr(err))
+		errors = append(errors, errMsg)
+		logger.Error("Failed to delete files from MinIO",
 			"kbUID", kbUID.String(),
 			"error", err.Error())
 	}
@@ -185,7 +221,9 @@ func (w *Worker) CleanupKnowledgeBaseWorkflow(ctx workflow.Context, param servic
 		KnowledgeBaseUID: kbUID,
 	}).Get(ctx, nil)
 	if err != nil {
-		logger.Warn("Failed to drop Milvus collection, continuing",
+		errMsg := fmt.Sprintf("drop Milvus collection: %s", errorsx.MessageOrErr(err))
+		errors = append(errors, errMsg)
+		logger.Error("Failed to drop Milvus collection",
 			"kbUID", kbUID.String(),
 			"error", err.Error())
 	}
@@ -195,7 +233,9 @@ func (w *Worker) CleanupKnowledgeBaseWorkflow(ctx workflow.Context, param servic
 		KnowledgeBaseUID: kbUID,
 	}).Get(ctx, nil)
 	if err != nil {
-		logger.Warn("Failed to delete file records, continuing",
+		errMsg := fmt.Sprintf("delete file records: %s", errorsx.MessageOrErr(err))
+		errors = append(errors, errMsg)
+		logger.Error("Failed to delete file records",
 			"kbUID", kbUID.String(),
 			"error", err.Error())
 	}
@@ -205,7 +245,9 @@ func (w *Worker) CleanupKnowledgeBaseWorkflow(ctx workflow.Context, param servic
 		KnowledgeBaseUID: kbUID,
 	}).Get(ctx, nil)
 	if err != nil {
-		logger.Warn("Failed to delete converted file records, continuing",
+		errMsg := fmt.Sprintf("delete converted file records: %s", errorsx.MessageOrErr(err))
+		errors = append(errors, errMsg)
+		logger.Error("Failed to delete converted file records",
 			"kbUID", kbUID.String(),
 			"error", err.Error())
 	}
@@ -215,7 +257,9 @@ func (w *Worker) CleanupKnowledgeBaseWorkflow(ctx workflow.Context, param servic
 		KnowledgeBaseUID: kbUID,
 	}).Get(ctx, nil)
 	if err != nil {
-		logger.Warn("Failed to delete chunk records, continuing",
+		errMsg := fmt.Sprintf("delete chunk records: %s", errorsx.MessageOrErr(err))
+		errors = append(errors, errMsg)
+		logger.Error("Failed to delete chunk records",
 			"kbUID", kbUID.String(),
 			"error", err.Error())
 	}
@@ -225,7 +269,9 @@ func (w *Worker) CleanupKnowledgeBaseWorkflow(ctx workflow.Context, param servic
 		KnowledgeBaseUID: kbUID,
 	}).Get(ctx, nil)
 	if err != nil {
-		logger.Warn("Failed to delete embedding records, continuing",
+		errMsg := fmt.Sprintf("delete embedding records: %s", errorsx.MessageOrErr(err))
+		errors = append(errors, errMsg)
+		logger.Error("Failed to delete embedding records",
 			"kbUID", kbUID.String(),
 			"error", err.Error())
 	}
@@ -235,9 +281,20 @@ func (w *Worker) CleanupKnowledgeBaseWorkflow(ctx workflow.Context, param servic
 		KnowledgeBaseUID: kbUID,
 	}).Get(ctx, nil)
 	if err != nil {
-		logger.Warn("Failed to purge ACL, continuing",
+		errMsg := fmt.Sprintf("purge ACL: %s", errorsx.MessageOrErr(err))
+		errors = append(errors, errMsg)
+		logger.Error("Failed to purge ACL",
 			"kbUID", kbUID.String(),
 			"error", err.Error())
+	}
+
+	// If any cleanup operation failed, return an error
+	if len(errors) > 0 {
+		logger.Error("CleanupKnowledgeBaseWorkflow completed with errors",
+			"kbUID", param.KnowledgeBaseUID.String(),
+			"errorCount", len(errors),
+			"errors", errors)
+		return fmt.Errorf("cleanup failed with %d error(s): %v", len(errors), errors)
 	}
 
 	logger.Info("CleanupKnowledgeBaseWorkflow completed successfully", "kbUID", param.KnowledgeBaseUID.String())

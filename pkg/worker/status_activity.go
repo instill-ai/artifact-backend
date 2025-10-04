@@ -25,7 +25,7 @@ type UpdateFileStatusActivityParam struct {
 func (w *Worker) GetFileStatusActivity(ctx context.Context, fileUID uuid.UUID) (artifactpb.FileProcessStatus, error) {
 	w.log.Info("Getting file status", zap.String("fileUID", fileUID.String()))
 
-	files, err := w.repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{fileUID})
+	files, err := w.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{fileUID})
 	if err != nil {
 		return artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, temporal.NewApplicationErrorWithCause(
 			fmt.Sprintf("Failed to get file: %s", errorsx.MessageOrErr(err)),
@@ -65,7 +65,7 @@ func (w *Worker) UpdateFileStatusActivity(ctx context.Context, param *UpdateFile
 		zap.String("status", param.Status.String()),
 		zap.String("message", param.Message))
 
-	files, err := w.repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{param.FileUID})
+	files, err := w.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{param.FileUID})
 	if err != nil {
 		w.log.Error("Failed to get file for status update", zap.Error(err))
 		return temporal.NewApplicationErrorWithCause(
@@ -83,13 +83,13 @@ func (w *Worker) UpdateFileStatusActivity(ctx context.Context, param *UpdateFile
 	}
 
 	if param.Message != "" {
-		err := w.repository.UpdateKBFileMetadata(ctx, param.FileUID, repository.ExtraMetaData{FailReason: param.Message})
+		err := w.service.Repository().UpdateKBFileMetadata(ctx, param.FileUID, repository.ExtraMetaData{FailReason: param.Message})
 		if err != nil {
 			w.log.Warn("Failed to update file extra metadata with message (file may be deleted)", zap.Error(err))
 		}
 	}
 
-	_, err = w.repository.UpdateKnowledgeBaseFile(ctx, param.FileUID.String(), updateMap)
+	_, err = w.service.Repository().UpdateKnowledgeBaseFile(ctx, param.FileUID.String(), updateMap)
 	if err != nil {
 		w.log.Warn("Failed to update file status (file may be deleted)",
 			zap.String("fileUID", param.FileUID.String()),

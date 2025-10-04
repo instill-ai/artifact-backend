@@ -3,15 +3,15 @@ package worker
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	qt "github.com/frankban/quicktest"
 )
 
 func TestEmbedTextsActivityParam_Validation(t *testing.T) {
+	c := qt.New(t)
+
 	tests := []struct {
-		name       string
-		param      *EmbedTextsActivityParam
-		expectPass bool
+		name  string
+		param *EmbedTextsActivityParam
 	}{
 		{
 			name: "Valid param with texts",
@@ -19,7 +19,6 @@ func TestEmbedTextsActivityParam_Validation(t *testing.T) {
 				Texts:      []string{"text1", "text2", "text3"},
 				BatchIndex: 0,
 			},
-			expectPass: true,
 		},
 		{
 			name: "Empty texts",
@@ -27,7 +26,6 @@ func TestEmbedTextsActivityParam_Validation(t *testing.T) {
 				Texts:      []string{},
 				BatchIndex: 0,
 			},
-			expectPass: true,
 		},
 		{
 			name: "Batch index set correctly",
@@ -35,51 +33,49 @@ func TestEmbedTextsActivityParam_Validation(t *testing.T) {
 				Texts:      []string{"text1"},
 				BatchIndex: 5,
 			},
-			expectPass: true,
 		},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			require.NotNil(t, tt.param)
-			if tt.expectPass {
-				assert.GreaterOrEqual(t, tt.param.BatchIndex, 0)
-				assert.NotNil(t, tt.param.Texts)
-			}
+		c.Run(tt.name, func(c *qt.C) {
+			c.Assert(tt.param.BatchIndex >= 0, qt.IsTrue)
+			c.Assert(tt.param.Texts, qt.Not(qt.IsNil))
 		})
 	}
 }
 
 func TestEmbedTextsActivity_EmptyInput(t *testing.T) {
+	c := qt.New(t)
+
 	// Test that empty input returns empty output
 	param := &EmbedTextsActivityParam{
 		Texts:      []string{},
 		BatchIndex: 0,
 	}
 
-	require.NotNil(t, param)
-	assert.Len(t, param.Texts, 0)
+	c.Assert(param.Texts, qt.HasLen, 0)
 	// Activity should handle empty input gracefully and return [][]float32{}
 }
 
 func TestEmbedTextsActivity_BatchIndexing(t *testing.T) {
+	c := qt.New(t)
+
 	tests := []struct {
 		name       string
 		batchIndex int
-		valid      bool
 	}{
-		{"First batch", 0, true},
-		{"Second batch", 1, true},
-		{"Tenth batch", 9, true},
+		{"First batch", 0},
+		{"Second batch", 1},
+		{"Tenth batch", 9},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+		c.Run(tt.name, func(c *qt.C) {
 			param := &EmbedTextsActivityParam{
 				Texts:      []string{"test"},
 				BatchIndex: tt.batchIndex,
 			}
-			assert.Equal(t, tt.batchIndex, param.BatchIndex)
+			c.Assert(param.BatchIndex, qt.Equals, tt.batchIndex)
 		})
 	}
 }

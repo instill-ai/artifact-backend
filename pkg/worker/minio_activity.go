@@ -9,6 +9,7 @@ import (
 	"github.com/gofrs/uuid"
 	"go.temporal.io/sdk/temporal"
 	"go.uber.org/zap"
+	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/instill-ai/artifact-backend/config"
 
@@ -42,9 +43,10 @@ type DeleteFileActivityParam struct {
 
 // GetFileActivityParam defines parameters for getting a single file
 type GetFileActivityParam struct {
-	Bucket string
-	Path   string
-	Index  int // For maintaining order
+	Bucket   string
+	Path     string
+	Index    int              // For maintaining order
+	Metadata *structpb.Struct // For authentication context
 }
 
 // GetFileActivityResult contains the file content
@@ -120,7 +122,21 @@ func (w *Worker) GetFileActivity(ctx context.Context, param *GetFileActivityPara
 		zap.String("bucket", param.Bucket),
 		zap.String("path", param.Path))
 
-	content, err := w.service.MinIO().GetFile(ctx, param.Bucket, param.Path)
+	// Create authenticated context if metadata provided
+	authCtx := ctx
+	if param.Metadata != nil {
+		var err error
+		authCtx, err = createAuthenticatedContext(ctx, param.Metadata)
+		if err != nil {
+			return nil, temporal.NewApplicationErrorWithCause(
+				fmt.Sprintf("Failed to create authenticated context: %s", errorsx.MessageOrErr(err)),
+				getFileActivityError,
+				err,
+			)
+		}
+	}
+
+	content, err := w.service.MinIO().GetFile(authCtx, param.Bucket, param.Path)
 	if err != nil {
 		w.log.Error("Failed to get file",
 			zap.String("path", param.Path),
@@ -148,7 +164,7 @@ func (w *Worker) UpdateChunkDestinationsActivity(ctx context.Context, param *Upd
 	w.log.Info("Starting UpdateChunkDestinationsActivity",
 		zap.Int("chunkCount", len(param.Destinations)))
 
-	err := w.repository.UpdateChunkDestinations(ctx, param.Destinations)
+	err := w.service.Repository().UpdateChunkDestinations(ctx, param.Destinations)
 	if err != nil {
 		w.log.Error("Failed to update chunk destinations",
 			zap.Int("chunkCount", len(param.Destinations)),

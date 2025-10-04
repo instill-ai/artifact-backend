@@ -4,13 +4,14 @@ import (
 	"testing"
 
 	"github.com/gofrs/uuid"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+
+	qt "github.com/frankban/quicktest"
 
 	"github.com/instill-ai/artifact-backend/pkg/service"
 )
 
 func TestSaveChunksWorkflowParam_Validation(t *testing.T) {
+	c := qt.New(t)
 	kbUID := uuid.Must(uuid.NewV4())
 	fileUID := uuid.Must(uuid.NewV4())
 
@@ -25,24 +26,26 @@ func TestSaveChunksWorkflowParam_Validation(t *testing.T) {
 		Chunks:           chunks,
 	}
 
-	require.NotNil(t, param)
-	assert.NotEqual(t, uuid.Nil, param.KnowledgeBaseUID)
-	assert.NotEqual(t, uuid.Nil, param.FileUID)
-	assert.Len(t, param.Chunks, 2)
+	c.Assert(param.KnowledgeBaseUID, qt.Not(qt.Equals), uuid.Nil)
+	c.Assert(param.FileUID, qt.Not(qt.Equals), uuid.Nil)
+	c.Assert(param.Chunks, qt.HasLen, 2)
 }
 
 func TestDeleteFilesWorkflowParam_Validation(t *testing.T) {
+	c := qt.New(t)
+
 	param := service.DeleteFilesWorkflowParam{
 		Bucket:    "test-bucket",
 		FilePaths: []string{"file1.txt", "file2.txt"},
 	}
 
-	require.NotNil(t, param)
-	assert.NotEmpty(t, param.Bucket)
-	assert.Len(t, param.FilePaths, 2)
+	c.Assert(param.Bucket, qt.Not(qt.Equals), "")
+	c.Assert(param.FilePaths, qt.HasLen, 2)
 }
 
 func TestGetFilesWorkflowParam_Validation(t *testing.T) {
+	c := qt.New(t)
+
 	filePaths := []string{
 		"path/to/file1.txt",
 		"path/to/file2.txt",
@@ -53,28 +56,31 @@ func TestGetFilesWorkflowParam_Validation(t *testing.T) {
 		FilePaths: filePaths,
 	}
 
-	require.NotNil(t, param)
-	assert.NotEmpty(t, param.Bucket)
-	assert.Len(t, param.FilePaths, 2)
+	c.Assert(param.Bucket, qt.Not(qt.Equals), "")
+	c.Assert(param.FilePaths, qt.HasLen, 2)
 }
 
 func TestSaveChunksWorkflow_EmptyChunks(t *testing.T) {
+	c := qt.New(t)
+
 	param := service.SaveChunksWorkflowParam{
 		KnowledgeBaseUID: uuid.Must(uuid.NewV4()),
 		FileUID:          uuid.Must(uuid.NewV4()),
 		Chunks:           map[string][]byte{},
 	}
 
-	assert.Len(t, param.Chunks, 0)
+	c.Assert(param.Chunks, qt.HasLen, 0)
 	// Workflow should handle empty chunks gracefully
 }
 
 func TestDeleteFilesWorkflow_EmptyPaths(t *testing.T) {
+	c := qt.New(t)
+
 	param := service.DeleteFilesWorkflowParam{
 		Bucket:    "test-bucket",
 		FilePaths: []string{},
 	}
 
-	assert.Len(t, param.FilePaths, 0)
+	c.Assert(param.FilePaths, qt.HasLen, 0)
 	// Workflow should handle empty paths gracefully
 }
