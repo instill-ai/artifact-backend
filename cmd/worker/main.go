@@ -156,12 +156,8 @@ func main() {
 	w.RegisterWorkflow(cw.DeleteFilesWorkflow)
 	w.RegisterWorkflow(cw.GetFilesWorkflow)
 
-	// Register file processing activities
-	w.RegisterActivity(cw.ConvertFileActivity)
-	w.RegisterActivity(cw.ChunkFileActivity)
-	w.RegisterActivity(cw.EmbedFileActivity)
+	// Register batch embedding activity
 	w.RegisterActivity(cw.EmbedTextsActivity)
-	w.RegisterActivity(cw.GenerateSummaryActivity)
 
 	// Register MinIO activities
 	w.RegisterActivity(cw.SaveChunkActivity)
@@ -173,8 +169,45 @@ func main() {
 	w.RegisterActivity(cw.GetFileStatusActivity)
 	w.RegisterActivity(cw.ProcessWaitingFileActivity)
 	w.RegisterActivity(cw.UpdateFileStatusActivity)
-	w.RegisterActivity(cw.CleanupFilesActivity)
-	w.RegisterActivity(cw.CleanupKnowledgeBaseActivity)
+
+	// Register cleanup activities - File cleanup
+	w.RegisterActivity(cw.DeleteOriginalFileActivity)
+	w.RegisterActivity(cw.DeleteConvertedFileActivity)
+	w.RegisterActivity(cw.DeleteChunksFromMinIOActivity)
+	w.RegisterActivity(cw.DeleteEmbeddingsFromVectorDBActivity)
+
+	// Register cleanup activities - Knowledge base cleanup
+	w.RegisterActivity(cw.DeleteKBFilesFromMinIOActivity)
+	w.RegisterActivity(cw.DropVectorDBCollectionActivity)
+	w.RegisterActivity(cw.DeleteKBFileRecordsActivity)
+	w.RegisterActivity(cw.DeleteKBConvertedFileRecordsActivity)
+	w.RegisterActivity(cw.DeleteKBChunkRecordsActivity)
+	w.RegisterActivity(cw.DeleteKBEmbeddingRecordsActivity)
+	w.RegisterActivity(cw.PurgeKBACLActivity)
+
+	// Register process file activities
+	// Conversion Phase
+	w.RegisterActivity(cw.GetFileMetadataActivity)
+	w.RegisterActivity(cw.GetFileContentActivity)
+	w.RegisterActivity(cw.ConvertToMarkdownActivity)
+	w.RegisterActivity(cw.CleanupOldConvertedFileActivity)
+	w.RegisterActivity(cw.SaveConvertedFileActivity)
+	w.RegisterActivity(cw.UpdateConversionMetadataActivity)
+	// Chunking Phase
+	w.RegisterActivity(cw.GetConvertedFileForChunkingActivity)
+	w.RegisterActivity(cw.GetOriginalFileForChunkingActivity)
+	w.RegisterActivity(cw.ChunkContentActivity)
+	w.RegisterActivity(cw.SaveChunksToDBActivity)
+	w.RegisterActivity(cw.UpdateChunkingMetadataActivity)
+	// Embedding Phase
+	w.RegisterActivity(cw.GetChunksForEmbeddingActivity)
+	w.RegisterActivity(cw.GenerateEmbeddingsActivity)
+	w.RegisterActivity(cw.SaveEmbeddingsToVectorDBActivity)
+	w.RegisterActivity(cw.UpdateEmbeddingMetadataActivity)
+	// Summary Phase
+	w.RegisterActivity(cw.GetFileContentForSummaryActivity)
+	w.RegisterActivity(cw.GenerateSummaryFromPipelineActivity)
+	w.RegisterActivity(cw.SaveSummaryActivity)
 
 	if err := w.Start(); err != nil {
 		logger.Fatal(fmt.Sprintf("Unable to start worker: %s", err))

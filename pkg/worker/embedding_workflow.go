@@ -1,14 +1,47 @@
 package worker
 
 import (
+	"context"
 	"fmt"
 	"time"
 
+	"go.temporal.io/api/enums/v1"
+	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
 	"github.com/instill-ai/artifact-backend/pkg/service"
 )
+
+type embedTextsWorkflow struct {
+	temporalClient client.Client
+}
+
+// NewEmbedTextsWorkflow creates a new EmbedTextsWorkflow instance
+func NewEmbedTextsWorkflow(temporalClient client.Client) service.EmbedTextsWorkflow {
+	return &embedTextsWorkflow{temporalClient: temporalClient}
+}
+
+func (w *embedTextsWorkflow) Execute(ctx context.Context, param service.EmbedTextsWorkflowParam) ([][]float32, error) {
+	workflowID := fmt.Sprintf("embed-texts-%d-%d", time.Now().UnixNano(), len(param.Texts))
+	workflowOptions := client.StartWorkflowOptions{
+		ID:                    workflowID,
+		TaskQueue:             TaskQueue,
+		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+	}
+
+	workflowRun, err := w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, new(Worker).EmbedTextsWorkflow, param)
+	if err != nil {
+		return nil, err
+	}
+
+	var vectors [][]float32
+	if err = workflowRun.Get(ctx, &vectors); err != nil {
+		return nil, err
+	}
+
+	return vectors, nil
+}
 
 // EmbedTextsWorkflow orchestrates parallel embedding of text batches
 func (w *Worker) EmbedTextsWorkflow(ctx workflow.Context, param service.EmbedTextsWorkflowParam) ([][]float32, error) {

@@ -407,35 +407,25 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
         });
       }
 
-      // All files should have chunks
-      // Embeddings/vectors are conditional based on API key availability
+      // All files must have chunks, embeddings, and vectors after successful processing
       check({ minioCounts }, {
         [`E2E: MinIO has chunks (${f.originalName})`]: () => minioCounts.chunks > 0,
       });
 
-      // Only check embeddings/vectors if they exist (requires OpenAI API key)
-      if (embeddings > 0 || vectors > 0) {
-        check({ embeddings, vectors }, {
-          [`E2E: Postgres has embeddings (${f.originalName})`]: () => embeddings > 0,
-          [`E2E: Milvus has vectors (${f.originalName})`]: () => vectors > 0,
-        });
-      }
+      check({ embeddings, vectors }, {
+        [`E2E: Postgres has embeddings (${f.originalName})`]: () => embeddings > 0,
+        [`E2E: Milvus has vectors (${f.originalName})`]: () => vectors > 0,
+      });
     }
-
-    const hasAnyEmbeddings = totalEmbeddings > 0 || totalMilvusVectors > 0;
 
     check({ totalMinioChunks }, {
       "E2E: Total MinIO chunks across all files is positive": () => totalMinioChunks > 0,
     });
 
-    if (hasAnyEmbeddings) {
-      check({ totalEmbeddings, totalMilvusVectors }, {
-        "E2E: Total embeddings across all files is positive": () => totalEmbeddings > 0,
-        "E2E: Total Milvus vectors across all files is positive": () => totalMilvusVectors > 0,
-      });
-    } else {
-      console.log("E2E: Skipping total embedding checks - embeddings not created (likely missing OpenAI API key)");
-    }
+    check({ totalEmbeddings, totalMilvusVectors }, {
+      "E2E: Total embeddings across all files is positive": () => totalEmbeddings > 0,
+      "E2E: Total Milvus vectors across all files is positive": () => totalMilvusVectors > 0,
+    });
 
     // Step 12: Delete catalog and verify cleanup
     const dRes = http.request(

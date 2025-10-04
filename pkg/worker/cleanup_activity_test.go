@@ -10,50 +10,22 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/service"
 )
 
-func TestCleanupFilesActivityParam_Validation(t *testing.T) {
+func TestCleanupFileWorkflowParam_Validation(t *testing.T) {
 	fileUID := uuid.Must(uuid.NewV4())
+	userUID := uuid.Must(uuid.NewV4())
 
-	tests := []struct {
-		name  string
-		param *CleanupFilesActivityParam
-		valid bool
-	}{
-		{
-			name: "Cleanup without original file",
-			param: &CleanupFilesActivityParam{
-				FileUID:             fileUID,
-				FileIDs:             []string{},
-				IncludeOriginalFile: false,
-			},
-			valid: true,
-		},
-		{
-			name: "Cleanup with original file",
-			param: &CleanupFilesActivityParam{
-				FileUID:             fileUID,
-				FileIDs:             []string{},
-				IncludeOriginalFile: true,
-			},
-			valid: true,
-		},
-		{
-			name: "Cleanup with specific temp files",
-			param: &CleanupFilesActivityParam{
-				FileUID:             fileUID,
-				FileIDs:             []string{"temp1", "temp2"},
-				IncludeOriginalFile: false,
-			},
-			valid: true,
-		},
+	param := service.CleanupFileWorkflowParam{
+		FileUID:             fileUID,
+		IncludeOriginalFile: true,
+		UserUID:             userUID,
+		WorkflowID:          "test-workflow-id",
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			require.NotNil(t, tt.param)
-			assert.NotEqual(t, uuid.Nil, tt.param.FileUID)
-			assert.NotNil(t, tt.param.FileIDs)
-		})
-	}
+	require.NotNil(t, param)
+	assert.NotEqual(t, uuid.Nil, param.FileUID)
+	assert.NotEqual(t, uuid.Nil, param.UserUID)
+	assert.NotEmpty(t, param.WorkflowID)
+	assert.True(t, param.IncludeOriginalFile)
 }
 
 func TestCleanupKnowledgeBaseWorkflowParam_Validation(t *testing.T) {
@@ -68,15 +40,4 @@ func TestCleanupKnowledgeBaseWorkflowParam_Validation(t *testing.T) {
 
 	// Validate UUID
 	assert.Equal(t, kbUID, param.KnowledgeBaseUID)
-}
-
-func TestCleanupFilesActivity_EmptyFiles(t *testing.T) {
-	param := &CleanupFilesActivityParam{
-		FileUID:             uuid.Must(uuid.NewV4()),
-		FileIDs:             []string{},
-		IncludeOriginalFile: false,
-	}
-
-	assert.Len(t, param.FileIDs, 0)
-	assert.False(t, param.IncludeOriginalFile)
 }

@@ -1,14 +1,60 @@
 package worker
 
 import (
+	"context"
 	"fmt"
 	"time"
 
+	"go.temporal.io/api/enums/v1"
+	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
+	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/service"
 )
+
+type cleanupFileWorkflow struct {
+	temporalClient client.Client
+}
+
+// NewCleanupFileWorkflow creates a new CleanupFileWorkflow instance
+func NewCleanupFileWorkflow(temporalClient client.Client) service.CleanupFileWorkflow {
+	return &cleanupFileWorkflow{temporalClient: temporalClient}
+}
+
+func (w *cleanupFileWorkflow) Execute(ctx context.Context, param service.CleanupFileWorkflowParam) error {
+	workflowID := fmt.Sprintf("cleanup-file-%s", param.FileUID.String())
+	workflowOptions := client.StartWorkflowOptions{
+		ID:                    workflowID,
+		TaskQueue:             TaskQueue,
+		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+	}
+
+	_, err := w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, new(Worker).CleanupFileWorkflow, param)
+	return err
+}
+
+type cleanupKnowledgeBaseWorkflow struct {
+	temporalClient client.Client
+}
+
+// NewCleanupKnowledgeBaseWorkflow creates a new CleanupKnowledgeBaseWorkflow instance
+func NewCleanupKnowledgeBaseWorkflow(temporalClient client.Client) service.CleanupKnowledgeBaseWorkflow {
+	return &cleanupKnowledgeBaseWorkflow{temporalClient: temporalClient}
+}
+
+func (w *cleanupKnowledgeBaseWorkflow) Execute(ctx context.Context, param service.CleanupKnowledgeBaseWorkflowParam) error {
+	workflowID := fmt.Sprintf("cleanup-kb-%s", param.KnowledgeBaseUID.String())
+	workflowOptions := client.StartWorkflowOptions{
+		ID:                    workflowID,
+		TaskQueue:             TaskQueue,
+		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+	}
+
+	_, err := w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, new(Worker).CleanupKnowledgeBaseWorkflow, param)
+	return err
+}
 
 // CleanupFileWorkflow handles cleanup operations for a specific file.
 // This workflow cleans up resources for a single file, including:
@@ -38,16 +84,49 @@ func (w *Worker) CleanupFileWorkflow(ctx workflow.Context, param service.Cleanup
 	}
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
 
-	cleanupParam := &CleanupFilesActivityParam{
-		FileUID:             fileUID,
-		FileIDs:             []string{},
-		IncludeOriginalFile: param.IncludeOriginalFile,
+	// Step 1: Delete original file if requested
+	// The activity will fetch file metadata to get destination and bucket
+	if param.IncludeOriginalFile {
+		err := workflow.ExecuteActivity(ctx, w.DeleteOriginalFileActivity, &DeleteOriginalFileActivityParam{
+			FileUID: fileUID,
+			Bucket:  config.Config.Minio.BucketName,
+		}).Get(ctx, nil)
+		if err != nil {
+			logger.Warn("Failed to delete original file, continuing",
+				"fileUID", fileUID.String(),
+				"error", err.Error())
+		}
 	}
 
-	err := workflow.ExecuteActivity(ctx, w.CleanupFilesActivity, cleanupParam).Get(ctx, nil)
+	// Step 2: Delete converted file
+	err := workflow.ExecuteActivity(ctx, w.DeleteConvertedFileActivity, &DeleteConvertedFileActivityParam{
+		FileUID: fileUID,
+	}).Get(ctx, nil)
 	if err != nil {
-		logger.Error("Failed to cleanup files", "error", err)
-		return fmt.Errorf("failed to cleanup files: %w", err)
+		logger.Warn("Failed to delete converted file, continuing",
+			"fileUID", fileUID.String(),
+			"error", err.Error())
+	}
+
+	// Step 3: Delete chunks
+	err = workflow.ExecuteActivity(ctx, w.DeleteChunksFromMinIOActivity, &DeleteChunksFromMinIOActivityParam{
+		FileUID: fileUID,
+	}).Get(ctx, nil)
+	if err != nil {
+		logger.Warn("Failed to delete chunks, continuing",
+			"fileUID", fileUID.String(),
+			"error", err.Error())
+	}
+
+	// Step 4: Delete embeddings
+	// The activity will get KB UID from the embedding records
+	err = workflow.ExecuteActivity(ctx, w.DeleteEmbeddingsFromVectorDBActivity, &DeleteEmbeddingsFromVectorDBActivityParam{
+		FileUID: fileUID,
+	}).Get(ctx, nil)
+	if err != nil {
+		logger.Warn("Failed to delete embeddings, continuing",
+			"fileUID", fileUID.String(),
+			"error", err.Error())
 	}
 
 	logger.Info("CleanupFileWorkflow completed successfully",
@@ -70,6 +149,8 @@ func (w *Worker) CleanupKnowledgeBaseWorkflow(ctx workflow.Context, param servic
 	logger := workflow.GetLogger(ctx)
 	logger.Info("Starting CleanupKnowledgeBaseWorkflow", "kbUID", param.KnowledgeBaseUID.String())
 
+	kbUID := param.KnowledgeBaseUID
+
 	activityOptions := workflow.ActivityOptions{
 		StartToCloseTimeout: 10 * time.Minute,
 		RetryPolicy: &temporal.RetryPolicy{
@@ -81,10 +162,74 @@ func (w *Worker) CleanupKnowledgeBaseWorkflow(ctx workflow.Context, param servic
 	}
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
 
-	err := workflow.ExecuteActivity(ctx, w.CleanupKnowledgeBaseActivity, param).Get(ctx, nil)
+	// Step 1: Delete all files from MinIO
+	err := workflow.ExecuteActivity(ctx, w.DeleteKBFilesFromMinIOActivity, &DeleteKBFilesFromMinIOActivityParam{
+		KnowledgeBaseUID: kbUID,
+	}).Get(ctx, nil)
 	if err != nil {
-		logger.Error("CleanupKnowledgeBaseWorkflow failed", "error", err)
-		return err
+		logger.Warn("Failed to delete files from MinIO, continuing",
+			"kbUID", kbUID.String(),
+			"error", err.Error())
+	}
+
+	// Step 2: Drop Milvus collection
+	err = workflow.ExecuteActivity(ctx, w.DropVectorDBCollectionActivity, &DropVectorDBCollectionActivityParam{
+		KnowledgeBaseUID: kbUID,
+	}).Get(ctx, nil)
+	if err != nil {
+		logger.Warn("Failed to drop Milvus collection, continuing",
+			"kbUID", kbUID.String(),
+			"error", err.Error())
+	}
+
+	// Step 3: Delete file records
+	err = workflow.ExecuteActivity(ctx, w.DeleteKBFileRecordsActivity, &DeleteKBFileRecordsActivityParam{
+		KnowledgeBaseUID: kbUID,
+	}).Get(ctx, nil)
+	if err != nil {
+		logger.Warn("Failed to delete file records, continuing",
+			"kbUID", kbUID.String(),
+			"error", err.Error())
+	}
+
+	// Step 4: Delete converted file records
+	err = workflow.ExecuteActivity(ctx, w.DeleteKBConvertedFileRecordsActivity, &DeleteKBConvertedFileRecordsActivityParam{
+		KnowledgeBaseUID: kbUID,
+	}).Get(ctx, nil)
+	if err != nil {
+		logger.Warn("Failed to delete converted file records, continuing",
+			"kbUID", kbUID.String(),
+			"error", err.Error())
+	}
+
+	// Step 5: Delete chunk records
+	err = workflow.ExecuteActivity(ctx, w.DeleteKBChunkRecordsActivity, &DeleteKBChunkRecordsActivityParam{
+		KnowledgeBaseUID: kbUID,
+	}).Get(ctx, nil)
+	if err != nil {
+		logger.Warn("Failed to delete chunk records, continuing",
+			"kbUID", kbUID.String(),
+			"error", err.Error())
+	}
+
+	// Step 6: Delete embedding records
+	err = workflow.ExecuteActivity(ctx, w.DeleteKBEmbeddingRecordsActivity, &DeleteKBEmbeddingRecordsActivityParam{
+		KnowledgeBaseUID: kbUID,
+	}).Get(ctx, nil)
+	if err != nil {
+		logger.Warn("Failed to delete embedding records, continuing",
+			"kbUID", kbUID.String(),
+			"error", err.Error())
+	}
+
+	// Step 7: Purge ACL (must be done last)
+	err = workflow.ExecuteActivity(ctx, w.PurgeKBACLActivity, &PurgeKBACLActivityParam{
+		KnowledgeBaseUID: kbUID,
+	}).Get(ctx, nil)
+	if err != nil {
+		logger.Warn("Failed to purge ACL, continuing",
+			"kbUID", kbUID.String(),
+			"error", err.Error())
 	}
 
 	logger.Info("CleanupKnowledgeBaseWorkflow completed successfully", "kbUID", param.KnowledgeBaseUID.String())

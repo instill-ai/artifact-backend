@@ -6,10 +6,50 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/gofrs/uuid"
 	"go.uber.org/zap"
 
 	"github.com/instill-ai/artifact-backend/config"
 )
+
+// SaveChunkActivityParam defines parameters for saving a single chunk
+type SaveChunkActivityParam struct {
+	KnowledgeBaseUID uuid.UUID
+	FileUID          uuid.UUID
+	ChunkUID         string
+	ChunkContent     []byte
+}
+
+// SaveChunkActivityResult contains the result of saving a chunk
+type SaveChunkActivityResult struct {
+	ChunkUID    string
+	Destination string
+}
+
+// UpdateChunkDestinationsActivityParam defines parameters for updating chunk destinations
+type UpdateChunkDestinationsActivityParam struct {
+	Destinations map[string]string // chunkUID -> destination
+}
+
+// DeleteFileActivityParam defines parameters for deleting a single file
+type DeleteFileActivityParam struct {
+	Bucket string
+	Path   string
+}
+
+// GetFileActivityParam defines parameters for getting a single file
+type GetFileActivityParam struct {
+	Bucket string
+	Path   string
+	Index  int // For maintaining order
+}
+
+// GetFileActivityResult contains the file content
+type GetFileActivityResult struct {
+	Index   int
+	Name    string
+	Content []byte
+}
 
 // SaveChunkActivity saves a single text chunk to MinIO
 func (w *Worker) SaveChunkActivity(ctx context.Context, param *SaveChunkActivityParam) (*SaveChunkActivityResult, error) {

@@ -156,32 +156,26 @@ export function CheckFileReprocessing(data) {
     // Poll Milvus vectors (handles indexing delays - can take 5-10 seconds)
     const milvusVectorsAfterFirst = helper.pollMilvusVectors(catalogUid, fileUid, 10);
 
+    // Verify all resources exist after first processing
+    // If file processing completed successfully, ALL resources must exist including embeddings
     check(minioBlobsAfterFirst, {
       "Reprocess: MinIO has converted file blob after first processing": (r) => r.converted > 0,
       "Reprocess: MinIO has chunk blobs after first processing": (r) => r.chunks > 0,
     });
 
+    check({ embeddings: embeddingsAfterFirst }, {
+      "Reprocess: Database has embeddings after first processing": (r) => r.embeddings > 0,
+    });
+
+    check({ vectors: milvusVectorsAfterFirst }, {
+      "Reprocess: Milvus has vectors after first processing": (r) => r.vectors > 0,
+    });
+
     // Early exit if baseline verification fails (resources weren't created)
-    if (minioBlobsAfterFirst.converted === 0 || minioBlobsAfterFirst.chunks === 0) {
+    if (minioBlobsAfterFirst.converted === 0 || minioBlobsAfterFirst.chunks === 0 ||
+      embeddingsAfterFirst === 0 || milvusVectorsAfterFirst === 0) {
       http.request("DELETE", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
       return;
-    }
-
-    // Note: Embedding checks are conditional - they verify consistency whether embeddings
-    // are created or not. This allows tests to pass in environments without OpenAI API keys.
-    const hasEmbeddings = embeddingsAfterFirst > 0 || milvusVectorsAfterFirst > 0;
-
-    if (hasEmbeddings) {
-      check({ embeddings: embeddingsAfterFirst }, {
-        "Reprocess: Database has embeddings after first processing": (r) => r.embeddings > 0,
-      });
-
-      check({ vectors: milvusVectorsAfterFirst }, {
-        "Reprocess: Milvus has vectors after first processing": (r) => r.vectors > 0,
-      });
-    } else {
-      // If no embeddings were created (e.g., missing API key), log but don't fail
-      console.log("Reprocess: Skipping embedding checks - embeddings not created (likely missing OpenAI API key)");
     }
 
     // Step 5: Trigger reprocessing (second processing of the same file)
@@ -255,20 +249,20 @@ export function CheckFileReprocessing(data) {
       "Reprocess: MinIO still has chunk blobs after reprocessing": (r) => r.chunks > 0,
     });
 
+    // Verify all resources exist after reprocessing
+    check({ embeddings: embeddingsAfterSecond }, {
+      "Reprocess: Database still has embeddings after reprocessing": (r) => r.embeddings > 0,
+    });
+
+    check({ vectors: milvusVectorsAfterSecond }, {
+      "Reprocess: Milvus still has vectors after reprocessing": (r) => r.vectors > 0,
+    });
+
     // Early exit if reprocessing didn't create resources (indicates failure)
-    if (minioBlobsAfterSecond.converted === 0 || minioBlobsAfterSecond.chunks === 0) {
+    if (minioBlobsAfterSecond.converted === 0 || minioBlobsAfterSecond.chunks === 0 ||
+      embeddingsAfterSecond === 0 || milvusVectorsAfterSecond === 0) {
       http.request("DELETE", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
       return;
-    }
-
-    if (hasEmbeddings) {
-      check({ embeddings: embeddingsAfterSecond }, {
-        "Reprocess: Database still has embeddings after reprocessing": (r) => r.embeddings > 0,
-      });
-
-      check({ vectors: milvusVectorsAfterSecond }, {
-        "Reprocess: Milvus still has vectors after reprocessing": (r) => r.vectors > 0,
-      });
     }
 
     // THE CRITICAL VERIFICATION: All resource counts should be UNCHANGED

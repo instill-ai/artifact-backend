@@ -1,14 +1,76 @@
 package worker
 
 import (
+	"context"
 	"fmt"
 	"time"
 
+	"go.temporal.io/api/enums/v1"
+	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
 	"github.com/instill-ai/artifact-backend/pkg/service"
 )
+
+type deleteFilesWorkflow struct {
+	temporalClient client.Client
+}
+
+// NewDeleteFilesWorkflow creates a new DeleteFilesWorkflow instance
+func NewDeleteFilesWorkflow(temporalClient client.Client) service.DeleteFilesWorkflow {
+	return &deleteFilesWorkflow{temporalClient: temporalClient}
+}
+
+func (w *deleteFilesWorkflow) Execute(ctx context.Context, param service.DeleteFilesWorkflowParam) error {
+	workflowID := fmt.Sprintf("delete-files-%d-%d", time.Now().UnixNano(), len(param.FilePaths))
+	workflowOptions := client.StartWorkflowOptions{
+		ID:                    workflowID,
+		TaskQueue:             TaskQueue,
+		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+	}
+
+	workflowRun, err := w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, new(Worker).DeleteFilesWorkflow, param)
+	if err != nil {
+		return fmt.Errorf("failed to start delete files workflow: %w", err)
+	}
+
+	if err = workflowRun.Get(ctx, nil); err != nil {
+		return fmt.Errorf("delete files workflow failed: %w", err)
+	}
+
+	return nil
+}
+
+type getFilesWorkflow struct {
+	temporalClient client.Client
+}
+
+// NewGetFilesWorkflow creates a new GetFilesWorkflow instance
+func NewGetFilesWorkflow(temporalClient client.Client) service.GetFilesWorkflow {
+	return &getFilesWorkflow{temporalClient: temporalClient}
+}
+
+func (w *getFilesWorkflow) Execute(ctx context.Context, param service.GetFilesWorkflowParam) ([]service.FileContent, error) {
+	workflowID := fmt.Sprintf("get-files-%d-%d", time.Now().UnixNano(), len(param.FilePaths))
+	workflowOptions := client.StartWorkflowOptions{
+		ID:                    workflowID,
+		TaskQueue:             TaskQueue,
+		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+	}
+
+	workflowRun, err := w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, new(Worker).GetFilesWorkflow, param)
+	if err != nil {
+		return nil, fmt.Errorf("failed to start get files workflow: %w", err)
+	}
+
+	var results []service.FileContent
+	if err = workflowRun.Get(ctx, &results); err != nil {
+		return nil, fmt.Errorf("get files workflow failed: %w", err)
+	}
+
+	return results, nil
+}
 
 // SaveChunksWorkflow orchestrates parallel saving of multiple text chunks
 func (w *Worker) SaveChunksWorkflow(ctx workflow.Context, param service.SaveChunksWorkflowParam) (map[string]string, error) {

@@ -12,6 +12,13 @@ import (
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
+// UpdateFileStatusActivityParam defines the parameters for the UpdateFileStatusActivity
+type UpdateFileStatusActivityParam struct {
+	FileUID uuid.UUID
+	Status  artifactpb.FileProcessStatus
+	Message string
+}
+
 // GetFileStatusActivity retrieves the current status of a file
 func (w *Worker) GetFileStatusActivity(ctx context.Context, fileUID uuid.UUID) (artifactpb.FileProcessStatus, error) {
 	w.log.Info("Getting file status", zap.String("fileUID", fileUID.String()))

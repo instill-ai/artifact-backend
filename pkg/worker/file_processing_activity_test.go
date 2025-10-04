@@ -3,9 +3,7 @@ package worker
 import (
 	"testing"
 
-	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestExtractPageReferences(t *testing.T) {
@@ -103,58 +101,6 @@ func TestProcessWaitingFileActivity_FileTypeConversion(t *testing.T) {
 			assert.NotEmpty(t, tt.fileType, "fileType should not be empty")
 		})
 	}
-}
-
-func TestConvertFileActivityParam_Validation(t *testing.T) {
-	fileUID := uuid.Must(uuid.NewV4())
-	kbUID := uuid.Must(uuid.NewV4())
-	userUID := uuid.Must(uuid.NewV4())
-
-	param := &ConvertFileActivityParam{
-		FileUID:          fileUID,
-		KnowledgeBaseUID: kbUID,
-		UserUID:          userUID,
-	}
-
-	require.NotNil(t, param)
-	assert.NotEqual(t, uuid.Nil, param.FileUID)
-	assert.NotEqual(t, uuid.Nil, param.KnowledgeBaseUID)
-}
-
-func TestChunkFileActivityParam_Validation(t *testing.T) {
-	fileUID := uuid.Must(uuid.NewV4())
-	kbUID := uuid.Must(uuid.NewV4())
-	userUID := uuid.Must(uuid.NewV4())
-
-	param := &ChunkFileActivityParam{
-		FileUID:          fileUID,
-		KnowledgeBaseUID: kbUID,
-		UserUID:          userUID,
-		ChunkSize:        1000,
-		ChunkOverlap:     200,
-	}
-
-	require.NotNil(t, param)
-	assert.NotEqual(t, uuid.Nil, param.FileUID)
-	assert.Greater(t, param.ChunkSize, 0)
-	assert.GreaterOrEqual(t, param.ChunkSize, param.ChunkOverlap)
-}
-
-func TestEmbedFileActivityParam_Validation(t *testing.T) {
-	fileUID := uuid.Must(uuid.NewV4())
-	kbUID := uuid.Must(uuid.NewV4())
-	userUID := uuid.Must(uuid.NewV4())
-
-	param := &EmbedFileActivityParam{
-		FileUID:          fileUID,
-		KnowledgeBaseUID: kbUID,
-		UserUID:          userUID,
-		EmbeddingModel:   "text-embedding-ada-002",
-	}
-
-	require.NotNil(t, param)
-	assert.NotEqual(t, uuid.Nil, param.FileUID)
-	assert.NotEmpty(t, param.EmbeddingModel)
 }
 
 // Mock-based tests would go here with minimock
