@@ -147,7 +147,6 @@ func main() {
 	cleanupFileWorkflow := worker.NewCleanupFileWorkflow(temporalClient)
 	cleanupKBWorkflow := worker.NewCleanupKnowledgeBaseWorkflow(temporalClient)
 	embedTextsWorkflow := worker.NewEmbedTextsWorkflow(temporalClient)
-	saveChunksWorkflow := worker.NewSaveChunksWorkflow(temporalClient)
 	deleteFilesWorkflow := worker.NewDeleteFilesWorkflow(temporalClient)
 	getFilesWorkflow := worker.NewGetFilesWorkflow(temporalClient)
 
@@ -164,7 +163,6 @@ func main() {
 		cleanupFileWorkflow,
 		cleanupKBWorkflow,
 		embedTextsWorkflow,
-		saveChunksWorkflow,
 		deleteFilesWorkflow,
 		getFilesWorkflow,
 	)

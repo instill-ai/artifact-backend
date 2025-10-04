@@ -95,7 +95,6 @@ func main() {
 	cleanupFileWf := artifactworker.NewCleanupFileWorkflow(temporalClient)
 	cleanupKBWf := artifactworker.NewCleanupKnowledgeBaseWorkflow(temporalClient)
 	embedTextsWf := artifactworker.NewEmbedTextsWorkflow(temporalClient)
-	saveChunksWf := artifactworker.NewSaveChunksWorkflow(temporalClient)
 	deleteFilesWf := artifactworker.NewDeleteFilesWorkflow(temporalClient)
 	getFilesWf := artifactworker.NewGetFilesWorkflow(temporalClient)
 
@@ -112,7 +111,6 @@ func main() {
 		cleanupFileWf,
 		cleanupKBWf,
 		embedTextsWf,
-		saveChunksWf,
 		deleteFilesWf,
 		getFilesWf,
 	)
@@ -169,6 +167,7 @@ func main() {
 	w.RegisterActivity(cw.SaveChunkActivity)
 	w.RegisterActivity(cw.DeleteFileActivity)
 	w.RegisterActivity(cw.GetFileActivity)
+	w.RegisterActivity(cw.UpdateChunkDestinationsActivity)
 
 	// Register utility activities
 	w.RegisterActivity(cw.GetFileStatusActivity)

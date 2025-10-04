@@ -94,11 +94,6 @@ type EmbedTextsWorkflow interface {
 	Execute(ctx context.Context, param EmbedTextsWorkflowParam) ([][]float32, error)
 }
 
-// SaveChunksWorkflow interface
-type SaveChunksWorkflow interface {
-	Execute(ctx context.Context, param SaveChunksWorkflowParam) (map[string]string, error)
-}
-
 // DeleteFilesWorkflow interface
 type DeleteFilesWorkflow interface {
 	Execute(ctx context.Context, param DeleteFilesWorkflowParam) error
@@ -129,7 +124,6 @@ type Service interface {
 	DeleteKnowledgeBase(context.Context, string) error
 	DeleteConvertedFileByFileUID(context.Context, uuid.UUID, uuid.UUID) error
 	DeleteTextChunksByFileUID(context.Context, uuid.UUID, uuid.UUID) error
-	SaveTextChunks(context.Context, uuid.UUID, uuid.UUID, map[string][]byte) (map[string]string, error)
 	TriggerCleanupKnowledgeBaseWorkflow(context.Context, string) error
 	ListRepositoryTags(context.Context, *artifactpb.ListRepositoryTagsRequest) (*artifactpb.ListRepositoryTagsResponse, error)
 	CreateRepositoryTag(context.Context, *artifactpb.CreateRepositoryTagRequest) (*artifactpb.CreateRepositoryTagResponse, error)
@@ -155,7 +149,6 @@ type Service interface {
 	CleanupFileWorkflow() CleanupFileWorkflow
 	CleanupKnowledgeBaseWorkflow() CleanupKnowledgeBaseWorkflow
 	EmbedTextsWorkflow() EmbedTextsWorkflow
-	SaveChunksWorkflow() SaveChunksWorkflow
 	DeleteFilesWorkflow() DeleteFilesWorkflow
 	GetFilesWorkflow() GetFilesWorkflow
 }
@@ -175,7 +168,6 @@ type service struct {
 	cleanupFileWorkflow          CleanupFileWorkflow
 	cleanupKnowledgeBaseWorkflow CleanupKnowledgeBaseWorkflow
 	embedTextsWorkflow           EmbedTextsWorkflow
-	saveChunksWorkflow           SaveChunksWorkflow
 	deleteFilesWorkflow          DeleteFilesWorkflow
 	getFilesWorkflow             GetFilesWorkflow
 }
@@ -194,7 +186,6 @@ func NewService(
 	cleanupFileWorkflow CleanupFileWorkflow,
 	cleanupKnowledgeBaseWorkflow CleanupKnowledgeBaseWorkflow,
 	embedTextsWorkflow EmbedTextsWorkflow,
-	saveChunksWorkflow SaveChunksWorkflow,
 	deleteFilesWorkflow DeleteFilesWorkflow,
 	getFilesWorkflow GetFilesWorkflow,
 ) Service {
@@ -211,7 +202,6 @@ func NewService(
 		cleanupFileWorkflow:          cleanupFileWorkflow,
 		cleanupKnowledgeBaseWorkflow: cleanupKnowledgeBaseWorkflow,
 		embedTextsWorkflow:           embedTextsWorkflow,
-		saveChunksWorkflow:           saveChunksWorkflow,
 		deleteFilesWorkflow:          deleteFilesWorkflow,
 		getFilesWorkflow:             getFilesWorkflow,
 	}
@@ -238,10 +228,6 @@ func (s *service) CleanupKnowledgeBaseWorkflow() CleanupKnowledgeBaseWorkflow {
 
 func (s *service) EmbedTextsWorkflow() EmbedTextsWorkflow {
 	return s.embedTextsWorkflow
-}
-
-func (s *service) SaveChunksWorkflow() SaveChunksWorkflow {
-	return s.saveChunksWorkflow
 }
 
 func (s *service) DeleteFilesWorkflow() DeleteFilesWorkflow {

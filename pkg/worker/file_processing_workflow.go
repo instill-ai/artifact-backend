@@ -119,7 +119,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 		fallthrough
 
 	case artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CHUNKING:
-		// Step 4: Chunk file
+		// Step 4: Chunk file (prepares chunks and saves to DB)
 		chunkParam := &ChunkFileActivityParam{
 			FileUID:          fileUID,
 			KnowledgeBaseUID: knowledgeBaseUID,
@@ -127,8 +127,34 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 			ChunkSize:        1000,
 			ChunkOverlap:     200,
 		}
-		if err := workflow.ExecuteActivity(ctx, w.ChunkFileActivity, chunkParam).Get(ctx, nil); err != nil {
+		var chunkResult ChunkFileActivityResult
+		if err := workflow.ExecuteActivity(ctx, w.ChunkFileActivity, chunkParam).Get(ctx, &chunkResult); err != nil {
 			return handleError("file chunking", err)
+		}
+
+		// Step 4b: Save chunks to MinIO using child workflow (parallel I/O)
+		if len(chunkResult.ChunksToSave) > 0 {
+			childWorkflowOptions := workflow.ChildWorkflowOptions{
+				WorkflowID: fmt.Sprintf("save-chunks-%s", fileUID.String()),
+			}
+			childCtx := workflow.WithChildOptions(ctx, childWorkflowOptions)
+
+			saveChunksParam := service.SaveChunksWorkflowParam{
+				KnowledgeBaseUID: knowledgeBaseUID,
+				FileUID:          fileUID,
+				Chunks:           chunkResult.ChunksToSave,
+			}
+			var destinations map[string]string
+			if err := workflow.ExecuteChildWorkflow(childCtx, w.SaveChunksWorkflow, saveChunksParam).Get(ctx, &destinations); err != nil {
+				return handleError("saving chunks to MinIO", err)
+			}
+
+			// Step 4c: Update chunk destinations in database
+			if err := workflow.ExecuteActivity(ctx, w.UpdateChunkDestinationsActivity, &UpdateChunkDestinationsActivityParam{
+				Destinations: destinations,
+			}).Get(ctx, nil); err != nil {
+				return handleError("updating chunk destinations", err)
+			}
 		}
 		fallthrough
 

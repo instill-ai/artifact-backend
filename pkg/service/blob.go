@@ -68,18 +68,6 @@ func (s *service) DeleteTextChunksByFileUID(ctx context.Context, kbUID, fileUID 
 	return s.DeleteFiles(ctx, config.Config.Minio.BucketName, filePaths)
 }
 
-func (s *service) SaveTextChunks(ctx context.Context, kbUID, fileUID uuid.UUID, chunks map[string][]byte) (map[string]string, error) {
-	if len(chunks) == 0 {
-		return map[string]string{}, nil
-	}
-
-	return s.saveChunksWorkflow.Execute(ctx, SaveChunksWorkflowParam{
-		KnowledgeBaseUID: kbUID,
-		FileUID:          fileUID,
-		Chunks:           chunks,
-	})
-}
-
 func (s *service) TriggerCleanupKnowledgeBaseWorkflow(ctx context.Context, kbUID string) error {
 	if s.cleanupKnowledgeBaseWorkflow == nil {
 		return fmt.Errorf("cleanup knowledge base workflow not available")

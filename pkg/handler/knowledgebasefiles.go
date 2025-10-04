@@ -568,6 +568,11 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 			Tags:               kbFile.Tags,
 		}
 
+		// Include error message if processing failed
+		if kbFile.ExtraMetaDataUnmarshal != nil && kbFile.ExtraMetaDataUnmarshal.FailReason != "" {
+			file.ProcessOutcome = kbFile.ExtraMetaDataUnmarshal.FailReason
+		}
+
 		if kbFile.ExtraMetaDataUnmarshal != nil && kbFile.ExtraMetaDataUnmarshal.Length != nil {
 			fileType := artifactpb.FileType(artifactpb.FileType_value[kbFile.Type])
 			file.Length = &artifactpb.File_Position{
@@ -780,7 +785,7 @@ func (ph *PublicHandler) ProcessCatalogFiles(ctx context.Context, req *artifactp
 
 		objectUID := uuid.FromStringOrNil(strings.TrimPrefix(strings.Split(file.Destination, "/")[1], "obj-"))
 
-		resFiles = append(resFiles, &artifactpb.File{
+		resFile := &artifactpb.File{
 			FileUid:            file.UID.String(),
 			OwnerUid:           file.Owner.String(),
 			CreatorUid:         file.CreatorUID.String(),
@@ -793,7 +798,14 @@ func (ph *PublicHandler) ProcessCatalogFiles(ctx context.Context, req *artifactp
 			ObjectUid:          objectUID.String(),
 			ConvertingPipeline: file.ConvertingPipeline(),
 			Tags:               file.Tags,
-		})
+		}
+
+		// Include error message if processing failed
+		if file.ExtraMetaDataUnmarshal != nil && file.ExtraMetaDataUnmarshal.FailReason != "" {
+			resFile.ProcessOutcome = file.ExtraMetaDataUnmarshal.FailReason
+		}
+
+		resFiles = append(resFiles, resFile)
 	}
 	return &artifactpb.ProcessCatalogFilesResponse{
 		Files: resFiles,

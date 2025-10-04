@@ -87,3 +87,21 @@ func (w *Worker) GetFileActivity(ctx context.Context, param *GetFileActivityPara
 		Content: content,
 	}, nil
 }
+
+// UpdateChunkDestinationsActivity updates the destinations of chunks in the database
+func (w *Worker) UpdateChunkDestinationsActivity(ctx context.Context, param *UpdateChunkDestinationsActivityParam) error {
+	w.log.Info("Starting UpdateChunkDestinationsActivity",
+		zap.Int("chunkCount", len(param.Destinations)))
+
+	err := w.repository.UpdateChunkDestinations(ctx, param.Destinations)
+	if err != nil {
+		w.log.Error("Failed to update chunk destinations",
+			zap.Int("chunkCount", len(param.Destinations)),
+			zap.Error(err))
+		return fmt.Errorf("failed to update chunk destinations: %w", err)
+	}
+
+	w.log.Info("Chunk destinations updated successfully",
+		zap.Int("chunkCount", len(param.Destinations)))
+	return nil
+}

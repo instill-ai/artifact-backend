@@ -115,36 +115,6 @@ func (w *embedTextsWorkflow) Execute(ctx context.Context, param service.EmbedTex
 	return vectors, nil
 }
 
-type saveChunksWorkflow struct {
-	temporalClient client.Client
-}
-
-// NewSaveChunksWorkflow creates a new SaveChunksWorkflow instance
-func NewSaveChunksWorkflow(temporalClient client.Client) service.SaveChunksWorkflow {
-	return &saveChunksWorkflow{temporalClient: temporalClient}
-}
-
-func (w *saveChunksWorkflow) Execute(ctx context.Context, param service.SaveChunksWorkflowParam) (map[string]string, error) {
-	workflowID := fmt.Sprintf("save-chunks-%s", param.FileUID.String())
-	workflowOptions := client.StartWorkflowOptions{
-		ID:                    workflowID,
-		TaskQueue:             TaskQueue,
-		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-	}
-
-	workflowRun, err := w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, new(Worker).SaveChunksWorkflow, param)
-	if err != nil {
-		return nil, fmt.Errorf("failed to start save chunks workflow: %w", err)
-	}
-
-	var destinations map[string]string
-	if err = workflowRun.Get(ctx, &destinations); err != nil {
-		return nil, fmt.Errorf("save chunks workflow failed: %w", err)
-	}
-
-	return destinations, nil
-}
-
 type deleteFilesWorkflow struct {
 	temporalClient client.Client
 }
@@ -245,6 +215,12 @@ type ChunkFileActivityParam struct {
 	ChunkOverlap     int
 }
 
+// ChunkFileActivityResult contains the chunks that need to be saved to MinIO
+type ChunkFileActivityResult struct {
+	// Map of chunkUID -> chunk text content
+	ChunksToSave map[string][]byte
+}
+
 // EmbedFileActivityParam defines the parameters for the EmbedFileActivity
 type EmbedFileActivityParam struct {
 	FileUID          uuid.UUID
@@ -302,6 +278,11 @@ type SaveChunkActivityParam struct {
 type SaveChunkActivityResult struct {
 	ChunkUID    string
 	Destination string
+}
+
+// UpdateChunkDestinationsActivityParam defines parameters for updating chunk destinations
+type UpdateChunkDestinationsActivityParam struct {
+	Destinations map[string]string // chunkUID -> destination
 }
 
 // DeleteFileActivityParam defines parameters for deleting a single file

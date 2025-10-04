@@ -56,15 +56,17 @@ func saveConvertedFile(ctx context.Context, svc service.Service, kbUID, fileUID 
 	return nil
 }
 
-// saveChunks saves chunks into object storage and updates the metadata in the database.
-func saveChunks(
+// saveChunksToDBOnly saves chunks to database with placeholder destinations.
+// Returns a map of chunkUID -> chunk content that needs to be saved to MinIO.
+func saveChunksToDBOnly(
 	ctx context.Context,
 	svc service.Service,
+	repo repository.RepositoryI,
 	kbUID, kbFileUID, sourceUID uuid.UUID,
 	sourceTable string,
 	summaryChunks, contentChunks []service.Chunk,
 	fileType string,
-) error {
+) (map[string][]byte, error) {
 	textChunks := make([]*repository.TextChunk, len(summaryChunks)+len(contentChunks))
 	texts := make([]string, len(summaryChunks)+len(contentChunks))
 
@@ -74,7 +76,7 @@ func saveChunks(
 			SourceTable: sourceTable,
 			StartPos:    0,
 			EndPos:      0,
-			ContentDest: "not set yet because we need to save the chunks in db to get the uid",
+			ContentDest: "pending", // Placeholder, will be updated after MinIO save
 			Tokens:      c.Tokens,
 			Retrievable: true,
 			InOrder:     i,
@@ -93,7 +95,7 @@ func saveChunks(
 			StartPos:    c.Start,
 			EndPos:      c.End,
 			Reference:   c.Reference,
-			ContentDest: "not set yet because we need to save the chunks in db to get the uid",
+			ContentDest: "pending", // Placeholder, will be updated after MinIO save
 			Tokens:      c.Tokens,
 			Retrievable: true,
 			InOrder:     ii,
@@ -106,26 +108,27 @@ func saveChunks(
 		texts[ii] = c.Text
 	}
 
-	saveToMinIO := func(chunkUIDs []string) (map[string]string, error) {
-		chunksForMinIO := make(map[string][]byte, len(textChunks))
-		for i, uid := range chunkUIDs {
-			chunksForMinIO[uid] = []byte(texts[i])
-		}
-
-		destinations, err := svc.SaveTextChunks(ctx, kbUID, kbFileUID, chunksForMinIO)
-		if err != nil {
-			return nil, fmt.Errorf("storing chunk blobs: %w", err)
+	// Save chunks to database with placeholder destinations
+	// Delete old chunks and create new ones
+	createdChunks, err := repo.DeleteAndCreateChunks(ctx, kbFileUID, textChunks, func(uids []string) (map[string]string, error) {
+		// Return placeholder destinations for now
+		destinations := make(map[string]string, len(uids))
+		for _, uid := range uids {
+			destinations[uid] = "pending"
 		}
 		return destinations, nil
-	}
-
-	// Save new chunks to MinIO and database atomically (database handles transaction)
-	_, err := svc.Repository().DeleteAndCreateChunks(ctx, kbFileUID, textChunks, saveToMinIO)
+	})
 	if err != nil {
-		return fmt.Errorf("storing chunk records in repository: %w", err)
+		return nil, fmt.Errorf("storing chunk records in repository: %w", err)
 	}
 
-	return nil
+	// Build map of chunkUID -> content for MinIO save
+	chunksToSave := make(map[string][]byte, len(createdChunks))
+	for i, chunk := range createdChunks {
+		chunksToSave[chunk.UID.String()] = []byte(texts[i])
+	}
+
+	return chunksToSave, nil
 }
 
 const batchSize = 50

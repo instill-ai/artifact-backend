@@ -44,6 +44,7 @@ type TextChunkI interface {
 		SourceUID   SourceUID
 	}) (map[FileUID]int, error)
 	UpdateChunk(_ context.Context, chunkUID string, updates map[string]any) (*TextChunk, error)
+	UpdateChunkDestinations(_ context.Context, destinations map[string]string) error
 }
 
 // ChunkReference contains the position information of the chunk within the
@@ -402,6 +403,25 @@ func (r *Repository) ListChunksByKbFileUID(ctx context.Context, kbFileUID uuid.U
 func (r *Repository) HardDeleteChunksByKbFileUID(ctx context.Context, kbFileUID uuid.UUID) error {
 	where := fmt.Sprintf("%s = ?", TextChunkColumn.KbFileUID)
 	return r.db.WithContext(ctx).Where(where, kbFileUID).Unscoped().Delete(&TextChunk{}).Error
+}
+
+// UpdateChunkDestinations updates the content_dest field for multiple chunks
+func (r *Repository) UpdateChunkDestinations(ctx context.Context, destinations map[string]string) error {
+	if len(destinations) == 0 {
+		return nil
+	}
+
+	// Use a transaction to update all destinations atomically
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for chunkUID, dest := range destinations {
+			if err := tx.Model(&TextChunk{}).
+				Where("uid = ?", chunkUID).
+				Update("content_dest", dest).Error; err != nil {
+				return fmt.Errorf("failed to update chunk %s: %w", chunkUID, err)
+			}
+		}
+		return nil
+	})
 }
 
 // GORM hooks

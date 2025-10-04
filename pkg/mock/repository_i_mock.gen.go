@@ -428,6 +428,13 @@ type RepositoryIMock struct {
 	beforeUpdateChunkCounter uint64
 	UpdateChunkMock          mRepositoryIMockUpdateChunk
 
+	funcUpdateChunkDestinations          func(ctx context.Context, destinations map[string]string) (err error)
+	funcUpdateChunkDestinationsOrigin    string
+	inspectFuncUpdateChunkDestinations   func(ctx context.Context, destinations map[string]string)
+	afterUpdateChunkDestinationsCounter  uint64
+	beforeUpdateChunkDestinationsCounter uint64
+	UpdateChunkDestinationsMock          mRepositoryIMockUpdateChunkDestinations
+
 	funcUpdateKBFileMetadata          func(ctx context.Context, fileUID uuid.UUID, e1 mm_repository.ExtraMetaData) (err error)
 	funcUpdateKBFileMetadataOrigin    string
 	inspectFuncUpdateKBFileMetadata   func(ctx context.Context, fileUID uuid.UUID, e1 mm_repository.ExtraMetaData)
@@ -650,6 +657,9 @@ func NewRepositoryIMock(t minimock.Tester) *RepositoryIMock {
 
 	m.UpdateChunkMock = mRepositoryIMockUpdateChunk{mock: m}
 	m.UpdateChunkMock.callArgs = []*RepositoryIMockUpdateChunkParams{}
+
+	m.UpdateChunkDestinationsMock = mRepositoryIMockUpdateChunkDestinations{mock: m}
+	m.UpdateChunkDestinationsMock.callArgs = []*RepositoryIMockUpdateChunkDestinationsParams{}
 
 	m.UpdateKBFileMetadataMock = mRepositoryIMockUpdateKBFileMetadata{mock: m}
 	m.UpdateKBFileMetadataMock.callArgs = []*RepositoryIMockUpdateKBFileMetadataParams{}
@@ -20082,6 +20092,348 @@ func (m *RepositoryIMock) MinimockUpdateChunkInspect() {
 	}
 }
 
+type mRepositoryIMockUpdateChunkDestinations struct {
+	optional           bool
+	mock               *RepositoryIMock
+	defaultExpectation *RepositoryIMockUpdateChunkDestinationsExpectation
+	expectations       []*RepositoryIMockUpdateChunkDestinationsExpectation
+
+	callArgs []*RepositoryIMockUpdateChunkDestinationsParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryIMockUpdateChunkDestinationsExpectation specifies expectation struct of the RepositoryI.UpdateChunkDestinations
+type RepositoryIMockUpdateChunkDestinationsExpectation struct {
+	mock               *RepositoryIMock
+	params             *RepositoryIMockUpdateChunkDestinationsParams
+	paramPtrs          *RepositoryIMockUpdateChunkDestinationsParamPtrs
+	expectationOrigins RepositoryIMockUpdateChunkDestinationsExpectationOrigins
+	results            *RepositoryIMockUpdateChunkDestinationsResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryIMockUpdateChunkDestinationsParams contains parameters of the RepositoryI.UpdateChunkDestinations
+type RepositoryIMockUpdateChunkDestinationsParams struct {
+	ctx          context.Context
+	destinations map[string]string
+}
+
+// RepositoryIMockUpdateChunkDestinationsParamPtrs contains pointers to parameters of the RepositoryI.UpdateChunkDestinations
+type RepositoryIMockUpdateChunkDestinationsParamPtrs struct {
+	ctx          *context.Context
+	destinations *map[string]string
+}
+
+// RepositoryIMockUpdateChunkDestinationsResults contains results of the RepositoryI.UpdateChunkDestinations
+type RepositoryIMockUpdateChunkDestinationsResults struct {
+	err error
+}
+
+// RepositoryIMockUpdateChunkDestinationsOrigins contains origins of expectations of the RepositoryI.UpdateChunkDestinations
+type RepositoryIMockUpdateChunkDestinationsExpectationOrigins struct {
+	origin             string
+	originCtx          string
+	originDestinations string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmUpdateChunkDestinations *mRepositoryIMockUpdateChunkDestinations) Optional() *mRepositoryIMockUpdateChunkDestinations {
+	mmUpdateChunkDestinations.optional = true
+	return mmUpdateChunkDestinations
+}
+
+// Expect sets up expected params for RepositoryI.UpdateChunkDestinations
+func (mmUpdateChunkDestinations *mRepositoryIMockUpdateChunkDestinations) Expect(ctx context.Context, destinations map[string]string) *mRepositoryIMockUpdateChunkDestinations {
+	if mmUpdateChunkDestinations.mock.funcUpdateChunkDestinations != nil {
+		mmUpdateChunkDestinations.mock.t.Fatalf("RepositoryIMock.UpdateChunkDestinations mock is already set by Set")
+	}
+
+	if mmUpdateChunkDestinations.defaultExpectation == nil {
+		mmUpdateChunkDestinations.defaultExpectation = &RepositoryIMockUpdateChunkDestinationsExpectation{}
+	}
+
+	if mmUpdateChunkDestinations.defaultExpectation.paramPtrs != nil {
+		mmUpdateChunkDestinations.mock.t.Fatalf("RepositoryIMock.UpdateChunkDestinations mock is already set by ExpectParams functions")
+	}
+
+	mmUpdateChunkDestinations.defaultExpectation.params = &RepositoryIMockUpdateChunkDestinationsParams{ctx, destinations}
+	mmUpdateChunkDestinations.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmUpdateChunkDestinations.expectations {
+		if minimock.Equal(e.params, mmUpdateChunkDestinations.defaultExpectation.params) {
+			mmUpdateChunkDestinations.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmUpdateChunkDestinations.defaultExpectation.params)
+		}
+	}
+
+	return mmUpdateChunkDestinations
+}
+
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.UpdateChunkDestinations
+func (mmUpdateChunkDestinations *mRepositoryIMockUpdateChunkDestinations) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockUpdateChunkDestinations {
+	if mmUpdateChunkDestinations.mock.funcUpdateChunkDestinations != nil {
+		mmUpdateChunkDestinations.mock.t.Fatalf("RepositoryIMock.UpdateChunkDestinations mock is already set by Set")
+	}
+
+	if mmUpdateChunkDestinations.defaultExpectation == nil {
+		mmUpdateChunkDestinations.defaultExpectation = &RepositoryIMockUpdateChunkDestinationsExpectation{}
+	}
+
+	if mmUpdateChunkDestinations.defaultExpectation.params != nil {
+		mmUpdateChunkDestinations.mock.t.Fatalf("RepositoryIMock.UpdateChunkDestinations mock is already set by Expect")
+	}
+
+	if mmUpdateChunkDestinations.defaultExpectation.paramPtrs == nil {
+		mmUpdateChunkDestinations.defaultExpectation.paramPtrs = &RepositoryIMockUpdateChunkDestinationsParamPtrs{}
+	}
+	mmUpdateChunkDestinations.defaultExpectation.paramPtrs.ctx = &ctx
+	mmUpdateChunkDestinations.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmUpdateChunkDestinations
+}
+
+// ExpectDestinationsParam2 sets up expected param destinations for RepositoryI.UpdateChunkDestinations
+func (mmUpdateChunkDestinations *mRepositoryIMockUpdateChunkDestinations) ExpectDestinationsParam2(destinations map[string]string) *mRepositoryIMockUpdateChunkDestinations {
+	if mmUpdateChunkDestinations.mock.funcUpdateChunkDestinations != nil {
+		mmUpdateChunkDestinations.mock.t.Fatalf("RepositoryIMock.UpdateChunkDestinations mock is already set by Set")
+	}
+
+	if mmUpdateChunkDestinations.defaultExpectation == nil {
+		mmUpdateChunkDestinations.defaultExpectation = &RepositoryIMockUpdateChunkDestinationsExpectation{}
+	}
+
+	if mmUpdateChunkDestinations.defaultExpectation.params != nil {
+		mmUpdateChunkDestinations.mock.t.Fatalf("RepositoryIMock.UpdateChunkDestinations mock is already set by Expect")
+	}
+
+	if mmUpdateChunkDestinations.defaultExpectation.paramPtrs == nil {
+		mmUpdateChunkDestinations.defaultExpectation.paramPtrs = &RepositoryIMockUpdateChunkDestinationsParamPtrs{}
+	}
+	mmUpdateChunkDestinations.defaultExpectation.paramPtrs.destinations = &destinations
+	mmUpdateChunkDestinations.defaultExpectation.expectationOrigins.originDestinations = minimock.CallerInfo(1)
+
+	return mmUpdateChunkDestinations
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.UpdateChunkDestinations
+func (mmUpdateChunkDestinations *mRepositoryIMockUpdateChunkDestinations) Inspect(f func(ctx context.Context, destinations map[string]string)) *mRepositoryIMockUpdateChunkDestinations {
+	if mmUpdateChunkDestinations.mock.inspectFuncUpdateChunkDestinations != nil {
+		mmUpdateChunkDestinations.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.UpdateChunkDestinations")
+	}
+
+	mmUpdateChunkDestinations.mock.inspectFuncUpdateChunkDestinations = f
+
+	return mmUpdateChunkDestinations
+}
+
+// Return sets up results that will be returned by RepositoryI.UpdateChunkDestinations
+func (mmUpdateChunkDestinations *mRepositoryIMockUpdateChunkDestinations) Return(err error) *RepositoryIMock {
+	if mmUpdateChunkDestinations.mock.funcUpdateChunkDestinations != nil {
+		mmUpdateChunkDestinations.mock.t.Fatalf("RepositoryIMock.UpdateChunkDestinations mock is already set by Set")
+	}
+
+	if mmUpdateChunkDestinations.defaultExpectation == nil {
+		mmUpdateChunkDestinations.defaultExpectation = &RepositoryIMockUpdateChunkDestinationsExpectation{mock: mmUpdateChunkDestinations.mock}
+	}
+	mmUpdateChunkDestinations.defaultExpectation.results = &RepositoryIMockUpdateChunkDestinationsResults{err}
+	mmUpdateChunkDestinations.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmUpdateChunkDestinations.mock
+}
+
+// Set uses given function f to mock the RepositoryI.UpdateChunkDestinations method
+func (mmUpdateChunkDestinations *mRepositoryIMockUpdateChunkDestinations) Set(f func(ctx context.Context, destinations map[string]string) (err error)) *RepositoryIMock {
+	if mmUpdateChunkDestinations.defaultExpectation != nil {
+		mmUpdateChunkDestinations.mock.t.Fatalf("Default expectation is already set for the RepositoryI.UpdateChunkDestinations method")
+	}
+
+	if len(mmUpdateChunkDestinations.expectations) > 0 {
+		mmUpdateChunkDestinations.mock.t.Fatalf("Some expectations are already set for the RepositoryI.UpdateChunkDestinations method")
+	}
+
+	mmUpdateChunkDestinations.mock.funcUpdateChunkDestinations = f
+	mmUpdateChunkDestinations.mock.funcUpdateChunkDestinationsOrigin = minimock.CallerInfo(1)
+	return mmUpdateChunkDestinations.mock
+}
+
+// When sets expectation for the RepositoryI.UpdateChunkDestinations which will trigger the result defined by the following
+// Then helper
+func (mmUpdateChunkDestinations *mRepositoryIMockUpdateChunkDestinations) When(ctx context.Context, destinations map[string]string) *RepositoryIMockUpdateChunkDestinationsExpectation {
+	if mmUpdateChunkDestinations.mock.funcUpdateChunkDestinations != nil {
+		mmUpdateChunkDestinations.mock.t.Fatalf("RepositoryIMock.UpdateChunkDestinations mock is already set by Set")
+	}
+
+	expectation := &RepositoryIMockUpdateChunkDestinationsExpectation{
+		mock:               mmUpdateChunkDestinations.mock,
+		params:             &RepositoryIMockUpdateChunkDestinationsParams{ctx, destinations},
+		expectationOrigins: RepositoryIMockUpdateChunkDestinationsExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmUpdateChunkDestinations.expectations = append(mmUpdateChunkDestinations.expectations, expectation)
+	return expectation
+}
+
+// Then sets up RepositoryI.UpdateChunkDestinations return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockUpdateChunkDestinationsExpectation) Then(err error) *RepositoryIMock {
+	e.results = &RepositoryIMockUpdateChunkDestinationsResults{err}
+	return e.mock
+}
+
+// Times sets number of times RepositoryI.UpdateChunkDestinations should be invoked
+func (mmUpdateChunkDestinations *mRepositoryIMockUpdateChunkDestinations) Times(n uint64) *mRepositoryIMockUpdateChunkDestinations {
+	if n == 0 {
+		mmUpdateChunkDestinations.mock.t.Fatalf("Times of RepositoryIMock.UpdateChunkDestinations mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmUpdateChunkDestinations.expectedInvocations, n)
+	mmUpdateChunkDestinations.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmUpdateChunkDestinations
+}
+
+func (mmUpdateChunkDestinations *mRepositoryIMockUpdateChunkDestinations) invocationsDone() bool {
+	if len(mmUpdateChunkDestinations.expectations) == 0 && mmUpdateChunkDestinations.defaultExpectation == nil && mmUpdateChunkDestinations.mock.funcUpdateChunkDestinations == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmUpdateChunkDestinations.mock.afterUpdateChunkDestinationsCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmUpdateChunkDestinations.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// UpdateChunkDestinations implements mm_repository.RepositoryI
+func (mmUpdateChunkDestinations *RepositoryIMock) UpdateChunkDestinations(ctx context.Context, destinations map[string]string) (err error) {
+	mm_atomic.AddUint64(&mmUpdateChunkDestinations.beforeUpdateChunkDestinationsCounter, 1)
+	defer mm_atomic.AddUint64(&mmUpdateChunkDestinations.afterUpdateChunkDestinationsCounter, 1)
+
+	mmUpdateChunkDestinations.t.Helper()
+
+	if mmUpdateChunkDestinations.inspectFuncUpdateChunkDestinations != nil {
+		mmUpdateChunkDestinations.inspectFuncUpdateChunkDestinations(ctx, destinations)
+	}
+
+	mm_params := RepositoryIMockUpdateChunkDestinationsParams{ctx, destinations}
+
+	// Record call args
+	mmUpdateChunkDestinations.UpdateChunkDestinationsMock.mutex.Lock()
+	mmUpdateChunkDestinations.UpdateChunkDestinationsMock.callArgs = append(mmUpdateChunkDestinations.UpdateChunkDestinationsMock.callArgs, &mm_params)
+	mmUpdateChunkDestinations.UpdateChunkDestinationsMock.mutex.Unlock()
+
+	for _, e := range mmUpdateChunkDestinations.UpdateChunkDestinationsMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmUpdateChunkDestinations.UpdateChunkDestinationsMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmUpdateChunkDestinations.UpdateChunkDestinationsMock.defaultExpectation.Counter, 1)
+		mm_want := mmUpdateChunkDestinations.UpdateChunkDestinationsMock.defaultExpectation.params
+		mm_want_ptrs := mmUpdateChunkDestinations.UpdateChunkDestinationsMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryIMockUpdateChunkDestinationsParams{ctx, destinations}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmUpdateChunkDestinations.t.Errorf("RepositoryIMock.UpdateChunkDestinations got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateChunkDestinations.UpdateChunkDestinationsMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.destinations != nil && !minimock.Equal(*mm_want_ptrs.destinations, mm_got.destinations) {
+				mmUpdateChunkDestinations.t.Errorf("RepositoryIMock.UpdateChunkDestinations got unexpected parameter destinations, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateChunkDestinations.UpdateChunkDestinationsMock.defaultExpectation.expectationOrigins.originDestinations, *mm_want_ptrs.destinations, mm_got.destinations, minimock.Diff(*mm_want_ptrs.destinations, mm_got.destinations))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmUpdateChunkDestinations.t.Errorf("RepositoryIMock.UpdateChunkDestinations got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmUpdateChunkDestinations.UpdateChunkDestinationsMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmUpdateChunkDestinations.UpdateChunkDestinationsMock.defaultExpectation.results
+		if mm_results == nil {
+			mmUpdateChunkDestinations.t.Fatal("No results are set for the RepositoryIMock.UpdateChunkDestinations")
+		}
+		return (*mm_results).err
+	}
+	if mmUpdateChunkDestinations.funcUpdateChunkDestinations != nil {
+		return mmUpdateChunkDestinations.funcUpdateChunkDestinations(ctx, destinations)
+	}
+	mmUpdateChunkDestinations.t.Fatalf("Unexpected call to RepositoryIMock.UpdateChunkDestinations. %v %v", ctx, destinations)
+	return
+}
+
+// UpdateChunkDestinationsAfterCounter returns a count of finished RepositoryIMock.UpdateChunkDestinations invocations
+func (mmUpdateChunkDestinations *RepositoryIMock) UpdateChunkDestinationsAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateChunkDestinations.afterUpdateChunkDestinationsCounter)
+}
+
+// UpdateChunkDestinationsBeforeCounter returns a count of RepositoryIMock.UpdateChunkDestinations invocations
+func (mmUpdateChunkDestinations *RepositoryIMock) UpdateChunkDestinationsBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateChunkDestinations.beforeUpdateChunkDestinationsCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryIMock.UpdateChunkDestinations.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmUpdateChunkDestinations *mRepositoryIMockUpdateChunkDestinations) Calls() []*RepositoryIMockUpdateChunkDestinationsParams {
+	mmUpdateChunkDestinations.mutex.RLock()
+
+	argCopy := make([]*RepositoryIMockUpdateChunkDestinationsParams, len(mmUpdateChunkDestinations.callArgs))
+	copy(argCopy, mmUpdateChunkDestinations.callArgs)
+
+	mmUpdateChunkDestinations.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockUpdateChunkDestinationsDone returns true if the count of the UpdateChunkDestinations invocations corresponds
+// the number of defined expectations
+func (m *RepositoryIMock) MinimockUpdateChunkDestinationsDone() bool {
+	if m.UpdateChunkDestinationsMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.UpdateChunkDestinationsMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.UpdateChunkDestinationsMock.invocationsDone()
+}
+
+// MinimockUpdateChunkDestinationsInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockUpdateChunkDestinationsInspect() {
+	for _, e := range m.UpdateChunkDestinationsMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryIMock.UpdateChunkDestinations at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterUpdateChunkDestinationsCounter := mm_atomic.LoadUint64(&m.afterUpdateChunkDestinationsCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.UpdateChunkDestinationsMock.defaultExpectation != nil && afterUpdateChunkDestinationsCounter < 1 {
+		if m.UpdateChunkDestinationsMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryIMock.UpdateChunkDestinations at\n%s", m.UpdateChunkDestinationsMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryIMock.UpdateChunkDestinations at\n%s with params: %#v", m.UpdateChunkDestinationsMock.defaultExpectation.expectationOrigins.origin, *m.UpdateChunkDestinationsMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcUpdateChunkDestinations != nil && afterUpdateChunkDestinationsCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryIMock.UpdateChunkDestinations at\n%s", m.funcUpdateChunkDestinationsOrigin)
+	}
+
+	if !m.UpdateChunkDestinationsMock.invocationsDone() && afterUpdateChunkDestinationsCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.UpdateChunkDestinations at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.UpdateChunkDestinationsMock.expectedInvocations), m.UpdateChunkDestinationsMock.expectedInvocationsOrigin, afterUpdateChunkDestinationsCounter)
+	}
+}
+
 type mRepositoryIMockUpdateKBFileMetadata struct {
 	optional           bool
 	mock               *RepositoryIMock
@@ -22783,6 +23135,8 @@ func (m *RepositoryIMock) MinimockFinish() {
 
 			m.MinimockUpdateChunkInspect()
 
+			m.MinimockUpdateChunkDestinationsInspect()
+
 			m.MinimockUpdateKBFileMetadataInspect()
 
 			m.MinimockUpdateKnowledgeBaseInspect()
@@ -22875,6 +23229,7 @@ func (m *RepositoryIMock) minimockDone() bool {
 		m.MinimockProcessKnowledgeBaseFilesDone() &&
 		m.MinimockTextChunkTableNameDone() &&
 		m.MinimockUpdateChunkDone() &&
+		m.MinimockUpdateChunkDestinationsDone() &&
 		m.MinimockUpdateKBFileMetadataDone() &&
 		m.MinimockUpdateKnowledgeBaseDone() &&
 		m.MinimockUpdateKnowledgeBaseFileDone() &&

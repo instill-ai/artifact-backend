@@ -166,8 +166,9 @@ func (w *Worker) ConvertFileActivity(ctx context.Context, param *ConvertFileActi
 	return nil
 }
 
-// ChunkFileActivity handles file chunking operations
-func (w *Worker) ChunkFileActivity(ctx context.Context, param *ChunkFileActivityParam) error {
+// ChunkFileActivity handles file chunking operations.
+// Returns the chunks that need to be saved to MinIO.
+func (w *Worker) ChunkFileActivity(ctx context.Context, param *ChunkFileActivityParam) (*ChunkFileActivityResult, error) {
 	w.log.Info("Starting ChunkFileActivity",
 		zap.String("fileUID", param.FileUID.String()),
 		zap.Int("chunkSize", param.ChunkSize),
@@ -175,7 +176,7 @@ func (w *Worker) ChunkFileActivity(ctx context.Context, param *ChunkFileActivity
 
 	file, err := getFileByUID(ctx, w.repository, param.FileUID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Update status to CHUNKING at the beginning (after confirming file exists)
@@ -211,12 +212,12 @@ func (w *Worker) ChunkFileActivity(ctx context.Context, param *ChunkFileActivity
 
 		convertedFile, err := w.repository.GetConvertedFileByFileUID(ctx, param.FileUID)
 		if err != nil {
-			return fmt.Errorf("fetching converted file record: %w", err)
+			return nil, fmt.Errorf("fetching converted file record: %w", err)
 		}
 
 		fileData, err = w.service.MinIO().GetFile(authCtx, config.Config.Minio.BucketName, convertedFile.Destination)
 		if err != nil {
-			return fmt.Errorf("fetching converted file blob: %w", err)
+			return nil, fmt.Errorf("fetching converted file blob: %w", err)
 		}
 
 		sourceTable = w.repository.ConvertedFileTableName()
@@ -224,7 +225,7 @@ func (w *Worker) ChunkFileActivity(ctx context.Context, param *ChunkFileActivity
 
 		chunkingResult, err := w.service.ChunkMarkdownPipe(authCtx, string(fileData))
 		if err != nil {
-			return fmt.Errorf("chunking converted file: %w", err)
+			return nil, fmt.Errorf("chunking converted file: %w", err)
 		}
 		contentChunks = chunkingResult.Chunks
 
@@ -248,14 +249,14 @@ func (w *Worker) ChunkFileActivity(ctx context.Context, param *ChunkFileActivity
 		bucket := minio.BucketFromDestination(file.Destination)
 		fileData, err = w.service.MinIO().GetFile(authCtx, bucket, file.Destination)
 		if err != nil {
-			return fmt.Errorf("fetching original file blob: %w", err)
+			return nil, fmt.Errorf("fetching original file blob: %w", err)
 		}
 		sourceTable = w.repository.KnowledgeBaseFileTableName()
 		sourceUID = file.UID
 
 		chunkingResult, err := w.service.ChunkMarkdownPipe(authCtx, string(fileData))
 		if err != nil {
-			return fmt.Errorf("chunking original file: %w", err)
+			return nil, fmt.Errorf("chunking original file: %w", err)
 		}
 		contentChunks = chunkingResult.Chunks
 
@@ -263,28 +264,28 @@ func (w *Worker) ChunkFileActivity(ctx context.Context, param *ChunkFileActivity
 		bucket := minio.BucketFromDestination(file.Destination)
 		fileData, err = w.service.MinIO().GetFile(authCtx, bucket, file.Destination)
 		if err != nil {
-			return fmt.Errorf("fetching original file blob: %w", err)
+			return nil, fmt.Errorf("fetching original file blob: %w", err)
 		}
 		sourceTable = w.repository.KnowledgeBaseFileTableName()
 		sourceUID = file.UID
 
 		chunkingResult, err := w.service.ChunkTextPipe(authCtx, string(fileData))
 		if err != nil {
-			return fmt.Errorf("chunking original file: %w", err)
+			return nil, fmt.Errorf("chunking original file: %w", err)
 		}
 		contentChunks = chunkingResult.Chunks
 
 	default:
-		return fmt.Errorf("unsupported file type in ChunkFileActivity: %v", file.Type)
+		return nil, fmt.Errorf("unsupported file type in ChunkFileActivity: %v", file.Type)
 	}
 
 	summaryChunkingResult, err := w.service.ChunkTextPipe(authCtx, string(file.Summary))
 	if err != nil {
-		return fmt.Errorf("chunking summary: %w", err)
+		return nil, fmt.Errorf("chunking summary: %w", err)
 	}
 
 	// Clean up old chunks from MinIO if reprocessing (before saving new ones)
-	// The database records will be deleted by DeleteAndCreateChunks, but we need to clean up MinIO blobs
+	// The database records will be deleted by CreateChunksWithPlaceholders, but we need to clean up MinIO blobs
 	oldChunks, err := w.repository.ListChunksByKbFileUID(ctx, param.FileUID)
 	if err == nil && len(oldChunks) > 0 {
 		w.log.Info("Deleting old chunks before creating new ones (reprocessing)",
@@ -302,21 +303,26 @@ func (w *Worker) ChunkFileActivity(ctx context.Context, param *ChunkFileActivity
 		}
 	}
 
-	// Save new chunks (database cleanup is handled by DeleteAndCreateChunks)
-	err = saveChunks(ctx, w.service, param.KnowledgeBaseUID, param.FileUID, sourceUID, sourceTable, summaryChunkingResult.Chunks, contentChunks, string(constant.DocumentFileType))
+	// Prepare chunks for database and MinIO
+	chunksToSave, err := saveChunksToDBOnly(ctx, w.service, w.repository, param.KnowledgeBaseUID, param.FileUID, sourceUID, sourceTable, summaryChunkingResult.Chunks, contentChunks, string(constant.DocumentFileType))
 	if err != nil {
-		return fmt.Errorf("storing chunks: %w", err)
+		return nil, fmt.Errorf("storing chunks in database: %w", err)
 	}
 
 	mdUpdate := repository.ExtraMetaData{
 		ChunkingPipe: service.ChunkTextPipeline.Name(),
 	}
 	if err = w.repository.UpdateKBFileMetadata(ctx, param.FileUID, mdUpdate); err != nil {
-		return fmt.Errorf("saving chunking metadata in file record: %w", err)
+		return nil, fmt.Errorf("saving chunking metadata in file record: %w", err)
 	}
 
-	w.log.Info("File chunking completed", zap.String("fileUID", param.FileUID.String()))
-	return nil
+	w.log.Info("File chunking completed, returning chunks to save to MinIO",
+		zap.String("fileUID", param.FileUID.String()),
+		zap.Int("chunkCount", len(chunksToSave)))
+
+	return &ChunkFileActivityResult{
+		ChunksToSave: chunksToSave,
+	}, nil
 }
 
 // EmbedFileActivity handles file embedding operations
