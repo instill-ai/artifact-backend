@@ -5,11 +5,14 @@ import (
 	"fmt"
 
 	"github.com/gofrs/uuid"
+	"go.temporal.io/sdk/temporal"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/instill-ai/artifact-backend/pkg/repository"
+
+	errorsx "github.com/instill-ai/x/errors"
 )
 
 // EmbedTextsActivityParam defines the parameters for the EmbedTextsActivity
@@ -74,14 +77,22 @@ func (w *Worker) GetChunksForEmbeddingActivity(ctx context.Context, param *GetCh
 	// Get file
 	files, err := w.repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{param.FileUID})
 	if err != nil || len(files) == 0 {
-		return nil, fmt.Errorf("failed to get file: %w", err)
+		return nil, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to get file: %s", errorsx.MessageOrErr(err)),
+			getChunksForEmbeddingActivityError,
+			err,
+		)
 	}
 	file := files[0]
 
 	// Get chunks by file
 	sourceTable, sourceUID, chunks, _, texts, err := w.service.GetChunksByFile(ctx, &file)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get chunks: %w", err)
+		return nil, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to retrieve chunks: %s", errorsx.MessageOrErr(err)),
+			getChunksForEmbeddingActivityError,
+			err,
+		)
 	}
 
 	w.log.Info("GetChunksForEmbeddingActivity: Chunks retrieved",
@@ -118,7 +129,11 @@ func (w *Worker) GenerateEmbeddingsActivity(ctx context.Context, param *Generate
 	// Call the embedding pipeline - THIS IS THE KEY EXTERNAL CALL
 	embeddings, err := w.service.EmbeddingTextPipe(authCtx, param.Texts)
 	if err != nil {
-		return nil, fmt.Errorf("embedding pipeline failed: %w", err)
+		return nil, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Embedding generation failed: %s", errorsx.MessageOrErr(err)),
+			generateEmbeddingsActivityError,
+			err,
+		)
 	}
 
 	w.log.Info("GenerateEmbeddingsActivity: Embeddings generated successfully",
@@ -139,7 +154,11 @@ func (w *Worker) SaveEmbeddingsToVectorDBActivity(ctx context.Context, param *Sa
 	// Use helper function from common.go
 	err := saveEmbeddings(ctx, w.service, param.KnowledgeBaseUID, param.FileUID, param.Embeddings, param.FileName)
 	if err != nil {
-		return fmt.Errorf("failed to save embeddings: %w", err)
+		return temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to save embeddings: %s", errorsx.MessageOrErr(err)),
+			saveEmbeddingsActivityError,
+			err,
+		)
 	}
 
 	w.log.Info("SaveEmbeddingsToVectorDBActivity: Embeddings saved successfully")
@@ -164,7 +183,11 @@ func (w *Worker) UpdateEmbeddingMetadataActivity(ctx context.Context, param *Upd
 				zap.String("fileUID", param.FileUID.String()))
 			return nil
 		}
-		return fmt.Errorf("failed to update file metadata: %w", err)
+		return temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to update file metadata: %s", errorsx.MessageOrErr(err)),
+			updateEmbeddingMetadataActivityError,
+			err,
+		)
 	}
 
 	w.log.Info("UpdateEmbeddingMetadataActivity: Metadata updated successfully")
@@ -193,7 +216,11 @@ func (w *Worker) EmbedTextsActivity(ctx context.Context, param *EmbedTextsActivi
 			zap.Int("batchIndex", param.BatchIndex),
 			zap.Int("batchSize", len(param.Texts)),
 			zap.Error(err))
-		return nil, fmt.Errorf("failed to embed batch %d: %w", param.BatchIndex, err)
+		return nil, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Embedding batch %d failed: %s", param.BatchIndex, errorsx.MessageOrErr(err)),
+			embedTextsActivityError,
+			err,
+		)
 	}
 
 	w.log.Info("Batch embedding completed",
@@ -202,3 +229,12 @@ func (w *Worker) EmbedTextsActivity(ctx context.Context, param *EmbedTextsActivi
 
 	return vectors, nil
 }
+
+// Activity error type constants
+const (
+	getChunksForEmbeddingActivityError   = "GetChunksForEmbeddingActivity"
+	generateEmbeddingsActivityError      = "GenerateEmbeddingsActivity"
+	saveEmbeddingsActivityError          = "SaveEmbeddingsToVectorDBActivity"
+	updateEmbeddingMetadataActivityError = "UpdateEmbeddingMetadataActivity"
+	embedTextsActivityError              = "EmbedTextsActivity"
+)

@@ -14,6 +14,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/service"
 
+	errorsx "github.com/instill-ai/x/errors"
 	logx "github.com/instill-ai/x/log"
 )
 
@@ -22,7 +23,7 @@ import (
 func getFileByUID(ctx context.Context, repo repository.RepositoryI, fileUID uuid.UUID) (repository.KnowledgeBaseFile, error) {
 	files, err := repo.GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{fileUID})
 	if err != nil {
-		return repository.KnowledgeBaseFile{}, fmt.Errorf("failed to get file: %w", err)
+		return repository.KnowledgeBaseFile{}, fmt.Errorf("failed to get file: %s", errorsx.MessageOrErr(err))
 	}
 	if len(files) == 0 {
 		return repository.KnowledgeBaseFile{}, fmt.Errorf("file not found: %s", fileUID.String())
@@ -93,7 +94,7 @@ func saveChunksToDBOnly(
 		return destinations, nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("storing chunk records in repository: %w", err)
+		return nil, fmt.Errorf("storing chunk records in repository: %s", errorsx.MessageOrErr(err))
 	}
 
 	// Build map of chunkUID -> content for MinIO save
@@ -125,14 +126,14 @@ func saveEmbeddings(ctx context.Context, svc service.Service, kbUID, fileUID uui
 
 	// Delete existing embeddings in the vector database
 	if err := svc.VectorDB().DeleteEmbeddingsWithFileUID(ctx, kbUID, fileUID); err != nil {
-		return fmt.Errorf("deleting existing embeddings in vector database: %w", err)
+		return fmt.Errorf("deleting existing embeddings in vector database: %s", errorsx.MessageOrErr(err))
 	}
 
 	// Process embeddings in batches
 	for i := 0; i < totalEmbeddings; i += batchSize {
 		// Add context check
 		if err := ctx.Err(); err != nil {
-			return fmt.Errorf("context cancelled while processing embeddings: %w", err)
+			return fmt.Errorf("context cancelled while processing embeddings: %s", errorsx.MessageOrErr(err))
 		}
 
 		end := min(totalEmbeddings, i+batchSize)
@@ -161,7 +162,7 @@ func saveEmbeddings(ctx context.Context, svc service.Service, kbUID, fileUID uui
 				}
 			}
 			if err := svc.VectorDB().UpsertVectorsInCollection(ctx, kbUID, vectors); err != nil {
-				return fmt.Errorf("saving embeddings in vector database: %w", err)
+				return fmt.Errorf("saving embeddings in vector database: %s", errorsx.MessageOrErr(err))
 			}
 
 			return nil
@@ -169,7 +170,7 @@ func saveEmbeddings(ctx context.Context, svc service.Service, kbUID, fileUID uui
 
 		_, err := svc.Repository().DeleteAndCreateEmbeddings(ctx, fileUID, currentBatch, externalServiceCall)
 		if err != nil {
-			return fmt.Errorf("saving embeddings metadata into database: %w", err)
+			return fmt.Errorf("saving embeddings metadata into database: %s", errorsx.MessageOrErr(err))
 		}
 
 		logger.Info("Embeddings batch saved successfully")
@@ -197,11 +198,11 @@ func extractRequestMetadata(externalMetadata *structpb.Struct) (metadata.MD, err
 	// map[string][]string), but readability has been prioritized.
 	j, err := externalMetadata.Fields[constant.MetadataRequestKey].GetStructValue().MarshalJSON()
 	if err != nil {
-		return nil, fmt.Errorf("marshalling metadata: %w", err)
+		return nil, fmt.Errorf("marshalling metadata: %s", errorsx.MessageOrErr(err))
 	}
 
 	if err := json.Unmarshal(j, &md); err != nil {
-		return nil, fmt.Errorf("unmarshalling metadata: %w", err)
+		return nil, fmt.Errorf("unmarshalling metadata: %s", errorsx.MessageOrErr(err))
 	}
 
 	return md, nil
@@ -213,7 +214,7 @@ func extractRequestMetadata(externalMetadata *structpb.Struct) (metadata.MD, err
 func createAuthenticatedContext(ctx context.Context, externalMetadata *structpb.Struct) (context.Context, error) {
 	md, err := extractRequestMetadata(externalMetadata)
 	if err != nil {
-		return ctx, fmt.Errorf("extracting request metadata: %w", err)
+		return ctx, fmt.Errorf("extracting request metadata: %s", errorsx.MessageOrErr(err))
 	}
 
 	if len(md) == 0 {

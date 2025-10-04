@@ -19,6 +19,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/service"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	errorsx "github.com/instill-ai/x/errors"
 )
 
 type processFileWorkflow struct {
@@ -67,11 +68,14 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 	handleError := func(stage string, err error) error {
 		logger.Error("Failed at stage", "stage", stage, "error", err)
 
+		// Extract a clean error message for display
+		errMsg := errorsx.MessageOrErr(err)
+
 		// Update file status to FAILED
 		statusErr := workflow.ExecuteActivity(ctx, w.UpdateFileStatusActivity, &UpdateFileStatusActivityParam{
 			FileUID: fileUID,
 			Status:  artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_FAILED,
-			Message: fmt.Sprintf("%s failed: %v", stage, err),
+			Message: fmt.Sprintf("%s: %s", stage, errMsg),
 		}).Get(ctx, nil)
 		if statusErr != nil {
 			logger.Error("Failed to update file status to FAILED", "statusError", statusErr)
@@ -80,7 +84,8 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 		// Note: We don't clean up intermediate files on error to allow resuming from the failed step.
 		// Cleanup happens automatically on reprocessing (each activity cleans up old data before creating new).
 
-		return fmt.Errorf("failed at %s: %w", stage, err)
+		// Return a user-friendly error message without Temporal overhead
+		return fmt.Errorf("%s: %s", stage, errMsg)
 	}
 
 	// Get current file status to determine starting point

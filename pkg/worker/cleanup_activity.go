@@ -6,9 +6,12 @@ import (
 	"strings"
 
 	"github.com/gofrs/uuid"
+	"go.temporal.io/sdk/temporal"
 	"go.uber.org/zap"
 
 	"github.com/instill-ai/artifact-backend/pkg/service"
+
+	errorsx "github.com/instill-ai/x/errors"
 )
 
 // DeleteOriginalFileActivityParam defines parameters for deleting original file
@@ -59,7 +62,11 @@ func (w *Worker) DeleteOriginalFileActivity(ctx context.Context, param *DeleteOr
 
 	err = w.service.DeleteFiles(ctx, param.Bucket, []string{file.Destination})
 	if err != nil {
-		return fmt.Errorf("failed to delete original file: %w", err)
+		return temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to delete file from storage: %s", errorsx.MessageOrErr(err)),
+			deleteOriginalFileActivityError,
+			err,
+		)
 	}
 
 	w.log.Info("DeleteOriginalFileActivity: Successfully deleted original file",
@@ -83,7 +90,11 @@ func (w *Worker) DeleteConvertedFileActivity(ctx context.Context, param *DeleteC
 	// Delete from MinIO using KB UID from the converted file record
 	err = w.service.DeleteConvertedFileByFileUID(ctx, convertedFile.KbUID, param.FileUID)
 	if err != nil {
-		return fmt.Errorf("failed to delete converted file from MinIO: %w", err)
+		return temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to delete converted file from storage: %s", errorsx.MessageOrErr(err)),
+			deleteConvertedFileActivityError,
+			err,
+		)
 	}
 
 	w.log.Info("DeleteConvertedFileActivity: Deleted from MinIO",
@@ -93,7 +104,11 @@ func (w *Worker) DeleteConvertedFileActivity(ctx context.Context, param *DeleteC
 	// Delete record from DB
 	err = w.repository.HardDeleteConvertedFileByFileUID(ctx, param.FileUID)
 	if err != nil {
-		return fmt.Errorf("failed to delete converted file record: %w", err)
+		return temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to delete converted file record: %s", errorsx.MessageOrErr(err)),
+			deleteConvertedFileActivityError,
+			err,
+		)
 	}
 
 	w.log.Info("DeleteConvertedFileActivity: Successfully deleted converted file and record")
@@ -119,7 +134,11 @@ func (w *Worker) DeleteChunksFromMinIOActivity(ctx context.Context, param *Delet
 	// Delete from MinIO using KB UID from the chunk records
 	err = w.service.DeleteTextChunksByFileUID(ctx, kbUID, param.FileUID)
 	if err != nil {
-		return fmt.Errorf("failed to delete chunks from MinIO: %w", err)
+		return temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to delete chunks from storage: %s", errorsx.MessageOrErr(err)),
+			deleteChunksActivityError,
+			err,
+		)
 	}
 
 	w.log.Info("DeleteChunksFromMinIOActivity: Deleted from MinIO",
@@ -129,7 +148,11 @@ func (w *Worker) DeleteChunksFromMinIOActivity(ctx context.Context, param *Delet
 	// Delete records from DB
 	err = w.repository.HardDeleteChunksByKbFileUID(ctx, param.FileUID)
 	if err != nil {
-		return fmt.Errorf("failed to delete chunk records: %w", err)
+		return temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to delete chunk records: %s", errorsx.MessageOrErr(err)),
+			deleteChunksActivityError,
+			err,
+		)
 	}
 
 	w.log.Info("DeleteChunksFromMinIOActivity: Successfully deleted chunks and records",
@@ -162,7 +185,11 @@ func (w *Worker) DeleteEmbeddingsFromVectorDBActivity(ctx context.Context, param
 			w.log.Info("DeleteEmbeddingsFromVectorDBActivity: Collection not found (already cleaned up)",
 				zap.String("collection", collection))
 		} else {
-			return fmt.Errorf("failed to delete embeddings from Milvus: %w", err)
+			return temporal.NewApplicationErrorWithCause(
+				fmt.Sprintf("Failed to delete embeddings from vector database: %s", errorsx.MessageOrErr(err)),
+				deleteEmbeddingsActivityError,
+				err,
+			)
 		}
 	} else {
 		w.log.Info("DeleteEmbeddingsFromVectorDBActivity: Deleted from Milvus",
@@ -173,7 +200,11 @@ func (w *Worker) DeleteEmbeddingsFromVectorDBActivity(ctx context.Context, param
 	// Delete records from DB
 	err = w.repository.HardDeleteEmbeddingsByKbFileUID(ctx, param.FileUID)
 	if err != nil {
-		return fmt.Errorf("failed to delete embedding records: %w", err)
+		return temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to delete embedding records: %s", errorsx.MessageOrErr(err)),
+			deleteEmbeddingsActivityError,
+			err,
+		)
 	}
 
 	w.log.Info("DeleteEmbeddingsFromVectorDBActivity: Successfully deleted embeddings and records")
@@ -224,7 +255,11 @@ func (w *Worker) DeleteKBFilesFromMinIOActivity(ctx context.Context, param *Dele
 
 	err := w.service.DeleteKnowledgeBase(ctx, param.KnowledgeBaseUID.String())
 	if err != nil {
-		return fmt.Errorf("failed to delete files from MinIO: %w", err)
+		return temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to delete catalog files from storage: %s", errorsx.MessageOrErr(err)),
+			deleteKBFilesActivityError,
+			err,
+		)
 	}
 
 	w.log.Info("DeleteKBFilesFromMinIOActivity: Successfully deleted files from MinIO")
@@ -245,7 +280,11 @@ func (w *Worker) DropVectorDBCollectionActivity(ctx context.Context, param *Drop
 				zap.String("collection", collection))
 			return nil
 		}
-		return fmt.Errorf("failed to drop collection: %w", err)
+		return temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to drop vector database collection: %s", errorsx.MessageOrErr(err)),
+			dropCollectionActivityError,
+			err,
+		)
 	}
 
 	w.log.Info("DropVectorDBCollectionActivity: Successfully dropped collection")
@@ -259,7 +298,11 @@ func (w *Worker) DeleteKBFileRecordsActivity(ctx context.Context, param *DeleteK
 
 	err := w.repository.DeleteAllKnowledgeBaseFiles(ctx, param.KnowledgeBaseUID.String())
 	if err != nil {
-		return fmt.Errorf("failed to delete file records: %w", err)
+		return temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to delete file records: %s", errorsx.MessageOrErr(err)),
+			deleteKBFileRecordsActivityError,
+			err,
+		)
 	}
 
 	w.log.Info("DeleteKBFileRecordsActivity: Successfully deleted file records")
@@ -273,7 +316,11 @@ func (w *Worker) DeleteKBConvertedFileRecordsActivity(ctx context.Context, param
 
 	err := w.repository.DeleteAllConvertedFilesInKb(ctx, param.KnowledgeBaseUID)
 	if err != nil {
-		return fmt.Errorf("failed to delete converted file records: %w", err)
+		return temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to delete converted file records: %s", errorsx.MessageOrErr(err)),
+			deleteKBConvertedRecordsActivityError,
+			err,
+		)
 	}
 
 	w.log.Info("DeleteKBConvertedFileRecordsActivity: Successfully deleted converted file records")
@@ -287,7 +334,11 @@ func (w *Worker) DeleteKBChunkRecordsActivity(ctx context.Context, param *Delete
 
 	err := w.repository.HardDeleteChunksByKbUID(ctx, param.KnowledgeBaseUID)
 	if err != nil {
-		return fmt.Errorf("failed to delete chunk records: %w", err)
+		return temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to delete chunk records: %s", errorsx.MessageOrErr(err)),
+			deleteKBChunkRecordsActivityError,
+			err,
+		)
 	}
 
 	w.log.Info("DeleteKBChunkRecordsActivity: Successfully deleted chunk records")
@@ -301,7 +352,11 @@ func (w *Worker) DeleteKBEmbeddingRecordsActivity(ctx context.Context, param *De
 
 	err := w.repository.HardDeleteEmbeddingsByKbUID(ctx, param.KnowledgeBaseUID)
 	if err != nil {
-		return fmt.Errorf("failed to delete embedding records: %w", err)
+		return temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to delete embedding records: %s", errorsx.MessageOrErr(err)),
+			deleteKBEmbeddingRecordsActivityError,
+			err,
+		)
 	}
 
 	w.log.Info("DeleteKBEmbeddingRecordsActivity: Successfully deleted embedding records")
@@ -315,9 +370,28 @@ func (w *Worker) PurgeKBACLActivity(ctx context.Context, param *PurgeKBACLActivi
 
 	err := w.service.ACLClient().Purge(ctx, "knowledgebase", param.KnowledgeBaseUID)
 	if err != nil {
-		return fmt.Errorf("failed to purge ACL: %w", err)
+		return temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to purge access control: %s", errorsx.MessageOrErr(err)),
+			purgeKBACLActivityError,
+			err,
+		)
 	}
 
 	w.log.Info("PurgeKBACLActivity: Successfully purged ACL")
 	return nil
 }
+
+// Activity error type constants
+const (
+	deleteOriginalFileActivityError       = "DeleteOriginalFileActivity"
+	deleteConvertedFileActivityError      = "DeleteConvertedFileActivity"
+	deleteChunksActivityError             = "DeleteChunksFromMinIOActivity"
+	deleteEmbeddingsActivityError         = "DeleteEmbeddingsFromVectorDBActivity"
+	deleteKBFilesActivityError            = "DeleteKBFilesFromMinIOActivity"
+	dropCollectionActivityError           = "DropVectorDBCollectionActivity"
+	deleteKBFileRecordsActivityError      = "DeleteKBFileRecordsActivity"
+	deleteKBConvertedRecordsActivityError = "DeleteKBConvertedFileRecordsActivity"
+	deleteKBChunkRecordsActivityError     = "DeleteKBChunkRecordsActivity"
+	deleteKBEmbeddingRecordsActivityError = "DeleteKBEmbeddingRecordsActivity"
+	purgeKBACLActivityError               = "PurgeKBACLActivity"
+)

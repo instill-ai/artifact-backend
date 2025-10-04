@@ -11,6 +11,8 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"github.com/instill-ai/artifact-backend/pkg/service"
+
+	errorsx "github.com/instill-ai/x/errors"
 )
 
 type deleteFilesWorkflow struct {
@@ -32,11 +34,11 @@ func (w *deleteFilesWorkflow) Execute(ctx context.Context, param service.DeleteF
 
 	workflowRun, err := w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, new(Worker).DeleteFilesWorkflow, param)
 	if err != nil {
-		return fmt.Errorf("failed to start delete files workflow: %w", err)
+		return fmt.Errorf("failed to start delete files workflow: %s", errorsx.MessageOrErr(err))
 	}
 
 	if err = workflowRun.Get(ctx, nil); err != nil {
-		return fmt.Errorf("delete files workflow failed: %w", err)
+		return fmt.Errorf("delete files workflow failed: %s", errorsx.MessageOrErr(err))
 	}
 
 	return nil
@@ -61,12 +63,12 @@ func (w *getFilesWorkflow) Execute(ctx context.Context, param service.GetFilesWo
 
 	workflowRun, err := w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, new(Worker).GetFilesWorkflow, param)
 	if err != nil {
-		return nil, fmt.Errorf("failed to start get files workflow: %w", err)
+		return nil, fmt.Errorf("failed to start get files workflow: %s", errorsx.MessageOrErr(err))
 	}
 
 	var results []service.FileContent
 	if err = workflowRun.Get(ctx, &results); err != nil {
-		return nil, fmt.Errorf("get files workflow failed: %w", err)
+		return nil, fmt.Errorf("get files workflow failed: %s", errorsx.MessageOrErr(err))
 	}
 
 	return results, nil
@@ -124,7 +126,7 @@ func (w *Worker) SaveChunksWorkflow(ctx workflow.Context, param service.SaveChun
 			logger.Error("Chunk save failed",
 				"chunkUID", cf.chunkUID,
 				"error", err)
-			return nil, fmt.Errorf("failed to save chunk %s: %w", cf.chunkUID, err)
+			return nil, fmt.Errorf("failed to save chunk %s: %s", cf.chunkUID, errorsx.MessageOrErr(err))
 		}
 
 		destinations[result.ChunkUID] = result.Destination
@@ -175,7 +177,7 @@ func (w *Worker) DeleteFilesWorkflow(ctx workflow.Context, param service.DeleteF
 			logger.Error("File deletion failed",
 				"path", param.FilePaths[i],
 				"error", err)
-			return fmt.Errorf("failed to delete file %s: %w", param.FilePaths[i], err)
+			return fmt.Errorf("failed to delete file %s: %s", param.FilePaths[i], errorsx.MessageOrErr(err))
 		}
 	}
 
@@ -225,7 +227,7 @@ func (w *Worker) GetFilesWorkflow(ctx workflow.Context, param service.GetFilesWo
 		var result GetFileActivityResult
 		if err := future.Get(ctx, &result); err != nil {
 			logger.Error("File retrieval failed", "error", err)
-			return nil, fmt.Errorf("failed to retrieve file: %w", err)
+			return nil, fmt.Errorf("failed to retrieve file: %s", errorsx.MessageOrErr(err))
 		}
 
 		results[result.Index] = service.FileContent{

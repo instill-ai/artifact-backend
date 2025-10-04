@@ -11,6 +11,8 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"github.com/instill-ai/artifact-backend/pkg/service"
+
+	errorsx "github.com/instill-ai/x/errors"
 )
 
 type embedTextsWorkflow struct {
@@ -32,12 +34,12 @@ func (w *embedTextsWorkflow) Execute(ctx context.Context, param service.EmbedTex
 
 	workflowRun, err := w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, new(Worker).EmbedTextsWorkflow, param)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to start embed texts workflow: %s", errorsx.MessageOrErr(err))
 	}
 
 	var vectors [][]float32
 	if err = workflowRun.Get(ctx, &vectors); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("embed texts workflow failed: %s", errorsx.MessageOrErr(err))
 	}
 
 	return vectors, nil
@@ -95,7 +97,7 @@ func (w *Worker) EmbedTextsWorkflow(ctx workflow.Context, param service.EmbedTex
 			logger.Error("Batch failed",
 				"batchIndex", i,
 				"error", err)
-			return nil, fmt.Errorf("batch %d failed: %w", i, err)
+			return nil, fmt.Errorf("batch %d failed: %s", i, errorsx.MessageOrErr(err))
 		}
 
 		logger.Info("Batch completed",

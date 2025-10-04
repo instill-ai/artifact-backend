@@ -5,11 +5,13 @@ import (
 	"fmt"
 
 	"github.com/gofrs/uuid"
+	"go.temporal.io/sdk/temporal"
 	"go.uber.org/zap"
 
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	errorsx "github.com/instill-ai/x/errors"
 )
 
 // UpdateFileStatusActivityParam defines the parameters for the UpdateFileStatusActivity
@@ -25,16 +27,30 @@ func (w *Worker) GetFileStatusActivity(ctx context.Context, fileUID uuid.UUID) (
 
 	files, err := w.repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{fileUID})
 	if err != nil {
-		return artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, fmt.Errorf("failed to get files: %w", err)
+		return artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to get file: %s", errorsx.MessageOrErr(err)),
+			getFileStatusActivityError,
+			err,
+		)
 	}
 	if len(files) == 0 {
-		return artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, fmt.Errorf("file not found: %s", fileUID.String())
+		err := fmt.Errorf("file not found: %s", fileUID.String())
+		return artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, temporal.NewApplicationErrorWithCause(
+			"File not found",
+			getFileStatusActivityError,
+			err,
+		)
 	}
 	file := files[0]
 
 	statusInt, ok := artifactpb.FileProcessStatus_value[file.ProcessStatus]
 	if !ok {
-		return artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, fmt.Errorf("invalid process status: %v", file.ProcessStatus)
+		err := fmt.Errorf("invalid process status: %v", file.ProcessStatus)
+		return artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, temporal.NewApplicationErrorWithCause(
+			"Invalid file status",
+			getFileStatusActivityError,
+			err,
+		)
 	}
 
 	status := artifactpb.FileProcessStatus(statusInt)
@@ -52,7 +68,11 @@ func (w *Worker) UpdateFileStatusActivity(ctx context.Context, param *UpdateFile
 	files, err := w.repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{param.FileUID})
 	if err != nil {
 		w.log.Error("Failed to get file for status update", zap.Error(err))
-		return fmt.Errorf("failed to get file: %w", err)
+		return temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to get file: %s", errorsx.MessageOrErr(err)),
+			updateFileStatusActivityError,
+			err,
+		)
 	}
 	if len(files) == 0 {
 		return nil
@@ -82,3 +102,9 @@ func (w *Worker) UpdateFileStatusActivity(ctx context.Context, param *UpdateFile
 		zap.String("status", param.Status.String()))
 	return nil
 }
+
+// Activity error type constants
+const (
+	getFileStatusActivityError    = "GetFileStatusActivity"
+	updateFileStatusActivityError = "UpdateFileStatusActivity"
+)

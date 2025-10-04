@@ -12,6 +12,8 @@ import (
 
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/service"
+
+	errorsx "github.com/instill-ai/x/errors"
 )
 
 type cleanupFileWorkflow struct {
@@ -32,7 +34,10 @@ func (w *cleanupFileWorkflow) Execute(ctx context.Context, param service.Cleanup
 	}
 
 	_, err := w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, new(Worker).CleanupFileWorkflow, param)
-	return err
+	if err != nil {
+		return fmt.Errorf("failed to start cleanup file workflow: %s", errorsx.MessageOrErr(err))
+	}
+	return nil
 }
 
 type cleanupKnowledgeBaseWorkflow struct {
@@ -53,7 +58,10 @@ func (w *cleanupKnowledgeBaseWorkflow) Execute(ctx context.Context, param servic
 	}
 
 	_, err := w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, new(Worker).CleanupKnowledgeBaseWorkflow, param)
-	return err
+	if err != nil {
+		return fmt.Errorf("failed to start cleanup knowledge base workflow: %s", errorsx.MessageOrErr(err))
+	}
+	return nil
 }
 
 // CleanupFileWorkflow handles cleanup operations for a specific file.

@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/gofrs/uuid"
+	"go.temporal.io/sdk/temporal"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/structpb"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/service"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	errorsx "github.com/instill-ai/x/errors"
 )
 
 // extractPageReferences extracts the location of a chunk (defined by its start
@@ -163,7 +165,11 @@ func (w *Worker) GetFileMetadataActivity(ctx context.Context, param *GetFileMeta
 	// Get file metadata
 	files, err := w.repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{param.FileUID})
 	if err != nil {
-		return nil, fmt.Errorf("failed to get file: %w", err)
+		return nil, temporal.NewApplicationErrorWithCause(
+			errorsx.MessageOrErr(err),
+			getFileMetadataActivityError,
+			err,
+		)
 	}
 	if len(files) == 0 {
 		// File was deleted during processing - this is OK in scenarios like:
@@ -172,14 +178,23 @@ func (w *Worker) GetFileMetadataActivity(ctx context.Context, param *GetFileMeta
 		// Return a non-retryable error to exit the workflow gracefully
 		w.log.Info("GetFileMetadataActivity: File not found (may have been deleted during processing)",
 			zap.String("fileUID", param.FileUID.String()))
-		return nil, fmt.Errorf("file not found: %s", param.FileUID.String())
+		err := fmt.Errorf("file not found: %s", param.FileUID.String())
+		return nil, temporal.NewApplicationErrorWithCause(
+			"File not found",
+			getFileMetadataActivityError,
+			err,
+		)
 	}
 	file := files[0]
 
 	// Get knowledge base configuration
 	kb, err := w.repository.GetKnowledgeBaseByUID(ctx, param.KnowledgeBaseUID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get knowledge base: %w", err)
+		return nil, temporal.NewApplicationErrorWithCause(
+			errorsx.MessageOrErr(err),
+			getFileMetadataActivityError,
+			err,
+		)
 	}
 
 	// Build converting pipelines list
@@ -189,7 +204,11 @@ func (w *Worker) GetFileMetadataActivity(ctx context.Context, param *GetFileMeta
 	if file.ExtraMetaDataUnmarshal != nil && file.ExtraMetaDataUnmarshal.ConvertingPipe != "" {
 		pipeline, err := service.PipelineReleaseFromName(file.ExtraMetaDataUnmarshal.ConvertingPipe)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse file pipeline: %w", err)
+			return nil, temporal.NewApplicationErrorWithCause(
+				fmt.Sprintf("Invalid file pipeline: %s", errorsx.MessageOrErr(err)),
+				getFileMetadataActivityError,
+				err,
+			)
 		}
 		convertingPipelines = append(convertingPipelines, pipeline)
 	}
@@ -205,7 +224,11 @@ func (w *Worker) GetFileMetadataActivity(ctx context.Context, param *GetFileMeta
 		}
 		pipeline, err := service.PipelineReleaseFromName(pipelineName)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse catalog pipeline: %w", err)
+			return nil, temporal.NewApplicationErrorWithCause(
+				fmt.Sprintf("Invalid catalog pipeline: %s", errorsx.MessageOrErr(err)),
+				getFileMetadataActivityError,
+				err,
+			)
 		}
 		convertingPipelines = append(convertingPipelines, pipeline)
 	}
@@ -237,7 +260,11 @@ func (w *Worker) GetFileContentActivity(ctx context.Context, param *GetFileConte
 
 	content, err := w.service.MinIO().GetFile(authCtx, param.Bucket, param.Destination)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get file from MinIO: %w", err)
+		return nil, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to retrieve file from storage: %s", errorsx.MessageOrErr(err)),
+			getFileContentActivityError,
+			err,
+		)
 	}
 
 	w.log.Info("GetFileContentActivity: File retrieved successfully",
@@ -290,7 +317,11 @@ func (w *Worker) ConvertToMarkdownActivity(ctx context.Context, param *ConvertTo
 		Pipelines:     param.Pipelines,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("pipeline conversion failed: %w", err)
+		return nil, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("File conversion failed: %s", errorsx.MessageOrErr(err)),
+			convertFileActivityError,
+			err,
+		)
 	}
 
 	w.log.Info("ConvertToMarkdownActivity: Conversion successful",
@@ -359,7 +390,11 @@ func (w *Worker) CreateConvertedFileRecordActivity(ctx context.Context, param *C
 		w.log.Error("CreateConvertedFileRecordActivity: Failed to create DB record",
 			zap.String("fileUID", param.FileUID.String()),
 			zap.Error(err))
-		return nil, fmt.Errorf("failed to create converted file record: %w", err)
+		return nil, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to create converted file record: %s", errorsx.MessageOrErr(err)),
+			createConvertedFileRecordActivityError,
+			err,
+		)
 	}
 
 	w.log.Info("CreateConvertedFileRecordActivity: DB record created successfully",
@@ -388,7 +423,11 @@ func (w *Worker) UploadConvertedFileToMinIOActivity(ctx context.Context, param *
 	if err != nil {
 		w.log.Error("UploadConvertedFileToMinIOActivity: Failed to upload to MinIO",
 			zap.Error(err))
-		return nil, fmt.Errorf("failed to upload converted file to MinIO: %w", err)
+		return nil, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to upload converted file: %s", errorsx.MessageOrErr(err)),
+			uploadConvertedFileActivityError,
+			err,
+		)
 	}
 
 	w.log.Info("UploadConvertedFileToMinIOActivity: Upload successful",
@@ -410,7 +449,11 @@ func (w *Worker) DeleteConvertedFileRecordActivity(ctx context.Context, param *D
 		w.log.Error("DeleteConvertedFileRecordActivity: Failed to delete DB record",
 			zap.String("convertedFileUID", param.ConvertedFileUID.String()),
 			zap.Error(err))
-		return fmt.Errorf("failed to delete converted file record: %w", err)
+		return temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to delete converted file record: %s", errorsx.MessageOrErr(err)),
+			deleteConvertedFileRecordActivityError,
+			err,
+		)
 	}
 
 	w.log.Info("DeleteConvertedFileRecordActivity: DB record deleted successfully")
@@ -431,7 +474,11 @@ func (w *Worker) UpdateConvertedFileDestinationActivity(ctx context.Context, par
 		w.log.Error("UpdateConvertedFileDestinationActivity: Failed to update destination",
 			zap.String("convertedFileUID", param.ConvertedFileUID.String()),
 			zap.Error(err))
-		return fmt.Errorf("failed to update converted file destination: %w", err)
+		return temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to update file destination: %s", errorsx.MessageOrErr(err)),
+			updateConvertedFileDestActivityError,
+			err,
+		)
 	}
 
 	w.log.Info("UpdateConvertedFileDestinationActivity: Destination updated successfully")
@@ -450,7 +497,11 @@ func (w *Worker) DeleteConvertedFileFromMinIOActivity(ctx context.Context, param
 		w.log.Error("DeleteConvertedFileFromMinIOActivity: Failed to delete from MinIO",
 			zap.String("destination", param.Destination),
 			zap.Error(err))
-		return fmt.Errorf("failed to delete converted file from MinIO: %w", err)
+		return temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to delete converted file from storage: %s", errorsx.MessageOrErr(err)),
+			deleteConvertedFileMinIOActivityError,
+			err,
+		)
 	}
 
 	w.log.Info("DeleteConvertedFileFromMinIOActivity: File deleted successfully from MinIO")
@@ -476,7 +527,11 @@ func (w *Worker) UpdateConversionMetadataActivity(ctx context.Context, param *Up
 				zap.String("fileUID", param.FileUID.String()))
 			return nil
 		}
-		return fmt.Errorf("failed to update file metadata: %w", err)
+		return temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to update file metadata: %s", errorsx.MessageOrErr(err)),
+			updateConversionMetadataActivityError,
+			err,
+		)
 	}
 
 	w.log.Info("UpdateConversionMetadataActivity: Metadata updated successfully")
@@ -544,13 +599,21 @@ func (w *Worker) GetConvertedFileForChunkingActivity(ctx context.Context, param 
 	// Get converted file metadata from DB
 	convertedFile, err := w.repository.GetConvertedFileByFileUID(ctx, param.FileUID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get converted file metadata: %w", err)
+		return nil, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to get converted file: %s", errorsx.MessageOrErr(err)),
+			getConvertedFileActivityError,
+			err,
+		)
 	}
 
 	// Get file to access external metadata for authentication
 	file, err := getFileByUID(ctx, w.repository, param.FileUID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get file metadata: %w", err)
+		return nil, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to get file metadata: %s", errorsx.MessageOrErr(err)),
+			getConvertedFileActivityError,
+			err,
+		)
 	}
 
 	// Create authenticated context if external metadata exists
@@ -589,7 +652,11 @@ func (w *Worker) GetConvertedFileForChunkingActivity(ctx context.Context, param 
 			zap.String("bucket", bucket),
 			zap.String("destination", convertedFile.Destination),
 			zap.Error(err))
-		return nil, fmt.Errorf("failed to get converted file from MinIO: %w", err)
+		return nil, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to retrieve converted file from storage: %s", errorsx.MessageOrErr(err)),
+			getConvertedFileActivityError,
+			err,
+		)
 	}
 
 	w.log.Info("GetConvertedFileForChunkingActivity: Converted file retrieved",
@@ -631,7 +698,11 @@ func (w *Worker) ChunkContentActivity(ctx context.Context, param *ChunkContentAc
 		chunkingResult, err = w.service.ChunkTextPipe(authCtx, string(param.Content))
 	}
 	if err != nil {
-		return nil, fmt.Errorf("chunking pipeline failed: %w", err)
+		return nil, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Content chunking failed: %s", errorsx.MessageOrErr(err)),
+			chunkContentActivityError,
+			err,
+		)
 	}
 
 	w.log.Info("ChunkContentActivity: Chunking successful",
@@ -665,7 +736,11 @@ func (w *Worker) SaveChunksToDBActivity(ctx context.Context, param *SaveChunksTo
 		param.KnowledgeBaseUID, param.FileUID, param.SourceUID, param.SourceTable,
 		param.SummaryChunks, param.ContentChunks, param.FileType)
 	if err != nil {
-		return nil, fmt.Errorf("failed to save chunks to DB: %w", err)
+		return nil, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to save chunks: %s", errorsx.MessageOrErr(err)),
+			saveChunksDBActivityError,
+			err,
+		)
 	}
 
 	w.log.Info("SaveChunksToDBActivity: Chunks saved to database",
@@ -694,7 +769,11 @@ func (w *Worker) UpdateChunkingMetadataActivity(ctx context.Context, param *Upda
 				zap.String("fileUID", param.FileUID.String()))
 			return nil
 		}
-		return fmt.Errorf("failed to update file metadata: %w", err)
+		return temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to update file metadata: %s", errorsx.MessageOrErr(err)),
+			updateChunkingMetadataActivityError,
+			err,
+		)
 	}
 
 	w.log.Info("UpdateChunkingMetadataActivity: Metadata updated successfully")
@@ -775,18 +854,30 @@ func (w *Worker) GetFileContentForSummaryActivity(ctx context.Context, param *Ge
 		// Get converted file
 		convertedFile, err := w.repository.GetConvertedFileByFileUID(ctx, param.FileUID)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get converted file: %w", err)
+			return nil, temporal.NewApplicationErrorWithCause(
+				fmt.Sprintf("Failed to get converted file: %s", errorsx.MessageOrErr(err)),
+				getFileContentSummaryActivityError,
+				err,
+			)
 		}
 		content, err = w.service.MinIO().GetFile(authCtx, config.Config.Minio.BucketName, convertedFile.Destination)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get converted file from MinIO: %w", err)
+			return nil, temporal.NewApplicationErrorWithCause(
+				fmt.Sprintf("Failed to retrieve converted file from storage: %s", errorsx.MessageOrErr(err)),
+				getFileContentSummaryActivityError,
+				err,
+			)
 		}
 
 	default:
 		// Get original file
 		content, err = w.service.MinIO().GetFile(authCtx, param.Bucket, param.Destination)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get original file from MinIO: %w", err)
+			return nil, temporal.NewApplicationErrorWithCause(
+				fmt.Sprintf("Failed to retrieve file from storage: %s", errorsx.MessageOrErr(err)),
+				getFileContentSummaryActivityError,
+				err,
+			)
 		}
 	}
 
@@ -819,7 +910,11 @@ func (w *Worker) GenerateSummaryFromPipelineActivity(ctx context.Context, param 
 	// Call the summarization pipeline - THIS IS THE KEY EXTERNAL CALL
 	summary, err := w.service.GenerateSummary(authCtx, string(param.Content), param.RequesterID)
 	if err != nil {
-		return nil, fmt.Errorf("summarization pipeline failed: %w", err)
+		return nil, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Summary generation failed: %s", errorsx.MessageOrErr(err)),
+			generateSummaryActivityError,
+			err,
+		)
 	}
 
 	w.log.Info("GenerateSummaryFromPipelineActivity: Summary generated successfully",
@@ -850,7 +945,11 @@ func (w *Worker) SaveSummaryActivity(ctx context.Context, param *SaveSummaryActi
 				zap.String("fileUID", param.FileUID.String()))
 			return nil
 		}
-		return fmt.Errorf("failed to update summary: %w", err)
+		return temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to save summary: %s", errorsx.MessageOrErr(err)),
+			saveSummaryActivityError,
+			err,
+		)
 	}
 
 	// Update metadata
@@ -865,9 +964,35 @@ func (w *Worker) SaveSummaryActivity(ctx context.Context, param *SaveSummaryActi
 				zap.String("fileUID", param.FileUID.String()))
 			return nil
 		}
-		return fmt.Errorf("failed to update metadata: %w", err)
+		return temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to update file metadata: %s", errorsx.MessageOrErr(err)),
+			saveSummaryActivityError,
+			err,
+		)
 	}
 
 	w.log.Info("SaveSummaryActivity: Summary saved successfully")
 	return nil
 }
+
+// Activity error type constants help Temporal clients identify the origin of errors
+// and can be used to define retry policies or handle errors appropriately.
+const (
+	getFileMetadataActivityError           = "GetFileMetadataActivity"
+	getFileContentActivityError            = "GetFileContentActivity"
+	convertFileActivityError               = "ConvertFileActivity"
+	cleanupOldConvertedFileActivityError   = "CleanupOldConvertedFileActivity"
+	createConvertedFileRecordActivityError = "CreateConvertedFileRecordActivity"
+	uploadConvertedFileActivityError       = "UploadConvertedFileActivity"
+	deleteConvertedFileRecordActivityError = "DeleteConvertedFileRecordActivity"
+	updateConvertedFileDestActivityError   = "UpdateConvertedFileDestinationActivity"
+	deleteConvertedFileMinIOActivityError  = "DeleteConvertedFileFromMinIOActivity"
+	updateConversionMetadataActivityError  = "UpdateConversionMetadataActivity"
+	getConvertedFileActivityError          = "GetConvertedFileForChunkingActivity"
+	chunkContentActivityError              = "ChunkContentActivity"
+	saveChunksDBActivityError              = "SaveChunksToDBActivity"
+	updateChunkingMetadataActivityError    = "UpdateChunkingMetadataActivity"
+	getFileContentSummaryActivityError     = "GetFileContentForSummaryActivity"
+	generateSummaryActivityError           = "GenerateSummaryFromPipelineActivity"
+	saveSummaryActivityError               = "SaveSummaryActivity"
+)

@@ -7,9 +7,12 @@ import (
 	"path/filepath"
 
 	"github.com/gofrs/uuid"
+	"go.temporal.io/sdk/temporal"
 	"go.uber.org/zap"
 
 	"github.com/instill-ai/artifact-backend/config"
+
+	errorsx "github.com/instill-ai/x/errors"
 )
 
 // SaveChunkActivityParam defines parameters for saving a single chunk
@@ -72,7 +75,11 @@ func (w *Worker) SaveChunkActivity(ctx context.Context, param *SaveChunkActivity
 		w.log.Error("Failed to upload chunk",
 			zap.String("chunkUID", param.ChunkUID),
 			zap.Error(err))
-		return nil, fmt.Errorf("failed to upload chunk %s: %w", param.ChunkUID, err)
+		return nil, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to upload chunk to storage: %s", errorsx.MessageOrErr(err)),
+			saveChunkActivityError,
+			err,
+		)
 	}
 
 	w.log.Info("Chunk uploaded successfully",
@@ -96,7 +103,11 @@ func (w *Worker) DeleteFileActivity(ctx context.Context, param *DeleteFileActivi
 		w.log.Error("Failed to delete file",
 			zap.String("path", param.Path),
 			zap.Error(err))
-		return fmt.Errorf("failed to delete file %s: %w", param.Path, err)
+		return temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to delete file from storage: %s", errorsx.MessageOrErr(err)),
+			deleteFileActivityError,
+			err,
+		)
 	}
 
 	w.log.Info("File deleted successfully", zap.String("path", param.Path))
@@ -114,7 +125,11 @@ func (w *Worker) GetFileActivity(ctx context.Context, param *GetFileActivityPara
 		w.log.Error("Failed to get file",
 			zap.String("path", param.Path),
 			zap.Error(err))
-		return nil, fmt.Errorf("failed to get file %s: %w", param.Path, err)
+		return nil, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to retrieve file from storage: %s", errorsx.MessageOrErr(err)),
+			getFileActivityError,
+			err,
+		)
 	}
 
 	w.log.Info("File retrieved successfully",
@@ -138,10 +153,22 @@ func (w *Worker) UpdateChunkDestinationsActivity(ctx context.Context, param *Upd
 		w.log.Error("Failed to update chunk destinations",
 			zap.Int("chunkCount", len(param.Destinations)),
 			zap.Error(err))
-		return fmt.Errorf("failed to update chunk destinations: %w", err)
+		return temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to update chunk destinations: %s", errorsx.MessageOrErr(err)),
+			updateChunkDestinationsActivityError,
+			err,
+		)
 	}
 
 	w.log.Info("Chunk destinations updated successfully",
 		zap.Int("chunkCount", len(param.Destinations)))
 	return nil
 }
+
+// Activity error type constants
+const (
+	saveChunkActivityError               = "SaveChunkActivity"
+	deleteFileActivityError              = "DeleteFileActivity"
+	getFileActivityError                 = "GetFileActivity"
+	updateChunkDestinationsActivityError = "UpdateChunkDestinationsActivity"
+)
