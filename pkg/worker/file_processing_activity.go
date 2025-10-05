@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"strings"
 	"unicode/utf8"
@@ -11,6 +12,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/structpb"
+	"gorm.io/gorm"
 
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/minio"
@@ -533,7 +535,7 @@ func (w *Worker) UpdateConversionMetadataActivity(ctx context.Context, param *Up
 	err := w.service.Repository().UpdateKBFileMetadata(ctx, param.FileUID, mdUpdate)
 	if err != nil {
 		// If file not found, it may have been deleted during processing - this is OK
-		if err.Error() == "record not found" || err.Error() == "fetching file: record not found" {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			w.log.Info("UpdateConversionMetadataActivity: File not found (may have been deleted), skipping metadata update",
 				zap.String("fileUID", param.FileUID.String()))
 			return nil
@@ -786,7 +788,7 @@ func (w *Worker) UpdateChunkingMetadataActivity(ctx context.Context, param *Upda
 	err := w.service.Repository().UpdateKBFileMetadata(ctx, param.FileUID, mdUpdate)
 	if err != nil {
 		// If file not found, it may have been deleted during processing - this is OK
-		if err.Error() == "record not found" || err.Error() == "fetching file: record not found" {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			w.log.Info("UpdateChunkingMetadataActivity: File not found (may have been deleted), skipping metadata update",
 				zap.String("fileUID", param.FileUID.String()))
 			return nil
@@ -968,7 +970,7 @@ func (w *Worker) SaveSummaryActivity(ctx context.Context, param *SaveSummaryActi
 	_, err := w.service.Repository().UpdateKnowledgeBaseFile(ctx, param.FileUID.String(), updateMap)
 	if err != nil {
 		// If file not found, it may have been deleted during processing - this is OK
-		if err.Error() == "record not found" {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			w.log.Info("SaveSummaryActivity: File not found (may have been deleted), skipping summary save",
 				zap.String("fileUID", param.FileUID.String()))
 			return nil
@@ -987,7 +989,7 @@ func (w *Worker) SaveSummaryActivity(ctx context.Context, param *SaveSummaryActi
 	err = w.service.Repository().UpdateKBFileMetadata(ctx, param.FileUID, mdUpdate)
 	if err != nil {
 		// If file not found, it may have been deleted during processing - this is OK
-		if err.Error() == "record not found" || err.Error() == "fetching file: record not found" {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			w.log.Info("SaveSummaryActivity: File not found (may have been deleted), skipping metadata update",
 				zap.String("fileUID", param.FileUID.String()))
 			return nil
