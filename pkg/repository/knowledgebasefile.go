@@ -38,8 +38,6 @@ type KnowledgeBaseFileI interface {
 	DeleteAllKnowledgeBaseFiles(ctx context.Context, kbUID string) error
 	// ProcessKnowledgeBaseFiles updates the process status of the files
 	ProcessKnowledgeBaseFiles(ctx context.Context, fileUIDs []string, requester uuid.UUID) ([]KnowledgeBaseFile, error)
-	// GetNeedProcessFiles returns the files that are not yet processed
-	GetNeedProcessFiles(ctx context.Context, catalogType artifactpb.CatalogType) []KnowledgeBaseFile
 	// UpdateKnowledgeBaseFile updates the data and retrieves the latest data
 	UpdateKnowledgeBaseFile(ctx context.Context, fileUID string, updateMap map[string]any) (*KnowledgeBaseFile, error)
 	// GetCountFilesByListKnowledgeBaseUID returns the number of files associated with the knowledge base UID
@@ -500,59 +498,6 @@ func (r *Repository) ProcessKnowledgeBaseFiles(
 	}
 
 	return files, nil
-}
-
-// GetNeedProcessFiles returns the files that need to be processed in persistent catalogs
-func (r *Repository) GetNeedProcessFiles(ctx context.Context, catalogType artifactpb.CatalogType) []KnowledgeBaseFile {
-	var files []KnowledgeBaseFile
-
-	// First get files that need processing
-	whereClause := fmt.Sprintf("%v IN ? AND %v is null", KnowledgeBaseFileColumn.ProcessStatus, KnowledgeBaseFileColumn.DeleteTime)
-	if err := r.db.WithContext(ctx).Where(
-		whereClause, []string{
-			artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CONVERTING.String(),
-			artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_SUMMARIZING.String(),
-			artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_EMBEDDING.String(),
-			artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CHUNKING.String(),
-		}).
-		Find(&files).Error; err != nil {
-		return nil
-	}
-
-	// Filter files to only include those from persistent catalogs
-	var result []KnowledgeBaseFile
-	// Get all unique knowledge base UIDs
-	kbUIDs := make([]uuid.UUID, 0)
-	kbUIDMap := make(map[uuid.UUID]bool)
-	for _, file := range files {
-		if !kbUIDMap[file.KnowledgeBaseUID] {
-			kbUIDs = append(kbUIDs, file.KnowledgeBaseUID)
-			kbUIDMap[file.KnowledgeBaseUID] = true
-		}
-	}
-
-	// Get all knowledge bases in one query
-	kbs, err := r.GetKnowledgeBasesByUIDs(ctx, kbUIDs)
-	if err != nil {
-		return nil
-	}
-
-	// Create map of persistent knowledge bases
-	persistentKBs := make(map[uuid.UUID]bool)
-	for _, kb := range kbs {
-		if kb.CatalogType == catalogType.String() {
-			persistentKBs[kb.UID] = true
-		}
-	}
-
-	// Filter files to only include those from persistent catalogs
-	for _, file := range files {
-		if persistentKBs[file.KnowledgeBaseUID] {
-			result = append(result, file)
-		}
-	}
-
-	return result
 }
 
 // UpdateKnowledgeBaseFile updates the data and retrieves the latest data
