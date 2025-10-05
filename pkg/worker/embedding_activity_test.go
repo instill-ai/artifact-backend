@@ -8,6 +8,7 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/gojuno/minimock/v3"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 
 	qt "github.com/frankban/quicktest"
 
@@ -454,7 +455,7 @@ func TestUpdateEmbeddingMetadataActivity_FileDeleted(t *testing.T) {
 	mc := minimock.NewController(c)
 
 	mockRepo := mock.NewRepositoryIMock(mc)
-	mockRepo.UpdateKBFileMetadataMock.Return(fmt.Errorf("record not found"))
+	mockRepo.UpdateKBFileMetadataMock.Return(gorm.ErrRecordNotFound)
 
 	mockSvc := NewServiceMock(mc)
 	mockSvc.RepositoryMock.Return(mockRepo)

@@ -756,7 +756,7 @@ func (w *Worker) SaveChunksToDBActivity(ctx context.Context, param *SaveChunksTo
 	}
 
 	// Use helper function from common.go
-	chunksToSave, err := saveChunksToDBOnly(ctx, w.service.Repository(),
+	chunksToSave, err := saveChunksToDBOnly(ctx, w.service.Repository(), w.service.MinIO(),
 		param.KnowledgeBaseUID, param.FileUID, param.SourceUID, param.SourceTable,
 		param.SummaryChunks, param.ContentChunks, param.FileType)
 	if err != nil {

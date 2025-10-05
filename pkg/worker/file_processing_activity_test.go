@@ -247,13 +247,42 @@ func TestSaveChunksToDBActivity_Success(t *testing.T) {
 
 	chunkUID := uuid.Must(uuid.NewV4())
 
+	// Mock MinIO client for chunk upload
+	mockMinio := mock.NewMinioIMock(mc)
+	mockMinio.UploadBase64FileMock.Return(nil)
+
+	// Mock Repository with custom implementation that calls the callback
 	mockRepo := mock.NewRepositoryIMock(mc)
-	mockRepo.DeleteAndCreateChunksMock.Return([]*repository.TextChunk{
-		{UID: chunkUID},
-	}, nil)
+	mockRepo.DeleteAndCreateChunksMock.Set(func(
+		ctx context.Context,
+		fUID uuid.UUID,
+		chunks []*repository.TextChunk,
+		callback func(chunkUIDs []string) (destinations map[string]string, err error),
+	) ([]*repository.TextChunk, error) {
+		// Create the chunk with the test UID
+		createdChunks := []*repository.TextChunk{{UID: chunkUID}}
+
+		// Call the callback if provided (this will trigger MinIO upload)
+		if callback != nil {
+			chunkUIDs := []string{chunkUID.String()}
+			destinations, err := callback(chunkUIDs)
+			if err != nil {
+				return nil, err
+			}
+			// Update the destinations in the chunks
+			for _, chunk := range createdChunks {
+				if dest, ok := destinations[chunk.UID.String()]; ok {
+					chunk.ContentDest = dest
+				}
+			}
+		}
+
+		return createdChunks, nil
+	})
 
 	mockSvc := NewServiceMock(mc)
 	mockSvc.RepositoryMock.Return(mockRepo)
+	mockSvc.MinIOMock.Return(mockMinio)
 
 	// Mock DeleteTextChunksByFileUID (called before saving)
 	mockSvc.DeleteTextChunksByFileUIDMock.Return(nil)

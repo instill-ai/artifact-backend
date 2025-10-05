@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 
@@ -9,7 +10,9 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/constant"
+	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/service"
 
@@ -34,6 +37,7 @@ func getFileByUID(ctx context.Context, repo repository.RepositoryI, fileUID uuid
 func saveChunksToDBOnly(
 	ctx context.Context,
 	repo repository.RepositoryI,
+	minioClient minio.MinioI,
 	kbUID, kbFileUID, sourceUID uuid.UUID,
 	sourceTable string,
 	summaryChunks, contentChunks []service.Chunk,
@@ -80,21 +84,46 @@ func saveChunksToDBOnly(
 		texts[ii] = c.Text
 	}
 
-	// Save chunks to database with placeholder destinations
-	// Delete old chunks and create new ones
-	createdChunks, err := repo.DeleteAndCreateChunks(ctx, kbFileUID, textChunks, func(uids []string) (map[string]string, error) {
-		// Return placeholder destinations for now
-		destinations := make(map[string]string, len(uids))
-		for _, uid := range uids {
-			destinations[uid] = "pending"
+	// Create a callback that saves chunks to MinIO and returns destinations
+	// This callback is executed within the database transaction, ensuring atomicity
+	callback := func(chunkUIDs []string) (map[string]string, error) {
+		destinations := make(map[string]string, len(chunkUIDs))
+
+		for i, chunkUID := range chunkUIDs {
+			// Construct the MinIO path using the format: kb-{kbUID}/file-{fileUID}/chunk/{chunkUID}.md
+			basePath := fmt.Sprintf("kb-%s/file-%s/chunk", kbUID.String(), kbFileUID.String())
+			path := fmt.Sprintf("%s/%s.md", basePath, chunkUID)
+
+			// Encode chunk content to base64
+			base64Content := base64.StdEncoding.EncodeToString([]byte(texts[i]))
+
+			// Save chunk content to MinIO
+			err := minioClient.UploadBase64File(
+				ctx,
+				config.Config.Minio.BucketName,
+				path,
+				base64Content,
+				"text/markdown",
+			)
+			if err != nil {
+				return nil, fmt.Errorf("failed to save chunk %s to MinIO: %s", chunkUID, errorsx.MessageOrErr(err))
+			}
+
+			destinations[chunkUID] = path
 		}
+
 		return destinations, nil
-	})
+	}
+
+	// Save chunks to database and MinIO atomically
+	// Delete old chunks and create new ones
+	createdChunks, err := repo.DeleteAndCreateChunks(ctx, kbFileUID, textChunks, callback)
 	if err != nil {
 		return nil, fmt.Errorf("storing chunk records in repository: %s", errorsx.MessageOrErr(err))
 	}
 
-	// Build map of chunkUID -> content for MinIO save
+	// Build map of chunkUID -> content for MinIO save (for backward compatibility)
+	// This is now just for returning the data, as MinIO save already happened in the callback
 	chunksToSave := make(map[string][]byte, len(createdChunks))
 	for i, chunk := range createdChunks {
 		chunksToSave[chunk.UID.String()] = []byte(texts[i])
