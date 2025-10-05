@@ -663,8 +663,16 @@ func (ph *PublicHandler) DeleteCatalogFile(ctx context.Context, req *artifactpb.
 		return nil, fmt.Errorf("file not found. err: %w", errorsx.ErrNotFound)
 	}
 
-	// Try to trigger cleanup workflow first - if this fails, we don't want to soft-delete
-	// the file record as it would leave orphaned resources
+	// Soft-delete the file record first to make it immediately invisible to users
+	// This ensures a responsive user experience regardless of cleanup workflow status
+	err = ph.service.Repository().DeleteKnowledgeBaseFileAndDecreaseUsage(ctx, fUID)
+	if err != nil {
+		logger.Error("failed to delete knowledge base file and decrease usage", zap.Error(err))
+		return nil, err
+	}
+
+	// Fire-and-forget: trigger background cleanup workflow
+	// If this fails, log the error but don't fail the user's delete request
 	if ph.service.CleanupFileWorkflow() != nil {
 		// Generate workflow ID for tracking
 		workflowID := uuid.Must(uuid.NewV4()).String()
@@ -676,35 +684,41 @@ func (ph *PublicHandler) DeleteCatalogFile(ctx context.Context, req *artifactpb.
 			WorkflowID:          workflowID,
 		}
 
-		err = ph.service.CleanupFileWorkflow().Execute(ctx, param)
+		// Use a detached context to prevent request cancellation from affecting workflow start
+		// This ensures the cleanup workflow can be triggered even if the client disconnects
+		backgroundCtx := context.Background()
+
+		err = ph.service.CleanupFileWorkflow().Execute(backgroundCtx, param)
 		if err != nil {
-			logger.Error("Failed to trigger cleanup workflow - aborting file deletion to prevent resource leaks",
+			// Log the error but don't fail the user's request
+			// The file has already been soft-deleted from their perspective
+			logger.Error("Failed to trigger cleanup workflow - resources may be orphaned and require manual cleanup",
 				zap.String("fileUID", fUID.String()),
 				zap.String("workflowID", workflowID),
 				zap.Error(err))
-			return nil, fmt.Errorf("failed to start cleanup workflow: %w", err)
+		} else {
+			logger.Info("Cleanup workflow triggered successfully",
+				zap.String("fileUID", fUID.String()),
+				zap.String("workflowID", workflowID))
 		}
-		logger.Info("Cleanup workflow triggered successfully",
-			zap.String("fileUID", fUID.String()),
-			zap.String("workflowID", workflowID))
 	} else {
-		// Temporal client is nil - perform immediate cleanup to prevent resource leaks
-		logger.Warn("Temporal client is nil, performing immediate cleanup",
+		// Temporal client is nil - schedule immediate cleanup in background goroutine
+		// This prevents blocking the RPC while still attempting cleanup
+		logger.Warn("Temporal client is nil, scheduling immediate cleanup in background",
 			zap.String("fileUID", fUID.String()))
 
-		if err := ph.performImmediateCleanup(ctx, files[0]); err != nil {
-			logger.Error("Failed to perform immediate cleanup",
-				zap.String("fileUID", fUID.String()),
-				zap.Error(err))
-			return nil, fmt.Errorf("failed to perform cleanup: %w", err)
-		}
-	}
-
-	// Only soft-delete the file record after cleanup is successfully initiated or completed
-	err = ph.service.Repository().DeleteKnowledgeBaseFileAndDecreaseUsage(ctx, fUID)
-	if err != nil {
-		logger.Error("failed to delete knowledge base file and decrease usage", zap.Error(err))
-		return nil, err
+		go func() {
+			// Use background context since the original request context may be cancelled
+			bgCtx := context.Background()
+			if err := ph.performImmediateCleanup(bgCtx, files[0]); err != nil {
+				logger.Error("Failed to perform immediate cleanup - resources may be orphaned",
+					zap.String("fileUID", fUID.String()),
+					zap.Error(err))
+			} else {
+				logger.Info("Immediate cleanup completed successfully",
+					zap.String("fileUID", fUID.String()))
+			}
+		}()
 	}
 
 	return &artifactpb.DeleteCatalogFileResponse{
