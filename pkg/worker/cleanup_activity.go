@@ -185,18 +185,18 @@ func (w *Worker) DeleteEmbeddingsFromVectorDBActivity(ctx context.Context, param
 		if strings.Contains(err.Error(), "can't find collection") {
 			w.log.Info("DeleteEmbeddingsFromVectorDBActivity: Collection not found (already cleaned up) in vector db",
 				zap.String("collection", collection))
-		} else {
-			return temporal.NewApplicationErrorWithCause(
-				fmt.Sprintf("Failed to delete embeddings from vector db: %s", errorsx.MessageOrErr(err)),
-				deleteEmbeddingsActivityError,
-				err,
-			)
+			return nil
 		}
-	} else {
-		w.log.Info("DeleteEmbeddingsFromVectorDBActivity: Deleted from vector db",
-			zap.String("kbUID", kbUID.String()),
-			zap.Int("embeddingCount", len(embeddings)))
+		return temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to delete embeddings from vector db: %s", errorsx.MessageOrErr(err)),
+			deleteEmbeddingsActivityError,
+			err,
+		)
 	}
+
+	w.log.Info("DeleteEmbeddingsFromVectorDBActivity: Deleted from vector db",
+		zap.String("kbUID", kbUID.String()),
+		zap.Int("embeddingCount", len(embeddings)))
 
 	return nil
 }
