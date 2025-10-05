@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"github.com/gofrs/uuid"
-	"go.uber.org/zap"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/structpb"
 
@@ -15,7 +14,6 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/service"
 
 	errorsx "github.com/instill-ai/x/errors"
-	logx "github.com/instill-ai/x/log"
 )
 
 // getFileByUID is a helper function to retrieve a single file by UID.
@@ -103,80 +101,6 @@ func saveChunksToDBOnly(
 	}
 
 	return chunksToSave, nil
-}
-
-const batchSize = 50
-
-// saveEmbeddings saves a collection of embeddings extracted from a file into
-// the vector and relational databases. The process is done in batches to avoid
-// timeouts with the vector DB. If previous embeddings associated to the file
-// exist in either database, they're cleaned up.
-func saveEmbeddings(ctx context.Context, svc service.Service, kbUID, fileUID uuid.UUID, embeddings []repository.Embedding, fileName string) error {
-	logger, _ := logx.GetZapLogger(ctx)
-	logger = logger.With(zap.String("KbUID", kbUID.String()))
-
-	if len(embeddings) == 0 {
-		logger.Debug("No embeddings to save")
-		return nil
-	}
-
-	totalEmbeddings := len(embeddings)
-	logger = logger.With(zap.Int("total", totalEmbeddings))
-
-	// Delete existing embeddings in the vector database
-	if err := svc.VectorDB().DeleteEmbeddingsWithFileUID(ctx, kbUID, fileUID); err != nil {
-		return fmt.Errorf("deleting existing embeddings in vector database: %s", errorsx.MessageOrErr(err))
-	}
-
-	// Process embeddings in batches
-	for i := 0; i < totalEmbeddings; i += batchSize {
-		// Add context check
-		if err := ctx.Err(); err != nil {
-			return fmt.Errorf("context cancelled while processing embeddings: %s", errorsx.MessageOrErr(err))
-		}
-
-		end := min(totalEmbeddings, i+batchSize)
-		currentBatch := embeddings[i:end]
-
-		logger := logger.With(
-			zap.Int("batch", i/batchSize+1),
-			zap.Int("batchSize", len(currentBatch)),
-			zap.Int("progress", end),
-		)
-
-		externalServiceCall := func(insertedEmbeddings []repository.Embedding) error {
-			// save the embeddings into vector database
-			vectors := make([]service.Embedding, len(insertedEmbeddings))
-			for j, emb := range insertedEmbeddings {
-				vectors[j] = service.Embedding{
-					SourceTable:  emb.SourceTable,
-					SourceUID:    emb.SourceUID.String(),
-					EmbeddingUID: emb.UID.String(),
-					Vector:       emb.Vector,
-					FileUID:      emb.KbFileUID,
-					FileName:     fileName,
-					FileType:     emb.FileType,
-					ContentType:  emb.ContentType,
-					Tags:         emb.Tags,
-				}
-			}
-			if err := svc.VectorDB().UpsertVectorsInCollection(ctx, kbUID, vectors); err != nil {
-				return fmt.Errorf("saving embeddings in vector database: %s", errorsx.MessageOrErr(err))
-			}
-
-			return nil
-		}
-
-		_, err := svc.Repository().DeleteAndCreateEmbeddings(ctx, fileUID, currentBatch, externalServiceCall)
-		if err != nil {
-			return fmt.Errorf("saving embeddings metadata into database: %s", errorsx.MessageOrErr(err))
-		}
-
-		logger.Info("Embeddings batch saved successfully")
-	}
-
-	logger.Info("All embeddings saved into vector database and metadata into database.")
-	return nil
 }
 
 // extractRequestMetadata extracts the gRPC metadata from a file's ExternalMetadata

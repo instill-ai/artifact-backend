@@ -66,12 +66,12 @@ func (w *Worker) EmbedTextsWorkflow(ctx workflow.Context, param service.EmbedTex
 	}
 
 	activityOptions := workflow.ActivityOptions{
-		StartToCloseTimeout: 5 * time.Minute,
+		StartToCloseTimeout: ActivityTimeoutStandard,
 		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval:    time.Second,
-			BackoffCoefficient: 2.0,
-			MaximumInterval:    30 * time.Second,
-			MaximumAttempts:    3,
+			InitialInterval:    RetryInitialInterval,
+			BackoffCoefficient: RetryBackoffCoefficient,
+			MaximumInterval:    RetryMaximumIntervalStandard,
+			MaximumAttempts:    RetryMaximumAttempts,
 		},
 	}
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
@@ -116,4 +116,101 @@ func (w *Worker) EmbedTextsWorkflow(ctx workflow.Context, param service.EmbedTex
 		"totalVectors", len(allVectors))
 
 	return allVectors, nil
+}
+
+// SaveEmbeddingsToVectorDBWorkflow orchestrates parallel saving of embedding batches
+// This workflow provides better performance than the single-activity approach by:
+// 1. Deleting old embeddings once upfront
+// 2. Saving batches in parallel (concurrent DB + Milvus writes)
+func (w *Worker) SaveEmbeddingsToVectorDBWorkflow(ctx workflow.Context, param SaveEmbeddingsToVectorDBWorkflowParam) error {
+	logger := workflow.GetLogger(ctx)
+	logger.Info("Starting SaveEmbeddingsToVectorDBWorkflow",
+		"kbUID", param.KnowledgeBaseUID.String(),
+		"fileUID", param.FileUID.String(),
+		"embeddingCount", len(param.Embeddings))
+
+	if len(param.Embeddings) == 0 {
+		logger.Info("No embeddings to save")
+		return nil
+	}
+
+	activityOptions := workflow.ActivityOptions{
+		StartToCloseTimeout: ActivityTimeoutLong,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    RetryInitialInterval,
+			BackoffCoefficient: RetryBackoffCoefficient,
+			MaximumInterval:    RetryMaximumIntervalLong,
+			MaximumAttempts:    RetryMaximumAttempts,
+		},
+	}
+	ctx = workflow.WithActivityOptions(ctx, activityOptions)
+
+	// Step 1: Delete old embeddings from VectorDB (ONCE)
+	deleteParam := &DeleteOldEmbeddingsActivityParam{
+		KnowledgeBaseUID: param.KnowledgeBaseUID,
+		FileUID:          param.FileUID,
+	}
+
+	if err := workflow.ExecuteActivity(ctx, w.DeleteOldEmbeddingsFromMilvusActivity, deleteParam).Get(ctx, nil); err != nil {
+		logger.Error("Failed to delete old embeddings from VectorDB", "error", err)
+		return fmt.Errorf("delete old embeddings from VectorDB: %s", errorsx.MessageOrErr(err))
+	}
+
+	// Step 2: Delete old embeddings from Database (ONCE)
+	if err := workflow.ExecuteActivity(ctx, w.DeleteOldEmbeddingsFromDBActivity, deleteParam).Get(ctx, nil); err != nil {
+		logger.Error("Failed to delete old embeddings from DB", "error", err)
+		return fmt.Errorf("delete old embeddings from DB: %s", errorsx.MessageOrErr(err))
+	}
+
+	// Step 3: Save batches in parallel
+	batchSize := EmbeddingBatchSize
+	totalBatches := (len(param.Embeddings) + batchSize - 1) / batchSize
+	logger.Info("Calculated batches for parallel processing", "totalBatches", totalBatches)
+
+	futures := make([]workflow.Future, totalBatches)
+	for i := range totalBatches {
+		start := i * batchSize
+		end := min(start+batchSize, len(param.Embeddings))
+
+		batchEmbeddings := param.Embeddings[start:end]
+		batchParam := &SaveEmbeddingBatchActivityParam{
+			KnowledgeBaseUID: param.KnowledgeBaseUID,
+			FileUID:          param.FileUID,
+			FileName:         param.FileName,
+			Embeddings:       batchEmbeddings,
+			BatchNumber:      i + 1,
+			TotalBatches:     totalBatches,
+		}
+
+		// Execute activities in parallel (no .Get() here)
+		futures[i] = workflow.ExecuteActivity(ctx, w.SaveEmbeddingBatchActivity, batchParam)
+	}
+
+	// Wait for all batches to complete
+	for i, future := range futures {
+		if err := future.Get(ctx, nil); err != nil {
+			logger.Error("Batch failed",
+				"batchNumber", i+1,
+				"totalBatches", totalBatches,
+				"error", err)
+			return fmt.Errorf("batch %d/%d failed: %s", i+1, totalBatches, errorsx.MessageOrErr(err))
+		}
+
+		logger.Info("Batch completed",
+			"batchNumber", i+1,
+			"totalBatches", totalBatches)
+	}
+
+	// Step 4: Flush the collection once at the end to persist all data
+	logger.Info("Flushing collection after all batches completed")
+	if err := workflow.ExecuteActivity(ctx, w.FlushCollectionActivity, deleteParam).Get(ctx, nil); err != nil {
+		logger.Error("Failed to flush collection", "error", err)
+		return fmt.Errorf("flush collection: %s", errorsx.MessageOrErr(err))
+	}
+
+	logger.Info("SaveEmbeddingsToVectorDBWorkflow completed successfully",
+		"totalEmbeddings", len(param.Embeddings),
+		"totalBatches", totalBatches)
+
+	return nil
 }

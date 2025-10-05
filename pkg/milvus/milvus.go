@@ -253,7 +253,27 @@ func (m *milvusClient) UpsertVectorsInCollection(ctx context.Context, kbUID uuid
 		return fmt.Errorf("inserting vectors: %w", err)
 	}
 
+	// Note: Flush removed for performance. Call FlushCollection separately after all batches complete.
+	logger.Info("Successfully inserted vectors", zap.Int("count", vectorCount))
+	return nil
+}
+
+// FlushCollection flushes a collection to persist all data immediately
+func (m *milvusClient) FlushCollection(ctx context.Context, collectionName string) error {
+	logger, _ := logx.GetZapLogger(ctx)
+	logger = logger.With(zap.String("collection_name", collectionName))
+
+	// Check if the collection exists
+	has, err := m.c.HasCollection(ctx, collectionName)
+	if err != nil {
+		return fmt.Errorf("checking collection existence: %w", err)
+	}
+	if !has {
+		return fmt.Errorf("collection does not exist: %w", errorsx.ErrNotFound)
+	}
+
 	// Flush the collection with retry
+	maxRetries := 3
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		err = m.c.Flush(ctx, collectionName, false)
 		if err == nil {
@@ -263,28 +283,41 @@ func (m *milvusClient) UpsertVectorsInCollection(ctx context.Context, kbUID uuid
 		time.Sleep(time.Second * time.Duration(attempt))
 	}
 	if err != nil {
-		return fmt.Errorf("flushing collection after insertion: %w", err)
+		return fmt.Errorf("flushing collection: %w", err)
 	}
 
-	logger.Info("Successfully inserted and flushed vectors")
+	logger.Info("Successfully flushed collection")
 	return nil
 }
 
 func (m *milvusClient) DeleteEmbeddingsWithFileUID(ctx context.Context, kbUID uuid.UUID, fileUID uuid.UUID) error {
 	collectionName := collectionName(kbUID)
-	fields, err := m.extractCollectionFields(ctx, collectionName)
+	
+	// Check if collection exists first
+	has, err := m.c.HasCollection(ctx, collectionName)
+	if err != nil {
+		return fmt.Errorf("checking collection existence: %w", err)
+	}
+	
+	// If collection does not exist, there is nothing to delete - return success
+	if !has {
+		return nil
+	}
+	
+	_, hasFileUID, err := m.checkMetadataFields(ctx, collectionName)
 	if err != nil {
 		return fmt.Errorf("checking metadata fields: %w", err)
 	}
-
-	if !fields.hasFileUID() {
-		return nil
+	if !hasFileUID {
+		return fmt.Errorf("collection %s does not have file_uid field", collectionName)
 	}
-
-	if err = m.c.LoadCollection(ctx, collectionName, false); err != nil {
-		return fmt.Errorf("loading collection: %w", err)
+	
+	expr := fmt.Sprintf("%s == '%s'", kbCollectionFieldFileUID, fileUID.String())
+	if err := m.c.Delete(ctx, collectionName, "", expr); err != nil {
+		return fmt.Errorf("deleting embeddings: %w", err)
 	}
-
+	
+	return nil
 	expr := fmt.Sprintf("%s == '%s'", kbCollectionFieldFileUID, fileUID.String())
 	if err := m.c.Delete(ctx, collectionName, "", expr); err != nil {
 		return fmt.Errorf("deleting embeddings: %w", err)

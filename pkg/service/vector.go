@@ -63,4 +63,17 @@ type VectorDatabase interface {
 	CheckFileUIDMetadata(_ context.Context, kbUID uuid.UUID) (bool, error)
 	// CheckTagsMetadata checks if the collection has the tags metadata field.
 	CheckTagsMetadata(_ context.Context, kbUID uuid.UUID) (bool, error)
+	// FlushCollection flushes a collection to persist data immediately
+	FlushCollection(_ context.Context, kbUID uuid.UUID) error
+}
+
+const kbCollectionPrefix = "kb_"
+
+// KBCollectionName returns the collection name for a given knowledge base,
+// identified by its uuid-formatted UID.
+// For historical reasons, collection names can only contain numbers, letters
+// and underscores, so UUID is here converted to a valid collection name.
+func KBCollectionName(uid uuid.UUID) string {
+	return kbCollectionPrefix + strings.ReplaceAll(uid.String(), "-", "_")
+>>>>>>> 2fb9164 (feat(worker): optimize SaveEmbeddingsToVectorDBWorkflow)
 }

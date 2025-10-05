@@ -246,8 +246,6 @@ export function countMilvusVectors(kbUID, fileUID) {
 // Polling Helpers for Eventual Consistency
 // ============================================================================
 
-import { sleep } from 'k6';
-
 /**
  * Poll MinIO until objects appear or timeout
  * Handles eventual consistency of S3/MinIO storage

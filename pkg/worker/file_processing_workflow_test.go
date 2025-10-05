@@ -4,9 +4,14 @@ import (
 	"testing"
 
 	"github.com/gofrs/uuid"
+	"github.com/gojuno/minimock/v3"
+	"go.temporal.io/sdk/testsuite"
+	"go.uber.org/zap"
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/instill-ai/artifact-backend/pkg/mock"
+	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/service"
 )
 
@@ -172,4 +177,46 @@ func TestProcessFileWorkflowParam_Copy(t *testing.T) {
 	// Verify original is unchanged (value type behavior)
 	c.Assert(original.FileUID, qt.Equals, fileUID)
 	c.Assert(original.FileUID, qt.Not(qt.Equals), copy.FileUID)
+}
+
+// Workflow tests with minimock
+// Note: ProcessFileWorkflow is highly complex with 20+ activities, 2+ child workflows,
+// and external pipeline calls. Full mocking of this workflow is extremely complex and brittle.
+// These tests validate error handling and key failure paths. Full happy-path testing is
+// better suited for end-to-end integration tests with real services.
+
+func TestProcessFileWorkflow_GetFileMetadataFailure(t *testing.T) {
+	c := qt.New(t)
+	mc := minimock.NewController(c)
+
+	testSuite := &testsuite.WorkflowTestSuite{}
+	env := testSuite.NewTestWorkflowEnvironment()
+
+	mockRepo := mock.NewRepositoryIMock(mc)
+	mockSvc := NewServiceMock(mc)
+	mockSvc.RepositoryMock.Return(mockRepo)
+
+	fileUID := uuid.Must(uuid.NewV4())
+	kbUID := uuid.Must(uuid.NewV4())
+
+	// Mock GetFileStatusActivity and GetFileMetadataActivity to return empty (file not found)
+	mockRepo.GetKnowledgeBaseFilesByFileUIDsMock.Return([]repository.KnowledgeBaseFile{}, nil)
+
+	worker := &Worker{service: mockSvc, log: zap.NewNop()}
+
+	env.RegisterActivity(worker.GetFileMetadataActivity)
+	env.RegisterActivity(worker.GetFileStatusActivity)
+	env.RegisterActivity(worker.UpdateFileStatusActivity)
+	env.RegisterWorkflow(worker.ProcessFileWorkflow)
+
+	param := service.ProcessFileWorkflowParam{
+		FileUID:          fileUID,
+		KnowledgeBaseUID: kbUID,
+	}
+
+	env.ExecuteWorkflow(worker.ProcessFileWorkflow, param)
+
+	c.Assert(env.IsWorkflowCompleted(), qt.IsTrue)
+	c.Assert(env.GetWorkflowError(), qt.IsNotNil)
+	c.Assert(env.GetWorkflowError().Error(), qt.Contains, "file status")
 }

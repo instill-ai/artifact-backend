@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/gofrs/uuid"
 	"go.temporal.io/api/enums/v1"
@@ -58,12 +57,12 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 
 	// Set workflow options
 	activityOptions := workflow.ActivityOptions{
-		StartToCloseTimeout: 10 * time.Minute,
+		StartToCloseTimeout: ActivityTimeoutLong,
 		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval:    time.Second,
-			BackoffCoefficient: 2.0,
-			MaximumInterval:    100 * time.Second,
-			MaximumAttempts:    3,
+			InitialInterval:    RetryInitialInterval,
+			BackoffCoefficient: RetryBackoffCoefficient,
+			MaximumInterval:    RetryMaximumIntervalLong,
+			MaximumAttempts:    RetryMaximumAttempts,
 		},
 	}
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
@@ -83,20 +82,19 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 		}).Get(ctx, nil)
 		if statusErr != nil {
 			logger.Error("Failed to update file status to FAILED", "statusError", statusErr)
-			// Even if we can't update the status, return nil to prevent Temporal retries.
-			// The workflow will complete, but the file status may not reflect the failure.
-			// This is preferable to triggering automatic retries which conflict with our
-			// manual intervention model.
+			// If we can't update the status, still return the original error
+			// to mark the workflow as failed in Temporal
 		} else {
-			logger.Info("File marked as FAILED, workflow completing without retry", "stage", stage)
+			logger.Info("File marked as FAILED, workflow will be marked as failed", "stage", stage)
 		}
 
 		// Note: We don't clean up intermediate files on error to allow resuming from the failed step.
 		// Cleanup happens automatically on reprocessing (each activity cleans up old data before creating new).
 
-		// Always return nil to complete workflow successfully and prevent Temporal's automatic retries.
-		// The file requires manual intervention (reprocessing) to continue.
-		return nil
+		// Return the error to mark the workflow as Failed in Temporal.
+		// Temporal's retry policy (MaximumAttempts: 3) will be respected.
+		// This ensures workflow status matches file status.
+		return fmt.Errorf("%s: %s", stage, errMsg)
 	}
 
 	// Get current file status to determine starting point
@@ -401,8 +399,8 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 		if err := workflow.ExecuteActivity(ctx, w.ChunkContentActivity, &ChunkContentActivityParam{
 			Content:      contentToChunk,
 			IsMarkdown:   true, // All converted files are markdown
-			ChunkSize:    1000,
-			ChunkOverlap: 200,
+			ChunkSize:    TextChunkSize,
+			ChunkOverlap: TextChunkOverlap,
 			Metadata:     fileInfo.ExternalMetadata,
 		}).Get(ctx, &contentChunks); err != nil {
 			return handleError("chunk content", err)
@@ -419,8 +417,8 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 			if err := workflow.ExecuteActivity(ctx, w.ChunkContentActivity, &ChunkContentActivityParam{
 				Content:      summaryBytes,
 				IsMarkdown:   false, // Summary is plain text
-				ChunkSize:    1000,
-				ChunkOverlap: 200,
+				ChunkSize:    TextChunkSize,
+				ChunkOverlap: TextChunkOverlap,
 				Metadata:     fileInfo.ExternalMetadata,
 			}).Get(ctx, &summaryChunks); err != nil {
 				return handleError("chunk summary", err)
@@ -520,14 +518,20 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 			}
 		}
 
-		// 5c. Save embeddings to Milvus + DB (combined operation for performance)
+		// 5c. Save embeddings to Milvus + DB using concurrent workflow
+		// This child workflow deletes old embeddings once, then saves batches in parallel
 		// Use file name from chunksData (already fetched in GetChunksForEmbeddingActivity)
-		if err := workflow.ExecuteActivity(ctx, w.SaveEmbeddingsToVectorDBActivity, &SaveEmbeddingsToVectorDBActivityParam{
+		childWorkflowOptions := workflow.ChildWorkflowOptions{
+			WorkflowID: fmt.Sprintf("save-embeddings-%s", fileUID.String()),
+		}
+		childCtx := workflow.WithChildOptions(ctx, childWorkflowOptions)
+
+		if err := workflow.ExecuteChildWorkflow(childCtx, w.SaveEmbeddingsToVectorDBWorkflow, SaveEmbeddingsToVectorDBWorkflowParam{
 			KnowledgeBaseUID: knowledgeBaseUID,
 			FileUID:          fileUID,
 			FileName:         chunksData.FileName,
 			Embeddings:       embeddings,
-		}).Get(ctx, nil); err != nil {
+		}).Get(childCtx, nil); err != nil {
 			return handleError("save embeddings to vector DB", err)
 		}
 

@@ -158,6 +158,7 @@ func main() {
 	w.RegisterWorkflow(cw.CleanupKnowledgeBaseWorkflow)
 	w.RegisterWorkflow(cw.EmbedTextsWorkflow)
 	w.RegisterWorkflow(cw.SaveChunksWorkflow)
+	w.RegisterWorkflow(cw.SaveEmbeddingsToVectorDBWorkflow)
 	w.RegisterWorkflow(cw.DeleteFilesWorkflow)
 	w.RegisterWorkflow(cw.GetFilesWorkflow)
 
@@ -209,7 +210,10 @@ func main() {
 	// Embedding Phase
 	w.RegisterActivity(cw.GetChunksForEmbeddingActivity)
 	w.RegisterActivity(cw.GenerateEmbeddingsActivity)
-	w.RegisterActivity(cw.SaveEmbeddingsToVectorDBActivity)
+	w.RegisterActivity(cw.DeleteOldEmbeddingsFromMilvusActivity)
+	w.RegisterActivity(cw.DeleteOldEmbeddingsFromDBActivity)
+	w.RegisterActivity(cw.SaveEmbeddingBatchActivity)
+	w.RegisterActivity(cw.FlushCollectionActivity)
 	w.RegisterActivity(cw.UpdateEmbeddingMetadataActivity)
 	// Summary Phase
 	w.RegisterActivity(cw.GetFileContentForSummaryActivity)

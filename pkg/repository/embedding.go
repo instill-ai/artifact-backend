@@ -13,12 +13,17 @@ import (
 	logx "github.com/instill-ai/x/log"
 )
 
+// EmbeddingI is the interface for the embedding repository
 type EmbeddingI interface {
 	DeleteAndCreateEmbeddings(_ context.Context, fileUID uuid.UUID, embeddings []Embedding, externalServiceCall func([]Embedding) error) ([]Embedding, error)
+	CreateEmbeddings(_ context.Context, embeddings []Embedding, externalServiceCall func([]Embedding) error) ([]Embedding, error)
+	DeleteEmbeddingsByKbFileUID(_ context.Context, kbFileUID uuid.UUID) error
 	HardDeleteEmbeddingsByKbUID(_ context.Context, kbUID uuid.UUID) error
 	HardDeleteEmbeddingsByKbFileUID(_ context.Context, kbFileUID uuid.UUID) error
 	ListEmbeddingsByKbFileUID(_ context.Context, kbFileUID uuid.UUID) ([]Embedding, error)
 }
+
+// Embedding is the model for the embedding table
 type Embedding struct {
 	UID uuid.UUID `gorm:"column:uid;type:uuid;default:gen_random_uuid();primaryKey" json:"uid"`
 	// SourceUID is the UID of the source entity that the embedding is associated with. i.e. the UID of the chunk, file, etc.
@@ -43,8 +48,10 @@ type Embedding struct {
 	Tags []string `json:"tags" gorm:"-"`
 }
 
+// Vector is the type for the vector column
 type Vector []float32
 
+// Value implements the driver.Valuer interface
 func (v Vector) Value() (driver.Value, error) {
 	if v == nil {
 		return nil, nil
@@ -56,6 +63,7 @@ func (v Vector) Value() (driver.Value, error) {
 	return string(r), nil
 }
 
+// Scan implements the sql.Scanner interface
 func (v *Vector) Scan(value any) error {
 	if value == nil {
 		*v = nil
@@ -92,6 +100,7 @@ func (v *Vector) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// EmbeddingColumns is the columns for the embedding table
 type EmbeddingColumns struct {
 	UID         string
 	SourceUID   string
@@ -105,6 +114,7 @@ type EmbeddingColumns struct {
 	ContentType string
 }
 
+// EmbeddingColumn is the column for the embedding table
 var EmbeddingColumn = EmbeddingColumns{
 	UID:         "uid",
 	SourceUID:   "source_uid",
@@ -169,6 +179,53 @@ func (r *Repository) DeleteAndCreateEmbeddings(
 	}
 
 	return embeddings, nil
+}
+
+// CreateEmbeddings inserts a batch of embeddings into the database without
+// deleting existing ones. This is useful for batch processing where deletion
+// has already been performed separately.
+func (r *Repository) CreateEmbeddings(
+	ctx context.Context,
+	embeddings []Embedding,
+	externalServiceCall func([]Embedding) error,
+) ([]Embedding, error) {
+
+	logger, _ := logx.GetZapLogger(ctx)
+
+	if len(embeddings) == 0 {
+		logger.Warn("no embeddings to create")
+		return embeddings, nil
+	}
+
+	// Start a transaction
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Insert new embeddings. This will update the UIDs in the embedding
+		// slice.
+		if err := tx.Create(&embeddings).Error; err != nil {
+			return fmt.Errorf("creating embeddings: %w", err)
+		}
+
+		if externalServiceCall != nil {
+			if err := externalServiceCall(embeddings); err != nil {
+				return fmt.Errorf("calling external service: %w", err)
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("transaction failed: %w", err)
+	}
+
+	return embeddings, nil
+}
+
+// DeleteEmbeddingsByKbFileUID deletes all embeddings associated with a file
+// (soft delete, respects the model's DeletedAt field if present).
+func (r *Repository) DeleteEmbeddingsByKbFileUID(ctx context.Context, kbFileUID uuid.UUID) error {
+	where := fmt.Sprintf("%s = ?", EmbeddingColumn.KbFileUID)
+	return r.db.WithContext(ctx).Where(where, kbFileUID).Delete(&Embedding{}).Error
 }
 
 // HardDeleteEmbeddingsByKbUID deletes all the embeddings associated with a certain kbUID.

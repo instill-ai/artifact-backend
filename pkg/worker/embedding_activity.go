@@ -11,6 +11,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/instill-ai/artifact-backend/pkg/repository"
+	"github.com/instill-ai/artifact-backend/pkg/service"
 
 	errorsx "github.com/instill-ai/x/errors"
 )
@@ -48,12 +49,28 @@ type GenerateEmbeddingsActivityResult struct {
 	Embeddings [][]float32
 }
 
-// SaveEmbeddingsToVectorDBActivityParam saves embeddings to Milvus
-type SaveEmbeddingsToVectorDBActivityParam struct {
+// SaveEmbeddingsToVectorDBWorkflowParam saves embeddings to Milvus
+type SaveEmbeddingsToVectorDBWorkflowParam struct {
 	KnowledgeBaseUID uuid.UUID
 	FileUID          uuid.UUID
 	FileName         string
 	Embeddings       []repository.Embedding
+}
+
+// SaveEmbeddingBatchActivityParam saves a single batch of embeddings
+type SaveEmbeddingBatchActivityParam struct {
+	KnowledgeBaseUID uuid.UUID
+	FileUID          uuid.UUID
+	FileName         string
+	Embeddings       []repository.Embedding
+	BatchNumber      int
+	TotalBatches     int
+}
+
+// DeleteOldEmbeddingsActivityParam for deleting old embeddings before batch save
+type DeleteOldEmbeddingsActivityParam struct {
+	KnowledgeBaseUID uuid.UUID
+	FileUID          uuid.UUID
 }
 
 // SaveEmbeddingsToDBActivityParam saves embedding metadata to DB
@@ -147,24 +164,114 @@ func (w *Worker) GenerateEmbeddingsActivity(ctx context.Context, param *Generate
 	}, nil
 }
 
-// SaveEmbeddingsToVectorDBActivity saves embeddings to Milvus and database
-// This is a combined Milvus write + DB write operation - idempotent
-func (w *Worker) SaveEmbeddingsToVectorDBActivity(ctx context.Context, param *SaveEmbeddingsToVectorDBActivityParam) error {
-	w.log.Info("SaveEmbeddingsToVectorDBActivity: Saving embeddings to Milvus",
+// SaveEmbeddingBatchActivity saves a single batch of embeddings to Milvus and database
+// This is designed for parallel execution - each batch is independent
+func (w *Worker) SaveEmbeddingBatchActivity(ctx context.Context, param *SaveEmbeddingBatchActivityParam) error {
+	w.log.Info("SaveEmbeddingBatchActivity: Saving batch",
 		zap.String("kbUID", param.KnowledgeBaseUID.String()),
+		zap.Int("batchNumber", param.BatchNumber),
+		zap.Int("totalBatches", param.TotalBatches),
 		zap.Int("embeddingCount", len(param.Embeddings)))
 
-	// Use helper function from common.go
-	err := saveEmbeddings(ctx, w.service, param.KnowledgeBaseUID, param.FileUID, param.Embeddings, param.FileName)
+	if len(param.Embeddings) == 0 {
+		w.log.Warn("SaveEmbeddingBatchActivity: Empty batch, skipping")
+		return nil
+	}
+
+	// Build vectors for Milvus
+	collection := service.KBCollectionName(param.KnowledgeBaseUID)
+
+	externalServiceCall := func(insertedEmbeddings []repository.Embedding) error {
+		vectors := make([]service.Embedding, len(insertedEmbeddings))
+		for j, emb := range insertedEmbeddings {
+			vectors[j] = service.Embedding{
+				SourceTable:  emb.SourceTable,
+				SourceUID:    emb.SourceUID.String(),
+				EmbeddingUID: emb.UID.String(),
+				Vector:       emb.Vector,
+				FileUID:      emb.KbFileUID,
+				FileName:     param.FileName,
+				FileType:     emb.FileType,
+				ContentType:  emb.ContentType,
+			}
+		}
+		if err := w.service.VectorDB().InsertVectorsInCollection(ctx, collection, vectors); err != nil {
+			return fmt.Errorf("saving embeddings in vector database: %s", errorsx.MessageOrErr(err))
+		}
+		return nil
+	}
+
+	// Insert embeddings in transaction
+	_, err := w.service.Repository().CreateEmbeddings(ctx, param.Embeddings, externalServiceCall)
 	if err != nil {
 		return temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to save embeddings: %s", errorsx.MessageOrErr(err)),
+			fmt.Sprintf("Failed to save batch %d/%d: %s", param.BatchNumber, param.TotalBatches, errorsx.MessageOrErr(err)),
 			saveEmbeddingsActivityError,
 			err,
 		)
 	}
 
-	w.log.Info("SaveEmbeddingsToVectorDBActivity: Embeddings saved successfully")
+	w.log.Info("SaveEmbeddingBatchActivity: Batch saved successfully",
+		zap.Int("batchNumber", param.BatchNumber))
+	return nil
+}
+
+// DeleteOldEmbeddingsFromMilvusActivity deletes embeddings from Milvus for a file
+// This is used by the concurrent embedding workflow - idempotent
+func (w *Worker) DeleteOldEmbeddingsFromMilvusActivity(ctx context.Context, param *DeleteOldEmbeddingsActivityParam) error {
+	w.log.Info("DeleteOldEmbeddingsFromMilvusActivity: Deleting embeddings from Milvus",
+		zap.String("kbUID", param.KnowledgeBaseUID.String()),
+		zap.String("fileUID", param.FileUID.String()))
+
+	collection := service.KBCollectionName(param.KnowledgeBaseUID)
+
+	if err := w.service.VectorDB().DeleteEmbeddingsWithFileUID(ctx, collection, param.FileUID); err != nil {
+		return temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to delete embeddings from Milvus: %s", errorsx.MessageOrErr(err)),
+			saveEmbeddingsActivityError,
+			err,
+		)
+	}
+
+	w.log.Info("DeleteOldEmbeddingsFromMilvusActivity: Embeddings deleted successfully")
+	return nil
+}
+
+// DeleteOldEmbeddingsFromDBActivity deletes embeddings from PostgreSQL for a file
+// This is used by the concurrent embedding workflow - idempotent
+func (w *Worker) DeleteOldEmbeddingsFromDBActivity(ctx context.Context, param *DeleteOldEmbeddingsActivityParam) error {
+	w.log.Info("DeleteOldEmbeddingsFromDBActivity: Deleting embeddings from DB",
+		zap.String("fileUID", param.FileUID.String()))
+
+	if err := w.service.Repository().DeleteEmbeddingsByKbFileUID(ctx, param.FileUID); err != nil {
+		return temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to delete embeddings from DB: %s", errorsx.MessageOrErr(err)),
+			saveEmbeddingsActivityError,
+			err,
+		)
+	}
+
+	w.log.Info("DeleteOldEmbeddingsFromDBActivity: Embeddings deleted successfully")
+	return nil
+}
+
+// FlushCollectionActivity flushes a Milvus collection to persist all data immediately
+// This is called once at the end after all batches are saved
+func (w *Worker) FlushCollectionActivity(ctx context.Context, param *DeleteOldEmbeddingsActivityParam) error {
+	w.log.Info("FlushCollectionActivity: Flushing collection",
+		zap.String("kbUID", param.KnowledgeBaseUID.String()))
+
+	collection := service.KBCollectionName(param.KnowledgeBaseUID)
+
+	if err := w.service.VectorDB().FlushCollection(ctx, collection); err != nil {
+		return temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to flush collection: %s", errorsx.MessageOrErr(err)),
+			flushCollectionActivityError,
+			err,
+		)
+	}
+
+	w.log.Info("FlushCollectionActivity: Collection flushed successfully")
 	return nil
 }
 
@@ -237,7 +344,8 @@ func (w *Worker) EmbedTextsActivity(ctx context.Context, param *EmbedTextsActivi
 const (
 	getChunksForEmbeddingActivityError   = "GetChunksForEmbeddingActivity"
 	generateEmbeddingsActivityError      = "GenerateEmbeddingsActivity"
-	saveEmbeddingsActivityError          = "SaveEmbeddingsToVectorDBActivity"
+	saveEmbeddingsActivityError          = "SaveEmbeddingBatchActivity"
+	flushCollectionActivityError         = "FlushCollectionActivity"
 	updateEmbeddingMetadataActivityError = "UpdateEmbeddingMetadataActivity"
 	embedTextsActivityError              = "EmbedTextsActivity"
 )

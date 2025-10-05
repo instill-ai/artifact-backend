@@ -94,12 +94,12 @@ func (w *Worker) SaveChunksWorkflow(ctx workflow.Context, param service.SaveChun
 
 	// Set activity options
 	activityOptions := workflow.ActivityOptions{
-		StartToCloseTimeout: 5 * time.Minute,
+		StartToCloseTimeout: ActivityTimeoutStandard,
 		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval:    time.Second,
-			BackoffCoefficient: 2.0,
-			MaximumInterval:    30 * time.Second,
-			MaximumAttempts:    3,
+			InitialInterval:    RetryInitialInterval,
+			BackoffCoefficient: RetryBackoffCoefficient,
+			MaximumInterval:    RetryMaximumIntervalStandard,
+			MaximumAttempts:    RetryMaximumAttempts,
 		},
 	}
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
@@ -158,12 +158,12 @@ func (w *Worker) DeleteFilesWorkflow(ctx workflow.Context, param service.DeleteF
 
 	// Set activity options
 	activityOptions := workflow.ActivityOptions{
-		StartToCloseTimeout: 5 * time.Minute,
+		StartToCloseTimeout: ActivityTimeoutStandard,
 		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval:    time.Second,
-			BackoffCoefficient: 2.0,
-			MaximumInterval:    30 * time.Second,
-			MaximumAttempts:    3,
+			InitialInterval:    RetryInitialInterval,
+			BackoffCoefficient: RetryBackoffCoefficient,
+			MaximumInterval:    RetryMaximumIntervalStandard,
+			MaximumAttempts:    RetryMaximumAttempts,
 		},
 	}
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
@@ -207,12 +207,12 @@ func (w *Worker) GetFilesWorkflow(ctx workflow.Context, param service.GetFilesWo
 
 	// Set activity options
 	activityOptions := workflow.ActivityOptions{
-		StartToCloseTimeout: 5 * time.Minute,
+		StartToCloseTimeout: ActivityTimeoutStandard,
 		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval:    time.Second,
-			BackoffCoefficient: 2.0,
-			MaximumInterval:    30 * time.Second,
-			MaximumAttempts:    3,
+			InitialInterval:    RetryInitialInterval,
+			BackoffCoefficient: RetryBackoffCoefficient,
+			MaximumInterval:    RetryMaximumIntervalStandard,
+			MaximumAttempts:    RetryMaximumAttempts,
 		},
 	}
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)

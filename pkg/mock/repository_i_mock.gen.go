@@ -35,6 +35,13 @@ type RepositoryIMock struct {
 	beforeCreateConvertedFileWithDestinationCounter uint64
 	CreateConvertedFileWithDestinationMock          mRepositoryIMockCreateConvertedFileWithDestination
 
+	funcCreateEmbeddings          func(ctx context.Context, embeddings []mm_repository.Embedding, externalServiceCall func([]mm_repository.Embedding) error) (ea1 []mm_repository.Embedding, err error)
+	funcCreateEmbeddingsOrigin    string
+	inspectFuncCreateEmbeddings   func(ctx context.Context, embeddings []mm_repository.Embedding, externalServiceCall func([]mm_repository.Embedding) error)
+	afterCreateEmbeddingsCounter  uint64
+	beforeCreateEmbeddingsCounter uint64
+	CreateEmbeddingsMock          mRepositoryIMockCreateEmbeddings
+
 	funcCreateKnowledgeBase          func(ctx context.Context, kb mm_repository.KnowledgeBase, externalService func(kbUID uuid.UUID) error) (kp1 *mm_repository.KnowledgeBase, err error)
 	funcCreateKnowledgeBaseOrigin    string
 	inspectFuncCreateKnowledgeBase   func(ctx context.Context, kb mm_repository.KnowledgeBase, externalService func(kbUID uuid.UUID) error)
@@ -90,6 +97,13 @@ type RepositoryIMock struct {
 	afterDeleteConvertedFileCounter  uint64
 	beforeDeleteConvertedFileCounter uint64
 	DeleteConvertedFileMock          mRepositoryIMockDeleteConvertedFile
+
+	funcDeleteEmbeddingsByKbFileUID          func(ctx context.Context, kbFileUID uuid.UUID) (err error)
+	funcDeleteEmbeddingsByKbFileUIDOrigin    string
+	inspectFuncDeleteEmbeddingsByKbFileUID   func(ctx context.Context, kbFileUID uuid.UUID)
+	afterDeleteEmbeddingsByKbFileUIDCounter  uint64
+	beforeDeleteEmbeddingsByKbFileUIDCounter uint64
+	DeleteEmbeddingsByKbFileUIDMock          mRepositoryIMockDeleteEmbeddingsByKbFileUID
 
 	funcDeleteKnowledgeBase          func(ctx context.Context, ownerUID string, kbID string) (kp1 *mm_repository.KnowledgeBase, err error)
 	funcDeleteKnowledgeBaseOrigin    string
@@ -505,6 +519,9 @@ func NewRepositoryIMock(t minimock.Tester) *RepositoryIMock {
 	m.CreateConvertedFileWithDestinationMock = mRepositoryIMockCreateConvertedFileWithDestination{mock: m}
 	m.CreateConvertedFileWithDestinationMock.callArgs = []*RepositoryIMockCreateConvertedFileWithDestinationParams{}
 
+	m.CreateEmbeddingsMock = mRepositoryIMockCreateEmbeddings{mock: m}
+	m.CreateEmbeddingsMock.callArgs = []*RepositoryIMockCreateEmbeddingsParams{}
+
 	m.CreateKnowledgeBaseMock = mRepositoryIMockCreateKnowledgeBase{mock: m}
 	m.CreateKnowledgeBaseMock.callArgs = []*RepositoryIMockCreateKnowledgeBaseParams{}
 
@@ -528,6 +545,9 @@ func NewRepositoryIMock(t minimock.Tester) *RepositoryIMock {
 
 	m.DeleteConvertedFileMock = mRepositoryIMockDeleteConvertedFile{mock: m}
 	m.DeleteConvertedFileMock.callArgs = []*RepositoryIMockDeleteConvertedFileParams{}
+
+	m.DeleteEmbeddingsByKbFileUIDMock = mRepositoryIMockDeleteEmbeddingsByKbFileUID{mock: m}
+	m.DeleteEmbeddingsByKbFileUIDMock.callArgs = []*RepositoryIMockDeleteEmbeddingsByKbFileUIDParams{}
 
 	m.DeleteKnowledgeBaseMock = mRepositoryIMockDeleteKnowledgeBase{mock: m}
 	m.DeleteKnowledgeBaseMock.callArgs = []*RepositoryIMockDeleteKnowledgeBaseParams{}
@@ -1223,6 +1243,380 @@ func (m *RepositoryIMock) MinimockCreateConvertedFileWithDestinationInspect() {
 	if !m.CreateConvertedFileWithDestinationMock.invocationsDone() && afterCreateConvertedFileWithDestinationCounter > 0 {
 		m.t.Errorf("Expected %d calls to RepositoryIMock.CreateConvertedFileWithDestination at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.CreateConvertedFileWithDestinationMock.expectedInvocations), m.CreateConvertedFileWithDestinationMock.expectedInvocationsOrigin, afterCreateConvertedFileWithDestinationCounter)
+	}
+}
+
+type mRepositoryIMockCreateEmbeddings struct {
+	optional           bool
+	mock               *RepositoryIMock
+	defaultExpectation *RepositoryIMockCreateEmbeddingsExpectation
+	expectations       []*RepositoryIMockCreateEmbeddingsExpectation
+
+	callArgs []*RepositoryIMockCreateEmbeddingsParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryIMockCreateEmbeddingsExpectation specifies expectation struct of the RepositoryI.CreateEmbeddings
+type RepositoryIMockCreateEmbeddingsExpectation struct {
+	mock               *RepositoryIMock
+	params             *RepositoryIMockCreateEmbeddingsParams
+	paramPtrs          *RepositoryIMockCreateEmbeddingsParamPtrs
+	expectationOrigins RepositoryIMockCreateEmbeddingsExpectationOrigins
+	results            *RepositoryIMockCreateEmbeddingsResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryIMockCreateEmbeddingsParams contains parameters of the RepositoryI.CreateEmbeddings
+type RepositoryIMockCreateEmbeddingsParams struct {
+	ctx                 context.Context
+	embeddings          []mm_repository.Embedding
+	externalServiceCall func([]mm_repository.Embedding) error
+}
+
+// RepositoryIMockCreateEmbeddingsParamPtrs contains pointers to parameters of the RepositoryI.CreateEmbeddings
+type RepositoryIMockCreateEmbeddingsParamPtrs struct {
+	ctx                 *context.Context
+	embeddings          *[]mm_repository.Embedding
+	externalServiceCall *func([]mm_repository.Embedding) error
+}
+
+// RepositoryIMockCreateEmbeddingsResults contains results of the RepositoryI.CreateEmbeddings
+type RepositoryIMockCreateEmbeddingsResults struct {
+	ea1 []mm_repository.Embedding
+	err error
+}
+
+// RepositoryIMockCreateEmbeddingsOrigins contains origins of expectations of the RepositoryI.CreateEmbeddings
+type RepositoryIMockCreateEmbeddingsExpectationOrigins struct {
+	origin                    string
+	originCtx                 string
+	originEmbeddings          string
+	originExternalServiceCall string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmCreateEmbeddings *mRepositoryIMockCreateEmbeddings) Optional() *mRepositoryIMockCreateEmbeddings {
+	mmCreateEmbeddings.optional = true
+	return mmCreateEmbeddings
+}
+
+// Expect sets up expected params for RepositoryI.CreateEmbeddings
+func (mmCreateEmbeddings *mRepositoryIMockCreateEmbeddings) Expect(ctx context.Context, embeddings []mm_repository.Embedding, externalServiceCall func([]mm_repository.Embedding) error) *mRepositoryIMockCreateEmbeddings {
+	if mmCreateEmbeddings.mock.funcCreateEmbeddings != nil {
+		mmCreateEmbeddings.mock.t.Fatalf("RepositoryIMock.CreateEmbeddings mock is already set by Set")
+	}
+
+	if mmCreateEmbeddings.defaultExpectation == nil {
+		mmCreateEmbeddings.defaultExpectation = &RepositoryIMockCreateEmbeddingsExpectation{}
+	}
+
+	if mmCreateEmbeddings.defaultExpectation.paramPtrs != nil {
+		mmCreateEmbeddings.mock.t.Fatalf("RepositoryIMock.CreateEmbeddings mock is already set by ExpectParams functions")
+	}
+
+	mmCreateEmbeddings.defaultExpectation.params = &RepositoryIMockCreateEmbeddingsParams{ctx, embeddings, externalServiceCall}
+	mmCreateEmbeddings.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmCreateEmbeddings.expectations {
+		if minimock.Equal(e.params, mmCreateEmbeddings.defaultExpectation.params) {
+			mmCreateEmbeddings.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmCreateEmbeddings.defaultExpectation.params)
+		}
+	}
+
+	return mmCreateEmbeddings
+}
+
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.CreateEmbeddings
+func (mmCreateEmbeddings *mRepositoryIMockCreateEmbeddings) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockCreateEmbeddings {
+	if mmCreateEmbeddings.mock.funcCreateEmbeddings != nil {
+		mmCreateEmbeddings.mock.t.Fatalf("RepositoryIMock.CreateEmbeddings mock is already set by Set")
+	}
+
+	if mmCreateEmbeddings.defaultExpectation == nil {
+		mmCreateEmbeddings.defaultExpectation = &RepositoryIMockCreateEmbeddingsExpectation{}
+	}
+
+	if mmCreateEmbeddings.defaultExpectation.params != nil {
+		mmCreateEmbeddings.mock.t.Fatalf("RepositoryIMock.CreateEmbeddings mock is already set by Expect")
+	}
+
+	if mmCreateEmbeddings.defaultExpectation.paramPtrs == nil {
+		mmCreateEmbeddings.defaultExpectation.paramPtrs = &RepositoryIMockCreateEmbeddingsParamPtrs{}
+	}
+	mmCreateEmbeddings.defaultExpectation.paramPtrs.ctx = &ctx
+	mmCreateEmbeddings.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmCreateEmbeddings
+}
+
+// ExpectEmbeddingsParam2 sets up expected param embeddings for RepositoryI.CreateEmbeddings
+func (mmCreateEmbeddings *mRepositoryIMockCreateEmbeddings) ExpectEmbeddingsParam2(embeddings []mm_repository.Embedding) *mRepositoryIMockCreateEmbeddings {
+	if mmCreateEmbeddings.mock.funcCreateEmbeddings != nil {
+		mmCreateEmbeddings.mock.t.Fatalf("RepositoryIMock.CreateEmbeddings mock is already set by Set")
+	}
+
+	if mmCreateEmbeddings.defaultExpectation == nil {
+		mmCreateEmbeddings.defaultExpectation = &RepositoryIMockCreateEmbeddingsExpectation{}
+	}
+
+	if mmCreateEmbeddings.defaultExpectation.params != nil {
+		mmCreateEmbeddings.mock.t.Fatalf("RepositoryIMock.CreateEmbeddings mock is already set by Expect")
+	}
+
+	if mmCreateEmbeddings.defaultExpectation.paramPtrs == nil {
+		mmCreateEmbeddings.defaultExpectation.paramPtrs = &RepositoryIMockCreateEmbeddingsParamPtrs{}
+	}
+	mmCreateEmbeddings.defaultExpectation.paramPtrs.embeddings = &embeddings
+	mmCreateEmbeddings.defaultExpectation.expectationOrigins.originEmbeddings = minimock.CallerInfo(1)
+
+	return mmCreateEmbeddings
+}
+
+// ExpectExternalServiceCallParam3 sets up expected param externalServiceCall for RepositoryI.CreateEmbeddings
+func (mmCreateEmbeddings *mRepositoryIMockCreateEmbeddings) ExpectExternalServiceCallParam3(externalServiceCall func([]mm_repository.Embedding) error) *mRepositoryIMockCreateEmbeddings {
+	if mmCreateEmbeddings.mock.funcCreateEmbeddings != nil {
+		mmCreateEmbeddings.mock.t.Fatalf("RepositoryIMock.CreateEmbeddings mock is already set by Set")
+	}
+
+	if mmCreateEmbeddings.defaultExpectation == nil {
+		mmCreateEmbeddings.defaultExpectation = &RepositoryIMockCreateEmbeddingsExpectation{}
+	}
+
+	if mmCreateEmbeddings.defaultExpectation.params != nil {
+		mmCreateEmbeddings.mock.t.Fatalf("RepositoryIMock.CreateEmbeddings mock is already set by Expect")
+	}
+
+	if mmCreateEmbeddings.defaultExpectation.paramPtrs == nil {
+		mmCreateEmbeddings.defaultExpectation.paramPtrs = &RepositoryIMockCreateEmbeddingsParamPtrs{}
+	}
+	mmCreateEmbeddings.defaultExpectation.paramPtrs.externalServiceCall = &externalServiceCall
+	mmCreateEmbeddings.defaultExpectation.expectationOrigins.originExternalServiceCall = minimock.CallerInfo(1)
+
+	return mmCreateEmbeddings
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.CreateEmbeddings
+func (mmCreateEmbeddings *mRepositoryIMockCreateEmbeddings) Inspect(f func(ctx context.Context, embeddings []mm_repository.Embedding, externalServiceCall func([]mm_repository.Embedding) error)) *mRepositoryIMockCreateEmbeddings {
+	if mmCreateEmbeddings.mock.inspectFuncCreateEmbeddings != nil {
+		mmCreateEmbeddings.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.CreateEmbeddings")
+	}
+
+	mmCreateEmbeddings.mock.inspectFuncCreateEmbeddings = f
+
+	return mmCreateEmbeddings
+}
+
+// Return sets up results that will be returned by RepositoryI.CreateEmbeddings
+func (mmCreateEmbeddings *mRepositoryIMockCreateEmbeddings) Return(ea1 []mm_repository.Embedding, err error) *RepositoryIMock {
+	if mmCreateEmbeddings.mock.funcCreateEmbeddings != nil {
+		mmCreateEmbeddings.mock.t.Fatalf("RepositoryIMock.CreateEmbeddings mock is already set by Set")
+	}
+
+	if mmCreateEmbeddings.defaultExpectation == nil {
+		mmCreateEmbeddings.defaultExpectation = &RepositoryIMockCreateEmbeddingsExpectation{mock: mmCreateEmbeddings.mock}
+	}
+	mmCreateEmbeddings.defaultExpectation.results = &RepositoryIMockCreateEmbeddingsResults{ea1, err}
+	mmCreateEmbeddings.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmCreateEmbeddings.mock
+}
+
+// Set uses given function f to mock the RepositoryI.CreateEmbeddings method
+func (mmCreateEmbeddings *mRepositoryIMockCreateEmbeddings) Set(f func(ctx context.Context, embeddings []mm_repository.Embedding, externalServiceCall func([]mm_repository.Embedding) error) (ea1 []mm_repository.Embedding, err error)) *RepositoryIMock {
+	if mmCreateEmbeddings.defaultExpectation != nil {
+		mmCreateEmbeddings.mock.t.Fatalf("Default expectation is already set for the RepositoryI.CreateEmbeddings method")
+	}
+
+	if len(mmCreateEmbeddings.expectations) > 0 {
+		mmCreateEmbeddings.mock.t.Fatalf("Some expectations are already set for the RepositoryI.CreateEmbeddings method")
+	}
+
+	mmCreateEmbeddings.mock.funcCreateEmbeddings = f
+	mmCreateEmbeddings.mock.funcCreateEmbeddingsOrigin = minimock.CallerInfo(1)
+	return mmCreateEmbeddings.mock
+}
+
+// When sets expectation for the RepositoryI.CreateEmbeddings which will trigger the result defined by the following
+// Then helper
+func (mmCreateEmbeddings *mRepositoryIMockCreateEmbeddings) When(ctx context.Context, embeddings []mm_repository.Embedding, externalServiceCall func([]mm_repository.Embedding) error) *RepositoryIMockCreateEmbeddingsExpectation {
+	if mmCreateEmbeddings.mock.funcCreateEmbeddings != nil {
+		mmCreateEmbeddings.mock.t.Fatalf("RepositoryIMock.CreateEmbeddings mock is already set by Set")
+	}
+
+	expectation := &RepositoryIMockCreateEmbeddingsExpectation{
+		mock:               mmCreateEmbeddings.mock,
+		params:             &RepositoryIMockCreateEmbeddingsParams{ctx, embeddings, externalServiceCall},
+		expectationOrigins: RepositoryIMockCreateEmbeddingsExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmCreateEmbeddings.expectations = append(mmCreateEmbeddings.expectations, expectation)
+	return expectation
+}
+
+// Then sets up RepositoryI.CreateEmbeddings return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockCreateEmbeddingsExpectation) Then(ea1 []mm_repository.Embedding, err error) *RepositoryIMock {
+	e.results = &RepositoryIMockCreateEmbeddingsResults{ea1, err}
+	return e.mock
+}
+
+// Times sets number of times RepositoryI.CreateEmbeddings should be invoked
+func (mmCreateEmbeddings *mRepositoryIMockCreateEmbeddings) Times(n uint64) *mRepositoryIMockCreateEmbeddings {
+	if n == 0 {
+		mmCreateEmbeddings.mock.t.Fatalf("Times of RepositoryIMock.CreateEmbeddings mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmCreateEmbeddings.expectedInvocations, n)
+	mmCreateEmbeddings.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmCreateEmbeddings
+}
+
+func (mmCreateEmbeddings *mRepositoryIMockCreateEmbeddings) invocationsDone() bool {
+	if len(mmCreateEmbeddings.expectations) == 0 && mmCreateEmbeddings.defaultExpectation == nil && mmCreateEmbeddings.mock.funcCreateEmbeddings == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmCreateEmbeddings.mock.afterCreateEmbeddingsCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmCreateEmbeddings.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// CreateEmbeddings implements mm_repository.RepositoryI
+func (mmCreateEmbeddings *RepositoryIMock) CreateEmbeddings(ctx context.Context, embeddings []mm_repository.Embedding, externalServiceCall func([]mm_repository.Embedding) error) (ea1 []mm_repository.Embedding, err error) {
+	mm_atomic.AddUint64(&mmCreateEmbeddings.beforeCreateEmbeddingsCounter, 1)
+	defer mm_atomic.AddUint64(&mmCreateEmbeddings.afterCreateEmbeddingsCounter, 1)
+
+	mmCreateEmbeddings.t.Helper()
+
+	if mmCreateEmbeddings.inspectFuncCreateEmbeddings != nil {
+		mmCreateEmbeddings.inspectFuncCreateEmbeddings(ctx, embeddings, externalServiceCall)
+	}
+
+	mm_params := RepositoryIMockCreateEmbeddingsParams{ctx, embeddings, externalServiceCall}
+
+	// Record call args
+	mmCreateEmbeddings.CreateEmbeddingsMock.mutex.Lock()
+	mmCreateEmbeddings.CreateEmbeddingsMock.callArgs = append(mmCreateEmbeddings.CreateEmbeddingsMock.callArgs, &mm_params)
+	mmCreateEmbeddings.CreateEmbeddingsMock.mutex.Unlock()
+
+	for _, e := range mmCreateEmbeddings.CreateEmbeddingsMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.ea1, e.results.err
+		}
+	}
+
+	if mmCreateEmbeddings.CreateEmbeddingsMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmCreateEmbeddings.CreateEmbeddingsMock.defaultExpectation.Counter, 1)
+		mm_want := mmCreateEmbeddings.CreateEmbeddingsMock.defaultExpectation.params
+		mm_want_ptrs := mmCreateEmbeddings.CreateEmbeddingsMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryIMockCreateEmbeddingsParams{ctx, embeddings, externalServiceCall}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmCreateEmbeddings.t.Errorf("RepositoryIMock.CreateEmbeddings got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCreateEmbeddings.CreateEmbeddingsMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.embeddings != nil && !minimock.Equal(*mm_want_ptrs.embeddings, mm_got.embeddings) {
+				mmCreateEmbeddings.t.Errorf("RepositoryIMock.CreateEmbeddings got unexpected parameter embeddings, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCreateEmbeddings.CreateEmbeddingsMock.defaultExpectation.expectationOrigins.originEmbeddings, *mm_want_ptrs.embeddings, mm_got.embeddings, minimock.Diff(*mm_want_ptrs.embeddings, mm_got.embeddings))
+			}
+
+			if mm_want_ptrs.externalServiceCall != nil && !minimock.Equal(*mm_want_ptrs.externalServiceCall, mm_got.externalServiceCall) {
+				mmCreateEmbeddings.t.Errorf("RepositoryIMock.CreateEmbeddings got unexpected parameter externalServiceCall, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCreateEmbeddings.CreateEmbeddingsMock.defaultExpectation.expectationOrigins.originExternalServiceCall, *mm_want_ptrs.externalServiceCall, mm_got.externalServiceCall, minimock.Diff(*mm_want_ptrs.externalServiceCall, mm_got.externalServiceCall))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmCreateEmbeddings.t.Errorf("RepositoryIMock.CreateEmbeddings got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmCreateEmbeddings.CreateEmbeddingsMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmCreateEmbeddings.CreateEmbeddingsMock.defaultExpectation.results
+		if mm_results == nil {
+			mmCreateEmbeddings.t.Fatal("No results are set for the RepositoryIMock.CreateEmbeddings")
+		}
+		return (*mm_results).ea1, (*mm_results).err
+	}
+	if mmCreateEmbeddings.funcCreateEmbeddings != nil {
+		return mmCreateEmbeddings.funcCreateEmbeddings(ctx, embeddings, externalServiceCall)
+	}
+	mmCreateEmbeddings.t.Fatalf("Unexpected call to RepositoryIMock.CreateEmbeddings. %v %v %v", ctx, embeddings, externalServiceCall)
+	return
+}
+
+// CreateEmbeddingsAfterCounter returns a count of finished RepositoryIMock.CreateEmbeddings invocations
+func (mmCreateEmbeddings *RepositoryIMock) CreateEmbeddingsAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmCreateEmbeddings.afterCreateEmbeddingsCounter)
+}
+
+// CreateEmbeddingsBeforeCounter returns a count of RepositoryIMock.CreateEmbeddings invocations
+func (mmCreateEmbeddings *RepositoryIMock) CreateEmbeddingsBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmCreateEmbeddings.beforeCreateEmbeddingsCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryIMock.CreateEmbeddings.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmCreateEmbeddings *mRepositoryIMockCreateEmbeddings) Calls() []*RepositoryIMockCreateEmbeddingsParams {
+	mmCreateEmbeddings.mutex.RLock()
+
+	argCopy := make([]*RepositoryIMockCreateEmbeddingsParams, len(mmCreateEmbeddings.callArgs))
+	copy(argCopy, mmCreateEmbeddings.callArgs)
+
+	mmCreateEmbeddings.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockCreateEmbeddingsDone returns true if the count of the CreateEmbeddings invocations corresponds
+// the number of defined expectations
+func (m *RepositoryIMock) MinimockCreateEmbeddingsDone() bool {
+	if m.CreateEmbeddingsMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.CreateEmbeddingsMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.CreateEmbeddingsMock.invocationsDone()
+}
+
+// MinimockCreateEmbeddingsInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockCreateEmbeddingsInspect() {
+	for _, e := range m.CreateEmbeddingsMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryIMock.CreateEmbeddings at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterCreateEmbeddingsCounter := mm_atomic.LoadUint64(&m.afterCreateEmbeddingsCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.CreateEmbeddingsMock.defaultExpectation != nil && afterCreateEmbeddingsCounter < 1 {
+		if m.CreateEmbeddingsMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryIMock.CreateEmbeddings at\n%s", m.CreateEmbeddingsMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryIMock.CreateEmbeddings at\n%s with params: %#v", m.CreateEmbeddingsMock.defaultExpectation.expectationOrigins.origin, *m.CreateEmbeddingsMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcCreateEmbeddings != nil && afterCreateEmbeddingsCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryIMock.CreateEmbeddings at\n%s", m.funcCreateEmbeddingsOrigin)
+	}
+
+	if !m.CreateEmbeddingsMock.invocationsDone() && afterCreateEmbeddingsCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.CreateEmbeddings at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.CreateEmbeddingsMock.expectedInvocations), m.CreateEmbeddingsMock.expectedInvocationsOrigin, afterCreateEmbeddingsCounter)
 	}
 }
 
@@ -4150,6 +4544,348 @@ func (m *RepositoryIMock) MinimockDeleteConvertedFileInspect() {
 	if !m.DeleteConvertedFileMock.invocationsDone() && afterDeleteConvertedFileCounter > 0 {
 		m.t.Errorf("Expected %d calls to RepositoryIMock.DeleteConvertedFile at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.DeleteConvertedFileMock.expectedInvocations), m.DeleteConvertedFileMock.expectedInvocationsOrigin, afterDeleteConvertedFileCounter)
+	}
+}
+
+type mRepositoryIMockDeleteEmbeddingsByKbFileUID struct {
+	optional           bool
+	mock               *RepositoryIMock
+	defaultExpectation *RepositoryIMockDeleteEmbeddingsByKbFileUIDExpectation
+	expectations       []*RepositoryIMockDeleteEmbeddingsByKbFileUIDExpectation
+
+	callArgs []*RepositoryIMockDeleteEmbeddingsByKbFileUIDParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryIMockDeleteEmbeddingsByKbFileUIDExpectation specifies expectation struct of the RepositoryI.DeleteEmbeddingsByKbFileUID
+type RepositoryIMockDeleteEmbeddingsByKbFileUIDExpectation struct {
+	mock               *RepositoryIMock
+	params             *RepositoryIMockDeleteEmbeddingsByKbFileUIDParams
+	paramPtrs          *RepositoryIMockDeleteEmbeddingsByKbFileUIDParamPtrs
+	expectationOrigins RepositoryIMockDeleteEmbeddingsByKbFileUIDExpectationOrigins
+	results            *RepositoryIMockDeleteEmbeddingsByKbFileUIDResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryIMockDeleteEmbeddingsByKbFileUIDParams contains parameters of the RepositoryI.DeleteEmbeddingsByKbFileUID
+type RepositoryIMockDeleteEmbeddingsByKbFileUIDParams struct {
+	ctx       context.Context
+	kbFileUID uuid.UUID
+}
+
+// RepositoryIMockDeleteEmbeddingsByKbFileUIDParamPtrs contains pointers to parameters of the RepositoryI.DeleteEmbeddingsByKbFileUID
+type RepositoryIMockDeleteEmbeddingsByKbFileUIDParamPtrs struct {
+	ctx       *context.Context
+	kbFileUID *uuid.UUID
+}
+
+// RepositoryIMockDeleteEmbeddingsByKbFileUIDResults contains results of the RepositoryI.DeleteEmbeddingsByKbFileUID
+type RepositoryIMockDeleteEmbeddingsByKbFileUIDResults struct {
+	err error
+}
+
+// RepositoryIMockDeleteEmbeddingsByKbFileUIDOrigins contains origins of expectations of the RepositoryI.DeleteEmbeddingsByKbFileUID
+type RepositoryIMockDeleteEmbeddingsByKbFileUIDExpectationOrigins struct {
+	origin          string
+	originCtx       string
+	originKbFileUID string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmDeleteEmbeddingsByKbFileUID *mRepositoryIMockDeleteEmbeddingsByKbFileUID) Optional() *mRepositoryIMockDeleteEmbeddingsByKbFileUID {
+	mmDeleteEmbeddingsByKbFileUID.optional = true
+	return mmDeleteEmbeddingsByKbFileUID
+}
+
+// Expect sets up expected params for RepositoryI.DeleteEmbeddingsByKbFileUID
+func (mmDeleteEmbeddingsByKbFileUID *mRepositoryIMockDeleteEmbeddingsByKbFileUID) Expect(ctx context.Context, kbFileUID uuid.UUID) *mRepositoryIMockDeleteEmbeddingsByKbFileUID {
+	if mmDeleteEmbeddingsByKbFileUID.mock.funcDeleteEmbeddingsByKbFileUID != nil {
+		mmDeleteEmbeddingsByKbFileUID.mock.t.Fatalf("RepositoryIMock.DeleteEmbeddingsByKbFileUID mock is already set by Set")
+	}
+
+	if mmDeleteEmbeddingsByKbFileUID.defaultExpectation == nil {
+		mmDeleteEmbeddingsByKbFileUID.defaultExpectation = &RepositoryIMockDeleteEmbeddingsByKbFileUIDExpectation{}
+	}
+
+	if mmDeleteEmbeddingsByKbFileUID.defaultExpectation.paramPtrs != nil {
+		mmDeleteEmbeddingsByKbFileUID.mock.t.Fatalf("RepositoryIMock.DeleteEmbeddingsByKbFileUID mock is already set by ExpectParams functions")
+	}
+
+	mmDeleteEmbeddingsByKbFileUID.defaultExpectation.params = &RepositoryIMockDeleteEmbeddingsByKbFileUIDParams{ctx, kbFileUID}
+	mmDeleteEmbeddingsByKbFileUID.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmDeleteEmbeddingsByKbFileUID.expectations {
+		if minimock.Equal(e.params, mmDeleteEmbeddingsByKbFileUID.defaultExpectation.params) {
+			mmDeleteEmbeddingsByKbFileUID.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmDeleteEmbeddingsByKbFileUID.defaultExpectation.params)
+		}
+	}
+
+	return mmDeleteEmbeddingsByKbFileUID
+}
+
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.DeleteEmbeddingsByKbFileUID
+func (mmDeleteEmbeddingsByKbFileUID *mRepositoryIMockDeleteEmbeddingsByKbFileUID) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockDeleteEmbeddingsByKbFileUID {
+	if mmDeleteEmbeddingsByKbFileUID.mock.funcDeleteEmbeddingsByKbFileUID != nil {
+		mmDeleteEmbeddingsByKbFileUID.mock.t.Fatalf("RepositoryIMock.DeleteEmbeddingsByKbFileUID mock is already set by Set")
+	}
+
+	if mmDeleteEmbeddingsByKbFileUID.defaultExpectation == nil {
+		mmDeleteEmbeddingsByKbFileUID.defaultExpectation = &RepositoryIMockDeleteEmbeddingsByKbFileUIDExpectation{}
+	}
+
+	if mmDeleteEmbeddingsByKbFileUID.defaultExpectation.params != nil {
+		mmDeleteEmbeddingsByKbFileUID.mock.t.Fatalf("RepositoryIMock.DeleteEmbeddingsByKbFileUID mock is already set by Expect")
+	}
+
+	if mmDeleteEmbeddingsByKbFileUID.defaultExpectation.paramPtrs == nil {
+		mmDeleteEmbeddingsByKbFileUID.defaultExpectation.paramPtrs = &RepositoryIMockDeleteEmbeddingsByKbFileUIDParamPtrs{}
+	}
+	mmDeleteEmbeddingsByKbFileUID.defaultExpectation.paramPtrs.ctx = &ctx
+	mmDeleteEmbeddingsByKbFileUID.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmDeleteEmbeddingsByKbFileUID
+}
+
+// ExpectKbFileUIDParam2 sets up expected param kbFileUID for RepositoryI.DeleteEmbeddingsByKbFileUID
+func (mmDeleteEmbeddingsByKbFileUID *mRepositoryIMockDeleteEmbeddingsByKbFileUID) ExpectKbFileUIDParam2(kbFileUID uuid.UUID) *mRepositoryIMockDeleteEmbeddingsByKbFileUID {
+	if mmDeleteEmbeddingsByKbFileUID.mock.funcDeleteEmbeddingsByKbFileUID != nil {
+		mmDeleteEmbeddingsByKbFileUID.mock.t.Fatalf("RepositoryIMock.DeleteEmbeddingsByKbFileUID mock is already set by Set")
+	}
+
+	if mmDeleteEmbeddingsByKbFileUID.defaultExpectation == nil {
+		mmDeleteEmbeddingsByKbFileUID.defaultExpectation = &RepositoryIMockDeleteEmbeddingsByKbFileUIDExpectation{}
+	}
+
+	if mmDeleteEmbeddingsByKbFileUID.defaultExpectation.params != nil {
+		mmDeleteEmbeddingsByKbFileUID.mock.t.Fatalf("RepositoryIMock.DeleteEmbeddingsByKbFileUID mock is already set by Expect")
+	}
+
+	if mmDeleteEmbeddingsByKbFileUID.defaultExpectation.paramPtrs == nil {
+		mmDeleteEmbeddingsByKbFileUID.defaultExpectation.paramPtrs = &RepositoryIMockDeleteEmbeddingsByKbFileUIDParamPtrs{}
+	}
+	mmDeleteEmbeddingsByKbFileUID.defaultExpectation.paramPtrs.kbFileUID = &kbFileUID
+	mmDeleteEmbeddingsByKbFileUID.defaultExpectation.expectationOrigins.originKbFileUID = minimock.CallerInfo(1)
+
+	return mmDeleteEmbeddingsByKbFileUID
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.DeleteEmbeddingsByKbFileUID
+func (mmDeleteEmbeddingsByKbFileUID *mRepositoryIMockDeleteEmbeddingsByKbFileUID) Inspect(f func(ctx context.Context, kbFileUID uuid.UUID)) *mRepositoryIMockDeleteEmbeddingsByKbFileUID {
+	if mmDeleteEmbeddingsByKbFileUID.mock.inspectFuncDeleteEmbeddingsByKbFileUID != nil {
+		mmDeleteEmbeddingsByKbFileUID.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.DeleteEmbeddingsByKbFileUID")
+	}
+
+	mmDeleteEmbeddingsByKbFileUID.mock.inspectFuncDeleteEmbeddingsByKbFileUID = f
+
+	return mmDeleteEmbeddingsByKbFileUID
+}
+
+// Return sets up results that will be returned by RepositoryI.DeleteEmbeddingsByKbFileUID
+func (mmDeleteEmbeddingsByKbFileUID *mRepositoryIMockDeleteEmbeddingsByKbFileUID) Return(err error) *RepositoryIMock {
+	if mmDeleteEmbeddingsByKbFileUID.mock.funcDeleteEmbeddingsByKbFileUID != nil {
+		mmDeleteEmbeddingsByKbFileUID.mock.t.Fatalf("RepositoryIMock.DeleteEmbeddingsByKbFileUID mock is already set by Set")
+	}
+
+	if mmDeleteEmbeddingsByKbFileUID.defaultExpectation == nil {
+		mmDeleteEmbeddingsByKbFileUID.defaultExpectation = &RepositoryIMockDeleteEmbeddingsByKbFileUIDExpectation{mock: mmDeleteEmbeddingsByKbFileUID.mock}
+	}
+	mmDeleteEmbeddingsByKbFileUID.defaultExpectation.results = &RepositoryIMockDeleteEmbeddingsByKbFileUIDResults{err}
+	mmDeleteEmbeddingsByKbFileUID.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmDeleteEmbeddingsByKbFileUID.mock
+}
+
+// Set uses given function f to mock the RepositoryI.DeleteEmbeddingsByKbFileUID method
+func (mmDeleteEmbeddingsByKbFileUID *mRepositoryIMockDeleteEmbeddingsByKbFileUID) Set(f func(ctx context.Context, kbFileUID uuid.UUID) (err error)) *RepositoryIMock {
+	if mmDeleteEmbeddingsByKbFileUID.defaultExpectation != nil {
+		mmDeleteEmbeddingsByKbFileUID.mock.t.Fatalf("Default expectation is already set for the RepositoryI.DeleteEmbeddingsByKbFileUID method")
+	}
+
+	if len(mmDeleteEmbeddingsByKbFileUID.expectations) > 0 {
+		mmDeleteEmbeddingsByKbFileUID.mock.t.Fatalf("Some expectations are already set for the RepositoryI.DeleteEmbeddingsByKbFileUID method")
+	}
+
+	mmDeleteEmbeddingsByKbFileUID.mock.funcDeleteEmbeddingsByKbFileUID = f
+	mmDeleteEmbeddingsByKbFileUID.mock.funcDeleteEmbeddingsByKbFileUIDOrigin = minimock.CallerInfo(1)
+	return mmDeleteEmbeddingsByKbFileUID.mock
+}
+
+// When sets expectation for the RepositoryI.DeleteEmbeddingsByKbFileUID which will trigger the result defined by the following
+// Then helper
+func (mmDeleteEmbeddingsByKbFileUID *mRepositoryIMockDeleteEmbeddingsByKbFileUID) When(ctx context.Context, kbFileUID uuid.UUID) *RepositoryIMockDeleteEmbeddingsByKbFileUIDExpectation {
+	if mmDeleteEmbeddingsByKbFileUID.mock.funcDeleteEmbeddingsByKbFileUID != nil {
+		mmDeleteEmbeddingsByKbFileUID.mock.t.Fatalf("RepositoryIMock.DeleteEmbeddingsByKbFileUID mock is already set by Set")
+	}
+
+	expectation := &RepositoryIMockDeleteEmbeddingsByKbFileUIDExpectation{
+		mock:               mmDeleteEmbeddingsByKbFileUID.mock,
+		params:             &RepositoryIMockDeleteEmbeddingsByKbFileUIDParams{ctx, kbFileUID},
+		expectationOrigins: RepositoryIMockDeleteEmbeddingsByKbFileUIDExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmDeleteEmbeddingsByKbFileUID.expectations = append(mmDeleteEmbeddingsByKbFileUID.expectations, expectation)
+	return expectation
+}
+
+// Then sets up RepositoryI.DeleteEmbeddingsByKbFileUID return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockDeleteEmbeddingsByKbFileUIDExpectation) Then(err error) *RepositoryIMock {
+	e.results = &RepositoryIMockDeleteEmbeddingsByKbFileUIDResults{err}
+	return e.mock
+}
+
+// Times sets number of times RepositoryI.DeleteEmbeddingsByKbFileUID should be invoked
+func (mmDeleteEmbeddingsByKbFileUID *mRepositoryIMockDeleteEmbeddingsByKbFileUID) Times(n uint64) *mRepositoryIMockDeleteEmbeddingsByKbFileUID {
+	if n == 0 {
+		mmDeleteEmbeddingsByKbFileUID.mock.t.Fatalf("Times of RepositoryIMock.DeleteEmbeddingsByKbFileUID mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmDeleteEmbeddingsByKbFileUID.expectedInvocations, n)
+	mmDeleteEmbeddingsByKbFileUID.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmDeleteEmbeddingsByKbFileUID
+}
+
+func (mmDeleteEmbeddingsByKbFileUID *mRepositoryIMockDeleteEmbeddingsByKbFileUID) invocationsDone() bool {
+	if len(mmDeleteEmbeddingsByKbFileUID.expectations) == 0 && mmDeleteEmbeddingsByKbFileUID.defaultExpectation == nil && mmDeleteEmbeddingsByKbFileUID.mock.funcDeleteEmbeddingsByKbFileUID == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmDeleteEmbeddingsByKbFileUID.mock.afterDeleteEmbeddingsByKbFileUIDCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmDeleteEmbeddingsByKbFileUID.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// DeleteEmbeddingsByKbFileUID implements mm_repository.RepositoryI
+func (mmDeleteEmbeddingsByKbFileUID *RepositoryIMock) DeleteEmbeddingsByKbFileUID(ctx context.Context, kbFileUID uuid.UUID) (err error) {
+	mm_atomic.AddUint64(&mmDeleteEmbeddingsByKbFileUID.beforeDeleteEmbeddingsByKbFileUIDCounter, 1)
+	defer mm_atomic.AddUint64(&mmDeleteEmbeddingsByKbFileUID.afterDeleteEmbeddingsByKbFileUIDCounter, 1)
+
+	mmDeleteEmbeddingsByKbFileUID.t.Helper()
+
+	if mmDeleteEmbeddingsByKbFileUID.inspectFuncDeleteEmbeddingsByKbFileUID != nil {
+		mmDeleteEmbeddingsByKbFileUID.inspectFuncDeleteEmbeddingsByKbFileUID(ctx, kbFileUID)
+	}
+
+	mm_params := RepositoryIMockDeleteEmbeddingsByKbFileUIDParams{ctx, kbFileUID}
+
+	// Record call args
+	mmDeleteEmbeddingsByKbFileUID.DeleteEmbeddingsByKbFileUIDMock.mutex.Lock()
+	mmDeleteEmbeddingsByKbFileUID.DeleteEmbeddingsByKbFileUIDMock.callArgs = append(mmDeleteEmbeddingsByKbFileUID.DeleteEmbeddingsByKbFileUIDMock.callArgs, &mm_params)
+	mmDeleteEmbeddingsByKbFileUID.DeleteEmbeddingsByKbFileUIDMock.mutex.Unlock()
+
+	for _, e := range mmDeleteEmbeddingsByKbFileUID.DeleteEmbeddingsByKbFileUIDMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmDeleteEmbeddingsByKbFileUID.DeleteEmbeddingsByKbFileUIDMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmDeleteEmbeddingsByKbFileUID.DeleteEmbeddingsByKbFileUIDMock.defaultExpectation.Counter, 1)
+		mm_want := mmDeleteEmbeddingsByKbFileUID.DeleteEmbeddingsByKbFileUIDMock.defaultExpectation.params
+		mm_want_ptrs := mmDeleteEmbeddingsByKbFileUID.DeleteEmbeddingsByKbFileUIDMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryIMockDeleteEmbeddingsByKbFileUIDParams{ctx, kbFileUID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmDeleteEmbeddingsByKbFileUID.t.Errorf("RepositoryIMock.DeleteEmbeddingsByKbFileUID got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDeleteEmbeddingsByKbFileUID.DeleteEmbeddingsByKbFileUIDMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.kbFileUID != nil && !minimock.Equal(*mm_want_ptrs.kbFileUID, mm_got.kbFileUID) {
+				mmDeleteEmbeddingsByKbFileUID.t.Errorf("RepositoryIMock.DeleteEmbeddingsByKbFileUID got unexpected parameter kbFileUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDeleteEmbeddingsByKbFileUID.DeleteEmbeddingsByKbFileUIDMock.defaultExpectation.expectationOrigins.originKbFileUID, *mm_want_ptrs.kbFileUID, mm_got.kbFileUID, minimock.Diff(*mm_want_ptrs.kbFileUID, mm_got.kbFileUID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmDeleteEmbeddingsByKbFileUID.t.Errorf("RepositoryIMock.DeleteEmbeddingsByKbFileUID got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmDeleteEmbeddingsByKbFileUID.DeleteEmbeddingsByKbFileUIDMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmDeleteEmbeddingsByKbFileUID.DeleteEmbeddingsByKbFileUIDMock.defaultExpectation.results
+		if mm_results == nil {
+			mmDeleteEmbeddingsByKbFileUID.t.Fatal("No results are set for the RepositoryIMock.DeleteEmbeddingsByKbFileUID")
+		}
+		return (*mm_results).err
+	}
+	if mmDeleteEmbeddingsByKbFileUID.funcDeleteEmbeddingsByKbFileUID != nil {
+		return mmDeleteEmbeddingsByKbFileUID.funcDeleteEmbeddingsByKbFileUID(ctx, kbFileUID)
+	}
+	mmDeleteEmbeddingsByKbFileUID.t.Fatalf("Unexpected call to RepositoryIMock.DeleteEmbeddingsByKbFileUID. %v %v", ctx, kbFileUID)
+	return
+}
+
+// DeleteEmbeddingsByKbFileUIDAfterCounter returns a count of finished RepositoryIMock.DeleteEmbeddingsByKbFileUID invocations
+func (mmDeleteEmbeddingsByKbFileUID *RepositoryIMock) DeleteEmbeddingsByKbFileUIDAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmDeleteEmbeddingsByKbFileUID.afterDeleteEmbeddingsByKbFileUIDCounter)
+}
+
+// DeleteEmbeddingsByKbFileUIDBeforeCounter returns a count of RepositoryIMock.DeleteEmbeddingsByKbFileUID invocations
+func (mmDeleteEmbeddingsByKbFileUID *RepositoryIMock) DeleteEmbeddingsByKbFileUIDBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmDeleteEmbeddingsByKbFileUID.beforeDeleteEmbeddingsByKbFileUIDCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryIMock.DeleteEmbeddingsByKbFileUID.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmDeleteEmbeddingsByKbFileUID *mRepositoryIMockDeleteEmbeddingsByKbFileUID) Calls() []*RepositoryIMockDeleteEmbeddingsByKbFileUIDParams {
+	mmDeleteEmbeddingsByKbFileUID.mutex.RLock()
+
+	argCopy := make([]*RepositoryIMockDeleteEmbeddingsByKbFileUIDParams, len(mmDeleteEmbeddingsByKbFileUID.callArgs))
+	copy(argCopy, mmDeleteEmbeddingsByKbFileUID.callArgs)
+
+	mmDeleteEmbeddingsByKbFileUID.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockDeleteEmbeddingsByKbFileUIDDone returns true if the count of the DeleteEmbeddingsByKbFileUID invocations corresponds
+// the number of defined expectations
+func (m *RepositoryIMock) MinimockDeleteEmbeddingsByKbFileUIDDone() bool {
+	if m.DeleteEmbeddingsByKbFileUIDMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.DeleteEmbeddingsByKbFileUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.DeleteEmbeddingsByKbFileUIDMock.invocationsDone()
+}
+
+// MinimockDeleteEmbeddingsByKbFileUIDInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockDeleteEmbeddingsByKbFileUIDInspect() {
+	for _, e := range m.DeleteEmbeddingsByKbFileUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryIMock.DeleteEmbeddingsByKbFileUID at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterDeleteEmbeddingsByKbFileUIDCounter := mm_atomic.LoadUint64(&m.afterDeleteEmbeddingsByKbFileUIDCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.DeleteEmbeddingsByKbFileUIDMock.defaultExpectation != nil && afterDeleteEmbeddingsByKbFileUIDCounter < 1 {
+		if m.DeleteEmbeddingsByKbFileUIDMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryIMock.DeleteEmbeddingsByKbFileUID at\n%s", m.DeleteEmbeddingsByKbFileUIDMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryIMock.DeleteEmbeddingsByKbFileUID at\n%s with params: %#v", m.DeleteEmbeddingsByKbFileUIDMock.defaultExpectation.expectationOrigins.origin, *m.DeleteEmbeddingsByKbFileUIDMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcDeleteEmbeddingsByKbFileUID != nil && afterDeleteEmbeddingsByKbFileUIDCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryIMock.DeleteEmbeddingsByKbFileUID at\n%s", m.funcDeleteEmbeddingsByKbFileUIDOrigin)
+	}
+
+	if !m.DeleteEmbeddingsByKbFileUIDMock.invocationsDone() && afterDeleteEmbeddingsByKbFileUIDCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.DeleteEmbeddingsByKbFileUID at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.DeleteEmbeddingsByKbFileUIDMock.expectedInvocations), m.DeleteEmbeddingsByKbFileUIDMock.expectedInvocationsOrigin, afterDeleteEmbeddingsByKbFileUIDCounter)
 	}
 }
 
@@ -23379,6 +24115,8 @@ func (m *RepositoryIMock) MinimockFinish() {
 
 			m.MinimockCreateConvertedFileWithDestinationInspect()
 
+			m.MinimockCreateEmbeddingsInspect()
+
 			m.MinimockCreateKnowledgeBaseInspect()
 
 			m.MinimockCreateKnowledgeBaseFileInspect()
@@ -23394,6 +24132,8 @@ func (m *RepositoryIMock) MinimockFinish() {
 			m.MinimockDeleteAndCreateEmbeddingsInspect()
 
 			m.MinimockDeleteConvertedFileInspect()
+
+			m.MinimockDeleteEmbeddingsByKbFileUIDInspect()
 
 			m.MinimockDeleteKnowledgeBaseInspect()
 
@@ -23529,6 +24269,7 @@ func (m *RepositoryIMock) minimockDone() bool {
 	return done &&
 		m.MinimockConvertedFileTableNameDone() &&
 		m.MinimockCreateConvertedFileWithDestinationDone() &&
+		m.MinimockCreateEmbeddingsDone() &&
 		m.MinimockCreateKnowledgeBaseDone() &&
 		m.MinimockCreateKnowledgeBaseFileDone() &&
 		m.MinimockCreateObjectDone() &&
@@ -23537,6 +24278,7 @@ func (m *RepositoryIMock) minimockDone() bool {
 		m.MinimockDeleteAndCreateChunksDone() &&
 		m.MinimockDeleteAndCreateEmbeddingsDone() &&
 		m.MinimockDeleteConvertedFileDone() &&
+		m.MinimockDeleteEmbeddingsByKbFileUIDDone() &&
 		m.MinimockDeleteKnowledgeBaseDone() &&
 		m.MinimockDeleteKnowledgeBaseFileDone() &&
 		m.MinimockDeleteKnowledgeBaseFileAndDecreaseUsageDone() &&

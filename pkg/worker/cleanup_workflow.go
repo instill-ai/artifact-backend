@@ -3,7 +3,6 @@ package worker
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
@@ -90,12 +89,12 @@ func (w *Worker) CleanupFileWorkflow(ctx workflow.Context, param service.Cleanup
 	fileUID := param.FileUID
 
 	activityOptions := workflow.ActivityOptions{
-		StartToCloseTimeout: 5 * time.Minute,
+		StartToCloseTimeout: ActivityTimeoutStandard,
 		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval:    time.Second,
-			BackoffCoefficient: 2.0,
-			MaximumInterval:    30 * time.Second,
-			MaximumAttempts:    3,
+			InitialInterval:    RetryInitialInterval,
+			BackoffCoefficient: RetryBackoffCoefficient,
+			MaximumInterval:    RetryMaximumIntervalStandard,
+			MaximumAttempts:    RetryMaximumAttempts,
 		},
 	}
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
@@ -190,12 +189,12 @@ func (w *Worker) CleanupKnowledgeBaseWorkflow(ctx workflow.Context, param servic
 	kbUID := param.KnowledgeBaseUID
 
 	activityOptions := workflow.ActivityOptions{
-		StartToCloseTimeout: 10 * time.Minute,
+		StartToCloseTimeout: ActivityTimeoutLong,
 		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval:    time.Second,
-			BackoffCoefficient: 2.0,
-			MaximumInterval:    100 * time.Second,
-			MaximumAttempts:    3,
+			InitialInterval:    RetryInitialInterval,
+			BackoffCoefficient: RetryBackoffCoefficient,
+			MaximumInterval:    RetryMaximumIntervalLong,
+			MaximumAttempts:    RetryMaximumAttempts,
 		},
 	}
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)

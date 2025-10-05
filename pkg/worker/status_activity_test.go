@@ -7,17 +7,12 @@ import (
 
 	"github.com/gofrs/uuid"
 	"github.com/gojuno/minimock/v3"
-	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/instill-ai/artifact-backend/pkg/acl"
-	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/mock"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
-	"github.com/instill-ai/artifact-backend/pkg/resource"
-	"github.com/instill-ai/artifact-backend/pkg/service"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
@@ -101,7 +96,8 @@ func TestGetFileStatusActivity_Success(t *testing.T) {
 			},
 		}, nil)
 
-	mockService := &mockStatusServiceWrapper{repo: mockRepo}
+	mockService := NewServiceMock(mc)
+	mockService.RepositoryMock.Return(mockRepo)
 
 	w := &Worker{
 		service: mockService,
@@ -125,7 +121,8 @@ func TestGetFileStatusActivity_FileNotFound(t *testing.T) {
 		When(minimock.AnyContext, []uuid.UUID{fileUID}).
 		Then([]repository.KnowledgeBaseFile{}, nil)
 
-	mockService := &mockStatusServiceWrapper{repo: mockRepo}
+	mockService := NewServiceMock(mc)
+	mockService.RepositoryMock.Return(mockRepo)
 
 	w := &Worker{
 		service: mockService,
@@ -149,7 +146,8 @@ func TestGetFileStatusActivity_DatabaseError(t *testing.T) {
 		When(minimock.AnyContext, []uuid.UUID{fileUID}).
 		Then(nil, fmt.Errorf("database error"))
 
-	mockService := &mockStatusServiceWrapper{repo: mockRepo}
+	mockService := NewServiceMock(mc)
+	mockService.RepositoryMock.Return(mockRepo)
 
 	w := &Worker{
 		service: mockService,
@@ -183,7 +181,8 @@ func TestUpdateFileStatusActivity_Success(t *testing.T) {
 		}).
 		Return(&repository.KnowledgeBaseFile{}, nil)
 
-	mockService := &mockStatusServiceWrapper{repo: mockRepo}
+	mockService := NewServiceMock(mc)
+	mockService.RepositoryMock.Return(mockRepo)
 
 	w := &Worker{
 		service: mockService,
@@ -233,7 +232,8 @@ func TestUpdateFileStatusActivity_WithMessage(t *testing.T) {
 		}).
 		Return(&repository.KnowledgeBaseFile{}, nil)
 
-	mockService := &mockStatusServiceWrapper{repo: mockRepo}
+	mockService := NewServiceMock(mc)
+	mockService.RepositoryMock.Return(mockRepo)
 
 	w := &Worker{
 		service: mockService,
@@ -264,7 +264,8 @@ func TestUpdateFileStatusActivity_FileDeleted(t *testing.T) {
 		When(minimock.AnyContext, []uuid.UUID{fileUID}).
 		Then([]repository.KnowledgeBaseFile{}, nil) // File was deleted
 
-	mockService := &mockStatusServiceWrapper{repo: mockRepo}
+	mockService := NewServiceMock(mc)
+	mockService.RepositoryMock.Return(mockRepo)
 
 	w := &Worker{
 		service: mockService,
@@ -282,95 +283,5 @@ func TestUpdateFileStatusActivity_FileDeleted(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 }
 
-// mockStatusServiceWrapper is a simple mock for service.Service
-type mockStatusServiceWrapper struct {
-	repo repository.RepositoryI
-}
-
-func (m *mockStatusServiceWrapper) Repository() repository.RepositoryI               { return m.repo }
-func (m *mockStatusServiceWrapper) MinIO() minio.MinioI                              { return nil }
-func (m *mockStatusServiceWrapper) ACLClient() *acl.ACLClient                        { return nil }
-func (m *mockStatusServiceWrapper) VectorDB() service.VectorDatabase                 { return nil }
-func (m *mockStatusServiceWrapper) RedisClient() *redis.Client                       { return nil }
-func (m *mockStatusServiceWrapper) ProcessFileWorkflow() service.ProcessFileWorkflow { return nil }
-func (m *mockStatusServiceWrapper) CleanupFileWorkflow() service.CleanupFileWorkflow { return nil }
-func (m *mockStatusServiceWrapper) CleanupKnowledgeBaseWorkflow() service.CleanupKnowledgeBaseWorkflow {
-	return nil
-}
-func (m *mockStatusServiceWrapper) EmbedTextsWorkflow() service.EmbedTextsWorkflow   { return nil }
-func (m *mockStatusServiceWrapper) DeleteFilesWorkflow() service.DeleteFilesWorkflow { return nil }
-func (m *mockStatusServiceWrapper) GetFilesWorkflow() service.GetFilesWorkflow       { return nil }
-func (m *mockStatusServiceWrapper) CheckNamespacePermission(context.Context, *resource.Namespace) error {
-	return nil
-}
-func (m *mockStatusServiceWrapper) ConvertToMDPipe(context.Context, service.MDConversionParams) (*service.MDConversionResult, error) {
-	return nil, nil
-}
-func (m *mockStatusServiceWrapper) GenerateSummary(context.Context, string, string) (string, error) {
-	return "", nil
-}
-func (m *mockStatusServiceWrapper) ChunkMarkdownPipe(context.Context, string) (*service.ChunkingResult, error) {
-	return nil, nil
-}
-func (m *mockStatusServiceWrapper) ChunkTextPipe(context.Context, string) (*service.ChunkingResult, error) {
-	return nil, nil
-}
-func (m *mockStatusServiceWrapper) EmbeddingTextBatch(context.Context, []string) ([][]float32, error) {
-	return nil, nil
-}
-func (m *mockStatusServiceWrapper) EmbeddingTextPipe(context.Context, []string) ([][]float32, error) {
-	return nil, nil
-}
-func (m *mockStatusServiceWrapper) QuestionAnsweringPipe(context.Context, string, []string) (string, error) {
-	return "", nil
-}
-func (m *mockStatusServiceWrapper) SimilarityChunksSearch(context.Context, uuid.UUID, *artifactpb.SimilarityChunksSearchRequest) ([]service.SimChunk, error) {
-	return nil, nil
-}
-func (m *mockStatusServiceWrapper) GetNamespaceByNsID(context.Context, string) (*resource.Namespace, error) {
-	return nil, nil
-}
-func (m *mockStatusServiceWrapper) GetChunksByFile(context.Context, *repository.KnowledgeBaseFile) (service.SourceTableType, service.SourceIDType, []repository.TextChunk, map[service.ChunkUIDType]service.ContentType, []string, error) {
-	return service.SourceTableType(""), uuid.Nil, nil, nil, nil, nil
-}
-func (m *mockStatusServiceWrapper) GetFilesByPaths(context.Context, string, []string) ([]service.FileContent, error) {
-	return nil, nil
-}
-func (m *mockStatusServiceWrapper) DeleteFiles(context.Context, string, []string) error { return nil }
-func (m *mockStatusServiceWrapper) DeleteFilesWithPrefix(context.Context, string, string) error {
-	return nil
-}
-func (m *mockStatusServiceWrapper) DeleteKnowledgeBase(context.Context, string) error { return nil }
-func (m *mockStatusServiceWrapper) DeleteConvertedFileByFileUID(context.Context, uuid.UUID, uuid.UUID) error {
-	return nil
-}
-func (m *mockStatusServiceWrapper) DeleteTextChunksByFileUID(context.Context, uuid.UUID, uuid.UUID) error {
-	return nil
-}
-func (m *mockStatusServiceWrapper) TriggerCleanupKnowledgeBaseWorkflow(context.Context, string) error {
-	return nil
-}
-func (m *mockStatusServiceWrapper) ListRepositoryTags(context.Context, *artifactpb.ListRepositoryTagsRequest) (*artifactpb.ListRepositoryTagsResponse, error) {
-	return nil, nil
-}
-func (m *mockStatusServiceWrapper) CreateRepositoryTag(context.Context, *artifactpb.CreateRepositoryTagRequest) (*artifactpb.CreateRepositoryTagResponse, error) {
-	return nil, nil
-}
-func (m *mockStatusServiceWrapper) GetRepositoryTag(context.Context, *artifactpb.GetRepositoryTagRequest) (*artifactpb.GetRepositoryTagResponse, error) {
-	return nil, nil
-}
-func (m *mockStatusServiceWrapper) DeleteRepositoryTag(context.Context, *artifactpb.DeleteRepositoryTagRequest) (*artifactpb.DeleteRepositoryTagResponse, error) {
-	return nil, nil
-}
-func (m *mockStatusServiceWrapper) GetUploadURL(context.Context, *artifactpb.GetObjectUploadURLRequest, uuid.UUID, string, uuid.UUID) (*artifactpb.GetObjectUploadURLResponse, error) {
-	return nil, nil
-}
-func (m *mockStatusServiceWrapper) GetDownloadURL(context.Context, *artifactpb.GetObjectDownloadURLRequest, uuid.UUID, string) (*artifactpb.GetObjectDownloadURLResponse, error) {
-	return nil, nil
-}
-func (m *mockStatusServiceWrapper) CheckCatalogUserPermission(context.Context, string, string, string) (*resource.Namespace, *repository.KnowledgeBase, error) {
-	return nil, nil, nil
-}
-func (m *mockStatusServiceWrapper) GetNamespaceAndCheckPermission(context.Context, string) (*resource.Namespace, error) {
-	return nil, nil
-}
+// Note: All mocks are auto-generated using minimock.
+// See pkg/mock/generator.go for mock generation configuration.
