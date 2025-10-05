@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/gofrs/uuid"
@@ -9,6 +10,7 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/structpb"
+	"gorm.io/gorm"
 
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/service"
@@ -289,13 +291,13 @@ func (w *Worker) UpdateEmbeddingMetadataActivity(ctx context.Context, param *Upd
 	err := w.service.Repository().UpdateKBFileMetadata(ctx, param.FileUID, mdUpdate)
 	if err != nil {
 		// If file not found, it may have been deleted during processing - this is OK
-		if err.Error() == "record not found" || err.Error() == "fetching file: record not found" {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			w.log.Info("UpdateEmbeddingMetadataActivity: File not found (may have been deleted), skipping metadata update",
 				zap.String("fileUID", param.FileUID.String()))
 			return nil
 		}
 		return temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to update file metadata from DB: %s", errorsx.MessageOrErr(err)),
+			fmt.Sprintf("Failed to update file metadata: %s", errorsx.MessageOrErr(err)),
 			updateEmbeddingMetadataActivityError,
 			err,
 		)
