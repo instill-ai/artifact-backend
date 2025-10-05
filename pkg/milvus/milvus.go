@@ -292,6 +292,8 @@ func (m *milvusClient) FlushCollection(ctx context.Context, collectionName strin
 
 func (m *milvusClient) DeleteEmbeddingsWithFileUID(ctx context.Context, kbUID uuid.UUID, fileUID uuid.UUID) error {
 	collectionName := collectionName(kbUID)
+	logger, _ := logx.GetZapLogger(ctx)
+	logger = logger.With(zap.String("collection_name", collectionName), zap.String("file_uid", fileUID.String()))
 	
 	// Check if collection exists first
 	has, err := m.c.HasCollection(ctx, collectionName)
@@ -301,6 +303,7 @@ func (m *milvusClient) DeleteEmbeddingsWithFileUID(ctx context.Context, kbUID uu
 	
 	// If collection does not exist, there is nothing to delete - return success
 	if !has {
+		logger.Info("Collection does not exist, skipping delete")
 		return nil
 	}
 	
@@ -309,11 +312,32 @@ func (m *milvusClient) DeleteEmbeddingsWithFileUID(ctx context.Context, kbUID uu
 		return fmt.Errorf("checking metadata fields: %w", err)
 	}
 	if !hasFileUID {
+<<<<<<< HEAD
 		return fmt.Errorf("collection %s does not have file_uid field", collectionName)
 	}
 	
 	if err = m.c.LoadCollection(ctx, collectionName, false); err != nil {
 		return fmt.Errorf("loading collection for delete: %w", err)
+=======
+		logger.Info("Collection does not have file_uid field, skipping delete")
+		return nil
+	}
+
+	// Load collection if needed - check load state first to avoid redundant load
+	loadState, err := m.c.GetLoadState(ctx, collectionName, []string{})
+	if err != nil {
+		return fmt.Errorf("checking load state: %w", err)
+	}
+
+	// Only load if not already loaded
+	if loadState != entity.LoadStateLoaded {
+		if err = m.c.LoadCollection(ctx, collectionName, false); err != nil {
+			return fmt.Errorf("loading collection for delete: %w", err)
+		}
+		logger.Info("Collection loaded for delete operation")
+	} else {
+		logger.Info("Collection already loaded, skipping load")
+>>>>>>> c77b321 (feat(workflow): refactor and optimize codes)
 	}
 	
 	expr := fmt.Sprintf("%s == '%s'", kbCollectionFieldFileUID, fileUID.String())
@@ -327,6 +351,7 @@ func (m *milvusClient) DeleteEmbeddingsWithFileUID(ctx context.Context, kbUID uu
 		return fmt.Errorf("deleting embeddings: %w", err)
 	}
 
+	logger.Info("Successfully deleted embeddings")
 	return nil
 }
 

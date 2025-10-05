@@ -62,7 +62,7 @@ func TestDeleteOriginalFileActivity_Success(t *testing.T) {
 			{UID: fileUID, Destination: destination},
 		}, nil)
 
-	mockService := NewServiceMock(mc)
+	mockService := mock.NewServiceMock(mc)
 	mockService.RepositoryMock.Return(mockRepo)
 	mockService.DeleteFilesMock.
 		When(minimock.AnyContext, bucket, []string{destination}).
@@ -95,7 +95,7 @@ func TestDeleteOriginalFileActivity_FileNotFound(t *testing.T) {
 		When(minimock.AnyContext, []uuid.UUID{fileUID}).
 		Then([]repository.KnowledgeBaseFile{}, nil)
 
-	mockService := NewServiceMock(mc)
+	mockService := mock.NewServiceMock(mc)
 	mockService.RepositoryMock.Return(mockRepo)
 
 	w := &Worker{
@@ -128,7 +128,7 @@ func TestDeleteOriginalFileActivity_NoDestination(t *testing.T) {
 			{UID: fileUID, Destination: ""}, // No destination
 		}, nil)
 
-	mockService := NewServiceMock(mc)
+	mockService := mock.NewServiceMock(mc)
 	mockService.RepositoryMock.Return(mockRepo)
 
 	w := &Worker{
@@ -167,7 +167,7 @@ func TestDeleteConvertedFileActivity_Success(t *testing.T) {
 		When(minimock.AnyContext, fileUID).
 		Then(nil)
 
-	mockService := NewServiceMock(mc)
+	mockService := mock.NewServiceMock(mc)
 	mockService.RepositoryMock.Return(mockRepo)
 	mockService.DeleteConvertedFileByFileUIDMock.
 		When(minimock.AnyContext, kbUID, fileUID).
@@ -199,7 +199,7 @@ func TestDeleteConvertedFileActivity_NotFound(t *testing.T) {
 		When(minimock.AnyContext, fileUID).
 		Then(nil, fmt.Errorf("not found"))
 
-	mockService := NewServiceMock(mc)
+	mockService := mock.NewServiceMock(mc)
 	mockService.RepositoryMock.Return(mockRepo)
 
 	w := &Worker{
@@ -236,7 +236,7 @@ func TestDeleteChunksFromMinIOActivity_Success(t *testing.T) {
 		When(minimock.AnyContext, fileUID).
 		Then(nil)
 
-	mockService := NewServiceMock(mc)
+	mockService := mock.NewServiceMock(mc)
 	mockService.RepositoryMock.Return(mockRepo)
 	mockService.DeleteTextChunksByFileUIDMock.
 		When(minimock.AnyContext, kbUID, fileUID).
@@ -272,13 +272,13 @@ func TestDeleteEmbeddingsFromVectorDBActivity_Success(t *testing.T) {
 			{UID: embeddingUID, KbUID: kbUID},
 		}, nil)
 
-	mockVectorDB := NewVectorDatabaseMock(mc)
+	mockVectorDB := mock.NewVectorDatabaseMock(mc)
 	expectedCollection := service.KBCollectionName(kbUID)
 	mockVectorDB.DeleteEmbeddingsWithFileUIDMock.
 		When(minimock.AnyContext, expectedCollection, fileUID).
 		Then(nil)
 
-	mockService := NewServiceMock(mc)
+	mockService := mock.NewServiceMock(mc)
 	mockService.RepositoryMock.Return(mockRepo)
 	mockService.VectorDBMock.Return(mockVectorDB)
 
@@ -312,13 +312,13 @@ func TestDeleteEmbeddingsFromVectorDBActivity_CollectionNotFound(t *testing.T) {
 			{UID: embeddingUID, KbUID: kbUID},
 		}, nil)
 
-	mockVectorDB := NewVectorDatabaseMock(mc)
+	mockVectorDB := mock.NewVectorDatabaseMock(mc)
 	expectedCollection := service.KBCollectionName(kbUID)
 	mockVectorDB.DeleteEmbeddingsWithFileUIDMock.
 		When(minimock.AnyContext, expectedCollection, fileUID).
 		Then(fmt.Errorf("can't find collection"))
 
-	mockService := NewServiceMock(mc)
+	mockService := mock.NewServiceMock(mc)
 	mockService.RepositoryMock.Return(mockRepo)
 	mockService.VectorDBMock.Return(mockVectorDB)
 
@@ -343,13 +343,13 @@ func TestDropVectorDBCollectionActivity_Success(t *testing.T) {
 	ctx := context.Background()
 	kbUID := uuid.Must(uuid.NewV4())
 
-	mockVectorDB := NewVectorDatabaseMock(mc)
+	mockVectorDB := mock.NewVectorDatabaseMock(mc)
 	expectedCollection := service.KBCollectionName(kbUID)
 	mockVectorDB.DropCollectionMock.
 		When(minimock.AnyContext, expectedCollection).
 		Then(nil)
 
-	mockService := NewServiceMock(mc)
+	mockService := mock.NewServiceMock(mc)
 	mockService.VectorDBMock.Return(mockVectorDB)
 
 	w := &Worker{
@@ -373,13 +373,13 @@ func TestDropVectorDBCollectionActivity_AlreadyDropped(t *testing.T) {
 	ctx := context.Background()
 	kbUID := uuid.Must(uuid.NewV4())
 
-	mockVectorDB := NewVectorDatabaseMock(mc)
+	mockVectorDB := mock.NewVectorDatabaseMock(mc)
 	expectedCollection := service.KBCollectionName(kbUID)
 	mockVectorDB.DropCollectionMock.
 		When(minimock.AnyContext, expectedCollection).
 		Then(fmt.Errorf("can't find collection"))
 
-	mockService := NewServiceMock(mc)
+	mockService := mock.NewServiceMock(mc)
 	mockService.VectorDBMock.Return(mockVectorDB)
 
 	w := &Worker{

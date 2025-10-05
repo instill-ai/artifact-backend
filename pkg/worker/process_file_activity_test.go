@@ -144,7 +144,7 @@ func TestGetFileMetadataActivity_Success(t *testing.T) {
 		ConvertingPipelines: []string{},
 	}, nil)
 
-	mockSvc := NewServiceMock(mc)
+	mockSvc := mock.NewServiceMock(mc)
 	mockSvc.RepositoryMock.Return(mockRepo)
 
 	w := &Worker{
@@ -177,7 +177,7 @@ func TestGetFileContentActivity_Success(t *testing.T) {
 	mockMinIO := mock.NewMinioIMock(mc)
 	mockMinIO.GetFileMock.Return(fileContent, nil)
 
-	mockSvc := NewServiceMock(mc)
+	mockSvc := mock.NewServiceMock(mc)
 	mockSvc.MinIOMock.Return(mockMinIO)
 
 	w := &Worker{
@@ -201,7 +201,7 @@ func TestChunkContentActivity_Success(t *testing.T) {
 
 	ctx := context.Background()
 
-	mockSvc := NewServiceMock(mc)
+	mockSvc := mock.NewServiceMock(mc)
 
 	// Mock ChunkMarkdownPipe
 	mockSvc.ChunkMarkdownPipeMock.Return(&service.ChunkingResult{
@@ -220,7 +220,7 @@ func TestChunkContentActivity_Success(t *testing.T) {
 		log:     zap.NewNop(),
 	}
 
-	// Create a simple markdown content for chunking
+	// Test with small content passed directly (like summaries)
 	markdownContent := []byte("# Title\n\nThis is a test content for chunking.")
 
 	param := &ChunkContentActivityParam{
@@ -251,7 +251,7 @@ func TestSaveChunksToDBActivity_Success(t *testing.T) {
 	mockMinio := mock.NewMinioIMock(mc)
 	mockMinio.UploadBase64FileMock.Return(nil)
 
-	// Mock Repository with custom implementation that calls the callback
+	// Mock Repository
 	mockRepo := mock.NewRepositoryIMock(mc)
 	mockRepo.DeleteAndCreateChunksMock.Set(func(
 		ctx context.Context,
@@ -261,26 +261,13 @@ func TestSaveChunksToDBActivity_Success(t *testing.T) {
 	) ([]*repository.TextChunk, error) {
 		// Create the chunk with the test UID
 		createdChunks := []*repository.TextChunk{{UID: chunkUID}}
-
-		// Call the callback if provided (this will trigger MinIO upload)
-		if callback != nil {
-			chunkUIDs := []string{chunkUID.String()}
-			destinations, err := callback(chunkUIDs)
-			if err != nil {
-				return nil, err
-			}
-			// Update the destinations in the chunks
-			for _, chunk := range createdChunks {
-				if dest, ok := destinations[chunk.UID.String()]; ok {
-					chunk.ContentDest = dest
-				}
-			}
-		}
-
 		return createdChunks, nil
 	})
 
-	mockSvc := NewServiceMock(mc)
+	// Mock UpdateChunkDestinations (called after MinIO upload)
+	mockRepo.UpdateChunkDestinationsMock.Return(nil)
+
+	mockSvc := mock.NewServiceMock(mc)
 	mockSvc.RepositoryMock.Return(mockRepo)
 	mockSvc.MinIOMock.Return(mockMinio)
 

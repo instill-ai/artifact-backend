@@ -100,8 +100,8 @@ func TestCleanupFileWorkflow_Success(t *testing.T) {
 	env := testSuite.NewTestWorkflowEnvironment()
 
 	mockRepo := mock.NewRepositoryIMock(mc)
-	mockVectorDB := NewVectorDatabaseMock(mc)
-	mockSvc := NewServiceMock(mc)
+	mockVectorDB := mock.NewVectorDatabaseMock(mc)
+	mockSvc := mock.NewServiceMock(mc)
 	mockSvc.RepositoryMock.Return(mockRepo)
 	mockSvc.VectorDBMock.Return(mockVectorDB)
 
@@ -165,7 +165,7 @@ func TestCleanupFileWorkflow_WithoutOriginalFile(t *testing.T) {
 	env := testSuite.NewTestWorkflowEnvironment()
 
 	mockRepo := mock.NewRepositoryIMock(mc)
-	mockSvc := NewServiceMock(mc)
+	mockSvc := mock.NewServiceMock(mc)
 	mockSvc.RepositoryMock.Return(mockRepo)
 	// Note: VectorDB mock not set up because activities return early when lists are empty
 
@@ -220,8 +220,8 @@ func TestCleanupKnowledgeBaseWorkflow_Success(t *testing.T) {
 	env := testSuite.NewTestWorkflowEnvironment()
 
 	mockRepo := mock.NewRepositoryIMock(mc)
-	mockVectorDB := NewVectorDatabaseMock(mc)
-	mockSvc := NewServiceMock(mc)
+	mockVectorDB := mock.NewVectorDatabaseMock(mc)
+	mockSvc := mock.NewServiceMock(mc)
 	mockSvc.RepositoryMock.Return(mockRepo)
 	mockSvc.VectorDBMock.Return(mockVectorDB)
 	mockSvc.ACLClientMock.Return(&acl.ACLClient{})
@@ -282,8 +282,8 @@ func TestCleanupKnowledgeBaseWorkflow_VectorDBError(t *testing.T) {
 	env := testSuite.NewTestWorkflowEnvironment()
 
 	mockRepo := mock.NewRepositoryIMock(mc)
-	mockVectorDB := NewVectorDatabaseMock(mc)
-	mockSvc := NewServiceMock(mc)
+	mockVectorDB := mock.NewVectorDatabaseMock(mc)
+	mockSvc := mock.NewServiceMock(mc)
 	mockSvc.RepositoryMock.Return(mockRepo)
 	mockSvc.VectorDBMock.Return(mockVectorDB)
 	mockSvc.ACLClientMock.Return(&acl.ACLClient{})

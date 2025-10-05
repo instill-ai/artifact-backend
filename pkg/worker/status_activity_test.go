@@ -96,7 +96,7 @@ func TestGetFileStatusActivity_Success(t *testing.T) {
 			},
 		}, nil)
 
-	mockService := NewServiceMock(mc)
+	mockService := mock.NewServiceMock(mc)
 	mockService.RepositoryMock.Return(mockRepo)
 
 	w := &Worker{
@@ -121,7 +121,7 @@ func TestGetFileStatusActivity_FileNotFound(t *testing.T) {
 		When(minimock.AnyContext, []uuid.UUID{fileUID}).
 		Then([]repository.KnowledgeBaseFile{}, nil)
 
-	mockService := NewServiceMock(mc)
+	mockService := mock.NewServiceMock(mc)
 	mockService.RepositoryMock.Return(mockRepo)
 
 	w := &Worker{
@@ -146,7 +146,7 @@ func TestGetFileStatusActivity_DatabaseError(t *testing.T) {
 		When(minimock.AnyContext, []uuid.UUID{fileUID}).
 		Then(nil, fmt.Errorf("database error"))
 
-	mockService := NewServiceMock(mc)
+	mockService := mock.NewServiceMock(mc)
 	mockService.RepositoryMock.Return(mockRepo)
 
 	w := &Worker{
@@ -181,7 +181,7 @@ func TestUpdateFileStatusActivity_Success(t *testing.T) {
 		}).
 		Return(&repository.KnowledgeBaseFile{}, nil)
 
-	mockService := NewServiceMock(mc)
+	mockService := mock.NewServiceMock(mc)
 	mockService.RepositoryMock.Return(mockRepo)
 
 	w := &Worker{
@@ -232,7 +232,7 @@ func TestUpdateFileStatusActivity_WithMessage(t *testing.T) {
 		}).
 		Return(&repository.KnowledgeBaseFile{}, nil)
 
-	mockService := NewServiceMock(mc)
+	mockService := mock.NewServiceMock(mc)
 	mockService.RepositoryMock.Return(mockRepo)
 
 	w := &Worker{
@@ -264,7 +264,7 @@ func TestUpdateFileStatusActivity_FileDeleted(t *testing.T) {
 		When(minimock.AnyContext, []uuid.UUID{fileUID}).
 		Then([]repository.KnowledgeBaseFile{}, nil) // File was deleted
 
-	mockService := NewServiceMock(mc)
+	mockService := mock.NewServiceMock(mc)
 	mockService.RepositoryMock.Return(mockRepo)
 
 	w := &Worker{

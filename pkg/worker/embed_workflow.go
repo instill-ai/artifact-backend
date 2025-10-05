@@ -145,19 +145,23 @@ func (w *Worker) SaveEmbeddingsToVectorDBWorkflow(ctx workflow.Context, param Sa
 	}
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
 
-	// Step 1: Delete old embeddings from VectorDB (ONCE)
+	// Step 1 & 2: Delete old embeddings in parallel (VectorDB + DB)
 	deleteParam := &DeleteOldEmbeddingsActivityParam{
 		KnowledgeBaseUID: param.KnowledgeBaseUID,
 		FileUID:          param.FileUID,
 	}
 
-	if err := workflow.ExecuteActivity(ctx, w.DeleteOldEmbeddingsFromVectorDBActivity, deleteParam).Get(ctx, nil); err != nil {
+	// Execute both delete operations in parallel
+	deleteVectorDBFuture := workflow.ExecuteActivity(ctx, w.DeleteOldEmbeddingsFromVectorDBActivity, deleteParam)
+	deleteDBFuture := workflow.ExecuteActivity(ctx, w.DeleteOldEmbeddingsFromDBActivity, deleteParam)
+
+	// Wait for both to complete
+	if err := deleteVectorDBFuture.Get(ctx, nil); err != nil {
 		logger.Error("Failed to delete old embeddings from VectorDB", "error", err)
 		return fmt.Errorf("delete old embeddings from VectorDB: %s", errorsx.MessageOrErr(err))
 	}
 
-	// Step 2: Delete old embeddings from Database (ONCE)
-	if err := workflow.ExecuteActivity(ctx, w.DeleteOldEmbeddingsFromDBActivity, deleteParam).Get(ctx, nil); err != nil {
+	if err := deleteDBFuture.Get(ctx, nil); err != nil {
 		logger.Error("Failed to delete old embeddings from DB", "error", err)
 		return fmt.Errorf("delete old embeddings from DB: %s", errorsx.MessageOrErr(err))
 	}
@@ -201,9 +205,25 @@ func (w *Worker) SaveEmbeddingsToVectorDBWorkflow(ctx workflow.Context, param Sa
 			"totalBatches", totalBatches)
 	}
 
-	// Step 4: Flush the collection once at the end to persist all data
+	// Step 4: Flush the collection to ensure immediate search availability
+	// Note: Milvus 2.x has auto-flush, but we flush manually here to guarantee
+	// that newly uploaded files are immediately searchable when marked as "completed"
+	//
+	// Alternative: If eventual consistency is acceptable (1-60s delay), this can be removed
+	// to rely on Milvus auto-flush, improving workflow performance by ~150-200ms
 	logger.Info("Flushing collection after all batches completed")
-	if err := workflow.ExecuteActivity(ctx, w.FlushCollectionActivity, deleteParam).Get(ctx, nil); err != nil {
+	localActivityOptions := workflow.LocalActivityOptions{
+		StartToCloseTimeout: ActivityTimeoutStandard,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    RetryInitialInterval,
+			BackoffCoefficient: RetryBackoffCoefficient,
+			MaximumInterval:    RetryMaximumIntervalStandard,
+			MaximumAttempts:    RetryMaximumAttempts,
+		},
+	}
+	localCtx := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
+
+	if err := workflow.ExecuteLocalActivity(localCtx, w.FlushCollectionActivity, deleteParam).Get(localCtx, nil); err != nil {
 		logger.Error("Failed to flush collection", "error", err)
 		return fmt.Errorf("flush collection: %s", errorsx.MessageOrErr(err))
 	}

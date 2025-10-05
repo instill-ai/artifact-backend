@@ -215,10 +215,20 @@ func (m *Minio) authenticatedUser(ctx context.Context) string {
 // BucketFromDestination infers the bucket from the file destination string.
 // Since there's a runtime migration for the object-based flow, this is used to
 // retrieve files that might not have been updated their destination yet.
+// - Legacy paths with "uploaded-file": artifact bucket (pre-migration)
+// - Blob objects (uploaded files): ns-{uuid}/obj-{uuid} → BlobBucketName (core-blob)
+// - Artifact files (converted, chunks): kb-{uuid}/... → artifact bucket
 func BucketFromDestination(destination string) string {
+	// Legacy: paths with "uploaded-file" are in the artifact bucket (pre-migration)
 	if strings.Contains(destination, "uploaded-file") {
 		return config.Config.Minio.BucketName
 	}
 
-	return BlobBucketName
+	// Blob objects use the ns-{uuid}/obj-{uuid} format
+	if strings.HasPrefix(destination, "ns-") {
+		return BlobBucketName
+	}
+
+	// All other paths (kb-{uuid}/..., legacy paths) use the artifact bucket
+	return config.Config.Minio.BucketName
 }

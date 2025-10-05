@@ -16,18 +16,16 @@ import (
 	errorsx "github.com/instill-ai/x/errors"
 )
 
-// SaveChunkActivityParam defines parameters for saving a single chunk
-type SaveChunkActivityParam struct {
+// SaveChunkBatchActivityParam defines parameters for saving multiple chunks in one activity
+type SaveChunkBatchActivityParam struct {
 	KnowledgeBaseUID uuid.UUID
 	FileUID          uuid.UUID
-	ChunkUID         string
-	ChunkContent     []byte
+	Chunks           map[string][]byte // chunkUID -> content
 }
 
-// SaveChunkActivityResult contains the result of saving a chunk
-type SaveChunkActivityResult struct {
-	ChunkUID    string
-	Destination string
+// SaveChunkBatchActivityResult defines the result of saving a batch of chunks
+type SaveChunkBatchActivityResult struct {
+	Destinations map[string]string // chunkUID -> destination
 }
 
 // UpdateChunkDestinationsActivityParam defines parameters for updating chunk destinations
@@ -54,44 +52,6 @@ type GetFileActivityResult struct {
 	Index   int
 	Name    string
 	Content []byte
-}
-
-// SaveChunkActivity saves a single text chunk to MinIO
-func (w *Worker) SaveChunkActivity(ctx context.Context, param *SaveChunkActivityParam) (*SaveChunkActivityResult, error) {
-	w.log.Info("Starting SaveChunkActivity",
-		zap.String("chunkUID", param.ChunkUID))
-
-	// Construct the path using the correct format: kb-{kbUID}/file-{fileUID}/chunk/{chunkUID}.md
-	basePath := filepath.Join("kb-"+param.KnowledgeBaseUID.String(), "file-"+param.FileUID.String(), "chunk")
-	path := filepath.Join(basePath, param.ChunkUID) + ".md"
-
-	// Upload the chunk
-	err := w.service.MinIO().UploadBase64File(
-		ctx,
-		config.Config.Minio.BucketName,
-		path,
-		base64.StdEncoding.EncodeToString(param.ChunkContent),
-		"text/markdown",
-	)
-	if err != nil {
-		w.log.Error("Failed to upload chunk",
-			zap.String("chunkUID", param.ChunkUID),
-			zap.Error(err))
-		return nil, temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to upload chunk to storage: %s", errorsx.MessageOrErr(err)),
-			saveChunkActivityError,
-			err,
-		)
-	}
-
-	w.log.Info("Chunk uploaded successfully",
-		zap.String("chunkUID", param.ChunkUID),
-		zap.String("path", path))
-
-	return &SaveChunkActivityResult{
-		ChunkUID:    param.ChunkUID,
-		Destination: path,
-	}, nil
 }
 
 // DeleteFileActivity deletes a single file from MinIO
@@ -181,9 +141,54 @@ func (w *Worker) UpdateChunkDestinationsActivity(ctx context.Context, param *Upd
 	return nil
 }
 
+// SaveChunkBatchActivity saves multiple chunks to MinIO in one activity
+// This reduces Temporal overhead by batching multiple chunks into a single activity
+func (w *Worker) SaveChunkBatchActivity(ctx context.Context, param *SaveChunkBatchActivityParam) (*SaveChunkBatchActivityResult, error) {
+	w.log.Info("Starting SaveChunkBatchActivity",
+		zap.String("kbUID", param.KnowledgeBaseUID.String()),
+		zap.String("fileUID", param.FileUID.String()),
+		zap.Int("chunkCount", len(param.Chunks)))
+
+	destinations := make(map[string]string, len(param.Chunks))
+
+	for chunkUID, chunkContent := range param.Chunks {
+		basePath := fmt.Sprintf("kb-%s/file-%s/chunk", param.KnowledgeBaseUID.String(), param.FileUID.String())
+		path := fmt.Sprintf("%s/%s.md", basePath, chunkUID)
+
+		base64Content := base64.StdEncoding.EncodeToString(chunkContent)
+
+		err := w.service.MinIO().UploadBase64File(
+			ctx,
+			config.Config.Minio.BucketName,
+			path,
+			base64Content,
+			"text/markdown",
+		)
+		if err != nil {
+			w.log.Error("Failed to save chunk",
+				zap.String("chunkUID", chunkUID),
+				zap.Error(err))
+			return nil, temporal.NewApplicationErrorWithCause(
+				fmt.Sprintf("Failed to save chunk %s: %s", chunkUID, errorsx.MessageOrErr(err)),
+				saveChunkBatchActivityError,
+				err,
+			)
+		}
+
+		destinations[chunkUID] = path
+	}
+
+	w.log.Info("Batch saved successfully",
+		zap.Int("chunkCount", len(destinations)))
+
+	return &SaveChunkBatchActivityResult{
+		Destinations: destinations,
+	}, nil
+}
+
 // Activity error type constants
 const (
-	saveChunkActivityError               = "SaveChunkActivity"
+	saveChunkBatchActivityError          = "SaveChunkBatchActivity"
 	deleteFileActivityError              = "DeleteFileActivity"
 	getFileActivityError                 = "GetFileActivity"
 	updateChunkDestinationsActivityError = "UpdateChunkDestinationsActivity"

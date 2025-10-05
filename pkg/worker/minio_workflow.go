@@ -3,8 +3,8 @@ package worker
 import (
 	"context"
 	"fmt"
-	"time"
 
+	"github.com/gofrs/uuid"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
@@ -29,7 +29,13 @@ func NewDeleteFilesWorkflow(temporalClient client.Client, worker *Worker) servic
 }
 
 func (w *deleteFilesWorkflow) Execute(ctx context.Context, param service.DeleteFilesWorkflowParam) error {
-	workflowID := fmt.Sprintf("delete-files-%d-%d", time.Now().UnixNano(), len(param.FilePaths))
+	// Generate a unique workflow ID using UUID to prevent collisions
+	workflowUUID, err := uuid.NewV4()
+	if err != nil {
+		return fmt.Errorf("failed to generate workflow UUID: %s", errorsx.MessageOrErr(err))
+	}
+	workflowID := fmt.Sprintf("delete-files-%s", workflowUUID.String())
+
 	workflowOptions := client.StartWorkflowOptions{
 		ID:                    workflowID,
 		TaskQueue:             TaskQueue,
@@ -62,7 +68,13 @@ func NewGetFilesWorkflow(temporalClient client.Client, worker *Worker) service.G
 }
 
 func (w *getFilesWorkflow) Execute(ctx context.Context, param service.GetFilesWorkflowParam) ([]service.FileContent, error) {
-	workflowID := fmt.Sprintf("get-files-%d-%d", time.Now().UnixNano(), len(param.FilePaths))
+	// Generate a unique workflow ID using UUID to prevent collisions
+	workflowUUID, err := uuid.NewV4()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate workflow UUID: %s", errorsx.MessageOrErr(err))
+	}
+	workflowID := fmt.Sprintf("get-files-%s", workflowUUID.String())
+
 	workflowOptions := client.StartWorkflowOptions{
 		ID:                    workflowID,
 		TaskQueue:             TaskQueue,
@@ -83,6 +95,7 @@ func (w *getFilesWorkflow) Execute(ctx context.Context, param service.GetFilesWo
 }
 
 // SaveChunksWorkflow orchestrates parallel saving of multiple text chunks
+// Uses batched activities to reduce Temporal overhead
 func (w *Worker) SaveChunksWorkflow(ctx workflow.Context, param service.SaveChunksWorkflowParam) (map[string]string, error) {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("Starting SaveChunksWorkflow",
@@ -104,44 +117,63 @@ func (w *Worker) SaveChunksWorkflow(ctx workflow.Context, param service.SaveChun
 	}
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
 
-	// Create activities for all chunks
-	type chunkFuture struct {
-		chunkUID string
-		future   workflow.Future
-	}
-	futures := make([]chunkFuture, 0, len(param.Chunks))
+	// Batch size for optimal performance (reduces activities while maintaining parallelism)
+	const batchSize = 10
+
+	// Create batches
+	batches := make([]map[string][]byte, 0)
+	currentBatch := make(map[string][]byte)
 
 	for chunkUID, chunkContent := range param.Chunks {
-		activityParam := &SaveChunkActivityParam{
-			KnowledgeBaseUID: param.KnowledgeBaseUID,
-			FileUID:          param.FileUID,
-			ChunkUID:         chunkUID,
-			ChunkContent:     chunkContent,
-		}
+		currentBatch[chunkUID] = chunkContent
 
-		future := workflow.ExecuteActivity(ctx, w.SaveChunkActivity, activityParam)
-		futures = append(futures, chunkFuture{
-			chunkUID: chunkUID,
-			future:   future,
-		})
+		if len(currentBatch) >= batchSize {
+			batches = append(batches, currentBatch)
+			currentBatch = make(map[string][]byte)
+		}
 	}
 
-	// Wait for all activities and collect results
-	destinations := make(map[string]string)
-	for _, cf := range futures {
-		var result SaveChunkActivityResult
-		if err := cf.future.Get(ctx, &result); err != nil {
-			logger.Error("Chunk save failed",
-				"chunkUID", cf.chunkUID,
-				"error", err)
-			return nil, fmt.Errorf("failed to save chunk %s: %s", cf.chunkUID, errorsx.MessageOrErr(err))
+	// Add remaining chunks
+	if len(currentBatch) > 0 {
+		batches = append(batches, currentBatch)
+	}
+
+	logger.Info("Created batches for parallel processing",
+		"batchCount", len(batches),
+		"batchSize", batchSize)
+
+	// Execute batch activities in parallel
+	futures := make([]workflow.Future, len(batches))
+	for i, batch := range batches {
+		activityParam := &SaveChunkBatchActivityParam{
+			KnowledgeBaseUID: param.KnowledgeBaseUID,
+			FileUID:          param.FileUID,
+			Chunks:           batch,
 		}
 
-		destinations[result.ChunkUID] = result.Destination
+		futures[i] = workflow.ExecuteActivity(ctx, w.SaveChunkBatchActivity, activityParam)
+	}
+
+	// Wait for all batches and collect results
+	destinations := make(map[string]string)
+	for i, future := range futures {
+		var result SaveChunkBatchActivityResult
+		if err := future.Get(ctx, &result); err != nil {
+			logger.Error("Batch save failed",
+				"batchIndex", i,
+				"error", err)
+			return nil, fmt.Errorf("failed to save batch %d: %s", i, errorsx.MessageOrErr(err))
+		}
+
+		// Merge batch results
+		for chunkUID, destination := range result.Destinations {
+			destinations[chunkUID] = destination
+		}
 	}
 
 	logger.Info("SaveChunksWorkflow completed successfully",
-		"chunksSaved", len(destinations))
+		"chunksSaved", len(destinations),
+		"batchesProcessed", len(batches))
 
 	return destinations, nil
 }

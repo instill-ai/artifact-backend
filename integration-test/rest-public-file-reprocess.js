@@ -269,9 +269,9 @@ export function CheckFileReprocessing(data) {
     // If counts increase: Bug! Old resources weren't deleted, causing accumulation
     // If counts unchanged: Correct! Old resources were deleted before new ones were created
     // This test validates the fix for reprocessing cleanup logic in:
-    // - ConvertFileActivity (deletes old converted files before creating new ones)
-    // - ChunkFileActivity (deletes old chunks before creating new ones)
-    // - EmbedFileActivity (deletes old embeddings and vectors before creating new ones)
+    // - ConvertToMarkdownActivity (deletes old converted files before creating new ones)
+    // - SaveChunksToDBActivity (deletes old chunks before creating new ones)
+    // - SaveEmbeddingsToVectorDBWorkflow (deletes old embeddings and vectors before creating new ones)
     // Verify resource counts are unchanged (critical for reprocessing cleanup validation)
     const verificationChecks = {
       convertedBlobsUnchanged: minioBlobsAfterSecond.converted === minioBlobsAfterFirst.converted,

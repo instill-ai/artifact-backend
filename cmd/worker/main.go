@@ -166,7 +166,7 @@ func main() {
 	w.RegisterActivity(cw.EmbedTextsActivity)
 
 	// Register MinIO activities
-	w.RegisterActivity(cw.SaveChunkActivity)
+	w.RegisterActivity(cw.SaveChunkBatchActivity)
 	w.RegisterActivity(cw.DeleteFileActivity)
 	w.RegisterActivity(cw.GetFileActivity)
 	w.RegisterActivity(cw.UpdateChunkDestinationsActivity)
@@ -210,14 +210,12 @@ func main() {
 	w.RegisterActivity(cw.UpdateChunkingMetadataActivity)
 	// Embedding Phase
 	w.RegisterActivity(cw.GetChunksForEmbeddingActivity)
-	w.RegisterActivity(cw.GenerateEmbeddingsActivity)
 	w.RegisterActivity(cw.DeleteOldEmbeddingsFromVectorDBActivity)
 	w.RegisterActivity(cw.DeleteOldEmbeddingsFromDBActivity)
 	w.RegisterActivity(cw.SaveEmbeddingBatchActivity)
 	w.RegisterActivity(cw.FlushCollectionActivity)
 	w.RegisterActivity(cw.UpdateEmbeddingMetadataActivity)
 	// Summary Phase
-	w.RegisterActivity(cw.GetFileContentForSummaryActivity)
 	w.RegisterActivity(cw.GenerateSummaryFromPipelineActivity)
 	w.RegisterActivity(cw.SaveSummaryActivity)
 

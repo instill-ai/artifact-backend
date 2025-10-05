@@ -32,8 +32,11 @@ func getFileByUID(ctx context.Context, repo repository.RepositoryI, fileUID uuid
 	return files[0], nil
 }
 
-// saveChunksToDBOnly saves chunks to database with placeholder destinations.
-// Returns a map of chunkUID -> chunk content that needs to be saved to MinIO.
+// saveChunksToDBOnly saves chunks to database with placeholder destinations,
+// then uploads to MinIO, and finally updates the destinations in the database.
+// This ensures MinIO uploads happen AFTER the DB transaction commits, preventing
+// orphaned files if the transaction rolls back.
+// Returns a map of chunkUID -> chunk content that was saved to MinIO.
 func saveChunksToDBOnly(
 	ctx context.Context,
 	repo repository.RepositoryI,
@@ -84,46 +87,47 @@ func saveChunksToDBOnly(
 		texts[ii] = c.Text
 	}
 
-	// Create a callback that saves chunks to MinIO and returns destinations
-	// This callback is executed within the database transaction, ensuring atomicity
-	callback := func(chunkUIDs []string) (map[string]string, error) {
-		destinations := make(map[string]string, len(chunkUIDs))
-
-		for i, chunkUID := range chunkUIDs {
-			// Construct the MinIO path using the format: kb-{kbUID}/file-{fileUID}/chunk/{chunkUID}.md
-			basePath := fmt.Sprintf("kb-%s/file-%s/chunk", kbUID.String(), kbFileUID.String())
-			path := fmt.Sprintf("%s/%s.md", basePath, chunkUID)
-
-			// Encode chunk content to base64
-			base64Content := base64.StdEncoding.EncodeToString([]byte(texts[i]))
-
-			// Save chunk content to MinIO
-			err := minioClient.UploadBase64File(
-				ctx,
-				config.Config.Minio.BucketName,
-				path,
-				base64Content,
-				"text/markdown",
-			)
-			if err != nil {
-				return nil, fmt.Errorf("failed to save chunk %s to MinIO: %s", chunkUID, errorsx.MessageOrErr(err))
-			}
-
-			destinations[chunkUID] = path
-		}
-
-		return destinations, nil
-	}
-
-	// Save chunks to database and MinIO atomically
-	// Delete old chunks and create new ones
-	createdChunks, err := repo.DeleteAndCreateChunks(ctx, kbFileUID, textChunks, callback)
+	// Step 1: Save chunks to database with placeholder destinations
+	// Pass nil callback to avoid MinIO operations within the transaction
+	createdChunks, err := repo.DeleteAndCreateChunks(ctx, kbFileUID, textChunks, nil)
 	if err != nil {
 		return nil, fmt.Errorf("storing chunk records in repository: %s", errorsx.MessageOrErr(err))
 	}
 
-	// Build map of chunkUID -> content for MinIO save (for backward compatibility)
-	// This is now just for returning the data, as MinIO save already happened in the callback
+	// Step 2: Upload chunks to MinIO after DB transaction commits
+	destinations := make(map[string]string, len(createdChunks))
+	for i, chunk := range createdChunks {
+		chunkUID := chunk.UID.String()
+
+		// Construct the MinIO path using the format: kb-{kbUID}/file-{fileUID}/chunk/{chunkUID}.md
+		basePath := fmt.Sprintf("kb-%s/file-%s/chunk", kbUID.String(), kbFileUID.String())
+		path := fmt.Sprintf("%s/%s.md", basePath, chunkUID)
+
+		// Encode chunk content to base64
+		base64Content := base64.StdEncoding.EncodeToString([]byte(texts[i]))
+
+		// Save chunk content to MinIO
+		err := minioClient.UploadBase64File(
+			ctx,
+			config.Config.Minio.BucketName,
+			path,
+			base64Content,
+			"text/markdown",
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to save chunk %s to MinIO: %s", chunkUID, errorsx.MessageOrErr(err))
+		}
+
+		destinations[chunkUID] = path
+	}
+
+	// Step 3: Update chunk destinations in database
+	err = repo.UpdateChunkDestinations(ctx, destinations)
+	if err != nil {
+		return nil, fmt.Errorf("updating chunk destinations in repository: %s", errorsx.MessageOrErr(err))
+	}
+
+	// Build map of chunkUID -> content for return value
 	chunksToSave := make(map[string][]byte, len(createdChunks))
 	for i, chunk := range createdChunks {
 		chunksToSave[chunk.UID.String()] = []byte(texts[i])

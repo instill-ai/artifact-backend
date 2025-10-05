@@ -40,17 +40,6 @@ type GetChunksForEmbeddingActivityResult struct {
 	FileName    string
 }
 
-// GenerateEmbeddingsActivityParam for external embedding pipeline call
-type GenerateEmbeddingsActivityParam struct {
-	Texts    []string
-	Metadata *structpb.Struct
-}
-
-// GenerateEmbeddingsActivityResult contains generated embeddings
-type GenerateEmbeddingsActivityResult struct {
-	Embeddings [][]float32
-}
-
 // SaveEmbeddingsToVectorDBWorkflowParam saves embeddings to vector db
 type SaveEmbeddingsToVectorDBWorkflowParam struct {
 	KnowledgeBaseUID uuid.UUID
@@ -93,6 +82,15 @@ func (w *Worker) GetChunksForEmbeddingActivity(ctx context.Context, param *GetCh
 	w.log.Info("GetChunksForEmbeddingActivity: Fetching chunks",
 		zap.String("fileUID", param.FileUID.String()))
 
+	// Safety check: ensure service is initialized
+	if w.service == nil {
+		return nil, temporal.NewApplicationErrorWithCause(
+			"Service not initialized in worker",
+			getChunksForEmbeddingActivityError,
+			fmt.Errorf("worker service is nil"),
+		)
+	}
+
 	// Get file
 	files, err := w.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{param.FileUID})
 	if err != nil || len(files) == 0 {
@@ -125,45 +123,6 @@ func (w *Worker) GetChunksForEmbeddingActivity(ctx context.Context, param *GetCh
 		Texts:       texts,
 		Metadata:    file.ExternalMetadataUnmarshal,
 		FileName:    file.Name,
-	}, nil
-}
-
-// GenerateEmbeddingsActivity calls external pipeline to generate embeddings
-// This is a single external API call - idempotent (pipeline should be deterministic)
-func (w *Worker) GenerateEmbeddingsActivity(ctx context.Context, param *GenerateEmbeddingsActivityParam) (*GenerateEmbeddingsActivityResult, error) {
-	w.log.Info("GenerateEmbeddingsActivity: Generating embeddings",
-		zap.Int("textCount", len(param.Texts)))
-
-	// Create authenticated context if metadata provided
-	authCtx := ctx
-	if param.Metadata != nil {
-		var err error
-		authCtx, err = createAuthenticatedContext(ctx, param.Metadata)
-		if err != nil {
-			return nil, temporal.NewApplicationErrorWithCause(
-				fmt.Sprintf("Failed to create authenticated context: %s", errorsx.MessageOrErr(err)),
-				generateEmbeddingsActivityError,
-				err,
-			)
-		}
-	}
-
-	// Call the embedding pipeline batch method - THIS IS THE KEY EXTERNAL CALL
-	// Note: We use EmbeddingTextBatch instead of EmbeddingTextPipe to avoid nested workflows
-	embeddings, err := w.service.EmbeddingTextBatch(authCtx, param.Texts)
-	if err != nil {
-		return nil, temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Embedding generation failed: %s", errorsx.MessageOrErr(err)),
-			generateEmbeddingsActivityError,
-			err,
-		)
-	}
-
-	w.log.Info("GenerateEmbeddingsActivity: Embeddings generated successfully",
-		zap.Int("embeddingCount", len(embeddings)))
-
-	return &GenerateEmbeddingsActivityResult{
-		Embeddings: embeddings,
 	}, nil
 }
 
@@ -222,7 +181,7 @@ func (w *Worker) SaveEmbeddingBatchActivity(ctx context.Context, param *SaveEmbe
 // DeleteOldEmbeddingsFromVectorDBActivity deletes embeddings from vector db for a file
 // This is used by the concurrent embedding workflow - idempotent
 func (w *Worker) DeleteOldEmbeddingsFromVectorDBActivity(ctx context.Context, param *DeleteOldEmbeddingsActivityParam) error {
-	w.log.Info("DeleteOldEmbeddingsFromVectorDBActivity: Deleting embeddings from vector db",
+	w.log.Info("DeleteOldEmbeddingsFromVectorDBActivity: Starting",
 		zap.String("kbUID", param.KnowledgeBaseUID.String()),
 		zap.String("fileUID", param.FileUID.String()))
 
@@ -236,14 +195,14 @@ func (w *Worker) DeleteOldEmbeddingsFromVectorDBActivity(ctx context.Context, pa
 		)
 	}
 
-	w.log.Info("DeleteOldEmbeddingsFromVectorDBActivity: Embeddings deleted from vector db successfully in vector db")
+	w.log.Info("DeleteOldEmbeddingsFromVectorDBActivity: Successfully deleted embeddings from vector db")
 	return nil
 }
 
 // DeleteOldEmbeddingsFromDBActivity deletes embeddings from PostgreSQL for a file
 // This is used by the concurrent embedding workflow - idempotent
 func (w *Worker) DeleteOldEmbeddingsFromDBActivity(ctx context.Context, param *DeleteOldEmbeddingsActivityParam) error {
-	w.log.Info("DeleteOldEmbeddingsFromDBActivity: Deleting embeddings from DB",
+	w.log.Info("DeleteOldEmbeddingsFromDBActivity: Starting",
 		zap.String("fileUID", param.FileUID.String()))
 
 	if err := w.service.Repository().DeleteEmbeddingsByKbFileUID(ctx, param.FileUID); err != nil {
@@ -254,7 +213,7 @@ func (w *Worker) DeleteOldEmbeddingsFromDBActivity(ctx context.Context, param *D
 		)
 	}
 
-	w.log.Info("DeleteOldEmbeddingsFromDBActivity: Embeddings deleted from DB successfully")
+	w.log.Info("DeleteOldEmbeddingsFromDBActivity: Successfully deleted embeddings from DB")
 	return nil
 }
 
@@ -346,7 +305,6 @@ func (w *Worker) EmbedTextsActivity(ctx context.Context, param *EmbedTextsActivi
 // Activity error type constants
 const (
 	getChunksForEmbeddingActivityError   = "GetChunksForEmbeddingActivity"
-	generateEmbeddingsActivityError      = "GenerateEmbeddingsActivity"
 	saveEmbeddingsActivityError          = "SaveEmbeddingBatchActivity"
 	flushCollectionActivityError         = "FlushCollectionActivity"
 	updateEmbeddingMetadataActivityError = "UpdateEmbeddingMetadataActivity"

@@ -150,29 +150,21 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 			return handleError("get file metadata", err)
 		}
 
-		// 2b. Get file content from MinIO (single MinIO read - fast, cheap to retry)
-		var fileContent []byte
+		// 2b. Convert to Markdown (THE KEY EXTERNAL API CALL - expensive, benefits most from isolated retry)
+		// Note: Activity fetches content directly from MinIO to avoid passing large files through Temporal
 		bucket := minio.BucketFromDestination(metadata.File.Destination)
-		if err := workflow.ExecuteActivity(ctx, w.GetFileContentActivity, &GetFileContentActivityParam{
-			Bucket:      bucket,
-			Destination: metadata.File.Destination,
-			Metadata:    metadata.ExternalMetadata,
-		}).Get(ctx, &fileContent); err != nil {
-			return handleError("get file content", err)
-		}
-
-		// 2c. Convert to Markdown (THE KEY EXTERNAL API CALL - expensive, benefits most from isolated retry)
 		var conversionResult ConvertToMarkdownActivityResult
 		if err := workflow.ExecuteActivity(ctx, w.ConvertToMarkdownActivity, &ConvertToMarkdownActivityParam{
-			Content:   fileContent,
-			FileType:  artifactpb.FileType(artifactpb.FileType_value[metadata.File.Type]),
-			Pipelines: metadata.ConvertingPipelines,
-			Metadata:  metadata.ExternalMetadata,
+			Bucket:      bucket,
+			Destination: metadata.File.Destination,
+			FileType:    artifactpb.FileType(artifactpb.FileType_value[metadata.File.Type]),
+			Pipelines:   metadata.ConvertingPipelines,
+			Metadata:    metadata.ExternalMetadata,
 		}).Get(ctx, &conversionResult); err != nil {
 			return handleError("convert to markdown", err)
 		}
 
-		// 2d. Cleanup old converted file if exists
+		// 2c. Cleanup old converted file if exists
 		// Note: Activity is idempotent - succeeds if no file exists, fails only on real errors (network, etc.)
 		if err := workflow.ExecuteActivity(ctx, w.CleanupOldConvertedFileActivity, &CleanupOldConvertedFileActivityParam{
 			FileUID: fileUID,
@@ -180,7 +172,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 			return handleError("cleanup old converted file", err)
 		}
 
-		// 2e. Save converted file using separate activities to decouple DB and MinIO operations
+		// 2d. Save converted file using separate activities to decouple DB and MinIO operations
 		fileType := artifactpb.FileType(artifactpb.FileType_value[metadata.File.Type])
 
 		// For TEXT/MARKDOWN files, create a record pointing to the original file (no MinIO upload)
@@ -309,31 +301,22 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 			return handleError("get file metadata for summary", err)
 		}
 
-		// 3b. Get content for summarization (DB read + MinIO read)
+		// 3b. Generate summary (THE KEY EXTERNAL API CALL - expensive, benefits most from isolated retry)
+		// Note: Activity fetches content directly from MinIO to avoid passing large files through Temporal
 		bucket := minio.BucketFromDestination(fileMeta.File.Destination)
-		var summaryContent GetFileContentForSummaryActivityResult
-		if err := workflow.ExecuteActivity(ctx, w.GetFileContentForSummaryActivity, &GetFileContentForSummaryActivityParam{
+		var summaryResult GenerateSummaryFromPipelineActivityResult
+		if err := workflow.ExecuteActivity(ctx, w.GenerateSummaryFromPipelineActivity, &GenerateSummaryFromPipelineActivityParam{
 			FileUID:     fileUID,
 			Bucket:      bucket,
 			Destination: fileMeta.File.Destination,
+			FileName:    fileMeta.File.Name,
 			FileType:    fileMeta.File.Type,
 			Metadata:    fileMeta.ExternalMetadata,
-		}).Get(ctx, &summaryContent); err != nil {
-			return handleError("get content for summary", err)
-		}
-
-		// 3c. Generate summary (THE KEY EXTERNAL API CALL - expensive, benefits most from isolated retry)
-		var summaryResult GenerateSummaryFromPipelineActivityResult
-		if err := workflow.ExecuteActivity(ctx, w.GenerateSummaryFromPipelineActivity, &GenerateSummaryFromPipelineActivityParam{
-			Content:  summaryContent.Content,
-			FileName: fileMeta.File.Name,
-			FileType: fileMeta.File.Type,
-			Metadata: summaryContent.Metadata,
 		}).Get(ctx, &summaryResult); err != nil {
 			return handleError("generate summary", err)
 		}
 
-		// 3d. Save summary to database (single DB write)
+		// 3c. Save summary to database (single DB write)
 		if err := workflow.ExecuteActivity(ctx, w.SaveSummaryActivity, &SaveSummaryActivityParam{
 			FileUID:  fileUID,
 			Summary:  summaryResult.Summary,
@@ -372,8 +355,9 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 			return handleError("get file metadata for chunking", err)
 		}
 
-		// 4b. Get converted file - ALL files now have a converted file record
+		// 4b. Get converted file metadata - ALL files now have a converted file record
 		// (TEXT/MARKDOWN files have a record pointing to the original file)
+		// Note: We only get metadata here, not content (to avoid Temporal size limits)
 		var convertedFile GetConvertedFileForChunkingActivityResult
 		if err := workflow.ExecuteActivity(ctx, w.GetConvertedFileForChunkingActivity, &GetConvertedFileForChunkingActivityParam{
 			FileUID: fileUID,
@@ -381,21 +365,22 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 			return handleError("get converted file for chunking", err)
 		}
 
-		contentToChunk := convertedFile.Content
 		sourceTable := convertedFile.SourceTable
 		sourceUID := convertedFile.SourceUID
 		positionData := &convertedFile
 		fileType := fileInfo.File.Type
 
 		// 4e. Chunk content (THE KEY EXTERNAL API CALL - expensive, benefits most from isolated retry)
+		// Note: Activity fetches content directly from MinIO to avoid Temporal size limits
 		// All converted files are markdown (or treated as such)
 		var contentChunks ChunkContentActivityResult
 		if err := workflow.ExecuteActivity(ctx, w.ChunkContentActivity, &ChunkContentActivityParam{
-			Content:      contentToChunk,
-			IsMarkdown:   true, // All converted files are markdown
-			ChunkSize:    TextChunkSize,
-			ChunkOverlap: TextChunkOverlap,
-			Metadata:     fileInfo.ExternalMetadata,
+			FileUID:         convertedFile.SourceUID,
+			FileDestination: convertedFile.Destination,
+			IsMarkdown:      true, // All converted files are markdown
+			ChunkSize:       TextChunkSize,
+			ChunkOverlap:    TextChunkOverlap,
+			Metadata:        fileInfo.ExternalMetadata,
 		}).Get(ctx, &contentChunks); err != nil {
 			return handleError("chunk content", err)
 		}
@@ -404,12 +389,11 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 		// Note: Page references are stored in the chunk metadata during SaveChunksToDBActivity
 		_ = positionData // Keep for future use
 
-		// 4f. Chunk summary text (external API call)
-		summaryBytes := []byte(fileInfo.File.Summary)
+		// 4f. Chunk summary text (pass directly as it's always small)
 		var summaryChunks ChunkContentActivityResult
-		if len(summaryBytes) > 0 {
+		if len(fileInfo.File.Summary) > 0 {
 			if err := workflow.ExecuteActivity(ctx, w.ChunkContentActivity, &ChunkContentActivityParam{
-				Content:      summaryBytes,
+				Content:      fileInfo.File.Summary,
 				IsMarkdown:   false, // Summary is plain text
 				ChunkSize:    TextChunkSize,
 				ChunkOverlap: TextChunkOverlap,
@@ -489,12 +473,28 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 			return handleError("get chunks for embedding", err)
 		}
 
-		// 5b. Generate embeddings (THE KEY EXTERNAL API CALL - expensive, benefits most from isolated retry)
-		var embeddingResult GenerateEmbeddingsActivityResult
-		if err := workflow.ExecuteActivity(ctx, w.GenerateEmbeddingsActivity, &GenerateEmbeddingsActivityParam{
-			Texts:    chunksData.Texts,
-			Metadata: chunksData.Metadata,
-		}).Get(ctx, &embeddingResult); err != nil {
+		// 5b. Generate embeddings using child workflow for proper parallel batching
+		// Extract request metadata for authentication
+		var requestMetadata map[string][]string
+		if chunksData.Metadata != nil {
+			md, err := extractRequestMetadata(chunksData.Metadata)
+			if err != nil {
+				return handleError("extract request metadata", err)
+			}
+			requestMetadata = md
+		}
+
+		embedWorkflowOptions := workflow.ChildWorkflowOptions{
+			WorkflowID: fmt.Sprintf("embed-texts-%s", fileUID.String()),
+		}
+		embedCtx := workflow.WithChildOptions(ctx, embedWorkflowOptions)
+
+		var embeddingVectors [][]float32
+		if err := workflow.ExecuteChildWorkflow(embedCtx, w.EmbedTextsWorkflow, service.EmbedTextsWorkflowParam{
+			Texts:           chunksData.Texts,
+			BatchSize:       32, // Process 32 text chunks per batch
+			RequestMetadata: requestMetadata,
+		}).Get(embedCtx, &embeddingVectors); err != nil {
 			return handleError("generate embeddings", err)
 		}
 
@@ -504,7 +504,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 			embeddings[i] = repository.Embedding{
 				SourceTable: chunksData.SourceTable,
 				SourceUID:   chunk.UID,
-				Vector:      embeddingResult.Embeddings[i],
+				Vector:      embeddingVectors[i],
 				KbUID:       knowledgeBaseUID,
 				KbFileUID:   fileUID,
 				FileType:    string(constant.DocumentFileType), // Standard file type

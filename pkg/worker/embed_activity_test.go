@@ -95,8 +95,8 @@ func TestSaveEmbeddingBatchActivity_Success(t *testing.T) {
 	mc := minimock.NewController(c)
 
 	mockRepo := mock.NewRepositoryIMock(mc)
-	mockVectorDB := NewVectorDatabaseMock(mc)
-	mockSvc := NewServiceMock(mc)
+	mockVectorDB := mock.NewVectorDatabaseMock(mc)
+	mockSvc := mock.NewServiceMock(mc)
 	mockSvc.RepositoryMock.Return(mockRepo)
 	mockSvc.VectorDBMock.Return(mockVectorDB)
 
@@ -136,7 +136,7 @@ func TestSaveEmbeddingBatchActivity_EmptyBatch(t *testing.T) {
 	c := qt.New(t)
 	mc := minimock.NewController(c)
 	// No mocks needed - empty batch returns early without calling any service methods
-	mockSvc := NewServiceMock(mc)
+	mockSvc := mock.NewServiceMock(mc)
 
 	worker := &Worker{service: mockSvc, log: zap.NewNop()}
 
@@ -158,8 +158,8 @@ func TestSaveEmbeddingBatchActivity_MilvusFailure(t *testing.T) {
 	mc := minimock.NewController(c)
 
 	mockRepo := mock.NewRepositoryIMock(mc)
-	mockVectorDB := NewVectorDatabaseMock(mc)
-	mockSvc := NewServiceMock(mc)
+	mockVectorDB := mock.NewVectorDatabaseMock(mc)
+	mockSvc := mock.NewServiceMock(mc)
 	mockSvc.RepositoryMock.Return(mockRepo)
 	mockSvc.VectorDBMock.Return(mockVectorDB)
 	mockVectorDB.InsertVectorsInCollectionMock.Return(fmt.Errorf("milvus insert failed"))
@@ -201,7 +201,7 @@ func TestSaveEmbeddingBatchActivity_DatabaseFailure(t *testing.T) {
 	mockRepo := mock.NewRepositoryIMock(mc)
 	mockRepo.CreateEmbeddingsMock.Return(nil, fmt.Errorf("database insert failed"))
 
-	mockSvc := NewServiceMock(mc)
+	mockSvc := mock.NewServiceMock(mc)
 	mockSvc.RepositoryMock.Return(mockRepo)
 
 	worker := &Worker{service: mockSvc, log: zap.NewNop()}
@@ -223,9 +223,10 @@ func TestSaveEmbeddingBatchActivity_DatabaseFailure(t *testing.T) {
 func TestDeleteOldEmbeddingsFromVectorDBActivity_Success(t *testing.T) {
 	c := qt.New(t)
 	mc := minimock.NewController(c)
-	mockVectorDB := NewVectorDatabaseMock(mc)
-	mockSvc := NewServiceMock(mc)
+	mockVectorDB := mock.NewVectorDatabaseMock(mc)
+	mockSvc := mock.NewServiceMock(mc)
 	mockSvc.VectorDBMock.Return(mockVectorDB)
+
 	mockVectorDB.DeleteEmbeddingsWithFileUIDMock.Return(nil)
 
 	worker := &Worker{service: mockSvc, log: zap.NewNop()}
@@ -242,9 +243,10 @@ func TestDeleteOldEmbeddingsFromVectorDBActivity_Success(t *testing.T) {
 func TestDeleteOldEmbeddingsFromVectorDBActivity_Failure(t *testing.T) {
 	c := qt.New(t)
 	mc := minimock.NewController(c)
-	mockVectorDB := NewVectorDatabaseMock(mc)
-	mockSvc := NewServiceMock(mc)
+	mockVectorDB := mock.NewVectorDatabaseMock(mc)
+	mockSvc := mock.NewServiceMock(mc)
 	mockSvc.VectorDBMock.Return(mockVectorDB)
+
 	mockVectorDB.DeleteEmbeddingsWithFileUIDMock.Return(fmt.Errorf("milvus connection error"))
 
 	worker := &Worker{service: mockSvc, log: zap.NewNop()}
@@ -266,7 +268,7 @@ func TestDeleteOldEmbeddingsFromDBActivity_Success(t *testing.T) {
 	mockRepo := mock.NewRepositoryIMock(mc)
 	mockRepo.DeleteEmbeddingsByKbFileUIDMock.Return(nil)
 
-	mockSvc := NewServiceMock(mc)
+	mockSvc := mock.NewServiceMock(mc)
 	mockSvc.RepositoryMock.Return(mockRepo)
 
 	worker := &Worker{service: mockSvc, log: zap.NewNop()}
@@ -287,7 +289,7 @@ func TestDeleteOldEmbeddingsFromDBActivity_Failure(t *testing.T) {
 	mockRepo := mock.NewRepositoryIMock(mc)
 	mockRepo.DeleteEmbeddingsByKbFileUIDMock.Return(fmt.Errorf("database connection error"))
 
-	mockSvc := NewServiceMock(mc)
+	mockSvc := mock.NewServiceMock(mc)
 	mockSvc.RepositoryMock.Return(mockRepo)
 
 	worker := &Worker{service: mockSvc, log: zap.NewNop()}
@@ -370,8 +372,8 @@ func TestFlushCollectionActivity_Success(t *testing.T) {
 	c := qt.New(t)
 	mc := minimock.NewController(c)
 
-	mockVectorDB := NewVectorDatabaseMock(mc)
-	mockSvc := NewServiceMock(mc)
+	mockVectorDB := mock.NewVectorDatabaseMock(mc)
+	mockSvc := mock.NewServiceMock(mc)
 	mockSvc.VectorDBMock.Return(mockVectorDB)
 	mockVectorDB.FlushCollectionMock.Return(nil)
 
@@ -390,8 +392,8 @@ func TestFlushCollectionActivity_Failure(t *testing.T) {
 	c := qt.New(t)
 	mc := minimock.NewController(c)
 
-	mockVectorDB := NewVectorDatabaseMock(mc)
-	mockSvc := NewServiceMock(mc)
+	mockVectorDB := mock.NewVectorDatabaseMock(mc)
+	mockSvc := mock.NewServiceMock(mc)
 	mockSvc.VectorDBMock.Return(mockVectorDB)
 	mockVectorDB.FlushCollectionMock.Return(fmt.Errorf("flush collection error"))
 
@@ -414,7 +416,7 @@ func TestUpdateEmbeddingMetadataActivity_Success(t *testing.T) {
 	mockRepo := mock.NewRepositoryIMock(mc)
 	mockRepo.UpdateKBFileMetadataMock.Return(nil)
 
-	mockSvc := NewServiceMock(mc)
+	mockSvc := mock.NewServiceMock(mc)
 	mockSvc.RepositoryMock.Return(mockRepo)
 
 	worker := &Worker{service: mockSvc, log: zap.NewNop()}
@@ -435,7 +437,7 @@ func TestUpdateEmbeddingMetadataActivity_Failure(t *testing.T) {
 	mockRepo := mock.NewRepositoryIMock(mc)
 	mockRepo.UpdateKBFileMetadataMock.Return(fmt.Errorf("database error"))
 
-	mockSvc := NewServiceMock(mc)
+	mockSvc := mock.NewServiceMock(mc)
 	mockSvc.RepositoryMock.Return(mockRepo)
 
 	worker := &Worker{service: mockSvc, log: zap.NewNop()}
@@ -457,7 +459,7 @@ func TestUpdateEmbeddingMetadataActivity_FileDeleted(t *testing.T) {
 	mockRepo := mock.NewRepositoryIMock(mc)
 	mockRepo.UpdateKBFileMetadataMock.Return(gorm.ErrRecordNotFound)
 
-	mockSvc := NewServiceMock(mc)
+	mockSvc := mock.NewServiceMock(mc)
 	mockSvc.RepositoryMock.Return(mockRepo)
 
 	worker := &Worker{service: mockSvc, log: zap.NewNop()}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/gofrs/uuid"
 	"github.com/gojuno/minimock/v3"
 	"go.uber.org/zap"
 
@@ -12,25 +11,6 @@ import (
 
 	"github.com/instill-ai/artifact-backend/pkg/mock"
 )
-
-func TestSaveChunkActivityParam_Validation(t *testing.T) {
-	c := qt.New(t)
-	kbUID := uuid.Must(uuid.NewV4())
-	fileUID := uuid.Must(uuid.NewV4())
-	chunkUID := "test-chunk-uid"
-
-	param := &SaveChunkActivityParam{
-		KnowledgeBaseUID: kbUID,
-		FileUID:          fileUID,
-		ChunkUID:         chunkUID,
-		ChunkContent:     []byte("test content"),
-	}
-
-	c.Assert(param.KnowledgeBaseUID, qt.Not(qt.Equals), uuid.Nil)
-	c.Assert(param.FileUID, qt.Not(qt.Equals), uuid.Nil)
-	c.Assert(param.ChunkUID, qt.Not(qt.Equals), "")
-	c.Assert(param.ChunkContent, qt.Not(qt.HasLen), 0)
-}
 
 func TestDeleteFileActivityParam_Validation(t *testing.T) {
 	c := qt.New(t)
@@ -78,18 +58,6 @@ func TestGetFileActivityParam_Validation(t *testing.T) {
 	}
 }
 
-func TestSaveChunkActivityResult_Validation(t *testing.T) {
-	c := qt.New(t)
-
-	result := &SaveChunkActivityResult{
-		ChunkUID:    "test-chunk-uid",
-		Destination: "path/to/chunk",
-	}
-
-	c.Assert(result.ChunkUID, qt.Not(qt.Equals), "")
-	c.Assert(result.Destination, qt.Not(qt.Equals), "")
-}
-
 func TestGetFileActivityResult_Validation(t *testing.T) {
 	c := qt.New(t)
 
@@ -106,40 +74,6 @@ func TestGetFileActivityResult_Validation(t *testing.T) {
 
 // Activity tests with minimock
 
-func TestSaveChunkActivity_Success(t *testing.T) {
-	c := qt.New(t)
-	mc := minimock.NewController(c)
-
-	ctx := context.Background()
-	kbUID := uuid.Must(uuid.NewV4())
-	fileUID := uuid.Must(uuid.NewV4())
-	chunkUID := "test-chunk-uid"
-
-	mockMinIO := mock.NewMinioIMock(mc)
-	mockMinIO.UploadBase64FileMock.Return(nil)
-
-	mockSvc := NewServiceMock(mc)
-	mockSvc.MinIOMock.Return(mockMinIO)
-
-	w := &Worker{
-		service: mockSvc,
-		log:     zap.NewNop(),
-	}
-
-	param := &SaveChunkActivityParam{
-		KnowledgeBaseUID: kbUID,
-		FileUID:          fileUID,
-		ChunkUID:         chunkUID,
-		ChunkContent:     []byte("test content"),
-	}
-
-	result, err := w.SaveChunkActivity(ctx, param)
-	c.Assert(err, qt.IsNil)
-	c.Assert(result, qt.IsNotNil)
-	c.Assert(result.ChunkUID, qt.Equals, chunkUID)
-	c.Assert(result.Destination, qt.Not(qt.Equals), "")
-}
-
 func TestDeleteFileActivity_Success(t *testing.T) {
 	c := qt.New(t)
 	mc := minimock.NewController(c)
@@ -149,7 +83,7 @@ func TestDeleteFileActivity_Success(t *testing.T) {
 	mockMinIO := mock.NewMinioIMock(mc)
 	mockMinIO.DeleteFileMock.Return(nil)
 
-	mockSvc := NewServiceMock(mc)
+	mockSvc := mock.NewServiceMock(mc)
 	mockSvc.MinIOMock.Return(mockMinIO)
 
 	w := &Worker{
@@ -176,7 +110,7 @@ func TestGetFileActivity_Success(t *testing.T) {
 	mockMinIO := mock.NewMinioIMock(mc)
 	mockMinIO.GetFileMock.Return(fileContent, nil)
 
-	mockSvc := NewServiceMock(mc)
+	mockSvc := mock.NewServiceMock(mc)
 	mockSvc.MinIOMock.Return(mockMinIO)
 
 	w := &Worker{

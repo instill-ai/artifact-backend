@@ -105,8 +105,8 @@ func TestSaveEmbeddingsToVectorDBWorkflow_Success(t *testing.T) {
 
 	// Setup mocks
 	mockRepo := mock.NewRepositoryIMock(mc)
-	mockVectorDB := NewVectorDatabaseMock(mc)
-	mockSvc := NewServiceMock(mc)
+	mockVectorDB := mock.NewVectorDatabaseMock(mc)
+	mockSvc := mock.NewServiceMock(mc)
 	mockSvc.RepositoryMock.Return(mockRepo)
 	mockSvc.VectorDBMock.Return(mockVectorDB)
 
@@ -162,7 +162,7 @@ func TestSaveEmbeddingsToVectorDBWorkflow_EmptyEmbeddings(t *testing.T) {
 	env := testSuite.NewTestWorkflowEnvironment()
 
 	// No mocks needed - empty embeddings causes workflow to return early without executing activities
-	mockSvc := NewServiceMock(mc)
+	mockSvc := mock.NewServiceMock(mc)
 
 	param := SaveEmbeddingsToVectorDBWorkflowParam{
 		KnowledgeBaseUID: uuid.Must(uuid.NewV4()),
@@ -190,11 +190,15 @@ func TestSaveEmbeddingsToVectorDBWorkflow_DeleteMilvusFailure(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 
-	mockVectorDB := NewVectorDatabaseMock(mc)
-	mockSvc := NewServiceMock(mc)
+	mockVectorDB := mock.NewVectorDatabaseMock(mc)
+	mockRepo := mock.NewRepositoryIMock(mc)
+	mockSvc := mock.NewServiceMock(mc)
 	mockSvc.VectorDBMock.Return(mockVectorDB)
+	mockSvc.RepositoryMock.Return(mockRepo)
 
-	// Setup mock to return error - this activity only uses VectorDB
+	// Mock delete for DB activity (runs in parallel, should succeed)
+	mockRepo.DeleteEmbeddingsByKbFileUIDMock.Return(nil)
+	// Setup mock to return error for VectorDB
 	mockVectorDB.DeleteEmbeddingsWithFileUIDMock.Return(fmt.Errorf("milvus connection error"))
 
 	param := SaveEmbeddingsToVectorDBWorkflowParam{
@@ -225,14 +229,14 @@ func TestSaveEmbeddingsToVectorDBWorkflow_DeleteDBFailure(t *testing.T) {
 	env := testSuite.NewTestWorkflowEnvironment()
 
 	// DeleteOldEmbeddingsFromVectorDBActivity needs VectorDB (should succeed)
-	mockVectorDB := NewVectorDatabaseMock(mc)
+	mockVectorDB := mock.NewVectorDatabaseMock(mc)
 	mockVectorDB.DeleteEmbeddingsWithFileUIDMock.Return(nil)
 
 	// DeleteOldEmbeddingsFromDBActivity needs Repository (should fail)
 	mockRepo := mock.NewRepositoryIMock(mc)
 	mockRepo.DeleteEmbeddingsByKbFileUIDMock.Return(fmt.Errorf("database connection error"))
 
-	mockSvc := NewServiceMock(mc)
+	mockSvc := mock.NewServiceMock(mc)
 	mockSvc.VectorDBMock.Return(mockVectorDB)
 	mockSvc.RepositoryMock.Return(mockRepo)
 
@@ -264,12 +268,12 @@ func TestSaveEmbeddingsToVectorDBWorkflow_BatchFailure(t *testing.T) {
 	env := testSuite.NewTestWorkflowEnvironment()
 
 	mockRepo := mock.NewRepositoryIMock(mc)
-	mockVectorDB := NewVectorDatabaseMock(mc)
+	mockVectorDB := mock.NewVectorDatabaseMock(mc)
 	mockRepo.DeleteEmbeddingsByKbFileUIDMock.Return(nil)
 	mockRepo.CreateEmbeddingsMock.Return(nil, fmt.Errorf("batch insert failed"))
 	mockVectorDB.DeleteEmbeddingsWithFileUIDMock.Return(nil)
 
-	mockSvc := NewServiceMock(mc)
+	mockSvc := mock.NewServiceMock(mc)
 	mockSvc.RepositoryMock.Return(mockRepo)
 	mockSvc.VectorDBMock.Return(mockVectorDB)
 
@@ -301,8 +305,8 @@ func TestSaveEmbeddingsToVectorDBWorkflow_LargeDataset(t *testing.T) {
 	env := testSuite.NewTestWorkflowEnvironment()
 
 	mockRepo := mock.NewRepositoryIMock(mc)
-	mockVectorDB := NewVectorDatabaseMock(mc)
-	mockSvc := NewServiceMock(mc)
+	mockVectorDB := mock.NewVectorDatabaseMock(mc)
+	mockSvc := mock.NewServiceMock(mc)
 	mockSvc.RepositoryMock.Return(mockRepo)
 	mockSvc.VectorDBMock.Return(mockVectorDB)
 

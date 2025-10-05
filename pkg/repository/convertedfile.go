@@ -88,6 +88,23 @@ func (r *Repository) ConvertedFileTableName() string {
 // This method properly decouples database operations from external storage operations.
 // It handles deletion of any existing converted file for the same file_uid (for reprocessing).
 func (r *Repository) CreateConvertedFileWithDestination(ctx context.Context, cf ConvertedFile) (*ConvertedFile, error) {
+	// Validate required fields before attempting to persist
+	if cf.FileUID == uuid.Nil {
+		return nil, fmt.Errorf("file_uid is required")
+	}
+	if cf.KbUID == uuid.Nil {
+		return nil, fmt.Errorf("kb_uid is required")
+	}
+	if cf.Destination == "" {
+		return nil, fmt.Errorf("destination is required and cannot be empty")
+	}
+	if cf.Name == "" {
+		return nil, fmt.Errorf("name is required and cannot be empty")
+	}
+	if cf.Type == "" {
+		return nil, fmt.Errorf("type is required and cannot be empty")
+	}
+
 	err := r.db.Transaction(func(tx *gorm.DB) error {
 		// There may already be a converted file (if we're reprocessing a file).
 		if err := tx.Where("file_uid = ?", cf.FileUID).Delete(&ConvertedFile{}).Error; err != nil {
@@ -97,11 +114,6 @@ func (r *Repository) CreateConvertedFileWithDestination(ctx context.Context, cf 
 		// Create the new ConvertedFile with the provided destination
 		if err := tx.Create(&cf).Error; err != nil {
 			return err
-		}
-
-		// Check if UID was generated after create
-		if cf.UID == uuid.Nil {
-			return fmt.Errorf("did not get UID after create")
 		}
 
 		return nil

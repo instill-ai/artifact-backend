@@ -193,7 +193,7 @@ func TestProcessFileWorkflow_GetFileMetadataFailure(t *testing.T) {
 	env := testSuite.NewTestWorkflowEnvironment()
 
 	mockRepo := mock.NewRepositoryIMock(mc)
-	mockSvc := NewServiceMock(mc)
+	mockSvc := mock.NewServiceMock(mc)
 	mockSvc.RepositoryMock.Return(mockRepo)
 
 	fileUID := uuid.Must(uuid.NewV4())

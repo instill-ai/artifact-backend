@@ -96,18 +96,18 @@ func TestSaveChunksWorkflow_Success(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 
-	mockSvc := NewServiceMock(mc)
+	mockSvc := mock.NewServiceMock(mc)
 	mockMinIO := mock.NewMinioIMock(mc)
 	mockSvc.MinIOMock.Return(mockMinIO)
 
 	kbUID := uuid.Must(uuid.NewV4())
 	fileUID := uuid.Must(uuid.NewV4())
 
-	// Mock for SaveChunkActivity
+	// Mock for SaveChunkBatchActivity
 	mockMinIO.UploadBase64FileMock.Return(nil)
 
 	worker := &Worker{service: mockSvc, log: zap.NewNop()}
-	env.RegisterActivity(worker.SaveChunkActivity)
+	env.RegisterActivity(worker.SaveChunkBatchActivity)
 	env.RegisterWorkflow(worker.SaveChunksWorkflow)
 
 	param := service.SaveChunksWorkflowParam{
@@ -137,7 +137,7 @@ func TestDeleteFilesWorkflow_Success(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 
-	mockSvc := NewServiceMock(mc)
+	mockSvc := mock.NewServiceMock(mc)
 	mockMinIO := mock.NewMinioIMock(mc)
 	mockSvc.MinIOMock.Return(mockMinIO)
 
@@ -166,7 +166,7 @@ func TestGetFilesWorkflow_Success(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 
-	mockSvc := NewServiceMock(mc)
+	mockSvc := mock.NewServiceMock(mc)
 	mockMinIO := mock.NewMinioIMock(mc)
 	mockSvc.MinIOMock.Return(mockMinIO)
 
