@@ -180,6 +180,7 @@ func main() {
 	w.RegisterActivity(cw.DeleteConvertedFileActivity)
 	w.RegisterActivity(cw.DeleteChunksFromMinIOActivity)
 	w.RegisterActivity(cw.DeleteEmbeddingsFromVectorDBActivity)
+	w.RegisterActivity(cw.DeleteEmbeddingRecordsActivity)
 
 	// Register cleanup activities - Knowledge base cleanup
 	w.RegisterActivity(cw.DeleteKBFilesFromMinIOActivity)
@@ -210,7 +211,7 @@ func main() {
 	// Embedding Phase
 	w.RegisterActivity(cw.GetChunksForEmbeddingActivity)
 	w.RegisterActivity(cw.GenerateEmbeddingsActivity)
-	w.RegisterActivity(cw.DeleteOldEmbeddingsFromMilvusActivity)
+	w.RegisterActivity(cw.DeleteOldEmbeddingsFromVectorDBActivity)
 	w.RegisterActivity(cw.DeleteOldEmbeddingsFromDBActivity)
 	w.RegisterActivity(cw.SaveEmbeddingBatchActivity)
 	w.RegisterActivity(cw.FlushCollectionActivity)

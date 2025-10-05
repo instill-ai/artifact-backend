@@ -30,7 +30,7 @@ type DeleteChunksFromMinIOActivityParam struct {
 	FileUID uuid.UUID
 }
 
-// DeleteEmbeddingsFromVectorDBActivityParam defines parameters for deleting embeddings from Milvus
+// DeleteEmbeddingsFromVectorDBActivityParam defines parameters for deleting embeddings from vector db
 type DeleteEmbeddingsFromVectorDBActivityParam struct {
 	FileUID uuid.UUID
 }
@@ -160,9 +160,10 @@ func (w *Worker) DeleteChunksFromMinIOActivity(ctx context.Context, param *Delet
 	return nil
 }
 
-// DeleteEmbeddingsFromVectorDBActivity deletes embeddings from Milvus and DB
+// DeleteEmbeddingsFromVectorDBActivity deletes embeddings from vector db only (cleanup workflow)
+// This is the parallel-optimized version - use with DeleteEmbeddingRecordsActivity
 func (w *Worker) DeleteEmbeddingsFromVectorDBActivity(ctx context.Context, param *DeleteEmbeddingsFromVectorDBActivityParam) error {
-	w.log.Info("DeleteEmbeddingsFromVectorDBActivity: Deleting embeddings",
+	w.log.Info("DeleteEmbeddingsFromVectorDBActivity: Deleting embeddings from vector db",
 		zap.String("fileUID", param.FileUID.String()))
 
 	// Get embeddings to extract KB UID
@@ -177,37 +178,45 @@ func (w *Worker) DeleteEmbeddingsFromVectorDBActivity(ctx context.Context, param
 	kbUID := embeddings[0].KbUID
 	collection := service.KBCollectionName(kbUID)
 
-	// Delete from Milvus
+	// Delete from vector db
 	err = w.service.VectorDB().DeleteEmbeddingsWithFileUID(ctx, collection, param.FileUID)
 	if err != nil {
 		// If collection doesn't exist, that's fine - it's already cleaned up
 		if strings.Contains(err.Error(), "can't find collection") {
-			w.log.Info("DeleteEmbeddingsFromVectorDBActivity: Collection not found (already cleaned up)",
+			w.log.Info("DeleteEmbeddingsFromVectorDBActivity: Collection not found (already cleaned up) in vector db",
 				zap.String("collection", collection))
 		} else {
 			return temporal.NewApplicationErrorWithCause(
-				fmt.Sprintf("Failed to delete embeddings from vector database: %s", errorsx.MessageOrErr(err)),
+				fmt.Sprintf("Failed to delete embeddings from vector db: %s", errorsx.MessageOrErr(err)),
 				deleteEmbeddingsActivityError,
 				err,
 			)
 		}
 	} else {
-		w.log.Info("DeleteEmbeddingsFromVectorDBActivity: Deleted from Milvus",
+		w.log.Info("DeleteEmbeddingsFromVectorDBActivity: Deleted from vector db",
 			zap.String("kbUID", kbUID.String()),
 			zap.Int("embeddingCount", len(embeddings)))
 	}
 
-	// Delete records from DB
-	err = w.service.Repository().HardDeleteEmbeddingsByKbFileUID(ctx, param.FileUID)
+	return nil
+}
+
+// DeleteEmbeddingRecordsActivity hard deletes embedding records from PostgreSQL (cleanup workflow)
+// This is the parallel-optimized version for the cleanup workflow
+func (w *Worker) DeleteEmbeddingRecordsActivity(ctx context.Context, param *DeleteEmbeddingsFromVectorDBActivityParam) error {
+	w.log.Info("DeleteEmbeddingRecordsActivity: Deleting embedding records from DB",
+		zap.String("fileUID", param.FileUID.String()))
+
+	err := w.service.Repository().HardDeleteEmbeddingsByKbFileUID(ctx, param.FileUID)
 	if err != nil {
 		return temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to delete embedding records: %s", errorsx.MessageOrErr(err)),
+			fmt.Sprintf("Failed to delete embedding records from DB: %s", errorsx.MessageOrErr(err)),
 			deleteEmbeddingsActivityError,
 			err,
 		)
 	}
 
-	w.log.Info("DeleteEmbeddingsFromVectorDBActivity: Successfully deleted embeddings and records")
+	w.log.Info("DeleteEmbeddingRecordsActivity: Successfully deleted embedding records from DB")
 	return nil
 }
 
@@ -218,7 +227,7 @@ type DeleteKBFilesFromMinIOActivityParam struct {
 	KnowledgeBaseUID uuid.UUID
 }
 
-// DropVectorDBCollectionActivityParam defines parameters for dropping Milvus collection
+// DropVectorDBCollectionActivityParam defines parameters for dropping vector db collection
 type DropVectorDBCollectionActivityParam struct {
 	KnowledgeBaseUID uuid.UUID
 }
@@ -266,7 +275,7 @@ func (w *Worker) DeleteKBFilesFromMinIOActivity(ctx context.Context, param *Dele
 	return nil
 }
 
-// DropVectorDBCollectionActivity drops the Milvus collection for a knowledge base
+// DropVectorDBCollectionActivity drops the vector db collection for a knowledge base
 func (w *Worker) DropVectorDBCollectionActivity(ctx context.Context, param *DropVectorDBCollectionActivityParam) error {
 	w.log.Info("DropVectorDBCollectionActivity: Dropping collection",
 		zap.String("kbUID", param.KnowledgeBaseUID.String()))

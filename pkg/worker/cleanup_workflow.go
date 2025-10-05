@@ -103,57 +103,68 @@ func (w *Worker) CleanupFileWorkflow(ctx workflow.Context, param service.Cleanup
 	// but still report failures
 	var errors []string
 
-	// Step 1: Delete original file if requested
-	// The activity will fetch file metadata to get destination and bucket
+	// Launch all cleanup activities in parallel for better performance
+	// All these operations are independent and can run concurrently
+	type cleanupTask struct {
+		name   string
+		future workflow.Future
+	}
+
+	tasks := []cleanupTask{}
+
+	// Optional: Delete original file if requested
 	if param.IncludeOriginalFile {
-		err := workflow.ExecuteActivity(ctx, w.DeleteOriginalFileActivity, &DeleteOriginalFileActivityParam{
+		tasks = append(tasks, cleanupTask{
+			name: "delete original file",
+			future: workflow.ExecuteActivity(ctx, w.DeleteOriginalFileActivity, &DeleteOriginalFileActivityParam{
+				FileUID: fileUID,
+				Bucket:  config.Config.Minio.BucketName,
+			}),
+		})
+	}
+
+	// Delete converted file
+	tasks = append(tasks, cleanupTask{
+		name: "delete converted file",
+		future: workflow.ExecuteActivity(ctx, w.DeleteConvertedFileActivity, &DeleteConvertedFileActivityParam{
 			FileUID: fileUID,
-			Bucket:  config.Config.Minio.BucketName,
-		}).Get(ctx, nil)
-		if err != nil {
-			errMsg := fmt.Sprintf("delete original file: %s", errorsx.MessageOrErr(err))
+		}),
+	})
+
+	// Delete chunks
+	tasks = append(tasks, cleanupTask{
+		name: "delete chunks",
+		future: workflow.ExecuteActivity(ctx, w.DeleteChunksFromMinIOActivity, &DeleteChunksFromMinIOActivityParam{
+			FileUID: fileUID,
+		}),
+	})
+
+	// Delete embeddings from Milvus (parallel-optimized)
+	tasks = append(tasks, cleanupTask{
+		name: "delete embeddings from Milvus",
+		future: workflow.ExecuteActivity(ctx, w.DeleteEmbeddingsFromVectorDBActivity, &DeleteEmbeddingsFromVectorDBActivityParam{
+			FileUID: fileUID,
+		}),
+	})
+
+	// Delete embedding records from DB (parallel-optimized)
+	tasks = append(tasks, cleanupTask{
+		name: "delete embedding records",
+		future: workflow.ExecuteActivity(ctx, w.DeleteEmbeddingRecordsActivity, &DeleteEmbeddingsFromVectorDBActivityParam{
+			FileUID: fileUID,
+		}),
+	})
+
+	// Wait for all tasks to complete and collect errors
+	for _, task := range tasks {
+		if err := task.future.Get(ctx, nil); err != nil {
+			errMsg := fmt.Sprintf("%s: %s", task.name, errorsx.MessageOrErr(err))
 			errors = append(errors, errMsg)
-			logger.Error("Failed to delete original file",
+			logger.Error("Cleanup task failed",
+				"task", task.name,
 				"fileUID", fileUID.String(),
 				"error", err.Error())
 		}
-	}
-
-	// Step 2: Delete converted file
-	err := workflow.ExecuteActivity(ctx, w.DeleteConvertedFileActivity, &DeleteConvertedFileActivityParam{
-		FileUID: fileUID,
-	}).Get(ctx, nil)
-	if err != nil {
-		errMsg := fmt.Sprintf("delete converted file: %s", errorsx.MessageOrErr(err))
-		errors = append(errors, errMsg)
-		logger.Error("Failed to delete converted file",
-			"fileUID", fileUID.String(),
-			"error", err.Error())
-	}
-
-	// Step 3: Delete chunks
-	err = workflow.ExecuteActivity(ctx, w.DeleteChunksFromMinIOActivity, &DeleteChunksFromMinIOActivityParam{
-		FileUID: fileUID,
-	}).Get(ctx, nil)
-	if err != nil {
-		errMsg := fmt.Sprintf("delete chunks: %s", errorsx.MessageOrErr(err))
-		errors = append(errors, errMsg)
-		logger.Error("Failed to delete chunks",
-			"fileUID", fileUID.String(),
-			"error", err.Error())
-	}
-
-	// Step 4: Delete embeddings
-	// The activity will get KB UID from the embedding records
-	err = workflow.ExecuteActivity(ctx, w.DeleteEmbeddingsFromVectorDBActivity, &DeleteEmbeddingsFromVectorDBActivityParam{
-		FileUID: fileUID,
-	}).Get(ctx, nil)
-	if err != nil {
-		errMsg := fmt.Sprintf("delete embeddings: %s", errorsx.MessageOrErr(err))
-		errors = append(errors, errMsg)
-		logger.Error("Failed to delete embeddings",
-			"fileUID", fileUID.String(),
-			"error", err.Error())
 	}
 
 	// If any cleanup operation failed, return an error

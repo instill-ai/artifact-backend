@@ -151,7 +151,7 @@ func (w *Worker) SaveEmbeddingsToVectorDBWorkflow(ctx workflow.Context, param Sa
 		FileUID:          param.FileUID,
 	}
 
-	if err := workflow.ExecuteActivity(ctx, w.DeleteOldEmbeddingsFromMilvusActivity, deleteParam).Get(ctx, nil); err != nil {
+	if err := workflow.ExecuteActivity(ctx, w.DeleteOldEmbeddingsFromVectorDBActivity, deleteParam).Get(ctx, nil); err != nil {
 		logger.Error("Failed to delete old embeddings from VectorDB", "error", err)
 		return fmt.Errorf("delete old embeddings from VectorDB: %s", errorsx.MessageOrErr(err))
 	}

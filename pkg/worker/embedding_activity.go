@@ -49,7 +49,7 @@ type GenerateEmbeddingsActivityResult struct {
 	Embeddings [][]float32
 }
 
-// SaveEmbeddingsToVectorDBWorkflowParam saves embeddings to Milvus
+// SaveEmbeddingsToVectorDBWorkflowParam saves embeddings to vector db
 type SaveEmbeddingsToVectorDBWorkflowParam struct {
 	KnowledgeBaseUID uuid.UUID
 	FileUID          uuid.UUID
@@ -164,7 +164,7 @@ func (w *Worker) GenerateEmbeddingsActivity(ctx context.Context, param *Generate
 	}, nil
 }
 
-// SaveEmbeddingBatchActivity saves a single batch of embeddings to Milvus and database
+// SaveEmbeddingBatchActivity saves a single batch of embeddings to vector db and database
 // This is designed for parallel execution - each batch is independent
 func (w *Worker) SaveEmbeddingBatchActivity(ctx context.Context, param *SaveEmbeddingBatchActivityParam) error {
 	w.log.Info("SaveEmbeddingBatchActivity: Saving batch",
@@ -178,7 +178,7 @@ func (w *Worker) SaveEmbeddingBatchActivity(ctx context.Context, param *SaveEmbe
 		return nil
 	}
 
-	// Build vectors for Milvus
+	// Build vectors for vector db
 	collection := service.KBCollectionName(param.KnowledgeBaseUID)
 
 	externalServiceCall := func(insertedEmbeddings []repository.Embedding) error {
@@ -196,7 +196,7 @@ func (w *Worker) SaveEmbeddingBatchActivity(ctx context.Context, param *SaveEmbe
 			}
 		}
 		if err := w.service.VectorDB().InsertVectorsInCollection(ctx, collection, vectors); err != nil {
-			return fmt.Errorf("saving embeddings in vector database: %s", errorsx.MessageOrErr(err))
+			return fmt.Errorf("saving embeddings in vector db: %s", errorsx.MessageOrErr(err))
 		}
 		return nil
 	}
@@ -205,21 +205,21 @@ func (w *Worker) SaveEmbeddingBatchActivity(ctx context.Context, param *SaveEmbe
 	_, err := w.service.Repository().CreateEmbeddings(ctx, param.Embeddings, externalServiceCall)
 	if err != nil {
 		return temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to save batch %d/%d: %s", param.BatchNumber, param.TotalBatches, errorsx.MessageOrErr(err)),
+			fmt.Sprintf("Failed to save batch %d/%d in vector db: %s", param.BatchNumber, param.TotalBatches, errorsx.MessageOrErr(err)),
 			saveEmbeddingsActivityError,
 			err,
 		)
 	}
 
-	w.log.Info("SaveEmbeddingBatchActivity: Batch saved successfully",
+	w.log.Info("SaveEmbeddingBatchActivity: Batch saved successfully in vector db",
 		zap.Int("batchNumber", param.BatchNumber))
 	return nil
 }
 
-// DeleteOldEmbeddingsFromMilvusActivity deletes embeddings from Milvus for a file
+// DeleteOldEmbeddingsFromVectorDBActivity deletes embeddings from vector db for a file
 // This is used by the concurrent embedding workflow - idempotent
-func (w *Worker) DeleteOldEmbeddingsFromMilvusActivity(ctx context.Context, param *DeleteOldEmbeddingsActivityParam) error {
-	w.log.Info("DeleteOldEmbeddingsFromMilvusActivity: Deleting embeddings from Milvus",
+func (w *Worker) DeleteOldEmbeddingsFromVectorDBActivity(ctx context.Context, param *DeleteOldEmbeddingsActivityParam) error {
+	w.log.Info("DeleteOldEmbeddingsFromVectorDBActivity: Deleting embeddings from vector db",
 		zap.String("kbUID", param.KnowledgeBaseUID.String()),
 		zap.String("fileUID", param.FileUID.String()))
 
@@ -227,13 +227,13 @@ func (w *Worker) DeleteOldEmbeddingsFromMilvusActivity(ctx context.Context, para
 
 	if err := w.service.VectorDB().DeleteEmbeddingsWithFileUID(ctx, collection, param.FileUID); err != nil {
 		return temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to delete embeddings from Milvus: %s", errorsx.MessageOrErr(err)),
+			fmt.Sprintf("Failed to delete embeddings from vector db: %s", errorsx.MessageOrErr(err)),
 			saveEmbeddingsActivityError,
 			err,
 		)
 	}
 
-	w.log.Info("DeleteOldEmbeddingsFromMilvusActivity: Embeddings deleted successfully")
+	w.log.Info("DeleteOldEmbeddingsFromVectorDBActivity: Embeddings deleted from vector db successfully in vector db")
 	return nil
 }
 
@@ -251,11 +251,11 @@ func (w *Worker) DeleteOldEmbeddingsFromDBActivity(ctx context.Context, param *D
 		)
 	}
 
-	w.log.Info("DeleteOldEmbeddingsFromDBActivity: Embeddings deleted successfully")
+	w.log.Info("DeleteOldEmbeddingsFromDBActivity: Embeddings deleted from DB successfully")
 	return nil
 }
 
-// FlushCollectionActivity flushes a Milvus collection to persist all data immediately
+// FlushCollectionActivity flushes a vector db collection to persist all data immediately
 // This is called once at the end after all batches are saved
 func (w *Worker) FlushCollectionActivity(ctx context.Context, param *DeleteOldEmbeddingsActivityParam) error {
 	w.log.Info("FlushCollectionActivity: Flushing collection",
@@ -265,13 +265,13 @@ func (w *Worker) FlushCollectionActivity(ctx context.Context, param *DeleteOldEm
 
 	if err := w.service.VectorDB().FlushCollection(ctx, collection); err != nil {
 		return temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to flush collection: %s", errorsx.MessageOrErr(err)),
+			fmt.Sprintf("Failed to flush collection from vector db: %s", errorsx.MessageOrErr(err)),
 			flushCollectionActivityError,
 			err,
 		)
 	}
 
-	w.log.Info("FlushCollectionActivity: Collection flushed successfully")
+	w.log.Info("FlushCollectionActivity: Collection flushed from vector db successfully")
 	return nil
 }
 
@@ -294,13 +294,13 @@ func (w *Worker) UpdateEmbeddingMetadataActivity(ctx context.Context, param *Upd
 			return nil
 		}
 		return temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to update file metadata: %s", errorsx.MessageOrErr(err)),
+			fmt.Sprintf("Failed to update file metadata from DB: %s", errorsx.MessageOrErr(err)),
 			updateEmbeddingMetadataActivityError,
 			err,
 		)
 	}
 
-	w.log.Info("UpdateEmbeddingMetadataActivity: Metadata updated successfully")
+	w.log.Info("UpdateEmbeddingMetadataActivity: Metadata updated from DB successfully")
 	return nil
 }
 
@@ -322,18 +322,18 @@ func (w *Worker) EmbedTextsActivity(ctx context.Context, param *EmbedTextsActivi
 
 	vectors, err := w.service.EmbeddingTextBatch(authCtx, param.Texts)
 	if err != nil {
-		w.log.Error("Failed to embed text batch",
+		w.log.Error("Failed to embed text batch in vector db",
 			zap.Int("batchIndex", param.BatchIndex),
 			zap.Int("batchSize", len(param.Texts)),
 			zap.Error(err))
 		return nil, temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Embedding batch %d failed: %s", param.BatchIndex, errorsx.MessageOrErr(err)),
+			fmt.Sprintf("Embedding batch %d failed in vector db: %s", param.BatchIndex, errorsx.MessageOrErr(err)),
 			embedTextsActivityError,
 			err,
 		)
 	}
 
-	w.log.Info("Batch embedding completed",
+	w.log.Info("Batch embedding completed in vector db",
 		zap.Int("batchIndex", param.BatchIndex),
 		zap.Int("vectorCount", len(vectors)))
 

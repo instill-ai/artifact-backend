@@ -142,7 +142,7 @@ func TestSaveEmbeddingsToVectorDBWorkflow_Success(t *testing.T) {
 
 	// Create worker and register
 	worker := &Worker{service: mockSvc, log: zap.NewNop()}
-	env.RegisterActivity(worker.DeleteOldEmbeddingsFromMilvusActivity)
+	env.RegisterActivity(worker.DeleteOldEmbeddingsFromVectorDBActivity)
 	env.RegisterActivity(worker.DeleteOldEmbeddingsFromDBActivity)
 	env.RegisterActivity(worker.SaveEmbeddingBatchActivity)
 	env.RegisterActivity(worker.FlushCollectionActivity)
@@ -172,7 +172,7 @@ func TestSaveEmbeddingsToVectorDBWorkflow_EmptyEmbeddings(t *testing.T) {
 	}
 
 	worker := &Worker{service: mockSvc, log: zap.NewNop()}
-	env.RegisterActivity(worker.DeleteOldEmbeddingsFromMilvusActivity)
+	env.RegisterActivity(worker.DeleteOldEmbeddingsFromVectorDBActivity)
 	env.RegisterActivity(worker.DeleteOldEmbeddingsFromDBActivity)
 	env.RegisterActivity(worker.SaveEmbeddingBatchActivity)
 	env.RegisterActivity(worker.FlushCollectionActivity)
@@ -205,7 +205,7 @@ func TestSaveEmbeddingsToVectorDBWorkflow_DeleteMilvusFailure(t *testing.T) {
 	}
 
 	worker := &Worker{service: mockSvc, log: zap.NewNop()}
-	env.RegisterActivity(worker.DeleteOldEmbeddingsFromMilvusActivity)
+	env.RegisterActivity(worker.DeleteOldEmbeddingsFromVectorDBActivity)
 	env.RegisterActivity(worker.DeleteOldEmbeddingsFromDBActivity)
 	env.RegisterActivity(worker.SaveEmbeddingBatchActivity)
 	env.RegisterActivity(worker.FlushCollectionActivity)
@@ -224,7 +224,7 @@ func TestSaveEmbeddingsToVectorDBWorkflow_DeleteDBFailure(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 
-	// DeleteOldEmbeddingsFromMilvusActivity needs VectorDB (should succeed)
+	// DeleteOldEmbeddingsFromVectorDBActivity needs VectorDB (should succeed)
 	mockVectorDB := NewVectorDatabaseMock(mc)
 	mockVectorDB.DeleteEmbeddingsWithFileUIDMock.Return(nil)
 
@@ -244,7 +244,7 @@ func TestSaveEmbeddingsToVectorDBWorkflow_DeleteDBFailure(t *testing.T) {
 	}
 
 	worker := &Worker{service: mockSvc, log: zap.NewNop()}
-	env.RegisterActivity(worker.DeleteOldEmbeddingsFromMilvusActivity)
+	env.RegisterActivity(worker.DeleteOldEmbeddingsFromVectorDBActivity)
 	env.RegisterActivity(worker.DeleteOldEmbeddingsFromDBActivity)
 	env.RegisterActivity(worker.SaveEmbeddingBatchActivity)
 	env.RegisterActivity(worker.FlushCollectionActivity)
@@ -281,7 +281,7 @@ func TestSaveEmbeddingsToVectorDBWorkflow_BatchFailure(t *testing.T) {
 	}
 
 	worker := &Worker{service: mockSvc, log: zap.NewNop()}
-	env.RegisterActivity(worker.DeleteOldEmbeddingsFromMilvusActivity)
+	env.RegisterActivity(worker.DeleteOldEmbeddingsFromVectorDBActivity)
 	env.RegisterActivity(worker.DeleteOldEmbeddingsFromDBActivity)
 	env.RegisterActivity(worker.SaveEmbeddingBatchActivity)
 	env.RegisterActivity(worker.FlushCollectionActivity)
@@ -334,7 +334,7 @@ func TestSaveEmbeddingsToVectorDBWorkflow_LargeDataset(t *testing.T) {
 	})
 
 	worker := &Worker{service: mockSvc, log: zap.NewNop()}
-	env.RegisterActivity(worker.DeleteOldEmbeddingsFromMilvusActivity)
+	env.RegisterActivity(worker.DeleteOldEmbeddingsFromVectorDBActivity)
 	env.RegisterActivity(worker.DeleteOldEmbeddingsFromDBActivity)
 	env.RegisterActivity(worker.SaveEmbeddingBatchActivity)
 	env.RegisterActivity(worker.FlushCollectionActivity)

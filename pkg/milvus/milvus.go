@@ -312,6 +312,10 @@ func (m *milvusClient) DeleteEmbeddingsWithFileUID(ctx context.Context, kbUID uu
 		return fmt.Errorf("collection %s does not have file_uid field", collectionName)
 	}
 	
+	if err = m.c.LoadCollection(ctx, collectionName, false); err != nil {
+		return fmt.Errorf("loading collection for delete: %w", err)
+	}
+	
 	expr := fmt.Sprintf("%s == '%s'", kbCollectionFieldFileUID, fileUID.String())
 	if err := m.c.Delete(ctx, collectionName, "", expr); err != nil {
 		return fmt.Errorf("deleting embeddings: %w", err)

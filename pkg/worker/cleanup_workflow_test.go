@@ -129,7 +129,7 @@ func TestCleanupFileWorkflow_Success(t *testing.T) {
 	mockSvc.DeleteTextChunksByFileUIDMock.Return(nil)
 	mockRepo.HardDeleteChunksByKbFileUIDMock.Return(nil)
 
-	// Mock for DeleteEmbeddingsFromVectorDBActivity
+	// Mock for DeleteEmbeddingsFromVectorDBActivity and DeleteEmbeddingRecordsActivity
 	mockRepo.ListEmbeddingsByKbFileUIDMock.Return([]repository.Embedding{
 		{UID: uuid.Must(uuid.NewV4()), KbUID: kbUID},
 	}, nil)
@@ -141,6 +141,7 @@ func TestCleanupFileWorkflow_Success(t *testing.T) {
 	env.RegisterActivity(worker.DeleteConvertedFileActivity)
 	env.RegisterActivity(worker.DeleteChunksFromMinIOActivity)
 	env.RegisterActivity(worker.DeleteEmbeddingsFromVectorDBActivity)
+	env.RegisterActivity(worker.DeleteEmbeddingRecordsActivity)
 	env.RegisterWorkflow(worker.CleanupFileWorkflow)
 
 	param := service.CleanupFileWorkflowParam{
@@ -184,7 +185,7 @@ func TestCleanupFileWorkflow_WithoutOriginalFile(t *testing.T) {
 	// Mock for DeleteChunksFromMinIOActivity (empty chunks - activity returns early)
 	mockRepo.ListChunksByKbFileUIDMock.Return([]repository.TextChunk{}, nil)
 
-	// Mock for DeleteEmbeddingsFromVectorDBActivity (empty embeddings - activity returns early)
+	// Mock for DeleteEmbeddingsFromVectorDBActivity and DeleteEmbeddingRecordsActivity (empty embeddings - activities return early)
 	mockRepo.ListEmbeddingsByKbFileUIDMock.Return([]repository.Embedding{}, nil)
 
 	worker := &Worker{service: mockSvc, log: zap.NewNop()}
@@ -192,6 +193,7 @@ func TestCleanupFileWorkflow_WithoutOriginalFile(t *testing.T) {
 	env.RegisterActivity(worker.DeleteConvertedFileActivity)
 	env.RegisterActivity(worker.DeleteChunksFromMinIOActivity)
 	env.RegisterActivity(worker.DeleteEmbeddingsFromVectorDBActivity)
+	env.RegisterActivity(worker.DeleteEmbeddingRecordsActivity)
 	env.RegisterWorkflow(worker.CleanupFileWorkflow)
 
 	param := service.CleanupFileWorkflowParam{

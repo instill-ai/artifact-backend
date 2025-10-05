@@ -219,7 +219,7 @@ func TestSaveEmbeddingBatchActivity_DatabaseFailure(t *testing.T) {
 	c.Assert(err.Error(), qt.Contains, "database")
 }
 
-func TestDeleteOldEmbeddingsFromMilvusActivity_Success(t *testing.T) {
+func TestDeleteOldEmbeddingsFromVectorDBActivity_Success(t *testing.T) {
 	c := qt.New(t)
 	mc := minimock.NewController(c)
 	mockVectorDB := NewVectorDatabaseMock(mc)
@@ -234,11 +234,11 @@ func TestDeleteOldEmbeddingsFromMilvusActivity_Success(t *testing.T) {
 		FileUID:          uuid.Must(uuid.NewV4()),
 	}
 
-	err := worker.DeleteOldEmbeddingsFromMilvusActivity(context.Background(), param)
+	err := worker.DeleteOldEmbeddingsFromVectorDBActivity(context.Background(), param)
 	c.Assert(err, qt.IsNil)
 }
 
-func TestDeleteOldEmbeddingsFromMilvusActivity_Failure(t *testing.T) {
+func TestDeleteOldEmbeddingsFromVectorDBActivity_Failure(t *testing.T) {
 	c := qt.New(t)
 	mc := minimock.NewController(c)
 	mockVectorDB := NewVectorDatabaseMock(mc)
@@ -253,7 +253,7 @@ func TestDeleteOldEmbeddingsFromMilvusActivity_Failure(t *testing.T) {
 		FileUID:          uuid.Must(uuid.NewV4()),
 	}
 
-	err := worker.DeleteOldEmbeddingsFromMilvusActivity(context.Background(), param)
+	err := worker.DeleteOldEmbeddingsFromVectorDBActivity(context.Background(), param)
 	c.Assert(err, qt.Not(qt.IsNil))
 	c.Assert(err.Error(), qt.Contains, "Milvus")
 }
