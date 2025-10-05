@@ -146,8 +146,9 @@ func (w *Worker) GenerateEmbeddingsActivity(ctx context.Context, param *Generate
 		}
 	}
 
-	// Call the embedding pipeline - THIS IS THE KEY EXTERNAL CALL
-	embeddings, err := w.service.EmbeddingTextPipe(authCtx, param.Texts)
+	// Call the embedding pipeline batch method - THIS IS THE KEY EXTERNAL CALL
+	// Note: We use EmbeddingTextBatch instead of EmbeddingTextPipe to avoid nested workflows
+	embeddings, err := w.service.EmbeddingTextBatch(authCtx, param.Texts)
 	if err != nil {
 		return nil, temporal.NewApplicationErrorWithCause(
 			fmt.Sprintf("Embedding generation failed: %s", errorsx.MessageOrErr(err)),

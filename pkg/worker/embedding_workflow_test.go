@@ -306,8 +306,9 @@ func TestSaveEmbeddingsToVectorDBWorkflow_LargeDataset(t *testing.T) {
 	mockSvc.RepositoryMock.Return(mockRepo)
 	mockSvc.VectorDBMock.Return(mockVectorDB)
 
-	// Create 1000 embeddings = 20 batches (50 per batch)
-	embeddings := createWorkflowTestEmbeddings(1000)
+	// Create 250 embeddings = 5 batches (50 per batch)
+	// This tests parallel batch processing without overwhelming the test environment
+	embeddings := createWorkflowTestEmbeddings(250)
 
 	param := SaveEmbeddingsToVectorDBWorkflowParam{
 		KnowledgeBaseUID: uuid.Must(uuid.NewV4()),

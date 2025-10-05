@@ -255,7 +255,7 @@ func TestDeleteOldEmbeddingsFromVectorDBActivity_Failure(t *testing.T) {
 
 	err := worker.DeleteOldEmbeddingsFromVectorDBActivity(context.Background(), param)
 	c.Assert(err, qt.Not(qt.IsNil))
-	c.Assert(err.Error(), qt.Contains, "Milvus")
+	c.Assert(err.Error(), qt.Contains, "vector db")
 }
 
 func TestDeleteOldEmbeddingsFromDBActivity_Success(t *testing.T) {

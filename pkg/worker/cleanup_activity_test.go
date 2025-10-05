@@ -272,10 +272,6 @@ func TestDeleteEmbeddingsFromVectorDBActivity_Success(t *testing.T) {
 			{UID: embeddingUID, KbUID: kbUID},
 		}, nil)
 
-	mockRepo.HardDeleteEmbeddingsByKbFileUIDMock.
-		When(minimock.AnyContext, fileUID).
-		Then(nil)
-
 	mockVectorDB := NewVectorDatabaseMock(mc)
 	expectedCollection := service.KBCollectionName(kbUID)
 	mockVectorDB.DeleteEmbeddingsWithFileUIDMock.
@@ -315,10 +311,6 @@ func TestDeleteEmbeddingsFromVectorDBActivity_CollectionNotFound(t *testing.T) {
 		Then([]repository.Embedding{
 			{UID: embeddingUID, KbUID: kbUID},
 		}, nil)
-
-	mockRepo.HardDeleteEmbeddingsByKbFileUIDMock.
-		When(minimock.AnyContext, fileUID).
-		Then(nil)
 
 	mockVectorDB := NewVectorDatabaseMock(mc)
 	expectedCollection := service.KBCollectionName(kbUID)

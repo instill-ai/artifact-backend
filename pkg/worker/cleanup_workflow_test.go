@@ -185,8 +185,11 @@ func TestCleanupFileWorkflow_WithoutOriginalFile(t *testing.T) {
 	// Mock for DeleteChunksFromMinIOActivity (empty chunks - activity returns early)
 	mockRepo.ListChunksByKbFileUIDMock.Return([]repository.TextChunk{}, nil)
 
-	// Mock for DeleteEmbeddingsFromVectorDBActivity and DeleteEmbeddingRecordsActivity (empty embeddings - activities return early)
+	// Mock for DeleteEmbeddingsFromVectorDBActivity (empty embeddings - activity returns early)
 	mockRepo.ListEmbeddingsByKbFileUIDMock.Return([]repository.Embedding{}, nil)
+
+	// Mock for DeleteEmbeddingRecordsActivity (hard delete from DB)
+	mockRepo.HardDeleteEmbeddingsByKbFileUIDMock.Return(nil)
 
 	worker := &Worker{service: mockSvc, log: zap.NewNop()}
 	env.RegisterActivity(worker.DeleteOriginalFileActivity)
