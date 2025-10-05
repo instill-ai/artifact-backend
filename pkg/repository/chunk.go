@@ -411,15 +411,58 @@ func (r *Repository) UpdateChunkDestinations(ctx context.Context, destinations m
 		return nil
 	}
 
+	// Extract chunk UIDs for validation
+	chunkUIDs := make([]string, 0, len(destinations))
+	for uid := range destinations {
+		chunkUIDs = append(chunkUIDs, uid)
+	}
+
 	// Use a transaction to update all destinations atomically
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		for chunkUID, dest := range destinations {
-			if err := tx.Model(&TextChunk{}).
-				Where("uid = ?", chunkUID).
-				Update("content_dest", dest).Error; err != nil {
-				return fmt.Errorf("failed to update chunk %s: %w", chunkUID, err)
-			}
+		// Validate that all chunk UIDs exist
+		var existingChunks []TextChunk
+		if err := tx.Select("uid").Where("uid IN ?", chunkUIDs).Find(&existingChunks).Error; err != nil {
+			return fmt.Errorf("failed to query existing chunks: %w", err)
 		}
+
+		// Check if all provided chunk UIDs exist
+		if len(existingChunks) != len(destinations) {
+			existingUIDs := make(map[string]bool)
+			for _, chunk := range existingChunks {
+				existingUIDs[chunk.UID.String()] = true
+			}
+
+			var missingUIDs []string
+			for uid := range destinations {
+				if !existingUIDs[uid] {
+					missingUIDs = append(missingUIDs, uid)
+				}
+			}
+			return fmt.Errorf("chunk UIDs not found: %v", missingUIDs)
+		}
+
+		// Build a CASE WHEN statement for bulk update
+		// UPDATE text_chunk SET content_dest = CASE
+		//   WHEN uid = 'uid1' THEN 'dest1'
+		//   WHEN uid = 'uid2' THEN 'dest2'
+		//   ...
+		// END WHERE uid IN ('uid1', 'uid2', ...)
+
+		var caseClauses []string
+		var args []any
+		for uid, dest := range destinations {
+			caseClauses = append(caseClauses, "WHEN uid = ? THEN ?")
+			args = append(args, uid, dest)
+		}
+
+		caseSQL := fmt.Sprintf("CASE %s END", strings.Join(caseClauses, " "))
+
+		if err := tx.Model(&TextChunk{}).
+			Where("uid IN ?", chunkUIDs).
+			Update("content_dest", gorm.Expr(caseSQL, args...)).Error; err != nil {
+			return fmt.Errorf("failed to update chunk destinations: %w", err)
+		}
+
 		return nil
 	})
 }

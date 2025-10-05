@@ -188,10 +188,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 			logger.Info("Creating DB record for TEXT/MARKDOWN file")
 
 			// Generate UUID for the converted file
-			convertedFileUID, uuidErr := uuid.NewV4()
-			if uuidErr != nil {
-				return handleError("generate converted file UUID", uuidErr)
-			}
+			convertedFileUID, _ := uuid.NewV4()
 
 			if err := workflow.ExecuteActivity(ctx, w.CreateConvertedFileRecordActivity, &CreateConvertedFileRecordActivityParam{
 				KnowledgeBaseUID: knowledgeBaseUID,
@@ -209,10 +206,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 			logger.Info("Saving converted file with separate DB and MinIO operations")
 
 			// Step 1: Generate UUID for the converted file
-			convertedFileUID, uuidErr := uuid.NewV4()
-			if uuidErr != nil {
-				return handleError("generate converted file UUID", uuidErr)
-			}
+			convertedFileUID, _ := uuid.NewV4()
 
 			// Step 2: Create DB record with placeholder destination
 			if err := workflow.ExecuteActivity(ctx, w.CreateConvertedFileRecordActivity, &CreateConvertedFileRecordActivityParam{
