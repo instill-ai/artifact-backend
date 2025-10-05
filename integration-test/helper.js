@@ -161,6 +161,7 @@ export function validateFileGRPC(file, isPrivate) {
 // Storage Verification Helpers for Reprocessing Tests
 // ============================================================================
 
+import { sleep } from 'k6';
 import exec from 'k6/x/exec';
 import * as constant from './const.js';
 
@@ -204,7 +205,7 @@ export function countMinioObjects(kbUID, fileUID, objectType) {
  */
 export function countEmbeddings(fileUid) {
   try {
-    const results = constant.db.query(`SELECT uid FROM embedding WHERE kb_file_uid = '${fileUid}'`);
+    const results = constant.db.query('SELECT uid FROM embedding WHERE kb_file_uid = $1', fileUid);
     // results is an array of row objects
     return results ? results.length : 0;
   } catch (e) {
@@ -348,4 +349,55 @@ export function pollAllStorageSystems(kbUID, fileUID, expectConverted = true, ma
   results.vectors = pollMilvusVectors(kbUID, fileUID, maxWaitSeconds);
 
   return results;
+}
+
+// ============================================================================
+// API Polling Helpers for Eventual Consistency
+// ============================================================================
+
+import http from "k6/http";
+
+/**
+ * Poll chunks API until chunks appear or timeout
+ * Handles API-level eventual consistency (transaction delays, caching, etc.)
+ *
+ * @param {string} apiUrl - Full URL to list chunks endpoint
+ * @param {object} headers - Request headers (authentication, etc.)
+ * @param {number} maxWaitSeconds - Maximum seconds to wait (default: 15)
+ * @returns {number} Final count of chunks returned by API
+ */
+export function pollChunksAPI(apiUrl, headers, maxWaitSeconds = 15) {
+  for (let i = 0; i < maxWaitSeconds; i++) {
+    const res = http.request("GET", apiUrl, null, headers);
+
+    if (res.status === 200) {
+      try {
+        const json = res.json();
+        const chunks = Array.isArray(json.chunks) ? json.chunks : [];
+        if (chunks.length > 0) {
+          return chunks.length;
+        }
+      } catch (e) {
+        // Ignore parse errors, continue polling
+      }
+    }
+
+    if (i < maxWaitSeconds - 1) {
+      sleep(1);
+    }
+  }
+
+  // Final attempt after waiting
+  const finalRes = http.request("GET", apiUrl, null, headers);
+  if (finalRes.status === 200) {
+    try {
+      const json = finalRes.json();
+      const chunks = Array.isArray(json.chunks) ? json.chunks : [];
+      return chunks.length;
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  return 0;
 }

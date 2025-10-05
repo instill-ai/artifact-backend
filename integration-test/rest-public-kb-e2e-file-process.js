@@ -199,9 +199,14 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
     {
       const pending = new Set(uploaded.map((f) => f.fileUid));
       let lastBatch = [];
+      const startTime = Date.now();
+      const maxWaitMs = 60 * 60 * 1000; // 60 minutes for resource-constrained CI
 
-      // Poll for up to 30 minutes (3600 iterations * 0.5s = 1800s)
-      for (let iter = 0; iter < 3600 && pending.size > 0; iter++) {
+      // Poll until all complete or timeout (max 60 minutes)
+      let iter = 0;
+      while (pending.size > 0 && (Date.now() - startTime) < maxWaitMs) {
+        iter++;
+
         lastBatch = http.batch(
           Array.from(pending).map((uid) => ({
             method: "GET",
@@ -211,6 +216,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
         );
 
         let idx = 0;
+        let processingCount = 0;
         for (const uid of Array.from(pending)) {
           const r = lastBatch[idx++];
           try {
@@ -221,6 +227,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
             if (r.status === 200 && st === "FILE_PROCESS_STATUS_COMPLETED") {
               pending.delete(uid);
               completedCount++;
+              console.log(`[${iter}] ✓ Completed: ${fileName} (${completedCount}/${uploaded.length})`);
             } else if (r.status === 200 && st === "FILE_PROCESS_STATUS_FAILED") {
               pending.delete(uid);
               failedFiles.push({
@@ -228,12 +235,33 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
                 name: fileName,
                 outcome: (body.file && body.file.processOutcome) || "Unknown error"
               });
+              console.log(`[${iter}] ✗ Failed: ${fileName} - ${failedFiles[failedFiles.length - 1].outcome}`);
+            } else if (r.status === 200 && (
+              st === "FILE_PROCESS_STATUS_CONVERTING" ||
+              st === "FILE_PROCESS_STATUS_CHUNKING" ||
+              st === "FILE_PROCESS_STATUS_EMBEDDING" ||
+              st === "FILE_PROCESS_STATUS_SUMMARIZING" ||
+              st === "FILE_PROCESS_STATUS_WAITING"
+            )) {
+              processingCount++;
             }
           } catch (e) { /* ignore parsing errors, continue polling */ }
         }
 
+        // Log progress every 30 seconds
+        if (iter % 60 === 0 || pending.size === 0) {
+          const elapsedSec = Math.floor((Date.now() - startTime) / 1000);
+          console.log(`[${elapsedSec}s] Progress: ${completedCount} completed, ${processingCount} processing, ${pending.size} pending, ${failedFiles.length} failed`);
+        }
+
         if (pending.size === 0) break;
         sleep(0.5);
+      }
+
+      // Log timeout if occurred
+      if (pending.size > 0) {
+        const elapsedMin = Math.floor((Date.now() - startTime) / 60000);
+        console.log(`⚠️  Timeout after ${elapsedMin} minutes. ${pending.size} files still pending.`);
       }
 
       check({ completedCount, totalFiles: uploaded.length }, {
@@ -332,32 +360,30 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
     });
 
     // Step 9: List chunks for each file
+    // Use polling to handle API-level eventual consistency on resource-constrained runners
     let totalChunksCount = 0;
     for (const f of uploaded) {
-      const listChunksRes = http.request(
-        "GET",
-        `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/chunks?fileUid=${f.fileUid}`,
-        null,
-        data.header
-      );
+      const chunkApiUrl = `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/chunks?fileUid=${f.fileUid}`;
+
+      // Poll for chunks with 15 second timeout (GitHub-hosted runners need more time)
+      const chunkCount = helper.pollChunksAPI(chunkApiUrl, data.header, 15);
+      totalChunksCount += chunkCount;
+
+      // Verify final state after polling
+      const listChunksRes = http.request("GET", chunkApiUrl, null, data.header);
 
       let listChunksJson;
       try { listChunksJson = listChunksRes.json(); } catch (e) { listChunksJson = {}; }
-
-      const chunksArray = Array.isArray(listChunksJson.chunks) ? listChunksJson.chunks : [];
-      totalChunksCount += chunksArray.length;
 
       check(listChunksRes, {
         [`E2E: List chunks successful (${f.originalName})`]: (r) => r.status === 200,
         [`E2E: Chunks is array (${f.originalName})`]: () => Array.isArray(listChunksJson.chunks),
       });
 
-      // Only check chunk count if request was successful
-      if (listChunksRes.status === 200) {
-        check({ chunksArray }, {
-          [`E2E: File has chunks (${f.originalName})`]: () => chunksArray.length > 0,
-        });
-      }
+      // Check chunk count after polling
+      check({ chunkCount }, {
+        [`E2E: File has chunks (${f.originalName})`]: () => chunkCount > 0,
+      });
     }
 
     check({ totalChunks: totalChunksCount }, {

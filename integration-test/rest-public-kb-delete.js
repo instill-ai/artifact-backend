@@ -209,10 +209,10 @@ export function CheckKnowledgeBaseDeletion(data) {
 
     let dbRecordsAfterDelete = { converted: 0, chunks: 0 };
     try {
-      const convertedResults = constant.db.query(`SELECT uid FROM converted_file WHERE file_uid = '${fileUid}'`);
+      const convertedResults = constant.db.query('SELECT uid FROM converted_file WHERE file_uid = $1', fileUid);
       dbRecordsAfterDelete.converted = convertedResults ? convertedResults.length : 0;
 
-      const chunksResults = constant.db.query(`SELECT uid FROM text_chunk WHERE kb_file_uid = '${fileUid}'`);
+      const chunksResults = constant.db.query('SELECT uid FROM text_chunk WHERE kb_file_uid = $1', fileUid);
       dbRecordsAfterDelete.chunks = chunksResults ? chunksResults.length : 0;
     } catch (e) {
       console.error(`Failed to query database records after deletion: ${e}`);

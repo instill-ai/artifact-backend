@@ -15,9 +15,9 @@ import { CheckKnowledgeBaseDeletion } from './rest-public-kb-delete.js';
 import { CheckKnowledgeBaseEndToEndFileProcessing } from './rest-public-kb-e2e-file-process.js';
 
 export let options = {
-  setupTimeout: '5s',
+  setupTimeout: '30s',
   iterations: 1,
-  duration: '60m',
+  duration: '120m',
   insecureSkipTLSVerify: true,
   thresholds: {
     checks: ["rate == 1.0"],
