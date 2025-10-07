@@ -107,7 +107,7 @@ type GetFilesWorkflow interface {
 // Service defines the Artifact domain use cases.
 type Service interface {
 	CheckNamespacePermission(context.Context, *resource.Namespace) error
-	ConvertToMDPipe(context.Context, MDConversionParams) (*MDConversionResult, error)
+	ConvertToMarkdownPipe(context.Context, MarkdownConversionParams) (*MarkdownConversionResult, error)
 	GenerateSummary(context.Context, string, string) (string, error)
 	ChunkMarkdownPipe(context.Context, string) (*ChunkingResult, error)
 	ChunkTextPipe(context.Context, string) (*ChunkingResult, error)
@@ -143,6 +143,7 @@ type Service interface {
 	ACLClient() *acl.ACLClient
 	VectorDB() VectorDatabase
 	RedisClient() *redis.Client
+	PipelinePublicClient() pipelinepb.PipelinePublicServiceClient
 
 	// Workflow interfaces for proper decoupling
 	ProcessFileWorkflow() ProcessFileWorkflow
@@ -207,11 +208,12 @@ func NewService(
 	}
 }
 
-func (s *service) Repository() repository.RepositoryI { return s.repository }
-func (s *service) MinIO() minio.MinioI                { return s.minIO }
-func (s *service) ACLClient() *acl.ACLClient          { return s.aclClient }
-func (s *service) RedisClient() *redis.Client         { return s.redisClient }
-func (s *service) VectorDB() VectorDatabase           { return s.vectorDB }
+func (s *service) Repository() repository.RepositoryI                           { return s.repository }
+func (s *service) MinIO() minio.MinioI                                          { return s.minIO }
+func (s *service) ACLClient() *acl.ACLClient                                    { return s.aclClient }
+func (s *service) PipelinePublicClient() pipelinepb.PipelinePublicServiceClient { return s.pipelinePub }
+func (s *service) RedisClient() *redis.Client                                   { return s.redisClient }
+func (s *service) VectorDB() VectorDatabase                                     { return s.vectorDB }
 
 // Workflow getters
 func (s *service) ProcessFileWorkflow() ProcessFileWorkflow {

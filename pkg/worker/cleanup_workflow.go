@@ -38,7 +38,7 @@ func (w *cleanupFileWorkflow) Execute(ctx context.Context, param service.Cleanup
 
 	_, err := w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, w.worker.CleanupFileWorkflow, param)
 	if err != nil {
-		return fmt.Errorf("failed to start cleanup file workflow: %s", errorsx.MessageOrErr(err))
+		return errorsx.AddMessage(err, "Unable to start file cleanup workflow. Please try again.")
 	}
 	return nil
 }
@@ -66,7 +66,7 @@ func (w *cleanupKnowledgeBaseWorkflow) Execute(ctx context.Context, param servic
 
 	_, err := w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, w.worker.CleanupKnowledgeBaseWorkflow, param)
 	if err != nil {
-		return fmt.Errorf("failed to start cleanup knowledge base workflow: %s", errorsx.MessageOrErr(err))
+		return errorsx.AddMessage(err, "Unable to start catalog cleanup workflow. Please try again.")
 	}
 	return nil
 }
@@ -174,7 +174,11 @@ func (w *Worker) CleanupFileWorkflow(ctx workflow.Context, param service.Cleanup
 			"workflowID", param.WorkflowID,
 			"errorCount", len(errors),
 			"errors", errors)
-		return fmt.Errorf("cleanup failed with %d error(s): %v", len(errors), errors)
+		err := errorsx.AddMessage(
+			fmt.Errorf("cleanup failed with %d error(s): %v", len(errors), errors),
+			"File cleanup encountered errors. Some cleanup operations may not have completed.",
+		)
+		return err
 	}
 
 	logger.Info("CleanupFileWorkflow completed successfully",
@@ -304,7 +308,11 @@ func (w *Worker) CleanupKnowledgeBaseWorkflow(ctx workflow.Context, param servic
 			"kbUID", param.KnowledgeBaseUID.String(),
 			"errorCount", len(errors),
 			"errors", errors)
-		return fmt.Errorf("cleanup failed with %d error(s): %v", len(errors), errors)
+		err := errorsx.AddMessage(
+			fmt.Errorf("cleanup failed with %d error(s): %v", len(errors), errors),
+			"Catalog cleanup encountered errors. Some cleanup operations may not have completed.",
+		)
+		return err
 	}
 
 	logger.Info("CleanupKnowledgeBaseWorkflow completed successfully", "kbUID", param.KnowledgeBaseUID.String())

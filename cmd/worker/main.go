@@ -90,9 +90,7 @@ func main() {
 	// Create worker instance first (without service dependencies for now)
 	// We'll set up the service layer after creating workflow wrappers
 	cw, err := artifactworker.New(
-		artifactworker.Config{
-			Service: nil, // Will be set after service is created
-		},
+		nil, // Service will be set after it's created
 		logger,
 	)
 	if err != nil {
@@ -152,72 +150,99 @@ func main() {
 		}(),
 	})
 
-	// Register workflows
-	w.RegisterWorkflow(cw.ProcessFileWorkflow)
-	w.RegisterWorkflow(cw.CleanupFileWorkflow)
-	w.RegisterWorkflow(cw.CleanupKnowledgeBaseWorkflow)
-	w.RegisterWorkflow(cw.EmbedTextsWorkflow)
-	w.RegisterWorkflow(cw.SaveChunksWorkflow)
-	w.RegisterWorkflow(cw.SaveEmbeddingsToVectorDBWorkflow)
-	w.RegisterWorkflow(cw.DeleteFilesWorkflow)
-	w.RegisterWorkflow(cw.GetFilesWorkflow)
+	// ===== Workflow Registrations =====
 
-	// Register batch embedding activity
-	w.RegisterActivity(cw.EmbedTextsActivity)
+	// Main workflows
+	w.RegisterWorkflow(cw.ProcessFileWorkflow)          // Main file processing orchestration workflow
+	w.RegisterWorkflow(cw.CleanupFileWorkflow)          // Single file cleanup and deletion workflow
+	w.RegisterWorkflow(cw.CleanupKnowledgeBaseWorkflow) // Knowledge base cleanup and deletion workflow
+	w.RegisterWorkflow(cw.DeleteFilesWorkflow)          // Batch file deletion workflow
+	w.RegisterWorkflow(cw.GetFilesWorkflow)             // Batch file retrieval workflow
 
-	// Register MinIO activities
-	w.RegisterActivity(cw.SaveChunkBatchActivity)
-	w.RegisterActivity(cw.DeleteFileActivity)
-	w.RegisterActivity(cw.GetFileActivity)
-	w.RegisterActivity(cw.UpdateChunkDestinationsActivity)
+	// Child workflows (called by main workflows)
+	w.RegisterWorkflow(cw.ConvertToMarkdownFileWorkflow)    // File format conversion and markdown generation
+	w.RegisterWorkflow(cw.EmbedTextsWorkflow)               // Batch text embedding generation
+	w.RegisterWorkflow(cw.SaveChunksWorkflow)               // Text chunking and persistence
+	w.RegisterWorkflow(cw.SaveEmbeddingsToVectorDBWorkflow) // Vector embedding storage
 
-	// Register utility activities
-	w.RegisterActivity(cw.GetFileStatusActivity)
-	w.RegisterActivity(cw.UpdateFileStatusActivity)
+	// ===== Shared Activities (Used by Multiple Workflows) =====
 
-	// Register cleanup activities - File cleanup
-	w.RegisterActivity(cw.DeleteOriginalFileActivity)
-	w.RegisterActivity(cw.DeleteConvertedFileActivity)
-	w.RegisterActivity(cw.DeleteChunksFromMinIOActivity)
-	w.RegisterActivity(cw.DeleteEmbeddingsFromVectorDBActivity)
-	w.RegisterActivity(cw.DeleteEmbeddingRecordsActivity)
+	// Embedding generation
+	w.RegisterActivity(cw.EmbedTextsActivity) // Generate vector embeddings for text batches
 
-	// Register cleanup activities - Knowledge base cleanup
-	w.RegisterActivity(cw.DeleteKBFilesFromMinIOActivity)
-	w.RegisterActivity(cw.DropVectorDBCollectionActivity)
-	w.RegisterActivity(cw.DeleteKBFileRecordsActivity)
-	w.RegisterActivity(cw.DeleteKBConvertedFileRecordsActivity)
-	w.RegisterActivity(cw.DeleteKBChunkRecordsActivity)
-	w.RegisterActivity(cw.DeleteKBEmbeddingRecordsActivity)
-	w.RegisterActivity(cw.PurgeKBACLActivity)
+	// MinIO operations
+	w.RegisterActivity(cw.SaveChunkBatchActivity)          // Save chunk batch to MinIO
+	w.RegisterActivity(cw.DeleteFileActivity)              // Delete single file from MinIO
+	w.RegisterActivity(cw.GetFileActivity)                 // Retrieve single file from MinIO
+	w.RegisterActivity(cw.UpdateChunkDestinationsActivity) // Update chunk MinIO destinations in DB
 
-	// Register process file activities
-	// Conversion Phase
-	w.RegisterActivity(cw.GetFileMetadataActivity)
-	w.RegisterActivity(cw.GetFileContentActivity)
-	w.RegisterActivity(cw.ConvertToMarkdownActivity)
-	w.RegisterActivity(cw.CleanupOldConvertedFileActivity)
-	w.RegisterActivity(cw.CreateConvertedFileRecordActivity)
-	w.RegisterActivity(cw.UploadConvertedFileToMinIOActivity)
-	w.RegisterActivity(cw.UpdateConvertedFileDestinationActivity)
-	w.RegisterActivity(cw.DeleteConvertedFileRecordActivity)
-	w.RegisterActivity(cw.DeleteConvertedFileFromMinIOActivity)
-	w.RegisterActivity(cw.UpdateConversionMetadataActivity)
-	// Chunking Phase
-	w.RegisterActivity(cw.GetConvertedFileForChunkingActivity)
-	w.RegisterActivity(cw.ChunkContentActivity)
-	w.RegisterActivity(cw.SaveChunksToDBActivity)
-	w.RegisterActivity(cw.UpdateChunkingMetadataActivity)
-	// Embedding Phase
-	w.RegisterActivity(cw.GetChunksForEmbeddingActivity)
-	w.RegisterActivity(cw.DeleteOldEmbeddingsFromVectorDBActivity)
-	w.RegisterActivity(cw.DeleteOldEmbeddingsFromDBActivity)
-	w.RegisterActivity(cw.SaveEmbeddingBatchActivity)
-	w.RegisterActivity(cw.FlushCollectionActivity)
-	w.RegisterActivity(cw.UpdateEmbeddingMetadataActivity)
-	// Summary Phase
-	w.RegisterActivity(cw.GenerateSummaryFromPipelineActivity)
-	w.RegisterActivity(cw.SaveSummaryActivity)
+	// File status management
+	w.RegisterActivity(cw.GetFileStatusActivity)    // Retrieve current file processing status
+	w.RegisterActivity(cw.UpdateFileStatusActivity) // Update file processing status
+
+	// ===== CleanupFileWorkflow Activities =====
+	// Activities for cleaning up individual file resources
+	w.RegisterActivity(cw.DeleteOriginalFileActivity)           // Delete original uploaded file from MinIO
+	w.RegisterActivity(cw.DeleteConvertedFileActivity)          // Delete converted markdown file from MinIO
+	w.RegisterActivity(cw.DeleteChunksFromMinIOActivity)        // Delete all file chunks from MinIO
+	w.RegisterActivity(cw.DeleteEmbeddingsFromVectorDBActivity) // Delete file embeddings from Milvus
+	w.RegisterActivity(cw.DeleteEmbeddingRecordsActivity)       // Delete embedding records from database
+
+	// ===== CleanupKnowledgeBaseWorkflow Activities =====
+	// Activities for cleaning up entire knowledge base resources
+	w.RegisterActivity(cw.DeleteKBFilesFromMinIOActivity)       // Delete all KB files from MinIO
+	w.RegisterActivity(cw.DropVectorDBCollectionActivity)       // Drop Milvus collection for KB
+	w.RegisterActivity(cw.DeleteKBFileRecordsActivity)          // Delete all file records from database
+	w.RegisterActivity(cw.DeleteKBConvertedFileRecordsActivity) // Delete all converted file records
+	w.RegisterActivity(cw.DeleteKBChunkRecordsActivity)         // Delete all chunk records
+	w.RegisterActivity(cw.DeleteKBEmbeddingRecordsActivity)     // Delete all embedding records
+	w.RegisterActivity(cw.PurgeKBACLActivity)                   // Remove all ACL permissions for KB
+
+	// ===== ProcessFileWorkflow Activities =====
+	// Main workflow orchestrating the entire file processing pipeline
+
+	// Conversion Phase - Initial metadata and content retrieval
+	w.RegisterActivity(cw.GetFileMetadataActivity)                // Fetch file metadata from database
+	w.RegisterActivity(cw.GetFileContentActivity)                 // Retrieve file binary content from MinIO
+	w.RegisterActivity(cw.CleanupOldConvertedFileActivity)        // Remove previous conversion artifacts
+	w.RegisterActivity(cw.CreateConvertedFileRecordActivity)      // Create DB record for converted file
+	w.RegisterActivity(cw.UploadConvertedFileToMinIOActivity)     // Upload converted markdown to MinIO
+	w.RegisterActivity(cw.UpdateConvertedFileDestinationActivity) // Update MinIO destination in DB
+	w.RegisterActivity(cw.DeleteConvertedFileRecordActivity)      // Delete conversion record on failure
+	w.RegisterActivity(cw.DeleteConvertedFileFromMinIOActivity)   // Delete converted file from MinIO on failure
+	w.RegisterActivity(cw.UpdateConversionMetadataActivity)       // Update file status and conversion metadata
+
+	// Chunking Phase - Text chunking and preparation
+	w.RegisterActivity(cw.GetConvertedFileForChunkingActivity) // Retrieve converted markdown for chunking
+	w.RegisterActivity(cw.UpdateChunkingMetadataActivity)      // Update file status and chunking metadata
+
+	// Embedding Phase - Vector embedding generation and storage
+	w.RegisterActivity(cw.GetChunksForEmbeddingActivity)   // Retrieve text chunks for embedding
+	w.RegisterActivity(cw.UpdateEmbeddingMetadataActivity) // Update file status and embedding metadata
+
+	// Summary Phase - Generate file summary
+	w.RegisterActivity(cw.GenerateSummaryFromPipelineActivity) // Generate summary using AI pipeline
+	w.RegisterActivity(cw.SaveSummaryActivity)                 // Save summary to database
+
+	// ===== ConvertToMarkdownFileWorkflow Activities (Child Workflow) =====
+	// Child workflow handling file format conversion, caching, and markdown generation
+	w.RegisterActivity(cw.ConvertFileTypeActivity)              // Convert non-Gemini formats (GIF→PNG, MKV→MP4, DOC→PDF)
+	w.RegisterActivity(cw.CacheContextActivity)                 // Create Gemini cache for efficient processing
+	w.RegisterActivity(cw.DeleteCacheActivity)                  // Clean up Gemini cache after processing
+	w.RegisterActivity(cw.DeleteTemporaryConvertedFileActivity) // Clean up temporary converted file from MinIO (core-blob/tmp/*)
+	w.RegisterActivity(cw.ConvertToMarkdownFileActivity)        // Convert file to markdown using Gemini or pipelines
+
+	// ===== SaveChunksWorkflow Activities (Child Workflow) =====
+	// Child workflow handling text chunking operations
+	w.RegisterActivity(cw.ChunkContentActivity)   // Split markdown content into semantic chunks
+	w.RegisterActivity(cw.SaveChunksToDBActivity) // Persist chunks to database with metadata
+
+	// ===== SaveEmbeddingsToVectorDBWorkflow Activities (Child Workflow) =====
+	// Child workflow handling vector embedding storage
+	w.RegisterActivity(cw.DeleteOldEmbeddingsFromVectorDBActivity) // Remove old embeddings from Milvus
+	w.RegisterActivity(cw.DeleteOldEmbeddingsFromDBActivity)       // Remove old embedding records from DB
+	w.RegisterActivity(cw.SaveEmbeddingBatchActivity)              // Save embedding batch to DB and vector store
+	w.RegisterActivity(cw.FlushCollectionActivity)                 // Flush Milvus collection to persist data
 
 	if err := w.Start(); err != nil {
 		logger.Fatal(fmt.Sprintf("Unable to start worker: %s", err))

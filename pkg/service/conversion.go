@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"strings"
 	"time"
@@ -16,17 +17,17 @@ import (
 	logx "github.com/instill-ai/x/log"
 )
 
-// MDConversionParams contains the information required to convert a file to
+// MarkdownConversionParams contains the information required to convert a file to
 // markdown.
-type MDConversionParams struct {
+type MarkdownConversionParams struct {
 	Base64Content string
 	Type          artifactpb.FileType
 	Pipelines     []PipelineRelease
 }
 
-// MDConversionResult contains the information extracted from the conversion
+// MarkdownConversionResult contains the information extracted from the conversion
 // step.
-type MDConversionResult struct {
+type MarkdownConversionResult struct {
 	Markdown     string
 	PositionData *repository.PositionData
 
@@ -43,7 +44,7 @@ type MDConversionResult struct {
 // back to "convert_result2". It handles both single strings (for non-page-based
 // files) and arrays of strings (for page-based files). Returns an error if
 // neither field contains valid data or if the response structure is invalid.
-func convertResultParser(resp *pipelinepb.TriggerNamespacePipelineReleaseResponse) (*MDConversionResult, error) {
+func convertResultParser(resp *pipelinepb.TriggerNamespacePipelineReleaseResponse) (*MarkdownConversionResult, error) {
 	if resp == nil || len(resp.Outputs) == 0 {
 		return nil, fmt.Errorf("response is nil or has no outputs. resp: %v", resp)
 	}
@@ -71,7 +72,7 @@ func convertResultParser(resp *pipelinepb.TriggerNamespacePipelineReleaseRespons
 			return nil, fmt.Errorf("empty page list in conversion result")
 		}
 
-		return &MDConversionResult{
+		return &MarkdownConversionResult{
 			Markdown:     strings.Join(pages, ""),
 			Length:       []uint32{uint32(len(pages))},
 			PositionData: PositionDataFromPages(pages),
@@ -83,24 +84,24 @@ func convertResultParser(resp *pipelinepb.TriggerNamespacePipelineReleaseRespons
 	if md == "" {
 		return nil, fmt.Errorf("empty markdown string in conversion result")
 	}
-	return &MDConversionResult{
+	return &MarkdownConversionResult{
 		Markdown: md,
 		// No length or position data for non-page-based files
 	}, nil
 }
 
-// ConvertToMDPipe converts a file into Markdown by triggering a converting
+// ConvertToMarkdownPipe converts a file into Markdown by triggering a converting
 // pipeline. If conversion succeeds, the catalog file record will be updated
 // with the pipeline used to produce the results.
 //   - If the file has a document type extension (pdf, doc[x], ppt[x]) the client
 //     may specify a slice of pipelines, which will be triggered in order until a
 //     successful trigger produces a non-empty result.
-//   - If no pipelines are specified, ConvertDocToMDPipeline will be used by
+//   - If no pipelines are specified, ConvertDocToMarkdownPipeline will be used by
 //     default.
-//   - Non-document files will use ConvertDocToMDStandardPipeline, as these types
+//   - Non-document files will use ConvertDocToMarkdownStandardPipeline, as these types
 //     tend to be trivial to convert and can use a deterministic pipeline instead
 //     of a custom one that improves the conversion performance.
-func (s *service) ConvertToMDPipe(ctx context.Context, p MDConversionParams) (*MDConversionResult, error) {
+func (s *service) ConvertToMarkdownPipe(ctx context.Context, p MarkdownConversionParams) (*MarkdownConversionResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, 300*time.Second)
 	defer cancel()
 
@@ -117,13 +118,30 @@ func (s *service) ConvertToMDPipe(ctx context.Context, p MDConversionParams) (*M
 
 	// Determine which pipeline and version to use based on file type
 	switch p.Type {
+	// Text-based files: no conversion needed, return as-is
+	// These are typically handled by AI providers, but this is a fallback
+	case artifactpb.FileType_FILE_TYPE_TEXT,
+		artifactpb.FileType_FILE_TYPE_MARKDOWN:
+
+		// Decode base64 content
+		content, err := base64.StdEncoding.DecodeString(p.Base64Content)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode text content: %w", err)
+		}
+
+		// Return text content as-is (it's already markdown-compatible)
+		return &MarkdownConversionResult{
+			Markdown:        string(content),
+			PipelineRelease: PipelineRelease{}, // No pipeline used
+		}, nil
+
 	// Spreadsheet types and others use the original pipeline
 	case artifactpb.FileType_FILE_TYPE_XLSX,
 		artifactpb.FileType_FILE_TYPE_XLS,
 		artifactpb.FileType_FILE_TYPE_CSV,
 		artifactpb.FileType_FILE_TYPE_HTML:
 
-		p.Pipelines = []PipelineRelease{ConvertDocToMDStandardPipeline}
+		p.Pipelines = []PipelineRelease{ConvertDocToMarkdownStandardPipeline}
 
 	// Document types use the conversion pipeline configured in the catalog, if
 	// present, or the default one for documents (parsing-router if the request
@@ -138,8 +156,8 @@ func (s *service) ConvertToMDPipe(ctx context.Context, p MDConversionParams) (*M
 		// namespace and ID, but potentially different version), reprocess with
 		// the newest version of the default pipeline
 		reprocessWithDefaultPipeline := len(p.Pipelines) == 1 &&
-			p.Pipelines[0].Namespace == ConvertDocToMDPipeline.Namespace &&
-			p.Pipelines[0].ID == ConvertDocToMDPipeline.ID
+			p.Pipelines[0].Namespace == ConvertDocToMarkdownPipeline.Namespace &&
+			p.Pipelines[0].ID == ConvertDocToMarkdownPipeline.ID
 
 		//
 		if len(p.Pipelines) == 0 || reprocessWithDefaultPipeline {

@@ -16,6 +16,10 @@ import (
 	errorsx "github.com/instill-ai/x/errors"
 )
 
+// This file contains MinIO storage activities used by SaveChunksWorkflow and GetFilesWorkflow:
+// - SaveChunkBatchActivity - Saves multiple text chunks to MinIO in batch
+// - GetFileActivity - Retrieves file metadata and content from MinIO
+
 // SaveChunkBatchActivityParam defines parameters for saving multiple chunks in one activity
 type SaveChunkBatchActivityParam struct {
 	KnowledgeBaseUID uuid.UUID
@@ -65,8 +69,9 @@ func (w *Worker) DeleteFileActivity(ctx context.Context, param *DeleteFileActivi
 		w.log.Error("Failed to delete file",
 			zap.String("path", param.Path),
 			zap.Error(err))
+		err = errorsx.AddMessage(err, "Unable to delete file from storage. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to delete file from storage: %s", errorsx.MessageOrErr(err)),
+			errorsx.MessageOrErr(err),
 			deleteFileActivityError,
 			err,
 		)
@@ -88,8 +93,9 @@ func (w *Worker) GetFileActivity(ctx context.Context, param *GetFileActivityPara
 		var err error
 		authCtx, err = createAuthenticatedContext(ctx, param.Metadata)
 		if err != nil {
+			err = errorsx.AddMessage(err, "Authentication failed. Please try again.")
 			return nil, temporal.NewApplicationErrorWithCause(
-				fmt.Sprintf("Failed to create authenticated context: %s", errorsx.MessageOrErr(err)),
+				errorsx.MessageOrErr(err),
 				getFileActivityError,
 				err,
 			)
@@ -101,8 +107,9 @@ func (w *Worker) GetFileActivity(ctx context.Context, param *GetFileActivityPara
 		w.log.Error("Failed to get file",
 			zap.String("path", param.Path),
 			zap.Error(err))
+		err = errorsx.AddMessage(err, "Unable to retrieve file from storage. Please try again.")
 		return nil, temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to retrieve file from storage: %s", errorsx.MessageOrErr(err)),
+			errorsx.MessageOrErr(err),
 			getFileActivityError,
 			err,
 		)
@@ -129,8 +136,9 @@ func (w *Worker) UpdateChunkDestinationsActivity(ctx context.Context, param *Upd
 		w.log.Error("Failed to update chunk destinations",
 			zap.Int("chunkCount", len(param.Destinations)),
 			zap.Error(err))
+		err = errorsx.AddMessage(err, "Unable to update chunk references. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to update chunk destinations: %s", errorsx.MessageOrErr(err)),
+			errorsx.MessageOrErr(err),
 			updateChunkDestinationsActivityError,
 			err,
 		)
@@ -168,8 +176,9 @@ func (w *Worker) SaveChunkBatchActivity(ctx context.Context, param *SaveChunkBat
 			w.log.Error("Failed to save chunk",
 				zap.String("chunkUID", chunkUID),
 				zap.Error(err))
+			err = errorsx.AddMessage(err, fmt.Sprintf("Unable to save chunk (ID: %s). Please try again.", chunkUID))
 			return nil, temporal.NewApplicationErrorWithCause(
-				fmt.Sprintf("Failed to save chunk %s: %s", chunkUID, errorsx.MessageOrErr(err)),
+				errorsx.MessageOrErr(err),
 				saveChunkBatchActivityError,
 				err,
 			)

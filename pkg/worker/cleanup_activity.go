@@ -2,7 +2,6 @@ package worker
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/gofrs/uuid"
@@ -13,6 +12,19 @@ import (
 
 	errorsx "github.com/instill-ai/x/errors"
 )
+
+// This file contains cleanup activities used by CleanupFileWorkflow and CleanupKnowledgeBaseWorkflow:
+// - DeleteOriginalFileActivity - Deletes original uploaded files from MinIO
+// - DeleteConvertedFileActivity - Deletes converted markdown files from database
+// - DeleteChunksFromMinIOActivity - Deletes chunked content files from MinIO
+// - DeleteEmbeddingsFromVectorDBActivity - Removes embeddings from vector database
+// - DeleteEmbeddingRecordsActivity - Removes embedding records from database
+// - DeleteKBFilesFromMinIOActivity - Deletes all files for a knowledge base
+// - DropVectorDBCollectionActivity - Drops vector database collection
+// - DeleteKBFileRecordsActivity - Deletes file records for a knowledge base
+// - DeleteKBConvertedFileRecordsActivity - Deletes converted file records
+// - DeleteKBChunkRecordsActivity - Deletes chunk records for a knowledge base
+// - DeleteKBEmbeddingRecordsActivity - Deletes embedding records for a knowledge base
 
 // DeleteOriginalFileActivityParam defines parameters for deleting original file
 type DeleteOriginalFileActivityParam struct {
@@ -62,8 +74,9 @@ func (w *Worker) DeleteOriginalFileActivity(ctx context.Context, param *DeleteOr
 
 	err = w.service.DeleteFiles(ctx, param.Bucket, []string{file.Destination})
 	if err != nil {
+		err = errorsx.AddMessage(err, "Unable to delete file from storage. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to delete file from storage: %s", errorsx.MessageOrErr(err)),
+			errorsx.MessageOrErr(err),
 			deleteOriginalFileActivityError,
 			err,
 		)
@@ -90,8 +103,9 @@ func (w *Worker) DeleteConvertedFileActivity(ctx context.Context, param *DeleteC
 	// Delete from MinIO using KB UID from the converted file record
 	err = w.service.DeleteConvertedFileByFileUID(ctx, convertedFile.KbUID, param.FileUID)
 	if err != nil {
+		err = errorsx.AddMessage(err, "Unable to delete converted file from storage. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to delete converted file from storage: %s", errorsx.MessageOrErr(err)),
+			errorsx.MessageOrErr(err),
 			deleteConvertedFileActivityError,
 			err,
 		)
@@ -104,8 +118,9 @@ func (w *Worker) DeleteConvertedFileActivity(ctx context.Context, param *DeleteC
 	// Delete record from DB
 	err = w.service.Repository().HardDeleteConvertedFileByFileUID(ctx, param.FileUID)
 	if err != nil {
+		err = errorsx.AddMessage(err, "Unable to delete converted file record. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to delete converted file record: %s", errorsx.MessageOrErr(err)),
+			errorsx.MessageOrErr(err),
 			deleteConvertedFileActivityError,
 			err,
 		)
@@ -134,8 +149,9 @@ func (w *Worker) DeleteChunksFromMinIOActivity(ctx context.Context, param *Delet
 	// Delete from MinIO using KB UID from the chunk records
 	err = w.service.DeleteTextChunksByFileUID(ctx, kbUID, param.FileUID)
 	if err != nil {
+		err = errorsx.AddMessage(err, "Unable to delete chunks from storage. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to delete chunks from storage: %s", errorsx.MessageOrErr(err)),
+			errorsx.MessageOrErr(err),
 			deleteChunksActivityError,
 			err,
 		)
@@ -148,8 +164,9 @@ func (w *Worker) DeleteChunksFromMinIOActivity(ctx context.Context, param *Delet
 	// Delete records from DB
 	err = w.service.Repository().HardDeleteChunksByKbFileUID(ctx, param.FileUID)
 	if err != nil {
+		err = errorsx.AddMessage(err, "Unable to delete chunk records. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to delete chunk records: %s", errorsx.MessageOrErr(err)),
+			errorsx.MessageOrErr(err),
 			deleteChunksActivityError,
 			err,
 		)
@@ -187,8 +204,9 @@ func (w *Worker) DeleteEmbeddingsFromVectorDBActivity(ctx context.Context, param
 				zap.String("collection", collection))
 			return nil
 		}
+		err = errorsx.AddMessage(err, "Unable to delete embeddings from vector database. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to delete embeddings from vector db: %s", errorsx.MessageOrErr(err)),
+			errorsx.MessageOrErr(err),
 			deleteEmbeddingsActivityError,
 			err,
 		)
@@ -209,8 +227,9 @@ func (w *Worker) DeleteEmbeddingRecordsActivity(ctx context.Context, param *Dele
 
 	err := w.service.Repository().HardDeleteEmbeddingsByKbFileUID(ctx, param.FileUID)
 	if err != nil {
+		err = errorsx.AddMessage(err, "Unable to delete embedding records. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to delete embedding records from DB: %s", errorsx.MessageOrErr(err)),
+			errorsx.MessageOrErr(err),
 			deleteEmbeddingsActivityError,
 			err,
 		)
@@ -264,8 +283,9 @@ func (w *Worker) DeleteKBFilesFromMinIOActivity(ctx context.Context, param *Dele
 
 	err := w.service.DeleteKnowledgeBase(ctx, param.KnowledgeBaseUID.String())
 	if err != nil {
+		err = errorsx.AddMessage(err, "Unable to delete catalog files from storage. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to delete catalog files from storage: %s", errorsx.MessageOrErr(err)),
+			errorsx.MessageOrErr(err),
 			deleteKBFilesActivityError,
 			err,
 		)
@@ -289,8 +309,9 @@ func (w *Worker) DropVectorDBCollectionActivity(ctx context.Context, param *Drop
 				zap.String("collection", collection))
 			return nil
 		}
+		err = errorsx.AddMessage(err, "Unable to drop vector database collection. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to drop vector database collection: %s", errorsx.MessageOrErr(err)),
+			errorsx.MessageOrErr(err),
 			dropCollectionActivityError,
 			err,
 		)
@@ -307,8 +328,9 @@ func (w *Worker) DeleteKBFileRecordsActivity(ctx context.Context, param *DeleteK
 
 	err := w.service.Repository().DeleteAllKnowledgeBaseFiles(ctx, param.KnowledgeBaseUID.String())
 	if err != nil {
+		err = errorsx.AddMessage(err, "Unable to delete file records. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to delete file records: %s", errorsx.MessageOrErr(err)),
+			errorsx.MessageOrErr(err),
 			deleteKBFileRecordsActivityError,
 			err,
 		)
@@ -325,8 +347,9 @@ func (w *Worker) DeleteKBConvertedFileRecordsActivity(ctx context.Context, param
 
 	err := w.service.Repository().DeleteAllConvertedFilesInKb(ctx, param.KnowledgeBaseUID)
 	if err != nil {
+		err = errorsx.AddMessage(err, "Unable to delete converted file records. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to delete converted file records: %s", errorsx.MessageOrErr(err)),
+			errorsx.MessageOrErr(err),
 			deleteKBConvertedRecordsActivityError,
 			err,
 		)
@@ -343,8 +366,9 @@ func (w *Worker) DeleteKBChunkRecordsActivity(ctx context.Context, param *Delete
 
 	err := w.service.Repository().HardDeleteChunksByKbUID(ctx, param.KnowledgeBaseUID)
 	if err != nil {
+		err = errorsx.AddMessage(err, "Unable to delete chunk records. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to delete chunk records: %s", errorsx.MessageOrErr(err)),
+			errorsx.MessageOrErr(err),
 			deleteKBChunkRecordsActivityError,
 			err,
 		)
@@ -361,8 +385,9 @@ func (w *Worker) DeleteKBEmbeddingRecordsActivity(ctx context.Context, param *De
 
 	err := w.service.Repository().HardDeleteEmbeddingsByKbUID(ctx, param.KnowledgeBaseUID)
 	if err != nil {
+		err = errorsx.AddMessage(err, "Unable to delete embedding records. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to delete embedding records: %s", errorsx.MessageOrErr(err)),
+			errorsx.MessageOrErr(err),
 			deleteKBEmbeddingRecordsActivityError,
 			err,
 		)
@@ -379,8 +404,9 @@ func (w *Worker) PurgeKBACLActivity(ctx context.Context, param *PurgeKBACLActivi
 
 	err := w.service.ACLClient().Purge(ctx, "knowledgebase", param.KnowledgeBaseUID)
 	if err != nil {
+		err = errorsx.AddMessage(err, "Unable to purge access control. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to purge access control: %s", errorsx.MessageOrErr(err)),
+			errorsx.MessageOrErr(err),
 			purgeKBACLActivityError,
 			err,
 		)

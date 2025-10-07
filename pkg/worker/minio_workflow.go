@@ -32,7 +32,7 @@ func (w *deleteFilesWorkflow) Execute(ctx context.Context, param service.DeleteF
 	// Generate a unique workflow ID using UUID to prevent collisions
 	workflowUUID, err := uuid.NewV4()
 	if err != nil {
-		return fmt.Errorf("failed to generate workflow UUID: %s", errorsx.MessageOrErr(err))
+		return errorsx.AddMessage(err, "Unable to generate workflow identifier. Please try again.")
 	}
 	workflowID := fmt.Sprintf("delete-files-%s", workflowUUID.String())
 
@@ -44,11 +44,11 @@ func (w *deleteFilesWorkflow) Execute(ctx context.Context, param service.DeleteF
 
 	workflowRun, err := w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, w.worker.DeleteFilesWorkflow, param)
 	if err != nil {
-		return fmt.Errorf("failed to start delete files workflow: %s", errorsx.MessageOrErr(err))
+		return errorsx.AddMessage(err, "Unable to start file deletion workflow. Please try again.")
 	}
 
 	if err = workflowRun.Get(ctx, nil); err != nil {
-		return fmt.Errorf("delete files workflow failed: %s", errorsx.MessageOrErr(err))
+		return errorsx.AddMessage(err, "File deletion workflow failed. Please try again.")
 	}
 
 	return nil
@@ -71,7 +71,7 @@ func (w *getFilesWorkflow) Execute(ctx context.Context, param service.GetFilesWo
 	// Generate a unique workflow ID using UUID to prevent collisions
 	workflowUUID, err := uuid.NewV4()
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate workflow UUID: %s", errorsx.MessageOrErr(err))
+		return nil, errorsx.AddMessage(err, "Unable to generate workflow identifier. Please try again.")
 	}
 	workflowID := fmt.Sprintf("get-files-%s", workflowUUID.String())
 
@@ -83,12 +83,12 @@ func (w *getFilesWorkflow) Execute(ctx context.Context, param service.GetFilesWo
 
 	workflowRun, err := w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, w.worker.GetFilesWorkflow, param)
 	if err != nil {
-		return nil, fmt.Errorf("failed to start get files workflow: %s", errorsx.MessageOrErr(err))
+		return nil, errorsx.AddMessage(err, "Unable to start file retrieval workflow. Please try again.")
 	}
 
 	var results []service.FileContent
 	if err = workflowRun.Get(ctx, &results); err != nil {
-		return nil, fmt.Errorf("get files workflow failed: %s", errorsx.MessageOrErr(err))
+		return nil, errorsx.AddMessage(err, "File retrieval workflow failed. Please try again.")
 	}
 
 	return results, nil
@@ -162,7 +162,7 @@ func (w *Worker) SaveChunksWorkflow(ctx workflow.Context, param service.SaveChun
 			logger.Error("Batch save failed",
 				"batchIndex", i,
 				"error", err)
-			return nil, fmt.Errorf("failed to save batch %d: %s", i, errorsx.MessageOrErr(err))
+			return nil, errorsx.AddMessage(err, fmt.Sprintf("Unable to save chunk batch %d. Please try again.", i))
 		}
 
 		// Merge batch results
@@ -217,7 +217,7 @@ func (w *Worker) DeleteFilesWorkflow(ctx workflow.Context, param service.DeleteF
 			logger.Error("File deletion failed",
 				"path", param.FilePaths[i],
 				"error", err)
-			return fmt.Errorf("failed to delete file %s: %s", param.FilePaths[i], errorsx.MessageOrErr(err))
+			return errorsx.AddMessage(err, fmt.Sprintf("Unable to delete file: %s. Please try again.", param.FilePaths[i]))
 		}
 	}
 
@@ -267,7 +267,7 @@ func (w *Worker) GetFilesWorkflow(ctx workflow.Context, param service.GetFilesWo
 		var result GetFileActivityResult
 		if err := future.Get(ctx, &result); err != nil {
 			logger.Error("File retrieval failed", "error", err)
-			return nil, fmt.Errorf("failed to retrieve file: %s", errorsx.MessageOrErr(err))
+			return nil, errorsx.AddMessage(err, "Unable to retrieve file. Please try again.")
 		}
 
 		results[result.Index] = service.FileContent{

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"google.golang.org/grpc/metadata"
@@ -98,10 +99,20 @@ func (s *service) GenerateSummary(ctx context.Context, content, fileType string)
 // Returns an error if neither field contains valid data or if the response structure is invalid.
 func getGenerateSummaryResult(resp *pipelinepb.TriggerNamespacePipelineReleaseResponse) (string, error) {
 	if resp == nil || len(resp.Outputs) == 0 {
+		// Extract trace errors if available
+		traceErrors := extractPipelineTraceErrors(resp)
+		if traceErrors != "" {
+			return "", fmt.Errorf("pipeline execution failed: %s", traceErrors)
+		}
 		return "", fmt.Errorf("response is nil or has no outputs. resp: %v", resp)
 	}
 	fields := resp.Outputs[0].GetFields()
 	if fields == nil {
+		// Extract trace errors if available
+		traceErrors := extractPipelineTraceErrors(resp)
+		if traceErrors != "" {
+			return "", fmt.Errorf("pipeline execution failed: %s", traceErrors)
+		}
 		return "", fmt.Errorf("fields in the output are nil. resp: %v", resp)
 	}
 	convertResult, ok := fields["summary_from_long_text"]
@@ -112,7 +123,44 @@ func getGenerateSummaryResult(resp *pipelinepb.TriggerNamespacePipelineReleaseRe
 	if ok2 && convertResult2.GetStringValue() != "" {
 		return convertResult2.GetStringValue(), nil
 	}
+
+	// Extract trace errors for better debugging
+	traceErrors := extractPipelineTraceErrors(resp)
+	if traceErrors != "" {
+		return "", fmt.Errorf("summary fields not found in output. Pipeline errors: %s", traceErrors)
+	}
 	return "", fmt.Errorf("summary_from_short_text and summary_from_long_text not found in the output fields. resp: %v", resp)
+}
+
+// extractPipelineTraceErrors extracts error messages from pipeline execution traces
+func extractPipelineTraceErrors(resp *pipelinepb.TriggerNamespacePipelineReleaseResponse) string {
+	if resp == nil || resp.Metadata == nil {
+		return ""
+	}
+
+	traces := resp.Metadata.GetTraces()
+	if len(traces) == 0 {
+		return ""
+	}
+
+	var errors []string
+	for componentName, trace := range traces {
+		// Check for STATUS_ERROR
+		if len(trace.Statuses) > 0 && trace.Statuses[0] == pipelinepb.Trace_STATUS_ERROR {
+			if trace.Error != nil && trace.Error.Fields != nil {
+				if msgField := trace.Error.Fields["message"]; msgField != nil {
+					if msg := msgField.GetStringValue(); msg != "" {
+						errors = append(errors, fmt.Sprintf("%s: %s", componentName, msg))
+					}
+				}
+			}
+		}
+	}
+
+	if len(errors) > 0 {
+		return fmt.Sprintf("[%s]", strings.Join(errors, "; "))
+	}
+	return ""
 }
 
 // ChunkingResult contains the information extracted from chunking a text.
@@ -131,9 +179,9 @@ func (s *service) ChunkMarkdownPipe(ctx context.Context, markdown string) (*Chun
 	ctx, cancel := context.WithTimeout(ctx, 300*time.Second)
 	defer cancel()
 	req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
-		NamespaceId: ChunkMDPipeline.Namespace,
-		PipelineId:  ChunkMDPipeline.ID,
-		ReleaseId:   ChunkMDPipeline.Version,
+		NamespaceId: ChunkMarkdownPipeline.Namespace,
+		PipelineId:  ChunkMarkdownPipeline.ID,
+		ReleaseId:   ChunkMarkdownPipeline.Version,
 		Inputs: []*structpb.Struct{
 			{
 				Fields: map[string]*structpb.Value{
@@ -146,7 +194,7 @@ func (s *service) ChunkMarkdownPipe(ctx context.Context, markdown string) (*Chun
 	}
 	res, err := s.pipelinePub.TriggerNamespacePipelineRelease(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to trigger %s pipeline. err:%w", ChunkMDPipeline.ID, err)
+		return nil, fmt.Errorf("failed to trigger %s pipeline. err:%w", ChunkMarkdownPipeline.ID, err)
 	}
 	result, err := getChunksFromResponse(res)
 	if err != nil {
@@ -162,7 +210,7 @@ func (s *service) ChunkMarkdownPipe(ctx context.Context, markdown string) (*Chun
 	}
 	return &ChunkingResult{
 		Chunks:          filteredResult,
-		PipelineRelease: ChunkMDPipeline,
+		PipelineRelease: ChunkMarkdownPipeline,
 	}, nil
 }
 

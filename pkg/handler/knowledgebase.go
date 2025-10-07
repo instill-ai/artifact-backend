@@ -142,7 +142,7 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 		},
 		SplittingPipelines: []string{
 			service.ChunkTextPipeline.Name(),
-			service.ChunkMDPipeline.Name(),
+			service.ChunkMarkdownPipeline.Name(),
 		},
 		EmbeddingPipelines: []string{
 			service.EmbedTextPipeline.Name(),
@@ -229,7 +229,7 @@ func (ph *PublicHandler) ListCatalogs(ctx context.Context, req *artifactpb.ListC
 			},
 			SplittingPipelines: []string{
 				service.ChunkTextPipeline.Name(),
-				service.ChunkMDPipeline.Name(),
+				service.ChunkMarkdownPipeline.Name(),
 			},
 			EmbeddingPipelines: []string{
 				service.EmbedTextPipeline.Name(),
@@ -330,7 +330,7 @@ func (ph *PublicHandler) UpdateCatalog(ctx context.Context, req *artifactpb.Upda
 		},
 		SplittingPipelines: []string{
 			service.ChunkTextPipeline.Name(),
-			service.ChunkMDPipeline.Name(),
+			service.ChunkMarkdownPipeline.Name(),
 		},
 		EmbeddingPipelines: []string{
 			service.EmbedTextPipeline.Name(),

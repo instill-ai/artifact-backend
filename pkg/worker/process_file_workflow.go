@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/gofrs/uuid"
 	"go.temporal.io/api/enums/v1"
@@ -94,7 +95,11 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 		// Return the error to mark the workflow as Failed in Temporal.
 		// Temporal's retry policy (MaximumAttempts: 3) will be respected.
 		// This ensures workflow status matches file status.
-		return fmt.Errorf("%s: %s", stage, errMsg)
+		workflowErr := errorsx.AddMessage(
+			fmt.Errorf("%s: %s", stage, errMsg),
+			fmt.Sprintf("File processing failed at %s stage. %s", stage, errMsg),
+		)
+		return workflowErr
 	}
 
 	// Get current file status to determine starting point
@@ -150,19 +155,44 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 			return handleError("get file metadata", err)
 		}
 
-		// 2b. Convert to Markdown (THE KEY EXTERNAL API CALL - expensive, benefits most from isolated retry)
-		// Note: Activity fetches content directly from MinIO to avoid passing large files through Temporal
 		bucket := minio.BucketFromDestination(metadata.File.Destination)
-		var conversionResult ConvertToMarkdownActivityResult
-		if err := workflow.ExecuteActivity(ctx, w.ConvertToMarkdownActivity, &ConvertToMarkdownActivityParam{
-			Bucket:      bucket,
-			Destination: metadata.File.Destination,
-			FileType:    artifactpb.FileType(artifactpb.FileType_value[metadata.File.Type]),
-			Pipelines:   metadata.ConvertingPipelines,
-			Metadata:    metadata.ExternalMetadata,
-		}).Get(ctx, &conversionResult); err != nil {
+
+		// 2b. Convert to Markdown using child workflow
+		// This child workflow encapsulates the complete conversion pipeline:
+		// - Format conversion (GIF→PNG, MKV→MP4, DOC→PDF, etc.)
+		// - Gemini caching (for efficient processing)
+		// - Markdown conversion (using Gemini or pipelines)
+		// This provides better encapsulation and allows for independent optimization
+		childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
+			WorkflowID:         workflow.GetInfo(ctx).WorkflowExecution.ID + "-convert-to-markdown",
+			TaskQueue:          workflow.GetInfo(ctx).TaskQueueName,
+			WorkflowRunTimeout: 30 * time.Minute,
+			RetryPolicy: &temporal.RetryPolicy{
+				InitialInterval:    time.Second,
+				BackoffCoefficient: 2.0,
+				MaximumInterval:    5 * time.Minute,
+				MaximumAttempts:    3,
+			},
+		})
+
+		var conversionResult ConvertToMarkdownFileWorkflowResult
+		if err := workflow.ExecuteChildWorkflow(childCtx, w.ConvertToMarkdownFileWorkflow, ConvertToMarkdownFileWorkflowParam{
+			FileUID:          fileUID,
+			KnowledgeBaseUID: knowledgeBaseUID,
+			Bucket:           bucket,
+			Destination:      metadata.File.Destination,
+			FileType:         artifactpb.FileType(artifactpb.FileType_value[metadata.File.Type]),
+			Filename:         metadata.File.Name,
+			Pipelines:        metadata.ConvertingPipelines,
+			Metadata:         metadata.ExternalMetadata,
+		}).Get(childCtx, &conversionResult); err != nil {
 			return handleError("convert to markdown", err)
 		}
+
+		logger.Info("Markdown conversion completed",
+			"originalType", conversionResult.OriginalType.String(),
+			"convertedType", conversionResult.ConvertedType.String(),
+			"formatConverted", conversionResult.FormatConverted)
 
 		// 2c. Cleanup old converted file if exists
 		// Note: Activity is idempotent - succeeds if no file exists, fails only on real errors (network, etc.)
@@ -355,97 +385,58 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 			return handleError("get file metadata for chunking", err)
 		}
 
-		// 4b. Get converted file metadata - ALL files now have a converted file record
-		// (TEXT/MARKDOWN files have a record pointing to the original file)
-		// Note: We only get metadata here, not content (to avoid Temporal size limits)
+		// 4b. Get converted file for chunking - activity fetches content from MinIO
 		var convertedFile GetConvertedFileForChunkingActivityResult
 		if err := workflow.ExecuteActivity(ctx, w.GetConvertedFileForChunkingActivity, &GetConvertedFileForChunkingActivityParam{
-			FileUID: fileUID,
+			FileUID:          fileUID,
+			KnowledgeBaseUID: knowledgeBaseUID,
 		}).Get(ctx, &convertedFile); err != nil {
 			return handleError("get converted file for chunking", err)
 		}
 
-		sourceTable := convertedFile.SourceTable
-		sourceUID := convertedFile.SourceUID
-		positionData := &convertedFile
-		fileType := fileInfo.File.Type
-
 		// 4e. Chunk content (THE KEY EXTERNAL API CALL - expensive, benefits most from isolated retry)
-		// Note: Activity fetches content directly from MinIO to avoid Temporal size limits
-		// All converted files are markdown (or treated as such)
 		var contentChunks ChunkContentActivityResult
 		if err := workflow.ExecuteActivity(ctx, w.ChunkContentActivity, &ChunkContentActivityParam{
-			FileUID:         convertedFile.SourceUID,
-			FileDestination: convertedFile.Destination,
-			IsMarkdown:      true, // All converted files are markdown
-			ChunkSize:       TextChunkSize,
-			ChunkOverlap:    TextChunkOverlap,
-			Metadata:        fileInfo.ExternalMetadata,
+			FileUID:          fileUID,
+			KnowledgeBaseUID: knowledgeBaseUID,
+			Content:          convertedFile.Content,
+			Pipelines:        convertedFile.ChunkingPipelines,
+			Metadata:         fileInfo.ExternalMetadata,
 		}).Get(ctx, &contentChunks); err != nil {
 			return handleError("chunk content", err)
 		}
 
-		// Add page references if we have position data from converted file
-		// Note: Page references are stored in the chunk metadata during SaveChunksToDBActivity
-		_ = positionData // Keep for future use
-
-		// 4f. Chunk summary text (pass directly as it's always small)
-		var summaryChunks ChunkContentActivityResult
+		// Combine content chunks with summary chunks (if any)
+		allChunks := contentChunks.Chunks
 		if len(fileInfo.File.Summary) > 0 {
+			var summaryChunks ChunkContentActivityResult
 			if err := workflow.ExecuteActivity(ctx, w.ChunkContentActivity, &ChunkContentActivityParam{
-				Content:      fileInfo.File.Summary,
-				IsMarkdown:   false, // Summary is plain text
-				ChunkSize:    TextChunkSize,
-				ChunkOverlap: TextChunkOverlap,
-				Metadata:     fileInfo.ExternalMetadata,
+				FileUID:          fileUID,
+				KnowledgeBaseUID: knowledgeBaseUID,
+				Content:          string(fileInfo.File.Summary),
+				Pipelines:        []service.PipelineRelease{}, // Use default
+				Metadata:         fileInfo.ExternalMetadata,
 			}).Get(ctx, &summaryChunks); err != nil {
 				return handleError("chunk summary", err)
 			}
+			allChunks = append(allChunks, summaryChunks.Chunks...)
 		}
 
-		// 4f. Save chunks to DB with placeholders (single DB transaction)
-		var dbResult SaveChunksToDBActivityResult
+		// 4f. Save chunks to DB (single DB transaction)
 		if err := workflow.ExecuteActivity(ctx, w.SaveChunksToDBActivity, &SaveChunksToDBActivityParam{
 			KnowledgeBaseUID: knowledgeBaseUID,
 			FileUID:          fileUID,
-			SourceUID:        sourceUID,
-			SourceTable:      sourceTable,
-			SummaryChunks:    summaryChunks.Chunks,
-			ContentChunks:    contentChunks.Chunks,
-			FileType:         fileType,
-		}).Get(ctx, &dbResult); err != nil {
+			Chunks:           allChunks,
+		}).Get(ctx, nil); err != nil {
 			return handleError("save chunks to DB", err)
 		}
 
-		// 4g. Save chunks to MinIO using child workflow (parallel I/O)
-		if len(dbResult.ChunksToSave) > 0 {
-			childWorkflowOptions := workflow.ChildWorkflowOptions{
-				WorkflowID: fmt.Sprintf("save-chunks-%s", fileUID.String()),
-			}
-			childCtx := workflow.WithChildOptions(ctx, childWorkflowOptions)
-
-			saveChunksParam := service.SaveChunksWorkflowParam{
-				KnowledgeBaseUID: knowledgeBaseUID,
-				FileUID:          fileUID,
-				Chunks:           dbResult.ChunksToSave,
-			}
-			var destinations map[string]string
-			if err := workflow.ExecuteChildWorkflow(childCtx, w.SaveChunksWorkflow, saveChunksParam).Get(ctx, &destinations); err != nil {
-				return handleError("save chunks to MinIO", err)
-			}
-
-			// 4i. Update chunk destinations in database (single DB write)
-			if err := workflow.ExecuteActivity(ctx, w.UpdateChunkDestinationsActivity, &UpdateChunkDestinationsActivityParam{
-				Destinations: destinations,
-			}).Get(ctx, nil); err != nil {
-				return handleError("update chunk destinations", err)
-			}
-		}
-
-		// 4j. Update file metadata (single DB write)
+		// 4g. Update file metadata (single DB write)
 		if err := workflow.ExecuteActivity(ctx, w.UpdateChunkingMetadataActivity, &UpdateChunkingMetadataActivityParam{
-			FileUID:  fileUID,
-			Pipeline: service.ChunkTextPipeline.Name(),
+			FileUID:          fileUID,
+			KnowledgeBaseUID: knowledgeBaseUID,
+			ChunkingPipeline: contentChunks.PipelineRelease.Name(),
+			ChunkCount:       uint32(len(allChunks)),
 		}).Get(ctx, nil); err != nil {
 			return handleError("update chunking metadata", err)
 		}

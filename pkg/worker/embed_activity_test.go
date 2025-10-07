@@ -258,7 +258,7 @@ func TestDeleteOldEmbeddingsFromVectorDBActivity_Failure(t *testing.T) {
 
 	err := worker.DeleteOldEmbeddingsFromVectorDBActivity(context.Background(), param)
 	c.Assert(err, qt.Not(qt.IsNil))
-	c.Assert(err.Error(), qt.Contains, "vector db")
+	c.Assert(err.Error(), qt.Contains, "Unable to delete old embeddings from vector database")
 }
 
 func TestDeleteOldEmbeddingsFromDBActivity_Success(t *testing.T) {
@@ -301,7 +301,7 @@ func TestDeleteOldEmbeddingsFromDBActivity_Failure(t *testing.T) {
 
 	err := worker.DeleteOldEmbeddingsFromDBActivity(context.Background(), param)
 	c.Assert(err, qt.Not(qt.IsNil))
-	c.Assert(err.Error(), qt.Contains, "DB")
+	c.Assert(err.Error(), qt.Contains, "Unable to delete old embedding records")
 }
 
 func TestSaveEmbeddingBatchActivityParam_Validation(t *testing.T) {

@@ -48,7 +48,7 @@ type SimilarVectorSearchParam struct {
 	FileNames []string
 }
 
-// VectorDatabase implements the use necesasry cases to interact with a vector
+// VectorDatabase implements the use necessary cases to interact with a vector
 // database.
 type VectorDatabase interface {
 	CreateCollection(_ context.Context, kbUID uuid.UUID) error

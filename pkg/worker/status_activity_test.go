@@ -155,7 +155,7 @@ func TestGetFileStatusActivity_DatabaseError(t *testing.T) {
 	}
 
 	status, err := w.GetFileStatusActivity(ctx, fileUID)
-	c.Assert(err, qt.ErrorMatches, ".*Failed to get file.*")
+	c.Assert(err, qt.ErrorMatches, ".*Unable to retrieve file status.*")
 	c.Assert(status, qt.Equals, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED)
 }
 

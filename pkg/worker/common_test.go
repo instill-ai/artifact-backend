@@ -49,7 +49,8 @@ func TestGetFileByUID_NotFound(t *testing.T) {
 		Then([]repository.KnowledgeBaseFile{}, nil)
 
 	file, err := getFileByUID(ctx, mockRepo, fileUID)
-	c.Assert(err, qt.ErrorMatches, ".*file not found.*")
+	c.Assert(err, qt.Not(qt.IsNil))
+	c.Assert(err.Error(), qt.Contains, "not found")
 	c.Assert(file, qt.DeepEquals, repository.KnowledgeBaseFile{})
 }
 

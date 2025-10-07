@@ -24,10 +24,11 @@ import (
 func getFileByUID(ctx context.Context, repo repository.RepositoryI, fileUID uuid.UUID) (repository.KnowledgeBaseFile, error) {
 	files, err := repo.GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{fileUID})
 	if err != nil {
-		return repository.KnowledgeBaseFile{}, fmt.Errorf("failed to get file: %s", errorsx.MessageOrErr(err))
+		return repository.KnowledgeBaseFile{}, errorsx.AddMessage(err, "Unable to retrieve file information. Please try again.")
 	}
 	if len(files) == 0 {
-		return repository.KnowledgeBaseFile{}, fmt.Errorf("file not found: %s", fileUID.String())
+		err := errorsx.AddMessage(errorsx.ErrNotFound, "File not found. It may have been deleted.")
+		return repository.KnowledgeBaseFile{}, err
 	}
 	return files[0], nil
 }
@@ -91,7 +92,7 @@ func saveChunksToDBOnly(
 	// Pass nil callback to avoid MinIO operations within the transaction
 	createdChunks, err := repo.DeleteAndCreateChunks(ctx, kbFileUID, textChunks, nil)
 	if err != nil {
-		return nil, fmt.Errorf("storing chunk records in repository: %s", errorsx.MessageOrErr(err))
+		return nil, errorsx.AddMessage(err, "Unable to save chunk records. Please try again.")
 	}
 
 	// Step 2: Upload chunks to MinIO after DB transaction commits
@@ -115,7 +116,7 @@ func saveChunksToDBOnly(
 			"text/markdown",
 		)
 		if err != nil {
-			return nil, fmt.Errorf("failed to save chunk %s to MinIO: %s", chunkUID, errorsx.MessageOrErr(err))
+			return nil, errorsx.AddMessage(err, fmt.Sprintf("Unable to save chunk (ID: %s) to storage. Please try again.", chunkUID))
 		}
 
 		destinations[chunkUID] = path
@@ -124,7 +125,7 @@ func saveChunksToDBOnly(
 	// Step 3: Update chunk destinations in database
 	err = repo.UpdateChunkDestinations(ctx, destinations)
 	if err != nil {
-		return nil, fmt.Errorf("updating chunk destinations in repository: %s", errorsx.MessageOrErr(err))
+		return nil, errorsx.AddMessage(err, "Unable to update chunk references. Please try again.")
 	}
 
 	// Build map of chunkUID -> content for return value
@@ -154,11 +155,11 @@ func extractRequestMetadata(externalMetadata *structpb.Struct) (metadata.MD, err
 	// map[string][]string), but readability has been prioritized.
 	j, err := externalMetadata.Fields[constant.MetadataRequestKey].GetStructValue().MarshalJSON()
 	if err != nil {
-		return nil, fmt.Errorf("marshalling metadata: %s", errorsx.MessageOrErr(err))
+		return nil, errorsx.AddMessage(err, "Unable to process authentication metadata. Please try again.")
 	}
 
 	if err := json.Unmarshal(j, &md); err != nil {
-		return nil, fmt.Errorf("unmarshalling metadata: %s", errorsx.MessageOrErr(err))
+		return nil, errorsx.AddMessage(err, "Unable to process authentication metadata. Please try again.")
 	}
 
 	return md, nil
@@ -170,7 +171,7 @@ func extractRequestMetadata(externalMetadata *structpb.Struct) (metadata.MD, err
 func createAuthenticatedContext(ctx context.Context, externalMetadata *structpb.Struct) (context.Context, error) {
 	md, err := extractRequestMetadata(externalMetadata)
 	if err != nil {
-		return ctx, fmt.Errorf("extracting request metadata: %s", errorsx.MessageOrErr(err))
+		return ctx, errorsx.AddMessage(err, "Authentication failed. Please try again.")
 	}
 
 	if len(md) == 0 {

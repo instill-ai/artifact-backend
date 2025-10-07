@@ -2,9 +2,9 @@ package worker
 
 import (
 	"context"
-	"encoding/base64"
 	"errors"
 	"fmt"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/gofrs/uuid"
@@ -18,9 +18,15 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/service"
 
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	errorsx "github.com/instill-ai/x/errors"
 )
+
+// This file contains file processing activities used by ProcessFileWorkflow:
+// - GetFileMetadataActivity - Retrieves file information and pipeline configuration
+// - GenerateSummaryFromPipelineActivity - Generates document summaries using AI pipelines
+// - ChunkContentActivity - Splits document content into manageable chunks
+// - SaveChunksToDBActivity - Persists chunks and their metadata to database
+// - UpdateChunkingMetadataActivity - Updates chunking statistics and pipeline info
 
 // extractPageReferences extracts the location of a chunk (defined by its start
 // and end byte positions) in a document (defined by the byte delimiters of its
@@ -62,7 +68,21 @@ func extractPageReferences(chunkStart, chunkEnd uint32, pageDelimiters []uint32)
 	return
 }
 
-// ===== CONVERSION ACTIVITIES =====
+// sanitizeUTF8 ensures the content is valid UTF-8 by replacing invalid sequences
+// with the Unicode replacement character (�). This prevents gRPC marshaling errors
+// when content contains invalid UTF-8 sequences (common with certain PDF conversions).
+func sanitizeUTF8(content []byte) string {
+	// Fast path: if already valid UTF-8, return as-is
+	if utf8.Valid(content) {
+		return string(content)
+	}
+
+	// Slow path: replace invalid UTF-8 sequences
+	// The � character (U+FFFD) is the standard replacement for invalid UTF-8
+	return strings.ToValidUTF8(string(content), "�")
+}
+
+// ===== METADATA & CONTENT ACTIVITIES =====
 
 // GetFileMetadataActivityParam for retrieving file and KB metadata
 type GetFileMetadataActivityParam struct {
@@ -72,9 +92,12 @@ type GetFileMetadataActivityParam struct {
 
 // GetFileMetadataActivityResult contains file and KB configuration
 type GetFileMetadataActivityResult struct {
-	File                *repository.KnowledgeBaseFile
-	ConvertingPipelines []service.PipelineRelease
-	ExternalMetadata    *structpb.Struct
+	File                 *repository.KnowledgeBaseFile
+	ConvertingPipelines  []service.PipelineRelease
+	SummarizingPipelines []service.PipelineRelease
+	ChunkingPipelines    []service.PipelineRelease
+	EmbeddingPipelines   []service.PipelineRelease
+	ExternalMetadata     *structpb.Struct
 }
 
 // GetFileContentActivityParam for retrieving file content from MinIO
@@ -82,80 +105,6 @@ type GetFileContentActivityParam struct {
 	Bucket      string
 	Destination string
 	Metadata    *structpb.Struct // For authentication context
-}
-
-// ConvertToMarkdownActivityParam for external pipeline conversion call
-type ConvertToMarkdownActivityParam struct {
-	Bucket      string // MinIO bucket
-	Destination string // MinIO file path
-	FileType    artifactpb.FileType
-	Pipelines   []service.PipelineRelease
-	Metadata    *structpb.Struct // For authentication context
-}
-
-// ConvertToMarkdownActivityResult contains the conversion result
-type ConvertToMarkdownActivityResult struct {
-	Markdown        string
-	PositionData    *repository.PositionData
-	Length          []uint32
-	PipelineRelease service.PipelineRelease
-}
-
-// CleanupOldConvertedFileActivityParam for removing old converted files
-type CleanupOldConvertedFileActivityParam struct {
-	FileUID uuid.UUID
-}
-
-// CreateConvertedFileRecordActivityParam for creating a converted file DB record
-type CreateConvertedFileRecordActivityParam struct {
-	KnowledgeBaseUID uuid.UUID
-	FileUID          uuid.UUID
-	ConvertedFileUID uuid.UUID
-	FileName         string
-	Destination      string                   // Known destination (for TEXT/MARKDOWN: original file, for others: determined MinIO path)
-	PositionData     *repository.PositionData // Position data from conversion
-}
-
-// CreateConvertedFileRecordActivityResult returns the created converted file UID
-type CreateConvertedFileRecordActivityResult struct {
-	ConvertedFileUID uuid.UUID
-}
-
-// UploadConvertedFileToMinIOActivityParam for uploading converted file to MinIO
-type UploadConvertedFileToMinIOActivityParam struct {
-	KnowledgeBaseUID uuid.UUID
-	FileUID          uuid.UUID
-	ConvertedFileUID uuid.UUID
-	Content          string // Markdown content to upload
-}
-
-// UploadConvertedFileToMinIOActivityResult returns the actual MinIO destination
-type UploadConvertedFileToMinIOActivityResult struct {
-	Destination string
-}
-
-// DeleteConvertedFileRecordActivityParam for deleting a converted file DB record (compensating transaction)
-type DeleteConvertedFileRecordActivityParam struct {
-	ConvertedFileUID uuid.UUID
-}
-
-// DeleteConvertedFileFromMinIOActivityParam for deleting a converted file from MinIO (compensating transaction)
-type DeleteConvertedFileFromMinIOActivityParam struct {
-	Bucket      string
-	Destination string
-}
-
-// UpdateConvertedFileDestinationActivityParam for updating the converted file destination in DB
-type UpdateConvertedFileDestinationActivityParam struct {
-	ConvertedFileUID uuid.UUID
-	Destination      string
-}
-
-// UpdateConversionMetadataActivityParam for updating file metadata after conversion
-type UpdateConversionMetadataActivityParam struct {
-	FileUID  uuid.UUID
-	Length   []uint32
-	Pipeline string
 }
 
 // GetFileMetadataActivity retrieves file and knowledge base metadata from DB
@@ -235,6 +184,12 @@ func (w *Worker) GetFileMetadataActivity(ctx context.Context, param *GetFileMeta
 		convertingPipelines = append(convertingPipelines, pipeline)
 	}
 
+	// If no converting pipelines configured (neither file-specific nor catalog-level),
+	// fall back to default markdown conversion pipelines for backward compatibility
+	if len(convertingPipelines) == 0 {
+		convertingPipelines = service.DefaultConversionPipelines
+	}
+
 	return &GetFileMetadataActivityResult{
 		File:                &file,
 		ConvertingPipelines: convertingPipelines,
@@ -277,86 +232,63 @@ func (w *Worker) GetFileContentActivity(ctx context.Context, param *GetFileConte
 	return content, nil
 }
 
-// ConvertToMarkdownActivity calls external pipeline to convert file to markdown
-// For TEXT/MARKDOWN files, it extracts the file length without calling the pipeline
-// This is a single external API call - idempotent (pipeline should be idempotent)
-// Note: This activity fetches content directly from MinIO to avoid passing large files through Temporal
-func (w *Worker) ConvertToMarkdownActivity(ctx context.Context, param *ConvertToMarkdownActivityParam) (*ConvertToMarkdownActivityResult, error) {
-	w.log.Info("ConvertToMarkdownActivity: Converting file to markdown",
-		zap.String("fileType", param.FileType.String()),
-		zap.String("destination", param.Destination),
-		zap.Int("pipelineCount", len(param.Pipelines)))
+// ===== FILE MANAGEMENT ACTIVITIES =====
 
-	// Create authenticated context if metadata provided
-	authCtx := ctx
-	if param.Metadata != nil {
-		var err error
-		authCtx, err = createAuthenticatedContext(ctx, param.Metadata)
-		if err != nil {
-			return nil, temporal.NewApplicationErrorWithCause(
-				fmt.Sprintf("Failed to create authenticated context: %s", errorsx.MessageOrErr(err)),
-				convertToMarkdownActivityError,
-				err,
-			)
-		}
-	}
+// CleanupOldConvertedFileActivityParam for removing old converted files
+type CleanupOldConvertedFileActivityParam struct {
+	FileUID uuid.UUID
+}
 
-	// Fetch file content directly from MinIO (avoids passing large files through Temporal)
-	content, err := w.service.MinIO().GetFile(authCtx, param.Bucket, param.Destination)
-	if err != nil {
-		return nil, temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to retrieve file from storage: %s", errorsx.MessageOrErr(err)),
-			convertToMarkdownActivityError,
-			err,
-		)
-	}
+// CreateConvertedFileRecordActivityParam for creating a converted file DB record
+type CreateConvertedFileRecordActivityParam struct {
+	KnowledgeBaseUID uuid.UUID
+	FileUID          uuid.UUID
+	ConvertedFileUID uuid.UUID
+	FileName         string
+	Destination      string                   // Known destination (for TEXT/MARKDOWN: original file, for others: determined MinIO path)
+	PositionData     *repository.PositionData // Position data from conversion
+}
 
-	w.log.Info("ConvertToMarkdownActivity: File content retrieved from MinIO",
-		zap.Int("contentSize", len(content)))
+// CreateConvertedFileRecordActivityResult returns the created converted file UID
+type CreateConvertedFileRecordActivityResult struct {
+	ConvertedFileUID uuid.UUID
+}
 
-	// Handle TEXT/MARKDOWN files specially - no actual conversion needed
-	if param.FileType == artifactpb.FileType_FILE_TYPE_TEXT ||
-		param.FileType == artifactpb.FileType_FILE_TYPE_MARKDOWN {
+// UploadConvertedFileToMinIOActivityParam for uploading converted file to MinIO
+type UploadConvertedFileToMinIOActivityParam struct {
+	KnowledgeBaseUID uuid.UUID
+	FileUID          uuid.UUID
+	ConvertedFileUID uuid.UUID
+	Content          string // Markdown content to upload
+}
 
-		// Extract file length (character count)
-		charCount := utf8.RuneCount(content)
+// UploadConvertedFileToMinIOActivityResult returns the actual MinIO destination
+type UploadConvertedFileToMinIOActivityResult struct {
+	Destination string
+}
 
-		w.log.Info("ConvertToMarkdownActivity: Text file, no conversion needed",
-			zap.Int("charCount", charCount))
+// DeleteConvertedFileRecordActivityParam for deleting a converted file DB record (compensating transaction)
+type DeleteConvertedFileRecordActivityParam struct {
+	ConvertedFileUID uuid.UUID
+}
 
-		// Return the original content as markdown with length
-		return &ConvertToMarkdownActivityResult{
-			Markdown:        string(content),
-			PositionData:    nil, // No position data for text files
-			Length:          []uint32{uint32(charCount)},
-			PipelineRelease: service.PipelineRelease{}, // No pipeline used
-		}, nil
-	}
+// DeleteConvertedFileFromMinIOActivityParam for deleting a converted file from MinIO (compensating transaction)
+type DeleteConvertedFileFromMinIOActivityParam struct {
+	Bucket      string
+	Destination string
+}
 
-	// Call the conversion pipeline - THIS IS THE KEY EXTERNAL CALL
-	// Note: Use authCtx to pass authentication credentials to the pipeline service
-	conversion, err := w.service.ConvertToMDPipe(authCtx, service.MDConversionParams{
-		Base64Content: base64.StdEncoding.EncodeToString(content),
-		Type:          param.FileType,
-		Pipelines:     param.Pipelines,
-	})
-	if err != nil {
-		return nil, temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("File conversion failed: %s", errorsx.MessageOrErr(err)),
-			convertToMarkdownActivityError,
-			err,
-		)
-	}
+// UpdateConvertedFileDestinationActivityParam for updating the converted file destination in DB
+type UpdateConvertedFileDestinationActivityParam struct {
+	ConvertedFileUID uuid.UUID
+	Destination      string
+}
 
-	w.log.Info("ConvertToMarkdownActivity: Conversion successful",
-		zap.Int("markdownLength", len(conversion.Markdown)))
-
-	return &ConvertToMarkdownActivityResult{
-		Markdown:        conversion.Markdown,
-		PositionData:    conversion.PositionData,
-		Length:          conversion.Length,
-		PipelineRelease: conversion.PipelineRelease,
-	}, nil
+// UpdateConversionMetadataActivityParam for updating file metadata after conversion
+type UpdateConversionMetadataActivityParam struct {
+	FileUID  uuid.UUID
+	Length   []uint32
+	Pipeline string
 }
 
 // CleanupOldConvertedFileActivity removes old converted file from MinIO if it exists
@@ -571,65 +503,59 @@ func (w *Worker) UpdateConversionMetadataActivity(ctx context.Context, param *Up
 
 // GetConvertedFileForChunkingActivityParam retrieves converted file for chunking
 type GetConvertedFileForChunkingActivityParam struct {
-	FileUID uuid.UUID
+	FileUID          uuid.UUID
+	KnowledgeBaseUID uuid.UUID
 }
 
-// GetConvertedFileForChunkingActivityResult contains file metadata
-// Note: Content is NOT included to avoid Temporal size limits - activities fetch from MinIO directly
+// GetConvertedFileForChunkingActivityResult contains file metadata and content
 type GetConvertedFileForChunkingActivityResult struct {
-	Destination  string
-	SourceTable  string
-	SourceUID    uuid.UUID
-	PositionData *repository.PositionData
-	Metadata     *structpb.Struct
+	Content            string
+	ChunkingPipelines  []service.PipelineRelease
+	EmbeddingPipelines []service.PipelineRelease
+	ExternalMetadata   *structpb.Struct
 }
 
 // ChunkContentActivityParam for external chunking pipeline call
 type ChunkContentActivityParam struct {
-	Content         []byte    // For small content (like summaries), pass directly
-	FileUID         uuid.UUID // For large content (converted files), use MinIO location to avoid Temporal size limits
-	FileDestination string
-	IsMarkdown      bool
-	ChunkSize       int
-	ChunkOverlap    int
-	Metadata        *structpb.Struct
+	FileUID          uuid.UUID
+	KnowledgeBaseUID uuid.UUID
+	Content          string
+	Pipelines        []service.PipelineRelease
+	Metadata         *structpb.Struct
 }
 
 // ChunkContentActivityResult contains chunked content
 type ChunkContentActivityResult struct {
-	Chunks []service.Chunk
+	Chunks          []service.Chunk
+	PipelineRelease service.PipelineRelease
 }
 
-// SaveChunksToDBActivityParam for saving chunks to database with placeholders
+// SaveChunksToDBActivityParam for saving chunks to database
 type SaveChunksToDBActivityParam struct {
-	KnowledgeBaseUID uuid.UUID
 	FileUID          uuid.UUID
-	SourceUID        uuid.UUID
-	SourceTable      string
-	SummaryChunks    []service.Chunk
-	ContentChunks    []service.Chunk
-	FileType         string
+	KnowledgeBaseUID uuid.UUID
+	Chunks           []service.Chunk
 }
 
-// SaveChunksToDBActivityResult contains chunks that need MinIO save
+// SaveChunksToDBActivityResult contains saved chunk UIDs
 type SaveChunksToDBActivityResult struct {
-	ChunksToSave map[string][]byte
+	ChunkUIDs []uuid.UUID
 }
 
 // UpdateChunkingMetadataActivityParam for updating metadata after chunking
 type UpdateChunkingMetadataActivityParam struct {
-	FileUID  uuid.UUID
-	Pipeline string
+	FileUID          uuid.UUID
+	KnowledgeBaseUID uuid.UUID
+	ChunkingPipeline string
+	ChunkCount       uint32
 }
 
-// GetConvertedFileForChunkingActivity retrieves converted file metadata for chunking
-// This is a DB read operation - idempotent
-// Note: Does NOT fetch content from MinIO to avoid Temporal size limits - ChunkContentActivity fetches directly
+// GetConvertedFileForChunkingActivity retrieves converted file content for chunking
 func (w *Worker) GetConvertedFileForChunkingActivity(ctx context.Context, param *GetConvertedFileForChunkingActivityParam) (*GetConvertedFileForChunkingActivityResult, error) {
-	w.log.Info("GetConvertedFileForChunkingActivity: Fetching converted file metadata",
+	w.log.Info("GetConvertedFileForChunkingActivity: Fetching converted file",
 		zap.String("fileUID", param.FileUID.String()))
 
-	// Get converted file metadata from DB
+	// Get converted file from DB
 	convertedFile, err := w.service.Repository().GetConvertedFileByFileUID(ctx, param.FileUID)
 	if err != nil {
 		return nil, temporal.NewApplicationErrorWithCause(
@@ -639,7 +565,18 @@ func (w *Worker) GetConvertedFileForChunkingActivity(ctx context.Context, param 
 		)
 	}
 
-	// Get file to access external metadata
+	// Get content from MinIO
+	bucket := minio.BucketFromDestination(convertedFile.Destination)
+	content, err := w.service.MinIO().GetFile(ctx, bucket, convertedFile.Destination)
+	if err != nil {
+		return nil, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to get content from storage: %s", errorsx.MessageOrErr(err)),
+			getConvertedFileForChunkingActivityError,
+			err,
+		)
+	}
+
+	// Get file for external metadata
 	file, err := getFileByUID(ctx, w.service.Repository(), param.FileUID)
 	if err != nil {
 		return nil, temporal.NewApplicationErrorWithCause(
@@ -649,24 +586,26 @@ func (w *Worker) GetConvertedFileForChunkingActivity(ctx context.Context, param 
 		)
 	}
 
-	w.log.Info("GetConvertedFileForChunkingActivity: Metadata retrieved successfully",
-		zap.String("destination", convertedFile.Destination))
+	// TODO: Build chunking and embedding pipelines from KB configuration
+	// For now, these will be passed from the workflow
+	chunkingPipelines := make([]service.PipelineRelease, 0)
+	embeddingPipelines := make([]service.PipelineRelease, 0)
+
+	w.log.Info("GetConvertedFileForChunkingActivity: Content retrieved successfully",
+		zap.Int("contentSize", len(content)))
 
 	return &GetConvertedFileForChunkingActivityResult{
-		Destination:  convertedFile.Destination,
-		SourceTable:  w.service.Repository().ConvertedFileTableName(),
-		SourceUID:    convertedFile.UID,
-		PositionData: convertedFile.PositionData,
-		Metadata:     file.ExternalMetadataUnmarshal,
+		Content:            string(content),
+		ChunkingPipelines:  chunkingPipelines,
+		EmbeddingPipelines: embeddingPipelines,
+		ExternalMetadata:   file.ExternalMetadataUnmarshal,
 	}, nil
 }
 
 // ChunkContentActivity calls external pipeline to chunk content
-// This is a single external API call - idempotent (pipeline should be deterministic)
-// Note: For large content (converted files), fetches from MinIO. For small content (summaries), uses direct bytes.
 func (w *Worker) ChunkContentActivity(ctx context.Context, param *ChunkContentActivityParam) (*ChunkContentActivityResult, error) {
 	w.log.Info("ChunkContentActivity: Chunking content",
-		zap.Bool("isMarkdown", param.IsMarkdown))
+		zap.String("fileUID", param.FileUID.String()))
 
 	// Create authenticated context if metadata provided
 	authCtx := ctx
@@ -682,44 +621,8 @@ func (w *Worker) ChunkContentActivity(ctx context.Context, param *ChunkContentAc
 		}
 	}
 
-	// Determine content source: fetch from MinIO for large files, or use direct bytes for small content
-	var content []byte
-	var err error
-
-	if param.FileDestination != "" {
-		// Fetch large content from MinIO (for converted files)
-		// Extract the correct bucket - TEXT/MARKDOWN files point to blob bucket, others to artifact bucket
-		bucket := minio.BucketFromDestination(param.FileDestination)
-
-		w.log.Info("ChunkContentActivity: Fetching content from MinIO",
-			zap.String("bucket", bucket),
-			zap.String("destination", param.FileDestination))
-
-		content, err = w.service.MinIO().GetFile(authCtx, bucket, param.FileDestination)
-		if err != nil {
-			return nil, temporal.NewApplicationErrorWithCause(
-				fmt.Sprintf("Failed to retrieve content from storage: %s", errorsx.MessageOrErr(err)),
-				chunkContentActivityError,
-				err,
-			)
-		}
-		w.log.Info("ChunkContentActivity: Content retrieved from MinIO",
-			zap.Int("contentSize", len(content)))
-	} else {
-		// Use directly passed content (for small data like summaries)
-		content = param.Content
-		w.log.Info("ChunkContentActivity: Using directly passed content",
-			zap.Int("contentSize", len(content)))
-	}
-
-	// Call the appropriate chunking pipeline
-	// Note: Use authCtx to pass authentication credentials to the pipeline service
-	var chunkingResult *service.ChunkingResult
-	if param.IsMarkdown {
-		chunkingResult, err = w.service.ChunkMarkdownPipe(authCtx, string(content))
-	} else {
-		chunkingResult, err = w.service.ChunkTextPipe(authCtx, string(content))
-	}
+	// Call the chunking pipeline
+	chunkingResult, err := w.service.ChunkMarkdownPipe(authCtx, param.Content)
 	if err != nil {
 		return nil, temporal.NewApplicationErrorWithCause(
 			fmt.Sprintf("Content chunking failed: %s", errorsx.MessageOrErr(err)),
@@ -732,26 +635,20 @@ func (w *Worker) ChunkContentActivity(ctx context.Context, param *ChunkContentAc
 		zap.Int("chunkCount", len(chunkingResult.Chunks)))
 
 	return &ChunkContentActivityResult{
-		Chunks: chunkingResult.Chunks,
+		Chunks:          chunkingResult.Chunks,
+		PipelineRelease: chunkingResult.PipelineRelease,
 	}, nil
 }
 
-// SaveChunksToDBActivity saves chunks to database with placeholder destinations
-// This is a single DB transaction - atomic operation
+// SaveChunksToDBActivity saves chunks to database
 func (w *Worker) SaveChunksToDBActivity(ctx context.Context, param *SaveChunksToDBActivityParam) (*SaveChunksToDBActivityResult, error) {
 	w.log.Info("SaveChunksToDBActivity: Saving chunks to database",
 		zap.String("fileUID", param.FileUID.String()),
-		zap.Int("summaryChunkCount", len(param.SummaryChunks)),
-		zap.Int("contentChunkCount", len(param.ContentChunks)))
+		zap.Int("chunkCount", len(param.Chunks)))
 
-	// First, delete old chunks from MinIO (for reprocessing)
-	// Note: DeleteTextChunksByFileUID is idempotent - if no chunks exist, it returns empty list (no error).
-	// Any error returned here is a real error (network, MinIO unavailable, etc.) that should be retried.
+	// Delete old chunks (for reprocessing)
 	err := w.service.DeleteTextChunksByFileUID(ctx, param.KnowledgeBaseUID, param.FileUID)
 	if err != nil {
-		w.log.Error("SaveChunksToDBActivity: Failed to delete old chunks from MinIO",
-			zap.String("fileUID", param.FileUID.String()),
-			zap.Error(err))
 		return nil, temporal.NewApplicationErrorWithCause(
 			fmt.Sprintf("Failed to delete old chunks: %s", errorsx.MessageOrErr(err)),
 			saveChunksToDBActivityError,
@@ -759,10 +656,57 @@ func (w *Worker) SaveChunksToDBActivity(ctx context.Context, param *SaveChunksTo
 		)
 	}
 
-	// Use helper function from common.go
-	chunksToSave, err := saveChunksToDBOnly(ctx, w.service.Repository(), w.service.MinIO(),
-		param.KnowledgeBaseUID, param.FileUID, param.SourceUID, param.SourceTable,
-		param.SummaryChunks, param.ContentChunks, param.FileType)
+	// Get converted file for source information
+	convertedFile, err := w.service.Repository().GetConvertedFileByFileUID(ctx, param.FileUID)
+	if err != nil {
+		return nil, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to get converted file: %s", errorsx.MessageOrErr(err)),
+			saveChunksToDBActivityError,
+			err,
+		)
+	}
+
+	// Add page references to chunks if position data is available
+	chunksWithReferences := param.Chunks
+	if convertedFile.PositionData != nil && len(convertedFile.PositionData.PageDelimiters) > 0 {
+		w.log.Info("SaveChunksToDBActivity: Adding page references to chunks",
+			zap.Int("delimiterCount", len(convertedFile.PositionData.PageDelimiters)))
+
+		chunksWithReferences = make([]service.Chunk, len(param.Chunks))
+		copy(chunksWithReferences, param.Chunks)
+
+		for i, chunk := range chunksWithReferences {
+			pageStart, pageEnd := extractPageReferences(
+				uint32(chunk.Start),
+				uint32(chunk.End),
+				convertedFile.PositionData.PageDelimiters,
+			)
+
+			if pageStart != 0 && pageEnd != 0 {
+				chunksWithReferences[i].Reference = &repository.ChunkReference{
+					PageRange: [2]uint32{pageStart, pageEnd},
+				}
+				w.log.Debug("Added page reference",
+					zap.Int("chunkIndex", i),
+					zap.Uint32("pageStart", pageStart),
+					zap.Uint32("pageEnd", pageEnd))
+			}
+		}
+	}
+
+	// Save chunks using helper function
+	chunksToSave, err := saveChunksToDBOnly(
+		ctx,
+		w.service.Repository(),
+		w.service.MinIO(),
+		param.KnowledgeBaseUID,
+		param.FileUID,
+		convertedFile.UID,
+		w.service.Repository().ConvertedFileTableName(),
+		nil, // No summary chunks
+		chunksWithReferences,
+		"text/markdown",
+	)
 	if err != nil {
 		return nil, temporal.NewApplicationErrorWithCause(
 			fmt.Sprintf("Failed to save chunks: %s", errorsx.MessageOrErr(err)),
@@ -771,22 +715,21 @@ func (w *Worker) SaveChunksToDBActivity(ctx context.Context, param *SaveChunksTo
 		)
 	}
 
-	w.log.Info("SaveChunksToDBActivity: Chunks saved to database",
-		zap.Int("chunksForMinIO", len(chunksToSave)))
+	w.log.Info("SaveChunksToDBActivity: Chunks saved successfully",
+		zap.Int("chunksToSave", len(chunksToSave)))
 
 	return &SaveChunksToDBActivityResult{
-		ChunksToSave: chunksToSave,
+		ChunkUIDs: nil,
 	}, nil
 }
 
 // UpdateChunkingMetadataActivity updates file metadata after chunking
-// This is a single DB write operation - idempotent
 func (w *Worker) UpdateChunkingMetadataActivity(ctx context.Context, param *UpdateChunkingMetadataActivityParam) error {
 	w.log.Info("UpdateChunkingMetadataActivity: Updating file metadata",
 		zap.String("fileUID", param.FileUID.String()))
 
 	mdUpdate := repository.ExtraMetaData{
-		ChunkingPipe: param.Pipeline,
+		ChunkingPipe: param.ChunkingPipeline,
 	}
 
 	err := w.service.Repository().UpdateKBFileMetadata(ctx, param.FileUID, mdUpdate)
@@ -812,12 +755,13 @@ func (w *Worker) UpdateChunkingMetadataActivity(ctx context.Context, param *Upda
 
 // GenerateSummaryFromPipelineActivityParam for external summarization pipeline call
 type GenerateSummaryFromPipelineActivityParam struct {
-	FileUID     uuid.UUID
-	Bucket      string
-	Destination string
-	FileName    string
-	FileType    string
-	Metadata    *structpb.Struct
+	FileUID          uuid.UUID
+	KnowledgeBaseUID uuid.UUID
+	Bucket           string
+	Destination      string
+	FileName         string
+	FileType         string
+	Metadata         *structpb.Struct
 }
 
 // GenerateSummaryFromPipelineActivityResult contains the generated summary
@@ -828,18 +772,16 @@ type GenerateSummaryFromPipelineActivityResult struct {
 
 // SaveSummaryActivityParam saves summary to database
 type SaveSummaryActivityParam struct {
-	FileUID  uuid.UUID
-	Summary  string
-	Pipeline string
+	FileUID          uuid.UUID
+	KnowledgeBaseUID uuid.UUID
+	Summary          string
+	Pipeline         string
 }
 
 // GenerateSummaryFromPipelineActivity calls external pipeline to generate summary
-// This is a single external API call - idempotent (pipeline should be idempotent)
-// Note: This activity fetches content directly from MinIO to avoid passing large files through Temporal
 func (w *Worker) GenerateSummaryFromPipelineActivity(ctx context.Context, param *GenerateSummaryFromPipelineActivityParam) (*GenerateSummaryFromPipelineActivityResult, error) {
 	w.log.Info("GenerateSummaryFromPipelineActivity: Generating summary",
-		zap.String("fileName", param.FileName),
-		zap.String("fileType", param.FileType))
+		zap.String("fileUID", param.FileUID.String()))
 
 	// Create authenticated context if metadata provided
 	authCtx := ctx
@@ -855,58 +797,40 @@ func (w *Worker) GenerateSummaryFromPipelineActivity(ctx context.Context, param 
 		}
 	}
 
-	// Fetch content directly from MinIO (avoids passing large files through Temporal)
-	// For document types, get converted file; for text/markdown, get original
-	var content []byte
-	var err error
-
-	switch param.FileType {
-	case artifactpb.FileType_FILE_TYPE_PDF.String(),
-		artifactpb.FileType_FILE_TYPE_DOC.String(),
-		artifactpb.FileType_FILE_TYPE_DOCX.String(),
-		artifactpb.FileType_FILE_TYPE_PPT.String(),
-		artifactpb.FileType_FILE_TYPE_PPTX.String(),
-		artifactpb.FileType_FILE_TYPE_HTML.String(),
-		artifactpb.FileType_FILE_TYPE_XLSX.String(),
-		artifactpb.FileType_FILE_TYPE_XLS.String(),
-		artifactpb.FileType_FILE_TYPE_CSV.String():
-
-		// Get converted file
-		convertedFile, err := w.service.Repository().GetConvertedFileByFileUID(ctx, param.FileUID)
-		if err != nil {
-			return nil, temporal.NewApplicationErrorWithCause(
-				fmt.Sprintf("Failed to get converted file: %s", errorsx.MessageOrErr(err)),
-				generateSummaryFromPipelineActivityError,
-				err,
-			)
-		}
-		content, err = w.service.MinIO().GetFile(authCtx, config.Config.Minio.BucketName, convertedFile.Destination)
-		if err != nil {
-			return nil, temporal.NewApplicationErrorWithCause(
-				fmt.Sprintf("Failed to retrieve converted file from storage: %s", errorsx.MessageOrErr(err)),
-				generateSummaryFromPipelineActivityError,
-				err,
-			)
-		}
-
-	default:
-		// Get original file
-		content, err = w.service.MinIO().GetFile(authCtx, param.Bucket, param.Destination)
-		if err != nil {
-			return nil, temporal.NewApplicationErrorWithCause(
-				fmt.Sprintf("Failed to retrieve file from storage: %s", errorsx.MessageOrErr(err)),
-				generateSummaryFromPipelineActivityError,
-				err,
-			)
-		}
+	// Fetch content from MinIO
+	content, err := w.service.MinIO().GetFile(authCtx, param.Bucket, param.Destination)
+	if err != nil {
+		return nil, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to retrieve file from storage: %s", errorsx.MessageOrErr(err)),
+			generateSummaryFromPipelineActivityError,
+			err,
+		)
 	}
 
-	w.log.Info("GenerateSummaryFromPipelineActivity: Content retrieved from MinIO",
-		zap.Int("contentSize", len(content)))
+	// Sanitize content to ensure valid UTF-8
+	// This prevents gRPC marshaling errors when content contains invalid UTF-8 sequences
+	// (common with certain PDF conversions or binary data)
+	contentStr := sanitizeUTF8(content)
 
-	// Call the summarization pipeline - THIS IS THE KEY EXTERNAL CALL
-	// Note: Use authCtx to pass authentication credentials to the pipeline service
-	summary, err := w.service.GenerateSummary(authCtx, string(content), param.FileType)
+	// Log content stats for debugging
+	w.log.Info("GenerateSummaryFromPipelineActivity: Content prepared",
+		zap.String("fileUID", param.FileUID.String()),
+		zap.Int("originalBytes", len(content)),
+		zap.Int("sanitizedBytes", len(contentStr)),
+		zap.Int("sanitizedRunes", len([]rune(contentStr))),
+		zap.Bool("isEmpty", len(strings.TrimSpace(contentStr)) == 0))
+
+	// Verify content is not empty after sanitization
+	if len(strings.TrimSpace(contentStr)) == 0 {
+		return nil, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Content is empty after UTF-8 sanitization for file %s", param.FileUID.String()),
+			generateSummaryFromPipelineActivityError,
+			fmt.Errorf("empty content after sanitization"),
+		)
+	}
+
+	// Call the summarization pipeline
+	summary, err := w.service.GenerateSummary(authCtx, contentStr, param.FileType)
 	if err != nil {
 		return nil, temporal.NewApplicationErrorWithCause(
 			fmt.Sprintf("Summary generation failed: %s", errorsx.MessageOrErr(err)),
@@ -925,7 +849,6 @@ func (w *Worker) GenerateSummaryFromPipelineActivity(ctx context.Context, param 
 }
 
 // SaveSummaryActivity saves summary to database
-// This is a single DB write operation - idempotent
 func (w *Worker) SaveSummaryActivity(ctx context.Context, param *SaveSummaryActivityParam) error {
 	w.log.Info("SaveSummaryActivity: Saving summary to database",
 		zap.String("fileUID", param.FileUID.String()))
@@ -973,12 +896,11 @@ func (w *Worker) SaveSummaryActivity(ctx context.Context, param *SaveSummaryActi
 	return nil
 }
 
-// Activity error type constants help Temporal clients identify the origin of errors
-// and can be used to define retry policies or handle errors appropriately.
+// ===== ERROR CONSTANTS =====
+
 const (
 	getFileMetadataActivityError                = "GetFileMetadataActivity"
 	getFileContentActivityError                 = "GetFileContentActivity"
-	convertToMarkdownActivityError              = "ConvertToMarkdownActivity"
 	cleanupOldConvertedFileActivityError        = "CleanupOldConvertedFileActivity"
 	createConvertedFileRecordActivityError      = "CreateConvertedFileRecordActivity"
 	uploadConvertedFileToMinIOActivityError     = "UploadConvertedFileToMinIOActivity"
@@ -990,6 +912,8 @@ const (
 	chunkContentActivityError                   = "ChunkContentActivity"
 	saveChunksToDBActivityError                 = "SaveChunksToDBActivity"
 	updateChunkingMetadataActivityError         = "UpdateChunkingMetadataActivity"
+	embedChunksActivityError                    = "EmbedChunksActivity"
+	saveEmbeddingsToMilvusActivityError         = "SaveEmbeddingsToMilvusActivity"
 	generateSummaryFromPipelineActivityError    = "GenerateSummaryFromPipelineActivity"
 	saveSummaryActivityError                    = "SaveSummaryActivity"
 )

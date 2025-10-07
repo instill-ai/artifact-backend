@@ -72,18 +72,30 @@ func PipelineReleaseFromName(name string) (PipelineRelease, error) {
 }
 
 var (
-	// ConvertDocToMDPipeline is the default conversion pipeline for documents.
+	// ConvertFileTypePipeline converts various file formats to Gemini-supported types
+	// before AI content understanding. It handles format transformations like:
+	// - PPTX/PPT → PDF (for document conversion)
+	// - HEIC → JPEG (for image processing)
+	// - AVIF → PNG (for web image formats)
+	// - Additional conversions for audio, video, and other formats
+	ConvertFileTypePipeline = PipelineRelease{
+		Namespace: DefaultNamespaceID,
+		ID:        "convert-file-type",
+		Version:   "v1.0.0",
+	}
+
+	// ConvertDocToMarkdownPipeline is the default conversion pipeline for documents.
 	// Note: this pipeline is for the new indexing pipeline having
 	// convert_result or convert_result2
-	ConvertDocToMDPipeline = PipelineRelease{
+	ConvertDocToMarkdownPipeline = PipelineRelease{
 		Namespace: DefaultNamespaceID,
 		ID:        "indexing-advanced-convert-doc",
 		Version:   "v1.4.0",
 	}
 
-	// ConvertDocToMDStandardPipeline is the default conversion pipeline for
+	// ConvertDocToMarkdownStandardPipeline is the default conversion pipeline for
 	// non-document files (e.g. CSV).
-	ConvertDocToMDStandardPipeline = PipelineRelease{
+	ConvertDocToMarkdownStandardPipeline = PipelineRelease{
 		Namespace: DefaultNamespaceID,
 		ID:        "indexing-convert-pdf",
 		Version:   "v1.1.1",
@@ -96,8 +108,8 @@ var (
 		Version:   "v1.0.0",
 	}
 
-	// ChunkMDPipeline is the default pipeline for chunking Markdown.
-	ChunkMDPipeline = PipelineRelease{
+	// ChunkMarkdownPipeline is the default pipeline for chunking Markdown.
+	ChunkMarkdownPipeline = PipelineRelease{
 		Namespace: DefaultNamespaceID,
 		ID:        "indexing-split-markdown",
 		Version:   "v2.0.0",
@@ -126,18 +138,21 @@ var (
 
 	// PresetPipelinesList contains the preset pipelines used in catalogs.
 	PresetPipelinesList = PipelineReleases{
-		ConvertDocToMDPipeline,
-		ConvertDocToMDStandardPipeline,
+		ConvertFileTypePipeline,
+		ConvertDocToMarkdownPipeline,
+		ConvertDocToMarkdownStandardPipeline,
 		GenerateSummaryPipeline,
-		ChunkMDPipeline,
+		ChunkMarkdownPipeline,
 		ChunkTextPipeline,
 		EmbedTextPipeline,
 		QAPipeline,
 	}
 
 	// DefaultConversionPipelines is the chain of pipelines used for converting
-	// documents to Markdown.
-	DefaultConversionPipelines = PipelineReleases{ConvertDocToMDPipeline}
+	// documents to Markdown. Note: ConvertFileTypePipeline is NOT included here
+	// because it's only used for Gemini AI preprocessing (hardcoded in the workflow),
+	// not for general markdown conversion.
+	DefaultConversionPipelines = PipelineReleases{ConvertDocToMarkdownPipeline}
 )
 
 // PipelineReleaseUpserter is used to upsert predefined pipeline releases into

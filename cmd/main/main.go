@@ -147,9 +147,7 @@ func main() {
 	// Create worker instance first (without service dependencies for now)
 	// We'll set up the service layer after creating workflow wrappers
 	w, err := worker.New(
-		worker.Config{
-			Service: nil, // Will be set after service is created
-		},
+		nil, // Service will be set after it's created
 		logger,
 	)
 	if err != nil {

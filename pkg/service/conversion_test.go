@@ -18,7 +18,7 @@ func TestConvertResultParser(t *testing.T) {
 	tests := []struct {
 		name     string
 		response *structpb.Struct
-		expected *MDConversionResult
+		expected *MarkdownConversionResult
 		wantErr  string
 	}{
 		{
@@ -28,7 +28,7 @@ func TestConvertResultParser(t *testing.T) {
 					"convert_result": structpb.NewStringValue("Hello world"),
 				},
 			},
-			expected: &MDConversionResult{
+			expected: &MarkdownConversionResult{
 				Markdown: "Hello world",
 			},
 		},
@@ -44,7 +44,7 @@ func TestConvertResultParser(t *testing.T) {
 					}),
 				},
 			},
-			expected: &MDConversionResult{
+			expected: &MarkdownConversionResult{
 				Markdown: "Page 1\nPage 2",
 				Length:   []uint32{2},
 				PositionData: &repository.PositionData{
@@ -64,7 +64,7 @@ func TestConvertResultParser(t *testing.T) {
 					}),
 				},
 			},
-			expected: &MDConversionResult{
+			expected: &MarkdownConversionResult{
 				Markdown: "Page 1\nPage 2",
 				Length:   []uint32{2},
 				PositionData: &repository.PositionData{

@@ -260,6 +260,33 @@ func (ph *PublicHandler) GetSourceFile(ctx context.Context, req *artifactpb.GetS
 		return nil, fmt.Errorf("failed to parse file uid: %v. err: %w", err, errorsx.ErrInvalidArgument)
 	}
 
+	// Check file processing status before accessing converted file
+	files, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{fileUID})
+	if err != nil || len(files) == 0 {
+		logger.Error("failed to fetch file", zap.Error(err))
+		return nil, fmt.Errorf("file not found. err: %w", errorsx.ErrNotFound)
+	}
+	file := files[0]
+
+	// Return proper error if file is still being processed
+	if file.ProcessStatus != artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED.String() {
+		status := artifactpb.FileProcessStatus(artifactpb.FileProcessStatus_value[file.ProcessStatus])
+		logger.Info("file processing not complete",
+			zap.String("fileUID", fileUID.String()),
+			zap.String("currentStatus", status.String()))
+
+		errMsg := fmt.Sprintf("File is still being processed (current status: %s). Please wait for processing to complete.", status.String())
+		if status == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_FAILED {
+			// Include failure reason if available
+			if file.ExtraMetaDataUnmarshal != nil && file.ExtraMetaDataUnmarshal.FailReason != "" {
+				errMsg = fmt.Sprintf("File processing failed: %s", file.ExtraMetaDataUnmarshal.FailReason)
+			} else {
+				errMsg = "File processing failed. Please reprocess the file."
+			}
+		}
+		return nil, fmt.Errorf("%s", errMsg)
+	}
+
 	source, err := ph.service.Repository().GetTruthSourceByFileUID(ctx, fileUID)
 	if err != nil {
 		logger.Error("failed to get truth source by file uid", zap.Error(err))
@@ -275,14 +302,9 @@ func (ph *PublicHandler) GetSourceFile(ctx context.Context, req *artifactpb.GetS
 		return nil, fmt.Errorf("%w: no permission over catalog", errorsx.ErrUnauthorized)
 	}
 
-	// Decide bucket based on file type: TEXT/MD -> blob; others -> artifact
-	kbfs, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{fileUID})
-	if err != nil || len(kbfs) == 0 {
-		logger.Error("failed to fetch file for bucket selection", zap.Error(err))
-		return nil, fmt.Errorf("failed to fetch file for bucket selection: %w", errorsx.ErrNotFound)
-	}
+	// Decide bucket based on file type: TEXT/MARKDOWN -> blob; others -> artifact
 	bucketName := config.Config.Minio.BucketName
-	if kbfs[0].Type == artifactpb.FileType_FILE_TYPE_TEXT.String() || kbfs[0].Type == artifactpb.FileType_FILE_TYPE_MARKDOWN.String() {
+	if file.Type == artifactpb.FileType_FILE_TYPE_TEXT.String() || file.Type == artifactpb.FileType_FILE_TYPE_MARKDOWN.String() {
 		bucketName = minio.BlobBucketName
 	}
 	content, err := ph.service.MinIO().GetFile(ctx, bucketName, source.Dest)

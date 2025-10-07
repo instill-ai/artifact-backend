@@ -40,6 +40,7 @@ type AppConfig struct {
 	Minio           miniox.Config         `koanf:"minio"`
 	Milvus          MilvusConfig          `koanf:"milvus"`
 	Blob            BlobConfig            `koanf:"blob"`
+	AI              AIConfig              `koanf:"ai"`
 }
 
 // OpenFGAConfig is the openfga configuration.
@@ -135,6 +136,19 @@ type MilvusConfig struct {
 // BlobConfig is the blob configuration.
 type BlobConfig struct {
 	HostPort string `koanf:"hostport"`
+}
+
+// AIConfig defines the configuration for AI providers
+type AIConfig struct {
+	Gemini GeminiConfig `koanf:"gemini"`
+	// Future AI providers:
+	// OpenAI      OpenAIConfig      `koanf:"openai"`
+	// Anthropic   AnthropicConfig   `koanf:"anthropic"`
+}
+
+// GeminiConfig defines the configuration for Gemini AI
+type GeminiConfig struct {
+	APIKey string `koanf:"apikey"`
 }
 
 // Init - Assign global config to decoded config struct

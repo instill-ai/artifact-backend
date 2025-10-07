@@ -91,3 +91,6 @@ milvus:
   port: 19530
 blob:
   hostport: http://localhost:8080
+ai:
+  gemini:
+    apikey:

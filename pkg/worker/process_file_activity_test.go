@@ -221,13 +221,14 @@ func TestChunkContentActivity_Success(t *testing.T) {
 	}
 
 	// Test with small content passed directly (like summaries)
-	markdownContent := []byte("# Title\n\nThis is a test content for chunking.")
+	markdownContent := "# Title\n\nThis is a test content for chunking."
 
 	param := &ChunkContentActivityParam{
-		Content:      markdownContent,
-		IsMarkdown:   true,
-		ChunkSize:    500,
-		ChunkOverlap: 50,
+		FileUID:          uuid.Must(uuid.NewV4()),
+		KnowledgeBaseUID: uuid.Must(uuid.NewV4()),
+		Content:          markdownContent,
+		Pipelines:        []service.PipelineRelease{},
+		Metadata:         nil,
 	}
 
 	result, err := w.ChunkContentActivity(ctx, param)
@@ -243,7 +244,6 @@ func TestSaveChunksToDBActivity_Success(t *testing.T) {
 	ctx := context.Background()
 	kbUID := uuid.Must(uuid.NewV4())
 	fileUID := uuid.Must(uuid.NewV4())
-	sourceUID := uuid.Must(uuid.NewV4())
 
 	chunkUID := uuid.Must(uuid.NewV4())
 
@@ -253,6 +253,10 @@ func TestSaveChunksToDBActivity_Success(t *testing.T) {
 
 	// Mock Repository
 	mockRepo := mock.NewRepositoryIMock(mc)
+	mockRepo.GetConvertedFileByFileUIDMock.Return(&repository.ConvertedFile{
+		UID: chunkUID,
+	}, nil)
+	mockRepo.ConvertedFileTableNameMock.Return("converted_files")
 	mockRepo.DeleteAndCreateChunksMock.Set(func(
 		ctx context.Context,
 		fUID uuid.UUID,
@@ -282,9 +286,7 @@ func TestSaveChunksToDBActivity_Success(t *testing.T) {
 	param := &SaveChunksToDBActivityParam{
 		KnowledgeBaseUID: kbUID,
 		FileUID:          fileUID,
-		SourceUID:        sourceUID,
-		SourceTable:      "knowledge_base_files",
-		ContentChunks: []service.Chunk{
+		Chunks: []service.Chunk{
 			{
 				Start:  0,
 				End:    100,
@@ -292,11 +294,9 @@ func TestSaveChunksToDBActivity_Success(t *testing.T) {
 				Tokens: 50,
 			},
 		},
-		FileType: "FILE_TYPE_PDF",
 	}
 
 	result, err := w.SaveChunksToDBActivity(ctx, param)
 	c.Assert(err, qt.IsNil)
 	c.Assert(result, qt.IsNotNil)
-	c.Assert(result.ChunksToSave, qt.IsNotNil)
 }

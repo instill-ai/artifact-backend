@@ -1,10 +1,14 @@
 package worker
 
 import (
+	"context"
 	"time"
 
 	"go.uber.org/zap"
 
+	"github.com/instill-ai/artifact-backend/config"
+	"github.com/instill-ai/artifact-backend/internal/ai"
+	"github.com/instill-ai/artifact-backend/internal/ai/gemini"
 	"github.com/instill-ai/artifact-backend/pkg/service"
 )
 
@@ -39,23 +43,46 @@ const (
 	RetryMaximumAttempts         = 3                 // 3 attempts = ~7s max
 )
 
-// Config defines the configuration for the worker
-type Config struct {
-	Service service.Service
-}
-
 // Worker implements the Temporal worker with all workflows and activities
 type Worker struct {
-	service service.Service
-	log     *zap.Logger
+	service    service.Service
+	aiProvider ai.Provider
+	log        *zap.Logger
 }
 
 // New creates a new worker instance
-func New(config Config, log *zap.Logger) (*Worker, error) {
+func New(svc service.Service, log *zap.Logger) (*Worker, error) {
 	w := &Worker{
-		service: config.Service,
+		service: svc,
 		log:     log,
 	}
+
+	// Initialize AI provider for unstructured data content understanding (Gemini, OpenAI, etc.)
+	// If not configured or initialization fails, worker will fall back to pipeline conversion
+	var provider ai.Provider
+	cfg := config.Config // Access global config
+	if cfg.AI.Gemini.APIKey != "" {
+		geminiProvider, err := gemini.NewProvider(context.Background(), cfg.AI.Gemini.APIKey)
+		if err != nil {
+			log.Warn("Failed to initialize AI provider for content understanding, will use pipeline fallback",
+				zap.Error(err))
+		} else {
+			provider = geminiProvider
+			log.Info("AI provider for content understanding initialized successfully",
+				zap.String("provider", provider.Name()))
+		}
+	}
+
+	// Future: Try OpenAI if Gemini not configured
+	// if provider == nil && cfg.AI.OpenAI.APIKey != "" {
+	//     openaiProvider, err := openai.NewProvider(context.Background(), cfg.AI.OpenAI.APIKey)
+	//     if err == nil {
+	//         provider = openaiProvider
+	//     }
+	// }
+
+	w.aiProvider = provider
+
 	return w, nil
 }
 

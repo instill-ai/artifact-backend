@@ -14,6 +14,10 @@ import (
 	errorsx "github.com/instill-ai/x/errors"
 )
 
+// This file contains status tracking activities used by ProcessFileWorkflow:
+// - GetFileStatusActivity - Retrieves current file processing status
+// - UpdateFileStatusActivity - Updates file processing status and error messages
+
 // UpdateFileStatusActivityParam defines the parameters for the UpdateFileStatusActivity
 type UpdateFileStatusActivityParam struct {
 	FileUID uuid.UUID
@@ -27,16 +31,20 @@ func (w *Worker) GetFileStatusActivity(ctx context.Context, fileUID uuid.UUID) (
 
 	files, err := w.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{fileUID})
 	if err != nil {
+		err = errorsx.AddMessage(err, "Unable to retrieve file status. Please try again.")
 		return artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to get file: %s", errorsx.MessageOrErr(err)),
+			errorsx.MessageOrErr(err),
 			getFileStatusActivityError,
 			err,
 		)
 	}
 	if len(files) == 0 {
-		err := fmt.Errorf("file not found: %s", fileUID.String())
+		err := errorsx.AddMessage(
+			errorsx.ErrNotFound,
+			"File not found. It may have been deleted.",
+		)
 		return artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, temporal.NewApplicationErrorWithCause(
-			"File not found",
+			errorsx.MessageOrErr(err),
 			getFileStatusActivityError,
 			err,
 		)
@@ -45,9 +53,12 @@ func (w *Worker) GetFileStatusActivity(ctx context.Context, fileUID uuid.UUID) (
 
 	statusInt, ok := artifactpb.FileProcessStatus_value[file.ProcessStatus]
 	if !ok {
-		err := fmt.Errorf("invalid process status: %v", file.ProcessStatus)
+		err := errorsx.AddMessage(
+			fmt.Errorf("invalid process status: %v", file.ProcessStatus),
+			"File status is invalid. Please contact support.",
+		)
 		return artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, temporal.NewApplicationErrorWithCause(
-			"Invalid file status",
+			errorsx.MessageOrErr(err),
 			getFileStatusActivityError,
 			err,
 		)
@@ -68,8 +79,9 @@ func (w *Worker) UpdateFileStatusActivity(ctx context.Context, param *UpdateFile
 	files, err := w.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{param.FileUID})
 	if err != nil {
 		w.log.Error("Failed to get file for status update", zap.Error(err))
+		err = errorsx.AddMessage(err, "Unable to update file status. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to get file: %s", errorsx.MessageOrErr(err)),
+			errorsx.MessageOrErr(err),
 			updateFileStatusActivityError,
 			err,
 		)

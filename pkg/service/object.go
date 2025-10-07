@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"net/url"
 	"strconv"
 	"strings"
@@ -108,7 +109,7 @@ func (s *service) GetUploadURL(
 		return nil, status.Errorf(codes.Internal, "failed to make presigned url for upload: %v", err)
 	}
 
-	uploadURL, err := encodeBlobURL(presignedURL)
+	uploadURL, err := EncodeBlobURL(presignedURL)
 	if err != nil {
 		logger.Error("failed to encode blob url", zap.Error(err))
 		return nil, status.Errorf(codes.Internal, "failed to encode blob url: %v", err)
@@ -195,7 +196,7 @@ func (s *service) GetDownloadURL(
 		return nil, status.Errorf(codes.Internal, "failed to make presigned url for download: %v", err)
 	}
 
-	downloadURL, err := encodeBlobURL(presignedURL)
+	downloadURL, err := EncodeBlobURL(presignedURL)
 	if err != nil {
 		logger.Error("failed to encode blob url", zap.Error(err))
 		return nil, status.Errorf(codes.Internal, "failed to encode blob url: %v", err)
@@ -216,7 +217,7 @@ func (s *service) GetDownloadURL(
 	}, nil
 }
 
-// encodeBlobURL encodes the presigned URL to a blob URL. The presigned URL
+// EncodeBlobURL encodes the presigned URL to a blob URL. The presigned URL
 // provided by MinIO is a self-contained URL that can be used to upload or
 // download the object. The structure follows the AWS S3 presigned URL format,
 // which consists of query parameters including signature.
@@ -235,7 +236,7 @@ func (s *service) GetDownloadURL(
 //  4. Simplifies proxy implementation in the API gateway - the gateway can
 //     directly decode the base64 string to the presigned URL and forward the
 //     request to MinIO.
-func encodeBlobURL(presignedURL *url.URL) (string, error) {
+func EncodeBlobURL(presignedURL *url.URL) (string, error) {
 	presignedURLBase64 := base64.URLEncoding.EncodeToString([]byte(presignedURL.String()))
 
 	path, err := url.JoinPath(blobURLPath, presignedURLBase64)
@@ -252,6 +253,44 @@ func encodeBlobURL(presignedURL *url.URL) (string, error) {
 		Path:   path,
 	}
 	return u.String(), nil
+}
+
+// DecodeBlobURL decodes a blob URL back to the original presigned URL.
+// This is the inverse of encodeBlobURL and extracts the base64-encoded
+// presigned URL from the blob URL format:
+// schema://host:port/v1alpha/blob-urls/base64_encoded_presigned_url
+func DecodeBlobURL(blobURL string) (string, error) {
+	// Check if it's a blob URL
+	if !strings.Contains(blobURL, "/v1alpha/blob-urls/") {
+		return "", fmt.Errorf("not a valid blob URL format")
+	}
+
+	// Parse the blob URL and extract the base64-encoded presigned URL
+	urlParts := strings.Split(blobURL, "/")
+	if len(urlParts) < 4 {
+		return "", fmt.Errorf("invalid blob URL format")
+	}
+
+	// Find the "blob-urls" segment and get the next segment
+	for i, part := range urlParts {
+		if part == "blob-urls" && i+1 < len(urlParts) {
+			base64EncodedURL := urlParts[i+1]
+
+			// Decode the base64-encoded presigned URL
+			decodedURL, err := base64.URLEncoding.DecodeString(base64EncodedURL)
+			if err != nil {
+				// Try standard encoding if URL encoding fails
+				decodedURL, err = base64.StdEncoding.DecodeString(base64EncodedURL)
+				if err != nil {
+					return "", fmt.Errorf("failed to decode presigned URL: %w", err)
+				}
+			}
+
+			return string(decodedURL), nil
+		}
+	}
+
+	return "", fmt.Errorf("could not find blob-urls segment in URL")
 }
 
 func getExpireAtTS(presignedURL *url.URL) (time.Time, error) {

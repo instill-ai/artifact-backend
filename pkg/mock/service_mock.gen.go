@@ -16,6 +16,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/resource"
 	mm_service "github.com/instill-ai/artifact-backend/pkg/service"
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	pipelinepb "github.com/instill-ai/protogen-go/pipeline/pipeline/v1beta"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -73,12 +74,12 @@ type ServiceMock struct {
 	beforeCleanupKnowledgeBaseWorkflowCounter uint64
 	CleanupKnowledgeBaseWorkflowMock          mServiceMockCleanupKnowledgeBaseWorkflow
 
-	funcConvertToMDPipe          func(ctx context.Context, m1 mm_service.MDConversionParams) (mp1 *mm_service.MDConversionResult, err error)
-	funcConvertToMDPipeOrigin    string
-	inspectFuncConvertToMDPipe   func(ctx context.Context, m1 mm_service.MDConversionParams)
-	afterConvertToMDPipeCounter  uint64
-	beforeConvertToMDPipeCounter uint64
-	ConvertToMDPipeMock          mServiceMockConvertToMDPipe
+	funcConvertToMarkdownPipe          func(ctx context.Context, m1 mm_service.MarkdownConversionParams) (mp1 *mm_service.MarkdownConversionResult, err error)
+	funcConvertToMarkdownPipeOrigin    string
+	inspectFuncConvertToMarkdownPipe   func(ctx context.Context, m1 mm_service.MarkdownConversionParams)
+	afterConvertToMarkdownPipeCounter  uint64
+	beforeConvertToMarkdownPipeCounter uint64
+	ConvertToMarkdownPipeMock          mServiceMockConvertToMarkdownPipe
 
 	funcCreateRepositoryTag          func(ctx context.Context, cp1 *artifactpb.CreateRepositoryTagRequest) (cp2 *artifactpb.CreateRepositoryTagResponse, err error)
 	funcCreateRepositoryTagOrigin    string
@@ -234,6 +235,13 @@ type ServiceMock struct {
 	beforeMinIOCounter uint64
 	MinIOMock          mServiceMockMinIO
 
+	funcPipelinePublicClient          func() (p1 pipelinepb.PipelinePublicServiceClient)
+	funcPipelinePublicClientOrigin    string
+	inspectFuncPipelinePublicClient   func()
+	afterPipelinePublicClientCounter  uint64
+	beforePipelinePublicClientCounter uint64
+	PipelinePublicClientMock          mServiceMockPipelinePublicClient
+
 	funcProcessFileWorkflow          func() (p1 mm_service.ProcessFileWorkflow)
 	funcProcessFileWorkflowOrigin    string
 	inspectFuncProcessFileWorkflow   func()
@@ -310,8 +318,8 @@ func NewServiceMock(t minimock.Tester) *ServiceMock {
 
 	m.CleanupKnowledgeBaseWorkflowMock = mServiceMockCleanupKnowledgeBaseWorkflow{mock: m}
 
-	m.ConvertToMDPipeMock = mServiceMockConvertToMDPipe{mock: m}
-	m.ConvertToMDPipeMock.callArgs = []*ServiceMockConvertToMDPipeParams{}
+	m.ConvertToMarkdownPipeMock = mServiceMockConvertToMarkdownPipe{mock: m}
+	m.ConvertToMarkdownPipeMock.callArgs = []*ServiceMockConvertToMarkdownPipeParams{}
 
 	m.CreateRepositoryTagMock = mServiceMockCreateRepositoryTag{mock: m}
 	m.CreateRepositoryTagMock.callArgs = []*ServiceMockCreateRepositoryTagParams{}
@@ -374,6 +382,8 @@ func NewServiceMock(t minimock.Tester) *ServiceMock {
 	m.ListRepositoryTagsMock.callArgs = []*ServiceMockListRepositoryTagsParams{}
 
 	m.MinIOMock = mServiceMockMinIO{mock: m}
+
+	m.PipelinePublicClientMock = mServiceMockPipelinePublicClient{mock: m}
 
 	m.ProcessFileWorkflowMock = mServiceMockProcessFileWorkflow{mock: m}
 
@@ -2389,50 +2399,50 @@ func (m *ServiceMock) MinimockCleanupKnowledgeBaseWorkflowInspect() {
 	}
 }
 
-type mServiceMockConvertToMDPipe struct {
+type mServiceMockConvertToMarkdownPipe struct {
 	optional           bool
 	mock               *ServiceMock
-	defaultExpectation *ServiceMockConvertToMDPipeExpectation
-	expectations       []*ServiceMockConvertToMDPipeExpectation
+	defaultExpectation *ServiceMockConvertToMarkdownPipeExpectation
+	expectations       []*ServiceMockConvertToMarkdownPipeExpectation
 
-	callArgs []*ServiceMockConvertToMDPipeParams
+	callArgs []*ServiceMockConvertToMarkdownPipeParams
 	mutex    sync.RWMutex
 
 	expectedInvocations       uint64
 	expectedInvocationsOrigin string
 }
 
-// ServiceMockConvertToMDPipeExpectation specifies expectation struct of the Service.ConvertToMDPipe
-type ServiceMockConvertToMDPipeExpectation struct {
+// ServiceMockConvertToMarkdownPipeExpectation specifies expectation struct of the Service.ConvertToMarkdownPipe
+type ServiceMockConvertToMarkdownPipeExpectation struct {
 	mock               *ServiceMock
-	params             *ServiceMockConvertToMDPipeParams
-	paramPtrs          *ServiceMockConvertToMDPipeParamPtrs
-	expectationOrigins ServiceMockConvertToMDPipeExpectationOrigins
-	results            *ServiceMockConvertToMDPipeResults
+	params             *ServiceMockConvertToMarkdownPipeParams
+	paramPtrs          *ServiceMockConvertToMarkdownPipeParamPtrs
+	expectationOrigins ServiceMockConvertToMarkdownPipeExpectationOrigins
+	results            *ServiceMockConvertToMarkdownPipeResults
 	returnOrigin       string
 	Counter            uint64
 }
 
-// ServiceMockConvertToMDPipeParams contains parameters of the Service.ConvertToMDPipe
-type ServiceMockConvertToMDPipeParams struct {
+// ServiceMockConvertToMarkdownPipeParams contains parameters of the Service.ConvertToMarkdownPipe
+type ServiceMockConvertToMarkdownPipeParams struct {
 	ctx context.Context
-	m1  mm_service.MDConversionParams
+	m1  mm_service.MarkdownConversionParams
 }
 
-// ServiceMockConvertToMDPipeParamPtrs contains pointers to parameters of the Service.ConvertToMDPipe
-type ServiceMockConvertToMDPipeParamPtrs struct {
+// ServiceMockConvertToMarkdownPipeParamPtrs contains pointers to parameters of the Service.ConvertToMarkdownPipe
+type ServiceMockConvertToMarkdownPipeParamPtrs struct {
 	ctx *context.Context
-	m1  *mm_service.MDConversionParams
+	m1  *mm_service.MarkdownConversionParams
 }
 
-// ServiceMockConvertToMDPipeResults contains results of the Service.ConvertToMDPipe
-type ServiceMockConvertToMDPipeResults struct {
-	mp1 *mm_service.MDConversionResult
+// ServiceMockConvertToMarkdownPipeResults contains results of the Service.ConvertToMarkdownPipe
+type ServiceMockConvertToMarkdownPipeResults struct {
+	mp1 *mm_service.MarkdownConversionResult
 	err error
 }
 
-// ServiceMockConvertToMDPipeOrigins contains origins of expectations of the Service.ConvertToMDPipe
-type ServiceMockConvertToMDPipeExpectationOrigins struct {
+// ServiceMockConvertToMarkdownPipeOrigins contains origins of expectations of the Service.ConvertToMarkdownPipe
+type ServiceMockConvertToMarkdownPipeExpectationOrigins struct {
 	origin    string
 	originCtx string
 	originM1  string
@@ -2443,292 +2453,292 @@ type ServiceMockConvertToMDPipeExpectationOrigins struct {
 // Optional() makes method check to work in '0 or more' mode.
 // It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
 // catch the problems when the expected method call is totally skipped during test run.
-func (mmConvertToMDPipe *mServiceMockConvertToMDPipe) Optional() *mServiceMockConvertToMDPipe {
-	mmConvertToMDPipe.optional = true
-	return mmConvertToMDPipe
+func (mmConvertToMarkdownPipe *mServiceMockConvertToMarkdownPipe) Optional() *mServiceMockConvertToMarkdownPipe {
+	mmConvertToMarkdownPipe.optional = true
+	return mmConvertToMarkdownPipe
 }
 
-// Expect sets up expected params for Service.ConvertToMDPipe
-func (mmConvertToMDPipe *mServiceMockConvertToMDPipe) Expect(ctx context.Context, m1 mm_service.MDConversionParams) *mServiceMockConvertToMDPipe {
-	if mmConvertToMDPipe.mock.funcConvertToMDPipe != nil {
-		mmConvertToMDPipe.mock.t.Fatalf("ServiceMock.ConvertToMDPipe mock is already set by Set")
+// Expect sets up expected params for Service.ConvertToMarkdownPipe
+func (mmConvertToMarkdownPipe *mServiceMockConvertToMarkdownPipe) Expect(ctx context.Context, m1 mm_service.MarkdownConversionParams) *mServiceMockConvertToMarkdownPipe {
+	if mmConvertToMarkdownPipe.mock.funcConvertToMarkdownPipe != nil {
+		mmConvertToMarkdownPipe.mock.t.Fatalf("ServiceMock.ConvertToMarkdownPipe mock is already set by Set")
 	}
 
-	if mmConvertToMDPipe.defaultExpectation == nil {
-		mmConvertToMDPipe.defaultExpectation = &ServiceMockConvertToMDPipeExpectation{}
+	if mmConvertToMarkdownPipe.defaultExpectation == nil {
+		mmConvertToMarkdownPipe.defaultExpectation = &ServiceMockConvertToMarkdownPipeExpectation{}
 	}
 
-	if mmConvertToMDPipe.defaultExpectation.paramPtrs != nil {
-		mmConvertToMDPipe.mock.t.Fatalf("ServiceMock.ConvertToMDPipe mock is already set by ExpectParams functions")
+	if mmConvertToMarkdownPipe.defaultExpectation.paramPtrs != nil {
+		mmConvertToMarkdownPipe.mock.t.Fatalf("ServiceMock.ConvertToMarkdownPipe mock is already set by ExpectParams functions")
 	}
 
-	mmConvertToMDPipe.defaultExpectation.params = &ServiceMockConvertToMDPipeParams{ctx, m1}
-	mmConvertToMDPipe.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
-	for _, e := range mmConvertToMDPipe.expectations {
-		if minimock.Equal(e.params, mmConvertToMDPipe.defaultExpectation.params) {
-			mmConvertToMDPipe.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmConvertToMDPipe.defaultExpectation.params)
+	mmConvertToMarkdownPipe.defaultExpectation.params = &ServiceMockConvertToMarkdownPipeParams{ctx, m1}
+	mmConvertToMarkdownPipe.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmConvertToMarkdownPipe.expectations {
+		if minimock.Equal(e.params, mmConvertToMarkdownPipe.defaultExpectation.params) {
+			mmConvertToMarkdownPipe.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmConvertToMarkdownPipe.defaultExpectation.params)
 		}
 	}
 
-	return mmConvertToMDPipe
+	return mmConvertToMarkdownPipe
 }
 
-// ExpectCtxParam1 sets up expected param ctx for Service.ConvertToMDPipe
-func (mmConvertToMDPipe *mServiceMockConvertToMDPipe) ExpectCtxParam1(ctx context.Context) *mServiceMockConvertToMDPipe {
-	if mmConvertToMDPipe.mock.funcConvertToMDPipe != nil {
-		mmConvertToMDPipe.mock.t.Fatalf("ServiceMock.ConvertToMDPipe mock is already set by Set")
+// ExpectCtxParam1 sets up expected param ctx for Service.ConvertToMarkdownPipe
+func (mmConvertToMarkdownPipe *mServiceMockConvertToMarkdownPipe) ExpectCtxParam1(ctx context.Context) *mServiceMockConvertToMarkdownPipe {
+	if mmConvertToMarkdownPipe.mock.funcConvertToMarkdownPipe != nil {
+		mmConvertToMarkdownPipe.mock.t.Fatalf("ServiceMock.ConvertToMarkdownPipe mock is already set by Set")
 	}
 
-	if mmConvertToMDPipe.defaultExpectation == nil {
-		mmConvertToMDPipe.defaultExpectation = &ServiceMockConvertToMDPipeExpectation{}
+	if mmConvertToMarkdownPipe.defaultExpectation == nil {
+		mmConvertToMarkdownPipe.defaultExpectation = &ServiceMockConvertToMarkdownPipeExpectation{}
 	}
 
-	if mmConvertToMDPipe.defaultExpectation.params != nil {
-		mmConvertToMDPipe.mock.t.Fatalf("ServiceMock.ConvertToMDPipe mock is already set by Expect")
+	if mmConvertToMarkdownPipe.defaultExpectation.params != nil {
+		mmConvertToMarkdownPipe.mock.t.Fatalf("ServiceMock.ConvertToMarkdownPipe mock is already set by Expect")
 	}
 
-	if mmConvertToMDPipe.defaultExpectation.paramPtrs == nil {
-		mmConvertToMDPipe.defaultExpectation.paramPtrs = &ServiceMockConvertToMDPipeParamPtrs{}
+	if mmConvertToMarkdownPipe.defaultExpectation.paramPtrs == nil {
+		mmConvertToMarkdownPipe.defaultExpectation.paramPtrs = &ServiceMockConvertToMarkdownPipeParamPtrs{}
 	}
-	mmConvertToMDPipe.defaultExpectation.paramPtrs.ctx = &ctx
-	mmConvertToMDPipe.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+	mmConvertToMarkdownPipe.defaultExpectation.paramPtrs.ctx = &ctx
+	mmConvertToMarkdownPipe.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
 
-	return mmConvertToMDPipe
+	return mmConvertToMarkdownPipe
 }
 
-// ExpectM1Param2 sets up expected param m1 for Service.ConvertToMDPipe
-func (mmConvertToMDPipe *mServiceMockConvertToMDPipe) ExpectM1Param2(m1 mm_service.MDConversionParams) *mServiceMockConvertToMDPipe {
-	if mmConvertToMDPipe.mock.funcConvertToMDPipe != nil {
-		mmConvertToMDPipe.mock.t.Fatalf("ServiceMock.ConvertToMDPipe mock is already set by Set")
+// ExpectM1Param2 sets up expected param m1 for Service.ConvertToMarkdownPipe
+func (mmConvertToMarkdownPipe *mServiceMockConvertToMarkdownPipe) ExpectM1Param2(m1 mm_service.MarkdownConversionParams) *mServiceMockConvertToMarkdownPipe {
+	if mmConvertToMarkdownPipe.mock.funcConvertToMarkdownPipe != nil {
+		mmConvertToMarkdownPipe.mock.t.Fatalf("ServiceMock.ConvertToMarkdownPipe mock is already set by Set")
 	}
 
-	if mmConvertToMDPipe.defaultExpectation == nil {
-		mmConvertToMDPipe.defaultExpectation = &ServiceMockConvertToMDPipeExpectation{}
+	if mmConvertToMarkdownPipe.defaultExpectation == nil {
+		mmConvertToMarkdownPipe.defaultExpectation = &ServiceMockConvertToMarkdownPipeExpectation{}
 	}
 
-	if mmConvertToMDPipe.defaultExpectation.params != nil {
-		mmConvertToMDPipe.mock.t.Fatalf("ServiceMock.ConvertToMDPipe mock is already set by Expect")
+	if mmConvertToMarkdownPipe.defaultExpectation.params != nil {
+		mmConvertToMarkdownPipe.mock.t.Fatalf("ServiceMock.ConvertToMarkdownPipe mock is already set by Expect")
 	}
 
-	if mmConvertToMDPipe.defaultExpectation.paramPtrs == nil {
-		mmConvertToMDPipe.defaultExpectation.paramPtrs = &ServiceMockConvertToMDPipeParamPtrs{}
+	if mmConvertToMarkdownPipe.defaultExpectation.paramPtrs == nil {
+		mmConvertToMarkdownPipe.defaultExpectation.paramPtrs = &ServiceMockConvertToMarkdownPipeParamPtrs{}
 	}
-	mmConvertToMDPipe.defaultExpectation.paramPtrs.m1 = &m1
-	mmConvertToMDPipe.defaultExpectation.expectationOrigins.originM1 = minimock.CallerInfo(1)
+	mmConvertToMarkdownPipe.defaultExpectation.paramPtrs.m1 = &m1
+	mmConvertToMarkdownPipe.defaultExpectation.expectationOrigins.originM1 = minimock.CallerInfo(1)
 
-	return mmConvertToMDPipe
+	return mmConvertToMarkdownPipe
 }
 
-// Inspect accepts an inspector function that has same arguments as the Service.ConvertToMDPipe
-func (mmConvertToMDPipe *mServiceMockConvertToMDPipe) Inspect(f func(ctx context.Context, m1 mm_service.MDConversionParams)) *mServiceMockConvertToMDPipe {
-	if mmConvertToMDPipe.mock.inspectFuncConvertToMDPipe != nil {
-		mmConvertToMDPipe.mock.t.Fatalf("Inspect function is already set for ServiceMock.ConvertToMDPipe")
+// Inspect accepts an inspector function that has same arguments as the Service.ConvertToMarkdownPipe
+func (mmConvertToMarkdownPipe *mServiceMockConvertToMarkdownPipe) Inspect(f func(ctx context.Context, m1 mm_service.MarkdownConversionParams)) *mServiceMockConvertToMarkdownPipe {
+	if mmConvertToMarkdownPipe.mock.inspectFuncConvertToMarkdownPipe != nil {
+		mmConvertToMarkdownPipe.mock.t.Fatalf("Inspect function is already set for ServiceMock.ConvertToMarkdownPipe")
 	}
 
-	mmConvertToMDPipe.mock.inspectFuncConvertToMDPipe = f
+	mmConvertToMarkdownPipe.mock.inspectFuncConvertToMarkdownPipe = f
 
-	return mmConvertToMDPipe
+	return mmConvertToMarkdownPipe
 }
 
-// Return sets up results that will be returned by Service.ConvertToMDPipe
-func (mmConvertToMDPipe *mServiceMockConvertToMDPipe) Return(mp1 *mm_service.MDConversionResult, err error) *ServiceMock {
-	if mmConvertToMDPipe.mock.funcConvertToMDPipe != nil {
-		mmConvertToMDPipe.mock.t.Fatalf("ServiceMock.ConvertToMDPipe mock is already set by Set")
+// Return sets up results that will be returned by Service.ConvertToMarkdownPipe
+func (mmConvertToMarkdownPipe *mServiceMockConvertToMarkdownPipe) Return(mp1 *mm_service.MarkdownConversionResult, err error) *ServiceMock {
+	if mmConvertToMarkdownPipe.mock.funcConvertToMarkdownPipe != nil {
+		mmConvertToMarkdownPipe.mock.t.Fatalf("ServiceMock.ConvertToMarkdownPipe mock is already set by Set")
 	}
 
-	if mmConvertToMDPipe.defaultExpectation == nil {
-		mmConvertToMDPipe.defaultExpectation = &ServiceMockConvertToMDPipeExpectation{mock: mmConvertToMDPipe.mock}
+	if mmConvertToMarkdownPipe.defaultExpectation == nil {
+		mmConvertToMarkdownPipe.defaultExpectation = &ServiceMockConvertToMarkdownPipeExpectation{mock: mmConvertToMarkdownPipe.mock}
 	}
-	mmConvertToMDPipe.defaultExpectation.results = &ServiceMockConvertToMDPipeResults{mp1, err}
-	mmConvertToMDPipe.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
-	return mmConvertToMDPipe.mock
+	mmConvertToMarkdownPipe.defaultExpectation.results = &ServiceMockConvertToMarkdownPipeResults{mp1, err}
+	mmConvertToMarkdownPipe.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmConvertToMarkdownPipe.mock
 }
 
-// Set uses given function f to mock the Service.ConvertToMDPipe method
-func (mmConvertToMDPipe *mServiceMockConvertToMDPipe) Set(f func(ctx context.Context, m1 mm_service.MDConversionParams) (mp1 *mm_service.MDConversionResult, err error)) *ServiceMock {
-	if mmConvertToMDPipe.defaultExpectation != nil {
-		mmConvertToMDPipe.mock.t.Fatalf("Default expectation is already set for the Service.ConvertToMDPipe method")
+// Set uses given function f to mock the Service.ConvertToMarkdownPipe method
+func (mmConvertToMarkdownPipe *mServiceMockConvertToMarkdownPipe) Set(f func(ctx context.Context, m1 mm_service.MarkdownConversionParams) (mp1 *mm_service.MarkdownConversionResult, err error)) *ServiceMock {
+	if mmConvertToMarkdownPipe.defaultExpectation != nil {
+		mmConvertToMarkdownPipe.mock.t.Fatalf("Default expectation is already set for the Service.ConvertToMarkdownPipe method")
 	}
 
-	if len(mmConvertToMDPipe.expectations) > 0 {
-		mmConvertToMDPipe.mock.t.Fatalf("Some expectations are already set for the Service.ConvertToMDPipe method")
+	if len(mmConvertToMarkdownPipe.expectations) > 0 {
+		mmConvertToMarkdownPipe.mock.t.Fatalf("Some expectations are already set for the Service.ConvertToMarkdownPipe method")
 	}
 
-	mmConvertToMDPipe.mock.funcConvertToMDPipe = f
-	mmConvertToMDPipe.mock.funcConvertToMDPipeOrigin = minimock.CallerInfo(1)
-	return mmConvertToMDPipe.mock
+	mmConvertToMarkdownPipe.mock.funcConvertToMarkdownPipe = f
+	mmConvertToMarkdownPipe.mock.funcConvertToMarkdownPipeOrigin = minimock.CallerInfo(1)
+	return mmConvertToMarkdownPipe.mock
 }
 
-// When sets expectation for the Service.ConvertToMDPipe which will trigger the result defined by the following
+// When sets expectation for the Service.ConvertToMarkdownPipe which will trigger the result defined by the following
 // Then helper
-func (mmConvertToMDPipe *mServiceMockConvertToMDPipe) When(ctx context.Context, m1 mm_service.MDConversionParams) *ServiceMockConvertToMDPipeExpectation {
-	if mmConvertToMDPipe.mock.funcConvertToMDPipe != nil {
-		mmConvertToMDPipe.mock.t.Fatalf("ServiceMock.ConvertToMDPipe mock is already set by Set")
+func (mmConvertToMarkdownPipe *mServiceMockConvertToMarkdownPipe) When(ctx context.Context, m1 mm_service.MarkdownConversionParams) *ServiceMockConvertToMarkdownPipeExpectation {
+	if mmConvertToMarkdownPipe.mock.funcConvertToMarkdownPipe != nil {
+		mmConvertToMarkdownPipe.mock.t.Fatalf("ServiceMock.ConvertToMarkdownPipe mock is already set by Set")
 	}
 
-	expectation := &ServiceMockConvertToMDPipeExpectation{
-		mock:               mmConvertToMDPipe.mock,
-		params:             &ServiceMockConvertToMDPipeParams{ctx, m1},
-		expectationOrigins: ServiceMockConvertToMDPipeExpectationOrigins{origin: minimock.CallerInfo(1)},
+	expectation := &ServiceMockConvertToMarkdownPipeExpectation{
+		mock:               mmConvertToMarkdownPipe.mock,
+		params:             &ServiceMockConvertToMarkdownPipeParams{ctx, m1},
+		expectationOrigins: ServiceMockConvertToMarkdownPipeExpectationOrigins{origin: minimock.CallerInfo(1)},
 	}
-	mmConvertToMDPipe.expectations = append(mmConvertToMDPipe.expectations, expectation)
+	mmConvertToMarkdownPipe.expectations = append(mmConvertToMarkdownPipe.expectations, expectation)
 	return expectation
 }
 
-// Then sets up Service.ConvertToMDPipe return parameters for the expectation previously defined by the When method
-func (e *ServiceMockConvertToMDPipeExpectation) Then(mp1 *mm_service.MDConversionResult, err error) *ServiceMock {
-	e.results = &ServiceMockConvertToMDPipeResults{mp1, err}
+// Then sets up Service.ConvertToMarkdownPipe return parameters for the expectation previously defined by the When method
+func (e *ServiceMockConvertToMarkdownPipeExpectation) Then(mp1 *mm_service.MarkdownConversionResult, err error) *ServiceMock {
+	e.results = &ServiceMockConvertToMarkdownPipeResults{mp1, err}
 	return e.mock
 }
 
-// Times sets number of times Service.ConvertToMDPipe should be invoked
-func (mmConvertToMDPipe *mServiceMockConvertToMDPipe) Times(n uint64) *mServiceMockConvertToMDPipe {
+// Times sets number of times Service.ConvertToMarkdownPipe should be invoked
+func (mmConvertToMarkdownPipe *mServiceMockConvertToMarkdownPipe) Times(n uint64) *mServiceMockConvertToMarkdownPipe {
 	if n == 0 {
-		mmConvertToMDPipe.mock.t.Fatalf("Times of ServiceMock.ConvertToMDPipe mock can not be zero")
+		mmConvertToMarkdownPipe.mock.t.Fatalf("Times of ServiceMock.ConvertToMarkdownPipe mock can not be zero")
 	}
-	mm_atomic.StoreUint64(&mmConvertToMDPipe.expectedInvocations, n)
-	mmConvertToMDPipe.expectedInvocationsOrigin = minimock.CallerInfo(1)
-	return mmConvertToMDPipe
+	mm_atomic.StoreUint64(&mmConvertToMarkdownPipe.expectedInvocations, n)
+	mmConvertToMarkdownPipe.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmConvertToMarkdownPipe
 }
 
-func (mmConvertToMDPipe *mServiceMockConvertToMDPipe) invocationsDone() bool {
-	if len(mmConvertToMDPipe.expectations) == 0 && mmConvertToMDPipe.defaultExpectation == nil && mmConvertToMDPipe.mock.funcConvertToMDPipe == nil {
+func (mmConvertToMarkdownPipe *mServiceMockConvertToMarkdownPipe) invocationsDone() bool {
+	if len(mmConvertToMarkdownPipe.expectations) == 0 && mmConvertToMarkdownPipe.defaultExpectation == nil && mmConvertToMarkdownPipe.mock.funcConvertToMarkdownPipe == nil {
 		return true
 	}
 
-	totalInvocations := mm_atomic.LoadUint64(&mmConvertToMDPipe.mock.afterConvertToMDPipeCounter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmConvertToMDPipe.expectedInvocations)
+	totalInvocations := mm_atomic.LoadUint64(&mmConvertToMarkdownPipe.mock.afterConvertToMarkdownPipeCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmConvertToMarkdownPipe.expectedInvocations)
 
 	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
 }
 
-// ConvertToMDPipe implements mm_service.Service
-func (mmConvertToMDPipe *ServiceMock) ConvertToMDPipe(ctx context.Context, m1 mm_service.MDConversionParams) (mp1 *mm_service.MDConversionResult, err error) {
-	mm_atomic.AddUint64(&mmConvertToMDPipe.beforeConvertToMDPipeCounter, 1)
-	defer mm_atomic.AddUint64(&mmConvertToMDPipe.afterConvertToMDPipeCounter, 1)
+// ConvertToMarkdownPipe implements mm_service.Service
+func (mmConvertToMarkdownPipe *ServiceMock) ConvertToMarkdownPipe(ctx context.Context, m1 mm_service.MarkdownConversionParams) (mp1 *mm_service.MarkdownConversionResult, err error) {
+	mm_atomic.AddUint64(&mmConvertToMarkdownPipe.beforeConvertToMarkdownPipeCounter, 1)
+	defer mm_atomic.AddUint64(&mmConvertToMarkdownPipe.afterConvertToMarkdownPipeCounter, 1)
 
-	mmConvertToMDPipe.t.Helper()
+	mmConvertToMarkdownPipe.t.Helper()
 
-	if mmConvertToMDPipe.inspectFuncConvertToMDPipe != nil {
-		mmConvertToMDPipe.inspectFuncConvertToMDPipe(ctx, m1)
+	if mmConvertToMarkdownPipe.inspectFuncConvertToMarkdownPipe != nil {
+		mmConvertToMarkdownPipe.inspectFuncConvertToMarkdownPipe(ctx, m1)
 	}
 
-	mm_params := ServiceMockConvertToMDPipeParams{ctx, m1}
+	mm_params := ServiceMockConvertToMarkdownPipeParams{ctx, m1}
 
 	// Record call args
-	mmConvertToMDPipe.ConvertToMDPipeMock.mutex.Lock()
-	mmConvertToMDPipe.ConvertToMDPipeMock.callArgs = append(mmConvertToMDPipe.ConvertToMDPipeMock.callArgs, &mm_params)
-	mmConvertToMDPipe.ConvertToMDPipeMock.mutex.Unlock()
+	mmConvertToMarkdownPipe.ConvertToMarkdownPipeMock.mutex.Lock()
+	mmConvertToMarkdownPipe.ConvertToMarkdownPipeMock.callArgs = append(mmConvertToMarkdownPipe.ConvertToMarkdownPipeMock.callArgs, &mm_params)
+	mmConvertToMarkdownPipe.ConvertToMarkdownPipeMock.mutex.Unlock()
 
-	for _, e := range mmConvertToMDPipe.ConvertToMDPipeMock.expectations {
+	for _, e := range mmConvertToMarkdownPipe.ConvertToMarkdownPipeMock.expectations {
 		if minimock.Equal(*e.params, mm_params) {
 			mm_atomic.AddUint64(&e.Counter, 1)
 			return e.results.mp1, e.results.err
 		}
 	}
 
-	if mmConvertToMDPipe.ConvertToMDPipeMock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmConvertToMDPipe.ConvertToMDPipeMock.defaultExpectation.Counter, 1)
-		mm_want := mmConvertToMDPipe.ConvertToMDPipeMock.defaultExpectation.params
-		mm_want_ptrs := mmConvertToMDPipe.ConvertToMDPipeMock.defaultExpectation.paramPtrs
+	if mmConvertToMarkdownPipe.ConvertToMarkdownPipeMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmConvertToMarkdownPipe.ConvertToMarkdownPipeMock.defaultExpectation.Counter, 1)
+		mm_want := mmConvertToMarkdownPipe.ConvertToMarkdownPipeMock.defaultExpectation.params
+		mm_want_ptrs := mmConvertToMarkdownPipe.ConvertToMarkdownPipeMock.defaultExpectation.paramPtrs
 
-		mm_got := ServiceMockConvertToMDPipeParams{ctx, m1}
+		mm_got := ServiceMockConvertToMarkdownPipeParams{ctx, m1}
 
 		if mm_want_ptrs != nil {
 
 			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
-				mmConvertToMDPipe.t.Errorf("ServiceMock.ConvertToMDPipe got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmConvertToMDPipe.ConvertToMDPipeMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+				mmConvertToMarkdownPipe.t.Errorf("ServiceMock.ConvertToMarkdownPipe got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmConvertToMarkdownPipe.ConvertToMarkdownPipeMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
 			}
 
 			if mm_want_ptrs.m1 != nil && !minimock.Equal(*mm_want_ptrs.m1, mm_got.m1) {
-				mmConvertToMDPipe.t.Errorf("ServiceMock.ConvertToMDPipe got unexpected parameter m1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmConvertToMDPipe.ConvertToMDPipeMock.defaultExpectation.expectationOrigins.originM1, *mm_want_ptrs.m1, mm_got.m1, minimock.Diff(*mm_want_ptrs.m1, mm_got.m1))
+				mmConvertToMarkdownPipe.t.Errorf("ServiceMock.ConvertToMarkdownPipe got unexpected parameter m1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmConvertToMarkdownPipe.ConvertToMarkdownPipeMock.defaultExpectation.expectationOrigins.originM1, *mm_want_ptrs.m1, mm_got.m1, minimock.Diff(*mm_want_ptrs.m1, mm_got.m1))
 			}
 
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
-			mmConvertToMDPipe.t.Errorf("ServiceMock.ConvertToMDPipe got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-				mmConvertToMDPipe.ConvertToMDPipeMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+			mmConvertToMarkdownPipe.t.Errorf("ServiceMock.ConvertToMarkdownPipe got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmConvertToMarkdownPipe.ConvertToMarkdownPipeMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
 		}
 
-		mm_results := mmConvertToMDPipe.ConvertToMDPipeMock.defaultExpectation.results
+		mm_results := mmConvertToMarkdownPipe.ConvertToMarkdownPipeMock.defaultExpectation.results
 		if mm_results == nil {
-			mmConvertToMDPipe.t.Fatal("No results are set for the ServiceMock.ConvertToMDPipe")
+			mmConvertToMarkdownPipe.t.Fatal("No results are set for the ServiceMock.ConvertToMarkdownPipe")
 		}
 		return (*mm_results).mp1, (*mm_results).err
 	}
-	if mmConvertToMDPipe.funcConvertToMDPipe != nil {
-		return mmConvertToMDPipe.funcConvertToMDPipe(ctx, m1)
+	if mmConvertToMarkdownPipe.funcConvertToMarkdownPipe != nil {
+		return mmConvertToMarkdownPipe.funcConvertToMarkdownPipe(ctx, m1)
 	}
-	mmConvertToMDPipe.t.Fatalf("Unexpected call to ServiceMock.ConvertToMDPipe. %v %v", ctx, m1)
+	mmConvertToMarkdownPipe.t.Fatalf("Unexpected call to ServiceMock.ConvertToMarkdownPipe. %v %v", ctx, m1)
 	return
 }
 
-// ConvertToMDPipeAfterCounter returns a count of finished ServiceMock.ConvertToMDPipe invocations
-func (mmConvertToMDPipe *ServiceMock) ConvertToMDPipeAfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmConvertToMDPipe.afterConvertToMDPipeCounter)
+// ConvertToMarkdownPipeAfterCounter returns a count of finished ServiceMock.ConvertToMarkdownPipe invocations
+func (mmConvertToMarkdownPipe *ServiceMock) ConvertToMarkdownPipeAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmConvertToMarkdownPipe.afterConvertToMarkdownPipeCounter)
 }
 
-// ConvertToMDPipeBeforeCounter returns a count of ServiceMock.ConvertToMDPipe invocations
-func (mmConvertToMDPipe *ServiceMock) ConvertToMDPipeBeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmConvertToMDPipe.beforeConvertToMDPipeCounter)
+// ConvertToMarkdownPipeBeforeCounter returns a count of ServiceMock.ConvertToMarkdownPipe invocations
+func (mmConvertToMarkdownPipe *ServiceMock) ConvertToMarkdownPipeBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmConvertToMarkdownPipe.beforeConvertToMarkdownPipeCounter)
 }
 
-// Calls returns a list of arguments used in each call to ServiceMock.ConvertToMDPipe.
+// Calls returns a list of arguments used in each call to ServiceMock.ConvertToMarkdownPipe.
 // The list is in the same order as the calls were made (i.e. recent calls have a higher index)
-func (mmConvertToMDPipe *mServiceMockConvertToMDPipe) Calls() []*ServiceMockConvertToMDPipeParams {
-	mmConvertToMDPipe.mutex.RLock()
+func (mmConvertToMarkdownPipe *mServiceMockConvertToMarkdownPipe) Calls() []*ServiceMockConvertToMarkdownPipeParams {
+	mmConvertToMarkdownPipe.mutex.RLock()
 
-	argCopy := make([]*ServiceMockConvertToMDPipeParams, len(mmConvertToMDPipe.callArgs))
-	copy(argCopy, mmConvertToMDPipe.callArgs)
+	argCopy := make([]*ServiceMockConvertToMarkdownPipeParams, len(mmConvertToMarkdownPipe.callArgs))
+	copy(argCopy, mmConvertToMarkdownPipe.callArgs)
 
-	mmConvertToMDPipe.mutex.RUnlock()
+	mmConvertToMarkdownPipe.mutex.RUnlock()
 
 	return argCopy
 }
 
-// MinimockConvertToMDPipeDone returns true if the count of the ConvertToMDPipe invocations corresponds
+// MinimockConvertToMarkdownPipeDone returns true if the count of the ConvertToMarkdownPipe invocations corresponds
 // the number of defined expectations
-func (m *ServiceMock) MinimockConvertToMDPipeDone() bool {
-	if m.ConvertToMDPipeMock.optional {
+func (m *ServiceMock) MinimockConvertToMarkdownPipeDone() bool {
+	if m.ConvertToMarkdownPipeMock.optional {
 		// Optional methods provide '0 or more' call count restriction.
 		return true
 	}
 
-	for _, e := range m.ConvertToMDPipeMock.expectations {
+	for _, e := range m.ConvertToMarkdownPipeMock.expectations {
 		if mm_atomic.LoadUint64(&e.Counter) < 1 {
 			return false
 		}
 	}
 
-	return m.ConvertToMDPipeMock.invocationsDone()
+	return m.ConvertToMarkdownPipeMock.invocationsDone()
 }
 
-// MinimockConvertToMDPipeInspect logs each unmet expectation
-func (m *ServiceMock) MinimockConvertToMDPipeInspect() {
-	for _, e := range m.ConvertToMDPipeMock.expectations {
+// MinimockConvertToMarkdownPipeInspect logs each unmet expectation
+func (m *ServiceMock) MinimockConvertToMarkdownPipeInspect() {
+	for _, e := range m.ConvertToMarkdownPipeMock.expectations {
 		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Errorf("Expected call to ServiceMock.ConvertToMDPipe at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+			m.t.Errorf("Expected call to ServiceMock.ConvertToMarkdownPipe at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
 		}
 	}
 
-	afterConvertToMDPipeCounter := mm_atomic.LoadUint64(&m.afterConvertToMDPipeCounter)
+	afterConvertToMarkdownPipeCounter := mm_atomic.LoadUint64(&m.afterConvertToMarkdownPipeCounter)
 	// if default expectation was set then invocations count should be greater than zero
-	if m.ConvertToMDPipeMock.defaultExpectation != nil && afterConvertToMDPipeCounter < 1 {
-		if m.ConvertToMDPipeMock.defaultExpectation.params == nil {
-			m.t.Errorf("Expected call to ServiceMock.ConvertToMDPipe at\n%s", m.ConvertToMDPipeMock.defaultExpectation.returnOrigin)
+	if m.ConvertToMarkdownPipeMock.defaultExpectation != nil && afterConvertToMarkdownPipeCounter < 1 {
+		if m.ConvertToMarkdownPipeMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to ServiceMock.ConvertToMarkdownPipe at\n%s", m.ConvertToMarkdownPipeMock.defaultExpectation.returnOrigin)
 		} else {
-			m.t.Errorf("Expected call to ServiceMock.ConvertToMDPipe at\n%s with params: %#v", m.ConvertToMDPipeMock.defaultExpectation.expectationOrigins.origin, *m.ConvertToMDPipeMock.defaultExpectation.params)
+			m.t.Errorf("Expected call to ServiceMock.ConvertToMarkdownPipe at\n%s with params: %#v", m.ConvertToMarkdownPipeMock.defaultExpectation.expectationOrigins.origin, *m.ConvertToMarkdownPipeMock.defaultExpectation.params)
 		}
 	}
 	// if func was set then invocations count should be greater than zero
-	if m.funcConvertToMDPipe != nil && afterConvertToMDPipeCounter < 1 {
-		m.t.Errorf("Expected call to ServiceMock.ConvertToMDPipe at\n%s", m.funcConvertToMDPipeOrigin)
+	if m.funcConvertToMarkdownPipe != nil && afterConvertToMarkdownPipeCounter < 1 {
+		m.t.Errorf("Expected call to ServiceMock.ConvertToMarkdownPipe at\n%s", m.funcConvertToMarkdownPipeOrigin)
 	}
 
-	if !m.ConvertToMDPipeMock.invocationsDone() && afterConvertToMDPipeCounter > 0 {
-		m.t.Errorf("Expected %d calls to ServiceMock.ConvertToMDPipe at\n%s but found %d calls",
-			mm_atomic.LoadUint64(&m.ConvertToMDPipeMock.expectedInvocations), m.ConvertToMDPipeMock.expectedInvocationsOrigin, afterConvertToMDPipeCounter)
+	if !m.ConvertToMarkdownPipeMock.invocationsDone() && afterConvertToMarkdownPipeCounter > 0 {
+		m.t.Errorf("Expected %d calls to ServiceMock.ConvertToMarkdownPipe at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.ConvertToMarkdownPipeMock.expectedInvocations), m.ConvertToMarkdownPipeMock.expectedInvocationsOrigin, afterConvertToMarkdownPipeCounter)
 	}
 }
 
@@ -9990,6 +10000,192 @@ func (m *ServiceMock) MinimockMinIOInspect() {
 	}
 }
 
+type mServiceMockPipelinePublicClient struct {
+	optional           bool
+	mock               *ServiceMock
+	defaultExpectation *ServiceMockPipelinePublicClientExpectation
+	expectations       []*ServiceMockPipelinePublicClientExpectation
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// ServiceMockPipelinePublicClientExpectation specifies expectation struct of the Service.PipelinePublicClient
+type ServiceMockPipelinePublicClientExpectation struct {
+	mock *ServiceMock
+
+	results      *ServiceMockPipelinePublicClientResults
+	returnOrigin string
+	Counter      uint64
+}
+
+// ServiceMockPipelinePublicClientResults contains results of the Service.PipelinePublicClient
+type ServiceMockPipelinePublicClientResults struct {
+	p1 pipelinepb.PipelinePublicServiceClient
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmPipelinePublicClient *mServiceMockPipelinePublicClient) Optional() *mServiceMockPipelinePublicClient {
+	mmPipelinePublicClient.optional = true
+	return mmPipelinePublicClient
+}
+
+// Expect sets up expected params for Service.PipelinePublicClient
+func (mmPipelinePublicClient *mServiceMockPipelinePublicClient) Expect() *mServiceMockPipelinePublicClient {
+	if mmPipelinePublicClient.mock.funcPipelinePublicClient != nil {
+		mmPipelinePublicClient.mock.t.Fatalf("ServiceMock.PipelinePublicClient mock is already set by Set")
+	}
+
+	if mmPipelinePublicClient.defaultExpectation == nil {
+		mmPipelinePublicClient.defaultExpectation = &ServiceMockPipelinePublicClientExpectation{}
+	}
+
+	return mmPipelinePublicClient
+}
+
+// Inspect accepts an inspector function that has same arguments as the Service.PipelinePublicClient
+func (mmPipelinePublicClient *mServiceMockPipelinePublicClient) Inspect(f func()) *mServiceMockPipelinePublicClient {
+	if mmPipelinePublicClient.mock.inspectFuncPipelinePublicClient != nil {
+		mmPipelinePublicClient.mock.t.Fatalf("Inspect function is already set for ServiceMock.PipelinePublicClient")
+	}
+
+	mmPipelinePublicClient.mock.inspectFuncPipelinePublicClient = f
+
+	return mmPipelinePublicClient
+}
+
+// Return sets up results that will be returned by Service.PipelinePublicClient
+func (mmPipelinePublicClient *mServiceMockPipelinePublicClient) Return(p1 pipelinepb.PipelinePublicServiceClient) *ServiceMock {
+	if mmPipelinePublicClient.mock.funcPipelinePublicClient != nil {
+		mmPipelinePublicClient.mock.t.Fatalf("ServiceMock.PipelinePublicClient mock is already set by Set")
+	}
+
+	if mmPipelinePublicClient.defaultExpectation == nil {
+		mmPipelinePublicClient.defaultExpectation = &ServiceMockPipelinePublicClientExpectation{mock: mmPipelinePublicClient.mock}
+	}
+	mmPipelinePublicClient.defaultExpectation.results = &ServiceMockPipelinePublicClientResults{p1}
+	mmPipelinePublicClient.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmPipelinePublicClient.mock
+}
+
+// Set uses given function f to mock the Service.PipelinePublicClient method
+func (mmPipelinePublicClient *mServiceMockPipelinePublicClient) Set(f func() (p1 pipelinepb.PipelinePublicServiceClient)) *ServiceMock {
+	if mmPipelinePublicClient.defaultExpectation != nil {
+		mmPipelinePublicClient.mock.t.Fatalf("Default expectation is already set for the Service.PipelinePublicClient method")
+	}
+
+	if len(mmPipelinePublicClient.expectations) > 0 {
+		mmPipelinePublicClient.mock.t.Fatalf("Some expectations are already set for the Service.PipelinePublicClient method")
+	}
+
+	mmPipelinePublicClient.mock.funcPipelinePublicClient = f
+	mmPipelinePublicClient.mock.funcPipelinePublicClientOrigin = minimock.CallerInfo(1)
+	return mmPipelinePublicClient.mock
+}
+
+// Times sets number of times Service.PipelinePublicClient should be invoked
+func (mmPipelinePublicClient *mServiceMockPipelinePublicClient) Times(n uint64) *mServiceMockPipelinePublicClient {
+	if n == 0 {
+		mmPipelinePublicClient.mock.t.Fatalf("Times of ServiceMock.PipelinePublicClient mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmPipelinePublicClient.expectedInvocations, n)
+	mmPipelinePublicClient.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmPipelinePublicClient
+}
+
+func (mmPipelinePublicClient *mServiceMockPipelinePublicClient) invocationsDone() bool {
+	if len(mmPipelinePublicClient.expectations) == 0 && mmPipelinePublicClient.defaultExpectation == nil && mmPipelinePublicClient.mock.funcPipelinePublicClient == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmPipelinePublicClient.mock.afterPipelinePublicClientCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmPipelinePublicClient.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// PipelinePublicClient implements mm_service.Service
+func (mmPipelinePublicClient *ServiceMock) PipelinePublicClient() (p1 pipelinepb.PipelinePublicServiceClient) {
+	mm_atomic.AddUint64(&mmPipelinePublicClient.beforePipelinePublicClientCounter, 1)
+	defer mm_atomic.AddUint64(&mmPipelinePublicClient.afterPipelinePublicClientCounter, 1)
+
+	mmPipelinePublicClient.t.Helper()
+
+	if mmPipelinePublicClient.inspectFuncPipelinePublicClient != nil {
+		mmPipelinePublicClient.inspectFuncPipelinePublicClient()
+	}
+
+	if mmPipelinePublicClient.PipelinePublicClientMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmPipelinePublicClient.PipelinePublicClientMock.defaultExpectation.Counter, 1)
+
+		mm_results := mmPipelinePublicClient.PipelinePublicClientMock.defaultExpectation.results
+		if mm_results == nil {
+			mmPipelinePublicClient.t.Fatal("No results are set for the ServiceMock.PipelinePublicClient")
+		}
+		return (*mm_results).p1
+	}
+	if mmPipelinePublicClient.funcPipelinePublicClient != nil {
+		return mmPipelinePublicClient.funcPipelinePublicClient()
+	}
+	mmPipelinePublicClient.t.Fatalf("Unexpected call to ServiceMock.PipelinePublicClient.")
+	return
+}
+
+// PipelinePublicClientAfterCounter returns a count of finished ServiceMock.PipelinePublicClient invocations
+func (mmPipelinePublicClient *ServiceMock) PipelinePublicClientAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmPipelinePublicClient.afterPipelinePublicClientCounter)
+}
+
+// PipelinePublicClientBeforeCounter returns a count of ServiceMock.PipelinePublicClient invocations
+func (mmPipelinePublicClient *ServiceMock) PipelinePublicClientBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmPipelinePublicClient.beforePipelinePublicClientCounter)
+}
+
+// MinimockPipelinePublicClientDone returns true if the count of the PipelinePublicClient invocations corresponds
+// the number of defined expectations
+func (m *ServiceMock) MinimockPipelinePublicClientDone() bool {
+	if m.PipelinePublicClientMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.PipelinePublicClientMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.PipelinePublicClientMock.invocationsDone()
+}
+
+// MinimockPipelinePublicClientInspect logs each unmet expectation
+func (m *ServiceMock) MinimockPipelinePublicClientInspect() {
+	for _, e := range m.PipelinePublicClientMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Error("Expected call to ServiceMock.PipelinePublicClient")
+		}
+	}
+
+	afterPipelinePublicClientCounter := mm_atomic.LoadUint64(&m.afterPipelinePublicClientCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.PipelinePublicClientMock.defaultExpectation != nil && afterPipelinePublicClientCounter < 1 {
+		m.t.Errorf("Expected call to ServiceMock.PipelinePublicClient at\n%s", m.PipelinePublicClientMock.defaultExpectation.returnOrigin)
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcPipelinePublicClient != nil && afterPipelinePublicClientCounter < 1 {
+		m.t.Errorf("Expected call to ServiceMock.PipelinePublicClient at\n%s", m.funcPipelinePublicClientOrigin)
+	}
+
+	if !m.PipelinePublicClientMock.invocationsDone() && afterPipelinePublicClientCounter > 0 {
+		m.t.Errorf("Expected %d calls to ServiceMock.PipelinePublicClient at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.PipelinePublicClientMock.expectedInvocations), m.PipelinePublicClientMock.expectedInvocationsOrigin, afterPipelinePublicClientCounter)
+	}
+}
+
 type mServiceMockProcessFileWorkflow struct {
 	optional           bool
 	mock               *ServiceMock
@@ -11842,7 +12038,7 @@ func (m *ServiceMock) MinimockFinish() {
 
 			m.MinimockCleanupKnowledgeBaseWorkflowInspect()
 
-			m.MinimockConvertToMDPipeInspect()
+			m.MinimockConvertToMarkdownPipeInspect()
 
 			m.MinimockCreateRepositoryTagInspect()
 
@@ -11888,6 +12084,8 @@ func (m *ServiceMock) MinimockFinish() {
 
 			m.MinimockMinIOInspect()
 
+			m.MinimockPipelinePublicClientInspect()
+
 			m.MinimockProcessFileWorkflowInspect()
 
 			m.MinimockQuestionAnsweringPipeInspect()
@@ -11931,7 +12129,7 @@ func (m *ServiceMock) minimockDone() bool {
 		m.MinimockChunkTextPipeDone() &&
 		m.MinimockCleanupFileWorkflowDone() &&
 		m.MinimockCleanupKnowledgeBaseWorkflowDone() &&
-		m.MinimockConvertToMDPipeDone() &&
+		m.MinimockConvertToMarkdownPipeDone() &&
 		m.MinimockCreateRepositoryTagDone() &&
 		m.MinimockDeleteConvertedFileByFileUIDDone() &&
 		m.MinimockDeleteFilesDone() &&
@@ -11954,6 +12152,7 @@ func (m *ServiceMock) minimockDone() bool {
 		m.MinimockGetUploadURLDone() &&
 		m.MinimockListRepositoryTagsDone() &&
 		m.MinimockMinIODone() &&
+		m.MinimockPipelinePublicClientDone() &&
 		m.MinimockProcessFileWorkflowDone() &&
 		m.MinimockQuestionAnsweringPipeDone() &&
 		m.MinimockRedisClientDone() &&

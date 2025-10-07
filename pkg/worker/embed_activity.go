@@ -18,6 +18,14 @@ import (
 	errorsx "github.com/instill-ai/x/errors"
 )
 
+// This file contains embedding activities used by ProcessFileWorkflow and SaveEmbeddingsToVectorDBWorkflow:
+// - EmbedTextsActivity - Generates vector embeddings for text chunks using AI models
+// - GetChunksForEmbeddingActivity - Retrieves chunk content for embedding generation
+// - SaveEmbeddingBatchActivity - Saves embedding vectors to vector database in batches
+// - DeleteOldEmbeddingsFromVectorDBActivity - Removes outdated embeddings from vector DB
+// - DeleteOldEmbeddingsFromDBActivity - Removes outdated embedding records from database
+// - UpdateEmbeddingMetadataActivity - Updates embedding metadata after processing
+
 // EmbedTextsActivityParam defines the parameters for the EmbedTextsActivity
 type EmbedTextsActivityParam struct {
 	Texts           []string
@@ -94,8 +102,9 @@ func (w *Worker) GetChunksForEmbeddingActivity(ctx context.Context, param *GetCh
 	// Get file
 	files, err := w.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{param.FileUID})
 	if err != nil || len(files) == 0 {
+		err = errorsx.AddMessage(err, "Unable to retrieve file information. Please try again.")
 		return nil, temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to get file: %s", errorsx.MessageOrErr(err)),
+			errorsx.MessageOrErr(err),
 			getChunksForEmbeddingActivityError,
 			err,
 		)
@@ -105,8 +114,9 @@ func (w *Worker) GetChunksForEmbeddingActivity(ctx context.Context, param *GetCh
 	// Get chunks by file
 	sourceTable, sourceUID, chunks, _, texts, err := w.service.GetChunksByFile(ctx, &file)
 	if err != nil {
+		err = errorsx.AddMessage(err, "Unable to retrieve content chunks. Please try again.")
 		return nil, temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to retrieve chunks: %s", errorsx.MessageOrErr(err)),
+			errorsx.MessageOrErr(err),
 			getChunksForEmbeddingActivityError,
 			err,
 		)
@@ -166,8 +176,9 @@ func (w *Worker) SaveEmbeddingBatchActivity(ctx context.Context, param *SaveEmbe
 	// Insert embeddings in transaction
 	_, err := w.service.Repository().CreateEmbeddings(ctx, param.Embeddings, externalServiceCall)
 	if err != nil {
+		err = errorsx.AddMessage(err, fmt.Sprintf("Unable to save embeddings (batch %d/%d). Please try again.", param.BatchNumber, param.TotalBatches))
 		return temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to save batch %d/%d in vector db: %s", param.BatchNumber, param.TotalBatches, errorsx.MessageOrErr(err)),
+			errorsx.MessageOrErr(err),
 			saveEmbeddingsActivityError,
 			err,
 		)
@@ -188,9 +199,10 @@ func (w *Worker) DeleteOldEmbeddingsFromVectorDBActivity(ctx context.Context, pa
 	collection := service.KBCollectionName(param.KnowledgeBaseUID)
 
 	if err := w.service.VectorDB().DeleteEmbeddingsWithFileUID(ctx, collection, param.FileUID); err != nil {
+		err = errorsx.AddMessage(err, "Unable to delete old embeddings from vector database. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to delete embeddings from vector db: %s", errorsx.MessageOrErr(err)),
-			saveEmbeddingsActivityError,
+			errorsx.MessageOrErr(err),
+			deleteOldEmbeddingsFromVectorDBActivityError,
 			err,
 		)
 	}
@@ -206,9 +218,10 @@ func (w *Worker) DeleteOldEmbeddingsFromDBActivity(ctx context.Context, param *D
 		zap.String("fileUID", param.FileUID.String()))
 
 	if err := w.service.Repository().DeleteEmbeddingsByKbFileUID(ctx, param.FileUID); err != nil {
+		err = errorsx.AddMessage(err, "Unable to delete old embedding records. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to delete embeddings from DB: %s", errorsx.MessageOrErr(err)),
-			saveEmbeddingsActivityError,
+			errorsx.MessageOrErr(err),
+			deleteOldEmbeddingsFromDBActivityError,
 			err,
 		)
 	}
@@ -226,8 +239,9 @@ func (w *Worker) FlushCollectionActivity(ctx context.Context, param *DeleteOldEm
 	collection := service.KBCollectionName(param.KnowledgeBaseUID)
 
 	if err := w.service.VectorDB().FlushCollection(ctx, collection); err != nil {
+		err = errorsx.AddMessage(err, "Unable to flush vector database collection. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to flush collection from vector db: %s", errorsx.MessageOrErr(err)),
+			errorsx.MessageOrErr(err),
 			flushCollectionActivityError,
 			err,
 		)
@@ -255,8 +269,9 @@ func (w *Worker) UpdateEmbeddingMetadataActivity(ctx context.Context, param *Upd
 				zap.String("fileUID", param.FileUID.String()))
 			return nil
 		}
+		err = errorsx.AddMessage(err, "Unable to update file metadata. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to update file metadata: %s", errorsx.MessageOrErr(err)),
+			errorsx.MessageOrErr(err),
 			updateEmbeddingMetadataActivityError,
 			err,
 		)
@@ -288,8 +303,9 @@ func (w *Worker) EmbedTextsActivity(ctx context.Context, param *EmbedTextsActivi
 			zap.Int("batchIndex", param.BatchIndex),
 			zap.Int("batchSize", len(param.Texts)),
 			zap.Error(err))
+		err = errorsx.AddMessage(err, fmt.Sprintf("Unable to generate embeddings (batch %d). Please try again.", param.BatchIndex))
 		return nil, temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Embedding batch %d failed in vector db: %s", param.BatchIndex, errorsx.MessageOrErr(err)),
+			errorsx.MessageOrErr(err),
 			embedTextsActivityError,
 			err,
 		)
@@ -304,9 +320,11 @@ func (w *Worker) EmbedTextsActivity(ctx context.Context, param *EmbedTextsActivi
 
 // Activity error type constants
 const (
-	getChunksForEmbeddingActivityError   = "GetChunksForEmbeddingActivity"
-	saveEmbeddingsActivityError          = "SaveEmbeddingBatchActivity"
-	flushCollectionActivityError         = "FlushCollectionActivity"
-	updateEmbeddingMetadataActivityError = "UpdateEmbeddingMetadataActivity"
-	embedTextsActivityError              = "EmbedTextsActivity"
+	getChunksForEmbeddingActivityError           = "GetChunksForEmbeddingActivity"
+	saveEmbeddingsActivityError                  = "SaveEmbeddingBatchActivity"
+	deleteOldEmbeddingsFromVectorDBActivityError = "DeleteOldEmbeddingsFromVectorDBActivity"
+	deleteOldEmbeddingsFromDBActivityError       = "DeleteOldEmbeddingsFromDBActivity"
+	flushCollectionActivityError                 = "FlushCollectionActivity"
+	updateEmbeddingMetadataActivityError         = "UpdateEmbeddingMetadataActivity"
+	embedTextsActivityError                      = "EmbedTextsActivity"
 )

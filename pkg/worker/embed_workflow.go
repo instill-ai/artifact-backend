@@ -38,12 +38,12 @@ func (w *embedTextsWorkflow) Execute(ctx context.Context, param service.EmbedTex
 
 	workflowRun, err := w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, w.worker.EmbedTextsWorkflow, param)
 	if err != nil {
-		return nil, fmt.Errorf("failed to start embed texts workflow: %s", errorsx.MessageOrErr(err))
+		return nil, errorsx.AddMessage(err, "Unable to start embedding workflow. Please try again.")
 	}
 
 	var vectors [][]float32
 	if err = workflowRun.Get(ctx, &vectors); err != nil {
-		return nil, fmt.Errorf("embed texts workflow failed: %s", errorsx.MessageOrErr(err))
+		return nil, errorsx.AddMessage(err, "Embedding workflow failed. Please try again.")
 	}
 
 	return vectors, nil
@@ -101,7 +101,7 @@ func (w *Worker) EmbedTextsWorkflow(ctx workflow.Context, param service.EmbedTex
 			logger.Error("Batch failed",
 				"batchIndex", i,
 				"error", err)
-			return nil, fmt.Errorf("batch %d failed: %s", i, errorsx.MessageOrErr(err))
+			return nil, errorsx.AddMessage(err, fmt.Sprintf("Unable to generate embeddings for batch %d. Please try again.", i))
 		}
 
 		logger.Info("Batch completed",
@@ -158,12 +158,12 @@ func (w *Worker) SaveEmbeddingsToVectorDBWorkflow(ctx workflow.Context, param Sa
 	// Wait for both to complete
 	if err := deleteVectorDBFuture.Get(ctx, nil); err != nil {
 		logger.Error("Failed to delete old embeddings from VectorDB", "error", err)
-		return fmt.Errorf("delete old embeddings from VectorDB: %s", errorsx.MessageOrErr(err))
+		return errorsx.AddMessage(err, "Unable to delete old embeddings from vector database. Please try again.")
 	}
 
 	if err := deleteDBFuture.Get(ctx, nil); err != nil {
 		logger.Error("Failed to delete old embeddings from DB", "error", err)
-		return fmt.Errorf("delete old embeddings from DB: %s", errorsx.MessageOrErr(err))
+		return errorsx.AddMessage(err, "Unable to delete old embedding records. Please try again.")
 	}
 
 	// Step 3: Save batches in parallel
@@ -197,7 +197,7 @@ func (w *Worker) SaveEmbeddingsToVectorDBWorkflow(ctx workflow.Context, param Sa
 				"batchNumber", i+1,
 				"totalBatches", totalBatches,
 				"error", err)
-			return fmt.Errorf("batch %d/%d failed: %s", i+1, totalBatches, errorsx.MessageOrErr(err))
+			return errorsx.AddMessage(err, fmt.Sprintf("Unable to save embedding batch %d/%d. Please try again.", i+1, totalBatches))
 		}
 
 		logger.Info("Batch completed",
@@ -225,7 +225,7 @@ func (w *Worker) SaveEmbeddingsToVectorDBWorkflow(ctx workflow.Context, param Sa
 
 	if err := workflow.ExecuteLocalActivity(localCtx, w.FlushCollectionActivity, deleteParam).Get(localCtx, nil); err != nil {
 		logger.Error("Failed to flush collection", "error", err)
-		return fmt.Errorf("flush collection: %s", errorsx.MessageOrErr(err))
+		return errorsx.AddMessage(err, "Unable to flush vector database collection. Please try again.")
 	}
 
 	logger.Info("SaveEmbeddingsToVectorDBWorkflow completed successfully",
