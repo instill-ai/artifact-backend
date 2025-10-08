@@ -98,7 +98,7 @@ type KnowledgeBaseFile struct {
 	// This field is not stored in the database. It is used to unmarshal the ExternalMetadata field
 	ExternalMetadataUnmarshal *structpb.Struct `gorm:"-" json:"external_metadata_unmarshal"`
 	// Array of tags associated with the file
-	Tags []string `gorm:"column:tags;type:varchar(255)[]" json:"tags"`
+	Tags TagsArray `gorm:"column:tags;type:VARCHAR(255)[]" json:"tags"`
 }
 
 type ExtraMetaData struct {

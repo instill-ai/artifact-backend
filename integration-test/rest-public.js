@@ -259,13 +259,16 @@ export function CheckCatalog(data) {
     const uploaded = [];
     const uploadReqs = constant.sampleFiles.map((s) => {
       const fileName = `${constant.dbIDPrefix}${s.originalName}`;
+      // Add tags to file upload - using different tags for different file types
+      const tags = s.type === "FILE_TYPE_PDF" ? ["scott", "ramona"] : ["kim", "knives"];
       return {
         s,
         fileName,
+        tags,
         req: {
           method: "POST",
           url: `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
-          body: JSON.stringify({ name: fileName, type: s.type, content: s.content }),
+          body: JSON.stringify({ name: fileName, type: s.type, content: s.content, tags: tags }),
           params: data.header,
         },
       };
@@ -275,10 +278,11 @@ export function CheckCatalog(data) {
       const resp = uploadResponses[i];
       const s = uploadReqs[i].s;
       const fileName = uploadReqs[i].fileName;
+      const tags = uploadReqs[i].tags;
       const fJson = (function () { try { return resp.json(); } catch (e) { return {}; } })();
       const file = (fJson && fJson.file) || {};
       check(resp, { [`POST /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files 200 (${s.originalName})`]: (r) => r.status === 200 });
-      if (file && file.fileUid) uploaded.push({ fileUid: file.fileUid, name: fileName, type: s.type });
+      if (file && file.fileUid) uploaded.push({ fileUid: file.fileUid, name: fileName, type: s.type, tags: tags });
     }
 
     // Trigger processing for all files in one call
@@ -343,6 +347,11 @@ export function CheckCatalog(data) {
         [`GET ${viewPath} file has totalTokens (${f.name}: ${f.type})`]: (r) => r.json().files[0].totalTokens > 0,
         [`GET ${viewPath} file has summary (${f.name}: ${f.type})`]: (r) => r.json().files[0].summary.length > 0,
         [`GET ${viewPath} file has downloadUrl (${f.name}: ${f.type})`]: (r) => r.json().files[0].downloadUrl.includes("v1alpha/blob-urls/"),
+        [`GET ${viewPath} file has tags (${f.name}: ${f.type})`]: (r) => {
+          const fileData = r.json().files[0];
+          return Array.isArray(fileData.tags) && fileData.tags.length === f.tags.length &&
+                 f.tags.every(tag => fileData.tags.includes(tag));
+        },
       });
 
       // Check conversion pipeline and page information depending on the file type
@@ -378,6 +387,10 @@ export function CheckCatalog(data) {
       [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files?pageSize=100 200`]: (r) => r.status === 200,
       [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files?pageSize=100 catalog files is array`]: () => Array.isArray(listFilesJson.files),
       [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files?pageSize=100 catalog files count matches uploads`]: () => Array.isArray(listFilesJson.files) && listFilesJson.files.length === uploaded.length,
+      [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files?pageSize=100 files have tags`]: () => {
+        const files = listFilesJson.files || [];
+        return files.every(file => Array.isArray(file.tags) && file.tags.length > 0);
+      },
     });
 
     // List catalog file chunks

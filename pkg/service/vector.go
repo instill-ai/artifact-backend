@@ -18,6 +18,7 @@ type Embedding struct {
 	FileName     string
 	FileType     string
 	ContentType  string
+	Tags         []string
 }
 
 // SimilarEmbedding extends Embedding to add a similarity search score.
@@ -35,6 +36,7 @@ type SimilarVectorSearchParam struct {
 	FileUIDs     []uuid.UUID
 	FileType     string
 	ContentType  string
+	Tags         []string
 
 	// The filename filter was implemented back when the filename in a catalog was
 	// unique, which isn't the case anymore. Using this filter might yield
@@ -59,7 +61,9 @@ type VectorDatabase interface {
 	// CheckFileUIDMetadata checks if the collection has the file UID metadata
 	// field, which wasn't introduced since the beginning and is not present in
 	// legacy collections.
-	CheckFileUIDMetadata(_ context.Context, collectionID string) (bool, error)
+	CheckFileUIDMetadata(_ context.Context, kbUID uuid.UUID) (bool, error)
+	// CheckTagsMetadata checks if the collection has the tags metadata field.
+	CheckTagsMetadata(_ context.Context, kbUID uuid.UUID) (bool, error)
 }
 
 const kbCollectionPrefix = "kb_"
