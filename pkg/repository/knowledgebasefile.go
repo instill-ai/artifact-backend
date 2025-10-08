@@ -97,6 +97,8 @@ type KnowledgeBaseFile struct {
 	ExternalMetadata string `gorm:"column:external_metadata;type:jsonb" json:"external_metadata"`
 	// This field is not stored in the database. It is used to unmarshal the ExternalMetadata field
 	ExternalMetadataUnmarshal *structpb.Struct `gorm:"-" json:"external_metadata_unmarshal"`
+	// Array of tags associated with the file
+	Tags []string `gorm:"column:tags;type:varchar(255)[]" json:"tags"`
 }
 
 type ExtraMetaData struct {
@@ -135,6 +137,7 @@ type KnowledgeBaseFileColumns struct {
 	RequesterUID     string
 	Size             string
 	ExternalMetadata string
+	Tags             string
 }
 
 var KnowledgeBaseFileColumn = KnowledgeBaseFileColumns{
@@ -154,6 +157,7 @@ var KnowledgeBaseFileColumn = KnowledgeBaseFileColumns{
 	Size:             "size",
 	RequesterUID:     "requester_uid",
 	ExternalMetadata: "external_metadata",
+	Tags:             "tags",
 }
 
 // ConvertingPipeline extracts the conversion pipeline, if present, from the
