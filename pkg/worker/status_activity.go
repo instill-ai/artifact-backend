@@ -20,9 +20,9 @@ import (
 
 // UpdateFileStatusActivityParam defines the parameters for the UpdateFileStatusActivity
 type UpdateFileStatusActivityParam struct {
-	FileUID uuid.UUID
-	Status  artifactpb.FileProcessStatus
-	Message string
+	FileUID uuid.UUID                    // File unique identifier
+	Status  artifactpb.FileProcessStatus // New processing status
+	Message string                       // Optional status message for display
 }
 
 // GetFileStatusActivity retrieves the current status of a file
@@ -65,7 +65,6 @@ func (w *Worker) GetFileStatusActivity(ctx context.Context, fileUID uuid.UUID) (
 	}
 
 	status := artifactpb.FileProcessStatus(statusInt)
-	w.log.Info("File status retrieved", zap.String("fileUID", fileUID.String()), zap.String("status", status.String()))
 	return status, nil
 }
 
@@ -109,9 +108,6 @@ func (w *Worker) UpdateFileStatusActivity(ctx context.Context, param *UpdateFile
 		return nil
 	}
 
-	w.log.Info("File status updated successfully",
-		zap.String("fileUID", param.FileUID.String()),
-		zap.String("status", param.Status.String()))
 	return nil
 }
 

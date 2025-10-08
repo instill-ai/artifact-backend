@@ -26,6 +26,7 @@ func TestCleanupFileWorkflowParam_FieldTypes(t *testing.T) {
 		FileUID:             fileUID,
 		IncludeOriginalFile: true,
 		UserUID:             userUID,
+		RequesterUID:        uuid.Must(uuid.NewV4()),
 		WorkflowID:          "test-workflow-id",
 	}
 
@@ -148,6 +149,7 @@ func TestCleanupFileWorkflow_Success(t *testing.T) {
 		FileUID:             fileUID,
 		IncludeOriginalFile: true,
 		UserUID:             uuid.Must(uuid.NewV4()),
+		RequesterUID:        uuid.Must(uuid.NewV4()),
 		WorkflowID:          "test-workflow",
 	}
 

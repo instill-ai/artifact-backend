@@ -32,10 +32,12 @@ func (p *Provider) convertToMarkdownWithoutCache(ctx context.Context, input *Con
 		model = DefaultConversionModel
 	}
 
-	prompt := DefaultPromptTemplate
-	if input.CustomPrompt != nil && *input.CustomPrompt != "" {
-		prompt = *input.CustomPrompt
+	// Prompt must be provided by caller (no default assumption)
+	if input.CustomPrompt == nil || *input.CustomPrompt == "" {
+		err := errorsx.ErrInvalidArgument
+		return nil, errorsx.AddMessage(err, "Internal processing error: prompt not specified. Please try again.")
 	}
+	prompt := *input.CustomPrompt
 
 	// === Prepare Content ===
 	// Create content part (document, image, audio, or video) using File API for large files
@@ -66,8 +68,8 @@ func (p *Provider) convertToMarkdownWithoutCache(ctx context.Context, input *Con
 
 	// === Configure API Call ===
 	config := &genai.GenerateContentConfig{
-		Temperature: genai.Ptr(float32(0.0)), // Deterministic output
-		TopP:        genai.Ptr(float32(0.01)),
+		Temperature: genai.Ptr(float32(1.0)),
+		TopP:        genai.Ptr(float32(0.95)),
 	}
 
 	// === Call Gemini API ===
@@ -111,8 +113,10 @@ func (p *Provider) convertToMarkdownWithCache(ctx context.Context, cacheName, pr
 	// === Set Defaults ===
 	model := DefaultConversionModel
 
+	// Prompt must be provided by caller (no default assumption)
 	if prompt == "" {
-		prompt = DefaultPromptTemplate
+		err := errorsx.ErrInvalidArgument
+		return nil, errorsx.AddMessage(err, "Internal processing error: prompt not specified. Please try again.")
 	}
 
 	// === Prepare Content ===
@@ -128,8 +132,8 @@ func (p *Provider) convertToMarkdownWithCache(ctx context.Context, cacheName, pr
 
 	// === Configure API Call ===
 	config := &genai.GenerateContentConfig{
-		Temperature:   genai.Ptr(float32(0.0)), // Deterministic output
-		TopP:          genai.Ptr(float32(0.01)),
+		Temperature:   genai.Ptr(float32(1.0)), // Deterministic output
+		TopP:          genai.Ptr(float32(0.95)),
 		CachedContent: cacheName, // Use cached context
 	}
 

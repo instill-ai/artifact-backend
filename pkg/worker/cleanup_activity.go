@@ -28,28 +28,28 @@ import (
 
 // DeleteOriginalFileActivityParam defines parameters for deleting original file
 type DeleteOriginalFileActivityParam struct {
-	FileUID uuid.UUID
-	Bucket  string
+	FileUID uuid.UUID // File unique identifier
+	Bucket  string    // MinIO bucket containing the file
 }
 
 // DeleteConvertedFileActivityParam defines parameters for deleting converted file
 type DeleteConvertedFileActivityParam struct {
-	FileUID uuid.UUID
+	FileUID uuid.UUID // File unique identifier
 }
 
 // DeleteChunksFromMinIOActivityParam defines parameters for deleting chunks from MinIO
 type DeleteChunksFromMinIOActivityParam struct {
-	FileUID uuid.UUID
+	FileUID uuid.UUID // File unique identifier
 }
 
 // DeleteEmbeddingsFromVectorDBActivityParam defines parameters for deleting embeddings from vector db
 type DeleteEmbeddingsFromVectorDBActivityParam struct {
-	FileUID uuid.UUID
+	FileUID uuid.UUID // File unique identifier
 }
 
 // DeleteFileRecordsActivityParam defines parameters for deleting file records from DB
 type DeleteFileRecordsActivityParam struct {
-	FileUID uuid.UUID
+	FileUID uuid.UUID // File unique identifier
 }
 
 // DeleteOriginalFileActivity deletes the original uploaded file from MinIO
@@ -82,8 +82,6 @@ func (w *Worker) DeleteOriginalFileActivity(ctx context.Context, param *DeleteOr
 		)
 	}
 
-	w.log.Info("DeleteOriginalFileActivity: Successfully deleted original file",
-		zap.String("destination", file.Destination))
 	return nil
 }
 
@@ -126,7 +124,6 @@ func (w *Worker) DeleteConvertedFileActivity(ctx context.Context, param *DeleteC
 		)
 	}
 
-	w.log.Info("DeleteConvertedFileActivity: Successfully deleted converted file and record")
 	return nil
 }
 
@@ -172,8 +169,6 @@ func (w *Worker) DeleteChunksFromMinIOActivity(ctx context.Context, param *Delet
 		)
 	}
 
-	w.log.Info("DeleteChunksFromMinIOActivity: Successfully deleted chunks and records",
-		zap.Int("chunkCount", len(chunks)))
 	return nil
 }
 
@@ -235,7 +230,6 @@ func (w *Worker) DeleteEmbeddingRecordsActivity(ctx context.Context, param *Dele
 		)
 	}
 
-	w.log.Info("DeleteEmbeddingRecordsActivity: Successfully deleted embedding records from DB")
 	return nil
 }
 
@@ -243,37 +237,37 @@ func (w *Worker) DeleteEmbeddingRecordsActivity(ctx context.Context, param *Dele
 
 // DeleteKBFilesFromMinIOActivityParam defines parameters for deleting KB files from MinIO
 type DeleteKBFilesFromMinIOActivityParam struct {
-	KnowledgeBaseUID uuid.UUID
+	KnowledgeBaseUID uuid.UUID // Knowledge base unique identifier
 }
 
 // DropVectorDBCollectionActivityParam defines parameters for dropping vector db collection
 type DropVectorDBCollectionActivityParam struct {
-	KnowledgeBaseUID uuid.UUID
+	KnowledgeBaseUID uuid.UUID // Knowledge base unique identifier
 }
 
 // DeleteKBFileRecordsActivityParam defines parameters for deleting KB file records
 type DeleteKBFileRecordsActivityParam struct {
-	KnowledgeBaseUID uuid.UUID
+	KnowledgeBaseUID uuid.UUID // Knowledge base unique identifier
 }
 
 // DeleteKBConvertedFileRecordsActivityParam defines parameters for deleting KB converted file records
 type DeleteKBConvertedFileRecordsActivityParam struct {
-	KnowledgeBaseUID uuid.UUID
+	KnowledgeBaseUID uuid.UUID // Knowledge base unique identifier
 }
 
 // DeleteKBChunkRecordsActivityParam defines parameters for deleting KB chunk records
 type DeleteKBChunkRecordsActivityParam struct {
-	KnowledgeBaseUID uuid.UUID
+	KnowledgeBaseUID uuid.UUID // Knowledge base unique identifier
 }
 
 // DeleteKBEmbeddingRecordsActivityParam defines parameters for deleting KB embedding records
 type DeleteKBEmbeddingRecordsActivityParam struct {
-	KnowledgeBaseUID uuid.UUID
+	KnowledgeBaseUID uuid.UUID // Knowledge base unique identifier
 }
 
 // PurgeKBACLActivityParam defines parameters for purging KB ACL
 type PurgeKBACLActivityParam struct {
-	KnowledgeBaseUID uuid.UUID
+	KnowledgeBaseUID uuid.UUID // Knowledge base unique identifier
 }
 
 // DeleteKBFilesFromMinIOActivity deletes all files from MinIO for a knowledge base
@@ -291,7 +285,6 @@ func (w *Worker) DeleteKBFilesFromMinIOActivity(ctx context.Context, param *Dele
 		)
 	}
 
-	w.log.Info("DeleteKBFilesFromMinIOActivity: Successfully deleted files from MinIO")
 	return nil
 }
 
@@ -317,7 +310,6 @@ func (w *Worker) DropVectorDBCollectionActivity(ctx context.Context, param *Drop
 		)
 	}
 
-	w.log.Info("DropVectorDBCollectionActivity: Successfully dropped collection")
 	return nil
 }
 
@@ -336,7 +328,6 @@ func (w *Worker) DeleteKBFileRecordsActivity(ctx context.Context, param *DeleteK
 		)
 	}
 
-	w.log.Info("DeleteKBFileRecordsActivity: Successfully deleted file records")
 	return nil
 }
 
@@ -355,7 +346,6 @@ func (w *Worker) DeleteKBConvertedFileRecordsActivity(ctx context.Context, param
 		)
 	}
 
-	w.log.Info("DeleteKBConvertedFileRecordsActivity: Successfully deleted converted file records")
 	return nil
 }
 
@@ -374,7 +364,6 @@ func (w *Worker) DeleteKBChunkRecordsActivity(ctx context.Context, param *Delete
 		)
 	}
 
-	w.log.Info("DeleteKBChunkRecordsActivity: Successfully deleted chunk records")
 	return nil
 }
 
@@ -393,7 +382,6 @@ func (w *Worker) DeleteKBEmbeddingRecordsActivity(ctx context.Context, param *De
 		)
 	}
 
-	w.log.Info("DeleteKBEmbeddingRecordsActivity: Successfully deleted embedding records")
 	return nil
 }
 
@@ -412,7 +400,6 @@ func (w *Worker) PurgeKBACLActivity(ctx context.Context, param *PurgeKBACLActivi
 		)
 	}
 
-	w.log.Info("PurgeKBACLActivity: Successfully purged ACL")
 	return nil
 }
 

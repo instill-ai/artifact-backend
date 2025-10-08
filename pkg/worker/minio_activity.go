@@ -16,46 +16,46 @@ import (
 	errorsx "github.com/instill-ai/x/errors"
 )
 
-// This file contains MinIO storage activities used by SaveChunksWorkflow and GetFilesWorkflow:
+// This file contains MinIO storage activities:
 // - SaveChunkBatchActivity - Saves multiple text chunks to MinIO in batch
 // - GetFileActivity - Retrieves file metadata and content from MinIO
 
 // SaveChunkBatchActivityParam defines parameters for saving multiple chunks in one activity
 type SaveChunkBatchActivityParam struct {
-	KnowledgeBaseUID uuid.UUID
-	FileUID          uuid.UUID
-	Chunks           map[string][]byte // chunkUID -> content
+	KnowledgeBaseUID uuid.UUID         // Knowledge base unique identifier
+	FileUID          uuid.UUID         // File unique identifier
+	Chunks           map[string][]byte // Map of chunk UID to content bytes
 }
 
 // SaveChunkBatchActivityResult defines the result of saving a batch of chunks
 type SaveChunkBatchActivityResult struct {
-	Destinations map[string]string // chunkUID -> destination
+	Destinations map[string]string // Map of chunk UID to MinIO destination path
 }
 
 // UpdateChunkDestinationsActivityParam defines parameters for updating chunk destinations
 type UpdateChunkDestinationsActivityParam struct {
-	Destinations map[string]string // chunkUID -> destination
+	Destinations map[string]string // Map of chunk UID to MinIO destination path
 }
 
 // DeleteFileActivityParam defines parameters for deleting a single file
 type DeleteFileActivityParam struct {
-	Bucket string
-	Path   string
+	Bucket string // MinIO bucket containing the file
+	Path   string // MinIO path to the file
 }
 
 // GetFileActivityParam defines parameters for getting a single file
 type GetFileActivityParam struct {
-	Bucket   string
-	Path     string
-	Index    int              // For maintaining order
-	Metadata *structpb.Struct // For authentication context
+	Bucket   string           // MinIO bucket containing the file
+	Path     string           // MinIO path to the file
+	Index    int              // Index for maintaining order in batch operations
+	Metadata *structpb.Struct // Request metadata for authentication context
 }
 
 // GetFileActivityResult contains the file content
 type GetFileActivityResult struct {
-	Index   int
-	Name    string
-	Content []byte
+	Index   int    // Index from the request (for ordering results)
+	Name    string // File name
+	Content []byte // File content bytes
 }
 
 // DeleteFileActivity deletes a single file from MinIO
@@ -77,7 +77,6 @@ func (w *Worker) DeleteFileActivity(ctx context.Context, param *DeleteFileActivi
 		)
 	}
 
-	w.log.Info("File deleted successfully", zap.String("path", param.Path))
 	return nil
 }
 
@@ -115,10 +114,6 @@ func (w *Worker) GetFileActivity(ctx context.Context, param *GetFileActivityPara
 		)
 	}
 
-	w.log.Info("File retrieved successfully",
-		zap.String("path", param.Path),
-		zap.Int("size", len(content)))
-
 	return &GetFileActivityResult{
 		Index:   param.Index,
 		Name:    filepath.Base(param.Path),
@@ -144,8 +139,6 @@ func (w *Worker) UpdateChunkDestinationsActivity(ctx context.Context, param *Upd
 		)
 	}
 
-	w.log.Info("Chunk destinations updated successfully",
-		zap.Int("chunkCount", len(param.Destinations)))
 	return nil
 }
 
@@ -186,9 +179,6 @@ func (w *Worker) SaveChunkBatchActivity(ctx context.Context, param *SaveChunkBat
 
 		destinations[chunkUID] = path
 	}
-
-	w.log.Info("Batch saved successfully",
-		zap.Int("chunkCount", len(destinations)))
 
 	return &SaveChunkBatchActivityResult{
 		Destinations: destinations,

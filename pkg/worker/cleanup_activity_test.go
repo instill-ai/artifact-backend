@@ -25,6 +25,7 @@ func TestCleanupFileWorkflowParam_Validation(t *testing.T) {
 		FileUID:             fileUID,
 		IncludeOriginalFile: true,
 		UserUID:             userUID,
+		RequesterUID:        uuid.Must(uuid.NewV4()),
 		WorkflowID:          "test-workflow-id",
 	}
 

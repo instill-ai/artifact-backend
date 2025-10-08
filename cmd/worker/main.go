@@ -160,9 +160,9 @@ func main() {
 	w.RegisterWorkflow(cw.GetFilesWorkflow)             // Batch file retrieval workflow
 
 	// Child workflows (called by main workflows)
-	w.RegisterWorkflow(cw.ConvertToMarkdownFileWorkflow)    // File format conversion and markdown generation
+	w.RegisterWorkflow(cw.ProcessContentWorkflow)           // Parallel: Convert file to markdown
+	w.RegisterWorkflow(cw.ProcessSummaryWorkflow)           // Parallel: Generate file summary
 	w.RegisterWorkflow(cw.EmbedTextsWorkflow)               // Batch text embedding generation
-	w.RegisterWorkflow(cw.SaveChunksWorkflow)               // Text chunking and persistence
 	w.RegisterWorkflow(cw.SaveEmbeddingsToVectorDBWorkflow) // Vector embedding storage
 
 	// ===== Shared Activities (Used by Multiple Workflows) =====
@@ -198,10 +198,11 @@ func main() {
 	w.RegisterActivity(cw.DeleteKBEmbeddingRecordsActivity)     // Delete all embedding records
 	w.RegisterActivity(cw.PurgeKBACLActivity)                   // Remove all ACL permissions for KB
 
-	// ===== ProcessFileWorkflow Activities =====
+	// ===== ProcessFileWorkflow Activities (Main Workflow) =====
 	// Main workflow orchestrating the entire file processing pipeline
+	// Note: Actual conversion and summarization are delegated to child workflows
 
-	// Conversion Phase - Initial metadata and content retrieval
+	// File Metadata and Setup Phase
 	w.RegisterActivity(cw.GetFileMetadataActivity)                // Fetch file metadata from database
 	w.RegisterActivity(cw.GetFileContentActivity)                 // Retrieve file binary content from MinIO
 	w.RegisterActivity(cw.CleanupOldConvertedFileActivity)        // Remove previous conversion artifacts
@@ -212,7 +213,7 @@ func main() {
 	w.RegisterActivity(cw.DeleteConvertedFileFromMinIOActivity)   // Delete converted file from MinIO on failure
 	w.RegisterActivity(cw.UpdateConversionMetadataActivity)       // Update file status and conversion metadata
 
-	// Chunking Phase - Text chunking and preparation
+	// Chunking Phase - Combined content and summary chunking (sequential after parallel AI operations)
 	w.RegisterActivity(cw.GetConvertedFileForChunkingActivity) // Retrieve converted markdown for chunking
 	w.RegisterActivity(cw.UpdateChunkingMetadataActivity)      // Update file status and chunking metadata
 
@@ -220,20 +221,21 @@ func main() {
 	w.RegisterActivity(cw.GetChunksForEmbeddingActivity)   // Retrieve text chunks for embedding
 	w.RegisterActivity(cw.UpdateEmbeddingMetadataActivity) // Update file status and embedding metadata
 
-	// Summary Phase - Generate file summary
-	w.RegisterActivity(cw.GenerateSummaryFromPipelineActivity) // Generate summary using AI pipeline
-	w.RegisterActivity(cw.SaveSummaryActivity)                 // Save summary to database
-
-	// ===== ConvertToMarkdownFileWorkflow Activities (Child Workflow) =====
-	// Child workflow handling file format conversion, caching, and markdown generation
-	w.RegisterActivity(cw.ConvertFileTypeActivity)              // Convert non-Gemini formats (GIF→PNG, MKV→MP4, DOC→PDF)
-	w.RegisterActivity(cw.CacheContextActivity)                 // Create Gemini cache for efficient processing
-	w.RegisterActivity(cw.DeleteCacheActivity)                  // Clean up Gemini cache after processing
+	// ===== ProcessContentWorkflow Activities (Child Workflow) =====
+	// Child workflow for parallel markdown conversion with shared AI cache
+	w.RegisterActivity(cw.ConvertFileTypeActivity)              // Convert non-AI-native formats (GIF→PNG, MKV→MP4, DOC→PDF)
+	w.RegisterActivity(cw.CacheContextActivity)                 // Create AI cache for efficient processing
+	w.RegisterActivity(cw.ConvertToMarkdownFileActivity)        // Convert file to markdown using AI or pipelines
+	w.RegisterActivity(cw.DeleteCacheActivity)                  // Clean up AI cache after processing
 	w.RegisterActivity(cw.DeleteTemporaryConvertedFileActivity) // Clean up temporary converted file from MinIO (core-blob/tmp/*)
-	w.RegisterActivity(cw.ConvertToMarkdownFileActivity)        // Convert file to markdown using Gemini or pipelines
 
-	// ===== SaveChunksWorkflow Activities (Child Workflow) =====
-	// Child workflow handling text chunking operations
+	// ===== ProcessSummaryWorkflow Activities (Child Workflow) =====
+	// Child workflow for parallel summary generation with shared AI cache
+	w.RegisterActivity(cw.GenerateSummaryActivity) // Generate summary using AI with cache
+	w.RegisterActivity(cw.SaveSummaryActivity)     // Save summary to PostgreSQL database
+
+	// ===== Chunking and Embedding Activities =====
+	// Used in main ProcessFileWorkflow for content chunking and persistence
 	w.RegisterActivity(cw.ChunkContentActivity)   // Split markdown content into semantic chunks
 	w.RegisterActivity(cw.SaveChunksToDBActivity) // Persist chunks to database with metadata
 

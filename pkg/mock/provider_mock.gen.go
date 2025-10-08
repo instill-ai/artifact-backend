@@ -26,9 +26,9 @@ type ProviderMock struct {
 	beforeCloseCounter uint64
 	CloseMock          mProviderMockClose
 
-	funcConvertToMarkdown          func(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string) (cp1 *mm_ai.ConversionResult, err error)
+	funcConvertToMarkdown          func(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string, prompt string) (cp1 *mm_ai.ConversionResult, err error)
 	funcConvertToMarkdownOrigin    string
-	inspectFuncConvertToMarkdown   func(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string)
+	inspectFuncConvertToMarkdown   func(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string, prompt string)
 	afterConvertToMarkdownCounter  uint64
 	beforeConvertToMarkdownCounter uint64
 	ConvertToMarkdownMock          mProviderMockConvertToMarkdown
@@ -317,6 +317,7 @@ type ProviderMockConvertToMarkdownParams struct {
 	content  []byte
 	fileType artifactpb.FileType
 	filename string
+	prompt   string
 }
 
 // ProviderMockConvertToMarkdownParamPtrs contains pointers to parameters of the Provider.ConvertToMarkdown
@@ -325,6 +326,7 @@ type ProviderMockConvertToMarkdownParamPtrs struct {
 	content  *[]byte
 	fileType *artifactpb.FileType
 	filename *string
+	prompt   *string
 }
 
 // ProviderMockConvertToMarkdownResults contains results of the Provider.ConvertToMarkdown
@@ -340,6 +342,7 @@ type ProviderMockConvertToMarkdownExpectationOrigins struct {
 	originContent  string
 	originFileType string
 	originFilename string
+	originPrompt   string
 }
 
 // Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
@@ -353,7 +356,7 @@ func (mmConvertToMarkdown *mProviderMockConvertToMarkdown) Optional() *mProvider
 }
 
 // Expect sets up expected params for Provider.ConvertToMarkdown
-func (mmConvertToMarkdown *mProviderMockConvertToMarkdown) Expect(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string) *mProviderMockConvertToMarkdown {
+func (mmConvertToMarkdown *mProviderMockConvertToMarkdown) Expect(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string, prompt string) *mProviderMockConvertToMarkdown {
 	if mmConvertToMarkdown.mock.funcConvertToMarkdown != nil {
 		mmConvertToMarkdown.mock.t.Fatalf("ProviderMock.ConvertToMarkdown mock is already set by Set")
 	}
@@ -366,7 +369,7 @@ func (mmConvertToMarkdown *mProviderMockConvertToMarkdown) Expect(ctx context.Co
 		mmConvertToMarkdown.mock.t.Fatalf("ProviderMock.ConvertToMarkdown mock is already set by ExpectParams functions")
 	}
 
-	mmConvertToMarkdown.defaultExpectation.params = &ProviderMockConvertToMarkdownParams{ctx, content, fileType, filename}
+	mmConvertToMarkdown.defaultExpectation.params = &ProviderMockConvertToMarkdownParams{ctx, content, fileType, filename, prompt}
 	mmConvertToMarkdown.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
 	for _, e := range mmConvertToMarkdown.expectations {
 		if minimock.Equal(e.params, mmConvertToMarkdown.defaultExpectation.params) {
@@ -469,8 +472,31 @@ func (mmConvertToMarkdown *mProviderMockConvertToMarkdown) ExpectFilenameParam4(
 	return mmConvertToMarkdown
 }
 
+// ExpectPromptParam5 sets up expected param prompt for Provider.ConvertToMarkdown
+func (mmConvertToMarkdown *mProviderMockConvertToMarkdown) ExpectPromptParam5(prompt string) *mProviderMockConvertToMarkdown {
+	if mmConvertToMarkdown.mock.funcConvertToMarkdown != nil {
+		mmConvertToMarkdown.mock.t.Fatalf("ProviderMock.ConvertToMarkdown mock is already set by Set")
+	}
+
+	if mmConvertToMarkdown.defaultExpectation == nil {
+		mmConvertToMarkdown.defaultExpectation = &ProviderMockConvertToMarkdownExpectation{}
+	}
+
+	if mmConvertToMarkdown.defaultExpectation.params != nil {
+		mmConvertToMarkdown.mock.t.Fatalf("ProviderMock.ConvertToMarkdown mock is already set by Expect")
+	}
+
+	if mmConvertToMarkdown.defaultExpectation.paramPtrs == nil {
+		mmConvertToMarkdown.defaultExpectation.paramPtrs = &ProviderMockConvertToMarkdownParamPtrs{}
+	}
+	mmConvertToMarkdown.defaultExpectation.paramPtrs.prompt = &prompt
+	mmConvertToMarkdown.defaultExpectation.expectationOrigins.originPrompt = minimock.CallerInfo(1)
+
+	return mmConvertToMarkdown
+}
+
 // Inspect accepts an inspector function that has same arguments as the Provider.ConvertToMarkdown
-func (mmConvertToMarkdown *mProviderMockConvertToMarkdown) Inspect(f func(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string)) *mProviderMockConvertToMarkdown {
+func (mmConvertToMarkdown *mProviderMockConvertToMarkdown) Inspect(f func(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string, prompt string)) *mProviderMockConvertToMarkdown {
 	if mmConvertToMarkdown.mock.inspectFuncConvertToMarkdown != nil {
 		mmConvertToMarkdown.mock.t.Fatalf("Inspect function is already set for ProviderMock.ConvertToMarkdown")
 	}
@@ -495,7 +521,7 @@ func (mmConvertToMarkdown *mProviderMockConvertToMarkdown) Return(cp1 *mm_ai.Con
 }
 
 // Set uses given function f to mock the Provider.ConvertToMarkdown method
-func (mmConvertToMarkdown *mProviderMockConvertToMarkdown) Set(f func(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string) (cp1 *mm_ai.ConversionResult, err error)) *ProviderMock {
+func (mmConvertToMarkdown *mProviderMockConvertToMarkdown) Set(f func(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string, prompt string) (cp1 *mm_ai.ConversionResult, err error)) *ProviderMock {
 	if mmConvertToMarkdown.defaultExpectation != nil {
 		mmConvertToMarkdown.mock.t.Fatalf("Default expectation is already set for the Provider.ConvertToMarkdown method")
 	}
@@ -511,14 +537,14 @@ func (mmConvertToMarkdown *mProviderMockConvertToMarkdown) Set(f func(ctx contex
 
 // When sets expectation for the Provider.ConvertToMarkdown which will trigger the result defined by the following
 // Then helper
-func (mmConvertToMarkdown *mProviderMockConvertToMarkdown) When(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string) *ProviderMockConvertToMarkdownExpectation {
+func (mmConvertToMarkdown *mProviderMockConvertToMarkdown) When(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string, prompt string) *ProviderMockConvertToMarkdownExpectation {
 	if mmConvertToMarkdown.mock.funcConvertToMarkdown != nil {
 		mmConvertToMarkdown.mock.t.Fatalf("ProviderMock.ConvertToMarkdown mock is already set by Set")
 	}
 
 	expectation := &ProviderMockConvertToMarkdownExpectation{
 		mock:               mmConvertToMarkdown.mock,
-		params:             &ProviderMockConvertToMarkdownParams{ctx, content, fileType, filename},
+		params:             &ProviderMockConvertToMarkdownParams{ctx, content, fileType, filename, prompt},
 		expectationOrigins: ProviderMockConvertToMarkdownExpectationOrigins{origin: minimock.CallerInfo(1)},
 	}
 	mmConvertToMarkdown.expectations = append(mmConvertToMarkdown.expectations, expectation)
@@ -553,17 +579,17 @@ func (mmConvertToMarkdown *mProviderMockConvertToMarkdown) invocationsDone() boo
 }
 
 // ConvertToMarkdown implements mm_ai.Provider
-func (mmConvertToMarkdown *ProviderMock) ConvertToMarkdown(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string) (cp1 *mm_ai.ConversionResult, err error) {
+func (mmConvertToMarkdown *ProviderMock) ConvertToMarkdown(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string, prompt string) (cp1 *mm_ai.ConversionResult, err error) {
 	mm_atomic.AddUint64(&mmConvertToMarkdown.beforeConvertToMarkdownCounter, 1)
 	defer mm_atomic.AddUint64(&mmConvertToMarkdown.afterConvertToMarkdownCounter, 1)
 
 	mmConvertToMarkdown.t.Helper()
 
 	if mmConvertToMarkdown.inspectFuncConvertToMarkdown != nil {
-		mmConvertToMarkdown.inspectFuncConvertToMarkdown(ctx, content, fileType, filename)
+		mmConvertToMarkdown.inspectFuncConvertToMarkdown(ctx, content, fileType, filename, prompt)
 	}
 
-	mm_params := ProviderMockConvertToMarkdownParams{ctx, content, fileType, filename}
+	mm_params := ProviderMockConvertToMarkdownParams{ctx, content, fileType, filename, prompt}
 
 	// Record call args
 	mmConvertToMarkdown.ConvertToMarkdownMock.mutex.Lock()
@@ -582,7 +608,7 @@ func (mmConvertToMarkdown *ProviderMock) ConvertToMarkdown(ctx context.Context, 
 		mm_want := mmConvertToMarkdown.ConvertToMarkdownMock.defaultExpectation.params
 		mm_want_ptrs := mmConvertToMarkdown.ConvertToMarkdownMock.defaultExpectation.paramPtrs
 
-		mm_got := ProviderMockConvertToMarkdownParams{ctx, content, fileType, filename}
+		mm_got := ProviderMockConvertToMarkdownParams{ctx, content, fileType, filename, prompt}
 
 		if mm_want_ptrs != nil {
 
@@ -606,6 +632,11 @@ func (mmConvertToMarkdown *ProviderMock) ConvertToMarkdown(ctx context.Context, 
 					mmConvertToMarkdown.ConvertToMarkdownMock.defaultExpectation.expectationOrigins.originFilename, *mm_want_ptrs.filename, mm_got.filename, minimock.Diff(*mm_want_ptrs.filename, mm_got.filename))
 			}
 
+			if mm_want_ptrs.prompt != nil && !minimock.Equal(*mm_want_ptrs.prompt, mm_got.prompt) {
+				mmConvertToMarkdown.t.Errorf("ProviderMock.ConvertToMarkdown got unexpected parameter prompt, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmConvertToMarkdown.ConvertToMarkdownMock.defaultExpectation.expectationOrigins.originPrompt, *mm_want_ptrs.prompt, mm_got.prompt, minimock.Diff(*mm_want_ptrs.prompt, mm_got.prompt))
+			}
+
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
 			mmConvertToMarkdown.t.Errorf("ProviderMock.ConvertToMarkdown got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
 				mmConvertToMarkdown.ConvertToMarkdownMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
@@ -618,9 +649,9 @@ func (mmConvertToMarkdown *ProviderMock) ConvertToMarkdown(ctx context.Context, 
 		return (*mm_results).cp1, (*mm_results).err
 	}
 	if mmConvertToMarkdown.funcConvertToMarkdown != nil {
-		return mmConvertToMarkdown.funcConvertToMarkdown(ctx, content, fileType, filename)
+		return mmConvertToMarkdown.funcConvertToMarkdown(ctx, content, fileType, filename, prompt)
 	}
-	mmConvertToMarkdown.t.Fatalf("Unexpected call to ProviderMock.ConvertToMarkdown. %v %v %v %v", ctx, content, fileType, filename)
+	mmConvertToMarkdown.t.Fatalf("Unexpected call to ProviderMock.ConvertToMarkdown. %v %v %v %v %v", ctx, content, fileType, filename, prompt)
 	return
 }
 

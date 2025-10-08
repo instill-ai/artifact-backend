@@ -83,6 +83,7 @@ func (w *Worker) CleanupFileWorkflow(ctx workflow.Context, param service.Cleanup
 	logger.Info("Starting CleanupFileWorkflow",
 		"fileUID", param.FileUID.String(),
 		"userUID", param.UserUID.String(),
+		"requesterUID", param.RequesterUID.String(),
 		"workflowID", param.WorkflowID,
 		"includeOriginalFile", param.IncludeOriginalFile)
 
@@ -183,6 +184,8 @@ func (w *Worker) CleanupFileWorkflow(ctx workflow.Context, param service.Cleanup
 
 	logger.Info("CleanupFileWorkflow completed successfully",
 		"fileUID", param.FileUID.String(),
+		"userUID", param.UserUID.String(),
+		"requesterUID", param.RequesterUID.String(),
 		"workflowID", param.WorkflowID)
 	return nil
 }

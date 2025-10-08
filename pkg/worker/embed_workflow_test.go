@@ -120,6 +120,8 @@ func TestSaveEmbeddingsToVectorDBWorkflow_Success(t *testing.T) {
 		FileUID:          fileUID,
 		FileName:         "test.pdf",
 		Embeddings:       embeddings,
+		UserUID:          uuid.Must(uuid.NewV4()),
+		RequesterUID:     uuid.Must(uuid.NewV4()),
 	}
 
 	// Setup mock expectations
@@ -169,6 +171,8 @@ func TestSaveEmbeddingsToVectorDBWorkflow_EmptyEmbeddings(t *testing.T) {
 		FileUID:          uuid.Must(uuid.NewV4()),
 		FileName:         "test.pdf",
 		Embeddings:       []repository.Embedding{}, // Empty
+		UserUID:          uuid.Must(uuid.NewV4()),
+		RequesterUID:     uuid.Must(uuid.NewV4()),
 	}
 
 	worker := &Worker{service: mockSvc, log: zap.NewNop()}
@@ -206,6 +210,8 @@ func TestSaveEmbeddingsToVectorDBWorkflow_DeleteMilvusFailure(t *testing.T) {
 		FileUID:          uuid.Must(uuid.NewV4()),
 		FileName:         "test.pdf",
 		Embeddings:       createWorkflowTestEmbeddings(50),
+		UserUID:          uuid.Must(uuid.NewV4()),
+		RequesterUID:     uuid.Must(uuid.NewV4()),
 	}
 
 	worker := &Worker{service: mockSvc, log: zap.NewNop()}
@@ -245,6 +251,8 @@ func TestSaveEmbeddingsToVectorDBWorkflow_DeleteDBFailure(t *testing.T) {
 		FileUID:          uuid.Must(uuid.NewV4()),
 		FileName:         "test.pdf",
 		Embeddings:       createWorkflowTestEmbeddings(50),
+		UserUID:          uuid.Must(uuid.NewV4()),
+		RequesterUID:     uuid.Must(uuid.NewV4()),
 	}
 
 	worker := &Worker{service: mockSvc, log: zap.NewNop()}
@@ -282,6 +290,8 @@ func TestSaveEmbeddingsToVectorDBWorkflow_BatchFailure(t *testing.T) {
 		FileUID:          uuid.Must(uuid.NewV4()),
 		FileName:         "test.pdf",
 		Embeddings:       createWorkflowTestEmbeddings(50),
+		UserUID:          uuid.Must(uuid.NewV4()),
+		RequesterUID:     uuid.Must(uuid.NewV4()),
 	}
 
 	worker := &Worker{service: mockSvc, log: zap.NewNop()}
@@ -319,6 +329,8 @@ func TestSaveEmbeddingsToVectorDBWorkflow_LargeDataset(t *testing.T) {
 		FileUID:          uuid.Must(uuid.NewV4()),
 		FileName:         "large.pdf",
 		Embeddings:       embeddings,
+		UserUID:          uuid.Must(uuid.NewV4()),
+		RequesterUID:     uuid.Must(uuid.NewV4()),
 	}
 
 	mockVectorDB.DeleteEmbeddingsWithFileUIDMock.Return(nil)

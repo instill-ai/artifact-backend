@@ -49,13 +49,14 @@ func (p *Provider) Name() string {
 // ConvertToMarkdown implements ai.Provider
 // Note: This does direct conversion WITHOUT creating a cache.
 // For cached conversion, use ConvertToMarkdownWithCache() with a pre-existing cache.
-func (p *Provider) ConvertToMarkdown(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string) (*ai.ConversionResult, error) {
+func (p *Provider) ConvertToMarkdown(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string, prompt string) (*ai.ConversionResult, error) {
 	mimeType := ai.FileTypeToMIME(fileType)
 	input := &ConversionInput{
-		Content:     content,
-		ContentType: mimeType,
-		Filename:    filename,
-		Model:       DefaultConversionModel,
+		Content:      content,
+		ContentType:  mimeType,
+		Filename:     filename,
+		Model:        DefaultConversionModel,
+		CustomPrompt: &prompt,
 	}
 
 	output, err := p.convertToMarkdownWithRetry(ctx, input, 2)

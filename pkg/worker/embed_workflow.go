@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gofrs/uuid"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
+	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/service"
 
 	errorsx "github.com/instill-ai/x/errors"
@@ -118,6 +120,16 @@ func (w *Worker) EmbedTextsWorkflow(ctx workflow.Context, param service.EmbedTex
 	return allVectors, nil
 }
 
+// SaveEmbeddingsToVectorDBWorkflowParam saves embeddings to vector db
+type SaveEmbeddingsToVectorDBWorkflowParam struct {
+	KnowledgeBaseUID uuid.UUID              // Knowledge base unique identifier
+	FileUID          uuid.UUID              // File unique identifier
+	FileName         string                 // File name for identification
+	Embeddings       []repository.Embedding // Embeddings to save
+	UserUID          uuid.UUID              // User unique identifier
+	RequesterUID     uuid.UUID              // Requester unique identifier
+}
+
 // SaveEmbeddingsToVectorDBWorkflow orchestrates parallel saving of embedding batches
 // This workflow provides better performance than the single-activity approach by:
 // 1. Deleting old embeddings once upfront
@@ -127,6 +139,8 @@ func (w *Worker) SaveEmbeddingsToVectorDBWorkflow(ctx workflow.Context, param Sa
 	logger.Info("Starting SaveEmbeddingsToVectorDBWorkflow",
 		"kbUID", param.KnowledgeBaseUID.String(),
 		"fileUID", param.FileUID.String(),
+		"userUID", param.UserUID.String(),
+		"requesterUID", param.RequesterUID.String(),
 		"embeddingCount", len(param.Embeddings))
 
 	if len(param.Embeddings) == 0 {
@@ -229,6 +243,10 @@ func (w *Worker) SaveEmbeddingsToVectorDBWorkflow(ctx workflow.Context, param Sa
 	}
 
 	logger.Info("SaveEmbeddingsToVectorDBWorkflow completed successfully",
+		"kbUID", param.KnowledgeBaseUID.String(),
+		"fileUID", param.FileUID.String(),
+		"userUID", param.UserUID.String(),
+		"requesterUID", param.RequesterUID.String(),
 		"totalEmbeddings", len(param.Embeddings),
 		"totalBatches", totalBatches)
 

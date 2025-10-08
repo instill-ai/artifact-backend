@@ -28,60 +28,52 @@ import (
 
 // EmbedTextsActivityParam defines the parameters for the EmbedTextsActivity
 type EmbedTextsActivityParam struct {
-	Texts           []string
-	BatchIndex      int
+	Texts           []string            // Texts to generate embeddings for
+	BatchIndex      int                 // Index of this batch in the overall embedding workflow
 	RequestMetadata map[string][]string // gRPC metadata for authentication
 }
 
 // GetChunksForEmbeddingActivityParam retrieves chunks for embedding
 type GetChunksForEmbeddingActivityParam struct {
-	FileUID uuid.UUID
+	FileUID uuid.UUID // File unique identifier
 }
 
 // GetChunksForEmbeddingActivityResult contains chunk data
 type GetChunksForEmbeddingActivityResult struct {
-	SourceTable string
-	SourceUID   uuid.UUID
-	Chunks      []repository.TextChunk
-	Texts       []string
-	Metadata    *structpb.Struct
-	FileName    string
-}
-
-// SaveEmbeddingsToVectorDBWorkflowParam saves embeddings to vector db
-type SaveEmbeddingsToVectorDBWorkflowParam struct {
-	KnowledgeBaseUID uuid.UUID
-	FileUID          uuid.UUID
-	FileName         string
-	Embeddings       []repository.Embedding
+	SourceTable string                 // Source table name (e.g., "converted_file")
+	SourceUID   uuid.UUID              // Source record unique identifier
+	Chunks      []repository.TextChunk // Text chunks with metadata
+	Texts       []string               // Text content for embedding generation
+	Metadata    *structpb.Struct       // External metadata from request
+	FileName    string                 // File name for identification
 }
 
 // SaveEmbeddingBatchActivityParam saves a single batch of embeddings
 type SaveEmbeddingBatchActivityParam struct {
-	KnowledgeBaseUID uuid.UUID
-	FileUID          uuid.UUID
-	FileName         string
-	Embeddings       []repository.Embedding
-	BatchNumber      int
-	TotalBatches     int
+	KnowledgeBaseUID uuid.UUID              // Knowledge base unique identifier
+	FileUID          uuid.UUID              // File unique identifier
+	FileName         string                 // File name for identification
+	Embeddings       []repository.Embedding // Embeddings batch to save
+	BatchNumber      int                    // Current batch number (1-based)
+	TotalBatches     int                    // Total number of batches
 }
 
 // DeleteOldEmbeddingsActivityParam for deleting old embeddings before batch save
 type DeleteOldEmbeddingsActivityParam struct {
-	KnowledgeBaseUID uuid.UUID
-	FileUID          uuid.UUID
+	KnowledgeBaseUID uuid.UUID // Knowledge base unique identifier
+	FileUID          uuid.UUID // File unique identifier
 }
 
 // SaveEmbeddingsToDBActivityParam saves embedding metadata to DB
 type SaveEmbeddingsToDBActivityParam struct {
-	FileUID    uuid.UUID
-	Embeddings []repository.Embedding
+	FileUID    uuid.UUID              // File unique identifier
+	Embeddings []repository.Embedding // Embeddings to save to database
 }
 
 // UpdateEmbeddingMetadataActivityParam updates metadata after embedding
 type UpdateEmbeddingMetadataActivityParam struct {
-	FileUID  uuid.UUID
-	Pipeline string
+	FileUID  uuid.UUID // File unique identifier
+	Pipeline string    // Pipeline used for embedding generation
 }
 
 // GetChunksForEmbeddingActivity retrieves chunks and texts for embedding
@@ -184,8 +176,6 @@ func (w *Worker) SaveEmbeddingBatchActivity(ctx context.Context, param *SaveEmbe
 		)
 	}
 
-	w.log.Info("SaveEmbeddingBatchActivity: Batch saved successfully in vector db",
-		zap.Int("batchNumber", param.BatchNumber))
 	return nil
 }
 
@@ -207,7 +197,6 @@ func (w *Worker) DeleteOldEmbeddingsFromVectorDBActivity(ctx context.Context, pa
 		)
 	}
 
-	w.log.Info("DeleteOldEmbeddingsFromVectorDBActivity: Successfully deleted embeddings from vector db")
 	return nil
 }
 
@@ -226,7 +215,6 @@ func (w *Worker) DeleteOldEmbeddingsFromDBActivity(ctx context.Context, param *D
 		)
 	}
 
-	w.log.Info("DeleteOldEmbeddingsFromDBActivity: Successfully deleted embeddings from DB")
 	return nil
 }
 
@@ -247,7 +235,6 @@ func (w *Worker) FlushCollectionActivity(ctx context.Context, param *DeleteOldEm
 		)
 	}
 
-	w.log.Info("FlushCollectionActivity: Collection flushed from vector db successfully")
 	return nil
 }
 
@@ -277,7 +264,6 @@ func (w *Worker) UpdateEmbeddingMetadataActivity(ctx context.Context, param *Upd
 		)
 	}
 
-	w.log.Info("UpdateEmbeddingMetadataActivity: Metadata updated from DB successfully")
 	return nil
 }
 

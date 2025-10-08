@@ -31,7 +31,8 @@ type Provider interface {
 	Name() string
 
 	// ConvertToMarkdown understands unstructured data content and extracts it to Markdown
-	ConvertToMarkdown(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string) (*ConversionResult, error)
+	// The prompt parameter specifies the task-specific instruction (e.g., conversion prompt or summary prompt)
+	ConvertToMarkdown(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string, prompt string) (*ConversionResult, error)
 
 	// ConvertToMarkdownWithCache uses a pre-existing cached context for content understanding
 	ConvertToMarkdownWithCache(ctx context.Context, cacheName, prompt string) (*ConversionResult, error)

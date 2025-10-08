@@ -229,17 +229,17 @@ func TestConstants(t *testing.T) {
 	})
 
 	t.Run("DefaultPromptTemplate not empty", func(t *testing.T) {
-		c.Assert(DefaultPromptTemplate, qt.Not(qt.Equals), "")
-		c.Assert(len(DefaultPromptTemplate) > 100, qt.IsTrue, qt.Commentf("Prompt template should be comprehensive"))
+		c.Assert(DefaultConvertToMarkdownPromptTemplate, qt.Not(qt.Equals), "")
+		c.Assert(len(DefaultConvertToMarkdownPromptTemplate) > 100, qt.IsTrue, qt.Commentf("Prompt template should be comprehensive"))
 	})
 
 	t.Run("DefaultPromptTemplate contains key instructions", func(t *testing.T) {
 		// Verify prompt contains multimodal guidance
-		c.Assert(DefaultPromptTemplate, qt.Contains, "document")
-		c.Assert(DefaultPromptTemplate, qt.Contains, "image")
-		c.Assert(DefaultPromptTemplate, qt.Contains, "audio")
-		c.Assert(DefaultPromptTemplate, qt.Contains, "video")
-		c.Assert(DefaultPromptTemplate, qt.Contains, "Markdown")
+		c.Assert(DefaultConvertToMarkdownPromptTemplate, qt.Contains, "document")
+		c.Assert(DefaultConvertToMarkdownPromptTemplate, qt.Contains, "image")
+		c.Assert(DefaultConvertToMarkdownPromptTemplate, qt.Contains, "audio")
+		c.Assert(DefaultConvertToMarkdownPromptTemplate, qt.Contains, "video")
+		c.Assert(DefaultConvertToMarkdownPromptTemplate, qt.Contains, "Markdown")
 	})
 
 	t.Run("DefaultSystemInstruction mentions multimodal", func(t *testing.T) {

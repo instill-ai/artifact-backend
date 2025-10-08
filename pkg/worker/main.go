@@ -57,7 +57,7 @@ func New(svc service.Service, log *zap.Logger) (*Worker, error) {
 		log:     log,
 	}
 
-	// Initialize AI provider for unstructured data content understanding (Gemini, OpenAI, etc.)
+	// Initialize AI provider for unstructured data content understanding
 	// If not configured or initialization fails, worker will fall back to pipeline conversion
 	var provider ai.Provider
 	cfg := config.Config // Access global config
@@ -73,7 +73,7 @@ func New(svc service.Service, log *zap.Logger) (*Worker, error) {
 		}
 	}
 
-	// Future: Try OpenAI if Gemini not configured
+	// Future: Add support for additional AI providers (e.g., OpenAI, Claude)
 	// if provider == nil && cfg.AI.OpenAI.APIKey != "" {
 	//     openaiProvider, err := openai.NewProvider(context.Background(), cfg.AI.OpenAI.APIKey)
 	//     if err == nil {

@@ -31,6 +31,7 @@ type CleanupFileWorkflowParam struct {
 	FileUID             uuid.UUID
 	IncludeOriginalFile bool
 	UserUID             uuid.UUID
+	RequesterUID        uuid.UUID
 	WorkflowID          string
 }
 
@@ -39,13 +40,6 @@ type EmbedTextsWorkflowParam struct {
 	Texts           []string
 	BatchSize       int
 	RequestMetadata map[string][]string
-}
-
-// SaveChunksWorkflowParam defines the parameters for the SaveChunksWorkflow
-type SaveChunksWorkflowParam struct {
-	KnowledgeBaseUID uuid.UUID
-	FileUID          uuid.UUID
-	Chunks           map[string][]byte
 }
 
 // DeleteFilesWorkflowParam defines the parameters for the DeleteFilesWorkflow

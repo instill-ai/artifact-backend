@@ -622,8 +622,8 @@ func (ph *PublicHandler) GetCatalogFile(ctx context.Context, req *artifactpb.Get
 func (ph *PublicHandler) DeleteCatalogFile(ctx context.Context, req *artifactpb.DeleteCatalogFileRequest) (*artifactpb.DeleteCatalogFileResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 
-	// Get authenticated user UID for proper context in cleanup operations
-	authUID, err := getUserUIDFromContext(ctx)
+	// Get authenticated user UID for ACL checks
+	_, err := getUserUIDFromContext(ctx)
 	if err != nil {
 		logger.Error("failed to get user id from header", zap.Error(err))
 		return nil, fmt.Errorf("failed to get user id from header: %v. err: %w", err, errorsx.ErrUnauthenticated)
@@ -680,7 +680,8 @@ func (ph *PublicHandler) DeleteCatalogFile(ctx context.Context, req *artifactpb.
 		param := service.CleanupFileWorkflowParam{
 			FileUID:             fUID,
 			IncludeOriginalFile: true,
-			UserUID:             uuid.FromStringOrNil(authUID),
+			UserUID:             files[0].Owner,
+			RequesterUID:        files[0].RequesterUID,
 			WorkflowID:          workflowID,
 		}
 
