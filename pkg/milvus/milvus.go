@@ -3,6 +3,7 @@ package milvus
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -34,6 +35,7 @@ const (
 	kbCollectionFieldFileName     = "file_name"
 	kbCollectionFieldFileType     = "file_type"
 	kbCollectionFieldContentType  = "content_type"
+	kbCollectionFieldTags         = "tags"
 )
 
 type milvusClient struct {
@@ -65,21 +67,65 @@ func (m *milvusClient) CreateCollection(ctx context.Context, collectionName stri
 	}
 
 	// 2. Create the collection with the specified schema
-	vectorDim := fmt.Sprintf("%d", vectorDim)
-	schema := &entity.Schema{
-		CollectionName: collectionName,
-		Description:    "",
-		Fields: []*entity.Field{
-			{Name: kbCollectionFieldSourceTable, DataType: entity.FieldTypeVarChar, TypeParams: map[string]string{"max_length": "255"}},
-			{Name: kbCollectionFieldSourceUID, DataType: entity.FieldTypeVarChar, TypeParams: map[string]string{"max_length": "255"}},
-			{Name: kbCollectionFieldEmbeddingUID, DataType: entity.FieldTypeVarChar, PrimaryKey: true, TypeParams: map[string]string{"max_length": "255"}},
-			{Name: kbCollectionFieldEmbedding, DataType: entity.FieldTypeFloatVector, TypeParams: map[string]string{"dim": vectorDim}},
-			{Name: kbCollectionFieldFileUID, DataType: entity.FieldTypeVarChar, TypeParams: map[string]string{"max_length": "255"}},
-			{Name: kbCollectionFieldFileName, DataType: entity.FieldTypeVarChar, TypeParams: map[string]string{"max_length": "255"}},
-			{Name: kbCollectionFieldFileType, DataType: entity.FieldTypeVarChar, TypeParams: map[string]string{"max_length": "255"}},
-			{Name: kbCollectionFieldContentType, DataType: entity.FieldTypeVarChar, TypeParams: map[string]string{"max_length": "255"}},
-		},
-	}
+	schema := entity.NewSchema().
+		WithName(collectionName).
+		WithField(
+			entity.NewField().
+				WithName(kbCollectionFieldSourceTable).
+				WithDataType(entity.FieldTypeVarChar).
+				WithMaxLength(255),
+		).
+		WithField(
+			entity.NewField().
+				WithName(kbCollectionFieldSourceUID).
+				WithDataType(entity.FieldTypeVarChar).
+				WithMaxLength(255),
+		).
+		WithField(
+			entity.NewField().
+				WithName(kbCollectionFieldEmbeddingUID).
+				WithDataType(entity.FieldTypeVarChar).
+				WithIsPrimaryKey(true).
+				WithMaxLength(255),
+		).
+		WithField(
+			entity.NewField().
+				WithName(kbCollectionFieldEmbedding).
+				WithDataType(entity.FieldTypeFloatVector).
+				WithDim(vectorDim),
+		).
+		WithField(
+			entity.NewField().
+				WithName(kbCollectionFieldFileUID).
+				WithDataType(entity.FieldTypeVarChar).
+				WithMaxLength(255),
+		).
+		WithField(
+			entity.NewField().
+				WithName(kbCollectionFieldFileName).
+				WithDataType(entity.FieldTypeVarChar).
+				WithMaxLength(255),
+		).
+		WithField(
+			entity.NewField().
+				WithName(kbCollectionFieldFileType).
+				WithDataType(entity.FieldTypeVarChar).
+				WithMaxLength(255),
+		).
+		WithField(
+			entity.NewField().
+				WithName(kbCollectionFieldContentType).
+				WithDataType(entity.FieldTypeVarChar).
+				WithMaxLength(255),
+		).
+		WithField(
+			entity.NewField().
+				WithName(kbCollectionFieldTags).
+				WithDataType(entity.FieldTypeArray).
+				WithMaxCapacity(1024). // TODO import from service
+				WithElementType(entity.FieldTypeVarChar).
+				WithMaxLength(255),
+		)
 
 	err = m.c.CreateCollection(ctx, schema, 1)
 	if err != nil {
@@ -95,6 +141,7 @@ func (m *milvusClient) CreateCollection(ctx context.Context, collectionName stri
 	for field, idx := range map[string]entity.Index{
 		kbCollectionFieldEmbedding: vectorIdx,
 		kbCollectionFieldFileUID:   entity.NewScalarIndexWithType(entity.Inverted),
+		kbCollectionFieldTags:      entity.NewScalarIndexWithType(entity.Inverted),
 	} {
 		err = m.c.CreateIndex(ctx, collectionName, field, idx, false)
 		if err != nil {
@@ -129,6 +176,7 @@ func (m *milvusClient) InsertVectorsInCollection(ctx context.Context, collection
 	fileNames := make([]string, vectorCount)
 	fileTypes := make([]string, vectorCount)
 	contentTypes := make([]string, vectorCount)
+	tags := make([][][]byte, vectorCount)
 
 	for i, embedding := range embeddings {
 		sourceTables[i] = embedding.SourceTable
@@ -138,9 +186,15 @@ func (m *milvusClient) InsertVectorsInCollection(ctx context.Context, collection
 		fileNames[i] = embedding.FileName
 		fileTypes[i] = embedding.FileType
 		contentTypes[i] = embedding.ContentType
+
 		vectors[i] = make([]float32, len(embedding.Vector))
 		for j, val := range embedding.Vector {
 			vectors[i][j] = float32(val)
+		}
+
+		tags[i] = make([][]byte, len(embedding.Tags))
+		for j, tag := range embedding.Tags {
+			tags[i][j] = []byte(tag)
 		}
 	}
 
@@ -152,12 +206,12 @@ func (m *milvusClient) InsertVectorsInCollection(ctx context.Context, collection
 		entity.NewColumnFloatVector(kbCollectionFieldEmbedding, vectorDim, vectors),
 	}
 
-	hasMetadata, hasFileUID, err := m.checkMetadataFields(ctx, collectionName)
+	fields, err := m.extractCollectionFields(ctx, collectionName)
 	if err != nil {
 		return fmt.Errorf("checking metadata fields: %w", err)
 	}
 
-	if hasMetadata {
+	if fields.hasLegacyMetadata() {
 		columns = append(columns,
 			entity.NewColumnVarChar(kbCollectionFieldFileName, fileNames),
 			entity.NewColumnVarChar(kbCollectionFieldFileType, fileTypes),
@@ -165,8 +219,12 @@ func (m *milvusClient) InsertVectorsInCollection(ctx context.Context, collection
 		)
 	}
 
-	if hasFileUID {
+	if fields.hasFileUID() {
 		columns = append(columns, entity.NewColumnVarChar(kbCollectionFieldFileUID, fileUIDs))
+	}
+
+	if fields.hasTags() {
+		columns = append(columns, entity.NewColumnVarCharArray(kbCollectionFieldTags, tags))
 	}
 
 	// Insert the data with retry
@@ -201,12 +259,12 @@ func (m *milvusClient) InsertVectorsInCollection(ctx context.Context, collection
 }
 
 func (m *milvusClient) DeleteEmbeddingsWithFileUID(ctx context.Context, collectionName string, fileUID uuid.UUID) error {
-	_, hasFileUID, err := m.checkMetadataFields(ctx, collectionName)
+	fields, err := m.extractCollectionFields(ctx, collectionName)
 	if err != nil {
 		return fmt.Errorf("checking metadata fields: %w", err)
 	}
 
-	if !hasFileUID {
+	if !fields.hasFileUID() {
 		return nil
 	}
 
@@ -282,7 +340,7 @@ func (m *milvusClient) SimilarVectorsInCollection(ctx context.Context, p service
 	}
 	logger.Info("Collection load.", zap.Duration("duration", time.Since(t)))
 
-	hasMetadata, hasFileUID, err := m.checkMetadataFields(ctx, collectionName)
+	fields, err := m.extractCollectionFields(ctx, collectionName)
 	if err != nil {
 		return nil, fmt.Errorf("checking metadata fields: %w", err)
 	}
@@ -293,8 +351,11 @@ func (m *milvusClient) SimilarVectorsInCollection(ctx context.Context, p service
 		kbCollectionFieldEmbeddingUID,
 		kbCollectionFieldEmbedding,
 	}
+
 	var filterStrs []string
-	if hasMetadata {
+	fileUIDFilter := m.fileUIDFilter(p.FileUIDs)
+
+	if fields.hasLegacyMetadata() {
 		outputFields = append(
 			outputFields,
 			kbCollectionFieldFileName,
@@ -302,12 +363,10 @@ func (m *milvusClient) SimilarVectorsInCollection(ctx context.Context, p service
 			kbCollectionFieldContentType,
 		)
 
-		if hasFileUID {
+		if fields.hasFileUID() {
 			outputFields = append(outputFields, kbCollectionFieldFileUID)
-
-			filter := m.fileUIDFilter(p.FileUIDs)
-			if filter != "" {
-				filterStrs = append(filterStrs, filter)
+			if fileUIDFilter != "" {
+				filterStrs = append(filterStrs, fileUIDFilter)
 			}
 		} else if len(p.FileNames) > 0 {
 			// Filename filter is only used for backwards compatibility in
@@ -325,7 +384,27 @@ func (m *milvusClient) SimilarVectorsInCollection(ctx context.Context, p service
 		}
 	}
 
+	// Several files can share a tag, but all the embeddings extracted from a
+	// file share the same tags. Therefore, a file UID filter takes precedence
+	// over a tag filter.
+	if len(p.Tags) > 0 && fileUIDFilter == "" {
+		// If tags are provided but collection doesn't support them, ignore tag filter
+		if !fields.hasTags() {
+			logger.Info("Collection does not support tags, ignoring tag filter")
+		} else {
+			// Use ARRAY_CONTAINS_ANY for OR logic with multiple tags
+			// Format: ARRAY_CONTAINS_ANY(tags, ["tag1", "tag2"])
+			tagList := make([]string, len(p.Tags))
+			for i, tag := range p.Tags {
+				tagList[i] = fmt.Sprintf("\"%s\"", tag)
+			}
+			filter := fmt.Sprintf("ARRAY_CONTAINS_ANY(%s, [%s])", kbCollectionFieldTags, strings.Join(tagList, ","))
+			filterStrs = append(filterStrs, filter)
+		}
+	}
+
 	t = time.Now()
+
 	// Convert the input vector to float32
 	milvusVectors := make([]entity.Vector, len(p.Vectors))
 	// milvus search vector support batch search, but we just need one vector
@@ -392,36 +471,69 @@ func (m *milvusClient) SimilarVectorsInCollection(ctx context.Context, p service
 	return embeddings, nil
 }
 
+// DropCollection removes a collection from the vector database.
 func (m *milvusClient) DropCollection(ctx context.Context, collectionName string) error {
 	return m.c.DropCollection(ctx, collectionName)
 }
 
-func (m *milvusClient) CheckFileUIDMetadata(ctx context.Context, collectionName string) (bool, error) {
-	_, hasFileUID, err := m.checkMetadataFields(ctx, collectionName)
-	return hasFileUID, err
+// CheckFileUIDMetadata returns whether the collection's schema allows for file
+// UID metadata.
+func (m *milvusClient) CheckFileUIDMetadata(ctx context.Context, kbUID uuid.UUID) (bool, error) {
+	fields, err := m.extractCollectionFields(ctx, service.KBCollectionName(kbUID))
+	if err != nil {
+		return false, err
+	}
+
+	return fields.hasFileUID(), nil
 }
 
-// checkMetadataFields returns whether the collection schema has metadata
-// fields. Additionally, it checks the file UID metadata field separately as it
-// was introduced later and certain legacy collections don't have it.
-func (m *milvusClient) checkMetadataFields(ctx context.Context, collectionName string) (hasMetadata, hasFileUID bool, _ error) {
+// CheckTagsMetadata returns whether the collection's schema allows for tag
+// metadata.
+func (m *milvusClient) CheckTagsMetadata(ctx context.Context, kbUID uuid.UUID) (bool, error) {
+	fields, err := m.extractCollectionFields(ctx, service.KBCollectionName((kbUID)))
+	if err != nil {
+		return false, err
+	}
+
+	return fields.hasTags(), nil
+}
+
+// collectionFields is used to check the metadata present in a collection.
+// Collections schemas have gone through modifications over time and this
+// allows us to set the expectations when inserting and fetching data from
+// them.
+//
+// TODO: There's an upcoming feature changing the embedding method (with a new
+// vector size), which will require a collection migration. This is an
+// opportunity to unify the collection schemas.
+type collectionFields []string
+
+func (cf collectionFields) hasLegacyMetadata() bool {
+	return slices.Contains(cf, kbCollectionFieldFileName) &&
+		slices.Contains(cf, kbCollectionFieldFileType) &&
+		slices.Contains(cf, kbCollectionFieldContentType)
+}
+
+func (cf collectionFields) hasFileUID() bool {
+	return slices.Contains(cf, kbCollectionFieldFileUID)
+}
+
+func (cf collectionFields) hasTags() bool {
+	return slices.Contains(cf, kbCollectionFieldTags)
+}
+
+func (m *milvusClient) extractCollectionFields(ctx context.Context, collectionName string) (collectionFields, error) {
 	collDesc, err := m.c.DescribeCollection(ctx, collectionName)
 	if err != nil {
-		return false, false, fmt.Errorf("describing collection: %w", err)
+		return nil, fmt.Errorf("describing collection: %w", err)
 	}
 
-	var existingFields = map[string]bool{}
-	for _, field := range collDesc.Schema.Fields {
-		existingFields[field.Name] = true
+	fields := collectionFields(make([]string, len(collDesc.Schema.Fields)))
+	for i, field := range collDesc.Schema.Fields {
+		fields[i] = field.Name
 	}
 
-	hasMetadata = existingFields[kbCollectionFieldFileName] &&
-		existingFields[kbCollectionFieldFileType] &&
-		existingFields[kbCollectionFieldContentType]
-
-	hasFileUID = existingFields[kbCollectionFieldFileUID]
-
-	return hasMetadata, hasFileUID, nil
+	return fields, nil
 }
 
 func getStringData(col entity.Column) ([]string, error) {

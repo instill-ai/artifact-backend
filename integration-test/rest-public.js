@@ -259,13 +259,16 @@ export function CheckCatalog(data) {
     const uploaded = [];
     const uploadReqs = constant.sampleFiles.map((s) => {
       const fileName = `${constant.dbIDPrefix}${s.originalName}`;
+      // Add tags to file upload - using different tags for different file types
+      const tags = s.type === "FILE_TYPE_PDF" ? ["scott", "ramona"] : ["kim", "knives"];
       return {
         s,
         fileName,
+        tags,
         req: {
           method: "POST",
           url: `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
-          body: JSON.stringify({ name: fileName, type: s.type, content: s.content }),
+          body: JSON.stringify({ name: fileName, type: s.type, content: s.content, tags: tags }),
           params: data.header,
         },
       };
@@ -275,10 +278,11 @@ export function CheckCatalog(data) {
       const resp = uploadResponses[i];
       const s = uploadReqs[i].s;
       const fileName = uploadReqs[i].fileName;
+      const tags = uploadReqs[i].tags;
       const fJson = (function () { try { return resp.json(); } catch (e) { return {}; } })();
       const file = (fJson && fJson.file) || {};
       check(resp, { [`POST /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files 200 (${s.originalName})`]: (r) => r.status === 200 });
-      if (file && file.fileUid) uploaded.push({ fileUid: file.fileUid, name: fileName, type: s.type });
+      if (file && file.fileUid) uploaded.push({ fileUid: file.fileUid, name: fileName, type: s.type, tags: tags });
     }
 
     // Trigger processing for all files in one call
@@ -343,6 +347,11 @@ export function CheckCatalog(data) {
         [`GET ${viewPath} file has totalTokens (${f.name}: ${f.type})`]: (r) => r.json().files[0].totalTokens > 0,
         [`GET ${viewPath} file has summary (${f.name}: ${f.type})`]: (r) => r.json().files[0].summary.length > 0,
         [`GET ${viewPath} file has downloadUrl (${f.name}: ${f.type})`]: (r) => r.json().files[0].downloadUrl.includes("v1alpha/blob-urls/"),
+        [`GET ${viewPath} file has tags (${f.name}: ${f.type})`]: (r) => {
+          const fileData = r.json().files[0];
+          return Array.isArray(fileData.tags) && fileData.tags.length === f.tags.length &&
+                 f.tags.every(tag => fileData.tags.includes(tag));
+        },
       });
 
       // Check conversion pipeline and page information depending on the file type
@@ -378,6 +387,10 @@ export function CheckCatalog(data) {
       [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files?pageSize=100 200`]: (r) => r.status === 200,
       [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files?pageSize=100 catalog files is array`]: () => Array.isArray(listFilesJson.files),
       [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files?pageSize=100 catalog files count matches uploads`]: () => Array.isArray(listFilesJson.files) && listFilesJson.files.length === uploaded.length,
+      [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files?pageSize=100 files have tags`]: () => {
+        const files = listFilesJson.files || [];
+        return files.every(file => Array.isArray(file.tags) && file.tags.length > 0);
+      },
     });
 
     // List catalog file chunks
@@ -397,6 +410,122 @@ export function CheckCatalog(data) {
       check(getSummaryRes, {
         [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid}/summary 200`]: (r) => r.status === 200,
       });
+    }
+
+    // Chunk similarity search tests
+    {
+      // Test 1: Search with a combination of tags that returns all files
+      const searchBody1 = {
+        textPrompt: "test file markdown",
+        topK: 10,
+        tags: ["scott", "kim"],
+        contentType: "CONTENT_TYPE_CHUNK"
+      };
+      const searchRes1 = http.request(
+        "POST",
+        `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/chunks/retrieve`,
+        JSON.stringify(searchBody1),
+        data.header
+      );
+      let searchJson1; try { searchJson1 = searchRes1.json(); } catch (e) { searchJson1 = {}; }
+      const similarChunks1 = searchJson1.similarChunks || [];
+
+      check(searchRes1, {
+        [`POST /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/chunks/retrieve 200 (all files)`]: (r) => r.status === 200,
+        [`POST /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/chunks/retrieve returns similarChunks array (all files)`]: () => Array.isArray(similarChunks1),
+        [`POST /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/chunks/retrieve returns results (all files)`]: () => similarChunks1.length > 0,
+        [`POST /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/chunks/retrieve chunks have similarity scores (all files)`]: () =>
+          similarChunks1.every(chunk => typeof chunk.similarityScore === 'number' && chunk.similarityScore >= 0),
+        [`POST /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/chunks/retrieve chunks have metadata (all files)`]: () =>
+          similarChunks1.every(chunk => chunk.chunkMetadata && chunk.chunkMetadata.originalFileUid),
+      });
+
+      // Test 2: Search with only PDF tag
+      const searchBody2 = {
+        textPrompt: "test file markdown",
+        topK: 10,
+        tags: ["scott"],
+        contentType: "CONTENT_TYPE_CHUNK"
+      };
+      const searchRes2 = http.request(
+        "POST",
+        `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/chunks/retrieve`,
+        JSON.stringify(searchBody2),
+        data.header
+      );
+      let searchJson2; try { searchJson2 = searchRes2.json(); } catch (e) { searchJson2 = {}; }
+      const similarChunks2 = searchJson2.similarChunks || [];
+
+      // Find the PDF file UID for validation
+      const pdfFile = uploaded.find(f => f.type === "FILE_TYPE_PDF");
+      const pdfFileUid = pdfFile ? pdfFile.fileUid : null;
+
+      check(searchRes2, {
+        [`POST /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/chunks/retrieve 200 (pdf file filtered by tag)`]: (r) => r.status === 200,
+        [`POST /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/chunks/retrieve returns similarChunks array (pdf file filtered by tag)`]: () => Array.isArray(similarChunks2),
+        [`POST /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/chunks/retrieve returns results (pdf file filtered by tag)`]: () => similarChunks2.length > 0,
+        [`POST /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/chunks/retrieve returns only PDF results (pdf file filtered by tag)`]: () =>
+          pdfFileUid && similarChunks2.every(chunk => chunk.chunkMetadata.originalFileUid === pdfFileUid),
+      });
+
+      // Test 3: Verify that document types (PDF, DOC, DOCX, PPT, PPTX) have page-based references starting and ending at page 1
+      const documentTypes = ["FILE_TYPE_PDF", "FILE_TYPE_DOC", "FILE_TYPE_DOCX", "FILE_TYPE_PPT", "FILE_TYPE_PPTX"];
+      const documentFiles = uploaded.filter(f => documentTypes.includes(f.type));
+
+      if (documentFiles.length > 0) {
+        // Get file UIDs for document types
+        const documentFileUids = documentFiles.map(f => f.fileUid);
+
+        // Search specifically for document types using fileUids filter
+        const searchBody3 = {
+          textPrompt: "test file markdown",
+          topK: 50, // Higher limit to catch more document types
+          fileUids: documentFileUids,
+          contentType: "CONTENT_TYPE_CHUNK"
+        };
+        const searchRes3 = http.request(
+          "POST",
+          `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/chunks/retrieve`,
+          JSON.stringify(searchBody3),
+          data.header
+        );
+        let searchJson3; try { searchJson3 = searchRes3.json(); } catch (e) { searchJson3 = {}; }
+        const similarChunks3 = searchJson3.similarChunks || [];
+
+        check(searchRes3, {
+          [`POST /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/chunks/retrieve 200 (document types check)`]: (r) => r.status === 200,
+          [`POST /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/chunks/retrieve returns results for document types`]: () => similarChunks3.length > 0,
+          [`POST /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/chunks/retrieve document types have page references`]: () => {
+            return similarChunks3.every(chunk =>
+              chunk.chunkMetadata.reference &&
+              chunk.chunkMetadata.reference.start &&
+              chunk.chunkMetadata.reference.start.unit === "UNIT_PAGE" &&
+              Array.isArray(chunk.chunkMetadata.reference.start.coordinates) &&
+              chunk.chunkMetadata.reference.start.coordinates.length > 0
+            );
+          },
+          [`POST /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/chunks/retrieve document types start at page 1`]: () => {
+            return similarChunks3.every(chunk =>
+              chunk.chunkMetadata.reference &&
+              chunk.chunkMetadata.reference.start &&
+              chunk.chunkMetadata.reference.start.unit === "UNIT_PAGE" &&
+              Array.isArray(chunk.chunkMetadata.reference.start.coordinates) &&
+              chunk.chunkMetadata.reference.start.coordinates.length > 0 &&
+              chunk.chunkMetadata.reference.start.coordinates[0] === 1
+            );
+          },
+          [`POST /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/chunks/retrieve document types end at page 1`]: () => {
+            return similarChunks3.every(chunk =>
+              chunk.chunkMetadata.reference &&
+              chunk.chunkMetadata.reference.end &&
+              chunk.chunkMetadata.reference.end.unit === "UNIT_PAGE" &&
+              Array.isArray(chunk.chunkMetadata.reference.end.coordinates) &&
+              chunk.chunkMetadata.reference.end.coordinates.length > 0 &&
+              chunk.chunkMetadata.reference.end.coordinates[0] === 1
+            );
+          },
+        });
+      }
     }
 
     // Delete the catalog (cleanup)

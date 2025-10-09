@@ -33,6 +33,15 @@ type Embedding struct {
 	KbFileUID   uuid.UUID  `gorm:"column:kb_file_uid;type:uuid;not null" json:"kb_file_uid"`
 	FileType    string     `gorm:"column:file_type;size:255;not null" json:"file_type"`
 	ContentType string     `gorm:"column:content_type;size:255;not null" json:"content_type"`
+	// Tags associated with the embedding, inherited from the source file.
+	// Note: The tags are not stored in the database, they will only be used for
+	// filtering on the vector DB. However, the worker converts the repository
+	// embedding entity to the domain one, not vice versa, so this field is
+	// needed to be passed along to the vector DB.
+	// TODO: after the worker layer is rewritten as Temporal workflows and
+	// activities, rewrite how the embedding entities are converted to domain ->
+	// repository.
+	Tags []string `json:"tags" gorm:"-"`
 }
 
 type Vector []float32

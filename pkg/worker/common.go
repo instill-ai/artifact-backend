@@ -292,6 +292,7 @@ func saveEmbeddings(ctx context.Context, svc service.Service, kbUID, fileUID uui
 					FileName:     fileName,
 					FileType:     emb.FileType,
 					ContentType:  emb.ContentType,
+					Tags:         emb.Tags,
 				}
 			}
 			if err := svc.VectorDB().InsertVectorsInCollection(ctx, collection, vectors); err != nil {

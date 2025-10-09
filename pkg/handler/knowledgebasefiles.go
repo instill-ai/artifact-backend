@@ -184,6 +184,30 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 		return nil, errorsx.AddMessage(err, msg)
 	}
 
+	// sanitize tags
+	tags := req.GetFile().GetTags()
+	for _, tag := range tags {
+		// skip empty tags
+		if len(tag) == 0 {
+			continue
+		}
+	}
+
+	if len(tags) > 0 {
+		// Check if the knowledge base supports tags
+		hasTags, err := ph.service.VectorDB().CheckTagsMetadata(ctx, kb.UID)
+		if err != nil {
+			return nil, fmt.Errorf("checking tags metadata: %w", err)
+		}
+
+		if !hasTags {
+			err := fmt.Errorf("%w: tags are not supported for this knowledge base", errorsx.ErrInvalidArgument)
+			return nil, errorsx.AddMessage(err, "Legacy catalogs don't support tags")
+		}
+
+		kbFile.Tags = tags
+	}
+
 	// create catalog file in database
 	res, err := ph.service.Repository().CreateKnowledgeBaseFile(ctx, kbFile, nil)
 	if err != nil {
@@ -214,6 +238,7 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 			ExternalMetadata:   res.PublicExternalMetadataUnmarshal(),
 			ObjectUid:          req.File.ObjectUid,
 			ConvertingPipeline: res.ConvertingPipeline(),
+			Tags:               res.Tags,
 		},
 	}, nil
 }
@@ -373,6 +398,7 @@ func (ph *PublicHandler) MoveFileToCatalog(ctx context.Context, req *artifactpb.
 			Content:          fileContentBase64,
 			Type:             fileType,
 			ExternalMetadata: externalMetadata,
+			Tags:             sourceFile.Tags,
 		},
 	}
 
@@ -541,6 +567,7 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 			Summary:            string(kbFile.Summary),
 			DownloadUrl:        downloadURL,
 			ConvertingPipeline: kbFile.ConvertingPipeline(),
+			Tags:               kbFile.Tags,
 		}
 
 		if kbFile.ExtraMetaDataUnmarshal != nil && kbFile.ExtraMetaDataUnmarshal.Length != nil {
@@ -792,6 +819,7 @@ func (ph *PublicHandler) ProcessCatalogFiles(ctx context.Context, req *artifactp
 			ProcessStatus:      artifactpb.FileProcessStatus(artifactpb.FileProcessStatus_value[file.ProcessStatus]),
 			ObjectUid:          objectUID.String(),
 			ConvertingPipeline: file.ConvertingPipeline(),
+			Tags:               file.Tags,
 		})
 	}
 	return &artifactpb.ProcessCatalogFilesResponse{

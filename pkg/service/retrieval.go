@@ -72,13 +72,14 @@ func (s *service) SimilarityChunksSearch(ctx context.Context, ownerUID uuid.UUID
 		FileUIDs:     fileUIDs,
 		FileType:     string(fileType),
 		ContentType:  string(contentType),
+		Tags:         req.GetTags(),
 	}
 
 	// By default we'll filter the chunk search with the file UID metadata.
 	// However, certain legacy collections lack this field. In that case, we'll
 	// filter by filename. This field isn't indexed, so performance might be
 	// affected.
-	hasFileUID, err := s.vectorDB.CheckFileUIDMetadata(ctx, sp.CollectionID)
+	hasFileUID, err := s.vectorDB.CheckFileUIDMetadata(ctx, kb.UID)
 	if err != nil {
 		return nil, fmt.Errorf("checkin collection metadata: %w", err)
 	}

@@ -782,6 +782,7 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processEmbeddingFile(ctx context
 			KbFileUID:   file.UID,
 			FileType:    chunks[i].FileType,
 			ContentType: chunks[i].ContentType,
+			Tags:        file.Tags,
 		}
 	}
 	err = saveEmbeddings(ctx, wp.svc, file.KnowledgeBaseUID, file.UID, embeddings, file.Name)
