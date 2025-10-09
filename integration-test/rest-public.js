@@ -412,6 +412,122 @@ export function CheckCatalog(data) {
       });
     }
 
+    // Chunk similarity search tests
+    {
+      // Test 1: Search with a combination of tags that returns all files
+      const searchBody1 = {
+        textPrompt: "test file markdown",
+        topK: 10,
+        tags: ["scott", "kim"],
+        contentType: "CONTENT_TYPE_CHUNK"
+      };
+      const searchRes1 = http.request(
+        "POST",
+        `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/chunks/retrieve`,
+        JSON.stringify(searchBody1),
+        data.header
+      );
+      let searchJson1; try { searchJson1 = searchRes1.json(); } catch (e) { searchJson1 = {}; }
+      const similarChunks1 = searchJson1.similarChunks || [];
+
+      check(searchRes1, {
+        [`POST /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/chunks/retrieve 200 (all files)`]: (r) => r.status === 200,
+        [`POST /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/chunks/retrieve returns similarChunks array (all files)`]: () => Array.isArray(similarChunks1),
+        [`POST /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/chunks/retrieve returns results (all files)`]: () => similarChunks1.length > 0,
+        [`POST /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/chunks/retrieve chunks have similarity scores (all files)`]: () =>
+          similarChunks1.every(chunk => typeof chunk.similarityScore === 'number' && chunk.similarityScore >= 0),
+        [`POST /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/chunks/retrieve chunks have metadata (all files)`]: () =>
+          similarChunks1.every(chunk => chunk.chunkMetadata && chunk.chunkMetadata.originalFileUid),
+      });
+
+      // Test 2: Search with only PDF tag
+      const searchBody2 = {
+        textPrompt: "test file markdown",
+        topK: 10,
+        tags: ["scott"],
+        contentType: "CONTENT_TYPE_CHUNK"
+      };
+      const searchRes2 = http.request(
+        "POST",
+        `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/chunks/retrieve`,
+        JSON.stringify(searchBody2),
+        data.header
+      );
+      let searchJson2; try { searchJson2 = searchRes2.json(); } catch (e) { searchJson2 = {}; }
+      const similarChunks2 = searchJson2.similarChunks || [];
+
+      // Find the PDF file UID for validation
+      const pdfFile = uploaded.find(f => f.type === "FILE_TYPE_PDF");
+      const pdfFileUid = pdfFile ? pdfFile.fileUid : null;
+
+      check(searchRes2, {
+        [`POST /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/chunks/retrieve 200 (pdf file filtered by tag)`]: (r) => r.status === 200,
+        [`POST /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/chunks/retrieve returns similarChunks array (pdf file filtered by tag)`]: () => Array.isArray(similarChunks2),
+        [`POST /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/chunks/retrieve returns results (pdf file filtered by tag)`]: () => similarChunks2.length > 0,
+        [`POST /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/chunks/retrieve returns only PDF results (pdf file filtered by tag)`]: () =>
+          pdfFileUid && similarChunks2.every(chunk => chunk.chunkMetadata.originalFileUid === pdfFileUid),
+      });
+
+      // Test 3: Verify that document types (PDF, DOC, DOCX, PPT, PPTX) have page-based references starting and ending at page 1
+      const documentTypes = ["FILE_TYPE_PDF", "FILE_TYPE_DOC", "FILE_TYPE_DOCX", "FILE_TYPE_PPT", "FILE_TYPE_PPTX"];
+      const documentFiles = uploaded.filter(f => documentTypes.includes(f.type));
+
+      if (documentFiles.length > 0) {
+        // Get file UIDs for document types
+        const documentFileUids = documentFiles.map(f => f.fileUid);
+
+        // Search specifically for document types using fileUids filter
+        const searchBody3 = {
+          textPrompt: "test file markdown",
+          topK: 50, // Higher limit to catch more document types
+          fileUids: documentFileUids,
+          contentType: "CONTENT_TYPE_CHUNK"
+        };
+        const searchRes3 = http.request(
+          "POST",
+          `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/chunks/retrieve`,
+          JSON.stringify(searchBody3),
+          data.header
+        );
+        let searchJson3; try { searchJson3 = searchRes3.json(); } catch (e) { searchJson3 = {}; }
+        const similarChunks3 = searchJson3.similarChunks || [];
+
+        check(searchRes3, {
+          [`POST /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/chunks/retrieve 200 (document types check)`]: (r) => r.status === 200,
+          [`POST /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/chunks/retrieve returns results for document types`]: () => similarChunks3.length > 0,
+          [`POST /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/chunks/retrieve document types have page references`]: () => {
+            return similarChunks3.every(chunk =>
+              chunk.chunkMetadata.reference &&
+              chunk.chunkMetadata.reference.start &&
+              chunk.chunkMetadata.reference.start.unit === "UNIT_PAGE" &&
+              Array.isArray(chunk.chunkMetadata.reference.start.coordinates) &&
+              chunk.chunkMetadata.reference.start.coordinates.length > 0
+            );
+          },
+          [`POST /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/chunks/retrieve document types start at page 1`]: () => {
+            return similarChunks3.every(chunk =>
+              chunk.chunkMetadata.reference &&
+              chunk.chunkMetadata.reference.start &&
+              chunk.chunkMetadata.reference.start.unit === "UNIT_PAGE" &&
+              Array.isArray(chunk.chunkMetadata.reference.start.coordinates) &&
+              chunk.chunkMetadata.reference.start.coordinates.length > 0 &&
+              chunk.chunkMetadata.reference.start.coordinates[0] === 1
+            );
+          },
+          [`POST /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/chunks/retrieve document types end at page 1`]: () => {
+            return similarChunks3.every(chunk =>
+              chunk.chunkMetadata.reference &&
+              chunk.chunkMetadata.reference.end &&
+              chunk.chunkMetadata.reference.end.unit === "UNIT_PAGE" &&
+              Array.isArray(chunk.chunkMetadata.reference.end.coordinates) &&
+              chunk.chunkMetadata.reference.end.coordinates.length > 0 &&
+              chunk.chunkMetadata.reference.end.coordinates[0] === 1
+            );
+          },
+        });
+      }
+    }
+
     // Delete the catalog (cleanup)
     const dRes = http.request("DELETE", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
     check(dRes, { "DELETE /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id} 200": (r) => r.status === 200 || r.status === 204 });
