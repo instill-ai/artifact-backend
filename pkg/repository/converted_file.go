@@ -7,19 +7,24 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
+
+	"github.com/instill-ai/artifact-backend/pkg/types"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
-type ConvertedFileI interface {
-	ConvertedFileTableName() string
+const (
+	// ConvertedFileTableName is the table name for converted files
+	ConvertedFileTableName = "converted_file"
+)
 
-	CreateConvertedFileWithDestination(ctx context.Context, cf ConvertedFile) (*ConvertedFile, error)
+type ConvertedFile interface {
+	CreateConvertedFileWithDestination(ctx context.Context, cf ConvertedFileModel) (*ConvertedFileModel, error)
 	UpdateConvertedFile(ctx context.Context, uid uuid.UUID, update map[string]any) error
 	DeleteConvertedFile(ctx context.Context, uid uuid.UUID) error
-	DeleteAllConvertedFilesInKb(ctx context.Context, kbUID uuid.UUID) error
-	HardDeleteConvertedFileByFileUID(ctx context.Context, fileUID uuid.UUID) error
-	GetConvertedFileByFileUID(ctx context.Context, fileUID uuid.UUID) (*ConvertedFile, error)
+	DeleteAllConvertedFilesInKb(ctx context.Context, kbUID types.KBUIDType) error
+	HardDeleteConvertedFileByFileUID(ctx context.Context, fileUID types.FileUIDType) error
+	GetConvertedFileByFileUID(ctx context.Context, fileUID types.FileUIDType) (*ConvertedFileModel, error)
 }
 
 // PositionData contains metadata from the conversion step that will be used to
@@ -39,9 +44,9 @@ type PositionData struct {
 	PageDelimiters []uint32 `json:"page_delimiters"`
 }
 
-type ConvertedFile struct {
+type ConvertedFileModel struct {
 	UID   uuid.UUID `gorm:"column:uid;type:uuid;default:gen_random_uuid();primaryKey" json:"uid"`
-	KbUID uuid.UUID `gorm:"column:kb_uid;type:uuid;not null" json:"kb_uid"`
+	KBUID uuid.UUID `gorm:"column:kb_uid;type:uuid;not null" json:"kb_uid"`
 	// FileUID is the original file UID in knowledge base file table
 	FileUID uuid.UUID `gorm:"column:file_uid;type:uuid;not null" json:"file_uid"`
 	Name    string    `gorm:"column:name;size:255;not null" json:"name"`
@@ -57,9 +62,14 @@ type ConvertedFile struct {
 	UpdateTime *time.Time `gorm:"column:update_time;not null;default:CURRENT_TIMESTAMP;autoUpdateTime" json:"update_time"`
 }
 
+// TableName overrides the default table name for GORM
+func (ConvertedFileModel) TableName() string {
+	return ConvertedFileTableName
+}
+
 type ConvertedFileColumns struct {
 	UID         string
-	KbUID       string
+	KBUID       string
 	FileUID     string
 	Name        string
 	Type        string
@@ -70,7 +80,7 @@ type ConvertedFileColumns struct {
 
 var ConvertedFileColumn = ConvertedFileColumns{
 	UID:         "uid",
-	KbUID:       "kb_uid",
+	KBUID:       "kb_uid",
 	FileUID:     "file_uid",
 	Name:        "name",
 	Type:        "type",
@@ -79,20 +89,15 @@ var ConvertedFileColumn = ConvertedFileColumns{
 	UpdateTime:  "update_time",
 }
 
-// ConvertedFileTableName returns the table name of the ConvertedFile
-func (r *Repository) ConvertedFileTableName() string {
-	return "converted_file"
-}
-
 // CreateConvertedFileWithDestination creates a converted file record with a known destination.
 // This method properly decouples database operations from external storage operations.
 // It handles deletion of any existing converted file for the same file_uid (for reprocessing).
-func (r *Repository) CreateConvertedFileWithDestination(ctx context.Context, cf ConvertedFile) (*ConvertedFile, error) {
+func (r *repository) CreateConvertedFileWithDestination(ctx context.Context, cf ConvertedFileModel) (*ConvertedFileModel, error) {
 	// Validate required fields before attempting to persist
 	if cf.FileUID == uuid.Nil {
 		return nil, fmt.Errorf("file_uid is required")
 	}
-	if cf.KbUID == uuid.Nil {
+	if cf.KBUID == uuid.Nil {
 		return nil, fmt.Errorf("kb_uid is required")
 	}
 	if cf.Destination == "" {
@@ -107,11 +112,11 @@ func (r *Repository) CreateConvertedFileWithDestination(ctx context.Context, cf 
 
 	err := r.db.Transaction(func(tx *gorm.DB) error {
 		// There may already be a converted file (if we're reprocessing a file).
-		if err := tx.Where("file_uid = ?", cf.FileUID).Delete(&ConvertedFile{}).Error; err != nil {
+		if err := tx.Where("file_uid = ?", cf.FileUID).Delete(&ConvertedFileModel{}).Error; err != nil {
 			return err
 		}
 
-		// Create the new ConvertedFile with the provided destination
+		// Create the new ConvertedFileModel with the provided destination
 		if err := tx.Create(&cf).Error; err != nil {
 			return err
 		}
@@ -126,8 +131,8 @@ func (r *Repository) CreateConvertedFileWithDestination(ctx context.Context, cf 
 }
 
 // GetConvertedFileByFileUID returns the converted file by file UID
-func (r *Repository) GetConvertedFileByFileUID(ctx context.Context, fileUID uuid.UUID) (*ConvertedFile, error) {
-	var cf ConvertedFile
+func (r *repository) GetConvertedFileByFileUID(ctx context.Context, fileUID types.FileUIDType) (*ConvertedFileModel, error) {
+	var cf ConvertedFileModel
 	where := fmt.Sprintf("%s = ?", ConvertedFileColumn.FileUID)
 	if err := r.db.WithContext(ctx).Where(where, fileUID).First(&cf).Error; err != nil {
 		return nil, err
@@ -136,11 +141,11 @@ func (r *Repository) GetConvertedFileByFileUID(ctx context.Context, fileUID uuid
 }
 
 // DeleteConvertedFile deletes the record by UID
-func (r *Repository) DeleteConvertedFile(ctx context.Context, uid uuid.UUID) error {
+func (r *repository) DeleteConvertedFile(ctx context.Context, uid uuid.UUID) error {
 	err := r.db.Transaction(func(tx *gorm.DB) error {
 		// Specify the condition to find the record by its UID
 		where := fmt.Sprintf("%s = ?", ConvertedFileColumn.UID)
-		if err := tx.Where(where, uid).Delete(&ConvertedFile{}).Error; err != nil {
+		if err := tx.Where(where, uid).Delete(&ConvertedFileModel{}).Error; err != nil {
 			return err
 		}
 		return nil
@@ -152,11 +157,11 @@ func (r *Repository) DeleteConvertedFile(ctx context.Context, uid uuid.UUID) err
 }
 
 // DeleteAllConvertedFilesInKb deletes all the records in the knowledge base
-func (r *Repository) DeleteAllConvertedFilesInKb(ctx context.Context, kbUID uuid.UUID) error {
+func (r *repository) DeleteAllConvertedFilesInKb(ctx context.Context, kbUID types.KBUIDType) error {
 	err := r.db.Transaction(func(tx *gorm.DB) error {
 		// Specify the condition to find the record by its UID
-		where := fmt.Sprintf("%s = ?", ConvertedFileColumn.KbUID)
-		if err := tx.Where(where, kbUID).Delete(&ConvertedFile{}).Error; err != nil {
+		where := fmt.Sprintf("%s = ?", ConvertedFileColumn.KBUID)
+		if err := tx.Where(where, kbUID).Delete(&ConvertedFileModel{}).Error; err != nil {
 			return err
 		}
 		return nil
@@ -168,27 +173,27 @@ func (r *Repository) DeleteAllConvertedFilesInKb(ctx context.Context, kbUID uuid
 }
 
 // UpdateConvertedFile updates the record by UID using update map.
-func (r *Repository) UpdateConvertedFile(ctx context.Context, uid uuid.UUID, update map[string]any) error {
+func (r *repository) UpdateConvertedFile(ctx context.Context, uid uuid.UUID, update map[string]any) error {
 	// Specify the condition to find the record by its UID
 	where := fmt.Sprintf("%s = ?", ConvertedFileColumn.UID)
-	if err := r.db.WithContext(ctx).Model(&ConvertedFile{}).Where(where, uid).Updates(update).Error; err != nil {
+	if err := r.db.WithContext(ctx).Model(&ConvertedFileModel{}).Where(where, uid).Updates(update).Error; err != nil {
 		return err
 	}
 	return nil
 }
 
 // HardDeleteConvertedFileByFileUID deletes the record by file UID
-func (r *Repository) HardDeleteConvertedFileByFileUID(ctx context.Context, fileUID uuid.UUID) error {
+func (r *repository) HardDeleteConvertedFileByFileUID(ctx context.Context, fileUID types.FileUIDType) error {
 	// Specify the condition to find the record by its UID
 	where := fmt.Sprintf("%s = ?", ConvertedFileColumn.FileUID)
-	if err := r.db.WithContext(ctx).Where(where, fileUID).Unscoped().Delete(&ConvertedFile{}).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where(where, fileUID).Unscoped().Delete(&ConvertedFileModel{}).Error; err != nil {
 		return err
 	}
 	return nil
 }
 
 // GORM hooks
-func (cf *ConvertedFile) fillPositionDataJSON() (err error) {
+func (cf *ConvertedFileModel) fillPositionDataJSON() (err error) {
 	if cf.PositionData == nil {
 		return nil
 	}
@@ -197,19 +202,19 @@ func (cf *ConvertedFile) fillPositionDataJSON() (err error) {
 	return err
 }
 
-func (cf *ConvertedFile) BeforeCreate(tx *gorm.DB) error {
+func (cf *ConvertedFileModel) BeforeCreate(tx *gorm.DB) error {
 	return cf.fillPositionDataJSON()
 }
 
-func (cf *ConvertedFile) BeforeSave(tx *gorm.DB) error {
+func (cf *ConvertedFileModel) BeforeSave(tx *gorm.DB) error {
 	return cf.fillPositionDataJSON()
 }
 
-func (cf *ConvertedFile) BeforeUpdate(tx *gorm.DB) error {
+func (cf *ConvertedFileModel) BeforeUpdate(tx *gorm.DB) error {
 	return cf.fillPositionDataJSON()
 }
 
-func (cf *ConvertedFile) AfterFind(tx *gorm.DB) error {
+func (cf *ConvertedFileModel) AfterFind(tx *gorm.DB) error {
 	if cf.PositionDataJSON == nil {
 		return nil
 	}

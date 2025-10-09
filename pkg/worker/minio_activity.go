@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/gofrs/uuid"
 	"go.temporal.io/sdk/temporal"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/instill-ai/artifact-backend/config"
+	"github.com/instill-ai/artifact-backend/pkg/types"
 
 	errorsx "github.com/instill-ai/x/errors"
 )
@@ -20,21 +20,21 @@ import (
 // - SaveChunkBatchActivity - Saves multiple text chunks to MinIO in batch
 // - GetFileActivity - Retrieves file metadata and content from MinIO
 
-// SaveChunkBatchActivityParam defines parameters for saving multiple chunks in one activity
+// SaveChunkBatchActivityParam defines parameters for saving multiple text chunks in one activity
 type SaveChunkBatchActivityParam struct {
-	KnowledgeBaseUID uuid.UUID         // Knowledge base unique identifier
-	FileUID          uuid.UUID         // File unique identifier
-	Chunks           map[string][]byte // Map of chunk UID to content bytes
+	KBUID   types.KBUIDType   // Knowledge base unique identifier
+	FileUID types.FileUIDType // File unique identifier
+	Chunks  map[string][]byte // Map of text chunk UID to content bytes
 }
 
-// SaveChunkBatchActivityResult defines the result of saving a batch of chunks
+// SaveChunkBatchActivityResult defines the result of saving a batch of text chunks
 type SaveChunkBatchActivityResult struct {
-	Destinations map[string]string // Map of chunk UID to MinIO destination path
+	Destinations map[string]string // Map of text chunk UID to MinIO destination path
 }
 
-// UpdateChunkDestinationsActivityParam defines parameters for updating chunk destinations
+// UpdateChunkDestinationsActivityParam defines parameters for UpdateTextChunkDestinationsActivity
 type UpdateChunkDestinationsActivityParam struct {
-	Destinations map[string]string // Map of chunk UID to MinIO destination path
+	Destinations map[string]string // Map of text chunk UID to MinIO destination path
 }
 
 // DeleteFileActivityParam defines parameters for deleting a single file
@@ -64,7 +64,7 @@ func (w *Worker) DeleteFileActivity(ctx context.Context, param *DeleteFileActivi
 		zap.String("bucket", param.Bucket),
 		zap.String("path", param.Path))
 
-	err := w.service.MinIO().DeleteFile(ctx, param.Bucket, param.Path)
+	err := w.repository.DeleteFile(ctx, param.Bucket, param.Path)
 	if err != nil {
 		w.log.Error("Failed to delete file",
 			zap.String("path", param.Path),
@@ -101,7 +101,7 @@ func (w *Worker) GetFileActivity(ctx context.Context, param *GetFileActivityPara
 		}
 	}
 
-	content, err := w.service.MinIO().GetFile(authCtx, param.Bucket, param.Path)
+	content, err := w.repository.GetFile(authCtx, param.Bucket, param.Path)
 	if err != nil {
 		w.log.Error("Failed to get file",
 			zap.String("path", param.Path),
@@ -121,20 +121,20 @@ func (w *Worker) GetFileActivity(ctx context.Context, param *GetFileActivityPara
 	}, nil
 }
 
-// UpdateChunkDestinationsActivity updates the destinations of chunks in the database
-func (w *Worker) UpdateChunkDestinationsActivity(ctx context.Context, param *UpdateChunkDestinationsActivityParam) error {
-	w.log.Info("Starting UpdateChunkDestinationsActivity",
+// UpdateTextChunkDestinationsActivity updates the destinations of text chunks in the database
+func (w *Worker) UpdateTextChunkDestinationsActivity(ctx context.Context, param *UpdateChunkDestinationsActivityParam) error {
+	w.log.Info("Starting UpdateTextChunkDestinationsActivity",
 		zap.Int("chunkCount", len(param.Destinations)))
 
-	err := w.service.Repository().UpdateChunkDestinations(ctx, param.Destinations)
+	err := w.repository.UpdateTextChunkDestinations(ctx, param.Destinations)
 	if err != nil {
-		w.log.Error("Failed to update chunk destinations",
+		w.log.Error("Failed to update text chunk destinations",
 			zap.Int("chunkCount", len(param.Destinations)),
 			zap.Error(err))
-		err = errorsx.AddMessage(err, "Unable to update chunk references. Please try again.")
+		err = errorsx.AddMessage(err, "Unable to update text chunk references. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
 			errorsx.MessageOrErr(err),
-			updateChunkDestinationsActivityError,
+			updateTextChunkDestinationsActivityError,
 			err,
 		)
 	}
@@ -142,23 +142,23 @@ func (w *Worker) UpdateChunkDestinationsActivity(ctx context.Context, param *Upd
 	return nil
 }
 
-// SaveChunkBatchActivity saves multiple chunks to MinIO in one activity
-// This reduces Temporal overhead by batching multiple chunks into a single activity
-func (w *Worker) SaveChunkBatchActivity(ctx context.Context, param *SaveChunkBatchActivityParam) (*SaveChunkBatchActivityResult, error) {
-	w.log.Info("Starting SaveChunkBatchActivity",
-		zap.String("kbUID", param.KnowledgeBaseUID.String()),
+// SaveTextChunkBatchActivity saves multiple text chunks to MinIO in one activity
+// This reduces Temporal overhead by batching multiple text chunks into a single activity
+func (w *Worker) SaveTextChunkBatchActivity(ctx context.Context, param *SaveChunkBatchActivityParam) (*SaveChunkBatchActivityResult, error) {
+	w.log.Info("Starting SaveTextChunkBatchActivity",
+		zap.String("kbUID", param.KBUID.String()),
 		zap.String("fileUID", param.FileUID.String()),
 		zap.Int("chunkCount", len(param.Chunks)))
 
 	destinations := make(map[string]string, len(param.Chunks))
 
 	for chunkUID, chunkContent := range param.Chunks {
-		basePath := fmt.Sprintf("kb-%s/file-%s/chunk", param.KnowledgeBaseUID.String(), param.FileUID.String())
+		basePath := fmt.Sprintf("kb-%s/file-%s/chunk", param.KBUID.String(), param.FileUID.String())
 		path := fmt.Sprintf("%s/%s.md", basePath, chunkUID)
 
 		base64Content := base64.StdEncoding.EncodeToString(chunkContent)
 
-		err := w.service.MinIO().UploadBase64File(
+		err := w.repository.UploadBase64File(
 			ctx,
 			config.Config.Minio.BucketName,
 			path,
@@ -166,13 +166,13 @@ func (w *Worker) SaveChunkBatchActivity(ctx context.Context, param *SaveChunkBat
 			"text/markdown",
 		)
 		if err != nil {
-			w.log.Error("Failed to save chunk",
+			w.log.Error("Failed to save text chunk",
 				zap.String("chunkUID", chunkUID),
 				zap.Error(err))
-			err = errorsx.AddMessage(err, fmt.Sprintf("Unable to save chunk (ID: %s). Please try again.", chunkUID))
+			err = errorsx.AddMessage(err, fmt.Sprintf("Unable to save text chunk (ID: %s). Please try again.", chunkUID))
 			return nil, temporal.NewApplicationErrorWithCause(
 				errorsx.MessageOrErr(err),
-				saveChunkBatchActivityError,
+				saveTextChunkBatchActivityError,
 				err,
 			)
 		}
@@ -187,8 +187,8 @@ func (w *Worker) SaveChunkBatchActivity(ctx context.Context, param *SaveChunkBat
 
 // Activity error type constants
 const (
-	saveChunkBatchActivityError          = "SaveChunkBatchActivity"
-	deleteFileActivityError              = "DeleteFileActivity"
-	getFileActivityError                 = "GetFileActivity"
-	updateChunkDestinationsActivityError = "UpdateChunkDestinationsActivity"
+	saveTextChunkBatchActivityError          = "SaveTextChunkBatchActivity"
+	deleteFileActivityError                  = "DeleteFileActivity"
+	getFileActivityError                     = "GetFileActivity"
+	updateTextChunkDestinationsActivityError = "UpdateTextChunkDestinationsActivity"
 )

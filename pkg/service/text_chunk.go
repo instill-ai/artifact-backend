@@ -6,41 +6,29 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gofrs/uuid"
 	"go.uber.org/zap"
 
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
+	"github.com/instill-ai/artifact-backend/pkg/types"
 
 	logx "github.com/instill-ai/x/log"
 )
 
-// ChunkUIDType is the type for the chunk UID
-type ChunkUIDType = uuid.UUID
-
-// ContentType is the type for the content type
-type ContentType = string
-
-// SourceTableType is the type for the source table
-type SourceTableType = string
-
-// SourceIDType is the type for the source ID
-type SourceIDType = uuid.UUID
-
 // GetChunksByFile returns the chunks of a file
 // Fetches chunk content directly from MinIO using parallel goroutines for better performance
-func (s *service) GetChunksByFile(ctx context.Context, file *repository.KnowledgeBaseFile) (
-	SourceTableType,
-	SourceIDType,
-	[]repository.TextChunk,
-	map[ChunkUIDType]ContentType,
+func (s *service) GetChunksByFile(ctx context.Context, file *repository.KnowledgeBaseFileModel) (
+	types.SourceTableType,
+	types.SourceUIDType,
+	[]repository.TextChunkModel,
+	map[types.TextChunkUIDType]types.ContentType,
 	[]string,
 	error,
 ) {
 
 	logger, _ := logx.GetZapLogger(ctx)
 	var sourceTable string
-	var sourceUID uuid.UUID
+	var sourceUID types.SourceUIDType
 
 	// Get converted file for all types
 	convertedFile, err := s.repository.GetConvertedFileByFileUID(ctx, file.UID)
@@ -48,25 +36,25 @@ func (s *service) GetChunksByFile(ctx context.Context, file *repository.Knowledg
 		logger.Error("Failed to get converted file metadata.", zap.String("File uid", file.UID.String()))
 		return sourceTable, sourceUID, nil, nil, nil, err
 	}
-	sourceTable = s.repository.ConvertedFileTableName()
+	sourceTable = repository.ConvertedFileTableName
 	sourceUID = convertedFile.UID
 
-	// Get chunks metadata from database
-	chunks, err := s.repository.GetTextChunksBySource(ctx, sourceTable, sourceUID)
+	// Get textChunks metadata from database
+	textChunks, err := s.repository.GetTextChunksBySource(ctx, sourceTable, sourceUID)
 	if err != nil {
 		logger.Error("Failed to get chunks from database.", zap.String("SourceUID", sourceUID.String()))
 		return sourceTable, sourceUID, nil, nil, nil, err
 	}
 
 	// Fetch chunks from MinIO in parallel using goroutines with retry
-	texts := make([]string, len(chunks))
+	texts := make([]string, len(textChunks))
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	var fetchErr error
 
 	bucket := config.Config.Minio.BucketName
 
-	for i, chunk := range chunks {
+	for i, chunk := range textChunks {
 		wg.Add(1)
 		go func(idx int, path string) {
 			defer wg.Done()
@@ -77,7 +65,7 @@ func (s *service) GetChunksByFile(ctx context.Context, file *repository.Knowledg
 			maxAttempts := 3
 
 			for attempt := 0; attempt < maxAttempts; attempt++ {
-				content, err = s.minIO.GetFile(ctx, bucket, path)
+				content, err = s.repository.GetFile(ctx, bucket, path)
 				if err == nil {
 					break // Success!
 				}
@@ -116,10 +104,10 @@ func (s *service) GetChunksByFile(ctx context.Context, file *repository.Knowledg
 	}
 
 	// Build chunk UID to content map
-	chunkUIDToContents := make(map[ChunkUIDType]ContentType, len(chunks))
-	for i, c := range chunks {
-		chunkUIDToContents[c.UID] = texts[i]
+	textChunkUIDToContents := make(map[types.TextChunkUIDType]types.ContentType, len(textChunks))
+	for i, c := range textChunks {
+		textChunkUIDToContents[c.UID] = types.ContentType(texts[i])
 	}
 
-	return sourceTable, sourceUID, chunks, chunkUIDToContents, texts, nil
+	return sourceTable, sourceUID, textChunks, textChunkUIDToContents, texts, nil
 }

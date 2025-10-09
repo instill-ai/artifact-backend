@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/genai"
+
 	qt "github.com/frankban/quicktest"
 
 	errorsx "github.com/instill-ai/x/errors"
@@ -96,27 +98,31 @@ func TestCacheOutput(t *testing.T) {
 	t.Run("valid cache output structure", func(t *testing.T) {
 		now := time.Now()
 		expiry := now.Add(time.Hour)
+		usageMetadata := &genai.CachedContentUsageMetadata{
+			TotalTokenCount: 1024,
+		}
 
 		output := &CacheOutput{
-			CacheName:  "test-cache-123",
-			Model:      "gemini-2.5-flash",
-			CreateTime: now,
-			ExpireTime: expiry,
-			TokenCount: 1024,
+			CacheName:     "test-cache-123",
+			Model:         "gemini-2.5-flash",
+			CreateTime:    now,
+			ExpireTime:    expiry,
+			UsageMetadata: usageMetadata,
 		}
 
 		c.Assert(output.CacheName, qt.Equals, "test-cache-123")
 		c.Assert(output.Model, qt.Equals, "gemini-2.5-flash")
 		c.Assert(output.CreateTime, qt.Equals, now)
 		c.Assert(output.ExpireTime, qt.Equals, expiry)
-		c.Assert(output.TokenCount, qt.Equals, 1024)
+		c.Assert(output.UsageMetadata, qt.Not(qt.IsNil))
+		c.Assert(output.UsageMetadata.TotalTokenCount, qt.Equals, int32(1024))
 	})
 
 	t.Run("zero values", func(t *testing.T) {
 		var output CacheOutput
 		c.Assert(output.CacheName, qt.Equals, "")
 		c.Assert(output.Model, qt.Equals, "")
-		c.Assert(output.TokenCount, qt.Equals, 0)
+		c.Assert(output.UsageMetadata, qt.IsNil)
 	})
 }
 

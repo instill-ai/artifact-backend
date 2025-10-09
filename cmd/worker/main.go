@@ -24,14 +24,11 @@ import (
 
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/acl"
-	"github.com/instill-ai/artifact-backend/pkg/milvus"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
-	"github.com/instill-ai/artifact-backend/pkg/service"
 	"github.com/instill-ai/x/client"
 	"github.com/instill-ai/x/temporal"
 
 	database "github.com/instill-ai/artifact-backend/pkg/db"
-	artifactminio "github.com/instill-ai/artifact-backend/pkg/minio"
 	artifactworker "github.com/instill-ai/artifact-backend/pkg/worker"
 	mgmtpb "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
 	pipelinepb "github.com/instill-ai/protogen-go/pipeline/pipeline/v1beta"
@@ -83,53 +80,28 @@ func main() {
 	}
 
 	// Initialize all clients
-	pipelinePublicServiceClient, mgmtPrivateServiceClient,
+	pipelinePublicServiceClient, _, // mgmtPrivateServiceClient not needed for worker
 		redisClient, db, minioClient, vectorDB, aclClient, temporalClient, closeClients := newClients(ctx, logger)
 	defer closeClients()
 
-	// Create worker instance first (without service dependencies for now)
-	// We'll set up the service layer after creating workflow wrappers
+	// Initialize repository with vector database
+	repo := repository.NewRepository(db, vectorDB, minioClient)
+
+	// Create worker with all primitive dependencies (no circular dependency)
 	cw, err := artifactworker.New(
-		nil, // Service will be set after it's created
+		temporalClient,
+		repo,
+		pipelinePublicServiceClient,
+		aclClient,
+		redisClient,
 		logger,
 	)
 	if err != nil {
 		logger.Fatal("Unable to create worker", zap.Error(err))
 	}
 
-	// Initialize workflow implementations with the worker instance
-	processFileWf := artifactworker.NewProcessFileWorkflow(temporalClient, cw)
-	cleanupFileWf := artifactworker.NewCleanupFileWorkflow(temporalClient, cw)
-	cleanupKBWf := artifactworker.NewCleanupKnowledgeBaseWorkflow(temporalClient, cw)
-	embedTextsWf := artifactworker.NewEmbedTextsWorkflow(temporalClient, cw)
-	deleteFilesWf := artifactworker.NewDeleteFilesWorkflow(temporalClient, cw)
-	getFilesWf := artifactworker.NewGetFilesWorkflow(temporalClient, cw)
-
-	// Initialize repository
-	repo := repository.NewRepository(db)
-
-	// Create service with workflow implementations
-	svc := service.NewService(
-		repo,
-		minioClient,
-		mgmtPrivateServiceClient,
-		pipelinePublicServiceClient,
-		nil, // registry client - not needed for worker
-		redisClient,
-		vectorDB,
-		aclClient,
-		processFileWf,
-		cleanupFileWf,
-		cleanupKBWf,
-		embedTextsWf,
-		deleteFilesWf,
-		getFilesWf,
-	)
-
-	// Update the worker instance with the service
-	// (the workflow wrappers already have a reference to this worker)
-	cw.SetService(svc)
-
+	// Register workflows and activities with Temporal worker
+	// Note: Service layer is not needed here - it's only for the API handlers in cmd/main
 	w := worker.New(temporalClient, artifactworker.TaskQueue, worker.Options{
 		EnableSessionWorker:                    true,
 		WorkflowPanicPolicy:                    worker.BlockWorkflow,
@@ -171,10 +143,10 @@ func main() {
 	w.RegisterActivity(cw.EmbedTextsActivity) // Generate vector embeddings for text batches
 
 	// MinIO operations
-	w.RegisterActivity(cw.SaveChunkBatchActivity)          // Save chunk batch to MinIO
-	w.RegisterActivity(cw.DeleteFileActivity)              // Delete single file from MinIO
-	w.RegisterActivity(cw.GetFileActivity)                 // Retrieve single file from MinIO
-	w.RegisterActivity(cw.UpdateChunkDestinationsActivity) // Update chunk MinIO destinations in DB
+	w.RegisterActivity(cw.SaveTextChunkBatchActivity)          // Save text chunk batch to MinIO
+	w.RegisterActivity(cw.DeleteFileActivity)                  // Delete single file from MinIO
+	w.RegisterActivity(cw.GetFileActivity)                     // Retrieve single file from MinIO
+	w.RegisterActivity(cw.UpdateTextChunkDestinationsActivity) // Update text chunk MinIO destinations in DB
 
 	// File status management
 	w.RegisterActivity(cw.GetFileStatusActivity)    // Retrieve current file processing status
@@ -184,7 +156,7 @@ func main() {
 	// Activities for cleaning up individual file resources
 	w.RegisterActivity(cw.DeleteOriginalFileActivity)           // Delete original uploaded file from MinIO
 	w.RegisterActivity(cw.DeleteConvertedFileActivity)          // Delete converted markdown file from MinIO
-	w.RegisterActivity(cw.DeleteChunksFromMinIOActivity)        // Delete all file chunks from MinIO
+	w.RegisterActivity(cw.DeleteTextChunksFromMinIOActivity)    // Delete all file chunks from MinIO
 	w.RegisterActivity(cw.DeleteEmbeddingsFromVectorDBActivity) // Delete file embeddings from Milvus
 	w.RegisterActivity(cw.DeleteEmbeddingRecordsActivity)       // Delete embedding records from database
 
@@ -194,7 +166,7 @@ func main() {
 	w.RegisterActivity(cw.DropVectorDBCollectionActivity)       // Drop Milvus collection for KB
 	w.RegisterActivity(cw.DeleteKBFileRecordsActivity)          // Delete all file records from database
 	w.RegisterActivity(cw.DeleteKBConvertedFileRecordsActivity) // Delete all converted file records
-	w.RegisterActivity(cw.DeleteKBChunkRecordsActivity)         // Delete all chunk records
+	w.RegisterActivity(cw.DeleteKBTextChunkRecordsActivity)     // Delete all chunk records
 	w.RegisterActivity(cw.DeleteKBEmbeddingRecordsActivity)     // Delete all embedding records
 	w.RegisterActivity(cw.PurgeKBACLActivity)                   // Remove all ACL permissions for KB
 
@@ -225,7 +197,7 @@ func main() {
 	// Child workflow for parallel markdown conversion with shared AI cache
 	w.RegisterActivity(cw.ConvertFileTypeActivity)              // Convert non-AI-native formats (GIF→PNG, MKV→MP4, DOC→PDF)
 	w.RegisterActivity(cw.CacheContextActivity)                 // Create AI cache for efficient processing
-	w.RegisterActivity(cw.ConvertToMarkdownFileActivity)        // Convert file to markdown using AI or pipelines
+	w.RegisterActivity(cw.ConvertToFileActivity)                // Convert file to markdown using AI or pipelines
 	w.RegisterActivity(cw.DeleteCacheActivity)                  // Clean up AI cache after processing
 	w.RegisterActivity(cw.DeleteTemporaryConvertedFileActivity) // Clean up temporary converted file from MinIO (core-blob/tmp/*)
 
@@ -236,8 +208,8 @@ func main() {
 
 	// ===== Chunking and Embedding Activities =====
 	// Used in main ProcessFileWorkflow for content chunking and persistence
-	w.RegisterActivity(cw.ChunkContentActivity)   // Split markdown content into semantic chunks
-	w.RegisterActivity(cw.SaveChunksToDBActivity) // Persist chunks to database with metadata
+	w.RegisterActivity(cw.ChunkContentActivity)       // Split markdown content into semantic chunks
+	w.RegisterActivity(cw.SaveTextChunksToDBActivity) // Persist chunks to database with metadata
 
 	// ===== SaveEmbeddingsToVectorDBWorkflow Activities (Child Workflow) =====
 	// Child workflow handling vector embedding storage
@@ -278,8 +250,8 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 	mgmtpb.MgmtPrivateServiceClient,
 	*redis.Client,
 	*gorm.DB,
-	*artifactminio.Minio,
-	service.VectorDatabase,
+	repository.ObjectStorage,
+	repository.VectorDatabase,
 	*acl.ACLClient,
 	temporalclient.Client,
 	func(),
@@ -348,7 +320,7 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 	}
 
 	// Initialize MinIO client (artifact-backend's wrapper)
-	minioClient, err := artifactminio.NewMinioClientAndInitBucket(ctx, miniox.ClientParams{
+	minioClient, err := repository.NewMinioObjectStorage(ctx, miniox.ClientParams{
 		Config: config.Config.Minio,
 		Logger: logger,
 		AppInfo: miniox.AppInfo{
@@ -361,7 +333,7 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 	}
 
 	// Initialize milvus client
-	vectorDB, vclose, err := milvus.NewVectorDatabase(ctx, config.Config.Milvus.Host, config.Config.Milvus.Port)
+	vectorDB, vclose, err := repository.NewVectorDatabase(ctx, config.Config.Milvus.Host, config.Config.Milvus.Port)
 	if err != nil {
 		logger.Fatal(fmt.Sprintf("failed to create milvus client: %v", err))
 	}

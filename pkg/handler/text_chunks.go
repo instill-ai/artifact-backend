@@ -10,9 +10,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/instill-ai/artifact-backend/config"
-	"github.com/instill-ai/artifact-backend/pkg/constant"
-	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
+	"github.com/instill-ai/artifact-backend/pkg/types"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	errorsx "github.com/instill-ai/x/errors"
@@ -20,24 +19,24 @@ import (
 )
 
 // convertToProtoChunk
-func convertToProtoChunk(chunk repository.TextChunk) *artifactpb.Chunk {
+func convertToProtoChunk(textChunk repository.TextChunkModel) *artifactpb.Chunk {
 	var contentType artifactpb.ContentType
 
-	switch chunk.ContentType {
-	case string(constant.SummaryContentType):
+	switch textChunk.ContentType {
+	case string(types.SummaryContentType):
 		contentType = artifactpb.ContentType_CONTENT_TYPE_SUMMARY
-	case string(constant.ChunkContentType):
+	case string(types.ChunkContentType):
 		contentType = artifactpb.ContentType_CONTENT_TYPE_CHUNK
-	case string(constant.AugmentedContentType):
+	case string(types.AugmentedContentType):
 		contentType = artifactpb.ContentType_CONTENT_TYPE_AUGMENTED
 	}
 
 	pbChunk := &artifactpb.Chunk{
-		ChunkUid:        chunk.UID.String(),
-		Retrievable:     chunk.Retrievable,
-		Tokens:          uint32(chunk.Tokens),
-		CreateTime:      timestamppb.New(*chunk.CreateTime),
-		OriginalFileUid: chunk.KbFileUID.String(),
+		ChunkUid:        textChunk.UID.String(),
+		Retrievable:     textChunk.Retrievable,
+		Tokens:          uint32(textChunk.Tokens),
+		CreateTime:      timestamppb.New(*textChunk.CreateTime),
+		OriginalFileUid: textChunk.KBFileUID.String(),
 		ContentType:     contentType,
 	}
 
@@ -48,30 +47,30 @@ func convertToProtoChunk(chunk repository.TextChunk) *artifactpb.Chunk {
 	pbChunk.MarkdownReference = &artifactpb.Chunk_Reference{
 		Start: &artifactpb.File_Position{
 			Unit:        artifactpb.File_Position_UNIT_CHARACTER,
-			Coordinates: []uint32{uint32(chunk.StartPos)},
+			Coordinates: []uint32{uint32(textChunk.StartPos)},
 		},
 		End: &artifactpb.File_Position{
 			Unit:        artifactpb.File_Position_UNIT_CHARACTER,
-			Coordinates: []uint32{uint32(chunk.EndPos)},
+			Coordinates: []uint32{uint32(textChunk.EndPos)},
 		},
 	}
 
 	// StartPos and EndPos are deprecated in favor of MarkdownReference.
-	pbChunk.StartPos = uint32(chunk.StartPos)
-	pbChunk.EndPos = uint32(chunk.EndPos)
+	pbChunk.StartPos = uint32(textChunk.StartPos)
+	pbChunk.EndPos = uint32(textChunk.EndPos)
 
-	if chunk.Reference != nil && chunk.Reference.PageRange[0] != 0 && chunk.Reference.PageRange[1] != 0 {
+	if textChunk.Reference != nil && textChunk.Reference.PageRange[0] != 0 && textChunk.Reference.PageRange[1] != 0 {
 		// We only extract one kind of reference for now. When more file
 		// types are supported, we'll need to inspect the reference object
 		// to build the response correctly.
 		pbChunk.Reference = &artifactpb.Chunk_Reference{
 			Start: &artifactpb.File_Position{
 				Unit:        artifactpb.File_Position_UNIT_PAGE,
-				Coordinates: []uint32{chunk.Reference.PageRange[0]},
+				Coordinates: []uint32{textChunk.Reference.PageRange[0]},
 			},
 			End: &artifactpb.File_Position{
 				Unit:        artifactpb.File_Position_UNIT_PAGE,
-				Coordinates: []uint32{chunk.Reference.PageRange[1]},
+				Coordinates: []uint32{textChunk.Reference.PageRange[1]},
 			},
 		}
 	}
@@ -105,7 +104,7 @@ func (ph *PublicHandler) ListChunks(ctx context.Context, req *artifactpb.ListChu
 	}
 	kbf := kbfs[0]
 	// ACL - check user's permission to read knowledge base
-	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kbf.KnowledgeBaseUID, "reader")
+	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kbf.KBUID, "reader")
 	if err != nil {
 		logger.Error("failed to check permission", zap.Error(err))
 		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
@@ -113,7 +112,7 @@ func (ph *PublicHandler) ListChunks(ctx context.Context, req *artifactpb.ListChu
 	if !granted {
 		return nil, fmt.Errorf("%w: no permission over catalog", errorsx.ErrUnauthorized)
 	}
-	sources, err := ph.service.Repository().GetSourceTableAndUIDByFileUIDs(ctx, []repository.KnowledgeBaseFile{kbf})
+	sources, err := ph.service.Repository().GetSourceTableAndUIDByFileUIDs(ctx, []repository.KnowledgeBaseFileModel{kbf})
 	if err != nil {
 		logger.Error("failed to get source table and uid by file uids", zap.Error(err))
 		return nil, fmt.Errorf("failed to get source table and uid by file uids ")
@@ -174,7 +173,7 @@ func (ph *PublicHandler) SearchChunks(ctx context.Context, req *artifactpb.Searc
 		logger.Error("chunk uids is more than 20", zap.Int("chunk_uids_count", len(chunkUIDs)))
 		return nil, fmt.Errorf("chunk uids is more than 20")
 	}
-	chunks, err := ph.service.Repository().GetChunksByUIDs(ctx, chunkUIDs)
+	chunks, err := ph.service.Repository().GetTextChunksByUIDs(ctx, chunkUIDs)
 	if err != nil {
 		logger.Error("failed to get chunks by uids", zap.Error(err))
 		return nil, fmt.Errorf("failed to get chunks by uids: %w", err)
@@ -183,7 +182,7 @@ func (ph *PublicHandler) SearchChunks(ctx context.Context, req *artifactpb.Searc
 	// get the kbUIDs from chunks
 	kbUIDs := make([]uuid.UUID, 0, len(chunks))
 	for _, chunk := range chunks {
-		kbUIDs = append(kbUIDs, chunk.KbUID)
+		kbUIDs = append(kbUIDs, chunk.KBUID)
 	}
 	// use kbUIDs to get the knowledge bases
 	knowledgeBases, err := ph.service.Repository().GetKnowledgeBasesByUIDs(ctx, kbUIDs)
@@ -213,7 +212,7 @@ func (ph *PublicHandler) SearchChunks(ctx context.Context, req *artifactpb.Searc
 func (ph *PublicHandler) UpdateChunk(ctx context.Context, req *artifactpb.UpdateChunkRequest) (*artifactpb.UpdateChunkResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 
-	chunks, err := ph.service.Repository().GetChunksByUIDs(ctx, []uuid.UUID{uuid.FromStringOrNil(req.ChunkUid)})
+	chunks, err := ph.service.Repository().GetTextChunksByUIDs(ctx, []uuid.UUID{uuid.FromStringOrNil(req.ChunkUid)})
 	if err != nil {
 		logger.Error("failed to get chunks by uids", zap.Error(err))
 		return nil, fmt.Errorf("failed to get chunks by uids: %w", err)
@@ -224,7 +223,7 @@ func (ph *PublicHandler) UpdateChunk(ctx context.Context, req *artifactpb.Update
 	}
 	chunk := &chunks[0]
 	// ACL - check user's permission to write knowledge base of chunks
-	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", chunk.KbUID, "writer")
+	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", chunk.KBUID, "writer")
 	if err != nil {
 		logger.Error("failed to check permission", zap.Error(err))
 		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
@@ -238,7 +237,7 @@ func (ph *PublicHandler) UpdateChunk(ctx context.Context, req *artifactpb.Update
 		repository.TextChunkColumn.Retrievable: retrievable,
 	}
 
-	chunk, err = ph.service.Repository().UpdateChunk(ctx, req.ChunkUid, update)
+	chunk, err = ph.service.Repository().UpdateTextChunk(ctx, req.ChunkUid, update)
 	if err != nil {
 		logger.Error("failed to update text chunk", zap.Error(err))
 		return nil, fmt.Errorf("failed to update text chunk: %w", err)
@@ -293,7 +292,7 @@ func (ph *PublicHandler) GetSourceFile(ctx context.Context, req *artifactpb.GetS
 		return nil, fmt.Errorf("failed to get truth source by file uid. err: %w", err)
 	}
 	// ACL - check if the user(uid from context) has access to the knowledge base of source file.
-	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", source.KbUID, "writer")
+	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", source.KBUID, "writer")
 	if err != nil {
 		logger.Error("failed to check permission in GetSourceFile", zap.Error(err))
 		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
@@ -305,9 +304,9 @@ func (ph *PublicHandler) GetSourceFile(ctx context.Context, req *artifactpb.GetS
 	// Decide bucket based on file type: TEXT/MARKDOWN -> blob; others -> artifact
 	bucketName := config.Config.Minio.BucketName
 	if file.Type == artifactpb.FileType_FILE_TYPE_TEXT.String() || file.Type == artifactpb.FileType_FILE_TYPE_MARKDOWN.String() {
-		bucketName = minio.BlobBucketName
+		bucketName = repository.BlobBucketName
 	}
-	content, err := ph.service.MinIO().GetFile(ctx, bucketName, source.Dest)
+	content, err := ph.service.Repository().GetFile(ctx, bucketName, source.Dest)
 	if err != nil {
 		logger.Error("failed to get file from minio", zap.Error(err))
 		return nil, fmt.Errorf("failed to get file from minio. err: %w", err)
@@ -353,7 +352,7 @@ func (ph *PublicHandler) SearchSourceFiles(ctx context.Context, req *artifactpb.
 		}
 
 		// ACL check for each source file
-		granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", source.KbUID, "reader")
+		granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", source.KBUID, "reader")
 		if err != nil {
 			return nil, fmt.Errorf("checking permission: %w", err)
 		}
@@ -362,8 +361,8 @@ func (ph *PublicHandler) SearchSourceFiles(ctx context.Context, req *artifactpb.
 		}
 
 		// Get file content from MinIO
-		bucket := minio.BucketFromDestination(source.Dest)
-		content, err := ph.service.MinIO().GetFile(ctx, bucket, source.Dest)
+		bucket := repository.BucketFromDestination(source.Dest)
+		content, err := ph.service.Repository().GetFile(ctx, bucket, source.Dest)
 		if err != nil {
 			logger.Error("failed to get file from minio", zap.Error(err))
 			continue

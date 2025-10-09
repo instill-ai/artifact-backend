@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
+
+	"github.com/instill-ai/artifact-backend/pkg/types"
 	"github.com/gogo/status"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
@@ -20,7 +22,6 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
 
-	miniolocal "github.com/instill-ai/artifact-backend/pkg/minio"
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	logx "github.com/instill-ai/x/log"
 )
@@ -43,7 +44,7 @@ func (s *service) GetUploadURL(
 	req *artifactpb.GetObjectUploadURLRequest,
 	namespaceUID uuid.UUID,
 	namespaceID string,
-	creatorUID uuid.UUID,
+	creatorUID types.CreatorUIDType,
 ) (*artifactpb.GetObjectUploadURLResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 	// name cannot be empty
@@ -72,7 +73,7 @@ func (s *service) GetUploadURL(
 	lastModifiedTime := req.GetLastModifiedTime().AsTime()
 	contentType := utils.DetermineMimeType(req.GetObjectName())
 	// create object
-	object := &repository.Object{
+	object := &repository.ObjectModel{
 		Name:             req.GetObjectName(),
 		NamespaceUID:     namespaceUID,
 		CreatorUID:       creatorUID,
@@ -92,7 +93,7 @@ func (s *service) GetUploadURL(
 	}
 
 	// get path of the object
-	minioPath := miniolocal.GetBlobObjectPath(createdObject.NamespaceUID, createdObject.UID)
+	minioPath := repository.GetBlobObjectPath(createdObject.NamespaceUID, createdObject.UID)
 	// update the object destination
 	createdObject.Destination = minioPath
 	_, err = s.repository.UpdateObject(ctx, *createdObject)
@@ -103,7 +104,7 @@ func (s *service) GetUploadURL(
 
 	// get presigned url for uploading object
 	expirationTime := time.Duration(req.GetUrlExpireDays()) * time.Hour * 24
-	presignedURL, err := s.minIO.GetPresignedURLForUpload(ctx, namespaceUID, createdObject.UID, req.GetObjectName(), expirationTime)
+	presignedURL, err := s.repository.GetPresignedURLForUpload(ctx, namespaceUID, createdObject.UID, req.GetObjectName(), expirationTime)
 	if err != nil {
 		logger.Error("failed to make presigned url for upload", zap.Error(err))
 		return nil, status.Errorf(codes.Internal, "failed to make presigned url for upload: %v", err)
@@ -160,7 +161,7 @@ func (s *service) GetDownloadURL(
 			return nil, ErrObjectNotUploaded
 		}
 
-		objectInfo, err := s.minIO.GetFileMetadata(ctx, miniolocal.BlobBucketName, object.Destination)
+		objectInfo, err := s.repository.GetFileMetadata(ctx, repository.BlobBucketName, object.Destination)
 		if err != nil {
 			logger.Error("failed to get file", zap.Error(err))
 			return nil, status.Errorf(codes.Internal, "failed to get file: %v", err)
@@ -183,7 +184,7 @@ func (s *service) GetDownloadURL(
 	expirationTime := time.Duration(urlExpireDays) * time.Hour * 24
 
 	// Get presigned URL for downloading object
-	presignedURL, err := s.minIO.GetPresignedURLForDownload(
+	presignedURL, err := s.repository.GetPresignedURLForDownload(
 		ctx,
 		object.NamespaceUID,
 		object.UID,

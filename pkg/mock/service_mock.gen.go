@@ -11,10 +11,10 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/gojuno/minimock/v3"
 	"github.com/instill-ai/artifact-backend/pkg/acl"
-	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/resource"
 	mm_service "github.com/instill-ai/artifact-backend/pkg/service"
+	"github.com/instill-ai/artifact-backend/pkg/types"
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	pipelinepb "github.com/instill-ai/protogen-go/pipeline/pipeline/v1beta"
 	"github.com/redis/go-redis/v9"
@@ -32,7 +32,7 @@ type ServiceMock struct {
 	beforeACLClientCounter uint64
 	ACLClientMock          mServiceMockACLClient
 
-	funcCheckCatalogUserPermission          func(ctx context.Context, s1 string, s2 string, s3 string) (np1 *resource.Namespace, kp1 *repository.KnowledgeBase, err error)
+	funcCheckCatalogUserPermission          func(ctx context.Context, s1 string, s2 string, s3 string) (np1 *resource.Namespace, kp1 *repository.KnowledgeBaseModel, err error)
 	funcCheckCatalogUserPermissionOrigin    string
 	inspectFuncCheckCatalogUserPermission   func(ctx context.Context, s1 string, s2 string, s3 string)
 	afterCheckCatalogUserPermissionCounter  uint64
@@ -46,40 +46,19 @@ type ServiceMock struct {
 	beforeCheckNamespacePermissionCounter uint64
 	CheckNamespacePermissionMock          mServiceMockCheckNamespacePermission
 
-	funcChunkMarkdownPipe          func(ctx context.Context, s1 string) (cp1 *mm_service.ChunkingResult, err error)
-	funcChunkMarkdownPipeOrigin    string
-	inspectFuncChunkMarkdownPipe   func(ctx context.Context, s1 string)
-	afterChunkMarkdownPipeCounter  uint64
-	beforeChunkMarkdownPipeCounter uint64
-	ChunkMarkdownPipeMock          mServiceMockChunkMarkdownPipe
+	funcCleanupFile          func(ctx context.Context, f1 types.FileUIDType, u1 types.UserUIDType, r1 types.RequesterUIDType, s1 string, b1 bool) (err error)
+	funcCleanupFileOrigin    string
+	inspectFuncCleanupFile   func(ctx context.Context, f1 types.FileUIDType, u1 types.UserUIDType, r1 types.RequesterUIDType, s1 string, b1 bool)
+	afterCleanupFileCounter  uint64
+	beforeCleanupFileCounter uint64
+	CleanupFileMock          mServiceMockCleanupFile
 
-	funcChunkTextPipe          func(ctx context.Context, s1 string) (cp1 *mm_service.ChunkingResult, err error)
-	funcChunkTextPipeOrigin    string
-	inspectFuncChunkTextPipe   func(ctx context.Context, s1 string)
-	afterChunkTextPipeCounter  uint64
-	beforeChunkTextPipeCounter uint64
-	ChunkTextPipeMock          mServiceMockChunkTextPipe
-
-	funcCleanupFileWorkflow          func() (c1 mm_service.CleanupFileWorkflow)
-	funcCleanupFileWorkflowOrigin    string
-	inspectFuncCleanupFileWorkflow   func()
-	afterCleanupFileWorkflowCounter  uint64
-	beforeCleanupFileWorkflowCounter uint64
-	CleanupFileWorkflowMock          mServiceMockCleanupFileWorkflow
-
-	funcCleanupKnowledgeBaseWorkflow          func() (c1 mm_service.CleanupKnowledgeBaseWorkflow)
-	funcCleanupKnowledgeBaseWorkflowOrigin    string
-	inspectFuncCleanupKnowledgeBaseWorkflow   func()
-	afterCleanupKnowledgeBaseWorkflowCounter  uint64
-	beforeCleanupKnowledgeBaseWorkflowCounter uint64
-	CleanupKnowledgeBaseWorkflowMock          mServiceMockCleanupKnowledgeBaseWorkflow
-
-	funcConvertToMarkdownPipe          func(ctx context.Context, m1 mm_service.MarkdownConversionParams) (mp1 *mm_service.MarkdownConversionResult, err error)
-	funcConvertToMarkdownPipeOrigin    string
-	inspectFuncConvertToMarkdownPipe   func(ctx context.Context, m1 mm_service.MarkdownConversionParams)
-	afterConvertToMarkdownPipeCounter  uint64
-	beforeConvertToMarkdownPipeCounter uint64
-	ConvertToMarkdownPipeMock          mServiceMockConvertToMarkdownPipe
+	funcCleanupKnowledgeBase          func(ctx context.Context, k1 types.KBUIDType) (err error)
+	funcCleanupKnowledgeBaseOrigin    string
+	inspectFuncCleanupKnowledgeBase   func(ctx context.Context, k1 types.KBUIDType)
+	afterCleanupKnowledgeBaseCounter  uint64
+	beforeCleanupKnowledgeBaseCounter uint64
+	CleanupKnowledgeBaseMock          mServiceMockCleanupKnowledgeBase
 
 	funcCreateRepositoryTag          func(ctx context.Context, cp1 *artifactpb.CreateRepositoryTagRequest) (cp2 *artifactpb.CreateRepositoryTagResponse, err error)
 	funcCreateRepositoryTagOrigin    string
@@ -88,40 +67,12 @@ type ServiceMock struct {
 	beforeCreateRepositoryTagCounter uint64
 	CreateRepositoryTagMock          mServiceMockCreateRepositoryTag
 
-	funcDeleteConvertedFileByFileUID          func(ctx context.Context, u1 uuid.UUID, u2 uuid.UUID) (err error)
-	funcDeleteConvertedFileByFileUIDOrigin    string
-	inspectFuncDeleteConvertedFileByFileUID   func(ctx context.Context, u1 uuid.UUID, u2 uuid.UUID)
-	afterDeleteConvertedFileByFileUIDCounter  uint64
-	beforeDeleteConvertedFileByFileUIDCounter uint64
-	DeleteConvertedFileByFileUIDMock          mServiceMockDeleteConvertedFileByFileUID
-
 	funcDeleteFiles          func(ctx context.Context, s1 string, sa1 []string) (err error)
 	funcDeleteFilesOrigin    string
 	inspectFuncDeleteFiles   func(ctx context.Context, s1 string, sa1 []string)
 	afterDeleteFilesCounter  uint64
 	beforeDeleteFilesCounter uint64
 	DeleteFilesMock          mServiceMockDeleteFiles
-
-	funcDeleteFilesWithPrefix          func(ctx context.Context, s1 string, s2 string) (err error)
-	funcDeleteFilesWithPrefixOrigin    string
-	inspectFuncDeleteFilesWithPrefix   func(ctx context.Context, s1 string, s2 string)
-	afterDeleteFilesWithPrefixCounter  uint64
-	beforeDeleteFilesWithPrefixCounter uint64
-	DeleteFilesWithPrefixMock          mServiceMockDeleteFilesWithPrefix
-
-	funcDeleteFilesWorkflow          func() (d1 mm_service.DeleteFilesWorkflow)
-	funcDeleteFilesWorkflowOrigin    string
-	inspectFuncDeleteFilesWorkflow   func()
-	afterDeleteFilesWorkflowCounter  uint64
-	beforeDeleteFilesWorkflowCounter uint64
-	DeleteFilesWorkflowMock          mServiceMockDeleteFilesWorkflow
-
-	funcDeleteKnowledgeBase          func(ctx context.Context, s1 string) (err error)
-	funcDeleteKnowledgeBaseOrigin    string
-	inspectFuncDeleteKnowledgeBase   func(ctx context.Context, s1 string)
-	afterDeleteKnowledgeBaseCounter  uint64
-	beforeDeleteKnowledgeBaseCounter uint64
-	DeleteKnowledgeBaseMock          mServiceMockDeleteKnowledgeBase
 
 	funcDeleteRepositoryTag          func(ctx context.Context, dp1 *artifactpb.DeleteRepositoryTagRequest) (dp2 *artifactpb.DeleteRepositoryTagResponse, err error)
 	funcDeleteRepositoryTagOrigin    string
@@ -130,47 +81,26 @@ type ServiceMock struct {
 	beforeDeleteRepositoryTagCounter uint64
 	DeleteRepositoryTagMock          mServiceMockDeleteRepositoryTag
 
-	funcDeleteTextChunksByFileUID          func(ctx context.Context, u1 uuid.UUID, u2 uuid.UUID) (err error)
-	funcDeleteTextChunksByFileUIDOrigin    string
-	inspectFuncDeleteTextChunksByFileUID   func(ctx context.Context, u1 uuid.UUID, u2 uuid.UUID)
-	afterDeleteTextChunksByFileUIDCounter  uint64
-	beforeDeleteTextChunksByFileUIDCounter uint64
-	DeleteTextChunksByFileUIDMock          mServiceMockDeleteTextChunksByFileUID
+	funcEmbedTexts          func(ctx context.Context, sa1 []string, i1 int, m1 map[string][]string) (faa1 [][]float32, err error)
+	funcEmbedTextsOrigin    string
+	inspectFuncEmbedTexts   func(ctx context.Context, sa1 []string, i1 int, m1 map[string][]string)
+	afterEmbedTextsCounter  uint64
+	beforeEmbedTextsCounter uint64
+	EmbedTextsMock          mServiceMockEmbedTexts
 
-	funcEmbedTextsWorkflow          func() (e1 mm_service.EmbedTextsWorkflow)
-	funcEmbedTextsWorkflowOrigin    string
-	inspectFuncEmbedTextsWorkflow   func()
-	afterEmbedTextsWorkflowCounter  uint64
-	beforeEmbedTextsWorkflowCounter uint64
-	EmbedTextsWorkflowMock          mServiceMockEmbedTextsWorkflow
-
-	funcEmbeddingTextBatch          func(ctx context.Context, sa1 []string) (faa1 [][]float32, err error)
-	funcEmbeddingTextBatchOrigin    string
-	inspectFuncEmbeddingTextBatch   func(ctx context.Context, sa1 []string)
-	afterEmbeddingTextBatchCounter  uint64
-	beforeEmbeddingTextBatchCounter uint64
-	EmbeddingTextBatchMock          mServiceMockEmbeddingTextBatch
-
-	funcEmbeddingTextPipe          func(ctx context.Context, sa1 []string) (faa1 [][]float32, err error)
-	funcEmbeddingTextPipeOrigin    string
-	inspectFuncEmbeddingTextPipe   func(ctx context.Context, sa1 []string)
-	afterEmbeddingTextPipeCounter  uint64
-	beforeEmbeddingTextPipeCounter uint64
-	EmbeddingTextPipeMock          mServiceMockEmbeddingTextPipe
-
-	funcGenerateSummary          func(ctx context.Context, s1 string, s2 string) (s3 string, err error)
-	funcGenerateSummaryOrigin    string
-	inspectFuncGenerateSummary   func(ctx context.Context, s1 string, s2 string)
-	afterGenerateSummaryCounter  uint64
-	beforeGenerateSummaryCounter uint64
-	GenerateSummaryMock          mServiceMockGenerateSummary
-
-	funcGetChunksByFile          func(ctx context.Context, kp1 *repository.KnowledgeBaseFile) (s1 mm_service.SourceTableType, s2 mm_service.SourceIDType, ta1 []repository.TextChunk, m1 map[mm_service.ChunkUIDType]mm_service.ContentType, sa1 []string, err error)
+	funcGetChunksByFile          func(ctx context.Context, kp1 *repository.KnowledgeBaseFileModel) (s1 types.SourceTableType, s2 types.SourceUIDType, ta1 []repository.TextChunkModel, m1 map[types.TextChunkUIDType]types.ContentType, sa1 []string, err error)
 	funcGetChunksByFileOrigin    string
-	inspectFuncGetChunksByFile   func(ctx context.Context, kp1 *repository.KnowledgeBaseFile)
+	inspectFuncGetChunksByFile   func(ctx context.Context, kp1 *repository.KnowledgeBaseFileModel)
 	afterGetChunksByFileCounter  uint64
 	beforeGetChunksByFileCounter uint64
 	GetChunksByFileMock          mServiceMockGetChunksByFile
+
+	funcGetConvertedFilePathsByFileUID          func(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType) (sa1 []string, err error)
+	funcGetConvertedFilePathsByFileUIDOrigin    string
+	inspectFuncGetConvertedFilePathsByFileUID   func(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType)
+	afterGetConvertedFilePathsByFileUIDCounter  uint64
+	beforeGetConvertedFilePathsByFileUIDCounter uint64
+	GetConvertedFilePathsByFileUIDMock          mServiceMockGetConvertedFilePathsByFileUID
 
 	funcGetDownloadURL          func(ctx context.Context, gp1 *artifactpb.GetObjectDownloadURLRequest, u1 uuid.UUID, s1 string) (gp2 *artifactpb.GetObjectDownloadURLResponse, err error)
 	funcGetDownloadURLOrigin    string
@@ -185,13 +115,6 @@ type ServiceMock struct {
 	afterGetFilesByPathsCounter  uint64
 	beforeGetFilesByPathsCounter uint64
 	GetFilesByPathsMock          mServiceMockGetFilesByPaths
-
-	funcGetFilesWorkflow          func() (g1 mm_service.GetFilesWorkflow)
-	funcGetFilesWorkflowOrigin    string
-	inspectFuncGetFilesWorkflow   func()
-	afterGetFilesWorkflowCounter  uint64
-	beforeGetFilesWorkflowCounter uint64
-	GetFilesWorkflowMock          mServiceMockGetFilesWorkflow
 
 	funcGetNamespaceAndCheckPermission          func(ctx context.Context, s1 string) (np1 *resource.Namespace, err error)
 	funcGetNamespaceAndCheckPermissionOrigin    string
@@ -214,9 +137,16 @@ type ServiceMock struct {
 	beforeGetRepositoryTagCounter uint64
 	GetRepositoryTagMock          mServiceMockGetRepositoryTag
 
-	funcGetUploadURL          func(ctx context.Context, gp1 *artifactpb.GetObjectUploadURLRequest, u1 uuid.UUID, s1 string, u2 uuid.UUID) (gp2 *artifactpb.GetObjectUploadURLResponse, err error)
+	funcGetTextChunkFilePathsByFileUID          func(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType) (sa1 []string, err error)
+	funcGetTextChunkFilePathsByFileUIDOrigin    string
+	inspectFuncGetTextChunkFilePathsByFileUID   func(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType)
+	afterGetTextChunkFilePathsByFileUIDCounter  uint64
+	beforeGetTextChunkFilePathsByFileUIDCounter uint64
+	GetTextChunkFilePathsByFileUIDMock          mServiceMockGetTextChunkFilePathsByFileUID
+
+	funcGetUploadURL          func(ctx context.Context, gp1 *artifactpb.GetObjectUploadURLRequest, u1 uuid.UUID, s1 string, c2 types.CreatorUIDType) (gp2 *artifactpb.GetObjectUploadURLResponse, err error)
 	funcGetUploadURLOrigin    string
-	inspectFuncGetUploadURL   func(ctx context.Context, gp1 *artifactpb.GetObjectUploadURLRequest, u1 uuid.UUID, s1 string, u2 uuid.UUID)
+	inspectFuncGetUploadURL   func(ctx context.Context, gp1 *artifactpb.GetObjectUploadURLRequest, u1 uuid.UUID, s1 string, c2 types.CreatorUIDType)
 	afterGetUploadURLCounter  uint64
 	beforeGetUploadURLCounter uint64
 	GetUploadURLMock          mServiceMockGetUploadURL
@@ -228,13 +158,6 @@ type ServiceMock struct {
 	beforeListRepositoryTagsCounter uint64
 	ListRepositoryTagsMock          mServiceMockListRepositoryTags
 
-	funcMinIO          func() (m1 minio.MinioI)
-	funcMinIOOrigin    string
-	inspectFuncMinIO   func()
-	afterMinIOCounter  uint64
-	beforeMinIOCounter uint64
-	MinIOMock          mServiceMockMinIO
-
 	funcPipelinePublicClient          func() (p1 pipelinepb.PipelinePublicServiceClient)
 	funcPipelinePublicClientOrigin    string
 	inspectFuncPipelinePublicClient   func()
@@ -242,19 +165,12 @@ type ServiceMock struct {
 	beforePipelinePublicClientCounter uint64
 	PipelinePublicClientMock          mServiceMockPipelinePublicClient
 
-	funcProcessFileWorkflow          func() (p1 mm_service.ProcessFileWorkflow)
-	funcProcessFileWorkflowOrigin    string
-	inspectFuncProcessFileWorkflow   func()
-	afterProcessFileWorkflowCounter  uint64
-	beforeProcessFileWorkflowCounter uint64
-	ProcessFileWorkflowMock          mServiceMockProcessFileWorkflow
-
-	funcQuestionAnsweringPipe          func(ctx context.Context, s1 string, sa1 []string) (s2 string, err error)
-	funcQuestionAnsweringPipeOrigin    string
-	inspectFuncQuestionAnsweringPipe   func(ctx context.Context, s1 string, sa1 []string)
-	afterQuestionAnsweringPipeCounter  uint64
-	beforeQuestionAnsweringPipeCounter uint64
-	QuestionAnsweringPipeMock          mServiceMockQuestionAnsweringPipe
+	funcProcessFile          func(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType, u1 types.UserUIDType, r1 types.RequesterUIDType) (err error)
+	funcProcessFileOrigin    string
+	inspectFuncProcessFile   func(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType, u1 types.UserUIDType, r1 types.RequesterUIDType)
+	afterProcessFileCounter  uint64
+	beforeProcessFileCounter uint64
+	ProcessFileMock          mServiceMockProcessFile
 
 	funcRedisClient          func() (cp1 *redis.Client)
 	funcRedisClientOrigin    string
@@ -263,33 +179,19 @@ type ServiceMock struct {
 	beforeRedisClientCounter uint64
 	RedisClientMock          mServiceMockRedisClient
 
-	funcRepository          func() (r1 repository.RepositoryI)
+	funcRepository          func() (r1 repository.Repository)
 	funcRepositoryOrigin    string
 	inspectFuncRepository   func()
 	afterRepositoryCounter  uint64
 	beforeRepositoryCounter uint64
 	RepositoryMock          mServiceMockRepository
 
-	funcSimilarityChunksSearch          func(ctx context.Context, u1 uuid.UUID, sp1 *artifactpb.SimilarityChunksSearchRequest) (sa1 []mm_service.SimChunk, err error)
+	funcSimilarityChunksSearch          func(ctx context.Context, o1 types.OwnerUIDType, sp1 *artifactpb.SimilarityChunksSearchRequest, faa1 [][]float32) (sa1 []mm_service.SimChunk, err error)
 	funcSimilarityChunksSearchOrigin    string
-	inspectFuncSimilarityChunksSearch   func(ctx context.Context, u1 uuid.UUID, sp1 *artifactpb.SimilarityChunksSearchRequest)
+	inspectFuncSimilarityChunksSearch   func(ctx context.Context, o1 types.OwnerUIDType, sp1 *artifactpb.SimilarityChunksSearchRequest, faa1 [][]float32)
 	afterSimilarityChunksSearchCounter  uint64
 	beforeSimilarityChunksSearchCounter uint64
 	SimilarityChunksSearchMock          mServiceMockSimilarityChunksSearch
-
-	funcTriggerCleanupKnowledgeBaseWorkflow          func(ctx context.Context, s1 string) (err error)
-	funcTriggerCleanupKnowledgeBaseWorkflowOrigin    string
-	inspectFuncTriggerCleanupKnowledgeBaseWorkflow   func(ctx context.Context, s1 string)
-	afterTriggerCleanupKnowledgeBaseWorkflowCounter  uint64
-	beforeTriggerCleanupKnowledgeBaseWorkflowCounter uint64
-	TriggerCleanupKnowledgeBaseWorkflowMock          mServiceMockTriggerCleanupKnowledgeBaseWorkflow
-
-	funcVectorDB          func() (v1 mm_service.VectorDatabase)
-	funcVectorDBOrigin    string
-	inspectFuncVectorDB   func()
-	afterVectorDBCounter  uint64
-	beforeVectorDBCounter uint64
-	VectorDBMock          mServiceMockVectorDB
 }
 
 // NewServiceMock returns a mock for mm_service.Service
@@ -308,63 +210,35 @@ func NewServiceMock(t minimock.Tester) *ServiceMock {
 	m.CheckNamespacePermissionMock = mServiceMockCheckNamespacePermission{mock: m}
 	m.CheckNamespacePermissionMock.callArgs = []*ServiceMockCheckNamespacePermissionParams{}
 
-	m.ChunkMarkdownPipeMock = mServiceMockChunkMarkdownPipe{mock: m}
-	m.ChunkMarkdownPipeMock.callArgs = []*ServiceMockChunkMarkdownPipeParams{}
+	m.CleanupFileMock = mServiceMockCleanupFile{mock: m}
+	m.CleanupFileMock.callArgs = []*ServiceMockCleanupFileParams{}
 
-	m.ChunkTextPipeMock = mServiceMockChunkTextPipe{mock: m}
-	m.ChunkTextPipeMock.callArgs = []*ServiceMockChunkTextPipeParams{}
-
-	m.CleanupFileWorkflowMock = mServiceMockCleanupFileWorkflow{mock: m}
-
-	m.CleanupKnowledgeBaseWorkflowMock = mServiceMockCleanupKnowledgeBaseWorkflow{mock: m}
-
-	m.ConvertToMarkdownPipeMock = mServiceMockConvertToMarkdownPipe{mock: m}
-	m.ConvertToMarkdownPipeMock.callArgs = []*ServiceMockConvertToMarkdownPipeParams{}
+	m.CleanupKnowledgeBaseMock = mServiceMockCleanupKnowledgeBase{mock: m}
+	m.CleanupKnowledgeBaseMock.callArgs = []*ServiceMockCleanupKnowledgeBaseParams{}
 
 	m.CreateRepositoryTagMock = mServiceMockCreateRepositoryTag{mock: m}
 	m.CreateRepositoryTagMock.callArgs = []*ServiceMockCreateRepositoryTagParams{}
 
-	m.DeleteConvertedFileByFileUIDMock = mServiceMockDeleteConvertedFileByFileUID{mock: m}
-	m.DeleteConvertedFileByFileUIDMock.callArgs = []*ServiceMockDeleteConvertedFileByFileUIDParams{}
-
 	m.DeleteFilesMock = mServiceMockDeleteFiles{mock: m}
 	m.DeleteFilesMock.callArgs = []*ServiceMockDeleteFilesParams{}
-
-	m.DeleteFilesWithPrefixMock = mServiceMockDeleteFilesWithPrefix{mock: m}
-	m.DeleteFilesWithPrefixMock.callArgs = []*ServiceMockDeleteFilesWithPrefixParams{}
-
-	m.DeleteFilesWorkflowMock = mServiceMockDeleteFilesWorkflow{mock: m}
-
-	m.DeleteKnowledgeBaseMock = mServiceMockDeleteKnowledgeBase{mock: m}
-	m.DeleteKnowledgeBaseMock.callArgs = []*ServiceMockDeleteKnowledgeBaseParams{}
 
 	m.DeleteRepositoryTagMock = mServiceMockDeleteRepositoryTag{mock: m}
 	m.DeleteRepositoryTagMock.callArgs = []*ServiceMockDeleteRepositoryTagParams{}
 
-	m.DeleteTextChunksByFileUIDMock = mServiceMockDeleteTextChunksByFileUID{mock: m}
-	m.DeleteTextChunksByFileUIDMock.callArgs = []*ServiceMockDeleteTextChunksByFileUIDParams{}
-
-	m.EmbedTextsWorkflowMock = mServiceMockEmbedTextsWorkflow{mock: m}
-
-	m.EmbeddingTextBatchMock = mServiceMockEmbeddingTextBatch{mock: m}
-	m.EmbeddingTextBatchMock.callArgs = []*ServiceMockEmbeddingTextBatchParams{}
-
-	m.EmbeddingTextPipeMock = mServiceMockEmbeddingTextPipe{mock: m}
-	m.EmbeddingTextPipeMock.callArgs = []*ServiceMockEmbeddingTextPipeParams{}
-
-	m.GenerateSummaryMock = mServiceMockGenerateSummary{mock: m}
-	m.GenerateSummaryMock.callArgs = []*ServiceMockGenerateSummaryParams{}
+	m.EmbedTextsMock = mServiceMockEmbedTexts{mock: m}
+	m.EmbedTextsMock.callArgs = []*ServiceMockEmbedTextsParams{}
 
 	m.GetChunksByFileMock = mServiceMockGetChunksByFile{mock: m}
 	m.GetChunksByFileMock.callArgs = []*ServiceMockGetChunksByFileParams{}
+
+	m.GetConvertedFilePathsByFileUIDMock = mServiceMockGetConvertedFilePathsByFileUID{mock: m}
+	m.GetConvertedFilePathsByFileUIDMock.callArgs = []*ServiceMockGetConvertedFilePathsByFileUIDParams{}
 
 	m.GetDownloadURLMock = mServiceMockGetDownloadURL{mock: m}
 	m.GetDownloadURLMock.callArgs = []*ServiceMockGetDownloadURLParams{}
 
 	m.GetFilesByPathsMock = mServiceMockGetFilesByPaths{mock: m}
 	m.GetFilesByPathsMock.callArgs = []*ServiceMockGetFilesByPathsParams{}
-
-	m.GetFilesWorkflowMock = mServiceMockGetFilesWorkflow{mock: m}
 
 	m.GetNamespaceAndCheckPermissionMock = mServiceMockGetNamespaceAndCheckPermission{mock: m}
 	m.GetNamespaceAndCheckPermissionMock.callArgs = []*ServiceMockGetNamespaceAndCheckPermissionParams{}
@@ -375,20 +249,19 @@ func NewServiceMock(t minimock.Tester) *ServiceMock {
 	m.GetRepositoryTagMock = mServiceMockGetRepositoryTag{mock: m}
 	m.GetRepositoryTagMock.callArgs = []*ServiceMockGetRepositoryTagParams{}
 
+	m.GetTextChunkFilePathsByFileUIDMock = mServiceMockGetTextChunkFilePathsByFileUID{mock: m}
+	m.GetTextChunkFilePathsByFileUIDMock.callArgs = []*ServiceMockGetTextChunkFilePathsByFileUIDParams{}
+
 	m.GetUploadURLMock = mServiceMockGetUploadURL{mock: m}
 	m.GetUploadURLMock.callArgs = []*ServiceMockGetUploadURLParams{}
 
 	m.ListRepositoryTagsMock = mServiceMockListRepositoryTags{mock: m}
 	m.ListRepositoryTagsMock.callArgs = []*ServiceMockListRepositoryTagsParams{}
 
-	m.MinIOMock = mServiceMockMinIO{mock: m}
-
 	m.PipelinePublicClientMock = mServiceMockPipelinePublicClient{mock: m}
 
-	m.ProcessFileWorkflowMock = mServiceMockProcessFileWorkflow{mock: m}
-
-	m.QuestionAnsweringPipeMock = mServiceMockQuestionAnsweringPipe{mock: m}
-	m.QuestionAnsweringPipeMock.callArgs = []*ServiceMockQuestionAnsweringPipeParams{}
+	m.ProcessFileMock = mServiceMockProcessFile{mock: m}
+	m.ProcessFileMock.callArgs = []*ServiceMockProcessFileParams{}
 
 	m.RedisClientMock = mServiceMockRedisClient{mock: m}
 
@@ -396,11 +269,6 @@ func NewServiceMock(t minimock.Tester) *ServiceMock {
 
 	m.SimilarityChunksSearchMock = mServiceMockSimilarityChunksSearch{mock: m}
 	m.SimilarityChunksSearchMock.callArgs = []*ServiceMockSimilarityChunksSearchParams{}
-
-	m.TriggerCleanupKnowledgeBaseWorkflowMock = mServiceMockTriggerCleanupKnowledgeBaseWorkflow{mock: m}
-	m.TriggerCleanupKnowledgeBaseWorkflowMock.callArgs = []*ServiceMockTriggerCleanupKnowledgeBaseWorkflowParams{}
-
-	m.VectorDBMock = mServiceMockVectorDB{mock: m}
 
 	t.Cleanup(m.MinimockFinish)
 
@@ -636,7 +504,7 @@ type ServiceMockCheckCatalogUserPermissionParamPtrs struct {
 // ServiceMockCheckCatalogUserPermissionResults contains results of the Service.CheckCatalogUserPermission
 type ServiceMockCheckCatalogUserPermissionResults struct {
 	np1 *resource.Namespace
-	kp1 *repository.KnowledgeBase
+	kp1 *repository.KnowledgeBaseModel
 	err error
 }
 
@@ -788,7 +656,7 @@ func (mmCheckCatalogUserPermission *mServiceMockCheckCatalogUserPermission) Insp
 }
 
 // Return sets up results that will be returned by Service.CheckCatalogUserPermission
-func (mmCheckCatalogUserPermission *mServiceMockCheckCatalogUserPermission) Return(np1 *resource.Namespace, kp1 *repository.KnowledgeBase, err error) *ServiceMock {
+func (mmCheckCatalogUserPermission *mServiceMockCheckCatalogUserPermission) Return(np1 *resource.Namespace, kp1 *repository.KnowledgeBaseModel, err error) *ServiceMock {
 	if mmCheckCatalogUserPermission.mock.funcCheckCatalogUserPermission != nil {
 		mmCheckCatalogUserPermission.mock.t.Fatalf("ServiceMock.CheckCatalogUserPermission mock is already set by Set")
 	}
@@ -802,7 +670,7 @@ func (mmCheckCatalogUserPermission *mServiceMockCheckCatalogUserPermission) Retu
 }
 
 // Set uses given function f to mock the Service.CheckCatalogUserPermission method
-func (mmCheckCatalogUserPermission *mServiceMockCheckCatalogUserPermission) Set(f func(ctx context.Context, s1 string, s2 string, s3 string) (np1 *resource.Namespace, kp1 *repository.KnowledgeBase, err error)) *ServiceMock {
+func (mmCheckCatalogUserPermission *mServiceMockCheckCatalogUserPermission) Set(f func(ctx context.Context, s1 string, s2 string, s3 string) (np1 *resource.Namespace, kp1 *repository.KnowledgeBaseModel, err error)) *ServiceMock {
 	if mmCheckCatalogUserPermission.defaultExpectation != nil {
 		mmCheckCatalogUserPermission.mock.t.Fatalf("Default expectation is already set for the Service.CheckCatalogUserPermission method")
 	}
@@ -833,7 +701,7 @@ func (mmCheckCatalogUserPermission *mServiceMockCheckCatalogUserPermission) When
 }
 
 // Then sets up Service.CheckCatalogUserPermission return parameters for the expectation previously defined by the When method
-func (e *ServiceMockCheckCatalogUserPermissionExpectation) Then(np1 *resource.Namespace, kp1 *repository.KnowledgeBase, err error) *ServiceMock {
+func (e *ServiceMockCheckCatalogUserPermissionExpectation) Then(np1 *resource.Namespace, kp1 *repository.KnowledgeBaseModel, err error) *ServiceMock {
 	e.results = &ServiceMockCheckCatalogUserPermissionResults{np1, kp1, err}
 	return e.mock
 }
@@ -860,7 +728,7 @@ func (mmCheckCatalogUserPermission *mServiceMockCheckCatalogUserPermission) invo
 }
 
 // CheckCatalogUserPermission implements mm_service.Service
-func (mmCheckCatalogUserPermission *ServiceMock) CheckCatalogUserPermission(ctx context.Context, s1 string, s2 string, s3 string) (np1 *resource.Namespace, kp1 *repository.KnowledgeBase, err error) {
+func (mmCheckCatalogUserPermission *ServiceMock) CheckCatalogUserPermission(ctx context.Context, s1 string, s2 string, s3 string) (np1 *resource.Namespace, kp1 *repository.KnowledgeBaseModel, err error) {
 	mm_atomic.AddUint64(&mmCheckCatalogUserPermission.beforeCheckCatalogUserPermissionCounter, 1)
 	defer mm_atomic.AddUint64(&mmCheckCatalogUserPermission.afterCheckCatalogUserPermissionCounter, 1)
 
@@ -1341,53 +1209,64 @@ func (m *ServiceMock) MinimockCheckNamespacePermissionInspect() {
 	}
 }
 
-type mServiceMockChunkMarkdownPipe struct {
+type mServiceMockCleanupFile struct {
 	optional           bool
 	mock               *ServiceMock
-	defaultExpectation *ServiceMockChunkMarkdownPipeExpectation
-	expectations       []*ServiceMockChunkMarkdownPipeExpectation
+	defaultExpectation *ServiceMockCleanupFileExpectation
+	expectations       []*ServiceMockCleanupFileExpectation
 
-	callArgs []*ServiceMockChunkMarkdownPipeParams
+	callArgs []*ServiceMockCleanupFileParams
 	mutex    sync.RWMutex
 
 	expectedInvocations       uint64
 	expectedInvocationsOrigin string
 }
 
-// ServiceMockChunkMarkdownPipeExpectation specifies expectation struct of the Service.ChunkMarkdownPipe
-type ServiceMockChunkMarkdownPipeExpectation struct {
+// ServiceMockCleanupFileExpectation specifies expectation struct of the Service.CleanupFile
+type ServiceMockCleanupFileExpectation struct {
 	mock               *ServiceMock
-	params             *ServiceMockChunkMarkdownPipeParams
-	paramPtrs          *ServiceMockChunkMarkdownPipeParamPtrs
-	expectationOrigins ServiceMockChunkMarkdownPipeExpectationOrigins
-	results            *ServiceMockChunkMarkdownPipeResults
+	params             *ServiceMockCleanupFileParams
+	paramPtrs          *ServiceMockCleanupFileParamPtrs
+	expectationOrigins ServiceMockCleanupFileExpectationOrigins
+	results            *ServiceMockCleanupFileResults
 	returnOrigin       string
 	Counter            uint64
 }
 
-// ServiceMockChunkMarkdownPipeParams contains parameters of the Service.ChunkMarkdownPipe
-type ServiceMockChunkMarkdownPipeParams struct {
+// ServiceMockCleanupFileParams contains parameters of the Service.CleanupFile
+type ServiceMockCleanupFileParams struct {
 	ctx context.Context
+	f1  types.FileUIDType
+	u1  types.UserUIDType
+	r1  types.RequesterUIDType
 	s1  string
+	b1  bool
 }
 
-// ServiceMockChunkMarkdownPipeParamPtrs contains pointers to parameters of the Service.ChunkMarkdownPipe
-type ServiceMockChunkMarkdownPipeParamPtrs struct {
+// ServiceMockCleanupFileParamPtrs contains pointers to parameters of the Service.CleanupFile
+type ServiceMockCleanupFileParamPtrs struct {
 	ctx *context.Context
+	f1  *types.FileUIDType
+	u1  *types.UserUIDType
+	r1  *types.RequesterUIDType
 	s1  *string
+	b1  *bool
 }
 
-// ServiceMockChunkMarkdownPipeResults contains results of the Service.ChunkMarkdownPipe
-type ServiceMockChunkMarkdownPipeResults struct {
-	cp1 *mm_service.ChunkingResult
+// ServiceMockCleanupFileResults contains results of the Service.CleanupFile
+type ServiceMockCleanupFileResults struct {
 	err error
 }
 
-// ServiceMockChunkMarkdownPipeOrigins contains origins of expectations of the Service.ChunkMarkdownPipe
-type ServiceMockChunkMarkdownPipeExpectationOrigins struct {
+// ServiceMockCleanupFileOrigins contains origins of expectations of the Service.CleanupFile
+type ServiceMockCleanupFileExpectationOrigins struct {
 	origin    string
 	originCtx string
+	originF1  string
+	originU1  string
+	originR1  string
 	originS1  string
+	originB1  string
 }
 
 // Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
@@ -1395,342 +1274,453 @@ type ServiceMockChunkMarkdownPipeExpectationOrigins struct {
 // Optional() makes method check to work in '0 or more' mode.
 // It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
 // catch the problems when the expected method call is totally skipped during test run.
-func (mmChunkMarkdownPipe *mServiceMockChunkMarkdownPipe) Optional() *mServiceMockChunkMarkdownPipe {
-	mmChunkMarkdownPipe.optional = true
-	return mmChunkMarkdownPipe
+func (mmCleanupFile *mServiceMockCleanupFile) Optional() *mServiceMockCleanupFile {
+	mmCleanupFile.optional = true
+	return mmCleanupFile
 }
 
-// Expect sets up expected params for Service.ChunkMarkdownPipe
-func (mmChunkMarkdownPipe *mServiceMockChunkMarkdownPipe) Expect(ctx context.Context, s1 string) *mServiceMockChunkMarkdownPipe {
-	if mmChunkMarkdownPipe.mock.funcChunkMarkdownPipe != nil {
-		mmChunkMarkdownPipe.mock.t.Fatalf("ServiceMock.ChunkMarkdownPipe mock is already set by Set")
+// Expect sets up expected params for Service.CleanupFile
+func (mmCleanupFile *mServiceMockCleanupFile) Expect(ctx context.Context, f1 types.FileUIDType, u1 types.UserUIDType, r1 types.RequesterUIDType, s1 string, b1 bool) *mServiceMockCleanupFile {
+	if mmCleanupFile.mock.funcCleanupFile != nil {
+		mmCleanupFile.mock.t.Fatalf("ServiceMock.CleanupFile mock is already set by Set")
 	}
 
-	if mmChunkMarkdownPipe.defaultExpectation == nil {
-		mmChunkMarkdownPipe.defaultExpectation = &ServiceMockChunkMarkdownPipeExpectation{}
+	if mmCleanupFile.defaultExpectation == nil {
+		mmCleanupFile.defaultExpectation = &ServiceMockCleanupFileExpectation{}
 	}
 
-	if mmChunkMarkdownPipe.defaultExpectation.paramPtrs != nil {
-		mmChunkMarkdownPipe.mock.t.Fatalf("ServiceMock.ChunkMarkdownPipe mock is already set by ExpectParams functions")
+	if mmCleanupFile.defaultExpectation.paramPtrs != nil {
+		mmCleanupFile.mock.t.Fatalf("ServiceMock.CleanupFile mock is already set by ExpectParams functions")
 	}
 
-	mmChunkMarkdownPipe.defaultExpectation.params = &ServiceMockChunkMarkdownPipeParams{ctx, s1}
-	mmChunkMarkdownPipe.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
-	for _, e := range mmChunkMarkdownPipe.expectations {
-		if minimock.Equal(e.params, mmChunkMarkdownPipe.defaultExpectation.params) {
-			mmChunkMarkdownPipe.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmChunkMarkdownPipe.defaultExpectation.params)
+	mmCleanupFile.defaultExpectation.params = &ServiceMockCleanupFileParams{ctx, f1, u1, r1, s1, b1}
+	mmCleanupFile.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmCleanupFile.expectations {
+		if minimock.Equal(e.params, mmCleanupFile.defaultExpectation.params) {
+			mmCleanupFile.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmCleanupFile.defaultExpectation.params)
 		}
 	}
 
-	return mmChunkMarkdownPipe
+	return mmCleanupFile
 }
 
-// ExpectCtxParam1 sets up expected param ctx for Service.ChunkMarkdownPipe
-func (mmChunkMarkdownPipe *mServiceMockChunkMarkdownPipe) ExpectCtxParam1(ctx context.Context) *mServiceMockChunkMarkdownPipe {
-	if mmChunkMarkdownPipe.mock.funcChunkMarkdownPipe != nil {
-		mmChunkMarkdownPipe.mock.t.Fatalf("ServiceMock.ChunkMarkdownPipe mock is already set by Set")
+// ExpectCtxParam1 sets up expected param ctx for Service.CleanupFile
+func (mmCleanupFile *mServiceMockCleanupFile) ExpectCtxParam1(ctx context.Context) *mServiceMockCleanupFile {
+	if mmCleanupFile.mock.funcCleanupFile != nil {
+		mmCleanupFile.mock.t.Fatalf("ServiceMock.CleanupFile mock is already set by Set")
 	}
 
-	if mmChunkMarkdownPipe.defaultExpectation == nil {
-		mmChunkMarkdownPipe.defaultExpectation = &ServiceMockChunkMarkdownPipeExpectation{}
+	if mmCleanupFile.defaultExpectation == nil {
+		mmCleanupFile.defaultExpectation = &ServiceMockCleanupFileExpectation{}
 	}
 
-	if mmChunkMarkdownPipe.defaultExpectation.params != nil {
-		mmChunkMarkdownPipe.mock.t.Fatalf("ServiceMock.ChunkMarkdownPipe mock is already set by Expect")
+	if mmCleanupFile.defaultExpectation.params != nil {
+		mmCleanupFile.mock.t.Fatalf("ServiceMock.CleanupFile mock is already set by Expect")
 	}
 
-	if mmChunkMarkdownPipe.defaultExpectation.paramPtrs == nil {
-		mmChunkMarkdownPipe.defaultExpectation.paramPtrs = &ServiceMockChunkMarkdownPipeParamPtrs{}
+	if mmCleanupFile.defaultExpectation.paramPtrs == nil {
+		mmCleanupFile.defaultExpectation.paramPtrs = &ServiceMockCleanupFileParamPtrs{}
 	}
-	mmChunkMarkdownPipe.defaultExpectation.paramPtrs.ctx = &ctx
-	mmChunkMarkdownPipe.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+	mmCleanupFile.defaultExpectation.paramPtrs.ctx = &ctx
+	mmCleanupFile.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
 
-	return mmChunkMarkdownPipe
+	return mmCleanupFile
 }
 
-// ExpectS1Param2 sets up expected param s1 for Service.ChunkMarkdownPipe
-func (mmChunkMarkdownPipe *mServiceMockChunkMarkdownPipe) ExpectS1Param2(s1 string) *mServiceMockChunkMarkdownPipe {
-	if mmChunkMarkdownPipe.mock.funcChunkMarkdownPipe != nil {
-		mmChunkMarkdownPipe.mock.t.Fatalf("ServiceMock.ChunkMarkdownPipe mock is already set by Set")
+// ExpectF1Param2 sets up expected param f1 for Service.CleanupFile
+func (mmCleanupFile *mServiceMockCleanupFile) ExpectF1Param2(f1 types.FileUIDType) *mServiceMockCleanupFile {
+	if mmCleanupFile.mock.funcCleanupFile != nil {
+		mmCleanupFile.mock.t.Fatalf("ServiceMock.CleanupFile mock is already set by Set")
 	}
 
-	if mmChunkMarkdownPipe.defaultExpectation == nil {
-		mmChunkMarkdownPipe.defaultExpectation = &ServiceMockChunkMarkdownPipeExpectation{}
+	if mmCleanupFile.defaultExpectation == nil {
+		mmCleanupFile.defaultExpectation = &ServiceMockCleanupFileExpectation{}
 	}
 
-	if mmChunkMarkdownPipe.defaultExpectation.params != nil {
-		mmChunkMarkdownPipe.mock.t.Fatalf("ServiceMock.ChunkMarkdownPipe mock is already set by Expect")
+	if mmCleanupFile.defaultExpectation.params != nil {
+		mmCleanupFile.mock.t.Fatalf("ServiceMock.CleanupFile mock is already set by Expect")
 	}
 
-	if mmChunkMarkdownPipe.defaultExpectation.paramPtrs == nil {
-		mmChunkMarkdownPipe.defaultExpectation.paramPtrs = &ServiceMockChunkMarkdownPipeParamPtrs{}
+	if mmCleanupFile.defaultExpectation.paramPtrs == nil {
+		mmCleanupFile.defaultExpectation.paramPtrs = &ServiceMockCleanupFileParamPtrs{}
 	}
-	mmChunkMarkdownPipe.defaultExpectation.paramPtrs.s1 = &s1
-	mmChunkMarkdownPipe.defaultExpectation.expectationOrigins.originS1 = minimock.CallerInfo(1)
+	mmCleanupFile.defaultExpectation.paramPtrs.f1 = &f1
+	mmCleanupFile.defaultExpectation.expectationOrigins.originF1 = minimock.CallerInfo(1)
 
-	return mmChunkMarkdownPipe
+	return mmCleanupFile
 }
 
-// Inspect accepts an inspector function that has same arguments as the Service.ChunkMarkdownPipe
-func (mmChunkMarkdownPipe *mServiceMockChunkMarkdownPipe) Inspect(f func(ctx context.Context, s1 string)) *mServiceMockChunkMarkdownPipe {
-	if mmChunkMarkdownPipe.mock.inspectFuncChunkMarkdownPipe != nil {
-		mmChunkMarkdownPipe.mock.t.Fatalf("Inspect function is already set for ServiceMock.ChunkMarkdownPipe")
+// ExpectU1Param3 sets up expected param u1 for Service.CleanupFile
+func (mmCleanupFile *mServiceMockCleanupFile) ExpectU1Param3(u1 types.UserUIDType) *mServiceMockCleanupFile {
+	if mmCleanupFile.mock.funcCleanupFile != nil {
+		mmCleanupFile.mock.t.Fatalf("ServiceMock.CleanupFile mock is already set by Set")
 	}
 
-	mmChunkMarkdownPipe.mock.inspectFuncChunkMarkdownPipe = f
+	if mmCleanupFile.defaultExpectation == nil {
+		mmCleanupFile.defaultExpectation = &ServiceMockCleanupFileExpectation{}
+	}
 
-	return mmChunkMarkdownPipe
+	if mmCleanupFile.defaultExpectation.params != nil {
+		mmCleanupFile.mock.t.Fatalf("ServiceMock.CleanupFile mock is already set by Expect")
+	}
+
+	if mmCleanupFile.defaultExpectation.paramPtrs == nil {
+		mmCleanupFile.defaultExpectation.paramPtrs = &ServiceMockCleanupFileParamPtrs{}
+	}
+	mmCleanupFile.defaultExpectation.paramPtrs.u1 = &u1
+	mmCleanupFile.defaultExpectation.expectationOrigins.originU1 = minimock.CallerInfo(1)
+
+	return mmCleanupFile
 }
 
-// Return sets up results that will be returned by Service.ChunkMarkdownPipe
-func (mmChunkMarkdownPipe *mServiceMockChunkMarkdownPipe) Return(cp1 *mm_service.ChunkingResult, err error) *ServiceMock {
-	if mmChunkMarkdownPipe.mock.funcChunkMarkdownPipe != nil {
-		mmChunkMarkdownPipe.mock.t.Fatalf("ServiceMock.ChunkMarkdownPipe mock is already set by Set")
+// ExpectR1Param4 sets up expected param r1 for Service.CleanupFile
+func (mmCleanupFile *mServiceMockCleanupFile) ExpectR1Param4(r1 types.RequesterUIDType) *mServiceMockCleanupFile {
+	if mmCleanupFile.mock.funcCleanupFile != nil {
+		mmCleanupFile.mock.t.Fatalf("ServiceMock.CleanupFile mock is already set by Set")
 	}
 
-	if mmChunkMarkdownPipe.defaultExpectation == nil {
-		mmChunkMarkdownPipe.defaultExpectation = &ServiceMockChunkMarkdownPipeExpectation{mock: mmChunkMarkdownPipe.mock}
+	if mmCleanupFile.defaultExpectation == nil {
+		mmCleanupFile.defaultExpectation = &ServiceMockCleanupFileExpectation{}
 	}
-	mmChunkMarkdownPipe.defaultExpectation.results = &ServiceMockChunkMarkdownPipeResults{cp1, err}
-	mmChunkMarkdownPipe.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
-	return mmChunkMarkdownPipe.mock
+
+	if mmCleanupFile.defaultExpectation.params != nil {
+		mmCleanupFile.mock.t.Fatalf("ServiceMock.CleanupFile mock is already set by Expect")
+	}
+
+	if mmCleanupFile.defaultExpectation.paramPtrs == nil {
+		mmCleanupFile.defaultExpectation.paramPtrs = &ServiceMockCleanupFileParamPtrs{}
+	}
+	mmCleanupFile.defaultExpectation.paramPtrs.r1 = &r1
+	mmCleanupFile.defaultExpectation.expectationOrigins.originR1 = minimock.CallerInfo(1)
+
+	return mmCleanupFile
 }
 
-// Set uses given function f to mock the Service.ChunkMarkdownPipe method
-func (mmChunkMarkdownPipe *mServiceMockChunkMarkdownPipe) Set(f func(ctx context.Context, s1 string) (cp1 *mm_service.ChunkingResult, err error)) *ServiceMock {
-	if mmChunkMarkdownPipe.defaultExpectation != nil {
-		mmChunkMarkdownPipe.mock.t.Fatalf("Default expectation is already set for the Service.ChunkMarkdownPipe method")
+// ExpectS1Param5 sets up expected param s1 for Service.CleanupFile
+func (mmCleanupFile *mServiceMockCleanupFile) ExpectS1Param5(s1 string) *mServiceMockCleanupFile {
+	if mmCleanupFile.mock.funcCleanupFile != nil {
+		mmCleanupFile.mock.t.Fatalf("ServiceMock.CleanupFile mock is already set by Set")
 	}
 
-	if len(mmChunkMarkdownPipe.expectations) > 0 {
-		mmChunkMarkdownPipe.mock.t.Fatalf("Some expectations are already set for the Service.ChunkMarkdownPipe method")
+	if mmCleanupFile.defaultExpectation == nil {
+		mmCleanupFile.defaultExpectation = &ServiceMockCleanupFileExpectation{}
 	}
 
-	mmChunkMarkdownPipe.mock.funcChunkMarkdownPipe = f
-	mmChunkMarkdownPipe.mock.funcChunkMarkdownPipeOrigin = minimock.CallerInfo(1)
-	return mmChunkMarkdownPipe.mock
+	if mmCleanupFile.defaultExpectation.params != nil {
+		mmCleanupFile.mock.t.Fatalf("ServiceMock.CleanupFile mock is already set by Expect")
+	}
+
+	if mmCleanupFile.defaultExpectation.paramPtrs == nil {
+		mmCleanupFile.defaultExpectation.paramPtrs = &ServiceMockCleanupFileParamPtrs{}
+	}
+	mmCleanupFile.defaultExpectation.paramPtrs.s1 = &s1
+	mmCleanupFile.defaultExpectation.expectationOrigins.originS1 = minimock.CallerInfo(1)
+
+	return mmCleanupFile
 }
 
-// When sets expectation for the Service.ChunkMarkdownPipe which will trigger the result defined by the following
+// ExpectB1Param6 sets up expected param b1 for Service.CleanupFile
+func (mmCleanupFile *mServiceMockCleanupFile) ExpectB1Param6(b1 bool) *mServiceMockCleanupFile {
+	if mmCleanupFile.mock.funcCleanupFile != nil {
+		mmCleanupFile.mock.t.Fatalf("ServiceMock.CleanupFile mock is already set by Set")
+	}
+
+	if mmCleanupFile.defaultExpectation == nil {
+		mmCleanupFile.defaultExpectation = &ServiceMockCleanupFileExpectation{}
+	}
+
+	if mmCleanupFile.defaultExpectation.params != nil {
+		mmCleanupFile.mock.t.Fatalf("ServiceMock.CleanupFile mock is already set by Expect")
+	}
+
+	if mmCleanupFile.defaultExpectation.paramPtrs == nil {
+		mmCleanupFile.defaultExpectation.paramPtrs = &ServiceMockCleanupFileParamPtrs{}
+	}
+	mmCleanupFile.defaultExpectation.paramPtrs.b1 = &b1
+	mmCleanupFile.defaultExpectation.expectationOrigins.originB1 = minimock.CallerInfo(1)
+
+	return mmCleanupFile
+}
+
+// Inspect accepts an inspector function that has same arguments as the Service.CleanupFile
+func (mmCleanupFile *mServiceMockCleanupFile) Inspect(f func(ctx context.Context, f1 types.FileUIDType, u1 types.UserUIDType, r1 types.RequesterUIDType, s1 string, b1 bool)) *mServiceMockCleanupFile {
+	if mmCleanupFile.mock.inspectFuncCleanupFile != nil {
+		mmCleanupFile.mock.t.Fatalf("Inspect function is already set for ServiceMock.CleanupFile")
+	}
+
+	mmCleanupFile.mock.inspectFuncCleanupFile = f
+
+	return mmCleanupFile
+}
+
+// Return sets up results that will be returned by Service.CleanupFile
+func (mmCleanupFile *mServiceMockCleanupFile) Return(err error) *ServiceMock {
+	if mmCleanupFile.mock.funcCleanupFile != nil {
+		mmCleanupFile.mock.t.Fatalf("ServiceMock.CleanupFile mock is already set by Set")
+	}
+
+	if mmCleanupFile.defaultExpectation == nil {
+		mmCleanupFile.defaultExpectation = &ServiceMockCleanupFileExpectation{mock: mmCleanupFile.mock}
+	}
+	mmCleanupFile.defaultExpectation.results = &ServiceMockCleanupFileResults{err}
+	mmCleanupFile.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmCleanupFile.mock
+}
+
+// Set uses given function f to mock the Service.CleanupFile method
+func (mmCleanupFile *mServiceMockCleanupFile) Set(f func(ctx context.Context, f1 types.FileUIDType, u1 types.UserUIDType, r1 types.RequesterUIDType, s1 string, b1 bool) (err error)) *ServiceMock {
+	if mmCleanupFile.defaultExpectation != nil {
+		mmCleanupFile.mock.t.Fatalf("Default expectation is already set for the Service.CleanupFile method")
+	}
+
+	if len(mmCleanupFile.expectations) > 0 {
+		mmCleanupFile.mock.t.Fatalf("Some expectations are already set for the Service.CleanupFile method")
+	}
+
+	mmCleanupFile.mock.funcCleanupFile = f
+	mmCleanupFile.mock.funcCleanupFileOrigin = minimock.CallerInfo(1)
+	return mmCleanupFile.mock
+}
+
+// When sets expectation for the Service.CleanupFile which will trigger the result defined by the following
 // Then helper
-func (mmChunkMarkdownPipe *mServiceMockChunkMarkdownPipe) When(ctx context.Context, s1 string) *ServiceMockChunkMarkdownPipeExpectation {
-	if mmChunkMarkdownPipe.mock.funcChunkMarkdownPipe != nil {
-		mmChunkMarkdownPipe.mock.t.Fatalf("ServiceMock.ChunkMarkdownPipe mock is already set by Set")
+func (mmCleanupFile *mServiceMockCleanupFile) When(ctx context.Context, f1 types.FileUIDType, u1 types.UserUIDType, r1 types.RequesterUIDType, s1 string, b1 bool) *ServiceMockCleanupFileExpectation {
+	if mmCleanupFile.mock.funcCleanupFile != nil {
+		mmCleanupFile.mock.t.Fatalf("ServiceMock.CleanupFile mock is already set by Set")
 	}
 
-	expectation := &ServiceMockChunkMarkdownPipeExpectation{
-		mock:               mmChunkMarkdownPipe.mock,
-		params:             &ServiceMockChunkMarkdownPipeParams{ctx, s1},
-		expectationOrigins: ServiceMockChunkMarkdownPipeExpectationOrigins{origin: minimock.CallerInfo(1)},
+	expectation := &ServiceMockCleanupFileExpectation{
+		mock:               mmCleanupFile.mock,
+		params:             &ServiceMockCleanupFileParams{ctx, f1, u1, r1, s1, b1},
+		expectationOrigins: ServiceMockCleanupFileExpectationOrigins{origin: minimock.CallerInfo(1)},
 	}
-	mmChunkMarkdownPipe.expectations = append(mmChunkMarkdownPipe.expectations, expectation)
+	mmCleanupFile.expectations = append(mmCleanupFile.expectations, expectation)
 	return expectation
 }
 
-// Then sets up Service.ChunkMarkdownPipe return parameters for the expectation previously defined by the When method
-func (e *ServiceMockChunkMarkdownPipeExpectation) Then(cp1 *mm_service.ChunkingResult, err error) *ServiceMock {
-	e.results = &ServiceMockChunkMarkdownPipeResults{cp1, err}
+// Then sets up Service.CleanupFile return parameters for the expectation previously defined by the When method
+func (e *ServiceMockCleanupFileExpectation) Then(err error) *ServiceMock {
+	e.results = &ServiceMockCleanupFileResults{err}
 	return e.mock
 }
 
-// Times sets number of times Service.ChunkMarkdownPipe should be invoked
-func (mmChunkMarkdownPipe *mServiceMockChunkMarkdownPipe) Times(n uint64) *mServiceMockChunkMarkdownPipe {
+// Times sets number of times Service.CleanupFile should be invoked
+func (mmCleanupFile *mServiceMockCleanupFile) Times(n uint64) *mServiceMockCleanupFile {
 	if n == 0 {
-		mmChunkMarkdownPipe.mock.t.Fatalf("Times of ServiceMock.ChunkMarkdownPipe mock can not be zero")
+		mmCleanupFile.mock.t.Fatalf("Times of ServiceMock.CleanupFile mock can not be zero")
 	}
-	mm_atomic.StoreUint64(&mmChunkMarkdownPipe.expectedInvocations, n)
-	mmChunkMarkdownPipe.expectedInvocationsOrigin = minimock.CallerInfo(1)
-	return mmChunkMarkdownPipe
+	mm_atomic.StoreUint64(&mmCleanupFile.expectedInvocations, n)
+	mmCleanupFile.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmCleanupFile
 }
 
-func (mmChunkMarkdownPipe *mServiceMockChunkMarkdownPipe) invocationsDone() bool {
-	if len(mmChunkMarkdownPipe.expectations) == 0 && mmChunkMarkdownPipe.defaultExpectation == nil && mmChunkMarkdownPipe.mock.funcChunkMarkdownPipe == nil {
+func (mmCleanupFile *mServiceMockCleanupFile) invocationsDone() bool {
+	if len(mmCleanupFile.expectations) == 0 && mmCleanupFile.defaultExpectation == nil && mmCleanupFile.mock.funcCleanupFile == nil {
 		return true
 	}
 
-	totalInvocations := mm_atomic.LoadUint64(&mmChunkMarkdownPipe.mock.afterChunkMarkdownPipeCounter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmChunkMarkdownPipe.expectedInvocations)
+	totalInvocations := mm_atomic.LoadUint64(&mmCleanupFile.mock.afterCleanupFileCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmCleanupFile.expectedInvocations)
 
 	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
 }
 
-// ChunkMarkdownPipe implements mm_service.Service
-func (mmChunkMarkdownPipe *ServiceMock) ChunkMarkdownPipe(ctx context.Context, s1 string) (cp1 *mm_service.ChunkingResult, err error) {
-	mm_atomic.AddUint64(&mmChunkMarkdownPipe.beforeChunkMarkdownPipeCounter, 1)
-	defer mm_atomic.AddUint64(&mmChunkMarkdownPipe.afterChunkMarkdownPipeCounter, 1)
+// CleanupFile implements mm_service.Service
+func (mmCleanupFile *ServiceMock) CleanupFile(ctx context.Context, f1 types.FileUIDType, u1 types.UserUIDType, r1 types.RequesterUIDType, s1 string, b1 bool) (err error) {
+	mm_atomic.AddUint64(&mmCleanupFile.beforeCleanupFileCounter, 1)
+	defer mm_atomic.AddUint64(&mmCleanupFile.afterCleanupFileCounter, 1)
 
-	mmChunkMarkdownPipe.t.Helper()
+	mmCleanupFile.t.Helper()
 
-	if mmChunkMarkdownPipe.inspectFuncChunkMarkdownPipe != nil {
-		mmChunkMarkdownPipe.inspectFuncChunkMarkdownPipe(ctx, s1)
+	if mmCleanupFile.inspectFuncCleanupFile != nil {
+		mmCleanupFile.inspectFuncCleanupFile(ctx, f1, u1, r1, s1, b1)
 	}
 
-	mm_params := ServiceMockChunkMarkdownPipeParams{ctx, s1}
+	mm_params := ServiceMockCleanupFileParams{ctx, f1, u1, r1, s1, b1}
 
 	// Record call args
-	mmChunkMarkdownPipe.ChunkMarkdownPipeMock.mutex.Lock()
-	mmChunkMarkdownPipe.ChunkMarkdownPipeMock.callArgs = append(mmChunkMarkdownPipe.ChunkMarkdownPipeMock.callArgs, &mm_params)
-	mmChunkMarkdownPipe.ChunkMarkdownPipeMock.mutex.Unlock()
+	mmCleanupFile.CleanupFileMock.mutex.Lock()
+	mmCleanupFile.CleanupFileMock.callArgs = append(mmCleanupFile.CleanupFileMock.callArgs, &mm_params)
+	mmCleanupFile.CleanupFileMock.mutex.Unlock()
 
-	for _, e := range mmChunkMarkdownPipe.ChunkMarkdownPipeMock.expectations {
+	for _, e := range mmCleanupFile.CleanupFileMock.expectations {
 		if minimock.Equal(*e.params, mm_params) {
 			mm_atomic.AddUint64(&e.Counter, 1)
-			return e.results.cp1, e.results.err
+			return e.results.err
 		}
 	}
 
-	if mmChunkMarkdownPipe.ChunkMarkdownPipeMock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmChunkMarkdownPipe.ChunkMarkdownPipeMock.defaultExpectation.Counter, 1)
-		mm_want := mmChunkMarkdownPipe.ChunkMarkdownPipeMock.defaultExpectation.params
-		mm_want_ptrs := mmChunkMarkdownPipe.ChunkMarkdownPipeMock.defaultExpectation.paramPtrs
+	if mmCleanupFile.CleanupFileMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmCleanupFile.CleanupFileMock.defaultExpectation.Counter, 1)
+		mm_want := mmCleanupFile.CleanupFileMock.defaultExpectation.params
+		mm_want_ptrs := mmCleanupFile.CleanupFileMock.defaultExpectation.paramPtrs
 
-		mm_got := ServiceMockChunkMarkdownPipeParams{ctx, s1}
+		mm_got := ServiceMockCleanupFileParams{ctx, f1, u1, r1, s1, b1}
 
 		if mm_want_ptrs != nil {
 
 			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
-				mmChunkMarkdownPipe.t.Errorf("ServiceMock.ChunkMarkdownPipe got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmChunkMarkdownPipe.ChunkMarkdownPipeMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+				mmCleanupFile.t.Errorf("ServiceMock.CleanupFile got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCleanupFile.CleanupFileMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.f1 != nil && !minimock.Equal(*mm_want_ptrs.f1, mm_got.f1) {
+				mmCleanupFile.t.Errorf("ServiceMock.CleanupFile got unexpected parameter f1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCleanupFile.CleanupFileMock.defaultExpectation.expectationOrigins.originF1, *mm_want_ptrs.f1, mm_got.f1, minimock.Diff(*mm_want_ptrs.f1, mm_got.f1))
+			}
+
+			if mm_want_ptrs.u1 != nil && !minimock.Equal(*mm_want_ptrs.u1, mm_got.u1) {
+				mmCleanupFile.t.Errorf("ServiceMock.CleanupFile got unexpected parameter u1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCleanupFile.CleanupFileMock.defaultExpectation.expectationOrigins.originU1, *mm_want_ptrs.u1, mm_got.u1, minimock.Diff(*mm_want_ptrs.u1, mm_got.u1))
+			}
+
+			if mm_want_ptrs.r1 != nil && !minimock.Equal(*mm_want_ptrs.r1, mm_got.r1) {
+				mmCleanupFile.t.Errorf("ServiceMock.CleanupFile got unexpected parameter r1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCleanupFile.CleanupFileMock.defaultExpectation.expectationOrigins.originR1, *mm_want_ptrs.r1, mm_got.r1, minimock.Diff(*mm_want_ptrs.r1, mm_got.r1))
 			}
 
 			if mm_want_ptrs.s1 != nil && !minimock.Equal(*mm_want_ptrs.s1, mm_got.s1) {
-				mmChunkMarkdownPipe.t.Errorf("ServiceMock.ChunkMarkdownPipe got unexpected parameter s1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmChunkMarkdownPipe.ChunkMarkdownPipeMock.defaultExpectation.expectationOrigins.originS1, *mm_want_ptrs.s1, mm_got.s1, minimock.Diff(*mm_want_ptrs.s1, mm_got.s1))
+				mmCleanupFile.t.Errorf("ServiceMock.CleanupFile got unexpected parameter s1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCleanupFile.CleanupFileMock.defaultExpectation.expectationOrigins.originS1, *mm_want_ptrs.s1, mm_got.s1, minimock.Diff(*mm_want_ptrs.s1, mm_got.s1))
+			}
+
+			if mm_want_ptrs.b1 != nil && !minimock.Equal(*mm_want_ptrs.b1, mm_got.b1) {
+				mmCleanupFile.t.Errorf("ServiceMock.CleanupFile got unexpected parameter b1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCleanupFile.CleanupFileMock.defaultExpectation.expectationOrigins.originB1, *mm_want_ptrs.b1, mm_got.b1, minimock.Diff(*mm_want_ptrs.b1, mm_got.b1))
 			}
 
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
-			mmChunkMarkdownPipe.t.Errorf("ServiceMock.ChunkMarkdownPipe got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-				mmChunkMarkdownPipe.ChunkMarkdownPipeMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+			mmCleanupFile.t.Errorf("ServiceMock.CleanupFile got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmCleanupFile.CleanupFileMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
 		}
 
-		mm_results := mmChunkMarkdownPipe.ChunkMarkdownPipeMock.defaultExpectation.results
+		mm_results := mmCleanupFile.CleanupFileMock.defaultExpectation.results
 		if mm_results == nil {
-			mmChunkMarkdownPipe.t.Fatal("No results are set for the ServiceMock.ChunkMarkdownPipe")
+			mmCleanupFile.t.Fatal("No results are set for the ServiceMock.CleanupFile")
 		}
-		return (*mm_results).cp1, (*mm_results).err
+		return (*mm_results).err
 	}
-	if mmChunkMarkdownPipe.funcChunkMarkdownPipe != nil {
-		return mmChunkMarkdownPipe.funcChunkMarkdownPipe(ctx, s1)
+	if mmCleanupFile.funcCleanupFile != nil {
+		return mmCleanupFile.funcCleanupFile(ctx, f1, u1, r1, s1, b1)
 	}
-	mmChunkMarkdownPipe.t.Fatalf("Unexpected call to ServiceMock.ChunkMarkdownPipe. %v %v", ctx, s1)
+	mmCleanupFile.t.Fatalf("Unexpected call to ServiceMock.CleanupFile. %v %v %v %v %v %v", ctx, f1, u1, r1, s1, b1)
 	return
 }
 
-// ChunkMarkdownPipeAfterCounter returns a count of finished ServiceMock.ChunkMarkdownPipe invocations
-func (mmChunkMarkdownPipe *ServiceMock) ChunkMarkdownPipeAfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmChunkMarkdownPipe.afterChunkMarkdownPipeCounter)
+// CleanupFileAfterCounter returns a count of finished ServiceMock.CleanupFile invocations
+func (mmCleanupFile *ServiceMock) CleanupFileAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmCleanupFile.afterCleanupFileCounter)
 }
 
-// ChunkMarkdownPipeBeforeCounter returns a count of ServiceMock.ChunkMarkdownPipe invocations
-func (mmChunkMarkdownPipe *ServiceMock) ChunkMarkdownPipeBeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmChunkMarkdownPipe.beforeChunkMarkdownPipeCounter)
+// CleanupFileBeforeCounter returns a count of ServiceMock.CleanupFile invocations
+func (mmCleanupFile *ServiceMock) CleanupFileBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmCleanupFile.beforeCleanupFileCounter)
 }
 
-// Calls returns a list of arguments used in each call to ServiceMock.ChunkMarkdownPipe.
+// Calls returns a list of arguments used in each call to ServiceMock.CleanupFile.
 // The list is in the same order as the calls were made (i.e. recent calls have a higher index)
-func (mmChunkMarkdownPipe *mServiceMockChunkMarkdownPipe) Calls() []*ServiceMockChunkMarkdownPipeParams {
-	mmChunkMarkdownPipe.mutex.RLock()
+func (mmCleanupFile *mServiceMockCleanupFile) Calls() []*ServiceMockCleanupFileParams {
+	mmCleanupFile.mutex.RLock()
 
-	argCopy := make([]*ServiceMockChunkMarkdownPipeParams, len(mmChunkMarkdownPipe.callArgs))
-	copy(argCopy, mmChunkMarkdownPipe.callArgs)
+	argCopy := make([]*ServiceMockCleanupFileParams, len(mmCleanupFile.callArgs))
+	copy(argCopy, mmCleanupFile.callArgs)
 
-	mmChunkMarkdownPipe.mutex.RUnlock()
+	mmCleanupFile.mutex.RUnlock()
 
 	return argCopy
 }
 
-// MinimockChunkMarkdownPipeDone returns true if the count of the ChunkMarkdownPipe invocations corresponds
+// MinimockCleanupFileDone returns true if the count of the CleanupFile invocations corresponds
 // the number of defined expectations
-func (m *ServiceMock) MinimockChunkMarkdownPipeDone() bool {
-	if m.ChunkMarkdownPipeMock.optional {
+func (m *ServiceMock) MinimockCleanupFileDone() bool {
+	if m.CleanupFileMock.optional {
 		// Optional methods provide '0 or more' call count restriction.
 		return true
 	}
 
-	for _, e := range m.ChunkMarkdownPipeMock.expectations {
+	for _, e := range m.CleanupFileMock.expectations {
 		if mm_atomic.LoadUint64(&e.Counter) < 1 {
 			return false
 		}
 	}
 
-	return m.ChunkMarkdownPipeMock.invocationsDone()
+	return m.CleanupFileMock.invocationsDone()
 }
 
-// MinimockChunkMarkdownPipeInspect logs each unmet expectation
-func (m *ServiceMock) MinimockChunkMarkdownPipeInspect() {
-	for _, e := range m.ChunkMarkdownPipeMock.expectations {
+// MinimockCleanupFileInspect logs each unmet expectation
+func (m *ServiceMock) MinimockCleanupFileInspect() {
+	for _, e := range m.CleanupFileMock.expectations {
 		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Errorf("Expected call to ServiceMock.ChunkMarkdownPipe at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+			m.t.Errorf("Expected call to ServiceMock.CleanupFile at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
 		}
 	}
 
-	afterChunkMarkdownPipeCounter := mm_atomic.LoadUint64(&m.afterChunkMarkdownPipeCounter)
+	afterCleanupFileCounter := mm_atomic.LoadUint64(&m.afterCleanupFileCounter)
 	// if default expectation was set then invocations count should be greater than zero
-	if m.ChunkMarkdownPipeMock.defaultExpectation != nil && afterChunkMarkdownPipeCounter < 1 {
-		if m.ChunkMarkdownPipeMock.defaultExpectation.params == nil {
-			m.t.Errorf("Expected call to ServiceMock.ChunkMarkdownPipe at\n%s", m.ChunkMarkdownPipeMock.defaultExpectation.returnOrigin)
+	if m.CleanupFileMock.defaultExpectation != nil && afterCleanupFileCounter < 1 {
+		if m.CleanupFileMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to ServiceMock.CleanupFile at\n%s", m.CleanupFileMock.defaultExpectation.returnOrigin)
 		} else {
-			m.t.Errorf("Expected call to ServiceMock.ChunkMarkdownPipe at\n%s with params: %#v", m.ChunkMarkdownPipeMock.defaultExpectation.expectationOrigins.origin, *m.ChunkMarkdownPipeMock.defaultExpectation.params)
+			m.t.Errorf("Expected call to ServiceMock.CleanupFile at\n%s with params: %#v", m.CleanupFileMock.defaultExpectation.expectationOrigins.origin, *m.CleanupFileMock.defaultExpectation.params)
 		}
 	}
 	// if func was set then invocations count should be greater than zero
-	if m.funcChunkMarkdownPipe != nil && afterChunkMarkdownPipeCounter < 1 {
-		m.t.Errorf("Expected call to ServiceMock.ChunkMarkdownPipe at\n%s", m.funcChunkMarkdownPipeOrigin)
+	if m.funcCleanupFile != nil && afterCleanupFileCounter < 1 {
+		m.t.Errorf("Expected call to ServiceMock.CleanupFile at\n%s", m.funcCleanupFileOrigin)
 	}
 
-	if !m.ChunkMarkdownPipeMock.invocationsDone() && afterChunkMarkdownPipeCounter > 0 {
-		m.t.Errorf("Expected %d calls to ServiceMock.ChunkMarkdownPipe at\n%s but found %d calls",
-			mm_atomic.LoadUint64(&m.ChunkMarkdownPipeMock.expectedInvocations), m.ChunkMarkdownPipeMock.expectedInvocationsOrigin, afterChunkMarkdownPipeCounter)
+	if !m.CleanupFileMock.invocationsDone() && afterCleanupFileCounter > 0 {
+		m.t.Errorf("Expected %d calls to ServiceMock.CleanupFile at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.CleanupFileMock.expectedInvocations), m.CleanupFileMock.expectedInvocationsOrigin, afterCleanupFileCounter)
 	}
 }
 
-type mServiceMockChunkTextPipe struct {
+type mServiceMockCleanupKnowledgeBase struct {
 	optional           bool
 	mock               *ServiceMock
-	defaultExpectation *ServiceMockChunkTextPipeExpectation
-	expectations       []*ServiceMockChunkTextPipeExpectation
+	defaultExpectation *ServiceMockCleanupKnowledgeBaseExpectation
+	expectations       []*ServiceMockCleanupKnowledgeBaseExpectation
 
-	callArgs []*ServiceMockChunkTextPipeParams
+	callArgs []*ServiceMockCleanupKnowledgeBaseParams
 	mutex    sync.RWMutex
 
 	expectedInvocations       uint64
 	expectedInvocationsOrigin string
 }
 
-// ServiceMockChunkTextPipeExpectation specifies expectation struct of the Service.ChunkTextPipe
-type ServiceMockChunkTextPipeExpectation struct {
+// ServiceMockCleanupKnowledgeBaseExpectation specifies expectation struct of the Service.CleanupKnowledgeBase
+type ServiceMockCleanupKnowledgeBaseExpectation struct {
 	mock               *ServiceMock
-	params             *ServiceMockChunkTextPipeParams
-	paramPtrs          *ServiceMockChunkTextPipeParamPtrs
-	expectationOrigins ServiceMockChunkTextPipeExpectationOrigins
-	results            *ServiceMockChunkTextPipeResults
+	params             *ServiceMockCleanupKnowledgeBaseParams
+	paramPtrs          *ServiceMockCleanupKnowledgeBaseParamPtrs
+	expectationOrigins ServiceMockCleanupKnowledgeBaseExpectationOrigins
+	results            *ServiceMockCleanupKnowledgeBaseResults
 	returnOrigin       string
 	Counter            uint64
 }
 
-// ServiceMockChunkTextPipeParams contains parameters of the Service.ChunkTextPipe
-type ServiceMockChunkTextPipeParams struct {
+// ServiceMockCleanupKnowledgeBaseParams contains parameters of the Service.CleanupKnowledgeBase
+type ServiceMockCleanupKnowledgeBaseParams struct {
 	ctx context.Context
-	s1  string
+	k1  types.KBUIDType
 }
 
-// ServiceMockChunkTextPipeParamPtrs contains pointers to parameters of the Service.ChunkTextPipe
-type ServiceMockChunkTextPipeParamPtrs struct {
+// ServiceMockCleanupKnowledgeBaseParamPtrs contains pointers to parameters of the Service.CleanupKnowledgeBase
+type ServiceMockCleanupKnowledgeBaseParamPtrs struct {
 	ctx *context.Context
-	s1  *string
+	k1  *types.KBUIDType
 }
 
-// ServiceMockChunkTextPipeResults contains results of the Service.ChunkTextPipe
-type ServiceMockChunkTextPipeResults struct {
-	cp1 *mm_service.ChunkingResult
+// ServiceMockCleanupKnowledgeBaseResults contains results of the Service.CleanupKnowledgeBase
+type ServiceMockCleanupKnowledgeBaseResults struct {
 	err error
 }
 
-// ServiceMockChunkTextPipeOrigins contains origins of expectations of the Service.ChunkTextPipe
-type ServiceMockChunkTextPipeExpectationOrigins struct {
+// ServiceMockCleanupKnowledgeBaseOrigins contains origins of expectations of the Service.CleanupKnowledgeBase
+type ServiceMockCleanupKnowledgeBaseExpectationOrigins struct {
 	origin    string
 	originCtx string
-	originS1  string
+	originK1  string
 }
 
 // Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
@@ -1738,1007 +1728,292 @@ type ServiceMockChunkTextPipeExpectationOrigins struct {
 // Optional() makes method check to work in '0 or more' mode.
 // It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
 // catch the problems when the expected method call is totally skipped during test run.
-func (mmChunkTextPipe *mServiceMockChunkTextPipe) Optional() *mServiceMockChunkTextPipe {
-	mmChunkTextPipe.optional = true
-	return mmChunkTextPipe
+func (mmCleanupKnowledgeBase *mServiceMockCleanupKnowledgeBase) Optional() *mServiceMockCleanupKnowledgeBase {
+	mmCleanupKnowledgeBase.optional = true
+	return mmCleanupKnowledgeBase
 }
 
-// Expect sets up expected params for Service.ChunkTextPipe
-func (mmChunkTextPipe *mServiceMockChunkTextPipe) Expect(ctx context.Context, s1 string) *mServiceMockChunkTextPipe {
-	if mmChunkTextPipe.mock.funcChunkTextPipe != nil {
-		mmChunkTextPipe.mock.t.Fatalf("ServiceMock.ChunkTextPipe mock is already set by Set")
+// Expect sets up expected params for Service.CleanupKnowledgeBase
+func (mmCleanupKnowledgeBase *mServiceMockCleanupKnowledgeBase) Expect(ctx context.Context, k1 types.KBUIDType) *mServiceMockCleanupKnowledgeBase {
+	if mmCleanupKnowledgeBase.mock.funcCleanupKnowledgeBase != nil {
+		mmCleanupKnowledgeBase.mock.t.Fatalf("ServiceMock.CleanupKnowledgeBase mock is already set by Set")
 	}
 
-	if mmChunkTextPipe.defaultExpectation == nil {
-		mmChunkTextPipe.defaultExpectation = &ServiceMockChunkTextPipeExpectation{}
+	if mmCleanupKnowledgeBase.defaultExpectation == nil {
+		mmCleanupKnowledgeBase.defaultExpectation = &ServiceMockCleanupKnowledgeBaseExpectation{}
 	}
 
-	if mmChunkTextPipe.defaultExpectation.paramPtrs != nil {
-		mmChunkTextPipe.mock.t.Fatalf("ServiceMock.ChunkTextPipe mock is already set by ExpectParams functions")
+	if mmCleanupKnowledgeBase.defaultExpectation.paramPtrs != nil {
+		mmCleanupKnowledgeBase.mock.t.Fatalf("ServiceMock.CleanupKnowledgeBase mock is already set by ExpectParams functions")
 	}
 
-	mmChunkTextPipe.defaultExpectation.params = &ServiceMockChunkTextPipeParams{ctx, s1}
-	mmChunkTextPipe.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
-	for _, e := range mmChunkTextPipe.expectations {
-		if minimock.Equal(e.params, mmChunkTextPipe.defaultExpectation.params) {
-			mmChunkTextPipe.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmChunkTextPipe.defaultExpectation.params)
+	mmCleanupKnowledgeBase.defaultExpectation.params = &ServiceMockCleanupKnowledgeBaseParams{ctx, k1}
+	mmCleanupKnowledgeBase.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmCleanupKnowledgeBase.expectations {
+		if minimock.Equal(e.params, mmCleanupKnowledgeBase.defaultExpectation.params) {
+			mmCleanupKnowledgeBase.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmCleanupKnowledgeBase.defaultExpectation.params)
 		}
 	}
 
-	return mmChunkTextPipe
+	return mmCleanupKnowledgeBase
 }
 
-// ExpectCtxParam1 sets up expected param ctx for Service.ChunkTextPipe
-func (mmChunkTextPipe *mServiceMockChunkTextPipe) ExpectCtxParam1(ctx context.Context) *mServiceMockChunkTextPipe {
-	if mmChunkTextPipe.mock.funcChunkTextPipe != nil {
-		mmChunkTextPipe.mock.t.Fatalf("ServiceMock.ChunkTextPipe mock is already set by Set")
+// ExpectCtxParam1 sets up expected param ctx for Service.CleanupKnowledgeBase
+func (mmCleanupKnowledgeBase *mServiceMockCleanupKnowledgeBase) ExpectCtxParam1(ctx context.Context) *mServiceMockCleanupKnowledgeBase {
+	if mmCleanupKnowledgeBase.mock.funcCleanupKnowledgeBase != nil {
+		mmCleanupKnowledgeBase.mock.t.Fatalf("ServiceMock.CleanupKnowledgeBase mock is already set by Set")
 	}
 
-	if mmChunkTextPipe.defaultExpectation == nil {
-		mmChunkTextPipe.defaultExpectation = &ServiceMockChunkTextPipeExpectation{}
+	if mmCleanupKnowledgeBase.defaultExpectation == nil {
+		mmCleanupKnowledgeBase.defaultExpectation = &ServiceMockCleanupKnowledgeBaseExpectation{}
 	}
 
-	if mmChunkTextPipe.defaultExpectation.params != nil {
-		mmChunkTextPipe.mock.t.Fatalf("ServiceMock.ChunkTextPipe mock is already set by Expect")
+	if mmCleanupKnowledgeBase.defaultExpectation.params != nil {
+		mmCleanupKnowledgeBase.mock.t.Fatalf("ServiceMock.CleanupKnowledgeBase mock is already set by Expect")
 	}
 
-	if mmChunkTextPipe.defaultExpectation.paramPtrs == nil {
-		mmChunkTextPipe.defaultExpectation.paramPtrs = &ServiceMockChunkTextPipeParamPtrs{}
+	if mmCleanupKnowledgeBase.defaultExpectation.paramPtrs == nil {
+		mmCleanupKnowledgeBase.defaultExpectation.paramPtrs = &ServiceMockCleanupKnowledgeBaseParamPtrs{}
 	}
-	mmChunkTextPipe.defaultExpectation.paramPtrs.ctx = &ctx
-	mmChunkTextPipe.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+	mmCleanupKnowledgeBase.defaultExpectation.paramPtrs.ctx = &ctx
+	mmCleanupKnowledgeBase.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
 
-	return mmChunkTextPipe
+	return mmCleanupKnowledgeBase
 }
 
-// ExpectS1Param2 sets up expected param s1 for Service.ChunkTextPipe
-func (mmChunkTextPipe *mServiceMockChunkTextPipe) ExpectS1Param2(s1 string) *mServiceMockChunkTextPipe {
-	if mmChunkTextPipe.mock.funcChunkTextPipe != nil {
-		mmChunkTextPipe.mock.t.Fatalf("ServiceMock.ChunkTextPipe mock is already set by Set")
+// ExpectK1Param2 sets up expected param k1 for Service.CleanupKnowledgeBase
+func (mmCleanupKnowledgeBase *mServiceMockCleanupKnowledgeBase) ExpectK1Param2(k1 types.KBUIDType) *mServiceMockCleanupKnowledgeBase {
+	if mmCleanupKnowledgeBase.mock.funcCleanupKnowledgeBase != nil {
+		mmCleanupKnowledgeBase.mock.t.Fatalf("ServiceMock.CleanupKnowledgeBase mock is already set by Set")
 	}
 
-	if mmChunkTextPipe.defaultExpectation == nil {
-		mmChunkTextPipe.defaultExpectation = &ServiceMockChunkTextPipeExpectation{}
+	if mmCleanupKnowledgeBase.defaultExpectation == nil {
+		mmCleanupKnowledgeBase.defaultExpectation = &ServiceMockCleanupKnowledgeBaseExpectation{}
 	}
 
-	if mmChunkTextPipe.defaultExpectation.params != nil {
-		mmChunkTextPipe.mock.t.Fatalf("ServiceMock.ChunkTextPipe mock is already set by Expect")
+	if mmCleanupKnowledgeBase.defaultExpectation.params != nil {
+		mmCleanupKnowledgeBase.mock.t.Fatalf("ServiceMock.CleanupKnowledgeBase mock is already set by Expect")
 	}
 
-	if mmChunkTextPipe.defaultExpectation.paramPtrs == nil {
-		mmChunkTextPipe.defaultExpectation.paramPtrs = &ServiceMockChunkTextPipeParamPtrs{}
+	if mmCleanupKnowledgeBase.defaultExpectation.paramPtrs == nil {
+		mmCleanupKnowledgeBase.defaultExpectation.paramPtrs = &ServiceMockCleanupKnowledgeBaseParamPtrs{}
 	}
-	mmChunkTextPipe.defaultExpectation.paramPtrs.s1 = &s1
-	mmChunkTextPipe.defaultExpectation.expectationOrigins.originS1 = minimock.CallerInfo(1)
+	mmCleanupKnowledgeBase.defaultExpectation.paramPtrs.k1 = &k1
+	mmCleanupKnowledgeBase.defaultExpectation.expectationOrigins.originK1 = minimock.CallerInfo(1)
 
-	return mmChunkTextPipe
+	return mmCleanupKnowledgeBase
 }
 
-// Inspect accepts an inspector function that has same arguments as the Service.ChunkTextPipe
-func (mmChunkTextPipe *mServiceMockChunkTextPipe) Inspect(f func(ctx context.Context, s1 string)) *mServiceMockChunkTextPipe {
-	if mmChunkTextPipe.mock.inspectFuncChunkTextPipe != nil {
-		mmChunkTextPipe.mock.t.Fatalf("Inspect function is already set for ServiceMock.ChunkTextPipe")
+// Inspect accepts an inspector function that has same arguments as the Service.CleanupKnowledgeBase
+func (mmCleanupKnowledgeBase *mServiceMockCleanupKnowledgeBase) Inspect(f func(ctx context.Context, k1 types.KBUIDType)) *mServiceMockCleanupKnowledgeBase {
+	if mmCleanupKnowledgeBase.mock.inspectFuncCleanupKnowledgeBase != nil {
+		mmCleanupKnowledgeBase.mock.t.Fatalf("Inspect function is already set for ServiceMock.CleanupKnowledgeBase")
 	}
 
-	mmChunkTextPipe.mock.inspectFuncChunkTextPipe = f
+	mmCleanupKnowledgeBase.mock.inspectFuncCleanupKnowledgeBase = f
 
-	return mmChunkTextPipe
+	return mmCleanupKnowledgeBase
 }
 
-// Return sets up results that will be returned by Service.ChunkTextPipe
-func (mmChunkTextPipe *mServiceMockChunkTextPipe) Return(cp1 *mm_service.ChunkingResult, err error) *ServiceMock {
-	if mmChunkTextPipe.mock.funcChunkTextPipe != nil {
-		mmChunkTextPipe.mock.t.Fatalf("ServiceMock.ChunkTextPipe mock is already set by Set")
+// Return sets up results that will be returned by Service.CleanupKnowledgeBase
+func (mmCleanupKnowledgeBase *mServiceMockCleanupKnowledgeBase) Return(err error) *ServiceMock {
+	if mmCleanupKnowledgeBase.mock.funcCleanupKnowledgeBase != nil {
+		mmCleanupKnowledgeBase.mock.t.Fatalf("ServiceMock.CleanupKnowledgeBase mock is already set by Set")
 	}
 
-	if mmChunkTextPipe.defaultExpectation == nil {
-		mmChunkTextPipe.defaultExpectation = &ServiceMockChunkTextPipeExpectation{mock: mmChunkTextPipe.mock}
+	if mmCleanupKnowledgeBase.defaultExpectation == nil {
+		mmCleanupKnowledgeBase.defaultExpectation = &ServiceMockCleanupKnowledgeBaseExpectation{mock: mmCleanupKnowledgeBase.mock}
 	}
-	mmChunkTextPipe.defaultExpectation.results = &ServiceMockChunkTextPipeResults{cp1, err}
-	mmChunkTextPipe.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
-	return mmChunkTextPipe.mock
+	mmCleanupKnowledgeBase.defaultExpectation.results = &ServiceMockCleanupKnowledgeBaseResults{err}
+	mmCleanupKnowledgeBase.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmCleanupKnowledgeBase.mock
 }
 
-// Set uses given function f to mock the Service.ChunkTextPipe method
-func (mmChunkTextPipe *mServiceMockChunkTextPipe) Set(f func(ctx context.Context, s1 string) (cp1 *mm_service.ChunkingResult, err error)) *ServiceMock {
-	if mmChunkTextPipe.defaultExpectation != nil {
-		mmChunkTextPipe.mock.t.Fatalf("Default expectation is already set for the Service.ChunkTextPipe method")
+// Set uses given function f to mock the Service.CleanupKnowledgeBase method
+func (mmCleanupKnowledgeBase *mServiceMockCleanupKnowledgeBase) Set(f func(ctx context.Context, k1 types.KBUIDType) (err error)) *ServiceMock {
+	if mmCleanupKnowledgeBase.defaultExpectation != nil {
+		mmCleanupKnowledgeBase.mock.t.Fatalf("Default expectation is already set for the Service.CleanupKnowledgeBase method")
 	}
 
-	if len(mmChunkTextPipe.expectations) > 0 {
-		mmChunkTextPipe.mock.t.Fatalf("Some expectations are already set for the Service.ChunkTextPipe method")
+	if len(mmCleanupKnowledgeBase.expectations) > 0 {
+		mmCleanupKnowledgeBase.mock.t.Fatalf("Some expectations are already set for the Service.CleanupKnowledgeBase method")
 	}
 
-	mmChunkTextPipe.mock.funcChunkTextPipe = f
-	mmChunkTextPipe.mock.funcChunkTextPipeOrigin = minimock.CallerInfo(1)
-	return mmChunkTextPipe.mock
+	mmCleanupKnowledgeBase.mock.funcCleanupKnowledgeBase = f
+	mmCleanupKnowledgeBase.mock.funcCleanupKnowledgeBaseOrigin = minimock.CallerInfo(1)
+	return mmCleanupKnowledgeBase.mock
 }
 
-// When sets expectation for the Service.ChunkTextPipe which will trigger the result defined by the following
+// When sets expectation for the Service.CleanupKnowledgeBase which will trigger the result defined by the following
 // Then helper
-func (mmChunkTextPipe *mServiceMockChunkTextPipe) When(ctx context.Context, s1 string) *ServiceMockChunkTextPipeExpectation {
-	if mmChunkTextPipe.mock.funcChunkTextPipe != nil {
-		mmChunkTextPipe.mock.t.Fatalf("ServiceMock.ChunkTextPipe mock is already set by Set")
+func (mmCleanupKnowledgeBase *mServiceMockCleanupKnowledgeBase) When(ctx context.Context, k1 types.KBUIDType) *ServiceMockCleanupKnowledgeBaseExpectation {
+	if mmCleanupKnowledgeBase.mock.funcCleanupKnowledgeBase != nil {
+		mmCleanupKnowledgeBase.mock.t.Fatalf("ServiceMock.CleanupKnowledgeBase mock is already set by Set")
 	}
 
-	expectation := &ServiceMockChunkTextPipeExpectation{
-		mock:               mmChunkTextPipe.mock,
-		params:             &ServiceMockChunkTextPipeParams{ctx, s1},
-		expectationOrigins: ServiceMockChunkTextPipeExpectationOrigins{origin: minimock.CallerInfo(1)},
+	expectation := &ServiceMockCleanupKnowledgeBaseExpectation{
+		mock:               mmCleanupKnowledgeBase.mock,
+		params:             &ServiceMockCleanupKnowledgeBaseParams{ctx, k1},
+		expectationOrigins: ServiceMockCleanupKnowledgeBaseExpectationOrigins{origin: minimock.CallerInfo(1)},
 	}
-	mmChunkTextPipe.expectations = append(mmChunkTextPipe.expectations, expectation)
+	mmCleanupKnowledgeBase.expectations = append(mmCleanupKnowledgeBase.expectations, expectation)
 	return expectation
 }
 
-// Then sets up Service.ChunkTextPipe return parameters for the expectation previously defined by the When method
-func (e *ServiceMockChunkTextPipeExpectation) Then(cp1 *mm_service.ChunkingResult, err error) *ServiceMock {
-	e.results = &ServiceMockChunkTextPipeResults{cp1, err}
+// Then sets up Service.CleanupKnowledgeBase return parameters for the expectation previously defined by the When method
+func (e *ServiceMockCleanupKnowledgeBaseExpectation) Then(err error) *ServiceMock {
+	e.results = &ServiceMockCleanupKnowledgeBaseResults{err}
 	return e.mock
 }
 
-// Times sets number of times Service.ChunkTextPipe should be invoked
-func (mmChunkTextPipe *mServiceMockChunkTextPipe) Times(n uint64) *mServiceMockChunkTextPipe {
+// Times sets number of times Service.CleanupKnowledgeBase should be invoked
+func (mmCleanupKnowledgeBase *mServiceMockCleanupKnowledgeBase) Times(n uint64) *mServiceMockCleanupKnowledgeBase {
 	if n == 0 {
-		mmChunkTextPipe.mock.t.Fatalf("Times of ServiceMock.ChunkTextPipe mock can not be zero")
+		mmCleanupKnowledgeBase.mock.t.Fatalf("Times of ServiceMock.CleanupKnowledgeBase mock can not be zero")
 	}
-	mm_atomic.StoreUint64(&mmChunkTextPipe.expectedInvocations, n)
-	mmChunkTextPipe.expectedInvocationsOrigin = minimock.CallerInfo(1)
-	return mmChunkTextPipe
+	mm_atomic.StoreUint64(&mmCleanupKnowledgeBase.expectedInvocations, n)
+	mmCleanupKnowledgeBase.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmCleanupKnowledgeBase
 }
 
-func (mmChunkTextPipe *mServiceMockChunkTextPipe) invocationsDone() bool {
-	if len(mmChunkTextPipe.expectations) == 0 && mmChunkTextPipe.defaultExpectation == nil && mmChunkTextPipe.mock.funcChunkTextPipe == nil {
+func (mmCleanupKnowledgeBase *mServiceMockCleanupKnowledgeBase) invocationsDone() bool {
+	if len(mmCleanupKnowledgeBase.expectations) == 0 && mmCleanupKnowledgeBase.defaultExpectation == nil && mmCleanupKnowledgeBase.mock.funcCleanupKnowledgeBase == nil {
 		return true
 	}
 
-	totalInvocations := mm_atomic.LoadUint64(&mmChunkTextPipe.mock.afterChunkTextPipeCounter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmChunkTextPipe.expectedInvocations)
+	totalInvocations := mm_atomic.LoadUint64(&mmCleanupKnowledgeBase.mock.afterCleanupKnowledgeBaseCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmCleanupKnowledgeBase.expectedInvocations)
 
 	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
 }
 
-// ChunkTextPipe implements mm_service.Service
-func (mmChunkTextPipe *ServiceMock) ChunkTextPipe(ctx context.Context, s1 string) (cp1 *mm_service.ChunkingResult, err error) {
-	mm_atomic.AddUint64(&mmChunkTextPipe.beforeChunkTextPipeCounter, 1)
-	defer mm_atomic.AddUint64(&mmChunkTextPipe.afterChunkTextPipeCounter, 1)
+// CleanupKnowledgeBase implements mm_service.Service
+func (mmCleanupKnowledgeBase *ServiceMock) CleanupKnowledgeBase(ctx context.Context, k1 types.KBUIDType) (err error) {
+	mm_atomic.AddUint64(&mmCleanupKnowledgeBase.beforeCleanupKnowledgeBaseCounter, 1)
+	defer mm_atomic.AddUint64(&mmCleanupKnowledgeBase.afterCleanupKnowledgeBaseCounter, 1)
 
-	mmChunkTextPipe.t.Helper()
+	mmCleanupKnowledgeBase.t.Helper()
 
-	if mmChunkTextPipe.inspectFuncChunkTextPipe != nil {
-		mmChunkTextPipe.inspectFuncChunkTextPipe(ctx, s1)
+	if mmCleanupKnowledgeBase.inspectFuncCleanupKnowledgeBase != nil {
+		mmCleanupKnowledgeBase.inspectFuncCleanupKnowledgeBase(ctx, k1)
 	}
 
-	mm_params := ServiceMockChunkTextPipeParams{ctx, s1}
+	mm_params := ServiceMockCleanupKnowledgeBaseParams{ctx, k1}
 
 	// Record call args
-	mmChunkTextPipe.ChunkTextPipeMock.mutex.Lock()
-	mmChunkTextPipe.ChunkTextPipeMock.callArgs = append(mmChunkTextPipe.ChunkTextPipeMock.callArgs, &mm_params)
-	mmChunkTextPipe.ChunkTextPipeMock.mutex.Unlock()
+	mmCleanupKnowledgeBase.CleanupKnowledgeBaseMock.mutex.Lock()
+	mmCleanupKnowledgeBase.CleanupKnowledgeBaseMock.callArgs = append(mmCleanupKnowledgeBase.CleanupKnowledgeBaseMock.callArgs, &mm_params)
+	mmCleanupKnowledgeBase.CleanupKnowledgeBaseMock.mutex.Unlock()
 
-	for _, e := range mmChunkTextPipe.ChunkTextPipeMock.expectations {
+	for _, e := range mmCleanupKnowledgeBase.CleanupKnowledgeBaseMock.expectations {
 		if minimock.Equal(*e.params, mm_params) {
 			mm_atomic.AddUint64(&e.Counter, 1)
-			return e.results.cp1, e.results.err
+			return e.results.err
 		}
 	}
 
-	if mmChunkTextPipe.ChunkTextPipeMock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmChunkTextPipe.ChunkTextPipeMock.defaultExpectation.Counter, 1)
-		mm_want := mmChunkTextPipe.ChunkTextPipeMock.defaultExpectation.params
-		mm_want_ptrs := mmChunkTextPipe.ChunkTextPipeMock.defaultExpectation.paramPtrs
+	if mmCleanupKnowledgeBase.CleanupKnowledgeBaseMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmCleanupKnowledgeBase.CleanupKnowledgeBaseMock.defaultExpectation.Counter, 1)
+		mm_want := mmCleanupKnowledgeBase.CleanupKnowledgeBaseMock.defaultExpectation.params
+		mm_want_ptrs := mmCleanupKnowledgeBase.CleanupKnowledgeBaseMock.defaultExpectation.paramPtrs
 
-		mm_got := ServiceMockChunkTextPipeParams{ctx, s1}
+		mm_got := ServiceMockCleanupKnowledgeBaseParams{ctx, k1}
 
 		if mm_want_ptrs != nil {
 
 			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
-				mmChunkTextPipe.t.Errorf("ServiceMock.ChunkTextPipe got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmChunkTextPipe.ChunkTextPipeMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+				mmCleanupKnowledgeBase.t.Errorf("ServiceMock.CleanupKnowledgeBase got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCleanupKnowledgeBase.CleanupKnowledgeBaseMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
 			}
 
-			if mm_want_ptrs.s1 != nil && !minimock.Equal(*mm_want_ptrs.s1, mm_got.s1) {
-				mmChunkTextPipe.t.Errorf("ServiceMock.ChunkTextPipe got unexpected parameter s1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmChunkTextPipe.ChunkTextPipeMock.defaultExpectation.expectationOrigins.originS1, *mm_want_ptrs.s1, mm_got.s1, minimock.Diff(*mm_want_ptrs.s1, mm_got.s1))
+			if mm_want_ptrs.k1 != nil && !minimock.Equal(*mm_want_ptrs.k1, mm_got.k1) {
+				mmCleanupKnowledgeBase.t.Errorf("ServiceMock.CleanupKnowledgeBase got unexpected parameter k1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCleanupKnowledgeBase.CleanupKnowledgeBaseMock.defaultExpectation.expectationOrigins.originK1, *mm_want_ptrs.k1, mm_got.k1, minimock.Diff(*mm_want_ptrs.k1, mm_got.k1))
 			}
 
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
-			mmChunkTextPipe.t.Errorf("ServiceMock.ChunkTextPipe got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-				mmChunkTextPipe.ChunkTextPipeMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+			mmCleanupKnowledgeBase.t.Errorf("ServiceMock.CleanupKnowledgeBase got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmCleanupKnowledgeBase.CleanupKnowledgeBaseMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
 		}
 
-		mm_results := mmChunkTextPipe.ChunkTextPipeMock.defaultExpectation.results
+		mm_results := mmCleanupKnowledgeBase.CleanupKnowledgeBaseMock.defaultExpectation.results
 		if mm_results == nil {
-			mmChunkTextPipe.t.Fatal("No results are set for the ServiceMock.ChunkTextPipe")
+			mmCleanupKnowledgeBase.t.Fatal("No results are set for the ServiceMock.CleanupKnowledgeBase")
 		}
-		return (*mm_results).cp1, (*mm_results).err
+		return (*mm_results).err
 	}
-	if mmChunkTextPipe.funcChunkTextPipe != nil {
-		return mmChunkTextPipe.funcChunkTextPipe(ctx, s1)
+	if mmCleanupKnowledgeBase.funcCleanupKnowledgeBase != nil {
+		return mmCleanupKnowledgeBase.funcCleanupKnowledgeBase(ctx, k1)
 	}
-	mmChunkTextPipe.t.Fatalf("Unexpected call to ServiceMock.ChunkTextPipe. %v %v", ctx, s1)
+	mmCleanupKnowledgeBase.t.Fatalf("Unexpected call to ServiceMock.CleanupKnowledgeBase. %v %v", ctx, k1)
 	return
 }
 
-// ChunkTextPipeAfterCounter returns a count of finished ServiceMock.ChunkTextPipe invocations
-func (mmChunkTextPipe *ServiceMock) ChunkTextPipeAfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmChunkTextPipe.afterChunkTextPipeCounter)
+// CleanupKnowledgeBaseAfterCounter returns a count of finished ServiceMock.CleanupKnowledgeBase invocations
+func (mmCleanupKnowledgeBase *ServiceMock) CleanupKnowledgeBaseAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmCleanupKnowledgeBase.afterCleanupKnowledgeBaseCounter)
 }
 
-// ChunkTextPipeBeforeCounter returns a count of ServiceMock.ChunkTextPipe invocations
-func (mmChunkTextPipe *ServiceMock) ChunkTextPipeBeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmChunkTextPipe.beforeChunkTextPipeCounter)
+// CleanupKnowledgeBaseBeforeCounter returns a count of ServiceMock.CleanupKnowledgeBase invocations
+func (mmCleanupKnowledgeBase *ServiceMock) CleanupKnowledgeBaseBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmCleanupKnowledgeBase.beforeCleanupKnowledgeBaseCounter)
 }
 
-// Calls returns a list of arguments used in each call to ServiceMock.ChunkTextPipe.
+// Calls returns a list of arguments used in each call to ServiceMock.CleanupKnowledgeBase.
 // The list is in the same order as the calls were made (i.e. recent calls have a higher index)
-func (mmChunkTextPipe *mServiceMockChunkTextPipe) Calls() []*ServiceMockChunkTextPipeParams {
-	mmChunkTextPipe.mutex.RLock()
+func (mmCleanupKnowledgeBase *mServiceMockCleanupKnowledgeBase) Calls() []*ServiceMockCleanupKnowledgeBaseParams {
+	mmCleanupKnowledgeBase.mutex.RLock()
 
-	argCopy := make([]*ServiceMockChunkTextPipeParams, len(mmChunkTextPipe.callArgs))
-	copy(argCopy, mmChunkTextPipe.callArgs)
+	argCopy := make([]*ServiceMockCleanupKnowledgeBaseParams, len(mmCleanupKnowledgeBase.callArgs))
+	copy(argCopy, mmCleanupKnowledgeBase.callArgs)
 
-	mmChunkTextPipe.mutex.RUnlock()
+	mmCleanupKnowledgeBase.mutex.RUnlock()
 
 	return argCopy
 }
 
-// MinimockChunkTextPipeDone returns true if the count of the ChunkTextPipe invocations corresponds
+// MinimockCleanupKnowledgeBaseDone returns true if the count of the CleanupKnowledgeBase invocations corresponds
 // the number of defined expectations
-func (m *ServiceMock) MinimockChunkTextPipeDone() bool {
-	if m.ChunkTextPipeMock.optional {
+func (m *ServiceMock) MinimockCleanupKnowledgeBaseDone() bool {
+	if m.CleanupKnowledgeBaseMock.optional {
 		// Optional methods provide '0 or more' call count restriction.
 		return true
 	}
 
-	for _, e := range m.ChunkTextPipeMock.expectations {
+	for _, e := range m.CleanupKnowledgeBaseMock.expectations {
 		if mm_atomic.LoadUint64(&e.Counter) < 1 {
 			return false
 		}
 	}
 
-	return m.ChunkTextPipeMock.invocationsDone()
+	return m.CleanupKnowledgeBaseMock.invocationsDone()
 }
 
-// MinimockChunkTextPipeInspect logs each unmet expectation
-func (m *ServiceMock) MinimockChunkTextPipeInspect() {
-	for _, e := range m.ChunkTextPipeMock.expectations {
+// MinimockCleanupKnowledgeBaseInspect logs each unmet expectation
+func (m *ServiceMock) MinimockCleanupKnowledgeBaseInspect() {
+	for _, e := range m.CleanupKnowledgeBaseMock.expectations {
 		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Errorf("Expected call to ServiceMock.ChunkTextPipe at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+			m.t.Errorf("Expected call to ServiceMock.CleanupKnowledgeBase at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
 		}
 	}
 
-	afterChunkTextPipeCounter := mm_atomic.LoadUint64(&m.afterChunkTextPipeCounter)
+	afterCleanupKnowledgeBaseCounter := mm_atomic.LoadUint64(&m.afterCleanupKnowledgeBaseCounter)
 	// if default expectation was set then invocations count should be greater than zero
-	if m.ChunkTextPipeMock.defaultExpectation != nil && afterChunkTextPipeCounter < 1 {
-		if m.ChunkTextPipeMock.defaultExpectation.params == nil {
-			m.t.Errorf("Expected call to ServiceMock.ChunkTextPipe at\n%s", m.ChunkTextPipeMock.defaultExpectation.returnOrigin)
+	if m.CleanupKnowledgeBaseMock.defaultExpectation != nil && afterCleanupKnowledgeBaseCounter < 1 {
+		if m.CleanupKnowledgeBaseMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to ServiceMock.CleanupKnowledgeBase at\n%s", m.CleanupKnowledgeBaseMock.defaultExpectation.returnOrigin)
 		} else {
-			m.t.Errorf("Expected call to ServiceMock.ChunkTextPipe at\n%s with params: %#v", m.ChunkTextPipeMock.defaultExpectation.expectationOrigins.origin, *m.ChunkTextPipeMock.defaultExpectation.params)
+			m.t.Errorf("Expected call to ServiceMock.CleanupKnowledgeBase at\n%s with params: %#v", m.CleanupKnowledgeBaseMock.defaultExpectation.expectationOrigins.origin, *m.CleanupKnowledgeBaseMock.defaultExpectation.params)
 		}
 	}
 	// if func was set then invocations count should be greater than zero
-	if m.funcChunkTextPipe != nil && afterChunkTextPipeCounter < 1 {
-		m.t.Errorf("Expected call to ServiceMock.ChunkTextPipe at\n%s", m.funcChunkTextPipeOrigin)
+	if m.funcCleanupKnowledgeBase != nil && afterCleanupKnowledgeBaseCounter < 1 {
+		m.t.Errorf("Expected call to ServiceMock.CleanupKnowledgeBase at\n%s", m.funcCleanupKnowledgeBaseOrigin)
 	}
 
-	if !m.ChunkTextPipeMock.invocationsDone() && afterChunkTextPipeCounter > 0 {
-		m.t.Errorf("Expected %d calls to ServiceMock.ChunkTextPipe at\n%s but found %d calls",
-			mm_atomic.LoadUint64(&m.ChunkTextPipeMock.expectedInvocations), m.ChunkTextPipeMock.expectedInvocationsOrigin, afterChunkTextPipeCounter)
-	}
-}
-
-type mServiceMockCleanupFileWorkflow struct {
-	optional           bool
-	mock               *ServiceMock
-	defaultExpectation *ServiceMockCleanupFileWorkflowExpectation
-	expectations       []*ServiceMockCleanupFileWorkflowExpectation
-
-	expectedInvocations       uint64
-	expectedInvocationsOrigin string
-}
-
-// ServiceMockCleanupFileWorkflowExpectation specifies expectation struct of the Service.CleanupFileWorkflow
-type ServiceMockCleanupFileWorkflowExpectation struct {
-	mock *ServiceMock
-
-	results      *ServiceMockCleanupFileWorkflowResults
-	returnOrigin string
-	Counter      uint64
-}
-
-// ServiceMockCleanupFileWorkflowResults contains results of the Service.CleanupFileWorkflow
-type ServiceMockCleanupFileWorkflowResults struct {
-	c1 mm_service.CleanupFileWorkflow
-}
-
-// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
-// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
-// Optional() makes method check to work in '0 or more' mode.
-// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
-// catch the problems when the expected method call is totally skipped during test run.
-func (mmCleanupFileWorkflow *mServiceMockCleanupFileWorkflow) Optional() *mServiceMockCleanupFileWorkflow {
-	mmCleanupFileWorkflow.optional = true
-	return mmCleanupFileWorkflow
-}
-
-// Expect sets up expected params for Service.CleanupFileWorkflow
-func (mmCleanupFileWorkflow *mServiceMockCleanupFileWorkflow) Expect() *mServiceMockCleanupFileWorkflow {
-	if mmCleanupFileWorkflow.mock.funcCleanupFileWorkflow != nil {
-		mmCleanupFileWorkflow.mock.t.Fatalf("ServiceMock.CleanupFileWorkflow mock is already set by Set")
-	}
-
-	if mmCleanupFileWorkflow.defaultExpectation == nil {
-		mmCleanupFileWorkflow.defaultExpectation = &ServiceMockCleanupFileWorkflowExpectation{}
-	}
-
-	return mmCleanupFileWorkflow
-}
-
-// Inspect accepts an inspector function that has same arguments as the Service.CleanupFileWorkflow
-func (mmCleanupFileWorkflow *mServiceMockCleanupFileWorkflow) Inspect(f func()) *mServiceMockCleanupFileWorkflow {
-	if mmCleanupFileWorkflow.mock.inspectFuncCleanupFileWorkflow != nil {
-		mmCleanupFileWorkflow.mock.t.Fatalf("Inspect function is already set for ServiceMock.CleanupFileWorkflow")
-	}
-
-	mmCleanupFileWorkflow.mock.inspectFuncCleanupFileWorkflow = f
-
-	return mmCleanupFileWorkflow
-}
-
-// Return sets up results that will be returned by Service.CleanupFileWorkflow
-func (mmCleanupFileWorkflow *mServiceMockCleanupFileWorkflow) Return(c1 mm_service.CleanupFileWorkflow) *ServiceMock {
-	if mmCleanupFileWorkflow.mock.funcCleanupFileWorkflow != nil {
-		mmCleanupFileWorkflow.mock.t.Fatalf("ServiceMock.CleanupFileWorkflow mock is already set by Set")
-	}
-
-	if mmCleanupFileWorkflow.defaultExpectation == nil {
-		mmCleanupFileWorkflow.defaultExpectation = &ServiceMockCleanupFileWorkflowExpectation{mock: mmCleanupFileWorkflow.mock}
-	}
-	mmCleanupFileWorkflow.defaultExpectation.results = &ServiceMockCleanupFileWorkflowResults{c1}
-	mmCleanupFileWorkflow.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
-	return mmCleanupFileWorkflow.mock
-}
-
-// Set uses given function f to mock the Service.CleanupFileWorkflow method
-func (mmCleanupFileWorkflow *mServiceMockCleanupFileWorkflow) Set(f func() (c1 mm_service.CleanupFileWorkflow)) *ServiceMock {
-	if mmCleanupFileWorkflow.defaultExpectation != nil {
-		mmCleanupFileWorkflow.mock.t.Fatalf("Default expectation is already set for the Service.CleanupFileWorkflow method")
-	}
-
-	if len(mmCleanupFileWorkflow.expectations) > 0 {
-		mmCleanupFileWorkflow.mock.t.Fatalf("Some expectations are already set for the Service.CleanupFileWorkflow method")
-	}
-
-	mmCleanupFileWorkflow.mock.funcCleanupFileWorkflow = f
-	mmCleanupFileWorkflow.mock.funcCleanupFileWorkflowOrigin = minimock.CallerInfo(1)
-	return mmCleanupFileWorkflow.mock
-}
-
-// Times sets number of times Service.CleanupFileWorkflow should be invoked
-func (mmCleanupFileWorkflow *mServiceMockCleanupFileWorkflow) Times(n uint64) *mServiceMockCleanupFileWorkflow {
-	if n == 0 {
-		mmCleanupFileWorkflow.mock.t.Fatalf("Times of ServiceMock.CleanupFileWorkflow mock can not be zero")
-	}
-	mm_atomic.StoreUint64(&mmCleanupFileWorkflow.expectedInvocations, n)
-	mmCleanupFileWorkflow.expectedInvocationsOrigin = minimock.CallerInfo(1)
-	return mmCleanupFileWorkflow
-}
-
-func (mmCleanupFileWorkflow *mServiceMockCleanupFileWorkflow) invocationsDone() bool {
-	if len(mmCleanupFileWorkflow.expectations) == 0 && mmCleanupFileWorkflow.defaultExpectation == nil && mmCleanupFileWorkflow.mock.funcCleanupFileWorkflow == nil {
-		return true
-	}
-
-	totalInvocations := mm_atomic.LoadUint64(&mmCleanupFileWorkflow.mock.afterCleanupFileWorkflowCounter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmCleanupFileWorkflow.expectedInvocations)
-
-	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
-}
-
-// CleanupFileWorkflow implements mm_service.Service
-func (mmCleanupFileWorkflow *ServiceMock) CleanupFileWorkflow() (c1 mm_service.CleanupFileWorkflow) {
-	mm_atomic.AddUint64(&mmCleanupFileWorkflow.beforeCleanupFileWorkflowCounter, 1)
-	defer mm_atomic.AddUint64(&mmCleanupFileWorkflow.afterCleanupFileWorkflowCounter, 1)
-
-	mmCleanupFileWorkflow.t.Helper()
-
-	if mmCleanupFileWorkflow.inspectFuncCleanupFileWorkflow != nil {
-		mmCleanupFileWorkflow.inspectFuncCleanupFileWorkflow()
-	}
-
-	if mmCleanupFileWorkflow.CleanupFileWorkflowMock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmCleanupFileWorkflow.CleanupFileWorkflowMock.defaultExpectation.Counter, 1)
-
-		mm_results := mmCleanupFileWorkflow.CleanupFileWorkflowMock.defaultExpectation.results
-		if mm_results == nil {
-			mmCleanupFileWorkflow.t.Fatal("No results are set for the ServiceMock.CleanupFileWorkflow")
-		}
-		return (*mm_results).c1
-	}
-	if mmCleanupFileWorkflow.funcCleanupFileWorkflow != nil {
-		return mmCleanupFileWorkflow.funcCleanupFileWorkflow()
-	}
-	mmCleanupFileWorkflow.t.Fatalf("Unexpected call to ServiceMock.CleanupFileWorkflow.")
-	return
-}
-
-// CleanupFileWorkflowAfterCounter returns a count of finished ServiceMock.CleanupFileWorkflow invocations
-func (mmCleanupFileWorkflow *ServiceMock) CleanupFileWorkflowAfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmCleanupFileWorkflow.afterCleanupFileWorkflowCounter)
-}
-
-// CleanupFileWorkflowBeforeCounter returns a count of ServiceMock.CleanupFileWorkflow invocations
-func (mmCleanupFileWorkflow *ServiceMock) CleanupFileWorkflowBeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmCleanupFileWorkflow.beforeCleanupFileWorkflowCounter)
-}
-
-// MinimockCleanupFileWorkflowDone returns true if the count of the CleanupFileWorkflow invocations corresponds
-// the number of defined expectations
-func (m *ServiceMock) MinimockCleanupFileWorkflowDone() bool {
-	if m.CleanupFileWorkflowMock.optional {
-		// Optional methods provide '0 or more' call count restriction.
-		return true
-	}
-
-	for _, e := range m.CleanupFileWorkflowMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			return false
-		}
-	}
-
-	return m.CleanupFileWorkflowMock.invocationsDone()
-}
-
-// MinimockCleanupFileWorkflowInspect logs each unmet expectation
-func (m *ServiceMock) MinimockCleanupFileWorkflowInspect() {
-	for _, e := range m.CleanupFileWorkflowMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Error("Expected call to ServiceMock.CleanupFileWorkflow")
-		}
-	}
-
-	afterCleanupFileWorkflowCounter := mm_atomic.LoadUint64(&m.afterCleanupFileWorkflowCounter)
-	// if default expectation was set then invocations count should be greater than zero
-	if m.CleanupFileWorkflowMock.defaultExpectation != nil && afterCleanupFileWorkflowCounter < 1 {
-		m.t.Errorf("Expected call to ServiceMock.CleanupFileWorkflow at\n%s", m.CleanupFileWorkflowMock.defaultExpectation.returnOrigin)
-	}
-	// if func was set then invocations count should be greater than zero
-	if m.funcCleanupFileWorkflow != nil && afterCleanupFileWorkflowCounter < 1 {
-		m.t.Errorf("Expected call to ServiceMock.CleanupFileWorkflow at\n%s", m.funcCleanupFileWorkflowOrigin)
-	}
-
-	if !m.CleanupFileWorkflowMock.invocationsDone() && afterCleanupFileWorkflowCounter > 0 {
-		m.t.Errorf("Expected %d calls to ServiceMock.CleanupFileWorkflow at\n%s but found %d calls",
-			mm_atomic.LoadUint64(&m.CleanupFileWorkflowMock.expectedInvocations), m.CleanupFileWorkflowMock.expectedInvocationsOrigin, afterCleanupFileWorkflowCounter)
-	}
-}
-
-type mServiceMockCleanupKnowledgeBaseWorkflow struct {
-	optional           bool
-	mock               *ServiceMock
-	defaultExpectation *ServiceMockCleanupKnowledgeBaseWorkflowExpectation
-	expectations       []*ServiceMockCleanupKnowledgeBaseWorkflowExpectation
-
-	expectedInvocations       uint64
-	expectedInvocationsOrigin string
-}
-
-// ServiceMockCleanupKnowledgeBaseWorkflowExpectation specifies expectation struct of the Service.CleanupKnowledgeBaseWorkflow
-type ServiceMockCleanupKnowledgeBaseWorkflowExpectation struct {
-	mock *ServiceMock
-
-	results      *ServiceMockCleanupKnowledgeBaseWorkflowResults
-	returnOrigin string
-	Counter      uint64
-}
-
-// ServiceMockCleanupKnowledgeBaseWorkflowResults contains results of the Service.CleanupKnowledgeBaseWorkflow
-type ServiceMockCleanupKnowledgeBaseWorkflowResults struct {
-	c1 mm_service.CleanupKnowledgeBaseWorkflow
-}
-
-// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
-// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
-// Optional() makes method check to work in '0 or more' mode.
-// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
-// catch the problems when the expected method call is totally skipped during test run.
-func (mmCleanupKnowledgeBaseWorkflow *mServiceMockCleanupKnowledgeBaseWorkflow) Optional() *mServiceMockCleanupKnowledgeBaseWorkflow {
-	mmCleanupKnowledgeBaseWorkflow.optional = true
-	return mmCleanupKnowledgeBaseWorkflow
-}
-
-// Expect sets up expected params for Service.CleanupKnowledgeBaseWorkflow
-func (mmCleanupKnowledgeBaseWorkflow *mServiceMockCleanupKnowledgeBaseWorkflow) Expect() *mServiceMockCleanupKnowledgeBaseWorkflow {
-	if mmCleanupKnowledgeBaseWorkflow.mock.funcCleanupKnowledgeBaseWorkflow != nil {
-		mmCleanupKnowledgeBaseWorkflow.mock.t.Fatalf("ServiceMock.CleanupKnowledgeBaseWorkflow mock is already set by Set")
-	}
-
-	if mmCleanupKnowledgeBaseWorkflow.defaultExpectation == nil {
-		mmCleanupKnowledgeBaseWorkflow.defaultExpectation = &ServiceMockCleanupKnowledgeBaseWorkflowExpectation{}
-	}
-
-	return mmCleanupKnowledgeBaseWorkflow
-}
-
-// Inspect accepts an inspector function that has same arguments as the Service.CleanupKnowledgeBaseWorkflow
-func (mmCleanupKnowledgeBaseWorkflow *mServiceMockCleanupKnowledgeBaseWorkflow) Inspect(f func()) *mServiceMockCleanupKnowledgeBaseWorkflow {
-	if mmCleanupKnowledgeBaseWorkflow.mock.inspectFuncCleanupKnowledgeBaseWorkflow != nil {
-		mmCleanupKnowledgeBaseWorkflow.mock.t.Fatalf("Inspect function is already set for ServiceMock.CleanupKnowledgeBaseWorkflow")
-	}
-
-	mmCleanupKnowledgeBaseWorkflow.mock.inspectFuncCleanupKnowledgeBaseWorkflow = f
-
-	return mmCleanupKnowledgeBaseWorkflow
-}
-
-// Return sets up results that will be returned by Service.CleanupKnowledgeBaseWorkflow
-func (mmCleanupKnowledgeBaseWorkflow *mServiceMockCleanupKnowledgeBaseWorkflow) Return(c1 mm_service.CleanupKnowledgeBaseWorkflow) *ServiceMock {
-	if mmCleanupKnowledgeBaseWorkflow.mock.funcCleanupKnowledgeBaseWorkflow != nil {
-		mmCleanupKnowledgeBaseWorkflow.mock.t.Fatalf("ServiceMock.CleanupKnowledgeBaseWorkflow mock is already set by Set")
-	}
-
-	if mmCleanupKnowledgeBaseWorkflow.defaultExpectation == nil {
-		mmCleanupKnowledgeBaseWorkflow.defaultExpectation = &ServiceMockCleanupKnowledgeBaseWorkflowExpectation{mock: mmCleanupKnowledgeBaseWorkflow.mock}
-	}
-	mmCleanupKnowledgeBaseWorkflow.defaultExpectation.results = &ServiceMockCleanupKnowledgeBaseWorkflowResults{c1}
-	mmCleanupKnowledgeBaseWorkflow.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
-	return mmCleanupKnowledgeBaseWorkflow.mock
-}
-
-// Set uses given function f to mock the Service.CleanupKnowledgeBaseWorkflow method
-func (mmCleanupKnowledgeBaseWorkflow *mServiceMockCleanupKnowledgeBaseWorkflow) Set(f func() (c1 mm_service.CleanupKnowledgeBaseWorkflow)) *ServiceMock {
-	if mmCleanupKnowledgeBaseWorkflow.defaultExpectation != nil {
-		mmCleanupKnowledgeBaseWorkflow.mock.t.Fatalf("Default expectation is already set for the Service.CleanupKnowledgeBaseWorkflow method")
-	}
-
-	if len(mmCleanupKnowledgeBaseWorkflow.expectations) > 0 {
-		mmCleanupKnowledgeBaseWorkflow.mock.t.Fatalf("Some expectations are already set for the Service.CleanupKnowledgeBaseWorkflow method")
-	}
-
-	mmCleanupKnowledgeBaseWorkflow.mock.funcCleanupKnowledgeBaseWorkflow = f
-	mmCleanupKnowledgeBaseWorkflow.mock.funcCleanupKnowledgeBaseWorkflowOrigin = minimock.CallerInfo(1)
-	return mmCleanupKnowledgeBaseWorkflow.mock
-}
-
-// Times sets number of times Service.CleanupKnowledgeBaseWorkflow should be invoked
-func (mmCleanupKnowledgeBaseWorkflow *mServiceMockCleanupKnowledgeBaseWorkflow) Times(n uint64) *mServiceMockCleanupKnowledgeBaseWorkflow {
-	if n == 0 {
-		mmCleanupKnowledgeBaseWorkflow.mock.t.Fatalf("Times of ServiceMock.CleanupKnowledgeBaseWorkflow mock can not be zero")
-	}
-	mm_atomic.StoreUint64(&mmCleanupKnowledgeBaseWorkflow.expectedInvocations, n)
-	mmCleanupKnowledgeBaseWorkflow.expectedInvocationsOrigin = minimock.CallerInfo(1)
-	return mmCleanupKnowledgeBaseWorkflow
-}
-
-func (mmCleanupKnowledgeBaseWorkflow *mServiceMockCleanupKnowledgeBaseWorkflow) invocationsDone() bool {
-	if len(mmCleanupKnowledgeBaseWorkflow.expectations) == 0 && mmCleanupKnowledgeBaseWorkflow.defaultExpectation == nil && mmCleanupKnowledgeBaseWorkflow.mock.funcCleanupKnowledgeBaseWorkflow == nil {
-		return true
-	}
-
-	totalInvocations := mm_atomic.LoadUint64(&mmCleanupKnowledgeBaseWorkflow.mock.afterCleanupKnowledgeBaseWorkflowCounter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmCleanupKnowledgeBaseWorkflow.expectedInvocations)
-
-	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
-}
-
-// CleanupKnowledgeBaseWorkflow implements mm_service.Service
-func (mmCleanupKnowledgeBaseWorkflow *ServiceMock) CleanupKnowledgeBaseWorkflow() (c1 mm_service.CleanupKnowledgeBaseWorkflow) {
-	mm_atomic.AddUint64(&mmCleanupKnowledgeBaseWorkflow.beforeCleanupKnowledgeBaseWorkflowCounter, 1)
-	defer mm_atomic.AddUint64(&mmCleanupKnowledgeBaseWorkflow.afterCleanupKnowledgeBaseWorkflowCounter, 1)
-
-	mmCleanupKnowledgeBaseWorkflow.t.Helper()
-
-	if mmCleanupKnowledgeBaseWorkflow.inspectFuncCleanupKnowledgeBaseWorkflow != nil {
-		mmCleanupKnowledgeBaseWorkflow.inspectFuncCleanupKnowledgeBaseWorkflow()
-	}
-
-	if mmCleanupKnowledgeBaseWorkflow.CleanupKnowledgeBaseWorkflowMock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmCleanupKnowledgeBaseWorkflow.CleanupKnowledgeBaseWorkflowMock.defaultExpectation.Counter, 1)
-
-		mm_results := mmCleanupKnowledgeBaseWorkflow.CleanupKnowledgeBaseWorkflowMock.defaultExpectation.results
-		if mm_results == nil {
-			mmCleanupKnowledgeBaseWorkflow.t.Fatal("No results are set for the ServiceMock.CleanupKnowledgeBaseWorkflow")
-		}
-		return (*mm_results).c1
-	}
-	if mmCleanupKnowledgeBaseWorkflow.funcCleanupKnowledgeBaseWorkflow != nil {
-		return mmCleanupKnowledgeBaseWorkflow.funcCleanupKnowledgeBaseWorkflow()
-	}
-	mmCleanupKnowledgeBaseWorkflow.t.Fatalf("Unexpected call to ServiceMock.CleanupKnowledgeBaseWorkflow.")
-	return
-}
-
-// CleanupKnowledgeBaseWorkflowAfterCounter returns a count of finished ServiceMock.CleanupKnowledgeBaseWorkflow invocations
-func (mmCleanupKnowledgeBaseWorkflow *ServiceMock) CleanupKnowledgeBaseWorkflowAfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmCleanupKnowledgeBaseWorkflow.afterCleanupKnowledgeBaseWorkflowCounter)
-}
-
-// CleanupKnowledgeBaseWorkflowBeforeCounter returns a count of ServiceMock.CleanupKnowledgeBaseWorkflow invocations
-func (mmCleanupKnowledgeBaseWorkflow *ServiceMock) CleanupKnowledgeBaseWorkflowBeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmCleanupKnowledgeBaseWorkflow.beforeCleanupKnowledgeBaseWorkflowCounter)
-}
-
-// MinimockCleanupKnowledgeBaseWorkflowDone returns true if the count of the CleanupKnowledgeBaseWorkflow invocations corresponds
-// the number of defined expectations
-func (m *ServiceMock) MinimockCleanupKnowledgeBaseWorkflowDone() bool {
-	if m.CleanupKnowledgeBaseWorkflowMock.optional {
-		// Optional methods provide '0 or more' call count restriction.
-		return true
-	}
-
-	for _, e := range m.CleanupKnowledgeBaseWorkflowMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			return false
-		}
-	}
-
-	return m.CleanupKnowledgeBaseWorkflowMock.invocationsDone()
-}
-
-// MinimockCleanupKnowledgeBaseWorkflowInspect logs each unmet expectation
-func (m *ServiceMock) MinimockCleanupKnowledgeBaseWorkflowInspect() {
-	for _, e := range m.CleanupKnowledgeBaseWorkflowMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Error("Expected call to ServiceMock.CleanupKnowledgeBaseWorkflow")
-		}
-	}
-
-	afterCleanupKnowledgeBaseWorkflowCounter := mm_atomic.LoadUint64(&m.afterCleanupKnowledgeBaseWorkflowCounter)
-	// if default expectation was set then invocations count should be greater than zero
-	if m.CleanupKnowledgeBaseWorkflowMock.defaultExpectation != nil && afterCleanupKnowledgeBaseWorkflowCounter < 1 {
-		m.t.Errorf("Expected call to ServiceMock.CleanupKnowledgeBaseWorkflow at\n%s", m.CleanupKnowledgeBaseWorkflowMock.defaultExpectation.returnOrigin)
-	}
-	// if func was set then invocations count should be greater than zero
-	if m.funcCleanupKnowledgeBaseWorkflow != nil && afterCleanupKnowledgeBaseWorkflowCounter < 1 {
-		m.t.Errorf("Expected call to ServiceMock.CleanupKnowledgeBaseWorkflow at\n%s", m.funcCleanupKnowledgeBaseWorkflowOrigin)
-	}
-
-	if !m.CleanupKnowledgeBaseWorkflowMock.invocationsDone() && afterCleanupKnowledgeBaseWorkflowCounter > 0 {
-		m.t.Errorf("Expected %d calls to ServiceMock.CleanupKnowledgeBaseWorkflow at\n%s but found %d calls",
-			mm_atomic.LoadUint64(&m.CleanupKnowledgeBaseWorkflowMock.expectedInvocations), m.CleanupKnowledgeBaseWorkflowMock.expectedInvocationsOrigin, afterCleanupKnowledgeBaseWorkflowCounter)
-	}
-}
-
-type mServiceMockConvertToMarkdownPipe struct {
-	optional           bool
-	mock               *ServiceMock
-	defaultExpectation *ServiceMockConvertToMarkdownPipeExpectation
-	expectations       []*ServiceMockConvertToMarkdownPipeExpectation
-
-	callArgs []*ServiceMockConvertToMarkdownPipeParams
-	mutex    sync.RWMutex
-
-	expectedInvocations       uint64
-	expectedInvocationsOrigin string
-}
-
-// ServiceMockConvertToMarkdownPipeExpectation specifies expectation struct of the Service.ConvertToMarkdownPipe
-type ServiceMockConvertToMarkdownPipeExpectation struct {
-	mock               *ServiceMock
-	params             *ServiceMockConvertToMarkdownPipeParams
-	paramPtrs          *ServiceMockConvertToMarkdownPipeParamPtrs
-	expectationOrigins ServiceMockConvertToMarkdownPipeExpectationOrigins
-	results            *ServiceMockConvertToMarkdownPipeResults
-	returnOrigin       string
-	Counter            uint64
-}
-
-// ServiceMockConvertToMarkdownPipeParams contains parameters of the Service.ConvertToMarkdownPipe
-type ServiceMockConvertToMarkdownPipeParams struct {
-	ctx context.Context
-	m1  mm_service.MarkdownConversionParams
-}
-
-// ServiceMockConvertToMarkdownPipeParamPtrs contains pointers to parameters of the Service.ConvertToMarkdownPipe
-type ServiceMockConvertToMarkdownPipeParamPtrs struct {
-	ctx *context.Context
-	m1  *mm_service.MarkdownConversionParams
-}
-
-// ServiceMockConvertToMarkdownPipeResults contains results of the Service.ConvertToMarkdownPipe
-type ServiceMockConvertToMarkdownPipeResults struct {
-	mp1 *mm_service.MarkdownConversionResult
-	err error
-}
-
-// ServiceMockConvertToMarkdownPipeOrigins contains origins of expectations of the Service.ConvertToMarkdownPipe
-type ServiceMockConvertToMarkdownPipeExpectationOrigins struct {
-	origin    string
-	originCtx string
-	originM1  string
-}
-
-// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
-// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
-// Optional() makes method check to work in '0 or more' mode.
-// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
-// catch the problems when the expected method call is totally skipped during test run.
-func (mmConvertToMarkdownPipe *mServiceMockConvertToMarkdownPipe) Optional() *mServiceMockConvertToMarkdownPipe {
-	mmConvertToMarkdownPipe.optional = true
-	return mmConvertToMarkdownPipe
-}
-
-// Expect sets up expected params for Service.ConvertToMarkdownPipe
-func (mmConvertToMarkdownPipe *mServiceMockConvertToMarkdownPipe) Expect(ctx context.Context, m1 mm_service.MarkdownConversionParams) *mServiceMockConvertToMarkdownPipe {
-	if mmConvertToMarkdownPipe.mock.funcConvertToMarkdownPipe != nil {
-		mmConvertToMarkdownPipe.mock.t.Fatalf("ServiceMock.ConvertToMarkdownPipe mock is already set by Set")
-	}
-
-	if mmConvertToMarkdownPipe.defaultExpectation == nil {
-		mmConvertToMarkdownPipe.defaultExpectation = &ServiceMockConvertToMarkdownPipeExpectation{}
-	}
-
-	if mmConvertToMarkdownPipe.defaultExpectation.paramPtrs != nil {
-		mmConvertToMarkdownPipe.mock.t.Fatalf("ServiceMock.ConvertToMarkdownPipe mock is already set by ExpectParams functions")
-	}
-
-	mmConvertToMarkdownPipe.defaultExpectation.params = &ServiceMockConvertToMarkdownPipeParams{ctx, m1}
-	mmConvertToMarkdownPipe.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
-	for _, e := range mmConvertToMarkdownPipe.expectations {
-		if minimock.Equal(e.params, mmConvertToMarkdownPipe.defaultExpectation.params) {
-			mmConvertToMarkdownPipe.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmConvertToMarkdownPipe.defaultExpectation.params)
-		}
-	}
-
-	return mmConvertToMarkdownPipe
-}
-
-// ExpectCtxParam1 sets up expected param ctx for Service.ConvertToMarkdownPipe
-func (mmConvertToMarkdownPipe *mServiceMockConvertToMarkdownPipe) ExpectCtxParam1(ctx context.Context) *mServiceMockConvertToMarkdownPipe {
-	if mmConvertToMarkdownPipe.mock.funcConvertToMarkdownPipe != nil {
-		mmConvertToMarkdownPipe.mock.t.Fatalf("ServiceMock.ConvertToMarkdownPipe mock is already set by Set")
-	}
-
-	if mmConvertToMarkdownPipe.defaultExpectation == nil {
-		mmConvertToMarkdownPipe.defaultExpectation = &ServiceMockConvertToMarkdownPipeExpectation{}
-	}
-
-	if mmConvertToMarkdownPipe.defaultExpectation.params != nil {
-		mmConvertToMarkdownPipe.mock.t.Fatalf("ServiceMock.ConvertToMarkdownPipe mock is already set by Expect")
-	}
-
-	if mmConvertToMarkdownPipe.defaultExpectation.paramPtrs == nil {
-		mmConvertToMarkdownPipe.defaultExpectation.paramPtrs = &ServiceMockConvertToMarkdownPipeParamPtrs{}
-	}
-	mmConvertToMarkdownPipe.defaultExpectation.paramPtrs.ctx = &ctx
-	mmConvertToMarkdownPipe.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
-
-	return mmConvertToMarkdownPipe
-}
-
-// ExpectM1Param2 sets up expected param m1 for Service.ConvertToMarkdownPipe
-func (mmConvertToMarkdownPipe *mServiceMockConvertToMarkdownPipe) ExpectM1Param2(m1 mm_service.MarkdownConversionParams) *mServiceMockConvertToMarkdownPipe {
-	if mmConvertToMarkdownPipe.mock.funcConvertToMarkdownPipe != nil {
-		mmConvertToMarkdownPipe.mock.t.Fatalf("ServiceMock.ConvertToMarkdownPipe mock is already set by Set")
-	}
-
-	if mmConvertToMarkdownPipe.defaultExpectation == nil {
-		mmConvertToMarkdownPipe.defaultExpectation = &ServiceMockConvertToMarkdownPipeExpectation{}
-	}
-
-	if mmConvertToMarkdownPipe.defaultExpectation.params != nil {
-		mmConvertToMarkdownPipe.mock.t.Fatalf("ServiceMock.ConvertToMarkdownPipe mock is already set by Expect")
-	}
-
-	if mmConvertToMarkdownPipe.defaultExpectation.paramPtrs == nil {
-		mmConvertToMarkdownPipe.defaultExpectation.paramPtrs = &ServiceMockConvertToMarkdownPipeParamPtrs{}
-	}
-	mmConvertToMarkdownPipe.defaultExpectation.paramPtrs.m1 = &m1
-	mmConvertToMarkdownPipe.defaultExpectation.expectationOrigins.originM1 = minimock.CallerInfo(1)
-
-	return mmConvertToMarkdownPipe
-}
-
-// Inspect accepts an inspector function that has same arguments as the Service.ConvertToMarkdownPipe
-func (mmConvertToMarkdownPipe *mServiceMockConvertToMarkdownPipe) Inspect(f func(ctx context.Context, m1 mm_service.MarkdownConversionParams)) *mServiceMockConvertToMarkdownPipe {
-	if mmConvertToMarkdownPipe.mock.inspectFuncConvertToMarkdownPipe != nil {
-		mmConvertToMarkdownPipe.mock.t.Fatalf("Inspect function is already set for ServiceMock.ConvertToMarkdownPipe")
-	}
-
-	mmConvertToMarkdownPipe.mock.inspectFuncConvertToMarkdownPipe = f
-
-	return mmConvertToMarkdownPipe
-}
-
-// Return sets up results that will be returned by Service.ConvertToMarkdownPipe
-func (mmConvertToMarkdownPipe *mServiceMockConvertToMarkdownPipe) Return(mp1 *mm_service.MarkdownConversionResult, err error) *ServiceMock {
-	if mmConvertToMarkdownPipe.mock.funcConvertToMarkdownPipe != nil {
-		mmConvertToMarkdownPipe.mock.t.Fatalf("ServiceMock.ConvertToMarkdownPipe mock is already set by Set")
-	}
-
-	if mmConvertToMarkdownPipe.defaultExpectation == nil {
-		mmConvertToMarkdownPipe.defaultExpectation = &ServiceMockConvertToMarkdownPipeExpectation{mock: mmConvertToMarkdownPipe.mock}
-	}
-	mmConvertToMarkdownPipe.defaultExpectation.results = &ServiceMockConvertToMarkdownPipeResults{mp1, err}
-	mmConvertToMarkdownPipe.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
-	return mmConvertToMarkdownPipe.mock
-}
-
-// Set uses given function f to mock the Service.ConvertToMarkdownPipe method
-func (mmConvertToMarkdownPipe *mServiceMockConvertToMarkdownPipe) Set(f func(ctx context.Context, m1 mm_service.MarkdownConversionParams) (mp1 *mm_service.MarkdownConversionResult, err error)) *ServiceMock {
-	if mmConvertToMarkdownPipe.defaultExpectation != nil {
-		mmConvertToMarkdownPipe.mock.t.Fatalf("Default expectation is already set for the Service.ConvertToMarkdownPipe method")
-	}
-
-	if len(mmConvertToMarkdownPipe.expectations) > 0 {
-		mmConvertToMarkdownPipe.mock.t.Fatalf("Some expectations are already set for the Service.ConvertToMarkdownPipe method")
-	}
-
-	mmConvertToMarkdownPipe.mock.funcConvertToMarkdownPipe = f
-	mmConvertToMarkdownPipe.mock.funcConvertToMarkdownPipeOrigin = minimock.CallerInfo(1)
-	return mmConvertToMarkdownPipe.mock
-}
-
-// When sets expectation for the Service.ConvertToMarkdownPipe which will trigger the result defined by the following
-// Then helper
-func (mmConvertToMarkdownPipe *mServiceMockConvertToMarkdownPipe) When(ctx context.Context, m1 mm_service.MarkdownConversionParams) *ServiceMockConvertToMarkdownPipeExpectation {
-	if mmConvertToMarkdownPipe.mock.funcConvertToMarkdownPipe != nil {
-		mmConvertToMarkdownPipe.mock.t.Fatalf("ServiceMock.ConvertToMarkdownPipe mock is already set by Set")
-	}
-
-	expectation := &ServiceMockConvertToMarkdownPipeExpectation{
-		mock:               mmConvertToMarkdownPipe.mock,
-		params:             &ServiceMockConvertToMarkdownPipeParams{ctx, m1},
-		expectationOrigins: ServiceMockConvertToMarkdownPipeExpectationOrigins{origin: minimock.CallerInfo(1)},
-	}
-	mmConvertToMarkdownPipe.expectations = append(mmConvertToMarkdownPipe.expectations, expectation)
-	return expectation
-}
-
-// Then sets up Service.ConvertToMarkdownPipe return parameters for the expectation previously defined by the When method
-func (e *ServiceMockConvertToMarkdownPipeExpectation) Then(mp1 *mm_service.MarkdownConversionResult, err error) *ServiceMock {
-	e.results = &ServiceMockConvertToMarkdownPipeResults{mp1, err}
-	return e.mock
-}
-
-// Times sets number of times Service.ConvertToMarkdownPipe should be invoked
-func (mmConvertToMarkdownPipe *mServiceMockConvertToMarkdownPipe) Times(n uint64) *mServiceMockConvertToMarkdownPipe {
-	if n == 0 {
-		mmConvertToMarkdownPipe.mock.t.Fatalf("Times of ServiceMock.ConvertToMarkdownPipe mock can not be zero")
-	}
-	mm_atomic.StoreUint64(&mmConvertToMarkdownPipe.expectedInvocations, n)
-	mmConvertToMarkdownPipe.expectedInvocationsOrigin = minimock.CallerInfo(1)
-	return mmConvertToMarkdownPipe
-}
-
-func (mmConvertToMarkdownPipe *mServiceMockConvertToMarkdownPipe) invocationsDone() bool {
-	if len(mmConvertToMarkdownPipe.expectations) == 0 && mmConvertToMarkdownPipe.defaultExpectation == nil && mmConvertToMarkdownPipe.mock.funcConvertToMarkdownPipe == nil {
-		return true
-	}
-
-	totalInvocations := mm_atomic.LoadUint64(&mmConvertToMarkdownPipe.mock.afterConvertToMarkdownPipeCounter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmConvertToMarkdownPipe.expectedInvocations)
-
-	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
-}
-
-// ConvertToMarkdownPipe implements mm_service.Service
-func (mmConvertToMarkdownPipe *ServiceMock) ConvertToMarkdownPipe(ctx context.Context, m1 mm_service.MarkdownConversionParams) (mp1 *mm_service.MarkdownConversionResult, err error) {
-	mm_atomic.AddUint64(&mmConvertToMarkdownPipe.beforeConvertToMarkdownPipeCounter, 1)
-	defer mm_atomic.AddUint64(&mmConvertToMarkdownPipe.afterConvertToMarkdownPipeCounter, 1)
-
-	mmConvertToMarkdownPipe.t.Helper()
-
-	if mmConvertToMarkdownPipe.inspectFuncConvertToMarkdownPipe != nil {
-		mmConvertToMarkdownPipe.inspectFuncConvertToMarkdownPipe(ctx, m1)
-	}
-
-	mm_params := ServiceMockConvertToMarkdownPipeParams{ctx, m1}
-
-	// Record call args
-	mmConvertToMarkdownPipe.ConvertToMarkdownPipeMock.mutex.Lock()
-	mmConvertToMarkdownPipe.ConvertToMarkdownPipeMock.callArgs = append(mmConvertToMarkdownPipe.ConvertToMarkdownPipeMock.callArgs, &mm_params)
-	mmConvertToMarkdownPipe.ConvertToMarkdownPipeMock.mutex.Unlock()
-
-	for _, e := range mmConvertToMarkdownPipe.ConvertToMarkdownPipeMock.expectations {
-		if minimock.Equal(*e.params, mm_params) {
-			mm_atomic.AddUint64(&e.Counter, 1)
-			return e.results.mp1, e.results.err
-		}
-	}
-
-	if mmConvertToMarkdownPipe.ConvertToMarkdownPipeMock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmConvertToMarkdownPipe.ConvertToMarkdownPipeMock.defaultExpectation.Counter, 1)
-		mm_want := mmConvertToMarkdownPipe.ConvertToMarkdownPipeMock.defaultExpectation.params
-		mm_want_ptrs := mmConvertToMarkdownPipe.ConvertToMarkdownPipeMock.defaultExpectation.paramPtrs
-
-		mm_got := ServiceMockConvertToMarkdownPipeParams{ctx, m1}
-
-		if mm_want_ptrs != nil {
-
-			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
-				mmConvertToMarkdownPipe.t.Errorf("ServiceMock.ConvertToMarkdownPipe got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmConvertToMarkdownPipe.ConvertToMarkdownPipeMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
-			}
-
-			if mm_want_ptrs.m1 != nil && !minimock.Equal(*mm_want_ptrs.m1, mm_got.m1) {
-				mmConvertToMarkdownPipe.t.Errorf("ServiceMock.ConvertToMarkdownPipe got unexpected parameter m1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmConvertToMarkdownPipe.ConvertToMarkdownPipeMock.defaultExpectation.expectationOrigins.originM1, *mm_want_ptrs.m1, mm_got.m1, minimock.Diff(*mm_want_ptrs.m1, mm_got.m1))
-			}
-
-		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
-			mmConvertToMarkdownPipe.t.Errorf("ServiceMock.ConvertToMarkdownPipe got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-				mmConvertToMarkdownPipe.ConvertToMarkdownPipeMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
-		}
-
-		mm_results := mmConvertToMarkdownPipe.ConvertToMarkdownPipeMock.defaultExpectation.results
-		if mm_results == nil {
-			mmConvertToMarkdownPipe.t.Fatal("No results are set for the ServiceMock.ConvertToMarkdownPipe")
-		}
-		return (*mm_results).mp1, (*mm_results).err
-	}
-	if mmConvertToMarkdownPipe.funcConvertToMarkdownPipe != nil {
-		return mmConvertToMarkdownPipe.funcConvertToMarkdownPipe(ctx, m1)
-	}
-	mmConvertToMarkdownPipe.t.Fatalf("Unexpected call to ServiceMock.ConvertToMarkdownPipe. %v %v", ctx, m1)
-	return
-}
-
-// ConvertToMarkdownPipeAfterCounter returns a count of finished ServiceMock.ConvertToMarkdownPipe invocations
-func (mmConvertToMarkdownPipe *ServiceMock) ConvertToMarkdownPipeAfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmConvertToMarkdownPipe.afterConvertToMarkdownPipeCounter)
-}
-
-// ConvertToMarkdownPipeBeforeCounter returns a count of ServiceMock.ConvertToMarkdownPipe invocations
-func (mmConvertToMarkdownPipe *ServiceMock) ConvertToMarkdownPipeBeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmConvertToMarkdownPipe.beforeConvertToMarkdownPipeCounter)
-}
-
-// Calls returns a list of arguments used in each call to ServiceMock.ConvertToMarkdownPipe.
-// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
-func (mmConvertToMarkdownPipe *mServiceMockConvertToMarkdownPipe) Calls() []*ServiceMockConvertToMarkdownPipeParams {
-	mmConvertToMarkdownPipe.mutex.RLock()
-
-	argCopy := make([]*ServiceMockConvertToMarkdownPipeParams, len(mmConvertToMarkdownPipe.callArgs))
-	copy(argCopy, mmConvertToMarkdownPipe.callArgs)
-
-	mmConvertToMarkdownPipe.mutex.RUnlock()
-
-	return argCopy
-}
-
-// MinimockConvertToMarkdownPipeDone returns true if the count of the ConvertToMarkdownPipe invocations corresponds
-// the number of defined expectations
-func (m *ServiceMock) MinimockConvertToMarkdownPipeDone() bool {
-	if m.ConvertToMarkdownPipeMock.optional {
-		// Optional methods provide '0 or more' call count restriction.
-		return true
-	}
-
-	for _, e := range m.ConvertToMarkdownPipeMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			return false
-		}
-	}
-
-	return m.ConvertToMarkdownPipeMock.invocationsDone()
-}
-
-// MinimockConvertToMarkdownPipeInspect logs each unmet expectation
-func (m *ServiceMock) MinimockConvertToMarkdownPipeInspect() {
-	for _, e := range m.ConvertToMarkdownPipeMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Errorf("Expected call to ServiceMock.ConvertToMarkdownPipe at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
-		}
-	}
-
-	afterConvertToMarkdownPipeCounter := mm_atomic.LoadUint64(&m.afterConvertToMarkdownPipeCounter)
-	// if default expectation was set then invocations count should be greater than zero
-	if m.ConvertToMarkdownPipeMock.defaultExpectation != nil && afterConvertToMarkdownPipeCounter < 1 {
-		if m.ConvertToMarkdownPipeMock.defaultExpectation.params == nil {
-			m.t.Errorf("Expected call to ServiceMock.ConvertToMarkdownPipe at\n%s", m.ConvertToMarkdownPipeMock.defaultExpectation.returnOrigin)
-		} else {
-			m.t.Errorf("Expected call to ServiceMock.ConvertToMarkdownPipe at\n%s with params: %#v", m.ConvertToMarkdownPipeMock.defaultExpectation.expectationOrigins.origin, *m.ConvertToMarkdownPipeMock.defaultExpectation.params)
-		}
-	}
-	// if func was set then invocations count should be greater than zero
-	if m.funcConvertToMarkdownPipe != nil && afterConvertToMarkdownPipeCounter < 1 {
-		m.t.Errorf("Expected call to ServiceMock.ConvertToMarkdownPipe at\n%s", m.funcConvertToMarkdownPipeOrigin)
-	}
-
-	if !m.ConvertToMarkdownPipeMock.invocationsDone() && afterConvertToMarkdownPipeCounter > 0 {
-		m.t.Errorf("Expected %d calls to ServiceMock.ConvertToMarkdownPipe at\n%s but found %d calls",
-			mm_atomic.LoadUint64(&m.ConvertToMarkdownPipeMock.expectedInvocations), m.ConvertToMarkdownPipeMock.expectedInvocationsOrigin, afterConvertToMarkdownPipeCounter)
+	if !m.CleanupKnowledgeBaseMock.invocationsDone() && afterCleanupKnowledgeBaseCounter > 0 {
+		m.t.Errorf("Expected %d calls to ServiceMock.CleanupKnowledgeBase at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.CleanupKnowledgeBaseMock.expectedInvocations), m.CleanupKnowledgeBaseMock.expectedInvocationsOrigin, afterCleanupKnowledgeBaseCounter)
 	}
 }
 
@@ -3082,379 +2357,6 @@ func (m *ServiceMock) MinimockCreateRepositoryTagInspect() {
 	if !m.CreateRepositoryTagMock.invocationsDone() && afterCreateRepositoryTagCounter > 0 {
 		m.t.Errorf("Expected %d calls to ServiceMock.CreateRepositoryTag at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.CreateRepositoryTagMock.expectedInvocations), m.CreateRepositoryTagMock.expectedInvocationsOrigin, afterCreateRepositoryTagCounter)
-	}
-}
-
-type mServiceMockDeleteConvertedFileByFileUID struct {
-	optional           bool
-	mock               *ServiceMock
-	defaultExpectation *ServiceMockDeleteConvertedFileByFileUIDExpectation
-	expectations       []*ServiceMockDeleteConvertedFileByFileUIDExpectation
-
-	callArgs []*ServiceMockDeleteConvertedFileByFileUIDParams
-	mutex    sync.RWMutex
-
-	expectedInvocations       uint64
-	expectedInvocationsOrigin string
-}
-
-// ServiceMockDeleteConvertedFileByFileUIDExpectation specifies expectation struct of the Service.DeleteConvertedFileByFileUID
-type ServiceMockDeleteConvertedFileByFileUIDExpectation struct {
-	mock               *ServiceMock
-	params             *ServiceMockDeleteConvertedFileByFileUIDParams
-	paramPtrs          *ServiceMockDeleteConvertedFileByFileUIDParamPtrs
-	expectationOrigins ServiceMockDeleteConvertedFileByFileUIDExpectationOrigins
-	results            *ServiceMockDeleteConvertedFileByFileUIDResults
-	returnOrigin       string
-	Counter            uint64
-}
-
-// ServiceMockDeleteConvertedFileByFileUIDParams contains parameters of the Service.DeleteConvertedFileByFileUID
-type ServiceMockDeleteConvertedFileByFileUIDParams struct {
-	ctx context.Context
-	u1  uuid.UUID
-	u2  uuid.UUID
-}
-
-// ServiceMockDeleteConvertedFileByFileUIDParamPtrs contains pointers to parameters of the Service.DeleteConvertedFileByFileUID
-type ServiceMockDeleteConvertedFileByFileUIDParamPtrs struct {
-	ctx *context.Context
-	u1  *uuid.UUID
-	u2  *uuid.UUID
-}
-
-// ServiceMockDeleteConvertedFileByFileUIDResults contains results of the Service.DeleteConvertedFileByFileUID
-type ServiceMockDeleteConvertedFileByFileUIDResults struct {
-	err error
-}
-
-// ServiceMockDeleteConvertedFileByFileUIDOrigins contains origins of expectations of the Service.DeleteConvertedFileByFileUID
-type ServiceMockDeleteConvertedFileByFileUIDExpectationOrigins struct {
-	origin    string
-	originCtx string
-	originU1  string
-	originU2  string
-}
-
-// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
-// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
-// Optional() makes method check to work in '0 or more' mode.
-// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
-// catch the problems when the expected method call is totally skipped during test run.
-func (mmDeleteConvertedFileByFileUID *mServiceMockDeleteConvertedFileByFileUID) Optional() *mServiceMockDeleteConvertedFileByFileUID {
-	mmDeleteConvertedFileByFileUID.optional = true
-	return mmDeleteConvertedFileByFileUID
-}
-
-// Expect sets up expected params for Service.DeleteConvertedFileByFileUID
-func (mmDeleteConvertedFileByFileUID *mServiceMockDeleteConvertedFileByFileUID) Expect(ctx context.Context, u1 uuid.UUID, u2 uuid.UUID) *mServiceMockDeleteConvertedFileByFileUID {
-	if mmDeleteConvertedFileByFileUID.mock.funcDeleteConvertedFileByFileUID != nil {
-		mmDeleteConvertedFileByFileUID.mock.t.Fatalf("ServiceMock.DeleteConvertedFileByFileUID mock is already set by Set")
-	}
-
-	if mmDeleteConvertedFileByFileUID.defaultExpectation == nil {
-		mmDeleteConvertedFileByFileUID.defaultExpectation = &ServiceMockDeleteConvertedFileByFileUIDExpectation{}
-	}
-
-	if mmDeleteConvertedFileByFileUID.defaultExpectation.paramPtrs != nil {
-		mmDeleteConvertedFileByFileUID.mock.t.Fatalf("ServiceMock.DeleteConvertedFileByFileUID mock is already set by ExpectParams functions")
-	}
-
-	mmDeleteConvertedFileByFileUID.defaultExpectation.params = &ServiceMockDeleteConvertedFileByFileUIDParams{ctx, u1, u2}
-	mmDeleteConvertedFileByFileUID.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
-	for _, e := range mmDeleteConvertedFileByFileUID.expectations {
-		if minimock.Equal(e.params, mmDeleteConvertedFileByFileUID.defaultExpectation.params) {
-			mmDeleteConvertedFileByFileUID.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmDeleteConvertedFileByFileUID.defaultExpectation.params)
-		}
-	}
-
-	return mmDeleteConvertedFileByFileUID
-}
-
-// ExpectCtxParam1 sets up expected param ctx for Service.DeleteConvertedFileByFileUID
-func (mmDeleteConvertedFileByFileUID *mServiceMockDeleteConvertedFileByFileUID) ExpectCtxParam1(ctx context.Context) *mServiceMockDeleteConvertedFileByFileUID {
-	if mmDeleteConvertedFileByFileUID.mock.funcDeleteConvertedFileByFileUID != nil {
-		mmDeleteConvertedFileByFileUID.mock.t.Fatalf("ServiceMock.DeleteConvertedFileByFileUID mock is already set by Set")
-	}
-
-	if mmDeleteConvertedFileByFileUID.defaultExpectation == nil {
-		mmDeleteConvertedFileByFileUID.defaultExpectation = &ServiceMockDeleteConvertedFileByFileUIDExpectation{}
-	}
-
-	if mmDeleteConvertedFileByFileUID.defaultExpectation.params != nil {
-		mmDeleteConvertedFileByFileUID.mock.t.Fatalf("ServiceMock.DeleteConvertedFileByFileUID mock is already set by Expect")
-	}
-
-	if mmDeleteConvertedFileByFileUID.defaultExpectation.paramPtrs == nil {
-		mmDeleteConvertedFileByFileUID.defaultExpectation.paramPtrs = &ServiceMockDeleteConvertedFileByFileUIDParamPtrs{}
-	}
-	mmDeleteConvertedFileByFileUID.defaultExpectation.paramPtrs.ctx = &ctx
-	mmDeleteConvertedFileByFileUID.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
-
-	return mmDeleteConvertedFileByFileUID
-}
-
-// ExpectU1Param2 sets up expected param u1 for Service.DeleteConvertedFileByFileUID
-func (mmDeleteConvertedFileByFileUID *mServiceMockDeleteConvertedFileByFileUID) ExpectU1Param2(u1 uuid.UUID) *mServiceMockDeleteConvertedFileByFileUID {
-	if mmDeleteConvertedFileByFileUID.mock.funcDeleteConvertedFileByFileUID != nil {
-		mmDeleteConvertedFileByFileUID.mock.t.Fatalf("ServiceMock.DeleteConvertedFileByFileUID mock is already set by Set")
-	}
-
-	if mmDeleteConvertedFileByFileUID.defaultExpectation == nil {
-		mmDeleteConvertedFileByFileUID.defaultExpectation = &ServiceMockDeleteConvertedFileByFileUIDExpectation{}
-	}
-
-	if mmDeleteConvertedFileByFileUID.defaultExpectation.params != nil {
-		mmDeleteConvertedFileByFileUID.mock.t.Fatalf("ServiceMock.DeleteConvertedFileByFileUID mock is already set by Expect")
-	}
-
-	if mmDeleteConvertedFileByFileUID.defaultExpectation.paramPtrs == nil {
-		mmDeleteConvertedFileByFileUID.defaultExpectation.paramPtrs = &ServiceMockDeleteConvertedFileByFileUIDParamPtrs{}
-	}
-	mmDeleteConvertedFileByFileUID.defaultExpectation.paramPtrs.u1 = &u1
-	mmDeleteConvertedFileByFileUID.defaultExpectation.expectationOrigins.originU1 = minimock.CallerInfo(1)
-
-	return mmDeleteConvertedFileByFileUID
-}
-
-// ExpectU2Param3 sets up expected param u2 for Service.DeleteConvertedFileByFileUID
-func (mmDeleteConvertedFileByFileUID *mServiceMockDeleteConvertedFileByFileUID) ExpectU2Param3(u2 uuid.UUID) *mServiceMockDeleteConvertedFileByFileUID {
-	if mmDeleteConvertedFileByFileUID.mock.funcDeleteConvertedFileByFileUID != nil {
-		mmDeleteConvertedFileByFileUID.mock.t.Fatalf("ServiceMock.DeleteConvertedFileByFileUID mock is already set by Set")
-	}
-
-	if mmDeleteConvertedFileByFileUID.defaultExpectation == nil {
-		mmDeleteConvertedFileByFileUID.defaultExpectation = &ServiceMockDeleteConvertedFileByFileUIDExpectation{}
-	}
-
-	if mmDeleteConvertedFileByFileUID.defaultExpectation.params != nil {
-		mmDeleteConvertedFileByFileUID.mock.t.Fatalf("ServiceMock.DeleteConvertedFileByFileUID mock is already set by Expect")
-	}
-
-	if mmDeleteConvertedFileByFileUID.defaultExpectation.paramPtrs == nil {
-		mmDeleteConvertedFileByFileUID.defaultExpectation.paramPtrs = &ServiceMockDeleteConvertedFileByFileUIDParamPtrs{}
-	}
-	mmDeleteConvertedFileByFileUID.defaultExpectation.paramPtrs.u2 = &u2
-	mmDeleteConvertedFileByFileUID.defaultExpectation.expectationOrigins.originU2 = minimock.CallerInfo(1)
-
-	return mmDeleteConvertedFileByFileUID
-}
-
-// Inspect accepts an inspector function that has same arguments as the Service.DeleteConvertedFileByFileUID
-func (mmDeleteConvertedFileByFileUID *mServiceMockDeleteConvertedFileByFileUID) Inspect(f func(ctx context.Context, u1 uuid.UUID, u2 uuid.UUID)) *mServiceMockDeleteConvertedFileByFileUID {
-	if mmDeleteConvertedFileByFileUID.mock.inspectFuncDeleteConvertedFileByFileUID != nil {
-		mmDeleteConvertedFileByFileUID.mock.t.Fatalf("Inspect function is already set for ServiceMock.DeleteConvertedFileByFileUID")
-	}
-
-	mmDeleteConvertedFileByFileUID.mock.inspectFuncDeleteConvertedFileByFileUID = f
-
-	return mmDeleteConvertedFileByFileUID
-}
-
-// Return sets up results that will be returned by Service.DeleteConvertedFileByFileUID
-func (mmDeleteConvertedFileByFileUID *mServiceMockDeleteConvertedFileByFileUID) Return(err error) *ServiceMock {
-	if mmDeleteConvertedFileByFileUID.mock.funcDeleteConvertedFileByFileUID != nil {
-		mmDeleteConvertedFileByFileUID.mock.t.Fatalf("ServiceMock.DeleteConvertedFileByFileUID mock is already set by Set")
-	}
-
-	if mmDeleteConvertedFileByFileUID.defaultExpectation == nil {
-		mmDeleteConvertedFileByFileUID.defaultExpectation = &ServiceMockDeleteConvertedFileByFileUIDExpectation{mock: mmDeleteConvertedFileByFileUID.mock}
-	}
-	mmDeleteConvertedFileByFileUID.defaultExpectation.results = &ServiceMockDeleteConvertedFileByFileUIDResults{err}
-	mmDeleteConvertedFileByFileUID.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
-	return mmDeleteConvertedFileByFileUID.mock
-}
-
-// Set uses given function f to mock the Service.DeleteConvertedFileByFileUID method
-func (mmDeleteConvertedFileByFileUID *mServiceMockDeleteConvertedFileByFileUID) Set(f func(ctx context.Context, u1 uuid.UUID, u2 uuid.UUID) (err error)) *ServiceMock {
-	if mmDeleteConvertedFileByFileUID.defaultExpectation != nil {
-		mmDeleteConvertedFileByFileUID.mock.t.Fatalf("Default expectation is already set for the Service.DeleteConvertedFileByFileUID method")
-	}
-
-	if len(mmDeleteConvertedFileByFileUID.expectations) > 0 {
-		mmDeleteConvertedFileByFileUID.mock.t.Fatalf("Some expectations are already set for the Service.DeleteConvertedFileByFileUID method")
-	}
-
-	mmDeleteConvertedFileByFileUID.mock.funcDeleteConvertedFileByFileUID = f
-	mmDeleteConvertedFileByFileUID.mock.funcDeleteConvertedFileByFileUIDOrigin = minimock.CallerInfo(1)
-	return mmDeleteConvertedFileByFileUID.mock
-}
-
-// When sets expectation for the Service.DeleteConvertedFileByFileUID which will trigger the result defined by the following
-// Then helper
-func (mmDeleteConvertedFileByFileUID *mServiceMockDeleteConvertedFileByFileUID) When(ctx context.Context, u1 uuid.UUID, u2 uuid.UUID) *ServiceMockDeleteConvertedFileByFileUIDExpectation {
-	if mmDeleteConvertedFileByFileUID.mock.funcDeleteConvertedFileByFileUID != nil {
-		mmDeleteConvertedFileByFileUID.mock.t.Fatalf("ServiceMock.DeleteConvertedFileByFileUID mock is already set by Set")
-	}
-
-	expectation := &ServiceMockDeleteConvertedFileByFileUIDExpectation{
-		mock:               mmDeleteConvertedFileByFileUID.mock,
-		params:             &ServiceMockDeleteConvertedFileByFileUIDParams{ctx, u1, u2},
-		expectationOrigins: ServiceMockDeleteConvertedFileByFileUIDExpectationOrigins{origin: minimock.CallerInfo(1)},
-	}
-	mmDeleteConvertedFileByFileUID.expectations = append(mmDeleteConvertedFileByFileUID.expectations, expectation)
-	return expectation
-}
-
-// Then sets up Service.DeleteConvertedFileByFileUID return parameters for the expectation previously defined by the When method
-func (e *ServiceMockDeleteConvertedFileByFileUIDExpectation) Then(err error) *ServiceMock {
-	e.results = &ServiceMockDeleteConvertedFileByFileUIDResults{err}
-	return e.mock
-}
-
-// Times sets number of times Service.DeleteConvertedFileByFileUID should be invoked
-func (mmDeleteConvertedFileByFileUID *mServiceMockDeleteConvertedFileByFileUID) Times(n uint64) *mServiceMockDeleteConvertedFileByFileUID {
-	if n == 0 {
-		mmDeleteConvertedFileByFileUID.mock.t.Fatalf("Times of ServiceMock.DeleteConvertedFileByFileUID mock can not be zero")
-	}
-	mm_atomic.StoreUint64(&mmDeleteConvertedFileByFileUID.expectedInvocations, n)
-	mmDeleteConvertedFileByFileUID.expectedInvocationsOrigin = minimock.CallerInfo(1)
-	return mmDeleteConvertedFileByFileUID
-}
-
-func (mmDeleteConvertedFileByFileUID *mServiceMockDeleteConvertedFileByFileUID) invocationsDone() bool {
-	if len(mmDeleteConvertedFileByFileUID.expectations) == 0 && mmDeleteConvertedFileByFileUID.defaultExpectation == nil && mmDeleteConvertedFileByFileUID.mock.funcDeleteConvertedFileByFileUID == nil {
-		return true
-	}
-
-	totalInvocations := mm_atomic.LoadUint64(&mmDeleteConvertedFileByFileUID.mock.afterDeleteConvertedFileByFileUIDCounter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmDeleteConvertedFileByFileUID.expectedInvocations)
-
-	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
-}
-
-// DeleteConvertedFileByFileUID implements mm_service.Service
-func (mmDeleteConvertedFileByFileUID *ServiceMock) DeleteConvertedFileByFileUID(ctx context.Context, u1 uuid.UUID, u2 uuid.UUID) (err error) {
-	mm_atomic.AddUint64(&mmDeleteConvertedFileByFileUID.beforeDeleteConvertedFileByFileUIDCounter, 1)
-	defer mm_atomic.AddUint64(&mmDeleteConvertedFileByFileUID.afterDeleteConvertedFileByFileUIDCounter, 1)
-
-	mmDeleteConvertedFileByFileUID.t.Helper()
-
-	if mmDeleteConvertedFileByFileUID.inspectFuncDeleteConvertedFileByFileUID != nil {
-		mmDeleteConvertedFileByFileUID.inspectFuncDeleteConvertedFileByFileUID(ctx, u1, u2)
-	}
-
-	mm_params := ServiceMockDeleteConvertedFileByFileUIDParams{ctx, u1, u2}
-
-	// Record call args
-	mmDeleteConvertedFileByFileUID.DeleteConvertedFileByFileUIDMock.mutex.Lock()
-	mmDeleteConvertedFileByFileUID.DeleteConvertedFileByFileUIDMock.callArgs = append(mmDeleteConvertedFileByFileUID.DeleteConvertedFileByFileUIDMock.callArgs, &mm_params)
-	mmDeleteConvertedFileByFileUID.DeleteConvertedFileByFileUIDMock.mutex.Unlock()
-
-	for _, e := range mmDeleteConvertedFileByFileUID.DeleteConvertedFileByFileUIDMock.expectations {
-		if minimock.Equal(*e.params, mm_params) {
-			mm_atomic.AddUint64(&e.Counter, 1)
-			return e.results.err
-		}
-	}
-
-	if mmDeleteConvertedFileByFileUID.DeleteConvertedFileByFileUIDMock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmDeleteConvertedFileByFileUID.DeleteConvertedFileByFileUIDMock.defaultExpectation.Counter, 1)
-		mm_want := mmDeleteConvertedFileByFileUID.DeleteConvertedFileByFileUIDMock.defaultExpectation.params
-		mm_want_ptrs := mmDeleteConvertedFileByFileUID.DeleteConvertedFileByFileUIDMock.defaultExpectation.paramPtrs
-
-		mm_got := ServiceMockDeleteConvertedFileByFileUIDParams{ctx, u1, u2}
-
-		if mm_want_ptrs != nil {
-
-			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
-				mmDeleteConvertedFileByFileUID.t.Errorf("ServiceMock.DeleteConvertedFileByFileUID got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmDeleteConvertedFileByFileUID.DeleteConvertedFileByFileUIDMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
-			}
-
-			if mm_want_ptrs.u1 != nil && !minimock.Equal(*mm_want_ptrs.u1, mm_got.u1) {
-				mmDeleteConvertedFileByFileUID.t.Errorf("ServiceMock.DeleteConvertedFileByFileUID got unexpected parameter u1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmDeleteConvertedFileByFileUID.DeleteConvertedFileByFileUIDMock.defaultExpectation.expectationOrigins.originU1, *mm_want_ptrs.u1, mm_got.u1, minimock.Diff(*mm_want_ptrs.u1, mm_got.u1))
-			}
-
-			if mm_want_ptrs.u2 != nil && !minimock.Equal(*mm_want_ptrs.u2, mm_got.u2) {
-				mmDeleteConvertedFileByFileUID.t.Errorf("ServiceMock.DeleteConvertedFileByFileUID got unexpected parameter u2, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmDeleteConvertedFileByFileUID.DeleteConvertedFileByFileUIDMock.defaultExpectation.expectationOrigins.originU2, *mm_want_ptrs.u2, mm_got.u2, minimock.Diff(*mm_want_ptrs.u2, mm_got.u2))
-			}
-
-		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
-			mmDeleteConvertedFileByFileUID.t.Errorf("ServiceMock.DeleteConvertedFileByFileUID got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-				mmDeleteConvertedFileByFileUID.DeleteConvertedFileByFileUIDMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
-		}
-
-		mm_results := mmDeleteConvertedFileByFileUID.DeleteConvertedFileByFileUIDMock.defaultExpectation.results
-		if mm_results == nil {
-			mmDeleteConvertedFileByFileUID.t.Fatal("No results are set for the ServiceMock.DeleteConvertedFileByFileUID")
-		}
-		return (*mm_results).err
-	}
-	if mmDeleteConvertedFileByFileUID.funcDeleteConvertedFileByFileUID != nil {
-		return mmDeleteConvertedFileByFileUID.funcDeleteConvertedFileByFileUID(ctx, u1, u2)
-	}
-	mmDeleteConvertedFileByFileUID.t.Fatalf("Unexpected call to ServiceMock.DeleteConvertedFileByFileUID. %v %v %v", ctx, u1, u2)
-	return
-}
-
-// DeleteConvertedFileByFileUIDAfterCounter returns a count of finished ServiceMock.DeleteConvertedFileByFileUID invocations
-func (mmDeleteConvertedFileByFileUID *ServiceMock) DeleteConvertedFileByFileUIDAfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmDeleteConvertedFileByFileUID.afterDeleteConvertedFileByFileUIDCounter)
-}
-
-// DeleteConvertedFileByFileUIDBeforeCounter returns a count of ServiceMock.DeleteConvertedFileByFileUID invocations
-func (mmDeleteConvertedFileByFileUID *ServiceMock) DeleteConvertedFileByFileUIDBeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmDeleteConvertedFileByFileUID.beforeDeleteConvertedFileByFileUIDCounter)
-}
-
-// Calls returns a list of arguments used in each call to ServiceMock.DeleteConvertedFileByFileUID.
-// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
-func (mmDeleteConvertedFileByFileUID *mServiceMockDeleteConvertedFileByFileUID) Calls() []*ServiceMockDeleteConvertedFileByFileUIDParams {
-	mmDeleteConvertedFileByFileUID.mutex.RLock()
-
-	argCopy := make([]*ServiceMockDeleteConvertedFileByFileUIDParams, len(mmDeleteConvertedFileByFileUID.callArgs))
-	copy(argCopy, mmDeleteConvertedFileByFileUID.callArgs)
-
-	mmDeleteConvertedFileByFileUID.mutex.RUnlock()
-
-	return argCopy
-}
-
-// MinimockDeleteConvertedFileByFileUIDDone returns true if the count of the DeleteConvertedFileByFileUID invocations corresponds
-// the number of defined expectations
-func (m *ServiceMock) MinimockDeleteConvertedFileByFileUIDDone() bool {
-	if m.DeleteConvertedFileByFileUIDMock.optional {
-		// Optional methods provide '0 or more' call count restriction.
-		return true
-	}
-
-	for _, e := range m.DeleteConvertedFileByFileUIDMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			return false
-		}
-	}
-
-	return m.DeleteConvertedFileByFileUIDMock.invocationsDone()
-}
-
-// MinimockDeleteConvertedFileByFileUIDInspect logs each unmet expectation
-func (m *ServiceMock) MinimockDeleteConvertedFileByFileUIDInspect() {
-	for _, e := range m.DeleteConvertedFileByFileUIDMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Errorf("Expected call to ServiceMock.DeleteConvertedFileByFileUID at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
-		}
-	}
-
-	afterDeleteConvertedFileByFileUIDCounter := mm_atomic.LoadUint64(&m.afterDeleteConvertedFileByFileUIDCounter)
-	// if default expectation was set then invocations count should be greater than zero
-	if m.DeleteConvertedFileByFileUIDMock.defaultExpectation != nil && afterDeleteConvertedFileByFileUIDCounter < 1 {
-		if m.DeleteConvertedFileByFileUIDMock.defaultExpectation.params == nil {
-			m.t.Errorf("Expected call to ServiceMock.DeleteConvertedFileByFileUID at\n%s", m.DeleteConvertedFileByFileUIDMock.defaultExpectation.returnOrigin)
-		} else {
-			m.t.Errorf("Expected call to ServiceMock.DeleteConvertedFileByFileUID at\n%s with params: %#v", m.DeleteConvertedFileByFileUIDMock.defaultExpectation.expectationOrigins.origin, *m.DeleteConvertedFileByFileUIDMock.defaultExpectation.params)
-		}
-	}
-	// if func was set then invocations count should be greater than zero
-	if m.funcDeleteConvertedFileByFileUID != nil && afterDeleteConvertedFileByFileUIDCounter < 1 {
-		m.t.Errorf("Expected call to ServiceMock.DeleteConvertedFileByFileUID at\n%s", m.funcDeleteConvertedFileByFileUIDOrigin)
-	}
-
-	if !m.DeleteConvertedFileByFileUIDMock.invocationsDone() && afterDeleteConvertedFileByFileUIDCounter > 0 {
-		m.t.Errorf("Expected %d calls to ServiceMock.DeleteConvertedFileByFileUID at\n%s but found %d calls",
-			mm_atomic.LoadUint64(&m.DeleteConvertedFileByFileUIDMock.expectedInvocations), m.DeleteConvertedFileByFileUIDMock.expectedInvocationsOrigin, afterDeleteConvertedFileByFileUIDCounter)
 	}
 }
 
@@ -3831,907 +2733,6 @@ func (m *ServiceMock) MinimockDeleteFilesInspect() {
 	}
 }
 
-type mServiceMockDeleteFilesWithPrefix struct {
-	optional           bool
-	mock               *ServiceMock
-	defaultExpectation *ServiceMockDeleteFilesWithPrefixExpectation
-	expectations       []*ServiceMockDeleteFilesWithPrefixExpectation
-
-	callArgs []*ServiceMockDeleteFilesWithPrefixParams
-	mutex    sync.RWMutex
-
-	expectedInvocations       uint64
-	expectedInvocationsOrigin string
-}
-
-// ServiceMockDeleteFilesWithPrefixExpectation specifies expectation struct of the Service.DeleteFilesWithPrefix
-type ServiceMockDeleteFilesWithPrefixExpectation struct {
-	mock               *ServiceMock
-	params             *ServiceMockDeleteFilesWithPrefixParams
-	paramPtrs          *ServiceMockDeleteFilesWithPrefixParamPtrs
-	expectationOrigins ServiceMockDeleteFilesWithPrefixExpectationOrigins
-	results            *ServiceMockDeleteFilesWithPrefixResults
-	returnOrigin       string
-	Counter            uint64
-}
-
-// ServiceMockDeleteFilesWithPrefixParams contains parameters of the Service.DeleteFilesWithPrefix
-type ServiceMockDeleteFilesWithPrefixParams struct {
-	ctx context.Context
-	s1  string
-	s2  string
-}
-
-// ServiceMockDeleteFilesWithPrefixParamPtrs contains pointers to parameters of the Service.DeleteFilesWithPrefix
-type ServiceMockDeleteFilesWithPrefixParamPtrs struct {
-	ctx *context.Context
-	s1  *string
-	s2  *string
-}
-
-// ServiceMockDeleteFilesWithPrefixResults contains results of the Service.DeleteFilesWithPrefix
-type ServiceMockDeleteFilesWithPrefixResults struct {
-	err error
-}
-
-// ServiceMockDeleteFilesWithPrefixOrigins contains origins of expectations of the Service.DeleteFilesWithPrefix
-type ServiceMockDeleteFilesWithPrefixExpectationOrigins struct {
-	origin    string
-	originCtx string
-	originS1  string
-	originS2  string
-}
-
-// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
-// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
-// Optional() makes method check to work in '0 or more' mode.
-// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
-// catch the problems when the expected method call is totally skipped during test run.
-func (mmDeleteFilesWithPrefix *mServiceMockDeleteFilesWithPrefix) Optional() *mServiceMockDeleteFilesWithPrefix {
-	mmDeleteFilesWithPrefix.optional = true
-	return mmDeleteFilesWithPrefix
-}
-
-// Expect sets up expected params for Service.DeleteFilesWithPrefix
-func (mmDeleteFilesWithPrefix *mServiceMockDeleteFilesWithPrefix) Expect(ctx context.Context, s1 string, s2 string) *mServiceMockDeleteFilesWithPrefix {
-	if mmDeleteFilesWithPrefix.mock.funcDeleteFilesWithPrefix != nil {
-		mmDeleteFilesWithPrefix.mock.t.Fatalf("ServiceMock.DeleteFilesWithPrefix mock is already set by Set")
-	}
-
-	if mmDeleteFilesWithPrefix.defaultExpectation == nil {
-		mmDeleteFilesWithPrefix.defaultExpectation = &ServiceMockDeleteFilesWithPrefixExpectation{}
-	}
-
-	if mmDeleteFilesWithPrefix.defaultExpectation.paramPtrs != nil {
-		mmDeleteFilesWithPrefix.mock.t.Fatalf("ServiceMock.DeleteFilesWithPrefix mock is already set by ExpectParams functions")
-	}
-
-	mmDeleteFilesWithPrefix.defaultExpectation.params = &ServiceMockDeleteFilesWithPrefixParams{ctx, s1, s2}
-	mmDeleteFilesWithPrefix.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
-	for _, e := range mmDeleteFilesWithPrefix.expectations {
-		if minimock.Equal(e.params, mmDeleteFilesWithPrefix.defaultExpectation.params) {
-			mmDeleteFilesWithPrefix.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmDeleteFilesWithPrefix.defaultExpectation.params)
-		}
-	}
-
-	return mmDeleteFilesWithPrefix
-}
-
-// ExpectCtxParam1 sets up expected param ctx for Service.DeleteFilesWithPrefix
-func (mmDeleteFilesWithPrefix *mServiceMockDeleteFilesWithPrefix) ExpectCtxParam1(ctx context.Context) *mServiceMockDeleteFilesWithPrefix {
-	if mmDeleteFilesWithPrefix.mock.funcDeleteFilesWithPrefix != nil {
-		mmDeleteFilesWithPrefix.mock.t.Fatalf("ServiceMock.DeleteFilesWithPrefix mock is already set by Set")
-	}
-
-	if mmDeleteFilesWithPrefix.defaultExpectation == nil {
-		mmDeleteFilesWithPrefix.defaultExpectation = &ServiceMockDeleteFilesWithPrefixExpectation{}
-	}
-
-	if mmDeleteFilesWithPrefix.defaultExpectation.params != nil {
-		mmDeleteFilesWithPrefix.mock.t.Fatalf("ServiceMock.DeleteFilesWithPrefix mock is already set by Expect")
-	}
-
-	if mmDeleteFilesWithPrefix.defaultExpectation.paramPtrs == nil {
-		mmDeleteFilesWithPrefix.defaultExpectation.paramPtrs = &ServiceMockDeleteFilesWithPrefixParamPtrs{}
-	}
-	mmDeleteFilesWithPrefix.defaultExpectation.paramPtrs.ctx = &ctx
-	mmDeleteFilesWithPrefix.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
-
-	return mmDeleteFilesWithPrefix
-}
-
-// ExpectS1Param2 sets up expected param s1 for Service.DeleteFilesWithPrefix
-func (mmDeleteFilesWithPrefix *mServiceMockDeleteFilesWithPrefix) ExpectS1Param2(s1 string) *mServiceMockDeleteFilesWithPrefix {
-	if mmDeleteFilesWithPrefix.mock.funcDeleteFilesWithPrefix != nil {
-		mmDeleteFilesWithPrefix.mock.t.Fatalf("ServiceMock.DeleteFilesWithPrefix mock is already set by Set")
-	}
-
-	if mmDeleteFilesWithPrefix.defaultExpectation == nil {
-		mmDeleteFilesWithPrefix.defaultExpectation = &ServiceMockDeleteFilesWithPrefixExpectation{}
-	}
-
-	if mmDeleteFilesWithPrefix.defaultExpectation.params != nil {
-		mmDeleteFilesWithPrefix.mock.t.Fatalf("ServiceMock.DeleteFilesWithPrefix mock is already set by Expect")
-	}
-
-	if mmDeleteFilesWithPrefix.defaultExpectation.paramPtrs == nil {
-		mmDeleteFilesWithPrefix.defaultExpectation.paramPtrs = &ServiceMockDeleteFilesWithPrefixParamPtrs{}
-	}
-	mmDeleteFilesWithPrefix.defaultExpectation.paramPtrs.s1 = &s1
-	mmDeleteFilesWithPrefix.defaultExpectation.expectationOrigins.originS1 = minimock.CallerInfo(1)
-
-	return mmDeleteFilesWithPrefix
-}
-
-// ExpectS2Param3 sets up expected param s2 for Service.DeleteFilesWithPrefix
-func (mmDeleteFilesWithPrefix *mServiceMockDeleteFilesWithPrefix) ExpectS2Param3(s2 string) *mServiceMockDeleteFilesWithPrefix {
-	if mmDeleteFilesWithPrefix.mock.funcDeleteFilesWithPrefix != nil {
-		mmDeleteFilesWithPrefix.mock.t.Fatalf("ServiceMock.DeleteFilesWithPrefix mock is already set by Set")
-	}
-
-	if mmDeleteFilesWithPrefix.defaultExpectation == nil {
-		mmDeleteFilesWithPrefix.defaultExpectation = &ServiceMockDeleteFilesWithPrefixExpectation{}
-	}
-
-	if mmDeleteFilesWithPrefix.defaultExpectation.params != nil {
-		mmDeleteFilesWithPrefix.mock.t.Fatalf("ServiceMock.DeleteFilesWithPrefix mock is already set by Expect")
-	}
-
-	if mmDeleteFilesWithPrefix.defaultExpectation.paramPtrs == nil {
-		mmDeleteFilesWithPrefix.defaultExpectation.paramPtrs = &ServiceMockDeleteFilesWithPrefixParamPtrs{}
-	}
-	mmDeleteFilesWithPrefix.defaultExpectation.paramPtrs.s2 = &s2
-	mmDeleteFilesWithPrefix.defaultExpectation.expectationOrigins.originS2 = minimock.CallerInfo(1)
-
-	return mmDeleteFilesWithPrefix
-}
-
-// Inspect accepts an inspector function that has same arguments as the Service.DeleteFilesWithPrefix
-func (mmDeleteFilesWithPrefix *mServiceMockDeleteFilesWithPrefix) Inspect(f func(ctx context.Context, s1 string, s2 string)) *mServiceMockDeleteFilesWithPrefix {
-	if mmDeleteFilesWithPrefix.mock.inspectFuncDeleteFilesWithPrefix != nil {
-		mmDeleteFilesWithPrefix.mock.t.Fatalf("Inspect function is already set for ServiceMock.DeleteFilesWithPrefix")
-	}
-
-	mmDeleteFilesWithPrefix.mock.inspectFuncDeleteFilesWithPrefix = f
-
-	return mmDeleteFilesWithPrefix
-}
-
-// Return sets up results that will be returned by Service.DeleteFilesWithPrefix
-func (mmDeleteFilesWithPrefix *mServiceMockDeleteFilesWithPrefix) Return(err error) *ServiceMock {
-	if mmDeleteFilesWithPrefix.mock.funcDeleteFilesWithPrefix != nil {
-		mmDeleteFilesWithPrefix.mock.t.Fatalf("ServiceMock.DeleteFilesWithPrefix mock is already set by Set")
-	}
-
-	if mmDeleteFilesWithPrefix.defaultExpectation == nil {
-		mmDeleteFilesWithPrefix.defaultExpectation = &ServiceMockDeleteFilesWithPrefixExpectation{mock: mmDeleteFilesWithPrefix.mock}
-	}
-	mmDeleteFilesWithPrefix.defaultExpectation.results = &ServiceMockDeleteFilesWithPrefixResults{err}
-	mmDeleteFilesWithPrefix.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
-	return mmDeleteFilesWithPrefix.mock
-}
-
-// Set uses given function f to mock the Service.DeleteFilesWithPrefix method
-func (mmDeleteFilesWithPrefix *mServiceMockDeleteFilesWithPrefix) Set(f func(ctx context.Context, s1 string, s2 string) (err error)) *ServiceMock {
-	if mmDeleteFilesWithPrefix.defaultExpectation != nil {
-		mmDeleteFilesWithPrefix.mock.t.Fatalf("Default expectation is already set for the Service.DeleteFilesWithPrefix method")
-	}
-
-	if len(mmDeleteFilesWithPrefix.expectations) > 0 {
-		mmDeleteFilesWithPrefix.mock.t.Fatalf("Some expectations are already set for the Service.DeleteFilesWithPrefix method")
-	}
-
-	mmDeleteFilesWithPrefix.mock.funcDeleteFilesWithPrefix = f
-	mmDeleteFilesWithPrefix.mock.funcDeleteFilesWithPrefixOrigin = minimock.CallerInfo(1)
-	return mmDeleteFilesWithPrefix.mock
-}
-
-// When sets expectation for the Service.DeleteFilesWithPrefix which will trigger the result defined by the following
-// Then helper
-func (mmDeleteFilesWithPrefix *mServiceMockDeleteFilesWithPrefix) When(ctx context.Context, s1 string, s2 string) *ServiceMockDeleteFilesWithPrefixExpectation {
-	if mmDeleteFilesWithPrefix.mock.funcDeleteFilesWithPrefix != nil {
-		mmDeleteFilesWithPrefix.mock.t.Fatalf("ServiceMock.DeleteFilesWithPrefix mock is already set by Set")
-	}
-
-	expectation := &ServiceMockDeleteFilesWithPrefixExpectation{
-		mock:               mmDeleteFilesWithPrefix.mock,
-		params:             &ServiceMockDeleteFilesWithPrefixParams{ctx, s1, s2},
-		expectationOrigins: ServiceMockDeleteFilesWithPrefixExpectationOrigins{origin: minimock.CallerInfo(1)},
-	}
-	mmDeleteFilesWithPrefix.expectations = append(mmDeleteFilesWithPrefix.expectations, expectation)
-	return expectation
-}
-
-// Then sets up Service.DeleteFilesWithPrefix return parameters for the expectation previously defined by the When method
-func (e *ServiceMockDeleteFilesWithPrefixExpectation) Then(err error) *ServiceMock {
-	e.results = &ServiceMockDeleteFilesWithPrefixResults{err}
-	return e.mock
-}
-
-// Times sets number of times Service.DeleteFilesWithPrefix should be invoked
-func (mmDeleteFilesWithPrefix *mServiceMockDeleteFilesWithPrefix) Times(n uint64) *mServiceMockDeleteFilesWithPrefix {
-	if n == 0 {
-		mmDeleteFilesWithPrefix.mock.t.Fatalf("Times of ServiceMock.DeleteFilesWithPrefix mock can not be zero")
-	}
-	mm_atomic.StoreUint64(&mmDeleteFilesWithPrefix.expectedInvocations, n)
-	mmDeleteFilesWithPrefix.expectedInvocationsOrigin = minimock.CallerInfo(1)
-	return mmDeleteFilesWithPrefix
-}
-
-func (mmDeleteFilesWithPrefix *mServiceMockDeleteFilesWithPrefix) invocationsDone() bool {
-	if len(mmDeleteFilesWithPrefix.expectations) == 0 && mmDeleteFilesWithPrefix.defaultExpectation == nil && mmDeleteFilesWithPrefix.mock.funcDeleteFilesWithPrefix == nil {
-		return true
-	}
-
-	totalInvocations := mm_atomic.LoadUint64(&mmDeleteFilesWithPrefix.mock.afterDeleteFilesWithPrefixCounter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmDeleteFilesWithPrefix.expectedInvocations)
-
-	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
-}
-
-// DeleteFilesWithPrefix implements mm_service.Service
-func (mmDeleteFilesWithPrefix *ServiceMock) DeleteFilesWithPrefix(ctx context.Context, s1 string, s2 string) (err error) {
-	mm_atomic.AddUint64(&mmDeleteFilesWithPrefix.beforeDeleteFilesWithPrefixCounter, 1)
-	defer mm_atomic.AddUint64(&mmDeleteFilesWithPrefix.afterDeleteFilesWithPrefixCounter, 1)
-
-	mmDeleteFilesWithPrefix.t.Helper()
-
-	if mmDeleteFilesWithPrefix.inspectFuncDeleteFilesWithPrefix != nil {
-		mmDeleteFilesWithPrefix.inspectFuncDeleteFilesWithPrefix(ctx, s1, s2)
-	}
-
-	mm_params := ServiceMockDeleteFilesWithPrefixParams{ctx, s1, s2}
-
-	// Record call args
-	mmDeleteFilesWithPrefix.DeleteFilesWithPrefixMock.mutex.Lock()
-	mmDeleteFilesWithPrefix.DeleteFilesWithPrefixMock.callArgs = append(mmDeleteFilesWithPrefix.DeleteFilesWithPrefixMock.callArgs, &mm_params)
-	mmDeleteFilesWithPrefix.DeleteFilesWithPrefixMock.mutex.Unlock()
-
-	for _, e := range mmDeleteFilesWithPrefix.DeleteFilesWithPrefixMock.expectations {
-		if minimock.Equal(*e.params, mm_params) {
-			mm_atomic.AddUint64(&e.Counter, 1)
-			return e.results.err
-		}
-	}
-
-	if mmDeleteFilesWithPrefix.DeleteFilesWithPrefixMock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmDeleteFilesWithPrefix.DeleteFilesWithPrefixMock.defaultExpectation.Counter, 1)
-		mm_want := mmDeleteFilesWithPrefix.DeleteFilesWithPrefixMock.defaultExpectation.params
-		mm_want_ptrs := mmDeleteFilesWithPrefix.DeleteFilesWithPrefixMock.defaultExpectation.paramPtrs
-
-		mm_got := ServiceMockDeleteFilesWithPrefixParams{ctx, s1, s2}
-
-		if mm_want_ptrs != nil {
-
-			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
-				mmDeleteFilesWithPrefix.t.Errorf("ServiceMock.DeleteFilesWithPrefix got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmDeleteFilesWithPrefix.DeleteFilesWithPrefixMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
-			}
-
-			if mm_want_ptrs.s1 != nil && !minimock.Equal(*mm_want_ptrs.s1, mm_got.s1) {
-				mmDeleteFilesWithPrefix.t.Errorf("ServiceMock.DeleteFilesWithPrefix got unexpected parameter s1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmDeleteFilesWithPrefix.DeleteFilesWithPrefixMock.defaultExpectation.expectationOrigins.originS1, *mm_want_ptrs.s1, mm_got.s1, minimock.Diff(*mm_want_ptrs.s1, mm_got.s1))
-			}
-
-			if mm_want_ptrs.s2 != nil && !minimock.Equal(*mm_want_ptrs.s2, mm_got.s2) {
-				mmDeleteFilesWithPrefix.t.Errorf("ServiceMock.DeleteFilesWithPrefix got unexpected parameter s2, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmDeleteFilesWithPrefix.DeleteFilesWithPrefixMock.defaultExpectation.expectationOrigins.originS2, *mm_want_ptrs.s2, mm_got.s2, minimock.Diff(*mm_want_ptrs.s2, mm_got.s2))
-			}
-
-		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
-			mmDeleteFilesWithPrefix.t.Errorf("ServiceMock.DeleteFilesWithPrefix got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-				mmDeleteFilesWithPrefix.DeleteFilesWithPrefixMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
-		}
-
-		mm_results := mmDeleteFilesWithPrefix.DeleteFilesWithPrefixMock.defaultExpectation.results
-		if mm_results == nil {
-			mmDeleteFilesWithPrefix.t.Fatal("No results are set for the ServiceMock.DeleteFilesWithPrefix")
-		}
-		return (*mm_results).err
-	}
-	if mmDeleteFilesWithPrefix.funcDeleteFilesWithPrefix != nil {
-		return mmDeleteFilesWithPrefix.funcDeleteFilesWithPrefix(ctx, s1, s2)
-	}
-	mmDeleteFilesWithPrefix.t.Fatalf("Unexpected call to ServiceMock.DeleteFilesWithPrefix. %v %v %v", ctx, s1, s2)
-	return
-}
-
-// DeleteFilesWithPrefixAfterCounter returns a count of finished ServiceMock.DeleteFilesWithPrefix invocations
-func (mmDeleteFilesWithPrefix *ServiceMock) DeleteFilesWithPrefixAfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmDeleteFilesWithPrefix.afterDeleteFilesWithPrefixCounter)
-}
-
-// DeleteFilesWithPrefixBeforeCounter returns a count of ServiceMock.DeleteFilesWithPrefix invocations
-func (mmDeleteFilesWithPrefix *ServiceMock) DeleteFilesWithPrefixBeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmDeleteFilesWithPrefix.beforeDeleteFilesWithPrefixCounter)
-}
-
-// Calls returns a list of arguments used in each call to ServiceMock.DeleteFilesWithPrefix.
-// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
-func (mmDeleteFilesWithPrefix *mServiceMockDeleteFilesWithPrefix) Calls() []*ServiceMockDeleteFilesWithPrefixParams {
-	mmDeleteFilesWithPrefix.mutex.RLock()
-
-	argCopy := make([]*ServiceMockDeleteFilesWithPrefixParams, len(mmDeleteFilesWithPrefix.callArgs))
-	copy(argCopy, mmDeleteFilesWithPrefix.callArgs)
-
-	mmDeleteFilesWithPrefix.mutex.RUnlock()
-
-	return argCopy
-}
-
-// MinimockDeleteFilesWithPrefixDone returns true if the count of the DeleteFilesWithPrefix invocations corresponds
-// the number of defined expectations
-func (m *ServiceMock) MinimockDeleteFilesWithPrefixDone() bool {
-	if m.DeleteFilesWithPrefixMock.optional {
-		// Optional methods provide '0 or more' call count restriction.
-		return true
-	}
-
-	for _, e := range m.DeleteFilesWithPrefixMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			return false
-		}
-	}
-
-	return m.DeleteFilesWithPrefixMock.invocationsDone()
-}
-
-// MinimockDeleteFilesWithPrefixInspect logs each unmet expectation
-func (m *ServiceMock) MinimockDeleteFilesWithPrefixInspect() {
-	for _, e := range m.DeleteFilesWithPrefixMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Errorf("Expected call to ServiceMock.DeleteFilesWithPrefix at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
-		}
-	}
-
-	afterDeleteFilesWithPrefixCounter := mm_atomic.LoadUint64(&m.afterDeleteFilesWithPrefixCounter)
-	// if default expectation was set then invocations count should be greater than zero
-	if m.DeleteFilesWithPrefixMock.defaultExpectation != nil && afterDeleteFilesWithPrefixCounter < 1 {
-		if m.DeleteFilesWithPrefixMock.defaultExpectation.params == nil {
-			m.t.Errorf("Expected call to ServiceMock.DeleteFilesWithPrefix at\n%s", m.DeleteFilesWithPrefixMock.defaultExpectation.returnOrigin)
-		} else {
-			m.t.Errorf("Expected call to ServiceMock.DeleteFilesWithPrefix at\n%s with params: %#v", m.DeleteFilesWithPrefixMock.defaultExpectation.expectationOrigins.origin, *m.DeleteFilesWithPrefixMock.defaultExpectation.params)
-		}
-	}
-	// if func was set then invocations count should be greater than zero
-	if m.funcDeleteFilesWithPrefix != nil && afterDeleteFilesWithPrefixCounter < 1 {
-		m.t.Errorf("Expected call to ServiceMock.DeleteFilesWithPrefix at\n%s", m.funcDeleteFilesWithPrefixOrigin)
-	}
-
-	if !m.DeleteFilesWithPrefixMock.invocationsDone() && afterDeleteFilesWithPrefixCounter > 0 {
-		m.t.Errorf("Expected %d calls to ServiceMock.DeleteFilesWithPrefix at\n%s but found %d calls",
-			mm_atomic.LoadUint64(&m.DeleteFilesWithPrefixMock.expectedInvocations), m.DeleteFilesWithPrefixMock.expectedInvocationsOrigin, afterDeleteFilesWithPrefixCounter)
-	}
-}
-
-type mServiceMockDeleteFilesWorkflow struct {
-	optional           bool
-	mock               *ServiceMock
-	defaultExpectation *ServiceMockDeleteFilesWorkflowExpectation
-	expectations       []*ServiceMockDeleteFilesWorkflowExpectation
-
-	expectedInvocations       uint64
-	expectedInvocationsOrigin string
-}
-
-// ServiceMockDeleteFilesWorkflowExpectation specifies expectation struct of the Service.DeleteFilesWorkflow
-type ServiceMockDeleteFilesWorkflowExpectation struct {
-	mock *ServiceMock
-
-	results      *ServiceMockDeleteFilesWorkflowResults
-	returnOrigin string
-	Counter      uint64
-}
-
-// ServiceMockDeleteFilesWorkflowResults contains results of the Service.DeleteFilesWorkflow
-type ServiceMockDeleteFilesWorkflowResults struct {
-	d1 mm_service.DeleteFilesWorkflow
-}
-
-// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
-// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
-// Optional() makes method check to work in '0 or more' mode.
-// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
-// catch the problems when the expected method call is totally skipped during test run.
-func (mmDeleteFilesWorkflow *mServiceMockDeleteFilesWorkflow) Optional() *mServiceMockDeleteFilesWorkflow {
-	mmDeleteFilesWorkflow.optional = true
-	return mmDeleteFilesWorkflow
-}
-
-// Expect sets up expected params for Service.DeleteFilesWorkflow
-func (mmDeleteFilesWorkflow *mServiceMockDeleteFilesWorkflow) Expect() *mServiceMockDeleteFilesWorkflow {
-	if mmDeleteFilesWorkflow.mock.funcDeleteFilesWorkflow != nil {
-		mmDeleteFilesWorkflow.mock.t.Fatalf("ServiceMock.DeleteFilesWorkflow mock is already set by Set")
-	}
-
-	if mmDeleteFilesWorkflow.defaultExpectation == nil {
-		mmDeleteFilesWorkflow.defaultExpectation = &ServiceMockDeleteFilesWorkflowExpectation{}
-	}
-
-	return mmDeleteFilesWorkflow
-}
-
-// Inspect accepts an inspector function that has same arguments as the Service.DeleteFilesWorkflow
-func (mmDeleteFilesWorkflow *mServiceMockDeleteFilesWorkflow) Inspect(f func()) *mServiceMockDeleteFilesWorkflow {
-	if mmDeleteFilesWorkflow.mock.inspectFuncDeleteFilesWorkflow != nil {
-		mmDeleteFilesWorkflow.mock.t.Fatalf("Inspect function is already set for ServiceMock.DeleteFilesWorkflow")
-	}
-
-	mmDeleteFilesWorkflow.mock.inspectFuncDeleteFilesWorkflow = f
-
-	return mmDeleteFilesWorkflow
-}
-
-// Return sets up results that will be returned by Service.DeleteFilesWorkflow
-func (mmDeleteFilesWorkflow *mServiceMockDeleteFilesWorkflow) Return(d1 mm_service.DeleteFilesWorkflow) *ServiceMock {
-	if mmDeleteFilesWorkflow.mock.funcDeleteFilesWorkflow != nil {
-		mmDeleteFilesWorkflow.mock.t.Fatalf("ServiceMock.DeleteFilesWorkflow mock is already set by Set")
-	}
-
-	if mmDeleteFilesWorkflow.defaultExpectation == nil {
-		mmDeleteFilesWorkflow.defaultExpectation = &ServiceMockDeleteFilesWorkflowExpectation{mock: mmDeleteFilesWorkflow.mock}
-	}
-	mmDeleteFilesWorkflow.defaultExpectation.results = &ServiceMockDeleteFilesWorkflowResults{d1}
-	mmDeleteFilesWorkflow.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
-	return mmDeleteFilesWorkflow.mock
-}
-
-// Set uses given function f to mock the Service.DeleteFilesWorkflow method
-func (mmDeleteFilesWorkflow *mServiceMockDeleteFilesWorkflow) Set(f func() (d1 mm_service.DeleteFilesWorkflow)) *ServiceMock {
-	if mmDeleteFilesWorkflow.defaultExpectation != nil {
-		mmDeleteFilesWorkflow.mock.t.Fatalf("Default expectation is already set for the Service.DeleteFilesWorkflow method")
-	}
-
-	if len(mmDeleteFilesWorkflow.expectations) > 0 {
-		mmDeleteFilesWorkflow.mock.t.Fatalf("Some expectations are already set for the Service.DeleteFilesWorkflow method")
-	}
-
-	mmDeleteFilesWorkflow.mock.funcDeleteFilesWorkflow = f
-	mmDeleteFilesWorkflow.mock.funcDeleteFilesWorkflowOrigin = minimock.CallerInfo(1)
-	return mmDeleteFilesWorkflow.mock
-}
-
-// Times sets number of times Service.DeleteFilesWorkflow should be invoked
-func (mmDeleteFilesWorkflow *mServiceMockDeleteFilesWorkflow) Times(n uint64) *mServiceMockDeleteFilesWorkflow {
-	if n == 0 {
-		mmDeleteFilesWorkflow.mock.t.Fatalf("Times of ServiceMock.DeleteFilesWorkflow mock can not be zero")
-	}
-	mm_atomic.StoreUint64(&mmDeleteFilesWorkflow.expectedInvocations, n)
-	mmDeleteFilesWorkflow.expectedInvocationsOrigin = minimock.CallerInfo(1)
-	return mmDeleteFilesWorkflow
-}
-
-func (mmDeleteFilesWorkflow *mServiceMockDeleteFilesWorkflow) invocationsDone() bool {
-	if len(mmDeleteFilesWorkflow.expectations) == 0 && mmDeleteFilesWorkflow.defaultExpectation == nil && mmDeleteFilesWorkflow.mock.funcDeleteFilesWorkflow == nil {
-		return true
-	}
-
-	totalInvocations := mm_atomic.LoadUint64(&mmDeleteFilesWorkflow.mock.afterDeleteFilesWorkflowCounter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmDeleteFilesWorkflow.expectedInvocations)
-
-	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
-}
-
-// DeleteFilesWorkflow implements mm_service.Service
-func (mmDeleteFilesWorkflow *ServiceMock) DeleteFilesWorkflow() (d1 mm_service.DeleteFilesWorkflow) {
-	mm_atomic.AddUint64(&mmDeleteFilesWorkflow.beforeDeleteFilesWorkflowCounter, 1)
-	defer mm_atomic.AddUint64(&mmDeleteFilesWorkflow.afterDeleteFilesWorkflowCounter, 1)
-
-	mmDeleteFilesWorkflow.t.Helper()
-
-	if mmDeleteFilesWorkflow.inspectFuncDeleteFilesWorkflow != nil {
-		mmDeleteFilesWorkflow.inspectFuncDeleteFilesWorkflow()
-	}
-
-	if mmDeleteFilesWorkflow.DeleteFilesWorkflowMock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmDeleteFilesWorkflow.DeleteFilesWorkflowMock.defaultExpectation.Counter, 1)
-
-		mm_results := mmDeleteFilesWorkflow.DeleteFilesWorkflowMock.defaultExpectation.results
-		if mm_results == nil {
-			mmDeleteFilesWorkflow.t.Fatal("No results are set for the ServiceMock.DeleteFilesWorkflow")
-		}
-		return (*mm_results).d1
-	}
-	if mmDeleteFilesWorkflow.funcDeleteFilesWorkflow != nil {
-		return mmDeleteFilesWorkflow.funcDeleteFilesWorkflow()
-	}
-	mmDeleteFilesWorkflow.t.Fatalf("Unexpected call to ServiceMock.DeleteFilesWorkflow.")
-	return
-}
-
-// DeleteFilesWorkflowAfterCounter returns a count of finished ServiceMock.DeleteFilesWorkflow invocations
-func (mmDeleteFilesWorkflow *ServiceMock) DeleteFilesWorkflowAfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmDeleteFilesWorkflow.afterDeleteFilesWorkflowCounter)
-}
-
-// DeleteFilesWorkflowBeforeCounter returns a count of ServiceMock.DeleteFilesWorkflow invocations
-func (mmDeleteFilesWorkflow *ServiceMock) DeleteFilesWorkflowBeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmDeleteFilesWorkflow.beforeDeleteFilesWorkflowCounter)
-}
-
-// MinimockDeleteFilesWorkflowDone returns true if the count of the DeleteFilesWorkflow invocations corresponds
-// the number of defined expectations
-func (m *ServiceMock) MinimockDeleteFilesWorkflowDone() bool {
-	if m.DeleteFilesWorkflowMock.optional {
-		// Optional methods provide '0 or more' call count restriction.
-		return true
-	}
-
-	for _, e := range m.DeleteFilesWorkflowMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			return false
-		}
-	}
-
-	return m.DeleteFilesWorkflowMock.invocationsDone()
-}
-
-// MinimockDeleteFilesWorkflowInspect logs each unmet expectation
-func (m *ServiceMock) MinimockDeleteFilesWorkflowInspect() {
-	for _, e := range m.DeleteFilesWorkflowMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Error("Expected call to ServiceMock.DeleteFilesWorkflow")
-		}
-	}
-
-	afterDeleteFilesWorkflowCounter := mm_atomic.LoadUint64(&m.afterDeleteFilesWorkflowCounter)
-	// if default expectation was set then invocations count should be greater than zero
-	if m.DeleteFilesWorkflowMock.defaultExpectation != nil && afterDeleteFilesWorkflowCounter < 1 {
-		m.t.Errorf("Expected call to ServiceMock.DeleteFilesWorkflow at\n%s", m.DeleteFilesWorkflowMock.defaultExpectation.returnOrigin)
-	}
-	// if func was set then invocations count should be greater than zero
-	if m.funcDeleteFilesWorkflow != nil && afterDeleteFilesWorkflowCounter < 1 {
-		m.t.Errorf("Expected call to ServiceMock.DeleteFilesWorkflow at\n%s", m.funcDeleteFilesWorkflowOrigin)
-	}
-
-	if !m.DeleteFilesWorkflowMock.invocationsDone() && afterDeleteFilesWorkflowCounter > 0 {
-		m.t.Errorf("Expected %d calls to ServiceMock.DeleteFilesWorkflow at\n%s but found %d calls",
-			mm_atomic.LoadUint64(&m.DeleteFilesWorkflowMock.expectedInvocations), m.DeleteFilesWorkflowMock.expectedInvocationsOrigin, afterDeleteFilesWorkflowCounter)
-	}
-}
-
-type mServiceMockDeleteKnowledgeBase struct {
-	optional           bool
-	mock               *ServiceMock
-	defaultExpectation *ServiceMockDeleteKnowledgeBaseExpectation
-	expectations       []*ServiceMockDeleteKnowledgeBaseExpectation
-
-	callArgs []*ServiceMockDeleteKnowledgeBaseParams
-	mutex    sync.RWMutex
-
-	expectedInvocations       uint64
-	expectedInvocationsOrigin string
-}
-
-// ServiceMockDeleteKnowledgeBaseExpectation specifies expectation struct of the Service.DeleteKnowledgeBase
-type ServiceMockDeleteKnowledgeBaseExpectation struct {
-	mock               *ServiceMock
-	params             *ServiceMockDeleteKnowledgeBaseParams
-	paramPtrs          *ServiceMockDeleteKnowledgeBaseParamPtrs
-	expectationOrigins ServiceMockDeleteKnowledgeBaseExpectationOrigins
-	results            *ServiceMockDeleteKnowledgeBaseResults
-	returnOrigin       string
-	Counter            uint64
-}
-
-// ServiceMockDeleteKnowledgeBaseParams contains parameters of the Service.DeleteKnowledgeBase
-type ServiceMockDeleteKnowledgeBaseParams struct {
-	ctx context.Context
-	s1  string
-}
-
-// ServiceMockDeleteKnowledgeBaseParamPtrs contains pointers to parameters of the Service.DeleteKnowledgeBase
-type ServiceMockDeleteKnowledgeBaseParamPtrs struct {
-	ctx *context.Context
-	s1  *string
-}
-
-// ServiceMockDeleteKnowledgeBaseResults contains results of the Service.DeleteKnowledgeBase
-type ServiceMockDeleteKnowledgeBaseResults struct {
-	err error
-}
-
-// ServiceMockDeleteKnowledgeBaseOrigins contains origins of expectations of the Service.DeleteKnowledgeBase
-type ServiceMockDeleteKnowledgeBaseExpectationOrigins struct {
-	origin    string
-	originCtx string
-	originS1  string
-}
-
-// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
-// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
-// Optional() makes method check to work in '0 or more' mode.
-// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
-// catch the problems when the expected method call is totally skipped during test run.
-func (mmDeleteKnowledgeBase *mServiceMockDeleteKnowledgeBase) Optional() *mServiceMockDeleteKnowledgeBase {
-	mmDeleteKnowledgeBase.optional = true
-	return mmDeleteKnowledgeBase
-}
-
-// Expect sets up expected params for Service.DeleteKnowledgeBase
-func (mmDeleteKnowledgeBase *mServiceMockDeleteKnowledgeBase) Expect(ctx context.Context, s1 string) *mServiceMockDeleteKnowledgeBase {
-	if mmDeleteKnowledgeBase.mock.funcDeleteKnowledgeBase != nil {
-		mmDeleteKnowledgeBase.mock.t.Fatalf("ServiceMock.DeleteKnowledgeBase mock is already set by Set")
-	}
-
-	if mmDeleteKnowledgeBase.defaultExpectation == nil {
-		mmDeleteKnowledgeBase.defaultExpectation = &ServiceMockDeleteKnowledgeBaseExpectation{}
-	}
-
-	if mmDeleteKnowledgeBase.defaultExpectation.paramPtrs != nil {
-		mmDeleteKnowledgeBase.mock.t.Fatalf("ServiceMock.DeleteKnowledgeBase mock is already set by ExpectParams functions")
-	}
-
-	mmDeleteKnowledgeBase.defaultExpectation.params = &ServiceMockDeleteKnowledgeBaseParams{ctx, s1}
-	mmDeleteKnowledgeBase.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
-	for _, e := range mmDeleteKnowledgeBase.expectations {
-		if minimock.Equal(e.params, mmDeleteKnowledgeBase.defaultExpectation.params) {
-			mmDeleteKnowledgeBase.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmDeleteKnowledgeBase.defaultExpectation.params)
-		}
-	}
-
-	return mmDeleteKnowledgeBase
-}
-
-// ExpectCtxParam1 sets up expected param ctx for Service.DeleteKnowledgeBase
-func (mmDeleteKnowledgeBase *mServiceMockDeleteKnowledgeBase) ExpectCtxParam1(ctx context.Context) *mServiceMockDeleteKnowledgeBase {
-	if mmDeleteKnowledgeBase.mock.funcDeleteKnowledgeBase != nil {
-		mmDeleteKnowledgeBase.mock.t.Fatalf("ServiceMock.DeleteKnowledgeBase mock is already set by Set")
-	}
-
-	if mmDeleteKnowledgeBase.defaultExpectation == nil {
-		mmDeleteKnowledgeBase.defaultExpectation = &ServiceMockDeleteKnowledgeBaseExpectation{}
-	}
-
-	if mmDeleteKnowledgeBase.defaultExpectation.params != nil {
-		mmDeleteKnowledgeBase.mock.t.Fatalf("ServiceMock.DeleteKnowledgeBase mock is already set by Expect")
-	}
-
-	if mmDeleteKnowledgeBase.defaultExpectation.paramPtrs == nil {
-		mmDeleteKnowledgeBase.defaultExpectation.paramPtrs = &ServiceMockDeleteKnowledgeBaseParamPtrs{}
-	}
-	mmDeleteKnowledgeBase.defaultExpectation.paramPtrs.ctx = &ctx
-	mmDeleteKnowledgeBase.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
-
-	return mmDeleteKnowledgeBase
-}
-
-// ExpectS1Param2 sets up expected param s1 for Service.DeleteKnowledgeBase
-func (mmDeleteKnowledgeBase *mServiceMockDeleteKnowledgeBase) ExpectS1Param2(s1 string) *mServiceMockDeleteKnowledgeBase {
-	if mmDeleteKnowledgeBase.mock.funcDeleteKnowledgeBase != nil {
-		mmDeleteKnowledgeBase.mock.t.Fatalf("ServiceMock.DeleteKnowledgeBase mock is already set by Set")
-	}
-
-	if mmDeleteKnowledgeBase.defaultExpectation == nil {
-		mmDeleteKnowledgeBase.defaultExpectation = &ServiceMockDeleteKnowledgeBaseExpectation{}
-	}
-
-	if mmDeleteKnowledgeBase.defaultExpectation.params != nil {
-		mmDeleteKnowledgeBase.mock.t.Fatalf("ServiceMock.DeleteKnowledgeBase mock is already set by Expect")
-	}
-
-	if mmDeleteKnowledgeBase.defaultExpectation.paramPtrs == nil {
-		mmDeleteKnowledgeBase.defaultExpectation.paramPtrs = &ServiceMockDeleteKnowledgeBaseParamPtrs{}
-	}
-	mmDeleteKnowledgeBase.defaultExpectation.paramPtrs.s1 = &s1
-	mmDeleteKnowledgeBase.defaultExpectation.expectationOrigins.originS1 = minimock.CallerInfo(1)
-
-	return mmDeleteKnowledgeBase
-}
-
-// Inspect accepts an inspector function that has same arguments as the Service.DeleteKnowledgeBase
-func (mmDeleteKnowledgeBase *mServiceMockDeleteKnowledgeBase) Inspect(f func(ctx context.Context, s1 string)) *mServiceMockDeleteKnowledgeBase {
-	if mmDeleteKnowledgeBase.mock.inspectFuncDeleteKnowledgeBase != nil {
-		mmDeleteKnowledgeBase.mock.t.Fatalf("Inspect function is already set for ServiceMock.DeleteKnowledgeBase")
-	}
-
-	mmDeleteKnowledgeBase.mock.inspectFuncDeleteKnowledgeBase = f
-
-	return mmDeleteKnowledgeBase
-}
-
-// Return sets up results that will be returned by Service.DeleteKnowledgeBase
-func (mmDeleteKnowledgeBase *mServiceMockDeleteKnowledgeBase) Return(err error) *ServiceMock {
-	if mmDeleteKnowledgeBase.mock.funcDeleteKnowledgeBase != nil {
-		mmDeleteKnowledgeBase.mock.t.Fatalf("ServiceMock.DeleteKnowledgeBase mock is already set by Set")
-	}
-
-	if mmDeleteKnowledgeBase.defaultExpectation == nil {
-		mmDeleteKnowledgeBase.defaultExpectation = &ServiceMockDeleteKnowledgeBaseExpectation{mock: mmDeleteKnowledgeBase.mock}
-	}
-	mmDeleteKnowledgeBase.defaultExpectation.results = &ServiceMockDeleteKnowledgeBaseResults{err}
-	mmDeleteKnowledgeBase.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
-	return mmDeleteKnowledgeBase.mock
-}
-
-// Set uses given function f to mock the Service.DeleteKnowledgeBase method
-func (mmDeleteKnowledgeBase *mServiceMockDeleteKnowledgeBase) Set(f func(ctx context.Context, s1 string) (err error)) *ServiceMock {
-	if mmDeleteKnowledgeBase.defaultExpectation != nil {
-		mmDeleteKnowledgeBase.mock.t.Fatalf("Default expectation is already set for the Service.DeleteKnowledgeBase method")
-	}
-
-	if len(mmDeleteKnowledgeBase.expectations) > 0 {
-		mmDeleteKnowledgeBase.mock.t.Fatalf("Some expectations are already set for the Service.DeleteKnowledgeBase method")
-	}
-
-	mmDeleteKnowledgeBase.mock.funcDeleteKnowledgeBase = f
-	mmDeleteKnowledgeBase.mock.funcDeleteKnowledgeBaseOrigin = minimock.CallerInfo(1)
-	return mmDeleteKnowledgeBase.mock
-}
-
-// When sets expectation for the Service.DeleteKnowledgeBase which will trigger the result defined by the following
-// Then helper
-func (mmDeleteKnowledgeBase *mServiceMockDeleteKnowledgeBase) When(ctx context.Context, s1 string) *ServiceMockDeleteKnowledgeBaseExpectation {
-	if mmDeleteKnowledgeBase.mock.funcDeleteKnowledgeBase != nil {
-		mmDeleteKnowledgeBase.mock.t.Fatalf("ServiceMock.DeleteKnowledgeBase mock is already set by Set")
-	}
-
-	expectation := &ServiceMockDeleteKnowledgeBaseExpectation{
-		mock:               mmDeleteKnowledgeBase.mock,
-		params:             &ServiceMockDeleteKnowledgeBaseParams{ctx, s1},
-		expectationOrigins: ServiceMockDeleteKnowledgeBaseExpectationOrigins{origin: minimock.CallerInfo(1)},
-	}
-	mmDeleteKnowledgeBase.expectations = append(mmDeleteKnowledgeBase.expectations, expectation)
-	return expectation
-}
-
-// Then sets up Service.DeleteKnowledgeBase return parameters for the expectation previously defined by the When method
-func (e *ServiceMockDeleteKnowledgeBaseExpectation) Then(err error) *ServiceMock {
-	e.results = &ServiceMockDeleteKnowledgeBaseResults{err}
-	return e.mock
-}
-
-// Times sets number of times Service.DeleteKnowledgeBase should be invoked
-func (mmDeleteKnowledgeBase *mServiceMockDeleteKnowledgeBase) Times(n uint64) *mServiceMockDeleteKnowledgeBase {
-	if n == 0 {
-		mmDeleteKnowledgeBase.mock.t.Fatalf("Times of ServiceMock.DeleteKnowledgeBase mock can not be zero")
-	}
-	mm_atomic.StoreUint64(&mmDeleteKnowledgeBase.expectedInvocations, n)
-	mmDeleteKnowledgeBase.expectedInvocationsOrigin = minimock.CallerInfo(1)
-	return mmDeleteKnowledgeBase
-}
-
-func (mmDeleteKnowledgeBase *mServiceMockDeleteKnowledgeBase) invocationsDone() bool {
-	if len(mmDeleteKnowledgeBase.expectations) == 0 && mmDeleteKnowledgeBase.defaultExpectation == nil && mmDeleteKnowledgeBase.mock.funcDeleteKnowledgeBase == nil {
-		return true
-	}
-
-	totalInvocations := mm_atomic.LoadUint64(&mmDeleteKnowledgeBase.mock.afterDeleteKnowledgeBaseCounter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmDeleteKnowledgeBase.expectedInvocations)
-
-	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
-}
-
-// DeleteKnowledgeBase implements mm_service.Service
-func (mmDeleteKnowledgeBase *ServiceMock) DeleteKnowledgeBase(ctx context.Context, s1 string) (err error) {
-	mm_atomic.AddUint64(&mmDeleteKnowledgeBase.beforeDeleteKnowledgeBaseCounter, 1)
-	defer mm_atomic.AddUint64(&mmDeleteKnowledgeBase.afterDeleteKnowledgeBaseCounter, 1)
-
-	mmDeleteKnowledgeBase.t.Helper()
-
-	if mmDeleteKnowledgeBase.inspectFuncDeleteKnowledgeBase != nil {
-		mmDeleteKnowledgeBase.inspectFuncDeleteKnowledgeBase(ctx, s1)
-	}
-
-	mm_params := ServiceMockDeleteKnowledgeBaseParams{ctx, s1}
-
-	// Record call args
-	mmDeleteKnowledgeBase.DeleteKnowledgeBaseMock.mutex.Lock()
-	mmDeleteKnowledgeBase.DeleteKnowledgeBaseMock.callArgs = append(mmDeleteKnowledgeBase.DeleteKnowledgeBaseMock.callArgs, &mm_params)
-	mmDeleteKnowledgeBase.DeleteKnowledgeBaseMock.mutex.Unlock()
-
-	for _, e := range mmDeleteKnowledgeBase.DeleteKnowledgeBaseMock.expectations {
-		if minimock.Equal(*e.params, mm_params) {
-			mm_atomic.AddUint64(&e.Counter, 1)
-			return e.results.err
-		}
-	}
-
-	if mmDeleteKnowledgeBase.DeleteKnowledgeBaseMock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmDeleteKnowledgeBase.DeleteKnowledgeBaseMock.defaultExpectation.Counter, 1)
-		mm_want := mmDeleteKnowledgeBase.DeleteKnowledgeBaseMock.defaultExpectation.params
-		mm_want_ptrs := mmDeleteKnowledgeBase.DeleteKnowledgeBaseMock.defaultExpectation.paramPtrs
-
-		mm_got := ServiceMockDeleteKnowledgeBaseParams{ctx, s1}
-
-		if mm_want_ptrs != nil {
-
-			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
-				mmDeleteKnowledgeBase.t.Errorf("ServiceMock.DeleteKnowledgeBase got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmDeleteKnowledgeBase.DeleteKnowledgeBaseMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
-			}
-
-			if mm_want_ptrs.s1 != nil && !minimock.Equal(*mm_want_ptrs.s1, mm_got.s1) {
-				mmDeleteKnowledgeBase.t.Errorf("ServiceMock.DeleteKnowledgeBase got unexpected parameter s1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmDeleteKnowledgeBase.DeleteKnowledgeBaseMock.defaultExpectation.expectationOrigins.originS1, *mm_want_ptrs.s1, mm_got.s1, minimock.Diff(*mm_want_ptrs.s1, mm_got.s1))
-			}
-
-		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
-			mmDeleteKnowledgeBase.t.Errorf("ServiceMock.DeleteKnowledgeBase got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-				mmDeleteKnowledgeBase.DeleteKnowledgeBaseMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
-		}
-
-		mm_results := mmDeleteKnowledgeBase.DeleteKnowledgeBaseMock.defaultExpectation.results
-		if mm_results == nil {
-			mmDeleteKnowledgeBase.t.Fatal("No results are set for the ServiceMock.DeleteKnowledgeBase")
-		}
-		return (*mm_results).err
-	}
-	if mmDeleteKnowledgeBase.funcDeleteKnowledgeBase != nil {
-		return mmDeleteKnowledgeBase.funcDeleteKnowledgeBase(ctx, s1)
-	}
-	mmDeleteKnowledgeBase.t.Fatalf("Unexpected call to ServiceMock.DeleteKnowledgeBase. %v %v", ctx, s1)
-	return
-}
-
-// DeleteKnowledgeBaseAfterCounter returns a count of finished ServiceMock.DeleteKnowledgeBase invocations
-func (mmDeleteKnowledgeBase *ServiceMock) DeleteKnowledgeBaseAfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmDeleteKnowledgeBase.afterDeleteKnowledgeBaseCounter)
-}
-
-// DeleteKnowledgeBaseBeforeCounter returns a count of ServiceMock.DeleteKnowledgeBase invocations
-func (mmDeleteKnowledgeBase *ServiceMock) DeleteKnowledgeBaseBeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmDeleteKnowledgeBase.beforeDeleteKnowledgeBaseCounter)
-}
-
-// Calls returns a list of arguments used in each call to ServiceMock.DeleteKnowledgeBase.
-// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
-func (mmDeleteKnowledgeBase *mServiceMockDeleteKnowledgeBase) Calls() []*ServiceMockDeleteKnowledgeBaseParams {
-	mmDeleteKnowledgeBase.mutex.RLock()
-
-	argCopy := make([]*ServiceMockDeleteKnowledgeBaseParams, len(mmDeleteKnowledgeBase.callArgs))
-	copy(argCopy, mmDeleteKnowledgeBase.callArgs)
-
-	mmDeleteKnowledgeBase.mutex.RUnlock()
-
-	return argCopy
-}
-
-// MinimockDeleteKnowledgeBaseDone returns true if the count of the DeleteKnowledgeBase invocations corresponds
-// the number of defined expectations
-func (m *ServiceMock) MinimockDeleteKnowledgeBaseDone() bool {
-	if m.DeleteKnowledgeBaseMock.optional {
-		// Optional methods provide '0 or more' call count restriction.
-		return true
-	}
-
-	for _, e := range m.DeleteKnowledgeBaseMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			return false
-		}
-	}
-
-	return m.DeleteKnowledgeBaseMock.invocationsDone()
-}
-
-// MinimockDeleteKnowledgeBaseInspect logs each unmet expectation
-func (m *ServiceMock) MinimockDeleteKnowledgeBaseInspect() {
-	for _, e := range m.DeleteKnowledgeBaseMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Errorf("Expected call to ServiceMock.DeleteKnowledgeBase at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
-		}
-	}
-
-	afterDeleteKnowledgeBaseCounter := mm_atomic.LoadUint64(&m.afterDeleteKnowledgeBaseCounter)
-	// if default expectation was set then invocations count should be greater than zero
-	if m.DeleteKnowledgeBaseMock.defaultExpectation != nil && afterDeleteKnowledgeBaseCounter < 1 {
-		if m.DeleteKnowledgeBaseMock.defaultExpectation.params == nil {
-			m.t.Errorf("Expected call to ServiceMock.DeleteKnowledgeBase at\n%s", m.DeleteKnowledgeBaseMock.defaultExpectation.returnOrigin)
-		} else {
-			m.t.Errorf("Expected call to ServiceMock.DeleteKnowledgeBase at\n%s with params: %#v", m.DeleteKnowledgeBaseMock.defaultExpectation.expectationOrigins.origin, *m.DeleteKnowledgeBaseMock.defaultExpectation.params)
-		}
-	}
-	// if func was set then invocations count should be greater than zero
-	if m.funcDeleteKnowledgeBase != nil && afterDeleteKnowledgeBaseCounter < 1 {
-		m.t.Errorf("Expected call to ServiceMock.DeleteKnowledgeBase at\n%s", m.funcDeleteKnowledgeBaseOrigin)
-	}
-
-	if !m.DeleteKnowledgeBaseMock.invocationsDone() && afterDeleteKnowledgeBaseCounter > 0 {
-		m.t.Errorf("Expected %d calls to ServiceMock.DeleteKnowledgeBase at\n%s but found %d calls",
-			mm_atomic.LoadUint64(&m.DeleteKnowledgeBaseMock.expectedInvocations), m.DeleteKnowledgeBaseMock.expectedInvocationsOrigin, afterDeleteKnowledgeBaseCounter)
-	}
-}
-
 type mServiceMockDeleteRepositoryTag struct {
 	optional           bool
 	mock               *ServiceMock
@@ -5075,612 +3076,59 @@ func (m *ServiceMock) MinimockDeleteRepositoryTagInspect() {
 	}
 }
 
-type mServiceMockDeleteTextChunksByFileUID struct {
+type mServiceMockEmbedTexts struct {
 	optional           bool
 	mock               *ServiceMock
-	defaultExpectation *ServiceMockDeleteTextChunksByFileUIDExpectation
-	expectations       []*ServiceMockDeleteTextChunksByFileUIDExpectation
+	defaultExpectation *ServiceMockEmbedTextsExpectation
+	expectations       []*ServiceMockEmbedTextsExpectation
 
-	callArgs []*ServiceMockDeleteTextChunksByFileUIDParams
+	callArgs []*ServiceMockEmbedTextsParams
 	mutex    sync.RWMutex
 
 	expectedInvocations       uint64
 	expectedInvocationsOrigin string
 }
 
-// ServiceMockDeleteTextChunksByFileUIDExpectation specifies expectation struct of the Service.DeleteTextChunksByFileUID
-type ServiceMockDeleteTextChunksByFileUIDExpectation struct {
+// ServiceMockEmbedTextsExpectation specifies expectation struct of the Service.EmbedTexts
+type ServiceMockEmbedTextsExpectation struct {
 	mock               *ServiceMock
-	params             *ServiceMockDeleteTextChunksByFileUIDParams
-	paramPtrs          *ServiceMockDeleteTextChunksByFileUIDParamPtrs
-	expectationOrigins ServiceMockDeleteTextChunksByFileUIDExpectationOrigins
-	results            *ServiceMockDeleteTextChunksByFileUIDResults
+	params             *ServiceMockEmbedTextsParams
+	paramPtrs          *ServiceMockEmbedTextsParamPtrs
+	expectationOrigins ServiceMockEmbedTextsExpectationOrigins
+	results            *ServiceMockEmbedTextsResults
 	returnOrigin       string
 	Counter            uint64
 }
 
-// ServiceMockDeleteTextChunksByFileUIDParams contains parameters of the Service.DeleteTextChunksByFileUID
-type ServiceMockDeleteTextChunksByFileUIDParams struct {
-	ctx context.Context
-	u1  uuid.UUID
-	u2  uuid.UUID
-}
-
-// ServiceMockDeleteTextChunksByFileUIDParamPtrs contains pointers to parameters of the Service.DeleteTextChunksByFileUID
-type ServiceMockDeleteTextChunksByFileUIDParamPtrs struct {
-	ctx *context.Context
-	u1  *uuid.UUID
-	u2  *uuid.UUID
-}
-
-// ServiceMockDeleteTextChunksByFileUIDResults contains results of the Service.DeleteTextChunksByFileUID
-type ServiceMockDeleteTextChunksByFileUIDResults struct {
-	err error
-}
-
-// ServiceMockDeleteTextChunksByFileUIDOrigins contains origins of expectations of the Service.DeleteTextChunksByFileUID
-type ServiceMockDeleteTextChunksByFileUIDExpectationOrigins struct {
-	origin    string
-	originCtx string
-	originU1  string
-	originU2  string
-}
-
-// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
-// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
-// Optional() makes method check to work in '0 or more' mode.
-// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
-// catch the problems when the expected method call is totally skipped during test run.
-func (mmDeleteTextChunksByFileUID *mServiceMockDeleteTextChunksByFileUID) Optional() *mServiceMockDeleteTextChunksByFileUID {
-	mmDeleteTextChunksByFileUID.optional = true
-	return mmDeleteTextChunksByFileUID
-}
-
-// Expect sets up expected params for Service.DeleteTextChunksByFileUID
-func (mmDeleteTextChunksByFileUID *mServiceMockDeleteTextChunksByFileUID) Expect(ctx context.Context, u1 uuid.UUID, u2 uuid.UUID) *mServiceMockDeleteTextChunksByFileUID {
-	if mmDeleteTextChunksByFileUID.mock.funcDeleteTextChunksByFileUID != nil {
-		mmDeleteTextChunksByFileUID.mock.t.Fatalf("ServiceMock.DeleteTextChunksByFileUID mock is already set by Set")
-	}
-
-	if mmDeleteTextChunksByFileUID.defaultExpectation == nil {
-		mmDeleteTextChunksByFileUID.defaultExpectation = &ServiceMockDeleteTextChunksByFileUIDExpectation{}
-	}
-
-	if mmDeleteTextChunksByFileUID.defaultExpectation.paramPtrs != nil {
-		mmDeleteTextChunksByFileUID.mock.t.Fatalf("ServiceMock.DeleteTextChunksByFileUID mock is already set by ExpectParams functions")
-	}
-
-	mmDeleteTextChunksByFileUID.defaultExpectation.params = &ServiceMockDeleteTextChunksByFileUIDParams{ctx, u1, u2}
-	mmDeleteTextChunksByFileUID.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
-	for _, e := range mmDeleteTextChunksByFileUID.expectations {
-		if minimock.Equal(e.params, mmDeleteTextChunksByFileUID.defaultExpectation.params) {
-			mmDeleteTextChunksByFileUID.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmDeleteTextChunksByFileUID.defaultExpectation.params)
-		}
-	}
-
-	return mmDeleteTextChunksByFileUID
-}
-
-// ExpectCtxParam1 sets up expected param ctx for Service.DeleteTextChunksByFileUID
-func (mmDeleteTextChunksByFileUID *mServiceMockDeleteTextChunksByFileUID) ExpectCtxParam1(ctx context.Context) *mServiceMockDeleteTextChunksByFileUID {
-	if mmDeleteTextChunksByFileUID.mock.funcDeleteTextChunksByFileUID != nil {
-		mmDeleteTextChunksByFileUID.mock.t.Fatalf("ServiceMock.DeleteTextChunksByFileUID mock is already set by Set")
-	}
-
-	if mmDeleteTextChunksByFileUID.defaultExpectation == nil {
-		mmDeleteTextChunksByFileUID.defaultExpectation = &ServiceMockDeleteTextChunksByFileUIDExpectation{}
-	}
-
-	if mmDeleteTextChunksByFileUID.defaultExpectation.params != nil {
-		mmDeleteTextChunksByFileUID.mock.t.Fatalf("ServiceMock.DeleteTextChunksByFileUID mock is already set by Expect")
-	}
-
-	if mmDeleteTextChunksByFileUID.defaultExpectation.paramPtrs == nil {
-		mmDeleteTextChunksByFileUID.defaultExpectation.paramPtrs = &ServiceMockDeleteTextChunksByFileUIDParamPtrs{}
-	}
-	mmDeleteTextChunksByFileUID.defaultExpectation.paramPtrs.ctx = &ctx
-	mmDeleteTextChunksByFileUID.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
-
-	return mmDeleteTextChunksByFileUID
-}
-
-// ExpectU1Param2 sets up expected param u1 for Service.DeleteTextChunksByFileUID
-func (mmDeleteTextChunksByFileUID *mServiceMockDeleteTextChunksByFileUID) ExpectU1Param2(u1 uuid.UUID) *mServiceMockDeleteTextChunksByFileUID {
-	if mmDeleteTextChunksByFileUID.mock.funcDeleteTextChunksByFileUID != nil {
-		mmDeleteTextChunksByFileUID.mock.t.Fatalf("ServiceMock.DeleteTextChunksByFileUID mock is already set by Set")
-	}
-
-	if mmDeleteTextChunksByFileUID.defaultExpectation == nil {
-		mmDeleteTextChunksByFileUID.defaultExpectation = &ServiceMockDeleteTextChunksByFileUIDExpectation{}
-	}
-
-	if mmDeleteTextChunksByFileUID.defaultExpectation.params != nil {
-		mmDeleteTextChunksByFileUID.mock.t.Fatalf("ServiceMock.DeleteTextChunksByFileUID mock is already set by Expect")
-	}
-
-	if mmDeleteTextChunksByFileUID.defaultExpectation.paramPtrs == nil {
-		mmDeleteTextChunksByFileUID.defaultExpectation.paramPtrs = &ServiceMockDeleteTextChunksByFileUIDParamPtrs{}
-	}
-	mmDeleteTextChunksByFileUID.defaultExpectation.paramPtrs.u1 = &u1
-	mmDeleteTextChunksByFileUID.defaultExpectation.expectationOrigins.originU1 = minimock.CallerInfo(1)
-
-	return mmDeleteTextChunksByFileUID
-}
-
-// ExpectU2Param3 sets up expected param u2 for Service.DeleteTextChunksByFileUID
-func (mmDeleteTextChunksByFileUID *mServiceMockDeleteTextChunksByFileUID) ExpectU2Param3(u2 uuid.UUID) *mServiceMockDeleteTextChunksByFileUID {
-	if mmDeleteTextChunksByFileUID.mock.funcDeleteTextChunksByFileUID != nil {
-		mmDeleteTextChunksByFileUID.mock.t.Fatalf("ServiceMock.DeleteTextChunksByFileUID mock is already set by Set")
-	}
-
-	if mmDeleteTextChunksByFileUID.defaultExpectation == nil {
-		mmDeleteTextChunksByFileUID.defaultExpectation = &ServiceMockDeleteTextChunksByFileUIDExpectation{}
-	}
-
-	if mmDeleteTextChunksByFileUID.defaultExpectation.params != nil {
-		mmDeleteTextChunksByFileUID.mock.t.Fatalf("ServiceMock.DeleteTextChunksByFileUID mock is already set by Expect")
-	}
-
-	if mmDeleteTextChunksByFileUID.defaultExpectation.paramPtrs == nil {
-		mmDeleteTextChunksByFileUID.defaultExpectation.paramPtrs = &ServiceMockDeleteTextChunksByFileUIDParamPtrs{}
-	}
-	mmDeleteTextChunksByFileUID.defaultExpectation.paramPtrs.u2 = &u2
-	mmDeleteTextChunksByFileUID.defaultExpectation.expectationOrigins.originU2 = minimock.CallerInfo(1)
-
-	return mmDeleteTextChunksByFileUID
-}
-
-// Inspect accepts an inspector function that has same arguments as the Service.DeleteTextChunksByFileUID
-func (mmDeleteTextChunksByFileUID *mServiceMockDeleteTextChunksByFileUID) Inspect(f func(ctx context.Context, u1 uuid.UUID, u2 uuid.UUID)) *mServiceMockDeleteTextChunksByFileUID {
-	if mmDeleteTextChunksByFileUID.mock.inspectFuncDeleteTextChunksByFileUID != nil {
-		mmDeleteTextChunksByFileUID.mock.t.Fatalf("Inspect function is already set for ServiceMock.DeleteTextChunksByFileUID")
-	}
-
-	mmDeleteTextChunksByFileUID.mock.inspectFuncDeleteTextChunksByFileUID = f
-
-	return mmDeleteTextChunksByFileUID
-}
-
-// Return sets up results that will be returned by Service.DeleteTextChunksByFileUID
-func (mmDeleteTextChunksByFileUID *mServiceMockDeleteTextChunksByFileUID) Return(err error) *ServiceMock {
-	if mmDeleteTextChunksByFileUID.mock.funcDeleteTextChunksByFileUID != nil {
-		mmDeleteTextChunksByFileUID.mock.t.Fatalf("ServiceMock.DeleteTextChunksByFileUID mock is already set by Set")
-	}
-
-	if mmDeleteTextChunksByFileUID.defaultExpectation == nil {
-		mmDeleteTextChunksByFileUID.defaultExpectation = &ServiceMockDeleteTextChunksByFileUIDExpectation{mock: mmDeleteTextChunksByFileUID.mock}
-	}
-	mmDeleteTextChunksByFileUID.defaultExpectation.results = &ServiceMockDeleteTextChunksByFileUIDResults{err}
-	mmDeleteTextChunksByFileUID.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
-	return mmDeleteTextChunksByFileUID.mock
-}
-
-// Set uses given function f to mock the Service.DeleteTextChunksByFileUID method
-func (mmDeleteTextChunksByFileUID *mServiceMockDeleteTextChunksByFileUID) Set(f func(ctx context.Context, u1 uuid.UUID, u2 uuid.UUID) (err error)) *ServiceMock {
-	if mmDeleteTextChunksByFileUID.defaultExpectation != nil {
-		mmDeleteTextChunksByFileUID.mock.t.Fatalf("Default expectation is already set for the Service.DeleteTextChunksByFileUID method")
-	}
-
-	if len(mmDeleteTextChunksByFileUID.expectations) > 0 {
-		mmDeleteTextChunksByFileUID.mock.t.Fatalf("Some expectations are already set for the Service.DeleteTextChunksByFileUID method")
-	}
-
-	mmDeleteTextChunksByFileUID.mock.funcDeleteTextChunksByFileUID = f
-	mmDeleteTextChunksByFileUID.mock.funcDeleteTextChunksByFileUIDOrigin = minimock.CallerInfo(1)
-	return mmDeleteTextChunksByFileUID.mock
-}
-
-// When sets expectation for the Service.DeleteTextChunksByFileUID which will trigger the result defined by the following
-// Then helper
-func (mmDeleteTextChunksByFileUID *mServiceMockDeleteTextChunksByFileUID) When(ctx context.Context, u1 uuid.UUID, u2 uuid.UUID) *ServiceMockDeleteTextChunksByFileUIDExpectation {
-	if mmDeleteTextChunksByFileUID.mock.funcDeleteTextChunksByFileUID != nil {
-		mmDeleteTextChunksByFileUID.mock.t.Fatalf("ServiceMock.DeleteTextChunksByFileUID mock is already set by Set")
-	}
-
-	expectation := &ServiceMockDeleteTextChunksByFileUIDExpectation{
-		mock:               mmDeleteTextChunksByFileUID.mock,
-		params:             &ServiceMockDeleteTextChunksByFileUIDParams{ctx, u1, u2},
-		expectationOrigins: ServiceMockDeleteTextChunksByFileUIDExpectationOrigins{origin: minimock.CallerInfo(1)},
-	}
-	mmDeleteTextChunksByFileUID.expectations = append(mmDeleteTextChunksByFileUID.expectations, expectation)
-	return expectation
-}
-
-// Then sets up Service.DeleteTextChunksByFileUID return parameters for the expectation previously defined by the When method
-func (e *ServiceMockDeleteTextChunksByFileUIDExpectation) Then(err error) *ServiceMock {
-	e.results = &ServiceMockDeleteTextChunksByFileUIDResults{err}
-	return e.mock
-}
-
-// Times sets number of times Service.DeleteTextChunksByFileUID should be invoked
-func (mmDeleteTextChunksByFileUID *mServiceMockDeleteTextChunksByFileUID) Times(n uint64) *mServiceMockDeleteTextChunksByFileUID {
-	if n == 0 {
-		mmDeleteTextChunksByFileUID.mock.t.Fatalf("Times of ServiceMock.DeleteTextChunksByFileUID mock can not be zero")
-	}
-	mm_atomic.StoreUint64(&mmDeleteTextChunksByFileUID.expectedInvocations, n)
-	mmDeleteTextChunksByFileUID.expectedInvocationsOrigin = minimock.CallerInfo(1)
-	return mmDeleteTextChunksByFileUID
-}
-
-func (mmDeleteTextChunksByFileUID *mServiceMockDeleteTextChunksByFileUID) invocationsDone() bool {
-	if len(mmDeleteTextChunksByFileUID.expectations) == 0 && mmDeleteTextChunksByFileUID.defaultExpectation == nil && mmDeleteTextChunksByFileUID.mock.funcDeleteTextChunksByFileUID == nil {
-		return true
-	}
-
-	totalInvocations := mm_atomic.LoadUint64(&mmDeleteTextChunksByFileUID.mock.afterDeleteTextChunksByFileUIDCounter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmDeleteTextChunksByFileUID.expectedInvocations)
-
-	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
-}
-
-// DeleteTextChunksByFileUID implements mm_service.Service
-func (mmDeleteTextChunksByFileUID *ServiceMock) DeleteTextChunksByFileUID(ctx context.Context, u1 uuid.UUID, u2 uuid.UUID) (err error) {
-	mm_atomic.AddUint64(&mmDeleteTextChunksByFileUID.beforeDeleteTextChunksByFileUIDCounter, 1)
-	defer mm_atomic.AddUint64(&mmDeleteTextChunksByFileUID.afterDeleteTextChunksByFileUIDCounter, 1)
-
-	mmDeleteTextChunksByFileUID.t.Helper()
-
-	if mmDeleteTextChunksByFileUID.inspectFuncDeleteTextChunksByFileUID != nil {
-		mmDeleteTextChunksByFileUID.inspectFuncDeleteTextChunksByFileUID(ctx, u1, u2)
-	}
-
-	mm_params := ServiceMockDeleteTextChunksByFileUIDParams{ctx, u1, u2}
-
-	// Record call args
-	mmDeleteTextChunksByFileUID.DeleteTextChunksByFileUIDMock.mutex.Lock()
-	mmDeleteTextChunksByFileUID.DeleteTextChunksByFileUIDMock.callArgs = append(mmDeleteTextChunksByFileUID.DeleteTextChunksByFileUIDMock.callArgs, &mm_params)
-	mmDeleteTextChunksByFileUID.DeleteTextChunksByFileUIDMock.mutex.Unlock()
-
-	for _, e := range mmDeleteTextChunksByFileUID.DeleteTextChunksByFileUIDMock.expectations {
-		if minimock.Equal(*e.params, mm_params) {
-			mm_atomic.AddUint64(&e.Counter, 1)
-			return e.results.err
-		}
-	}
-
-	if mmDeleteTextChunksByFileUID.DeleteTextChunksByFileUIDMock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmDeleteTextChunksByFileUID.DeleteTextChunksByFileUIDMock.defaultExpectation.Counter, 1)
-		mm_want := mmDeleteTextChunksByFileUID.DeleteTextChunksByFileUIDMock.defaultExpectation.params
-		mm_want_ptrs := mmDeleteTextChunksByFileUID.DeleteTextChunksByFileUIDMock.defaultExpectation.paramPtrs
-
-		mm_got := ServiceMockDeleteTextChunksByFileUIDParams{ctx, u1, u2}
-
-		if mm_want_ptrs != nil {
-
-			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
-				mmDeleteTextChunksByFileUID.t.Errorf("ServiceMock.DeleteTextChunksByFileUID got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmDeleteTextChunksByFileUID.DeleteTextChunksByFileUIDMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
-			}
-
-			if mm_want_ptrs.u1 != nil && !minimock.Equal(*mm_want_ptrs.u1, mm_got.u1) {
-				mmDeleteTextChunksByFileUID.t.Errorf("ServiceMock.DeleteTextChunksByFileUID got unexpected parameter u1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmDeleteTextChunksByFileUID.DeleteTextChunksByFileUIDMock.defaultExpectation.expectationOrigins.originU1, *mm_want_ptrs.u1, mm_got.u1, minimock.Diff(*mm_want_ptrs.u1, mm_got.u1))
-			}
-
-			if mm_want_ptrs.u2 != nil && !minimock.Equal(*mm_want_ptrs.u2, mm_got.u2) {
-				mmDeleteTextChunksByFileUID.t.Errorf("ServiceMock.DeleteTextChunksByFileUID got unexpected parameter u2, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmDeleteTextChunksByFileUID.DeleteTextChunksByFileUIDMock.defaultExpectation.expectationOrigins.originU2, *mm_want_ptrs.u2, mm_got.u2, minimock.Diff(*mm_want_ptrs.u2, mm_got.u2))
-			}
-
-		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
-			mmDeleteTextChunksByFileUID.t.Errorf("ServiceMock.DeleteTextChunksByFileUID got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-				mmDeleteTextChunksByFileUID.DeleteTextChunksByFileUIDMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
-		}
-
-		mm_results := mmDeleteTextChunksByFileUID.DeleteTextChunksByFileUIDMock.defaultExpectation.results
-		if mm_results == nil {
-			mmDeleteTextChunksByFileUID.t.Fatal("No results are set for the ServiceMock.DeleteTextChunksByFileUID")
-		}
-		return (*mm_results).err
-	}
-	if mmDeleteTextChunksByFileUID.funcDeleteTextChunksByFileUID != nil {
-		return mmDeleteTextChunksByFileUID.funcDeleteTextChunksByFileUID(ctx, u1, u2)
-	}
-	mmDeleteTextChunksByFileUID.t.Fatalf("Unexpected call to ServiceMock.DeleteTextChunksByFileUID. %v %v %v", ctx, u1, u2)
-	return
-}
-
-// DeleteTextChunksByFileUIDAfterCounter returns a count of finished ServiceMock.DeleteTextChunksByFileUID invocations
-func (mmDeleteTextChunksByFileUID *ServiceMock) DeleteTextChunksByFileUIDAfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmDeleteTextChunksByFileUID.afterDeleteTextChunksByFileUIDCounter)
-}
-
-// DeleteTextChunksByFileUIDBeforeCounter returns a count of ServiceMock.DeleteTextChunksByFileUID invocations
-func (mmDeleteTextChunksByFileUID *ServiceMock) DeleteTextChunksByFileUIDBeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmDeleteTextChunksByFileUID.beforeDeleteTextChunksByFileUIDCounter)
-}
-
-// Calls returns a list of arguments used in each call to ServiceMock.DeleteTextChunksByFileUID.
-// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
-func (mmDeleteTextChunksByFileUID *mServiceMockDeleteTextChunksByFileUID) Calls() []*ServiceMockDeleteTextChunksByFileUIDParams {
-	mmDeleteTextChunksByFileUID.mutex.RLock()
-
-	argCopy := make([]*ServiceMockDeleteTextChunksByFileUIDParams, len(mmDeleteTextChunksByFileUID.callArgs))
-	copy(argCopy, mmDeleteTextChunksByFileUID.callArgs)
-
-	mmDeleteTextChunksByFileUID.mutex.RUnlock()
-
-	return argCopy
-}
-
-// MinimockDeleteTextChunksByFileUIDDone returns true if the count of the DeleteTextChunksByFileUID invocations corresponds
-// the number of defined expectations
-func (m *ServiceMock) MinimockDeleteTextChunksByFileUIDDone() bool {
-	if m.DeleteTextChunksByFileUIDMock.optional {
-		// Optional methods provide '0 or more' call count restriction.
-		return true
-	}
-
-	for _, e := range m.DeleteTextChunksByFileUIDMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			return false
-		}
-	}
-
-	return m.DeleteTextChunksByFileUIDMock.invocationsDone()
-}
-
-// MinimockDeleteTextChunksByFileUIDInspect logs each unmet expectation
-func (m *ServiceMock) MinimockDeleteTextChunksByFileUIDInspect() {
-	for _, e := range m.DeleteTextChunksByFileUIDMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Errorf("Expected call to ServiceMock.DeleteTextChunksByFileUID at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
-		}
-	}
-
-	afterDeleteTextChunksByFileUIDCounter := mm_atomic.LoadUint64(&m.afterDeleteTextChunksByFileUIDCounter)
-	// if default expectation was set then invocations count should be greater than zero
-	if m.DeleteTextChunksByFileUIDMock.defaultExpectation != nil && afterDeleteTextChunksByFileUIDCounter < 1 {
-		if m.DeleteTextChunksByFileUIDMock.defaultExpectation.params == nil {
-			m.t.Errorf("Expected call to ServiceMock.DeleteTextChunksByFileUID at\n%s", m.DeleteTextChunksByFileUIDMock.defaultExpectation.returnOrigin)
-		} else {
-			m.t.Errorf("Expected call to ServiceMock.DeleteTextChunksByFileUID at\n%s with params: %#v", m.DeleteTextChunksByFileUIDMock.defaultExpectation.expectationOrigins.origin, *m.DeleteTextChunksByFileUIDMock.defaultExpectation.params)
-		}
-	}
-	// if func was set then invocations count should be greater than zero
-	if m.funcDeleteTextChunksByFileUID != nil && afterDeleteTextChunksByFileUIDCounter < 1 {
-		m.t.Errorf("Expected call to ServiceMock.DeleteTextChunksByFileUID at\n%s", m.funcDeleteTextChunksByFileUIDOrigin)
-	}
-
-	if !m.DeleteTextChunksByFileUIDMock.invocationsDone() && afterDeleteTextChunksByFileUIDCounter > 0 {
-		m.t.Errorf("Expected %d calls to ServiceMock.DeleteTextChunksByFileUID at\n%s but found %d calls",
-			mm_atomic.LoadUint64(&m.DeleteTextChunksByFileUIDMock.expectedInvocations), m.DeleteTextChunksByFileUIDMock.expectedInvocationsOrigin, afterDeleteTextChunksByFileUIDCounter)
-	}
-}
-
-type mServiceMockEmbedTextsWorkflow struct {
-	optional           bool
-	mock               *ServiceMock
-	defaultExpectation *ServiceMockEmbedTextsWorkflowExpectation
-	expectations       []*ServiceMockEmbedTextsWorkflowExpectation
-
-	expectedInvocations       uint64
-	expectedInvocationsOrigin string
-}
-
-// ServiceMockEmbedTextsWorkflowExpectation specifies expectation struct of the Service.EmbedTextsWorkflow
-type ServiceMockEmbedTextsWorkflowExpectation struct {
-	mock *ServiceMock
-
-	results      *ServiceMockEmbedTextsWorkflowResults
-	returnOrigin string
-	Counter      uint64
-}
-
-// ServiceMockEmbedTextsWorkflowResults contains results of the Service.EmbedTextsWorkflow
-type ServiceMockEmbedTextsWorkflowResults struct {
-	e1 mm_service.EmbedTextsWorkflow
-}
-
-// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
-// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
-// Optional() makes method check to work in '0 or more' mode.
-// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
-// catch the problems when the expected method call is totally skipped during test run.
-func (mmEmbedTextsWorkflow *mServiceMockEmbedTextsWorkflow) Optional() *mServiceMockEmbedTextsWorkflow {
-	mmEmbedTextsWorkflow.optional = true
-	return mmEmbedTextsWorkflow
-}
-
-// Expect sets up expected params for Service.EmbedTextsWorkflow
-func (mmEmbedTextsWorkflow *mServiceMockEmbedTextsWorkflow) Expect() *mServiceMockEmbedTextsWorkflow {
-	if mmEmbedTextsWorkflow.mock.funcEmbedTextsWorkflow != nil {
-		mmEmbedTextsWorkflow.mock.t.Fatalf("ServiceMock.EmbedTextsWorkflow mock is already set by Set")
-	}
-
-	if mmEmbedTextsWorkflow.defaultExpectation == nil {
-		mmEmbedTextsWorkflow.defaultExpectation = &ServiceMockEmbedTextsWorkflowExpectation{}
-	}
-
-	return mmEmbedTextsWorkflow
-}
-
-// Inspect accepts an inspector function that has same arguments as the Service.EmbedTextsWorkflow
-func (mmEmbedTextsWorkflow *mServiceMockEmbedTextsWorkflow) Inspect(f func()) *mServiceMockEmbedTextsWorkflow {
-	if mmEmbedTextsWorkflow.mock.inspectFuncEmbedTextsWorkflow != nil {
-		mmEmbedTextsWorkflow.mock.t.Fatalf("Inspect function is already set for ServiceMock.EmbedTextsWorkflow")
-	}
-
-	mmEmbedTextsWorkflow.mock.inspectFuncEmbedTextsWorkflow = f
-
-	return mmEmbedTextsWorkflow
-}
-
-// Return sets up results that will be returned by Service.EmbedTextsWorkflow
-func (mmEmbedTextsWorkflow *mServiceMockEmbedTextsWorkflow) Return(e1 mm_service.EmbedTextsWorkflow) *ServiceMock {
-	if mmEmbedTextsWorkflow.mock.funcEmbedTextsWorkflow != nil {
-		mmEmbedTextsWorkflow.mock.t.Fatalf("ServiceMock.EmbedTextsWorkflow mock is already set by Set")
-	}
-
-	if mmEmbedTextsWorkflow.defaultExpectation == nil {
-		mmEmbedTextsWorkflow.defaultExpectation = &ServiceMockEmbedTextsWorkflowExpectation{mock: mmEmbedTextsWorkflow.mock}
-	}
-	mmEmbedTextsWorkflow.defaultExpectation.results = &ServiceMockEmbedTextsWorkflowResults{e1}
-	mmEmbedTextsWorkflow.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
-	return mmEmbedTextsWorkflow.mock
-}
-
-// Set uses given function f to mock the Service.EmbedTextsWorkflow method
-func (mmEmbedTextsWorkflow *mServiceMockEmbedTextsWorkflow) Set(f func() (e1 mm_service.EmbedTextsWorkflow)) *ServiceMock {
-	if mmEmbedTextsWorkflow.defaultExpectation != nil {
-		mmEmbedTextsWorkflow.mock.t.Fatalf("Default expectation is already set for the Service.EmbedTextsWorkflow method")
-	}
-
-	if len(mmEmbedTextsWorkflow.expectations) > 0 {
-		mmEmbedTextsWorkflow.mock.t.Fatalf("Some expectations are already set for the Service.EmbedTextsWorkflow method")
-	}
-
-	mmEmbedTextsWorkflow.mock.funcEmbedTextsWorkflow = f
-	mmEmbedTextsWorkflow.mock.funcEmbedTextsWorkflowOrigin = minimock.CallerInfo(1)
-	return mmEmbedTextsWorkflow.mock
-}
-
-// Times sets number of times Service.EmbedTextsWorkflow should be invoked
-func (mmEmbedTextsWorkflow *mServiceMockEmbedTextsWorkflow) Times(n uint64) *mServiceMockEmbedTextsWorkflow {
-	if n == 0 {
-		mmEmbedTextsWorkflow.mock.t.Fatalf("Times of ServiceMock.EmbedTextsWorkflow mock can not be zero")
-	}
-	mm_atomic.StoreUint64(&mmEmbedTextsWorkflow.expectedInvocations, n)
-	mmEmbedTextsWorkflow.expectedInvocationsOrigin = minimock.CallerInfo(1)
-	return mmEmbedTextsWorkflow
-}
-
-func (mmEmbedTextsWorkflow *mServiceMockEmbedTextsWorkflow) invocationsDone() bool {
-	if len(mmEmbedTextsWorkflow.expectations) == 0 && mmEmbedTextsWorkflow.defaultExpectation == nil && mmEmbedTextsWorkflow.mock.funcEmbedTextsWorkflow == nil {
-		return true
-	}
-
-	totalInvocations := mm_atomic.LoadUint64(&mmEmbedTextsWorkflow.mock.afterEmbedTextsWorkflowCounter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmEmbedTextsWorkflow.expectedInvocations)
-
-	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
-}
-
-// EmbedTextsWorkflow implements mm_service.Service
-func (mmEmbedTextsWorkflow *ServiceMock) EmbedTextsWorkflow() (e1 mm_service.EmbedTextsWorkflow) {
-	mm_atomic.AddUint64(&mmEmbedTextsWorkflow.beforeEmbedTextsWorkflowCounter, 1)
-	defer mm_atomic.AddUint64(&mmEmbedTextsWorkflow.afterEmbedTextsWorkflowCounter, 1)
-
-	mmEmbedTextsWorkflow.t.Helper()
-
-	if mmEmbedTextsWorkflow.inspectFuncEmbedTextsWorkflow != nil {
-		mmEmbedTextsWorkflow.inspectFuncEmbedTextsWorkflow()
-	}
-
-	if mmEmbedTextsWorkflow.EmbedTextsWorkflowMock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmEmbedTextsWorkflow.EmbedTextsWorkflowMock.defaultExpectation.Counter, 1)
-
-		mm_results := mmEmbedTextsWorkflow.EmbedTextsWorkflowMock.defaultExpectation.results
-		if mm_results == nil {
-			mmEmbedTextsWorkflow.t.Fatal("No results are set for the ServiceMock.EmbedTextsWorkflow")
-		}
-		return (*mm_results).e1
-	}
-	if mmEmbedTextsWorkflow.funcEmbedTextsWorkflow != nil {
-		return mmEmbedTextsWorkflow.funcEmbedTextsWorkflow()
-	}
-	mmEmbedTextsWorkflow.t.Fatalf("Unexpected call to ServiceMock.EmbedTextsWorkflow.")
-	return
-}
-
-// EmbedTextsWorkflowAfterCounter returns a count of finished ServiceMock.EmbedTextsWorkflow invocations
-func (mmEmbedTextsWorkflow *ServiceMock) EmbedTextsWorkflowAfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmEmbedTextsWorkflow.afterEmbedTextsWorkflowCounter)
-}
-
-// EmbedTextsWorkflowBeforeCounter returns a count of ServiceMock.EmbedTextsWorkflow invocations
-func (mmEmbedTextsWorkflow *ServiceMock) EmbedTextsWorkflowBeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmEmbedTextsWorkflow.beforeEmbedTextsWorkflowCounter)
-}
-
-// MinimockEmbedTextsWorkflowDone returns true if the count of the EmbedTextsWorkflow invocations corresponds
-// the number of defined expectations
-func (m *ServiceMock) MinimockEmbedTextsWorkflowDone() bool {
-	if m.EmbedTextsWorkflowMock.optional {
-		// Optional methods provide '0 or more' call count restriction.
-		return true
-	}
-
-	for _, e := range m.EmbedTextsWorkflowMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			return false
-		}
-	}
-
-	return m.EmbedTextsWorkflowMock.invocationsDone()
-}
-
-// MinimockEmbedTextsWorkflowInspect logs each unmet expectation
-func (m *ServiceMock) MinimockEmbedTextsWorkflowInspect() {
-	for _, e := range m.EmbedTextsWorkflowMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Error("Expected call to ServiceMock.EmbedTextsWorkflow")
-		}
-	}
-
-	afterEmbedTextsWorkflowCounter := mm_atomic.LoadUint64(&m.afterEmbedTextsWorkflowCounter)
-	// if default expectation was set then invocations count should be greater than zero
-	if m.EmbedTextsWorkflowMock.defaultExpectation != nil && afterEmbedTextsWorkflowCounter < 1 {
-		m.t.Errorf("Expected call to ServiceMock.EmbedTextsWorkflow at\n%s", m.EmbedTextsWorkflowMock.defaultExpectation.returnOrigin)
-	}
-	// if func was set then invocations count should be greater than zero
-	if m.funcEmbedTextsWorkflow != nil && afterEmbedTextsWorkflowCounter < 1 {
-		m.t.Errorf("Expected call to ServiceMock.EmbedTextsWorkflow at\n%s", m.funcEmbedTextsWorkflowOrigin)
-	}
-
-	if !m.EmbedTextsWorkflowMock.invocationsDone() && afterEmbedTextsWorkflowCounter > 0 {
-		m.t.Errorf("Expected %d calls to ServiceMock.EmbedTextsWorkflow at\n%s but found %d calls",
-			mm_atomic.LoadUint64(&m.EmbedTextsWorkflowMock.expectedInvocations), m.EmbedTextsWorkflowMock.expectedInvocationsOrigin, afterEmbedTextsWorkflowCounter)
-	}
-}
-
-type mServiceMockEmbeddingTextBatch struct {
-	optional           bool
-	mock               *ServiceMock
-	defaultExpectation *ServiceMockEmbeddingTextBatchExpectation
-	expectations       []*ServiceMockEmbeddingTextBatchExpectation
-
-	callArgs []*ServiceMockEmbeddingTextBatchParams
-	mutex    sync.RWMutex
-
-	expectedInvocations       uint64
-	expectedInvocationsOrigin string
-}
-
-// ServiceMockEmbeddingTextBatchExpectation specifies expectation struct of the Service.EmbeddingTextBatch
-type ServiceMockEmbeddingTextBatchExpectation struct {
-	mock               *ServiceMock
-	params             *ServiceMockEmbeddingTextBatchParams
-	paramPtrs          *ServiceMockEmbeddingTextBatchParamPtrs
-	expectationOrigins ServiceMockEmbeddingTextBatchExpectationOrigins
-	results            *ServiceMockEmbeddingTextBatchResults
-	returnOrigin       string
-	Counter            uint64
-}
-
-// ServiceMockEmbeddingTextBatchParams contains parameters of the Service.EmbeddingTextBatch
-type ServiceMockEmbeddingTextBatchParams struct {
+// ServiceMockEmbedTextsParams contains parameters of the Service.EmbedTexts
+type ServiceMockEmbedTextsParams struct {
 	ctx context.Context
 	sa1 []string
+	i1  int
+	m1  map[string][]string
 }
 
-// ServiceMockEmbeddingTextBatchParamPtrs contains pointers to parameters of the Service.EmbeddingTextBatch
-type ServiceMockEmbeddingTextBatchParamPtrs struct {
+// ServiceMockEmbedTextsParamPtrs contains pointers to parameters of the Service.EmbedTexts
+type ServiceMockEmbedTextsParamPtrs struct {
 	ctx *context.Context
 	sa1 *[]string
+	i1  *int
+	m1  *map[string][]string
 }
 
-// ServiceMockEmbeddingTextBatchResults contains results of the Service.EmbeddingTextBatch
-type ServiceMockEmbeddingTextBatchResults struct {
+// ServiceMockEmbedTextsResults contains results of the Service.EmbedTexts
+type ServiceMockEmbedTextsResults struct {
 	faa1 [][]float32
 	err  error
 }
 
-// ServiceMockEmbeddingTextBatchOrigins contains origins of expectations of the Service.EmbeddingTextBatch
-type ServiceMockEmbeddingTextBatchExpectationOrigins struct {
+// ServiceMockEmbedTextsOrigins contains origins of expectations of the Service.EmbedTexts
+type ServiceMockEmbedTextsExpectationOrigins struct {
 	origin    string
 	originCtx string
 	originSa1 string
+	originI1  string
+	originM1  string
 }
 
 // Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
@@ -5688,1009 +3136,348 @@ type ServiceMockEmbeddingTextBatchExpectationOrigins struct {
 // Optional() makes method check to work in '0 or more' mode.
 // It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
 // catch the problems when the expected method call is totally skipped during test run.
-func (mmEmbeddingTextBatch *mServiceMockEmbeddingTextBatch) Optional() *mServiceMockEmbeddingTextBatch {
-	mmEmbeddingTextBatch.optional = true
-	return mmEmbeddingTextBatch
+func (mmEmbedTexts *mServiceMockEmbedTexts) Optional() *mServiceMockEmbedTexts {
+	mmEmbedTexts.optional = true
+	return mmEmbedTexts
 }
 
-// Expect sets up expected params for Service.EmbeddingTextBatch
-func (mmEmbeddingTextBatch *mServiceMockEmbeddingTextBatch) Expect(ctx context.Context, sa1 []string) *mServiceMockEmbeddingTextBatch {
-	if mmEmbeddingTextBatch.mock.funcEmbeddingTextBatch != nil {
-		mmEmbeddingTextBatch.mock.t.Fatalf("ServiceMock.EmbeddingTextBatch mock is already set by Set")
+// Expect sets up expected params for Service.EmbedTexts
+func (mmEmbedTexts *mServiceMockEmbedTexts) Expect(ctx context.Context, sa1 []string, i1 int, m1 map[string][]string) *mServiceMockEmbedTexts {
+	if mmEmbedTexts.mock.funcEmbedTexts != nil {
+		mmEmbedTexts.mock.t.Fatalf("ServiceMock.EmbedTexts mock is already set by Set")
 	}
 
-	if mmEmbeddingTextBatch.defaultExpectation == nil {
-		mmEmbeddingTextBatch.defaultExpectation = &ServiceMockEmbeddingTextBatchExpectation{}
+	if mmEmbedTexts.defaultExpectation == nil {
+		mmEmbedTexts.defaultExpectation = &ServiceMockEmbedTextsExpectation{}
 	}
 
-	if mmEmbeddingTextBatch.defaultExpectation.paramPtrs != nil {
-		mmEmbeddingTextBatch.mock.t.Fatalf("ServiceMock.EmbeddingTextBatch mock is already set by ExpectParams functions")
+	if mmEmbedTexts.defaultExpectation.paramPtrs != nil {
+		mmEmbedTexts.mock.t.Fatalf("ServiceMock.EmbedTexts mock is already set by ExpectParams functions")
 	}
 
-	mmEmbeddingTextBatch.defaultExpectation.params = &ServiceMockEmbeddingTextBatchParams{ctx, sa1}
-	mmEmbeddingTextBatch.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
-	for _, e := range mmEmbeddingTextBatch.expectations {
-		if minimock.Equal(e.params, mmEmbeddingTextBatch.defaultExpectation.params) {
-			mmEmbeddingTextBatch.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmEmbeddingTextBatch.defaultExpectation.params)
+	mmEmbedTexts.defaultExpectation.params = &ServiceMockEmbedTextsParams{ctx, sa1, i1, m1}
+	mmEmbedTexts.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmEmbedTexts.expectations {
+		if minimock.Equal(e.params, mmEmbedTexts.defaultExpectation.params) {
+			mmEmbedTexts.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmEmbedTexts.defaultExpectation.params)
 		}
 	}
 
-	return mmEmbeddingTextBatch
+	return mmEmbedTexts
 }
 
-// ExpectCtxParam1 sets up expected param ctx for Service.EmbeddingTextBatch
-func (mmEmbeddingTextBatch *mServiceMockEmbeddingTextBatch) ExpectCtxParam1(ctx context.Context) *mServiceMockEmbeddingTextBatch {
-	if mmEmbeddingTextBatch.mock.funcEmbeddingTextBatch != nil {
-		mmEmbeddingTextBatch.mock.t.Fatalf("ServiceMock.EmbeddingTextBatch mock is already set by Set")
+// ExpectCtxParam1 sets up expected param ctx for Service.EmbedTexts
+func (mmEmbedTexts *mServiceMockEmbedTexts) ExpectCtxParam1(ctx context.Context) *mServiceMockEmbedTexts {
+	if mmEmbedTexts.mock.funcEmbedTexts != nil {
+		mmEmbedTexts.mock.t.Fatalf("ServiceMock.EmbedTexts mock is already set by Set")
 	}
 
-	if mmEmbeddingTextBatch.defaultExpectation == nil {
-		mmEmbeddingTextBatch.defaultExpectation = &ServiceMockEmbeddingTextBatchExpectation{}
+	if mmEmbedTexts.defaultExpectation == nil {
+		mmEmbedTexts.defaultExpectation = &ServiceMockEmbedTextsExpectation{}
 	}
 
-	if mmEmbeddingTextBatch.defaultExpectation.params != nil {
-		mmEmbeddingTextBatch.mock.t.Fatalf("ServiceMock.EmbeddingTextBatch mock is already set by Expect")
+	if mmEmbedTexts.defaultExpectation.params != nil {
+		mmEmbedTexts.mock.t.Fatalf("ServiceMock.EmbedTexts mock is already set by Expect")
 	}
 
-	if mmEmbeddingTextBatch.defaultExpectation.paramPtrs == nil {
-		mmEmbeddingTextBatch.defaultExpectation.paramPtrs = &ServiceMockEmbeddingTextBatchParamPtrs{}
+	if mmEmbedTexts.defaultExpectation.paramPtrs == nil {
+		mmEmbedTexts.defaultExpectation.paramPtrs = &ServiceMockEmbedTextsParamPtrs{}
 	}
-	mmEmbeddingTextBatch.defaultExpectation.paramPtrs.ctx = &ctx
-	mmEmbeddingTextBatch.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+	mmEmbedTexts.defaultExpectation.paramPtrs.ctx = &ctx
+	mmEmbedTexts.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
 
-	return mmEmbeddingTextBatch
+	return mmEmbedTexts
 }
 
-// ExpectSa1Param2 sets up expected param sa1 for Service.EmbeddingTextBatch
-func (mmEmbeddingTextBatch *mServiceMockEmbeddingTextBatch) ExpectSa1Param2(sa1 []string) *mServiceMockEmbeddingTextBatch {
-	if mmEmbeddingTextBatch.mock.funcEmbeddingTextBatch != nil {
-		mmEmbeddingTextBatch.mock.t.Fatalf("ServiceMock.EmbeddingTextBatch mock is already set by Set")
+// ExpectSa1Param2 sets up expected param sa1 for Service.EmbedTexts
+func (mmEmbedTexts *mServiceMockEmbedTexts) ExpectSa1Param2(sa1 []string) *mServiceMockEmbedTexts {
+	if mmEmbedTexts.mock.funcEmbedTexts != nil {
+		mmEmbedTexts.mock.t.Fatalf("ServiceMock.EmbedTexts mock is already set by Set")
 	}
 
-	if mmEmbeddingTextBatch.defaultExpectation == nil {
-		mmEmbeddingTextBatch.defaultExpectation = &ServiceMockEmbeddingTextBatchExpectation{}
+	if mmEmbedTexts.defaultExpectation == nil {
+		mmEmbedTexts.defaultExpectation = &ServiceMockEmbedTextsExpectation{}
 	}
 
-	if mmEmbeddingTextBatch.defaultExpectation.params != nil {
-		mmEmbeddingTextBatch.mock.t.Fatalf("ServiceMock.EmbeddingTextBatch mock is already set by Expect")
+	if mmEmbedTexts.defaultExpectation.params != nil {
+		mmEmbedTexts.mock.t.Fatalf("ServiceMock.EmbedTexts mock is already set by Expect")
 	}
 
-	if mmEmbeddingTextBatch.defaultExpectation.paramPtrs == nil {
-		mmEmbeddingTextBatch.defaultExpectation.paramPtrs = &ServiceMockEmbeddingTextBatchParamPtrs{}
+	if mmEmbedTexts.defaultExpectation.paramPtrs == nil {
+		mmEmbedTexts.defaultExpectation.paramPtrs = &ServiceMockEmbedTextsParamPtrs{}
 	}
-	mmEmbeddingTextBatch.defaultExpectation.paramPtrs.sa1 = &sa1
-	mmEmbeddingTextBatch.defaultExpectation.expectationOrigins.originSa1 = minimock.CallerInfo(1)
+	mmEmbedTexts.defaultExpectation.paramPtrs.sa1 = &sa1
+	mmEmbedTexts.defaultExpectation.expectationOrigins.originSa1 = minimock.CallerInfo(1)
 
-	return mmEmbeddingTextBatch
+	return mmEmbedTexts
 }
 
-// Inspect accepts an inspector function that has same arguments as the Service.EmbeddingTextBatch
-func (mmEmbeddingTextBatch *mServiceMockEmbeddingTextBatch) Inspect(f func(ctx context.Context, sa1 []string)) *mServiceMockEmbeddingTextBatch {
-	if mmEmbeddingTextBatch.mock.inspectFuncEmbeddingTextBatch != nil {
-		mmEmbeddingTextBatch.mock.t.Fatalf("Inspect function is already set for ServiceMock.EmbeddingTextBatch")
+// ExpectI1Param3 sets up expected param i1 for Service.EmbedTexts
+func (mmEmbedTexts *mServiceMockEmbedTexts) ExpectI1Param3(i1 int) *mServiceMockEmbedTexts {
+	if mmEmbedTexts.mock.funcEmbedTexts != nil {
+		mmEmbedTexts.mock.t.Fatalf("ServiceMock.EmbedTexts mock is already set by Set")
 	}
 
-	mmEmbeddingTextBatch.mock.inspectFuncEmbeddingTextBatch = f
+	if mmEmbedTexts.defaultExpectation == nil {
+		mmEmbedTexts.defaultExpectation = &ServiceMockEmbedTextsExpectation{}
+	}
 
-	return mmEmbeddingTextBatch
+	if mmEmbedTexts.defaultExpectation.params != nil {
+		mmEmbedTexts.mock.t.Fatalf("ServiceMock.EmbedTexts mock is already set by Expect")
+	}
+
+	if mmEmbedTexts.defaultExpectation.paramPtrs == nil {
+		mmEmbedTexts.defaultExpectation.paramPtrs = &ServiceMockEmbedTextsParamPtrs{}
+	}
+	mmEmbedTexts.defaultExpectation.paramPtrs.i1 = &i1
+	mmEmbedTexts.defaultExpectation.expectationOrigins.originI1 = minimock.CallerInfo(1)
+
+	return mmEmbedTexts
 }
 
-// Return sets up results that will be returned by Service.EmbeddingTextBatch
-func (mmEmbeddingTextBatch *mServiceMockEmbeddingTextBatch) Return(faa1 [][]float32, err error) *ServiceMock {
-	if mmEmbeddingTextBatch.mock.funcEmbeddingTextBatch != nil {
-		mmEmbeddingTextBatch.mock.t.Fatalf("ServiceMock.EmbeddingTextBatch mock is already set by Set")
+// ExpectM1Param4 sets up expected param m1 for Service.EmbedTexts
+func (mmEmbedTexts *mServiceMockEmbedTexts) ExpectM1Param4(m1 map[string][]string) *mServiceMockEmbedTexts {
+	if mmEmbedTexts.mock.funcEmbedTexts != nil {
+		mmEmbedTexts.mock.t.Fatalf("ServiceMock.EmbedTexts mock is already set by Set")
 	}
 
-	if mmEmbeddingTextBatch.defaultExpectation == nil {
-		mmEmbeddingTextBatch.defaultExpectation = &ServiceMockEmbeddingTextBatchExpectation{mock: mmEmbeddingTextBatch.mock}
+	if mmEmbedTexts.defaultExpectation == nil {
+		mmEmbedTexts.defaultExpectation = &ServiceMockEmbedTextsExpectation{}
 	}
-	mmEmbeddingTextBatch.defaultExpectation.results = &ServiceMockEmbeddingTextBatchResults{faa1, err}
-	mmEmbeddingTextBatch.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
-	return mmEmbeddingTextBatch.mock
+
+	if mmEmbedTexts.defaultExpectation.params != nil {
+		mmEmbedTexts.mock.t.Fatalf("ServiceMock.EmbedTexts mock is already set by Expect")
+	}
+
+	if mmEmbedTexts.defaultExpectation.paramPtrs == nil {
+		mmEmbedTexts.defaultExpectation.paramPtrs = &ServiceMockEmbedTextsParamPtrs{}
+	}
+	mmEmbedTexts.defaultExpectation.paramPtrs.m1 = &m1
+	mmEmbedTexts.defaultExpectation.expectationOrigins.originM1 = minimock.CallerInfo(1)
+
+	return mmEmbedTexts
 }
 
-// Set uses given function f to mock the Service.EmbeddingTextBatch method
-func (mmEmbeddingTextBatch *mServiceMockEmbeddingTextBatch) Set(f func(ctx context.Context, sa1 []string) (faa1 [][]float32, err error)) *ServiceMock {
-	if mmEmbeddingTextBatch.defaultExpectation != nil {
-		mmEmbeddingTextBatch.mock.t.Fatalf("Default expectation is already set for the Service.EmbeddingTextBatch method")
+// Inspect accepts an inspector function that has same arguments as the Service.EmbedTexts
+func (mmEmbedTexts *mServiceMockEmbedTexts) Inspect(f func(ctx context.Context, sa1 []string, i1 int, m1 map[string][]string)) *mServiceMockEmbedTexts {
+	if mmEmbedTexts.mock.inspectFuncEmbedTexts != nil {
+		mmEmbedTexts.mock.t.Fatalf("Inspect function is already set for ServiceMock.EmbedTexts")
 	}
 
-	if len(mmEmbeddingTextBatch.expectations) > 0 {
-		mmEmbeddingTextBatch.mock.t.Fatalf("Some expectations are already set for the Service.EmbeddingTextBatch method")
-	}
+	mmEmbedTexts.mock.inspectFuncEmbedTexts = f
 
-	mmEmbeddingTextBatch.mock.funcEmbeddingTextBatch = f
-	mmEmbeddingTextBatch.mock.funcEmbeddingTextBatchOrigin = minimock.CallerInfo(1)
-	return mmEmbeddingTextBatch.mock
+	return mmEmbedTexts
 }
 
-// When sets expectation for the Service.EmbeddingTextBatch which will trigger the result defined by the following
+// Return sets up results that will be returned by Service.EmbedTexts
+func (mmEmbedTexts *mServiceMockEmbedTexts) Return(faa1 [][]float32, err error) *ServiceMock {
+	if mmEmbedTexts.mock.funcEmbedTexts != nil {
+		mmEmbedTexts.mock.t.Fatalf("ServiceMock.EmbedTexts mock is already set by Set")
+	}
+
+	if mmEmbedTexts.defaultExpectation == nil {
+		mmEmbedTexts.defaultExpectation = &ServiceMockEmbedTextsExpectation{mock: mmEmbedTexts.mock}
+	}
+	mmEmbedTexts.defaultExpectation.results = &ServiceMockEmbedTextsResults{faa1, err}
+	mmEmbedTexts.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmEmbedTexts.mock
+}
+
+// Set uses given function f to mock the Service.EmbedTexts method
+func (mmEmbedTexts *mServiceMockEmbedTexts) Set(f func(ctx context.Context, sa1 []string, i1 int, m1 map[string][]string) (faa1 [][]float32, err error)) *ServiceMock {
+	if mmEmbedTexts.defaultExpectation != nil {
+		mmEmbedTexts.mock.t.Fatalf("Default expectation is already set for the Service.EmbedTexts method")
+	}
+
+	if len(mmEmbedTexts.expectations) > 0 {
+		mmEmbedTexts.mock.t.Fatalf("Some expectations are already set for the Service.EmbedTexts method")
+	}
+
+	mmEmbedTexts.mock.funcEmbedTexts = f
+	mmEmbedTexts.mock.funcEmbedTextsOrigin = minimock.CallerInfo(1)
+	return mmEmbedTexts.mock
+}
+
+// When sets expectation for the Service.EmbedTexts which will trigger the result defined by the following
 // Then helper
-func (mmEmbeddingTextBatch *mServiceMockEmbeddingTextBatch) When(ctx context.Context, sa1 []string) *ServiceMockEmbeddingTextBatchExpectation {
-	if mmEmbeddingTextBatch.mock.funcEmbeddingTextBatch != nil {
-		mmEmbeddingTextBatch.mock.t.Fatalf("ServiceMock.EmbeddingTextBatch mock is already set by Set")
+func (mmEmbedTexts *mServiceMockEmbedTexts) When(ctx context.Context, sa1 []string, i1 int, m1 map[string][]string) *ServiceMockEmbedTextsExpectation {
+	if mmEmbedTexts.mock.funcEmbedTexts != nil {
+		mmEmbedTexts.mock.t.Fatalf("ServiceMock.EmbedTexts mock is already set by Set")
 	}
 
-	expectation := &ServiceMockEmbeddingTextBatchExpectation{
-		mock:               mmEmbeddingTextBatch.mock,
-		params:             &ServiceMockEmbeddingTextBatchParams{ctx, sa1},
-		expectationOrigins: ServiceMockEmbeddingTextBatchExpectationOrigins{origin: minimock.CallerInfo(1)},
+	expectation := &ServiceMockEmbedTextsExpectation{
+		mock:               mmEmbedTexts.mock,
+		params:             &ServiceMockEmbedTextsParams{ctx, sa1, i1, m1},
+		expectationOrigins: ServiceMockEmbedTextsExpectationOrigins{origin: minimock.CallerInfo(1)},
 	}
-	mmEmbeddingTextBatch.expectations = append(mmEmbeddingTextBatch.expectations, expectation)
+	mmEmbedTexts.expectations = append(mmEmbedTexts.expectations, expectation)
 	return expectation
 }
 
-// Then sets up Service.EmbeddingTextBatch return parameters for the expectation previously defined by the When method
-func (e *ServiceMockEmbeddingTextBatchExpectation) Then(faa1 [][]float32, err error) *ServiceMock {
-	e.results = &ServiceMockEmbeddingTextBatchResults{faa1, err}
+// Then sets up Service.EmbedTexts return parameters for the expectation previously defined by the When method
+func (e *ServiceMockEmbedTextsExpectation) Then(faa1 [][]float32, err error) *ServiceMock {
+	e.results = &ServiceMockEmbedTextsResults{faa1, err}
 	return e.mock
 }
 
-// Times sets number of times Service.EmbeddingTextBatch should be invoked
-func (mmEmbeddingTextBatch *mServiceMockEmbeddingTextBatch) Times(n uint64) *mServiceMockEmbeddingTextBatch {
+// Times sets number of times Service.EmbedTexts should be invoked
+func (mmEmbedTexts *mServiceMockEmbedTexts) Times(n uint64) *mServiceMockEmbedTexts {
 	if n == 0 {
-		mmEmbeddingTextBatch.mock.t.Fatalf("Times of ServiceMock.EmbeddingTextBatch mock can not be zero")
+		mmEmbedTexts.mock.t.Fatalf("Times of ServiceMock.EmbedTexts mock can not be zero")
 	}
-	mm_atomic.StoreUint64(&mmEmbeddingTextBatch.expectedInvocations, n)
-	mmEmbeddingTextBatch.expectedInvocationsOrigin = minimock.CallerInfo(1)
-	return mmEmbeddingTextBatch
+	mm_atomic.StoreUint64(&mmEmbedTexts.expectedInvocations, n)
+	mmEmbedTexts.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmEmbedTexts
 }
 
-func (mmEmbeddingTextBatch *mServiceMockEmbeddingTextBatch) invocationsDone() bool {
-	if len(mmEmbeddingTextBatch.expectations) == 0 && mmEmbeddingTextBatch.defaultExpectation == nil && mmEmbeddingTextBatch.mock.funcEmbeddingTextBatch == nil {
+func (mmEmbedTexts *mServiceMockEmbedTexts) invocationsDone() bool {
+	if len(mmEmbedTexts.expectations) == 0 && mmEmbedTexts.defaultExpectation == nil && mmEmbedTexts.mock.funcEmbedTexts == nil {
 		return true
 	}
 
-	totalInvocations := mm_atomic.LoadUint64(&mmEmbeddingTextBatch.mock.afterEmbeddingTextBatchCounter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmEmbeddingTextBatch.expectedInvocations)
+	totalInvocations := mm_atomic.LoadUint64(&mmEmbedTexts.mock.afterEmbedTextsCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmEmbedTexts.expectedInvocations)
 
 	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
 }
 
-// EmbeddingTextBatch implements mm_service.Service
-func (mmEmbeddingTextBatch *ServiceMock) EmbeddingTextBatch(ctx context.Context, sa1 []string) (faa1 [][]float32, err error) {
-	mm_atomic.AddUint64(&mmEmbeddingTextBatch.beforeEmbeddingTextBatchCounter, 1)
-	defer mm_atomic.AddUint64(&mmEmbeddingTextBatch.afterEmbeddingTextBatchCounter, 1)
+// EmbedTexts implements mm_service.Service
+func (mmEmbedTexts *ServiceMock) EmbedTexts(ctx context.Context, sa1 []string, i1 int, m1 map[string][]string) (faa1 [][]float32, err error) {
+	mm_atomic.AddUint64(&mmEmbedTexts.beforeEmbedTextsCounter, 1)
+	defer mm_atomic.AddUint64(&mmEmbedTexts.afterEmbedTextsCounter, 1)
 
-	mmEmbeddingTextBatch.t.Helper()
+	mmEmbedTexts.t.Helper()
 
-	if mmEmbeddingTextBatch.inspectFuncEmbeddingTextBatch != nil {
-		mmEmbeddingTextBatch.inspectFuncEmbeddingTextBatch(ctx, sa1)
+	if mmEmbedTexts.inspectFuncEmbedTexts != nil {
+		mmEmbedTexts.inspectFuncEmbedTexts(ctx, sa1, i1, m1)
 	}
 
-	mm_params := ServiceMockEmbeddingTextBatchParams{ctx, sa1}
+	mm_params := ServiceMockEmbedTextsParams{ctx, sa1, i1, m1}
 
 	// Record call args
-	mmEmbeddingTextBatch.EmbeddingTextBatchMock.mutex.Lock()
-	mmEmbeddingTextBatch.EmbeddingTextBatchMock.callArgs = append(mmEmbeddingTextBatch.EmbeddingTextBatchMock.callArgs, &mm_params)
-	mmEmbeddingTextBatch.EmbeddingTextBatchMock.mutex.Unlock()
+	mmEmbedTexts.EmbedTextsMock.mutex.Lock()
+	mmEmbedTexts.EmbedTextsMock.callArgs = append(mmEmbedTexts.EmbedTextsMock.callArgs, &mm_params)
+	mmEmbedTexts.EmbedTextsMock.mutex.Unlock()
 
-	for _, e := range mmEmbeddingTextBatch.EmbeddingTextBatchMock.expectations {
+	for _, e := range mmEmbedTexts.EmbedTextsMock.expectations {
 		if minimock.Equal(*e.params, mm_params) {
 			mm_atomic.AddUint64(&e.Counter, 1)
 			return e.results.faa1, e.results.err
 		}
 	}
 
-	if mmEmbeddingTextBatch.EmbeddingTextBatchMock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmEmbeddingTextBatch.EmbeddingTextBatchMock.defaultExpectation.Counter, 1)
-		mm_want := mmEmbeddingTextBatch.EmbeddingTextBatchMock.defaultExpectation.params
-		mm_want_ptrs := mmEmbeddingTextBatch.EmbeddingTextBatchMock.defaultExpectation.paramPtrs
+	if mmEmbedTexts.EmbedTextsMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmEmbedTexts.EmbedTextsMock.defaultExpectation.Counter, 1)
+		mm_want := mmEmbedTexts.EmbedTextsMock.defaultExpectation.params
+		mm_want_ptrs := mmEmbedTexts.EmbedTextsMock.defaultExpectation.paramPtrs
 
-		mm_got := ServiceMockEmbeddingTextBatchParams{ctx, sa1}
+		mm_got := ServiceMockEmbedTextsParams{ctx, sa1, i1, m1}
 
 		if mm_want_ptrs != nil {
 
 			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
-				mmEmbeddingTextBatch.t.Errorf("ServiceMock.EmbeddingTextBatch got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmEmbeddingTextBatch.EmbeddingTextBatchMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+				mmEmbedTexts.t.Errorf("ServiceMock.EmbedTexts got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmEmbedTexts.EmbedTextsMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
 			}
 
 			if mm_want_ptrs.sa1 != nil && !minimock.Equal(*mm_want_ptrs.sa1, mm_got.sa1) {
-				mmEmbeddingTextBatch.t.Errorf("ServiceMock.EmbeddingTextBatch got unexpected parameter sa1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmEmbeddingTextBatch.EmbeddingTextBatchMock.defaultExpectation.expectationOrigins.originSa1, *mm_want_ptrs.sa1, mm_got.sa1, minimock.Diff(*mm_want_ptrs.sa1, mm_got.sa1))
+				mmEmbedTexts.t.Errorf("ServiceMock.EmbedTexts got unexpected parameter sa1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmEmbedTexts.EmbedTextsMock.defaultExpectation.expectationOrigins.originSa1, *mm_want_ptrs.sa1, mm_got.sa1, minimock.Diff(*mm_want_ptrs.sa1, mm_got.sa1))
+			}
+
+			if mm_want_ptrs.i1 != nil && !minimock.Equal(*mm_want_ptrs.i1, mm_got.i1) {
+				mmEmbedTexts.t.Errorf("ServiceMock.EmbedTexts got unexpected parameter i1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmEmbedTexts.EmbedTextsMock.defaultExpectation.expectationOrigins.originI1, *mm_want_ptrs.i1, mm_got.i1, minimock.Diff(*mm_want_ptrs.i1, mm_got.i1))
+			}
+
+			if mm_want_ptrs.m1 != nil && !minimock.Equal(*mm_want_ptrs.m1, mm_got.m1) {
+				mmEmbedTexts.t.Errorf("ServiceMock.EmbedTexts got unexpected parameter m1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmEmbedTexts.EmbedTextsMock.defaultExpectation.expectationOrigins.originM1, *mm_want_ptrs.m1, mm_got.m1, minimock.Diff(*mm_want_ptrs.m1, mm_got.m1))
 			}
 
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
-			mmEmbeddingTextBatch.t.Errorf("ServiceMock.EmbeddingTextBatch got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-				mmEmbeddingTextBatch.EmbeddingTextBatchMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+			mmEmbedTexts.t.Errorf("ServiceMock.EmbedTexts got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmEmbedTexts.EmbedTextsMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
 		}
 
-		mm_results := mmEmbeddingTextBatch.EmbeddingTextBatchMock.defaultExpectation.results
+		mm_results := mmEmbedTexts.EmbedTextsMock.defaultExpectation.results
 		if mm_results == nil {
-			mmEmbeddingTextBatch.t.Fatal("No results are set for the ServiceMock.EmbeddingTextBatch")
+			mmEmbedTexts.t.Fatal("No results are set for the ServiceMock.EmbedTexts")
 		}
 		return (*mm_results).faa1, (*mm_results).err
 	}
-	if mmEmbeddingTextBatch.funcEmbeddingTextBatch != nil {
-		return mmEmbeddingTextBatch.funcEmbeddingTextBatch(ctx, sa1)
+	if mmEmbedTexts.funcEmbedTexts != nil {
+		return mmEmbedTexts.funcEmbedTexts(ctx, sa1, i1, m1)
 	}
-	mmEmbeddingTextBatch.t.Fatalf("Unexpected call to ServiceMock.EmbeddingTextBatch. %v %v", ctx, sa1)
+	mmEmbedTexts.t.Fatalf("Unexpected call to ServiceMock.EmbedTexts. %v %v %v %v", ctx, sa1, i1, m1)
 	return
 }
 
-// EmbeddingTextBatchAfterCounter returns a count of finished ServiceMock.EmbeddingTextBatch invocations
-func (mmEmbeddingTextBatch *ServiceMock) EmbeddingTextBatchAfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmEmbeddingTextBatch.afterEmbeddingTextBatchCounter)
+// EmbedTextsAfterCounter returns a count of finished ServiceMock.EmbedTexts invocations
+func (mmEmbedTexts *ServiceMock) EmbedTextsAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmEmbedTexts.afterEmbedTextsCounter)
 }
 
-// EmbeddingTextBatchBeforeCounter returns a count of ServiceMock.EmbeddingTextBatch invocations
-func (mmEmbeddingTextBatch *ServiceMock) EmbeddingTextBatchBeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmEmbeddingTextBatch.beforeEmbeddingTextBatchCounter)
+// EmbedTextsBeforeCounter returns a count of ServiceMock.EmbedTexts invocations
+func (mmEmbedTexts *ServiceMock) EmbedTextsBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmEmbedTexts.beforeEmbedTextsCounter)
 }
 
-// Calls returns a list of arguments used in each call to ServiceMock.EmbeddingTextBatch.
+// Calls returns a list of arguments used in each call to ServiceMock.EmbedTexts.
 // The list is in the same order as the calls were made (i.e. recent calls have a higher index)
-func (mmEmbeddingTextBatch *mServiceMockEmbeddingTextBatch) Calls() []*ServiceMockEmbeddingTextBatchParams {
-	mmEmbeddingTextBatch.mutex.RLock()
+func (mmEmbedTexts *mServiceMockEmbedTexts) Calls() []*ServiceMockEmbedTextsParams {
+	mmEmbedTexts.mutex.RLock()
 
-	argCopy := make([]*ServiceMockEmbeddingTextBatchParams, len(mmEmbeddingTextBatch.callArgs))
-	copy(argCopy, mmEmbeddingTextBatch.callArgs)
+	argCopy := make([]*ServiceMockEmbedTextsParams, len(mmEmbedTexts.callArgs))
+	copy(argCopy, mmEmbedTexts.callArgs)
 
-	mmEmbeddingTextBatch.mutex.RUnlock()
+	mmEmbedTexts.mutex.RUnlock()
 
 	return argCopy
 }
 
-// MinimockEmbeddingTextBatchDone returns true if the count of the EmbeddingTextBatch invocations corresponds
+// MinimockEmbedTextsDone returns true if the count of the EmbedTexts invocations corresponds
 // the number of defined expectations
-func (m *ServiceMock) MinimockEmbeddingTextBatchDone() bool {
-	if m.EmbeddingTextBatchMock.optional {
+func (m *ServiceMock) MinimockEmbedTextsDone() bool {
+	if m.EmbedTextsMock.optional {
 		// Optional methods provide '0 or more' call count restriction.
 		return true
 	}
 
-	for _, e := range m.EmbeddingTextBatchMock.expectations {
+	for _, e := range m.EmbedTextsMock.expectations {
 		if mm_atomic.LoadUint64(&e.Counter) < 1 {
 			return false
 		}
 	}
 
-	return m.EmbeddingTextBatchMock.invocationsDone()
+	return m.EmbedTextsMock.invocationsDone()
 }
 
-// MinimockEmbeddingTextBatchInspect logs each unmet expectation
-func (m *ServiceMock) MinimockEmbeddingTextBatchInspect() {
-	for _, e := range m.EmbeddingTextBatchMock.expectations {
+// MinimockEmbedTextsInspect logs each unmet expectation
+func (m *ServiceMock) MinimockEmbedTextsInspect() {
+	for _, e := range m.EmbedTextsMock.expectations {
 		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Errorf("Expected call to ServiceMock.EmbeddingTextBatch at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+			m.t.Errorf("Expected call to ServiceMock.EmbedTexts at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
 		}
 	}
 
-	afterEmbeddingTextBatchCounter := mm_atomic.LoadUint64(&m.afterEmbeddingTextBatchCounter)
+	afterEmbedTextsCounter := mm_atomic.LoadUint64(&m.afterEmbedTextsCounter)
 	// if default expectation was set then invocations count should be greater than zero
-	if m.EmbeddingTextBatchMock.defaultExpectation != nil && afterEmbeddingTextBatchCounter < 1 {
-		if m.EmbeddingTextBatchMock.defaultExpectation.params == nil {
-			m.t.Errorf("Expected call to ServiceMock.EmbeddingTextBatch at\n%s", m.EmbeddingTextBatchMock.defaultExpectation.returnOrigin)
+	if m.EmbedTextsMock.defaultExpectation != nil && afterEmbedTextsCounter < 1 {
+		if m.EmbedTextsMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to ServiceMock.EmbedTexts at\n%s", m.EmbedTextsMock.defaultExpectation.returnOrigin)
 		} else {
-			m.t.Errorf("Expected call to ServiceMock.EmbeddingTextBatch at\n%s with params: %#v", m.EmbeddingTextBatchMock.defaultExpectation.expectationOrigins.origin, *m.EmbeddingTextBatchMock.defaultExpectation.params)
+			m.t.Errorf("Expected call to ServiceMock.EmbedTexts at\n%s with params: %#v", m.EmbedTextsMock.defaultExpectation.expectationOrigins.origin, *m.EmbedTextsMock.defaultExpectation.params)
 		}
 	}
 	// if func was set then invocations count should be greater than zero
-	if m.funcEmbeddingTextBatch != nil && afterEmbeddingTextBatchCounter < 1 {
-		m.t.Errorf("Expected call to ServiceMock.EmbeddingTextBatch at\n%s", m.funcEmbeddingTextBatchOrigin)
+	if m.funcEmbedTexts != nil && afterEmbedTextsCounter < 1 {
+		m.t.Errorf("Expected call to ServiceMock.EmbedTexts at\n%s", m.funcEmbedTextsOrigin)
 	}
 
-	if !m.EmbeddingTextBatchMock.invocationsDone() && afterEmbeddingTextBatchCounter > 0 {
-		m.t.Errorf("Expected %d calls to ServiceMock.EmbeddingTextBatch at\n%s but found %d calls",
-			mm_atomic.LoadUint64(&m.EmbeddingTextBatchMock.expectedInvocations), m.EmbeddingTextBatchMock.expectedInvocationsOrigin, afterEmbeddingTextBatchCounter)
-	}
-}
-
-type mServiceMockEmbeddingTextPipe struct {
-	optional           bool
-	mock               *ServiceMock
-	defaultExpectation *ServiceMockEmbeddingTextPipeExpectation
-	expectations       []*ServiceMockEmbeddingTextPipeExpectation
-
-	callArgs []*ServiceMockEmbeddingTextPipeParams
-	mutex    sync.RWMutex
-
-	expectedInvocations       uint64
-	expectedInvocationsOrigin string
-}
-
-// ServiceMockEmbeddingTextPipeExpectation specifies expectation struct of the Service.EmbeddingTextPipe
-type ServiceMockEmbeddingTextPipeExpectation struct {
-	mock               *ServiceMock
-	params             *ServiceMockEmbeddingTextPipeParams
-	paramPtrs          *ServiceMockEmbeddingTextPipeParamPtrs
-	expectationOrigins ServiceMockEmbeddingTextPipeExpectationOrigins
-	results            *ServiceMockEmbeddingTextPipeResults
-	returnOrigin       string
-	Counter            uint64
-}
-
-// ServiceMockEmbeddingTextPipeParams contains parameters of the Service.EmbeddingTextPipe
-type ServiceMockEmbeddingTextPipeParams struct {
-	ctx context.Context
-	sa1 []string
-}
-
-// ServiceMockEmbeddingTextPipeParamPtrs contains pointers to parameters of the Service.EmbeddingTextPipe
-type ServiceMockEmbeddingTextPipeParamPtrs struct {
-	ctx *context.Context
-	sa1 *[]string
-}
-
-// ServiceMockEmbeddingTextPipeResults contains results of the Service.EmbeddingTextPipe
-type ServiceMockEmbeddingTextPipeResults struct {
-	faa1 [][]float32
-	err  error
-}
-
-// ServiceMockEmbeddingTextPipeOrigins contains origins of expectations of the Service.EmbeddingTextPipe
-type ServiceMockEmbeddingTextPipeExpectationOrigins struct {
-	origin    string
-	originCtx string
-	originSa1 string
-}
-
-// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
-// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
-// Optional() makes method check to work in '0 or more' mode.
-// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
-// catch the problems when the expected method call is totally skipped during test run.
-func (mmEmbeddingTextPipe *mServiceMockEmbeddingTextPipe) Optional() *mServiceMockEmbeddingTextPipe {
-	mmEmbeddingTextPipe.optional = true
-	return mmEmbeddingTextPipe
-}
-
-// Expect sets up expected params for Service.EmbeddingTextPipe
-func (mmEmbeddingTextPipe *mServiceMockEmbeddingTextPipe) Expect(ctx context.Context, sa1 []string) *mServiceMockEmbeddingTextPipe {
-	if mmEmbeddingTextPipe.mock.funcEmbeddingTextPipe != nil {
-		mmEmbeddingTextPipe.mock.t.Fatalf("ServiceMock.EmbeddingTextPipe mock is already set by Set")
-	}
-
-	if mmEmbeddingTextPipe.defaultExpectation == nil {
-		mmEmbeddingTextPipe.defaultExpectation = &ServiceMockEmbeddingTextPipeExpectation{}
-	}
-
-	if mmEmbeddingTextPipe.defaultExpectation.paramPtrs != nil {
-		mmEmbeddingTextPipe.mock.t.Fatalf("ServiceMock.EmbeddingTextPipe mock is already set by ExpectParams functions")
-	}
-
-	mmEmbeddingTextPipe.defaultExpectation.params = &ServiceMockEmbeddingTextPipeParams{ctx, sa1}
-	mmEmbeddingTextPipe.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
-	for _, e := range mmEmbeddingTextPipe.expectations {
-		if minimock.Equal(e.params, mmEmbeddingTextPipe.defaultExpectation.params) {
-			mmEmbeddingTextPipe.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmEmbeddingTextPipe.defaultExpectation.params)
-		}
-	}
-
-	return mmEmbeddingTextPipe
-}
-
-// ExpectCtxParam1 sets up expected param ctx for Service.EmbeddingTextPipe
-func (mmEmbeddingTextPipe *mServiceMockEmbeddingTextPipe) ExpectCtxParam1(ctx context.Context) *mServiceMockEmbeddingTextPipe {
-	if mmEmbeddingTextPipe.mock.funcEmbeddingTextPipe != nil {
-		mmEmbeddingTextPipe.mock.t.Fatalf("ServiceMock.EmbeddingTextPipe mock is already set by Set")
-	}
-
-	if mmEmbeddingTextPipe.defaultExpectation == nil {
-		mmEmbeddingTextPipe.defaultExpectation = &ServiceMockEmbeddingTextPipeExpectation{}
-	}
-
-	if mmEmbeddingTextPipe.defaultExpectation.params != nil {
-		mmEmbeddingTextPipe.mock.t.Fatalf("ServiceMock.EmbeddingTextPipe mock is already set by Expect")
-	}
-
-	if mmEmbeddingTextPipe.defaultExpectation.paramPtrs == nil {
-		mmEmbeddingTextPipe.defaultExpectation.paramPtrs = &ServiceMockEmbeddingTextPipeParamPtrs{}
-	}
-	mmEmbeddingTextPipe.defaultExpectation.paramPtrs.ctx = &ctx
-	mmEmbeddingTextPipe.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
-
-	return mmEmbeddingTextPipe
-}
-
-// ExpectSa1Param2 sets up expected param sa1 for Service.EmbeddingTextPipe
-func (mmEmbeddingTextPipe *mServiceMockEmbeddingTextPipe) ExpectSa1Param2(sa1 []string) *mServiceMockEmbeddingTextPipe {
-	if mmEmbeddingTextPipe.mock.funcEmbeddingTextPipe != nil {
-		mmEmbeddingTextPipe.mock.t.Fatalf("ServiceMock.EmbeddingTextPipe mock is already set by Set")
-	}
-
-	if mmEmbeddingTextPipe.defaultExpectation == nil {
-		mmEmbeddingTextPipe.defaultExpectation = &ServiceMockEmbeddingTextPipeExpectation{}
-	}
-
-	if mmEmbeddingTextPipe.defaultExpectation.params != nil {
-		mmEmbeddingTextPipe.mock.t.Fatalf("ServiceMock.EmbeddingTextPipe mock is already set by Expect")
-	}
-
-	if mmEmbeddingTextPipe.defaultExpectation.paramPtrs == nil {
-		mmEmbeddingTextPipe.defaultExpectation.paramPtrs = &ServiceMockEmbeddingTextPipeParamPtrs{}
-	}
-	mmEmbeddingTextPipe.defaultExpectation.paramPtrs.sa1 = &sa1
-	mmEmbeddingTextPipe.defaultExpectation.expectationOrigins.originSa1 = minimock.CallerInfo(1)
-
-	return mmEmbeddingTextPipe
-}
-
-// Inspect accepts an inspector function that has same arguments as the Service.EmbeddingTextPipe
-func (mmEmbeddingTextPipe *mServiceMockEmbeddingTextPipe) Inspect(f func(ctx context.Context, sa1 []string)) *mServiceMockEmbeddingTextPipe {
-	if mmEmbeddingTextPipe.mock.inspectFuncEmbeddingTextPipe != nil {
-		mmEmbeddingTextPipe.mock.t.Fatalf("Inspect function is already set for ServiceMock.EmbeddingTextPipe")
-	}
-
-	mmEmbeddingTextPipe.mock.inspectFuncEmbeddingTextPipe = f
-
-	return mmEmbeddingTextPipe
-}
-
-// Return sets up results that will be returned by Service.EmbeddingTextPipe
-func (mmEmbeddingTextPipe *mServiceMockEmbeddingTextPipe) Return(faa1 [][]float32, err error) *ServiceMock {
-	if mmEmbeddingTextPipe.mock.funcEmbeddingTextPipe != nil {
-		mmEmbeddingTextPipe.mock.t.Fatalf("ServiceMock.EmbeddingTextPipe mock is already set by Set")
-	}
-
-	if mmEmbeddingTextPipe.defaultExpectation == nil {
-		mmEmbeddingTextPipe.defaultExpectation = &ServiceMockEmbeddingTextPipeExpectation{mock: mmEmbeddingTextPipe.mock}
-	}
-	mmEmbeddingTextPipe.defaultExpectation.results = &ServiceMockEmbeddingTextPipeResults{faa1, err}
-	mmEmbeddingTextPipe.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
-	return mmEmbeddingTextPipe.mock
-}
-
-// Set uses given function f to mock the Service.EmbeddingTextPipe method
-func (mmEmbeddingTextPipe *mServiceMockEmbeddingTextPipe) Set(f func(ctx context.Context, sa1 []string) (faa1 [][]float32, err error)) *ServiceMock {
-	if mmEmbeddingTextPipe.defaultExpectation != nil {
-		mmEmbeddingTextPipe.mock.t.Fatalf("Default expectation is already set for the Service.EmbeddingTextPipe method")
-	}
-
-	if len(mmEmbeddingTextPipe.expectations) > 0 {
-		mmEmbeddingTextPipe.mock.t.Fatalf("Some expectations are already set for the Service.EmbeddingTextPipe method")
-	}
-
-	mmEmbeddingTextPipe.mock.funcEmbeddingTextPipe = f
-	mmEmbeddingTextPipe.mock.funcEmbeddingTextPipeOrigin = minimock.CallerInfo(1)
-	return mmEmbeddingTextPipe.mock
-}
-
-// When sets expectation for the Service.EmbeddingTextPipe which will trigger the result defined by the following
-// Then helper
-func (mmEmbeddingTextPipe *mServiceMockEmbeddingTextPipe) When(ctx context.Context, sa1 []string) *ServiceMockEmbeddingTextPipeExpectation {
-	if mmEmbeddingTextPipe.mock.funcEmbeddingTextPipe != nil {
-		mmEmbeddingTextPipe.mock.t.Fatalf("ServiceMock.EmbeddingTextPipe mock is already set by Set")
-	}
-
-	expectation := &ServiceMockEmbeddingTextPipeExpectation{
-		mock:               mmEmbeddingTextPipe.mock,
-		params:             &ServiceMockEmbeddingTextPipeParams{ctx, sa1},
-		expectationOrigins: ServiceMockEmbeddingTextPipeExpectationOrigins{origin: minimock.CallerInfo(1)},
-	}
-	mmEmbeddingTextPipe.expectations = append(mmEmbeddingTextPipe.expectations, expectation)
-	return expectation
-}
-
-// Then sets up Service.EmbeddingTextPipe return parameters for the expectation previously defined by the When method
-func (e *ServiceMockEmbeddingTextPipeExpectation) Then(faa1 [][]float32, err error) *ServiceMock {
-	e.results = &ServiceMockEmbeddingTextPipeResults{faa1, err}
-	return e.mock
-}
-
-// Times sets number of times Service.EmbeddingTextPipe should be invoked
-func (mmEmbeddingTextPipe *mServiceMockEmbeddingTextPipe) Times(n uint64) *mServiceMockEmbeddingTextPipe {
-	if n == 0 {
-		mmEmbeddingTextPipe.mock.t.Fatalf("Times of ServiceMock.EmbeddingTextPipe mock can not be zero")
-	}
-	mm_atomic.StoreUint64(&mmEmbeddingTextPipe.expectedInvocations, n)
-	mmEmbeddingTextPipe.expectedInvocationsOrigin = minimock.CallerInfo(1)
-	return mmEmbeddingTextPipe
-}
-
-func (mmEmbeddingTextPipe *mServiceMockEmbeddingTextPipe) invocationsDone() bool {
-	if len(mmEmbeddingTextPipe.expectations) == 0 && mmEmbeddingTextPipe.defaultExpectation == nil && mmEmbeddingTextPipe.mock.funcEmbeddingTextPipe == nil {
-		return true
-	}
-
-	totalInvocations := mm_atomic.LoadUint64(&mmEmbeddingTextPipe.mock.afterEmbeddingTextPipeCounter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmEmbeddingTextPipe.expectedInvocations)
-
-	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
-}
-
-// EmbeddingTextPipe implements mm_service.Service
-func (mmEmbeddingTextPipe *ServiceMock) EmbeddingTextPipe(ctx context.Context, sa1 []string) (faa1 [][]float32, err error) {
-	mm_atomic.AddUint64(&mmEmbeddingTextPipe.beforeEmbeddingTextPipeCounter, 1)
-	defer mm_atomic.AddUint64(&mmEmbeddingTextPipe.afterEmbeddingTextPipeCounter, 1)
-
-	mmEmbeddingTextPipe.t.Helper()
-
-	if mmEmbeddingTextPipe.inspectFuncEmbeddingTextPipe != nil {
-		mmEmbeddingTextPipe.inspectFuncEmbeddingTextPipe(ctx, sa1)
-	}
-
-	mm_params := ServiceMockEmbeddingTextPipeParams{ctx, sa1}
-
-	// Record call args
-	mmEmbeddingTextPipe.EmbeddingTextPipeMock.mutex.Lock()
-	mmEmbeddingTextPipe.EmbeddingTextPipeMock.callArgs = append(mmEmbeddingTextPipe.EmbeddingTextPipeMock.callArgs, &mm_params)
-	mmEmbeddingTextPipe.EmbeddingTextPipeMock.mutex.Unlock()
-
-	for _, e := range mmEmbeddingTextPipe.EmbeddingTextPipeMock.expectations {
-		if minimock.Equal(*e.params, mm_params) {
-			mm_atomic.AddUint64(&e.Counter, 1)
-			return e.results.faa1, e.results.err
-		}
-	}
-
-	if mmEmbeddingTextPipe.EmbeddingTextPipeMock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmEmbeddingTextPipe.EmbeddingTextPipeMock.defaultExpectation.Counter, 1)
-		mm_want := mmEmbeddingTextPipe.EmbeddingTextPipeMock.defaultExpectation.params
-		mm_want_ptrs := mmEmbeddingTextPipe.EmbeddingTextPipeMock.defaultExpectation.paramPtrs
-
-		mm_got := ServiceMockEmbeddingTextPipeParams{ctx, sa1}
-
-		if mm_want_ptrs != nil {
-
-			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
-				mmEmbeddingTextPipe.t.Errorf("ServiceMock.EmbeddingTextPipe got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmEmbeddingTextPipe.EmbeddingTextPipeMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
-			}
-
-			if mm_want_ptrs.sa1 != nil && !minimock.Equal(*mm_want_ptrs.sa1, mm_got.sa1) {
-				mmEmbeddingTextPipe.t.Errorf("ServiceMock.EmbeddingTextPipe got unexpected parameter sa1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmEmbeddingTextPipe.EmbeddingTextPipeMock.defaultExpectation.expectationOrigins.originSa1, *mm_want_ptrs.sa1, mm_got.sa1, minimock.Diff(*mm_want_ptrs.sa1, mm_got.sa1))
-			}
-
-		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
-			mmEmbeddingTextPipe.t.Errorf("ServiceMock.EmbeddingTextPipe got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-				mmEmbeddingTextPipe.EmbeddingTextPipeMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
-		}
-
-		mm_results := mmEmbeddingTextPipe.EmbeddingTextPipeMock.defaultExpectation.results
-		if mm_results == nil {
-			mmEmbeddingTextPipe.t.Fatal("No results are set for the ServiceMock.EmbeddingTextPipe")
-		}
-		return (*mm_results).faa1, (*mm_results).err
-	}
-	if mmEmbeddingTextPipe.funcEmbeddingTextPipe != nil {
-		return mmEmbeddingTextPipe.funcEmbeddingTextPipe(ctx, sa1)
-	}
-	mmEmbeddingTextPipe.t.Fatalf("Unexpected call to ServiceMock.EmbeddingTextPipe. %v %v", ctx, sa1)
-	return
-}
-
-// EmbeddingTextPipeAfterCounter returns a count of finished ServiceMock.EmbeddingTextPipe invocations
-func (mmEmbeddingTextPipe *ServiceMock) EmbeddingTextPipeAfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmEmbeddingTextPipe.afterEmbeddingTextPipeCounter)
-}
-
-// EmbeddingTextPipeBeforeCounter returns a count of ServiceMock.EmbeddingTextPipe invocations
-func (mmEmbeddingTextPipe *ServiceMock) EmbeddingTextPipeBeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmEmbeddingTextPipe.beforeEmbeddingTextPipeCounter)
-}
-
-// Calls returns a list of arguments used in each call to ServiceMock.EmbeddingTextPipe.
-// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
-func (mmEmbeddingTextPipe *mServiceMockEmbeddingTextPipe) Calls() []*ServiceMockEmbeddingTextPipeParams {
-	mmEmbeddingTextPipe.mutex.RLock()
-
-	argCopy := make([]*ServiceMockEmbeddingTextPipeParams, len(mmEmbeddingTextPipe.callArgs))
-	copy(argCopy, mmEmbeddingTextPipe.callArgs)
-
-	mmEmbeddingTextPipe.mutex.RUnlock()
-
-	return argCopy
-}
-
-// MinimockEmbeddingTextPipeDone returns true if the count of the EmbeddingTextPipe invocations corresponds
-// the number of defined expectations
-func (m *ServiceMock) MinimockEmbeddingTextPipeDone() bool {
-	if m.EmbeddingTextPipeMock.optional {
-		// Optional methods provide '0 or more' call count restriction.
-		return true
-	}
-
-	for _, e := range m.EmbeddingTextPipeMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			return false
-		}
-	}
-
-	return m.EmbeddingTextPipeMock.invocationsDone()
-}
-
-// MinimockEmbeddingTextPipeInspect logs each unmet expectation
-func (m *ServiceMock) MinimockEmbeddingTextPipeInspect() {
-	for _, e := range m.EmbeddingTextPipeMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Errorf("Expected call to ServiceMock.EmbeddingTextPipe at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
-		}
-	}
-
-	afterEmbeddingTextPipeCounter := mm_atomic.LoadUint64(&m.afterEmbeddingTextPipeCounter)
-	// if default expectation was set then invocations count should be greater than zero
-	if m.EmbeddingTextPipeMock.defaultExpectation != nil && afterEmbeddingTextPipeCounter < 1 {
-		if m.EmbeddingTextPipeMock.defaultExpectation.params == nil {
-			m.t.Errorf("Expected call to ServiceMock.EmbeddingTextPipe at\n%s", m.EmbeddingTextPipeMock.defaultExpectation.returnOrigin)
-		} else {
-			m.t.Errorf("Expected call to ServiceMock.EmbeddingTextPipe at\n%s with params: %#v", m.EmbeddingTextPipeMock.defaultExpectation.expectationOrigins.origin, *m.EmbeddingTextPipeMock.defaultExpectation.params)
-		}
-	}
-	// if func was set then invocations count should be greater than zero
-	if m.funcEmbeddingTextPipe != nil && afterEmbeddingTextPipeCounter < 1 {
-		m.t.Errorf("Expected call to ServiceMock.EmbeddingTextPipe at\n%s", m.funcEmbeddingTextPipeOrigin)
-	}
-
-	if !m.EmbeddingTextPipeMock.invocationsDone() && afterEmbeddingTextPipeCounter > 0 {
-		m.t.Errorf("Expected %d calls to ServiceMock.EmbeddingTextPipe at\n%s but found %d calls",
-			mm_atomic.LoadUint64(&m.EmbeddingTextPipeMock.expectedInvocations), m.EmbeddingTextPipeMock.expectedInvocationsOrigin, afterEmbeddingTextPipeCounter)
-	}
-}
-
-type mServiceMockGenerateSummary struct {
-	optional           bool
-	mock               *ServiceMock
-	defaultExpectation *ServiceMockGenerateSummaryExpectation
-	expectations       []*ServiceMockGenerateSummaryExpectation
-
-	callArgs []*ServiceMockGenerateSummaryParams
-	mutex    sync.RWMutex
-
-	expectedInvocations       uint64
-	expectedInvocationsOrigin string
-}
-
-// ServiceMockGenerateSummaryExpectation specifies expectation struct of the Service.GenerateSummary
-type ServiceMockGenerateSummaryExpectation struct {
-	mock               *ServiceMock
-	params             *ServiceMockGenerateSummaryParams
-	paramPtrs          *ServiceMockGenerateSummaryParamPtrs
-	expectationOrigins ServiceMockGenerateSummaryExpectationOrigins
-	results            *ServiceMockGenerateSummaryResults
-	returnOrigin       string
-	Counter            uint64
-}
-
-// ServiceMockGenerateSummaryParams contains parameters of the Service.GenerateSummary
-type ServiceMockGenerateSummaryParams struct {
-	ctx context.Context
-	s1  string
-	s2  string
-}
-
-// ServiceMockGenerateSummaryParamPtrs contains pointers to parameters of the Service.GenerateSummary
-type ServiceMockGenerateSummaryParamPtrs struct {
-	ctx *context.Context
-	s1  *string
-	s2  *string
-}
-
-// ServiceMockGenerateSummaryResults contains results of the Service.GenerateSummary
-type ServiceMockGenerateSummaryResults struct {
-	s3  string
-	err error
-}
-
-// ServiceMockGenerateSummaryOrigins contains origins of expectations of the Service.GenerateSummary
-type ServiceMockGenerateSummaryExpectationOrigins struct {
-	origin    string
-	originCtx string
-	originS1  string
-	originS2  string
-}
-
-// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
-// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
-// Optional() makes method check to work in '0 or more' mode.
-// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
-// catch the problems when the expected method call is totally skipped during test run.
-func (mmGenerateSummary *mServiceMockGenerateSummary) Optional() *mServiceMockGenerateSummary {
-	mmGenerateSummary.optional = true
-	return mmGenerateSummary
-}
-
-// Expect sets up expected params for Service.GenerateSummary
-func (mmGenerateSummary *mServiceMockGenerateSummary) Expect(ctx context.Context, s1 string, s2 string) *mServiceMockGenerateSummary {
-	if mmGenerateSummary.mock.funcGenerateSummary != nil {
-		mmGenerateSummary.mock.t.Fatalf("ServiceMock.GenerateSummary mock is already set by Set")
-	}
-
-	if mmGenerateSummary.defaultExpectation == nil {
-		mmGenerateSummary.defaultExpectation = &ServiceMockGenerateSummaryExpectation{}
-	}
-
-	if mmGenerateSummary.defaultExpectation.paramPtrs != nil {
-		mmGenerateSummary.mock.t.Fatalf("ServiceMock.GenerateSummary mock is already set by ExpectParams functions")
-	}
-
-	mmGenerateSummary.defaultExpectation.params = &ServiceMockGenerateSummaryParams{ctx, s1, s2}
-	mmGenerateSummary.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
-	for _, e := range mmGenerateSummary.expectations {
-		if minimock.Equal(e.params, mmGenerateSummary.defaultExpectation.params) {
-			mmGenerateSummary.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGenerateSummary.defaultExpectation.params)
-		}
-	}
-
-	return mmGenerateSummary
-}
-
-// ExpectCtxParam1 sets up expected param ctx for Service.GenerateSummary
-func (mmGenerateSummary *mServiceMockGenerateSummary) ExpectCtxParam1(ctx context.Context) *mServiceMockGenerateSummary {
-	if mmGenerateSummary.mock.funcGenerateSummary != nil {
-		mmGenerateSummary.mock.t.Fatalf("ServiceMock.GenerateSummary mock is already set by Set")
-	}
-
-	if mmGenerateSummary.defaultExpectation == nil {
-		mmGenerateSummary.defaultExpectation = &ServiceMockGenerateSummaryExpectation{}
-	}
-
-	if mmGenerateSummary.defaultExpectation.params != nil {
-		mmGenerateSummary.mock.t.Fatalf("ServiceMock.GenerateSummary mock is already set by Expect")
-	}
-
-	if mmGenerateSummary.defaultExpectation.paramPtrs == nil {
-		mmGenerateSummary.defaultExpectation.paramPtrs = &ServiceMockGenerateSummaryParamPtrs{}
-	}
-	mmGenerateSummary.defaultExpectation.paramPtrs.ctx = &ctx
-	mmGenerateSummary.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
-
-	return mmGenerateSummary
-}
-
-// ExpectS1Param2 sets up expected param s1 for Service.GenerateSummary
-func (mmGenerateSummary *mServiceMockGenerateSummary) ExpectS1Param2(s1 string) *mServiceMockGenerateSummary {
-	if mmGenerateSummary.mock.funcGenerateSummary != nil {
-		mmGenerateSummary.mock.t.Fatalf("ServiceMock.GenerateSummary mock is already set by Set")
-	}
-
-	if mmGenerateSummary.defaultExpectation == nil {
-		mmGenerateSummary.defaultExpectation = &ServiceMockGenerateSummaryExpectation{}
-	}
-
-	if mmGenerateSummary.defaultExpectation.params != nil {
-		mmGenerateSummary.mock.t.Fatalf("ServiceMock.GenerateSummary mock is already set by Expect")
-	}
-
-	if mmGenerateSummary.defaultExpectation.paramPtrs == nil {
-		mmGenerateSummary.defaultExpectation.paramPtrs = &ServiceMockGenerateSummaryParamPtrs{}
-	}
-	mmGenerateSummary.defaultExpectation.paramPtrs.s1 = &s1
-	mmGenerateSummary.defaultExpectation.expectationOrigins.originS1 = minimock.CallerInfo(1)
-
-	return mmGenerateSummary
-}
-
-// ExpectS2Param3 sets up expected param s2 for Service.GenerateSummary
-func (mmGenerateSummary *mServiceMockGenerateSummary) ExpectS2Param3(s2 string) *mServiceMockGenerateSummary {
-	if mmGenerateSummary.mock.funcGenerateSummary != nil {
-		mmGenerateSummary.mock.t.Fatalf("ServiceMock.GenerateSummary mock is already set by Set")
-	}
-
-	if mmGenerateSummary.defaultExpectation == nil {
-		mmGenerateSummary.defaultExpectation = &ServiceMockGenerateSummaryExpectation{}
-	}
-
-	if mmGenerateSummary.defaultExpectation.params != nil {
-		mmGenerateSummary.mock.t.Fatalf("ServiceMock.GenerateSummary mock is already set by Expect")
-	}
-
-	if mmGenerateSummary.defaultExpectation.paramPtrs == nil {
-		mmGenerateSummary.defaultExpectation.paramPtrs = &ServiceMockGenerateSummaryParamPtrs{}
-	}
-	mmGenerateSummary.defaultExpectation.paramPtrs.s2 = &s2
-	mmGenerateSummary.defaultExpectation.expectationOrigins.originS2 = minimock.CallerInfo(1)
-
-	return mmGenerateSummary
-}
-
-// Inspect accepts an inspector function that has same arguments as the Service.GenerateSummary
-func (mmGenerateSummary *mServiceMockGenerateSummary) Inspect(f func(ctx context.Context, s1 string, s2 string)) *mServiceMockGenerateSummary {
-	if mmGenerateSummary.mock.inspectFuncGenerateSummary != nil {
-		mmGenerateSummary.mock.t.Fatalf("Inspect function is already set for ServiceMock.GenerateSummary")
-	}
-
-	mmGenerateSummary.mock.inspectFuncGenerateSummary = f
-
-	return mmGenerateSummary
-}
-
-// Return sets up results that will be returned by Service.GenerateSummary
-func (mmGenerateSummary *mServiceMockGenerateSummary) Return(s3 string, err error) *ServiceMock {
-	if mmGenerateSummary.mock.funcGenerateSummary != nil {
-		mmGenerateSummary.mock.t.Fatalf("ServiceMock.GenerateSummary mock is already set by Set")
-	}
-
-	if mmGenerateSummary.defaultExpectation == nil {
-		mmGenerateSummary.defaultExpectation = &ServiceMockGenerateSummaryExpectation{mock: mmGenerateSummary.mock}
-	}
-	mmGenerateSummary.defaultExpectation.results = &ServiceMockGenerateSummaryResults{s3, err}
-	mmGenerateSummary.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
-	return mmGenerateSummary.mock
-}
-
-// Set uses given function f to mock the Service.GenerateSummary method
-func (mmGenerateSummary *mServiceMockGenerateSummary) Set(f func(ctx context.Context, s1 string, s2 string) (s3 string, err error)) *ServiceMock {
-	if mmGenerateSummary.defaultExpectation != nil {
-		mmGenerateSummary.mock.t.Fatalf("Default expectation is already set for the Service.GenerateSummary method")
-	}
-
-	if len(mmGenerateSummary.expectations) > 0 {
-		mmGenerateSummary.mock.t.Fatalf("Some expectations are already set for the Service.GenerateSummary method")
-	}
-
-	mmGenerateSummary.mock.funcGenerateSummary = f
-	mmGenerateSummary.mock.funcGenerateSummaryOrigin = minimock.CallerInfo(1)
-	return mmGenerateSummary.mock
-}
-
-// When sets expectation for the Service.GenerateSummary which will trigger the result defined by the following
-// Then helper
-func (mmGenerateSummary *mServiceMockGenerateSummary) When(ctx context.Context, s1 string, s2 string) *ServiceMockGenerateSummaryExpectation {
-	if mmGenerateSummary.mock.funcGenerateSummary != nil {
-		mmGenerateSummary.mock.t.Fatalf("ServiceMock.GenerateSummary mock is already set by Set")
-	}
-
-	expectation := &ServiceMockGenerateSummaryExpectation{
-		mock:               mmGenerateSummary.mock,
-		params:             &ServiceMockGenerateSummaryParams{ctx, s1, s2},
-		expectationOrigins: ServiceMockGenerateSummaryExpectationOrigins{origin: minimock.CallerInfo(1)},
-	}
-	mmGenerateSummary.expectations = append(mmGenerateSummary.expectations, expectation)
-	return expectation
-}
-
-// Then sets up Service.GenerateSummary return parameters for the expectation previously defined by the When method
-func (e *ServiceMockGenerateSummaryExpectation) Then(s3 string, err error) *ServiceMock {
-	e.results = &ServiceMockGenerateSummaryResults{s3, err}
-	return e.mock
-}
-
-// Times sets number of times Service.GenerateSummary should be invoked
-func (mmGenerateSummary *mServiceMockGenerateSummary) Times(n uint64) *mServiceMockGenerateSummary {
-	if n == 0 {
-		mmGenerateSummary.mock.t.Fatalf("Times of ServiceMock.GenerateSummary mock can not be zero")
-	}
-	mm_atomic.StoreUint64(&mmGenerateSummary.expectedInvocations, n)
-	mmGenerateSummary.expectedInvocationsOrigin = minimock.CallerInfo(1)
-	return mmGenerateSummary
-}
-
-func (mmGenerateSummary *mServiceMockGenerateSummary) invocationsDone() bool {
-	if len(mmGenerateSummary.expectations) == 0 && mmGenerateSummary.defaultExpectation == nil && mmGenerateSummary.mock.funcGenerateSummary == nil {
-		return true
-	}
-
-	totalInvocations := mm_atomic.LoadUint64(&mmGenerateSummary.mock.afterGenerateSummaryCounter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmGenerateSummary.expectedInvocations)
-
-	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
-}
-
-// GenerateSummary implements mm_service.Service
-func (mmGenerateSummary *ServiceMock) GenerateSummary(ctx context.Context, s1 string, s2 string) (s3 string, err error) {
-	mm_atomic.AddUint64(&mmGenerateSummary.beforeGenerateSummaryCounter, 1)
-	defer mm_atomic.AddUint64(&mmGenerateSummary.afterGenerateSummaryCounter, 1)
-
-	mmGenerateSummary.t.Helper()
-
-	if mmGenerateSummary.inspectFuncGenerateSummary != nil {
-		mmGenerateSummary.inspectFuncGenerateSummary(ctx, s1, s2)
-	}
-
-	mm_params := ServiceMockGenerateSummaryParams{ctx, s1, s2}
-
-	// Record call args
-	mmGenerateSummary.GenerateSummaryMock.mutex.Lock()
-	mmGenerateSummary.GenerateSummaryMock.callArgs = append(mmGenerateSummary.GenerateSummaryMock.callArgs, &mm_params)
-	mmGenerateSummary.GenerateSummaryMock.mutex.Unlock()
-
-	for _, e := range mmGenerateSummary.GenerateSummaryMock.expectations {
-		if minimock.Equal(*e.params, mm_params) {
-			mm_atomic.AddUint64(&e.Counter, 1)
-			return e.results.s3, e.results.err
-		}
-	}
-
-	if mmGenerateSummary.GenerateSummaryMock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmGenerateSummary.GenerateSummaryMock.defaultExpectation.Counter, 1)
-		mm_want := mmGenerateSummary.GenerateSummaryMock.defaultExpectation.params
-		mm_want_ptrs := mmGenerateSummary.GenerateSummaryMock.defaultExpectation.paramPtrs
-
-		mm_got := ServiceMockGenerateSummaryParams{ctx, s1, s2}
-
-		if mm_want_ptrs != nil {
-
-			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
-				mmGenerateSummary.t.Errorf("ServiceMock.GenerateSummary got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmGenerateSummary.GenerateSummaryMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
-			}
-
-			if mm_want_ptrs.s1 != nil && !minimock.Equal(*mm_want_ptrs.s1, mm_got.s1) {
-				mmGenerateSummary.t.Errorf("ServiceMock.GenerateSummary got unexpected parameter s1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmGenerateSummary.GenerateSummaryMock.defaultExpectation.expectationOrigins.originS1, *mm_want_ptrs.s1, mm_got.s1, minimock.Diff(*mm_want_ptrs.s1, mm_got.s1))
-			}
-
-			if mm_want_ptrs.s2 != nil && !minimock.Equal(*mm_want_ptrs.s2, mm_got.s2) {
-				mmGenerateSummary.t.Errorf("ServiceMock.GenerateSummary got unexpected parameter s2, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmGenerateSummary.GenerateSummaryMock.defaultExpectation.expectationOrigins.originS2, *mm_want_ptrs.s2, mm_got.s2, minimock.Diff(*mm_want_ptrs.s2, mm_got.s2))
-			}
-
-		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
-			mmGenerateSummary.t.Errorf("ServiceMock.GenerateSummary got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-				mmGenerateSummary.GenerateSummaryMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
-		}
-
-		mm_results := mmGenerateSummary.GenerateSummaryMock.defaultExpectation.results
-		if mm_results == nil {
-			mmGenerateSummary.t.Fatal("No results are set for the ServiceMock.GenerateSummary")
-		}
-		return (*mm_results).s3, (*mm_results).err
-	}
-	if mmGenerateSummary.funcGenerateSummary != nil {
-		return mmGenerateSummary.funcGenerateSummary(ctx, s1, s2)
-	}
-	mmGenerateSummary.t.Fatalf("Unexpected call to ServiceMock.GenerateSummary. %v %v %v", ctx, s1, s2)
-	return
-}
-
-// GenerateSummaryAfterCounter returns a count of finished ServiceMock.GenerateSummary invocations
-func (mmGenerateSummary *ServiceMock) GenerateSummaryAfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmGenerateSummary.afterGenerateSummaryCounter)
-}
-
-// GenerateSummaryBeforeCounter returns a count of ServiceMock.GenerateSummary invocations
-func (mmGenerateSummary *ServiceMock) GenerateSummaryBeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmGenerateSummary.beforeGenerateSummaryCounter)
-}
-
-// Calls returns a list of arguments used in each call to ServiceMock.GenerateSummary.
-// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
-func (mmGenerateSummary *mServiceMockGenerateSummary) Calls() []*ServiceMockGenerateSummaryParams {
-	mmGenerateSummary.mutex.RLock()
-
-	argCopy := make([]*ServiceMockGenerateSummaryParams, len(mmGenerateSummary.callArgs))
-	copy(argCopy, mmGenerateSummary.callArgs)
-
-	mmGenerateSummary.mutex.RUnlock()
-
-	return argCopy
-}
-
-// MinimockGenerateSummaryDone returns true if the count of the GenerateSummary invocations corresponds
-// the number of defined expectations
-func (m *ServiceMock) MinimockGenerateSummaryDone() bool {
-	if m.GenerateSummaryMock.optional {
-		// Optional methods provide '0 or more' call count restriction.
-		return true
-	}
-
-	for _, e := range m.GenerateSummaryMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			return false
-		}
-	}
-
-	return m.GenerateSummaryMock.invocationsDone()
-}
-
-// MinimockGenerateSummaryInspect logs each unmet expectation
-func (m *ServiceMock) MinimockGenerateSummaryInspect() {
-	for _, e := range m.GenerateSummaryMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Errorf("Expected call to ServiceMock.GenerateSummary at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
-		}
-	}
-
-	afterGenerateSummaryCounter := mm_atomic.LoadUint64(&m.afterGenerateSummaryCounter)
-	// if default expectation was set then invocations count should be greater than zero
-	if m.GenerateSummaryMock.defaultExpectation != nil && afterGenerateSummaryCounter < 1 {
-		if m.GenerateSummaryMock.defaultExpectation.params == nil {
-			m.t.Errorf("Expected call to ServiceMock.GenerateSummary at\n%s", m.GenerateSummaryMock.defaultExpectation.returnOrigin)
-		} else {
-			m.t.Errorf("Expected call to ServiceMock.GenerateSummary at\n%s with params: %#v", m.GenerateSummaryMock.defaultExpectation.expectationOrigins.origin, *m.GenerateSummaryMock.defaultExpectation.params)
-		}
-	}
-	// if func was set then invocations count should be greater than zero
-	if m.funcGenerateSummary != nil && afterGenerateSummaryCounter < 1 {
-		m.t.Errorf("Expected call to ServiceMock.GenerateSummary at\n%s", m.funcGenerateSummaryOrigin)
-	}
-
-	if !m.GenerateSummaryMock.invocationsDone() && afterGenerateSummaryCounter > 0 {
-		m.t.Errorf("Expected %d calls to ServiceMock.GenerateSummary at\n%s but found %d calls",
-			mm_atomic.LoadUint64(&m.GenerateSummaryMock.expectedInvocations), m.GenerateSummaryMock.expectedInvocationsOrigin, afterGenerateSummaryCounter)
+	if !m.EmbedTextsMock.invocationsDone() && afterEmbedTextsCounter > 0 {
+		m.t.Errorf("Expected %d calls to ServiceMock.EmbedTexts at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.EmbedTextsMock.expectedInvocations), m.EmbedTextsMock.expectedInvocationsOrigin, afterEmbedTextsCounter)
 	}
 }
 
@@ -6721,21 +3508,21 @@ type ServiceMockGetChunksByFileExpectation struct {
 // ServiceMockGetChunksByFileParams contains parameters of the Service.GetChunksByFile
 type ServiceMockGetChunksByFileParams struct {
 	ctx context.Context
-	kp1 *repository.KnowledgeBaseFile
+	kp1 *repository.KnowledgeBaseFileModel
 }
 
 // ServiceMockGetChunksByFileParamPtrs contains pointers to parameters of the Service.GetChunksByFile
 type ServiceMockGetChunksByFileParamPtrs struct {
 	ctx *context.Context
-	kp1 **repository.KnowledgeBaseFile
+	kp1 **repository.KnowledgeBaseFileModel
 }
 
 // ServiceMockGetChunksByFileResults contains results of the Service.GetChunksByFile
 type ServiceMockGetChunksByFileResults struct {
-	s1  mm_service.SourceTableType
-	s2  mm_service.SourceIDType
-	ta1 []repository.TextChunk
-	m1  map[mm_service.ChunkUIDType]mm_service.ContentType
+	s1  types.SourceTableType
+	s2  types.SourceUIDType
+	ta1 []repository.TextChunkModel
+	m1  map[types.TextChunkUIDType]types.ContentType
 	sa1 []string
 	err error
 }
@@ -6758,7 +3545,7 @@ func (mmGetChunksByFile *mServiceMockGetChunksByFile) Optional() *mServiceMockGe
 }
 
 // Expect sets up expected params for Service.GetChunksByFile
-func (mmGetChunksByFile *mServiceMockGetChunksByFile) Expect(ctx context.Context, kp1 *repository.KnowledgeBaseFile) *mServiceMockGetChunksByFile {
+func (mmGetChunksByFile *mServiceMockGetChunksByFile) Expect(ctx context.Context, kp1 *repository.KnowledgeBaseFileModel) *mServiceMockGetChunksByFile {
 	if mmGetChunksByFile.mock.funcGetChunksByFile != nil {
 		mmGetChunksByFile.mock.t.Fatalf("ServiceMock.GetChunksByFile mock is already set by Set")
 	}
@@ -6806,7 +3593,7 @@ func (mmGetChunksByFile *mServiceMockGetChunksByFile) ExpectCtxParam1(ctx contex
 }
 
 // ExpectKp1Param2 sets up expected param kp1 for Service.GetChunksByFile
-func (mmGetChunksByFile *mServiceMockGetChunksByFile) ExpectKp1Param2(kp1 *repository.KnowledgeBaseFile) *mServiceMockGetChunksByFile {
+func (mmGetChunksByFile *mServiceMockGetChunksByFile) ExpectKp1Param2(kp1 *repository.KnowledgeBaseFileModel) *mServiceMockGetChunksByFile {
 	if mmGetChunksByFile.mock.funcGetChunksByFile != nil {
 		mmGetChunksByFile.mock.t.Fatalf("ServiceMock.GetChunksByFile mock is already set by Set")
 	}
@@ -6829,7 +3616,7 @@ func (mmGetChunksByFile *mServiceMockGetChunksByFile) ExpectKp1Param2(kp1 *repos
 }
 
 // Inspect accepts an inspector function that has same arguments as the Service.GetChunksByFile
-func (mmGetChunksByFile *mServiceMockGetChunksByFile) Inspect(f func(ctx context.Context, kp1 *repository.KnowledgeBaseFile)) *mServiceMockGetChunksByFile {
+func (mmGetChunksByFile *mServiceMockGetChunksByFile) Inspect(f func(ctx context.Context, kp1 *repository.KnowledgeBaseFileModel)) *mServiceMockGetChunksByFile {
 	if mmGetChunksByFile.mock.inspectFuncGetChunksByFile != nil {
 		mmGetChunksByFile.mock.t.Fatalf("Inspect function is already set for ServiceMock.GetChunksByFile")
 	}
@@ -6840,7 +3627,7 @@ func (mmGetChunksByFile *mServiceMockGetChunksByFile) Inspect(f func(ctx context
 }
 
 // Return sets up results that will be returned by Service.GetChunksByFile
-func (mmGetChunksByFile *mServiceMockGetChunksByFile) Return(s1 mm_service.SourceTableType, s2 mm_service.SourceIDType, ta1 []repository.TextChunk, m1 map[mm_service.ChunkUIDType]mm_service.ContentType, sa1 []string, err error) *ServiceMock {
+func (mmGetChunksByFile *mServiceMockGetChunksByFile) Return(s1 types.SourceTableType, s2 types.SourceUIDType, ta1 []repository.TextChunkModel, m1 map[types.TextChunkUIDType]types.ContentType, sa1 []string, err error) *ServiceMock {
 	if mmGetChunksByFile.mock.funcGetChunksByFile != nil {
 		mmGetChunksByFile.mock.t.Fatalf("ServiceMock.GetChunksByFile mock is already set by Set")
 	}
@@ -6854,7 +3641,7 @@ func (mmGetChunksByFile *mServiceMockGetChunksByFile) Return(s1 mm_service.Sourc
 }
 
 // Set uses given function f to mock the Service.GetChunksByFile method
-func (mmGetChunksByFile *mServiceMockGetChunksByFile) Set(f func(ctx context.Context, kp1 *repository.KnowledgeBaseFile) (s1 mm_service.SourceTableType, s2 mm_service.SourceIDType, ta1 []repository.TextChunk, m1 map[mm_service.ChunkUIDType]mm_service.ContentType, sa1 []string, err error)) *ServiceMock {
+func (mmGetChunksByFile *mServiceMockGetChunksByFile) Set(f func(ctx context.Context, kp1 *repository.KnowledgeBaseFileModel) (s1 types.SourceTableType, s2 types.SourceUIDType, ta1 []repository.TextChunkModel, m1 map[types.TextChunkUIDType]types.ContentType, sa1 []string, err error)) *ServiceMock {
 	if mmGetChunksByFile.defaultExpectation != nil {
 		mmGetChunksByFile.mock.t.Fatalf("Default expectation is already set for the Service.GetChunksByFile method")
 	}
@@ -6870,7 +3657,7 @@ func (mmGetChunksByFile *mServiceMockGetChunksByFile) Set(f func(ctx context.Con
 
 // When sets expectation for the Service.GetChunksByFile which will trigger the result defined by the following
 // Then helper
-func (mmGetChunksByFile *mServiceMockGetChunksByFile) When(ctx context.Context, kp1 *repository.KnowledgeBaseFile) *ServiceMockGetChunksByFileExpectation {
+func (mmGetChunksByFile *mServiceMockGetChunksByFile) When(ctx context.Context, kp1 *repository.KnowledgeBaseFileModel) *ServiceMockGetChunksByFileExpectation {
 	if mmGetChunksByFile.mock.funcGetChunksByFile != nil {
 		mmGetChunksByFile.mock.t.Fatalf("ServiceMock.GetChunksByFile mock is already set by Set")
 	}
@@ -6885,7 +3672,7 @@ func (mmGetChunksByFile *mServiceMockGetChunksByFile) When(ctx context.Context, 
 }
 
 // Then sets up Service.GetChunksByFile return parameters for the expectation previously defined by the When method
-func (e *ServiceMockGetChunksByFileExpectation) Then(s1 mm_service.SourceTableType, s2 mm_service.SourceIDType, ta1 []repository.TextChunk, m1 map[mm_service.ChunkUIDType]mm_service.ContentType, sa1 []string, err error) *ServiceMock {
+func (e *ServiceMockGetChunksByFileExpectation) Then(s1 types.SourceTableType, s2 types.SourceUIDType, ta1 []repository.TextChunkModel, m1 map[types.TextChunkUIDType]types.ContentType, sa1 []string, err error) *ServiceMock {
 	e.results = &ServiceMockGetChunksByFileResults{s1, s2, ta1, m1, sa1, err}
 	return e.mock
 }
@@ -6912,7 +3699,7 @@ func (mmGetChunksByFile *mServiceMockGetChunksByFile) invocationsDone() bool {
 }
 
 // GetChunksByFile implements mm_service.Service
-func (mmGetChunksByFile *ServiceMock) GetChunksByFile(ctx context.Context, kp1 *repository.KnowledgeBaseFile) (s1 mm_service.SourceTableType, s2 mm_service.SourceIDType, ta1 []repository.TextChunk, m1 map[mm_service.ChunkUIDType]mm_service.ContentType, sa1 []string, err error) {
+func (mmGetChunksByFile *ServiceMock) GetChunksByFile(ctx context.Context, kp1 *repository.KnowledgeBaseFileModel) (s1 types.SourceTableType, s2 types.SourceUIDType, ta1 []repository.TextChunkModel, m1 map[types.TextChunkUIDType]types.ContentType, sa1 []string, err error) {
 	mm_atomic.AddUint64(&mmGetChunksByFile.beforeGetChunksByFileCounter, 1)
 	defer mm_atomic.AddUint64(&mmGetChunksByFile.afterGetChunksByFileCounter, 1)
 
@@ -7038,6 +3825,380 @@ func (m *ServiceMock) MinimockGetChunksByFileInspect() {
 	if !m.GetChunksByFileMock.invocationsDone() && afterGetChunksByFileCounter > 0 {
 		m.t.Errorf("Expected %d calls to ServiceMock.GetChunksByFile at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.GetChunksByFileMock.expectedInvocations), m.GetChunksByFileMock.expectedInvocationsOrigin, afterGetChunksByFileCounter)
+	}
+}
+
+type mServiceMockGetConvertedFilePathsByFileUID struct {
+	optional           bool
+	mock               *ServiceMock
+	defaultExpectation *ServiceMockGetConvertedFilePathsByFileUIDExpectation
+	expectations       []*ServiceMockGetConvertedFilePathsByFileUIDExpectation
+
+	callArgs []*ServiceMockGetConvertedFilePathsByFileUIDParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// ServiceMockGetConvertedFilePathsByFileUIDExpectation specifies expectation struct of the Service.GetConvertedFilePathsByFileUID
+type ServiceMockGetConvertedFilePathsByFileUIDExpectation struct {
+	mock               *ServiceMock
+	params             *ServiceMockGetConvertedFilePathsByFileUIDParams
+	paramPtrs          *ServiceMockGetConvertedFilePathsByFileUIDParamPtrs
+	expectationOrigins ServiceMockGetConvertedFilePathsByFileUIDExpectationOrigins
+	results            *ServiceMockGetConvertedFilePathsByFileUIDResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// ServiceMockGetConvertedFilePathsByFileUIDParams contains parameters of the Service.GetConvertedFilePathsByFileUID
+type ServiceMockGetConvertedFilePathsByFileUIDParams struct {
+	ctx context.Context
+	k1  types.KBUIDType
+	f1  types.FileUIDType
+}
+
+// ServiceMockGetConvertedFilePathsByFileUIDParamPtrs contains pointers to parameters of the Service.GetConvertedFilePathsByFileUID
+type ServiceMockGetConvertedFilePathsByFileUIDParamPtrs struct {
+	ctx *context.Context
+	k1  *types.KBUIDType
+	f1  *types.FileUIDType
+}
+
+// ServiceMockGetConvertedFilePathsByFileUIDResults contains results of the Service.GetConvertedFilePathsByFileUID
+type ServiceMockGetConvertedFilePathsByFileUIDResults struct {
+	sa1 []string
+	err error
+}
+
+// ServiceMockGetConvertedFilePathsByFileUIDOrigins contains origins of expectations of the Service.GetConvertedFilePathsByFileUID
+type ServiceMockGetConvertedFilePathsByFileUIDExpectationOrigins struct {
+	origin    string
+	originCtx string
+	originK1  string
+	originF1  string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmGetConvertedFilePathsByFileUID *mServiceMockGetConvertedFilePathsByFileUID) Optional() *mServiceMockGetConvertedFilePathsByFileUID {
+	mmGetConvertedFilePathsByFileUID.optional = true
+	return mmGetConvertedFilePathsByFileUID
+}
+
+// Expect sets up expected params for Service.GetConvertedFilePathsByFileUID
+func (mmGetConvertedFilePathsByFileUID *mServiceMockGetConvertedFilePathsByFileUID) Expect(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType) *mServiceMockGetConvertedFilePathsByFileUID {
+	if mmGetConvertedFilePathsByFileUID.mock.funcGetConvertedFilePathsByFileUID != nil {
+		mmGetConvertedFilePathsByFileUID.mock.t.Fatalf("ServiceMock.GetConvertedFilePathsByFileUID mock is already set by Set")
+	}
+
+	if mmGetConvertedFilePathsByFileUID.defaultExpectation == nil {
+		mmGetConvertedFilePathsByFileUID.defaultExpectation = &ServiceMockGetConvertedFilePathsByFileUIDExpectation{}
+	}
+
+	if mmGetConvertedFilePathsByFileUID.defaultExpectation.paramPtrs != nil {
+		mmGetConvertedFilePathsByFileUID.mock.t.Fatalf("ServiceMock.GetConvertedFilePathsByFileUID mock is already set by ExpectParams functions")
+	}
+
+	mmGetConvertedFilePathsByFileUID.defaultExpectation.params = &ServiceMockGetConvertedFilePathsByFileUIDParams{ctx, k1, f1}
+	mmGetConvertedFilePathsByFileUID.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmGetConvertedFilePathsByFileUID.expectations {
+		if minimock.Equal(e.params, mmGetConvertedFilePathsByFileUID.defaultExpectation.params) {
+			mmGetConvertedFilePathsByFileUID.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetConvertedFilePathsByFileUID.defaultExpectation.params)
+		}
+	}
+
+	return mmGetConvertedFilePathsByFileUID
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Service.GetConvertedFilePathsByFileUID
+func (mmGetConvertedFilePathsByFileUID *mServiceMockGetConvertedFilePathsByFileUID) ExpectCtxParam1(ctx context.Context) *mServiceMockGetConvertedFilePathsByFileUID {
+	if mmGetConvertedFilePathsByFileUID.mock.funcGetConvertedFilePathsByFileUID != nil {
+		mmGetConvertedFilePathsByFileUID.mock.t.Fatalf("ServiceMock.GetConvertedFilePathsByFileUID mock is already set by Set")
+	}
+
+	if mmGetConvertedFilePathsByFileUID.defaultExpectation == nil {
+		mmGetConvertedFilePathsByFileUID.defaultExpectation = &ServiceMockGetConvertedFilePathsByFileUIDExpectation{}
+	}
+
+	if mmGetConvertedFilePathsByFileUID.defaultExpectation.params != nil {
+		mmGetConvertedFilePathsByFileUID.mock.t.Fatalf("ServiceMock.GetConvertedFilePathsByFileUID mock is already set by Expect")
+	}
+
+	if mmGetConvertedFilePathsByFileUID.defaultExpectation.paramPtrs == nil {
+		mmGetConvertedFilePathsByFileUID.defaultExpectation.paramPtrs = &ServiceMockGetConvertedFilePathsByFileUIDParamPtrs{}
+	}
+	mmGetConvertedFilePathsByFileUID.defaultExpectation.paramPtrs.ctx = &ctx
+	mmGetConvertedFilePathsByFileUID.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmGetConvertedFilePathsByFileUID
+}
+
+// ExpectK1Param2 sets up expected param k1 for Service.GetConvertedFilePathsByFileUID
+func (mmGetConvertedFilePathsByFileUID *mServiceMockGetConvertedFilePathsByFileUID) ExpectK1Param2(k1 types.KBUIDType) *mServiceMockGetConvertedFilePathsByFileUID {
+	if mmGetConvertedFilePathsByFileUID.mock.funcGetConvertedFilePathsByFileUID != nil {
+		mmGetConvertedFilePathsByFileUID.mock.t.Fatalf("ServiceMock.GetConvertedFilePathsByFileUID mock is already set by Set")
+	}
+
+	if mmGetConvertedFilePathsByFileUID.defaultExpectation == nil {
+		mmGetConvertedFilePathsByFileUID.defaultExpectation = &ServiceMockGetConvertedFilePathsByFileUIDExpectation{}
+	}
+
+	if mmGetConvertedFilePathsByFileUID.defaultExpectation.params != nil {
+		mmGetConvertedFilePathsByFileUID.mock.t.Fatalf("ServiceMock.GetConvertedFilePathsByFileUID mock is already set by Expect")
+	}
+
+	if mmGetConvertedFilePathsByFileUID.defaultExpectation.paramPtrs == nil {
+		mmGetConvertedFilePathsByFileUID.defaultExpectation.paramPtrs = &ServiceMockGetConvertedFilePathsByFileUIDParamPtrs{}
+	}
+	mmGetConvertedFilePathsByFileUID.defaultExpectation.paramPtrs.k1 = &k1
+	mmGetConvertedFilePathsByFileUID.defaultExpectation.expectationOrigins.originK1 = minimock.CallerInfo(1)
+
+	return mmGetConvertedFilePathsByFileUID
+}
+
+// ExpectF1Param3 sets up expected param f1 for Service.GetConvertedFilePathsByFileUID
+func (mmGetConvertedFilePathsByFileUID *mServiceMockGetConvertedFilePathsByFileUID) ExpectF1Param3(f1 types.FileUIDType) *mServiceMockGetConvertedFilePathsByFileUID {
+	if mmGetConvertedFilePathsByFileUID.mock.funcGetConvertedFilePathsByFileUID != nil {
+		mmGetConvertedFilePathsByFileUID.mock.t.Fatalf("ServiceMock.GetConvertedFilePathsByFileUID mock is already set by Set")
+	}
+
+	if mmGetConvertedFilePathsByFileUID.defaultExpectation == nil {
+		mmGetConvertedFilePathsByFileUID.defaultExpectation = &ServiceMockGetConvertedFilePathsByFileUIDExpectation{}
+	}
+
+	if mmGetConvertedFilePathsByFileUID.defaultExpectation.params != nil {
+		mmGetConvertedFilePathsByFileUID.mock.t.Fatalf("ServiceMock.GetConvertedFilePathsByFileUID mock is already set by Expect")
+	}
+
+	if mmGetConvertedFilePathsByFileUID.defaultExpectation.paramPtrs == nil {
+		mmGetConvertedFilePathsByFileUID.defaultExpectation.paramPtrs = &ServiceMockGetConvertedFilePathsByFileUIDParamPtrs{}
+	}
+	mmGetConvertedFilePathsByFileUID.defaultExpectation.paramPtrs.f1 = &f1
+	mmGetConvertedFilePathsByFileUID.defaultExpectation.expectationOrigins.originF1 = minimock.CallerInfo(1)
+
+	return mmGetConvertedFilePathsByFileUID
+}
+
+// Inspect accepts an inspector function that has same arguments as the Service.GetConvertedFilePathsByFileUID
+func (mmGetConvertedFilePathsByFileUID *mServiceMockGetConvertedFilePathsByFileUID) Inspect(f func(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType)) *mServiceMockGetConvertedFilePathsByFileUID {
+	if mmGetConvertedFilePathsByFileUID.mock.inspectFuncGetConvertedFilePathsByFileUID != nil {
+		mmGetConvertedFilePathsByFileUID.mock.t.Fatalf("Inspect function is already set for ServiceMock.GetConvertedFilePathsByFileUID")
+	}
+
+	mmGetConvertedFilePathsByFileUID.mock.inspectFuncGetConvertedFilePathsByFileUID = f
+
+	return mmGetConvertedFilePathsByFileUID
+}
+
+// Return sets up results that will be returned by Service.GetConvertedFilePathsByFileUID
+func (mmGetConvertedFilePathsByFileUID *mServiceMockGetConvertedFilePathsByFileUID) Return(sa1 []string, err error) *ServiceMock {
+	if mmGetConvertedFilePathsByFileUID.mock.funcGetConvertedFilePathsByFileUID != nil {
+		mmGetConvertedFilePathsByFileUID.mock.t.Fatalf("ServiceMock.GetConvertedFilePathsByFileUID mock is already set by Set")
+	}
+
+	if mmGetConvertedFilePathsByFileUID.defaultExpectation == nil {
+		mmGetConvertedFilePathsByFileUID.defaultExpectation = &ServiceMockGetConvertedFilePathsByFileUIDExpectation{mock: mmGetConvertedFilePathsByFileUID.mock}
+	}
+	mmGetConvertedFilePathsByFileUID.defaultExpectation.results = &ServiceMockGetConvertedFilePathsByFileUIDResults{sa1, err}
+	mmGetConvertedFilePathsByFileUID.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmGetConvertedFilePathsByFileUID.mock
+}
+
+// Set uses given function f to mock the Service.GetConvertedFilePathsByFileUID method
+func (mmGetConvertedFilePathsByFileUID *mServiceMockGetConvertedFilePathsByFileUID) Set(f func(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType) (sa1 []string, err error)) *ServiceMock {
+	if mmGetConvertedFilePathsByFileUID.defaultExpectation != nil {
+		mmGetConvertedFilePathsByFileUID.mock.t.Fatalf("Default expectation is already set for the Service.GetConvertedFilePathsByFileUID method")
+	}
+
+	if len(mmGetConvertedFilePathsByFileUID.expectations) > 0 {
+		mmGetConvertedFilePathsByFileUID.mock.t.Fatalf("Some expectations are already set for the Service.GetConvertedFilePathsByFileUID method")
+	}
+
+	mmGetConvertedFilePathsByFileUID.mock.funcGetConvertedFilePathsByFileUID = f
+	mmGetConvertedFilePathsByFileUID.mock.funcGetConvertedFilePathsByFileUIDOrigin = minimock.CallerInfo(1)
+	return mmGetConvertedFilePathsByFileUID.mock
+}
+
+// When sets expectation for the Service.GetConvertedFilePathsByFileUID which will trigger the result defined by the following
+// Then helper
+func (mmGetConvertedFilePathsByFileUID *mServiceMockGetConvertedFilePathsByFileUID) When(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType) *ServiceMockGetConvertedFilePathsByFileUIDExpectation {
+	if mmGetConvertedFilePathsByFileUID.mock.funcGetConvertedFilePathsByFileUID != nil {
+		mmGetConvertedFilePathsByFileUID.mock.t.Fatalf("ServiceMock.GetConvertedFilePathsByFileUID mock is already set by Set")
+	}
+
+	expectation := &ServiceMockGetConvertedFilePathsByFileUIDExpectation{
+		mock:               mmGetConvertedFilePathsByFileUID.mock,
+		params:             &ServiceMockGetConvertedFilePathsByFileUIDParams{ctx, k1, f1},
+		expectationOrigins: ServiceMockGetConvertedFilePathsByFileUIDExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmGetConvertedFilePathsByFileUID.expectations = append(mmGetConvertedFilePathsByFileUID.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Service.GetConvertedFilePathsByFileUID return parameters for the expectation previously defined by the When method
+func (e *ServiceMockGetConvertedFilePathsByFileUIDExpectation) Then(sa1 []string, err error) *ServiceMock {
+	e.results = &ServiceMockGetConvertedFilePathsByFileUIDResults{sa1, err}
+	return e.mock
+}
+
+// Times sets number of times Service.GetConvertedFilePathsByFileUID should be invoked
+func (mmGetConvertedFilePathsByFileUID *mServiceMockGetConvertedFilePathsByFileUID) Times(n uint64) *mServiceMockGetConvertedFilePathsByFileUID {
+	if n == 0 {
+		mmGetConvertedFilePathsByFileUID.mock.t.Fatalf("Times of ServiceMock.GetConvertedFilePathsByFileUID mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetConvertedFilePathsByFileUID.expectedInvocations, n)
+	mmGetConvertedFilePathsByFileUID.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmGetConvertedFilePathsByFileUID
+}
+
+func (mmGetConvertedFilePathsByFileUID *mServiceMockGetConvertedFilePathsByFileUID) invocationsDone() bool {
+	if len(mmGetConvertedFilePathsByFileUID.expectations) == 0 && mmGetConvertedFilePathsByFileUID.defaultExpectation == nil && mmGetConvertedFilePathsByFileUID.mock.funcGetConvertedFilePathsByFileUID == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetConvertedFilePathsByFileUID.mock.afterGetConvertedFilePathsByFileUIDCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetConvertedFilePathsByFileUID.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetConvertedFilePathsByFileUID implements mm_service.Service
+func (mmGetConvertedFilePathsByFileUID *ServiceMock) GetConvertedFilePathsByFileUID(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType) (sa1 []string, err error) {
+	mm_atomic.AddUint64(&mmGetConvertedFilePathsByFileUID.beforeGetConvertedFilePathsByFileUIDCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetConvertedFilePathsByFileUID.afterGetConvertedFilePathsByFileUIDCounter, 1)
+
+	mmGetConvertedFilePathsByFileUID.t.Helper()
+
+	if mmGetConvertedFilePathsByFileUID.inspectFuncGetConvertedFilePathsByFileUID != nil {
+		mmGetConvertedFilePathsByFileUID.inspectFuncGetConvertedFilePathsByFileUID(ctx, k1, f1)
+	}
+
+	mm_params := ServiceMockGetConvertedFilePathsByFileUIDParams{ctx, k1, f1}
+
+	// Record call args
+	mmGetConvertedFilePathsByFileUID.GetConvertedFilePathsByFileUIDMock.mutex.Lock()
+	mmGetConvertedFilePathsByFileUID.GetConvertedFilePathsByFileUIDMock.callArgs = append(mmGetConvertedFilePathsByFileUID.GetConvertedFilePathsByFileUIDMock.callArgs, &mm_params)
+	mmGetConvertedFilePathsByFileUID.GetConvertedFilePathsByFileUIDMock.mutex.Unlock()
+
+	for _, e := range mmGetConvertedFilePathsByFileUID.GetConvertedFilePathsByFileUIDMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.sa1, e.results.err
+		}
+	}
+
+	if mmGetConvertedFilePathsByFileUID.GetConvertedFilePathsByFileUIDMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetConvertedFilePathsByFileUID.GetConvertedFilePathsByFileUIDMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetConvertedFilePathsByFileUID.GetConvertedFilePathsByFileUIDMock.defaultExpectation.params
+		mm_want_ptrs := mmGetConvertedFilePathsByFileUID.GetConvertedFilePathsByFileUIDMock.defaultExpectation.paramPtrs
+
+		mm_got := ServiceMockGetConvertedFilePathsByFileUIDParams{ctx, k1, f1}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetConvertedFilePathsByFileUID.t.Errorf("ServiceMock.GetConvertedFilePathsByFileUID got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetConvertedFilePathsByFileUID.GetConvertedFilePathsByFileUIDMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.k1 != nil && !minimock.Equal(*mm_want_ptrs.k1, mm_got.k1) {
+				mmGetConvertedFilePathsByFileUID.t.Errorf("ServiceMock.GetConvertedFilePathsByFileUID got unexpected parameter k1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetConvertedFilePathsByFileUID.GetConvertedFilePathsByFileUIDMock.defaultExpectation.expectationOrigins.originK1, *mm_want_ptrs.k1, mm_got.k1, minimock.Diff(*mm_want_ptrs.k1, mm_got.k1))
+			}
+
+			if mm_want_ptrs.f1 != nil && !minimock.Equal(*mm_want_ptrs.f1, mm_got.f1) {
+				mmGetConvertedFilePathsByFileUID.t.Errorf("ServiceMock.GetConvertedFilePathsByFileUID got unexpected parameter f1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetConvertedFilePathsByFileUID.GetConvertedFilePathsByFileUIDMock.defaultExpectation.expectationOrigins.originF1, *mm_want_ptrs.f1, mm_got.f1, minimock.Diff(*mm_want_ptrs.f1, mm_got.f1))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetConvertedFilePathsByFileUID.t.Errorf("ServiceMock.GetConvertedFilePathsByFileUID got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmGetConvertedFilePathsByFileUID.GetConvertedFilePathsByFileUIDMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetConvertedFilePathsByFileUID.GetConvertedFilePathsByFileUIDMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetConvertedFilePathsByFileUID.t.Fatal("No results are set for the ServiceMock.GetConvertedFilePathsByFileUID")
+		}
+		return (*mm_results).sa1, (*mm_results).err
+	}
+	if mmGetConvertedFilePathsByFileUID.funcGetConvertedFilePathsByFileUID != nil {
+		return mmGetConvertedFilePathsByFileUID.funcGetConvertedFilePathsByFileUID(ctx, k1, f1)
+	}
+	mmGetConvertedFilePathsByFileUID.t.Fatalf("Unexpected call to ServiceMock.GetConvertedFilePathsByFileUID. %v %v %v", ctx, k1, f1)
+	return
+}
+
+// GetConvertedFilePathsByFileUIDAfterCounter returns a count of finished ServiceMock.GetConvertedFilePathsByFileUID invocations
+func (mmGetConvertedFilePathsByFileUID *ServiceMock) GetConvertedFilePathsByFileUIDAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetConvertedFilePathsByFileUID.afterGetConvertedFilePathsByFileUIDCounter)
+}
+
+// GetConvertedFilePathsByFileUIDBeforeCounter returns a count of ServiceMock.GetConvertedFilePathsByFileUID invocations
+func (mmGetConvertedFilePathsByFileUID *ServiceMock) GetConvertedFilePathsByFileUIDBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetConvertedFilePathsByFileUID.beforeGetConvertedFilePathsByFileUIDCounter)
+}
+
+// Calls returns a list of arguments used in each call to ServiceMock.GetConvertedFilePathsByFileUID.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetConvertedFilePathsByFileUID *mServiceMockGetConvertedFilePathsByFileUID) Calls() []*ServiceMockGetConvertedFilePathsByFileUIDParams {
+	mmGetConvertedFilePathsByFileUID.mutex.RLock()
+
+	argCopy := make([]*ServiceMockGetConvertedFilePathsByFileUIDParams, len(mmGetConvertedFilePathsByFileUID.callArgs))
+	copy(argCopy, mmGetConvertedFilePathsByFileUID.callArgs)
+
+	mmGetConvertedFilePathsByFileUID.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetConvertedFilePathsByFileUIDDone returns true if the count of the GetConvertedFilePathsByFileUID invocations corresponds
+// the number of defined expectations
+func (m *ServiceMock) MinimockGetConvertedFilePathsByFileUIDDone() bool {
+	if m.GetConvertedFilePathsByFileUIDMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.GetConvertedFilePathsByFileUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetConvertedFilePathsByFileUIDMock.invocationsDone()
+}
+
+// MinimockGetConvertedFilePathsByFileUIDInspect logs each unmet expectation
+func (m *ServiceMock) MinimockGetConvertedFilePathsByFileUIDInspect() {
+	for _, e := range m.GetConvertedFilePathsByFileUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to ServiceMock.GetConvertedFilePathsByFileUID at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterGetConvertedFilePathsByFileUIDCounter := mm_atomic.LoadUint64(&m.afterGetConvertedFilePathsByFileUIDCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetConvertedFilePathsByFileUIDMock.defaultExpectation != nil && afterGetConvertedFilePathsByFileUIDCounter < 1 {
+		if m.GetConvertedFilePathsByFileUIDMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to ServiceMock.GetConvertedFilePathsByFileUID at\n%s", m.GetConvertedFilePathsByFileUIDMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to ServiceMock.GetConvertedFilePathsByFileUID at\n%s with params: %#v", m.GetConvertedFilePathsByFileUIDMock.defaultExpectation.expectationOrigins.origin, *m.GetConvertedFilePathsByFileUIDMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetConvertedFilePathsByFileUID != nil && afterGetConvertedFilePathsByFileUIDCounter < 1 {
+		m.t.Errorf("Expected call to ServiceMock.GetConvertedFilePathsByFileUID at\n%s", m.funcGetConvertedFilePathsByFileUIDOrigin)
+	}
+
+	if !m.GetConvertedFilePathsByFileUIDMock.invocationsDone() && afterGetConvertedFilePathsByFileUIDCounter > 0 {
+		m.t.Errorf("Expected %d calls to ServiceMock.GetConvertedFilePathsByFileUID at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.GetConvertedFilePathsByFileUIDMock.expectedInvocations), m.GetConvertedFilePathsByFileUIDMock.expectedInvocationsOrigin, afterGetConvertedFilePathsByFileUIDCounter)
 	}
 }
 
@@ -7817,192 +4978,6 @@ func (m *ServiceMock) MinimockGetFilesByPathsInspect() {
 	if !m.GetFilesByPathsMock.invocationsDone() && afterGetFilesByPathsCounter > 0 {
 		m.t.Errorf("Expected %d calls to ServiceMock.GetFilesByPaths at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.GetFilesByPathsMock.expectedInvocations), m.GetFilesByPathsMock.expectedInvocationsOrigin, afterGetFilesByPathsCounter)
-	}
-}
-
-type mServiceMockGetFilesWorkflow struct {
-	optional           bool
-	mock               *ServiceMock
-	defaultExpectation *ServiceMockGetFilesWorkflowExpectation
-	expectations       []*ServiceMockGetFilesWorkflowExpectation
-
-	expectedInvocations       uint64
-	expectedInvocationsOrigin string
-}
-
-// ServiceMockGetFilesWorkflowExpectation specifies expectation struct of the Service.GetFilesWorkflow
-type ServiceMockGetFilesWorkflowExpectation struct {
-	mock *ServiceMock
-
-	results      *ServiceMockGetFilesWorkflowResults
-	returnOrigin string
-	Counter      uint64
-}
-
-// ServiceMockGetFilesWorkflowResults contains results of the Service.GetFilesWorkflow
-type ServiceMockGetFilesWorkflowResults struct {
-	g1 mm_service.GetFilesWorkflow
-}
-
-// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
-// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
-// Optional() makes method check to work in '0 or more' mode.
-// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
-// catch the problems when the expected method call is totally skipped during test run.
-func (mmGetFilesWorkflow *mServiceMockGetFilesWorkflow) Optional() *mServiceMockGetFilesWorkflow {
-	mmGetFilesWorkflow.optional = true
-	return mmGetFilesWorkflow
-}
-
-// Expect sets up expected params for Service.GetFilesWorkflow
-func (mmGetFilesWorkflow *mServiceMockGetFilesWorkflow) Expect() *mServiceMockGetFilesWorkflow {
-	if mmGetFilesWorkflow.mock.funcGetFilesWorkflow != nil {
-		mmGetFilesWorkflow.mock.t.Fatalf("ServiceMock.GetFilesWorkflow mock is already set by Set")
-	}
-
-	if mmGetFilesWorkflow.defaultExpectation == nil {
-		mmGetFilesWorkflow.defaultExpectation = &ServiceMockGetFilesWorkflowExpectation{}
-	}
-
-	return mmGetFilesWorkflow
-}
-
-// Inspect accepts an inspector function that has same arguments as the Service.GetFilesWorkflow
-func (mmGetFilesWorkflow *mServiceMockGetFilesWorkflow) Inspect(f func()) *mServiceMockGetFilesWorkflow {
-	if mmGetFilesWorkflow.mock.inspectFuncGetFilesWorkflow != nil {
-		mmGetFilesWorkflow.mock.t.Fatalf("Inspect function is already set for ServiceMock.GetFilesWorkflow")
-	}
-
-	mmGetFilesWorkflow.mock.inspectFuncGetFilesWorkflow = f
-
-	return mmGetFilesWorkflow
-}
-
-// Return sets up results that will be returned by Service.GetFilesWorkflow
-func (mmGetFilesWorkflow *mServiceMockGetFilesWorkflow) Return(g1 mm_service.GetFilesWorkflow) *ServiceMock {
-	if mmGetFilesWorkflow.mock.funcGetFilesWorkflow != nil {
-		mmGetFilesWorkflow.mock.t.Fatalf("ServiceMock.GetFilesWorkflow mock is already set by Set")
-	}
-
-	if mmGetFilesWorkflow.defaultExpectation == nil {
-		mmGetFilesWorkflow.defaultExpectation = &ServiceMockGetFilesWorkflowExpectation{mock: mmGetFilesWorkflow.mock}
-	}
-	mmGetFilesWorkflow.defaultExpectation.results = &ServiceMockGetFilesWorkflowResults{g1}
-	mmGetFilesWorkflow.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
-	return mmGetFilesWorkflow.mock
-}
-
-// Set uses given function f to mock the Service.GetFilesWorkflow method
-func (mmGetFilesWorkflow *mServiceMockGetFilesWorkflow) Set(f func() (g1 mm_service.GetFilesWorkflow)) *ServiceMock {
-	if mmGetFilesWorkflow.defaultExpectation != nil {
-		mmGetFilesWorkflow.mock.t.Fatalf("Default expectation is already set for the Service.GetFilesWorkflow method")
-	}
-
-	if len(mmGetFilesWorkflow.expectations) > 0 {
-		mmGetFilesWorkflow.mock.t.Fatalf("Some expectations are already set for the Service.GetFilesWorkflow method")
-	}
-
-	mmGetFilesWorkflow.mock.funcGetFilesWorkflow = f
-	mmGetFilesWorkflow.mock.funcGetFilesWorkflowOrigin = minimock.CallerInfo(1)
-	return mmGetFilesWorkflow.mock
-}
-
-// Times sets number of times Service.GetFilesWorkflow should be invoked
-func (mmGetFilesWorkflow *mServiceMockGetFilesWorkflow) Times(n uint64) *mServiceMockGetFilesWorkflow {
-	if n == 0 {
-		mmGetFilesWorkflow.mock.t.Fatalf("Times of ServiceMock.GetFilesWorkflow mock can not be zero")
-	}
-	mm_atomic.StoreUint64(&mmGetFilesWorkflow.expectedInvocations, n)
-	mmGetFilesWorkflow.expectedInvocationsOrigin = minimock.CallerInfo(1)
-	return mmGetFilesWorkflow
-}
-
-func (mmGetFilesWorkflow *mServiceMockGetFilesWorkflow) invocationsDone() bool {
-	if len(mmGetFilesWorkflow.expectations) == 0 && mmGetFilesWorkflow.defaultExpectation == nil && mmGetFilesWorkflow.mock.funcGetFilesWorkflow == nil {
-		return true
-	}
-
-	totalInvocations := mm_atomic.LoadUint64(&mmGetFilesWorkflow.mock.afterGetFilesWorkflowCounter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmGetFilesWorkflow.expectedInvocations)
-
-	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
-}
-
-// GetFilesWorkflow implements mm_service.Service
-func (mmGetFilesWorkflow *ServiceMock) GetFilesWorkflow() (g1 mm_service.GetFilesWorkflow) {
-	mm_atomic.AddUint64(&mmGetFilesWorkflow.beforeGetFilesWorkflowCounter, 1)
-	defer mm_atomic.AddUint64(&mmGetFilesWorkflow.afterGetFilesWorkflowCounter, 1)
-
-	mmGetFilesWorkflow.t.Helper()
-
-	if mmGetFilesWorkflow.inspectFuncGetFilesWorkflow != nil {
-		mmGetFilesWorkflow.inspectFuncGetFilesWorkflow()
-	}
-
-	if mmGetFilesWorkflow.GetFilesWorkflowMock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmGetFilesWorkflow.GetFilesWorkflowMock.defaultExpectation.Counter, 1)
-
-		mm_results := mmGetFilesWorkflow.GetFilesWorkflowMock.defaultExpectation.results
-		if mm_results == nil {
-			mmGetFilesWorkflow.t.Fatal("No results are set for the ServiceMock.GetFilesWorkflow")
-		}
-		return (*mm_results).g1
-	}
-	if mmGetFilesWorkflow.funcGetFilesWorkflow != nil {
-		return mmGetFilesWorkflow.funcGetFilesWorkflow()
-	}
-	mmGetFilesWorkflow.t.Fatalf("Unexpected call to ServiceMock.GetFilesWorkflow.")
-	return
-}
-
-// GetFilesWorkflowAfterCounter returns a count of finished ServiceMock.GetFilesWorkflow invocations
-func (mmGetFilesWorkflow *ServiceMock) GetFilesWorkflowAfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmGetFilesWorkflow.afterGetFilesWorkflowCounter)
-}
-
-// GetFilesWorkflowBeforeCounter returns a count of ServiceMock.GetFilesWorkflow invocations
-func (mmGetFilesWorkflow *ServiceMock) GetFilesWorkflowBeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmGetFilesWorkflow.beforeGetFilesWorkflowCounter)
-}
-
-// MinimockGetFilesWorkflowDone returns true if the count of the GetFilesWorkflow invocations corresponds
-// the number of defined expectations
-func (m *ServiceMock) MinimockGetFilesWorkflowDone() bool {
-	if m.GetFilesWorkflowMock.optional {
-		// Optional methods provide '0 or more' call count restriction.
-		return true
-	}
-
-	for _, e := range m.GetFilesWorkflowMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			return false
-		}
-	}
-
-	return m.GetFilesWorkflowMock.invocationsDone()
-}
-
-// MinimockGetFilesWorkflowInspect logs each unmet expectation
-func (m *ServiceMock) MinimockGetFilesWorkflowInspect() {
-	for _, e := range m.GetFilesWorkflowMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Error("Expected call to ServiceMock.GetFilesWorkflow")
-		}
-	}
-
-	afterGetFilesWorkflowCounter := mm_atomic.LoadUint64(&m.afterGetFilesWorkflowCounter)
-	// if default expectation was set then invocations count should be greater than zero
-	if m.GetFilesWorkflowMock.defaultExpectation != nil && afterGetFilesWorkflowCounter < 1 {
-		m.t.Errorf("Expected call to ServiceMock.GetFilesWorkflow at\n%s", m.GetFilesWorkflowMock.defaultExpectation.returnOrigin)
-	}
-	// if func was set then invocations count should be greater than zero
-	if m.funcGetFilesWorkflow != nil && afterGetFilesWorkflowCounter < 1 {
-		m.t.Errorf("Expected call to ServiceMock.GetFilesWorkflow at\n%s", m.funcGetFilesWorkflowOrigin)
-	}
-
-	if !m.GetFilesWorkflowMock.invocationsDone() && afterGetFilesWorkflowCounter > 0 {
-		m.t.Errorf("Expected %d calls to ServiceMock.GetFilesWorkflow at\n%s but found %d calls",
-			mm_atomic.LoadUint64(&m.GetFilesWorkflowMock.expectedInvocations), m.GetFilesWorkflowMock.expectedInvocationsOrigin, afterGetFilesWorkflowCounter)
 	}
 }
 
@@ -9035,6 +6010,380 @@ func (m *ServiceMock) MinimockGetRepositoryTagInspect() {
 	}
 }
 
+type mServiceMockGetTextChunkFilePathsByFileUID struct {
+	optional           bool
+	mock               *ServiceMock
+	defaultExpectation *ServiceMockGetTextChunkFilePathsByFileUIDExpectation
+	expectations       []*ServiceMockGetTextChunkFilePathsByFileUIDExpectation
+
+	callArgs []*ServiceMockGetTextChunkFilePathsByFileUIDParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// ServiceMockGetTextChunkFilePathsByFileUIDExpectation specifies expectation struct of the Service.GetTextChunkFilePathsByFileUID
+type ServiceMockGetTextChunkFilePathsByFileUIDExpectation struct {
+	mock               *ServiceMock
+	params             *ServiceMockGetTextChunkFilePathsByFileUIDParams
+	paramPtrs          *ServiceMockGetTextChunkFilePathsByFileUIDParamPtrs
+	expectationOrigins ServiceMockGetTextChunkFilePathsByFileUIDExpectationOrigins
+	results            *ServiceMockGetTextChunkFilePathsByFileUIDResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// ServiceMockGetTextChunkFilePathsByFileUIDParams contains parameters of the Service.GetTextChunkFilePathsByFileUID
+type ServiceMockGetTextChunkFilePathsByFileUIDParams struct {
+	ctx context.Context
+	k1  types.KBUIDType
+	f1  types.FileUIDType
+}
+
+// ServiceMockGetTextChunkFilePathsByFileUIDParamPtrs contains pointers to parameters of the Service.GetTextChunkFilePathsByFileUID
+type ServiceMockGetTextChunkFilePathsByFileUIDParamPtrs struct {
+	ctx *context.Context
+	k1  *types.KBUIDType
+	f1  *types.FileUIDType
+}
+
+// ServiceMockGetTextChunkFilePathsByFileUIDResults contains results of the Service.GetTextChunkFilePathsByFileUID
+type ServiceMockGetTextChunkFilePathsByFileUIDResults struct {
+	sa1 []string
+	err error
+}
+
+// ServiceMockGetTextChunkFilePathsByFileUIDOrigins contains origins of expectations of the Service.GetTextChunkFilePathsByFileUID
+type ServiceMockGetTextChunkFilePathsByFileUIDExpectationOrigins struct {
+	origin    string
+	originCtx string
+	originK1  string
+	originF1  string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmGetTextChunkFilePathsByFileUID *mServiceMockGetTextChunkFilePathsByFileUID) Optional() *mServiceMockGetTextChunkFilePathsByFileUID {
+	mmGetTextChunkFilePathsByFileUID.optional = true
+	return mmGetTextChunkFilePathsByFileUID
+}
+
+// Expect sets up expected params for Service.GetTextChunkFilePathsByFileUID
+func (mmGetTextChunkFilePathsByFileUID *mServiceMockGetTextChunkFilePathsByFileUID) Expect(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType) *mServiceMockGetTextChunkFilePathsByFileUID {
+	if mmGetTextChunkFilePathsByFileUID.mock.funcGetTextChunkFilePathsByFileUID != nil {
+		mmGetTextChunkFilePathsByFileUID.mock.t.Fatalf("ServiceMock.GetTextChunkFilePathsByFileUID mock is already set by Set")
+	}
+
+	if mmGetTextChunkFilePathsByFileUID.defaultExpectation == nil {
+		mmGetTextChunkFilePathsByFileUID.defaultExpectation = &ServiceMockGetTextChunkFilePathsByFileUIDExpectation{}
+	}
+
+	if mmGetTextChunkFilePathsByFileUID.defaultExpectation.paramPtrs != nil {
+		mmGetTextChunkFilePathsByFileUID.mock.t.Fatalf("ServiceMock.GetTextChunkFilePathsByFileUID mock is already set by ExpectParams functions")
+	}
+
+	mmGetTextChunkFilePathsByFileUID.defaultExpectation.params = &ServiceMockGetTextChunkFilePathsByFileUIDParams{ctx, k1, f1}
+	mmGetTextChunkFilePathsByFileUID.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmGetTextChunkFilePathsByFileUID.expectations {
+		if minimock.Equal(e.params, mmGetTextChunkFilePathsByFileUID.defaultExpectation.params) {
+			mmGetTextChunkFilePathsByFileUID.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetTextChunkFilePathsByFileUID.defaultExpectation.params)
+		}
+	}
+
+	return mmGetTextChunkFilePathsByFileUID
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Service.GetTextChunkFilePathsByFileUID
+func (mmGetTextChunkFilePathsByFileUID *mServiceMockGetTextChunkFilePathsByFileUID) ExpectCtxParam1(ctx context.Context) *mServiceMockGetTextChunkFilePathsByFileUID {
+	if mmGetTextChunkFilePathsByFileUID.mock.funcGetTextChunkFilePathsByFileUID != nil {
+		mmGetTextChunkFilePathsByFileUID.mock.t.Fatalf("ServiceMock.GetTextChunkFilePathsByFileUID mock is already set by Set")
+	}
+
+	if mmGetTextChunkFilePathsByFileUID.defaultExpectation == nil {
+		mmGetTextChunkFilePathsByFileUID.defaultExpectation = &ServiceMockGetTextChunkFilePathsByFileUIDExpectation{}
+	}
+
+	if mmGetTextChunkFilePathsByFileUID.defaultExpectation.params != nil {
+		mmGetTextChunkFilePathsByFileUID.mock.t.Fatalf("ServiceMock.GetTextChunkFilePathsByFileUID mock is already set by Expect")
+	}
+
+	if mmGetTextChunkFilePathsByFileUID.defaultExpectation.paramPtrs == nil {
+		mmGetTextChunkFilePathsByFileUID.defaultExpectation.paramPtrs = &ServiceMockGetTextChunkFilePathsByFileUIDParamPtrs{}
+	}
+	mmGetTextChunkFilePathsByFileUID.defaultExpectation.paramPtrs.ctx = &ctx
+	mmGetTextChunkFilePathsByFileUID.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmGetTextChunkFilePathsByFileUID
+}
+
+// ExpectK1Param2 sets up expected param k1 for Service.GetTextChunkFilePathsByFileUID
+func (mmGetTextChunkFilePathsByFileUID *mServiceMockGetTextChunkFilePathsByFileUID) ExpectK1Param2(k1 types.KBUIDType) *mServiceMockGetTextChunkFilePathsByFileUID {
+	if mmGetTextChunkFilePathsByFileUID.mock.funcGetTextChunkFilePathsByFileUID != nil {
+		mmGetTextChunkFilePathsByFileUID.mock.t.Fatalf("ServiceMock.GetTextChunkFilePathsByFileUID mock is already set by Set")
+	}
+
+	if mmGetTextChunkFilePathsByFileUID.defaultExpectation == nil {
+		mmGetTextChunkFilePathsByFileUID.defaultExpectation = &ServiceMockGetTextChunkFilePathsByFileUIDExpectation{}
+	}
+
+	if mmGetTextChunkFilePathsByFileUID.defaultExpectation.params != nil {
+		mmGetTextChunkFilePathsByFileUID.mock.t.Fatalf("ServiceMock.GetTextChunkFilePathsByFileUID mock is already set by Expect")
+	}
+
+	if mmGetTextChunkFilePathsByFileUID.defaultExpectation.paramPtrs == nil {
+		mmGetTextChunkFilePathsByFileUID.defaultExpectation.paramPtrs = &ServiceMockGetTextChunkFilePathsByFileUIDParamPtrs{}
+	}
+	mmGetTextChunkFilePathsByFileUID.defaultExpectation.paramPtrs.k1 = &k1
+	mmGetTextChunkFilePathsByFileUID.defaultExpectation.expectationOrigins.originK1 = minimock.CallerInfo(1)
+
+	return mmGetTextChunkFilePathsByFileUID
+}
+
+// ExpectF1Param3 sets up expected param f1 for Service.GetTextChunkFilePathsByFileUID
+func (mmGetTextChunkFilePathsByFileUID *mServiceMockGetTextChunkFilePathsByFileUID) ExpectF1Param3(f1 types.FileUIDType) *mServiceMockGetTextChunkFilePathsByFileUID {
+	if mmGetTextChunkFilePathsByFileUID.mock.funcGetTextChunkFilePathsByFileUID != nil {
+		mmGetTextChunkFilePathsByFileUID.mock.t.Fatalf("ServiceMock.GetTextChunkFilePathsByFileUID mock is already set by Set")
+	}
+
+	if mmGetTextChunkFilePathsByFileUID.defaultExpectation == nil {
+		mmGetTextChunkFilePathsByFileUID.defaultExpectation = &ServiceMockGetTextChunkFilePathsByFileUIDExpectation{}
+	}
+
+	if mmGetTextChunkFilePathsByFileUID.defaultExpectation.params != nil {
+		mmGetTextChunkFilePathsByFileUID.mock.t.Fatalf("ServiceMock.GetTextChunkFilePathsByFileUID mock is already set by Expect")
+	}
+
+	if mmGetTextChunkFilePathsByFileUID.defaultExpectation.paramPtrs == nil {
+		mmGetTextChunkFilePathsByFileUID.defaultExpectation.paramPtrs = &ServiceMockGetTextChunkFilePathsByFileUIDParamPtrs{}
+	}
+	mmGetTextChunkFilePathsByFileUID.defaultExpectation.paramPtrs.f1 = &f1
+	mmGetTextChunkFilePathsByFileUID.defaultExpectation.expectationOrigins.originF1 = minimock.CallerInfo(1)
+
+	return mmGetTextChunkFilePathsByFileUID
+}
+
+// Inspect accepts an inspector function that has same arguments as the Service.GetTextChunkFilePathsByFileUID
+func (mmGetTextChunkFilePathsByFileUID *mServiceMockGetTextChunkFilePathsByFileUID) Inspect(f func(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType)) *mServiceMockGetTextChunkFilePathsByFileUID {
+	if mmGetTextChunkFilePathsByFileUID.mock.inspectFuncGetTextChunkFilePathsByFileUID != nil {
+		mmGetTextChunkFilePathsByFileUID.mock.t.Fatalf("Inspect function is already set for ServiceMock.GetTextChunkFilePathsByFileUID")
+	}
+
+	mmGetTextChunkFilePathsByFileUID.mock.inspectFuncGetTextChunkFilePathsByFileUID = f
+
+	return mmGetTextChunkFilePathsByFileUID
+}
+
+// Return sets up results that will be returned by Service.GetTextChunkFilePathsByFileUID
+func (mmGetTextChunkFilePathsByFileUID *mServiceMockGetTextChunkFilePathsByFileUID) Return(sa1 []string, err error) *ServiceMock {
+	if mmGetTextChunkFilePathsByFileUID.mock.funcGetTextChunkFilePathsByFileUID != nil {
+		mmGetTextChunkFilePathsByFileUID.mock.t.Fatalf("ServiceMock.GetTextChunkFilePathsByFileUID mock is already set by Set")
+	}
+
+	if mmGetTextChunkFilePathsByFileUID.defaultExpectation == nil {
+		mmGetTextChunkFilePathsByFileUID.defaultExpectation = &ServiceMockGetTextChunkFilePathsByFileUIDExpectation{mock: mmGetTextChunkFilePathsByFileUID.mock}
+	}
+	mmGetTextChunkFilePathsByFileUID.defaultExpectation.results = &ServiceMockGetTextChunkFilePathsByFileUIDResults{sa1, err}
+	mmGetTextChunkFilePathsByFileUID.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmGetTextChunkFilePathsByFileUID.mock
+}
+
+// Set uses given function f to mock the Service.GetTextChunkFilePathsByFileUID method
+func (mmGetTextChunkFilePathsByFileUID *mServiceMockGetTextChunkFilePathsByFileUID) Set(f func(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType) (sa1 []string, err error)) *ServiceMock {
+	if mmGetTextChunkFilePathsByFileUID.defaultExpectation != nil {
+		mmGetTextChunkFilePathsByFileUID.mock.t.Fatalf("Default expectation is already set for the Service.GetTextChunkFilePathsByFileUID method")
+	}
+
+	if len(mmGetTextChunkFilePathsByFileUID.expectations) > 0 {
+		mmGetTextChunkFilePathsByFileUID.mock.t.Fatalf("Some expectations are already set for the Service.GetTextChunkFilePathsByFileUID method")
+	}
+
+	mmGetTextChunkFilePathsByFileUID.mock.funcGetTextChunkFilePathsByFileUID = f
+	mmGetTextChunkFilePathsByFileUID.mock.funcGetTextChunkFilePathsByFileUIDOrigin = minimock.CallerInfo(1)
+	return mmGetTextChunkFilePathsByFileUID.mock
+}
+
+// When sets expectation for the Service.GetTextChunkFilePathsByFileUID which will trigger the result defined by the following
+// Then helper
+func (mmGetTextChunkFilePathsByFileUID *mServiceMockGetTextChunkFilePathsByFileUID) When(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType) *ServiceMockGetTextChunkFilePathsByFileUIDExpectation {
+	if mmGetTextChunkFilePathsByFileUID.mock.funcGetTextChunkFilePathsByFileUID != nil {
+		mmGetTextChunkFilePathsByFileUID.mock.t.Fatalf("ServiceMock.GetTextChunkFilePathsByFileUID mock is already set by Set")
+	}
+
+	expectation := &ServiceMockGetTextChunkFilePathsByFileUIDExpectation{
+		mock:               mmGetTextChunkFilePathsByFileUID.mock,
+		params:             &ServiceMockGetTextChunkFilePathsByFileUIDParams{ctx, k1, f1},
+		expectationOrigins: ServiceMockGetTextChunkFilePathsByFileUIDExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmGetTextChunkFilePathsByFileUID.expectations = append(mmGetTextChunkFilePathsByFileUID.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Service.GetTextChunkFilePathsByFileUID return parameters for the expectation previously defined by the When method
+func (e *ServiceMockGetTextChunkFilePathsByFileUIDExpectation) Then(sa1 []string, err error) *ServiceMock {
+	e.results = &ServiceMockGetTextChunkFilePathsByFileUIDResults{sa1, err}
+	return e.mock
+}
+
+// Times sets number of times Service.GetTextChunkFilePathsByFileUID should be invoked
+func (mmGetTextChunkFilePathsByFileUID *mServiceMockGetTextChunkFilePathsByFileUID) Times(n uint64) *mServiceMockGetTextChunkFilePathsByFileUID {
+	if n == 0 {
+		mmGetTextChunkFilePathsByFileUID.mock.t.Fatalf("Times of ServiceMock.GetTextChunkFilePathsByFileUID mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetTextChunkFilePathsByFileUID.expectedInvocations, n)
+	mmGetTextChunkFilePathsByFileUID.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmGetTextChunkFilePathsByFileUID
+}
+
+func (mmGetTextChunkFilePathsByFileUID *mServiceMockGetTextChunkFilePathsByFileUID) invocationsDone() bool {
+	if len(mmGetTextChunkFilePathsByFileUID.expectations) == 0 && mmGetTextChunkFilePathsByFileUID.defaultExpectation == nil && mmGetTextChunkFilePathsByFileUID.mock.funcGetTextChunkFilePathsByFileUID == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetTextChunkFilePathsByFileUID.mock.afterGetTextChunkFilePathsByFileUIDCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetTextChunkFilePathsByFileUID.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetTextChunkFilePathsByFileUID implements mm_service.Service
+func (mmGetTextChunkFilePathsByFileUID *ServiceMock) GetTextChunkFilePathsByFileUID(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType) (sa1 []string, err error) {
+	mm_atomic.AddUint64(&mmGetTextChunkFilePathsByFileUID.beforeGetTextChunkFilePathsByFileUIDCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetTextChunkFilePathsByFileUID.afterGetTextChunkFilePathsByFileUIDCounter, 1)
+
+	mmGetTextChunkFilePathsByFileUID.t.Helper()
+
+	if mmGetTextChunkFilePathsByFileUID.inspectFuncGetTextChunkFilePathsByFileUID != nil {
+		mmGetTextChunkFilePathsByFileUID.inspectFuncGetTextChunkFilePathsByFileUID(ctx, k1, f1)
+	}
+
+	mm_params := ServiceMockGetTextChunkFilePathsByFileUIDParams{ctx, k1, f1}
+
+	// Record call args
+	mmGetTextChunkFilePathsByFileUID.GetTextChunkFilePathsByFileUIDMock.mutex.Lock()
+	mmGetTextChunkFilePathsByFileUID.GetTextChunkFilePathsByFileUIDMock.callArgs = append(mmGetTextChunkFilePathsByFileUID.GetTextChunkFilePathsByFileUIDMock.callArgs, &mm_params)
+	mmGetTextChunkFilePathsByFileUID.GetTextChunkFilePathsByFileUIDMock.mutex.Unlock()
+
+	for _, e := range mmGetTextChunkFilePathsByFileUID.GetTextChunkFilePathsByFileUIDMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.sa1, e.results.err
+		}
+	}
+
+	if mmGetTextChunkFilePathsByFileUID.GetTextChunkFilePathsByFileUIDMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetTextChunkFilePathsByFileUID.GetTextChunkFilePathsByFileUIDMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetTextChunkFilePathsByFileUID.GetTextChunkFilePathsByFileUIDMock.defaultExpectation.params
+		mm_want_ptrs := mmGetTextChunkFilePathsByFileUID.GetTextChunkFilePathsByFileUIDMock.defaultExpectation.paramPtrs
+
+		mm_got := ServiceMockGetTextChunkFilePathsByFileUIDParams{ctx, k1, f1}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetTextChunkFilePathsByFileUID.t.Errorf("ServiceMock.GetTextChunkFilePathsByFileUID got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetTextChunkFilePathsByFileUID.GetTextChunkFilePathsByFileUIDMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.k1 != nil && !minimock.Equal(*mm_want_ptrs.k1, mm_got.k1) {
+				mmGetTextChunkFilePathsByFileUID.t.Errorf("ServiceMock.GetTextChunkFilePathsByFileUID got unexpected parameter k1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetTextChunkFilePathsByFileUID.GetTextChunkFilePathsByFileUIDMock.defaultExpectation.expectationOrigins.originK1, *mm_want_ptrs.k1, mm_got.k1, minimock.Diff(*mm_want_ptrs.k1, mm_got.k1))
+			}
+
+			if mm_want_ptrs.f1 != nil && !minimock.Equal(*mm_want_ptrs.f1, mm_got.f1) {
+				mmGetTextChunkFilePathsByFileUID.t.Errorf("ServiceMock.GetTextChunkFilePathsByFileUID got unexpected parameter f1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetTextChunkFilePathsByFileUID.GetTextChunkFilePathsByFileUIDMock.defaultExpectation.expectationOrigins.originF1, *mm_want_ptrs.f1, mm_got.f1, minimock.Diff(*mm_want_ptrs.f1, mm_got.f1))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetTextChunkFilePathsByFileUID.t.Errorf("ServiceMock.GetTextChunkFilePathsByFileUID got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmGetTextChunkFilePathsByFileUID.GetTextChunkFilePathsByFileUIDMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetTextChunkFilePathsByFileUID.GetTextChunkFilePathsByFileUIDMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetTextChunkFilePathsByFileUID.t.Fatal("No results are set for the ServiceMock.GetTextChunkFilePathsByFileUID")
+		}
+		return (*mm_results).sa1, (*mm_results).err
+	}
+	if mmGetTextChunkFilePathsByFileUID.funcGetTextChunkFilePathsByFileUID != nil {
+		return mmGetTextChunkFilePathsByFileUID.funcGetTextChunkFilePathsByFileUID(ctx, k1, f1)
+	}
+	mmGetTextChunkFilePathsByFileUID.t.Fatalf("Unexpected call to ServiceMock.GetTextChunkFilePathsByFileUID. %v %v %v", ctx, k1, f1)
+	return
+}
+
+// GetTextChunkFilePathsByFileUIDAfterCounter returns a count of finished ServiceMock.GetTextChunkFilePathsByFileUID invocations
+func (mmGetTextChunkFilePathsByFileUID *ServiceMock) GetTextChunkFilePathsByFileUIDAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetTextChunkFilePathsByFileUID.afterGetTextChunkFilePathsByFileUIDCounter)
+}
+
+// GetTextChunkFilePathsByFileUIDBeforeCounter returns a count of ServiceMock.GetTextChunkFilePathsByFileUID invocations
+func (mmGetTextChunkFilePathsByFileUID *ServiceMock) GetTextChunkFilePathsByFileUIDBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetTextChunkFilePathsByFileUID.beforeGetTextChunkFilePathsByFileUIDCounter)
+}
+
+// Calls returns a list of arguments used in each call to ServiceMock.GetTextChunkFilePathsByFileUID.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetTextChunkFilePathsByFileUID *mServiceMockGetTextChunkFilePathsByFileUID) Calls() []*ServiceMockGetTextChunkFilePathsByFileUIDParams {
+	mmGetTextChunkFilePathsByFileUID.mutex.RLock()
+
+	argCopy := make([]*ServiceMockGetTextChunkFilePathsByFileUIDParams, len(mmGetTextChunkFilePathsByFileUID.callArgs))
+	copy(argCopy, mmGetTextChunkFilePathsByFileUID.callArgs)
+
+	mmGetTextChunkFilePathsByFileUID.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetTextChunkFilePathsByFileUIDDone returns true if the count of the GetTextChunkFilePathsByFileUID invocations corresponds
+// the number of defined expectations
+func (m *ServiceMock) MinimockGetTextChunkFilePathsByFileUIDDone() bool {
+	if m.GetTextChunkFilePathsByFileUIDMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.GetTextChunkFilePathsByFileUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetTextChunkFilePathsByFileUIDMock.invocationsDone()
+}
+
+// MinimockGetTextChunkFilePathsByFileUIDInspect logs each unmet expectation
+func (m *ServiceMock) MinimockGetTextChunkFilePathsByFileUIDInspect() {
+	for _, e := range m.GetTextChunkFilePathsByFileUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to ServiceMock.GetTextChunkFilePathsByFileUID at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterGetTextChunkFilePathsByFileUIDCounter := mm_atomic.LoadUint64(&m.afterGetTextChunkFilePathsByFileUIDCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetTextChunkFilePathsByFileUIDMock.defaultExpectation != nil && afterGetTextChunkFilePathsByFileUIDCounter < 1 {
+		if m.GetTextChunkFilePathsByFileUIDMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to ServiceMock.GetTextChunkFilePathsByFileUID at\n%s", m.GetTextChunkFilePathsByFileUIDMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to ServiceMock.GetTextChunkFilePathsByFileUID at\n%s with params: %#v", m.GetTextChunkFilePathsByFileUIDMock.defaultExpectation.expectationOrigins.origin, *m.GetTextChunkFilePathsByFileUIDMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetTextChunkFilePathsByFileUID != nil && afterGetTextChunkFilePathsByFileUIDCounter < 1 {
+		m.t.Errorf("Expected call to ServiceMock.GetTextChunkFilePathsByFileUID at\n%s", m.funcGetTextChunkFilePathsByFileUIDOrigin)
+	}
+
+	if !m.GetTextChunkFilePathsByFileUIDMock.invocationsDone() && afterGetTextChunkFilePathsByFileUIDCounter > 0 {
+		m.t.Errorf("Expected %d calls to ServiceMock.GetTextChunkFilePathsByFileUID at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.GetTextChunkFilePathsByFileUIDMock.expectedInvocations), m.GetTextChunkFilePathsByFileUIDMock.expectedInvocationsOrigin, afterGetTextChunkFilePathsByFileUIDCounter)
+	}
+}
+
 type mServiceMockGetUploadURL struct {
 	optional           bool
 	mock               *ServiceMock
@@ -9065,7 +6414,7 @@ type ServiceMockGetUploadURLParams struct {
 	gp1 *artifactpb.GetObjectUploadURLRequest
 	u1  uuid.UUID
 	s1  string
-	u2  uuid.UUID
+	c2  types.CreatorUIDType
 }
 
 // ServiceMockGetUploadURLParamPtrs contains pointers to parameters of the Service.GetUploadURL
@@ -9074,7 +6423,7 @@ type ServiceMockGetUploadURLParamPtrs struct {
 	gp1 **artifactpb.GetObjectUploadURLRequest
 	u1  *uuid.UUID
 	s1  *string
-	u2  *uuid.UUID
+	c2  *types.CreatorUIDType
 }
 
 // ServiceMockGetUploadURLResults contains results of the Service.GetUploadURL
@@ -9090,7 +6439,7 @@ type ServiceMockGetUploadURLExpectationOrigins struct {
 	originGp1 string
 	originU1  string
 	originS1  string
-	originU2  string
+	originC2  string
 }
 
 // Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
@@ -9104,7 +6453,7 @@ func (mmGetUploadURL *mServiceMockGetUploadURL) Optional() *mServiceMockGetUploa
 }
 
 // Expect sets up expected params for Service.GetUploadURL
-func (mmGetUploadURL *mServiceMockGetUploadURL) Expect(ctx context.Context, gp1 *artifactpb.GetObjectUploadURLRequest, u1 uuid.UUID, s1 string, u2 uuid.UUID) *mServiceMockGetUploadURL {
+func (mmGetUploadURL *mServiceMockGetUploadURL) Expect(ctx context.Context, gp1 *artifactpb.GetObjectUploadURLRequest, u1 uuid.UUID, s1 string, c2 types.CreatorUIDType) *mServiceMockGetUploadURL {
 	if mmGetUploadURL.mock.funcGetUploadURL != nil {
 		mmGetUploadURL.mock.t.Fatalf("ServiceMock.GetUploadURL mock is already set by Set")
 	}
@@ -9117,7 +6466,7 @@ func (mmGetUploadURL *mServiceMockGetUploadURL) Expect(ctx context.Context, gp1 
 		mmGetUploadURL.mock.t.Fatalf("ServiceMock.GetUploadURL mock is already set by ExpectParams functions")
 	}
 
-	mmGetUploadURL.defaultExpectation.params = &ServiceMockGetUploadURLParams{ctx, gp1, u1, s1, u2}
+	mmGetUploadURL.defaultExpectation.params = &ServiceMockGetUploadURLParams{ctx, gp1, u1, s1, c2}
 	mmGetUploadURL.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
 	for _, e := range mmGetUploadURL.expectations {
 		if minimock.Equal(e.params, mmGetUploadURL.defaultExpectation.params) {
@@ -9220,8 +6569,8 @@ func (mmGetUploadURL *mServiceMockGetUploadURL) ExpectS1Param4(s1 string) *mServ
 	return mmGetUploadURL
 }
 
-// ExpectU2Param5 sets up expected param u2 for Service.GetUploadURL
-func (mmGetUploadURL *mServiceMockGetUploadURL) ExpectU2Param5(u2 uuid.UUID) *mServiceMockGetUploadURL {
+// ExpectC2Param5 sets up expected param c2 for Service.GetUploadURL
+func (mmGetUploadURL *mServiceMockGetUploadURL) ExpectC2Param5(c2 types.CreatorUIDType) *mServiceMockGetUploadURL {
 	if mmGetUploadURL.mock.funcGetUploadURL != nil {
 		mmGetUploadURL.mock.t.Fatalf("ServiceMock.GetUploadURL mock is already set by Set")
 	}
@@ -9237,14 +6586,14 @@ func (mmGetUploadURL *mServiceMockGetUploadURL) ExpectU2Param5(u2 uuid.UUID) *mS
 	if mmGetUploadURL.defaultExpectation.paramPtrs == nil {
 		mmGetUploadURL.defaultExpectation.paramPtrs = &ServiceMockGetUploadURLParamPtrs{}
 	}
-	mmGetUploadURL.defaultExpectation.paramPtrs.u2 = &u2
-	mmGetUploadURL.defaultExpectation.expectationOrigins.originU2 = minimock.CallerInfo(1)
+	mmGetUploadURL.defaultExpectation.paramPtrs.c2 = &c2
+	mmGetUploadURL.defaultExpectation.expectationOrigins.originC2 = minimock.CallerInfo(1)
 
 	return mmGetUploadURL
 }
 
 // Inspect accepts an inspector function that has same arguments as the Service.GetUploadURL
-func (mmGetUploadURL *mServiceMockGetUploadURL) Inspect(f func(ctx context.Context, gp1 *artifactpb.GetObjectUploadURLRequest, u1 uuid.UUID, s1 string, u2 uuid.UUID)) *mServiceMockGetUploadURL {
+func (mmGetUploadURL *mServiceMockGetUploadURL) Inspect(f func(ctx context.Context, gp1 *artifactpb.GetObjectUploadURLRequest, u1 uuid.UUID, s1 string, c2 types.CreatorUIDType)) *mServiceMockGetUploadURL {
 	if mmGetUploadURL.mock.inspectFuncGetUploadURL != nil {
 		mmGetUploadURL.mock.t.Fatalf("Inspect function is already set for ServiceMock.GetUploadURL")
 	}
@@ -9269,7 +6618,7 @@ func (mmGetUploadURL *mServiceMockGetUploadURL) Return(gp2 *artifactpb.GetObject
 }
 
 // Set uses given function f to mock the Service.GetUploadURL method
-func (mmGetUploadURL *mServiceMockGetUploadURL) Set(f func(ctx context.Context, gp1 *artifactpb.GetObjectUploadURLRequest, u1 uuid.UUID, s1 string, u2 uuid.UUID) (gp2 *artifactpb.GetObjectUploadURLResponse, err error)) *ServiceMock {
+func (mmGetUploadURL *mServiceMockGetUploadURL) Set(f func(ctx context.Context, gp1 *artifactpb.GetObjectUploadURLRequest, u1 uuid.UUID, s1 string, c2 types.CreatorUIDType) (gp2 *artifactpb.GetObjectUploadURLResponse, err error)) *ServiceMock {
 	if mmGetUploadURL.defaultExpectation != nil {
 		mmGetUploadURL.mock.t.Fatalf("Default expectation is already set for the Service.GetUploadURL method")
 	}
@@ -9285,14 +6634,14 @@ func (mmGetUploadURL *mServiceMockGetUploadURL) Set(f func(ctx context.Context, 
 
 // When sets expectation for the Service.GetUploadURL which will trigger the result defined by the following
 // Then helper
-func (mmGetUploadURL *mServiceMockGetUploadURL) When(ctx context.Context, gp1 *artifactpb.GetObjectUploadURLRequest, u1 uuid.UUID, s1 string, u2 uuid.UUID) *ServiceMockGetUploadURLExpectation {
+func (mmGetUploadURL *mServiceMockGetUploadURL) When(ctx context.Context, gp1 *artifactpb.GetObjectUploadURLRequest, u1 uuid.UUID, s1 string, c2 types.CreatorUIDType) *ServiceMockGetUploadURLExpectation {
 	if mmGetUploadURL.mock.funcGetUploadURL != nil {
 		mmGetUploadURL.mock.t.Fatalf("ServiceMock.GetUploadURL mock is already set by Set")
 	}
 
 	expectation := &ServiceMockGetUploadURLExpectation{
 		mock:               mmGetUploadURL.mock,
-		params:             &ServiceMockGetUploadURLParams{ctx, gp1, u1, s1, u2},
+		params:             &ServiceMockGetUploadURLParams{ctx, gp1, u1, s1, c2},
 		expectationOrigins: ServiceMockGetUploadURLExpectationOrigins{origin: minimock.CallerInfo(1)},
 	}
 	mmGetUploadURL.expectations = append(mmGetUploadURL.expectations, expectation)
@@ -9327,17 +6676,17 @@ func (mmGetUploadURL *mServiceMockGetUploadURL) invocationsDone() bool {
 }
 
 // GetUploadURL implements mm_service.Service
-func (mmGetUploadURL *ServiceMock) GetUploadURL(ctx context.Context, gp1 *artifactpb.GetObjectUploadURLRequest, u1 uuid.UUID, s1 string, u2 uuid.UUID) (gp2 *artifactpb.GetObjectUploadURLResponse, err error) {
+func (mmGetUploadURL *ServiceMock) GetUploadURL(ctx context.Context, gp1 *artifactpb.GetObjectUploadURLRequest, u1 uuid.UUID, s1 string, c2 types.CreatorUIDType) (gp2 *artifactpb.GetObjectUploadURLResponse, err error) {
 	mm_atomic.AddUint64(&mmGetUploadURL.beforeGetUploadURLCounter, 1)
 	defer mm_atomic.AddUint64(&mmGetUploadURL.afterGetUploadURLCounter, 1)
 
 	mmGetUploadURL.t.Helper()
 
 	if mmGetUploadURL.inspectFuncGetUploadURL != nil {
-		mmGetUploadURL.inspectFuncGetUploadURL(ctx, gp1, u1, s1, u2)
+		mmGetUploadURL.inspectFuncGetUploadURL(ctx, gp1, u1, s1, c2)
 	}
 
-	mm_params := ServiceMockGetUploadURLParams{ctx, gp1, u1, s1, u2}
+	mm_params := ServiceMockGetUploadURLParams{ctx, gp1, u1, s1, c2}
 
 	// Record call args
 	mmGetUploadURL.GetUploadURLMock.mutex.Lock()
@@ -9356,7 +6705,7 @@ func (mmGetUploadURL *ServiceMock) GetUploadURL(ctx context.Context, gp1 *artifa
 		mm_want := mmGetUploadURL.GetUploadURLMock.defaultExpectation.params
 		mm_want_ptrs := mmGetUploadURL.GetUploadURLMock.defaultExpectation.paramPtrs
 
-		mm_got := ServiceMockGetUploadURLParams{ctx, gp1, u1, s1, u2}
+		mm_got := ServiceMockGetUploadURLParams{ctx, gp1, u1, s1, c2}
 
 		if mm_want_ptrs != nil {
 
@@ -9380,9 +6729,9 @@ func (mmGetUploadURL *ServiceMock) GetUploadURL(ctx context.Context, gp1 *artifa
 					mmGetUploadURL.GetUploadURLMock.defaultExpectation.expectationOrigins.originS1, *mm_want_ptrs.s1, mm_got.s1, minimock.Diff(*mm_want_ptrs.s1, mm_got.s1))
 			}
 
-			if mm_want_ptrs.u2 != nil && !minimock.Equal(*mm_want_ptrs.u2, mm_got.u2) {
-				mmGetUploadURL.t.Errorf("ServiceMock.GetUploadURL got unexpected parameter u2, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmGetUploadURL.GetUploadURLMock.defaultExpectation.expectationOrigins.originU2, *mm_want_ptrs.u2, mm_got.u2, minimock.Diff(*mm_want_ptrs.u2, mm_got.u2))
+			if mm_want_ptrs.c2 != nil && !minimock.Equal(*mm_want_ptrs.c2, mm_got.c2) {
+				mmGetUploadURL.t.Errorf("ServiceMock.GetUploadURL got unexpected parameter c2, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetUploadURL.GetUploadURLMock.defaultExpectation.expectationOrigins.originC2, *mm_want_ptrs.c2, mm_got.c2, minimock.Diff(*mm_want_ptrs.c2, mm_got.c2))
 			}
 
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
@@ -9397,9 +6746,9 @@ func (mmGetUploadURL *ServiceMock) GetUploadURL(ctx context.Context, gp1 *artifa
 		return (*mm_results).gp2, (*mm_results).err
 	}
 	if mmGetUploadURL.funcGetUploadURL != nil {
-		return mmGetUploadURL.funcGetUploadURL(ctx, gp1, u1, s1, u2)
+		return mmGetUploadURL.funcGetUploadURL(ctx, gp1, u1, s1, c2)
 	}
-	mmGetUploadURL.t.Fatalf("Unexpected call to ServiceMock.GetUploadURL. %v %v %v %v %v", ctx, gp1, u1, s1, u2)
+	mmGetUploadURL.t.Fatalf("Unexpected call to ServiceMock.GetUploadURL. %v %v %v %v %v", ctx, gp1, u1, s1, c2)
 	return
 }
 
@@ -9814,192 +7163,6 @@ func (m *ServiceMock) MinimockListRepositoryTagsInspect() {
 	}
 }
 
-type mServiceMockMinIO struct {
-	optional           bool
-	mock               *ServiceMock
-	defaultExpectation *ServiceMockMinIOExpectation
-	expectations       []*ServiceMockMinIOExpectation
-
-	expectedInvocations       uint64
-	expectedInvocationsOrigin string
-}
-
-// ServiceMockMinIOExpectation specifies expectation struct of the Service.MinIO
-type ServiceMockMinIOExpectation struct {
-	mock *ServiceMock
-
-	results      *ServiceMockMinIOResults
-	returnOrigin string
-	Counter      uint64
-}
-
-// ServiceMockMinIOResults contains results of the Service.MinIO
-type ServiceMockMinIOResults struct {
-	m1 minio.MinioI
-}
-
-// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
-// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
-// Optional() makes method check to work in '0 or more' mode.
-// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
-// catch the problems when the expected method call is totally skipped during test run.
-func (mmMinIO *mServiceMockMinIO) Optional() *mServiceMockMinIO {
-	mmMinIO.optional = true
-	return mmMinIO
-}
-
-// Expect sets up expected params for Service.MinIO
-func (mmMinIO *mServiceMockMinIO) Expect() *mServiceMockMinIO {
-	if mmMinIO.mock.funcMinIO != nil {
-		mmMinIO.mock.t.Fatalf("ServiceMock.MinIO mock is already set by Set")
-	}
-
-	if mmMinIO.defaultExpectation == nil {
-		mmMinIO.defaultExpectation = &ServiceMockMinIOExpectation{}
-	}
-
-	return mmMinIO
-}
-
-// Inspect accepts an inspector function that has same arguments as the Service.MinIO
-func (mmMinIO *mServiceMockMinIO) Inspect(f func()) *mServiceMockMinIO {
-	if mmMinIO.mock.inspectFuncMinIO != nil {
-		mmMinIO.mock.t.Fatalf("Inspect function is already set for ServiceMock.MinIO")
-	}
-
-	mmMinIO.mock.inspectFuncMinIO = f
-
-	return mmMinIO
-}
-
-// Return sets up results that will be returned by Service.MinIO
-func (mmMinIO *mServiceMockMinIO) Return(m1 minio.MinioI) *ServiceMock {
-	if mmMinIO.mock.funcMinIO != nil {
-		mmMinIO.mock.t.Fatalf("ServiceMock.MinIO mock is already set by Set")
-	}
-
-	if mmMinIO.defaultExpectation == nil {
-		mmMinIO.defaultExpectation = &ServiceMockMinIOExpectation{mock: mmMinIO.mock}
-	}
-	mmMinIO.defaultExpectation.results = &ServiceMockMinIOResults{m1}
-	mmMinIO.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
-	return mmMinIO.mock
-}
-
-// Set uses given function f to mock the Service.MinIO method
-func (mmMinIO *mServiceMockMinIO) Set(f func() (m1 minio.MinioI)) *ServiceMock {
-	if mmMinIO.defaultExpectation != nil {
-		mmMinIO.mock.t.Fatalf("Default expectation is already set for the Service.MinIO method")
-	}
-
-	if len(mmMinIO.expectations) > 0 {
-		mmMinIO.mock.t.Fatalf("Some expectations are already set for the Service.MinIO method")
-	}
-
-	mmMinIO.mock.funcMinIO = f
-	mmMinIO.mock.funcMinIOOrigin = minimock.CallerInfo(1)
-	return mmMinIO.mock
-}
-
-// Times sets number of times Service.MinIO should be invoked
-func (mmMinIO *mServiceMockMinIO) Times(n uint64) *mServiceMockMinIO {
-	if n == 0 {
-		mmMinIO.mock.t.Fatalf("Times of ServiceMock.MinIO mock can not be zero")
-	}
-	mm_atomic.StoreUint64(&mmMinIO.expectedInvocations, n)
-	mmMinIO.expectedInvocationsOrigin = minimock.CallerInfo(1)
-	return mmMinIO
-}
-
-func (mmMinIO *mServiceMockMinIO) invocationsDone() bool {
-	if len(mmMinIO.expectations) == 0 && mmMinIO.defaultExpectation == nil && mmMinIO.mock.funcMinIO == nil {
-		return true
-	}
-
-	totalInvocations := mm_atomic.LoadUint64(&mmMinIO.mock.afterMinIOCounter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmMinIO.expectedInvocations)
-
-	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
-}
-
-// MinIO implements mm_service.Service
-func (mmMinIO *ServiceMock) MinIO() (m1 minio.MinioI) {
-	mm_atomic.AddUint64(&mmMinIO.beforeMinIOCounter, 1)
-	defer mm_atomic.AddUint64(&mmMinIO.afterMinIOCounter, 1)
-
-	mmMinIO.t.Helper()
-
-	if mmMinIO.inspectFuncMinIO != nil {
-		mmMinIO.inspectFuncMinIO()
-	}
-
-	if mmMinIO.MinIOMock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmMinIO.MinIOMock.defaultExpectation.Counter, 1)
-
-		mm_results := mmMinIO.MinIOMock.defaultExpectation.results
-		if mm_results == nil {
-			mmMinIO.t.Fatal("No results are set for the ServiceMock.MinIO")
-		}
-		return (*mm_results).m1
-	}
-	if mmMinIO.funcMinIO != nil {
-		return mmMinIO.funcMinIO()
-	}
-	mmMinIO.t.Fatalf("Unexpected call to ServiceMock.MinIO.")
-	return
-}
-
-// MinIOAfterCounter returns a count of finished ServiceMock.MinIO invocations
-func (mmMinIO *ServiceMock) MinIOAfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmMinIO.afterMinIOCounter)
-}
-
-// MinIOBeforeCounter returns a count of ServiceMock.MinIO invocations
-func (mmMinIO *ServiceMock) MinIOBeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmMinIO.beforeMinIOCounter)
-}
-
-// MinimockMinIODone returns true if the count of the MinIO invocations corresponds
-// the number of defined expectations
-func (m *ServiceMock) MinimockMinIODone() bool {
-	if m.MinIOMock.optional {
-		// Optional methods provide '0 or more' call count restriction.
-		return true
-	}
-
-	for _, e := range m.MinIOMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			return false
-		}
-	}
-
-	return m.MinIOMock.invocationsDone()
-}
-
-// MinimockMinIOInspect logs each unmet expectation
-func (m *ServiceMock) MinimockMinIOInspect() {
-	for _, e := range m.MinIOMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Error("Expected call to ServiceMock.MinIO")
-		}
-	}
-
-	afterMinIOCounter := mm_atomic.LoadUint64(&m.afterMinIOCounter)
-	// if default expectation was set then invocations count should be greater than zero
-	if m.MinIOMock.defaultExpectation != nil && afterMinIOCounter < 1 {
-		m.t.Errorf("Expected call to ServiceMock.MinIO at\n%s", m.MinIOMock.defaultExpectation.returnOrigin)
-	}
-	// if func was set then invocations count should be greater than zero
-	if m.funcMinIO != nil && afterMinIOCounter < 1 {
-		m.t.Errorf("Expected call to ServiceMock.MinIO at\n%s", m.funcMinIOOrigin)
-	}
-
-	if !m.MinIOMock.invocationsDone() && afterMinIOCounter > 0 {
-		m.t.Errorf("Expected %d calls to ServiceMock.MinIO at\n%s but found %d calls",
-			mm_atomic.LoadUint64(&m.MinIOMock.expectedInvocations), m.MinIOMock.expectedInvocationsOrigin, afterMinIOCounter)
-	}
-}
-
 type mServiceMockPipelinePublicClient struct {
 	optional           bool
 	mock               *ServiceMock
@@ -10186,242 +7349,61 @@ func (m *ServiceMock) MinimockPipelinePublicClientInspect() {
 	}
 }
 
-type mServiceMockProcessFileWorkflow struct {
+type mServiceMockProcessFile struct {
 	optional           bool
 	mock               *ServiceMock
-	defaultExpectation *ServiceMockProcessFileWorkflowExpectation
-	expectations       []*ServiceMockProcessFileWorkflowExpectation
+	defaultExpectation *ServiceMockProcessFileExpectation
+	expectations       []*ServiceMockProcessFileExpectation
 
-	expectedInvocations       uint64
-	expectedInvocationsOrigin string
-}
-
-// ServiceMockProcessFileWorkflowExpectation specifies expectation struct of the Service.ProcessFileWorkflow
-type ServiceMockProcessFileWorkflowExpectation struct {
-	mock *ServiceMock
-
-	results      *ServiceMockProcessFileWorkflowResults
-	returnOrigin string
-	Counter      uint64
-}
-
-// ServiceMockProcessFileWorkflowResults contains results of the Service.ProcessFileWorkflow
-type ServiceMockProcessFileWorkflowResults struct {
-	p1 mm_service.ProcessFileWorkflow
-}
-
-// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
-// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
-// Optional() makes method check to work in '0 or more' mode.
-// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
-// catch the problems when the expected method call is totally skipped during test run.
-func (mmProcessFileWorkflow *mServiceMockProcessFileWorkflow) Optional() *mServiceMockProcessFileWorkflow {
-	mmProcessFileWorkflow.optional = true
-	return mmProcessFileWorkflow
-}
-
-// Expect sets up expected params for Service.ProcessFileWorkflow
-func (mmProcessFileWorkflow *mServiceMockProcessFileWorkflow) Expect() *mServiceMockProcessFileWorkflow {
-	if mmProcessFileWorkflow.mock.funcProcessFileWorkflow != nil {
-		mmProcessFileWorkflow.mock.t.Fatalf("ServiceMock.ProcessFileWorkflow mock is already set by Set")
-	}
-
-	if mmProcessFileWorkflow.defaultExpectation == nil {
-		mmProcessFileWorkflow.defaultExpectation = &ServiceMockProcessFileWorkflowExpectation{}
-	}
-
-	return mmProcessFileWorkflow
-}
-
-// Inspect accepts an inspector function that has same arguments as the Service.ProcessFileWorkflow
-func (mmProcessFileWorkflow *mServiceMockProcessFileWorkflow) Inspect(f func()) *mServiceMockProcessFileWorkflow {
-	if mmProcessFileWorkflow.mock.inspectFuncProcessFileWorkflow != nil {
-		mmProcessFileWorkflow.mock.t.Fatalf("Inspect function is already set for ServiceMock.ProcessFileWorkflow")
-	}
-
-	mmProcessFileWorkflow.mock.inspectFuncProcessFileWorkflow = f
-
-	return mmProcessFileWorkflow
-}
-
-// Return sets up results that will be returned by Service.ProcessFileWorkflow
-func (mmProcessFileWorkflow *mServiceMockProcessFileWorkflow) Return(p1 mm_service.ProcessFileWorkflow) *ServiceMock {
-	if mmProcessFileWorkflow.mock.funcProcessFileWorkflow != nil {
-		mmProcessFileWorkflow.mock.t.Fatalf("ServiceMock.ProcessFileWorkflow mock is already set by Set")
-	}
-
-	if mmProcessFileWorkflow.defaultExpectation == nil {
-		mmProcessFileWorkflow.defaultExpectation = &ServiceMockProcessFileWorkflowExpectation{mock: mmProcessFileWorkflow.mock}
-	}
-	mmProcessFileWorkflow.defaultExpectation.results = &ServiceMockProcessFileWorkflowResults{p1}
-	mmProcessFileWorkflow.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
-	return mmProcessFileWorkflow.mock
-}
-
-// Set uses given function f to mock the Service.ProcessFileWorkflow method
-func (mmProcessFileWorkflow *mServiceMockProcessFileWorkflow) Set(f func() (p1 mm_service.ProcessFileWorkflow)) *ServiceMock {
-	if mmProcessFileWorkflow.defaultExpectation != nil {
-		mmProcessFileWorkflow.mock.t.Fatalf("Default expectation is already set for the Service.ProcessFileWorkflow method")
-	}
-
-	if len(mmProcessFileWorkflow.expectations) > 0 {
-		mmProcessFileWorkflow.mock.t.Fatalf("Some expectations are already set for the Service.ProcessFileWorkflow method")
-	}
-
-	mmProcessFileWorkflow.mock.funcProcessFileWorkflow = f
-	mmProcessFileWorkflow.mock.funcProcessFileWorkflowOrigin = minimock.CallerInfo(1)
-	return mmProcessFileWorkflow.mock
-}
-
-// Times sets number of times Service.ProcessFileWorkflow should be invoked
-func (mmProcessFileWorkflow *mServiceMockProcessFileWorkflow) Times(n uint64) *mServiceMockProcessFileWorkflow {
-	if n == 0 {
-		mmProcessFileWorkflow.mock.t.Fatalf("Times of ServiceMock.ProcessFileWorkflow mock can not be zero")
-	}
-	mm_atomic.StoreUint64(&mmProcessFileWorkflow.expectedInvocations, n)
-	mmProcessFileWorkflow.expectedInvocationsOrigin = minimock.CallerInfo(1)
-	return mmProcessFileWorkflow
-}
-
-func (mmProcessFileWorkflow *mServiceMockProcessFileWorkflow) invocationsDone() bool {
-	if len(mmProcessFileWorkflow.expectations) == 0 && mmProcessFileWorkflow.defaultExpectation == nil && mmProcessFileWorkflow.mock.funcProcessFileWorkflow == nil {
-		return true
-	}
-
-	totalInvocations := mm_atomic.LoadUint64(&mmProcessFileWorkflow.mock.afterProcessFileWorkflowCounter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmProcessFileWorkflow.expectedInvocations)
-
-	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
-}
-
-// ProcessFileWorkflow implements mm_service.Service
-func (mmProcessFileWorkflow *ServiceMock) ProcessFileWorkflow() (p1 mm_service.ProcessFileWorkflow) {
-	mm_atomic.AddUint64(&mmProcessFileWorkflow.beforeProcessFileWorkflowCounter, 1)
-	defer mm_atomic.AddUint64(&mmProcessFileWorkflow.afterProcessFileWorkflowCounter, 1)
-
-	mmProcessFileWorkflow.t.Helper()
-
-	if mmProcessFileWorkflow.inspectFuncProcessFileWorkflow != nil {
-		mmProcessFileWorkflow.inspectFuncProcessFileWorkflow()
-	}
-
-	if mmProcessFileWorkflow.ProcessFileWorkflowMock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmProcessFileWorkflow.ProcessFileWorkflowMock.defaultExpectation.Counter, 1)
-
-		mm_results := mmProcessFileWorkflow.ProcessFileWorkflowMock.defaultExpectation.results
-		if mm_results == nil {
-			mmProcessFileWorkflow.t.Fatal("No results are set for the ServiceMock.ProcessFileWorkflow")
-		}
-		return (*mm_results).p1
-	}
-	if mmProcessFileWorkflow.funcProcessFileWorkflow != nil {
-		return mmProcessFileWorkflow.funcProcessFileWorkflow()
-	}
-	mmProcessFileWorkflow.t.Fatalf("Unexpected call to ServiceMock.ProcessFileWorkflow.")
-	return
-}
-
-// ProcessFileWorkflowAfterCounter returns a count of finished ServiceMock.ProcessFileWorkflow invocations
-func (mmProcessFileWorkflow *ServiceMock) ProcessFileWorkflowAfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmProcessFileWorkflow.afterProcessFileWorkflowCounter)
-}
-
-// ProcessFileWorkflowBeforeCounter returns a count of ServiceMock.ProcessFileWorkflow invocations
-func (mmProcessFileWorkflow *ServiceMock) ProcessFileWorkflowBeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmProcessFileWorkflow.beforeProcessFileWorkflowCounter)
-}
-
-// MinimockProcessFileWorkflowDone returns true if the count of the ProcessFileWorkflow invocations corresponds
-// the number of defined expectations
-func (m *ServiceMock) MinimockProcessFileWorkflowDone() bool {
-	if m.ProcessFileWorkflowMock.optional {
-		// Optional methods provide '0 or more' call count restriction.
-		return true
-	}
-
-	for _, e := range m.ProcessFileWorkflowMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			return false
-		}
-	}
-
-	return m.ProcessFileWorkflowMock.invocationsDone()
-}
-
-// MinimockProcessFileWorkflowInspect logs each unmet expectation
-func (m *ServiceMock) MinimockProcessFileWorkflowInspect() {
-	for _, e := range m.ProcessFileWorkflowMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Error("Expected call to ServiceMock.ProcessFileWorkflow")
-		}
-	}
-
-	afterProcessFileWorkflowCounter := mm_atomic.LoadUint64(&m.afterProcessFileWorkflowCounter)
-	// if default expectation was set then invocations count should be greater than zero
-	if m.ProcessFileWorkflowMock.defaultExpectation != nil && afterProcessFileWorkflowCounter < 1 {
-		m.t.Errorf("Expected call to ServiceMock.ProcessFileWorkflow at\n%s", m.ProcessFileWorkflowMock.defaultExpectation.returnOrigin)
-	}
-	// if func was set then invocations count should be greater than zero
-	if m.funcProcessFileWorkflow != nil && afterProcessFileWorkflowCounter < 1 {
-		m.t.Errorf("Expected call to ServiceMock.ProcessFileWorkflow at\n%s", m.funcProcessFileWorkflowOrigin)
-	}
-
-	if !m.ProcessFileWorkflowMock.invocationsDone() && afterProcessFileWorkflowCounter > 0 {
-		m.t.Errorf("Expected %d calls to ServiceMock.ProcessFileWorkflow at\n%s but found %d calls",
-			mm_atomic.LoadUint64(&m.ProcessFileWorkflowMock.expectedInvocations), m.ProcessFileWorkflowMock.expectedInvocationsOrigin, afterProcessFileWorkflowCounter)
-	}
-}
-
-type mServiceMockQuestionAnsweringPipe struct {
-	optional           bool
-	mock               *ServiceMock
-	defaultExpectation *ServiceMockQuestionAnsweringPipeExpectation
-	expectations       []*ServiceMockQuestionAnsweringPipeExpectation
-
-	callArgs []*ServiceMockQuestionAnsweringPipeParams
+	callArgs []*ServiceMockProcessFileParams
 	mutex    sync.RWMutex
 
 	expectedInvocations       uint64
 	expectedInvocationsOrigin string
 }
 
-// ServiceMockQuestionAnsweringPipeExpectation specifies expectation struct of the Service.QuestionAnsweringPipe
-type ServiceMockQuestionAnsweringPipeExpectation struct {
+// ServiceMockProcessFileExpectation specifies expectation struct of the Service.ProcessFile
+type ServiceMockProcessFileExpectation struct {
 	mock               *ServiceMock
-	params             *ServiceMockQuestionAnsweringPipeParams
-	paramPtrs          *ServiceMockQuestionAnsweringPipeParamPtrs
-	expectationOrigins ServiceMockQuestionAnsweringPipeExpectationOrigins
-	results            *ServiceMockQuestionAnsweringPipeResults
+	params             *ServiceMockProcessFileParams
+	paramPtrs          *ServiceMockProcessFileParamPtrs
+	expectationOrigins ServiceMockProcessFileExpectationOrigins
+	results            *ServiceMockProcessFileResults
 	returnOrigin       string
 	Counter            uint64
 }
 
-// ServiceMockQuestionAnsweringPipeParams contains parameters of the Service.QuestionAnsweringPipe
-type ServiceMockQuestionAnsweringPipeParams struct {
+// ServiceMockProcessFileParams contains parameters of the Service.ProcessFile
+type ServiceMockProcessFileParams struct {
 	ctx context.Context
-	s1  string
-	sa1 []string
+	k1  types.KBUIDType
+	f1  types.FileUIDType
+	u1  types.UserUIDType
+	r1  types.RequesterUIDType
 }
 
-// ServiceMockQuestionAnsweringPipeParamPtrs contains pointers to parameters of the Service.QuestionAnsweringPipe
-type ServiceMockQuestionAnsweringPipeParamPtrs struct {
+// ServiceMockProcessFileParamPtrs contains pointers to parameters of the Service.ProcessFile
+type ServiceMockProcessFileParamPtrs struct {
 	ctx *context.Context
-	s1  *string
-	sa1 *[]string
+	k1  *types.KBUIDType
+	f1  *types.FileUIDType
+	u1  *types.UserUIDType
+	r1  *types.RequesterUIDType
 }
 
-// ServiceMockQuestionAnsweringPipeResults contains results of the Service.QuestionAnsweringPipe
-type ServiceMockQuestionAnsweringPipeResults struct {
-	s2  string
+// ServiceMockProcessFileResults contains results of the Service.ProcessFile
+type ServiceMockProcessFileResults struct {
 	err error
 }
 
-// ServiceMockQuestionAnsweringPipeOrigins contains origins of expectations of the Service.QuestionAnsweringPipe
-type ServiceMockQuestionAnsweringPipeExpectationOrigins struct {
+// ServiceMockProcessFileOrigins contains origins of expectations of the Service.ProcessFile
+type ServiceMockProcessFileExpectationOrigins struct {
 	origin    string
 	originCtx string
-	originS1  string
-	originSa1 string
+	originK1  string
+	originF1  string
+	originU1  string
+	originR1  string
 }
 
 // Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
@@ -10429,320 +7411,376 @@ type ServiceMockQuestionAnsweringPipeExpectationOrigins struct {
 // Optional() makes method check to work in '0 or more' mode.
 // It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
 // catch the problems when the expected method call is totally skipped during test run.
-func (mmQuestionAnsweringPipe *mServiceMockQuestionAnsweringPipe) Optional() *mServiceMockQuestionAnsweringPipe {
-	mmQuestionAnsweringPipe.optional = true
-	return mmQuestionAnsweringPipe
+func (mmProcessFile *mServiceMockProcessFile) Optional() *mServiceMockProcessFile {
+	mmProcessFile.optional = true
+	return mmProcessFile
 }
 
-// Expect sets up expected params for Service.QuestionAnsweringPipe
-func (mmQuestionAnsweringPipe *mServiceMockQuestionAnsweringPipe) Expect(ctx context.Context, s1 string, sa1 []string) *mServiceMockQuestionAnsweringPipe {
-	if mmQuestionAnsweringPipe.mock.funcQuestionAnsweringPipe != nil {
-		mmQuestionAnsweringPipe.mock.t.Fatalf("ServiceMock.QuestionAnsweringPipe mock is already set by Set")
+// Expect sets up expected params for Service.ProcessFile
+func (mmProcessFile *mServiceMockProcessFile) Expect(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType, u1 types.UserUIDType, r1 types.RequesterUIDType) *mServiceMockProcessFile {
+	if mmProcessFile.mock.funcProcessFile != nil {
+		mmProcessFile.mock.t.Fatalf("ServiceMock.ProcessFile mock is already set by Set")
 	}
 
-	if mmQuestionAnsweringPipe.defaultExpectation == nil {
-		mmQuestionAnsweringPipe.defaultExpectation = &ServiceMockQuestionAnsweringPipeExpectation{}
+	if mmProcessFile.defaultExpectation == nil {
+		mmProcessFile.defaultExpectation = &ServiceMockProcessFileExpectation{}
 	}
 
-	if mmQuestionAnsweringPipe.defaultExpectation.paramPtrs != nil {
-		mmQuestionAnsweringPipe.mock.t.Fatalf("ServiceMock.QuestionAnsweringPipe mock is already set by ExpectParams functions")
+	if mmProcessFile.defaultExpectation.paramPtrs != nil {
+		mmProcessFile.mock.t.Fatalf("ServiceMock.ProcessFile mock is already set by ExpectParams functions")
 	}
 
-	mmQuestionAnsweringPipe.defaultExpectation.params = &ServiceMockQuestionAnsweringPipeParams{ctx, s1, sa1}
-	mmQuestionAnsweringPipe.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
-	for _, e := range mmQuestionAnsweringPipe.expectations {
-		if minimock.Equal(e.params, mmQuestionAnsweringPipe.defaultExpectation.params) {
-			mmQuestionAnsweringPipe.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmQuestionAnsweringPipe.defaultExpectation.params)
+	mmProcessFile.defaultExpectation.params = &ServiceMockProcessFileParams{ctx, k1, f1, u1, r1}
+	mmProcessFile.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmProcessFile.expectations {
+		if minimock.Equal(e.params, mmProcessFile.defaultExpectation.params) {
+			mmProcessFile.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmProcessFile.defaultExpectation.params)
 		}
 	}
 
-	return mmQuestionAnsweringPipe
+	return mmProcessFile
 }
 
-// ExpectCtxParam1 sets up expected param ctx for Service.QuestionAnsweringPipe
-func (mmQuestionAnsweringPipe *mServiceMockQuestionAnsweringPipe) ExpectCtxParam1(ctx context.Context) *mServiceMockQuestionAnsweringPipe {
-	if mmQuestionAnsweringPipe.mock.funcQuestionAnsweringPipe != nil {
-		mmQuestionAnsweringPipe.mock.t.Fatalf("ServiceMock.QuestionAnsweringPipe mock is already set by Set")
+// ExpectCtxParam1 sets up expected param ctx for Service.ProcessFile
+func (mmProcessFile *mServiceMockProcessFile) ExpectCtxParam1(ctx context.Context) *mServiceMockProcessFile {
+	if mmProcessFile.mock.funcProcessFile != nil {
+		mmProcessFile.mock.t.Fatalf("ServiceMock.ProcessFile mock is already set by Set")
 	}
 
-	if mmQuestionAnsweringPipe.defaultExpectation == nil {
-		mmQuestionAnsweringPipe.defaultExpectation = &ServiceMockQuestionAnsweringPipeExpectation{}
+	if mmProcessFile.defaultExpectation == nil {
+		mmProcessFile.defaultExpectation = &ServiceMockProcessFileExpectation{}
 	}
 
-	if mmQuestionAnsweringPipe.defaultExpectation.params != nil {
-		mmQuestionAnsweringPipe.mock.t.Fatalf("ServiceMock.QuestionAnsweringPipe mock is already set by Expect")
+	if mmProcessFile.defaultExpectation.params != nil {
+		mmProcessFile.mock.t.Fatalf("ServiceMock.ProcessFile mock is already set by Expect")
 	}
 
-	if mmQuestionAnsweringPipe.defaultExpectation.paramPtrs == nil {
-		mmQuestionAnsweringPipe.defaultExpectation.paramPtrs = &ServiceMockQuestionAnsweringPipeParamPtrs{}
+	if mmProcessFile.defaultExpectation.paramPtrs == nil {
+		mmProcessFile.defaultExpectation.paramPtrs = &ServiceMockProcessFileParamPtrs{}
 	}
-	mmQuestionAnsweringPipe.defaultExpectation.paramPtrs.ctx = &ctx
-	mmQuestionAnsweringPipe.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+	mmProcessFile.defaultExpectation.paramPtrs.ctx = &ctx
+	mmProcessFile.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
 
-	return mmQuestionAnsweringPipe
+	return mmProcessFile
 }
 
-// ExpectS1Param2 sets up expected param s1 for Service.QuestionAnsweringPipe
-func (mmQuestionAnsweringPipe *mServiceMockQuestionAnsweringPipe) ExpectS1Param2(s1 string) *mServiceMockQuestionAnsweringPipe {
-	if mmQuestionAnsweringPipe.mock.funcQuestionAnsweringPipe != nil {
-		mmQuestionAnsweringPipe.mock.t.Fatalf("ServiceMock.QuestionAnsweringPipe mock is already set by Set")
+// ExpectK1Param2 sets up expected param k1 for Service.ProcessFile
+func (mmProcessFile *mServiceMockProcessFile) ExpectK1Param2(k1 types.KBUIDType) *mServiceMockProcessFile {
+	if mmProcessFile.mock.funcProcessFile != nil {
+		mmProcessFile.mock.t.Fatalf("ServiceMock.ProcessFile mock is already set by Set")
 	}
 
-	if mmQuestionAnsweringPipe.defaultExpectation == nil {
-		mmQuestionAnsweringPipe.defaultExpectation = &ServiceMockQuestionAnsweringPipeExpectation{}
+	if mmProcessFile.defaultExpectation == nil {
+		mmProcessFile.defaultExpectation = &ServiceMockProcessFileExpectation{}
 	}
 
-	if mmQuestionAnsweringPipe.defaultExpectation.params != nil {
-		mmQuestionAnsweringPipe.mock.t.Fatalf("ServiceMock.QuestionAnsweringPipe mock is already set by Expect")
+	if mmProcessFile.defaultExpectation.params != nil {
+		mmProcessFile.mock.t.Fatalf("ServiceMock.ProcessFile mock is already set by Expect")
 	}
 
-	if mmQuestionAnsweringPipe.defaultExpectation.paramPtrs == nil {
-		mmQuestionAnsweringPipe.defaultExpectation.paramPtrs = &ServiceMockQuestionAnsweringPipeParamPtrs{}
+	if mmProcessFile.defaultExpectation.paramPtrs == nil {
+		mmProcessFile.defaultExpectation.paramPtrs = &ServiceMockProcessFileParamPtrs{}
 	}
-	mmQuestionAnsweringPipe.defaultExpectation.paramPtrs.s1 = &s1
-	mmQuestionAnsweringPipe.defaultExpectation.expectationOrigins.originS1 = minimock.CallerInfo(1)
+	mmProcessFile.defaultExpectation.paramPtrs.k1 = &k1
+	mmProcessFile.defaultExpectation.expectationOrigins.originK1 = minimock.CallerInfo(1)
 
-	return mmQuestionAnsweringPipe
+	return mmProcessFile
 }
 
-// ExpectSa1Param3 sets up expected param sa1 for Service.QuestionAnsweringPipe
-func (mmQuestionAnsweringPipe *mServiceMockQuestionAnsweringPipe) ExpectSa1Param3(sa1 []string) *mServiceMockQuestionAnsweringPipe {
-	if mmQuestionAnsweringPipe.mock.funcQuestionAnsweringPipe != nil {
-		mmQuestionAnsweringPipe.mock.t.Fatalf("ServiceMock.QuestionAnsweringPipe mock is already set by Set")
+// ExpectF1Param3 sets up expected param f1 for Service.ProcessFile
+func (mmProcessFile *mServiceMockProcessFile) ExpectF1Param3(f1 types.FileUIDType) *mServiceMockProcessFile {
+	if mmProcessFile.mock.funcProcessFile != nil {
+		mmProcessFile.mock.t.Fatalf("ServiceMock.ProcessFile mock is already set by Set")
 	}
 
-	if mmQuestionAnsweringPipe.defaultExpectation == nil {
-		mmQuestionAnsweringPipe.defaultExpectation = &ServiceMockQuestionAnsweringPipeExpectation{}
+	if mmProcessFile.defaultExpectation == nil {
+		mmProcessFile.defaultExpectation = &ServiceMockProcessFileExpectation{}
 	}
 
-	if mmQuestionAnsweringPipe.defaultExpectation.params != nil {
-		mmQuestionAnsweringPipe.mock.t.Fatalf("ServiceMock.QuestionAnsweringPipe mock is already set by Expect")
+	if mmProcessFile.defaultExpectation.params != nil {
+		mmProcessFile.mock.t.Fatalf("ServiceMock.ProcessFile mock is already set by Expect")
 	}
 
-	if mmQuestionAnsweringPipe.defaultExpectation.paramPtrs == nil {
-		mmQuestionAnsweringPipe.defaultExpectation.paramPtrs = &ServiceMockQuestionAnsweringPipeParamPtrs{}
+	if mmProcessFile.defaultExpectation.paramPtrs == nil {
+		mmProcessFile.defaultExpectation.paramPtrs = &ServiceMockProcessFileParamPtrs{}
 	}
-	mmQuestionAnsweringPipe.defaultExpectation.paramPtrs.sa1 = &sa1
-	mmQuestionAnsweringPipe.defaultExpectation.expectationOrigins.originSa1 = minimock.CallerInfo(1)
+	mmProcessFile.defaultExpectation.paramPtrs.f1 = &f1
+	mmProcessFile.defaultExpectation.expectationOrigins.originF1 = minimock.CallerInfo(1)
 
-	return mmQuestionAnsweringPipe
+	return mmProcessFile
 }
 
-// Inspect accepts an inspector function that has same arguments as the Service.QuestionAnsweringPipe
-func (mmQuestionAnsweringPipe *mServiceMockQuestionAnsweringPipe) Inspect(f func(ctx context.Context, s1 string, sa1 []string)) *mServiceMockQuestionAnsweringPipe {
-	if mmQuestionAnsweringPipe.mock.inspectFuncQuestionAnsweringPipe != nil {
-		mmQuestionAnsweringPipe.mock.t.Fatalf("Inspect function is already set for ServiceMock.QuestionAnsweringPipe")
+// ExpectU1Param4 sets up expected param u1 for Service.ProcessFile
+func (mmProcessFile *mServiceMockProcessFile) ExpectU1Param4(u1 types.UserUIDType) *mServiceMockProcessFile {
+	if mmProcessFile.mock.funcProcessFile != nil {
+		mmProcessFile.mock.t.Fatalf("ServiceMock.ProcessFile mock is already set by Set")
 	}
 
-	mmQuestionAnsweringPipe.mock.inspectFuncQuestionAnsweringPipe = f
+	if mmProcessFile.defaultExpectation == nil {
+		mmProcessFile.defaultExpectation = &ServiceMockProcessFileExpectation{}
+	}
 
-	return mmQuestionAnsweringPipe
+	if mmProcessFile.defaultExpectation.params != nil {
+		mmProcessFile.mock.t.Fatalf("ServiceMock.ProcessFile mock is already set by Expect")
+	}
+
+	if mmProcessFile.defaultExpectation.paramPtrs == nil {
+		mmProcessFile.defaultExpectation.paramPtrs = &ServiceMockProcessFileParamPtrs{}
+	}
+	mmProcessFile.defaultExpectation.paramPtrs.u1 = &u1
+	mmProcessFile.defaultExpectation.expectationOrigins.originU1 = minimock.CallerInfo(1)
+
+	return mmProcessFile
 }
 
-// Return sets up results that will be returned by Service.QuestionAnsweringPipe
-func (mmQuestionAnsweringPipe *mServiceMockQuestionAnsweringPipe) Return(s2 string, err error) *ServiceMock {
-	if mmQuestionAnsweringPipe.mock.funcQuestionAnsweringPipe != nil {
-		mmQuestionAnsweringPipe.mock.t.Fatalf("ServiceMock.QuestionAnsweringPipe mock is already set by Set")
+// ExpectR1Param5 sets up expected param r1 for Service.ProcessFile
+func (mmProcessFile *mServiceMockProcessFile) ExpectR1Param5(r1 types.RequesterUIDType) *mServiceMockProcessFile {
+	if mmProcessFile.mock.funcProcessFile != nil {
+		mmProcessFile.mock.t.Fatalf("ServiceMock.ProcessFile mock is already set by Set")
 	}
 
-	if mmQuestionAnsweringPipe.defaultExpectation == nil {
-		mmQuestionAnsweringPipe.defaultExpectation = &ServiceMockQuestionAnsweringPipeExpectation{mock: mmQuestionAnsweringPipe.mock}
+	if mmProcessFile.defaultExpectation == nil {
+		mmProcessFile.defaultExpectation = &ServiceMockProcessFileExpectation{}
 	}
-	mmQuestionAnsweringPipe.defaultExpectation.results = &ServiceMockQuestionAnsweringPipeResults{s2, err}
-	mmQuestionAnsweringPipe.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
-	return mmQuestionAnsweringPipe.mock
+
+	if mmProcessFile.defaultExpectation.params != nil {
+		mmProcessFile.mock.t.Fatalf("ServiceMock.ProcessFile mock is already set by Expect")
+	}
+
+	if mmProcessFile.defaultExpectation.paramPtrs == nil {
+		mmProcessFile.defaultExpectation.paramPtrs = &ServiceMockProcessFileParamPtrs{}
+	}
+	mmProcessFile.defaultExpectation.paramPtrs.r1 = &r1
+	mmProcessFile.defaultExpectation.expectationOrigins.originR1 = minimock.CallerInfo(1)
+
+	return mmProcessFile
 }
 
-// Set uses given function f to mock the Service.QuestionAnsweringPipe method
-func (mmQuestionAnsweringPipe *mServiceMockQuestionAnsweringPipe) Set(f func(ctx context.Context, s1 string, sa1 []string) (s2 string, err error)) *ServiceMock {
-	if mmQuestionAnsweringPipe.defaultExpectation != nil {
-		mmQuestionAnsweringPipe.mock.t.Fatalf("Default expectation is already set for the Service.QuestionAnsweringPipe method")
+// Inspect accepts an inspector function that has same arguments as the Service.ProcessFile
+func (mmProcessFile *mServiceMockProcessFile) Inspect(f func(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType, u1 types.UserUIDType, r1 types.RequesterUIDType)) *mServiceMockProcessFile {
+	if mmProcessFile.mock.inspectFuncProcessFile != nil {
+		mmProcessFile.mock.t.Fatalf("Inspect function is already set for ServiceMock.ProcessFile")
 	}
 
-	if len(mmQuestionAnsweringPipe.expectations) > 0 {
-		mmQuestionAnsweringPipe.mock.t.Fatalf("Some expectations are already set for the Service.QuestionAnsweringPipe method")
-	}
+	mmProcessFile.mock.inspectFuncProcessFile = f
 
-	mmQuestionAnsweringPipe.mock.funcQuestionAnsweringPipe = f
-	mmQuestionAnsweringPipe.mock.funcQuestionAnsweringPipeOrigin = minimock.CallerInfo(1)
-	return mmQuestionAnsweringPipe.mock
+	return mmProcessFile
 }
 
-// When sets expectation for the Service.QuestionAnsweringPipe which will trigger the result defined by the following
+// Return sets up results that will be returned by Service.ProcessFile
+func (mmProcessFile *mServiceMockProcessFile) Return(err error) *ServiceMock {
+	if mmProcessFile.mock.funcProcessFile != nil {
+		mmProcessFile.mock.t.Fatalf("ServiceMock.ProcessFile mock is already set by Set")
+	}
+
+	if mmProcessFile.defaultExpectation == nil {
+		mmProcessFile.defaultExpectation = &ServiceMockProcessFileExpectation{mock: mmProcessFile.mock}
+	}
+	mmProcessFile.defaultExpectation.results = &ServiceMockProcessFileResults{err}
+	mmProcessFile.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmProcessFile.mock
+}
+
+// Set uses given function f to mock the Service.ProcessFile method
+func (mmProcessFile *mServiceMockProcessFile) Set(f func(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType, u1 types.UserUIDType, r1 types.RequesterUIDType) (err error)) *ServiceMock {
+	if mmProcessFile.defaultExpectation != nil {
+		mmProcessFile.mock.t.Fatalf("Default expectation is already set for the Service.ProcessFile method")
+	}
+
+	if len(mmProcessFile.expectations) > 0 {
+		mmProcessFile.mock.t.Fatalf("Some expectations are already set for the Service.ProcessFile method")
+	}
+
+	mmProcessFile.mock.funcProcessFile = f
+	mmProcessFile.mock.funcProcessFileOrigin = minimock.CallerInfo(1)
+	return mmProcessFile.mock
+}
+
+// When sets expectation for the Service.ProcessFile which will trigger the result defined by the following
 // Then helper
-func (mmQuestionAnsweringPipe *mServiceMockQuestionAnsweringPipe) When(ctx context.Context, s1 string, sa1 []string) *ServiceMockQuestionAnsweringPipeExpectation {
-	if mmQuestionAnsweringPipe.mock.funcQuestionAnsweringPipe != nil {
-		mmQuestionAnsweringPipe.mock.t.Fatalf("ServiceMock.QuestionAnsweringPipe mock is already set by Set")
+func (mmProcessFile *mServiceMockProcessFile) When(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType, u1 types.UserUIDType, r1 types.RequesterUIDType) *ServiceMockProcessFileExpectation {
+	if mmProcessFile.mock.funcProcessFile != nil {
+		mmProcessFile.mock.t.Fatalf("ServiceMock.ProcessFile mock is already set by Set")
 	}
 
-	expectation := &ServiceMockQuestionAnsweringPipeExpectation{
-		mock:               mmQuestionAnsweringPipe.mock,
-		params:             &ServiceMockQuestionAnsweringPipeParams{ctx, s1, sa1},
-		expectationOrigins: ServiceMockQuestionAnsweringPipeExpectationOrigins{origin: minimock.CallerInfo(1)},
+	expectation := &ServiceMockProcessFileExpectation{
+		mock:               mmProcessFile.mock,
+		params:             &ServiceMockProcessFileParams{ctx, k1, f1, u1, r1},
+		expectationOrigins: ServiceMockProcessFileExpectationOrigins{origin: minimock.CallerInfo(1)},
 	}
-	mmQuestionAnsweringPipe.expectations = append(mmQuestionAnsweringPipe.expectations, expectation)
+	mmProcessFile.expectations = append(mmProcessFile.expectations, expectation)
 	return expectation
 }
 
-// Then sets up Service.QuestionAnsweringPipe return parameters for the expectation previously defined by the When method
-func (e *ServiceMockQuestionAnsweringPipeExpectation) Then(s2 string, err error) *ServiceMock {
-	e.results = &ServiceMockQuestionAnsweringPipeResults{s2, err}
+// Then sets up Service.ProcessFile return parameters for the expectation previously defined by the When method
+func (e *ServiceMockProcessFileExpectation) Then(err error) *ServiceMock {
+	e.results = &ServiceMockProcessFileResults{err}
 	return e.mock
 }
 
-// Times sets number of times Service.QuestionAnsweringPipe should be invoked
-func (mmQuestionAnsweringPipe *mServiceMockQuestionAnsweringPipe) Times(n uint64) *mServiceMockQuestionAnsweringPipe {
+// Times sets number of times Service.ProcessFile should be invoked
+func (mmProcessFile *mServiceMockProcessFile) Times(n uint64) *mServiceMockProcessFile {
 	if n == 0 {
-		mmQuestionAnsweringPipe.mock.t.Fatalf("Times of ServiceMock.QuestionAnsweringPipe mock can not be zero")
+		mmProcessFile.mock.t.Fatalf("Times of ServiceMock.ProcessFile mock can not be zero")
 	}
-	mm_atomic.StoreUint64(&mmQuestionAnsweringPipe.expectedInvocations, n)
-	mmQuestionAnsweringPipe.expectedInvocationsOrigin = minimock.CallerInfo(1)
-	return mmQuestionAnsweringPipe
+	mm_atomic.StoreUint64(&mmProcessFile.expectedInvocations, n)
+	mmProcessFile.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmProcessFile
 }
 
-func (mmQuestionAnsweringPipe *mServiceMockQuestionAnsweringPipe) invocationsDone() bool {
-	if len(mmQuestionAnsweringPipe.expectations) == 0 && mmQuestionAnsweringPipe.defaultExpectation == nil && mmQuestionAnsweringPipe.mock.funcQuestionAnsweringPipe == nil {
+func (mmProcessFile *mServiceMockProcessFile) invocationsDone() bool {
+	if len(mmProcessFile.expectations) == 0 && mmProcessFile.defaultExpectation == nil && mmProcessFile.mock.funcProcessFile == nil {
 		return true
 	}
 
-	totalInvocations := mm_atomic.LoadUint64(&mmQuestionAnsweringPipe.mock.afterQuestionAnsweringPipeCounter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmQuestionAnsweringPipe.expectedInvocations)
+	totalInvocations := mm_atomic.LoadUint64(&mmProcessFile.mock.afterProcessFileCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmProcessFile.expectedInvocations)
 
 	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
 }
 
-// QuestionAnsweringPipe implements mm_service.Service
-func (mmQuestionAnsweringPipe *ServiceMock) QuestionAnsweringPipe(ctx context.Context, s1 string, sa1 []string) (s2 string, err error) {
-	mm_atomic.AddUint64(&mmQuestionAnsweringPipe.beforeQuestionAnsweringPipeCounter, 1)
-	defer mm_atomic.AddUint64(&mmQuestionAnsweringPipe.afterQuestionAnsweringPipeCounter, 1)
+// ProcessFile implements mm_service.Service
+func (mmProcessFile *ServiceMock) ProcessFile(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType, u1 types.UserUIDType, r1 types.RequesterUIDType) (err error) {
+	mm_atomic.AddUint64(&mmProcessFile.beforeProcessFileCounter, 1)
+	defer mm_atomic.AddUint64(&mmProcessFile.afterProcessFileCounter, 1)
 
-	mmQuestionAnsweringPipe.t.Helper()
+	mmProcessFile.t.Helper()
 
-	if mmQuestionAnsweringPipe.inspectFuncQuestionAnsweringPipe != nil {
-		mmQuestionAnsweringPipe.inspectFuncQuestionAnsweringPipe(ctx, s1, sa1)
+	if mmProcessFile.inspectFuncProcessFile != nil {
+		mmProcessFile.inspectFuncProcessFile(ctx, k1, f1, u1, r1)
 	}
 
-	mm_params := ServiceMockQuestionAnsweringPipeParams{ctx, s1, sa1}
+	mm_params := ServiceMockProcessFileParams{ctx, k1, f1, u1, r1}
 
 	// Record call args
-	mmQuestionAnsweringPipe.QuestionAnsweringPipeMock.mutex.Lock()
-	mmQuestionAnsweringPipe.QuestionAnsweringPipeMock.callArgs = append(mmQuestionAnsweringPipe.QuestionAnsweringPipeMock.callArgs, &mm_params)
-	mmQuestionAnsweringPipe.QuestionAnsweringPipeMock.mutex.Unlock()
+	mmProcessFile.ProcessFileMock.mutex.Lock()
+	mmProcessFile.ProcessFileMock.callArgs = append(mmProcessFile.ProcessFileMock.callArgs, &mm_params)
+	mmProcessFile.ProcessFileMock.mutex.Unlock()
 
-	for _, e := range mmQuestionAnsweringPipe.QuestionAnsweringPipeMock.expectations {
+	for _, e := range mmProcessFile.ProcessFileMock.expectations {
 		if minimock.Equal(*e.params, mm_params) {
 			mm_atomic.AddUint64(&e.Counter, 1)
-			return e.results.s2, e.results.err
+			return e.results.err
 		}
 	}
 
-	if mmQuestionAnsweringPipe.QuestionAnsweringPipeMock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmQuestionAnsweringPipe.QuestionAnsweringPipeMock.defaultExpectation.Counter, 1)
-		mm_want := mmQuestionAnsweringPipe.QuestionAnsweringPipeMock.defaultExpectation.params
-		mm_want_ptrs := mmQuestionAnsweringPipe.QuestionAnsweringPipeMock.defaultExpectation.paramPtrs
+	if mmProcessFile.ProcessFileMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmProcessFile.ProcessFileMock.defaultExpectation.Counter, 1)
+		mm_want := mmProcessFile.ProcessFileMock.defaultExpectation.params
+		mm_want_ptrs := mmProcessFile.ProcessFileMock.defaultExpectation.paramPtrs
 
-		mm_got := ServiceMockQuestionAnsweringPipeParams{ctx, s1, sa1}
+		mm_got := ServiceMockProcessFileParams{ctx, k1, f1, u1, r1}
 
 		if mm_want_ptrs != nil {
 
 			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
-				mmQuestionAnsweringPipe.t.Errorf("ServiceMock.QuestionAnsweringPipe got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmQuestionAnsweringPipe.QuestionAnsweringPipeMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+				mmProcessFile.t.Errorf("ServiceMock.ProcessFile got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmProcessFile.ProcessFileMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
 			}
 
-			if mm_want_ptrs.s1 != nil && !minimock.Equal(*mm_want_ptrs.s1, mm_got.s1) {
-				mmQuestionAnsweringPipe.t.Errorf("ServiceMock.QuestionAnsweringPipe got unexpected parameter s1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmQuestionAnsweringPipe.QuestionAnsweringPipeMock.defaultExpectation.expectationOrigins.originS1, *mm_want_ptrs.s1, mm_got.s1, minimock.Diff(*mm_want_ptrs.s1, mm_got.s1))
+			if mm_want_ptrs.k1 != nil && !minimock.Equal(*mm_want_ptrs.k1, mm_got.k1) {
+				mmProcessFile.t.Errorf("ServiceMock.ProcessFile got unexpected parameter k1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmProcessFile.ProcessFileMock.defaultExpectation.expectationOrigins.originK1, *mm_want_ptrs.k1, mm_got.k1, minimock.Diff(*mm_want_ptrs.k1, mm_got.k1))
 			}
 
-			if mm_want_ptrs.sa1 != nil && !minimock.Equal(*mm_want_ptrs.sa1, mm_got.sa1) {
-				mmQuestionAnsweringPipe.t.Errorf("ServiceMock.QuestionAnsweringPipe got unexpected parameter sa1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmQuestionAnsweringPipe.QuestionAnsweringPipeMock.defaultExpectation.expectationOrigins.originSa1, *mm_want_ptrs.sa1, mm_got.sa1, minimock.Diff(*mm_want_ptrs.sa1, mm_got.sa1))
+			if mm_want_ptrs.f1 != nil && !minimock.Equal(*mm_want_ptrs.f1, mm_got.f1) {
+				mmProcessFile.t.Errorf("ServiceMock.ProcessFile got unexpected parameter f1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmProcessFile.ProcessFileMock.defaultExpectation.expectationOrigins.originF1, *mm_want_ptrs.f1, mm_got.f1, minimock.Diff(*mm_want_ptrs.f1, mm_got.f1))
+			}
+
+			if mm_want_ptrs.u1 != nil && !minimock.Equal(*mm_want_ptrs.u1, mm_got.u1) {
+				mmProcessFile.t.Errorf("ServiceMock.ProcessFile got unexpected parameter u1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmProcessFile.ProcessFileMock.defaultExpectation.expectationOrigins.originU1, *mm_want_ptrs.u1, mm_got.u1, minimock.Diff(*mm_want_ptrs.u1, mm_got.u1))
+			}
+
+			if mm_want_ptrs.r1 != nil && !minimock.Equal(*mm_want_ptrs.r1, mm_got.r1) {
+				mmProcessFile.t.Errorf("ServiceMock.ProcessFile got unexpected parameter r1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmProcessFile.ProcessFileMock.defaultExpectation.expectationOrigins.originR1, *mm_want_ptrs.r1, mm_got.r1, minimock.Diff(*mm_want_ptrs.r1, mm_got.r1))
 			}
 
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
-			mmQuestionAnsweringPipe.t.Errorf("ServiceMock.QuestionAnsweringPipe got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-				mmQuestionAnsweringPipe.QuestionAnsweringPipeMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+			mmProcessFile.t.Errorf("ServiceMock.ProcessFile got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmProcessFile.ProcessFileMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
 		}
 
-		mm_results := mmQuestionAnsweringPipe.QuestionAnsweringPipeMock.defaultExpectation.results
+		mm_results := mmProcessFile.ProcessFileMock.defaultExpectation.results
 		if mm_results == nil {
-			mmQuestionAnsweringPipe.t.Fatal("No results are set for the ServiceMock.QuestionAnsweringPipe")
+			mmProcessFile.t.Fatal("No results are set for the ServiceMock.ProcessFile")
 		}
-		return (*mm_results).s2, (*mm_results).err
+		return (*mm_results).err
 	}
-	if mmQuestionAnsweringPipe.funcQuestionAnsweringPipe != nil {
-		return mmQuestionAnsweringPipe.funcQuestionAnsweringPipe(ctx, s1, sa1)
+	if mmProcessFile.funcProcessFile != nil {
+		return mmProcessFile.funcProcessFile(ctx, k1, f1, u1, r1)
 	}
-	mmQuestionAnsweringPipe.t.Fatalf("Unexpected call to ServiceMock.QuestionAnsweringPipe. %v %v %v", ctx, s1, sa1)
+	mmProcessFile.t.Fatalf("Unexpected call to ServiceMock.ProcessFile. %v %v %v %v %v", ctx, k1, f1, u1, r1)
 	return
 }
 
-// QuestionAnsweringPipeAfterCounter returns a count of finished ServiceMock.QuestionAnsweringPipe invocations
-func (mmQuestionAnsweringPipe *ServiceMock) QuestionAnsweringPipeAfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmQuestionAnsweringPipe.afterQuestionAnsweringPipeCounter)
+// ProcessFileAfterCounter returns a count of finished ServiceMock.ProcessFile invocations
+func (mmProcessFile *ServiceMock) ProcessFileAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmProcessFile.afterProcessFileCounter)
 }
 
-// QuestionAnsweringPipeBeforeCounter returns a count of ServiceMock.QuestionAnsweringPipe invocations
-func (mmQuestionAnsweringPipe *ServiceMock) QuestionAnsweringPipeBeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmQuestionAnsweringPipe.beforeQuestionAnsweringPipeCounter)
+// ProcessFileBeforeCounter returns a count of ServiceMock.ProcessFile invocations
+func (mmProcessFile *ServiceMock) ProcessFileBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmProcessFile.beforeProcessFileCounter)
 }
 
-// Calls returns a list of arguments used in each call to ServiceMock.QuestionAnsweringPipe.
+// Calls returns a list of arguments used in each call to ServiceMock.ProcessFile.
 // The list is in the same order as the calls were made (i.e. recent calls have a higher index)
-func (mmQuestionAnsweringPipe *mServiceMockQuestionAnsweringPipe) Calls() []*ServiceMockQuestionAnsweringPipeParams {
-	mmQuestionAnsweringPipe.mutex.RLock()
+func (mmProcessFile *mServiceMockProcessFile) Calls() []*ServiceMockProcessFileParams {
+	mmProcessFile.mutex.RLock()
 
-	argCopy := make([]*ServiceMockQuestionAnsweringPipeParams, len(mmQuestionAnsweringPipe.callArgs))
-	copy(argCopy, mmQuestionAnsweringPipe.callArgs)
+	argCopy := make([]*ServiceMockProcessFileParams, len(mmProcessFile.callArgs))
+	copy(argCopy, mmProcessFile.callArgs)
 
-	mmQuestionAnsweringPipe.mutex.RUnlock()
+	mmProcessFile.mutex.RUnlock()
 
 	return argCopy
 }
 
-// MinimockQuestionAnsweringPipeDone returns true if the count of the QuestionAnsweringPipe invocations corresponds
+// MinimockProcessFileDone returns true if the count of the ProcessFile invocations corresponds
 // the number of defined expectations
-func (m *ServiceMock) MinimockQuestionAnsweringPipeDone() bool {
-	if m.QuestionAnsweringPipeMock.optional {
+func (m *ServiceMock) MinimockProcessFileDone() bool {
+	if m.ProcessFileMock.optional {
 		// Optional methods provide '0 or more' call count restriction.
 		return true
 	}
 
-	for _, e := range m.QuestionAnsweringPipeMock.expectations {
+	for _, e := range m.ProcessFileMock.expectations {
 		if mm_atomic.LoadUint64(&e.Counter) < 1 {
 			return false
 		}
 	}
 
-	return m.QuestionAnsweringPipeMock.invocationsDone()
+	return m.ProcessFileMock.invocationsDone()
 }
 
-// MinimockQuestionAnsweringPipeInspect logs each unmet expectation
-func (m *ServiceMock) MinimockQuestionAnsweringPipeInspect() {
-	for _, e := range m.QuestionAnsweringPipeMock.expectations {
+// MinimockProcessFileInspect logs each unmet expectation
+func (m *ServiceMock) MinimockProcessFileInspect() {
+	for _, e := range m.ProcessFileMock.expectations {
 		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Errorf("Expected call to ServiceMock.QuestionAnsweringPipe at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+			m.t.Errorf("Expected call to ServiceMock.ProcessFile at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
 		}
 	}
 
-	afterQuestionAnsweringPipeCounter := mm_atomic.LoadUint64(&m.afterQuestionAnsweringPipeCounter)
+	afterProcessFileCounter := mm_atomic.LoadUint64(&m.afterProcessFileCounter)
 	// if default expectation was set then invocations count should be greater than zero
-	if m.QuestionAnsweringPipeMock.defaultExpectation != nil && afterQuestionAnsweringPipeCounter < 1 {
-		if m.QuestionAnsweringPipeMock.defaultExpectation.params == nil {
-			m.t.Errorf("Expected call to ServiceMock.QuestionAnsweringPipe at\n%s", m.QuestionAnsweringPipeMock.defaultExpectation.returnOrigin)
+	if m.ProcessFileMock.defaultExpectation != nil && afterProcessFileCounter < 1 {
+		if m.ProcessFileMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to ServiceMock.ProcessFile at\n%s", m.ProcessFileMock.defaultExpectation.returnOrigin)
 		} else {
-			m.t.Errorf("Expected call to ServiceMock.QuestionAnsweringPipe at\n%s with params: %#v", m.QuestionAnsweringPipeMock.defaultExpectation.expectationOrigins.origin, *m.QuestionAnsweringPipeMock.defaultExpectation.params)
+			m.t.Errorf("Expected call to ServiceMock.ProcessFile at\n%s with params: %#v", m.ProcessFileMock.defaultExpectation.expectationOrigins.origin, *m.ProcessFileMock.defaultExpectation.params)
 		}
 	}
 	// if func was set then invocations count should be greater than zero
-	if m.funcQuestionAnsweringPipe != nil && afterQuestionAnsweringPipeCounter < 1 {
-		m.t.Errorf("Expected call to ServiceMock.QuestionAnsweringPipe at\n%s", m.funcQuestionAnsweringPipeOrigin)
+	if m.funcProcessFile != nil && afterProcessFileCounter < 1 {
+		m.t.Errorf("Expected call to ServiceMock.ProcessFile at\n%s", m.funcProcessFileOrigin)
 	}
 
-	if !m.QuestionAnsweringPipeMock.invocationsDone() && afterQuestionAnsweringPipeCounter > 0 {
-		m.t.Errorf("Expected %d calls to ServiceMock.QuestionAnsweringPipe at\n%s but found %d calls",
-			mm_atomic.LoadUint64(&m.QuestionAnsweringPipeMock.expectedInvocations), m.QuestionAnsweringPipeMock.expectedInvocationsOrigin, afterQuestionAnsweringPipeCounter)
+	if !m.ProcessFileMock.invocationsDone() && afterProcessFileCounter > 0 {
+		m.t.Errorf("Expected %d calls to ServiceMock.ProcessFile at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.ProcessFileMock.expectedInvocations), m.ProcessFileMock.expectedInvocationsOrigin, afterProcessFileCounter)
 	}
 }
 
@@ -10953,7 +7991,7 @@ type ServiceMockRepositoryExpectation struct {
 
 // ServiceMockRepositoryResults contains results of the Service.Repository
 type ServiceMockRepositoryResults struct {
-	r1 repository.RepositoryI
+	r1 repository.Repository
 }
 
 // Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
@@ -10991,7 +8029,7 @@ func (mmRepository *mServiceMockRepository) Inspect(f func()) *mServiceMockRepos
 }
 
 // Return sets up results that will be returned by Service.Repository
-func (mmRepository *mServiceMockRepository) Return(r1 repository.RepositoryI) *ServiceMock {
+func (mmRepository *mServiceMockRepository) Return(r1 repository.Repository) *ServiceMock {
 	if mmRepository.mock.funcRepository != nil {
 		mmRepository.mock.t.Fatalf("ServiceMock.Repository mock is already set by Set")
 	}
@@ -11005,7 +8043,7 @@ func (mmRepository *mServiceMockRepository) Return(r1 repository.RepositoryI) *S
 }
 
 // Set uses given function f to mock the Service.Repository method
-func (mmRepository *mServiceMockRepository) Set(f func() (r1 repository.RepositoryI)) *ServiceMock {
+func (mmRepository *mServiceMockRepository) Set(f func() (r1 repository.Repository)) *ServiceMock {
 	if mmRepository.defaultExpectation != nil {
 		mmRepository.mock.t.Fatalf("Default expectation is already set for the Service.Repository method")
 	}
@@ -11041,7 +8079,7 @@ func (mmRepository *mServiceMockRepository) invocationsDone() bool {
 }
 
 // Repository implements mm_service.Service
-func (mmRepository *ServiceMock) Repository() (r1 repository.RepositoryI) {
+func (mmRepository *ServiceMock) Repository() (r1 repository.Repository) {
 	mm_atomic.AddUint64(&mmRepository.beforeRepositoryCounter, 1)
 	defer mm_atomic.AddUint64(&mmRepository.afterRepositoryCounter, 1)
 
@@ -11144,16 +8182,18 @@ type ServiceMockSimilarityChunksSearchExpectation struct {
 
 // ServiceMockSimilarityChunksSearchParams contains parameters of the Service.SimilarityChunksSearch
 type ServiceMockSimilarityChunksSearchParams struct {
-	ctx context.Context
-	u1  uuid.UUID
-	sp1 *artifactpb.SimilarityChunksSearchRequest
+	ctx  context.Context
+	o1   types.OwnerUIDType
+	sp1  *artifactpb.SimilarityChunksSearchRequest
+	faa1 [][]float32
 }
 
 // ServiceMockSimilarityChunksSearchParamPtrs contains pointers to parameters of the Service.SimilarityChunksSearch
 type ServiceMockSimilarityChunksSearchParamPtrs struct {
-	ctx *context.Context
-	u1  *uuid.UUID
-	sp1 **artifactpb.SimilarityChunksSearchRequest
+	ctx  *context.Context
+	o1   *types.OwnerUIDType
+	sp1  **artifactpb.SimilarityChunksSearchRequest
+	faa1 *[][]float32
 }
 
 // ServiceMockSimilarityChunksSearchResults contains results of the Service.SimilarityChunksSearch
@@ -11164,10 +8204,11 @@ type ServiceMockSimilarityChunksSearchResults struct {
 
 // ServiceMockSimilarityChunksSearchOrigins contains origins of expectations of the Service.SimilarityChunksSearch
 type ServiceMockSimilarityChunksSearchExpectationOrigins struct {
-	origin    string
-	originCtx string
-	originU1  string
-	originSp1 string
+	origin     string
+	originCtx  string
+	originO1   string
+	originSp1  string
+	originFaa1 string
 }
 
 // Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
@@ -11181,7 +8222,7 @@ func (mmSimilarityChunksSearch *mServiceMockSimilarityChunksSearch) Optional() *
 }
 
 // Expect sets up expected params for Service.SimilarityChunksSearch
-func (mmSimilarityChunksSearch *mServiceMockSimilarityChunksSearch) Expect(ctx context.Context, u1 uuid.UUID, sp1 *artifactpb.SimilarityChunksSearchRequest) *mServiceMockSimilarityChunksSearch {
+func (mmSimilarityChunksSearch *mServiceMockSimilarityChunksSearch) Expect(ctx context.Context, o1 types.OwnerUIDType, sp1 *artifactpb.SimilarityChunksSearchRequest, faa1 [][]float32) *mServiceMockSimilarityChunksSearch {
 	if mmSimilarityChunksSearch.mock.funcSimilarityChunksSearch != nil {
 		mmSimilarityChunksSearch.mock.t.Fatalf("ServiceMock.SimilarityChunksSearch mock is already set by Set")
 	}
@@ -11194,7 +8235,7 @@ func (mmSimilarityChunksSearch *mServiceMockSimilarityChunksSearch) Expect(ctx c
 		mmSimilarityChunksSearch.mock.t.Fatalf("ServiceMock.SimilarityChunksSearch mock is already set by ExpectParams functions")
 	}
 
-	mmSimilarityChunksSearch.defaultExpectation.params = &ServiceMockSimilarityChunksSearchParams{ctx, u1, sp1}
+	mmSimilarityChunksSearch.defaultExpectation.params = &ServiceMockSimilarityChunksSearchParams{ctx, o1, sp1, faa1}
 	mmSimilarityChunksSearch.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
 	for _, e := range mmSimilarityChunksSearch.expectations {
 		if minimock.Equal(e.params, mmSimilarityChunksSearch.defaultExpectation.params) {
@@ -11228,8 +8269,8 @@ func (mmSimilarityChunksSearch *mServiceMockSimilarityChunksSearch) ExpectCtxPar
 	return mmSimilarityChunksSearch
 }
 
-// ExpectU1Param2 sets up expected param u1 for Service.SimilarityChunksSearch
-func (mmSimilarityChunksSearch *mServiceMockSimilarityChunksSearch) ExpectU1Param2(u1 uuid.UUID) *mServiceMockSimilarityChunksSearch {
+// ExpectO1Param2 sets up expected param o1 for Service.SimilarityChunksSearch
+func (mmSimilarityChunksSearch *mServiceMockSimilarityChunksSearch) ExpectO1Param2(o1 types.OwnerUIDType) *mServiceMockSimilarityChunksSearch {
 	if mmSimilarityChunksSearch.mock.funcSimilarityChunksSearch != nil {
 		mmSimilarityChunksSearch.mock.t.Fatalf("ServiceMock.SimilarityChunksSearch mock is already set by Set")
 	}
@@ -11245,8 +8286,8 @@ func (mmSimilarityChunksSearch *mServiceMockSimilarityChunksSearch) ExpectU1Para
 	if mmSimilarityChunksSearch.defaultExpectation.paramPtrs == nil {
 		mmSimilarityChunksSearch.defaultExpectation.paramPtrs = &ServiceMockSimilarityChunksSearchParamPtrs{}
 	}
-	mmSimilarityChunksSearch.defaultExpectation.paramPtrs.u1 = &u1
-	mmSimilarityChunksSearch.defaultExpectation.expectationOrigins.originU1 = minimock.CallerInfo(1)
+	mmSimilarityChunksSearch.defaultExpectation.paramPtrs.o1 = &o1
+	mmSimilarityChunksSearch.defaultExpectation.expectationOrigins.originO1 = minimock.CallerInfo(1)
 
 	return mmSimilarityChunksSearch
 }
@@ -11274,8 +8315,31 @@ func (mmSimilarityChunksSearch *mServiceMockSimilarityChunksSearch) ExpectSp1Par
 	return mmSimilarityChunksSearch
 }
 
+// ExpectFaa1Param4 sets up expected param faa1 for Service.SimilarityChunksSearch
+func (mmSimilarityChunksSearch *mServiceMockSimilarityChunksSearch) ExpectFaa1Param4(faa1 [][]float32) *mServiceMockSimilarityChunksSearch {
+	if mmSimilarityChunksSearch.mock.funcSimilarityChunksSearch != nil {
+		mmSimilarityChunksSearch.mock.t.Fatalf("ServiceMock.SimilarityChunksSearch mock is already set by Set")
+	}
+
+	if mmSimilarityChunksSearch.defaultExpectation == nil {
+		mmSimilarityChunksSearch.defaultExpectation = &ServiceMockSimilarityChunksSearchExpectation{}
+	}
+
+	if mmSimilarityChunksSearch.defaultExpectation.params != nil {
+		mmSimilarityChunksSearch.mock.t.Fatalf("ServiceMock.SimilarityChunksSearch mock is already set by Expect")
+	}
+
+	if mmSimilarityChunksSearch.defaultExpectation.paramPtrs == nil {
+		mmSimilarityChunksSearch.defaultExpectation.paramPtrs = &ServiceMockSimilarityChunksSearchParamPtrs{}
+	}
+	mmSimilarityChunksSearch.defaultExpectation.paramPtrs.faa1 = &faa1
+	mmSimilarityChunksSearch.defaultExpectation.expectationOrigins.originFaa1 = minimock.CallerInfo(1)
+
+	return mmSimilarityChunksSearch
+}
+
 // Inspect accepts an inspector function that has same arguments as the Service.SimilarityChunksSearch
-func (mmSimilarityChunksSearch *mServiceMockSimilarityChunksSearch) Inspect(f func(ctx context.Context, u1 uuid.UUID, sp1 *artifactpb.SimilarityChunksSearchRequest)) *mServiceMockSimilarityChunksSearch {
+func (mmSimilarityChunksSearch *mServiceMockSimilarityChunksSearch) Inspect(f func(ctx context.Context, o1 types.OwnerUIDType, sp1 *artifactpb.SimilarityChunksSearchRequest, faa1 [][]float32)) *mServiceMockSimilarityChunksSearch {
 	if mmSimilarityChunksSearch.mock.inspectFuncSimilarityChunksSearch != nil {
 		mmSimilarityChunksSearch.mock.t.Fatalf("Inspect function is already set for ServiceMock.SimilarityChunksSearch")
 	}
@@ -11300,7 +8364,7 @@ func (mmSimilarityChunksSearch *mServiceMockSimilarityChunksSearch) Return(sa1 [
 }
 
 // Set uses given function f to mock the Service.SimilarityChunksSearch method
-func (mmSimilarityChunksSearch *mServiceMockSimilarityChunksSearch) Set(f func(ctx context.Context, u1 uuid.UUID, sp1 *artifactpb.SimilarityChunksSearchRequest) (sa1 []mm_service.SimChunk, err error)) *ServiceMock {
+func (mmSimilarityChunksSearch *mServiceMockSimilarityChunksSearch) Set(f func(ctx context.Context, o1 types.OwnerUIDType, sp1 *artifactpb.SimilarityChunksSearchRequest, faa1 [][]float32) (sa1 []mm_service.SimChunk, err error)) *ServiceMock {
 	if mmSimilarityChunksSearch.defaultExpectation != nil {
 		mmSimilarityChunksSearch.mock.t.Fatalf("Default expectation is already set for the Service.SimilarityChunksSearch method")
 	}
@@ -11316,14 +8380,14 @@ func (mmSimilarityChunksSearch *mServiceMockSimilarityChunksSearch) Set(f func(c
 
 // When sets expectation for the Service.SimilarityChunksSearch which will trigger the result defined by the following
 // Then helper
-func (mmSimilarityChunksSearch *mServiceMockSimilarityChunksSearch) When(ctx context.Context, u1 uuid.UUID, sp1 *artifactpb.SimilarityChunksSearchRequest) *ServiceMockSimilarityChunksSearchExpectation {
+func (mmSimilarityChunksSearch *mServiceMockSimilarityChunksSearch) When(ctx context.Context, o1 types.OwnerUIDType, sp1 *artifactpb.SimilarityChunksSearchRequest, faa1 [][]float32) *ServiceMockSimilarityChunksSearchExpectation {
 	if mmSimilarityChunksSearch.mock.funcSimilarityChunksSearch != nil {
 		mmSimilarityChunksSearch.mock.t.Fatalf("ServiceMock.SimilarityChunksSearch mock is already set by Set")
 	}
 
 	expectation := &ServiceMockSimilarityChunksSearchExpectation{
 		mock:               mmSimilarityChunksSearch.mock,
-		params:             &ServiceMockSimilarityChunksSearchParams{ctx, u1, sp1},
+		params:             &ServiceMockSimilarityChunksSearchParams{ctx, o1, sp1, faa1},
 		expectationOrigins: ServiceMockSimilarityChunksSearchExpectationOrigins{origin: minimock.CallerInfo(1)},
 	}
 	mmSimilarityChunksSearch.expectations = append(mmSimilarityChunksSearch.expectations, expectation)
@@ -11358,17 +8422,17 @@ func (mmSimilarityChunksSearch *mServiceMockSimilarityChunksSearch) invocationsD
 }
 
 // SimilarityChunksSearch implements mm_service.Service
-func (mmSimilarityChunksSearch *ServiceMock) SimilarityChunksSearch(ctx context.Context, u1 uuid.UUID, sp1 *artifactpb.SimilarityChunksSearchRequest) (sa1 []mm_service.SimChunk, err error) {
+func (mmSimilarityChunksSearch *ServiceMock) SimilarityChunksSearch(ctx context.Context, o1 types.OwnerUIDType, sp1 *artifactpb.SimilarityChunksSearchRequest, faa1 [][]float32) (sa1 []mm_service.SimChunk, err error) {
 	mm_atomic.AddUint64(&mmSimilarityChunksSearch.beforeSimilarityChunksSearchCounter, 1)
 	defer mm_atomic.AddUint64(&mmSimilarityChunksSearch.afterSimilarityChunksSearchCounter, 1)
 
 	mmSimilarityChunksSearch.t.Helper()
 
 	if mmSimilarityChunksSearch.inspectFuncSimilarityChunksSearch != nil {
-		mmSimilarityChunksSearch.inspectFuncSimilarityChunksSearch(ctx, u1, sp1)
+		mmSimilarityChunksSearch.inspectFuncSimilarityChunksSearch(ctx, o1, sp1, faa1)
 	}
 
-	mm_params := ServiceMockSimilarityChunksSearchParams{ctx, u1, sp1}
+	mm_params := ServiceMockSimilarityChunksSearchParams{ctx, o1, sp1, faa1}
 
 	// Record call args
 	mmSimilarityChunksSearch.SimilarityChunksSearchMock.mutex.Lock()
@@ -11387,7 +8451,7 @@ func (mmSimilarityChunksSearch *ServiceMock) SimilarityChunksSearch(ctx context.
 		mm_want := mmSimilarityChunksSearch.SimilarityChunksSearchMock.defaultExpectation.params
 		mm_want_ptrs := mmSimilarityChunksSearch.SimilarityChunksSearchMock.defaultExpectation.paramPtrs
 
-		mm_got := ServiceMockSimilarityChunksSearchParams{ctx, u1, sp1}
+		mm_got := ServiceMockSimilarityChunksSearchParams{ctx, o1, sp1, faa1}
 
 		if mm_want_ptrs != nil {
 
@@ -11396,14 +8460,19 @@ func (mmSimilarityChunksSearch *ServiceMock) SimilarityChunksSearch(ctx context.
 					mmSimilarityChunksSearch.SimilarityChunksSearchMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
 			}
 
-			if mm_want_ptrs.u1 != nil && !minimock.Equal(*mm_want_ptrs.u1, mm_got.u1) {
-				mmSimilarityChunksSearch.t.Errorf("ServiceMock.SimilarityChunksSearch got unexpected parameter u1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmSimilarityChunksSearch.SimilarityChunksSearchMock.defaultExpectation.expectationOrigins.originU1, *mm_want_ptrs.u1, mm_got.u1, minimock.Diff(*mm_want_ptrs.u1, mm_got.u1))
+			if mm_want_ptrs.o1 != nil && !minimock.Equal(*mm_want_ptrs.o1, mm_got.o1) {
+				mmSimilarityChunksSearch.t.Errorf("ServiceMock.SimilarityChunksSearch got unexpected parameter o1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmSimilarityChunksSearch.SimilarityChunksSearchMock.defaultExpectation.expectationOrigins.originO1, *mm_want_ptrs.o1, mm_got.o1, minimock.Diff(*mm_want_ptrs.o1, mm_got.o1))
 			}
 
 			if mm_want_ptrs.sp1 != nil && !minimock.Equal(*mm_want_ptrs.sp1, mm_got.sp1) {
 				mmSimilarityChunksSearch.t.Errorf("ServiceMock.SimilarityChunksSearch got unexpected parameter sp1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
 					mmSimilarityChunksSearch.SimilarityChunksSearchMock.defaultExpectation.expectationOrigins.originSp1, *mm_want_ptrs.sp1, mm_got.sp1, minimock.Diff(*mm_want_ptrs.sp1, mm_got.sp1))
+			}
+
+			if mm_want_ptrs.faa1 != nil && !minimock.Equal(*mm_want_ptrs.faa1, mm_got.faa1) {
+				mmSimilarityChunksSearch.t.Errorf("ServiceMock.SimilarityChunksSearch got unexpected parameter faa1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmSimilarityChunksSearch.SimilarityChunksSearchMock.defaultExpectation.expectationOrigins.originFaa1, *mm_want_ptrs.faa1, mm_got.faa1, minimock.Diff(*mm_want_ptrs.faa1, mm_got.faa1))
 			}
 
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
@@ -11418,9 +8487,9 @@ func (mmSimilarityChunksSearch *ServiceMock) SimilarityChunksSearch(ctx context.
 		return (*mm_results).sa1, (*mm_results).err
 	}
 	if mmSimilarityChunksSearch.funcSimilarityChunksSearch != nil {
-		return mmSimilarityChunksSearch.funcSimilarityChunksSearch(ctx, u1, sp1)
+		return mmSimilarityChunksSearch.funcSimilarityChunksSearch(ctx, o1, sp1, faa1)
 	}
-	mmSimilarityChunksSearch.t.Fatalf("Unexpected call to ServiceMock.SimilarityChunksSearch. %v %v %v", ctx, u1, sp1)
+	mmSimilarityChunksSearch.t.Fatalf("Unexpected call to ServiceMock.SimilarityChunksSearch. %v %v %v %v", ctx, o1, sp1, faa1)
 	return
 }
 
@@ -11492,534 +8561,6 @@ func (m *ServiceMock) MinimockSimilarityChunksSearchInspect() {
 	}
 }
 
-type mServiceMockTriggerCleanupKnowledgeBaseWorkflow struct {
-	optional           bool
-	mock               *ServiceMock
-	defaultExpectation *ServiceMockTriggerCleanupKnowledgeBaseWorkflowExpectation
-	expectations       []*ServiceMockTriggerCleanupKnowledgeBaseWorkflowExpectation
-
-	callArgs []*ServiceMockTriggerCleanupKnowledgeBaseWorkflowParams
-	mutex    sync.RWMutex
-
-	expectedInvocations       uint64
-	expectedInvocationsOrigin string
-}
-
-// ServiceMockTriggerCleanupKnowledgeBaseWorkflowExpectation specifies expectation struct of the Service.TriggerCleanupKnowledgeBaseWorkflow
-type ServiceMockTriggerCleanupKnowledgeBaseWorkflowExpectation struct {
-	mock               *ServiceMock
-	params             *ServiceMockTriggerCleanupKnowledgeBaseWorkflowParams
-	paramPtrs          *ServiceMockTriggerCleanupKnowledgeBaseWorkflowParamPtrs
-	expectationOrigins ServiceMockTriggerCleanupKnowledgeBaseWorkflowExpectationOrigins
-	results            *ServiceMockTriggerCleanupKnowledgeBaseWorkflowResults
-	returnOrigin       string
-	Counter            uint64
-}
-
-// ServiceMockTriggerCleanupKnowledgeBaseWorkflowParams contains parameters of the Service.TriggerCleanupKnowledgeBaseWorkflow
-type ServiceMockTriggerCleanupKnowledgeBaseWorkflowParams struct {
-	ctx context.Context
-	s1  string
-}
-
-// ServiceMockTriggerCleanupKnowledgeBaseWorkflowParamPtrs contains pointers to parameters of the Service.TriggerCleanupKnowledgeBaseWorkflow
-type ServiceMockTriggerCleanupKnowledgeBaseWorkflowParamPtrs struct {
-	ctx *context.Context
-	s1  *string
-}
-
-// ServiceMockTriggerCleanupKnowledgeBaseWorkflowResults contains results of the Service.TriggerCleanupKnowledgeBaseWorkflow
-type ServiceMockTriggerCleanupKnowledgeBaseWorkflowResults struct {
-	err error
-}
-
-// ServiceMockTriggerCleanupKnowledgeBaseWorkflowOrigins contains origins of expectations of the Service.TriggerCleanupKnowledgeBaseWorkflow
-type ServiceMockTriggerCleanupKnowledgeBaseWorkflowExpectationOrigins struct {
-	origin    string
-	originCtx string
-	originS1  string
-}
-
-// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
-// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
-// Optional() makes method check to work in '0 or more' mode.
-// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
-// catch the problems when the expected method call is totally skipped during test run.
-func (mmTriggerCleanupKnowledgeBaseWorkflow *mServiceMockTriggerCleanupKnowledgeBaseWorkflow) Optional() *mServiceMockTriggerCleanupKnowledgeBaseWorkflow {
-	mmTriggerCleanupKnowledgeBaseWorkflow.optional = true
-	return mmTriggerCleanupKnowledgeBaseWorkflow
-}
-
-// Expect sets up expected params for Service.TriggerCleanupKnowledgeBaseWorkflow
-func (mmTriggerCleanupKnowledgeBaseWorkflow *mServiceMockTriggerCleanupKnowledgeBaseWorkflow) Expect(ctx context.Context, s1 string) *mServiceMockTriggerCleanupKnowledgeBaseWorkflow {
-	if mmTriggerCleanupKnowledgeBaseWorkflow.mock.funcTriggerCleanupKnowledgeBaseWorkflow != nil {
-		mmTriggerCleanupKnowledgeBaseWorkflow.mock.t.Fatalf("ServiceMock.TriggerCleanupKnowledgeBaseWorkflow mock is already set by Set")
-	}
-
-	if mmTriggerCleanupKnowledgeBaseWorkflow.defaultExpectation == nil {
-		mmTriggerCleanupKnowledgeBaseWorkflow.defaultExpectation = &ServiceMockTriggerCleanupKnowledgeBaseWorkflowExpectation{}
-	}
-
-	if mmTriggerCleanupKnowledgeBaseWorkflow.defaultExpectation.paramPtrs != nil {
-		mmTriggerCleanupKnowledgeBaseWorkflow.mock.t.Fatalf("ServiceMock.TriggerCleanupKnowledgeBaseWorkflow mock is already set by ExpectParams functions")
-	}
-
-	mmTriggerCleanupKnowledgeBaseWorkflow.defaultExpectation.params = &ServiceMockTriggerCleanupKnowledgeBaseWorkflowParams{ctx, s1}
-	mmTriggerCleanupKnowledgeBaseWorkflow.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
-	for _, e := range mmTriggerCleanupKnowledgeBaseWorkflow.expectations {
-		if minimock.Equal(e.params, mmTriggerCleanupKnowledgeBaseWorkflow.defaultExpectation.params) {
-			mmTriggerCleanupKnowledgeBaseWorkflow.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmTriggerCleanupKnowledgeBaseWorkflow.defaultExpectation.params)
-		}
-	}
-
-	return mmTriggerCleanupKnowledgeBaseWorkflow
-}
-
-// ExpectCtxParam1 sets up expected param ctx for Service.TriggerCleanupKnowledgeBaseWorkflow
-func (mmTriggerCleanupKnowledgeBaseWorkflow *mServiceMockTriggerCleanupKnowledgeBaseWorkflow) ExpectCtxParam1(ctx context.Context) *mServiceMockTriggerCleanupKnowledgeBaseWorkflow {
-	if mmTriggerCleanupKnowledgeBaseWorkflow.mock.funcTriggerCleanupKnowledgeBaseWorkflow != nil {
-		mmTriggerCleanupKnowledgeBaseWorkflow.mock.t.Fatalf("ServiceMock.TriggerCleanupKnowledgeBaseWorkflow mock is already set by Set")
-	}
-
-	if mmTriggerCleanupKnowledgeBaseWorkflow.defaultExpectation == nil {
-		mmTriggerCleanupKnowledgeBaseWorkflow.defaultExpectation = &ServiceMockTriggerCleanupKnowledgeBaseWorkflowExpectation{}
-	}
-
-	if mmTriggerCleanupKnowledgeBaseWorkflow.defaultExpectation.params != nil {
-		mmTriggerCleanupKnowledgeBaseWorkflow.mock.t.Fatalf("ServiceMock.TriggerCleanupKnowledgeBaseWorkflow mock is already set by Expect")
-	}
-
-	if mmTriggerCleanupKnowledgeBaseWorkflow.defaultExpectation.paramPtrs == nil {
-		mmTriggerCleanupKnowledgeBaseWorkflow.defaultExpectation.paramPtrs = &ServiceMockTriggerCleanupKnowledgeBaseWorkflowParamPtrs{}
-	}
-	mmTriggerCleanupKnowledgeBaseWorkflow.defaultExpectation.paramPtrs.ctx = &ctx
-	mmTriggerCleanupKnowledgeBaseWorkflow.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
-
-	return mmTriggerCleanupKnowledgeBaseWorkflow
-}
-
-// ExpectS1Param2 sets up expected param s1 for Service.TriggerCleanupKnowledgeBaseWorkflow
-func (mmTriggerCleanupKnowledgeBaseWorkflow *mServiceMockTriggerCleanupKnowledgeBaseWorkflow) ExpectS1Param2(s1 string) *mServiceMockTriggerCleanupKnowledgeBaseWorkflow {
-	if mmTriggerCleanupKnowledgeBaseWorkflow.mock.funcTriggerCleanupKnowledgeBaseWorkflow != nil {
-		mmTriggerCleanupKnowledgeBaseWorkflow.mock.t.Fatalf("ServiceMock.TriggerCleanupKnowledgeBaseWorkflow mock is already set by Set")
-	}
-
-	if mmTriggerCleanupKnowledgeBaseWorkflow.defaultExpectation == nil {
-		mmTriggerCleanupKnowledgeBaseWorkflow.defaultExpectation = &ServiceMockTriggerCleanupKnowledgeBaseWorkflowExpectation{}
-	}
-
-	if mmTriggerCleanupKnowledgeBaseWorkflow.defaultExpectation.params != nil {
-		mmTriggerCleanupKnowledgeBaseWorkflow.mock.t.Fatalf("ServiceMock.TriggerCleanupKnowledgeBaseWorkflow mock is already set by Expect")
-	}
-
-	if mmTriggerCleanupKnowledgeBaseWorkflow.defaultExpectation.paramPtrs == nil {
-		mmTriggerCleanupKnowledgeBaseWorkflow.defaultExpectation.paramPtrs = &ServiceMockTriggerCleanupKnowledgeBaseWorkflowParamPtrs{}
-	}
-	mmTriggerCleanupKnowledgeBaseWorkflow.defaultExpectation.paramPtrs.s1 = &s1
-	mmTriggerCleanupKnowledgeBaseWorkflow.defaultExpectation.expectationOrigins.originS1 = minimock.CallerInfo(1)
-
-	return mmTriggerCleanupKnowledgeBaseWorkflow
-}
-
-// Inspect accepts an inspector function that has same arguments as the Service.TriggerCleanupKnowledgeBaseWorkflow
-func (mmTriggerCleanupKnowledgeBaseWorkflow *mServiceMockTriggerCleanupKnowledgeBaseWorkflow) Inspect(f func(ctx context.Context, s1 string)) *mServiceMockTriggerCleanupKnowledgeBaseWorkflow {
-	if mmTriggerCleanupKnowledgeBaseWorkflow.mock.inspectFuncTriggerCleanupKnowledgeBaseWorkflow != nil {
-		mmTriggerCleanupKnowledgeBaseWorkflow.mock.t.Fatalf("Inspect function is already set for ServiceMock.TriggerCleanupKnowledgeBaseWorkflow")
-	}
-
-	mmTriggerCleanupKnowledgeBaseWorkflow.mock.inspectFuncTriggerCleanupKnowledgeBaseWorkflow = f
-
-	return mmTriggerCleanupKnowledgeBaseWorkflow
-}
-
-// Return sets up results that will be returned by Service.TriggerCleanupKnowledgeBaseWorkflow
-func (mmTriggerCleanupKnowledgeBaseWorkflow *mServiceMockTriggerCleanupKnowledgeBaseWorkflow) Return(err error) *ServiceMock {
-	if mmTriggerCleanupKnowledgeBaseWorkflow.mock.funcTriggerCleanupKnowledgeBaseWorkflow != nil {
-		mmTriggerCleanupKnowledgeBaseWorkflow.mock.t.Fatalf("ServiceMock.TriggerCleanupKnowledgeBaseWorkflow mock is already set by Set")
-	}
-
-	if mmTriggerCleanupKnowledgeBaseWorkflow.defaultExpectation == nil {
-		mmTriggerCleanupKnowledgeBaseWorkflow.defaultExpectation = &ServiceMockTriggerCleanupKnowledgeBaseWorkflowExpectation{mock: mmTriggerCleanupKnowledgeBaseWorkflow.mock}
-	}
-	mmTriggerCleanupKnowledgeBaseWorkflow.defaultExpectation.results = &ServiceMockTriggerCleanupKnowledgeBaseWorkflowResults{err}
-	mmTriggerCleanupKnowledgeBaseWorkflow.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
-	return mmTriggerCleanupKnowledgeBaseWorkflow.mock
-}
-
-// Set uses given function f to mock the Service.TriggerCleanupKnowledgeBaseWorkflow method
-func (mmTriggerCleanupKnowledgeBaseWorkflow *mServiceMockTriggerCleanupKnowledgeBaseWorkflow) Set(f func(ctx context.Context, s1 string) (err error)) *ServiceMock {
-	if mmTriggerCleanupKnowledgeBaseWorkflow.defaultExpectation != nil {
-		mmTriggerCleanupKnowledgeBaseWorkflow.mock.t.Fatalf("Default expectation is already set for the Service.TriggerCleanupKnowledgeBaseWorkflow method")
-	}
-
-	if len(mmTriggerCleanupKnowledgeBaseWorkflow.expectations) > 0 {
-		mmTriggerCleanupKnowledgeBaseWorkflow.mock.t.Fatalf("Some expectations are already set for the Service.TriggerCleanupKnowledgeBaseWorkflow method")
-	}
-
-	mmTriggerCleanupKnowledgeBaseWorkflow.mock.funcTriggerCleanupKnowledgeBaseWorkflow = f
-	mmTriggerCleanupKnowledgeBaseWorkflow.mock.funcTriggerCleanupKnowledgeBaseWorkflowOrigin = minimock.CallerInfo(1)
-	return mmTriggerCleanupKnowledgeBaseWorkflow.mock
-}
-
-// When sets expectation for the Service.TriggerCleanupKnowledgeBaseWorkflow which will trigger the result defined by the following
-// Then helper
-func (mmTriggerCleanupKnowledgeBaseWorkflow *mServiceMockTriggerCleanupKnowledgeBaseWorkflow) When(ctx context.Context, s1 string) *ServiceMockTriggerCleanupKnowledgeBaseWorkflowExpectation {
-	if mmTriggerCleanupKnowledgeBaseWorkflow.mock.funcTriggerCleanupKnowledgeBaseWorkflow != nil {
-		mmTriggerCleanupKnowledgeBaseWorkflow.mock.t.Fatalf("ServiceMock.TriggerCleanupKnowledgeBaseWorkflow mock is already set by Set")
-	}
-
-	expectation := &ServiceMockTriggerCleanupKnowledgeBaseWorkflowExpectation{
-		mock:               mmTriggerCleanupKnowledgeBaseWorkflow.mock,
-		params:             &ServiceMockTriggerCleanupKnowledgeBaseWorkflowParams{ctx, s1},
-		expectationOrigins: ServiceMockTriggerCleanupKnowledgeBaseWorkflowExpectationOrigins{origin: minimock.CallerInfo(1)},
-	}
-	mmTriggerCleanupKnowledgeBaseWorkflow.expectations = append(mmTriggerCleanupKnowledgeBaseWorkflow.expectations, expectation)
-	return expectation
-}
-
-// Then sets up Service.TriggerCleanupKnowledgeBaseWorkflow return parameters for the expectation previously defined by the When method
-func (e *ServiceMockTriggerCleanupKnowledgeBaseWorkflowExpectation) Then(err error) *ServiceMock {
-	e.results = &ServiceMockTriggerCleanupKnowledgeBaseWorkflowResults{err}
-	return e.mock
-}
-
-// Times sets number of times Service.TriggerCleanupKnowledgeBaseWorkflow should be invoked
-func (mmTriggerCleanupKnowledgeBaseWorkflow *mServiceMockTriggerCleanupKnowledgeBaseWorkflow) Times(n uint64) *mServiceMockTriggerCleanupKnowledgeBaseWorkflow {
-	if n == 0 {
-		mmTriggerCleanupKnowledgeBaseWorkflow.mock.t.Fatalf("Times of ServiceMock.TriggerCleanupKnowledgeBaseWorkflow mock can not be zero")
-	}
-	mm_atomic.StoreUint64(&mmTriggerCleanupKnowledgeBaseWorkflow.expectedInvocations, n)
-	mmTriggerCleanupKnowledgeBaseWorkflow.expectedInvocationsOrigin = minimock.CallerInfo(1)
-	return mmTriggerCleanupKnowledgeBaseWorkflow
-}
-
-func (mmTriggerCleanupKnowledgeBaseWorkflow *mServiceMockTriggerCleanupKnowledgeBaseWorkflow) invocationsDone() bool {
-	if len(mmTriggerCleanupKnowledgeBaseWorkflow.expectations) == 0 && mmTriggerCleanupKnowledgeBaseWorkflow.defaultExpectation == nil && mmTriggerCleanupKnowledgeBaseWorkflow.mock.funcTriggerCleanupKnowledgeBaseWorkflow == nil {
-		return true
-	}
-
-	totalInvocations := mm_atomic.LoadUint64(&mmTriggerCleanupKnowledgeBaseWorkflow.mock.afterTriggerCleanupKnowledgeBaseWorkflowCounter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmTriggerCleanupKnowledgeBaseWorkflow.expectedInvocations)
-
-	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
-}
-
-// TriggerCleanupKnowledgeBaseWorkflow implements mm_service.Service
-func (mmTriggerCleanupKnowledgeBaseWorkflow *ServiceMock) TriggerCleanupKnowledgeBaseWorkflow(ctx context.Context, s1 string) (err error) {
-	mm_atomic.AddUint64(&mmTriggerCleanupKnowledgeBaseWorkflow.beforeTriggerCleanupKnowledgeBaseWorkflowCounter, 1)
-	defer mm_atomic.AddUint64(&mmTriggerCleanupKnowledgeBaseWorkflow.afterTriggerCleanupKnowledgeBaseWorkflowCounter, 1)
-
-	mmTriggerCleanupKnowledgeBaseWorkflow.t.Helper()
-
-	if mmTriggerCleanupKnowledgeBaseWorkflow.inspectFuncTriggerCleanupKnowledgeBaseWorkflow != nil {
-		mmTriggerCleanupKnowledgeBaseWorkflow.inspectFuncTriggerCleanupKnowledgeBaseWorkflow(ctx, s1)
-	}
-
-	mm_params := ServiceMockTriggerCleanupKnowledgeBaseWorkflowParams{ctx, s1}
-
-	// Record call args
-	mmTriggerCleanupKnowledgeBaseWorkflow.TriggerCleanupKnowledgeBaseWorkflowMock.mutex.Lock()
-	mmTriggerCleanupKnowledgeBaseWorkflow.TriggerCleanupKnowledgeBaseWorkflowMock.callArgs = append(mmTriggerCleanupKnowledgeBaseWorkflow.TriggerCleanupKnowledgeBaseWorkflowMock.callArgs, &mm_params)
-	mmTriggerCleanupKnowledgeBaseWorkflow.TriggerCleanupKnowledgeBaseWorkflowMock.mutex.Unlock()
-
-	for _, e := range mmTriggerCleanupKnowledgeBaseWorkflow.TriggerCleanupKnowledgeBaseWorkflowMock.expectations {
-		if minimock.Equal(*e.params, mm_params) {
-			mm_atomic.AddUint64(&e.Counter, 1)
-			return e.results.err
-		}
-	}
-
-	if mmTriggerCleanupKnowledgeBaseWorkflow.TriggerCleanupKnowledgeBaseWorkflowMock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmTriggerCleanupKnowledgeBaseWorkflow.TriggerCleanupKnowledgeBaseWorkflowMock.defaultExpectation.Counter, 1)
-		mm_want := mmTriggerCleanupKnowledgeBaseWorkflow.TriggerCleanupKnowledgeBaseWorkflowMock.defaultExpectation.params
-		mm_want_ptrs := mmTriggerCleanupKnowledgeBaseWorkflow.TriggerCleanupKnowledgeBaseWorkflowMock.defaultExpectation.paramPtrs
-
-		mm_got := ServiceMockTriggerCleanupKnowledgeBaseWorkflowParams{ctx, s1}
-
-		if mm_want_ptrs != nil {
-
-			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
-				mmTriggerCleanupKnowledgeBaseWorkflow.t.Errorf("ServiceMock.TriggerCleanupKnowledgeBaseWorkflow got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmTriggerCleanupKnowledgeBaseWorkflow.TriggerCleanupKnowledgeBaseWorkflowMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
-			}
-
-			if mm_want_ptrs.s1 != nil && !minimock.Equal(*mm_want_ptrs.s1, mm_got.s1) {
-				mmTriggerCleanupKnowledgeBaseWorkflow.t.Errorf("ServiceMock.TriggerCleanupKnowledgeBaseWorkflow got unexpected parameter s1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmTriggerCleanupKnowledgeBaseWorkflow.TriggerCleanupKnowledgeBaseWorkflowMock.defaultExpectation.expectationOrigins.originS1, *mm_want_ptrs.s1, mm_got.s1, minimock.Diff(*mm_want_ptrs.s1, mm_got.s1))
-			}
-
-		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
-			mmTriggerCleanupKnowledgeBaseWorkflow.t.Errorf("ServiceMock.TriggerCleanupKnowledgeBaseWorkflow got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-				mmTriggerCleanupKnowledgeBaseWorkflow.TriggerCleanupKnowledgeBaseWorkflowMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
-		}
-
-		mm_results := mmTriggerCleanupKnowledgeBaseWorkflow.TriggerCleanupKnowledgeBaseWorkflowMock.defaultExpectation.results
-		if mm_results == nil {
-			mmTriggerCleanupKnowledgeBaseWorkflow.t.Fatal("No results are set for the ServiceMock.TriggerCleanupKnowledgeBaseWorkflow")
-		}
-		return (*mm_results).err
-	}
-	if mmTriggerCleanupKnowledgeBaseWorkflow.funcTriggerCleanupKnowledgeBaseWorkflow != nil {
-		return mmTriggerCleanupKnowledgeBaseWorkflow.funcTriggerCleanupKnowledgeBaseWorkflow(ctx, s1)
-	}
-	mmTriggerCleanupKnowledgeBaseWorkflow.t.Fatalf("Unexpected call to ServiceMock.TriggerCleanupKnowledgeBaseWorkflow. %v %v", ctx, s1)
-	return
-}
-
-// TriggerCleanupKnowledgeBaseWorkflowAfterCounter returns a count of finished ServiceMock.TriggerCleanupKnowledgeBaseWorkflow invocations
-func (mmTriggerCleanupKnowledgeBaseWorkflow *ServiceMock) TriggerCleanupKnowledgeBaseWorkflowAfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmTriggerCleanupKnowledgeBaseWorkflow.afterTriggerCleanupKnowledgeBaseWorkflowCounter)
-}
-
-// TriggerCleanupKnowledgeBaseWorkflowBeforeCounter returns a count of ServiceMock.TriggerCleanupKnowledgeBaseWorkflow invocations
-func (mmTriggerCleanupKnowledgeBaseWorkflow *ServiceMock) TriggerCleanupKnowledgeBaseWorkflowBeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmTriggerCleanupKnowledgeBaseWorkflow.beforeTriggerCleanupKnowledgeBaseWorkflowCounter)
-}
-
-// Calls returns a list of arguments used in each call to ServiceMock.TriggerCleanupKnowledgeBaseWorkflow.
-// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
-func (mmTriggerCleanupKnowledgeBaseWorkflow *mServiceMockTriggerCleanupKnowledgeBaseWorkflow) Calls() []*ServiceMockTriggerCleanupKnowledgeBaseWorkflowParams {
-	mmTriggerCleanupKnowledgeBaseWorkflow.mutex.RLock()
-
-	argCopy := make([]*ServiceMockTriggerCleanupKnowledgeBaseWorkflowParams, len(mmTriggerCleanupKnowledgeBaseWorkflow.callArgs))
-	copy(argCopy, mmTriggerCleanupKnowledgeBaseWorkflow.callArgs)
-
-	mmTriggerCleanupKnowledgeBaseWorkflow.mutex.RUnlock()
-
-	return argCopy
-}
-
-// MinimockTriggerCleanupKnowledgeBaseWorkflowDone returns true if the count of the TriggerCleanupKnowledgeBaseWorkflow invocations corresponds
-// the number of defined expectations
-func (m *ServiceMock) MinimockTriggerCleanupKnowledgeBaseWorkflowDone() bool {
-	if m.TriggerCleanupKnowledgeBaseWorkflowMock.optional {
-		// Optional methods provide '0 or more' call count restriction.
-		return true
-	}
-
-	for _, e := range m.TriggerCleanupKnowledgeBaseWorkflowMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			return false
-		}
-	}
-
-	return m.TriggerCleanupKnowledgeBaseWorkflowMock.invocationsDone()
-}
-
-// MinimockTriggerCleanupKnowledgeBaseWorkflowInspect logs each unmet expectation
-func (m *ServiceMock) MinimockTriggerCleanupKnowledgeBaseWorkflowInspect() {
-	for _, e := range m.TriggerCleanupKnowledgeBaseWorkflowMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Errorf("Expected call to ServiceMock.TriggerCleanupKnowledgeBaseWorkflow at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
-		}
-	}
-
-	afterTriggerCleanupKnowledgeBaseWorkflowCounter := mm_atomic.LoadUint64(&m.afterTriggerCleanupKnowledgeBaseWorkflowCounter)
-	// if default expectation was set then invocations count should be greater than zero
-	if m.TriggerCleanupKnowledgeBaseWorkflowMock.defaultExpectation != nil && afterTriggerCleanupKnowledgeBaseWorkflowCounter < 1 {
-		if m.TriggerCleanupKnowledgeBaseWorkflowMock.defaultExpectation.params == nil {
-			m.t.Errorf("Expected call to ServiceMock.TriggerCleanupKnowledgeBaseWorkflow at\n%s", m.TriggerCleanupKnowledgeBaseWorkflowMock.defaultExpectation.returnOrigin)
-		} else {
-			m.t.Errorf("Expected call to ServiceMock.TriggerCleanupKnowledgeBaseWorkflow at\n%s with params: %#v", m.TriggerCleanupKnowledgeBaseWorkflowMock.defaultExpectation.expectationOrigins.origin, *m.TriggerCleanupKnowledgeBaseWorkflowMock.defaultExpectation.params)
-		}
-	}
-	// if func was set then invocations count should be greater than zero
-	if m.funcTriggerCleanupKnowledgeBaseWorkflow != nil && afterTriggerCleanupKnowledgeBaseWorkflowCounter < 1 {
-		m.t.Errorf("Expected call to ServiceMock.TriggerCleanupKnowledgeBaseWorkflow at\n%s", m.funcTriggerCleanupKnowledgeBaseWorkflowOrigin)
-	}
-
-	if !m.TriggerCleanupKnowledgeBaseWorkflowMock.invocationsDone() && afterTriggerCleanupKnowledgeBaseWorkflowCounter > 0 {
-		m.t.Errorf("Expected %d calls to ServiceMock.TriggerCleanupKnowledgeBaseWorkflow at\n%s but found %d calls",
-			mm_atomic.LoadUint64(&m.TriggerCleanupKnowledgeBaseWorkflowMock.expectedInvocations), m.TriggerCleanupKnowledgeBaseWorkflowMock.expectedInvocationsOrigin, afterTriggerCleanupKnowledgeBaseWorkflowCounter)
-	}
-}
-
-type mServiceMockVectorDB struct {
-	optional           bool
-	mock               *ServiceMock
-	defaultExpectation *ServiceMockVectorDBExpectation
-	expectations       []*ServiceMockVectorDBExpectation
-
-	expectedInvocations       uint64
-	expectedInvocationsOrigin string
-}
-
-// ServiceMockVectorDBExpectation specifies expectation struct of the Service.VectorDB
-type ServiceMockVectorDBExpectation struct {
-	mock *ServiceMock
-
-	results      *ServiceMockVectorDBResults
-	returnOrigin string
-	Counter      uint64
-}
-
-// ServiceMockVectorDBResults contains results of the Service.VectorDB
-type ServiceMockVectorDBResults struct {
-	v1 mm_service.VectorDatabase
-}
-
-// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
-// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
-// Optional() makes method check to work in '0 or more' mode.
-// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
-// catch the problems when the expected method call is totally skipped during test run.
-func (mmVectorDB *mServiceMockVectorDB) Optional() *mServiceMockVectorDB {
-	mmVectorDB.optional = true
-	return mmVectorDB
-}
-
-// Expect sets up expected params for Service.VectorDB
-func (mmVectorDB *mServiceMockVectorDB) Expect() *mServiceMockVectorDB {
-	if mmVectorDB.mock.funcVectorDB != nil {
-		mmVectorDB.mock.t.Fatalf("ServiceMock.VectorDB mock is already set by Set")
-	}
-
-	if mmVectorDB.defaultExpectation == nil {
-		mmVectorDB.defaultExpectation = &ServiceMockVectorDBExpectation{}
-	}
-
-	return mmVectorDB
-}
-
-// Inspect accepts an inspector function that has same arguments as the Service.VectorDB
-func (mmVectorDB *mServiceMockVectorDB) Inspect(f func()) *mServiceMockVectorDB {
-	if mmVectorDB.mock.inspectFuncVectorDB != nil {
-		mmVectorDB.mock.t.Fatalf("Inspect function is already set for ServiceMock.VectorDB")
-	}
-
-	mmVectorDB.mock.inspectFuncVectorDB = f
-
-	return mmVectorDB
-}
-
-// Return sets up results that will be returned by Service.VectorDB
-func (mmVectorDB *mServiceMockVectorDB) Return(v1 mm_service.VectorDatabase) *ServiceMock {
-	if mmVectorDB.mock.funcVectorDB != nil {
-		mmVectorDB.mock.t.Fatalf("ServiceMock.VectorDB mock is already set by Set")
-	}
-
-	if mmVectorDB.defaultExpectation == nil {
-		mmVectorDB.defaultExpectation = &ServiceMockVectorDBExpectation{mock: mmVectorDB.mock}
-	}
-	mmVectorDB.defaultExpectation.results = &ServiceMockVectorDBResults{v1}
-	mmVectorDB.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
-	return mmVectorDB.mock
-}
-
-// Set uses given function f to mock the Service.VectorDB method
-func (mmVectorDB *mServiceMockVectorDB) Set(f func() (v1 mm_service.VectorDatabase)) *ServiceMock {
-	if mmVectorDB.defaultExpectation != nil {
-		mmVectorDB.mock.t.Fatalf("Default expectation is already set for the Service.VectorDB method")
-	}
-
-	if len(mmVectorDB.expectations) > 0 {
-		mmVectorDB.mock.t.Fatalf("Some expectations are already set for the Service.VectorDB method")
-	}
-
-	mmVectorDB.mock.funcVectorDB = f
-	mmVectorDB.mock.funcVectorDBOrigin = minimock.CallerInfo(1)
-	return mmVectorDB.mock
-}
-
-// Times sets number of times Service.VectorDB should be invoked
-func (mmVectorDB *mServiceMockVectorDB) Times(n uint64) *mServiceMockVectorDB {
-	if n == 0 {
-		mmVectorDB.mock.t.Fatalf("Times of ServiceMock.VectorDB mock can not be zero")
-	}
-	mm_atomic.StoreUint64(&mmVectorDB.expectedInvocations, n)
-	mmVectorDB.expectedInvocationsOrigin = minimock.CallerInfo(1)
-	return mmVectorDB
-}
-
-func (mmVectorDB *mServiceMockVectorDB) invocationsDone() bool {
-	if len(mmVectorDB.expectations) == 0 && mmVectorDB.defaultExpectation == nil && mmVectorDB.mock.funcVectorDB == nil {
-		return true
-	}
-
-	totalInvocations := mm_atomic.LoadUint64(&mmVectorDB.mock.afterVectorDBCounter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmVectorDB.expectedInvocations)
-
-	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
-}
-
-// VectorDB implements mm_service.Service
-func (mmVectorDB *ServiceMock) VectorDB() (v1 mm_service.VectorDatabase) {
-	mm_atomic.AddUint64(&mmVectorDB.beforeVectorDBCounter, 1)
-	defer mm_atomic.AddUint64(&mmVectorDB.afterVectorDBCounter, 1)
-
-	mmVectorDB.t.Helper()
-
-	if mmVectorDB.inspectFuncVectorDB != nil {
-		mmVectorDB.inspectFuncVectorDB()
-	}
-
-	if mmVectorDB.VectorDBMock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmVectorDB.VectorDBMock.defaultExpectation.Counter, 1)
-
-		mm_results := mmVectorDB.VectorDBMock.defaultExpectation.results
-		if mm_results == nil {
-			mmVectorDB.t.Fatal("No results are set for the ServiceMock.VectorDB")
-		}
-		return (*mm_results).v1
-	}
-	if mmVectorDB.funcVectorDB != nil {
-		return mmVectorDB.funcVectorDB()
-	}
-	mmVectorDB.t.Fatalf("Unexpected call to ServiceMock.VectorDB.")
-	return
-}
-
-// VectorDBAfterCounter returns a count of finished ServiceMock.VectorDB invocations
-func (mmVectorDB *ServiceMock) VectorDBAfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmVectorDB.afterVectorDBCounter)
-}
-
-// VectorDBBeforeCounter returns a count of ServiceMock.VectorDB invocations
-func (mmVectorDB *ServiceMock) VectorDBBeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmVectorDB.beforeVectorDBCounter)
-}
-
-// MinimockVectorDBDone returns true if the count of the VectorDB invocations corresponds
-// the number of defined expectations
-func (m *ServiceMock) MinimockVectorDBDone() bool {
-	if m.VectorDBMock.optional {
-		// Optional methods provide '0 or more' call count restriction.
-		return true
-	}
-
-	for _, e := range m.VectorDBMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			return false
-		}
-	}
-
-	return m.VectorDBMock.invocationsDone()
-}
-
-// MinimockVectorDBInspect logs each unmet expectation
-func (m *ServiceMock) MinimockVectorDBInspect() {
-	for _, e := range m.VectorDBMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Error("Expected call to ServiceMock.VectorDB")
-		}
-	}
-
-	afterVectorDBCounter := mm_atomic.LoadUint64(&m.afterVectorDBCounter)
-	// if default expectation was set then invocations count should be greater than zero
-	if m.VectorDBMock.defaultExpectation != nil && afterVectorDBCounter < 1 {
-		m.t.Errorf("Expected call to ServiceMock.VectorDB at\n%s", m.VectorDBMock.defaultExpectation.returnOrigin)
-	}
-	// if func was set then invocations count should be greater than zero
-	if m.funcVectorDB != nil && afterVectorDBCounter < 1 {
-		m.t.Errorf("Expected call to ServiceMock.VectorDB at\n%s", m.funcVectorDBOrigin)
-	}
-
-	if !m.VectorDBMock.invocationsDone() && afterVectorDBCounter > 0 {
-		m.t.Errorf("Expected %d calls to ServiceMock.VectorDB at\n%s but found %d calls",
-			mm_atomic.LoadUint64(&m.VectorDBMock.expectedInvocations), m.VectorDBMock.expectedInvocationsOrigin, afterVectorDBCounter)
-	}
-}
-
 // MinimockFinish checks that all mocked methods have been called the expected number of times
 func (m *ServiceMock) MinimockFinish() {
 	m.finishOnce.Do(func() {
@@ -12030,47 +8571,25 @@ func (m *ServiceMock) MinimockFinish() {
 
 			m.MinimockCheckNamespacePermissionInspect()
 
-			m.MinimockChunkMarkdownPipeInspect()
+			m.MinimockCleanupFileInspect()
 
-			m.MinimockChunkTextPipeInspect()
-
-			m.MinimockCleanupFileWorkflowInspect()
-
-			m.MinimockCleanupKnowledgeBaseWorkflowInspect()
-
-			m.MinimockConvertToMarkdownPipeInspect()
+			m.MinimockCleanupKnowledgeBaseInspect()
 
 			m.MinimockCreateRepositoryTagInspect()
 
-			m.MinimockDeleteConvertedFileByFileUIDInspect()
-
 			m.MinimockDeleteFilesInspect()
-
-			m.MinimockDeleteFilesWithPrefixInspect()
-
-			m.MinimockDeleteFilesWorkflowInspect()
-
-			m.MinimockDeleteKnowledgeBaseInspect()
 
 			m.MinimockDeleteRepositoryTagInspect()
 
-			m.MinimockDeleteTextChunksByFileUIDInspect()
-
-			m.MinimockEmbedTextsWorkflowInspect()
-
-			m.MinimockEmbeddingTextBatchInspect()
-
-			m.MinimockEmbeddingTextPipeInspect()
-
-			m.MinimockGenerateSummaryInspect()
+			m.MinimockEmbedTextsInspect()
 
 			m.MinimockGetChunksByFileInspect()
+
+			m.MinimockGetConvertedFilePathsByFileUIDInspect()
 
 			m.MinimockGetDownloadURLInspect()
 
 			m.MinimockGetFilesByPathsInspect()
-
-			m.MinimockGetFilesWorkflowInspect()
 
 			m.MinimockGetNamespaceAndCheckPermissionInspect()
 
@@ -12078,27 +8597,21 @@ func (m *ServiceMock) MinimockFinish() {
 
 			m.MinimockGetRepositoryTagInspect()
 
+			m.MinimockGetTextChunkFilePathsByFileUIDInspect()
+
 			m.MinimockGetUploadURLInspect()
 
 			m.MinimockListRepositoryTagsInspect()
 
-			m.MinimockMinIOInspect()
-
 			m.MinimockPipelinePublicClientInspect()
 
-			m.MinimockProcessFileWorkflowInspect()
-
-			m.MinimockQuestionAnsweringPipeInspect()
+			m.MinimockProcessFileInspect()
 
 			m.MinimockRedisClientInspect()
 
 			m.MinimockRepositoryInspect()
 
 			m.MinimockSimilarityChunksSearchInspect()
-
-			m.MinimockTriggerCleanupKnowledgeBaseWorkflowInspect()
-
-			m.MinimockVectorDBInspect()
 		}
 	})
 }
@@ -12125,39 +8638,25 @@ func (m *ServiceMock) minimockDone() bool {
 		m.MinimockACLClientDone() &&
 		m.MinimockCheckCatalogUserPermissionDone() &&
 		m.MinimockCheckNamespacePermissionDone() &&
-		m.MinimockChunkMarkdownPipeDone() &&
-		m.MinimockChunkTextPipeDone() &&
-		m.MinimockCleanupFileWorkflowDone() &&
-		m.MinimockCleanupKnowledgeBaseWorkflowDone() &&
-		m.MinimockConvertToMarkdownPipeDone() &&
+		m.MinimockCleanupFileDone() &&
+		m.MinimockCleanupKnowledgeBaseDone() &&
 		m.MinimockCreateRepositoryTagDone() &&
-		m.MinimockDeleteConvertedFileByFileUIDDone() &&
 		m.MinimockDeleteFilesDone() &&
-		m.MinimockDeleteFilesWithPrefixDone() &&
-		m.MinimockDeleteFilesWorkflowDone() &&
-		m.MinimockDeleteKnowledgeBaseDone() &&
 		m.MinimockDeleteRepositoryTagDone() &&
-		m.MinimockDeleteTextChunksByFileUIDDone() &&
-		m.MinimockEmbedTextsWorkflowDone() &&
-		m.MinimockEmbeddingTextBatchDone() &&
-		m.MinimockEmbeddingTextPipeDone() &&
-		m.MinimockGenerateSummaryDone() &&
+		m.MinimockEmbedTextsDone() &&
 		m.MinimockGetChunksByFileDone() &&
+		m.MinimockGetConvertedFilePathsByFileUIDDone() &&
 		m.MinimockGetDownloadURLDone() &&
 		m.MinimockGetFilesByPathsDone() &&
-		m.MinimockGetFilesWorkflowDone() &&
 		m.MinimockGetNamespaceAndCheckPermissionDone() &&
 		m.MinimockGetNamespaceByNsIDDone() &&
 		m.MinimockGetRepositoryTagDone() &&
+		m.MinimockGetTextChunkFilePathsByFileUIDDone() &&
 		m.MinimockGetUploadURLDone() &&
 		m.MinimockListRepositoryTagsDone() &&
-		m.MinimockMinIODone() &&
 		m.MinimockPipelinePublicClientDone() &&
-		m.MinimockProcessFileWorkflowDone() &&
-		m.MinimockQuestionAnsweringPipeDone() &&
+		m.MinimockProcessFileDone() &&
 		m.MinimockRedisClientDone() &&
 		m.MinimockRepositoryDone() &&
-		m.MinimockSimilarityChunksSearchDone() &&
-		m.MinimockTriggerCleanupKnowledgeBaseWorkflowDone() &&
-		m.MinimockVectorDBDone()
+		m.MinimockSimilarityChunksSearchDone()
 }

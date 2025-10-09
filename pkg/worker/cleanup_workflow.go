@@ -10,10 +10,24 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"github.com/instill-ai/artifact-backend/config"
-	"github.com/instill-ai/artifact-backend/pkg/service"
+	"github.com/instill-ai/artifact-backend/pkg/types"
 
 	errorsx "github.com/instill-ai/x/errors"
 )
+
+// CleanupFileWorkflowParam defines the parameters for the CleanupFileWorkflow
+type CleanupFileWorkflowParam struct {
+	FileUID             types.FileUIDType
+	UserUID             types.UserUIDType
+	RequesterUID        types.RequesterUIDType
+	WorkflowID          string
+	IncludeOriginalFile bool
+}
+
+// CleanupKnowledgeBaseWorkflowParam defines the parameters for the CleanupKnowledgeBaseWorkflow
+type CleanupKnowledgeBaseWorkflowParam struct {
+	KBUID types.KBUIDType
+}
 
 type cleanupFileWorkflow struct {
 	temporalClient client.Client
@@ -21,14 +35,14 @@ type cleanupFileWorkflow struct {
 }
 
 // NewCleanupFileWorkflow creates a new CleanupFileWorkflow instance
-func NewCleanupFileWorkflow(temporalClient client.Client, worker *Worker) service.CleanupFileWorkflow {
+func NewCleanupFileWorkflow(temporalClient client.Client, worker *Worker) *cleanupFileWorkflow {
 	return &cleanupFileWorkflow{
 		temporalClient: temporalClient,
 		worker:         worker,
 	}
 }
 
-func (w *cleanupFileWorkflow) Execute(ctx context.Context, param service.CleanupFileWorkflowParam) error {
+func (w *cleanupFileWorkflow) Execute(ctx context.Context, param CleanupFileWorkflowParam) error {
 	workflowID := fmt.Sprintf("cleanup-file-%s", param.FileUID.String())
 	workflowOptions := client.StartWorkflowOptions{
 		ID:                    workflowID,
@@ -49,15 +63,15 @@ type cleanupKnowledgeBaseWorkflow struct {
 }
 
 // NewCleanupKnowledgeBaseWorkflow creates a new CleanupKnowledgeBaseWorkflow instance
-func NewCleanupKnowledgeBaseWorkflow(temporalClient client.Client, worker *Worker) service.CleanupKnowledgeBaseWorkflow {
+func NewCleanupKnowledgeBaseWorkflow(temporalClient client.Client, worker *Worker) *cleanupKnowledgeBaseWorkflow {
 	return &cleanupKnowledgeBaseWorkflow{
 		temporalClient: temporalClient,
 		worker:         worker,
 	}
 }
 
-func (w *cleanupKnowledgeBaseWorkflow) Execute(ctx context.Context, param service.CleanupKnowledgeBaseWorkflowParam) error {
-	workflowID := fmt.Sprintf("cleanup-kb-%s", param.KnowledgeBaseUID.String())
+func (w *cleanupKnowledgeBaseWorkflow) Execute(ctx context.Context, param CleanupKnowledgeBaseWorkflowParam) error {
+	workflowID := fmt.Sprintf("cleanup-kb-%s", param.KBUID.String())
 	workflowOptions := client.StartWorkflowOptions{
 		ID:                    workflowID,
 		TaskQueue:             TaskQueue,
@@ -78,7 +92,7 @@ func (w *cleanupKnowledgeBaseWorkflow) Execute(ctx context.Context, param servic
 // - Text chunks
 // - Embeddings from both Milvus and Postgres
 // Use this when deleting individual files from a knowledge base.
-func (w *Worker) CleanupFileWorkflow(ctx workflow.Context, param service.CleanupFileWorkflowParam) error {
+func (w *Worker) CleanupFileWorkflow(ctx workflow.Context, param CleanupFileWorkflowParam) error {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("Starting CleanupFileWorkflow",
 		"fileUID", param.FileUID.String(),
@@ -132,10 +146,10 @@ func (w *Worker) CleanupFileWorkflow(ctx workflow.Context, param service.Cleanup
 		}),
 	})
 
-	// Delete chunks
+	// Delete text chunks
 	tasks = append(tasks, cleanupTask{
-		name: "delete chunks",
-		future: workflow.ExecuteActivity(ctx, w.DeleteChunksFromMinIOActivity, &DeleteChunksFromMinIOActivityParam{
+		name: "delete text chunks",
+		future: workflow.ExecuteActivity(ctx, w.DeleteTextChunksFromMinIOActivity, &DeleteTextChunksFromMinIOActivityParam{
 			FileUID: fileUID,
 		}),
 	})
@@ -196,15 +210,15 @@ func (w *Worker) CleanupFileWorkflow(ctx workflow.Context, param service.Cleanup
 // - Entire Milvus collection (all embeddings)
 // - All file records in Postgres
 // - All converted file records in Postgres
-// - All chunk records in Postgres
+// - All text chunk records in Postgres
 // - All embedding records in Postgres
 // - ACL permissions for the knowledge base
 // Use this when deleting an entire knowledge base (not individual files).
-func (w *Worker) CleanupKnowledgeBaseWorkflow(ctx workflow.Context, param service.CleanupKnowledgeBaseWorkflowParam) error {
+func (w *Worker) CleanupKnowledgeBaseWorkflow(ctx workflow.Context, param CleanupKnowledgeBaseWorkflowParam) error {
 	logger := workflow.GetLogger(ctx)
-	logger.Info("Starting CleanupKnowledgeBaseWorkflow", "kbUID", param.KnowledgeBaseUID.String())
+	logger.Info("Starting CleanupKnowledgeBaseWorkflow", "kbUID", param.KBUID.String())
 
-	kbUID := param.KnowledgeBaseUID
+	kbUID := param.KBUID
 
 	activityOptions := workflow.ActivityOptions{
 		StartToCloseTimeout: ActivityTimeoutLong,
@@ -223,7 +237,7 @@ func (w *Worker) CleanupKnowledgeBaseWorkflow(ctx workflow.Context, param servic
 
 	// Step 1: Delete all files from MinIO
 	err := workflow.ExecuteActivity(ctx, w.DeleteKBFilesFromMinIOActivity, &DeleteKBFilesFromMinIOActivityParam{
-		KnowledgeBaseUID: kbUID,
+		KBUID: kbUID,
 	}).Get(ctx, nil)
 	if err != nil {
 		errMsg := fmt.Sprintf("delete files from MinIO: %s", errorsx.MessageOrErr(err))
@@ -235,7 +249,7 @@ func (w *Worker) CleanupKnowledgeBaseWorkflow(ctx workflow.Context, param servic
 
 	// Step 2: Drop Milvus collection
 	err = workflow.ExecuteActivity(ctx, w.DropVectorDBCollectionActivity, &DropVectorDBCollectionActivityParam{
-		KnowledgeBaseUID: kbUID,
+		KBUID: kbUID,
 	}).Get(ctx, nil)
 	if err != nil {
 		errMsg := fmt.Sprintf("drop Milvus collection: %s", errorsx.MessageOrErr(err))
@@ -247,7 +261,7 @@ func (w *Worker) CleanupKnowledgeBaseWorkflow(ctx workflow.Context, param servic
 
 	// Step 3: Delete file records
 	err = workflow.ExecuteActivity(ctx, w.DeleteKBFileRecordsActivity, &DeleteKBFileRecordsActivityParam{
-		KnowledgeBaseUID: kbUID,
+		KBUID: kbUID,
 	}).Get(ctx, nil)
 	if err != nil {
 		errMsg := fmt.Sprintf("delete file records: %s", errorsx.MessageOrErr(err))
@@ -259,7 +273,7 @@ func (w *Worker) CleanupKnowledgeBaseWorkflow(ctx workflow.Context, param servic
 
 	// Step 4: Delete converted file records
 	err = workflow.ExecuteActivity(ctx, w.DeleteKBConvertedFileRecordsActivity, &DeleteKBConvertedFileRecordsActivityParam{
-		KnowledgeBaseUID: kbUID,
+		KBUID: kbUID,
 	}).Get(ctx, nil)
 	if err != nil {
 		errMsg := fmt.Sprintf("delete converted file records: %s", errorsx.MessageOrErr(err))
@@ -269,21 +283,21 @@ func (w *Worker) CleanupKnowledgeBaseWorkflow(ctx workflow.Context, param servic
 			"error", err.Error())
 	}
 
-	// Step 5: Delete chunk records
-	err = workflow.ExecuteActivity(ctx, w.DeleteKBChunkRecordsActivity, &DeleteKBChunkRecordsActivityParam{
-		KnowledgeBaseUID: kbUID,
+	// Step 5: Delete text chunk records
+	err = workflow.ExecuteActivity(ctx, w.DeleteKBTextChunkRecordsActivity, &DeleteKBTextChunkRecordsActivityParam{
+		KBUID: kbUID,
 	}).Get(ctx, nil)
 	if err != nil {
-		errMsg := fmt.Sprintf("delete chunk records: %s", errorsx.MessageOrErr(err))
+		errMsg := fmt.Sprintf("delete text chunk records: %s", errorsx.MessageOrErr(err))
 		errors = append(errors, errMsg)
-		logger.Error("Failed to delete chunk records",
+		logger.Error("Failed to delete text chunk records",
 			"kbUID", kbUID.String(),
 			"error", err.Error())
 	}
 
 	// Step 6: Delete embedding records
 	err = workflow.ExecuteActivity(ctx, w.DeleteKBEmbeddingRecordsActivity, &DeleteKBEmbeddingRecordsActivityParam{
-		KnowledgeBaseUID: kbUID,
+		KBUID: kbUID,
 	}).Get(ctx, nil)
 	if err != nil {
 		errMsg := fmt.Sprintf("delete embedding records: %s", errorsx.MessageOrErr(err))
@@ -295,7 +309,7 @@ func (w *Worker) CleanupKnowledgeBaseWorkflow(ctx workflow.Context, param servic
 
 	// Step 7: Purge ACL (must be done last)
 	err = workflow.ExecuteActivity(ctx, w.PurgeKBACLActivity, &PurgeKBACLActivityParam{
-		KnowledgeBaseUID: kbUID,
+		KBUID: kbUID,
 	}).Get(ctx, nil)
 	if err != nil {
 		errMsg := fmt.Sprintf("purge ACL: %s", errorsx.MessageOrErr(err))
@@ -308,7 +322,7 @@ func (w *Worker) CleanupKnowledgeBaseWorkflow(ctx workflow.Context, param servic
 	// If any cleanup operation failed, return an error
 	if len(errors) > 0 {
 		logger.Error("CleanupKnowledgeBaseWorkflow completed with errors",
-			"kbUID", param.KnowledgeBaseUID.String(),
+			"kbUID", param.KBUID.String(),
 			"errorCount", len(errors),
 			"errors", errors)
 		err := errorsx.AddMessage(
@@ -318,6 +332,6 @@ func (w *Worker) CleanupKnowledgeBaseWorkflow(ctx workflow.Context, param servic
 		return err
 	}
 
-	logger.Info("CleanupKnowledgeBaseWorkflow completed successfully", "kbUID", param.KnowledgeBaseUID.String())
+	logger.Info("CleanupKnowledgeBaseWorkflow completed successfully", "kbUID", param.KBUID.String())
 	return nil
 }

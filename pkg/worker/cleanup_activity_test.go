@@ -11,9 +11,8 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/instill-ai/artifact-backend/pkg/mock"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
-	"github.com/instill-ai/artifact-backend/pkg/service"
+	"github.com/instill-ai/artifact-backend/pkg/worker/mock"
 )
 
 func TestCleanupFileWorkflowParam_Validation(t *testing.T) {
@@ -21,7 +20,7 @@ func TestCleanupFileWorkflowParam_Validation(t *testing.T) {
 	fileUID := uuid.Must(uuid.NewV4())
 	userUID := uuid.Must(uuid.NewV4())
 
-	param := service.CleanupFileWorkflowParam{
+	param := CleanupFileWorkflowParam{
 		FileUID:             fileUID,
 		IncludeOriginalFile: true,
 		UserUID:             userUID,
@@ -39,12 +38,12 @@ func TestCleanupKnowledgeBaseWorkflowParam_Validation(t *testing.T) {
 	c := qt.New(t)
 	kbUID := uuid.Must(uuid.NewV4())
 
-	param := service.CleanupKnowledgeBaseWorkflowParam{
-		KnowledgeBaseUID: kbUID,
+	param := CleanupKnowledgeBaseWorkflowParam{
+		KBUID: kbUID,
 	}
 
-	c.Assert(param.KnowledgeBaseUID, qt.Not(qt.Equals), uuid.Nil)
-	c.Assert(param.KnowledgeBaseUID, qt.Equals, kbUID)
+	c.Assert(param.KBUID, qt.Not(qt.Equals), uuid.Nil)
+	c.Assert(param.KBUID, qt.Equals, kbUID)
 }
 
 func TestDeleteOriginalFileActivity_Success(t *testing.T) {
@@ -56,23 +55,15 @@ func TestDeleteOriginalFileActivity_Success(t *testing.T) {
 	bucket := "test-bucket"
 	destination := "kb/file/test.pdf"
 
-	mockRepo := mock.NewRepositoryIMock(mc)
-	mockRepo.GetKnowledgeBaseFilesByFileUIDsMock.
+	mockRepository := mock.NewRepositoryMock(mc)
+	mockRepository.GetKnowledgeBaseFilesByFileUIDsMock.
 		When(minimock.AnyContext, []uuid.UUID{fileUID}).
-		Then([]repository.KnowledgeBaseFile{
+		Then([]repository.KnowledgeBaseFileModel{
 			{UID: fileUID, Destination: destination},
 		}, nil)
+	mockRepository.DeleteFileMock.Return(nil)
 
-	mockService := mock.NewServiceMock(mc)
-	mockService.RepositoryMock.Return(mockRepo)
-	mockService.DeleteFilesMock.
-		When(minimock.AnyContext, bucket, []string{destination}).
-		Then(nil)
-
-	w := &Worker{
-		service: mockService,
-		log:     zap.NewNop(),
-	}
+	w := &Worker{repository: mockRepository, log: zap.NewNop()}
 
 	param := &DeleteOriginalFileActivityParam{
 		FileUID: fileUID,
@@ -91,18 +82,12 @@ func TestDeleteOriginalFileActivity_FileNotFound(t *testing.T) {
 	fileUID := uuid.Must(uuid.NewV4())
 	bucket := "test-bucket"
 
-	mockRepo := mock.NewRepositoryIMock(mc)
-	mockRepo.GetKnowledgeBaseFilesByFileUIDsMock.
+	mockRepository := mock.NewRepositoryMock(mc)
+	mockRepository.GetKnowledgeBaseFilesByFileUIDsMock.
 		When(minimock.AnyContext, []uuid.UUID{fileUID}).
-		Then([]repository.KnowledgeBaseFile{}, nil)
+		Then([]repository.KnowledgeBaseFileModel{}, nil)
 
-	mockService := mock.NewServiceMock(mc)
-	mockService.RepositoryMock.Return(mockRepo)
-
-	w := &Worker{
-		service: mockService,
-		log:     zap.NewNop(),
-	}
+	w := &Worker{repository: mockRepository, log: zap.NewNop()}
 
 	param := &DeleteOriginalFileActivityParam{
 		FileUID: fileUID,
@@ -122,20 +107,14 @@ func TestDeleteOriginalFileActivity_NoDestination(t *testing.T) {
 	fileUID := uuid.Must(uuid.NewV4())
 	bucket := "test-bucket"
 
-	mockRepo := mock.NewRepositoryIMock(mc)
-	mockRepo.GetKnowledgeBaseFilesByFileUIDsMock.
+	mockRepository := mock.NewRepositoryMock(mc)
+	mockRepository.GetKnowledgeBaseFilesByFileUIDsMock.
 		When(minimock.AnyContext, []uuid.UUID{fileUID}).
-		Then([]repository.KnowledgeBaseFile{
+		Then([]repository.KnowledgeBaseFileModel{
 			{UID: fileUID, Destination: ""}, // No destination
 		}, nil)
 
-	mockService := mock.NewServiceMock(mc)
-	mockService.RepositoryMock.Return(mockRepo)
-
-	w := &Worker{
-		service: mockService,
-		log:     zap.NewNop(),
-	}
+	w := &Worker{repository: mockRepository, log: zap.NewNop()}
 
 	param := &DeleteOriginalFileActivityParam{
 		FileUID: fileUID,
@@ -156,28 +135,20 @@ func TestDeleteConvertedFileActivity_Success(t *testing.T) {
 	kbUID := uuid.Must(uuid.NewV4())
 	convertedFileUID := uuid.Must(uuid.NewV4())
 
-	mockRepo := mock.NewRepositoryIMock(mc)
-	mockRepo.GetConvertedFileByFileUIDMock.
+	mockRepository := mock.NewRepositoryMock(mc)
+	mockRepository.GetConvertedFileByFileUIDMock.
 		When(minimock.AnyContext, fileUID).
-		Then(&repository.ConvertedFile{
+		Then(&repository.ConvertedFileModel{
 			UID:   convertedFileUID,
-			KbUID: kbUID,
+			KBUID: kbUID,
 		}, nil)
 
-	mockRepo.HardDeleteConvertedFileByFileUIDMock.
+	mockRepository.HardDeleteConvertedFileByFileUIDMock.
 		When(minimock.AnyContext, fileUID).
 		Then(nil)
+	mockRepository.ListConvertedFilesByFileUIDMock.Return([]string{}, nil)
 
-	mockService := mock.NewServiceMock(mc)
-	mockService.RepositoryMock.Return(mockRepo)
-	mockService.DeleteConvertedFileByFileUIDMock.
-		When(minimock.AnyContext, kbUID, fileUID).
-		Then(nil)
-
-	w := &Worker{
-		service: mockService,
-		log:     zap.NewNop(),
-	}
+	w := &Worker{repository: mockRepository, log: zap.NewNop()}
 
 	param := &DeleteConvertedFileActivityParam{
 		FileUID: fileUID,
@@ -195,18 +166,12 @@ func TestDeleteConvertedFileActivity_NotFound(t *testing.T) {
 	ctx := context.Background()
 	fileUID := uuid.Must(uuid.NewV4())
 
-	mockRepo := mock.NewRepositoryIMock(mc)
-	mockRepo.GetConvertedFileByFileUIDMock.
+	mockRepository := mock.NewRepositoryMock(mc)
+	mockRepository.GetConvertedFileByFileUIDMock.
 		When(minimock.AnyContext, fileUID).
 		Then(nil, fmt.Errorf("not found"))
 
-	mockService := mock.NewServiceMock(mc)
-	mockService.RepositoryMock.Return(mockRepo)
-
-	w := &Worker{
-		service: mockService,
-		log:     zap.NewNop(),
-	}
+	w := &Worker{repository: mockRepository, log: zap.NewNop()}
 
 	param := &DeleteConvertedFileActivityParam{
 		FileUID: fileUID,
@@ -217,42 +182,39 @@ func TestDeleteConvertedFileActivity_NotFound(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 }
 
-func TestDeleteChunksFromMinIOActivity_Success(t *testing.T) {
+func TestDeleteTextChunksFromMinIOActivity_Success(t *testing.T) {
 	c := qt.New(t)
 	mc := minimock.NewController(t)
 
 	ctx := context.Background()
 	fileUID := uuid.Must(uuid.NewV4())
 	kbUID := uuid.Must(uuid.NewV4())
-	chunkUID := uuid.Must(uuid.NewV4())
+	textChunkUID := uuid.Must(uuid.NewV4())
 
-	mockRepo := mock.NewRepositoryIMock(mc)
-	mockRepo.ListChunksByKbFileUIDMock.
+	mockRepository := mock.NewRepositoryMock(mc)
+	mockRepository.ListTextChunksByKBFileUIDMock.
 		When(minimock.AnyContext, fileUID).
-		Then([]repository.TextChunk{
-			{UID: chunkUID, KbUID: kbUID},
+		Then([]repository.TextChunkModel{
+			{UID: textChunkUID, KBUID: kbUID},
 		}, nil)
 
-	mockRepo.HardDeleteChunksByKbFileUIDMock.
+	mockRepository.ListTextChunksByFileUIDMock.
+		When(minimock.AnyContext, kbUID, fileUID).
+		Then([]string{"chunk-path-1"}, nil)
+
+	mockRepository.DeleteFileMock.Return(nil)
+
+	mockRepository.HardDeleteTextChunksByKBFileUIDMock.
 		When(minimock.AnyContext, fileUID).
 		Then(nil)
 
-	mockService := mock.NewServiceMock(mc)
-	mockService.RepositoryMock.Return(mockRepo)
-	mockService.DeleteTextChunksByFileUIDMock.
-		When(minimock.AnyContext, kbUID, fileUID).
-		Then(nil)
+	w := &Worker{repository: mockRepository, log: zap.NewNop()}
 
-	w := &Worker{
-		service: mockService,
-		log:     zap.NewNop(),
-	}
-
-	param := &DeleteChunksFromMinIOActivityParam{
+	param := &DeleteTextChunksFromMinIOActivityParam{
 		FileUID: fileUID,
 	}
 
-	err := w.DeleteChunksFromMinIOActivity(ctx, param)
+	err := w.DeleteTextChunksFromMinIOActivity(ctx, param)
 	c.Assert(err, qt.IsNil)
 	// minimock will automatically verify that DeleteTextChunksByFileUID was called correctly
 }
@@ -266,27 +228,16 @@ func TestDeleteEmbeddingsFromVectorDBActivity_Success(t *testing.T) {
 	kbUID := uuid.Must(uuid.NewV4())
 	embeddingUID := uuid.Must(uuid.NewV4())
 
-	mockRepo := mock.NewRepositoryIMock(mc)
-	mockRepo.ListEmbeddingsByKbFileUIDMock.
+	mockRepository := mock.NewRepositoryMock(mc)
+	mockRepository.ListEmbeddingsByKBFileUIDMock.
 		When(minimock.AnyContext, fileUID).
-		Then([]repository.Embedding{
-			{UID: embeddingUID, KbUID: kbUID},
+		Then([]repository.EmbeddingModel{
+			{UID: embeddingUID, KBUID: kbUID},
 		}, nil)
 
-	mockVectorDB := mock.NewVectorDatabaseMock(mc)
-	expectedCollection := service.KBCollectionName(kbUID)
-	mockVectorDB.DeleteEmbeddingsWithFileUIDMock.
-		When(minimock.AnyContext, expectedCollection, fileUID).
-		Then(nil)
+	mockRepository.DeleteEmbeddingsWithFileUIDMock.Return(nil)
 
-	mockService := mock.NewServiceMock(mc)
-	mockService.RepositoryMock.Return(mockRepo)
-	mockService.VectorDBMock.Return(mockVectorDB)
-
-	w := &Worker{
-		service: mockService,
-		log:     zap.NewNop(),
-	}
+	w := &Worker{repository: mockRepository, log: zap.NewNop()}
 
 	param := &DeleteEmbeddingsFromVectorDBActivityParam{
 		FileUID: fileUID,
@@ -306,27 +257,16 @@ func TestDeleteEmbeddingsFromVectorDBActivity_CollectionNotFound(t *testing.T) {
 	kbUID := uuid.Must(uuid.NewV4())
 	embeddingUID := uuid.Must(uuid.NewV4())
 
-	mockRepo := mock.NewRepositoryIMock(mc)
-	mockRepo.ListEmbeddingsByKbFileUIDMock.
+	mockRepository := mock.NewRepositoryMock(mc)
+	mockRepository.ListEmbeddingsByKBFileUIDMock.
 		When(minimock.AnyContext, fileUID).
-		Then([]repository.Embedding{
-			{UID: embeddingUID, KbUID: kbUID},
+		Then([]repository.EmbeddingModel{
+			{UID: embeddingUID, KBUID: kbUID},
 		}, nil)
 
-	mockVectorDB := mock.NewVectorDatabaseMock(mc)
-	expectedCollection := service.KBCollectionName(kbUID)
-	mockVectorDB.DeleteEmbeddingsWithFileUIDMock.
-		When(minimock.AnyContext, expectedCollection, fileUID).
-		Then(fmt.Errorf("can't find collection"))
+	mockRepository.DeleteEmbeddingsWithFileUIDMock.Return(fmt.Errorf("can't find collection"))
 
-	mockService := mock.NewServiceMock(mc)
-	mockService.RepositoryMock.Return(mockRepo)
-	mockService.VectorDBMock.Return(mockVectorDB)
-
-	w := &Worker{
-		service: mockService,
-		log:     zap.NewNop(),
-	}
+	w := &Worker{repository: mockRepository, log: zap.NewNop()}
 
 	param := &DeleteEmbeddingsFromVectorDBActivityParam{
 		FileUID: fileUID,
@@ -344,22 +284,13 @@ func TestDropVectorDBCollectionActivity_Success(t *testing.T) {
 	ctx := context.Background()
 	kbUID := uuid.Must(uuid.NewV4())
 
-	mockVectorDB := mock.NewVectorDatabaseMock(mc)
-	expectedCollection := service.KBCollectionName(kbUID)
-	mockVectorDB.DropCollectionMock.
-		When(minimock.AnyContext, expectedCollection).
-		Then(nil)
+	mockRepository := mock.NewRepositoryMock(mc)
+	mockRepository.DropCollectionMock.Return(nil)
 
-	mockService := mock.NewServiceMock(mc)
-	mockService.VectorDBMock.Return(mockVectorDB)
-
-	w := &Worker{
-		service: mockService,
-		log:     zap.NewNop(),
-	}
+	w := &Worker{repository: mockRepository, log: zap.NewNop()}
 
 	param := &DropVectorDBCollectionActivityParam{
-		KnowledgeBaseUID: kbUID,
+		KBUID: kbUID,
 	}
 
 	err := w.DropVectorDBCollectionActivity(ctx, param)
@@ -374,22 +305,13 @@ func TestDropVectorDBCollectionActivity_AlreadyDropped(t *testing.T) {
 	ctx := context.Background()
 	kbUID := uuid.Must(uuid.NewV4())
 
-	mockVectorDB := mock.NewVectorDatabaseMock(mc)
-	expectedCollection := service.KBCollectionName(kbUID)
-	mockVectorDB.DropCollectionMock.
-		When(minimock.AnyContext, expectedCollection).
-		Then(fmt.Errorf("can't find collection"))
+	mockRepository := mock.NewRepositoryMock(mc)
+	mockRepository.DropCollectionMock.Return(fmt.Errorf("can't find collection"))
 
-	mockService := mock.NewServiceMock(mc)
-	mockService.VectorDBMock.Return(mockVectorDB)
-
-	w := &Worker{
-		service: mockService,
-		log:     zap.NewNop(),
-	}
+	w := &Worker{repository: mockRepository, log: zap.NewNop()}
 
 	param := &DropVectorDBCollectionActivityParam{
-		KnowledgeBaseUID: kbUID,
+		KBUID: kbUID,
 	}
 
 	// Should not error when collection doesn't exist (already dropped)

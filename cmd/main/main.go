@@ -32,7 +32,6 @@ import (
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/acl"
 	"github.com/instill-ai/artifact-backend/pkg/handler"
-	"github.com/instill-ai/artifact-backend/pkg/milvus"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/service"
 	"github.com/instill-ai/artifact-backend/pkg/usage"
@@ -41,7 +40,6 @@ import (
 
 	httpclient "github.com/instill-ai/artifact-backend/pkg/client/http"
 	database "github.com/instill-ai/artifact-backend/pkg/db"
-	minio "github.com/instill-ai/artifact-backend/pkg/minio"
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	mgmtpb "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
 	usagepb "github.com/instill-ai/protogen-go/core/usage/v1beta"
@@ -141,48 +139,32 @@ func main() {
 		redisClient, db, minioClient, vectorDB, aclClient, temporalClient, closer := newClients(ctx, logger)
 	defer closer()
 
-	// Initialize repository
-	repo := repository.NewRepository(db)
+	// Initialize repository with vector database
+	repo := repository.NewRepository(db, vectorDB, minioClient)
 
-	// Create worker instance first (without service dependencies for now)
-	// We'll set up the service layer after creating workflow wrappers
+	// Create worker
 	w, err := worker.New(
-		nil, // Service will be set after it's created
+		temporalClient,
+		repo,
+		pipelinePublicServiceClient,
+		aclClient,
+		redisClient,
 		logger,
 	)
 	if err != nil {
 		logger.Fatal("Unable to create worker", zap.Error(err))
 	}
 
-	// Initialize workflow implementations with the worker instance
-	processFileWorkflow := worker.NewProcessFileWorkflow(temporalClient, w)
-	cleanupFileWorkflow := worker.NewCleanupFileWorkflow(temporalClient, w)
-	cleanupKBWorkflow := worker.NewCleanupKnowledgeBaseWorkflow(temporalClient, w)
-	embedTextsWorkflow := worker.NewEmbedTextsWorkflow(temporalClient, w)
-	deleteFilesWorkflow := worker.NewDeleteFilesWorkflow(temporalClient, w)
-	getFilesWorkflow := worker.NewGetFilesWorkflow(temporalClient, w)
-
-	// Create service with workflow implementations
+	// Create service with worker abstraction
 	svc := service.NewService(
 		repo,
-		minioClient,
 		mgmtPrivateServiceClient,
 		pipelinePublicServiceClient,
 		httpclient.NewRegistryClient(ctx),
 		redisClient,
-		vectorDB,
 		aclClient,
-		processFileWorkflow,
-		cleanupFileWorkflow,
-		cleanupKBWorkflow,
-		embedTextsWorkflow,
-		deleteFilesWorkflow,
-		getFilesWorkflow,
+		w,
 	)
-
-	// Update the worker instance with the service
-	// (the workflow wrappers already have a reference to this worker)
-	w.SetService(svc)
 
 	privateHandler := handler.NewPrivateHandler(svc, logger)
 	artifactpb.RegisterArtifactPrivateServiceServer(
@@ -348,8 +330,8 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 	mgmtpb.MgmtPrivateServiceClient,
 	*redis.Client,
 	*gorm.DB,
-	*minio.Minio,
-	service.VectorDatabase,
+	repository.ObjectStorage,
+	repository.VectorDatabase,
 	*acl.ACLClient,
 	temporalclient.Client,
 	func(),
@@ -392,7 +374,7 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 	}
 
 	// Initialize Minio client
-	minioClient, err := minio.NewMinioClientAndInitBucket(ctx, miniox.ClientParams{
+	minioClient, err := repository.NewMinioObjectStorage(ctx, miniox.ClientParams{
 		Config: config.Config.Minio,
 		Logger: logger,
 		AppInfo: miniox.AppInfo{
@@ -405,7 +387,7 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 	}
 
 	// Initialize milvus client
-	vectorDB, vclose, err := milvus.NewVectorDatabase(ctx, config.Config.Milvus.Host, config.Config.Milvus.Port)
+	vectorDB, vclose, err := repository.NewVectorDatabase(ctx, config.Config.Milvus.Host, config.Config.Milvus.Port)
 	if err != nil {
 		logger.Fatal(fmt.Sprintf("failed to create milvus client: %v", err))
 	}

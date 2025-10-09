@@ -14,14 +14,21 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/instill-ai/artifact-backend/config"
-	"github.com/instill-ai/artifact-backend/pkg/constant"
-	"github.com/instill-ai/artifact-backend/pkg/minio"
+	"github.com/instill-ai/artifact-backend/pkg/pipeline"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
-	"github.com/instill-ai/artifact-backend/pkg/service"
+	"github.com/instill-ai/artifact-backend/pkg/types"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	errorsx "github.com/instill-ai/x/errors"
 )
+
+// ProcessFileWorkflowParam defines the parameters for ProcessFileWorkflow
+type ProcessFileWorkflowParam struct {
+	FileUID      types.FileUIDType      // File unique identifier
+	KBUID        types.KBUIDType        // Knowledge base unique identifier
+	UserUID      types.UserUIDType      // User unique identifier
+	RequesterUID types.RequesterUIDType // Requester unique identifier (for access control)
+}
 
 type processFileWorkflow struct {
 	temporalClient client.Client
@@ -29,14 +36,14 @@ type processFileWorkflow struct {
 }
 
 // NewProcessFileWorkflow creates a new ProcessFileWorkflow instance
-func NewProcessFileWorkflow(temporalClient client.Client, worker *Worker) service.ProcessFileWorkflow {
+func NewProcessFileWorkflow(temporalClient client.Client, worker *Worker) *processFileWorkflow {
 	return &processFileWorkflow{
 		temporalClient: temporalClient,
 		worker:         worker,
 	}
 }
 
-func (w *processFileWorkflow) Execute(ctx context.Context, param service.ProcessFileWorkflowParam) error {
+func (w *processFileWorkflow) Execute(ctx context.Context, param ProcessFileWorkflowParam) error {
 	workflowID := fmt.Sprintf("process-file-%s", param.FileUID.String())
 	workflowOptions := client.StartWorkflowOptions{
 		ID:                    workflowID,
@@ -57,9 +64,9 @@ func (w *processFileWorkflow) Execute(ctx context.Context, param service.Process
 //   - ProcessContentWorkflow: cleanup old file → format conversion → markdown conversion → save to DB
 //   - ProcessSummaryWorkflow: summary generation → save to DB
 //
-// 3. Chunk content and summary, generate embeddings, and save to vector DB
+// 3. Chunk content and summary into text chunks, generate embeddings, and save to vector DB
 // 4. Update metadata and cleanup cache
-func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.ProcessFileWorkflowParam) error {
+func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWorkflowParam) error {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("Starting ProcessFileWorkflow",
 		"fileUID", param.FileUID.String(),
@@ -68,7 +75,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 
 	// Extract UUIDs from parameters
 	fileUID := param.FileUID
-	knowledgeBaseUID := param.KnowledgeBaseUID
+	kbUID := param.KBUID
 	userUID := param.UserUID
 	requesterUID := param.RequesterUID
 
@@ -142,7 +149,9 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 
 	// Get current file status to determine starting point
 	var startStatus artifactpb.FileProcessStatus
-	if err := workflow.ExecuteActivity(ctx, w.GetFileStatusActivity, fileUID).Get(ctx, &startStatus); err != nil {
+	if err := workflow.ExecuteActivity(ctx, w.GetFileStatusActivity, &GetFileStatusActivityParam{
+		FileUID: fileUID,
+	}).Get(ctx, &startStatus); err != nil {
 		return handleError("get file status", err)
 	}
 
@@ -150,8 +159,8 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 	// - COMPLETED/FAILED: Full reprocessing from start (go to PROCESSING)
 	// - Old statuses (CONVERTING/SUMMARIZING): Restart from PROCESSING (parallel architecture)
 	// - PROCESSING: Continue (retry/reconciliation)
-	// - CHUNKING: Resume from chunking phase (skip conversion/summarization)
-	// - EMBEDDING: Resume from embedding phase (skip conversion/summarization/chunking)
+	// - CHUNKING: Resume from text chunking phase (skip conversion/summarization)
+	// - EMBEDDING: Resume from embedding phase (skip conversion/summarization/text chunking)
 	if startStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED ||
 		startStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_FAILED ||
 		startStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CONVERTING ||
@@ -183,8 +192,8 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 		// Step 2: Get file and KB metadata (single DB read)
 		var metadata GetFileMetadataActivityResult
 		if err := workflow.ExecuteActivity(ctx, w.GetFileMetadataActivity, &GetFileMetadataActivityParam{
-			FileUID:          fileUID,
-			KnowledgeBaseUID: knowledgeBaseUID,
+			FileUID: fileUID,
+			KBUID:   kbUID,
 		}).Get(ctx, &metadata); err != nil {
 			// If file not found, it may have been deleted - exit gracefully
 			if strings.Contains(err.Error(), "file not found") {
@@ -197,20 +206,20 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 			return handleError("get file metadata", err)
 		}
 
-		bucket := minio.BucketFromDestination(metadata.File.Destination)
+		bucket := repository.BucketFromDestination(metadata.File.Destination)
 		fileType := artifactpb.FileType(artifactpb.FileType_value[metadata.File.Type])
 
 		// Step 3: Create shared AI cache for efficient processing
 		// This cache will be used by both parallel workflows
 		var cacheResult CacheContextActivityResult
 		if err := workflow.ExecuteActivity(ctx, w.CacheContextActivity, &CacheContextActivityParam{
-			FileUID:          fileUID,
-			KnowledgeBaseUID: knowledgeBaseUID,
-			Bucket:           bucket,
-			Destination:      metadata.File.Destination,
-			FileType:         fileType,
-			Filename:         metadata.File.Name,
-			Metadata:         metadata.ExternalMetadata,
+			FileUID:     fileUID,
+			KBUID:       kbUID,
+			Bucket:      bucket,
+			Destination: metadata.File.Destination,
+			FileType:    fileType,
+			Filename:    metadata.File.Name,
+			Metadata:    metadata.ExternalMetadata,
 		}).Get(ctx, &cacheResult); err != nil {
 			// Cache creation is optional - log and continue without cache
 			logger.Warn("Cache creation failed, continuing without cache", "error", err)
@@ -298,7 +307,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 		// Create selectors for parallel execution
 		contentFuture := workflow.ExecuteChildWorkflow(contentCtx, w.ProcessContentWorkflow, ProcessContentWorkflowParam{
 			FileUID:             fileUID,
-			KnowledgeBaseUID:    knowledgeBaseUID,
+			KBUID:               kbUID,
 			Bucket:              bucket,
 			Destination:         metadata.File.Destination,
 			FileType:            fileType,
@@ -309,14 +318,14 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 		})
 
 		summaryFuture := workflow.ExecuteChildWorkflow(summaryCtx, w.ProcessSummaryWorkflow, ProcessSummaryWorkflowParam{
-			FileUID:          fileUID,
-			KnowledgeBaseUID: knowledgeBaseUID,
-			Bucket:           bucket,
-			Destination:      metadata.File.Destination,
-			FileName:         metadata.File.Name,
-			FileType:         metadata.File.Type,
-			Metadata:         metadata.ExternalMetadata,
-			CacheName:        cacheName, // Shared cache
+			FileUID:     fileUID,
+			KBUID:       kbUID,
+			Bucket:      bucket,
+			Destination: metadata.File.Destination,
+			FileName:    metadata.File.Name,
+			FileType:    metadata.File.Type,
+			Metadata:    metadata.ExternalMetadata,
+			CacheName:   cacheName, // Shared cache
 		})
 
 		// Wait for both workflows to complete
@@ -350,7 +359,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 			return handleError("update conversion metadata", err)
 		}
 
-		// Step 7: Chunk content and summary together
+		// Step 7: Chunk content and summary into text chunks
 		logger.Info("Starting CHUNKING phase (sequential after parallel workflows)",
 			"fileUID", fileUID.String(),
 			"userUID", userUID.String(),
@@ -364,11 +373,11 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 			logger.Warn("Failed to update status to CHUNKING", "error", err)
 		}
 
-		// 7a. Get converted file for chunking
+		// 7a. Get converted file for text chunking
 		var convertedFile GetConvertedFileForChunkingActivityResult
 		if err := workflow.ExecuteActivity(ctx, w.GetConvertedFileForChunkingActivity, &GetConvertedFileForChunkingActivityParam{
-			FileUID:          fileUID,
-			KnowledgeBaseUID: knowledgeBaseUID,
+			FileUID: fileUID,
+			KBUID:   kbUID,
 		}).Get(ctx, &convertedFile); err != nil {
 			return handleError("get converted file for chunking", err)
 		}
@@ -376,46 +385,46 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 		// 7b. Chunk content
 		var contentChunks ChunkContentActivityResult
 		if err := workflow.ExecuteActivity(ctx, w.ChunkContentActivity, &ChunkContentActivityParam{
-			FileUID:          fileUID,
-			KnowledgeBaseUID: knowledgeBaseUID,
-			Content:          convertedFile.Content,
-			Pipelines:        convertedFile.ChunkingPipelines,
-			Metadata:         metadata.ExternalMetadata,
+			FileUID:   fileUID,
+			KBUID:     kbUID,
+			Content:   convertedFile.Content,
+			Pipelines: convertedFile.ChunkingPipelines,
+			Metadata:  metadata.ExternalMetadata,
 		}).Get(ctx, &contentChunks); err != nil {
 			return handleError("chunk content", err)
 		}
 
-		// 7c. Combine content chunks with summary chunks (if any)
-		allChunks := contentChunks.Chunks
+		// 7c. Combine content and summary text chunks (if any)
+		allTextChunks := contentChunks.Chunks
 		if len(summaryResult.Summary) > 0 {
 			var summaryChunks ChunkContentActivityResult
 			if err := workflow.ExecuteActivity(ctx, w.ChunkContentActivity, &ChunkContentActivityParam{
-				FileUID:          fileUID,
-				KnowledgeBaseUID: knowledgeBaseUID,
-				Content:          summaryResult.Summary,
-				Pipelines:        []service.PipelineRelease{}, // Use default
-				Metadata:         metadata.ExternalMetadata,
+				FileUID:   fileUID,
+				KBUID:     kbUID,
+				Content:   summaryResult.Summary,
+				Pipelines: []pipeline.PipelineRelease{}, // Use default
+				Metadata:  metadata.ExternalMetadata,
 			}).Get(ctx, &summaryChunks); err != nil {
 				return handleError("chunk summary", err)
 			}
-			allChunks = append(allChunks, summaryChunks.Chunks...)
+			allTextChunks = append(allTextChunks, summaryChunks.Chunks...)
 		}
 
-		// 7d. Save chunks to DB (single DB transaction)
-		if err := workflow.ExecuteActivity(ctx, w.SaveChunksToDBActivity, &SaveChunksToDBActivityParam{
-			KnowledgeBaseUID: knowledgeBaseUID,
-			FileUID:          fileUID,
-			Chunks:           allChunks,
+		// 7d. Save text chunks to DB (single DB transaction)
+		if err := workflow.ExecuteActivity(ctx, w.SaveTextChunksToDBActivity, &SaveTextChunksToDBActivityParam{
+			KBUID:      kbUID,
+			FileUID:    fileUID,
+			TextChunks: allTextChunks,
 		}).Get(ctx, nil); err != nil {
-			return handleError("save chunks to DB", err)
+			return handleError("save text chunks to DB", err)
 		}
 
-		// 7e. Update chunking metadata
+		// 7e. Update text chunking metadata
 		if err := workflow.ExecuteActivity(ctx, w.UpdateChunkingMetadataActivity, &UpdateChunkingMetadataActivityParam{
 			FileUID:          fileUID,
-			KnowledgeBaseUID: knowledgeBaseUID,
+			KBUID:            kbUID,
 			ChunkingPipeline: contentChunks.PipelineRelease.Name(),
-			ChunkCount:       uint32(len(allChunks)),
+			TextChunkCount:   uint32(len(allTextChunks)),
 		}).Get(ctx, nil); err != nil {
 			return handleError("update chunking metadata", err)
 		}
@@ -424,7 +433,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 			"fileUID", fileUID.String(),
 			"userUID", userUID.String(),
 			"requesterUID", requesterUID.String(),
-			"totalChunks", len(allChunks))
+			"totalChunks", len(allTextChunks))
 
 		// Step 8: Generate embeddings
 		logger.Info("Starting EMBEDDING phase",
@@ -440,12 +449,12 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 			logger.Warn("Failed to update status to EMBEDDING", "error", err)
 		}
 
-		// 8a. Get chunks from database (single DB read + service call)
-		var chunksData GetChunksForEmbeddingActivityResult
+		// 8a. Get text chunks from database (single DB read + service call)
+		var chunksData GetTextChunksForEmbeddingActivityResult
 		if err := workflow.ExecuteActivity(ctx, w.GetChunksForEmbeddingActivity, &GetChunksForEmbeddingActivityParam{
 			FileUID: fileUID,
 		}).Get(ctx, &chunksData); err != nil {
-			return handleError("get chunks for embedding", err)
+			return handleError("get text chunks for embedding", err)
 		}
 
 		// 8b. Generate embeddings using child workflow for proper parallel batching
@@ -465,7 +474,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 		embedCtx := workflow.WithChildOptions(ctx, embedWorkflowOptions)
 
 		var embeddingVectors [][]float32
-		if err := workflow.ExecuteChildWorkflow(embedCtx, w.EmbedTextsWorkflow, service.EmbedTextsWorkflowParam{
+		if err := workflow.ExecuteChildWorkflow(embedCtx, w.EmbedTextsWorkflow, EmbedTextsWorkflowParam{
 			Texts:           chunksData.Texts,
 			BatchSize:       32, // Process 32 text chunks per batch
 			RequestMetadata: requestMetadata,
@@ -474,16 +483,16 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 		}
 
 		// Build embedding records with all required fields
-		embeddings := make([]repository.Embedding, len(chunksData.Chunks))
+		embeddings := make([]repository.EmbeddingModel, len(chunksData.Chunks))
 		for i, chunk := range chunksData.Chunks {
-			embeddings[i] = repository.Embedding{
+			embeddings[i] = repository.EmbeddingModel{
 				SourceTable: chunksData.SourceTable,
 				SourceUID:   chunk.UID,
 				Vector:      embeddingVectors[i],
-				KbUID:       knowledgeBaseUID,
-				KbFileUID:   fileUID,
-				FileType:    string(constant.DocumentFileType), // Standard file type
-				ContentType: chunk.ContentType,                 // From chunk (e.g., "text", "summary")
+				KBUID:       kbUID,
+				KBFileUID:   fileUID,
+				FileType:    string(types.DocumentFileType), // Standard file type
+				ContentType: chunk.ContentType,              // From chunk (e.g., "text", "summary")
 			}
 		}
 
@@ -495,12 +504,12 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 		childCtx := workflow.WithChildOptions(ctx, childWorkflowOptions)
 
 		if err := workflow.ExecuteChildWorkflow(childCtx, w.SaveEmbeddingsToVectorDBWorkflow, SaveEmbeddingsToVectorDBWorkflowParam{
-			KnowledgeBaseUID: knowledgeBaseUID,
-			FileUID:          fileUID,
-			FileName:         chunksData.FileName,
-			Embeddings:       embeddings,
-			UserUID:          userUID,
-			RequesterUID:     requesterUID,
+			KBUID:        kbUID,
+			FileUID:      fileUID,
+			FileName:     chunksData.FileName,
+			Embeddings:   embeddings,
+			UserUID:      userUID,
+			RequesterUID: requesterUID,
 		}).Get(childCtx, nil); err != nil {
 			return handleError("save embeddings to vector DB", err)
 		}
@@ -508,7 +517,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 		// 8d. Update embedding metadata
 		if err := workflow.ExecuteActivity(ctx, w.UpdateEmbeddingMetadataActivity, &UpdateEmbeddingMetadataActivityParam{
 			FileUID:  fileUID,
-			Pipeline: service.EmbedTextPipeline.Name(),
+			Pipeline: pipeline.EmbedTextPipeline.Name(),
 		}).Get(ctx, nil); err != nil {
 			return handleError("update embedding metadata", err)
 		}
@@ -533,11 +542,11 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 			"userUID", userUID.String(),
 			"requesterUID", requesterUID.String())
 
-		// Get file and KB metadata for chunking
+		// Get file and KB metadata for text chunking
 		var metadata GetFileMetadataActivityResult
 		if err := workflow.ExecuteActivity(ctx, w.GetFileMetadataActivity, &GetFileMetadataActivityParam{
-			FileUID:          fileUID,
-			KnowledgeBaseUID: knowledgeBaseUID,
+			FileUID: fileUID,
+			KBUID:   kbUID,
 		}).Get(ctx, &metadata); err != nil {
 			if strings.Contains(err.Error(), "file not found") {
 				logger.Info("File not found during processing, exiting workflow gracefully",
@@ -557,67 +566,67 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 			logger.Warn("Failed to update status to CHUNKING", "error", err)
 		}
 
-		// Get converted file for chunking
+		// Get converted file for text chunking
 		var convertedFile GetConvertedFileForChunkingActivityResult
 		if err := workflow.ExecuteActivity(ctx, w.GetConvertedFileForChunkingActivity, &GetConvertedFileForChunkingActivityParam{
-			FileUID:          fileUID,
-			KnowledgeBaseUID: knowledgeBaseUID,
+			FileUID: fileUID,
+			KBUID:   kbUID,
 		}).Get(ctx, &convertedFile); err != nil {
 			return handleError("get converted file for chunking", err)
 		}
 
-		// Chunk content
+		// Chunk content into text chunks
 		var contentChunks ChunkContentActivityResult
 		if err := workflow.ExecuteActivity(ctx, w.ChunkContentActivity, &ChunkContentActivityParam{
-			FileUID:          fileUID,
-			KnowledgeBaseUID: knowledgeBaseUID,
-			Content:          convertedFile.Content,
-			Pipelines:        convertedFile.ChunkingPipelines,
-			Metadata:         metadata.ExternalMetadata,
+			FileUID:   fileUID,
+			KBUID:     kbUID,
+			Content:   convertedFile.Content,
+			Pipelines: convertedFile.ChunkingPipelines,
+			Metadata:  metadata.ExternalMetadata,
 		}).Get(ctx, &contentChunks); err != nil {
-			return handleError("chunk content", err)
+			return handleError("chunk content into text chunks", err)
 		}
 
-		// Get summary for chunking (if exists)
+		// Get summary for text chunking (if exists)
 		allChunks := contentChunks.Chunks
 		if len(metadata.File.Summary) > 0 {
 			var summaryChunks ChunkContentActivityResult
 			if err := workflow.ExecuteActivity(ctx, w.ChunkContentActivity, &ChunkContentActivityParam{
-				FileUID:          fileUID,
-				KnowledgeBaseUID: knowledgeBaseUID,
-				Content:          string(metadata.File.Summary),
-				Pipelines:        []service.PipelineRelease{}, // Use default
-				Metadata:         metadata.ExternalMetadata,
+				FileUID:   fileUID,
+				KBUID:     kbUID,
+				Content:   string(metadata.File.Summary),
+				Pipelines: []pipeline.PipelineRelease{},
+				Metadata:  metadata.ExternalMetadata,
 			}).Get(ctx, &summaryChunks); err != nil {
-				return handleError("chunk summary", err)
+				return handleError("chunk summary into text chunks", err)
 			}
 			allChunks = append(allChunks, summaryChunks.Chunks...)
 		}
 
-		// Save chunks to DB
-		if err := workflow.ExecuteActivity(ctx, w.SaveChunksToDBActivity, &SaveChunksToDBActivityParam{
-			KnowledgeBaseUID: knowledgeBaseUID,
-			FileUID:          fileUID,
-			Chunks:           allChunks,
+		// Save text chunks to DB
+		if err := workflow.ExecuteActivity(ctx, w.SaveTextChunksToDBActivity, &SaveTextChunksToDBActivityParam{
+			KBUID:      kbUID,
+			FileUID:    fileUID,
+			TextChunks: allChunks,
 		}).Get(ctx, nil); err != nil {
-			return handleError("save chunks to DB", err)
+			return handleError("save text chunks to DB", err)
 		}
 
-		// Update chunking metadata
+		// Update text chunking metadata
 		if err := workflow.ExecuteActivity(ctx, w.UpdateChunkingMetadataActivity, &UpdateChunkingMetadataActivityParam{
 			FileUID:          fileUID,
-			KnowledgeBaseUID: knowledgeBaseUID,
+			KBUID:            kbUID,
 			ChunkingPipeline: contentChunks.PipelineRelease.Name(),
-			ChunkCount:       uint32(len(allChunks)),
+			TextChunkCount:   uint32(len(allChunks)),
 		}).Get(ctx, nil); err != nil {
-			return handleError("update chunking metadata", err)
+			return handleError("update text chunking metadata", err)
 		}
 
 		logger.Info("CHUNKING phase completed successfully",
 			"fileUID", fileUID.String(),
 			"userUID", userUID.String(),
 			"requesterUID", requesterUID.String(),
-			"totalChunks", len(allChunks))
+			"totalTextChunks", len(allChunks))
 
 		// Update status to EMBEDDING and continue
 		if err := workflow.ExecuteActivity(ctx, w.UpdateFileStatusActivity, &UpdateFileStatusActivityParam{
@@ -631,7 +640,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 		startStatus = artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_EMBEDDING
 	}
 
-	// Resume from EMBEDDING phase (skip conversion/summarization/chunking)
+	// Resume from EMBEDDING phase (skip conversion/summarization/text chunking)
 	if startStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_EMBEDDING {
 		logger.Info("Resuming from EMBEDDING phase",
 			"fileUID", fileUID.String(),
@@ -646,12 +655,12 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 			logger.Warn("Failed to update status to EMBEDDING", "error", err)
 		}
 
-		// Get chunks from database
-		var chunksData GetChunksForEmbeddingActivityResult
+		// Get text chunks from database
+		var chunksData GetTextChunksForEmbeddingActivityResult
 		if err := workflow.ExecuteActivity(ctx, w.GetChunksForEmbeddingActivity, &GetChunksForEmbeddingActivityParam{
 			FileUID: fileUID,
 		}).Get(ctx, &chunksData); err != nil {
-			return handleError("get chunks for embedding", err)
+			return handleError("get text chunks for embedding", err)
 		}
 
 		// Generate embeddings using child workflow
@@ -670,7 +679,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 		embedCtx := workflow.WithChildOptions(ctx, embedWorkflowOptions)
 
 		var embeddingVectors [][]float32
-		if err := workflow.ExecuteChildWorkflow(embedCtx, w.EmbedTextsWorkflow, service.EmbedTextsWorkflowParam{
+		if err := workflow.ExecuteChildWorkflow(embedCtx, w.EmbedTextsWorkflow, EmbedTextsWorkflowParam{
 			Texts:           chunksData.Texts,
 			BatchSize:       32,
 			RequestMetadata: requestMetadata,
@@ -679,15 +688,15 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 		}
 
 		// Build embedding records
-		embeddings := make([]repository.Embedding, len(chunksData.Chunks))
+		embeddings := make([]repository.EmbeddingModel, len(chunksData.Chunks))
 		for i, chunk := range chunksData.Chunks {
-			embeddings[i] = repository.Embedding{
+			embeddings[i] = repository.EmbeddingModel{
 				SourceTable: chunksData.SourceTable,
 				SourceUID:   chunk.UID,
 				Vector:      embeddingVectors[i],
-				KbUID:       knowledgeBaseUID,
-				KbFileUID:   fileUID,
-				FileType:    string(constant.DocumentFileType),
+				KBUID:       kbUID,
+				KBFileUID:   fileUID,
+				FileType:    string(types.DocumentFileType),
 				ContentType: chunk.ContentType,
 			}
 		}
@@ -699,12 +708,12 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 		childCtx := workflow.WithChildOptions(ctx, childWorkflowOptions)
 
 		if err := workflow.ExecuteChildWorkflow(childCtx, w.SaveEmbeddingsToVectorDBWorkflow, SaveEmbeddingsToVectorDBWorkflowParam{
-			KnowledgeBaseUID: knowledgeBaseUID,
-			FileUID:          fileUID,
-			FileName:         chunksData.FileName,
-			Embeddings:       embeddings,
-			UserUID:          userUID,
-			RequesterUID:     requesterUID,
+			KBUID:        kbUID,
+			FileUID:      fileUID,
+			FileName:     chunksData.FileName,
+			Embeddings:   embeddings,
+			UserUID:      userUID,
+			RequesterUID: requesterUID,
 		}).Get(childCtx, nil); err != nil {
 			return handleError("save embeddings to vector DB", err)
 		}
@@ -712,7 +721,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 		// Update embedding metadata
 		if err := workflow.ExecuteActivity(ctx, w.UpdateEmbeddingMetadataActivity, &UpdateEmbeddingMetadataActivityParam{
 			FileUID:  fileUID,
-			Pipeline: service.EmbedTextPipeline.Name(),
+			Pipeline: pipeline.EmbedTextPipeline.Name(),
 		}).Get(ctx, nil); err != nil {
 			return handleError("update embedding metadata", err)
 		}
@@ -742,16 +751,16 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param service.Process
 
 // ProcessContentWorkflowParam defines the input parameters for ProcessContentWorkflow
 type ProcessContentWorkflowParam struct {
-	FileUID             uuid.UUID                 // File unique identifier
-	KnowledgeBaseUID    uuid.UUID                 // Knowledge base unique identifier
-	Bucket              string                    // MinIO bucket containing the file
-	Destination         string                    // MinIO path to the file
-	FileType            artifactpb.FileType       // Original file type
-	Filename            string                    // File name for identification
-	ConvertingPipelines []service.PipelineRelease // Pipelines for markdown conversion (fallback)
-	Metadata            *structpb.Struct          // Request metadata for authentication
-	CacheName           string                    // Shared AI cache from parent workflow
-	ConversionMetadata  map[string]interface{}    // Conversion metadata to be saved by parent (unused, kept for consistency)
+	FileUID             types.FileUIDType          // File unique identifier
+	KBUID               types.KBUIDType            // Knowledge base unique identifier
+	Bucket              string                     // MinIO bucket containing the file
+	Destination         string                     // MinIO path to the file
+	FileType            artifactpb.FileType        // Original file type
+	Filename            string                     // File name for identification
+	ConvertingPipelines []pipeline.PipelineRelease // Pipelines for markdown conversion (fallback)
+	Metadata            *structpb.Struct           // Request metadata for authentication
+	CacheName           string                     // Shared AI cache from parent workflow
+	ConversionMetadata  map[string]interface{}     // Conversion metadata to be saved by parent (unused, kept for consistency)
 }
 
 // ProcessContentWorkflowResult defines the output of ProcessContentWorkflow
@@ -759,10 +768,11 @@ type ProcessContentWorkflowResult struct {
 	Markdown           string                   // Converted markdown content
 	Length             []uint32                 // Length of markdown sections
 	PositionData       *repository.PositionData // Position metadata (e.g., page mappings)
-	ConversionPipeline service.PipelineRelease  // Pipeline used (empty if AI was used)
+	ConversionPipeline pipeline.PipelineRelease // Pipeline used (empty if AI was used)
 	ConvertedType      artifactpb.FileType      // File type after format conversion
 	OriginalType       artifactpb.FileType      // Original file type
 	FormatConverted    bool                     // Whether format conversion was performed
+	UsageMetadata      any                      // Token usage metadata from AI conversion (nil if pipeline was used)
 }
 
 // ProcessContentWorkflow is a child workflow that handles:
@@ -772,8 +782,8 @@ type ProcessContentWorkflowResult struct {
 // 4. Save converted file to DB and MinIO
 //
 // This workflow runs in parallel with ProcessSummaryWorkflow to optimize processing time.
-// Note: Chunking and embedding are handled by the parent workflow after both child workflows complete,
-// to ensure content and summary chunks are combined and saved together.
+// Note: Text chunking and embedding are handled by the parent workflow after both child workflows complete,
+// to ensure content and summary text chunks are combined and saved together.
 func (w *Worker) ProcessContentWorkflow(ctx workflow.Context, param ProcessContentWorkflowParam) (*ProcessContentWorkflowResult, error) {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("ProcessContentWorkflow started",
@@ -807,14 +817,14 @@ func (w *Worker) ProcessContentWorkflow(ctx workflow.Context, param ProcessConte
 	// ===== PHASE 1: FORMAT CONVERSION =====
 	var convertResult ConvertFileTypeActivityResult
 	if err := workflow.ExecuteActivity(activityCtx, w.ConvertFileTypeActivity, &ConvertFileTypeActivityParam{
-		FileUID:          param.FileUID,
-		KnowledgeBaseUID: param.KnowledgeBaseUID,
-		Bucket:           param.Bucket,
-		Destination:      param.Destination,
-		FileType:         param.FileType,
-		Filename:         param.Filename,
-		Pipelines:        []service.PipelineRelease{service.ConvertFileTypePipeline},
-		Metadata:         param.Metadata,
+		FileUID:     param.FileUID,
+		KBUID:       param.KBUID,
+		Bucket:      param.Bucket,
+		Destination: param.Destination,
+		FileType:    param.FileType,
+		Filename:    param.Filename,
+		Pipelines:   []pipeline.PipelineRelease{pipeline.ConvertFileTypePipeline},
+		Metadata:    param.Metadata,
 	}).Get(activityCtx, &convertResult); err != nil {
 		// Format conversion failure is not fatal - continue with original file
 		logger.Warn("Format conversion failed, continuing with original file", "error", err)
@@ -864,8 +874,8 @@ func (w *Worker) ProcessContentWorkflow(ctx workflow.Context, param ProcessConte
 	}
 
 	// ===== PHASE 2: MARKDOWN CONVERSION =====
-	var conversionResult ConvertToMarkdownFileActivityResult
-	if err := workflow.ExecuteActivity(activityCtx, w.ConvertToMarkdownFileActivity, &ConvertToMarkdownFileActivityParam{
+	var conversionResult ConvertToFileActivityResult
+	if err := workflow.ExecuteActivity(activityCtx, w.ConvertToFileActivity, &ConvertToFileActivityParam{
 		Bucket:      effectiveBucket,
 		Destination: effectiveDestination,
 		FileType:    effectiveFileType,
@@ -881,13 +891,14 @@ func (w *Worker) ProcessContentWorkflow(ctx workflow.Context, param ProcessConte
 	result.Length = conversionResult.Length
 	result.PositionData = conversionResult.PositionData
 	result.ConversionPipeline = conversionResult.PipelineRelease
+	result.UsageMetadata = conversionResult.UsageMetadata
 
 	logger.Info("Markdown conversion completed",
 		"markdownLength", len(conversionResult.Markdown),
 		"pipeline", conversionResult.PipelineRelease.Name())
 
 	// ===== PHASE 3: SAVE CONVERTED FILE =====
-	var convertedFileUID uuid.UUID
+	var convertedFileUID types.FileUIDType
 
 	// For TEXT/MARKDOWN files, create a record pointing to the original file (no MinIO upload)
 	fileType := param.FileType
@@ -895,7 +906,7 @@ func (w *Worker) ProcessContentWorkflow(ctx workflow.Context, param ProcessConte
 		convertedFileUID, _ = uuid.NewV4()
 
 		if err := workflow.ExecuteActivity(activityCtx, w.CreateConvertedFileRecordActivity, &CreateConvertedFileRecordActivityParam{
-			KnowledgeBaseUID: param.KnowledgeBaseUID,
+			KBUID:            param.KBUID,
 			FileUID:          param.FileUID,
 			ConvertedFileUID: convertedFileUID,
 			FileName:         "converted_" + param.Filename,
@@ -911,7 +922,7 @@ func (w *Worker) ProcessContentWorkflow(ctx workflow.Context, param ProcessConte
 
 		// Step 1: Create DB record with placeholder destination
 		if err := workflow.ExecuteActivity(activityCtx, w.CreateConvertedFileRecordActivity, &CreateConvertedFileRecordActivityParam{
-			KnowledgeBaseUID: param.KnowledgeBaseUID,
+			KBUID:            param.KBUID,
 			FileUID:          param.FileUID,
 			ConvertedFileUID: convertedFileUID,
 			FileName:         "converted_" + param.Filename,
@@ -925,7 +936,7 @@ func (w *Worker) ProcessContentWorkflow(ctx workflow.Context, param ProcessConte
 		// Step 2: Upload to MinIO
 		var uploadResult UploadConvertedFileToMinIOActivityResult
 		if err := workflow.ExecuteActivity(activityCtx, w.UploadConvertedFileToMinIOActivity, &UploadConvertedFileToMinIOActivityParam{
-			KnowledgeBaseUID: param.KnowledgeBaseUID,
+			KBUID:            param.KBUID,
 			FileUID:          param.FileUID,
 			ConvertedFileUID: convertedFileUID,
 			Content:          conversionResult.Markdown,
@@ -974,20 +985,21 @@ func (w *Worker) ProcessContentWorkflow(ctx workflow.Context, param ProcessConte
 
 // ProcessSummaryWorkflowParam defines the input parameters for ProcessSummaryWorkflow
 type ProcessSummaryWorkflowParam struct {
-	FileUID          uuid.UUID        // File unique identifier
-	KnowledgeBaseUID uuid.UUID        // Knowledge base unique identifier (unused, kept for consistency)
-	Bucket           string           // MinIO bucket containing the file
-	Destination      string           // MinIO path to the file
-	FileName         string           // File name for identification
-	FileType         string           // File type for summarization
-	Metadata         *structpb.Struct // Request metadata for authentication
-	CacheName        string           // Shared AI cache from parent workflow
+	FileUID     types.FileUIDType // File unique identifier
+	KBUID       types.KBUIDType   // Knowledge base unique identifier (unused, kept for consistency)
+	Bucket      string            // MinIO bucket containing the file
+	Destination string            // MinIO path to the file
+	FileName    string            // File name for identification
+	FileType    string            // File type for summarization
+	Metadata    *structpb.Struct  // Request metadata for authentication
+	CacheName   string            // Shared AI cache from parent workflow
 }
 
 // ProcessSummaryWorkflowResult defines the output of ProcessSummaryWorkflow
 type ProcessSummaryWorkflowResult struct {
-	Summary  string // Generated summary text
-	Pipeline string // Pipeline used for summary generation (empty if AI was used)
+	Summary       string // Generated summary text
+	Pipeline      string // Pipeline used for summary generation (empty if AI was used)
+	UsageMetadata any    // Token usage metadata from AI summarization (nil if pipeline was used)
 }
 
 // ProcessSummaryWorkflow is a child workflow that handles:
@@ -1045,7 +1057,8 @@ func (w *Worker) ProcessSummaryWorkflow(ctx workflow.Context, param ProcessSumma
 	}
 
 	return &ProcessSummaryWorkflowResult{
-		Summary:  summaryResult.Summary,
-		Pipeline: summaryResult.Pipeline,
+		Summary:       summaryResult.Summary,
+		Pipeline:      summaryResult.Pipeline,
+		UsageMetadata: summaryResult.UsageMetadata,
 	}, nil
 }

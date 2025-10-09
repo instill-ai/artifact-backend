@@ -11,8 +11,8 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/instill-ai/artifact-backend/pkg/constant"
-	"github.com/instill-ai/artifact-backend/pkg/mock"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
+	"github.com/instill-ai/artifact-backend/pkg/worker/mock"
 )
 
 func TestGetFileByUID_Success(t *testing.T) {
@@ -21,17 +21,17 @@ func TestGetFileByUID_Success(t *testing.T) {
 
 	ctx := context.Background()
 	fileUID := uuid.Must(uuid.NewV4())
-	expectedFile := repository.KnowledgeBaseFile{
+	expectedFile := repository.KnowledgeBaseFileModel{
 		UID:  fileUID,
 		Name: "test.pdf",
 	}
 
-	mockRepo := mock.NewRepositoryIMock(mc)
-	mockRepo.GetKnowledgeBaseFilesByFileUIDsMock.
+	mockRepository := mock.NewRepositoryMock(mc)
+	mockRepository.GetKnowledgeBaseFilesByFileUIDsMock.
 		When(minimock.AnyContext, []uuid.UUID{fileUID}).
-		Then([]repository.KnowledgeBaseFile{expectedFile}, nil)
+		Then([]repository.KnowledgeBaseFileModel{expectedFile}, nil)
 
-	file, err := getFileByUID(ctx, mockRepo, fileUID)
+	file, err := getFileByUID(ctx, mockRepository, fileUID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(file, qt.DeepEquals, expectedFile)
 }
@@ -43,15 +43,15 @@ func TestGetFileByUID_NotFound(t *testing.T) {
 	ctx := context.Background()
 	fileUID := uuid.Must(uuid.NewV4())
 
-	mockRepo := mock.NewRepositoryIMock(mc)
-	mockRepo.GetKnowledgeBaseFilesByFileUIDsMock.
+	mockRepository := mock.NewRepositoryMock(mc)
+	mockRepository.GetKnowledgeBaseFilesByFileUIDsMock.
 		When(minimock.AnyContext, []uuid.UUID{fileUID}).
-		Then([]repository.KnowledgeBaseFile{}, nil)
+		Then([]repository.KnowledgeBaseFileModel{}, nil)
 
-	file, err := getFileByUID(ctx, mockRepo, fileUID)
+	file, err := getFileByUID(ctx, mockRepository, fileUID)
 	c.Assert(err, qt.Not(qt.IsNil))
 	c.Assert(err.Error(), qt.Contains, "not found")
-	c.Assert(file, qt.DeepEquals, repository.KnowledgeBaseFile{})
+	c.Assert(file, qt.DeepEquals, repository.KnowledgeBaseFileModel{})
 }
 
 func TestExtractRequestMetadata_Success(t *testing.T) {

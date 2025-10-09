@@ -5,17 +5,23 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gofrs/uuid"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
 	"github.com/instill-ai/artifact-backend/pkg/repository"
-	"github.com/instill-ai/artifact-backend/pkg/service"
+	"github.com/instill-ai/artifact-backend/pkg/types"
 
 	errorsx "github.com/instill-ai/x/errors"
 )
+
+// EmbedTextsWorkflowParam defines the parameters for the EmbedTextsWorkflow
+type EmbedTextsWorkflowParam struct {
+	Texts           []string
+	BatchSize       int
+	RequestMetadata map[string][]string
+}
 
 type embedTextsWorkflow struct {
 	temporalClient client.Client
@@ -23,14 +29,14 @@ type embedTextsWorkflow struct {
 }
 
 // NewEmbedTextsWorkflow creates a new EmbedTextsWorkflow instance
-func NewEmbedTextsWorkflow(temporalClient client.Client, worker *Worker) service.EmbedTextsWorkflow {
+func NewEmbedTextsWorkflow(temporalClient client.Client, worker *Worker) *embedTextsWorkflow {
 	return &embedTextsWorkflow{
 		temporalClient: temporalClient,
 		worker:         worker,
 	}
 }
 
-func (w *embedTextsWorkflow) Execute(ctx context.Context, param service.EmbedTextsWorkflowParam) ([][]float32, error) {
+func (w *embedTextsWorkflow) Execute(ctx context.Context, param EmbedTextsWorkflowParam) ([][]float32, error) {
 	workflowID := fmt.Sprintf("embed-texts-%d-%d", time.Now().UnixNano(), len(param.Texts))
 	workflowOptions := client.StartWorkflowOptions{
 		ID:                    workflowID,
@@ -52,7 +58,7 @@ func (w *embedTextsWorkflow) Execute(ctx context.Context, param service.EmbedTex
 }
 
 // EmbedTextsWorkflow orchestrates parallel embedding of text batches
-func (w *Worker) EmbedTextsWorkflow(ctx workflow.Context, param service.EmbedTextsWorkflowParam) ([][]float32, error) {
+func (w *Worker) EmbedTextsWorkflow(ctx workflow.Context, param EmbedTextsWorkflowParam) ([][]float32, error) {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("Starting EmbedTextsWorkflow",
 		"totalTexts", len(param.Texts),
@@ -122,12 +128,12 @@ func (w *Worker) EmbedTextsWorkflow(ctx workflow.Context, param service.EmbedTex
 
 // SaveEmbeddingsToVectorDBWorkflowParam saves embeddings to vector db
 type SaveEmbeddingsToVectorDBWorkflowParam struct {
-	KnowledgeBaseUID uuid.UUID              // Knowledge base unique identifier
-	FileUID          uuid.UUID              // File unique identifier
-	FileName         string                 // File name for identification
-	Embeddings       []repository.Embedding // Embeddings to save
-	UserUID          uuid.UUID              // User unique identifier
-	RequesterUID     uuid.UUID              // Requester unique identifier
+	KBUID        types.KBUIDType             // Knowledge base unique identifier
+	FileUID      types.FileUIDType           // File unique identifier
+	FileName     string                      // File name for identification
+	Embeddings   []repository.EmbeddingModel // Embeddings to save
+	UserUID      types.UserUIDType           // User unique identifier
+	RequesterUID types.RequesterUIDType      // Requester unique identifier
 }
 
 // SaveEmbeddingsToVectorDBWorkflow orchestrates parallel saving of embedding batches
@@ -137,7 +143,7 @@ type SaveEmbeddingsToVectorDBWorkflowParam struct {
 func (w *Worker) SaveEmbeddingsToVectorDBWorkflow(ctx workflow.Context, param SaveEmbeddingsToVectorDBWorkflowParam) error {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("Starting SaveEmbeddingsToVectorDBWorkflow",
-		"kbUID", param.KnowledgeBaseUID.String(),
+		"kbUID", param.KBUID.String(),
 		"fileUID", param.FileUID.String(),
 		"userUID", param.UserUID.String(),
 		"requesterUID", param.RequesterUID.String(),
@@ -161,8 +167,8 @@ func (w *Worker) SaveEmbeddingsToVectorDBWorkflow(ctx workflow.Context, param Sa
 
 	// Step 1 & 2: Delete old embeddings in parallel (VectorDB + DB)
 	deleteParam := &DeleteOldEmbeddingsActivityParam{
-		KnowledgeBaseUID: param.KnowledgeBaseUID,
-		FileUID:          param.FileUID,
+		KBUID:   param.KBUID,
+		FileUID: param.FileUID,
 	}
 
 	// Execute both delete operations in parallel
@@ -192,12 +198,12 @@ func (w *Worker) SaveEmbeddingsToVectorDBWorkflow(ctx workflow.Context, param Sa
 
 		batchEmbeddings := param.Embeddings[start:end]
 		batchParam := &SaveEmbeddingBatchActivityParam{
-			KnowledgeBaseUID: param.KnowledgeBaseUID,
-			FileUID:          param.FileUID,
-			FileName:         param.FileName,
-			Embeddings:       batchEmbeddings,
-			BatchNumber:      i + 1,
-			TotalBatches:     totalBatches,
+			KBUID:        param.KBUID,
+			FileUID:      param.FileUID,
+			FileName:     param.FileName,
+			Embeddings:   batchEmbeddings,
+			BatchNumber:  i + 1,
+			TotalBatches: totalBatches,
 		}
 
 		// Execute activities in parallel (no .Get() here)
@@ -243,7 +249,7 @@ func (w *Worker) SaveEmbeddingsToVectorDBWorkflow(ctx workflow.Context, param Sa
 	}
 
 	logger.Info("SaveEmbeddingsToVectorDBWorkflow completed successfully",
-		"kbUID", param.KnowledgeBaseUID.String(),
+		"kbUID", param.KBUID.String(),
 		"fileUID", param.FileUID.String(),
 		"userUID", param.UserUID.String(),
 		"requesterUID", param.RequesterUID.String(),

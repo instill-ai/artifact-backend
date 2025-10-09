@@ -16,6 +16,7 @@ dev:							## Run dev container
 		echo "Run dev container ${SERVICE_NAME}. To stop it, run \"make stop\"."
 	@docker run -d --rm \
 		-v $(PWD):/${SERVICE_NAME} \
+		-v /Users/Pinglin/Workspace/instill/protogen-go:/protogen-go \
 		-p ${PUBLIC_SERVICE_PORT}:${PUBLIC_SERVICE_PORT} \
 		-p ${PRIVATE_SERVICE_PORT}:${PRIVATE_SERVICE_PORT} \
 		--network instill-network \

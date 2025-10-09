@@ -2,32 +2,51 @@ package repository
 
 import (
 	"context"
+	"fmt"
+	"time"
 
-	"google.golang.org/protobuf/types/known/timestamppb"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
+	"github.com/instill-ai/artifact-backend/pkg/types"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
 
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	errorsx "github.com/instill-ai/x/errors"
 )
 
-// TagI
-//
-//	GetRepositoryTag(context.Context, utils.RepositoryTagName) (*artifactpb.RepositoryTag, error)
-//
-// UpsertRepositoryTag(context.Context, *artifactpb.RepositoryTag) (*artifactpb.RepositoryTag, error)
-type TagI interface {
-	GetRepositoryTag(context.Context, utils.RepositoryTagName) (*artifactpb.RepositoryTag, error)
-	UpsertRepositoryTag(context.Context, *artifactpb.RepositoryTag) (*artifactpb.RepositoryTag, error)
+const (
+	// RepositoryTagTableName is the table name for repository tags
+	RepositoryTagTableName = "repository_tag"
+)
+
+// Tag defines repository operations for tags
+type Tag interface {
+	GetRepositoryTag(context.Context, utils.RepositoryTagName) (*types.Tag, error)
+	UpsertRepositoryTag(context.Context, *types.Tag) (*types.Tag, error)
 	DeleteRepositoryTag(context.Context, string) error
+}
+
+type repositoryTag struct {
+	Name       string `gorm:"primaryKey"`
+	Digest     string
+	UpdateTime time.Time `gorm:"autoUpdateTime:nano"`
+}
+
+// TableName overrides the default table name for GORM
+func (repositoryTag) TableName() string {
+	return RepositoryTagTableName
+}
+
+func repositoryTagName(repo, id string) string {
+	// In the database, the tag name is the primary key. It is compacted to
+	// <repository>:tag to improve the efficiency of the queries.
+	return fmt.Sprintf("%s:%s", repo, id)
 }
 
 // GetRepositoryTag fetches the tag information from the repository_tag table.
 // The name param is the resource name of the tag, e.g.
 // `repositories/admin/hello-world/tags/0.1.1-beta`.
-func (r *Repository) GetRepositoryTag(_ context.Context, name utils.RepositoryTagName) (*artifactpb.RepositoryTag, error) {
+func (r *repository) GetRepositoryTag(_ context.Context, name utils.RepositoryTagName) (*types.Tag, error) {
 	repo, tagID, err := name.ExtractRepositoryAndID()
 	if err != nil {
 		return nil, err
@@ -45,25 +64,25 @@ func (r *Repository) GetRepositoryTag(_ context.Context, name utils.RepositoryTa
 		return nil, result.Error
 	}
 
-	return &artifactpb.RepositoryTag{
+	return &types.Tag{
 		Name:       string(name),
-		Id:         tagID,
+		ID:         tagID,
 		Digest:     record.Digest,
-		UpdateTime: timestamppb.New(record.UpdateTime),
+		UpdateTime: record.UpdateTime,
 	}, nil
 }
 
 // UpsertRepositoryTag stores the provided tag information in the database. The
 // update timestamp will be generated on insertion.
-func (r *Repository) UpsertRepositoryTag(_ context.Context, tag *artifactpb.RepositoryTag) (*artifactpb.RepositoryTag, error) {
-	repo, tagID, err := utils.RepositoryTagName(tag.GetName()).ExtractRepositoryAndID()
+func (r *repository) UpsertRepositoryTag(_ context.Context, tag *types.Tag) (*types.Tag, error) {
+	repo, tagID, err := utils.RepositoryTagName(tag.Name).ExtractRepositoryAndID()
 	if err != nil {
 		return nil, err
 	}
 
 	record := &repositoryTag{
 		Name:   repositoryTagName(repo, tagID),
-		Digest: tag.GetDigest(),
+		Digest: tag.Digest,
 	}
 
 	updateOnConflict := clause.OnConflict{
@@ -74,18 +93,18 @@ func (r *Repository) UpsertRepositoryTag(_ context.Context, tag *artifactpb.Repo
 		return nil, result.Error
 	}
 
-	return &artifactpb.RepositoryTag{
-		Name:       tag.GetName(),
-		Id:         tag.GetId(),
+	return &types.Tag{
+		Name:       tag.Name,
+		ID:         tag.ID,
 		Digest:     record.Digest,
-		UpdateTime: timestamppb.New(record.UpdateTime),
+		UpdateTime: record.UpdateTime,
 	}, nil
 }
 
 // DeleteRepositoryTag delete the tag information from the repository_tag table.
 // The name param is the resource name of the tag, e.g.
 // `repositories/admin/hello-world/tags/0.1.1-beta`.
-func (r *Repository) DeleteRepositoryTag(_ context.Context, digest string) error {
+func (r *repository) DeleteRepositoryTag(_ context.Context, digest string) error {
 	record := new(repositoryTag)
 	if result := r.db.Model(record).
 		Where("digest = ?", digest).

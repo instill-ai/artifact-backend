@@ -1,4 +1,4 @@
-package service
+package pipeline
 
 import (
 	"fmt"
@@ -16,8 +16,8 @@ type PageSplitter struct {
 
 // Split breaks a string into chunks according to the splitter's delimiters.
 // Chunks with empty text are skipped.
-func (ps *PageSplitter) Split(content string) ([]Chunk, error) {
-	chunks := make([]Chunk, 0, len(ps.PageDelimiters))
+func (ps *PageSplitter) Split(content string) ([]TextChunk, error) {
+	chunks := make([]TextChunk, 0, len(ps.PageDelimiters))
 	runes := []rune(content)
 
 	var start uint32
@@ -38,12 +38,12 @@ func (ps *PageSplitter) Split(content string) ([]Chunk, error) {
 		}
 		tokenCount := len(tkm.Encode(text, nil, nil))
 
-		chunk := Chunk{
+		chunk := TextChunk{
 			Start:  int(start),
 			End:    int(delim),
 			Text:   text,
 			Tokens: tokenCount,
-			Reference: &repository.ChunkReference{
+			Reference: &repository.TextChunkReference{
 				PageRange: [2]uint32{page, page},
 			},
 		}

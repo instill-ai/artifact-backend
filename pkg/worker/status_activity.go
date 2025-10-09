@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/gofrs/uuid"
 	"go.temporal.io/sdk/temporal"
 	"go.uber.org/zap"
 
 	"github.com/instill-ai/artifact-backend/pkg/repository"
+	"github.com/instill-ai/artifact-backend/pkg/types"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	errorsx "github.com/instill-ai/x/errors"
@@ -20,16 +20,22 @@ import (
 
 // UpdateFileStatusActivityParam defines the parameters for the UpdateFileStatusActivity
 type UpdateFileStatusActivityParam struct {
-	FileUID uuid.UUID                    // File unique identifier
+	FileUID types.FileUIDType            // File unique identifier
 	Status  artifactpb.FileProcessStatus // New processing status
 	Message string                       // Optional status message for display
 }
 
+// GetFileStatusActivityParam defines the parameters for the GetFileStatusActivity
+type GetFileStatusActivityParam struct {
+	FileUID types.FileUIDType // File unique identifier
+}
+
 // GetFileStatusActivity retrieves the current status of a file
-func (w *Worker) GetFileStatusActivity(ctx context.Context, fileUID uuid.UUID) (artifactpb.FileProcessStatus, error) {
+func (w *Worker) GetFileStatusActivity(ctx context.Context, param *GetFileStatusActivityParam) (artifactpb.FileProcessStatus, error) {
+	fileUID := param.FileUID
 	w.log.Info("Getting file status", zap.String("fileUID", fileUID.String()))
 
-	files, err := w.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{fileUID})
+	files, err := w.repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{fileUID})
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to retrieve file status. Please try again.")
 		return artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, temporal.NewApplicationErrorWithCause(
@@ -75,7 +81,7 @@ func (w *Worker) UpdateFileStatusActivity(ctx context.Context, param *UpdateFile
 		zap.String("status", param.Status.String()),
 		zap.String("message", param.Message))
 
-	files, err := w.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{param.FileUID})
+	files, err := w.repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{param.FileUID})
 	if err != nil {
 		w.log.Error("Failed to get file for status update", zap.Error(err))
 		err = errorsx.AddMessage(err, "Unable to update file status. Please try again.")
@@ -94,13 +100,13 @@ func (w *Worker) UpdateFileStatusActivity(ctx context.Context, param *UpdateFile
 	}
 
 	if param.Message != "" {
-		err := w.service.Repository().UpdateKBFileMetadata(ctx, param.FileUID, repository.ExtraMetaData{FailReason: param.Message})
+		err := w.repository.UpdateKnowledgeFileMetadata(ctx, param.FileUID, repository.ExtraMetaData{FailReason: param.Message})
 		if err != nil {
 			w.log.Warn("Failed to update file extra metadata with message (file may be deleted)", zap.Error(err))
 		}
 	}
 
-	_, err = w.service.Repository().UpdateKnowledgeBaseFile(ctx, param.FileUID.String(), updateMap)
+	_, err = w.repository.UpdateKnowledgeBaseFile(ctx, param.FileUID.String(), updateMap)
 	if err != nil {
 		w.log.Warn("Failed to update file status (file may be deleted)",
 			zap.String("fileUID", param.FileUID.String()),

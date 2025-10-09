@@ -10,10 +10,27 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
-	"github.com/instill-ai/artifact-backend/pkg/service"
-
 	errorsx "github.com/instill-ai/x/errors"
 )
+
+// DeleteFilesWorkflowParam defines the parameters for the DeleteFilesWorkflow
+type DeleteFilesWorkflowParam struct {
+	Bucket    string
+	FilePaths []string
+}
+
+// GetFilesWorkflowParam defines the parameters for the GetFilesWorkflow
+type GetFilesWorkflowParam struct {
+	Bucket    string
+	FilePaths []string
+}
+
+// FileContent represents file content with metadata
+type FileContent struct {
+	Index   int
+	Name    string
+	Content []byte
+}
 
 type deleteFilesWorkflow struct {
 	temporalClient client.Client
@@ -21,14 +38,14 @@ type deleteFilesWorkflow struct {
 }
 
 // NewDeleteFilesWorkflow creates a new DeleteFilesWorkflow instance
-func NewDeleteFilesWorkflow(temporalClient client.Client, worker *Worker) service.DeleteFilesWorkflow {
+func NewDeleteFilesWorkflow(temporalClient client.Client, worker *Worker) *deleteFilesWorkflow {
 	return &deleteFilesWorkflow{
 		temporalClient: temporalClient,
 		worker:         worker,
 	}
 }
 
-func (w *deleteFilesWorkflow) Execute(ctx context.Context, param service.DeleteFilesWorkflowParam) error {
+func (w *deleteFilesWorkflow) Execute(ctx context.Context, param DeleteFilesWorkflowParam) error {
 	// Generate a unique workflow ID using UUID to prevent collisions
 	workflowUUID, err := uuid.NewV4()
 	if err != nil {
@@ -60,14 +77,14 @@ type getFilesWorkflow struct {
 }
 
 // NewGetFilesWorkflow creates a new GetFilesWorkflow instance
-func NewGetFilesWorkflow(temporalClient client.Client, worker *Worker) service.GetFilesWorkflow {
+func NewGetFilesWorkflow(temporalClient client.Client, worker *Worker) *getFilesWorkflow {
 	return &getFilesWorkflow{
 		temporalClient: temporalClient,
 		worker:         worker,
 	}
 }
 
-func (w *getFilesWorkflow) Execute(ctx context.Context, param service.GetFilesWorkflowParam) ([]service.FileContent, error) {
+func (w *getFilesWorkflow) Execute(ctx context.Context, param GetFilesWorkflowParam) ([]FileContent, error) {
 	// Generate a unique workflow ID using UUID to prevent collisions
 	workflowUUID, err := uuid.NewV4()
 	if err != nil {
@@ -86,7 +103,7 @@ func (w *getFilesWorkflow) Execute(ctx context.Context, param service.GetFilesWo
 		return nil, errorsx.AddMessage(err, "Unable to start file retrieval workflow. Please try again.")
 	}
 
-	var results []service.FileContent
+	var results []FileContent
 	if err = workflowRun.Get(ctx, &results); err != nil {
 		return nil, errorsx.AddMessage(err, "File retrieval workflow failed. Please try again.")
 	}
@@ -95,7 +112,7 @@ func (w *getFilesWorkflow) Execute(ctx context.Context, param service.GetFilesWo
 }
 
 // DeleteFilesWorkflow orchestrates parallel deletion of multiple files
-func (w *Worker) DeleteFilesWorkflow(ctx workflow.Context, param service.DeleteFilesWorkflowParam) error {
+func (w *Worker) DeleteFilesWorkflow(ctx workflow.Context, param DeleteFilesWorkflowParam) error {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("Starting DeleteFilesWorkflow",
 		"fileCount", len(param.FilePaths))
@@ -144,13 +161,13 @@ func (w *Worker) DeleteFilesWorkflow(ctx workflow.Context, param service.DeleteF
 }
 
 // GetFilesWorkflow orchestrates parallel retrieval of multiple files
-func (w *Worker) GetFilesWorkflow(ctx workflow.Context, param service.GetFilesWorkflowParam) ([]service.FileContent, error) {
+func (w *Worker) GetFilesWorkflow(ctx workflow.Context, param GetFilesWorkflowParam) ([]FileContent, error) {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("Starting GetFilesWorkflow",
 		"fileCount", len(param.FilePaths))
 
 	if len(param.FilePaths) == 0 {
-		return []service.FileContent{}, nil
+		return []FileContent{}, nil
 	}
 
 	// Set activity options
@@ -178,7 +195,7 @@ func (w *Worker) GetFilesWorkflow(ctx workflow.Context, param service.GetFilesWo
 	}
 
 	// Wait for all retrievals and collect results in order
-	results := make([]service.FileContent, len(param.FilePaths))
+	results := make([]FileContent, len(param.FilePaths))
 	for _, future := range futures {
 		var result GetFileActivityResult
 		if err := future.Get(ctx, &result); err != nil {
@@ -186,11 +203,7 @@ func (w *Worker) GetFilesWorkflow(ctx workflow.Context, param service.GetFilesWo
 			return nil, errorsx.AddMessage(err, "Unable to retrieve file. Please try again.")
 		}
 
-		results[result.Index] = service.FileContent{
-			Index:   result.Index,
-			Name:    result.Name,
-			Content: result.Content,
-		}
+		results[result.Index] = FileContent(result)
 	}
 
 	logger.Info("GetFilesWorkflow completed successfully",

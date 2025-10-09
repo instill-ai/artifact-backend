@@ -4,11 +4,11 @@ import (
 	"context"
 	"strings"
 
-	"github.com/gofrs/uuid"
 	"go.temporal.io/sdk/temporal"
 	"go.uber.org/zap"
 
-	"github.com/instill-ai/artifact-backend/pkg/service"
+	"github.com/instill-ai/artifact-backend/pkg/constant"
+	"github.com/instill-ai/artifact-backend/pkg/types"
 
 	errorsx "github.com/instill-ai/x/errors"
 )
@@ -16,40 +16,40 @@ import (
 // This file contains cleanup activities used by CleanupFileWorkflow and CleanupKnowledgeBaseWorkflow:
 // - DeleteOriginalFileActivity - Deletes original uploaded files from MinIO
 // - DeleteConvertedFileActivity - Deletes converted markdown files from database
-// - DeleteChunksFromMinIOActivity - Deletes chunked content files from MinIO
+// - DeleteTextChunksFromMinIOActivity - Deletes text chunk content files from MinIO
 // - DeleteEmbeddingsFromVectorDBActivity - Removes embeddings from vector database
 // - DeleteEmbeddingRecordsActivity - Removes embedding records from database
 // - DeleteKBFilesFromMinIOActivity - Deletes all files for a knowledge base
 // - DropVectorDBCollectionActivity - Drops vector database collection
 // - DeleteKBFileRecordsActivity - Deletes file records for a knowledge base
 // - DeleteKBConvertedFileRecordsActivity - Deletes converted file records
-// - DeleteKBChunkRecordsActivity - Deletes chunk records for a knowledge base
+// - DeleteKBTextChunkRecordsActivity - Deletes text chunk records for a knowledge base
 // - DeleteKBEmbeddingRecordsActivity - Deletes embedding records for a knowledge base
 
 // DeleteOriginalFileActivityParam defines parameters for deleting original file
 type DeleteOriginalFileActivityParam struct {
-	FileUID uuid.UUID // File unique identifier
-	Bucket  string    // MinIO bucket containing the file
+	FileUID types.FileUIDType // File unique identifier
+	Bucket  string            // MinIO bucket containing the file
 }
 
 // DeleteConvertedFileActivityParam defines parameters for deleting converted file
 type DeleteConvertedFileActivityParam struct {
-	FileUID uuid.UUID // File unique identifier
+	FileUID types.FileUIDType // File unique identifier
 }
 
-// DeleteChunksFromMinIOActivityParam defines parameters for deleting chunks from MinIO
-type DeleteChunksFromMinIOActivityParam struct {
-	FileUID uuid.UUID // File unique identifier
+// DeleteTextChunksFromMinIOActivityParam defines parameters for deleting text chunks from MinIO
+type DeleteTextChunksFromMinIOActivityParam struct {
+	FileUID types.FileUIDType // File unique identifier
 }
 
 // DeleteEmbeddingsFromVectorDBActivityParam defines parameters for deleting embeddings from vector db
 type DeleteEmbeddingsFromVectorDBActivityParam struct {
-	FileUID uuid.UUID // File unique identifier
+	FileUID types.FileUIDType // File unique identifier
 }
 
 // DeleteFileRecordsActivityParam defines parameters for deleting file records from DB
 type DeleteFileRecordsActivityParam struct {
-	FileUID uuid.UUID // File unique identifier
+	FileUID types.FileUIDType // File unique identifier
 }
 
 // DeleteOriginalFileActivity deletes the original uploaded file from MinIO
@@ -58,7 +58,7 @@ func (w *Worker) DeleteOriginalFileActivity(ctx context.Context, param *DeleteOr
 		zap.String("fileUID", param.FileUID.String()))
 
 	// Fetch file record to get destination
-	files, err := w.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{param.FileUID})
+	files, err := w.repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{param.FileUID})
 	if err != nil || len(files) == 0 {
 		w.log.Info("DeleteOriginalFileActivity: File not found, may have been deleted already",
 			zap.String("fileUID", param.FileUID.String()))
@@ -72,7 +72,7 @@ func (w *Worker) DeleteOriginalFileActivity(ctx context.Context, param *DeleteOr
 		return nil
 	}
 
-	err = w.service.DeleteFiles(ctx, param.Bucket, []string{file.Destination})
+	err = w.deleteFilesSync(ctx, param.Bucket, []string{file.Destination})
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to delete file from storage. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
@@ -91,7 +91,7 @@ func (w *Worker) DeleteConvertedFileActivity(ctx context.Context, param *DeleteC
 		zap.String("fileUID", param.FileUID.String()))
 
 	// Check if converted file exists and get KB UID from it
-	convertedFile, err := w.service.Repository().GetConvertedFileByFileUID(ctx, param.FileUID)
+	convertedFile, err := w.repository.GetConvertedFileByFileUID(ctx, param.FileUID)
 	if err != nil {
 		w.log.Info("DeleteConvertedFileActivity: No converted file found, skipping",
 			zap.String("fileUID", param.FileUID.String()))
@@ -99,7 +99,7 @@ func (w *Worker) DeleteConvertedFileActivity(ctx context.Context, param *DeleteC
 	}
 
 	// Delete from MinIO using KB UID from the converted file record
-	err = w.service.DeleteConvertedFileByFileUID(ctx, convertedFile.KbUID, param.FileUID)
+	err = w.deleteConvertedFileByFileUIDSync(ctx, convertedFile.KBUID, param.FileUID)
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to delete converted file from storage. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
@@ -111,10 +111,10 @@ func (w *Worker) DeleteConvertedFileActivity(ctx context.Context, param *DeleteC
 
 	w.log.Info("DeleteConvertedFileActivity: Deleted from MinIO",
 		zap.String("convertedFileUID", convertedFile.UID.String()),
-		zap.String("kbUID", convertedFile.KbUID.String()))
+		zap.String("kbUID", convertedFile.KBUID.String()))
 
 	// Delete record from DB
-	err = w.service.Repository().HardDeleteConvertedFileByFileUID(ctx, param.FileUID)
+	err = w.repository.HardDeleteConvertedFileByFileUID(ctx, param.FileUID)
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to delete converted file record. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
@@ -127,44 +127,44 @@ func (w *Worker) DeleteConvertedFileActivity(ctx context.Context, param *DeleteC
 	return nil
 }
 
-// DeleteChunksFromMinIOActivity deletes chunks from MinIO and DB
-func (w *Worker) DeleteChunksFromMinIOActivity(ctx context.Context, param *DeleteChunksFromMinIOActivityParam) error {
-	w.log.Info("DeleteChunksFromMinIOActivity: Deleting chunks",
+// DeleteTextChunksFromMinIOActivity deletes text chunks from MinIO and DB
+func (w *Worker) DeleteTextChunksFromMinIOActivity(ctx context.Context, param *DeleteTextChunksFromMinIOActivityParam) error {
+	w.log.Info("DeleteTextChunksFromMinIOActivity: Deleting text chunks",
 		zap.String("fileUID", param.FileUID.String()))
 
-	// Check if chunks exist and get KB UID from them
-	chunks, err := w.service.Repository().ListChunksByKbFileUID(ctx, param.FileUID)
-	if err != nil || len(chunks) == 0 {
-		w.log.Info("DeleteChunksFromMinIOActivity: No chunks found, skipping",
+	// Check if text textChunks exist and get KB UID from them
+	textChunks, err := w.repository.ListTextChunksByKBFileUID(ctx, param.FileUID)
+	if err != nil || len(textChunks) == 0 {
+		w.log.Info("DeleteTextChunksFromMinIOActivity: No text chunks found, skipping",
 			zap.String("fileUID", param.FileUID.String()))
 		return nil
 	}
 
-	// Get KB UID from the first chunk (all chunks have the same KB UID)
-	kbUID := chunks[0].KbUID
+	// Get KB UID from the first text chunk (all text chunks have the same KB UID)
+	kbUID := textChunks[0].KBUID
 
-	// Delete from MinIO using KB UID from the chunk records
-	err = w.service.DeleteTextChunksByFileUID(ctx, kbUID, param.FileUID)
+	// Delete from MinIO using KB UID from the text chunk records
+	err = w.deleteTextChunksByFileUIDSync(ctx, kbUID, param.FileUID)
 	if err != nil {
-		err = errorsx.AddMessage(err, "Unable to delete chunks from storage. Please try again.")
+		err = errorsx.AddMessage(err, "Unable to delete text chunks from storage. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
 			errorsx.MessageOrErr(err),
-			deleteChunksActivityError,
+			deleteTextChunksActivityError,
 			err,
 		)
 	}
 
-	w.log.Info("DeleteChunksFromMinIOActivity: Deleted from MinIO",
-		zap.Int("chunkCount", len(chunks)),
+	w.log.Info("DeleteTextChunksFromMinIOActivity: Deleted from MinIO",
+		zap.Int("textChunkCount", len(textChunks)),
 		zap.String("kbUID", kbUID.String()))
 
 	// Delete records from DB
-	err = w.service.Repository().HardDeleteChunksByKbFileUID(ctx, param.FileUID)
+	err = w.repository.HardDeleteTextChunksByKBFileUID(ctx, param.FileUID)
 	if err != nil {
-		err = errorsx.AddMessage(err, "Unable to delete chunk records. Please try again.")
+		err = errorsx.AddMessage(err, "Unable to delete text chunk records. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
 			errorsx.MessageOrErr(err),
-			deleteChunksActivityError,
+			deleteTextChunksActivityError,
 			err,
 		)
 	}
@@ -179,7 +179,7 @@ func (w *Worker) DeleteEmbeddingsFromVectorDBActivity(ctx context.Context, param
 		zap.String("fileUID", param.FileUID.String()))
 
 	// Get embeddings to extract KB UID
-	embeddings, err := w.service.Repository().ListEmbeddingsByKbFileUID(ctx, param.FileUID)
+	embeddings, err := w.repository.ListEmbeddingsByKBFileUID(ctx, param.FileUID)
 	if err != nil || len(embeddings) == 0 {
 		w.log.Info("DeleteEmbeddingsFromVectorDBActivity: No embeddings found, skipping",
 			zap.String("fileUID", param.FileUID.String()))
@@ -187,11 +187,11 @@ func (w *Worker) DeleteEmbeddingsFromVectorDBActivity(ctx context.Context, param
 	}
 
 	// Get KB UID from the first embedding (all embeddings have the same KB UID)
-	kbUID := embeddings[0].KbUID
-	collection := service.KBCollectionName(kbUID)
+	kbUID := embeddings[0].KBUID
+	collection := constant.KBCollectionName(kbUID)
 
 	// Delete from vector db
-	err = w.service.VectorDB().DeleteEmbeddingsWithFileUID(ctx, collection, param.FileUID)
+	err = w.repository.DeleteEmbeddingsWithFileUID(ctx, collection, param.FileUID)
 	if err != nil {
 		// If collection doesn't exist, that's fine - it's already cleaned up
 		if strings.Contains(err.Error(), "can't find collection") {
@@ -220,7 +220,7 @@ func (w *Worker) DeleteEmbeddingRecordsActivity(ctx context.Context, param *Dele
 	w.log.Info("DeleteEmbeddingRecordsActivity: Deleting embedding records from DB",
 		zap.String("fileUID", param.FileUID.String()))
 
-	err := w.service.Repository().HardDeleteEmbeddingsByKbFileUID(ctx, param.FileUID)
+	err := w.repository.HardDeleteEmbeddingsByKBFileUID(ctx, param.FileUID)
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to delete embedding records. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
@@ -237,45 +237,45 @@ func (w *Worker) DeleteEmbeddingRecordsActivity(ctx context.Context, param *Dele
 
 // DeleteKBFilesFromMinIOActivityParam defines parameters for deleting KB files from MinIO
 type DeleteKBFilesFromMinIOActivityParam struct {
-	KnowledgeBaseUID uuid.UUID // Knowledge base unique identifier
+	KBUID types.KBUIDType // Knowledge base unique identifier
 }
 
 // DropVectorDBCollectionActivityParam defines parameters for dropping vector db collection
 type DropVectorDBCollectionActivityParam struct {
-	KnowledgeBaseUID uuid.UUID // Knowledge base unique identifier
+	KBUID types.KBUIDType // Knowledge base unique identifier
 }
 
 // DeleteKBFileRecordsActivityParam defines parameters for deleting KB file records
 type DeleteKBFileRecordsActivityParam struct {
-	KnowledgeBaseUID uuid.UUID // Knowledge base unique identifier
+	KBUID types.KBUIDType // Knowledge base unique identifier
 }
 
 // DeleteKBConvertedFileRecordsActivityParam defines parameters for deleting KB converted file records
 type DeleteKBConvertedFileRecordsActivityParam struct {
-	KnowledgeBaseUID uuid.UUID // Knowledge base unique identifier
+	KBUID types.KBUIDType // Knowledge base unique identifier
 }
 
-// DeleteKBChunkRecordsActivityParam defines parameters for deleting KB chunk records
-type DeleteKBChunkRecordsActivityParam struct {
-	KnowledgeBaseUID uuid.UUID // Knowledge base unique identifier
+// DeleteKBTextChunkRecordsActivityParam defines parameters for deleting KB text chunk records
+type DeleteKBTextChunkRecordsActivityParam struct {
+	KBUID types.KBUIDType // Knowledge base unique identifier
 }
 
 // DeleteKBEmbeddingRecordsActivityParam defines parameters for deleting KB embedding records
 type DeleteKBEmbeddingRecordsActivityParam struct {
-	KnowledgeBaseUID uuid.UUID // Knowledge base unique identifier
+	KBUID types.KBUIDType // Knowledge base unique identifier
 }
 
 // PurgeKBACLActivityParam defines parameters for purging KB ACL
 type PurgeKBACLActivityParam struct {
-	KnowledgeBaseUID uuid.UUID // Knowledge base unique identifier
+	KBUID types.KBUIDType // Knowledge base unique identifier
 }
 
 // DeleteKBFilesFromMinIOActivity deletes all files from MinIO for a knowledge base
 func (w *Worker) DeleteKBFilesFromMinIOActivity(ctx context.Context, param *DeleteKBFilesFromMinIOActivityParam) error {
 	w.log.Info("DeleteKBFilesFromMinIOActivity: Deleting files from MinIO",
-		zap.String("kbUID", param.KnowledgeBaseUID.String()))
+		zap.String("kbUID", param.KBUID.String()))
 
-	err := w.service.DeleteKnowledgeBase(ctx, param.KnowledgeBaseUID.String())
+	err := w.deleteKnowledgeBaseSync(ctx, param.KBUID.String())
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to delete catalog files from storage. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
@@ -291,10 +291,10 @@ func (w *Worker) DeleteKBFilesFromMinIOActivity(ctx context.Context, param *Dele
 // DropVectorDBCollectionActivity drops the vector db collection for a knowledge base
 func (w *Worker) DropVectorDBCollectionActivity(ctx context.Context, param *DropVectorDBCollectionActivityParam) error {
 	w.log.Info("DropVectorDBCollectionActivity: Dropping collection",
-		zap.String("kbUID", param.KnowledgeBaseUID.String()))
+		zap.String("kbUID", param.KBUID.String()))
 
-	collection := service.KBCollectionName(param.KnowledgeBaseUID)
-	err := w.service.VectorDB().DropCollection(ctx, collection)
+	collection := constant.KBCollectionName(param.KBUID)
+	err := w.repository.DropCollection(ctx, collection)
 	if err != nil {
 		// If collection doesn't exist, that's fine - it's already cleaned up
 		if strings.Contains(err.Error(), "can't find collection") {
@@ -316,9 +316,9 @@ func (w *Worker) DropVectorDBCollectionActivity(ctx context.Context, param *Drop
 // DeleteKBFileRecordsActivity deletes all file records for a knowledge base
 func (w *Worker) DeleteKBFileRecordsActivity(ctx context.Context, param *DeleteKBFileRecordsActivityParam) error {
 	w.log.Info("DeleteKBFileRecordsActivity: Deleting file records",
-		zap.String("kbUID", param.KnowledgeBaseUID.String()))
+		zap.String("kbUID", param.KBUID.String()))
 
-	err := w.service.Repository().DeleteAllKnowledgeBaseFiles(ctx, param.KnowledgeBaseUID.String())
+	err := w.repository.DeleteAllKnowledgeBaseFiles(ctx, param.KBUID.String())
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to delete file records. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
@@ -334,9 +334,9 @@ func (w *Worker) DeleteKBFileRecordsActivity(ctx context.Context, param *DeleteK
 // DeleteKBConvertedFileRecordsActivity deletes all converted file records for a knowledge base
 func (w *Worker) DeleteKBConvertedFileRecordsActivity(ctx context.Context, param *DeleteKBConvertedFileRecordsActivityParam) error {
 	w.log.Info("DeleteKBConvertedFileRecordsActivity: Deleting converted file records",
-		zap.String("kbUID", param.KnowledgeBaseUID.String()))
+		zap.String("kbUID", param.KBUID.String()))
 
-	err := w.service.Repository().DeleteAllConvertedFilesInKb(ctx, param.KnowledgeBaseUID)
+	err := w.repository.DeleteAllConvertedFilesInKb(ctx, param.KBUID)
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to delete converted file records. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
@@ -349,17 +349,17 @@ func (w *Worker) DeleteKBConvertedFileRecordsActivity(ctx context.Context, param
 	return nil
 }
 
-// DeleteKBChunkRecordsActivity deletes all chunk records for a knowledge base
-func (w *Worker) DeleteKBChunkRecordsActivity(ctx context.Context, param *DeleteKBChunkRecordsActivityParam) error {
-	w.log.Info("DeleteKBChunkRecordsActivity: Deleting chunk records",
-		zap.String("kbUID", param.KnowledgeBaseUID.String()))
+// DeleteKBTextChunkRecordsActivity deletes all text chunk records for a knowledge base
+func (w *Worker) DeleteKBTextChunkRecordsActivity(ctx context.Context, param *DeleteKBTextChunkRecordsActivityParam) error {
+	w.log.Info("DeleteKBChunkRecordsActivity: Deleting text chunk records",
+		zap.String("kbUID", param.KBUID.String()))
 
-	err := w.service.Repository().HardDeleteChunksByKbUID(ctx, param.KnowledgeBaseUID)
+	err := w.repository.HardDeleteTextChunksByKBUID(ctx, param.KBUID)
 	if err != nil {
-		err = errorsx.AddMessage(err, "Unable to delete chunk records. Please try again.")
+		err = errorsx.AddMessage(err, "Unable to delete text chunk records. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
 			errorsx.MessageOrErr(err),
-			deleteKBChunkRecordsActivityError,
+			deleteKBTextChunkRecordsActivityError,
 			err,
 		)
 	}
@@ -370,9 +370,9 @@ func (w *Worker) DeleteKBChunkRecordsActivity(ctx context.Context, param *Delete
 // DeleteKBEmbeddingRecordsActivity deletes all embedding records for a knowledge base
 func (w *Worker) DeleteKBEmbeddingRecordsActivity(ctx context.Context, param *DeleteKBEmbeddingRecordsActivityParam) error {
 	w.log.Info("DeleteKBEmbeddingRecordsActivity: Deleting embedding records",
-		zap.String("kbUID", param.KnowledgeBaseUID.String()))
+		zap.String("kbUID", param.KBUID.String()))
 
-	err := w.service.Repository().HardDeleteEmbeddingsByKbUID(ctx, param.KnowledgeBaseUID)
+	err := w.repository.HardDeleteEmbeddingsByKBUID(ctx, param.KBUID)
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to delete embedding records. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
@@ -388,9 +388,9 @@ func (w *Worker) DeleteKBEmbeddingRecordsActivity(ctx context.Context, param *De
 // PurgeKBACLActivity purges ACL permissions for a knowledge base
 func (w *Worker) PurgeKBACLActivity(ctx context.Context, param *PurgeKBACLActivityParam) error {
 	w.log.Info("PurgeKBACLActivity: Purging ACL",
-		zap.String("kbUID", param.KnowledgeBaseUID.String()))
+		zap.String("kbUID", param.KBUID.String()))
 
-	err := w.service.ACLClient().Purge(ctx, "knowledgebase", param.KnowledgeBaseUID)
+	err := w.aclClient.Purge(ctx, "knowledgebase", param.KBUID)
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to purge access control. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
@@ -407,13 +407,13 @@ func (w *Worker) PurgeKBACLActivity(ctx context.Context, param *PurgeKBACLActivi
 const (
 	deleteOriginalFileActivityError       = "DeleteOriginalFileActivity"
 	deleteConvertedFileActivityError      = "DeleteConvertedFileActivity"
-	deleteChunksActivityError             = "DeleteChunksFromMinIOActivity"
+	deleteTextChunksActivityError         = "DeleteTextChunksFromMinIOActivity"
 	deleteEmbeddingsActivityError         = "DeleteEmbeddingsFromVectorDBActivity"
 	deleteKBFilesActivityError            = "DeleteKBFilesFromMinIOActivity"
 	dropCollectionActivityError           = "DropVectorDBCollectionActivity"
 	deleteKBFileRecordsActivityError      = "DeleteKBFileRecordsActivity"
 	deleteKBConvertedRecordsActivityError = "DeleteKBConvertedFileRecordsActivity"
-	deleteKBChunkRecordsActivityError     = "DeleteKBChunkRecordsActivity"
+	deleteKBTextChunkRecordsActivityError = "DeleteKBTextChunkRecordsActivity"
 	deleteKBEmbeddingRecordsActivityError = "DeleteKBEmbeddingRecordsActivity"
 	purgeKBACLActivityError               = "PurgeKBACLActivity"
 )

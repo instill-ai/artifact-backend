@@ -7,8 +7,10 @@ import (
 
 	"github.com/gofrs/uuid"
 	"go.uber.org/zap"
+	"google.golang.org/grpc/metadata"
 
 	"github.com/instill-ai/artifact-backend/config"
+	"github.com/instill-ai/artifact-backend/pkg/pipeline"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 
 	artifactPb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
@@ -67,7 +69,24 @@ func (ph *PublicHandler) QuestionAnswering(
 		FileUids:    req.GetFileUids(),
 	}
 
-	simChunksScores, err := ph.service.SimilarityChunksSearch(ctx, ownerUID, scReq)
+	// Extract authentication metadata from context to pass to worker
+	var requestMetadata map[string][]string
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		md, ok = metadata.FromOutgoingContext(ctx)
+	}
+	if ok {
+		requestMetadata = md
+	}
+
+	// Embed question using service
+	textVector, err := ph.service.EmbedTexts(ctx, []string{req.GetQuestion()}, 32, requestMetadata)
+	if err != nil {
+		logger.Error("failed to vectorize question", zap.Error(err))
+		return nil, fmt.Errorf("failed to vectorize question. err: %w", err)
+	}
+
+	simChunksScores, err := ph.service.SimilarityChunksSearch(ctx, ownerUID, scReq, textVector)
 	if err != nil {
 		logger.Error("failed to get similarity chunks", zap.Error(err))
 		return nil, fmt.Errorf("failed to get similarity chunks. err: %w", err)
@@ -79,7 +98,7 @@ func (ph *PublicHandler) QuestionAnswering(
 	logger.Info("get similarity chunks", zap.Duration("duration", time.Since(t)))
 	t = time.Now()
 	// fetch the chunks metadata
-	chunks, err := ph.service.Repository().GetChunksByUIDs(ctx, chunkUIDs)
+	chunks, err := ph.service.Repository().GetTextChunksByUIDs(ctx, chunkUIDs)
 	if err != nil {
 		logger.Error("failed to get chunks by uids", zap.Error(err))
 		return nil, fmt.Errorf("failed to get chunks by uids. err: %w", err)
@@ -91,6 +110,8 @@ func (ph *PublicHandler) QuestionAnswering(
 	}
 	logger.Info("get chunks by uids", zap.Duration("duration", time.Since(t)))
 	t = time.Now()
+
+	// Get chunk contents using service
 	chunkContents, err := ph.service.GetFilesByPaths(ctx, config.Config.Minio.BucketName, chunkFilePaths)
 	if err != nil {
 		logger.Error("failed to get chunks content", zap.Error(err))
@@ -101,7 +122,7 @@ func (ph *PublicHandler) QuestionAnswering(
 	// fetch the file names
 	fileUIDMapName := make(map[uuid.UUID]string)
 	for _, chunk := range chunks {
-		fileUIDMapName[chunk.KbFileUID] = ""
+		fileUIDMapName[chunk.KBFileUID] = ""
 	}
 	fileUids := make([]uuid.UUID, 0, len(fileUIDMapName))
 	for fileUID := range fileUIDMapName {
@@ -129,14 +150,14 @@ func (ph *PublicHandler) QuestionAnswering(
 			ChunkUid:        chunk.UID.String(),
 			SimilarityScore: float32(simChunksScores[i].Score),
 			TextContent:     string(chunkContents[i].Content),
-			SourceFile:      fileUIDMapName[chunk.KbFileUID],
+			SourceFile:      fileUIDMapName[chunk.KBFileUID],
 		})
 	}
 	chunksForQA := make([]string, 0, len(simChunks))
 	for _, simChunk := range simChunks {
 		chunksForQA = append(chunksForQA, simChunk.TextContent)
 	}
-	answer, err := ph.service.QuestionAnsweringPipe(ctx, req.Question, chunksForQA)
+	answer, err := pipeline.QuestionAnsweringPipe(ctx, ph.service.PipelinePublicClient(), req.Question, chunksForQA)
 	if err != nil {
 		logger.Error("failed to get question answering response", zap.Error(err))
 		return nil, fmt.Errorf("failed to get question answering response. err: %w", err)

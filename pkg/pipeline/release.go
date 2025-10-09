@@ -1,4 +1,4 @@
-package service
+package pipeline
 
 import (
 	"context"
@@ -72,7 +72,7 @@ func PipelineReleaseFromName(name string) (PipelineRelease, error) {
 }
 
 var (
-	// ConvertFileTypePipeline converts various file formats to Gemini-supported types
+	// ConvertFileTypePipeline converts various file formats to AI-supported types
 	// before AI content understanding. It handles format transformations like:
 	// - PPTX/PPT → PDF (for document conversion)
 	// - HEIC → JPEG (for image processing)
@@ -150,7 +150,7 @@ var (
 
 	// DefaultConversionPipelines is the chain of pipelines used for converting
 	// documents to Markdown. Note: ConvertFileTypePipeline is NOT included here
-	// because it's only used for Gemini AI preprocessing (hardcoded in the workflow),
+	// because it's only used for AI preprocessing (hardcoded in the workflow),
 	// not for general markdown conversion.
 	DefaultConversionPipelines = PipelineReleases{ConvertDocToMarkdownPipeline}
 )

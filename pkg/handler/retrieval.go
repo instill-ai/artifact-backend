@@ -7,6 +7,7 @@ import (
 
 	"github.com/gofrs/uuid"
 	"go.uber.org/zap"
+	"google.golang.org/grpc/metadata"
 
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
@@ -56,7 +57,25 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 
 	// retrieve the chunks based on the similarity
 	t := time.Now()
-	simChunksScores, err := ph.service.SimilarityChunksSearch(ctx, ownerUID, req)
+
+	// Extract authentication metadata from context to pass to worker
+	var requestMetadata map[string][]string
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		md, ok = metadata.FromOutgoingContext(ctx)
+	}
+	if ok {
+		requestMetadata = md
+	}
+
+	// Embed text using service
+	textVector, err := ph.service.EmbedTexts(ctx, []string{req.TextPrompt}, 32, requestMetadata)
+	if err != nil {
+		return nil, fmt.Errorf("vectorizing text: %w", err)
+	}
+
+	// Now call service to do vector search
+	simChunksScores, err := ph.service.SimilarityChunksSearch(ctx, ownerUID, req, textVector)
 	if err != nil {
 		return nil, fmt.Errorf("searching similar chunks: %w", err)
 	}
@@ -67,7 +86,7 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 	logger.Info("get similarity chunks", zap.Duration("duration", time.Since(t)))
 
 	// fetch the chunks metadata
-	chunks, err := ph.service.Repository().GetChunksByUIDs(ctx, chunkUIDs)
+	chunks, err := ph.service.Repository().GetTextChunksByUIDs(ctx, chunkUIDs)
 	if err != nil {
 		return nil, fmt.Errorf("fetching chunk metadata: %w", err)
 	}
@@ -78,6 +97,7 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 		chunkFilePaths = append(chunkFilePaths, chunk.ContentDest)
 	}
 
+	// Get file contents using service
 	chunkContents, err := ph.service.GetFilesByPaths(ctx, config.Config.Minio.BucketName, chunkFilePaths)
 	if err != nil {
 		return nil, fmt.Errorf("fetching chunk contents: %w", err)
@@ -86,7 +106,7 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 	// fetch the file names
 	fileUIDMapName := make(map[uuid.UUID]string)
 	for _, chunk := range chunks {
-		fileUIDMapName[chunk.KbFileUID] = ""
+		fileUIDMapName[chunk.KBFileUID] = ""
 	}
 
 	fileUids := make([]uuid.UUID, 0, len(fileUIDMapName))
@@ -119,7 +139,7 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 			ChunkUid:        chunk.UID.String(),
 			SimilarityScore: float32(simChunksScores[i].Score),
 			TextContent:     string(chunkContents[i].Content),
-			SourceFile:      fileUIDMapName[chunk.KbFileUID],
+			SourceFile:      fileUIDMapName[chunk.KBFileUID],
 			ChunkMetadata:   convertToProtoChunk(chunk),
 		}
 

@@ -8,23 +8,30 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
+
+	"github.com/instill-ai/artifact-backend/pkg/types"
 	"gorm.io/gorm"
 
 	logx "github.com/instill-ai/x/log"
 )
 
-// EmbeddingI is the interface for the embedding repository
-type EmbeddingI interface {
-	DeleteAndCreateEmbeddings(_ context.Context, fileUID uuid.UUID, embeddings []Embedding, externalServiceCall func([]Embedding) error) ([]Embedding, error)
-	CreateEmbeddings(_ context.Context, embeddings []Embedding, externalServiceCall func([]Embedding) error) ([]Embedding, error)
-	DeleteEmbeddingsByKbFileUID(_ context.Context, kbFileUID uuid.UUID) error
-	HardDeleteEmbeddingsByKbUID(_ context.Context, kbUID uuid.UUID) error
-	HardDeleteEmbeddingsByKbFileUID(_ context.Context, kbFileUID uuid.UUID) error
-	ListEmbeddingsByKbFileUID(_ context.Context, kbFileUID uuid.UUID) ([]Embedding, error)
+const (
+	// EmbeddingTableName is the table name for embeddings
+	EmbeddingTableName = "embedding"
+)
+
+// Embedding is the interface for the embedding repository
+type Embedding interface {
+	DeleteAndCreateEmbeddings(_ context.Context, fileUID types.FileUIDType, embeddings []EmbeddingModel, externalServiceCall func([]EmbeddingModel) error) ([]EmbeddingModel, error)
+	CreateEmbeddings(_ context.Context, embeddings []EmbeddingModel, externalServiceCall func([]EmbeddingModel) error) ([]EmbeddingModel, error)
+	DeleteEmbeddingsByKBFileUID(_ context.Context, kbFileUID uuid.UUID) error
+	HardDeleteEmbeddingsByKBUID(_ context.Context, kbUID types.KBUIDType) error
+	HardDeleteEmbeddingsByKBFileUID(_ context.Context, kbFileUID uuid.UUID) error
+	ListEmbeddingsByKBFileUID(_ context.Context, kbFileUID uuid.UUID) ([]EmbeddingModel, error)
 }
 
-// Embedding is the model for the embedding table
-type Embedding struct {
+// EmbeddingModel is the model for the embedding table
+type EmbeddingModel struct {
 	UID uuid.UUID `gorm:"column:uid;type:uuid;default:gen_random_uuid();primaryKey" json:"uid"`
 	// SourceUID is the UID of the source entity that the embedding is associated with. i.e. the UID of the chunk, file, etc.
 	// And SourceTable is the table name of the source entity.
@@ -33,8 +40,8 @@ type Embedding struct {
 	Vector      Vector     `gorm:"column:vector;type:jsonb;not null" json:"vector"`
 	CreateTime  *time.Time `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
 	UpdateTime  *time.Time `gorm:"column:update_time;not null;default:CURRENT_TIMESTAMP" json:"update_time"`
-	KbUID       uuid.UUID  `gorm:"column:kb_uid;type:uuid;not null" json:"kb_uid"`
-	KbFileUID   uuid.UUID  `gorm:"column:kb_file_uid;type:uuid;not null" json:"kb_file_uid"`
+	KBUID       uuid.UUID  `gorm:"column:kb_uid;type:uuid;not null" json:"kb_uid"`
+	KBFileUID   uuid.UUID  `gorm:"column:kb_file_uid;type:uuid;not null" json:"kb_file_uid"`
 	FileType    string     `gorm:"column:file_type;size:255;not null" json:"file_type"`
 	ContentType string     `gorm:"column:content_type;size:255;not null" json:"content_type"`
 	// Tags associated with the embedding, inherited from the source file.
@@ -108,8 +115,8 @@ type EmbeddingColumns struct {
 	Vector      string
 	CreateTime  string
 	UpdateTime  string
-	KbUID       string
-	KbFileUID   string
+	KBUID       string
+	KBFileUID   string
 	FileType    string
 	ContentType string
 }
@@ -122,15 +129,15 @@ var EmbeddingColumn = EmbeddingColumns{
 	Vector:      "vector",
 	CreateTime:  "create_time",
 	UpdateTime:  "update_time",
-	KbUID:       "kb_uid",
-	KbFileUID:   "kb_file_uid",
+	KBUID:       "kb_uid",
+	KBFileUID:   "kb_file_uid",
 	FileType:    "file_type",
 	ContentType: "content_type",
 }
 
 // TableName returns the table name of the Embedding
-func (Embedding) TableName() string {
-	return "embedding"
+func (EmbeddingModel) TableName() string {
+	return EmbeddingTableName
 }
 
 // DeleteAndCreateEmbeddings inserts a set of new embeddings extracted from a
@@ -138,19 +145,19 @@ func (Embedding) TableName() string {
 // the file is being reprocessed. In that case, the existing embeddings are
 // deleted.  A function is passed as an argument as a way to call external
 // services (i.e., the vector database) within the upsert transaction.
-func (r *Repository) DeleteAndCreateEmbeddings(
+func (r *repository) DeleteAndCreateEmbeddings(
 	ctx context.Context,
-	fileUID uuid.UUID,
-	embeddings []Embedding,
-	externalServiceCall func([]Embedding) error,
-) ([]Embedding, error) {
+	fileUID types.FileUIDType,
+	embeddings []EmbeddingModel,
+	externalServiceCall func([]EmbeddingModel) error,
+) ([]EmbeddingModel, error) {
 
 	logger, _ := logx.GetZapLogger(ctx)
 
 	// Start a transaction
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// Delete existing embeddings
-		if err := tx.Where("kb_file_uid = ?", fileUID).Delete(&Embedding{}).Error; err != nil {
+		if err := tx.Where("kb_file_uid = ?", fileUID).Delete(&EmbeddingModel{}).Error; err != nil {
 			return fmt.Errorf("deleting existing embeddings: %w", err)
 		}
 
@@ -184,11 +191,11 @@ func (r *Repository) DeleteAndCreateEmbeddings(
 // CreateEmbeddings inserts a batch of embeddings into the database without
 // deleting existing ones. This is useful for batch processing where deletion
 // has already been performed separately.
-func (r *Repository) CreateEmbeddings(
+func (r *repository) CreateEmbeddings(
 	ctx context.Context,
-	embeddings []Embedding,
-	externalServiceCall func([]Embedding) error,
-) ([]Embedding, error) {
+	embeddings []EmbeddingModel,
+	externalServiceCall func([]EmbeddingModel) error,
+) ([]EmbeddingModel, error) {
 
 	logger, _ := logx.GetZapLogger(ctx)
 
@@ -221,29 +228,29 @@ func (r *Repository) CreateEmbeddings(
 	return embeddings, nil
 }
 
-// DeleteEmbeddingsByKbFileUID deletes all embeddings associated with a file
+// DeleteEmbeddingsByKBFileUID deletes all embeddings associated with a file
 // (soft delete, respects the model's DeletedAt field if present).
-func (r *Repository) DeleteEmbeddingsByKbFileUID(ctx context.Context, kbFileUID uuid.UUID) error {
-	where := fmt.Sprintf("%s = ?", EmbeddingColumn.KbFileUID)
-	return r.db.WithContext(ctx).Where(where, kbFileUID).Delete(&Embedding{}).Error
+func (r *repository) DeleteEmbeddingsByKBFileUID(ctx context.Context, kbFileUID uuid.UUID) error {
+	where := fmt.Sprintf("%s = ?", EmbeddingColumn.KBFileUID)
+	return r.db.WithContext(ctx).Where(where, kbFileUID).Delete(&EmbeddingModel{}).Error
 }
 
-// HardDeleteEmbeddingsByKbUID deletes all the embeddings associated with a certain kbUID.
-func (r *Repository) HardDeleteEmbeddingsByKbUID(ctx context.Context, kbUID uuid.UUID) error {
-	where := fmt.Sprintf("%s = ?", EmbeddingColumn.KbUID)
-	return r.db.WithContext(ctx).Where(where, kbUID).Unscoped().Delete(&Embedding{}).Error
+// HardDeleteEmbeddingsByKBUID deletes all the embeddings associated with a certain kbUID.
+func (r *repository) HardDeleteEmbeddingsByKBUID(ctx context.Context, kbUID types.KBUIDType) error {
+	where := fmt.Sprintf("%s = ?", EmbeddingColumn.KBUID)
+	return r.db.WithContext(ctx).Where(where, kbUID).Unscoped().Delete(&EmbeddingModel{}).Error
 }
 
-// HardDeleteEmbeddingsByKbFileUID deletes all the embeddings associated with a certain kbFileUID.
-func (r *Repository) HardDeleteEmbeddingsByKbFileUID(ctx context.Context, kbFileUID uuid.UUID) error {
-	where := fmt.Sprintf("%s = ?", EmbeddingColumn.KbFileUID)
-	return r.db.WithContext(ctx).Where(where, kbFileUID).Unscoped().Delete(&Embedding{}).Error
+// HardDeleteEmbeddingsByKBFileUID deletes all the embeddings associated with a certain kbFileUID.
+func (r *repository) HardDeleteEmbeddingsByKBFileUID(ctx context.Context, kbFileUID uuid.UUID) error {
+	where := fmt.Sprintf("%s = ?", EmbeddingColumn.KBFileUID)
+	return r.db.WithContext(ctx).Where(where, kbFileUID).Unscoped().Delete(&EmbeddingModel{}).Error
 }
 
-// ListEmbeddingsByKbFileUID fetches embeddings by their kbFileUID.
-func (r *Repository) ListEmbeddingsByKbFileUID(ctx context.Context, kbFileUID uuid.UUID) ([]Embedding, error) {
-	var embeddings []Embedding
-	where := fmt.Sprintf("%s = ?", EmbeddingColumn.KbFileUID)
+// ListEmbeddingsByKBFileUID fetches embeddings by their kbFileUID.
+func (r *repository) ListEmbeddingsByKBFileUID(ctx context.Context, kbFileUID uuid.UUID) ([]EmbeddingModel, error) {
+	var embeddings []EmbeddingModel
+	where := fmt.Sprintf("%s = ?", EmbeddingColumn.KBFileUID)
 	if err := r.db.WithContext(ctx).Where(where, kbFileUID).Find(&embeddings).Error; err != nil {
 		return nil, err
 	}

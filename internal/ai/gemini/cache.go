@@ -17,38 +17,6 @@ const MaxInlineSize = 20 * 1024 * 1024
 // FileUploadTimeout is the timeout for file upload and processing
 const FileUploadTimeout = 5 * time.Minute
 
-// CacheInput defines the input for creating a cached context
-type CacheInput struct {
-	// Model to use for caching
-	Model string
-	// Content is the raw file content
-	Content []byte
-	// ContentType is the MIME type
-	ContentType string
-	// Filename for better identification
-	Filename string
-	// TTL for the cache (default: 1 hour)
-	TTL *time.Duration
-	// DisplayName for easier identification
-	DisplayName *string
-	// SystemInstruction for the cache
-	SystemInstruction *string
-}
-
-// CacheOutput defines the output of cache operations
-type CacheOutput struct {
-	// CacheName is the identifier for the cached content
-	CacheName string
-	// Model used for caching
-	Model string
-	// CreateTime when the cache was created
-	CreateTime time.Time
-	// ExpireTime when the cache will expire
-	ExpireTime time.Time
-	// TokenCount is the number of tokens cached
-	TokenCount int
-}
-
 // CreateCache creates a cached content with the document/media for efficient reuse
 func (p *Provider) createCache(ctx context.Context, input *CacheInput) (*CacheOutput, error) {
 	if input == nil {
@@ -151,10 +119,11 @@ func (p *Provider) createCache(ctx context.Context, input *CacheInput) (*CacheOu
 
 	// Build output
 	output := &CacheOutput{
-		CacheName:  cached.Name,
-		Model:      cached.Model,
-		CreateTime: cached.CreateTime,
-		ExpireTime: cached.ExpireTime,
+		CacheName:     cached.Name,
+		Model:         cached.Model,
+		CreateTime:    cached.CreateTime,
+		ExpireTime:    cached.ExpireTime,
+		UsageMetadata: cached.UsageMetadata,
 	}
 
 	return output, nil

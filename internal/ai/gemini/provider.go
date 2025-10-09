@@ -68,10 +68,11 @@ func (p *Provider) ConvertToMarkdown(ctx context.Context, content []byte, fileTy
 	}
 
 	return &ai.ConversionResult{
-		Markdown:     output.Markdown,
-		Length:       []uint32{uint32(len(output.Markdown))},
-		Provider:     "gemini",
-		PositionData: nil,
+		Markdown:      output.Markdown,
+		Length:        []uint32{uint32(len(output.Markdown))},
+		Provider:      "gemini",
+		PositionData:  nil,
+		UsageMetadata: output.UsageMetadata,
 	}, nil
 }
 
@@ -86,10 +87,11 @@ func (p *Provider) ConvertToMarkdownWithCache(ctx context.Context, cacheName, pr
 	}
 
 	return &ai.ConversionResult{
-		Markdown:     output.Markdown,
-		Length:       []uint32{uint32(len(output.Markdown))},
-		Provider:     "gemini",
-		PositionData: nil,
+		Markdown:      output.Markdown,
+		Length:        []uint32{uint32(len(output.Markdown))},
+		Provider:      "gemini",
+		PositionData:  nil,
+		UsageMetadata: output.UsageMetadata,
 	}, nil
 }
 
@@ -116,10 +118,11 @@ func (p *Provider) CreateCache(ctx context.Context, content []byte, fileType art
 	}
 
 	return &ai.CacheResult{
-		CacheName:  output.CacheName,
-		Model:      output.Model,
-		CreateTime: output.CreateTime,
-		ExpireTime: output.ExpireTime,
+		CacheName:     output.CacheName,
+		Model:         output.Model,
+		CreateTime:    output.CreateTime,
+		ExpireTime:    output.ExpireTime,
+		UsageMetadata: output.UsageMetadata,
 	}, nil
 }
 

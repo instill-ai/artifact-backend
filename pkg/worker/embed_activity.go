@@ -5,22 +5,22 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/gofrs/uuid"
 	"go.temporal.io/sdk/temporal"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/structpb"
 	"gorm.io/gorm"
 
+	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
-	"github.com/instill-ai/artifact-backend/pkg/service"
+	"github.com/instill-ai/artifact-backend/pkg/types"
 
 	errorsx "github.com/instill-ai/x/errors"
 )
 
 // This file contains embedding activities used by ProcessFileWorkflow and SaveEmbeddingsToVectorDBWorkflow:
 // - EmbedTextsActivity - Generates vector embeddings for text chunks using AI models
-// - GetChunksForEmbeddingActivity - Retrieves chunk content for embedding generation
+// - GetTextChunksForEmbeddingActivity - Retrieves text chunk content for embedding generation
 // - SaveEmbeddingBatchActivity - Saves embedding vectors to vector database in batches
 // - DeleteOldEmbeddingsFromVectorDBActivity - Removes outdated embeddings from vector DB
 // - DeleteOldEmbeddingsFromDBActivity - Removes outdated embedding records from database
@@ -33,66 +33,57 @@ type EmbedTextsActivityParam struct {
 	RequestMetadata map[string][]string // gRPC metadata for authentication
 }
 
-// GetChunksForEmbeddingActivityParam retrieves chunks for embedding
+// GetChunksForEmbeddingActivityParam retrieves text chunks for embedding generation
 type GetChunksForEmbeddingActivityParam struct {
-	FileUID uuid.UUID // File unique identifier
+	FileUID types.FileUIDType // File unique identifier
 }
 
-// GetChunksForEmbeddingActivityResult contains chunk data
-type GetChunksForEmbeddingActivityResult struct {
-	SourceTable string                 // Source table name (e.g., "converted_file")
-	SourceUID   uuid.UUID              // Source record unique identifier
-	Chunks      []repository.TextChunk // Text chunks with metadata
-	Texts       []string               // Text content for embedding generation
-	Metadata    *structpb.Struct       // External metadata from request
-	FileName    string                 // File name for identification
+// GetTextChunksForEmbeddingActivityResult contains text chunk data
+type GetTextChunksForEmbeddingActivityResult struct {
+	SourceTable string                      // Source table name (e.g., "converted_file")
+	SourceUID   types.SourceUIDType         // Source record unique identifier
+	Chunks      []repository.TextChunkModel // Text chunks with metadata
+	Texts       []string                    // Text chunk content for embedding generation
+	Metadata    *structpb.Struct            // External metadata from request
+	FileName    string                      // File name for identification
 }
 
 // SaveEmbeddingBatchActivityParam saves a single batch of embeddings
 type SaveEmbeddingBatchActivityParam struct {
-	KnowledgeBaseUID uuid.UUID              // Knowledge base unique identifier
-	FileUID          uuid.UUID              // File unique identifier
-	FileName         string                 // File name for identification
-	Embeddings       []repository.Embedding // Embeddings batch to save
-	BatchNumber      int                    // Current batch number (1-based)
-	TotalBatches     int                    // Total number of batches
+	KBUID        types.KBUIDType             // Knowledge base unique identifier
+	FileUID      types.FileUIDType           // File unique identifier
+	FileName     string                      // File name for identification
+	Embeddings   []repository.EmbeddingModel // Embeddings batch to save
+	BatchNumber  int                         // Current batch number (1-based)
+	TotalBatches int                         // Total number of batches
 }
 
 // DeleteOldEmbeddingsActivityParam for deleting old embeddings before batch save
 type DeleteOldEmbeddingsActivityParam struct {
-	KnowledgeBaseUID uuid.UUID // Knowledge base unique identifier
-	FileUID          uuid.UUID // File unique identifier
+	KBUID   types.KBUIDType   // Knowledge base unique identifier
+	FileUID types.FileUIDType // File unique identifier
 }
 
 // SaveEmbeddingsToDBActivityParam saves embedding metadata to DB
 type SaveEmbeddingsToDBActivityParam struct {
-	FileUID    uuid.UUID              // File unique identifier
-	Embeddings []repository.Embedding // Embeddings to save to database
+	FileUID    types.FileUIDType           // File unique identifier
+	Embeddings []repository.EmbeddingModel // Embeddings to save to database
 }
 
 // UpdateEmbeddingMetadataActivityParam updates metadata after embedding
 type UpdateEmbeddingMetadataActivityParam struct {
-	FileUID  uuid.UUID // File unique identifier
-	Pipeline string    // Pipeline used for embedding generation
+	FileUID  types.FileUIDType // File unique identifier
+	Pipeline string            // Pipeline used for embedding generation
 }
 
-// GetChunksForEmbeddingActivity retrieves chunks and texts for embedding
+// GetChunksForEmbeddingActivity retrieves text chunks and texts for embedding
 // This is a DB read operation - idempotent
-func (w *Worker) GetChunksForEmbeddingActivity(ctx context.Context, param *GetChunksForEmbeddingActivityParam) (*GetChunksForEmbeddingActivityResult, error) {
-	w.log.Info("GetChunksForEmbeddingActivity: Fetching chunks",
+func (w *Worker) GetChunksForEmbeddingActivity(ctx context.Context, param *GetChunksForEmbeddingActivityParam) (*GetTextChunksForEmbeddingActivityResult, error) {
+	w.log.Info("GetChunksForEmbeddingActivity: Fetching text chunks",
 		zap.String("fileUID", param.FileUID.String()))
 
-	// Safety check: ensure service is initialized
-	if w.service == nil {
-		return nil, temporal.NewApplicationErrorWithCause(
-			"Service not initialized in worker",
-			getChunksForEmbeddingActivityError,
-			fmt.Errorf("worker service is nil"),
-		)
-	}
-
 	// Get file
-	files, err := w.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{param.FileUID})
+	files, err := w.repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{param.FileUID})
 	if err != nil || len(files) == 0 {
 		err = errorsx.AddMessage(err, "Unable to retrieve file information. Please try again.")
 		return nil, temporal.NewApplicationErrorWithCause(
@@ -103,10 +94,10 @@ func (w *Worker) GetChunksForEmbeddingActivity(ctx context.Context, param *GetCh
 	}
 	file := files[0]
 
-	// Get chunks by file
-	sourceTable, sourceUID, chunks, _, texts, err := w.service.GetChunksByFile(ctx, &file)
+	// Get text chunks by file
+	sourceTable, sourceUID, chunks, _, texts, err := w.getTextChunksByFile(ctx, &file)
 	if err != nil {
-		err = errorsx.AddMessage(err, "Unable to retrieve content chunks. Please try again.")
+		err = errorsx.AddMessage(err, "Unable to retrieve text chunks. Please try again.")
 		return nil, temporal.NewApplicationErrorWithCause(
 			errorsx.MessageOrErr(err),
 			getChunksForEmbeddingActivityError,
@@ -114,11 +105,11 @@ func (w *Worker) GetChunksForEmbeddingActivity(ctx context.Context, param *GetCh
 		)
 	}
 
-	w.log.Info("GetChunksForEmbeddingActivity: Chunks retrieved",
+	w.log.Info("GetChunksForEmbeddingActivity: Text chunks retrieved",
 		zap.Int("chunkCount", len(chunks)),
 		zap.Int("textCount", len(texts)))
 
-	return &GetChunksForEmbeddingActivityResult{
+	return &GetTextChunksForEmbeddingActivityResult{
 		SourceTable: sourceTable,
 		SourceUID:   sourceUID,
 		Chunks:      chunks,
@@ -132,7 +123,7 @@ func (w *Worker) GetChunksForEmbeddingActivity(ctx context.Context, param *GetCh
 // This is designed for parallel execution - each batch is independent
 func (w *Worker) SaveEmbeddingBatchActivity(ctx context.Context, param *SaveEmbeddingBatchActivityParam) error {
 	w.log.Info("SaveEmbeddingBatchActivity: Saving batch",
-		zap.String("kbUID", param.KnowledgeBaseUID.String()),
+		zap.String("kbUID", param.KBUID.String()),
 		zap.Int("batchNumber", param.BatchNumber),
 		zap.Int("totalBatches", param.TotalBatches),
 		zap.Int("embeddingCount", len(param.Embeddings)))
@@ -143,30 +134,29 @@ func (w *Worker) SaveEmbeddingBatchActivity(ctx context.Context, param *SaveEmbe
 	}
 
 	// Build vectors for vector db
-	collection := service.KBCollectionName(param.KnowledgeBaseUID)
+	collection := constant.KBCollectionName(param.KBUID)
 
-	externalServiceCall := func(insertedEmbeddings []repository.Embedding) error {
-		vectors := make([]service.Embedding, len(insertedEmbeddings))
+	externalServiceCall := func(insertedEmbeddings []repository.EmbeddingModel) error {
+		// Convert repository.Embedding to repository.VectorEmbedding for vector DB
+		vectors := make([]repository.VectorEmbedding, len(insertedEmbeddings))
 		for j, emb := range insertedEmbeddings {
-			vectors[j] = service.Embedding{
+			vectors[j] = repository.VectorEmbedding{
 				SourceTable:  emb.SourceTable,
 				SourceUID:    emb.SourceUID.String(),
 				EmbeddingUID: emb.UID.String(),
 				Vector:       emb.Vector,
-				FileUID:      emb.KbFileUID,
-				FileName:     param.FileName,
-				FileType:     emb.FileType,
-				ContentType:  emb.ContentType,
+				FileUID:      emb.KBFileUID,
 			}
 		}
-		if err := w.service.VectorDB().InsertVectorsInCollection(ctx, collection, vectors); err != nil {
+		// Insert embeddings into vector database
+		if err := w.repository.InsertVectorsInCollection(ctx, collection, vectors); err != nil {
 			return fmt.Errorf("saving embeddings in vector db: %s", errorsx.MessageOrErr(err))
 		}
 		return nil
 	}
 
 	// Insert embeddings in transaction
-	_, err := w.service.Repository().CreateEmbeddings(ctx, param.Embeddings, externalServiceCall)
+	_, err := w.repository.CreateEmbeddings(ctx, param.Embeddings, externalServiceCall)
 	if err != nil {
 		err = errorsx.AddMessage(err, fmt.Sprintf("Unable to save embeddings (batch %d/%d). Please try again.", param.BatchNumber, param.TotalBatches))
 		return temporal.NewApplicationErrorWithCause(
@@ -183,12 +173,12 @@ func (w *Worker) SaveEmbeddingBatchActivity(ctx context.Context, param *SaveEmbe
 // This is used by the concurrent embedding workflow - idempotent
 func (w *Worker) DeleteOldEmbeddingsFromVectorDBActivity(ctx context.Context, param *DeleteOldEmbeddingsActivityParam) error {
 	w.log.Info("DeleteOldEmbeddingsFromVectorDBActivity: Starting",
-		zap.String("kbUID", param.KnowledgeBaseUID.String()),
+		zap.String("kbUID", param.KBUID.String()),
 		zap.String("fileUID", param.FileUID.String()))
 
-	collection := service.KBCollectionName(param.KnowledgeBaseUID)
+	collection := constant.KBCollectionName(param.KBUID)
 
-	if err := w.service.VectorDB().DeleteEmbeddingsWithFileUID(ctx, collection, param.FileUID); err != nil {
+	if err := w.repository.DeleteEmbeddingsWithFileUID(ctx, collection, param.FileUID); err != nil {
 		err = errorsx.AddMessage(err, "Unable to delete old embeddings from vector database. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
 			errorsx.MessageOrErr(err),
@@ -206,7 +196,7 @@ func (w *Worker) DeleteOldEmbeddingsFromDBActivity(ctx context.Context, param *D
 	w.log.Info("DeleteOldEmbeddingsFromDBActivity: Starting",
 		zap.String("fileUID", param.FileUID.String()))
 
-	if err := w.service.Repository().DeleteEmbeddingsByKbFileUID(ctx, param.FileUID); err != nil {
+	if err := w.repository.DeleteEmbeddingsByKBFileUID(ctx, param.FileUID); err != nil {
 		err = errorsx.AddMessage(err, "Unable to delete old embedding records. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
 			errorsx.MessageOrErr(err),
@@ -222,11 +212,11 @@ func (w *Worker) DeleteOldEmbeddingsFromDBActivity(ctx context.Context, param *D
 // This is called once at the end after all batches are saved
 func (w *Worker) FlushCollectionActivity(ctx context.Context, param *DeleteOldEmbeddingsActivityParam) error {
 	w.log.Info("FlushCollectionActivity: Flushing collection",
-		zap.String("kbUID", param.KnowledgeBaseUID.String()))
+		zap.String("kbUID", param.KBUID.String()))
 
-	collection := service.KBCollectionName(param.KnowledgeBaseUID)
+	collection := constant.KBCollectionName(param.KBUID)
 
-	if err := w.service.VectorDB().FlushCollection(ctx, collection); err != nil {
+	if err := w.repository.FlushCollection(ctx, collection); err != nil {
 		err = errorsx.AddMessage(err, "Unable to flush vector database collection. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
 			errorsx.MessageOrErr(err),
@@ -248,7 +238,7 @@ func (w *Worker) UpdateEmbeddingMetadataActivity(ctx context.Context, param *Upd
 		EmbeddingPipe: param.Pipeline,
 	}
 
-	err := w.service.Repository().UpdateKBFileMetadata(ctx, param.FileUID, mdUpdate)
+	err := w.repository.UpdateKnowledgeFileMetadata(ctx, param.FileUID, mdUpdate)
 	if err != nil {
 		// If file not found, it may have been deleted during processing - this is OK
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -283,7 +273,7 @@ func (w *Worker) EmbedTextsActivity(ctx context.Context, param *EmbedTextsActivi
 		authCtx = metadata.NewOutgoingContext(ctx, metadata.MD(param.RequestMetadata))
 	}
 
-	vectors, err := w.service.EmbeddingTextBatch(authCtx, param.Texts)
+	vectors, err := w.embedTextBatch(authCtx, param.Texts)
 	if err != nil {
 		w.log.Error("Failed to embed text batch in vector db",
 			zap.Int("batchIndex", param.BatchIndex),

@@ -92,10 +92,10 @@ func (p *Provider) convertToMarkdownWithoutCache(ctx context.Context, input *Con
 
 	// === Build Output ===
 	output := &ConversionOutput{
-		Markdown:   markdown,
-		TokensUsed: p.extractTokenUsage(result),
-		CacheName:  nil, // No cache used
-		Model:      model,
+		Markdown:      markdown,
+		UsageMetadata: p.extractTokenUsage(result),
+		CacheName:     nil, // No cache used
+		Model:         model,
 	}
 
 	return output, nil
@@ -132,9 +132,9 @@ func (p *Provider) convertToMarkdownWithCache(ctx context.Context, cacheName, pr
 
 	// === Configure API Call ===
 	config := &genai.GenerateContentConfig{
-		Temperature:   genai.Ptr(float32(1.0)), // Deterministic output
+		Temperature:   genai.Ptr(float32(1.0)),
 		TopP:          genai.Ptr(float32(0.95)),
-		CachedContent: cacheName, // Use cached context
+		CachedContent: cacheName,
 	}
 
 	// === Call Gemini API ===
@@ -157,10 +157,10 @@ func (p *Provider) convertToMarkdownWithCache(ctx context.Context, cacheName, pr
 
 	// === Build Output ===
 	output := &ConversionOutput{
-		Markdown:   markdown,
-		TokensUsed: p.extractTokenUsage(result),
-		CacheName:  &cacheName, // Cache was used
-		Model:      model,
+		Markdown:      markdown,
+		UsageMetadata: p.extractTokenUsage(result),
+		CacheName:     &cacheName, // Cache was used
+		Model:         model,
 	}
 
 	return output, nil
@@ -375,19 +375,12 @@ func (p *Provider) extractMarkdownFromResponse(response *genai.GenerateContentRe
 }
 
 // extractTokenUsage extracts token usage information from the response
-func (p *Provider) extractTokenUsage(response *genai.GenerateContentResponse) *TokenUsage {
+func (p *Provider) extractTokenUsage(response *genai.GenerateContentResponse) *genai.GenerateContentResponseUsageMetadata {
 	if response == nil || response.UsageMetadata == nil {
 		return nil
 	}
 
-	usage := &TokenUsage{
-		InputTokens:       int32(response.UsageMetadata.PromptTokenCount),
-		OutputTokens:      int32(response.UsageMetadata.CandidatesTokenCount),
-		TotalTokens:       int32(response.UsageMetadata.TotalTokenCount),
-		CachedInputTokens: int32(response.UsageMetadata.CachedContentTokenCount),
-	}
-
-	return usage
+	return response.UsageMetadata
 }
 
 // cleanMarkdown removes unnecessary code block markers and cleans up the output

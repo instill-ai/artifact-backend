@@ -9,14 +9,13 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/instill-ai/artifact-backend/pkg/mock"
-	"github.com/instill-ai/artifact-backend/pkg/service"
+	"github.com/instill-ai/artifact-backend/pkg/worker/mock"
 )
 
 func TestDeleteFilesWorkflowParam_Validation(t *testing.T) {
 	c := qt.New(t)
 
-	param := service.DeleteFilesWorkflowParam{
+	param := DeleteFilesWorkflowParam{
 		Bucket:    "test-bucket",
 		FilePaths: []string{"file1.txt", "file2.txt"},
 	}
@@ -33,7 +32,7 @@ func TestGetFilesWorkflowParam_Validation(t *testing.T) {
 		"path/to/file2.txt",
 	}
 
-	param := service.GetFilesWorkflowParam{
+	param := GetFilesWorkflowParam{
 		Bucket:    "test-bucket",
 		FilePaths: filePaths,
 	}
@@ -45,7 +44,7 @@ func TestGetFilesWorkflowParam_Validation(t *testing.T) {
 func TestDeleteFilesWorkflow_EmptyPaths(t *testing.T) {
 	c := qt.New(t)
 
-	param := service.DeleteFilesWorkflowParam{
+	param := DeleteFilesWorkflowParam{
 		Bucket:    "test-bucket",
 		FilePaths: []string{},
 	}
@@ -61,23 +60,19 @@ func TestDeleteFilesWorkflow_Success(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 
-	mockSvc := mock.NewServiceMock(mc)
-	mockMinIO := mock.NewMinioIMock(mc)
-	mockSvc.MinIOMock.Return(mockMinIO)
+	mockRepo := mock.NewRepositoryMock(mc)
+	mockRepo.DeleteFileMock.Return(nil)
 
-	// Mock for DeleteFileActivity
-	mockMinIO.DeleteFileMock.Return(nil)
+	w := &Worker{repository: mockRepo, log: zap.NewNop()}
+	env.RegisterActivity(w.DeleteFileActivity)
+	env.RegisterWorkflow(w.DeleteFilesWorkflow)
 
-	worker := &Worker{service: mockSvc, log: zap.NewNop()}
-	env.RegisterActivity(worker.DeleteFileActivity)
-	env.RegisterWorkflow(worker.DeleteFilesWorkflow)
-
-	param := service.DeleteFilesWorkflowParam{
+	param := DeleteFilesWorkflowParam{
 		Bucket:    "test-bucket",
 		FilePaths: []string{"file1.txt", "file2.txt"},
 	}
 
-	env.ExecuteWorkflow(worker.DeleteFilesWorkflow, param)
+	env.ExecuteWorkflow(w.DeleteFilesWorkflow, param)
 
 	c.Assert(env.IsWorkflowCompleted(), qt.IsTrue)
 	c.Assert(env.GetWorkflowError(), qt.IsNil)
@@ -90,28 +85,24 @@ func TestGetFilesWorkflow_Success(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 
-	mockSvc := mock.NewServiceMock(mc)
-	mockMinIO := mock.NewMinioIMock(mc)
-	mockSvc.MinIOMock.Return(mockMinIO)
+	mockRepo := mock.NewRepositoryMock(mc)
+	mockRepo.GetFileMock.Return([]byte("test content"), nil)
 
-	// Mock for GetFileActivity
-	mockMinIO.GetFileMock.Return([]byte("file content"), nil)
+	w := &Worker{repository: mockRepo, log: zap.NewNop()}
+	env.RegisterActivity(w.GetFileActivity)
+	env.RegisterWorkflow(w.GetFilesWorkflow)
 
-	worker := &Worker{service: mockSvc, log: zap.NewNop()}
-	env.RegisterActivity(worker.GetFileActivity)
-	env.RegisterWorkflow(worker.GetFilesWorkflow)
-
-	param := service.GetFilesWorkflowParam{
+	param := GetFilesWorkflowParam{
 		Bucket:    "test-bucket",
 		FilePaths: []string{"file1.txt", "file2.txt"},
 	}
 
-	env.ExecuteWorkflow(worker.GetFilesWorkflow, param)
+	env.ExecuteWorkflow(w.GetFilesWorkflow, param)
 
 	c.Assert(env.IsWorkflowCompleted(), qt.IsTrue)
 	c.Assert(env.GetWorkflowError(), qt.IsNil)
 
-	var results []service.FileContent
+	var results []FileContent
 	err := env.GetWorkflowResult(&results)
 	c.Assert(err, qt.IsNil)
 	c.Assert(results, qt.HasLen, 2)

@@ -9,7 +9,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/instill-ai/artifact-backend/pkg/mock"
+	"github.com/instill-ai/artifact-backend/pkg/worker/mock"
 )
 
 func TestDeleteFileActivityParam_Validation(t *testing.T) {
@@ -78,18 +78,12 @@ func TestDeleteFileActivity_Success(t *testing.T) {
 	c := qt.New(t)
 	mc := minimock.NewController(c)
 
+	mockRepository := mock.NewRepositoryMock(mc)
+	mockRepository.DeleteFileMock.Return(nil)
+
 	ctx := context.Background()
 
-	mockMinIO := mock.NewMinioIMock(mc)
-	mockMinIO.DeleteFileMock.Return(nil)
-
-	mockSvc := mock.NewServiceMock(mc)
-	mockSvc.MinIOMock.Return(mockMinIO)
-
-	w := &Worker{
-		service: mockSvc,
-		log:     zap.NewNop(),
-	}
+	w := &Worker{repository: mockRepository, log: zap.NewNop()}
 
 	param := &DeleteFileActivityParam{
 		Bucket: "test-bucket",
@@ -104,19 +98,13 @@ func TestGetFileActivity_Success(t *testing.T) {
 	c := qt.New(t)
 	mc := minimock.NewController(c)
 
-	ctx := context.Background()
+	mockRepository := mock.NewRepositoryMock(mc)
 	fileContent := []byte("test file content")
+	mockRepository.GetFileMock.Return(fileContent, nil)
 
-	mockMinIO := mock.NewMinioIMock(mc)
-	mockMinIO.GetFileMock.Return(fileContent, nil)
+	ctx := context.Background()
 
-	mockSvc := mock.NewServiceMock(mc)
-	mockSvc.MinIOMock.Return(mockMinIO)
-
-	w := &Worker{
-		service: mockSvc,
-		log:     zap.NewNop(),
-	}
+	w := &Worker{repository: mockRepository, log: zap.NewNop()}
 
 	param := &GetFileActivityParam{
 		Bucket: "test-bucket",

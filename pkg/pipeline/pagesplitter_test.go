@@ -1,4 +1,4 @@
-package service
+package pipeline
 
 import (
 	"os"
@@ -17,20 +17,20 @@ func TestPageSplitter_Split(t *testing.T) {
 		name           string
 		pageDelimiters []uint32
 		content        string
-		expected       []Chunk
+		expected       []TextChunk
 		wantErr        string
 	}{
 		{
 			name:           "single page",
 			pageDelimiters: []uint32{5},
 			content:        "Hello",
-			expected: []Chunk{
+			expected: []TextChunk{
 				{
 					Start:  0,
 					End:    5,
 					Text:   "Hello",
 					Tokens: 1, // "Hello" = 1 token
-					Reference: &repository.ChunkReference{
+					Reference: &repository.TextChunkReference{
 						PageRange: [2]uint32{1, 1},
 					},
 				},
@@ -40,13 +40,13 @@ func TestPageSplitter_Split(t *testing.T) {
 			name:           "multiple pages",
 			pageDelimiters: []uint32{5, 10},
 			content:        "HelloWorld",
-			expected: []Chunk{
+			expected: []TextChunk{
 				{
 					Start:  0,
 					End:    5,
 					Text:   "Hello",
 					Tokens: 1, // "Hello" = 1 token
-					Reference: &repository.ChunkReference{
+					Reference: &repository.TextChunkReference{
 						PageRange: [2]uint32{1, 1},
 					},
 				},
@@ -55,7 +55,7 @@ func TestPageSplitter_Split(t *testing.T) {
 					End:    10,
 					Text:   "World",
 					Tokens: 1, // "World" = 1 token
-					Reference: &repository.ChunkReference{
+					Reference: &repository.TextChunkReference{
 						PageRange: [2]uint32{2, 2},
 					},
 				},
@@ -65,19 +65,19 @@ func TestPageSplitter_Split(t *testing.T) {
 			name:           "empty content",
 			pageDelimiters: []uint32{0},
 			content:        "",
-			expected:       []Chunk{}, // empty chunks are skipped
+			expected:       []TextChunk{}, // empty chunks are skipped
 		},
 		{
 			name:           "unicode content",
 			pageDelimiters: []uint32{2, 4},
 			content:        "你好世界",
-			expected: []Chunk{
+			expected: []TextChunk{
 				{
 					Start:  0,
 					End:    2,
 					Text:   "你好",
 					Tokens: 2, // "你好" = 2 tokens
-					Reference: &repository.ChunkReference{
+					Reference: &repository.TextChunkReference{
 						PageRange: [2]uint32{1, 1},
 					},
 				},
@@ -86,7 +86,7 @@ func TestPageSplitter_Split(t *testing.T) {
 					End:    4,
 					Text:   "世界",
 					Tokens: 3, // "世界" = 3 tokens
-					Reference: &repository.ChunkReference{
+					Reference: &repository.TextChunkReference{
 						PageRange: [2]uint32{2, 2},
 					},
 				},
@@ -96,13 +96,13 @@ func TestPageSplitter_Split(t *testing.T) {
 			name:           "content with newlines",
 			pageDelimiters: []uint32{6, 12},
 			content:        "Line 1\nLine 2",
-			expected: []Chunk{
+			expected: []TextChunk{
 				{
 					Start:  0,
 					End:    6,
 					Text:   "Line 1",
 					Tokens: 3, // "Line 1" = 3 tokens
-					Reference: &repository.ChunkReference{
+					Reference: &repository.TextChunkReference{
 						PageRange: [2]uint32{1, 1},
 					},
 				},
@@ -111,7 +111,7 @@ func TestPageSplitter_Split(t *testing.T) {
 					End:    12,
 					Text:   "\nLine ",
 					Tokens: 3, // "\nLine " = 3 tokens
-					Reference: &repository.ChunkReference{
+					Reference: &repository.TextChunkReference{
 						PageRange: [2]uint32{2, 2},
 					},
 				},
@@ -128,19 +128,19 @@ func TestPageSplitter_Split(t *testing.T) {
 			name:           "no delimiters",
 			pageDelimiters: []uint32{},
 			content:        "Hello",
-			expected:       []Chunk{},
+			expected:       []TextChunk{},
 		},
 		{
 			name:           "delimiter at content boundary",
 			pageDelimiters: []uint32{5},
 			content:        "Hello",
-			expected: []Chunk{
+			expected: []TextChunk{
 				{
 					Start:  0,
 					End:    5,
 					Text:   "Hello",
 					Tokens: 1,
-					Reference: &repository.ChunkReference{
+					Reference: &repository.TextChunkReference{
 						PageRange: [2]uint32{1, 1},
 					},
 				},
@@ -150,13 +150,13 @@ func TestPageSplitter_Split(t *testing.T) {
 			name:           "multiple delimiters with same position",
 			pageDelimiters: []uint32{5, 5, 10},
 			content:        "HelloWorld",
-			expected: []Chunk{
+			expected: []TextChunk{
 				{
 					Start:  0,
 					End:    5,
 					Text:   "Hello",
 					Tokens: 1,
-					Reference: &repository.ChunkReference{
+					Reference: &repository.TextChunkReference{
 						PageRange: [2]uint32{1, 1},
 					},
 				},
@@ -165,7 +165,7 @@ func TestPageSplitter_Split(t *testing.T) {
 					End:    10,
 					Text:   "World",
 					Tokens: 1,
-					Reference: &repository.ChunkReference{
+					Reference: &repository.TextChunkReference{
 						PageRange: [2]uint32{3, 3},
 					},
 				},
@@ -175,19 +175,19 @@ func TestPageSplitter_Split(t *testing.T) {
 			name:           "all empty chunks",
 			pageDelimiters: []uint32{0, 0, 0},
 			content:        "",
-			expected:       []Chunk{},
+			expected:       []TextChunk{},
 		},
 		{
 			name:           "mixed empty and non-empty chunks",
 			pageDelimiters: []uint32{0, 5, 5},
 			content:        "Hello",
-			expected: []Chunk{
+			expected: []TextChunk{
 				{
 					Start:  0,
 					End:    5,
 					Text:   "Hello",
 					Tokens: 1,
-					Reference: &repository.ChunkReference{
+					Reference: &repository.TextChunkReference{
 						PageRange: [2]uint32{2, 2},
 					},
 				},
@@ -238,8 +238,8 @@ func TestPageSplitter_Split_RealLife(t *testing.T) {
 	c := qt.New(t)
 
 	c.Run("EU Council document with page delimiters", func(c *qt.C) {
-		// Read the input content from testdata
-		inputPath := filepath.Join("testdata", "page-splitter-input.md")
+		// Read the input content from testdata (now in service package's testdata)
+		inputPath := filepath.Join("..", "service", "testdata", "page-splitter-input.md")
 		content, err := os.ReadFile(inputPath)
 		c.Assert(err, qt.IsNil, qt.Commentf("Failed to read input file: %s", inputPath))
 
@@ -282,7 +282,7 @@ func TestPageSplitter_Split_RealLife(t *testing.T) {
 			c.Assert(chunk.End, qt.Equals, expectedEndPositions[i], qt.Commentf("Chunk %d end position mismatch", i+1))
 
 			// Verify against expected output files
-			outputPath := filepath.Join("testdata", expectedOutputs[i])
+			outputPath := filepath.Join("..", "service", "testdata", expectedOutputs[i])
 			expectedContent, err := os.ReadFile(outputPath)
 			c.Assert(err, qt.IsNil, qt.Commentf("Failed to read expected output file: %s", outputPath))
 			c.Assert(chunk.Text, qt.Equals, string(expectedContent), qt.Commentf("Chunk %d content doesn't match expected output", i+1))

@@ -9,28 +9,29 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
+
+	"github.com/instill-ai/artifact-backend/pkg/types"
 	"github.com/lib/pq"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	errorsx "github.com/instill-ai/x/errors"
 )
 
-type KnowledgeBaseI interface {
-	CreateKnowledgeBase(ctx context.Context, kb KnowledgeBase, externalService func(kbUID uuid.UUID) error) (*KnowledgeBase, error)
-	ListKnowledgeBases(ctx context.Context, ownerUID string) ([]KnowledgeBase, error)
-	ListKnowledgeBasesByCatalogType(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType) ([]KnowledgeBase, error)
-	UpdateKnowledgeBase(ctx context.Context, id, ownerUID string, kb KnowledgeBase) (*KnowledgeBase, error)
-	DeleteKnowledgeBase(ctx context.Context, ownerUID, kbID string) (*KnowledgeBase, error)
-	GetKnowledgeBaseByOwnerAndKbID(ctx context.Context, ownerUID uuid.UUID, kbID string) (*KnowledgeBase, error)
-	GetKnowledgeBaseCountByOwner(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType) (int64, error)
+type KnowledgeBase interface {
+	CreateKnowledgeBase(ctx context.Context, kb KnowledgeBaseModel, externalService func(kbUID types.KBUIDType) error) (*KnowledgeBaseModel, error)
+	ListKnowledgeBases(ctx context.Context, ownerUID string) ([]KnowledgeBaseModel, error)
+	ListKnowledgeBasesByCatalogType(ctx context.Context, ownerUID string, catalogType types.CatalogType) ([]KnowledgeBaseModel, error)
+	UpdateKnowledgeBase(ctx context.Context, id, ownerUID string, kb KnowledgeBaseModel) (*KnowledgeBaseModel, error)
+	DeleteKnowledgeBase(ctx context.Context, ownerUID, kbID string) (*KnowledgeBaseModel, error)
+	GetKnowledgeBaseByOwnerAndKbID(ctx context.Context, ownerUID types.OwnerUIDType, kbID string) (*KnowledgeBaseModel, error)
+	GetKnowledgeBaseCountByOwner(ctx context.Context, ownerUID string, catalogType types.CatalogType) (int64, error)
 	IncreaseKnowledgeBaseUsage(ctx context.Context, tx *gorm.DB, kbUID string, amount int) error
-	GetKnowledgeBasesByUIDs(ctx context.Context, kbUIDs []uuid.UUID) ([]KnowledgeBase, error)
-	GetKnowledgeBaseByUID(context.Context, uuid.UUID) (*KnowledgeBase, error)
+	GetKnowledgeBasesByUIDs(ctx context.Context, kbUIDs []uuid.UUID) ([]KnowledgeBaseModel, error)
+	GetKnowledgeBaseByUID(context.Context, uuid.UUID) (*KnowledgeBaseModel, error)
 }
 
-type KnowledgeBase struct {
+type KnowledgeBaseModel struct {
 	UID  uuid.UUID `gorm:"column:uid;type:uuid;default:uuid_generate_v4();primaryKey" json:"uid"`
 	KbID string    `gorm:"column:id;size:255;not null" json:"kb_id"`
 	// current name is the kb_id
@@ -50,7 +51,12 @@ type KnowledgeBase struct {
 	ConvertingPipelines pq.StringArray `gorm:"column:converting_pipelines;type:varchar(255)[]" json:"converting_pipelines"`
 }
 
-// table columns map
+// TableName overrides the default table name for GORM
+func (KnowledgeBaseModel) TableName() string {
+	return "knowledge_base"
+}
+
+// KnowledgeBaseColumns is the columns for the knowledge base table
 type KnowledgeBaseColumns struct {
 	UID         string
 	KbID        string
@@ -119,8 +125,8 @@ func formatPostgresArray(tags []string) string {
 	return "{" + strings.Join(tags, ",") + "}"
 }
 
-// CreateKnowledgeBase inserts a new KnowledgeBase record into the database.
-func (r *Repository) CreateKnowledgeBase(ctx context.Context, kb KnowledgeBase, externalService func(kbUID uuid.UUID) error) (*KnowledgeBase, error) {
+// CreateKnowledgeBase inserts a new KnowledgeBaseModel record into the database.
+func (r *repository) CreateKnowledgeBase(ctx context.Context, kb KnowledgeBaseModel, externalService func(kbUID types.KBUIDType) error) (*KnowledgeBaseModel, error) {
 	// Start a database transaction
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// check if the name is unique in the owner's knowledge bases
@@ -132,7 +138,7 @@ func (r *Repository) CreateKnowledgeBase(ctx context.Context, kb KnowledgeBase, 
 			return fmt.Errorf("knowledge base name already exists. err: %w", errorsx.ErrInvalidArgument)
 		}
 
-		// Create a new KnowledgeBase record
+		// Create a new KnowledgeBaseModel record
 		if err := tx.Create(&kb).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return fmt.Errorf("knowledge base ID not found: %v, err:%w", kb.KbID, gorm.ErrRecordNotFound)
@@ -157,9 +163,9 @@ func (r *Repository) CreateKnowledgeBase(ctx context.Context, kb KnowledgeBase, 
 	return &kb, nil
 }
 
-// GetKnowledgeBase fetches all KnowledgeBase records from the database, excluding soft-deleted ones.
-func (r *Repository) ListKnowledgeBases(ctx context.Context, owner string) ([]KnowledgeBase, error) {
-	var knowledgeBases []KnowledgeBase
+// GetKnowledgeBase fetches all KnowledgeBaseModel records from the database, excluding soft-deleted ones.
+func (r *repository) ListKnowledgeBases(ctx context.Context, owner string) ([]KnowledgeBaseModel, error) {
+	var knowledgeBases []KnowledgeBaseModel
 	// Exclude records where DeleteTime is not null and filter by owner
 	whereString := fmt.Sprintf("%v IS NULL AND %v = ?", KnowledgeBaseColumn.DeleteTime, KnowledgeBaseColumn.Owner)
 	if err := r.db.WithContext(ctx).Where(whereString, owner).Find(&knowledgeBases).Error; err != nil {
@@ -169,30 +175,30 @@ func (r *Repository) ListKnowledgeBases(ctx context.Context, owner string) ([]Kn
 	return knowledgeBases, nil
 }
 
-// ListKnowledgeBasesByCatalogType fetches all KnowledgeBase records from the database, excluding soft-deleted ones.
-func (r *Repository) ListKnowledgeBasesByCatalogType(ctx context.Context, owner string, catalogType artifactpb.CatalogType) ([]KnowledgeBase, error) {
-	var knowledgeBases []KnowledgeBase
+// ListKnowledgeBasesByCatalogType fetches all KnowledgeBaseModel records from the database, excluding soft-deleted ones.
+func (r *repository) ListKnowledgeBasesByCatalogType(ctx context.Context, owner string, catalogType types.CatalogType) ([]KnowledgeBaseModel, error) {
+	var knowledgeBases []KnowledgeBaseModel
 	// Exclude records where DeleteTime is not null and filter by owner
 	whereString := fmt.Sprintf("%v IS NULL AND %v = ? AND %v = ?", KnowledgeBaseColumn.DeleteTime, KnowledgeBaseColumn.Owner, KnowledgeBaseColumn.CatalogType)
-	if err := r.db.WithContext(ctx).Where(whereString, owner, catalogType.String()).Find(&knowledgeBases).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where(whereString, owner, string(catalogType)).Find(&knowledgeBases).Error; err != nil {
 		return nil, err
 	}
 
 	return knowledgeBases, nil
 }
 
-// UpdateKnowledgeBase updates a KnowledgeBase record in the database. The
+// UpdateKnowledgeBase updates a KnowledgeBaseModel record in the database. The
 // modifiable fields are description, tags and conversion pipelines.
-func (r *Repository) UpdateKnowledgeBase(ctx context.Context, id, owner string, kb KnowledgeBase) (*KnowledgeBase, error) {
+func (r *repository) UpdateKnowledgeBase(ctx context.Context, id, owner string, kb KnowledgeBaseModel) (*KnowledgeBaseModel, error) {
 	where := fmt.Sprintf("%s = ? AND %s = ? AND %s is NULL", KnowledgeBaseColumn.KbID, KnowledgeBaseFileColumn.Owner, KnowledgeBaseColumn.DeleteTime)
 
 	// Update the specific fields of the record. Empty fields will be ignored.
-	updatedKB := new(KnowledgeBase)
+	updatedKB := new(KnowledgeBaseModel)
 	err := r.db.WithContext(ctx).
 		Clauses(clause.Returning{}).
 		Model(&updatedKB).
 		Where(where, id, owner).
-		Updates(KnowledgeBase{
+		Updates(KnowledgeBaseModel{
 			Description:         kb.Description,
 			Tags:                kb.Tags,
 			ConvertingPipelines: kb.ConvertingPipelines,
@@ -208,9 +214,9 @@ func (r *Repository) UpdateKnowledgeBase(ctx context.Context, id, owner string, 
 }
 
 // DeleteKnowledgeBase sets the DeleteTime to the current time to perform a soft delete.
-func (r *Repository) DeleteKnowledgeBase(ctx context.Context, ownerUID string, kbID string) (*KnowledgeBase, error) {
+func (r *repository) DeleteKnowledgeBase(ctx context.Context, ownerUID string, kbID string) (*KnowledgeBaseModel, error) {
 	// Fetch the existing record to ensure it exists
-	var existingKB KnowledgeBase
+	var existingKB KnowledgeBaseModel
 	conds := fmt.Sprintf("%v = ? AND %v = ? AND %v IS NULL", KnowledgeBaseColumn.Owner, KnowledgeBaseColumn.KbID, KnowledgeBaseColumn.DeleteTime)
 	if err := r.db.WithContext(ctx).First(&existingKB, conds, ownerUID, kbID).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -234,8 +240,8 @@ func (r *Repository) DeleteKnowledgeBase(ctx context.Context, ownerUID string, k
 	return &existingKB, nil
 }
 
-func (r *Repository) checkIfKbIDUnique(ctx context.Context, owner string, kbID string) (bool, error) {
-	var existingKB KnowledgeBase
+func (r *repository) checkIfKbIDUnique(ctx context.Context, owner string, kbID string) (bool, error) {
+	var existingKB KnowledgeBaseModel
 	whereString := fmt.Sprintf("%v = ? AND %v = ? AND %s is NULL", KnowledgeBaseColumn.Owner, KnowledgeBaseColumn.KbID, KnowledgeBaseColumn.DeleteTime)
 	if err := r.db.WithContext(ctx).Where(whereString, owner, kbID).First(&existingKB).Error; err != nil {
 		if err != gorm.ErrRecordNotFound {
@@ -248,9 +254,9 @@ func (r *Repository) checkIfKbIDUnique(ctx context.Context, owner string, kbID s
 }
 
 // check if knowledge base exists by kb_uid
-func (r *Repository) checkIfKnowledgeBaseExists(ctx context.Context, kbUID uuid.UUID) (bool, error) {
+func (r *repository) checkIfKnowledgeBaseExists(ctx context.Context, kbUID types.KBUIDType) (bool, error) {
 	whereString := fmt.Sprintf("%v = ? AND %s is NULL", KnowledgeBaseColumn.UID, KnowledgeBaseColumn.DeleteTime)
-	err := r.db.WithContext(ctx).Where(whereString, kbUID).First(&KnowledgeBase{}).Error
+	err := r.db.WithContext(ctx).Where(whereString, kbUID).First(&KnowledgeBaseModel{}).Error
 	if err != nil {
 		if err != gorm.ErrRecordNotFound {
 			return false, err
@@ -263,8 +269,8 @@ func (r *Repository) checkIfKnowledgeBaseExists(ctx context.Context, kbUID uuid.
 }
 
 // get the knowledge base by (owner, kb_id)
-func (r *Repository) GetKnowledgeBaseByOwnerAndKbID(ctx context.Context, owner uuid.UUID, kbID string) (*KnowledgeBase, error) {
-	var existingKB KnowledgeBase
+func (r *repository) GetKnowledgeBaseByOwnerAndKbID(ctx context.Context, owner uuid.UUID, kbID string) (*KnowledgeBaseModel, error) {
+	var existingKB KnowledgeBaseModel
 	whereString := fmt.Sprintf("%v = ? AND %v = ? AND %v is NULL", KnowledgeBaseColumn.Owner, KnowledgeBaseColumn.KbID, KnowledgeBaseColumn.DeleteTime)
 	if err := r.db.WithContext(ctx).Where(whereString, owner, kbID).First(&existingKB).Error; err != nil {
 		return nil, err
@@ -273,32 +279,32 @@ func (r *Repository) GetKnowledgeBaseByOwnerAndKbID(ctx context.Context, owner u
 }
 
 // get the count of knowledge bases by owner
-func (r *Repository) GetKnowledgeBaseCountByOwner(ctx context.Context, owner string, catalogType artifactpb.CatalogType) (int64, error) {
+func (r *repository) GetKnowledgeBaseCountByOwner(ctx context.Context, owner string, catalogType types.CatalogType) (int64, error) {
 	var count int64
 	whereString := fmt.Sprintf("%v = ? AND %v is NULL AND %v = ?", KnowledgeBaseColumn.Owner, KnowledgeBaseColumn.DeleteTime, KnowledgeBaseColumn.CatalogType)
-	if err := r.db.WithContext(ctx).Model(&KnowledgeBase{}).Where(whereString, owner, catalogType.String()).Count(&count).Error; err != nil {
+	if err := r.db.WithContext(ctx).Model(&KnowledgeBaseModel{}).Where(whereString, owner, string(catalogType)).Count(&count).Error; err != nil {
 		return 0, err
 	}
 	return count, nil
 }
 
-// IncreaseKnowledgeBaseUsage increments the usage count of a KnowledgeBase record by a specified amount.
-func (r *Repository) IncreaseKnowledgeBaseUsage(ctx context.Context, tx *gorm.DB, kbUID string, amount int) error {
+// IncreaseKnowledgeBaseUsage increments the usage count of a KnowledgeBaseModel record by a specified amount.
+func (r *repository) IncreaseKnowledgeBaseUsage(ctx context.Context, tx *gorm.DB, kbUID string, amount int) error {
 	if tx == nil {
 		tx = r.db.WithContext(ctx)
 	}
-	// Increment the usage count of the KnowledgeBase record by the specified amount
+	// Increment the usage count of the KnowledgeBaseModel record by the specified amount
 	where := fmt.Sprintf("%v = ?", KnowledgeBaseColumn.UID)
 	expr := fmt.Sprintf("%v + ?", KnowledgeBaseColumn.Usage)
-	if err := tx.WithContext(ctx).Model(&KnowledgeBase{}).Where(where, kbUID).Update(KnowledgeBaseColumn.Usage, gorm.Expr(expr, amount)).Error; err != nil {
+	if err := tx.WithContext(ctx).Model(&KnowledgeBaseModel{}).Where(where, kbUID).Update(KnowledgeBaseColumn.Usage, gorm.Expr(expr, amount)).Error; err != nil {
 		return err
 	}
 	return nil
 }
 
 // GetKnowledgeBasesByUIDs fetches a slice of knowledge bases by UID.
-func (r *Repository) GetKnowledgeBasesByUIDs(ctx context.Context, kbUIDs []uuid.UUID) ([]KnowledgeBase, error) {
-	var knowledgeBases []KnowledgeBase
+func (r *repository) GetKnowledgeBasesByUIDs(ctx context.Context, kbUIDs []uuid.UUID) ([]KnowledgeBaseModel, error) {
+	var knowledgeBases []KnowledgeBaseModel
 	whereString := fmt.Sprintf("%v IN (?) AND %v IS NULL", KnowledgeBaseColumn.UID, KnowledgeBaseColumn.DeleteTime)
 	if err := r.db.WithContext(ctx).Where(whereString, kbUIDs).Find(&knowledgeBases).Error; err != nil {
 		return nil, err
@@ -307,8 +313,8 @@ func (r *Repository) GetKnowledgeBasesByUIDs(ctx context.Context, kbUIDs []uuid.
 }
 
 // GetKnowledgeBaseByUID fetches a knowledge base by its primary key.
-func (r *Repository) GetKnowledgeBaseByUID(ctx context.Context, uid uuid.UUID) (*KnowledgeBase, error) {
-	kb := new(KnowledgeBase)
+func (r *repository) GetKnowledgeBaseByUID(ctx context.Context, uid uuid.UUID) (*KnowledgeBaseModel, error) {
+	kb := new(KnowledgeBaseModel)
 	err := r.db.WithContext(ctx).Where("uid = ?", uid).First(kb).Error
 	return kb, err
 }

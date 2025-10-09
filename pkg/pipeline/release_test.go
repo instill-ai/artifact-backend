@@ -1,4 +1,4 @@
-package service
+package pipeline
 
 import (
 	"testing"

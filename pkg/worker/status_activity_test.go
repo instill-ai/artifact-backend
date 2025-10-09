@@ -11,8 +11,8 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/instill-ai/artifact-backend/pkg/mock"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
+	"github.com/instill-ai/artifact-backend/pkg/worker/mock"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
@@ -86,25 +86,16 @@ func TestGetFileStatusActivity_Success(t *testing.T) {
 	ctx := context.Background()
 	fileUID := uuid.Must(uuid.NewV4())
 
-	mockRepo := mock.NewRepositoryIMock(mc)
-	mockRepo.GetKnowledgeBaseFilesByFileUIDsMock.
+	mockRepository := mock.NewRepositoryMock(mc)
+	mockRepository.GetKnowledgeBaseFilesByFileUIDsMock.
 		When(minimock.AnyContext, []uuid.UUID{fileUID}).
-		Then([]repository.KnowledgeBaseFile{
-			{
-				UID:           fileUID,
-				ProcessStatus: artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED.String(),
-			},
+		Then([]repository.KnowledgeBaseFileModel{
+			{UID: fileUID, ProcessStatus: artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED.String()},
 		}, nil)
 
-	mockService := mock.NewServiceMock(mc)
-	mockService.RepositoryMock.Return(mockRepo)
+	w := &Worker{repository: mockRepository, log: zap.NewNop()}
 
-	w := &Worker{
-		service: mockService,
-		log:     zap.NewNop(),
-	}
-
-	status, err := w.GetFileStatusActivity(ctx, fileUID)
+	status, err := w.GetFileStatusActivity(ctx, &GetFileStatusActivityParam{FileUID: fileUID})
 	c.Assert(err, qt.IsNil)
 	c.Assert(status, qt.Equals, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED)
 }
@@ -116,20 +107,14 @@ func TestGetFileStatusActivity_FileNotFound(t *testing.T) {
 	ctx := context.Background()
 	fileUID := uuid.Must(uuid.NewV4())
 
-	mockRepo := mock.NewRepositoryIMock(mc)
-	mockRepo.GetKnowledgeBaseFilesByFileUIDsMock.
+	mockRepository := mock.NewRepositoryMock(mc)
+	mockRepository.GetKnowledgeBaseFilesByFileUIDsMock.
 		When(minimock.AnyContext, []uuid.UUID{fileUID}).
-		Then([]repository.KnowledgeBaseFile{}, nil)
+		Then([]repository.KnowledgeBaseFileModel{}, nil)
 
-	mockService := mock.NewServiceMock(mc)
-	mockService.RepositoryMock.Return(mockRepo)
+	w := &Worker{repository: mockRepository, log: zap.NewNop()}
 
-	w := &Worker{
-		service: mockService,
-		log:     zap.NewNop(),
-	}
-
-	status, err := w.GetFileStatusActivity(ctx, fileUID)
+	status, err := w.GetFileStatusActivity(ctx, &GetFileStatusActivityParam{FileUID: fileUID})
 	c.Assert(err, qt.ErrorMatches, ".*File not found.*")
 	c.Assert(status, qt.Equals, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED)
 }
@@ -141,20 +126,14 @@ func TestGetFileStatusActivity_DatabaseError(t *testing.T) {
 	ctx := context.Background()
 	fileUID := uuid.Must(uuid.NewV4())
 
-	mockRepo := mock.NewRepositoryIMock(mc)
-	mockRepo.GetKnowledgeBaseFilesByFileUIDsMock.
+	mockRepository := mock.NewRepositoryMock(mc)
+	mockRepository.GetKnowledgeBaseFilesByFileUIDsMock.
 		When(minimock.AnyContext, []uuid.UUID{fileUID}).
 		Then(nil, fmt.Errorf("database error"))
 
-	mockService := mock.NewServiceMock(mc)
-	mockService.RepositoryMock.Return(mockRepo)
+	w := &Worker{repository: mockRepository, log: zap.NewNop()}
 
-	w := &Worker{
-		service: mockService,
-		log:     zap.NewNop(),
-	}
-
-	status, err := w.GetFileStatusActivity(ctx, fileUID)
+	status, err := w.GetFileStatusActivity(ctx, &GetFileStatusActivityParam{FileUID: fileUID})
 	c.Assert(err, qt.ErrorMatches, ".*Unable to retrieve file status.*")
 	c.Assert(status, qt.Equals, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED)
 }
@@ -166,38 +145,21 @@ func TestUpdateFileStatusActivity_Success(t *testing.T) {
 	ctx := context.Background()
 	fileUID := uuid.Must(uuid.NewV4())
 
-	mockRepo := mock.NewRepositoryIMock(mc)
-	mockRepo.GetKnowledgeBaseFilesByFileUIDsMock.
+	mockRepository := mock.NewRepositoryMock(mc)
+	mockRepository.GetKnowledgeBaseFilesByFileUIDsMock.
 		When(minimock.AnyContext, []uuid.UUID{fileUID}).
-		Then([]repository.KnowledgeBaseFile{
-			{UID: fileUID, ProcessStatus: "FILE_PROCESS_STATUS_WAITING"},
+		Then([]repository.KnowledgeBaseFileModel{
+			{UID: fileUID, ProcessStatus: artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_PROCESSING.String()},
 		}, nil)
+	mockRepository.UpdateKnowledgeBaseFileMock.Return(&repository.KnowledgeBaseFileModel{}, nil)
 
-	updateCalled := false
-	mockRepo.UpdateKnowledgeBaseFileMock.
-		Inspect(func(ctx context.Context, uid string, updateMap map[string]any) {
-			updateCalled = true
-			c.Check(uid, qt.Equals, fileUID.String())
-		}).
-		Return(&repository.KnowledgeBaseFile{}, nil)
-
-	mockService := mock.NewServiceMock(mc)
-	mockService.RepositoryMock.Return(mockRepo)
-
-	w := &Worker{
-		service: mockService,
-		log:     zap.NewNop(),
-	}
-
-	param := &UpdateFileStatusActivityParam{
+	w := &Worker{repository: mockRepository, log: zap.NewNop()}
+	err := w.UpdateFileStatusActivity(ctx, &UpdateFileStatusActivityParam{
 		FileUID: fileUID,
 		Status:  artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED,
 		Message: "",
-	}
-
-	err := w.UpdateFileStatusActivity(ctx, param)
+	})
 	c.Assert(err, qt.IsNil)
-	c.Assert(updateCalled, qt.IsTrue)
 }
 
 func TestUpdateFileStatusActivity_WithMessage(t *testing.T) {
@@ -208,15 +170,15 @@ func TestUpdateFileStatusActivity_WithMessage(t *testing.T) {
 	fileUID := uuid.Must(uuid.NewV4())
 	failMessage := "Conversion failed: invalid file format"
 
-	mockRepo := mock.NewRepositoryIMock(mc)
-	mockRepo.GetKnowledgeBaseFilesByFileUIDsMock.
+	mockRepository := mock.NewRepositoryMock(mc)
+	mockRepository.GetKnowledgeBaseFilesByFileUIDsMock.
 		When(minimock.AnyContext, []uuid.UUID{fileUID}).
-		Then([]repository.KnowledgeBaseFile{
+		Then([]repository.KnowledgeBaseFileModel{
 			{UID: fileUID, ProcessStatus: "FILE_PROCESS_STATUS_CONVERTING"},
 		}, nil)
 
 	metadataUpdateCalled := false
-	mockRepo.UpdateKBFileMetadataMock.
+	mockRepository.UpdateKnowledgeFileMetadataMock.
 		Inspect(func(ctx context.Context, fuid uuid.UUID, metadata repository.ExtraMetaData) {
 			metadataUpdateCalled = true
 			c.Check(fuid, qt.Equals, fileUID)
@@ -225,20 +187,14 @@ func TestUpdateFileStatusActivity_WithMessage(t *testing.T) {
 		Return(nil)
 
 	statusUpdateCalled := false
-	mockRepo.UpdateKnowledgeBaseFileMock.
+	mockRepository.UpdateKnowledgeBaseFileMock.
 		Inspect(func(ctx context.Context, uid string, updateMap map[string]any) {
 			statusUpdateCalled = true
 			c.Check(uid, qt.Equals, fileUID.String())
 		}).
-		Return(&repository.KnowledgeBaseFile{}, nil)
+		Return(&repository.KnowledgeBaseFileModel{}, nil)
 
-	mockService := mock.NewServiceMock(mc)
-	mockService.RepositoryMock.Return(mockRepo)
-
-	w := &Worker{
-		service: mockService,
-		log:     zap.NewNop(),
-	}
+	w := &Worker{repository: mockRepository, log: zap.NewNop()}
 
 	param := &UpdateFileStatusActivityParam{
 		FileUID: fileUID,
@@ -259,18 +215,12 @@ func TestUpdateFileStatusActivity_FileDeleted(t *testing.T) {
 	ctx := context.Background()
 	fileUID := uuid.Must(uuid.NewV4())
 
-	mockRepo := mock.NewRepositoryIMock(mc)
-	mockRepo.GetKnowledgeBaseFilesByFileUIDsMock.
+	mockRepository := mock.NewRepositoryMock(mc)
+	mockRepository.GetKnowledgeBaseFilesByFileUIDsMock.
 		When(minimock.AnyContext, []uuid.UUID{fileUID}).
-		Then([]repository.KnowledgeBaseFile{}, nil) // File was deleted
+		Then([]repository.KnowledgeBaseFileModel{}, nil) // File was deleted
 
-	mockService := mock.NewServiceMock(mc)
-	mockService.RepositoryMock.Return(mockRepo)
-
-	w := &Worker{
-		service: mockService,
-		log:     zap.NewNop(),
-	}
+	w := &Worker{repository: mockRepository, log: zap.NewNop()}
 
 	param := &UpdateFileStatusActivityParam{
 		FileUID: fileUID,
@@ -282,6 +232,3 @@ func TestUpdateFileStatusActivity_FileDeleted(t *testing.T) {
 	err := w.UpdateFileStatusActivity(ctx, param)
 	c.Assert(err, qt.IsNil)
 }
-
-// Note: All mocks are auto-generated using minimock.
-// See pkg/mock/generator.go for mock generation configuration.

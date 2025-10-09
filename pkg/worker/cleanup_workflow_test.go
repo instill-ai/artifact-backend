@@ -11,10 +11,8 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/instill-ai/artifact-backend/pkg/acl"
-	"github.com/instill-ai/artifact-backend/pkg/mock"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
-	"github.com/instill-ai/artifact-backend/pkg/service"
+	"github.com/instill-ai/artifact-backend/pkg/worker/mock"
 )
 
 func TestCleanupFileWorkflowParam_FieldTypes(t *testing.T) {
@@ -22,12 +20,12 @@ func TestCleanupFileWorkflowParam_FieldTypes(t *testing.T) {
 	fileUID := uuid.Must(uuid.NewV4())
 	userUID := uuid.Must(uuid.NewV4())
 
-	param := service.CleanupFileWorkflowParam{
+	param := CleanupFileWorkflowParam{
 		FileUID:             fileUID,
-		IncludeOriginalFile: true,
 		UserUID:             userUID,
 		RequesterUID:        uuid.Must(uuid.NewV4()),
 		WorkflowID:          "test-workflow-id",
+		IncludeOriginalFile: true,
 	}
 
 	// Verify all fields have expected types and values
@@ -41,13 +39,13 @@ func TestCleanupFileWorkflowParam_BooleanFlag(t *testing.T) {
 	c := qt.New(t)
 
 	// Test with IncludeOriginalFile = true
-	paramTrue := service.CleanupFileWorkflowParam{
+	paramTrue := CleanupFileWorkflowParam{
 		IncludeOriginalFile: true,
 	}
 	c.Assert(paramTrue.IncludeOriginalFile, qt.IsTrue)
 
 	// Test with IncludeOriginalFile = false
-	paramFalse := service.CleanupFileWorkflowParam{
+	paramFalse := CleanupFileWorkflowParam{
 		IncludeOriginalFile: false,
 	}
 	c.Assert(paramFalse.IncludeOriginalFile, qt.IsFalse)
@@ -57,12 +55,12 @@ func TestCleanupKBWorkflowParam_UUIDFormat(t *testing.T) {
 	c := qt.New(t)
 	kbUID := uuid.Must(uuid.NewV4())
 
-	param := service.CleanupKnowledgeBaseWorkflowParam{
-		KnowledgeBaseUID: kbUID,
+	param := CleanupKnowledgeBaseWorkflowParam{
+		KBUID: kbUID,
 	}
 
 	// Test UUID is properly formatted
-	uuidStr := param.KnowledgeBaseUID.String()
+	uuidStr := param.KBUID.String()
 	c.Assert(uuidStr, qt.HasLen, 36)
 	c.Assert(uuidStr, qt.Contains, "-")
 
@@ -76,7 +74,7 @@ func TestCleanupFileWorkflowParam_ZeroValues(t *testing.T) {
 	c := qt.New(t)
 
 	// Test with zero values
-	var param service.CleanupFileWorkflowParam
+	var param CleanupFileWorkflowParam
 
 	c.Assert(param.FileUID, qt.Equals, uuid.Nil)
 	c.Assert(param.UserUID, qt.Equals, uuid.Nil)
@@ -88,9 +86,9 @@ func TestCleanupKBWorkflowParam_ZeroValues(t *testing.T) {
 	c := qt.New(t)
 
 	// Test with zero values
-	var param service.CleanupKnowledgeBaseWorkflowParam
+	var param CleanupKnowledgeBaseWorkflowParam
 
-	c.Assert(param.KnowledgeBaseUID, qt.Equals, uuid.Nil)
+	c.Assert(param.KBUID, qt.Equals, uuid.Nil)
 }
 
 func TestCleanupFileWorkflow_Success(t *testing.T) {
@@ -100,52 +98,48 @@ func TestCleanupFileWorkflow_Success(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 
-	mockRepo := mock.NewRepositoryIMock(mc)
-	mockVectorDB := mock.NewVectorDatabaseMock(mc)
-	mockSvc := mock.NewServiceMock(mc)
-	mockSvc.RepositoryMock.Return(mockRepo)
-	mockSvc.VectorDBMock.Return(mockVectorDB)
+	mockRepository := mock.NewRepositoryMock(mc)
 
 	fileUID := uuid.Must(uuid.NewV4())
 	kbUID := uuid.Must(uuid.NewV4())
 
 	// Mock for DeleteOriginalFileActivity
-	mockRepo.GetKnowledgeBaseFilesByFileUIDsMock.Return([]repository.KnowledgeBaseFile{
+	mockRepository.GetKnowledgeBaseFilesByFileUIDsMock.Return([]repository.KnowledgeBaseFileModel{
 		{UID: fileUID, Destination: "kb/test-file.pdf"},
 	}, nil)
-	mockSvc.DeleteFilesMock.Return(nil)
+	mockRepository.DeleteFileMock.Return(nil)
+	mockRepository.ListConvertedFilesByFileUIDMock.Return([]string{}, nil)
 
 	// Mock for DeleteConvertedFileActivity
-	mockRepo.GetConvertedFileByFileUIDMock.Return(&repository.ConvertedFile{
+	mockRepository.GetConvertedFileByFileUIDMock.Return(&repository.ConvertedFileModel{
 		UID:   uuid.Must(uuid.NewV4()),
-		KbUID: kbUID,
+		KBUID: kbUID,
 	}, nil)
-	mockSvc.DeleteConvertedFileByFileUIDMock.Return(nil)
-	mockRepo.HardDeleteConvertedFileByFileUIDMock.Return(nil)
+	mockRepository.HardDeleteConvertedFileByFileUIDMock.Return(nil)
 
-	// Mock for DeleteChunksFromMinIOActivity
-	mockRepo.ListChunksByKbFileUIDMock.Return([]repository.TextChunk{
-		{UID: uuid.Must(uuid.NewV4()), KbUID: kbUID},
+	// Mock for DeleteTextChunksFromMinIOActivity
+	mockRepository.ListTextChunksByKBFileUIDMock.Return([]repository.TextChunkModel{
+		{UID: uuid.Must(uuid.NewV4()), KBUID: kbUID},
 	}, nil)
-	mockSvc.DeleteTextChunksByFileUIDMock.Return(nil)
-	mockRepo.HardDeleteChunksByKbFileUIDMock.Return(nil)
+	mockRepository.ListTextChunksByFileUIDMock.When(minimock.AnyContext, kbUID, fileUID).Then([]string{}, nil)
+	mockRepository.HardDeleteTextChunksByKBFileUIDMock.Return(nil)
 
 	// Mock for DeleteEmbeddingsFromVectorDBActivity and DeleteEmbeddingRecordsActivity
-	mockRepo.ListEmbeddingsByKbFileUIDMock.Return([]repository.Embedding{
-		{UID: uuid.Must(uuid.NewV4()), KbUID: kbUID},
+	mockRepository.ListEmbeddingsByKBFileUIDMock.Return([]repository.EmbeddingModel{
+		{UID: uuid.Must(uuid.NewV4()), KBUID: kbUID},
 	}, nil)
-	mockVectorDB.DeleteEmbeddingsWithFileUIDMock.Return(nil)
-	mockRepo.HardDeleteEmbeddingsByKbFileUIDMock.Return(nil)
+	mockRepository.DeleteEmbeddingsWithFileUIDMock.Return(nil)
+	mockRepository.HardDeleteEmbeddingsByKBFileUIDMock.Return(nil)
 
-	worker := &Worker{service: mockSvc, log: zap.NewNop()}
-	env.RegisterActivity(worker.DeleteOriginalFileActivity)
-	env.RegisterActivity(worker.DeleteConvertedFileActivity)
-	env.RegisterActivity(worker.DeleteChunksFromMinIOActivity)
-	env.RegisterActivity(worker.DeleteEmbeddingsFromVectorDBActivity)
-	env.RegisterActivity(worker.DeleteEmbeddingRecordsActivity)
-	env.RegisterWorkflow(worker.CleanupFileWorkflow)
+	w := &Worker{repository: mockRepository, log: zap.NewNop()}
+	env.RegisterActivity(w.DeleteOriginalFileActivity)
+	env.RegisterActivity(w.DeleteConvertedFileActivity)
+	env.RegisterActivity(w.DeleteTextChunksFromMinIOActivity)
+	env.RegisterActivity(w.DeleteEmbeddingsFromVectorDBActivity)
+	env.RegisterActivity(w.DeleteEmbeddingRecordsActivity)
+	env.RegisterWorkflow(w.CleanupFileWorkflow)
 
-	param := service.CleanupFileWorkflowParam{
+	param := CleanupFileWorkflowParam{
 		FileUID:             fileUID,
 		IncludeOriginalFile: true,
 		UserUID:             uuid.Must(uuid.NewV4()),
@@ -153,7 +147,7 @@ func TestCleanupFileWorkflow_Success(t *testing.T) {
 		WorkflowID:          "test-workflow",
 	}
 
-	env.ExecuteWorkflow(worker.CleanupFileWorkflow, param)
+	env.ExecuteWorkflow(w.CleanupFileWorkflow, param)
 
 	c.Assert(env.IsWorkflowCompleted(), qt.IsTrue)
 	c.Assert(env.GetWorkflowError(), qt.IsNil)
@@ -166,10 +160,7 @@ func TestCleanupFileWorkflow_WithoutOriginalFile(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 
-	mockRepo := mock.NewRepositoryIMock(mc)
-	mockSvc := mock.NewServiceMock(mc)
-	mockSvc.RepositoryMock.Return(mockRepo)
-	// Note: VectorDB mock not set up because activities return early when lists are empty
+	mockRepository := mock.NewRepositoryMock(mc)
 
 	fileUID := uuid.Must(uuid.NewV4())
 	kbUID := uuid.Must(uuid.NewV4())
@@ -177,38 +168,38 @@ func TestCleanupFileWorkflow_WithoutOriginalFile(t *testing.T) {
 	// Note: No mock for DeleteOriginalFileActivity since IncludeOriginalFile=false
 
 	// Mock for DeleteConvertedFileActivity
-	mockRepo.GetConvertedFileByFileUIDMock.Return(&repository.ConvertedFile{
+	mockRepository.GetConvertedFileByFileUIDMock.Return(&repository.ConvertedFileModel{
 		UID:   uuid.Must(uuid.NewV4()),
-		KbUID: kbUID,
+		KBUID: kbUID,
 	}, nil)
-	mockSvc.DeleteConvertedFileByFileUIDMock.Return(nil)
-	mockRepo.HardDeleteConvertedFileByFileUIDMock.Return(nil)
+	mockRepository.ListConvertedFilesByFileUIDMock.Return([]string{}, nil)
+	mockRepository.HardDeleteConvertedFileByFileUIDMock.Return(nil)
 
-	// Mock for DeleteChunksFromMinIOActivity (empty chunks - activity returns early)
-	mockRepo.ListChunksByKbFileUIDMock.Return([]repository.TextChunk{}, nil)
+	// Mock for DeleteTextChunksFromMinIOActivity (empty chunks - activity returns early)
+	mockRepository.ListTextChunksByKBFileUIDMock.Return([]repository.TextChunkModel{}, nil)
 
 	// Mock for DeleteEmbeddingsFromVectorDBActivity (empty embeddings - activity returns early)
-	mockRepo.ListEmbeddingsByKbFileUIDMock.Return([]repository.Embedding{}, nil)
+	mockRepository.ListEmbeddingsByKBFileUIDMock.Return([]repository.EmbeddingModel{}, nil)
 
 	// Mock for DeleteEmbeddingRecordsActivity (hard delete from DB)
-	mockRepo.HardDeleteEmbeddingsByKbFileUIDMock.Return(nil)
+	mockRepository.HardDeleteEmbeddingsByKBFileUIDMock.Return(nil)
 
-	worker := &Worker{service: mockSvc, log: zap.NewNop()}
-	env.RegisterActivity(worker.DeleteOriginalFileActivity)
-	env.RegisterActivity(worker.DeleteConvertedFileActivity)
-	env.RegisterActivity(worker.DeleteChunksFromMinIOActivity)
-	env.RegisterActivity(worker.DeleteEmbeddingsFromVectorDBActivity)
-	env.RegisterActivity(worker.DeleteEmbeddingRecordsActivity)
-	env.RegisterWorkflow(worker.CleanupFileWorkflow)
+	w := &Worker{repository: mockRepository, log: zap.NewNop()}
+	env.RegisterActivity(w.DeleteOriginalFileActivity)
+	env.RegisterActivity(w.DeleteConvertedFileActivity)
+	env.RegisterActivity(w.DeleteTextChunksFromMinIOActivity)
+	env.RegisterActivity(w.DeleteEmbeddingsFromVectorDBActivity)
+	env.RegisterActivity(w.DeleteEmbeddingRecordsActivity)
+	env.RegisterWorkflow(w.CleanupFileWorkflow)
 
-	param := service.CleanupFileWorkflowParam{
+	param := CleanupFileWorkflowParam{
 		FileUID:             fileUID,
 		IncludeOriginalFile: false, // Skip original file deletion
 		UserUID:             uuid.Must(uuid.NewV4()),
 		WorkflowID:          "test-workflow",
 	}
 
-	env.ExecuteWorkflow(worker.CleanupFileWorkflow, param)
+	env.ExecuteWorkflow(w.CleanupFileWorkflow, param)
 
 	c.Assert(env.IsWorkflowCompleted(), qt.IsTrue)
 	c.Assert(env.GetWorkflowError(), qt.IsNil)
@@ -221,54 +212,43 @@ func TestCleanupKnowledgeBaseWorkflow_Success(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 
-	mockRepo := mock.NewRepositoryIMock(mc)
-	mockVectorDB := mock.NewVectorDatabaseMock(mc)
-	mockSvc := mock.NewServiceMock(mc)
-	mockSvc.RepositoryMock.Return(mockRepo)
-	mockSvc.VectorDBMock.Return(mockVectorDB)
-	mockSvc.ACLClientMock.Return(&acl.ACLClient{})
+	mockRepository := mock.NewRepositoryMock(mc)
 
 	kbUID := uuid.Must(uuid.NewV4())
 
 	// Mock for DeleteKBFilesFromMinIOActivity
-	mockSvc.DeleteKnowledgeBaseMock.Return(nil)
+	mockRepository.ListKnowledgeBaseFilePathsMock.Return([]string{}, nil)
 
 	// Mock for DropVectorDBCollectionActivity
-	mockVectorDB.DropCollectionMock.Return(nil)
+	mockRepository.DropCollectionMock.Return(nil)
 
 	// Mock for DeleteKBFileRecordsActivity
-	mockRepo.DeleteAllKnowledgeBaseFilesMock.Return(nil)
+	mockRepository.DeleteAllKnowledgeBaseFilesMock.Return(nil)
 
 	// Mock for DeleteKBConvertedFileRecordsActivity
-	mockRepo.DeleteAllConvertedFilesInKbMock.Return(nil)
+	mockRepository.DeleteAllConvertedFilesInKbMock.Return(nil)
 
 	// Mock for DeleteKBChunkRecordsActivity
-	mockRepo.HardDeleteChunksByKbUIDMock.Return(nil)
+	mockRepository.HardDeleteTextChunksByKBUIDMock.Return(nil)
 
 	// Mock for DeleteKBEmbeddingRecordsActivity
-	mockRepo.HardDeleteEmbeddingsByKbUIDMock.Return(nil)
+	mockRepository.HardDeleteEmbeddingsByKBUIDMock.Return(nil)
 
-	// Note: PurgeKBACLActivity cannot be fully tested with minimock because ACLClient
-	// is a concrete type (not an interface) with internal state. We mock ACLClient() to
-	// return nil to avoid nil pointer panics, and don't register PurgeKBACLActivity.
-	// The workflow will report an error for the missing activity, which we expect.
-	mockSvc.ACLClientMock.Optional().Return(nil)
-
-	worker := &Worker{service: mockSvc, log: zap.NewNop()}
-	env.RegisterActivity(worker.DeleteKBFilesFromMinIOActivity)
-	env.RegisterActivity(worker.DropVectorDBCollectionActivity)
-	env.RegisterActivity(worker.DeleteKBFileRecordsActivity)
-	env.RegisterActivity(worker.DeleteKBConvertedFileRecordsActivity)
-	env.RegisterActivity(worker.DeleteKBChunkRecordsActivity)
-	env.RegisterActivity(worker.DeleteKBEmbeddingRecordsActivity)
+	w := &Worker{repository: mockRepository, log: zap.NewNop()}
+	env.RegisterActivity(w.DeleteKBFilesFromMinIOActivity)
+	env.RegisterActivity(w.DropVectorDBCollectionActivity)
+	env.RegisterActivity(w.DeleteKBFileRecordsActivity)
+	env.RegisterActivity(w.DeleteKBConvertedFileRecordsActivity)
+	env.RegisterActivity(w.DeleteKBTextChunkRecordsActivity)
+	env.RegisterActivity(w.DeleteKBEmbeddingRecordsActivity)
 	// Note: PurgeKBACLActivity intentionally not registered
-	env.RegisterWorkflow(worker.CleanupKnowledgeBaseWorkflow)
+	env.RegisterWorkflow(w.CleanupKnowledgeBaseWorkflow)
 
-	param := service.CleanupKnowledgeBaseWorkflowParam{
-		KnowledgeBaseUID: kbUID,
+	param := CleanupKnowledgeBaseWorkflowParam{
+		KBUID: kbUID,
 	}
 
-	env.ExecuteWorkflow(worker.CleanupKnowledgeBaseWorkflow, param)
+	env.ExecuteWorkflow(w.CleanupKnowledgeBaseWorkflow, param)
 
 	c.Assert(env.IsWorkflowCompleted(), qt.IsTrue)
 	// Expect workflow to complete with errors due to missing ACL activity registration
@@ -283,45 +263,37 @@ func TestCleanupKnowledgeBaseWorkflow_VectorDBError(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 
-	mockRepo := mock.NewRepositoryIMock(mc)
-	mockVectorDB := mock.NewVectorDatabaseMock(mc)
-	mockSvc := mock.NewServiceMock(mc)
-	mockSvc.RepositoryMock.Return(mockRepo)
-	mockSvc.VectorDBMock.Return(mockVectorDB)
-	mockSvc.ACLClientMock.Return(&acl.ACLClient{})
+	mockRepository := mock.NewRepositoryMock(mc)
 
 	kbUID := uuid.Must(uuid.NewV4())
 
-	// Mock for DeleteKBFilesFromMinIOActivity (succeeds)
-	mockSvc.DeleteKnowledgeBaseMock.Return(nil)
+	// Mock for DeleteKBFilesFromMinIOActivity
+	mockRepository.ListKnowledgeBaseFilePathsMock.Return([]string{}, nil)
 
 	// Mock for DropVectorDBCollectionActivity (fails but is handled)
-	mockVectorDB.DropCollectionMock.Return(fmt.Errorf("can't find collection"))
+	mockRepository.DropCollectionMock.Return(fmt.Errorf("can't find collection"))
 
 	// Mock for remaining activities (all succeed)
-	mockRepo.DeleteAllKnowledgeBaseFilesMock.Return(nil)
-	mockRepo.DeleteAllConvertedFilesInKbMock.Return(nil)
-	mockRepo.HardDeleteChunksByKbUIDMock.Return(nil)
-	mockRepo.HardDeleteEmbeddingsByKbUIDMock.Return(nil)
+	mockRepository.DeleteAllKnowledgeBaseFilesMock.Return(nil)
+	mockRepository.DeleteAllConvertedFilesInKbMock.Return(nil)
+	mockRepository.HardDeleteTextChunksByKBUIDMock.Return(nil)
+	mockRepository.HardDeleteEmbeddingsByKBUIDMock.Return(nil)
 
-	// Note: PurgeKBACLActivity not registered (see test above for explanation)
-	mockSvc.ACLClientMock.Optional().Return(nil)
-
-	worker := &Worker{service: mockSvc, log: zap.NewNop()}
-	env.RegisterActivity(worker.DeleteKBFilesFromMinIOActivity)
-	env.RegisterActivity(worker.DropVectorDBCollectionActivity)
-	env.RegisterActivity(worker.DeleteKBFileRecordsActivity)
-	env.RegisterActivity(worker.DeleteKBConvertedFileRecordsActivity)
-	env.RegisterActivity(worker.DeleteKBChunkRecordsActivity)
-	env.RegisterActivity(worker.DeleteKBEmbeddingRecordsActivity)
+	w := &Worker{repository: mockRepository, log: zap.NewNop()}
+	env.RegisterActivity(w.DeleteKBFilesFromMinIOActivity)
+	env.RegisterActivity(w.DropVectorDBCollectionActivity)
+	env.RegisterActivity(w.DeleteKBFileRecordsActivity)
+	env.RegisterActivity(w.DeleteKBConvertedFileRecordsActivity)
+	env.RegisterActivity(w.DeleteKBTextChunkRecordsActivity)
+	env.RegisterActivity(w.DeleteKBEmbeddingRecordsActivity)
 	// Note: PurgeKBACLActivity intentionally not registered
-	env.RegisterWorkflow(worker.CleanupKnowledgeBaseWorkflow)
+	env.RegisterWorkflow(w.CleanupKnowledgeBaseWorkflow)
 
-	param := service.CleanupKnowledgeBaseWorkflowParam{
-		KnowledgeBaseUID: kbUID,
+	param := CleanupKnowledgeBaseWorkflowParam{
+		KBUID: kbUID,
 	}
 
-	env.ExecuteWorkflow(worker.CleanupKnowledgeBaseWorkflow, param)
+	env.ExecuteWorkflow(w.CleanupKnowledgeBaseWorkflow, param)
 
 	c.Assert(env.IsWorkflowCompleted(), qt.IsTrue)
 	// Workflow collects all errors. VectorDB error is handled, but ACL activity is missing.

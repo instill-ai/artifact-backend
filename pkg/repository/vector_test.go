@@ -1,4 +1,4 @@
-package milvus
+package repository
 
 import (
 	"testing"

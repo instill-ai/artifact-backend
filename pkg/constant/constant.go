@@ -1,5 +1,11 @@
 package constant
 
+import (
+	"strings"
+
+	"github.com/gofrs/uuid"
+)
+
 const (
 	_  = iota
 	KB = 1 << (10 * iota)
@@ -11,19 +17,14 @@ const (
 // Constants for resource owner
 const DefaultUserID string = "admin"
 
-type FileType string
-
-var DocumentFileType FileType = "document"
-var VideoFileType FileType = "video"
-var ImageFileType FileType = "image"
-var AudioFileType FileType = "audio"
-
-type ContentType string
-
-var ChunkContentType ContentType = "chunk"
-var SummaryContentType ContentType = "summary"
-var AugmentedContentType ContentType = "augmented"
-
 // MetadataRequestKey is the key where the file upload request metadata is
 // stored in the ExternalMetadata property of a file.
 const MetadataRequestKey = "instill-request"
+
+// KBCollectionName converts a knowledge base UID to a valid Milvus collection name.
+// For historical reasons, collection names can only contain numbers, letters
+// and underscores, so UUID is here converted to a valid collection name.
+func KBCollectionName(uid uuid.UUID) string {
+	const kbCollectionPrefix = "kb_"
+	return kbCollectionPrefix + strings.ReplaceAll(uid.String(), "-", "_")
+}

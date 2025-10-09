@@ -14,6 +14,9 @@ type ConversionResult struct {
 	PositionData *repository.PositionData
 	Length       []uint32
 	Provider     string // "gemini", "openai", "anthropic"
+	// UsageMetadata contains token usage information from the AI provider
+	// The actual type depends on the provider
+	UsageMetadata any
 }
 
 // CacheResult represents the result of creating a cache for unstructured data content
@@ -22,6 +25,9 @@ type CacheResult struct {
 	Model      string
 	CreateTime time.Time
 	ExpireTime time.Time
+	// UsageMetadata contains token usage information from the AI provider
+	// The actual type depends on the provider
+	UsageMetadata any
 }
 
 // Provider defines the interface for AI providers that understand unstructured data

@@ -6,52 +6,51 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/gofrs/uuid"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/constant"
-	"github.com/instill-ai/artifact-backend/pkg/minio"
+	"github.com/instill-ai/artifact-backend/pkg/pipeline"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
-	"github.com/instill-ai/artifact-backend/pkg/service"
+	"github.com/instill-ai/artifact-backend/pkg/types"
 
 	errorsx "github.com/instill-ai/x/errors"
 )
 
 // getFileByUID is a helper function to retrieve a single file by UID.
 // It returns the file or an error if not found.
-func getFileByUID(ctx context.Context, repo repository.RepositoryI, fileUID uuid.UUID) (repository.KnowledgeBaseFile, error) {
-	files, err := repo.GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{fileUID})
+func getFileByUID(ctx context.Context, repo repository.Repository, fileUID types.FileUIDType) (repository.KnowledgeBaseFileModel, error) {
+	files, err := repo.GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{fileUID})
 	if err != nil {
-		return repository.KnowledgeBaseFile{}, errorsx.AddMessage(err, "Unable to retrieve file information. Please try again.")
+		return repository.KnowledgeBaseFileModel{}, errorsx.AddMessage(err, "Unable to retrieve file information. Please try again.")
 	}
 	if len(files) == 0 {
 		err := errorsx.AddMessage(errorsx.ErrNotFound, "File not found. It may have been deleted.")
-		return repository.KnowledgeBaseFile{}, err
+		return repository.KnowledgeBaseFileModel{}, err
 	}
 	return files[0], nil
 }
 
-// saveChunksToDBOnly saves chunks to database with placeholder destinations,
+// saveChunksToDBOnly saves text chunks to database with placeholder destinations,
 // then uploads to MinIO, and finally updates the destinations in the database.
 // This ensures MinIO uploads happen AFTER the DB transaction commits, preventing
 // orphaned files if the transaction rolls back.
-// Returns a map of chunkUID -> chunk content that was saved to MinIO.
+// Returns a map of textChunkUID -> text chunk content that was saved to MinIO.
 func saveChunksToDBOnly(
 	ctx context.Context,
-	repo repository.RepositoryI,
-	minioClient minio.MinioI,
-	kbUID, kbFileUID, sourceUID uuid.UUID,
+	repo repository.Repository,
+	minioClient repository.ObjectStorage,
+	kbUID types.KBUIDType, kbFileUID types.FileUIDType, sourceUID types.SourceUIDType,
 	sourceTable string,
-	summaryChunks, contentChunks []service.Chunk,
+	summaryChunks, contentChunks []pipeline.TextChunk,
 	fileType string,
 ) (map[string][]byte, error) {
-	textChunks := make([]*repository.TextChunk, len(summaryChunks)+len(contentChunks))
+	textChunks := make([]*repository.TextChunkModel, len(summaryChunks)+len(contentChunks))
 	texts := make([]string, len(summaryChunks)+len(contentChunks))
 
 	for i, c := range summaryChunks {
-		textChunks[i] = &repository.TextChunk{
+		textChunks[i] = &repository.TextChunkModel{
 			SourceUID:   sourceUID,
 			SourceTable: sourceTable,
 			StartPos:    0,
@@ -60,16 +59,16 @@ func saveChunksToDBOnly(
 			Tokens:      c.Tokens,
 			Retrievable: true,
 			InOrder:     i,
-			KbUID:       kbUID,
-			KbFileUID:   kbFileUID,
+			KBUID:       kbUID,
+			KBFileUID:   kbFileUID,
 			FileType:    fileType,
-			ContentType: string(constant.SummaryContentType),
+			ContentType: string(types.SummaryContentType),
 		}
 		texts[i] = c.Text
 	}
 	for i, c := range contentChunks {
 		ii := i + len(summaryChunks)
-		textChunks[ii] = &repository.TextChunk{
+		textChunks[ii] = &repository.TextChunkModel{
 			SourceUID:   sourceUID,
 			SourceTable: sourceTable,
 			StartPos:    c.Start,
@@ -79,23 +78,23 @@ func saveChunksToDBOnly(
 			Tokens:      c.Tokens,
 			Retrievable: true,
 			InOrder:     ii,
-			KbUID:       kbUID,
-			KbFileUID:   kbFileUID,
+			KBUID:       kbUID,
+			KBFileUID:   kbFileUID,
 			FileType:    fileType,
-			ContentType: string(constant.ChunkContentType),
+			ContentType: string(types.ChunkContentType),
 		}
 
 		texts[ii] = c.Text
 	}
 
-	// Step 1: Save chunks to database with placeholder destinations
+	// Step 1: Save text chunks to database with placeholder destinations
 	// Pass nil callback to avoid MinIO operations within the transaction
-	createdChunks, err := repo.DeleteAndCreateChunks(ctx, kbFileUID, textChunks, nil)
+	createdChunks, err := repo.DeleteAndCreateTextChunks(ctx, kbFileUID, textChunks, nil)
 	if err != nil {
-		return nil, errorsx.AddMessage(err, "Unable to save chunk records. Please try again.")
+		return nil, errorsx.AddMessage(err, "Unable to save text chunk records. Please try again.")
 	}
 
-	// Step 2: Upload chunks to MinIO after DB transaction commits
+	// Step 2: Upload text chunks to MinIO after DB transaction commits
 	destinations := make(map[string]string, len(createdChunks))
 	for i, chunk := range createdChunks {
 		chunkUID := chunk.UID.String()
@@ -104,10 +103,10 @@ func saveChunksToDBOnly(
 		basePath := fmt.Sprintf("kb-%s/file-%s/chunk", kbUID.String(), kbFileUID.String())
 		path := fmt.Sprintf("%s/%s.md", basePath, chunkUID)
 
-		// Encode chunk content to base64
+		// Encode text chunk content to base64
 		base64Content := base64.StdEncoding.EncodeToString([]byte(texts[i]))
 
-		// Save chunk content to MinIO
+		// Save text chunk content to MinIO
 		err := minioClient.UploadBase64File(
 			ctx,
 			config.Config.Minio.BucketName,
@@ -116,19 +115,19 @@ func saveChunksToDBOnly(
 			"text/markdown",
 		)
 		if err != nil {
-			return nil, errorsx.AddMessage(err, fmt.Sprintf("Unable to save chunk (ID: %s) to storage. Please try again.", chunkUID))
+			return nil, errorsx.AddMessage(err, fmt.Sprintf("Unable to save text chunk (ID: %s) to storage. Please try again.", chunkUID))
 		}
 
 		destinations[chunkUID] = path
 	}
 
-	// Step 3: Update chunk destinations in database
-	err = repo.UpdateChunkDestinations(ctx, destinations)
+	// Step 3: Update text chunk destinations in database
+	err = repo.UpdateTextChunkDestinations(ctx, destinations)
 	if err != nil {
-		return nil, errorsx.AddMessage(err, "Unable to update chunk references. Please try again.")
+		return nil, errorsx.AddMessage(err, "Unable to update text chunk references. Please try again.")
 	}
 
-	// Build map of chunkUID -> content for return value
+	// Build map of textChunkUID -> content for return value
 	chunksToSave := make(map[string][]byte, len(createdChunks))
 	for i, chunk := range createdChunks {
 		chunksToSave[chunk.UID.String()] = []byte(texts[i])
@@ -137,7 +136,7 @@ func saveChunksToDBOnly(
 	return chunksToSave, nil
 }
 
-// extractRequestMetadata extracts the gRPC metadata from a file's ExternalMetadata
+// extractRequestMetadata extracts the gRPC metadata from a file's ExternalMetadataE
 // and returns it as metadata.MD that can be used to create an authenticated context.
 func extractRequestMetadata(externalMetadata *structpb.Struct) (metadata.MD, error) {
 	md := metadata.MD{}
