@@ -267,12 +267,12 @@ type CleanupOldConvertedFileActivityParam struct {
 
 // CreateConvertedFileRecordActivityParam for creating a converted file DB record
 type CreateConvertedFileRecordActivityParam struct {
-	KBUID            types.KBUIDType          // Knowledge base unique identifier
-	FileUID          types.FileUIDType        // Original file unique identifier
-	ConvertedFileUID types.FileUIDType        // Converted file unique identifier
-	FileName         string                   // Converted file name
-	Destination      string                   // MinIO destination path
-	PositionData     *repository.PositionData // Position data from conversion (e.g., page mappings)
+	KBUID            types.KBUIDType     // Knowledge base unique identifier
+	FileUID          types.FileUIDType   // Original file unique identifier
+	ConvertedFileUID types.FileUIDType   // Converted file unique identifier
+	FileName         string              // Converted file name
+	Destination      string              // MinIO destination path
+	PositionData     *types.PositionData // Position data from conversion (e.g., page mappings)
 }
 
 // CreateConvertedFileRecordActivityResult returns the created converted file UID
@@ -1306,7 +1306,7 @@ type ConvertToFileActivityParam struct {
 // ConvertToFileActivityResult contains the conversion result
 type ConvertToFileActivityResult struct {
 	Markdown        string                   // Converted markdown content
-	PositionData    *repository.PositionData // Position metadata (e.g., page mappings)
+	PositionData    *types.PositionData      // Position metadata (e.g., page mappings)
 	Length          []uint32                 // Length of markdown sections
 	PipelineRelease pipeline.PipelineRelease // Pipeline used (empty if AI was used)
 	UsageMetadata   any                      // Token usage metadata from AI provider (nil if pipeline was used)
@@ -1386,10 +1386,19 @@ func (w *Worker) ConvertToFileActivity(ctx context.Context, param *ConvertToFile
 					zap.Int("markdownLength", len(conversion.Markdown)),
 					zap.String("provider", conversion.Provider))
 
+				// Process AI conversion result (parse pages, keep markdown with tags)
+				markdown, positionData, length := processAIConversionResult(
+					conversion.Markdown,
+					w.log,
+					map[string]any{
+						"cacheName": param.CacheName,
+					},
+				)
+
 				return &ConvertToFileActivityResult{
-					Markdown:        conversion.Markdown,
-					PositionData:    conversion.PositionData,
-					Length:          conversion.Length,
+					Markdown:        markdown,
+					PositionData:    positionData, // For visual grounding (mapping chunks to pages)
+					Length:          length,
 					PipelineRelease: pipeline.PipelineRelease{}, // No pipeline used (AI cached)
 					UsageMetadata:   conversion.UsageMetadata,
 				}, nil
@@ -1417,10 +1426,19 @@ func (w *Worker) ConvertToFileActivity(ctx context.Context, param *ConvertToFile
 				zap.Int("markdownLength", len(conversion.Markdown)),
 				zap.String("provider", conversion.Provider))
 
+			// Process AI conversion result (parse pages, keep markdown with tags)
+			markdown, positionData, length := processAIConversionResult(
+				conversion.Markdown,
+				w.log,
+				map[string]any{
+					"fileType": param.FileType.String(),
+				},
+			)
+
 			return &ConvertToFileActivityResult{
-				Markdown:        conversion.Markdown,
-				PositionData:    conversion.PositionData,
-				Length:          conversion.Length,
+				Markdown:        markdown,
+				PositionData:    positionData, // For visual grounding (mapping chunks to pages)
+				Length:          length,
 				PipelineRelease: pipeline.PipelineRelease{}, // No pipeline used (AI direct)
 				UsageMetadata:   conversion.UsageMetadata,
 			}, nil
@@ -1455,6 +1473,39 @@ func (w *Worker) ConvertToFileActivity(ctx context.Context, param *ConvertToFile
 		Length:          conversion.Length,
 		PipelineRelease: conversion.PipelineRelease,
 	}, nil
+}
+
+// processAIConversionResult processes AI conversion output by parsing page tags and preparing the result
+// Returns markdown WITH page tags preserved, position data for visual grounding, and length array
+func processAIConversionResult(markdown string, logger *zap.Logger, logContext map[string]any) (string, *types.PositionData, []uint32) {
+	// Parse pages from AI-generated Markdown
+	// Expected format: [Page: 1] ... [Page: n] ...
+	// The page tags are KEPT in the stored markdown for robust extraction
+	// Position data is calculated for visual grounding (mapping chunks to pages)
+	markdownWithPageTags, pages, positionData := parseMarkdownPages(markdown)
+
+	pageCount := len(pages)
+
+	// Log if multi-page document detected
+	if pageCount > 1 {
+		logFields := []zap.Field{
+			zap.Int("pageCount", pageCount),
+		}
+		for k, v := range logContext {
+			logFields = append(logFields, zap.Any(k, v))
+		}
+		logger.Info("ConvertToFileActivity: Multi-page document detected with [Page: X] tags", logFields...)
+	}
+
+	// Calculate length: page count for multi-page, character count for single-page
+	var length []uint32
+	if pageCount > 1 {
+		length = []uint32{uint32(pageCount)} // Number of pages
+	} else {
+		length = []uint32{uint32(len(markdownWithPageTags))} // Character length
+	}
+
+	return markdownWithPageTags, positionData, length
 }
 
 // ===== HELPER FUNCTIONS FOR FILE TYPE CONVERSION =====

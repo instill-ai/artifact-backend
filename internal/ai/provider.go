@@ -4,14 +4,15 @@ import (
 	"context"
 	"time"
 
-	"github.com/instill-ai/artifact-backend/pkg/repository"
+	"github.com/instill-ai/artifact-backend/pkg/types"
+
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
 // ConversionResult represents the result of understanding unstructured data content and extracting it to Markdown
 type ConversionResult struct {
 	Markdown     string
-	PositionData *repository.PositionData
+	PositionData *types.PositionData
 	Length       []uint32
 	Provider     string // "gemini", "openai", "anthropic"
 	// UsageMetadata contains token usage information from the AI provider

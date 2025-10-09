@@ -767,7 +767,7 @@ type ProcessContentWorkflowParam struct {
 type ProcessContentWorkflowResult struct {
 	Markdown           string                   // Converted markdown content
 	Length             []uint32                 // Length of markdown sections
-	PositionData       *repository.PositionData // Position metadata (e.g., page mappings)
+	PositionData       *types.PositionData      // Position metadata (e.g., page mappings)
 	ConversionPipeline pipeline.PipelineRelease // Pipeline used (empty if AI was used)
 	ConvertedType      artifactpb.FileType      // File type after format conversion
 	OriginalType       artifactpb.FileType      // Original file type

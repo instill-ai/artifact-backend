@@ -27,23 +27,6 @@ type ConvertedFile interface {
 	GetConvertedFileByFileUID(ctx context.Context, fileUID types.FileUIDType) (*ConvertedFileModel, error)
 }
 
-// PositionData contains metadata from the conversion step that will be used to
-// position the chunks extracted from the Markdown string within the original
-// file.
-//
-// When more filetypes are supported, this entity might evolve to accommodate
-// other kinds of positions (e.g. time markers mapping a character to a
-// duration).
-type PositionData struct {
-	// Page delimiters contains the byte length from the beginning of the
-	// document until the last character in a given page. The cumulative length
-	// of the pages is kept in order ease the positioning of the chunks within
-	// the original document.
-	// E.g., we can access the contents of a page as
-	// []rune(markdownStr)[pageDelimiters[i]:pageDelimiters[i+1]]
-	PageDelimiters []uint32 `json:"page_delimiters"`
-}
-
 type ConvertedFileModel struct {
 	UID   uuid.UUID `gorm:"column:uid;type:uuid;default:gen_random_uuid();primaryKey" json:"uid"`
 	KBUID uuid.UUID `gorm:"column:kb_uid;type:uuid;not null" json:"kb_uid"`
@@ -55,8 +38,8 @@ type ConvertedFileModel struct {
 	// destination path in minio
 	Destination string `gorm:"column:destination;size:255;not null" json:"destination"`
 
-	PositionDataJSON datatypes.JSON `gorm:"column:position_data;type:jsonb" json:"position_data_json"`
-	PositionData     *PositionData  `gorm:"-" json:"position_data"`
+	PositionDataJSON datatypes.JSON      `gorm:"column:position_data;type:jsonb" json:"position_data_json"`
+	PositionData     *types.PositionData `gorm:"-" json:"position_data"`
 
 	CreateTime *time.Time `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
 	UpdateTime *time.Time `gorm:"column:update_time;not null;default:CURRENT_TIMESTAMP;autoUpdateTime" json:"update_time"`
@@ -220,7 +203,7 @@ func (cf *ConvertedFileModel) AfterFind(tx *gorm.DB) error {
 	}
 
 	if cf.PositionData == nil {
-		cf.PositionData = new(PositionData)
+		cf.PositionData = new(types.PositionData)
 	}
 
 	return json.Unmarshal(cf.PositionDataJSON, cf.PositionData)

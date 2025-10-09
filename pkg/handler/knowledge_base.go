@@ -34,6 +34,18 @@ const ErrorDeleteKnowledgeBaseMsg = "failed to delete catalog: %w"
 // Note: in the future, we might have different max count for different user types
 const KnowledgeBaseMaxCount = 3
 
+// catalogTypeFromProto converts protobuf CatalogType to domain types.CatalogType
+func catalogTypeFromProto(pbType artifactpb.CatalogType) types.CatalogType {
+	switch pbType {
+	case artifactpb.CatalogType_CATALOG_TYPE_PERSISTENT:
+		return types.CatalogTypePersistent
+	case artifactpb.CatalogType_CATALOG_TYPE_EPHEMERAL:
+		return types.CatalogTypeEphemeral
+	default:
+		return types.CatalogTypeUnspecified
+	}
+}
+
 // CreateCatalog creates a catalog
 func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.CreateCatalogRequest) (*artifactpb.CreateCatalogResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
@@ -107,6 +119,9 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 		return nil, err
 	}
 
+	// Convert protobuf catalog type to domain type
+	catalogType := catalogTypeFromProto(req.GetType())
+
 	// create catalog
 	dbData, err := ph.service.Repository().CreateKnowledgeBase(
 		ctx,
@@ -118,7 +133,7 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 			Tags:                req.Tags,
 			Owner:               ns.NsUID.String(),
 			CreatorUID:          creatorUUID,
-			CatalogType:         req.GetType().String(),
+			CatalogType:         string(catalogType),
 			ConvertingPipelines: convertingPipelines,
 		},
 		callExternalService,

@@ -7,6 +7,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/instill-ai/artifact-backend/pkg/repository"
+	"github.com/instill-ai/artifact-backend/pkg/types"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	pipelinepb "github.com/instill-ai/protogen-go/pipeline/pipeline/v1beta"
@@ -53,7 +54,7 @@ type MarkdownConversionParams struct {
 // MarkdownConversionResult contains the information extracted from the conversion step.
 type MarkdownConversionResult struct {
 	Markdown     string
-	PositionData *repository.PositionData
+	PositionData *types.PositionData
 
 	// Length of the file. The unit and dimensions will depend on the filetype
 	// (e.g. pages, milliseconds, pixels).
@@ -288,13 +289,13 @@ func ProtoListToStrings(list *structpb.ListValue, suffix string) []string {
 }
 
 // PositionDataFromPages extracts the page delimiters from a list of pages.
-func PositionDataFromPages(pages []string) *repository.PositionData {
+func PositionDataFromPages(pages []string) *types.PositionData {
 	if len(pages) == 0 {
 		return nil
 	}
 
 	var offset uint32
-	positionData := &repository.PositionData{
+	positionData := &types.PositionData{
 		PageDelimiters: make([]uint32, len(pages)),
 	}
 
