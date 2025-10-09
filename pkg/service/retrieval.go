@@ -72,6 +72,7 @@ func (s *service) SimilarityChunksSearch(ctx context.Context, ownerUID uuid.UUID
 		FileUIDs:     fileUIDs,
 		FileType:     string(fileType),
 		ContentType:  string(contentType),
+		Tags:         req.GetTags(),
 	}
 
 	// By default we'll filter the chunk search with the file UID metadata.

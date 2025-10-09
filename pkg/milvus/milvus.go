@@ -351,7 +351,10 @@ func (m *milvusClient) SimilarVectorsInCollection(ctx context.Context, p service
 		kbCollectionFieldEmbeddingUID,
 		kbCollectionFieldEmbedding,
 	}
+
 	var filterStrs []string
+	fileUIDFilter := m.fileUIDFilter(p.FileUIDs)
+
 	if fields.hasLegacyMetadata() {
 		outputFields = append(
 			outputFields,
@@ -362,10 +365,8 @@ func (m *milvusClient) SimilarVectorsInCollection(ctx context.Context, p service
 
 		if fields.hasFileUID() {
 			outputFields = append(outputFields, kbCollectionFieldFileUID)
-
-			filter := m.fileUIDFilter(p.FileUIDs)
-			if filter != "" {
-				filterStrs = append(filterStrs, filter)
+			if fileUIDFilter != "" {
+				filterStrs = append(filterStrs, fileUIDFilter)
 			}
 		} else if len(p.FileNames) > 0 {
 			// Filename filter is only used for backwards compatibility in
@@ -383,7 +384,27 @@ func (m *milvusClient) SimilarVectorsInCollection(ctx context.Context, p service
 		}
 	}
 
+	// Several files can share a tag, but all the embeddings extracted from a
+	// file share the same tags. Therefore, a file UID filter takes precedence
+	// over a tag filter.
+	if len(p.Tags) > 0 && fileUIDFilter == "" {
+		// If tags are provided but collection doesn't support them, ignore tag filter
+		if !fields.hasTags() {
+			logger.Info("Collection does not support tags, ignoring tag filter")
+		} else {
+			// Use ARRAY_CONTAINS_ANY for OR logic with multiple tags
+			// Format: ARRAY_CONTAINS_ANY(tags, ["tag1", "tag2"])
+			tagList := make([]string, len(p.Tags))
+			for i, tag := range p.Tags {
+				tagList[i] = fmt.Sprintf("\"%s\"", tag)
+			}
+			filter := fmt.Sprintf("ARRAY_CONTAINS_ANY(%s, [%s])", kbCollectionFieldTags, strings.Join(tagList, ","))
+			filterStrs = append(filterStrs, filter)
+		}
+	}
+
 	t = time.Now()
+
 	// Convert the input vector to float32
 	milvusVectors := make([]entity.Vector, len(p.Vectors))
 	// milvus search vector support batch search, but we just need one vector
