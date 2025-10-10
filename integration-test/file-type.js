@@ -44,6 +44,18 @@ export let options = {
 export function setup() {
 
   check(true, { [constant.banner('Artifact API: Setup')]: () => true });
+
+  // Clean up any leftover test data from previous runs
+  try {
+    constant.db.exec(`DELETE FROM text_chunk WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+    constant.db.exec(`DELETE FROM embedding WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+    constant.db.exec(`DELETE FROM converted_file WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+    constant.db.exec(`DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`);
+    constant.db.exec(`DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`);
+  } catch (e) {
+    console.log(`Setup cleanup warning: ${e}`);
+  }
+
   var loginResp = http.request("POST", `${constant.mgmtPublicHost}/v1beta/auth/login`, JSON.stringify({
     "username": constant.defaultUsername,
     "password": constant.defaultPassword,
@@ -82,11 +94,14 @@ export function teardown(data) {
       }
     }
 
-    var q = `DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`;
-    constant.db.exec(q);
+    // Delete from child tables first, before deleting parent records
+    constant.db.exec(`DELETE FROM text_chunk WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+    constant.db.exec(`DELETE FROM embedding WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+    constant.db.exec(`DELETE FROM converted_file WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
 
-    q = `DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`;
-    constant.db.exec(q);
+    // Now delete parent tables
+    constant.db.exec(`DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`);
+    constant.db.exec(`DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`);
 
     constant.db.close();
   });
@@ -184,17 +199,39 @@ function runCatalogFileTest(data, opts) {
     logUnexpected(getProcessRes, 'POST /v1alpha/catalogs/files/processAsync');
     check(getProcessRes, { [`POST /v1alpha/catalogs/files/processAsync 200 (${fileUid})`]: (r) => r.status === 200 });
 
-    let getProcessStatusRes; let completed = false;
+    let getProcessStatusRes; let completed = false; let failed = false; let failureReason = "";
     for (let i = 0; i < 3600; i++) {
       getProcessStatusRes = http.request("GET", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${fileUid}`, null, data.header);
       try {
         const body = getProcessStatusRes.json();
         const st = (body.file && body.file.processStatus) || "";
-        if (getProcessStatusRes.status === 200 && st === "FILE_PROCESS_STATUS_COMPLETED") { completed = true; break; }
+        if (getProcessStatusRes.status === 200 && st === "FILE_PROCESS_STATUS_COMPLETED") {
+          completed = true;
+          break;
+        } else if (getProcessStatusRes.status === 200 && st === "FILE_PROCESS_STATUS_FAILED") {
+          failed = true;
+          failureReason = (body.file && body.file.processOutcome) || "Unknown error";
+          console.log(`✗ File processing failed for ${fileType}: ${failureReason}`);
+          break;
+        }
+        // Log progress every 30 seconds for slow processing files
+        if (i > 0 && i % 60 === 0) {
+          console.log(`⏳ Still processing ${fileType} after ${i * 0.5}s, status: ${st}`);
+        }
       } catch (e) { }
       sleep(0.5);
     }
-    check(getProcessStatusRes, { [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid} 200 and Process Status Reached COMPLETED (${fileType})`]: () => completed === true });
+    check(getProcessStatusRes, {
+      [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid} 200 and Process Status Reached COMPLETED (${fileType})`]: () => completed === true,
+      [`File processing did not fail (${fileType})`]: () => !failed,
+    });
+
+    if (failed) {
+      console.log(`✗ Skipping remaining checks for ${fileType} due to processing failure: ${failureReason}`);
+      http.request("DELETE", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+      sleep(5); // Wait for cleanup workflow
+      return;
+    }
 
     // Get the single-source-of-truth processed file source
     const getCatalogFileSource = http.request("GET", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${fileUid}/source`, null, data.header);
@@ -224,5 +261,6 @@ function runCatalogFileTest(data, opts) {
 
     http.request("DELETE", `${artifactPublicHost}/v1alpha/catalogs/files?file_uid=${fileUid}`, null, data.header);
     http.request("DELETE", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+    sleep(5); // Wait for cleanup workflow to prevent race conditions with other scenarios
   });
 }

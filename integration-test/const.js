@@ -136,3 +136,13 @@ export function banner(title) {
   const indent = "      ";
   return [topBorder, indent + content, indent + bottomBorder].join("\n");
 }
+
+// MinIO configuration for integration tests
+export const minioConfig = {
+  host: 'minio',
+  port: 9000,
+  user: 'minioadmin',
+  password: 'minioadmin',
+  bucket: 'core-artifact',
+  blobBucket: 'core-blob',
+};

@@ -11,7 +11,7 @@ import (
 	grpczap "github.com/grpc-ecosystem/go-grpc-middleware/logging/zap"
 
 	"github.com/instill-ai/artifact-backend/config"
-	"github.com/instill-ai/artifact-backend/pkg/service"
+	"github.com/instill-ai/artifact-backend/pkg/pipeline"
 
 	pipelinepb "github.com/instill-ai/protogen-go/pipeline/pipeline/v1beta"
 	clientx "github.com/instill-ai/x/client"
@@ -60,12 +60,12 @@ func main() {
 	defer cancel()
 	ctx = metadata.AppendToOutgoingContext(ctx, "Instill-Service", "instill")
 
-	upserter := &service.PipelineReleaseUpserter{
-		FS:                          service.PresetPipelinesFS,
+	upserter := &pipeline.PipelineReleaseUpserter{
+		FS:                          pipeline.PresetPipelinesFS,
 		PipelinePublicServiceClient: pipelinePublicServiceClient,
 	}
 
-	for _, pr := range service.PresetPipelinesList {
+	for _, pr := range pipeline.PresetPipelinesList {
 		logger := logger.With(zap.String("id", pr.ID), zap.String("version", pr.Version))
 		if err := upserter.Upsert(ctx, pr); err != nil {
 			logger.Error("Failed to add pipeline", zap.Error(err))

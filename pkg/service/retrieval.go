@@ -7,23 +7,20 @@ import (
 	"github.com/gofrs/uuid"
 
 	"github.com/instill-ai/artifact-backend/pkg/constant"
+	"github.com/instill-ai/artifact-backend/pkg/repository"
+	"github.com/instill-ai/artifact-backend/pkg/types"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
 type SimChunk struct {
-	ChunkUID uuid.UUID
+	ChunkUID types.TextChunkUIDType
 	Score    float32
 }
 
-func (s *service) SimilarityChunksSearch(ctx context.Context, ownerUID uuid.UUID, req *artifactpb.SimilarityChunksSearchRequest) ([]SimChunk, error) {
+func (s *service) SimilarityChunksSearch(ctx context.Context, ownerUID types.OwnerUIDType, req *artifactpb.SimilarityChunksSearchRequest, textVector [][]float32) ([]SimChunk, error) {
 	if req.TextPrompt == "" {
 		return nil, fmt.Errorf("empty text prompt")
-	}
-
-	textVector, err := s.EmbeddingTextPipe(ctx, []string{req.TextPrompt})
-	if err != nil {
-		return nil, fmt.Errorf("vectorizing text: %w", err)
 	}
 
 	kb, err := s.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, req.CatalogId)
@@ -32,54 +29,53 @@ func (s *service) SimilarityChunksSearch(ctx context.Context, ownerUID uuid.UUID
 	}
 
 	// Search similar embeddings in KB.
-	var fileType constant.FileType
+	var fileType types.FileType
 	switch req.GetFileMediaType() {
 	case artifactpb.FileMediaType_FILE_MEDIA_TYPE_DOCUMENT:
-		fileType = constant.DocumentFileType
+		fileType = types.DocumentFileType
 	case artifactpb.FileMediaType_FILE_MEDIA_TYPE_UNSPECIFIED:
 		fileType = ""
 	default:
 		return nil, fmt.Errorf("unsupported file type: %v", req.GetFileMediaType())
 	}
 
-	var contentType constant.ContentType
+	var contentType types.ContentType
 	switch req.GetContentType() {
 	case artifactpb.ContentType_CONTENT_TYPE_CHUNK:
-		contentType = constant.ChunkContentType
+		contentType = types.ChunkContentType
 	case artifactpb.ContentType_CONTENT_TYPE_SUMMARY:
-		contentType = constant.SummaryContentType
+		contentType = types.SummaryContentType
 	case artifactpb.ContentType_CONTENT_TYPE_AUGMENTED:
-		contentType = constant.AugmentedContentType
+		contentType = types.AugmentedContentType
 	case artifactpb.ContentType_CONTENT_TYPE_UNSPECIFIED:
 		contentType = ""
 	default:
 		return nil, fmt.Errorf("unsupported content type: %v", req.GetContentType())
 	}
 
-	fileUIDs := make([]uuid.UUID, 0, len(req.GetFileUids()))
+	fileUIDs := make([]types.FileUIDType, 0, len(req.GetFileUids()))
 	for _, uid := range req.GetFileUids() {
-		fileUIDs = append(fileUIDs, uuid.FromStringOrNil(uid))
+		fileUIDs = append(fileUIDs, types.FileUIDType(uuid.FromStringOrNil(uid)))
 	}
 
 	topK := req.GetTopK()
 	if topK == 0 {
 		topK = 5
 	}
-	sp := SimilarVectorSearchParam{
-		KnowledgeBaseUID: kb.UID,
-		Vectors:          textVector,
-		TopK:             topK,
-		FileUIDs:         fileUIDs,
-		FileType:         string(fileType),
-		ContentType:      string(contentType),
-		Tags:             req.GetTags(),
+	sp := repository.SimilarVectorSearchParam{
+		CollectionID: constant.KBCollectionName(kb.UID),
+		Vectors:      textVector,
+		TopK:         topK,
+		FileUIDs:     fileUIDs,
+		FileType:     string(fileType),
+		ContentType:  string(contentType),
 	}
 
 	// By default we'll filter the chunk search with the file UID metadata.
 	// However, certain legacy collections lack this field. In that case, we'll
 	// filter by filename. This field isn't indexed, so performance might be
 	// affected.
-	hasFileUID, err := s.vectorDB.CheckFileUIDMetadata(ctx, kb.UID)
+	hasFileUID, err := s.repository.CheckFileUIDMetadata(ctx, sp.CollectionID)
 	if err != nil {
 		return nil, fmt.Errorf("checkin collection metadata: %w", err)
 	}
@@ -96,7 +92,7 @@ func (s *service) SimilarityChunksSearch(ctx context.Context, ownerUID uuid.UUID
 		}
 	}
 
-	simEmbeddings, err := s.vectorDB.SimilarVectorsInCollection(ctx, sp)
+	simEmbeddings, err := s.repository.SimilarVectorsInCollection(ctx, sp)
 	if err != nil {
 		return nil, fmt.Errorf("searching similar embeddings in KB: %w", err)
 	}
@@ -106,8 +102,9 @@ func (s *service) SimilarityChunksSearch(ctx context.Context, ownerUID uuid.UUID
 	if len(simEmbeddings) == 0 {
 		return []SimChunk{}, nil
 	}
+
 	for _, simEmb := range simEmbeddings[0] {
-		if simEmb.SourceTable != s.repository.TextChunkTableName() {
+		if simEmb.SourceTable != repository.TextChunkTableName {
 			continue
 		}
 		simChunkUID, err := uuid.FromString(simEmb.SourceUID)
@@ -115,7 +112,7 @@ func (s *service) SimilarityChunksSearch(ctx context.Context, ownerUID uuid.UUID
 			return nil, fmt.Errorf("invalid chunk uid %s", simEmb.SourceUID)
 		}
 		res = append(res, SimChunk{
-			ChunkUID: simChunkUID,
+			ChunkUID: types.TextChunkUIDType(simChunkUID),
 			Score:    simEmb.Score,
 		})
 	}

@@ -10,9 +10,15 @@ import { artifactPublicHost } from "./const.js";
 import * as constant from "./const.js";
 import * as restPublic from './rest-public.js';
 import * as restPublicWithJwt from './rest-public-with-jwt.js';
+import { CheckFileReprocessing } from './rest-public-file-reprocess.js';
+import { CheckKnowledgeBaseDeletion } from './rest-public-kb-delete.js';
+import { CheckKnowledgeBaseEndToEndFileProcessing } from './rest-public-kb-e2e-file-process.js';
+import { CheckChatCacheImplementation } from './rest-public-chat-cache.js';
 
 export let options = {
-  setupTimeout: '300s',
+  setupTimeout: '30s',
+  iterations: 1,
+  duration: '120m',
   insecureSkipTLSVerify: true,
   thresholds: {
     checks: ["rate == 1.0"],
@@ -22,6 +28,19 @@ export let options = {
 export function setup() {
 
   check(true, { [constant.banner('Artifact API: Setup')]: () => true });
+
+  // Clean up any leftover test data from previous runs (especially important in CI)
+  // This prevents unique constraint violations from stale data
+  try {
+    constant.db.exec(`DELETE FROM text_chunk WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+    constant.db.exec(`DELETE FROM embedding WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+    constant.db.exec(`DELETE FROM converted_file WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+    constant.db.exec(`DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`);
+    constant.db.exec(`DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`);
+  } catch (e) {
+    console.log(`Setup cleanup warning: ${e}`);
+  }
+
   var loginResp = http.request("POST", `${constant.mgmtPublicHost}/v1beta/auth/login`, JSON.stringify({
     "username": constant.defaultUsername,
     "password": constant.defaultPassword,
@@ -63,12 +82,16 @@ export default function (data) {
     });
   }
 
+  CheckKnowledgeBaseDeletion(data);
+  CheckFileReprocessing(data);
+  CheckKnowledgeBaseEndToEndFileProcessing(data);
+  CheckChatCacheImplementation(data);
+
   restPublic.CheckCreateCatalog(data);
   restPublic.CheckListCatalogs(data);
   restPublic.CheckGetCatalog(data);
   restPublic.CheckUpdateCatalog(data);
   restPublic.CheckDeleteCatalog(data);
-  restPublic.CheckCatalog(data);
 
   restPublicWithJwt.CheckCreateCatalogUnauthenticated(data);
   restPublicWithJwt.CheckListCatalogsUnauthenticated(data);
@@ -110,11 +133,14 @@ export function teardown(data) {
       }
     }
 
-    var q = `DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`;
-    constant.db.exec(q);
+    // Delete from child tables first, before deleting parent records
+    constant.db.exec(`DELETE FROM text_chunk WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+    constant.db.exec(`DELETE FROM embedding WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+    constant.db.exec(`DELETE FROM converted_file WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
 
-    q = `DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`;
-    constant.db.exec(q);
+    // Now delete parent tables
+    constant.db.exec(`DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`);
+    constant.db.exec(`DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`);
 
     constant.db.close();
   });

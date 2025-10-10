@@ -60,7 +60,19 @@ jobs:
           go install go.k6.io/xk6/cmd/xk6@v${{ env.XK6_VERSION }}
           xk6 build v${{ env.K6_VERSION }} \
             --with github.com/grafana/xk6-sql@v${{ env.XK6_SQL_VERSION }} \
-            --with github.com/grafana/xk6-sql-driver-postgres@v${{ env.XK6_SQL_POSTGRES_VERSION }} && sudo cp k6 /usr/bin
+            --with github.com/grafana/xk6-sql-driver-postgres@v${{ env.XK6_SQL_POSTGRES_VERSION }} \
+            --with github.com/grafana/xk6-exec@latest && sudo cp k6 /usr/bin
+
+      - name: Install MinIO Client
+        run: |
+          curl -fsSL https://dl.min.io/client/mc/release/linux-amd64/mc -o mc
+          chmod +x mc
+          sudo mv mc /usr/bin/mc
+
+      - name: Install Python dependencies for integration tests
+        run: |
+          python3 -m pip install --upgrade pip
+          pip3 install pymilvus>=2.4.3
 
       - name: Login to Docker Hub
         uses: docker/login-action@v3
@@ -100,10 +112,16 @@ jobs:
         run: |
           f=".env.secrets.component.test"
           printf 'CFG_COMPONENT_SECRETS_OPENAI_APIKEY=%s\n' "${{ secrets.OPENAIAPIKEY }}" >> "$f"
-          make compose-dev EDITION=docker-ce:test ENV_SECRETS_COMPONENT=.env.secrets.component.test ARTIFACT_BACKEND_VERSION=${{ env.COMMIT_SHORT_SHA }}
+          printf 'CFG_RAG_MODEL_GEMINI_APIKEY=%s\n' "${{ secrets.GEMINIAPIKEY }}" >> "$f"
+          make compose-dev EDITION=docker-ce:test CI=true ARTIFACT_BACKEND_VERSION=${{ env.COMMIT_SHORT_SHA }}
 
       - name: Run integration-test
         working-directory: artifact-backend
+        env:
+          MINIO_HOST: localhost
+          MINIO_PORT: 19000
+          MILVUS_HOST: localhost
+          MILVUS_PORT: 19530
         run: |
           make integration-test API_GATEWAY_URL=localhost:8080
 

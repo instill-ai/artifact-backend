@@ -23,11 +23,15 @@ import (
 
 	grpczap "github.com/grpc-ecosystem/go-grpc-middleware/logging/zap"
 	openfga "github.com/openfga/api/proto/openfga/v1"
+	temporalclient "go.temporal.io/sdk/client"
+
+	"go.opentelemetry.io/otel"
+	"go.temporal.io/sdk/contrib/opentelemetry"
+	"go.temporal.io/sdk/interceptor"
 
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/acl"
 	"github.com/instill-ai/artifact-backend/pkg/handler"
-	"github.com/instill-ai/artifact-backend/pkg/milvus"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/service"
 	"github.com/instill-ai/artifact-backend/pkg/usage"
@@ -36,7 +40,6 @@ import (
 
 	httpclient "github.com/instill-ai/artifact-backend/pkg/client/http"
 	database "github.com/instill-ai/artifact-backend/pkg/db"
-	minio "github.com/instill-ai/artifact-backend/pkg/minio"
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	mgmtpb "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
 	usagepb "github.com/instill-ai/protogen-go/core/usage/v1beta"
@@ -48,6 +51,7 @@ import (
 	otelx "github.com/instill-ai/x/otel"
 	servergrpcx "github.com/instill-ai/x/server/grpc"
 	gatewayx "github.com/instill-ai/x/server/grpc/gateway"
+	temporalx "github.com/instill-ai/x/temporal"
 )
 
 var (
@@ -132,19 +136,34 @@ func main() {
 
 	// Initialize clients needed for service
 	pipelinePublicServiceClient, mgmtPrivateServiceClient,
-		redisClient, db, minioClient, vectorDB, aclClient, closer := newClients(ctx, logger)
+		redisClient, db, minioClient, vectorDB, aclClient, temporalClient, closer := newClients(ctx, logger)
 	defer closer()
 
-	// Initialize service
+	// Initialize repository with vector database and Redis
+	repo := repository.NewRepository(db, vectorDB, minioClient, redisClient)
+
+	// Create worker
+	w, err := worker.New(
+		temporalClient,
+		repo,
+		pipelinePublicServiceClient,
+		aclClient,
+		redisClient,
+		logger,
+	)
+	if err != nil {
+		logger.Fatal("Unable to create worker", zap.Error(err))
+	}
+
+	// Create service with worker abstraction
 	svc := service.NewService(
-		repository.NewRepository(db),
-		minioClient,
+		repo,
 		mgmtPrivateServiceClient,
 		pipelinePublicServiceClient,
 		httpclient.NewRegistryClient(ctx),
 		redisClient,
-		vectorDB,
 		aclClient,
+		w,
 	)
 
 	privateHandler := handler.NewPrivateHandler(svc, logger)
@@ -185,10 +204,6 @@ func main() {
 			},
 		}),
 	)
-
-	// activate persistent catalog file-to-embeddings worker pool
-	wp := worker.NewPersistentCatalogFileToEmbWorkerPool(ctx, svc, config.Config.FileToEmbeddingWorker.NumberOfWorkers, artifactpb.CatalogType_CATALOG_TYPE_PERSISTENT)
-	wp.Start()
 
 	// Start usage reporter
 	var usg usage.Usage
@@ -305,7 +320,6 @@ func main() {
 		}
 		logger.Info("Shutting down server...")
 		publicGrpcS.GracefulStop()
-		wp.GraceFulStop()
 		logger.Info("server shutdown due to signal")
 		os.Exit(0)
 	}
@@ -316,9 +330,10 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 	mgmtpb.MgmtPrivateServiceClient,
 	*redis.Client,
 	*gorm.DB,
-	*minio.Minio,
-	service.VectorDatabase,
+	repository.ObjectStorage,
+	repository.VectorDatabase,
 	*acl.ACLClient,
+	temporalclient.Client,
 	func(),
 ) {
 	closeFuncs := map[string]func() error{}
@@ -359,7 +374,7 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 	}
 
 	// Initialize Minio client
-	minioClient, err := minio.NewMinioClientAndInitBucket(ctx, miniox.ClientParams{
+	minioClient, err := repository.NewMinioObjectStorage(ctx, miniox.ClientParams{
 		Config: config.Config.Minio,
 		Logger: logger,
 		AppInfo: miniox.AppInfo{
@@ -372,7 +387,7 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 	}
 
 	// Initialize milvus client
-	vectorDB, vclose, err := milvus.NewVectorDatabase(ctx, config.Config.Milvus.Host, config.Config.Milvus.Port)
+	vectorDB, vclose, err := repository.NewVectorDatabase(ctx, config.Config.Milvus.Host, config.Config.Milvus.Port)
 	if err != nil {
 		logger.Fatal(fmt.Sprintf("failed to create milvus client: %v", err))
 	}
@@ -391,6 +406,33 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 
 	aclClient := acl.NewACLClient(fgaClient, fgaReplicaClient, redisClient)
 
+	// Initialize Temporal client
+	temporalClientOptions, err := temporalx.ClientOptions(config.Config.Temporal, logger)
+	if err != nil {
+		logger.Fatal("Unable to build Temporal client options", zap.Error(err))
+	}
+
+	// Only add interceptor if tracing is enabled
+	if config.Config.OTELCollector.Enable {
+		temporalTracingInterceptor, err := opentelemetry.NewTracingInterceptor(opentelemetry.TracerOptions{
+			Tracer:            otel.Tracer(serviceName),
+			TextMapPropagator: otel.GetTextMapPropagator(),
+		})
+		if err != nil {
+			logger.Fatal("Unable to create temporal tracing interceptor", zap.Error(err))
+		}
+		temporalClientOptions.Interceptors = []interceptor.ClientInterceptor{temporalTracingInterceptor}
+	}
+
+	temporalClient, err := temporalclient.Dial(temporalClientOptions)
+	if err != nil {
+		logger.Fatal("Unable to create Temporal client", zap.Error(err))
+	}
+	closeFuncs["temporal"] = func() error {
+		temporalClient.Close()
+		return nil
+	}
+
 	closer := func() {
 		for conn, fn := range closeFuncs {
 			if err := fn(); err != nil {
@@ -399,5 +441,5 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 		}
 	}
 
-	return pipelinePublicServiceClient, mgmtPrivateServiceClient, redisClient, db, minioClient, vectorDB, aclClient, closer
+	return pipelinePublicServiceClient, mgmtPrivateServiceClient, redisClient, db, minioClient, vectorDB, aclClient, temporalClient, closer
 }

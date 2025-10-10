@@ -23,7 +23,7 @@ const (
 )
 
 func (c *BumpConversionPipeline) Migrate() error {
-	files := make([]*repository.KnowledgeBaseFile, 0, batchSize)
+	files := make([]*repository.KnowledgeBaseFileModel, 0, batchSize)
 	q := c.DB.Select("uid").
 		Where("process_status = ?", artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_FAILED.String()).
 		Where("extra_meta_data->>'converting_pipe' = ?", oldConvertingPipe)

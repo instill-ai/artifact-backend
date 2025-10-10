@@ -10,8 +10,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/instill-ai/artifact-backend/config"
-	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
+	"github.com/instill-ai/artifact-backend/pkg/types"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	errorsx "github.com/instill-ai/x/errors"
@@ -19,7 +19,7 @@ import (
 )
 
 // GetFileCatalog returns a view of the file within the catalog, with the text
-// and chunks it generated after being processed.
+// chunks it generated after being processed.
 func (ph *PublicHandler) GetFileCatalog(ctx context.Context, req *artifactpb.GetFileCatalogRequest) (*artifactpb.GetFileCatalogResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 
@@ -44,11 +44,11 @@ func (ph *PublicHandler) GetFileCatalog(ctx context.Context, req *artifactpb.Get
 	}
 
 	fileUID := uuid.FromStringOrNil(req.GetFileUid())
-	kbfs, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{fileUID})
+	kbfs, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{types.FileUIDType(fileUID)})
 	switch {
 	case err != nil:
 		return nil, fmt.Errorf("fetching file from repository: %w", err)
-	case len(kbfs) == 0 || kbfs[0].KnowledgeBaseUID != kb.UID:
+	case len(kbfs) == 0 || kbfs[0].KBUID != kb.UID:
 		return nil, fmt.Errorf("fetching file from repository: %w", errorsx.ErrNotFound)
 	}
 
@@ -61,12 +61,12 @@ func (ph *PublicHandler) GetFileCatalog(ctx context.Context, req *artifactpb.Get
 	}
 
 	// Get the source file sourceContent from MinIO using destination of source.
-	sourceContent, err := getFileWithBucketFallback(ctx, ph.service.MinIO(), config.Config.Minio.BucketName, source.Dest)
+	sourceContent, err := getFileWithBucketFallback(ctx, ph.service.Repository(), config.Config.Minio.BucketName, source.Dest)
 	if err != nil {
 		return nil, fmt.Errorf("getting file from blob storage: %w", err)
 	}
 
-	// Get chunks.
+	// Get text chunks.
 	//
 	// NOTE: in the future, we may support other types of segment, e.g. image,
 	// audio, etc.
@@ -78,16 +78,16 @@ func (ph *PublicHandler) GetFileCatalog(ctx context.Context, req *artifactpb.Get
 	pbChunks := make([]*artifactpb.GetFileCatalogResponse_Chunk, 0, len(textChunks))
 
 	// Map chunks to embeddings.
-	embeddings, err := ph.service.Repository().ListEmbeddingsByKbFileUID(ctx, kbFile.UID)
+	embeddings, err := ph.service.Repository().ListEmbeddingsByKBFileUID(ctx, kbFile.UID)
 	if err != nil {
 		return nil, fmt.Errorf("getting file embeddings: %w", err)
 	}
 
 	// NOTE: in the future if we support embeddings for other types of source,
 	// we need to filter here.
-	targetSourceTable := ph.service.Repository().TextChunkTableName()
+	targetSourceTable := repository.TextChunkTableName
 
-	embeddingMap := make(map[uuid.UUID]repository.Embedding)
+	embeddingMap := make(map[types.SourceUIDType]repository.EmbeddingModel)
 	for _, embedding := range embeddings {
 		if embedding.SourceTable != targetSourceTable {
 			continue
@@ -118,7 +118,7 @@ func (ph *PublicHandler) GetFileCatalog(ctx context.Context, req *artifactpb.Get
 			Type:          artifactpb.GetFileCatalogResponse_CHUNK_TYPE_TEXT,
 			StartPosition: int32(chunk.StartPos),
 			EndPosition:   int32(chunk.EndPos),
-			Content:       content,
+			Content:       string(content),
 			TokenCount:    int32(chunk.Tokens),
 			Embedding:     embedding.Vector,
 			CreateTime:    createTime,
@@ -140,7 +140,7 @@ func (ph *PublicHandler) GetFileCatalog(ctx context.Context, req *artifactpb.Get
 
 	// Retrieve the original file content from MinIO.
 	minIOPath := kbFile.Destination
-	originalContent, err := getFileWithBucketFallback(ctx, ph.service.MinIO(), config.Config.Minio.BucketName, minIOPath)
+	originalContent, err := getFileWithBucketFallback(ctx, ph.service.Repository(), config.Config.Minio.BucketName, minIOPath)
 	if err != nil {
 		return nil, fmt.Errorf("fetching original file from blob: %w", err)
 	}
@@ -168,7 +168,7 @@ func (ph *PublicHandler) GetFileCatalog(ctx context.Context, req *artifactpb.Get
 	}, nil
 }
 
-func getPipelines(kbf *repository.KnowledgeBaseFile) []string {
+func getPipelines(kbf *repository.KnowledgeBaseFileModel) []string {
 	if kbf == nil || kbf.ExtraMetaDataUnmarshal == nil {
 		return nil
 	}
@@ -189,7 +189,7 @@ func getPipelines(kbf *repository.KnowledgeBaseFile) []string {
 }
 
 // getFileWithBucketFallback tries the inferred bucket and, on failure, the alternative bucket.
-func getFileWithBucketFallback(ctx context.Context, m minio.MinioI, primaryBucket, path string) ([]byte, error) {
+func getFileWithBucketFallback(ctx context.Context, m repository.ObjectStorage, primaryBucket, path string) ([]byte, error) {
 	data, err := m.GetFile(ctx, primaryBucket, path)
 	if err == nil {
 		return data, nil
@@ -197,7 +197,7 @@ func getFileWithBucketFallback(ctx context.Context, m minio.MinioI, primaryBucke
 	// decide alternative bucket
 	alt := config.Config.Minio.BucketName
 	if primaryBucket == alt {
-		alt = minio.BlobBucketName
+		alt = repository.BlobBucketName
 	}
 	return m.GetFile(ctx, alt, path)
 }

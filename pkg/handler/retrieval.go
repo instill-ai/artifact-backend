@@ -5,18 +5,19 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gofrs/uuid"
 	"go.uber.org/zap"
+	"google.golang.org/grpc/metadata"
 
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
+	"github.com/instill-ai/artifact-backend/pkg/types"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	errorsx "github.com/instill-ai/x/errors"
 	logx "github.com/instill-ai/x/log"
 )
 
-// SimilarityChunksSearch rturns the top-K most similar chunks to a text
+// SimilarityChunksSearch returns the top-K most similar chunks to a text
 // prompt.
 func (ph *PublicHandler) SimilarityChunksSearch(
 	ctx context.Context,
@@ -56,18 +57,36 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 
 	// retrieve the chunks based on the similarity
 	t := time.Now()
-	simChunksScores, err := ph.service.SimilarityChunksSearch(ctx, ownerUID, req)
+
+	// Extract authentication metadata from context to pass to worker
+	var requestMetadata map[string][]string
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		md, ok = metadata.FromOutgoingContext(ctx)
+	}
+	if ok {
+		requestMetadata = md
+	}
+
+	// Embed text using service
+	textVector, err := ph.service.EmbedTexts(ctx, []string{req.TextPrompt}, 32, requestMetadata)
+	if err != nil {
+		return nil, fmt.Errorf("vectorizing text: %w", err)
+	}
+
+	// Now call service to do vector search
+	simChunksScores, err := ph.service.SimilarityChunksSearch(ctx, ownerUID, req, textVector)
 	if err != nil {
 		return nil, fmt.Errorf("searching similar chunks: %w", err)
 	}
-	var chunkUIDs []uuid.UUID
+	var chunkUIDs []types.TextChunkUIDType
 	for _, simChunk := range simChunksScores {
 		chunkUIDs = append(chunkUIDs, simChunk.ChunkUID)
 	}
 	logger.Info("get similarity chunks", zap.Duration("duration", time.Since(t)))
 
 	// fetch the chunks metadata
-	chunks, err := ph.service.Repository().GetChunksByUIDs(ctx, chunkUIDs)
+	chunks, err := ph.service.Repository().GetTextChunksByUIDs(ctx, chunkUIDs)
 	if err != nil {
 		return nil, fmt.Errorf("fetching chunk metadata: %w", err)
 	}
@@ -78,19 +97,19 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 		chunkFilePaths = append(chunkFilePaths, chunk.ContentDest)
 	}
 
-	// fetch the chunks content from blob storage
-	chunkContents, err := ph.service.MinIO().GetFilesByPaths(ctx, config.Config.Minio.BucketName, chunkFilePaths)
+	// Get file contents using service
+	chunkContents, err := ph.service.GetFilesByPaths(ctx, config.Config.Minio.BucketName, chunkFilePaths)
 	if err != nil {
 		return nil, fmt.Errorf("fetching chunk contents: %w", err)
 	}
 
 	// fetch the file names
-	fileUIDMapName := make(map[uuid.UUID]string)
+	fileUIDMapName := make(map[types.FileUIDType]string)
 	for _, chunk := range chunks {
-		fileUIDMapName[chunk.KbFileUID] = ""
+		fileUIDMapName[chunk.KBFileUID] = ""
 	}
 
-	fileUids := make([]uuid.UUID, 0, len(fileUIDMapName))
+	fileUids := make([]types.FileUIDType, 0, len(fileUIDMapName))
 	for fileUID := range fileUIDMapName {
 		fileUids = append(fileUids, fileUID)
 	}
@@ -113,6 +132,7 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 	simChunks := make([]*artifactpb.SimilarityChunk, 0, len(chunks))
 	for i, chunk := range chunks {
 		if !chunk.Retrievable {
+			logger.Warn("Skipping non-retrievable chunk", zap.String("chunkUID", chunk.UID.String()))
 			continue
 		}
 
@@ -120,12 +140,17 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 			ChunkUid:        chunk.UID.String(),
 			SimilarityScore: float32(simChunksScores[i].Score),
 			TextContent:     string(chunkContents[i].Content),
-			SourceFile:      fileUIDMapName[chunk.KbFileUID],
+			SourceFile:      fileUIDMapName[chunk.KBFileUID],
 			ChunkMetadata:   convertToProtoChunk(chunk),
 		}
 
 		simChunks = append(simChunks, pbChunk)
 	}
+
+	logger.Info("SimilarityChunksSearch response",
+		zap.Int("totalChunks", len(chunks)),
+		zap.Int("returnedChunks", len(simChunks)),
+		zap.Int("vectorSearchResults", len(simChunksScores)))
 
 	return &artifactpb.SimilarityChunksSearchResponse{SimilarChunks: simChunks}, nil
 }

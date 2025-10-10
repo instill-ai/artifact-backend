@@ -11,43 +11,49 @@ export
 .PHONY: dev
 dev:							## Run dev container
 	@docker compose ls -q | grep -q "instill-core" && true || \
-		(echo "Error: Run \"make latest\" in instill-core repository (https://github.com/instill-ai/instill-core) in your local machine first and run \"docker rm -f ${SERVICE_NAME}\"." && exit 1)
+		(echo "Error: Run \"make latest\" in instill-core repository (https://github.com/instill-ai/instill-core) in your local machine first and run \"docker rm -f ${SERVICE_NAME} ${SERVICE_NAME}-worker\"." && exit 1)
 	@docker inspect --type container ${SERVICE_NAME} >/dev/null 2>&1 && echo "A container named ${SERVICE_NAME} is already running." || \
 		echo "Run dev container ${SERVICE_NAME}. To stop it, run \"make stop\"."
 	@docker run -d --rm \
 		-v $(PWD):/${SERVICE_NAME} \
-		-p ${SERVICE_PORT}:${SERVICE_PORT} \
+		-v /Users/Pinglin/Workspace/instill/protogen-go:/protogen-go \
+		-p ${PUBLIC_SERVICE_PORT}:${PUBLIC_SERVICE_PORT} \
+		-p ${PRIVATE_SERVICE_PORT}:${PRIVATE_SERVICE_PORT} \
 		--network instill-network \
 		--name ${SERVICE_NAME} \
 		instill/${SERVICE_NAME}:dev
 
 .PHONY: latest
-latest:
+latest: ## Run latest container
 	@docker compose ls -q | grep -q "instill-core" && true || \
-		(echo "Error: Run \"make latest\" in instill-core repository (https://github.com/instill-ai/instill-core) in your local machine first and run \"docker rm -f ${SERVICE_NAME}\"." && exit 1)
-	@docker inspect --type container ${SERVICE_NAME} >/dev/null 2>&1 && echo "A container named ${SERVICE_NAME} is already running."
-	@docker run -it --rm \
-		-p ${SERVICE_PORT}:${SERVICE_PORT} \
-		--network instill-network \
+		(echo "Error: Run \"make latest\" in instill-core repository (https://github.com/instill-ai/instill-core) in your local machine first and run \"docker rm -f ${SERVICE_NAME} ${SERVICE_NAME}-worker\"." && exit 1)
+	@docker inspect --type container ${SERVICE_NAME} >/dev/null 2>&1 && echo "A container named ${SERVICE_NAME} is already running." || \
+		echo "Run latest container ${SERVICE_NAME} and ${SERVICE_NAME}-worker. To stop it, run \"make stop\"."
+	@docker run --network=instill-network \
 		--name ${SERVICE_NAME} \
-		instill/${SERVICE_NAME}:latest \
+		-p ${PUBLIC_SERVICE_PORT}:${PUBLIC_SERVICE_PORT} \
+		-p ${PRIVATE_SERVICE_PORT}:${PRIVATE_SERVICE_PORT} \
+		-d instill/${SERVICE_NAME}:latest \
 		/bin/sh -c "\
 		./${SERVICE_NAME}-migrate && \
 		./${SERVICE_NAME}-init && \
 		./${SERVICE_NAME} \
 		"
+	@docker run --network=instill-network \
+		--name ${SERVICE_NAME}-worker \
+		-d instill/${SERVICE_NAME}:latest ./${SERVICE_NAME}-worker
 
 .PHONY: logs
-logs:					## Tail service container logs with -n 10
-	@docker logs ${SERVICE_NAME} --follow
+logs:					## Tail container logs with -n 10
+	@docker logs ${SERVICE_NAME} --follow --tail=10
 
 .PHONY: stop
-stop:							## Stop container
-	@docker stop -t 1 ${SERVICE_NAME}
+stop:							## Stop all running containers
+	@docker stop -t 1 ${SERVICE_NAME} ${SERVICE_NAME}-worker 2>/dev/null || true
 
 .PHONY: rm
-rm:								## Remove container
-	@docker rm -f ${SERVICE_NAME}
+rm:								## Remove all running containers
+	@docker rm -f ${SERVICE_NAME} ${SERVICE_NAME}-worker >/dev/null 2>&1
 
 .PHONY: top
 top:							## Display all running service processes
@@ -86,13 +92,13 @@ unit-test:       				## Run unit test
 integration-test:				## Run integration test
 	@TEST_FOLDER_ABS_PATH=${PWD} k6 run \
 		-e API_GATEWAY_PROTOCOL=${API_GATEWAY_PROTOCOL} -e API_GATEWAY_URL=${API_GATEWAY_URL} \
-		integration-test/grpc.js --no-usage-report --quiet
+		integration-test/grpc.js --no-usage-report
 	@TEST_FOLDER_ABS_PATH=${PWD} k6 run \
 		-e API_GATEWAY_PROTOCOL=${API_GATEWAY_PROTOCOL} 	-e API_GATEWAY_URL=${API_GATEWAY_URL} \
-		integration-test/rest.js --no-usage-report --quiet
+		integration-test/rest.js --no-usage-report
 	@TEST_FOLDER_ABS_PATH=${PWD} k6 run \
 		-e API_GATEWAY_PROTOCOL=${API_GATEWAY_PROTOCOL} -e API_GATEWAY_URL=${API_GATEWAY_URL} \
-		integration-test/file-type.js --no-usage-report --quiet
+		integration-test/file-type.js --no-usage-report
 
 .PHONY: help
 help:       	 				## Show this help

@@ -1,4 +1,4 @@
-package service
+package service_test
 
 import (
 	"context"
@@ -13,6 +13,8 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/instill-ai/artifact-backend/pkg/mock"
+	"github.com/instill-ai/artifact-backend/pkg/service"
+	"github.com/instill-ai/artifact-backend/pkg/types"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
@@ -28,6 +30,23 @@ var cmpPB = qt.CmpEquals(
 		timestamppb.Timestamp{},
 	),
 )
+
+// Helper function to convert protobuf RepositoryTag to domain Tag
+func protoToTag(pb *artifactpb.RepositoryTag) *types.Tag {
+	if pb == nil {
+		return nil
+	}
+	updateTime := time.Time{}
+	if pb.GetUpdateTime() != nil {
+		updateTime = pb.GetUpdateTime().AsTime()
+	}
+	return &types.Tag{
+		Name:       pb.GetName(),
+		ID:         pb.GetId(),
+		Digest:     pb.GetDigest(),
+		UpdateTime: updateTime,
+	}
+}
 
 func TestService_ListRepositoryTags(t *testing.T) {
 	c := qt.New(t)
@@ -196,19 +215,19 @@ func TestService_ListRepositoryTags(t *testing.T) {
 					Then(tc.registryTags, tc.registryErr)
 			}
 
-			repository := mock.NewRepositoryIMock(c)
+			repository := mock.NewRepositoryMock(c)
 			for _, repoTag := range tc.repoTags {
 				name := utils.RepositoryTagName(repoTag.Name)
 				_, id, _ := name.ExtractRepositoryAndID()
 				repository.GetRepositoryTagMock.When(minimock.AnyContext, name).
-					Then(repoTag, tc.repoErr)
+					Then(protoToTag(repoTag), tc.repoErr)
 				if tc.registryDigestErr != nil {
 					registry.GetTagDigestMock.When(minimock.AnyContext, repo, id).
 						Then("", tc.registryDigestErr)
 				}
 			}
 
-			s := NewService(repository, nil, nil, nil, registry, nil, nil, nil)
+			s := service.NewService(repository, nil, nil, registry, nil, nil, nil)
 			req := newReq(tc.in)
 			resp, err := s.ListRepositoryTags(ctx, req)
 			if tc.wantErr != "" {
@@ -241,7 +260,7 @@ func TestService_CreateRepositoryTag(t *testing.T) {
 			Name:       "repositories/shake/home/tags/1.3.0",
 			Id:         "1.3.0",
 			Digest:     "sha256:ab9ed2553e5a1c7f717436ffa070a06da8f2fe15caab4b71e2f02ce4efcae423",
-			UpdateTime: timestamppb.Now(),
+			UpdateTime: timestamppb.New(time.Now()),
 		}
 	}
 
@@ -250,7 +269,7 @@ func TestService_CreateRepositoryTag(t *testing.T) {
 		t.Name = "shake/home:1.3.0"
 		req := &artifactpb.CreateRepositoryTagRequest{Tag: t}
 
-		s := NewService(nil, nil, nil, nil, nil, nil, nil, nil)
+		s := service.NewService(nil, nil, nil, nil, nil, nil, nil)
 		_, err := s.CreateRepositoryTag(ctx, req)
 		c.Check(err, qt.ErrorMatches, "invalid tag name")
 	})
@@ -260,29 +279,41 @@ func TestService_CreateRepositoryTag(t *testing.T) {
 		t.Id = "latest"
 		req := &artifactpb.CreateRepositoryTagRequest{Tag: t}
 
-		s := NewService(nil, nil, nil, nil, nil, nil, nil, nil)
+		s := service.NewService(nil, nil, nil, nil, nil, nil, nil)
 		_, err := s.CreateRepositoryTag(ctx, req)
 		c.Check(err, qt.ErrorMatches, "invalid tag name")
 	})
 
-	req := &artifactpb.CreateRepositoryTagRequest{Tag: newTag()}
+	tag := newTag()
+	req := &artifactpb.CreateRepositoryTagRequest{Tag: tag}
 	clearedTag, want := newTag(), newTag()
 	clearedTag.UpdateTime = nil
 
 	c.Run("nok - repo error", func(c *qt.C) {
-		repository := mock.NewRepositoryIMock(c)
-		repository.UpsertRepositoryTagMock.When(minimock.AnyContext, clearedTag).Then(nil, fmt.Errorf("foo"))
+		repository := mock.NewRepositoryMock(c)
+		// Use Inspect to capture and verify the call, then return error
+		repository.UpsertRepositoryTagMock.Inspect(func(ctx context.Context, tag *types.Tag) {
+			c.Check(tag.Name, qt.Equals, "repositories/shake/home/tags/1.3.0")
+			c.Check(tag.ID, qt.Equals, "1.3.0")
+			c.Check(tag.Digest, qt.Equals, "sha256:ab9ed2553e5a1c7f717436ffa070a06da8f2fe15caab4b71e2f02ce4efcae423")
+		}).Return(nil, fmt.Errorf("foo"))
 
-		s := NewService(repository, nil, nil, nil, nil, nil, nil, nil)
+		s := service.NewService(repository, nil, nil, nil, nil, nil, nil)
 		_, err := s.CreateRepositoryTag(ctx, req)
 		c.Check(err, qt.ErrorMatches, "failed to upsert tag .*: foo")
 	})
 
 	c.Run("ok", func(c *qt.C) {
-		repository := mock.NewRepositoryIMock(c)
-		repository.UpsertRepositoryTagMock.When(minimock.AnyContext, clearedTag).Then(want, nil)
+		repository := mock.NewRepositoryMock(c)
+		// Convert want to domain type for return value
+		wantDomain := protoToTag(want)
+		repository.UpsertRepositoryTagMock.Inspect(func(ctx context.Context, tag *types.Tag) {
+			c.Check(tag.Name, qt.Equals, "repositories/shake/home/tags/1.3.0")
+			c.Check(tag.ID, qt.Equals, "1.3.0")
+			c.Check(tag.Digest, qt.Equals, "sha256:ab9ed2553e5a1c7f717436ffa070a06da8f2fe15caab4b71e2f02ce4efcae423")
+		}).Return(wantDomain, nil)
 
-		s := NewService(repository, nil, nil, nil, nil, nil, nil, nil)
+		s := service.NewService(repository, nil, nil, nil, nil, nil, nil)
 		resp, err := s.CreateRepositoryTag(ctx, req)
 		c.Check(err, qt.IsNil)
 		c.Check(resp.GetTag(), cmpPB, want)
