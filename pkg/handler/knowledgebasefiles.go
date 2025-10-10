@@ -699,7 +699,7 @@ func (ph *PublicHandler) DeleteCatalogFile(
 			for _, emb := range embeddings {
 				embUIDs = append(embUIDs, emb.UID.String())
 			}
-			err = ph.service.VectorDB().DeleteEmbeddingsInCollection(ctx, service.KBCollectionName(files[0].KnowledgeBaseUID), embUIDs)
+			err = ph.service.VectorDB().DeleteEmbeddingsInCollection(ctx, files[0].KnowledgeBaseUID, embUIDs)
 			if err != nil {
 				logger.Error("failed to delete embeddings in milvus", zap.Error(err))
 				allPass = false

@@ -83,7 +83,7 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 
 	// external service call - create catalog collection and set ACL in openFAG
 	callExternalService := func(kbUID uuid.UUID) error {
-		err := ph.service.VectorDB().CreateCollection(ctx, service.KBCollectionName(kbUID))
+		err := ph.service.VectorDB().CreateCollection(ctx, kbUID)
 		if err != nil {
 			return fmt.Errorf("creating vector database collection: %w", err)
 		}
@@ -398,7 +398,7 @@ func (ph *PublicHandler) DeleteCatalog(ctx context.Context, req *artifactpb.Dele
 		}
 
 		// delete the collection in milvus
-		err = ph.service.VectorDB().DropCollection(ctx, service.KBCollectionName(kb.UID))
+		err = ph.service.VectorDB().DropCollection(ctx, kb.UID)
 		if err != nil {
 			logger.Error("failed to delete collection in milvus in background", zap.Error(err))
 			allPass = false

@@ -310,8 +310,7 @@ func (s *service) updateEmbeddingsWithFileTags(ctx context.Context, file reposit
 		}
 	}
 
-	collection := KBCollectionName(file.KnowledgeBaseUID)
-	if err := s.vectorDB.InsertVectorsInCollection(ctx, collection, vectors); err != nil {
+	if err := s.vectorDB.UpsertVectorsInCollection(ctx, file.KnowledgeBaseUID, vectors); err != nil {
 		return fmt.Errorf("updating embeddings in vector database: %w", err)
 	}
 

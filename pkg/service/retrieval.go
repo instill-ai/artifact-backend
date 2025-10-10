@@ -66,13 +66,13 @@ func (s *service) SimilarityChunksSearch(ctx context.Context, ownerUID uuid.UUID
 		topK = 5
 	}
 	sp := SimilarVectorSearchParam{
-		CollectionID: KBCollectionName(kb.UID),
-		Vectors:      textVector,
-		TopK:         topK,
-		FileUIDs:     fileUIDs,
-		FileType:     string(fileType),
-		ContentType:  string(contentType),
-		Tags:         req.GetTags(),
+		KnowledgeBaseUID: kb.UID,
+		Vectors:          textVector,
+		TopK:             topK,
+		FileUIDs:         fileUIDs,
+		FileType:         string(fileType),
+		ContentType:      string(contentType),
+		Tags:             req.GetTags(),
 	}
 
 	// By default we'll filter the chunk search with the file UID metadata.

@@ -770,14 +770,12 @@ func (wp *persistentCatalogFileToEmbWorkerPool) processEmbeddingFile(ctx context
 		return nil, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, err
 	}
 	// save the embeddings into milvus and metadata into database
-	collection := service.KBCollectionName(file.KnowledgeBaseUID)
 	embeddings := make([]repository.Embedding, len(vectors))
 	for i, v := range vectors {
 		embeddings[i] = repository.Embedding{
 			SourceTable: wp.svc.Repository().TextChunkTableName(),
 			SourceUID:   chunks[i].UID,
 			Vector:      v,
-			Collection:  collection,
 			KbUID:       file.KnowledgeBaseUID,
 			KbFileUID:   file.UID,
 			FileType:    chunks[i].FileType,

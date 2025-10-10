@@ -258,8 +258,7 @@ func saveEmbeddings(ctx context.Context, svc service.Service, kbUID, fileUID uui
 	logger = logger.With(zap.Int("total", totalEmbeddings))
 
 	// Delete existing embeddings in the vector database
-	collection := service.KBCollectionName(kbUID)
-	if err := svc.VectorDB().DeleteEmbeddingsWithFileUID(ctx, collection, fileUID); err != nil {
+	if err := svc.VectorDB().DeleteEmbeddingsWithFileUID(ctx, kbUID, fileUID); err != nil {
 		return fmt.Errorf("deleting existing embeddings in vector database: %w", err)
 	}
 
@@ -295,7 +294,7 @@ func saveEmbeddings(ctx context.Context, svc service.Service, kbUID, fileUID uui
 					Tags:         emb.Tags,
 				}
 			}
-			if err := svc.VectorDB().InsertVectorsInCollection(ctx, collection, vectors); err != nil {
+			if err := svc.VectorDB().UpsertVectorsInCollection(ctx, kbUID, vectors); err != nil {
 				return fmt.Errorf("saving embeddings in vector database: %w", err)
 			}
 
