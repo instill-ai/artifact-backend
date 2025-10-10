@@ -101,6 +101,13 @@ type RepositoryMock struct {
 	beforeDeleteAndCreateTextChunksCounter uint64
 	DeleteAndCreateTextChunksMock          mRepositoryMockDeleteAndCreateTextChunks
 
+	funcDeleteChatCacheMetadata          func(ctx context.Context, kbUID uuid.UUID, fileUIDs []uuid.UUID) (err error)
+	funcDeleteChatCacheMetadataOrigin    string
+	inspectFuncDeleteChatCacheMetadata   func(ctx context.Context, kbUID uuid.UUID, fileUIDs []uuid.UUID)
+	afterDeleteChatCacheMetadataCounter  uint64
+	beforeDeleteChatCacheMetadataCounter uint64
+	DeleteChatCacheMetadataMock          mRepositoryMockDeleteChatCacheMetadata
+
 	funcDeleteConvertedFile          func(ctx context.Context, uid uuid.UUID) (err error)
 	funcDeleteConvertedFileOrigin    string
 	inspectFuncDeleteConvertedFile   func(ctx context.Context, uid uuid.UUID)
@@ -184,6 +191,13 @@ type RepositoryMock struct {
 	afterFlushCollectionCounter  uint64
 	beforeFlushCollectionCounter uint64
 	FlushCollectionMock          mRepositoryMockFlushCollection
+
+	funcGetChatCacheMetadata          func(ctx context.Context, kbUID uuid.UUID, fileUIDs []uuid.UUID) (cp1 *mm_repository.ChatCacheMetadata, err error)
+	funcGetChatCacheMetadataOrigin    string
+	inspectFuncGetChatCacheMetadata   func(ctx context.Context, kbUID uuid.UUID, fileUIDs []uuid.UUID)
+	afterGetChatCacheMetadataCounter  uint64
+	beforeGetChatCacheMetadataCounter uint64
+	GetChatCacheMetadataMock          mRepositoryMockGetChatCacheMetadata
 
 	funcGetConvertedFileByFileUID          func(ctx context.Context, fileUID types.FileUIDType) (cp1 *mm_repository.ConvertedFileModel, err error)
 	funcGetConvertedFileByFileUIDOrigin    string
@@ -522,6 +536,13 @@ type RepositoryMock struct {
 	beforeSaveConvertedFileCounter uint64
 	SaveConvertedFileMock          mRepositoryMockSaveConvertedFile
 
+	funcSetChatCacheMetadata          func(ctx context.Context, kbUID uuid.UUID, fileUIDs []uuid.UUID, metadata *mm_repository.ChatCacheMetadata, ttl time.Duration) (err error)
+	funcSetChatCacheMetadataOrigin    string
+	inspectFuncSetChatCacheMetadata   func(ctx context.Context, kbUID uuid.UUID, fileUIDs []uuid.UUID, metadata *mm_repository.ChatCacheMetadata, ttl time.Duration)
+	afterSetChatCacheMetadataCounter  uint64
+	beforeSetChatCacheMetadataCounter uint64
+	SetChatCacheMetadataMock          mRepositoryMockSetChatCacheMetadata
+
 	funcSimilarVectorsInCollection          func(ctx context.Context, s1 mm_repository.SimilarVectorSearchParam) (saa1 [][]mm_repository.SimilarVectorEmbedding, err error)
 	funcSimilarVectorsInCollectionOrigin    string
 	inspectFuncSimilarVectorsInCollection   func(ctx context.Context, s1 mm_repository.SimilarVectorSearchParam)
@@ -641,6 +662,9 @@ func NewRepositoryMock(t minimock.Tester) *RepositoryMock {
 	m.DeleteAndCreateTextChunksMock = mRepositoryMockDeleteAndCreateTextChunks{mock: m}
 	m.DeleteAndCreateTextChunksMock.callArgs = []*RepositoryMockDeleteAndCreateTextChunksParams{}
 
+	m.DeleteChatCacheMetadataMock = mRepositoryMockDeleteChatCacheMetadata{mock: m}
+	m.DeleteChatCacheMetadataMock.callArgs = []*RepositoryMockDeleteChatCacheMetadataParams{}
+
 	m.DeleteConvertedFileMock = mRepositoryMockDeleteConvertedFile{mock: m}
 	m.DeleteConvertedFileMock.callArgs = []*RepositoryMockDeleteConvertedFileParams{}
 
@@ -676,6 +700,9 @@ func NewRepositoryMock(t minimock.Tester) *RepositoryMock {
 
 	m.FlushCollectionMock = mRepositoryMockFlushCollection{mock: m}
 	m.FlushCollectionMock.callArgs = []*RepositoryMockFlushCollectionParams{}
+
+	m.GetChatCacheMetadataMock = mRepositoryMockGetChatCacheMetadata{mock: m}
+	m.GetChatCacheMetadataMock.callArgs = []*RepositoryMockGetChatCacheMetadataParams{}
 
 	m.GetConvertedFileByFileUIDMock = mRepositoryMockGetConvertedFileByFileUID{mock: m}
 	m.GetConvertedFileByFileUIDMock.callArgs = []*RepositoryMockGetConvertedFileByFileUIDParams{}
@@ -814,6 +841,9 @@ func NewRepositoryMock(t minimock.Tester) *RepositoryMock {
 
 	m.SaveConvertedFileMock = mRepositoryMockSaveConvertedFile{mock: m}
 	m.SaveConvertedFileMock.callArgs = []*RepositoryMockSaveConvertedFileParams{}
+
+	m.SetChatCacheMetadataMock = mRepositoryMockSetChatCacheMetadata{mock: m}
+	m.SetChatCacheMetadataMock.callArgs = []*RepositoryMockSetChatCacheMetadataParams{}
 
 	m.SimilarVectorsInCollectionMock = mRepositoryMockSimilarVectorsInCollection{mock: m}
 	m.SimilarVectorsInCollectionMock.callArgs = []*RepositoryMockSimilarVectorsInCollectionParams{}
@@ -4837,6 +4867,379 @@ func (m *RepositoryMock) MinimockDeleteAndCreateTextChunksInspect() {
 	if !m.DeleteAndCreateTextChunksMock.invocationsDone() && afterDeleteAndCreateTextChunksCounter > 0 {
 		m.t.Errorf("Expected %d calls to RepositoryMock.DeleteAndCreateTextChunks at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.DeleteAndCreateTextChunksMock.expectedInvocations), m.DeleteAndCreateTextChunksMock.expectedInvocationsOrigin, afterDeleteAndCreateTextChunksCounter)
+	}
+}
+
+type mRepositoryMockDeleteChatCacheMetadata struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockDeleteChatCacheMetadataExpectation
+	expectations       []*RepositoryMockDeleteChatCacheMetadataExpectation
+
+	callArgs []*RepositoryMockDeleteChatCacheMetadataParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockDeleteChatCacheMetadataExpectation specifies expectation struct of the Repository.DeleteChatCacheMetadata
+type RepositoryMockDeleteChatCacheMetadataExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockDeleteChatCacheMetadataParams
+	paramPtrs          *RepositoryMockDeleteChatCacheMetadataParamPtrs
+	expectationOrigins RepositoryMockDeleteChatCacheMetadataExpectationOrigins
+	results            *RepositoryMockDeleteChatCacheMetadataResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockDeleteChatCacheMetadataParams contains parameters of the Repository.DeleteChatCacheMetadata
+type RepositoryMockDeleteChatCacheMetadataParams struct {
+	ctx      context.Context
+	kbUID    uuid.UUID
+	fileUIDs []uuid.UUID
+}
+
+// RepositoryMockDeleteChatCacheMetadataParamPtrs contains pointers to parameters of the Repository.DeleteChatCacheMetadata
+type RepositoryMockDeleteChatCacheMetadataParamPtrs struct {
+	ctx      *context.Context
+	kbUID    *uuid.UUID
+	fileUIDs *[]uuid.UUID
+}
+
+// RepositoryMockDeleteChatCacheMetadataResults contains results of the Repository.DeleteChatCacheMetadata
+type RepositoryMockDeleteChatCacheMetadataResults struct {
+	err error
+}
+
+// RepositoryMockDeleteChatCacheMetadataOrigins contains origins of expectations of the Repository.DeleteChatCacheMetadata
+type RepositoryMockDeleteChatCacheMetadataExpectationOrigins struct {
+	origin         string
+	originCtx      string
+	originKbUID    string
+	originFileUIDs string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmDeleteChatCacheMetadata *mRepositoryMockDeleteChatCacheMetadata) Optional() *mRepositoryMockDeleteChatCacheMetadata {
+	mmDeleteChatCacheMetadata.optional = true
+	return mmDeleteChatCacheMetadata
+}
+
+// Expect sets up expected params for Repository.DeleteChatCacheMetadata
+func (mmDeleteChatCacheMetadata *mRepositoryMockDeleteChatCacheMetadata) Expect(ctx context.Context, kbUID uuid.UUID, fileUIDs []uuid.UUID) *mRepositoryMockDeleteChatCacheMetadata {
+	if mmDeleteChatCacheMetadata.mock.funcDeleteChatCacheMetadata != nil {
+		mmDeleteChatCacheMetadata.mock.t.Fatalf("RepositoryMock.DeleteChatCacheMetadata mock is already set by Set")
+	}
+
+	if mmDeleteChatCacheMetadata.defaultExpectation == nil {
+		mmDeleteChatCacheMetadata.defaultExpectation = &RepositoryMockDeleteChatCacheMetadataExpectation{}
+	}
+
+	if mmDeleteChatCacheMetadata.defaultExpectation.paramPtrs != nil {
+		mmDeleteChatCacheMetadata.mock.t.Fatalf("RepositoryMock.DeleteChatCacheMetadata mock is already set by ExpectParams functions")
+	}
+
+	mmDeleteChatCacheMetadata.defaultExpectation.params = &RepositoryMockDeleteChatCacheMetadataParams{ctx, kbUID, fileUIDs}
+	mmDeleteChatCacheMetadata.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmDeleteChatCacheMetadata.expectations {
+		if minimock.Equal(e.params, mmDeleteChatCacheMetadata.defaultExpectation.params) {
+			mmDeleteChatCacheMetadata.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmDeleteChatCacheMetadata.defaultExpectation.params)
+		}
+	}
+
+	return mmDeleteChatCacheMetadata
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.DeleteChatCacheMetadata
+func (mmDeleteChatCacheMetadata *mRepositoryMockDeleteChatCacheMetadata) ExpectCtxParam1(ctx context.Context) *mRepositoryMockDeleteChatCacheMetadata {
+	if mmDeleteChatCacheMetadata.mock.funcDeleteChatCacheMetadata != nil {
+		mmDeleteChatCacheMetadata.mock.t.Fatalf("RepositoryMock.DeleteChatCacheMetadata mock is already set by Set")
+	}
+
+	if mmDeleteChatCacheMetadata.defaultExpectation == nil {
+		mmDeleteChatCacheMetadata.defaultExpectation = &RepositoryMockDeleteChatCacheMetadataExpectation{}
+	}
+
+	if mmDeleteChatCacheMetadata.defaultExpectation.params != nil {
+		mmDeleteChatCacheMetadata.mock.t.Fatalf("RepositoryMock.DeleteChatCacheMetadata mock is already set by Expect")
+	}
+
+	if mmDeleteChatCacheMetadata.defaultExpectation.paramPtrs == nil {
+		mmDeleteChatCacheMetadata.defaultExpectation.paramPtrs = &RepositoryMockDeleteChatCacheMetadataParamPtrs{}
+	}
+	mmDeleteChatCacheMetadata.defaultExpectation.paramPtrs.ctx = &ctx
+	mmDeleteChatCacheMetadata.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmDeleteChatCacheMetadata
+}
+
+// ExpectKbUIDParam2 sets up expected param kbUID for Repository.DeleteChatCacheMetadata
+func (mmDeleteChatCacheMetadata *mRepositoryMockDeleteChatCacheMetadata) ExpectKbUIDParam2(kbUID uuid.UUID) *mRepositoryMockDeleteChatCacheMetadata {
+	if mmDeleteChatCacheMetadata.mock.funcDeleteChatCacheMetadata != nil {
+		mmDeleteChatCacheMetadata.mock.t.Fatalf("RepositoryMock.DeleteChatCacheMetadata mock is already set by Set")
+	}
+
+	if mmDeleteChatCacheMetadata.defaultExpectation == nil {
+		mmDeleteChatCacheMetadata.defaultExpectation = &RepositoryMockDeleteChatCacheMetadataExpectation{}
+	}
+
+	if mmDeleteChatCacheMetadata.defaultExpectation.params != nil {
+		mmDeleteChatCacheMetadata.mock.t.Fatalf("RepositoryMock.DeleteChatCacheMetadata mock is already set by Expect")
+	}
+
+	if mmDeleteChatCacheMetadata.defaultExpectation.paramPtrs == nil {
+		mmDeleteChatCacheMetadata.defaultExpectation.paramPtrs = &RepositoryMockDeleteChatCacheMetadataParamPtrs{}
+	}
+	mmDeleteChatCacheMetadata.defaultExpectation.paramPtrs.kbUID = &kbUID
+	mmDeleteChatCacheMetadata.defaultExpectation.expectationOrigins.originKbUID = minimock.CallerInfo(1)
+
+	return mmDeleteChatCacheMetadata
+}
+
+// ExpectFileUIDsParam3 sets up expected param fileUIDs for Repository.DeleteChatCacheMetadata
+func (mmDeleteChatCacheMetadata *mRepositoryMockDeleteChatCacheMetadata) ExpectFileUIDsParam3(fileUIDs []uuid.UUID) *mRepositoryMockDeleteChatCacheMetadata {
+	if mmDeleteChatCacheMetadata.mock.funcDeleteChatCacheMetadata != nil {
+		mmDeleteChatCacheMetadata.mock.t.Fatalf("RepositoryMock.DeleteChatCacheMetadata mock is already set by Set")
+	}
+
+	if mmDeleteChatCacheMetadata.defaultExpectation == nil {
+		mmDeleteChatCacheMetadata.defaultExpectation = &RepositoryMockDeleteChatCacheMetadataExpectation{}
+	}
+
+	if mmDeleteChatCacheMetadata.defaultExpectation.params != nil {
+		mmDeleteChatCacheMetadata.mock.t.Fatalf("RepositoryMock.DeleteChatCacheMetadata mock is already set by Expect")
+	}
+
+	if mmDeleteChatCacheMetadata.defaultExpectation.paramPtrs == nil {
+		mmDeleteChatCacheMetadata.defaultExpectation.paramPtrs = &RepositoryMockDeleteChatCacheMetadataParamPtrs{}
+	}
+	mmDeleteChatCacheMetadata.defaultExpectation.paramPtrs.fileUIDs = &fileUIDs
+	mmDeleteChatCacheMetadata.defaultExpectation.expectationOrigins.originFileUIDs = minimock.CallerInfo(1)
+
+	return mmDeleteChatCacheMetadata
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.DeleteChatCacheMetadata
+func (mmDeleteChatCacheMetadata *mRepositoryMockDeleteChatCacheMetadata) Inspect(f func(ctx context.Context, kbUID uuid.UUID, fileUIDs []uuid.UUID)) *mRepositoryMockDeleteChatCacheMetadata {
+	if mmDeleteChatCacheMetadata.mock.inspectFuncDeleteChatCacheMetadata != nil {
+		mmDeleteChatCacheMetadata.mock.t.Fatalf("Inspect function is already set for RepositoryMock.DeleteChatCacheMetadata")
+	}
+
+	mmDeleteChatCacheMetadata.mock.inspectFuncDeleteChatCacheMetadata = f
+
+	return mmDeleteChatCacheMetadata
+}
+
+// Return sets up results that will be returned by Repository.DeleteChatCacheMetadata
+func (mmDeleteChatCacheMetadata *mRepositoryMockDeleteChatCacheMetadata) Return(err error) *RepositoryMock {
+	if mmDeleteChatCacheMetadata.mock.funcDeleteChatCacheMetadata != nil {
+		mmDeleteChatCacheMetadata.mock.t.Fatalf("RepositoryMock.DeleteChatCacheMetadata mock is already set by Set")
+	}
+
+	if mmDeleteChatCacheMetadata.defaultExpectation == nil {
+		mmDeleteChatCacheMetadata.defaultExpectation = &RepositoryMockDeleteChatCacheMetadataExpectation{mock: mmDeleteChatCacheMetadata.mock}
+	}
+	mmDeleteChatCacheMetadata.defaultExpectation.results = &RepositoryMockDeleteChatCacheMetadataResults{err}
+	mmDeleteChatCacheMetadata.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmDeleteChatCacheMetadata.mock
+}
+
+// Set uses given function f to mock the Repository.DeleteChatCacheMetadata method
+func (mmDeleteChatCacheMetadata *mRepositoryMockDeleteChatCacheMetadata) Set(f func(ctx context.Context, kbUID uuid.UUID, fileUIDs []uuid.UUID) (err error)) *RepositoryMock {
+	if mmDeleteChatCacheMetadata.defaultExpectation != nil {
+		mmDeleteChatCacheMetadata.mock.t.Fatalf("Default expectation is already set for the Repository.DeleteChatCacheMetadata method")
+	}
+
+	if len(mmDeleteChatCacheMetadata.expectations) > 0 {
+		mmDeleteChatCacheMetadata.mock.t.Fatalf("Some expectations are already set for the Repository.DeleteChatCacheMetadata method")
+	}
+
+	mmDeleteChatCacheMetadata.mock.funcDeleteChatCacheMetadata = f
+	mmDeleteChatCacheMetadata.mock.funcDeleteChatCacheMetadataOrigin = minimock.CallerInfo(1)
+	return mmDeleteChatCacheMetadata.mock
+}
+
+// When sets expectation for the Repository.DeleteChatCacheMetadata which will trigger the result defined by the following
+// Then helper
+func (mmDeleteChatCacheMetadata *mRepositoryMockDeleteChatCacheMetadata) When(ctx context.Context, kbUID uuid.UUID, fileUIDs []uuid.UUID) *RepositoryMockDeleteChatCacheMetadataExpectation {
+	if mmDeleteChatCacheMetadata.mock.funcDeleteChatCacheMetadata != nil {
+		mmDeleteChatCacheMetadata.mock.t.Fatalf("RepositoryMock.DeleteChatCacheMetadata mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockDeleteChatCacheMetadataExpectation{
+		mock:               mmDeleteChatCacheMetadata.mock,
+		params:             &RepositoryMockDeleteChatCacheMetadataParams{ctx, kbUID, fileUIDs},
+		expectationOrigins: RepositoryMockDeleteChatCacheMetadataExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmDeleteChatCacheMetadata.expectations = append(mmDeleteChatCacheMetadata.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.DeleteChatCacheMetadata return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockDeleteChatCacheMetadataExpectation) Then(err error) *RepositoryMock {
+	e.results = &RepositoryMockDeleteChatCacheMetadataResults{err}
+	return e.mock
+}
+
+// Times sets number of times Repository.DeleteChatCacheMetadata should be invoked
+func (mmDeleteChatCacheMetadata *mRepositoryMockDeleteChatCacheMetadata) Times(n uint64) *mRepositoryMockDeleteChatCacheMetadata {
+	if n == 0 {
+		mmDeleteChatCacheMetadata.mock.t.Fatalf("Times of RepositoryMock.DeleteChatCacheMetadata mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmDeleteChatCacheMetadata.expectedInvocations, n)
+	mmDeleteChatCacheMetadata.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmDeleteChatCacheMetadata
+}
+
+func (mmDeleteChatCacheMetadata *mRepositoryMockDeleteChatCacheMetadata) invocationsDone() bool {
+	if len(mmDeleteChatCacheMetadata.expectations) == 0 && mmDeleteChatCacheMetadata.defaultExpectation == nil && mmDeleteChatCacheMetadata.mock.funcDeleteChatCacheMetadata == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmDeleteChatCacheMetadata.mock.afterDeleteChatCacheMetadataCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmDeleteChatCacheMetadata.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// DeleteChatCacheMetadata implements mm_repository.Repository
+func (mmDeleteChatCacheMetadata *RepositoryMock) DeleteChatCacheMetadata(ctx context.Context, kbUID uuid.UUID, fileUIDs []uuid.UUID) (err error) {
+	mm_atomic.AddUint64(&mmDeleteChatCacheMetadata.beforeDeleteChatCacheMetadataCounter, 1)
+	defer mm_atomic.AddUint64(&mmDeleteChatCacheMetadata.afterDeleteChatCacheMetadataCounter, 1)
+
+	mmDeleteChatCacheMetadata.t.Helper()
+
+	if mmDeleteChatCacheMetadata.inspectFuncDeleteChatCacheMetadata != nil {
+		mmDeleteChatCacheMetadata.inspectFuncDeleteChatCacheMetadata(ctx, kbUID, fileUIDs)
+	}
+
+	mm_params := RepositoryMockDeleteChatCacheMetadataParams{ctx, kbUID, fileUIDs}
+
+	// Record call args
+	mmDeleteChatCacheMetadata.DeleteChatCacheMetadataMock.mutex.Lock()
+	mmDeleteChatCacheMetadata.DeleteChatCacheMetadataMock.callArgs = append(mmDeleteChatCacheMetadata.DeleteChatCacheMetadataMock.callArgs, &mm_params)
+	mmDeleteChatCacheMetadata.DeleteChatCacheMetadataMock.mutex.Unlock()
+
+	for _, e := range mmDeleteChatCacheMetadata.DeleteChatCacheMetadataMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmDeleteChatCacheMetadata.DeleteChatCacheMetadataMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmDeleteChatCacheMetadata.DeleteChatCacheMetadataMock.defaultExpectation.Counter, 1)
+		mm_want := mmDeleteChatCacheMetadata.DeleteChatCacheMetadataMock.defaultExpectation.params
+		mm_want_ptrs := mmDeleteChatCacheMetadata.DeleteChatCacheMetadataMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockDeleteChatCacheMetadataParams{ctx, kbUID, fileUIDs}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmDeleteChatCacheMetadata.t.Errorf("RepositoryMock.DeleteChatCacheMetadata got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDeleteChatCacheMetadata.DeleteChatCacheMetadataMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.kbUID != nil && !minimock.Equal(*mm_want_ptrs.kbUID, mm_got.kbUID) {
+				mmDeleteChatCacheMetadata.t.Errorf("RepositoryMock.DeleteChatCacheMetadata got unexpected parameter kbUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDeleteChatCacheMetadata.DeleteChatCacheMetadataMock.defaultExpectation.expectationOrigins.originKbUID, *mm_want_ptrs.kbUID, mm_got.kbUID, minimock.Diff(*mm_want_ptrs.kbUID, mm_got.kbUID))
+			}
+
+			if mm_want_ptrs.fileUIDs != nil && !minimock.Equal(*mm_want_ptrs.fileUIDs, mm_got.fileUIDs) {
+				mmDeleteChatCacheMetadata.t.Errorf("RepositoryMock.DeleteChatCacheMetadata got unexpected parameter fileUIDs, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDeleteChatCacheMetadata.DeleteChatCacheMetadataMock.defaultExpectation.expectationOrigins.originFileUIDs, *mm_want_ptrs.fileUIDs, mm_got.fileUIDs, minimock.Diff(*mm_want_ptrs.fileUIDs, mm_got.fileUIDs))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmDeleteChatCacheMetadata.t.Errorf("RepositoryMock.DeleteChatCacheMetadata got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmDeleteChatCacheMetadata.DeleteChatCacheMetadataMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmDeleteChatCacheMetadata.DeleteChatCacheMetadataMock.defaultExpectation.results
+		if mm_results == nil {
+			mmDeleteChatCacheMetadata.t.Fatal("No results are set for the RepositoryMock.DeleteChatCacheMetadata")
+		}
+		return (*mm_results).err
+	}
+	if mmDeleteChatCacheMetadata.funcDeleteChatCacheMetadata != nil {
+		return mmDeleteChatCacheMetadata.funcDeleteChatCacheMetadata(ctx, kbUID, fileUIDs)
+	}
+	mmDeleteChatCacheMetadata.t.Fatalf("Unexpected call to RepositoryMock.DeleteChatCacheMetadata. %v %v %v", ctx, kbUID, fileUIDs)
+	return
+}
+
+// DeleteChatCacheMetadataAfterCounter returns a count of finished RepositoryMock.DeleteChatCacheMetadata invocations
+func (mmDeleteChatCacheMetadata *RepositoryMock) DeleteChatCacheMetadataAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmDeleteChatCacheMetadata.afterDeleteChatCacheMetadataCounter)
+}
+
+// DeleteChatCacheMetadataBeforeCounter returns a count of RepositoryMock.DeleteChatCacheMetadata invocations
+func (mmDeleteChatCacheMetadata *RepositoryMock) DeleteChatCacheMetadataBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmDeleteChatCacheMetadata.beforeDeleteChatCacheMetadataCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.DeleteChatCacheMetadata.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmDeleteChatCacheMetadata *mRepositoryMockDeleteChatCacheMetadata) Calls() []*RepositoryMockDeleteChatCacheMetadataParams {
+	mmDeleteChatCacheMetadata.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockDeleteChatCacheMetadataParams, len(mmDeleteChatCacheMetadata.callArgs))
+	copy(argCopy, mmDeleteChatCacheMetadata.callArgs)
+
+	mmDeleteChatCacheMetadata.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockDeleteChatCacheMetadataDone returns true if the count of the DeleteChatCacheMetadata invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockDeleteChatCacheMetadataDone() bool {
+	if m.DeleteChatCacheMetadataMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.DeleteChatCacheMetadataMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.DeleteChatCacheMetadataMock.invocationsDone()
+}
+
+// MinimockDeleteChatCacheMetadataInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockDeleteChatCacheMetadataInspect() {
+	for _, e := range m.DeleteChatCacheMetadataMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.DeleteChatCacheMetadata at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterDeleteChatCacheMetadataCounter := mm_atomic.LoadUint64(&m.afterDeleteChatCacheMetadataCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.DeleteChatCacheMetadataMock.defaultExpectation != nil && afterDeleteChatCacheMetadataCounter < 1 {
+		if m.DeleteChatCacheMetadataMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.DeleteChatCacheMetadata at\n%s", m.DeleteChatCacheMetadataMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.DeleteChatCacheMetadata at\n%s with params: %#v", m.DeleteChatCacheMetadataMock.defaultExpectation.expectationOrigins.origin, *m.DeleteChatCacheMetadataMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcDeleteChatCacheMetadata != nil && afterDeleteChatCacheMetadataCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.DeleteChatCacheMetadata at\n%s", m.funcDeleteChatCacheMetadataOrigin)
+	}
+
+	if !m.DeleteChatCacheMetadataMock.invocationsDone() && afterDeleteChatCacheMetadataCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.DeleteChatCacheMetadata at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.DeleteChatCacheMetadataMock.expectedInvocations), m.DeleteChatCacheMetadataMock.expectedInvocationsOrigin, afterDeleteChatCacheMetadataCounter)
 	}
 }
 
@@ -9035,6 +9438,380 @@ func (m *RepositoryMock) MinimockFlushCollectionInspect() {
 	if !m.FlushCollectionMock.invocationsDone() && afterFlushCollectionCounter > 0 {
 		m.t.Errorf("Expected %d calls to RepositoryMock.FlushCollection at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.FlushCollectionMock.expectedInvocations), m.FlushCollectionMock.expectedInvocationsOrigin, afterFlushCollectionCounter)
+	}
+}
+
+type mRepositoryMockGetChatCacheMetadata struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockGetChatCacheMetadataExpectation
+	expectations       []*RepositoryMockGetChatCacheMetadataExpectation
+
+	callArgs []*RepositoryMockGetChatCacheMetadataParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockGetChatCacheMetadataExpectation specifies expectation struct of the Repository.GetChatCacheMetadata
+type RepositoryMockGetChatCacheMetadataExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockGetChatCacheMetadataParams
+	paramPtrs          *RepositoryMockGetChatCacheMetadataParamPtrs
+	expectationOrigins RepositoryMockGetChatCacheMetadataExpectationOrigins
+	results            *RepositoryMockGetChatCacheMetadataResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockGetChatCacheMetadataParams contains parameters of the Repository.GetChatCacheMetadata
+type RepositoryMockGetChatCacheMetadataParams struct {
+	ctx      context.Context
+	kbUID    uuid.UUID
+	fileUIDs []uuid.UUID
+}
+
+// RepositoryMockGetChatCacheMetadataParamPtrs contains pointers to parameters of the Repository.GetChatCacheMetadata
+type RepositoryMockGetChatCacheMetadataParamPtrs struct {
+	ctx      *context.Context
+	kbUID    *uuid.UUID
+	fileUIDs *[]uuid.UUID
+}
+
+// RepositoryMockGetChatCacheMetadataResults contains results of the Repository.GetChatCacheMetadata
+type RepositoryMockGetChatCacheMetadataResults struct {
+	cp1 *mm_repository.ChatCacheMetadata
+	err error
+}
+
+// RepositoryMockGetChatCacheMetadataOrigins contains origins of expectations of the Repository.GetChatCacheMetadata
+type RepositoryMockGetChatCacheMetadataExpectationOrigins struct {
+	origin         string
+	originCtx      string
+	originKbUID    string
+	originFileUIDs string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmGetChatCacheMetadata *mRepositoryMockGetChatCacheMetadata) Optional() *mRepositoryMockGetChatCacheMetadata {
+	mmGetChatCacheMetadata.optional = true
+	return mmGetChatCacheMetadata
+}
+
+// Expect sets up expected params for Repository.GetChatCacheMetadata
+func (mmGetChatCacheMetadata *mRepositoryMockGetChatCacheMetadata) Expect(ctx context.Context, kbUID uuid.UUID, fileUIDs []uuid.UUID) *mRepositoryMockGetChatCacheMetadata {
+	if mmGetChatCacheMetadata.mock.funcGetChatCacheMetadata != nil {
+		mmGetChatCacheMetadata.mock.t.Fatalf("RepositoryMock.GetChatCacheMetadata mock is already set by Set")
+	}
+
+	if mmGetChatCacheMetadata.defaultExpectation == nil {
+		mmGetChatCacheMetadata.defaultExpectation = &RepositoryMockGetChatCacheMetadataExpectation{}
+	}
+
+	if mmGetChatCacheMetadata.defaultExpectation.paramPtrs != nil {
+		mmGetChatCacheMetadata.mock.t.Fatalf("RepositoryMock.GetChatCacheMetadata mock is already set by ExpectParams functions")
+	}
+
+	mmGetChatCacheMetadata.defaultExpectation.params = &RepositoryMockGetChatCacheMetadataParams{ctx, kbUID, fileUIDs}
+	mmGetChatCacheMetadata.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmGetChatCacheMetadata.expectations {
+		if minimock.Equal(e.params, mmGetChatCacheMetadata.defaultExpectation.params) {
+			mmGetChatCacheMetadata.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetChatCacheMetadata.defaultExpectation.params)
+		}
+	}
+
+	return mmGetChatCacheMetadata
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.GetChatCacheMetadata
+func (mmGetChatCacheMetadata *mRepositoryMockGetChatCacheMetadata) ExpectCtxParam1(ctx context.Context) *mRepositoryMockGetChatCacheMetadata {
+	if mmGetChatCacheMetadata.mock.funcGetChatCacheMetadata != nil {
+		mmGetChatCacheMetadata.mock.t.Fatalf("RepositoryMock.GetChatCacheMetadata mock is already set by Set")
+	}
+
+	if mmGetChatCacheMetadata.defaultExpectation == nil {
+		mmGetChatCacheMetadata.defaultExpectation = &RepositoryMockGetChatCacheMetadataExpectation{}
+	}
+
+	if mmGetChatCacheMetadata.defaultExpectation.params != nil {
+		mmGetChatCacheMetadata.mock.t.Fatalf("RepositoryMock.GetChatCacheMetadata mock is already set by Expect")
+	}
+
+	if mmGetChatCacheMetadata.defaultExpectation.paramPtrs == nil {
+		mmGetChatCacheMetadata.defaultExpectation.paramPtrs = &RepositoryMockGetChatCacheMetadataParamPtrs{}
+	}
+	mmGetChatCacheMetadata.defaultExpectation.paramPtrs.ctx = &ctx
+	mmGetChatCacheMetadata.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmGetChatCacheMetadata
+}
+
+// ExpectKbUIDParam2 sets up expected param kbUID for Repository.GetChatCacheMetadata
+func (mmGetChatCacheMetadata *mRepositoryMockGetChatCacheMetadata) ExpectKbUIDParam2(kbUID uuid.UUID) *mRepositoryMockGetChatCacheMetadata {
+	if mmGetChatCacheMetadata.mock.funcGetChatCacheMetadata != nil {
+		mmGetChatCacheMetadata.mock.t.Fatalf("RepositoryMock.GetChatCacheMetadata mock is already set by Set")
+	}
+
+	if mmGetChatCacheMetadata.defaultExpectation == nil {
+		mmGetChatCacheMetadata.defaultExpectation = &RepositoryMockGetChatCacheMetadataExpectation{}
+	}
+
+	if mmGetChatCacheMetadata.defaultExpectation.params != nil {
+		mmGetChatCacheMetadata.mock.t.Fatalf("RepositoryMock.GetChatCacheMetadata mock is already set by Expect")
+	}
+
+	if mmGetChatCacheMetadata.defaultExpectation.paramPtrs == nil {
+		mmGetChatCacheMetadata.defaultExpectation.paramPtrs = &RepositoryMockGetChatCacheMetadataParamPtrs{}
+	}
+	mmGetChatCacheMetadata.defaultExpectation.paramPtrs.kbUID = &kbUID
+	mmGetChatCacheMetadata.defaultExpectation.expectationOrigins.originKbUID = minimock.CallerInfo(1)
+
+	return mmGetChatCacheMetadata
+}
+
+// ExpectFileUIDsParam3 sets up expected param fileUIDs for Repository.GetChatCacheMetadata
+func (mmGetChatCacheMetadata *mRepositoryMockGetChatCacheMetadata) ExpectFileUIDsParam3(fileUIDs []uuid.UUID) *mRepositoryMockGetChatCacheMetadata {
+	if mmGetChatCacheMetadata.mock.funcGetChatCacheMetadata != nil {
+		mmGetChatCacheMetadata.mock.t.Fatalf("RepositoryMock.GetChatCacheMetadata mock is already set by Set")
+	}
+
+	if mmGetChatCacheMetadata.defaultExpectation == nil {
+		mmGetChatCacheMetadata.defaultExpectation = &RepositoryMockGetChatCacheMetadataExpectation{}
+	}
+
+	if mmGetChatCacheMetadata.defaultExpectation.params != nil {
+		mmGetChatCacheMetadata.mock.t.Fatalf("RepositoryMock.GetChatCacheMetadata mock is already set by Expect")
+	}
+
+	if mmGetChatCacheMetadata.defaultExpectation.paramPtrs == nil {
+		mmGetChatCacheMetadata.defaultExpectation.paramPtrs = &RepositoryMockGetChatCacheMetadataParamPtrs{}
+	}
+	mmGetChatCacheMetadata.defaultExpectation.paramPtrs.fileUIDs = &fileUIDs
+	mmGetChatCacheMetadata.defaultExpectation.expectationOrigins.originFileUIDs = minimock.CallerInfo(1)
+
+	return mmGetChatCacheMetadata
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.GetChatCacheMetadata
+func (mmGetChatCacheMetadata *mRepositoryMockGetChatCacheMetadata) Inspect(f func(ctx context.Context, kbUID uuid.UUID, fileUIDs []uuid.UUID)) *mRepositoryMockGetChatCacheMetadata {
+	if mmGetChatCacheMetadata.mock.inspectFuncGetChatCacheMetadata != nil {
+		mmGetChatCacheMetadata.mock.t.Fatalf("Inspect function is already set for RepositoryMock.GetChatCacheMetadata")
+	}
+
+	mmGetChatCacheMetadata.mock.inspectFuncGetChatCacheMetadata = f
+
+	return mmGetChatCacheMetadata
+}
+
+// Return sets up results that will be returned by Repository.GetChatCacheMetadata
+func (mmGetChatCacheMetadata *mRepositoryMockGetChatCacheMetadata) Return(cp1 *mm_repository.ChatCacheMetadata, err error) *RepositoryMock {
+	if mmGetChatCacheMetadata.mock.funcGetChatCacheMetadata != nil {
+		mmGetChatCacheMetadata.mock.t.Fatalf("RepositoryMock.GetChatCacheMetadata mock is already set by Set")
+	}
+
+	if mmGetChatCacheMetadata.defaultExpectation == nil {
+		mmGetChatCacheMetadata.defaultExpectation = &RepositoryMockGetChatCacheMetadataExpectation{mock: mmGetChatCacheMetadata.mock}
+	}
+	mmGetChatCacheMetadata.defaultExpectation.results = &RepositoryMockGetChatCacheMetadataResults{cp1, err}
+	mmGetChatCacheMetadata.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmGetChatCacheMetadata.mock
+}
+
+// Set uses given function f to mock the Repository.GetChatCacheMetadata method
+func (mmGetChatCacheMetadata *mRepositoryMockGetChatCacheMetadata) Set(f func(ctx context.Context, kbUID uuid.UUID, fileUIDs []uuid.UUID) (cp1 *mm_repository.ChatCacheMetadata, err error)) *RepositoryMock {
+	if mmGetChatCacheMetadata.defaultExpectation != nil {
+		mmGetChatCacheMetadata.mock.t.Fatalf("Default expectation is already set for the Repository.GetChatCacheMetadata method")
+	}
+
+	if len(mmGetChatCacheMetadata.expectations) > 0 {
+		mmGetChatCacheMetadata.mock.t.Fatalf("Some expectations are already set for the Repository.GetChatCacheMetadata method")
+	}
+
+	mmGetChatCacheMetadata.mock.funcGetChatCacheMetadata = f
+	mmGetChatCacheMetadata.mock.funcGetChatCacheMetadataOrigin = minimock.CallerInfo(1)
+	return mmGetChatCacheMetadata.mock
+}
+
+// When sets expectation for the Repository.GetChatCacheMetadata which will trigger the result defined by the following
+// Then helper
+func (mmGetChatCacheMetadata *mRepositoryMockGetChatCacheMetadata) When(ctx context.Context, kbUID uuid.UUID, fileUIDs []uuid.UUID) *RepositoryMockGetChatCacheMetadataExpectation {
+	if mmGetChatCacheMetadata.mock.funcGetChatCacheMetadata != nil {
+		mmGetChatCacheMetadata.mock.t.Fatalf("RepositoryMock.GetChatCacheMetadata mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockGetChatCacheMetadataExpectation{
+		mock:               mmGetChatCacheMetadata.mock,
+		params:             &RepositoryMockGetChatCacheMetadataParams{ctx, kbUID, fileUIDs},
+		expectationOrigins: RepositoryMockGetChatCacheMetadataExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmGetChatCacheMetadata.expectations = append(mmGetChatCacheMetadata.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.GetChatCacheMetadata return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockGetChatCacheMetadataExpectation) Then(cp1 *mm_repository.ChatCacheMetadata, err error) *RepositoryMock {
+	e.results = &RepositoryMockGetChatCacheMetadataResults{cp1, err}
+	return e.mock
+}
+
+// Times sets number of times Repository.GetChatCacheMetadata should be invoked
+func (mmGetChatCacheMetadata *mRepositoryMockGetChatCacheMetadata) Times(n uint64) *mRepositoryMockGetChatCacheMetadata {
+	if n == 0 {
+		mmGetChatCacheMetadata.mock.t.Fatalf("Times of RepositoryMock.GetChatCacheMetadata mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetChatCacheMetadata.expectedInvocations, n)
+	mmGetChatCacheMetadata.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmGetChatCacheMetadata
+}
+
+func (mmGetChatCacheMetadata *mRepositoryMockGetChatCacheMetadata) invocationsDone() bool {
+	if len(mmGetChatCacheMetadata.expectations) == 0 && mmGetChatCacheMetadata.defaultExpectation == nil && mmGetChatCacheMetadata.mock.funcGetChatCacheMetadata == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetChatCacheMetadata.mock.afterGetChatCacheMetadataCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetChatCacheMetadata.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetChatCacheMetadata implements mm_repository.Repository
+func (mmGetChatCacheMetadata *RepositoryMock) GetChatCacheMetadata(ctx context.Context, kbUID uuid.UUID, fileUIDs []uuid.UUID) (cp1 *mm_repository.ChatCacheMetadata, err error) {
+	mm_atomic.AddUint64(&mmGetChatCacheMetadata.beforeGetChatCacheMetadataCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetChatCacheMetadata.afterGetChatCacheMetadataCounter, 1)
+
+	mmGetChatCacheMetadata.t.Helper()
+
+	if mmGetChatCacheMetadata.inspectFuncGetChatCacheMetadata != nil {
+		mmGetChatCacheMetadata.inspectFuncGetChatCacheMetadata(ctx, kbUID, fileUIDs)
+	}
+
+	mm_params := RepositoryMockGetChatCacheMetadataParams{ctx, kbUID, fileUIDs}
+
+	// Record call args
+	mmGetChatCacheMetadata.GetChatCacheMetadataMock.mutex.Lock()
+	mmGetChatCacheMetadata.GetChatCacheMetadataMock.callArgs = append(mmGetChatCacheMetadata.GetChatCacheMetadataMock.callArgs, &mm_params)
+	mmGetChatCacheMetadata.GetChatCacheMetadataMock.mutex.Unlock()
+
+	for _, e := range mmGetChatCacheMetadata.GetChatCacheMetadataMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.cp1, e.results.err
+		}
+	}
+
+	if mmGetChatCacheMetadata.GetChatCacheMetadataMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetChatCacheMetadata.GetChatCacheMetadataMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetChatCacheMetadata.GetChatCacheMetadataMock.defaultExpectation.params
+		mm_want_ptrs := mmGetChatCacheMetadata.GetChatCacheMetadataMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockGetChatCacheMetadataParams{ctx, kbUID, fileUIDs}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetChatCacheMetadata.t.Errorf("RepositoryMock.GetChatCacheMetadata got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetChatCacheMetadata.GetChatCacheMetadataMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.kbUID != nil && !minimock.Equal(*mm_want_ptrs.kbUID, mm_got.kbUID) {
+				mmGetChatCacheMetadata.t.Errorf("RepositoryMock.GetChatCacheMetadata got unexpected parameter kbUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetChatCacheMetadata.GetChatCacheMetadataMock.defaultExpectation.expectationOrigins.originKbUID, *mm_want_ptrs.kbUID, mm_got.kbUID, minimock.Diff(*mm_want_ptrs.kbUID, mm_got.kbUID))
+			}
+
+			if mm_want_ptrs.fileUIDs != nil && !minimock.Equal(*mm_want_ptrs.fileUIDs, mm_got.fileUIDs) {
+				mmGetChatCacheMetadata.t.Errorf("RepositoryMock.GetChatCacheMetadata got unexpected parameter fileUIDs, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetChatCacheMetadata.GetChatCacheMetadataMock.defaultExpectation.expectationOrigins.originFileUIDs, *mm_want_ptrs.fileUIDs, mm_got.fileUIDs, minimock.Diff(*mm_want_ptrs.fileUIDs, mm_got.fileUIDs))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetChatCacheMetadata.t.Errorf("RepositoryMock.GetChatCacheMetadata got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmGetChatCacheMetadata.GetChatCacheMetadataMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetChatCacheMetadata.GetChatCacheMetadataMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetChatCacheMetadata.t.Fatal("No results are set for the RepositoryMock.GetChatCacheMetadata")
+		}
+		return (*mm_results).cp1, (*mm_results).err
+	}
+	if mmGetChatCacheMetadata.funcGetChatCacheMetadata != nil {
+		return mmGetChatCacheMetadata.funcGetChatCacheMetadata(ctx, kbUID, fileUIDs)
+	}
+	mmGetChatCacheMetadata.t.Fatalf("Unexpected call to RepositoryMock.GetChatCacheMetadata. %v %v %v", ctx, kbUID, fileUIDs)
+	return
+}
+
+// GetChatCacheMetadataAfterCounter returns a count of finished RepositoryMock.GetChatCacheMetadata invocations
+func (mmGetChatCacheMetadata *RepositoryMock) GetChatCacheMetadataAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetChatCacheMetadata.afterGetChatCacheMetadataCounter)
+}
+
+// GetChatCacheMetadataBeforeCounter returns a count of RepositoryMock.GetChatCacheMetadata invocations
+func (mmGetChatCacheMetadata *RepositoryMock) GetChatCacheMetadataBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetChatCacheMetadata.beforeGetChatCacheMetadataCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.GetChatCacheMetadata.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetChatCacheMetadata *mRepositoryMockGetChatCacheMetadata) Calls() []*RepositoryMockGetChatCacheMetadataParams {
+	mmGetChatCacheMetadata.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockGetChatCacheMetadataParams, len(mmGetChatCacheMetadata.callArgs))
+	copy(argCopy, mmGetChatCacheMetadata.callArgs)
+
+	mmGetChatCacheMetadata.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetChatCacheMetadataDone returns true if the count of the GetChatCacheMetadata invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockGetChatCacheMetadataDone() bool {
+	if m.GetChatCacheMetadataMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.GetChatCacheMetadataMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetChatCacheMetadataMock.invocationsDone()
+}
+
+// MinimockGetChatCacheMetadataInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockGetChatCacheMetadataInspect() {
+	for _, e := range m.GetChatCacheMetadataMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.GetChatCacheMetadata at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterGetChatCacheMetadataCounter := mm_atomic.LoadUint64(&m.afterGetChatCacheMetadataCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetChatCacheMetadataMock.defaultExpectation != nil && afterGetChatCacheMetadataCounter < 1 {
+		if m.GetChatCacheMetadataMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.GetChatCacheMetadata at\n%s", m.GetChatCacheMetadataMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.GetChatCacheMetadata at\n%s with params: %#v", m.GetChatCacheMetadataMock.defaultExpectation.expectationOrigins.origin, *m.GetChatCacheMetadataMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetChatCacheMetadata != nil && afterGetChatCacheMetadataCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.GetChatCacheMetadata at\n%s", m.funcGetChatCacheMetadataOrigin)
+	}
+
+	if !m.GetChatCacheMetadataMock.invocationsDone() && afterGetChatCacheMetadataCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.GetChatCacheMetadata at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.GetChatCacheMetadataMock.expectedInvocations), m.GetChatCacheMetadataMock.expectedInvocationsOrigin, afterGetChatCacheMetadataCounter)
 	}
 }
 
@@ -25740,6 +26517,441 @@ func (m *RepositoryMock) MinimockSaveConvertedFileInspect() {
 	}
 }
 
+type mRepositoryMockSetChatCacheMetadata struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockSetChatCacheMetadataExpectation
+	expectations       []*RepositoryMockSetChatCacheMetadataExpectation
+
+	callArgs []*RepositoryMockSetChatCacheMetadataParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockSetChatCacheMetadataExpectation specifies expectation struct of the Repository.SetChatCacheMetadata
+type RepositoryMockSetChatCacheMetadataExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockSetChatCacheMetadataParams
+	paramPtrs          *RepositoryMockSetChatCacheMetadataParamPtrs
+	expectationOrigins RepositoryMockSetChatCacheMetadataExpectationOrigins
+	results            *RepositoryMockSetChatCacheMetadataResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockSetChatCacheMetadataParams contains parameters of the Repository.SetChatCacheMetadata
+type RepositoryMockSetChatCacheMetadataParams struct {
+	ctx      context.Context
+	kbUID    uuid.UUID
+	fileUIDs []uuid.UUID
+	metadata *mm_repository.ChatCacheMetadata
+	ttl      time.Duration
+}
+
+// RepositoryMockSetChatCacheMetadataParamPtrs contains pointers to parameters of the Repository.SetChatCacheMetadata
+type RepositoryMockSetChatCacheMetadataParamPtrs struct {
+	ctx      *context.Context
+	kbUID    *uuid.UUID
+	fileUIDs *[]uuid.UUID
+	metadata **mm_repository.ChatCacheMetadata
+	ttl      *time.Duration
+}
+
+// RepositoryMockSetChatCacheMetadataResults contains results of the Repository.SetChatCacheMetadata
+type RepositoryMockSetChatCacheMetadataResults struct {
+	err error
+}
+
+// RepositoryMockSetChatCacheMetadataOrigins contains origins of expectations of the Repository.SetChatCacheMetadata
+type RepositoryMockSetChatCacheMetadataExpectationOrigins struct {
+	origin         string
+	originCtx      string
+	originKbUID    string
+	originFileUIDs string
+	originMetadata string
+	originTtl      string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmSetChatCacheMetadata *mRepositoryMockSetChatCacheMetadata) Optional() *mRepositoryMockSetChatCacheMetadata {
+	mmSetChatCacheMetadata.optional = true
+	return mmSetChatCacheMetadata
+}
+
+// Expect sets up expected params for Repository.SetChatCacheMetadata
+func (mmSetChatCacheMetadata *mRepositoryMockSetChatCacheMetadata) Expect(ctx context.Context, kbUID uuid.UUID, fileUIDs []uuid.UUID, metadata *mm_repository.ChatCacheMetadata, ttl time.Duration) *mRepositoryMockSetChatCacheMetadata {
+	if mmSetChatCacheMetadata.mock.funcSetChatCacheMetadata != nil {
+		mmSetChatCacheMetadata.mock.t.Fatalf("RepositoryMock.SetChatCacheMetadata mock is already set by Set")
+	}
+
+	if mmSetChatCacheMetadata.defaultExpectation == nil {
+		mmSetChatCacheMetadata.defaultExpectation = &RepositoryMockSetChatCacheMetadataExpectation{}
+	}
+
+	if mmSetChatCacheMetadata.defaultExpectation.paramPtrs != nil {
+		mmSetChatCacheMetadata.mock.t.Fatalf("RepositoryMock.SetChatCacheMetadata mock is already set by ExpectParams functions")
+	}
+
+	mmSetChatCacheMetadata.defaultExpectation.params = &RepositoryMockSetChatCacheMetadataParams{ctx, kbUID, fileUIDs, metadata, ttl}
+	mmSetChatCacheMetadata.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmSetChatCacheMetadata.expectations {
+		if minimock.Equal(e.params, mmSetChatCacheMetadata.defaultExpectation.params) {
+			mmSetChatCacheMetadata.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmSetChatCacheMetadata.defaultExpectation.params)
+		}
+	}
+
+	return mmSetChatCacheMetadata
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.SetChatCacheMetadata
+func (mmSetChatCacheMetadata *mRepositoryMockSetChatCacheMetadata) ExpectCtxParam1(ctx context.Context) *mRepositoryMockSetChatCacheMetadata {
+	if mmSetChatCacheMetadata.mock.funcSetChatCacheMetadata != nil {
+		mmSetChatCacheMetadata.mock.t.Fatalf("RepositoryMock.SetChatCacheMetadata mock is already set by Set")
+	}
+
+	if mmSetChatCacheMetadata.defaultExpectation == nil {
+		mmSetChatCacheMetadata.defaultExpectation = &RepositoryMockSetChatCacheMetadataExpectation{}
+	}
+
+	if mmSetChatCacheMetadata.defaultExpectation.params != nil {
+		mmSetChatCacheMetadata.mock.t.Fatalf("RepositoryMock.SetChatCacheMetadata mock is already set by Expect")
+	}
+
+	if mmSetChatCacheMetadata.defaultExpectation.paramPtrs == nil {
+		mmSetChatCacheMetadata.defaultExpectation.paramPtrs = &RepositoryMockSetChatCacheMetadataParamPtrs{}
+	}
+	mmSetChatCacheMetadata.defaultExpectation.paramPtrs.ctx = &ctx
+	mmSetChatCacheMetadata.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmSetChatCacheMetadata
+}
+
+// ExpectKbUIDParam2 sets up expected param kbUID for Repository.SetChatCacheMetadata
+func (mmSetChatCacheMetadata *mRepositoryMockSetChatCacheMetadata) ExpectKbUIDParam2(kbUID uuid.UUID) *mRepositoryMockSetChatCacheMetadata {
+	if mmSetChatCacheMetadata.mock.funcSetChatCacheMetadata != nil {
+		mmSetChatCacheMetadata.mock.t.Fatalf("RepositoryMock.SetChatCacheMetadata mock is already set by Set")
+	}
+
+	if mmSetChatCacheMetadata.defaultExpectation == nil {
+		mmSetChatCacheMetadata.defaultExpectation = &RepositoryMockSetChatCacheMetadataExpectation{}
+	}
+
+	if mmSetChatCacheMetadata.defaultExpectation.params != nil {
+		mmSetChatCacheMetadata.mock.t.Fatalf("RepositoryMock.SetChatCacheMetadata mock is already set by Expect")
+	}
+
+	if mmSetChatCacheMetadata.defaultExpectation.paramPtrs == nil {
+		mmSetChatCacheMetadata.defaultExpectation.paramPtrs = &RepositoryMockSetChatCacheMetadataParamPtrs{}
+	}
+	mmSetChatCacheMetadata.defaultExpectation.paramPtrs.kbUID = &kbUID
+	mmSetChatCacheMetadata.defaultExpectation.expectationOrigins.originKbUID = minimock.CallerInfo(1)
+
+	return mmSetChatCacheMetadata
+}
+
+// ExpectFileUIDsParam3 sets up expected param fileUIDs for Repository.SetChatCacheMetadata
+func (mmSetChatCacheMetadata *mRepositoryMockSetChatCacheMetadata) ExpectFileUIDsParam3(fileUIDs []uuid.UUID) *mRepositoryMockSetChatCacheMetadata {
+	if mmSetChatCacheMetadata.mock.funcSetChatCacheMetadata != nil {
+		mmSetChatCacheMetadata.mock.t.Fatalf("RepositoryMock.SetChatCacheMetadata mock is already set by Set")
+	}
+
+	if mmSetChatCacheMetadata.defaultExpectation == nil {
+		mmSetChatCacheMetadata.defaultExpectation = &RepositoryMockSetChatCacheMetadataExpectation{}
+	}
+
+	if mmSetChatCacheMetadata.defaultExpectation.params != nil {
+		mmSetChatCacheMetadata.mock.t.Fatalf("RepositoryMock.SetChatCacheMetadata mock is already set by Expect")
+	}
+
+	if mmSetChatCacheMetadata.defaultExpectation.paramPtrs == nil {
+		mmSetChatCacheMetadata.defaultExpectation.paramPtrs = &RepositoryMockSetChatCacheMetadataParamPtrs{}
+	}
+	mmSetChatCacheMetadata.defaultExpectation.paramPtrs.fileUIDs = &fileUIDs
+	mmSetChatCacheMetadata.defaultExpectation.expectationOrigins.originFileUIDs = minimock.CallerInfo(1)
+
+	return mmSetChatCacheMetadata
+}
+
+// ExpectMetadataParam4 sets up expected param metadata for Repository.SetChatCacheMetadata
+func (mmSetChatCacheMetadata *mRepositoryMockSetChatCacheMetadata) ExpectMetadataParam4(metadata *mm_repository.ChatCacheMetadata) *mRepositoryMockSetChatCacheMetadata {
+	if mmSetChatCacheMetadata.mock.funcSetChatCacheMetadata != nil {
+		mmSetChatCacheMetadata.mock.t.Fatalf("RepositoryMock.SetChatCacheMetadata mock is already set by Set")
+	}
+
+	if mmSetChatCacheMetadata.defaultExpectation == nil {
+		mmSetChatCacheMetadata.defaultExpectation = &RepositoryMockSetChatCacheMetadataExpectation{}
+	}
+
+	if mmSetChatCacheMetadata.defaultExpectation.params != nil {
+		mmSetChatCacheMetadata.mock.t.Fatalf("RepositoryMock.SetChatCacheMetadata mock is already set by Expect")
+	}
+
+	if mmSetChatCacheMetadata.defaultExpectation.paramPtrs == nil {
+		mmSetChatCacheMetadata.defaultExpectation.paramPtrs = &RepositoryMockSetChatCacheMetadataParamPtrs{}
+	}
+	mmSetChatCacheMetadata.defaultExpectation.paramPtrs.metadata = &metadata
+	mmSetChatCacheMetadata.defaultExpectation.expectationOrigins.originMetadata = minimock.CallerInfo(1)
+
+	return mmSetChatCacheMetadata
+}
+
+// ExpectTtlParam5 sets up expected param ttl for Repository.SetChatCacheMetadata
+func (mmSetChatCacheMetadata *mRepositoryMockSetChatCacheMetadata) ExpectTtlParam5(ttl time.Duration) *mRepositoryMockSetChatCacheMetadata {
+	if mmSetChatCacheMetadata.mock.funcSetChatCacheMetadata != nil {
+		mmSetChatCacheMetadata.mock.t.Fatalf("RepositoryMock.SetChatCacheMetadata mock is already set by Set")
+	}
+
+	if mmSetChatCacheMetadata.defaultExpectation == nil {
+		mmSetChatCacheMetadata.defaultExpectation = &RepositoryMockSetChatCacheMetadataExpectation{}
+	}
+
+	if mmSetChatCacheMetadata.defaultExpectation.params != nil {
+		mmSetChatCacheMetadata.mock.t.Fatalf("RepositoryMock.SetChatCacheMetadata mock is already set by Expect")
+	}
+
+	if mmSetChatCacheMetadata.defaultExpectation.paramPtrs == nil {
+		mmSetChatCacheMetadata.defaultExpectation.paramPtrs = &RepositoryMockSetChatCacheMetadataParamPtrs{}
+	}
+	mmSetChatCacheMetadata.defaultExpectation.paramPtrs.ttl = &ttl
+	mmSetChatCacheMetadata.defaultExpectation.expectationOrigins.originTtl = minimock.CallerInfo(1)
+
+	return mmSetChatCacheMetadata
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.SetChatCacheMetadata
+func (mmSetChatCacheMetadata *mRepositoryMockSetChatCacheMetadata) Inspect(f func(ctx context.Context, kbUID uuid.UUID, fileUIDs []uuid.UUID, metadata *mm_repository.ChatCacheMetadata, ttl time.Duration)) *mRepositoryMockSetChatCacheMetadata {
+	if mmSetChatCacheMetadata.mock.inspectFuncSetChatCacheMetadata != nil {
+		mmSetChatCacheMetadata.mock.t.Fatalf("Inspect function is already set for RepositoryMock.SetChatCacheMetadata")
+	}
+
+	mmSetChatCacheMetadata.mock.inspectFuncSetChatCacheMetadata = f
+
+	return mmSetChatCacheMetadata
+}
+
+// Return sets up results that will be returned by Repository.SetChatCacheMetadata
+func (mmSetChatCacheMetadata *mRepositoryMockSetChatCacheMetadata) Return(err error) *RepositoryMock {
+	if mmSetChatCacheMetadata.mock.funcSetChatCacheMetadata != nil {
+		mmSetChatCacheMetadata.mock.t.Fatalf("RepositoryMock.SetChatCacheMetadata mock is already set by Set")
+	}
+
+	if mmSetChatCacheMetadata.defaultExpectation == nil {
+		mmSetChatCacheMetadata.defaultExpectation = &RepositoryMockSetChatCacheMetadataExpectation{mock: mmSetChatCacheMetadata.mock}
+	}
+	mmSetChatCacheMetadata.defaultExpectation.results = &RepositoryMockSetChatCacheMetadataResults{err}
+	mmSetChatCacheMetadata.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmSetChatCacheMetadata.mock
+}
+
+// Set uses given function f to mock the Repository.SetChatCacheMetadata method
+func (mmSetChatCacheMetadata *mRepositoryMockSetChatCacheMetadata) Set(f func(ctx context.Context, kbUID uuid.UUID, fileUIDs []uuid.UUID, metadata *mm_repository.ChatCacheMetadata, ttl time.Duration) (err error)) *RepositoryMock {
+	if mmSetChatCacheMetadata.defaultExpectation != nil {
+		mmSetChatCacheMetadata.mock.t.Fatalf("Default expectation is already set for the Repository.SetChatCacheMetadata method")
+	}
+
+	if len(mmSetChatCacheMetadata.expectations) > 0 {
+		mmSetChatCacheMetadata.mock.t.Fatalf("Some expectations are already set for the Repository.SetChatCacheMetadata method")
+	}
+
+	mmSetChatCacheMetadata.mock.funcSetChatCacheMetadata = f
+	mmSetChatCacheMetadata.mock.funcSetChatCacheMetadataOrigin = minimock.CallerInfo(1)
+	return mmSetChatCacheMetadata.mock
+}
+
+// When sets expectation for the Repository.SetChatCacheMetadata which will trigger the result defined by the following
+// Then helper
+func (mmSetChatCacheMetadata *mRepositoryMockSetChatCacheMetadata) When(ctx context.Context, kbUID uuid.UUID, fileUIDs []uuid.UUID, metadata *mm_repository.ChatCacheMetadata, ttl time.Duration) *RepositoryMockSetChatCacheMetadataExpectation {
+	if mmSetChatCacheMetadata.mock.funcSetChatCacheMetadata != nil {
+		mmSetChatCacheMetadata.mock.t.Fatalf("RepositoryMock.SetChatCacheMetadata mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockSetChatCacheMetadataExpectation{
+		mock:               mmSetChatCacheMetadata.mock,
+		params:             &RepositoryMockSetChatCacheMetadataParams{ctx, kbUID, fileUIDs, metadata, ttl},
+		expectationOrigins: RepositoryMockSetChatCacheMetadataExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmSetChatCacheMetadata.expectations = append(mmSetChatCacheMetadata.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.SetChatCacheMetadata return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockSetChatCacheMetadataExpectation) Then(err error) *RepositoryMock {
+	e.results = &RepositoryMockSetChatCacheMetadataResults{err}
+	return e.mock
+}
+
+// Times sets number of times Repository.SetChatCacheMetadata should be invoked
+func (mmSetChatCacheMetadata *mRepositoryMockSetChatCacheMetadata) Times(n uint64) *mRepositoryMockSetChatCacheMetadata {
+	if n == 0 {
+		mmSetChatCacheMetadata.mock.t.Fatalf("Times of RepositoryMock.SetChatCacheMetadata mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmSetChatCacheMetadata.expectedInvocations, n)
+	mmSetChatCacheMetadata.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmSetChatCacheMetadata
+}
+
+func (mmSetChatCacheMetadata *mRepositoryMockSetChatCacheMetadata) invocationsDone() bool {
+	if len(mmSetChatCacheMetadata.expectations) == 0 && mmSetChatCacheMetadata.defaultExpectation == nil && mmSetChatCacheMetadata.mock.funcSetChatCacheMetadata == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmSetChatCacheMetadata.mock.afterSetChatCacheMetadataCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmSetChatCacheMetadata.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// SetChatCacheMetadata implements mm_repository.Repository
+func (mmSetChatCacheMetadata *RepositoryMock) SetChatCacheMetadata(ctx context.Context, kbUID uuid.UUID, fileUIDs []uuid.UUID, metadata *mm_repository.ChatCacheMetadata, ttl time.Duration) (err error) {
+	mm_atomic.AddUint64(&mmSetChatCacheMetadata.beforeSetChatCacheMetadataCounter, 1)
+	defer mm_atomic.AddUint64(&mmSetChatCacheMetadata.afterSetChatCacheMetadataCounter, 1)
+
+	mmSetChatCacheMetadata.t.Helper()
+
+	if mmSetChatCacheMetadata.inspectFuncSetChatCacheMetadata != nil {
+		mmSetChatCacheMetadata.inspectFuncSetChatCacheMetadata(ctx, kbUID, fileUIDs, metadata, ttl)
+	}
+
+	mm_params := RepositoryMockSetChatCacheMetadataParams{ctx, kbUID, fileUIDs, metadata, ttl}
+
+	// Record call args
+	mmSetChatCacheMetadata.SetChatCacheMetadataMock.mutex.Lock()
+	mmSetChatCacheMetadata.SetChatCacheMetadataMock.callArgs = append(mmSetChatCacheMetadata.SetChatCacheMetadataMock.callArgs, &mm_params)
+	mmSetChatCacheMetadata.SetChatCacheMetadataMock.mutex.Unlock()
+
+	for _, e := range mmSetChatCacheMetadata.SetChatCacheMetadataMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmSetChatCacheMetadata.SetChatCacheMetadataMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmSetChatCacheMetadata.SetChatCacheMetadataMock.defaultExpectation.Counter, 1)
+		mm_want := mmSetChatCacheMetadata.SetChatCacheMetadataMock.defaultExpectation.params
+		mm_want_ptrs := mmSetChatCacheMetadata.SetChatCacheMetadataMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockSetChatCacheMetadataParams{ctx, kbUID, fileUIDs, metadata, ttl}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmSetChatCacheMetadata.t.Errorf("RepositoryMock.SetChatCacheMetadata got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmSetChatCacheMetadata.SetChatCacheMetadataMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.kbUID != nil && !minimock.Equal(*mm_want_ptrs.kbUID, mm_got.kbUID) {
+				mmSetChatCacheMetadata.t.Errorf("RepositoryMock.SetChatCacheMetadata got unexpected parameter kbUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmSetChatCacheMetadata.SetChatCacheMetadataMock.defaultExpectation.expectationOrigins.originKbUID, *mm_want_ptrs.kbUID, mm_got.kbUID, minimock.Diff(*mm_want_ptrs.kbUID, mm_got.kbUID))
+			}
+
+			if mm_want_ptrs.fileUIDs != nil && !minimock.Equal(*mm_want_ptrs.fileUIDs, mm_got.fileUIDs) {
+				mmSetChatCacheMetadata.t.Errorf("RepositoryMock.SetChatCacheMetadata got unexpected parameter fileUIDs, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmSetChatCacheMetadata.SetChatCacheMetadataMock.defaultExpectation.expectationOrigins.originFileUIDs, *mm_want_ptrs.fileUIDs, mm_got.fileUIDs, minimock.Diff(*mm_want_ptrs.fileUIDs, mm_got.fileUIDs))
+			}
+
+			if mm_want_ptrs.metadata != nil && !minimock.Equal(*mm_want_ptrs.metadata, mm_got.metadata) {
+				mmSetChatCacheMetadata.t.Errorf("RepositoryMock.SetChatCacheMetadata got unexpected parameter metadata, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmSetChatCacheMetadata.SetChatCacheMetadataMock.defaultExpectation.expectationOrigins.originMetadata, *mm_want_ptrs.metadata, mm_got.metadata, minimock.Diff(*mm_want_ptrs.metadata, mm_got.metadata))
+			}
+
+			if mm_want_ptrs.ttl != nil && !minimock.Equal(*mm_want_ptrs.ttl, mm_got.ttl) {
+				mmSetChatCacheMetadata.t.Errorf("RepositoryMock.SetChatCacheMetadata got unexpected parameter ttl, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmSetChatCacheMetadata.SetChatCacheMetadataMock.defaultExpectation.expectationOrigins.originTtl, *mm_want_ptrs.ttl, mm_got.ttl, minimock.Diff(*mm_want_ptrs.ttl, mm_got.ttl))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmSetChatCacheMetadata.t.Errorf("RepositoryMock.SetChatCacheMetadata got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmSetChatCacheMetadata.SetChatCacheMetadataMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmSetChatCacheMetadata.SetChatCacheMetadataMock.defaultExpectation.results
+		if mm_results == nil {
+			mmSetChatCacheMetadata.t.Fatal("No results are set for the RepositoryMock.SetChatCacheMetadata")
+		}
+		return (*mm_results).err
+	}
+	if mmSetChatCacheMetadata.funcSetChatCacheMetadata != nil {
+		return mmSetChatCacheMetadata.funcSetChatCacheMetadata(ctx, kbUID, fileUIDs, metadata, ttl)
+	}
+	mmSetChatCacheMetadata.t.Fatalf("Unexpected call to RepositoryMock.SetChatCacheMetadata. %v %v %v %v %v", ctx, kbUID, fileUIDs, metadata, ttl)
+	return
+}
+
+// SetChatCacheMetadataAfterCounter returns a count of finished RepositoryMock.SetChatCacheMetadata invocations
+func (mmSetChatCacheMetadata *RepositoryMock) SetChatCacheMetadataAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmSetChatCacheMetadata.afterSetChatCacheMetadataCounter)
+}
+
+// SetChatCacheMetadataBeforeCounter returns a count of RepositoryMock.SetChatCacheMetadata invocations
+func (mmSetChatCacheMetadata *RepositoryMock) SetChatCacheMetadataBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmSetChatCacheMetadata.beforeSetChatCacheMetadataCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.SetChatCacheMetadata.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmSetChatCacheMetadata *mRepositoryMockSetChatCacheMetadata) Calls() []*RepositoryMockSetChatCacheMetadataParams {
+	mmSetChatCacheMetadata.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockSetChatCacheMetadataParams, len(mmSetChatCacheMetadata.callArgs))
+	copy(argCopy, mmSetChatCacheMetadata.callArgs)
+
+	mmSetChatCacheMetadata.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockSetChatCacheMetadataDone returns true if the count of the SetChatCacheMetadata invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockSetChatCacheMetadataDone() bool {
+	if m.SetChatCacheMetadataMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.SetChatCacheMetadataMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.SetChatCacheMetadataMock.invocationsDone()
+}
+
+// MinimockSetChatCacheMetadataInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockSetChatCacheMetadataInspect() {
+	for _, e := range m.SetChatCacheMetadataMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.SetChatCacheMetadata at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterSetChatCacheMetadataCounter := mm_atomic.LoadUint64(&m.afterSetChatCacheMetadataCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.SetChatCacheMetadataMock.defaultExpectation != nil && afterSetChatCacheMetadataCounter < 1 {
+		if m.SetChatCacheMetadataMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.SetChatCacheMetadata at\n%s", m.SetChatCacheMetadataMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.SetChatCacheMetadata at\n%s with params: %#v", m.SetChatCacheMetadataMock.defaultExpectation.expectationOrigins.origin, *m.SetChatCacheMetadataMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcSetChatCacheMetadata != nil && afterSetChatCacheMetadataCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.SetChatCacheMetadata at\n%s", m.funcSetChatCacheMetadataOrigin)
+	}
+
+	if !m.SetChatCacheMetadataMock.invocationsDone() && afterSetChatCacheMetadataCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.SetChatCacheMetadata at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.SetChatCacheMetadataMock.expectedInvocations), m.SetChatCacheMetadataMock.expectedInvocationsOrigin, afterSetChatCacheMetadataCounter)
+	}
+}
+
 type mRepositoryMockSimilarVectorsInCollection struct {
 	optional           bool
 	mock               *RepositoryMock
@@ -29845,6 +31057,8 @@ func (m *RepositoryMock) MinimockFinish() {
 
 			m.MinimockDeleteAndCreateTextChunksInspect()
 
+			m.MinimockDeleteChatCacheMetadataInspect()
+
 			m.MinimockDeleteConvertedFileInspect()
 
 			m.MinimockDeleteEmbeddingsByKBFileUIDInspect()
@@ -29868,6 +31082,8 @@ func (m *RepositoryMock) MinimockFinish() {
 			m.MinimockDropCollectionInspect()
 
 			m.MinimockFlushCollectionInspect()
+
+			m.MinimockGetChatCacheMetadataInspect()
 
 			m.MinimockGetConvertedFileByFileUIDInspect()
 
@@ -29961,6 +31177,8 @@ func (m *RepositoryMock) MinimockFinish() {
 
 			m.MinimockSaveConvertedFileInspect()
 
+			m.MinimockSetChatCacheMetadataInspect()
+
 			m.MinimockSimilarVectorsInCollectionInspect()
 
 			m.MinimockUpdateConvertedFileInspect()
@@ -30016,6 +31234,7 @@ func (m *RepositoryMock) minimockDone() bool {
 		m.MinimockDeleteAllKnowledgeBaseFilesDone() &&
 		m.MinimockDeleteAndCreateEmbeddingsDone() &&
 		m.MinimockDeleteAndCreateTextChunksDone() &&
+		m.MinimockDeleteChatCacheMetadataDone() &&
 		m.MinimockDeleteConvertedFileDone() &&
 		m.MinimockDeleteEmbeddingsByKBFileUIDDone() &&
 		m.MinimockDeleteEmbeddingsWithFileUIDDone() &&
@@ -30028,6 +31247,7 @@ func (m *RepositoryMock) minimockDone() bool {
 		m.MinimockDeleteRepositoryTagDone() &&
 		m.MinimockDropCollectionDone() &&
 		m.MinimockFlushCollectionDone() &&
+		m.MinimockGetChatCacheMetadataDone() &&
 		m.MinimockGetConvertedFileByFileUIDDone() &&
 		m.MinimockGetCountFilesByListKnowledgeBaseUIDDone() &&
 		m.MinimockGetFileDone() &&
@@ -30074,6 +31294,7 @@ func (m *RepositoryMock) minimockDone() bool {
 		m.MinimockListTextChunksByKBFileUIDDone() &&
 		m.MinimockProcessKnowledgeBaseFilesDone() &&
 		m.MinimockSaveConvertedFileDone() &&
+		m.MinimockSetChatCacheMetadataDone() &&
 		m.MinimockSimilarVectorsInCollectionDone() &&
 		m.MinimockUpdateConvertedFileDone() &&
 		m.MinimockUpdateKnowledgeBaseDone() &&

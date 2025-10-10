@@ -75,6 +75,12 @@ func (w *Worker) TemporalClient() client.Client {
 	return w.temporalClient
 }
 
+// GetAIProvider returns the AI provider for external use (e.g., service layer)
+// This enables the service layer to perform AI operations without circular dependencies
+func (w *Worker) GetAIProvider() ai.Provider {
+	return w.aiProvider
+}
+
 // New creates a new worker instance with direct dependencies (no circular dependency)
 func New(
 	temporalClient client.Client,
@@ -125,12 +131,12 @@ func New(
 // Use-case methods for workflow orchestration
 // These provide a clean interface for handlers to trigger workflows
 
-// ProcessFile orchestrates the file processing workflow
-func (w *Worker) ProcessFile(ctx context.Context, kbUID, fileUID, userUID, requesterUID types.RequesterUIDType) error {
+// ProcessFile orchestrates the file processing workflow for one or more files
+func (w *Worker) ProcessFile(ctx context.Context, kbUID types.KBUIDType, fileUIDs []types.FileUIDType, userUID, requesterUID types.RequesterUIDType) error {
 	workflow := NewProcessFileWorkflow(w.temporalClient, w)
 	return workflow.Execute(ctx, ProcessFileWorkflowParam{
 		KBUID:        kbUID,
-		FileUID:      fileUID,
+		FileUIDs:     fileUIDs,
 		UserUID:      userUID,
 		RequesterUID: requesterUID,
 	})

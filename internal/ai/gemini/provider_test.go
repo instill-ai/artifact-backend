@@ -147,10 +147,15 @@ func TestProvider_CreateCache_ValidatesInput(t *testing.T) {
 	t.Run("returns error on empty content", func(t *testing.T) {
 		result, err := provider.CreateCache(
 			context.Background(),
-			[]byte{},
-			artifactpb.FileType_FILE_TYPE_PDF,
-			"test.pdf",
+			[]ai.FileContent{
+				{
+					Content:  []byte{},
+					FileType: artifactpb.FileType_FILE_TYPE_PDF,
+					Filename: "test.pdf",
+				},
+			},
 			0,
+			ai.SystemInstructionRAG,
 		)
 		c.Assert(err, qt.Not(qt.IsNil))
 		c.Assert(result, qt.IsNil)
@@ -220,10 +225,15 @@ func TestProvider_ErrorMessages(t *testing.T) {
 	t.Run("CreateCache error includes context", func(t *testing.T) {
 		_, err := provider.CreateCache(
 			context.Background(),
-			[]byte{},
-			artifactpb.FileType_FILE_TYPE_PDF,
-			"test.pdf",
+			[]ai.FileContent{
+				{
+					Content:  []byte{},
+					FileType: artifactpb.FileType_FILE_TYPE_PDF,
+					Filename: "test.pdf",
+				},
+			},
 			0,
+			ai.SystemInstructionRAG,
 		)
 		c.Assert(err, qt.Not(qt.IsNil))
 		// The error should be descriptive

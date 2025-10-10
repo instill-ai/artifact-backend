@@ -397,6 +397,7 @@ func (m *milvusClient) SimilarVectorsInCollection(ctx context.Context, p service
 	if err != nil {
 		return nil, fmt.Errorf("loading collection: %w", err)
 	}
+
 	logger.Info("Collection load.", zap.Duration("duration", time.Since(t)))
 
 	fields, err := m.extractCollectionFields(ctx, collectionName)
@@ -475,6 +476,7 @@ func (m *milvusClient) SimilarVectorsInCollection(ctx context.Context, p service
 	if err != nil {
 		return nil, fmt.Errorf("creating search param: %w", err)
 	}
+
 	results, err := m.c.Search(
 		ctx,
 		collectionName,

@@ -12,7 +12,7 @@ import (
 )
 
 type SimChunk struct {
-	ChunkUID uuid.UUID
+	ChunkUID types.TextChunkUIDType
 	Score    float32
 }
 
@@ -56,9 +56,9 @@ func (s *service) SimilarityChunksSearch(ctx context.Context, ownerUID uuid.UUID
 		return nil, fmt.Errorf("unsupported content type: %v", req.GetContentType())
 	}
 
-	fileUIDs := make([]uuid.UUID, 0, len(req.GetFileUids()))
+	fileUIDs := make([]types.FileUIDType, 0, len(req.GetFileUids()))
 	for _, uid := range req.GetFileUids() {
-		fileUIDs = append(fileUIDs, uuid.FromStringOrNil(uid))
+		fileUIDs = append(fileUIDs, types.FileUIDType(uuid.FromStringOrNil(uid)))
 	}
 
 	topK := req.GetTopK()
@@ -106,6 +106,7 @@ func (s *service) SimilarityChunksSearch(ctx context.Context, ownerUID uuid.UUID
 	if len(simEmbeddings) == 0 {
 		return []SimChunk{}, nil
 	}
+
 	for _, simEmb := range simEmbeddings[0] {
 		if simEmb.SourceTable != s.repository.TextChunkTableName() {
 			continue
@@ -115,7 +116,7 @@ func (s *service) SimilarityChunksSearch(ctx context.Context, ownerUID uuid.UUID
 			return nil, fmt.Errorf("invalid chunk uid %s", simEmb.SourceUID)
 		}
 		res = append(res, SimChunk{
-			ChunkUID: simChunkUID,
+			ChunkUID: types.TextChunkUIDType(simChunkUID),
 			Score:    simEmb.Score,
 		})
 	}

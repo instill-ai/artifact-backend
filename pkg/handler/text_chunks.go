@@ -259,7 +259,7 @@ func (ph *PublicHandler) GetSourceFile(ctx context.Context, req *artifactpb.GetS
 		return nil, fmt.Errorf("failed to parse file uid: %v. err: %w", err, errorsx.ErrInvalidArgument)
 	}
 
-	// Check file processing status before accessing converted file
+	// Fetch file to get knowledge base UID for ACL check
 	files, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{fileUID})
 	if err != nil || len(files) == 0 {
 		logger.Error("failed to fetch file", zap.Error(err))
@@ -267,7 +267,18 @@ func (ph *PublicHandler) GetSourceFile(ctx context.Context, req *artifactpb.GetS
 	}
 	file := files[0]
 
-	// Return proper error if file is still being processed
+	// ACL - check if the user has access to the knowledge base BEFORE checking processing status
+	// This ensures unauthorized users get 403, not information about file processing status
+	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", file.KBUID, "writer")
+	if err != nil {
+		logger.Error("failed to check permission in GetSourceFile", zap.Error(err))
+		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
+	}
+	if !granted {
+		return nil, fmt.Errorf("%w: no permission over catalog", errorsx.ErrUnauthorized)
+	}
+
+	// After authorization check, validate file processing status
 	if file.ProcessStatus != artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED.String() {
 		status := artifactpb.FileProcessStatus(artifactpb.FileProcessStatus_value[file.ProcessStatus])
 		logger.Info("file processing not complete",
@@ -290,15 +301,6 @@ func (ph *PublicHandler) GetSourceFile(ctx context.Context, req *artifactpb.GetS
 	if err != nil {
 		logger.Error("failed to get truth source by file uid", zap.Error(err))
 		return nil, fmt.Errorf("failed to get truth source by file uid. err: %w", err)
-	}
-	// ACL - check if the user(uid from context) has access to the knowledge base of source file.
-	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", source.KBUID, "writer")
-	if err != nil {
-		logger.Error("failed to check permission in GetSourceFile", zap.Error(err))
-		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
-	}
-	if !granted {
-		return nil, fmt.Errorf("%w: no permission over catalog", errorsx.ErrUnauthorized)
 	}
 
 	// Decide bucket based on file type: TEXT/MARKDOWN -> blob; others -> artifact

@@ -139,8 +139,8 @@ func main() {
 		redisClient, db, minioClient, vectorDB, aclClient, temporalClient, closer := newClients(ctx, logger)
 	defer closer()
 
-	// Initialize repository with vector database
-	repo := repository.NewRepository(db, vectorDB, minioClient)
+	// Initialize repository with vector database and Redis
+	repo := repository.NewRepository(db, vectorDB, minioClient, redisClient)
 
 	// Create worker
 	w, err := worker.New(

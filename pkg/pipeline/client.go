@@ -16,7 +16,7 @@ import (
 )
 
 // ChunkMarkdownPipe triggers the markdown splitting pipeline
-func ChunkMarkdownPipe(ctx context.Context, pipelineClient pipelinepb.PipelinePublicServiceClient, markdown string) (*TextChunkingResult, error) {
+func ChunkMarkdownPipe(ctx context.Context, pipelineClient pipelinepb.PipelinePublicServiceClient, markdown string) (*TextChunkResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, 300*time.Second)
 	defer cancel()
 	req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
@@ -49,8 +49,8 @@ func ChunkMarkdownPipe(ctx context.Context, pipelineClient pipelinepb.PipelinePu
 			filteredResult = append(filteredResult, chunk)
 		}
 	}
-	return &TextChunkingResult{
-		Chunks:          filteredResult,
+	return &TextChunkResult{
+		TextChunks:      filteredResult,
 		PipelineRelease: ChunkMarkdownPipeline,
 	}, nil
 }
@@ -88,8 +88,8 @@ func GenerateSummary(ctx context.Context, pipelineClient pipelinepb.PipelinePubl
 	return result, nil
 }
 
-// ConvertToMarkdownPipe converts a file into Markdown by triggering a converting pipeline
-func ConvertToMarkdownPipe(ctx context.Context, pipelineClient pipelinepb.PipelinePublicServiceClient, repo repository.Repository, params MarkdownConversionParams) (*MarkdownConversionResult, error) {
+// GenerateContentPipe converts a file into Markdown by triggering a converting pipeline
+func GenerateContentPipe(ctx context.Context, pipelineClient pipelinepb.PipelinePublicServiceClient, repo repository.Repository, params GenerateContentParams) (*GenerateContentResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, 300*time.Second)
 	defer cancel()
 
@@ -113,7 +113,7 @@ func ConvertToMarkdownPipe(ctx context.Context, pipelineClient pipelinepb.Pipeli
 			return nil, fmt.Errorf("failed to decode text content: %w", err)
 		}
 		// Return text content as-is (it's already markdown-compatible)
-		return &MarkdownConversionResult{
+		return &GenerateContentResult{
 			Markdown:        string(content),
 			PipelineRelease: PipelineRelease{}, // No pipeline used
 		}, nil
@@ -123,7 +123,7 @@ func ConvertToMarkdownPipe(ctx context.Context, pipelineClient pipelinepb.Pipeli
 		artifactpb.FileType_FILE_TYPE_XLS,
 		artifactpb.FileType_FILE_TYPE_CSV,
 		artifactpb.FileType_FILE_TYPE_HTML:
-		params.Pipelines = []PipelineRelease{ConvertDocToMarkdownStandardPipeline}
+		params.Pipelines = []PipelineRelease{GenerateContentPipeline}
 
 	// Document types use the conversion pipeline configured in the catalog
 	case artifactpb.FileType_FILE_TYPE_PDF,
@@ -135,8 +135,8 @@ func ConvertToMarkdownPipe(ctx context.Context, pipelineClient pipelinepb.Pipeli
 		// namespace and ID, but potentially different version), reprocess with
 		// the newest version of the default pipeline
 		reprocessWithDefaultPipeline := len(params.Pipelines) == 1 &&
-			params.Pipelines[0].Namespace == ConvertDocToMarkdownPipeline.Namespace &&
-			params.Pipelines[0].ID == ConvertDocToMarkdownPipeline.ID
+			params.Pipelines[0].Namespace == GenerateContentPipeline.Namespace &&
+			params.Pipelines[0].ID == GenerateContentPipeline.ID
 
 		if len(params.Pipelines) == 0 || reprocessWithDefaultPipeline {
 			params.Pipelines = DefaultConversionPipelines
@@ -225,7 +225,7 @@ func EmbedTextPipe(ctx context.Context, pipelineClient pipelinepb.PipelinePublic
 }
 
 // ChunkTextPipe splits the input text into chunks using the splitting pipeline
-func ChunkTextPipe(ctx context.Context, pipelineClient pipelinepb.PipelinePublicServiceClient, text string) (*TextChunkingResult, error) {
+func ChunkTextPipe(ctx context.Context, pipelineClient pipelinepb.PipelinePublicServiceClient, text string) (*TextChunkResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, 300*time.Second)
 	defer cancel()
 
@@ -260,19 +260,20 @@ func ChunkTextPipe(ctx context.Context, pipelineClient pipelinepb.PipelinePublic
 			filteredResult = append(filteredResult, chunk)
 		}
 	}
-	return &TextChunkingResult{
-		Chunks:          filteredResult,
+	return &TextChunkResult{
+		TextChunks:      filteredResult,
 		PipelineRelease: ChunkTextPipeline,
 	}, nil
 }
 
-// QuestionAnsweringPipe processes a question with retrieved chunks using the QA pipeline
-func QuestionAnsweringPipe(ctx context.Context, pipelineClient pipelinepb.PipelinePublicServiceClient, question string, simChunks []string) (string, error) {
+// ChatPipe processes a prompt with retrieved chunks using the QA pipeline
+func ChatPipe(ctx context.Context, pipelineClient pipelinepb.PipelinePublicServiceClient, prompt string, simChunks []string) (string, error) {
 	// create a retired chunk var that combines all the chunks by /n/n
 	retrievedChunk := ""
 	for _, chunk := range simChunks {
 		retrievedChunk += chunk + "\n\n"
 	}
+
 	req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
 		NamespaceId: QAPipeline.Namespace,
 		PipelineId:  QAPipeline.ID,
@@ -281,15 +282,17 @@ func QuestionAnsweringPipe(ctx context.Context, pipelineClient pipelinepb.Pipeli
 			{
 				Fields: map[string]*structpb.Value{
 					"retrieved_chunk": structpb.NewStringValue(retrievedChunk),
-					"user_question":   structpb.NewStringValue(question),
+					"user_question":   structpb.NewStringValue(prompt),
 				},
 			},
 		},
 	}
+
 	res, err := pipelineClient.TriggerNamespacePipelineRelease(ctx, req)
 	if err != nil {
 		return "", fmt.Errorf("failed to trigger %s pipeline. err:%w", QAPipeline.ID, err)
 	}
+
 	reply := res.Outputs[0].GetFields()["assistant_reply"].GetStringValue()
 	return reply, nil
 }

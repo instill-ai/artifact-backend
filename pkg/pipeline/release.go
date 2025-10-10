@@ -80,25 +80,17 @@ var (
 	// - Additional conversions for audio, video, and other formats
 	ConvertFileTypePipeline = PipelineRelease{
 		Namespace: DefaultNamespaceID,
-		ID:        "convert-file-type",
+		ID:        "indexing-convert-file-type",
 		Version:   "v1.0.0",
 	}
 
-	// ConvertDocToMarkdownPipeline is the default conversion pipeline for documents.
+	// GenerateContentPipeline is the default conversion pipeline for documents.
 	// Note: this pipeline is for the new indexing pipeline having
 	// convert_result or convert_result2
-	ConvertDocToMarkdownPipeline = PipelineRelease{
+	GenerateContentPipeline = PipelineRelease{
 		Namespace: DefaultNamespaceID,
-		ID:        "indexing-advanced-convert-doc",
+		ID:        "indexing-generate-content",
 		Version:   "v1.4.0",
-	}
-
-	// ConvertDocToMarkdownStandardPipeline is the default conversion pipeline for
-	// non-document files (e.g. CSV).
-	ConvertDocToMarkdownStandardPipeline = PipelineRelease{
-		Namespace: DefaultNamespaceID,
-		ID:        "indexing-convert-pdf",
-		Version:   "v1.1.1",
 	}
 
 	// GenerateSummaryPipeline is the default pipeline for summarizing text.
@@ -111,21 +103,21 @@ var (
 	// ChunkMarkdownPipeline is the default pipeline for chunking Markdown.
 	ChunkMarkdownPipeline = PipelineRelease{
 		Namespace: DefaultNamespaceID,
-		ID:        "indexing-split-markdown",
+		ID:        "indexing-chunk-markdown",
 		Version:   "v2.0.0",
 	}
 
 	// ChunkTextPipeline is the default pipeline for chunking text.
 	ChunkTextPipeline = PipelineRelease{
 		Namespace: DefaultNamespaceID,
-		ID:        "indexing-split-text",
+		ID:        "indexing-chunk-text",
 		Version:   "v2.0.0",
 	}
 
 	// EmbedTextPipeline is the default pipeline for embedding text.
 	EmbedTextPipeline = PipelineRelease{
 		Namespace: DefaultNamespaceID,
-		ID:        "indexing-embed",
+		ID:        "indexing-embed-text",
 		Version:   "v1.1.0",
 	}
 
@@ -139,8 +131,7 @@ var (
 	// PresetPipelinesList contains the preset pipelines used in catalogs.
 	PresetPipelinesList = PipelineReleases{
 		ConvertFileTypePipeline,
-		ConvertDocToMarkdownPipeline,
-		ConvertDocToMarkdownStandardPipeline,
+		GenerateContentPipeline,
 		GenerateSummaryPipeline,
 		ChunkMarkdownPipeline,
 		ChunkTextPipeline,
@@ -152,7 +143,7 @@ var (
 	// documents to Markdown. Note: ConvertFileTypePipeline is NOT included here
 	// because it's only used for AI preprocessing (hardcoded in the workflow),
 	// not for general markdown conversion.
-	DefaultConversionPipelines = PipelineReleases{ConvertDocToMarkdownPipeline}
+	DefaultConversionPipelines = PipelineReleases{GenerateContentPipeline}
 )
 
 // PipelineReleaseUpserter is used to upsert predefined pipeline releases into

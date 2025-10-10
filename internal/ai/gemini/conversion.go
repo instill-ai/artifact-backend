@@ -1,7 +1,6 @@
 package gemini
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"strings"
@@ -9,53 +8,78 @@ import (
 
 	"google.golang.org/genai"
 
+	"github.com/instill-ai/artifact-backend/internal/ai"
+
+	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	errorsx "github.com/instill-ai/x/errors"
 )
+
+// conversionOutput defines the output of content-to-markdown conversion
+type conversionOutput struct {
+	// Markdown is the converted/extracted markdown content
+	Markdown string
+	// UsageMetadata tracks the number of tokens consumed
+	UsageMetadata *genai.GenerateContentResponseUsageMetadata
+	// CacheName is the name of the cached content (if caching was enabled)
+	CacheName *string
+	// Model is the model that was used for conversion
+	Model string
+}
+
+// ConvertToMarkdownWithoutCache implements ai.Provider
+// This does direct conversion WITHOUT using a cached context.
+// For cached conversion, use ConvertToMarkdownWithCache() with a pre-existing cache.
+func (p *Provider) ConvertToMarkdownWithoutCache(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string, prompt string) (*ai.ConversionResult, error) {
+	mimeType := ai.FileTypeToMIME(fileType)
+
+	// Retry logic for non-cached conversion
+	output, err := retryConversion(ctx, 2, func() (*conversionOutput, error) {
+		return p.convertToMarkdownWithoutCache(ctx, content, mimeType, prompt)
+	})
+	return buildConversionResult(output, err)
+}
+
+// ConvertToMarkdownWithCache implements ai.Provider
+// Uses a pre-existing cached context for efficient conversion
+func (p *Provider) ConvertToMarkdownWithCache(ctx context.Context, cacheName, prompt string) (*ai.ConversionResult, error) {
+	// Retry logic for cached conversion
+	output, err := retryConversion(ctx, 2, func() (*conversionOutput, error) {
+		return p.convertToMarkdownWithCache(ctx, cacheName, prompt)
+	})
+	return buildConversionResult(output, err)
+}
 
 // convertToMarkdownWithoutCache converts unstructured data (documents, images, audio, video) to Markdown
 // using Gemini's multimodal understanding capabilities WITHOUT using a cached context
 // Uses File API for large files (>20MB) or videos for better performance and reliability
-func (p *Provider) convertToMarkdownWithoutCache(ctx context.Context, input *ConversionInput) (*ConversionOutput, error) {
-	// === Validate Input ===
-	if input == nil {
-		err := errorsx.ErrInvalidArgument
-		return nil, errorsx.AddMessage(err, "Invalid request. Please ensure the file is properly uploaded.")
+func (p *Provider) convertToMarkdownWithoutCache(ctx context.Context, content []byte, contentType, prompt string) (*conversionOutput, error) {
+	// Validate input
+	if len(content) == 0 {
+		return nil, errorsx.AddMessage(errorsx.ErrInvalidArgument, "The file appears to be empty. Please upload a valid file.")
 	}
-	if len(input.Content) == 0 {
-		err := errorsx.ErrInvalidArgument
-		return nil, errorsx.AddMessage(err, "The file appears to be empty. Please upload a valid file.")
+	if contentType == "" {
+		return nil, errorsx.AddMessage(errorsx.ErrInvalidArgument, "Unsupported file type. Please upload a supported file format.")
 	}
 
-	// === Set Defaults ===
-	model := input.Model
-	if model == "" {
-		model = DefaultConversionModel
+	// Validate prompt
+	if err := validatePrompt(prompt); err != nil {
+		return nil, err
 	}
 
-	// Prompt must be provided by caller (no default assumption)
-	if input.CustomPrompt == nil || *input.CustomPrompt == "" {
-		err := errorsx.ErrInvalidArgument
-		return nil, errorsx.AddMessage(err, "Internal processing error: prompt not specified. Please try again.")
-	}
-	prompt := *input.CustomPrompt
-
-	// === Prepare Content ===
-	// Create content part (document, image, audio, or video) using File API for large files
-	contentPart, uploadedFileName, err := p.createContentPartWithFileAPI(ctx, input)
+	// Prepare content part using File API for large files
+	contentPart, uploadedFileName, err := p.createContentPartWithFileAPI(ctx, content, contentType)
 	if err != nil {
 		return nil, err
 	}
 
-	// Clean up uploaded file after conversion (if File API was used)
+	// Clean up uploaded file after conversion
 	if uploadedFileName != "" {
 		defer func() {
-			// Best effort cleanup - ignore errors
-			// Files will be automatically deleted after 48 hours anyway
 			_, _ = p.client.Files.Delete(ctx, uploadedFileName, nil)
 		}()
 	}
 
-	// Build user content with data + prompt
+	// Build request with content + prompt
 	contents := []*genai.Content{
 		{
 			Role: genai.RoleUser,
@@ -66,61 +90,25 @@ func (p *Provider) convertToMarkdownWithoutCache(ctx context.Context, input *Con
 		},
 	}
 
-	// === Configure API Call ===
-	config := &genai.GenerateContentConfig{
-		Temperature: genai.Ptr(float32(1.0)),
-		TopP:        genai.Ptr(float32(0.95)),
-	}
-
-	// === Call Gemini API ===
-	result, err := p.client.Models.GenerateContent(ctx, model, contents, config)
-	if err != nil {
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("gemini API call failed: %w", err),
-			"AI service is temporarily unavailable. Please try again in a few moments.",
-		)
-	}
-
-	// === Extract Response ===
-	markdown, err := p.extractMarkdownFromResponse(result)
-	if err != nil {
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("failed to extract markdown from response: %w", err),
-			"Unable to process the AI response. Please try again or contact support.",
-		)
-	}
-
-	// === Build Output ===
-	output := &ConversionOutput{
-		Markdown:      markdown,
-		UsageMetadata: p.extractTokenUsage(result),
-		CacheName:     nil, // No cache used
-		Model:         model,
-	}
-
-	return output, nil
+	// Generate content without cache
+	config := createGenerateContentConfig("")
+	return p.generateContentAndExtractMarkdown(ctx, DefaultConversionModel, contents, config, nil)
 }
 
 // convertToMarkdownWithCache converts unstructured data to Markdown using a pre-existing cached context
 // This is much more efficient than direct conversion when processing the same content multiple times
-func (p *Provider) convertToMarkdownWithCache(ctx context.Context, cacheName, prompt string) (*ConversionOutput, error) {
-	// === Validate Input ===
+func (p *Provider) convertToMarkdownWithCache(ctx context.Context, cacheName, prompt string) (*conversionOutput, error) {
+	// Validate cache name
 	if cacheName == "" {
-		err := errorsx.ErrInvalidArgument
-		return nil, errorsx.AddMessage(err, "Internal processing error. Please try again.")
+		return nil, errorsx.AddMessage(errorsx.ErrInvalidArgument, "Internal processing error. Please try again.")
 	}
 
-	// === Set Defaults ===
-	model := DefaultConversionModel
-
-	// Prompt must be provided by caller (no default assumption)
-	if prompt == "" {
-		err := errorsx.ErrInvalidArgument
-		return nil, errorsx.AddMessage(err, "Internal processing error: prompt not specified. Please try again.")
+	// Validate prompt
+	if err := validatePrompt(prompt); err != nil {
+		return nil, err
 	}
 
-	// === Prepare Content ===
-	// Build user content with just the prompt (data is already cached)
+	// Build request with just the prompt (data is already cached)
 	contents := []*genai.Content{
 		{
 			Role: genai.RoleUser,
@@ -130,13 +118,14 @@ func (p *Provider) convertToMarkdownWithCache(ctx context.Context, cacheName, pr
 		},
 	}
 
-	// === Configure API Call ===
-	config := &genai.GenerateContentConfig{
-		Temperature:   genai.Ptr(float32(1.0)),
-		TopP:          genai.Ptr(float32(0.95)),
-		CachedContent: cacheName,
-	}
+	// Generate content using cached context
+	config := createGenerateContentConfig(cacheName)
+	return p.generateContentAndExtractMarkdown(ctx, DefaultConversionModel, contents, config, &cacheName)
+}
 
+// generateContentAndExtractMarkdown is a common helper that calls Gemini API and extracts markdown
+// This consolidates the common code between cached and non-cached conversion
+func (p *Provider) generateContentAndExtractMarkdown(ctx context.Context, model string, contents []*genai.Content, config *genai.GenerateContentConfig, cacheName *string) (*conversionOutput, error) {
 	// === Call Gemini API ===
 	result, err := p.client.Models.GenerateContent(ctx, model, contents, config)
 	if err != nil {
@@ -156,10 +145,10 @@ func (p *Provider) convertToMarkdownWithCache(ctx context.Context, cacheName, pr
 	}
 
 	// === Build Output ===
-	output := &ConversionOutput{
+	output := &conversionOutput{
 		Markdown:      markdown,
 		UsageMetadata: p.extractTokenUsage(result),
-		CacheName:     &cacheName, // Cache was used
+		CacheName:     cacheName, // nil for non-cached, set for cached
 		Model:         model,
 	}
 
@@ -169,25 +158,19 @@ func (p *Provider) convertToMarkdownWithCache(ctx context.Context, cacheName, pr
 // createContentPartWithFileAPI creates a genai.Part from the input content using File API for large files or videos
 // Returns the part and the uploaded file name (empty string if inline data was used)
 // Text-based content (text/plain, text/html, text/markdown, text/csv) is sent as text parts instead of blobs
-func (p *Provider) createContentPartWithFileAPI(ctx context.Context, input *ConversionInput) (*genai.Part, string, error) {
-	// ContentType should always be set by the caller (via ai.FileTypeToMIME)
-	if input.ContentType == "" {
-		err := errorsx.ErrInvalidArgument
-		return nil, "", errorsx.AddMessage(err, "Unsupported file type. Please upload a supported file format.")
-	}
-
+func (p *Provider) createContentPartWithFileAPI(ctx context.Context, content []byte, contentType string) (*genai.Part, string, error) {
 	// Text-based content (plain text, HTML, Markdown, CSV) should be sent as text, not as blobs
 	// Gemini API expects text content to be in Text parts for proper understanding
-	if isTextBasedContent(input.ContentType) {
-		textContent := string(input.Content)
+	if isTextBasedContent(contentType) {
+		textContent := string(content)
 		part := &genai.Part{
 			Text: textContent,
 		}
 		return part, "", nil
 	}
 
-	fileSize := len(input.Content)
-	isVideo := isVideoType(input.ContentType)
+	fileSize := len(content)
+	isVideo := isVideoType(contentType)
 
 	// Use File API if:
 	// 1. File is larger than 20MB, or
@@ -195,31 +178,22 @@ func (p *Provider) createContentPartWithFileAPI(ctx context.Context, input *Conv
 	useFileAPI := fileSize > MaxInlineSize || isVideo
 
 	if useFileAPI {
-		// Upload file and wait for it to become active
-		uploadedFile, err := p.uploadFileAndWait(ctx, input.Content, input.ContentType)
+		// Upload file and wait for it to become active (using shared upload logic)
+		part, uploadedFileName, err := p.uploadAndWaitForFile(ctx, content, contentType)
 		if err != nil {
 			return nil, "", errorsx.AddMessage(
 				fmt.Errorf("failed to upload file for conversion: %w", err),
 				"Unable to upload file to AI service. The file may be too large or the service is busy. Please try again later.",
 			)
 		}
-
-		// Create FileData part
-		part := &genai.Part{
-			FileData: &genai.FileData{
-				FileURI:  uploadedFile.uri,
-				MIMEType: uploadedFile.mimeType,
-			},
-		}
-
-		return part, uploadedFile.name, nil
+		return part, uploadedFileName, nil
 	}
 
 	// Use inline data for small binary files (PDFs, images, audio, video)
 	part := &genai.Part{
 		InlineData: &genai.Blob{
-			MIMEType: input.ContentType,
-			Data:     input.Content,
+			MIMEType: contentType,
+			Data:     content,
 		},
 	}
 
@@ -227,9 +201,9 @@ func (p *Provider) createContentPartWithFileAPI(ctx context.Context, input *Conv
 }
 
 // createContentPart creates a genai.Part from the input content using inline data (for testing and small files)
-func (p *Provider) createContentPart(input *ConversionInput) (*genai.Part, error) {
+func (p *Provider) createContentPart(content []byte, contentType string) (*genai.Part, error) {
 	// ContentType should always be set by the caller (via ai.FileTypeToMIME)
-	if input.ContentType == "" {
+	if contentType == "" {
 		err := errorsx.ErrInvalidArgument
 		return nil, errorsx.AddMessage(err, "Unsupported file type. Please upload a supported file format.")
 	}
@@ -238,102 +212,12 @@ func (p *Provider) createContentPart(input *ConversionInput) (*genai.Part, error
 	// Gemini's multimodal API accepts documents, images, audio, and video
 	part := &genai.Part{
 		InlineData: &genai.Blob{
-			MIMEType: input.ContentType,
-			Data:     input.Content,
+			MIMEType: contentType,
+			Data:     content,
 		},
 	}
 
 	return part, nil
-}
-
-// uploadedFileInfo represents a file that was uploaded via File API
-type uploadedFileInfo struct {
-	name     string
-	uri      string
-	mimeType string
-}
-
-// uploadFileAndWait uploads a file to File API and waits for it to become ACTIVE
-func (p *Provider) uploadFileAndWait(ctx context.Context, data []byte, mimeType string) (*uploadedFileInfo, error) {
-	// Upload file
-	file, err := p.client.Files.Upload(ctx, bytes.NewReader(data), &genai.UploadFileConfig{
-		MIMEType: mimeType,
-	})
-	if err != nil {
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("failed to upload file: %w", err),
-			"Unable to upload file to AI service. Please try again.",
-		)
-	}
-
-	fileName := file.Name
-
-	// Wait for file to become ACTIVE with timeout
-	timeoutCtx, cancel := context.WithTimeout(ctx, FileUploadTimeout)
-	defer cancel()
-
-	if err := p.waitForFileActive(timeoutCtx, fileName); err != nil {
-		// Clean up the uploaded file on timeout/failure
-		_, _ = p.client.Files.Delete(ctx, fileName, nil)
-		return nil, err
-	}
-
-	return &uploadedFileInfo{
-		name:     fileName,
-		uri:      file.URI,
-		mimeType: mimeType,
-	}, nil
-}
-
-// waitForFileActive waits for an uploaded file to become ACTIVE state before using it
-func (p *Provider) waitForFileActive(ctx context.Context, fileName string) error {
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
-
-	// Check immediately first (file might already be active)
-	if fileInfo, err := p.client.Files.Get(ctx, fileName, nil); err == nil {
-		if fileInfo.State == genai.FileStateActive {
-			return nil
-		}
-		if fileInfo.State == genai.FileStateFailed {
-			err := fmt.Errorf("file processing failed")
-			return errorsx.AddMessage(err, "AI service failed to process the uploaded file. The file may be corrupted or in an unsupported format.")
-		}
-	}
-
-	// Wait for file to become active
-	for {
-		select {
-		case <-ctx.Done():
-			return errorsx.AddMessage(
-				fmt.Errorf("timeout waiting for file to become active: %w", ctx.Err()),
-				"File upload timed out. The file may be too large or the service is busy. Please try again later.",
-			)
-		case <-ticker.C:
-			fileInfo, err := p.client.Files.Get(ctx, fileName, nil)
-			if err != nil {
-				return errorsx.AddMessage(
-					fmt.Errorf("failed to get file status: %w", err),
-					"Unable to check file processing status. Please try again.",
-				)
-			}
-
-			switch fileInfo.State {
-			case genai.FileStateActive:
-				return nil
-			case genai.FileStateFailed:
-				err := fmt.Errorf("file processing failed")
-				return errorsx.AddMessage(err, "AI service failed to process the uploaded file. The file may be corrupted or in an unsupported format.")
-			case genai.FileStateProcessing:
-				continue
-			default:
-				return errorsx.AddMessage(
-					fmt.Errorf("file in unexpected state: %s", fileInfo.State),
-					"File processing encountered an unexpected error. Please try again.",
-				)
-			}
-		}
-	}
 }
 
 // extractMarkdownFromResponse extracts the markdown text from Gemini's response
@@ -402,26 +286,8 @@ func cleanMarkdown(text string) string {
 	return strings.TrimSpace(text)
 }
 
-// deleteCache deletes a cached content by name
-func (p *Provider) deleteCache(ctx context.Context, cacheName string) error {
-	if cacheName == "" {
-		err := errorsx.ErrInvalidArgument
-		return errorsx.AddMessage(err, "Internal error during cache cleanup.")
-	}
-
-	_, err := p.client.Caches.Delete(ctx, cacheName, &genai.DeleteCachedContentConfig{})
-	if err != nil {
-		return errorsx.AddMessage(
-			fmt.Errorf("failed to delete cache: %w", err),
-			"Failed to clean up processing cache. This may affect future operations.",
-		)
-	}
-
-	return nil
-}
-
-// convertToMarkdownWithRetry converts any content (document, image, audio, video) with automatic retry on transient failures
-func (p *Provider) convertToMarkdownWithRetry(ctx context.Context, input *ConversionInput, maxRetries int) (*ConversionOutput, error) {
+// retryConversion is a generic retry wrapper for conversion operations
+func retryConversion(ctx context.Context, maxRetries int, fn func() (*conversionOutput, error)) (*conversionOutput, error) {
 	var lastErr error
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
@@ -435,14 +301,14 @@ func (p *Provider) convertToMarkdownWithRetry(ctx context.Context, input *Conver
 			}
 		}
 
-		output, err := p.convertToMarkdownWithoutCache(ctx, input)
+		output, err := fn()
 		if err == nil {
 			return output, nil
 		}
 
 		lastErr = err
 
-		// Don't retry on certain errors
+		// Don't retry on certain errors (validation or unsupported formats)
 		if strings.Contains(err.Error(), "invalid") || strings.Contains(err.Error(), "unsupported") {
 			break
 		}
@@ -452,4 +318,55 @@ func (p *Provider) convertToMarkdownWithRetry(ctx context.Context, input *Conver
 		fmt.Errorf("conversion failed after %d attempts: %w", maxRetries+1, lastErr),
 		"Failed to convert file after multiple attempts. The file may be corrupted or in an unsupported format.",
 	)
+}
+
+// buildConversionResult constructs the final conversion result from internal output
+func buildConversionResult(output *conversionOutput, err error) (*ai.ConversionResult, error) {
+	if err != nil {
+		return nil, errorsx.AddMessage(
+			err,
+			"Failed to convert file to markdown. Please try again or contact support if the problem persists.",
+		)
+	}
+
+	return &ai.ConversionResult{
+		Markdown:      output.Markdown,
+		Length:        []uint32{uint32(len(output.Markdown))},
+		Provider:      "gemini",
+		PositionData:  nil,
+		UsageMetadata: output.UsageMetadata,
+	}, nil
+}
+
+// validatePrompt validates a prompt string
+func validatePrompt(prompt string) error {
+	if prompt == "" {
+		return errorsx.AddMessage(
+			errorsx.ErrInvalidArgument,
+			"Internal processing error: prompt not specified. Please try again.",
+		)
+	}
+	return nil
+}
+
+// createGenerateContentConfig creates a standard GenerateContentConfig with common settings
+func createGenerateContentConfig(cacheName string) *genai.GenerateContentConfig {
+	config := &genai.GenerateContentConfig{
+		Temperature: genai.Ptr(float32(1.0)),
+		TopP:        genai.Ptr(float32(0.95)),
+	}
+
+	if cacheName != "" {
+		// Using cached content - system instruction is already baked into the cache
+		config.CachedContent = cacheName
+	} else {
+		// Not using cache - set system instruction directly
+		config.SystemInstruction = &genai.Content{
+			Parts: []*genai.Part{
+				{Text: DefaultRAGSystemInstruction},
+			},
+		}
+	}
+
+	return config
 }

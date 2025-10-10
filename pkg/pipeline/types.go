@@ -36,23 +36,23 @@ type TextChunk struct {
 	Reference *repository.TextChunkReference
 }
 
-// TextChunkingResult contains the chunking result and metadata
-type TextChunkingResult struct {
-	Chunks []TextChunk
+// TextChunkResult contains the chunking result and metadata
+type TextChunkResult struct {
+	TextChunks []TextChunk
 
 	// PipelineRelease is the pipeline used for chunking
 	PipelineRelease PipelineRelease
 }
 
-// MarkdownConversionParams defines parameters for markdown conversion
-type MarkdownConversionParams struct {
+// GenerateContentParams defines parameters for markdown conversion
+type GenerateContentParams struct {
 	Base64Content string
 	Type          artifactpb.FileType
 	Pipelines     []PipelineRelease
 }
 
-// MarkdownConversionResult contains the information extracted from the conversion step.
-type MarkdownConversionResult struct {
+// GenerateContentResult contains the information extracted from the conversion step.
+type GenerateContentResult struct {
 	Markdown     string
 	PositionData *types.PositionData
 
@@ -223,7 +223,7 @@ func GetVectorsFromResponse(resp *pipelinepb.TriggerNamespacePipelineReleaseResp
 }
 
 // convertResultParser extracts the markdown conversion result from pipeline response
-func convertResultParser(resp *pipelinepb.TriggerNamespacePipelineReleaseResponse) (*MarkdownConversionResult, error) {
+func convertResultParser(resp *pipelinepb.TriggerNamespacePipelineReleaseResponse) (*GenerateContentResult, error) {
 	if resp == nil || len(resp.Outputs) == 0 {
 		return nil, fmt.Errorf("response is nil or has no outputs. resp: %v", resp)
 	}
@@ -251,7 +251,7 @@ func convertResultParser(resp *pipelinepb.TriggerNamespacePipelineReleaseRespons
 			return nil, fmt.Errorf("empty page list in conversion result")
 		}
 
-		return &MarkdownConversionResult{
+		return &GenerateContentResult{
 			Markdown: strings.Join(pages, ""),
 			Length:   []uint32{uint32(len(pages))},
 		}, nil
@@ -263,7 +263,7 @@ func convertResultParser(resp *pipelinepb.TriggerNamespacePipelineReleaseRespons
 		return nil, fmt.Errorf("conversion result is empty")
 	}
 
-	return &MarkdownConversionResult{
+	return &GenerateContentResult{
 		Markdown: markdown,
 	}, nil
 }

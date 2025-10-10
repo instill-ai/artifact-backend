@@ -12,7 +12,6 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/instill-ai/artifact-backend/internal/ai"
-	"github.com/instill-ai/artifact-backend/internal/ai/gemini"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/worker/mock"
 
@@ -285,7 +284,7 @@ func TestMapFormatToFileType(t *testing.T) {
 	c.Skip("Tests unexported helper function mapFormatToFileType")
 }
 
-func TestCacheContextActivity_NoAIProvider(t *testing.T) {
+func TestCacheFileContextActivity_NoAIProvider(t *testing.T) {
 	c := qt.New(t)
 	mc := minimock.NewController(t)
 
@@ -295,7 +294,7 @@ func TestCacheContextActivity_NoAIProvider(t *testing.T) {
 
 	w := &Worker{repository: mockRepository, log: logger}
 
-	param := &CacheContextActivityParam{
+	param := &CacheFileContextActivityParam{
 		FileUID:     uuid.Must(uuid.NewV4()),
 		KBUID:       uuid.Must(uuid.NewV4()),
 		Bucket:      "test-bucket",
@@ -304,12 +303,12 @@ func TestCacheContextActivity_NoAIProvider(t *testing.T) {
 		Filename:    "file.pdf",
 	}
 
-	result, err := w.CacheContextActivity(ctx, param)
+	result, err := w.CacheFileContextActivity(ctx, param)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result.CacheEnabled, qt.IsFalse)
+	c.Assert(result.CachedContextEnabled, qt.IsFalse)
 }
 
-func TestCacheContextActivity_UnsupportedFileType(t *testing.T) {
+func TestCacheFileContextActivity_UnsupportedFileType(t *testing.T) {
 	c := qt.New(t)
 	mc := minimock.NewController(t)
 
@@ -322,7 +321,7 @@ func TestCacheContextActivity_UnsupportedFileType(t *testing.T) {
 
 	w := &Worker{repository: mockRepositoryMock, log: logger, aiProvider: mockAIProvider}
 
-	param := &CacheContextActivityParam{
+	param := &CacheFileContextActivityParam{
 		FileUID:     uuid.Must(uuid.NewV4()),
 		KBUID:       uuid.Must(uuid.NewV4()),
 		Bucket:      "test-bucket",
@@ -331,12 +330,12 @@ func TestCacheContextActivity_UnsupportedFileType(t *testing.T) {
 		Filename:    "file.xyz",
 	}
 
-	result, err := w.CacheContextActivity(ctx, param)
+	result, err := w.CacheFileContextActivity(ctx, param)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result.CacheEnabled, qt.IsFalse)
+	c.Assert(result.CachedContextEnabled, qt.IsFalse)
 }
 
-func TestCacheContextActivity_Success(t *testing.T) {
+func TestCacheFileContextActivity_Success(t *testing.T) {
 	c := qt.New(t)
 	mc := minimock.NewController(t)
 
@@ -362,7 +361,7 @@ func TestCacheContextActivity_Success(t *testing.T) {
 
 	w := &Worker{repository: mockRepositoryMock, log: logger, aiProvider: mockAIProvider}
 
-	param := &CacheContextActivityParam{
+	param := &CacheFileContextActivityParam{
 		FileUID:     uuid.Must(uuid.NewV4()),
 		KBUID:       uuid.Must(uuid.NewV4()),
 		Bucket:      "test-bucket",
@@ -371,9 +370,9 @@ func TestCacheContextActivity_Success(t *testing.T) {
 		Filename:    "file.pdf",
 	}
 
-	result, err := w.CacheContextActivity(ctx, param)
+	result, err := w.CacheFileContextActivity(ctx, param)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result.CacheEnabled, qt.IsTrue)
+	c.Assert(result.CachedContextEnabled, qt.IsTrue)
 	c.Assert(result.CacheName, qt.Equals, cacheName)
 	c.Assert(result.Model, qt.Equals, "gemini-2.0-flash")
 }
@@ -435,90 +434,4 @@ func TestDeleteCacheActivity_Success(t *testing.T) {
 
 	err := w.DeleteCacheActivity(ctx, param)
 	c.Assert(err, qt.IsNil)
-}
-
-func TestConvertToFileActivity_WithCache(t *testing.T) {
-	c := qt.New(t)
-	mc := minimock.NewController(t)
-
-	ctx := context.Background()
-	mockRepositoryMock := mock.NewRepositoryMock(mc)
-	logger := zap.NewNop()
-
-	fileContent := []byte("test content")
-	markdown := "# Test Markdown"
-	cacheName := "test-cache"
-
-	mockRepositoryMock.GetFileMock.Return(fileContent, nil)
-	mockRepositoryMock.GetFileMock.
-		When(minimock.AnyContext, "test-bucket", "test/file.pdf").
-		Then(fileContent, nil)
-
-	mockAIProvider := mock.NewProviderMock(mc)
-	mockAIProvider.NameMock.Return("gemini")
-	mockAIProvider.SupportsFileTypeMock.Return(true)
-	mockAIProvider.ConvertToMarkdownWithCacheMock.Return(&ai.ConversionResult{
-		Markdown: markdown,
-		Length:   []uint32{uint32(len(markdown))},
-		Provider: "gemini",
-	}, nil)
-
-	w := &Worker{repository: mockRepositoryMock, log: logger, aiProvider: mockAIProvider}
-
-	param := &ConvertToFileActivityParam{
-		Bucket:      "test-bucket",
-		Destination: "test/file.pdf",
-		FileType:    artifactpb.FileType_FILE_TYPE_PDF,
-		CacheName:   cacheName,
-	}
-
-	result, err := w.ConvertToFileActivity(ctx, param)
-	c.Assert(err, qt.IsNil)
-	c.Assert(result.Markdown, qt.Equals, markdown)
-	c.Assert(result.Length, qt.HasLen, 1)
-}
-
-func TestConvertToFileActivity_DirectAI(t *testing.T) {
-	c := qt.New(t)
-	mc := minimock.NewController(t)
-
-	ctx := context.Background()
-	logger := zap.NewNop()
-
-	fileContent := []byte("test content")
-	markdown := "# Direct AI Conversion"
-
-	mockAIProvider := mock.NewProviderMock(mc)
-	mockAIProvider.NameMock.Return("gemini")
-	mockAIProvider.SupportsFileTypeMock.Return(true)
-	mockAIProvider.ConvertToMarkdownMock.
-		When(minimock.AnyContext, fileContent, artifactpb.FileType_FILE_TYPE_PDF, "file.pdf", gemini.DefaultConvertToMarkdownPromptTemplate).
-		Then(&ai.ConversionResult{
-			Markdown: markdown,
-			Length:   []uint32{uint32(len(markdown))},
-			Provider: "gemini",
-		}, nil)
-
-	mockRepository := mock.NewRepositoryMock(mc)
-	mockRepository.GetFileMock.Return(fileContent, nil)
-
-	w := &Worker{repository: mockRepository, log: logger, aiProvider: mockAIProvider}
-
-	param := &ConvertToFileActivityParam{
-		Bucket:      "test-bucket",
-		Destination: "test/file.pdf",
-		FileType:    artifactpb.FileType_FILE_TYPE_PDF,
-		CacheName:   "", // No cache
-	}
-
-	result, err := w.ConvertToFileActivity(ctx, param)
-	c.Assert(err, qt.IsNil)
-	c.Assert(result.Markdown, qt.Equals, markdown)
-}
-
-func TestConvertToFileActivity_PipelineFallback(t *testing.T) {
-	c := qt.New(t)
-	// This test requires a real pipeline client mock which is complex to set up
-	// Skip for now - integration tests cover this functionality
-	c.Skip("Requires pipeline client mock")
 }

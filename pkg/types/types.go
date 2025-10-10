@@ -76,22 +76,31 @@ type PositionData struct {
 }
 
 type (
-	// Knowledge Base unique identifier
+	// KBUIDType is the Knowledge Base unique identifier
 	KBUIDType = uuid.UUID
-	// File unique identifier
+	// FileUIDType is the File unique identifier
 	FileUIDType = uuid.UUID
-	// Text chunk unique identifier
+	// TextChunkUIDType is the Text chunk unique identifier
 	TextChunkUIDType = uuid.UUID
-	// Converted file unique identifier
-	ConvertedFileUIDType = uuid.UUID // Converted file unique identifier
+	// ConvertedFileUIDType is the Converted file unique identifier
+	ConvertedFileUIDType = uuid.UUID
 
-	// User and Permission UIDs
-	UserUIDType      = uuid.UUID // User unique identifier
-	RequesterUIDType = uuid.UUID // Request initiator unique identifier
-	CreatorUIDType   = uuid.UUID // Creator unique identifier
-	OwnerUIDType     = uuid.UUID // Owner unique identifier
+	// UserUIDType is the User unique identifier
+	UserUIDType = uuid.UUID
+	// RequesterUIDType is the Request initiator unique identifier
+	RequesterUIDType = uuid.UUID
+	// CreatorUIDType is the Creator unique identifier
+	CreatorUIDType = uuid.UUID
+	// OwnerUIDType is the Owner unique identifier
+	OwnerUIDType = uuid.UUID
 
-	// Source tracking (used in chunk metadata)
-	SourceUIDType   = uuid.UUID // Source entity unique identifier
-	SourceTableType = string    // Source table name
+	// NamespaceUIDType is the Namespace unique identifier
+	NamespaceUIDType = uuid.UUID
+	// ObjectUIDType is the Object unique identifier
+	ObjectUIDType = uuid.UUID
+
+	// SourceUIDType is the Source entity unique identifier
+	SourceUIDType = uuid.UUID
+	// SourceTableType is the Source table name
+	SourceTableType = string
 )

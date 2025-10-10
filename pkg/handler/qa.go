@@ -60,6 +60,74 @@ func (ph *PublicHandler) QuestionAnswering(
 		return nil, fmt.Errorf("failed to check requester permission. err: %w", err)
 	}
 
+	// Convert file UID strings to UUIDs for cache lookup and status checking
+	var fileUIDs []uuid.UUID
+	if len(req.GetFileUids()) > 0 {
+		fileUIDs = make([]uuid.UUID, 0, len(req.GetFileUids()))
+		for _, uidStr := range req.GetFileUids() {
+			uid, err := uuid.FromString(uidStr)
+			if err != nil {
+				logger.Warn("Invalid file UID", zap.String("uid", uidStr), zap.Error(err))
+				continue
+			}
+			fileUIDs = append(fileUIDs, uid)
+		}
+	}
+
+	// ===== NEW: Try chat cache path for files still being processed =====
+	if len(fileUIDs) > 0 {
+		// Check if files are still processing
+		allCompleted, processingCount, err := ph.service.CheckFilesProcessingStatus(ctx, fileUIDs)
+		if err != nil {
+			logger.Warn("Failed to check file processing status", zap.Error(err))
+			// Continue to traditional RAG path
+		} else if !allCompleted {
+			logger.Info("Some files still processing, checking for chat cache",
+				zap.Int("processingCount", processingCount),
+				zap.Int("totalFiles", len(fileUIDs)))
+
+			// Try to get chat cache from Redis
+			chatCache, err := ph.service.GetChatCacheForFiles(ctx, kb.UID, fileUIDs)
+			if err != nil {
+				logger.Warn("Failed to retrieve chat cache from Redis", zap.Error(err))
+			} else if chatCache != nil {
+				// Chat cache or file references found! Use for instant chat
+				if chatCache.CachedContextEnabled {
+					logger.Info("Using cached context for instant response",
+						zap.String("cacheName", chatCache.CacheName),
+						zap.Int("fileCount", chatCache.FileCount),
+						zap.Time("expireTime", chatCache.ExpireTime))
+				} else {
+					logger.Info("Using stored file content for instant response (uncached files)",
+						zap.Int("fileCount", len(chatCache.FileContents)))
+				}
+
+				answer, err := ph.service.ChatWithCache(ctx, chatCache, req.GetQuestion())
+				if err != nil {
+					logger.Error("Chat response failed, falling back to traditional RAG", zap.Error(err))
+					// Fall through to traditional RAG path below
+				} else {
+					// Success! Return answer from cache or file content
+					logger.Info("Successfully generated response using chat metadata",
+						zap.Bool("cached", chatCache.CachedContextEnabled),
+						zap.String("prompt", req.GetQuestion()),
+						zap.Int("answerLength", len(answer)))
+
+					return &artifactPb.QuestionAnsweringResponse{
+						Answer:        answer,
+						SimilarChunks: []*artifactPb.SimilarityChunk{}, // Empty - no vector search performed
+					}, nil
+				}
+			} else {
+				logger.Info("No active chat cache or file references found, using traditional RAG",
+					zap.Int("fileCount", len(fileUIDs)))
+			}
+		}
+	}
+
+	// ===== EXISTING: Traditional RAG path (vector search + pipeline) =====
+	logger.Info("Using traditional RAG (vector search + LLM pipeline)")
+
 	// retrieve the chunks based on the similarity
 	scReq := &artifactPb.SimilarityChunksSearchRequest{
 		TextPrompt:  req.GetQuestion(),
@@ -79,11 +147,11 @@ func (ph *PublicHandler) QuestionAnswering(
 		requestMetadata = md
 	}
 
-	// Embed question using service
+	// Embed prompt using service
 	textVector, err := ph.service.EmbedTexts(ctx, []string{req.GetQuestion()}, 32, requestMetadata)
 	if err != nil {
-		logger.Error("failed to vectorize question", zap.Error(err))
-		return nil, fmt.Errorf("failed to vectorize question. err: %w", err)
+		logger.Error("failed to vectorize prompt", zap.Error(err))
+		return nil, fmt.Errorf("failed to vectorize prompt. err: %w", err)
 	}
 
 	simChunksScores, err := ph.service.SimilarityChunksSearch(ctx, ownerUID, scReq, textVector)
@@ -157,10 +225,12 @@ func (ph *PublicHandler) QuestionAnswering(
 	for _, simChunk := range simChunks {
 		chunksForQA = append(chunksForQA, simChunk.TextContent)
 	}
-	answer, err := pipeline.QuestionAnsweringPipe(ctx, ph.service.PipelinePublicClient(), req.Question, chunksForQA)
+
+	answer, err := pipeline.ChatPipe(ctx, ph.service.PipelinePublicClient(), req.Question, chunksForQA)
 	if err != nil {
-		logger.Error("failed to get question answering response", zap.Error(err))
-		return nil, fmt.Errorf("failed to get question answering response. err: %w", err)
+		logger.Error("failed to get chat response", zap.Error(err))
+		return nil, fmt.Errorf("failed to get chat response. err: %w", err)
 	}
+
 	return &artifactPb.QuestionAnsweringResponse{SimilarChunks: simChunks, Answer: answer}, nil
 }

@@ -13,6 +13,7 @@ import * as restPublicWithJwt from './rest-public-with-jwt.js';
 import { CheckFileReprocessing } from './rest-public-file-reprocess.js';
 import { CheckKnowledgeBaseDeletion } from './rest-public-kb-delete.js';
 import { CheckKnowledgeBaseEndToEndFileProcessing } from './rest-public-kb-e2e-file-process.js';
+import { CheckChatCacheImplementation } from './rest-public-chat-cache.js';
 
 export let options = {
   setupTimeout: '30s',
@@ -71,6 +72,7 @@ export default function (data) {
   CheckKnowledgeBaseDeletion(data);
   CheckFileReprocessing(data);
   CheckKnowledgeBaseEndToEndFileProcessing(data);
+  CheckChatCacheImplementation(data);
 
   restPublic.CheckCreateCatalog(data);
   restPublic.CheckListCatalogs(data);

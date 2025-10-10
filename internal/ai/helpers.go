@@ -1,7 +1,23 @@
 package ai
 
 import (
+	"fmt"
+
+	"github.com/pkoukk/tiktoken-go"
+
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+)
+
+// MinCacheTokens is the minimum token count for cache creation
+// This is a common requirement across AI providers (e.g., Gemini requires 1024 tokens)
+const MinCacheTokens = 1024
+
+// Cache system instruction types
+const (
+	// SystemInstructionRAG indicates RAG-optimized system instruction for content/summarization generation
+	SystemInstructionRAG = "rag"
+	// SystemInstructionChat indicates chat-optimized system instruction for chat
+	SystemInstructionChat = "chat"
 )
 
 // SupportsFileType returns true if AI providers can directly process this file type
@@ -149,4 +165,23 @@ func FileTypeToMIME(fileType artifactpb.FileType) string {
 	default:
 		return "application/octet-stream"
 	}
+}
+
+// EstimateTotalTokens estimates the total token count across all files
+// Returns (estimatedTokens, error)
+// Note: This is an approximation using GPT-4 tokenizer (actual AI provider may count differently)
+func EstimateTotalTokens(files []FileContent) (int, error) {
+	tkm, err := tiktoken.EncodingForModel("gpt-4")
+	if err != nil {
+		return 0, fmt.Errorf("failed to get token encoding: %w", err)
+	}
+
+	totalTokens := 0
+	for _, file := range files {
+		// Estimate tokens from content size
+		tokens := len(tkm.Encode(string(file.Content), nil, nil))
+		totalTokens += tokens
+	}
+
+	return totalTokens, nil
 }

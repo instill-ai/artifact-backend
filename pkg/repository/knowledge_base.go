@@ -135,7 +135,7 @@ func (r *repository) CreateKnowledgeBase(ctx context.Context, kb KnowledgeBaseMo
 			return err
 		}
 		if KbIDExists {
-			return fmt.Errorf("knowledge base name already exists. err: %w", errorsx.ErrInvalidArgument)
+			return fmt.Errorf("knowledge base name %q already exists: %w", kb.KbID, errorsx.ErrAlreadyExists)
 		}
 
 		// Create a new KnowledgeBaseModel record

@@ -168,13 +168,10 @@ func TestCreateContentPart(t *testing.T) {
 	}
 
 	t.Run("valid input with content type", func(t *testing.T) {
-		input := &ConversionInput{
-			Content:     []byte("test content"),
-			ContentType: "application/pdf",
-			Filename:    "test.pdf",
-		}
+		content := []byte("test content")
+		contentType := "application/pdf"
 
-		part, err := provider.createContentPart(input)
+		part, err := provider.createContentPart(content, contentType)
 		c.Assert(err, qt.IsNil)
 		c.Assert(part, qt.Not(qt.IsNil))
 		c.Assert(part.InlineData, qt.Not(qt.IsNil))
@@ -183,13 +180,10 @@ func TestCreateContentPart(t *testing.T) {
 	})
 
 	t.Run("missing content type", func(t *testing.T) {
-		input := &ConversionInput{
-			Content:     []byte("test content"),
-			ContentType: "",
-			Filename:    "test.pdf",
-		}
+		content := []byte("test content")
+		contentType := ""
 
-		part, err := provider.createContentPart(input)
+		part, err := provider.createContentPart(content, contentType)
 		c.Assert(err, qt.Not(qt.IsNil))
 		msg := errorsx.Message(err)
 		c.Assert(msg, qt.Contains, "Unsupported file type")
@@ -197,39 +191,30 @@ func TestCreateContentPart(t *testing.T) {
 	})
 
 	t.Run("image content", func(t *testing.T) {
-		input := &ConversionInput{
-			Content:     []byte{0x89, 0x50, 0x4E, 0x47}, // PNG header
-			ContentType: "image/png",
-			Filename:    "image.png",
-		}
+		content := []byte{0x89, 0x50, 0x4E, 0x47} // PNG header
+		contentType := "image/png"
 
-		part, err := provider.createContentPart(input)
+		part, err := provider.createContentPart(content, contentType)
 		c.Assert(err, qt.IsNil)
 		c.Assert(part, qt.Not(qt.IsNil))
 		c.Assert(part.InlineData.MIMEType, qt.Equals, "image/png")
 	})
 
 	t.Run("video content", func(t *testing.T) {
-		input := &ConversionInput{
-			Content:     []byte("video data"),
-			ContentType: "video/mp4",
-			Filename:    "video.mp4",
-		}
+		content := []byte("video data")
+		contentType := "video/mp4"
 
-		part, err := provider.createContentPart(input)
+		part, err := provider.createContentPart(content, contentType)
 		c.Assert(err, qt.IsNil)
 		c.Assert(part, qt.Not(qt.IsNil))
 		c.Assert(part.InlineData.MIMEType, qt.Equals, "video/mp4")
 	})
 
 	t.Run("audio content", func(t *testing.T) {
-		input := &ConversionInput{
-			Content:     []byte("audio data"),
-			ContentType: "audio/mpeg",
-			Filename:    "audio.mp3",
-		}
+		content := []byte("audio data")
+		contentType := "audio/mpeg"
 
-		part, err := provider.createContentPart(input)
+		part, err := provider.createContentPart(content, contentType)
 		c.Assert(err, qt.IsNil)
 		c.Assert(part, qt.Not(qt.IsNil))
 		c.Assert(part.InlineData.MIMEType, qt.Equals, "audio/mpeg")
@@ -259,23 +244,26 @@ func TestConversionInputValidation(t *testing.T) {
 		client: nil,
 	}
 
-	t.Run("nil input", func(t *testing.T) {
-		_, err := provider.convertToMarkdownWithoutCache(context.Background(), nil)
-		c.Assert(err, qt.Not(qt.IsNil))
-		msg := errorsx.Message(err)
-		c.Assert(msg, qt.Contains, "Invalid request")
-	})
-
 	t.Run("empty content", func(t *testing.T) {
-		input := &ConversionInput{
-			Content:     []byte{},
-			ContentType: "application/pdf",
-			Filename:    "test.pdf",
-		}
-		_, err := provider.convertToMarkdownWithoutCache(context.Background(), input)
+		content := []byte{}
+		contentType := "application/pdf"
+		prompt := "convert"
+
+		_, err := provider.convertToMarkdownWithoutCache(context.Background(), content, contentType, prompt)
 		c.Assert(err, qt.Not(qt.IsNil))
 		msg := errorsx.Message(err)
 		c.Assert(msg, qt.Contains, "file appears to be empty")
+	})
+
+	t.Run("empty content type", func(t *testing.T) {
+		content := []byte("test")
+		contentType := ""
+		prompt := "convert"
+
+		_, err := provider.convertToMarkdownWithoutCache(context.Background(), content, contentType, prompt)
+		c.Assert(err, qt.Not(qt.IsNil))
+		msg := errorsx.Message(err)
+		c.Assert(msg, qt.Contains, "Unsupported file type")
 	})
 }
 

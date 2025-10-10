@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gofrs/uuid"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -270,9 +269,9 @@ func (r *repository) GetFilesTotalTokens(ctx context.Context, sources map[types.
 
 	// Query to get total tokens grouped by source_table and source_uid
 	var tokenSums []struct {
-		SourceTable string    `gorm:"column:source_table"`
-		SourceUID   uuid.UUID `gorm:"column:source_uid"`
-		TotalTokens int       `gorm:"column:total_tokens"`
+		SourceTable types.SourceTableType `gorm:"column:source_table"`
+		SourceUID   types.SourceUIDType   `gorm:"column:source_uid"`
+		TotalTokens int                   `gorm:"column:total_tokens"`
 	}
 
 	err := r.db.WithContext(ctx).Model(&TextChunkModel{}).

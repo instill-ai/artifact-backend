@@ -12,8 +12,8 @@ import (
 
 	"github.com/gofrs/uuid"
 
-	"github.com/instill-ai/artifact-backend/pkg/types"
 	"github.com/gogo/status"
+	"github.com/instill-ai/artifact-backend/pkg/types"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -27,7 +27,7 @@ import (
 )
 
 // MaxUploadFileSizeMB returns the maximum file size for artifact uploads, in
-// megabbytes. For now, this is a constant (512 Mb).
+// megabytes. For now, this is a constant (512 Mb).
 const MaxUploadFileSizeMB int64 = 512
 
 const blobURLPath = "/v1alpha/blob-urls"
@@ -42,7 +42,7 @@ var (
 func (s *service) GetUploadURL(
 	ctx context.Context,
 	req *artifactpb.GetObjectUploadURLRequest,
-	namespaceUID uuid.UUID,
+	namespaceUID types.NamespaceUIDType,
 	namespaceID string,
 	creatorUID types.CreatorUIDType,
 ) (*artifactpb.GetObjectUploadURLResponse, error) {
@@ -134,7 +134,7 @@ func (s *service) GetUploadURL(
 func (s *service) GetDownloadURL(
 	ctx context.Context,
 	req *artifactpb.GetObjectDownloadURLRequest,
-	namespaceUID uuid.UUID,
+	namespaceUID types.NamespaceUIDType,
 	namespaceID string,
 ) (*artifactpb.GetObjectDownloadURLResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
@@ -144,7 +144,7 @@ func (s *service) GetDownloadURL(
 		return nil, status.Errorf(codes.InvalidArgument, "failed to parse object uid: %v", err)
 	}
 	// Get the object from database
-	object, err := s.repository.GetObjectByUID(ctx, objectUID)
+	object, err := s.repository.GetObjectByUID(ctx, types.ObjectUIDType(objectUID))
 	if err != nil {
 		logger.Error("failed to get object", zap.Error(err))
 		return nil, status.Errorf(codes.NotFound, "object not found: %v", err)

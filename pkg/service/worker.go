@@ -12,8 +12,8 @@ import (
 // This interface allows the service to delegate to the worker without creating
 // a circular dependency (service → worker → service).
 type Worker interface {
-	// ProcessFile orchestrates the file processing workflow
-	ProcessFile(ctx context.Context, kbUID, fileUID, userUID, requesterUID types.RequesterUIDType) error
+	// ProcessFile orchestrates the file processing workflow for one or more files
+	ProcessFile(ctx context.Context, kbUID types.KBUIDType, fileUIDs []types.FileUIDType, userUID, requesterUID types.RequesterUIDType) error
 
 	// CleanupFile orchestrates the file cleanup workflow
 	CleanupFile(ctx context.Context, fileUID types.FileUIDType, userUID, requesterUID types.RequesterUIDType, workflowID string, includeOriginalFile bool) error

@@ -46,8 +46,8 @@ import (
 // - UpdateChunkingMetadataActivity - Updates text chunking statistics and pipeline info
 //
 // Child Workflow Activities (ProcessContentWorkflow):
-// - ConvertFileTypeActivity - Converts file formats (GIF→PNG, MKV→MP4, DOC→PDF, etc.)
-// - CacheContextActivity - Creates AI cache for efficient processing
+// - StandardizeFileTypeActivity - Standardizes file formats to AI-native types (GIF→PNG, MKV→MP4, DOC→PDF, etc.)
+// - CacheFileContextActivity - Creates AI cache for efficient file processing
 // - DeleteCacheActivity - Cleans up AI cache
 // - DeleteTemporaryConvertedFileActivity - Cleans up temporary converted files from MinIO
 // - ConvertToFileActivity - Converts files to Markdown using AI or pipelines
@@ -120,12 +120,13 @@ type GetFileMetadataActivityParam struct {
 
 // GetFileMetadataActivityResult contains file and KB configuration
 type GetFileMetadataActivityResult struct {
-	File                 *repository.KnowledgeBaseFileModel // File metadata from database
-	ConvertingPipelines  []pipeline.PipelineRelease         // Pipelines for file conversion
-	SummarizingPipelines []pipeline.PipelineRelease         // Pipelines for summarization
-	ChunkingPipelines    []pipeline.PipelineRelease         // Pipelines for chunking
-	EmbeddingPipelines   []pipeline.PipelineRelease         // Pipelines for embedding generation
-	ExternalMetadata     *structpb.Struct                   // External metadata from request
+	File                    *repository.KnowledgeBaseFileModel // File metadata from database
+	GenerateContentPipeline pipeline.PipelineRelease           // Pipeline for content generation
+	GenerateSummaryPipeline pipeline.PipelineRelease           // Pipeline for summary generation
+	ChunkMarkdownPipeline   pipeline.PipelineRelease           // Pipeline for chunking markdown (the converted documents)
+	ChunkTextPipeline       pipeline.PipelineRelease           // Pipeline for chunking plain text
+	EmbedPipeline           pipeline.PipelineRelease           // Pipeline for embedding generation
+	ExternalMetadata        *structpb.Struct                   // External metadata from request
 }
 
 // GetFileContentActivityParam for retrieving file content from MinIO
@@ -218,10 +219,16 @@ func (w *Worker) GetFileMetadataActivity(ctx context.Context, param *GetFileMeta
 		convertingPipelines = pipeline.DefaultConversionPipelines
 	}
 
+	// Use first configured pipeline or empty
+	var generateContentPipeline pipeline.PipelineRelease
+	if len(convertingPipelines) > 0 {
+		generateContentPipeline = convertingPipelines[0]
+	}
+
 	return &GetFileMetadataActivityResult{
-		File:                &file,
-		ConvertingPipelines: convertingPipelines,
-		ExternalMetadata:    file.ExternalMetadataUnmarshal,
+		File:                    &file,
+		GenerateContentPipeline: generateContentPipeline,
+		ExternalMetadata:        file.ExternalMetadataUnmarshal,
 	}, nil
 }
 
@@ -517,30 +524,32 @@ func (w *Worker) UpdateConversionMetadataActivity(ctx context.Context, param *Up
 
 // GetConvertedFileForChunkingActivityParam retrieves converted file for text chunking
 type GetConvertedFileForChunkingActivityParam struct {
-	FileUID types.FileUIDType // File unique identifier
-	KBUID   types.KBUIDType   // Knowledge base unique identifier
+	FileUID           types.FileUIDType        // File unique identifier
+	KBUID             types.KBUIDType          // Knowledge base unique identifier
+	ChunkTextPipeline pipeline.PipelineRelease // Pipeline for text chunking
+	EmbedTextPipeline pipeline.PipelineRelease // Pipeline for text embedding
 }
 
 // GetConvertedFileForChunkingActivityResult contains file metadata and content
 type GetConvertedFileForChunkingActivityResult struct {
-	Content            string                     // Converted markdown content
-	ChunkingPipelines  []pipeline.PipelineRelease // Pipelines for text chunking
-	EmbeddingPipelines []pipeline.PipelineRelease // Pipelines for embedding generation
-	ExternalMetadata   *structpb.Struct           // External metadata from request
+	Content           string                   // Converted markdown content
+	ChunkTextPipeline pipeline.PipelineRelease // Pipeline for text chunking
+	EmbedTextPipeline pipeline.PipelineRelease // Pipeline for text embedding generation
+	ExternalMetadata  *structpb.Struct         // External metadata from request
 }
 
 // ChunkContentActivityParam for external text chunking pipeline call
 type ChunkContentActivityParam struct {
-	FileUID   types.FileUIDType          // File unique identifier
-	KBUID     types.KBUIDType            // Knowledge base unique identifier
-	Content   string                     // Content to chunk into text chunks
-	Pipelines []pipeline.PipelineRelease // Pipelines for text chunking
-	Metadata  *structpb.Struct           // Request metadata for authentication
+	FileUID           types.FileUIDType        // File unique identifier
+	KBUID             types.KBUIDType          // Knowledge base unique identifier
+	Content           string                   // Content to chunk into text chunks
+	ChunkTextPipeline pipeline.PipelineRelease // Pipeline for text chunking
+	Metadata          *structpb.Struct         // Request metadata for authentication
 }
 
 // ChunkContentActivityResult contains chunked content
 type ChunkContentActivityResult struct {
-	Chunks          []pipeline.TextChunk     // Generated text chunks
+	TextChunks      []pipeline.TextChunk     // Generated text chunks
 	PipelineRelease pipeline.PipelineRelease // Pipeline used for text chunking
 }
 
@@ -558,10 +567,10 @@ type SaveChunksToDBActivityResult struct {
 
 // UpdateChunkingMetadataActivityParam for updating metadata after text chunking
 type UpdateChunkingMetadataActivityParam struct {
-	FileUID          types.FileUIDType // File unique identifier
-	KBUID            types.KBUIDType   // Knowledge base unique identifier
-	ChunkingPipeline string            // Pipeline used for text chunking
-	TextChunkCount   uint32            // Number of text chunks created
+	FileUID        types.FileUIDType // File unique identifier
+	KBUID          types.KBUIDType   // Knowledge base unique identifier
+	Pipeline       string            // Pipeline used for text chunking
+	TextChunkCount uint32            // Number of text chunks created
 }
 
 // GetConvertedFileForChunkingActivity retrieves converted file content for text chunking
@@ -600,16 +609,12 @@ func (w *Worker) GetConvertedFileForChunkingActivity(ctx context.Context, param 
 		)
 	}
 
-	// TODO: Build chunking and embedding pipelines from KB configuration
-	// For now, these will be passed from the workflow
-	chunkingPipelines := make([]pipeline.PipelineRelease, 0)
-	embeddingPipelines := make([]pipeline.PipelineRelease, 0)
-
+	// Pass through pipeline from workflow parameter
 	return &GetConvertedFileForChunkingActivityResult{
-		Content:            string(content),
-		ChunkingPipelines:  chunkingPipelines,
-		EmbeddingPipelines: embeddingPipelines,
-		ExternalMetadata:   file.ExternalMetadataUnmarshal,
+		Content:           string(content),
+		ChunkTextPipeline: param.ChunkTextPipeline,
+		EmbedTextPipeline: param.EmbedTextPipeline,
+		ExternalMetadata:  file.ExternalMetadataUnmarshal,
 	}, nil
 }
 
@@ -632,8 +637,22 @@ func (w *Worker) ChunkContentActivity(ctx context.Context, param *ChunkContentAc
 		}
 	}
 
-	// Call the chunking pipeline
-	chunkingResult, err := pipeline.ChunkMarkdownPipe(authCtx, w.pipelineClient, param.Content)
+	// Use configured pipeline or fall back to default ChunkMarkdownPipeline
+	// Note: param.ChunkTextPipeline comes from KB configuration (currently always default)
+	var chunkingResult *pipeline.TextChunkResult
+	var err error
+
+	if param.ChunkTextPipeline.ID != "" {
+		// Use configured pipeline
+		w.log.Info("Using configured chunking pipeline",
+			zap.String("pipeline", param.ChunkTextPipeline.Name()))
+		chunkingResult, err = pipeline.ChunkMarkdownPipe(authCtx, w.pipelineClient, param.Content)
+	} else {
+		// Fall back to default
+		w.log.Info("Using default chunking pipeline")
+		chunkingResult, err = pipeline.ChunkMarkdownPipe(authCtx, w.pipelineClient, param.Content)
+	}
+
 	if err != nil {
 		return nil, temporal.NewApplicationErrorWithCause(
 			fmt.Sprintf("Content chunking failed: %s", errorsx.MessageOrErr(err)),
@@ -643,10 +662,10 @@ func (w *Worker) ChunkContentActivity(ctx context.Context, param *ChunkContentAc
 	}
 
 	w.log.Info("ChunkContentActivity: Chunking successful",
-		zap.Int("chunkCount", len(chunkingResult.Chunks)))
+		zap.Int("chunkCount", len(chunkingResult.TextChunks)))
 
 	return &ChunkContentActivityResult{
-		Chunks:          chunkingResult.Chunks,
+		TextChunks:      chunkingResult.TextChunks,
 		PipelineRelease: chunkingResult.PipelineRelease,
 	}, nil
 }
@@ -737,7 +756,7 @@ func (w *Worker) UpdateChunkingMetadataActivity(ctx context.Context, param *Upda
 		zap.String("fileUID", param.FileUID.String()))
 
 	mdUpdate := repository.ExtraMetaData{
-		ChunkingPipe: param.ChunkingPipeline,
+		ChunkingPipe: param.Pipeline,
 	}
 
 	err := w.repository.UpdateKnowledgeFileMetadata(ctx, param.FileUID, mdUpdate)
@@ -760,166 +779,11 @@ func (w *Worker) UpdateChunkingMetadataActivity(ctx context.Context, param *Upda
 
 // ===== SUMMARY ACTIVITIES =====
 
-// GenerateSummaryActivityParam for AI-based summarization
-type GenerateSummaryActivityParam struct {
-	FileUID     types.FileUIDType // File unique identifier
-	KBUID       types.KBUIDType   // Knowledge base unique identifier (unused, kept for consistency)
-	Bucket      string            // MinIO bucket containing the file
-	Destination string            // MinIO path to the file
-	FileName    string            // File name for identification
-	FileType    string            // File type for summarization
-	Metadata    *structpb.Struct  // Request metadata for authentication
-	CacheName   string            // Optional: AI cache name for efficient summary generation
-}
-
-// GenerateSummaryActivityResult contains the generated summary
-type GenerateSummaryActivityResult struct {
-	Summary       string // Generated summary text
-	Pipeline      string // Pipeline used for summary generation (empty if AI was used)
-	UsageMetadata any    // Token usage metadata from AI provider (nil if pipeline was used)
-}
-
 // SaveSummaryActivityParam saves summary to database
 type SaveSummaryActivityParam struct {
 	FileUID  types.FileUIDType // File unique identifier
 	Summary  string            // Summary text to save
 	Pipeline string            // Pipeline used for summary generation (empty if AI was used)
-}
-
-// GenerateSummaryActivity generates document summary using AI (with cache or pipeline fallback)
-func (w *Worker) GenerateSummaryActivity(ctx context.Context, param *GenerateSummaryActivityParam) (*GenerateSummaryActivityResult, error) {
-	w.log.Info("GenerateSummaryActivity: Generating summary",
-		zap.String("fileUID", param.FileUID.String()))
-
-	// Create authenticated context if metadata provided
-	authCtx := ctx
-	if param.Metadata != nil {
-		var err error
-		authCtx, err = createAuthenticatedContext(ctx, param.Metadata)
-		if err != nil {
-			return nil, temporal.NewApplicationErrorWithCause(
-				fmt.Sprintf("Failed to create authenticated context: %s", errorsx.MessageOrErr(err)),
-				generateSummaryActivityError,
-				err,
-			)
-		}
-	}
-
-	// Fetch content from MinIO
-	content, err := w.repository.GetFile(authCtx, param.Bucket, param.Destination)
-	if err != nil {
-		return nil, temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to retrieve file from storage: %s", errorsx.MessageOrErr(err)),
-			generateSummaryActivityError,
-			err,
-		)
-	}
-
-	// Sanitize content to ensure valid UTF-8
-	// This prevents gRPC marshaling errors when content contains invalid UTF-8 sequences
-	// (common with certain PDF conversions or binary data)
-	contentStr := sanitizeUTF8(content)
-
-	// Log content stats for debugging
-	w.log.Info("GenerateSummaryActivity: Content prepared",
-		zap.String("fileUID", param.FileUID.String()),
-		zap.Int("originalBytes", len(content)),
-		zap.Int("sanitizedBytes", len(contentStr)),
-		zap.Int("sanitizedRunes", len([]rune(contentStr))),
-		zap.Bool("isEmpty", len(strings.TrimSpace(contentStr)) == 0))
-
-	// Verify content is not empty after sanitization
-	if len(strings.TrimSpace(contentStr)) == 0 {
-		return nil, temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Content is empty after UTF-8 sanitization for file %s", param.FileUID.String()),
-			generateSummaryActivityError,
-			fmt.Errorf("empty content after sanitization"),
-		)
-	}
-
-	var summary string
-
-	// Build prompt with filename context by replacing [filename] placeholder
-	summaryPrompt := gemini.DefaultSummaryPrompt
-	if param.FileName != "" {
-		summaryPrompt = strings.ReplaceAll(gemini.DefaultSummaryPrompt, "[filename]", param.FileName)
-	}
-
-	// Determine file type for AI - parse from string parameter (used by both cached and non-cached routes)
-	fileType := artifactpb.FileType_FILE_TYPE_PDF // Default to PDF for summarization
-	if param.FileType != "" {
-		// Parse the file type string to enum value (e.g., "FILE_TYPE_TEXT" -> FileType_FILE_TYPE_TEXT)
-		if enumVal, ok := artifactpb.FileType_value[param.FileType]; ok {
-			fileType = artifactpb.FileType(enumVal)
-		}
-	}
-
-	// Try AI provider with cache first (if available, cache is provided, and file type is supported)
-	if w.aiProvider != nil && param.CacheName != "" && w.aiProvider.SupportsFileType(fileType) {
-		w.log.Info("GenerateSummaryActivity: Attempting AI summarization with cache",
-			zap.String("cacheName", param.CacheName),
-			zap.String("fileName", param.FileName),
-			zap.String("fileType", fileType.String()),
-			zap.String("provider", w.aiProvider.Name()))
-
-		conversion, err := w.aiProvider.ConvertToMarkdownWithCache(authCtx, param.CacheName, summaryPrompt)
-		if err != nil {
-			// Log the error but continue to try AI without cache
-			w.log.Warn("GenerateSummaryActivity: Cached AI summarization failed, will try without cache",
-				zap.Error(err))
-		} else {
-			w.log.Info("GenerateSummaryActivity: Cached AI summarization successful",
-				zap.Int("summaryLength", len(conversion.Markdown)),
-				zap.String("provider", conversion.Provider))
-
-			return &GenerateSummaryActivityResult{
-				Summary:       conversion.Markdown,
-				Pipeline:      "", // No pipeline used (AI direct)
-				UsageMetadata: conversion.UsageMetadata,
-			}, nil
-		}
-	}
-
-	// Try AI provider without cache (if AI provider is available and file type is supported)
-	if w.aiProvider != nil && w.aiProvider.SupportsFileType(fileType) {
-		w.log.Info("GenerateSummaryActivity: Attempting AI summarization without cache",
-			zap.String("provider", w.aiProvider.Name()),
-			zap.String("fileName", param.FileName),
-			zap.String("fileType", fileType.String()))
-
-		conversion, err := w.aiProvider.ConvertToMarkdown(authCtx, content, fileType, param.FileName, summaryPrompt)
-		if err != nil {
-			// Log the error but fall back to pipeline
-			w.log.Warn("GenerateSummaryActivity: AI summarization failed, falling back to pipeline",
-				zap.Error(err))
-		} else {
-			w.log.Info("GenerateSummaryActivity: AI summarization successful",
-				zap.Int("summaryLength", len(conversion.Markdown)),
-				zap.String("provider", conversion.Provider))
-
-			return &GenerateSummaryActivityResult{
-				Summary:       conversion.Markdown,
-				Pipeline:      "", // No pipeline used (AI direct)
-				UsageMetadata: conversion.UsageMetadata,
-			}, nil
-		}
-	}
-
-	// Fall back to pipeline-based summarization
-	w.log.Info("GenerateSummaryActivity: Using pipeline for summarization")
-	summary, err = pipeline.GenerateSummary(authCtx, w.pipelineClient, contentStr, param.FileType)
-	if err != nil {
-		return nil, temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Summary generation failed: %s", errorsx.MessageOrErr(err)),
-			generateSummaryActivityError,
-			err,
-		)
-	}
-
-	return &GenerateSummaryActivityResult{
-		Summary:  summary,
-		Pipeline: pipeline.GenerateSummaryPipeline.Name(),
-	}, nil
 }
 
 // SaveSummaryActivity saves summary to database
@@ -969,25 +833,22 @@ func (w *Worker) SaveSummaryActivity(ctx context.Context, param *SaveSummaryActi
 	return nil
 }
 
-// ===== CHILD WORKFLOW ACTIVITIES =====
-// Activities used by ProcessContentWorkflow and ProcessSummaryWorkflow
-
 // ===== FILE TYPE CONVERSION ACTIVITY =====
 
-// ConvertFileTypeActivityParam defines the parameters for ConvertFileTypeActivity
-type ConvertFileTypeActivityParam struct {
+// StandardizeFileTypeActivityParam defines the parameters for StandardizeFileTypeActivity
+type StandardizeFileTypeActivityParam struct {
 	FileUID     types.FileUIDType          // File unique identifier
 	KBUID       types.KBUIDType            // Knowledge base unique identifier
 	Bucket      string                     // MinIO bucket containing the file
 	Destination string                     // MinIO path to the file
 	FileType    artifactpb.FileType        // Original file type to convert from
 	Filename    string                     // Filename for identification
-	Pipelines   []pipeline.PipelineRelease // convert-file-type pipeline
+	Pipelines   []pipeline.PipelineRelease // indexing-convert-file-type pipeline
 	Metadata    *structpb.Struct           // Request metadata for authentication
 }
 
-// ConvertFileTypeActivityResult defines the result of ConvertFileTypeActivity
-type ConvertFileTypeActivityResult struct {
+// StandardizeFileTypeActivityResult defines the result of StandardizeFileTypeActivity
+type StandardizeFileTypeActivityResult struct {
 	ConvertedDestination string                   // MinIO path to converted file (empty if no conversion)
 	ConvertedBucket      string                   // MinIO bucket for converted file (empty if no conversion)
 	ConvertedType        artifactpb.FileType      // New file type after conversion
@@ -996,19 +857,19 @@ type ConvertFileTypeActivityResult struct {
 	PipelineRelease      pipeline.PipelineRelease // Pipeline used for conversion
 }
 
-// ConvertFileTypeActivity converts non-AI-native file types to AI-supported formats
+// StandardizeFileTypeActivity standardizes non-AI-native file types to AI-supported formats
 // Following format mappings defined in the AI component
-func (w *Worker) ConvertFileTypeActivity(ctx context.Context, param *ConvertFileTypeActivityParam) (*ConvertFileTypeActivityResult, error) {
-	w.log.Info("ConvertFileTypeActivity: Checking if file needs conversion",
+func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *StandardizeFileTypeActivityParam) (*StandardizeFileTypeActivityResult, error) {
+	w.log.Info("StandardizeFileTypeActivity: Checking if file needs standardization",
 		zap.String("fileType", param.FileType.String()),
 		zap.String("filename", param.Filename))
 
 	// Check if file needs conversion
 	needsConversion, targetFormat := needsFileConversion(param.FileType)
 	if !needsConversion {
-		w.log.Info("ConvertFileTypeActivity: File type is AI-native, no conversion needed",
+		w.log.Info("StandardizeFileTypeActivity: File type is AI-native, no standardization needed",
 			zap.String("fileType", param.FileType.String()))
-		return &ConvertFileTypeActivityResult{
+		return &StandardizeFileTypeActivityResult{
 			ConvertedDestination: "", // No conversion, use original file
 			ConvertedBucket:      "",
 			ConvertedType:        param.FileType,
@@ -1017,7 +878,7 @@ func (w *Worker) ConvertFileTypeActivity(ctx context.Context, param *ConvertFile
 		}, nil
 	}
 
-	w.log.Info("ConvertFileTypeActivity: File type needs conversion",
+	w.log.Info("StandardizeFileTypeActivity: File type needs standardization",
 		zap.String("originalType", param.FileType.String()),
 		zap.String("targetFormat", targetFormat))
 
@@ -1029,7 +890,7 @@ func (w *Worker) ConvertFileTypeActivity(ctx context.Context, param *ConvertFile
 		if err != nil {
 			return nil, temporal.NewApplicationErrorWithCause(
 				fmt.Sprintf("Failed to create authenticated context: %s", errorsx.MessageOrErr(err)),
-				convertFileTypeActivityError,
+				standardizeFileTypeActivityError,
 				err,
 			)
 		}
@@ -1040,39 +901,39 @@ func (w *Worker) ConvertFileTypeActivity(ctx context.Context, param *ConvertFile
 	if err != nil {
 		return nil, temporal.NewApplicationErrorWithCause(
 			fmt.Sprintf("Failed to retrieve file from storage: %s", errorsx.MessageOrErr(err)),
-			convertFileTypeActivityError,
+			standardizeFileTypeActivityError,
 			err,
 		)
 	}
 
-	w.log.Info("ConvertFileTypeActivity: File content retrieved from MinIO",
+	w.log.Info("StandardizeFileTypeActivity: File content retrieved from MinIO",
 		zap.Int("contentSize", len(content)))
 
 	// Determine which pipeline to use and prepare input
 	var convertedContent []byte
 	var usedPipeline pipeline.PipelineRelease
 
-	// Try convert-file-type pipeline
+	// Try indexing-convert-file-type pipeline
 	if len(param.Pipelines) > 0 {
 		convertedContent, usedPipeline, err = w.convertUsingPipeline(authCtx, content, param.FileType, targetFormat, param.Pipelines)
 		if err != nil {
-			w.log.Warn("ConvertFileTypeActivity: Pipeline conversion failed",
+			w.log.Warn("StandardizeFileTypeActivity: Pipeline standardization failed",
 				zap.Error(err),
 				zap.String("pipeline", usedPipeline.Name()))
 			return nil, temporal.NewApplicationErrorWithCause(
 				fmt.Sprintf("Failed to convert file: %s", errorsx.MessageOrErr(err)),
-				convertFileTypeActivityError,
+				standardizeFileTypeActivityError,
 				err,
 			)
 		}
 	} else {
 		return nil, temporal.NewApplicationError(
 			"No conversion pipeline available",
-			convertFileTypeActivityError,
+			standardizeFileTypeActivityError,
 		)
 	}
 
-	w.log.Info("ConvertFileTypeActivity: File conversion successful",
+	w.log.Info("StandardizeFileTypeActivity: File standardization successful",
 		zap.String("originalType", param.FileType.String()),
 		zap.String("convertedType", targetFormat),
 		zap.Int("originalSize", len(content)),
@@ -1099,17 +960,17 @@ func (w *Worker) ConvertFileTypeActivity(ctx context.Context, param *ConvertFile
 	if err != nil {
 		return nil, temporal.NewApplicationErrorWithCause(
 			fmt.Sprintf("Failed to upload converted file to MinIO: %s", errorsx.MessageOrErr(err)),
-			convertFileTypeActivityError,
+			standardizeFileTypeActivityError,
 			err,
 		)
 	}
 
-	w.log.Info("ConvertFileTypeActivity: Converted file uploaded to MinIO",
+	w.log.Info("StandardizeFileTypeActivity: Standardized file uploaded to MinIO",
 		zap.String("destination", convertedDestination),
 		zap.String("bucket", repository.BlobBucketName),
 		zap.String("mimeType", mimeType))
 
-	return &ConvertFileTypeActivityResult{
+	return &StandardizeFileTypeActivityResult{
 		ConvertedDestination: convertedDestination,
 		ConvertedBucket:      repository.BlobBucketName,
 		ConvertedType:        convertedFileType,
@@ -1119,10 +980,10 @@ func (w *Worker) ConvertFileTypeActivity(ctx context.Context, param *ConvertFile
 	}, nil
 }
 
-// ===== CACHE CONTEXT ACTIVITY =====
+// ===== CACHE FILE CONTEXT ACTIVITY =====
 
-// CacheContextActivityParam defines the parameters for CacheContextActivity
-type CacheContextActivityParam struct {
+// CacheFileContextActivityParam defines the parameters for CacheFileContextActivity
+type CacheFileContextActivityParam struct {
 	FileUID     types.FileUIDType   // File unique identifier
 	KBUID       types.KBUIDType     // Knowledge base unique identifier
 	Bucket      string              // MinIO bucket (original or converted file)
@@ -1132,39 +993,39 @@ type CacheContextActivityParam struct {
 	Metadata    *structpb.Struct    // Request metadata for authentication
 }
 
-// CacheContextActivityResult defines the result of CacheContextActivity
-type CacheContextActivityResult struct {
-	CacheName     string    // AI cache name
-	Model         string    // Model used for cache
-	CreateTime    time.Time // When cache was created
-	ExpireTime    time.Time // When cache will expire
-	CacheEnabled  bool      // Flag indicating if cache was created (false means caching is disabled)
-	UsageMetadata any       // Token usage metadata from AI provider (nil if cache was not created)
+// CacheFileContextActivityResult defines the result of CacheFileContextActivity
+type CacheFileContextActivityResult struct {
+	CacheName            string    // AI cache name
+	Model                string    // Model used for cache
+	CreateTime           time.Time // When cache was created
+	ExpireTime           time.Time // When cache will expire
+	CachedContextEnabled bool      // Flag indicating if cache was created (false means caching is disabled)
+	UsageMetadata        any       // Token usage metadata from AI provider (nil if cache was not created)
 }
 
-// CacheContextActivity creates a cached context for the input file
+// CacheFileContextActivity creates a cached context for the input file
 // This enables efficient subsequent operations like conversion, analysis, etc.
 // Supports: Documents (PDF, DOCX, DOC, PPTX, PPT), Images, Audio, Video
-func (w *Worker) CacheContextActivity(ctx context.Context, param *CacheContextActivityParam) (*CacheContextActivityResult, error) {
-	w.log.Info("CacheContextActivity: Creating cache for input content",
+func (w *Worker) CacheFileContextActivity(ctx context.Context, param *CacheFileContextActivityParam) (*CacheFileContextActivityResult, error) {
+	w.log.Info("CacheFileContextActivity: Creating cache for input content",
 		zap.String("fileUID", param.FileUID.String()),
 		zap.String("fileType", param.FileType.String()),
 		zap.String("destination", param.Destination))
 
 	// Check if AI provider is available
 	if w.aiProvider == nil {
-		w.log.Info("CacheContextActivity: AI provider not available, skipping cache creation")
-		return &CacheContextActivityResult{
-			CacheEnabled: false,
+		w.log.Info("CacheFileContextActivity: AI provider not available, skipping cache creation")
+		return &CacheFileContextActivityResult{
+			CachedContextEnabled: false,
 		}, nil
 	}
 
 	// Check if file type is supported for caching
 	if !w.aiProvider.SupportsFileType(param.FileType) {
-		w.log.Info("CacheContextActivity: File type not supported for caching",
+		w.log.Info("CacheFileContextActivity: File type not supported for caching",
 			zap.String("fileType", param.FileType.String()))
-		return &CacheContextActivityResult{
-			CacheEnabled: false,
+		return &CacheFileContextActivityResult{
+			CachedContextEnabled: false,
 		}, nil
 	}
 
@@ -1174,7 +1035,7 @@ func (w *Worker) CacheContextActivity(ctx context.Context, param *CacheContextAc
 		var err error
 		authCtx, err = createAuthenticatedContext(ctx, param.Metadata)
 		if err != nil {
-			w.log.Warn("CacheContextActivity: Failed to create authenticated context, proceeding without auth",
+			w.log.Warn("CacheFileContextActivity: Failed to create authenticated context, proceeding without auth",
 				zap.Error(err))
 		}
 	}
@@ -1189,7 +1050,7 @@ func (w *Worker) CacheContextActivity(ctx context.Context, param *CacheContextAc
 		)
 	}
 
-	w.log.Info("CacheContextActivity: File content retrieved from MinIO",
+	w.log.Info("CacheFileContextActivity: File content retrieved from MinIO",
 		zap.String("bucket", param.Bucket),
 		zap.String("destination", param.Destination),
 		zap.Int("contentSize", len(content)))
@@ -1199,7 +1060,14 @@ func (w *Worker) CacheContextActivity(ctx context.Context, param *CacheContextAc
 
 	// Create the cache using AI provider
 	// Note: Cache creation is optional - if it fails, we continue without cache
-	cacheOutput, err := w.aiProvider.CreateCache(authCtx, content, param.FileType, param.Filename, cacheTTL)
+	// Use RAG system instruction for conversion/summarization operations
+	cacheOutput, err := w.aiProvider.CreateCache(authCtx, []ai.FileContent{
+		{
+			Content:  content,
+			FileType: param.FileType,
+			Filename: param.Filename,
+		},
+	}, cacheTTL, ai.SystemInstructionRAG)
 	if err != nil {
 		// Log the error but don't fail the activity
 		// Common reasons for cache failure:
@@ -1207,23 +1075,23 @@ func (w *Worker) CacheContextActivity(ctx context.Context, param *CacheContextAc
 		// - Content too large (> maximum cache size)
 		// - API quota exceeded
 		// - Network issues
-		w.log.Warn("CacheContextActivity: Cache creation failed, continuing without cache",
+		w.log.Warn("CacheFileContextActivity: Cache creation failed, continuing without cache",
 			zap.Error(err),
 			zap.String("fileUID", param.FileUID.String()),
 			zap.String("fileType", param.FileType.String()))
 
-		return &CacheContextActivityResult{
-			CacheEnabled: false,
+		return &CacheFileContextActivityResult{
+			CachedContextEnabled: false,
 		}, nil
 	}
 
-	return &CacheContextActivityResult{
-		CacheName:     cacheOutput.CacheName,
-		Model:         cacheOutput.Model,
-		CreateTime:    cacheOutput.CreateTime,
-		ExpireTime:    cacheOutput.ExpireTime,
-		CacheEnabled:  true,
-		UsageMetadata: cacheOutput.UsageMetadata,
+	return &CacheFileContextActivityResult{
+		CacheName:            cacheOutput.CacheName,
+		Model:                cacheOutput.Model,
+		CreateTime:           cacheOutput.CreateTime,
+		ExpireTime:           cacheOutput.ExpireTime,
+		CachedContextEnabled: true,
+		UsageMetadata:        cacheOutput.UsageMetadata,
 	}, nil
 }
 
@@ -1260,15 +1128,694 @@ func (w *Worker) DeleteCacheActivity(ctx context.Context, param *DeleteCacheActi
 	return nil
 }
 
+// CacheChatContextActivityParam defines the parameters for CacheChatContextActivity
+type CacheChatContextActivityParam struct {
+	FileUIDs []types.FileUIDType // File unique identifiers to cache together
+	KBUID    types.KBUIDType     // Knowledge base unique identifier
+	Metadata *structpb.Struct    // Request metadata for authentication
+}
+
+// CacheChatContextActivityResult defines the output from CacheChatContextActivity
+// This has the same structure as CacheFileContextActivityResult but is a separate type for clarity
+// Supports two modes:
+// 1. Cached mode: CachedContextEnabled=true, CacheName set, FileRefs empty (large files)
+// 2. Uncached mode: CachedContextEnabled=false, CacheName empty, FileRefs set (small files)
+type CacheChatContextActivityResult struct {
+	CacheName            string                      // AI cache name (empty if cache creation failed)
+	Model                string                      // Model used for cache
+	CreateTime           time.Time                   // When cache was created
+	ExpireTime           time.Time                   // When cache will expire
+	CachedContextEnabled bool                        // Flag indicating if cached context was created (false means caching is disabled)
+	UsageMetadata        any                         // Token usage metadata from AI provider (nil if cache was not created)
+	FileRefs             []repository.FileContentRef // File references for uncached small files
+}
+
+// CacheChatContextActivity creates a chat cached context for multiple files
+// This enables efficient multi-file operations like question answering across multiple documents
+// The chat cache contains all files together, optimized for cross-file queries
+func (w *Worker) CacheChatContextActivity(ctx context.Context, param *CacheChatContextActivityParam) (*CacheChatContextActivityResult, error) {
+	w.log.Info("CacheChatContextActivity: Creating chat cache for multiple files",
+		zap.Int("fileCount", len(param.FileUIDs)))
+
+	// Check if AI provider is available
+	if w.aiProvider == nil {
+		w.log.Info("CacheChatContextActivity: AI provider not available, skipping cache creation")
+		return &CacheChatContextActivityResult{
+			CachedContextEnabled: false,
+		}, nil
+	}
+
+	// Create authenticated context if metadata provided
+	authCtx := ctx
+	if param.Metadata != nil {
+		var err error
+		authCtx, err = createAuthenticatedContext(ctx, param.Metadata)
+		if err != nil {
+			w.log.Warn("CacheChatContextActivity: Failed to create authenticated context, proceeding without auth",
+				zap.Error(err))
+		}
+	}
+
+	// Fetch metadata and content for all files
+	fileContents := make([]ai.FileContent, 0, len(param.FileUIDs))
+
+	for _, fileUID := range param.FileUIDs {
+		// Get file metadata
+		kbFiles, err := w.repository.GetKnowledgeBaseFilesByFileUIDs(authCtx, []uuid.UUID{fileUID})
+		if err != nil || len(kbFiles) == 0 {
+			w.log.Warn("CacheChatContextActivity: Failed to get file metadata, skipping file",
+				zap.String("fileUID", fileUID.String()),
+				zap.Error(err))
+			continue
+		}
+		kbFile := kbFiles[0]
+
+		// Fetch file content from MinIO
+		bucket := repository.BucketFromDestination(kbFile.Destination)
+		content, err := w.repository.GetFile(authCtx, bucket, kbFile.Destination)
+		if err != nil {
+			w.log.Warn("CacheChatContextActivity: Failed to retrieve file content, skipping file",
+				zap.String("fileUID", fileUID.String()),
+				zap.String("destination", kbFile.Destination),
+				zap.Error(err))
+			continue
+		}
+
+		fileType := artifactpb.FileType(artifactpb.FileType_value[kbFile.Type])
+
+		// Check if file type is supported for caching
+		if !w.aiProvider.SupportsFileType(fileType) {
+			w.log.Info("CacheChatContextActivity: File type not supported for caching, skipping file",
+				zap.String("fileUID", fileUID.String()),
+				zap.String("fileType", fileType.String()))
+			continue
+		}
+
+		fileContents = append(fileContents, ai.FileContent{
+			FileUID:  fileUID,
+			Content:  content,
+			FileType: fileType,
+			Filename: kbFile.Name,
+		})
+
+		w.log.Info("CacheChatContextActivity: File content retrieved",
+			zap.String("fileUID", fileUID.String()),
+			zap.String("filename", kbFile.Name),
+			zap.Int("contentSize", len(content)))
+	}
+
+	// Check if we have any files to cache
+	if len(fileContents) == 0 {
+		w.log.Warn("CacheChatContextActivity: No valid files to cache")
+		return &CacheChatContextActivityResult{
+			CachedContextEnabled: false,
+		}, nil
+	}
+
+	// Set cache TTL (5 minutes default)
+	cacheTTL := 5 * time.Minute
+
+	// Proactively check if total content meets minimum cache size (1024 tokens)
+	// This avoids unnecessary API calls for small files
+	estimatedTokens, err := ai.EstimateTotalTokens(fileContents)
+	if err != nil {
+		w.log.Warn("CacheChatContextActivity: Failed to estimate tokens, will attempt cache creation anyway",
+			zap.Error(err))
+		estimatedTokens = ai.MinCacheTokens // Assume sufficient tokens if estimation fails
+	}
+
+	var cacheOutput *ai.CacheResult
+	var cacheErr error
+
+	if estimatedTokens < ai.MinCacheTokens {
+		// Content is too small for AI cache (expected, not an error)
+		// Skip cache creation and directly store content for fallback chat
+		w.log.Info("CacheChatContextActivity: Content too small for AI cache, storing directly in Redis",
+			zap.Int("estimatedTokens", estimatedTokens),
+			zap.Int("minRequired", ai.MinCacheTokens),
+			zap.Int("fileCount", len(fileContents)))
+	} else {
+		// Content is large enough, attempt cache creation
+		w.log.Info("CacheChatContextActivity: Attempting to create AI cache",
+			zap.Int("estimatedTokens", estimatedTokens),
+			zap.Int("fileCount", len(fileContents)))
+
+		// Use Chat system instruction for Q&A operations
+		cacheOutput, cacheErr = w.aiProvider.CreateCache(authCtx, fileContents, cacheTTL, ai.SystemInstructionChat)
+		if cacheErr != nil {
+			// Real cache creation error (network, quota, API error, etc.)
+			// This is unexpected since we verified token count
+			w.log.Error("CacheChatContextActivity: Cache creation failed unexpectedly",
+				zap.Error(cacheErr),
+				zap.Int("estimatedTokens", estimatedTokens),
+				zap.Int("fileCount", len(fileContents)))
+		} else {
+			// Cache created successfully!
+			w.log.Info("CacheChatContextActivity: Chat cache created successfully",
+				zap.String("cacheName", cacheOutput.CacheName),
+				zap.String("model", cacheOutput.Model),
+				zap.Int("fileCount", len(fileContents)))
+
+			return &CacheChatContextActivityResult{
+				CacheName:            cacheOutput.CacheName,
+				Model:                cacheOutput.Model,
+				CreateTime:           cacheOutput.CreateTime,
+				ExpireTime:           cacheOutput.ExpireTime,
+				CachedContextEnabled: true,
+				UsageMetadata:        cacheOutput.UsageMetadata,
+			}, nil
+		}
+	}
+
+	// If we reach here, either:
+	// 1. Content is too small (< 1024 tokens) - expected
+	// 2. Cache creation failed for other reasons - unexpected but we continue
+	// In both cases, store file content directly in Redis for fallback chat
+	fileRefs := make([]repository.FileContentRef, 0, len(fileContents))
+	for _, fc := range fileContents {
+		// Get file metadata for type information
+		kbFiles, err := w.repository.GetKnowledgeBaseFilesByFileUIDs(authCtx, []uuid.UUID{fc.FileUID})
+		if err != nil || len(kbFiles) == 0 {
+			continue
+		}
+		kbFile := kbFiles[0]
+
+		// Store actual content in Redis
+		fileRefs = append(fileRefs, repository.FileContentRef{
+			FileUID:  fc.FileUID,
+			Content:  fc.Content, // Store content directly
+			FileType: kbFile.Type,
+			Filename: kbFile.Name,
+		})
+	}
+
+	w.log.Info("CacheChatContextActivity: Stored file content in Redis for uncached chat",
+		zap.Int("fileCount", len(fileRefs)),
+		zap.Int("totalBytes", func() int {
+			total := 0
+			for _, ref := range fileRefs {
+				total += len(ref.Content)
+			}
+			return total
+		}()))
+
+	return &CacheChatContextActivityResult{
+		CachedContextEnabled: false,
+		FileRefs:             fileRefs,
+		Model:                "gemini-2.5-flash", // Default model for uncached chat
+		ExpireTime:           time.Now().Add(cacheTTL),
+	}, nil
+}
+
+// ===== CONTENT PROCESSING ACTIVITIES =====
+
+// ProcessContentActivityParam defines input for ProcessContentActivity
+type ProcessContentActivityParam struct {
+	FileUID          types.FileUIDType        // File unique identifier
+	KBUID            types.KBUIDType          // Knowledge base unique identifier
+	Bucket           string                   // MinIO bucket
+	Destination      string                   // MinIO path
+	FileType         artifactpb.FileType      // File type
+	Filename         string                   // File name
+	FallbackPipeline pipeline.PipelineRelease // Pipeline for conversion fallback
+	Metadata         *structpb.Struct         // Request metadata
+	CacheName        string                   // AI cache name
+}
+
+// ProcessContentActivityResult defines output from ProcessContentActivity
+type ProcessContentActivityResult struct {
+	Markdown           string                   // Converted markdown content
+	Length             []uint32                 // Length information
+	PositionData       *types.PositionData      // Position data for PDF
+	ConversionPipeline pipeline.PipelineRelease // Pipeline used
+	FormatConverted    bool                     // Whether format conversion occurred
+	OriginalType       artifactpb.FileType      // Original file type
+	ConvertedType      artifactpb.FileType      // Converted file type
+	UsageMetadata      any                      // AI token usage
+}
+
+// ProcessContentActivity handles the entire content processing pipeline:
+// 1. Cleanup old converted files
+// 2. Markdown conversion (AI or pipeline)
+// 3. Save to database and MinIO
+//
+// This is a composite activity that replaces ProcessContentWorkflow for simplified architecture.
+func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessContentActivityParam) (*ProcessContentActivityResult, error) {
+	logger := w.log.With(
+		zap.String("fileUID", param.FileUID.String()),
+		zap.String("fileType", param.FileType.String()),
+		zap.Bool("hasCache", param.CacheName != ""))
+
+	logger.Info("ProcessContentActivity started")
+
+	result := &ProcessContentActivityResult{
+		OriginalType: param.FileType,
+	}
+
+	// Phase 1: Cleanup old converted file
+	if err := w.CleanupOldConvertedFileActivity(ctx, &CleanupOldConvertedFileActivityParam{
+		FileUID: param.FileUID,
+	}); err != nil {
+		logger.Error("Failed to cleanup old converted file", zap.Error(err))
+		return nil, err
+	}
+
+	// Phase 2: Markdown conversion
+	// Note: Format conversion (DOCX→PDF, GIF→PNG, etc.) has already been done at the workflow level
+	// The param.Bucket, param.Destination, param.FileType already point to the converted file
+
+	// Create authenticated context if metadata provided
+	authCtx := ctx
+	if param.Metadata != nil {
+		var err error
+		authCtx, err = createAuthenticatedContext(ctx, param.Metadata)
+		if err != nil {
+			logger.Error("Failed to create authenticated context", zap.Error(err))
+			return nil, err
+		}
+	}
+
+	// Fetch file content from MinIO
+	content, err := w.repository.GetFile(authCtx, param.Bucket, param.Destination)
+	if err != nil {
+		logger.Error("Failed to retrieve file from storage", zap.Error(err))
+		return nil, err
+	}
+
+	logger.Info("File content retrieved",
+		zap.Int("contentSize", len(content)))
+
+	var markdown string
+	var positionData *types.PositionData
+	var length []uint32
+	var pipelineRelease pipeline.PipelineRelease
+	var usageMetadata any
+
+	// For TEXT/MARKDOWN files, no AI/pipeline conversion needed - content is already in usable format
+	if param.FileType == artifactpb.FileType_FILE_TYPE_TEXT || param.FileType == artifactpb.FileType_FILE_TYPE_MARKDOWN {
+		logger.Info("TEXT/MARKDOWN file - using content as-is (no conversion needed)")
+		markdown = string(content)
+		length = []uint32{uint32(len(markdown))}
+	} else {
+		// Check if AI provider supports this file type before attempting AI conversion
+		aiSupported := w.aiProvider != nil && w.aiProvider.SupportsFileType(param.FileType)
+		if !aiSupported && param.FileType != artifactpb.FileType_FILE_TYPE_PDF {
+			logger.Warn("File type not supported by AI provider and should have been converted",
+				zap.String("fileType", param.FileType.String()),
+				zap.String("hint", "StandardizeFileTypeActivity may have failed"))
+		}
+
+		// For other file types: Try AI provider with cache first (if available)
+		if aiSupported && param.CacheName != "" {
+			logger.Info("Attempting AI conversion with cache",
+				zap.String("cacheName", param.CacheName),
+				zap.String("provider", w.aiProvider.Name()))
+
+			conversion, err := w.aiProvider.ConvertToMarkdownWithCache(
+				authCtx,
+				param.CacheName,
+				gemini.DefaultGenerateContentPrompt,
+			)
+			if err != nil {
+				logger.Warn("Cached AI conversion failed, will try without cache", zap.Error(err))
+			} else {
+				logger.Info("Cached AI conversion successful",
+					zap.Int("markdownLength", len(conversion.Markdown)))
+
+				// Process AI conversion result
+				markdown, positionData, length = processAIConversionResult(
+					conversion.Markdown,
+					w.log,
+					map[string]any{"cacheName": param.CacheName},
+				)
+				usageMetadata = conversion.UsageMetadata
+			}
+		}
+
+		// Try AI provider without cache if cached attempt failed or wasn't available
+		if markdown == "" && aiSupported {
+			logger.Info("Attempting AI conversion without cache",
+				zap.String("fileType", param.FileType.String()),
+				zap.String("provider", w.aiProvider.Name()))
+
+			conversion, err := w.aiProvider.ConvertToMarkdownWithoutCache(
+				authCtx,
+				content,
+				param.FileType,
+				param.Filename,
+				gemini.DefaultGenerateContentPrompt,
+			)
+			if err != nil {
+				logger.Warn("AI conversion failed, will try pipeline fallback", zap.Error(err))
+			} else {
+				logger.Info("AI conversion successful",
+					zap.Int("markdownLength", len(conversion.Markdown)))
+
+				// Process AI conversion result
+				markdown, positionData, length = processAIConversionResult(
+					conversion.Markdown,
+					w.log,
+					map[string]any{"fileType": param.FileType.String()},
+				)
+				usageMetadata = conversion.UsageMetadata
+			}
+		}
+
+		// Pipeline fallback if AI failed or not available
+		if markdown == "" {
+			logger.Info("Using pipeline for markdown conversion")
+
+			// Use configured pipeline or empty to use defaults
+			var pipelines []pipeline.PipelineRelease
+			if param.FallbackPipeline.ID != "" {
+				pipelines = []pipeline.PipelineRelease{param.FallbackPipeline}
+			}
+
+			conversion, err := pipeline.GenerateContentPipe(authCtx, w.pipelineClient, w.repository, pipeline.GenerateContentParams{
+				Base64Content: base64.StdEncoding.EncodeToString(content),
+				Type:          param.FileType,
+				Pipelines:     pipelines,
+			})
+			if err != nil {
+				logger.Error("Pipeline conversion failed", zap.Error(err))
+				return nil, err
+			}
+
+			markdown = conversion.Markdown
+			positionData = conversion.PositionData
+			length = conversion.Length
+			pipelineRelease = conversion.PipelineRelease
+			logger.Info("Pipeline conversion successful",
+				zap.Int("markdownLength", len(markdown)))
+		}
+	}
+
+	result.Markdown = markdown
+	result.Length = length
+	result.PositionData = positionData
+	result.ConversionPipeline = pipelineRelease
+	result.UsageMetadata = usageMetadata
+	result.ConvertedType = param.FileType // Already converted at workflow level
+	result.FormatConverted = false        // Not converted here (already done at workflow level)
+
+	logger.Info("Markdown conversion completed", zap.Int("markdownLength", len(markdown)))
+
+	// Phase 3: Save converted file to DB and MinIO
+	// All file types now follow the same 3-step SAGA: create record → upload → update destination
+	convertedFileUID, _ := uuid.NewV4()
+
+	// Step 1: Create DB record with placeholder
+	_, err = w.CreateConvertedFileRecordActivity(ctx, &CreateConvertedFileRecordActivityParam{
+		KBUID:            param.KBUID,
+		FileUID:          param.FileUID,
+		ConvertedFileUID: convertedFileUID,
+		FileName:         "converted_" + param.Filename,
+		Destination:      fmt.Sprintf("placeholder-pending-upload-%s", convertedFileUID.String()),
+		PositionData:     positionData,
+	})
+	if err != nil {
+		logger.Error("Failed to create converted file record", zap.Error(err))
+		return nil, err
+	}
+
+	// Step 2: Upload to MinIO
+	uploadResult, err := w.UploadConvertedFileToMinIOActivity(ctx, &UploadConvertedFileToMinIOActivityParam{
+		KBUID:            param.KBUID,
+		FileUID:          param.FileUID,
+		ConvertedFileUID: convertedFileUID,
+		Content:          markdown,
+	})
+	if err != nil {
+		// Compensating transaction: delete DB record
+		logger.Warn("MinIO upload failed, deleting DB record", zap.Error(err))
+		_ = w.DeleteConvertedFileRecordActivity(ctx, &DeleteConvertedFileRecordActivityParam{
+			ConvertedFileUID: convertedFileUID,
+		})
+		return nil, err
+	}
+
+	// Step 3: Update DB record with actual destination
+	if err := w.UpdateConvertedFileDestinationActivity(ctx, &UpdateConvertedFileDestinationActivityParam{
+		ConvertedFileUID: convertedFileUID,
+		Destination:      uploadResult.Destination,
+	}); err != nil {
+		// Compensating transactions: delete MinIO file and DB record
+		logger.Warn("Failed to update destination, cleaning up", zap.Error(err))
+		_ = w.DeleteConvertedFileFromMinIOActivity(ctx, &DeleteConvertedFileFromMinIOActivityParam{
+			Bucket:      config.Config.Minio.BucketName,
+			Destination: uploadResult.Destination,
+		})
+		_ = w.DeleteConvertedFileRecordActivity(ctx, &DeleteConvertedFileRecordActivityParam{
+			ConvertedFileUID: convertedFileUID,
+		})
+		return nil, err
+	}
+
+	logger.Info("Converted file saved successfully", zap.String("convertedFileUID", convertedFileUID.String()))
+	return result, nil
+}
+
+// ProcessSummaryActivityParam defines input for ProcessSummaryActivity
+type ProcessSummaryActivityParam struct {
+	FileUID          types.FileUIDType        // File unique identifier
+	KBUID            types.KBUIDType          // Knowledge base unique identifier
+	Bucket           string                   // MinIO bucket
+	Destination      string                   // MinIO path
+	FileName         string                   // File name
+	FileType         string                   // File type
+	Metadata         *structpb.Struct         // Request metadata
+	CacheName        string                   // AI cache name
+	FallbackPipeline pipeline.PipelineRelease // Pipeline for summary generation fallback
+}
+
+// ProcessSummaryActivityResult defines output from ProcessSummaryActivity
+type ProcessSummaryActivityResult struct {
+	Summary       string // Generated summary
+	Pipeline      string // Pipeline used (empty if AI)
+	UsageMetadata any    // AI token usage
+}
+
+// ProcessSummaryActivity handles the entire summary generation pipeline:
+// 1. Generate summary (using AI cache or pipeline)
+// 2. Save summary to database
+//
+// This is a composite activity that replaces ProcessSummaryWorkflow for simplified architecture.
+func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSummaryActivityParam) (*ProcessSummaryActivityResult, error) {
+	logger := w.log.With(
+		zap.String("fileUID", param.FileUID.String()),
+		zap.Bool("hasCache", param.CacheName != ""))
+
+	logger.Info("ProcessSummaryActivity started")
+
+	result := &ProcessSummaryActivityResult{}
+
+	// Phase 1: Generate summary from file content
+	// Create authenticated context if metadata provided
+	authCtx := ctx
+	if param.Metadata != nil {
+		var err error
+		authCtx, err = createAuthenticatedContext(ctx, param.Metadata)
+		if err != nil {
+			logger.Error("Failed to create authenticated context", zap.Error(err))
+			return nil, err
+		}
+	}
+
+	// Fetch content from MinIO
+	content, err := w.repository.GetFile(authCtx, param.Bucket, param.Destination)
+	if err != nil {
+		logger.Error("Failed to retrieve file from storage", zap.Error(err))
+		return nil, err
+	}
+
+	// Sanitize content to ensure valid UTF-8
+	contentStr := sanitizeUTF8(content)
+
+	logger.Info("Content prepared for summarization",
+		zap.Int("originalBytes", len(content)),
+		zap.Int("sanitizedBytes", len(contentStr)))
+
+	// Verify content is not empty after sanitization
+	if len(strings.TrimSpace(contentStr)) == 0 {
+		return nil, fmt.Errorf("content is empty after UTF-8 sanitization for file %s", param.FileUID.String())
+	}
+
+	var summary string
+	var pipelineName string
+	var usageMetadata any
+
+	// Build prompt with filename context
+	summaryPrompt := gemini.DefaultGenerateSummaryPrompt
+	if param.FileName != "" {
+		summaryPrompt = strings.ReplaceAll(gemini.DefaultGenerateSummaryPrompt, "[filename]", param.FileName)
+	}
+
+	// Determine file type for AI
+	fileType := artifactpb.FileType_FILE_TYPE_PDF // Default to PDF
+	if param.FileType != "" {
+		if enumVal, ok := artifactpb.FileType_value[param.FileType]; ok {
+			fileType = artifactpb.FileType(enumVal)
+		}
+	}
+
+	// Try AI provider with cache first (if available)
+	if w.aiProvider != nil && param.CacheName != "" && w.aiProvider.SupportsFileType(fileType) {
+		logger.Info("Attempting AI summarization with cache",
+			zap.String("cacheName", param.CacheName),
+			zap.String("provider", w.aiProvider.Name()))
+
+		conversion, err := w.aiProvider.ConvertToMarkdownWithCache(authCtx, param.CacheName, summaryPrompt)
+		if err != nil {
+			logger.Warn("Cached AI summarization failed, will try without cache", zap.Error(err))
+		} else {
+			summary = conversion.Markdown
+			usageMetadata = conversion.UsageMetadata
+			logger.Info("AI summarization with cache succeeded",
+				zap.Int("summaryLength", len(summary)))
+		}
+	}
+
+	// Try AI provider without cache if cached attempt failed or wasn't available
+	if summary == "" && w.aiProvider != nil && w.aiProvider.SupportsFileType(fileType) {
+		logger.Info("Attempting AI summarization without cache",
+			zap.String("fileType", fileType.String()),
+			zap.String("provider", w.aiProvider.Name()))
+
+		conversion, err := w.aiProvider.ConvertToMarkdownWithoutCache(authCtx, content, fileType, param.FileName, summaryPrompt)
+		if err != nil {
+			logger.Warn("AI summarization failed, will try pipeline fallback", zap.Error(err))
+		} else {
+			summary = conversion.Markdown
+			usageMetadata = conversion.UsageMetadata
+			logger.Info("AI summarization without cache succeeded",
+				zap.Int("summaryLength", len(summary)))
+		}
+	}
+
+	// Pipeline fallback if AI failed or not available
+	if summary == "" {
+		logger.Info("Using pipeline for summary generation")
+
+		// Use configured pipeline or fall back to default
+		usePipeline := param.FallbackPipeline
+		if usePipeline.ID == "" {
+			usePipeline = pipeline.GenerateSummaryPipeline
+		}
+
+		pipelineSummary, err := pipeline.GenerateSummary(authCtx, w.pipelineClient, contentStr, param.FileType)
+		if err != nil {
+			logger.Error("Pipeline summary generation failed", zap.Error(err))
+			return nil, err
+		}
+		summary = pipelineSummary
+		pipelineName = usePipeline.Name()
+	}
+
+	result.Summary = summary
+	result.Pipeline = pipelineName
+	result.UsageMetadata = usageMetadata
+
+	logger.Info("Summary generated successfully",
+		zap.Int("summaryLength", len(summary)),
+		zap.String("pipeline", pipelineName))
+
+	// Phase 2: Save summary to database
+	if err := w.SaveSummaryActivity(ctx, &SaveSummaryActivityParam{
+		FileUID:  param.FileUID,
+		Summary:  summary,
+		Pipeline: pipelineName,
+	}); err != nil {
+		logger.Error("Failed to save summary to database", zap.Error(err))
+		return nil, err
+	}
+
+	return result, nil
+}
+
+// ===== STORE CHAT CACHE METADATA ACTIVITY =====
+
+// StoreChatCacheMetadataActivityParam defines parameters for storing chat cache metadata in Redis
+type StoreChatCacheMetadataActivityParam struct {
+	KBUID                types.KBUIDType             // Knowledge base UID
+	FileUIDs             []types.FileUIDType         // File UIDs included in the chat cache
+	CacheName            string                      // AI cache name (empty if cache creation failed)
+	Model                string                      // Model used for caching
+	FileCount            int                         // Number of files in cache
+	CreateTime           time.Time                   // When cache was created
+	ExpireTime           time.Time                   // When cache will expire
+	TTL                  time.Duration               // Time-to-live for Redis key
+	CachedContextEnabled bool                        // Whether AI cache exists
+	FileRefs             []repository.FileContentRef // File references for uncached small files
+}
+
+// StoreChatCacheMetadataActivity stores chat cache metadata in Redis
+// This enables the Chat API to quickly lookup and use cached contexts
+// for files that are still being processed (before embeddings are ready)
+func (w *Worker) StoreChatCacheMetadataActivity(
+	ctx context.Context,
+	param *StoreChatCacheMetadataActivityParam,
+) error {
+	w.log.Info("StoreChatCacheMetadataActivity: Storing chat cache metadata in Redis",
+		zap.String("cacheName", param.CacheName),
+		zap.Int("fileCount", param.FileCount),
+		zap.Duration("ttl", param.TTL))
+
+	// Convert types.FileUIDType to uuid.UUID for repository layer
+	fileUIDs := make([]uuid.UUID, len(param.FileUIDs))
+	for i, fuid := range param.FileUIDs {
+		fileUIDs[i] = uuid.UUID(fuid)
+	}
+
+	metadata := &repository.ChatCacheMetadata{
+		CacheName:            param.CacheName,
+		Model:                param.Model,
+		FileUIDs:             fileUIDs,
+		FileCount:            param.FileCount,
+		CreateTime:           param.CreateTime,
+		ExpireTime:           param.ExpireTime,
+		CachedContextEnabled: param.CachedContextEnabled,
+		FileContents:         param.FileRefs,
+	}
+
+	kbUID := uuid.UUID(param.KBUID)
+
+	if err := w.repository.SetChatCacheMetadata(ctx, kbUID, fileUIDs, metadata, param.TTL); err != nil {
+		w.log.Error("StoreChatCacheMetadataActivity: Failed to store metadata",
+			zap.Error(err),
+			zap.String("cacheName", param.CacheName))
+		return err
+	}
+
+	w.log.Info("StoreChatCacheMetadataActivity: Successfully stored chat cache metadata",
+		zap.String("cacheName", param.CacheName),
+		zap.String("kbUID", kbUID.String()),
+		zap.Int("fileCount", param.FileCount))
+
+	return nil
+}
+
 // DeleteTemporaryConvertedFileActivityParam defines the parameters for DeleteTemporaryConvertedFileActivity
 type DeleteTemporaryConvertedFileActivityParam struct {
 	Bucket      string // MinIO bucket (usually blob)
 	Destination string // MinIO path to temporary converted file
 }
 
-// DeleteTemporaryConvertedFileActivity deletes a temporary converted file from MinIO
-// This cleans up intermediate conversion results (e.g., core-blob/tmp/fileUID/uuid.pdf) after they've been used
-// Note: This is different from DeleteConvertedFileActivity which deletes the final markdown from DB
+// DeleteTemporaryConvertedFileActivity deletes a temporary format-converted file from MinIO
+// after it has been used for AI caching and markdown conversion.
+//
+// Purpose: When processing files like DOCX, GIF, or MKV, we first convert them to AI-friendly
+// formats (DOCX→PDF, GIF→PNG, MKV→MP4) using the indexing-convert-file-type pipeline.
+// These converted files are temporarily stored in MinIO (e.g., tmp/fileUID/uuid.pdf) and used
+// for AI caching and markdown conversion. Once processing is complete, these intermediate files
+// are no longer needed and should be cleaned up to avoid storage waste.
+//
+// Lifecycle:
+//  1. Original file: kb-123/file-456/example.docx (kept permanently)
+//  2. Temporary converted: tmp/file-456/abc-123.pdf (deleted by this activity)
+//  3. Final markdown: kb-123/file-456/converted_example.md (kept permanently)
+//
+// Note: This is different from DeleteConvertedFileActivity, which deletes the final markdown
+// output from both DB and MinIO when a file is removed from the knowledge base.
 func (w *Worker) DeleteTemporaryConvertedFileActivity(ctx context.Context, param *DeleteTemporaryConvertedFileActivityParam) error {
 	if param.Destination == "" {
 		w.log.Info("DeleteTemporaryConvertedFileActivity: No destination provided, skipping deletion")
@@ -1310,169 +1857,6 @@ type ConvertToFileActivityResult struct {
 	Length          []uint32                 // Length of markdown sections
 	PipelineRelease pipeline.PipelineRelease // Pipeline used (empty if AI was used)
 	UsageMetadata   any                      // Token usage metadata from AI provider (nil if pipeline was used)
-}
-
-// ConvertToFileActivity calls external pipeline to convert file to markdown
-// For TEXT/MARKDOWN files, it extracts the file length without calling the pipeline
-// This is a single external API call - idempotent (pipeline should be idempotent)
-// Note: This activity fetches content directly from MinIO to avoid passing large files through Temporal
-func (w *Worker) ConvertToFileActivity(ctx context.Context, param *ConvertToFileActivityParam) (*ConvertToFileActivityResult, error) {
-	w.log.Info("ConvertToFileActivity: Converting file to markdown",
-		zap.String("fileType", param.FileType.String()),
-		zap.String("destination", param.Destination),
-		zap.Int("pipelineCount", len(param.Pipelines)))
-
-	// Create authenticated context if metadata provided
-	authCtx := ctx
-	if param.Metadata != nil {
-		var err error
-		authCtx, err = createAuthenticatedContext(ctx, param.Metadata)
-		if err != nil {
-			return nil, temporal.NewApplicationErrorWithCause(
-				fmt.Sprintf("Failed to create authenticated context: %s", errorsx.MessageOrErr(err)),
-				convertToFileActivityError,
-				err,
-			)
-		}
-	}
-
-	// Fetch file content directly from MinIO (avoids passing large files through Temporal)
-	content, err := w.repository.GetFile(authCtx, param.Bucket, param.Destination)
-	if err != nil {
-		return nil, temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to retrieve file from storage: %s", errorsx.MessageOrErr(err)),
-			convertToFileActivityError,
-			err,
-		)
-	}
-
-	w.log.Info("ConvertToFileActivity: File content retrieved from MinIO",
-		zap.Int("contentSize", len(content)))
-
-	// For TEXT/MARKDOWN files, no conversion needed - return content as-is
-	if param.FileType == artifactpb.FileType_FILE_TYPE_TEXT || param.FileType == artifactpb.FileType_FILE_TYPE_MARKDOWN {
-		w.log.Info("ConvertToFileActivity: TEXT/MARKDOWN file - returning content as-is",
-			zap.String("fileType", param.FileType.String()))
-
-		markdown := string(content)
-		return &ConvertToFileActivityResult{
-			Markdown:        markdown,
-			Length:          []uint32{uint32(len(markdown))},
-			PositionData:    nil,
-			PipelineRelease: pipeline.PipelineRelease{}, // No conversion needed
-		}, nil
-	}
-
-	// Try AI provider conversion first for supported file types (faster and more efficient)
-	if w.aiProvider != nil && w.aiProvider.SupportsFileType(param.FileType) {
-		// If cache name is provided, use cached context for much faster conversion
-		if param.CacheName != "" {
-			w.log.Info("ConvertToFileActivity: Attempting AI conversion with cache",
-				zap.String("fileType", param.FileType.String()),
-				zap.String("cacheName", param.CacheName),
-				zap.String("provider", w.aiProvider.Name()))
-
-			conversion, err := w.aiProvider.ConvertToMarkdownWithCache(
-				authCtx,
-				param.CacheName,
-				gemini.DefaultConvertToMarkdownPromptTemplate,
-			)
-			if err != nil {
-				// Log the error but fall back to non-cached conversion
-				w.log.Warn("ConvertToFileActivity: Cached AI conversion failed, trying direct conversion",
-					zap.Error(err))
-			} else {
-				w.log.Info("ConvertToFileActivity: Cached AI conversion successful",
-					zap.Int("markdownLength", len(conversion.Markdown)),
-					zap.String("provider", conversion.Provider))
-
-				// Process AI conversion result (parse pages, keep markdown with tags)
-				markdown, positionData, length := processAIConversionResult(
-					conversion.Markdown,
-					w.log,
-					map[string]any{
-						"cacheName": param.CacheName,
-					},
-				)
-
-				return &ConvertToFileActivityResult{
-					Markdown:        markdown,
-					PositionData:    positionData, // For visual grounding (mapping chunks to pages)
-					Length:          length,
-					PipelineRelease: pipeline.PipelineRelease{}, // No pipeline used (AI cached)
-					UsageMetadata:   conversion.UsageMetadata,
-				}, nil
-			}
-		}
-
-		// Try direct AI conversion (without cache)
-		w.log.Info("ConvertToFileActivity: Attempting direct AI conversion",
-			zap.String("fileType", param.FileType.String()),
-			zap.String("provider", w.aiProvider.Name()))
-
-		// Extract filename from destination if not provided
-		filename := param.Destination
-		if idx := strings.LastIndex(filename, "/"); idx >= 0 {
-			filename = filename[idx+1:]
-		}
-
-		conversion, err := w.aiProvider.ConvertToMarkdown(authCtx, content, param.FileType, filename, gemini.DefaultConvertToMarkdownPromptTemplate)
-		if err != nil {
-			// Log the error but fall back to pipeline conversion
-			w.log.Warn("ConvertToFileActivity: AI conversion failed, falling back to pipeline",
-				zap.Error(err))
-		} else {
-			w.log.Info("ConvertToFileActivity: AI conversion successful",
-				zap.Int("markdownLength", len(conversion.Markdown)),
-				zap.String("provider", conversion.Provider))
-
-			// Process AI conversion result (parse pages, keep markdown with tags)
-			markdown, positionData, length := processAIConversionResult(
-				conversion.Markdown,
-				w.log,
-				map[string]any{
-					"fileType": param.FileType.String(),
-				},
-			)
-
-			return &ConvertToFileActivityResult{
-				Markdown:        markdown,
-				PositionData:    positionData, // For visual grounding (mapping chunks to pages)
-				Length:          length,
-				PipelineRelease: pipeline.PipelineRelease{}, // No pipeline used (AI direct)
-				UsageMetadata:   conversion.UsageMetadata,
-			}, nil
-		}
-	}
-
-	// Fall back to pipeline conversion
-	w.log.Info("ConvertToFileActivity: Using pipeline conversion",
-		zap.String("fileType", param.FileType.String()))
-
-	// Call the conversion pipeline - THIS IS THE KEY EXTERNAL CALL
-	// Note: Use authCtx to pass authentication credentials to the pipeline service
-	conversion, err := pipeline.ConvertToMarkdownPipe(authCtx, w.pipelineClient, w.repository, pipeline.MarkdownConversionParams{
-		Base64Content: base64.StdEncoding.EncodeToString(content),
-		Type:          param.FileType,
-		Pipelines:     param.Pipelines,
-	})
-	if err != nil {
-		return nil, temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("File conversion failed: %s", errorsx.MessageOrErr(err)),
-			convertToFileActivityError,
-			err,
-		)
-	}
-
-	w.log.Info("ConvertToFileActivity: Pipeline conversion successful",
-		zap.Int("markdownLength", len(conversion.Markdown)))
-
-	return &ConvertToFileActivityResult{
-		Markdown:        conversion.Markdown,
-		PositionData:    conversion.PositionData,
-		Length:          conversion.Length,
-		PipelineRelease: conversion.PipelineRelease,
-	}, nil
 }
 
 // processAIConversionResult processes AI conversion output by parsing page tags and preparing the result
@@ -1584,13 +1968,13 @@ func needsFileConversion(fileType artifactpb.FileType) (bool, string) {
 	}
 }
 
-// convertUsingPipeline converts a file using the convert-file-type pipeline
+// convertUsingPipeline converts a file using the indexing-convert-file-type pipeline
 func (w *Worker) convertUsingPipeline(ctx context.Context, content []byte, sourceType artifactpb.FileType, targetFormat string, pipelines []pipeline.PipelineRelease) ([]byte, pipeline.PipelineRelease, error) {
 	if len(pipelines) == 0 {
 		return nil, pipeline.PipelineRelease{}, fmt.Errorf("no pipelines provided")
 	}
 
-	// Use the first available pipeline (convert-file-type)
+	// Use the first available pipeline (indexing-convert-file-type)
 	pipeline := pipelines[0]
 
 	// Determine input variable name based on source type
@@ -1795,8 +2179,8 @@ const (
 	updateChunkingMetadataActivityError         = "UpdateChunkingMetadataActivity"
 	generateSummaryActivityError                = "GenerateSummaryActivity"
 	saveSummaryActivityError                    = "SaveSummaryActivity"
-	convertFileTypeActivityError                = "ConvertFileTypeActivity"
-	cacheContextActivityError                   = "CacheContextActivity"
+	standardizeFileTypeActivityError            = "StandardizeFileTypeActivity"
+	cacheContextActivityError                   = "CacheFileContextActivity"
 	convertToFileActivityError                  = "ConvertToFileActivity"
 )
 

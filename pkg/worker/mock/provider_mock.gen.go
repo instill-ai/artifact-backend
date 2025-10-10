@@ -19,19 +19,26 @@ type ProviderMock struct {
 	t          minimock.Tester
 	finishOnce sync.Once
 
+	funcChatWithCache          func(ctx context.Context, cacheName string, prompt string) (cp1 *mm_ai.ChatResult, err error)
+	funcChatWithCacheOrigin    string
+	inspectFuncChatWithCache   func(ctx context.Context, cacheName string, prompt string)
+	afterChatWithCacheCounter  uint64
+	beforeChatWithCacheCounter uint64
+	ChatWithCacheMock          mProviderMockChatWithCache
+
+	funcChatWithFiles          func(ctx context.Context, files []mm_ai.FileContent, prompt string) (cp1 *mm_ai.ChatResult, err error)
+	funcChatWithFilesOrigin    string
+	inspectFuncChatWithFiles   func(ctx context.Context, files []mm_ai.FileContent, prompt string)
+	afterChatWithFilesCounter  uint64
+	beforeChatWithFilesCounter uint64
+	ChatWithFilesMock          mProviderMockChatWithFiles
+
 	funcClose          func() (err error)
 	funcCloseOrigin    string
 	inspectFuncClose   func()
 	afterCloseCounter  uint64
 	beforeCloseCounter uint64
 	CloseMock          mProviderMockClose
-
-	funcConvertToMarkdown          func(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string, prompt string) (cp1 *mm_ai.ConversionResult, err error)
-	funcConvertToMarkdownOrigin    string
-	inspectFuncConvertToMarkdown   func(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string, prompt string)
-	afterConvertToMarkdownCounter  uint64
-	beforeConvertToMarkdownCounter uint64
-	ConvertToMarkdownMock          mProviderMockConvertToMarkdown
 
 	funcConvertToMarkdownWithCache          func(ctx context.Context, cacheName string, prompt string) (cp1 *mm_ai.ConversionResult, err error)
 	funcConvertToMarkdownWithCacheOrigin    string
@@ -40,9 +47,16 @@ type ProviderMock struct {
 	beforeConvertToMarkdownWithCacheCounter uint64
 	ConvertToMarkdownWithCacheMock          mProviderMockConvertToMarkdownWithCache
 
-	funcCreateCache          func(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string, ttl time.Duration) (cp1 *mm_ai.CacheResult, err error)
+	funcConvertToMarkdownWithoutCache          func(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string, prompt string) (cp1 *mm_ai.ConversionResult, err error)
+	funcConvertToMarkdownWithoutCacheOrigin    string
+	inspectFuncConvertToMarkdownWithoutCache   func(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string, prompt string)
+	afterConvertToMarkdownWithoutCacheCounter  uint64
+	beforeConvertToMarkdownWithoutCacheCounter uint64
+	ConvertToMarkdownWithoutCacheMock          mProviderMockConvertToMarkdownWithoutCache
+
+	funcCreateCache          func(ctx context.Context, files []mm_ai.FileContent, ttl time.Duration, systemInstruction string) (cp1 *mm_ai.CacheResult, err error)
 	funcCreateCacheOrigin    string
-	inspectFuncCreateCache   func(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string, ttl time.Duration)
+	inspectFuncCreateCache   func(ctx context.Context, files []mm_ai.FileContent, ttl time.Duration, systemInstruction string)
 	afterCreateCacheCounter  uint64
 	beforeCreateCacheCounter uint64
 	CreateCacheMock          mProviderMockCreateCache
@@ -53,6 +67,20 @@ type ProviderMock struct {
 	afterDeleteCacheCounter  uint64
 	beforeDeleteCacheCounter uint64
 	DeleteCacheMock          mProviderMockDeleteCache
+
+	funcGetCache          func(ctx context.Context, cacheName string) (cp1 *mm_ai.CacheResult, err error)
+	funcGetCacheOrigin    string
+	inspectFuncGetCache   func(ctx context.Context, cacheName string)
+	afterGetCacheCounter  uint64
+	beforeGetCacheCounter uint64
+	GetCacheMock          mProviderMockGetCache
+
+	funcListCaches          func(ctx context.Context, options *mm_ai.CacheListOptions) (cp1 *mm_ai.CacheListResult, err error)
+	funcListCachesOrigin    string
+	inspectFuncListCaches   func(ctx context.Context, options *mm_ai.CacheListOptions)
+	afterListCachesCounter  uint64
+	beforeListCachesCounter uint64
+	ListCachesMock          mProviderMockListCaches
 
 	funcName          func() (s1 string)
 	funcNameOrigin    string
@@ -67,6 +95,13 @@ type ProviderMock struct {
 	afterSupportsFileTypeCounter  uint64
 	beforeSupportsFileTypeCounter uint64
 	SupportsFileTypeMock          mProviderMockSupportsFileType
+
+	funcUpdateCache          func(ctx context.Context, cacheName string, options *mm_ai.CacheUpdateOptions) (cp1 *mm_ai.CacheResult, err error)
+	funcUpdateCacheOrigin    string
+	inspectFuncUpdateCache   func(ctx context.Context, cacheName string, options *mm_ai.CacheUpdateOptions)
+	afterUpdateCacheCounter  uint64
+	beforeUpdateCacheCounter uint64
+	UpdateCacheMock          mProviderMockUpdateCache
 }
 
 // NewProviderMock returns a mock for mm_ai.Provider
@@ -77,13 +112,19 @@ func NewProviderMock(t minimock.Tester) *ProviderMock {
 		controller.RegisterMocker(m)
 	}
 
-	m.CloseMock = mProviderMockClose{mock: m}
+	m.ChatWithCacheMock = mProviderMockChatWithCache{mock: m}
+	m.ChatWithCacheMock.callArgs = []*ProviderMockChatWithCacheParams{}
 
-	m.ConvertToMarkdownMock = mProviderMockConvertToMarkdown{mock: m}
-	m.ConvertToMarkdownMock.callArgs = []*ProviderMockConvertToMarkdownParams{}
+	m.ChatWithFilesMock = mProviderMockChatWithFiles{mock: m}
+	m.ChatWithFilesMock.callArgs = []*ProviderMockChatWithFilesParams{}
+
+	m.CloseMock = mProviderMockClose{mock: m}
 
 	m.ConvertToMarkdownWithCacheMock = mProviderMockConvertToMarkdownWithCache{mock: m}
 	m.ConvertToMarkdownWithCacheMock.callArgs = []*ProviderMockConvertToMarkdownWithCacheParams{}
+
+	m.ConvertToMarkdownWithoutCacheMock = mProviderMockConvertToMarkdownWithoutCache{mock: m}
+	m.ConvertToMarkdownWithoutCacheMock.callArgs = []*ProviderMockConvertToMarkdownWithoutCacheParams{}
 
 	m.CreateCacheMock = mProviderMockCreateCache{mock: m}
 	m.CreateCacheMock.callArgs = []*ProviderMockCreateCacheParams{}
@@ -91,14 +132,771 @@ func NewProviderMock(t minimock.Tester) *ProviderMock {
 	m.DeleteCacheMock = mProviderMockDeleteCache{mock: m}
 	m.DeleteCacheMock.callArgs = []*ProviderMockDeleteCacheParams{}
 
+	m.GetCacheMock = mProviderMockGetCache{mock: m}
+	m.GetCacheMock.callArgs = []*ProviderMockGetCacheParams{}
+
+	m.ListCachesMock = mProviderMockListCaches{mock: m}
+	m.ListCachesMock.callArgs = []*ProviderMockListCachesParams{}
+
 	m.NameMock = mProviderMockName{mock: m}
 
 	m.SupportsFileTypeMock = mProviderMockSupportsFileType{mock: m}
 	m.SupportsFileTypeMock.callArgs = []*ProviderMockSupportsFileTypeParams{}
 
+	m.UpdateCacheMock = mProviderMockUpdateCache{mock: m}
+	m.UpdateCacheMock.callArgs = []*ProviderMockUpdateCacheParams{}
+
 	t.Cleanup(m.MinimockFinish)
 
 	return m
+}
+
+type mProviderMockChatWithCache struct {
+	optional           bool
+	mock               *ProviderMock
+	defaultExpectation *ProviderMockChatWithCacheExpectation
+	expectations       []*ProviderMockChatWithCacheExpectation
+
+	callArgs []*ProviderMockChatWithCacheParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// ProviderMockChatWithCacheExpectation specifies expectation struct of the Provider.ChatWithCache
+type ProviderMockChatWithCacheExpectation struct {
+	mock               *ProviderMock
+	params             *ProviderMockChatWithCacheParams
+	paramPtrs          *ProviderMockChatWithCacheParamPtrs
+	expectationOrigins ProviderMockChatWithCacheExpectationOrigins
+	results            *ProviderMockChatWithCacheResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// ProviderMockChatWithCacheParams contains parameters of the Provider.ChatWithCache
+type ProviderMockChatWithCacheParams struct {
+	ctx       context.Context
+	cacheName string
+	prompt    string
+}
+
+// ProviderMockChatWithCacheParamPtrs contains pointers to parameters of the Provider.ChatWithCache
+type ProviderMockChatWithCacheParamPtrs struct {
+	ctx       *context.Context
+	cacheName *string
+	prompt    *string
+}
+
+// ProviderMockChatWithCacheResults contains results of the Provider.ChatWithCache
+type ProviderMockChatWithCacheResults struct {
+	cp1 *mm_ai.ChatResult
+	err error
+}
+
+// ProviderMockChatWithCacheOrigins contains origins of expectations of the Provider.ChatWithCache
+type ProviderMockChatWithCacheExpectationOrigins struct {
+	origin          string
+	originCtx       string
+	originCacheName string
+	originPrompt    string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmChatWithCache *mProviderMockChatWithCache) Optional() *mProviderMockChatWithCache {
+	mmChatWithCache.optional = true
+	return mmChatWithCache
+}
+
+// Expect sets up expected params for Provider.ChatWithCache
+func (mmChatWithCache *mProviderMockChatWithCache) Expect(ctx context.Context, cacheName string, prompt string) *mProviderMockChatWithCache {
+	if mmChatWithCache.mock.funcChatWithCache != nil {
+		mmChatWithCache.mock.t.Fatalf("ProviderMock.ChatWithCache mock is already set by Set")
+	}
+
+	if mmChatWithCache.defaultExpectation == nil {
+		mmChatWithCache.defaultExpectation = &ProviderMockChatWithCacheExpectation{}
+	}
+
+	if mmChatWithCache.defaultExpectation.paramPtrs != nil {
+		mmChatWithCache.mock.t.Fatalf("ProviderMock.ChatWithCache mock is already set by ExpectParams functions")
+	}
+
+	mmChatWithCache.defaultExpectation.params = &ProviderMockChatWithCacheParams{ctx, cacheName, prompt}
+	mmChatWithCache.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmChatWithCache.expectations {
+		if minimock.Equal(e.params, mmChatWithCache.defaultExpectation.params) {
+			mmChatWithCache.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmChatWithCache.defaultExpectation.params)
+		}
+	}
+
+	return mmChatWithCache
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Provider.ChatWithCache
+func (mmChatWithCache *mProviderMockChatWithCache) ExpectCtxParam1(ctx context.Context) *mProviderMockChatWithCache {
+	if mmChatWithCache.mock.funcChatWithCache != nil {
+		mmChatWithCache.mock.t.Fatalf("ProviderMock.ChatWithCache mock is already set by Set")
+	}
+
+	if mmChatWithCache.defaultExpectation == nil {
+		mmChatWithCache.defaultExpectation = &ProviderMockChatWithCacheExpectation{}
+	}
+
+	if mmChatWithCache.defaultExpectation.params != nil {
+		mmChatWithCache.mock.t.Fatalf("ProviderMock.ChatWithCache mock is already set by Expect")
+	}
+
+	if mmChatWithCache.defaultExpectation.paramPtrs == nil {
+		mmChatWithCache.defaultExpectation.paramPtrs = &ProviderMockChatWithCacheParamPtrs{}
+	}
+	mmChatWithCache.defaultExpectation.paramPtrs.ctx = &ctx
+	mmChatWithCache.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmChatWithCache
+}
+
+// ExpectCacheNameParam2 sets up expected param cacheName for Provider.ChatWithCache
+func (mmChatWithCache *mProviderMockChatWithCache) ExpectCacheNameParam2(cacheName string) *mProviderMockChatWithCache {
+	if mmChatWithCache.mock.funcChatWithCache != nil {
+		mmChatWithCache.mock.t.Fatalf("ProviderMock.ChatWithCache mock is already set by Set")
+	}
+
+	if mmChatWithCache.defaultExpectation == nil {
+		mmChatWithCache.defaultExpectation = &ProviderMockChatWithCacheExpectation{}
+	}
+
+	if mmChatWithCache.defaultExpectation.params != nil {
+		mmChatWithCache.mock.t.Fatalf("ProviderMock.ChatWithCache mock is already set by Expect")
+	}
+
+	if mmChatWithCache.defaultExpectation.paramPtrs == nil {
+		mmChatWithCache.defaultExpectation.paramPtrs = &ProviderMockChatWithCacheParamPtrs{}
+	}
+	mmChatWithCache.defaultExpectation.paramPtrs.cacheName = &cacheName
+	mmChatWithCache.defaultExpectation.expectationOrigins.originCacheName = minimock.CallerInfo(1)
+
+	return mmChatWithCache
+}
+
+// ExpectPromptParam3 sets up expected param prompt for Provider.ChatWithCache
+func (mmChatWithCache *mProviderMockChatWithCache) ExpectPromptParam3(prompt string) *mProviderMockChatWithCache {
+	if mmChatWithCache.mock.funcChatWithCache != nil {
+		mmChatWithCache.mock.t.Fatalf("ProviderMock.ChatWithCache mock is already set by Set")
+	}
+
+	if mmChatWithCache.defaultExpectation == nil {
+		mmChatWithCache.defaultExpectation = &ProviderMockChatWithCacheExpectation{}
+	}
+
+	if mmChatWithCache.defaultExpectation.params != nil {
+		mmChatWithCache.mock.t.Fatalf("ProviderMock.ChatWithCache mock is already set by Expect")
+	}
+
+	if mmChatWithCache.defaultExpectation.paramPtrs == nil {
+		mmChatWithCache.defaultExpectation.paramPtrs = &ProviderMockChatWithCacheParamPtrs{}
+	}
+	mmChatWithCache.defaultExpectation.paramPtrs.prompt = &prompt
+	mmChatWithCache.defaultExpectation.expectationOrigins.originPrompt = minimock.CallerInfo(1)
+
+	return mmChatWithCache
+}
+
+// Inspect accepts an inspector function that has same arguments as the Provider.ChatWithCache
+func (mmChatWithCache *mProviderMockChatWithCache) Inspect(f func(ctx context.Context, cacheName string, prompt string)) *mProviderMockChatWithCache {
+	if mmChatWithCache.mock.inspectFuncChatWithCache != nil {
+		mmChatWithCache.mock.t.Fatalf("Inspect function is already set for ProviderMock.ChatWithCache")
+	}
+
+	mmChatWithCache.mock.inspectFuncChatWithCache = f
+
+	return mmChatWithCache
+}
+
+// Return sets up results that will be returned by Provider.ChatWithCache
+func (mmChatWithCache *mProviderMockChatWithCache) Return(cp1 *mm_ai.ChatResult, err error) *ProviderMock {
+	if mmChatWithCache.mock.funcChatWithCache != nil {
+		mmChatWithCache.mock.t.Fatalf("ProviderMock.ChatWithCache mock is already set by Set")
+	}
+
+	if mmChatWithCache.defaultExpectation == nil {
+		mmChatWithCache.defaultExpectation = &ProviderMockChatWithCacheExpectation{mock: mmChatWithCache.mock}
+	}
+	mmChatWithCache.defaultExpectation.results = &ProviderMockChatWithCacheResults{cp1, err}
+	mmChatWithCache.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmChatWithCache.mock
+}
+
+// Set uses given function f to mock the Provider.ChatWithCache method
+func (mmChatWithCache *mProviderMockChatWithCache) Set(f func(ctx context.Context, cacheName string, prompt string) (cp1 *mm_ai.ChatResult, err error)) *ProviderMock {
+	if mmChatWithCache.defaultExpectation != nil {
+		mmChatWithCache.mock.t.Fatalf("Default expectation is already set for the Provider.ChatWithCache method")
+	}
+
+	if len(mmChatWithCache.expectations) > 0 {
+		mmChatWithCache.mock.t.Fatalf("Some expectations are already set for the Provider.ChatWithCache method")
+	}
+
+	mmChatWithCache.mock.funcChatWithCache = f
+	mmChatWithCache.mock.funcChatWithCacheOrigin = minimock.CallerInfo(1)
+	return mmChatWithCache.mock
+}
+
+// When sets expectation for the Provider.ChatWithCache which will trigger the result defined by the following
+// Then helper
+func (mmChatWithCache *mProviderMockChatWithCache) When(ctx context.Context, cacheName string, prompt string) *ProviderMockChatWithCacheExpectation {
+	if mmChatWithCache.mock.funcChatWithCache != nil {
+		mmChatWithCache.mock.t.Fatalf("ProviderMock.ChatWithCache mock is already set by Set")
+	}
+
+	expectation := &ProviderMockChatWithCacheExpectation{
+		mock:               mmChatWithCache.mock,
+		params:             &ProviderMockChatWithCacheParams{ctx, cacheName, prompt},
+		expectationOrigins: ProviderMockChatWithCacheExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmChatWithCache.expectations = append(mmChatWithCache.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Provider.ChatWithCache return parameters for the expectation previously defined by the When method
+func (e *ProviderMockChatWithCacheExpectation) Then(cp1 *mm_ai.ChatResult, err error) *ProviderMock {
+	e.results = &ProviderMockChatWithCacheResults{cp1, err}
+	return e.mock
+}
+
+// Times sets number of times Provider.ChatWithCache should be invoked
+func (mmChatWithCache *mProviderMockChatWithCache) Times(n uint64) *mProviderMockChatWithCache {
+	if n == 0 {
+		mmChatWithCache.mock.t.Fatalf("Times of ProviderMock.ChatWithCache mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmChatWithCache.expectedInvocations, n)
+	mmChatWithCache.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmChatWithCache
+}
+
+func (mmChatWithCache *mProviderMockChatWithCache) invocationsDone() bool {
+	if len(mmChatWithCache.expectations) == 0 && mmChatWithCache.defaultExpectation == nil && mmChatWithCache.mock.funcChatWithCache == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmChatWithCache.mock.afterChatWithCacheCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmChatWithCache.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// ChatWithCache implements mm_ai.Provider
+func (mmChatWithCache *ProviderMock) ChatWithCache(ctx context.Context, cacheName string, prompt string) (cp1 *mm_ai.ChatResult, err error) {
+	mm_atomic.AddUint64(&mmChatWithCache.beforeChatWithCacheCounter, 1)
+	defer mm_atomic.AddUint64(&mmChatWithCache.afterChatWithCacheCounter, 1)
+
+	mmChatWithCache.t.Helper()
+
+	if mmChatWithCache.inspectFuncChatWithCache != nil {
+		mmChatWithCache.inspectFuncChatWithCache(ctx, cacheName, prompt)
+	}
+
+	mm_params := ProviderMockChatWithCacheParams{ctx, cacheName, prompt}
+
+	// Record call args
+	mmChatWithCache.ChatWithCacheMock.mutex.Lock()
+	mmChatWithCache.ChatWithCacheMock.callArgs = append(mmChatWithCache.ChatWithCacheMock.callArgs, &mm_params)
+	mmChatWithCache.ChatWithCacheMock.mutex.Unlock()
+
+	for _, e := range mmChatWithCache.ChatWithCacheMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.cp1, e.results.err
+		}
+	}
+
+	if mmChatWithCache.ChatWithCacheMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmChatWithCache.ChatWithCacheMock.defaultExpectation.Counter, 1)
+		mm_want := mmChatWithCache.ChatWithCacheMock.defaultExpectation.params
+		mm_want_ptrs := mmChatWithCache.ChatWithCacheMock.defaultExpectation.paramPtrs
+
+		mm_got := ProviderMockChatWithCacheParams{ctx, cacheName, prompt}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmChatWithCache.t.Errorf("ProviderMock.ChatWithCache got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmChatWithCache.ChatWithCacheMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.cacheName != nil && !minimock.Equal(*mm_want_ptrs.cacheName, mm_got.cacheName) {
+				mmChatWithCache.t.Errorf("ProviderMock.ChatWithCache got unexpected parameter cacheName, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmChatWithCache.ChatWithCacheMock.defaultExpectation.expectationOrigins.originCacheName, *mm_want_ptrs.cacheName, mm_got.cacheName, minimock.Diff(*mm_want_ptrs.cacheName, mm_got.cacheName))
+			}
+
+			if mm_want_ptrs.prompt != nil && !minimock.Equal(*mm_want_ptrs.prompt, mm_got.prompt) {
+				mmChatWithCache.t.Errorf("ProviderMock.ChatWithCache got unexpected parameter prompt, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmChatWithCache.ChatWithCacheMock.defaultExpectation.expectationOrigins.originPrompt, *mm_want_ptrs.prompt, mm_got.prompt, minimock.Diff(*mm_want_ptrs.prompt, mm_got.prompt))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmChatWithCache.t.Errorf("ProviderMock.ChatWithCache got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmChatWithCache.ChatWithCacheMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmChatWithCache.ChatWithCacheMock.defaultExpectation.results
+		if mm_results == nil {
+			mmChatWithCache.t.Fatal("No results are set for the ProviderMock.ChatWithCache")
+		}
+		return (*mm_results).cp1, (*mm_results).err
+	}
+	if mmChatWithCache.funcChatWithCache != nil {
+		return mmChatWithCache.funcChatWithCache(ctx, cacheName, prompt)
+	}
+	mmChatWithCache.t.Fatalf("Unexpected call to ProviderMock.ChatWithCache. %v %v %v", ctx, cacheName, prompt)
+	return
+}
+
+// ChatWithCacheAfterCounter returns a count of finished ProviderMock.ChatWithCache invocations
+func (mmChatWithCache *ProviderMock) ChatWithCacheAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmChatWithCache.afterChatWithCacheCounter)
+}
+
+// ChatWithCacheBeforeCounter returns a count of ProviderMock.ChatWithCache invocations
+func (mmChatWithCache *ProviderMock) ChatWithCacheBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmChatWithCache.beforeChatWithCacheCounter)
+}
+
+// Calls returns a list of arguments used in each call to ProviderMock.ChatWithCache.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmChatWithCache *mProviderMockChatWithCache) Calls() []*ProviderMockChatWithCacheParams {
+	mmChatWithCache.mutex.RLock()
+
+	argCopy := make([]*ProviderMockChatWithCacheParams, len(mmChatWithCache.callArgs))
+	copy(argCopy, mmChatWithCache.callArgs)
+
+	mmChatWithCache.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockChatWithCacheDone returns true if the count of the ChatWithCache invocations corresponds
+// the number of defined expectations
+func (m *ProviderMock) MinimockChatWithCacheDone() bool {
+	if m.ChatWithCacheMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.ChatWithCacheMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.ChatWithCacheMock.invocationsDone()
+}
+
+// MinimockChatWithCacheInspect logs each unmet expectation
+func (m *ProviderMock) MinimockChatWithCacheInspect() {
+	for _, e := range m.ChatWithCacheMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to ProviderMock.ChatWithCache at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterChatWithCacheCounter := mm_atomic.LoadUint64(&m.afterChatWithCacheCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.ChatWithCacheMock.defaultExpectation != nil && afterChatWithCacheCounter < 1 {
+		if m.ChatWithCacheMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to ProviderMock.ChatWithCache at\n%s", m.ChatWithCacheMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to ProviderMock.ChatWithCache at\n%s with params: %#v", m.ChatWithCacheMock.defaultExpectation.expectationOrigins.origin, *m.ChatWithCacheMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcChatWithCache != nil && afterChatWithCacheCounter < 1 {
+		m.t.Errorf("Expected call to ProviderMock.ChatWithCache at\n%s", m.funcChatWithCacheOrigin)
+	}
+
+	if !m.ChatWithCacheMock.invocationsDone() && afterChatWithCacheCounter > 0 {
+		m.t.Errorf("Expected %d calls to ProviderMock.ChatWithCache at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.ChatWithCacheMock.expectedInvocations), m.ChatWithCacheMock.expectedInvocationsOrigin, afterChatWithCacheCounter)
+	}
+}
+
+type mProviderMockChatWithFiles struct {
+	optional           bool
+	mock               *ProviderMock
+	defaultExpectation *ProviderMockChatWithFilesExpectation
+	expectations       []*ProviderMockChatWithFilesExpectation
+
+	callArgs []*ProviderMockChatWithFilesParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// ProviderMockChatWithFilesExpectation specifies expectation struct of the Provider.ChatWithFiles
+type ProviderMockChatWithFilesExpectation struct {
+	mock               *ProviderMock
+	params             *ProviderMockChatWithFilesParams
+	paramPtrs          *ProviderMockChatWithFilesParamPtrs
+	expectationOrigins ProviderMockChatWithFilesExpectationOrigins
+	results            *ProviderMockChatWithFilesResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// ProviderMockChatWithFilesParams contains parameters of the Provider.ChatWithFiles
+type ProviderMockChatWithFilesParams struct {
+	ctx    context.Context
+	files  []mm_ai.FileContent
+	prompt string
+}
+
+// ProviderMockChatWithFilesParamPtrs contains pointers to parameters of the Provider.ChatWithFiles
+type ProviderMockChatWithFilesParamPtrs struct {
+	ctx    *context.Context
+	files  *[]mm_ai.FileContent
+	prompt *string
+}
+
+// ProviderMockChatWithFilesResults contains results of the Provider.ChatWithFiles
+type ProviderMockChatWithFilesResults struct {
+	cp1 *mm_ai.ChatResult
+	err error
+}
+
+// ProviderMockChatWithFilesOrigins contains origins of expectations of the Provider.ChatWithFiles
+type ProviderMockChatWithFilesExpectationOrigins struct {
+	origin       string
+	originCtx    string
+	originFiles  string
+	originPrompt string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmChatWithFiles *mProviderMockChatWithFiles) Optional() *mProviderMockChatWithFiles {
+	mmChatWithFiles.optional = true
+	return mmChatWithFiles
+}
+
+// Expect sets up expected params for Provider.ChatWithFiles
+func (mmChatWithFiles *mProviderMockChatWithFiles) Expect(ctx context.Context, files []mm_ai.FileContent, prompt string) *mProviderMockChatWithFiles {
+	if mmChatWithFiles.mock.funcChatWithFiles != nil {
+		mmChatWithFiles.mock.t.Fatalf("ProviderMock.ChatWithFiles mock is already set by Set")
+	}
+
+	if mmChatWithFiles.defaultExpectation == nil {
+		mmChatWithFiles.defaultExpectation = &ProviderMockChatWithFilesExpectation{}
+	}
+
+	if mmChatWithFiles.defaultExpectation.paramPtrs != nil {
+		mmChatWithFiles.mock.t.Fatalf("ProviderMock.ChatWithFiles mock is already set by ExpectParams functions")
+	}
+
+	mmChatWithFiles.defaultExpectation.params = &ProviderMockChatWithFilesParams{ctx, files, prompt}
+	mmChatWithFiles.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmChatWithFiles.expectations {
+		if minimock.Equal(e.params, mmChatWithFiles.defaultExpectation.params) {
+			mmChatWithFiles.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmChatWithFiles.defaultExpectation.params)
+		}
+	}
+
+	return mmChatWithFiles
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Provider.ChatWithFiles
+func (mmChatWithFiles *mProviderMockChatWithFiles) ExpectCtxParam1(ctx context.Context) *mProviderMockChatWithFiles {
+	if mmChatWithFiles.mock.funcChatWithFiles != nil {
+		mmChatWithFiles.mock.t.Fatalf("ProviderMock.ChatWithFiles mock is already set by Set")
+	}
+
+	if mmChatWithFiles.defaultExpectation == nil {
+		mmChatWithFiles.defaultExpectation = &ProviderMockChatWithFilesExpectation{}
+	}
+
+	if mmChatWithFiles.defaultExpectation.params != nil {
+		mmChatWithFiles.mock.t.Fatalf("ProviderMock.ChatWithFiles mock is already set by Expect")
+	}
+
+	if mmChatWithFiles.defaultExpectation.paramPtrs == nil {
+		mmChatWithFiles.defaultExpectation.paramPtrs = &ProviderMockChatWithFilesParamPtrs{}
+	}
+	mmChatWithFiles.defaultExpectation.paramPtrs.ctx = &ctx
+	mmChatWithFiles.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmChatWithFiles
+}
+
+// ExpectFilesParam2 sets up expected param files for Provider.ChatWithFiles
+func (mmChatWithFiles *mProviderMockChatWithFiles) ExpectFilesParam2(files []mm_ai.FileContent) *mProviderMockChatWithFiles {
+	if mmChatWithFiles.mock.funcChatWithFiles != nil {
+		mmChatWithFiles.mock.t.Fatalf("ProviderMock.ChatWithFiles mock is already set by Set")
+	}
+
+	if mmChatWithFiles.defaultExpectation == nil {
+		mmChatWithFiles.defaultExpectation = &ProviderMockChatWithFilesExpectation{}
+	}
+
+	if mmChatWithFiles.defaultExpectation.params != nil {
+		mmChatWithFiles.mock.t.Fatalf("ProviderMock.ChatWithFiles mock is already set by Expect")
+	}
+
+	if mmChatWithFiles.defaultExpectation.paramPtrs == nil {
+		mmChatWithFiles.defaultExpectation.paramPtrs = &ProviderMockChatWithFilesParamPtrs{}
+	}
+	mmChatWithFiles.defaultExpectation.paramPtrs.files = &files
+	mmChatWithFiles.defaultExpectation.expectationOrigins.originFiles = minimock.CallerInfo(1)
+
+	return mmChatWithFiles
+}
+
+// ExpectPromptParam3 sets up expected param prompt for Provider.ChatWithFiles
+func (mmChatWithFiles *mProviderMockChatWithFiles) ExpectPromptParam3(prompt string) *mProviderMockChatWithFiles {
+	if mmChatWithFiles.mock.funcChatWithFiles != nil {
+		mmChatWithFiles.mock.t.Fatalf("ProviderMock.ChatWithFiles mock is already set by Set")
+	}
+
+	if mmChatWithFiles.defaultExpectation == nil {
+		mmChatWithFiles.defaultExpectation = &ProviderMockChatWithFilesExpectation{}
+	}
+
+	if mmChatWithFiles.defaultExpectation.params != nil {
+		mmChatWithFiles.mock.t.Fatalf("ProviderMock.ChatWithFiles mock is already set by Expect")
+	}
+
+	if mmChatWithFiles.defaultExpectation.paramPtrs == nil {
+		mmChatWithFiles.defaultExpectation.paramPtrs = &ProviderMockChatWithFilesParamPtrs{}
+	}
+	mmChatWithFiles.defaultExpectation.paramPtrs.prompt = &prompt
+	mmChatWithFiles.defaultExpectation.expectationOrigins.originPrompt = minimock.CallerInfo(1)
+
+	return mmChatWithFiles
+}
+
+// Inspect accepts an inspector function that has same arguments as the Provider.ChatWithFiles
+func (mmChatWithFiles *mProviderMockChatWithFiles) Inspect(f func(ctx context.Context, files []mm_ai.FileContent, prompt string)) *mProviderMockChatWithFiles {
+	if mmChatWithFiles.mock.inspectFuncChatWithFiles != nil {
+		mmChatWithFiles.mock.t.Fatalf("Inspect function is already set for ProviderMock.ChatWithFiles")
+	}
+
+	mmChatWithFiles.mock.inspectFuncChatWithFiles = f
+
+	return mmChatWithFiles
+}
+
+// Return sets up results that will be returned by Provider.ChatWithFiles
+func (mmChatWithFiles *mProviderMockChatWithFiles) Return(cp1 *mm_ai.ChatResult, err error) *ProviderMock {
+	if mmChatWithFiles.mock.funcChatWithFiles != nil {
+		mmChatWithFiles.mock.t.Fatalf("ProviderMock.ChatWithFiles mock is already set by Set")
+	}
+
+	if mmChatWithFiles.defaultExpectation == nil {
+		mmChatWithFiles.defaultExpectation = &ProviderMockChatWithFilesExpectation{mock: mmChatWithFiles.mock}
+	}
+	mmChatWithFiles.defaultExpectation.results = &ProviderMockChatWithFilesResults{cp1, err}
+	mmChatWithFiles.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmChatWithFiles.mock
+}
+
+// Set uses given function f to mock the Provider.ChatWithFiles method
+func (mmChatWithFiles *mProviderMockChatWithFiles) Set(f func(ctx context.Context, files []mm_ai.FileContent, prompt string) (cp1 *mm_ai.ChatResult, err error)) *ProviderMock {
+	if mmChatWithFiles.defaultExpectation != nil {
+		mmChatWithFiles.mock.t.Fatalf("Default expectation is already set for the Provider.ChatWithFiles method")
+	}
+
+	if len(mmChatWithFiles.expectations) > 0 {
+		mmChatWithFiles.mock.t.Fatalf("Some expectations are already set for the Provider.ChatWithFiles method")
+	}
+
+	mmChatWithFiles.mock.funcChatWithFiles = f
+	mmChatWithFiles.mock.funcChatWithFilesOrigin = minimock.CallerInfo(1)
+	return mmChatWithFiles.mock
+}
+
+// When sets expectation for the Provider.ChatWithFiles which will trigger the result defined by the following
+// Then helper
+func (mmChatWithFiles *mProviderMockChatWithFiles) When(ctx context.Context, files []mm_ai.FileContent, prompt string) *ProviderMockChatWithFilesExpectation {
+	if mmChatWithFiles.mock.funcChatWithFiles != nil {
+		mmChatWithFiles.mock.t.Fatalf("ProviderMock.ChatWithFiles mock is already set by Set")
+	}
+
+	expectation := &ProviderMockChatWithFilesExpectation{
+		mock:               mmChatWithFiles.mock,
+		params:             &ProviderMockChatWithFilesParams{ctx, files, prompt},
+		expectationOrigins: ProviderMockChatWithFilesExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmChatWithFiles.expectations = append(mmChatWithFiles.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Provider.ChatWithFiles return parameters for the expectation previously defined by the When method
+func (e *ProviderMockChatWithFilesExpectation) Then(cp1 *mm_ai.ChatResult, err error) *ProviderMock {
+	e.results = &ProviderMockChatWithFilesResults{cp1, err}
+	return e.mock
+}
+
+// Times sets number of times Provider.ChatWithFiles should be invoked
+func (mmChatWithFiles *mProviderMockChatWithFiles) Times(n uint64) *mProviderMockChatWithFiles {
+	if n == 0 {
+		mmChatWithFiles.mock.t.Fatalf("Times of ProviderMock.ChatWithFiles mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmChatWithFiles.expectedInvocations, n)
+	mmChatWithFiles.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmChatWithFiles
+}
+
+func (mmChatWithFiles *mProviderMockChatWithFiles) invocationsDone() bool {
+	if len(mmChatWithFiles.expectations) == 0 && mmChatWithFiles.defaultExpectation == nil && mmChatWithFiles.mock.funcChatWithFiles == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmChatWithFiles.mock.afterChatWithFilesCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmChatWithFiles.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// ChatWithFiles implements mm_ai.Provider
+func (mmChatWithFiles *ProviderMock) ChatWithFiles(ctx context.Context, files []mm_ai.FileContent, prompt string) (cp1 *mm_ai.ChatResult, err error) {
+	mm_atomic.AddUint64(&mmChatWithFiles.beforeChatWithFilesCounter, 1)
+	defer mm_atomic.AddUint64(&mmChatWithFiles.afterChatWithFilesCounter, 1)
+
+	mmChatWithFiles.t.Helper()
+
+	if mmChatWithFiles.inspectFuncChatWithFiles != nil {
+		mmChatWithFiles.inspectFuncChatWithFiles(ctx, files, prompt)
+	}
+
+	mm_params := ProviderMockChatWithFilesParams{ctx, files, prompt}
+
+	// Record call args
+	mmChatWithFiles.ChatWithFilesMock.mutex.Lock()
+	mmChatWithFiles.ChatWithFilesMock.callArgs = append(mmChatWithFiles.ChatWithFilesMock.callArgs, &mm_params)
+	mmChatWithFiles.ChatWithFilesMock.mutex.Unlock()
+
+	for _, e := range mmChatWithFiles.ChatWithFilesMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.cp1, e.results.err
+		}
+	}
+
+	if mmChatWithFiles.ChatWithFilesMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmChatWithFiles.ChatWithFilesMock.defaultExpectation.Counter, 1)
+		mm_want := mmChatWithFiles.ChatWithFilesMock.defaultExpectation.params
+		mm_want_ptrs := mmChatWithFiles.ChatWithFilesMock.defaultExpectation.paramPtrs
+
+		mm_got := ProviderMockChatWithFilesParams{ctx, files, prompt}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmChatWithFiles.t.Errorf("ProviderMock.ChatWithFiles got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmChatWithFiles.ChatWithFilesMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.files != nil && !minimock.Equal(*mm_want_ptrs.files, mm_got.files) {
+				mmChatWithFiles.t.Errorf("ProviderMock.ChatWithFiles got unexpected parameter files, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmChatWithFiles.ChatWithFilesMock.defaultExpectation.expectationOrigins.originFiles, *mm_want_ptrs.files, mm_got.files, minimock.Diff(*mm_want_ptrs.files, mm_got.files))
+			}
+
+			if mm_want_ptrs.prompt != nil && !minimock.Equal(*mm_want_ptrs.prompt, mm_got.prompt) {
+				mmChatWithFiles.t.Errorf("ProviderMock.ChatWithFiles got unexpected parameter prompt, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmChatWithFiles.ChatWithFilesMock.defaultExpectation.expectationOrigins.originPrompt, *mm_want_ptrs.prompt, mm_got.prompt, minimock.Diff(*mm_want_ptrs.prompt, mm_got.prompt))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmChatWithFiles.t.Errorf("ProviderMock.ChatWithFiles got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmChatWithFiles.ChatWithFilesMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmChatWithFiles.ChatWithFilesMock.defaultExpectation.results
+		if mm_results == nil {
+			mmChatWithFiles.t.Fatal("No results are set for the ProviderMock.ChatWithFiles")
+		}
+		return (*mm_results).cp1, (*mm_results).err
+	}
+	if mmChatWithFiles.funcChatWithFiles != nil {
+		return mmChatWithFiles.funcChatWithFiles(ctx, files, prompt)
+	}
+	mmChatWithFiles.t.Fatalf("Unexpected call to ProviderMock.ChatWithFiles. %v %v %v", ctx, files, prompt)
+	return
+}
+
+// ChatWithFilesAfterCounter returns a count of finished ProviderMock.ChatWithFiles invocations
+func (mmChatWithFiles *ProviderMock) ChatWithFilesAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmChatWithFiles.afterChatWithFilesCounter)
+}
+
+// ChatWithFilesBeforeCounter returns a count of ProviderMock.ChatWithFiles invocations
+func (mmChatWithFiles *ProviderMock) ChatWithFilesBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmChatWithFiles.beforeChatWithFilesCounter)
+}
+
+// Calls returns a list of arguments used in each call to ProviderMock.ChatWithFiles.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmChatWithFiles *mProviderMockChatWithFiles) Calls() []*ProviderMockChatWithFilesParams {
+	mmChatWithFiles.mutex.RLock()
+
+	argCopy := make([]*ProviderMockChatWithFilesParams, len(mmChatWithFiles.callArgs))
+	copy(argCopy, mmChatWithFiles.callArgs)
+
+	mmChatWithFiles.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockChatWithFilesDone returns true if the count of the ChatWithFiles invocations corresponds
+// the number of defined expectations
+func (m *ProviderMock) MinimockChatWithFilesDone() bool {
+	if m.ChatWithFilesMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.ChatWithFilesMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.ChatWithFilesMock.invocationsDone()
+}
+
+// MinimockChatWithFilesInspect logs each unmet expectation
+func (m *ProviderMock) MinimockChatWithFilesInspect() {
+	for _, e := range m.ChatWithFilesMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to ProviderMock.ChatWithFiles at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterChatWithFilesCounter := mm_atomic.LoadUint64(&m.afterChatWithFilesCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.ChatWithFilesMock.defaultExpectation != nil && afterChatWithFilesCounter < 1 {
+		if m.ChatWithFilesMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to ProviderMock.ChatWithFiles at\n%s", m.ChatWithFilesMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to ProviderMock.ChatWithFiles at\n%s with params: %#v", m.ChatWithFilesMock.defaultExpectation.expectationOrigins.origin, *m.ChatWithFilesMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcChatWithFiles != nil && afterChatWithFilesCounter < 1 {
+		m.t.Errorf("Expected call to ProviderMock.ChatWithFiles at\n%s", m.funcChatWithFilesOrigin)
+	}
+
+	if !m.ChatWithFilesMock.invocationsDone() && afterChatWithFilesCounter > 0 {
+		m.t.Errorf("Expected %d calls to ProviderMock.ChatWithFiles at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.ChatWithFilesMock.expectedInvocations), m.ChatWithFilesMock.expectedInvocationsOrigin, afterChatWithFilesCounter)
+	}
 }
 
 type mProviderMockClose struct {
@@ -284,442 +1082,6 @@ func (m *ProviderMock) MinimockCloseInspect() {
 	if !m.CloseMock.invocationsDone() && afterCloseCounter > 0 {
 		m.t.Errorf("Expected %d calls to ProviderMock.Close at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.CloseMock.expectedInvocations), m.CloseMock.expectedInvocationsOrigin, afterCloseCounter)
-	}
-}
-
-type mProviderMockConvertToMarkdown struct {
-	optional           bool
-	mock               *ProviderMock
-	defaultExpectation *ProviderMockConvertToMarkdownExpectation
-	expectations       []*ProviderMockConvertToMarkdownExpectation
-
-	callArgs []*ProviderMockConvertToMarkdownParams
-	mutex    sync.RWMutex
-
-	expectedInvocations       uint64
-	expectedInvocationsOrigin string
-}
-
-// ProviderMockConvertToMarkdownExpectation specifies expectation struct of the Provider.ConvertToMarkdown
-type ProviderMockConvertToMarkdownExpectation struct {
-	mock               *ProviderMock
-	params             *ProviderMockConvertToMarkdownParams
-	paramPtrs          *ProviderMockConvertToMarkdownParamPtrs
-	expectationOrigins ProviderMockConvertToMarkdownExpectationOrigins
-	results            *ProviderMockConvertToMarkdownResults
-	returnOrigin       string
-	Counter            uint64
-}
-
-// ProviderMockConvertToMarkdownParams contains parameters of the Provider.ConvertToMarkdown
-type ProviderMockConvertToMarkdownParams struct {
-	ctx      context.Context
-	content  []byte
-	fileType artifactpb.FileType
-	filename string
-	prompt   string
-}
-
-// ProviderMockConvertToMarkdownParamPtrs contains pointers to parameters of the Provider.ConvertToMarkdown
-type ProviderMockConvertToMarkdownParamPtrs struct {
-	ctx      *context.Context
-	content  *[]byte
-	fileType *artifactpb.FileType
-	filename *string
-	prompt   *string
-}
-
-// ProviderMockConvertToMarkdownResults contains results of the Provider.ConvertToMarkdown
-type ProviderMockConvertToMarkdownResults struct {
-	cp1 *mm_ai.ConversionResult
-	err error
-}
-
-// ProviderMockConvertToMarkdownOrigins contains origins of expectations of the Provider.ConvertToMarkdown
-type ProviderMockConvertToMarkdownExpectationOrigins struct {
-	origin         string
-	originCtx      string
-	originContent  string
-	originFileType string
-	originFilename string
-	originPrompt   string
-}
-
-// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
-// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
-// Optional() makes method check to work in '0 or more' mode.
-// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
-// catch the problems when the expected method call is totally skipped during test run.
-func (mmConvertToMarkdown *mProviderMockConvertToMarkdown) Optional() *mProviderMockConvertToMarkdown {
-	mmConvertToMarkdown.optional = true
-	return mmConvertToMarkdown
-}
-
-// Expect sets up expected params for Provider.ConvertToMarkdown
-func (mmConvertToMarkdown *mProviderMockConvertToMarkdown) Expect(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string, prompt string) *mProviderMockConvertToMarkdown {
-	if mmConvertToMarkdown.mock.funcConvertToMarkdown != nil {
-		mmConvertToMarkdown.mock.t.Fatalf("ProviderMock.ConvertToMarkdown mock is already set by Set")
-	}
-
-	if mmConvertToMarkdown.defaultExpectation == nil {
-		mmConvertToMarkdown.defaultExpectation = &ProviderMockConvertToMarkdownExpectation{}
-	}
-
-	if mmConvertToMarkdown.defaultExpectation.paramPtrs != nil {
-		mmConvertToMarkdown.mock.t.Fatalf("ProviderMock.ConvertToMarkdown mock is already set by ExpectParams functions")
-	}
-
-	mmConvertToMarkdown.defaultExpectation.params = &ProviderMockConvertToMarkdownParams{ctx, content, fileType, filename, prompt}
-	mmConvertToMarkdown.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
-	for _, e := range mmConvertToMarkdown.expectations {
-		if minimock.Equal(e.params, mmConvertToMarkdown.defaultExpectation.params) {
-			mmConvertToMarkdown.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmConvertToMarkdown.defaultExpectation.params)
-		}
-	}
-
-	return mmConvertToMarkdown
-}
-
-// ExpectCtxParam1 sets up expected param ctx for Provider.ConvertToMarkdown
-func (mmConvertToMarkdown *mProviderMockConvertToMarkdown) ExpectCtxParam1(ctx context.Context) *mProviderMockConvertToMarkdown {
-	if mmConvertToMarkdown.mock.funcConvertToMarkdown != nil {
-		mmConvertToMarkdown.mock.t.Fatalf("ProviderMock.ConvertToMarkdown mock is already set by Set")
-	}
-
-	if mmConvertToMarkdown.defaultExpectation == nil {
-		mmConvertToMarkdown.defaultExpectation = &ProviderMockConvertToMarkdownExpectation{}
-	}
-
-	if mmConvertToMarkdown.defaultExpectation.params != nil {
-		mmConvertToMarkdown.mock.t.Fatalf("ProviderMock.ConvertToMarkdown mock is already set by Expect")
-	}
-
-	if mmConvertToMarkdown.defaultExpectation.paramPtrs == nil {
-		mmConvertToMarkdown.defaultExpectation.paramPtrs = &ProviderMockConvertToMarkdownParamPtrs{}
-	}
-	mmConvertToMarkdown.defaultExpectation.paramPtrs.ctx = &ctx
-	mmConvertToMarkdown.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
-
-	return mmConvertToMarkdown
-}
-
-// ExpectContentParam2 sets up expected param content for Provider.ConvertToMarkdown
-func (mmConvertToMarkdown *mProviderMockConvertToMarkdown) ExpectContentParam2(content []byte) *mProviderMockConvertToMarkdown {
-	if mmConvertToMarkdown.mock.funcConvertToMarkdown != nil {
-		mmConvertToMarkdown.mock.t.Fatalf("ProviderMock.ConvertToMarkdown mock is already set by Set")
-	}
-
-	if mmConvertToMarkdown.defaultExpectation == nil {
-		mmConvertToMarkdown.defaultExpectation = &ProviderMockConvertToMarkdownExpectation{}
-	}
-
-	if mmConvertToMarkdown.defaultExpectation.params != nil {
-		mmConvertToMarkdown.mock.t.Fatalf("ProviderMock.ConvertToMarkdown mock is already set by Expect")
-	}
-
-	if mmConvertToMarkdown.defaultExpectation.paramPtrs == nil {
-		mmConvertToMarkdown.defaultExpectation.paramPtrs = &ProviderMockConvertToMarkdownParamPtrs{}
-	}
-	mmConvertToMarkdown.defaultExpectation.paramPtrs.content = &content
-	mmConvertToMarkdown.defaultExpectation.expectationOrigins.originContent = minimock.CallerInfo(1)
-
-	return mmConvertToMarkdown
-}
-
-// ExpectFileTypeParam3 sets up expected param fileType for Provider.ConvertToMarkdown
-func (mmConvertToMarkdown *mProviderMockConvertToMarkdown) ExpectFileTypeParam3(fileType artifactpb.FileType) *mProviderMockConvertToMarkdown {
-	if mmConvertToMarkdown.mock.funcConvertToMarkdown != nil {
-		mmConvertToMarkdown.mock.t.Fatalf("ProviderMock.ConvertToMarkdown mock is already set by Set")
-	}
-
-	if mmConvertToMarkdown.defaultExpectation == nil {
-		mmConvertToMarkdown.defaultExpectation = &ProviderMockConvertToMarkdownExpectation{}
-	}
-
-	if mmConvertToMarkdown.defaultExpectation.params != nil {
-		mmConvertToMarkdown.mock.t.Fatalf("ProviderMock.ConvertToMarkdown mock is already set by Expect")
-	}
-
-	if mmConvertToMarkdown.defaultExpectation.paramPtrs == nil {
-		mmConvertToMarkdown.defaultExpectation.paramPtrs = &ProviderMockConvertToMarkdownParamPtrs{}
-	}
-	mmConvertToMarkdown.defaultExpectation.paramPtrs.fileType = &fileType
-	mmConvertToMarkdown.defaultExpectation.expectationOrigins.originFileType = minimock.CallerInfo(1)
-
-	return mmConvertToMarkdown
-}
-
-// ExpectFilenameParam4 sets up expected param filename for Provider.ConvertToMarkdown
-func (mmConvertToMarkdown *mProviderMockConvertToMarkdown) ExpectFilenameParam4(filename string) *mProviderMockConvertToMarkdown {
-	if mmConvertToMarkdown.mock.funcConvertToMarkdown != nil {
-		mmConvertToMarkdown.mock.t.Fatalf("ProviderMock.ConvertToMarkdown mock is already set by Set")
-	}
-
-	if mmConvertToMarkdown.defaultExpectation == nil {
-		mmConvertToMarkdown.defaultExpectation = &ProviderMockConvertToMarkdownExpectation{}
-	}
-
-	if mmConvertToMarkdown.defaultExpectation.params != nil {
-		mmConvertToMarkdown.mock.t.Fatalf("ProviderMock.ConvertToMarkdown mock is already set by Expect")
-	}
-
-	if mmConvertToMarkdown.defaultExpectation.paramPtrs == nil {
-		mmConvertToMarkdown.defaultExpectation.paramPtrs = &ProviderMockConvertToMarkdownParamPtrs{}
-	}
-	mmConvertToMarkdown.defaultExpectation.paramPtrs.filename = &filename
-	mmConvertToMarkdown.defaultExpectation.expectationOrigins.originFilename = minimock.CallerInfo(1)
-
-	return mmConvertToMarkdown
-}
-
-// ExpectPromptParam5 sets up expected param prompt for Provider.ConvertToMarkdown
-func (mmConvertToMarkdown *mProviderMockConvertToMarkdown) ExpectPromptParam5(prompt string) *mProviderMockConvertToMarkdown {
-	if mmConvertToMarkdown.mock.funcConvertToMarkdown != nil {
-		mmConvertToMarkdown.mock.t.Fatalf("ProviderMock.ConvertToMarkdown mock is already set by Set")
-	}
-
-	if mmConvertToMarkdown.defaultExpectation == nil {
-		mmConvertToMarkdown.defaultExpectation = &ProviderMockConvertToMarkdownExpectation{}
-	}
-
-	if mmConvertToMarkdown.defaultExpectation.params != nil {
-		mmConvertToMarkdown.mock.t.Fatalf("ProviderMock.ConvertToMarkdown mock is already set by Expect")
-	}
-
-	if mmConvertToMarkdown.defaultExpectation.paramPtrs == nil {
-		mmConvertToMarkdown.defaultExpectation.paramPtrs = &ProviderMockConvertToMarkdownParamPtrs{}
-	}
-	mmConvertToMarkdown.defaultExpectation.paramPtrs.prompt = &prompt
-	mmConvertToMarkdown.defaultExpectation.expectationOrigins.originPrompt = minimock.CallerInfo(1)
-
-	return mmConvertToMarkdown
-}
-
-// Inspect accepts an inspector function that has same arguments as the Provider.ConvertToMarkdown
-func (mmConvertToMarkdown *mProviderMockConvertToMarkdown) Inspect(f func(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string, prompt string)) *mProviderMockConvertToMarkdown {
-	if mmConvertToMarkdown.mock.inspectFuncConvertToMarkdown != nil {
-		mmConvertToMarkdown.mock.t.Fatalf("Inspect function is already set for ProviderMock.ConvertToMarkdown")
-	}
-
-	mmConvertToMarkdown.mock.inspectFuncConvertToMarkdown = f
-
-	return mmConvertToMarkdown
-}
-
-// Return sets up results that will be returned by Provider.ConvertToMarkdown
-func (mmConvertToMarkdown *mProviderMockConvertToMarkdown) Return(cp1 *mm_ai.ConversionResult, err error) *ProviderMock {
-	if mmConvertToMarkdown.mock.funcConvertToMarkdown != nil {
-		mmConvertToMarkdown.mock.t.Fatalf("ProviderMock.ConvertToMarkdown mock is already set by Set")
-	}
-
-	if mmConvertToMarkdown.defaultExpectation == nil {
-		mmConvertToMarkdown.defaultExpectation = &ProviderMockConvertToMarkdownExpectation{mock: mmConvertToMarkdown.mock}
-	}
-	mmConvertToMarkdown.defaultExpectation.results = &ProviderMockConvertToMarkdownResults{cp1, err}
-	mmConvertToMarkdown.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
-	return mmConvertToMarkdown.mock
-}
-
-// Set uses given function f to mock the Provider.ConvertToMarkdown method
-func (mmConvertToMarkdown *mProviderMockConvertToMarkdown) Set(f func(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string, prompt string) (cp1 *mm_ai.ConversionResult, err error)) *ProviderMock {
-	if mmConvertToMarkdown.defaultExpectation != nil {
-		mmConvertToMarkdown.mock.t.Fatalf("Default expectation is already set for the Provider.ConvertToMarkdown method")
-	}
-
-	if len(mmConvertToMarkdown.expectations) > 0 {
-		mmConvertToMarkdown.mock.t.Fatalf("Some expectations are already set for the Provider.ConvertToMarkdown method")
-	}
-
-	mmConvertToMarkdown.mock.funcConvertToMarkdown = f
-	mmConvertToMarkdown.mock.funcConvertToMarkdownOrigin = minimock.CallerInfo(1)
-	return mmConvertToMarkdown.mock
-}
-
-// When sets expectation for the Provider.ConvertToMarkdown which will trigger the result defined by the following
-// Then helper
-func (mmConvertToMarkdown *mProviderMockConvertToMarkdown) When(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string, prompt string) *ProviderMockConvertToMarkdownExpectation {
-	if mmConvertToMarkdown.mock.funcConvertToMarkdown != nil {
-		mmConvertToMarkdown.mock.t.Fatalf("ProviderMock.ConvertToMarkdown mock is already set by Set")
-	}
-
-	expectation := &ProviderMockConvertToMarkdownExpectation{
-		mock:               mmConvertToMarkdown.mock,
-		params:             &ProviderMockConvertToMarkdownParams{ctx, content, fileType, filename, prompt},
-		expectationOrigins: ProviderMockConvertToMarkdownExpectationOrigins{origin: minimock.CallerInfo(1)},
-	}
-	mmConvertToMarkdown.expectations = append(mmConvertToMarkdown.expectations, expectation)
-	return expectation
-}
-
-// Then sets up Provider.ConvertToMarkdown return parameters for the expectation previously defined by the When method
-func (e *ProviderMockConvertToMarkdownExpectation) Then(cp1 *mm_ai.ConversionResult, err error) *ProviderMock {
-	e.results = &ProviderMockConvertToMarkdownResults{cp1, err}
-	return e.mock
-}
-
-// Times sets number of times Provider.ConvertToMarkdown should be invoked
-func (mmConvertToMarkdown *mProviderMockConvertToMarkdown) Times(n uint64) *mProviderMockConvertToMarkdown {
-	if n == 0 {
-		mmConvertToMarkdown.mock.t.Fatalf("Times of ProviderMock.ConvertToMarkdown mock can not be zero")
-	}
-	mm_atomic.StoreUint64(&mmConvertToMarkdown.expectedInvocations, n)
-	mmConvertToMarkdown.expectedInvocationsOrigin = minimock.CallerInfo(1)
-	return mmConvertToMarkdown
-}
-
-func (mmConvertToMarkdown *mProviderMockConvertToMarkdown) invocationsDone() bool {
-	if len(mmConvertToMarkdown.expectations) == 0 && mmConvertToMarkdown.defaultExpectation == nil && mmConvertToMarkdown.mock.funcConvertToMarkdown == nil {
-		return true
-	}
-
-	totalInvocations := mm_atomic.LoadUint64(&mmConvertToMarkdown.mock.afterConvertToMarkdownCounter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmConvertToMarkdown.expectedInvocations)
-
-	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
-}
-
-// ConvertToMarkdown implements mm_ai.Provider
-func (mmConvertToMarkdown *ProviderMock) ConvertToMarkdown(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string, prompt string) (cp1 *mm_ai.ConversionResult, err error) {
-	mm_atomic.AddUint64(&mmConvertToMarkdown.beforeConvertToMarkdownCounter, 1)
-	defer mm_atomic.AddUint64(&mmConvertToMarkdown.afterConvertToMarkdownCounter, 1)
-
-	mmConvertToMarkdown.t.Helper()
-
-	if mmConvertToMarkdown.inspectFuncConvertToMarkdown != nil {
-		mmConvertToMarkdown.inspectFuncConvertToMarkdown(ctx, content, fileType, filename, prompt)
-	}
-
-	mm_params := ProviderMockConvertToMarkdownParams{ctx, content, fileType, filename, prompt}
-
-	// Record call args
-	mmConvertToMarkdown.ConvertToMarkdownMock.mutex.Lock()
-	mmConvertToMarkdown.ConvertToMarkdownMock.callArgs = append(mmConvertToMarkdown.ConvertToMarkdownMock.callArgs, &mm_params)
-	mmConvertToMarkdown.ConvertToMarkdownMock.mutex.Unlock()
-
-	for _, e := range mmConvertToMarkdown.ConvertToMarkdownMock.expectations {
-		if minimock.Equal(*e.params, mm_params) {
-			mm_atomic.AddUint64(&e.Counter, 1)
-			return e.results.cp1, e.results.err
-		}
-	}
-
-	if mmConvertToMarkdown.ConvertToMarkdownMock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmConvertToMarkdown.ConvertToMarkdownMock.defaultExpectation.Counter, 1)
-		mm_want := mmConvertToMarkdown.ConvertToMarkdownMock.defaultExpectation.params
-		mm_want_ptrs := mmConvertToMarkdown.ConvertToMarkdownMock.defaultExpectation.paramPtrs
-
-		mm_got := ProviderMockConvertToMarkdownParams{ctx, content, fileType, filename, prompt}
-
-		if mm_want_ptrs != nil {
-
-			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
-				mmConvertToMarkdown.t.Errorf("ProviderMock.ConvertToMarkdown got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmConvertToMarkdown.ConvertToMarkdownMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
-			}
-
-			if mm_want_ptrs.content != nil && !minimock.Equal(*mm_want_ptrs.content, mm_got.content) {
-				mmConvertToMarkdown.t.Errorf("ProviderMock.ConvertToMarkdown got unexpected parameter content, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmConvertToMarkdown.ConvertToMarkdownMock.defaultExpectation.expectationOrigins.originContent, *mm_want_ptrs.content, mm_got.content, minimock.Diff(*mm_want_ptrs.content, mm_got.content))
-			}
-
-			if mm_want_ptrs.fileType != nil && !minimock.Equal(*mm_want_ptrs.fileType, mm_got.fileType) {
-				mmConvertToMarkdown.t.Errorf("ProviderMock.ConvertToMarkdown got unexpected parameter fileType, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmConvertToMarkdown.ConvertToMarkdownMock.defaultExpectation.expectationOrigins.originFileType, *mm_want_ptrs.fileType, mm_got.fileType, minimock.Diff(*mm_want_ptrs.fileType, mm_got.fileType))
-			}
-
-			if mm_want_ptrs.filename != nil && !minimock.Equal(*mm_want_ptrs.filename, mm_got.filename) {
-				mmConvertToMarkdown.t.Errorf("ProviderMock.ConvertToMarkdown got unexpected parameter filename, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmConvertToMarkdown.ConvertToMarkdownMock.defaultExpectation.expectationOrigins.originFilename, *mm_want_ptrs.filename, mm_got.filename, minimock.Diff(*mm_want_ptrs.filename, mm_got.filename))
-			}
-
-			if mm_want_ptrs.prompt != nil && !minimock.Equal(*mm_want_ptrs.prompt, mm_got.prompt) {
-				mmConvertToMarkdown.t.Errorf("ProviderMock.ConvertToMarkdown got unexpected parameter prompt, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmConvertToMarkdown.ConvertToMarkdownMock.defaultExpectation.expectationOrigins.originPrompt, *mm_want_ptrs.prompt, mm_got.prompt, minimock.Diff(*mm_want_ptrs.prompt, mm_got.prompt))
-			}
-
-		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
-			mmConvertToMarkdown.t.Errorf("ProviderMock.ConvertToMarkdown got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-				mmConvertToMarkdown.ConvertToMarkdownMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
-		}
-
-		mm_results := mmConvertToMarkdown.ConvertToMarkdownMock.defaultExpectation.results
-		if mm_results == nil {
-			mmConvertToMarkdown.t.Fatal("No results are set for the ProviderMock.ConvertToMarkdown")
-		}
-		return (*mm_results).cp1, (*mm_results).err
-	}
-	if mmConvertToMarkdown.funcConvertToMarkdown != nil {
-		return mmConvertToMarkdown.funcConvertToMarkdown(ctx, content, fileType, filename, prompt)
-	}
-	mmConvertToMarkdown.t.Fatalf("Unexpected call to ProviderMock.ConvertToMarkdown. %v %v %v %v %v", ctx, content, fileType, filename, prompt)
-	return
-}
-
-// ConvertToMarkdownAfterCounter returns a count of finished ProviderMock.ConvertToMarkdown invocations
-func (mmConvertToMarkdown *ProviderMock) ConvertToMarkdownAfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmConvertToMarkdown.afterConvertToMarkdownCounter)
-}
-
-// ConvertToMarkdownBeforeCounter returns a count of ProviderMock.ConvertToMarkdown invocations
-func (mmConvertToMarkdown *ProviderMock) ConvertToMarkdownBeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmConvertToMarkdown.beforeConvertToMarkdownCounter)
-}
-
-// Calls returns a list of arguments used in each call to ProviderMock.ConvertToMarkdown.
-// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
-func (mmConvertToMarkdown *mProviderMockConvertToMarkdown) Calls() []*ProviderMockConvertToMarkdownParams {
-	mmConvertToMarkdown.mutex.RLock()
-
-	argCopy := make([]*ProviderMockConvertToMarkdownParams, len(mmConvertToMarkdown.callArgs))
-	copy(argCopy, mmConvertToMarkdown.callArgs)
-
-	mmConvertToMarkdown.mutex.RUnlock()
-
-	return argCopy
-}
-
-// MinimockConvertToMarkdownDone returns true if the count of the ConvertToMarkdown invocations corresponds
-// the number of defined expectations
-func (m *ProviderMock) MinimockConvertToMarkdownDone() bool {
-	if m.ConvertToMarkdownMock.optional {
-		// Optional methods provide '0 or more' call count restriction.
-		return true
-	}
-
-	for _, e := range m.ConvertToMarkdownMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			return false
-		}
-	}
-
-	return m.ConvertToMarkdownMock.invocationsDone()
-}
-
-// MinimockConvertToMarkdownInspect logs each unmet expectation
-func (m *ProviderMock) MinimockConvertToMarkdownInspect() {
-	for _, e := range m.ConvertToMarkdownMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Errorf("Expected call to ProviderMock.ConvertToMarkdown at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
-		}
-	}
-
-	afterConvertToMarkdownCounter := mm_atomic.LoadUint64(&m.afterConvertToMarkdownCounter)
-	// if default expectation was set then invocations count should be greater than zero
-	if m.ConvertToMarkdownMock.defaultExpectation != nil && afterConvertToMarkdownCounter < 1 {
-		if m.ConvertToMarkdownMock.defaultExpectation.params == nil {
-			m.t.Errorf("Expected call to ProviderMock.ConvertToMarkdown at\n%s", m.ConvertToMarkdownMock.defaultExpectation.returnOrigin)
-		} else {
-			m.t.Errorf("Expected call to ProviderMock.ConvertToMarkdown at\n%s with params: %#v", m.ConvertToMarkdownMock.defaultExpectation.expectationOrigins.origin, *m.ConvertToMarkdownMock.defaultExpectation.params)
-		}
-	}
-	// if func was set then invocations count should be greater than zero
-	if m.funcConvertToMarkdown != nil && afterConvertToMarkdownCounter < 1 {
-		m.t.Errorf("Expected call to ProviderMock.ConvertToMarkdown at\n%s", m.funcConvertToMarkdownOrigin)
-	}
-
-	if !m.ConvertToMarkdownMock.invocationsDone() && afterConvertToMarkdownCounter > 0 {
-		m.t.Errorf("Expected %d calls to ProviderMock.ConvertToMarkdown at\n%s but found %d calls",
-			mm_atomic.LoadUint64(&m.ConvertToMarkdownMock.expectedInvocations), m.ConvertToMarkdownMock.expectedInvocationsOrigin, afterConvertToMarkdownCounter)
 	}
 }
 
@@ -1097,6 +1459,442 @@ func (m *ProviderMock) MinimockConvertToMarkdownWithCacheInspect() {
 	}
 }
 
+type mProviderMockConvertToMarkdownWithoutCache struct {
+	optional           bool
+	mock               *ProviderMock
+	defaultExpectation *ProviderMockConvertToMarkdownWithoutCacheExpectation
+	expectations       []*ProviderMockConvertToMarkdownWithoutCacheExpectation
+
+	callArgs []*ProviderMockConvertToMarkdownWithoutCacheParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// ProviderMockConvertToMarkdownWithoutCacheExpectation specifies expectation struct of the Provider.ConvertToMarkdownWithoutCache
+type ProviderMockConvertToMarkdownWithoutCacheExpectation struct {
+	mock               *ProviderMock
+	params             *ProviderMockConvertToMarkdownWithoutCacheParams
+	paramPtrs          *ProviderMockConvertToMarkdownWithoutCacheParamPtrs
+	expectationOrigins ProviderMockConvertToMarkdownWithoutCacheExpectationOrigins
+	results            *ProviderMockConvertToMarkdownWithoutCacheResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// ProviderMockConvertToMarkdownWithoutCacheParams contains parameters of the Provider.ConvertToMarkdownWithoutCache
+type ProviderMockConvertToMarkdownWithoutCacheParams struct {
+	ctx      context.Context
+	content  []byte
+	fileType artifactpb.FileType
+	filename string
+	prompt   string
+}
+
+// ProviderMockConvertToMarkdownWithoutCacheParamPtrs contains pointers to parameters of the Provider.ConvertToMarkdownWithoutCache
+type ProviderMockConvertToMarkdownWithoutCacheParamPtrs struct {
+	ctx      *context.Context
+	content  *[]byte
+	fileType *artifactpb.FileType
+	filename *string
+	prompt   *string
+}
+
+// ProviderMockConvertToMarkdownWithoutCacheResults contains results of the Provider.ConvertToMarkdownWithoutCache
+type ProviderMockConvertToMarkdownWithoutCacheResults struct {
+	cp1 *mm_ai.ConversionResult
+	err error
+}
+
+// ProviderMockConvertToMarkdownWithoutCacheOrigins contains origins of expectations of the Provider.ConvertToMarkdownWithoutCache
+type ProviderMockConvertToMarkdownWithoutCacheExpectationOrigins struct {
+	origin         string
+	originCtx      string
+	originContent  string
+	originFileType string
+	originFilename string
+	originPrompt   string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmConvertToMarkdownWithoutCache *mProviderMockConvertToMarkdownWithoutCache) Optional() *mProviderMockConvertToMarkdownWithoutCache {
+	mmConvertToMarkdownWithoutCache.optional = true
+	return mmConvertToMarkdownWithoutCache
+}
+
+// Expect sets up expected params for Provider.ConvertToMarkdownWithoutCache
+func (mmConvertToMarkdownWithoutCache *mProviderMockConvertToMarkdownWithoutCache) Expect(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string, prompt string) *mProviderMockConvertToMarkdownWithoutCache {
+	if mmConvertToMarkdownWithoutCache.mock.funcConvertToMarkdownWithoutCache != nil {
+		mmConvertToMarkdownWithoutCache.mock.t.Fatalf("ProviderMock.ConvertToMarkdownWithoutCache mock is already set by Set")
+	}
+
+	if mmConvertToMarkdownWithoutCache.defaultExpectation == nil {
+		mmConvertToMarkdownWithoutCache.defaultExpectation = &ProviderMockConvertToMarkdownWithoutCacheExpectation{}
+	}
+
+	if mmConvertToMarkdownWithoutCache.defaultExpectation.paramPtrs != nil {
+		mmConvertToMarkdownWithoutCache.mock.t.Fatalf("ProviderMock.ConvertToMarkdownWithoutCache mock is already set by ExpectParams functions")
+	}
+
+	mmConvertToMarkdownWithoutCache.defaultExpectation.params = &ProviderMockConvertToMarkdownWithoutCacheParams{ctx, content, fileType, filename, prompt}
+	mmConvertToMarkdownWithoutCache.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmConvertToMarkdownWithoutCache.expectations {
+		if minimock.Equal(e.params, mmConvertToMarkdownWithoutCache.defaultExpectation.params) {
+			mmConvertToMarkdownWithoutCache.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmConvertToMarkdownWithoutCache.defaultExpectation.params)
+		}
+	}
+
+	return mmConvertToMarkdownWithoutCache
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Provider.ConvertToMarkdownWithoutCache
+func (mmConvertToMarkdownWithoutCache *mProviderMockConvertToMarkdownWithoutCache) ExpectCtxParam1(ctx context.Context) *mProviderMockConvertToMarkdownWithoutCache {
+	if mmConvertToMarkdownWithoutCache.mock.funcConvertToMarkdownWithoutCache != nil {
+		mmConvertToMarkdownWithoutCache.mock.t.Fatalf("ProviderMock.ConvertToMarkdownWithoutCache mock is already set by Set")
+	}
+
+	if mmConvertToMarkdownWithoutCache.defaultExpectation == nil {
+		mmConvertToMarkdownWithoutCache.defaultExpectation = &ProviderMockConvertToMarkdownWithoutCacheExpectation{}
+	}
+
+	if mmConvertToMarkdownWithoutCache.defaultExpectation.params != nil {
+		mmConvertToMarkdownWithoutCache.mock.t.Fatalf("ProviderMock.ConvertToMarkdownWithoutCache mock is already set by Expect")
+	}
+
+	if mmConvertToMarkdownWithoutCache.defaultExpectation.paramPtrs == nil {
+		mmConvertToMarkdownWithoutCache.defaultExpectation.paramPtrs = &ProviderMockConvertToMarkdownWithoutCacheParamPtrs{}
+	}
+	mmConvertToMarkdownWithoutCache.defaultExpectation.paramPtrs.ctx = &ctx
+	mmConvertToMarkdownWithoutCache.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmConvertToMarkdownWithoutCache
+}
+
+// ExpectContentParam2 sets up expected param content for Provider.ConvertToMarkdownWithoutCache
+func (mmConvertToMarkdownWithoutCache *mProviderMockConvertToMarkdownWithoutCache) ExpectContentParam2(content []byte) *mProviderMockConvertToMarkdownWithoutCache {
+	if mmConvertToMarkdownWithoutCache.mock.funcConvertToMarkdownWithoutCache != nil {
+		mmConvertToMarkdownWithoutCache.mock.t.Fatalf("ProviderMock.ConvertToMarkdownWithoutCache mock is already set by Set")
+	}
+
+	if mmConvertToMarkdownWithoutCache.defaultExpectation == nil {
+		mmConvertToMarkdownWithoutCache.defaultExpectation = &ProviderMockConvertToMarkdownWithoutCacheExpectation{}
+	}
+
+	if mmConvertToMarkdownWithoutCache.defaultExpectation.params != nil {
+		mmConvertToMarkdownWithoutCache.mock.t.Fatalf("ProviderMock.ConvertToMarkdownWithoutCache mock is already set by Expect")
+	}
+
+	if mmConvertToMarkdownWithoutCache.defaultExpectation.paramPtrs == nil {
+		mmConvertToMarkdownWithoutCache.defaultExpectation.paramPtrs = &ProviderMockConvertToMarkdownWithoutCacheParamPtrs{}
+	}
+	mmConvertToMarkdownWithoutCache.defaultExpectation.paramPtrs.content = &content
+	mmConvertToMarkdownWithoutCache.defaultExpectation.expectationOrigins.originContent = minimock.CallerInfo(1)
+
+	return mmConvertToMarkdownWithoutCache
+}
+
+// ExpectFileTypeParam3 sets up expected param fileType for Provider.ConvertToMarkdownWithoutCache
+func (mmConvertToMarkdownWithoutCache *mProviderMockConvertToMarkdownWithoutCache) ExpectFileTypeParam3(fileType artifactpb.FileType) *mProviderMockConvertToMarkdownWithoutCache {
+	if mmConvertToMarkdownWithoutCache.mock.funcConvertToMarkdownWithoutCache != nil {
+		mmConvertToMarkdownWithoutCache.mock.t.Fatalf("ProviderMock.ConvertToMarkdownWithoutCache mock is already set by Set")
+	}
+
+	if mmConvertToMarkdownWithoutCache.defaultExpectation == nil {
+		mmConvertToMarkdownWithoutCache.defaultExpectation = &ProviderMockConvertToMarkdownWithoutCacheExpectation{}
+	}
+
+	if mmConvertToMarkdownWithoutCache.defaultExpectation.params != nil {
+		mmConvertToMarkdownWithoutCache.mock.t.Fatalf("ProviderMock.ConvertToMarkdownWithoutCache mock is already set by Expect")
+	}
+
+	if mmConvertToMarkdownWithoutCache.defaultExpectation.paramPtrs == nil {
+		mmConvertToMarkdownWithoutCache.defaultExpectation.paramPtrs = &ProviderMockConvertToMarkdownWithoutCacheParamPtrs{}
+	}
+	mmConvertToMarkdownWithoutCache.defaultExpectation.paramPtrs.fileType = &fileType
+	mmConvertToMarkdownWithoutCache.defaultExpectation.expectationOrigins.originFileType = minimock.CallerInfo(1)
+
+	return mmConvertToMarkdownWithoutCache
+}
+
+// ExpectFilenameParam4 sets up expected param filename for Provider.ConvertToMarkdownWithoutCache
+func (mmConvertToMarkdownWithoutCache *mProviderMockConvertToMarkdownWithoutCache) ExpectFilenameParam4(filename string) *mProviderMockConvertToMarkdownWithoutCache {
+	if mmConvertToMarkdownWithoutCache.mock.funcConvertToMarkdownWithoutCache != nil {
+		mmConvertToMarkdownWithoutCache.mock.t.Fatalf("ProviderMock.ConvertToMarkdownWithoutCache mock is already set by Set")
+	}
+
+	if mmConvertToMarkdownWithoutCache.defaultExpectation == nil {
+		mmConvertToMarkdownWithoutCache.defaultExpectation = &ProviderMockConvertToMarkdownWithoutCacheExpectation{}
+	}
+
+	if mmConvertToMarkdownWithoutCache.defaultExpectation.params != nil {
+		mmConvertToMarkdownWithoutCache.mock.t.Fatalf("ProviderMock.ConvertToMarkdownWithoutCache mock is already set by Expect")
+	}
+
+	if mmConvertToMarkdownWithoutCache.defaultExpectation.paramPtrs == nil {
+		mmConvertToMarkdownWithoutCache.defaultExpectation.paramPtrs = &ProviderMockConvertToMarkdownWithoutCacheParamPtrs{}
+	}
+	mmConvertToMarkdownWithoutCache.defaultExpectation.paramPtrs.filename = &filename
+	mmConvertToMarkdownWithoutCache.defaultExpectation.expectationOrigins.originFilename = minimock.CallerInfo(1)
+
+	return mmConvertToMarkdownWithoutCache
+}
+
+// ExpectPromptParam5 sets up expected param prompt for Provider.ConvertToMarkdownWithoutCache
+func (mmConvertToMarkdownWithoutCache *mProviderMockConvertToMarkdownWithoutCache) ExpectPromptParam5(prompt string) *mProviderMockConvertToMarkdownWithoutCache {
+	if mmConvertToMarkdownWithoutCache.mock.funcConvertToMarkdownWithoutCache != nil {
+		mmConvertToMarkdownWithoutCache.mock.t.Fatalf("ProviderMock.ConvertToMarkdownWithoutCache mock is already set by Set")
+	}
+
+	if mmConvertToMarkdownWithoutCache.defaultExpectation == nil {
+		mmConvertToMarkdownWithoutCache.defaultExpectation = &ProviderMockConvertToMarkdownWithoutCacheExpectation{}
+	}
+
+	if mmConvertToMarkdownWithoutCache.defaultExpectation.params != nil {
+		mmConvertToMarkdownWithoutCache.mock.t.Fatalf("ProviderMock.ConvertToMarkdownWithoutCache mock is already set by Expect")
+	}
+
+	if mmConvertToMarkdownWithoutCache.defaultExpectation.paramPtrs == nil {
+		mmConvertToMarkdownWithoutCache.defaultExpectation.paramPtrs = &ProviderMockConvertToMarkdownWithoutCacheParamPtrs{}
+	}
+	mmConvertToMarkdownWithoutCache.defaultExpectation.paramPtrs.prompt = &prompt
+	mmConvertToMarkdownWithoutCache.defaultExpectation.expectationOrigins.originPrompt = minimock.CallerInfo(1)
+
+	return mmConvertToMarkdownWithoutCache
+}
+
+// Inspect accepts an inspector function that has same arguments as the Provider.ConvertToMarkdownWithoutCache
+func (mmConvertToMarkdownWithoutCache *mProviderMockConvertToMarkdownWithoutCache) Inspect(f func(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string, prompt string)) *mProviderMockConvertToMarkdownWithoutCache {
+	if mmConvertToMarkdownWithoutCache.mock.inspectFuncConvertToMarkdownWithoutCache != nil {
+		mmConvertToMarkdownWithoutCache.mock.t.Fatalf("Inspect function is already set for ProviderMock.ConvertToMarkdownWithoutCache")
+	}
+
+	mmConvertToMarkdownWithoutCache.mock.inspectFuncConvertToMarkdownWithoutCache = f
+
+	return mmConvertToMarkdownWithoutCache
+}
+
+// Return sets up results that will be returned by Provider.ConvertToMarkdownWithoutCache
+func (mmConvertToMarkdownWithoutCache *mProviderMockConvertToMarkdownWithoutCache) Return(cp1 *mm_ai.ConversionResult, err error) *ProviderMock {
+	if mmConvertToMarkdownWithoutCache.mock.funcConvertToMarkdownWithoutCache != nil {
+		mmConvertToMarkdownWithoutCache.mock.t.Fatalf("ProviderMock.ConvertToMarkdownWithoutCache mock is already set by Set")
+	}
+
+	if mmConvertToMarkdownWithoutCache.defaultExpectation == nil {
+		mmConvertToMarkdownWithoutCache.defaultExpectation = &ProviderMockConvertToMarkdownWithoutCacheExpectation{mock: mmConvertToMarkdownWithoutCache.mock}
+	}
+	mmConvertToMarkdownWithoutCache.defaultExpectation.results = &ProviderMockConvertToMarkdownWithoutCacheResults{cp1, err}
+	mmConvertToMarkdownWithoutCache.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmConvertToMarkdownWithoutCache.mock
+}
+
+// Set uses given function f to mock the Provider.ConvertToMarkdownWithoutCache method
+func (mmConvertToMarkdownWithoutCache *mProviderMockConvertToMarkdownWithoutCache) Set(f func(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string, prompt string) (cp1 *mm_ai.ConversionResult, err error)) *ProviderMock {
+	if mmConvertToMarkdownWithoutCache.defaultExpectation != nil {
+		mmConvertToMarkdownWithoutCache.mock.t.Fatalf("Default expectation is already set for the Provider.ConvertToMarkdownWithoutCache method")
+	}
+
+	if len(mmConvertToMarkdownWithoutCache.expectations) > 0 {
+		mmConvertToMarkdownWithoutCache.mock.t.Fatalf("Some expectations are already set for the Provider.ConvertToMarkdownWithoutCache method")
+	}
+
+	mmConvertToMarkdownWithoutCache.mock.funcConvertToMarkdownWithoutCache = f
+	mmConvertToMarkdownWithoutCache.mock.funcConvertToMarkdownWithoutCacheOrigin = minimock.CallerInfo(1)
+	return mmConvertToMarkdownWithoutCache.mock
+}
+
+// When sets expectation for the Provider.ConvertToMarkdownWithoutCache which will trigger the result defined by the following
+// Then helper
+func (mmConvertToMarkdownWithoutCache *mProviderMockConvertToMarkdownWithoutCache) When(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string, prompt string) *ProviderMockConvertToMarkdownWithoutCacheExpectation {
+	if mmConvertToMarkdownWithoutCache.mock.funcConvertToMarkdownWithoutCache != nil {
+		mmConvertToMarkdownWithoutCache.mock.t.Fatalf("ProviderMock.ConvertToMarkdownWithoutCache mock is already set by Set")
+	}
+
+	expectation := &ProviderMockConvertToMarkdownWithoutCacheExpectation{
+		mock:               mmConvertToMarkdownWithoutCache.mock,
+		params:             &ProviderMockConvertToMarkdownWithoutCacheParams{ctx, content, fileType, filename, prompt},
+		expectationOrigins: ProviderMockConvertToMarkdownWithoutCacheExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmConvertToMarkdownWithoutCache.expectations = append(mmConvertToMarkdownWithoutCache.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Provider.ConvertToMarkdownWithoutCache return parameters for the expectation previously defined by the When method
+func (e *ProviderMockConvertToMarkdownWithoutCacheExpectation) Then(cp1 *mm_ai.ConversionResult, err error) *ProviderMock {
+	e.results = &ProviderMockConvertToMarkdownWithoutCacheResults{cp1, err}
+	return e.mock
+}
+
+// Times sets number of times Provider.ConvertToMarkdownWithoutCache should be invoked
+func (mmConvertToMarkdownWithoutCache *mProviderMockConvertToMarkdownWithoutCache) Times(n uint64) *mProviderMockConvertToMarkdownWithoutCache {
+	if n == 0 {
+		mmConvertToMarkdownWithoutCache.mock.t.Fatalf("Times of ProviderMock.ConvertToMarkdownWithoutCache mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmConvertToMarkdownWithoutCache.expectedInvocations, n)
+	mmConvertToMarkdownWithoutCache.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmConvertToMarkdownWithoutCache
+}
+
+func (mmConvertToMarkdownWithoutCache *mProviderMockConvertToMarkdownWithoutCache) invocationsDone() bool {
+	if len(mmConvertToMarkdownWithoutCache.expectations) == 0 && mmConvertToMarkdownWithoutCache.defaultExpectation == nil && mmConvertToMarkdownWithoutCache.mock.funcConvertToMarkdownWithoutCache == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmConvertToMarkdownWithoutCache.mock.afterConvertToMarkdownWithoutCacheCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmConvertToMarkdownWithoutCache.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// ConvertToMarkdownWithoutCache implements mm_ai.Provider
+func (mmConvertToMarkdownWithoutCache *ProviderMock) ConvertToMarkdownWithoutCache(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string, prompt string) (cp1 *mm_ai.ConversionResult, err error) {
+	mm_atomic.AddUint64(&mmConvertToMarkdownWithoutCache.beforeConvertToMarkdownWithoutCacheCounter, 1)
+	defer mm_atomic.AddUint64(&mmConvertToMarkdownWithoutCache.afterConvertToMarkdownWithoutCacheCounter, 1)
+
+	mmConvertToMarkdownWithoutCache.t.Helper()
+
+	if mmConvertToMarkdownWithoutCache.inspectFuncConvertToMarkdownWithoutCache != nil {
+		mmConvertToMarkdownWithoutCache.inspectFuncConvertToMarkdownWithoutCache(ctx, content, fileType, filename, prompt)
+	}
+
+	mm_params := ProviderMockConvertToMarkdownWithoutCacheParams{ctx, content, fileType, filename, prompt}
+
+	// Record call args
+	mmConvertToMarkdownWithoutCache.ConvertToMarkdownWithoutCacheMock.mutex.Lock()
+	mmConvertToMarkdownWithoutCache.ConvertToMarkdownWithoutCacheMock.callArgs = append(mmConvertToMarkdownWithoutCache.ConvertToMarkdownWithoutCacheMock.callArgs, &mm_params)
+	mmConvertToMarkdownWithoutCache.ConvertToMarkdownWithoutCacheMock.mutex.Unlock()
+
+	for _, e := range mmConvertToMarkdownWithoutCache.ConvertToMarkdownWithoutCacheMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.cp1, e.results.err
+		}
+	}
+
+	if mmConvertToMarkdownWithoutCache.ConvertToMarkdownWithoutCacheMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmConvertToMarkdownWithoutCache.ConvertToMarkdownWithoutCacheMock.defaultExpectation.Counter, 1)
+		mm_want := mmConvertToMarkdownWithoutCache.ConvertToMarkdownWithoutCacheMock.defaultExpectation.params
+		mm_want_ptrs := mmConvertToMarkdownWithoutCache.ConvertToMarkdownWithoutCacheMock.defaultExpectation.paramPtrs
+
+		mm_got := ProviderMockConvertToMarkdownWithoutCacheParams{ctx, content, fileType, filename, prompt}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmConvertToMarkdownWithoutCache.t.Errorf("ProviderMock.ConvertToMarkdownWithoutCache got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmConvertToMarkdownWithoutCache.ConvertToMarkdownWithoutCacheMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.content != nil && !minimock.Equal(*mm_want_ptrs.content, mm_got.content) {
+				mmConvertToMarkdownWithoutCache.t.Errorf("ProviderMock.ConvertToMarkdownWithoutCache got unexpected parameter content, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmConvertToMarkdownWithoutCache.ConvertToMarkdownWithoutCacheMock.defaultExpectation.expectationOrigins.originContent, *mm_want_ptrs.content, mm_got.content, minimock.Diff(*mm_want_ptrs.content, mm_got.content))
+			}
+
+			if mm_want_ptrs.fileType != nil && !minimock.Equal(*mm_want_ptrs.fileType, mm_got.fileType) {
+				mmConvertToMarkdownWithoutCache.t.Errorf("ProviderMock.ConvertToMarkdownWithoutCache got unexpected parameter fileType, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmConvertToMarkdownWithoutCache.ConvertToMarkdownWithoutCacheMock.defaultExpectation.expectationOrigins.originFileType, *mm_want_ptrs.fileType, mm_got.fileType, minimock.Diff(*mm_want_ptrs.fileType, mm_got.fileType))
+			}
+
+			if mm_want_ptrs.filename != nil && !minimock.Equal(*mm_want_ptrs.filename, mm_got.filename) {
+				mmConvertToMarkdownWithoutCache.t.Errorf("ProviderMock.ConvertToMarkdownWithoutCache got unexpected parameter filename, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmConvertToMarkdownWithoutCache.ConvertToMarkdownWithoutCacheMock.defaultExpectation.expectationOrigins.originFilename, *mm_want_ptrs.filename, mm_got.filename, minimock.Diff(*mm_want_ptrs.filename, mm_got.filename))
+			}
+
+			if mm_want_ptrs.prompt != nil && !minimock.Equal(*mm_want_ptrs.prompt, mm_got.prompt) {
+				mmConvertToMarkdownWithoutCache.t.Errorf("ProviderMock.ConvertToMarkdownWithoutCache got unexpected parameter prompt, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmConvertToMarkdownWithoutCache.ConvertToMarkdownWithoutCacheMock.defaultExpectation.expectationOrigins.originPrompt, *mm_want_ptrs.prompt, mm_got.prompt, minimock.Diff(*mm_want_ptrs.prompt, mm_got.prompt))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmConvertToMarkdownWithoutCache.t.Errorf("ProviderMock.ConvertToMarkdownWithoutCache got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmConvertToMarkdownWithoutCache.ConvertToMarkdownWithoutCacheMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmConvertToMarkdownWithoutCache.ConvertToMarkdownWithoutCacheMock.defaultExpectation.results
+		if mm_results == nil {
+			mmConvertToMarkdownWithoutCache.t.Fatal("No results are set for the ProviderMock.ConvertToMarkdownWithoutCache")
+		}
+		return (*mm_results).cp1, (*mm_results).err
+	}
+	if mmConvertToMarkdownWithoutCache.funcConvertToMarkdownWithoutCache != nil {
+		return mmConvertToMarkdownWithoutCache.funcConvertToMarkdownWithoutCache(ctx, content, fileType, filename, prompt)
+	}
+	mmConvertToMarkdownWithoutCache.t.Fatalf("Unexpected call to ProviderMock.ConvertToMarkdownWithoutCache. %v %v %v %v %v", ctx, content, fileType, filename, prompt)
+	return
+}
+
+// ConvertToMarkdownWithoutCacheAfterCounter returns a count of finished ProviderMock.ConvertToMarkdownWithoutCache invocations
+func (mmConvertToMarkdownWithoutCache *ProviderMock) ConvertToMarkdownWithoutCacheAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmConvertToMarkdownWithoutCache.afterConvertToMarkdownWithoutCacheCounter)
+}
+
+// ConvertToMarkdownWithoutCacheBeforeCounter returns a count of ProviderMock.ConvertToMarkdownWithoutCache invocations
+func (mmConvertToMarkdownWithoutCache *ProviderMock) ConvertToMarkdownWithoutCacheBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmConvertToMarkdownWithoutCache.beforeConvertToMarkdownWithoutCacheCounter)
+}
+
+// Calls returns a list of arguments used in each call to ProviderMock.ConvertToMarkdownWithoutCache.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmConvertToMarkdownWithoutCache *mProviderMockConvertToMarkdownWithoutCache) Calls() []*ProviderMockConvertToMarkdownWithoutCacheParams {
+	mmConvertToMarkdownWithoutCache.mutex.RLock()
+
+	argCopy := make([]*ProviderMockConvertToMarkdownWithoutCacheParams, len(mmConvertToMarkdownWithoutCache.callArgs))
+	copy(argCopy, mmConvertToMarkdownWithoutCache.callArgs)
+
+	mmConvertToMarkdownWithoutCache.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockConvertToMarkdownWithoutCacheDone returns true if the count of the ConvertToMarkdownWithoutCache invocations corresponds
+// the number of defined expectations
+func (m *ProviderMock) MinimockConvertToMarkdownWithoutCacheDone() bool {
+	if m.ConvertToMarkdownWithoutCacheMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.ConvertToMarkdownWithoutCacheMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.ConvertToMarkdownWithoutCacheMock.invocationsDone()
+}
+
+// MinimockConvertToMarkdownWithoutCacheInspect logs each unmet expectation
+func (m *ProviderMock) MinimockConvertToMarkdownWithoutCacheInspect() {
+	for _, e := range m.ConvertToMarkdownWithoutCacheMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to ProviderMock.ConvertToMarkdownWithoutCache at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterConvertToMarkdownWithoutCacheCounter := mm_atomic.LoadUint64(&m.afterConvertToMarkdownWithoutCacheCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.ConvertToMarkdownWithoutCacheMock.defaultExpectation != nil && afterConvertToMarkdownWithoutCacheCounter < 1 {
+		if m.ConvertToMarkdownWithoutCacheMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to ProviderMock.ConvertToMarkdownWithoutCache at\n%s", m.ConvertToMarkdownWithoutCacheMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to ProviderMock.ConvertToMarkdownWithoutCache at\n%s with params: %#v", m.ConvertToMarkdownWithoutCacheMock.defaultExpectation.expectationOrigins.origin, *m.ConvertToMarkdownWithoutCacheMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcConvertToMarkdownWithoutCache != nil && afterConvertToMarkdownWithoutCacheCounter < 1 {
+		m.t.Errorf("Expected call to ProviderMock.ConvertToMarkdownWithoutCache at\n%s", m.funcConvertToMarkdownWithoutCacheOrigin)
+	}
+
+	if !m.ConvertToMarkdownWithoutCacheMock.invocationsDone() && afterConvertToMarkdownWithoutCacheCounter > 0 {
+		m.t.Errorf("Expected %d calls to ProviderMock.ConvertToMarkdownWithoutCache at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.ConvertToMarkdownWithoutCacheMock.expectedInvocations), m.ConvertToMarkdownWithoutCacheMock.expectedInvocationsOrigin, afterConvertToMarkdownWithoutCacheCounter)
+	}
+}
+
 type mProviderMockCreateCache struct {
 	optional           bool
 	mock               *ProviderMock
@@ -1123,20 +1921,18 @@ type ProviderMockCreateCacheExpectation struct {
 
 // ProviderMockCreateCacheParams contains parameters of the Provider.CreateCache
 type ProviderMockCreateCacheParams struct {
-	ctx      context.Context
-	content  []byte
-	fileType artifactpb.FileType
-	filename string
-	ttl      time.Duration
+	ctx               context.Context
+	files             []mm_ai.FileContent
+	ttl               time.Duration
+	systemInstruction string
 }
 
 // ProviderMockCreateCacheParamPtrs contains pointers to parameters of the Provider.CreateCache
 type ProviderMockCreateCacheParamPtrs struct {
-	ctx      *context.Context
-	content  *[]byte
-	fileType *artifactpb.FileType
-	filename *string
-	ttl      *time.Duration
+	ctx               *context.Context
+	files             *[]mm_ai.FileContent
+	ttl               *time.Duration
+	systemInstruction *string
 }
 
 // ProviderMockCreateCacheResults contains results of the Provider.CreateCache
@@ -1147,12 +1943,11 @@ type ProviderMockCreateCacheResults struct {
 
 // ProviderMockCreateCacheOrigins contains origins of expectations of the Provider.CreateCache
 type ProviderMockCreateCacheExpectationOrigins struct {
-	origin         string
-	originCtx      string
-	originContent  string
-	originFileType string
-	originFilename string
-	originTtl      string
+	origin                  string
+	originCtx               string
+	originFiles             string
+	originTtl               string
+	originSystemInstruction string
 }
 
 // Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
@@ -1166,7 +1961,7 @@ func (mmCreateCache *mProviderMockCreateCache) Optional() *mProviderMockCreateCa
 }
 
 // Expect sets up expected params for Provider.CreateCache
-func (mmCreateCache *mProviderMockCreateCache) Expect(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string, ttl time.Duration) *mProviderMockCreateCache {
+func (mmCreateCache *mProviderMockCreateCache) Expect(ctx context.Context, files []mm_ai.FileContent, ttl time.Duration, systemInstruction string) *mProviderMockCreateCache {
 	if mmCreateCache.mock.funcCreateCache != nil {
 		mmCreateCache.mock.t.Fatalf("ProviderMock.CreateCache mock is already set by Set")
 	}
@@ -1179,7 +1974,7 @@ func (mmCreateCache *mProviderMockCreateCache) Expect(ctx context.Context, conte
 		mmCreateCache.mock.t.Fatalf("ProviderMock.CreateCache mock is already set by ExpectParams functions")
 	}
 
-	mmCreateCache.defaultExpectation.params = &ProviderMockCreateCacheParams{ctx, content, fileType, filename, ttl}
+	mmCreateCache.defaultExpectation.params = &ProviderMockCreateCacheParams{ctx, files, ttl, systemInstruction}
 	mmCreateCache.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
 	for _, e := range mmCreateCache.expectations {
 		if minimock.Equal(e.params, mmCreateCache.defaultExpectation.params) {
@@ -1213,8 +2008,8 @@ func (mmCreateCache *mProviderMockCreateCache) ExpectCtxParam1(ctx context.Conte
 	return mmCreateCache
 }
 
-// ExpectContentParam2 sets up expected param content for Provider.CreateCache
-func (mmCreateCache *mProviderMockCreateCache) ExpectContentParam2(content []byte) *mProviderMockCreateCache {
+// ExpectFilesParam2 sets up expected param files for Provider.CreateCache
+func (mmCreateCache *mProviderMockCreateCache) ExpectFilesParam2(files []mm_ai.FileContent) *mProviderMockCreateCache {
 	if mmCreateCache.mock.funcCreateCache != nil {
 		mmCreateCache.mock.t.Fatalf("ProviderMock.CreateCache mock is already set by Set")
 	}
@@ -1230,60 +2025,14 @@ func (mmCreateCache *mProviderMockCreateCache) ExpectContentParam2(content []byt
 	if mmCreateCache.defaultExpectation.paramPtrs == nil {
 		mmCreateCache.defaultExpectation.paramPtrs = &ProviderMockCreateCacheParamPtrs{}
 	}
-	mmCreateCache.defaultExpectation.paramPtrs.content = &content
-	mmCreateCache.defaultExpectation.expectationOrigins.originContent = minimock.CallerInfo(1)
+	mmCreateCache.defaultExpectation.paramPtrs.files = &files
+	mmCreateCache.defaultExpectation.expectationOrigins.originFiles = minimock.CallerInfo(1)
 
 	return mmCreateCache
 }
 
-// ExpectFileTypeParam3 sets up expected param fileType for Provider.CreateCache
-func (mmCreateCache *mProviderMockCreateCache) ExpectFileTypeParam3(fileType artifactpb.FileType) *mProviderMockCreateCache {
-	if mmCreateCache.mock.funcCreateCache != nil {
-		mmCreateCache.mock.t.Fatalf("ProviderMock.CreateCache mock is already set by Set")
-	}
-
-	if mmCreateCache.defaultExpectation == nil {
-		mmCreateCache.defaultExpectation = &ProviderMockCreateCacheExpectation{}
-	}
-
-	if mmCreateCache.defaultExpectation.params != nil {
-		mmCreateCache.mock.t.Fatalf("ProviderMock.CreateCache mock is already set by Expect")
-	}
-
-	if mmCreateCache.defaultExpectation.paramPtrs == nil {
-		mmCreateCache.defaultExpectation.paramPtrs = &ProviderMockCreateCacheParamPtrs{}
-	}
-	mmCreateCache.defaultExpectation.paramPtrs.fileType = &fileType
-	mmCreateCache.defaultExpectation.expectationOrigins.originFileType = minimock.CallerInfo(1)
-
-	return mmCreateCache
-}
-
-// ExpectFilenameParam4 sets up expected param filename for Provider.CreateCache
-func (mmCreateCache *mProviderMockCreateCache) ExpectFilenameParam4(filename string) *mProviderMockCreateCache {
-	if mmCreateCache.mock.funcCreateCache != nil {
-		mmCreateCache.mock.t.Fatalf("ProviderMock.CreateCache mock is already set by Set")
-	}
-
-	if mmCreateCache.defaultExpectation == nil {
-		mmCreateCache.defaultExpectation = &ProviderMockCreateCacheExpectation{}
-	}
-
-	if mmCreateCache.defaultExpectation.params != nil {
-		mmCreateCache.mock.t.Fatalf("ProviderMock.CreateCache mock is already set by Expect")
-	}
-
-	if mmCreateCache.defaultExpectation.paramPtrs == nil {
-		mmCreateCache.defaultExpectation.paramPtrs = &ProviderMockCreateCacheParamPtrs{}
-	}
-	mmCreateCache.defaultExpectation.paramPtrs.filename = &filename
-	mmCreateCache.defaultExpectation.expectationOrigins.originFilename = minimock.CallerInfo(1)
-
-	return mmCreateCache
-}
-
-// ExpectTtlParam5 sets up expected param ttl for Provider.CreateCache
-func (mmCreateCache *mProviderMockCreateCache) ExpectTtlParam5(ttl time.Duration) *mProviderMockCreateCache {
+// ExpectTtlParam3 sets up expected param ttl for Provider.CreateCache
+func (mmCreateCache *mProviderMockCreateCache) ExpectTtlParam3(ttl time.Duration) *mProviderMockCreateCache {
 	if mmCreateCache.mock.funcCreateCache != nil {
 		mmCreateCache.mock.t.Fatalf("ProviderMock.CreateCache mock is already set by Set")
 	}
@@ -1305,8 +2054,31 @@ func (mmCreateCache *mProviderMockCreateCache) ExpectTtlParam5(ttl time.Duration
 	return mmCreateCache
 }
 
+// ExpectSystemInstructionParam4 sets up expected param systemInstruction for Provider.CreateCache
+func (mmCreateCache *mProviderMockCreateCache) ExpectSystemInstructionParam4(systemInstruction string) *mProviderMockCreateCache {
+	if mmCreateCache.mock.funcCreateCache != nil {
+		mmCreateCache.mock.t.Fatalf("ProviderMock.CreateCache mock is already set by Set")
+	}
+
+	if mmCreateCache.defaultExpectation == nil {
+		mmCreateCache.defaultExpectation = &ProviderMockCreateCacheExpectation{}
+	}
+
+	if mmCreateCache.defaultExpectation.params != nil {
+		mmCreateCache.mock.t.Fatalf("ProviderMock.CreateCache mock is already set by Expect")
+	}
+
+	if mmCreateCache.defaultExpectation.paramPtrs == nil {
+		mmCreateCache.defaultExpectation.paramPtrs = &ProviderMockCreateCacheParamPtrs{}
+	}
+	mmCreateCache.defaultExpectation.paramPtrs.systemInstruction = &systemInstruction
+	mmCreateCache.defaultExpectation.expectationOrigins.originSystemInstruction = minimock.CallerInfo(1)
+
+	return mmCreateCache
+}
+
 // Inspect accepts an inspector function that has same arguments as the Provider.CreateCache
-func (mmCreateCache *mProviderMockCreateCache) Inspect(f func(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string, ttl time.Duration)) *mProviderMockCreateCache {
+func (mmCreateCache *mProviderMockCreateCache) Inspect(f func(ctx context.Context, files []mm_ai.FileContent, ttl time.Duration, systemInstruction string)) *mProviderMockCreateCache {
 	if mmCreateCache.mock.inspectFuncCreateCache != nil {
 		mmCreateCache.mock.t.Fatalf("Inspect function is already set for ProviderMock.CreateCache")
 	}
@@ -1331,7 +2103,7 @@ func (mmCreateCache *mProviderMockCreateCache) Return(cp1 *mm_ai.CacheResult, er
 }
 
 // Set uses given function f to mock the Provider.CreateCache method
-func (mmCreateCache *mProviderMockCreateCache) Set(f func(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string, ttl time.Duration) (cp1 *mm_ai.CacheResult, err error)) *ProviderMock {
+func (mmCreateCache *mProviderMockCreateCache) Set(f func(ctx context.Context, files []mm_ai.FileContent, ttl time.Duration, systemInstruction string) (cp1 *mm_ai.CacheResult, err error)) *ProviderMock {
 	if mmCreateCache.defaultExpectation != nil {
 		mmCreateCache.mock.t.Fatalf("Default expectation is already set for the Provider.CreateCache method")
 	}
@@ -1347,14 +2119,14 @@ func (mmCreateCache *mProviderMockCreateCache) Set(f func(ctx context.Context, c
 
 // When sets expectation for the Provider.CreateCache which will trigger the result defined by the following
 // Then helper
-func (mmCreateCache *mProviderMockCreateCache) When(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string, ttl time.Duration) *ProviderMockCreateCacheExpectation {
+func (mmCreateCache *mProviderMockCreateCache) When(ctx context.Context, files []mm_ai.FileContent, ttl time.Duration, systemInstruction string) *ProviderMockCreateCacheExpectation {
 	if mmCreateCache.mock.funcCreateCache != nil {
 		mmCreateCache.mock.t.Fatalf("ProviderMock.CreateCache mock is already set by Set")
 	}
 
 	expectation := &ProviderMockCreateCacheExpectation{
 		mock:               mmCreateCache.mock,
-		params:             &ProviderMockCreateCacheParams{ctx, content, fileType, filename, ttl},
+		params:             &ProviderMockCreateCacheParams{ctx, files, ttl, systemInstruction},
 		expectationOrigins: ProviderMockCreateCacheExpectationOrigins{origin: minimock.CallerInfo(1)},
 	}
 	mmCreateCache.expectations = append(mmCreateCache.expectations, expectation)
@@ -1389,17 +2161,17 @@ func (mmCreateCache *mProviderMockCreateCache) invocationsDone() bool {
 }
 
 // CreateCache implements mm_ai.Provider
-func (mmCreateCache *ProviderMock) CreateCache(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string, ttl time.Duration) (cp1 *mm_ai.CacheResult, err error) {
+func (mmCreateCache *ProviderMock) CreateCache(ctx context.Context, files []mm_ai.FileContent, ttl time.Duration, systemInstruction string) (cp1 *mm_ai.CacheResult, err error) {
 	mm_atomic.AddUint64(&mmCreateCache.beforeCreateCacheCounter, 1)
 	defer mm_atomic.AddUint64(&mmCreateCache.afterCreateCacheCounter, 1)
 
 	mmCreateCache.t.Helper()
 
 	if mmCreateCache.inspectFuncCreateCache != nil {
-		mmCreateCache.inspectFuncCreateCache(ctx, content, fileType, filename, ttl)
+		mmCreateCache.inspectFuncCreateCache(ctx, files, ttl, systemInstruction)
 	}
 
-	mm_params := ProviderMockCreateCacheParams{ctx, content, fileType, filename, ttl}
+	mm_params := ProviderMockCreateCacheParams{ctx, files, ttl, systemInstruction}
 
 	// Record call args
 	mmCreateCache.CreateCacheMock.mutex.Lock()
@@ -1418,7 +2190,7 @@ func (mmCreateCache *ProviderMock) CreateCache(ctx context.Context, content []by
 		mm_want := mmCreateCache.CreateCacheMock.defaultExpectation.params
 		mm_want_ptrs := mmCreateCache.CreateCacheMock.defaultExpectation.paramPtrs
 
-		mm_got := ProviderMockCreateCacheParams{ctx, content, fileType, filename, ttl}
+		mm_got := ProviderMockCreateCacheParams{ctx, files, ttl, systemInstruction}
 
 		if mm_want_ptrs != nil {
 
@@ -1427,24 +2199,19 @@ func (mmCreateCache *ProviderMock) CreateCache(ctx context.Context, content []by
 					mmCreateCache.CreateCacheMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
 			}
 
-			if mm_want_ptrs.content != nil && !minimock.Equal(*mm_want_ptrs.content, mm_got.content) {
-				mmCreateCache.t.Errorf("ProviderMock.CreateCache got unexpected parameter content, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmCreateCache.CreateCacheMock.defaultExpectation.expectationOrigins.originContent, *mm_want_ptrs.content, mm_got.content, minimock.Diff(*mm_want_ptrs.content, mm_got.content))
-			}
-
-			if mm_want_ptrs.fileType != nil && !minimock.Equal(*mm_want_ptrs.fileType, mm_got.fileType) {
-				mmCreateCache.t.Errorf("ProviderMock.CreateCache got unexpected parameter fileType, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmCreateCache.CreateCacheMock.defaultExpectation.expectationOrigins.originFileType, *mm_want_ptrs.fileType, mm_got.fileType, minimock.Diff(*mm_want_ptrs.fileType, mm_got.fileType))
-			}
-
-			if mm_want_ptrs.filename != nil && !minimock.Equal(*mm_want_ptrs.filename, mm_got.filename) {
-				mmCreateCache.t.Errorf("ProviderMock.CreateCache got unexpected parameter filename, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmCreateCache.CreateCacheMock.defaultExpectation.expectationOrigins.originFilename, *mm_want_ptrs.filename, mm_got.filename, minimock.Diff(*mm_want_ptrs.filename, mm_got.filename))
+			if mm_want_ptrs.files != nil && !minimock.Equal(*mm_want_ptrs.files, mm_got.files) {
+				mmCreateCache.t.Errorf("ProviderMock.CreateCache got unexpected parameter files, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCreateCache.CreateCacheMock.defaultExpectation.expectationOrigins.originFiles, *mm_want_ptrs.files, mm_got.files, minimock.Diff(*mm_want_ptrs.files, mm_got.files))
 			}
 
 			if mm_want_ptrs.ttl != nil && !minimock.Equal(*mm_want_ptrs.ttl, mm_got.ttl) {
 				mmCreateCache.t.Errorf("ProviderMock.CreateCache got unexpected parameter ttl, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
 					mmCreateCache.CreateCacheMock.defaultExpectation.expectationOrigins.originTtl, *mm_want_ptrs.ttl, mm_got.ttl, minimock.Diff(*mm_want_ptrs.ttl, mm_got.ttl))
+			}
+
+			if mm_want_ptrs.systemInstruction != nil && !minimock.Equal(*mm_want_ptrs.systemInstruction, mm_got.systemInstruction) {
+				mmCreateCache.t.Errorf("ProviderMock.CreateCache got unexpected parameter systemInstruction, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCreateCache.CreateCacheMock.defaultExpectation.expectationOrigins.originSystemInstruction, *mm_want_ptrs.systemInstruction, mm_got.systemInstruction, minimock.Diff(*mm_want_ptrs.systemInstruction, mm_got.systemInstruction))
 			}
 
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
@@ -1459,9 +2226,9 @@ func (mmCreateCache *ProviderMock) CreateCache(ctx context.Context, content []by
 		return (*mm_results).cp1, (*mm_results).err
 	}
 	if mmCreateCache.funcCreateCache != nil {
-		return mmCreateCache.funcCreateCache(ctx, content, fileType, filename, ttl)
+		return mmCreateCache.funcCreateCache(ctx, files, ttl, systemInstruction)
 	}
-	mmCreateCache.t.Fatalf("Unexpected call to ProviderMock.CreateCache. %v %v %v %v %v", ctx, content, fileType, filename, ttl)
+	mmCreateCache.t.Fatalf("Unexpected call to ProviderMock.CreateCache. %v %v %v %v", ctx, files, ttl, systemInstruction)
 	return
 }
 
@@ -1872,6 +2639,692 @@ func (m *ProviderMock) MinimockDeleteCacheInspect() {
 	if !m.DeleteCacheMock.invocationsDone() && afterDeleteCacheCounter > 0 {
 		m.t.Errorf("Expected %d calls to ProviderMock.DeleteCache at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.DeleteCacheMock.expectedInvocations), m.DeleteCacheMock.expectedInvocationsOrigin, afterDeleteCacheCounter)
+	}
+}
+
+type mProviderMockGetCache struct {
+	optional           bool
+	mock               *ProviderMock
+	defaultExpectation *ProviderMockGetCacheExpectation
+	expectations       []*ProviderMockGetCacheExpectation
+
+	callArgs []*ProviderMockGetCacheParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// ProviderMockGetCacheExpectation specifies expectation struct of the Provider.GetCache
+type ProviderMockGetCacheExpectation struct {
+	mock               *ProviderMock
+	params             *ProviderMockGetCacheParams
+	paramPtrs          *ProviderMockGetCacheParamPtrs
+	expectationOrigins ProviderMockGetCacheExpectationOrigins
+	results            *ProviderMockGetCacheResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// ProviderMockGetCacheParams contains parameters of the Provider.GetCache
+type ProviderMockGetCacheParams struct {
+	ctx       context.Context
+	cacheName string
+}
+
+// ProviderMockGetCacheParamPtrs contains pointers to parameters of the Provider.GetCache
+type ProviderMockGetCacheParamPtrs struct {
+	ctx       *context.Context
+	cacheName *string
+}
+
+// ProviderMockGetCacheResults contains results of the Provider.GetCache
+type ProviderMockGetCacheResults struct {
+	cp1 *mm_ai.CacheResult
+	err error
+}
+
+// ProviderMockGetCacheOrigins contains origins of expectations of the Provider.GetCache
+type ProviderMockGetCacheExpectationOrigins struct {
+	origin          string
+	originCtx       string
+	originCacheName string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmGetCache *mProviderMockGetCache) Optional() *mProviderMockGetCache {
+	mmGetCache.optional = true
+	return mmGetCache
+}
+
+// Expect sets up expected params for Provider.GetCache
+func (mmGetCache *mProviderMockGetCache) Expect(ctx context.Context, cacheName string) *mProviderMockGetCache {
+	if mmGetCache.mock.funcGetCache != nil {
+		mmGetCache.mock.t.Fatalf("ProviderMock.GetCache mock is already set by Set")
+	}
+
+	if mmGetCache.defaultExpectation == nil {
+		mmGetCache.defaultExpectation = &ProviderMockGetCacheExpectation{}
+	}
+
+	if mmGetCache.defaultExpectation.paramPtrs != nil {
+		mmGetCache.mock.t.Fatalf("ProviderMock.GetCache mock is already set by ExpectParams functions")
+	}
+
+	mmGetCache.defaultExpectation.params = &ProviderMockGetCacheParams{ctx, cacheName}
+	mmGetCache.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmGetCache.expectations {
+		if minimock.Equal(e.params, mmGetCache.defaultExpectation.params) {
+			mmGetCache.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetCache.defaultExpectation.params)
+		}
+	}
+
+	return mmGetCache
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Provider.GetCache
+func (mmGetCache *mProviderMockGetCache) ExpectCtxParam1(ctx context.Context) *mProviderMockGetCache {
+	if mmGetCache.mock.funcGetCache != nil {
+		mmGetCache.mock.t.Fatalf("ProviderMock.GetCache mock is already set by Set")
+	}
+
+	if mmGetCache.defaultExpectation == nil {
+		mmGetCache.defaultExpectation = &ProviderMockGetCacheExpectation{}
+	}
+
+	if mmGetCache.defaultExpectation.params != nil {
+		mmGetCache.mock.t.Fatalf("ProviderMock.GetCache mock is already set by Expect")
+	}
+
+	if mmGetCache.defaultExpectation.paramPtrs == nil {
+		mmGetCache.defaultExpectation.paramPtrs = &ProviderMockGetCacheParamPtrs{}
+	}
+	mmGetCache.defaultExpectation.paramPtrs.ctx = &ctx
+	mmGetCache.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmGetCache
+}
+
+// ExpectCacheNameParam2 sets up expected param cacheName for Provider.GetCache
+func (mmGetCache *mProviderMockGetCache) ExpectCacheNameParam2(cacheName string) *mProviderMockGetCache {
+	if mmGetCache.mock.funcGetCache != nil {
+		mmGetCache.mock.t.Fatalf("ProviderMock.GetCache mock is already set by Set")
+	}
+
+	if mmGetCache.defaultExpectation == nil {
+		mmGetCache.defaultExpectation = &ProviderMockGetCacheExpectation{}
+	}
+
+	if mmGetCache.defaultExpectation.params != nil {
+		mmGetCache.mock.t.Fatalf("ProviderMock.GetCache mock is already set by Expect")
+	}
+
+	if mmGetCache.defaultExpectation.paramPtrs == nil {
+		mmGetCache.defaultExpectation.paramPtrs = &ProviderMockGetCacheParamPtrs{}
+	}
+	mmGetCache.defaultExpectation.paramPtrs.cacheName = &cacheName
+	mmGetCache.defaultExpectation.expectationOrigins.originCacheName = minimock.CallerInfo(1)
+
+	return mmGetCache
+}
+
+// Inspect accepts an inspector function that has same arguments as the Provider.GetCache
+func (mmGetCache *mProviderMockGetCache) Inspect(f func(ctx context.Context, cacheName string)) *mProviderMockGetCache {
+	if mmGetCache.mock.inspectFuncGetCache != nil {
+		mmGetCache.mock.t.Fatalf("Inspect function is already set for ProviderMock.GetCache")
+	}
+
+	mmGetCache.mock.inspectFuncGetCache = f
+
+	return mmGetCache
+}
+
+// Return sets up results that will be returned by Provider.GetCache
+func (mmGetCache *mProviderMockGetCache) Return(cp1 *mm_ai.CacheResult, err error) *ProviderMock {
+	if mmGetCache.mock.funcGetCache != nil {
+		mmGetCache.mock.t.Fatalf("ProviderMock.GetCache mock is already set by Set")
+	}
+
+	if mmGetCache.defaultExpectation == nil {
+		mmGetCache.defaultExpectation = &ProviderMockGetCacheExpectation{mock: mmGetCache.mock}
+	}
+	mmGetCache.defaultExpectation.results = &ProviderMockGetCacheResults{cp1, err}
+	mmGetCache.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmGetCache.mock
+}
+
+// Set uses given function f to mock the Provider.GetCache method
+func (mmGetCache *mProviderMockGetCache) Set(f func(ctx context.Context, cacheName string) (cp1 *mm_ai.CacheResult, err error)) *ProviderMock {
+	if mmGetCache.defaultExpectation != nil {
+		mmGetCache.mock.t.Fatalf("Default expectation is already set for the Provider.GetCache method")
+	}
+
+	if len(mmGetCache.expectations) > 0 {
+		mmGetCache.mock.t.Fatalf("Some expectations are already set for the Provider.GetCache method")
+	}
+
+	mmGetCache.mock.funcGetCache = f
+	mmGetCache.mock.funcGetCacheOrigin = minimock.CallerInfo(1)
+	return mmGetCache.mock
+}
+
+// When sets expectation for the Provider.GetCache which will trigger the result defined by the following
+// Then helper
+func (mmGetCache *mProviderMockGetCache) When(ctx context.Context, cacheName string) *ProviderMockGetCacheExpectation {
+	if mmGetCache.mock.funcGetCache != nil {
+		mmGetCache.mock.t.Fatalf("ProviderMock.GetCache mock is already set by Set")
+	}
+
+	expectation := &ProviderMockGetCacheExpectation{
+		mock:               mmGetCache.mock,
+		params:             &ProviderMockGetCacheParams{ctx, cacheName},
+		expectationOrigins: ProviderMockGetCacheExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmGetCache.expectations = append(mmGetCache.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Provider.GetCache return parameters for the expectation previously defined by the When method
+func (e *ProviderMockGetCacheExpectation) Then(cp1 *mm_ai.CacheResult, err error) *ProviderMock {
+	e.results = &ProviderMockGetCacheResults{cp1, err}
+	return e.mock
+}
+
+// Times sets number of times Provider.GetCache should be invoked
+func (mmGetCache *mProviderMockGetCache) Times(n uint64) *mProviderMockGetCache {
+	if n == 0 {
+		mmGetCache.mock.t.Fatalf("Times of ProviderMock.GetCache mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetCache.expectedInvocations, n)
+	mmGetCache.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmGetCache
+}
+
+func (mmGetCache *mProviderMockGetCache) invocationsDone() bool {
+	if len(mmGetCache.expectations) == 0 && mmGetCache.defaultExpectation == nil && mmGetCache.mock.funcGetCache == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetCache.mock.afterGetCacheCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetCache.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetCache implements mm_ai.Provider
+func (mmGetCache *ProviderMock) GetCache(ctx context.Context, cacheName string) (cp1 *mm_ai.CacheResult, err error) {
+	mm_atomic.AddUint64(&mmGetCache.beforeGetCacheCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetCache.afterGetCacheCounter, 1)
+
+	mmGetCache.t.Helper()
+
+	if mmGetCache.inspectFuncGetCache != nil {
+		mmGetCache.inspectFuncGetCache(ctx, cacheName)
+	}
+
+	mm_params := ProviderMockGetCacheParams{ctx, cacheName}
+
+	// Record call args
+	mmGetCache.GetCacheMock.mutex.Lock()
+	mmGetCache.GetCacheMock.callArgs = append(mmGetCache.GetCacheMock.callArgs, &mm_params)
+	mmGetCache.GetCacheMock.mutex.Unlock()
+
+	for _, e := range mmGetCache.GetCacheMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.cp1, e.results.err
+		}
+	}
+
+	if mmGetCache.GetCacheMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetCache.GetCacheMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetCache.GetCacheMock.defaultExpectation.params
+		mm_want_ptrs := mmGetCache.GetCacheMock.defaultExpectation.paramPtrs
+
+		mm_got := ProviderMockGetCacheParams{ctx, cacheName}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetCache.t.Errorf("ProviderMock.GetCache got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetCache.GetCacheMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.cacheName != nil && !minimock.Equal(*mm_want_ptrs.cacheName, mm_got.cacheName) {
+				mmGetCache.t.Errorf("ProviderMock.GetCache got unexpected parameter cacheName, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetCache.GetCacheMock.defaultExpectation.expectationOrigins.originCacheName, *mm_want_ptrs.cacheName, mm_got.cacheName, minimock.Diff(*mm_want_ptrs.cacheName, mm_got.cacheName))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetCache.t.Errorf("ProviderMock.GetCache got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmGetCache.GetCacheMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetCache.GetCacheMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetCache.t.Fatal("No results are set for the ProviderMock.GetCache")
+		}
+		return (*mm_results).cp1, (*mm_results).err
+	}
+	if mmGetCache.funcGetCache != nil {
+		return mmGetCache.funcGetCache(ctx, cacheName)
+	}
+	mmGetCache.t.Fatalf("Unexpected call to ProviderMock.GetCache. %v %v", ctx, cacheName)
+	return
+}
+
+// GetCacheAfterCounter returns a count of finished ProviderMock.GetCache invocations
+func (mmGetCache *ProviderMock) GetCacheAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetCache.afterGetCacheCounter)
+}
+
+// GetCacheBeforeCounter returns a count of ProviderMock.GetCache invocations
+func (mmGetCache *ProviderMock) GetCacheBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetCache.beforeGetCacheCounter)
+}
+
+// Calls returns a list of arguments used in each call to ProviderMock.GetCache.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetCache *mProviderMockGetCache) Calls() []*ProviderMockGetCacheParams {
+	mmGetCache.mutex.RLock()
+
+	argCopy := make([]*ProviderMockGetCacheParams, len(mmGetCache.callArgs))
+	copy(argCopy, mmGetCache.callArgs)
+
+	mmGetCache.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetCacheDone returns true if the count of the GetCache invocations corresponds
+// the number of defined expectations
+func (m *ProviderMock) MinimockGetCacheDone() bool {
+	if m.GetCacheMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.GetCacheMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetCacheMock.invocationsDone()
+}
+
+// MinimockGetCacheInspect logs each unmet expectation
+func (m *ProviderMock) MinimockGetCacheInspect() {
+	for _, e := range m.GetCacheMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to ProviderMock.GetCache at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterGetCacheCounter := mm_atomic.LoadUint64(&m.afterGetCacheCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetCacheMock.defaultExpectation != nil && afterGetCacheCounter < 1 {
+		if m.GetCacheMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to ProviderMock.GetCache at\n%s", m.GetCacheMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to ProviderMock.GetCache at\n%s with params: %#v", m.GetCacheMock.defaultExpectation.expectationOrigins.origin, *m.GetCacheMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetCache != nil && afterGetCacheCounter < 1 {
+		m.t.Errorf("Expected call to ProviderMock.GetCache at\n%s", m.funcGetCacheOrigin)
+	}
+
+	if !m.GetCacheMock.invocationsDone() && afterGetCacheCounter > 0 {
+		m.t.Errorf("Expected %d calls to ProviderMock.GetCache at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.GetCacheMock.expectedInvocations), m.GetCacheMock.expectedInvocationsOrigin, afterGetCacheCounter)
+	}
+}
+
+type mProviderMockListCaches struct {
+	optional           bool
+	mock               *ProviderMock
+	defaultExpectation *ProviderMockListCachesExpectation
+	expectations       []*ProviderMockListCachesExpectation
+
+	callArgs []*ProviderMockListCachesParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// ProviderMockListCachesExpectation specifies expectation struct of the Provider.ListCaches
+type ProviderMockListCachesExpectation struct {
+	mock               *ProviderMock
+	params             *ProviderMockListCachesParams
+	paramPtrs          *ProviderMockListCachesParamPtrs
+	expectationOrigins ProviderMockListCachesExpectationOrigins
+	results            *ProviderMockListCachesResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// ProviderMockListCachesParams contains parameters of the Provider.ListCaches
+type ProviderMockListCachesParams struct {
+	ctx     context.Context
+	options *mm_ai.CacheListOptions
+}
+
+// ProviderMockListCachesParamPtrs contains pointers to parameters of the Provider.ListCaches
+type ProviderMockListCachesParamPtrs struct {
+	ctx     *context.Context
+	options **mm_ai.CacheListOptions
+}
+
+// ProviderMockListCachesResults contains results of the Provider.ListCaches
+type ProviderMockListCachesResults struct {
+	cp1 *mm_ai.CacheListResult
+	err error
+}
+
+// ProviderMockListCachesOrigins contains origins of expectations of the Provider.ListCaches
+type ProviderMockListCachesExpectationOrigins struct {
+	origin        string
+	originCtx     string
+	originOptions string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmListCaches *mProviderMockListCaches) Optional() *mProviderMockListCaches {
+	mmListCaches.optional = true
+	return mmListCaches
+}
+
+// Expect sets up expected params for Provider.ListCaches
+func (mmListCaches *mProviderMockListCaches) Expect(ctx context.Context, options *mm_ai.CacheListOptions) *mProviderMockListCaches {
+	if mmListCaches.mock.funcListCaches != nil {
+		mmListCaches.mock.t.Fatalf("ProviderMock.ListCaches mock is already set by Set")
+	}
+
+	if mmListCaches.defaultExpectation == nil {
+		mmListCaches.defaultExpectation = &ProviderMockListCachesExpectation{}
+	}
+
+	if mmListCaches.defaultExpectation.paramPtrs != nil {
+		mmListCaches.mock.t.Fatalf("ProviderMock.ListCaches mock is already set by ExpectParams functions")
+	}
+
+	mmListCaches.defaultExpectation.params = &ProviderMockListCachesParams{ctx, options}
+	mmListCaches.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmListCaches.expectations {
+		if minimock.Equal(e.params, mmListCaches.defaultExpectation.params) {
+			mmListCaches.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmListCaches.defaultExpectation.params)
+		}
+	}
+
+	return mmListCaches
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Provider.ListCaches
+func (mmListCaches *mProviderMockListCaches) ExpectCtxParam1(ctx context.Context) *mProviderMockListCaches {
+	if mmListCaches.mock.funcListCaches != nil {
+		mmListCaches.mock.t.Fatalf("ProviderMock.ListCaches mock is already set by Set")
+	}
+
+	if mmListCaches.defaultExpectation == nil {
+		mmListCaches.defaultExpectation = &ProviderMockListCachesExpectation{}
+	}
+
+	if mmListCaches.defaultExpectation.params != nil {
+		mmListCaches.mock.t.Fatalf("ProviderMock.ListCaches mock is already set by Expect")
+	}
+
+	if mmListCaches.defaultExpectation.paramPtrs == nil {
+		mmListCaches.defaultExpectation.paramPtrs = &ProviderMockListCachesParamPtrs{}
+	}
+	mmListCaches.defaultExpectation.paramPtrs.ctx = &ctx
+	mmListCaches.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmListCaches
+}
+
+// ExpectOptionsParam2 sets up expected param options for Provider.ListCaches
+func (mmListCaches *mProviderMockListCaches) ExpectOptionsParam2(options *mm_ai.CacheListOptions) *mProviderMockListCaches {
+	if mmListCaches.mock.funcListCaches != nil {
+		mmListCaches.mock.t.Fatalf("ProviderMock.ListCaches mock is already set by Set")
+	}
+
+	if mmListCaches.defaultExpectation == nil {
+		mmListCaches.defaultExpectation = &ProviderMockListCachesExpectation{}
+	}
+
+	if mmListCaches.defaultExpectation.params != nil {
+		mmListCaches.mock.t.Fatalf("ProviderMock.ListCaches mock is already set by Expect")
+	}
+
+	if mmListCaches.defaultExpectation.paramPtrs == nil {
+		mmListCaches.defaultExpectation.paramPtrs = &ProviderMockListCachesParamPtrs{}
+	}
+	mmListCaches.defaultExpectation.paramPtrs.options = &options
+	mmListCaches.defaultExpectation.expectationOrigins.originOptions = minimock.CallerInfo(1)
+
+	return mmListCaches
+}
+
+// Inspect accepts an inspector function that has same arguments as the Provider.ListCaches
+func (mmListCaches *mProviderMockListCaches) Inspect(f func(ctx context.Context, options *mm_ai.CacheListOptions)) *mProviderMockListCaches {
+	if mmListCaches.mock.inspectFuncListCaches != nil {
+		mmListCaches.mock.t.Fatalf("Inspect function is already set for ProviderMock.ListCaches")
+	}
+
+	mmListCaches.mock.inspectFuncListCaches = f
+
+	return mmListCaches
+}
+
+// Return sets up results that will be returned by Provider.ListCaches
+func (mmListCaches *mProviderMockListCaches) Return(cp1 *mm_ai.CacheListResult, err error) *ProviderMock {
+	if mmListCaches.mock.funcListCaches != nil {
+		mmListCaches.mock.t.Fatalf("ProviderMock.ListCaches mock is already set by Set")
+	}
+
+	if mmListCaches.defaultExpectation == nil {
+		mmListCaches.defaultExpectation = &ProviderMockListCachesExpectation{mock: mmListCaches.mock}
+	}
+	mmListCaches.defaultExpectation.results = &ProviderMockListCachesResults{cp1, err}
+	mmListCaches.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmListCaches.mock
+}
+
+// Set uses given function f to mock the Provider.ListCaches method
+func (mmListCaches *mProviderMockListCaches) Set(f func(ctx context.Context, options *mm_ai.CacheListOptions) (cp1 *mm_ai.CacheListResult, err error)) *ProviderMock {
+	if mmListCaches.defaultExpectation != nil {
+		mmListCaches.mock.t.Fatalf("Default expectation is already set for the Provider.ListCaches method")
+	}
+
+	if len(mmListCaches.expectations) > 0 {
+		mmListCaches.mock.t.Fatalf("Some expectations are already set for the Provider.ListCaches method")
+	}
+
+	mmListCaches.mock.funcListCaches = f
+	mmListCaches.mock.funcListCachesOrigin = minimock.CallerInfo(1)
+	return mmListCaches.mock
+}
+
+// When sets expectation for the Provider.ListCaches which will trigger the result defined by the following
+// Then helper
+func (mmListCaches *mProviderMockListCaches) When(ctx context.Context, options *mm_ai.CacheListOptions) *ProviderMockListCachesExpectation {
+	if mmListCaches.mock.funcListCaches != nil {
+		mmListCaches.mock.t.Fatalf("ProviderMock.ListCaches mock is already set by Set")
+	}
+
+	expectation := &ProviderMockListCachesExpectation{
+		mock:               mmListCaches.mock,
+		params:             &ProviderMockListCachesParams{ctx, options},
+		expectationOrigins: ProviderMockListCachesExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmListCaches.expectations = append(mmListCaches.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Provider.ListCaches return parameters for the expectation previously defined by the When method
+func (e *ProviderMockListCachesExpectation) Then(cp1 *mm_ai.CacheListResult, err error) *ProviderMock {
+	e.results = &ProviderMockListCachesResults{cp1, err}
+	return e.mock
+}
+
+// Times sets number of times Provider.ListCaches should be invoked
+func (mmListCaches *mProviderMockListCaches) Times(n uint64) *mProviderMockListCaches {
+	if n == 0 {
+		mmListCaches.mock.t.Fatalf("Times of ProviderMock.ListCaches mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmListCaches.expectedInvocations, n)
+	mmListCaches.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmListCaches
+}
+
+func (mmListCaches *mProviderMockListCaches) invocationsDone() bool {
+	if len(mmListCaches.expectations) == 0 && mmListCaches.defaultExpectation == nil && mmListCaches.mock.funcListCaches == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmListCaches.mock.afterListCachesCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmListCaches.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// ListCaches implements mm_ai.Provider
+func (mmListCaches *ProviderMock) ListCaches(ctx context.Context, options *mm_ai.CacheListOptions) (cp1 *mm_ai.CacheListResult, err error) {
+	mm_atomic.AddUint64(&mmListCaches.beforeListCachesCounter, 1)
+	defer mm_atomic.AddUint64(&mmListCaches.afterListCachesCounter, 1)
+
+	mmListCaches.t.Helper()
+
+	if mmListCaches.inspectFuncListCaches != nil {
+		mmListCaches.inspectFuncListCaches(ctx, options)
+	}
+
+	mm_params := ProviderMockListCachesParams{ctx, options}
+
+	// Record call args
+	mmListCaches.ListCachesMock.mutex.Lock()
+	mmListCaches.ListCachesMock.callArgs = append(mmListCaches.ListCachesMock.callArgs, &mm_params)
+	mmListCaches.ListCachesMock.mutex.Unlock()
+
+	for _, e := range mmListCaches.ListCachesMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.cp1, e.results.err
+		}
+	}
+
+	if mmListCaches.ListCachesMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmListCaches.ListCachesMock.defaultExpectation.Counter, 1)
+		mm_want := mmListCaches.ListCachesMock.defaultExpectation.params
+		mm_want_ptrs := mmListCaches.ListCachesMock.defaultExpectation.paramPtrs
+
+		mm_got := ProviderMockListCachesParams{ctx, options}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmListCaches.t.Errorf("ProviderMock.ListCaches got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmListCaches.ListCachesMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.options != nil && !minimock.Equal(*mm_want_ptrs.options, mm_got.options) {
+				mmListCaches.t.Errorf("ProviderMock.ListCaches got unexpected parameter options, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmListCaches.ListCachesMock.defaultExpectation.expectationOrigins.originOptions, *mm_want_ptrs.options, mm_got.options, minimock.Diff(*mm_want_ptrs.options, mm_got.options))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmListCaches.t.Errorf("ProviderMock.ListCaches got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmListCaches.ListCachesMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmListCaches.ListCachesMock.defaultExpectation.results
+		if mm_results == nil {
+			mmListCaches.t.Fatal("No results are set for the ProviderMock.ListCaches")
+		}
+		return (*mm_results).cp1, (*mm_results).err
+	}
+	if mmListCaches.funcListCaches != nil {
+		return mmListCaches.funcListCaches(ctx, options)
+	}
+	mmListCaches.t.Fatalf("Unexpected call to ProviderMock.ListCaches. %v %v", ctx, options)
+	return
+}
+
+// ListCachesAfterCounter returns a count of finished ProviderMock.ListCaches invocations
+func (mmListCaches *ProviderMock) ListCachesAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmListCaches.afterListCachesCounter)
+}
+
+// ListCachesBeforeCounter returns a count of ProviderMock.ListCaches invocations
+func (mmListCaches *ProviderMock) ListCachesBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmListCaches.beforeListCachesCounter)
+}
+
+// Calls returns a list of arguments used in each call to ProviderMock.ListCaches.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmListCaches *mProviderMockListCaches) Calls() []*ProviderMockListCachesParams {
+	mmListCaches.mutex.RLock()
+
+	argCopy := make([]*ProviderMockListCachesParams, len(mmListCaches.callArgs))
+	copy(argCopy, mmListCaches.callArgs)
+
+	mmListCaches.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockListCachesDone returns true if the count of the ListCaches invocations corresponds
+// the number of defined expectations
+func (m *ProviderMock) MinimockListCachesDone() bool {
+	if m.ListCachesMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.ListCachesMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.ListCachesMock.invocationsDone()
+}
+
+// MinimockListCachesInspect logs each unmet expectation
+func (m *ProviderMock) MinimockListCachesInspect() {
+	for _, e := range m.ListCachesMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to ProviderMock.ListCaches at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterListCachesCounter := mm_atomic.LoadUint64(&m.afterListCachesCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.ListCachesMock.defaultExpectation != nil && afterListCachesCounter < 1 {
+		if m.ListCachesMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to ProviderMock.ListCaches at\n%s", m.ListCachesMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to ProviderMock.ListCaches at\n%s with params: %#v", m.ListCachesMock.defaultExpectation.expectationOrigins.origin, *m.ListCachesMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcListCaches != nil && afterListCachesCounter < 1 {
+		m.t.Errorf("Expected call to ProviderMock.ListCaches at\n%s", m.funcListCachesOrigin)
+	}
+
+	if !m.ListCachesMock.invocationsDone() && afterListCachesCounter > 0 {
+		m.t.Errorf("Expected %d calls to ProviderMock.ListCaches at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.ListCachesMock.expectedInvocations), m.ListCachesMock.expectedInvocationsOrigin, afterListCachesCounter)
 	}
 }
 
@@ -2372,23 +3825,407 @@ func (m *ProviderMock) MinimockSupportsFileTypeInspect() {
 	}
 }
 
+type mProviderMockUpdateCache struct {
+	optional           bool
+	mock               *ProviderMock
+	defaultExpectation *ProviderMockUpdateCacheExpectation
+	expectations       []*ProviderMockUpdateCacheExpectation
+
+	callArgs []*ProviderMockUpdateCacheParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// ProviderMockUpdateCacheExpectation specifies expectation struct of the Provider.UpdateCache
+type ProviderMockUpdateCacheExpectation struct {
+	mock               *ProviderMock
+	params             *ProviderMockUpdateCacheParams
+	paramPtrs          *ProviderMockUpdateCacheParamPtrs
+	expectationOrigins ProviderMockUpdateCacheExpectationOrigins
+	results            *ProviderMockUpdateCacheResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// ProviderMockUpdateCacheParams contains parameters of the Provider.UpdateCache
+type ProviderMockUpdateCacheParams struct {
+	ctx       context.Context
+	cacheName string
+	options   *mm_ai.CacheUpdateOptions
+}
+
+// ProviderMockUpdateCacheParamPtrs contains pointers to parameters of the Provider.UpdateCache
+type ProviderMockUpdateCacheParamPtrs struct {
+	ctx       *context.Context
+	cacheName *string
+	options   **mm_ai.CacheUpdateOptions
+}
+
+// ProviderMockUpdateCacheResults contains results of the Provider.UpdateCache
+type ProviderMockUpdateCacheResults struct {
+	cp1 *mm_ai.CacheResult
+	err error
+}
+
+// ProviderMockUpdateCacheOrigins contains origins of expectations of the Provider.UpdateCache
+type ProviderMockUpdateCacheExpectationOrigins struct {
+	origin          string
+	originCtx       string
+	originCacheName string
+	originOptions   string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmUpdateCache *mProviderMockUpdateCache) Optional() *mProviderMockUpdateCache {
+	mmUpdateCache.optional = true
+	return mmUpdateCache
+}
+
+// Expect sets up expected params for Provider.UpdateCache
+func (mmUpdateCache *mProviderMockUpdateCache) Expect(ctx context.Context, cacheName string, options *mm_ai.CacheUpdateOptions) *mProviderMockUpdateCache {
+	if mmUpdateCache.mock.funcUpdateCache != nil {
+		mmUpdateCache.mock.t.Fatalf("ProviderMock.UpdateCache mock is already set by Set")
+	}
+
+	if mmUpdateCache.defaultExpectation == nil {
+		mmUpdateCache.defaultExpectation = &ProviderMockUpdateCacheExpectation{}
+	}
+
+	if mmUpdateCache.defaultExpectation.paramPtrs != nil {
+		mmUpdateCache.mock.t.Fatalf("ProviderMock.UpdateCache mock is already set by ExpectParams functions")
+	}
+
+	mmUpdateCache.defaultExpectation.params = &ProviderMockUpdateCacheParams{ctx, cacheName, options}
+	mmUpdateCache.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmUpdateCache.expectations {
+		if minimock.Equal(e.params, mmUpdateCache.defaultExpectation.params) {
+			mmUpdateCache.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmUpdateCache.defaultExpectation.params)
+		}
+	}
+
+	return mmUpdateCache
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Provider.UpdateCache
+func (mmUpdateCache *mProviderMockUpdateCache) ExpectCtxParam1(ctx context.Context) *mProviderMockUpdateCache {
+	if mmUpdateCache.mock.funcUpdateCache != nil {
+		mmUpdateCache.mock.t.Fatalf("ProviderMock.UpdateCache mock is already set by Set")
+	}
+
+	if mmUpdateCache.defaultExpectation == nil {
+		mmUpdateCache.defaultExpectation = &ProviderMockUpdateCacheExpectation{}
+	}
+
+	if mmUpdateCache.defaultExpectation.params != nil {
+		mmUpdateCache.mock.t.Fatalf("ProviderMock.UpdateCache mock is already set by Expect")
+	}
+
+	if mmUpdateCache.defaultExpectation.paramPtrs == nil {
+		mmUpdateCache.defaultExpectation.paramPtrs = &ProviderMockUpdateCacheParamPtrs{}
+	}
+	mmUpdateCache.defaultExpectation.paramPtrs.ctx = &ctx
+	mmUpdateCache.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmUpdateCache
+}
+
+// ExpectCacheNameParam2 sets up expected param cacheName for Provider.UpdateCache
+func (mmUpdateCache *mProviderMockUpdateCache) ExpectCacheNameParam2(cacheName string) *mProviderMockUpdateCache {
+	if mmUpdateCache.mock.funcUpdateCache != nil {
+		mmUpdateCache.mock.t.Fatalf("ProviderMock.UpdateCache mock is already set by Set")
+	}
+
+	if mmUpdateCache.defaultExpectation == nil {
+		mmUpdateCache.defaultExpectation = &ProviderMockUpdateCacheExpectation{}
+	}
+
+	if mmUpdateCache.defaultExpectation.params != nil {
+		mmUpdateCache.mock.t.Fatalf("ProviderMock.UpdateCache mock is already set by Expect")
+	}
+
+	if mmUpdateCache.defaultExpectation.paramPtrs == nil {
+		mmUpdateCache.defaultExpectation.paramPtrs = &ProviderMockUpdateCacheParamPtrs{}
+	}
+	mmUpdateCache.defaultExpectation.paramPtrs.cacheName = &cacheName
+	mmUpdateCache.defaultExpectation.expectationOrigins.originCacheName = minimock.CallerInfo(1)
+
+	return mmUpdateCache
+}
+
+// ExpectOptionsParam3 sets up expected param options for Provider.UpdateCache
+func (mmUpdateCache *mProviderMockUpdateCache) ExpectOptionsParam3(options *mm_ai.CacheUpdateOptions) *mProviderMockUpdateCache {
+	if mmUpdateCache.mock.funcUpdateCache != nil {
+		mmUpdateCache.mock.t.Fatalf("ProviderMock.UpdateCache mock is already set by Set")
+	}
+
+	if mmUpdateCache.defaultExpectation == nil {
+		mmUpdateCache.defaultExpectation = &ProviderMockUpdateCacheExpectation{}
+	}
+
+	if mmUpdateCache.defaultExpectation.params != nil {
+		mmUpdateCache.mock.t.Fatalf("ProviderMock.UpdateCache mock is already set by Expect")
+	}
+
+	if mmUpdateCache.defaultExpectation.paramPtrs == nil {
+		mmUpdateCache.defaultExpectation.paramPtrs = &ProviderMockUpdateCacheParamPtrs{}
+	}
+	mmUpdateCache.defaultExpectation.paramPtrs.options = &options
+	mmUpdateCache.defaultExpectation.expectationOrigins.originOptions = minimock.CallerInfo(1)
+
+	return mmUpdateCache
+}
+
+// Inspect accepts an inspector function that has same arguments as the Provider.UpdateCache
+func (mmUpdateCache *mProviderMockUpdateCache) Inspect(f func(ctx context.Context, cacheName string, options *mm_ai.CacheUpdateOptions)) *mProviderMockUpdateCache {
+	if mmUpdateCache.mock.inspectFuncUpdateCache != nil {
+		mmUpdateCache.mock.t.Fatalf("Inspect function is already set for ProviderMock.UpdateCache")
+	}
+
+	mmUpdateCache.mock.inspectFuncUpdateCache = f
+
+	return mmUpdateCache
+}
+
+// Return sets up results that will be returned by Provider.UpdateCache
+func (mmUpdateCache *mProviderMockUpdateCache) Return(cp1 *mm_ai.CacheResult, err error) *ProviderMock {
+	if mmUpdateCache.mock.funcUpdateCache != nil {
+		mmUpdateCache.mock.t.Fatalf("ProviderMock.UpdateCache mock is already set by Set")
+	}
+
+	if mmUpdateCache.defaultExpectation == nil {
+		mmUpdateCache.defaultExpectation = &ProviderMockUpdateCacheExpectation{mock: mmUpdateCache.mock}
+	}
+	mmUpdateCache.defaultExpectation.results = &ProviderMockUpdateCacheResults{cp1, err}
+	mmUpdateCache.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmUpdateCache.mock
+}
+
+// Set uses given function f to mock the Provider.UpdateCache method
+func (mmUpdateCache *mProviderMockUpdateCache) Set(f func(ctx context.Context, cacheName string, options *mm_ai.CacheUpdateOptions) (cp1 *mm_ai.CacheResult, err error)) *ProviderMock {
+	if mmUpdateCache.defaultExpectation != nil {
+		mmUpdateCache.mock.t.Fatalf("Default expectation is already set for the Provider.UpdateCache method")
+	}
+
+	if len(mmUpdateCache.expectations) > 0 {
+		mmUpdateCache.mock.t.Fatalf("Some expectations are already set for the Provider.UpdateCache method")
+	}
+
+	mmUpdateCache.mock.funcUpdateCache = f
+	mmUpdateCache.mock.funcUpdateCacheOrigin = minimock.CallerInfo(1)
+	return mmUpdateCache.mock
+}
+
+// When sets expectation for the Provider.UpdateCache which will trigger the result defined by the following
+// Then helper
+func (mmUpdateCache *mProviderMockUpdateCache) When(ctx context.Context, cacheName string, options *mm_ai.CacheUpdateOptions) *ProviderMockUpdateCacheExpectation {
+	if mmUpdateCache.mock.funcUpdateCache != nil {
+		mmUpdateCache.mock.t.Fatalf("ProviderMock.UpdateCache mock is already set by Set")
+	}
+
+	expectation := &ProviderMockUpdateCacheExpectation{
+		mock:               mmUpdateCache.mock,
+		params:             &ProviderMockUpdateCacheParams{ctx, cacheName, options},
+		expectationOrigins: ProviderMockUpdateCacheExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmUpdateCache.expectations = append(mmUpdateCache.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Provider.UpdateCache return parameters for the expectation previously defined by the When method
+func (e *ProviderMockUpdateCacheExpectation) Then(cp1 *mm_ai.CacheResult, err error) *ProviderMock {
+	e.results = &ProviderMockUpdateCacheResults{cp1, err}
+	return e.mock
+}
+
+// Times sets number of times Provider.UpdateCache should be invoked
+func (mmUpdateCache *mProviderMockUpdateCache) Times(n uint64) *mProviderMockUpdateCache {
+	if n == 0 {
+		mmUpdateCache.mock.t.Fatalf("Times of ProviderMock.UpdateCache mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmUpdateCache.expectedInvocations, n)
+	mmUpdateCache.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmUpdateCache
+}
+
+func (mmUpdateCache *mProviderMockUpdateCache) invocationsDone() bool {
+	if len(mmUpdateCache.expectations) == 0 && mmUpdateCache.defaultExpectation == nil && mmUpdateCache.mock.funcUpdateCache == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmUpdateCache.mock.afterUpdateCacheCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmUpdateCache.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// UpdateCache implements mm_ai.Provider
+func (mmUpdateCache *ProviderMock) UpdateCache(ctx context.Context, cacheName string, options *mm_ai.CacheUpdateOptions) (cp1 *mm_ai.CacheResult, err error) {
+	mm_atomic.AddUint64(&mmUpdateCache.beforeUpdateCacheCounter, 1)
+	defer mm_atomic.AddUint64(&mmUpdateCache.afterUpdateCacheCounter, 1)
+
+	mmUpdateCache.t.Helper()
+
+	if mmUpdateCache.inspectFuncUpdateCache != nil {
+		mmUpdateCache.inspectFuncUpdateCache(ctx, cacheName, options)
+	}
+
+	mm_params := ProviderMockUpdateCacheParams{ctx, cacheName, options}
+
+	// Record call args
+	mmUpdateCache.UpdateCacheMock.mutex.Lock()
+	mmUpdateCache.UpdateCacheMock.callArgs = append(mmUpdateCache.UpdateCacheMock.callArgs, &mm_params)
+	mmUpdateCache.UpdateCacheMock.mutex.Unlock()
+
+	for _, e := range mmUpdateCache.UpdateCacheMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.cp1, e.results.err
+		}
+	}
+
+	if mmUpdateCache.UpdateCacheMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmUpdateCache.UpdateCacheMock.defaultExpectation.Counter, 1)
+		mm_want := mmUpdateCache.UpdateCacheMock.defaultExpectation.params
+		mm_want_ptrs := mmUpdateCache.UpdateCacheMock.defaultExpectation.paramPtrs
+
+		mm_got := ProviderMockUpdateCacheParams{ctx, cacheName, options}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmUpdateCache.t.Errorf("ProviderMock.UpdateCache got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateCache.UpdateCacheMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.cacheName != nil && !minimock.Equal(*mm_want_ptrs.cacheName, mm_got.cacheName) {
+				mmUpdateCache.t.Errorf("ProviderMock.UpdateCache got unexpected parameter cacheName, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateCache.UpdateCacheMock.defaultExpectation.expectationOrigins.originCacheName, *mm_want_ptrs.cacheName, mm_got.cacheName, minimock.Diff(*mm_want_ptrs.cacheName, mm_got.cacheName))
+			}
+
+			if mm_want_ptrs.options != nil && !minimock.Equal(*mm_want_ptrs.options, mm_got.options) {
+				mmUpdateCache.t.Errorf("ProviderMock.UpdateCache got unexpected parameter options, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateCache.UpdateCacheMock.defaultExpectation.expectationOrigins.originOptions, *mm_want_ptrs.options, mm_got.options, minimock.Diff(*mm_want_ptrs.options, mm_got.options))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmUpdateCache.t.Errorf("ProviderMock.UpdateCache got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmUpdateCache.UpdateCacheMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmUpdateCache.UpdateCacheMock.defaultExpectation.results
+		if mm_results == nil {
+			mmUpdateCache.t.Fatal("No results are set for the ProviderMock.UpdateCache")
+		}
+		return (*mm_results).cp1, (*mm_results).err
+	}
+	if mmUpdateCache.funcUpdateCache != nil {
+		return mmUpdateCache.funcUpdateCache(ctx, cacheName, options)
+	}
+	mmUpdateCache.t.Fatalf("Unexpected call to ProviderMock.UpdateCache. %v %v %v", ctx, cacheName, options)
+	return
+}
+
+// UpdateCacheAfterCounter returns a count of finished ProviderMock.UpdateCache invocations
+func (mmUpdateCache *ProviderMock) UpdateCacheAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateCache.afterUpdateCacheCounter)
+}
+
+// UpdateCacheBeforeCounter returns a count of ProviderMock.UpdateCache invocations
+func (mmUpdateCache *ProviderMock) UpdateCacheBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateCache.beforeUpdateCacheCounter)
+}
+
+// Calls returns a list of arguments used in each call to ProviderMock.UpdateCache.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmUpdateCache *mProviderMockUpdateCache) Calls() []*ProviderMockUpdateCacheParams {
+	mmUpdateCache.mutex.RLock()
+
+	argCopy := make([]*ProviderMockUpdateCacheParams, len(mmUpdateCache.callArgs))
+	copy(argCopy, mmUpdateCache.callArgs)
+
+	mmUpdateCache.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockUpdateCacheDone returns true if the count of the UpdateCache invocations corresponds
+// the number of defined expectations
+func (m *ProviderMock) MinimockUpdateCacheDone() bool {
+	if m.UpdateCacheMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.UpdateCacheMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.UpdateCacheMock.invocationsDone()
+}
+
+// MinimockUpdateCacheInspect logs each unmet expectation
+func (m *ProviderMock) MinimockUpdateCacheInspect() {
+	for _, e := range m.UpdateCacheMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to ProviderMock.UpdateCache at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterUpdateCacheCounter := mm_atomic.LoadUint64(&m.afterUpdateCacheCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.UpdateCacheMock.defaultExpectation != nil && afterUpdateCacheCounter < 1 {
+		if m.UpdateCacheMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to ProviderMock.UpdateCache at\n%s", m.UpdateCacheMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to ProviderMock.UpdateCache at\n%s with params: %#v", m.UpdateCacheMock.defaultExpectation.expectationOrigins.origin, *m.UpdateCacheMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcUpdateCache != nil && afterUpdateCacheCounter < 1 {
+		m.t.Errorf("Expected call to ProviderMock.UpdateCache at\n%s", m.funcUpdateCacheOrigin)
+	}
+
+	if !m.UpdateCacheMock.invocationsDone() && afterUpdateCacheCounter > 0 {
+		m.t.Errorf("Expected %d calls to ProviderMock.UpdateCache at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.UpdateCacheMock.expectedInvocations), m.UpdateCacheMock.expectedInvocationsOrigin, afterUpdateCacheCounter)
+	}
+}
+
 // MinimockFinish checks that all mocked methods have been called the expected number of times
 func (m *ProviderMock) MinimockFinish() {
 	m.finishOnce.Do(func() {
 		if !m.minimockDone() {
+			m.MinimockChatWithCacheInspect()
+
+			m.MinimockChatWithFilesInspect()
+
 			m.MinimockCloseInspect()
 
-			m.MinimockConvertToMarkdownInspect()
-
 			m.MinimockConvertToMarkdownWithCacheInspect()
+
+			m.MinimockConvertToMarkdownWithoutCacheInspect()
 
 			m.MinimockCreateCacheInspect()
 
 			m.MinimockDeleteCacheInspect()
 
+			m.MinimockGetCacheInspect()
+
+			m.MinimockListCachesInspect()
+
 			m.MinimockNameInspect()
 
 			m.MinimockSupportsFileTypeInspect()
+
+			m.MinimockUpdateCacheInspect()
 		}
 	})
 }
@@ -2412,11 +4249,16 @@ func (m *ProviderMock) MinimockWait(timeout mm_time.Duration) {
 func (m *ProviderMock) minimockDone() bool {
 	done := true
 	return done &&
+		m.MinimockChatWithCacheDone() &&
+		m.MinimockChatWithFilesDone() &&
 		m.MinimockCloseDone() &&
-		m.MinimockConvertToMarkdownDone() &&
 		m.MinimockConvertToMarkdownWithCacheDone() &&
+		m.MinimockConvertToMarkdownWithoutCacheDone() &&
 		m.MinimockCreateCacheDone() &&
 		m.MinimockDeleteCacheDone() &&
+		m.MinimockGetCacheDone() &&
+		m.MinimockListCachesDone() &&
 		m.MinimockNameDone() &&
-		m.MinimockSupportsFileTypeDone()
+		m.MinimockSupportsFileTypeDone() &&
+		m.MinimockUpdateCacheDone()
 }

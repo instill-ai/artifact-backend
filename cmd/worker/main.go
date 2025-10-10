@@ -38,8 +38,8 @@ import (
 	otelx "github.com/instill-ai/x/otel"
 )
 
-const gracefulShutdownWaitPeriod = 15 * time.Second
-const gracefulShutdownTimeout = 60 * time.Minute
+const gracefulShutdownWaitPeriod = 15 * time.Second // Wait period before stopping worker
+const gracefulShutdownTimeout = 60 * time.Minute    // Maximum time for in-flight workflows to complete
 
 var (
 	// These variables might be overridden at buildtime.
@@ -74,20 +74,20 @@ func main() {
 
 	// Set gRPC logging based on debug mode
 	if config.Config.Server.Debug {
-		grpczap.ReplaceGrpcLoggerV2WithVerbosity(logger, 0) // All logs
+		grpczap.ReplaceGrpcLoggerV2WithVerbosity(logger, 0) // All logs including transport layer
 	} else {
-		grpczap.ReplaceGrpcLoggerV2WithVerbosity(logger, 3) // verbosity 3 will avoid [transport] from emitting
+		grpczap.ReplaceGrpcLoggerV2WithVerbosity(logger, 3) // Suppress transport layer logs (verbosity 3+)
 	}
 
-	// Initialize all clients
-	pipelinePublicServiceClient, _, // mgmtPrivateServiceClient not needed for worker
+	// Initialize all clients (mgmtPrivateServiceClient not needed for worker - only used in cmd/main)
+	pipelinePublicServiceClient, _,
 		redisClient, db, minioClient, vectorDB, aclClient, temporalClient, closeClients := newClients(ctx, logger)
 	defer closeClients()
 
-	// Initialize repository with vector database
-	repo := repository.NewRepository(db, vectorDB, minioClient)
+	// Initialize repository with vector database and Redis
+	repo := repository.NewRepository(db, vectorDB, minioClient, redisClient)
 
-	// Create worker with all primitive dependencies (no circular dependency)
+	// Create worker with direct dependencies (primitives only - no service layer to avoid circular deps)
 	cw, err := artifactworker.New(
 		temporalClient,
 		repo,
@@ -101,7 +101,7 @@ func main() {
 	}
 
 	// Register workflows and activities with Temporal worker
-	// Note: Service layer is not needed here - it's only for the API handlers in cmd/main
+	// Note: Service layer not used here - only needed in cmd/main for API handler business logic
 	w := worker.New(temporalClient, artifactworker.TaskQueue, worker.Options{
 		EnableSessionWorker:                    true,
 		WorkflowPanicPolicy:                    worker.BlockWorkflow,
@@ -125,15 +125,13 @@ func main() {
 	// ===== Workflow Registrations =====
 
 	// Main workflows
-	w.RegisterWorkflow(cw.ProcessFileWorkflow)          // Main file processing orchestration workflow
+	w.RegisterWorkflow(cw.ProcessFileWorkflow)          // Main file processing orchestration workflow (batch)
 	w.RegisterWorkflow(cw.CleanupFileWorkflow)          // Single file cleanup and deletion workflow
 	w.RegisterWorkflow(cw.CleanupKnowledgeBaseWorkflow) // Knowledge base cleanup and deletion workflow
 	w.RegisterWorkflow(cw.DeleteFilesWorkflow)          // Batch file deletion workflow
 	w.RegisterWorkflow(cw.GetFilesWorkflow)             // Batch file retrieval workflow
 
 	// Child workflows (called by main workflows)
-	w.RegisterWorkflow(cw.ProcessContentWorkflow)           // Parallel: Convert file to markdown
-	w.RegisterWorkflow(cw.ProcessSummaryWorkflow)           // Parallel: Generate file summary
 	w.RegisterWorkflow(cw.EmbedTextsWorkflow)               // Batch text embedding generation
 	w.RegisterWorkflow(cw.SaveEmbeddingsToVectorDBWorkflow) // Vector embedding storage
 
@@ -172,7 +170,7 @@ func main() {
 
 	// ===== ProcessFileWorkflow Activities (Main Workflow) =====
 	// Main workflow orchestrating the entire file processing pipeline
-	// Note: Actual conversion and summarization are delegated to child workflows
+	// Content generation and summarization are handled by composite activities (ProcessContentActivity, ProcessSummaryActivity)
 
 	// File Metadata and Setup Phase
 	w.RegisterActivity(cw.GetFileMetadataActivity)                // Fetch file metadata from database
@@ -185,31 +183,29 @@ func main() {
 	w.RegisterActivity(cw.DeleteConvertedFileFromMinIOActivity)   // Delete converted file from MinIO on failure
 	w.RegisterActivity(cw.UpdateConversionMetadataActivity)       // Update file status and conversion metadata
 
+	// Format Standardization Phase - Executed before caching
+	w.RegisterActivity(cw.StandardizeFileTypeActivity)          // Convert non-AI-native formats (DOCX→PDF, GIF→PNG, MKV→MP4)
+	w.RegisterActivity(cw.DeleteTemporaryConvertedFileActivity) // Clean up temporary converted file from MinIO (core-blob/tmp/*)
+
+	// AI Caching Phase - Create caches for efficient processing
+	w.RegisterActivity(cw.CacheFileContextActivity)       // Create AI cache for individual file processing
+	w.RegisterActivity(cw.CacheChatContextActivity)       // Create AI cache for multi-file chat (Chat API)
+	w.RegisterActivity(cw.StoreChatCacheMetadataActivity) // Store chat cache metadata in Redis for Chat API
+	w.RegisterActivity(cw.DeleteCacheActivity)            // Clean up AI cache after processing
+
+	// Content and Summary Processing Phase - Composite activities (flattened from child workflows)
+	w.RegisterActivity(cw.ProcessContentActivity) // Complete content processing: markdown conversion → save to DB
+	w.RegisterActivity(cw.ProcessSummaryActivity) // Complete summary processing: generate → save to DB
+
 	// Chunking Phase - Combined content and summary chunking (sequential after parallel AI operations)
 	w.RegisterActivity(cw.GetConvertedFileForChunkingActivity) // Retrieve converted markdown for chunking
+	w.RegisterActivity(cw.ChunkContentActivity)                // Split markdown content into semantic chunks
+	w.RegisterActivity(cw.SaveTextChunksToDBActivity)          // Persist chunks to database with metadata
 	w.RegisterActivity(cw.UpdateChunkingMetadataActivity)      // Update file status and chunking metadata
 
 	// Embedding Phase - Vector embedding generation and storage
 	w.RegisterActivity(cw.GetChunksForEmbeddingActivity)   // Retrieve text chunks for embedding
 	w.RegisterActivity(cw.UpdateEmbeddingMetadataActivity) // Update file status and embedding metadata
-
-	// ===== ProcessContentWorkflow Activities (Child Workflow) =====
-	// Child workflow for parallel markdown conversion with shared AI cache
-	w.RegisterActivity(cw.ConvertFileTypeActivity)              // Convert non-AI-native formats (GIF→PNG, MKV→MP4, DOC→PDF)
-	w.RegisterActivity(cw.CacheContextActivity)                 // Create AI cache for efficient processing
-	w.RegisterActivity(cw.ConvertToFileActivity)                // Convert file to markdown using AI or pipelines
-	w.RegisterActivity(cw.DeleteCacheActivity)                  // Clean up AI cache after processing
-	w.RegisterActivity(cw.DeleteTemporaryConvertedFileActivity) // Clean up temporary converted file from MinIO (core-blob/tmp/*)
-
-	// ===== ProcessSummaryWorkflow Activities (Child Workflow) =====
-	// Child workflow for parallel summary generation with shared AI cache
-	w.RegisterActivity(cw.GenerateSummaryActivity) // Generate summary using AI with cache
-	w.RegisterActivity(cw.SaveSummaryActivity)     // Save summary to PostgreSQL database
-
-	// ===== Chunking and Embedding Activities =====
-	// Used in main ProcessFileWorkflow for content chunking and persistence
-	w.RegisterActivity(cw.ChunkContentActivity)       // Split markdown content into semantic chunks
-	w.RegisterActivity(cw.SaveTextChunksToDBActivity) // Persist chunks to database with metadata
 
 	// ===== SaveEmbeddingsToVectorDBWorkflow Activities (Child Workflow) =====
 	// Child workflow handling vector embedding storage
@@ -222,29 +218,28 @@ func main() {
 		logger.Fatal(fmt.Sprintf("Unable to start worker: %s", err))
 	}
 
-	logger.Info("worker is running.")
+	logger.Info("Temporal worker started successfully and is polling for tasks")
 
-	// Note: File processing workflows are triggered directly by the API handler
-	// when ProcessCatalogFiles is called, so we don't need a dispatcher polling
-	// for files. The old dispatcher pattern is not needed with Temporal.
+	// Workflows are triggered by API handlers (e.g., ProcessCatalogFiles in cmd/main)
+	// No dispatcher needed - Temporal handles task distribution and retries automatically
 
-	// kill (no param) default send syscall.SIGTERM
-	// kill -2 is syscall.SIGINT
-	// kill -9 is syscall.SIGKILL but can't be catch, so don't need add it
+	// Setup graceful shutdown on SIGTERM (kill) and SIGINT (Ctrl+C)
+	// Note: SIGKILL (kill -9) cannot be caught and will force immediate termination
 	quitSig := make(chan os.Signal, 1)
 	signal.Notify(quitSig, syscall.SIGINT, syscall.SIGTERM)
 
-	// When the server receives a SIGTERM, we'll try to finish ongoing
-	// workflows. This is because file processing activities might use shared
-	// resources that prevent workflows from recovering from interruptions.
+	// Block until shutdown signal received
 	<-quitSig
 
+	// Allow in-flight workflows to complete gracefully (shared resources like MinIO/DB need proper cleanup)
+	logger.Info("Shutdown signal received, waiting for in-flight workflows to complete...")
 	time.Sleep(gracefulShutdownWaitPeriod)
 
 	logger.Info("Shutting down worker...")
 	w.Stop()
 }
 
+// newClients initializes all external service clients and returns a cleanup function
 func newClients(ctx context.Context, logger *zap.Logger) (
 	pipelinepb.PipelinePublicServiceClient,
 	mgmtpb.MgmtPrivateServiceClient,
@@ -258,7 +253,7 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 ) {
 	closeFuncs := map[string]func() error{}
 
-	// Initialize mgmt private service client
+	// Initialize mgmt-backend client (for user/org management)
 	mgmtPrivateServiceClient, mgmtPrivateClose, err := clientgrpcx.NewClient[mgmtpb.MgmtPrivateServiceClient](
 		clientgrpcx.WithServiceConfig(config.Config.MgmtBackend),
 		clientgrpcx.WithSetOTELClientHandler(config.Config.OTELCollector.Enable),
@@ -268,7 +263,7 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 	}
 	closeFuncs["mgmtPrivate"] = mgmtPrivateClose
 
-	// Initialize pipeline public service client
+	// Initialize pipeline-backend client (for AI pipelines and conversions)
 	pipelinePublicServiceClient, pipelinePublicClose, err := clientgrpcx.NewClient[pipelinepb.PipelinePublicServiceClient](
 		clientgrpcx.WithServiceConfig(client.ServiceConfig{
 			Host:       config.Config.PipelineBackend.Host,
@@ -281,24 +276,24 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 	}
 	closeFuncs["pipelinePublic"] = pipelinePublicClose
 
-	// Initialize database
+	// Initialize PostgreSQL database connection (for metadata and file records)
 	db := database.GetSharedConnection()
 	closeFuncs["database"] = func() error {
 		database.Close(db)
 		return nil
 	}
 
-	// Initialize redis client
+	// Initialize Redis client (for caching and chat cache metadata)
 	redisClient := redis.NewClient(&config.Config.Cache.Redis.RedisOptions)
 	closeFuncs["redis"] = redisClient.Close
 
-	// Initialize Temporal client
+	// Initialize Temporal client (for workflow orchestration)
 	temporalClientOptions, err := temporal.ClientOptions(config.Config.Temporal, logger)
 	if err != nil {
 		logger.Fatal("Unable to build Temporal client options", zap.Error(err))
 	}
 
-	// Only add interceptor if tracing is enabled
+	// Add OpenTelemetry tracing interceptor if enabled
 	if config.Config.OTELCollector.Enable {
 		temporalTracingInterceptor, err := opentelemetry.NewTracingInterceptor(opentelemetry.TracerOptions{
 			Tracer:            otel.Tracer(serviceName),
@@ -319,7 +314,7 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 		return nil
 	}
 
-	// Initialize MinIO client (artifact-backend's wrapper)
+	// Initialize MinIO client (for object storage - files, chunks, embeddings)
 	minioClient, err := repository.NewMinioObjectStorage(ctx, miniox.ClientParams{
 		Config: config.Config.Minio,
 		Logger: logger,
@@ -332,17 +327,18 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 		logger.Fatal("failed to create MinIO client", zap.Error(err))
 	}
 
-	// Initialize milvus client
+	// Initialize Milvus client (for vector database - embedding storage and similarity search)
 	vectorDB, vclose, err := repository.NewVectorDatabase(ctx, config.Config.Milvus.Host, config.Config.Milvus.Port)
 	if err != nil {
 		logger.Fatal(fmt.Sprintf("failed to create milvus client: %v", err))
 	}
 	closeFuncs["milvus"] = vclose
 
-	// Init ACL client
+	// Initialize OpenFGA client (for access control and permissions)
 	fgaClient, fgaClientConn := acl.InitOpenFGAClient(ctx, config.Config.OpenFGA.Host, config.Config.OpenFGA.Port)
 	closeFuncs["fga"] = fgaClientConn.Close
 
+	// Initialize OpenFGA replica client if configured (for read scaling)
 	var fgaReplicaClient openfga.OpenFGAServiceClient
 	if config.Config.OpenFGA.Replica.Host != "" {
 		var fgaReplicaClientConn *grpc.ClientConn
@@ -350,8 +346,10 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 		closeFuncs["fgaReplica"] = fgaReplicaClientConn.Close
 	}
 
+	// Create ACL client with primary and optional replica
 	aclClient := acl.NewACLClient(fgaClient, fgaReplicaClient, redisClient)
 
+	// Return all clients and a cleanup function that closes all connections
 	closer := func() {
 		for conn, fn := range closeFuncs {
 			if err := fn(); err != nil {

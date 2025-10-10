@@ -32,12 +32,26 @@ type ServiceMock struct {
 	beforeACLClientCounter uint64
 	ACLClientMock          mServiceMockACLClient
 
+	funcChatWithCache          func(ctx context.Context, cp1 *repository.ChatCacheMetadata, s1 string) (s2 string, err error)
+	funcChatWithCacheOrigin    string
+	inspectFuncChatWithCache   func(ctx context.Context, cp1 *repository.ChatCacheMetadata, s1 string)
+	afterChatWithCacheCounter  uint64
+	beforeChatWithCacheCounter uint64
+	ChatWithCacheMock          mServiceMockChatWithCache
+
 	funcCheckCatalogUserPermission          func(ctx context.Context, s1 string, s2 string, s3 string) (np1 *resource.Namespace, kp1 *repository.KnowledgeBaseModel, err error)
 	funcCheckCatalogUserPermissionOrigin    string
 	inspectFuncCheckCatalogUserPermission   func(ctx context.Context, s1 string, s2 string, s3 string)
 	afterCheckCatalogUserPermissionCounter  uint64
 	beforeCheckCatalogUserPermissionCounter uint64
 	CheckCatalogUserPermissionMock          mServiceMockCheckCatalogUserPermission
+
+	funcCheckFilesProcessingStatus          func(ctx context.Context, ua1 []uuid.UUID) (allCompleted bool, processingCount int, err error)
+	funcCheckFilesProcessingStatusOrigin    string
+	inspectFuncCheckFilesProcessingStatus   func(ctx context.Context, ua1 []uuid.UUID)
+	afterCheckFilesProcessingStatusCounter  uint64
+	beforeCheckFilesProcessingStatusCounter uint64
+	CheckFilesProcessingStatusMock          mServiceMockCheckFilesProcessingStatus
 
 	funcCheckNamespacePermission          func(ctx context.Context, np1 *resource.Namespace) (err error)
 	funcCheckNamespacePermissionOrigin    string
@@ -87,6 +101,13 @@ type ServiceMock struct {
 	afterEmbedTextsCounter  uint64
 	beforeEmbedTextsCounter uint64
 	EmbedTextsMock          mServiceMockEmbedTexts
+
+	funcGetChatCacheForFiles          func(ctx context.Context, u1 uuid.UUID, ua1 []uuid.UUID) (cp1 *repository.ChatCacheMetadata, err error)
+	funcGetChatCacheForFilesOrigin    string
+	inspectFuncGetChatCacheForFiles   func(ctx context.Context, u1 uuid.UUID, ua1 []uuid.UUID)
+	afterGetChatCacheForFilesCounter  uint64
+	beforeGetChatCacheForFilesCounter uint64
+	GetChatCacheForFilesMock          mServiceMockGetChatCacheForFiles
 
 	funcGetChunksByFile          func(ctx context.Context, kp1 *repository.KnowledgeBaseFileModel) (s1 types.SourceTableType, s2 types.SourceUIDType, ta1 []repository.TextChunkModel, m1 map[types.TextChunkUIDType]types.ContentType, sa1 []string, err error)
 	funcGetChunksByFileOrigin    string
@@ -165,9 +186,9 @@ type ServiceMock struct {
 	beforePipelinePublicClientCounter uint64
 	PipelinePublicClientMock          mServiceMockPipelinePublicClient
 
-	funcProcessFile          func(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType, u1 types.UserUIDType, r1 types.RequesterUIDType) (err error)
+	funcProcessFile          func(ctx context.Context, k1 types.KBUIDType, fa1 []types.FileUIDType, u1 types.UserUIDType, r1 types.RequesterUIDType) (err error)
 	funcProcessFileOrigin    string
-	inspectFuncProcessFile   func(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType, u1 types.UserUIDType, r1 types.RequesterUIDType)
+	inspectFuncProcessFile   func(ctx context.Context, k1 types.KBUIDType, fa1 []types.FileUIDType, u1 types.UserUIDType, r1 types.RequesterUIDType)
 	afterProcessFileCounter  uint64
 	beforeProcessFileCounter uint64
 	ProcessFileMock          mServiceMockProcessFile
@@ -204,8 +225,14 @@ func NewServiceMock(t minimock.Tester) *ServiceMock {
 
 	m.ACLClientMock = mServiceMockACLClient{mock: m}
 
+	m.ChatWithCacheMock = mServiceMockChatWithCache{mock: m}
+	m.ChatWithCacheMock.callArgs = []*ServiceMockChatWithCacheParams{}
+
 	m.CheckCatalogUserPermissionMock = mServiceMockCheckCatalogUserPermission{mock: m}
 	m.CheckCatalogUserPermissionMock.callArgs = []*ServiceMockCheckCatalogUserPermissionParams{}
+
+	m.CheckFilesProcessingStatusMock = mServiceMockCheckFilesProcessingStatus{mock: m}
+	m.CheckFilesProcessingStatusMock.callArgs = []*ServiceMockCheckFilesProcessingStatusParams{}
 
 	m.CheckNamespacePermissionMock = mServiceMockCheckNamespacePermission{mock: m}
 	m.CheckNamespacePermissionMock.callArgs = []*ServiceMockCheckNamespacePermissionParams{}
@@ -227,6 +254,9 @@ func NewServiceMock(t minimock.Tester) *ServiceMock {
 
 	m.EmbedTextsMock = mServiceMockEmbedTexts{mock: m}
 	m.EmbedTextsMock.callArgs = []*ServiceMockEmbedTextsParams{}
+
+	m.GetChatCacheForFilesMock = mServiceMockGetChatCacheForFiles{mock: m}
+	m.GetChatCacheForFilesMock.callArgs = []*ServiceMockGetChatCacheForFilesParams{}
 
 	m.GetChunksByFileMock = mServiceMockGetChunksByFile{mock: m}
 	m.GetChunksByFileMock.callArgs = []*ServiceMockGetChunksByFileParams{}
@@ -458,6 +488,380 @@ func (m *ServiceMock) MinimockACLClientInspect() {
 	if !m.ACLClientMock.invocationsDone() && afterACLClientCounter > 0 {
 		m.t.Errorf("Expected %d calls to ServiceMock.ACLClient at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.ACLClientMock.expectedInvocations), m.ACLClientMock.expectedInvocationsOrigin, afterACLClientCounter)
+	}
+}
+
+type mServiceMockChatWithCache struct {
+	optional           bool
+	mock               *ServiceMock
+	defaultExpectation *ServiceMockChatWithCacheExpectation
+	expectations       []*ServiceMockChatWithCacheExpectation
+
+	callArgs []*ServiceMockChatWithCacheParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// ServiceMockChatWithCacheExpectation specifies expectation struct of the Service.ChatWithCache
+type ServiceMockChatWithCacheExpectation struct {
+	mock               *ServiceMock
+	params             *ServiceMockChatWithCacheParams
+	paramPtrs          *ServiceMockChatWithCacheParamPtrs
+	expectationOrigins ServiceMockChatWithCacheExpectationOrigins
+	results            *ServiceMockChatWithCacheResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// ServiceMockChatWithCacheParams contains parameters of the Service.ChatWithCache
+type ServiceMockChatWithCacheParams struct {
+	ctx context.Context
+	cp1 *repository.ChatCacheMetadata
+	s1  string
+}
+
+// ServiceMockChatWithCacheParamPtrs contains pointers to parameters of the Service.ChatWithCache
+type ServiceMockChatWithCacheParamPtrs struct {
+	ctx *context.Context
+	cp1 **repository.ChatCacheMetadata
+	s1  *string
+}
+
+// ServiceMockChatWithCacheResults contains results of the Service.ChatWithCache
+type ServiceMockChatWithCacheResults struct {
+	s2  string
+	err error
+}
+
+// ServiceMockChatWithCacheOrigins contains origins of expectations of the Service.ChatWithCache
+type ServiceMockChatWithCacheExpectationOrigins struct {
+	origin    string
+	originCtx string
+	originCp1 string
+	originS1  string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmChatWithCache *mServiceMockChatWithCache) Optional() *mServiceMockChatWithCache {
+	mmChatWithCache.optional = true
+	return mmChatWithCache
+}
+
+// Expect sets up expected params for Service.ChatWithCache
+func (mmChatWithCache *mServiceMockChatWithCache) Expect(ctx context.Context, cp1 *repository.ChatCacheMetadata, s1 string) *mServiceMockChatWithCache {
+	if mmChatWithCache.mock.funcChatWithCache != nil {
+		mmChatWithCache.mock.t.Fatalf("ServiceMock.ChatWithCache mock is already set by Set")
+	}
+
+	if mmChatWithCache.defaultExpectation == nil {
+		mmChatWithCache.defaultExpectation = &ServiceMockChatWithCacheExpectation{}
+	}
+
+	if mmChatWithCache.defaultExpectation.paramPtrs != nil {
+		mmChatWithCache.mock.t.Fatalf("ServiceMock.ChatWithCache mock is already set by ExpectParams functions")
+	}
+
+	mmChatWithCache.defaultExpectation.params = &ServiceMockChatWithCacheParams{ctx, cp1, s1}
+	mmChatWithCache.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmChatWithCache.expectations {
+		if minimock.Equal(e.params, mmChatWithCache.defaultExpectation.params) {
+			mmChatWithCache.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmChatWithCache.defaultExpectation.params)
+		}
+	}
+
+	return mmChatWithCache
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Service.ChatWithCache
+func (mmChatWithCache *mServiceMockChatWithCache) ExpectCtxParam1(ctx context.Context) *mServiceMockChatWithCache {
+	if mmChatWithCache.mock.funcChatWithCache != nil {
+		mmChatWithCache.mock.t.Fatalf("ServiceMock.ChatWithCache mock is already set by Set")
+	}
+
+	if mmChatWithCache.defaultExpectation == nil {
+		mmChatWithCache.defaultExpectation = &ServiceMockChatWithCacheExpectation{}
+	}
+
+	if mmChatWithCache.defaultExpectation.params != nil {
+		mmChatWithCache.mock.t.Fatalf("ServiceMock.ChatWithCache mock is already set by Expect")
+	}
+
+	if mmChatWithCache.defaultExpectation.paramPtrs == nil {
+		mmChatWithCache.defaultExpectation.paramPtrs = &ServiceMockChatWithCacheParamPtrs{}
+	}
+	mmChatWithCache.defaultExpectation.paramPtrs.ctx = &ctx
+	mmChatWithCache.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmChatWithCache
+}
+
+// ExpectCp1Param2 sets up expected param cp1 for Service.ChatWithCache
+func (mmChatWithCache *mServiceMockChatWithCache) ExpectCp1Param2(cp1 *repository.ChatCacheMetadata) *mServiceMockChatWithCache {
+	if mmChatWithCache.mock.funcChatWithCache != nil {
+		mmChatWithCache.mock.t.Fatalf("ServiceMock.ChatWithCache mock is already set by Set")
+	}
+
+	if mmChatWithCache.defaultExpectation == nil {
+		mmChatWithCache.defaultExpectation = &ServiceMockChatWithCacheExpectation{}
+	}
+
+	if mmChatWithCache.defaultExpectation.params != nil {
+		mmChatWithCache.mock.t.Fatalf("ServiceMock.ChatWithCache mock is already set by Expect")
+	}
+
+	if mmChatWithCache.defaultExpectation.paramPtrs == nil {
+		mmChatWithCache.defaultExpectation.paramPtrs = &ServiceMockChatWithCacheParamPtrs{}
+	}
+	mmChatWithCache.defaultExpectation.paramPtrs.cp1 = &cp1
+	mmChatWithCache.defaultExpectation.expectationOrigins.originCp1 = minimock.CallerInfo(1)
+
+	return mmChatWithCache
+}
+
+// ExpectS1Param3 sets up expected param s1 for Service.ChatWithCache
+func (mmChatWithCache *mServiceMockChatWithCache) ExpectS1Param3(s1 string) *mServiceMockChatWithCache {
+	if mmChatWithCache.mock.funcChatWithCache != nil {
+		mmChatWithCache.mock.t.Fatalf("ServiceMock.ChatWithCache mock is already set by Set")
+	}
+
+	if mmChatWithCache.defaultExpectation == nil {
+		mmChatWithCache.defaultExpectation = &ServiceMockChatWithCacheExpectation{}
+	}
+
+	if mmChatWithCache.defaultExpectation.params != nil {
+		mmChatWithCache.mock.t.Fatalf("ServiceMock.ChatWithCache mock is already set by Expect")
+	}
+
+	if mmChatWithCache.defaultExpectation.paramPtrs == nil {
+		mmChatWithCache.defaultExpectation.paramPtrs = &ServiceMockChatWithCacheParamPtrs{}
+	}
+	mmChatWithCache.defaultExpectation.paramPtrs.s1 = &s1
+	mmChatWithCache.defaultExpectation.expectationOrigins.originS1 = minimock.CallerInfo(1)
+
+	return mmChatWithCache
+}
+
+// Inspect accepts an inspector function that has same arguments as the Service.ChatWithCache
+func (mmChatWithCache *mServiceMockChatWithCache) Inspect(f func(ctx context.Context, cp1 *repository.ChatCacheMetadata, s1 string)) *mServiceMockChatWithCache {
+	if mmChatWithCache.mock.inspectFuncChatWithCache != nil {
+		mmChatWithCache.mock.t.Fatalf("Inspect function is already set for ServiceMock.ChatWithCache")
+	}
+
+	mmChatWithCache.mock.inspectFuncChatWithCache = f
+
+	return mmChatWithCache
+}
+
+// Return sets up results that will be returned by Service.ChatWithCache
+func (mmChatWithCache *mServiceMockChatWithCache) Return(s2 string, err error) *ServiceMock {
+	if mmChatWithCache.mock.funcChatWithCache != nil {
+		mmChatWithCache.mock.t.Fatalf("ServiceMock.ChatWithCache mock is already set by Set")
+	}
+
+	if mmChatWithCache.defaultExpectation == nil {
+		mmChatWithCache.defaultExpectation = &ServiceMockChatWithCacheExpectation{mock: mmChatWithCache.mock}
+	}
+	mmChatWithCache.defaultExpectation.results = &ServiceMockChatWithCacheResults{s2, err}
+	mmChatWithCache.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmChatWithCache.mock
+}
+
+// Set uses given function f to mock the Service.ChatWithCache method
+func (mmChatWithCache *mServiceMockChatWithCache) Set(f func(ctx context.Context, cp1 *repository.ChatCacheMetadata, s1 string) (s2 string, err error)) *ServiceMock {
+	if mmChatWithCache.defaultExpectation != nil {
+		mmChatWithCache.mock.t.Fatalf("Default expectation is already set for the Service.ChatWithCache method")
+	}
+
+	if len(mmChatWithCache.expectations) > 0 {
+		mmChatWithCache.mock.t.Fatalf("Some expectations are already set for the Service.ChatWithCache method")
+	}
+
+	mmChatWithCache.mock.funcChatWithCache = f
+	mmChatWithCache.mock.funcChatWithCacheOrigin = minimock.CallerInfo(1)
+	return mmChatWithCache.mock
+}
+
+// When sets expectation for the Service.ChatWithCache which will trigger the result defined by the following
+// Then helper
+func (mmChatWithCache *mServiceMockChatWithCache) When(ctx context.Context, cp1 *repository.ChatCacheMetadata, s1 string) *ServiceMockChatWithCacheExpectation {
+	if mmChatWithCache.mock.funcChatWithCache != nil {
+		mmChatWithCache.mock.t.Fatalf("ServiceMock.ChatWithCache mock is already set by Set")
+	}
+
+	expectation := &ServiceMockChatWithCacheExpectation{
+		mock:               mmChatWithCache.mock,
+		params:             &ServiceMockChatWithCacheParams{ctx, cp1, s1},
+		expectationOrigins: ServiceMockChatWithCacheExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmChatWithCache.expectations = append(mmChatWithCache.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Service.ChatWithCache return parameters for the expectation previously defined by the When method
+func (e *ServiceMockChatWithCacheExpectation) Then(s2 string, err error) *ServiceMock {
+	e.results = &ServiceMockChatWithCacheResults{s2, err}
+	return e.mock
+}
+
+// Times sets number of times Service.ChatWithCache should be invoked
+func (mmChatWithCache *mServiceMockChatWithCache) Times(n uint64) *mServiceMockChatWithCache {
+	if n == 0 {
+		mmChatWithCache.mock.t.Fatalf("Times of ServiceMock.ChatWithCache mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmChatWithCache.expectedInvocations, n)
+	mmChatWithCache.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmChatWithCache
+}
+
+func (mmChatWithCache *mServiceMockChatWithCache) invocationsDone() bool {
+	if len(mmChatWithCache.expectations) == 0 && mmChatWithCache.defaultExpectation == nil && mmChatWithCache.mock.funcChatWithCache == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmChatWithCache.mock.afterChatWithCacheCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmChatWithCache.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// ChatWithCache implements mm_service.Service
+func (mmChatWithCache *ServiceMock) ChatWithCache(ctx context.Context, cp1 *repository.ChatCacheMetadata, s1 string) (s2 string, err error) {
+	mm_atomic.AddUint64(&mmChatWithCache.beforeChatWithCacheCounter, 1)
+	defer mm_atomic.AddUint64(&mmChatWithCache.afterChatWithCacheCounter, 1)
+
+	mmChatWithCache.t.Helper()
+
+	if mmChatWithCache.inspectFuncChatWithCache != nil {
+		mmChatWithCache.inspectFuncChatWithCache(ctx, cp1, s1)
+	}
+
+	mm_params := ServiceMockChatWithCacheParams{ctx, cp1, s1}
+
+	// Record call args
+	mmChatWithCache.ChatWithCacheMock.mutex.Lock()
+	mmChatWithCache.ChatWithCacheMock.callArgs = append(mmChatWithCache.ChatWithCacheMock.callArgs, &mm_params)
+	mmChatWithCache.ChatWithCacheMock.mutex.Unlock()
+
+	for _, e := range mmChatWithCache.ChatWithCacheMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.s2, e.results.err
+		}
+	}
+
+	if mmChatWithCache.ChatWithCacheMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmChatWithCache.ChatWithCacheMock.defaultExpectation.Counter, 1)
+		mm_want := mmChatWithCache.ChatWithCacheMock.defaultExpectation.params
+		mm_want_ptrs := mmChatWithCache.ChatWithCacheMock.defaultExpectation.paramPtrs
+
+		mm_got := ServiceMockChatWithCacheParams{ctx, cp1, s1}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmChatWithCache.t.Errorf("ServiceMock.ChatWithCache got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmChatWithCache.ChatWithCacheMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.cp1 != nil && !minimock.Equal(*mm_want_ptrs.cp1, mm_got.cp1) {
+				mmChatWithCache.t.Errorf("ServiceMock.ChatWithCache got unexpected parameter cp1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmChatWithCache.ChatWithCacheMock.defaultExpectation.expectationOrigins.originCp1, *mm_want_ptrs.cp1, mm_got.cp1, minimock.Diff(*mm_want_ptrs.cp1, mm_got.cp1))
+			}
+
+			if mm_want_ptrs.s1 != nil && !minimock.Equal(*mm_want_ptrs.s1, mm_got.s1) {
+				mmChatWithCache.t.Errorf("ServiceMock.ChatWithCache got unexpected parameter s1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmChatWithCache.ChatWithCacheMock.defaultExpectation.expectationOrigins.originS1, *mm_want_ptrs.s1, mm_got.s1, minimock.Diff(*mm_want_ptrs.s1, mm_got.s1))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmChatWithCache.t.Errorf("ServiceMock.ChatWithCache got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmChatWithCache.ChatWithCacheMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmChatWithCache.ChatWithCacheMock.defaultExpectation.results
+		if mm_results == nil {
+			mmChatWithCache.t.Fatal("No results are set for the ServiceMock.ChatWithCache")
+		}
+		return (*mm_results).s2, (*mm_results).err
+	}
+	if mmChatWithCache.funcChatWithCache != nil {
+		return mmChatWithCache.funcChatWithCache(ctx, cp1, s1)
+	}
+	mmChatWithCache.t.Fatalf("Unexpected call to ServiceMock.ChatWithCache. %v %v %v", ctx, cp1, s1)
+	return
+}
+
+// ChatWithCacheAfterCounter returns a count of finished ServiceMock.ChatWithCache invocations
+func (mmChatWithCache *ServiceMock) ChatWithCacheAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmChatWithCache.afterChatWithCacheCounter)
+}
+
+// ChatWithCacheBeforeCounter returns a count of ServiceMock.ChatWithCache invocations
+func (mmChatWithCache *ServiceMock) ChatWithCacheBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmChatWithCache.beforeChatWithCacheCounter)
+}
+
+// Calls returns a list of arguments used in each call to ServiceMock.ChatWithCache.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmChatWithCache *mServiceMockChatWithCache) Calls() []*ServiceMockChatWithCacheParams {
+	mmChatWithCache.mutex.RLock()
+
+	argCopy := make([]*ServiceMockChatWithCacheParams, len(mmChatWithCache.callArgs))
+	copy(argCopy, mmChatWithCache.callArgs)
+
+	mmChatWithCache.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockChatWithCacheDone returns true if the count of the ChatWithCache invocations corresponds
+// the number of defined expectations
+func (m *ServiceMock) MinimockChatWithCacheDone() bool {
+	if m.ChatWithCacheMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.ChatWithCacheMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.ChatWithCacheMock.invocationsDone()
+}
+
+// MinimockChatWithCacheInspect logs each unmet expectation
+func (m *ServiceMock) MinimockChatWithCacheInspect() {
+	for _, e := range m.ChatWithCacheMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to ServiceMock.ChatWithCache at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterChatWithCacheCounter := mm_atomic.LoadUint64(&m.afterChatWithCacheCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.ChatWithCacheMock.defaultExpectation != nil && afterChatWithCacheCounter < 1 {
+		if m.ChatWithCacheMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to ServiceMock.ChatWithCache at\n%s", m.ChatWithCacheMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to ServiceMock.ChatWithCache at\n%s with params: %#v", m.ChatWithCacheMock.defaultExpectation.expectationOrigins.origin, *m.ChatWithCacheMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcChatWithCache != nil && afterChatWithCacheCounter < 1 {
+		m.t.Errorf("Expected call to ServiceMock.ChatWithCache at\n%s", m.funcChatWithCacheOrigin)
+	}
+
+	if !m.ChatWithCacheMock.invocationsDone() && afterChatWithCacheCounter > 0 {
+		m.t.Errorf("Expected %d calls to ServiceMock.ChatWithCache at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.ChatWithCacheMock.expectedInvocations), m.ChatWithCacheMock.expectedInvocationsOrigin, afterChatWithCacheCounter)
 	}
 }
 
@@ -864,6 +1268,350 @@ func (m *ServiceMock) MinimockCheckCatalogUserPermissionInspect() {
 	if !m.CheckCatalogUserPermissionMock.invocationsDone() && afterCheckCatalogUserPermissionCounter > 0 {
 		m.t.Errorf("Expected %d calls to ServiceMock.CheckCatalogUserPermission at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.CheckCatalogUserPermissionMock.expectedInvocations), m.CheckCatalogUserPermissionMock.expectedInvocationsOrigin, afterCheckCatalogUserPermissionCounter)
+	}
+}
+
+type mServiceMockCheckFilesProcessingStatus struct {
+	optional           bool
+	mock               *ServiceMock
+	defaultExpectation *ServiceMockCheckFilesProcessingStatusExpectation
+	expectations       []*ServiceMockCheckFilesProcessingStatusExpectation
+
+	callArgs []*ServiceMockCheckFilesProcessingStatusParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// ServiceMockCheckFilesProcessingStatusExpectation specifies expectation struct of the Service.CheckFilesProcessingStatus
+type ServiceMockCheckFilesProcessingStatusExpectation struct {
+	mock               *ServiceMock
+	params             *ServiceMockCheckFilesProcessingStatusParams
+	paramPtrs          *ServiceMockCheckFilesProcessingStatusParamPtrs
+	expectationOrigins ServiceMockCheckFilesProcessingStatusExpectationOrigins
+	results            *ServiceMockCheckFilesProcessingStatusResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// ServiceMockCheckFilesProcessingStatusParams contains parameters of the Service.CheckFilesProcessingStatus
+type ServiceMockCheckFilesProcessingStatusParams struct {
+	ctx context.Context
+	ua1 []uuid.UUID
+}
+
+// ServiceMockCheckFilesProcessingStatusParamPtrs contains pointers to parameters of the Service.CheckFilesProcessingStatus
+type ServiceMockCheckFilesProcessingStatusParamPtrs struct {
+	ctx *context.Context
+	ua1 *[]uuid.UUID
+}
+
+// ServiceMockCheckFilesProcessingStatusResults contains results of the Service.CheckFilesProcessingStatus
+type ServiceMockCheckFilesProcessingStatusResults struct {
+	allCompleted    bool
+	processingCount int
+	err             error
+}
+
+// ServiceMockCheckFilesProcessingStatusOrigins contains origins of expectations of the Service.CheckFilesProcessingStatus
+type ServiceMockCheckFilesProcessingStatusExpectationOrigins struct {
+	origin    string
+	originCtx string
+	originUa1 string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmCheckFilesProcessingStatus *mServiceMockCheckFilesProcessingStatus) Optional() *mServiceMockCheckFilesProcessingStatus {
+	mmCheckFilesProcessingStatus.optional = true
+	return mmCheckFilesProcessingStatus
+}
+
+// Expect sets up expected params for Service.CheckFilesProcessingStatus
+func (mmCheckFilesProcessingStatus *mServiceMockCheckFilesProcessingStatus) Expect(ctx context.Context, ua1 []uuid.UUID) *mServiceMockCheckFilesProcessingStatus {
+	if mmCheckFilesProcessingStatus.mock.funcCheckFilesProcessingStatus != nil {
+		mmCheckFilesProcessingStatus.mock.t.Fatalf("ServiceMock.CheckFilesProcessingStatus mock is already set by Set")
+	}
+
+	if mmCheckFilesProcessingStatus.defaultExpectation == nil {
+		mmCheckFilesProcessingStatus.defaultExpectation = &ServiceMockCheckFilesProcessingStatusExpectation{}
+	}
+
+	if mmCheckFilesProcessingStatus.defaultExpectation.paramPtrs != nil {
+		mmCheckFilesProcessingStatus.mock.t.Fatalf("ServiceMock.CheckFilesProcessingStatus mock is already set by ExpectParams functions")
+	}
+
+	mmCheckFilesProcessingStatus.defaultExpectation.params = &ServiceMockCheckFilesProcessingStatusParams{ctx, ua1}
+	mmCheckFilesProcessingStatus.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmCheckFilesProcessingStatus.expectations {
+		if minimock.Equal(e.params, mmCheckFilesProcessingStatus.defaultExpectation.params) {
+			mmCheckFilesProcessingStatus.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmCheckFilesProcessingStatus.defaultExpectation.params)
+		}
+	}
+
+	return mmCheckFilesProcessingStatus
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Service.CheckFilesProcessingStatus
+func (mmCheckFilesProcessingStatus *mServiceMockCheckFilesProcessingStatus) ExpectCtxParam1(ctx context.Context) *mServiceMockCheckFilesProcessingStatus {
+	if mmCheckFilesProcessingStatus.mock.funcCheckFilesProcessingStatus != nil {
+		mmCheckFilesProcessingStatus.mock.t.Fatalf("ServiceMock.CheckFilesProcessingStatus mock is already set by Set")
+	}
+
+	if mmCheckFilesProcessingStatus.defaultExpectation == nil {
+		mmCheckFilesProcessingStatus.defaultExpectation = &ServiceMockCheckFilesProcessingStatusExpectation{}
+	}
+
+	if mmCheckFilesProcessingStatus.defaultExpectation.params != nil {
+		mmCheckFilesProcessingStatus.mock.t.Fatalf("ServiceMock.CheckFilesProcessingStatus mock is already set by Expect")
+	}
+
+	if mmCheckFilesProcessingStatus.defaultExpectation.paramPtrs == nil {
+		mmCheckFilesProcessingStatus.defaultExpectation.paramPtrs = &ServiceMockCheckFilesProcessingStatusParamPtrs{}
+	}
+	mmCheckFilesProcessingStatus.defaultExpectation.paramPtrs.ctx = &ctx
+	mmCheckFilesProcessingStatus.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmCheckFilesProcessingStatus
+}
+
+// ExpectUa1Param2 sets up expected param ua1 for Service.CheckFilesProcessingStatus
+func (mmCheckFilesProcessingStatus *mServiceMockCheckFilesProcessingStatus) ExpectUa1Param2(ua1 []uuid.UUID) *mServiceMockCheckFilesProcessingStatus {
+	if mmCheckFilesProcessingStatus.mock.funcCheckFilesProcessingStatus != nil {
+		mmCheckFilesProcessingStatus.mock.t.Fatalf("ServiceMock.CheckFilesProcessingStatus mock is already set by Set")
+	}
+
+	if mmCheckFilesProcessingStatus.defaultExpectation == nil {
+		mmCheckFilesProcessingStatus.defaultExpectation = &ServiceMockCheckFilesProcessingStatusExpectation{}
+	}
+
+	if mmCheckFilesProcessingStatus.defaultExpectation.params != nil {
+		mmCheckFilesProcessingStatus.mock.t.Fatalf("ServiceMock.CheckFilesProcessingStatus mock is already set by Expect")
+	}
+
+	if mmCheckFilesProcessingStatus.defaultExpectation.paramPtrs == nil {
+		mmCheckFilesProcessingStatus.defaultExpectation.paramPtrs = &ServiceMockCheckFilesProcessingStatusParamPtrs{}
+	}
+	mmCheckFilesProcessingStatus.defaultExpectation.paramPtrs.ua1 = &ua1
+	mmCheckFilesProcessingStatus.defaultExpectation.expectationOrigins.originUa1 = minimock.CallerInfo(1)
+
+	return mmCheckFilesProcessingStatus
+}
+
+// Inspect accepts an inspector function that has same arguments as the Service.CheckFilesProcessingStatus
+func (mmCheckFilesProcessingStatus *mServiceMockCheckFilesProcessingStatus) Inspect(f func(ctx context.Context, ua1 []uuid.UUID)) *mServiceMockCheckFilesProcessingStatus {
+	if mmCheckFilesProcessingStatus.mock.inspectFuncCheckFilesProcessingStatus != nil {
+		mmCheckFilesProcessingStatus.mock.t.Fatalf("Inspect function is already set for ServiceMock.CheckFilesProcessingStatus")
+	}
+
+	mmCheckFilesProcessingStatus.mock.inspectFuncCheckFilesProcessingStatus = f
+
+	return mmCheckFilesProcessingStatus
+}
+
+// Return sets up results that will be returned by Service.CheckFilesProcessingStatus
+func (mmCheckFilesProcessingStatus *mServiceMockCheckFilesProcessingStatus) Return(allCompleted bool, processingCount int, err error) *ServiceMock {
+	if mmCheckFilesProcessingStatus.mock.funcCheckFilesProcessingStatus != nil {
+		mmCheckFilesProcessingStatus.mock.t.Fatalf("ServiceMock.CheckFilesProcessingStatus mock is already set by Set")
+	}
+
+	if mmCheckFilesProcessingStatus.defaultExpectation == nil {
+		mmCheckFilesProcessingStatus.defaultExpectation = &ServiceMockCheckFilesProcessingStatusExpectation{mock: mmCheckFilesProcessingStatus.mock}
+	}
+	mmCheckFilesProcessingStatus.defaultExpectation.results = &ServiceMockCheckFilesProcessingStatusResults{allCompleted, processingCount, err}
+	mmCheckFilesProcessingStatus.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmCheckFilesProcessingStatus.mock
+}
+
+// Set uses given function f to mock the Service.CheckFilesProcessingStatus method
+func (mmCheckFilesProcessingStatus *mServiceMockCheckFilesProcessingStatus) Set(f func(ctx context.Context, ua1 []uuid.UUID) (allCompleted bool, processingCount int, err error)) *ServiceMock {
+	if mmCheckFilesProcessingStatus.defaultExpectation != nil {
+		mmCheckFilesProcessingStatus.mock.t.Fatalf("Default expectation is already set for the Service.CheckFilesProcessingStatus method")
+	}
+
+	if len(mmCheckFilesProcessingStatus.expectations) > 0 {
+		mmCheckFilesProcessingStatus.mock.t.Fatalf("Some expectations are already set for the Service.CheckFilesProcessingStatus method")
+	}
+
+	mmCheckFilesProcessingStatus.mock.funcCheckFilesProcessingStatus = f
+	mmCheckFilesProcessingStatus.mock.funcCheckFilesProcessingStatusOrigin = minimock.CallerInfo(1)
+	return mmCheckFilesProcessingStatus.mock
+}
+
+// When sets expectation for the Service.CheckFilesProcessingStatus which will trigger the result defined by the following
+// Then helper
+func (mmCheckFilesProcessingStatus *mServiceMockCheckFilesProcessingStatus) When(ctx context.Context, ua1 []uuid.UUID) *ServiceMockCheckFilesProcessingStatusExpectation {
+	if mmCheckFilesProcessingStatus.mock.funcCheckFilesProcessingStatus != nil {
+		mmCheckFilesProcessingStatus.mock.t.Fatalf("ServiceMock.CheckFilesProcessingStatus mock is already set by Set")
+	}
+
+	expectation := &ServiceMockCheckFilesProcessingStatusExpectation{
+		mock:               mmCheckFilesProcessingStatus.mock,
+		params:             &ServiceMockCheckFilesProcessingStatusParams{ctx, ua1},
+		expectationOrigins: ServiceMockCheckFilesProcessingStatusExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmCheckFilesProcessingStatus.expectations = append(mmCheckFilesProcessingStatus.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Service.CheckFilesProcessingStatus return parameters for the expectation previously defined by the When method
+func (e *ServiceMockCheckFilesProcessingStatusExpectation) Then(allCompleted bool, processingCount int, err error) *ServiceMock {
+	e.results = &ServiceMockCheckFilesProcessingStatusResults{allCompleted, processingCount, err}
+	return e.mock
+}
+
+// Times sets number of times Service.CheckFilesProcessingStatus should be invoked
+func (mmCheckFilesProcessingStatus *mServiceMockCheckFilesProcessingStatus) Times(n uint64) *mServiceMockCheckFilesProcessingStatus {
+	if n == 0 {
+		mmCheckFilesProcessingStatus.mock.t.Fatalf("Times of ServiceMock.CheckFilesProcessingStatus mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmCheckFilesProcessingStatus.expectedInvocations, n)
+	mmCheckFilesProcessingStatus.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmCheckFilesProcessingStatus
+}
+
+func (mmCheckFilesProcessingStatus *mServiceMockCheckFilesProcessingStatus) invocationsDone() bool {
+	if len(mmCheckFilesProcessingStatus.expectations) == 0 && mmCheckFilesProcessingStatus.defaultExpectation == nil && mmCheckFilesProcessingStatus.mock.funcCheckFilesProcessingStatus == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmCheckFilesProcessingStatus.mock.afterCheckFilesProcessingStatusCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmCheckFilesProcessingStatus.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// CheckFilesProcessingStatus implements mm_service.Service
+func (mmCheckFilesProcessingStatus *ServiceMock) CheckFilesProcessingStatus(ctx context.Context, ua1 []uuid.UUID) (allCompleted bool, processingCount int, err error) {
+	mm_atomic.AddUint64(&mmCheckFilesProcessingStatus.beforeCheckFilesProcessingStatusCounter, 1)
+	defer mm_atomic.AddUint64(&mmCheckFilesProcessingStatus.afterCheckFilesProcessingStatusCounter, 1)
+
+	mmCheckFilesProcessingStatus.t.Helper()
+
+	if mmCheckFilesProcessingStatus.inspectFuncCheckFilesProcessingStatus != nil {
+		mmCheckFilesProcessingStatus.inspectFuncCheckFilesProcessingStatus(ctx, ua1)
+	}
+
+	mm_params := ServiceMockCheckFilesProcessingStatusParams{ctx, ua1}
+
+	// Record call args
+	mmCheckFilesProcessingStatus.CheckFilesProcessingStatusMock.mutex.Lock()
+	mmCheckFilesProcessingStatus.CheckFilesProcessingStatusMock.callArgs = append(mmCheckFilesProcessingStatus.CheckFilesProcessingStatusMock.callArgs, &mm_params)
+	mmCheckFilesProcessingStatus.CheckFilesProcessingStatusMock.mutex.Unlock()
+
+	for _, e := range mmCheckFilesProcessingStatus.CheckFilesProcessingStatusMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.allCompleted, e.results.processingCount, e.results.err
+		}
+	}
+
+	if mmCheckFilesProcessingStatus.CheckFilesProcessingStatusMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmCheckFilesProcessingStatus.CheckFilesProcessingStatusMock.defaultExpectation.Counter, 1)
+		mm_want := mmCheckFilesProcessingStatus.CheckFilesProcessingStatusMock.defaultExpectation.params
+		mm_want_ptrs := mmCheckFilesProcessingStatus.CheckFilesProcessingStatusMock.defaultExpectation.paramPtrs
+
+		mm_got := ServiceMockCheckFilesProcessingStatusParams{ctx, ua1}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmCheckFilesProcessingStatus.t.Errorf("ServiceMock.CheckFilesProcessingStatus got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCheckFilesProcessingStatus.CheckFilesProcessingStatusMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.ua1 != nil && !minimock.Equal(*mm_want_ptrs.ua1, mm_got.ua1) {
+				mmCheckFilesProcessingStatus.t.Errorf("ServiceMock.CheckFilesProcessingStatus got unexpected parameter ua1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCheckFilesProcessingStatus.CheckFilesProcessingStatusMock.defaultExpectation.expectationOrigins.originUa1, *mm_want_ptrs.ua1, mm_got.ua1, minimock.Diff(*mm_want_ptrs.ua1, mm_got.ua1))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmCheckFilesProcessingStatus.t.Errorf("ServiceMock.CheckFilesProcessingStatus got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmCheckFilesProcessingStatus.CheckFilesProcessingStatusMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmCheckFilesProcessingStatus.CheckFilesProcessingStatusMock.defaultExpectation.results
+		if mm_results == nil {
+			mmCheckFilesProcessingStatus.t.Fatal("No results are set for the ServiceMock.CheckFilesProcessingStatus")
+		}
+		return (*mm_results).allCompleted, (*mm_results).processingCount, (*mm_results).err
+	}
+	if mmCheckFilesProcessingStatus.funcCheckFilesProcessingStatus != nil {
+		return mmCheckFilesProcessingStatus.funcCheckFilesProcessingStatus(ctx, ua1)
+	}
+	mmCheckFilesProcessingStatus.t.Fatalf("Unexpected call to ServiceMock.CheckFilesProcessingStatus. %v %v", ctx, ua1)
+	return
+}
+
+// CheckFilesProcessingStatusAfterCounter returns a count of finished ServiceMock.CheckFilesProcessingStatus invocations
+func (mmCheckFilesProcessingStatus *ServiceMock) CheckFilesProcessingStatusAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmCheckFilesProcessingStatus.afterCheckFilesProcessingStatusCounter)
+}
+
+// CheckFilesProcessingStatusBeforeCounter returns a count of ServiceMock.CheckFilesProcessingStatus invocations
+func (mmCheckFilesProcessingStatus *ServiceMock) CheckFilesProcessingStatusBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmCheckFilesProcessingStatus.beforeCheckFilesProcessingStatusCounter)
+}
+
+// Calls returns a list of arguments used in each call to ServiceMock.CheckFilesProcessingStatus.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmCheckFilesProcessingStatus *mServiceMockCheckFilesProcessingStatus) Calls() []*ServiceMockCheckFilesProcessingStatusParams {
+	mmCheckFilesProcessingStatus.mutex.RLock()
+
+	argCopy := make([]*ServiceMockCheckFilesProcessingStatusParams, len(mmCheckFilesProcessingStatus.callArgs))
+	copy(argCopy, mmCheckFilesProcessingStatus.callArgs)
+
+	mmCheckFilesProcessingStatus.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockCheckFilesProcessingStatusDone returns true if the count of the CheckFilesProcessingStatus invocations corresponds
+// the number of defined expectations
+func (m *ServiceMock) MinimockCheckFilesProcessingStatusDone() bool {
+	if m.CheckFilesProcessingStatusMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.CheckFilesProcessingStatusMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.CheckFilesProcessingStatusMock.invocationsDone()
+}
+
+// MinimockCheckFilesProcessingStatusInspect logs each unmet expectation
+func (m *ServiceMock) MinimockCheckFilesProcessingStatusInspect() {
+	for _, e := range m.CheckFilesProcessingStatusMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to ServiceMock.CheckFilesProcessingStatus at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterCheckFilesProcessingStatusCounter := mm_atomic.LoadUint64(&m.afterCheckFilesProcessingStatusCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.CheckFilesProcessingStatusMock.defaultExpectation != nil && afterCheckFilesProcessingStatusCounter < 1 {
+		if m.CheckFilesProcessingStatusMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to ServiceMock.CheckFilesProcessingStatus at\n%s", m.CheckFilesProcessingStatusMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to ServiceMock.CheckFilesProcessingStatus at\n%s with params: %#v", m.CheckFilesProcessingStatusMock.defaultExpectation.expectationOrigins.origin, *m.CheckFilesProcessingStatusMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcCheckFilesProcessingStatus != nil && afterCheckFilesProcessingStatusCounter < 1 {
+		m.t.Errorf("Expected call to ServiceMock.CheckFilesProcessingStatus at\n%s", m.funcCheckFilesProcessingStatusOrigin)
+	}
+
+	if !m.CheckFilesProcessingStatusMock.invocationsDone() && afterCheckFilesProcessingStatusCounter > 0 {
+		m.t.Errorf("Expected %d calls to ServiceMock.CheckFilesProcessingStatus at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.CheckFilesProcessingStatusMock.expectedInvocations), m.CheckFilesProcessingStatusMock.expectedInvocationsOrigin, afterCheckFilesProcessingStatusCounter)
 	}
 }
 
@@ -3478,6 +4226,380 @@ func (m *ServiceMock) MinimockEmbedTextsInspect() {
 	if !m.EmbedTextsMock.invocationsDone() && afterEmbedTextsCounter > 0 {
 		m.t.Errorf("Expected %d calls to ServiceMock.EmbedTexts at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.EmbedTextsMock.expectedInvocations), m.EmbedTextsMock.expectedInvocationsOrigin, afterEmbedTextsCounter)
+	}
+}
+
+type mServiceMockGetChatCacheForFiles struct {
+	optional           bool
+	mock               *ServiceMock
+	defaultExpectation *ServiceMockGetChatCacheForFilesExpectation
+	expectations       []*ServiceMockGetChatCacheForFilesExpectation
+
+	callArgs []*ServiceMockGetChatCacheForFilesParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// ServiceMockGetChatCacheForFilesExpectation specifies expectation struct of the Service.GetChatCacheForFiles
+type ServiceMockGetChatCacheForFilesExpectation struct {
+	mock               *ServiceMock
+	params             *ServiceMockGetChatCacheForFilesParams
+	paramPtrs          *ServiceMockGetChatCacheForFilesParamPtrs
+	expectationOrigins ServiceMockGetChatCacheForFilesExpectationOrigins
+	results            *ServiceMockGetChatCacheForFilesResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// ServiceMockGetChatCacheForFilesParams contains parameters of the Service.GetChatCacheForFiles
+type ServiceMockGetChatCacheForFilesParams struct {
+	ctx context.Context
+	u1  uuid.UUID
+	ua1 []uuid.UUID
+}
+
+// ServiceMockGetChatCacheForFilesParamPtrs contains pointers to parameters of the Service.GetChatCacheForFiles
+type ServiceMockGetChatCacheForFilesParamPtrs struct {
+	ctx *context.Context
+	u1  *uuid.UUID
+	ua1 *[]uuid.UUID
+}
+
+// ServiceMockGetChatCacheForFilesResults contains results of the Service.GetChatCacheForFiles
+type ServiceMockGetChatCacheForFilesResults struct {
+	cp1 *repository.ChatCacheMetadata
+	err error
+}
+
+// ServiceMockGetChatCacheForFilesOrigins contains origins of expectations of the Service.GetChatCacheForFiles
+type ServiceMockGetChatCacheForFilesExpectationOrigins struct {
+	origin    string
+	originCtx string
+	originU1  string
+	originUa1 string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmGetChatCacheForFiles *mServiceMockGetChatCacheForFiles) Optional() *mServiceMockGetChatCacheForFiles {
+	mmGetChatCacheForFiles.optional = true
+	return mmGetChatCacheForFiles
+}
+
+// Expect sets up expected params for Service.GetChatCacheForFiles
+func (mmGetChatCacheForFiles *mServiceMockGetChatCacheForFiles) Expect(ctx context.Context, u1 uuid.UUID, ua1 []uuid.UUID) *mServiceMockGetChatCacheForFiles {
+	if mmGetChatCacheForFiles.mock.funcGetChatCacheForFiles != nil {
+		mmGetChatCacheForFiles.mock.t.Fatalf("ServiceMock.GetChatCacheForFiles mock is already set by Set")
+	}
+
+	if mmGetChatCacheForFiles.defaultExpectation == nil {
+		mmGetChatCacheForFiles.defaultExpectation = &ServiceMockGetChatCacheForFilesExpectation{}
+	}
+
+	if mmGetChatCacheForFiles.defaultExpectation.paramPtrs != nil {
+		mmGetChatCacheForFiles.mock.t.Fatalf("ServiceMock.GetChatCacheForFiles mock is already set by ExpectParams functions")
+	}
+
+	mmGetChatCacheForFiles.defaultExpectation.params = &ServiceMockGetChatCacheForFilesParams{ctx, u1, ua1}
+	mmGetChatCacheForFiles.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmGetChatCacheForFiles.expectations {
+		if minimock.Equal(e.params, mmGetChatCacheForFiles.defaultExpectation.params) {
+			mmGetChatCacheForFiles.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetChatCacheForFiles.defaultExpectation.params)
+		}
+	}
+
+	return mmGetChatCacheForFiles
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Service.GetChatCacheForFiles
+func (mmGetChatCacheForFiles *mServiceMockGetChatCacheForFiles) ExpectCtxParam1(ctx context.Context) *mServiceMockGetChatCacheForFiles {
+	if mmGetChatCacheForFiles.mock.funcGetChatCacheForFiles != nil {
+		mmGetChatCacheForFiles.mock.t.Fatalf("ServiceMock.GetChatCacheForFiles mock is already set by Set")
+	}
+
+	if mmGetChatCacheForFiles.defaultExpectation == nil {
+		mmGetChatCacheForFiles.defaultExpectation = &ServiceMockGetChatCacheForFilesExpectation{}
+	}
+
+	if mmGetChatCacheForFiles.defaultExpectation.params != nil {
+		mmGetChatCacheForFiles.mock.t.Fatalf("ServiceMock.GetChatCacheForFiles mock is already set by Expect")
+	}
+
+	if mmGetChatCacheForFiles.defaultExpectation.paramPtrs == nil {
+		mmGetChatCacheForFiles.defaultExpectation.paramPtrs = &ServiceMockGetChatCacheForFilesParamPtrs{}
+	}
+	mmGetChatCacheForFiles.defaultExpectation.paramPtrs.ctx = &ctx
+	mmGetChatCacheForFiles.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmGetChatCacheForFiles
+}
+
+// ExpectU1Param2 sets up expected param u1 for Service.GetChatCacheForFiles
+func (mmGetChatCacheForFiles *mServiceMockGetChatCacheForFiles) ExpectU1Param2(u1 uuid.UUID) *mServiceMockGetChatCacheForFiles {
+	if mmGetChatCacheForFiles.mock.funcGetChatCacheForFiles != nil {
+		mmGetChatCacheForFiles.mock.t.Fatalf("ServiceMock.GetChatCacheForFiles mock is already set by Set")
+	}
+
+	if mmGetChatCacheForFiles.defaultExpectation == nil {
+		mmGetChatCacheForFiles.defaultExpectation = &ServiceMockGetChatCacheForFilesExpectation{}
+	}
+
+	if mmGetChatCacheForFiles.defaultExpectation.params != nil {
+		mmGetChatCacheForFiles.mock.t.Fatalf("ServiceMock.GetChatCacheForFiles mock is already set by Expect")
+	}
+
+	if mmGetChatCacheForFiles.defaultExpectation.paramPtrs == nil {
+		mmGetChatCacheForFiles.defaultExpectation.paramPtrs = &ServiceMockGetChatCacheForFilesParamPtrs{}
+	}
+	mmGetChatCacheForFiles.defaultExpectation.paramPtrs.u1 = &u1
+	mmGetChatCacheForFiles.defaultExpectation.expectationOrigins.originU1 = minimock.CallerInfo(1)
+
+	return mmGetChatCacheForFiles
+}
+
+// ExpectUa1Param3 sets up expected param ua1 for Service.GetChatCacheForFiles
+func (mmGetChatCacheForFiles *mServiceMockGetChatCacheForFiles) ExpectUa1Param3(ua1 []uuid.UUID) *mServiceMockGetChatCacheForFiles {
+	if mmGetChatCacheForFiles.mock.funcGetChatCacheForFiles != nil {
+		mmGetChatCacheForFiles.mock.t.Fatalf("ServiceMock.GetChatCacheForFiles mock is already set by Set")
+	}
+
+	if mmGetChatCacheForFiles.defaultExpectation == nil {
+		mmGetChatCacheForFiles.defaultExpectation = &ServiceMockGetChatCacheForFilesExpectation{}
+	}
+
+	if mmGetChatCacheForFiles.defaultExpectation.params != nil {
+		mmGetChatCacheForFiles.mock.t.Fatalf("ServiceMock.GetChatCacheForFiles mock is already set by Expect")
+	}
+
+	if mmGetChatCacheForFiles.defaultExpectation.paramPtrs == nil {
+		mmGetChatCacheForFiles.defaultExpectation.paramPtrs = &ServiceMockGetChatCacheForFilesParamPtrs{}
+	}
+	mmGetChatCacheForFiles.defaultExpectation.paramPtrs.ua1 = &ua1
+	mmGetChatCacheForFiles.defaultExpectation.expectationOrigins.originUa1 = minimock.CallerInfo(1)
+
+	return mmGetChatCacheForFiles
+}
+
+// Inspect accepts an inspector function that has same arguments as the Service.GetChatCacheForFiles
+func (mmGetChatCacheForFiles *mServiceMockGetChatCacheForFiles) Inspect(f func(ctx context.Context, u1 uuid.UUID, ua1 []uuid.UUID)) *mServiceMockGetChatCacheForFiles {
+	if mmGetChatCacheForFiles.mock.inspectFuncGetChatCacheForFiles != nil {
+		mmGetChatCacheForFiles.mock.t.Fatalf("Inspect function is already set for ServiceMock.GetChatCacheForFiles")
+	}
+
+	mmGetChatCacheForFiles.mock.inspectFuncGetChatCacheForFiles = f
+
+	return mmGetChatCacheForFiles
+}
+
+// Return sets up results that will be returned by Service.GetChatCacheForFiles
+func (mmGetChatCacheForFiles *mServiceMockGetChatCacheForFiles) Return(cp1 *repository.ChatCacheMetadata, err error) *ServiceMock {
+	if mmGetChatCacheForFiles.mock.funcGetChatCacheForFiles != nil {
+		mmGetChatCacheForFiles.mock.t.Fatalf("ServiceMock.GetChatCacheForFiles mock is already set by Set")
+	}
+
+	if mmGetChatCacheForFiles.defaultExpectation == nil {
+		mmGetChatCacheForFiles.defaultExpectation = &ServiceMockGetChatCacheForFilesExpectation{mock: mmGetChatCacheForFiles.mock}
+	}
+	mmGetChatCacheForFiles.defaultExpectation.results = &ServiceMockGetChatCacheForFilesResults{cp1, err}
+	mmGetChatCacheForFiles.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmGetChatCacheForFiles.mock
+}
+
+// Set uses given function f to mock the Service.GetChatCacheForFiles method
+func (mmGetChatCacheForFiles *mServiceMockGetChatCacheForFiles) Set(f func(ctx context.Context, u1 uuid.UUID, ua1 []uuid.UUID) (cp1 *repository.ChatCacheMetadata, err error)) *ServiceMock {
+	if mmGetChatCacheForFiles.defaultExpectation != nil {
+		mmGetChatCacheForFiles.mock.t.Fatalf("Default expectation is already set for the Service.GetChatCacheForFiles method")
+	}
+
+	if len(mmGetChatCacheForFiles.expectations) > 0 {
+		mmGetChatCacheForFiles.mock.t.Fatalf("Some expectations are already set for the Service.GetChatCacheForFiles method")
+	}
+
+	mmGetChatCacheForFiles.mock.funcGetChatCacheForFiles = f
+	mmGetChatCacheForFiles.mock.funcGetChatCacheForFilesOrigin = minimock.CallerInfo(1)
+	return mmGetChatCacheForFiles.mock
+}
+
+// When sets expectation for the Service.GetChatCacheForFiles which will trigger the result defined by the following
+// Then helper
+func (mmGetChatCacheForFiles *mServiceMockGetChatCacheForFiles) When(ctx context.Context, u1 uuid.UUID, ua1 []uuid.UUID) *ServiceMockGetChatCacheForFilesExpectation {
+	if mmGetChatCacheForFiles.mock.funcGetChatCacheForFiles != nil {
+		mmGetChatCacheForFiles.mock.t.Fatalf("ServiceMock.GetChatCacheForFiles mock is already set by Set")
+	}
+
+	expectation := &ServiceMockGetChatCacheForFilesExpectation{
+		mock:               mmGetChatCacheForFiles.mock,
+		params:             &ServiceMockGetChatCacheForFilesParams{ctx, u1, ua1},
+		expectationOrigins: ServiceMockGetChatCacheForFilesExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmGetChatCacheForFiles.expectations = append(mmGetChatCacheForFiles.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Service.GetChatCacheForFiles return parameters for the expectation previously defined by the When method
+func (e *ServiceMockGetChatCacheForFilesExpectation) Then(cp1 *repository.ChatCacheMetadata, err error) *ServiceMock {
+	e.results = &ServiceMockGetChatCacheForFilesResults{cp1, err}
+	return e.mock
+}
+
+// Times sets number of times Service.GetChatCacheForFiles should be invoked
+func (mmGetChatCacheForFiles *mServiceMockGetChatCacheForFiles) Times(n uint64) *mServiceMockGetChatCacheForFiles {
+	if n == 0 {
+		mmGetChatCacheForFiles.mock.t.Fatalf("Times of ServiceMock.GetChatCacheForFiles mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetChatCacheForFiles.expectedInvocations, n)
+	mmGetChatCacheForFiles.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmGetChatCacheForFiles
+}
+
+func (mmGetChatCacheForFiles *mServiceMockGetChatCacheForFiles) invocationsDone() bool {
+	if len(mmGetChatCacheForFiles.expectations) == 0 && mmGetChatCacheForFiles.defaultExpectation == nil && mmGetChatCacheForFiles.mock.funcGetChatCacheForFiles == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetChatCacheForFiles.mock.afterGetChatCacheForFilesCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetChatCacheForFiles.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetChatCacheForFiles implements mm_service.Service
+func (mmGetChatCacheForFiles *ServiceMock) GetChatCacheForFiles(ctx context.Context, u1 uuid.UUID, ua1 []uuid.UUID) (cp1 *repository.ChatCacheMetadata, err error) {
+	mm_atomic.AddUint64(&mmGetChatCacheForFiles.beforeGetChatCacheForFilesCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetChatCacheForFiles.afterGetChatCacheForFilesCounter, 1)
+
+	mmGetChatCacheForFiles.t.Helper()
+
+	if mmGetChatCacheForFiles.inspectFuncGetChatCacheForFiles != nil {
+		mmGetChatCacheForFiles.inspectFuncGetChatCacheForFiles(ctx, u1, ua1)
+	}
+
+	mm_params := ServiceMockGetChatCacheForFilesParams{ctx, u1, ua1}
+
+	// Record call args
+	mmGetChatCacheForFiles.GetChatCacheForFilesMock.mutex.Lock()
+	mmGetChatCacheForFiles.GetChatCacheForFilesMock.callArgs = append(mmGetChatCacheForFiles.GetChatCacheForFilesMock.callArgs, &mm_params)
+	mmGetChatCacheForFiles.GetChatCacheForFilesMock.mutex.Unlock()
+
+	for _, e := range mmGetChatCacheForFiles.GetChatCacheForFilesMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.cp1, e.results.err
+		}
+	}
+
+	if mmGetChatCacheForFiles.GetChatCacheForFilesMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetChatCacheForFiles.GetChatCacheForFilesMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetChatCacheForFiles.GetChatCacheForFilesMock.defaultExpectation.params
+		mm_want_ptrs := mmGetChatCacheForFiles.GetChatCacheForFilesMock.defaultExpectation.paramPtrs
+
+		mm_got := ServiceMockGetChatCacheForFilesParams{ctx, u1, ua1}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetChatCacheForFiles.t.Errorf("ServiceMock.GetChatCacheForFiles got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetChatCacheForFiles.GetChatCacheForFilesMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.u1 != nil && !minimock.Equal(*mm_want_ptrs.u1, mm_got.u1) {
+				mmGetChatCacheForFiles.t.Errorf("ServiceMock.GetChatCacheForFiles got unexpected parameter u1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetChatCacheForFiles.GetChatCacheForFilesMock.defaultExpectation.expectationOrigins.originU1, *mm_want_ptrs.u1, mm_got.u1, minimock.Diff(*mm_want_ptrs.u1, mm_got.u1))
+			}
+
+			if mm_want_ptrs.ua1 != nil && !minimock.Equal(*mm_want_ptrs.ua1, mm_got.ua1) {
+				mmGetChatCacheForFiles.t.Errorf("ServiceMock.GetChatCacheForFiles got unexpected parameter ua1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetChatCacheForFiles.GetChatCacheForFilesMock.defaultExpectation.expectationOrigins.originUa1, *mm_want_ptrs.ua1, mm_got.ua1, minimock.Diff(*mm_want_ptrs.ua1, mm_got.ua1))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetChatCacheForFiles.t.Errorf("ServiceMock.GetChatCacheForFiles got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmGetChatCacheForFiles.GetChatCacheForFilesMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetChatCacheForFiles.GetChatCacheForFilesMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetChatCacheForFiles.t.Fatal("No results are set for the ServiceMock.GetChatCacheForFiles")
+		}
+		return (*mm_results).cp1, (*mm_results).err
+	}
+	if mmGetChatCacheForFiles.funcGetChatCacheForFiles != nil {
+		return mmGetChatCacheForFiles.funcGetChatCacheForFiles(ctx, u1, ua1)
+	}
+	mmGetChatCacheForFiles.t.Fatalf("Unexpected call to ServiceMock.GetChatCacheForFiles. %v %v %v", ctx, u1, ua1)
+	return
+}
+
+// GetChatCacheForFilesAfterCounter returns a count of finished ServiceMock.GetChatCacheForFiles invocations
+func (mmGetChatCacheForFiles *ServiceMock) GetChatCacheForFilesAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetChatCacheForFiles.afterGetChatCacheForFilesCounter)
+}
+
+// GetChatCacheForFilesBeforeCounter returns a count of ServiceMock.GetChatCacheForFiles invocations
+func (mmGetChatCacheForFiles *ServiceMock) GetChatCacheForFilesBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetChatCacheForFiles.beforeGetChatCacheForFilesCounter)
+}
+
+// Calls returns a list of arguments used in each call to ServiceMock.GetChatCacheForFiles.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetChatCacheForFiles *mServiceMockGetChatCacheForFiles) Calls() []*ServiceMockGetChatCacheForFilesParams {
+	mmGetChatCacheForFiles.mutex.RLock()
+
+	argCopy := make([]*ServiceMockGetChatCacheForFilesParams, len(mmGetChatCacheForFiles.callArgs))
+	copy(argCopy, mmGetChatCacheForFiles.callArgs)
+
+	mmGetChatCacheForFiles.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetChatCacheForFilesDone returns true if the count of the GetChatCacheForFiles invocations corresponds
+// the number of defined expectations
+func (m *ServiceMock) MinimockGetChatCacheForFilesDone() bool {
+	if m.GetChatCacheForFilesMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.GetChatCacheForFilesMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetChatCacheForFilesMock.invocationsDone()
+}
+
+// MinimockGetChatCacheForFilesInspect logs each unmet expectation
+func (m *ServiceMock) MinimockGetChatCacheForFilesInspect() {
+	for _, e := range m.GetChatCacheForFilesMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to ServiceMock.GetChatCacheForFiles at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterGetChatCacheForFilesCounter := mm_atomic.LoadUint64(&m.afterGetChatCacheForFilesCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetChatCacheForFilesMock.defaultExpectation != nil && afterGetChatCacheForFilesCounter < 1 {
+		if m.GetChatCacheForFilesMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to ServiceMock.GetChatCacheForFiles at\n%s", m.GetChatCacheForFilesMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to ServiceMock.GetChatCacheForFiles at\n%s with params: %#v", m.GetChatCacheForFilesMock.defaultExpectation.expectationOrigins.origin, *m.GetChatCacheForFilesMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetChatCacheForFiles != nil && afterGetChatCacheForFilesCounter < 1 {
+		m.t.Errorf("Expected call to ServiceMock.GetChatCacheForFiles at\n%s", m.funcGetChatCacheForFilesOrigin)
+	}
+
+	if !m.GetChatCacheForFilesMock.invocationsDone() && afterGetChatCacheForFilesCounter > 0 {
+		m.t.Errorf("Expected %d calls to ServiceMock.GetChatCacheForFiles at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.GetChatCacheForFilesMock.expectedInvocations), m.GetChatCacheForFilesMock.expectedInvocationsOrigin, afterGetChatCacheForFilesCounter)
 	}
 }
 
@@ -7377,7 +8499,7 @@ type ServiceMockProcessFileExpectation struct {
 type ServiceMockProcessFileParams struct {
 	ctx context.Context
 	k1  types.KBUIDType
-	f1  types.FileUIDType
+	fa1 []types.FileUIDType
 	u1  types.UserUIDType
 	r1  types.RequesterUIDType
 }
@@ -7386,7 +8508,7 @@ type ServiceMockProcessFileParams struct {
 type ServiceMockProcessFileParamPtrs struct {
 	ctx *context.Context
 	k1  *types.KBUIDType
-	f1  *types.FileUIDType
+	fa1 *[]types.FileUIDType
 	u1  *types.UserUIDType
 	r1  *types.RequesterUIDType
 }
@@ -7401,7 +8523,7 @@ type ServiceMockProcessFileExpectationOrigins struct {
 	origin    string
 	originCtx string
 	originK1  string
-	originF1  string
+	originFa1 string
 	originU1  string
 	originR1  string
 }
@@ -7417,7 +8539,7 @@ func (mmProcessFile *mServiceMockProcessFile) Optional() *mServiceMockProcessFil
 }
 
 // Expect sets up expected params for Service.ProcessFile
-func (mmProcessFile *mServiceMockProcessFile) Expect(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType, u1 types.UserUIDType, r1 types.RequesterUIDType) *mServiceMockProcessFile {
+func (mmProcessFile *mServiceMockProcessFile) Expect(ctx context.Context, k1 types.KBUIDType, fa1 []types.FileUIDType, u1 types.UserUIDType, r1 types.RequesterUIDType) *mServiceMockProcessFile {
 	if mmProcessFile.mock.funcProcessFile != nil {
 		mmProcessFile.mock.t.Fatalf("ServiceMock.ProcessFile mock is already set by Set")
 	}
@@ -7430,7 +8552,7 @@ func (mmProcessFile *mServiceMockProcessFile) Expect(ctx context.Context, k1 typ
 		mmProcessFile.mock.t.Fatalf("ServiceMock.ProcessFile mock is already set by ExpectParams functions")
 	}
 
-	mmProcessFile.defaultExpectation.params = &ServiceMockProcessFileParams{ctx, k1, f1, u1, r1}
+	mmProcessFile.defaultExpectation.params = &ServiceMockProcessFileParams{ctx, k1, fa1, u1, r1}
 	mmProcessFile.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
 	for _, e := range mmProcessFile.expectations {
 		if minimock.Equal(e.params, mmProcessFile.defaultExpectation.params) {
@@ -7487,8 +8609,8 @@ func (mmProcessFile *mServiceMockProcessFile) ExpectK1Param2(k1 types.KBUIDType)
 	return mmProcessFile
 }
 
-// ExpectF1Param3 sets up expected param f1 for Service.ProcessFile
-func (mmProcessFile *mServiceMockProcessFile) ExpectF1Param3(f1 types.FileUIDType) *mServiceMockProcessFile {
+// ExpectFa1Param3 sets up expected param fa1 for Service.ProcessFile
+func (mmProcessFile *mServiceMockProcessFile) ExpectFa1Param3(fa1 []types.FileUIDType) *mServiceMockProcessFile {
 	if mmProcessFile.mock.funcProcessFile != nil {
 		mmProcessFile.mock.t.Fatalf("ServiceMock.ProcessFile mock is already set by Set")
 	}
@@ -7504,8 +8626,8 @@ func (mmProcessFile *mServiceMockProcessFile) ExpectF1Param3(f1 types.FileUIDTyp
 	if mmProcessFile.defaultExpectation.paramPtrs == nil {
 		mmProcessFile.defaultExpectation.paramPtrs = &ServiceMockProcessFileParamPtrs{}
 	}
-	mmProcessFile.defaultExpectation.paramPtrs.f1 = &f1
-	mmProcessFile.defaultExpectation.expectationOrigins.originF1 = minimock.CallerInfo(1)
+	mmProcessFile.defaultExpectation.paramPtrs.fa1 = &fa1
+	mmProcessFile.defaultExpectation.expectationOrigins.originFa1 = minimock.CallerInfo(1)
 
 	return mmProcessFile
 }
@@ -7557,7 +8679,7 @@ func (mmProcessFile *mServiceMockProcessFile) ExpectR1Param5(r1 types.RequesterU
 }
 
 // Inspect accepts an inspector function that has same arguments as the Service.ProcessFile
-func (mmProcessFile *mServiceMockProcessFile) Inspect(f func(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType, u1 types.UserUIDType, r1 types.RequesterUIDType)) *mServiceMockProcessFile {
+func (mmProcessFile *mServiceMockProcessFile) Inspect(f func(ctx context.Context, k1 types.KBUIDType, fa1 []types.FileUIDType, u1 types.UserUIDType, r1 types.RequesterUIDType)) *mServiceMockProcessFile {
 	if mmProcessFile.mock.inspectFuncProcessFile != nil {
 		mmProcessFile.mock.t.Fatalf("Inspect function is already set for ServiceMock.ProcessFile")
 	}
@@ -7582,7 +8704,7 @@ func (mmProcessFile *mServiceMockProcessFile) Return(err error) *ServiceMock {
 }
 
 // Set uses given function f to mock the Service.ProcessFile method
-func (mmProcessFile *mServiceMockProcessFile) Set(f func(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType, u1 types.UserUIDType, r1 types.RequesterUIDType) (err error)) *ServiceMock {
+func (mmProcessFile *mServiceMockProcessFile) Set(f func(ctx context.Context, k1 types.KBUIDType, fa1 []types.FileUIDType, u1 types.UserUIDType, r1 types.RequesterUIDType) (err error)) *ServiceMock {
 	if mmProcessFile.defaultExpectation != nil {
 		mmProcessFile.mock.t.Fatalf("Default expectation is already set for the Service.ProcessFile method")
 	}
@@ -7598,14 +8720,14 @@ func (mmProcessFile *mServiceMockProcessFile) Set(f func(ctx context.Context, k1
 
 // When sets expectation for the Service.ProcessFile which will trigger the result defined by the following
 // Then helper
-func (mmProcessFile *mServiceMockProcessFile) When(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType, u1 types.UserUIDType, r1 types.RequesterUIDType) *ServiceMockProcessFileExpectation {
+func (mmProcessFile *mServiceMockProcessFile) When(ctx context.Context, k1 types.KBUIDType, fa1 []types.FileUIDType, u1 types.UserUIDType, r1 types.RequesterUIDType) *ServiceMockProcessFileExpectation {
 	if mmProcessFile.mock.funcProcessFile != nil {
 		mmProcessFile.mock.t.Fatalf("ServiceMock.ProcessFile mock is already set by Set")
 	}
 
 	expectation := &ServiceMockProcessFileExpectation{
 		mock:               mmProcessFile.mock,
-		params:             &ServiceMockProcessFileParams{ctx, k1, f1, u1, r1},
+		params:             &ServiceMockProcessFileParams{ctx, k1, fa1, u1, r1},
 		expectationOrigins: ServiceMockProcessFileExpectationOrigins{origin: minimock.CallerInfo(1)},
 	}
 	mmProcessFile.expectations = append(mmProcessFile.expectations, expectation)
@@ -7640,17 +8762,17 @@ func (mmProcessFile *mServiceMockProcessFile) invocationsDone() bool {
 }
 
 // ProcessFile implements mm_service.Service
-func (mmProcessFile *ServiceMock) ProcessFile(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType, u1 types.UserUIDType, r1 types.RequesterUIDType) (err error) {
+func (mmProcessFile *ServiceMock) ProcessFile(ctx context.Context, k1 types.KBUIDType, fa1 []types.FileUIDType, u1 types.UserUIDType, r1 types.RequesterUIDType) (err error) {
 	mm_atomic.AddUint64(&mmProcessFile.beforeProcessFileCounter, 1)
 	defer mm_atomic.AddUint64(&mmProcessFile.afterProcessFileCounter, 1)
 
 	mmProcessFile.t.Helper()
 
 	if mmProcessFile.inspectFuncProcessFile != nil {
-		mmProcessFile.inspectFuncProcessFile(ctx, k1, f1, u1, r1)
+		mmProcessFile.inspectFuncProcessFile(ctx, k1, fa1, u1, r1)
 	}
 
-	mm_params := ServiceMockProcessFileParams{ctx, k1, f1, u1, r1}
+	mm_params := ServiceMockProcessFileParams{ctx, k1, fa1, u1, r1}
 
 	// Record call args
 	mmProcessFile.ProcessFileMock.mutex.Lock()
@@ -7669,7 +8791,7 @@ func (mmProcessFile *ServiceMock) ProcessFile(ctx context.Context, k1 types.KBUI
 		mm_want := mmProcessFile.ProcessFileMock.defaultExpectation.params
 		mm_want_ptrs := mmProcessFile.ProcessFileMock.defaultExpectation.paramPtrs
 
-		mm_got := ServiceMockProcessFileParams{ctx, k1, f1, u1, r1}
+		mm_got := ServiceMockProcessFileParams{ctx, k1, fa1, u1, r1}
 
 		if mm_want_ptrs != nil {
 
@@ -7683,9 +8805,9 @@ func (mmProcessFile *ServiceMock) ProcessFile(ctx context.Context, k1 types.KBUI
 					mmProcessFile.ProcessFileMock.defaultExpectation.expectationOrigins.originK1, *mm_want_ptrs.k1, mm_got.k1, minimock.Diff(*mm_want_ptrs.k1, mm_got.k1))
 			}
 
-			if mm_want_ptrs.f1 != nil && !minimock.Equal(*mm_want_ptrs.f1, mm_got.f1) {
-				mmProcessFile.t.Errorf("ServiceMock.ProcessFile got unexpected parameter f1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmProcessFile.ProcessFileMock.defaultExpectation.expectationOrigins.originF1, *mm_want_ptrs.f1, mm_got.f1, minimock.Diff(*mm_want_ptrs.f1, mm_got.f1))
+			if mm_want_ptrs.fa1 != nil && !minimock.Equal(*mm_want_ptrs.fa1, mm_got.fa1) {
+				mmProcessFile.t.Errorf("ServiceMock.ProcessFile got unexpected parameter fa1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmProcessFile.ProcessFileMock.defaultExpectation.expectationOrigins.originFa1, *mm_want_ptrs.fa1, mm_got.fa1, minimock.Diff(*mm_want_ptrs.fa1, mm_got.fa1))
 			}
 
 			if mm_want_ptrs.u1 != nil && !minimock.Equal(*mm_want_ptrs.u1, mm_got.u1) {
@@ -7710,9 +8832,9 @@ func (mmProcessFile *ServiceMock) ProcessFile(ctx context.Context, k1 types.KBUI
 		return (*mm_results).err
 	}
 	if mmProcessFile.funcProcessFile != nil {
-		return mmProcessFile.funcProcessFile(ctx, k1, f1, u1, r1)
+		return mmProcessFile.funcProcessFile(ctx, k1, fa1, u1, r1)
 	}
-	mmProcessFile.t.Fatalf("Unexpected call to ServiceMock.ProcessFile. %v %v %v %v %v", ctx, k1, f1, u1, r1)
+	mmProcessFile.t.Fatalf("Unexpected call to ServiceMock.ProcessFile. %v %v %v %v %v", ctx, k1, fa1, u1, r1)
 	return
 }
 
@@ -8567,7 +9689,11 @@ func (m *ServiceMock) MinimockFinish() {
 		if !m.minimockDone() {
 			m.MinimockACLClientInspect()
 
+			m.MinimockChatWithCacheInspect()
+
 			m.MinimockCheckCatalogUserPermissionInspect()
+
+			m.MinimockCheckFilesProcessingStatusInspect()
 
 			m.MinimockCheckNamespacePermissionInspect()
 
@@ -8582,6 +9708,8 @@ func (m *ServiceMock) MinimockFinish() {
 			m.MinimockDeleteRepositoryTagInspect()
 
 			m.MinimockEmbedTextsInspect()
+
+			m.MinimockGetChatCacheForFilesInspect()
 
 			m.MinimockGetChunksByFileInspect()
 
@@ -8636,7 +9764,9 @@ func (m *ServiceMock) minimockDone() bool {
 	done := true
 	return done &&
 		m.MinimockACLClientDone() &&
+		m.MinimockChatWithCacheDone() &&
 		m.MinimockCheckCatalogUserPermissionDone() &&
+		m.MinimockCheckFilesProcessingStatusDone() &&
 		m.MinimockCheckNamespacePermissionDone() &&
 		m.MinimockCleanupFileDone() &&
 		m.MinimockCleanupKnowledgeBaseDone() &&
@@ -8644,6 +9774,7 @@ func (m *ServiceMock) minimockDone() bool {
 		m.MinimockDeleteFilesDone() &&
 		m.MinimockDeleteRepositoryTagDone() &&
 		m.MinimockEmbedTextsDone() &&
+		m.MinimockGetChatCacheForFilesDone() &&
 		m.MinimockGetChunksByFileDone() &&
 		m.MinimockGetConvertedFilePathsByFileUIDDone() &&
 		m.MinimockGetDownloadURLDone() &&

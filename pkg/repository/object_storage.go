@@ -12,8 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gofrs/uuid"
-
 	"github.com/instill-ai/artifact-backend/pkg/types"
 	"github.com/minio/minio-go/v7"
 	"go.uber.org/zap"
@@ -41,8 +39,8 @@ type ObjectStorage interface {
 	ListTextChunksByFileUID(ctx context.Context, kbUID types.KBUIDType, fileUID types.FileUIDType) ([]string, error)
 
 	// Object (blob) operations
-	GetPresignedURLForUpload(ctx context.Context, namespaceUUID uuid.UUID, objectUUID uuid.UUID, filename string, urlExpiration time.Duration) (*url.URL, error)
-	GetPresignedURLForDownload(ctx context.Context, namespaceUUID uuid.UUID, objectUUID uuid.UUID, filename string, contentType string, urlExpiration time.Duration) (*url.URL, error)
+	GetPresignedURLForUpload(ctx context.Context, namespaceUUID types.NamespaceUIDType, objectUUID types.ObjectUIDType, filename string, urlExpiration time.Duration) (*url.URL, error)
+	GetPresignedURLForDownload(ctx context.Context, namespaceUUID types.NamespaceUIDType, objectUUID types.ObjectUIDType, filename string, contentType string, urlExpiration time.Duration) (*url.URL, error)
 }
 
 // MinIO implementation constants
@@ -265,7 +263,7 @@ func (m *minioClient) ListTextChunksByFileUID(ctx context.Context, kbUID types.K
 
 // Object (blob) operations
 
-func (m *minioClient) GetPresignedURLForUpload(ctx context.Context, namespaceUUID uuid.UUID, objectUUID uuid.UUID, filename string, expiration time.Duration) (*url.URL, error) {
+func (m *minioClient) GetPresignedURLForUpload(ctx context.Context, namespaceUUID types.NamespaceUIDType, objectUUID types.ObjectUIDType, filename string, expiration time.Duration) (*url.URL, error) {
 	logger, err := logx.GetZapLogger(ctx)
 	if err != nil {
 		return nil, err
@@ -298,7 +296,7 @@ func (m *minioClient) GetPresignedURLForUpload(ctx context.Context, namespaceUUI
 	return presignedURL, nil
 }
 
-func (m *minioClient) GetPresignedURLForDownload(ctx context.Context, namespaceUUID uuid.UUID, objectUUID uuid.UUID, filename string, contentType string, expiration time.Duration) (*url.URL, error) {
+func (m *minioClient) GetPresignedURLForDownload(ctx context.Context, namespaceUUID types.NamespaceUIDType, objectUUID types.ObjectUIDType, filename string, contentType string, expiration time.Duration) (*url.URL, error) {
 	logger, err := logx.GetZapLogger(ctx)
 	if err != nil {
 		return nil, err
@@ -358,7 +356,7 @@ func chunkBasePath(kbUID, fileUID types.FileUIDType) string {
 
 // GetBlobObjectPath makes object path from objectUUID.
 // Format: ns-{namespaceUUID}/obj-{objectUUID}
-func GetBlobObjectPath(namespaceUUID uuid.UUID, objectUUID uuid.UUID) string {
+func GetBlobObjectPath(namespaceUUID types.NamespaceUIDType, objectUUID types.ObjectUIDType) string {
 	return fmt.Sprintf("ns-%s/obj-%s", namespaceUUID.String(), objectUUID.String())
 }
 

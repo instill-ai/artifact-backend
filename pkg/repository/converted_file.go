@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gofrs/uuid"
-
 	"github.com/instill-ai/artifact-backend/pkg/types"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
@@ -20,19 +18,19 @@ const (
 
 type ConvertedFile interface {
 	CreateConvertedFileWithDestination(ctx context.Context, cf ConvertedFileModel) (*ConvertedFileModel, error)
-	UpdateConvertedFile(ctx context.Context, uid uuid.UUID, update map[string]any) error
-	DeleteConvertedFile(ctx context.Context, uid uuid.UUID) error
+	UpdateConvertedFile(ctx context.Context, uid types.ConvertedFileUIDType, update map[string]any) error
+	DeleteConvertedFile(ctx context.Context, uid types.ConvertedFileUIDType) error
 	DeleteAllConvertedFilesInKb(ctx context.Context, kbUID types.KBUIDType) error
 	HardDeleteConvertedFileByFileUID(ctx context.Context, fileUID types.FileUIDType) error
 	GetConvertedFileByFileUID(ctx context.Context, fileUID types.FileUIDType) (*ConvertedFileModel, error)
 }
 
 type ConvertedFileModel struct {
-	UID   uuid.UUID `gorm:"column:uid;type:uuid;default:gen_random_uuid();primaryKey" json:"uid"`
-	KBUID uuid.UUID `gorm:"column:kb_uid;type:uuid;not null" json:"kb_uid"`
+	UID   types.ConvertedFileUIDType `gorm:"column:uid;type:uuid;default:gen_random_uuid();primaryKey" json:"uid"`
+	KBUID types.KBUIDType            `gorm:"column:kb_uid;type:uuid;not null" json:"kb_uid"`
 	// FileUID is the original file UID in knowledge base file table
-	FileUID uuid.UUID `gorm:"column:file_uid;type:uuid;not null" json:"file_uid"`
-	Name    string    `gorm:"column:name;size:255;not null" json:"name"`
+	FileUID types.FileUIDType `gorm:"column:file_uid;type:uuid;not null" json:"file_uid"`
+	Name    string            `gorm:"column:name;size:255;not null" json:"name"`
 	// MIME type
 	Type string `gorm:"column:type;size:100;not null" json:"type"`
 	// destination path in minio
@@ -77,10 +75,10 @@ var ConvertedFileColumn = ConvertedFileColumns{
 // It handles deletion of any existing converted file for the same file_uid (for reprocessing).
 func (r *repository) CreateConvertedFileWithDestination(ctx context.Context, cf ConvertedFileModel) (*ConvertedFileModel, error) {
 	// Validate required fields before attempting to persist
-	if cf.FileUID == uuid.Nil {
+	if cf.FileUID.IsNil() {
 		return nil, fmt.Errorf("file_uid is required")
 	}
-	if cf.KBUID == uuid.Nil {
+	if cf.KBUID.IsNil() {
 		return nil, fmt.Errorf("kb_uid is required")
 	}
 	if cf.Destination == "" {
@@ -124,7 +122,7 @@ func (r *repository) GetConvertedFileByFileUID(ctx context.Context, fileUID type
 }
 
 // DeleteConvertedFile deletes the record by UID
-func (r *repository) DeleteConvertedFile(ctx context.Context, uid uuid.UUID) error {
+func (r *repository) DeleteConvertedFile(ctx context.Context, uid types.ConvertedFileUIDType) error {
 	err := r.db.Transaction(func(tx *gorm.DB) error {
 		// Specify the condition to find the record by its UID
 		where := fmt.Sprintf("%s = ?", ConvertedFileColumn.UID)
@@ -156,7 +154,7 @@ func (r *repository) DeleteAllConvertedFilesInKb(ctx context.Context, kbUID type
 }
 
 // UpdateConvertedFile updates the record by UID using update map.
-func (r *repository) UpdateConvertedFile(ctx context.Context, uid uuid.UUID, update map[string]any) error {
+func (r *repository) UpdateConvertedFile(ctx context.Context, uid types.ConvertedFileUIDType, update map[string]any) error {
 	// Specify the condition to find the record by its UID
 	where := fmt.Sprintf("%s = ?", ConvertedFileColumn.UID)
 	if err := r.db.WithContext(ctx).Model(&ConvertedFileModel{}).Where(where, uid).Updates(update).Error; err != nil {
