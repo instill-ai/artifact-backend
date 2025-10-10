@@ -93,4 +93,4 @@ blob:
   hostport: http://localhost:8080
 ai:
   gemini:
-    apikey: AIzaSyCIztEf10HmMbjOPb28qWIGlyRngYD7QZc
+    apikey:

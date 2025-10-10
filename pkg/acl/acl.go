@@ -42,7 +42,7 @@ const (
 )
 
 type Relation struct {
-	UID      uuid.UUID
+	UID      types.ObjectUIDType
 	Relation string
 }
 
@@ -130,10 +130,14 @@ func (c *ACLClient) getClient(ctx context.Context, mode Mode) openfga.OpenFGASer
 // Parameters:
 // - ctx: context for managing request-scoped values, cancellation, and deadlines.
 // - objectType: the type of the object (e.g., "pipeline", "_model", "knowledgebase").
-// - objectUID: the unique identifier of the object.
+// - objectUID: the unique identifier of the object (uses uuid.UUID for polymorphic object types).
 // - ownerType: the type of the owner (e.g., "users", "organizations").
 // - ownerUID: the unique identifier of the owner.
 // Returns an error if the ownerType is invalid, if there is an error reading from or writing to the database, or nil if successful.
+//
+// Note: ACL functions use uuid.UUID instead of typed aliases for objectUID parameters
+// because they are polymorphic and work across multiple object types (knowledgebase,
+// organization, pipeline, model, etc.). The objectType parameter specifies the actual type.
 func (c *ACLClient) SetOwner(ctx context.Context, objectType string, objectUID uuid.UUID, ownerType string, ownerUID types.OwnerUIDType) error {
 	var err error
 	// Normalize ownerType to singular form. because in our openfga, the

@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gofrs/uuid"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/metadata"
 
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
+	"github.com/instill-ai/artifact-backend/pkg/types"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	errorsx "github.com/instill-ai/x/errors"
@@ -79,7 +79,7 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 	if err != nil {
 		return nil, fmt.Errorf("searching similar chunks: %w", err)
 	}
-	var chunkUIDs []uuid.UUID
+	var chunkUIDs []types.TextChunkUIDType
 	for _, simChunk := range simChunksScores {
 		chunkUIDs = append(chunkUIDs, simChunk.ChunkUID)
 	}
@@ -104,12 +104,12 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 	}
 
 	// fetch the file names
-	fileUIDMapName := make(map[uuid.UUID]string)
+	fileUIDMapName := make(map[types.FileUIDType]string)
 	for _, chunk := range chunks {
 		fileUIDMapName[chunk.KBFileUID] = ""
 	}
 
-	fileUids := make([]uuid.UUID, 0, len(fileUIDMapName))
+	fileUids := make([]types.FileUIDType, 0, len(fileUIDMapName))
 	for fileUID := range fileUIDMapName {
 		fileUids = append(fileUids, fileUID)
 	}

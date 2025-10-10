@@ -12,6 +12,7 @@ import (
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/pipeline"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
+	"github.com/instill-ai/artifact-backend/pkg/types"
 
 	artifactPb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	errorsx "github.com/instill-ai/x/errors"
@@ -61,16 +62,16 @@ func (ph *PublicHandler) QuestionAnswering(
 	}
 
 	// Convert file UID strings to UUIDs for cache lookup and status checking
-	var fileUIDs []uuid.UUID
+	var fileUIDs []types.FileUIDType
 	if len(req.GetFileUids()) > 0 {
-		fileUIDs = make([]uuid.UUID, 0, len(req.GetFileUids()))
+		fileUIDs = make([]types.FileUIDType, 0, len(req.GetFileUids()))
 		for _, uidStr := range req.GetFileUids() {
 			uid, err := uuid.FromString(uidStr)
 			if err != nil {
 				logger.Warn("Invalid file UID", zap.String("uid", uidStr), zap.Error(err))
 				continue
 			}
-			fileUIDs = append(fileUIDs, uid)
+			fileUIDs = append(fileUIDs, types.FileUIDType(uid))
 		}
 	}
 
@@ -159,7 +160,7 @@ func (ph *PublicHandler) QuestionAnswering(
 		logger.Error("failed to get similarity chunks", zap.Error(err))
 		return nil, fmt.Errorf("failed to get similarity chunks. err: %w", err)
 	}
-	var chunkUIDs []uuid.UUID
+	var chunkUIDs []types.TextChunkUIDType
 	for _, simChunk := range simChunksScores {
 		chunkUIDs = append(chunkUIDs, simChunk.ChunkUID)
 	}
@@ -188,11 +189,11 @@ func (ph *PublicHandler) QuestionAnswering(
 	logger.Info("get chunks content from minIO", zap.Duration("duration", time.Since(t)))
 
 	// fetch the file names
-	fileUIDMapName := make(map[uuid.UUID]string)
+	fileUIDMapName := make(map[types.FileUIDType]string)
 	for _, chunk := range chunks {
 		fileUIDMapName[chunk.KBFileUID] = ""
 	}
-	fileUids := make([]uuid.UUID, 0, len(fileUIDMapName))
+	fileUids := make([]types.FileUIDType, 0, len(fileUIDMapName))
 	for fileUID := range fileUIDMapName {
 		fileUids = append(fileUids, fileUID)
 	}

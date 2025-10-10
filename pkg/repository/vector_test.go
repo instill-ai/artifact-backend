@@ -6,6 +6,7 @@ import (
 	"github.com/gofrs/uuid"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/instill-ai/artifact-backend/pkg/types"
 )
 
 func TestFileUIDFilter(t *testing.T) {
@@ -18,22 +19,22 @@ func TestFileUIDFilter(t *testing.T) {
 
 	testcases := []struct {
 		name     string
-		fileUIDs []uuid.UUID
+		fileUIDs []types.FileUIDType
 		want     string
 	}{
 		{
 			name:     "ok - single valid UUID",
-			fileUIDs: []uuid.UUID{uid1},
+			fileUIDs: []types.FileUIDType{uid1},
 			want:     `file_uid in ["6e362976-bfc1-4677-b761-dcc12495b5bd"]`,
 		},
 		{
 			name:     "ok - multiple valid UUIDs",
-			fileUIDs: []uuid.UUID{uid1, uid2},
+			fileUIDs: []types.FileUIDType{uid1, uid2},
 			want:     `file_uid in ["6e362976-bfc1-4677-b761-dcc12495b5bd","f6f9f6ed-ab85-4753-9dbc-6dbd9a3818f3"]`,
 		},
 		{
 			name:     "ok - empty slice",
-			fileUIDs: []uuid.UUID{},
+			fileUIDs: []types.FileUIDType{},
 			want:     "",
 		},
 		{
@@ -43,12 +44,12 @@ func TestFileUIDFilter(t *testing.T) {
 		},
 		{
 			name:     "ok - single nil UUID",
-			fileUIDs: []uuid.UUID{badUID},
+			fileUIDs: []types.FileUIDType{badUID},
 			want:     "",
 		},
 		{
 			name:     "ok - mixed valid and nil UUIDs",
-			fileUIDs: []uuid.UUID{uid1, badUID, uid2},
+			fileUIDs: []types.FileUIDType{uid1, badUID, uid2},
 			want:     `file_uid in ["6e362976-bfc1-4677-b761-dcc12495b5bd","f6f9f6ed-ab85-4753-9dbc-6dbd9a3818f3"]`,
 		},
 	}

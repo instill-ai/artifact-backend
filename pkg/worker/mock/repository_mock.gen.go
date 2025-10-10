@@ -10,7 +10,6 @@ import (
 	"time"
 	mm_time "time"
 
-	"github.com/gofrs/uuid"
 	"github.com/gojuno/minimock/v3"
 	mm_repository "github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/types"
@@ -101,23 +100,23 @@ type RepositoryMock struct {
 	beforeDeleteAndCreateTextChunksCounter uint64
 	DeleteAndCreateTextChunksMock          mRepositoryMockDeleteAndCreateTextChunks
 
-	funcDeleteChatCacheMetadata          func(ctx context.Context, kbUID uuid.UUID, fileUIDs []uuid.UUID) (err error)
+	funcDeleteChatCacheMetadata          func(ctx context.Context, kbUID types.KBUIDType, fileUIDs []types.FileUIDType) (err error)
 	funcDeleteChatCacheMetadataOrigin    string
-	inspectFuncDeleteChatCacheMetadata   func(ctx context.Context, kbUID uuid.UUID, fileUIDs []uuid.UUID)
+	inspectFuncDeleteChatCacheMetadata   func(ctx context.Context, kbUID types.KBUIDType, fileUIDs []types.FileUIDType)
 	afterDeleteChatCacheMetadataCounter  uint64
 	beforeDeleteChatCacheMetadataCounter uint64
 	DeleteChatCacheMetadataMock          mRepositoryMockDeleteChatCacheMetadata
 
-	funcDeleteConvertedFile          func(ctx context.Context, uid uuid.UUID) (err error)
+	funcDeleteConvertedFile          func(ctx context.Context, uid types.ConvertedFileUIDType) (err error)
 	funcDeleteConvertedFileOrigin    string
-	inspectFuncDeleteConvertedFile   func(ctx context.Context, uid uuid.UUID)
+	inspectFuncDeleteConvertedFile   func(ctx context.Context, uid types.ConvertedFileUIDType)
 	afterDeleteConvertedFileCounter  uint64
 	beforeDeleteConvertedFileCounter uint64
 	DeleteConvertedFileMock          mRepositoryMockDeleteConvertedFile
 
-	funcDeleteEmbeddingsByKBFileUID          func(ctx context.Context, kbFileUID uuid.UUID) (err error)
+	funcDeleteEmbeddingsByKBFileUID          func(ctx context.Context, kbFileUID types.FileUIDType) (err error)
 	funcDeleteEmbeddingsByKBFileUIDOrigin    string
-	inspectFuncDeleteEmbeddingsByKBFileUID   func(ctx context.Context, kbFileUID uuid.UUID)
+	inspectFuncDeleteEmbeddingsByKBFileUID   func(ctx context.Context, kbFileUID types.FileUIDType)
 	afterDeleteEmbeddingsByKBFileUIDCounter  uint64
 	beforeDeleteEmbeddingsByKBFileUIDCounter uint64
 	DeleteEmbeddingsByKBFileUIDMock          mRepositoryMockDeleteEmbeddingsByKBFileUID
@@ -157,16 +156,16 @@ type RepositoryMock struct {
 	beforeDeleteKnowledgeBaseFileAndDecreaseUsageCounter uint64
 	DeleteKnowledgeBaseFileAndDecreaseUsageMock          mRepositoryMockDeleteKnowledgeBaseFileAndDecreaseUsage
 
-	funcDeleteObject          func(ctx context.Context, uid uuid.UUID) (err error)
+	funcDeleteObject          func(ctx context.Context, uid types.ObjectUIDType) (err error)
 	funcDeleteObjectOrigin    string
-	inspectFuncDeleteObject   func(ctx context.Context, uid uuid.UUID)
+	inspectFuncDeleteObject   func(ctx context.Context, uid types.ObjectUIDType)
 	afterDeleteObjectCounter  uint64
 	beforeDeleteObjectCounter uint64
 	DeleteObjectMock          mRepositoryMockDeleteObject
 
-	funcDeleteObjectURL          func(ctx context.Context, uid uuid.UUID) (err error)
+	funcDeleteObjectURL          func(ctx context.Context, uid types.ObjectURLUIDType) (err error)
 	funcDeleteObjectURLOrigin    string
-	inspectFuncDeleteObjectURL   func(ctx context.Context, uid uuid.UUID)
+	inspectFuncDeleteObjectURL   func(ctx context.Context, uid types.ObjectURLUIDType)
 	afterDeleteObjectURLCounter  uint64
 	beforeDeleteObjectURLCounter uint64
 	DeleteObjectURLMock          mRepositoryMockDeleteObjectURL
@@ -192,9 +191,9 @@ type RepositoryMock struct {
 	beforeFlushCollectionCounter uint64
 	FlushCollectionMock          mRepositoryMockFlushCollection
 
-	funcGetChatCacheMetadata          func(ctx context.Context, kbUID uuid.UUID, fileUIDs []uuid.UUID) (cp1 *mm_repository.ChatCacheMetadata, err error)
+	funcGetChatCacheMetadata          func(ctx context.Context, kbUID types.KBUIDType, fileUIDs []types.FileUIDType) (cp1 *mm_repository.ChatCacheMetadata, err error)
 	funcGetChatCacheMetadataOrigin    string
-	inspectFuncGetChatCacheMetadata   func(ctx context.Context, kbUID uuid.UUID, fileUIDs []uuid.UUID)
+	inspectFuncGetChatCacheMetadata   func(ctx context.Context, kbUID types.KBUIDType, fileUIDs []types.FileUIDType)
 	afterGetChatCacheMetadataCounter  uint64
 	beforeGetChatCacheMetadataCounter uint64
 	GetChatCacheMetadataMock          mRepositoryMockGetChatCacheMetadata
@@ -206,9 +205,9 @@ type RepositoryMock struct {
 	beforeGetConvertedFileByFileUIDCounter uint64
 	GetConvertedFileByFileUIDMock          mRepositoryMockGetConvertedFileByFileUID
 
-	funcGetCountFilesByListKnowledgeBaseUID          func(ctx context.Context, kbUIDs []mm_repository.KBUID) (m1 map[mm_repository.KBUID]int64, err error)
+	funcGetCountFilesByListKnowledgeBaseUID          func(ctx context.Context, kbUIDs []types.KBUIDType) (m1 map[types.KBUIDType]int64, err error)
 	funcGetCountFilesByListKnowledgeBaseUIDOrigin    string
-	inspectFuncGetCountFilesByListKnowledgeBaseUID   func(ctx context.Context, kbUIDs []mm_repository.KBUID)
+	inspectFuncGetCountFilesByListKnowledgeBaseUID   func(ctx context.Context, kbUIDs []types.KBUIDType)
 	afterGetCountFilesByListKnowledgeBaseUIDCounter  uint64
 	beforeGetCountFilesByListKnowledgeBaseUIDCounter uint64
 	GetCountFilesByListKnowledgeBaseUIDMock          mRepositoryMockGetCountFilesByListKnowledgeBaseUID
@@ -247,9 +246,9 @@ type RepositoryMock struct {
 	beforeGetKnowledgeBaseByOwnerAndKbIDCounter uint64
 	GetKnowledgeBaseByOwnerAndKbIDMock          mRepositoryMockGetKnowledgeBaseByOwnerAndKbID
 
-	funcGetKnowledgeBaseByUID          func(ctx context.Context, u1 uuid.UUID) (kp1 *mm_repository.KnowledgeBaseModel, err error)
+	funcGetKnowledgeBaseByUID          func(ctx context.Context, k1 types.KBUIDType) (kp1 *mm_repository.KnowledgeBaseModel, err error)
 	funcGetKnowledgeBaseByUIDOrigin    string
-	inspectFuncGetKnowledgeBaseByUID   func(ctx context.Context, u1 uuid.UUID)
+	inspectFuncGetKnowledgeBaseByUID   func(ctx context.Context, k1 types.KBUIDType)
 	afterGetKnowledgeBaseByUIDCounter  uint64
 	beforeGetKnowledgeBaseByUIDCounter uint64
 	GetKnowledgeBaseByUIDMock          mRepositoryMockGetKnowledgeBaseByUID
@@ -261,16 +260,16 @@ type RepositoryMock struct {
 	beforeGetKnowledgeBaseCountByOwnerCounter uint64
 	GetKnowledgeBaseCountByOwnerMock          mRepositoryMockGetKnowledgeBaseCountByOwner
 
-	funcGetKnowledgeBaseFilesByFileUIDs          func(ctx context.Context, fileUIDs []uuid.UUID, columns ...string) (ka1 []mm_repository.KnowledgeBaseFileModel, err error)
+	funcGetKnowledgeBaseFilesByFileUIDs          func(ctx context.Context, fileUIDs []types.FileUIDType, columns ...string) (ka1 []mm_repository.KnowledgeBaseFileModel, err error)
 	funcGetKnowledgeBaseFilesByFileUIDsOrigin    string
-	inspectFuncGetKnowledgeBaseFilesByFileUIDs   func(ctx context.Context, fileUIDs []uuid.UUID, columns ...string)
+	inspectFuncGetKnowledgeBaseFilesByFileUIDs   func(ctx context.Context, fileUIDs []types.FileUIDType, columns ...string)
 	afterGetKnowledgeBaseFilesByFileUIDsCounter  uint64
 	beforeGetKnowledgeBaseFilesByFileUIDsCounter uint64
 	GetKnowledgeBaseFilesByFileUIDsMock          mRepositoryMockGetKnowledgeBaseFilesByFileUIDs
 
-	funcGetKnowledgeBasesByUIDs          func(ctx context.Context, kbUIDs []uuid.UUID) (ka1 []mm_repository.KnowledgeBaseModel, err error)
+	funcGetKnowledgeBasesByUIDs          func(ctx context.Context, kbUIDs []types.KBUIDType) (ka1 []mm_repository.KnowledgeBaseModel, err error)
 	funcGetKnowledgeBasesByUIDsOrigin    string
-	inspectFuncGetKnowledgeBasesByUIDs   func(ctx context.Context, kbUIDs []uuid.UUID)
+	inspectFuncGetKnowledgeBasesByUIDs   func(ctx context.Context, kbUIDs []types.KBUIDType)
 	afterGetKnowledgeBasesByUIDsCounter  uint64
 	beforeGetKnowledgeBasesByUIDsCounter uint64
 	GetKnowledgeBasesByUIDsMock          mRepositoryMockGetKnowledgeBasesByUIDs
@@ -282,16 +281,16 @@ type RepositoryMock struct {
 	beforeGetKnowledgebaseFileByKBUIDAndFileIDCounter uint64
 	GetKnowledgebaseFileByKBUIDAndFileIDMock          mRepositoryMockGetKnowledgebaseFileByKBUIDAndFileID
 
-	funcGetObjectByUID          func(ctx context.Context, uid uuid.UUID) (op1 *mm_repository.ObjectModel, err error)
+	funcGetObjectByUID          func(ctx context.Context, uid types.ObjectUIDType) (op1 *mm_repository.ObjectModel, err error)
 	funcGetObjectByUIDOrigin    string
-	inspectFuncGetObjectByUID   func(ctx context.Context, uid uuid.UUID)
+	inspectFuncGetObjectByUID   func(ctx context.Context, uid types.ObjectUIDType)
 	afterGetObjectByUIDCounter  uint64
 	beforeGetObjectByUIDCounter uint64
 	GetObjectByUIDMock          mRepositoryMockGetObjectByUID
 
-	funcGetObjectDownloadURL          func(ctx context.Context, objectUID uuid.UUID) (op1 *mm_repository.ObjectURLModel, err error)
+	funcGetObjectDownloadURL          func(ctx context.Context, objectUID types.ObjectUIDType) (op1 *mm_repository.ObjectURLModel, err error)
 	funcGetObjectDownloadURLOrigin    string
-	inspectFuncGetObjectDownloadURL   func(ctx context.Context, objectUID uuid.UUID)
+	inspectFuncGetObjectDownloadURL   func(ctx context.Context, objectUID types.ObjectUIDType)
 	afterGetObjectDownloadURLCounter  uint64
 	beforeGetObjectDownloadURLCounter uint64
 	GetObjectDownloadURLMock          mRepositoryMockGetObjectDownloadURL
@@ -303,37 +302,37 @@ type RepositoryMock struct {
 	beforeGetObjectURLByEncodedURLPathCounter uint64
 	GetObjectURLByEncodedURLPathMock          mRepositoryMockGetObjectURLByEncodedURLPath
 
-	funcGetObjectURLByUID          func(ctx context.Context, uid uuid.UUID) (op1 *mm_repository.ObjectURLModel, err error)
+	funcGetObjectURLByUID          func(ctx context.Context, uid types.ObjectURLUIDType) (op1 *mm_repository.ObjectURLModel, err error)
 	funcGetObjectURLByUIDOrigin    string
-	inspectFuncGetObjectURLByUID   func(ctx context.Context, uid uuid.UUID)
+	inspectFuncGetObjectURLByUID   func(ctx context.Context, uid types.ObjectURLUIDType)
 	afterGetObjectURLByUIDCounter  uint64
 	beforeGetObjectURLByUIDCounter uint64
 	GetObjectURLByUIDMock          mRepositoryMockGetObjectURLByUID
 
-	funcGetObjectURLCountByObject          func(ctx context.Context, objectUID uuid.UUID) (i1 int64, err error)
+	funcGetObjectURLCountByObject          func(ctx context.Context, objectUID types.ObjectUIDType) (i1 int64, err error)
 	funcGetObjectURLCountByObjectOrigin    string
-	inspectFuncGetObjectURLCountByObject   func(ctx context.Context, objectUID uuid.UUID)
+	inspectFuncGetObjectURLCountByObject   func(ctx context.Context, objectUID types.ObjectUIDType)
 	afterGetObjectURLCountByObjectCounter  uint64
 	beforeGetObjectURLCountByObjectCounter uint64
 	GetObjectURLCountByObjectMock          mRepositoryMockGetObjectURLCountByObject
 
-	funcGetObjectUploadURL          func(ctx context.Context, objectUID uuid.UUID) (op1 *mm_repository.ObjectURLModel, err error)
+	funcGetObjectUploadURL          func(ctx context.Context, objectUID types.ObjectUIDType) (op1 *mm_repository.ObjectURLModel, err error)
 	funcGetObjectUploadURLOrigin    string
-	inspectFuncGetObjectUploadURL   func(ctx context.Context, objectUID uuid.UUID)
+	inspectFuncGetObjectUploadURL   func(ctx context.Context, objectUID types.ObjectUIDType)
 	afterGetObjectUploadURLCounter  uint64
 	beforeGetObjectUploadURLCounter uint64
 	GetObjectUploadURLMock          mRepositoryMockGetObjectUploadURL
 
-	funcGetPresignedURLForDownload          func(ctx context.Context, namespaceUUID uuid.UUID, objectUUID uuid.UUID, filename string, contentType string, urlExpiration time.Duration) (up1 *url.URL, err error)
+	funcGetPresignedURLForDownload          func(ctx context.Context, namespaceUUID types.NamespaceUIDType, objectUUID types.ObjectUIDType, filename string, contentType string, urlExpiration time.Duration) (up1 *url.URL, err error)
 	funcGetPresignedURLForDownloadOrigin    string
-	inspectFuncGetPresignedURLForDownload   func(ctx context.Context, namespaceUUID uuid.UUID, objectUUID uuid.UUID, filename string, contentType string, urlExpiration time.Duration)
+	inspectFuncGetPresignedURLForDownload   func(ctx context.Context, namespaceUUID types.NamespaceUIDType, objectUUID types.ObjectUIDType, filename string, contentType string, urlExpiration time.Duration)
 	afterGetPresignedURLForDownloadCounter  uint64
 	beforeGetPresignedURLForDownloadCounter uint64
 	GetPresignedURLForDownloadMock          mRepositoryMockGetPresignedURLForDownload
 
-	funcGetPresignedURLForUpload          func(ctx context.Context, namespaceUUID uuid.UUID, objectUUID uuid.UUID, filename string, urlExpiration time.Duration) (up1 *url.URL, err error)
+	funcGetPresignedURLForUpload          func(ctx context.Context, namespaceUUID types.NamespaceUIDType, objectUUID types.ObjectUIDType, filename string, urlExpiration time.Duration) (up1 *url.URL, err error)
 	funcGetPresignedURLForUploadOrigin    string
-	inspectFuncGetPresignedURLForUpload   func(ctx context.Context, namespaceUUID uuid.UUID, objectUUID uuid.UUID, filename string, urlExpiration time.Duration)
+	inspectFuncGetPresignedURLForUpload   func(ctx context.Context, namespaceUUID types.NamespaceUIDType, objectUUID types.ObjectUIDType, filename string, urlExpiration time.Duration)
 	afterGetPresignedURLForUploadCounter  uint64
 	beforeGetPresignedURLForUploadCounter uint64
 	GetPresignedURLForUploadMock          mRepositoryMockGetPresignedURLForUpload
@@ -403,9 +402,9 @@ type RepositoryMock struct {
 	beforeHardDeleteConvertedFileByFileUIDCounter uint64
 	HardDeleteConvertedFileByFileUIDMock          mRepositoryMockHardDeleteConvertedFileByFileUID
 
-	funcHardDeleteEmbeddingsByKBFileUID          func(ctx context.Context, kbFileUID uuid.UUID) (err error)
+	funcHardDeleteEmbeddingsByKBFileUID          func(ctx context.Context, kbFileUID types.FileUIDType) (err error)
 	funcHardDeleteEmbeddingsByKBFileUIDOrigin    string
-	inspectFuncHardDeleteEmbeddingsByKBFileUID   func(ctx context.Context, kbFileUID uuid.UUID)
+	inspectFuncHardDeleteEmbeddingsByKBFileUID   func(ctx context.Context, kbFileUID types.FileUIDType)
 	afterHardDeleteEmbeddingsByKBFileUIDCounter  uint64
 	beforeHardDeleteEmbeddingsByKBFileUIDCounter uint64
 	HardDeleteEmbeddingsByKBFileUIDMock          mRepositoryMockHardDeleteEmbeddingsByKBFileUID
@@ -445,16 +444,16 @@ type RepositoryMock struct {
 	beforeInsertVectorsInCollectionCounter uint64
 	InsertVectorsInCollectionMock          mRepositoryMockInsertVectorsInCollection
 
-	funcListAllObjectURLs          func(ctx context.Context, namespaceUID uuid.UUID, objectUID uuid.UUID) (oa1 []mm_repository.ObjectURLModel, err error)
+	funcListAllObjectURLs          func(ctx context.Context, namespaceUID types.NamespaceUIDType, objectUID types.ObjectUIDType) (oa1 []mm_repository.ObjectURLModel, err error)
 	funcListAllObjectURLsOrigin    string
-	inspectFuncListAllObjectURLs   func(ctx context.Context, namespaceUID uuid.UUID, objectUID uuid.UUID)
+	inspectFuncListAllObjectURLs   func(ctx context.Context, namespaceUID types.NamespaceUIDType, objectUID types.ObjectUIDType)
 	afterListAllObjectURLsCounter  uint64
 	beforeListAllObjectURLsCounter uint64
 	ListAllObjectURLsMock          mRepositoryMockListAllObjectURLs
 
-	funcListAllObjects          func(ctx context.Context, namespaceUID types.CreatorUIDType, creatorUID types.CreatorUIDType) (oa1 []mm_repository.ObjectModel, err error)
+	funcListAllObjects          func(ctx context.Context, namespaceUID types.NamespaceUIDType, creatorUID types.CreatorUIDType) (oa1 []mm_repository.ObjectModel, err error)
 	funcListAllObjectsOrigin    string
-	inspectFuncListAllObjects   func(ctx context.Context, namespaceUID types.CreatorUIDType, creatorUID types.CreatorUIDType)
+	inspectFuncListAllObjects   func(ctx context.Context, namespaceUID types.NamespaceUIDType, creatorUID types.CreatorUIDType)
 	afterListAllObjectsCounter  uint64
 	beforeListAllObjectsCounter uint64
 	ListAllObjectsMock          mRepositoryMockListAllObjects
@@ -466,9 +465,9 @@ type RepositoryMock struct {
 	beforeListConvertedFilesByFileUIDCounter uint64
 	ListConvertedFilesByFileUIDMock          mRepositoryMockListConvertedFilesByFileUID
 
-	funcListEmbeddingsByKBFileUID          func(ctx context.Context, kbFileUID uuid.UUID) (ea1 []mm_repository.EmbeddingModel, err error)
+	funcListEmbeddingsByKBFileUID          func(ctx context.Context, kbFileUID types.FileUIDType) (ea1 []mm_repository.EmbeddingModel, err error)
 	funcListEmbeddingsByKBFileUIDOrigin    string
-	inspectFuncListEmbeddingsByKBFileUID   func(ctx context.Context, kbFileUID uuid.UUID)
+	inspectFuncListEmbeddingsByKBFileUID   func(ctx context.Context, kbFileUID types.FileUIDType)
 	afterListEmbeddingsByKBFileUIDCounter  uint64
 	beforeListEmbeddingsByKBFileUIDCounter uint64
 	ListEmbeddingsByKBFileUIDMock          mRepositoryMockListEmbeddingsByKBFileUID
@@ -522,9 +521,9 @@ type RepositoryMock struct {
 	beforeListTextChunksByKBFileUIDCounter uint64
 	ListTextChunksByKBFileUIDMock          mRepositoryMockListTextChunksByKBFileUID
 
-	funcProcessKnowledgeBaseFiles          func(ctx context.Context, fileUIDs []string, requester uuid.UUID) (ka1 []mm_repository.KnowledgeBaseFileModel, err error)
+	funcProcessKnowledgeBaseFiles          func(ctx context.Context, fileUIDs []string, requester types.RequesterUIDType) (ka1 []mm_repository.KnowledgeBaseFileModel, err error)
 	funcProcessKnowledgeBaseFilesOrigin    string
-	inspectFuncProcessKnowledgeBaseFiles   func(ctx context.Context, fileUIDs []string, requester uuid.UUID)
+	inspectFuncProcessKnowledgeBaseFiles   func(ctx context.Context, fileUIDs []string, requester types.RequesterUIDType)
 	afterProcessKnowledgeBaseFilesCounter  uint64
 	beforeProcessKnowledgeBaseFilesCounter uint64
 	ProcessKnowledgeBaseFilesMock          mRepositoryMockProcessKnowledgeBaseFiles
@@ -536,9 +535,9 @@ type RepositoryMock struct {
 	beforeSaveConvertedFileCounter uint64
 	SaveConvertedFileMock          mRepositoryMockSaveConvertedFile
 
-	funcSetChatCacheMetadata          func(ctx context.Context, kbUID uuid.UUID, fileUIDs []uuid.UUID, metadata *mm_repository.ChatCacheMetadata, ttl time.Duration) (err error)
+	funcSetChatCacheMetadata          func(ctx context.Context, kbUID types.KBUIDType, fileUIDs []types.FileUIDType, metadata *mm_repository.ChatCacheMetadata, ttl time.Duration) (err error)
 	funcSetChatCacheMetadataOrigin    string
-	inspectFuncSetChatCacheMetadata   func(ctx context.Context, kbUID uuid.UUID, fileUIDs []uuid.UUID, metadata *mm_repository.ChatCacheMetadata, ttl time.Duration)
+	inspectFuncSetChatCacheMetadata   func(ctx context.Context, kbUID types.KBUIDType, fileUIDs []types.FileUIDType, metadata *mm_repository.ChatCacheMetadata, ttl time.Duration)
 	afterSetChatCacheMetadataCounter  uint64
 	beforeSetChatCacheMetadataCounter uint64
 	SetChatCacheMetadataMock          mRepositoryMockSetChatCacheMetadata
@@ -550,9 +549,9 @@ type RepositoryMock struct {
 	beforeSimilarVectorsInCollectionCounter uint64
 	SimilarVectorsInCollectionMock          mRepositoryMockSimilarVectorsInCollection
 
-	funcUpdateConvertedFile          func(ctx context.Context, uid uuid.UUID, update map[string]any) (err error)
+	funcUpdateConvertedFile          func(ctx context.Context, uid types.ConvertedFileUIDType, update map[string]any) (err error)
 	funcUpdateConvertedFileOrigin    string
-	inspectFuncUpdateConvertedFile   func(ctx context.Context, uid uuid.UUID, update map[string]any)
+	inspectFuncUpdateConvertedFile   func(ctx context.Context, uid types.ConvertedFileUIDType, update map[string]any)
 	afterUpdateConvertedFileCounter  uint64
 	beforeUpdateConvertedFileCounter uint64
 	UpdateConvertedFileMock          mRepositoryMockUpdateConvertedFile
@@ -585,9 +584,9 @@ type RepositoryMock struct {
 	beforeUpdateObjectCounter uint64
 	UpdateObjectMock          mRepositoryMockUpdateObject
 
-	funcUpdateObjectByUpdateMap          func(ctx context.Context, objUID uuid.UUID, updateMap map[string]any) (op1 *mm_repository.ObjectModel, err error)
+	funcUpdateObjectByUpdateMap          func(ctx context.Context, objUID types.ObjectUIDType, updateMap map[string]any) (op1 *mm_repository.ObjectModel, err error)
 	funcUpdateObjectByUpdateMapOrigin    string
-	inspectFuncUpdateObjectByUpdateMap   func(ctx context.Context, objUID uuid.UUID, updateMap map[string]any)
+	inspectFuncUpdateObjectByUpdateMap   func(ctx context.Context, objUID types.ObjectUIDType, updateMap map[string]any)
 	afterUpdateObjectByUpdateMapCounter  uint64
 	beforeUpdateObjectByUpdateMapCounter uint64
 	UpdateObjectByUpdateMapMock          mRepositoryMockUpdateObjectByUpdateMap
@@ -4897,15 +4896,15 @@ type RepositoryMockDeleteChatCacheMetadataExpectation struct {
 // RepositoryMockDeleteChatCacheMetadataParams contains parameters of the Repository.DeleteChatCacheMetadata
 type RepositoryMockDeleteChatCacheMetadataParams struct {
 	ctx      context.Context
-	kbUID    uuid.UUID
-	fileUIDs []uuid.UUID
+	kbUID    types.KBUIDType
+	fileUIDs []types.FileUIDType
 }
 
 // RepositoryMockDeleteChatCacheMetadataParamPtrs contains pointers to parameters of the Repository.DeleteChatCacheMetadata
 type RepositoryMockDeleteChatCacheMetadataParamPtrs struct {
 	ctx      *context.Context
-	kbUID    *uuid.UUID
-	fileUIDs *[]uuid.UUID
+	kbUID    *types.KBUIDType
+	fileUIDs *[]types.FileUIDType
 }
 
 // RepositoryMockDeleteChatCacheMetadataResults contains results of the Repository.DeleteChatCacheMetadata
@@ -4932,7 +4931,7 @@ func (mmDeleteChatCacheMetadata *mRepositoryMockDeleteChatCacheMetadata) Optiona
 }
 
 // Expect sets up expected params for Repository.DeleteChatCacheMetadata
-func (mmDeleteChatCacheMetadata *mRepositoryMockDeleteChatCacheMetadata) Expect(ctx context.Context, kbUID uuid.UUID, fileUIDs []uuid.UUID) *mRepositoryMockDeleteChatCacheMetadata {
+func (mmDeleteChatCacheMetadata *mRepositoryMockDeleteChatCacheMetadata) Expect(ctx context.Context, kbUID types.KBUIDType, fileUIDs []types.FileUIDType) *mRepositoryMockDeleteChatCacheMetadata {
 	if mmDeleteChatCacheMetadata.mock.funcDeleteChatCacheMetadata != nil {
 		mmDeleteChatCacheMetadata.mock.t.Fatalf("RepositoryMock.DeleteChatCacheMetadata mock is already set by Set")
 	}
@@ -4980,7 +4979,7 @@ func (mmDeleteChatCacheMetadata *mRepositoryMockDeleteChatCacheMetadata) ExpectC
 }
 
 // ExpectKbUIDParam2 sets up expected param kbUID for Repository.DeleteChatCacheMetadata
-func (mmDeleteChatCacheMetadata *mRepositoryMockDeleteChatCacheMetadata) ExpectKbUIDParam2(kbUID uuid.UUID) *mRepositoryMockDeleteChatCacheMetadata {
+func (mmDeleteChatCacheMetadata *mRepositoryMockDeleteChatCacheMetadata) ExpectKbUIDParam2(kbUID types.KBUIDType) *mRepositoryMockDeleteChatCacheMetadata {
 	if mmDeleteChatCacheMetadata.mock.funcDeleteChatCacheMetadata != nil {
 		mmDeleteChatCacheMetadata.mock.t.Fatalf("RepositoryMock.DeleteChatCacheMetadata mock is already set by Set")
 	}
@@ -5003,7 +5002,7 @@ func (mmDeleteChatCacheMetadata *mRepositoryMockDeleteChatCacheMetadata) ExpectK
 }
 
 // ExpectFileUIDsParam3 sets up expected param fileUIDs for Repository.DeleteChatCacheMetadata
-func (mmDeleteChatCacheMetadata *mRepositoryMockDeleteChatCacheMetadata) ExpectFileUIDsParam3(fileUIDs []uuid.UUID) *mRepositoryMockDeleteChatCacheMetadata {
+func (mmDeleteChatCacheMetadata *mRepositoryMockDeleteChatCacheMetadata) ExpectFileUIDsParam3(fileUIDs []types.FileUIDType) *mRepositoryMockDeleteChatCacheMetadata {
 	if mmDeleteChatCacheMetadata.mock.funcDeleteChatCacheMetadata != nil {
 		mmDeleteChatCacheMetadata.mock.t.Fatalf("RepositoryMock.DeleteChatCacheMetadata mock is already set by Set")
 	}
@@ -5026,7 +5025,7 @@ func (mmDeleteChatCacheMetadata *mRepositoryMockDeleteChatCacheMetadata) ExpectF
 }
 
 // Inspect accepts an inspector function that has same arguments as the Repository.DeleteChatCacheMetadata
-func (mmDeleteChatCacheMetadata *mRepositoryMockDeleteChatCacheMetadata) Inspect(f func(ctx context.Context, kbUID uuid.UUID, fileUIDs []uuid.UUID)) *mRepositoryMockDeleteChatCacheMetadata {
+func (mmDeleteChatCacheMetadata *mRepositoryMockDeleteChatCacheMetadata) Inspect(f func(ctx context.Context, kbUID types.KBUIDType, fileUIDs []types.FileUIDType)) *mRepositoryMockDeleteChatCacheMetadata {
 	if mmDeleteChatCacheMetadata.mock.inspectFuncDeleteChatCacheMetadata != nil {
 		mmDeleteChatCacheMetadata.mock.t.Fatalf("Inspect function is already set for RepositoryMock.DeleteChatCacheMetadata")
 	}
@@ -5051,7 +5050,7 @@ func (mmDeleteChatCacheMetadata *mRepositoryMockDeleteChatCacheMetadata) Return(
 }
 
 // Set uses given function f to mock the Repository.DeleteChatCacheMetadata method
-func (mmDeleteChatCacheMetadata *mRepositoryMockDeleteChatCacheMetadata) Set(f func(ctx context.Context, kbUID uuid.UUID, fileUIDs []uuid.UUID) (err error)) *RepositoryMock {
+func (mmDeleteChatCacheMetadata *mRepositoryMockDeleteChatCacheMetadata) Set(f func(ctx context.Context, kbUID types.KBUIDType, fileUIDs []types.FileUIDType) (err error)) *RepositoryMock {
 	if mmDeleteChatCacheMetadata.defaultExpectation != nil {
 		mmDeleteChatCacheMetadata.mock.t.Fatalf("Default expectation is already set for the Repository.DeleteChatCacheMetadata method")
 	}
@@ -5067,7 +5066,7 @@ func (mmDeleteChatCacheMetadata *mRepositoryMockDeleteChatCacheMetadata) Set(f f
 
 // When sets expectation for the Repository.DeleteChatCacheMetadata which will trigger the result defined by the following
 // Then helper
-func (mmDeleteChatCacheMetadata *mRepositoryMockDeleteChatCacheMetadata) When(ctx context.Context, kbUID uuid.UUID, fileUIDs []uuid.UUID) *RepositoryMockDeleteChatCacheMetadataExpectation {
+func (mmDeleteChatCacheMetadata *mRepositoryMockDeleteChatCacheMetadata) When(ctx context.Context, kbUID types.KBUIDType, fileUIDs []types.FileUIDType) *RepositoryMockDeleteChatCacheMetadataExpectation {
 	if mmDeleteChatCacheMetadata.mock.funcDeleteChatCacheMetadata != nil {
 		mmDeleteChatCacheMetadata.mock.t.Fatalf("RepositoryMock.DeleteChatCacheMetadata mock is already set by Set")
 	}
@@ -5109,7 +5108,7 @@ func (mmDeleteChatCacheMetadata *mRepositoryMockDeleteChatCacheMetadata) invocat
 }
 
 // DeleteChatCacheMetadata implements mm_repository.Repository
-func (mmDeleteChatCacheMetadata *RepositoryMock) DeleteChatCacheMetadata(ctx context.Context, kbUID uuid.UUID, fileUIDs []uuid.UUID) (err error) {
+func (mmDeleteChatCacheMetadata *RepositoryMock) DeleteChatCacheMetadata(ctx context.Context, kbUID types.KBUIDType, fileUIDs []types.FileUIDType) (err error) {
 	mm_atomic.AddUint64(&mmDeleteChatCacheMetadata.beforeDeleteChatCacheMetadataCounter, 1)
 	defer mm_atomic.AddUint64(&mmDeleteChatCacheMetadata.afterDeleteChatCacheMetadataCounter, 1)
 
@@ -5270,13 +5269,13 @@ type RepositoryMockDeleteConvertedFileExpectation struct {
 // RepositoryMockDeleteConvertedFileParams contains parameters of the Repository.DeleteConvertedFile
 type RepositoryMockDeleteConvertedFileParams struct {
 	ctx context.Context
-	uid uuid.UUID
+	uid types.ConvertedFileUIDType
 }
 
 // RepositoryMockDeleteConvertedFileParamPtrs contains pointers to parameters of the Repository.DeleteConvertedFile
 type RepositoryMockDeleteConvertedFileParamPtrs struct {
 	ctx *context.Context
-	uid *uuid.UUID
+	uid *types.ConvertedFileUIDType
 }
 
 // RepositoryMockDeleteConvertedFileResults contains results of the Repository.DeleteConvertedFile
@@ -5302,7 +5301,7 @@ func (mmDeleteConvertedFile *mRepositoryMockDeleteConvertedFile) Optional() *mRe
 }
 
 // Expect sets up expected params for Repository.DeleteConvertedFile
-func (mmDeleteConvertedFile *mRepositoryMockDeleteConvertedFile) Expect(ctx context.Context, uid uuid.UUID) *mRepositoryMockDeleteConvertedFile {
+func (mmDeleteConvertedFile *mRepositoryMockDeleteConvertedFile) Expect(ctx context.Context, uid types.ConvertedFileUIDType) *mRepositoryMockDeleteConvertedFile {
 	if mmDeleteConvertedFile.mock.funcDeleteConvertedFile != nil {
 		mmDeleteConvertedFile.mock.t.Fatalf("RepositoryMock.DeleteConvertedFile mock is already set by Set")
 	}
@@ -5350,7 +5349,7 @@ func (mmDeleteConvertedFile *mRepositoryMockDeleteConvertedFile) ExpectCtxParam1
 }
 
 // ExpectUidParam2 sets up expected param uid for Repository.DeleteConvertedFile
-func (mmDeleteConvertedFile *mRepositoryMockDeleteConvertedFile) ExpectUidParam2(uid uuid.UUID) *mRepositoryMockDeleteConvertedFile {
+func (mmDeleteConvertedFile *mRepositoryMockDeleteConvertedFile) ExpectUidParam2(uid types.ConvertedFileUIDType) *mRepositoryMockDeleteConvertedFile {
 	if mmDeleteConvertedFile.mock.funcDeleteConvertedFile != nil {
 		mmDeleteConvertedFile.mock.t.Fatalf("RepositoryMock.DeleteConvertedFile mock is already set by Set")
 	}
@@ -5373,7 +5372,7 @@ func (mmDeleteConvertedFile *mRepositoryMockDeleteConvertedFile) ExpectUidParam2
 }
 
 // Inspect accepts an inspector function that has same arguments as the Repository.DeleteConvertedFile
-func (mmDeleteConvertedFile *mRepositoryMockDeleteConvertedFile) Inspect(f func(ctx context.Context, uid uuid.UUID)) *mRepositoryMockDeleteConvertedFile {
+func (mmDeleteConvertedFile *mRepositoryMockDeleteConvertedFile) Inspect(f func(ctx context.Context, uid types.ConvertedFileUIDType)) *mRepositoryMockDeleteConvertedFile {
 	if mmDeleteConvertedFile.mock.inspectFuncDeleteConvertedFile != nil {
 		mmDeleteConvertedFile.mock.t.Fatalf("Inspect function is already set for RepositoryMock.DeleteConvertedFile")
 	}
@@ -5398,7 +5397,7 @@ func (mmDeleteConvertedFile *mRepositoryMockDeleteConvertedFile) Return(err erro
 }
 
 // Set uses given function f to mock the Repository.DeleteConvertedFile method
-func (mmDeleteConvertedFile *mRepositoryMockDeleteConvertedFile) Set(f func(ctx context.Context, uid uuid.UUID) (err error)) *RepositoryMock {
+func (mmDeleteConvertedFile *mRepositoryMockDeleteConvertedFile) Set(f func(ctx context.Context, uid types.ConvertedFileUIDType) (err error)) *RepositoryMock {
 	if mmDeleteConvertedFile.defaultExpectation != nil {
 		mmDeleteConvertedFile.mock.t.Fatalf("Default expectation is already set for the Repository.DeleteConvertedFile method")
 	}
@@ -5414,7 +5413,7 @@ func (mmDeleteConvertedFile *mRepositoryMockDeleteConvertedFile) Set(f func(ctx 
 
 // When sets expectation for the Repository.DeleteConvertedFile which will trigger the result defined by the following
 // Then helper
-func (mmDeleteConvertedFile *mRepositoryMockDeleteConvertedFile) When(ctx context.Context, uid uuid.UUID) *RepositoryMockDeleteConvertedFileExpectation {
+func (mmDeleteConvertedFile *mRepositoryMockDeleteConvertedFile) When(ctx context.Context, uid types.ConvertedFileUIDType) *RepositoryMockDeleteConvertedFileExpectation {
 	if mmDeleteConvertedFile.mock.funcDeleteConvertedFile != nil {
 		mmDeleteConvertedFile.mock.t.Fatalf("RepositoryMock.DeleteConvertedFile mock is already set by Set")
 	}
@@ -5456,7 +5455,7 @@ func (mmDeleteConvertedFile *mRepositoryMockDeleteConvertedFile) invocationsDone
 }
 
 // DeleteConvertedFile implements mm_repository.Repository
-func (mmDeleteConvertedFile *RepositoryMock) DeleteConvertedFile(ctx context.Context, uid uuid.UUID) (err error) {
+func (mmDeleteConvertedFile *RepositoryMock) DeleteConvertedFile(ctx context.Context, uid types.ConvertedFileUIDType) (err error) {
 	mm_atomic.AddUint64(&mmDeleteConvertedFile.beforeDeleteConvertedFileCounter, 1)
 	defer mm_atomic.AddUint64(&mmDeleteConvertedFile.afterDeleteConvertedFileCounter, 1)
 
@@ -5612,13 +5611,13 @@ type RepositoryMockDeleteEmbeddingsByKBFileUIDExpectation struct {
 // RepositoryMockDeleteEmbeddingsByKBFileUIDParams contains parameters of the Repository.DeleteEmbeddingsByKBFileUID
 type RepositoryMockDeleteEmbeddingsByKBFileUIDParams struct {
 	ctx       context.Context
-	kbFileUID uuid.UUID
+	kbFileUID types.FileUIDType
 }
 
 // RepositoryMockDeleteEmbeddingsByKBFileUIDParamPtrs contains pointers to parameters of the Repository.DeleteEmbeddingsByKBFileUID
 type RepositoryMockDeleteEmbeddingsByKBFileUIDParamPtrs struct {
 	ctx       *context.Context
-	kbFileUID *uuid.UUID
+	kbFileUID *types.FileUIDType
 }
 
 // RepositoryMockDeleteEmbeddingsByKBFileUIDResults contains results of the Repository.DeleteEmbeddingsByKBFileUID
@@ -5644,7 +5643,7 @@ func (mmDeleteEmbeddingsByKBFileUID *mRepositoryMockDeleteEmbeddingsByKBFileUID)
 }
 
 // Expect sets up expected params for Repository.DeleteEmbeddingsByKBFileUID
-func (mmDeleteEmbeddingsByKBFileUID *mRepositoryMockDeleteEmbeddingsByKBFileUID) Expect(ctx context.Context, kbFileUID uuid.UUID) *mRepositoryMockDeleteEmbeddingsByKBFileUID {
+func (mmDeleteEmbeddingsByKBFileUID *mRepositoryMockDeleteEmbeddingsByKBFileUID) Expect(ctx context.Context, kbFileUID types.FileUIDType) *mRepositoryMockDeleteEmbeddingsByKBFileUID {
 	if mmDeleteEmbeddingsByKBFileUID.mock.funcDeleteEmbeddingsByKBFileUID != nil {
 		mmDeleteEmbeddingsByKBFileUID.mock.t.Fatalf("RepositoryMock.DeleteEmbeddingsByKBFileUID mock is already set by Set")
 	}
@@ -5692,7 +5691,7 @@ func (mmDeleteEmbeddingsByKBFileUID *mRepositoryMockDeleteEmbeddingsByKBFileUID)
 }
 
 // ExpectKbFileUIDParam2 sets up expected param kbFileUID for Repository.DeleteEmbeddingsByKBFileUID
-func (mmDeleteEmbeddingsByKBFileUID *mRepositoryMockDeleteEmbeddingsByKBFileUID) ExpectKbFileUIDParam2(kbFileUID uuid.UUID) *mRepositoryMockDeleteEmbeddingsByKBFileUID {
+func (mmDeleteEmbeddingsByKBFileUID *mRepositoryMockDeleteEmbeddingsByKBFileUID) ExpectKbFileUIDParam2(kbFileUID types.FileUIDType) *mRepositoryMockDeleteEmbeddingsByKBFileUID {
 	if mmDeleteEmbeddingsByKBFileUID.mock.funcDeleteEmbeddingsByKBFileUID != nil {
 		mmDeleteEmbeddingsByKBFileUID.mock.t.Fatalf("RepositoryMock.DeleteEmbeddingsByKBFileUID mock is already set by Set")
 	}
@@ -5715,7 +5714,7 @@ func (mmDeleteEmbeddingsByKBFileUID *mRepositoryMockDeleteEmbeddingsByKBFileUID)
 }
 
 // Inspect accepts an inspector function that has same arguments as the Repository.DeleteEmbeddingsByKBFileUID
-func (mmDeleteEmbeddingsByKBFileUID *mRepositoryMockDeleteEmbeddingsByKBFileUID) Inspect(f func(ctx context.Context, kbFileUID uuid.UUID)) *mRepositoryMockDeleteEmbeddingsByKBFileUID {
+func (mmDeleteEmbeddingsByKBFileUID *mRepositoryMockDeleteEmbeddingsByKBFileUID) Inspect(f func(ctx context.Context, kbFileUID types.FileUIDType)) *mRepositoryMockDeleteEmbeddingsByKBFileUID {
 	if mmDeleteEmbeddingsByKBFileUID.mock.inspectFuncDeleteEmbeddingsByKBFileUID != nil {
 		mmDeleteEmbeddingsByKBFileUID.mock.t.Fatalf("Inspect function is already set for RepositoryMock.DeleteEmbeddingsByKBFileUID")
 	}
@@ -5740,7 +5739,7 @@ func (mmDeleteEmbeddingsByKBFileUID *mRepositoryMockDeleteEmbeddingsByKBFileUID)
 }
 
 // Set uses given function f to mock the Repository.DeleteEmbeddingsByKBFileUID method
-func (mmDeleteEmbeddingsByKBFileUID *mRepositoryMockDeleteEmbeddingsByKBFileUID) Set(f func(ctx context.Context, kbFileUID uuid.UUID) (err error)) *RepositoryMock {
+func (mmDeleteEmbeddingsByKBFileUID *mRepositoryMockDeleteEmbeddingsByKBFileUID) Set(f func(ctx context.Context, kbFileUID types.FileUIDType) (err error)) *RepositoryMock {
 	if mmDeleteEmbeddingsByKBFileUID.defaultExpectation != nil {
 		mmDeleteEmbeddingsByKBFileUID.mock.t.Fatalf("Default expectation is already set for the Repository.DeleteEmbeddingsByKBFileUID method")
 	}
@@ -5756,7 +5755,7 @@ func (mmDeleteEmbeddingsByKBFileUID *mRepositoryMockDeleteEmbeddingsByKBFileUID)
 
 // When sets expectation for the Repository.DeleteEmbeddingsByKBFileUID which will trigger the result defined by the following
 // Then helper
-func (mmDeleteEmbeddingsByKBFileUID *mRepositoryMockDeleteEmbeddingsByKBFileUID) When(ctx context.Context, kbFileUID uuid.UUID) *RepositoryMockDeleteEmbeddingsByKBFileUIDExpectation {
+func (mmDeleteEmbeddingsByKBFileUID *mRepositoryMockDeleteEmbeddingsByKBFileUID) When(ctx context.Context, kbFileUID types.FileUIDType) *RepositoryMockDeleteEmbeddingsByKBFileUIDExpectation {
 	if mmDeleteEmbeddingsByKBFileUID.mock.funcDeleteEmbeddingsByKBFileUID != nil {
 		mmDeleteEmbeddingsByKBFileUID.mock.t.Fatalf("RepositoryMock.DeleteEmbeddingsByKBFileUID mock is already set by Set")
 	}
@@ -5798,7 +5797,7 @@ func (mmDeleteEmbeddingsByKBFileUID *mRepositoryMockDeleteEmbeddingsByKBFileUID)
 }
 
 // DeleteEmbeddingsByKBFileUID implements mm_repository.Repository
-func (mmDeleteEmbeddingsByKBFileUID *RepositoryMock) DeleteEmbeddingsByKBFileUID(ctx context.Context, kbFileUID uuid.UUID) (err error) {
+func (mmDeleteEmbeddingsByKBFileUID *RepositoryMock) DeleteEmbeddingsByKBFileUID(ctx context.Context, kbFileUID types.FileUIDType) (err error) {
 	mm_atomic.AddUint64(&mmDeleteEmbeddingsByKBFileUID.beforeDeleteEmbeddingsByKBFileUIDCounter, 1)
 	defer mm_atomic.AddUint64(&mmDeleteEmbeddingsByKBFileUID.afterDeleteEmbeddingsByKBFileUIDCounter, 1)
 
@@ -7758,13 +7757,13 @@ type RepositoryMockDeleteObjectExpectation struct {
 // RepositoryMockDeleteObjectParams contains parameters of the Repository.DeleteObject
 type RepositoryMockDeleteObjectParams struct {
 	ctx context.Context
-	uid uuid.UUID
+	uid types.ObjectUIDType
 }
 
 // RepositoryMockDeleteObjectParamPtrs contains pointers to parameters of the Repository.DeleteObject
 type RepositoryMockDeleteObjectParamPtrs struct {
 	ctx *context.Context
-	uid *uuid.UUID
+	uid *types.ObjectUIDType
 }
 
 // RepositoryMockDeleteObjectResults contains results of the Repository.DeleteObject
@@ -7790,7 +7789,7 @@ func (mmDeleteObject *mRepositoryMockDeleteObject) Optional() *mRepositoryMockDe
 }
 
 // Expect sets up expected params for Repository.DeleteObject
-func (mmDeleteObject *mRepositoryMockDeleteObject) Expect(ctx context.Context, uid uuid.UUID) *mRepositoryMockDeleteObject {
+func (mmDeleteObject *mRepositoryMockDeleteObject) Expect(ctx context.Context, uid types.ObjectUIDType) *mRepositoryMockDeleteObject {
 	if mmDeleteObject.mock.funcDeleteObject != nil {
 		mmDeleteObject.mock.t.Fatalf("RepositoryMock.DeleteObject mock is already set by Set")
 	}
@@ -7838,7 +7837,7 @@ func (mmDeleteObject *mRepositoryMockDeleteObject) ExpectCtxParam1(ctx context.C
 }
 
 // ExpectUidParam2 sets up expected param uid for Repository.DeleteObject
-func (mmDeleteObject *mRepositoryMockDeleteObject) ExpectUidParam2(uid uuid.UUID) *mRepositoryMockDeleteObject {
+func (mmDeleteObject *mRepositoryMockDeleteObject) ExpectUidParam2(uid types.ObjectUIDType) *mRepositoryMockDeleteObject {
 	if mmDeleteObject.mock.funcDeleteObject != nil {
 		mmDeleteObject.mock.t.Fatalf("RepositoryMock.DeleteObject mock is already set by Set")
 	}
@@ -7861,7 +7860,7 @@ func (mmDeleteObject *mRepositoryMockDeleteObject) ExpectUidParam2(uid uuid.UUID
 }
 
 // Inspect accepts an inspector function that has same arguments as the Repository.DeleteObject
-func (mmDeleteObject *mRepositoryMockDeleteObject) Inspect(f func(ctx context.Context, uid uuid.UUID)) *mRepositoryMockDeleteObject {
+func (mmDeleteObject *mRepositoryMockDeleteObject) Inspect(f func(ctx context.Context, uid types.ObjectUIDType)) *mRepositoryMockDeleteObject {
 	if mmDeleteObject.mock.inspectFuncDeleteObject != nil {
 		mmDeleteObject.mock.t.Fatalf("Inspect function is already set for RepositoryMock.DeleteObject")
 	}
@@ -7886,7 +7885,7 @@ func (mmDeleteObject *mRepositoryMockDeleteObject) Return(err error) *Repository
 }
 
 // Set uses given function f to mock the Repository.DeleteObject method
-func (mmDeleteObject *mRepositoryMockDeleteObject) Set(f func(ctx context.Context, uid uuid.UUID) (err error)) *RepositoryMock {
+func (mmDeleteObject *mRepositoryMockDeleteObject) Set(f func(ctx context.Context, uid types.ObjectUIDType) (err error)) *RepositoryMock {
 	if mmDeleteObject.defaultExpectation != nil {
 		mmDeleteObject.mock.t.Fatalf("Default expectation is already set for the Repository.DeleteObject method")
 	}
@@ -7902,7 +7901,7 @@ func (mmDeleteObject *mRepositoryMockDeleteObject) Set(f func(ctx context.Contex
 
 // When sets expectation for the Repository.DeleteObject which will trigger the result defined by the following
 // Then helper
-func (mmDeleteObject *mRepositoryMockDeleteObject) When(ctx context.Context, uid uuid.UUID) *RepositoryMockDeleteObjectExpectation {
+func (mmDeleteObject *mRepositoryMockDeleteObject) When(ctx context.Context, uid types.ObjectUIDType) *RepositoryMockDeleteObjectExpectation {
 	if mmDeleteObject.mock.funcDeleteObject != nil {
 		mmDeleteObject.mock.t.Fatalf("RepositoryMock.DeleteObject mock is already set by Set")
 	}
@@ -7944,7 +7943,7 @@ func (mmDeleteObject *mRepositoryMockDeleteObject) invocationsDone() bool {
 }
 
 // DeleteObject implements mm_repository.Repository
-func (mmDeleteObject *RepositoryMock) DeleteObject(ctx context.Context, uid uuid.UUID) (err error) {
+func (mmDeleteObject *RepositoryMock) DeleteObject(ctx context.Context, uid types.ObjectUIDType) (err error) {
 	mm_atomic.AddUint64(&mmDeleteObject.beforeDeleteObjectCounter, 1)
 	defer mm_atomic.AddUint64(&mmDeleteObject.afterDeleteObjectCounter, 1)
 
@@ -8100,13 +8099,13 @@ type RepositoryMockDeleteObjectURLExpectation struct {
 // RepositoryMockDeleteObjectURLParams contains parameters of the Repository.DeleteObjectURL
 type RepositoryMockDeleteObjectURLParams struct {
 	ctx context.Context
-	uid uuid.UUID
+	uid types.ObjectURLUIDType
 }
 
 // RepositoryMockDeleteObjectURLParamPtrs contains pointers to parameters of the Repository.DeleteObjectURL
 type RepositoryMockDeleteObjectURLParamPtrs struct {
 	ctx *context.Context
-	uid *uuid.UUID
+	uid *types.ObjectURLUIDType
 }
 
 // RepositoryMockDeleteObjectURLResults contains results of the Repository.DeleteObjectURL
@@ -8132,7 +8131,7 @@ func (mmDeleteObjectURL *mRepositoryMockDeleteObjectURL) Optional() *mRepository
 }
 
 // Expect sets up expected params for Repository.DeleteObjectURL
-func (mmDeleteObjectURL *mRepositoryMockDeleteObjectURL) Expect(ctx context.Context, uid uuid.UUID) *mRepositoryMockDeleteObjectURL {
+func (mmDeleteObjectURL *mRepositoryMockDeleteObjectURL) Expect(ctx context.Context, uid types.ObjectURLUIDType) *mRepositoryMockDeleteObjectURL {
 	if mmDeleteObjectURL.mock.funcDeleteObjectURL != nil {
 		mmDeleteObjectURL.mock.t.Fatalf("RepositoryMock.DeleteObjectURL mock is already set by Set")
 	}
@@ -8180,7 +8179,7 @@ func (mmDeleteObjectURL *mRepositoryMockDeleteObjectURL) ExpectCtxParam1(ctx con
 }
 
 // ExpectUidParam2 sets up expected param uid for Repository.DeleteObjectURL
-func (mmDeleteObjectURL *mRepositoryMockDeleteObjectURL) ExpectUidParam2(uid uuid.UUID) *mRepositoryMockDeleteObjectURL {
+func (mmDeleteObjectURL *mRepositoryMockDeleteObjectURL) ExpectUidParam2(uid types.ObjectURLUIDType) *mRepositoryMockDeleteObjectURL {
 	if mmDeleteObjectURL.mock.funcDeleteObjectURL != nil {
 		mmDeleteObjectURL.mock.t.Fatalf("RepositoryMock.DeleteObjectURL mock is already set by Set")
 	}
@@ -8203,7 +8202,7 @@ func (mmDeleteObjectURL *mRepositoryMockDeleteObjectURL) ExpectUidParam2(uid uui
 }
 
 // Inspect accepts an inspector function that has same arguments as the Repository.DeleteObjectURL
-func (mmDeleteObjectURL *mRepositoryMockDeleteObjectURL) Inspect(f func(ctx context.Context, uid uuid.UUID)) *mRepositoryMockDeleteObjectURL {
+func (mmDeleteObjectURL *mRepositoryMockDeleteObjectURL) Inspect(f func(ctx context.Context, uid types.ObjectURLUIDType)) *mRepositoryMockDeleteObjectURL {
 	if mmDeleteObjectURL.mock.inspectFuncDeleteObjectURL != nil {
 		mmDeleteObjectURL.mock.t.Fatalf("Inspect function is already set for RepositoryMock.DeleteObjectURL")
 	}
@@ -8228,7 +8227,7 @@ func (mmDeleteObjectURL *mRepositoryMockDeleteObjectURL) Return(err error) *Repo
 }
 
 // Set uses given function f to mock the Repository.DeleteObjectURL method
-func (mmDeleteObjectURL *mRepositoryMockDeleteObjectURL) Set(f func(ctx context.Context, uid uuid.UUID) (err error)) *RepositoryMock {
+func (mmDeleteObjectURL *mRepositoryMockDeleteObjectURL) Set(f func(ctx context.Context, uid types.ObjectURLUIDType) (err error)) *RepositoryMock {
 	if mmDeleteObjectURL.defaultExpectation != nil {
 		mmDeleteObjectURL.mock.t.Fatalf("Default expectation is already set for the Repository.DeleteObjectURL method")
 	}
@@ -8244,7 +8243,7 @@ func (mmDeleteObjectURL *mRepositoryMockDeleteObjectURL) Set(f func(ctx context.
 
 // When sets expectation for the Repository.DeleteObjectURL which will trigger the result defined by the following
 // Then helper
-func (mmDeleteObjectURL *mRepositoryMockDeleteObjectURL) When(ctx context.Context, uid uuid.UUID) *RepositoryMockDeleteObjectURLExpectation {
+func (mmDeleteObjectURL *mRepositoryMockDeleteObjectURL) When(ctx context.Context, uid types.ObjectURLUIDType) *RepositoryMockDeleteObjectURLExpectation {
 	if mmDeleteObjectURL.mock.funcDeleteObjectURL != nil {
 		mmDeleteObjectURL.mock.t.Fatalf("RepositoryMock.DeleteObjectURL mock is already set by Set")
 	}
@@ -8286,7 +8285,7 @@ func (mmDeleteObjectURL *mRepositoryMockDeleteObjectURL) invocationsDone() bool 
 }
 
 // DeleteObjectURL implements mm_repository.Repository
-func (mmDeleteObjectURL *RepositoryMock) DeleteObjectURL(ctx context.Context, uid uuid.UUID) (err error) {
+func (mmDeleteObjectURL *RepositoryMock) DeleteObjectURL(ctx context.Context, uid types.ObjectURLUIDType) (err error) {
 	mm_atomic.AddUint64(&mmDeleteObjectURL.beforeDeleteObjectURLCounter, 1)
 	defer mm_atomic.AddUint64(&mmDeleteObjectURL.afterDeleteObjectURLCounter, 1)
 
@@ -9468,15 +9467,15 @@ type RepositoryMockGetChatCacheMetadataExpectation struct {
 // RepositoryMockGetChatCacheMetadataParams contains parameters of the Repository.GetChatCacheMetadata
 type RepositoryMockGetChatCacheMetadataParams struct {
 	ctx      context.Context
-	kbUID    uuid.UUID
-	fileUIDs []uuid.UUID
+	kbUID    types.KBUIDType
+	fileUIDs []types.FileUIDType
 }
 
 // RepositoryMockGetChatCacheMetadataParamPtrs contains pointers to parameters of the Repository.GetChatCacheMetadata
 type RepositoryMockGetChatCacheMetadataParamPtrs struct {
 	ctx      *context.Context
-	kbUID    *uuid.UUID
-	fileUIDs *[]uuid.UUID
+	kbUID    *types.KBUIDType
+	fileUIDs *[]types.FileUIDType
 }
 
 // RepositoryMockGetChatCacheMetadataResults contains results of the Repository.GetChatCacheMetadata
@@ -9504,7 +9503,7 @@ func (mmGetChatCacheMetadata *mRepositoryMockGetChatCacheMetadata) Optional() *m
 }
 
 // Expect sets up expected params for Repository.GetChatCacheMetadata
-func (mmGetChatCacheMetadata *mRepositoryMockGetChatCacheMetadata) Expect(ctx context.Context, kbUID uuid.UUID, fileUIDs []uuid.UUID) *mRepositoryMockGetChatCacheMetadata {
+func (mmGetChatCacheMetadata *mRepositoryMockGetChatCacheMetadata) Expect(ctx context.Context, kbUID types.KBUIDType, fileUIDs []types.FileUIDType) *mRepositoryMockGetChatCacheMetadata {
 	if mmGetChatCacheMetadata.mock.funcGetChatCacheMetadata != nil {
 		mmGetChatCacheMetadata.mock.t.Fatalf("RepositoryMock.GetChatCacheMetadata mock is already set by Set")
 	}
@@ -9552,7 +9551,7 @@ func (mmGetChatCacheMetadata *mRepositoryMockGetChatCacheMetadata) ExpectCtxPara
 }
 
 // ExpectKbUIDParam2 sets up expected param kbUID for Repository.GetChatCacheMetadata
-func (mmGetChatCacheMetadata *mRepositoryMockGetChatCacheMetadata) ExpectKbUIDParam2(kbUID uuid.UUID) *mRepositoryMockGetChatCacheMetadata {
+func (mmGetChatCacheMetadata *mRepositoryMockGetChatCacheMetadata) ExpectKbUIDParam2(kbUID types.KBUIDType) *mRepositoryMockGetChatCacheMetadata {
 	if mmGetChatCacheMetadata.mock.funcGetChatCacheMetadata != nil {
 		mmGetChatCacheMetadata.mock.t.Fatalf("RepositoryMock.GetChatCacheMetadata mock is already set by Set")
 	}
@@ -9575,7 +9574,7 @@ func (mmGetChatCacheMetadata *mRepositoryMockGetChatCacheMetadata) ExpectKbUIDPa
 }
 
 // ExpectFileUIDsParam3 sets up expected param fileUIDs for Repository.GetChatCacheMetadata
-func (mmGetChatCacheMetadata *mRepositoryMockGetChatCacheMetadata) ExpectFileUIDsParam3(fileUIDs []uuid.UUID) *mRepositoryMockGetChatCacheMetadata {
+func (mmGetChatCacheMetadata *mRepositoryMockGetChatCacheMetadata) ExpectFileUIDsParam3(fileUIDs []types.FileUIDType) *mRepositoryMockGetChatCacheMetadata {
 	if mmGetChatCacheMetadata.mock.funcGetChatCacheMetadata != nil {
 		mmGetChatCacheMetadata.mock.t.Fatalf("RepositoryMock.GetChatCacheMetadata mock is already set by Set")
 	}
@@ -9598,7 +9597,7 @@ func (mmGetChatCacheMetadata *mRepositoryMockGetChatCacheMetadata) ExpectFileUID
 }
 
 // Inspect accepts an inspector function that has same arguments as the Repository.GetChatCacheMetadata
-func (mmGetChatCacheMetadata *mRepositoryMockGetChatCacheMetadata) Inspect(f func(ctx context.Context, kbUID uuid.UUID, fileUIDs []uuid.UUID)) *mRepositoryMockGetChatCacheMetadata {
+func (mmGetChatCacheMetadata *mRepositoryMockGetChatCacheMetadata) Inspect(f func(ctx context.Context, kbUID types.KBUIDType, fileUIDs []types.FileUIDType)) *mRepositoryMockGetChatCacheMetadata {
 	if mmGetChatCacheMetadata.mock.inspectFuncGetChatCacheMetadata != nil {
 		mmGetChatCacheMetadata.mock.t.Fatalf("Inspect function is already set for RepositoryMock.GetChatCacheMetadata")
 	}
@@ -9623,7 +9622,7 @@ func (mmGetChatCacheMetadata *mRepositoryMockGetChatCacheMetadata) Return(cp1 *m
 }
 
 // Set uses given function f to mock the Repository.GetChatCacheMetadata method
-func (mmGetChatCacheMetadata *mRepositoryMockGetChatCacheMetadata) Set(f func(ctx context.Context, kbUID uuid.UUID, fileUIDs []uuid.UUID) (cp1 *mm_repository.ChatCacheMetadata, err error)) *RepositoryMock {
+func (mmGetChatCacheMetadata *mRepositoryMockGetChatCacheMetadata) Set(f func(ctx context.Context, kbUID types.KBUIDType, fileUIDs []types.FileUIDType) (cp1 *mm_repository.ChatCacheMetadata, err error)) *RepositoryMock {
 	if mmGetChatCacheMetadata.defaultExpectation != nil {
 		mmGetChatCacheMetadata.mock.t.Fatalf("Default expectation is already set for the Repository.GetChatCacheMetadata method")
 	}
@@ -9639,7 +9638,7 @@ func (mmGetChatCacheMetadata *mRepositoryMockGetChatCacheMetadata) Set(f func(ct
 
 // When sets expectation for the Repository.GetChatCacheMetadata which will trigger the result defined by the following
 // Then helper
-func (mmGetChatCacheMetadata *mRepositoryMockGetChatCacheMetadata) When(ctx context.Context, kbUID uuid.UUID, fileUIDs []uuid.UUID) *RepositoryMockGetChatCacheMetadataExpectation {
+func (mmGetChatCacheMetadata *mRepositoryMockGetChatCacheMetadata) When(ctx context.Context, kbUID types.KBUIDType, fileUIDs []types.FileUIDType) *RepositoryMockGetChatCacheMetadataExpectation {
 	if mmGetChatCacheMetadata.mock.funcGetChatCacheMetadata != nil {
 		mmGetChatCacheMetadata.mock.t.Fatalf("RepositoryMock.GetChatCacheMetadata mock is already set by Set")
 	}
@@ -9681,7 +9680,7 @@ func (mmGetChatCacheMetadata *mRepositoryMockGetChatCacheMetadata) invocationsDo
 }
 
 // GetChatCacheMetadata implements mm_repository.Repository
-func (mmGetChatCacheMetadata *RepositoryMock) GetChatCacheMetadata(ctx context.Context, kbUID uuid.UUID, fileUIDs []uuid.UUID) (cp1 *mm_repository.ChatCacheMetadata, err error) {
+func (mmGetChatCacheMetadata *RepositoryMock) GetChatCacheMetadata(ctx context.Context, kbUID types.KBUIDType, fileUIDs []types.FileUIDType) (cp1 *mm_repository.ChatCacheMetadata, err error) {
 	mm_atomic.AddUint64(&mmGetChatCacheMetadata.beforeGetChatCacheMetadataCounter, 1)
 	defer mm_atomic.AddUint64(&mmGetChatCacheMetadata.afterGetChatCacheMetadataCounter, 1)
 
@@ -10185,18 +10184,18 @@ type RepositoryMockGetCountFilesByListKnowledgeBaseUIDExpectation struct {
 // RepositoryMockGetCountFilesByListKnowledgeBaseUIDParams contains parameters of the Repository.GetCountFilesByListKnowledgeBaseUID
 type RepositoryMockGetCountFilesByListKnowledgeBaseUIDParams struct {
 	ctx    context.Context
-	kbUIDs []mm_repository.KBUID
+	kbUIDs []types.KBUIDType
 }
 
 // RepositoryMockGetCountFilesByListKnowledgeBaseUIDParamPtrs contains pointers to parameters of the Repository.GetCountFilesByListKnowledgeBaseUID
 type RepositoryMockGetCountFilesByListKnowledgeBaseUIDParamPtrs struct {
 	ctx    *context.Context
-	kbUIDs *[]mm_repository.KBUID
+	kbUIDs *[]types.KBUIDType
 }
 
 // RepositoryMockGetCountFilesByListKnowledgeBaseUIDResults contains results of the Repository.GetCountFilesByListKnowledgeBaseUID
 type RepositoryMockGetCountFilesByListKnowledgeBaseUIDResults struct {
-	m1  map[mm_repository.KBUID]int64
+	m1  map[types.KBUIDType]int64
 	err error
 }
 
@@ -10218,7 +10217,7 @@ func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryMockGetCountFilesByListK
 }
 
 // Expect sets up expected params for Repository.GetCountFilesByListKnowledgeBaseUID
-func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryMockGetCountFilesByListKnowledgeBaseUID) Expect(ctx context.Context, kbUIDs []mm_repository.KBUID) *mRepositoryMockGetCountFilesByListKnowledgeBaseUID {
+func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryMockGetCountFilesByListKnowledgeBaseUID) Expect(ctx context.Context, kbUIDs []types.KBUIDType) *mRepositoryMockGetCountFilesByListKnowledgeBaseUID {
 	if mmGetCountFilesByListKnowledgeBaseUID.mock.funcGetCountFilesByListKnowledgeBaseUID != nil {
 		mmGetCountFilesByListKnowledgeBaseUID.mock.t.Fatalf("RepositoryMock.GetCountFilesByListKnowledgeBaseUID mock is already set by Set")
 	}
@@ -10266,7 +10265,7 @@ func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryMockGetCountFilesByListK
 }
 
 // ExpectKbUIDsParam2 sets up expected param kbUIDs for Repository.GetCountFilesByListKnowledgeBaseUID
-func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryMockGetCountFilesByListKnowledgeBaseUID) ExpectKbUIDsParam2(kbUIDs []mm_repository.KBUID) *mRepositoryMockGetCountFilesByListKnowledgeBaseUID {
+func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryMockGetCountFilesByListKnowledgeBaseUID) ExpectKbUIDsParam2(kbUIDs []types.KBUIDType) *mRepositoryMockGetCountFilesByListKnowledgeBaseUID {
 	if mmGetCountFilesByListKnowledgeBaseUID.mock.funcGetCountFilesByListKnowledgeBaseUID != nil {
 		mmGetCountFilesByListKnowledgeBaseUID.mock.t.Fatalf("RepositoryMock.GetCountFilesByListKnowledgeBaseUID mock is already set by Set")
 	}
@@ -10289,7 +10288,7 @@ func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryMockGetCountFilesByListK
 }
 
 // Inspect accepts an inspector function that has same arguments as the Repository.GetCountFilesByListKnowledgeBaseUID
-func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryMockGetCountFilesByListKnowledgeBaseUID) Inspect(f func(ctx context.Context, kbUIDs []mm_repository.KBUID)) *mRepositoryMockGetCountFilesByListKnowledgeBaseUID {
+func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryMockGetCountFilesByListKnowledgeBaseUID) Inspect(f func(ctx context.Context, kbUIDs []types.KBUIDType)) *mRepositoryMockGetCountFilesByListKnowledgeBaseUID {
 	if mmGetCountFilesByListKnowledgeBaseUID.mock.inspectFuncGetCountFilesByListKnowledgeBaseUID != nil {
 		mmGetCountFilesByListKnowledgeBaseUID.mock.t.Fatalf("Inspect function is already set for RepositoryMock.GetCountFilesByListKnowledgeBaseUID")
 	}
@@ -10300,7 +10299,7 @@ func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryMockGetCountFilesByListK
 }
 
 // Return sets up results that will be returned by Repository.GetCountFilesByListKnowledgeBaseUID
-func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryMockGetCountFilesByListKnowledgeBaseUID) Return(m1 map[mm_repository.KBUID]int64, err error) *RepositoryMock {
+func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryMockGetCountFilesByListKnowledgeBaseUID) Return(m1 map[types.KBUIDType]int64, err error) *RepositoryMock {
 	if mmGetCountFilesByListKnowledgeBaseUID.mock.funcGetCountFilesByListKnowledgeBaseUID != nil {
 		mmGetCountFilesByListKnowledgeBaseUID.mock.t.Fatalf("RepositoryMock.GetCountFilesByListKnowledgeBaseUID mock is already set by Set")
 	}
@@ -10314,7 +10313,7 @@ func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryMockGetCountFilesByListK
 }
 
 // Set uses given function f to mock the Repository.GetCountFilesByListKnowledgeBaseUID method
-func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryMockGetCountFilesByListKnowledgeBaseUID) Set(f func(ctx context.Context, kbUIDs []mm_repository.KBUID) (m1 map[mm_repository.KBUID]int64, err error)) *RepositoryMock {
+func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryMockGetCountFilesByListKnowledgeBaseUID) Set(f func(ctx context.Context, kbUIDs []types.KBUIDType) (m1 map[types.KBUIDType]int64, err error)) *RepositoryMock {
 	if mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation != nil {
 		mmGetCountFilesByListKnowledgeBaseUID.mock.t.Fatalf("Default expectation is already set for the Repository.GetCountFilesByListKnowledgeBaseUID method")
 	}
@@ -10330,7 +10329,7 @@ func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryMockGetCountFilesByListK
 
 // When sets expectation for the Repository.GetCountFilesByListKnowledgeBaseUID which will trigger the result defined by the following
 // Then helper
-func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryMockGetCountFilesByListKnowledgeBaseUID) When(ctx context.Context, kbUIDs []mm_repository.KBUID) *RepositoryMockGetCountFilesByListKnowledgeBaseUIDExpectation {
+func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryMockGetCountFilesByListKnowledgeBaseUID) When(ctx context.Context, kbUIDs []types.KBUIDType) *RepositoryMockGetCountFilesByListKnowledgeBaseUIDExpectation {
 	if mmGetCountFilesByListKnowledgeBaseUID.mock.funcGetCountFilesByListKnowledgeBaseUID != nil {
 		mmGetCountFilesByListKnowledgeBaseUID.mock.t.Fatalf("RepositoryMock.GetCountFilesByListKnowledgeBaseUID mock is already set by Set")
 	}
@@ -10345,7 +10344,7 @@ func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryMockGetCountFilesByListK
 }
 
 // Then sets up Repository.GetCountFilesByListKnowledgeBaseUID return parameters for the expectation previously defined by the When method
-func (e *RepositoryMockGetCountFilesByListKnowledgeBaseUIDExpectation) Then(m1 map[mm_repository.KBUID]int64, err error) *RepositoryMock {
+func (e *RepositoryMockGetCountFilesByListKnowledgeBaseUIDExpectation) Then(m1 map[types.KBUIDType]int64, err error) *RepositoryMock {
 	e.results = &RepositoryMockGetCountFilesByListKnowledgeBaseUIDResults{m1, err}
 	return e.mock
 }
@@ -10372,7 +10371,7 @@ func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryMockGetCountFilesByListK
 }
 
 // GetCountFilesByListKnowledgeBaseUID implements mm_repository.Repository
-func (mmGetCountFilesByListKnowledgeBaseUID *RepositoryMock) GetCountFilesByListKnowledgeBaseUID(ctx context.Context, kbUIDs []mm_repository.KBUID) (m1 map[mm_repository.KBUID]int64, err error) {
+func (mmGetCountFilesByListKnowledgeBaseUID *RepositoryMock) GetCountFilesByListKnowledgeBaseUID(ctx context.Context, kbUIDs []types.KBUIDType) (m1 map[types.KBUIDType]int64, err error) {
 	mm_atomic.AddUint64(&mmGetCountFilesByListKnowledgeBaseUID.beforeGetCountFilesByListKnowledgeBaseUIDCounter, 1)
 	defer mm_atomic.AddUint64(&mmGetCountFilesByListKnowledgeBaseUID.afterGetCountFilesByListKnowledgeBaseUIDCounter, 1)
 
@@ -12017,13 +12016,13 @@ type RepositoryMockGetKnowledgeBaseByUIDExpectation struct {
 // RepositoryMockGetKnowledgeBaseByUIDParams contains parameters of the Repository.GetKnowledgeBaseByUID
 type RepositoryMockGetKnowledgeBaseByUIDParams struct {
 	ctx context.Context
-	u1  uuid.UUID
+	k1  types.KBUIDType
 }
 
 // RepositoryMockGetKnowledgeBaseByUIDParamPtrs contains pointers to parameters of the Repository.GetKnowledgeBaseByUID
 type RepositoryMockGetKnowledgeBaseByUIDParamPtrs struct {
 	ctx *context.Context
-	u1  *uuid.UUID
+	k1  *types.KBUIDType
 }
 
 // RepositoryMockGetKnowledgeBaseByUIDResults contains results of the Repository.GetKnowledgeBaseByUID
@@ -12036,7 +12035,7 @@ type RepositoryMockGetKnowledgeBaseByUIDResults struct {
 type RepositoryMockGetKnowledgeBaseByUIDExpectationOrigins struct {
 	origin    string
 	originCtx string
-	originU1  string
+	originK1  string
 }
 
 // Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
@@ -12050,7 +12049,7 @@ func (mmGetKnowledgeBaseByUID *mRepositoryMockGetKnowledgeBaseByUID) Optional() 
 }
 
 // Expect sets up expected params for Repository.GetKnowledgeBaseByUID
-func (mmGetKnowledgeBaseByUID *mRepositoryMockGetKnowledgeBaseByUID) Expect(ctx context.Context, u1 uuid.UUID) *mRepositoryMockGetKnowledgeBaseByUID {
+func (mmGetKnowledgeBaseByUID *mRepositoryMockGetKnowledgeBaseByUID) Expect(ctx context.Context, k1 types.KBUIDType) *mRepositoryMockGetKnowledgeBaseByUID {
 	if mmGetKnowledgeBaseByUID.mock.funcGetKnowledgeBaseByUID != nil {
 		mmGetKnowledgeBaseByUID.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseByUID mock is already set by Set")
 	}
@@ -12063,7 +12062,7 @@ func (mmGetKnowledgeBaseByUID *mRepositoryMockGetKnowledgeBaseByUID) Expect(ctx 
 		mmGetKnowledgeBaseByUID.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseByUID mock is already set by ExpectParams functions")
 	}
 
-	mmGetKnowledgeBaseByUID.defaultExpectation.params = &RepositoryMockGetKnowledgeBaseByUIDParams{ctx, u1}
+	mmGetKnowledgeBaseByUID.defaultExpectation.params = &RepositoryMockGetKnowledgeBaseByUIDParams{ctx, k1}
 	mmGetKnowledgeBaseByUID.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
 	for _, e := range mmGetKnowledgeBaseByUID.expectations {
 		if minimock.Equal(e.params, mmGetKnowledgeBaseByUID.defaultExpectation.params) {
@@ -12097,8 +12096,8 @@ func (mmGetKnowledgeBaseByUID *mRepositoryMockGetKnowledgeBaseByUID) ExpectCtxPa
 	return mmGetKnowledgeBaseByUID
 }
 
-// ExpectU1Param2 sets up expected param u1 for Repository.GetKnowledgeBaseByUID
-func (mmGetKnowledgeBaseByUID *mRepositoryMockGetKnowledgeBaseByUID) ExpectU1Param2(u1 uuid.UUID) *mRepositoryMockGetKnowledgeBaseByUID {
+// ExpectK1Param2 sets up expected param k1 for Repository.GetKnowledgeBaseByUID
+func (mmGetKnowledgeBaseByUID *mRepositoryMockGetKnowledgeBaseByUID) ExpectK1Param2(k1 types.KBUIDType) *mRepositoryMockGetKnowledgeBaseByUID {
 	if mmGetKnowledgeBaseByUID.mock.funcGetKnowledgeBaseByUID != nil {
 		mmGetKnowledgeBaseByUID.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseByUID mock is already set by Set")
 	}
@@ -12114,14 +12113,14 @@ func (mmGetKnowledgeBaseByUID *mRepositoryMockGetKnowledgeBaseByUID) ExpectU1Par
 	if mmGetKnowledgeBaseByUID.defaultExpectation.paramPtrs == nil {
 		mmGetKnowledgeBaseByUID.defaultExpectation.paramPtrs = &RepositoryMockGetKnowledgeBaseByUIDParamPtrs{}
 	}
-	mmGetKnowledgeBaseByUID.defaultExpectation.paramPtrs.u1 = &u1
-	mmGetKnowledgeBaseByUID.defaultExpectation.expectationOrigins.originU1 = minimock.CallerInfo(1)
+	mmGetKnowledgeBaseByUID.defaultExpectation.paramPtrs.k1 = &k1
+	mmGetKnowledgeBaseByUID.defaultExpectation.expectationOrigins.originK1 = minimock.CallerInfo(1)
 
 	return mmGetKnowledgeBaseByUID
 }
 
 // Inspect accepts an inspector function that has same arguments as the Repository.GetKnowledgeBaseByUID
-func (mmGetKnowledgeBaseByUID *mRepositoryMockGetKnowledgeBaseByUID) Inspect(f func(ctx context.Context, u1 uuid.UUID)) *mRepositoryMockGetKnowledgeBaseByUID {
+func (mmGetKnowledgeBaseByUID *mRepositoryMockGetKnowledgeBaseByUID) Inspect(f func(ctx context.Context, k1 types.KBUIDType)) *mRepositoryMockGetKnowledgeBaseByUID {
 	if mmGetKnowledgeBaseByUID.mock.inspectFuncGetKnowledgeBaseByUID != nil {
 		mmGetKnowledgeBaseByUID.mock.t.Fatalf("Inspect function is already set for RepositoryMock.GetKnowledgeBaseByUID")
 	}
@@ -12146,7 +12145,7 @@ func (mmGetKnowledgeBaseByUID *mRepositoryMockGetKnowledgeBaseByUID) Return(kp1 
 }
 
 // Set uses given function f to mock the Repository.GetKnowledgeBaseByUID method
-func (mmGetKnowledgeBaseByUID *mRepositoryMockGetKnowledgeBaseByUID) Set(f func(ctx context.Context, u1 uuid.UUID) (kp1 *mm_repository.KnowledgeBaseModel, err error)) *RepositoryMock {
+func (mmGetKnowledgeBaseByUID *mRepositoryMockGetKnowledgeBaseByUID) Set(f func(ctx context.Context, k1 types.KBUIDType) (kp1 *mm_repository.KnowledgeBaseModel, err error)) *RepositoryMock {
 	if mmGetKnowledgeBaseByUID.defaultExpectation != nil {
 		mmGetKnowledgeBaseByUID.mock.t.Fatalf("Default expectation is already set for the Repository.GetKnowledgeBaseByUID method")
 	}
@@ -12162,14 +12161,14 @@ func (mmGetKnowledgeBaseByUID *mRepositoryMockGetKnowledgeBaseByUID) Set(f func(
 
 // When sets expectation for the Repository.GetKnowledgeBaseByUID which will trigger the result defined by the following
 // Then helper
-func (mmGetKnowledgeBaseByUID *mRepositoryMockGetKnowledgeBaseByUID) When(ctx context.Context, u1 uuid.UUID) *RepositoryMockGetKnowledgeBaseByUIDExpectation {
+func (mmGetKnowledgeBaseByUID *mRepositoryMockGetKnowledgeBaseByUID) When(ctx context.Context, k1 types.KBUIDType) *RepositoryMockGetKnowledgeBaseByUIDExpectation {
 	if mmGetKnowledgeBaseByUID.mock.funcGetKnowledgeBaseByUID != nil {
 		mmGetKnowledgeBaseByUID.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseByUID mock is already set by Set")
 	}
 
 	expectation := &RepositoryMockGetKnowledgeBaseByUIDExpectation{
 		mock:               mmGetKnowledgeBaseByUID.mock,
-		params:             &RepositoryMockGetKnowledgeBaseByUIDParams{ctx, u1},
+		params:             &RepositoryMockGetKnowledgeBaseByUIDParams{ctx, k1},
 		expectationOrigins: RepositoryMockGetKnowledgeBaseByUIDExpectationOrigins{origin: minimock.CallerInfo(1)},
 	}
 	mmGetKnowledgeBaseByUID.expectations = append(mmGetKnowledgeBaseByUID.expectations, expectation)
@@ -12204,17 +12203,17 @@ func (mmGetKnowledgeBaseByUID *mRepositoryMockGetKnowledgeBaseByUID) invocations
 }
 
 // GetKnowledgeBaseByUID implements mm_repository.Repository
-func (mmGetKnowledgeBaseByUID *RepositoryMock) GetKnowledgeBaseByUID(ctx context.Context, u1 uuid.UUID) (kp1 *mm_repository.KnowledgeBaseModel, err error) {
+func (mmGetKnowledgeBaseByUID *RepositoryMock) GetKnowledgeBaseByUID(ctx context.Context, k1 types.KBUIDType) (kp1 *mm_repository.KnowledgeBaseModel, err error) {
 	mm_atomic.AddUint64(&mmGetKnowledgeBaseByUID.beforeGetKnowledgeBaseByUIDCounter, 1)
 	defer mm_atomic.AddUint64(&mmGetKnowledgeBaseByUID.afterGetKnowledgeBaseByUIDCounter, 1)
 
 	mmGetKnowledgeBaseByUID.t.Helper()
 
 	if mmGetKnowledgeBaseByUID.inspectFuncGetKnowledgeBaseByUID != nil {
-		mmGetKnowledgeBaseByUID.inspectFuncGetKnowledgeBaseByUID(ctx, u1)
+		mmGetKnowledgeBaseByUID.inspectFuncGetKnowledgeBaseByUID(ctx, k1)
 	}
 
-	mm_params := RepositoryMockGetKnowledgeBaseByUIDParams{ctx, u1}
+	mm_params := RepositoryMockGetKnowledgeBaseByUIDParams{ctx, k1}
 
 	// Record call args
 	mmGetKnowledgeBaseByUID.GetKnowledgeBaseByUIDMock.mutex.Lock()
@@ -12233,7 +12232,7 @@ func (mmGetKnowledgeBaseByUID *RepositoryMock) GetKnowledgeBaseByUID(ctx context
 		mm_want := mmGetKnowledgeBaseByUID.GetKnowledgeBaseByUIDMock.defaultExpectation.params
 		mm_want_ptrs := mmGetKnowledgeBaseByUID.GetKnowledgeBaseByUIDMock.defaultExpectation.paramPtrs
 
-		mm_got := RepositoryMockGetKnowledgeBaseByUIDParams{ctx, u1}
+		mm_got := RepositoryMockGetKnowledgeBaseByUIDParams{ctx, k1}
 
 		if mm_want_ptrs != nil {
 
@@ -12242,9 +12241,9 @@ func (mmGetKnowledgeBaseByUID *RepositoryMock) GetKnowledgeBaseByUID(ctx context
 					mmGetKnowledgeBaseByUID.GetKnowledgeBaseByUIDMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
 			}
 
-			if mm_want_ptrs.u1 != nil && !minimock.Equal(*mm_want_ptrs.u1, mm_got.u1) {
-				mmGetKnowledgeBaseByUID.t.Errorf("RepositoryMock.GetKnowledgeBaseByUID got unexpected parameter u1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmGetKnowledgeBaseByUID.GetKnowledgeBaseByUIDMock.defaultExpectation.expectationOrigins.originU1, *mm_want_ptrs.u1, mm_got.u1, minimock.Diff(*mm_want_ptrs.u1, mm_got.u1))
+			if mm_want_ptrs.k1 != nil && !minimock.Equal(*mm_want_ptrs.k1, mm_got.k1) {
+				mmGetKnowledgeBaseByUID.t.Errorf("RepositoryMock.GetKnowledgeBaseByUID got unexpected parameter k1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetKnowledgeBaseByUID.GetKnowledgeBaseByUIDMock.defaultExpectation.expectationOrigins.originK1, *mm_want_ptrs.k1, mm_got.k1, minimock.Diff(*mm_want_ptrs.k1, mm_got.k1))
 			}
 
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
@@ -12259,9 +12258,9 @@ func (mmGetKnowledgeBaseByUID *RepositoryMock) GetKnowledgeBaseByUID(ctx context
 		return (*mm_results).kp1, (*mm_results).err
 	}
 	if mmGetKnowledgeBaseByUID.funcGetKnowledgeBaseByUID != nil {
-		return mmGetKnowledgeBaseByUID.funcGetKnowledgeBaseByUID(ctx, u1)
+		return mmGetKnowledgeBaseByUID.funcGetKnowledgeBaseByUID(ctx, k1)
 	}
-	mmGetKnowledgeBaseByUID.t.Fatalf("Unexpected call to RepositoryMock.GetKnowledgeBaseByUID. %v %v", ctx, u1)
+	mmGetKnowledgeBaseByUID.t.Fatalf("Unexpected call to RepositoryMock.GetKnowledgeBaseByUID. %v %v", ctx, k1)
 	return
 }
 
@@ -12734,14 +12733,14 @@ type RepositoryMockGetKnowledgeBaseFilesByFileUIDsExpectation struct {
 // RepositoryMockGetKnowledgeBaseFilesByFileUIDsParams contains parameters of the Repository.GetKnowledgeBaseFilesByFileUIDs
 type RepositoryMockGetKnowledgeBaseFilesByFileUIDsParams struct {
 	ctx      context.Context
-	fileUIDs []uuid.UUID
+	fileUIDs []types.FileUIDType
 	columns  []string
 }
 
 // RepositoryMockGetKnowledgeBaseFilesByFileUIDsParamPtrs contains pointers to parameters of the Repository.GetKnowledgeBaseFilesByFileUIDs
 type RepositoryMockGetKnowledgeBaseFilesByFileUIDsParamPtrs struct {
 	ctx      *context.Context
-	fileUIDs *[]uuid.UUID
+	fileUIDs *[]types.FileUIDType
 	columns  *[]string
 }
 
@@ -12770,7 +12769,7 @@ func (mmGetKnowledgeBaseFilesByFileUIDs *mRepositoryMockGetKnowledgeBaseFilesByF
 }
 
 // Expect sets up expected params for Repository.GetKnowledgeBaseFilesByFileUIDs
-func (mmGetKnowledgeBaseFilesByFileUIDs *mRepositoryMockGetKnowledgeBaseFilesByFileUIDs) Expect(ctx context.Context, fileUIDs []uuid.UUID, columns ...string) *mRepositoryMockGetKnowledgeBaseFilesByFileUIDs {
+func (mmGetKnowledgeBaseFilesByFileUIDs *mRepositoryMockGetKnowledgeBaseFilesByFileUIDs) Expect(ctx context.Context, fileUIDs []types.FileUIDType, columns ...string) *mRepositoryMockGetKnowledgeBaseFilesByFileUIDs {
 	if mmGetKnowledgeBaseFilesByFileUIDs.mock.funcGetKnowledgeBaseFilesByFileUIDs != nil {
 		mmGetKnowledgeBaseFilesByFileUIDs.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseFilesByFileUIDs mock is already set by Set")
 	}
@@ -12818,7 +12817,7 @@ func (mmGetKnowledgeBaseFilesByFileUIDs *mRepositoryMockGetKnowledgeBaseFilesByF
 }
 
 // ExpectFileUIDsParam2 sets up expected param fileUIDs for Repository.GetKnowledgeBaseFilesByFileUIDs
-func (mmGetKnowledgeBaseFilesByFileUIDs *mRepositoryMockGetKnowledgeBaseFilesByFileUIDs) ExpectFileUIDsParam2(fileUIDs []uuid.UUID) *mRepositoryMockGetKnowledgeBaseFilesByFileUIDs {
+func (mmGetKnowledgeBaseFilesByFileUIDs *mRepositoryMockGetKnowledgeBaseFilesByFileUIDs) ExpectFileUIDsParam2(fileUIDs []types.FileUIDType) *mRepositoryMockGetKnowledgeBaseFilesByFileUIDs {
 	if mmGetKnowledgeBaseFilesByFileUIDs.mock.funcGetKnowledgeBaseFilesByFileUIDs != nil {
 		mmGetKnowledgeBaseFilesByFileUIDs.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseFilesByFileUIDs mock is already set by Set")
 	}
@@ -12864,7 +12863,7 @@ func (mmGetKnowledgeBaseFilesByFileUIDs *mRepositoryMockGetKnowledgeBaseFilesByF
 }
 
 // Inspect accepts an inspector function that has same arguments as the Repository.GetKnowledgeBaseFilesByFileUIDs
-func (mmGetKnowledgeBaseFilesByFileUIDs *mRepositoryMockGetKnowledgeBaseFilesByFileUIDs) Inspect(f func(ctx context.Context, fileUIDs []uuid.UUID, columns ...string)) *mRepositoryMockGetKnowledgeBaseFilesByFileUIDs {
+func (mmGetKnowledgeBaseFilesByFileUIDs *mRepositoryMockGetKnowledgeBaseFilesByFileUIDs) Inspect(f func(ctx context.Context, fileUIDs []types.FileUIDType, columns ...string)) *mRepositoryMockGetKnowledgeBaseFilesByFileUIDs {
 	if mmGetKnowledgeBaseFilesByFileUIDs.mock.inspectFuncGetKnowledgeBaseFilesByFileUIDs != nil {
 		mmGetKnowledgeBaseFilesByFileUIDs.mock.t.Fatalf("Inspect function is already set for RepositoryMock.GetKnowledgeBaseFilesByFileUIDs")
 	}
@@ -12889,7 +12888,7 @@ func (mmGetKnowledgeBaseFilesByFileUIDs *mRepositoryMockGetKnowledgeBaseFilesByF
 }
 
 // Set uses given function f to mock the Repository.GetKnowledgeBaseFilesByFileUIDs method
-func (mmGetKnowledgeBaseFilesByFileUIDs *mRepositoryMockGetKnowledgeBaseFilesByFileUIDs) Set(f func(ctx context.Context, fileUIDs []uuid.UUID, columns ...string) (ka1 []mm_repository.KnowledgeBaseFileModel, err error)) *RepositoryMock {
+func (mmGetKnowledgeBaseFilesByFileUIDs *mRepositoryMockGetKnowledgeBaseFilesByFileUIDs) Set(f func(ctx context.Context, fileUIDs []types.FileUIDType, columns ...string) (ka1 []mm_repository.KnowledgeBaseFileModel, err error)) *RepositoryMock {
 	if mmGetKnowledgeBaseFilesByFileUIDs.defaultExpectation != nil {
 		mmGetKnowledgeBaseFilesByFileUIDs.mock.t.Fatalf("Default expectation is already set for the Repository.GetKnowledgeBaseFilesByFileUIDs method")
 	}
@@ -12905,7 +12904,7 @@ func (mmGetKnowledgeBaseFilesByFileUIDs *mRepositoryMockGetKnowledgeBaseFilesByF
 
 // When sets expectation for the Repository.GetKnowledgeBaseFilesByFileUIDs which will trigger the result defined by the following
 // Then helper
-func (mmGetKnowledgeBaseFilesByFileUIDs *mRepositoryMockGetKnowledgeBaseFilesByFileUIDs) When(ctx context.Context, fileUIDs []uuid.UUID, columns ...string) *RepositoryMockGetKnowledgeBaseFilesByFileUIDsExpectation {
+func (mmGetKnowledgeBaseFilesByFileUIDs *mRepositoryMockGetKnowledgeBaseFilesByFileUIDs) When(ctx context.Context, fileUIDs []types.FileUIDType, columns ...string) *RepositoryMockGetKnowledgeBaseFilesByFileUIDsExpectation {
 	if mmGetKnowledgeBaseFilesByFileUIDs.mock.funcGetKnowledgeBaseFilesByFileUIDs != nil {
 		mmGetKnowledgeBaseFilesByFileUIDs.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseFilesByFileUIDs mock is already set by Set")
 	}
@@ -12947,7 +12946,7 @@ func (mmGetKnowledgeBaseFilesByFileUIDs *mRepositoryMockGetKnowledgeBaseFilesByF
 }
 
 // GetKnowledgeBaseFilesByFileUIDs implements mm_repository.Repository
-func (mmGetKnowledgeBaseFilesByFileUIDs *RepositoryMock) GetKnowledgeBaseFilesByFileUIDs(ctx context.Context, fileUIDs []uuid.UUID, columns ...string) (ka1 []mm_repository.KnowledgeBaseFileModel, err error) {
+func (mmGetKnowledgeBaseFilesByFileUIDs *RepositoryMock) GetKnowledgeBaseFilesByFileUIDs(ctx context.Context, fileUIDs []types.FileUIDType, columns ...string) (ka1 []mm_repository.KnowledgeBaseFileModel, err error) {
 	mm_atomic.AddUint64(&mmGetKnowledgeBaseFilesByFileUIDs.beforeGetKnowledgeBaseFilesByFileUIDsCounter, 1)
 	defer mm_atomic.AddUint64(&mmGetKnowledgeBaseFilesByFileUIDs.afterGetKnowledgeBaseFilesByFileUIDsCounter, 1)
 
@@ -13108,13 +13107,13 @@ type RepositoryMockGetKnowledgeBasesByUIDsExpectation struct {
 // RepositoryMockGetKnowledgeBasesByUIDsParams contains parameters of the Repository.GetKnowledgeBasesByUIDs
 type RepositoryMockGetKnowledgeBasesByUIDsParams struct {
 	ctx    context.Context
-	kbUIDs []uuid.UUID
+	kbUIDs []types.KBUIDType
 }
 
 // RepositoryMockGetKnowledgeBasesByUIDsParamPtrs contains pointers to parameters of the Repository.GetKnowledgeBasesByUIDs
 type RepositoryMockGetKnowledgeBasesByUIDsParamPtrs struct {
 	ctx    *context.Context
-	kbUIDs *[]uuid.UUID
+	kbUIDs *[]types.KBUIDType
 }
 
 // RepositoryMockGetKnowledgeBasesByUIDsResults contains results of the Repository.GetKnowledgeBasesByUIDs
@@ -13141,7 +13140,7 @@ func (mmGetKnowledgeBasesByUIDs *mRepositoryMockGetKnowledgeBasesByUIDs) Optiona
 }
 
 // Expect sets up expected params for Repository.GetKnowledgeBasesByUIDs
-func (mmGetKnowledgeBasesByUIDs *mRepositoryMockGetKnowledgeBasesByUIDs) Expect(ctx context.Context, kbUIDs []uuid.UUID) *mRepositoryMockGetKnowledgeBasesByUIDs {
+func (mmGetKnowledgeBasesByUIDs *mRepositoryMockGetKnowledgeBasesByUIDs) Expect(ctx context.Context, kbUIDs []types.KBUIDType) *mRepositoryMockGetKnowledgeBasesByUIDs {
 	if mmGetKnowledgeBasesByUIDs.mock.funcGetKnowledgeBasesByUIDs != nil {
 		mmGetKnowledgeBasesByUIDs.mock.t.Fatalf("RepositoryMock.GetKnowledgeBasesByUIDs mock is already set by Set")
 	}
@@ -13189,7 +13188,7 @@ func (mmGetKnowledgeBasesByUIDs *mRepositoryMockGetKnowledgeBasesByUIDs) ExpectC
 }
 
 // ExpectKbUIDsParam2 sets up expected param kbUIDs for Repository.GetKnowledgeBasesByUIDs
-func (mmGetKnowledgeBasesByUIDs *mRepositoryMockGetKnowledgeBasesByUIDs) ExpectKbUIDsParam2(kbUIDs []uuid.UUID) *mRepositoryMockGetKnowledgeBasesByUIDs {
+func (mmGetKnowledgeBasesByUIDs *mRepositoryMockGetKnowledgeBasesByUIDs) ExpectKbUIDsParam2(kbUIDs []types.KBUIDType) *mRepositoryMockGetKnowledgeBasesByUIDs {
 	if mmGetKnowledgeBasesByUIDs.mock.funcGetKnowledgeBasesByUIDs != nil {
 		mmGetKnowledgeBasesByUIDs.mock.t.Fatalf("RepositoryMock.GetKnowledgeBasesByUIDs mock is already set by Set")
 	}
@@ -13212,7 +13211,7 @@ func (mmGetKnowledgeBasesByUIDs *mRepositoryMockGetKnowledgeBasesByUIDs) ExpectK
 }
 
 // Inspect accepts an inspector function that has same arguments as the Repository.GetKnowledgeBasesByUIDs
-func (mmGetKnowledgeBasesByUIDs *mRepositoryMockGetKnowledgeBasesByUIDs) Inspect(f func(ctx context.Context, kbUIDs []uuid.UUID)) *mRepositoryMockGetKnowledgeBasesByUIDs {
+func (mmGetKnowledgeBasesByUIDs *mRepositoryMockGetKnowledgeBasesByUIDs) Inspect(f func(ctx context.Context, kbUIDs []types.KBUIDType)) *mRepositoryMockGetKnowledgeBasesByUIDs {
 	if mmGetKnowledgeBasesByUIDs.mock.inspectFuncGetKnowledgeBasesByUIDs != nil {
 		mmGetKnowledgeBasesByUIDs.mock.t.Fatalf("Inspect function is already set for RepositoryMock.GetKnowledgeBasesByUIDs")
 	}
@@ -13237,7 +13236,7 @@ func (mmGetKnowledgeBasesByUIDs *mRepositoryMockGetKnowledgeBasesByUIDs) Return(
 }
 
 // Set uses given function f to mock the Repository.GetKnowledgeBasesByUIDs method
-func (mmGetKnowledgeBasesByUIDs *mRepositoryMockGetKnowledgeBasesByUIDs) Set(f func(ctx context.Context, kbUIDs []uuid.UUID) (ka1 []mm_repository.KnowledgeBaseModel, err error)) *RepositoryMock {
+func (mmGetKnowledgeBasesByUIDs *mRepositoryMockGetKnowledgeBasesByUIDs) Set(f func(ctx context.Context, kbUIDs []types.KBUIDType) (ka1 []mm_repository.KnowledgeBaseModel, err error)) *RepositoryMock {
 	if mmGetKnowledgeBasesByUIDs.defaultExpectation != nil {
 		mmGetKnowledgeBasesByUIDs.mock.t.Fatalf("Default expectation is already set for the Repository.GetKnowledgeBasesByUIDs method")
 	}
@@ -13253,7 +13252,7 @@ func (mmGetKnowledgeBasesByUIDs *mRepositoryMockGetKnowledgeBasesByUIDs) Set(f f
 
 // When sets expectation for the Repository.GetKnowledgeBasesByUIDs which will trigger the result defined by the following
 // Then helper
-func (mmGetKnowledgeBasesByUIDs *mRepositoryMockGetKnowledgeBasesByUIDs) When(ctx context.Context, kbUIDs []uuid.UUID) *RepositoryMockGetKnowledgeBasesByUIDsExpectation {
+func (mmGetKnowledgeBasesByUIDs *mRepositoryMockGetKnowledgeBasesByUIDs) When(ctx context.Context, kbUIDs []types.KBUIDType) *RepositoryMockGetKnowledgeBasesByUIDsExpectation {
 	if mmGetKnowledgeBasesByUIDs.mock.funcGetKnowledgeBasesByUIDs != nil {
 		mmGetKnowledgeBasesByUIDs.mock.t.Fatalf("RepositoryMock.GetKnowledgeBasesByUIDs mock is already set by Set")
 	}
@@ -13295,7 +13294,7 @@ func (mmGetKnowledgeBasesByUIDs *mRepositoryMockGetKnowledgeBasesByUIDs) invocat
 }
 
 // GetKnowledgeBasesByUIDs implements mm_repository.Repository
-func (mmGetKnowledgeBasesByUIDs *RepositoryMock) GetKnowledgeBasesByUIDs(ctx context.Context, kbUIDs []uuid.UUID) (ka1 []mm_repository.KnowledgeBaseModel, err error) {
+func (mmGetKnowledgeBasesByUIDs *RepositoryMock) GetKnowledgeBasesByUIDs(ctx context.Context, kbUIDs []types.KBUIDType) (ka1 []mm_repository.KnowledgeBaseModel, err error) {
 	mm_atomic.AddUint64(&mmGetKnowledgeBasesByUIDs.beforeGetKnowledgeBasesByUIDsCounter, 1)
 	defer mm_atomic.AddUint64(&mmGetKnowledgeBasesByUIDs.afterGetKnowledgeBasesByUIDsCounter, 1)
 
@@ -13825,13 +13824,13 @@ type RepositoryMockGetObjectByUIDExpectation struct {
 // RepositoryMockGetObjectByUIDParams contains parameters of the Repository.GetObjectByUID
 type RepositoryMockGetObjectByUIDParams struct {
 	ctx context.Context
-	uid uuid.UUID
+	uid types.ObjectUIDType
 }
 
 // RepositoryMockGetObjectByUIDParamPtrs contains pointers to parameters of the Repository.GetObjectByUID
 type RepositoryMockGetObjectByUIDParamPtrs struct {
 	ctx *context.Context
-	uid *uuid.UUID
+	uid *types.ObjectUIDType
 }
 
 // RepositoryMockGetObjectByUIDResults contains results of the Repository.GetObjectByUID
@@ -13858,7 +13857,7 @@ func (mmGetObjectByUID *mRepositoryMockGetObjectByUID) Optional() *mRepositoryMo
 }
 
 // Expect sets up expected params for Repository.GetObjectByUID
-func (mmGetObjectByUID *mRepositoryMockGetObjectByUID) Expect(ctx context.Context, uid uuid.UUID) *mRepositoryMockGetObjectByUID {
+func (mmGetObjectByUID *mRepositoryMockGetObjectByUID) Expect(ctx context.Context, uid types.ObjectUIDType) *mRepositoryMockGetObjectByUID {
 	if mmGetObjectByUID.mock.funcGetObjectByUID != nil {
 		mmGetObjectByUID.mock.t.Fatalf("RepositoryMock.GetObjectByUID mock is already set by Set")
 	}
@@ -13906,7 +13905,7 @@ func (mmGetObjectByUID *mRepositoryMockGetObjectByUID) ExpectCtxParam1(ctx conte
 }
 
 // ExpectUidParam2 sets up expected param uid for Repository.GetObjectByUID
-func (mmGetObjectByUID *mRepositoryMockGetObjectByUID) ExpectUidParam2(uid uuid.UUID) *mRepositoryMockGetObjectByUID {
+func (mmGetObjectByUID *mRepositoryMockGetObjectByUID) ExpectUidParam2(uid types.ObjectUIDType) *mRepositoryMockGetObjectByUID {
 	if mmGetObjectByUID.mock.funcGetObjectByUID != nil {
 		mmGetObjectByUID.mock.t.Fatalf("RepositoryMock.GetObjectByUID mock is already set by Set")
 	}
@@ -13929,7 +13928,7 @@ func (mmGetObjectByUID *mRepositoryMockGetObjectByUID) ExpectUidParam2(uid uuid.
 }
 
 // Inspect accepts an inspector function that has same arguments as the Repository.GetObjectByUID
-func (mmGetObjectByUID *mRepositoryMockGetObjectByUID) Inspect(f func(ctx context.Context, uid uuid.UUID)) *mRepositoryMockGetObjectByUID {
+func (mmGetObjectByUID *mRepositoryMockGetObjectByUID) Inspect(f func(ctx context.Context, uid types.ObjectUIDType)) *mRepositoryMockGetObjectByUID {
 	if mmGetObjectByUID.mock.inspectFuncGetObjectByUID != nil {
 		mmGetObjectByUID.mock.t.Fatalf("Inspect function is already set for RepositoryMock.GetObjectByUID")
 	}
@@ -13954,7 +13953,7 @@ func (mmGetObjectByUID *mRepositoryMockGetObjectByUID) Return(op1 *mm_repository
 }
 
 // Set uses given function f to mock the Repository.GetObjectByUID method
-func (mmGetObjectByUID *mRepositoryMockGetObjectByUID) Set(f func(ctx context.Context, uid uuid.UUID) (op1 *mm_repository.ObjectModel, err error)) *RepositoryMock {
+func (mmGetObjectByUID *mRepositoryMockGetObjectByUID) Set(f func(ctx context.Context, uid types.ObjectUIDType) (op1 *mm_repository.ObjectModel, err error)) *RepositoryMock {
 	if mmGetObjectByUID.defaultExpectation != nil {
 		mmGetObjectByUID.mock.t.Fatalf("Default expectation is already set for the Repository.GetObjectByUID method")
 	}
@@ -13970,7 +13969,7 @@ func (mmGetObjectByUID *mRepositoryMockGetObjectByUID) Set(f func(ctx context.Co
 
 // When sets expectation for the Repository.GetObjectByUID which will trigger the result defined by the following
 // Then helper
-func (mmGetObjectByUID *mRepositoryMockGetObjectByUID) When(ctx context.Context, uid uuid.UUID) *RepositoryMockGetObjectByUIDExpectation {
+func (mmGetObjectByUID *mRepositoryMockGetObjectByUID) When(ctx context.Context, uid types.ObjectUIDType) *RepositoryMockGetObjectByUIDExpectation {
 	if mmGetObjectByUID.mock.funcGetObjectByUID != nil {
 		mmGetObjectByUID.mock.t.Fatalf("RepositoryMock.GetObjectByUID mock is already set by Set")
 	}
@@ -14012,7 +14011,7 @@ func (mmGetObjectByUID *mRepositoryMockGetObjectByUID) invocationsDone() bool {
 }
 
 // GetObjectByUID implements mm_repository.Repository
-func (mmGetObjectByUID *RepositoryMock) GetObjectByUID(ctx context.Context, uid uuid.UUID) (op1 *mm_repository.ObjectModel, err error) {
+func (mmGetObjectByUID *RepositoryMock) GetObjectByUID(ctx context.Context, uid types.ObjectUIDType) (op1 *mm_repository.ObjectModel, err error) {
 	mm_atomic.AddUint64(&mmGetObjectByUID.beforeGetObjectByUIDCounter, 1)
 	defer mm_atomic.AddUint64(&mmGetObjectByUID.afterGetObjectByUIDCounter, 1)
 
@@ -14168,13 +14167,13 @@ type RepositoryMockGetObjectDownloadURLExpectation struct {
 // RepositoryMockGetObjectDownloadURLParams contains parameters of the Repository.GetObjectDownloadURL
 type RepositoryMockGetObjectDownloadURLParams struct {
 	ctx       context.Context
-	objectUID uuid.UUID
+	objectUID types.ObjectUIDType
 }
 
 // RepositoryMockGetObjectDownloadURLParamPtrs contains pointers to parameters of the Repository.GetObjectDownloadURL
 type RepositoryMockGetObjectDownloadURLParamPtrs struct {
 	ctx       *context.Context
-	objectUID *uuid.UUID
+	objectUID *types.ObjectUIDType
 }
 
 // RepositoryMockGetObjectDownloadURLResults contains results of the Repository.GetObjectDownloadURL
@@ -14201,7 +14200,7 @@ func (mmGetObjectDownloadURL *mRepositoryMockGetObjectDownloadURL) Optional() *m
 }
 
 // Expect sets up expected params for Repository.GetObjectDownloadURL
-func (mmGetObjectDownloadURL *mRepositoryMockGetObjectDownloadURL) Expect(ctx context.Context, objectUID uuid.UUID) *mRepositoryMockGetObjectDownloadURL {
+func (mmGetObjectDownloadURL *mRepositoryMockGetObjectDownloadURL) Expect(ctx context.Context, objectUID types.ObjectUIDType) *mRepositoryMockGetObjectDownloadURL {
 	if mmGetObjectDownloadURL.mock.funcGetObjectDownloadURL != nil {
 		mmGetObjectDownloadURL.mock.t.Fatalf("RepositoryMock.GetObjectDownloadURL mock is already set by Set")
 	}
@@ -14249,7 +14248,7 @@ func (mmGetObjectDownloadURL *mRepositoryMockGetObjectDownloadURL) ExpectCtxPara
 }
 
 // ExpectObjectUIDParam2 sets up expected param objectUID for Repository.GetObjectDownloadURL
-func (mmGetObjectDownloadURL *mRepositoryMockGetObjectDownloadURL) ExpectObjectUIDParam2(objectUID uuid.UUID) *mRepositoryMockGetObjectDownloadURL {
+func (mmGetObjectDownloadURL *mRepositoryMockGetObjectDownloadURL) ExpectObjectUIDParam2(objectUID types.ObjectUIDType) *mRepositoryMockGetObjectDownloadURL {
 	if mmGetObjectDownloadURL.mock.funcGetObjectDownloadURL != nil {
 		mmGetObjectDownloadURL.mock.t.Fatalf("RepositoryMock.GetObjectDownloadURL mock is already set by Set")
 	}
@@ -14272,7 +14271,7 @@ func (mmGetObjectDownloadURL *mRepositoryMockGetObjectDownloadURL) ExpectObjectU
 }
 
 // Inspect accepts an inspector function that has same arguments as the Repository.GetObjectDownloadURL
-func (mmGetObjectDownloadURL *mRepositoryMockGetObjectDownloadURL) Inspect(f func(ctx context.Context, objectUID uuid.UUID)) *mRepositoryMockGetObjectDownloadURL {
+func (mmGetObjectDownloadURL *mRepositoryMockGetObjectDownloadURL) Inspect(f func(ctx context.Context, objectUID types.ObjectUIDType)) *mRepositoryMockGetObjectDownloadURL {
 	if mmGetObjectDownloadURL.mock.inspectFuncGetObjectDownloadURL != nil {
 		mmGetObjectDownloadURL.mock.t.Fatalf("Inspect function is already set for RepositoryMock.GetObjectDownloadURL")
 	}
@@ -14297,7 +14296,7 @@ func (mmGetObjectDownloadURL *mRepositoryMockGetObjectDownloadURL) Return(op1 *m
 }
 
 // Set uses given function f to mock the Repository.GetObjectDownloadURL method
-func (mmGetObjectDownloadURL *mRepositoryMockGetObjectDownloadURL) Set(f func(ctx context.Context, objectUID uuid.UUID) (op1 *mm_repository.ObjectURLModel, err error)) *RepositoryMock {
+func (mmGetObjectDownloadURL *mRepositoryMockGetObjectDownloadURL) Set(f func(ctx context.Context, objectUID types.ObjectUIDType) (op1 *mm_repository.ObjectURLModel, err error)) *RepositoryMock {
 	if mmGetObjectDownloadURL.defaultExpectation != nil {
 		mmGetObjectDownloadURL.mock.t.Fatalf("Default expectation is already set for the Repository.GetObjectDownloadURL method")
 	}
@@ -14313,7 +14312,7 @@ func (mmGetObjectDownloadURL *mRepositoryMockGetObjectDownloadURL) Set(f func(ct
 
 // When sets expectation for the Repository.GetObjectDownloadURL which will trigger the result defined by the following
 // Then helper
-func (mmGetObjectDownloadURL *mRepositoryMockGetObjectDownloadURL) When(ctx context.Context, objectUID uuid.UUID) *RepositoryMockGetObjectDownloadURLExpectation {
+func (mmGetObjectDownloadURL *mRepositoryMockGetObjectDownloadURL) When(ctx context.Context, objectUID types.ObjectUIDType) *RepositoryMockGetObjectDownloadURLExpectation {
 	if mmGetObjectDownloadURL.mock.funcGetObjectDownloadURL != nil {
 		mmGetObjectDownloadURL.mock.t.Fatalf("RepositoryMock.GetObjectDownloadURL mock is already set by Set")
 	}
@@ -14355,7 +14354,7 @@ func (mmGetObjectDownloadURL *mRepositoryMockGetObjectDownloadURL) invocationsDo
 }
 
 // GetObjectDownloadURL implements mm_repository.Repository
-func (mmGetObjectDownloadURL *RepositoryMock) GetObjectDownloadURL(ctx context.Context, objectUID uuid.UUID) (op1 *mm_repository.ObjectURLModel, err error) {
+func (mmGetObjectDownloadURL *RepositoryMock) GetObjectDownloadURL(ctx context.Context, objectUID types.ObjectUIDType) (op1 *mm_repository.ObjectURLModel, err error) {
 	mm_atomic.AddUint64(&mmGetObjectDownloadURL.beforeGetObjectDownloadURLCounter, 1)
 	defer mm_atomic.AddUint64(&mmGetObjectDownloadURL.afterGetObjectDownloadURLCounter, 1)
 
@@ -14854,13 +14853,13 @@ type RepositoryMockGetObjectURLByUIDExpectation struct {
 // RepositoryMockGetObjectURLByUIDParams contains parameters of the Repository.GetObjectURLByUID
 type RepositoryMockGetObjectURLByUIDParams struct {
 	ctx context.Context
-	uid uuid.UUID
+	uid types.ObjectURLUIDType
 }
 
 // RepositoryMockGetObjectURLByUIDParamPtrs contains pointers to parameters of the Repository.GetObjectURLByUID
 type RepositoryMockGetObjectURLByUIDParamPtrs struct {
 	ctx *context.Context
-	uid *uuid.UUID
+	uid *types.ObjectURLUIDType
 }
 
 // RepositoryMockGetObjectURLByUIDResults contains results of the Repository.GetObjectURLByUID
@@ -14887,7 +14886,7 @@ func (mmGetObjectURLByUID *mRepositoryMockGetObjectURLByUID) Optional() *mReposi
 }
 
 // Expect sets up expected params for Repository.GetObjectURLByUID
-func (mmGetObjectURLByUID *mRepositoryMockGetObjectURLByUID) Expect(ctx context.Context, uid uuid.UUID) *mRepositoryMockGetObjectURLByUID {
+func (mmGetObjectURLByUID *mRepositoryMockGetObjectURLByUID) Expect(ctx context.Context, uid types.ObjectURLUIDType) *mRepositoryMockGetObjectURLByUID {
 	if mmGetObjectURLByUID.mock.funcGetObjectURLByUID != nil {
 		mmGetObjectURLByUID.mock.t.Fatalf("RepositoryMock.GetObjectURLByUID mock is already set by Set")
 	}
@@ -14935,7 +14934,7 @@ func (mmGetObjectURLByUID *mRepositoryMockGetObjectURLByUID) ExpectCtxParam1(ctx
 }
 
 // ExpectUidParam2 sets up expected param uid for Repository.GetObjectURLByUID
-func (mmGetObjectURLByUID *mRepositoryMockGetObjectURLByUID) ExpectUidParam2(uid uuid.UUID) *mRepositoryMockGetObjectURLByUID {
+func (mmGetObjectURLByUID *mRepositoryMockGetObjectURLByUID) ExpectUidParam2(uid types.ObjectURLUIDType) *mRepositoryMockGetObjectURLByUID {
 	if mmGetObjectURLByUID.mock.funcGetObjectURLByUID != nil {
 		mmGetObjectURLByUID.mock.t.Fatalf("RepositoryMock.GetObjectURLByUID mock is already set by Set")
 	}
@@ -14958,7 +14957,7 @@ func (mmGetObjectURLByUID *mRepositoryMockGetObjectURLByUID) ExpectUidParam2(uid
 }
 
 // Inspect accepts an inspector function that has same arguments as the Repository.GetObjectURLByUID
-func (mmGetObjectURLByUID *mRepositoryMockGetObjectURLByUID) Inspect(f func(ctx context.Context, uid uuid.UUID)) *mRepositoryMockGetObjectURLByUID {
+func (mmGetObjectURLByUID *mRepositoryMockGetObjectURLByUID) Inspect(f func(ctx context.Context, uid types.ObjectURLUIDType)) *mRepositoryMockGetObjectURLByUID {
 	if mmGetObjectURLByUID.mock.inspectFuncGetObjectURLByUID != nil {
 		mmGetObjectURLByUID.mock.t.Fatalf("Inspect function is already set for RepositoryMock.GetObjectURLByUID")
 	}
@@ -14983,7 +14982,7 @@ func (mmGetObjectURLByUID *mRepositoryMockGetObjectURLByUID) Return(op1 *mm_repo
 }
 
 // Set uses given function f to mock the Repository.GetObjectURLByUID method
-func (mmGetObjectURLByUID *mRepositoryMockGetObjectURLByUID) Set(f func(ctx context.Context, uid uuid.UUID) (op1 *mm_repository.ObjectURLModel, err error)) *RepositoryMock {
+func (mmGetObjectURLByUID *mRepositoryMockGetObjectURLByUID) Set(f func(ctx context.Context, uid types.ObjectURLUIDType) (op1 *mm_repository.ObjectURLModel, err error)) *RepositoryMock {
 	if mmGetObjectURLByUID.defaultExpectation != nil {
 		mmGetObjectURLByUID.mock.t.Fatalf("Default expectation is already set for the Repository.GetObjectURLByUID method")
 	}
@@ -14999,7 +14998,7 @@ func (mmGetObjectURLByUID *mRepositoryMockGetObjectURLByUID) Set(f func(ctx cont
 
 // When sets expectation for the Repository.GetObjectURLByUID which will trigger the result defined by the following
 // Then helper
-func (mmGetObjectURLByUID *mRepositoryMockGetObjectURLByUID) When(ctx context.Context, uid uuid.UUID) *RepositoryMockGetObjectURLByUIDExpectation {
+func (mmGetObjectURLByUID *mRepositoryMockGetObjectURLByUID) When(ctx context.Context, uid types.ObjectURLUIDType) *RepositoryMockGetObjectURLByUIDExpectation {
 	if mmGetObjectURLByUID.mock.funcGetObjectURLByUID != nil {
 		mmGetObjectURLByUID.mock.t.Fatalf("RepositoryMock.GetObjectURLByUID mock is already set by Set")
 	}
@@ -15041,7 +15040,7 @@ func (mmGetObjectURLByUID *mRepositoryMockGetObjectURLByUID) invocationsDone() b
 }
 
 // GetObjectURLByUID implements mm_repository.Repository
-func (mmGetObjectURLByUID *RepositoryMock) GetObjectURLByUID(ctx context.Context, uid uuid.UUID) (op1 *mm_repository.ObjectURLModel, err error) {
+func (mmGetObjectURLByUID *RepositoryMock) GetObjectURLByUID(ctx context.Context, uid types.ObjectURLUIDType) (op1 *mm_repository.ObjectURLModel, err error) {
 	mm_atomic.AddUint64(&mmGetObjectURLByUID.beforeGetObjectURLByUIDCounter, 1)
 	defer mm_atomic.AddUint64(&mmGetObjectURLByUID.afterGetObjectURLByUIDCounter, 1)
 
@@ -15197,13 +15196,13 @@ type RepositoryMockGetObjectURLCountByObjectExpectation struct {
 // RepositoryMockGetObjectURLCountByObjectParams contains parameters of the Repository.GetObjectURLCountByObject
 type RepositoryMockGetObjectURLCountByObjectParams struct {
 	ctx       context.Context
-	objectUID uuid.UUID
+	objectUID types.ObjectUIDType
 }
 
 // RepositoryMockGetObjectURLCountByObjectParamPtrs contains pointers to parameters of the Repository.GetObjectURLCountByObject
 type RepositoryMockGetObjectURLCountByObjectParamPtrs struct {
 	ctx       *context.Context
-	objectUID *uuid.UUID
+	objectUID *types.ObjectUIDType
 }
 
 // RepositoryMockGetObjectURLCountByObjectResults contains results of the Repository.GetObjectURLCountByObject
@@ -15230,7 +15229,7 @@ func (mmGetObjectURLCountByObject *mRepositoryMockGetObjectURLCountByObject) Opt
 }
 
 // Expect sets up expected params for Repository.GetObjectURLCountByObject
-func (mmGetObjectURLCountByObject *mRepositoryMockGetObjectURLCountByObject) Expect(ctx context.Context, objectUID uuid.UUID) *mRepositoryMockGetObjectURLCountByObject {
+func (mmGetObjectURLCountByObject *mRepositoryMockGetObjectURLCountByObject) Expect(ctx context.Context, objectUID types.ObjectUIDType) *mRepositoryMockGetObjectURLCountByObject {
 	if mmGetObjectURLCountByObject.mock.funcGetObjectURLCountByObject != nil {
 		mmGetObjectURLCountByObject.mock.t.Fatalf("RepositoryMock.GetObjectURLCountByObject mock is already set by Set")
 	}
@@ -15278,7 +15277,7 @@ func (mmGetObjectURLCountByObject *mRepositoryMockGetObjectURLCountByObject) Exp
 }
 
 // ExpectObjectUIDParam2 sets up expected param objectUID for Repository.GetObjectURLCountByObject
-func (mmGetObjectURLCountByObject *mRepositoryMockGetObjectURLCountByObject) ExpectObjectUIDParam2(objectUID uuid.UUID) *mRepositoryMockGetObjectURLCountByObject {
+func (mmGetObjectURLCountByObject *mRepositoryMockGetObjectURLCountByObject) ExpectObjectUIDParam2(objectUID types.ObjectUIDType) *mRepositoryMockGetObjectURLCountByObject {
 	if mmGetObjectURLCountByObject.mock.funcGetObjectURLCountByObject != nil {
 		mmGetObjectURLCountByObject.mock.t.Fatalf("RepositoryMock.GetObjectURLCountByObject mock is already set by Set")
 	}
@@ -15301,7 +15300,7 @@ func (mmGetObjectURLCountByObject *mRepositoryMockGetObjectURLCountByObject) Exp
 }
 
 // Inspect accepts an inspector function that has same arguments as the Repository.GetObjectURLCountByObject
-func (mmGetObjectURLCountByObject *mRepositoryMockGetObjectURLCountByObject) Inspect(f func(ctx context.Context, objectUID uuid.UUID)) *mRepositoryMockGetObjectURLCountByObject {
+func (mmGetObjectURLCountByObject *mRepositoryMockGetObjectURLCountByObject) Inspect(f func(ctx context.Context, objectUID types.ObjectUIDType)) *mRepositoryMockGetObjectURLCountByObject {
 	if mmGetObjectURLCountByObject.mock.inspectFuncGetObjectURLCountByObject != nil {
 		mmGetObjectURLCountByObject.mock.t.Fatalf("Inspect function is already set for RepositoryMock.GetObjectURLCountByObject")
 	}
@@ -15326,7 +15325,7 @@ func (mmGetObjectURLCountByObject *mRepositoryMockGetObjectURLCountByObject) Ret
 }
 
 // Set uses given function f to mock the Repository.GetObjectURLCountByObject method
-func (mmGetObjectURLCountByObject *mRepositoryMockGetObjectURLCountByObject) Set(f func(ctx context.Context, objectUID uuid.UUID) (i1 int64, err error)) *RepositoryMock {
+func (mmGetObjectURLCountByObject *mRepositoryMockGetObjectURLCountByObject) Set(f func(ctx context.Context, objectUID types.ObjectUIDType) (i1 int64, err error)) *RepositoryMock {
 	if mmGetObjectURLCountByObject.defaultExpectation != nil {
 		mmGetObjectURLCountByObject.mock.t.Fatalf("Default expectation is already set for the Repository.GetObjectURLCountByObject method")
 	}
@@ -15342,7 +15341,7 @@ func (mmGetObjectURLCountByObject *mRepositoryMockGetObjectURLCountByObject) Set
 
 // When sets expectation for the Repository.GetObjectURLCountByObject which will trigger the result defined by the following
 // Then helper
-func (mmGetObjectURLCountByObject *mRepositoryMockGetObjectURLCountByObject) When(ctx context.Context, objectUID uuid.UUID) *RepositoryMockGetObjectURLCountByObjectExpectation {
+func (mmGetObjectURLCountByObject *mRepositoryMockGetObjectURLCountByObject) When(ctx context.Context, objectUID types.ObjectUIDType) *RepositoryMockGetObjectURLCountByObjectExpectation {
 	if mmGetObjectURLCountByObject.mock.funcGetObjectURLCountByObject != nil {
 		mmGetObjectURLCountByObject.mock.t.Fatalf("RepositoryMock.GetObjectURLCountByObject mock is already set by Set")
 	}
@@ -15384,7 +15383,7 @@ func (mmGetObjectURLCountByObject *mRepositoryMockGetObjectURLCountByObject) inv
 }
 
 // GetObjectURLCountByObject implements mm_repository.Repository
-func (mmGetObjectURLCountByObject *RepositoryMock) GetObjectURLCountByObject(ctx context.Context, objectUID uuid.UUID) (i1 int64, err error) {
+func (mmGetObjectURLCountByObject *RepositoryMock) GetObjectURLCountByObject(ctx context.Context, objectUID types.ObjectUIDType) (i1 int64, err error) {
 	mm_atomic.AddUint64(&mmGetObjectURLCountByObject.beforeGetObjectURLCountByObjectCounter, 1)
 	defer mm_atomic.AddUint64(&mmGetObjectURLCountByObject.afterGetObjectURLCountByObjectCounter, 1)
 
@@ -15540,13 +15539,13 @@ type RepositoryMockGetObjectUploadURLExpectation struct {
 // RepositoryMockGetObjectUploadURLParams contains parameters of the Repository.GetObjectUploadURL
 type RepositoryMockGetObjectUploadURLParams struct {
 	ctx       context.Context
-	objectUID uuid.UUID
+	objectUID types.ObjectUIDType
 }
 
 // RepositoryMockGetObjectUploadURLParamPtrs contains pointers to parameters of the Repository.GetObjectUploadURL
 type RepositoryMockGetObjectUploadURLParamPtrs struct {
 	ctx       *context.Context
-	objectUID *uuid.UUID
+	objectUID *types.ObjectUIDType
 }
 
 // RepositoryMockGetObjectUploadURLResults contains results of the Repository.GetObjectUploadURL
@@ -15573,7 +15572,7 @@ func (mmGetObjectUploadURL *mRepositoryMockGetObjectUploadURL) Optional() *mRepo
 }
 
 // Expect sets up expected params for Repository.GetObjectUploadURL
-func (mmGetObjectUploadURL *mRepositoryMockGetObjectUploadURL) Expect(ctx context.Context, objectUID uuid.UUID) *mRepositoryMockGetObjectUploadURL {
+func (mmGetObjectUploadURL *mRepositoryMockGetObjectUploadURL) Expect(ctx context.Context, objectUID types.ObjectUIDType) *mRepositoryMockGetObjectUploadURL {
 	if mmGetObjectUploadURL.mock.funcGetObjectUploadURL != nil {
 		mmGetObjectUploadURL.mock.t.Fatalf("RepositoryMock.GetObjectUploadURL mock is already set by Set")
 	}
@@ -15621,7 +15620,7 @@ func (mmGetObjectUploadURL *mRepositoryMockGetObjectUploadURL) ExpectCtxParam1(c
 }
 
 // ExpectObjectUIDParam2 sets up expected param objectUID for Repository.GetObjectUploadURL
-func (mmGetObjectUploadURL *mRepositoryMockGetObjectUploadURL) ExpectObjectUIDParam2(objectUID uuid.UUID) *mRepositoryMockGetObjectUploadURL {
+func (mmGetObjectUploadURL *mRepositoryMockGetObjectUploadURL) ExpectObjectUIDParam2(objectUID types.ObjectUIDType) *mRepositoryMockGetObjectUploadURL {
 	if mmGetObjectUploadURL.mock.funcGetObjectUploadURL != nil {
 		mmGetObjectUploadURL.mock.t.Fatalf("RepositoryMock.GetObjectUploadURL mock is already set by Set")
 	}
@@ -15644,7 +15643,7 @@ func (mmGetObjectUploadURL *mRepositoryMockGetObjectUploadURL) ExpectObjectUIDPa
 }
 
 // Inspect accepts an inspector function that has same arguments as the Repository.GetObjectUploadURL
-func (mmGetObjectUploadURL *mRepositoryMockGetObjectUploadURL) Inspect(f func(ctx context.Context, objectUID uuid.UUID)) *mRepositoryMockGetObjectUploadURL {
+func (mmGetObjectUploadURL *mRepositoryMockGetObjectUploadURL) Inspect(f func(ctx context.Context, objectUID types.ObjectUIDType)) *mRepositoryMockGetObjectUploadURL {
 	if mmGetObjectUploadURL.mock.inspectFuncGetObjectUploadURL != nil {
 		mmGetObjectUploadURL.mock.t.Fatalf("Inspect function is already set for RepositoryMock.GetObjectUploadURL")
 	}
@@ -15669,7 +15668,7 @@ func (mmGetObjectUploadURL *mRepositoryMockGetObjectUploadURL) Return(op1 *mm_re
 }
 
 // Set uses given function f to mock the Repository.GetObjectUploadURL method
-func (mmGetObjectUploadURL *mRepositoryMockGetObjectUploadURL) Set(f func(ctx context.Context, objectUID uuid.UUID) (op1 *mm_repository.ObjectURLModel, err error)) *RepositoryMock {
+func (mmGetObjectUploadURL *mRepositoryMockGetObjectUploadURL) Set(f func(ctx context.Context, objectUID types.ObjectUIDType) (op1 *mm_repository.ObjectURLModel, err error)) *RepositoryMock {
 	if mmGetObjectUploadURL.defaultExpectation != nil {
 		mmGetObjectUploadURL.mock.t.Fatalf("Default expectation is already set for the Repository.GetObjectUploadURL method")
 	}
@@ -15685,7 +15684,7 @@ func (mmGetObjectUploadURL *mRepositoryMockGetObjectUploadURL) Set(f func(ctx co
 
 // When sets expectation for the Repository.GetObjectUploadURL which will trigger the result defined by the following
 // Then helper
-func (mmGetObjectUploadURL *mRepositoryMockGetObjectUploadURL) When(ctx context.Context, objectUID uuid.UUID) *RepositoryMockGetObjectUploadURLExpectation {
+func (mmGetObjectUploadURL *mRepositoryMockGetObjectUploadURL) When(ctx context.Context, objectUID types.ObjectUIDType) *RepositoryMockGetObjectUploadURLExpectation {
 	if mmGetObjectUploadURL.mock.funcGetObjectUploadURL != nil {
 		mmGetObjectUploadURL.mock.t.Fatalf("RepositoryMock.GetObjectUploadURL mock is already set by Set")
 	}
@@ -15727,7 +15726,7 @@ func (mmGetObjectUploadURL *mRepositoryMockGetObjectUploadURL) invocationsDone()
 }
 
 // GetObjectUploadURL implements mm_repository.Repository
-func (mmGetObjectUploadURL *RepositoryMock) GetObjectUploadURL(ctx context.Context, objectUID uuid.UUID) (op1 *mm_repository.ObjectURLModel, err error) {
+func (mmGetObjectUploadURL *RepositoryMock) GetObjectUploadURL(ctx context.Context, objectUID types.ObjectUIDType) (op1 *mm_repository.ObjectURLModel, err error) {
 	mm_atomic.AddUint64(&mmGetObjectUploadURL.beforeGetObjectUploadURLCounter, 1)
 	defer mm_atomic.AddUint64(&mmGetObjectUploadURL.afterGetObjectUploadURLCounter, 1)
 
@@ -15883,8 +15882,8 @@ type RepositoryMockGetPresignedURLForDownloadExpectation struct {
 // RepositoryMockGetPresignedURLForDownloadParams contains parameters of the Repository.GetPresignedURLForDownload
 type RepositoryMockGetPresignedURLForDownloadParams struct {
 	ctx           context.Context
-	namespaceUUID uuid.UUID
-	objectUUID    uuid.UUID
+	namespaceUUID types.NamespaceUIDType
+	objectUUID    types.ObjectUIDType
 	filename      string
 	contentType   string
 	urlExpiration time.Duration
@@ -15893,8 +15892,8 @@ type RepositoryMockGetPresignedURLForDownloadParams struct {
 // RepositoryMockGetPresignedURLForDownloadParamPtrs contains pointers to parameters of the Repository.GetPresignedURLForDownload
 type RepositoryMockGetPresignedURLForDownloadParamPtrs struct {
 	ctx           *context.Context
-	namespaceUUID *uuid.UUID
-	objectUUID    *uuid.UUID
+	namespaceUUID *types.NamespaceUIDType
+	objectUUID    *types.ObjectUIDType
 	filename      *string
 	contentType   *string
 	urlExpiration *time.Duration
@@ -15928,7 +15927,7 @@ func (mmGetPresignedURLForDownload *mRepositoryMockGetPresignedURLForDownload) O
 }
 
 // Expect sets up expected params for Repository.GetPresignedURLForDownload
-func (mmGetPresignedURLForDownload *mRepositoryMockGetPresignedURLForDownload) Expect(ctx context.Context, namespaceUUID uuid.UUID, objectUUID uuid.UUID, filename string, contentType string, urlExpiration time.Duration) *mRepositoryMockGetPresignedURLForDownload {
+func (mmGetPresignedURLForDownload *mRepositoryMockGetPresignedURLForDownload) Expect(ctx context.Context, namespaceUUID types.NamespaceUIDType, objectUUID types.ObjectUIDType, filename string, contentType string, urlExpiration time.Duration) *mRepositoryMockGetPresignedURLForDownload {
 	if mmGetPresignedURLForDownload.mock.funcGetPresignedURLForDownload != nil {
 		mmGetPresignedURLForDownload.mock.t.Fatalf("RepositoryMock.GetPresignedURLForDownload mock is already set by Set")
 	}
@@ -15976,7 +15975,7 @@ func (mmGetPresignedURLForDownload *mRepositoryMockGetPresignedURLForDownload) E
 }
 
 // ExpectNamespaceUUIDParam2 sets up expected param namespaceUUID for Repository.GetPresignedURLForDownload
-func (mmGetPresignedURLForDownload *mRepositoryMockGetPresignedURLForDownload) ExpectNamespaceUUIDParam2(namespaceUUID uuid.UUID) *mRepositoryMockGetPresignedURLForDownload {
+func (mmGetPresignedURLForDownload *mRepositoryMockGetPresignedURLForDownload) ExpectNamespaceUUIDParam2(namespaceUUID types.NamespaceUIDType) *mRepositoryMockGetPresignedURLForDownload {
 	if mmGetPresignedURLForDownload.mock.funcGetPresignedURLForDownload != nil {
 		mmGetPresignedURLForDownload.mock.t.Fatalf("RepositoryMock.GetPresignedURLForDownload mock is already set by Set")
 	}
@@ -15999,7 +15998,7 @@ func (mmGetPresignedURLForDownload *mRepositoryMockGetPresignedURLForDownload) E
 }
 
 // ExpectObjectUUIDParam3 sets up expected param objectUUID for Repository.GetPresignedURLForDownload
-func (mmGetPresignedURLForDownload *mRepositoryMockGetPresignedURLForDownload) ExpectObjectUUIDParam3(objectUUID uuid.UUID) *mRepositoryMockGetPresignedURLForDownload {
+func (mmGetPresignedURLForDownload *mRepositoryMockGetPresignedURLForDownload) ExpectObjectUUIDParam3(objectUUID types.ObjectUIDType) *mRepositoryMockGetPresignedURLForDownload {
 	if mmGetPresignedURLForDownload.mock.funcGetPresignedURLForDownload != nil {
 		mmGetPresignedURLForDownload.mock.t.Fatalf("RepositoryMock.GetPresignedURLForDownload mock is already set by Set")
 	}
@@ -16091,7 +16090,7 @@ func (mmGetPresignedURLForDownload *mRepositoryMockGetPresignedURLForDownload) E
 }
 
 // Inspect accepts an inspector function that has same arguments as the Repository.GetPresignedURLForDownload
-func (mmGetPresignedURLForDownload *mRepositoryMockGetPresignedURLForDownload) Inspect(f func(ctx context.Context, namespaceUUID uuid.UUID, objectUUID uuid.UUID, filename string, contentType string, urlExpiration time.Duration)) *mRepositoryMockGetPresignedURLForDownload {
+func (mmGetPresignedURLForDownload *mRepositoryMockGetPresignedURLForDownload) Inspect(f func(ctx context.Context, namespaceUUID types.NamespaceUIDType, objectUUID types.ObjectUIDType, filename string, contentType string, urlExpiration time.Duration)) *mRepositoryMockGetPresignedURLForDownload {
 	if mmGetPresignedURLForDownload.mock.inspectFuncGetPresignedURLForDownload != nil {
 		mmGetPresignedURLForDownload.mock.t.Fatalf("Inspect function is already set for RepositoryMock.GetPresignedURLForDownload")
 	}
@@ -16116,7 +16115,7 @@ func (mmGetPresignedURLForDownload *mRepositoryMockGetPresignedURLForDownload) R
 }
 
 // Set uses given function f to mock the Repository.GetPresignedURLForDownload method
-func (mmGetPresignedURLForDownload *mRepositoryMockGetPresignedURLForDownload) Set(f func(ctx context.Context, namespaceUUID uuid.UUID, objectUUID uuid.UUID, filename string, contentType string, urlExpiration time.Duration) (up1 *url.URL, err error)) *RepositoryMock {
+func (mmGetPresignedURLForDownload *mRepositoryMockGetPresignedURLForDownload) Set(f func(ctx context.Context, namespaceUUID types.NamespaceUIDType, objectUUID types.ObjectUIDType, filename string, contentType string, urlExpiration time.Duration) (up1 *url.URL, err error)) *RepositoryMock {
 	if mmGetPresignedURLForDownload.defaultExpectation != nil {
 		mmGetPresignedURLForDownload.mock.t.Fatalf("Default expectation is already set for the Repository.GetPresignedURLForDownload method")
 	}
@@ -16132,7 +16131,7 @@ func (mmGetPresignedURLForDownload *mRepositoryMockGetPresignedURLForDownload) S
 
 // When sets expectation for the Repository.GetPresignedURLForDownload which will trigger the result defined by the following
 // Then helper
-func (mmGetPresignedURLForDownload *mRepositoryMockGetPresignedURLForDownload) When(ctx context.Context, namespaceUUID uuid.UUID, objectUUID uuid.UUID, filename string, contentType string, urlExpiration time.Duration) *RepositoryMockGetPresignedURLForDownloadExpectation {
+func (mmGetPresignedURLForDownload *mRepositoryMockGetPresignedURLForDownload) When(ctx context.Context, namespaceUUID types.NamespaceUIDType, objectUUID types.ObjectUIDType, filename string, contentType string, urlExpiration time.Duration) *RepositoryMockGetPresignedURLForDownloadExpectation {
 	if mmGetPresignedURLForDownload.mock.funcGetPresignedURLForDownload != nil {
 		mmGetPresignedURLForDownload.mock.t.Fatalf("RepositoryMock.GetPresignedURLForDownload mock is already set by Set")
 	}
@@ -16174,7 +16173,7 @@ func (mmGetPresignedURLForDownload *mRepositoryMockGetPresignedURLForDownload) i
 }
 
 // GetPresignedURLForDownload implements mm_repository.Repository
-func (mmGetPresignedURLForDownload *RepositoryMock) GetPresignedURLForDownload(ctx context.Context, namespaceUUID uuid.UUID, objectUUID uuid.UUID, filename string, contentType string, urlExpiration time.Duration) (up1 *url.URL, err error) {
+func (mmGetPresignedURLForDownload *RepositoryMock) GetPresignedURLForDownload(ctx context.Context, namespaceUUID types.NamespaceUIDType, objectUUID types.ObjectUIDType, filename string, contentType string, urlExpiration time.Duration) (up1 *url.URL, err error) {
 	mm_atomic.AddUint64(&mmGetPresignedURLForDownload.beforeGetPresignedURLForDownloadCounter, 1)
 	defer mm_atomic.AddUint64(&mmGetPresignedURLForDownload.afterGetPresignedURLForDownloadCounter, 1)
 
@@ -16350,8 +16349,8 @@ type RepositoryMockGetPresignedURLForUploadExpectation struct {
 // RepositoryMockGetPresignedURLForUploadParams contains parameters of the Repository.GetPresignedURLForUpload
 type RepositoryMockGetPresignedURLForUploadParams struct {
 	ctx           context.Context
-	namespaceUUID uuid.UUID
-	objectUUID    uuid.UUID
+	namespaceUUID types.NamespaceUIDType
+	objectUUID    types.ObjectUIDType
 	filename      string
 	urlExpiration time.Duration
 }
@@ -16359,8 +16358,8 @@ type RepositoryMockGetPresignedURLForUploadParams struct {
 // RepositoryMockGetPresignedURLForUploadParamPtrs contains pointers to parameters of the Repository.GetPresignedURLForUpload
 type RepositoryMockGetPresignedURLForUploadParamPtrs struct {
 	ctx           *context.Context
-	namespaceUUID *uuid.UUID
-	objectUUID    *uuid.UUID
+	namespaceUUID *types.NamespaceUIDType
+	objectUUID    *types.ObjectUIDType
 	filename      *string
 	urlExpiration *time.Duration
 }
@@ -16392,7 +16391,7 @@ func (mmGetPresignedURLForUpload *mRepositoryMockGetPresignedURLForUpload) Optio
 }
 
 // Expect sets up expected params for Repository.GetPresignedURLForUpload
-func (mmGetPresignedURLForUpload *mRepositoryMockGetPresignedURLForUpload) Expect(ctx context.Context, namespaceUUID uuid.UUID, objectUUID uuid.UUID, filename string, urlExpiration time.Duration) *mRepositoryMockGetPresignedURLForUpload {
+func (mmGetPresignedURLForUpload *mRepositoryMockGetPresignedURLForUpload) Expect(ctx context.Context, namespaceUUID types.NamespaceUIDType, objectUUID types.ObjectUIDType, filename string, urlExpiration time.Duration) *mRepositoryMockGetPresignedURLForUpload {
 	if mmGetPresignedURLForUpload.mock.funcGetPresignedURLForUpload != nil {
 		mmGetPresignedURLForUpload.mock.t.Fatalf("RepositoryMock.GetPresignedURLForUpload mock is already set by Set")
 	}
@@ -16440,7 +16439,7 @@ func (mmGetPresignedURLForUpload *mRepositoryMockGetPresignedURLForUpload) Expec
 }
 
 // ExpectNamespaceUUIDParam2 sets up expected param namespaceUUID for Repository.GetPresignedURLForUpload
-func (mmGetPresignedURLForUpload *mRepositoryMockGetPresignedURLForUpload) ExpectNamespaceUUIDParam2(namespaceUUID uuid.UUID) *mRepositoryMockGetPresignedURLForUpload {
+func (mmGetPresignedURLForUpload *mRepositoryMockGetPresignedURLForUpload) ExpectNamespaceUUIDParam2(namespaceUUID types.NamespaceUIDType) *mRepositoryMockGetPresignedURLForUpload {
 	if mmGetPresignedURLForUpload.mock.funcGetPresignedURLForUpload != nil {
 		mmGetPresignedURLForUpload.mock.t.Fatalf("RepositoryMock.GetPresignedURLForUpload mock is already set by Set")
 	}
@@ -16463,7 +16462,7 @@ func (mmGetPresignedURLForUpload *mRepositoryMockGetPresignedURLForUpload) Expec
 }
 
 // ExpectObjectUUIDParam3 sets up expected param objectUUID for Repository.GetPresignedURLForUpload
-func (mmGetPresignedURLForUpload *mRepositoryMockGetPresignedURLForUpload) ExpectObjectUUIDParam3(objectUUID uuid.UUID) *mRepositoryMockGetPresignedURLForUpload {
+func (mmGetPresignedURLForUpload *mRepositoryMockGetPresignedURLForUpload) ExpectObjectUUIDParam3(objectUUID types.ObjectUIDType) *mRepositoryMockGetPresignedURLForUpload {
 	if mmGetPresignedURLForUpload.mock.funcGetPresignedURLForUpload != nil {
 		mmGetPresignedURLForUpload.mock.t.Fatalf("RepositoryMock.GetPresignedURLForUpload mock is already set by Set")
 	}
@@ -16532,7 +16531,7 @@ func (mmGetPresignedURLForUpload *mRepositoryMockGetPresignedURLForUpload) Expec
 }
 
 // Inspect accepts an inspector function that has same arguments as the Repository.GetPresignedURLForUpload
-func (mmGetPresignedURLForUpload *mRepositoryMockGetPresignedURLForUpload) Inspect(f func(ctx context.Context, namespaceUUID uuid.UUID, objectUUID uuid.UUID, filename string, urlExpiration time.Duration)) *mRepositoryMockGetPresignedURLForUpload {
+func (mmGetPresignedURLForUpload *mRepositoryMockGetPresignedURLForUpload) Inspect(f func(ctx context.Context, namespaceUUID types.NamespaceUIDType, objectUUID types.ObjectUIDType, filename string, urlExpiration time.Duration)) *mRepositoryMockGetPresignedURLForUpload {
 	if mmGetPresignedURLForUpload.mock.inspectFuncGetPresignedURLForUpload != nil {
 		mmGetPresignedURLForUpload.mock.t.Fatalf("Inspect function is already set for RepositoryMock.GetPresignedURLForUpload")
 	}
@@ -16557,7 +16556,7 @@ func (mmGetPresignedURLForUpload *mRepositoryMockGetPresignedURLForUpload) Retur
 }
 
 // Set uses given function f to mock the Repository.GetPresignedURLForUpload method
-func (mmGetPresignedURLForUpload *mRepositoryMockGetPresignedURLForUpload) Set(f func(ctx context.Context, namespaceUUID uuid.UUID, objectUUID uuid.UUID, filename string, urlExpiration time.Duration) (up1 *url.URL, err error)) *RepositoryMock {
+func (mmGetPresignedURLForUpload *mRepositoryMockGetPresignedURLForUpload) Set(f func(ctx context.Context, namespaceUUID types.NamespaceUIDType, objectUUID types.ObjectUIDType, filename string, urlExpiration time.Duration) (up1 *url.URL, err error)) *RepositoryMock {
 	if mmGetPresignedURLForUpload.defaultExpectation != nil {
 		mmGetPresignedURLForUpload.mock.t.Fatalf("Default expectation is already set for the Repository.GetPresignedURLForUpload method")
 	}
@@ -16573,7 +16572,7 @@ func (mmGetPresignedURLForUpload *mRepositoryMockGetPresignedURLForUpload) Set(f
 
 // When sets expectation for the Repository.GetPresignedURLForUpload which will trigger the result defined by the following
 // Then helper
-func (mmGetPresignedURLForUpload *mRepositoryMockGetPresignedURLForUpload) When(ctx context.Context, namespaceUUID uuid.UUID, objectUUID uuid.UUID, filename string, urlExpiration time.Duration) *RepositoryMockGetPresignedURLForUploadExpectation {
+func (mmGetPresignedURLForUpload *mRepositoryMockGetPresignedURLForUpload) When(ctx context.Context, namespaceUUID types.NamespaceUIDType, objectUUID types.ObjectUIDType, filename string, urlExpiration time.Duration) *RepositoryMockGetPresignedURLForUploadExpectation {
 	if mmGetPresignedURLForUpload.mock.funcGetPresignedURLForUpload != nil {
 		mmGetPresignedURLForUpload.mock.t.Fatalf("RepositoryMock.GetPresignedURLForUpload mock is already set by Set")
 	}
@@ -16615,7 +16614,7 @@ func (mmGetPresignedURLForUpload *mRepositoryMockGetPresignedURLForUpload) invoc
 }
 
 // GetPresignedURLForUpload implements mm_repository.Repository
-func (mmGetPresignedURLForUpload *RepositoryMock) GetPresignedURLForUpload(ctx context.Context, namespaceUUID uuid.UUID, objectUUID uuid.UUID, filename string, urlExpiration time.Duration) (up1 *url.URL, err error) {
+func (mmGetPresignedURLForUpload *RepositoryMock) GetPresignedURLForUpload(ctx context.Context, namespaceUUID types.NamespaceUIDType, objectUUID types.ObjectUIDType, filename string, urlExpiration time.Duration) (up1 *url.URL, err error) {
 	mm_atomic.AddUint64(&mmGetPresignedURLForUpload.beforeGetPresignedURLForUploadCounter, 1)
 	defer mm_atomic.AddUint64(&mmGetPresignedURLForUpload.afterGetPresignedURLForUploadCounter, 1)
 
@@ -19599,13 +19598,13 @@ type RepositoryMockHardDeleteEmbeddingsByKBFileUIDExpectation struct {
 // RepositoryMockHardDeleteEmbeddingsByKBFileUIDParams contains parameters of the Repository.HardDeleteEmbeddingsByKBFileUID
 type RepositoryMockHardDeleteEmbeddingsByKBFileUIDParams struct {
 	ctx       context.Context
-	kbFileUID uuid.UUID
+	kbFileUID types.FileUIDType
 }
 
 // RepositoryMockHardDeleteEmbeddingsByKBFileUIDParamPtrs contains pointers to parameters of the Repository.HardDeleteEmbeddingsByKBFileUID
 type RepositoryMockHardDeleteEmbeddingsByKBFileUIDParamPtrs struct {
 	ctx       *context.Context
-	kbFileUID *uuid.UUID
+	kbFileUID *types.FileUIDType
 }
 
 // RepositoryMockHardDeleteEmbeddingsByKBFileUIDResults contains results of the Repository.HardDeleteEmbeddingsByKBFileUID
@@ -19631,7 +19630,7 @@ func (mmHardDeleteEmbeddingsByKBFileUID *mRepositoryMockHardDeleteEmbeddingsByKB
 }
 
 // Expect sets up expected params for Repository.HardDeleteEmbeddingsByKBFileUID
-func (mmHardDeleteEmbeddingsByKBFileUID *mRepositoryMockHardDeleteEmbeddingsByKBFileUID) Expect(ctx context.Context, kbFileUID uuid.UUID) *mRepositoryMockHardDeleteEmbeddingsByKBFileUID {
+func (mmHardDeleteEmbeddingsByKBFileUID *mRepositoryMockHardDeleteEmbeddingsByKBFileUID) Expect(ctx context.Context, kbFileUID types.FileUIDType) *mRepositoryMockHardDeleteEmbeddingsByKBFileUID {
 	if mmHardDeleteEmbeddingsByKBFileUID.mock.funcHardDeleteEmbeddingsByKBFileUID != nil {
 		mmHardDeleteEmbeddingsByKBFileUID.mock.t.Fatalf("RepositoryMock.HardDeleteEmbeddingsByKBFileUID mock is already set by Set")
 	}
@@ -19679,7 +19678,7 @@ func (mmHardDeleteEmbeddingsByKBFileUID *mRepositoryMockHardDeleteEmbeddingsByKB
 }
 
 // ExpectKbFileUIDParam2 sets up expected param kbFileUID for Repository.HardDeleteEmbeddingsByKBFileUID
-func (mmHardDeleteEmbeddingsByKBFileUID *mRepositoryMockHardDeleteEmbeddingsByKBFileUID) ExpectKbFileUIDParam2(kbFileUID uuid.UUID) *mRepositoryMockHardDeleteEmbeddingsByKBFileUID {
+func (mmHardDeleteEmbeddingsByKBFileUID *mRepositoryMockHardDeleteEmbeddingsByKBFileUID) ExpectKbFileUIDParam2(kbFileUID types.FileUIDType) *mRepositoryMockHardDeleteEmbeddingsByKBFileUID {
 	if mmHardDeleteEmbeddingsByKBFileUID.mock.funcHardDeleteEmbeddingsByKBFileUID != nil {
 		mmHardDeleteEmbeddingsByKBFileUID.mock.t.Fatalf("RepositoryMock.HardDeleteEmbeddingsByKBFileUID mock is already set by Set")
 	}
@@ -19702,7 +19701,7 @@ func (mmHardDeleteEmbeddingsByKBFileUID *mRepositoryMockHardDeleteEmbeddingsByKB
 }
 
 // Inspect accepts an inspector function that has same arguments as the Repository.HardDeleteEmbeddingsByKBFileUID
-func (mmHardDeleteEmbeddingsByKBFileUID *mRepositoryMockHardDeleteEmbeddingsByKBFileUID) Inspect(f func(ctx context.Context, kbFileUID uuid.UUID)) *mRepositoryMockHardDeleteEmbeddingsByKBFileUID {
+func (mmHardDeleteEmbeddingsByKBFileUID *mRepositoryMockHardDeleteEmbeddingsByKBFileUID) Inspect(f func(ctx context.Context, kbFileUID types.FileUIDType)) *mRepositoryMockHardDeleteEmbeddingsByKBFileUID {
 	if mmHardDeleteEmbeddingsByKBFileUID.mock.inspectFuncHardDeleteEmbeddingsByKBFileUID != nil {
 		mmHardDeleteEmbeddingsByKBFileUID.mock.t.Fatalf("Inspect function is already set for RepositoryMock.HardDeleteEmbeddingsByKBFileUID")
 	}
@@ -19727,7 +19726,7 @@ func (mmHardDeleteEmbeddingsByKBFileUID *mRepositoryMockHardDeleteEmbeddingsByKB
 }
 
 // Set uses given function f to mock the Repository.HardDeleteEmbeddingsByKBFileUID method
-func (mmHardDeleteEmbeddingsByKBFileUID *mRepositoryMockHardDeleteEmbeddingsByKBFileUID) Set(f func(ctx context.Context, kbFileUID uuid.UUID) (err error)) *RepositoryMock {
+func (mmHardDeleteEmbeddingsByKBFileUID *mRepositoryMockHardDeleteEmbeddingsByKBFileUID) Set(f func(ctx context.Context, kbFileUID types.FileUIDType) (err error)) *RepositoryMock {
 	if mmHardDeleteEmbeddingsByKBFileUID.defaultExpectation != nil {
 		mmHardDeleteEmbeddingsByKBFileUID.mock.t.Fatalf("Default expectation is already set for the Repository.HardDeleteEmbeddingsByKBFileUID method")
 	}
@@ -19743,7 +19742,7 @@ func (mmHardDeleteEmbeddingsByKBFileUID *mRepositoryMockHardDeleteEmbeddingsByKB
 
 // When sets expectation for the Repository.HardDeleteEmbeddingsByKBFileUID which will trigger the result defined by the following
 // Then helper
-func (mmHardDeleteEmbeddingsByKBFileUID *mRepositoryMockHardDeleteEmbeddingsByKBFileUID) When(ctx context.Context, kbFileUID uuid.UUID) *RepositoryMockHardDeleteEmbeddingsByKBFileUIDExpectation {
+func (mmHardDeleteEmbeddingsByKBFileUID *mRepositoryMockHardDeleteEmbeddingsByKBFileUID) When(ctx context.Context, kbFileUID types.FileUIDType) *RepositoryMockHardDeleteEmbeddingsByKBFileUIDExpectation {
 	if mmHardDeleteEmbeddingsByKBFileUID.mock.funcHardDeleteEmbeddingsByKBFileUID != nil {
 		mmHardDeleteEmbeddingsByKBFileUID.mock.t.Fatalf("RepositoryMock.HardDeleteEmbeddingsByKBFileUID mock is already set by Set")
 	}
@@ -19785,7 +19784,7 @@ func (mmHardDeleteEmbeddingsByKBFileUID *mRepositoryMockHardDeleteEmbeddingsByKB
 }
 
 // HardDeleteEmbeddingsByKBFileUID implements mm_repository.Repository
-func (mmHardDeleteEmbeddingsByKBFileUID *RepositoryMock) HardDeleteEmbeddingsByKBFileUID(ctx context.Context, kbFileUID uuid.UUID) (err error) {
+func (mmHardDeleteEmbeddingsByKBFileUID *RepositoryMock) HardDeleteEmbeddingsByKBFileUID(ctx context.Context, kbFileUID types.FileUIDType) (err error) {
 	mm_atomic.AddUint64(&mmHardDeleteEmbeddingsByKBFileUID.beforeHardDeleteEmbeddingsByKBFileUIDCounter, 1)
 	defer mm_atomic.AddUint64(&mmHardDeleteEmbeddingsByKBFileUID.afterHardDeleteEmbeddingsByKBFileUIDCounter, 1)
 
@@ -21744,15 +21743,15 @@ type RepositoryMockListAllObjectURLsExpectation struct {
 // RepositoryMockListAllObjectURLsParams contains parameters of the Repository.ListAllObjectURLs
 type RepositoryMockListAllObjectURLsParams struct {
 	ctx          context.Context
-	namespaceUID uuid.UUID
-	objectUID    uuid.UUID
+	namespaceUID types.NamespaceUIDType
+	objectUID    types.ObjectUIDType
 }
 
 // RepositoryMockListAllObjectURLsParamPtrs contains pointers to parameters of the Repository.ListAllObjectURLs
 type RepositoryMockListAllObjectURLsParamPtrs struct {
 	ctx          *context.Context
-	namespaceUID *uuid.UUID
-	objectUID    *uuid.UUID
+	namespaceUID *types.NamespaceUIDType
+	objectUID    *types.ObjectUIDType
 }
 
 // RepositoryMockListAllObjectURLsResults contains results of the Repository.ListAllObjectURLs
@@ -21780,7 +21779,7 @@ func (mmListAllObjectURLs *mRepositoryMockListAllObjectURLs) Optional() *mReposi
 }
 
 // Expect sets up expected params for Repository.ListAllObjectURLs
-func (mmListAllObjectURLs *mRepositoryMockListAllObjectURLs) Expect(ctx context.Context, namespaceUID uuid.UUID, objectUID uuid.UUID) *mRepositoryMockListAllObjectURLs {
+func (mmListAllObjectURLs *mRepositoryMockListAllObjectURLs) Expect(ctx context.Context, namespaceUID types.NamespaceUIDType, objectUID types.ObjectUIDType) *mRepositoryMockListAllObjectURLs {
 	if mmListAllObjectURLs.mock.funcListAllObjectURLs != nil {
 		mmListAllObjectURLs.mock.t.Fatalf("RepositoryMock.ListAllObjectURLs mock is already set by Set")
 	}
@@ -21828,7 +21827,7 @@ func (mmListAllObjectURLs *mRepositoryMockListAllObjectURLs) ExpectCtxParam1(ctx
 }
 
 // ExpectNamespaceUIDParam2 sets up expected param namespaceUID for Repository.ListAllObjectURLs
-func (mmListAllObjectURLs *mRepositoryMockListAllObjectURLs) ExpectNamespaceUIDParam2(namespaceUID uuid.UUID) *mRepositoryMockListAllObjectURLs {
+func (mmListAllObjectURLs *mRepositoryMockListAllObjectURLs) ExpectNamespaceUIDParam2(namespaceUID types.NamespaceUIDType) *mRepositoryMockListAllObjectURLs {
 	if mmListAllObjectURLs.mock.funcListAllObjectURLs != nil {
 		mmListAllObjectURLs.mock.t.Fatalf("RepositoryMock.ListAllObjectURLs mock is already set by Set")
 	}
@@ -21851,7 +21850,7 @@ func (mmListAllObjectURLs *mRepositoryMockListAllObjectURLs) ExpectNamespaceUIDP
 }
 
 // ExpectObjectUIDParam3 sets up expected param objectUID for Repository.ListAllObjectURLs
-func (mmListAllObjectURLs *mRepositoryMockListAllObjectURLs) ExpectObjectUIDParam3(objectUID uuid.UUID) *mRepositoryMockListAllObjectURLs {
+func (mmListAllObjectURLs *mRepositoryMockListAllObjectURLs) ExpectObjectUIDParam3(objectUID types.ObjectUIDType) *mRepositoryMockListAllObjectURLs {
 	if mmListAllObjectURLs.mock.funcListAllObjectURLs != nil {
 		mmListAllObjectURLs.mock.t.Fatalf("RepositoryMock.ListAllObjectURLs mock is already set by Set")
 	}
@@ -21874,7 +21873,7 @@ func (mmListAllObjectURLs *mRepositoryMockListAllObjectURLs) ExpectObjectUIDPara
 }
 
 // Inspect accepts an inspector function that has same arguments as the Repository.ListAllObjectURLs
-func (mmListAllObjectURLs *mRepositoryMockListAllObjectURLs) Inspect(f func(ctx context.Context, namespaceUID uuid.UUID, objectUID uuid.UUID)) *mRepositoryMockListAllObjectURLs {
+func (mmListAllObjectURLs *mRepositoryMockListAllObjectURLs) Inspect(f func(ctx context.Context, namespaceUID types.NamespaceUIDType, objectUID types.ObjectUIDType)) *mRepositoryMockListAllObjectURLs {
 	if mmListAllObjectURLs.mock.inspectFuncListAllObjectURLs != nil {
 		mmListAllObjectURLs.mock.t.Fatalf("Inspect function is already set for RepositoryMock.ListAllObjectURLs")
 	}
@@ -21899,7 +21898,7 @@ func (mmListAllObjectURLs *mRepositoryMockListAllObjectURLs) Return(oa1 []mm_rep
 }
 
 // Set uses given function f to mock the Repository.ListAllObjectURLs method
-func (mmListAllObjectURLs *mRepositoryMockListAllObjectURLs) Set(f func(ctx context.Context, namespaceUID uuid.UUID, objectUID uuid.UUID) (oa1 []mm_repository.ObjectURLModel, err error)) *RepositoryMock {
+func (mmListAllObjectURLs *mRepositoryMockListAllObjectURLs) Set(f func(ctx context.Context, namespaceUID types.NamespaceUIDType, objectUID types.ObjectUIDType) (oa1 []mm_repository.ObjectURLModel, err error)) *RepositoryMock {
 	if mmListAllObjectURLs.defaultExpectation != nil {
 		mmListAllObjectURLs.mock.t.Fatalf("Default expectation is already set for the Repository.ListAllObjectURLs method")
 	}
@@ -21915,7 +21914,7 @@ func (mmListAllObjectURLs *mRepositoryMockListAllObjectURLs) Set(f func(ctx cont
 
 // When sets expectation for the Repository.ListAllObjectURLs which will trigger the result defined by the following
 // Then helper
-func (mmListAllObjectURLs *mRepositoryMockListAllObjectURLs) When(ctx context.Context, namespaceUID uuid.UUID, objectUID uuid.UUID) *RepositoryMockListAllObjectURLsExpectation {
+func (mmListAllObjectURLs *mRepositoryMockListAllObjectURLs) When(ctx context.Context, namespaceUID types.NamespaceUIDType, objectUID types.ObjectUIDType) *RepositoryMockListAllObjectURLsExpectation {
 	if mmListAllObjectURLs.mock.funcListAllObjectURLs != nil {
 		mmListAllObjectURLs.mock.t.Fatalf("RepositoryMock.ListAllObjectURLs mock is already set by Set")
 	}
@@ -21957,7 +21956,7 @@ func (mmListAllObjectURLs *mRepositoryMockListAllObjectURLs) invocationsDone() b
 }
 
 // ListAllObjectURLs implements mm_repository.Repository
-func (mmListAllObjectURLs *RepositoryMock) ListAllObjectURLs(ctx context.Context, namespaceUID uuid.UUID, objectUID uuid.UUID) (oa1 []mm_repository.ObjectURLModel, err error) {
+func (mmListAllObjectURLs *RepositoryMock) ListAllObjectURLs(ctx context.Context, namespaceUID types.NamespaceUIDType, objectUID types.ObjectUIDType) (oa1 []mm_repository.ObjectURLModel, err error) {
 	mm_atomic.AddUint64(&mmListAllObjectURLs.beforeListAllObjectURLsCounter, 1)
 	defer mm_atomic.AddUint64(&mmListAllObjectURLs.afterListAllObjectURLsCounter, 1)
 
@@ -22118,14 +22117,14 @@ type RepositoryMockListAllObjectsExpectation struct {
 // RepositoryMockListAllObjectsParams contains parameters of the Repository.ListAllObjects
 type RepositoryMockListAllObjectsParams struct {
 	ctx          context.Context
-	namespaceUID types.CreatorUIDType
+	namespaceUID types.NamespaceUIDType
 	creatorUID   types.CreatorUIDType
 }
 
 // RepositoryMockListAllObjectsParamPtrs contains pointers to parameters of the Repository.ListAllObjects
 type RepositoryMockListAllObjectsParamPtrs struct {
 	ctx          *context.Context
-	namespaceUID *types.CreatorUIDType
+	namespaceUID *types.NamespaceUIDType
 	creatorUID   *types.CreatorUIDType
 }
 
@@ -22154,7 +22153,7 @@ func (mmListAllObjects *mRepositoryMockListAllObjects) Optional() *mRepositoryMo
 }
 
 // Expect sets up expected params for Repository.ListAllObjects
-func (mmListAllObjects *mRepositoryMockListAllObjects) Expect(ctx context.Context, namespaceUID types.CreatorUIDType, creatorUID types.CreatorUIDType) *mRepositoryMockListAllObjects {
+func (mmListAllObjects *mRepositoryMockListAllObjects) Expect(ctx context.Context, namespaceUID types.NamespaceUIDType, creatorUID types.CreatorUIDType) *mRepositoryMockListAllObjects {
 	if mmListAllObjects.mock.funcListAllObjects != nil {
 		mmListAllObjects.mock.t.Fatalf("RepositoryMock.ListAllObjects mock is already set by Set")
 	}
@@ -22202,7 +22201,7 @@ func (mmListAllObjects *mRepositoryMockListAllObjects) ExpectCtxParam1(ctx conte
 }
 
 // ExpectNamespaceUIDParam2 sets up expected param namespaceUID for Repository.ListAllObjects
-func (mmListAllObjects *mRepositoryMockListAllObjects) ExpectNamespaceUIDParam2(namespaceUID types.CreatorUIDType) *mRepositoryMockListAllObjects {
+func (mmListAllObjects *mRepositoryMockListAllObjects) ExpectNamespaceUIDParam2(namespaceUID types.NamespaceUIDType) *mRepositoryMockListAllObjects {
 	if mmListAllObjects.mock.funcListAllObjects != nil {
 		mmListAllObjects.mock.t.Fatalf("RepositoryMock.ListAllObjects mock is already set by Set")
 	}
@@ -22248,7 +22247,7 @@ func (mmListAllObjects *mRepositoryMockListAllObjects) ExpectCreatorUIDParam3(cr
 }
 
 // Inspect accepts an inspector function that has same arguments as the Repository.ListAllObjects
-func (mmListAllObjects *mRepositoryMockListAllObjects) Inspect(f func(ctx context.Context, namespaceUID types.CreatorUIDType, creatorUID types.CreatorUIDType)) *mRepositoryMockListAllObjects {
+func (mmListAllObjects *mRepositoryMockListAllObjects) Inspect(f func(ctx context.Context, namespaceUID types.NamespaceUIDType, creatorUID types.CreatorUIDType)) *mRepositoryMockListAllObjects {
 	if mmListAllObjects.mock.inspectFuncListAllObjects != nil {
 		mmListAllObjects.mock.t.Fatalf("Inspect function is already set for RepositoryMock.ListAllObjects")
 	}
@@ -22273,7 +22272,7 @@ func (mmListAllObjects *mRepositoryMockListAllObjects) Return(oa1 []mm_repositor
 }
 
 // Set uses given function f to mock the Repository.ListAllObjects method
-func (mmListAllObjects *mRepositoryMockListAllObjects) Set(f func(ctx context.Context, namespaceUID types.CreatorUIDType, creatorUID types.CreatorUIDType) (oa1 []mm_repository.ObjectModel, err error)) *RepositoryMock {
+func (mmListAllObjects *mRepositoryMockListAllObjects) Set(f func(ctx context.Context, namespaceUID types.NamespaceUIDType, creatorUID types.CreatorUIDType) (oa1 []mm_repository.ObjectModel, err error)) *RepositoryMock {
 	if mmListAllObjects.defaultExpectation != nil {
 		mmListAllObjects.mock.t.Fatalf("Default expectation is already set for the Repository.ListAllObjects method")
 	}
@@ -22289,7 +22288,7 @@ func (mmListAllObjects *mRepositoryMockListAllObjects) Set(f func(ctx context.Co
 
 // When sets expectation for the Repository.ListAllObjects which will trigger the result defined by the following
 // Then helper
-func (mmListAllObjects *mRepositoryMockListAllObjects) When(ctx context.Context, namespaceUID types.CreatorUIDType, creatorUID types.CreatorUIDType) *RepositoryMockListAllObjectsExpectation {
+func (mmListAllObjects *mRepositoryMockListAllObjects) When(ctx context.Context, namespaceUID types.NamespaceUIDType, creatorUID types.CreatorUIDType) *RepositoryMockListAllObjectsExpectation {
 	if mmListAllObjects.mock.funcListAllObjects != nil {
 		mmListAllObjects.mock.t.Fatalf("RepositoryMock.ListAllObjects mock is already set by Set")
 	}
@@ -22331,7 +22330,7 @@ func (mmListAllObjects *mRepositoryMockListAllObjects) invocationsDone() bool {
 }
 
 // ListAllObjects implements mm_repository.Repository
-func (mmListAllObjects *RepositoryMock) ListAllObjects(ctx context.Context, namespaceUID types.CreatorUIDType, creatorUID types.CreatorUIDType) (oa1 []mm_repository.ObjectModel, err error) {
+func (mmListAllObjects *RepositoryMock) ListAllObjects(ctx context.Context, namespaceUID types.NamespaceUIDType, creatorUID types.CreatorUIDType) (oa1 []mm_repository.ObjectModel, err error) {
 	mm_atomic.AddUint64(&mmListAllObjects.beforeListAllObjectsCounter, 1)
 	defer mm_atomic.AddUint64(&mmListAllObjects.afterListAllObjectsCounter, 1)
 
@@ -22866,13 +22865,13 @@ type RepositoryMockListEmbeddingsByKBFileUIDExpectation struct {
 // RepositoryMockListEmbeddingsByKBFileUIDParams contains parameters of the Repository.ListEmbeddingsByKBFileUID
 type RepositoryMockListEmbeddingsByKBFileUIDParams struct {
 	ctx       context.Context
-	kbFileUID uuid.UUID
+	kbFileUID types.FileUIDType
 }
 
 // RepositoryMockListEmbeddingsByKBFileUIDParamPtrs contains pointers to parameters of the Repository.ListEmbeddingsByKBFileUID
 type RepositoryMockListEmbeddingsByKBFileUIDParamPtrs struct {
 	ctx       *context.Context
-	kbFileUID *uuid.UUID
+	kbFileUID *types.FileUIDType
 }
 
 // RepositoryMockListEmbeddingsByKBFileUIDResults contains results of the Repository.ListEmbeddingsByKBFileUID
@@ -22899,7 +22898,7 @@ func (mmListEmbeddingsByKBFileUID *mRepositoryMockListEmbeddingsByKBFileUID) Opt
 }
 
 // Expect sets up expected params for Repository.ListEmbeddingsByKBFileUID
-func (mmListEmbeddingsByKBFileUID *mRepositoryMockListEmbeddingsByKBFileUID) Expect(ctx context.Context, kbFileUID uuid.UUID) *mRepositoryMockListEmbeddingsByKBFileUID {
+func (mmListEmbeddingsByKBFileUID *mRepositoryMockListEmbeddingsByKBFileUID) Expect(ctx context.Context, kbFileUID types.FileUIDType) *mRepositoryMockListEmbeddingsByKBFileUID {
 	if mmListEmbeddingsByKBFileUID.mock.funcListEmbeddingsByKBFileUID != nil {
 		mmListEmbeddingsByKBFileUID.mock.t.Fatalf("RepositoryMock.ListEmbeddingsByKBFileUID mock is already set by Set")
 	}
@@ -22947,7 +22946,7 @@ func (mmListEmbeddingsByKBFileUID *mRepositoryMockListEmbeddingsByKBFileUID) Exp
 }
 
 // ExpectKbFileUIDParam2 sets up expected param kbFileUID for Repository.ListEmbeddingsByKBFileUID
-func (mmListEmbeddingsByKBFileUID *mRepositoryMockListEmbeddingsByKBFileUID) ExpectKbFileUIDParam2(kbFileUID uuid.UUID) *mRepositoryMockListEmbeddingsByKBFileUID {
+func (mmListEmbeddingsByKBFileUID *mRepositoryMockListEmbeddingsByKBFileUID) ExpectKbFileUIDParam2(kbFileUID types.FileUIDType) *mRepositoryMockListEmbeddingsByKBFileUID {
 	if mmListEmbeddingsByKBFileUID.mock.funcListEmbeddingsByKBFileUID != nil {
 		mmListEmbeddingsByKBFileUID.mock.t.Fatalf("RepositoryMock.ListEmbeddingsByKBFileUID mock is already set by Set")
 	}
@@ -22970,7 +22969,7 @@ func (mmListEmbeddingsByKBFileUID *mRepositoryMockListEmbeddingsByKBFileUID) Exp
 }
 
 // Inspect accepts an inspector function that has same arguments as the Repository.ListEmbeddingsByKBFileUID
-func (mmListEmbeddingsByKBFileUID *mRepositoryMockListEmbeddingsByKBFileUID) Inspect(f func(ctx context.Context, kbFileUID uuid.UUID)) *mRepositoryMockListEmbeddingsByKBFileUID {
+func (mmListEmbeddingsByKBFileUID *mRepositoryMockListEmbeddingsByKBFileUID) Inspect(f func(ctx context.Context, kbFileUID types.FileUIDType)) *mRepositoryMockListEmbeddingsByKBFileUID {
 	if mmListEmbeddingsByKBFileUID.mock.inspectFuncListEmbeddingsByKBFileUID != nil {
 		mmListEmbeddingsByKBFileUID.mock.t.Fatalf("Inspect function is already set for RepositoryMock.ListEmbeddingsByKBFileUID")
 	}
@@ -22995,7 +22994,7 @@ func (mmListEmbeddingsByKBFileUID *mRepositoryMockListEmbeddingsByKBFileUID) Ret
 }
 
 // Set uses given function f to mock the Repository.ListEmbeddingsByKBFileUID method
-func (mmListEmbeddingsByKBFileUID *mRepositoryMockListEmbeddingsByKBFileUID) Set(f func(ctx context.Context, kbFileUID uuid.UUID) (ea1 []mm_repository.EmbeddingModel, err error)) *RepositoryMock {
+func (mmListEmbeddingsByKBFileUID *mRepositoryMockListEmbeddingsByKBFileUID) Set(f func(ctx context.Context, kbFileUID types.FileUIDType) (ea1 []mm_repository.EmbeddingModel, err error)) *RepositoryMock {
 	if mmListEmbeddingsByKBFileUID.defaultExpectation != nil {
 		mmListEmbeddingsByKBFileUID.mock.t.Fatalf("Default expectation is already set for the Repository.ListEmbeddingsByKBFileUID method")
 	}
@@ -23011,7 +23010,7 @@ func (mmListEmbeddingsByKBFileUID *mRepositoryMockListEmbeddingsByKBFileUID) Set
 
 // When sets expectation for the Repository.ListEmbeddingsByKBFileUID which will trigger the result defined by the following
 // Then helper
-func (mmListEmbeddingsByKBFileUID *mRepositoryMockListEmbeddingsByKBFileUID) When(ctx context.Context, kbFileUID uuid.UUID) *RepositoryMockListEmbeddingsByKBFileUIDExpectation {
+func (mmListEmbeddingsByKBFileUID *mRepositoryMockListEmbeddingsByKBFileUID) When(ctx context.Context, kbFileUID types.FileUIDType) *RepositoryMockListEmbeddingsByKBFileUIDExpectation {
 	if mmListEmbeddingsByKBFileUID.mock.funcListEmbeddingsByKBFileUID != nil {
 		mmListEmbeddingsByKBFileUID.mock.t.Fatalf("RepositoryMock.ListEmbeddingsByKBFileUID mock is already set by Set")
 	}
@@ -23053,7 +23052,7 @@ func (mmListEmbeddingsByKBFileUID *mRepositoryMockListEmbeddingsByKBFileUID) inv
 }
 
 // ListEmbeddingsByKBFileUID implements mm_repository.Repository
-func (mmListEmbeddingsByKBFileUID *RepositoryMock) ListEmbeddingsByKBFileUID(ctx context.Context, kbFileUID uuid.UUID) (ea1 []mm_repository.EmbeddingModel, err error) {
+func (mmListEmbeddingsByKBFileUID *RepositoryMock) ListEmbeddingsByKBFileUID(ctx context.Context, kbFileUID types.FileUIDType) (ea1 []mm_repository.EmbeddingModel, err error) {
 	mm_atomic.AddUint64(&mmListEmbeddingsByKBFileUID.beforeListEmbeddingsByKBFileUIDCounter, 1)
 	defer mm_atomic.AddUint64(&mmListEmbeddingsByKBFileUID.afterListEmbeddingsByKBFileUIDCounter, 1)
 
@@ -25704,14 +25703,14 @@ type RepositoryMockProcessKnowledgeBaseFilesExpectation struct {
 type RepositoryMockProcessKnowledgeBaseFilesParams struct {
 	ctx       context.Context
 	fileUIDs  []string
-	requester uuid.UUID
+	requester types.RequesterUIDType
 }
 
 // RepositoryMockProcessKnowledgeBaseFilesParamPtrs contains pointers to parameters of the Repository.ProcessKnowledgeBaseFiles
 type RepositoryMockProcessKnowledgeBaseFilesParamPtrs struct {
 	ctx       *context.Context
 	fileUIDs  *[]string
-	requester *uuid.UUID
+	requester *types.RequesterUIDType
 }
 
 // RepositoryMockProcessKnowledgeBaseFilesResults contains results of the Repository.ProcessKnowledgeBaseFiles
@@ -25739,7 +25738,7 @@ func (mmProcessKnowledgeBaseFiles *mRepositoryMockProcessKnowledgeBaseFiles) Opt
 }
 
 // Expect sets up expected params for Repository.ProcessKnowledgeBaseFiles
-func (mmProcessKnowledgeBaseFiles *mRepositoryMockProcessKnowledgeBaseFiles) Expect(ctx context.Context, fileUIDs []string, requester uuid.UUID) *mRepositoryMockProcessKnowledgeBaseFiles {
+func (mmProcessKnowledgeBaseFiles *mRepositoryMockProcessKnowledgeBaseFiles) Expect(ctx context.Context, fileUIDs []string, requester types.RequesterUIDType) *mRepositoryMockProcessKnowledgeBaseFiles {
 	if mmProcessKnowledgeBaseFiles.mock.funcProcessKnowledgeBaseFiles != nil {
 		mmProcessKnowledgeBaseFiles.mock.t.Fatalf("RepositoryMock.ProcessKnowledgeBaseFiles mock is already set by Set")
 	}
@@ -25810,7 +25809,7 @@ func (mmProcessKnowledgeBaseFiles *mRepositoryMockProcessKnowledgeBaseFiles) Exp
 }
 
 // ExpectRequesterParam3 sets up expected param requester for Repository.ProcessKnowledgeBaseFiles
-func (mmProcessKnowledgeBaseFiles *mRepositoryMockProcessKnowledgeBaseFiles) ExpectRequesterParam3(requester uuid.UUID) *mRepositoryMockProcessKnowledgeBaseFiles {
+func (mmProcessKnowledgeBaseFiles *mRepositoryMockProcessKnowledgeBaseFiles) ExpectRequesterParam3(requester types.RequesterUIDType) *mRepositoryMockProcessKnowledgeBaseFiles {
 	if mmProcessKnowledgeBaseFiles.mock.funcProcessKnowledgeBaseFiles != nil {
 		mmProcessKnowledgeBaseFiles.mock.t.Fatalf("RepositoryMock.ProcessKnowledgeBaseFiles mock is already set by Set")
 	}
@@ -25833,7 +25832,7 @@ func (mmProcessKnowledgeBaseFiles *mRepositoryMockProcessKnowledgeBaseFiles) Exp
 }
 
 // Inspect accepts an inspector function that has same arguments as the Repository.ProcessKnowledgeBaseFiles
-func (mmProcessKnowledgeBaseFiles *mRepositoryMockProcessKnowledgeBaseFiles) Inspect(f func(ctx context.Context, fileUIDs []string, requester uuid.UUID)) *mRepositoryMockProcessKnowledgeBaseFiles {
+func (mmProcessKnowledgeBaseFiles *mRepositoryMockProcessKnowledgeBaseFiles) Inspect(f func(ctx context.Context, fileUIDs []string, requester types.RequesterUIDType)) *mRepositoryMockProcessKnowledgeBaseFiles {
 	if mmProcessKnowledgeBaseFiles.mock.inspectFuncProcessKnowledgeBaseFiles != nil {
 		mmProcessKnowledgeBaseFiles.mock.t.Fatalf("Inspect function is already set for RepositoryMock.ProcessKnowledgeBaseFiles")
 	}
@@ -25858,7 +25857,7 @@ func (mmProcessKnowledgeBaseFiles *mRepositoryMockProcessKnowledgeBaseFiles) Ret
 }
 
 // Set uses given function f to mock the Repository.ProcessKnowledgeBaseFiles method
-func (mmProcessKnowledgeBaseFiles *mRepositoryMockProcessKnowledgeBaseFiles) Set(f func(ctx context.Context, fileUIDs []string, requester uuid.UUID) (ka1 []mm_repository.KnowledgeBaseFileModel, err error)) *RepositoryMock {
+func (mmProcessKnowledgeBaseFiles *mRepositoryMockProcessKnowledgeBaseFiles) Set(f func(ctx context.Context, fileUIDs []string, requester types.RequesterUIDType) (ka1 []mm_repository.KnowledgeBaseFileModel, err error)) *RepositoryMock {
 	if mmProcessKnowledgeBaseFiles.defaultExpectation != nil {
 		mmProcessKnowledgeBaseFiles.mock.t.Fatalf("Default expectation is already set for the Repository.ProcessKnowledgeBaseFiles method")
 	}
@@ -25874,7 +25873,7 @@ func (mmProcessKnowledgeBaseFiles *mRepositoryMockProcessKnowledgeBaseFiles) Set
 
 // When sets expectation for the Repository.ProcessKnowledgeBaseFiles which will trigger the result defined by the following
 // Then helper
-func (mmProcessKnowledgeBaseFiles *mRepositoryMockProcessKnowledgeBaseFiles) When(ctx context.Context, fileUIDs []string, requester uuid.UUID) *RepositoryMockProcessKnowledgeBaseFilesExpectation {
+func (mmProcessKnowledgeBaseFiles *mRepositoryMockProcessKnowledgeBaseFiles) When(ctx context.Context, fileUIDs []string, requester types.RequesterUIDType) *RepositoryMockProcessKnowledgeBaseFilesExpectation {
 	if mmProcessKnowledgeBaseFiles.mock.funcProcessKnowledgeBaseFiles != nil {
 		mmProcessKnowledgeBaseFiles.mock.t.Fatalf("RepositoryMock.ProcessKnowledgeBaseFiles mock is already set by Set")
 	}
@@ -25916,7 +25915,7 @@ func (mmProcessKnowledgeBaseFiles *mRepositoryMockProcessKnowledgeBaseFiles) inv
 }
 
 // ProcessKnowledgeBaseFiles implements mm_repository.Repository
-func (mmProcessKnowledgeBaseFiles *RepositoryMock) ProcessKnowledgeBaseFiles(ctx context.Context, fileUIDs []string, requester uuid.UUID) (ka1 []mm_repository.KnowledgeBaseFileModel, err error) {
+func (mmProcessKnowledgeBaseFiles *RepositoryMock) ProcessKnowledgeBaseFiles(ctx context.Context, fileUIDs []string, requester types.RequesterUIDType) (ka1 []mm_repository.KnowledgeBaseFileModel, err error) {
 	mm_atomic.AddUint64(&mmProcessKnowledgeBaseFiles.beforeProcessKnowledgeBaseFilesCounter, 1)
 	defer mm_atomic.AddUint64(&mmProcessKnowledgeBaseFiles.afterProcessKnowledgeBaseFilesCounter, 1)
 
@@ -26544,8 +26543,8 @@ type RepositoryMockSetChatCacheMetadataExpectation struct {
 // RepositoryMockSetChatCacheMetadataParams contains parameters of the Repository.SetChatCacheMetadata
 type RepositoryMockSetChatCacheMetadataParams struct {
 	ctx      context.Context
-	kbUID    uuid.UUID
-	fileUIDs []uuid.UUID
+	kbUID    types.KBUIDType
+	fileUIDs []types.FileUIDType
 	metadata *mm_repository.ChatCacheMetadata
 	ttl      time.Duration
 }
@@ -26553,8 +26552,8 @@ type RepositoryMockSetChatCacheMetadataParams struct {
 // RepositoryMockSetChatCacheMetadataParamPtrs contains pointers to parameters of the Repository.SetChatCacheMetadata
 type RepositoryMockSetChatCacheMetadataParamPtrs struct {
 	ctx      *context.Context
-	kbUID    *uuid.UUID
-	fileUIDs *[]uuid.UUID
+	kbUID    *types.KBUIDType
+	fileUIDs *[]types.FileUIDType
 	metadata **mm_repository.ChatCacheMetadata
 	ttl      *time.Duration
 }
@@ -26585,7 +26584,7 @@ func (mmSetChatCacheMetadata *mRepositoryMockSetChatCacheMetadata) Optional() *m
 }
 
 // Expect sets up expected params for Repository.SetChatCacheMetadata
-func (mmSetChatCacheMetadata *mRepositoryMockSetChatCacheMetadata) Expect(ctx context.Context, kbUID uuid.UUID, fileUIDs []uuid.UUID, metadata *mm_repository.ChatCacheMetadata, ttl time.Duration) *mRepositoryMockSetChatCacheMetadata {
+func (mmSetChatCacheMetadata *mRepositoryMockSetChatCacheMetadata) Expect(ctx context.Context, kbUID types.KBUIDType, fileUIDs []types.FileUIDType, metadata *mm_repository.ChatCacheMetadata, ttl time.Duration) *mRepositoryMockSetChatCacheMetadata {
 	if mmSetChatCacheMetadata.mock.funcSetChatCacheMetadata != nil {
 		mmSetChatCacheMetadata.mock.t.Fatalf("RepositoryMock.SetChatCacheMetadata mock is already set by Set")
 	}
@@ -26633,7 +26632,7 @@ func (mmSetChatCacheMetadata *mRepositoryMockSetChatCacheMetadata) ExpectCtxPara
 }
 
 // ExpectKbUIDParam2 sets up expected param kbUID for Repository.SetChatCacheMetadata
-func (mmSetChatCacheMetadata *mRepositoryMockSetChatCacheMetadata) ExpectKbUIDParam2(kbUID uuid.UUID) *mRepositoryMockSetChatCacheMetadata {
+func (mmSetChatCacheMetadata *mRepositoryMockSetChatCacheMetadata) ExpectKbUIDParam2(kbUID types.KBUIDType) *mRepositoryMockSetChatCacheMetadata {
 	if mmSetChatCacheMetadata.mock.funcSetChatCacheMetadata != nil {
 		mmSetChatCacheMetadata.mock.t.Fatalf("RepositoryMock.SetChatCacheMetadata mock is already set by Set")
 	}
@@ -26656,7 +26655,7 @@ func (mmSetChatCacheMetadata *mRepositoryMockSetChatCacheMetadata) ExpectKbUIDPa
 }
 
 // ExpectFileUIDsParam3 sets up expected param fileUIDs for Repository.SetChatCacheMetadata
-func (mmSetChatCacheMetadata *mRepositoryMockSetChatCacheMetadata) ExpectFileUIDsParam3(fileUIDs []uuid.UUID) *mRepositoryMockSetChatCacheMetadata {
+func (mmSetChatCacheMetadata *mRepositoryMockSetChatCacheMetadata) ExpectFileUIDsParam3(fileUIDs []types.FileUIDType) *mRepositoryMockSetChatCacheMetadata {
 	if mmSetChatCacheMetadata.mock.funcSetChatCacheMetadata != nil {
 		mmSetChatCacheMetadata.mock.t.Fatalf("RepositoryMock.SetChatCacheMetadata mock is already set by Set")
 	}
@@ -26725,7 +26724,7 @@ func (mmSetChatCacheMetadata *mRepositoryMockSetChatCacheMetadata) ExpectTtlPara
 }
 
 // Inspect accepts an inspector function that has same arguments as the Repository.SetChatCacheMetadata
-func (mmSetChatCacheMetadata *mRepositoryMockSetChatCacheMetadata) Inspect(f func(ctx context.Context, kbUID uuid.UUID, fileUIDs []uuid.UUID, metadata *mm_repository.ChatCacheMetadata, ttl time.Duration)) *mRepositoryMockSetChatCacheMetadata {
+func (mmSetChatCacheMetadata *mRepositoryMockSetChatCacheMetadata) Inspect(f func(ctx context.Context, kbUID types.KBUIDType, fileUIDs []types.FileUIDType, metadata *mm_repository.ChatCacheMetadata, ttl time.Duration)) *mRepositoryMockSetChatCacheMetadata {
 	if mmSetChatCacheMetadata.mock.inspectFuncSetChatCacheMetadata != nil {
 		mmSetChatCacheMetadata.mock.t.Fatalf("Inspect function is already set for RepositoryMock.SetChatCacheMetadata")
 	}
@@ -26750,7 +26749,7 @@ func (mmSetChatCacheMetadata *mRepositoryMockSetChatCacheMetadata) Return(err er
 }
 
 // Set uses given function f to mock the Repository.SetChatCacheMetadata method
-func (mmSetChatCacheMetadata *mRepositoryMockSetChatCacheMetadata) Set(f func(ctx context.Context, kbUID uuid.UUID, fileUIDs []uuid.UUID, metadata *mm_repository.ChatCacheMetadata, ttl time.Duration) (err error)) *RepositoryMock {
+func (mmSetChatCacheMetadata *mRepositoryMockSetChatCacheMetadata) Set(f func(ctx context.Context, kbUID types.KBUIDType, fileUIDs []types.FileUIDType, metadata *mm_repository.ChatCacheMetadata, ttl time.Duration) (err error)) *RepositoryMock {
 	if mmSetChatCacheMetadata.defaultExpectation != nil {
 		mmSetChatCacheMetadata.mock.t.Fatalf("Default expectation is already set for the Repository.SetChatCacheMetadata method")
 	}
@@ -26766,7 +26765,7 @@ func (mmSetChatCacheMetadata *mRepositoryMockSetChatCacheMetadata) Set(f func(ct
 
 // When sets expectation for the Repository.SetChatCacheMetadata which will trigger the result defined by the following
 // Then helper
-func (mmSetChatCacheMetadata *mRepositoryMockSetChatCacheMetadata) When(ctx context.Context, kbUID uuid.UUID, fileUIDs []uuid.UUID, metadata *mm_repository.ChatCacheMetadata, ttl time.Duration) *RepositoryMockSetChatCacheMetadataExpectation {
+func (mmSetChatCacheMetadata *mRepositoryMockSetChatCacheMetadata) When(ctx context.Context, kbUID types.KBUIDType, fileUIDs []types.FileUIDType, metadata *mm_repository.ChatCacheMetadata, ttl time.Duration) *RepositoryMockSetChatCacheMetadataExpectation {
 	if mmSetChatCacheMetadata.mock.funcSetChatCacheMetadata != nil {
 		mmSetChatCacheMetadata.mock.t.Fatalf("RepositoryMock.SetChatCacheMetadata mock is already set by Set")
 	}
@@ -26808,7 +26807,7 @@ func (mmSetChatCacheMetadata *mRepositoryMockSetChatCacheMetadata) invocationsDo
 }
 
 // SetChatCacheMetadata implements mm_repository.Repository
-func (mmSetChatCacheMetadata *RepositoryMock) SetChatCacheMetadata(ctx context.Context, kbUID uuid.UUID, fileUIDs []uuid.UUID, metadata *mm_repository.ChatCacheMetadata, ttl time.Duration) (err error) {
+func (mmSetChatCacheMetadata *RepositoryMock) SetChatCacheMetadata(ctx context.Context, kbUID types.KBUIDType, fileUIDs []types.FileUIDType, metadata *mm_repository.ChatCacheMetadata, ttl time.Duration) (err error) {
 	mm_atomic.AddUint64(&mmSetChatCacheMetadata.beforeSetChatCacheMetadataCounter, 1)
 	defer mm_atomic.AddUint64(&mmSetChatCacheMetadata.afterSetChatCacheMetadataCounter, 1)
 
@@ -27322,14 +27321,14 @@ type RepositoryMockUpdateConvertedFileExpectation struct {
 // RepositoryMockUpdateConvertedFileParams contains parameters of the Repository.UpdateConvertedFile
 type RepositoryMockUpdateConvertedFileParams struct {
 	ctx    context.Context
-	uid    uuid.UUID
+	uid    types.ConvertedFileUIDType
 	update map[string]any
 }
 
 // RepositoryMockUpdateConvertedFileParamPtrs contains pointers to parameters of the Repository.UpdateConvertedFile
 type RepositoryMockUpdateConvertedFileParamPtrs struct {
 	ctx    *context.Context
-	uid    *uuid.UUID
+	uid    *types.ConvertedFileUIDType
 	update *map[string]any
 }
 
@@ -27357,7 +27356,7 @@ func (mmUpdateConvertedFile *mRepositoryMockUpdateConvertedFile) Optional() *mRe
 }
 
 // Expect sets up expected params for Repository.UpdateConvertedFile
-func (mmUpdateConvertedFile *mRepositoryMockUpdateConvertedFile) Expect(ctx context.Context, uid uuid.UUID, update map[string]any) *mRepositoryMockUpdateConvertedFile {
+func (mmUpdateConvertedFile *mRepositoryMockUpdateConvertedFile) Expect(ctx context.Context, uid types.ConvertedFileUIDType, update map[string]any) *mRepositoryMockUpdateConvertedFile {
 	if mmUpdateConvertedFile.mock.funcUpdateConvertedFile != nil {
 		mmUpdateConvertedFile.mock.t.Fatalf("RepositoryMock.UpdateConvertedFile mock is already set by Set")
 	}
@@ -27405,7 +27404,7 @@ func (mmUpdateConvertedFile *mRepositoryMockUpdateConvertedFile) ExpectCtxParam1
 }
 
 // ExpectUidParam2 sets up expected param uid for Repository.UpdateConvertedFile
-func (mmUpdateConvertedFile *mRepositoryMockUpdateConvertedFile) ExpectUidParam2(uid uuid.UUID) *mRepositoryMockUpdateConvertedFile {
+func (mmUpdateConvertedFile *mRepositoryMockUpdateConvertedFile) ExpectUidParam2(uid types.ConvertedFileUIDType) *mRepositoryMockUpdateConvertedFile {
 	if mmUpdateConvertedFile.mock.funcUpdateConvertedFile != nil {
 		mmUpdateConvertedFile.mock.t.Fatalf("RepositoryMock.UpdateConvertedFile mock is already set by Set")
 	}
@@ -27451,7 +27450,7 @@ func (mmUpdateConvertedFile *mRepositoryMockUpdateConvertedFile) ExpectUpdatePar
 }
 
 // Inspect accepts an inspector function that has same arguments as the Repository.UpdateConvertedFile
-func (mmUpdateConvertedFile *mRepositoryMockUpdateConvertedFile) Inspect(f func(ctx context.Context, uid uuid.UUID, update map[string]any)) *mRepositoryMockUpdateConvertedFile {
+func (mmUpdateConvertedFile *mRepositoryMockUpdateConvertedFile) Inspect(f func(ctx context.Context, uid types.ConvertedFileUIDType, update map[string]any)) *mRepositoryMockUpdateConvertedFile {
 	if mmUpdateConvertedFile.mock.inspectFuncUpdateConvertedFile != nil {
 		mmUpdateConvertedFile.mock.t.Fatalf("Inspect function is already set for RepositoryMock.UpdateConvertedFile")
 	}
@@ -27476,7 +27475,7 @@ func (mmUpdateConvertedFile *mRepositoryMockUpdateConvertedFile) Return(err erro
 }
 
 // Set uses given function f to mock the Repository.UpdateConvertedFile method
-func (mmUpdateConvertedFile *mRepositoryMockUpdateConvertedFile) Set(f func(ctx context.Context, uid uuid.UUID, update map[string]any) (err error)) *RepositoryMock {
+func (mmUpdateConvertedFile *mRepositoryMockUpdateConvertedFile) Set(f func(ctx context.Context, uid types.ConvertedFileUIDType, update map[string]any) (err error)) *RepositoryMock {
 	if mmUpdateConvertedFile.defaultExpectation != nil {
 		mmUpdateConvertedFile.mock.t.Fatalf("Default expectation is already set for the Repository.UpdateConvertedFile method")
 	}
@@ -27492,7 +27491,7 @@ func (mmUpdateConvertedFile *mRepositoryMockUpdateConvertedFile) Set(f func(ctx 
 
 // When sets expectation for the Repository.UpdateConvertedFile which will trigger the result defined by the following
 // Then helper
-func (mmUpdateConvertedFile *mRepositoryMockUpdateConvertedFile) When(ctx context.Context, uid uuid.UUID, update map[string]any) *RepositoryMockUpdateConvertedFileExpectation {
+func (mmUpdateConvertedFile *mRepositoryMockUpdateConvertedFile) When(ctx context.Context, uid types.ConvertedFileUIDType, update map[string]any) *RepositoryMockUpdateConvertedFileExpectation {
 	if mmUpdateConvertedFile.mock.funcUpdateConvertedFile != nil {
 		mmUpdateConvertedFile.mock.t.Fatalf("RepositoryMock.UpdateConvertedFile mock is already set by Set")
 	}
@@ -27534,7 +27533,7 @@ func (mmUpdateConvertedFile *mRepositoryMockUpdateConvertedFile) invocationsDone
 }
 
 // UpdateConvertedFile implements mm_repository.Repository
-func (mmUpdateConvertedFile *RepositoryMock) UpdateConvertedFile(ctx context.Context, uid uuid.UUID, update map[string]any) (err error) {
+func (mmUpdateConvertedFile *RepositoryMock) UpdateConvertedFile(ctx context.Context, uid types.ConvertedFileUIDType, update map[string]any) (err error) {
 	mm_atomic.AddUint64(&mmUpdateConvertedFile.beforeUpdateConvertedFileCounter, 1)
 	defer mm_atomic.AddUint64(&mmUpdateConvertedFile.afterUpdateConvertedFileCounter, 1)
 
@@ -29190,14 +29189,14 @@ type RepositoryMockUpdateObjectByUpdateMapExpectation struct {
 // RepositoryMockUpdateObjectByUpdateMapParams contains parameters of the Repository.UpdateObjectByUpdateMap
 type RepositoryMockUpdateObjectByUpdateMapParams struct {
 	ctx       context.Context
-	objUID    uuid.UUID
+	objUID    types.ObjectUIDType
 	updateMap map[string]any
 }
 
 // RepositoryMockUpdateObjectByUpdateMapParamPtrs contains pointers to parameters of the Repository.UpdateObjectByUpdateMap
 type RepositoryMockUpdateObjectByUpdateMapParamPtrs struct {
 	ctx       *context.Context
-	objUID    *uuid.UUID
+	objUID    *types.ObjectUIDType
 	updateMap *map[string]any
 }
 
@@ -29226,7 +29225,7 @@ func (mmUpdateObjectByUpdateMap *mRepositoryMockUpdateObjectByUpdateMap) Optiona
 }
 
 // Expect sets up expected params for Repository.UpdateObjectByUpdateMap
-func (mmUpdateObjectByUpdateMap *mRepositoryMockUpdateObjectByUpdateMap) Expect(ctx context.Context, objUID uuid.UUID, updateMap map[string]any) *mRepositoryMockUpdateObjectByUpdateMap {
+func (mmUpdateObjectByUpdateMap *mRepositoryMockUpdateObjectByUpdateMap) Expect(ctx context.Context, objUID types.ObjectUIDType, updateMap map[string]any) *mRepositoryMockUpdateObjectByUpdateMap {
 	if mmUpdateObjectByUpdateMap.mock.funcUpdateObjectByUpdateMap != nil {
 		mmUpdateObjectByUpdateMap.mock.t.Fatalf("RepositoryMock.UpdateObjectByUpdateMap mock is already set by Set")
 	}
@@ -29274,7 +29273,7 @@ func (mmUpdateObjectByUpdateMap *mRepositoryMockUpdateObjectByUpdateMap) ExpectC
 }
 
 // ExpectObjUIDParam2 sets up expected param objUID for Repository.UpdateObjectByUpdateMap
-func (mmUpdateObjectByUpdateMap *mRepositoryMockUpdateObjectByUpdateMap) ExpectObjUIDParam2(objUID uuid.UUID) *mRepositoryMockUpdateObjectByUpdateMap {
+func (mmUpdateObjectByUpdateMap *mRepositoryMockUpdateObjectByUpdateMap) ExpectObjUIDParam2(objUID types.ObjectUIDType) *mRepositoryMockUpdateObjectByUpdateMap {
 	if mmUpdateObjectByUpdateMap.mock.funcUpdateObjectByUpdateMap != nil {
 		mmUpdateObjectByUpdateMap.mock.t.Fatalf("RepositoryMock.UpdateObjectByUpdateMap mock is already set by Set")
 	}
@@ -29320,7 +29319,7 @@ func (mmUpdateObjectByUpdateMap *mRepositoryMockUpdateObjectByUpdateMap) ExpectU
 }
 
 // Inspect accepts an inspector function that has same arguments as the Repository.UpdateObjectByUpdateMap
-func (mmUpdateObjectByUpdateMap *mRepositoryMockUpdateObjectByUpdateMap) Inspect(f func(ctx context.Context, objUID uuid.UUID, updateMap map[string]any)) *mRepositoryMockUpdateObjectByUpdateMap {
+func (mmUpdateObjectByUpdateMap *mRepositoryMockUpdateObjectByUpdateMap) Inspect(f func(ctx context.Context, objUID types.ObjectUIDType, updateMap map[string]any)) *mRepositoryMockUpdateObjectByUpdateMap {
 	if mmUpdateObjectByUpdateMap.mock.inspectFuncUpdateObjectByUpdateMap != nil {
 		mmUpdateObjectByUpdateMap.mock.t.Fatalf("Inspect function is already set for RepositoryMock.UpdateObjectByUpdateMap")
 	}
@@ -29345,7 +29344,7 @@ func (mmUpdateObjectByUpdateMap *mRepositoryMockUpdateObjectByUpdateMap) Return(
 }
 
 // Set uses given function f to mock the Repository.UpdateObjectByUpdateMap method
-func (mmUpdateObjectByUpdateMap *mRepositoryMockUpdateObjectByUpdateMap) Set(f func(ctx context.Context, objUID uuid.UUID, updateMap map[string]any) (op1 *mm_repository.ObjectModel, err error)) *RepositoryMock {
+func (mmUpdateObjectByUpdateMap *mRepositoryMockUpdateObjectByUpdateMap) Set(f func(ctx context.Context, objUID types.ObjectUIDType, updateMap map[string]any) (op1 *mm_repository.ObjectModel, err error)) *RepositoryMock {
 	if mmUpdateObjectByUpdateMap.defaultExpectation != nil {
 		mmUpdateObjectByUpdateMap.mock.t.Fatalf("Default expectation is already set for the Repository.UpdateObjectByUpdateMap method")
 	}
@@ -29361,7 +29360,7 @@ func (mmUpdateObjectByUpdateMap *mRepositoryMockUpdateObjectByUpdateMap) Set(f f
 
 // When sets expectation for the Repository.UpdateObjectByUpdateMap which will trigger the result defined by the following
 // Then helper
-func (mmUpdateObjectByUpdateMap *mRepositoryMockUpdateObjectByUpdateMap) When(ctx context.Context, objUID uuid.UUID, updateMap map[string]any) *RepositoryMockUpdateObjectByUpdateMapExpectation {
+func (mmUpdateObjectByUpdateMap *mRepositoryMockUpdateObjectByUpdateMap) When(ctx context.Context, objUID types.ObjectUIDType, updateMap map[string]any) *RepositoryMockUpdateObjectByUpdateMapExpectation {
 	if mmUpdateObjectByUpdateMap.mock.funcUpdateObjectByUpdateMap != nil {
 		mmUpdateObjectByUpdateMap.mock.t.Fatalf("RepositoryMock.UpdateObjectByUpdateMap mock is already set by Set")
 	}
@@ -29403,7 +29402,7 @@ func (mmUpdateObjectByUpdateMap *mRepositoryMockUpdateObjectByUpdateMap) invocat
 }
 
 // UpdateObjectByUpdateMap implements mm_repository.Repository
-func (mmUpdateObjectByUpdateMap *RepositoryMock) UpdateObjectByUpdateMap(ctx context.Context, objUID uuid.UUID, updateMap map[string]any) (op1 *mm_repository.ObjectModel, err error) {
+func (mmUpdateObjectByUpdateMap *RepositoryMock) UpdateObjectByUpdateMap(ctx context.Context, objUID types.ObjectUIDType, updateMap map[string]any) (op1 *mm_repository.ObjectModel, err error) {
 	mm_atomic.AddUint64(&mmUpdateObjectByUpdateMap.beforeUpdateObjectByUpdateMapCounter, 1)
 	defer mm_atomic.AddUint64(&mmUpdateObjectByUpdateMap.afterUpdateObjectByUpdateMapCounter, 1)
 

@@ -11,6 +11,7 @@ import (
 
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
+	"github.com/instill-ai/artifact-backend/pkg/types"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	errorsx "github.com/instill-ai/x/errors"
@@ -43,7 +44,7 @@ func (ph *PublicHandler) GetFileCatalog(ctx context.Context, req *artifactpb.Get
 	}
 
 	fileUID := uuid.FromStringOrNil(req.GetFileUid())
-	kbfs, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{fileUID})
+	kbfs, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{types.FileUIDType(fileUID)})
 	switch {
 	case err != nil:
 		return nil, fmt.Errorf("fetching file from repository: %w", err)
@@ -86,7 +87,7 @@ func (ph *PublicHandler) GetFileCatalog(ctx context.Context, req *artifactpb.Get
 	// we need to filter here.
 	targetSourceTable := repository.TextChunkTableName
 
-	embeddingMap := make(map[uuid.UUID]repository.EmbeddingModel)
+	embeddingMap := make(map[types.SourceUIDType]repository.EmbeddingModel)
 	for _, embedding := range embeddings {
 		if embedding.SourceTable != targetSourceTable {
 			continue

@@ -46,6 +46,7 @@ type GetTextChunksForEmbeddingActivityResult struct {
 	Texts       []string                    // Text chunk content for embedding generation
 	Metadata    *structpb.Struct            // External metadata from request
 	FileName    string                      // File name for identification
+	Tags        []string                    // File tags to propagate to embeddings
 }
 
 // SaveEmbeddingBatchActivityParam saves a single batch of embeddings
@@ -116,6 +117,7 @@ func (w *Worker) GetChunksForEmbeddingActivity(ctx context.Context, param *GetCh
 		Texts:       texts,
 		Metadata:    file.ExternalMetadataUnmarshal,
 		FileName:    file.Name,
+		Tags:        file.Tags,
 	}, nil
 }
 

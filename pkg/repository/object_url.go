@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gofrs/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/instill-ai/artifact-backend/pkg/types"
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
@@ -19,24 +19,24 @@ const (
 // TODO: the ObjectURLModel will be fully removed in the future, we will use the
 // presigned URL instead.
 type ObjectURL interface {
-	ListAllObjectURLs(ctx context.Context, namespaceUID, objectUID uuid.UUID) ([]ObjectURLModel, error)
-	DeleteObjectURL(ctx context.Context, uid uuid.UUID) error
-	GetObjectURLByUID(ctx context.Context, uid uuid.UUID) (*ObjectURLModel, error)
-	GetObjectURLCountByObject(ctx context.Context, objectUID uuid.UUID) (int64, error)
-	GetObjectUploadURL(ctx context.Context, objectUID uuid.UUID) (*ObjectURLModel, error)
-	GetObjectDownloadURL(ctx context.Context, objectUID uuid.UUID) (*ObjectURLModel, error)
+	ListAllObjectURLs(ctx context.Context, namespaceUID types.NamespaceUIDType, objectUID types.ObjectUIDType) ([]ObjectURLModel, error)
+	DeleteObjectURL(ctx context.Context, uid types.ObjectURLUIDType) error
+	GetObjectURLByUID(ctx context.Context, uid types.ObjectURLUIDType) (*ObjectURLModel, error)
+	GetObjectURLCountByObject(ctx context.Context, objectUID types.ObjectUIDType) (int64, error)
+	GetObjectUploadURL(ctx context.Context, objectUID types.ObjectUIDType) (*ObjectURLModel, error)
+	GetObjectDownloadURL(ctx context.Context, objectUID types.ObjectUIDType) (*ObjectURLModel, error)
 	GetObjectURLByEncodedURLPath(ctx context.Context, encodedURLPath string) (*ObjectURLModel, error)
 }
 
 // ObjectURLModel represents the object_url table in the database.
 // Note: due to ObjectURLModel will be translated to object_uRL in the database, we use ObjectURLModel instead of objectURL
 type ObjectURLModel struct {
-	UID            uuid.UUID `gorm:"column:uid;type:uuid;default:gen_random_uuid();primaryKey" json:"uid"`
-	NamespaceUID   uuid.UUID `gorm:"column:namespace_uid;type:uuid;not null" json:"namespace_uid"`
-	ObjectUID      uuid.UUID `gorm:"column:object_uid;type:uuid;not null" json:"object_uid"`
-	URLExpireAt    time.Time `gorm:"column:url_expire_at" json:"url_expire_at"`
-	MinioURLPath   string    `gorm:"column:minio_url_path;type:text;not null" json:"minio_url_path"`
-	EncodedURLPath string    `gorm:"column:encoded_url_path;type:text;not null" json:"encoded_url_path"`
+	UID            types.ObjectURLUIDType `gorm:"column:uid;type:uuid;default:gen_random_uuid();primaryKey" json:"uid"`
+	NamespaceUID   types.NamespaceUIDType `gorm:"column:namespace_uid;type:uuid;not null" json:"namespace_uid"`
+	ObjectUID      types.ObjectUIDType    `gorm:"column:object_uid;type:uuid;not null" json:"object_uid"`
+	URLExpireAt    time.Time              `gorm:"column:url_expire_at" json:"url_expire_at"`
+	MinioURLPath   string                 `gorm:"column:minio_url_path;type:text;not null" json:"minio_url_path"`
+	EncodedURLPath string                 `gorm:"column:encoded_url_path;type:text;not null" json:"encoded_url_path"`
 	// download or upload
 	Type       string     `gorm:"column:type;size:10;not null" json:"type"`
 	CreateTime time.Time  `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
@@ -81,7 +81,7 @@ const (
 )
 
 // ListAllObjectURLs fetches all ObjectURLModel records from the database for a given namespace and object, excluding soft-deleted ones.
-func (r *repository) ListAllObjectURLs(ctx context.Context, namespaceUID, objectUID uuid.UUID) ([]ObjectURLModel, error) {
+func (r *repository) ListAllObjectURLs(ctx context.Context, namespaceUID types.NamespaceUIDType, objectUID types.ObjectUIDType) ([]ObjectURLModel, error) {
 	var objectURLs []ObjectURLModel
 	whereString := fmt.Sprintf("%v IS NULL AND %v = ? AND %v = ?", ObjectURLColumn.DeleteTime, ObjectURLColumn.NamespaceUID, ObjectURLColumn.ObjectUID)
 	if err := r.db.WithContext(ctx).Where(whereString, namespaceUID, objectUID).Find(&objectURLs).Error; err != nil {
@@ -91,7 +91,7 @@ func (r *repository) ListAllObjectURLs(ctx context.Context, namespaceUID, object
 }
 
 // DeleteObjectURL performs a soft delete on an ObjectURLModel record.
-func (r *repository) DeleteObjectURL(ctx context.Context, uid uuid.UUID) error {
+func (r *repository) DeleteObjectURL(ctx context.Context, uid types.ObjectURLUIDType) error {
 	deleteTime := time.Now().UTC()
 	whereString := fmt.Sprintf("%v = ? AND %v IS NULL", ObjectURLColumn.UID, ObjectURLColumn.DeleteTime)
 	if err := r.db.WithContext(ctx).Where(whereString, uid).Update(ObjectURLColumn.DeleteTime, deleteTime).Error; err != nil {
@@ -101,7 +101,7 @@ func (r *repository) DeleteObjectURL(ctx context.Context, uid uuid.UUID) error {
 }
 
 // GetObjectURLByUID fetches an ObjectURLModel record by its UID.
-func (r *repository) GetObjectURLByUID(ctx context.Context, uid uuid.UUID) (*ObjectURLModel, error) {
+func (r *repository) GetObjectURLByUID(ctx context.Context, uid types.ObjectURLUIDType) (*ObjectURLModel, error) {
 	var objectURL ObjectURLModel
 	whereString := fmt.Sprintf("%v = ? AND %v IS NULL", ObjectURLColumn.UID, ObjectURLColumn.DeleteTime)
 	if err := r.db.WithContext(ctx).Where(whereString, uid).First(&objectURL).Error; err != nil {
@@ -111,7 +111,7 @@ func (r *repository) GetObjectURLByUID(ctx context.Context, uid uuid.UUID) (*Obj
 }
 
 // GetObjectURLCountByObject gets the count of ObjectURLs for a specific Object
-func (r *repository) GetObjectURLCountByObject(ctx context.Context, objectUID uuid.UUID) (int64, error) {
+func (r *repository) GetObjectURLCountByObject(ctx context.Context, objectUID types.ObjectUIDType) (int64, error) {
 	var count int64
 	whereString := fmt.Sprintf("%v = ? AND %v IS NULL", ObjectURLColumn.ObjectUID, ObjectURLColumn.DeleteTime)
 	if err := r.db.WithContext(ctx).Where(whereString, objectUID).Count(&count).Error; err != nil {
@@ -121,7 +121,7 @@ func (r *repository) GetObjectURLCountByObject(ctx context.Context, objectUID uu
 }
 
 // GetObjectUploadURL gets the upload url for a specific Object
-func (r *repository) GetObjectUploadURL(ctx context.Context, objectUID uuid.UUID) (*ObjectURLModel, error) {
+func (r *repository) GetObjectUploadURL(ctx context.Context, objectUID types.ObjectUIDType) (*ObjectURLModel, error) {
 	var objectURL ObjectURLModel
 	whereString := fmt.Sprintf("%v = ? AND %v = ? AND %v IS NULL", ObjectURLColumn.ObjectUID, ObjectURLColumn.Type, ObjectURLColumn.DeleteTime)
 	if err := r.db.WithContext(ctx).Where(whereString, objectUID, ObjectURLTypeUpload).First(&objectURL).Error; err != nil {
@@ -131,7 +131,7 @@ func (r *repository) GetObjectUploadURL(ctx context.Context, objectUID uuid.UUID
 }
 
 // GetObjectDownloadURL gets the download url for a specific Object
-func (r *repository) GetObjectDownloadURL(ctx context.Context, objectUID uuid.UUID) (*ObjectURLModel, error) {
+func (r *repository) GetObjectDownloadURL(ctx context.Context, objectUID types.ObjectUIDType) (*ObjectURLModel, error) {
 	var objectURL ObjectURLModel
 	whereString := fmt.Sprintf("%v = ? AND %v = ? AND %v IS NULL", ObjectURLColumn.ObjectUID, ObjectURLColumn.Type, ObjectURLColumn.DeleteTime)
 	if err := r.db.WithContext(ctx).Where(whereString, objectUID, ObjectURLTypeDownload).First(&objectURL).Error; err != nil {

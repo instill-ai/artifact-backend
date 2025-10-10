@@ -8,8 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gofrs/uuid"
-
 	"github.com/instill-ai/artifact-backend/pkg/types"
 	"github.com/lib/pq"
 	"gorm.io/gorm"
@@ -27,13 +25,13 @@ type KnowledgeBase interface {
 	GetKnowledgeBaseByOwnerAndKbID(ctx context.Context, ownerUID types.OwnerUIDType, kbID string) (*KnowledgeBaseModel, error)
 	GetKnowledgeBaseCountByOwner(ctx context.Context, ownerUID string, catalogType types.CatalogType) (int64, error)
 	IncreaseKnowledgeBaseUsage(ctx context.Context, tx *gorm.DB, kbUID string, amount int) error
-	GetKnowledgeBasesByUIDs(ctx context.Context, kbUIDs []uuid.UUID) ([]KnowledgeBaseModel, error)
-	GetKnowledgeBaseByUID(context.Context, uuid.UUID) (*KnowledgeBaseModel, error)
+	GetKnowledgeBasesByUIDs(ctx context.Context, kbUIDs []types.KBUIDType) ([]KnowledgeBaseModel, error)
+	GetKnowledgeBaseByUID(context.Context, types.KBUIDType) (*KnowledgeBaseModel, error)
 }
 
 type KnowledgeBaseModel struct {
-	UID  uuid.UUID `gorm:"column:uid;type:uuid;default:uuid_generate_v4();primaryKey" json:"uid"`
-	KbID string    `gorm:"column:id;size:255;not null" json:"kb_id"`
+	UID  types.KBUIDType `gorm:"column:uid;type:uuid;default:uuid_generate_v4();primaryKey" json:"uid"`
+	KbID string          `gorm:"column:id;size:255;not null" json:"kb_id"`
 	// current name is the kb_id
 	Name        string     `gorm:"column:name;size:255;not null" json:"name"`
 	Description string     `gorm:"column:description;size:1023" json:"description"`
@@ -43,8 +41,8 @@ type KnowledgeBaseModel struct {
 	UpdateTime  *time.Time `gorm:"column:update_time;not null;autoUpdateTime" json:"update_time"` // Use autoUpdateTime
 	DeleteTime  *time.Time `gorm:"column:delete_time" json:"delete_time"`
 	// creator
-	CreatorUID uuid.UUID `gorm:"column:creator_uid;type:uuid;not null" json:"creator_uid"`
-	Usage      int64     `gorm:"column:usage;not null;default:0" json:"usage"`
+	CreatorUID types.CreatorUIDType `gorm:"column:creator_uid;type:uuid;not null" json:"creator_uid"`
+	Usage      int64                `gorm:"column:usage;not null;default:0" json:"usage"`
 	// this type is defined in artifact/artifact/v1alpha/catalog.proto
 	CatalogType string `gorm:"column:catalog_type;size:255" json:"catalog_type"`
 
@@ -269,7 +267,7 @@ func (r *repository) checkIfKnowledgeBaseExists(ctx context.Context, kbUID types
 }
 
 // get the knowledge base by (owner, kb_id)
-func (r *repository) GetKnowledgeBaseByOwnerAndKbID(ctx context.Context, owner uuid.UUID, kbID string) (*KnowledgeBaseModel, error) {
+func (r *repository) GetKnowledgeBaseByOwnerAndKbID(ctx context.Context, owner types.OwnerUIDType, kbID string) (*KnowledgeBaseModel, error) {
 	var existingKB KnowledgeBaseModel
 	whereString := fmt.Sprintf("%v = ? AND %v = ? AND %v is NULL", KnowledgeBaseColumn.Owner, KnowledgeBaseColumn.KbID, KnowledgeBaseColumn.DeleteTime)
 	if err := r.db.WithContext(ctx).Where(whereString, owner, kbID).First(&existingKB).Error; err != nil {
@@ -303,7 +301,7 @@ func (r *repository) IncreaseKnowledgeBaseUsage(ctx context.Context, tx *gorm.DB
 }
 
 // GetKnowledgeBasesByUIDs fetches a slice of knowledge bases by UID.
-func (r *repository) GetKnowledgeBasesByUIDs(ctx context.Context, kbUIDs []uuid.UUID) ([]KnowledgeBaseModel, error) {
+func (r *repository) GetKnowledgeBasesByUIDs(ctx context.Context, kbUIDs []types.KBUIDType) ([]KnowledgeBaseModel, error) {
 	var knowledgeBases []KnowledgeBaseModel
 	whereString := fmt.Sprintf("%v IN (?) AND %v IS NULL", KnowledgeBaseColumn.UID, KnowledgeBaseColumn.DeleteTime)
 	if err := r.db.WithContext(ctx).Where(whereString, kbUIDs).Find(&knowledgeBases).Error; err != nil {
@@ -313,7 +311,7 @@ func (r *repository) GetKnowledgeBasesByUIDs(ctx context.Context, kbUIDs []uuid.
 }
 
 // GetKnowledgeBaseByUID fetches a knowledge base by its primary key.
-func (r *repository) GetKnowledgeBaseByUID(ctx context.Context, uid uuid.UUID) (*KnowledgeBaseModel, error) {
+func (r *repository) GetKnowledgeBaseByUID(ctx context.Context, uid types.KBUIDType) (*KnowledgeBaseModel, error) {
 	kb := new(KnowledgeBaseModel)
 	err := r.db.WithContext(ctx).Where("uid = ?", uid).First(kb).Error
 	return kb, err

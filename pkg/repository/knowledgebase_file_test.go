@@ -10,7 +10,7 @@ import (
 func TestKnowledgeBaseFile_ExtraMetaDataUnmarshal_Empty(t *testing.T) {
 	c := qt.New(t)
 
-	kf := KnowledgeBaseFile{ExtraMetaData: `{"fail_reason":"some reason"}`}
+	kf := KnowledgeBaseFileModel{ExtraMetaData: `{"fail_reason":"some reason"}`}
 	err := kf.ExtraMetaDataUnmarshalFunc()
 	c.Check(err, qt.IsNil)
 	c.Check(kf.ExtraMetaDataUnmarshal.FailReason, qt.Equals, "some reason")
@@ -20,7 +20,7 @@ func TestKnowledgeBaseFile_ExtraMetaDataUnmarshal_Empty(t *testing.T) {
 func TestKnowledgeBaseFile_ExtraMetaDataUnmarshal_EmptyString(t *testing.T) {
 	c := qt.New(t)
 
-	kf := KnowledgeBaseFile{ExtraMetaData: ""}
+	kf := KnowledgeBaseFileModel{ExtraMetaData: ""}
 	err := kf.ExtraMetaDataUnmarshalFunc()
 	c.Check(err, qt.IsNil)
 	c.Check(kf.ExtraMetaDataUnmarshal, qt.IsNil)
@@ -30,7 +30,7 @@ func TestKnowledgeBaseFile_ExtraMetaDataUnmarshal_EmptyString(t *testing.T) {
 func TestKnowledgeBaseFile_ExtraMetaDataMarshal_Nil(t *testing.T) {
 	c := qt.New(t)
 
-	kf := KnowledgeBaseFile{}
+	kf := KnowledgeBaseFileModel{}
 	err := kf.ExtraMetaDataMarshal()
 	c.Check(err, qt.IsNil)
 	c.Check(kf.ExtraMetaData, qt.Equals, "{}")

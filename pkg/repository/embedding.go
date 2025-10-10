@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gofrs/uuid"
-
 	"github.com/instill-ai/artifact-backend/pkg/types"
 	"gorm.io/gorm"
 
@@ -24,26 +22,26 @@ const (
 type Embedding interface {
 	DeleteAndCreateEmbeddings(_ context.Context, fileUID types.FileUIDType, embeddings []EmbeddingModel, externalServiceCall func([]EmbeddingModel) error) ([]EmbeddingModel, error)
 	CreateEmbeddings(_ context.Context, embeddings []EmbeddingModel, externalServiceCall func([]EmbeddingModel) error) ([]EmbeddingModel, error)
-	DeleteEmbeddingsByKBFileUID(_ context.Context, kbFileUID uuid.UUID) error
+	DeleteEmbeddingsByKBFileUID(_ context.Context, kbFileUID types.FileUIDType) error
 	HardDeleteEmbeddingsByKBUID(_ context.Context, kbUID types.KBUIDType) error
-	HardDeleteEmbeddingsByKBFileUID(_ context.Context, kbFileUID uuid.UUID) error
-	ListEmbeddingsByKBFileUID(_ context.Context, kbFileUID uuid.UUID) ([]EmbeddingModel, error)
+	HardDeleteEmbeddingsByKBFileUID(_ context.Context, kbFileUID types.FileUIDType) error
+	ListEmbeddingsByKBFileUID(_ context.Context, kbFileUID types.FileUIDType) ([]EmbeddingModel, error)
 }
 
 // EmbeddingModel is the model for the embedding table
 type EmbeddingModel struct {
-	UID uuid.UUID `gorm:"column:uid;type:uuid;default:gen_random_uuid();primaryKey" json:"uid"`
+	UID types.EmbeddingUIDType `gorm:"column:uid;type:uuid;default:gen_random_uuid();primaryKey" json:"uid"`
 	// SourceUID is the UID of the source entity that the embedding is associated with. i.e. the UID of the chunk, file, etc.
 	// And SourceTable is the table name of the source entity.
-	SourceTable string     `gorm:"column:source_table;size:255;not null" json:"source_table"`
-	SourceUID   uuid.UUID  `gorm:"column:source_uid;type:uuid;not null" json:"source_uid"`
-	Vector      Vector     `gorm:"column:vector;type:jsonb;not null" json:"vector"`
-	CreateTime  *time.Time `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
-	UpdateTime  *time.Time `gorm:"column:update_time;not null;default:CURRENT_TIMESTAMP" json:"update_time"`
-	KBUID       uuid.UUID  `gorm:"column:kb_uid;type:uuid;not null" json:"kb_uid"`
-	KBFileUID   uuid.UUID  `gorm:"column:kb_file_uid;type:uuid;not null" json:"kb_file_uid"`
-	FileType    string     `gorm:"column:file_type;size:255;not null" json:"file_type"`
-	ContentType string     `gorm:"column:content_type;size:255;not null" json:"content_type"`
+	SourceTable string              `gorm:"column:source_table;size:255;not null" json:"source_table"`
+	SourceUID   types.SourceUIDType `gorm:"column:source_uid;type:uuid;not null" json:"source_uid"`
+	Vector      Vector              `gorm:"column:vector;type:jsonb;not null" json:"vector"`
+	CreateTime  *time.Time          `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
+	UpdateTime  *time.Time          `gorm:"column:update_time;not null;default:CURRENT_TIMESTAMP" json:"update_time"`
+	KBUID       types.KBUIDType     `gorm:"column:kb_uid;type:uuid;not null" json:"kb_uid"`
+	KBFileUID   types.FileUIDType   `gorm:"column:kb_file_uid;type:uuid;not null" json:"kb_file_uid"`
+	FileType    string              `gorm:"column:file_type;size:255;not null" json:"file_type"`
+	ContentType string              `gorm:"column:content_type;size:255;not null" json:"content_type"`
 	// Tags associated with the embedding, inherited from the source file.
 	// Note: The tags are not stored in the database, they will only be used for
 	// filtering on the vector DB. However, the worker converts the repository
@@ -230,7 +228,7 @@ func (r *repository) CreateEmbeddings(
 
 // DeleteEmbeddingsByKBFileUID deletes all embeddings associated with a file
 // (soft delete, respects the model's DeletedAt field if present).
-func (r *repository) DeleteEmbeddingsByKBFileUID(ctx context.Context, kbFileUID uuid.UUID) error {
+func (r *repository) DeleteEmbeddingsByKBFileUID(ctx context.Context, kbFileUID types.FileUIDType) error {
 	where := fmt.Sprintf("%s = ?", EmbeddingColumn.KBFileUID)
 	return r.db.WithContext(ctx).Where(where, kbFileUID).Delete(&EmbeddingModel{}).Error
 }
@@ -242,13 +240,13 @@ func (r *repository) HardDeleteEmbeddingsByKBUID(ctx context.Context, kbUID type
 }
 
 // HardDeleteEmbeddingsByKBFileUID deletes all the embeddings associated with a certain kbFileUID.
-func (r *repository) HardDeleteEmbeddingsByKBFileUID(ctx context.Context, kbFileUID uuid.UUID) error {
+func (r *repository) HardDeleteEmbeddingsByKBFileUID(ctx context.Context, kbFileUID types.FileUIDType) error {
 	where := fmt.Sprintf("%s = ?", EmbeddingColumn.KBFileUID)
 	return r.db.WithContext(ctx).Where(where, kbFileUID).Unscoped().Delete(&EmbeddingModel{}).Error
 }
 
 // ListEmbeddingsByKBFileUID fetches embeddings by their kbFileUID.
-func (r *repository) ListEmbeddingsByKBFileUID(ctx context.Context, kbFileUID uuid.UUID) ([]EmbeddingModel, error) {
+func (r *repository) ListEmbeddingsByKBFileUID(ctx context.Context, kbFileUID types.FileUIDType) ([]EmbeddingModel, error) {
 	var embeddings []EmbeddingModel
 	where := fmt.Sprintf("%s = ?", EmbeddingColumn.KBFileUID)
 	if err := r.db.WithContext(ctx).Where(where, kbFileUID).Find(&embeddings).Error; err != nil {

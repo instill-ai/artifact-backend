@@ -458,7 +458,7 @@ export function CheckCatalog(data) {
         [`GET ${viewPath} file has tags (${f.name}: ${f.type})`]: (r) => {
           const fileData = r.json().files[0];
           return Array.isArray(fileData.tags) && fileData.tags.length === f.tags.length &&
-                 f.tags.every(tag => fileData.tags.includes(tag));
+            f.tags.every(tag => fileData.tags.includes(tag));
         },
       });
 

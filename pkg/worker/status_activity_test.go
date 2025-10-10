@@ -12,6 +12,7 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/instill-ai/artifact-backend/pkg/repository"
+	"github.com/instill-ai/artifact-backend/pkg/types"
 	"github.com/instill-ai/artifact-backend/pkg/worker/mock"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
@@ -179,7 +180,7 @@ func TestUpdateFileStatusActivity_WithMessage(t *testing.T) {
 
 	metadataUpdateCalled := false
 	mockRepository.UpdateKnowledgeFileMetadataMock.
-		Inspect(func(ctx context.Context, fuid uuid.UUID, metadata repository.ExtraMetaData) {
+		Inspect(func(ctx context.Context, fuid types.FileUIDType, metadata repository.ExtraMetaData) {
 			metadataUpdateCalled = true
 			c.Check(fuid, qt.Equals, fileUID)
 			c.Check(metadata.FailReason, qt.Equals, failMessage)

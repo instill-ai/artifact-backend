@@ -3,7 +3,7 @@ package constant
 import (
 	"strings"
 
-	"github.com/gofrs/uuid"
+	"github.com/instill-ai/artifact-backend/pkg/types"
 )
 
 const (
@@ -24,7 +24,7 @@ const MetadataRequestKey = "instill-request"
 // KBCollectionName converts a knowledge base UID to a valid Milvus collection name.
 // For historical reasons, collection names can only contain numbers, letters
 // and underscores, so UUID is here converted to a valid collection name.
-func KBCollectionName(uid uuid.UUID) string {
+func KBCollectionName(uid types.KBUIDType) string {
 	const kbCollectionPrefix = "kb_"
 	return kbCollectionPrefix + strings.ReplaceAll(uid.String(), "-", "_")
 }

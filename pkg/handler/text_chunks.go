@@ -93,7 +93,7 @@ func (ph *PublicHandler) ListChunks(ctx context.Context, req *artifactpb.ListChu
 		return nil, fmt.Errorf("failed to parse file uid: %v. err: %w", err, errorsx.ErrInvalidArgument)
 	}
 
-	fileUIDs := []uuid.UUID{fileUID}
+	fileUIDs := []types.FileUIDType{types.FileUIDType(fileUID)}
 	kbfs, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, fileUIDs)
 	if err != nil {
 		logger.Error("failed to get knowledge base files by file uids", zap.Error(err))
@@ -159,14 +159,14 @@ func (ph *PublicHandler) SearchChunks(ctx context.Context, req *artifactpb.Searc
 		return nil, fmt.Errorf("failed to get namespace and check permission: %w", err)
 	}
 
-	chunkUIDs := make([]uuid.UUID, 0, len(req.ChunkUids))
+	chunkUIDs := make([]types.TextChunkUIDType, 0, len(req.ChunkUids))
 	for _, chunkUID := range req.ChunkUids {
 		chunkUID, err := uuid.FromString(chunkUID)
 		if err != nil {
 			logger.Error("failed to parse chunk uid", zap.Error(err))
 			return nil, fmt.Errorf("failed to parse chunk uid: %w", err)
 		}
-		chunkUIDs = append(chunkUIDs, chunkUID)
+		chunkUIDs = append(chunkUIDs, types.TextChunkUIDType(chunkUID))
 	}
 	// check if the chunkUIs is more than 20
 	if len(chunkUIDs) > 25 {
@@ -180,7 +180,7 @@ func (ph *PublicHandler) SearchChunks(ctx context.Context, req *artifactpb.Searc
 	}
 
 	// get the kbUIDs from chunks
-	kbUIDs := make([]uuid.UUID, 0, len(chunks))
+	kbUIDs := make([]types.KBUIDType, 0, len(chunks))
 	for _, chunk := range chunks {
 		kbUIDs = append(kbUIDs, chunk.KBUID)
 	}
@@ -212,7 +212,7 @@ func (ph *PublicHandler) SearchChunks(ctx context.Context, req *artifactpb.Searc
 func (ph *PublicHandler) UpdateChunk(ctx context.Context, req *artifactpb.UpdateChunkRequest) (*artifactpb.UpdateChunkResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 
-	chunks, err := ph.service.Repository().GetTextChunksByUIDs(ctx, []uuid.UUID{uuid.FromStringOrNil(req.ChunkUid)})
+	chunks, err := ph.service.Repository().GetTextChunksByUIDs(ctx, []types.TextChunkUIDType{types.TextChunkUIDType(uuid.FromStringOrNil(req.ChunkUid))})
 	if err != nil {
 		logger.Error("failed to get chunks by uids", zap.Error(err))
 		return nil, fmt.Errorf("failed to get chunks by uids: %w", err)
@@ -260,7 +260,7 @@ func (ph *PublicHandler) GetSourceFile(ctx context.Context, req *artifactpb.GetS
 	}
 
 	// Fetch file to get knowledge base UID for ACL check
-	files, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{fileUID})
+	files, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{types.FileUIDType(fileUID)})
 	if err != nil || len(files) == 0 {
 		logger.Error("failed to fetch file", zap.Error(err))
 		return nil, fmt.Errorf("file not found. err: %w", errorsx.ErrNotFound)
@@ -335,14 +335,14 @@ func (ph *PublicHandler) SearchSourceFiles(ctx context.Context, req *artifactpb.
 		return nil, fmt.Errorf("failed to get namespace and check permission: %w", err)
 	}
 
-	fileUIDs := make([]uuid.UUID, 0, len(req.FileUids))
+	fileUIDs := make([]types.FileUIDType, 0, len(req.FileUids))
 	for _, fileUID := range req.FileUids {
 		uid, err := uuid.FromString(fileUID)
 		if err != nil {
 			logger.Error("failed to parse file uid", zap.Error(err))
 			return nil, fmt.Errorf("failed to parse file uid: %v. err: %w", err, errorsx.ErrInvalidArgument)
 		}
-		fileUIDs = append(fileUIDs, uid)
+		fileUIDs = append(fileUIDs, types.FileUIDType(uid))
 	}
 
 	sources := make([]*artifactpb.SourceFile, 0, len(fileUIDs))

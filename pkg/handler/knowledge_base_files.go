@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/gofrs/uuid"
+
+	"github.com/instill-ai/artifact-backend/pkg/types"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -15,7 +17,7 @@ import (
 
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/constant"
-	"github.com/instill-ai/artifact-backend/pkg/minio"
+	"github.com/instill-ai/artifact-backend/pkg/pipeline"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/service"
 	"github.com/instill-ai/x/resource"
@@ -87,11 +89,11 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 	}
 
 	// upload file to minio and database
-	kbFile := repository.KnowledgeBaseFile{
+	kbFile := repository.KnowledgeBaseFileModel{
 		Name:                      req.GetFile().GetName(),
 		Type:                      req.File.Type.String(),
 		Owner:                     ns.NsUID,
-		KnowledgeBaseUID:          kb.UID,
+		KBUID:                     kb.UID,
 		ProcessStatus:             artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_NOTSTARTED.String(),
 		ExternalMetadataUnmarshal: md,
 	}
@@ -99,7 +101,7 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 	if req.GetFile().GetConvertingPipeline() != "" {
 		// TODO jvallesm: validate existence, permissions & recipe of provided
 		// pipeline.
-		if _, err := service.PipelineReleaseFromName(req.GetFile().GetConvertingPipeline()); err != nil {
+		if _, err := pipeline.PipelineReleaseFromName(req.GetFile().GetConvertingPipeline()); err != nil {
 			err = fmt.Errorf("%w: invalid conversion pipeline format: %w", errorsx.ErrInvalidArgument, err)
 			return nil, errorsx.AddMessage(
 				err,
@@ -138,7 +140,7 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 		if err != nil {
 			return nil, fmt.Errorf("fetching upload URL: %w", err)
 		}
-		destination := minio.GetBlobObjectPath(ns.NsUID, objectUID)
+		destination := repository.GetBlobObjectPath(ns.NsUID, objectUID)
 
 		kbFile.CreatorUID = creatorUID
 		kbFile.Destination = destination
@@ -158,7 +160,7 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 			}
 
 			// check if file exists in minio
-			_, err := ph.service.MinIO().GetFile(ctx, minio.BlobBucketName, object.Destination)
+			_, err := ph.service.Repository().GetFile(ctx, repository.BlobBucketName, object.Destination)
 			if err != nil {
 				logger.Error("failed to get file from minio", zap.Error(err))
 				return nil, err
@@ -182,30 +184,6 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 		return nil, errorsx.AddMessage(err, msg)
 	}
 
-	// sanitize tags
-	tags := req.GetFile().GetTags()
-	for _, tag := range tags {
-		// skip empty tags
-		if len(tag) == 0 {
-			continue
-		}
-	}
-
-	if len(tags) > 0 {
-		// Check if the knowledge base supports tags
-		hasTags, err := ph.service.VectorDB().CheckTagsMetadata(ctx, kb.UID)
-		if err != nil {
-			return nil, fmt.Errorf("checking tags metadata: %w", err)
-		}
-
-		if !hasTags {
-			err := fmt.Errorf("%w: tags are not supported for this knowledge base", errorsx.ErrInvalidArgument)
-			return nil, errorsx.AddMessage(err, "Legacy catalogs don't support tags")
-		}
-
-		kbFile.Tags = tags
-	}
-
 	// create catalog file in database
 	res, err := ph.service.Repository().CreateKnowledgeBaseFile(ctx, kbFile, nil)
 	if err != nil {
@@ -224,7 +202,7 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 			FileUid:            res.UID.String(),
 			OwnerUid:           res.Owner.String(),
 			CreatorUid:         res.CreatorUID.String(),
-			CatalogUid:         res.KnowledgeBaseUID.String(),
+			CatalogUid:         res.KBUID.String(),
 			Name:               res.Name,
 			Type:               req.File.Type,
 			CreateTime:         timestamppb.New(*res.CreateTime),
@@ -236,7 +214,6 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 			ExternalMetadata:   res.PublicExternalMetadataUnmarshal(),
 			ObjectUid:          req.File.ObjectUid,
 			ConvertingPipeline: res.ConvertingPipeline(),
-			Tags:               res.Tags,
 		},
 	}, nil
 }
@@ -350,7 +327,7 @@ func (ph *PublicHandler) MoveFileToCatalog(ctx context.Context, req *artifactpb.
 	}
 
 	// Step 1: Verify source file exists and check namespace permissions
-	sourceFiles, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{uuid.FromStringOrNil(req.FileUid)})
+	sourceFiles, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{types.FileUIDType(uuid.FromStringOrNil(req.FileUid))})
 	if err != nil || len(sourceFiles) == 0 {
 		logger.Error("file not found", zap.Error(err))
 		return nil, fmt.Errorf("file not found. err: %w", errorsx.ErrNotFound)
@@ -376,7 +353,7 @@ func (ph *PublicHandler) MoveFileToCatalog(ctx context.Context, req *artifactpb.
 	}
 
 	// Step 3: Retrieve file content from MinIO storage
-	fileContent, err := ph.service.MinIO().GetFile(ctx, config.Config.Minio.BucketName, sourceFile.Destination)
+	fileContent, err := ph.service.Repository().GetFile(ctx, config.Config.Minio.BucketName, sourceFile.Destination)
 	if err != nil {
 		logger.Error("failed to get file content from MinIO", zap.Error(err))
 		return nil, fmt.Errorf("failed to get file content from MinIO. err: %w", err)
@@ -396,7 +373,6 @@ func (ph *PublicHandler) MoveFileToCatalog(ctx context.Context, req *artifactpb.
 			Content:          fileContentBase64,
 			Type:             fileType,
 			ExternalMetadata: externalMetadata,
-			Tags:             sourceFile.Tags,
 		},
 	}
 
@@ -470,7 +446,7 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 
 	kbFileList, err := ph.service.Repository().ListKnowledgeBaseFiles(ctx, repository.KnowledgeBaseFileListParams{
 		OwnerUID:      ns.NsUID.String(),
-		KbUID:         kb.UID.String(),
+		KBUID:         kb.UID.String(),
 		PageSize:      int(req.GetPageSize()),
 		PageToken:     req.GetPageToken(),
 		FileUIDs:      req.GetFilter().GetFileUids(),
@@ -491,7 +467,7 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 		return nil, fmt.Errorf("fetching tokens: %w", err)
 	}
 
-	totalChunks, err := ph.service.Repository().GetTotalChunksBySources(ctx, sources)
+	totalChunks, err := ph.service.Repository().GetTotalTextChunksBySources(ctx, sources)
 	if err != nil {
 		return nil, fmt.Errorf("fetching chunks: %w", err)
 	}
@@ -515,7 +491,7 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 		if strings.Split(kbFile.Destination, "/")[1] == "uploaded-file" {
 			fileName := strings.Split(kbFile.Destination, "/")[2]
 
-			content, err := ph.service.MinIO().GetFile(ctx, config.Config.Minio.BucketName, kbFile.Destination)
+			content, err := ph.service.Repository().GetFile(ctx, config.Config.Minio.BucketName, kbFile.Destination)
 			if err != nil {
 				return nil, fmt.Errorf("fetching file blob: %w", err)
 			}
@@ -527,7 +503,7 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 				return nil, fmt.Errorf("uploading migrated file to MinIO: %w", err)
 			}
 
-			newDestination := minio.GetBlobObjectPath(ns.NsUID, objectUID)
+			newDestination := repository.GetBlobObjectPath(ns.NsUID, objectUID)
 			fmt.Println("newDestination", newDestination)
 			_, err = ph.service.Repository().UpdateKnowledgeBaseFile(ctx, kbFile.UID.String(), map[string]any{
 				repository.KnowledgeBaseFileColumn.Destination: newDestination,
@@ -551,7 +527,7 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 			FileUid:            kbFile.UID.String(),
 			OwnerUid:           kbFile.Owner.String(),
 			CreatorUid:         kbFile.CreatorUID.String(),
-			CatalogUid:         kbFile.KnowledgeBaseUID.String(),
+			CatalogUid:         kbFile.KBUID.String(),
 			Name:               kbFile.Name,
 			Type:               artifactpb.FileType(artifactpb.FileType_value[kbFile.Type]),
 			CreateTime:         timestamppb.New(*kbFile.CreateTime),
@@ -565,7 +541,6 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 			Summary:            string(kbFile.Summary),
 			DownloadUrl:        downloadURL,
 			ConvertingPipeline: kbFile.ConvertingPipeline(),
-			Tags:               kbFile.Tags,
 		}
 
 		// Include error message if processing failed
@@ -630,14 +605,14 @@ func (ph *PublicHandler) DeleteCatalogFile(ctx context.Context, req *artifactpb.
 	}
 
 	// ACL - check user's permission to write catalog of kb file
-	kbfs, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{uuid.FromStringOrNil(req.FileUid)})
+	kbfs, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{types.FileUIDType(uuid.FromStringOrNil(req.FileUid))})
 	if err != nil {
 		logger.Error("failed to get catalog files", zap.Error(err))
 		return nil, fmt.Errorf("failed to get catalog files. err: %w", err)
 	} else if len(kbfs) == 0 {
 		return nil, fmt.Errorf("file not found. err: %w", errorsx.ErrNotFound)
 	}
-	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kbfs[0].KnowledgeBaseUID, "writer")
+	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kbfs[0].KBUID, "writer")
 	if err != nil {
 		logger.Error("failed to check permission", zap.Error(err))
 		return nil, fmt.Errorf("failed to check permission. err: %w", err)
@@ -656,7 +631,7 @@ func (ph *PublicHandler) DeleteCatalogFile(ctx context.Context, req *artifactpb.
 	}
 
 	// get the file by uid
-	files, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{fUID})
+	files, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{types.FileUIDType(fUID)})
 	if err != nil {
 		return nil, err
 	} else if len(files) == 0 {
@@ -673,53 +648,26 @@ func (ph *PublicHandler) DeleteCatalogFile(ctx context.Context, req *artifactpb.
 
 	// Fire-and-forget: trigger background cleanup workflow
 	// If this fails, log the error but don't fail the user's delete request
-	if ph.service.CleanupFileWorkflow() != nil {
-		// Generate workflow ID for tracking
-		workflowID := uuid.Must(uuid.NewV4()).String()
+	// Generate workflow ID for tracking
+	workflowID := uuid.Must(uuid.NewV4()).String()
 
-		param := service.CleanupFileWorkflowParam{
-			FileUID:             fUID,
-			IncludeOriginalFile: true,
-			UserUID:             files[0].Owner,
-			RequesterUID:        files[0].RequesterUID,
-			WorkflowID:          workflowID,
-		}
+	// Use a detached context to prevent request cancellation from affecting workflow start
+	// This ensures the cleanup workflow can be triggered even if the client disconnects
+	backgroundCtx := context.Background()
 
-		// Use a detached context to prevent request cancellation from affecting workflow start
-		// This ensures the cleanup workflow can be triggered even if the client disconnects
-		backgroundCtx := context.Background()
-
-		err = ph.service.CleanupFileWorkflow().Execute(backgroundCtx, param)
-		if err != nil {
-			// Log the error but don't fail the user's request
-			// The file has already been soft-deleted from their perspective
-			logger.Error("Failed to trigger cleanup workflow - resources may be orphaned and require manual cleanup",
-				zap.String("fileUID", fUID.String()),
-				zap.String("workflowID", workflowID),
-				zap.Error(err))
-		} else {
-			logger.Info("Cleanup workflow triggered successfully",
-				zap.String("fileUID", fUID.String()),
-				zap.String("workflowID", workflowID))
-		}
+	// Trigger cleanup workflow
+	err = ph.service.CleanupFile(backgroundCtx, fUID, files[0].Owner, files[0].RequesterUID, workflowID, true)
+	if err != nil {
+		// Log the error but don't fail the user's request
+		// The file has already been soft-deleted from their perspective
+		logger.Error("Failed to trigger cleanup workflow - resources may be orphaned and require manual cleanup",
+			zap.String("fileUID", fUID.String()),
+			zap.String("workflowID", workflowID),
+			zap.Error(err))
 	} else {
-		// Temporal client is nil - schedule immediate cleanup in background goroutine
-		// This prevents blocking the RPC while still attempting cleanup
-		logger.Warn("Temporal client is nil, scheduling immediate cleanup in background",
-			zap.String("fileUID", fUID.String()))
-
-		go func() {
-			// Use background context since the original request context may be cancelled
-			bgCtx := context.Background()
-			if err := ph.performImmediateCleanup(bgCtx, files[0]); err != nil {
-				logger.Error("Failed to perform immediate cleanup - resources may be orphaned",
-					zap.String("fileUID", fUID.String()),
-					zap.Error(err))
-			} else {
-				logger.Info("Immediate cleanup completed successfully",
-					zap.String("fileUID", fUID.String()))
-			}
-		}()
+		logger.Info("Cleanup workflow triggered successfully",
+			zap.String("fileUID", fUID.String()),
+			zap.String("workflowID", workflowID))
 	}
 
 	return &artifactpb.DeleteCatalogFileResponse{
@@ -734,15 +682,15 @@ func (ph *PublicHandler) ProcessCatalogFiles(ctx context.Context, req *artifactp
 	logger, _ := logx.GetZapLogger(ctx)
 	// ACL - check if the uid can process file. ACL.
 	// check the file's kb_uid and use kb_uid to check if user has write permission
-	fileUUIDs := make([]uuid.UUID, 0, len(req.FileUids))
+	fileUIDs := make([]types.FileUIDType, 0, len(req.FileUids))
 	for _, fileUID := range req.FileUids {
 		fUID, err := uuid.FromString(fileUID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse file uid. err: %w", errorsx.ErrInvalidArgument)
 		}
-		fileUUIDs = append(fileUUIDs, fUID)
+		fileUIDs = append(fileUIDs, types.FileUIDType(fUID))
 	}
-	kbfs, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, fileUUIDs)
+	kbfs, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, fileUIDs)
 	if err != nil {
 		return nil, err
 	} else if len(kbfs) == 0 {
@@ -750,7 +698,7 @@ func (ph *PublicHandler) ProcessCatalogFiles(ctx context.Context, req *artifactp
 	}
 	// check write permission for the catalog
 	for _, kbf := range kbfs {
-		granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kbf.KnowledgeBaseUID, "writer")
+		granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kbf.KBUID, "writer")
 		if err != nil {
 			return nil, err
 		}
@@ -774,25 +722,32 @@ func (ph *PublicHandler) ProcessCatalogFiles(ctx context.Context, req *artifactp
 		return nil, err
 	}
 
-	// Trigger Temporal workflows for each file
-	if ph.service.ProcessFileWorkflow() != nil {
-		for _, file := range files {
-			param := service.ProcessFileWorkflowParam{
-				FileUID:          file.UID,
-				KnowledgeBaseUID: file.KnowledgeBaseUID,
-				UserUID:          file.Owner,
-				RequesterUID:     file.RequesterUID,
-			}
-
-			err := ph.service.ProcessFileWorkflow().Execute(ctx, param)
-			if err != nil {
-				logger.Error("Failed to start file processing workflow",
-					zap.String("fileUID", file.UID.String()),
-					zap.Error(err))
-				// Continue processing other files even if one fails
-			}
-		}
+	// Collect file information for batch processing
+	if len(files) == 0 {
+		return &artifactpb.ProcessCatalogFilesResponse{Files: []*artifactpb.File{}}, nil
 	}
+
+	// Extract file UIDs and common metadata
+	fileUIDs = make([]types.FileUIDType, 0, len(files))
+	kbUID := files[0].KBUID
+	ownerUID := files[0].Owner
+	requesterUIDFromFile := files[0].RequesterUID
+
+	for _, file := range files {
+		fileUIDs = append(fileUIDs, file.UID)
+	}
+
+	// Trigger Temporal workflow once for all files (batch processing)
+	err = ph.service.ProcessFile(ctx, kbUID, fileUIDs, ownerUID, requesterUIDFromFile)
+	if err != nil {
+		logger.Error("Failed to start batch file processing workflow",
+			zap.Int("fileCount", len(fileUIDs)),
+			zap.Error(err))
+		return nil, fmt.Errorf("failed to start batch file processing workflow. err: %w", err)
+	}
+
+	logger.Info("Batch file processing workflow started successfully",
+		zap.Int("fileCount", len(fileUIDs)))
 
 	// populate the files into response
 	var resFiles []*artifactpb.File
@@ -804,7 +759,7 @@ func (ph *PublicHandler) ProcessCatalogFiles(ctx context.Context, req *artifactp
 			FileUid:            file.UID.String(),
 			OwnerUid:           file.Owner.String(),
 			CreatorUid:         file.CreatorUID.String(),
-			CatalogUid:         file.KnowledgeBaseUID.String(),
+			CatalogUid:         file.KBUID.String(),
 			Name:               file.Name,
 			Type:               artifactpb.FileType(artifactpb.FileType_value[file.Type]),
 			CreateTime:         timestamppb.New(*file.CreateTime),
@@ -812,7 +767,6 @@ func (ph *PublicHandler) ProcessCatalogFiles(ctx context.Context, req *artifactp
 			ProcessStatus:      artifactpb.FileProcessStatus(artifactpb.FileProcessStatus_value[file.ProcessStatus]),
 			ObjectUid:          objectUID.String(),
 			ConvertingPipeline: file.ConvertingPipeline(),
-			Tags:               file.Tags,
 		}
 
 		// Include error message if processing failed
@@ -921,7 +875,7 @@ func (ph *PublicHandler) GetFileSummary(ctx context.Context, req *artifactpb.Get
 		return nil, fmt.Errorf("failed to get namespace and check permission: %w", err)
 	}
 
-	kbFiles, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []uuid.UUID{uuid.FromStringOrNil(req.FileUid)}, repository.KnowledgeBaseFileColumn.Summary)
+	kbFiles, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{types.FileUIDType(uuid.FromStringOrNil(req.FileUid))}, repository.KnowledgeBaseFileColumn.Summary)
 	if err != nil || len(kbFiles) == 0 {
 		logger.Error("file not found", zap.Error(err))
 		return nil, fmt.Errorf("file not found. err: %w", errorsx.ErrNotFound)
@@ -944,7 +898,7 @@ func (ph *PublicHandler) GetFileSummary(ctx context.Context, req *artifactpb.Get
 // 3. Creating the object record in the database
 //
 // This ensures both flows result in the same consistent data structure.
-func (ph *PublicHandler) uploadBase64FileToMinIO(ctx context.Context, nsID string, nsUID, creatorUID uuid.UUID, fileName string, content string, fileType artifactpb.FileType) (uuid.UUID, error) {
+func (ph *PublicHandler) uploadBase64FileToMinIO(ctx context.Context, nsID string, nsUID, creatorUID types.CreatorUIDType, fileName string, content string, fileType artifactpb.FileType) (types.ObjectUIDType, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 	response, err := ph.service.GetUploadURL(ctx, &artifactpb.GetObjectUploadURLRequest{
 		NamespaceId: nsID,
@@ -955,8 +909,8 @@ func (ph *PublicHandler) uploadBase64FileToMinIO(ctx context.Context, nsID strin
 		return uuid.Nil, fmt.Errorf("failed to get upload URL. err: %w", err)
 	}
 	objectUID := uuid.FromStringOrNil(response.Object.Uid)
-	destination := minio.GetBlobObjectPath(nsUID, objectUID)
-	err = ph.service.MinIO().UploadBase64File(ctx, minio.BlobBucketName, destination, content, fileTypeConvertToMime(fileType))
+	destination := repository.GetBlobObjectPath(nsUID, objectUID)
+	err = ph.service.Repository().UploadBase64File(ctx, repository.BlobBucketName, destination, content, fileTypeConvertToMime(fileType))
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("failed to upload file to MinIO. err: %w", err)
 	}
@@ -980,127 +934,4 @@ func (ph *PublicHandler) uploadBase64FileToMinIO(ctx context.Context, nsID strin
 		return uuid.Nil, fmt.Errorf("failed to update object. err: %w", err)
 	}
 	return objectUID, nil
-}
-
-// UpdateCatalogFileTags updates the tags for a catalog file
-func (ph *PublicHandler) UpdateCatalogFileTags(ctx context.Context, req *artifactpb.UpdateCatalogFileTagsRequest) (*artifactpb.UpdateCatalogFileTagsResponse, error) {
-	// Call the service layer to update the tags
-	// The service layer handles all validation, permission checks, and business logic
-	return ph.service.UpdateCatalogFileTags(ctx, req)
-}
-
-// performImmediateCleanup performs immediate cleanup of file resources when Temporal is unavailable
-// This serves as a fallback mechanism to prevent resource leaks
-func (ph *PublicHandler) performImmediateCleanup(ctx context.Context, file repository.KnowledgeBaseFile) error {
-	logger, _ := logx.GetZapLogger(ctx)
-	fileUID := file.UID
-	kbUID := file.KnowledgeBaseUID
-
-	logger.Info("Starting immediate cleanup of file resources",
-		zap.String("fileUID", fileUID.String()),
-		zap.String("kbUID", kbUID.String()))
-
-	var cleanupErrors []string
-
-	// 1. Cleanup original file from MinIO
-	if file.Destination != "" {
-		err := ph.service.MinIO().DeleteFile(ctx, config.Config.Minio.BucketName, file.Destination)
-		if err != nil {
-			logger.Error("Failed to delete original file from MinIO",
-				zap.String("fileUID", fileUID.String()),
-				zap.String("destination", file.Destination),
-				zap.Error(err))
-			cleanupErrors = append(cleanupErrors, fmt.Sprintf("original file: %v", err))
-		} else {
-			logger.Info("Deleted original file from MinIO",
-				zap.String("fileUID", fileUID.String()),
-				zap.String("destination", file.Destination))
-		}
-	}
-
-	// 2. Cleanup converted files if they exist
-	convertedFile, err := ph.service.Repository().GetConvertedFileByFileUID(ctx, fileUID)
-	if err == nil && convertedFile != nil {
-		err = ph.service.DeleteConvertedFileByFileUID(ctx, kbUID, fileUID)
-		if err != nil {
-			logger.Error("Failed to delete converted file from MinIO",
-				zap.String("fileUID", fileUID.String()),
-				zap.Error(err))
-			cleanupErrors = append(cleanupErrors, fmt.Sprintf("converted file: %v", err))
-		} else {
-			logger.Info("Deleted converted file from MinIO",
-				zap.String("fileUID", fileUID.String()))
-		}
-
-		// Delete the converted file record from database
-		err = ph.service.Repository().HardDeleteConvertedFileByFileUID(ctx, fileUID)
-		if err != nil {
-			logger.Error("Failed to delete converted file record",
-				zap.String("fileUID", fileUID.String()),
-				zap.Error(err))
-			cleanupErrors = append(cleanupErrors, fmt.Sprintf("converted file record: %v", err))
-		}
-	}
-
-	// 3. Cleanup text chunks if they exist
-	chunks, err := ph.service.Repository().ListChunksByKbFileUID(ctx, fileUID)
-	if err == nil && len(chunks) > 0 {
-		err = ph.service.DeleteTextChunksByFileUID(ctx, kbUID, fileUID)
-		if err != nil {
-			logger.Error("Failed to delete chunks from MinIO",
-				zap.String("fileUID", fileUID.String()),
-				zap.Int("chunkCount", len(chunks)),
-				zap.Error(err))
-			cleanupErrors = append(cleanupErrors, fmt.Sprintf("chunks: %v", err))
-		} else {
-			logger.Info("Deleted chunks from MinIO",
-				zap.String("fileUID", fileUID.String()),
-				zap.Int("chunkCount", len(chunks)))
-		}
-
-		// Delete chunk records from database
-		err = ph.service.Repository().HardDeleteChunksByKbFileUID(ctx, fileUID)
-		if err != nil {
-			logger.Error("Failed to delete chunk records",
-				zap.String("fileUID", fileUID.String()),
-				zap.Error(err))
-			cleanupErrors = append(cleanupErrors, fmt.Sprintf("chunk records: %v", err))
-		}
-	}
-
-	// 4. Cleanup embeddings if they exist
-	// This also cleans up any orphaned embeddings in Milvus that might not have database records
-	collection := service.KBCollectionName(kbUID)
-	err = ph.service.VectorDB().DeleteEmbeddingsWithFileUID(ctx, collection, fileUID)
-	if err != nil {
-		logger.Error("Failed to delete embeddings from Milvus",
-			zap.String("fileUID", fileUID.String()),
-			zap.Error(err))
-		cleanupErrors = append(cleanupErrors, fmt.Sprintf("embeddings in Milvus: %v", err))
-	} else {
-		logger.Info("Deleted embeddings from Milvus by fileUID",
-			zap.String("fileUID", fileUID.String()))
-	}
-
-	// Delete embedding records from database
-	err = ph.service.Repository().HardDeleteEmbeddingsByKbFileUID(ctx, fileUID)
-	if err != nil {
-		logger.Error("Failed to delete embedding records",
-			zap.String("fileUID", fileUID.String()),
-			zap.Error(err))
-		cleanupErrors = append(cleanupErrors, fmt.Sprintf("embedding records: %v", err))
-	}
-
-	// Log final results
-	if len(cleanupErrors) > 0 {
-		logger.Warn("Immediate cleanup completed with some errors",
-			zap.String("fileUID", fileUID.String()),
-			zap.Strings("errors", cleanupErrors))
-		// Return error to prevent file deletion if cleanup failed
-		return fmt.Errorf("cleanup failed with errors: %v", cleanupErrors)
-	}
-
-	logger.Info("Immediate cleanup completed successfully",
-		zap.String("fileUID", fileUID.String()))
-	return nil
 }

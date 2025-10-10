@@ -10,14 +10,17 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
+
 	"go.uber.org/zap"
 	"google.golang.org/grpc/metadata"
 
+	"github.com/instill-ai/artifact-backend/pkg/constant"
+	"github.com/instill-ai/artifact-backend/pkg/pipeline"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
-	"github.com/instill-ai/artifact-backend/pkg/service"
-	"github.com/instill-ai/x/constant"
+	"github.com/instill-ai/artifact-backend/pkg/types"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	constantx "github.com/instill-ai/x/constant"
 	errorsx "github.com/instill-ai/x/errors"
 	logx "github.com/instill-ai/x/log"
 )
@@ -93,8 +96,8 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 	}
 
 	// external service call - create catalog collection and set ACL in openFAG
-	callExternalService := func(kbUID uuid.UUID) error {
-		err := ph.service.VectorDB().CreateCollection(ctx, kbUID)
+	callExternalService := func(kbUID types.KBUIDType) error {
+		err := ph.service.Repository().CreateCollection(ctx, constant.KBCollectionName(kbUID))
 		if err != nil {
 			return fmt.Errorf("creating vector database collection: %w", err)
 		}
@@ -125,7 +128,7 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 	// create catalog
 	dbData, err := ph.service.Repository().CreateKnowledgeBase(
 		ctx,
-		repository.KnowledgeBase{
+		repository.KnowledgeBaseModel{
 			Name: req.Name,
 			// make name as kbID
 			KbID:                req.Name,
@@ -153,14 +156,14 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 		UpdateTime:          dbData.UpdateTime.String(),
 		ConvertingPipelines: dbData.ConvertingPipelines,
 		SummarizingPipelines: []string{
-			service.GenerateSummaryPipeline.Name(),
+			pipeline.GenerateSummaryPipeline.Name(),
 		},
 		SplittingPipelines: []string{
-			service.ChunkTextPipeline.Name(),
-			service.ChunkMarkdownPipeline.Name(),
+			pipeline.ChunkTextPipeline.Name(),
+			pipeline.ChunkMarkdownPipeline.Name(),
 		},
 		EmbeddingPipelines: []string{
-			service.EmbedTextPipeline.Name(),
+			pipeline.EmbedTextPipeline.Name(),
 		},
 		DownstreamApps: []string{},
 		TotalFiles:     0,
@@ -169,7 +172,7 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 	}
 
 	if len(dbData.ConvertingPipelines) == 0 {
-		catalog.ConvertingPipelines = service.DefaultConversionPipelines.Names()
+		catalog.ConvertingPipelines = pipeline.DefaultConversionPipelines.Names()
 	}
 
 	return &artifactpb.CreateCatalogResponse{Catalog: catalog}, nil
@@ -206,23 +209,23 @@ func (ph *PublicHandler) ListCatalogs(ctx context.Context, req *artifactpb.ListC
 		return nil, fmt.Errorf("failed to check namespace permission. err:%w", err)
 	}
 
-	dbData, err := ph.service.Repository().ListKnowledgeBasesByCatalogType(ctx, ns.NsUID.String(), artifactpb.CatalogType_CATALOG_TYPE_PERSISTENT)
+	dbData, err := ph.service.Repository().ListKnowledgeBasesByCatalogType(ctx, ns.NsUID.String(), types.CatalogTypePersistent)
 	if err != nil {
 		logger.Error("failed to get catalogs", zap.Error(err))
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
 
-	kbUIDuuid := make([]uuid.UUID, len(dbData))
+	kbUIDs := make([]types.KBUIDType, len(dbData))
 	for i, kb := range dbData {
-		kbUIDuuid[i] = kb.UID
+		kbUIDs[i] = kb.UID
 	}
 
-	fileCounts, err := ph.service.Repository().GetCountFilesByListKnowledgeBaseUID(ctx, kbUIDuuid)
+	fileCounts, err := ph.service.Repository().GetCountFilesByListKnowledgeBaseUID(ctx, kbUIDs)
 	if err != nil {
 		logger.Error("failed to get file counts", zap.Error(err))
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
-	tokenCounts, err := ph.service.Repository().GetTotalTokensByListKBUIDs(ctx, kbUIDuuid)
+	tokenCounts, err := ph.service.Repository().GetTotalTokensByListKBUIDs(ctx, kbUIDs)
 	if err != nil {
 		logger.Error("failed to get token counts", zap.Error(err))
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
@@ -240,14 +243,14 @@ func (ph *PublicHandler) ListCatalogs(ctx context.Context, req *artifactpb.ListC
 			OwnerName:           kb.Owner,
 			ConvertingPipelines: kb.ConvertingPipelines,
 			SummarizingPipelines: []string{
-				service.GenerateSummaryPipeline.Name(),
+				pipeline.GenerateSummaryPipeline.Name(),
 			},
 			SplittingPipelines: []string{
-				service.ChunkTextPipeline.Name(),
-				service.ChunkMarkdownPipeline.Name(),
+				pipeline.ChunkTextPipeline.Name(),
+				pipeline.ChunkMarkdownPipeline.Name(),
 			},
 			EmbeddingPipelines: []string{
-				service.EmbedTextPipeline.Name(),
+				pipeline.EmbedTextPipeline.Name(),
 			},
 			DownstreamApps: []string{},
 			TotalFiles:     uint32(fileCounts[kb.UID]),
@@ -256,7 +259,7 @@ func (ph *PublicHandler) ListCatalogs(ctx context.Context, req *artifactpb.ListC
 		}
 
 		if len(kb.ConvertingPipelines) == 0 {
-			kbs[i].ConvertingPipelines = service.DefaultConversionPipelines.Names()
+			kbs[i].ConvertingPipelines = pipeline.DefaultConversionPipelines.Names()
 		}
 
 	}
@@ -311,7 +314,7 @@ func (ph *PublicHandler) UpdateCatalog(ctx context.Context, req *artifactpb.Upda
 		ctx,
 		req.GetCatalogId(),
 		ns.NsUID.String(),
-		repository.KnowledgeBase{
+		repository.KnowledgeBaseModel{
 			Description:         req.GetDescription(),
 			Tags:                req.GetTags(),
 			ConvertingPipelines: convertingPipelines,
@@ -321,11 +324,11 @@ func (ph *PublicHandler) UpdateCatalog(ctx context.Context, req *artifactpb.Upda
 		return nil, fmt.Errorf("updating catalog: %w", err)
 	}
 
-	fileCounts, err := ph.service.Repository().GetCountFilesByListKnowledgeBaseUID(ctx, []uuid.UUID{kb.UID})
+	fileCounts, err := ph.service.Repository().GetCountFilesByListKnowledgeBaseUID(ctx, []types.KBUIDType{kb.UID})
 	if err != nil {
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
-	tokenCounts, err := ph.service.Repository().GetTotalTokensByListKBUIDs(ctx, []uuid.UUID{kb.UID})
+	tokenCounts, err := ph.service.Repository().GetTotalTokensByListKBUIDs(ctx, []types.KBUIDType{kb.UID})
 	if err != nil {
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
@@ -341,14 +344,14 @@ func (ph *PublicHandler) UpdateCatalog(ctx context.Context, req *artifactpb.Upda
 		OwnerName:           kb.Owner,
 		ConvertingPipelines: kb.ConvertingPipelines,
 		SummarizingPipelines: []string{
-			service.GenerateSummaryPipeline.Name(),
+			pipeline.GenerateSummaryPipeline.Name(),
 		},
 		SplittingPipelines: []string{
-			service.ChunkTextPipeline.Name(),
-			service.ChunkMarkdownPipeline.Name(),
+			pipeline.ChunkTextPipeline.Name(),
+			pipeline.ChunkMarkdownPipeline.Name(),
 		},
 		EmbeddingPipelines: []string{
-			service.EmbedTextPipeline.Name(),
+			pipeline.EmbedTextPipeline.Name(),
 		},
 		DownstreamApps: []string{},
 		TotalFiles:     uint32(fileCounts[kb.UID]),
@@ -399,7 +402,7 @@ func (ph *PublicHandler) DeleteCatalog(ctx context.Context, req *artifactpb.Dele
 	}
 
 	// Trigger Temporal workflow for background cleanup
-	if err := ph.service.TriggerCleanupKnowledgeBaseWorkflow(ctx, kb.UID.String()); err != nil {
+	if err := ph.service.CleanupKnowledgeBase(ctx, kb.UID); err != nil {
 		logger.Error("failed to trigger cleanup workflow", zap.Error(err), zap.String("catalog_id", kb.UID.String()))
 		// Don't fail the request - cleanup will be retried by Temporal
 	}
@@ -425,7 +428,7 @@ func (ph *PublicHandler) DeleteCatalog(ctx context.Context, req *artifactpb.Dele
 
 func getUserUIDFromContext(ctx context.Context) (string, error) {
 	md, _ := metadata.FromIncomingContext(ctx)
-	if v, ok := md[strings.ToLower(constant.HeaderUserUIDKey)]; ok {
+	if v, ok := md[strings.ToLower(constantx.HeaderUserUIDKey)]; ok {
 		return v[0], nil
 	}
 	return "", fmt.Errorf("user id not found in context. err: %w", errorsx.ErrUnauthenticated)
@@ -472,7 +475,7 @@ func sanitizeConvertingPipelines(pipelines []string) ([]string, error) {
 			continue
 		}
 
-		if _, err := service.PipelineReleaseFromName(pipelineName); err != nil {
+		if _, err := pipeline.PipelineReleaseFromName(pipelineName); err != nil {
 			err = fmt.Errorf("%w: invalid conversion pipeline format: %w", errorsx.ErrInvalidArgument, err)
 			return nil, errorsx.AddMessage(
 				err,

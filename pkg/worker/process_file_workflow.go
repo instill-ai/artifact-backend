@@ -11,7 +11,6 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
-	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/pipeline"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/types"
@@ -804,11 +803,11 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 					SourceTable: repository.TextChunkTableName,
 					SourceUID:   chunk.UID,
 					Vector:      embeddingVectors[j],
-					Collection:  constant.KBCollectionName(kbUID),
 					KBUID:       kbUID,
 					KBFileUID:   fileUID,
 					FileType:    string(types.DocumentFileType),
 					ContentType: chunk.ContentType,
+					Tags:        chunksData.Tags,
 				}
 			}
 
