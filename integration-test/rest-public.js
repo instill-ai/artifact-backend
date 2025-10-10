@@ -259,8 +259,8 @@ export function CheckCatalog(data) {
     const uploaded = [];
     const uploadReqs = constant.sampleFiles.map((s) => {
       const fileName = `${constant.dbIDPrefix}${s.originalName}`;
-      // Add tags to file upload - using different tags for different file types
-      const tags = s.type === "FILE_TYPE_PDF" ? ["scott", "ramona"] : ["kim", "knives"];
+      // Add tags to file upload - using same tags for all files initially
+      const tags = ["kim", "knives"];
       return {
         s,
         fileName,
@@ -410,6 +410,35 @@ export function CheckCatalog(data) {
       check(getSummaryRes, {
         [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid}/summary 200`]: (r) => r.status === 200,
       });
+    }
+
+    // Update PDF file tags before retrieval tests
+    {
+      const pdfFile = uploaded.find(f => f.type === "FILE_TYPE_PDF");
+      if (pdfFile) {
+        const updateTagsBody = {
+          tags: ["scott", "kim"]
+        };
+        const updateTagsRes = http.request(
+          "PUT",
+          `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${pdfFile.fileUid}/tags`,
+          JSON.stringify(updateTagsBody),
+          data.header
+        );
+        let updateTagsJson; try { updateTagsJson = updateTagsRes.json(); } catch (e) { updateTagsJson = {}; }
+        const updatedFile = updateTagsJson.file || {};
+        const updatedTags = updatedFile.tags || [];
+
+        check(updateTagsRes, {
+          [`PUT /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid}/tags 200`]: (r) => r.status === 200,
+          [`PUT /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid}/tags returns file object`]: () => updatedFile && updatedFile.fileUid,
+          [`PUT /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid}/tags returns correct tags`]: () =>
+            Array.isArray(updatedTags) &&
+            updatedTags.length === 2 &&
+            updatedTags.includes("scott") &&
+            updatedTags.includes("kim"),
+        });
+      }
     }
 
     // Chunk similarity search tests

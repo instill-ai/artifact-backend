@@ -449,6 +449,13 @@ type RepositoryIMock struct {
 	beforeUpdateKnowledgeBaseFileCounter uint64
 	UpdateKnowledgeBaseFileMock          mRepositoryIMockUpdateKnowledgeBaseFile
 
+	funcUpdateKnowledgeBaseFileTags          func(ctx context.Context, fileUID uuid.UUID, tags []string) (err error)
+	funcUpdateKnowledgeBaseFileTagsOrigin    string
+	inspectFuncUpdateKnowledgeBaseFileTags   func(ctx context.Context, fileUID uuid.UUID, tags []string)
+	afterUpdateKnowledgeBaseFileTagsCounter  uint64
+	beforeUpdateKnowledgeBaseFileTagsCounter uint64
+	UpdateKnowledgeBaseFileTagsMock          mRepositoryIMockUpdateKnowledgeBaseFileTags
+
 	funcUpdateObject          func(ctx context.Context, obj mm_repository.Object) (op1 *mm_repository.Object, err error)
 	funcUpdateObjectOrigin    string
 	inspectFuncUpdateObject   func(ctx context.Context, obj mm_repository.Object)
@@ -652,6 +659,9 @@ func NewRepositoryIMock(t minimock.Tester) *RepositoryIMock {
 
 	m.UpdateKnowledgeBaseFileMock = mRepositoryIMockUpdateKnowledgeBaseFile{mock: m}
 	m.UpdateKnowledgeBaseFileMock.callArgs = []*RepositoryIMockUpdateKnowledgeBaseFileParams{}
+
+	m.UpdateKnowledgeBaseFileTagsMock = mRepositoryIMockUpdateKnowledgeBaseFileTags{mock: m}
+	m.UpdateKnowledgeBaseFileTagsMock.callArgs = []*RepositoryIMockUpdateKnowledgeBaseFileTagsParams{}
 
 	m.UpdateObjectMock = mRepositoryIMockUpdateObject{mock: m}
 	m.UpdateObjectMock.callArgs = []*RepositoryIMockUpdateObjectParams{}
@@ -21224,6 +21234,379 @@ func (m *RepositoryIMock) MinimockUpdateKnowledgeBaseFileInspect() {
 	}
 }
 
+type mRepositoryIMockUpdateKnowledgeBaseFileTags struct {
+	optional           bool
+	mock               *RepositoryIMock
+	defaultExpectation *RepositoryIMockUpdateKnowledgeBaseFileTagsExpectation
+	expectations       []*RepositoryIMockUpdateKnowledgeBaseFileTagsExpectation
+
+	callArgs []*RepositoryIMockUpdateKnowledgeBaseFileTagsParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryIMockUpdateKnowledgeBaseFileTagsExpectation specifies expectation struct of the RepositoryI.UpdateKnowledgeBaseFileTags
+type RepositoryIMockUpdateKnowledgeBaseFileTagsExpectation struct {
+	mock               *RepositoryIMock
+	params             *RepositoryIMockUpdateKnowledgeBaseFileTagsParams
+	paramPtrs          *RepositoryIMockUpdateKnowledgeBaseFileTagsParamPtrs
+	expectationOrigins RepositoryIMockUpdateKnowledgeBaseFileTagsExpectationOrigins
+	results            *RepositoryIMockUpdateKnowledgeBaseFileTagsResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryIMockUpdateKnowledgeBaseFileTagsParams contains parameters of the RepositoryI.UpdateKnowledgeBaseFileTags
+type RepositoryIMockUpdateKnowledgeBaseFileTagsParams struct {
+	ctx     context.Context
+	fileUID uuid.UUID
+	tags    []string
+}
+
+// RepositoryIMockUpdateKnowledgeBaseFileTagsParamPtrs contains pointers to parameters of the RepositoryI.UpdateKnowledgeBaseFileTags
+type RepositoryIMockUpdateKnowledgeBaseFileTagsParamPtrs struct {
+	ctx     *context.Context
+	fileUID *uuid.UUID
+	tags    *[]string
+}
+
+// RepositoryIMockUpdateKnowledgeBaseFileTagsResults contains results of the RepositoryI.UpdateKnowledgeBaseFileTags
+type RepositoryIMockUpdateKnowledgeBaseFileTagsResults struct {
+	err error
+}
+
+// RepositoryIMockUpdateKnowledgeBaseFileTagsOrigins contains origins of expectations of the RepositoryI.UpdateKnowledgeBaseFileTags
+type RepositoryIMockUpdateKnowledgeBaseFileTagsExpectationOrigins struct {
+	origin        string
+	originCtx     string
+	originFileUID string
+	originTags    string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmUpdateKnowledgeBaseFileTags *mRepositoryIMockUpdateKnowledgeBaseFileTags) Optional() *mRepositoryIMockUpdateKnowledgeBaseFileTags {
+	mmUpdateKnowledgeBaseFileTags.optional = true
+	return mmUpdateKnowledgeBaseFileTags
+}
+
+// Expect sets up expected params for RepositoryI.UpdateKnowledgeBaseFileTags
+func (mmUpdateKnowledgeBaseFileTags *mRepositoryIMockUpdateKnowledgeBaseFileTags) Expect(ctx context.Context, fileUID uuid.UUID, tags []string) *mRepositoryIMockUpdateKnowledgeBaseFileTags {
+	if mmUpdateKnowledgeBaseFileTags.mock.funcUpdateKnowledgeBaseFileTags != nil {
+		mmUpdateKnowledgeBaseFileTags.mock.t.Fatalf("RepositoryIMock.UpdateKnowledgeBaseFileTags mock is already set by Set")
+	}
+
+	if mmUpdateKnowledgeBaseFileTags.defaultExpectation == nil {
+		mmUpdateKnowledgeBaseFileTags.defaultExpectation = &RepositoryIMockUpdateKnowledgeBaseFileTagsExpectation{}
+	}
+
+	if mmUpdateKnowledgeBaseFileTags.defaultExpectation.paramPtrs != nil {
+		mmUpdateKnowledgeBaseFileTags.mock.t.Fatalf("RepositoryIMock.UpdateKnowledgeBaseFileTags mock is already set by ExpectParams functions")
+	}
+
+	mmUpdateKnowledgeBaseFileTags.defaultExpectation.params = &RepositoryIMockUpdateKnowledgeBaseFileTagsParams{ctx, fileUID, tags}
+	mmUpdateKnowledgeBaseFileTags.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmUpdateKnowledgeBaseFileTags.expectations {
+		if minimock.Equal(e.params, mmUpdateKnowledgeBaseFileTags.defaultExpectation.params) {
+			mmUpdateKnowledgeBaseFileTags.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmUpdateKnowledgeBaseFileTags.defaultExpectation.params)
+		}
+	}
+
+	return mmUpdateKnowledgeBaseFileTags
+}
+
+// ExpectCtxParam1 sets up expected param ctx for RepositoryI.UpdateKnowledgeBaseFileTags
+func (mmUpdateKnowledgeBaseFileTags *mRepositoryIMockUpdateKnowledgeBaseFileTags) ExpectCtxParam1(ctx context.Context) *mRepositoryIMockUpdateKnowledgeBaseFileTags {
+	if mmUpdateKnowledgeBaseFileTags.mock.funcUpdateKnowledgeBaseFileTags != nil {
+		mmUpdateKnowledgeBaseFileTags.mock.t.Fatalf("RepositoryIMock.UpdateKnowledgeBaseFileTags mock is already set by Set")
+	}
+
+	if mmUpdateKnowledgeBaseFileTags.defaultExpectation == nil {
+		mmUpdateKnowledgeBaseFileTags.defaultExpectation = &RepositoryIMockUpdateKnowledgeBaseFileTagsExpectation{}
+	}
+
+	if mmUpdateKnowledgeBaseFileTags.defaultExpectation.params != nil {
+		mmUpdateKnowledgeBaseFileTags.mock.t.Fatalf("RepositoryIMock.UpdateKnowledgeBaseFileTags mock is already set by Expect")
+	}
+
+	if mmUpdateKnowledgeBaseFileTags.defaultExpectation.paramPtrs == nil {
+		mmUpdateKnowledgeBaseFileTags.defaultExpectation.paramPtrs = &RepositoryIMockUpdateKnowledgeBaseFileTagsParamPtrs{}
+	}
+	mmUpdateKnowledgeBaseFileTags.defaultExpectation.paramPtrs.ctx = &ctx
+	mmUpdateKnowledgeBaseFileTags.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmUpdateKnowledgeBaseFileTags
+}
+
+// ExpectFileUIDParam2 sets up expected param fileUID for RepositoryI.UpdateKnowledgeBaseFileTags
+func (mmUpdateKnowledgeBaseFileTags *mRepositoryIMockUpdateKnowledgeBaseFileTags) ExpectFileUIDParam2(fileUID uuid.UUID) *mRepositoryIMockUpdateKnowledgeBaseFileTags {
+	if mmUpdateKnowledgeBaseFileTags.mock.funcUpdateKnowledgeBaseFileTags != nil {
+		mmUpdateKnowledgeBaseFileTags.mock.t.Fatalf("RepositoryIMock.UpdateKnowledgeBaseFileTags mock is already set by Set")
+	}
+
+	if mmUpdateKnowledgeBaseFileTags.defaultExpectation == nil {
+		mmUpdateKnowledgeBaseFileTags.defaultExpectation = &RepositoryIMockUpdateKnowledgeBaseFileTagsExpectation{}
+	}
+
+	if mmUpdateKnowledgeBaseFileTags.defaultExpectation.params != nil {
+		mmUpdateKnowledgeBaseFileTags.mock.t.Fatalf("RepositoryIMock.UpdateKnowledgeBaseFileTags mock is already set by Expect")
+	}
+
+	if mmUpdateKnowledgeBaseFileTags.defaultExpectation.paramPtrs == nil {
+		mmUpdateKnowledgeBaseFileTags.defaultExpectation.paramPtrs = &RepositoryIMockUpdateKnowledgeBaseFileTagsParamPtrs{}
+	}
+	mmUpdateKnowledgeBaseFileTags.defaultExpectation.paramPtrs.fileUID = &fileUID
+	mmUpdateKnowledgeBaseFileTags.defaultExpectation.expectationOrigins.originFileUID = minimock.CallerInfo(1)
+
+	return mmUpdateKnowledgeBaseFileTags
+}
+
+// ExpectTagsParam3 sets up expected param tags for RepositoryI.UpdateKnowledgeBaseFileTags
+func (mmUpdateKnowledgeBaseFileTags *mRepositoryIMockUpdateKnowledgeBaseFileTags) ExpectTagsParam3(tags []string) *mRepositoryIMockUpdateKnowledgeBaseFileTags {
+	if mmUpdateKnowledgeBaseFileTags.mock.funcUpdateKnowledgeBaseFileTags != nil {
+		mmUpdateKnowledgeBaseFileTags.mock.t.Fatalf("RepositoryIMock.UpdateKnowledgeBaseFileTags mock is already set by Set")
+	}
+
+	if mmUpdateKnowledgeBaseFileTags.defaultExpectation == nil {
+		mmUpdateKnowledgeBaseFileTags.defaultExpectation = &RepositoryIMockUpdateKnowledgeBaseFileTagsExpectation{}
+	}
+
+	if mmUpdateKnowledgeBaseFileTags.defaultExpectation.params != nil {
+		mmUpdateKnowledgeBaseFileTags.mock.t.Fatalf("RepositoryIMock.UpdateKnowledgeBaseFileTags mock is already set by Expect")
+	}
+
+	if mmUpdateKnowledgeBaseFileTags.defaultExpectation.paramPtrs == nil {
+		mmUpdateKnowledgeBaseFileTags.defaultExpectation.paramPtrs = &RepositoryIMockUpdateKnowledgeBaseFileTagsParamPtrs{}
+	}
+	mmUpdateKnowledgeBaseFileTags.defaultExpectation.paramPtrs.tags = &tags
+	mmUpdateKnowledgeBaseFileTags.defaultExpectation.expectationOrigins.originTags = minimock.CallerInfo(1)
+
+	return mmUpdateKnowledgeBaseFileTags
+}
+
+// Inspect accepts an inspector function that has same arguments as the RepositoryI.UpdateKnowledgeBaseFileTags
+func (mmUpdateKnowledgeBaseFileTags *mRepositoryIMockUpdateKnowledgeBaseFileTags) Inspect(f func(ctx context.Context, fileUID uuid.UUID, tags []string)) *mRepositoryIMockUpdateKnowledgeBaseFileTags {
+	if mmUpdateKnowledgeBaseFileTags.mock.inspectFuncUpdateKnowledgeBaseFileTags != nil {
+		mmUpdateKnowledgeBaseFileTags.mock.t.Fatalf("Inspect function is already set for RepositoryIMock.UpdateKnowledgeBaseFileTags")
+	}
+
+	mmUpdateKnowledgeBaseFileTags.mock.inspectFuncUpdateKnowledgeBaseFileTags = f
+
+	return mmUpdateKnowledgeBaseFileTags
+}
+
+// Return sets up results that will be returned by RepositoryI.UpdateKnowledgeBaseFileTags
+func (mmUpdateKnowledgeBaseFileTags *mRepositoryIMockUpdateKnowledgeBaseFileTags) Return(err error) *RepositoryIMock {
+	if mmUpdateKnowledgeBaseFileTags.mock.funcUpdateKnowledgeBaseFileTags != nil {
+		mmUpdateKnowledgeBaseFileTags.mock.t.Fatalf("RepositoryIMock.UpdateKnowledgeBaseFileTags mock is already set by Set")
+	}
+
+	if mmUpdateKnowledgeBaseFileTags.defaultExpectation == nil {
+		mmUpdateKnowledgeBaseFileTags.defaultExpectation = &RepositoryIMockUpdateKnowledgeBaseFileTagsExpectation{mock: mmUpdateKnowledgeBaseFileTags.mock}
+	}
+	mmUpdateKnowledgeBaseFileTags.defaultExpectation.results = &RepositoryIMockUpdateKnowledgeBaseFileTagsResults{err}
+	mmUpdateKnowledgeBaseFileTags.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmUpdateKnowledgeBaseFileTags.mock
+}
+
+// Set uses given function f to mock the RepositoryI.UpdateKnowledgeBaseFileTags method
+func (mmUpdateKnowledgeBaseFileTags *mRepositoryIMockUpdateKnowledgeBaseFileTags) Set(f func(ctx context.Context, fileUID uuid.UUID, tags []string) (err error)) *RepositoryIMock {
+	if mmUpdateKnowledgeBaseFileTags.defaultExpectation != nil {
+		mmUpdateKnowledgeBaseFileTags.mock.t.Fatalf("Default expectation is already set for the RepositoryI.UpdateKnowledgeBaseFileTags method")
+	}
+
+	if len(mmUpdateKnowledgeBaseFileTags.expectations) > 0 {
+		mmUpdateKnowledgeBaseFileTags.mock.t.Fatalf("Some expectations are already set for the RepositoryI.UpdateKnowledgeBaseFileTags method")
+	}
+
+	mmUpdateKnowledgeBaseFileTags.mock.funcUpdateKnowledgeBaseFileTags = f
+	mmUpdateKnowledgeBaseFileTags.mock.funcUpdateKnowledgeBaseFileTagsOrigin = minimock.CallerInfo(1)
+	return mmUpdateKnowledgeBaseFileTags.mock
+}
+
+// When sets expectation for the RepositoryI.UpdateKnowledgeBaseFileTags which will trigger the result defined by the following
+// Then helper
+func (mmUpdateKnowledgeBaseFileTags *mRepositoryIMockUpdateKnowledgeBaseFileTags) When(ctx context.Context, fileUID uuid.UUID, tags []string) *RepositoryIMockUpdateKnowledgeBaseFileTagsExpectation {
+	if mmUpdateKnowledgeBaseFileTags.mock.funcUpdateKnowledgeBaseFileTags != nil {
+		mmUpdateKnowledgeBaseFileTags.mock.t.Fatalf("RepositoryIMock.UpdateKnowledgeBaseFileTags mock is already set by Set")
+	}
+
+	expectation := &RepositoryIMockUpdateKnowledgeBaseFileTagsExpectation{
+		mock:               mmUpdateKnowledgeBaseFileTags.mock,
+		params:             &RepositoryIMockUpdateKnowledgeBaseFileTagsParams{ctx, fileUID, tags},
+		expectationOrigins: RepositoryIMockUpdateKnowledgeBaseFileTagsExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmUpdateKnowledgeBaseFileTags.expectations = append(mmUpdateKnowledgeBaseFileTags.expectations, expectation)
+	return expectation
+}
+
+// Then sets up RepositoryI.UpdateKnowledgeBaseFileTags return parameters for the expectation previously defined by the When method
+func (e *RepositoryIMockUpdateKnowledgeBaseFileTagsExpectation) Then(err error) *RepositoryIMock {
+	e.results = &RepositoryIMockUpdateKnowledgeBaseFileTagsResults{err}
+	return e.mock
+}
+
+// Times sets number of times RepositoryI.UpdateKnowledgeBaseFileTags should be invoked
+func (mmUpdateKnowledgeBaseFileTags *mRepositoryIMockUpdateKnowledgeBaseFileTags) Times(n uint64) *mRepositoryIMockUpdateKnowledgeBaseFileTags {
+	if n == 0 {
+		mmUpdateKnowledgeBaseFileTags.mock.t.Fatalf("Times of RepositoryIMock.UpdateKnowledgeBaseFileTags mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmUpdateKnowledgeBaseFileTags.expectedInvocations, n)
+	mmUpdateKnowledgeBaseFileTags.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmUpdateKnowledgeBaseFileTags
+}
+
+func (mmUpdateKnowledgeBaseFileTags *mRepositoryIMockUpdateKnowledgeBaseFileTags) invocationsDone() bool {
+	if len(mmUpdateKnowledgeBaseFileTags.expectations) == 0 && mmUpdateKnowledgeBaseFileTags.defaultExpectation == nil && mmUpdateKnowledgeBaseFileTags.mock.funcUpdateKnowledgeBaseFileTags == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmUpdateKnowledgeBaseFileTags.mock.afterUpdateKnowledgeBaseFileTagsCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmUpdateKnowledgeBaseFileTags.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// UpdateKnowledgeBaseFileTags implements mm_repository.RepositoryI
+func (mmUpdateKnowledgeBaseFileTags *RepositoryIMock) UpdateKnowledgeBaseFileTags(ctx context.Context, fileUID uuid.UUID, tags []string) (err error) {
+	mm_atomic.AddUint64(&mmUpdateKnowledgeBaseFileTags.beforeUpdateKnowledgeBaseFileTagsCounter, 1)
+	defer mm_atomic.AddUint64(&mmUpdateKnowledgeBaseFileTags.afterUpdateKnowledgeBaseFileTagsCounter, 1)
+
+	mmUpdateKnowledgeBaseFileTags.t.Helper()
+
+	if mmUpdateKnowledgeBaseFileTags.inspectFuncUpdateKnowledgeBaseFileTags != nil {
+		mmUpdateKnowledgeBaseFileTags.inspectFuncUpdateKnowledgeBaseFileTags(ctx, fileUID, tags)
+	}
+
+	mm_params := RepositoryIMockUpdateKnowledgeBaseFileTagsParams{ctx, fileUID, tags}
+
+	// Record call args
+	mmUpdateKnowledgeBaseFileTags.UpdateKnowledgeBaseFileTagsMock.mutex.Lock()
+	mmUpdateKnowledgeBaseFileTags.UpdateKnowledgeBaseFileTagsMock.callArgs = append(mmUpdateKnowledgeBaseFileTags.UpdateKnowledgeBaseFileTagsMock.callArgs, &mm_params)
+	mmUpdateKnowledgeBaseFileTags.UpdateKnowledgeBaseFileTagsMock.mutex.Unlock()
+
+	for _, e := range mmUpdateKnowledgeBaseFileTags.UpdateKnowledgeBaseFileTagsMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmUpdateKnowledgeBaseFileTags.UpdateKnowledgeBaseFileTagsMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmUpdateKnowledgeBaseFileTags.UpdateKnowledgeBaseFileTagsMock.defaultExpectation.Counter, 1)
+		mm_want := mmUpdateKnowledgeBaseFileTags.UpdateKnowledgeBaseFileTagsMock.defaultExpectation.params
+		mm_want_ptrs := mmUpdateKnowledgeBaseFileTags.UpdateKnowledgeBaseFileTagsMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryIMockUpdateKnowledgeBaseFileTagsParams{ctx, fileUID, tags}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmUpdateKnowledgeBaseFileTags.t.Errorf("RepositoryIMock.UpdateKnowledgeBaseFileTags got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateKnowledgeBaseFileTags.UpdateKnowledgeBaseFileTagsMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.fileUID != nil && !minimock.Equal(*mm_want_ptrs.fileUID, mm_got.fileUID) {
+				mmUpdateKnowledgeBaseFileTags.t.Errorf("RepositoryIMock.UpdateKnowledgeBaseFileTags got unexpected parameter fileUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateKnowledgeBaseFileTags.UpdateKnowledgeBaseFileTagsMock.defaultExpectation.expectationOrigins.originFileUID, *mm_want_ptrs.fileUID, mm_got.fileUID, minimock.Diff(*mm_want_ptrs.fileUID, mm_got.fileUID))
+			}
+
+			if mm_want_ptrs.tags != nil && !minimock.Equal(*mm_want_ptrs.tags, mm_got.tags) {
+				mmUpdateKnowledgeBaseFileTags.t.Errorf("RepositoryIMock.UpdateKnowledgeBaseFileTags got unexpected parameter tags, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateKnowledgeBaseFileTags.UpdateKnowledgeBaseFileTagsMock.defaultExpectation.expectationOrigins.originTags, *mm_want_ptrs.tags, mm_got.tags, minimock.Diff(*mm_want_ptrs.tags, mm_got.tags))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmUpdateKnowledgeBaseFileTags.t.Errorf("RepositoryIMock.UpdateKnowledgeBaseFileTags got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmUpdateKnowledgeBaseFileTags.UpdateKnowledgeBaseFileTagsMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmUpdateKnowledgeBaseFileTags.UpdateKnowledgeBaseFileTagsMock.defaultExpectation.results
+		if mm_results == nil {
+			mmUpdateKnowledgeBaseFileTags.t.Fatal("No results are set for the RepositoryIMock.UpdateKnowledgeBaseFileTags")
+		}
+		return (*mm_results).err
+	}
+	if mmUpdateKnowledgeBaseFileTags.funcUpdateKnowledgeBaseFileTags != nil {
+		return mmUpdateKnowledgeBaseFileTags.funcUpdateKnowledgeBaseFileTags(ctx, fileUID, tags)
+	}
+	mmUpdateKnowledgeBaseFileTags.t.Fatalf("Unexpected call to RepositoryIMock.UpdateKnowledgeBaseFileTags. %v %v %v", ctx, fileUID, tags)
+	return
+}
+
+// UpdateKnowledgeBaseFileTagsAfterCounter returns a count of finished RepositoryIMock.UpdateKnowledgeBaseFileTags invocations
+func (mmUpdateKnowledgeBaseFileTags *RepositoryIMock) UpdateKnowledgeBaseFileTagsAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateKnowledgeBaseFileTags.afterUpdateKnowledgeBaseFileTagsCounter)
+}
+
+// UpdateKnowledgeBaseFileTagsBeforeCounter returns a count of RepositoryIMock.UpdateKnowledgeBaseFileTags invocations
+func (mmUpdateKnowledgeBaseFileTags *RepositoryIMock) UpdateKnowledgeBaseFileTagsBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateKnowledgeBaseFileTags.beforeUpdateKnowledgeBaseFileTagsCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryIMock.UpdateKnowledgeBaseFileTags.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmUpdateKnowledgeBaseFileTags *mRepositoryIMockUpdateKnowledgeBaseFileTags) Calls() []*RepositoryIMockUpdateKnowledgeBaseFileTagsParams {
+	mmUpdateKnowledgeBaseFileTags.mutex.RLock()
+
+	argCopy := make([]*RepositoryIMockUpdateKnowledgeBaseFileTagsParams, len(mmUpdateKnowledgeBaseFileTags.callArgs))
+	copy(argCopy, mmUpdateKnowledgeBaseFileTags.callArgs)
+
+	mmUpdateKnowledgeBaseFileTags.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockUpdateKnowledgeBaseFileTagsDone returns true if the count of the UpdateKnowledgeBaseFileTags invocations corresponds
+// the number of defined expectations
+func (m *RepositoryIMock) MinimockUpdateKnowledgeBaseFileTagsDone() bool {
+	if m.UpdateKnowledgeBaseFileTagsMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.UpdateKnowledgeBaseFileTagsMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.UpdateKnowledgeBaseFileTagsMock.invocationsDone()
+}
+
+// MinimockUpdateKnowledgeBaseFileTagsInspect logs each unmet expectation
+func (m *RepositoryIMock) MinimockUpdateKnowledgeBaseFileTagsInspect() {
+	for _, e := range m.UpdateKnowledgeBaseFileTagsMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryIMock.UpdateKnowledgeBaseFileTags at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterUpdateKnowledgeBaseFileTagsCounter := mm_atomic.LoadUint64(&m.afterUpdateKnowledgeBaseFileTagsCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.UpdateKnowledgeBaseFileTagsMock.defaultExpectation != nil && afterUpdateKnowledgeBaseFileTagsCounter < 1 {
+		if m.UpdateKnowledgeBaseFileTagsMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryIMock.UpdateKnowledgeBaseFileTags at\n%s", m.UpdateKnowledgeBaseFileTagsMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryIMock.UpdateKnowledgeBaseFileTags at\n%s with params: %#v", m.UpdateKnowledgeBaseFileTagsMock.defaultExpectation.expectationOrigins.origin, *m.UpdateKnowledgeBaseFileTagsMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcUpdateKnowledgeBaseFileTags != nil && afterUpdateKnowledgeBaseFileTagsCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryIMock.UpdateKnowledgeBaseFileTags at\n%s", m.funcUpdateKnowledgeBaseFileTagsOrigin)
+	}
+
+	if !m.UpdateKnowledgeBaseFileTagsMock.invocationsDone() && afterUpdateKnowledgeBaseFileTagsCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryIMock.UpdateKnowledgeBaseFileTags at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.UpdateKnowledgeBaseFileTagsMock.expectedInvocations), m.UpdateKnowledgeBaseFileTagsMock.expectedInvocationsOrigin, afterUpdateKnowledgeBaseFileTagsCounter)
+	}
+}
+
 type mRepositoryIMockUpdateObject struct {
 	optional           bool
 	mock               *RepositoryIMock
@@ -22406,6 +22789,8 @@ func (m *RepositoryIMock) MinimockFinish() {
 
 			m.MinimockUpdateKnowledgeBaseFileInspect()
 
+			m.MinimockUpdateKnowledgeBaseFileTagsInspect()
+
 			m.MinimockUpdateObjectInspect()
 
 			m.MinimockUpdateObjectByUpdateMapInspect()
@@ -22493,6 +22878,7 @@ func (m *RepositoryIMock) minimockDone() bool {
 		m.MinimockUpdateKBFileMetadataDone() &&
 		m.MinimockUpdateKnowledgeBaseDone() &&
 		m.MinimockUpdateKnowledgeBaseFileDone() &&
+		m.MinimockUpdateKnowledgeBaseFileTagsDone() &&
 		m.MinimockUpdateObjectDone() &&
 		m.MinimockUpdateObjectByUpdateMapDone() &&
 		m.MinimockUpsertRepositoryTagDone()

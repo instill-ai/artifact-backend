@@ -981,3 +981,10 @@ func (ph *PublicHandler) uploadBase64FileToMinIO(ctx context.Context, nsID strin
 	}
 	return objectUID, nil
 }
+
+// UpdateCatalogFileTags updates the tags for a catalog file
+func (ph *PublicHandler) UpdateCatalogFileTags(ctx context.Context, req *artifactpb.UpdateCatalogFileTagsRequest) (*artifactpb.UpdateCatalogFileTagsResponse, error) {
+	// Call the service layer to update the tags
+	// The service layer handles all validation, permission checks, and business logic
+	return ph.service.UpdateCatalogFileTags(ctx, req)
+}
