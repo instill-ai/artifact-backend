@@ -16,6 +16,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/instill-ai/x/client"
+	"github.com/instill-ai/x/temporal"
 
 	miniox "github.com/instill-ai/x/minio"
 )
@@ -25,20 +26,21 @@ var Config AppConfig
 
 // AppConfig defines
 type AppConfig struct {
-	Server                ServerConfig          `koanf:"server"`
-	Database              DatabaseConfig        `koanf:"database"`
-	InfluxDB              InfluxDBConfig        `koanf:"influxdb"`
-	Cache                 CacheConfig           `koanf:"cache"`
-	OTELCollector         OTELCollectorConfig   `koanf:"otelcollector"`
-	MgmtBackend           client.ServiceConfig  `koanf:"mgmtbackend"`
-	PipelineBackend       client.ServiceConfig  `koanf:"pipelinebackend"`
-	ModelBackend          client.ServiceConfig  `koanf:"modelbackend"`
-	Registry              RegistryConfig        `koanf:"registry"`
-	OpenFGA               OpenFGAConfig         `koanf:"openfga"`
-	Minio                 miniox.Config         `koanf:"minio"`
-	Milvus                MilvusConfig          `koanf:"milvus"`
-	FileToEmbeddingWorker FileToEmbeddingWorker `koanf:"filetoembeddingworker"`
-	Blob                  BlobConfig            `koanf:"blob"`
+	Server          ServerConfig          `koanf:"server"`
+	Database        DatabaseConfig        `koanf:"database"`
+	InfluxDB        InfluxDBConfig        `koanf:"influxdb"`
+	Temporal        temporal.ClientConfig `koanf:"temporal"`
+	Cache           CacheConfig           `koanf:"cache"`
+	OTELCollector   OTELCollectorConfig   `koanf:"otelcollector"`
+	MgmtBackend     client.ServiceConfig  `koanf:"mgmtbackend"`
+	PipelineBackend client.ServiceConfig  `koanf:"pipelinebackend"`
+	ModelBackend    client.ServiceConfig  `koanf:"modelbackend"`
+	Registry        RegistryConfig        `koanf:"registry"`
+	OpenFGA         OpenFGAConfig         `koanf:"openfga"`
+	Minio           miniox.Config         `koanf:"minio"`
+	Milvus          MilvusConfig          `koanf:"milvus"`
+	Blob            BlobConfig            `koanf:"blob"`
+	AI              AIConfig              `koanf:"ai"`
 }
 
 // OpenFGAConfig is the openfga configuration.
@@ -131,14 +133,22 @@ type MilvusConfig struct {
 	Port string `koanf:"port"`
 }
 
-// FileToEmbeddingWorker is the file to embedding worker configuration.
-type FileToEmbeddingWorker struct {
-	NumberOfWorkers int `koanf:"numberofworkers"`
-}
-
 // BlobConfig is the blob configuration.
 type BlobConfig struct {
 	HostPort string `koanf:"hostport"`
+}
+
+// AIConfig defines the configuration for AI providers
+type AIConfig struct {
+	Gemini GeminiConfig `koanf:"gemini"`
+	// Future AI providers:
+	// OpenAI      OpenAIConfig      `koanf:"openai"`
+	// Anthropic   AnthropicConfig   `koanf:"anthropic"`
+}
+
+// GeminiConfig defines the configuration for Gemini AI
+type GeminiConfig struct {
+	APIKey string `koanf:"apikey"`
 }
 
 // Init - Assign global config to decoded config struct

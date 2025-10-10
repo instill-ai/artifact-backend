@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
+
+	"github.com/instill-ai/artifact-backend/pkg/types"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -40,7 +42,7 @@ const (
 )
 
 type Relation struct {
-	UID      uuid.UUID
+	UID      types.ObjectUIDType
 	Relation string
 }
 
@@ -128,11 +130,15 @@ func (c *ACLClient) getClient(ctx context.Context, mode Mode) openfga.OpenFGASer
 // Parameters:
 // - ctx: context for managing request-scoped values, cancellation, and deadlines.
 // - objectType: the type of the object (e.g., "pipeline", "_model", "knowledgebase").
-// - objectUID: the unique identifier of the object.
+// - objectUID: the unique identifier of the object (uses uuid.UUID for polymorphic object types).
 // - ownerType: the type of the owner (e.g., "users", "organizations").
 // - ownerUID: the unique identifier of the owner.
 // Returns an error if the ownerType is invalid, if there is an error reading from or writing to the database, or nil if successful.
-func (c *ACLClient) SetOwner(ctx context.Context, objectType string, objectUID uuid.UUID, ownerType string, ownerUID uuid.UUID) error {
+//
+// Note: ACL functions use uuid.UUID instead of typed aliases for objectUID parameters
+// because they are polymorphic and work across multiple object types (knowledgebase,
+// organization, pipeline, model, etc.). The objectType parameter specifies the actual type.
+func (c *ACLClient) SetOwner(ctx context.Context, objectType string, objectUID uuid.UUID, ownerType string, ownerUID types.OwnerUIDType) error {
 	var err error
 	// Normalize ownerType to singular form. because in our openfga, the
 	// owner/organization type is singular.
@@ -182,7 +188,7 @@ func (c *ACLClient) SetOwner(ctx context.Context, objectType string, objectUID u
 }
 
 // Note: may move this to service layer due to it is specific to knowledge base
-func (c *ACLClient) SetKnowledgeBasePermission(ctx context.Context, kbUID uuid.UUID, user, role string, enable bool) error {
+func (c *ACLClient) SetKnowledgeBasePermission(ctx context.Context, kbUID types.KBUIDType, user, role string, enable bool) error {
 	var err error
 	_ = c.DeleteKnowledgeBasePermission(ctx, kbUID, user)
 
@@ -208,7 +214,7 @@ func (c *ACLClient) SetKnowledgeBasePermission(ctx context.Context, kbUID uuid.U
 	return nil
 }
 
-func (c *ACLClient) DeleteKnowledgeBasePermission(ctx context.Context, kbUID uuid.UUID, user string) error {
+func (c *ACLClient) DeleteKnowledgeBasePermission(ctx context.Context, kbUID types.KBUIDType, user string) error {
 
 	// delete all roles
 	for _, role := range []string{"admin", "writer", "executor", "reader"} {
@@ -231,7 +237,7 @@ func (c *ACLClient) DeleteKnowledgeBasePermission(ctx context.Context, kbUID uui
 }
 
 // Note: may move this to service layer due to it is specific to knowledge base
-func (c *ACLClient) SetPublicKnowledgeBasePermission(ctx context.Context, kbUID uuid.UUID) error {
+func (c *ACLClient) SetPublicKnowledgeBasePermission(ctx context.Context, kbUID types.KBUIDType) error {
 	for _, t := range []string{"user", "visitor"} {
 		err := c.SetKnowledgeBasePermission(ctx, kbUID, fmt.Sprintf("%s:*", t), "reader", true)
 		if err != nil {
@@ -247,7 +253,7 @@ func (c *ACLClient) SetPublicKnowledgeBasePermission(ctx context.Context, kbUID 
 }
 
 // Note: may move this to service layer due to it is specific to knowledge base
-func (c *ACLClient) DeletePublicKnowledgeBasePermission(ctx context.Context, kbUID uuid.UUID) error {
+func (c *ACLClient) DeletePublicKnowledgeBasePermission(ctx context.Context, kbUID types.KBUIDType) error {
 	for _, t := range []string{"user", "visitor"} {
 		// delete user:* and visitor:* from all roles
 		err := c.DeleteKnowledgeBasePermission(ctx, kbUID, fmt.Sprintf("%s:*", t))

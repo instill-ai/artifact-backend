@@ -3,88 +3,124 @@ package service
 import (
 	"context"
 
-	"github.com/gofrs/uuid"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/instill-ai/artifact-backend/pkg/acl"
-	"github.com/instill-ai/artifact-backend/pkg/minio"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/resource"
+	"github.com/instill-ai/artifact-backend/pkg/types"
+	"github.com/instill-ai/artifact-backend/pkg/worker"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	mgmtpb "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
 	pipelinepb "github.com/instill-ai/protogen-go/pipeline/pipeline/v1beta"
 )
 
+// FileContent is an alias to worker.FileContent for backwards compatibility
+type FileContent = worker.FileContent
+
 // Service defines the Artifact domain use cases.
 type Service interface {
 	CheckNamespacePermission(context.Context, *resource.Namespace) error
-	ConvertToMDPipe(context.Context, MDConversionParams) (*MDConversionResult, error)
-	GenerateSummary(_ context.Context, content, fileType string) (string, error)
-	ChunkMarkdownPipe(_ context.Context, markdown string) (*ChunkingResult, error)
-	ChunkTextPipe(_ context.Context, text string) (*ChunkingResult, error)
-	EmbeddingTextPipe(_ context.Context, texts []string) ([][]float32, error)
-	QuestionAnsweringPipe(_ context.Context, question string, simChunks []string) (string, error)
-	SimilarityChunksSearch(_ context.Context, ownerUID uuid.UUID, _ *artifactpb.SimilarityChunksSearchRequest) ([]SimChunk, error)
-	UpdateCatalogFileTags(_ context.Context, _ *artifactpb.UpdateCatalogFileTagsRequest) (*artifactpb.UpdateCatalogFileTagsResponse, error)
-	GetNamespaceByNsID(_ context.Context, nsID string) (*resource.Namespace, error)
-	GetChunksByFile(context.Context, *repository.KnowledgeBaseFile) (SourceTableType, SourceIDType, []repository.TextChunk, map[ChunkUIDType]ContentType, []string, error)
+	SimilarityChunksSearch(context.Context, types.OwnerUIDType, *artifactpb.SimilarityChunksSearchRequest, [][]float32) ([]SimChunk, error)
+	GetNamespaceByNsID(context.Context, string) (*resource.Namespace, error)
+	GetChunksByFile(context.Context, *repository.KnowledgeBaseFileModel) (types.SourceTableType, types.SourceUIDType, []repository.TextChunkModel, map[types.TextChunkUIDType]types.ContentType, []string, error)
+	GetConvertedFilePathsByFileUID(context.Context, types.KBUIDType, types.FileUIDType) ([]string, error)
+	GetTextChunkFilePathsByFileUID(context.Context, types.KBUIDType, types.FileUIDType) ([]string, error)
 	ListRepositoryTags(context.Context, *artifactpb.ListRepositoryTagsRequest) (*artifactpb.ListRepositoryTagsResponse, error)
 	CreateRepositoryTag(context.Context, *artifactpb.CreateRepositoryTagRequest) (*artifactpb.CreateRepositoryTagResponse, error)
 	GetRepositoryTag(context.Context, *artifactpb.GetRepositoryTagRequest) (*artifactpb.GetRepositoryTagResponse, error)
 	DeleteRepositoryTag(context.Context, *artifactpb.DeleteRepositoryTagRequest) (*artifactpb.DeleteRepositoryTagResponse, error)
-	GetUploadURL(_ context.Context, _ *artifactpb.GetObjectUploadURLRequest, namespaceUID uuid.UUID, namespaceID string, creatorUID uuid.UUID) (*artifactpb.GetObjectUploadURLResponse, error)
-	GetDownloadURL(_ context.Context, _ *artifactpb.GetObjectDownloadURLRequest, namespaceUID uuid.UUID, namespaceID string) (*artifactpb.GetObjectDownloadURLResponse, error)
-	CheckCatalogUserPermission(_ context.Context, nsID, catalogID, authUID string) (*resource.Namespace, *repository.KnowledgeBase, error)
-	GetNamespaceAndCheckPermission(_ context.Context, nsID string) (*resource.Namespace, error)
+	GetUploadURL(context.Context, *artifactpb.GetObjectUploadURLRequest, types.NamespaceUIDType, string, types.CreatorUIDType) (*artifactpb.GetObjectUploadURLResponse, error)
+	GetDownloadURL(context.Context, *artifactpb.GetObjectDownloadURLRequest, types.NamespaceUIDType, string) (*artifactpb.GetObjectDownloadURLResponse, error)
+	CheckCatalogUserPermission(context.Context, string, string, string) (*resource.Namespace, *repository.KnowledgeBaseModel, error)
+	GetNamespaceAndCheckPermission(context.Context, string) (*resource.Namespace, error)
 
-	// TODO instead of exposing this dependencies, Service should expose use
+	// Worker orchestration use cases (abstracted from worker package)
+	ProcessFile(context.Context, types.KBUIDType, []types.FileUIDType, types.UserUIDType, types.RequesterUIDType) error
+	CleanupFile(context.Context, types.FileUIDType, types.UserUIDType, types.RequesterUIDType, string, bool) error
+	CleanupKnowledgeBase(context.Context, types.KBUIDType) error
+	GetFilesByPaths(context.Context, string, []string) ([]FileContent, error)
+	DeleteFiles(context.Context, string, []string) error
+	EmbedTexts(context.Context, []string, int, map[string][]string) ([][]float32, error)
+
+	// Chat cache use cases (for instant chat during file processing)
+	GetChatCacheForFiles(context.Context, types.KBUIDType, []types.FileUIDType) (*repository.ChatCacheMetadata, error)
+	ChatWithCache(context.Context, *repository.ChatCacheMetadata, string) (string, error)
+	CheckFilesProcessingStatus(context.Context, []types.FileUIDType) (allCompleted bool, processingCount int, err error)
+
+	// TODO instead of exposing these dependencies, Service should expose use
 	// cases. We're drawing a line for now here in the refactor and take this
 	// as valid in order to move forward with new features, but we should avoid
 	// using these methods in them.
-	Repository() repository.RepositoryI
-	MinIO() minio.MinioI
+	Repository() repository.Repository
 	ACLClient() *acl.ACLClient
-	VectorDB() VectorDatabase
 	RedisClient() *redis.Client
+	PipelinePublicClient() pipelinepb.PipelinePublicServiceClient
 }
 
 type service struct {
-	repository     repository.RepositoryI
-	minIO          minio.MinioI
+	repository     repository.Repository
 	mgmtPrv        mgmtpb.MgmtPrivateServiceClient
 	pipelinePub    pipelinepb.PipelinePublicServiceClient
 	registryClient RegistryClient
 	redisClient    *redis.Client
-	vectorDB       VectorDatabase
 	aclClient      *acl.ACLClient
+	worker         Worker
 }
 
 // NewService initiates a service instance
 func NewService(
-	r repository.RepositoryI,
-	mc minio.MinioI,
+	r repository.Repository,
 	mgmtPrv mgmtpb.MgmtPrivateServiceClient,
 	pipelinePub pipelinepb.PipelinePublicServiceClient,
 	rgc RegistryClient,
 	rc *redis.Client,
-	vectorDB VectorDatabase,
 	aclClient *acl.ACLClient,
+	w Worker,
 ) Service {
 	return &service{
 		repository:     r,
-		minIO:          mc,
 		mgmtPrv:        mgmtPrv,
 		pipelinePub:    pipelinePub,
 		registryClient: rgc,
 		redisClient:    rc,
-		vectorDB:       vectorDB,
 		aclClient:      aclClient,
+		worker:         w,
 	}
 }
 
-func (s *service) Repository() repository.RepositoryI { return s.repository }
-func (s *service) MinIO() minio.MinioI                { return s.minIO }
-func (s *service) ACLClient() *acl.ACLClient          { return s.aclClient }
-func (s *service) RedisClient() *redis.Client         { return s.redisClient }
-func (s *service) VectorDB() VectorDatabase           { return s.vectorDB }
+func (s *service) Repository() repository.Repository                            { return s.repository }
+func (s *service) ACLClient() *acl.ACLClient                                    { return s.aclClient }
+func (s *service) PipelinePublicClient() pipelinepb.PipelinePublicServiceClient { return s.pipelinePub }
+func (s *service) RedisClient() *redis.Client                                   { return s.redisClient }
+
+// ProcessFile orchestrates the file processing workflow for one or more files
+func (s *service) ProcessFile(ctx context.Context, kbUID types.KBUIDType, fileUIDs []types.FileUIDType, userUID, requesterUID types.RequesterUIDType) error {
+	return s.worker.ProcessFile(ctx, kbUID, fileUIDs, userUID, requesterUID)
+}
+
+// CleanupFile cleans up a file using workflow
+func (s *service) CleanupFile(ctx context.Context, fileUID types.FileUIDType, userUID, requesterUID types.RequesterUIDType, workflowID string, includeOriginalFile bool) error {
+	return s.worker.CleanupFile(ctx, fileUID, userUID, requesterUID, workflowID, includeOriginalFile)
+}
+
+// GetFilesByPaths retrieves files by their paths using workflow
+func (s *service) GetFilesByPaths(ctx context.Context, bucket string, filePaths []string) ([]FileContent, error) {
+	return s.worker.GetFilesByPaths(ctx, bucket, filePaths)
+}
+
+// DeleteFiles deletes files using workflow
+func (s *service) DeleteFiles(ctx context.Context, bucket string, filePaths []string) error {
+	return s.worker.DeleteFiles(ctx, bucket, filePaths)
+}
+
+// CleanupKnowledgeBase cleans up a knowledge base using workflow
+func (s *service) CleanupKnowledgeBase(ctx context.Context, kbUID types.KBUIDType) error {
+	return s.worker.CleanupKnowledgeBase(ctx, kbUID)
+}
+
+// EmbedTexts embeds texts using workflow
+func (s *service) EmbedTexts(ctx context.Context, texts []string, batchSize int, requestMetadata map[string][]string) ([][]float32, error) {
+	return s.worker.EmbedTexts(ctx, texts, batchSize, requestMetadata)
+}

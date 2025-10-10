@@ -83,7 +83,7 @@ func (h *PrivateHandler) GetObjectURL(ctx context.Context, req *artifactpb.GetOb
 		return nil, fmt.Errorf("one of UID or EncodedURLPath must be provided")
 	}
 
-	var resp *repository.ObjectURL
+	var resp *repository.ObjectURLModel
 	var err error
 	objectURLUID := uuid.FromStringOrNil(req.GetUid())
 	if objectURLUID != uuid.Nil {
@@ -168,7 +168,7 @@ func (h *PrivateHandler) GetFileAsMarkdown(ctx context.Context, req *artifactpb.
 	}
 
 	// get the source file sourceContent from minIO using dest of source
-	sourceContent, err := h.service.MinIO().GetFile(ctx, config.Config.Minio.BucketName, source.Dest)
+	sourceContent, err := h.service.Repository().GetFile(ctx, config.Config.Minio.BucketName, source.Dest)
 	if err != nil {
 		return nil, fmt.Errorf("getting source file from blob storage: %w", err)
 	}
@@ -198,7 +198,7 @@ func (h *PrivateHandler) GetChatFile(ctx context.Context, req *artifactpb.GetCha
 		return nil, fmt.Errorf("failed to get catalog by namespace and catalog id. err: %w", err)
 	}
 
-	kbFile, err := h.service.Repository().GetKnowledgebaseFileByKbUIDAndFileID(ctx, kb.UID, fileID)
+	kbFile, err := h.service.Repository().GetKnowledgebaseFileByKBUIDAndFileID(ctx, kb.UID, fileID)
 	if err != nil {
 		h.logger.Error("failed to get file by file id", zap.Error(err))
 		return nil, fmt.Errorf("failed to get file by file id. err: %w", err)
@@ -212,7 +212,7 @@ func (h *PrivateHandler) GetChatFile(ctx context.Context, req *artifactpb.GetCha
 	}
 
 	// get the source file sourceContent from minIO using dest of source
-	sourceContent, err := h.service.MinIO().GetFile(ctx, config.Config.Minio.BucketName, source.Dest)
+	sourceContent, err := h.service.Repository().GetFile(ctx, config.Config.Minio.BucketName, source.Dest)
 	if err != nil {
 		h.logger.Error("failed to get file from minio", zap.Error(err))
 		return nil, fmt.Errorf("failed to get file from minio. err: %w", err)

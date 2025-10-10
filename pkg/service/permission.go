@@ -14,7 +14,7 @@ import (
 	logx "github.com/instill-ai/x/log"
 )
 
-func (s *service) CheckCatalogUserPermission(ctx context.Context, nsID, catalogID, authUID string) (*resource.Namespace, *repository.KnowledgeBase, error) {
+func (s *service) CheckCatalogUserPermission(ctx context.Context, nsID, catalogID, authUID string) (*resource.Namespace, *repository.KnowledgeBaseModel, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 	// ACL - check user's permission to create conversation in the namespace
 	ns, err := s.GetNamespaceByNsID(ctx, nsID)

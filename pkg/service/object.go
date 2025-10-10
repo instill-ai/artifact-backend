@@ -4,13 +4,16 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gofrs/uuid"
+
 	"github.com/gogo/status"
+	"github.com/instill-ai/artifact-backend/pkg/types"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -19,13 +22,12 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
 
-	miniolocal "github.com/instill-ai/artifact-backend/pkg/minio"
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	logx "github.com/instill-ai/x/log"
 )
 
 // MaxUploadFileSizeMB returns the maximum file size for artifact uploads, in
-// megabbytes. For now, this is a constant (512 Mb).
+// megabytes. For now, this is a constant (512 Mb).
 const MaxUploadFileSizeMB int64 = 512
 
 const blobURLPath = "/v1alpha/blob-urls"
@@ -40,9 +42,9 @@ var (
 func (s *service) GetUploadURL(
 	ctx context.Context,
 	req *artifactpb.GetObjectUploadURLRequest,
-	namespaceUID uuid.UUID,
+	namespaceUID types.NamespaceUIDType,
 	namespaceID string,
-	creatorUID uuid.UUID,
+	creatorUID types.CreatorUIDType,
 ) (*artifactpb.GetObjectUploadURLResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 	// name cannot be empty
@@ -71,7 +73,7 @@ func (s *service) GetUploadURL(
 	lastModifiedTime := req.GetLastModifiedTime().AsTime()
 	contentType := utils.DetermineMimeType(req.GetObjectName())
 	// create object
-	object := &repository.Object{
+	object := &repository.ObjectModel{
 		Name:             req.GetObjectName(),
 		NamespaceUID:     namespaceUID,
 		CreatorUID:       creatorUID,
@@ -91,7 +93,7 @@ func (s *service) GetUploadURL(
 	}
 
 	// get path of the object
-	minioPath := miniolocal.GetBlobObjectPath(createdObject.NamespaceUID, createdObject.UID)
+	minioPath := repository.GetBlobObjectPath(createdObject.NamespaceUID, createdObject.UID)
 	// update the object destination
 	createdObject.Destination = minioPath
 	_, err = s.repository.UpdateObject(ctx, *createdObject)
@@ -102,13 +104,13 @@ func (s *service) GetUploadURL(
 
 	// get presigned url for uploading object
 	expirationTime := time.Duration(req.GetUrlExpireDays()) * time.Hour * 24
-	presignedURL, err := s.minIO.GetPresignedURLForUpload(ctx, namespaceUID, createdObject.UID, req.GetObjectName(), expirationTime)
+	presignedURL, err := s.repository.GetPresignedURLForUpload(ctx, namespaceUID, createdObject.UID, req.GetObjectName(), expirationTime)
 	if err != nil {
 		logger.Error("failed to make presigned url for upload", zap.Error(err))
 		return nil, status.Errorf(codes.Internal, "failed to make presigned url for upload: %v", err)
 	}
 
-	uploadURL, err := encodeBlobURL(presignedURL)
+	uploadURL, err := EncodeBlobURL(presignedURL)
 	if err != nil {
 		logger.Error("failed to encode blob url", zap.Error(err))
 		return nil, status.Errorf(codes.Internal, "failed to encode blob url: %v", err)
@@ -132,7 +134,7 @@ func (s *service) GetUploadURL(
 func (s *service) GetDownloadURL(
 	ctx context.Context,
 	req *artifactpb.GetObjectDownloadURLRequest,
-	namespaceUID uuid.UUID,
+	namespaceUID types.NamespaceUIDType,
 	namespaceID string,
 ) (*artifactpb.GetObjectDownloadURLResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
@@ -142,7 +144,7 @@ func (s *service) GetDownloadURL(
 		return nil, status.Errorf(codes.InvalidArgument, "failed to parse object uid: %v", err)
 	}
 	// Get the object from database
-	object, err := s.repository.GetObjectByUID(ctx, objectUID)
+	object, err := s.repository.GetObjectByUID(ctx, types.ObjectUIDType(objectUID))
 	if err != nil {
 		logger.Error("failed to get object", zap.Error(err))
 		return nil, status.Errorf(codes.NotFound, "object not found: %v", err)
@@ -159,7 +161,7 @@ func (s *service) GetDownloadURL(
 			return nil, ErrObjectNotUploaded
 		}
 
-		objectInfo, err := s.minIO.GetFileMetadata(ctx, miniolocal.BlobBucketName, object.Destination)
+		objectInfo, err := s.repository.GetFileMetadata(ctx, repository.BlobBucketName, object.Destination)
 		if err != nil {
 			logger.Error("failed to get file", zap.Error(err))
 			return nil, status.Errorf(codes.Internal, "failed to get file: %v", err)
@@ -182,7 +184,7 @@ func (s *service) GetDownloadURL(
 	expirationTime := time.Duration(urlExpireDays) * time.Hour * 24
 
 	// Get presigned URL for downloading object
-	presignedURL, err := s.minIO.GetPresignedURLForDownload(
+	presignedURL, err := s.repository.GetPresignedURLForDownload(
 		ctx,
 		object.NamespaceUID,
 		object.UID,
@@ -195,7 +197,7 @@ func (s *service) GetDownloadURL(
 		return nil, status.Errorf(codes.Internal, "failed to make presigned url for download: %v", err)
 	}
 
-	downloadURL, err := encodeBlobURL(presignedURL)
+	downloadURL, err := EncodeBlobURL(presignedURL)
 	if err != nil {
 		logger.Error("failed to encode blob url", zap.Error(err))
 		return nil, status.Errorf(codes.Internal, "failed to encode blob url: %v", err)
@@ -216,7 +218,7 @@ func (s *service) GetDownloadURL(
 	}, nil
 }
 
-// encodeBlobURL encodes the presigned URL to a blob URL. The presigned URL
+// EncodeBlobURL encodes the presigned URL to a blob URL. The presigned URL
 // provided by MinIO is a self-contained URL that can be used to upload or
 // download the object. The structure follows the AWS S3 presigned URL format,
 // which consists of query parameters including signature.
@@ -235,7 +237,7 @@ func (s *service) GetDownloadURL(
 //  4. Simplifies proxy implementation in the API gateway - the gateway can
 //     directly decode the base64 string to the presigned URL and forward the
 //     request to MinIO.
-func encodeBlobURL(presignedURL *url.URL) (string, error) {
+func EncodeBlobURL(presignedURL *url.URL) (string, error) {
 	presignedURLBase64 := base64.URLEncoding.EncodeToString([]byte(presignedURL.String()))
 
 	path, err := url.JoinPath(blobURLPath, presignedURLBase64)
@@ -252,6 +254,44 @@ func encodeBlobURL(presignedURL *url.URL) (string, error) {
 		Path:   path,
 	}
 	return u.String(), nil
+}
+
+// DecodeBlobURL decodes a blob URL back to the original presigned URL.
+// This is the inverse of encodeBlobURL and extracts the base64-encoded
+// presigned URL from the blob URL format:
+// schema://host:port/v1alpha/blob-urls/base64_encoded_presigned_url
+func DecodeBlobURL(blobURL string) (string, error) {
+	// Check if it's a blob URL
+	if !strings.Contains(blobURL, "/v1alpha/blob-urls/") {
+		return "", fmt.Errorf("not a valid blob URL format")
+	}
+
+	// Parse the blob URL and extract the base64-encoded presigned URL
+	urlParts := strings.Split(blobURL, "/")
+	if len(urlParts) < 4 {
+		return "", fmt.Errorf("invalid blob URL format")
+	}
+
+	// Find the "blob-urls" segment and get the next segment
+	for i, part := range urlParts {
+		if part == "blob-urls" && i+1 < len(urlParts) {
+			base64EncodedURL := urlParts[i+1]
+
+			// Decode the base64-encoded presigned URL
+			decodedURL, err := base64.URLEncoding.DecodeString(base64EncodedURL)
+			if err != nil {
+				// Try standard encoding if URL encoding fails
+				decodedURL, err = base64.StdEncoding.DecodeString(base64EncodedURL)
+				if err != nil {
+					return "", fmt.Errorf("failed to decode presigned URL: %w", err)
+				}
+			}
+
+			return string(decodedURL), nil
+		}
+	}
+
+	return "", fmt.Errorf("could not find blob-urls segment in URL")
 }
 
 func getExpireAtTS(presignedURL *url.URL) (time.Time, error) {

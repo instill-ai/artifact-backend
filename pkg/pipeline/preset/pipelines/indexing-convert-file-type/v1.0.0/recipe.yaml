@@ -1,0 +1,60 @@
+version: v1beta
+component:
+  document:
+    type: collection
+    task: TASK_CONCAT
+    input:
+      data:
+        - pdf: ${variable.document:pdf}
+    condition: ${variable.document} != nil
+  image:
+    type: collection
+    task: TASK_CONCAT
+    input:
+      data:
+        - png: ${variable.image:png}
+    condition: ${variable.image} != nil
+  audio:
+    type: collection
+    task: TASK_CONCAT
+    input:
+      data:
+        - ogg: ${variable.audio:ogg}
+    condition: ${variable.audio} != nil
+  video:
+    type: collection
+    task: TASK_CONCAT
+    input:
+      data:
+        - mp4: ${variable.video:mp4}
+    condition: ${variable.video} != nil
+variable:
+  document:
+    title: Document
+    description: Document file to convert
+    type: document
+  image:
+    title: Image
+    description: Image file to convert
+    type: image
+  audio:
+    title: Audio
+    description: Audio file to convert
+    type: audio
+  video:
+    title: Video
+    description: Video file to convert
+    type: video
+output:
+  document:
+    title: Document file in PDF
+    value: ${document.output.data.pdf}
+  image:
+    title: Image file in PNG
+    value: ${image.output.data.png}
+  audio:
+    title: Audio file in OGG
+    value: ${audio.output.data.ogg}
+  video:
+    title: Video file in MP4
+    value: ${video.output.data.mp4}
