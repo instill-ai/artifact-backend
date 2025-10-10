@@ -26,6 +26,7 @@ type Service interface {
 	EmbeddingTextPipe(_ context.Context, texts []string) ([][]float32, error)
 	QuestionAnsweringPipe(_ context.Context, question string, simChunks []string) (string, error)
 	SimilarityChunksSearch(_ context.Context, ownerUID uuid.UUID, _ *artifactpb.SimilarityChunksSearchRequest) ([]SimChunk, error)
+	UpdateCatalogFileTags(_ context.Context, _ *artifactpb.UpdateCatalogFileTagsRequest) (*artifactpb.UpdateCatalogFileTagsResponse, error)
 	GetNamespaceByNsID(_ context.Context, nsID string) (*resource.Namespace, error)
 	GetChunksByFile(context.Context, *repository.KnowledgeBaseFile) (SourceTableType, SourceIDType, []repository.TextChunk, map[ChunkUIDType]ContentType, []string, error)
 	ListRepositoryTags(context.Context, *artifactpb.ListRepositoryTagsRequest) (*artifactpb.ListRepositoryTagsResponse, error)

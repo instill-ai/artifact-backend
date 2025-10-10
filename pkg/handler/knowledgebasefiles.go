@@ -699,7 +699,7 @@ func (ph *PublicHandler) DeleteCatalogFile(
 			for _, emb := range embeddings {
 				embUIDs = append(embUIDs, emb.UID.String())
 			}
-			err = ph.service.VectorDB().DeleteEmbeddingsInCollection(ctx, service.KBCollectionName(files[0].KnowledgeBaseUID), embUIDs)
+			err = ph.service.VectorDB().DeleteEmbeddingsInCollection(ctx, files[0].KnowledgeBaseUID, embUIDs)
 			if err != nil {
 				logger.Error("failed to delete embeddings in milvus", zap.Error(err))
 				allPass = false
@@ -980,4 +980,11 @@ func (ph *PublicHandler) uploadBase64FileToMinIO(ctx context.Context, nsID strin
 		return uuid.Nil, fmt.Errorf("failed to update object. err: %w", err)
 	}
 	return objectUID, nil
+}
+
+// UpdateCatalogFileTags updates the tags for a catalog file
+func (ph *PublicHandler) UpdateCatalogFileTags(ctx context.Context, req *artifactpb.UpdateCatalogFileTagsRequest) (*artifactpb.UpdateCatalogFileTagsResponse, error) {
+	// Call the service layer to update the tags
+	// The service layer handles all validation, permission checks, and business logic
+	return ph.service.UpdateCatalogFileTags(ctx, req)
 }

@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"strings"
 
 	"github.com/gofrs/uuid"
 )
@@ -30,13 +29,13 @@ type SimilarEmbedding struct {
 // SimilarVectorSearchParam contains the parameters for a similarity vector
 // search.
 type SimilarVectorSearchParam struct {
-	CollectionID string
-	Vectors      [][]float32
-	TopK         uint32
-	FileUIDs     []uuid.UUID
-	FileType     string
-	ContentType  string
-	Tags         []string
+	KnowledgeBaseUID uuid.UUID
+	Vectors          [][]float32
+	TopK             uint32
+	FileUIDs         []uuid.UUID
+	FileType         string
+	ContentType      string
+	Tags             []string
 
 	// The filename filter was implemented back when the filename in a catalog was
 	// unique, which isn't the case anymore. Using this filter might yield
@@ -52,26 +51,16 @@ type SimilarVectorSearchParam struct {
 // VectorDatabase implements the use necesasry cases to interact with a vector
 // database.
 type VectorDatabase interface {
-	CreateCollection(_ context.Context, id string) error
-	InsertVectorsInCollection(_ context.Context, collID string, embeddings []Embedding) error
-	DropCollection(_ context.Context, id string) error
+	CreateCollection(_ context.Context, kbUID uuid.UUID) error
+	UpsertVectorsInCollection(_ context.Context, kbUID uuid.UUID, embeddings []Embedding) error
+	DropCollection(_ context.Context, kbUID uuid.UUID) error
 	SimilarVectorsInCollection(context.Context, SimilarVectorSearchParam) ([][]SimilarEmbedding, error)
-	DeleteEmbeddingsInCollection(_ context.Context, collID string, embeddingUID []string) error
-	DeleteEmbeddingsWithFileUID(_ context.Context, collID string, fileUID uuid.UUID) error
+	DeleteEmbeddingsInCollection(_ context.Context, kbUID uuid.UUID, embeddingUID []string) error
+	DeleteEmbeddingsWithFileUID(_ context.Context, kbUID uuid.UUID, fileUID uuid.UUID) error
 	// CheckFileUIDMetadata checks if the collection has the file UID metadata
 	// field, which wasn't introduced since the beginning and is not present in
 	// legacy collections.
 	CheckFileUIDMetadata(_ context.Context, kbUID uuid.UUID) (bool, error)
 	// CheckTagsMetadata checks if the collection has the tags metadata field.
 	CheckTagsMetadata(_ context.Context, kbUID uuid.UUID) (bool, error)
-}
-
-const kbCollectionPrefix = "kb_"
-
-// KBCollectionName returns the collection name for a given knowledge base,
-// identified by its uuid-formatted UID.
-// For historical reasons, collection names can only contain numbers, letters
-// and underscores, so UUID is here converted to a valid collection name.
-func KBCollectionName(uid uuid.UUID) string {
-	return kbCollectionPrefix + strings.ReplaceAll(uid.String(), "-", "_")
 }

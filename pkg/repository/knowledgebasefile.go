@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/gofrs/uuid"
@@ -12,6 +13,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
@@ -53,6 +55,8 @@ type KnowledgeBaseFileI interface {
 	UpdateKBFileMetadata(_ context.Context, fileUID uuid.UUID, _ ExtraMetaData) error
 	// DeleteKnowledgeBaseFileAndDecreaseUsage deletes the knowledge base file and decreases the knowledge base usage
 	DeleteKnowledgeBaseFileAndDecreaseUsage(ctx context.Context, fileUID uuid.UUID) error
+	// UpdateKnowledgeBaseFileTags updates the tags for a knowledge base file
+	UpdateKnowledgeBaseFileTags(ctx context.Context, fileUID uuid.UUID, tags []string) error
 
 	// Deprecated methods
 
@@ -312,6 +316,38 @@ func (r *Repository) CreateKnowledgeBaseFile(ctx context.Context, kb KnowledgeBa
 	}
 
 	return &kb, nil
+}
+
+// ToPBFile converts a KnowledgeBaseFile to its protobuf representation.
+// Fields that are not directly available from the repository entity are left empty:
+// - TotalChunks: Requires counting chunks in the database
+// - TotalTokens: Requires counting tokens in the database
+func (kf *KnowledgeBaseFile) ToPBFile() *artifactpb.File {
+	// Extract ObjectUid from Destination field
+	objectUID := ""
+	if kf.Destination != "" {
+		parts := strings.Split(kf.Destination, "/")
+		if len(parts) > 1 {
+			objectUID = strings.TrimPrefix(parts[1], "obj-")
+		}
+	}
+
+	return &artifactpb.File{
+		FileUid:            kf.UID.String(),
+		OwnerUid:           kf.Owner.String(),
+		CreatorUid:         kf.CreatorUID.String(),
+		CatalogUid:         kf.KnowledgeBaseUID.String(),
+		Name:               kf.Name,
+		Type:               artifactpb.FileType(artifactpb.FileType_value[kf.Type]),
+		CreateTime:         timestamppb.New(*kf.CreateTime),
+		UpdateTime:         timestamppb.New(*kf.UpdateTime),
+		ProcessStatus:      artifactpb.FileProcessStatus(artifactpb.FileProcessStatus_value[kf.ProcessStatus]),
+		Size:               kf.Size,
+		Tags:               kf.Tags,
+		ObjectUid:          objectUID,
+		ConvertingPipeline: kf.ConvertingPipeline(),
+		ExternalMetadata:   kf.PublicExternalMetadataUnmarshal(),
+	}
 }
 
 // KnowledgeBaseFileListParams contains the params to fetch a list of knowledge
@@ -855,4 +891,11 @@ func (r *Repository) GetKnowledgebaseFileByKbUIDAndFileID(ctx context.Context, k
 		return nil, err
 	}
 	return &file, nil
+}
+
+// UpdateKnowledgeBaseFileTags updates the tags for a knowledge base file
+func (r *Repository) UpdateKnowledgeBaseFileTags(ctx context.Context, fileUID uuid.UUID, tags []string) error {
+	return r.db.WithContext(ctx).Model(&KnowledgeBaseFile{}).
+		Where("uid = ?", fileUID).
+		Update("tags", TagsArray(tags)).Error
 }

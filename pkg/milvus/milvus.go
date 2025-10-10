@@ -18,6 +18,16 @@ import (
 	logx "github.com/instill-ai/x/log"
 )
 
+const kbCollectionPrefix = "kb_"
+
+// collectionName returns the collection name for a given knowledge base,
+// identified by its uuid-formatted UID.
+// For historical reasons, collection names can only contain numbers, letters
+// and underscores, so UUID is here converted to a valid collection name.
+func collectionName(uid uuid.UUID) string {
+	return kbCollectionPrefix + strings.ReplaceAll(uid.String(), "-", "_")
+}
+
 const (
 	vectorDim  = 1536
 	scaNNList  = 1024
@@ -52,7 +62,8 @@ func NewVectorDatabase(ctx context.Context, host, port string) (db service.Vecto
 	return &milvusClient{c: c}, c.Close, nil
 }
 
-func (m *milvusClient) CreateCollection(ctx context.Context, collectionName string) error {
+func (m *milvusClient) CreateCollection(ctx context.Context, kbUID uuid.UUID) error {
+	collectionName := collectionName(kbUID)
 	logger, _ := logx.GetZapLogger(ctx)
 	logger = logger.With(zap.String("collection_name", collectionName))
 
@@ -153,7 +164,8 @@ func (m *milvusClient) CreateCollection(ctx context.Context, collectionName stri
 	return nil
 }
 
-func (m *milvusClient) InsertVectorsInCollection(ctx context.Context, collectionName string, embeddings []service.Embedding) error {
+func (m *milvusClient) UpsertVectorsInCollection(ctx context.Context, kbUID uuid.UUID, embeddings []service.Embedding) error {
+	collectionName := collectionName(kbUID)
 	logger, _ := logx.GetZapLogger(ctx)
 	logger = logger.With(zap.String("collection_name", collectionName))
 
@@ -258,7 +270,8 @@ func (m *milvusClient) InsertVectorsInCollection(ctx context.Context, collection
 	return nil
 }
 
-func (m *milvusClient) DeleteEmbeddingsWithFileUID(ctx context.Context, collectionName string, fileUID uuid.UUID) error {
+func (m *milvusClient) DeleteEmbeddingsWithFileUID(ctx context.Context, kbUID uuid.UUID, fileUID uuid.UUID) error {
+	collectionName := collectionName(kbUID)
 	fields, err := m.extractCollectionFields(ctx, collectionName)
 	if err != nil {
 		return fmt.Errorf("checking metadata fields: %w", err)
@@ -280,7 +293,8 @@ func (m *milvusClient) DeleteEmbeddingsWithFileUID(ctx context.Context, collecti
 	return nil
 }
 
-func (m *milvusClient) DeleteEmbeddingsInCollection(ctx context.Context, collectionName string, embeddingUID []string) error {
+func (m *milvusClient) DeleteEmbeddingsInCollection(ctx context.Context, kbUID uuid.UUID, embeddingUID []string) error {
+	collectionName := collectionName(kbUID)
 	// Construct the delete expression
 	// The expression should be in the format: "embedding_uid in ['pk1', 'pk2', ...]"
 	expr := fmt.Sprintf("embedding_uid in ['%s']", strings.Join(embeddingUID, "','"))
@@ -315,7 +329,7 @@ func (m *milvusClient) fileUIDFilter(fileUIDs []uuid.UUID) string {
 func (m *milvusClient) SimilarVectorsInCollection(ctx context.Context, p service.SimilarVectorSearchParam) ([][]service.SimilarEmbedding, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 
-	collectionName := p.CollectionID
+	collectionName := collectionName(p.KnowledgeBaseUID)
 	topK := int(p.TopK)
 
 	logger = logger.With(zap.String("collection_name", collectionName))
@@ -472,14 +486,15 @@ func (m *milvusClient) SimilarVectorsInCollection(ctx context.Context, p service
 }
 
 // DropCollection removes a collection from the vector database.
-func (m *milvusClient) DropCollection(ctx context.Context, collectionName string) error {
+func (m *milvusClient) DropCollection(ctx context.Context, kbUID uuid.UUID) error {
+	collectionName := collectionName(kbUID)
 	return m.c.DropCollection(ctx, collectionName)
 }
 
 // CheckFileUIDMetadata returns whether the collection's schema allows for file
 // UID metadata.
 func (m *milvusClient) CheckFileUIDMetadata(ctx context.Context, kbUID uuid.UUID) (bool, error) {
-	fields, err := m.extractCollectionFields(ctx, service.KBCollectionName(kbUID))
+	fields, err := m.extractCollectionFields(ctx, collectionName(kbUID))
 	if err != nil {
 		return false, err
 	}
@@ -490,7 +505,7 @@ func (m *milvusClient) CheckFileUIDMetadata(ctx context.Context, kbUID uuid.UUID
 // CheckTagsMetadata returns whether the collection's schema allows for tag
 // metadata.
 func (m *milvusClient) CheckTagsMetadata(ctx context.Context, kbUID uuid.UUID) (bool, error) {
-	fields, err := m.extractCollectionFields(ctx, service.KBCollectionName((kbUID)))
+	fields, err := m.extractCollectionFields(ctx, collectionName(kbUID))
 	if err != nil {
 		return false, err
 	}
