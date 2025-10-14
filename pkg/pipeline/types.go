@@ -177,6 +177,9 @@ func GetChunksFromResponse(resp *pipelinepb.TriggerNamespacePipelineReleaseRespo
 			Start:  startPos,
 			Text:   text,
 			Tokens: tokenCount,
+			Reference: &types.TextChunkReference{
+				PageRange: [2]uint32{1, 1}, // Pipeline-based chunks default to page 1
+			},
 		})
 	}
 

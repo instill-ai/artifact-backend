@@ -601,11 +601,13 @@ func (w *Worker) ChunkContentActivity(ctx context.Context, param *ChunkContentAc
 		// For non-paginated files (TXT, MD, CSV, HTML), treat entire content as one chunk
 		tokens := ai.EstimateTokenCount(param.Content)
 		chunk := types.TextChunk{
-			Text:      param.Content,
-			Start:     0,
-			End:       len(param.Content),
-			Tokens:    tokens,
-			Reference: nil, // No page reference for plain text files
+			Text:   param.Content,
+			Start:  0,
+			End:    len(param.Content),
+			Tokens: tokens,
+			Reference: &types.TextChunkReference{
+				PageRange: [2]uint32{1, 1}, // Treat as single-page file
+			},
 		}
 		w.log.Info("ChunkContentActivity: Created single text chunk",
 			zap.Int("contentLength", len(param.Content)),
@@ -629,11 +631,13 @@ func (w *Worker) ChunkContentActivity(ctx context.Context, param *ChunkContentAc
 		// Fall back to single chunk for summaries or mismatched content
 		tokens := ai.EstimateTokenCount(param.Content)
 		chunk := types.TextChunk{
-			Text:      param.Content,
-			Start:     0,
-			End:       len(param.Content),
-			Tokens:    tokens,
-			Reference: nil,
+			Text:   param.Content,
+			Start:  0,
+			End:    len(param.Content),
+			Tokens: tokens,
+			Reference: &types.TextChunkReference{
+				PageRange: [2]uint32{1, 1}, // Treat as single-page file
+			},
 		}
 		w.log.Info("ChunkContentActivity: Created single text chunk (fallback)",
 			zap.Int("contentLength", len(param.Content)),
@@ -700,16 +704,6 @@ func (w *Worker) SaveTextChunksToDBActivity(ctx context.Context, param *SaveText
 	w.log.Info("SaveChunksToDBActivity: Saving text chunks to database",
 		zap.String("fileUID", param.FileUID.String()),
 		zap.Int("chunkCount", len(param.TextChunks)))
-
-	// Delete old text chunks (for reprocessing)
-	err := w.deleteTextChunksByFileUIDSync(ctx, param.KBUID, param.FileUID)
-	if err != nil {
-		return nil, temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to delete old text chunks: %s", errorsx.MessageOrErr(err)),
-			saveTextChunksToDBActivityError,
-			err,
-		)
-	}
 
 	// Get converted file for source information
 	convertedFile, err := w.repository.GetConvertedFileByFileUID(ctx, param.FileUID)

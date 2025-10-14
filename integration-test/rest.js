@@ -82,11 +82,6 @@ export default function (data) {
     });
   }
 
-  CheckKnowledgeBaseDeletion(data);
-  CheckFileReprocessing(data);
-  CheckKnowledgeBaseEndToEndFileProcessing(data);
-  CheckChatCacheImplementation(data);
-
   restPublic.CheckCreateCatalog(data);
   restPublic.CheckListCatalogs(data);
   restPublic.CheckGetCatalog(data);
@@ -105,6 +100,11 @@ export default function (data) {
   restPublicWithJwt.CheckGetFileSummaryUnauthenticated(data);
   restPublicWithJwt.CheckListChunksUnauthenticated(data);
   restPublicWithJwt.CheckSearchChunksUnauthenticated(data);
+
+  CheckKnowledgeBaseDeletion(data);
+  CheckFileReprocessing(data);
+  CheckKnowledgeBaseEndToEndFileProcessing(data);
+  CheckChatCacheImplementation(data);
 }
 
 export function teardown(data) {

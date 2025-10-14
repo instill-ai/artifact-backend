@@ -139,7 +139,7 @@ func (r *repository) DeleteAndCreateTextChunks(
 
 	// Start a transaction
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		// Delete existing text chunks
+		// Delete existing text chunks by kb_file_uid
 		err := tx.Where("kb_file_uid = ?", fileUID).Delete(&TextChunkModel{}).Error
 		if err != nil {
 			return fmt.Errorf("deleting existing text chunks: %w", err)
@@ -148,6 +148,18 @@ func (r *repository) DeleteAndCreateTextChunks(
 		if len(textChunks) == 0 {
 			logger.Warn("no text chunks to create")
 			return nil // return nil to commit the transaction (DELETE was successful)
+		}
+
+		// Also delete any orphaned chunks that might exist with the same source_uid and source_table
+		// This handles edge cases where chunks exist from previous failed operations
+		// The unique constraint is on (source_table, source_uid, start_pos, end_pos)
+		if len(textChunks) > 0 {
+			sourceUID := textChunks[0].SourceUID
+			sourceTable := textChunks[0].SourceTable
+			err := tx.Where("source_table = ? AND source_uid = ?", sourceTable, sourceUID).Delete(&TextChunkModel{}).Error
+			if err != nil {
+				return fmt.Errorf("deleting orphaned text chunks by source: %w", err)
+			}
 		}
 
 		// Batch insert new text chunks

@@ -14,10 +14,11 @@ import * as helper from "./helper.js";
  * 1. Catalog Management: Create, list, update, delete catalog
  * 2. Multi-File Upload: Upload all supported file types (13 files)
  * 3. Batch Processing: Process all files asynchronously
- * 4. Storage Verification: Verify resources in MinIO, Postgres, and Milvus
- * 5. API Completeness: Test all file-related endpoints
- * 6. Type-Specific Validation: Verify file type-specific processing (PDF, DOC, TEXT, etc.)
- * 7. Resource Cleanup: Verify proper cleanup on catalog deletion
+ * 4. Database Sanity: Verify data format consistency (catalog_type, PageRange, PageDelimiters)
+ * 5. Storage Verification: Verify resources in MinIO, Postgres, and Milvus
+ * 6. API Completeness: Test all file-related endpoints
+ * 7. Type-Specific Validation: Verify file type-specific processing (PDF, DOC, TEXT, etc.)
+ * 8. Resource Cleanup: Verify proper cleanup on catalog deletion
  *
  * Test Flow:
  * - Create catalog
@@ -31,6 +32,9 @@ import * as helper from "./helper.js";
  * - List all files in catalog
  * - List chunks for each file
  * - Get summary for each file
+ * - **Database sanity check**: Verify catalog_type uses full enum name, text_chunk.reference
+ *   uses PascalCase "PageRange" (all chunks including summaries and non-paginated files get
+ *   PageRange=[1,1]), converted_file.position_data uses PascalCase "PageDelimiters"
  * - Verify storage layer resources (MinIO, Postgres, Milvus)
  * - Delete catalog and verify cleanup
  *
@@ -42,6 +46,8 @@ import * as helper from "./helper.js";
  * This test ensures:
  * - All file types are processed correctly
  * - Batch processing works reliably
+ * - Database records use correct format (full enum names, PascalCase JSONB fields)
+ * - All chunks (content, summary, non-paginated) have PageRange field with at least [1,1]
  * - Storage layers are populated correctly
  * - All API endpoints return expected data
  * - Cleanup removes all resources
@@ -411,7 +417,129 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
     }
     console.log(`E2E: All summaries retrieved`);
 
-    // Step 11: Verify storage layer resources (MinIO, Postgres, Milvus)
+    // Step 11: Database sanity check - verify data format consistency
+    console.log(`\n========================================`);
+    console.log(`E2E: Verifying database format consistency...`);
+    console.log(`========================================\n`);
+
+    // Check catalog_type format in database
+    const catalogTypeResult = constant.db.query(
+      `SELECT catalog_type FROM knowledge_base WHERE uid = $1`,
+      catalogUid
+    );
+
+    check(catalogTypeResult, {
+      "E2E DB Sanity: catalog_type query successful": (rows) => rows.length > 0,
+      "E2E DB Sanity: catalog_type is CATALOG_TYPE_PERSISTENT (not 'persistent')": (rows) =>
+        rows.length > 0 && rows[0].catalog_type === "CATALOG_TYPE_PERSISTENT",
+    });
+
+    if (catalogTypeResult.length > 0) {
+      console.log(`E2E DB Sanity: ✓ catalog_type = '${catalogTypeResult[0].catalog_type}'`);
+    }
+
+    // Check text_chunk.reference format for a sample file (PDF preferred)
+    const pdfFile = uploaded.find(f => f.type === "FILE_TYPE_PDF") || uploaded[0];
+    if (pdfFile) {
+      console.log(`E2E DB Sanity: Checking text_chunk format for ${pdfFile.originalName}`);
+
+      // Count text chunks with correct PascalCase PageRange format
+      const correctPageRangeResult = constant.db.query(
+        `SELECT COUNT(*) as count FROM text_chunk WHERE kb_file_uid = $1 AND reference ? 'PageRange'`,
+        pdfFile.fileUid
+      );
+
+      const correctCount = correctPageRangeResult.length > 0 ? parseInt(correctPageRangeResult[0].count) : 0;
+      console.log(`E2E DB Sanity: Text chunks with PageRange (PascalCase): ${correctCount}`);
+
+      // Count text chunks with INCORRECT snake_case page_range format (should be 0)
+      const incorrectPageRangeResult = constant.db.query(
+        `SELECT COUNT(*) as count FROM text_chunk WHERE kb_file_uid = $1 AND reference ? 'page_range'`,
+        pdfFile.fileUid
+      );
+
+      const incorrectCount = incorrectPageRangeResult.length > 0 ? parseInt(incorrectPageRangeResult[0].count) : 0;
+      console.log(`E2E DB Sanity: Text chunks with page_range (snake_case): ${incorrectCount}`);
+
+      check(true, {
+        "E2E DB Sanity: All text chunks use PascalCase PageRange": () => correctCount > 0 && incorrectCount === 0,
+      });
+
+      // Sample a text_chunk reference to verify format
+      // Cast JSONB to text to avoid k6 driver returning it as byte array
+      const sampleReferenceResult = constant.db.query(
+        `SELECT reference::text as reference_text FROM text_chunk WHERE kb_file_uid = $1 AND reference IS NOT NULL LIMIT 1`,
+        pdfFile.fileUid
+      );
+
+      if (sampleReferenceResult.length > 0) {
+        // Parse the JSON string
+        const referenceText = sampleReferenceResult[0].reference_text;
+        console.log(`E2E DB Sanity: Sample text_chunk.reference (raw): ${referenceText}`);
+
+        let parsedReference;
+        try {
+          parsedReference = JSON.parse(referenceText);
+          console.log(`E2E DB Sanity: Sample text_chunk.reference (parsed): ${JSON.stringify(parsedReference)}`);
+        } catch (e) {
+          console.log(`E2E DB Sanity: ERROR - Failed to parse reference: ${e}`);
+          parsedReference = null;
+        }
+
+        check({ parsedReference }, {
+          "E2E DB Sanity: Sample reference contains PageRange field": () =>
+            parsedReference && parsedReference.PageRange !== undefined,
+          "E2E DB Sanity: Sample reference does NOT contain page_range field": () =>
+            parsedReference && parsedReference.page_range === undefined,
+        });
+      } else {
+        console.log(`E2E DB Sanity: No chunks with non-null reference found!`);
+      }
+
+      // Verify converted_file position_data uses PascalCase PageDelimiters
+      const correctPageDelimitersResult = constant.db.query(
+        `SELECT COUNT(*) as count FROM converted_file WHERE file_uid = $1 AND position_data ? 'PageDelimiters'`,
+        pdfFile.fileUid
+      );
+
+      const correctDelimitersCount = correctPageDelimitersResult.length > 0 ? parseInt(correctPageDelimitersResult[0].count) : 0;
+      console.log(`E2E DB Sanity: Converted files with PageDelimiters (PascalCase): ${correctDelimitersCount}`);
+
+      const incorrectPageDelimitersResult = constant.db.query(
+        `SELECT COUNT(*) as count FROM converted_file WHERE file_uid = $1 AND position_data ? 'page_delimiters'`,
+        pdfFile.fileUid
+      );
+
+      const incorrectDelimitersCount = incorrectPageDelimitersResult.length > 0 ? parseInt(incorrectPageDelimitersResult[0].count) : 0;
+      console.log(`E2E DB Sanity: Converted files with page_delimiters (snake_case): ${incorrectDelimitersCount}`);
+
+      check(true, {
+        "E2E DB Sanity: All converted_file records use PascalCase PageDelimiters": () =>
+          correctDelimitersCount >= 0 && incorrectDelimitersCount === 0,
+      });
+
+      // Sample a converted_file position_data to verify format
+      const samplePositionDataResult = constant.db.query(
+        `SELECT position_data FROM converted_file WHERE file_uid = $1 AND position_data IS NOT NULL LIMIT 1`,
+        pdfFile.fileUid
+      );
+
+      if (samplePositionDataResult.length > 0) {
+        const samplePos = JSON.stringify(samplePositionDataResult[0].position_data);
+        console.log(`E2E DB Sanity: Sample converted_file.position_data: ${samplePos}`);
+
+        check(samplePositionDataResult, {
+          "E2E DB Sanity: Sample position_data contains PageDelimiters field": (rows) =>
+            rows.length > 0 && rows[0].position_data && rows[0].position_data.PageDelimiters !== undefined,
+          "E2E DB Sanity: Sample position_data does NOT contain page_delimiters field": (rows) =>
+            rows.length > 0 && rows[0].position_data && rows[0].position_data.page_delimiters === undefined,
+        });
+      }
+    }
+
+    console.log(`========================================\n`);
+
+    // Step 12: Verify storage layer resources (MinIO, Postgres, Milvus)
     // Direct count checks - no polling since API confirmed COMPLETED status
     // All storage operations are synchronous in the workflow
     console.log(`E2E: Starting storage verification for ${uploaded.length} files`);
@@ -467,7 +595,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
       "E2E: Total Milvus vectors across all files is positive": () => totalMilvusVectors > 0,
     });
 
-    // Step 12: Delete catalog and verify cleanup
+    // Step 13: Delete catalog and verify cleanup
     console.log(`E2E: Deleting catalog ${catalogId}`);
     const dRes = http.request(
       "DELETE",
