@@ -139,7 +139,8 @@ func (r *repository) DeleteAndCreateTextChunks(
 
 	// Start a transaction
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		// Delete existing text chunks
+		// Delete existing text chunks by kb_file_uid
+		// This handles all chunks for this file, including those from old converted_file records
 		err := tx.Where("kb_file_uid = ?", fileUID).Delete(&TextChunkModel{}).Error
 		if err != nil {
 			return fmt.Errorf("deleting existing text chunks: %w", err)

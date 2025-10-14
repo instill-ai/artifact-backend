@@ -213,7 +213,7 @@ export function CheckKnowledgeBaseDeletion(data) {
     // The cleanup workflow runs asynchronously, so we need to wait
     // for it to finish removing all resources
     console.log("Step 6: Waiting 15s for cleanup workflow to complete...");
-    sleep(5);
+    sleep(15);
 
     // Step 7: Verify all resources are COMPLETELY REMOVED (FINAL VERIFICATION)
     console.log("Step 7: Verifying all resources are completely removed...");

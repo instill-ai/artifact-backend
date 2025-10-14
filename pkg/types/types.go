@@ -20,18 +20,6 @@ const (
 	AudioFileType FileType = "audio"
 )
 
-// CatalogType represents the type of knowledge base catalog
-type CatalogType string
-
-const (
-	// CatalogTypeUnspecified is the default/unspecified catalog type
-	CatalogTypeUnspecified CatalogType = ""
-	// CatalogTypePersistent represents a persistent catalog
-	CatalogTypePersistent CatalogType = "persistent"
-	// CatalogTypeEphemeral represents an ephemeral/temporary catalog
-	CatalogTypeEphemeral CatalogType = "ephemeral"
-)
-
 // Tag represents a repository tag (domain model)
 type Tag struct {
 	Name       string    // The name of the tag (e.g. "repositories/{repo}/tags/{id}")
@@ -72,7 +60,7 @@ const (
 // which delimiter range it falls into (0 to delimiter[0] = page 1, delimiter[0] to delimiter[1] = page 2, etc.)
 type PositionData struct {
 	// PageDelimiters contains the end position (rune offset) of each page in the converted markdown.
-	PageDelimiters []uint32 `json:"page_delimiters"`
+	PageDelimiters []uint32 `json:"PageDelimiters"`
 }
 
 // TextChunkReference contains the position information of the text chunk within the
@@ -81,7 +69,7 @@ type TextChunkReference struct {
 	// PageRange contains the start and end pages of the text chunk when the page
 	// belongs to a document. Positions in this case are 1-indexed in order
 	// to align with the document visualization standards (e.g. page 4 of 4).
-	PageRange [2]uint32 `json:"page_range,omitempty"`
+	PageRange [2]uint32 `json:"PageRange,omitempty"`
 }
 
 // TextChunk represents a chunk of text extracted from a file.

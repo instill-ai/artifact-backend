@@ -25,8 +25,8 @@ database:
   name: artifact
   timezone: Etc/UTC
   pool:
-    idleconnections: 5
-    maxconnections: 10
+    idleconnections: 10
+    maxconnections: 30
     connlifetime: 30m # In minutes, e.g., '60m'
 influxdb:
   url: http://influxdb:8086

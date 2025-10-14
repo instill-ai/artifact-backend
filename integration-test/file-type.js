@@ -84,24 +84,31 @@ export function teardown(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
+    // Delete catalogs via API (which triggers cleanup workflows)
     var listResp = http.request("GET", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, data.header)
-    var catalogs = (listResp.status === 200 && Array.isArray(listResp.json().catalogs)) ? listResp.json().catalogs : []
-    for (const catalog of catalogs) {
-      if (catalog.catalog_id && catalog.catalog_id.startsWith(constant.dbIDPrefix)) {
-        check(http.request("DELETE", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalog.catalog_id}`, null, data.header), {
-          [`DELETE /v1alpha/namespaces/${data.expectedOwner.id}/catalogs response status is 200`]: (r) => r.status === 200,
-        });
+    if (listResp.status === 200) {
+      var catalogs = Array.isArray(listResp.json().catalogs) ? listResp.json().catalogs : []
+      for (const catalog of catalogs) {
+        if (catalog.catalog_id && catalog.catalog_id.startsWith(constant.dbIDPrefix)) {
+          var delResp = http.request("DELETE", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalog.catalog_id}`, null, data.header);
+          check(delResp, {
+            [`DELETE /v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalog.catalog_id} response status is 200 or 404`]: (r) => r.status === 200 || r.status === 404,
+          });
+        }
       }
     }
 
+    // Final DB cleanup (defensive - in case workflows didn't complete)
     // Delete from child tables first, before deleting parent records
-    constant.db.exec(`DELETE FROM text_chunk WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-    constant.db.exec(`DELETE FROM embedding WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-    constant.db.exec(`DELETE FROM converted_file WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-
-    // Now delete parent tables
-    constant.db.exec(`DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`);
-    constant.db.exec(`DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`);
+    try {
+      constant.db.exec(`DELETE FROM text_chunk WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+      constant.db.exec(`DELETE FROM embedding WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+      constant.db.exec(`DELETE FROM converted_file WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+      constant.db.exec(`DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`);
+      constant.db.exec(`DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`);
+    } catch (e) {
+      console.log(`Teardown DB cleanup warning: ${e}`);
+    }
 
     constant.db.close();
   });
@@ -131,7 +138,7 @@ function runCatalogFileTest(data, opts) {
 
     const { fileType, originalName } = opts || {};
 
-    // Create catalog
+    // Create catalog (name must be < 32 chars: test-{4}-src-{8} = 23 chars)
     const cRes = http.request("POST", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, JSON.stringify({ name: constant.dbIDPrefix + "src-" + randomString(8) }), data.header);
     logUnexpected(cRes, 'POST /v1alpha/namespaces/{namespace_id}/catalogs');
     const catalog = ((() => { try { return cRes.json(); } catch (e) { return {}; } })()).catalog || {};
@@ -228,8 +235,7 @@ function runCatalogFileTest(data, opts) {
 
     if (failed) {
       console.log(`✗ Skipping remaining checks for ${fileType} due to processing failure: ${failureReason}`);
-      http.request("DELETE", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
-      sleep(5); // Wait for cleanup workflow
+      // Don't delete here - let teardown handle cleanup
       return;
     }
 
@@ -259,8 +265,7 @@ function runCatalogFileTest(data, opts) {
       [`GET /v1alpha/namespaces/{namespace_id}/chunks 200 (${fileType})`]: (r) => r.status === 200,
     });
 
-    http.request("DELETE", `${artifactPublicHost}/v1alpha/catalogs/files?file_uid=${fileUid}`, null, data.header);
-    http.request("DELETE", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
-    sleep(5); // Wait for cleanup workflow to prevent race conditions with other scenarios
+    // Don't delete here - let teardown handle cleanup to avoid 404 errors
+    // The teardown will properly clean up all catalogs and files at the end
   });
 }

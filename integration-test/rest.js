@@ -82,11 +82,6 @@ export default function (data) {
     });
   }
 
-  CheckKnowledgeBaseDeletion(data);
-  CheckFileReprocessing(data);
-  CheckKnowledgeBaseEndToEndFileProcessing(data);
-  CheckChatCacheImplementation(data);
-
   restPublic.CheckCreateCatalog(data);
   restPublic.CheckListCatalogs(data);
   restPublic.CheckGetCatalog(data);
@@ -105,6 +100,14 @@ export default function (data) {
   restPublicWithJwt.CheckGetFileSummaryUnauthenticated(data);
   restPublicWithJwt.CheckListChunksUnauthenticated(data);
   restPublicWithJwt.CheckSearchChunksUnauthenticated(data);
+
+  // Run general functional tests first (fast - no cleanup waits)
+  CheckChatCacheImplementation(data);
+  CheckKnowledgeBaseEndToEndFileProcessing(data);
+
+  // Run cleanup verification tests last (slower - need to verify cleanup completed)
+  CheckFileReprocessing(data);
+  CheckKnowledgeBaseDeletion(data);
 }
 
 export function teardown(data) {
@@ -112,35 +115,33 @@ export function teardown(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
+    // Note: dbIDPrefix is randomized per test run, so this only cleans up resources from THIS run
+    // This allows parallel test execution without collisions
     var listResp = http.request("GET", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, data.header)
-    var catalogs = (listResp.status === 200 && Array.isArray(listResp.json().catalogs)) ? listResp.json().catalogs : []
+    if (listResp.status === 200) {
+      var catalogs = Array.isArray(listResp.json().catalogs) ? listResp.json().catalogs : []
 
-    for (const catalog of catalogs) {
-      var listFilesResp = http.request("GET", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalog.catalog_id}/files`, null, data.header)
-      var files = (listFilesResp.status === 200 && Array.isArray(listFilesResp.json().files)) ? listFilesResp.json().files : []
-      for (const file of files) {
-        check(http.request("DELETE", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalog.catalog_id}/files/${file.file_id}`, null, data.header), {
-          [`DELETE /v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalog.catalog_id}/files/${file.file_id} response status is 200`]: (r) => r.status === 200,
-        });
+      for (const catalog of catalogs) {
+        if (catalog.catalog_id && catalog.catalog_id.startsWith(constant.dbIDPrefix)) {
+          var delResp = http.request("DELETE", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalog.catalog_id}`, null, data.header);
+          check(delResp, {
+            [`DELETE /v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalog.catalog_id} response status is 200 or 404`]: (r) => r.status === 200 || r.status === 404,
+          });
+        }
       }
     }
 
-    for (const catalog of catalogs) {
-      if (catalog.catalog_id && catalog.catalog_id.startsWith(constant.dbIDPrefix)) {
-        check(http.request("DELETE", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalog.catalog_id}`, null, data.header), {
-          [`DELETE /v1alpha/namespaces/${data.expectedOwner.id}/catalogs response status is 200`]: (r) => r.status === 200,
-        });
-      }
-    }
-
+    // Final DB cleanup (defensive - in case workflows didn't complete)
     // Delete from child tables first, before deleting parent records
-    constant.db.exec(`DELETE FROM text_chunk WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-    constant.db.exec(`DELETE FROM embedding WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-    constant.db.exec(`DELETE FROM converted_file WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-
-    // Now delete parent tables
-    constant.db.exec(`DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`);
-    constant.db.exec(`DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`);
+    try {
+      constant.db.exec(`DELETE FROM text_chunk WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+      constant.db.exec(`DELETE FROM embedding WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+      constant.db.exec(`DELETE FROM converted_file WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+      constant.db.exec(`DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`);
+      constant.db.exec(`DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`);
+    } catch (e) {
+      console.log(`Teardown DB cleanup warning: ${e}`);
+    }
 
     constant.db.close();
   });

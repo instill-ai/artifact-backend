@@ -720,13 +720,13 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				allTextChunks = append(allTextChunks, summaryChunks.TextChunks...)
 			}
 
-			// Save text chunks to DB
-			if err := workflow.ExecuteActivity(ctx, w.SaveTextChunksToDBActivity, &SaveTextChunksToDBActivityParam{
+			// Save text chunks to DB and MinIO
+			if err := workflow.ExecuteActivity(ctx, w.SaveTextChunksActivity, &SaveTextChunksActivityParam{
 				KBUID:      kbUID,
 				FileUID:    fileUID,
 				TextChunks: allTextChunks,
 			}).Get(ctx, nil); err != nil {
-				_ = handleFileError(fileUID, "save text chunks to DB", err)
+				_ = handleFileError(fileUID, "save text chunks", err)
 				filesCompleted[fileUID.String()] = true
 				continue
 			}
@@ -864,7 +864,3 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 		"completedCount", len(filesCompleted))
 	return nil
 }
-
-// TODO: Resume functionality for CHUNKING and EMBEDDING phases
-// For now, batch processing only supports full processing from the start
-// Individual file resume can be handled by processing files one at a time (batch size = 1)

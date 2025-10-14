@@ -13,17 +13,18 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
+	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	errorsx "github.com/instill-ai/x/errors"
 )
 
 type KnowledgeBase interface {
 	CreateKnowledgeBase(ctx context.Context, kb KnowledgeBaseModel, externalService func(kbUID types.KBUIDType) error) (*KnowledgeBaseModel, error)
 	ListKnowledgeBases(ctx context.Context, ownerUID string) ([]KnowledgeBaseModel, error)
-	ListKnowledgeBasesByCatalogType(ctx context.Context, ownerUID string, catalogType types.CatalogType) ([]KnowledgeBaseModel, error)
+	ListKnowledgeBasesByCatalogType(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType) ([]KnowledgeBaseModel, error)
 	UpdateKnowledgeBase(ctx context.Context, id, ownerUID string, kb KnowledgeBaseModel) (*KnowledgeBaseModel, error)
 	DeleteKnowledgeBase(ctx context.Context, ownerUID, kbID string) (*KnowledgeBaseModel, error)
 	GetKnowledgeBaseByOwnerAndKbID(ctx context.Context, ownerUID types.OwnerUIDType, kbID string) (*KnowledgeBaseModel, error)
-	GetKnowledgeBaseCountByOwner(ctx context.Context, ownerUID string, catalogType types.CatalogType) (int64, error)
+	GetKnowledgeBaseCountByOwner(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType) (int64, error)
 	IncreaseKnowledgeBaseUsage(ctx context.Context, tx *gorm.DB, kbUID string, amount int) error
 	GetKnowledgeBasesByUIDs(ctx context.Context, kbUIDs []types.KBUIDType) ([]KnowledgeBaseModel, error)
 	GetKnowledgeBaseByUID(context.Context, types.KBUIDType) (*KnowledgeBaseModel, error)
@@ -174,11 +175,11 @@ func (r *repository) ListKnowledgeBases(ctx context.Context, owner string) ([]Kn
 }
 
 // ListKnowledgeBasesByCatalogType fetches all KnowledgeBaseModel records from the database, excluding soft-deleted ones.
-func (r *repository) ListKnowledgeBasesByCatalogType(ctx context.Context, owner string, catalogType types.CatalogType) ([]KnowledgeBaseModel, error) {
+func (r *repository) ListKnowledgeBasesByCatalogType(ctx context.Context, owner string, catalogType artifactpb.CatalogType) ([]KnowledgeBaseModel, error) {
 	var knowledgeBases []KnowledgeBaseModel
 	// Exclude records where DeleteTime is not null and filter by owner
 	whereString := fmt.Sprintf("%v IS NULL AND %v = ? AND %v = ?", KnowledgeBaseColumn.DeleteTime, KnowledgeBaseColumn.Owner, KnowledgeBaseColumn.CatalogType)
-	if err := r.db.WithContext(ctx).Where(whereString, owner, string(catalogType)).Find(&knowledgeBases).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where(whereString, owner, catalogType.String()).Find(&knowledgeBases).Error; err != nil {
 		return nil, err
 	}
 
@@ -277,10 +278,10 @@ func (r *repository) GetKnowledgeBaseByOwnerAndKbID(ctx context.Context, owner t
 }
 
 // get the count of knowledge bases by owner
-func (r *repository) GetKnowledgeBaseCountByOwner(ctx context.Context, owner string, catalogType types.CatalogType) (int64, error) {
+func (r *repository) GetKnowledgeBaseCountByOwner(ctx context.Context, owner string, catalogType artifactpb.CatalogType) (int64, error) {
 	var count int64
 	whereString := fmt.Sprintf("%v = ? AND %v is NULL AND %v = ?", KnowledgeBaseColumn.Owner, KnowledgeBaseColumn.DeleteTime, KnowledgeBaseColumn.CatalogType)
-	if err := r.db.WithContext(ctx).Model(&KnowledgeBaseModel{}).Where(whereString, owner, string(catalogType)).Count(&count).Error; err != nil {
+	if err := r.db.WithContext(ctx).Model(&KnowledgeBaseModel{}).Where(whereString, owner, catalogType.String()).Count(&count).Error; err != nil {
 		return 0, err
 	}
 	return count, nil

@@ -29,31 +29,44 @@ import (
 	errorsx "github.com/instill-ai/x/errors"
 )
 
-// This file contains file processing activities used by ProcessFileWorkflow and its child workflows:
+// This file contains file processing activities used by ProcessFileWorkflow:
 //
-// Main Workflow Activities:
-// - GetFileMetadataActivity - Retrieves file information and pipeline configuration
+// Workflow Execution Flow:
+// 1. File Preparation Phase:
+//    - GetFileMetadataActivity - Retrieves file information and pipeline configuration
+//    - StandardizeFileTypeActivity - Standardizes file formats (DOCX→PDF, GIF→PNG, MKV→MP4, etc.)
+// 2. Caching Phase (uses standardized files):
+//    - CacheFileContextActivity - Creates individual AI cache per file for efficient processing
+//    - CacheChatContextActivity - Creates multi-file chat cache (for future Chat API)
+// 3. Content & Summary Processing (run in parallel, both use the same cache):
+//    - ProcessContentActivity - Composite activity: converts files to Markdown
+//    - ProcessSummaryActivity - Composite activity: generates file summaries
+// 4. Chunking & Embedding Phase:
+//    - GetConvertedFileForChunkingActivity - Retrieves converted file content for chunking
+//    - ChunkContentActivity - Splits document content into manageable text chunks
+//    - SaveTextChunksActivity - Persists text chunks to database and MinIO storage
+//    - UpdateChunkingMetadataActivity - Updates text chunking statistics and pipeline info
+//    - GetChunksForEmbeddingActivity - Retrieves text chunks for embedding generation
+//    - (EmbedTextsWorkflow, SaveEmbeddingsToVectorDBWorkflow)
+// 5. Metadata & Cleanup:
+//    - UpdateConversionMetadataActivity - Updates file conversion metadata
+//    - UpdateEmbeddingMetadataActivity - Updates embedding metadata
+//    - UpdateFileStatusActivity - Updates file processing status
+//    - DeleteCacheActivity - Cleans up AI caches
+//    - DeleteTemporaryConvertedFileActivity - Cleans up temporary converted files from MinIO
+//    - StoreChatCacheMetadataActivity - Stores chat cache metadata in Redis
+//
+// Sub-activities called by ProcessContentActivity:
 // - CleanupOldConvertedFileActivity - Removes old converted files before creating new ones
+// - (Inline AI or pipeline conversion to Markdown)
 // - CreateConvertedFileRecordActivity - Creates DB record for converted markdown file
 // - UploadConvertedFileToMinIOActivity - Uploads converted content to MinIO
 // - UpdateConvertedFileDestinationActivity - Updates DB with actual MinIO destination
-// - DeleteConvertedFileRecordActivity - Cleanup activity for DB record
-// - DeleteConvertedFileFromMinIOActivity - Cleanup activity for MinIO file
-// - UpdateConversionMetadataActivity - Updates file metadata after conversion
-// - GetConvertedFileForChunkingActivity - Retrieves converted file for chunking
-// - ChunkContentActivity - Splits document content into manageable text chunks
-// - SaveTextChunksToDBActivity - Persists text chunks and their metadata to database
-// - UpdateChunkingMetadataActivity - Updates text chunking statistics and pipeline info
+// - DeleteConvertedFileRecordActivity - Cleanup activity for DB record (on error)
+// - DeleteConvertedFileFromMinIOActivity - Cleanup activity for MinIO file (on error)
 //
-// Child Workflow Activities (ProcessContentWorkflow):
-// - StandardizeFileTypeActivity - Standardizes file formats to AI-native types (GIF→PNG, MKV→MP4, DOC→PDF, etc.)
-// - CacheFileContextActivity - Creates AI cache for efficient file processing
-// - DeleteCacheActivity - Cleans up AI cache
-// - DeleteTemporaryConvertedFileActivity - Cleans up temporary converted files from MinIO
-// - ConvertToFileActivity - Converts files to Markdown using AI or pipelines
-//
-// Child Workflow Activities (ProcessSummaryWorkflow):
-// - GenerateSummaryActivity - Generates document summaries using AI
+// Sub-activities called by ProcessSummaryActivity:
+// - (Inline AI or pipeline summary generation)
 // - SaveSummaryActivity - Saves summary to PostgreSQL database
 
 // sanitizeUTF8 ensures the content is valid UTF-8 by replacing invalid sequences
@@ -284,15 +297,29 @@ type UpdateConversionMetadataActivityParam struct {
 	Pipeline string            // Pipeline used for conversion (empty if AI was used)
 }
 
-// CleanupOldConvertedFileActivity removes old converted file from MinIO if it exists
-// This is a single MinIO delete operation - idempotent (delete is naturally idempotent)
+// CleanupOldConvertedFileActivity removes old converted file from MinIO and DB if it exists
+// This is critical for reprocessing to avoid duplicate converted_file records
 func (w *Worker) CleanupOldConvertedFileActivity(ctx context.Context, param *CleanupOldConvertedFileActivityParam) error {
 	w.log.Info("CleanupOldConvertedFileActivity: Checking for old converted file",
 		zap.String("fileUID", param.FileUID.String()))
 
 	// Check if old converted file exists
 	oldConvertedFile, err := w.repository.GetConvertedFileByFileUID(ctx, param.FileUID)
-	if err != nil || oldConvertedFile == nil || oldConvertedFile.Destination == "" {
+	if err != nil {
+		// If not found, no cleanup needed
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			w.log.Info("CleanupOldConvertedFileActivity: No old converted file found, skipping cleanup")
+			return nil
+		}
+		// Real error - return it
+		return temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to check for old converted file: %s", errorsx.MessageOrErr(err)),
+			cleanupOldConvertedFileActivityError,
+			err,
+		)
+	}
+
+	if oldConvertedFile == nil || oldConvertedFile.Destination == "" {
 		// No old file to clean up - this is fine
 		return nil
 	}
@@ -301,7 +328,7 @@ func (w *Worker) CleanupOldConvertedFileActivity(ctx context.Context, param *Cle
 		zap.String("oldConvertedFileUID", oldConvertedFile.UID.String()),
 		zap.String("destination", oldConvertedFile.Destination))
 
-	// Delete from MinIO
+	// Delete from MinIO first
 	// Note: MinIO DeleteFile is idempotent - if file doesn't exist, it succeeds.
 	// Any error returned here is a real error (network, permissions, etc.) that should be retried.
 	err = w.repository.DeleteFile(ctx, config.Config.Minio.BucketName, oldConvertedFile.Destination)
@@ -310,11 +337,29 @@ func (w *Worker) CleanupOldConvertedFileActivity(ctx context.Context, param *Cle
 			zap.String("destination", oldConvertedFile.Destination),
 			zap.Error(err))
 		return temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to delete old converted file: %s", errorsx.MessageOrErr(err)),
+			fmt.Sprintf("Failed to delete old converted file from MinIO: %s", errorsx.MessageOrErr(err)),
 			cleanupOldConvertedFileActivityError,
 			err,
 		)
 	}
+
+	// IMPORTANT: Also delete the old converted_file DB record
+	// This prevents GetConvertedFileByFileUID from returning the old record during reprocessing,
+	// which would cause duplicate key errors when creating new chunks with the old source_uid
+	err = w.repository.DeleteConvertedFile(ctx, oldConvertedFile.UID)
+	if err != nil {
+		w.log.Error("CleanupOldConvertedFileActivity: Failed to delete old converted file DB record",
+			zap.String("convertedFileUID", oldConvertedFile.UID.String()),
+			zap.Error(err))
+		return temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to delete old converted file DB record: %s", errorsx.MessageOrErr(err)),
+			cleanupOldConvertedFileActivityError,
+			err,
+		)
+	}
+
+	w.log.Info("CleanupOldConvertedFileActivity: Successfully deleted old converted file from both MinIO and DB",
+		zap.String("oldConvertedFileUID", oldConvertedFile.UID.String()))
 
 	return nil
 }
@@ -513,15 +558,15 @@ type ChunkContentActivityResult struct {
 	PipelineRelease pipeline.PipelineRelease // Pipeline used for text chunking
 }
 
-// SaveTextChunksToDBActivityParam for saving text chunks to database
-type SaveTextChunksToDBActivityParam struct {
+// SaveTextChunksActivityParam for saving text chunks to database and MinIO
+type SaveTextChunksActivityParam struct {
 	FileUID    types.FileUIDType // File unique identifier
 	KBUID      types.KBUIDType   // Knowledge base unique identifier
 	TextChunks []types.TextChunk // Text chunks to save
 }
 
-// SaveChunksToDBActivityResult contains saved text chunk UIDs from SaveTextChunksToDBActivity
-type SaveChunksToDBActivityResult struct {
+// SaveTextChunksActivityResult contains saved text chunk UIDs from SaveTextChunksActivity
+type SaveTextChunksActivityResult struct {
 	TextChunkUIDs []types.TextChunkUIDType // Saved text chunk unique identifiers
 }
 
@@ -601,11 +646,13 @@ func (w *Worker) ChunkContentActivity(ctx context.Context, param *ChunkContentAc
 		// For non-paginated files (TXT, MD, CSV, HTML), treat entire content as one chunk
 		tokens := ai.EstimateTokenCount(param.Content)
 		chunk := types.TextChunk{
-			Text:      param.Content,
-			Start:     0,
-			End:       len(param.Content),
-			Tokens:    tokens,
-			Reference: nil, // No page reference for plain text files
+			Text:   param.Content,
+			Start:  0,
+			End:    len(param.Content),
+			Tokens: tokens,
+			Reference: &types.TextChunkReference{
+				PageRange: [2]uint32{1, 1}, // Treat as single-page file
+			},
 		}
 		w.log.Info("ChunkContentActivity: Created single text chunk",
 			zap.Int("contentLength", len(param.Content)),
@@ -629,11 +676,13 @@ func (w *Worker) ChunkContentActivity(ctx context.Context, param *ChunkContentAc
 		// Fall back to single chunk for summaries or mismatched content
 		tokens := ai.EstimateTokenCount(param.Content)
 		chunk := types.TextChunk{
-			Text:      param.Content,
-			Start:     0,
-			End:       len(param.Content),
-			Tokens:    tokens,
-			Reference: nil,
+			Text:   param.Content,
+			Start:  0,
+			End:    len(param.Content),
+			Tokens: tokens,
+			Reference: &types.TextChunkReference{
+				PageRange: [2]uint32{1, 1}, // Treat as single-page file
+			},
 		}
 		w.log.Info("ChunkContentActivity: Created single text chunk (fallback)",
 			zap.Int("contentLength", len(param.Content)),
@@ -695,20 +744,20 @@ func (w *Worker) ChunkContentActivity(ctx context.Context, param *ChunkContentAc
 	}, nil
 }
 
-// SaveTextChunksToDBActivity saves text chunks to database
-func (w *Worker) SaveTextChunksToDBActivity(ctx context.Context, param *SaveTextChunksToDBActivityParam) (*SaveChunksToDBActivityResult, error) {
-	w.log.Info("SaveChunksToDBActivity: Saving text chunks to database",
+// SaveTextChunksActivity saves text chunks to database and MinIO storage
+func (w *Worker) SaveTextChunksActivity(ctx context.Context, param *SaveTextChunksActivityParam) (*SaveTextChunksActivityResult, error) {
+	w.log.Info("SaveTextChunksActivity: Saving text chunks to database and MinIO",
 		zap.String("fileUID", param.FileUID.String()),
 		zap.Int("chunkCount", len(param.TextChunks)))
 
-	// Delete old text chunks (for reprocessing)
-	err := w.deleteTextChunksByFileUIDSync(ctx, param.KBUID, param.FileUID)
+	// IMPORTANT: Get OLD chunk file paths BEFORE the DB transaction
+	// This is critical for reprocessing: we need to delete old MinIO files after creating new ones
+	oldChunkPaths, err := w.repository.ListTextChunksByFileUID(ctx, param.KBUID, param.FileUID)
 	if err != nil {
-		return nil, temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to delete old text chunks: %s", errorsx.MessageOrErr(err)),
-			saveTextChunksToDBActivityError,
-			err,
-		)
+		w.log.Warn("Failed to list old chunk paths (non-critical)",
+			zap.String("fileUID", param.FileUID.String()),
+			zap.Error(err))
+		oldChunkPaths = nil // Continue anyway
 	}
 
 	// Get converted file for source information
@@ -716,7 +765,7 @@ func (w *Worker) SaveTextChunksToDBActivity(ctx context.Context, param *SaveText
 	if err != nil {
 		return nil, temporal.NewApplicationErrorWithCause(
 			fmt.Sprintf("Failed to get converted file: %s", errorsx.MessageOrErr(err)),
-			saveTextChunksToDBActivityError,
+			saveTextChunksActivityError,
 			err,
 		)
 	}
@@ -732,32 +781,109 @@ func (w *Worker) SaveTextChunksToDBActivity(ctx context.Context, param *SaveText
 			chunksWithRefs++
 		}
 	}
-	w.log.Info("SaveChunksToDBActivity: Chunks with references",
+	w.log.Info("SaveTextChunksActivity: Chunks with references",
 		zap.Int("totalChunks", len(chunksWithReferences)),
 		zap.Int("chunksWithRefs", chunksWithRefs))
 
-	// Save text chunks using helper function
-	_, err = saveChunksToDBOnly(
-		ctx,
-		w.repository,
-		w.repository,
-		param.KBUID,
-		param.FileUID,
-		convertedFile.UID,
-		repository.ConvertedFileTableName,
-		nil, // No summary chunks
-		chunksWithReferences,
-		"text/markdown",
-	)
+	// IMPORTANT: Save chunks to database and upload to MinIO
+	// Step 1: Create text chunk models
+	textChunks := make([]*repository.TextChunkModel, len(chunksWithReferences))
+	texts := make([]string, len(chunksWithReferences))
+	for i, c := range chunksWithReferences {
+		textChunks[i] = &repository.TextChunkModel{
+			SourceUID:   convertedFile.UID,
+			SourceTable: repository.ConvertedFileTableName,
+			StartPos:    c.Start,
+			EndPos:      c.End,
+			Reference:   c.Reference,
+			ContentDest: "pending", // Placeholder, will be updated after MinIO save
+			Tokens:      c.Tokens,
+			Retrievable: true,
+			InOrder:     i,
+			KBUID:       param.KBUID,
+			KBFileUID:   param.FileUID,
+			FileType:    "text/markdown",
+			ContentType: string(types.ChunkContentType),
+		}
+		texts[i] = c.Text
+	}
+
+	// Step 2: Save text chunks to database with placeholder destinations
+	// DeleteAndCreateTextChunks handles DB deletion atomically to prevent race conditions
+	createdChunks, err := w.repository.DeleteAndCreateTextChunks(ctx, param.FileUID, textChunks, nil)
 	if err != nil {
 		return nil, temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to save text chunks: %s", errorsx.MessageOrErr(err)),
-			saveTextChunksToDBActivityError,
+			fmt.Sprintf("Failed to save text chunks to database: %s", errorsx.MessageOrErr(err)),
+			saveTextChunksActivityError,
 			err,
 		)
 	}
 
-	return &SaveChunksToDBActivityResult{
+	// Step 3: Upload text chunks to MinIO after DB transaction commits
+	destinations := make(map[string]string, len(createdChunks))
+	for i, chunk := range createdChunks {
+		chunkUID := chunk.UID.String()
+
+		// Construct the MinIO path using the format: kb-{kbUID}/file-{fileUID}/chunk/{chunkUID}.md
+		basePath := fmt.Sprintf("kb-%s/file-%s/chunk", param.KBUID.String(), param.FileUID.String())
+		path := fmt.Sprintf("%s/%s.md", basePath, chunkUID)
+
+		// Encode text chunk content to base64
+		base64Content := base64.StdEncoding.EncodeToString([]byte(texts[i]))
+
+		// Save text chunk content to MinIO
+		err := w.repository.UploadBase64File(
+			ctx,
+			config.Config.Minio.BucketName,
+			path,
+			base64Content,
+			"text/markdown",
+		)
+		if err != nil {
+			return nil, temporal.NewApplicationErrorWithCause(
+				fmt.Sprintf("Failed to upload text chunk (ID: %s) to MinIO: %s", chunkUID, errorsx.MessageOrErr(err)),
+				saveTextChunksActivityError,
+				err,
+			)
+		}
+
+		destinations[chunkUID] = path
+	}
+
+	// Step 4: Update text chunk destinations in database
+	err = w.repository.UpdateTextChunkDestinations(ctx, destinations)
+	if err != nil {
+		return nil, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to update text chunk destinations: %s", errorsx.MessageOrErr(err)),
+			saveTextChunksActivityError,
+			err,
+		)
+	}
+
+	// AFTER successful DB save and MinIO upload of NEW chunks, clean up OLD MinIO chunk files
+	// This ensures old MinIO files are removed during reprocessing while preserving new ones
+	// IMPORTANT: This deletion MUST succeed for reprocessing to be correct
+	// If it fails, we need to retry to avoid accumulating orphaned files in MinIO
+	if len(oldChunkPaths) > 0 {
+		w.log.Info("Deleting old MinIO chunk files",
+			zap.String("fileUID", param.FileUID.String()),
+			zap.Int("oldChunkCount", len(oldChunkPaths)))
+
+		err = w.deleteFilesSync(ctx, config.Config.Minio.BucketName, oldChunkPaths)
+		if err != nil {
+			return nil, temporal.NewApplicationErrorWithCause(
+				fmt.Sprintf("Failed to delete old MinIO chunk files: %s", errorsx.MessageOrErr(err)),
+				saveTextChunksActivityError,
+				err,
+			)
+		}
+
+		w.log.Info("Successfully deleted old MinIO chunk files",
+			zap.String("fileUID", param.FileUID.String()),
+			zap.Int("deletedCount", len(oldChunkPaths)))
+	}
+
+	return &SaveTextChunksActivityResult{
 		TextChunkUIDs: nil,
 	}, nil
 }
@@ -1389,7 +1515,11 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 		FileUID: param.FileUID,
 	}); err != nil {
 		logger.Error("Failed to cleanup old converted file", zap.Error(err))
-		return nil, err
+		return nil, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to cleanup old converted file: %s", errorsx.MessageOrErr(err)),
+			processContentActivityError,
+			err,
+		)
 	}
 
 	// Phase 2: Markdown conversion
@@ -1403,7 +1533,11 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 		authCtx, err = CreateAuthenticatedContext(ctx, param.Metadata)
 		if err != nil {
 			logger.Error("Failed to create authenticated context", zap.Error(err))
-			return nil, err
+			return nil, temporal.NewApplicationErrorWithCause(
+				fmt.Sprintf("Failed to create authenticated context: %s", errorsx.MessageOrErr(err)),
+				processContentActivityError,
+				err,
+			)
 		}
 	}
 
@@ -1411,7 +1545,11 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 	content, err := w.repository.GetFile(authCtx, param.Bucket, param.Destination)
 	if err != nil {
 		logger.Error("Failed to retrieve file from storage", zap.Error(err))
-		return nil, err
+		return nil, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to retrieve file from storage: %s", errorsx.MessageOrErr(err)),
+			processContentActivityError,
+			err,
+		)
 	}
 
 	logger.Info("File content retrieved",
@@ -1510,7 +1648,11 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 			})
 			if err != nil {
 				logger.Error("Pipeline conversion failed", zap.Error(err))
-				return nil, err
+				return nil, temporal.NewApplicationErrorWithCause(
+					fmt.Sprintf("Pipeline conversion failed: %s", errorsx.MessageOrErr(err)),
+					processContentActivityError,
+					err,
+				)
 			}
 
 			markdown = conversion.Markdown
@@ -1547,7 +1689,11 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 	})
 	if err != nil {
 		logger.Error("Failed to create converted file record", zap.Error(err))
-		return nil, err
+		return nil, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to create converted file record: %s", errorsx.MessageOrErr(err)),
+			processContentActivityError,
+			err,
+		)
 	}
 
 	// Step 2: Upload to MinIO
@@ -1563,7 +1709,11 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 		_ = w.DeleteConvertedFileRecordActivity(ctx, &DeleteConvertedFileRecordActivityParam{
 			ConvertedFileUID: convertedFileUID,
 		})
-		return nil, err
+		return nil, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to upload converted file to MinIO: %s", errorsx.MessageOrErr(err)),
+			processContentActivityError,
+			err,
+		)
 	}
 
 	// Step 3: Update DB record with actual destination
@@ -1580,7 +1730,11 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 		_ = w.DeleteConvertedFileRecordActivity(ctx, &DeleteConvertedFileRecordActivityParam{
 			ConvertedFileUID: convertedFileUID,
 		})
-		return nil, err
+		return nil, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to update converted file destination: %s", errorsx.MessageOrErr(err)),
+			processContentActivityError,
+			err,
+		)
 	}
 
 	logger.Info("Converted file saved successfully", zap.String("convertedFileUID", convertedFileUID.String()))
@@ -1629,7 +1783,11 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 		authCtx, err = CreateAuthenticatedContext(ctx, param.Metadata)
 		if err != nil {
 			logger.Error("Failed to create authenticated context", zap.Error(err))
-			return nil, err
+			return nil, temporal.NewApplicationErrorWithCause(
+				fmt.Sprintf("Failed to create authenticated context: %s", errorsx.MessageOrErr(err)),
+				processSummaryActivityError,
+				err,
+			)
 		}
 	}
 
@@ -1637,7 +1795,11 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 	content, err := w.repository.GetFile(authCtx, param.Bucket, param.Destination)
 	if err != nil {
 		logger.Error("Failed to retrieve file from storage", zap.Error(err))
-		return nil, err
+		return nil, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to retrieve file from storage: %s", errorsx.MessageOrErr(err)),
+			processSummaryActivityError,
+			err,
+		)
 	}
 
 	// Sanitize content to ensure valid UTF-8
@@ -1649,7 +1811,10 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 
 	// Verify content is not empty after sanitization
 	if len(strings.TrimSpace(contentStr)) == 0 {
-		return nil, fmt.Errorf("content is empty after UTF-8 sanitization for file %s", param.FileUID.String())
+		return nil, temporal.NewApplicationError(
+			fmt.Sprintf("content is empty after UTF-8 sanitization for file %s", param.FileUID.String()),
+			processSummaryActivityError,
+		)
 	}
 
 	var summary string
@@ -1718,7 +1883,11 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 		pipelineSummary, err := pipeline.GenerateSummaryPipe(authCtx, w.pipelineClient, contentStr, param.FileType)
 		if err != nil {
 			logger.Error("Pipeline summary generation failed", zap.Error(err))
-			return nil, err
+			return nil, temporal.NewApplicationErrorWithCause(
+				fmt.Sprintf("Pipeline summary generation failed: %s", errorsx.MessageOrErr(err)),
+				processSummaryActivityError,
+				err,
+			)
 		}
 		summary = pipelineSummary
 		pipelineName = usePipeline.Name()
@@ -1739,7 +1908,11 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 		Pipeline: pipelineName,
 	}); err != nil {
 		logger.Error("Failed to save summary to database", zap.Error(err))
-		return nil, err
+		return nil, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to save summary to database: %s", errorsx.MessageOrErr(err)),
+			processSummaryActivityError,
+			err,
+		)
 	}
 
 	return result, nil
@@ -2189,13 +2362,13 @@ const (
 	updateConversionMetadataActivityError       = "UpdateConversionMetadataActivity"
 	getConvertedFileForChunkingActivityError    = "GetConvertedFileForChunkingActivity"
 	chunkContentActivityError                   = "ChunkContentActivity"
-	saveTextChunksToDBActivityError             = "SaveTextChunksToDBActivity"
+	saveTextChunksActivityError                 = "SaveTextChunksActivity"
 	updateChunkingMetadataActivityError         = "UpdateChunkingMetadataActivity"
-	generateSummaryActivityError                = "GenerateSummaryActivity"
 	saveSummaryActivityError                    = "SaveSummaryActivity"
 	standardizeFileTypeActivityError            = "StandardizeFileTypeActivity"
 	cacheContextActivityError                   = "CacheFileContextActivity"
-	convertToFileActivityError                  = "ConvertToFileActivity"
+	processContentActivityError                 = "ProcessContentActivity"
+	processSummaryActivityError                 = "ProcessSummaryActivity"
 )
 
 // decodeBlobURL decodes a blob URL to extract the presigned URL

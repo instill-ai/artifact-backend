@@ -189,15 +189,15 @@ func TestChunkContentActivity_Success(t *testing.T) {
 	c.Skip("Requires pipeline client mock")
 }
 
-func TestSaveChunksToDBActivity_Success(t *testing.T) {
+func TestSaveChunksActivity_Success(t *testing.T) {
 	c := qt.New(t)
 	// This test requires complex mock setup for chunk creation and MinIO upload
 	// Skip for now - integration tests cover this functionality
 	c.Skip("Requires complex mock setup")
 }
 
-// ===== Child Workflow Activity Tests =====
-// Tests for activities used by ProcessContentWorkflow and ProcessSummaryWorkflow
+// ===== Composite Activity Tests =====
+// Tests for activities used by ProcessContentActivity and ProcessSummaryActivity
 
 func TestNeedsFileConversion(t *testing.T) {
 	c := qt.New(t)

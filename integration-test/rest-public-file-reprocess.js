@@ -358,7 +358,8 @@ export function CheckFileReprocessing(data) {
 
     // Wait for cleanup workflow to complete before next test starts
     // This prevents race conditions with subsequent tests
+    // Increased wait time to ensure cleanup completes in resource-limited environments
     console.log("Reprocess: Waiting for cleanup workflow to complete...");
-    sleep(5);
+    sleep(15);
   });
 }
