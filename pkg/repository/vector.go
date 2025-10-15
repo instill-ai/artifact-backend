@@ -8,6 +8,7 @@ import (
 
 	"github.com/gofrs/uuid"
 
+	"github.com/instill-ai/artifact-backend/internal/ai"
 	"github.com/instill-ai/artifact-backend/pkg/types"
 	"github.com/milvus-io/milvus-sdk-go/v2/client"
 	"github.com/milvus-io/milvus-sdk-go/v2/entity"
@@ -76,7 +77,6 @@ type VectorDatabase interface {
 
 // Milvus implementation constants
 const (
-	vectorDim  = 1536
 	scanNList  = 1024
 	metricType = entity.COSINE
 	withRaw    = true
@@ -106,7 +106,9 @@ func NewVectorDatabase(ctx context.Context, host, port string) (db VectorDatabas
 		return nil, nil, err
 	}
 
-	return &milvusClient{c: c}, c.Close, nil
+	return &milvusClient{
+		c: c,
+	}, c.Close, nil
 }
 
 func (m *milvusClient) CreateCollection(ctx context.Context, collectionName string) error {
@@ -124,7 +126,7 @@ func (m *milvusClient) CreateCollection(ctx context.Context, collectionName stri
 	}
 
 	// 2. Create the collection with the specified schema
-	vectorDim := fmt.Sprintf("%d", vectorDim)
+	vectorDimStr := fmt.Sprintf("%d", ai.GeminiEmbeddingDimDefault)
 	schema := &entity.Schema{
 		CollectionName: collectionName,
 		Description:    "",
@@ -132,7 +134,7 @@ func (m *milvusClient) CreateCollection(ctx context.Context, collectionName stri
 			{Name: kbCollectionFieldSourceTable, DataType: entity.FieldTypeVarChar, TypeParams: map[string]string{"max_length": "255"}},
 			{Name: kbCollectionFieldSourceUID, DataType: entity.FieldTypeVarChar, TypeParams: map[string]string{"max_length": "255"}},
 			{Name: kbCollectionFieldEmbeddingUID, DataType: entity.FieldTypeVarChar, PrimaryKey: true, TypeParams: map[string]string{"max_length": "255"}},
-			{Name: kbCollectionFieldEmbedding, DataType: entity.FieldTypeFloatVector, TypeParams: map[string]string{"dim": vectorDim}},
+			{Name: kbCollectionFieldEmbedding, DataType: entity.FieldTypeFloatVector, TypeParams: map[string]string{"dim": vectorDimStr}},
 			{Name: kbCollectionFieldFileUID, DataType: entity.FieldTypeVarChar, TypeParams: map[string]string{"max_length": "255"}},
 			{Name: kbCollectionFieldFileName, DataType: entity.FieldTypeVarChar, TypeParams: map[string]string{"max_length": "255"}},
 			{Name: kbCollectionFieldFileType, DataType: entity.FieldTypeVarChar, TypeParams: map[string]string{"max_length": "255"}},
@@ -211,7 +213,7 @@ func (m *milvusClient) InsertVectorsInCollection(ctx context.Context, collection
 		entity.NewColumnVarChar(kbCollectionFieldSourceTable, sourceTables),
 		entity.NewColumnVarChar(kbCollectionFieldSourceUID, sourceUIDs),
 		entity.NewColumnVarChar(kbCollectionFieldEmbeddingUID, embeddingUIDs),
-		entity.NewColumnFloatVector(kbCollectionFieldEmbedding, vectorDim, vectors),
+		entity.NewColumnFloatVector(kbCollectionFieldEmbedding, int(ai.GeminiEmbeddingDimDefault), vectors),
 	}
 
 	hasMetadata, hasFileUID, hasTags, err := m.checkMetadataFields(ctx, collectionName)

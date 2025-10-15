@@ -49,28 +49,43 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 			zap.Error(err),
 			zap.String("owner_id(ns_id)", req.GetNamespaceId()),
 			zap.String("auth_uid", authUID))
-		return nil, fmt.Errorf("failed to get namespace. err: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to get namespace. err: %w", err),
+			"Unable to access the specified namespace. Please check the namespace ID and try again.",
+		)
 	}
 	// ACL - check user's permission to write catalog
 	kb, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.CatalogId)
 	if err != nil {
 		logger.Error("failed to get catalog", zap.Error(err))
-		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf(ErrorListKnowledgeBasesMsg, err),
+			"Unable to access the specified catalog. Please check the catalog ID and try again.",
+		)
 	}
 	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kb.UID, "writer")
 	if err != nil {
 		logger.Error("failed to check permission", zap.Error(err))
-		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err),
+			"Unable to verify access permissions. Please try again.",
+		)
 	}
 	if !granted {
-		return nil, fmt.Errorf("%w: no permission over catalog", errorsx.ErrUnauthorized)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("%w: no permission over catalog", errorsx.ErrUnauthorized),
+			"You don't have permission to upload files to this catalog. Please contact the owner for access.",
+		)
 	}
 
 	// get all kbs in the namespace
 	kbs, err := ph.service.Repository().ListKnowledgeBases(ctx, ns.NsUID.String())
 	if err != nil {
 		logger.Error("failed to list catalog", zap.Error(err))
-		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf(ErrorListKnowledgeBasesMsg, err),
+			"Unable to retrieve catalog information. Please try again.",
+		)
 	}
 	totalUsageInNamespace := int64(0)
 	for _, kb := range kbs {
@@ -85,7 +100,10 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 	// users.
 	md, err := appendRequestMetadata(ctx, req.GetFile().GetExternalMetadata())
 	if err != nil {
-		return nil, fmt.Errorf("appending request metadata to context: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("appending request metadata to context: %w", err),
+			"Unable to process request. Please try again.",
+		)
 	}
 
 	// upload file to minio and database
@@ -117,28 +135,43 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 	if !hasObject {
 		// check file name length based on character count
 		if len(req.File.Name) > 255 {
-			return nil, fmt.Errorf("file name is too long. max length is 255. name: %s err: %w",
-				req.File.Name, errorsx.ErrInvalidArgument)
+			return nil, errorsx.AddMessage(
+				fmt.Errorf("file name is too long. max length is 255. name: %s err: %w",
+					req.File.Name, errorsx.ErrInvalidArgument),
+				"File name is too long. Please use a name with 255 characters or less.",
+			)
 		}
 		// determine the file type by its extension
 		req.File.Type = determineFileType(req.File.Name)
 		if req.File.Type == artifactpb.FileType_FILE_TYPE_UNSPECIFIED {
-			return nil, fmt.Errorf("%w: unsupported file extension", errorsx.ErrInvalidArgument)
+			return nil, errorsx.AddMessage(
+				fmt.Errorf("%w: unsupported file extension", errorsx.ErrInvalidArgument),
+				"Unsupported file type. Please upload a supported file format.",
+			)
 		}
 
 		if strings.Contains(req.File.Name, "/") {
-			return nil, fmt.Errorf("%w: file name cannot contain slashes ('/')", errorsx.ErrInvalidArgument)
+			return nil, errorsx.AddMessage(
+				fmt.Errorf("%w: file name cannot contain slashes ('/')", errorsx.ErrInvalidArgument),
+				"File name cannot contain slashes ('/'). Please rename the file and try again.",
+			)
 		}
 
 		creatorUID, err := uuid.FromString(authUID)
 		if err != nil {
-			return nil, fmt.Errorf("parsing creator UID: %w", err)
+			return nil, errorsx.AddMessage(
+				fmt.Errorf("parsing creator UID: %w", err),
+				"Invalid user session. Please log in again and try again.",
+			)
 		}
 
 		// upload the file to MinIO and create the object in the object table
 		objectUID, err := ph.uploadBase64FileToMinIO(ctx, ns.NsID, ns.NsUID, creatorUID, req.File.Name, req.File.Content, req.File.Type)
 		if err != nil {
-			return nil, fmt.Errorf("fetching upload URL: %w", err)
+			return nil, errorsx.AddMessage(
+				fmt.Errorf("fetching upload URL: %w", err),
+				"Unable to upload file. Please check your network connection and try again.",
+			)
 		}
 		destination := repository.GetBlobObjectPath(ns.NsUID, objectUID)
 
@@ -156,7 +189,10 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 
 		if !object.IsUploaded {
 			if !strings.HasPrefix(object.Destination, "ns-") {
-				return nil, fmt.Errorf("file has not been uploaded yet")
+				return nil, errorsx.AddMessage(
+					fmt.Errorf("file has not been uploaded yet"),
+					"File upload is not complete. Please wait for the upload to finish and try again.",
+				)
 			}
 
 			// check if file exists in minio
@@ -187,14 +223,20 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 	// create catalog file in database
 	res, err := ph.service.Repository().CreateKnowledgeBaseFile(ctx, kbFile, nil)
 	if err != nil {
-		return nil, fmt.Errorf("creating catalog file: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("creating catalog file: %w", err),
+			"Unable to add file to catalog. Please try again.",
+		)
 	}
 
 	// increase catalog usage. need to increase after the file is created.
 	// TODO: increase the usage in transaction with creating the file.
 	err = ph.service.Repository().IncreaseKnowledgeBaseUsage(ctx, nil, kb.UID.String(), int(kbFile.Size))
 	if err != nil {
-		return nil, fmt.Errorf("increasing catalog usage: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("increasing catalog usage: %w", err),
+			"File uploaded but catalog statistics update failed. The file is available for use.",
+		)
 	}
 
 	return &artifactpb.UploadCatalogFileResponse{
@@ -238,12 +280,18 @@ func appendRequestMetadata(ctx context.Context, externalMetadata *structpb.Struc
 	// map[string][]string), but readability has been prioritized.
 	j, err := json.Marshal(md)
 	if err != nil {
-		return nil, fmt.Errorf("marshalling metadata: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("marshalling metadata: %w", err),
+			"Unable to process request metadata. Please try again.",
+		)
 	}
 
 	mdStruct := new(structpb.Struct)
 	if err := mdStruct.UnmarshalJSON(j); err != nil {
-		return nil, fmt.Errorf("unmarshalling metadata into struct: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("unmarshalling metadata into struct: %w", err),
+			"Unable to process request metadata. Please try again.",
+		)
 	}
 
 	externalMetadata.Fields[constant.MetadataRequestKey] = structpb.NewStructValue(mdStruct)
@@ -320,17 +368,26 @@ func (ph *PublicHandler) MoveFileToCatalog(ctx context.Context, req *artifactpb.
 		return nil, err
 	}
 	if req.FileUid == "" {
-		return nil, fmt.Errorf("file uid is required. err: %w", errorsx.ErrInvalidArgument)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("file uid is required. err: %w", errorsx.ErrInvalidArgument),
+			"File ID is required. Please specify which file to move.",
+		)
 	}
 	if req.ToCatalogId == "" {
-		return nil, fmt.Errorf("to catalog id is required. err: %w", errorsx.ErrInvalidArgument)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("to catalog id is required. err: %w", errorsx.ErrInvalidArgument),
+			"Target catalog ID is required. Please specify the destination catalog.",
+		)
 	}
 
 	// Step 1: Verify source file exists and check namespace permissions
 	sourceFiles, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{types.FileUIDType(uuid.FromStringOrNil(req.FileUid))})
 	if err != nil || len(sourceFiles) == 0 {
 		logger.Error("file not found", zap.Error(err))
-		return nil, fmt.Errorf("file not found. err: %w", errorsx.ErrNotFound)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("file not found: %w", errorsx.ErrNotFound),
+			"File not found. Please check the file ID and try again.",
+		)
 	}
 
 	sourceFile := sourceFiles[0]
@@ -338,25 +395,37 @@ func (ph *PublicHandler) MoveFileToCatalog(ctx context.Context, req *artifactpb.
 	reqNamespace, err := ph.service.GetNamespaceByNsID(ctx, req.NamespaceId)
 	if err != nil {
 		logger.Error("failed to get namespace uid from source file", zap.Error(err))
-		return nil, fmt.Errorf("failed to get namespace uid from source file. err: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to get namespace: %w", err),
+			"Unable to access the specified namespace. Please check the namespace ID and try again.",
+		)
 	}
 	// Ensure file movement occurs within the same namespace
 	if reqNamespace.NsUID.String() != sourceFile.Owner.String() {
-		return nil, fmt.Errorf("source file is not in the same namespace. err: %w", errorsx.ErrInvalidArgument)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("%w: source file is not in the same namespace", errorsx.ErrInvalidArgument),
+			"File can only be moved within the same namespace. Please select a target catalog in the same namespace.",
+		)
 	}
 
 	// Step 2: Verify target catalog exists
 	targetCatalog, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, reqNamespace.NsUID, req.ToCatalogId)
 	if err != nil {
 		logger.Error("target catalog not found", zap.Error(err))
-		return nil, fmt.Errorf("target catalog not found. err: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("target catalog not found: %w", err),
+			"Target catalog not found. Please check the catalog ID and try again.",
+		)
 	}
 
 	// Step 3: Retrieve file content from MinIO storage
 	fileContent, err := ph.service.Repository().GetFile(ctx, config.Config.Minio.BucketName, sourceFile.Destination)
 	if err != nil {
 		logger.Error("failed to get file content from MinIO", zap.Error(err))
-		return nil, fmt.Errorf("failed to get file content from MinIO. err: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to get file content: %w", err),
+			"Unable to retrieve file content. Please try again.",
+		)
 	}
 
 	// Prepare file content and metadata for upload
@@ -379,7 +448,10 @@ func (ph *PublicHandler) MoveFileToCatalog(ctx context.Context, req *artifactpb.
 	uploadResp, err := ph.UploadCatalogFile(ctx, uploadReq)
 	if err != nil {
 		logger.Error("failed to upload file to target catalog", zap.Error(err))
-		return nil, fmt.Errorf("failed to upload file to target catalog. err: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to upload file to target catalog: %w", err),
+			"Unable to upload file to the target catalog. Please try again.",
+		)
 	}
 
 	// process the file
@@ -389,7 +461,10 @@ func (ph *PublicHandler) MoveFileToCatalog(ctx context.Context, req *artifactpb.
 	_, err = ph.ProcessCatalogFiles(ctx, processReq)
 	if err != nil {
 		logger.Error("failed to process file", zap.Error(err))
-		return nil, fmt.Errorf("failed to process file. err: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to process file: %w", err),
+			"File moved but processing failed. The file is in the target catalog but may need to be processed manually.",
+		)
 	}
 
 	// Step 5: delete the source file
@@ -427,21 +502,33 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 			zap.Error(err),
 			zap.String("owner_id(ns_id)", req.GetNamespaceId()),
 			zap.String("auth_uid", authUID))
-		return nil, fmt.Errorf("failed to get namespace. err: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to get namespace: %w", err),
+			"Unable to access the specified namespace. Please check the namespace ID and try again.",
+		)
 	}
 	// ACL - check user's permission to write catalog
 	kb, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.CatalogId)
 	if err != nil {
 		logger.Error("failed to get catalog", zap.Error(err))
-		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf(ErrorListKnowledgeBasesMsg, err),
+			"Unable to access the specified catalog. Please check the catalog ID and try again.",
+		)
 	}
 	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kb.UID, "reader")
 	if err != nil {
 		logger.Error("failed to check permission", zap.Error(err))
-		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err),
+			"Unable to verify access permissions. Please try again.",
+		)
 	}
 	if !granted {
-		return nil, fmt.Errorf("%w: no permission over catalog", errorsx.ErrUnauthorized)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("%w: no permission over catalog", errorsx.ErrUnauthorized),
+			"You don't have permission to view this catalog. Please contact the owner for access.",
+		)
 	}
 
 	kbFileList, err := ph.service.Repository().ListKnowledgeBaseFiles(ctx, repository.KnowledgeBaseFileListParams{
@@ -453,23 +540,35 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 		ProcessStatus: req.GetFilter().GetProcessStatus(),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("fetching file list: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("fetching file list: %w", err),
+			"Unable to retrieve file list. Please try again.",
+		)
 	}
 
 	// Get the tokens and chunks using the source table and source UID.
 	sources, err := ph.service.Repository().GetSourceTableAndUIDByFileUIDs(ctx, kbFileList.Files)
 	if err != nil {
-		return nil, fmt.Errorf("fetching sources: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("fetching sources: %w", err),
+			"Unable to retrieve file metadata. Please try again.",
+		)
 	}
 
 	totalTokens, err := ph.service.Repository().GetFilesTotalTokens(ctx, sources)
 	if err != nil {
-		return nil, fmt.Errorf("fetching tokens: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("fetching tokens: %w", err),
+			"Unable to retrieve token counts. Please try again.",
+		)
 	}
 
 	totalChunks, err := ph.service.Repository().GetTotalTextChunksBySources(ctx, sources)
 	if err != nil {
-		return nil, fmt.Errorf("fetching chunks: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("fetching chunks: %w", err),
+			"Unable to retrieve chunk counts. Please try again.",
+		)
 	}
 
 	files := make([]*artifactpb.File, 0, len(kbFileList.Files))
@@ -493,14 +592,20 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 
 			content, err := ph.service.Repository().GetFile(ctx, config.Config.Minio.BucketName, kbFile.Destination)
 			if err != nil {
-				return nil, fmt.Errorf("fetching file blob: %w", err)
+				return nil, errorsx.AddMessage(
+					fmt.Errorf("fetching file blob: %w", err),
+					"Unable to retrieve file content. Please try again.",
+				)
 			}
 			contentBase64 := base64.StdEncoding.EncodeToString(content)
 			fileType := artifactpb.FileType(artifactpb.FileType_value[kbFile.Type])
 
 			objectUID, err = ph.uploadBase64FileToMinIO(ctx, ns.NsID, ns.NsUID, ns.NsUID, fileName, contentBase64, fileType)
 			if err != nil {
-				return nil, fmt.Errorf("uploading migrated file to MinIO: %w", err)
+				return nil, errorsx.AddMessage(
+					fmt.Errorf("uploading migrated file to MinIO: %w", err),
+					"Unable to migrate file. Please try again.",
+				)
 			}
 
 			newDestination := repository.GetBlobObjectPath(ns.NsUID, objectUID)
@@ -509,7 +614,10 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 				repository.KnowledgeBaseFileColumn.Destination: newDestination,
 			})
 			if err != nil {
-				return nil, fmt.Errorf("updating migrated object: %w", err)
+				return nil, errorsx.AddMessage(
+					fmt.Errorf("updating migrated object: %w", err),
+					"Unable to complete file migration. Please try again.",
+				)
 			}
 
 		}
@@ -584,7 +692,10 @@ func (ph *PublicHandler) GetCatalogFile(ctx context.Context, req *artifactpb.Get
 		return nil, err
 	}
 	if len(files.Files) == 0 {
-		return nil, fmt.Errorf("file not found. err: %w", errorsx.ErrNotFound)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("file not found: %w", errorsx.ErrNotFound),
+			"File not found. Please check the file ID and try again.",
+		)
 	}
 
 	return &artifactpb.GetCatalogFileResponse{
@@ -601,33 +712,54 @@ func (ph *PublicHandler) DeleteCatalogFile(ctx context.Context, req *artifactpb.
 	_, err := getUserUIDFromContext(ctx)
 	if err != nil {
 		logger.Error("failed to get user id from header", zap.Error(err))
-		return nil, fmt.Errorf("failed to get user id from header: %v. err: %w", err, errorsx.ErrUnauthenticated)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to get user id from header: %v: %w", err, errorsx.ErrUnauthenticated),
+			"Authentication failed. Please log in and try again.",
+		)
 	}
 
 	// ACL - check user's permission to write catalog of kb file
 	kbfs, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{types.FileUIDType(uuid.FromStringOrNil(req.FileUid))})
 	if err != nil {
 		logger.Error("failed to get catalog files", zap.Error(err))
-		return nil, fmt.Errorf("failed to get catalog files. err: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to get catalog files: %w", err),
+			"Unable to retrieve file information. Please try again.",
+		)
 	} else if len(kbfs) == 0 {
-		return nil, fmt.Errorf("file not found. err: %w", errorsx.ErrNotFound)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("file not found: %w", errorsx.ErrNotFound),
+			"File not found. Please check the file ID and try again.",
+		)
 	}
 	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kbfs[0].KBUID, "writer")
 	if err != nil {
 		logger.Error("failed to check permission", zap.Error(err))
-		return nil, fmt.Errorf("failed to check permission. err: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to check permission: %w", err),
+			"Unable to verify access permissions. Please try again.",
+		)
 	}
 	if !granted {
-		return nil, fmt.Errorf("%w: no permission over catalog", errorsx.ErrUnauthorized)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("%w: no permission over catalog", errorsx.ErrUnauthorized),
+			"You don't have permission to delete files from this catalog. Please contact the owner for access.",
+		)
 	}
 	// check if file uid is empty
 	if req.FileUid == "" {
-		return nil, fmt.Errorf("file uid is required. err: %w", errorsx.ErrInvalidArgument)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("%w: file uid is required", errorsx.ErrInvalidArgument),
+			"File ID is required. Please specify which file to delete.",
+		)
 	}
 
 	fUID, err := uuid.FromString(req.FileUid)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse file uid. err: %w", errorsx.ErrInvalidArgument)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to parse file uid: %w", errorsx.ErrInvalidArgument),
+			"Invalid file ID format. Please check the file ID and try again.",
+		)
 	}
 
 	// get the file by uid
@@ -635,7 +767,10 @@ func (ph *PublicHandler) DeleteCatalogFile(ctx context.Context, req *artifactpb.
 	if err != nil {
 		return nil, err
 	} else if len(files) == 0 {
-		return nil, fmt.Errorf("file not found. err: %w", errorsx.ErrNotFound)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("file not found: %w", errorsx.ErrNotFound),
+			"File not found. Please check the file ID and try again.",
+		)
 	}
 
 	// Soft-delete the file record first to make it immediately invisible to users
@@ -686,7 +821,10 @@ func (ph *PublicHandler) ProcessCatalogFiles(ctx context.Context, req *artifactp
 	for _, fileUID := range req.FileUids {
 		fUID, err := uuid.FromString(fileUID)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse file uid. err: %w", errorsx.ErrInvalidArgument)
+			return nil, errorsx.AddMessage(
+				fmt.Errorf("failed to parse file uid: %w", errorsx.ErrInvalidArgument),
+				"Invalid file ID format. Please check the file IDs and try again.",
+			)
 		}
 		fileUIDs = append(fileUIDs, types.FileUIDType(fUID))
 	}
@@ -694,7 +832,10 @@ func (ph *PublicHandler) ProcessCatalogFiles(ctx context.Context, req *artifactp
 	if err != nil {
 		return nil, err
 	} else if len(kbfs) == 0 {
-		return nil, fmt.Errorf("file not found. err: %w", errorsx.ErrNotFound)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("file not found: %w", errorsx.ErrNotFound),
+			"No files found with the provided IDs. Please check the file IDs and try again.",
+		)
 	}
 	// check write permission for the catalog
 	for _, kbf := range kbfs {
@@ -703,7 +844,10 @@ func (ph *PublicHandler) ProcessCatalogFiles(ctx context.Context, req *artifactp
 			return nil, err
 		}
 		if !granted {
-			return nil, fmt.Errorf("%w: no permission over catalog", errorsx.ErrUnauthorized)
+			return nil, errorsx.AddMessage(
+				fmt.Errorf("%w: no permission over catalog", errorsx.ErrUnauthorized),
+				"You don't have permission to process files in this catalog. Please contact the owner for access.",
+			)
 		}
 	}
 
@@ -711,7 +855,10 @@ func (ph *PublicHandler) ProcessCatalogFiles(ctx context.Context, req *artifactp
 	err = ph.service.ACLClient().CheckRequesterPermission(ctx)
 	if err != nil {
 		logger.Error("failed to check requester permission", zap.Error(err))
-		return nil, fmt.Errorf("failed to check requester permission. err: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to check requester permission: %w", err),
+			"Unable to verify requester permissions. Please try again.",
+		)
 	}
 
 	requesterUID := resource.GetRequestSingleHeader(ctx, constantx.HeaderRequesterUIDKey)
@@ -743,7 +890,10 @@ func (ph *PublicHandler) ProcessCatalogFiles(ctx context.Context, req *artifactp
 		logger.Error("Failed to start batch file processing workflow",
 			zap.Int("fileCount", len(fileUIDs)),
 			zap.Error(err))
-		return nil, fmt.Errorf("failed to start batch file processing workflow. err: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to start batch file processing workflow: %w", err),
+			"Unable to start file processing. Please try again.",
+		)
 	}
 
 	logger.Info("Batch file processing workflow started successfully",
@@ -865,20 +1015,29 @@ func (ph *PublicHandler) GetFileSummary(ctx context.Context, req *artifactpb.Get
 	_, err := getUserUIDFromContext(ctx)
 	if err != nil {
 		logger.Error("failed to get user id from header", zap.Error(err))
-		return nil, fmt.Errorf("failed to get user id from header: %v. err: %w", err, errorsx.ErrUnauthenticated)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to get user id from header: %v: %w", err, errorsx.ErrUnauthenticated),
+			"Authentication failed. Please log in and try again.",
+		)
 	}
 
 	// Check if user can access the namespace
 	_, err = ph.service.GetNamespaceAndCheckPermission(ctx, req.NamespaceId)
 	if err != nil {
 		logger.Error("failed to get namespace and check permission", zap.Error(err))
-		return nil, fmt.Errorf("failed to get namespace and check permission: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to get namespace and check permission: %w", err),
+			"Unable to access the specified namespace. Please check permissions and try again.",
+		)
 	}
 
 	kbFiles, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{types.FileUIDType(uuid.FromStringOrNil(req.FileUid))}, repository.KnowledgeBaseFileColumn.Summary)
 	if err != nil || len(kbFiles) == 0 {
 		logger.Error("file not found", zap.Error(err))
-		return nil, fmt.Errorf("file not found. err: %w", errorsx.ErrNotFound)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("file not found: %w", errorsx.ErrNotFound),
+			"File not found. Please check the file ID and try again.",
+		)
 	}
 
 	return &artifactpb.GetFileSummaryResponse{
@@ -906,24 +1065,36 @@ func (ph *PublicHandler) uploadBase64FileToMinIO(ctx context.Context, nsID strin
 	}, nsUID, fileName, creatorUID)
 	if err != nil {
 		logger.Error("failed to get upload URL", zap.Error(err))
-		return uuid.Nil, fmt.Errorf("failed to get upload URL. err: %w", err)
+		return uuid.Nil, errorsx.AddMessage(
+			fmt.Errorf("failed to get upload URL: %w", err),
+			"Unable to prepare file upload. Please try again.",
+		)
 	}
 	objectUID := uuid.FromStringOrNil(response.Object.Uid)
 	destination := repository.GetBlobObjectPath(nsUID, objectUID)
 	err = ph.service.Repository().UploadBase64File(ctx, repository.BlobBucketName, destination, content, fileTypeConvertToMime(fileType))
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("failed to upload file to MinIO. err: %w", err)
+		return uuid.Nil, errorsx.AddMessage(
+			fmt.Errorf("failed to upload file to MinIO: %w", err),
+			"Unable to upload file to storage. Please try again.",
+		)
 	}
 	decodedContent, err := base64.StdEncoding.DecodeString(content)
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("failed to decode file content. err: %w", err)
+		return uuid.Nil, errorsx.AddMessage(
+			fmt.Errorf("failed to decode file content: %w", err),
+			"Invalid file content format. Please try again.",
+		)
 	}
 	objectSize := int64(len(decodedContent))
 
 	object, err := ph.service.Repository().GetObjectByUID(ctx, objectUID)
 	if err != nil {
 		logger.Error("failed to get object by uid", zap.Error(err))
-		return uuid.Nil, fmt.Errorf("failed to get object by uid. err: %w", err)
+		return uuid.Nil, errorsx.AddMessage(
+			fmt.Errorf("failed to get object by uid: %w", err),
+			"Unable to retrieve uploaded file information. Please try again.",
+		)
 	}
 	object.Size = objectSize
 	object.IsUploaded = true
@@ -931,7 +1102,10 @@ func (ph *PublicHandler) uploadBase64FileToMinIO(ctx context.Context, nsID strin
 	_, err = ph.service.Repository().UpdateObject(ctx, *object)
 	if err != nil {
 		logger.Error("failed to update object", zap.Error(err))
-		return uuid.Nil, fmt.Errorf("failed to update object. err: %w", err)
+		return uuid.Nil, errorsx.AddMessage(
+			fmt.Errorf("failed to update object: %w", err),
+			"Unable to finalize file upload. Please try again.",
+		)
 	}
 	return objectUID, nil
 }

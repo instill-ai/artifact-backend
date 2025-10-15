@@ -9,6 +9,22 @@ import (
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
+// Embedding dimension constants for different AI providers
+const (
+	// OpenAI embedding dimensions (constant, not configurable)
+	OpenAIEmbeddingDim = 1536
+
+	// Gemini embedding dimensions (configurable via Matryoshka Representation Learning)
+	// - 768: Recommended by Google for optimal balance of storage efficiency and quality
+	// - 1536: Compatible with OpenAI for migration scenarios
+	// - 3072: Maximum quality (full-size embeddings)
+	GeminiEmbeddingDimDefault = 3072
+
+	// Model family identifiers
+	ModelFamilyGemini = "gemini"
+	ModelFamilyOpenAI = "openai"
+)
+
 // ConversionResult represents the result of understanding unstructured data content and extracting it to Markdown
 type ConversionResult struct {
 	Markdown     string
@@ -64,6 +80,13 @@ type ChatResult struct {
 	UsageMetadata any    // Token usage metadata from the AI provider
 }
 
+// EmbedResult represents the result of an embedding operation
+type EmbedResult struct {
+	Vectors        [][]float32 // The embedding vectors
+	Model          string      // Model used (e.g., "gemini-embedding-001")
+	Dimensionality int32       // Vector dimensionality (e.g., 768)
+}
+
 // Provider defines the interface for AI providers that understand unstructured data
 // (documents, images, audio, video) and extract content to Markdown
 type Provider interface {
@@ -105,6 +128,15 @@ type Provider interface {
 	// Used for small files that couldn't be cached by Gemini (< 1024 tokens minimum)
 	// Enables chat during processing phase without needing embeddings or cache
 	ChatWithFiles(ctx context.Context, files []FileContent, prompt string) (*ChatResult, error)
+
+	// EmbedTexts generates embeddings with a specific task type optimization
+	// taskType specifies the optimization (e.g., "RETRIEVAL_DOCUMENT", "RETRIEVAL_QUERY", "QUESTION_ANSWERING")
+	EmbedTexts(ctx context.Context, texts []string, taskType string) (*EmbedResult, error)
+
+	// GetEmbeddingDimensionality returns the embedding vector dimensionality for this provider
+	// For OpenAI: always returns 1536
+	// For Gemini: always returns 3072 (full dimensionality)
+	GetEmbeddingDimensionality() int32
 
 	// SupportsFileType returns true if this provider can understand and extract content from this file type
 	SupportsFileType(fileType artifactpb.FileType) bool

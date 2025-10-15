@@ -10,17 +10,16 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.temporal.io/sdk/client"
 	"go.uber.org/zap"
-	"google.golang.org/grpc/metadata"
 
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/internal/ai"
 	"github.com/instill-ai/artifact-backend/internal/ai/gemini"
 	"github.com/instill-ai/artifact-backend/pkg/acl"
-	"github.com/instill-ai/artifact-backend/pkg/pipeline"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/types"
 
 	pipelinepb "github.com/instill-ai/protogen-go/pipeline/pipeline/v1beta"
+	errorsx "github.com/instill-ai/x/errors"
 )
 
 // TaskQueue is the Temporal task queue name for all workflows and activities.
@@ -126,7 +125,8 @@ func New(
 		} else {
 			provider = geminiProvider
 			log.Info("AI provider for content understanding initialized successfully",
-				zap.String("provider", provider.Name()))
+				zap.String("provider", provider.Name()),
+				zap.Int32("embedding_dimension", provider.GetEmbeddingDimensionality()))
 		}
 	}
 
@@ -195,14 +195,18 @@ func (w *Worker) CleanupKnowledgeBase(ctx context.Context, kbUID types.KBUIDType
 	})
 }
 
-// EmbedTexts embeds texts using workflow
-func (w *Worker) EmbedTexts(ctx context.Context, texts []string, batchSize int, requestMetadata map[string][]string) ([][]float32, error) {
+// EmbedTexts embeds texts with a specific task type optimization using Temporal workflow
+// taskType specifies the optimization (e.g., gemini.TaskTypeRetrievalDocument, gemini.TaskTypeRetrievalQuery, gemini.TaskTypeQuestionAnswering)
+// This method triggers a workflow for better reliability and retries
+func (w *Worker) EmbedTexts(ctx context.Context, texts []string, taskType string) ([][]float32, error) {
+	// Use workflow for orchestrated, reliable embedding with retries
+	workflowParam := EmbedTextsWorkflowParam{
+		Texts:    texts,
+		TaskType: taskType,
+	}
+
 	workflow := NewEmbedTextsWorkflow(w.temporalClient, w)
-	return workflow.Execute(ctx, EmbedTextsWorkflowParam{
-		Texts:           texts,
-		BatchSize:       batchSize,
-		RequestMetadata: requestMetadata,
-	})
+	return workflow.Execute(ctx, workflowParam)
 }
 
 // Helper methods (high-level operations used by activities)
@@ -217,7 +221,10 @@ func (w *Worker) deleteFilesSync(ctx context.Context, bucket string, filePaths [
 	// For parallel/reliable deletion, use worker.DeleteFiles workflow instead
 	for _, filePath := range filePaths {
 		if err := w.repository.DeleteFile(ctx, bucket, filePath); err != nil {
-			return fmt.Errorf("failed to delete file %s: %w", filePath, err)
+			return errorsx.AddMessage(
+				fmt.Errorf("failed to delete file %s: %w", filePath, err),
+				"Unable to delete file. Please try again.",
+			)
 		}
 	}
 
@@ -228,12 +235,18 @@ func (w *Worker) deleteFilesSync(ctx context.Context, bucket string, filePaths [
 func (w *Worker) deleteKnowledgeBaseSync(ctx context.Context, kbUID string) error {
 	kbUUID, err := uuid.FromString(kbUID)
 	if err != nil {
-		return fmt.Errorf("invalid knowledge base UID: %w", err)
+		return errorsx.AddMessage(
+			fmt.Errorf("invalid knowledge base UID: %w", err),
+			"Invalid catalog identifier. Please check the catalog ID and try again.",
+		)
 	}
 
 	filePaths, err := w.repository.ListKnowledgeBaseFilePaths(ctx, kbUUID)
 	if err != nil {
-		return fmt.Errorf("failed to list knowledge base files: %w", err)
+		return errorsx.AddMessage(
+			fmt.Errorf("failed to list knowledge base files: %w", err),
+			"Unable to list catalog files. Please try again.",
+		)
 	}
 	return w.deleteFilesSync(ctx, config.Config.Minio.BucketName, filePaths)
 }
@@ -242,7 +255,10 @@ func (w *Worker) deleteKnowledgeBaseSync(ctx context.Context, kbUID string) erro
 func (w *Worker) deleteConvertedFileByFileUIDSync(ctx context.Context, kbUID, fileUID types.FileUIDType) error {
 	filePaths, err := w.repository.ListConvertedFilesByFileUID(ctx, kbUID, fileUID)
 	if err != nil {
-		return fmt.Errorf("failed to list converted files: %w", err)
+		return errorsx.AddMessage(
+			fmt.Errorf("failed to list converted files: %w", err),
+			"Unable to list converted files. Please try again.",
+		)
 	}
 	return w.deleteFilesSync(ctx, config.Config.Minio.BucketName, filePaths)
 }
@@ -251,7 +267,10 @@ func (w *Worker) deleteConvertedFileByFileUIDSync(ctx context.Context, kbUID, fi
 func (w *Worker) deleteTextChunksByFileUIDSync(ctx context.Context, kbUID, fileUID types.FileUIDType) error {
 	filePaths, err := w.repository.ListTextChunksByFileUID(ctx, kbUID, fileUID)
 	if err != nil {
-		return fmt.Errorf("failed to list text chunk files: %w", err)
+		return errorsx.AddMessage(
+			fmt.Errorf("failed to list text chunk files: %w", err),
+			"Unable to list text chunks. Please try again.",
+		)
 	}
 	return w.deleteFilesSync(ctx, config.Config.Minio.BucketName, filePaths)
 }
@@ -320,7 +339,10 @@ func (w *Worker) getTextChunksByFile(ctx context.Context, file *repository.Knowl
 			if err != nil {
 				mu.Lock()
 				if fetchErr == nil {
-					fetchErr = fmt.Errorf("failed to fetch text chunk %s after %d attempts: %w", path, maxAttempts, err)
+					fetchErr = errorsx.AddMessage(
+						fmt.Errorf("failed to fetch text chunk %s after %d attempts: %w", path, maxAttempts, err),
+						"Unable to retrieve text chunks. Please try again.",
+					)
 				}
 				mu.Unlock()
 				return
@@ -351,22 +373,30 @@ func (w *Worker) getTextChunksByFile(ctx context.Context, file *repository.Knowl
 	return sourceTable, sourceUID, chunks, chunkUIDToContents, texts, nil
 }
 
-// embedTextsSync generates embeddings for texts (synchronous implementation without workflow)
-func (w *Worker) embedTextBatch(ctx context.Context, texts []string) ([][]float32, error) {
-	// Synchronous embedding (no workflow orchestration)
-	// For large batches with retries, use worker.EmbedTexts workflow instead
-
-	// Get request metadata from context
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		md = metadata.MD{}
+// embedTexts generates embeddings with a specific task type optimization
+// This is called by activities and provides the core embedding logic
+func (w *Worker) embedTexts(ctx context.Context, texts []string, taskType string) ([][]float32, error) {
+	if w.aiProvider == nil {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("AI provider not configured"),
+			"AI provider is not configured. Please configure Gemini API key in your settings.",
+		)
 	}
 
-	// Call standalone function
-	embeddings, err := pipeline.EmbedTextPipe(ctx, w.pipelineClient, texts, md)
+	// Use Gemini for embedding generation
+	result, err := w.aiProvider.EmbedTexts(ctx, texts, taskType)
 	if err != nil {
-		return nil, fmt.Errorf("failed to embed texts: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to generate embeddings: %w", err),
+			"Unable to generate embeddings. Please try again.",
+		)
 	}
 
-	return embeddings, nil
+	w.log.Info("Embedded texts using AI provider (Gemini)",
+		zap.Int("textCount", len(texts)),
+		zap.String("model", result.Model),
+		zap.Int32("dimensionality", result.Dimensionality),
+		zap.String("taskType", taskType))
+
+	return result.Vectors, nil
 }

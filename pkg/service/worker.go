@@ -27,6 +27,7 @@ type Worker interface {
 	// CleanupKnowledgeBase cleans up a knowledge base using workflow
 	CleanupKnowledgeBase(ctx context.Context, kbUID types.KBUIDType) error
 
-	// EmbedTexts embeds texts using workflow
-	EmbedTexts(ctx context.Context, texts []string, batchSize int, requestMetadata map[string][]string) ([][]float32, error)
+	// EmbedTexts embeds texts with a specific task type optimization
+	// taskType specifies the optimization (e.g., gemini.TaskTypeRetrievalDocument, gemini.TaskTypeRetrievalQuery, gemini.TaskTypeQuestionAnswering)
+	EmbedTexts(ctx context.Context, texts []string, taskType string) ([][]float32, error)
 }

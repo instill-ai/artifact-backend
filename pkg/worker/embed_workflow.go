@@ -18,9 +18,8 @@ import (
 
 // EmbedTextsWorkflowParam defines the parameters for the EmbedTextsWorkflow
 type EmbedTextsWorkflowParam struct {
-	Texts           []string
-	BatchSize       int
-	RequestMetadata map[string][]string
+	Texts    []string
+	TaskType string // Task type for embedding optimization (e.g., "RETRIEVAL_DOCUMENT", "RETRIEVAL_QUERY")
 }
 
 type embedTextsWorkflow struct {
@@ -57,20 +56,15 @@ func (w *embedTextsWorkflow) Execute(ctx context.Context, param EmbedTextsWorkfl
 	return vectors, nil
 }
 
-// EmbedTextsWorkflow orchestrates parallel embedding of text batches
+// EmbedTextsWorkflow orchestrates embedding of texts
 func (w *Worker) EmbedTextsWorkflow(ctx workflow.Context, param EmbedTextsWorkflowParam) ([][]float32, error) {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("Starting EmbedTextsWorkflow",
 		"totalTexts", len(param.Texts),
-		"batchSize", param.BatchSize)
+		"taskType", param.TaskType)
 
 	if len(param.Texts) == 0 {
 		return [][]float32{}, nil
-	}
-
-	batchSize := param.BatchSize
-	if batchSize <= 0 {
-		batchSize = 32
 	}
 
 	activityOptions := workflow.ActivityOptions{
@@ -84,46 +78,23 @@ func (w *Worker) EmbedTextsWorkflow(ctx workflow.Context, param EmbedTextsWorkfl
 	}
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
 
-	totalBatches := (len(param.Texts) + batchSize - 1) / batchSize
-	logger.Info("Calculated batches", "totalBatches", totalBatches)
-
-	futures := make([]workflow.Future, totalBatches)
-	for i := range totalBatches {
-		start := i * batchSize
-		end := min(start+batchSize, len(param.Texts))
-
-		batchTexts := param.Texts[start:end]
-		activityParam := &EmbedTextsActivityParam{
-			Texts:           batchTexts,
-			BatchIndex:      i,
-			RequestMetadata: param.RequestMetadata,
-		}
-
-		futures[i] = workflow.ExecuteActivity(ctx, w.EmbedTextsActivity, activityParam)
+	// Execute single activity for all texts
+	activityParam := &EmbedTextsActivityParam{
+		Texts:    param.Texts,
+		TaskType: param.TaskType,
 	}
 
-	allVectors := make([][]float32, 0, len(param.Texts))
-	for i, future := range futures {
-		var vectors [][]float32
-		if err := future.Get(ctx, &vectors); err != nil {
-			logger.Error("Batch failed",
-				"batchIndex", i,
-				"error", err)
-			return nil, errorsx.AddMessage(err, fmt.Sprintf("Unable to generate embeddings for batch %d. Please try again.", i))
-		}
-
-		logger.Info("Batch completed",
-			"batchIndex", i,
-			"vectorCount", len(vectors))
-
-		allVectors = append(allVectors, vectors...)
+	var vectors [][]float32
+	if err := workflow.ExecuteActivity(ctx, w.EmbedTextsActivity, activityParam).Get(ctx, &vectors); err != nil {
+		logger.Error("Embedding failed", "error", err)
+		return nil, errorsx.AddMessage(err, "Failed to generate embeddings. Please try again.")
 	}
 
 	logger.Info("EmbedTextsWorkflow completed successfully",
 		"totalTexts", len(param.Texts),
-		"totalVectors", len(allVectors))
+		"totalVectors", len(vectors))
 
-	return allVectors, nil
+	return vectors, nil
 }
 
 // SaveEmbeddingsToVectorDBWorkflowParam saves embeddings to vector db

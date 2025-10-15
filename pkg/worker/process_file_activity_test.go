@@ -137,11 +137,7 @@ func TestGetFileMetadataActivity_Success(t *testing.T) {
 		},
 	}, nil)
 
-	// Mock GetKnowledgeBaseByUID (called by the activity)
-	mockRepository.GetKnowledgeBaseByUIDMock.Return(&repository.KnowledgeBaseModel{
-		UID:                 kbUID,
-		ConvertingPipelines: []string{},
-	}, nil)
+	// NOTE: GetKnowledgeBaseByUID is no longer called - conversion pipelines are retired
 
 	w := &Worker{repository: mockRepository, log: zap.NewNop()}
 

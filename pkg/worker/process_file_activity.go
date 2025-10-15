@@ -93,13 +93,8 @@ type GetFileMetadataActivityParam struct {
 
 // GetFileMetadataActivityResult contains file and KB configuration
 type GetFileMetadataActivityResult struct {
-	File                    *repository.KnowledgeBaseFileModel // File metadata from database
-	GenerateContentPipeline pipeline.PipelineRelease           // Pipeline for content generation
-	GenerateSummaryPipeline pipeline.PipelineRelease           // Pipeline for summary generation
-	ChunkMarkdownPipeline   pipeline.PipelineRelease           // Pipeline for chunking markdown (the converted documents)
-	ChunkTextPipeline       pipeline.PipelineRelease           // Pipeline for chunking plain text
-	EmbedPipeline           pipeline.PipelineRelease           // Pipeline for embedding generation
-	ExternalMetadata        *structpb.Struct                   // External metadata from request
+	File             *repository.KnowledgeBaseFileModel // File metadata from database
+	ExternalMetadata *structpb.Struct                   // External metadata from request
 }
 
 // GetFileContentActivityParam for retrieving file content from MinIO
@@ -140,68 +135,12 @@ func (w *Worker) GetFileMetadataActivity(ctx context.Context, param *GetFileMeta
 	}
 	file := files[0]
 
-	// Get knowledge base configuration
-	kb, err := w.repository.GetKnowledgeBaseByUID(ctx, param.KBUID)
-	if err != nil {
-		return nil, temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			getFileMetadataActivityError,
-			err,
-		)
-	}
-
-	// Build converting pipelines list
-	convertingPipelines := make([]pipeline.PipelineRelease, 0, len(kb.ConvertingPipelines)+1)
-
-	// Add file-specific pipeline if exists
-	if file.ExtraMetaDataUnmarshal != nil && file.ExtraMetaDataUnmarshal.ConvertingPipe != "" {
-		pipeline, err := pipeline.PipelineReleaseFromName(file.ExtraMetaDataUnmarshal.ConvertingPipe)
-		if err != nil {
-			return nil, temporal.NewApplicationErrorWithCause(
-				fmt.Sprintf("Invalid file pipeline: %s", errorsx.MessageOrErr(err)),
-				getFileMetadataActivityError,
-				err,
-			)
-		}
-		convertingPipelines = append(convertingPipelines, pipeline)
-	}
-
-	// Add catalog pipelines
-	for _, pipelineName := range kb.ConvertingPipelines {
-		if len(pipelineName) == 0 {
-			continue
-		}
-		// Skip if already added as file pipeline
-		if file.ExtraMetaDataUnmarshal != nil && pipelineName == file.ExtraMetaDataUnmarshal.ConvertingPipe {
-			continue
-		}
-		pipeline, err := pipeline.PipelineReleaseFromName(pipelineName)
-		if err != nil {
-			return nil, temporal.NewApplicationErrorWithCause(
-				fmt.Sprintf("Invalid catalog pipeline: %s", errorsx.MessageOrErr(err)),
-				getFileMetadataActivityError,
-				err,
-			)
-		}
-		convertingPipelines = append(convertingPipelines, pipeline)
-	}
-
-	// If no converting pipelines configured (neither file-specific nor catalog-level),
-	// fall back to default markdown conversion pipelines for backward compatibility
-	if len(convertingPipelines) == 0 {
-		convertingPipelines = pipeline.DefaultConversionPipelines
-	}
-
-	// Use first configured pipeline or empty
-	var generateContentPipeline pipeline.PipelineRelease
-	if len(convertingPipelines) > 0 {
-		generateContentPipeline = convertingPipelines[0]
-	}
+	// NOTE: Converting pipelines are no longer used - all conversion is handled by AI providers (Gemini)
+	// Knowledge base pipeline information is no longer needed
 
 	return &GetFileMetadataActivityResult{
-		File:                    &file,
-		GenerateContentPipeline: generateContentPipeline,
-		ExternalMetadata:        file.ExternalMetadataUnmarshal,
+		File:             &file,
+		ExternalMetadata: file.ExternalMetadataUnmarshal,
 	}, nil
 }
 
@@ -529,27 +468,22 @@ func (w *Worker) UpdateConversionMetadataActivity(ctx context.Context, param *Up
 
 // GetConvertedFileForChunkingActivityParam retrieves converted file for text chunking
 type GetConvertedFileForChunkingActivityParam struct {
-	FileUID           types.FileUIDType        // File unique identifier
-	KBUID             types.KBUIDType          // Knowledge base unique identifier
-	ChunkTextPipeline pipeline.PipelineRelease // Pipeline for text chunking
-	EmbedTextPipeline pipeline.PipelineRelease // Pipeline for text embedding
+	FileUID types.FileUIDType // File unique identifier
+	KBUID   types.KBUIDType   // Knowledge base unique identifier
 }
 
 // GetConvertedFileForChunkingActivityResult contains file metadata and content
 type GetConvertedFileForChunkingActivityResult struct {
-	Content           string                   // Converted markdown content
-	ChunkTextPipeline pipeline.PipelineRelease // Pipeline for text chunking
-	EmbedTextPipeline pipeline.PipelineRelease // Pipeline for text embedding generation
-	ExternalMetadata  *structpb.Struct         // External metadata from request
+	Content          string           // Converted markdown content
+	ExternalMetadata *structpb.Struct // External metadata from request
 }
 
-// ChunkContentActivityParam for external text chunking pipeline call
+// ChunkContentActivityParam for internal text chunking (page-based)
 type ChunkContentActivityParam struct {
-	FileUID           types.FileUIDType        // File unique identifier
-	KBUID             types.KBUIDType          // Knowledge base unique identifier
-	Content           string                   // Content to chunk into text chunks
-	ChunkTextPipeline pipeline.PipelineRelease // Pipeline for text chunking
-	Metadata          *structpb.Struct         // Request metadata for authentication
+	FileUID  types.FileUIDType // File unique identifier
+	KBUID    types.KBUIDType   // Knowledge base unique identifier
+	Content  string            // Content to chunk into text chunks
+	Metadata *structpb.Struct  // Request metadata for authentication
 }
 
 // ChunkContentActivityResult contains chunked content
@@ -614,12 +548,9 @@ func (w *Worker) GetConvertedFileForChunkingActivity(ctx context.Context, param 
 		)
 	}
 
-	// Pass through pipeline from workflow parameter
 	return &GetConvertedFileForChunkingActivityResult{
-		Content:           string(content),
-		ChunkTextPipeline: param.ChunkTextPipeline,
-		EmbedTextPipeline: param.EmbedTextPipeline,
-		ExternalMetadata:  file.ExternalMetadataUnmarshal,
+		Content:          string(content),
+		ExternalMetadata: file.ExternalMetadataUnmarshal,
 	}, nil
 }
 
@@ -1469,27 +1400,25 @@ func (w *Worker) CacheChatContextActivity(ctx context.Context, param *CacheChatC
 
 // ProcessContentActivityParam defines input for ProcessContentActivity
 type ProcessContentActivityParam struct {
-	FileUID          types.FileUIDType        // File unique identifier
-	KBUID            types.KBUIDType          // Knowledge base unique identifier
-	Bucket           string                   // MinIO bucket
-	Destination      string                   // MinIO path
-	FileType         artifactpb.FileType      // File type
-	Filename         string                   // File name
-	FallbackPipeline pipeline.PipelineRelease // Pipeline for conversion fallback
-	Metadata         *structpb.Struct         // Request metadata
-	CacheName        string                   // AI cache name
+	FileUID     types.FileUIDType   // File unique identifier
+	KBUID       types.KBUIDType     // Knowledge base unique identifier
+	Bucket      string              // MinIO bucket
+	Destination string              // MinIO path
+	FileType    artifactpb.FileType // File type
+	Filename    string              // File name
+	Metadata    *structpb.Struct    // Request metadata
+	CacheName   string              // AI cache name
 }
 
 // ProcessContentActivityResult defines output from ProcessContentActivity
 type ProcessContentActivityResult struct {
-	Markdown           string                   // Converted markdown content
-	Length             []uint32                 // Length information
-	PositionData       *types.PositionData      // Position data for PDF
-	ConversionPipeline pipeline.PipelineRelease // Pipeline used
-	FormatConverted    bool                     // Whether format conversion occurred
-	OriginalType       artifactpb.FileType      // Original file type
-	ConvertedType      artifactpb.FileType      // Converted file type
-	UsageMetadata      any                      // AI token usage
+	Markdown        string              // Converted markdown content
+	Length          []uint32            // Length information
+	PositionData    *types.PositionData // Position data for PDF
+	FormatConverted bool                // Whether format conversion occurred
+	OriginalType    artifactpb.FileType // Original file type
+	ConvertedType   artifactpb.FileType // Converted file type
+	UsageMetadata   any                 // AI token usage
 }
 
 // ProcessContentActivity handles the entire content processing pipeline:
@@ -1558,7 +1487,6 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 	var markdown string
 	var positionData *types.PositionData
 	var length []uint32
-	var pipelineRelease pipeline.PipelineRelease
 	var usageMetadata any
 
 	// For TEXT/MARKDOWN files, no AI/pipeline conversion needed - content is already in usable format
@@ -1631,43 +1559,20 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 			}
 		}
 
-		// Pipeline fallback if AI failed or not available
+		// AI provider is required - no pipeline fallback
 		if markdown == "" {
-			logger.Info("Using pipeline for markdown conversion")
-
-			// Use configured pipeline or empty to use defaults
-			var pipelines []pipeline.PipelineRelease
-			if param.FallbackPipeline.ID != "" {
-				pipelines = []pipeline.PipelineRelease{param.FallbackPipeline}
-			}
-
-			conversion, err := pipeline.GenerateContentPipe(authCtx, w.pipelineClient, w.repository, pipeline.GenerateContentParams{
-				Base64Content: base64.StdEncoding.EncodeToString(content),
-				Type:          param.FileType,
-				Pipelines:     pipelines,
-			})
-			if err != nil {
-				logger.Error("Pipeline conversion failed", zap.Error(err))
-				return nil, temporal.NewApplicationErrorWithCause(
-					fmt.Sprintf("Pipeline conversion failed: %s", errorsx.MessageOrErr(err)),
-					processContentActivityError,
-					err,
-				)
-			}
-
-			markdown = conversion.Markdown
-			positionData = conversion.PositionData
-			length = conversion.Length
-			pipelineRelease = conversion.PipelineRelease
-			logger.Info("Pipeline conversion successful",
-				zap.Int("markdownLength", len(markdown)))
+			logger.Error("AI provider is required for content conversion but was not available")
+			return nil, temporal.NewApplicationErrorWithCause(
+				"AI provider is required for content conversion. Please configure Gemini API key.",
+				processContentActivityError,
+				fmt.Errorf("AI provider not configured"),
+			)
 		}
 	}
 
 	result.Markdown = markdown
 	result.Length = length
 	result.PositionData = positionData
-	result.ConversionPipeline = pipelineRelease
 	result.UsageMetadata = usageMetadata
 	result.ConvertedType = param.FileType // Already converted at workflow level
 	result.FormatConverted = false        // Not converted here (already done at workflow level)
@@ -1743,15 +1648,14 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 
 // ProcessSummaryActivityParam defines input for ProcessSummaryActivity
 type ProcessSummaryActivityParam struct {
-	FileUID          types.FileUIDType        // File unique identifier
-	KBUID            types.KBUIDType          // Knowledge base unique identifier
-	Bucket           string                   // MinIO bucket
-	Destination      string                   // MinIO path
-	FileName         string                   // File name
-	FileType         artifactpb.FileType      // File type
-	Metadata         *structpb.Struct         // Request metadata
-	CacheName        string                   // AI cache name
-	FallbackPipeline pipeline.PipelineRelease // Pipeline for summary generation fallback
+	FileUID     types.FileUIDType   // File unique identifier
+	KBUID       types.KBUIDType     // Knowledge base unique identifier
+	Bucket      string              // MinIO bucket
+	Destination string              // MinIO path
+	FileName    string              // File name
+	FileType    artifactpb.FileType // File type
+	Metadata    *structpb.Struct    // Request metadata
+	CacheName   string              // AI cache name
 }
 
 // ProcessSummaryActivityResult defines output from ProcessSummaryActivity
@@ -1870,27 +1774,14 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 		}
 	}
 
-	// Pipeline fallback if AI failed or not available
+	// AI provider is required - no pipeline fallback
 	if summary == "" {
-		logger.Info("Using pipeline for summary generation")
-
-		// Use configured pipeline or fall back to default
-		usePipeline := param.FallbackPipeline
-		if usePipeline.ID == "" {
-			usePipeline = pipeline.GenerateSummaryPipeline
-		}
-
-		pipelineSummary, err := pipeline.GenerateSummaryPipe(authCtx, w.pipelineClient, contentStr, param.FileType)
-		if err != nil {
-			logger.Error("Pipeline summary generation failed", zap.Error(err))
-			return nil, temporal.NewApplicationErrorWithCause(
-				fmt.Sprintf("Pipeline summary generation failed: %s", errorsx.MessageOrErr(err)),
-				processSummaryActivityError,
-				err,
-			)
-		}
-		summary = pipelineSummary
-		pipelineName = usePipeline.Name()
+		logger.Error("AI provider is required for summary generation but was not available")
+		return nil, temporal.NewApplicationErrorWithCause(
+			"AI provider is required for summary generation. Please configure Gemini API key.",
+			processSummaryActivityError,
+			fmt.Errorf("AI provider not configured"),
+		)
 	}
 
 	result.Summary = summary

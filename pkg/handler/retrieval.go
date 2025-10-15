@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"go.uber.org/zap"
-	"google.golang.org/grpc/metadata"
 
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
@@ -31,53 +30,66 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 
 	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
 	if err != nil {
-		return nil, fmt.Errorf("fetching namespace: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("fetching namespace: %w", err),
+			"Unable to access the specified namespace. Please check the namespace ID and try again.",
+		)
 	}
 
 	ownerUID := ns.NsUID
 	kb, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, req.CatalogId)
 	if err != nil {
-		return nil, fmt.Errorf("fetching catalog: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("fetching catalog: %w", err),
+			"Unable to access the specified catalog. Please check the catalog ID and try again.",
+		)
 	}
 
 	// ACL : check user has access to the catalog
 	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kb.UID, "reader")
 	if err != nil {
-		return nil, fmt.Errorf("checking permissions: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("checking permissions: %w", err),
+			"Unable to verify access permissions. Please try again.",
+		)
 	}
 	if !granted {
-		return nil, errorsx.ErrUnauthenticated
+		return nil, errorsx.AddMessage(
+			errorsx.ErrUnauthenticated,
+			"You don't have permission to access this catalog. Please contact the owner for access.",
+		)
 	}
 
 	// check auth user has access to the requester
 	err = ph.service.ACLClient().CheckRequesterPermission(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("checking requester permission: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("checking requester permission: %w", err),
+			"Unable to verify your authentication. Please log in again and try again.",
+		)
 	}
 
 	// retrieve the chunks based on the similarity
 	t := time.Now()
 
-	// Extract authentication metadata from context to pass to worker
-	var requestMetadata map[string][]string
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		md, ok = metadata.FromOutgoingContext(ctx)
-	}
-	if ok {
-		requestMetadata = md
-	}
-
-	// Embed text using service
-	textVector, err := ph.service.EmbedTexts(ctx, []string{req.TextPrompt}, 32, requestMetadata)
+	// Embed query using Gemini
+	// Note: For similarity search, we use RETRIEVAL_QUERY task type which optimizes
+	// for finding relevant documents similar to the query
+	textVector, err := ph.service.EmbedTexts(ctx, []string{req.TextPrompt}, "RETRIEVAL_QUERY")
 	if err != nil {
-		return nil, fmt.Errorf("vectorizing text: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("vectorizing text: %w", err),
+			"Unable to process your search query. Please try again.",
+		)
 	}
 
 	// Now call service to do vector search
 	simChunksScores, err := ph.service.SimilarityChunksSearch(ctx, ownerUID, req, textVector)
 	if err != nil {
-		return nil, fmt.Errorf("searching similar chunks: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("searching similar chunks: %w", err),
+			"Unable to search for similar content. Please try again.",
+		)
 	}
 	var chunkUIDs []types.TextChunkUIDType
 	for _, simChunk := range simChunksScores {
@@ -88,7 +100,10 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 	// fetch the chunks metadata
 	chunks, err := ph.service.Repository().GetTextChunksByUIDs(ctx, chunkUIDs)
 	if err != nil {
-		return nil, fmt.Errorf("fetching chunk metadata: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("fetching chunk metadata: %w", err),
+			"Unable to retrieve search results. Please try again.",
+		)
 	}
 
 	// chunks content
@@ -100,7 +115,10 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 	// Get file contents using service
 	chunkContents, err := ph.service.GetFilesByPaths(ctx, config.Config.Minio.BucketName, chunkFilePaths)
 	if err != nil {
-		return nil, fmt.Errorf("fetching chunk contents: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("fetching chunk contents: %w", err),
+			"Unable to load search result contents. Please try again.",
+		)
 	}
 
 	// fetch the file names
@@ -121,7 +139,10 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 		repository.KnowledgeBaseFileColumn.Name,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("fetching file info: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("fetching file info: %w", err),
+			"Unable to load file information for search results. Please try again.",
+		)
 	}
 
 	for _, file := range files {
