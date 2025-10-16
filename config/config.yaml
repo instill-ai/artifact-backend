@@ -95,4 +95,5 @@ rag:
   model:
     gemini:
       apikey:
-      cachettlminutes: 60
+    openai:
+      apikey:

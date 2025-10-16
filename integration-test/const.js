@@ -28,7 +28,7 @@ export const mgmtVersion = 'v1beta';
 
 export const namespace = "users/admin"
 export const defaultUsername = "admin"
-export const defaultPassword = "password"
+export const defaultPassword = "qazwsxedc"
 
 export const params = {
   headers: {

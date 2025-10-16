@@ -28,6 +28,7 @@ type Worker interface {
 	CleanupKnowledgeBase(ctx context.Context, kbUID types.KBUIDType) error
 
 	// EmbedTexts embeds texts with a specific task type optimization
+	// kbUID is optional and used to select the appropriate provider based on KB's embedding config
 	// taskType specifies the optimization (e.g., gemini.TaskTypeRetrievalDocument, gemini.TaskTypeRetrievalQuery, gemini.TaskTypeQuestionAnswering)
-	EmbedTexts(ctx context.Context, texts []string, taskType string) ([][]float32, error)
+	EmbedTexts(ctx context.Context, kbUID *types.KBUIDType, texts []string, taskType string) ([][]float32, error)
 }

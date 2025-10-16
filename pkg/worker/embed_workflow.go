@@ -18,6 +18,7 @@ import (
 
 // EmbedTextsWorkflowParam defines the parameters for the EmbedTextsWorkflow
 type EmbedTextsWorkflowParam struct {
+	KBUID    *types.KBUIDType // Optional: Knowledge base UID for provider selection
 	Texts    []string
 	TaskType string // Task type for embedding optimization (e.g., "RETRIEVAL_DOCUMENT", "RETRIEVAL_QUERY")
 }
@@ -80,6 +81,7 @@ func (w *Worker) EmbedTextsWorkflow(ctx workflow.Context, param EmbedTextsWorkfl
 
 	// Execute single activity for all texts
 	activityParam := &EmbedTextsActivityParam{
+		KBUID:    param.KBUID,
 		Texts:    param.Texts,
 		TaskType: param.TaskType,
 	}

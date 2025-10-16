@@ -752,9 +752,6 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				totalChunkCount += len(summaryChunks.TextChunks)
 			}
 
-			// NOTE: UpdateChunkingMetadataActivity removed - chunking metadata no longer tracked
-			// (chunking is now done inline, not via pipeline)
-
 			logger.Info("CHUNKING phase completed for file",
 				"fileUID", fileUID.String(),
 				"totalChunks", totalChunkCount)
@@ -781,6 +778,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			}
 
 			// Generate embeddings using child workflow
+			// Pass KBUID to enable provider selection based on KB's embedding config
 			embedWorkflowOptions := workflow.ChildWorkflowOptions{
 				WorkflowID: fmt.Sprintf("embed-texts-%s", fileUID.String()),
 			}
@@ -788,6 +786,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 
 			var embeddingVectors [][]float32
 			if err := workflow.ExecuteChildWorkflow(embedCtx, w.EmbedTextsWorkflow, EmbedTextsWorkflowParam{
+				KBUID:    &kbUID, // Pass KBUID for provider selection (Gemini 3072-dim vs OpenAI 1536-dim)
 				Texts:    chunksData.Texts,
 				TaskType: "RETRIEVAL_DOCUMENT", // For indexing document chunks
 			}).Get(embedCtx, &embeddingVectors); err != nil {

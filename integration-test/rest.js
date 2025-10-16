@@ -10,10 +10,10 @@ import { artifactPublicHost } from "./const.js";
 import * as constant from "./const.js";
 import * as restPublic from './rest-public.js';
 import * as restPublicWithJwt from './rest-public-with-jwt.js';
-import { CheckFileReprocessing } from './rest-public-file-reprocess.js';
-import { CheckKnowledgeBaseDeletion } from './rest-public-kb-delete.js';
-import { CheckKnowledgeBaseEndToEndFileProcessing } from './rest-public-kb-e2e-file-process.js';
-import { CheckChatCacheImplementation } from './rest-public-chat-cache.js';
+import { CheckFileReprocessing } from './rest-file-reprocess.js';
+import { CheckKnowledgeBaseDeletion } from './rest-kb-delete.js';
+import { CheckKnowledgeBaseEndToEndFileProcessing } from './rest-kb-e2e-file-process.js';
+import { CheckChatCacheImplementation } from './rest-chat-cache.js';
 
 export let options = {
   setupTimeout: '30s',
