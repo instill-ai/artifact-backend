@@ -146,15 +146,19 @@ type RAGConfig struct {
 // ModelConfig defines the configuration for AI model providers
 type ModelConfig struct {
 	Gemini GeminiConfig `koanf:"gemini"`
+	OpenAI OpenAIConfig `koanf:"openai"`
 	// Future AI providers:
-	// OpenAI      OpenAIConfig      `koanf:"openai"`
 	// Anthropic   AnthropicConfig   `koanf:"anthropic"`
 }
 
 // GeminiConfig defines the configuration for Gemini AI
 type GeminiConfig struct {
-	APIKey          string `koanf:"apikey"`
-	CacheTTLMinutes int    `koanf:"cachettlminutes"`
+	APIKey string `koanf:"apikey"`
+}
+
+// OpenAIConfig defines the configuration for OpenAI
+type OpenAIConfig struct {
+	APIKey string `koanf:"apikey"`
 }
 
 // Init - Assign global config to decoded config struct

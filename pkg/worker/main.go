@@ -14,6 +14,7 @@ import (
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/internal/ai"
 	"github.com/instill-ai/artifact-backend/internal/ai/gemini"
+	"github.com/instill-ai/artifact-backend/internal/ai/openai"
 	"github.com/instill-ai/artifact-backend/pkg/acl"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/types"
@@ -65,8 +66,10 @@ type Worker struct {
 	temporalClient client.Client
 
 	// Worker-specific dependencies
-	aiProvider ai.Provider
-	log        *zap.Logger
+	aiProvider     ai.Provider // Default AI provider (Gemini for content processing)
+	geminiProvider ai.Provider // Gemini provider for 3072-dim embeddings
+	openaiProvider ai.Provider // OpenAI provider for 1536-dim legacy embeddings
+	log            *zap.Logger
 }
 
 // TemporalClient returns the Temporal client for workflow execution
@@ -114,29 +117,51 @@ func New(
 	}
 
 	// Initialize AI provider for unstructured data content understanding
-	// If not configured or initialization fails, worker will fall back to pipeline conversion
+	// Gemini is required for content conversion, caching, and summarization
+	// OpenAI is optional and only used for legacy embedding generation (1536-dim)
 	var provider ai.Provider
 	cfg := config.Config // Access global config
+
+	// Initialize Gemini provider (required for content processing)
 	if cfg.RAG.Model.Gemini.APIKey != "" {
 		geminiProvider, err := gemini.NewProvider(context.Background(), cfg.RAG.Model.Gemini.APIKey)
 		if err != nil {
-			log.Warn("Failed to initialize AI provider for content understanding, will use pipeline fallback",
+			log.Error("Failed to initialize Gemini AI provider",
 				zap.Error(err))
 		} else {
 			provider = geminiProvider
-			log.Info("AI provider for content understanding initialized successfully",
+			w.geminiProvider = geminiProvider
+			log.Info("Gemini AI provider initialized successfully",
 				zap.String("provider", provider.Name()),
 				zap.Int32("embedding_dimension", provider.GetEmbeddingDimensionality()))
 		}
+	} else {
+		log.Warn("Gemini API key not configured. Content conversion and summarization will use pipeline fallback.")
 	}
 
-	// Future: Add support for additional AI providers (e.g., OpenAI, Claude)
-	// if provider == nil && cfg.RAG.Model.OpenAI.APIKey != "" {
-	//     openaiProvider, err := openai.NewProvider(context.Background(), cfg.RAG.Model.OpenAI.APIKey)
-	//     if err == nil {
-	//         provider = openaiProvider
-	//     }
-	// }
+	// Initialize OpenAI provider if configured (optional, for legacy embedding support only)
+	// Note: OpenAI provider only supports embedding generation (1536-dim vectors)
+	// It does not support content conversion, caching, or chat
+	if cfg.RAG.Model.OpenAI.APIKey != "" {
+		openaiProvider, err := openai.NewProvider(context.Background(), cfg.RAG.Model.OpenAI.APIKey)
+		if err != nil {
+			log.Warn("Failed to initialize OpenAI provider for legacy embeddings",
+				zap.Error(err))
+		} else {
+			w.openaiProvider = openaiProvider
+			// If Gemini is not available, use OpenAI for embeddings only
+			if provider == nil {
+				provider = openaiProvider
+				log.Info("OpenAI provider initialized for embedding generation only",
+					zap.String("provider", provider.Name()),
+					zap.Int32("embedding_dimension", provider.GetEmbeddingDimensionality()))
+				log.Warn("Using OpenAI for embeddings only. Content conversion requires Gemini configuration.")
+			} else {
+				log.Info("OpenAI provider available for legacy embeddings (1536-dim)",
+					zap.Int32("embedding_dimension", openaiProvider.GetEmbeddingDimensionality()))
+			}
+		}
+	}
 
 	w.aiProvider = provider
 
@@ -196,11 +221,13 @@ func (w *Worker) CleanupKnowledgeBase(ctx context.Context, kbUID types.KBUIDType
 }
 
 // EmbedTexts embeds texts with a specific task type optimization using Temporal workflow
+// kbUID is optional and used to select the appropriate provider based on KB's embedding config
 // taskType specifies the optimization (e.g., gemini.TaskTypeRetrievalDocument, gemini.TaskTypeRetrievalQuery, gemini.TaskTypeQuestionAnswering)
 // This method triggers a workflow for better reliability and retries
-func (w *Worker) EmbedTexts(ctx context.Context, texts []string, taskType string) ([][]float32, error) {
+func (w *Worker) EmbedTexts(ctx context.Context, kbUID *types.KBUIDType, texts []string, taskType string) ([][]float32, error) {
 	// Use workflow for orchestrated, reliable embedding with retries
 	workflowParam := EmbedTextsWorkflowParam{
+		KBUID:    kbUID,
 		Texts:    texts,
 		TaskType: taskType,
 	}
@@ -373,18 +400,67 @@ func (w *Worker) getTextChunksByFile(ctx context.Context, file *repository.Knowl
 	return sourceTable, sourceUID, chunks, chunkUIDToContents, texts, nil
 }
 
-// embedTexts generates embeddings with a specific task type optimization
-// This is called by activities and provides the core embedding logic
-func (w *Worker) embedTexts(ctx context.Context, texts []string, taskType string) ([][]float32, error) {
-	if w.aiProvider == nil {
+// embedTextsWithProviderSelection generates embeddings using the appropriate provider
+// based on the KB's embedding configuration. If KBUID is provided, it checks the KB's
+// embedding_config to determine which provider to use (Gemini 3072-dim vs OpenAI 1536-dim).
+// This ensures embedding dimensionality consistency within each knowledge base.
+func (w *Worker) embedTextsWithProviderSelection(ctx context.Context, kbUID *types.KBUIDType, texts []string, taskType string) ([][]float32, error) {
+	if len(texts) == 0 {
+		return [][]float32{}, nil
+	}
+
+	// Determine which provider to use based on KB's embedding config
+	var selectedProvider ai.Provider
+	var providerName string
+
+	if kbUID != nil {
+		// Fetch KB's embedding configuration to determine appropriate provider
+		kbs, err := w.repository.GetKnowledgeBasesByUIDs(ctx, []types.KBUIDType{*kbUID})
+		if err != nil || len(kbs) == 0 {
+			w.log.Warn("Failed to fetch KB embedding config, using default provider",
+				zap.String("kbUID", kbUID.String()),
+				zap.Error(err))
+		} else {
+			kb := kbs[0]
+			// Check KB's configured embedding model family
+			switch kb.EmbeddingConfig.ModelFamily {
+			case ai.ModelFamilyOpenAI:
+				// KB was created with OpenAI embeddings (1536-dim), use OpenAI provider
+				if w.openaiProvider != nil {
+					selectedProvider = w.openaiProvider
+					providerName = "OpenAI (legacy 1536-dim for KB compatibility)"
+				} else {
+					w.log.Warn("KB requires OpenAI embeddings but OpenAI provider not configured",
+						zap.String("kbUID", kbUID.String()))
+				}
+			case ai.ModelFamilyGemini:
+				// KB was created with Gemini embeddings (3072-dim), use Gemini provider
+				if w.geminiProvider != nil {
+					selectedProvider = w.geminiProvider
+					providerName = "Gemini (3072-dim for KB compatibility)"
+				} else {
+					w.log.Warn("KB requires Gemini embeddings but Gemini provider not configured",
+						zap.String("kbUID", kbUID.String()))
+				}
+			}
+		}
+	}
+
+	// Fall back to default provider if no KB-specific provider selected
+	if selectedProvider == nil {
+		selectedProvider = w.aiProvider
+		providerName = "default"
+	}
+
+	if selectedProvider == nil {
 		return nil, errorsx.AddMessage(
-			fmt.Errorf("AI provider not configured"),
-			"AI provider is not configured. Please configure Gemini API key in your settings.",
+			fmt.Errorf("no AI provider available"),
+			"AI provider is not configured. Please configure Gemini or OpenAI API key in your settings.",
 		)
 	}
 
-	// Use Gemini for embedding generation
-	result, err := w.aiProvider.EmbedTexts(ctx, texts, taskType)
+	// Generate embeddings using selected provider
+	result, err := selectedProvider.EmbedTexts(ctx, texts, taskType)
 	if err != nil {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("failed to generate embeddings: %w", err),
@@ -392,9 +468,10 @@ func (w *Worker) embedTexts(ctx context.Context, texts []string, taskType string
 		)
 	}
 
-	w.log.Info("Embedded texts using AI provider (Gemini)",
+	w.log.Info("Embedded texts using selected AI provider",
 		zap.Int("textCount", len(texts)),
-		zap.String("model", result.Model),
+		zap.String("provider", result.Model),
+		zap.String("selection", providerName),
 		zap.Int32("dimensionality", result.Dimensionality),
 		zap.String("taskType", taskType))
 

@@ -152,10 +152,10 @@ func (ph *PublicHandler) QuestionAnswering(
 		FileUids:    req.GetFileUids(),
 	}
 
-	// Embed prompt using Gemini
+	// Embed prompt using appropriate provider based on KB's embedding config
 	// Note: For question answering, we use QUESTION_ANSWERING task type which optimizes
 	// for finding documents that contain answers to the question
-	textVector, err := ph.service.EmbedTexts(ctx, []string{req.GetQuestion()}, "QUESTION_ANSWERING")
+	textVector, err := ph.service.EmbedTexts(ctx, &kb.UID, []string{req.GetQuestion()}, "QUESTION_ANSWERING")
 	if err != nil {
 		logger.Error("failed to vectorize prompt", zap.Error(err))
 		return nil, errorsx.AddMessage(

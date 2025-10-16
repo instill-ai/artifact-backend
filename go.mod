@@ -19,6 +19,7 @@ require (
 	github.com/knadh/koanf v1.5.0
 	github.com/milvus-io/milvus-sdk-go/v2 v2.4.2
 	github.com/minio/minio-go/v7 v7.0.92
+	github.com/openai/openai-go/v3 v3.4.0
 	github.com/openfga/api/proto v0.0.0-20240723155248-7e5be7b65c27
 	github.com/pkoukk/tiktoken-go v0.1.8
 	github.com/redis/go-redis/v9 v9.9.0
@@ -36,6 +37,8 @@ require (
 	gorm.io/driver/postgres v1.5.0
 	gorm.io/gorm v1.30.0
 )
+
+require github.com/tidwall/sjson v1.2.5 // indirect
 
 require (
 	cloud.google.com/go v0.120.0 // indirect

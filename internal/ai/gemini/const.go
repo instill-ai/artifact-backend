@@ -5,8 +5,6 @@ import (
 	"log"
 	"sync"
 	"time"
-
-	"github.com/instill-ai/artifact-backend/config"
 )
 
 //go:embed prompt/*.md
@@ -23,8 +21,8 @@ const (
 	// DefaultModel is the default Gemini model for multimodal content conversion
 	DefaultModel = "gemini-2.5-flash"
 
-	// DefaultCacheTTL is the default time-to-live for cached content (1 hour)
-	DefaultCacheTTL = time.Hour
+	// DefaultCacheTTL is the default time-to-live for cached content (1 minute)
+	DefaultCacheTTL = time.Minute
 )
 
 // loadPrompts loads all prompt templates from embedded files
@@ -89,10 +87,7 @@ func GetModel() string {
 	return DefaultModel
 }
 
-// GetCacheTTL returns the configured cache TTL or default
+// GetCacheTTL returns the default cache TTL
 func GetCacheTTL() time.Duration {
-	if config.Config.RAG.Model.Gemini.CacheTTLMinutes > 0 {
-		return time.Duration(config.Config.RAG.Model.Gemini.CacheTTLMinutes) * time.Minute
-	}
 	return DefaultCacheTTL
 }

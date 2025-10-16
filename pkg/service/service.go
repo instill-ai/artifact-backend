@@ -42,7 +42,7 @@ type Service interface {
 	CleanupKnowledgeBase(context.Context, types.KBUIDType) error
 	GetFilesByPaths(context.Context, string, []string) ([]FileContent, error)
 	DeleteFiles(context.Context, string, []string) error
-	EmbedTexts(context.Context, []string, string) ([][]float32, error)
+	EmbedTexts(context.Context, *types.KBUIDType, []string, string) ([][]float32, error)
 
 	// Chat cache use cases (for instant chat during file processing)
 	GetChatCacheForFiles(context.Context, types.KBUIDType, []types.FileUIDType) (*repository.ChatCacheMetadata, error)
@@ -121,6 +121,7 @@ func (s *service) CleanupKnowledgeBase(ctx context.Context, kbUID types.KBUIDTyp
 }
 
 // EmbedTexts embeds texts with a specific task type optimization
-func (s *service) EmbedTexts(ctx context.Context, texts []string, taskType string) ([][]float32, error) {
-	return s.worker.EmbedTexts(ctx, texts, taskType)
+// kbUID is optional and used to select the appropriate provider based on KB's embedding config
+func (s *service) EmbedTexts(ctx context.Context, kbUID *types.KBUIDType, texts []string, taskType string) ([][]float32, error) {
+	return s.worker.EmbedTexts(ctx, kbUID, texts, taskType)
 }
