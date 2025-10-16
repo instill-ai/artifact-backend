@@ -84,43 +84,6 @@ var (
 		Version:   "v1.0.0",
 	}
 
-	// GenerateContentPipeline is the default conversion pipeline for documents.
-	// Note: this pipeline is for the new indexing pipeline having
-	// convert_result or convert_result2
-	GenerateContentPipeline = PipelineRelease{
-		Namespace: DefaultNamespaceID,
-		ID:        "indexing-generate-content",
-		Version:   "v1.4.0",
-	}
-
-	// GenerateSummaryPipeline is the default pipeline for summarizing text.
-	GenerateSummaryPipeline = PipelineRelease{
-		Namespace: DefaultNamespaceID,
-		ID:        "indexing-generate-summary",
-		Version:   "v1.0.0",
-	}
-
-	// ChunkMarkdownPipeline is the default pipeline for chunking Markdown.
-	ChunkMarkdownPipeline = PipelineRelease{
-		Namespace: DefaultNamespaceID,
-		ID:        "indexing-chunk-markdown",
-		Version:   "v2.0.0",
-	}
-
-	// ChunkTextPipeline is the default pipeline for chunking text.
-	ChunkTextPipeline = PipelineRelease{
-		Namespace: DefaultNamespaceID,
-		ID:        "indexing-chunk-text",
-		Version:   "v2.0.0",
-	}
-
-	// EmbedTextPipeline is the default pipeline for embedding text.
-	EmbedTextPipeline = PipelineRelease{
-		Namespace: DefaultNamespaceID,
-		ID:        "indexing-embed-text",
-		Version:   "v1.1.0",
-	}
-
 	// QAPipeline is the default pipeline for question & answering.
 	QAPipeline = PipelineRelease{
 		Namespace: DefaultNamespaceID,
@@ -131,19 +94,8 @@ var (
 	// PresetPipelinesList contains the preset pipelines used in catalogs.
 	PresetPipelinesList = PipelineReleases{
 		ConvertFileTypePipeline,
-		GenerateContentPipeline,
-		GenerateSummaryPipeline,
-		ChunkMarkdownPipeline,
-		ChunkTextPipeline,
-		EmbedTextPipeline,
 		QAPipeline,
 	}
-
-	// DefaultConversionPipelines is the chain of pipelines used for converting
-	// documents to Markdown. Note: ConvertFileTypePipeline is NOT included here
-	// because it's only used for AI preprocessing (hardcoded in the workflow),
-	// not for general markdown conversion.
-	DefaultConversionPipelines = PipelineReleases{GenerateContentPipeline}
 )
 
 // PipelineReleaseUpserter is used to upsert predefined pipeline releases into

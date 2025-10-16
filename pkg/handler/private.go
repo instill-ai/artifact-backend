@@ -10,6 +10,7 @@ import (
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 
+	errorsx "github.com/instill-ai/x/errors"
 	artifact "github.com/instill-ai/artifact-backend/pkg/service"
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
@@ -190,32 +191,47 @@ func (h *PrivateHandler) GetChatFile(ctx context.Context, req *artifactpb.GetCha
 	ns, err := h.service.GetNamespaceByNsID(ctx, req.NamespaceId)
 	if err != nil {
 		h.logger.Error("failed to get namespace by ns id", zap.Error(err))
-		return nil, fmt.Errorf("failed to get namespace by ns id. err: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to get namespace by ns id: %w", err),
+			"Unable to access the specified namespace. Please check the namespace ID and try again.",
+		)
 	}
 	kb, err := h.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.CatalogId)
 	if err != nil {
 		h.logger.Error("failed to get knowledge base by owner and kb id", zap.Error(err))
-		return nil, fmt.Errorf("failed to get catalog by namespace and catalog id. err: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to get catalog by namespace and catalog id: %w", err),
+			"Unable to access the specified catalog. Please check the catalog ID and try again.",
+		)
 	}
 
 	kbFile, err := h.service.Repository().GetKnowledgebaseFileByKBUIDAndFileID(ctx, kb.UID, fileID)
 	if err != nil {
 		h.logger.Error("failed to get file by file id", zap.Error(err))
-		return nil, fmt.Errorf("failed to get file by file id. err: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to get file by file id: %w", err),
+			"File not found. Please check the file ID and try again.",
+		)
 	}
 
 	// get source file
 	source, err := h.service.Repository().GetTruthSourceByFileUID(ctx, kbFile.UID)
 	if err != nil {
 		h.logger.Error("failed to get truth source by file uid", zap.Error(err))
-		return nil, fmt.Errorf("failed to get truth source by file uid. err: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to get truth source by file uid: %w", err),
+			"Unable to retrieve file source. Please try again.",
+		)
 	}
 
 	// get the source file sourceContent from minIO using dest of source
 	sourceContent, err := h.service.Repository().GetFile(ctx, config.Config.Minio.BucketName, source.Dest)
 	if err != nil {
 		h.logger.Error("failed to get file from minio", zap.Error(err))
-		return nil, fmt.Errorf("failed to get file from minio. err: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to get file from minio: %w", err),
+			"Unable to retrieve file content. Please try again.",
+		)
 	}
 
 	// Add the originalData field to the response

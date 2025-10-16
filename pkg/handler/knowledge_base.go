@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math/rand"
 	"regexp"
-	"slices"
 	"strings"
 	"time"
 
@@ -14,8 +13,8 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc/metadata"
 
+	"github.com/instill-ai/artifact-backend/internal/ai"
 	"github.com/instill-ai/artifact-backend/pkg/constant"
-	"github.com/instill-ai/artifact-backend/pkg/pipeline"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/types"
 
@@ -33,9 +32,6 @@ const ErrorCreateKnowledgeBaseMsg = "failed to create catalog: %w"
 const ErrorListKnowledgeBasesMsg = "failed to get catalogs: %w "
 const ErrorUpdateKnowledgeBaseMsg = "failed to update catalog: %w"
 const ErrorDeleteKnowledgeBaseMsg = "failed to delete catalog: %w"
-
-// Note: in the future, we might have different max count for different user types
-const KnowledgeBaseMaxCount = 3
 
 // CreateCatalog creates a catalog
 func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.CreateCatalogRequest) (*artifactpb.CreateCatalogResponse, error) {
@@ -104,25 +100,23 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 		req.Type = artifactpb.CatalogType_CATALOG_TYPE_PERSISTENT
 	}
 
-	// Read conversion pipelines from request.
-	convertingPipelines, err := sanitizeConvertingPipelines(req.GetConvertingPipelines())
-	if err != nil {
-		return nil, err
-	}
-
 	// create catalog
+	// Set default embedding configuration: Gemini with default dimensions
 	dbData, err := ph.service.Repository().CreateKnowledgeBase(
 		ctx,
 		repository.KnowledgeBaseModel{
 			Name: req.Name,
 			// make name as kbID
-			KbID:                req.Name,
-			Description:         req.Description,
-			Tags:                req.Tags,
-			Owner:               ns.NsUID.String(),
-			CreatorUID:          creatorUUID,
-			CatalogType:         req.GetType().String(),
-			ConvertingPipelines: convertingPipelines,
+			KbID:        req.Name,
+			Description: req.Description,
+			Tags:        req.Tags,
+			Owner:       ns.NsUID.String(),
+			CreatorUID:  creatorUUID,
+			CatalogType: req.GetType().String(),
+			EmbeddingConfig: repository.EmbeddingConfigJSON{
+				ModelFamily:    ai.ModelFamilyGemini,
+				Dimensionality: uint32(ai.GeminiEmbeddingDimDefault),
+			},
 		},
 		callExternalService,
 	)
@@ -131,33 +125,22 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 	}
 
 	catalog := &artifactpb.Catalog{
-		Name:                dbData.Name,
-		CatalogUid:          dbData.UID.String(),
-		CatalogId:           dbData.KbID,
-		Description:         dbData.Description,
-		Tags:                dbData.Tags,
-		OwnerName:           dbData.Owner,
-		CreateTime:          dbData.CreateTime.String(),
-		UpdateTime:          dbData.UpdateTime.String(),
-		ConvertingPipelines: dbData.ConvertingPipelines,
-		SummarizingPipelines: []string{
-			pipeline.GenerateSummaryPipeline.Name(),
-		},
-		SplittingPipelines: []string{
-			pipeline.ChunkTextPipeline.Name(),
-			pipeline.ChunkMarkdownPipeline.Name(),
-		},
-		EmbeddingPipelines: []string{
-			pipeline.EmbedTextPipeline.Name(),
-		},
+		Name:           dbData.Name,
+		CatalogUid:     dbData.UID.String(),
+		CatalogId:      dbData.KbID,
+		Description:    dbData.Description,
+		Tags:           dbData.Tags,
+		OwnerName:      dbData.Owner,
+		CreateTime:     dbData.CreateTime.String(),
+		UpdateTime:     dbData.UpdateTime.String(),
 		DownstreamApps: []string{},
 		TotalFiles:     0,
 		TotalTokens:    0,
 		UsedStorage:    0,
-	}
-
-	if len(dbData.ConvertingPipelines) == 0 {
-		catalog.ConvertingPipelines = pipeline.DefaultConversionPipelines.Names()
+		EmbeddingConfig: &artifactpb.Catalog_EmbeddingConfig{
+			ModelFamily:    dbData.EmbeddingConfig.ModelFamily,
+			Dimensionality: dbData.EmbeddingConfig.Dimensionality,
+		},
 	}
 
 	return &artifactpb.CreateCatalogResponse{Catalog: catalog}, nil
@@ -182,7 +165,10 @@ func (ph *PublicHandler) ListCatalogs(ctx context.Context, req *artifactpb.ListC
 			zap.Error(err),
 			zap.String("owner_id(ns_id)", req.GetNamespaceId()),
 			zap.String("auth_uid", authUID))
-		return nil, fmt.Errorf("failed to get namespace. err: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to get namespace: %w", err),
+			"Unable to access the specified namespace. Please check the namespace ID and try again.",
+		)
 	}
 	err = ph.service.CheckNamespacePermission(ctx, ns)
 	if err != nil {
@@ -191,7 +177,10 @@ func (ph *PublicHandler) ListCatalogs(ctx context.Context, req *artifactpb.ListC
 			zap.Error(err),
 			zap.String("owner_id(ns_id)", req.GetNamespaceId()),
 			zap.String("auth_uid", authUID))
-		return nil, fmt.Errorf("failed to check namespace permission. err:%w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to check namespace permission: %w", err),
+			"You don't have permission to access this namespace. Please contact the owner for access.",
+		)
 	}
 
 	dbData, err := ph.service.Repository().ListKnowledgeBasesByCatalogType(ctx, ns.NsUID.String(), artifactpb.CatalogType_CATALOG_TYPE_PERSISTENT)
@@ -218,33 +207,22 @@ func (ph *PublicHandler) ListCatalogs(ctx context.Context, req *artifactpb.ListC
 	kbs := make([]*artifactpb.Catalog, len(dbData))
 	for i, kb := range dbData {
 		kbs[i] = &artifactpb.Catalog{
-			CatalogUid:          kb.UID.String(),
-			Name:                kb.Name,
-			CatalogId:           kb.KbID,
-			Description:         kb.Description,
-			Tags:                kb.Tags,
-			CreateTime:          kb.CreateTime.String(),
-			UpdateTime:          kb.UpdateTime.String(),
-			OwnerName:           kb.Owner,
-			ConvertingPipelines: kb.ConvertingPipelines,
-			SummarizingPipelines: []string{
-				pipeline.GenerateSummaryPipeline.Name(),
-			},
-			SplittingPipelines: []string{
-				pipeline.ChunkTextPipeline.Name(),
-				pipeline.ChunkMarkdownPipeline.Name(),
-			},
-			EmbeddingPipelines: []string{
-				pipeline.EmbedTextPipeline.Name(),
-			},
+			CatalogUid:     kb.UID.String(),
+			Name:           kb.Name,
+			CatalogId:      kb.KbID,
+			Description:    kb.Description,
+			Tags:           kb.Tags,
+			CreateTime:     kb.CreateTime.String(),
+			UpdateTime:     kb.UpdateTime.String(),
+			OwnerName:      kb.Owner,
 			DownstreamApps: []string{},
 			TotalFiles:     uint32(fileCounts[kb.UID]),
 			TotalTokens:    uint32(tokenCounts[kb.UID]),
 			UsedStorage:    uint64(kb.Usage),
-		}
-
-		if len(kb.ConvertingPipelines) == 0 {
-			kbs[i].ConvertingPipelines = pipeline.DefaultConversionPipelines.Names()
+			EmbeddingConfig: &artifactpb.Catalog_EmbeddingConfig{
+				ModelFamily:    kb.EmbeddingConfig.ModelFamily,
+				Dimensionality: kb.EmbeddingConfig.Dimensionality,
+			},
 		}
 
 	}
@@ -264,7 +242,10 @@ func (ph *PublicHandler) UpdateCatalog(ctx context.Context, req *artifactpb.Upda
 	// check name if it is empty
 	if req.CatalogId == "" {
 		logger.Error("kb_id is empty", zap.Error(errorsx.ErrInvalidArgument))
-		return nil, fmt.Errorf("kb_id is empty. err: %w", errorsx.ErrInvalidArgument)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("%w: kb_id is empty", errorsx.ErrInvalidArgument),
+			"Catalog ID is required. Please provide a catalog ID.",
+		)
 	}
 
 	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
@@ -274,24 +255,31 @@ func (ph *PublicHandler) UpdateCatalog(ctx context.Context, req *artifactpb.Upda
 			zap.Error(err),
 			zap.String("owner_id(ns_id)", req.GetNamespaceId()),
 			zap.String("auth_uid", authUID))
-		return nil, fmt.Errorf("failed to get namespace. err: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to get namespace: %w", err),
+			"Unable to access the specified namespace. Please check the namespace ID and try again.",
+		)
 	}
 	// ACL - check user's permission to update catalog
 	kb, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.CatalogId)
 	if err != nil {
-		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf(ErrorListKnowledgeBasesMsg, err),
+			"Unable to access the specified catalog. Please check the catalog ID and try again.",
+		)
 	}
 	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kb.UID, "writer")
 	if err != nil {
-		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err),
+			"Unable to verify access permissions. Please try again.",
+		)
 	}
 	if !granted {
-		return nil, fmt.Errorf("%w: no permission over catalog", errorsx.ErrUnauthorized)
-	}
-
-	convertingPipelines, err := sanitizeConvertingPipelines(req.GetConvertingPipelines())
-	if err != nil {
-		return nil, err
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("%w: no permission over catalog", errorsx.ErrUnauthorized),
+			"You don't have permission to update this catalog. Please contact the owner for access.",
+		)
 	}
 
 	// update catalog
@@ -300,9 +288,8 @@ func (ph *PublicHandler) UpdateCatalog(ctx context.Context, req *artifactpb.Upda
 		req.GetCatalogId(),
 		ns.NsUID.String(),
 		repository.KnowledgeBaseModel{
-			Description:         req.GetDescription(),
-			Tags:                req.GetTags(),
-			ConvertingPipelines: convertingPipelines,
+			Description: req.GetDescription(),
+			Tags:        req.GetTags(),
 		},
 	)
 	if err != nil {
@@ -320,28 +307,21 @@ func (ph *PublicHandler) UpdateCatalog(ctx context.Context, req *artifactpb.Upda
 
 	// populate response
 	catalog := &artifactpb.Catalog{
-		Name:                kb.Name,
-		CatalogId:           kb.KbID,
-		Description:         kb.Description,
-		Tags:                kb.Tags,
-		CreateTime:          kb.CreateTime.String(),
-		UpdateTime:          kb.UpdateTime.String(),
-		OwnerName:           kb.Owner,
-		ConvertingPipelines: kb.ConvertingPipelines,
-		SummarizingPipelines: []string{
-			pipeline.GenerateSummaryPipeline.Name(),
-		},
-		SplittingPipelines: []string{
-			pipeline.ChunkTextPipeline.Name(),
-			pipeline.ChunkMarkdownPipeline.Name(),
-		},
-		EmbeddingPipelines: []string{
-			pipeline.EmbedTextPipeline.Name(),
-		},
+		Name:           kb.Name,
+		CatalogId:      kb.KbID,
+		Description:    kb.Description,
+		Tags:           kb.Tags,
+		CreateTime:     kb.CreateTime.String(),
+		UpdateTime:     kb.UpdateTime.String(),
+		OwnerName:      kb.Owner,
 		DownstreamApps: []string{},
 		TotalFiles:     uint32(fileCounts[kb.UID]),
 		TotalTokens:    uint32(tokenCounts[kb.UID]),
 		UsedStorage:    uint64(kb.Usage),
+		EmbeddingConfig: &artifactpb.Catalog_EmbeddingConfig{
+			ModelFamily:    kb.EmbeddingConfig.ModelFamily,
+			Dimensionality: kb.EmbeddingConfig.Dimensionality,
+		},
 	}
 
 	return &artifactpb.UpdateCatalogResponse{Catalog: catalog}, nil
@@ -363,21 +343,33 @@ func (ph *PublicHandler) DeleteCatalog(ctx context.Context, req *artifactpb.Dele
 			zap.Error(err),
 			zap.String("owner_id(ns_id)", req.GetNamespaceId()),
 			zap.String("auth_uid", authUID))
-		return nil, fmt.Errorf("failed to get namespace. err: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to get namespace: %w", err),
+			"Unable to access the specified namespace. Please check the namespace ID and try again.",
+		)
 	}
 	// ACL - check user's permission to write catalog
 	kb, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.CatalogId)
 	if err != nil {
 		logger.Error("failed to get catalog", zap.Error(err))
-		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf(ErrorListKnowledgeBasesMsg, err),
+			"Unable to access the specified catalog. Please check the catalog ID and try again.",
+		)
 	}
 	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kb.UID, "writer")
 	if err != nil {
 		logger.Error("failed to check permission", zap.Error(err))
-		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err),
+			"Unable to verify access permissions. Please try again.",
+		)
 	}
 	if !granted {
-		return nil, fmt.Errorf("%w: no permission over catalog", errorsx.ErrUnauthorized)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("%w: no permission over catalog", errorsx.ErrUnauthorized),
+			"You don't have permission to delete this catalog. Please contact the owner for access.",
+		)
 	}
 
 	deletedKb, err := ph.service.Repository().DeleteKnowledgeBase(ctx, ns.NsUID.String(), req.CatalogId)
@@ -394,19 +386,21 @@ func (ph *PublicHandler) DeleteCatalog(ctx context.Context, req *artifactpb.Dele
 
 	return &artifactpb.DeleteCatalogResponse{
 		Catalog: &artifactpb.Catalog{
-			Name:                deletedKb.Name,
-			CatalogId:           deletedKb.KbID,
-			Description:         deletedKb.Description,
-			Tags:                deletedKb.Tags,
-			CreateTime:          deletedKb.CreateTime.String(),
-			UpdateTime:          deletedKb.UpdateTime.String(),
-			OwnerName:           deletedKb.Owner,
-			ConvertingPipelines: []string{},
-			EmbeddingPipelines:  []string{},
-			DownstreamApps:      []string{},
-			TotalFiles:          0,
-			TotalTokens:         0,
-			UsedStorage:         0,
+			Name:           deletedKb.Name,
+			CatalogId:      deletedKb.KbID,
+			Description:    deletedKb.Description,
+			Tags:           deletedKb.Tags,
+			CreateTime:     deletedKb.CreateTime.String(),
+			UpdateTime:     deletedKb.UpdateTime.String(),
+			OwnerName:      deletedKb.Owner,
+			DownstreamApps: []string{},
+			TotalFiles:     0,
+			TotalTokens:    0,
+			UsedStorage:    0,
+			EmbeddingConfig: &artifactpb.Catalog_EmbeddingConfig{
+				ModelFamily:    deletedKb.EmbeddingConfig.ModelFamily,
+				Dimensionality: deletedKb.EmbeddingConfig.Dimensionality,
+			},
 		},
 	}, nil
 }
@@ -416,7 +410,10 @@ func getUserUIDFromContext(ctx context.Context) (string, error) {
 	if v, ok := md[strings.ToLower(constantx.HeaderUserUIDKey)]; ok {
 		return v[0], nil
 	}
-	return "", fmt.Errorf("user id not found in context. err: %w", errorsx.ErrUnauthenticated)
+	return "", errorsx.AddMessage(
+		fmt.Errorf("user id not found in context: %w", errorsx.ErrUnauthenticated),
+		"Authentication failed. Please log in and try again.",
+	)
 }
 
 // The ID should be lowercase without any space or special character besides
@@ -439,37 +436,4 @@ func generateID() string {
 	}
 
 	return string(id)
-}
-
-// sanitizeConvertingPipelines validates an input array of strings that
-// represent the conversion pipelines of a catalog. It checks the string format
-// is correct.
-// TODO we also want to validate the existence of the pipelines, permissions of
-// the requester over that pipeline and the validity of its recipe.
-func sanitizeConvertingPipelines(pipelines []string) ([]string, error) {
-	validPipelines := make([]string, 0, len(pipelines))
-	for _, pipelineName := range pipelines {
-		// Console passes an empty string to reset the catalog conversion
-		// pipeline to the default one.
-		if pipelineName == "" {
-			continue
-		}
-
-		// Remove duplicates.
-		if slices.Contains(validPipelines, pipelineName) {
-			continue
-		}
-
-		if _, err := pipeline.PipelineReleaseFromName(pipelineName); err != nil {
-			err = fmt.Errorf("%w: invalid conversion pipeline format: %w", errorsx.ErrInvalidArgument, err)
-			return nil, errorsx.AddMessage(
-				err,
-				`Conversion pipeline must have the format "{namespaceID}/{pipelineID}@{version}"`,
-			)
-		}
-
-		validPipelines = append(validPipelines, pipelineName)
-	}
-
-	return validPipelines, nil
 }

@@ -212,6 +212,7 @@ func TestProvider_StructFields(t *testing.T) {
 			client: nil,
 		}
 		c.Assert(provider.client, qt.IsNil)
+		c.Assert(provider.GetEmbeddingDimensionality(), qt.Equals, int32(3072))
 	})
 }
 

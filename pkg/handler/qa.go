@@ -7,7 +7,6 @@ import (
 
 	"github.com/gofrs/uuid"
 	"go.uber.org/zap"
-	"google.golang.org/grpc/metadata"
 
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/pipeline"
@@ -31,7 +30,10 @@ func (ph *PublicHandler) QuestionAnswering(
 	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
 	if err != nil {
 		logger.Error("failed to get namespace by ns id", zap.Error(err))
-		return nil, fmt.Errorf("failed to get namespace by ns id. err: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to get namespace by ns id. err: %w", err),
+			"Unable to access the specified namespace. Please check the namespace ID and try again.",
+		)
 	}
 	logger.Info("get namespace by ns id", zap.Duration("duration", time.Since(t)))
 	t = time.Now()
@@ -39,7 +41,10 @@ func (ph *PublicHandler) QuestionAnswering(
 	kb, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, req.CatalogId)
 	if err != nil {
 		logger.Error("failed to get catalog by namespace and catalog id", zap.Error(err))
-		return nil, fmt.Errorf("failed to get catalog by namespace and catalog id. err: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to get catalog by namespace and catalog id. err: %w", err),
+			"Unable to access the specified catalog. Please check the catalog ID and try again.",
+		)
 	}
 	logger.Info("get catalog by owner and kb id", zap.Duration("duration", time.Since(t)))
 	t = time.Now()
@@ -47,10 +52,16 @@ func (ph *PublicHandler) QuestionAnswering(
 	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kb.UID, "reader")
 	if err != nil {
 		logger.Error("failed to check permission", zap.Error(err))
-		return nil, fmt.Errorf("failed to check permission. err: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to check permission. err: %w", err),
+			"Unable to verify access permissions. Please try again.",
+		)
 	}
 	if !granted {
-		return nil, fmt.Errorf("SimilarityChunksSearch permission denied. err: %w", errorsx.ErrUnauthenticated)
+		return nil, errorsx.AddMessage(
+			errorsx.ErrUnauthenticated,
+			"You don't have permission to access this catalog. Please contact the owner for access.",
+		)
 	}
 	logger.Info("check permission", zap.Duration("duration", time.Since(t)))
 	t = time.Now()
@@ -58,7 +69,10 @@ func (ph *PublicHandler) QuestionAnswering(
 	err = ph.service.ACLClient().CheckRequesterPermission(ctx)
 	if err != nil {
 		logger.Error("failed to check requester permission", zap.Error(err))
-		return nil, fmt.Errorf("failed to check requester permission. err: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to check requester permission. err: %w", err),
+			"Unable to verify your authentication. Please log in again and try again.",
+		)
 	}
 
 	// Convert file UID strings to UUIDs for cache lookup and status checking
@@ -138,27 +152,25 @@ func (ph *PublicHandler) QuestionAnswering(
 		FileUids:    req.GetFileUids(),
 	}
 
-	// Extract authentication metadata from context to pass to worker
-	var requestMetadata map[string][]string
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		md, ok = metadata.FromOutgoingContext(ctx)
-	}
-	if ok {
-		requestMetadata = md
-	}
-
-	// Embed prompt using service
-	textVector, err := ph.service.EmbedTexts(ctx, []string{req.GetQuestion()}, 32, requestMetadata)
+	// Embed prompt using Gemini
+	// Note: For question answering, we use QUESTION_ANSWERING task type which optimizes
+	// for finding documents that contain answers to the question
+	textVector, err := ph.service.EmbedTexts(ctx, []string{req.GetQuestion()}, "QUESTION_ANSWERING")
 	if err != nil {
 		logger.Error("failed to vectorize prompt", zap.Error(err))
-		return nil, fmt.Errorf("failed to vectorize prompt. err: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to vectorize prompt. err: %w", err),
+			"Unable to process your question. Please try again.",
+		)
 	}
 
 	simChunksScores, err := ph.service.SimilarityChunksSearch(ctx, ownerUID, scReq, textVector)
 	if err != nil {
 		logger.Error("failed to get similarity chunks", zap.Error(err))
-		return nil, fmt.Errorf("failed to get similarity chunks. err: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to get similarity chunks. err: %w", err),
+			"Unable to search for relevant content. Please try again.",
+		)
 	}
 	var chunkUIDs []types.TextChunkUIDType
 	for _, simChunk := range simChunksScores {
@@ -170,7 +182,10 @@ func (ph *PublicHandler) QuestionAnswering(
 	chunks, err := ph.service.Repository().GetTextChunksByUIDs(ctx, chunkUIDs)
 	if err != nil {
 		logger.Error("failed to get chunks by uids", zap.Error(err))
-		return nil, fmt.Errorf("failed to get chunks by uids. err: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to get chunks by uids. err: %w", err),
+			"Unable to retrieve relevant content. Please try again.",
+		)
 	}
 	// chunks content
 	chunkFilePaths := make([]string, 0, len(chunks))
@@ -184,7 +199,10 @@ func (ph *PublicHandler) QuestionAnswering(
 	chunkContents, err := ph.service.GetFilesByPaths(ctx, config.Config.Minio.BucketName, chunkFilePaths)
 	if err != nil {
 		logger.Error("failed to get chunks content", zap.Error(err))
-		return nil, fmt.Errorf("failed to get chunks content. err: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to get chunks content. err: %w", err),
+			"Unable to load content for answering your question. Please try again.",
+		)
 	}
 	logger.Info("get chunks content from minIO", zap.Duration("duration", time.Since(t)))
 
@@ -202,7 +220,10 @@ func (ph *PublicHandler) QuestionAnswering(
 		ctx, fileUids, repository.KnowledgeBaseFileColumn.UID, repository.KnowledgeBaseFileColumn.Name)
 	if err != nil {
 		logger.Error("failed to get catalog files by file uids", zap.Error(err))
-		return nil, fmt.Errorf("failed to get catalog files by file uids. err: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to get catalog files by file uids. err: %w", err),
+			"Unable to load file information. Please try again.",
+		)
 	}
 	for _, file := range files {
 		fileUIDMapName[file.UID] = file.Name
@@ -234,7 +255,10 @@ func (ph *PublicHandler) QuestionAnswering(
 	answer, err := pipeline.ChatPipe(ctx, ph.service.PipelinePublicClient(), req.Question, chunksForQA)
 	if err != nil {
 		logger.Error("failed to get chat response", zap.Error(err))
-		return nil, fmt.Errorf("failed to get chat response. err: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to get chat response. err: %w", err),
+			"Unable to generate an answer to your question. Please try again.",
+		)
 	}
 
 	return &artifactPb.QuestionAnsweringResponse{SimilarChunks: simChunks, Answer: answer}, nil

@@ -68,12 +68,26 @@ type ProviderMock struct {
 	beforeDeleteCacheCounter uint64
 	DeleteCacheMock          mProviderMockDeleteCache
 
+	funcEmbedTexts          func(ctx context.Context, texts []string, taskType string) (ep1 *mm_ai.EmbedResult, err error)
+	funcEmbedTextsOrigin    string
+	inspectFuncEmbedTexts   func(ctx context.Context, texts []string, taskType string)
+	afterEmbedTextsCounter  uint64
+	beforeEmbedTextsCounter uint64
+	EmbedTextsMock          mProviderMockEmbedTexts
+
 	funcGetCache          func(ctx context.Context, cacheName string) (cp1 *mm_ai.CacheResult, err error)
 	funcGetCacheOrigin    string
 	inspectFuncGetCache   func(ctx context.Context, cacheName string)
 	afterGetCacheCounter  uint64
 	beforeGetCacheCounter uint64
 	GetCacheMock          mProviderMockGetCache
+
+	funcGetEmbeddingDimensionality          func() (i1 int32)
+	funcGetEmbeddingDimensionalityOrigin    string
+	inspectFuncGetEmbeddingDimensionality   func()
+	afterGetEmbeddingDimensionalityCounter  uint64
+	beforeGetEmbeddingDimensionalityCounter uint64
+	GetEmbeddingDimensionalityMock          mProviderMockGetEmbeddingDimensionality
 
 	funcListCaches          func(ctx context.Context, options *mm_ai.CacheListOptions) (cp1 *mm_ai.CacheListResult, err error)
 	funcListCachesOrigin    string
@@ -132,8 +146,13 @@ func NewProviderMock(t minimock.Tester) *ProviderMock {
 	m.DeleteCacheMock = mProviderMockDeleteCache{mock: m}
 	m.DeleteCacheMock.callArgs = []*ProviderMockDeleteCacheParams{}
 
+	m.EmbedTextsMock = mProviderMockEmbedTexts{mock: m}
+	m.EmbedTextsMock.callArgs = []*ProviderMockEmbedTextsParams{}
+
 	m.GetCacheMock = mProviderMockGetCache{mock: m}
 	m.GetCacheMock.callArgs = []*ProviderMockGetCacheParams{}
+
+	m.GetEmbeddingDimensionalityMock = mProviderMockGetEmbeddingDimensionality{mock: m}
 
 	m.ListCachesMock = mProviderMockListCaches{mock: m}
 	m.ListCachesMock.callArgs = []*ProviderMockListCachesParams{}
@@ -2642,6 +2661,380 @@ func (m *ProviderMock) MinimockDeleteCacheInspect() {
 	}
 }
 
+type mProviderMockEmbedTexts struct {
+	optional           bool
+	mock               *ProviderMock
+	defaultExpectation *ProviderMockEmbedTextsExpectation
+	expectations       []*ProviderMockEmbedTextsExpectation
+
+	callArgs []*ProviderMockEmbedTextsParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// ProviderMockEmbedTextsExpectation specifies expectation struct of the Provider.EmbedTexts
+type ProviderMockEmbedTextsExpectation struct {
+	mock               *ProviderMock
+	params             *ProviderMockEmbedTextsParams
+	paramPtrs          *ProviderMockEmbedTextsParamPtrs
+	expectationOrigins ProviderMockEmbedTextsExpectationOrigins
+	results            *ProviderMockEmbedTextsResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// ProviderMockEmbedTextsParams contains parameters of the Provider.EmbedTexts
+type ProviderMockEmbedTextsParams struct {
+	ctx      context.Context
+	texts    []string
+	taskType string
+}
+
+// ProviderMockEmbedTextsParamPtrs contains pointers to parameters of the Provider.EmbedTexts
+type ProviderMockEmbedTextsParamPtrs struct {
+	ctx      *context.Context
+	texts    *[]string
+	taskType *string
+}
+
+// ProviderMockEmbedTextsResults contains results of the Provider.EmbedTexts
+type ProviderMockEmbedTextsResults struct {
+	ep1 *mm_ai.EmbedResult
+	err error
+}
+
+// ProviderMockEmbedTextsOrigins contains origins of expectations of the Provider.EmbedTexts
+type ProviderMockEmbedTextsExpectationOrigins struct {
+	origin         string
+	originCtx      string
+	originTexts    string
+	originTaskType string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmEmbedTexts *mProviderMockEmbedTexts) Optional() *mProviderMockEmbedTexts {
+	mmEmbedTexts.optional = true
+	return mmEmbedTexts
+}
+
+// Expect sets up expected params for Provider.EmbedTexts
+func (mmEmbedTexts *mProviderMockEmbedTexts) Expect(ctx context.Context, texts []string, taskType string) *mProviderMockEmbedTexts {
+	if mmEmbedTexts.mock.funcEmbedTexts != nil {
+		mmEmbedTexts.mock.t.Fatalf("ProviderMock.EmbedTexts mock is already set by Set")
+	}
+
+	if mmEmbedTexts.defaultExpectation == nil {
+		mmEmbedTexts.defaultExpectation = &ProviderMockEmbedTextsExpectation{}
+	}
+
+	if mmEmbedTexts.defaultExpectation.paramPtrs != nil {
+		mmEmbedTexts.mock.t.Fatalf("ProviderMock.EmbedTexts mock is already set by ExpectParams functions")
+	}
+
+	mmEmbedTexts.defaultExpectation.params = &ProviderMockEmbedTextsParams{ctx, texts, taskType}
+	mmEmbedTexts.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmEmbedTexts.expectations {
+		if minimock.Equal(e.params, mmEmbedTexts.defaultExpectation.params) {
+			mmEmbedTexts.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmEmbedTexts.defaultExpectation.params)
+		}
+	}
+
+	return mmEmbedTexts
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Provider.EmbedTexts
+func (mmEmbedTexts *mProviderMockEmbedTexts) ExpectCtxParam1(ctx context.Context) *mProviderMockEmbedTexts {
+	if mmEmbedTexts.mock.funcEmbedTexts != nil {
+		mmEmbedTexts.mock.t.Fatalf("ProviderMock.EmbedTexts mock is already set by Set")
+	}
+
+	if mmEmbedTexts.defaultExpectation == nil {
+		mmEmbedTexts.defaultExpectation = &ProviderMockEmbedTextsExpectation{}
+	}
+
+	if mmEmbedTexts.defaultExpectation.params != nil {
+		mmEmbedTexts.mock.t.Fatalf("ProviderMock.EmbedTexts mock is already set by Expect")
+	}
+
+	if mmEmbedTexts.defaultExpectation.paramPtrs == nil {
+		mmEmbedTexts.defaultExpectation.paramPtrs = &ProviderMockEmbedTextsParamPtrs{}
+	}
+	mmEmbedTexts.defaultExpectation.paramPtrs.ctx = &ctx
+	mmEmbedTexts.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmEmbedTexts
+}
+
+// ExpectTextsParam2 sets up expected param texts for Provider.EmbedTexts
+func (mmEmbedTexts *mProviderMockEmbedTexts) ExpectTextsParam2(texts []string) *mProviderMockEmbedTexts {
+	if mmEmbedTexts.mock.funcEmbedTexts != nil {
+		mmEmbedTexts.mock.t.Fatalf("ProviderMock.EmbedTexts mock is already set by Set")
+	}
+
+	if mmEmbedTexts.defaultExpectation == nil {
+		mmEmbedTexts.defaultExpectation = &ProviderMockEmbedTextsExpectation{}
+	}
+
+	if mmEmbedTexts.defaultExpectation.params != nil {
+		mmEmbedTexts.mock.t.Fatalf("ProviderMock.EmbedTexts mock is already set by Expect")
+	}
+
+	if mmEmbedTexts.defaultExpectation.paramPtrs == nil {
+		mmEmbedTexts.defaultExpectation.paramPtrs = &ProviderMockEmbedTextsParamPtrs{}
+	}
+	mmEmbedTexts.defaultExpectation.paramPtrs.texts = &texts
+	mmEmbedTexts.defaultExpectation.expectationOrigins.originTexts = minimock.CallerInfo(1)
+
+	return mmEmbedTexts
+}
+
+// ExpectTaskTypeParam3 sets up expected param taskType for Provider.EmbedTexts
+func (mmEmbedTexts *mProviderMockEmbedTexts) ExpectTaskTypeParam3(taskType string) *mProviderMockEmbedTexts {
+	if mmEmbedTexts.mock.funcEmbedTexts != nil {
+		mmEmbedTexts.mock.t.Fatalf("ProviderMock.EmbedTexts mock is already set by Set")
+	}
+
+	if mmEmbedTexts.defaultExpectation == nil {
+		mmEmbedTexts.defaultExpectation = &ProviderMockEmbedTextsExpectation{}
+	}
+
+	if mmEmbedTexts.defaultExpectation.params != nil {
+		mmEmbedTexts.mock.t.Fatalf("ProviderMock.EmbedTexts mock is already set by Expect")
+	}
+
+	if mmEmbedTexts.defaultExpectation.paramPtrs == nil {
+		mmEmbedTexts.defaultExpectation.paramPtrs = &ProviderMockEmbedTextsParamPtrs{}
+	}
+	mmEmbedTexts.defaultExpectation.paramPtrs.taskType = &taskType
+	mmEmbedTexts.defaultExpectation.expectationOrigins.originTaskType = minimock.CallerInfo(1)
+
+	return mmEmbedTexts
+}
+
+// Inspect accepts an inspector function that has same arguments as the Provider.EmbedTexts
+func (mmEmbedTexts *mProviderMockEmbedTexts) Inspect(f func(ctx context.Context, texts []string, taskType string)) *mProviderMockEmbedTexts {
+	if mmEmbedTexts.mock.inspectFuncEmbedTexts != nil {
+		mmEmbedTexts.mock.t.Fatalf("Inspect function is already set for ProviderMock.EmbedTexts")
+	}
+
+	mmEmbedTexts.mock.inspectFuncEmbedTexts = f
+
+	return mmEmbedTexts
+}
+
+// Return sets up results that will be returned by Provider.EmbedTexts
+func (mmEmbedTexts *mProviderMockEmbedTexts) Return(ep1 *mm_ai.EmbedResult, err error) *ProviderMock {
+	if mmEmbedTexts.mock.funcEmbedTexts != nil {
+		mmEmbedTexts.mock.t.Fatalf("ProviderMock.EmbedTexts mock is already set by Set")
+	}
+
+	if mmEmbedTexts.defaultExpectation == nil {
+		mmEmbedTexts.defaultExpectation = &ProviderMockEmbedTextsExpectation{mock: mmEmbedTexts.mock}
+	}
+	mmEmbedTexts.defaultExpectation.results = &ProviderMockEmbedTextsResults{ep1, err}
+	mmEmbedTexts.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmEmbedTexts.mock
+}
+
+// Set uses given function f to mock the Provider.EmbedTexts method
+func (mmEmbedTexts *mProviderMockEmbedTexts) Set(f func(ctx context.Context, texts []string, taskType string) (ep1 *mm_ai.EmbedResult, err error)) *ProviderMock {
+	if mmEmbedTexts.defaultExpectation != nil {
+		mmEmbedTexts.mock.t.Fatalf("Default expectation is already set for the Provider.EmbedTexts method")
+	}
+
+	if len(mmEmbedTexts.expectations) > 0 {
+		mmEmbedTexts.mock.t.Fatalf("Some expectations are already set for the Provider.EmbedTexts method")
+	}
+
+	mmEmbedTexts.mock.funcEmbedTexts = f
+	mmEmbedTexts.mock.funcEmbedTextsOrigin = minimock.CallerInfo(1)
+	return mmEmbedTexts.mock
+}
+
+// When sets expectation for the Provider.EmbedTexts which will trigger the result defined by the following
+// Then helper
+func (mmEmbedTexts *mProviderMockEmbedTexts) When(ctx context.Context, texts []string, taskType string) *ProviderMockEmbedTextsExpectation {
+	if mmEmbedTexts.mock.funcEmbedTexts != nil {
+		mmEmbedTexts.mock.t.Fatalf("ProviderMock.EmbedTexts mock is already set by Set")
+	}
+
+	expectation := &ProviderMockEmbedTextsExpectation{
+		mock:               mmEmbedTexts.mock,
+		params:             &ProviderMockEmbedTextsParams{ctx, texts, taskType},
+		expectationOrigins: ProviderMockEmbedTextsExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmEmbedTexts.expectations = append(mmEmbedTexts.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Provider.EmbedTexts return parameters for the expectation previously defined by the When method
+func (e *ProviderMockEmbedTextsExpectation) Then(ep1 *mm_ai.EmbedResult, err error) *ProviderMock {
+	e.results = &ProviderMockEmbedTextsResults{ep1, err}
+	return e.mock
+}
+
+// Times sets number of times Provider.EmbedTexts should be invoked
+func (mmEmbedTexts *mProviderMockEmbedTexts) Times(n uint64) *mProviderMockEmbedTexts {
+	if n == 0 {
+		mmEmbedTexts.mock.t.Fatalf("Times of ProviderMock.EmbedTexts mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmEmbedTexts.expectedInvocations, n)
+	mmEmbedTexts.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmEmbedTexts
+}
+
+func (mmEmbedTexts *mProviderMockEmbedTexts) invocationsDone() bool {
+	if len(mmEmbedTexts.expectations) == 0 && mmEmbedTexts.defaultExpectation == nil && mmEmbedTexts.mock.funcEmbedTexts == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmEmbedTexts.mock.afterEmbedTextsCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmEmbedTexts.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// EmbedTexts implements mm_ai.Provider
+func (mmEmbedTexts *ProviderMock) EmbedTexts(ctx context.Context, texts []string, taskType string) (ep1 *mm_ai.EmbedResult, err error) {
+	mm_atomic.AddUint64(&mmEmbedTexts.beforeEmbedTextsCounter, 1)
+	defer mm_atomic.AddUint64(&mmEmbedTexts.afterEmbedTextsCounter, 1)
+
+	mmEmbedTexts.t.Helper()
+
+	if mmEmbedTexts.inspectFuncEmbedTexts != nil {
+		mmEmbedTexts.inspectFuncEmbedTexts(ctx, texts, taskType)
+	}
+
+	mm_params := ProviderMockEmbedTextsParams{ctx, texts, taskType}
+
+	// Record call args
+	mmEmbedTexts.EmbedTextsMock.mutex.Lock()
+	mmEmbedTexts.EmbedTextsMock.callArgs = append(mmEmbedTexts.EmbedTextsMock.callArgs, &mm_params)
+	mmEmbedTexts.EmbedTextsMock.mutex.Unlock()
+
+	for _, e := range mmEmbedTexts.EmbedTextsMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.ep1, e.results.err
+		}
+	}
+
+	if mmEmbedTexts.EmbedTextsMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmEmbedTexts.EmbedTextsMock.defaultExpectation.Counter, 1)
+		mm_want := mmEmbedTexts.EmbedTextsMock.defaultExpectation.params
+		mm_want_ptrs := mmEmbedTexts.EmbedTextsMock.defaultExpectation.paramPtrs
+
+		mm_got := ProviderMockEmbedTextsParams{ctx, texts, taskType}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmEmbedTexts.t.Errorf("ProviderMock.EmbedTexts got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmEmbedTexts.EmbedTextsMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.texts != nil && !minimock.Equal(*mm_want_ptrs.texts, mm_got.texts) {
+				mmEmbedTexts.t.Errorf("ProviderMock.EmbedTexts got unexpected parameter texts, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmEmbedTexts.EmbedTextsMock.defaultExpectation.expectationOrigins.originTexts, *mm_want_ptrs.texts, mm_got.texts, minimock.Diff(*mm_want_ptrs.texts, mm_got.texts))
+			}
+
+			if mm_want_ptrs.taskType != nil && !minimock.Equal(*mm_want_ptrs.taskType, mm_got.taskType) {
+				mmEmbedTexts.t.Errorf("ProviderMock.EmbedTexts got unexpected parameter taskType, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmEmbedTexts.EmbedTextsMock.defaultExpectation.expectationOrigins.originTaskType, *mm_want_ptrs.taskType, mm_got.taskType, minimock.Diff(*mm_want_ptrs.taskType, mm_got.taskType))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmEmbedTexts.t.Errorf("ProviderMock.EmbedTexts got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmEmbedTexts.EmbedTextsMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmEmbedTexts.EmbedTextsMock.defaultExpectation.results
+		if mm_results == nil {
+			mmEmbedTexts.t.Fatal("No results are set for the ProviderMock.EmbedTexts")
+		}
+		return (*mm_results).ep1, (*mm_results).err
+	}
+	if mmEmbedTexts.funcEmbedTexts != nil {
+		return mmEmbedTexts.funcEmbedTexts(ctx, texts, taskType)
+	}
+	mmEmbedTexts.t.Fatalf("Unexpected call to ProviderMock.EmbedTexts. %v %v %v", ctx, texts, taskType)
+	return
+}
+
+// EmbedTextsAfterCounter returns a count of finished ProviderMock.EmbedTexts invocations
+func (mmEmbedTexts *ProviderMock) EmbedTextsAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmEmbedTexts.afterEmbedTextsCounter)
+}
+
+// EmbedTextsBeforeCounter returns a count of ProviderMock.EmbedTexts invocations
+func (mmEmbedTexts *ProviderMock) EmbedTextsBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmEmbedTexts.beforeEmbedTextsCounter)
+}
+
+// Calls returns a list of arguments used in each call to ProviderMock.EmbedTexts.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmEmbedTexts *mProviderMockEmbedTexts) Calls() []*ProviderMockEmbedTextsParams {
+	mmEmbedTexts.mutex.RLock()
+
+	argCopy := make([]*ProviderMockEmbedTextsParams, len(mmEmbedTexts.callArgs))
+	copy(argCopy, mmEmbedTexts.callArgs)
+
+	mmEmbedTexts.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockEmbedTextsDone returns true if the count of the EmbedTexts invocations corresponds
+// the number of defined expectations
+func (m *ProviderMock) MinimockEmbedTextsDone() bool {
+	if m.EmbedTextsMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.EmbedTextsMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.EmbedTextsMock.invocationsDone()
+}
+
+// MinimockEmbedTextsInspect logs each unmet expectation
+func (m *ProviderMock) MinimockEmbedTextsInspect() {
+	for _, e := range m.EmbedTextsMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to ProviderMock.EmbedTexts at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterEmbedTextsCounter := mm_atomic.LoadUint64(&m.afterEmbedTextsCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.EmbedTextsMock.defaultExpectation != nil && afterEmbedTextsCounter < 1 {
+		if m.EmbedTextsMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to ProviderMock.EmbedTexts at\n%s", m.EmbedTextsMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to ProviderMock.EmbedTexts at\n%s with params: %#v", m.EmbedTextsMock.defaultExpectation.expectationOrigins.origin, *m.EmbedTextsMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcEmbedTexts != nil && afterEmbedTextsCounter < 1 {
+		m.t.Errorf("Expected call to ProviderMock.EmbedTexts at\n%s", m.funcEmbedTextsOrigin)
+	}
+
+	if !m.EmbedTextsMock.invocationsDone() && afterEmbedTextsCounter > 0 {
+		m.t.Errorf("Expected %d calls to ProviderMock.EmbedTexts at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.EmbedTextsMock.expectedInvocations), m.EmbedTextsMock.expectedInvocationsOrigin, afterEmbedTextsCounter)
+	}
+}
+
 type mProviderMockGetCache struct {
 	optional           bool
 	mock               *ProviderMock
@@ -2982,6 +3375,192 @@ func (m *ProviderMock) MinimockGetCacheInspect() {
 	if !m.GetCacheMock.invocationsDone() && afterGetCacheCounter > 0 {
 		m.t.Errorf("Expected %d calls to ProviderMock.GetCache at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.GetCacheMock.expectedInvocations), m.GetCacheMock.expectedInvocationsOrigin, afterGetCacheCounter)
+	}
+}
+
+type mProviderMockGetEmbeddingDimensionality struct {
+	optional           bool
+	mock               *ProviderMock
+	defaultExpectation *ProviderMockGetEmbeddingDimensionalityExpectation
+	expectations       []*ProviderMockGetEmbeddingDimensionalityExpectation
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// ProviderMockGetEmbeddingDimensionalityExpectation specifies expectation struct of the Provider.GetEmbeddingDimensionality
+type ProviderMockGetEmbeddingDimensionalityExpectation struct {
+	mock *ProviderMock
+
+	results      *ProviderMockGetEmbeddingDimensionalityResults
+	returnOrigin string
+	Counter      uint64
+}
+
+// ProviderMockGetEmbeddingDimensionalityResults contains results of the Provider.GetEmbeddingDimensionality
+type ProviderMockGetEmbeddingDimensionalityResults struct {
+	i1 int32
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmGetEmbeddingDimensionality *mProviderMockGetEmbeddingDimensionality) Optional() *mProviderMockGetEmbeddingDimensionality {
+	mmGetEmbeddingDimensionality.optional = true
+	return mmGetEmbeddingDimensionality
+}
+
+// Expect sets up expected params for Provider.GetEmbeddingDimensionality
+func (mmGetEmbeddingDimensionality *mProviderMockGetEmbeddingDimensionality) Expect() *mProviderMockGetEmbeddingDimensionality {
+	if mmGetEmbeddingDimensionality.mock.funcGetEmbeddingDimensionality != nil {
+		mmGetEmbeddingDimensionality.mock.t.Fatalf("ProviderMock.GetEmbeddingDimensionality mock is already set by Set")
+	}
+
+	if mmGetEmbeddingDimensionality.defaultExpectation == nil {
+		mmGetEmbeddingDimensionality.defaultExpectation = &ProviderMockGetEmbeddingDimensionalityExpectation{}
+	}
+
+	return mmGetEmbeddingDimensionality
+}
+
+// Inspect accepts an inspector function that has same arguments as the Provider.GetEmbeddingDimensionality
+func (mmGetEmbeddingDimensionality *mProviderMockGetEmbeddingDimensionality) Inspect(f func()) *mProviderMockGetEmbeddingDimensionality {
+	if mmGetEmbeddingDimensionality.mock.inspectFuncGetEmbeddingDimensionality != nil {
+		mmGetEmbeddingDimensionality.mock.t.Fatalf("Inspect function is already set for ProviderMock.GetEmbeddingDimensionality")
+	}
+
+	mmGetEmbeddingDimensionality.mock.inspectFuncGetEmbeddingDimensionality = f
+
+	return mmGetEmbeddingDimensionality
+}
+
+// Return sets up results that will be returned by Provider.GetEmbeddingDimensionality
+func (mmGetEmbeddingDimensionality *mProviderMockGetEmbeddingDimensionality) Return(i1 int32) *ProviderMock {
+	if mmGetEmbeddingDimensionality.mock.funcGetEmbeddingDimensionality != nil {
+		mmGetEmbeddingDimensionality.mock.t.Fatalf("ProviderMock.GetEmbeddingDimensionality mock is already set by Set")
+	}
+
+	if mmGetEmbeddingDimensionality.defaultExpectation == nil {
+		mmGetEmbeddingDimensionality.defaultExpectation = &ProviderMockGetEmbeddingDimensionalityExpectation{mock: mmGetEmbeddingDimensionality.mock}
+	}
+	mmGetEmbeddingDimensionality.defaultExpectation.results = &ProviderMockGetEmbeddingDimensionalityResults{i1}
+	mmGetEmbeddingDimensionality.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmGetEmbeddingDimensionality.mock
+}
+
+// Set uses given function f to mock the Provider.GetEmbeddingDimensionality method
+func (mmGetEmbeddingDimensionality *mProviderMockGetEmbeddingDimensionality) Set(f func() (i1 int32)) *ProviderMock {
+	if mmGetEmbeddingDimensionality.defaultExpectation != nil {
+		mmGetEmbeddingDimensionality.mock.t.Fatalf("Default expectation is already set for the Provider.GetEmbeddingDimensionality method")
+	}
+
+	if len(mmGetEmbeddingDimensionality.expectations) > 0 {
+		mmGetEmbeddingDimensionality.mock.t.Fatalf("Some expectations are already set for the Provider.GetEmbeddingDimensionality method")
+	}
+
+	mmGetEmbeddingDimensionality.mock.funcGetEmbeddingDimensionality = f
+	mmGetEmbeddingDimensionality.mock.funcGetEmbeddingDimensionalityOrigin = minimock.CallerInfo(1)
+	return mmGetEmbeddingDimensionality.mock
+}
+
+// Times sets number of times Provider.GetEmbeddingDimensionality should be invoked
+func (mmGetEmbeddingDimensionality *mProviderMockGetEmbeddingDimensionality) Times(n uint64) *mProviderMockGetEmbeddingDimensionality {
+	if n == 0 {
+		mmGetEmbeddingDimensionality.mock.t.Fatalf("Times of ProviderMock.GetEmbeddingDimensionality mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetEmbeddingDimensionality.expectedInvocations, n)
+	mmGetEmbeddingDimensionality.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmGetEmbeddingDimensionality
+}
+
+func (mmGetEmbeddingDimensionality *mProviderMockGetEmbeddingDimensionality) invocationsDone() bool {
+	if len(mmGetEmbeddingDimensionality.expectations) == 0 && mmGetEmbeddingDimensionality.defaultExpectation == nil && mmGetEmbeddingDimensionality.mock.funcGetEmbeddingDimensionality == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetEmbeddingDimensionality.mock.afterGetEmbeddingDimensionalityCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetEmbeddingDimensionality.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetEmbeddingDimensionality implements mm_ai.Provider
+func (mmGetEmbeddingDimensionality *ProviderMock) GetEmbeddingDimensionality() (i1 int32) {
+	mm_atomic.AddUint64(&mmGetEmbeddingDimensionality.beforeGetEmbeddingDimensionalityCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetEmbeddingDimensionality.afterGetEmbeddingDimensionalityCounter, 1)
+
+	mmGetEmbeddingDimensionality.t.Helper()
+
+	if mmGetEmbeddingDimensionality.inspectFuncGetEmbeddingDimensionality != nil {
+		mmGetEmbeddingDimensionality.inspectFuncGetEmbeddingDimensionality()
+	}
+
+	if mmGetEmbeddingDimensionality.GetEmbeddingDimensionalityMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetEmbeddingDimensionality.GetEmbeddingDimensionalityMock.defaultExpectation.Counter, 1)
+
+		mm_results := mmGetEmbeddingDimensionality.GetEmbeddingDimensionalityMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetEmbeddingDimensionality.t.Fatal("No results are set for the ProviderMock.GetEmbeddingDimensionality")
+		}
+		return (*mm_results).i1
+	}
+	if mmGetEmbeddingDimensionality.funcGetEmbeddingDimensionality != nil {
+		return mmGetEmbeddingDimensionality.funcGetEmbeddingDimensionality()
+	}
+	mmGetEmbeddingDimensionality.t.Fatalf("Unexpected call to ProviderMock.GetEmbeddingDimensionality.")
+	return
+}
+
+// GetEmbeddingDimensionalityAfterCounter returns a count of finished ProviderMock.GetEmbeddingDimensionality invocations
+func (mmGetEmbeddingDimensionality *ProviderMock) GetEmbeddingDimensionalityAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetEmbeddingDimensionality.afterGetEmbeddingDimensionalityCounter)
+}
+
+// GetEmbeddingDimensionalityBeforeCounter returns a count of ProviderMock.GetEmbeddingDimensionality invocations
+func (mmGetEmbeddingDimensionality *ProviderMock) GetEmbeddingDimensionalityBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetEmbeddingDimensionality.beforeGetEmbeddingDimensionalityCounter)
+}
+
+// MinimockGetEmbeddingDimensionalityDone returns true if the count of the GetEmbeddingDimensionality invocations corresponds
+// the number of defined expectations
+func (m *ProviderMock) MinimockGetEmbeddingDimensionalityDone() bool {
+	if m.GetEmbeddingDimensionalityMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.GetEmbeddingDimensionalityMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetEmbeddingDimensionalityMock.invocationsDone()
+}
+
+// MinimockGetEmbeddingDimensionalityInspect logs each unmet expectation
+func (m *ProviderMock) MinimockGetEmbeddingDimensionalityInspect() {
+	for _, e := range m.GetEmbeddingDimensionalityMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Error("Expected call to ProviderMock.GetEmbeddingDimensionality")
+		}
+	}
+
+	afterGetEmbeddingDimensionalityCounter := mm_atomic.LoadUint64(&m.afterGetEmbeddingDimensionalityCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetEmbeddingDimensionalityMock.defaultExpectation != nil && afterGetEmbeddingDimensionalityCounter < 1 {
+		m.t.Errorf("Expected call to ProviderMock.GetEmbeddingDimensionality at\n%s", m.GetEmbeddingDimensionalityMock.defaultExpectation.returnOrigin)
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetEmbeddingDimensionality != nil && afterGetEmbeddingDimensionalityCounter < 1 {
+		m.t.Errorf("Expected call to ProviderMock.GetEmbeddingDimensionality at\n%s", m.funcGetEmbeddingDimensionalityOrigin)
+	}
+
+	if !m.GetEmbeddingDimensionalityMock.invocationsDone() && afterGetEmbeddingDimensionalityCounter > 0 {
+		m.t.Errorf("Expected %d calls to ProviderMock.GetEmbeddingDimensionality at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.GetEmbeddingDimensionalityMock.expectedInvocations), m.GetEmbeddingDimensionalityMock.expectedInvocationsOrigin, afterGetEmbeddingDimensionalityCounter)
 	}
 }
 
@@ -4217,7 +4796,11 @@ func (m *ProviderMock) MinimockFinish() {
 
 			m.MinimockDeleteCacheInspect()
 
+			m.MinimockEmbedTextsInspect()
+
 			m.MinimockGetCacheInspect()
+
+			m.MinimockGetEmbeddingDimensionalityInspect()
 
 			m.MinimockListCachesInspect()
 
@@ -4256,7 +4839,9 @@ func (m *ProviderMock) minimockDone() bool {
 		m.MinimockConvertToMarkdownWithoutCacheDone() &&
 		m.MinimockCreateCacheDone() &&
 		m.MinimockDeleteCacheDone() &&
+		m.MinimockEmbedTextsDone() &&
 		m.MinimockGetCacheDone() &&
+		m.MinimockGetEmbeddingDimensionalityDone() &&
 		m.MinimockListCachesDone() &&
 		m.MinimockNameDone() &&
 		m.MinimockSupportsFileTypeDone() &&

@@ -3,7 +3,12 @@ package repository
 import (
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
+
+	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
+
+// Type aliases to help minimock detect imports from embedded interfaces
+var _ artifactpb.CatalogType
 
 // Repository interface defines the methods for the repository.
 type Repository interface {

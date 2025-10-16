@@ -7,7 +7,6 @@ import (
 
 	"go.temporal.io/sdk/temporal"
 	"go.uber.org/zap"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/structpb"
 	"gorm.io/gorm"
 
@@ -28,9 +27,8 @@ import (
 
 // EmbedTextsActivityParam defines the parameters for the EmbedTextsActivity
 type EmbedTextsActivityParam struct {
-	Texts           []string            // Texts to generate embeddings for
-	BatchIndex      int                 // Index of this batch in the overall embedding workflow
-	RequestMetadata map[string][]string // gRPC metadata for authentication
+	Texts    []string // Texts to generate embeddings for
+	TaskType string   // Task type for embedding optimization (e.g., "RETRIEVAL_DOCUMENT", "RETRIEVAL_QUERY")
 }
 
 // GetChunksForEmbeddingActivityParam retrieves text chunks for embedding generation
@@ -263,29 +261,24 @@ func (w *Worker) UpdateEmbeddingMetadataActivity(ctx context.Context, param *Upd
 	return nil
 }
 
-// EmbedTextsActivity handles embedding a single batch of texts
+// EmbedTextsActivity handles embedding texts
 func (w *Worker) EmbedTextsActivity(ctx context.Context, param *EmbedTextsActivityParam) ([][]float32, error) {
 	w.log.Info("Starting EmbedTextsActivity",
-		zap.Int("batchSize", len(param.Texts)),
-		zap.Int("batchIndex", param.BatchIndex))
+		zap.Int("textCount", len(param.Texts)),
+		zap.String("taskType", param.TaskType))
 
 	if len(param.Texts) == 0 {
 		return [][]float32{}, nil
 	}
 
-	// Create authenticated context from request metadata
-	authCtx := ctx
-	if len(param.RequestMetadata) > 0 {
-		authCtx = metadata.NewOutgoingContext(ctx, metadata.MD(param.RequestMetadata))
-	}
-
-	vectors, err := w.embedTextBatch(authCtx, param.Texts)
+	// Use the specified task type for optimal embedding generation
+	vectors, err := w.embedTexts(ctx, param.Texts, param.TaskType)
 	if err != nil {
-		w.log.Error("Failed to embed text batch in vector db",
-			zap.Int("batchIndex", param.BatchIndex),
-			zap.Int("batchSize", len(param.Texts)),
+		w.log.Error("Failed to embed texts",
+			zap.Int("textCount", len(param.Texts)),
+			zap.String("taskType", param.TaskType),
 			zap.Error(err))
-		err = errorsx.AddMessage(err, fmt.Sprintf("Unable to generate embeddings (batch %d). Please try again.", param.BatchIndex))
+		err = errorsx.AddMessage(err, "Unable to generate embeddings. Please try again.")
 		return nil, temporal.NewApplicationErrorWithCause(
 			errorsx.MessageOrErr(err),
 			embedTextsActivityError,
@@ -293,9 +286,9 @@ func (w *Worker) EmbedTextsActivity(ctx context.Context, param *EmbedTextsActivi
 		)
 	}
 
-	w.log.Info("Batch embedding completed in vector db",
-		zap.Int("batchIndex", param.BatchIndex),
-		zap.Int("vectorCount", len(vectors)))
+	w.log.Info("Embedding completed",
+		zap.Int("vectorCount", len(vectors)),
+		zap.String("taskType", param.TaskType))
 
 	return vectors, nil
 }

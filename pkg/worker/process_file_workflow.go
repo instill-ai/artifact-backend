@@ -592,27 +592,25 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			// Start both content and summary activities in parallel for this file
 			// Use the CONVERTED file location (effectiveBucket/effectiveDestination/effectiveFileType)
 			contentFuture := workflow.ExecuteActivity(ctx, w.ProcessContentActivity, &ProcessContentActivityParam{
-				FileUID:          cr.fileUID,
-				KBUID:            kbUID,
-				Bucket:           cr.effectiveBucket,
-				Destination:      cr.effectiveDestination,
-				FileType:         cr.effectiveFileType,
-				Filename:         cr.fileMetadata.metadata.File.Name,
-				FallbackPipeline: cr.fileMetadata.metadata.GenerateContentPipeline,
-				Metadata:         cr.fileMetadata.metadata.ExternalMetadata,
-				CacheName:        fileCacheName,
+				FileUID:     cr.fileUID,
+				KBUID:       kbUID,
+				Bucket:      cr.effectiveBucket,
+				Destination: cr.effectiveDestination,
+				FileType:    cr.effectiveFileType,
+				Filename:    cr.fileMetadata.metadata.File.Name,
+				Metadata:    cr.fileMetadata.metadata.ExternalMetadata,
+				CacheName:   fileCacheName,
 			})
 
 			summaryFuture := workflow.ExecuteActivity(ctx, w.ProcessSummaryActivity, &ProcessSummaryActivityParam{
-				FileUID:          cr.fileUID,
-				KBUID:            kbUID,
-				Bucket:           cr.effectiveBucket,
-				Destination:      cr.effectiveDestination,
-				FileName:         cr.fileMetadata.metadata.File.Name,
-				FileType:         cr.effectiveFileType,
-				Metadata:         cr.fileMetadata.metadata.ExternalMetadata,
-				CacheName:        fileCacheName,
-				FallbackPipeline: cr.fileMetadata.metadata.GenerateSummaryPipeline,
+				FileUID:     cr.fileUID,
+				KBUID:       kbUID,
+				Bucket:      cr.effectiveBucket,
+				Destination: cr.effectiveDestination,
+				FileName:    cr.fileMetadata.metadata.File.Name,
+				FileType:    cr.effectiveFileType,
+				Metadata:    cr.fileMetadata.metadata.ExternalMetadata,
+				CacheName:   fileCacheName,
 			})
 
 			workflowFutures[i] = fileWorkflowFutures{
@@ -648,14 +646,11 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				"summaryLength", len(summaryResult.Summary))
 
 			// Update conversion metadata for this file
-			pipelineName := ""
-			if contentResult.ConversionPipeline.ID != "" {
-				pipelineName = contentResult.ConversionPipeline.Name()
-			}
+			// Note: Content conversion now exclusively via AI (no pipeline fallback)
 			if err := workflow.ExecuteActivity(ctx, w.UpdateConversionMetadataActivity, &UpdateConversionMetadataActivityParam{
 				FileUID:  wf.fileUID,
 				Length:   contentResult.Length,
-				Pipeline: pipelineName,
+				Pipeline: "", // Content conversion now exclusively via AI
 			}).Get(ctx, nil); err != nil {
 				_ = handleFileError(wf.fileUID, "update conversion metadata", err)
 				filesCompleted[wf.fileUID.String()] = true
@@ -678,10 +673,8 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			// Get converted file for text chunking
 			var convertedFile GetConvertedFileForChunkingActivityResult
 			if err := workflow.ExecuteActivity(ctx, w.GetConvertedFileForChunkingActivity, &GetConvertedFileForChunkingActivityParam{
-				FileUID:           fileUID,
-				KBUID:             kbUID,
-				ChunkTextPipeline: wf.conversionData.fileMetadata.metadata.ChunkMarkdownPipeline,
-				EmbedTextPipeline: wf.conversionData.fileMetadata.metadata.EmbedPipeline,
+				FileUID: fileUID,
+				KBUID:   kbUID,
 			}).Get(ctx, &convertedFile); err != nil {
 				_ = handleFileError(fileUID, "get converted file for chunking", err)
 				filesCompleted[fileUID.String()] = true
@@ -691,11 +684,10 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			// Chunk content
 			var contentChunks ChunkContentActivityResult
 			if err := workflow.ExecuteActivity(ctx, w.ChunkContentActivity, &ChunkContentActivityParam{
-				FileUID:           fileUID,
-				KBUID:             kbUID,
-				Content:           convertedFile.Content,
-				ChunkTextPipeline: convertedFile.ChunkTextPipeline,
-				Metadata:          wf.conversionData.fileMetadata.metadata.ExternalMetadata,
+				FileUID:  fileUID,
+				KBUID:    kbUID,
+				Content:  convertedFile.Content,
+				Metadata: wf.conversionData.fileMetadata.metadata.ExternalMetadata,
 			}).Get(ctx, &contentChunks); err != nil {
 				_ = handleFileError(fileUID, "chunk content", err)
 				filesCompleted[fileUID.String()] = true
@@ -707,11 +699,10 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			if len(summaryResult.Summary) > 0 {
 				var summaryChunks ChunkContentActivityResult
 				if err := workflow.ExecuteActivity(ctx, w.ChunkContentActivity, &ChunkContentActivityParam{
-					FileUID:           fileUID,
-					KBUID:             kbUID,
-					Content:           summaryResult.Summary,
-					ChunkTextPipeline: pipeline.PipelineRelease{}, // Use default
-					Metadata:          wf.conversionData.fileMetadata.metadata.ExternalMetadata,
+					FileUID:  fileUID,
+					KBUID:    kbUID,
+					Content:  summaryResult.Summary,
+					Metadata: wf.conversionData.fileMetadata.metadata.ExternalMetadata,
 				}).Get(ctx, &summaryChunks); err != nil {
 					_ = handleFileError(fileUID, "chunk summary", err)
 					filesCompleted[fileUID.String()] = true
@@ -769,17 +760,6 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			}
 
 			// Generate embeddings using child workflow
-			var requestMetadata map[string][]string
-			if chunksData.Metadata != nil {
-				md, err := extractRequestMetadata(chunksData.Metadata)
-				if err != nil {
-					_ = handleFileError(fileUID, "extract request metadata", err)
-					filesCompleted[fileUID.String()] = true
-					continue
-				}
-				requestMetadata = md
-			}
-
 			embedWorkflowOptions := workflow.ChildWorkflowOptions{
 				WorkflowID: fmt.Sprintf("embed-texts-%s", fileUID.String()),
 			}
@@ -787,9 +767,8 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 
 			var embeddingVectors [][]float32
 			if err := workflow.ExecuteChildWorkflow(embedCtx, w.EmbedTextsWorkflow, EmbedTextsWorkflowParam{
-				Texts:           chunksData.Texts,
-				BatchSize:       32,
-				RequestMetadata: requestMetadata,
+				Texts:    chunksData.Texts,
+				TaskType: "RETRIEVAL_DOCUMENT", // For indexing document chunks
 			}).Get(embedCtx, &embeddingVectors); err != nil {
 				_ = handleFileError(fileUID, "generate embeddings", err)
 				filesCompleted[fileUID.String()] = true
@@ -833,7 +812,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			// Update embedding metadata
 			if err := workflow.ExecuteActivity(ctx, w.UpdateEmbeddingMetadataActivity, &UpdateEmbeddingMetadataActivityParam{
 				FileUID:  fileUID,
-				Pipeline: pipeline.EmbedTextPipeline.Name(),
+				Pipeline: "",
 			}).Get(ctx, nil); err != nil {
 				_ = handleFileError(fileUID, "update embedding metadata", err)
 				filesCompleted[fileUID.String()] = true

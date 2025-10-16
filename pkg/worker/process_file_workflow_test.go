@@ -245,9 +245,7 @@ func TestProcessFileWorkflow_GetFileMetadataSuccess(t *testing.T) {
 			Destination:   "test/file.pdf",
 		},
 	}, nil)
-	mockRepository.GetKnowledgeBaseByUIDMock.Return(&repository.KnowledgeBaseModel{
-		UID: kbUID,
-	}, nil)
+	// NOTE: GetKnowledgeBaseByUID is no longer called - conversion pipelines are retired
 
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()

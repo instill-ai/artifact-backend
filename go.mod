@@ -13,7 +13,7 @@ require (
 	github.com/google/go-cmp v0.7.0
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.1
-	github.com/instill-ai/protogen-go v0.3.3-alpha.0.20251008234003-08110218de5b
+	github.com/instill-ai/protogen-go v0.3.3-alpha.0.20251015172110-88f0bc59c769
 	github.com/instill-ai/usage-client v0.4.0
 	github.com/instill-ai/x v0.10.0-alpha
 	github.com/knadh/koanf v1.5.0
@@ -92,7 +92,7 @@ require (
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
-	github.com/lib/pq v1.10.9
+	github.com/lib/pq v1.10.9 // indirect
 	github.com/milvus-io/milvus-proto/go-api/v2 v2.4.10-0.20240819025435-512e3b98866a // indirect
 	github.com/minio/crc64nvme v1.0.2 // indirect
 	github.com/minio/md5-simd v1.1.2 // indirect

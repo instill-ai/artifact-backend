@@ -3,13 +3,13 @@ package repository
 import (
 	"context"
 	"database/sql/driver"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/instill-ai/artifact-backend/pkg/types"
-	"github.com/lib/pq"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
@@ -47,7 +47,41 @@ type KnowledgeBaseModel struct {
 	// this type is defined in artifact/artifact/v1alpha/catalog.proto
 	CatalogType string `gorm:"column:catalog_type;size:255" json:"catalog_type"`
 
-	ConvertingPipelines pq.StringArray `gorm:"column:converting_pipelines;type:varchar(255)[]" json:"converting_pipelines"`
+	// Embedding configuration stored as JSONB
+	// Format: {"model_family": "gemini", "dimensionality": 3072}
+	EmbeddingConfig EmbeddingConfigJSON `gorm:"column:embedding_config;type:jsonb" json:"embedding_config"`
+}
+
+// EmbeddingConfigJSON represents the embedding configuration in the database
+type EmbeddingConfigJSON struct {
+	ModelFamily    string `json:"model_family"`
+	Dimensionality uint32 `json:"dimensionality"`
+}
+
+// Scan implements the Scanner interface for EmbeddingConfigJSON
+func (e *EmbeddingConfigJSON) Scan(value any) error {
+	if value == nil {
+		return nil
+	}
+
+	bytes, ok := value.([]byte)
+	if !ok {
+		return fmt.Errorf("failed to unmarshal JSONB value: %v", value)
+	}
+
+	return json.Unmarshal(bytes, e)
+}
+
+// Value implements the driver Valuer interface for EmbeddingConfigJSON
+func (e EmbeddingConfigJSON) Value() (driver.Value, error) {
+	if e.ModelFamily == "" {
+		return nil, nil
+	}
+	jsonBytes, err := json.Marshal(e)
+	if err != nil {
+		return nil, err
+	}
+	return string(jsonBytes), nil
 }
 
 // TableName overrides the default table name for GORM
@@ -187,7 +221,7 @@ func (r *repository) ListKnowledgeBasesByCatalogType(ctx context.Context, owner 
 }
 
 // UpdateKnowledgeBase updates a KnowledgeBaseModel record in the database. The
-// modifiable fields are description, tags and conversion pipelines.
+// modifiable fields are description, tags, and deprecated conversion pipelines.
 func (r *repository) UpdateKnowledgeBase(ctx context.Context, id, owner string, kb KnowledgeBaseModel) (*KnowledgeBaseModel, error) {
 	where := fmt.Sprintf("%s = ? AND %s = ? AND %s is NULL", KnowledgeBaseColumn.KbID, KnowledgeBaseFileColumn.Owner, KnowledgeBaseColumn.DeleteTime)
 
@@ -198,9 +232,8 @@ func (r *repository) UpdateKnowledgeBase(ctx context.Context, id, owner string, 
 		Model(&updatedKB).
 		Where(where, id, owner).
 		Updates(KnowledgeBaseModel{
-			Description:         kb.Description,
-			Tags:                kb.Tags,
-			ConvertingPipelines: kb.ConvertingPipelines,
+			Description: kb.Description,
+			Tags:        kb.Tags,
 		}).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {

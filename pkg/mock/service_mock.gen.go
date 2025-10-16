@@ -94,9 +94,9 @@ type ServiceMock struct {
 	beforeDeleteRepositoryTagCounter uint64
 	DeleteRepositoryTagMock          mServiceMockDeleteRepositoryTag
 
-	funcEmbedTexts          func(ctx context.Context, sa1 []string, i1 int, m1 map[string][]string) (faa1 [][]float32, err error)
+	funcEmbedTexts          func(ctx context.Context, sa1 []string, s1 string) (faa1 [][]float32, err error)
 	funcEmbedTextsOrigin    string
-	inspectFuncEmbedTexts   func(ctx context.Context, sa1 []string, i1 int, m1 map[string][]string)
+	inspectFuncEmbedTexts   func(ctx context.Context, sa1 []string, s1 string)
 	afterEmbedTextsCounter  uint64
 	beforeEmbedTextsCounter uint64
 	EmbedTextsMock          mServiceMockEmbedTexts
@@ -3851,16 +3851,14 @@ type ServiceMockEmbedTextsExpectation struct {
 type ServiceMockEmbedTextsParams struct {
 	ctx context.Context
 	sa1 []string
-	i1  int
-	m1  map[string][]string
+	s1  string
 }
 
 // ServiceMockEmbedTextsParamPtrs contains pointers to parameters of the Service.EmbedTexts
 type ServiceMockEmbedTextsParamPtrs struct {
 	ctx *context.Context
 	sa1 *[]string
-	i1  *int
-	m1  *map[string][]string
+	s1  *string
 }
 
 // ServiceMockEmbedTextsResults contains results of the Service.EmbedTexts
@@ -3874,8 +3872,7 @@ type ServiceMockEmbedTextsExpectationOrigins struct {
 	origin    string
 	originCtx string
 	originSa1 string
-	originI1  string
-	originM1  string
+	originS1  string
 }
 
 // Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
@@ -3889,7 +3886,7 @@ func (mmEmbedTexts *mServiceMockEmbedTexts) Optional() *mServiceMockEmbedTexts {
 }
 
 // Expect sets up expected params for Service.EmbedTexts
-func (mmEmbedTexts *mServiceMockEmbedTexts) Expect(ctx context.Context, sa1 []string, i1 int, m1 map[string][]string) *mServiceMockEmbedTexts {
+func (mmEmbedTexts *mServiceMockEmbedTexts) Expect(ctx context.Context, sa1 []string, s1 string) *mServiceMockEmbedTexts {
 	if mmEmbedTexts.mock.funcEmbedTexts != nil {
 		mmEmbedTexts.mock.t.Fatalf("ServiceMock.EmbedTexts mock is already set by Set")
 	}
@@ -3902,7 +3899,7 @@ func (mmEmbedTexts *mServiceMockEmbedTexts) Expect(ctx context.Context, sa1 []st
 		mmEmbedTexts.mock.t.Fatalf("ServiceMock.EmbedTexts mock is already set by ExpectParams functions")
 	}
 
-	mmEmbedTexts.defaultExpectation.params = &ServiceMockEmbedTextsParams{ctx, sa1, i1, m1}
+	mmEmbedTexts.defaultExpectation.params = &ServiceMockEmbedTextsParams{ctx, sa1, s1}
 	mmEmbedTexts.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
 	for _, e := range mmEmbedTexts.expectations {
 		if minimock.Equal(e.params, mmEmbedTexts.defaultExpectation.params) {
@@ -3959,8 +3956,8 @@ func (mmEmbedTexts *mServiceMockEmbedTexts) ExpectSa1Param2(sa1 []string) *mServ
 	return mmEmbedTexts
 }
 
-// ExpectI1Param3 sets up expected param i1 for Service.EmbedTexts
-func (mmEmbedTexts *mServiceMockEmbedTexts) ExpectI1Param3(i1 int) *mServiceMockEmbedTexts {
+// ExpectS1Param3 sets up expected param s1 for Service.EmbedTexts
+func (mmEmbedTexts *mServiceMockEmbedTexts) ExpectS1Param3(s1 string) *mServiceMockEmbedTexts {
 	if mmEmbedTexts.mock.funcEmbedTexts != nil {
 		mmEmbedTexts.mock.t.Fatalf("ServiceMock.EmbedTexts mock is already set by Set")
 	}
@@ -3976,37 +3973,14 @@ func (mmEmbedTexts *mServiceMockEmbedTexts) ExpectI1Param3(i1 int) *mServiceMock
 	if mmEmbedTexts.defaultExpectation.paramPtrs == nil {
 		mmEmbedTexts.defaultExpectation.paramPtrs = &ServiceMockEmbedTextsParamPtrs{}
 	}
-	mmEmbedTexts.defaultExpectation.paramPtrs.i1 = &i1
-	mmEmbedTexts.defaultExpectation.expectationOrigins.originI1 = minimock.CallerInfo(1)
-
-	return mmEmbedTexts
-}
-
-// ExpectM1Param4 sets up expected param m1 for Service.EmbedTexts
-func (mmEmbedTexts *mServiceMockEmbedTexts) ExpectM1Param4(m1 map[string][]string) *mServiceMockEmbedTexts {
-	if mmEmbedTexts.mock.funcEmbedTexts != nil {
-		mmEmbedTexts.mock.t.Fatalf("ServiceMock.EmbedTexts mock is already set by Set")
-	}
-
-	if mmEmbedTexts.defaultExpectation == nil {
-		mmEmbedTexts.defaultExpectation = &ServiceMockEmbedTextsExpectation{}
-	}
-
-	if mmEmbedTexts.defaultExpectation.params != nil {
-		mmEmbedTexts.mock.t.Fatalf("ServiceMock.EmbedTexts mock is already set by Expect")
-	}
-
-	if mmEmbedTexts.defaultExpectation.paramPtrs == nil {
-		mmEmbedTexts.defaultExpectation.paramPtrs = &ServiceMockEmbedTextsParamPtrs{}
-	}
-	mmEmbedTexts.defaultExpectation.paramPtrs.m1 = &m1
-	mmEmbedTexts.defaultExpectation.expectationOrigins.originM1 = minimock.CallerInfo(1)
+	mmEmbedTexts.defaultExpectation.paramPtrs.s1 = &s1
+	mmEmbedTexts.defaultExpectation.expectationOrigins.originS1 = minimock.CallerInfo(1)
 
 	return mmEmbedTexts
 }
 
 // Inspect accepts an inspector function that has same arguments as the Service.EmbedTexts
-func (mmEmbedTexts *mServiceMockEmbedTexts) Inspect(f func(ctx context.Context, sa1 []string, i1 int, m1 map[string][]string)) *mServiceMockEmbedTexts {
+func (mmEmbedTexts *mServiceMockEmbedTexts) Inspect(f func(ctx context.Context, sa1 []string, s1 string)) *mServiceMockEmbedTexts {
 	if mmEmbedTexts.mock.inspectFuncEmbedTexts != nil {
 		mmEmbedTexts.mock.t.Fatalf("Inspect function is already set for ServiceMock.EmbedTexts")
 	}
@@ -4031,7 +4005,7 @@ func (mmEmbedTexts *mServiceMockEmbedTexts) Return(faa1 [][]float32, err error) 
 }
 
 // Set uses given function f to mock the Service.EmbedTexts method
-func (mmEmbedTexts *mServiceMockEmbedTexts) Set(f func(ctx context.Context, sa1 []string, i1 int, m1 map[string][]string) (faa1 [][]float32, err error)) *ServiceMock {
+func (mmEmbedTexts *mServiceMockEmbedTexts) Set(f func(ctx context.Context, sa1 []string, s1 string) (faa1 [][]float32, err error)) *ServiceMock {
 	if mmEmbedTexts.defaultExpectation != nil {
 		mmEmbedTexts.mock.t.Fatalf("Default expectation is already set for the Service.EmbedTexts method")
 	}
@@ -4047,14 +4021,14 @@ func (mmEmbedTexts *mServiceMockEmbedTexts) Set(f func(ctx context.Context, sa1 
 
 // When sets expectation for the Service.EmbedTexts which will trigger the result defined by the following
 // Then helper
-func (mmEmbedTexts *mServiceMockEmbedTexts) When(ctx context.Context, sa1 []string, i1 int, m1 map[string][]string) *ServiceMockEmbedTextsExpectation {
+func (mmEmbedTexts *mServiceMockEmbedTexts) When(ctx context.Context, sa1 []string, s1 string) *ServiceMockEmbedTextsExpectation {
 	if mmEmbedTexts.mock.funcEmbedTexts != nil {
 		mmEmbedTexts.mock.t.Fatalf("ServiceMock.EmbedTexts mock is already set by Set")
 	}
 
 	expectation := &ServiceMockEmbedTextsExpectation{
 		mock:               mmEmbedTexts.mock,
-		params:             &ServiceMockEmbedTextsParams{ctx, sa1, i1, m1},
+		params:             &ServiceMockEmbedTextsParams{ctx, sa1, s1},
 		expectationOrigins: ServiceMockEmbedTextsExpectationOrigins{origin: minimock.CallerInfo(1)},
 	}
 	mmEmbedTexts.expectations = append(mmEmbedTexts.expectations, expectation)
@@ -4089,17 +4063,17 @@ func (mmEmbedTexts *mServiceMockEmbedTexts) invocationsDone() bool {
 }
 
 // EmbedTexts implements mm_service.Service
-func (mmEmbedTexts *ServiceMock) EmbedTexts(ctx context.Context, sa1 []string, i1 int, m1 map[string][]string) (faa1 [][]float32, err error) {
+func (mmEmbedTexts *ServiceMock) EmbedTexts(ctx context.Context, sa1 []string, s1 string) (faa1 [][]float32, err error) {
 	mm_atomic.AddUint64(&mmEmbedTexts.beforeEmbedTextsCounter, 1)
 	defer mm_atomic.AddUint64(&mmEmbedTexts.afterEmbedTextsCounter, 1)
 
 	mmEmbedTexts.t.Helper()
 
 	if mmEmbedTexts.inspectFuncEmbedTexts != nil {
-		mmEmbedTexts.inspectFuncEmbedTexts(ctx, sa1, i1, m1)
+		mmEmbedTexts.inspectFuncEmbedTexts(ctx, sa1, s1)
 	}
 
-	mm_params := ServiceMockEmbedTextsParams{ctx, sa1, i1, m1}
+	mm_params := ServiceMockEmbedTextsParams{ctx, sa1, s1}
 
 	// Record call args
 	mmEmbedTexts.EmbedTextsMock.mutex.Lock()
@@ -4118,7 +4092,7 @@ func (mmEmbedTexts *ServiceMock) EmbedTexts(ctx context.Context, sa1 []string, i
 		mm_want := mmEmbedTexts.EmbedTextsMock.defaultExpectation.params
 		mm_want_ptrs := mmEmbedTexts.EmbedTextsMock.defaultExpectation.paramPtrs
 
-		mm_got := ServiceMockEmbedTextsParams{ctx, sa1, i1, m1}
+		mm_got := ServiceMockEmbedTextsParams{ctx, sa1, s1}
 
 		if mm_want_ptrs != nil {
 
@@ -4132,14 +4106,9 @@ func (mmEmbedTexts *ServiceMock) EmbedTexts(ctx context.Context, sa1 []string, i
 					mmEmbedTexts.EmbedTextsMock.defaultExpectation.expectationOrigins.originSa1, *mm_want_ptrs.sa1, mm_got.sa1, minimock.Diff(*mm_want_ptrs.sa1, mm_got.sa1))
 			}
 
-			if mm_want_ptrs.i1 != nil && !minimock.Equal(*mm_want_ptrs.i1, mm_got.i1) {
-				mmEmbedTexts.t.Errorf("ServiceMock.EmbedTexts got unexpected parameter i1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmEmbedTexts.EmbedTextsMock.defaultExpectation.expectationOrigins.originI1, *mm_want_ptrs.i1, mm_got.i1, minimock.Diff(*mm_want_ptrs.i1, mm_got.i1))
-			}
-
-			if mm_want_ptrs.m1 != nil && !minimock.Equal(*mm_want_ptrs.m1, mm_got.m1) {
-				mmEmbedTexts.t.Errorf("ServiceMock.EmbedTexts got unexpected parameter m1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmEmbedTexts.EmbedTextsMock.defaultExpectation.expectationOrigins.originM1, *mm_want_ptrs.m1, mm_got.m1, minimock.Diff(*mm_want_ptrs.m1, mm_got.m1))
+			if mm_want_ptrs.s1 != nil && !minimock.Equal(*mm_want_ptrs.s1, mm_got.s1) {
+				mmEmbedTexts.t.Errorf("ServiceMock.EmbedTexts got unexpected parameter s1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmEmbedTexts.EmbedTextsMock.defaultExpectation.expectationOrigins.originS1, *mm_want_ptrs.s1, mm_got.s1, minimock.Diff(*mm_want_ptrs.s1, mm_got.s1))
 			}
 
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
@@ -4154,9 +4123,9 @@ func (mmEmbedTexts *ServiceMock) EmbedTexts(ctx context.Context, sa1 []string, i
 		return (*mm_results).faa1, (*mm_results).err
 	}
 	if mmEmbedTexts.funcEmbedTexts != nil {
-		return mmEmbedTexts.funcEmbedTexts(ctx, sa1, i1, m1)
+		return mmEmbedTexts.funcEmbedTexts(ctx, sa1, s1)
 	}
-	mmEmbedTexts.t.Fatalf("Unexpected call to ServiceMock.EmbedTexts. %v %v %v %v", ctx, sa1, i1, m1)
+	mmEmbedTexts.t.Fatalf("Unexpected call to ServiceMock.EmbedTexts. %v %v %v", ctx, sa1, s1)
 	return
 }
 

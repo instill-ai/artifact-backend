@@ -17,12 +17,17 @@ func (ph *PublicHandler) GetObjectUploadURL(ctx context.Context, req *artifactpb
 	logger, _ := logx.GetZapLogger(ctx)
 	authUID, err := getUserUIDFromContext(ctx)
 	if err != nil {
-		err := fmt.Errorf("failed to get user id from header: %v. err: %w", err, errorsx.ErrUnauthenticated)
-		return nil, err
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to get user id from header: %v: %w", err, errorsx.ErrUnauthenticated),
+			"Authentication failed. Please log in and try again.",
+		)
 	}
 	creatorUID, err := uuid.FromString(authUID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse creator uid. err: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to parse creator uid: %w", err),
+			"Invalid user session. Please log in again.",
+		)
 	}
 
 	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
@@ -32,7 +37,10 @@ func (ph *PublicHandler) GetObjectUploadURL(ctx context.Context, req *artifactpb
 			zap.Error(err),
 			zap.String("owner_id(ns_id)", req.GetNamespaceId()),
 			zap.String("auth_uid", authUID))
-		return nil, fmt.Errorf("failed to get namespace. err: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to get namespace: %w", err),
+			"Unable to access the specified namespace. Please check the namespace ID and try again.",
+		)
 	}
 	// ACL - check user's permission to upload object in the namespace
 	err = ph.service.CheckNamespacePermission(ctx, ns)
@@ -42,14 +50,20 @@ func (ph *PublicHandler) GetObjectUploadURL(ctx context.Context, req *artifactpb
 			zap.Error(err),
 			zap.String("owner_id(ns_id)", req.GetNamespaceId()),
 			zap.String("auth_uid", authUID))
-		return nil, fmt.Errorf("failed to check namespace permission. err: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to check namespace permission: %w", err),
+			"You don't have permission to upload to this namespace. Please contact the owner for access.",
+		)
 	}
 
 	// Call the service to get the upload URL
 	response, err := ph.service.GetUploadURL(ctx, req, ns.NsUID, ns.NsID, creatorUID)
 	if err != nil {
 		logger.Error("failed to get upload URL", zap.Error(err))
-		return nil, fmt.Errorf("failed to get upload URL. err: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to get upload URL: %w", err),
+			"Unable to generate upload URL. Please try again.",
+		)
 	}
 
 	return response, nil
@@ -60,8 +74,10 @@ func (ph *PublicHandler) GetObjectDownloadURL(ctx context.Context, req *artifact
 	logger, _ := logx.GetZapLogger(ctx)
 	authUID, err := getUserUIDFromContext(ctx)
 	if err != nil {
-		err := fmt.Errorf("failed to get user id from header: %v. err: %w", err, errorsx.ErrUnauthenticated)
-		return nil, err
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to get user id from header: %v: %w", err, errorsx.ErrUnauthenticated),
+			"Authentication failed. Please log in and try again.",
+		)
 	}
 
 	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
@@ -71,7 +87,10 @@ func (ph *PublicHandler) GetObjectDownloadURL(ctx context.Context, req *artifact
 			zap.Error(err),
 			zap.String("owner_id(ns_id)", req.GetNamespaceId()),
 			zap.String("auth_uid", authUID))
-		return nil, fmt.Errorf("failed to get namespace. err: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to get namespace: %w", err),
+			"Unable to access the specified namespace. Please check the namespace ID and try again.",
+		)
 	}
 
 	// ACL - check user's permission to download object from the namespace
@@ -82,14 +101,20 @@ func (ph *PublicHandler) GetObjectDownloadURL(ctx context.Context, req *artifact
 			zap.Error(err),
 			zap.String("owner_id(ns_id)", req.GetNamespaceId()),
 			zap.String("auth_uid", authUID))
-		return nil, fmt.Errorf("failed to check namespace permission. err: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to check namespace permission: %w", err),
+			"You don't have permission to download from this namespace. Please contact the owner for access.",
+		)
 	}
 
 	// Call the service to get the download URL
 	response, err := ph.service.GetDownloadURL(ctx, req, ns.NsUID, ns.NsID)
 	if err != nil {
 		logger.Error("failed to get download URL", zap.Error(err))
-		return nil, fmt.Errorf("failed to get download URL. err: %w", err)
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to get download URL: %w", err),
+			"Unable to generate download URL. Please try again.",
+		)
 	}
 
 	return response, nil
