@@ -29,8 +29,9 @@ import (
 
 // EmbedTextsActivityParam defines the parameters for the EmbedTextsActivity
 type EmbedTextsActivityParam struct {
-	Texts    []string // Texts to generate embeddings for
-	TaskType string   // Task type for embedding optimization (e.g., "RETRIEVAL_DOCUMENT", "RETRIEVAL_QUERY")
+	KBUID    *types.KBUIDType // Optional: Knowledge base UID for provider selection
+	Texts    []string         // Texts to generate embeddings for
+	TaskType string           // Task type for embedding optimization (e.g., "RETRIEVAL_DOCUMENT", "RETRIEVAL_QUERY")
 }
 
 // GetChunksForEmbeddingActivityParam retrieves text chunks for embedding generation
@@ -281,7 +282,8 @@ func (w *Worker) EmbedTextsActivity(ctx context.Context, param *EmbedTextsActivi
 	}
 
 	// Use the specified task type for optimal embedding generation
-	vectors, err := w.embedTexts(ctx, param.Texts, param.TaskType)
+	// Select provider based on KB's embedding config if KBUID is provided
+	vectors, err := w.embedTextsWithProviderSelection(ctx, param.KBUID, param.Texts, param.TaskType)
 	if err != nil {
 		w.log.Error("Failed to embed texts",
 			zap.Int("textCount", len(param.Texts)),

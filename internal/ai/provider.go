@@ -11,6 +11,9 @@ import (
 
 // Embedding dimension constants for different AI providers
 const (
+	// Default provider family for backward compatibility
+	DefaultProviderFamily = "gemini"
+
 	// Gemini model family
 	ModelFamilyGemini = "gemini"
 
@@ -46,9 +49,6 @@ const (
 
 	// Default embedding model for openai
 	OpenAIEmbeddingModelDefault = "text-embedding-3-small"
-
-	// Default chat model for openai
-	OpenAIChatModelDefault = "gpt-4o-mini"
 )
 
 // ConversionResult represents the result of understanding unstructured data content and extracting it to Markdown
