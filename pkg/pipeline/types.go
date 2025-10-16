@@ -29,7 +29,7 @@ type TextChunkResult struct {
 // GenerateContentParams defines parameters for markdown conversion
 type GenerateContentParams struct {
 	Base64Content string
-	Type          artifactpb.FileType
+	Type          artifactpb.File_Type
 	Pipelines     []PipelineRelease
 }
 
@@ -47,27 +47,27 @@ type GenerateContentResult struct {
 }
 
 // GetFileTypePrefix returns the appropriate prefix for the given file type
-func GetFileTypePrefix(fileType artifactpb.FileType) string {
+func GetFileTypePrefix(fileType artifactpb.File_Type) string {
 	switch fileType {
-	case artifactpb.FileType_FILE_TYPE_PDF:
+	case artifactpb.File_TYPE_PDF:
 		return "data:application/pdf;base64,"
-	case artifactpb.FileType_FILE_TYPE_DOCX:
+	case artifactpb.File_TYPE_DOCX:
 		return "data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,"
-	case artifactpb.FileType_FILE_TYPE_DOC:
+	case artifactpb.File_TYPE_DOC:
 		return "data:application/msword;base64,"
-	case artifactpb.FileType_FILE_TYPE_PPT:
+	case artifactpb.File_TYPE_PPT:
 		return "data:application/vnd.ms-powerpoint;base64,"
-	case artifactpb.FileType_FILE_TYPE_PPTX:
+	case artifactpb.File_TYPE_PPTX:
 		return "data:application/vnd.openxmlformats-officedocument.presentationml.presentation;base64,"
-	case artifactpb.FileType_FILE_TYPE_HTML:
+	case artifactpb.File_TYPE_HTML:
 		return "data:text/html;base64,"
-	case artifactpb.FileType_FILE_TYPE_TEXT:
+	case artifactpb.File_TYPE_TEXT:
 		return "data:text/plain;base64,"
-	case artifactpb.FileType_FILE_TYPE_XLSX:
+	case artifactpb.File_TYPE_XLSX:
 		return "data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,"
-	case artifactpb.FileType_FILE_TYPE_XLS:
+	case artifactpb.File_TYPE_XLS:
 		return "data:application/vnd.ms-excel;base64,"
-	case artifactpb.FileType_FILE_TYPE_CSV:
+	case artifactpb.File_TYPE_CSV:
 		return "data:text/csv;base64,"
 	default:
 		return ""

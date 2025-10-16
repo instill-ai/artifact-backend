@@ -76,11 +76,11 @@ func (s *service) ChatWithCache(
 		files := make([]ai.FileContent, 0, len(metadata.FileContents))
 		for _, ref := range metadata.FileContents {
 			// Parse file type from string
-			fileTypeVal, ok := artifactpb.FileType_value[ref.FileType]
+			fileTypeVal, ok := artifactpb.File_Type_value[ref.FileType]
 			if !ok {
 				continue
 			}
-			fileType := artifactpb.FileType(fileTypeVal)
+			fileType := artifactpb.File_Type(fileTypeVal)
 
 			// Use content already stored in Redis (no MinIO fetch needed!)
 			files = append(files, ai.FileContent{

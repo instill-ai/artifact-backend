@@ -127,7 +127,7 @@ func TestCreateCache_Validation(t *testing.T) {
 			[]ai.FileContent{
 				{
 					Content:  []byte{},
-					FileType: artifactpb.FileType_FILE_TYPE_PDF,
+					FileType: artifactpb.File_TYPE_PDF,
 					Filename: "test.pdf",
 				},
 			},
@@ -146,12 +146,12 @@ func TestCreateCache_Validation(t *testing.T) {
 			[]ai.FileContent{
 				{
 					Content:  []byte("valid content"),
-					FileType: artifactpb.FileType_FILE_TYPE_PDF,
+					FileType: artifactpb.File_TYPE_PDF,
 					Filename: "test1.pdf",
 				},
 				{
 					Content:  []byte{}, // empty content
-					FileType: artifactpb.FileType_FILE_TYPE_PDF,
+					FileType: artifactpb.File_TYPE_PDF,
 					Filename: "test2.pdf",
 				},
 			},
@@ -172,7 +172,7 @@ func TestCreateCache_DisplayName(t *testing.T) {
 		files := []ai.FileContent{
 			{
 				Content:  []byte("test content"),
-				FileType: artifactpb.FileType_FILE_TYPE_PDF,
+				FileType: artifactpb.File_TYPE_PDF,
 				Filename: "my-document.pdf",
 			},
 		}
@@ -213,12 +213,12 @@ func TestCreateBatchCache_Validation(t *testing.T) {
 		files := []ai.FileContent{
 			{
 				Content:  []byte("valid"),
-				FileType: artifactpb.FileType_FILE_TYPE_PDF,
+				FileType: artifactpb.File_TYPE_PDF,
 				Filename: "test1.pdf",
 			},
 			{
 				Content:  []byte{}, // empty
-				FileType: artifactpb.FileType_FILE_TYPE_PDF,
+				FileType: artifactpb.File_TYPE_PDF,
 				Filename: "test2.pdf",
 			},
 		}
@@ -232,7 +232,7 @@ func TestCreateBatchCache_Validation(t *testing.T) {
 		files := []ai.FileContent{
 			{
 				Content:  []byte("test"),
-				FileType: artifactpb.FileType_FILE_TYPE_PDF,
+				FileType: artifactpb.File_TYPE_PDF,
 				Filename: "test.pdf",
 			},
 		}
@@ -246,7 +246,7 @@ func TestCreateBatchCache_Validation(t *testing.T) {
 		files := []ai.FileContent{
 			{
 				Content:  []byte("test"),
-				FileType: artifactpb.FileType_FILE_TYPE_PDF,
+				FileType: artifactpb.File_TYPE_PDF,
 				Filename: "test.pdf",
 			},
 		}

@@ -108,7 +108,7 @@ type ServiceMock struct {
 	beforeGetChatCacheForFilesCounter uint64
 	GetChatCacheForFilesMock          mServiceMockGetChatCacheForFiles
 
-	funcGetChunksByFile          func(ctx context.Context, kp1 *repository.KnowledgeBaseFileModel) (s1 types.SourceTableType, s2 types.SourceUIDType, ta1 []repository.TextChunkModel, m1 map[types.TextChunkUIDType]types.ContentType, sa1 []string, err error)
+	funcGetChunksByFile          func(ctx context.Context, kp1 *repository.KnowledgeBaseFileModel) (s1 types.SourceTableType, s2 types.SourceUIDType, ta1 []repository.TextChunkModel, sa1 []string, err error)
 	funcGetChunksByFileOrigin    string
 	inspectFuncGetChunksByFile   func(ctx context.Context, kp1 *repository.KnowledgeBaseFileModel)
 	afterGetChunksByFileCounter  uint64
@@ -4612,7 +4612,6 @@ type ServiceMockGetChunksByFileResults struct {
 	s1  types.SourceTableType
 	s2  types.SourceUIDType
 	ta1 []repository.TextChunkModel
-	m1  map[types.TextChunkUIDType]types.ContentType
 	sa1 []string
 	err error
 }
@@ -4717,7 +4716,7 @@ func (mmGetChunksByFile *mServiceMockGetChunksByFile) Inspect(f func(ctx context
 }
 
 // Return sets up results that will be returned by Service.GetChunksByFile
-func (mmGetChunksByFile *mServiceMockGetChunksByFile) Return(s1 types.SourceTableType, s2 types.SourceUIDType, ta1 []repository.TextChunkModel, m1 map[types.TextChunkUIDType]types.ContentType, sa1 []string, err error) *ServiceMock {
+func (mmGetChunksByFile *mServiceMockGetChunksByFile) Return(s1 types.SourceTableType, s2 types.SourceUIDType, ta1 []repository.TextChunkModel, sa1 []string, err error) *ServiceMock {
 	if mmGetChunksByFile.mock.funcGetChunksByFile != nil {
 		mmGetChunksByFile.mock.t.Fatalf("ServiceMock.GetChunksByFile mock is already set by Set")
 	}
@@ -4725,13 +4724,13 @@ func (mmGetChunksByFile *mServiceMockGetChunksByFile) Return(s1 types.SourceTabl
 	if mmGetChunksByFile.defaultExpectation == nil {
 		mmGetChunksByFile.defaultExpectation = &ServiceMockGetChunksByFileExpectation{mock: mmGetChunksByFile.mock}
 	}
-	mmGetChunksByFile.defaultExpectation.results = &ServiceMockGetChunksByFileResults{s1, s2, ta1, m1, sa1, err}
+	mmGetChunksByFile.defaultExpectation.results = &ServiceMockGetChunksByFileResults{s1, s2, ta1, sa1, err}
 	mmGetChunksByFile.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
 	return mmGetChunksByFile.mock
 }
 
 // Set uses given function f to mock the Service.GetChunksByFile method
-func (mmGetChunksByFile *mServiceMockGetChunksByFile) Set(f func(ctx context.Context, kp1 *repository.KnowledgeBaseFileModel) (s1 types.SourceTableType, s2 types.SourceUIDType, ta1 []repository.TextChunkModel, m1 map[types.TextChunkUIDType]types.ContentType, sa1 []string, err error)) *ServiceMock {
+func (mmGetChunksByFile *mServiceMockGetChunksByFile) Set(f func(ctx context.Context, kp1 *repository.KnowledgeBaseFileModel) (s1 types.SourceTableType, s2 types.SourceUIDType, ta1 []repository.TextChunkModel, sa1 []string, err error)) *ServiceMock {
 	if mmGetChunksByFile.defaultExpectation != nil {
 		mmGetChunksByFile.mock.t.Fatalf("Default expectation is already set for the Service.GetChunksByFile method")
 	}
@@ -4762,8 +4761,8 @@ func (mmGetChunksByFile *mServiceMockGetChunksByFile) When(ctx context.Context, 
 }
 
 // Then sets up Service.GetChunksByFile return parameters for the expectation previously defined by the When method
-func (e *ServiceMockGetChunksByFileExpectation) Then(s1 types.SourceTableType, s2 types.SourceUIDType, ta1 []repository.TextChunkModel, m1 map[types.TextChunkUIDType]types.ContentType, sa1 []string, err error) *ServiceMock {
-	e.results = &ServiceMockGetChunksByFileResults{s1, s2, ta1, m1, sa1, err}
+func (e *ServiceMockGetChunksByFileExpectation) Then(s1 types.SourceTableType, s2 types.SourceUIDType, ta1 []repository.TextChunkModel, sa1 []string, err error) *ServiceMock {
+	e.results = &ServiceMockGetChunksByFileResults{s1, s2, ta1, sa1, err}
 	return e.mock
 }
 
@@ -4789,7 +4788,7 @@ func (mmGetChunksByFile *mServiceMockGetChunksByFile) invocationsDone() bool {
 }
 
 // GetChunksByFile implements mm_service.Service
-func (mmGetChunksByFile *ServiceMock) GetChunksByFile(ctx context.Context, kp1 *repository.KnowledgeBaseFileModel) (s1 types.SourceTableType, s2 types.SourceUIDType, ta1 []repository.TextChunkModel, m1 map[types.TextChunkUIDType]types.ContentType, sa1 []string, err error) {
+func (mmGetChunksByFile *ServiceMock) GetChunksByFile(ctx context.Context, kp1 *repository.KnowledgeBaseFileModel) (s1 types.SourceTableType, s2 types.SourceUIDType, ta1 []repository.TextChunkModel, sa1 []string, err error) {
 	mm_atomic.AddUint64(&mmGetChunksByFile.beforeGetChunksByFileCounter, 1)
 	defer mm_atomic.AddUint64(&mmGetChunksByFile.afterGetChunksByFileCounter, 1)
 
@@ -4809,7 +4808,7 @@ func (mmGetChunksByFile *ServiceMock) GetChunksByFile(ctx context.Context, kp1 *
 	for _, e := range mmGetChunksByFile.GetChunksByFileMock.expectations {
 		if minimock.Equal(*e.params, mm_params) {
 			mm_atomic.AddUint64(&e.Counter, 1)
-			return e.results.s1, e.results.s2, e.results.ta1, e.results.m1, e.results.sa1, e.results.err
+			return e.results.s1, e.results.s2, e.results.ta1, e.results.sa1, e.results.err
 		}
 	}
 
@@ -4841,7 +4840,7 @@ func (mmGetChunksByFile *ServiceMock) GetChunksByFile(ctx context.Context, kp1 *
 		if mm_results == nil {
 			mmGetChunksByFile.t.Fatal("No results are set for the ServiceMock.GetChunksByFile")
 		}
-		return (*mm_results).s1, (*mm_results).s2, (*mm_results).ta1, (*mm_results).m1, (*mm_results).sa1, (*mm_results).err
+		return (*mm_results).s1, (*mm_results).s2, (*mm_results).ta1, (*mm_results).sa1, (*mm_results).err
 	}
 	if mmGetChunksByFile.funcGetChunksByFile != nil {
 		return mmGetChunksByFile.funcGetChunksByFile(ctx, kp1)

@@ -47,9 +47,9 @@ type ProviderMock struct {
 	beforeConvertToMarkdownWithCacheCounter uint64
 	ConvertToMarkdownWithCacheMock          mProviderMockConvertToMarkdownWithCache
 
-	funcConvertToMarkdownWithoutCache          func(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string, prompt string) (cp1 *mm_ai.ConversionResult, err error)
+	funcConvertToMarkdownWithoutCache          func(ctx context.Context, content []byte, fileType artifactpb.File_Type, filename string, prompt string) (cp1 *mm_ai.ConversionResult, err error)
 	funcConvertToMarkdownWithoutCacheOrigin    string
-	inspectFuncConvertToMarkdownWithoutCache   func(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string, prompt string)
+	inspectFuncConvertToMarkdownWithoutCache   func(ctx context.Context, content []byte, fileType artifactpb.File_Type, filename string, prompt string)
 	afterConvertToMarkdownWithoutCacheCounter  uint64
 	beforeConvertToMarkdownWithoutCacheCounter uint64
 	ConvertToMarkdownWithoutCacheMock          mProviderMockConvertToMarkdownWithoutCache
@@ -103,9 +103,9 @@ type ProviderMock struct {
 	beforeNameCounter uint64
 	NameMock          mProviderMockName
 
-	funcSupportsFileType          func(fileType artifactpb.FileType) (b1 bool)
+	funcSupportsFileType          func(fileType artifactpb.File_Type) (b1 bool)
 	funcSupportsFileTypeOrigin    string
-	inspectFuncSupportsFileType   func(fileType artifactpb.FileType)
+	inspectFuncSupportsFileType   func(fileType artifactpb.File_Type)
 	afterSupportsFileTypeCounter  uint64
 	beforeSupportsFileTypeCounter uint64
 	SupportsFileTypeMock          mProviderMockSupportsFileType
@@ -1506,7 +1506,7 @@ type ProviderMockConvertToMarkdownWithoutCacheExpectation struct {
 type ProviderMockConvertToMarkdownWithoutCacheParams struct {
 	ctx      context.Context
 	content  []byte
-	fileType artifactpb.FileType
+	fileType artifactpb.File_Type
 	filename string
 	prompt   string
 }
@@ -1515,7 +1515,7 @@ type ProviderMockConvertToMarkdownWithoutCacheParams struct {
 type ProviderMockConvertToMarkdownWithoutCacheParamPtrs struct {
 	ctx      *context.Context
 	content  *[]byte
-	fileType *artifactpb.FileType
+	fileType *artifactpb.File_Type
 	filename *string
 	prompt   *string
 }
@@ -1547,7 +1547,7 @@ func (mmConvertToMarkdownWithoutCache *mProviderMockConvertToMarkdownWithoutCach
 }
 
 // Expect sets up expected params for Provider.ConvertToMarkdownWithoutCache
-func (mmConvertToMarkdownWithoutCache *mProviderMockConvertToMarkdownWithoutCache) Expect(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string, prompt string) *mProviderMockConvertToMarkdownWithoutCache {
+func (mmConvertToMarkdownWithoutCache *mProviderMockConvertToMarkdownWithoutCache) Expect(ctx context.Context, content []byte, fileType artifactpb.File_Type, filename string, prompt string) *mProviderMockConvertToMarkdownWithoutCache {
 	if mmConvertToMarkdownWithoutCache.mock.funcConvertToMarkdownWithoutCache != nil {
 		mmConvertToMarkdownWithoutCache.mock.t.Fatalf("ProviderMock.ConvertToMarkdownWithoutCache mock is already set by Set")
 	}
@@ -1618,7 +1618,7 @@ func (mmConvertToMarkdownWithoutCache *mProviderMockConvertToMarkdownWithoutCach
 }
 
 // ExpectFileTypeParam3 sets up expected param fileType for Provider.ConvertToMarkdownWithoutCache
-func (mmConvertToMarkdownWithoutCache *mProviderMockConvertToMarkdownWithoutCache) ExpectFileTypeParam3(fileType artifactpb.FileType) *mProviderMockConvertToMarkdownWithoutCache {
+func (mmConvertToMarkdownWithoutCache *mProviderMockConvertToMarkdownWithoutCache) ExpectFileTypeParam3(fileType artifactpb.File_Type) *mProviderMockConvertToMarkdownWithoutCache {
 	if mmConvertToMarkdownWithoutCache.mock.funcConvertToMarkdownWithoutCache != nil {
 		mmConvertToMarkdownWithoutCache.mock.t.Fatalf("ProviderMock.ConvertToMarkdownWithoutCache mock is already set by Set")
 	}
@@ -1687,7 +1687,7 @@ func (mmConvertToMarkdownWithoutCache *mProviderMockConvertToMarkdownWithoutCach
 }
 
 // Inspect accepts an inspector function that has same arguments as the Provider.ConvertToMarkdownWithoutCache
-func (mmConvertToMarkdownWithoutCache *mProviderMockConvertToMarkdownWithoutCache) Inspect(f func(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string, prompt string)) *mProviderMockConvertToMarkdownWithoutCache {
+func (mmConvertToMarkdownWithoutCache *mProviderMockConvertToMarkdownWithoutCache) Inspect(f func(ctx context.Context, content []byte, fileType artifactpb.File_Type, filename string, prompt string)) *mProviderMockConvertToMarkdownWithoutCache {
 	if mmConvertToMarkdownWithoutCache.mock.inspectFuncConvertToMarkdownWithoutCache != nil {
 		mmConvertToMarkdownWithoutCache.mock.t.Fatalf("Inspect function is already set for ProviderMock.ConvertToMarkdownWithoutCache")
 	}
@@ -1712,7 +1712,7 @@ func (mmConvertToMarkdownWithoutCache *mProviderMockConvertToMarkdownWithoutCach
 }
 
 // Set uses given function f to mock the Provider.ConvertToMarkdownWithoutCache method
-func (mmConvertToMarkdownWithoutCache *mProviderMockConvertToMarkdownWithoutCache) Set(f func(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string, prompt string) (cp1 *mm_ai.ConversionResult, err error)) *ProviderMock {
+func (mmConvertToMarkdownWithoutCache *mProviderMockConvertToMarkdownWithoutCache) Set(f func(ctx context.Context, content []byte, fileType artifactpb.File_Type, filename string, prompt string) (cp1 *mm_ai.ConversionResult, err error)) *ProviderMock {
 	if mmConvertToMarkdownWithoutCache.defaultExpectation != nil {
 		mmConvertToMarkdownWithoutCache.mock.t.Fatalf("Default expectation is already set for the Provider.ConvertToMarkdownWithoutCache method")
 	}
@@ -1728,7 +1728,7 @@ func (mmConvertToMarkdownWithoutCache *mProviderMockConvertToMarkdownWithoutCach
 
 // When sets expectation for the Provider.ConvertToMarkdownWithoutCache which will trigger the result defined by the following
 // Then helper
-func (mmConvertToMarkdownWithoutCache *mProviderMockConvertToMarkdownWithoutCache) When(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string, prompt string) *ProviderMockConvertToMarkdownWithoutCacheExpectation {
+func (mmConvertToMarkdownWithoutCache *mProviderMockConvertToMarkdownWithoutCache) When(ctx context.Context, content []byte, fileType artifactpb.File_Type, filename string, prompt string) *ProviderMockConvertToMarkdownWithoutCacheExpectation {
 	if mmConvertToMarkdownWithoutCache.mock.funcConvertToMarkdownWithoutCache != nil {
 		mmConvertToMarkdownWithoutCache.mock.t.Fatalf("ProviderMock.ConvertToMarkdownWithoutCache mock is already set by Set")
 	}
@@ -1770,7 +1770,7 @@ func (mmConvertToMarkdownWithoutCache *mProviderMockConvertToMarkdownWithoutCach
 }
 
 // ConvertToMarkdownWithoutCache implements mm_ai.Provider
-func (mmConvertToMarkdownWithoutCache *ProviderMock) ConvertToMarkdownWithoutCache(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string, prompt string) (cp1 *mm_ai.ConversionResult, err error) {
+func (mmConvertToMarkdownWithoutCache *ProviderMock) ConvertToMarkdownWithoutCache(ctx context.Context, content []byte, fileType artifactpb.File_Type, filename string, prompt string) (cp1 *mm_ai.ConversionResult, err error) {
 	mm_atomic.AddUint64(&mmConvertToMarkdownWithoutCache.beforeConvertToMarkdownWithoutCacheCounter, 1)
 	defer mm_atomic.AddUint64(&mmConvertToMarkdownWithoutCache.afterConvertToMarkdownWithoutCacheCounter, 1)
 
@@ -4119,12 +4119,12 @@ type ProviderMockSupportsFileTypeExpectation struct {
 
 // ProviderMockSupportsFileTypeParams contains parameters of the Provider.SupportsFileType
 type ProviderMockSupportsFileTypeParams struct {
-	fileType artifactpb.FileType
+	fileType artifactpb.File_Type
 }
 
 // ProviderMockSupportsFileTypeParamPtrs contains pointers to parameters of the Provider.SupportsFileType
 type ProviderMockSupportsFileTypeParamPtrs struct {
-	fileType *artifactpb.FileType
+	fileType *artifactpb.File_Type
 }
 
 // ProviderMockSupportsFileTypeResults contains results of the Provider.SupportsFileType
@@ -4149,7 +4149,7 @@ func (mmSupportsFileType *mProviderMockSupportsFileType) Optional() *mProviderMo
 }
 
 // Expect sets up expected params for Provider.SupportsFileType
-func (mmSupportsFileType *mProviderMockSupportsFileType) Expect(fileType artifactpb.FileType) *mProviderMockSupportsFileType {
+func (mmSupportsFileType *mProviderMockSupportsFileType) Expect(fileType artifactpb.File_Type) *mProviderMockSupportsFileType {
 	if mmSupportsFileType.mock.funcSupportsFileType != nil {
 		mmSupportsFileType.mock.t.Fatalf("ProviderMock.SupportsFileType mock is already set by Set")
 	}
@@ -4174,7 +4174,7 @@ func (mmSupportsFileType *mProviderMockSupportsFileType) Expect(fileType artifac
 }
 
 // ExpectFileTypeParam1 sets up expected param fileType for Provider.SupportsFileType
-func (mmSupportsFileType *mProviderMockSupportsFileType) ExpectFileTypeParam1(fileType artifactpb.FileType) *mProviderMockSupportsFileType {
+func (mmSupportsFileType *mProviderMockSupportsFileType) ExpectFileTypeParam1(fileType artifactpb.File_Type) *mProviderMockSupportsFileType {
 	if mmSupportsFileType.mock.funcSupportsFileType != nil {
 		mmSupportsFileType.mock.t.Fatalf("ProviderMock.SupportsFileType mock is already set by Set")
 	}
@@ -4197,7 +4197,7 @@ func (mmSupportsFileType *mProviderMockSupportsFileType) ExpectFileTypeParam1(fi
 }
 
 // Inspect accepts an inspector function that has same arguments as the Provider.SupportsFileType
-func (mmSupportsFileType *mProviderMockSupportsFileType) Inspect(f func(fileType artifactpb.FileType)) *mProviderMockSupportsFileType {
+func (mmSupportsFileType *mProviderMockSupportsFileType) Inspect(f func(fileType artifactpb.File_Type)) *mProviderMockSupportsFileType {
 	if mmSupportsFileType.mock.inspectFuncSupportsFileType != nil {
 		mmSupportsFileType.mock.t.Fatalf("Inspect function is already set for ProviderMock.SupportsFileType")
 	}
@@ -4222,7 +4222,7 @@ func (mmSupportsFileType *mProviderMockSupportsFileType) Return(b1 bool) *Provid
 }
 
 // Set uses given function f to mock the Provider.SupportsFileType method
-func (mmSupportsFileType *mProviderMockSupportsFileType) Set(f func(fileType artifactpb.FileType) (b1 bool)) *ProviderMock {
+func (mmSupportsFileType *mProviderMockSupportsFileType) Set(f func(fileType artifactpb.File_Type) (b1 bool)) *ProviderMock {
 	if mmSupportsFileType.defaultExpectation != nil {
 		mmSupportsFileType.mock.t.Fatalf("Default expectation is already set for the Provider.SupportsFileType method")
 	}
@@ -4238,7 +4238,7 @@ func (mmSupportsFileType *mProviderMockSupportsFileType) Set(f func(fileType art
 
 // When sets expectation for the Provider.SupportsFileType which will trigger the result defined by the following
 // Then helper
-func (mmSupportsFileType *mProviderMockSupportsFileType) When(fileType artifactpb.FileType) *ProviderMockSupportsFileTypeExpectation {
+func (mmSupportsFileType *mProviderMockSupportsFileType) When(fileType artifactpb.File_Type) *ProviderMockSupportsFileTypeExpectation {
 	if mmSupportsFileType.mock.funcSupportsFileType != nil {
 		mmSupportsFileType.mock.t.Fatalf("ProviderMock.SupportsFileType mock is already set by Set")
 	}
@@ -4280,7 +4280,7 @@ func (mmSupportsFileType *mProviderMockSupportsFileType) invocationsDone() bool 
 }
 
 // SupportsFileType implements mm_ai.Provider
-func (mmSupportsFileType *ProviderMock) SupportsFileType(fileType artifactpb.FileType) (b1 bool) {
+func (mmSupportsFileType *ProviderMock) SupportsFileType(fileType artifactpb.File_Type) (b1 bool) {
 	mm_atomic.AddUint64(&mmSupportsFileType.beforeSupportsFileTypeCounter, 1)
 	defer mm_atomic.AddUint64(&mmSupportsFileType.afterSupportsFileTypeCounter, 1)
 

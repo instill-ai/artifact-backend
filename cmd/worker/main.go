@@ -198,10 +198,8 @@ func main() {
 	w.RegisterActivity(cw.ProcessSummaryActivity) // Complete summary processing: generate → save to DB
 
 	// Chunking Phase - Combined content and summary chunking (sequential after parallel AI operations)
-	w.RegisterActivity(cw.GetConvertedFileForChunkingActivity) // Retrieve converted markdown for chunking
-	w.RegisterActivity(cw.ChunkContentActivity)                // Split markdown content into semantic chunks
-	w.RegisterActivity(cw.SaveTextChunksActivity)              // Persist chunks to database and MinIO storage
-	w.RegisterActivity(cw.UpdateChunkingMetadataActivity)      // Update file status and chunking metadata
+	w.RegisterActivity(cw.ChunkContentActivity)   // Split markdown content into semantic chunks
+	w.RegisterActivity(cw.SaveTextChunksActivity) // Persist chunks to database and MinIO storage
 
 	// Embedding Phase - Vector embedding generation and storage
 	w.RegisterActivity(cw.GetChunksForEmbeddingActivity)   // Retrieve text chunks for embedding

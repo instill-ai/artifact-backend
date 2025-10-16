@@ -20,55 +20,55 @@ const (
 
 // SupportsFileType returns true if AI providers can directly process this file type
 // Aligned with pipeline-backend/pkg/data supported formats
-func SupportsFileType(fileType artifactpb.FileType) bool {
+func SupportsFileType(fileType artifactpb.File_Type) bool {
 	switch fileType {
 	// Documents - supported by pipeline-backend/pkg/data/document.go
-	case artifactpb.FileType_FILE_TYPE_PDF,
-		artifactpb.FileType_FILE_TYPE_DOCX,
-		artifactpb.FileType_FILE_TYPE_DOC,
-		artifactpb.FileType_FILE_TYPE_PPTX,
-		artifactpb.FileType_FILE_TYPE_PPT,
-		artifactpb.FileType_FILE_TYPE_XLSX,
-		artifactpb.FileType_FILE_TYPE_XLS,
-		artifactpb.FileType_FILE_TYPE_HTML,
-		artifactpb.FileType_FILE_TYPE_TEXT,
-		artifactpb.FileType_FILE_TYPE_MARKDOWN,
-		artifactpb.FileType_FILE_TYPE_CSV:
+	case artifactpb.File_TYPE_PDF,
+		artifactpb.File_TYPE_DOCX,
+		artifactpb.File_TYPE_DOC,
+		artifactpb.File_TYPE_PPTX,
+		artifactpb.File_TYPE_PPT,
+		artifactpb.File_TYPE_XLSX,
+		artifactpb.File_TYPE_XLS,
+		artifactpb.File_TYPE_HTML,
+		artifactpb.File_TYPE_TEXT,
+		artifactpb.File_TYPE_MARKDOWN,
+		artifactpb.File_TYPE_CSV:
 		return true
 
 	// Images - supported by pipeline-backend/pkg/data/image.go
-	case artifactpb.FileType_FILE_TYPE_PNG,
-		artifactpb.FileType_FILE_TYPE_JPEG,
-		artifactpb.FileType_FILE_TYPE_JPG,
-		artifactpb.FileType_FILE_TYPE_WEBP,
-		artifactpb.FileType_FILE_TYPE_HEIC,
-		artifactpb.FileType_FILE_TYPE_HEIF,
-		artifactpb.FileType_FILE_TYPE_GIF,
-		artifactpb.FileType_FILE_TYPE_BMP,
-		artifactpb.FileType_FILE_TYPE_TIFF,
-		artifactpb.FileType_FILE_TYPE_AVIF:
+	case artifactpb.File_TYPE_PNG,
+		artifactpb.File_TYPE_JPEG,
+		artifactpb.File_TYPE_JPG,
+		artifactpb.File_TYPE_WEBP,
+		artifactpb.File_TYPE_HEIC,
+		artifactpb.File_TYPE_HEIF,
+		artifactpb.File_TYPE_GIF,
+		artifactpb.File_TYPE_BMP,
+		artifactpb.File_TYPE_TIFF,
+		artifactpb.File_TYPE_AVIF:
 		return true
 
 	// Audio - supported by pipeline-backend/pkg/data/audio.go
-	case artifactpb.FileType_FILE_TYPE_MP3,
-		artifactpb.FileType_FILE_TYPE_WAV,
-		artifactpb.FileType_FILE_TYPE_AAC,
-		artifactpb.FileType_FILE_TYPE_OGG,
-		artifactpb.FileType_FILE_TYPE_FLAC,
-		artifactpb.FileType_FILE_TYPE_AIFF,
-		artifactpb.FileType_FILE_TYPE_M4A,
-		artifactpb.FileType_FILE_TYPE_WMA:
+	case artifactpb.File_TYPE_MP3,
+		artifactpb.File_TYPE_WAV,
+		artifactpb.File_TYPE_AAC,
+		artifactpb.File_TYPE_OGG,
+		artifactpb.File_TYPE_FLAC,
+		artifactpb.File_TYPE_AIFF,
+		artifactpb.File_TYPE_M4A,
+		artifactpb.File_TYPE_WMA:
 		return true
 
 	// Video - supported by pipeline-backend/pkg/data/video.go
-	case artifactpb.FileType_FILE_TYPE_MP4,
-		artifactpb.FileType_FILE_TYPE_MPEG,
-		artifactpb.FileType_FILE_TYPE_MOV,
-		artifactpb.FileType_FILE_TYPE_AVI,
-		artifactpb.FileType_FILE_TYPE_FLV,
-		artifactpb.FileType_FILE_TYPE_WEBM_VIDEO,
-		artifactpb.FileType_FILE_TYPE_WMV,
-		artifactpb.FileType_FILE_TYPE_MKV:
+	case artifactpb.File_TYPE_MP4,
+		artifactpb.File_TYPE_MPEG,
+		artifactpb.File_TYPE_MOV,
+		artifactpb.File_TYPE_AVI,
+		artifactpb.File_TYPE_FLV,
+		artifactpb.File_TYPE_WEBM_VIDEO,
+		artifactpb.File_TYPE_WMV,
+		artifactpb.File_TYPE_MKV:
 		return true
 
 	default:
@@ -78,86 +78,86 @@ func SupportsFileType(fileType artifactpb.FileType) bool {
 
 // FileTypeToMIME converts artifact file type to MIME type
 // Aligned with pipeline-backend/pkg/data MIME type constants
-func FileTypeToMIME(fileType artifactpb.FileType) string {
+func FileTypeToMIME(fileType artifactpb.File_Type) string {
 	switch fileType {
 	// Documents (from pipeline-backend/pkg/data/document.go)
-	case artifactpb.FileType_FILE_TYPE_PDF:
+	case artifactpb.File_TYPE_PDF:
 		return "application/pdf"
-	case artifactpb.FileType_FILE_TYPE_DOCX:
+	case artifactpb.File_TYPE_DOCX:
 		return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-	case artifactpb.FileType_FILE_TYPE_DOC:
+	case artifactpb.File_TYPE_DOC:
 		return "application/msword"
-	case artifactpb.FileType_FILE_TYPE_PPTX:
+	case artifactpb.File_TYPE_PPTX:
 		return "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-	case artifactpb.FileType_FILE_TYPE_PPT:
+	case artifactpb.File_TYPE_PPT:
 		return "application/vnd.ms-powerpoint"
-	case artifactpb.FileType_FILE_TYPE_XLSX:
+	case artifactpb.File_TYPE_XLSX:
 		return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-	case artifactpb.FileType_FILE_TYPE_XLS:
+	case artifactpb.File_TYPE_XLS:
 		return "application/vnd.ms-excel"
-	case artifactpb.FileType_FILE_TYPE_HTML:
+	case artifactpb.File_TYPE_HTML:
 		return "text/html"
-	case artifactpb.FileType_FILE_TYPE_TEXT:
+	case artifactpb.File_TYPE_TEXT:
 		return "text/plain"
-	case artifactpb.FileType_FILE_TYPE_MARKDOWN:
+	case artifactpb.File_TYPE_MARKDOWN:
 		return "text/markdown"
-	case artifactpb.FileType_FILE_TYPE_CSV:
+	case artifactpb.File_TYPE_CSV:
 		return "text/csv"
 
 	// Images (from pipeline-backend/pkg/data/image.go)
-	case artifactpb.FileType_FILE_TYPE_PNG:
+	case artifactpb.File_TYPE_PNG:
 		return "image/png"
-	case artifactpb.FileType_FILE_TYPE_JPEG, artifactpb.FileType_FILE_TYPE_JPG:
+	case artifactpb.File_TYPE_JPEG, artifactpb.File_TYPE_JPG:
 		return "image/jpeg"
-	case artifactpb.FileType_FILE_TYPE_GIF:
+	case artifactpb.File_TYPE_GIF:
 		return "image/gif"
-	case artifactpb.FileType_FILE_TYPE_WEBP:
+	case artifactpb.File_TYPE_WEBP:
 		return "image/webp"
-	case artifactpb.FileType_FILE_TYPE_TIFF:
+	case artifactpb.File_TYPE_TIFF:
 		return "image/tiff"
-	case artifactpb.FileType_FILE_TYPE_BMP:
+	case artifactpb.File_TYPE_BMP:
 		return "image/bmp"
-	case artifactpb.FileType_FILE_TYPE_HEIC:
+	case artifactpb.File_TYPE_HEIC:
 		return "image/heic"
-	case artifactpb.FileType_FILE_TYPE_HEIF:
+	case artifactpb.File_TYPE_HEIF:
 		return "image/heif"
-	case artifactpb.FileType_FILE_TYPE_AVIF:
+	case artifactpb.File_TYPE_AVIF:
 		return "image/avif"
 
 	// Audio (from pipeline-backend/pkg/data/audio.go)
-	case artifactpb.FileType_FILE_TYPE_MP3:
+	case artifactpb.File_TYPE_MP3:
 		return "audio/mpeg"
-	case artifactpb.FileType_FILE_TYPE_WAV:
+	case artifactpb.File_TYPE_WAV:
 		return "audio/wav"
-	case artifactpb.FileType_FILE_TYPE_AAC:
+	case artifactpb.File_TYPE_AAC:
 		return "audio/aac"
-	case artifactpb.FileType_FILE_TYPE_OGG:
+	case artifactpb.File_TYPE_OGG:
 		return "audio/ogg"
-	case artifactpb.FileType_FILE_TYPE_FLAC:
+	case artifactpb.File_TYPE_FLAC:
 		return "audio/flac"
-	case artifactpb.FileType_FILE_TYPE_M4A:
+	case artifactpb.File_TYPE_M4A:
 		return "audio/mp4"
-	case artifactpb.FileType_FILE_TYPE_WMA:
+	case artifactpb.File_TYPE_WMA:
 		return "audio/x-ms-wma"
-	case artifactpb.FileType_FILE_TYPE_AIFF:
+	case artifactpb.File_TYPE_AIFF:
 		return "audio/aiff"
 
 	// Video (from pipeline-backend/pkg/data/video.go)
-	case artifactpb.FileType_FILE_TYPE_MP4:
+	case artifactpb.File_TYPE_MP4:
 		return "video/mp4"
-	case artifactpb.FileType_FILE_TYPE_AVI:
+	case artifactpb.File_TYPE_AVI:
 		return "video/x-msvideo"
-	case artifactpb.FileType_FILE_TYPE_MOV:
+	case artifactpb.File_TYPE_MOV:
 		return "video/quicktime"
-	case artifactpb.FileType_FILE_TYPE_WEBM_VIDEO:
+	case artifactpb.File_TYPE_WEBM_VIDEO:
 		return "video/webm"
-	case artifactpb.FileType_FILE_TYPE_MKV:
+	case artifactpb.File_TYPE_MKV:
 		return "video/x-matroska"
-	case artifactpb.FileType_FILE_TYPE_FLV:
+	case artifactpb.File_TYPE_FLV:
 		return "video/x-flv"
-	case artifactpb.FileType_FILE_TYPE_WMV:
+	case artifactpb.File_TYPE_WMV:
 		return "video/x-ms-wmv"
-	case artifactpb.FileType_FILE_TYPE_MPEG:
+	case artifactpb.File_TYPE_MPEG:
 		return "video/mpeg"
 
 	default:

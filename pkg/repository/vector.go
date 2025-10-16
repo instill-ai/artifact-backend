@@ -27,8 +27,8 @@ type VectorEmbedding struct {
 	Vector       []float32
 	FileUID      types.FileUIDType
 	FileName     string
-	FileType     string
-	ContentType  string
+	ContentType  string // MIME type (e.g., "text/markdown", "application/pdf")
+	ChunkType    string // Chunk classification ("content", "summary", "augmented")
 	Tags         []string
 }
 
@@ -45,8 +45,8 @@ type SimilarVectorSearchParam struct {
 	Vectors      [][]float32
 	TopK         uint32
 	FileUIDs     []types.FileUIDType
-	FileType     string
-	ContentType  string
+	ContentType  string // MIME type filter (e.g., "text/markdown", "application/pdf")
+	ChunkType    string // Chunk classification filter ("content", "summary", "augmented")
 
 	// The filename filter was implemented back when the filename in a catalog was
 	// unique, which isn't the case anymore. Using this filter might yield
@@ -199,8 +199,8 @@ func (m *milvusClient) InsertVectorsInCollection(ctx context.Context, collection
 		embeddingUIDs[i] = embedding.EmbeddingUID // Use the embeddingUID from the input struct
 		fileUIDs[i] = embedding.FileUID.String()
 		fileNames[i] = embedding.FileName
-		fileTypes[i] = embedding.FileType
-		contentTypes[i] = embedding.ContentType
+		fileTypes[i] = embedding.ContentType  // MIME type
+		contentTypes[i] = embedding.ChunkType // chunk type
 		tags[i] = embedding.Tags
 		vectors[i] = make([]float32, len(embedding.Vector))
 		for j, val := range embedding.Vector {
@@ -426,12 +426,12 @@ func (m *milvusClient) SimilarVectorsInCollection(ctx context.Context, p Similar
 			filterStrs = append(filterStrs, filter)
 		}
 
-		if p.FileType != "" {
-			filterStrs = append(filterStrs, fmt.Sprintf("%s == '%s'", kbCollectionFieldFileType, p.FileType))
+		if p.ContentType != "" {
+			filterStrs = append(filterStrs, fmt.Sprintf("%s == '%s'", kbCollectionFieldFileType, p.ContentType))
 		}
 
-		if p.ContentType != "" {
-			filterStrs = append(filterStrs, fmt.Sprintf("%s == '%s'", kbCollectionFieldContentType, p.ContentType))
+		if p.ChunkType != "" {
+			filterStrs = append(filterStrs, fmt.Sprintf("%s == '%s'", kbCollectionFieldContentType, p.ChunkType))
 		}
 	}
 
@@ -522,8 +522,8 @@ func (m *milvusClient) SimilarVectorsInCollection(ctx context.Context, p Similar
 			}
 			if hasMetadata {
 				emb.FileName = fileNames[i]
-				emb.FileType = fileTypes[i]
-				emb.ContentType = contentTypes[i]
+				emb.ContentType = fileTypes[i]  // MIME type from file_type field
+				emb.ChunkType = contentTypes[i] // chunk type from content_type field
 				if hasFileUID {
 					emb.FileUID = uuid.FromStringOrNil(fileUIDs[i])
 				}

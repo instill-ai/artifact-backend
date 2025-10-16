@@ -10,10 +10,12 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 	"gorm.io/gorm"
 
+	"github.com/instill-ai/artifact-backend/internal/ai"
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/types"
 
+	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	errorsx "github.com/instill-ai/x/errors"
 )
 
@@ -45,6 +47,7 @@ type GetTextChunksForEmbeddingActivityResult struct {
 	Metadata    *structpb.Struct            // External metadata from request
 	FileName    string                      // File name for identification
 	Tags        []string                    // File tags to propagate to embeddings
+	ContentType string                      // MIME type of the file content (e.g., "text/markdown", "application/pdf")
 }
 
 // SaveEmbeddingBatchActivityParam saves a single batch of embeddings
@@ -108,6 +111,11 @@ func (w *Worker) GetChunksForEmbeddingActivity(ctx context.Context, param *GetCh
 		zap.Int("chunkCount", len(chunks)),
 		zap.Int("textCount", len(texts)))
 
+	// Convert FileType enum string to MIME type
+	// FileType in DB is stored as enum string (e.g., "TYPE_PDF", "TYPE_TEXT")
+	fileTypeEnum := artifactpb.File_Type(artifactpb.File_Type_value[file.FileType])
+	contentType := ai.FileTypeToMIME(fileTypeEnum)
+
 	return &GetTextChunksForEmbeddingActivityResult{
 		SourceTable: sourceTable,
 		SourceUID:   sourceUID,
@@ -116,6 +124,7 @@ func (w *Worker) GetChunksForEmbeddingActivity(ctx context.Context, param *GetCh
 		Metadata:    file.ExternalMetadataUnmarshal,
 		FileName:    file.Name,
 		Tags:        file.Tags,
+		ContentType: contentType,
 	}, nil
 }
 
@@ -147,8 +156,8 @@ func (w *Worker) SaveEmbeddingBatchActivity(ctx context.Context, param *SaveEmbe
 				Vector:       emb.Vector,
 				FileUID:      emb.KBFileUID,
 				FileName:     param.FileName,
-				FileType:     emb.FileType,
 				ContentType:  emb.ContentType,
+				ChunkType:    emb.ChunkType,
 				Tags:         emb.Tags,
 			}
 		}

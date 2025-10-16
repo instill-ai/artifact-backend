@@ -4,6 +4,8 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
+
+	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
 // FileType represents the type of file being processed
@@ -27,18 +29,6 @@ type Tag struct {
 	Digest     string    // Unique identifier from the manifest
 	UpdateTime time.Time // Tag update time
 }
-
-// ContentType represents the type of content in a chunk
-type ContentType string
-
-const (
-	// ChunkContentType represents the type of chunk content
-	ChunkContentType ContentType = "chunk"
-	// SummaryContentType represents the type of summary content
-	SummaryContentType ContentType = "summary"
-	// AugmentedContentType represents the type of augmented content
-	AugmentedContentType ContentType = "augmented"
-)
 
 // PositionData contains metadata from the file-to-markdown conversion step used for visual grounding.
 // It maps text positions in the stored markdown back to their location in the original file (page numbers).
@@ -83,6 +73,7 @@ type TextChunk struct {
 	Text      string
 	Tokens    int
 	Reference *TextChunkReference
+	Type      artifactpb.Chunk_Type
 }
 
 type (

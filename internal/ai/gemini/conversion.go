@@ -29,7 +29,7 @@ type conversionOutput struct {
 // ConvertToMarkdownWithoutCache implements ai.Provider
 // This does direct conversion WITHOUT using a cached context.
 // For cached conversion, use ConvertToMarkdownWithCache() with a pre-existing cache.
-func (p *Provider) ConvertToMarkdownWithoutCache(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string, prompt string) (*ai.ConversionResult, error) {
+func (p *Provider) ConvertToMarkdownWithoutCache(ctx context.Context, content []byte, fileType artifactpb.File_Type, filename string, prompt string) (*ai.ConversionResult, error) {
 	mimeType := ai.FileTypeToMIME(fileType)
 
 	// Retry logic for non-cached conversion

@@ -13,33 +13,6 @@ import (
 	errorsx "github.com/instill-ai/x/errors"
 )
 
-const (
-	// EmbeddingModel is the Gemini embedding model that supports task-specific embeddings
-	// gemini-embedding-001 is trained using Matryoshka Representation Learning (MRL)
-	// which allows for flexible output dimensionality while maintaining quality
-	EmbeddingModel = "gemini-embedding-001"
-
-	// DefaultOutputDimensionality is the Gemini embedding vector size
-	// gemini-embedding-001 produces 3072-dimensional embeddings
-	// This is the full dimensionality and provides maximum quality
-	DefaultOutputDimensionality int32 = 3072
-
-	// Task types for embedding optimization (as per Gemini API)
-	// These map directly to Gemini API task types (as strings)
-
-	// TaskTypeRetrievalDocument is used for embedding document chunks that will be stored in the vector database
-	// This optimizes embeddings for being retrieved by search queries
-	TaskTypeRetrievalDocument = "RETRIEVAL_DOCUMENT"
-
-	// TaskTypeRetrievalQuery is used for embedding search queries to find similar document chunks
-	// This is used in similarity search operations to find relevant chunks
-	TaskTypeRetrievalQuery = "RETRIEVAL_QUERY"
-
-	// TaskTypeQuestionAnswering is used for embedding questions in a Q&A system
-	// This optimizes for finding documents that answer the question
-	TaskTypeQuestionAnswering = "QUESTION_ANSWERING"
-)
-
 // EmbedTexts generates embeddings for a batch of texts using Gemini API directly
 //
 // taskType specifies the optimization:
@@ -55,8 +28,8 @@ func (p *Provider) EmbedTexts(ctx context.Context, texts []string, taskType stri
 	if len(texts) == 0 {
 		return &ai.EmbedResult{
 			Vectors:        [][]float32{},
-			Model:          EmbeddingModel,
-			Dimensionality: DefaultOutputDimensionality,
+			Model:          ai.GeminiEmbeddingModelDefault,
+			Dimensionality: ai.GeminiEmbeddingDimDefault,
 		}, nil
 	}
 
@@ -96,9 +69,9 @@ func (p *Provider) EmbedTexts(ctx context.Context, texts []string, taskType stri
 				}
 
 				// Call Gemini API for embedding with task-specific optimization
-				result, apiErr := p.client.Models.EmbedContent(ctx, EmbeddingModel, contents, &genai.EmbedContentConfig{
+				result, apiErr := p.client.Models.EmbedContent(ctx, ai.GeminiEmbeddingModelDefault, contents, &genai.EmbedContentConfig{
 					TaskType:             taskType,
-					OutputDimensionality: genai.Ptr(DefaultOutputDimensionality),
+					OutputDimensionality: genai.Ptr(int32(ai.GeminiEmbeddingDimDefault)),
 				})
 
 				if apiErr != nil {
@@ -187,7 +160,7 @@ func (p *Provider) EmbedTexts(ctx context.Context, texts []string, taskType stri
 
 	return &ai.EmbedResult{
 		Vectors:        vectors,
-		Model:          EmbeddingModel,
-		Dimensionality: DefaultOutputDimensionality,
+		Model:          ai.GeminiEmbeddingModelDefault,
+		Dimensionality: ai.GeminiEmbeddingDimDefault,
 	}, nil
 }

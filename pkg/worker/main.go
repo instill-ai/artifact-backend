@@ -47,10 +47,10 @@ const (
 // Prevents retry storms under high concurrency.
 const (
 	RetryInitialInterval         = 1 * time.Second   // Prevents retry storms
-	RetryBackoffCoefficient      = 2.0               // Exponential: 1s→2s→4s
-	RetryMaximumIntervalStandard = 30 * time.Second  // Transient failures
-	RetryMaximumIntervalLong     = 100 * time.Second // Service recovery
-	RetryMaximumAttempts         = 3                 // 3 attempts = ~7s max
+	RetryBackoffCoefficient      = 2.0               // Exponential: 1s→2s→4s→8s→16s
+	RetryMaximumIntervalStandard = 30 * time.Second  // Caps exponential backoff for transient failures
+	RetryMaximumIntervalLong     = 100 * time.Second // Service recovery (AI provider rate limits)
+	RetryMaximumAttempts         = 5                 // 5 attempts = ~30-60s max (better for 503/rate limit errors)
 )
 
 // Worker implements the Temporal worker with all workflows and activities
@@ -281,7 +281,7 @@ func (w *Worker) getTextChunksByFile(ctx context.Context, file *repository.Knowl
 	types.SourceTableType,
 	types.SourceUIDType,
 	[]repository.TextChunkModel,
-	map[types.TextChunkUIDType]types.ContentType,
+	map[types.TextChunkUIDType]string,
 	[]string,
 	error,
 ) {
@@ -364,10 +364,10 @@ func (w *Worker) getTextChunksByFile(ctx context.Context, file *repository.Knowl
 		return sourceTable, sourceUID, nil, nil, nil, fetchErr
 	}
 
-	// Build text chunk UID to content map
-	chunkUIDToContents := make(map[types.TextChunkUIDType]types.ContentType, len(chunks))
+	// Build text chunk UID to content text map
+	chunkUIDToContents := make(map[types.TextChunkUIDType]string, len(chunks))
 	for i, c := range chunks {
-		chunkUIDToContents[c.UID] = types.ContentType(texts[i])
+		chunkUIDToContents[c.UID] = texts[i]
 	}
 
 	return sourceTable, sourceUID, chunks, chunkUIDToContents, texts, nil

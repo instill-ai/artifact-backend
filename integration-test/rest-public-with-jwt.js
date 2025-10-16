@@ -42,7 +42,7 @@ function deleteCatalogAuthenticated(data, catalogId) {
 
 function createFileAuthenticated(data, catalogId) {
   const fileName = constant.dbIDPrefix + "jwt-file-" + randomString(6) + ".txt";
-  const body = { name: fileName, type: "FILE_TYPE_TEXT", content: constant.sampleTxt };
+  const body = { name: fileName, type: "TYPE_TEXT", content: constant.sampleTxt };
   const res = http.request(
     "POST",
     `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
@@ -129,7 +129,7 @@ export function CheckCreateFileUnauthenticated(data) {
 
     // Create catalog with authorized header, then try to create file with random user
     const created = createCatalogAuthenticated(data);
-    const body = { name: constant.dbIDPrefix + "x.txt", type: "FILE_TYPE_TEXT", content: constant.sampleTxt };
+    const body = { name: constant.dbIDPrefix + "x.txt", type: "TYPE_TEXT", content: constant.sampleTxt };
     const res = http.request("POST", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${created.catalogId}/files`, JSON.stringify(body), constant.paramsHTTPWithJWT.headers);
     logUnexpected(res, "POST /v1alpha/namespaces/{namespace_id}/catalogs/{id}/files");
     check(res, { "POST /v1alpha/namespaces/{namespace_id}/catalogs/{id}/files 401": (r) => r.status === 401 });
@@ -239,18 +239,5 @@ export function CheckListChunksUnauthenticated(data) {
 
     // Cleanup
     deleteCatalogAuthenticated(data, created.catalogId);
-  });
-}
-
-export function CheckSearchChunksUnauthenticated(data) {
-  const groupName = "Artifact API [JWT]: Search chunks rejects random user";
-  group(groupName, () => {
-    check(true, { [constant.banner(groupName)]: () => true });
-
-    // Ensure data exists in namespace, then search with random user
-    createCatalogAuthenticated(data);
-    const res = http.request("GET", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/chunks`, null, constant.paramsHTTPWithJWT.headers);
-    logUnexpected(res, "GET /v1alpha/namespaces/{namespace_id}/chunks");
-    check(res, { "GET /v1alpha/namespaces/{namespace_id}/chunks 401": (r) => r.status === 401 });
   });
 }

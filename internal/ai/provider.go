@@ -11,8 +11,8 @@ import (
 
 // Embedding dimension constants for different AI providers
 const (
-	// OpenAI embedding dimensions (constant, not configurable)
-	OpenAIEmbeddingDim = 1536
+	// Gemini model family
+	ModelFamilyGemini = "gemini"
 
 	// Gemini embedding dimensions (configurable via Matryoshka Representation Learning)
 	// - 768: Recommended by Google for optimal balance of storage efficiency and quality
@@ -20,9 +20,35 @@ const (
 	// - 3072: Maximum quality (full-size embeddings)
 	GeminiEmbeddingDimDefault = 3072
 
-	// Model family identifiers
-	ModelFamilyGemini = "gemini"
+	// Default embedding model for Gemini
+	GeminiEmbeddingModelDefault = "gemini-embedding-001"
+
+	// TaskTypeRetrievalDocument is used for embedding document chunks that will be stored in the vector database
+	// This optimizes embeddings for being retrieved by search queries
+	TaskTypeRetrievalDocument = "RETRIEVAL_DOCUMENT"
+
+	// TaskTypeRetrievalQuery is used for embedding search queries to find similar document chunks
+	// This is used in similarity search operations to find relevant chunks
+	TaskTypeRetrievalQuery = "RETRIEVAL_QUERY"
+
+	// TaskTypeQuestionAnswering is used for embedding questions in a Q&A system
+	// This optimizes for finding documents that answer the question
+	TaskTypeQuestionAnswering = "QUESTION_ANSWERING"
+
+	// Default chat model for gemini
+	GeminiChatModelDefault = "gemini-2.5-flash"
+
+	// OpenAI model family
 	ModelFamilyOpenAI = "openai"
+
+	// OpenAI embedding dimensions (constant, not configurable)
+	OpenAIEmbeddingDim = 1536
+
+	// Default embedding model for openai
+	OpenAIEmbeddingModelDefault = "text-embedding-3-small"
+
+	// Default chat model for openai
+	OpenAIChatModelDefault = "gpt-4o-mini"
 )
 
 // ConversionResult represents the result of understanding unstructured data content and extracting it to Markdown
@@ -69,7 +95,7 @@ type CacheUpdateOptions struct {
 type FileContent struct {
 	FileUID  types.FileUIDType
 	Content  []byte
-	FileType artifactpb.FileType
+	FileType artifactpb.File_Type
 	Filename string
 }
 
@@ -84,7 +110,7 @@ type ChatResult struct {
 type EmbedResult struct {
 	Vectors        [][]float32 // The embedding vectors
 	Model          string      // Model used (e.g., "gemini-embedding-001")
-	Dimensionality int32       // Vector dimensionality (e.g., 768)
+	Dimensionality int32       // Vector dimensionality (e.g., 3072)
 }
 
 // Provider defines the interface for AI providers that understand unstructured data
@@ -96,7 +122,7 @@ type Provider interface {
 	// ConvertToMarkdownWithoutCache understands unstructured data content and extracts it to Markdown
 	// This does direct conversion WITHOUT using a cached context
 	// The prompt parameter specifies the task-specific instruction (e.g., conversion prompt or summary prompt)
-	ConvertToMarkdownWithoutCache(ctx context.Context, content []byte, fileType artifactpb.FileType, filename string, prompt string) (*ConversionResult, error)
+	ConvertToMarkdownWithoutCache(ctx context.Context, content []byte, fileType artifactpb.File_Type, filename string, prompt string) (*ConversionResult, error)
 
 	// ConvertToMarkdownWithCache uses a pre-existing cached context for content understanding
 	// This is more efficient when the same content is being processed multiple times
@@ -139,7 +165,7 @@ type Provider interface {
 	GetEmbeddingDimensionality() int32
 
 	// SupportsFileType returns true if this provider can understand and extract content from this file type
-	SupportsFileType(fileType artifactpb.FileType) bool
+	SupportsFileType(fileType artifactpb.File_Type) bool
 
 	// Close releases provider resources
 	Close() error

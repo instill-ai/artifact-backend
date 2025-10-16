@@ -99,7 +99,6 @@ export default function (data) {
   restPublicWithJwt.CheckGetFileSourceUnauthorized(data);
   restPublicWithJwt.CheckGetFileSummaryUnauthenticated(data);
   restPublicWithJwt.CheckListChunksUnauthenticated(data);
-  restPublicWithJwt.CheckSearchChunksUnauthenticated(data);
 
   // Run general functional tests first (fast - no cleanup waits)
   CheckChatCacheImplementation(data);

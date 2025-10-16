@@ -14,7 +14,7 @@ export function CheckUploadCatalogFile(client, data) {
     const cRes = client.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateCatalog", { namespaceId: data.expectedOwner.id, name: constant.dbIDPrefix + randomString(10), description: randomString(30), tags: ["test", "integration", "grpc"], type: "CATALOG_TYPE_PERSISTENT" }, data.metadata);
     const catalog = cRes.message.catalog;
 
-    const reqBody = { namespaceId: data.expectedOwner.id, catalogId: catalog.catalogId, file: { name: constant.dbIDPrefix + "test-file-grpc-jwt-" + randomString(5) + ".docx", type: "FILE_TYPE_DOCX", content: constant.sampleDocx } };
+    const reqBody = { namespaceId: data.expectedOwner.id, catalogId: catalog.catalogId, file: { name: constant.dbIDPrefix + "test-file-grpc-jwt-" + randomString(5) + ".docx", type: "TYPE_DOCX", content: constant.sampleDocx } };
     // Invoke with invalid Authorization metadata → expect Unauthenticated/PermissionDenied
     const resNeg = client.invoke("artifact.artifact.v1alpha.ArtifactPublicService/UploadCatalogFile", reqBody, constant.paramsGRPCWithJwt);
     check(resNeg, {
@@ -35,7 +35,7 @@ export function CheckListCatalogFiles(client, data) {
     // Create resources with authorized metadata
     const cRes = client.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateCatalog", { namespaceId: data.expectedOwner.id, name: constant.dbIDPrefix + randomString(10), description: randomString(30), tags: ["test", "integration", "grpc"], type: "CATALOG_TYPE_PERSISTENT" }, data.metadata);
     const catalog = cRes.message.catalog;
-    client.invoke("artifact.artifact.v1alpha.ArtifactPublicService/UploadCatalogFile", { namespaceId: data.expectedOwner.id, catalogId: catalog.catalogId, file: { name: constant.dbIDPrefix + "test-file-grpc-jwt-" + randomString(5) + ".docx", type: "FILE_TYPE_DOCX", content: constant.sampleDocx } }, data.metadata);
+    client.invoke("artifact.artifact.v1alpha.ArtifactPublicService/UploadCatalogFile", { namespaceId: data.expectedOwner.id, catalogId: catalog.catalogId, file: { name: constant.dbIDPrefix + "test-file-grpc-jwt-" + randomString(5) + ".docx", type: "TYPE_DOCX", content: constant.sampleDocx } }, data.metadata);
 
     // Negative: list with invalid Authorization
     const resNeg = client.invoke("artifact.artifact.v1alpha.ArtifactPublicService/ListCatalogFiles", { namespaceId: data.expectedOwner.id, catalogId: catalog.catalogId, pageSize: 10 }, constant.paramsGRPCWithJwt);
@@ -54,7 +54,7 @@ export function CheckGetCatalogFile(client, data) {
 
     const cRes = client.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateCatalog", { namespaceId: data.expectedOwner.id, name: constant.dbIDPrefix + randomString(10), description: randomString(30), tags: ["test", "integration", "grpc"], type: "CATALOG_TYPE_PERSISTENT" }, data.metadata);
     const catalog = cRes.message.catalog;
-    const fRes = client.invoke("artifact.artifact.v1alpha.ArtifactPublicService/UploadCatalogFile", { namespaceId: data.expectedOwner.id, catalogId: catalog.catalogId, file: { name: constant.dbIDPrefix + "test-file-grpc-jwt-" + randomString(5) + ".docx", type: "FILE_TYPE_DOCX", content: constant.sampleDocx } }, data.metadata);
+    const fRes = client.invoke("artifact.artifact.v1alpha.ArtifactPublicService/UploadCatalogFile", { namespaceId: data.expectedOwner.id, catalogId: catalog.catalogId, file: { name: constant.dbIDPrefix + "test-file-grpc-jwt-" + randomString(5) + ".docx", type: "TYPE_DOCX", content: constant.sampleDocx } }, data.metadata);
     const file = fRes.message.file;
 
     // Negative: get file with invalid Authorization

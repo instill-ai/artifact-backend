@@ -109,7 +109,7 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 	// upload file to minio and database
 	kbFile := repository.KnowledgeBaseFileModel{
 		Name:                      req.GetFile().GetName(),
-		Type:                      req.File.Type.String(),
+		FileType:                  req.File.Type.String(),
 		Owner:                     ns.NsUID,
 		KBUID:                     kb.UID,
 		ProcessStatus:             artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_NOTSTARTED.String(),
@@ -143,7 +143,7 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 		}
 		// determine the file type by its extension
 		req.File.Type = determineFileType(req.File.Name)
-		if req.File.Type == artifactpb.FileType_FILE_TYPE_UNSPECIFIED {
+		if req.File.Type == artifactpb.File_TYPE_UNSPECIFIED {
 			return nil, errorsx.AddMessage(
 				fmt.Errorf("%w: unsupported file extension", errorsx.ErrInvalidArgument),
 				"Unsupported file type. Please upload a supported file format.",
@@ -210,7 +210,7 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 		kbFile.Size = object.Size
 
 		req.File.Type = determineFileType(object.Name)
-		kbFile.Type = req.File.Type.String()
+		kbFile.FileType = req.File.Type.String()
 	}
 
 	maxSizeBytes := service.MaxUploadFileSizeMB << 10 << 10
@@ -430,7 +430,7 @@ func (ph *PublicHandler) MoveFileToCatalog(ctx context.Context, req *artifactpb.
 
 	// Prepare file content and metadata for upload
 	fileContentBase64 := base64.StdEncoding.EncodeToString(fileContent)
-	fileType := artifactpb.FileType(artifactpb.FileType_value[sourceFile.Type])
+	fileType := artifactpb.File_Type(artifactpb.File_Type_value[sourceFile.FileType])
 	externalMetadata := sourceFile.PublicExternalMetadataUnmarshal()
 
 	// Step 4: Create file in target catalog
@@ -598,7 +598,7 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 				)
 			}
 			contentBase64 := base64.StdEncoding.EncodeToString(content)
-			fileType := artifactpb.FileType(artifactpb.FileType_value[kbFile.Type])
+			fileType := artifactpb.File_Type(artifactpb.File_Type_value[kbFile.FileType])
 
 			objectUID, err = ph.uploadBase64FileToMinIO(ctx, ns.NsID, ns.NsUID, ns.NsUID, fileName, contentBase64, fileType)
 			if err != nil {
@@ -637,7 +637,7 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 			CreatorUid:         kbFile.CreatorUID.String(),
 			CatalogUid:         kbFile.KBUID.String(),
 			Name:               kbFile.Name,
-			Type:               artifactpb.FileType(artifactpb.FileType_value[kbFile.Type]),
+			Type:               artifactpb.File_Type(artifactpb.File_Type_value[kbFile.FileType]),
 			CreateTime:         timestamppb.New(*kbFile.CreateTime),
 			UpdateTime:         timestamppb.New(*kbFile.UpdateTime),
 			ProcessStatus:      artifactpb.FileProcessStatus(artifactpb.FileProcessStatus_value[kbFile.ProcessStatus]),
@@ -646,7 +646,7 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 			TotalChunks:        int32(totalChunks[kbFile.UID]),
 			TotalTokens:        int32(totalTokens[kbFile.UID]),
 			ObjectUid:          objectUID.String(),
-			Summary:            string(kbFile.Summary),
+			Summary:            "", // Summary is now stored as a separate converted_file, use GetFileSummary API to retrieve
 			DownloadUrl:        downloadURL,
 			ConvertingPipeline: kbFile.ConvertingPipeline(),
 		}
@@ -657,7 +657,7 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 		}
 
 		if kbFile.ExtraMetaDataUnmarshal != nil && kbFile.ExtraMetaDataUnmarshal.Length != nil {
-			fileType := artifactpb.FileType(artifactpb.FileType_value[kbFile.Type])
+			fileType := artifactpb.File_Type(artifactpb.File_Type_value[kbFile.FileType])
 			file.Length = &artifactpb.File_Position{
 				Unit:        getPositionUnit(fileType),
 				Coordinates: kbFile.ExtraMetaDataUnmarshal.Length,
@@ -911,7 +911,7 @@ func (ph *PublicHandler) ProcessCatalogFiles(ctx context.Context, req *artifactp
 			CreatorUid:         file.CreatorUID.String(),
 			CatalogUid:         file.KBUID.String(),
 			Name:               file.Name,
-			Type:               artifactpb.FileType(artifactpb.FileType_value[file.Type]),
+			Type:               artifactpb.File_Type(artifactpb.File_Type_value[file.FileType]),
 			CreateTime:         timestamppb.New(*file.CreateTime),
 			UpdateTime:         timestamppb.New(*file.UpdateTime),
 			ProcessStatus:      artifactpb.FileProcessStatus(artifactpb.FileProcessStatus_value[file.ProcessStatus]),
@@ -931,85 +931,85 @@ func (ph *PublicHandler) ProcessCatalogFiles(ctx context.Context, req *artifactp
 	}, nil
 }
 
-func fileTypeConvertToMime(t artifactpb.FileType) string {
+func fileTypeConvertToMime(t artifactpb.File_Type) string {
 	switch t {
-	case artifactpb.FileType_FILE_TYPE_PDF:
+	case artifactpb.File_TYPE_PDF:
 		return "application/pdf"
-	case artifactpb.FileType_FILE_TYPE_MARKDOWN:
+	case artifactpb.File_TYPE_MARKDOWN:
 		return "text/markdown"
-	case artifactpb.FileType_FILE_TYPE_TEXT:
+	case artifactpb.File_TYPE_TEXT:
 		return "text/plain"
-	case artifactpb.FileType_FILE_TYPE_DOC:
+	case artifactpb.File_TYPE_DOC:
 		return "application/msword"
-	case artifactpb.FileType_FILE_TYPE_DOCX:
+	case artifactpb.File_TYPE_DOCX:
 		return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-	case artifactpb.FileType_FILE_TYPE_HTML:
+	case artifactpb.File_TYPE_HTML:
 		return "text/html"
-	case artifactpb.FileType_FILE_TYPE_PPT:
+	case artifactpb.File_TYPE_PPT:
 		return "application/vnd.ms-powerpoint"
-	case artifactpb.FileType_FILE_TYPE_PPTX:
+	case artifactpb.File_TYPE_PPTX:
 		return "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-	case artifactpb.FileType_FILE_TYPE_XLSX:
+	case artifactpb.File_TYPE_XLSX:
 		return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-	case artifactpb.FileType_FILE_TYPE_XLS:
+	case artifactpb.File_TYPE_XLS:
 		return "application/vnd.ms-excel"
-	case artifactpb.FileType_FILE_TYPE_CSV:
+	case artifactpb.File_TYPE_CSV:
 		return "text/csv"
 	default:
 		return "application/octet-stream"
 	}
 }
 
-func determineFileType(fileName string) artifactpb.FileType {
+func determineFileType(fileName string) artifactpb.File_Type {
 	fileNameLower := strings.ToLower(fileName)
 	if strings.HasSuffix(fileNameLower, ".pdf") {
-		return artifactpb.FileType_FILE_TYPE_PDF
+		return artifactpb.File_TYPE_PDF
 	} else if strings.HasSuffix(fileNameLower, ".md") {
-		return artifactpb.FileType_FILE_TYPE_MARKDOWN
+		return artifactpb.File_TYPE_MARKDOWN
 	} else if strings.HasSuffix(fileNameLower, ".txt") {
-		return artifactpb.FileType_FILE_TYPE_TEXT
+		return artifactpb.File_TYPE_TEXT
 	} else if strings.HasSuffix(fileNameLower, ".doc") {
-		return artifactpb.FileType_FILE_TYPE_DOC
+		return artifactpb.File_TYPE_DOC
 	} else if strings.HasSuffix(fileNameLower, ".docx") {
-		return artifactpb.FileType_FILE_TYPE_DOCX
+		return artifactpb.File_TYPE_DOCX
 	} else if strings.HasSuffix(fileNameLower, ".html") {
-		return artifactpb.FileType_FILE_TYPE_HTML
+		return artifactpb.File_TYPE_HTML
 	} else if strings.HasSuffix(fileNameLower, ".ppt") {
-		return artifactpb.FileType_FILE_TYPE_PPT
+		return artifactpb.File_TYPE_PPT
 	} else if strings.HasSuffix(fileNameLower, ".pptx") {
-		return artifactpb.FileType_FILE_TYPE_PPTX
+		return artifactpb.File_TYPE_PPTX
 	} else if strings.HasSuffix(fileNameLower, ".xlsx") {
-		return artifactpb.FileType_FILE_TYPE_XLSX
+		return artifactpb.File_TYPE_XLSX
 	} else if strings.HasSuffix(fileNameLower, ".xls") {
-		return artifactpb.FileType_FILE_TYPE_XLS
+		return artifactpb.File_TYPE_XLS
 	} else if strings.HasSuffix(fileNameLower, ".csv") {
-		return artifactpb.FileType_FILE_TYPE_CSV
+		return artifactpb.File_TYPE_CSV
 	}
-	return artifactpb.FileType_FILE_TYPE_UNSPECIFIED
+	return artifactpb.File_TYPE_UNSPECIFIED
 }
 
 // getPositionUnit returns the appropriate unit for file position based on file type
-func getPositionUnit(fileType artifactpb.FileType) artifactpb.File_Position_Unit {
+func getPositionUnit(fileType artifactpb.File_Type) artifactpb.File_Position_Unit {
 	switch fileType {
-	case artifactpb.FileType_FILE_TYPE_TEXT,
-		artifactpb.FileType_FILE_TYPE_MARKDOWN,
-		artifactpb.FileType_FILE_TYPE_HTML,
-		artifactpb.FileType_FILE_TYPE_CSV:
+	case artifactpb.File_TYPE_TEXT,
+		artifactpb.File_TYPE_MARKDOWN,
+		artifactpb.File_TYPE_HTML,
+		artifactpb.File_TYPE_CSV:
 		return artifactpb.File_Position_UNIT_CHARACTER
-	case artifactpb.FileType_FILE_TYPE_PDF,
-		artifactpb.FileType_FILE_TYPE_DOCX,
-		artifactpb.FileType_FILE_TYPE_DOC,
-		artifactpb.FileType_FILE_TYPE_PPT,
-		artifactpb.FileType_FILE_TYPE_PPTX,
-		artifactpb.FileType_FILE_TYPE_XLSX,
-		artifactpb.FileType_FILE_TYPE_XLS:
+	case artifactpb.File_TYPE_PDF,
+		artifactpb.File_TYPE_DOCX,
+		artifactpb.File_TYPE_DOC,
+		artifactpb.File_TYPE_PPT,
+		artifactpb.File_TYPE_PPTX,
+		artifactpb.File_TYPE_XLSX,
+		artifactpb.File_TYPE_XLS:
 		return artifactpb.File_Position_UNIT_PAGE
 	}
 
 	return artifactpb.File_Position_UNIT_UNSPECIFIED
 }
 
-// GetFileSummary returns the summary of the file
+// GetFileSummary returns the summary of the file from the summary converted_file
 func (ph *PublicHandler) GetFileSummary(ctx context.Context, req *artifactpb.GetFileSummaryRequest) (*artifactpb.GetFileSummaryResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 	_, err := getUserUIDFromContext(ctx)
@@ -1031,7 +1031,10 @@ func (ph *PublicHandler) GetFileSummary(ctx context.Context, req *artifactpb.Get
 		)
 	}
 
-	kbFiles, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{types.FileUIDType(uuid.FromStringOrNil(req.FileUid))}, repository.KnowledgeBaseFileColumn.Summary)
+	fileUID := uuid.FromStringOrNil(req.FileUid)
+
+	// Verify file exists
+	kbFiles, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{types.FileUIDType(fileUID)})
 	if err != nil || len(kbFiles) == 0 {
 		logger.Error("file not found", zap.Error(err))
 		return nil, errorsx.AddMessage(
@@ -1040,8 +1043,34 @@ func (ph *PublicHandler) GetFileSummary(ctx context.Context, req *artifactpb.Get
 		)
 	}
 
+	// Get the SUMMARY converted file using explicit type query
+	summaryConvertedFile, err := ph.service.Repository().GetConvertedFileByFileUIDAndType(
+		ctx,
+		types.FileUIDType(fileUID),
+		artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_SUMMARY,
+	)
+	if err != nil {
+		logger.Error("failed to get summary converted file", zap.Error(err))
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("summary not yet available: %w", errorsx.ErrNotFound),
+			"File summary not yet available. The file may still be processing.",
+		)
+	}
+
+	// Fetch summary content from MinIO
+	content, err := ph.service.Repository().GetFile(ctx, config.Config.Minio.BucketName, summaryConvertedFile.Destination)
+	if err != nil {
+		logger.Error("failed to get summary from MinIO",
+			zap.String("destination", summaryConvertedFile.Destination),
+			zap.Error(err))
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to retrieve summary content: %w", err),
+			"Unable to retrieve file summary. Please try again later.",
+		)
+	}
+
 	return &artifactpb.GetFileSummaryResponse{
-		Summary: string(kbFiles[0].Summary),
+		Summary: string(content),
 	}, nil
 }
 
@@ -1057,7 +1086,7 @@ func (ph *PublicHandler) GetFileSummary(ctx context.Context, req *artifactpb.Get
 // 3. Creating the object record in the database
 //
 // This ensures both flows result in the same consistent data structure.
-func (ph *PublicHandler) uploadBase64FileToMinIO(ctx context.Context, nsID string, nsUID, creatorUID types.CreatorUIDType, fileName string, content string, fileType artifactpb.FileType) (types.ObjectUIDType, error) {
+func (ph *PublicHandler) uploadBase64FileToMinIO(ctx context.Context, nsID string, nsUID, creatorUID types.CreatorUIDType, fileName string, content string, fileType artifactpb.File_Type) (types.ObjectUIDType, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 	response, err := ph.service.GetUploadURL(ctx, &artifactpb.GetObjectUploadURLRequest{
 		NamespaceId: nsID,

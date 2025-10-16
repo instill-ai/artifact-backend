@@ -24,7 +24,7 @@ type Service interface {
 	CheckNamespacePermission(context.Context, *resource.Namespace) error
 	SimilarityChunksSearch(context.Context, types.OwnerUIDType, *artifactpb.SimilarityChunksSearchRequest, [][]float32) ([]SimChunk, error)
 	GetNamespaceByNsID(context.Context, string) (*resource.Namespace, error)
-	GetChunksByFile(context.Context, *repository.KnowledgeBaseFileModel) (types.SourceTableType, types.SourceUIDType, []repository.TextChunkModel, map[types.TextChunkUIDType]types.ContentType, []string, error)
+	GetChunksByFile(context.Context, *repository.KnowledgeBaseFileModel) (types.SourceTableType, types.SourceUIDType, []repository.TextChunkModel, []string, error)
 	GetConvertedFilePathsByFileUID(context.Context, types.KBUIDType, types.FileUIDType) ([]string, error)
 	GetTextChunkFilePathsByFileUID(context.Context, types.KBUIDType, types.FileUIDType) ([]string, error)
 	ListRepositoryTags(context.Context, *artifactpb.ListRepositoryTagsRequest) (*artifactpb.ListRepositoryTagsResponse, error)

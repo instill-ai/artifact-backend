@@ -17,13 +17,13 @@ export function CheckUploadCatalogFile(client, data) {
     );
     const catalog = cRes.message && cRes.message.catalog ? cRes.message.catalog : {};
 
-    const reqBody = { namespaceId: data.expectedOwner.id, catalogId: catalog.catalogId, file: { name: constant.dbIDPrefix + "test-file-grpc-" + randomString(5) + ".doc", type: "FILE_TYPE_DOC", content: constant.sampleDoc } };
+    const reqBody = { namespaceId: data.expectedOwner.id, catalogId: catalog.catalogId, file: { name: constant.dbIDPrefix + "test-file-grpc-" + randomString(5) + ".doc", type: "TYPE_DOC", content: constant.sampleDoc } };
     const resOrigin = client.invoke("artifact.artifact.v1alpha.ArtifactPublicService/UploadCatalogFile", reqBody, data.metadata);
     check(resOrigin, {
       "artifact.artifact.v1alpha.ArtifactPublicService/UploadCatalogFile response status is StatusOK": (r) => r.status === grpc.StatusOK,
       "artifact.artifact.v1alpha.ArtifactPublicService/UploadCatalogFile response file name": (r) => r.message.file.name === reqBody.file.name,
       "artifact.artifact.v1alpha.ArtifactPublicService/UploadCatalogFile response file uid": (r) => helper.isUUID(r.message.file.fileUid),
-      "artifact.artifact.v1alpha.ArtifactPublicService/UploadCatalogFile response file type": (r) => r.message.file.type === "FILE_TYPE_DOC",
+      "artifact.artifact.v1alpha.ArtifactPublicService/UploadCatalogFile response file type": (r) => r.message.file.type === "TYPE_DOC",
       "artifact.artifact.v1alpha.ArtifactPublicService/UploadCatalogFile response file is valid": (r) => helper.validateFileGRPC(r.message.file, false),
     });
 
@@ -39,7 +39,7 @@ export function CheckListCatalogFiles(client, data) {
 
     const cRes = client.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateCatalog", { namespaceId: data.expectedOwner.id, name: constant.dbIDPrefix + randomString(10), description: randomString(30), tags: ["test", "integration", "grpc"], type: "CATALOG_TYPE_PERSISTENT" }, data.metadata);
     const catalog = cRes.message && cRes.message.catalog ? cRes.message.catalog : {};
-    const fRes = client.invoke("artifact.artifact.v1alpha.ArtifactPublicService/UploadCatalogFile", { namespaceId: data.expectedOwner.id, catalogId: catalog.catalogId, file: { name: constant.dbIDPrefix + "test-file-grpc-" + randomString(5) + ".doc", type: "FILE_TYPE_DOC", content: constant.sampleDoc } }, data.metadata);
+    const fRes = client.invoke("artifact.artifact.v1alpha.ArtifactPublicService/UploadCatalogFile", { namespaceId: data.expectedOwner.id, catalogId: catalog.catalogId, file: { name: constant.dbIDPrefix + "test-file-grpc-" + randomString(5) + ".doc", type: "TYPE_DOC", content: constant.sampleDoc } }, data.metadata);
 
     const resOrigin = client.invoke("artifact.artifact.v1alpha.ArtifactPublicService/ListCatalogFiles", { namespaceId: data.expectedOwner.id, catalogId: catalog.catalogId, pageSize: 10 }, data.metadata);
     check(resOrigin, {
@@ -58,7 +58,7 @@ export function CheckGetCatalogFile(client, data) {
 
     const cRes = client.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateCatalog", { namespaceId: data.expectedOwner.id, name: constant.dbIDPrefix + randomString(10), description: randomString(30), tags: ["test", "integration", "grpc"], type: "CATALOG_TYPE_PERSISTENT" }, data.metadata);
     const catalog = cRes.message && cRes.message.catalog ? cRes.message.catalog : {};
-    const fRes = client.invoke("artifact.artifact.v1alpha.ArtifactPublicService/UploadCatalogFile", { namespaceId: data.expectedOwner.id, catalogId: catalog.catalogId, file: { name: constant.dbIDPrefix + "test-file-grpc-" + randomString(5) + ".doc", type: "FILE_TYPE_DOC", content: constant.sampleDoc } }, data.metadata);
+    const fRes = client.invoke("artifact.artifact.v1alpha.ArtifactPublicService/UploadCatalogFile", { namespaceId: data.expectedOwner.id, catalogId: catalog.catalogId, file: { name: constant.dbIDPrefix + "test-file-grpc-" + randomString(5) + ".doc", type: "TYPE_DOC", content: constant.sampleDoc } }, data.metadata);
     const file = fRes.message.file;
 
     const resOrigin = client.invoke("artifact.artifact.v1alpha.ArtifactPublicService/GetCatalogFile", { namespaceId: data.expectedOwner.id, catalogId: catalog.catalogId, fileUid: file.fileUid }, data.metadata);
@@ -172,7 +172,7 @@ export function CheckCleanupOnFileDeletion(client, data) {
     // Upload a PDF file (will trigger conversion)
     const fRes = client.invoke(
       "artifact.artifact.v1alpha.ArtifactPublicService/UploadCatalogFile",
-      { namespaceId: data.expectedOwner.id, catalogId: catalog.catalogId, file: { name: constant.dbIDPrefix + "clf.pdf", type: "FILE_TYPE_PDF", content: constant.samplePdf } },
+      { namespaceId: data.expectedOwner.id, catalogId: catalog.catalogId, file: { name: constant.dbIDPrefix + "clf.pdf", type: "TYPE_PDF", content: constant.samplePdf } },
       data.metadata
     );
     const file = fRes.message && fRes.message.file ? fRes.message.file : {};

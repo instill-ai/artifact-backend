@@ -323,8 +323,8 @@ func createWorkflowTestEmbeddings(count int) []repository.EmbeddingModel {
 			SourceUID:   uuid.Must(uuid.NewV4()),
 			KBFileUID:   kbFileUID,
 			Vector:      createWorkflowTestVector(768),
-			FileType:    "application/pdf",
-			ContentType: "text",
+			ContentType: "application/pdf",
+			ChunkType:   "content",
 		}
 	}
 

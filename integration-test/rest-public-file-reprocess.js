@@ -80,7 +80,7 @@ export function CheckFileReprocessing(data) {
       `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
       JSON.stringify({
         name: fileName,
-        type: "FILE_TYPE_PDF",
+        type: "TYPE_PDF",
         content: constant.samplePdf
       }),
       data.header
