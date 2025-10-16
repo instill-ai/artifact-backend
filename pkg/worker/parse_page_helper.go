@@ -33,8 +33,13 @@ func parseMarkdownPages(markdown string) (markdownWithTags string, pages []strin
 	pageMatches := pageTagPattern.FindAllStringIndex(markdown, -1)
 
 	// If no page tags found, treat entire document as a single page
+	// Create position data with one delimiter at the end for visual grounding consistency
 	if len(pageMatches) == 0 {
-		return markdown, []string{markdown}, nil
+		contentLength := uint32(len([]rune(markdown))) // Use rune count for Unicode safety
+		singlePagePositionData := &types.PositionData{
+			PageDelimiters: []uint32{contentLength}, // Single page, delimiter at end
+		}
+		return markdown, []string{markdown}, singlePagePositionData
 	}
 
 	// Split markdown by page tags and extract page content (without tags)

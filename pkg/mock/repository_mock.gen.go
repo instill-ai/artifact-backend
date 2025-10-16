@@ -192,6 +192,13 @@ type RepositoryMock struct {
 	beforeFlushCollectionCounter uint64
 	FlushCollectionMock          mRepositoryMockFlushCollection
 
+	funcGetAllConvertedFilesByFileUID          func(ctx context.Context, fileUID types.FileUIDType) (ca1 []mm_repository.ConvertedFileModel, err error)
+	funcGetAllConvertedFilesByFileUIDOrigin    string
+	inspectFuncGetAllConvertedFilesByFileUID   func(ctx context.Context, fileUID types.FileUIDType)
+	afterGetAllConvertedFilesByFileUIDCounter  uint64
+	beforeGetAllConvertedFilesByFileUIDCounter uint64
+	GetAllConvertedFilesByFileUIDMock          mRepositoryMockGetAllConvertedFilesByFileUID
+
 	funcGetChatCacheMetadata          func(ctx context.Context, kbUID types.KBUIDType, fileUIDs []types.FileUIDType) (cp1 *mm_repository.ChatCacheMetadata, err error)
 	funcGetChatCacheMetadataOrigin    string
 	inspectFuncGetChatCacheMetadata   func(ctx context.Context, kbUID types.KBUIDType, fileUIDs []types.FileUIDType)
@@ -205,6 +212,13 @@ type RepositoryMock struct {
 	afterGetConvertedFileByFileUIDCounter  uint64
 	beforeGetConvertedFileByFileUIDCounter uint64
 	GetConvertedFileByFileUIDMock          mRepositoryMockGetConvertedFileByFileUID
+
+	funcGetConvertedFileByFileUIDAndType          func(ctx context.Context, fileUID types.FileUIDType, convertedType artifactpb.ConvertedFileType) (cp1 *mm_repository.ConvertedFileModel, err error)
+	funcGetConvertedFileByFileUIDAndTypeOrigin    string
+	inspectFuncGetConvertedFileByFileUIDAndType   func(ctx context.Context, fileUID types.FileUIDType, convertedType artifactpb.ConvertedFileType)
+	afterGetConvertedFileByFileUIDAndTypeCounter  uint64
+	beforeGetConvertedFileByFileUIDAndTypeCounter uint64
+	GetConvertedFileByFileUIDAndTypeMock          mRepositoryMockGetConvertedFileByFileUIDAndType
 
 	funcGetCountFilesByListKnowledgeBaseUID          func(ctx context.Context, kbUIDs []types.KBUIDType) (m1 map[types.KBUIDType]int64, err error)
 	funcGetCountFilesByListKnowledgeBaseUIDOrigin    string
@@ -345,6 +359,13 @@ type RepositoryMock struct {
 	beforeGetRepositoryTagCounter uint64
 	GetRepositoryTagMock          mRepositoryMockGetRepositoryTag
 
+	funcGetSourceByFileUID          func(ctx context.Context, fileUID types.FileUIDType) (sp1 *mm_repository.SourceMeta, err error)
+	funcGetSourceByFileUIDOrigin    string
+	inspectFuncGetSourceByFileUID   func(ctx context.Context, fileUID types.FileUIDType)
+	afterGetSourceByFileUIDCounter  uint64
+	beforeGetSourceByFileUIDCounter uint64
+	GetSourceByFileUIDMock          mRepositoryMockGetSourceByFileUID
+
 	funcGetSourceTableAndUIDByFileUIDs func(ctx context.Context, files []mm_repository.KnowledgeBaseFileModel) (m1 map[types.FileUIDType]struct {
 		SourceTable string
 		SourceUID   types.SourceUIDType
@@ -388,13 +409,6 @@ type RepositoryMock struct {
 	afterGetTotalTokensByListKBUIDsCounter  uint64
 	beforeGetTotalTokensByListKBUIDsCounter uint64
 	GetTotalTokensByListKBUIDsMock          mRepositoryMockGetTotalTokensByListKBUIDs
-
-	funcGetTruthSourceByFileUID          func(ctx context.Context, fileUID types.FileUIDType) (sp1 *mm_repository.SourceMeta, err error)
-	funcGetTruthSourceByFileUIDOrigin    string
-	inspectFuncGetTruthSourceByFileUID   func(ctx context.Context, fileUID types.FileUIDType)
-	afterGetTruthSourceByFileUIDCounter  uint64
-	beforeGetTruthSourceByFileUIDCounter uint64
-	GetTruthSourceByFileUIDMock          mRepositoryMockGetTruthSourceByFileUID
 
 	funcHardDeleteConvertedFileByFileUID          func(ctx context.Context, fileUID types.FileUIDType) (err error)
 	funcHardDeleteConvertedFileByFileUIDOrigin    string
@@ -701,11 +715,17 @@ func NewRepositoryMock(t minimock.Tester) *RepositoryMock {
 	m.FlushCollectionMock = mRepositoryMockFlushCollection{mock: m}
 	m.FlushCollectionMock.callArgs = []*RepositoryMockFlushCollectionParams{}
 
+	m.GetAllConvertedFilesByFileUIDMock = mRepositoryMockGetAllConvertedFilesByFileUID{mock: m}
+	m.GetAllConvertedFilesByFileUIDMock.callArgs = []*RepositoryMockGetAllConvertedFilesByFileUIDParams{}
+
 	m.GetChatCacheMetadataMock = mRepositoryMockGetChatCacheMetadata{mock: m}
 	m.GetChatCacheMetadataMock.callArgs = []*RepositoryMockGetChatCacheMetadataParams{}
 
 	m.GetConvertedFileByFileUIDMock = mRepositoryMockGetConvertedFileByFileUID{mock: m}
 	m.GetConvertedFileByFileUIDMock.callArgs = []*RepositoryMockGetConvertedFileByFileUIDParams{}
+
+	m.GetConvertedFileByFileUIDAndTypeMock = mRepositoryMockGetConvertedFileByFileUIDAndType{mock: m}
+	m.GetConvertedFileByFileUIDAndTypeMock.callArgs = []*RepositoryMockGetConvertedFileByFileUIDAndTypeParams{}
 
 	m.GetCountFilesByListKnowledgeBaseUIDMock = mRepositoryMockGetCountFilesByListKnowledgeBaseUID{mock: m}
 	m.GetCountFilesByListKnowledgeBaseUIDMock.callArgs = []*RepositoryMockGetCountFilesByListKnowledgeBaseUIDParams{}
@@ -764,6 +784,9 @@ func NewRepositoryMock(t minimock.Tester) *RepositoryMock {
 	m.GetRepositoryTagMock = mRepositoryMockGetRepositoryTag{mock: m}
 	m.GetRepositoryTagMock.callArgs = []*RepositoryMockGetRepositoryTagParams{}
 
+	m.GetSourceByFileUIDMock = mRepositoryMockGetSourceByFileUID{mock: m}
+	m.GetSourceByFileUIDMock.callArgs = []*RepositoryMockGetSourceByFileUIDParams{}
+
 	m.GetSourceTableAndUIDByFileUIDsMock = mRepositoryMockGetSourceTableAndUIDByFileUIDs{mock: m}
 	m.GetSourceTableAndUIDByFileUIDsMock.callArgs = []*RepositoryMockGetSourceTableAndUIDByFileUIDsParams{}
 
@@ -778,9 +801,6 @@ func NewRepositoryMock(t minimock.Tester) *RepositoryMock {
 
 	m.GetTotalTokensByListKBUIDsMock = mRepositoryMockGetTotalTokensByListKBUIDs{mock: m}
 	m.GetTotalTokensByListKBUIDsMock.callArgs = []*RepositoryMockGetTotalTokensByListKBUIDsParams{}
-
-	m.GetTruthSourceByFileUIDMock = mRepositoryMockGetTruthSourceByFileUID{mock: m}
-	m.GetTruthSourceByFileUIDMock.callArgs = []*RepositoryMockGetTruthSourceByFileUIDParams{}
 
 	m.HardDeleteConvertedFileByFileUIDMock = mRepositoryMockHardDeleteConvertedFileByFileUID{mock: m}
 	m.HardDeleteConvertedFileByFileUIDMock.callArgs = []*RepositoryMockHardDeleteConvertedFileByFileUIDParams{}
@@ -9441,6 +9461,349 @@ func (m *RepositoryMock) MinimockFlushCollectionInspect() {
 	}
 }
 
+type mRepositoryMockGetAllConvertedFilesByFileUID struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockGetAllConvertedFilesByFileUIDExpectation
+	expectations       []*RepositoryMockGetAllConvertedFilesByFileUIDExpectation
+
+	callArgs []*RepositoryMockGetAllConvertedFilesByFileUIDParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockGetAllConvertedFilesByFileUIDExpectation specifies expectation struct of the Repository.GetAllConvertedFilesByFileUID
+type RepositoryMockGetAllConvertedFilesByFileUIDExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockGetAllConvertedFilesByFileUIDParams
+	paramPtrs          *RepositoryMockGetAllConvertedFilesByFileUIDParamPtrs
+	expectationOrigins RepositoryMockGetAllConvertedFilesByFileUIDExpectationOrigins
+	results            *RepositoryMockGetAllConvertedFilesByFileUIDResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockGetAllConvertedFilesByFileUIDParams contains parameters of the Repository.GetAllConvertedFilesByFileUID
+type RepositoryMockGetAllConvertedFilesByFileUIDParams struct {
+	ctx     context.Context
+	fileUID types.FileUIDType
+}
+
+// RepositoryMockGetAllConvertedFilesByFileUIDParamPtrs contains pointers to parameters of the Repository.GetAllConvertedFilesByFileUID
+type RepositoryMockGetAllConvertedFilesByFileUIDParamPtrs struct {
+	ctx     *context.Context
+	fileUID *types.FileUIDType
+}
+
+// RepositoryMockGetAllConvertedFilesByFileUIDResults contains results of the Repository.GetAllConvertedFilesByFileUID
+type RepositoryMockGetAllConvertedFilesByFileUIDResults struct {
+	ca1 []mm_repository.ConvertedFileModel
+	err error
+}
+
+// RepositoryMockGetAllConvertedFilesByFileUIDOrigins contains origins of expectations of the Repository.GetAllConvertedFilesByFileUID
+type RepositoryMockGetAllConvertedFilesByFileUIDExpectationOrigins struct {
+	origin        string
+	originCtx     string
+	originFileUID string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmGetAllConvertedFilesByFileUID *mRepositoryMockGetAllConvertedFilesByFileUID) Optional() *mRepositoryMockGetAllConvertedFilesByFileUID {
+	mmGetAllConvertedFilesByFileUID.optional = true
+	return mmGetAllConvertedFilesByFileUID
+}
+
+// Expect sets up expected params for Repository.GetAllConvertedFilesByFileUID
+func (mmGetAllConvertedFilesByFileUID *mRepositoryMockGetAllConvertedFilesByFileUID) Expect(ctx context.Context, fileUID types.FileUIDType) *mRepositoryMockGetAllConvertedFilesByFileUID {
+	if mmGetAllConvertedFilesByFileUID.mock.funcGetAllConvertedFilesByFileUID != nil {
+		mmGetAllConvertedFilesByFileUID.mock.t.Fatalf("RepositoryMock.GetAllConvertedFilesByFileUID mock is already set by Set")
+	}
+
+	if mmGetAllConvertedFilesByFileUID.defaultExpectation == nil {
+		mmGetAllConvertedFilesByFileUID.defaultExpectation = &RepositoryMockGetAllConvertedFilesByFileUIDExpectation{}
+	}
+
+	if mmGetAllConvertedFilesByFileUID.defaultExpectation.paramPtrs != nil {
+		mmGetAllConvertedFilesByFileUID.mock.t.Fatalf("RepositoryMock.GetAllConvertedFilesByFileUID mock is already set by ExpectParams functions")
+	}
+
+	mmGetAllConvertedFilesByFileUID.defaultExpectation.params = &RepositoryMockGetAllConvertedFilesByFileUIDParams{ctx, fileUID}
+	mmGetAllConvertedFilesByFileUID.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmGetAllConvertedFilesByFileUID.expectations {
+		if minimock.Equal(e.params, mmGetAllConvertedFilesByFileUID.defaultExpectation.params) {
+			mmGetAllConvertedFilesByFileUID.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetAllConvertedFilesByFileUID.defaultExpectation.params)
+		}
+	}
+
+	return mmGetAllConvertedFilesByFileUID
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.GetAllConvertedFilesByFileUID
+func (mmGetAllConvertedFilesByFileUID *mRepositoryMockGetAllConvertedFilesByFileUID) ExpectCtxParam1(ctx context.Context) *mRepositoryMockGetAllConvertedFilesByFileUID {
+	if mmGetAllConvertedFilesByFileUID.mock.funcGetAllConvertedFilesByFileUID != nil {
+		mmGetAllConvertedFilesByFileUID.mock.t.Fatalf("RepositoryMock.GetAllConvertedFilesByFileUID mock is already set by Set")
+	}
+
+	if mmGetAllConvertedFilesByFileUID.defaultExpectation == nil {
+		mmGetAllConvertedFilesByFileUID.defaultExpectation = &RepositoryMockGetAllConvertedFilesByFileUIDExpectation{}
+	}
+
+	if mmGetAllConvertedFilesByFileUID.defaultExpectation.params != nil {
+		mmGetAllConvertedFilesByFileUID.mock.t.Fatalf("RepositoryMock.GetAllConvertedFilesByFileUID mock is already set by Expect")
+	}
+
+	if mmGetAllConvertedFilesByFileUID.defaultExpectation.paramPtrs == nil {
+		mmGetAllConvertedFilesByFileUID.defaultExpectation.paramPtrs = &RepositoryMockGetAllConvertedFilesByFileUIDParamPtrs{}
+	}
+	mmGetAllConvertedFilesByFileUID.defaultExpectation.paramPtrs.ctx = &ctx
+	mmGetAllConvertedFilesByFileUID.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmGetAllConvertedFilesByFileUID
+}
+
+// ExpectFileUIDParam2 sets up expected param fileUID for Repository.GetAllConvertedFilesByFileUID
+func (mmGetAllConvertedFilesByFileUID *mRepositoryMockGetAllConvertedFilesByFileUID) ExpectFileUIDParam2(fileUID types.FileUIDType) *mRepositoryMockGetAllConvertedFilesByFileUID {
+	if mmGetAllConvertedFilesByFileUID.mock.funcGetAllConvertedFilesByFileUID != nil {
+		mmGetAllConvertedFilesByFileUID.mock.t.Fatalf("RepositoryMock.GetAllConvertedFilesByFileUID mock is already set by Set")
+	}
+
+	if mmGetAllConvertedFilesByFileUID.defaultExpectation == nil {
+		mmGetAllConvertedFilesByFileUID.defaultExpectation = &RepositoryMockGetAllConvertedFilesByFileUIDExpectation{}
+	}
+
+	if mmGetAllConvertedFilesByFileUID.defaultExpectation.params != nil {
+		mmGetAllConvertedFilesByFileUID.mock.t.Fatalf("RepositoryMock.GetAllConvertedFilesByFileUID mock is already set by Expect")
+	}
+
+	if mmGetAllConvertedFilesByFileUID.defaultExpectation.paramPtrs == nil {
+		mmGetAllConvertedFilesByFileUID.defaultExpectation.paramPtrs = &RepositoryMockGetAllConvertedFilesByFileUIDParamPtrs{}
+	}
+	mmGetAllConvertedFilesByFileUID.defaultExpectation.paramPtrs.fileUID = &fileUID
+	mmGetAllConvertedFilesByFileUID.defaultExpectation.expectationOrigins.originFileUID = minimock.CallerInfo(1)
+
+	return mmGetAllConvertedFilesByFileUID
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.GetAllConvertedFilesByFileUID
+func (mmGetAllConvertedFilesByFileUID *mRepositoryMockGetAllConvertedFilesByFileUID) Inspect(f func(ctx context.Context, fileUID types.FileUIDType)) *mRepositoryMockGetAllConvertedFilesByFileUID {
+	if mmGetAllConvertedFilesByFileUID.mock.inspectFuncGetAllConvertedFilesByFileUID != nil {
+		mmGetAllConvertedFilesByFileUID.mock.t.Fatalf("Inspect function is already set for RepositoryMock.GetAllConvertedFilesByFileUID")
+	}
+
+	mmGetAllConvertedFilesByFileUID.mock.inspectFuncGetAllConvertedFilesByFileUID = f
+
+	return mmGetAllConvertedFilesByFileUID
+}
+
+// Return sets up results that will be returned by Repository.GetAllConvertedFilesByFileUID
+func (mmGetAllConvertedFilesByFileUID *mRepositoryMockGetAllConvertedFilesByFileUID) Return(ca1 []mm_repository.ConvertedFileModel, err error) *RepositoryMock {
+	if mmGetAllConvertedFilesByFileUID.mock.funcGetAllConvertedFilesByFileUID != nil {
+		mmGetAllConvertedFilesByFileUID.mock.t.Fatalf("RepositoryMock.GetAllConvertedFilesByFileUID mock is already set by Set")
+	}
+
+	if mmGetAllConvertedFilesByFileUID.defaultExpectation == nil {
+		mmGetAllConvertedFilesByFileUID.defaultExpectation = &RepositoryMockGetAllConvertedFilesByFileUIDExpectation{mock: mmGetAllConvertedFilesByFileUID.mock}
+	}
+	mmGetAllConvertedFilesByFileUID.defaultExpectation.results = &RepositoryMockGetAllConvertedFilesByFileUIDResults{ca1, err}
+	mmGetAllConvertedFilesByFileUID.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmGetAllConvertedFilesByFileUID.mock
+}
+
+// Set uses given function f to mock the Repository.GetAllConvertedFilesByFileUID method
+func (mmGetAllConvertedFilesByFileUID *mRepositoryMockGetAllConvertedFilesByFileUID) Set(f func(ctx context.Context, fileUID types.FileUIDType) (ca1 []mm_repository.ConvertedFileModel, err error)) *RepositoryMock {
+	if mmGetAllConvertedFilesByFileUID.defaultExpectation != nil {
+		mmGetAllConvertedFilesByFileUID.mock.t.Fatalf("Default expectation is already set for the Repository.GetAllConvertedFilesByFileUID method")
+	}
+
+	if len(mmGetAllConvertedFilesByFileUID.expectations) > 0 {
+		mmGetAllConvertedFilesByFileUID.mock.t.Fatalf("Some expectations are already set for the Repository.GetAllConvertedFilesByFileUID method")
+	}
+
+	mmGetAllConvertedFilesByFileUID.mock.funcGetAllConvertedFilesByFileUID = f
+	mmGetAllConvertedFilesByFileUID.mock.funcGetAllConvertedFilesByFileUIDOrigin = minimock.CallerInfo(1)
+	return mmGetAllConvertedFilesByFileUID.mock
+}
+
+// When sets expectation for the Repository.GetAllConvertedFilesByFileUID which will trigger the result defined by the following
+// Then helper
+func (mmGetAllConvertedFilesByFileUID *mRepositoryMockGetAllConvertedFilesByFileUID) When(ctx context.Context, fileUID types.FileUIDType) *RepositoryMockGetAllConvertedFilesByFileUIDExpectation {
+	if mmGetAllConvertedFilesByFileUID.mock.funcGetAllConvertedFilesByFileUID != nil {
+		mmGetAllConvertedFilesByFileUID.mock.t.Fatalf("RepositoryMock.GetAllConvertedFilesByFileUID mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockGetAllConvertedFilesByFileUIDExpectation{
+		mock:               mmGetAllConvertedFilesByFileUID.mock,
+		params:             &RepositoryMockGetAllConvertedFilesByFileUIDParams{ctx, fileUID},
+		expectationOrigins: RepositoryMockGetAllConvertedFilesByFileUIDExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmGetAllConvertedFilesByFileUID.expectations = append(mmGetAllConvertedFilesByFileUID.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.GetAllConvertedFilesByFileUID return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockGetAllConvertedFilesByFileUIDExpectation) Then(ca1 []mm_repository.ConvertedFileModel, err error) *RepositoryMock {
+	e.results = &RepositoryMockGetAllConvertedFilesByFileUIDResults{ca1, err}
+	return e.mock
+}
+
+// Times sets number of times Repository.GetAllConvertedFilesByFileUID should be invoked
+func (mmGetAllConvertedFilesByFileUID *mRepositoryMockGetAllConvertedFilesByFileUID) Times(n uint64) *mRepositoryMockGetAllConvertedFilesByFileUID {
+	if n == 0 {
+		mmGetAllConvertedFilesByFileUID.mock.t.Fatalf("Times of RepositoryMock.GetAllConvertedFilesByFileUID mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetAllConvertedFilesByFileUID.expectedInvocations, n)
+	mmGetAllConvertedFilesByFileUID.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmGetAllConvertedFilesByFileUID
+}
+
+func (mmGetAllConvertedFilesByFileUID *mRepositoryMockGetAllConvertedFilesByFileUID) invocationsDone() bool {
+	if len(mmGetAllConvertedFilesByFileUID.expectations) == 0 && mmGetAllConvertedFilesByFileUID.defaultExpectation == nil && mmGetAllConvertedFilesByFileUID.mock.funcGetAllConvertedFilesByFileUID == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetAllConvertedFilesByFileUID.mock.afterGetAllConvertedFilesByFileUIDCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetAllConvertedFilesByFileUID.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetAllConvertedFilesByFileUID implements mm_repository.Repository
+func (mmGetAllConvertedFilesByFileUID *RepositoryMock) GetAllConvertedFilesByFileUID(ctx context.Context, fileUID types.FileUIDType) (ca1 []mm_repository.ConvertedFileModel, err error) {
+	mm_atomic.AddUint64(&mmGetAllConvertedFilesByFileUID.beforeGetAllConvertedFilesByFileUIDCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetAllConvertedFilesByFileUID.afterGetAllConvertedFilesByFileUIDCounter, 1)
+
+	mmGetAllConvertedFilesByFileUID.t.Helper()
+
+	if mmGetAllConvertedFilesByFileUID.inspectFuncGetAllConvertedFilesByFileUID != nil {
+		mmGetAllConvertedFilesByFileUID.inspectFuncGetAllConvertedFilesByFileUID(ctx, fileUID)
+	}
+
+	mm_params := RepositoryMockGetAllConvertedFilesByFileUIDParams{ctx, fileUID}
+
+	// Record call args
+	mmGetAllConvertedFilesByFileUID.GetAllConvertedFilesByFileUIDMock.mutex.Lock()
+	mmGetAllConvertedFilesByFileUID.GetAllConvertedFilesByFileUIDMock.callArgs = append(mmGetAllConvertedFilesByFileUID.GetAllConvertedFilesByFileUIDMock.callArgs, &mm_params)
+	mmGetAllConvertedFilesByFileUID.GetAllConvertedFilesByFileUIDMock.mutex.Unlock()
+
+	for _, e := range mmGetAllConvertedFilesByFileUID.GetAllConvertedFilesByFileUIDMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.ca1, e.results.err
+		}
+	}
+
+	if mmGetAllConvertedFilesByFileUID.GetAllConvertedFilesByFileUIDMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetAllConvertedFilesByFileUID.GetAllConvertedFilesByFileUIDMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetAllConvertedFilesByFileUID.GetAllConvertedFilesByFileUIDMock.defaultExpectation.params
+		mm_want_ptrs := mmGetAllConvertedFilesByFileUID.GetAllConvertedFilesByFileUIDMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockGetAllConvertedFilesByFileUIDParams{ctx, fileUID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetAllConvertedFilesByFileUID.t.Errorf("RepositoryMock.GetAllConvertedFilesByFileUID got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetAllConvertedFilesByFileUID.GetAllConvertedFilesByFileUIDMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.fileUID != nil && !minimock.Equal(*mm_want_ptrs.fileUID, mm_got.fileUID) {
+				mmGetAllConvertedFilesByFileUID.t.Errorf("RepositoryMock.GetAllConvertedFilesByFileUID got unexpected parameter fileUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetAllConvertedFilesByFileUID.GetAllConvertedFilesByFileUIDMock.defaultExpectation.expectationOrigins.originFileUID, *mm_want_ptrs.fileUID, mm_got.fileUID, minimock.Diff(*mm_want_ptrs.fileUID, mm_got.fileUID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetAllConvertedFilesByFileUID.t.Errorf("RepositoryMock.GetAllConvertedFilesByFileUID got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmGetAllConvertedFilesByFileUID.GetAllConvertedFilesByFileUIDMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetAllConvertedFilesByFileUID.GetAllConvertedFilesByFileUIDMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetAllConvertedFilesByFileUID.t.Fatal("No results are set for the RepositoryMock.GetAllConvertedFilesByFileUID")
+		}
+		return (*mm_results).ca1, (*mm_results).err
+	}
+	if mmGetAllConvertedFilesByFileUID.funcGetAllConvertedFilesByFileUID != nil {
+		return mmGetAllConvertedFilesByFileUID.funcGetAllConvertedFilesByFileUID(ctx, fileUID)
+	}
+	mmGetAllConvertedFilesByFileUID.t.Fatalf("Unexpected call to RepositoryMock.GetAllConvertedFilesByFileUID. %v %v", ctx, fileUID)
+	return
+}
+
+// GetAllConvertedFilesByFileUIDAfterCounter returns a count of finished RepositoryMock.GetAllConvertedFilesByFileUID invocations
+func (mmGetAllConvertedFilesByFileUID *RepositoryMock) GetAllConvertedFilesByFileUIDAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetAllConvertedFilesByFileUID.afterGetAllConvertedFilesByFileUIDCounter)
+}
+
+// GetAllConvertedFilesByFileUIDBeforeCounter returns a count of RepositoryMock.GetAllConvertedFilesByFileUID invocations
+func (mmGetAllConvertedFilesByFileUID *RepositoryMock) GetAllConvertedFilesByFileUIDBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetAllConvertedFilesByFileUID.beforeGetAllConvertedFilesByFileUIDCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.GetAllConvertedFilesByFileUID.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetAllConvertedFilesByFileUID *mRepositoryMockGetAllConvertedFilesByFileUID) Calls() []*RepositoryMockGetAllConvertedFilesByFileUIDParams {
+	mmGetAllConvertedFilesByFileUID.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockGetAllConvertedFilesByFileUIDParams, len(mmGetAllConvertedFilesByFileUID.callArgs))
+	copy(argCopy, mmGetAllConvertedFilesByFileUID.callArgs)
+
+	mmGetAllConvertedFilesByFileUID.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetAllConvertedFilesByFileUIDDone returns true if the count of the GetAllConvertedFilesByFileUID invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockGetAllConvertedFilesByFileUIDDone() bool {
+	if m.GetAllConvertedFilesByFileUIDMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.GetAllConvertedFilesByFileUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetAllConvertedFilesByFileUIDMock.invocationsDone()
+}
+
+// MinimockGetAllConvertedFilesByFileUIDInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockGetAllConvertedFilesByFileUIDInspect() {
+	for _, e := range m.GetAllConvertedFilesByFileUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.GetAllConvertedFilesByFileUID at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterGetAllConvertedFilesByFileUIDCounter := mm_atomic.LoadUint64(&m.afterGetAllConvertedFilesByFileUIDCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetAllConvertedFilesByFileUIDMock.defaultExpectation != nil && afterGetAllConvertedFilesByFileUIDCounter < 1 {
+		if m.GetAllConvertedFilesByFileUIDMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.GetAllConvertedFilesByFileUID at\n%s", m.GetAllConvertedFilesByFileUIDMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.GetAllConvertedFilesByFileUID at\n%s with params: %#v", m.GetAllConvertedFilesByFileUIDMock.defaultExpectation.expectationOrigins.origin, *m.GetAllConvertedFilesByFileUIDMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetAllConvertedFilesByFileUID != nil && afterGetAllConvertedFilesByFileUIDCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.GetAllConvertedFilesByFileUID at\n%s", m.funcGetAllConvertedFilesByFileUIDOrigin)
+	}
+
+	if !m.GetAllConvertedFilesByFileUIDMock.invocationsDone() && afterGetAllConvertedFilesByFileUIDCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.GetAllConvertedFilesByFileUID at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.GetAllConvertedFilesByFileUIDMock.expectedInvocations), m.GetAllConvertedFilesByFileUIDMock.expectedInvocationsOrigin, afterGetAllConvertedFilesByFileUIDCounter)
+	}
+}
+
 type mRepositoryMockGetChatCacheMetadata struct {
 	optional           bool
 	mock               *RepositoryMock
@@ -10155,6 +10518,380 @@ func (m *RepositoryMock) MinimockGetConvertedFileByFileUIDInspect() {
 	if !m.GetConvertedFileByFileUIDMock.invocationsDone() && afterGetConvertedFileByFileUIDCounter > 0 {
 		m.t.Errorf("Expected %d calls to RepositoryMock.GetConvertedFileByFileUID at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.GetConvertedFileByFileUIDMock.expectedInvocations), m.GetConvertedFileByFileUIDMock.expectedInvocationsOrigin, afterGetConvertedFileByFileUIDCounter)
+	}
+}
+
+type mRepositoryMockGetConvertedFileByFileUIDAndType struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockGetConvertedFileByFileUIDAndTypeExpectation
+	expectations       []*RepositoryMockGetConvertedFileByFileUIDAndTypeExpectation
+
+	callArgs []*RepositoryMockGetConvertedFileByFileUIDAndTypeParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockGetConvertedFileByFileUIDAndTypeExpectation specifies expectation struct of the Repository.GetConvertedFileByFileUIDAndType
+type RepositoryMockGetConvertedFileByFileUIDAndTypeExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockGetConvertedFileByFileUIDAndTypeParams
+	paramPtrs          *RepositoryMockGetConvertedFileByFileUIDAndTypeParamPtrs
+	expectationOrigins RepositoryMockGetConvertedFileByFileUIDAndTypeExpectationOrigins
+	results            *RepositoryMockGetConvertedFileByFileUIDAndTypeResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockGetConvertedFileByFileUIDAndTypeParams contains parameters of the Repository.GetConvertedFileByFileUIDAndType
+type RepositoryMockGetConvertedFileByFileUIDAndTypeParams struct {
+	ctx           context.Context
+	fileUID       types.FileUIDType
+	convertedType artifactpb.ConvertedFileType
+}
+
+// RepositoryMockGetConvertedFileByFileUIDAndTypeParamPtrs contains pointers to parameters of the Repository.GetConvertedFileByFileUIDAndType
+type RepositoryMockGetConvertedFileByFileUIDAndTypeParamPtrs struct {
+	ctx           *context.Context
+	fileUID       *types.FileUIDType
+	convertedType *artifactpb.ConvertedFileType
+}
+
+// RepositoryMockGetConvertedFileByFileUIDAndTypeResults contains results of the Repository.GetConvertedFileByFileUIDAndType
+type RepositoryMockGetConvertedFileByFileUIDAndTypeResults struct {
+	cp1 *mm_repository.ConvertedFileModel
+	err error
+}
+
+// RepositoryMockGetConvertedFileByFileUIDAndTypeOrigins contains origins of expectations of the Repository.GetConvertedFileByFileUIDAndType
+type RepositoryMockGetConvertedFileByFileUIDAndTypeExpectationOrigins struct {
+	origin              string
+	originCtx           string
+	originFileUID       string
+	originConvertedType string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmGetConvertedFileByFileUIDAndType *mRepositoryMockGetConvertedFileByFileUIDAndType) Optional() *mRepositoryMockGetConvertedFileByFileUIDAndType {
+	mmGetConvertedFileByFileUIDAndType.optional = true
+	return mmGetConvertedFileByFileUIDAndType
+}
+
+// Expect sets up expected params for Repository.GetConvertedFileByFileUIDAndType
+func (mmGetConvertedFileByFileUIDAndType *mRepositoryMockGetConvertedFileByFileUIDAndType) Expect(ctx context.Context, fileUID types.FileUIDType, convertedType artifactpb.ConvertedFileType) *mRepositoryMockGetConvertedFileByFileUIDAndType {
+	if mmGetConvertedFileByFileUIDAndType.mock.funcGetConvertedFileByFileUIDAndType != nil {
+		mmGetConvertedFileByFileUIDAndType.mock.t.Fatalf("RepositoryMock.GetConvertedFileByFileUIDAndType mock is already set by Set")
+	}
+
+	if mmGetConvertedFileByFileUIDAndType.defaultExpectation == nil {
+		mmGetConvertedFileByFileUIDAndType.defaultExpectation = &RepositoryMockGetConvertedFileByFileUIDAndTypeExpectation{}
+	}
+
+	if mmGetConvertedFileByFileUIDAndType.defaultExpectation.paramPtrs != nil {
+		mmGetConvertedFileByFileUIDAndType.mock.t.Fatalf("RepositoryMock.GetConvertedFileByFileUIDAndType mock is already set by ExpectParams functions")
+	}
+
+	mmGetConvertedFileByFileUIDAndType.defaultExpectation.params = &RepositoryMockGetConvertedFileByFileUIDAndTypeParams{ctx, fileUID, convertedType}
+	mmGetConvertedFileByFileUIDAndType.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmGetConvertedFileByFileUIDAndType.expectations {
+		if minimock.Equal(e.params, mmGetConvertedFileByFileUIDAndType.defaultExpectation.params) {
+			mmGetConvertedFileByFileUIDAndType.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetConvertedFileByFileUIDAndType.defaultExpectation.params)
+		}
+	}
+
+	return mmGetConvertedFileByFileUIDAndType
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.GetConvertedFileByFileUIDAndType
+func (mmGetConvertedFileByFileUIDAndType *mRepositoryMockGetConvertedFileByFileUIDAndType) ExpectCtxParam1(ctx context.Context) *mRepositoryMockGetConvertedFileByFileUIDAndType {
+	if mmGetConvertedFileByFileUIDAndType.mock.funcGetConvertedFileByFileUIDAndType != nil {
+		mmGetConvertedFileByFileUIDAndType.mock.t.Fatalf("RepositoryMock.GetConvertedFileByFileUIDAndType mock is already set by Set")
+	}
+
+	if mmGetConvertedFileByFileUIDAndType.defaultExpectation == nil {
+		mmGetConvertedFileByFileUIDAndType.defaultExpectation = &RepositoryMockGetConvertedFileByFileUIDAndTypeExpectation{}
+	}
+
+	if mmGetConvertedFileByFileUIDAndType.defaultExpectation.params != nil {
+		mmGetConvertedFileByFileUIDAndType.mock.t.Fatalf("RepositoryMock.GetConvertedFileByFileUIDAndType mock is already set by Expect")
+	}
+
+	if mmGetConvertedFileByFileUIDAndType.defaultExpectation.paramPtrs == nil {
+		mmGetConvertedFileByFileUIDAndType.defaultExpectation.paramPtrs = &RepositoryMockGetConvertedFileByFileUIDAndTypeParamPtrs{}
+	}
+	mmGetConvertedFileByFileUIDAndType.defaultExpectation.paramPtrs.ctx = &ctx
+	mmGetConvertedFileByFileUIDAndType.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmGetConvertedFileByFileUIDAndType
+}
+
+// ExpectFileUIDParam2 sets up expected param fileUID for Repository.GetConvertedFileByFileUIDAndType
+func (mmGetConvertedFileByFileUIDAndType *mRepositoryMockGetConvertedFileByFileUIDAndType) ExpectFileUIDParam2(fileUID types.FileUIDType) *mRepositoryMockGetConvertedFileByFileUIDAndType {
+	if mmGetConvertedFileByFileUIDAndType.mock.funcGetConvertedFileByFileUIDAndType != nil {
+		mmGetConvertedFileByFileUIDAndType.mock.t.Fatalf("RepositoryMock.GetConvertedFileByFileUIDAndType mock is already set by Set")
+	}
+
+	if mmGetConvertedFileByFileUIDAndType.defaultExpectation == nil {
+		mmGetConvertedFileByFileUIDAndType.defaultExpectation = &RepositoryMockGetConvertedFileByFileUIDAndTypeExpectation{}
+	}
+
+	if mmGetConvertedFileByFileUIDAndType.defaultExpectation.params != nil {
+		mmGetConvertedFileByFileUIDAndType.mock.t.Fatalf("RepositoryMock.GetConvertedFileByFileUIDAndType mock is already set by Expect")
+	}
+
+	if mmGetConvertedFileByFileUIDAndType.defaultExpectation.paramPtrs == nil {
+		mmGetConvertedFileByFileUIDAndType.defaultExpectation.paramPtrs = &RepositoryMockGetConvertedFileByFileUIDAndTypeParamPtrs{}
+	}
+	mmGetConvertedFileByFileUIDAndType.defaultExpectation.paramPtrs.fileUID = &fileUID
+	mmGetConvertedFileByFileUIDAndType.defaultExpectation.expectationOrigins.originFileUID = minimock.CallerInfo(1)
+
+	return mmGetConvertedFileByFileUIDAndType
+}
+
+// ExpectConvertedTypeParam3 sets up expected param convertedType for Repository.GetConvertedFileByFileUIDAndType
+func (mmGetConvertedFileByFileUIDAndType *mRepositoryMockGetConvertedFileByFileUIDAndType) ExpectConvertedTypeParam3(convertedType artifactpb.ConvertedFileType) *mRepositoryMockGetConvertedFileByFileUIDAndType {
+	if mmGetConvertedFileByFileUIDAndType.mock.funcGetConvertedFileByFileUIDAndType != nil {
+		mmGetConvertedFileByFileUIDAndType.mock.t.Fatalf("RepositoryMock.GetConvertedFileByFileUIDAndType mock is already set by Set")
+	}
+
+	if mmGetConvertedFileByFileUIDAndType.defaultExpectation == nil {
+		mmGetConvertedFileByFileUIDAndType.defaultExpectation = &RepositoryMockGetConvertedFileByFileUIDAndTypeExpectation{}
+	}
+
+	if mmGetConvertedFileByFileUIDAndType.defaultExpectation.params != nil {
+		mmGetConvertedFileByFileUIDAndType.mock.t.Fatalf("RepositoryMock.GetConvertedFileByFileUIDAndType mock is already set by Expect")
+	}
+
+	if mmGetConvertedFileByFileUIDAndType.defaultExpectation.paramPtrs == nil {
+		mmGetConvertedFileByFileUIDAndType.defaultExpectation.paramPtrs = &RepositoryMockGetConvertedFileByFileUIDAndTypeParamPtrs{}
+	}
+	mmGetConvertedFileByFileUIDAndType.defaultExpectation.paramPtrs.convertedType = &convertedType
+	mmGetConvertedFileByFileUIDAndType.defaultExpectation.expectationOrigins.originConvertedType = minimock.CallerInfo(1)
+
+	return mmGetConvertedFileByFileUIDAndType
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.GetConvertedFileByFileUIDAndType
+func (mmGetConvertedFileByFileUIDAndType *mRepositoryMockGetConvertedFileByFileUIDAndType) Inspect(f func(ctx context.Context, fileUID types.FileUIDType, convertedType artifactpb.ConvertedFileType)) *mRepositoryMockGetConvertedFileByFileUIDAndType {
+	if mmGetConvertedFileByFileUIDAndType.mock.inspectFuncGetConvertedFileByFileUIDAndType != nil {
+		mmGetConvertedFileByFileUIDAndType.mock.t.Fatalf("Inspect function is already set for RepositoryMock.GetConvertedFileByFileUIDAndType")
+	}
+
+	mmGetConvertedFileByFileUIDAndType.mock.inspectFuncGetConvertedFileByFileUIDAndType = f
+
+	return mmGetConvertedFileByFileUIDAndType
+}
+
+// Return sets up results that will be returned by Repository.GetConvertedFileByFileUIDAndType
+func (mmGetConvertedFileByFileUIDAndType *mRepositoryMockGetConvertedFileByFileUIDAndType) Return(cp1 *mm_repository.ConvertedFileModel, err error) *RepositoryMock {
+	if mmGetConvertedFileByFileUIDAndType.mock.funcGetConvertedFileByFileUIDAndType != nil {
+		mmGetConvertedFileByFileUIDAndType.mock.t.Fatalf("RepositoryMock.GetConvertedFileByFileUIDAndType mock is already set by Set")
+	}
+
+	if mmGetConvertedFileByFileUIDAndType.defaultExpectation == nil {
+		mmGetConvertedFileByFileUIDAndType.defaultExpectation = &RepositoryMockGetConvertedFileByFileUIDAndTypeExpectation{mock: mmGetConvertedFileByFileUIDAndType.mock}
+	}
+	mmGetConvertedFileByFileUIDAndType.defaultExpectation.results = &RepositoryMockGetConvertedFileByFileUIDAndTypeResults{cp1, err}
+	mmGetConvertedFileByFileUIDAndType.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmGetConvertedFileByFileUIDAndType.mock
+}
+
+// Set uses given function f to mock the Repository.GetConvertedFileByFileUIDAndType method
+func (mmGetConvertedFileByFileUIDAndType *mRepositoryMockGetConvertedFileByFileUIDAndType) Set(f func(ctx context.Context, fileUID types.FileUIDType, convertedType artifactpb.ConvertedFileType) (cp1 *mm_repository.ConvertedFileModel, err error)) *RepositoryMock {
+	if mmGetConvertedFileByFileUIDAndType.defaultExpectation != nil {
+		mmGetConvertedFileByFileUIDAndType.mock.t.Fatalf("Default expectation is already set for the Repository.GetConvertedFileByFileUIDAndType method")
+	}
+
+	if len(mmGetConvertedFileByFileUIDAndType.expectations) > 0 {
+		mmGetConvertedFileByFileUIDAndType.mock.t.Fatalf("Some expectations are already set for the Repository.GetConvertedFileByFileUIDAndType method")
+	}
+
+	mmGetConvertedFileByFileUIDAndType.mock.funcGetConvertedFileByFileUIDAndType = f
+	mmGetConvertedFileByFileUIDAndType.mock.funcGetConvertedFileByFileUIDAndTypeOrigin = minimock.CallerInfo(1)
+	return mmGetConvertedFileByFileUIDAndType.mock
+}
+
+// When sets expectation for the Repository.GetConvertedFileByFileUIDAndType which will trigger the result defined by the following
+// Then helper
+func (mmGetConvertedFileByFileUIDAndType *mRepositoryMockGetConvertedFileByFileUIDAndType) When(ctx context.Context, fileUID types.FileUIDType, convertedType artifactpb.ConvertedFileType) *RepositoryMockGetConvertedFileByFileUIDAndTypeExpectation {
+	if mmGetConvertedFileByFileUIDAndType.mock.funcGetConvertedFileByFileUIDAndType != nil {
+		mmGetConvertedFileByFileUIDAndType.mock.t.Fatalf("RepositoryMock.GetConvertedFileByFileUIDAndType mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockGetConvertedFileByFileUIDAndTypeExpectation{
+		mock:               mmGetConvertedFileByFileUIDAndType.mock,
+		params:             &RepositoryMockGetConvertedFileByFileUIDAndTypeParams{ctx, fileUID, convertedType},
+		expectationOrigins: RepositoryMockGetConvertedFileByFileUIDAndTypeExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmGetConvertedFileByFileUIDAndType.expectations = append(mmGetConvertedFileByFileUIDAndType.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.GetConvertedFileByFileUIDAndType return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockGetConvertedFileByFileUIDAndTypeExpectation) Then(cp1 *mm_repository.ConvertedFileModel, err error) *RepositoryMock {
+	e.results = &RepositoryMockGetConvertedFileByFileUIDAndTypeResults{cp1, err}
+	return e.mock
+}
+
+// Times sets number of times Repository.GetConvertedFileByFileUIDAndType should be invoked
+func (mmGetConvertedFileByFileUIDAndType *mRepositoryMockGetConvertedFileByFileUIDAndType) Times(n uint64) *mRepositoryMockGetConvertedFileByFileUIDAndType {
+	if n == 0 {
+		mmGetConvertedFileByFileUIDAndType.mock.t.Fatalf("Times of RepositoryMock.GetConvertedFileByFileUIDAndType mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetConvertedFileByFileUIDAndType.expectedInvocations, n)
+	mmGetConvertedFileByFileUIDAndType.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmGetConvertedFileByFileUIDAndType
+}
+
+func (mmGetConvertedFileByFileUIDAndType *mRepositoryMockGetConvertedFileByFileUIDAndType) invocationsDone() bool {
+	if len(mmGetConvertedFileByFileUIDAndType.expectations) == 0 && mmGetConvertedFileByFileUIDAndType.defaultExpectation == nil && mmGetConvertedFileByFileUIDAndType.mock.funcGetConvertedFileByFileUIDAndType == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetConvertedFileByFileUIDAndType.mock.afterGetConvertedFileByFileUIDAndTypeCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetConvertedFileByFileUIDAndType.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetConvertedFileByFileUIDAndType implements mm_repository.Repository
+func (mmGetConvertedFileByFileUIDAndType *RepositoryMock) GetConvertedFileByFileUIDAndType(ctx context.Context, fileUID types.FileUIDType, convertedType artifactpb.ConvertedFileType) (cp1 *mm_repository.ConvertedFileModel, err error) {
+	mm_atomic.AddUint64(&mmGetConvertedFileByFileUIDAndType.beforeGetConvertedFileByFileUIDAndTypeCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetConvertedFileByFileUIDAndType.afterGetConvertedFileByFileUIDAndTypeCounter, 1)
+
+	mmGetConvertedFileByFileUIDAndType.t.Helper()
+
+	if mmGetConvertedFileByFileUIDAndType.inspectFuncGetConvertedFileByFileUIDAndType != nil {
+		mmGetConvertedFileByFileUIDAndType.inspectFuncGetConvertedFileByFileUIDAndType(ctx, fileUID, convertedType)
+	}
+
+	mm_params := RepositoryMockGetConvertedFileByFileUIDAndTypeParams{ctx, fileUID, convertedType}
+
+	// Record call args
+	mmGetConvertedFileByFileUIDAndType.GetConvertedFileByFileUIDAndTypeMock.mutex.Lock()
+	mmGetConvertedFileByFileUIDAndType.GetConvertedFileByFileUIDAndTypeMock.callArgs = append(mmGetConvertedFileByFileUIDAndType.GetConvertedFileByFileUIDAndTypeMock.callArgs, &mm_params)
+	mmGetConvertedFileByFileUIDAndType.GetConvertedFileByFileUIDAndTypeMock.mutex.Unlock()
+
+	for _, e := range mmGetConvertedFileByFileUIDAndType.GetConvertedFileByFileUIDAndTypeMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.cp1, e.results.err
+		}
+	}
+
+	if mmGetConvertedFileByFileUIDAndType.GetConvertedFileByFileUIDAndTypeMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetConvertedFileByFileUIDAndType.GetConvertedFileByFileUIDAndTypeMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetConvertedFileByFileUIDAndType.GetConvertedFileByFileUIDAndTypeMock.defaultExpectation.params
+		mm_want_ptrs := mmGetConvertedFileByFileUIDAndType.GetConvertedFileByFileUIDAndTypeMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockGetConvertedFileByFileUIDAndTypeParams{ctx, fileUID, convertedType}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetConvertedFileByFileUIDAndType.t.Errorf("RepositoryMock.GetConvertedFileByFileUIDAndType got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetConvertedFileByFileUIDAndType.GetConvertedFileByFileUIDAndTypeMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.fileUID != nil && !minimock.Equal(*mm_want_ptrs.fileUID, mm_got.fileUID) {
+				mmGetConvertedFileByFileUIDAndType.t.Errorf("RepositoryMock.GetConvertedFileByFileUIDAndType got unexpected parameter fileUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetConvertedFileByFileUIDAndType.GetConvertedFileByFileUIDAndTypeMock.defaultExpectation.expectationOrigins.originFileUID, *mm_want_ptrs.fileUID, mm_got.fileUID, minimock.Diff(*mm_want_ptrs.fileUID, mm_got.fileUID))
+			}
+
+			if mm_want_ptrs.convertedType != nil && !minimock.Equal(*mm_want_ptrs.convertedType, mm_got.convertedType) {
+				mmGetConvertedFileByFileUIDAndType.t.Errorf("RepositoryMock.GetConvertedFileByFileUIDAndType got unexpected parameter convertedType, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetConvertedFileByFileUIDAndType.GetConvertedFileByFileUIDAndTypeMock.defaultExpectation.expectationOrigins.originConvertedType, *mm_want_ptrs.convertedType, mm_got.convertedType, minimock.Diff(*mm_want_ptrs.convertedType, mm_got.convertedType))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetConvertedFileByFileUIDAndType.t.Errorf("RepositoryMock.GetConvertedFileByFileUIDAndType got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmGetConvertedFileByFileUIDAndType.GetConvertedFileByFileUIDAndTypeMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetConvertedFileByFileUIDAndType.GetConvertedFileByFileUIDAndTypeMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetConvertedFileByFileUIDAndType.t.Fatal("No results are set for the RepositoryMock.GetConvertedFileByFileUIDAndType")
+		}
+		return (*mm_results).cp1, (*mm_results).err
+	}
+	if mmGetConvertedFileByFileUIDAndType.funcGetConvertedFileByFileUIDAndType != nil {
+		return mmGetConvertedFileByFileUIDAndType.funcGetConvertedFileByFileUIDAndType(ctx, fileUID, convertedType)
+	}
+	mmGetConvertedFileByFileUIDAndType.t.Fatalf("Unexpected call to RepositoryMock.GetConvertedFileByFileUIDAndType. %v %v %v", ctx, fileUID, convertedType)
+	return
+}
+
+// GetConvertedFileByFileUIDAndTypeAfterCounter returns a count of finished RepositoryMock.GetConvertedFileByFileUIDAndType invocations
+func (mmGetConvertedFileByFileUIDAndType *RepositoryMock) GetConvertedFileByFileUIDAndTypeAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetConvertedFileByFileUIDAndType.afterGetConvertedFileByFileUIDAndTypeCounter)
+}
+
+// GetConvertedFileByFileUIDAndTypeBeforeCounter returns a count of RepositoryMock.GetConvertedFileByFileUIDAndType invocations
+func (mmGetConvertedFileByFileUIDAndType *RepositoryMock) GetConvertedFileByFileUIDAndTypeBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetConvertedFileByFileUIDAndType.beforeGetConvertedFileByFileUIDAndTypeCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.GetConvertedFileByFileUIDAndType.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetConvertedFileByFileUIDAndType *mRepositoryMockGetConvertedFileByFileUIDAndType) Calls() []*RepositoryMockGetConvertedFileByFileUIDAndTypeParams {
+	mmGetConvertedFileByFileUIDAndType.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockGetConvertedFileByFileUIDAndTypeParams, len(mmGetConvertedFileByFileUIDAndType.callArgs))
+	copy(argCopy, mmGetConvertedFileByFileUIDAndType.callArgs)
+
+	mmGetConvertedFileByFileUIDAndType.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetConvertedFileByFileUIDAndTypeDone returns true if the count of the GetConvertedFileByFileUIDAndType invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockGetConvertedFileByFileUIDAndTypeDone() bool {
+	if m.GetConvertedFileByFileUIDAndTypeMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.GetConvertedFileByFileUIDAndTypeMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetConvertedFileByFileUIDAndTypeMock.invocationsDone()
+}
+
+// MinimockGetConvertedFileByFileUIDAndTypeInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockGetConvertedFileByFileUIDAndTypeInspect() {
+	for _, e := range m.GetConvertedFileByFileUIDAndTypeMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.GetConvertedFileByFileUIDAndType at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterGetConvertedFileByFileUIDAndTypeCounter := mm_atomic.LoadUint64(&m.afterGetConvertedFileByFileUIDAndTypeCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetConvertedFileByFileUIDAndTypeMock.defaultExpectation != nil && afterGetConvertedFileByFileUIDAndTypeCounter < 1 {
+		if m.GetConvertedFileByFileUIDAndTypeMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.GetConvertedFileByFileUIDAndType at\n%s", m.GetConvertedFileByFileUIDAndTypeMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.GetConvertedFileByFileUIDAndType at\n%s with params: %#v", m.GetConvertedFileByFileUIDAndTypeMock.defaultExpectation.expectationOrigins.origin, *m.GetConvertedFileByFileUIDAndTypeMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetConvertedFileByFileUIDAndType != nil && afterGetConvertedFileByFileUIDAndTypeCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.GetConvertedFileByFileUIDAndType at\n%s", m.funcGetConvertedFileByFileUIDAndTypeOrigin)
+	}
+
+	if !m.GetConvertedFileByFileUIDAndTypeMock.invocationsDone() && afterGetConvertedFileByFileUIDAndTypeCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.GetConvertedFileByFileUIDAndType at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.GetConvertedFileByFileUIDAndTypeMock.expectedInvocations), m.GetConvertedFileByFileUIDAndTypeMock.expectedInvocationsOrigin, afterGetConvertedFileByFileUIDAndTypeCounter)
 	}
 }
 
@@ -17102,6 +17839,349 @@ func (m *RepositoryMock) MinimockGetRepositoryTagInspect() {
 	}
 }
 
+type mRepositoryMockGetSourceByFileUID struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockGetSourceByFileUIDExpectation
+	expectations       []*RepositoryMockGetSourceByFileUIDExpectation
+
+	callArgs []*RepositoryMockGetSourceByFileUIDParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockGetSourceByFileUIDExpectation specifies expectation struct of the Repository.GetSourceByFileUID
+type RepositoryMockGetSourceByFileUIDExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockGetSourceByFileUIDParams
+	paramPtrs          *RepositoryMockGetSourceByFileUIDParamPtrs
+	expectationOrigins RepositoryMockGetSourceByFileUIDExpectationOrigins
+	results            *RepositoryMockGetSourceByFileUIDResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockGetSourceByFileUIDParams contains parameters of the Repository.GetSourceByFileUID
+type RepositoryMockGetSourceByFileUIDParams struct {
+	ctx     context.Context
+	fileUID types.FileUIDType
+}
+
+// RepositoryMockGetSourceByFileUIDParamPtrs contains pointers to parameters of the Repository.GetSourceByFileUID
+type RepositoryMockGetSourceByFileUIDParamPtrs struct {
+	ctx     *context.Context
+	fileUID *types.FileUIDType
+}
+
+// RepositoryMockGetSourceByFileUIDResults contains results of the Repository.GetSourceByFileUID
+type RepositoryMockGetSourceByFileUIDResults struct {
+	sp1 *mm_repository.SourceMeta
+	err error
+}
+
+// RepositoryMockGetSourceByFileUIDOrigins contains origins of expectations of the Repository.GetSourceByFileUID
+type RepositoryMockGetSourceByFileUIDExpectationOrigins struct {
+	origin        string
+	originCtx     string
+	originFileUID string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmGetSourceByFileUID *mRepositoryMockGetSourceByFileUID) Optional() *mRepositoryMockGetSourceByFileUID {
+	mmGetSourceByFileUID.optional = true
+	return mmGetSourceByFileUID
+}
+
+// Expect sets up expected params for Repository.GetSourceByFileUID
+func (mmGetSourceByFileUID *mRepositoryMockGetSourceByFileUID) Expect(ctx context.Context, fileUID types.FileUIDType) *mRepositoryMockGetSourceByFileUID {
+	if mmGetSourceByFileUID.mock.funcGetSourceByFileUID != nil {
+		mmGetSourceByFileUID.mock.t.Fatalf("RepositoryMock.GetSourceByFileUID mock is already set by Set")
+	}
+
+	if mmGetSourceByFileUID.defaultExpectation == nil {
+		mmGetSourceByFileUID.defaultExpectation = &RepositoryMockGetSourceByFileUIDExpectation{}
+	}
+
+	if mmGetSourceByFileUID.defaultExpectation.paramPtrs != nil {
+		mmGetSourceByFileUID.mock.t.Fatalf("RepositoryMock.GetSourceByFileUID mock is already set by ExpectParams functions")
+	}
+
+	mmGetSourceByFileUID.defaultExpectation.params = &RepositoryMockGetSourceByFileUIDParams{ctx, fileUID}
+	mmGetSourceByFileUID.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmGetSourceByFileUID.expectations {
+		if minimock.Equal(e.params, mmGetSourceByFileUID.defaultExpectation.params) {
+			mmGetSourceByFileUID.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetSourceByFileUID.defaultExpectation.params)
+		}
+	}
+
+	return mmGetSourceByFileUID
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.GetSourceByFileUID
+func (mmGetSourceByFileUID *mRepositoryMockGetSourceByFileUID) ExpectCtxParam1(ctx context.Context) *mRepositoryMockGetSourceByFileUID {
+	if mmGetSourceByFileUID.mock.funcGetSourceByFileUID != nil {
+		mmGetSourceByFileUID.mock.t.Fatalf("RepositoryMock.GetSourceByFileUID mock is already set by Set")
+	}
+
+	if mmGetSourceByFileUID.defaultExpectation == nil {
+		mmGetSourceByFileUID.defaultExpectation = &RepositoryMockGetSourceByFileUIDExpectation{}
+	}
+
+	if mmGetSourceByFileUID.defaultExpectation.params != nil {
+		mmGetSourceByFileUID.mock.t.Fatalf("RepositoryMock.GetSourceByFileUID mock is already set by Expect")
+	}
+
+	if mmGetSourceByFileUID.defaultExpectation.paramPtrs == nil {
+		mmGetSourceByFileUID.defaultExpectation.paramPtrs = &RepositoryMockGetSourceByFileUIDParamPtrs{}
+	}
+	mmGetSourceByFileUID.defaultExpectation.paramPtrs.ctx = &ctx
+	mmGetSourceByFileUID.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmGetSourceByFileUID
+}
+
+// ExpectFileUIDParam2 sets up expected param fileUID for Repository.GetSourceByFileUID
+func (mmGetSourceByFileUID *mRepositoryMockGetSourceByFileUID) ExpectFileUIDParam2(fileUID types.FileUIDType) *mRepositoryMockGetSourceByFileUID {
+	if mmGetSourceByFileUID.mock.funcGetSourceByFileUID != nil {
+		mmGetSourceByFileUID.mock.t.Fatalf("RepositoryMock.GetSourceByFileUID mock is already set by Set")
+	}
+
+	if mmGetSourceByFileUID.defaultExpectation == nil {
+		mmGetSourceByFileUID.defaultExpectation = &RepositoryMockGetSourceByFileUIDExpectation{}
+	}
+
+	if mmGetSourceByFileUID.defaultExpectation.params != nil {
+		mmGetSourceByFileUID.mock.t.Fatalf("RepositoryMock.GetSourceByFileUID mock is already set by Expect")
+	}
+
+	if mmGetSourceByFileUID.defaultExpectation.paramPtrs == nil {
+		mmGetSourceByFileUID.defaultExpectation.paramPtrs = &RepositoryMockGetSourceByFileUIDParamPtrs{}
+	}
+	mmGetSourceByFileUID.defaultExpectation.paramPtrs.fileUID = &fileUID
+	mmGetSourceByFileUID.defaultExpectation.expectationOrigins.originFileUID = minimock.CallerInfo(1)
+
+	return mmGetSourceByFileUID
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.GetSourceByFileUID
+func (mmGetSourceByFileUID *mRepositoryMockGetSourceByFileUID) Inspect(f func(ctx context.Context, fileUID types.FileUIDType)) *mRepositoryMockGetSourceByFileUID {
+	if mmGetSourceByFileUID.mock.inspectFuncGetSourceByFileUID != nil {
+		mmGetSourceByFileUID.mock.t.Fatalf("Inspect function is already set for RepositoryMock.GetSourceByFileUID")
+	}
+
+	mmGetSourceByFileUID.mock.inspectFuncGetSourceByFileUID = f
+
+	return mmGetSourceByFileUID
+}
+
+// Return sets up results that will be returned by Repository.GetSourceByFileUID
+func (mmGetSourceByFileUID *mRepositoryMockGetSourceByFileUID) Return(sp1 *mm_repository.SourceMeta, err error) *RepositoryMock {
+	if mmGetSourceByFileUID.mock.funcGetSourceByFileUID != nil {
+		mmGetSourceByFileUID.mock.t.Fatalf("RepositoryMock.GetSourceByFileUID mock is already set by Set")
+	}
+
+	if mmGetSourceByFileUID.defaultExpectation == nil {
+		mmGetSourceByFileUID.defaultExpectation = &RepositoryMockGetSourceByFileUIDExpectation{mock: mmGetSourceByFileUID.mock}
+	}
+	mmGetSourceByFileUID.defaultExpectation.results = &RepositoryMockGetSourceByFileUIDResults{sp1, err}
+	mmGetSourceByFileUID.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmGetSourceByFileUID.mock
+}
+
+// Set uses given function f to mock the Repository.GetSourceByFileUID method
+func (mmGetSourceByFileUID *mRepositoryMockGetSourceByFileUID) Set(f func(ctx context.Context, fileUID types.FileUIDType) (sp1 *mm_repository.SourceMeta, err error)) *RepositoryMock {
+	if mmGetSourceByFileUID.defaultExpectation != nil {
+		mmGetSourceByFileUID.mock.t.Fatalf("Default expectation is already set for the Repository.GetSourceByFileUID method")
+	}
+
+	if len(mmGetSourceByFileUID.expectations) > 0 {
+		mmGetSourceByFileUID.mock.t.Fatalf("Some expectations are already set for the Repository.GetSourceByFileUID method")
+	}
+
+	mmGetSourceByFileUID.mock.funcGetSourceByFileUID = f
+	mmGetSourceByFileUID.mock.funcGetSourceByFileUIDOrigin = minimock.CallerInfo(1)
+	return mmGetSourceByFileUID.mock
+}
+
+// When sets expectation for the Repository.GetSourceByFileUID which will trigger the result defined by the following
+// Then helper
+func (mmGetSourceByFileUID *mRepositoryMockGetSourceByFileUID) When(ctx context.Context, fileUID types.FileUIDType) *RepositoryMockGetSourceByFileUIDExpectation {
+	if mmGetSourceByFileUID.mock.funcGetSourceByFileUID != nil {
+		mmGetSourceByFileUID.mock.t.Fatalf("RepositoryMock.GetSourceByFileUID mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockGetSourceByFileUIDExpectation{
+		mock:               mmGetSourceByFileUID.mock,
+		params:             &RepositoryMockGetSourceByFileUIDParams{ctx, fileUID},
+		expectationOrigins: RepositoryMockGetSourceByFileUIDExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmGetSourceByFileUID.expectations = append(mmGetSourceByFileUID.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.GetSourceByFileUID return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockGetSourceByFileUIDExpectation) Then(sp1 *mm_repository.SourceMeta, err error) *RepositoryMock {
+	e.results = &RepositoryMockGetSourceByFileUIDResults{sp1, err}
+	return e.mock
+}
+
+// Times sets number of times Repository.GetSourceByFileUID should be invoked
+func (mmGetSourceByFileUID *mRepositoryMockGetSourceByFileUID) Times(n uint64) *mRepositoryMockGetSourceByFileUID {
+	if n == 0 {
+		mmGetSourceByFileUID.mock.t.Fatalf("Times of RepositoryMock.GetSourceByFileUID mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetSourceByFileUID.expectedInvocations, n)
+	mmGetSourceByFileUID.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmGetSourceByFileUID
+}
+
+func (mmGetSourceByFileUID *mRepositoryMockGetSourceByFileUID) invocationsDone() bool {
+	if len(mmGetSourceByFileUID.expectations) == 0 && mmGetSourceByFileUID.defaultExpectation == nil && mmGetSourceByFileUID.mock.funcGetSourceByFileUID == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetSourceByFileUID.mock.afterGetSourceByFileUIDCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetSourceByFileUID.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetSourceByFileUID implements mm_repository.Repository
+func (mmGetSourceByFileUID *RepositoryMock) GetSourceByFileUID(ctx context.Context, fileUID types.FileUIDType) (sp1 *mm_repository.SourceMeta, err error) {
+	mm_atomic.AddUint64(&mmGetSourceByFileUID.beforeGetSourceByFileUIDCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetSourceByFileUID.afterGetSourceByFileUIDCounter, 1)
+
+	mmGetSourceByFileUID.t.Helper()
+
+	if mmGetSourceByFileUID.inspectFuncGetSourceByFileUID != nil {
+		mmGetSourceByFileUID.inspectFuncGetSourceByFileUID(ctx, fileUID)
+	}
+
+	mm_params := RepositoryMockGetSourceByFileUIDParams{ctx, fileUID}
+
+	// Record call args
+	mmGetSourceByFileUID.GetSourceByFileUIDMock.mutex.Lock()
+	mmGetSourceByFileUID.GetSourceByFileUIDMock.callArgs = append(mmGetSourceByFileUID.GetSourceByFileUIDMock.callArgs, &mm_params)
+	mmGetSourceByFileUID.GetSourceByFileUIDMock.mutex.Unlock()
+
+	for _, e := range mmGetSourceByFileUID.GetSourceByFileUIDMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.sp1, e.results.err
+		}
+	}
+
+	if mmGetSourceByFileUID.GetSourceByFileUIDMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetSourceByFileUID.GetSourceByFileUIDMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetSourceByFileUID.GetSourceByFileUIDMock.defaultExpectation.params
+		mm_want_ptrs := mmGetSourceByFileUID.GetSourceByFileUIDMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockGetSourceByFileUIDParams{ctx, fileUID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetSourceByFileUID.t.Errorf("RepositoryMock.GetSourceByFileUID got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetSourceByFileUID.GetSourceByFileUIDMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.fileUID != nil && !minimock.Equal(*mm_want_ptrs.fileUID, mm_got.fileUID) {
+				mmGetSourceByFileUID.t.Errorf("RepositoryMock.GetSourceByFileUID got unexpected parameter fileUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetSourceByFileUID.GetSourceByFileUIDMock.defaultExpectation.expectationOrigins.originFileUID, *mm_want_ptrs.fileUID, mm_got.fileUID, minimock.Diff(*mm_want_ptrs.fileUID, mm_got.fileUID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetSourceByFileUID.t.Errorf("RepositoryMock.GetSourceByFileUID got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmGetSourceByFileUID.GetSourceByFileUIDMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetSourceByFileUID.GetSourceByFileUIDMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetSourceByFileUID.t.Fatal("No results are set for the RepositoryMock.GetSourceByFileUID")
+		}
+		return (*mm_results).sp1, (*mm_results).err
+	}
+	if mmGetSourceByFileUID.funcGetSourceByFileUID != nil {
+		return mmGetSourceByFileUID.funcGetSourceByFileUID(ctx, fileUID)
+	}
+	mmGetSourceByFileUID.t.Fatalf("Unexpected call to RepositoryMock.GetSourceByFileUID. %v %v", ctx, fileUID)
+	return
+}
+
+// GetSourceByFileUIDAfterCounter returns a count of finished RepositoryMock.GetSourceByFileUID invocations
+func (mmGetSourceByFileUID *RepositoryMock) GetSourceByFileUIDAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetSourceByFileUID.afterGetSourceByFileUIDCounter)
+}
+
+// GetSourceByFileUIDBeforeCounter returns a count of RepositoryMock.GetSourceByFileUID invocations
+func (mmGetSourceByFileUID *RepositoryMock) GetSourceByFileUIDBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetSourceByFileUID.beforeGetSourceByFileUIDCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.GetSourceByFileUID.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetSourceByFileUID *mRepositoryMockGetSourceByFileUID) Calls() []*RepositoryMockGetSourceByFileUIDParams {
+	mmGetSourceByFileUID.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockGetSourceByFileUIDParams, len(mmGetSourceByFileUID.callArgs))
+	copy(argCopy, mmGetSourceByFileUID.callArgs)
+
+	mmGetSourceByFileUID.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetSourceByFileUIDDone returns true if the count of the GetSourceByFileUID invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockGetSourceByFileUIDDone() bool {
+	if m.GetSourceByFileUIDMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.GetSourceByFileUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetSourceByFileUIDMock.invocationsDone()
+}
+
+// MinimockGetSourceByFileUIDInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockGetSourceByFileUIDInspect() {
+	for _, e := range m.GetSourceByFileUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.GetSourceByFileUID at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterGetSourceByFileUIDCounter := mm_atomic.LoadUint64(&m.afterGetSourceByFileUIDCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetSourceByFileUIDMock.defaultExpectation != nil && afterGetSourceByFileUIDCounter < 1 {
+		if m.GetSourceByFileUIDMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.GetSourceByFileUID at\n%s", m.GetSourceByFileUIDMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.GetSourceByFileUID at\n%s with params: %#v", m.GetSourceByFileUIDMock.defaultExpectation.expectationOrigins.origin, *m.GetSourceByFileUIDMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetSourceByFileUID != nil && afterGetSourceByFileUIDCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.GetSourceByFileUID at\n%s", m.funcGetSourceByFileUIDOrigin)
+	}
+
+	if !m.GetSourceByFileUIDMock.invocationsDone() && afterGetSourceByFileUIDCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.GetSourceByFileUID at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.GetSourceByFileUIDMock.expectedInvocations), m.GetSourceByFileUIDMock.expectedInvocationsOrigin, afterGetSourceByFileUIDCounter)
+	}
+}
+
 type mRepositoryMockGetSourceTableAndUIDByFileUIDs struct {
 	optional           bool
 	mock               *RepositoryMock
@@ -18884,349 +19964,6 @@ func (m *RepositoryMock) MinimockGetTotalTokensByListKBUIDsInspect() {
 	if !m.GetTotalTokensByListKBUIDsMock.invocationsDone() && afterGetTotalTokensByListKBUIDsCounter > 0 {
 		m.t.Errorf("Expected %d calls to RepositoryMock.GetTotalTokensByListKBUIDs at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.GetTotalTokensByListKBUIDsMock.expectedInvocations), m.GetTotalTokensByListKBUIDsMock.expectedInvocationsOrigin, afterGetTotalTokensByListKBUIDsCounter)
-	}
-}
-
-type mRepositoryMockGetTruthSourceByFileUID struct {
-	optional           bool
-	mock               *RepositoryMock
-	defaultExpectation *RepositoryMockGetTruthSourceByFileUIDExpectation
-	expectations       []*RepositoryMockGetTruthSourceByFileUIDExpectation
-
-	callArgs []*RepositoryMockGetTruthSourceByFileUIDParams
-	mutex    sync.RWMutex
-
-	expectedInvocations       uint64
-	expectedInvocationsOrigin string
-}
-
-// RepositoryMockGetTruthSourceByFileUIDExpectation specifies expectation struct of the Repository.GetTruthSourceByFileUID
-type RepositoryMockGetTruthSourceByFileUIDExpectation struct {
-	mock               *RepositoryMock
-	params             *RepositoryMockGetTruthSourceByFileUIDParams
-	paramPtrs          *RepositoryMockGetTruthSourceByFileUIDParamPtrs
-	expectationOrigins RepositoryMockGetTruthSourceByFileUIDExpectationOrigins
-	results            *RepositoryMockGetTruthSourceByFileUIDResults
-	returnOrigin       string
-	Counter            uint64
-}
-
-// RepositoryMockGetTruthSourceByFileUIDParams contains parameters of the Repository.GetTruthSourceByFileUID
-type RepositoryMockGetTruthSourceByFileUIDParams struct {
-	ctx     context.Context
-	fileUID types.FileUIDType
-}
-
-// RepositoryMockGetTruthSourceByFileUIDParamPtrs contains pointers to parameters of the Repository.GetTruthSourceByFileUID
-type RepositoryMockGetTruthSourceByFileUIDParamPtrs struct {
-	ctx     *context.Context
-	fileUID *types.FileUIDType
-}
-
-// RepositoryMockGetTruthSourceByFileUIDResults contains results of the Repository.GetTruthSourceByFileUID
-type RepositoryMockGetTruthSourceByFileUIDResults struct {
-	sp1 *mm_repository.SourceMeta
-	err error
-}
-
-// RepositoryMockGetTruthSourceByFileUIDOrigins contains origins of expectations of the Repository.GetTruthSourceByFileUID
-type RepositoryMockGetTruthSourceByFileUIDExpectationOrigins struct {
-	origin        string
-	originCtx     string
-	originFileUID string
-}
-
-// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
-// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
-// Optional() makes method check to work in '0 or more' mode.
-// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
-// catch the problems when the expected method call is totally skipped during test run.
-func (mmGetTruthSourceByFileUID *mRepositoryMockGetTruthSourceByFileUID) Optional() *mRepositoryMockGetTruthSourceByFileUID {
-	mmGetTruthSourceByFileUID.optional = true
-	return mmGetTruthSourceByFileUID
-}
-
-// Expect sets up expected params for Repository.GetTruthSourceByFileUID
-func (mmGetTruthSourceByFileUID *mRepositoryMockGetTruthSourceByFileUID) Expect(ctx context.Context, fileUID types.FileUIDType) *mRepositoryMockGetTruthSourceByFileUID {
-	if mmGetTruthSourceByFileUID.mock.funcGetTruthSourceByFileUID != nil {
-		mmGetTruthSourceByFileUID.mock.t.Fatalf("RepositoryMock.GetTruthSourceByFileUID mock is already set by Set")
-	}
-
-	if mmGetTruthSourceByFileUID.defaultExpectation == nil {
-		mmGetTruthSourceByFileUID.defaultExpectation = &RepositoryMockGetTruthSourceByFileUIDExpectation{}
-	}
-
-	if mmGetTruthSourceByFileUID.defaultExpectation.paramPtrs != nil {
-		mmGetTruthSourceByFileUID.mock.t.Fatalf("RepositoryMock.GetTruthSourceByFileUID mock is already set by ExpectParams functions")
-	}
-
-	mmGetTruthSourceByFileUID.defaultExpectation.params = &RepositoryMockGetTruthSourceByFileUIDParams{ctx, fileUID}
-	mmGetTruthSourceByFileUID.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
-	for _, e := range mmGetTruthSourceByFileUID.expectations {
-		if minimock.Equal(e.params, mmGetTruthSourceByFileUID.defaultExpectation.params) {
-			mmGetTruthSourceByFileUID.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetTruthSourceByFileUID.defaultExpectation.params)
-		}
-	}
-
-	return mmGetTruthSourceByFileUID
-}
-
-// ExpectCtxParam1 sets up expected param ctx for Repository.GetTruthSourceByFileUID
-func (mmGetTruthSourceByFileUID *mRepositoryMockGetTruthSourceByFileUID) ExpectCtxParam1(ctx context.Context) *mRepositoryMockGetTruthSourceByFileUID {
-	if mmGetTruthSourceByFileUID.mock.funcGetTruthSourceByFileUID != nil {
-		mmGetTruthSourceByFileUID.mock.t.Fatalf("RepositoryMock.GetTruthSourceByFileUID mock is already set by Set")
-	}
-
-	if mmGetTruthSourceByFileUID.defaultExpectation == nil {
-		mmGetTruthSourceByFileUID.defaultExpectation = &RepositoryMockGetTruthSourceByFileUIDExpectation{}
-	}
-
-	if mmGetTruthSourceByFileUID.defaultExpectation.params != nil {
-		mmGetTruthSourceByFileUID.mock.t.Fatalf("RepositoryMock.GetTruthSourceByFileUID mock is already set by Expect")
-	}
-
-	if mmGetTruthSourceByFileUID.defaultExpectation.paramPtrs == nil {
-		mmGetTruthSourceByFileUID.defaultExpectation.paramPtrs = &RepositoryMockGetTruthSourceByFileUIDParamPtrs{}
-	}
-	mmGetTruthSourceByFileUID.defaultExpectation.paramPtrs.ctx = &ctx
-	mmGetTruthSourceByFileUID.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
-
-	return mmGetTruthSourceByFileUID
-}
-
-// ExpectFileUIDParam2 sets up expected param fileUID for Repository.GetTruthSourceByFileUID
-func (mmGetTruthSourceByFileUID *mRepositoryMockGetTruthSourceByFileUID) ExpectFileUIDParam2(fileUID types.FileUIDType) *mRepositoryMockGetTruthSourceByFileUID {
-	if mmGetTruthSourceByFileUID.mock.funcGetTruthSourceByFileUID != nil {
-		mmGetTruthSourceByFileUID.mock.t.Fatalf("RepositoryMock.GetTruthSourceByFileUID mock is already set by Set")
-	}
-
-	if mmGetTruthSourceByFileUID.defaultExpectation == nil {
-		mmGetTruthSourceByFileUID.defaultExpectation = &RepositoryMockGetTruthSourceByFileUIDExpectation{}
-	}
-
-	if mmGetTruthSourceByFileUID.defaultExpectation.params != nil {
-		mmGetTruthSourceByFileUID.mock.t.Fatalf("RepositoryMock.GetTruthSourceByFileUID mock is already set by Expect")
-	}
-
-	if mmGetTruthSourceByFileUID.defaultExpectation.paramPtrs == nil {
-		mmGetTruthSourceByFileUID.defaultExpectation.paramPtrs = &RepositoryMockGetTruthSourceByFileUIDParamPtrs{}
-	}
-	mmGetTruthSourceByFileUID.defaultExpectation.paramPtrs.fileUID = &fileUID
-	mmGetTruthSourceByFileUID.defaultExpectation.expectationOrigins.originFileUID = minimock.CallerInfo(1)
-
-	return mmGetTruthSourceByFileUID
-}
-
-// Inspect accepts an inspector function that has same arguments as the Repository.GetTruthSourceByFileUID
-func (mmGetTruthSourceByFileUID *mRepositoryMockGetTruthSourceByFileUID) Inspect(f func(ctx context.Context, fileUID types.FileUIDType)) *mRepositoryMockGetTruthSourceByFileUID {
-	if mmGetTruthSourceByFileUID.mock.inspectFuncGetTruthSourceByFileUID != nil {
-		mmGetTruthSourceByFileUID.mock.t.Fatalf("Inspect function is already set for RepositoryMock.GetTruthSourceByFileUID")
-	}
-
-	mmGetTruthSourceByFileUID.mock.inspectFuncGetTruthSourceByFileUID = f
-
-	return mmGetTruthSourceByFileUID
-}
-
-// Return sets up results that will be returned by Repository.GetTruthSourceByFileUID
-func (mmGetTruthSourceByFileUID *mRepositoryMockGetTruthSourceByFileUID) Return(sp1 *mm_repository.SourceMeta, err error) *RepositoryMock {
-	if mmGetTruthSourceByFileUID.mock.funcGetTruthSourceByFileUID != nil {
-		mmGetTruthSourceByFileUID.mock.t.Fatalf("RepositoryMock.GetTruthSourceByFileUID mock is already set by Set")
-	}
-
-	if mmGetTruthSourceByFileUID.defaultExpectation == nil {
-		mmGetTruthSourceByFileUID.defaultExpectation = &RepositoryMockGetTruthSourceByFileUIDExpectation{mock: mmGetTruthSourceByFileUID.mock}
-	}
-	mmGetTruthSourceByFileUID.defaultExpectation.results = &RepositoryMockGetTruthSourceByFileUIDResults{sp1, err}
-	mmGetTruthSourceByFileUID.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
-	return mmGetTruthSourceByFileUID.mock
-}
-
-// Set uses given function f to mock the Repository.GetTruthSourceByFileUID method
-func (mmGetTruthSourceByFileUID *mRepositoryMockGetTruthSourceByFileUID) Set(f func(ctx context.Context, fileUID types.FileUIDType) (sp1 *mm_repository.SourceMeta, err error)) *RepositoryMock {
-	if mmGetTruthSourceByFileUID.defaultExpectation != nil {
-		mmGetTruthSourceByFileUID.mock.t.Fatalf("Default expectation is already set for the Repository.GetTruthSourceByFileUID method")
-	}
-
-	if len(mmGetTruthSourceByFileUID.expectations) > 0 {
-		mmGetTruthSourceByFileUID.mock.t.Fatalf("Some expectations are already set for the Repository.GetTruthSourceByFileUID method")
-	}
-
-	mmGetTruthSourceByFileUID.mock.funcGetTruthSourceByFileUID = f
-	mmGetTruthSourceByFileUID.mock.funcGetTruthSourceByFileUIDOrigin = minimock.CallerInfo(1)
-	return mmGetTruthSourceByFileUID.mock
-}
-
-// When sets expectation for the Repository.GetTruthSourceByFileUID which will trigger the result defined by the following
-// Then helper
-func (mmGetTruthSourceByFileUID *mRepositoryMockGetTruthSourceByFileUID) When(ctx context.Context, fileUID types.FileUIDType) *RepositoryMockGetTruthSourceByFileUIDExpectation {
-	if mmGetTruthSourceByFileUID.mock.funcGetTruthSourceByFileUID != nil {
-		mmGetTruthSourceByFileUID.mock.t.Fatalf("RepositoryMock.GetTruthSourceByFileUID mock is already set by Set")
-	}
-
-	expectation := &RepositoryMockGetTruthSourceByFileUIDExpectation{
-		mock:               mmGetTruthSourceByFileUID.mock,
-		params:             &RepositoryMockGetTruthSourceByFileUIDParams{ctx, fileUID},
-		expectationOrigins: RepositoryMockGetTruthSourceByFileUIDExpectationOrigins{origin: minimock.CallerInfo(1)},
-	}
-	mmGetTruthSourceByFileUID.expectations = append(mmGetTruthSourceByFileUID.expectations, expectation)
-	return expectation
-}
-
-// Then sets up Repository.GetTruthSourceByFileUID return parameters for the expectation previously defined by the When method
-func (e *RepositoryMockGetTruthSourceByFileUIDExpectation) Then(sp1 *mm_repository.SourceMeta, err error) *RepositoryMock {
-	e.results = &RepositoryMockGetTruthSourceByFileUIDResults{sp1, err}
-	return e.mock
-}
-
-// Times sets number of times Repository.GetTruthSourceByFileUID should be invoked
-func (mmGetTruthSourceByFileUID *mRepositoryMockGetTruthSourceByFileUID) Times(n uint64) *mRepositoryMockGetTruthSourceByFileUID {
-	if n == 0 {
-		mmGetTruthSourceByFileUID.mock.t.Fatalf("Times of RepositoryMock.GetTruthSourceByFileUID mock can not be zero")
-	}
-	mm_atomic.StoreUint64(&mmGetTruthSourceByFileUID.expectedInvocations, n)
-	mmGetTruthSourceByFileUID.expectedInvocationsOrigin = minimock.CallerInfo(1)
-	return mmGetTruthSourceByFileUID
-}
-
-func (mmGetTruthSourceByFileUID *mRepositoryMockGetTruthSourceByFileUID) invocationsDone() bool {
-	if len(mmGetTruthSourceByFileUID.expectations) == 0 && mmGetTruthSourceByFileUID.defaultExpectation == nil && mmGetTruthSourceByFileUID.mock.funcGetTruthSourceByFileUID == nil {
-		return true
-	}
-
-	totalInvocations := mm_atomic.LoadUint64(&mmGetTruthSourceByFileUID.mock.afterGetTruthSourceByFileUIDCounter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmGetTruthSourceByFileUID.expectedInvocations)
-
-	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
-}
-
-// GetTruthSourceByFileUID implements mm_repository.Repository
-func (mmGetTruthSourceByFileUID *RepositoryMock) GetTruthSourceByFileUID(ctx context.Context, fileUID types.FileUIDType) (sp1 *mm_repository.SourceMeta, err error) {
-	mm_atomic.AddUint64(&mmGetTruthSourceByFileUID.beforeGetTruthSourceByFileUIDCounter, 1)
-	defer mm_atomic.AddUint64(&mmGetTruthSourceByFileUID.afterGetTruthSourceByFileUIDCounter, 1)
-
-	mmGetTruthSourceByFileUID.t.Helper()
-
-	if mmGetTruthSourceByFileUID.inspectFuncGetTruthSourceByFileUID != nil {
-		mmGetTruthSourceByFileUID.inspectFuncGetTruthSourceByFileUID(ctx, fileUID)
-	}
-
-	mm_params := RepositoryMockGetTruthSourceByFileUIDParams{ctx, fileUID}
-
-	// Record call args
-	mmGetTruthSourceByFileUID.GetTruthSourceByFileUIDMock.mutex.Lock()
-	mmGetTruthSourceByFileUID.GetTruthSourceByFileUIDMock.callArgs = append(mmGetTruthSourceByFileUID.GetTruthSourceByFileUIDMock.callArgs, &mm_params)
-	mmGetTruthSourceByFileUID.GetTruthSourceByFileUIDMock.mutex.Unlock()
-
-	for _, e := range mmGetTruthSourceByFileUID.GetTruthSourceByFileUIDMock.expectations {
-		if minimock.Equal(*e.params, mm_params) {
-			mm_atomic.AddUint64(&e.Counter, 1)
-			return e.results.sp1, e.results.err
-		}
-	}
-
-	if mmGetTruthSourceByFileUID.GetTruthSourceByFileUIDMock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmGetTruthSourceByFileUID.GetTruthSourceByFileUIDMock.defaultExpectation.Counter, 1)
-		mm_want := mmGetTruthSourceByFileUID.GetTruthSourceByFileUIDMock.defaultExpectation.params
-		mm_want_ptrs := mmGetTruthSourceByFileUID.GetTruthSourceByFileUIDMock.defaultExpectation.paramPtrs
-
-		mm_got := RepositoryMockGetTruthSourceByFileUIDParams{ctx, fileUID}
-
-		if mm_want_ptrs != nil {
-
-			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
-				mmGetTruthSourceByFileUID.t.Errorf("RepositoryMock.GetTruthSourceByFileUID got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmGetTruthSourceByFileUID.GetTruthSourceByFileUIDMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
-			}
-
-			if mm_want_ptrs.fileUID != nil && !minimock.Equal(*mm_want_ptrs.fileUID, mm_got.fileUID) {
-				mmGetTruthSourceByFileUID.t.Errorf("RepositoryMock.GetTruthSourceByFileUID got unexpected parameter fileUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmGetTruthSourceByFileUID.GetTruthSourceByFileUIDMock.defaultExpectation.expectationOrigins.originFileUID, *mm_want_ptrs.fileUID, mm_got.fileUID, minimock.Diff(*mm_want_ptrs.fileUID, mm_got.fileUID))
-			}
-
-		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
-			mmGetTruthSourceByFileUID.t.Errorf("RepositoryMock.GetTruthSourceByFileUID got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-				mmGetTruthSourceByFileUID.GetTruthSourceByFileUIDMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
-		}
-
-		mm_results := mmGetTruthSourceByFileUID.GetTruthSourceByFileUIDMock.defaultExpectation.results
-		if mm_results == nil {
-			mmGetTruthSourceByFileUID.t.Fatal("No results are set for the RepositoryMock.GetTruthSourceByFileUID")
-		}
-		return (*mm_results).sp1, (*mm_results).err
-	}
-	if mmGetTruthSourceByFileUID.funcGetTruthSourceByFileUID != nil {
-		return mmGetTruthSourceByFileUID.funcGetTruthSourceByFileUID(ctx, fileUID)
-	}
-	mmGetTruthSourceByFileUID.t.Fatalf("Unexpected call to RepositoryMock.GetTruthSourceByFileUID. %v %v", ctx, fileUID)
-	return
-}
-
-// GetTruthSourceByFileUIDAfterCounter returns a count of finished RepositoryMock.GetTruthSourceByFileUID invocations
-func (mmGetTruthSourceByFileUID *RepositoryMock) GetTruthSourceByFileUIDAfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmGetTruthSourceByFileUID.afterGetTruthSourceByFileUIDCounter)
-}
-
-// GetTruthSourceByFileUIDBeforeCounter returns a count of RepositoryMock.GetTruthSourceByFileUID invocations
-func (mmGetTruthSourceByFileUID *RepositoryMock) GetTruthSourceByFileUIDBeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmGetTruthSourceByFileUID.beforeGetTruthSourceByFileUIDCounter)
-}
-
-// Calls returns a list of arguments used in each call to RepositoryMock.GetTruthSourceByFileUID.
-// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
-func (mmGetTruthSourceByFileUID *mRepositoryMockGetTruthSourceByFileUID) Calls() []*RepositoryMockGetTruthSourceByFileUIDParams {
-	mmGetTruthSourceByFileUID.mutex.RLock()
-
-	argCopy := make([]*RepositoryMockGetTruthSourceByFileUIDParams, len(mmGetTruthSourceByFileUID.callArgs))
-	copy(argCopy, mmGetTruthSourceByFileUID.callArgs)
-
-	mmGetTruthSourceByFileUID.mutex.RUnlock()
-
-	return argCopy
-}
-
-// MinimockGetTruthSourceByFileUIDDone returns true if the count of the GetTruthSourceByFileUID invocations corresponds
-// the number of defined expectations
-func (m *RepositoryMock) MinimockGetTruthSourceByFileUIDDone() bool {
-	if m.GetTruthSourceByFileUIDMock.optional {
-		// Optional methods provide '0 or more' call count restriction.
-		return true
-	}
-
-	for _, e := range m.GetTruthSourceByFileUIDMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			return false
-		}
-	}
-
-	return m.GetTruthSourceByFileUIDMock.invocationsDone()
-}
-
-// MinimockGetTruthSourceByFileUIDInspect logs each unmet expectation
-func (m *RepositoryMock) MinimockGetTruthSourceByFileUIDInspect() {
-	for _, e := range m.GetTruthSourceByFileUIDMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Errorf("Expected call to RepositoryMock.GetTruthSourceByFileUID at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
-		}
-	}
-
-	afterGetTruthSourceByFileUIDCounter := mm_atomic.LoadUint64(&m.afterGetTruthSourceByFileUIDCounter)
-	// if default expectation was set then invocations count should be greater than zero
-	if m.GetTruthSourceByFileUIDMock.defaultExpectation != nil && afterGetTruthSourceByFileUIDCounter < 1 {
-		if m.GetTruthSourceByFileUIDMock.defaultExpectation.params == nil {
-			m.t.Errorf("Expected call to RepositoryMock.GetTruthSourceByFileUID at\n%s", m.GetTruthSourceByFileUIDMock.defaultExpectation.returnOrigin)
-		} else {
-			m.t.Errorf("Expected call to RepositoryMock.GetTruthSourceByFileUID at\n%s with params: %#v", m.GetTruthSourceByFileUIDMock.defaultExpectation.expectationOrigins.origin, *m.GetTruthSourceByFileUIDMock.defaultExpectation.params)
-		}
-	}
-	// if func was set then invocations count should be greater than zero
-	if m.funcGetTruthSourceByFileUID != nil && afterGetTruthSourceByFileUIDCounter < 1 {
-		m.t.Errorf("Expected call to RepositoryMock.GetTruthSourceByFileUID at\n%s", m.funcGetTruthSourceByFileUIDOrigin)
-	}
-
-	if !m.GetTruthSourceByFileUIDMock.invocationsDone() && afterGetTruthSourceByFileUIDCounter > 0 {
-		m.t.Errorf("Expected %d calls to RepositoryMock.GetTruthSourceByFileUID at\n%s but found %d calls",
-			mm_atomic.LoadUint64(&m.GetTruthSourceByFileUIDMock.expectedInvocations), m.GetTruthSourceByFileUIDMock.expectedInvocationsOrigin, afterGetTruthSourceByFileUIDCounter)
 	}
 }
 
@@ -31083,9 +31820,13 @@ func (m *RepositoryMock) MinimockFinish() {
 
 			m.MinimockFlushCollectionInspect()
 
+			m.MinimockGetAllConvertedFilesByFileUIDInspect()
+
 			m.MinimockGetChatCacheMetadataInspect()
 
 			m.MinimockGetConvertedFileByFileUIDInspect()
+
+			m.MinimockGetConvertedFileByFileUIDAndTypeInspect()
 
 			m.MinimockGetCountFilesByListKnowledgeBaseUIDInspect()
 
@@ -31125,6 +31866,8 @@ func (m *RepositoryMock) MinimockFinish() {
 
 			m.MinimockGetRepositoryTagInspect()
 
+			m.MinimockGetSourceByFileUIDInspect()
+
 			m.MinimockGetSourceTableAndUIDByFileUIDsInspect()
 
 			m.MinimockGetTextChunksBySourceInspect()
@@ -31134,8 +31877,6 @@ func (m *RepositoryMock) MinimockFinish() {
 			m.MinimockGetTotalTextChunksBySourcesInspect()
 
 			m.MinimockGetTotalTokensByListKBUIDsInspect()
-
-			m.MinimockGetTruthSourceByFileUIDInspect()
 
 			m.MinimockHardDeleteConvertedFileByFileUIDInspect()
 
@@ -31247,8 +31988,10 @@ func (m *RepositoryMock) minimockDone() bool {
 		m.MinimockDeleteRepositoryTagDone() &&
 		m.MinimockDropCollectionDone() &&
 		m.MinimockFlushCollectionDone() &&
+		m.MinimockGetAllConvertedFilesByFileUIDDone() &&
 		m.MinimockGetChatCacheMetadataDone() &&
 		m.MinimockGetConvertedFileByFileUIDDone() &&
+		m.MinimockGetConvertedFileByFileUIDAndTypeDone() &&
 		m.MinimockGetCountFilesByListKnowledgeBaseUIDDone() &&
 		m.MinimockGetFileDone() &&
 		m.MinimockGetFileMetadataDone() &&
@@ -31268,12 +32011,12 @@ func (m *RepositoryMock) minimockDone() bool {
 		m.MinimockGetPresignedURLForDownloadDone() &&
 		m.MinimockGetPresignedURLForUploadDone() &&
 		m.MinimockGetRepositoryTagDone() &&
+		m.MinimockGetSourceByFileUIDDone() &&
 		m.MinimockGetSourceTableAndUIDByFileUIDsDone() &&
 		m.MinimockGetTextChunksBySourceDone() &&
 		m.MinimockGetTextChunksByUIDsDone() &&
 		m.MinimockGetTotalTextChunksBySourcesDone() &&
 		m.MinimockGetTotalTokensByListKBUIDsDone() &&
-		m.MinimockGetTruthSourceByFileUIDDone() &&
 		m.MinimockHardDeleteConvertedFileByFileUIDDone() &&
 		m.MinimockHardDeleteEmbeddingsByKBFileUIDDone() &&
 		m.MinimockHardDeleteEmbeddingsByKBUIDDone() &&

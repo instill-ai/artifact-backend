@@ -49,40 +49,40 @@ func TestProvider_SupportsFileType(t *testing.T) {
 	provider := &Provider{}
 
 	t.Run("supports PDF", func(t *testing.T) {
-		result := provider.SupportsFileType(artifactpb.FileType_FILE_TYPE_PDF)
+		result := provider.SupportsFileType(artifactpb.File_TYPE_PDF)
 		c.Assert(result, qt.IsTrue)
 	})
 
 	t.Run("supports DOCX", func(t *testing.T) {
-		result := provider.SupportsFileType(artifactpb.FileType_FILE_TYPE_DOCX)
+		result := provider.SupportsFileType(artifactpb.File_TYPE_DOCX)
 		c.Assert(result, qt.IsTrue)
 	})
 
 	t.Run("supports images", func(t *testing.T) {
-		c.Assert(provider.SupportsFileType(artifactpb.FileType_FILE_TYPE_PNG), qt.IsTrue)
-		c.Assert(provider.SupportsFileType(artifactpb.FileType_FILE_TYPE_JPEG), qt.IsTrue)
-		c.Assert(provider.SupportsFileType(artifactpb.FileType_FILE_TYPE_JPG), qt.IsTrue)
-		c.Assert(provider.SupportsFileType(artifactpb.FileType_FILE_TYPE_WEBP), qt.IsTrue)
-		c.Assert(provider.SupportsFileType(artifactpb.FileType_FILE_TYPE_GIF), qt.IsTrue)
-		c.Assert(provider.SupportsFileType(artifactpb.FileType_FILE_TYPE_AVIF), qt.IsTrue)
+		c.Assert(provider.SupportsFileType(artifactpb.File_TYPE_PNG), qt.IsTrue)
+		c.Assert(provider.SupportsFileType(artifactpb.File_TYPE_JPEG), qt.IsTrue)
+		c.Assert(provider.SupportsFileType(artifactpb.File_TYPE_JPG), qt.IsTrue)
+		c.Assert(provider.SupportsFileType(artifactpb.File_TYPE_WEBP), qt.IsTrue)
+		c.Assert(provider.SupportsFileType(artifactpb.File_TYPE_GIF), qt.IsTrue)
+		c.Assert(provider.SupportsFileType(artifactpb.File_TYPE_AVIF), qt.IsTrue)
 	})
 
 	t.Run("supports audio", func(t *testing.T) {
-		c.Assert(provider.SupportsFileType(artifactpb.FileType_FILE_TYPE_MP3), qt.IsTrue)
-		c.Assert(provider.SupportsFileType(artifactpb.FileType_FILE_TYPE_WAV), qt.IsTrue)
-		c.Assert(provider.SupportsFileType(artifactpb.FileType_FILE_TYPE_AAC), qt.IsTrue)
-		c.Assert(provider.SupportsFileType(artifactpb.FileType_FILE_TYPE_FLAC), qt.IsTrue)
+		c.Assert(provider.SupportsFileType(artifactpb.File_TYPE_MP3), qt.IsTrue)
+		c.Assert(provider.SupportsFileType(artifactpb.File_TYPE_WAV), qt.IsTrue)
+		c.Assert(provider.SupportsFileType(artifactpb.File_TYPE_AAC), qt.IsTrue)
+		c.Assert(provider.SupportsFileType(artifactpb.File_TYPE_FLAC), qt.IsTrue)
 	})
 
 	t.Run("supports video", func(t *testing.T) {
-		c.Assert(provider.SupportsFileType(artifactpb.FileType_FILE_TYPE_MP4), qt.IsTrue)
-		c.Assert(provider.SupportsFileType(artifactpb.FileType_FILE_TYPE_MOV), qt.IsTrue)
-		c.Assert(provider.SupportsFileType(artifactpb.FileType_FILE_TYPE_WEBM_VIDEO), qt.IsTrue)
-		c.Assert(provider.SupportsFileType(artifactpb.FileType_FILE_TYPE_AVI), qt.IsTrue)
+		c.Assert(provider.SupportsFileType(artifactpb.File_TYPE_MP4), qt.IsTrue)
+		c.Assert(provider.SupportsFileType(artifactpb.File_TYPE_MOV), qt.IsTrue)
+		c.Assert(provider.SupportsFileType(artifactpb.File_TYPE_WEBM_VIDEO), qt.IsTrue)
+		c.Assert(provider.SupportsFileType(artifactpb.File_TYPE_AVI), qt.IsTrue)
 	})
 
 	t.Run("unsupported file type", func(t *testing.T) {
-		result := provider.SupportsFileType(artifactpb.FileType_FILE_TYPE_UNSPECIFIED)
+		result := provider.SupportsFileType(artifactpb.File_TYPE_UNSPECIFIED)
 		c.Assert(result, qt.IsFalse)
 	})
 }
@@ -119,14 +119,14 @@ func TestProvider_ConvertToMarkdown_UsesCorrectMIMEType(t *testing.T) {
 
 	// Test that the provider correctly maps file types to MIME types
 	testCases := []struct {
-		fileType     artifactpb.FileType
+		fileType     artifactpb.File_Type
 		expectedMIME string
 	}{
-		{artifactpb.FileType_FILE_TYPE_PDF, "application/pdf"},
-		{artifactpb.FileType_FILE_TYPE_PNG, "image/png"},
-		{artifactpb.FileType_FILE_TYPE_JPEG, "image/jpeg"},
-		{artifactpb.FileType_FILE_TYPE_MP3, "audio/mpeg"},
-		{artifactpb.FileType_FILE_TYPE_MP4, "video/mp4"},
+		{artifactpb.File_TYPE_PDF, "application/pdf"},
+		{artifactpb.File_TYPE_PNG, "image/png"},
+		{artifactpb.File_TYPE_JPEG, "image/jpeg"},
+		{artifactpb.File_TYPE_MP3, "audio/mpeg"},
+		{artifactpb.File_TYPE_MP4, "video/mp4"},
 	}
 
 	for _, tc := range testCases {
@@ -150,7 +150,7 @@ func TestProvider_CreateCache_ValidatesInput(t *testing.T) {
 			[]ai.FileContent{
 				{
 					Content:  []byte{},
-					FileType: artifactpb.FileType_FILE_TYPE_PDF,
+					FileType: artifactpb.File_TYPE_PDF,
 					Filename: "test.pdf",
 				},
 			},
@@ -195,7 +195,7 @@ func TestProvider_MethodSignatures(t *testing.T) {
 
 	t.Run("SupportsFileType accepts FileType", func(t *testing.T) {
 		// Just verify the method can be called
-		_ = provider.SupportsFileType(artifactpb.FileType_FILE_TYPE_PDF)
+		_ = provider.SupportsFileType(artifactpb.File_TYPE_PDF)
 	})
 
 	t.Run("Close returns error", func(t *testing.T) {
@@ -229,7 +229,7 @@ func TestProvider_ErrorMessages(t *testing.T) {
 			[]ai.FileContent{
 				{
 					Content:  []byte{},
-					FileType: artifactpb.FileType_FILE_TYPE_PDF,
+					FileType: artifactpb.File_TYPE_PDF,
 					Filename: "test.pdf",
 				},
 			},

@@ -17,11 +17,11 @@ import (
 
 // GetChunksByFile returns the chunks of a file
 // Fetches chunk content directly from MinIO using parallel goroutines for better performance
+// Returns chunks and their content texts in the same order (use index to access matching content)
 func (s *service) GetChunksByFile(ctx context.Context, file *repository.KnowledgeBaseFileModel) (
 	types.SourceTableType,
 	types.SourceUIDType,
 	[]repository.TextChunkModel,
-	map[types.TextChunkUIDType]types.ContentType,
 	[]string,
 	error,
 ) {
@@ -34,7 +34,7 @@ func (s *service) GetChunksByFile(ctx context.Context, file *repository.Knowledg
 	convertedFile, err := s.repository.GetConvertedFileByFileUID(ctx, file.UID)
 	if err != nil {
 		logger.Error("Failed to get converted file metadata.", zap.String("File uid", file.UID.String()))
-		return sourceTable, sourceUID, nil, nil, nil, err
+		return sourceTable, sourceUID, nil, nil, err
 	}
 	sourceTable = repository.ConvertedFileTableName
 	sourceUID = convertedFile.UID
@@ -43,7 +43,7 @@ func (s *service) GetChunksByFile(ctx context.Context, file *repository.Knowledg
 	textChunks, err := s.repository.GetTextChunksBySource(ctx, sourceTable, sourceUID)
 	if err != nil {
 		logger.Error("Failed to get chunks from database.", zap.String("SourceUID", sourceUID.String()))
-		return sourceTable, sourceUID, nil, nil, nil, err
+		return sourceTable, sourceUID, nil, nil, err
 	}
 
 	// Fetch chunks from MinIO in parallel using goroutines with retry
@@ -64,7 +64,7 @@ func (s *service) GetChunksByFile(ctx context.Context, file *repository.Knowledg
 			var err error
 			maxAttempts := 3
 
-			for attempt := 0; attempt < maxAttempts; attempt++ {
+			for attempt := range maxAttempts {
 				content, err = s.repository.GetFile(ctx, bucket, path)
 				if err == nil {
 					break // Success!
@@ -100,14 +100,8 @@ func (s *service) GetChunksByFile(ctx context.Context, file *repository.Knowledg
 			zap.String("SourceTable", sourceTable),
 			zap.String("SourceUID", sourceUID.String()),
 			zap.Error(fetchErr))
-		return sourceTable, sourceUID, nil, nil, nil, fetchErr
+		return sourceTable, sourceUID, nil, nil, fetchErr
 	}
 
-	// Build chunk UID to content map
-	textChunkUIDToContents := make(map[types.TextChunkUIDType]types.ContentType, len(textChunks))
-	for i, c := range textChunks {
-		textChunkUIDToContents[c.UID] = types.ContentType(texts[i])
-	}
-
-	return sourceTable, sourceUID, textChunks, textChunkUIDToContents, texts, nil
+	return sourceTable, sourceUID, textChunks, texts, nil
 }

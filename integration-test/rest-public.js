@@ -235,7 +235,7 @@ export function CheckCleanupFiles(data) {
     const uploadRes = http.request(
       "POST",
       `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
-      JSON.stringify({ name: fileName, type: "FILE_TYPE_PDF", content: constant.samplePdf }),
+      JSON.stringify({ name: fileName, type: "TYPE_PDF", content: constant.samplePdf }),
       data.header
     );
 
@@ -463,8 +463,8 @@ export function CheckCatalog(data) {
       });
 
       // Check conversion pipeline and page information depending on the file type
-      const isDocumentType = ["FILE_TYPE_PDF", "FILE_TYPE_DOC", "FILE_TYPE_DOCX", "FILE_TYPE_PPT", "FILE_TYPE_PPTX"].includes(f.type);
-      const isTextType = ["FILE_TYPE_TEXT", "FILE_TYPE_MARKDOWN"].includes(f.type);
+      const isDocumentType = ["TYPE_PDF", "TYPE_DOC", "TYPE_DOCX", "TYPE_PPT", "TYPE_PPTX"].includes(f.type);
+      const isTextType = ["TYPE_TEXT", "TYPE_MARKDOWN"].includes(f.type);
 
       if (isDocumentType) {
         // For document types, check that length unit is pages and coordinates contain page count
@@ -522,7 +522,7 @@ export function CheckCatalog(data) {
 
     // Update PDF file tags before retrieval tests
     {
-      const pdfFile = uploaded.find(f => f.type === "FILE_TYPE_PDF");
+      const pdfFile = uploaded.find(f => f.type === "TYPE_PDF");
       if (pdfFile) {
         const updateTagsBody = {
           tags: ["scott", "kim"]
@@ -594,7 +594,7 @@ export function CheckCatalog(data) {
       const similarChunks2 = searchJson2.similarChunks || [];
 
       // Find the PDF file UID for validation
-      const pdfFile = uploaded.find(f => f.type === "FILE_TYPE_PDF");
+      const pdfFile = uploaded.find(f => f.type === "TYPE_PDF");
       const pdfFileUid = pdfFile ? pdfFile.fileUid : null;
 
       check(searchRes2, {
@@ -606,7 +606,7 @@ export function CheckCatalog(data) {
       });
 
       // Test 3: Verify that document types (PDF, DOC, DOCX, PPT, PPTX) have page-based references starting and ending at page 1
-      const documentTypes = ["FILE_TYPE_PDF", "FILE_TYPE_DOC", "FILE_TYPE_DOCX", "FILE_TYPE_PPT", "FILE_TYPE_PPTX"];
+      const documentTypes = ["TYPE_PDF", "TYPE_DOC", "TYPE_DOCX", "TYPE_PPT", "TYPE_PPTX"];
       const documentFiles = uploaded.filter(f => documentTypes.includes(f.type));
 
       if (documentFiles.length > 0) {

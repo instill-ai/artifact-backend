@@ -40,8 +40,10 @@ type EmbeddingModel struct {
 	UpdateTime  *time.Time          `gorm:"column:update_time;not null;default:CURRENT_TIMESTAMP" json:"update_time"`
 	KBUID       types.KBUIDType     `gorm:"column:kb_uid;type:uuid;not null" json:"kb_uid"`
 	KBFileUID   types.FileUIDType   `gorm:"column:kb_file_uid;type:uuid;not null" json:"kb_file_uid"`
-	FileType    string              `gorm:"column:file_type;size:255;not null" json:"file_type"`
-	ContentType string              `gorm:"column:content_type;size:255;not null" json:"content_type"`
+	// ContentType stores the MIME type (e.g., "text/markdown", "application/pdf")
+	ContentType string `gorm:"column:content_type;size:255;not null" json:"content_type"`
+	// ChunkType stores the chunk classification ("content", "summary", "augmented")
+	ChunkType string `gorm:"column:chunk_type;size:255;not null" json:"chunk_type"`
 	// Tags associated with the embedding, inherited from the source file.
 	// Note: The tags are not stored in the database, they will only be used for
 	// filtering on the vector DB. However, the worker converts the repository
@@ -115,8 +117,8 @@ type EmbeddingColumns struct {
 	UpdateTime  string
 	KBUID       string
 	KBFileUID   string
-	FileType    string
 	ContentType string
+	ChunkType   string
 }
 
 // EmbeddingColumn is the column for the embedding table
@@ -129,8 +131,8 @@ var EmbeddingColumn = EmbeddingColumns{
 	UpdateTime:  "update_time",
 	KBUID:       "kb_uid",
 	KBFileUID:   "kb_file_uid",
-	FileType:    "file_type",
 	ContentType: "content_type",
+	ChunkType:   "chunk_type",
 }
 
 // TableName returns the table name of the Embedding

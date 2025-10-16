@@ -47,11 +47,11 @@ func (p *Provider) Name() string {
 
 // GetEmbeddingDimensionality returns the Gemini embedding vector dimensionality (3072)
 func (p *Provider) GetEmbeddingDimensionality() int32 {
-	return DefaultOutputDimensionality
+	return ai.GeminiEmbeddingDimDefault
 }
 
 // SupportsFileType returns true if Gemini can handle the file type
-func (p *Provider) SupportsFileType(fileType artifactpb.FileType) bool {
+func (p *Provider) SupportsFileType(fileType artifactpb.File_Type) bool {
 	return ai.SupportsFileType(fileType)
 }
 

@@ -55,7 +55,7 @@ func (ph *PublicHandler) GetFileCatalog(ctx context.Context, req *artifactpb.Get
 	kbFile := &(kbfs[0])
 
 	// Get source file.
-	source, err := ph.service.Repository().GetTruthSourceByFileUID(ctx, kbFile.UID)
+	source, err := ph.service.Repository().GetSourceByFileUID(ctx, kbFile.UID)
 	if err != nil {
 		return nil, fmt.Errorf("fetching truth source: %w", err)
 	}
@@ -70,7 +70,7 @@ func (ph *PublicHandler) GetFileCatalog(ctx context.Context, req *artifactpb.Get
 	//
 	// NOTE: in the future, we may support other types of segment, e.g. image,
 	// audio, etc.
-	_, _, textChunks, chunkUIDToContent, _, err := ph.service.GetChunksByFile(ctx, kbFile)
+	_, _, textChunks, texts, err := ph.service.GetChunksByFile(ctx, kbFile)
 	if err != nil {
 		return nil, fmt.Errorf("fetching file chunks: %w", err)
 	}
@@ -96,7 +96,7 @@ func (ph *PublicHandler) GetFileCatalog(ctx context.Context, req *artifactpb.Get
 		embeddingMap[embedding.SourceUID] = embedding
 	}
 
-	for _, chunk := range textChunks {
+	for i, chunk := range textChunks {
 		logger := logger.With(zap.String("chunkUID", chunk.UID.String()))
 
 		embedding, ok := embeddingMap[chunk.UID]
@@ -104,10 +104,8 @@ func (ph *PublicHandler) GetFileCatalog(ctx context.Context, req *artifactpb.Get
 			logger.Error("Couldn't find embedding for chunk")
 		}
 
-		content, ok := chunkUIDToContent[chunk.UID]
-		if !ok {
-			logger.Error("Couldn't find content for chunk")
-		}
+		// Content is at the same index as the chunk
+		content := texts[i]
 
 		var createTime *timestamppb.Timestamp
 		if chunk.CreateTime != nil {
@@ -152,7 +150,7 @@ func (ph *PublicHandler) GetFileCatalog(ctx context.Context, req *artifactpb.Get
 		FileMetadata: &artifactpb.GetFileCatalogResponse_FileMetadata{
 			Uid:           kbFile.UID.String(),
 			Filename:      kbFile.Name,
-			FileType:      artifactpb.FileType(artifactpb.FileType_value[kbFile.Type]),
+			FileType:      artifactpb.File_Type(artifactpb.File_Type_value[kbFile.FileType]),
 			Size:          kbFile.Size,
 			CreateTime:    fileCreateTime,
 			ProcessStatus: artifactpb.FileProcessStatus(artifactpb.FileProcessStatus_value[kbFile.ProcessStatus]),

@@ -50,8 +50,8 @@ type KnowledgeBaseFile interface {
 		SourceTable string
 		SourceUID   types.SourceUIDType
 	}, error)
-	// GetTruthSourceByFileUID returns the truth source file destination of minIO by file UID
-	GetTruthSourceByFileUID(ctx context.Context, fileUID types.FileUIDType) (*SourceMeta, error)
+	// GetSourceByFileUID returns the content converted file metadata by file UID
+	GetSourceByFileUID(ctx context.Context, fileUID types.FileUIDType) (*SourceMeta, error)
 	// UpdateKnowledgeFileMetadata updates the metadata fields of a knowledge base file.
 	UpdateKnowledgeFileMetadata(_ context.Context, fileUID types.FileUIDType, _ ExtraMetaData) error
 	// DeleteKnowledgeBaseFileAndDecreaseUsage deletes the knowledge base file and decreases the knowledge base usage
@@ -72,8 +72,8 @@ type KnowledgeBaseFileModel struct {
 	KBUID      types.KBUIDType        `gorm:"column:kb_uid;type:uuid;not null" json:"kb_uid"`
 	CreatorUID types.CreatorUIDType   `gorm:"column:creator_uid;type:uuid;not null" json:"creator_uid"`
 	Name       string                 `gorm:"column:name;size:255;not null" json:"name"`
-	// Type is defined in the grpc proto file
-	Type string `gorm:"column:type;not null" json:"type"`
+	// FileType stores the FileType enum string (e.g., "FILE_TYPE_PDF", "FILE_TYPE_TEXT")
+	FileType string `gorm:"column:file_type;not null" json:"file_type"`
 	// Destination is the path in the MinIO bucket
 	Destination string `gorm:"column:destination;size:255;not null" json:"destination"`
 	// Process status is defined in the grpc proto file
@@ -81,10 +81,8 @@ type KnowledgeBaseFileModel struct {
 	// Note: use ExtraMetaDataMarshal method to marshal and unmarshal. do not populate this field directly
 	// this field is used internally for the extra meta data of the file
 	ExtraMetaData string `gorm:"column:extra_meta_data;type:jsonb" json:"extra_meta_data"`
-	// Content not used yet
-	Content []byte `gorm:"column:content;type:bytea" json:"content"`
-	// File summary
-	Summary    []byte     `gorm:"column:summary;type:bytea" json:"summary"`
+	// Note: Content and summary are now stored as separate converted_file records and chunks in MinIO
+	// They are no longer duplicated in this table
 	CreateTime *time.Time `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
 	UpdateTime *time.Time `gorm:"column:update_time;not null;autoUpdateTime" json:"update_time"` // Use autoUpdateTime
 	DeleteTime *time.Time `gorm:"column:delete_time" json:"delete_time"`
@@ -131,13 +129,11 @@ type KnowledgeBaseFileColumns struct {
 	KnowledgeBaseUID string
 	CreatorUID       string
 	Name             string
-	Type             string
+	FileType         string
 	Destination      string
 	ProcessStatus    string
 	CreateTime       string
 	ExtraMetaData    string
-	Content          string
-	Summary          string
 	UpdateTime       string
 	DeleteTime       string
 	RequesterUID     string
@@ -151,11 +147,10 @@ var KnowledgeBaseFileColumn = KnowledgeBaseFileColumns{
 	KnowledgeBaseUID: "kb_uid",
 	CreatorUID:       "creator_uid",
 	Name:             "name",
-	Type:             "type",
+	FileType:         "file_type",
 	Destination:      "destination",
 	ProcessStatus:    "process_status",
 	ExtraMetaData:    "extra_meta_data",
-	Summary:          "summary",
 	CreateTime:       "create_time",
 	UpdateTime:       "update_time",
 	DeleteTime:       "delete_time",
@@ -593,76 +588,58 @@ func (r *repository) GetKnowledgeBaseFilesByFileUIDs(
 	return files, nil
 }
 
+// SourceMeta represents the metadata of the source file
 type SourceMeta struct {
-	OriginalFileUID  types.FileUIDType
-	OriginalFileName string
-	KBUID            types.KBUIDType
-	Dest             string
-	CreateTime       time.Time
-	UpdateTime       time.Time
+	OriginalFileUID  types.FileUIDType `json:"original_file_uid"`  // OriginalFileUID is the UID of the original file
+	OriginalFileName string            `json:"original_file_name"` // OriginalFileName is the name of the original file
+	KBUID            types.KBUIDType   `json:"kb_uid"`             // KBUID is the UID of the knowledge base
+	Dest             string            `json:"dest"`               // Dest is the destination of the source file
+	CreateTime       time.Time         `json:"create_time"`        // CreateTime is the creation time of the source file
+	UpdateTime       time.Time         `json:"update_time"`        // UpdateTime is the update time of the source file
 }
 
-// GetTruthSourceByFileUID returns the truth source file destination of minIO by file UID
-// and support all file type. if the file type is text or markdown, the destination is the file destination.
-// if the file type is pdf, get the converted file destination
-func (r *repository) GetTruthSourceByFileUID(ctx context.Context, fileUID types.FileUIDType) (*SourceMeta, error) {
+// GetSourceByFileUID returns the content converted file metadata by file UID.
+// All file types have converted files for consistency.
+// For the /source endpoint, this returns the CONTENT converted file, not the summary.
+// We order by create_time ASC to get the first (content) converted file, as the summary is created later.
+// TODO: Rename this to GetContentByFileUID
+func (r *repository) GetSourceByFileUID(ctx context.Context, fileUID types.FileUIDType) (*SourceMeta, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 
-	// get the file type by file uid
+	// Get the original file metadata
 	var file KnowledgeBaseFileModel
 	where := fmt.Sprintf("%v = ?", KnowledgeBaseFileColumn.UID)
 	if err := r.db.WithContext(ctx).Where(where, fileUID).First(&file).Error; err != nil {
 		return nil, fmt.Errorf("fetching file: %w", err)
 	}
-	// assign truth source file destination and create time
-	originalFileUID := file.UID
-	originalFileName := file.Name
-	var kbUID types.KBUIDType
-	var dest string
-	var createTime time.Time
-	var updateTime time.Time
-	switch file.Type {
-	// if the file type is text or markdown, the destination is the file destination
-	case artifactpb.FileType_FILE_TYPE_TEXT.String(), artifactpb.FileType_FILE_TYPE_MARKDOWN.String():
-		kbUID = file.KBUID
-		dest = file.Destination
-		createTime = *file.CreateTime
-		updateTime = *file.UpdateTime
-	// if the file type is pdf, get the converted file destination
-	case artifactpb.FileType_FILE_TYPE_PDF.String(),
-		artifactpb.FileType_FILE_TYPE_HTML.String(),
-		artifactpb.FileType_FILE_TYPE_DOC.String(),
-		artifactpb.FileType_FILE_TYPE_DOCX.String(),
-		artifactpb.FileType_FILE_TYPE_PPT.String(),
-		artifactpb.FileType_FILE_TYPE_PPTX.String(),
-		artifactpb.FileType_FILE_TYPE_XLSX.String(),
-		artifactpb.FileType_FILE_TYPE_XLS.String(),
-		artifactpb.FileType_FILE_TYPE_CSV.String():
-		convertedFile, err := r.GetConvertedFileByFileUID(ctx, fileUID)
-		if err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				err = fmt.Errorf(`
-				Single source not found for the file UID.
-				It might be due to the file-to-single-source process not being completed yet
-				or the file does not exist. err: %w`, err)
-				logger.Error("converted file not found", zap.String("file_uid", fileUID.String()), zap.Error(err))
-				return nil, err
-			}
+
+	// Get the CONTENT converted file using explicit type query
+	// All file types now have converted files stored with explicit type markers
+	// For plaintext files, the content is identical to the original
+	// For other files (PDF/DOC/etc.), the content is the markdown conversion
+	where = fmt.Sprintf("%s = ? AND %s = ?", ConvertedFileColumn.FileUID, ConvertedFileColumn.ConvertedType)
+	var convertedFile ConvertedFileModel
+	contentTypeStr := ConvertedFileTypeToString(artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_CONTENT)
+	err := r.db.WithContext(ctx).Where(where, fileUID, contentTypeStr).First(&convertedFile).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			err = fmt.Errorf(`
+			Content source not found for the file UID.
+			It might be due to the file conversion process not being completed yet
+			or the file does not exist. err: %w`, err)
+			logger.Error("content converted file not found", zap.String("file_uid", fileUID.String()), zap.Error(err))
 			return nil, err
 		}
-		kbUID = convertedFile.KBUID
-		dest = convertedFile.Destination
-		createTime = *convertedFile.CreateTime
-		updateTime = *convertedFile.UpdateTime
+		return nil, err
 	}
 
 	return &SourceMeta{
-		OriginalFileUID:  originalFileUID,
-		OriginalFileName: originalFileName,
-		Dest:             dest,
-		CreateTime:       createTime,
-		UpdateTime:       updateTime,
-		KBUID:            kbUID,
+		OriginalFileUID:  file.UID,
+		OriginalFileName: file.Name,
+		Dest:             convertedFile.Destination,
+		CreateTime:       *convertedFile.CreateTime,
+		UpdateTime:       *convertedFile.UpdateTime,
+		KBUID:            convertedFile.KBUID,
 	}, nil
 }
 

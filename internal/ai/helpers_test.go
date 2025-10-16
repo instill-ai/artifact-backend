@@ -30,7 +30,7 @@ func TestEstimateTotalTokens(t *testing.T) {
 		files := []FileContent{
 			{
 				Content:  []byte("Hello world!"),
-				FileType: artifactpb.FileType_FILE_TYPE_TEXT,
+				FileType: artifactpb.File_TYPE_TEXT,
 				Filename: "test.txt",
 			},
 		}
@@ -50,12 +50,12 @@ func TestEstimateTotalTokens(t *testing.T) {
 		files := []FileContent{
 			{
 				Content:  smallContent,
-				FileType: artifactpb.FileType_FILE_TYPE_TEXT,
+				FileType: artifactpb.File_TYPE_TEXT,
 				Filename: "file1.txt",
 			},
 			{
 				Content:  smallContent,
-				FileType: artifactpb.FileType_FILE_TYPE_TEXT,
+				FileType: artifactpb.File_TYPE_TEXT,
 				Filename: "file2.txt",
 			},
 		}
@@ -84,7 +84,7 @@ func TestEstimateTotalTokens(t *testing.T) {
 		files := []FileContent{
 			{
 				Content:  largeContent,
-				FileType: artifactpb.FileType_FILE_TYPE_TEXT,
+				FileType: artifactpb.File_TYPE_TEXT,
 				Filename: "large.txt",
 			},
 		}

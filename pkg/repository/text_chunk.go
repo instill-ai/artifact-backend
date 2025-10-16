@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"go.uber.org/zap"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -77,10 +78,12 @@ type TextChunkModel struct {
 	CreateTime  *time.Time `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
 	UpdateTime  *time.Time `gorm:"column:update_time;not null;default:CURRENT_TIMESTAMP" json:"update_time"`
 	// KBUID is the knowledge base UID
-	KBUID       types.KBUIDType   `gorm:"column:kb_uid;type:uuid" json:"kb_uid"`
-	KBFileUID   types.FileUIDType `gorm:"column:kb_file_uid;type:uuid" json:"kb_file_uid"`
-	FileType    string            `gorm:"column:file_type;size:255;not null" json:"file_type"`
-	ContentType string            `gorm:"column:content_type;size:255;not null" json:"content_type"`
+	KBUID     types.KBUIDType   `gorm:"column:kb_uid;type:uuid" json:"kb_uid"`
+	KBFileUID types.FileUIDType `gorm:"column:kb_file_uid;type:uuid" json:"kb_file_uid"`
+	// ContentType stores the MIME type (always "text/markdown" for chunks)
+	ContentType string `gorm:"column:content_type;size:255;not null" json:"content_type"`
+	// ChunkType stores the chunk classification ("content", "summary", "augmented")
+	ChunkType string `gorm:"column:chunk_type;size:255;not null" json:"chunk_type"`
 }
 
 // TableName overrides the default table name for GORM
@@ -103,8 +106,8 @@ type TextChunkColumns struct {
 	UpdateTime  string
 	KBUID       string
 	KBFileUID   string
-	FileType    string
 	ContentType string
+	ChunkType   string
 }
 
 // TextChunkColumn is the column for the text chunk table
@@ -122,13 +125,14 @@ var TextChunkColumn = TextChunkColumns{
 	UpdateTime:  "update_time",
 	KBUID:       "kb_uid",
 	KBFileUID:   "kb_file_uid",
-	FileType:    "file_type",
 	ContentType: "content_type",
+	ChunkType:   "chunk_type",
 }
 
 // DeleteAndCreateTextChunks deletes all the text chunks associated with
-// a certain source table and sourceUID, then batch inserts the new text chunks
-// within a transaction.
+// a specific source_uid (converted_file), then batch inserts the new text chunks
+// within a transaction. This allows content and summary chunks to coexist since they
+// reference different converted_file records (different source_uid values).
 func (r *repository) DeleteAndCreateTextChunks(
 	ctx context.Context,
 	fileUID types.FileUIDType,
@@ -139,11 +143,19 @@ func (r *repository) DeleteAndCreateTextChunks(
 
 	// Start a transaction
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		// Delete existing text chunks by kb_file_uid
-		// This handles all chunks for this file, including those from old converted_file records
-		err := tx.Where("kb_file_uid = ?", fileUID).Delete(&TextChunkModel{}).Error
-		if err != nil {
-			return fmt.Errorf("deleting existing text chunks: %w", err)
+		// Delete existing text chunks by source_uid (not kb_file_uid)
+		// This ensures we only delete chunks for the specific converted_file being updated
+		// (e.g., content chunks or summary chunks), allowing them to coexist
+		if len(textChunks) > 0 {
+			sourceUID := textChunks[0].SourceUID
+			sourceTable := textChunks[0].SourceTable
+			err := tx.Where("source_uid = ? AND source_table = ?", sourceUID, sourceTable).Delete(&TextChunkModel{}).Error
+			if err != nil {
+				return fmt.Errorf("deleting existing text chunks for source_uid %s: %w", sourceUID, err)
+			}
+			logger.Info("Deleted existing text chunks",
+				zap.String("source_uid", sourceUID.String()),
+				zap.String("source_table", string(sourceTable)))
 		}
 
 		if len(textChunks) == 0 {
@@ -162,14 +174,14 @@ func (r *repository) DeleteAndCreateTextChunks(
 			chunkUIDs = append(chunkUIDs, textChunk.UID.String())
 		}
 		if externalServiceCall != nil {
-			if chunkDestMap, err := externalServiceCall(chunkUIDs); err != nil {
+			chunkDestMap, err := externalServiceCall(chunkUIDs)
+			if err != nil {
 				return err
-			} else {
-				// update the content dest of each text chunk
-				for _, textChunk := range textChunks {
-					if dest, ok := chunkDestMap[textChunk.UID.String()]; ok {
-						textChunk.ContentDest = dest
-					}
+			}
+			// update the content dest of each text chunk
+			for _, textChunk := range textChunks {
+				if dest, ok := chunkDestMap[textChunk.UID.String()]; ok {
+					textChunk.ContentDest = dest
 				}
 			}
 		}

@@ -10,9 +10,9 @@ import (
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 
-	errorsx "github.com/instill-ai/x/errors"
 	artifact "github.com/instill-ai/artifact-backend/pkg/service"
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	errorsx "github.com/instill-ai/x/errors"
 )
 
 // PrivateHandler handles the private Artifact endpoints.
@@ -163,7 +163,7 @@ func (h *PrivateHandler) UpdateObject(ctx context.Context, req *artifactpb.Updat
 // GetFileAsMarkdown returns the Markdown representation of a file.
 func (h *PrivateHandler) GetFileAsMarkdown(ctx context.Context, req *artifactpb.GetFileAsMarkdownRequest) (*artifactpb.GetFileAsMarkdownResponse, error) {
 	fileUID := uuid.FromStringOrNil(req.GetFileUid())
-	source, err := h.service.Repository().GetTruthSourceByFileUID(ctx, fileUID)
+	source, err := h.service.Repository().GetSourceByFileUID(ctx, fileUID)
 	if err != nil {
 		return nil, fmt.Errorf("fetching truth source: %w", err)
 	}
@@ -215,7 +215,7 @@ func (h *PrivateHandler) GetChatFile(ctx context.Context, req *artifactpb.GetCha
 	}
 
 	// get source file
-	source, err := h.service.Repository().GetTruthSourceByFileUID(ctx, kbFile.UID)
+	source, err := h.service.Repository().GetSourceByFileUID(ctx, kbFile.UID)
 	if err != nil {
 		h.logger.Error("failed to get truth source by file uid", zap.Error(err))
 		return nil, errorsx.AddMessage(

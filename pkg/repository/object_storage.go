@@ -219,6 +219,7 @@ func (m *minioClient) GetFileMetadata(ctx context.Context, bucket string, filePa
 
 // Knowledge base operations
 
+// SaveConvertedFile saves the converted file to MinIO
 func (m *minioClient) SaveConvertedFile(ctx context.Context, kbUID types.KBUIDType, fileUID types.FileUIDType, convertedFileUID types.ConvertedFileUIDType, fileExt string, content []byte) (string, error) {
 	filename := convertedFileUID.String() + "." + fileExt
 	path := filepath.Join(convertedFileBasePath(kbUID, fileUID), filename)
@@ -236,6 +237,7 @@ func (m *minioClient) SaveConvertedFile(ctx context.Context, kbUID types.KBUIDTy
 	return path, nil
 }
 
+// ListKnowledgeBaseFilePaths lists the file paths for a knowledge base
 func (m *minioClient) ListKnowledgeBaseFilePaths(ctx context.Context, kbUID types.KBUIDType) ([]string, error) {
 	bucket := config.Config.Minio.BucketName
 	legacyPrefix := kbUID.String()
@@ -253,16 +255,19 @@ func (m *minioClient) ListKnowledgeBaseFilePaths(ctx context.Context, kbUID type
 	return append(paths1, paths2...), nil
 }
 
+// ListConvertedFilesByFileUID lists the converted file paths for a file
 func (m *minioClient) ListConvertedFilesByFileUID(ctx context.Context, kbUID types.KBUIDType, fileUID types.FileUIDType) ([]string, error) {
 	return m.ListFilePathsWithPrefix(ctx, config.Config.Minio.BucketName, convertedFileBasePath(kbUID, fileUID))
 }
 
+// ListTextChunksByFileUID lists the text chunk paths for a file
 func (m *minioClient) ListTextChunksByFileUID(ctx context.Context, kbUID types.KBUIDType, fileUID types.FileUIDType) ([]string, error) {
 	return m.ListFilePathsWithPrefix(ctx, config.Config.Minio.BucketName, chunkBasePath(kbUID, fileUID))
 }
 
 // Object (blob) operations
 
+// GetPresignedURLForUpload generates a presigned URL for uploading an object to MinIO
 func (m *minioClient) GetPresignedURLForUpload(ctx context.Context, namespaceUUID types.NamespaceUIDType, objectUUID types.ObjectUIDType, filename string, expiration time.Duration) (*url.URL, error) {
 	logger, err := logx.GetZapLogger(ctx)
 	if err != nil {
@@ -296,6 +301,7 @@ func (m *minioClient) GetPresignedURLForUpload(ctx context.Context, namespaceUUI
 	return presignedURL, nil
 }
 
+// GetPresignedURLForDownload generates a presigned URL for downloading an object from MinIO
 func (m *minioClient) GetPresignedURLForDownload(ctx context.Context, namespaceUUID types.NamespaceUIDType, objectUUID types.ObjectUIDType, filename string, contentType string, expiration time.Duration) (*url.URL, error) {
 	logger, err := logx.GetZapLogger(ctx)
 	if err != nil {

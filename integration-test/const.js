@@ -102,19 +102,19 @@ export const sampleXlsx = encoding.b64encode(
 
 // Mapping of sample files to their intended artifact file types
 export const sampleFiles = [
-  { originalName: "sample.txt", type: "FILE_TYPE_TEXT", content: sampleTxt },
-  { originalName: "sample.md", type: "FILE_TYPE_MARKDOWN", content: sampleMd },
-  { originalName: "sample.csv", type: "FILE_TYPE_CSV", content: sampleCsv },
-  { originalName: "sample.html", type: "FILE_TYPE_HTML", content: sampleHtml },
-  { originalName: "sample.pdf", type: "FILE_TYPE_PDF", content: samplePdf },
-  { originalName: "sample.ppt", type: "FILE_TYPE_PPT", content: samplePpt },
-  { originalName: "sample.pptx", type: "FILE_TYPE_PPTX", content: samplePptx },
-  { originalName: "sample.xls", type: "FILE_TYPE_XLS", content: sampleXls },
-  { originalName: "sample.xlsx", type: "FILE_TYPE_XLSX", content: sampleXlsx },
-  { originalName: "sample.doc", type: "FILE_TYPE_DOC", content: sampleDoc },
-  { originalName: "sample.docx", type: "FILE_TYPE_DOCX", content: sampleDocx },
-  { originalName: "SAMPLE-UPPERCASE-FILENAME.DOC", type: "FILE_TYPE_DOC", content: sampleUppercaseDoc },
-  { originalName: "SAMPLE-UPPERCASE-FILENAME.DOCX", type: "FILE_TYPE_DOCX", content: sampleUppercaseDocx },
+  { originalName: "sample.txt", type: "TYPE_TEXT", content: sampleTxt },
+  { originalName: "sample.md", type: "TYPE_MARKDOWN", content: sampleMd },
+  { originalName: "sample.csv", type: "TYPE_CSV", content: sampleCsv },
+  { originalName: "sample.html", type: "TYPE_HTML", content: sampleHtml },
+  { originalName: "sample.pdf", type: "TYPE_PDF", content: samplePdf },
+  { originalName: "sample.ppt", type: "TYPE_PPT", content: samplePpt },
+  { originalName: "sample.pptx", type: "TYPE_PPTX", content: samplePptx },
+  { originalName: "sample.xls", type: "TYPE_XLS", content: sampleXls },
+  { originalName: "sample.xlsx", type: "TYPE_XLSX", content: sampleXlsx },
+  { originalName: "sample.doc", type: "TYPE_DOC", content: sampleDoc },
+  { originalName: "sample.docx", type: "TYPE_DOCX", content: sampleDocx },
+  { originalName: "SAMPLE-UPPERCASE-FILENAME.DOC", type: "TYPE_DOC", content: sampleUppercaseDoc },
+  { originalName: "SAMPLE-UPPERCASE-FILENAME.DOCX", type: "TYPE_DOCX", content: sampleUppercaseDocx },
 ];
 
 let dbHost = 'localhost';

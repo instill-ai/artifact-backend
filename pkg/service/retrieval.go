@@ -39,18 +39,19 @@ func (s *service) SimilarityChunksSearch(ctx context.Context, ownerUID types.Own
 		return nil, fmt.Errorf("unsupported file type: %v", req.GetFileMediaType())
 	}
 
-	var contentType types.ContentType
-	switch req.GetContentType() {
-	case artifactpb.ContentType_CONTENT_TYPE_CHUNK:
-		contentType = types.ChunkContentType
-	case artifactpb.ContentType_CONTENT_TYPE_SUMMARY:
-		contentType = types.SummaryContentType
-	case artifactpb.ContentType_CONTENT_TYPE_AUGMENTED:
-		contentType = types.AugmentedContentType
-	case artifactpb.ContentType_CONTENT_TYPE_UNSPECIFIED:
-		contentType = ""
+	// Convert protobuf Chunk.Type enum to database string
+	var chunkType string
+	switch req.GetType() {
+	case artifactpb.Chunk_TYPE_CONTENT:
+		chunkType = "content"
+	case artifactpb.Chunk_TYPE_SUMMARY:
+		chunkType = "summary"
+	case artifactpb.Chunk_TYPE_AUGMENTED:
+		chunkType = "augmented"
+	case artifactpb.Chunk_TYPE_UNSPECIFIED:
+		chunkType = ""
 	default:
-		return nil, fmt.Errorf("unsupported content type: %v", req.GetContentType())
+		return nil, fmt.Errorf("unsupported chunk type: %v", req.GetType())
 	}
 
 	fileUIDs := make([]types.FileUIDType, 0, len(req.GetFileUids()))
@@ -67,8 +68,8 @@ func (s *service) SimilarityChunksSearch(ctx context.Context, ownerUID types.Own
 		Vectors:      textVector,
 		TopK:         topK,
 		FileUIDs:     fileUIDs,
-		FileType:     string(fileType),
-		ContentType:  string(contentType),
+		ContentType:  string(fileType),
+		ChunkType:    string(chunkType),
 	}
 
 	// By default we'll filter the chunk search with the file UID metadata.
@@ -77,7 +78,7 @@ func (s *service) SimilarityChunksSearch(ctx context.Context, ownerUID types.Own
 	// affected.
 	hasFileUID, err := s.repository.CheckFileUIDMetadata(ctx, sp.CollectionID)
 	if err != nil {
-		return nil, fmt.Errorf("checkin collection metadata: %w", err)
+		return nil, fmt.Errorf("check in collection metadata: %w", err)
 	}
 
 	if !hasFileUID {

@@ -5,16 +5,12 @@ ALTER TABLE knowledge_base
 ADD COLUMN IF NOT EXISTS embedding_config JSONB;
 -- Set default values for existing records (Gemini with 3072 dimensions)
 UPDATE knowledge_base
-SET embedding_config = '{"model_family": "gemini", "dimensionality": 3072}'::jsonb
+SET embedding_config = '{"model_family": "openai", "dimensionality": 1536}'::jsonb
 WHERE embedding_config IS NULL;
 -- Make it NOT NULL after populating existing records
 ALTER TABLE knowledge_base
 ALTER COLUMN embedding_config
 SET NOT NULL;
--- Set default constraint for new records
-ALTER TABLE knowledge_base
-ALTER COLUMN embedding_config
-SET DEFAULT '{"model_family": "gemini", "dimensionality": 3072}'::jsonb;
 -- Add comment explaining the structure
 COMMENT ON COLUMN knowledge_base.embedding_config IS 'Embedding configuration for the catalog (JSON fields: model_family, dimensionality)';
 -- Create an index on the model_family field for efficient querying

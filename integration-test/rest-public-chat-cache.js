@@ -369,7 +369,7 @@ export function CheckChatCacheImplementation(data) {
             `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
             JSON.stringify({
                 name: `${constant.dbIDPrefix}small.txt`,
-                type: "FILE_TYPE_TEXT",
+                type: "TYPE_TEXT",
                 content: smallFileContent
             }),
             data.header

@@ -116,19 +116,19 @@ export function teardown(data) {
 
 
 // Scenario execs per file type
-export function TEST_TYPE_TEXT(data) { runCatalogFileTest(data, { originalName: "sample.txt", fileType: "FILE_TYPE_TEXT" }); }
-export function TEST_TYPE_MARKDOWN(data) { runCatalogFileTest(data, { originalName: "sample.md", fileType: "FILE_TYPE_MARKDOWN" }); }
-export function TEST_TYPE_CSV(data) { runCatalogFileTest(data, { originalName: "sample.csv", fileType: "FILE_TYPE_CSV" }); }
-export function TEST_TYPE_HTML(data) { runCatalogFileTest(data, { originalName: "sample.html", fileType: "FILE_TYPE_HTML" }); }
-export function TEST_TYPE_PDF(data) { runCatalogFileTest(data, { originalName: "sample.pdf", fileType: "FILE_TYPE_PDF" }); }
-export function TEST_TYPE_PPT(data) { runCatalogFileTest(data, { originalName: "sample.ppt", fileType: "FILE_TYPE_PPT" }); }
-export function TEST_TYPE_PPTX(data) { runCatalogFileTest(data, { originalName: "sample.pptx", fileType: "FILE_TYPE_PPTX" }); }
-export function TEST_TYPE_XLS(data) { runCatalogFileTest(data, { originalName: "sample.xls", fileType: "FILE_TYPE_XLS" }); }
-export function TEST_TYPE_XLSX(data) { runCatalogFileTest(data, { originalName: "sample.xlsx", fileType: "FILE_TYPE_XLSX" }); }
-export function TEST_TYPE_DOC(data) { runCatalogFileTest(data, { originalName: "sample.doc", fileType: "FILE_TYPE_DOC" }); }
-export function TEST_TYPE_DOCX(data) { runCatalogFileTest(data, { originalName: "sample.docx", fileType: "FILE_TYPE_DOCX" }); }
-export function TEST_TYPE_DOC_UPPERCASE(data) { runCatalogFileTest(data, { originalName: "SAMPLE-UPPERCASE-FILENAME.DOC", fileType: "FILE_TYPE_DOC" }); }
-export function TEST_TYPE_DOCX_UPPERCASE(data) { runCatalogFileTest(data, { originalName: "SAMPLE-UPPERCASE-FILENAME.DOCX", fileType: "FILE_TYPE_DOCX" }); }
+export function TEST_TYPE_TEXT(data) { runCatalogFileTest(data, { originalName: "sample.txt", fileType: "TYPE_TEXT" }); }
+export function TEST_TYPE_MARKDOWN(data) { runCatalogFileTest(data, { originalName: "sample.md", fileType: "TYPE_MARKDOWN" }); }
+export function TEST_TYPE_CSV(data) { runCatalogFileTest(data, { originalName: "sample.csv", fileType: "TYPE_CSV" }); }
+export function TEST_TYPE_HTML(data) { runCatalogFileTest(data, { originalName: "sample.html", fileType: "TYPE_HTML" }); }
+export function TEST_TYPE_PDF(data) { runCatalogFileTest(data, { originalName: "sample.pdf", fileType: "TYPE_PDF" }); }
+export function TEST_TYPE_PPT(data) { runCatalogFileTest(data, { originalName: "sample.ppt", fileType: "TYPE_PPT" }); }
+export function TEST_TYPE_PPTX(data) { runCatalogFileTest(data, { originalName: "sample.pptx", fileType: "TYPE_PPTX" }); }
+export function TEST_TYPE_XLS(data) { runCatalogFileTest(data, { originalName: "sample.xls", fileType: "TYPE_XLS" }); }
+export function TEST_TYPE_XLSX(data) { runCatalogFileTest(data, { originalName: "sample.xlsx", fileType: "TYPE_XLSX" }); }
+export function TEST_TYPE_DOC(data) { runCatalogFileTest(data, { originalName: "sample.doc", fileType: "TYPE_DOC" }); }
+export function TEST_TYPE_DOCX(data) { runCatalogFileTest(data, { originalName: "sample.docx", fileType: "TYPE_DOCX" }); }
+export function TEST_TYPE_DOC_UPPERCASE(data) { runCatalogFileTest(data, { originalName: "SAMPLE-UPPERCASE-FILENAME.DOC", fileType: "TYPE_DOC" }); }
+export function TEST_TYPE_DOCX_UPPERCASE(data) { runCatalogFileTest(data, { originalName: "SAMPLE-UPPERCASE-FILENAME.DOCX", fileType: "TYPE_DOCX" }); }
 
 // Internal helper to run catalog file test for each file type
 function runCatalogFileTest(data, opts) {
@@ -257,15 +257,5 @@ function runCatalogFileTest(data, opts) {
     check(listChunksRes, {
       [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/chunks 200 (${fileType})`]: (r) => r.status === 200,
     });
-
-    // Search chunks (no params) should return 200 with possibly empty list
-    const searchChunksRes = http.request("GET", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/chunks`, null, data.header);
-    logUnexpected(searchChunksRes, 'GET /v1alpha/namespaces/{namespace_id}/chunks');
-    check(searchChunksRes, {
-      [`GET /v1alpha/namespaces/{namespace_id}/chunks 200 (${fileType})`]: (r) => r.status === 200,
-    });
-
-    // Don't delete here - let teardown handle cleanup to avoid 404 errors
-    // The teardown will properly clean up all catalogs and files at the end
   });
 }

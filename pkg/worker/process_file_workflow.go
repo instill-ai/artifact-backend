@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
+	"github.com/gofrs/uuid"
 	"github.com/instill-ai/artifact-backend/pkg/pipeline"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/types"
@@ -178,7 +179,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 		metadata           GetFileMetadataActivityResult
 		startStatus        artifactpb.FileProcessStatus
 		bucket             string
-		fileType           artifactpb.FileType
+		fileType           artifactpb.File_Type
 		shouldProcessFull  bool // Full processing (NOTSTARTED/PROCESSING)
 		shouldProcessChunk bool // Resume from chunking
 		shouldProcessEmbed bool // Resume from embedding
@@ -223,7 +224,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 		}
 
 		bucket := repository.BucketFromDestination(metadata.File.Destination)
-		fileType := artifactpb.FileType(artifactpb.FileType_value[metadata.File.Type])
+		fileType := artifactpb.File_Type(artifactpb.File_Type_value[metadata.File.FileType])
 
 		filesMetadata = append(filesMetadata, fileMetadata{
 			fileUID:            fileUID,
@@ -405,7 +406,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			fileMetadata         *fileMetadata
 			effectiveBucket      string
 			effectiveDestination string
-			effectiveFileType    artifactpb.FileType
+			effectiveFileType    artifactpb.File_Type
 			convertedBucket      string
 			convertedDestination string
 			converted            bool
@@ -540,10 +541,10 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 		}
 
 		workflowFutures := make([]fileWorkflowFutures, len(processingFutures))
+		fileCacheNames := make(map[string]string) // Map fileUID -> cacheName
 
-		for i, pf := range processingFutures {
-			cr := pf.conversionData
-
+		// Phase 1: Collect cache names for all files
+		for _, pf := range processingFutures {
 			// Get file cache name for this file (wait only for THIS file's cache)
 			var fileCacheResult CacheFileContextActivityResult
 			var fileCacheName string
@@ -552,6 +553,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 					"fileUID", pf.fileUID.String(), "error", err)
 			} else if fileCacheResult.CachedContextEnabled {
 				fileCacheName = fileCacheResult.CacheName
+				fileCacheNames[pf.fileUID.String()] = fileCacheName
 				logger.Info("File cache created",
 					"fileUID", pf.fileUID.String(),
 					"cacheName", fileCacheName)
@@ -588,8 +590,26 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 						"cacheName", fileCacheName)
 				}
 			}
+		}
 
-			// Start both content and summary activities in parallel for this file
+		// Cleanup old converted files for ALL files BEFORE starting ANY parallel content/summary processing
+		// This prevents race conditions where cleanup might delete newly created files
+		for _, pf := range processingFutures {
+			cr := pf.conversionData
+			if err := workflow.ExecuteActivity(ctx, w.CleanupOldConvertedFileActivity, &CleanupOldConvertedFileActivityParam{
+				FileUID: cr.fileUID,
+			}).Get(ctx, nil); err != nil {
+				logger.Error("Failed to cleanup old converted files, continuing anyway",
+					"fileUID", cr.fileUID.String(), "error", err)
+			}
+		}
+
+		// Phase 3: Start all content and summary activities in parallel for all files
+		for i, pf := range processingFutures {
+			cr := pf.conversionData
+			// Get cache name for this file (if it exists)
+			fileCacheName := fileCacheNames[cr.fileUID.String()]
+
 			// Use the CONVERTED file location (effectiveBucket/effectiveDestination/effectiveFileType)
 			contentFuture := workflow.ExecuteActivity(ctx, w.ProcessContentActivity, &ProcessContentActivityParam{
 				FileUID:     cr.fileUID,
@@ -670,73 +690,74 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				logger.Warn("Failed to update status to CHUNKING", "fileUID", fileUID.String(), "error", err)
 			}
 
-			// Get converted file for text chunking
-			var convertedFile GetConvertedFileForChunkingActivityResult
-			if err := workflow.ExecuteActivity(ctx, w.GetConvertedFileForChunkingActivity, &GetConvertedFileForChunkingActivityParam{
-				FileUID: fileUID,
-				KBUID:   kbUID,
-			}).Get(ctx, &convertedFile); err != nil {
-				_ = handleFileError(fileUID, "get converted file for chunking", err)
-				filesCompleted[fileUID.String()] = true
-				continue
-			}
-
-			// Chunk content
+			// Chunk content (using content from ProcessContentActivity result)
 			var contentChunks ChunkContentActivityResult
 			if err := workflow.ExecuteActivity(ctx, w.ChunkContentActivity, &ChunkContentActivityParam{
-				FileUID:  fileUID,
-				KBUID:    kbUID,
-				Content:  convertedFile.Content,
-				Metadata: wf.conversionData.fileMetadata.metadata.ExternalMetadata,
+				FileUID:      fileUID,
+				KBUID:        kbUID,
+				Content:      contentResult.Content, // Use content from ProcessContentActivity
+				Metadata:     wf.conversionData.fileMetadata.metadata.ExternalMetadata,
+				Type:         artifactpb.Chunk_TYPE_CONTENT, // Mark as content chunks
+				PositionData: contentResult.PositionData,    // Pass position data from content processing
 			}).Get(ctx, &contentChunks); err != nil {
 				_ = handleFileError(fileUID, "chunk content", err)
 				filesCompleted[fileUID.String()] = true
 				continue
 			}
 
-			// Combine content and summary text chunks (if any)
-			allTextChunks := contentChunks.TextChunks
-			if len(summaryResult.Summary) > 0 {
+			// Save content chunks (reference the content converted_file)
+			if err := workflow.ExecuteActivity(ctx, w.SaveTextChunksActivity, &SaveTextChunksActivityParam{
+				KBUID:            kbUID,
+				FileUID:          fileUID,
+				TextChunks:       contentChunks.TextChunks,
+				ConvertedFileUID: contentResult.ConvertedFileUID, // Use UID from ProcessContentActivity
+			}).Get(ctx, nil); err != nil {
+				_ = handleFileError(fileUID, "save content chunks", err)
+				filesCompleted[fileUID.String()] = true
+				continue
+			}
+
+			// Process summary chunks if present (summary converted_file already created in ProcessSummaryActivity)
+			var totalChunkCount int
+			totalChunkCount = len(contentChunks.TextChunks)
+
+			if len(summaryResult.Summary) > 0 && summaryResult.ConvertedFileUID != uuid.Nil {
+				// Chunk the summary
 				var summaryChunks ChunkContentActivityResult
 				if err := workflow.ExecuteActivity(ctx, w.ChunkContentActivity, &ChunkContentActivityParam{
-					FileUID:  fileUID,
-					KBUID:    kbUID,
-					Content:  summaryResult.Summary,
-					Metadata: wf.conversionData.fileMetadata.metadata.ExternalMetadata,
+					FileUID:      fileUID,
+					KBUID:        kbUID,
+					Content:      summaryResult.Summary,
+					Metadata:     wf.conversionData.fileMetadata.metadata.ExternalMetadata,
+					Type:         artifactpb.Chunk_TYPE_SUMMARY, // Mark as summary chunks
+					PositionData: summaryResult.PositionData,    // Pass position data from summary processing
 				}).Get(ctx, &summaryChunks); err != nil {
 					_ = handleFileError(fileUID, "chunk summary", err)
 					filesCompleted[fileUID.String()] = true
 					continue
 				}
-				allTextChunks = append(allTextChunks, summaryChunks.TextChunks...)
+
+				// Save summary chunks (reference the summary converted_file created by ProcessSummaryActivity)
+				if err := workflow.ExecuteActivity(ctx, w.SaveTextChunksActivity, &SaveTextChunksActivityParam{
+					KBUID:            kbUID,
+					FileUID:          fileUID,
+					TextChunks:       summaryChunks.TextChunks,
+					ConvertedFileUID: summaryResult.ConvertedFileUID, // Summary chunks reference summary converted_file
+				}).Get(ctx, nil); err != nil {
+					_ = handleFileError(fileUID, "save summary chunks", err)
+					filesCompleted[fileUID.String()] = true
+					continue
+				}
+
+				totalChunkCount += len(summaryChunks.TextChunks)
 			}
 
-			// Save text chunks to DB and MinIO
-			if err := workflow.ExecuteActivity(ctx, w.SaveTextChunksActivity, &SaveTextChunksActivityParam{
-				KBUID:      kbUID,
-				FileUID:    fileUID,
-				TextChunks: allTextChunks,
-			}).Get(ctx, nil); err != nil {
-				_ = handleFileError(fileUID, "save text chunks", err)
-				filesCompleted[fileUID.String()] = true
-				continue
-			}
-
-			// Update text chunking metadata
-			if err := workflow.ExecuteActivity(ctx, w.UpdateChunkingMetadataActivity, &UpdateChunkingMetadataActivityParam{
-				FileUID:        fileUID,
-				KBUID:          kbUID,
-				Pipeline:       contentChunks.PipelineRelease.Name(),
-				TextChunkCount: uint32(len(allTextChunks)),
-			}).Get(ctx, nil); err != nil {
-				_ = handleFileError(fileUID, "update chunking metadata", err)
-				filesCompleted[fileUID.String()] = true
-				continue
-			}
+			// NOTE: UpdateChunkingMetadataActivity removed - chunking metadata no longer tracked
+			// (chunking is now done inline, not via pipeline)
 
 			logger.Info("CHUNKING phase completed for file",
 				"fileUID", fileUID.String(),
-				"totalChunks", len(allTextChunks))
+				"totalChunks", totalChunkCount)
 
 			// Start EMBEDDING phase
 			logger.Info("Starting EMBEDDING phase for file", "fileUID", fileUID.String())
@@ -784,8 +805,8 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 					Vector:      embeddingVectors[j],
 					KBUID:       kbUID,
 					KBFileUID:   fileUID,
-					FileType:    string(types.DocumentFileType),
-					ContentType: chunk.ContentType,
+					ContentType: chunksData.ContentType,
+					ChunkType:   chunk.ChunkType,
 					Tags:        chunksData.Tags,
 				}
 			}

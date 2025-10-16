@@ -20,15 +20,18 @@ import (
 
 // convertToProtoChunk
 func convertToProtoChunk(textChunk repository.TextChunkModel) *artifactpb.Chunk {
-	var contentType artifactpb.ContentType
+	var chunkType artifactpb.Chunk_Type
 
-	switch textChunk.ContentType {
-	case string(types.SummaryContentType):
-		contentType = artifactpb.ContentType_CONTENT_TYPE_SUMMARY
-	case string(types.ChunkContentType):
-		contentType = artifactpb.ContentType_CONTENT_TYPE_CHUNK
-	case string(types.AugmentedContentType):
-		contentType = artifactpb.ContentType_CONTENT_TYPE_AUGMENTED
+	// Convert database string to protobuf enum
+	switch textChunk.ChunkType {
+	case "content":
+		chunkType = artifactpb.Chunk_TYPE_CONTENT
+	case "summary":
+		chunkType = artifactpb.Chunk_TYPE_SUMMARY
+	case "augmented":
+		chunkType = artifactpb.Chunk_TYPE_AUGMENTED
+	default:
+		chunkType = artifactpb.Chunk_TYPE_CONTENT // Default to content
 	}
 
 	pbChunk := &artifactpb.Chunk{
@@ -37,13 +40,10 @@ func convertToProtoChunk(textChunk repository.TextChunkModel) *artifactpb.Chunk 
 		Tokens:          uint32(textChunk.Tokens),
 		CreateTime:      timestamppb.New(*textChunk.CreateTime),
 		OriginalFileUid: textChunk.KBFileUID.String(),
-		ContentType:     contentType,
+		Type:            chunkType,
 	}
 
-	if pbChunk.ContentType != artifactpb.ContentType_CONTENT_TYPE_CHUNK {
-		return pbChunk
-	}
-
+	// Set markdown reference for all chunk types (content, summary, augmented)
 	pbChunk.MarkdownReference = &artifactpb.Chunk_Reference{
 		Start: &artifactpb.File_Position{
 			Unit:        artifactpb.File_Position_UNIT_CHARACTER,
@@ -113,26 +113,41 @@ func (ph *PublicHandler) ListChunks(ctx context.Context, req *artifactpb.ListChu
 	if !granted {
 		return nil, fmt.Errorf("%w: no permission over catalog", errorsx.ErrUnauthorized)
 	}
-	sources, err := ph.service.Repository().GetSourceTableAndUIDByFileUIDs(ctx, []repository.KnowledgeBaseFileModel{kbf})
+	// Get ALL text chunks for this file (content + summary + augmented)
+	// Note: A file can have multiple converted_files (e.g., content converted_file + summary converted_file)
+	// We need to fetch chunks from ALL sources, not just one
+	chunks, err := ph.service.Repository().ListTextChunksByKBFileUID(ctx, fileUID)
 	if err != nil {
-		logger.Error("failed to get source table and uid by file uids", zap.Error(err))
-		return nil, fmt.Errorf("failed to get source table and uid by file uids ")
+		logger.Error("failed to list text chunks by file uid", zap.Error(err))
+		return nil, fmt.Errorf("failed to list text chunks by file uid: %w", err)
 	}
-
-	source, ok := sources[fileUID]
-	if !ok {
-		// source not found. if some files(e.g. pdf) don't have been converted yet. there is not source file for chunks.
-		return nil, nil
-	}
-
-	chunks, err := ph.service.Repository().GetTextChunksBySource(ctx, source.SourceTable, source.SourceUID)
-	if err != nil {
-		logger.Error("failed to get text chunks by source", zap.Error(err))
-		return nil, fmt.Errorf("failed to get text chunks by source: %w ", err)
-
-	}
-	// reorder the chunks by order
+	// Sort chunks: chunk type first (content, then summary, then augmented), then by order within each type
+	// This ensures content chunks appear before summary chunks in the UI
 	sort.Slice(chunks, func(i, j int) bool {
+		// Define sort priority for chunk types
+		typePriority := map[string]int{
+			"content":   1,
+			"summary":   2,
+			"augmented": 3,
+		}
+
+		iPriority, iOk := typePriority[chunks[i].ChunkType]
+		jPriority, jOk := typePriority[chunks[j].ChunkType]
+
+		// Unknown types go last
+		if !iOk {
+			iPriority = 999
+		}
+		if !jOk {
+			jPriority = 999
+		}
+
+		// First sort by content type priority
+		if iPriority != jPriority {
+			return iPriority < jPriority
+		}
+
+		// Within same content type, sort by in_order
 		return chunks[i].InOrder < chunks[j].InOrder
 	})
 
@@ -143,69 +158,6 @@ func (ph *PublicHandler) ListChunks(ctx context.Context, req *artifactpb.ListChu
 
 	return &artifactpb.ListChunksResponse{
 		Chunks: res,
-	}, nil
-}
-
-func (ph *PublicHandler) SearchChunks(ctx context.Context, req *artifactpb.SearchChunksRequest) (*artifactpb.SearchChunksResponse, error) {
-	logger, _ := logx.GetZapLogger(ctx)
-	_, err := getUserUIDFromContext(ctx)
-	if err != nil {
-		logger.Error("failed to get user id from header", zap.Error(err))
-		return nil, fmt.Errorf("failed to get user id from header: %v. err: %w", err, errorsx.ErrUnauthenticated)
-	}
-	// check if user can access the namespace
-	ns, err := ph.service.GetNamespaceAndCheckPermission(ctx, req.NamespaceId)
-	if err != nil {
-		logger.Error("failed to get namespace and check permission", zap.Error(err))
-		return nil, fmt.Errorf("failed to get namespace and check permission: %w", err)
-	}
-
-	chunkUIDs := make([]types.TextChunkUIDType, 0, len(req.ChunkUids))
-	for _, chunkUID := range req.ChunkUids {
-		chunkUID, err := uuid.FromString(chunkUID)
-		if err != nil {
-			logger.Error("failed to parse chunk uid", zap.Error(err))
-			return nil, fmt.Errorf("failed to parse chunk uid: %w", err)
-		}
-		chunkUIDs = append(chunkUIDs, types.TextChunkUIDType(chunkUID))
-	}
-	// check if the chunkUIs is more than 20
-	if len(chunkUIDs) > 25 {
-		logger.Error("chunk uids is more than 20", zap.Int("chunk_uids_count", len(chunkUIDs)))
-		return nil, fmt.Errorf("chunk uids is more than 20")
-	}
-	chunks, err := ph.service.Repository().GetTextChunksByUIDs(ctx, chunkUIDs)
-	if err != nil {
-		logger.Error("failed to get chunks by uids", zap.Error(err))
-		return nil, fmt.Errorf("failed to get chunks by uids: %w", err)
-	}
-
-	// get the kbUIDs from chunks
-	kbUIDs := make([]types.KBUIDType, 0, len(chunks))
-	for _, chunk := range chunks {
-		kbUIDs = append(kbUIDs, chunk.KBUID)
-	}
-	// use kbUIDs to get the knowledge bases
-	knowledgeBases, err := ph.service.Repository().GetKnowledgeBasesByUIDs(ctx, kbUIDs)
-	if err != nil {
-		logger.Error("failed to get knowledge bases by uids", zap.Error(err))
-		return nil, fmt.Errorf("failed to get knowledge bases by uids: %w", err)
-	}
-	// check if the chunks's knowledge base's owner(namespace uid) is the same as namespace uuid in path
-	for _, knowledgeBase := range knowledgeBases {
-		if knowledgeBase.Owner != ns.NsUID.String() {
-			logger.Error("chunks's namespace is not the same as namespace in path", zap.String("namespace_id_in_path", ns.NsUID.String()), zap.String("namespace_id_in_chunks", knowledgeBase.Owner))
-			return nil, fmt.Errorf("chunks's namespace is not the same as namespace in path")
-		}
-	}
-
-	// populate the response
-	protoChunks := make([]*artifactpb.Chunk, 0, len(chunks))
-	for _, chunk := range chunks {
-		protoChunks = append(protoChunks, convertToProtoChunk(chunk))
-	}
-	return &artifactpb.SearchChunksResponse{
-		Chunks: protoChunks,
 	}, nil
 }
 
@@ -298,18 +250,15 @@ func (ph *PublicHandler) GetSourceFile(ctx context.Context, req *artifactpb.GetS
 		return nil, fmt.Errorf("%s", errMsg)
 	}
 
-	source, err := ph.service.Repository().GetTruthSourceByFileUID(ctx, fileUID)
+	source, err := ph.service.Repository().GetSourceByFileUID(ctx, fileUID)
 	if err != nil {
-		logger.Error("failed to get truth source by file uid", zap.Error(err))
-		return nil, fmt.Errorf("failed to get truth source by file uid. err: %w", err)
+		logger.Error("failed to get content source by file uid", zap.Error(err))
+		return nil, fmt.Errorf("failed to get content source by file uid. err: %w", err)
 	}
 
-	// Decide bucket based on file type: TEXT/MARKDOWN -> blob; others -> artifact
-	bucketName := config.Config.Minio.BucketName
-	if file.Type == artifactpb.FileType_FILE_TYPE_TEXT.String() || file.Type == artifactpb.FileType_FILE_TYPE_MARKDOWN.String() {
-		bucketName = repository.BlobBucketName
-	}
-	content, err := ph.service.Repository().GetFile(ctx, bucketName, source.Dest)
+	// All files now have converted files stored in the artifact bucket (core-artifact)
+	// GetSourceByFileUID returns the content converted file destination for all file types
+	content, err := ph.service.Repository().GetFile(ctx, config.Config.Minio.BucketName, source.Dest)
 	if err != nil {
 		logger.Error("failed to get file from minio", zap.Error(err))
 		return nil, fmt.Errorf("failed to get file from minio. err: %w", err)
@@ -318,9 +267,11 @@ func (ph *PublicHandler) GetSourceFile(ctx context.Context, req *artifactpb.GetS
 	return &artifactpb.GetSourceFileResponse{
 		// Populate the response fields appropriately
 		SourceFile: &artifactpb.SourceFile{
-			Content:    string(content),
-			CreateTime: timestamppb.New(source.CreateTime),
-			UpdateTime: timestamppb.New(source.CreateTime),
+			OriginalFileUid:  source.OriginalFileUID.String(),
+			Content:          string(content),
+			CreateTime:       timestamppb.New(source.CreateTime),
+			UpdateTime:       timestamppb.New(source.UpdateTime),
+			OriginalFileName: source.OriginalFileName,
 		},
 	}, nil
 }
@@ -348,10 +299,10 @@ func (ph *PublicHandler) SearchSourceFiles(ctx context.Context, req *artifactpb.
 
 	sources := make([]*artifactpb.SourceFile, 0, len(fileUIDs))
 	for _, fileUID := range fileUIDs {
-		source, err := ph.service.Repository().GetTruthSourceByFileUID(ctx, fileUID)
+		source, err := ph.service.Repository().GetSourceByFileUID(ctx, fileUID)
 		if err != nil {
-			logger.Error("failed to get truth source by file uid", zap.Error(err))
-			return nil, fmt.Errorf("failed to get truth source by file uid. err: %w", err)
+			logger.Error("failed to get source by file uid", zap.Error(err))
+			return nil, fmt.Errorf("failed to get source by file uid. err: %w", err)
 		}
 
 		// ACL check for each source file

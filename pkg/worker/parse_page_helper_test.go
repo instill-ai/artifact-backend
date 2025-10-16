@@ -71,7 +71,7 @@ This is a single page document with no page markers.
 
 It should be treated as one page.`,
 			wantPageCount:       1,
-			wantHasPositionData: false,
+			wantHasPositionData: true, // Now creates position data for single-page documents
 		},
 		{
 			name:                "empty markdown",
@@ -324,12 +324,13 @@ Partners: OpenAI perplexity NVIDIA. Google Gartner. Innovate UK`,
 			markdownWithTags, pages, positionData := parseMarkdownPages(tt.input)
 
 			// Check that markdown with tags contains the original content
-			// For single-page docs without tags, should equal input
-			// For multi-page docs, should contain [Page: X] tags
-			if !tt.wantHasPositionData {
+			// For docs without page tags in input, output should equal cleaned input
+			// For docs with page tags in input, output should preserve those tags
+			if !strings.Contains(tt.input, "[Page:") {
+				// Input has no page tags - output should match cleaned input
 				c.Assert(markdownWithTags, qt.Equals, tt.wantCleaned)
 			} else {
-				// Multi-page docs should contain page tags
+				// Input has page tags - output should preserve them
 				c.Assert(strings.Contains(markdownWithTags, "[Page:"), qt.IsTrue)
 			}
 
