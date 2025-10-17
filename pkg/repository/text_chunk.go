@@ -32,6 +32,10 @@ type TextChunk interface {
 		externalServiceCall func(chunkUIDs []string) (destinations map[string]string, _ error),
 	) ([]*TextChunkModel, error)
 
+	// CreateTextChunks creates new text chunks without deletion
+	// Note: Assumes old chunks have been deleted separately via DeleteOldTextChunksActivity
+	CreateTextChunks(_ context.Context, textChunks []*TextChunkModel) error
+
 	// HardDeleteTextChunksByKBUID deletes all the chunks associated with a certain kbUID.
 	HardDeleteTextChunksByKBUID(_ context.Context, kbUID types.KBUIDType) error
 	// HardDeleteTextChunksByKBFileUID deletes all the chunks associated with a certain kbFileUID.
@@ -199,6 +203,21 @@ func (r *repository) DeleteAndCreateTextChunks(
 	}
 
 	return textChunks, nil
+}
+
+// CreateTextChunks creates new text chunks in the database without deletion
+// This is used when old chunks have been deleted separately at the workflow level
+func (r *repository) CreateTextChunks(ctx context.Context, textChunks []*TextChunkModel) error {
+	if len(textChunks) == 0 {
+		return nil
+	}
+
+	// Batch insert new text chunks
+	if err := r.db.WithContext(ctx).Create(&textChunks).Error; err != nil {
+		return fmt.Errorf("creating text chunks: %w", err)
+	}
+
+	return nil
 }
 
 // BatchUpdateContentDest updates the content dest of the text chunks

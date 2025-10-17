@@ -27,7 +27,7 @@ func TestEmbedTextsWorkflowParam_EmptyTexts(t *testing.T) {
 	c.Assert(param.Texts, qt.HasLen, 0)
 }
 
-func TestSaveEmbeddingsToVectorDBWorkflow_Success(t *testing.T) {
+func TestSaveEmbeddingsWorkflow_Success(t *testing.T) {
 	c := qt.New(t)
 	mc := minimock.NewController(c)
 	testSuite := &testsuite.WorkflowTestSuite{}
@@ -41,7 +41,7 @@ func TestSaveEmbeddingsToVectorDBWorkflow_Success(t *testing.T) {
 	fileUID := uuid.Must(uuid.NewV4())
 	embeddings := createWorkflowTestEmbeddings(100)
 
-	param := SaveEmbeddingsToVectorDBWorkflowParam{
+	param := SaveEmbeddingsWorkflowParam{
 		KBUID:        kbUID,
 		FileUID:      fileUID,
 		FileName:     "test.pdf",
@@ -70,20 +70,19 @@ func TestSaveEmbeddingsToVectorDBWorkflow_Success(t *testing.T) {
 
 	// Create worker and register
 	w := &Worker{repository: mockRepository, log: zap.NewNop()}
-	env.RegisterActivity(w.DeleteOldEmbeddingsFromVectorDBActivity)
-	env.RegisterActivity(w.DeleteOldEmbeddingsFromDBActivity)
+	env.RegisterActivity(w.DeleteOldEmbeddingsActivity)
 	env.RegisterActivity(w.SaveEmbeddingBatchActivity)
 	env.RegisterActivity(w.FlushCollectionActivity)
-	env.RegisterWorkflow(w.SaveEmbeddingsToVectorDBWorkflow)
+	env.RegisterWorkflow(w.SaveEmbeddingsWorkflow)
 
 	// Execute workflow
-	env.ExecuteWorkflow(w.SaveEmbeddingsToVectorDBWorkflow, param)
+	env.ExecuteWorkflow(w.SaveEmbeddingsWorkflow, param)
 
 	c.Assert(env.IsWorkflowCompleted(), qt.IsTrue)
 	c.Assert(env.GetWorkflowError(), qt.IsNil)
 }
 
-func TestSaveEmbeddingsToVectorDBWorkflow_EmptyEmbeddings(t *testing.T) {
+func TestSaveEmbeddingsWorkflow_EmptyEmbeddings(t *testing.T) {
 	c := qt.New(t)
 	mc := minimock.NewController(c)
 	testSuite := &testsuite.WorkflowTestSuite{}
@@ -91,7 +90,7 @@ func TestSaveEmbeddingsToVectorDBWorkflow_EmptyEmbeddings(t *testing.T) {
 
 	mockRepository := mock.NewRepositoryMock(mc)
 
-	param := SaveEmbeddingsToVectorDBWorkflowParam{
+	param := SaveEmbeddingsWorkflowParam{
 		KBUID:        uuid.Must(uuid.NewV4()),
 		FileUID:      uuid.Must(uuid.NewV4()),
 		FileName:     "test.pdf",
@@ -101,31 +100,29 @@ func TestSaveEmbeddingsToVectorDBWorkflow_EmptyEmbeddings(t *testing.T) {
 	}
 
 	w := &Worker{repository: mockRepository, log: zap.NewNop()}
-	env.RegisterActivity(w.DeleteOldEmbeddingsFromVectorDBActivity)
-	env.RegisterActivity(w.DeleteOldEmbeddingsFromDBActivity)
+	env.RegisterActivity(w.DeleteOldEmbeddingsActivity)
 	env.RegisterActivity(w.SaveEmbeddingBatchActivity)
 	env.RegisterActivity(w.FlushCollectionActivity)
-	env.RegisterWorkflow(w.SaveEmbeddingsToVectorDBWorkflow)
+	env.RegisterWorkflow(w.SaveEmbeddingsWorkflow)
 
-	env.ExecuteWorkflow(w.SaveEmbeddingsToVectorDBWorkflow, param)
+	env.ExecuteWorkflow(w.SaveEmbeddingsWorkflow, param)
 
 	c.Assert(env.IsWorkflowCompleted(), qt.IsTrue)
 	c.Assert(env.GetWorkflowError(), qt.IsNil)
 }
 
-func TestSaveEmbeddingsToVectorDBWorkflow_DeleteMilvusFailure(t *testing.T) {
+func TestSaveEmbeddingsWorkflow_DeleteMilvusFailure(t *testing.T) {
 	c := qt.New(t)
 	mc := minimock.NewController(c)
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 
 	mockRepository := mock.NewRepositoryMock(mc)
-	// Mock delete for DB activity (runs in parallel, should succeed)
-	mockRepository.DeleteEmbeddingsByKBFileUIDMock.Return(nil)
-	// Setup mock to return error for VectorDB (embedded in Repository)
+	// Setup mock to return error for VectorDB (will fail in first step of DeleteOldEmbeddingsActivity)
 	mockRepository.DeleteEmbeddingsWithFileUIDMock.Return(fmt.Errorf("milvus connection error"))
+	// DB delete won't be called since VectorDB fails first (removed expectation)
 
-	param := SaveEmbeddingsToVectorDBWorkflowParam{
+	param := SaveEmbeddingsWorkflowParam{
 		KBUID:        uuid.Must(uuid.NewV4()),
 		FileUID:      uuid.Must(uuid.NewV4()),
 		FileName:     "test.pdf",
@@ -135,32 +132,30 @@ func TestSaveEmbeddingsToVectorDBWorkflow_DeleteMilvusFailure(t *testing.T) {
 	}
 
 	w := &Worker{repository: mockRepository, log: zap.NewNop()}
-	env.RegisterActivity(w.DeleteOldEmbeddingsFromVectorDBActivity)
-	env.RegisterActivity(w.DeleteOldEmbeddingsFromDBActivity)
+	env.RegisterActivity(w.DeleteOldEmbeddingsActivity)
 	env.RegisterActivity(w.SaveEmbeddingBatchActivity)
 	env.RegisterActivity(w.FlushCollectionActivity)
-	env.RegisterWorkflow(w.SaveEmbeddingsToVectorDBWorkflow)
+	env.RegisterWorkflow(w.SaveEmbeddingsWorkflow)
 
-	env.ExecuteWorkflow(w.SaveEmbeddingsToVectorDBWorkflow, param)
+	env.ExecuteWorkflow(w.SaveEmbeddingsWorkflow, param)
 
 	c.Assert(env.IsWorkflowCompleted(), qt.IsTrue)
 	c.Assert(env.GetWorkflowError(), qt.Not(qt.IsNil))
-	c.Assert(env.GetWorkflowError().Error(), qt.Contains, "VectorDB")
+	c.Assert(env.GetWorkflowError().Error(), qt.Contains, "vector database")
 }
 
-func TestSaveEmbeddingsToVectorDBWorkflow_DeleteDBFailure(t *testing.T) {
+func TestSaveEmbeddingsWorkflow_DeleteDBFailure(t *testing.T) {
 	c := qt.New(t)
 	mc := minimock.NewController(c)
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 
-	// DeleteOldEmbeddingsFromVectorDBActivity needs VectorDB (should succeed)
-	// DeleteOldEmbeddingsFromDBActivity needs Repository (should fail)
+	// DeleteOldEmbeddingsActivity needs both VectorDB and Repository (should fail)
 	mockRepository := mock.NewRepositoryMock(mc)
 	mockRepository.DeleteEmbeddingsWithFileUIDMock.Return(nil)
 	mockRepository.DeleteEmbeddingsByKBFileUIDMock.Return(fmt.Errorf("database connection error"))
 
-	param := SaveEmbeddingsToVectorDBWorkflowParam{
+	param := SaveEmbeddingsWorkflowParam{
 		KBUID:        uuid.Must(uuid.NewV4()),
 		FileUID:      uuid.Must(uuid.NewV4()),
 		FileName:     "test.pdf",
@@ -170,20 +165,19 @@ func TestSaveEmbeddingsToVectorDBWorkflow_DeleteDBFailure(t *testing.T) {
 	}
 
 	w := &Worker{repository: mockRepository, log: zap.NewNop()}
-	env.RegisterActivity(w.DeleteOldEmbeddingsFromVectorDBActivity)
-	env.RegisterActivity(w.DeleteOldEmbeddingsFromDBActivity)
+	env.RegisterActivity(w.DeleteOldEmbeddingsActivity)
 	env.RegisterActivity(w.SaveEmbeddingBatchActivity)
 	env.RegisterActivity(w.FlushCollectionActivity)
-	env.RegisterWorkflow(w.SaveEmbeddingsToVectorDBWorkflow)
+	env.RegisterWorkflow(w.SaveEmbeddingsWorkflow)
 
-	env.ExecuteWorkflow(w.SaveEmbeddingsToVectorDBWorkflow, param)
+	env.ExecuteWorkflow(w.SaveEmbeddingsWorkflow, param)
 
 	c.Assert(env.IsWorkflowCompleted(), qt.IsTrue)
 	c.Assert(env.GetWorkflowError(), qt.Not(qt.IsNil))
-	c.Assert(env.GetWorkflowError().Error(), qt.Contains, "DB")
+	c.Assert(env.GetWorkflowError().Error(), qt.Contains, "embedding records")
 }
 
-func TestSaveEmbeddingsToVectorDBWorkflow_BatchFailure(t *testing.T) {
+func TestSaveEmbeddingsWorkflow_BatchFailure(t *testing.T) {
 	c := qt.New(t)
 	mc := minimock.NewController(c)
 	testSuite := &testsuite.WorkflowTestSuite{}
@@ -194,7 +188,7 @@ func TestSaveEmbeddingsToVectorDBWorkflow_BatchFailure(t *testing.T) {
 	mockRepository.CreateEmbeddingsMock.Return(nil, fmt.Errorf("batch insert failed"))
 	mockRepository.DeleteEmbeddingsWithFileUIDMock.Return(nil)
 
-	param := SaveEmbeddingsToVectorDBWorkflowParam{
+	param := SaveEmbeddingsWorkflowParam{
 		KBUID:        uuid.Must(uuid.NewV4()),
 		FileUID:      uuid.Must(uuid.NewV4()),
 		FileName:     "test.pdf",
@@ -204,20 +198,19 @@ func TestSaveEmbeddingsToVectorDBWorkflow_BatchFailure(t *testing.T) {
 	}
 
 	w := &Worker{repository: mockRepository, log: zap.NewNop()}
-	env.RegisterActivity(w.DeleteOldEmbeddingsFromVectorDBActivity)
-	env.RegisterActivity(w.DeleteOldEmbeddingsFromDBActivity)
+	env.RegisterActivity(w.DeleteOldEmbeddingsActivity)
 	env.RegisterActivity(w.SaveEmbeddingBatchActivity)
 	env.RegisterActivity(w.FlushCollectionActivity)
-	env.RegisterWorkflow(w.SaveEmbeddingsToVectorDBWorkflow)
+	env.RegisterWorkflow(w.SaveEmbeddingsWorkflow)
 
-	env.ExecuteWorkflow(w.SaveEmbeddingsToVectorDBWorkflow, param)
+	env.ExecuteWorkflow(w.SaveEmbeddingsWorkflow, param)
 
 	c.Assert(env.IsWorkflowCompleted(), qt.IsTrue)
 	c.Assert(env.GetWorkflowError(), qt.Not(qt.IsNil))
 	c.Assert(env.GetWorkflowError().Error(), qt.Contains, "batch")
 }
 
-func TestSaveEmbeddingsToVectorDBWorkflow_LargeDataset(t *testing.T) {
+func TestSaveEmbeddingsWorkflow_LargeDataset(t *testing.T) {
 	c := qt.New(t)
 	mc := minimock.NewController(c)
 	testSuite := &testsuite.WorkflowTestSuite{}
@@ -229,7 +222,7 @@ func TestSaveEmbeddingsToVectorDBWorkflow_LargeDataset(t *testing.T) {
 	// This tests parallel batch processing without overwhelming the test environment
 	embeddings := createWorkflowTestEmbeddings(250)
 
-	param := SaveEmbeddingsToVectorDBWorkflowParam{
+	param := SaveEmbeddingsWorkflowParam{
 		KBUID:        uuid.Must(uuid.NewV4()),
 		FileUID:      uuid.Must(uuid.NewV4()),
 		FileName:     "large.pdf",
@@ -256,19 +249,18 @@ func TestSaveEmbeddingsToVectorDBWorkflow_LargeDataset(t *testing.T) {
 	})
 
 	w := &Worker{repository: mockRepository, log: zap.NewNop()}
-	env.RegisterActivity(w.DeleteOldEmbeddingsFromVectorDBActivity)
-	env.RegisterActivity(w.DeleteOldEmbeddingsFromDBActivity)
+	env.RegisterActivity(w.DeleteOldEmbeddingsActivity)
 	env.RegisterActivity(w.SaveEmbeddingBatchActivity)
 	env.RegisterActivity(w.FlushCollectionActivity)
-	env.RegisterWorkflow(w.SaveEmbeddingsToVectorDBWorkflow)
+	env.RegisterWorkflow(w.SaveEmbeddingsWorkflow)
 
-	env.ExecuteWorkflow(w.SaveEmbeddingsToVectorDBWorkflow, param)
+	env.ExecuteWorkflow(w.SaveEmbeddingsWorkflow, param)
 
 	c.Assert(env.IsWorkflowCompleted(), qt.IsTrue)
 	c.Assert(env.GetWorkflowError(), qt.IsNil)
 }
 
-func TestSaveEmbeddingsToVectorDBWorkflow_BatchSizeCalculation(t *testing.T) {
+func TestSaveEmbeddingsWorkflow_BatchSizeCalculation(t *testing.T) {
 	c := qt.New(t)
 
 	tests := []struct {

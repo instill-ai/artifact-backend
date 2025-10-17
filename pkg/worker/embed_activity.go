@@ -19,12 +19,12 @@ import (
 	errorsx "github.com/instill-ai/x/errors"
 )
 
-// This file contains embedding activities used by ProcessFileWorkflow and SaveEmbeddingsToVectorDBWorkflow:
+// This file contains embedding activities used by ProcessFileWorkflow and SaveEmbeddingsWorkflow:
 // - EmbedTextsActivity - Generates vector embeddings for text chunks using AI models
 // - GetTextChunksForEmbeddingActivity - Retrieves text chunk content for embedding generation
 // - SaveEmbeddingBatchActivity - Saves embedding vectors to vector database in batches
-// - DeleteOldEmbeddingsFromVectorDBActivity - Removes outdated embeddings from vector DB
-// - DeleteOldEmbeddingsFromDBActivity - Removes outdated embedding records from database
+// - DeleteOldEmbeddingsActivity - Removes outdated embeddings from both VectorDB and PostgreSQL
+// - FlushCollectionActivity - Flushes vector database collection to ensure immediate search availability
 // - UpdateEmbeddingMetadataActivity - Updates embedding metadata after processing
 
 // EmbedTextsActivityParam defines the parameters for the EmbedTextsActivity
@@ -183,41 +183,37 @@ func (w *Worker) SaveEmbeddingBatchActivity(ctx context.Context, param *SaveEmbe
 	return nil
 }
 
-// DeleteOldEmbeddingsFromVectorDBActivity deletes embeddings from vector db for a file
-// This is used by the concurrent embedding workflow - idempotent
-func (w *Worker) DeleteOldEmbeddingsFromVectorDBActivity(ctx context.Context, param *DeleteOldEmbeddingsActivityParam) error {
-	w.log.Info("DeleteOldEmbeddingsFromVectorDBActivity: Starting",
+// DeleteOldEmbeddingsActivity deletes embeddings from both VectorDB and PostgreSQL for a file
+// This combines VectorDB and DB deletion into a single activity for symmetric workflow structure
+func (w *Worker) DeleteOldEmbeddingsActivity(ctx context.Context, param *DeleteOldEmbeddingsActivityParam) error {
+	w.log.Info("DeleteOldEmbeddingsActivity: Starting cleanup",
 		zap.String("kbUID", param.KBUID.String()),
 		zap.String("fileUID", param.FileUID.String()))
 
+	// Step 1: Delete from VectorDB (Milvus)
 	collection := constant.KBCollectionName(param.KBUID)
-
 	if err := w.repository.DeleteEmbeddingsWithFileUID(ctx, collection, param.FileUID); err != nil {
 		err = errorsx.AddMessage(err, "Unable to delete old embeddings from vector database. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
 			errorsx.MessageOrErr(err),
-			deleteOldEmbeddingsFromVectorDBActivityError,
+			deleteOldEmbeddingsActivityError,
 			err,
 		)
 	}
 
-	return nil
-}
-
-// DeleteOldEmbeddingsFromDBActivity deletes embeddings from PostgreSQL for a file
-// This is used by the concurrent embedding workflow - idempotent
-func (w *Worker) DeleteOldEmbeddingsFromDBActivity(ctx context.Context, param *DeleteOldEmbeddingsActivityParam) error {
-	w.log.Info("DeleteOldEmbeddingsFromDBActivity: Starting",
-		zap.String("fileUID", param.FileUID.String()))
-
+	// Step 2: Delete from PostgreSQL
 	if err := w.repository.DeleteEmbeddingsByKBFileUID(ctx, param.FileUID); err != nil {
 		err = errorsx.AddMessage(err, "Unable to delete old embedding records. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
 			errorsx.MessageOrErr(err),
-			deleteOldEmbeddingsFromDBActivityError,
+			deleteOldEmbeddingsActivityError,
 			err,
 		)
 	}
+
+	w.log.Info("DeleteOldEmbeddingsActivity: Successfully deleted embeddings",
+		zap.String("kbUID", param.KBUID.String()),
+		zap.String("fileUID", param.FileUID.String()))
 
 	return nil
 }
@@ -306,11 +302,10 @@ func (w *Worker) EmbedTextsActivity(ctx context.Context, param *EmbedTextsActivi
 
 // Activity error type constants
 const (
-	getChunksForEmbeddingActivityError           = "GetChunksForEmbeddingActivity"
-	saveEmbeddingsActivityError                  = "SaveEmbeddingBatchActivity"
-	deleteOldEmbeddingsFromVectorDBActivityError = "DeleteOldEmbeddingsFromVectorDBActivity"
-	deleteOldEmbeddingsFromDBActivityError       = "DeleteOldEmbeddingsFromDBActivity"
-	flushCollectionActivityError                 = "FlushCollectionActivity"
-	updateEmbeddingMetadataActivityError         = "UpdateEmbeddingMetadataActivity"
-	embedTextsActivityError                      = "EmbedTextsActivity"
+	getChunksForEmbeddingActivityError   = "GetChunksForEmbeddingActivity"
+	saveEmbeddingsActivityError          = "SaveEmbeddingBatchActivity"
+	deleteOldEmbeddingsActivityError     = "DeleteOldEmbeddingsActivity"
+	flushCollectionActivityError         = "FlushCollectionActivity"
+	updateEmbeddingMetadataActivityError = "UpdateEmbeddingMetadataActivity"
+	embedTextsActivityError              = "EmbedTextsActivity"
 )

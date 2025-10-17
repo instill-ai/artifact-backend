@@ -49,7 +49,8 @@ import (
 //      Content chunks reference content converted_file UID
 //      Summary chunks reference summary converted_file UID (separate source_uid)
 //    - GetChunksForEmbeddingActivity - Retrieves text chunks for embedding generation
-//    - (EmbedTextsWorkflow, SaveEmbeddingsToVectorDBWorkflow)
+//    - EmbedTextsActivity - Generates embeddings for all text chunks
+//    - SaveEmbeddingsWorkflow - Orchestrates parallel saving of embeddings
 //
 // 5. Metadata & Cleanup:
 //    - UpdateConversionMetadataActivity - Updates file conversion metadata
@@ -168,8 +169,8 @@ func (w *Worker) GetFileContentActivity(ctx context.Context, param *GetFileConte
 
 // ===== FILE MANAGEMENT ACTIVITIES =====
 
-// CleanupOldConvertedFileActivityParam for removing old converted files
-type CleanupOldConvertedFileActivityParam struct {
+// DeleteOldConvertedFilesActivityParam for removing old converted files
+type DeleteOldConvertedFilesActivityParam struct {
 	FileUID types.FileUIDType // File unique identifier to clean up old conversions for
 }
 
@@ -226,10 +227,10 @@ type UpdateConversionMetadataActivityParam struct {
 	Pipeline string            // Pipeline used for conversion (empty if AI was used)
 }
 
-// CleanupOldConvertedFileActivity removes old converted file from MinIO and DB if it exists
+// DeleteOldConvertedFilesActivity removes old converted file from MinIO and DB if it exists
 // This is critical for reprocessing to avoid duplicate converted_file records
-func (w *Worker) CleanupOldConvertedFileActivity(ctx context.Context, param *CleanupOldConvertedFileActivityParam) error {
-	w.log.Info("CleanupOldConvertedFileActivity: Checking for old converted files",
+func (w *Worker) DeleteOldConvertedFilesActivity(ctx context.Context, param *DeleteOldConvertedFilesActivityParam) error {
+	w.log.Info("DeleteOldConvertedFilesActivity: Checking for old converted files",
 		zap.String("fileUID", param.FileUID.String()))
 
 	// Get ALL converted files for this file UID (content + summary + any others)
@@ -237,23 +238,23 @@ func (w *Worker) CleanupOldConvertedFileActivity(ctx context.Context, param *Cle
 	if err != nil {
 		return temporal.NewApplicationErrorWithCause(
 			fmt.Sprintf("Failed to list converted files: %s", errorsx.MessageOrErr(err)),
-			cleanupOldConvertedFileActivityError,
+			deleteOldConvertedFilesActivityError,
 			err,
 		)
 	}
 
 	if len(allConvertedFiles) == 0 {
-		w.log.Info("CleanupOldConvertedFileActivity: No old converted files found, skipping cleanup")
+		w.log.Info("DeleteOldConvertedFilesActivity: No old converted files found, skipping cleanup")
 		return nil
 	}
 
-	w.log.Info("CleanupOldConvertedFileActivity: Found converted files to delete",
+	w.log.Info("DeleteOldConvertedFilesActivity: Found converted files to delete",
 		zap.Int("count", len(allConvertedFiles)))
 
 	// Delete ALL old converted files (content, summary, etc.)
 	// When reprocessing, we recreate all converted files from scratch
 	for _, file := range allConvertedFiles {
-		w.log.Info("CleanupOldConvertedFileActivity: Deleting old converted file",
+		w.log.Info("DeleteOldConvertedFilesActivity: Deleting old converted file",
 			zap.String("oldConvertedFileUID", file.UID.String()),
 			zap.String("originalFileName", file.OriginalFileName),
 			zap.String("destination", file.Destination))
@@ -263,7 +264,7 @@ func (w *Worker) CleanupOldConvertedFileActivity(ctx context.Context, param *Cle
 		// Once we delete the converted_file record, we lose track of which chunks belong to it
 		oldChunks, err := w.repository.GetTextChunksBySource(ctx, repository.ConvertedFileTableName, file.UID)
 		if err != nil {
-			w.log.Warn("CleanupOldConvertedFileActivity: Failed to get old chunks (continuing anyway)",
+			w.log.Warn("DeleteOldConvertedFilesActivity: Failed to get old chunks (continuing anyway)",
 				zap.String("convertedFileUID", file.UID.String()),
 				zap.Error(err))
 		} else if len(oldChunks) > 0 {
@@ -271,22 +272,22 @@ func (w *Worker) CleanupOldConvertedFileActivity(ctx context.Context, param *Cle
 			for i, chunk := range oldChunks {
 				oldChunkPaths[i] = chunk.ContentDest
 			}
-			w.log.Info("CleanupOldConvertedFileActivity: Deleting old chunk blobs",
+			w.log.Info("DeleteOldConvertedFilesActivity: Deleting old chunk blobs",
 				zap.String("convertedFileUID", file.UID.String()),
 				zap.Int("chunkCount", len(oldChunkPaths)))
 
 			err = w.deleteFilesSync(ctx, config.Config.Minio.BucketName, oldChunkPaths)
 			if err != nil {
-				w.log.Error("CleanupOldConvertedFileActivity: Failed to delete old chunk blobs from MinIO",
+				w.log.Error("DeleteOldConvertedFilesActivity: Failed to delete old chunk blobs from MinIO",
 					zap.String("convertedFileUID", file.UID.String()),
 					zap.Error(err))
 				return temporal.NewApplicationErrorWithCause(
 					fmt.Sprintf("Failed to delete old chunk blobs from MinIO: %s", errorsx.MessageOrErr(err)),
-					cleanupOldConvertedFileActivityError,
+					deleteOldConvertedFilesActivityError,
 					err,
 				)
 			}
-			w.log.Info("CleanupOldConvertedFileActivity: Successfully deleted old chunk blobs",
+			w.log.Info("DeleteOldConvertedFilesActivity: Successfully deleted old chunk blobs",
 				zap.String("convertedFileUID", file.UID.String()),
 				zap.Int("deletedCount", len(oldChunkPaths)))
 		}
@@ -296,12 +297,12 @@ func (w *Worker) CleanupOldConvertedFileActivity(ctx context.Context, param *Cle
 		// Any error returned here is a real error (network, permissions, etc.) that should be retried.
 		err = w.repository.DeleteFile(ctx, config.Config.Minio.BucketName, file.Destination)
 		if err != nil {
-			w.log.Error("CleanupOldConvertedFileActivity: Failed to delete old converted file from MinIO",
+			w.log.Error("DeleteOldConvertedFilesActivity: Failed to delete old converted file from MinIO",
 				zap.String("destination", file.Destination),
 				zap.Error(err))
 			return temporal.NewApplicationErrorWithCause(
 				fmt.Sprintf("Failed to delete old converted file from MinIO: %s", errorsx.MessageOrErr(err)),
-				cleanupOldConvertedFileActivityError,
+				deleteOldConvertedFilesActivityError,
 				err,
 			)
 		}
@@ -311,17 +312,17 @@ func (w *Worker) CleanupOldConvertedFileActivity(ctx context.Context, param *Cle
 		// which would cause duplicate key errors when creating new chunks with the old source_uid
 		err = w.repository.DeleteConvertedFile(ctx, file.UID)
 		if err != nil {
-			w.log.Error("CleanupOldConvertedFileActivity: Failed to delete old converted file DB record",
+			w.log.Error("DeleteOldConvertedFilesActivity: Failed to delete old converted file DB record",
 				zap.String("convertedFileUID", file.UID.String()),
 				zap.Error(err))
 			return temporal.NewApplicationErrorWithCause(
 				fmt.Sprintf("Failed to delete old converted file DB record: %s", errorsx.MessageOrErr(err)),
-				cleanupOldConvertedFileActivityError,
+				deleteOldConvertedFilesActivityError,
 				err,
 			)
 		}
 
-		w.log.Info("CleanupOldConvertedFileActivity: Successfully deleted old converted file from both MinIO and DB",
+		w.log.Info("DeleteOldConvertedFilesActivity: Successfully deleted old converted file from both MinIO and DB",
 			zap.String("oldConvertedFileUID", file.UID.String()))
 	}
 
@@ -620,6 +621,38 @@ func (w *Worker) ChunkContentActivity(ctx context.Context, param *ChunkContentAc
 	}, nil
 }
 
+// DeleteOldTextChunksActivityParam for deleting old text chunk DB records
+type DeleteOldTextChunksActivityParam struct {
+	FileUID types.FileUIDType // File unique identifier
+}
+
+// DeleteOldTextChunksActivity deletes old text chunk DB records for a file
+// Note: Chunk blobs are deleted by DeleteOldConvertedFilesActivity (when converted files are deleted)
+// This activity only deletes the text_chunk table records
+func (w *Worker) DeleteOldTextChunksActivity(ctx context.Context, param *DeleteOldTextChunksActivityParam) error {
+	w.log.Info("DeleteOldTextChunksActivity: Deleting old text chunk records",
+		zap.String("fileUID", param.FileUID.String()))
+
+	// Delete all text chunk records for this file from the database
+	// This uses hard delete (Unscoped) to remove records completely
+	err := w.repository.HardDeleteTextChunksByKBFileUID(ctx, param.FileUID)
+	if err != nil {
+		w.log.Error("DeleteOldTextChunksActivity: Failed to delete text chunk records",
+			zap.String("fileUID", param.FileUID.String()),
+			zap.Error(err))
+		return temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to delete old text chunk records: %s", errorsx.MessageOrErr(err)),
+			deleteOldTextChunksActivityError,
+			err,
+		)
+	}
+
+	w.log.Info("DeleteOldTextChunksActivity: Successfully deleted old text chunk records",
+		zap.String("fileUID", param.FileUID.String()))
+
+	return nil
+}
+
 // SaveTextChunksActivityParam for saving text chunks to database and MinIO
 type SaveTextChunksActivityParam struct {
 	FileUID          types.FileUIDType          // File unique identifier
@@ -634,8 +667,11 @@ type SaveTextChunksActivityResult struct {
 }
 
 // SaveTextChunksActivity saves text chunks to database and MinIO storage
-// Note: Old chunk blob cleanup is now handled by CleanupOldConvertedFileActivity
-// at the workflow level (before new converted files are created)
+// Note: Old data cleanup is handled at workflow level before this activity:
+//   - Chunk blobs: DeleteOldConvertedFilesActivity (when converted files are deleted)
+//   - Chunk DB records: DeleteOldTextChunksActivity
+//
+// This activity only creates new chunks without performing any deletion
 func (w *Worker) SaveTextChunksActivity(ctx context.Context, param *SaveTextChunksActivityParam) (*SaveTextChunksActivityResult, error) {
 	w.log.Info("SaveTextChunksActivity: Saving text chunks to database and MinIO",
 		zap.String("fileUID", param.FileUID.String()),
@@ -708,8 +744,9 @@ func (w *Worker) SaveTextChunksActivity(ctx context.Context, param *SaveTextChun
 	}
 
 	// Step 2: Save text chunks to database with placeholder destinations
-	// DeleteAndCreateTextChunks handles DB deletion atomically to prevent race conditions
-	createdChunks, err := w.repository.DeleteAndCreateTextChunks(ctx, param.FileUID, textChunks, nil)
+	// Note: Old chunks are deleted by DeleteOldTextChunksActivity at workflow level
+	// This activity only creates new chunks
+	err := w.repository.CreateTextChunks(ctx, textChunks)
 	if err != nil {
 		return nil, temporal.NewApplicationErrorWithCause(
 			fmt.Sprintf("Failed to save text chunks to database: %s", errorsx.MessageOrErr(err)),
@@ -717,6 +754,7 @@ func (w *Worker) SaveTextChunksActivity(ctx context.Context, param *SaveTextChun
 			err,
 		)
 	}
+	createdChunks := textChunks
 
 	// Step 3: Upload text chunks to MinIO after DB transaction commits
 	destinations := make(map[string]string, len(createdChunks))
@@ -1945,7 +1983,7 @@ func ProcessAIConversionResult(markdown string, logger *zap.Logger, logContext m
 const (
 	getFileMetadataActivityError                = "GetFileMetadataActivity"
 	getFileContentActivityError                 = "GetFileContentActivity"
-	cleanupOldConvertedFileActivityError        = "CleanupOldConvertedFileActivity"
+	deleteOldConvertedFilesActivityError        = "DeleteOldConvertedFilesActivity"
 	createConvertedFileRecordActivityError      = "CreateConvertedFileRecordActivity"
 	uploadConvertedFileToMinIOActivityError     = "UploadConvertedFileToMinIOActivity"
 	deleteConvertedFileRecordActivityError      = "DeleteConvertedFileRecordActivity"
@@ -1953,6 +1991,7 @@ const (
 	deleteConvertedFileFromMinIOActivityError   = "DeleteConvertedFileFromMinIOActivity"
 	updateConversionMetadataActivityError       = "UpdateConversionMetadataActivity"
 	chunkContentActivityError                   = "ChunkContentActivity"
+	deleteOldTextChunksActivityError            = "DeleteOldTextChunksActivity"
 	saveTextChunksActivityError                 = "SaveTextChunksActivity"
 	standardizeFileTypeActivityError            = "StandardizeFileTypeActivity"
 	cacheContextActivityError                   = "CacheFileContextActivity"

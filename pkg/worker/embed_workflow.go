@@ -58,6 +58,8 @@ func (w *embedTextsWorkflow) Execute(ctx context.Context, param EmbedTextsWorkfl
 }
 
 // EmbedTextsWorkflow orchestrates embedding of texts
+// NOTE: This is a thin wrapper around EmbedTextsActivity, primarily used for external API calls.
+// Internal workflows (like ProcessFileWorkflow) should call EmbedTextsActivity directly for simplicity.
 func (w *Worker) EmbedTextsWorkflow(ctx workflow.Context, param EmbedTextsWorkflowParam) ([][]float32, error) {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("Starting EmbedTextsWorkflow",
@@ -99,8 +101,8 @@ func (w *Worker) EmbedTextsWorkflow(ctx workflow.Context, param EmbedTextsWorkfl
 	return vectors, nil
 }
 
-// SaveEmbeddingsToVectorDBWorkflowParam saves embeddings to vector db
-type SaveEmbeddingsToVectorDBWorkflowParam struct {
+// SaveEmbeddingsWorkflowParam saves embeddings to vector db
+type SaveEmbeddingsWorkflowParam struct {
 	KBUID        types.KBUIDType             // Knowledge base unique identifier
 	FileUID      types.FileUIDType           // File unique identifier
 	FileName     string                      // File name for identification
@@ -109,13 +111,13 @@ type SaveEmbeddingsToVectorDBWorkflowParam struct {
 	RequesterUID types.RequesterUIDType      // Requester unique identifier
 }
 
-// SaveEmbeddingsToVectorDBWorkflow orchestrates parallel saving of embedding batches
+// SaveEmbeddingsWorkflow orchestrates parallel saving of embedding batches
 // This workflow provides better performance than the single-activity approach by:
 // 1. Deleting old embeddings once upfront
 // 2. Saving batches in parallel (concurrent DB + Milvus writes)
-func (w *Worker) SaveEmbeddingsToVectorDBWorkflow(ctx workflow.Context, param SaveEmbeddingsToVectorDBWorkflowParam) error {
+func (w *Worker) SaveEmbeddingsWorkflow(ctx workflow.Context, param SaveEmbeddingsWorkflowParam) error {
 	logger := workflow.GetLogger(ctx)
-	logger.Info("Starting SaveEmbeddingsToVectorDBWorkflow",
+	logger.Info("Starting SaveEmbeddingsWorkflow",
 		"kbUID", param.KBUID.String(),
 		"fileUID", param.FileUID.String(),
 		"userUID", param.UserUID.String(),
@@ -138,28 +140,18 @@ func (w *Worker) SaveEmbeddingsToVectorDBWorkflow(ctx workflow.Context, param Sa
 	}
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
 
-	// Step 1 & 2: Delete old embeddings in parallel (VectorDB + DB)
+	// Step 1: Delete old embeddings (both VectorDB + DB in single activity)
 	deleteParam := &DeleteOldEmbeddingsActivityParam{
 		KBUID:   param.KBUID,
 		FileUID: param.FileUID,
 	}
 
-	// Execute both delete operations in parallel
-	deleteVectorDBFuture := workflow.ExecuteActivity(ctx, w.DeleteOldEmbeddingsFromVectorDBActivity, deleteParam)
-	deleteDBFuture := workflow.ExecuteActivity(ctx, w.DeleteOldEmbeddingsFromDBActivity, deleteParam)
-
-	// Wait for both to complete
-	if err := deleteVectorDBFuture.Get(ctx, nil); err != nil {
-		logger.Error("Failed to delete old embeddings from VectorDB", "error", err)
-		return errorsx.AddMessage(err, "Unable to delete old embeddings from vector database. Please try again.")
+	if err := workflow.ExecuteActivity(ctx, w.DeleteOldEmbeddingsActivity, deleteParam).Get(ctx, nil); err != nil {
+		logger.Error("Failed to delete old embeddings", "error", err)
+		return errorsx.AddMessage(err, "Unable to delete old embeddings. Please try again.")
 	}
 
-	if err := deleteDBFuture.Get(ctx, nil); err != nil {
-		logger.Error("Failed to delete old embeddings from DB", "error", err)
-		return errorsx.AddMessage(err, "Unable to delete old embedding records. Please try again.")
-	}
-
-	// Step 3: Save batches in parallel
+	// Step 2: Save batches in parallel
 	batchSize := EmbeddingBatchSize
 	totalBatches := (len(param.Embeddings) + batchSize - 1) / batchSize
 	logger.Info("Calculated batches for parallel processing", "totalBatches", totalBatches)
@@ -198,7 +190,7 @@ func (w *Worker) SaveEmbeddingsToVectorDBWorkflow(ctx workflow.Context, param Sa
 			"totalBatches", totalBatches)
 	}
 
-	// Step 4: Flush the collection to ensure immediate search availability
+	// Step 3: Flush the collection to ensure immediate search availability
 	// Note: Milvus 2.x has auto-flush, but we flush manually here to guarantee
 	// that newly uploaded files are immediately searchable when marked as "completed"
 	//
@@ -221,7 +213,7 @@ func (w *Worker) SaveEmbeddingsToVectorDBWorkflow(ctx workflow.Context, param Sa
 		return errorsx.AddMessage(err, "Unable to flush vector database collection. Please try again.")
 	}
 
-	logger.Info("SaveEmbeddingsToVectorDBWorkflow completed successfully",
+	logger.Info("SaveEmbeddingsWorkflow completed successfully",
 		"kbUID", param.KBUID.String(),
 		"fileUID", param.FileUID.String(),
 		"userUID", param.UserUID.String(),
