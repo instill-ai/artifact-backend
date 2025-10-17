@@ -92,7 +92,7 @@ var ConvertedFileColumn = ConvertedFileColumns{
 
 // CreateConvertedFileWithDestination creates a converted file record with a known destination.
 // This method properly decouples database operations from external storage operations.
-// Note: Old converted files should be cleaned up by CleanupOldConvertedFileActivity before calling this.
+// Note: Old converted files should be cleaned up by DeleteOldConvertedFilesActivity before calling this.
 func (r *repository) CreateConvertedFileWithDestination(ctx context.Context, cf ConvertedFileModel) (*ConvertedFileModel, error) {
 	// Validate required fields before attempting to persist
 	if cf.FileUID.IsNil() {
@@ -115,7 +115,7 @@ func (r *repository) CreateConvertedFileWithDestination(ctx context.Context, cf 
 	}
 
 	err := r.db.Transaction(func(tx *gorm.DB) error {
-		// Note: Cleanup of old converted files is handled by CleanupOldConvertedFileActivity in the workflow
+		// Note: Cleanup of old converted files is handled by DeleteOldConvertedFilesActivity in the workflow
 		// This ensures all old files (content + summary) are deleted before new ones are created,
 		// preventing race conditions and allowing content and summary files to coexist
 

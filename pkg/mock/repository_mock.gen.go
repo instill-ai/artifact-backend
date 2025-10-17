@@ -73,6 +73,13 @@ type RepositoryMock struct {
 	beforeCreateObjectCounter uint64
 	CreateObjectMock          mRepositoryMockCreateObject
 
+	funcCreateTextChunks          func(ctx context.Context, textChunks []*mm_repository.TextChunkModel) (err error)
+	funcCreateTextChunksOrigin    string
+	inspectFuncCreateTextChunks   func(ctx context.Context, textChunks []*mm_repository.TextChunkModel)
+	afterCreateTextChunksCounter  uint64
+	beforeCreateTextChunksCounter uint64
+	CreateTextChunksMock          mRepositoryMockCreateTextChunks
+
 	funcDeleteAllConvertedFilesInKb          func(ctx context.Context, kbUID types.KBUIDType) (err error)
 	funcDeleteAllConvertedFilesInKbOrigin    string
 	inspectFuncDeleteAllConvertedFilesInKb   func(ctx context.Context, kbUID types.KBUIDType)
@@ -663,6 +670,9 @@ func NewRepositoryMock(t minimock.Tester) *RepositoryMock {
 
 	m.CreateObjectMock = mRepositoryMockCreateObject{mock: m}
 	m.CreateObjectMock.callArgs = []*RepositoryMockCreateObjectParams{}
+
+	m.CreateTextChunksMock = mRepositoryMockCreateTextChunks{mock: m}
+	m.CreateTextChunksMock.callArgs = []*RepositoryMockCreateTextChunksParams{}
 
 	m.DeleteAllConvertedFilesInKbMock = mRepositoryMockDeleteAllConvertedFilesInKb{mock: m}
 	m.DeleteAllConvertedFilesInKbMock.callArgs = []*RepositoryMockDeleteAllConvertedFilesInKbParams{}
@@ -3393,6 +3403,348 @@ func (m *RepositoryMock) MinimockCreateObjectInspect() {
 	if !m.CreateObjectMock.invocationsDone() && afterCreateObjectCounter > 0 {
 		m.t.Errorf("Expected %d calls to RepositoryMock.CreateObject at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.CreateObjectMock.expectedInvocations), m.CreateObjectMock.expectedInvocationsOrigin, afterCreateObjectCounter)
+	}
+}
+
+type mRepositoryMockCreateTextChunks struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockCreateTextChunksExpectation
+	expectations       []*RepositoryMockCreateTextChunksExpectation
+
+	callArgs []*RepositoryMockCreateTextChunksParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockCreateTextChunksExpectation specifies expectation struct of the Repository.CreateTextChunks
+type RepositoryMockCreateTextChunksExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockCreateTextChunksParams
+	paramPtrs          *RepositoryMockCreateTextChunksParamPtrs
+	expectationOrigins RepositoryMockCreateTextChunksExpectationOrigins
+	results            *RepositoryMockCreateTextChunksResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockCreateTextChunksParams contains parameters of the Repository.CreateTextChunks
+type RepositoryMockCreateTextChunksParams struct {
+	ctx        context.Context
+	textChunks []*mm_repository.TextChunkModel
+}
+
+// RepositoryMockCreateTextChunksParamPtrs contains pointers to parameters of the Repository.CreateTextChunks
+type RepositoryMockCreateTextChunksParamPtrs struct {
+	ctx        *context.Context
+	textChunks *[]*mm_repository.TextChunkModel
+}
+
+// RepositoryMockCreateTextChunksResults contains results of the Repository.CreateTextChunks
+type RepositoryMockCreateTextChunksResults struct {
+	err error
+}
+
+// RepositoryMockCreateTextChunksOrigins contains origins of expectations of the Repository.CreateTextChunks
+type RepositoryMockCreateTextChunksExpectationOrigins struct {
+	origin           string
+	originCtx        string
+	originTextChunks string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmCreateTextChunks *mRepositoryMockCreateTextChunks) Optional() *mRepositoryMockCreateTextChunks {
+	mmCreateTextChunks.optional = true
+	return mmCreateTextChunks
+}
+
+// Expect sets up expected params for Repository.CreateTextChunks
+func (mmCreateTextChunks *mRepositoryMockCreateTextChunks) Expect(ctx context.Context, textChunks []*mm_repository.TextChunkModel) *mRepositoryMockCreateTextChunks {
+	if mmCreateTextChunks.mock.funcCreateTextChunks != nil {
+		mmCreateTextChunks.mock.t.Fatalf("RepositoryMock.CreateTextChunks mock is already set by Set")
+	}
+
+	if mmCreateTextChunks.defaultExpectation == nil {
+		mmCreateTextChunks.defaultExpectation = &RepositoryMockCreateTextChunksExpectation{}
+	}
+
+	if mmCreateTextChunks.defaultExpectation.paramPtrs != nil {
+		mmCreateTextChunks.mock.t.Fatalf("RepositoryMock.CreateTextChunks mock is already set by ExpectParams functions")
+	}
+
+	mmCreateTextChunks.defaultExpectation.params = &RepositoryMockCreateTextChunksParams{ctx, textChunks}
+	mmCreateTextChunks.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmCreateTextChunks.expectations {
+		if minimock.Equal(e.params, mmCreateTextChunks.defaultExpectation.params) {
+			mmCreateTextChunks.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmCreateTextChunks.defaultExpectation.params)
+		}
+	}
+
+	return mmCreateTextChunks
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.CreateTextChunks
+func (mmCreateTextChunks *mRepositoryMockCreateTextChunks) ExpectCtxParam1(ctx context.Context) *mRepositoryMockCreateTextChunks {
+	if mmCreateTextChunks.mock.funcCreateTextChunks != nil {
+		mmCreateTextChunks.mock.t.Fatalf("RepositoryMock.CreateTextChunks mock is already set by Set")
+	}
+
+	if mmCreateTextChunks.defaultExpectation == nil {
+		mmCreateTextChunks.defaultExpectation = &RepositoryMockCreateTextChunksExpectation{}
+	}
+
+	if mmCreateTextChunks.defaultExpectation.params != nil {
+		mmCreateTextChunks.mock.t.Fatalf("RepositoryMock.CreateTextChunks mock is already set by Expect")
+	}
+
+	if mmCreateTextChunks.defaultExpectation.paramPtrs == nil {
+		mmCreateTextChunks.defaultExpectation.paramPtrs = &RepositoryMockCreateTextChunksParamPtrs{}
+	}
+	mmCreateTextChunks.defaultExpectation.paramPtrs.ctx = &ctx
+	mmCreateTextChunks.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmCreateTextChunks
+}
+
+// ExpectTextChunksParam2 sets up expected param textChunks for Repository.CreateTextChunks
+func (mmCreateTextChunks *mRepositoryMockCreateTextChunks) ExpectTextChunksParam2(textChunks []*mm_repository.TextChunkModel) *mRepositoryMockCreateTextChunks {
+	if mmCreateTextChunks.mock.funcCreateTextChunks != nil {
+		mmCreateTextChunks.mock.t.Fatalf("RepositoryMock.CreateTextChunks mock is already set by Set")
+	}
+
+	if mmCreateTextChunks.defaultExpectation == nil {
+		mmCreateTextChunks.defaultExpectation = &RepositoryMockCreateTextChunksExpectation{}
+	}
+
+	if mmCreateTextChunks.defaultExpectation.params != nil {
+		mmCreateTextChunks.mock.t.Fatalf("RepositoryMock.CreateTextChunks mock is already set by Expect")
+	}
+
+	if mmCreateTextChunks.defaultExpectation.paramPtrs == nil {
+		mmCreateTextChunks.defaultExpectation.paramPtrs = &RepositoryMockCreateTextChunksParamPtrs{}
+	}
+	mmCreateTextChunks.defaultExpectation.paramPtrs.textChunks = &textChunks
+	mmCreateTextChunks.defaultExpectation.expectationOrigins.originTextChunks = minimock.CallerInfo(1)
+
+	return mmCreateTextChunks
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.CreateTextChunks
+func (mmCreateTextChunks *mRepositoryMockCreateTextChunks) Inspect(f func(ctx context.Context, textChunks []*mm_repository.TextChunkModel)) *mRepositoryMockCreateTextChunks {
+	if mmCreateTextChunks.mock.inspectFuncCreateTextChunks != nil {
+		mmCreateTextChunks.mock.t.Fatalf("Inspect function is already set for RepositoryMock.CreateTextChunks")
+	}
+
+	mmCreateTextChunks.mock.inspectFuncCreateTextChunks = f
+
+	return mmCreateTextChunks
+}
+
+// Return sets up results that will be returned by Repository.CreateTextChunks
+func (mmCreateTextChunks *mRepositoryMockCreateTextChunks) Return(err error) *RepositoryMock {
+	if mmCreateTextChunks.mock.funcCreateTextChunks != nil {
+		mmCreateTextChunks.mock.t.Fatalf("RepositoryMock.CreateTextChunks mock is already set by Set")
+	}
+
+	if mmCreateTextChunks.defaultExpectation == nil {
+		mmCreateTextChunks.defaultExpectation = &RepositoryMockCreateTextChunksExpectation{mock: mmCreateTextChunks.mock}
+	}
+	mmCreateTextChunks.defaultExpectation.results = &RepositoryMockCreateTextChunksResults{err}
+	mmCreateTextChunks.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmCreateTextChunks.mock
+}
+
+// Set uses given function f to mock the Repository.CreateTextChunks method
+func (mmCreateTextChunks *mRepositoryMockCreateTextChunks) Set(f func(ctx context.Context, textChunks []*mm_repository.TextChunkModel) (err error)) *RepositoryMock {
+	if mmCreateTextChunks.defaultExpectation != nil {
+		mmCreateTextChunks.mock.t.Fatalf("Default expectation is already set for the Repository.CreateTextChunks method")
+	}
+
+	if len(mmCreateTextChunks.expectations) > 0 {
+		mmCreateTextChunks.mock.t.Fatalf("Some expectations are already set for the Repository.CreateTextChunks method")
+	}
+
+	mmCreateTextChunks.mock.funcCreateTextChunks = f
+	mmCreateTextChunks.mock.funcCreateTextChunksOrigin = minimock.CallerInfo(1)
+	return mmCreateTextChunks.mock
+}
+
+// When sets expectation for the Repository.CreateTextChunks which will trigger the result defined by the following
+// Then helper
+func (mmCreateTextChunks *mRepositoryMockCreateTextChunks) When(ctx context.Context, textChunks []*mm_repository.TextChunkModel) *RepositoryMockCreateTextChunksExpectation {
+	if mmCreateTextChunks.mock.funcCreateTextChunks != nil {
+		mmCreateTextChunks.mock.t.Fatalf("RepositoryMock.CreateTextChunks mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockCreateTextChunksExpectation{
+		mock:               mmCreateTextChunks.mock,
+		params:             &RepositoryMockCreateTextChunksParams{ctx, textChunks},
+		expectationOrigins: RepositoryMockCreateTextChunksExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmCreateTextChunks.expectations = append(mmCreateTextChunks.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.CreateTextChunks return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockCreateTextChunksExpectation) Then(err error) *RepositoryMock {
+	e.results = &RepositoryMockCreateTextChunksResults{err}
+	return e.mock
+}
+
+// Times sets number of times Repository.CreateTextChunks should be invoked
+func (mmCreateTextChunks *mRepositoryMockCreateTextChunks) Times(n uint64) *mRepositoryMockCreateTextChunks {
+	if n == 0 {
+		mmCreateTextChunks.mock.t.Fatalf("Times of RepositoryMock.CreateTextChunks mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmCreateTextChunks.expectedInvocations, n)
+	mmCreateTextChunks.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmCreateTextChunks
+}
+
+func (mmCreateTextChunks *mRepositoryMockCreateTextChunks) invocationsDone() bool {
+	if len(mmCreateTextChunks.expectations) == 0 && mmCreateTextChunks.defaultExpectation == nil && mmCreateTextChunks.mock.funcCreateTextChunks == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmCreateTextChunks.mock.afterCreateTextChunksCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmCreateTextChunks.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// CreateTextChunks implements mm_repository.Repository
+func (mmCreateTextChunks *RepositoryMock) CreateTextChunks(ctx context.Context, textChunks []*mm_repository.TextChunkModel) (err error) {
+	mm_atomic.AddUint64(&mmCreateTextChunks.beforeCreateTextChunksCounter, 1)
+	defer mm_atomic.AddUint64(&mmCreateTextChunks.afterCreateTextChunksCounter, 1)
+
+	mmCreateTextChunks.t.Helper()
+
+	if mmCreateTextChunks.inspectFuncCreateTextChunks != nil {
+		mmCreateTextChunks.inspectFuncCreateTextChunks(ctx, textChunks)
+	}
+
+	mm_params := RepositoryMockCreateTextChunksParams{ctx, textChunks}
+
+	// Record call args
+	mmCreateTextChunks.CreateTextChunksMock.mutex.Lock()
+	mmCreateTextChunks.CreateTextChunksMock.callArgs = append(mmCreateTextChunks.CreateTextChunksMock.callArgs, &mm_params)
+	mmCreateTextChunks.CreateTextChunksMock.mutex.Unlock()
+
+	for _, e := range mmCreateTextChunks.CreateTextChunksMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmCreateTextChunks.CreateTextChunksMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmCreateTextChunks.CreateTextChunksMock.defaultExpectation.Counter, 1)
+		mm_want := mmCreateTextChunks.CreateTextChunksMock.defaultExpectation.params
+		mm_want_ptrs := mmCreateTextChunks.CreateTextChunksMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockCreateTextChunksParams{ctx, textChunks}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmCreateTextChunks.t.Errorf("RepositoryMock.CreateTextChunks got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCreateTextChunks.CreateTextChunksMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.textChunks != nil && !minimock.Equal(*mm_want_ptrs.textChunks, mm_got.textChunks) {
+				mmCreateTextChunks.t.Errorf("RepositoryMock.CreateTextChunks got unexpected parameter textChunks, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCreateTextChunks.CreateTextChunksMock.defaultExpectation.expectationOrigins.originTextChunks, *mm_want_ptrs.textChunks, mm_got.textChunks, minimock.Diff(*mm_want_ptrs.textChunks, mm_got.textChunks))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmCreateTextChunks.t.Errorf("RepositoryMock.CreateTextChunks got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmCreateTextChunks.CreateTextChunksMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmCreateTextChunks.CreateTextChunksMock.defaultExpectation.results
+		if mm_results == nil {
+			mmCreateTextChunks.t.Fatal("No results are set for the RepositoryMock.CreateTextChunks")
+		}
+		return (*mm_results).err
+	}
+	if mmCreateTextChunks.funcCreateTextChunks != nil {
+		return mmCreateTextChunks.funcCreateTextChunks(ctx, textChunks)
+	}
+	mmCreateTextChunks.t.Fatalf("Unexpected call to RepositoryMock.CreateTextChunks. %v %v", ctx, textChunks)
+	return
+}
+
+// CreateTextChunksAfterCounter returns a count of finished RepositoryMock.CreateTextChunks invocations
+func (mmCreateTextChunks *RepositoryMock) CreateTextChunksAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmCreateTextChunks.afterCreateTextChunksCounter)
+}
+
+// CreateTextChunksBeforeCounter returns a count of RepositoryMock.CreateTextChunks invocations
+func (mmCreateTextChunks *RepositoryMock) CreateTextChunksBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmCreateTextChunks.beforeCreateTextChunksCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.CreateTextChunks.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmCreateTextChunks *mRepositoryMockCreateTextChunks) Calls() []*RepositoryMockCreateTextChunksParams {
+	mmCreateTextChunks.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockCreateTextChunksParams, len(mmCreateTextChunks.callArgs))
+	copy(argCopy, mmCreateTextChunks.callArgs)
+
+	mmCreateTextChunks.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockCreateTextChunksDone returns true if the count of the CreateTextChunks invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockCreateTextChunksDone() bool {
+	if m.CreateTextChunksMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.CreateTextChunksMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.CreateTextChunksMock.invocationsDone()
+}
+
+// MinimockCreateTextChunksInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockCreateTextChunksInspect() {
+	for _, e := range m.CreateTextChunksMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.CreateTextChunks at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterCreateTextChunksCounter := mm_atomic.LoadUint64(&m.afterCreateTextChunksCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.CreateTextChunksMock.defaultExpectation != nil && afterCreateTextChunksCounter < 1 {
+		if m.CreateTextChunksMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.CreateTextChunks at\n%s", m.CreateTextChunksMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.CreateTextChunks at\n%s with params: %#v", m.CreateTextChunksMock.defaultExpectation.expectationOrigins.origin, *m.CreateTextChunksMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcCreateTextChunks != nil && afterCreateTextChunksCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.CreateTextChunks at\n%s", m.funcCreateTextChunksOrigin)
+	}
+
+	if !m.CreateTextChunksMock.invocationsDone() && afterCreateTextChunksCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.CreateTextChunks at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.CreateTextChunksMock.expectedInvocations), m.CreateTextChunksMock.expectedInvocationsOrigin, afterCreateTextChunksCounter)
 	}
 }
 
@@ -31786,6 +32138,8 @@ func (m *RepositoryMock) MinimockFinish() {
 
 			m.MinimockCreateObjectInspect()
 
+			m.MinimockCreateTextChunksInspect()
+
 			m.MinimockDeleteAllConvertedFilesInKbInspect()
 
 			m.MinimockDeleteAllKnowledgeBaseFilesInspect()
@@ -31971,6 +32325,7 @@ func (m *RepositoryMock) minimockDone() bool {
 		m.MinimockCreateKnowledgeBaseDone() &&
 		m.MinimockCreateKnowledgeBaseFileDone() &&
 		m.MinimockCreateObjectDone() &&
+		m.MinimockCreateTextChunksDone() &&
 		m.MinimockDeleteAllConvertedFilesInKbDone() &&
 		m.MinimockDeleteAllKnowledgeBaseFilesDone() &&
 		m.MinimockDeleteAndCreateEmbeddingsDone() &&

@@ -186,49 +186,12 @@ func TestSaveEmbeddingBatchActivity_DatabaseFailure(t *testing.T) {
 	c.Assert(err.Error(), qt.Contains, "database")
 }
 
-func TestDeleteOldEmbeddingsFromVectorDBActivity_Success(t *testing.T) {
+func TestDeleteOldEmbeddingsActivity_Success(t *testing.T) {
 	c := qt.New(t)
 	mc := minimock.NewController(c)
 	mockRepository := mock.NewRepositoryMock(mc)
 
 	mockRepository.DeleteEmbeddingsWithFileUIDMock.Return(nil)
-
-	w := &Worker{repository: mockRepository, log: zap.NewNop()}
-
-	param := &DeleteOldEmbeddingsActivityParam{
-		KBUID:   uuid.Must(uuid.NewV4()),
-		FileUID: uuid.Must(uuid.NewV4()),
-	}
-
-	err := w.DeleteOldEmbeddingsFromVectorDBActivity(context.Background(), param)
-	c.Assert(err, qt.IsNil)
-}
-
-func TestDeleteOldEmbeddingsFromVectorDBActivity_Failure(t *testing.T) {
-	c := qt.New(t)
-	mc := minimock.NewController(c)
-
-	mockRepository := mock.NewRepositoryMock(mc)
-
-	mockRepository.DeleteEmbeddingsWithFileUIDMock.Return(fmt.Errorf("milvus connection error"))
-
-	w := &Worker{repository: mockRepository, log: zap.NewNop()}
-
-	param := &DeleteOldEmbeddingsActivityParam{
-		KBUID:   uuid.Must(uuid.NewV4()),
-		FileUID: uuid.Must(uuid.NewV4()),
-	}
-
-	err := w.DeleteOldEmbeddingsFromVectorDBActivity(context.Background(), param)
-	c.Assert(err, qt.Not(qt.IsNil))
-	c.Assert(err.Error(), qt.Contains, "Unable to delete old embeddings from vector database")
-}
-
-func TestDeleteOldEmbeddingsFromDBActivity_Success(t *testing.T) {
-	c := qt.New(t)
-	mc := minimock.NewController(c)
-
-	mockRepository := mock.NewRepositoryMock(mc)
 	mockRepository.DeleteEmbeddingsByKBFileUIDMock.Return(nil)
 
 	w := &Worker{repository: mockRepository, log: zap.NewNop()}
@@ -238,15 +201,35 @@ func TestDeleteOldEmbeddingsFromDBActivity_Success(t *testing.T) {
 		FileUID: uuid.Must(uuid.NewV4()),
 	}
 
-	err := w.DeleteOldEmbeddingsFromDBActivity(context.Background(), param)
+	err := w.DeleteOldEmbeddingsActivity(context.Background(), param)
 	c.Assert(err, qt.IsNil)
 }
 
-func TestDeleteOldEmbeddingsFromDBActivity_Failure(t *testing.T) {
+func TestDeleteOldEmbeddingsActivity_VectorDBFailure(t *testing.T) {
 	c := qt.New(t)
 	mc := minimock.NewController(c)
 
 	mockRepository := mock.NewRepositoryMock(mc)
+	mockRepository.DeleteEmbeddingsWithFileUIDMock.Return(fmt.Errorf("milvus connection error"))
+
+	w := &Worker{repository: mockRepository, log: zap.NewNop()}
+
+	param := &DeleteOldEmbeddingsActivityParam{
+		KBUID:   uuid.Must(uuid.NewV4()),
+		FileUID: uuid.Must(uuid.NewV4()),
+	}
+
+	err := w.DeleteOldEmbeddingsActivity(context.Background(), param)
+	c.Assert(err, qt.Not(qt.IsNil))
+	c.Assert(err.Error(), qt.Contains, "Unable to delete old embeddings from vector database")
+}
+
+func TestDeleteOldEmbeddingsActivity_DBFailure(t *testing.T) {
+	c := qt.New(t)
+	mc := minimock.NewController(c)
+
+	mockRepository := mock.NewRepositoryMock(mc)
+	mockRepository.DeleteEmbeddingsWithFileUIDMock.Return(nil)
 	mockRepository.DeleteEmbeddingsByKBFileUIDMock.Return(fmt.Errorf("database connection error"))
 
 	w := &Worker{repository: mockRepository, log: zap.NewNop()}
@@ -256,7 +239,7 @@ func TestDeleteOldEmbeddingsFromDBActivity_Failure(t *testing.T) {
 		FileUID: uuid.Must(uuid.NewV4()),
 	}
 
-	err := w.DeleteOldEmbeddingsFromDBActivity(context.Background(), param)
+	err := w.DeleteOldEmbeddingsActivity(context.Background(), param)
 	c.Assert(err, qt.Not(qt.IsNil))
 	c.Assert(err.Error(), qt.Contains, "Unable to delete old embedding records")
 }

@@ -132,8 +132,8 @@ func main() {
 	w.RegisterWorkflow(cw.GetFilesWorkflow)             // Batch file retrieval workflow
 
 	// Child workflows (called by main workflows)
-	w.RegisterWorkflow(cw.EmbedTextsWorkflow)               // Batch text embedding generation
-	w.RegisterWorkflow(cw.SaveEmbeddingsToVectorDBWorkflow) // Vector embedding storage
+	w.RegisterWorkflow(cw.EmbedTextsWorkflow)     // Batch text embedding generation
+	w.RegisterWorkflow(cw.SaveEmbeddingsWorkflow) // Vector embedding storage
 
 	// ===== Shared Activities (Used by Multiple Workflows) =====
 
@@ -175,7 +175,7 @@ func main() {
 	// File Metadata and Setup Phase
 	w.RegisterActivity(cw.GetFileMetadataActivity)                // Fetch file metadata from database
 	w.RegisterActivity(cw.GetFileContentActivity)                 // Retrieve file binary content from MinIO
-	w.RegisterActivity(cw.CleanupOldConvertedFileActivity)        // Remove previous conversion artifacts
+	w.RegisterActivity(cw.DeleteOldConvertedFilesActivity)        // Remove previous conversion artifacts
 	w.RegisterActivity(cw.CreateConvertedFileRecordActivity)      // Create DB record for converted file
 	w.RegisterActivity(cw.UploadConvertedFileToMinIOActivity)     // Upload converted markdown to MinIO
 	w.RegisterActivity(cw.UpdateConvertedFileDestinationActivity) // Update MinIO destination in DB
@@ -198,19 +198,19 @@ func main() {
 	w.RegisterActivity(cw.ProcessSummaryActivity) // Complete summary processing: generate → save to DB
 
 	// Chunking Phase - Combined content and summary chunking (sequential after parallel AI operations)
-	w.RegisterActivity(cw.ChunkContentActivity)   // Split markdown content into semantic chunks
-	w.RegisterActivity(cw.SaveTextChunksActivity) // Persist chunks to database and MinIO storage
+	w.RegisterActivity(cw.DeleteOldTextChunksActivity) // Delete old text chunk records before creating new ones
+	w.RegisterActivity(cw.ChunkContentActivity)        // Split markdown content into semantic chunks
+	w.RegisterActivity(cw.SaveTextChunksActivity)      // Persist chunks to database and MinIO storage
 
 	// Embedding Phase - Vector embedding generation and storage
 	w.RegisterActivity(cw.GetChunksForEmbeddingActivity)   // Retrieve text chunks for embedding
 	w.RegisterActivity(cw.UpdateEmbeddingMetadataActivity) // Update file status and embedding metadata
 
-	// ===== SaveEmbeddingsToVectorDBWorkflow Activities (Child Workflow) =====
+	// ===== SaveEmbeddingsWorkflow Activities (Child Workflow) =====
 	// Child workflow handling vector embedding storage
-	w.RegisterActivity(cw.DeleteOldEmbeddingsFromVectorDBActivity) // Remove old embeddings from Milvus
-	w.RegisterActivity(cw.DeleteOldEmbeddingsFromDBActivity)       // Remove old embedding records from DB
-	w.RegisterActivity(cw.SaveEmbeddingBatchActivity)              // Save embedding batch to DB and vector store
-	w.RegisterActivity(cw.FlushCollectionActivity)                 // Flush Milvus collection to persist data
+	w.RegisterActivity(cw.DeleteOldEmbeddingsActivity) // Remove old embeddings from both Milvus and DB
+	w.RegisterActivity(cw.SaveEmbeddingBatchActivity)  // Save embedding batch to DB and vector store
+	w.RegisterActivity(cw.FlushCollectionActivity)     // Flush Milvus collection to persist data
 
 	if err := w.Start(); err != nil {
 		logger.Fatal(fmt.Sprintf("Unable to start worker: %s", err))

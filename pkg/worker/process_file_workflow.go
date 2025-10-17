@@ -596,7 +596,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 		// This prevents race conditions where cleanup might delete newly created files
 		for _, pf := range processingFutures {
 			cr := pf.conversionData
-			if err := workflow.ExecuteActivity(ctx, w.CleanupOldConvertedFileActivity, &CleanupOldConvertedFileActivityParam{
+			if err := workflow.ExecuteActivity(ctx, w.DeleteOldConvertedFilesActivity, &DeleteOldConvertedFilesActivityParam{
 				FileUID: cr.fileUID,
 			}).Get(ctx, nil); err != nil {
 				logger.Error("Failed to cleanup old converted files, continuing anyway",
@@ -690,6 +690,15 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				logger.Warn("Failed to update status to CHUNKING", "fileUID", fileUID.String(), "error", err)
 			}
 
+			// Delete old text chunks before creating new ones
+			if err := workflow.ExecuteActivity(ctx, w.DeleteOldTextChunksActivity, &DeleteOldTextChunksActivityParam{
+				FileUID: fileUID,
+			}).Get(ctx, nil); err != nil {
+				_ = handleFileError(fileUID, "delete old text chunks", err)
+				filesCompleted[fileUID.String()] = true
+				continue
+			}
+
 			// Chunk content (using content from ProcessContentActivity result)
 			var contentChunks ChunkContentActivityResult
 			if err := workflow.ExecuteActivity(ctx, w.ChunkContentActivity, &ChunkContentActivityParam{
@@ -777,19 +786,14 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				continue
 			}
 
-			// Generate embeddings using child workflow
+			// Generate embeddings using activity
 			// Pass KBUID to enable provider selection based on KB's embedding config
-			embedWorkflowOptions := workflow.ChildWorkflowOptions{
-				WorkflowID: fmt.Sprintf("embed-texts-%s", fileUID.String()),
-			}
-			embedCtx := workflow.WithChildOptions(ctx, embedWorkflowOptions)
-
 			var embeddingVectors [][]float32
-			if err := workflow.ExecuteChildWorkflow(embedCtx, w.EmbedTextsWorkflow, EmbedTextsWorkflowParam{
+			if err := workflow.ExecuteActivity(ctx, w.EmbedTextsActivity, &EmbedTextsActivityParam{
 				KBUID:    &kbUID, // Pass KBUID for provider selection (Gemini 3072-dim vs OpenAI 1536-dim)
 				Texts:    chunksData.Texts,
 				TaskType: "RETRIEVAL_DOCUMENT", // For indexing document chunks
-			}).Get(embedCtx, &embeddingVectors); err != nil {
+			}).Get(ctx, &embeddingVectors); err != nil {
 				_ = handleFileError(fileUID, "generate embeddings", err)
 				filesCompleted[fileUID.String()] = true
 				continue
@@ -816,7 +820,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			}
 			childCtx := workflow.WithChildOptions(ctx, childWorkflowOptions)
 
-			if err := workflow.ExecuteChildWorkflow(childCtx, w.SaveEmbeddingsToVectorDBWorkflow, SaveEmbeddingsToVectorDBWorkflowParam{
+			if err := workflow.ExecuteChildWorkflow(childCtx, w.SaveEmbeddingsWorkflow, SaveEmbeddingsWorkflowParam{
 				KBUID:        kbUID,
 				FileUID:      fileUID,
 				FileName:     chunksData.FileName,
