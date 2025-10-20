@@ -126,7 +126,7 @@ service ArtifactPublicService {
   //
   // Deletes a file.
   rpc DeleteCatalogFile(DeleteCatalogFileRequest) returns (DeleteCatalogFileResponse) {
-    option (google.api.http) = {delete: "/v1alpha/catalogs/files"};
+    option (google.api.http) = {delete: "/v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid}"};
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       tags: "Artifact"
       extensions: {

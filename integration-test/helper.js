@@ -175,11 +175,50 @@ import * as constant from './const.js';
  * @returns {number} Count of objects (0 = no objects, -1 = error)
  */
 export function countMinioObjects(kbUID, fileUID, objectType) {
-  // Construct the MinIO path prefix based on object type
-  // Format: kb-{kbUID}/file-{fileUID}/{objectType}/
-  const prefix = `kb-${kbUID}/file-${fileUID}/${objectType}/`;
-
   try {
+    // CRITICAL: Query database for actual MinIO destination prefix
+    // After KB swaps, MinIO paths might not match current KB UID (destination field is preserved)
+    let prefix;
+
+    if (objectType === 'chunk') {
+      // Query text_chunk table for actual destination
+      const chunkResult = constant.db.query(`
+        SELECT content_dest FROM text_chunk
+        WHERE kb_file_uid = $1
+        LIMIT 1
+      `, fileUID);
+
+      if (chunkResult && chunkResult.length > 0 && chunkResult[0].content_dest) {
+        // Extract prefix from destination (e.g., "kb-xxx/file-yyy/chunk/chunk_0.json" -> "kb-xxx/file-yyy/chunk/")
+        const dest = chunkResult[0].content_dest;
+        const lastSlashIndex = dest.lastIndexOf('/');
+        prefix = dest.substring(0, lastSlashIndex + 1);
+      } else {
+        // Fallback to constructed prefix if no chunks found
+        prefix = `kb-${kbUID}/file-${fileUID}/${objectType}/`;
+      }
+    } else if (objectType === 'converted-file') {
+      // Query converted_file table for actual destination
+      const convertedResult = constant.db.query(`
+        SELECT destination FROM converted_file
+        WHERE file_uid = $1
+        LIMIT 1
+      `, fileUID);
+
+      if (convertedResult && convertedResult.length > 0 && convertedResult[0].destination) {
+        // Extract prefix from destination
+        const dest = convertedResult[0].destination;
+        const lastSlashIndex = dest.lastIndexOf('/');
+        prefix = dest.substring(0, lastSlashIndex + 1);
+      } else {
+        // Fallback to constructed prefix
+        prefix = `kb-${kbUID}/file-${fileUID}/${objectType}/`;
+      }
+    } else {
+      // Unknown object type, use constructed prefix
+      prefix = `kb-${kbUID}/file-${fileUID}/${objectType}/`;
+    }
+
     // Execute the shell script to count MinIO objects
     const result = exec.command('sh', [
       `${__ENV.TEST_FOLDER_ABS_PATH}/integration-test/count-minio-objects.sh`,
@@ -191,7 +230,7 @@ export function countMinioObjects(kbUID, fileUID, objectType) {
     const count = parseInt(result.trim());
     return isNaN(count) ? 0 : count;
   } catch (e) {
-    console.error(`Failed to count MinIO objects for ${prefix}: ${e}`);
+    console.error(`Failed to count MinIO objects for file ${fileUID}: ${e}`);
     return -1; // Return -1 to indicate error (not 0, which means "no objects")
   }
 }
@@ -218,15 +257,42 @@ export function countEmbeddings(fileUid) {
  * Count vectors in Milvus collection for a specific file
  * Verifies actual vector data in Milvus (not just database references)
  *
+ * CRITICAL: This function queries the database for active_collection_uid first
+ * to ensure we count vectors from the correct collection during KB updates.
+ *
  * @param {string} kbUID - Knowledge base (catalog) UUID
  * @param {string} fileUID - File UUID
  * @returns {number} Count of vectors (0 = no vectors, -1 = error)
  */
 export function countMilvusVectors(kbUID, fileUID) {
-  // Convert kbUID to Milvus collection name format: kb_{uuid_with_underscores}
-  const collectionName = `kb_${kbUID.replace(/-/g, '_')}`;
-
   try {
+    // CRITICAL FIX: Query active_collection_uid from database
+    // During updates, a KB's active_collection_uid may point to a different collection than its own UID
+    const kbResult = constant.db.query(`
+      SELECT active_collection_uid
+      FROM knowledge_base
+      WHERE uid = $1
+    `, kbUID);
+
+    if (!kbResult || kbResult.length === 0) {
+      console.error(`KB ${kbUID} not found in database`);
+      return -1;
+    }
+
+    // Convert active_collection_uid from Buffer (PostgreSQL UUID) to string
+    let activeCollectionUID = kbResult[0].active_collection_uid;
+    if (Array.isArray(activeCollectionUID)) {
+      activeCollectionUID = String.fromCharCode(...activeCollectionUID);
+    }
+
+    if (!activeCollectionUID) {
+      console.error(`KB ${kbUID} has null active_collection_uid`);
+      return -1;
+    }
+
+    // Convert active_collection_uid to Milvus collection name format: kb_{uuid_with_underscores}
+    const collectionName = `kb_${activeCollectionUID.replace(/-/g, '_')}`;
+
     // Execute the shell script to count Milvus vectors using milvus_cli
     const result = exec.command('sh', [
       `${__ENV.TEST_FOLDER_ABS_PATH}/integration-test/count-milvus-vectors.sh`,
@@ -234,11 +300,16 @@ export function countMilvusVectors(kbUID, fileUID) {
       fileUID
     ]);
 
+    // DEBUG: Log the raw output from the script
+    if (result.indexOf('Error') >= 0 || result.indexOf('not exist') >= 0) {
+      console.log(`DEBUG countMilvusVectors: KB=${kbUID}, activeCollection=${activeCollectionUID}, collection=${collectionName}, file=${fileUID}, result="${result.trim()}"`);
+    }
+
     // Parse the output (should be a number)
     const count = parseInt(result.trim());
     return isNaN(count) ? 0 : count;
   } catch (e) {
-    console.error(`Failed to count Milvus vectors for file ${fileUID} in collection ${collectionName}: ${e}`);
+    console.error(`Failed to count Milvus vectors for KB ${kbUID}, file ${fileUID}: ${e}`);
     return -1; // Return -1 to indicate error (not 0, which means "no vectors")
   }
 }
@@ -307,6 +378,75 @@ export function pollMilvusVectors(kbUID, fileUID, maxWaitSeconds = 3) {
     const count = countMilvusVectors(kbUID, fileUID);
     if (count > 0) {
       return count;
+    }
+    if (i < maxWaitSeconds - 1) {
+      sleep(1);
+    }
+  }
+  // Final attempt after waiting
+  return countMilvusVectors(kbUID, fileUID);
+}
+
+/**
+ * Poll MinIO objects until they are cleaned up (count becomes zero)
+ * Used to verify cleanup workflow completion after catalog deletion
+ *
+ * @param {string} kbUID - Knowledge base UUID
+ * @param {string} fileUID - File UUID
+ * @param {string} objectType - Type of object ('converted-file' or 'chunk')
+ * @param {number} maxWaitSeconds - Maximum seconds to wait (default: 30)
+ * @returns {number} Final count of objects (should be 0 if cleanup succeeded)
+ */
+export function pollMinIOCleanup(kbUID, fileUID, objectType, maxWaitSeconds = 30) {
+  for (let i = 0; i < maxWaitSeconds; i++) {
+    const count = countMinioObjects(kbUID, fileUID, objectType);
+    if (count === 0) {
+      return 0;
+    }
+    if (i < maxWaitSeconds - 1) {
+      sleep(1);
+    }
+  }
+  // Final attempt after waiting
+  return countMinioObjects(kbUID, fileUID, objectType);
+}
+
+/**
+ * Poll embeddings until they are cleaned up (count becomes zero)
+ * Used to verify cleanup workflow completion after catalog deletion
+ *
+ * @param {string} fileUid - File UUID
+ * @param {number} maxWaitSeconds - Maximum seconds to wait (default: 30)
+ * @returns {number} Final count of embeddings (should be 0 if cleanup succeeded)
+ */
+export function pollEmbeddingsCleanup(fileUid, maxWaitSeconds = 30) {
+  for (let i = 0; i < maxWaitSeconds; i++) {
+    const count = countEmbeddings(fileUid);
+    if (count === 0) {
+      return 0;
+    }
+    if (i < maxWaitSeconds - 1) {
+      sleep(1);
+    }
+  }
+  // Final attempt after waiting
+  return countEmbeddings(fileUid);
+}
+
+/**
+ * Poll Milvus vectors until they are cleaned up (count becomes zero)
+ * Used to verify cleanup workflow completion after catalog deletion
+ *
+ * @param {string} kbUID - Knowledge base UUID
+ * @param {string} fileUID - File UUID
+ * @param {number} maxWaitSeconds - Maximum seconds to wait (default: 30)
+ * @returns {number} Final count of vectors (should be 0 if cleanup succeeded)
+ */
+export function pollMilvusVectorsCleanup(kbUID, fileUID, maxWaitSeconds = 30) {
+  for (let i = 0; i < maxWaitSeconds; i++) {
+    const count = countMilvusVectors(kbUID, fileUID);
+    if (count === 0) {
+      return 0;
     }
     if (i < maxWaitSeconds - 1) {
       sleep(1);
@@ -463,4 +603,332 @@ export function pollChunksAPI(apiUrl, headers, maxWaitSeconds = 15) {
   }
 
   return 0;
+}
+
+// ============================================================================
+// RAG Update Framework Helpers
+// ============================================================================
+
+/**
+ * Poll database for catalog by name pattern
+ * Used to find staging/rollback KBs during update workflow
+ *
+ * @param {string} namePattern - SQL LIKE pattern (e.g., '%staging', '%rollback')
+ * @returns {Array} Array of catalog rows from database
+ */
+export function findCatalogByPattern(namePattern) {
+  try {
+    const query = `SELECT * FROM knowledge_base WHERE id LIKE $1`;
+    const results = constant.db.query(query, namePattern);
+    return results ? results.map(row => normalizeDBRow(row)) : [];
+  } catch (e) {
+    console.error(`Failed to find catalog by pattern ${namePattern}: ${e}`);
+    return [];
+  }
+}
+
+/**
+ * Poll for update completion by monitoring catalog update status
+ * Waits until catalog reaches "completed" status or timeout
+ *
+ * @param {object} client - gRPC client
+ * @param {object} data - Test data with metadata
+ * @param {string} catalogUid - Catalog UID to monitor
+ * @param {number} maxWaitSeconds - Maximum seconds to wait (default: 300 = 5 minutes)
+ * @returns {boolean} True if update completed, false if timeout
+ */
+export function pollUpdateCompletion(client, data, catalogUid, maxWaitSeconds = 300) {
+  console.log(`[POLL START] Polling for catalogUid=${catalogUid}, maxWait=${maxWaitSeconds}s`);
+  for (let i = 0; i < maxWaitSeconds; i++) {
+    const res = client.invoke(
+      "artifact.artifact.v1alpha.ArtifactPrivateService/GetKnowledgeBaseUpdateStatusAdmin",
+      {},
+      data.metadata
+    );
+
+    // k6 gRPC returns res.status in various forms, check if response has valid message
+    if (res.message && res.message.catalogStatuses) { // Check for successful response with data
+      const statuses = res.message.catalogStatuses || [];
+      const catalogStatus = statuses.find(s => s.catalogUid === catalogUid);
+
+      // Debug logging on first attempt and periodically
+      if (i === 0 || (i > 0 && i % 30 === 0)) {
+        console.log(`Poll attempt ${i + 1}: Looking for catalogUid=${catalogUid}, found ${statuses.length} statuses`);
+        if (statuses.length > 0 && !catalogStatus) {
+          console.log(`Available UIDs: ${statuses.map(s => s.catalogUid).join(', ')}`);
+        }
+      }
+
+      if (catalogStatus) {
+        if (catalogStatus.status === "completed") {
+          return true;
+        }
+        if (catalogStatus.status === "failed") {
+          console.error(`Update failed for catalog ${catalogUid}`);
+          return false;
+        }
+      }
+    } else {
+      // Log gRPC error for debugging
+      if (i === 0 || i % 60 === 0) { // Log every minute to avoid spam
+        console.error(`GetKnowledgeBaseUpdateStatus error (attempt ${i + 1}): status=${res.status}, error=${res.error ? JSON.stringify(res.error) : 'none'}`);
+      }
+    }
+
+    if (i < maxWaitSeconds - 1) {
+      sleep(1);
+    }
+  }
+
+  console.error(`Timeout waiting for update completion of catalog ${catalogUid}`);
+  return false;
+}
+
+/**
+ * Verify rollback KB exists in database
+ * Checks for KB with -rollback suffix and correct attributes
+ *
+ * @param {string} catalogId - Original catalog ID (without suffix)
+ * @param {string} ownerUid - Owner UID
+ * @returns {Array} Array of rollback KB rows (should be 1 or 0)
+ */
+/**
+ * Convert PostgreSQL byte array to string
+ * PostgreSQL text fields sometimes come back as byte arrays from the driver
+ */
+function byteArrayToString(value) {
+  if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'number') {
+    return String.fromCharCode(...value);
+  }
+  return value;
+}
+
+/**
+ * Normalize database row by converting byte arrays to strings
+ */
+function normalizeDBRow(row) {
+  if (!row) return row;
+  const normalized = {};
+  for (const [key, value] of Object.entries(row)) {
+    normalized[key] = byteArrayToString(value);
+  }
+  return normalized;
+}
+
+export function verifyRollbackKB(catalogId, ownerUid) {
+  const rollbackKbId = `${catalogId}-rollback`;
+  try {
+    const query = `
+      SELECT id, uid, staging, update_status, rollback_retention_until, tags, active_collection_uid
+      FROM knowledge_base
+      WHERE id = $1 AND owner = $2
+    `;
+    const results = constant.db.query(query, rollbackKbId, ownerUid);
+    return results ? results.map(row => normalizeDBRow(row)) : [];
+  } catch (e) {
+    console.error(`Failed to verify rollback KB for ${catalogId}: ${e}`);
+    return [];
+  }
+}
+
+/**
+ * Verify staging KB exists in database
+ * Checks for KB with -staging suffix during update workflow
+ *
+ * @param {string} catalogId - Original catalog ID (without suffix)
+ * @param {string} ownerUid - Owner UID
+ * @returns {Array} Array of staging KB rows (should be 1 or 0)
+ */
+export function verifyStagingKB(catalogId, ownerUid) {
+  const stagingKbId = `${catalogId}-staging`;
+  try {
+    const query = `
+      SELECT uid, id, staging, update_status, active_collection_uid
+      FROM knowledge_base
+      WHERE id = $1 AND owner = $2
+    `;
+    const results = constant.db.query(query, stagingKbId, ownerUid);
+    return results ? results.map(row => normalizeDBRow(row)) : [];
+  } catch (e) {
+    console.error(`Failed to verify staging KB for ${catalogId}: ${e}`);
+    return [];
+  }
+}
+
+/**
+ * Get catalog by catalog_id and owner
+ * Helper to retrieve catalog details from database
+ *
+ * @param {string} catalogId - Catalog ID
+ * @param {string} ownerUid - Owner UID
+ * @returns {Array} Array of catalog rows (should be 1 or 0)
+ */
+export function getCatalogByIdAndOwner(catalogId, ownerUid) {
+  try {
+    const query = `
+      SELECT * FROM knowledge_base
+      WHERE id = $1 AND owner = $2
+    `;
+    const results = constant.db.query(query, catalogId, ownerUid);
+    return results ? results.map(row => normalizeDBRow(row)) : [];
+  } catch (e) {
+    console.error(`Failed to get catalog ${catalogId}: ${e}`);
+    return [];
+  }
+}
+
+/**
+ * Verify resource kb_uid references after atomic swap
+ * CRITICAL: This prevents regression of the kb_uid bug where resources
+ * pointed to old KB UIDs after swap, breaking queries
+ *
+ * @param {string} newProdKBUID - New production KB UID (staging KB's UID)
+ * @param {string} rollbackKBUID - Rollback KB UID (original KB's UID)
+ * @returns {object} Result with counts and correctness flags
+ */
+export function verifyResourceKBUIDs(newProdKBUID, rollbackKBUID) {
+  const result = {
+    fileCount: 0,
+    chunkCount: 0,
+    embeddingCount: 0,
+    convertedFileCount: 0,
+    filesCorrect: false,
+    chunksCorrect: false,
+    embeddingsCorrect: false,
+    convertedFilesCorrect: false,
+  };
+
+  try {
+    // Check knowledge_base_file
+    const fileQuery = `SELECT COUNT(*) as count FROM knowledge_base_file WHERE kb_uid = $1`;
+    const fileResults = constant.db.query(fileQuery, newProdKBUID);
+    result.fileCount = fileResults && fileResults.length > 0 ? parseInt(fileResults[0].count) : 0;
+    result.filesCorrect = result.fileCount > 0;
+
+    // Check text_chunk
+    const chunkQuery = `SELECT COUNT(*) as count FROM text_chunk WHERE kb_uid = $1`;
+    const chunkResults = constant.db.query(chunkQuery, newProdKBUID);
+    result.chunkCount = chunkResults && chunkResults.length > 0 ? parseInt(chunkResults[0].count) : 0;
+    result.chunksCorrect = result.chunkCount > 0;
+
+    // Check embedding (optional - may not exist yet)
+    const embeddingQuery = `SELECT COUNT(*) as count FROM embedding WHERE kb_uid = $1`;
+    const embeddingResults = constant.db.query(embeddingQuery, newProdKBUID);
+    result.embeddingCount = embeddingResults && embeddingResults.length > 0 ? parseInt(embeddingResults[0].count) : 0;
+    result.embeddingsCorrect = true; // Always true, embeddings are optional
+
+    // Check converted_file
+    const convertedQuery = `SELECT COUNT(*) as count FROM converted_file WHERE kb_uid = $1`;
+    const convertedResults = constant.db.query(convertedQuery, newProdKBUID);
+    result.convertedFileCount = convertedResults && convertedResults.length > 0 ? parseInt(convertedResults[0].count) : 0;
+    result.convertedFilesCorrect = result.convertedFileCount > 0;
+
+  } catch (e) {
+    console.error(`Failed to verify resource KB UIDs: ${e}`);
+  }
+
+  return result;
+}
+
+/**
+ * Count files in a catalog by catalog UID
+ *
+ * @param {string} catalogUid - Catalog UID
+ * @returns {number} Number of files in catalog
+ */
+export function countFilesInCatalog(catalogUid) {
+  try {
+    const query = `SELECT COUNT(*) as count FROM knowledge_base_file WHERE kb_uid = $1 AND delete_time IS NULL`;
+    const results = constant.db.query(query, catalogUid);
+    return results && results.length > 0 ? parseInt(results[0].count) : 0;
+  } catch (e) {
+    console.error(`Failed to count files in catalog ${catalogUid}: ${e}`);
+    return 0;
+  }
+}
+
+/**
+ * Get all catalogs matching a pattern (uses SQL LIKE)
+ *
+ * @param {string} pattern - SQL LIKE pattern (e.g., "catalog%")
+ * @param {string} ownerUid - Owner UID
+ * @returns {Array} Array of catalog objects
+ */
+export function getCatalogsByPattern(pattern, ownerUid) {
+  try {
+    const query = `
+      SELECT uid, id, name, staging, update_status, delete_time, rollback_retention_until
+      FROM knowledge_base
+      WHERE owner = $1 AND name LIKE $2
+      ORDER BY create_time ASC
+    `;
+    return constant.db.query(query, ownerUid, pattern);
+  } catch (e) {
+    console.error(`Failed to get catalogs by pattern ${pattern}: ${e}`);
+    return null;
+  }
+}
+
+/**
+ * Poll for staging KB to appear during Phase 1 (Prepare)
+ *
+ * @param {string} catalogId - Original catalog ID (without suffix)
+ * @param {string} ownerUid - Owner UID
+ * @param {number} maxWaitSeconds - Maximum seconds to wait (default: 30)
+ * @returns {boolean} True if staging KB found, false otherwise
+ */
+export function pollForStagingKB(catalogId, ownerUid, maxWaitSeconds = 30) {
+  for (let i = 0; i < maxWaitSeconds; i++) {
+    const stagingKBs = verifyStagingKB(catalogId, ownerUid);
+    if (stagingKBs && stagingKBs.length > 0) {
+      return true;
+    }
+    if (i < maxWaitSeconds - 1) {
+      sleep(1);
+    }
+  }
+  return false;
+}
+
+/**
+ * Wait for all ongoing updates to complete before starting a new one
+ * This prevents "Update already in progress" errors
+ */
+export function waitForAllUpdatesComplete(client, data, maxWaitSeconds = 60) {
+  console.log(`[WAIT] Waiting for all ongoing updates to complete (max ${maxWaitSeconds}s)...`);
+
+  // OPTIMIZATION: Poll more frequently for faster detection (every 0.5s)
+  const pollIntervalSeconds = 0.5;
+  const maxIterations = maxWaitSeconds / pollIntervalSeconds;
+
+  for (let i = 0; i < maxIterations; i++) {
+    const res = client.invoke(
+      "artifact.artifact.v1alpha.ArtifactPrivateService/GetKnowledgeBaseUpdateStatusAdmin",
+      {},
+      data.metadata
+    );
+
+    if (res && res.message && res.message.catalogStatuses) {
+      // Check for ANY active update status, not just "updating"
+      const activeStatuses = ["updating", "swapping", "validating", "syncing"];
+      const active = res.message.catalogStatuses.filter(s => activeStatuses.includes(s.status));
+
+      if (active.length === 0) {
+        const elapsedSeconds = (i * pollIntervalSeconds).toFixed(1);
+        console.log(`[WAIT] All updates complete after ${elapsedSeconds}s`);
+        return true;
+      }
+
+      // Log every 10 seconds
+      if (i % 20 === 0 && i > 0) {
+        const elapsedSeconds = (i * pollIntervalSeconds).toFixed(1);
+        console.log(`[WAIT] Still waiting... ${active.length} catalogs active (${elapsedSeconds}s elapsed)`);
+      }
+    }
+
+    sleep(pollIntervalSeconds);
+  }
+
+  console.error(`[WAIT] Timeout: Updates still in progress after ${maxWaitSeconds}s`);
+  return false;
 }

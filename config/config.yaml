@@ -92,6 +92,11 @@ milvus:
 blob:
   hostport: http://localhost:8080
 rag:
+  update:
+    # Update settings - simple tag-based management without versioning
+    rollback_retention_days: 7 # Days to keep old KB after swap before cleanup
+    validation_enabled: true # Validate shadow KB before swap
+    batch_size: 10 # KBs to process concurrently
   model:
     gemini:
       apikey:

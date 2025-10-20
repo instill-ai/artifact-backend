@@ -26,25 +26,25 @@ type conversionOutput struct {
 	Model string
 }
 
-// ConvertToMarkdownWithoutCache implements ai.Provider
+// ConvertToMarkdownWithoutCache implements ai.Client
 // This does direct conversion WITHOUT using a cached context.
 // For cached conversion, use ConvertToMarkdownWithCache() with a pre-existing cache.
-func (p *Provider) ConvertToMarkdownWithoutCache(ctx context.Context, content []byte, fileType artifactpb.File_Type, filename string, prompt string) (*ai.ConversionResult, error) {
+func (c *Client) ConvertToMarkdownWithoutCache(ctx context.Context, content []byte, fileType artifactpb.File_Type, filename string, prompt string) (*ai.ConversionResult, error) {
 	mimeType := ai.FileTypeToMIME(fileType)
 
 	// Retry logic for non-cached conversion
 	output, err := retryConversion(ctx, 2, func() (*conversionOutput, error) {
-		return p.convertToMarkdownWithoutCache(ctx, content, mimeType, prompt)
+		return c.convertToMarkdownWithoutCache(ctx, content, mimeType, prompt)
 	})
 	return buildConversionResult(output, err)
 }
 
-// ConvertToMarkdownWithCache implements ai.Provider
+// ConvertToMarkdownWithCache implements ai.Client
 // Uses a pre-existing cached context for efficient conversion
-func (p *Provider) ConvertToMarkdownWithCache(ctx context.Context, cacheName, prompt string) (*ai.ConversionResult, error) {
+func (c *Client) ConvertToMarkdownWithCache(ctx context.Context, cacheName, prompt string) (*ai.ConversionResult, error) {
 	// Retry logic for cached conversion
 	output, err := retryConversion(ctx, 2, func() (*conversionOutput, error) {
-		return p.convertToMarkdownWithCache(ctx, cacheName, prompt)
+		return c.convertToMarkdownWithCache(ctx, cacheName, prompt)
 	})
 	return buildConversionResult(output, err)
 }
@@ -52,7 +52,7 @@ func (p *Provider) ConvertToMarkdownWithCache(ctx context.Context, cacheName, pr
 // convertToMarkdownWithoutCache converts unstructured data (documents, images, audio, video) to Markdown
 // using Gemini's multimodal understanding capabilities WITHOUT using a cached context
 // Uses File API for large files (>20MB) or videos for better performance and reliability
-func (p *Provider) convertToMarkdownWithoutCache(ctx context.Context, content []byte, contentType, prompt string) (*conversionOutput, error) {
+func (c *Client) convertToMarkdownWithoutCache(ctx context.Context, content []byte, contentType, prompt string) (*conversionOutput, error) {
 	// Validate input
 	if len(content) == 0 {
 		return nil, errorsx.AddMessage(errorsx.ErrInvalidArgument, "The file appears to be empty. Please upload a valid file.")
@@ -67,7 +67,7 @@ func (p *Provider) convertToMarkdownWithoutCache(ctx context.Context, content []
 	}
 
 	// Prepare content part using File API for large files
-	contentPart, uploadedFileName, err := p.createContentPartWithFileAPI(ctx, content, contentType)
+	contentPart, uploadedFileName, err := c.createContentPartWithFileAPI(ctx, content, contentType)
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +75,7 @@ func (p *Provider) convertToMarkdownWithoutCache(ctx context.Context, content []
 	// Clean up uploaded file after conversion
 	if uploadedFileName != "" {
 		defer func() {
-			_, _ = p.client.Files.Delete(ctx, uploadedFileName, nil)
+			_, _ = c.client.Files.Delete(ctx, uploadedFileName, nil)
 		}()
 	}
 
@@ -92,12 +92,12 @@ func (p *Provider) convertToMarkdownWithoutCache(ctx context.Context, content []
 
 	// Generate content without cache
 	config := createGenerateContentConfig("")
-	return p.generateContentAndExtractMarkdown(ctx, GetModel(), contents, config, nil)
+	return c.generateContentAndExtractMarkdown(ctx, GetModel(), contents, config, nil)
 }
 
 // convertToMarkdownWithCache converts unstructured data to Markdown using a pre-existing cached context
 // This is much more efficient than direct conversion when processing the same content multiple times
-func (p *Provider) convertToMarkdownWithCache(ctx context.Context, cacheName, prompt string) (*conversionOutput, error) {
+func (c *Client) convertToMarkdownWithCache(ctx context.Context, cacheName, prompt string) (*conversionOutput, error) {
 	// Validate cache name
 	if cacheName == "" {
 		return nil, errorsx.AddMessage(errorsx.ErrInvalidArgument, "Internal processing error. Please try again.")
@@ -120,14 +120,14 @@ func (p *Provider) convertToMarkdownWithCache(ctx context.Context, cacheName, pr
 
 	// Generate content using cached context
 	config := createGenerateContentConfig(cacheName)
-	return p.generateContentAndExtractMarkdown(ctx, GetModel(), contents, config, &cacheName)
+	return c.generateContentAndExtractMarkdown(ctx, GetModel(), contents, config, &cacheName)
 }
 
 // generateContentAndExtractMarkdown is a common helper that calls Gemini API and extracts markdown
 // This consolidates the common code between cached and non-cached conversion
-func (p *Provider) generateContentAndExtractMarkdown(ctx context.Context, model string, contents []*genai.Content, config *genai.GenerateContentConfig, cacheName *string) (*conversionOutput, error) {
+func (c *Client) generateContentAndExtractMarkdown(ctx context.Context, model string, contents []*genai.Content, config *genai.GenerateContentConfig, cacheName *string) (*conversionOutput, error) {
 	// === Call Gemini API ===
-	result, err := p.client.Models.GenerateContent(ctx, model, contents, config)
+	result, err := c.client.Models.GenerateContent(ctx, model, contents, config)
 	if err != nil {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("gemini API call failed: %w", err),
@@ -136,7 +136,7 @@ func (p *Provider) generateContentAndExtractMarkdown(ctx context.Context, model 
 	}
 
 	// === Extract Response ===
-	markdown, err := p.extractMarkdownFromResponse(result)
+	markdown, err := c.extractMarkdownFromResponse(result)
 	if err != nil {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("failed to extract markdown from response: %w", err),
@@ -147,7 +147,7 @@ func (p *Provider) generateContentAndExtractMarkdown(ctx context.Context, model 
 	// === Build Output ===
 	output := &conversionOutput{
 		Markdown:      markdown,
-		UsageMetadata: p.extractTokenUsage(result),
+		UsageMetadata: c.extractTokenUsage(result),
 		CacheName:     cacheName, // nil for non-cached, set for cached
 		Model:         model,
 	}
@@ -158,7 +158,7 @@ func (p *Provider) generateContentAndExtractMarkdown(ctx context.Context, model 
 // createContentPartWithFileAPI creates a genai.Part from the input content using File API for large files or videos
 // Returns the part and the uploaded file name (empty string if inline data was used)
 // Text-based content (text/plain, text/html, text/markdown, text/csv) is sent as text parts instead of blobs
-func (p *Provider) createContentPartWithFileAPI(ctx context.Context, content []byte, contentType string) (*genai.Part, string, error) {
+func (c *Client) createContentPartWithFileAPI(ctx context.Context, content []byte, contentType string) (*genai.Part, string, error) {
 	// Text-based content (plain text, HTML, Markdown, CSV) should be sent as text, not as blobs
 	// Gemini API expects text content to be in Text parts for proper understanding
 	if isTextBasedContent(contentType) {
@@ -179,7 +179,7 @@ func (p *Provider) createContentPartWithFileAPI(ctx context.Context, content []b
 
 	if useFileAPI {
 		// Upload file and wait for it to become active (using shared upload logic)
-		part, uploadedFileName, err := p.uploadAndWaitForFile(ctx, content, contentType)
+		part, uploadedFileName, err := c.uploadAndWaitForFile(ctx, content, contentType)
 		if err != nil {
 			return nil, "", errorsx.AddMessage(
 				fmt.Errorf("failed to upload file for conversion: %w", err),
@@ -201,7 +201,7 @@ func (p *Provider) createContentPartWithFileAPI(ctx context.Context, content []b
 }
 
 // createContentPart creates a genai.Part from the input content using inline data (for testing and small files)
-func (p *Provider) createContentPart(content []byte, contentType string) (*genai.Part, error) {
+func (c *Client) createContentPart(content []byte, contentType string) (*genai.Part, error) {
 	// ContentType should always be set by the caller (via ai.FileTypeToMIME)
 	if contentType == "" {
 		err := errorsx.ErrInvalidArgument
@@ -221,7 +221,7 @@ func (p *Provider) createContentPart(content []byte, contentType string) (*genai
 }
 
 // extractMarkdownFromResponse extracts the markdown text from Gemini's response
-func (p *Provider) extractMarkdownFromResponse(response *genai.GenerateContentResponse) (string, error) {
+func (c *Client) extractMarkdownFromResponse(response *genai.GenerateContentResponse) (string, error) {
 	if response == nil {
 		err := fmt.Errorf("response is nil")
 		return "", errorsx.AddMessage(err, "AI service returned an invalid response. Please try again.")
@@ -259,7 +259,7 @@ func (p *Provider) extractMarkdownFromResponse(response *genai.GenerateContentRe
 }
 
 // extractTokenUsage extracts token usage information from the response
-func (p *Provider) extractTokenUsage(response *genai.GenerateContentResponse) *genai.GenerateContentResponseUsageMetadata {
+func (c *Client) extractTokenUsage(response *genai.GenerateContentResponse) *genai.GenerateContentResponseUsageMetadata {
 	if response == nil || response.UsageMetadata == nil {
 		return nil
 	}
@@ -332,7 +332,7 @@ func buildConversionResult(output *conversionOutput, err error) (*ai.ConversionR
 	return &ai.ConversionResult{
 		Markdown:      output.Markdown,
 		Length:        []uint32{uint32(len(output.Markdown))},
-		Provider:      "gemini",
+		Client:      "gemini",
 		PositionData:  nil,
 		UsageMetadata: output.UsageMetadata,
 	}, nil

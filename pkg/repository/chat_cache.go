@@ -16,7 +16,7 @@ import (
 )
 
 // FileContentRef stores a small file's content directly in Redis
-// Used for small files that couldn't be cached by AI provider (< 1024 tokens ≈ 3-4KB)
+// Used for small files that couldn't be cached by AI client (< 1024 tokens ≈ 3-4KB)
 // Since these files are small, storing content in Redis is more efficient than
 // fetching from MinIO again during chat operations
 type FileContentRef struct {

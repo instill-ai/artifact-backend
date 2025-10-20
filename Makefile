@@ -89,22 +89,23 @@ unit-test:       				## Run unit test
 	@rm coverage.out coverage.final.out
 
 .PHONY: integration-test
-integration-test:				## Run integration test
-	@TEST_FOLDER_ABS_PATH=${PWD} k6 run \
+integration-test:		## Run integration tests in parallel using GNU parallel
+	@echo "Running integration tests in parallel..."
+	@parallel --halt now,fail=1 --tag --line-buffer \
+		"TEST_FOLDER_ABS_PATH=${PWD} k6 run \
 		-e API_GATEWAY_PROTOCOL=${API_GATEWAY_PROTOCOL} -e API_GATEWAY_URL=${API_GATEWAY_URL} \
-		integration-test/grpc.js --no-usage-report
-	@TEST_FOLDER_ABS_PATH=${PWD} k6 run \
-		-e API_GATEWAY_PROTOCOL=${API_GATEWAY_PROTOCOL} 	-e API_GATEWAY_URL=${API_GATEWAY_URL} \
-		integration-test/rest.js --no-usage-report
-	@TEST_FOLDER_ABS_PATH=${PWD} k6 run \
-		-e API_GATEWAY_PROTOCOL=${API_GATEWAY_PROTOCOL} -e API_GATEWAY_URL=${API_GATEWAY_URL} \
-		integration-test/rest-file-type.js --no-usage-report
-	@TEST_FOLDER_ABS_PATH=${PWD} k6 run \
-		-e API_GATEWAY_PROTOCOL=${API_GATEWAY_PROTOCOL} -e API_GATEWAY_URL=${API_GATEWAY_URL} \
-		integration-test/rest-db.js --no-usage-report
-	@TEST_FOLDER_ABS_PATH=${PWD} k6 run \
-		-e API_GATEWAY_PROTOCOL=${API_GATEWAY_PROTOCOL} -e API_GATEWAY_URL=${API_GATEWAY_URL} \
-		integration-test/rest-ai-provider.js --no-usage-report
+		-e DB_HOST=${DB_HOST} \
+		{} --no-usage-report" ::: \
+		integration-test/grpc.js \
+		integration-test/rest.js \
+		integration-test/rest-file-type.js \
+		integration-test/rest-db.js \
+		integration-test/rest-ai-client.js \
+		integration-test/rest-kb-e2e-file-process.js \
+		integration-test/rest-file-reprocess.js \
+		integration-test/rest-kb-delete.js \
+		integration-test/grpc-kb-update.js 2>&1 | tee /tmp/artifact-integration-test.log; \
+	bash integration-test/report-summary.sh /tmp/artifact-integration-test.log
 
 .PHONY: help
 help:       	 				## Show this help

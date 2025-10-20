@@ -7,7 +7,7 @@ import (
 )
 
 // MinCacheTokens is the minimum token count for cache creation
-// This is a common requirement across AI providers (e.g., Gemini requires 1024 tokens)
+// This is a common requirement across AI clients (e.g., Gemini requires 1024 tokens)
 const MinCacheTokens = 1024
 
 // Cache system instruction types
@@ -18,7 +18,7 @@ const (
 	SystemInstructionChat = "chat"
 )
 
-// SupportsFileType returns true if AI providers can directly process this file type
+// SupportsFileType returns true if AI clients can directly process this file type
 // Aligned with pipeline-backend/pkg/data supported formats
 func SupportsFileType(fileType artifactpb.File_Type) bool {
 	switch fileType {
@@ -167,7 +167,7 @@ func FileTypeToMIME(fileType artifactpb.File_Type) string {
 
 // EstimateTokenCount estimates the token count for a single text string
 // Returns the estimated token count (0 if estimation fails)
-// Note: This is an approximation using GPT-4 tokenizer (actual AI provider may count differently)
+// Note: This is an approximation using GPT-4 tokenizer (actual AI client may count differently)
 func EstimateTokenCount(text string) int {
 	tkm, err := tiktoken.EncodingForModel("gpt-4")
 	if err != nil {
@@ -180,7 +180,7 @@ func EstimateTokenCount(text string) int {
 
 // EstimateTotalTokens estimates the total token count across all files
 // Returns (estimatedTokens, error)
-// Note: This is an approximation using GPT-4 tokenizer (actual AI provider may count differently)
+// Note: This is an approximation using GPT-4 tokenizer (actual AI client may count differently)
 func EstimateTotalTokens(files []FileContent) (int, error) {
 	totalTokens := 0
 	for _, file := range files {

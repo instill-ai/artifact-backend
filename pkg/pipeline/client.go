@@ -11,7 +11,7 @@ import (
 
 // NOTE: ChunkMarkdownPipe, ChunkTextPipe, GenerateSummaryPipe, and GenerateContentPipe
 // have been removed as chunking is now done internally by ChunkContentActivity,
-// and content generation/summarization is handled by AI providers (Gemini).
+// and content generation/summarization is handled by AI clients (Gemini).
 
 // ChatPipe processes a prompt with retrieved chunks using the QA pipeline
 func ChatPipe(ctx context.Context, pipelineClient pipelinepb.PipelinePublicServiceClient, prompt string, simChunks []string) (string, error) {

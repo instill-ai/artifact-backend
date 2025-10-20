@@ -10,10 +10,6 @@ import { artifactPublicHost } from "./const.js";
 import * as constant from "./const.js";
 import * as restPublic from './rest-public.js';
 import * as restPublicWithJwt from './rest-public-with-jwt.js';
-import { CheckFileReprocessing } from './rest-file-reprocess.js';
-import { CheckKnowledgeBaseDeletion } from './rest-kb-delete.js';
-import { CheckKnowledgeBaseEndToEndFileProcessing } from './rest-kb-e2e-file-process.js';
-import { CheckChatCacheImplementation } from './rest-chat-cache.js';
 
 export let options = {
   setupTimeout: '30s',
@@ -99,14 +95,6 @@ export default function (data) {
   restPublicWithJwt.CheckGetFileSourceUnauthorized(data);
   restPublicWithJwt.CheckGetFileSummaryUnauthenticated(data);
   restPublicWithJwt.CheckListChunksUnauthenticated(data);
-
-  // Run general functional tests first (fast - no cleanup waits)
-  CheckChatCacheImplementation(data);
-  CheckKnowledgeBaseEndToEndFileProcessing(data);
-
-  // Run cleanup verification tests last (slower - need to verify cleanup completed)
-  CheckFileReprocessing(data);
-  CheckKnowledgeBaseDeletion(data);
 }
 
 export function teardown(data) {

@@ -1,0 +1,494 @@
+package service
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/gofrs/uuid"
+	"go.uber.org/zap"
+
+	"github.com/instill-ai/artifact-backend/pkg/repository"
+	"github.com/instill-ai/artifact-backend/pkg/types"
+
+	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	logx "github.com/instill-ai/x/log"
+)
+
+// RollbackAdmin rolls back a knowledge base to its previous state
+// CRITICAL DESIGN: The production KB UID remains constant - only resources are swapped
+// This preserves the KB identity and ACL permissions throughout the rollback
+func (s *service) RollbackAdmin(ctx context.Context, ownerUID types.OwnerUIDType, catalogID string) (*artifactpb.RollbackAdminResponse, error) {
+	// Get the current production catalog
+	productionKB, err := s.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, catalogID)
+	if err != nil {
+		return nil, fmt.Errorf("catalog not found: %w", err)
+	}
+
+	// Find the rollback KB (contains the old resources to restore)
+	rollbackKBID := fmt.Sprintf("%s-rollback", catalogID)
+	rollbackKB, err := s.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, rollbackKBID)
+	if err != nil {
+		return nil, fmt.Errorf("rollback version not found: %w", err)
+	}
+
+	logger, _ := logx.GetZapLogger(ctx)
+
+	// SYNCHRONIZATION: Wait for all in-progress file operations to complete
+	// This is critical to prevent corrupted state if files are being processed during rollback
+	// Same pattern as production ↔ staging swap in update workflow
+	logger.Info("Rollback: Checking for in-progress file operations",
+		zap.String("productionKBUID", productionKB.UID.String()),
+		zap.String("rollbackKBUID", rollbackKB.UID.String()))
+
+	// Check both production and rollback KBs for in-progress files
+	// These are files in any non-final state (not COMPLETED or FAILED)
+	inProgressStatuses := "FILE_PROCESS_STATUS_NOTSTARTED,FILE_PROCESS_STATUS_WAITING,FILE_PROCESS_STATUS_PROCESSING,FILE_PROCESS_STATUS_CONVERTING,FILE_PROCESS_STATUS_CHUNKING,FILE_PROCESS_STATUS_EMBEDDING"
+
+	prodInProgress, err := s.repository.GetFileCountByKnowledgeBaseUID(ctx, productionKB.UID, inProgressStatuses)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check production KB for in-progress files: %w", err)
+	}
+
+	rollbackInProgress, err := s.repository.GetFileCountByKnowledgeBaseUID(ctx, rollbackKB.UID, inProgressStatuses)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check rollback KB for in-progress files: %w", err)
+	}
+
+	totalInProgress := prodInProgress + rollbackInProgress
+
+	if totalInProgress > 0 {
+		logger.Info("Rollback: Waiting for in-progress file operations to complete",
+			zap.Int64("prodInProgress", prodInProgress),
+			zap.Int64("rollbackInProgress", rollbackInProgress),
+			zap.Int64("totalInProgress", totalInProgress))
+
+		// Poll with timeout until all files are complete
+		// Same pattern as synchronization in update workflow but with explicit polling
+		maxWaitTime := 10 * time.Minute // Generous timeout for large files
+		pollInterval := 5 * time.Second
+		deadline := time.Now().Add(maxWaitTime)
+		pollCount := 0
+
+		for time.Now().Before(deadline) {
+			time.Sleep(pollInterval)
+			pollCount++
+
+			// Check again
+			prodInProgress, _ = s.repository.GetFileCountByKnowledgeBaseUID(ctx, productionKB.UID, inProgressStatuses)
+			rollbackInProgress, _ = s.repository.GetFileCountByKnowledgeBaseUID(ctx, rollbackKB.UID, inProgressStatuses)
+			totalInProgress = prodInProgress + rollbackInProgress
+
+			if totalInProgress == 0 {
+				logger.Info("Rollback: All in-progress files completed",
+					zap.Int("pollCount", pollCount),
+					zap.Duration("waitTime", time.Duration(pollCount)*pollInterval))
+				break
+			}
+
+			// Log progress every 10 polls (50 seconds)
+			if pollCount%10 == 0 {
+				logger.Info("Rollback: Still waiting for file operations",
+					zap.Int64("prodInProgress", prodInProgress),
+					zap.Int64("rollbackInProgress", rollbackInProgress),
+					zap.Int64("totalRemaining", totalInProgress),
+					zap.Int("pollCount", pollCount))
+			}
+		}
+
+		// Final check - fail if still in progress after timeout
+		if totalInProgress > 0 {
+			return nil, fmt.Errorf(
+				"timeout waiting for file operations to complete after %v: %d files still processing (prod=%d, rollback=%d). "+
+					"Please wait for ongoing operations to finish and try again",
+				maxWaitTime, totalInProgress, prodInProgress, rollbackInProgress)
+		}
+	} else {
+		logger.Info("Rollback: No in-progress file operations, proceeding with swap")
+	}
+
+	// Swap resources between production and rollback KBs
+	// CRITICAL: Production KB UID stays the same, only its resources change
+	logger.Info("Rollback: Swapping resources (keeping production KB UID constant)",
+		zap.String("productionKBUID", productionKB.UID.String()),
+		zap.String("rollbackKBUID", rollbackKB.UID.String()))
+
+	// Use temp UID to avoid conflicts during the swap
+	tempUID := uuid.Must(uuid.NewV4())
+
+	// Step 1: Move production KB's resources → temp (current/new data)
+	if err := s.repository.UpdateKnowledgeBaseResources(ctx, productionKB.UID, types.KBUIDType(tempUID)); err != nil {
+		return nil, fmt.Errorf("failed to move production resources to temp: %w", err)
+	}
+
+	// Step 2: Move rollback KB's resources → production KB (restore old data)
+	// CRITICAL: Resources now point to the SAME production KB UID
+	if err := s.repository.UpdateKnowledgeBaseResources(ctx, rollbackKB.UID, productionKB.UID); err != nil {
+		return nil, fmt.Errorf("failed to restore rollback resources to production: %w", err)
+	}
+
+	// Step 3: Move temp resources → rollback KB (save current data for potential re-rollback)
+	if err := s.repository.UpdateKnowledgeBaseResources(ctx, types.KBUIDType(tempUID), rollbackKB.UID); err != nil {
+		return nil, fmt.Errorf("failed to move current resources to rollback: %w", err)
+	}
+
+	// Update production KB metadata
+	err = s.repository.UpdateKnowledgeBaseWithMap(ctx, productionKB.KBID, productionKB.Owner, map[string]interface{}{
+		"update_status": "rolled_back",
+		"staging":       false, // Ensure it stays as production
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to update production KB metadata: %w", err)
+	}
+
+	// Get updated catalog
+	updatedKB, err := s.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, catalogID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get updated catalog: %w", err)
+	}
+
+	logger.Info("Rollback: Successfully rolled back",
+		zap.String("catalogID", catalogID),
+		zap.String("productionKBUID", productionKB.UID.String()))
+
+	return &artifactpb.RollbackAdminResponse{
+		Catalog: convertKBToCatalogProto(updatedKB),
+		Message: "Successfully rolled back to previous version",
+	}, nil
+}
+
+// PurgeRollbackAdmin manually purges the rollback knowledge base immediately
+func (s *service) PurgeRollbackAdmin(ctx context.Context, ownerUID types.OwnerUIDType, catalogID string) (*artifactpb.PurgeRollbackAdminResponse, error) {
+	logger, _ := logx.GetZapLogger(ctx)
+
+	// Find rollback KB (named with -rollback suffix)
+	rollbackKBID := fmt.Sprintf("%s-rollback", catalogID)
+	rollbackKB, err := s.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, rollbackKBID)
+	if err != nil {
+		return nil, fmt.Errorf("rollback version not found: %w", err)
+	}
+
+	// SYNCHRONIZATION: Wait for any in-progress file operations to complete
+	// This prevents purging while files are still being processed
+	// Same pattern as rollback synchronization
+	logger.Info("PurgeRollback: Checking for in-progress file operations",
+		zap.String("rollbackKBUID", rollbackKB.UID.String()))
+
+	inProgressStatuses := "FILE_PROCESS_STATUS_NOTSTARTED,FILE_PROCESS_STATUS_WAITING,FILE_PROCESS_STATUS_PROCESSING,FILE_PROCESS_STATUS_CONVERTING,FILE_PROCESS_STATUS_CHUNKING,FILE_PROCESS_STATUS_EMBEDDING"
+
+	rollbackInProgress, err := s.repository.GetFileCountByKnowledgeBaseUID(ctx, rollbackKB.UID, inProgressStatuses)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check rollback KB for in-progress files: %w", err)
+	}
+
+	if rollbackInProgress > 0 {
+		logger.Info("PurgeRollback: Waiting for in-progress file operations to complete",
+			zap.Int64("rollbackInProgress", rollbackInProgress))
+
+		// Poll with timeout until all files are complete
+		maxWaitTime := 5 * time.Minute // Shorter timeout for purge operation
+		pollInterval := 5 * time.Second
+		deadline := time.Now().Add(maxWaitTime)
+		pollCount := 0
+
+		for time.Now().Before(deadline) {
+			time.Sleep(pollInterval)
+			pollCount++
+
+			// Check again
+			rollbackInProgress, _ = s.repository.GetFileCountByKnowledgeBaseUID(ctx, rollbackKB.UID, inProgressStatuses)
+
+			if rollbackInProgress == 0 {
+				logger.Info("PurgeRollback: All in-progress files completed",
+					zap.Int("pollCount", pollCount),
+					zap.Duration("waitTime", time.Duration(pollCount)*pollInterval))
+				break
+			}
+
+			// Log progress every 6 polls (30 seconds)
+			if pollCount%6 == 0 {
+				logger.Info("PurgeRollback: Still waiting for file operations",
+					zap.Int64("rollbackInProgress", rollbackInProgress),
+					zap.Int("pollCount", pollCount))
+			}
+		}
+
+		// Final check - fail if still in progress after timeout
+		if rollbackInProgress > 0 {
+			return nil, fmt.Errorf(
+				"timeout waiting for file operations to complete after %v: %d files still processing. "+
+					"Please wait for ongoing operations to finish and try again",
+				maxWaitTime, rollbackInProgress)
+		}
+	} else {
+		logger.Info("PurgeRollback: No in-progress file operations, proceeding with purge")
+	}
+
+	// Count files before deletion
+	fileCount := int32(0)
+	if count, err := s.repository.GetFileCountByKnowledgeBaseUID(ctx, rollbackKB.UID, ""); err == nil {
+		fileCount = int32(count)
+	}
+
+	// Trigger cleanup workflow via worker
+	// Note: Source files in MinIO are always preserved as they may be shared with production
+	err = s.worker.CleanupKnowledgeBase(ctx, rollbackKB.UID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to start cleanup workflow: %w", err)
+	}
+
+	logger.Info("PurgeRollback: Successfully triggered cleanup workflow",
+		zap.String("rollbackKBUID", rollbackKB.UID.String()),
+		zap.Int32("fileCount", fileCount))
+
+	return &artifactpb.PurgeRollbackAdminResponse{
+		Success:          true,
+		PurgedCatalogUid: rollbackKB.UID.String(),
+		DeletedFiles:     fileCount,
+		Message:          "Rollback knowledge base purged successfully",
+	}, nil
+}
+
+// SetRollbackRetentionAdmin sets the rollback retention period with flexible time units.
+// This also reschedules the cleanup workflow to use the new retention period.
+func (s *service) SetRollbackRetentionAdmin(ctx context.Context, ownerUID types.OwnerUIDType, catalogID string, duration int32, timeUnit artifactpb.SetRollbackRetentionAdminRequest_TimeUnit) (*artifactpb.SetRollbackRetentionAdminResponse, error) {
+	// Get current catalog
+	currentKB, err := s.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, catalogID)
+	if err != nil {
+		return nil, fmt.Errorf("catalog not found: %w", err)
+	}
+
+	if currentKB.RollbackRetentionUntil == nil {
+		return nil, fmt.Errorf("no rollback retention set for this catalog")
+	}
+
+	previousRetention := *currentKB.RollbackRetentionUntil
+
+	// Convert duration to time.Duration based on time unit
+	var retentionDuration time.Duration
+	switch timeUnit {
+	case artifactpb.SetRollbackRetentionAdminRequest_TIME_UNIT_SECOND:
+		retentionDuration = time.Duration(duration) * time.Second
+	case artifactpb.SetRollbackRetentionAdminRequest_TIME_UNIT_MINUTE:
+		retentionDuration = time.Duration(duration) * time.Minute
+	case artifactpb.SetRollbackRetentionAdminRequest_TIME_UNIT_HOUR:
+		retentionDuration = time.Duration(duration) * time.Hour
+	case artifactpb.SetRollbackRetentionAdminRequest_TIME_UNIT_DAY:
+		retentionDuration = time.Duration(duration) * 24 * time.Hour
+	default:
+		return nil, fmt.Errorf("invalid time unit: %v", timeUnit)
+	}
+
+	// Set retention to exactly duration from NOW
+	newRetention := time.Now().Add(retentionDuration)
+
+	// Update retention timestamp
+	_, err = s.repository.UpdateKnowledgeBase(ctx, currentKB.KBID, currentKB.Owner, repository.KnowledgeBaseModel{
+		RollbackRetentionUntil: &newRetention,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to update retention: %w", err)
+	}
+
+	// Find and reschedule the cleanup workflow with new retention
+	// The workflow ID is deterministic: cleanup-rollback-kb-{rollbackKBUID}
+	// Query for the rollback KB by looking for KBs with the "-rollback" suffix and "rollback" tag
+	rollbackKBID := currentKB.KBID + "-rollback"
+	rollbackKB, err := s.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, rollbackKBID)
+	if err == nil && rollbackKB != nil {
+		// Reschedule cleanup workflow with new retention period
+		retentionSeconds := int64(retentionDuration.Seconds())
+		err = s.worker.RescheduleCleanupWorkflow(ctx, rollbackKB.UID, retentionSeconds)
+		if err != nil {
+			// Log but don't fail the API call
+			logger, _ := logx.GetZapLogger(ctx)
+			logger.Warn("Could not reschedule cleanup workflow",
+				zap.String("rollbackKBUID", rollbackKB.UID.String()),
+				zap.Error(err))
+		}
+	}
+
+	totalSeconds := int64(time.Until(newRetention).Seconds())
+
+	return &artifactpb.SetRollbackRetentionAdminResponse{
+		PreviousRetentionUntil: previousRetention.Format(time.RFC3339),
+		NewRetentionUntil:      newRetention.Format(time.RFC3339),
+		TotalRetentionSeconds:  totalSeconds,
+	}, nil
+}
+
+// GetKnowledgeBaseUpdateStatusAdmin returns the current status of system update
+func (s *service) GetKnowledgeBaseUpdateStatusAdmin(ctx context.Context) (*artifactpb.GetKnowledgeBaseUpdateStatusAdminResponse, error) {
+	// Query each status separately and combine results
+	// IMPORTANT: Include "rolled_back" so we can track KBs attempting to update from rolled-back state
+	var kbs []repository.KnowledgeBaseModel
+	for _, status := range []string{"updating", "completed", "failed", "rolled_back"} {
+		statusKBs, err := s.repository.ListKnowledgeBasesByUpdateStatus(ctx, status)
+		if err == nil {
+			kbs = append(kbs, statusKBs...)
+		}
+	}
+
+	if len(kbs) == 0 {
+		// Return empty status
+		return &artifactpb.GetKnowledgeBaseUpdateStatusAdminResponse{
+			UpdateInProgress: false,
+			CatalogStatuses:  []*artifactpb.CatalogUpdateStatus{},
+			Message:          "No catalogs with update status found",
+		}, nil
+	}
+
+	var catalogStatuses []*artifactpb.CatalogUpdateStatus
+	updateInProgress := false
+	totalCatalogs := 0
+	catalogsCompleted := 0
+	catalogsFailed := 0
+	catalogsInProgress := 0
+
+	for _, kb := range kbs {
+		if kb.UpdateStatus != "" && kb.UpdateStatus != "idle" {
+			totalCatalogs++
+
+			switch kb.UpdateStatus {
+			case "updating":
+				updateInProgress = true
+				catalogsInProgress++
+			case "completed":
+				catalogsCompleted++
+			case "failed":
+				catalogsFailed++
+			}
+
+			// Get total file count for this KB
+			totalFiles := int32(0)
+			if count, err := s.repository.GetFileCountByKnowledgeBaseUID(ctx, kb.UID, ""); err == nil {
+				totalFiles = int32(count)
+			}
+
+			// For updating KBs, find the associated staging KB to count completed files
+			filesProcessed := int32(0)
+			if kb.UpdateStatus == "updating" {
+				// Find the staging KB (it has the same ID with "-staging" suffix)
+				stagingKBID := fmt.Sprintf("%s-staging", kb.KBID)
+				stagingKBs, err := s.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, types.OwnerUIDType(uuid.FromStringOrNil(kb.Owner)), stagingKBID)
+				if err == nil && stagingKBs != nil {
+					// Count completed files in the staging KB
+					if count, err := s.repository.GetFileCountByKnowledgeBaseUID(ctx, stagingKBs.UID, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED.String()); err == nil {
+						filesProcessed = int32(count)
+					}
+				}
+			}
+
+			catalogStatuses = append(catalogStatuses, &artifactpb.CatalogUpdateStatus{
+				CatalogUid:     kb.UID.String(),
+				Status:         kb.UpdateStatus,
+				WorkflowId:     kb.UpdateWorkflowID,
+				StartedAt:      formatTime(kb.UpdateStartedAt),
+				CompletedAt:    formatTime(kb.UpdateCompletedAt),
+				FilesProcessed: filesProcessed,
+				TotalFiles:     totalFiles,
+			})
+		}
+	}
+
+	response := &artifactpb.GetKnowledgeBaseUpdateStatusAdminResponse{
+		UpdateInProgress: updateInProgress,
+		CatalogStatuses:  catalogStatuses,
+		Message:          fmt.Sprintf("Update status: %d in progress, %d completed, %d failed", catalogsInProgress, catalogsCompleted, catalogsFailed),
+	}
+
+	return response, nil
+}
+
+// ExecuteKnowledgeBaseUpdateAdmin executes update for specified catalogs or all eligible catalogs
+func (s *service) ExecuteKnowledgeBaseUpdateAdmin(ctx context.Context, req *artifactpb.ExecuteKnowledgeBaseUpdateAdminRequest) (*artifactpb.ExecuteKnowledgeBaseUpdateAdminResponse, error) {
+	logger, _ := logx.GetZapLogger(ctx)
+
+	// DESIGN: Per-KB lock instead of global lock
+	// Each KB has its own update_status field that prevents concurrent updates of the same KB
+	// Multiple different KBs can update simultaneously (scalability + parallel testing)
+	// The filtering logic below already excludes KBs with update_status="updating"
+
+	// Get target KBs (filtering already excludes KBs with update_status="updating")
+	var kbs []repository.KnowledgeBaseModel
+	if len(req.CatalogIds) > 0 {
+		// Update specific catalogs
+		for _, catalogID := range req.CatalogIds {
+			kb, err := s.repository.GetKnowledgeBaseByID(ctx, catalogID)
+			if err != nil {
+				logger.Error("ExecuteKnowledgeBaseUpdate: Failed to get catalog", zap.String("catalogID", catalogID), zap.Error(err))
+				return nil, fmt.Errorf("failed to get catalog %s: %w", catalogID, err)
+			}
+			logger.Info("ExecuteKnowledgeBaseUpdate: Checking catalog eligibility", zap.String("catalogID", catalogID), zap.String("kbUID", kb.UID.String()), zap.Bool("staging", kb.Staging), zap.String("updateStatus", kb.UpdateStatus))
+			// Only include production KBs (not staging) and not already updating
+			if !kb.Staging && (kb.UpdateStatus == "" || kb.UpdateStatus == "completed" || kb.UpdateStatus == "failed" || kb.UpdateStatus == "rolled_back") {
+				kbs = append(kbs, *kb)
+				logger.Info("ExecuteKnowledgeBaseUpdate: Catalog eligible for update", zap.String("catalogID", catalogID), zap.String("kbUID", kb.UID.String()))
+			} else {
+				logger.Warn("ExecuteKnowledgeBaseUpdate: Catalog not eligible", zap.String("catalogID", catalogID), zap.String("kbUID", kb.UID.String()), zap.Bool("staging", kb.Staging), zap.String("updateStatus", kb.UpdateStatus))
+			}
+		}
+	} else {
+		// Update all eligible KBs (production, not currently updating)
+		var err error
+		kbs, err = s.repository.ListKnowledgeBasesForUpdate(ctx, nil, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list eligible catalogs: %w", err)
+		}
+	}
+
+	if len(kbs) == 0 {
+		return &artifactpb.ExecuteKnowledgeBaseUpdateAdminResponse{
+			Started: false,
+			Message: "No eligible catalogs found for update",
+		}, nil
+	}
+
+	// Extract catalog IDs
+	catalogIDs := make([]string, len(kbs))
+	for i, kb := range kbs {
+		catalogIDs[i] = kb.KBID
+	}
+
+	// Execute knowledge base update via worker
+	// Pass system_profile to worker (empty string if not specified)
+	systemProfile := ""
+	if req.SystemProfile != nil {
+		systemProfile = *req.SystemProfile
+	}
+
+	result, err := s.worker.ExecuteKnowledgeBaseUpdate(ctx, catalogIDs, systemProfile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute knowledge base update: %w", err)
+	}
+
+	return &artifactpb.ExecuteKnowledgeBaseUpdateAdminResponse{
+		Started: result.Started,
+		Message: result.Message,
+	}, nil
+}
+
+// Helper functions
+
+func convertKBToCatalogProto(kb *repository.KnowledgeBaseModel) *artifactpb.Catalog {
+	return &artifactpb.Catalog{
+		Name:           kb.Name,
+		CatalogUid:     kb.UID.String(),
+		CatalogId:      kb.KBID,
+		Description:    kb.Description,
+		Tags:           kb.Tags,
+		OwnerName:      kb.Owner,
+		CreateTime:     kb.CreateTime.String(),
+		UpdateTime:     kb.UpdateTime.String(),
+		DownstreamApps: []string{},
+		TotalFiles:     0, // Would need to query file count if needed
+		TotalTokens:    0,
+	}
+}
+
+func formatTime(t *time.Time) string {
+	if t == nil {
+		return ""
+	}
+	return t.Format(time.RFC3339)
+}

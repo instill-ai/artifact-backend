@@ -283,8 +283,14 @@ func TestDropVectorDBCollectionActivity_Success(t *testing.T) {
 
 	ctx := context.Background()
 	kbUID := uuid.Must(uuid.NewV4())
+	activeCollectionUID := uuid.Must(uuid.NewV4())
 
 	mockRepository := mock.NewRepositoryMock(mc)
+	mockRepository.GetKnowledgeBaseByUIDMock.Return(&repository.KnowledgeBaseModel{
+		UID:                 kbUID,
+		ActiveCollectionUID: activeCollectionUID,
+	}, nil)
+	mockRepository.IsCollectionInUseMock.Return(false, nil)
 	mockRepository.DropCollectionMock.Return(nil)
 
 	w := &Worker{repository: mockRepository, log: zap.NewNop()}
@@ -304,8 +310,14 @@ func TestDropVectorDBCollectionActivity_AlreadyDropped(t *testing.T) {
 
 	ctx := context.Background()
 	kbUID := uuid.Must(uuid.NewV4())
+	activeCollectionUID := uuid.Must(uuid.NewV4())
 
 	mockRepository := mock.NewRepositoryMock(mc)
+	mockRepository.GetKnowledgeBaseByUIDMock.Return(&repository.KnowledgeBaseModel{
+		UID:                 kbUID,
+		ActiveCollectionUID: activeCollectionUID,
+	}, nil)
+	mockRepository.IsCollectionInUseMock.Return(false, nil)
 	mockRepository.DropCollectionMock.Return(fmt.Errorf("can't find collection"))
 
 	w := &Worker{repository: mockRepository, log: zap.NewNop()}

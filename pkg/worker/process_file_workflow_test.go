@@ -229,7 +229,7 @@ func TestProcessFileWorkflow_GetFileMetadataSuccess(t *testing.T) {
 	mc := minimock.NewController(c)
 
 	mockRepository := mock.NewRepositoryMock(mc)
-	mockAIProvider := mock.NewProviderMock(mc)
+	mockAIClient := mock.NewClientMock(mc)
 
 	fileUID := uuid.Must(uuid.NewV4())
 	kbUID := uuid.Must(uuid.NewV4())
@@ -252,7 +252,7 @@ func TestProcessFileWorkflow_GetFileMetadataSuccess(t *testing.T) {
 
 	w := &Worker{
 		repository: mockRepository,
-		aiProvider: mockAIProvider,
+		aiClient:   mockAIClient,
 		log:        zap.NewNop(),
 	}
 

@@ -20,16 +20,29 @@ import (
 // - TaskTypeRetrievalQuery: For search queries finding similar chunks
 // - TaskTypeQuestionAnswering: For questions that need answers from documents
 //
+// dimensionality specifies the desired embedding vector size:
+// - Gemini supports 768, 1536, or 3072 dimensions
+// - This parameter allows dynamic sizing based on KB configuration
+//
 // Best practices from https://ai.google.dev/gemini-api/docs/embeddings:
 // 1. Use task-specific embeddings for better retrieval quality
 // 2. Use consistent dimensionality across all embeddings in a system
 // 3. Batch multiple texts together for better efficiency
-func (p *Provider) EmbedTexts(ctx context.Context, texts []string, taskType string) (*ai.EmbedResult, error) {
+func (c *Client) EmbedTexts(ctx context.Context, texts []string, taskType string, dimensionality int32) (*ai.EmbedResult, error) {
+	// Validate dimensionality - Gemini supports 768, 1536, or 3072
+	validDims := map[int32]bool{768: true, 1536: true, 3072: true}
+	if !validDims[dimensionality] {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("gemini embeddings only support 768, 1536, or 3072 dimensions, got %d", dimensionality),
+			"Gemini embeddings only support 768, 1536, or 3072 dimensions. Please update your knowledge base configuration to use one of these supported dimensionalities.",
+		)
+	}
+
 	if len(texts) == 0 {
 		return &ai.EmbedResult{
 			Vectors:        [][]float32{},
 			Model:          ai.GeminiEmbeddingModelDefault,
-			Dimensionality: ai.GeminiEmbeddingDimDefault,
+			Dimensionality: dimensionality,
 		}, nil
 	}
 
@@ -69,9 +82,9 @@ func (p *Provider) EmbedTexts(ctx context.Context, texts []string, taskType stri
 				}
 
 				// Call Gemini API for embedding with task-specific optimization
-				result, apiErr := p.client.Models.EmbedContent(ctx, ai.GeminiEmbeddingModelDefault, contents, &genai.EmbedContentConfig{
+				result, apiErr := c.client.Models.EmbedContent(ctx, ai.GeminiEmbeddingModelDefault, contents, &genai.EmbedContentConfig{
 					TaskType:             taskType,
-					OutputDimensionality: genai.Ptr(int32(ai.GeminiEmbeddingDimDefault)),
+					OutputDimensionality: genai.Ptr(dimensionality),
 				})
 
 				if apiErr != nil {
@@ -161,6 +174,6 @@ func (p *Provider) EmbedTexts(ctx context.Context, texts []string, taskType stri
 	return &ai.EmbedResult{
 		Vectors:        vectors,
 		Model:          ai.GeminiEmbeddingModelDefault,
-		Dimensionality: ai.GeminiEmbeddingDimDefault,
+		Dimensionality: dimensionality,
 	}, nil
 }

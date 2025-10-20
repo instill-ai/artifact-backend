@@ -72,7 +72,7 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 	// retrieve the chunks based on the similarity
 	t := time.Now()
 
-	// Embed query using appropriate provider based on KB's embedding config
+	// Embed query using appropriate client based on KB's embedding config
 	// Note: For similarity search, we use RETRIEVAL_QUERY task type which optimizes
 	// for finding relevant documents similar to the query
 	textVector, err := ph.service.EmbedTexts(ctx, &kb.UID, []string{req.TextPrompt}, "RETRIEVAL_QUERY")

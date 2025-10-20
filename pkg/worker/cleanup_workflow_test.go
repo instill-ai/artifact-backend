@@ -215,11 +215,17 @@ func TestCleanupKnowledgeBaseWorkflow_Success(t *testing.T) {
 	mockRepository := mock.NewRepositoryMock(mc)
 
 	kbUID := uuid.Must(uuid.NewV4())
+	activeCollectionUID := uuid.Must(uuid.NewV4())
 
 	// Mock for DeleteKBFilesFromMinIOActivity
 	mockRepository.ListKnowledgeBaseFilePathsMock.Return([]string{}, nil)
 
 	// Mock for DropVectorDBCollectionActivity
+	mockRepository.GetKnowledgeBaseByUIDMock.Return(&repository.KnowledgeBaseModel{
+		UID:                 kbUID,
+		ActiveCollectionUID: activeCollectionUID,
+	}, nil)
+	mockRepository.IsCollectionInUseMock.Return(false, nil)
 	mockRepository.DropCollectionMock.Return(nil)
 
 	// Mock for DeleteKBFileRecordsActivity
@@ -266,11 +272,17 @@ func TestCleanupKnowledgeBaseWorkflow_VectorDBError(t *testing.T) {
 	mockRepository := mock.NewRepositoryMock(mc)
 
 	kbUID := uuid.Must(uuid.NewV4())
+	activeCollectionUID := uuid.Must(uuid.NewV4())
 
 	// Mock for DeleteKBFilesFromMinIOActivity
 	mockRepository.ListKnowledgeBaseFilePathsMock.Return([]string{}, nil)
 
 	// Mock for DropVectorDBCollectionActivity (fails but is handled)
+	mockRepository.GetKnowledgeBaseByUIDMock.Return(&repository.KnowledgeBaseModel{
+		UID:                 kbUID,
+		ActiveCollectionUID: activeCollectionUID,
+	}, nil)
+	mockRepository.IsCollectionInUseMock.Return(false, nil)
 	mockRepository.DropCollectionMock.Return(fmt.Errorf("can't find collection"))
 
 	// Mock for remaining activities (all succeed)

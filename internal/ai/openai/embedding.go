@@ -8,16 +8,26 @@ import (
 	"github.com/openai/openai-go/v3"
 
 	"github.com/instill-ai/artifact-backend/internal/ai"
+
 	errorsx "github.com/instill-ai/x/errors"
 )
 
 // EmbedTexts generates embeddings for a batch of texts using OpenAI API
 // Note: OpenAI doesn't support task-specific embeddings like Gemini, so taskType is ignored
-func (p *Provider) EmbedTexts(ctx context.Context, texts []string, taskType string) (*ai.EmbedResult, error) {
+// Note: OpenAI's text-embedding-3-small only supports 1536 dimensions
+func (c *Client) EmbedTexts(ctx context.Context, texts []string, taskType string, dimensionality int32) (*ai.EmbedResult, error) {
+	// Validate dimensionality - OpenAI only supports 1536
+	if dimensionality != ai.OpenAIEmbeddingDim {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("openai text-embedding-3-small only supports %d dimensions, got %d", ai.OpenAIEmbeddingDim, dimensionality),
+			fmt.Sprintf("OpenAI embeddings only support %d dimensions. Please update your knowledge base configuration to use dimensionality %d, or switch to Gemini which supports 768, 1536, or 3072 dimensions.", ai.OpenAIEmbeddingDim, ai.OpenAIEmbeddingDim),
+		)
+	}
+
 	if len(texts) == 0 {
 		return &ai.EmbedResult{
 			Vectors:        [][]float32{},
-			Model:          p.embeddingModel,
+			Model:          c.embeddingModel,
 			Dimensionality: ai.OpenAIEmbeddingDim,
 		}, nil
 	}
@@ -51,11 +61,11 @@ func (p *Provider) EmbedTexts(ctx context.Context, texts []string, taskType stri
 
 			for attempt := 0; attempt < maxRetries; attempt++ {
 				// Call OpenAI API for embedding
-				response, apiErr := p.client.Embeddings.New(ctx, openai.EmbeddingNewParams{
+				response, apiErr := c.client.Embeddings.New(ctx, openai.EmbeddingNewParams{
 					Input: openai.EmbeddingNewParamsInputUnion{
 						OfArrayOfStrings: []string{txt},
 					},
-					Model: p.embeddingModel,
+					Model: c.embeddingModel,
 				})
 
 				if apiErr != nil {
@@ -124,7 +134,7 @@ func (p *Provider) EmbedTexts(ctx context.Context, texts []string, taskType stri
 
 	return &ai.EmbedResult{
 		Vectors:        vectors,
-		Model:          p.embeddingModel,
+		Model:          c.embeddingModel,
 		Dimensionality: ai.OpenAIEmbeddingDim,
 	}, nil
 }

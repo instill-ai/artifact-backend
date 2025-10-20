@@ -16,7 +16,7 @@ var (
 	promptCacheOnce sync.Once
 )
 
-// Constants for Gemini AI provider
+// Constants for Gemini AI client
 const (
 	// DefaultModel is the default Gemini model for multimodal content conversion
 	DefaultModel = "gemini-2.5-flash"

@@ -20,12 +20,12 @@ import (
 func TestDeleteCacheValidation(t *testing.T) {
 	c := qt.New(t)
 
-	provider := &Provider{
+	client := &Client{
 		client: nil,
 	}
 
 	t.Run("empty cache name returns error", func(t *testing.T) {
-		err := provider.deleteCache(context.Background(), "")
+		err := client.deleteCache(context.Background(), "")
 		c.Assert(err, qt.Not(qt.IsNil))
 		msg := errorsx.Message(err)
 		c.Assert(msg, qt.Contains, "Internal error during cache cleanup")
@@ -109,12 +109,12 @@ func TestVideoTypeDetection(t *testing.T) {
 func TestCreateCache_Validation(t *testing.T) {
 	c := qt.New(t)
 
-	provider := &Provider{
+	client := &Client{
 		client: nil,
 	}
 
 	t.Run("returns error when no files provided", func(t *testing.T) {
-		result, err := provider.CreateCache(context.Background(), []ai.FileContent{}, 5*time.Minute, ai.SystemInstructionRAG)
+		result, err := client.CreateCache(context.Background(), []ai.FileContent{}, 5*time.Minute, ai.SystemInstructionRAG)
 		c.Assert(err, qt.Not(qt.IsNil))
 		c.Assert(result, qt.IsNil)
 		msg := errorsx.Message(err)
@@ -122,7 +122,7 @@ func TestCreateCache_Validation(t *testing.T) {
 	})
 
 	t.Run("returns error when file content is empty", func(t *testing.T) {
-		result, err := provider.CreateCache(
+		result, err := client.CreateCache(
 			context.Background(),
 			[]ai.FileContent{
 				{
@@ -141,7 +141,7 @@ func TestCreateCache_Validation(t *testing.T) {
 	})
 
 	t.Run("returns error when any file in batch has empty content", func(t *testing.T) {
-		result, err := provider.CreateCache(
+		result, err := client.CreateCache(
 			context.Background(),
 			[]ai.FileContent{
 				{
@@ -197,13 +197,13 @@ func TestCreateCache_DisplayName(t *testing.T) {
 func TestCreateBatchCache_Validation(t *testing.T) {
 	c := qt.New(t)
 
-	provider := &Provider{
+	client := &Client{
 		client: nil,
 	}
 
 	t.Run("returns error on empty files array", func(t *testing.T) {
 		files := []ai.FileContent{}
-		_, err := provider.createBatchCache(context.Background(), GetModel(), files, time.Hour, "test", ai.SystemInstructionRAG)
+		_, err := client.createBatchCache(context.Background(), GetModel(), files, time.Hour, "test", ai.SystemInstructionRAG)
 		c.Assert(err, qt.Not(qt.IsNil))
 		msg := errorsx.Message(err)
 		c.Assert(msg, qt.Contains, "No files provided")
@@ -222,7 +222,7 @@ func TestCreateBatchCache_Validation(t *testing.T) {
 				Filename: "test2.pdf",
 			},
 		}
-		_, err := provider.createBatchCache(context.Background(), GetModel(), files, time.Hour, "test", ai.SystemInstructionRAG)
+		_, err := client.createBatchCache(context.Background(), GetModel(), files, time.Hour, "test", ai.SystemInstructionRAG)
 		c.Assert(err, qt.Not(qt.IsNil))
 		msg := errorsx.Message(err)
 		c.Assert(msg, qt.Contains, "file appears to be empty")

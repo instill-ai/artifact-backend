@@ -196,7 +196,7 @@ func TestSaveChunksActivity_Success(t *testing.T) {
 // ===== Composite Activity Tests =====
 // Tests for activities used by ProcessContentActivity and ProcessSummaryActivity
 
-func TestCacheFileContextActivity_NoAIProvider(t *testing.T) {
+func TestCacheFileContextActivity_NoAIClient(t *testing.T) {
 	c := qt.New(t)
 	mc := minimock.NewController(t)
 
@@ -228,10 +228,10 @@ func TestCacheFileContextActivity_UnsupportedFileType(t *testing.T) {
 	mockRepositoryMock := mock.NewRepositoryMock(mc)
 	logger := zap.NewNop()
 
-	mockAIProvider := mock.NewProviderMock(mc)
-	mockAIProvider.SupportsFileTypeMock.Return(false)
+	mockAIClient := mock.NewClientMock(mc)
+	mockAIClient.SupportsFileTypeMock.Return(false)
 
-	w := &Worker{repository: mockRepositoryMock, log: logger, aiProvider: mockAIProvider}
+	w := &Worker{repository: mockRepositoryMock, log: logger, aiClient: mockAIClient}
 
 	param := &CacheFileContextActivityParam{
 		FileUID:     uuid.Must(uuid.NewV4()),
@@ -262,16 +262,16 @@ func TestCacheFileContextActivity_Success(t *testing.T) {
 	cacheName := "test-cache-123"
 	now := time.Now()
 
-	mockAIProvider := mock.NewProviderMock(mc)
-	mockAIProvider.SupportsFileTypeMock.Return(true)
-	mockAIProvider.CreateCacheMock.Return(&ai.CacheResult{
+	mockAIClient := mock.NewClientMock(mc)
+	mockAIClient.SupportsFileTypeMock.Return(true)
+	mockAIClient.CreateCacheMock.Return(&ai.CacheResult{
 		CacheName:  cacheName,
 		Model:      "gemini-2.0-flash",
 		CreateTime: now,
 		ExpireTime: now.Add(5 * time.Minute),
 	}, nil)
 
-	w := &Worker{repository: mockRepositoryMock, log: logger, aiProvider: mockAIProvider}
+	w := &Worker{repository: mockRepositoryMock, log: logger, aiClient: mockAIClient}
 
 	param := &CacheFileContextActivityParam{
 		FileUID:     uuid.Must(uuid.NewV4()),
@@ -289,7 +289,7 @@ func TestCacheFileContextActivity_Success(t *testing.T) {
 	c.Assert(result.Model, qt.Equals, "gemini-2.0-flash")
 }
 
-func TestDeleteCacheActivity_NoAIProvider(t *testing.T) {
+func TestDeleteCacheActivity_NoAIClient(t *testing.T) {
 	c := qt.New(t)
 	mc := minimock.NewController(t)
 
@@ -333,12 +333,12 @@ func TestDeleteCacheActivity_Success(t *testing.T) {
 	mockRepositoryMock := mock.NewRepositoryMock(mc)
 	logger := zap.NewNop()
 
-	mockAIProvider := mock.NewProviderMock(mc)
-	mockAIProvider.DeleteCacheMock.
+	mockAIClient := mock.NewClientMock(mc)
+	mockAIClient.DeleteCacheMock.
 		When(minimock.AnyContext, "test-cache").
 		Then(nil)
 
-	w := &Worker{repository: mockRepositoryMock, log: logger, aiProvider: mockAIProvider}
+	w := &Worker{repository: mockRepositoryMock, log: logger, aiClient: mockAIClient}
 
 	param := &DeleteCacheActivityParam{
 		CacheName: "test-cache",

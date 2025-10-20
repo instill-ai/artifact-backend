@@ -2,10 +2,13 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"strings"
 
+	"github.com/gofrs/uuid"
 	"go.temporal.io/sdk/temporal"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/types"
@@ -25,6 +28,22 @@ import (
 // - DeleteKBConvertedFileRecordsActivity - Deletes converted file records
 // - DeleteKBTextChunkRecordsActivity - Deletes text chunk records for a knowledge base
 // - DeleteKBEmbeddingRecordsActivity - Deletes embedding records for a knowledge base
+
+// Activity error type constants
+const (
+	deleteOriginalFileActivityError       = "DeleteOriginalFileActivity"
+	deleteConvertedFileActivityError      = "DeleteConvertedFileActivity"
+	deleteTextChunksActivityError         = "DeleteTextChunksFromMinIOActivity"
+	deleteEmbeddingsActivityError         = "DeleteEmbeddingsFromVectorDBActivity"
+	deleteKBFilesActivityError            = "DeleteKBFilesFromMinIOActivity"
+	dropCollectionActivityError           = "DropVectorDBCollectionActivity"
+	deleteKBFileRecordsActivityError      = "DeleteKBFileRecordsActivity"
+	deleteKBConvertedRecordsActivityError = "DeleteKBConvertedFileRecordsActivity"
+	deleteKBTextChunkRecordsActivityError = "DeleteKBTextChunkRecordsActivity"
+	deleteKBEmbeddingRecordsActivityError = "DeleteKBEmbeddingRecordsActivity"
+	purgeKBACLActivityError               = "PurgeKBACLActivity"
+	softDeleteKBRecordActivityError       = "SoftDeleteKBRecordActivity"
+)
 
 // DeleteOriginalFileActivityParam defines parameters for deleting original file
 type DeleteOriginalFileActivityParam struct {
@@ -289,12 +308,68 @@ func (w *Worker) DeleteKBFilesFromMinIOActivity(ctx context.Context, param *Dele
 }
 
 // DropVectorDBCollectionActivity drops the vector db collection for a knowledge base
+// IMPORTANT: With collection versioning, we must check if the collection is still in use
+// by other KBs before dropping it (e.g., during rollback, old and new KBs may share collections)
 func (w *Worker) DropVectorDBCollectionActivity(ctx context.Context, param *DropVectorDBCollectionActivityParam) error {
-	w.log.Info("DropVectorDBCollectionActivity: Dropping collection",
+	w.log.Info("DropVectorDBCollectionActivity: Preparing to drop collection",
 		zap.String("kbUID", param.KBUID.String()))
 
-	collection := constant.KBCollectionName(param.KBUID)
-	err := w.repository.DropCollection(ctx, collection)
+	// Get the KB to find its active collection
+	kb, err := w.repository.GetKnowledgeBaseByUID(ctx, param.KBUID)
+	if err != nil {
+		w.log.Warn("DropVectorDBCollectionActivity: KB not found (may have been deleted)",
+			zap.String("kbUID", param.KBUID.String()),
+			zap.Error(err))
+		// KB not found - try to drop collection by KB UID anyway (legacy behavior)
+		collection := constant.KBCollectionName(param.KBUID)
+		_ = w.repository.DropCollection(ctx, collection)
+		return nil
+	}
+
+	// Determine which collection this KB was using
+	collectionUID := param.KBUID
+	if kb.ActiveCollectionUID != uuid.Nil {
+		collectionUID = kb.ActiveCollectionUID
+	}
+
+	// Check if the collection is still in use by other KBs
+	inUse, err := w.repository.IsCollectionInUse(ctx, collectionUID)
+	if err != nil {
+		w.log.Error("DropVectorDBCollectionActivity: Error checking collection usage",
+			zap.String("collectionUID", collectionUID.String()),
+			zap.Error(err))
+		// Continue with drop attempt even if check fails
+	}
+
+	if inUse {
+		w.log.Info("DropVectorDBCollectionActivity: Collection still in use by other KBs, preserving",
+			zap.String("collectionUID", collectionUID.String()))
+		return nil
+	}
+
+	// CRITICAL: Re-check IMMEDIATELY before dropping to prevent race condition
+	// Between the first check and now, a swap might have completed that pointed production KB to this collection
+	inUse, err = w.repository.IsCollectionInUse(ctx, collectionUID)
+	if err != nil {
+		w.log.Warn("DropVectorDBCollectionActivity: Error on final collection usage check, aborting drop to be safe",
+			zap.String("collectionUID", collectionUID.String()),
+			zap.Error(err))
+		return nil // Abort drop if check fails - better safe than sorry
+	}
+
+	if inUse {
+		w.log.Info("DropVectorDBCollectionActivity: Collection became in-use after initial check (race condition avoided)",
+			zap.String("collectionUID", collectionUID.String()))
+		return nil
+	}
+
+	// Collection not in use - safe to drop
+	collection := constant.KBCollectionName(collectionUID)
+	w.log.Info("DropVectorDBCollectionActivity: Dropping collection",
+		zap.String("collection", collection),
+		zap.String("collectionUID", collectionUID.String()))
+
+	err = w.repository.DropCollection(ctx, collection)
 	if err != nil {
 		// If collection doesn't exist, that's fine - it's already cleaned up
 		if strings.Contains(err.Error(), "can't find collection") {
@@ -309,6 +384,9 @@ func (w *Worker) DropVectorDBCollectionActivity(ctx context.Context, param *Drop
 			err,
 		)
 	}
+
+	w.log.Info("DropVectorDBCollectionActivity: Collection dropped successfully",
+		zap.String("collection", collection))
 
 	return nil
 }
@@ -403,17 +481,46 @@ func (w *Worker) PurgeKBACLActivity(ctx context.Context, param *PurgeKBACLActivi
 	return nil
 }
 
-// Activity error type constants
-const (
-	deleteOriginalFileActivityError       = "DeleteOriginalFileActivity"
-	deleteConvertedFileActivityError      = "DeleteConvertedFileActivity"
-	deleteTextChunksActivityError         = "DeleteTextChunksFromMinIOActivity"
-	deleteEmbeddingsActivityError         = "DeleteEmbeddingsFromVectorDBActivity"
-	deleteKBFilesActivityError            = "DeleteKBFilesFromMinIOActivity"
-	dropCollectionActivityError           = "DropVectorDBCollectionActivity"
-	deleteKBFileRecordsActivityError      = "DeleteKBFileRecordsActivity"
-	deleteKBConvertedRecordsActivityError = "DeleteKBConvertedFileRecordsActivity"
-	deleteKBTextChunkRecordsActivityError = "DeleteKBTextChunkRecordsActivity"
-	deleteKBEmbeddingRecordsActivityError = "DeleteKBEmbeddingRecordsActivity"
-	purgeKBACLActivityError               = "PurgeKBACLActivity"
-)
+// SoftDeleteKBRecordActivityParam defines parameters for soft-deleting KB record
+type SoftDeleteKBRecordActivityParam struct {
+	KBUID types.KBUIDType // KB unique identifier
+}
+
+// SoftDeleteKBRecordActivity soft-deletes the knowledge base record itself
+func (w *Worker) SoftDeleteKBRecordActivity(ctx context.Context, param *SoftDeleteKBRecordActivityParam) error {
+	w.log.Info("SoftDeleteKBRecordActivity: Soft-deleting KB record",
+		zap.String("kbUID", param.KBUID.String()))
+
+	// Get KB to retrieve owner and KBID
+	kb, err := w.repository.GetKnowledgeBaseByUID(ctx, param.KBUID)
+	if err != nil {
+		w.log.Info("SoftDeleteKBRecordActivity: KB not found, may have been deleted already",
+			zap.String("kbUID", param.KBUID.String()))
+		return nil
+	}
+
+	// Soft delete the KB record
+	_, err = w.repository.DeleteKnowledgeBase(ctx, kb.Owner, kb.KBID)
+	if err != nil {
+		// Check if KB was already deleted (record not found means it was already soft-deleted)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			w.log.Info("SoftDeleteKBRecordActivity: KB already soft-deleted",
+				zap.String("kbUID", param.KBUID.String()),
+				zap.String("kbID", kb.KBID))
+			return nil
+		}
+
+		err = errorsx.AddMessage(err, "Unable to soft-delete knowledge base record. Please try again.")
+		return temporal.NewApplicationErrorWithCause(
+			errorsx.MessageOrErr(err),
+			softDeleteKBRecordActivityError,
+			err,
+		)
+	}
+
+	w.log.Info("SoftDeleteKBRecordActivity: KB record soft-deleted successfully",
+		zap.String("kbUID", param.KBUID.String()),
+		zap.String("kbID", kb.KBID))
+
+	return nil
+}

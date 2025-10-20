@@ -140,7 +140,15 @@ type BlobConfig struct {
 
 // RAGConfig defines the configuration for RAG (Retrieval Augmented Generation)
 type RAGConfig struct {
-	Model ModelConfig `koanf:"model"`
+	Update RAGUpdateConfig `koanf:"update"`
+	Model  ModelConfig     `koanf:"model"`
+}
+
+// RAGUpdateConfig defines the configuration for RAG system updates
+type RAGUpdateConfig struct {
+	RollbackRetentionDays int  `koanf:"rollback_retention_days"` // Days to keep old KB after swap
+	ValidationEnabled     bool `koanf:"validation_enabled"`      // Validate shadow KB before swap
+	BatchSize             int  `koanf:"batch_size"`              // KBs to process concurrently
 }
 
 // ModelConfig defines the configuration for AI model providers

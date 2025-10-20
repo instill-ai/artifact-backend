@@ -31,9 +31,9 @@ type RepositoryMock struct {
 	beforeCheckFileUIDMetadataCounter uint64
 	CheckFileUIDMetadataMock          mRepositoryMockCheckFileUIDMetadata
 
-	funcCreateCollection          func(ctx context.Context, id string) (err error)
+	funcCreateCollection          func(ctx context.Context, id string, dimensionality uint32) (err error)
 	funcCreateCollectionOrigin    string
-	inspectFuncCreateCollection   func(ctx context.Context, id string)
+	inspectFuncCreateCollection   func(ctx context.Context, id string, dimensionality uint32)
 	afterCreateCollectionCounter  uint64
 	beforeCreateCollectionCounter uint64
 	CreateCollectionMock          mRepositoryMockCreateCollection
@@ -72,6 +72,13 @@ type RepositoryMock struct {
 	afterCreateObjectCounter  uint64
 	beforeCreateObjectCounter uint64
 	CreateObjectMock          mRepositoryMockCreateObject
+
+	funcCreateStagingKnowledgeBase          func(ctx context.Context, original *mm_repository.KnowledgeBaseModel, newEmbeddingConfig *mm_repository.EmbeddingConfigJSON, externalService func(kbUID types.KBUIDType) error) (kp1 *mm_repository.KnowledgeBaseModel, err error)
+	funcCreateStagingKnowledgeBaseOrigin    string
+	inspectFuncCreateStagingKnowledgeBase   func(ctx context.Context, original *mm_repository.KnowledgeBaseModel, newEmbeddingConfig *mm_repository.EmbeddingConfigJSON, externalService func(kbUID types.KBUIDType) error)
+	afterCreateStagingKnowledgeBaseCounter  uint64
+	beforeCreateStagingKnowledgeBaseCounter uint64
+	CreateStagingKnowledgeBaseMock          mRepositoryMockCreateStagingKnowledgeBase
 
 	funcCreateTextChunks          func(ctx context.Context, textChunks []*mm_repository.TextChunkModel) (err error)
 	funcCreateTextChunksOrigin    string
@@ -185,6 +192,13 @@ type RepositoryMock struct {
 	beforeDeleteRepositoryTagCounter uint64
 	DeleteRepositoryTagMock          mRepositoryMockDeleteRepositoryTag
 
+	funcDeleteSystemProfile          func(ctx context.Context, profile string) (err error)
+	funcDeleteSystemProfileOrigin    string
+	inspectFuncDeleteSystemProfile   func(ctx context.Context, profile string)
+	afterDeleteSystemProfileCounter  uint64
+	beforeDeleteSystemProfileCounter uint64
+	DeleteSystemProfileMock          mRepositoryMockDeleteSystemProfile
+
 	funcDropCollection          func(ctx context.Context, id string) (err error)
 	funcDropCollectionOrigin    string
 	inspectFuncDropCollection   func(ctx context.Context, id string)
@@ -198,6 +212,13 @@ type RepositoryMock struct {
 	afterFlushCollectionCounter  uint64
 	beforeFlushCollectionCounter uint64
 	FlushCollectionMock          mRepositoryMockFlushCollection
+
+	funcGetActiveCollectionUID          func(ctx context.Context, kbUID types.KBUIDType) (kp1 *types.KBUIDType, err error)
+	funcGetActiveCollectionUIDOrigin    string
+	inspectFuncGetActiveCollectionUID   func(ctx context.Context, kbUID types.KBUIDType)
+	afterGetActiveCollectionUIDCounter  uint64
+	beforeGetActiveCollectionUIDCounter uint64
+	GetActiveCollectionUIDMock          mRepositoryMockGetActiveCollectionUID
 
 	funcGetAllConvertedFilesByFileUID          func(ctx context.Context, fileUID types.FileUIDType) (ca1 []mm_repository.ConvertedFileModel, err error)
 	funcGetAllConvertedFilesByFileUIDOrigin    string
@@ -213,6 +234,13 @@ type RepositoryMock struct {
 	beforeGetChatCacheMetadataCounter uint64
 	GetChatCacheMetadataMock          mRepositoryMockGetChatCacheMetadata
 
+	funcGetChunkCountByKBUID          func(ctx context.Context, kbUID types.KBUIDType) (i1 int64, err error)
+	funcGetChunkCountByKBUIDOrigin    string
+	inspectFuncGetChunkCountByKBUID   func(ctx context.Context, kbUID types.KBUIDType)
+	afterGetChunkCountByKBUIDCounter  uint64
+	beforeGetChunkCountByKBUIDCounter uint64
+	GetChunkCountByKBUIDMock          mRepositoryMockGetChunkCountByKBUID
+
 	funcGetConvertedFileByFileUID          func(ctx context.Context, fileUID types.FileUIDType) (cp1 *mm_repository.ConvertedFileModel, err error)
 	funcGetConvertedFileByFileUIDOrigin    string
 	inspectFuncGetConvertedFileByFileUID   func(ctx context.Context, fileUID types.FileUIDType)
@@ -227,12 +255,33 @@ type RepositoryMock struct {
 	beforeGetConvertedFileByFileUIDAndTypeCounter uint64
 	GetConvertedFileByFileUIDAndTypeMock          mRepositoryMockGetConvertedFileByFileUIDAndType
 
-	funcGetCountFilesByListKnowledgeBaseUID          func(ctx context.Context, kbUIDs []types.KBUIDType) (m1 map[types.KBUIDType]int64, err error)
-	funcGetCountFilesByListKnowledgeBaseUIDOrigin    string
-	inspectFuncGetCountFilesByListKnowledgeBaseUID   func(ctx context.Context, kbUIDs []types.KBUIDType)
-	afterGetCountFilesByListKnowledgeBaseUIDCounter  uint64
-	beforeGetCountFilesByListKnowledgeBaseUIDCounter uint64
-	GetCountFilesByListKnowledgeBaseUIDMock          mRepositoryMockGetCountFilesByListKnowledgeBaseUID
+	funcGetConvertedFileCountByKBUID          func(ctx context.Context, kbUID types.KBUIDType) (i1 int64, err error)
+	funcGetConvertedFileCountByKBUIDOrigin    string
+	inspectFuncGetConvertedFileCountByKBUID   func(ctx context.Context, kbUID types.KBUIDType)
+	afterGetConvertedFileCountByKBUIDCounter  uint64
+	beforeGetConvertedFileCountByKBUIDCounter uint64
+	GetConvertedFileCountByKBUIDMock          mRepositoryMockGetConvertedFileCountByKBUID
+
+	funcGetDefaultEmbeddingConfig          func(ctx context.Context, profile string) (ep1 *mm_repository.EmbeddingConfigJSON, err error)
+	funcGetDefaultEmbeddingConfigOrigin    string
+	inspectFuncGetDefaultEmbeddingConfig   func(ctx context.Context, profile string)
+	afterGetDefaultEmbeddingConfigCounter  uint64
+	beforeGetDefaultEmbeddingConfigCounter uint64
+	GetDefaultEmbeddingConfigMock          mRepositoryMockGetDefaultEmbeddingConfig
+
+	funcGetDualProcessingTarget          func(ctx context.Context, productionKB *mm_repository.KnowledgeBaseModel) (dp1 *mm_repository.DualProcessingTarget, err error)
+	funcGetDualProcessingTargetOrigin    string
+	inspectFuncGetDualProcessingTarget   func(ctx context.Context, productionKB *mm_repository.KnowledgeBaseModel)
+	afterGetDualProcessingTargetCounter  uint64
+	beforeGetDualProcessingTargetCounter uint64
+	GetDualProcessingTargetMock          mRepositoryMockGetDualProcessingTarget
+
+	funcGetEmbeddingCountByKBUID          func(ctx context.Context, kbUID types.KBUIDType) (i1 int64, err error)
+	funcGetEmbeddingCountByKBUIDOrigin    string
+	inspectFuncGetEmbeddingCountByKBUID   func(ctx context.Context, kbUID types.KBUIDType)
+	afterGetEmbeddingCountByKBUIDCounter  uint64
+	beforeGetEmbeddingCountByKBUIDCounter uint64
+	GetEmbeddingCountByKBUIDMock          mRepositoryMockGetEmbeddingCountByKBUID
 
 	funcGetFile          func(ctx context.Context, bucket string, filePath string) (ba1 []byte, err error)
 	funcGetFileOrigin    string
@@ -240,6 +289,13 @@ type RepositoryMock struct {
 	afterGetFileCounter  uint64
 	beforeGetFileCounter uint64
 	GetFileMock          mRepositoryMockGetFile
+
+	funcGetFileCountByKnowledgeBaseUID          func(ctx context.Context, kbUID types.KBUIDType, processStatus string) (i1 int64, err error)
+	funcGetFileCountByKnowledgeBaseUIDOrigin    string
+	inspectFuncGetFileCountByKnowledgeBaseUID   func(ctx context.Context, kbUID types.KBUIDType, processStatus string)
+	afterGetFileCountByKnowledgeBaseUIDCounter  uint64
+	beforeGetFileCountByKnowledgeBaseUIDCounter uint64
+	GetFileCountByKnowledgeBaseUIDMock          mRepositoryMockGetFileCountByKnowledgeBaseUID
 
 	funcGetFileMetadata          func(ctx context.Context, bucket string, filePath string) (op1 *minio.ObjectInfo, err error)
 	funcGetFileMetadataOrigin    string
@@ -260,6 +316,13 @@ type RepositoryMock struct {
 	afterGetFilesTotalTokensCounter  uint64
 	beforeGetFilesTotalTokensCounter uint64
 	GetFilesTotalTokensMock          mRepositoryMockGetFilesTotalTokens
+
+	funcGetKnowledgeBaseByID          func(ctx context.Context, kbID string) (kp1 *mm_repository.KnowledgeBaseModel, err error)
+	funcGetKnowledgeBaseByIDOrigin    string
+	inspectFuncGetKnowledgeBaseByID   func(ctx context.Context, kbID string)
+	afterGetKnowledgeBaseByIDCounter  uint64
+	beforeGetKnowledgeBaseByIDCounter uint64
+	GetKnowledgeBaseByIDMock          mRepositoryMockGetKnowledgeBaseByID
 
 	funcGetKnowledgeBaseByOwnerAndKbID          func(ctx context.Context, ownerUID types.OwnerUIDType, kbID string) (kp1 *mm_repository.KnowledgeBaseModel, err error)
 	funcGetKnowledgeBaseByOwnerAndKbIDOrigin    string
@@ -288,6 +351,13 @@ type RepositoryMock struct {
 	afterGetKnowledgeBaseFilesByFileUIDsCounter  uint64
 	beforeGetKnowledgeBaseFilesByFileUIDsCounter uint64
 	GetKnowledgeBaseFilesByFileUIDsMock          mRepositoryMockGetKnowledgeBaseFilesByFileUIDs
+
+	funcGetKnowledgeBaseFilesByName          func(ctx context.Context, kbUID types.KBUIDType, fileName string) (ka1 []mm_repository.KnowledgeBaseFileModel, err error)
+	funcGetKnowledgeBaseFilesByNameOrigin    string
+	inspectFuncGetKnowledgeBaseFilesByName   func(ctx context.Context, kbUID types.KBUIDType, fileName string)
+	afterGetKnowledgeBaseFilesByNameCounter  uint64
+	beforeGetKnowledgeBaseFilesByNameCounter uint64
+	GetKnowledgeBaseFilesByNameMock          mRepositoryMockGetKnowledgeBaseFilesByName
 
 	funcGetKnowledgeBasesByUIDs          func(ctx context.Context, kbUIDs []types.KBUIDType) (ka1 []mm_repository.KnowledgeBaseModel, err error)
 	funcGetKnowledgeBasesByUIDsOrigin    string
@@ -366,6 +436,13 @@ type RepositoryMock struct {
 	beforeGetRepositoryTagCounter uint64
 	GetRepositoryTagMock          mRepositoryMockGetRepositoryTag
 
+	funcGetRollbackKBForProduction          func(ctx context.Context, ownerUID types.OwnerUIDType, productionCatalogID string) (kp1 *mm_repository.KnowledgeBaseModel, err error)
+	funcGetRollbackKBForProductionOrigin    string
+	inspectFuncGetRollbackKBForProduction   func(ctx context.Context, ownerUID types.OwnerUIDType, productionCatalogID string)
+	afterGetRollbackKBForProductionCounter  uint64
+	beforeGetRollbackKBForProductionCounter uint64
+	GetRollbackKBForProductionMock          mRepositoryMockGetRollbackKBForProduction
+
 	funcGetSourceByFileUID          func(ctx context.Context, fileUID types.FileUIDType) (sp1 *mm_repository.SourceMeta, err error)
 	funcGetSourceByFileUIDOrigin    string
 	inspectFuncGetSourceByFileUID   func(ctx context.Context, fileUID types.FileUIDType)
@@ -382,6 +459,20 @@ type RepositoryMock struct {
 	afterGetSourceTableAndUIDByFileUIDsCounter  uint64
 	beforeGetSourceTableAndUIDByFileUIDsCounter uint64
 	GetSourceTableAndUIDByFileUIDsMock          mRepositoryMockGetSourceTableAndUIDByFileUIDs
+
+	funcGetStagingKBForProduction          func(ctx context.Context, ownerUID types.OwnerUIDType, productionCatalogID string) (kp1 *mm_repository.KnowledgeBaseModel, err error)
+	funcGetStagingKBForProductionOrigin    string
+	inspectFuncGetStagingKBForProduction   func(ctx context.Context, ownerUID types.OwnerUIDType, productionCatalogID string)
+	afterGetStagingKBForProductionCounter  uint64
+	beforeGetStagingKBForProductionCounter uint64
+	GetStagingKBForProductionMock          mRepositoryMockGetStagingKBForProduction
+
+	funcGetSystemProfile          func(ctx context.Context, profile string) (sp1 *mm_repository.SystemProfileModel, err error)
+	funcGetSystemProfileOrigin    string
+	inspectFuncGetSystemProfile   func(ctx context.Context, profile string)
+	afterGetSystemProfileCounter  uint64
+	beforeGetSystemProfileCounter uint64
+	GetSystemProfileMock          mRepositoryMockGetSystemProfile
 
 	funcGetTextChunksBySource          func(ctx context.Context, sourceTable string, sourceUID types.SourceUIDType) (ta1 []mm_repository.TextChunkModel, err error)
 	funcGetTextChunksBySourceOrigin    string
@@ -466,6 +557,20 @@ type RepositoryMock struct {
 	beforeInsertVectorsInCollectionCounter uint64
 	InsertVectorsInCollectionMock          mRepositoryMockInsertVectorsInCollection
 
+	funcIsCollectionInUse          func(ctx context.Context, collectionUID types.CollectionUIDType) (b1 bool, err error)
+	funcIsCollectionInUseOrigin    string
+	inspectFuncIsCollectionInUse   func(ctx context.Context, collectionUID types.CollectionUIDType)
+	afterIsCollectionInUseCounter  uint64
+	beforeIsCollectionInUseCounter uint64
+	IsCollectionInUseMock          mRepositoryMockIsCollectionInUse
+
+	funcIsKBUpdating          func(ctx context.Context, kbUID types.KBUIDType) (b1 bool, err error)
+	funcIsKBUpdatingOrigin    string
+	inspectFuncIsKBUpdating   func(ctx context.Context, kbUID types.KBUIDType)
+	afterIsKBUpdatingCounter  uint64
+	beforeIsKBUpdatingCounter uint64
+	IsKBUpdatingMock          mRepositoryMockIsKBUpdating
+
 	funcListAllObjectURLs          func(ctx context.Context, namespaceUID types.NamespaceUIDType, objectUID types.ObjectUIDType) (oa1 []mm_repository.ObjectURLModel, err error)
 	funcListAllObjectURLsOrigin    string
 	inspectFuncListAllObjectURLs   func(ctx context.Context, namespaceUID types.NamespaceUIDType, objectUID types.ObjectUIDType)
@@ -529,6 +634,27 @@ type RepositoryMock struct {
 	beforeListKnowledgeBasesByCatalogTypeCounter uint64
 	ListKnowledgeBasesByCatalogTypeMock          mRepositoryMockListKnowledgeBasesByCatalogType
 
+	funcListKnowledgeBasesByUpdateStatus          func(ctx context.Context, updateStatus string) (ka1 []mm_repository.KnowledgeBaseModel, err error)
+	funcListKnowledgeBasesByUpdateStatusOrigin    string
+	inspectFuncListKnowledgeBasesByUpdateStatus   func(ctx context.Context, updateStatus string)
+	afterListKnowledgeBasesByUpdateStatusCounter  uint64
+	beforeListKnowledgeBasesByUpdateStatusCounter uint64
+	ListKnowledgeBasesByUpdateStatusMock          mRepositoryMockListKnowledgeBasesByUpdateStatus
+
+	funcListKnowledgeBasesForUpdate          func(ctx context.Context, tagFilters []string, catalogIDs []string) (ka1 []mm_repository.KnowledgeBaseModel, err error)
+	funcListKnowledgeBasesForUpdateOrigin    string
+	inspectFuncListKnowledgeBasesForUpdate   func(ctx context.Context, tagFilters []string, catalogIDs []string)
+	afterListKnowledgeBasesForUpdateCounter  uint64
+	beforeListKnowledgeBasesForUpdateCounter uint64
+	ListKnowledgeBasesForUpdateMock          mRepositoryMockListKnowledgeBasesForUpdate
+
+	funcListSystemProfiles          func(ctx context.Context) (sa1 []mm_repository.SystemProfileModel, err error)
+	funcListSystemProfilesOrigin    string
+	inspectFuncListSystemProfiles   func(ctx context.Context)
+	afterListSystemProfilesCounter  uint64
+	beforeListSystemProfilesCounter uint64
+	ListSystemProfilesMock          mRepositoryMockListSystemProfiles
+
 	funcListTextChunksByFileUID          func(ctx context.Context, kbUID types.KBUIDType, fileUID types.FileUIDType) (sa1 []string, err error)
 	funcListTextChunksByFileUIDOrigin    string
 	inspectFuncListTextChunksByFileUID   func(ctx context.Context, kbUID types.KBUIDType, fileUID types.FileUIDType)
@@ -578,6 +704,13 @@ type RepositoryMock struct {
 	beforeUpdateConvertedFileCounter uint64
 	UpdateConvertedFileMock          mRepositoryMockUpdateConvertedFile
 
+	funcUpdateDefaultEmbeddingConfig          func(ctx context.Context, profile string, config mm_repository.EmbeddingConfigJSON) (err error)
+	funcUpdateDefaultEmbeddingConfigOrigin    string
+	inspectFuncUpdateDefaultEmbeddingConfig   func(ctx context.Context, profile string, config mm_repository.EmbeddingConfigJSON)
+	afterUpdateDefaultEmbeddingConfigCounter  uint64
+	beforeUpdateDefaultEmbeddingConfigCounter uint64
+	UpdateDefaultEmbeddingConfigMock          mRepositoryMockUpdateDefaultEmbeddingConfig
+
 	funcUpdateKnowledgeBase          func(ctx context.Context, id string, ownerUID string, kb mm_repository.KnowledgeBaseModel) (kp1 *mm_repository.KnowledgeBaseModel, err error)
 	funcUpdateKnowledgeBaseOrigin    string
 	inspectFuncUpdateKnowledgeBase   func(ctx context.Context, id string, ownerUID string, kb mm_repository.KnowledgeBaseModel)
@@ -591,6 +724,27 @@ type RepositoryMock struct {
 	afterUpdateKnowledgeBaseFileCounter  uint64
 	beforeUpdateKnowledgeBaseFileCounter uint64
 	UpdateKnowledgeBaseFileMock          mRepositoryMockUpdateKnowledgeBaseFile
+
+	funcUpdateKnowledgeBaseResources          func(ctx context.Context, fromKBUID types.KBUIDType, toKBUID types.KBUIDType) (err error)
+	funcUpdateKnowledgeBaseResourcesOrigin    string
+	inspectFuncUpdateKnowledgeBaseResources   func(ctx context.Context, fromKBUID types.KBUIDType, toKBUID types.KBUIDType)
+	afterUpdateKnowledgeBaseResourcesCounter  uint64
+	beforeUpdateKnowledgeBaseResourcesCounter uint64
+	UpdateKnowledgeBaseResourcesMock          mRepositoryMockUpdateKnowledgeBaseResources
+
+	funcUpdateKnowledgeBaseUpdateStatus          func(ctx context.Context, kbUID types.KBUIDType, status string, workflowID string) (err error)
+	funcUpdateKnowledgeBaseUpdateStatusOrigin    string
+	inspectFuncUpdateKnowledgeBaseUpdateStatus   func(ctx context.Context, kbUID types.KBUIDType, status string, workflowID string)
+	afterUpdateKnowledgeBaseUpdateStatusCounter  uint64
+	beforeUpdateKnowledgeBaseUpdateStatusCounter uint64
+	UpdateKnowledgeBaseUpdateStatusMock          mRepositoryMockUpdateKnowledgeBaseUpdateStatus
+
+	funcUpdateKnowledgeBaseWithMap          func(ctx context.Context, id string, owner string, updates map[string]any) (err error)
+	funcUpdateKnowledgeBaseWithMapOrigin    string
+	inspectFuncUpdateKnowledgeBaseWithMap   func(ctx context.Context, id string, owner string, updates map[string]any)
+	afterUpdateKnowledgeBaseWithMapCounter  uint64
+	beforeUpdateKnowledgeBaseWithMapCounter uint64
+	UpdateKnowledgeBaseWithMapMock          mRepositoryMockUpdateKnowledgeBaseWithMap
 
 	funcUpdateKnowledgeFileMetadata          func(ctx context.Context, fileUID types.FileUIDType, e1 mm_repository.ExtraMetaData) (err error)
 	funcUpdateKnowledgeFileMetadataOrigin    string
@@ -612,6 +766,13 @@ type RepositoryMock struct {
 	afterUpdateObjectByUpdateMapCounter  uint64
 	beforeUpdateObjectByUpdateMapCounter uint64
 	UpdateObjectByUpdateMapMock          mRepositoryMockUpdateObjectByUpdateMap
+
+	funcUpdateSystemProfile          func(ctx context.Context, profile string, config map[string]any, description string) (err error)
+	funcUpdateSystemProfileOrigin    string
+	inspectFuncUpdateSystemProfile   func(ctx context.Context, profile string, config map[string]any, description string)
+	afterUpdateSystemProfileCounter  uint64
+	beforeUpdateSystemProfileCounter uint64
+	UpdateSystemProfileMock          mRepositoryMockUpdateSystemProfile
 
 	funcUpdateTextChunk          func(ctx context.Context, chunkUID string, updates map[string]any) (tp1 *mm_repository.TextChunkModel, err error)
 	funcUpdateTextChunkOrigin    string
@@ -671,6 +832,9 @@ func NewRepositoryMock(t minimock.Tester) *RepositoryMock {
 	m.CreateObjectMock = mRepositoryMockCreateObject{mock: m}
 	m.CreateObjectMock.callArgs = []*RepositoryMockCreateObjectParams{}
 
+	m.CreateStagingKnowledgeBaseMock = mRepositoryMockCreateStagingKnowledgeBase{mock: m}
+	m.CreateStagingKnowledgeBaseMock.callArgs = []*RepositoryMockCreateStagingKnowledgeBaseParams{}
+
 	m.CreateTextChunksMock = mRepositoryMockCreateTextChunks{mock: m}
 	m.CreateTextChunksMock.callArgs = []*RepositoryMockCreateTextChunksParams{}
 
@@ -719,11 +883,17 @@ func NewRepositoryMock(t minimock.Tester) *RepositoryMock {
 	m.DeleteRepositoryTagMock = mRepositoryMockDeleteRepositoryTag{mock: m}
 	m.DeleteRepositoryTagMock.callArgs = []*RepositoryMockDeleteRepositoryTagParams{}
 
+	m.DeleteSystemProfileMock = mRepositoryMockDeleteSystemProfile{mock: m}
+	m.DeleteSystemProfileMock.callArgs = []*RepositoryMockDeleteSystemProfileParams{}
+
 	m.DropCollectionMock = mRepositoryMockDropCollection{mock: m}
 	m.DropCollectionMock.callArgs = []*RepositoryMockDropCollectionParams{}
 
 	m.FlushCollectionMock = mRepositoryMockFlushCollection{mock: m}
 	m.FlushCollectionMock.callArgs = []*RepositoryMockFlushCollectionParams{}
+
+	m.GetActiveCollectionUIDMock = mRepositoryMockGetActiveCollectionUID{mock: m}
+	m.GetActiveCollectionUIDMock.callArgs = []*RepositoryMockGetActiveCollectionUIDParams{}
 
 	m.GetAllConvertedFilesByFileUIDMock = mRepositoryMockGetAllConvertedFilesByFileUID{mock: m}
 	m.GetAllConvertedFilesByFileUIDMock.callArgs = []*RepositoryMockGetAllConvertedFilesByFileUIDParams{}
@@ -731,23 +901,41 @@ func NewRepositoryMock(t minimock.Tester) *RepositoryMock {
 	m.GetChatCacheMetadataMock = mRepositoryMockGetChatCacheMetadata{mock: m}
 	m.GetChatCacheMetadataMock.callArgs = []*RepositoryMockGetChatCacheMetadataParams{}
 
+	m.GetChunkCountByKBUIDMock = mRepositoryMockGetChunkCountByKBUID{mock: m}
+	m.GetChunkCountByKBUIDMock.callArgs = []*RepositoryMockGetChunkCountByKBUIDParams{}
+
 	m.GetConvertedFileByFileUIDMock = mRepositoryMockGetConvertedFileByFileUID{mock: m}
 	m.GetConvertedFileByFileUIDMock.callArgs = []*RepositoryMockGetConvertedFileByFileUIDParams{}
 
 	m.GetConvertedFileByFileUIDAndTypeMock = mRepositoryMockGetConvertedFileByFileUIDAndType{mock: m}
 	m.GetConvertedFileByFileUIDAndTypeMock.callArgs = []*RepositoryMockGetConvertedFileByFileUIDAndTypeParams{}
 
-	m.GetCountFilesByListKnowledgeBaseUIDMock = mRepositoryMockGetCountFilesByListKnowledgeBaseUID{mock: m}
-	m.GetCountFilesByListKnowledgeBaseUIDMock.callArgs = []*RepositoryMockGetCountFilesByListKnowledgeBaseUIDParams{}
+	m.GetConvertedFileCountByKBUIDMock = mRepositoryMockGetConvertedFileCountByKBUID{mock: m}
+	m.GetConvertedFileCountByKBUIDMock.callArgs = []*RepositoryMockGetConvertedFileCountByKBUIDParams{}
+
+	m.GetDefaultEmbeddingConfigMock = mRepositoryMockGetDefaultEmbeddingConfig{mock: m}
+	m.GetDefaultEmbeddingConfigMock.callArgs = []*RepositoryMockGetDefaultEmbeddingConfigParams{}
+
+	m.GetDualProcessingTargetMock = mRepositoryMockGetDualProcessingTarget{mock: m}
+	m.GetDualProcessingTargetMock.callArgs = []*RepositoryMockGetDualProcessingTargetParams{}
+
+	m.GetEmbeddingCountByKBUIDMock = mRepositoryMockGetEmbeddingCountByKBUID{mock: m}
+	m.GetEmbeddingCountByKBUIDMock.callArgs = []*RepositoryMockGetEmbeddingCountByKBUIDParams{}
 
 	m.GetFileMock = mRepositoryMockGetFile{mock: m}
 	m.GetFileMock.callArgs = []*RepositoryMockGetFileParams{}
+
+	m.GetFileCountByKnowledgeBaseUIDMock = mRepositoryMockGetFileCountByKnowledgeBaseUID{mock: m}
+	m.GetFileCountByKnowledgeBaseUIDMock.callArgs = []*RepositoryMockGetFileCountByKnowledgeBaseUIDParams{}
 
 	m.GetFileMetadataMock = mRepositoryMockGetFileMetadata{mock: m}
 	m.GetFileMetadataMock.callArgs = []*RepositoryMockGetFileMetadataParams{}
 
 	m.GetFilesTotalTokensMock = mRepositoryMockGetFilesTotalTokens{mock: m}
 	m.GetFilesTotalTokensMock.callArgs = []*RepositoryMockGetFilesTotalTokensParams{}
+
+	m.GetKnowledgeBaseByIDMock = mRepositoryMockGetKnowledgeBaseByID{mock: m}
+	m.GetKnowledgeBaseByIDMock.callArgs = []*RepositoryMockGetKnowledgeBaseByIDParams{}
 
 	m.GetKnowledgeBaseByOwnerAndKbIDMock = mRepositoryMockGetKnowledgeBaseByOwnerAndKbID{mock: m}
 	m.GetKnowledgeBaseByOwnerAndKbIDMock.callArgs = []*RepositoryMockGetKnowledgeBaseByOwnerAndKbIDParams{}
@@ -760,6 +948,9 @@ func NewRepositoryMock(t minimock.Tester) *RepositoryMock {
 
 	m.GetKnowledgeBaseFilesByFileUIDsMock = mRepositoryMockGetKnowledgeBaseFilesByFileUIDs{mock: m}
 	m.GetKnowledgeBaseFilesByFileUIDsMock.callArgs = []*RepositoryMockGetKnowledgeBaseFilesByFileUIDsParams{}
+
+	m.GetKnowledgeBaseFilesByNameMock = mRepositoryMockGetKnowledgeBaseFilesByName{mock: m}
+	m.GetKnowledgeBaseFilesByNameMock.callArgs = []*RepositoryMockGetKnowledgeBaseFilesByNameParams{}
 
 	m.GetKnowledgeBasesByUIDsMock = mRepositoryMockGetKnowledgeBasesByUIDs{mock: m}
 	m.GetKnowledgeBasesByUIDsMock.callArgs = []*RepositoryMockGetKnowledgeBasesByUIDsParams{}
@@ -794,11 +985,20 @@ func NewRepositoryMock(t minimock.Tester) *RepositoryMock {
 	m.GetRepositoryTagMock = mRepositoryMockGetRepositoryTag{mock: m}
 	m.GetRepositoryTagMock.callArgs = []*RepositoryMockGetRepositoryTagParams{}
 
+	m.GetRollbackKBForProductionMock = mRepositoryMockGetRollbackKBForProduction{mock: m}
+	m.GetRollbackKBForProductionMock.callArgs = []*RepositoryMockGetRollbackKBForProductionParams{}
+
 	m.GetSourceByFileUIDMock = mRepositoryMockGetSourceByFileUID{mock: m}
 	m.GetSourceByFileUIDMock.callArgs = []*RepositoryMockGetSourceByFileUIDParams{}
 
 	m.GetSourceTableAndUIDByFileUIDsMock = mRepositoryMockGetSourceTableAndUIDByFileUIDs{mock: m}
 	m.GetSourceTableAndUIDByFileUIDsMock.callArgs = []*RepositoryMockGetSourceTableAndUIDByFileUIDsParams{}
+
+	m.GetStagingKBForProductionMock = mRepositoryMockGetStagingKBForProduction{mock: m}
+	m.GetStagingKBForProductionMock.callArgs = []*RepositoryMockGetStagingKBForProductionParams{}
+
+	m.GetSystemProfileMock = mRepositoryMockGetSystemProfile{mock: m}
+	m.GetSystemProfileMock.callArgs = []*RepositoryMockGetSystemProfileParams{}
 
 	m.GetTextChunksBySourceMock = mRepositoryMockGetTextChunksBySource{mock: m}
 	m.GetTextChunksBySourceMock.callArgs = []*RepositoryMockGetTextChunksBySourceParams{}
@@ -833,6 +1033,12 @@ func NewRepositoryMock(t minimock.Tester) *RepositoryMock {
 	m.InsertVectorsInCollectionMock = mRepositoryMockInsertVectorsInCollection{mock: m}
 	m.InsertVectorsInCollectionMock.callArgs = []*RepositoryMockInsertVectorsInCollectionParams{}
 
+	m.IsCollectionInUseMock = mRepositoryMockIsCollectionInUse{mock: m}
+	m.IsCollectionInUseMock.callArgs = []*RepositoryMockIsCollectionInUseParams{}
+
+	m.IsKBUpdatingMock = mRepositoryMockIsKBUpdating{mock: m}
+	m.IsKBUpdatingMock.callArgs = []*RepositoryMockIsKBUpdatingParams{}
+
 	m.ListAllObjectURLsMock = mRepositoryMockListAllObjectURLs{mock: m}
 	m.ListAllObjectURLsMock.callArgs = []*RepositoryMockListAllObjectURLsParams{}
 
@@ -860,6 +1066,15 @@ func NewRepositoryMock(t minimock.Tester) *RepositoryMock {
 	m.ListKnowledgeBasesByCatalogTypeMock = mRepositoryMockListKnowledgeBasesByCatalogType{mock: m}
 	m.ListKnowledgeBasesByCatalogTypeMock.callArgs = []*RepositoryMockListKnowledgeBasesByCatalogTypeParams{}
 
+	m.ListKnowledgeBasesByUpdateStatusMock = mRepositoryMockListKnowledgeBasesByUpdateStatus{mock: m}
+	m.ListKnowledgeBasesByUpdateStatusMock.callArgs = []*RepositoryMockListKnowledgeBasesByUpdateStatusParams{}
+
+	m.ListKnowledgeBasesForUpdateMock = mRepositoryMockListKnowledgeBasesForUpdate{mock: m}
+	m.ListKnowledgeBasesForUpdateMock.callArgs = []*RepositoryMockListKnowledgeBasesForUpdateParams{}
+
+	m.ListSystemProfilesMock = mRepositoryMockListSystemProfiles{mock: m}
+	m.ListSystemProfilesMock.callArgs = []*RepositoryMockListSystemProfilesParams{}
+
 	m.ListTextChunksByFileUIDMock = mRepositoryMockListTextChunksByFileUID{mock: m}
 	m.ListTextChunksByFileUIDMock.callArgs = []*RepositoryMockListTextChunksByFileUIDParams{}
 
@@ -881,11 +1096,23 @@ func NewRepositoryMock(t minimock.Tester) *RepositoryMock {
 	m.UpdateConvertedFileMock = mRepositoryMockUpdateConvertedFile{mock: m}
 	m.UpdateConvertedFileMock.callArgs = []*RepositoryMockUpdateConvertedFileParams{}
 
+	m.UpdateDefaultEmbeddingConfigMock = mRepositoryMockUpdateDefaultEmbeddingConfig{mock: m}
+	m.UpdateDefaultEmbeddingConfigMock.callArgs = []*RepositoryMockUpdateDefaultEmbeddingConfigParams{}
+
 	m.UpdateKnowledgeBaseMock = mRepositoryMockUpdateKnowledgeBase{mock: m}
 	m.UpdateKnowledgeBaseMock.callArgs = []*RepositoryMockUpdateKnowledgeBaseParams{}
 
 	m.UpdateKnowledgeBaseFileMock = mRepositoryMockUpdateKnowledgeBaseFile{mock: m}
 	m.UpdateKnowledgeBaseFileMock.callArgs = []*RepositoryMockUpdateKnowledgeBaseFileParams{}
+
+	m.UpdateKnowledgeBaseResourcesMock = mRepositoryMockUpdateKnowledgeBaseResources{mock: m}
+	m.UpdateKnowledgeBaseResourcesMock.callArgs = []*RepositoryMockUpdateKnowledgeBaseResourcesParams{}
+
+	m.UpdateKnowledgeBaseUpdateStatusMock = mRepositoryMockUpdateKnowledgeBaseUpdateStatus{mock: m}
+	m.UpdateKnowledgeBaseUpdateStatusMock.callArgs = []*RepositoryMockUpdateKnowledgeBaseUpdateStatusParams{}
+
+	m.UpdateKnowledgeBaseWithMapMock = mRepositoryMockUpdateKnowledgeBaseWithMap{mock: m}
+	m.UpdateKnowledgeBaseWithMapMock.callArgs = []*RepositoryMockUpdateKnowledgeBaseWithMapParams{}
 
 	m.UpdateKnowledgeFileMetadataMock = mRepositoryMockUpdateKnowledgeFileMetadata{mock: m}
 	m.UpdateKnowledgeFileMetadataMock.callArgs = []*RepositoryMockUpdateKnowledgeFileMetadataParams{}
@@ -895,6 +1122,9 @@ func NewRepositoryMock(t minimock.Tester) *RepositoryMock {
 
 	m.UpdateObjectByUpdateMapMock = mRepositoryMockUpdateObjectByUpdateMap{mock: m}
 	m.UpdateObjectByUpdateMapMock.callArgs = []*RepositoryMockUpdateObjectByUpdateMapParams{}
+
+	m.UpdateSystemProfileMock = mRepositoryMockUpdateSystemProfile{mock: m}
+	m.UpdateSystemProfileMock.callArgs = []*RepositoryMockUpdateSystemProfileParams{}
 
 	m.UpdateTextChunkMock = mRepositoryMockUpdateTextChunk{mock: m}
 	m.UpdateTextChunkMock.callArgs = []*RepositoryMockUpdateTextChunkParams{}
@@ -1282,14 +1512,16 @@ type RepositoryMockCreateCollectionExpectation struct {
 
 // RepositoryMockCreateCollectionParams contains parameters of the Repository.CreateCollection
 type RepositoryMockCreateCollectionParams struct {
-	ctx context.Context
-	id  string
+	ctx            context.Context
+	id             string
+	dimensionality uint32
 }
 
 // RepositoryMockCreateCollectionParamPtrs contains pointers to parameters of the Repository.CreateCollection
 type RepositoryMockCreateCollectionParamPtrs struct {
-	ctx *context.Context
-	id  *string
+	ctx            *context.Context
+	id             *string
+	dimensionality *uint32
 }
 
 // RepositoryMockCreateCollectionResults contains results of the Repository.CreateCollection
@@ -1299,9 +1531,10 @@ type RepositoryMockCreateCollectionResults struct {
 
 // RepositoryMockCreateCollectionOrigins contains origins of expectations of the Repository.CreateCollection
 type RepositoryMockCreateCollectionExpectationOrigins struct {
-	origin    string
-	originCtx string
-	originId  string
+	origin               string
+	originCtx            string
+	originId             string
+	originDimensionality string
 }
 
 // Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
@@ -1315,7 +1548,7 @@ func (mmCreateCollection *mRepositoryMockCreateCollection) Optional() *mReposito
 }
 
 // Expect sets up expected params for Repository.CreateCollection
-func (mmCreateCollection *mRepositoryMockCreateCollection) Expect(ctx context.Context, id string) *mRepositoryMockCreateCollection {
+func (mmCreateCollection *mRepositoryMockCreateCollection) Expect(ctx context.Context, id string, dimensionality uint32) *mRepositoryMockCreateCollection {
 	if mmCreateCollection.mock.funcCreateCollection != nil {
 		mmCreateCollection.mock.t.Fatalf("RepositoryMock.CreateCollection mock is already set by Set")
 	}
@@ -1328,7 +1561,7 @@ func (mmCreateCollection *mRepositoryMockCreateCollection) Expect(ctx context.Co
 		mmCreateCollection.mock.t.Fatalf("RepositoryMock.CreateCollection mock is already set by ExpectParams functions")
 	}
 
-	mmCreateCollection.defaultExpectation.params = &RepositoryMockCreateCollectionParams{ctx, id}
+	mmCreateCollection.defaultExpectation.params = &RepositoryMockCreateCollectionParams{ctx, id, dimensionality}
 	mmCreateCollection.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
 	for _, e := range mmCreateCollection.expectations {
 		if minimock.Equal(e.params, mmCreateCollection.defaultExpectation.params) {
@@ -1385,8 +1618,31 @@ func (mmCreateCollection *mRepositoryMockCreateCollection) ExpectIdParam2(id str
 	return mmCreateCollection
 }
 
+// ExpectDimensionalityParam3 sets up expected param dimensionality for Repository.CreateCollection
+func (mmCreateCollection *mRepositoryMockCreateCollection) ExpectDimensionalityParam3(dimensionality uint32) *mRepositoryMockCreateCollection {
+	if mmCreateCollection.mock.funcCreateCollection != nil {
+		mmCreateCollection.mock.t.Fatalf("RepositoryMock.CreateCollection mock is already set by Set")
+	}
+
+	if mmCreateCollection.defaultExpectation == nil {
+		mmCreateCollection.defaultExpectation = &RepositoryMockCreateCollectionExpectation{}
+	}
+
+	if mmCreateCollection.defaultExpectation.params != nil {
+		mmCreateCollection.mock.t.Fatalf("RepositoryMock.CreateCollection mock is already set by Expect")
+	}
+
+	if mmCreateCollection.defaultExpectation.paramPtrs == nil {
+		mmCreateCollection.defaultExpectation.paramPtrs = &RepositoryMockCreateCollectionParamPtrs{}
+	}
+	mmCreateCollection.defaultExpectation.paramPtrs.dimensionality = &dimensionality
+	mmCreateCollection.defaultExpectation.expectationOrigins.originDimensionality = minimock.CallerInfo(1)
+
+	return mmCreateCollection
+}
+
 // Inspect accepts an inspector function that has same arguments as the Repository.CreateCollection
-func (mmCreateCollection *mRepositoryMockCreateCollection) Inspect(f func(ctx context.Context, id string)) *mRepositoryMockCreateCollection {
+func (mmCreateCollection *mRepositoryMockCreateCollection) Inspect(f func(ctx context.Context, id string, dimensionality uint32)) *mRepositoryMockCreateCollection {
 	if mmCreateCollection.mock.inspectFuncCreateCollection != nil {
 		mmCreateCollection.mock.t.Fatalf("Inspect function is already set for RepositoryMock.CreateCollection")
 	}
@@ -1411,7 +1667,7 @@ func (mmCreateCollection *mRepositoryMockCreateCollection) Return(err error) *Re
 }
 
 // Set uses given function f to mock the Repository.CreateCollection method
-func (mmCreateCollection *mRepositoryMockCreateCollection) Set(f func(ctx context.Context, id string) (err error)) *RepositoryMock {
+func (mmCreateCollection *mRepositoryMockCreateCollection) Set(f func(ctx context.Context, id string, dimensionality uint32) (err error)) *RepositoryMock {
 	if mmCreateCollection.defaultExpectation != nil {
 		mmCreateCollection.mock.t.Fatalf("Default expectation is already set for the Repository.CreateCollection method")
 	}
@@ -1427,14 +1683,14 @@ func (mmCreateCollection *mRepositoryMockCreateCollection) Set(f func(ctx contex
 
 // When sets expectation for the Repository.CreateCollection which will trigger the result defined by the following
 // Then helper
-func (mmCreateCollection *mRepositoryMockCreateCollection) When(ctx context.Context, id string) *RepositoryMockCreateCollectionExpectation {
+func (mmCreateCollection *mRepositoryMockCreateCollection) When(ctx context.Context, id string, dimensionality uint32) *RepositoryMockCreateCollectionExpectation {
 	if mmCreateCollection.mock.funcCreateCollection != nil {
 		mmCreateCollection.mock.t.Fatalf("RepositoryMock.CreateCollection mock is already set by Set")
 	}
 
 	expectation := &RepositoryMockCreateCollectionExpectation{
 		mock:               mmCreateCollection.mock,
-		params:             &RepositoryMockCreateCollectionParams{ctx, id},
+		params:             &RepositoryMockCreateCollectionParams{ctx, id, dimensionality},
 		expectationOrigins: RepositoryMockCreateCollectionExpectationOrigins{origin: minimock.CallerInfo(1)},
 	}
 	mmCreateCollection.expectations = append(mmCreateCollection.expectations, expectation)
@@ -1469,17 +1725,17 @@ func (mmCreateCollection *mRepositoryMockCreateCollection) invocationsDone() boo
 }
 
 // CreateCollection implements mm_repository.Repository
-func (mmCreateCollection *RepositoryMock) CreateCollection(ctx context.Context, id string) (err error) {
+func (mmCreateCollection *RepositoryMock) CreateCollection(ctx context.Context, id string, dimensionality uint32) (err error) {
 	mm_atomic.AddUint64(&mmCreateCollection.beforeCreateCollectionCounter, 1)
 	defer mm_atomic.AddUint64(&mmCreateCollection.afterCreateCollectionCounter, 1)
 
 	mmCreateCollection.t.Helper()
 
 	if mmCreateCollection.inspectFuncCreateCollection != nil {
-		mmCreateCollection.inspectFuncCreateCollection(ctx, id)
+		mmCreateCollection.inspectFuncCreateCollection(ctx, id, dimensionality)
 	}
 
-	mm_params := RepositoryMockCreateCollectionParams{ctx, id}
+	mm_params := RepositoryMockCreateCollectionParams{ctx, id, dimensionality}
 
 	// Record call args
 	mmCreateCollection.CreateCollectionMock.mutex.Lock()
@@ -1498,7 +1754,7 @@ func (mmCreateCollection *RepositoryMock) CreateCollection(ctx context.Context, 
 		mm_want := mmCreateCollection.CreateCollectionMock.defaultExpectation.params
 		mm_want_ptrs := mmCreateCollection.CreateCollectionMock.defaultExpectation.paramPtrs
 
-		mm_got := RepositoryMockCreateCollectionParams{ctx, id}
+		mm_got := RepositoryMockCreateCollectionParams{ctx, id, dimensionality}
 
 		if mm_want_ptrs != nil {
 
@@ -1510,6 +1766,11 @@ func (mmCreateCollection *RepositoryMock) CreateCollection(ctx context.Context, 
 			if mm_want_ptrs.id != nil && !minimock.Equal(*mm_want_ptrs.id, mm_got.id) {
 				mmCreateCollection.t.Errorf("RepositoryMock.CreateCollection got unexpected parameter id, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
 					mmCreateCollection.CreateCollectionMock.defaultExpectation.expectationOrigins.originId, *mm_want_ptrs.id, mm_got.id, minimock.Diff(*mm_want_ptrs.id, mm_got.id))
+			}
+
+			if mm_want_ptrs.dimensionality != nil && !minimock.Equal(*mm_want_ptrs.dimensionality, mm_got.dimensionality) {
+				mmCreateCollection.t.Errorf("RepositoryMock.CreateCollection got unexpected parameter dimensionality, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCreateCollection.CreateCollectionMock.defaultExpectation.expectationOrigins.originDimensionality, *mm_want_ptrs.dimensionality, mm_got.dimensionality, minimock.Diff(*mm_want_ptrs.dimensionality, mm_got.dimensionality))
 			}
 
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
@@ -1524,9 +1785,9 @@ func (mmCreateCollection *RepositoryMock) CreateCollection(ctx context.Context, 
 		return (*mm_results).err
 	}
 	if mmCreateCollection.funcCreateCollection != nil {
-		return mmCreateCollection.funcCreateCollection(ctx, id)
+		return mmCreateCollection.funcCreateCollection(ctx, id, dimensionality)
 	}
-	mmCreateCollection.t.Fatalf("Unexpected call to RepositoryMock.CreateCollection. %v %v", ctx, id)
+	mmCreateCollection.t.Fatalf("Unexpected call to RepositoryMock.CreateCollection. %v %v %v", ctx, id, dimensionality)
 	return
 }
 
@@ -3403,6 +3664,411 @@ func (m *RepositoryMock) MinimockCreateObjectInspect() {
 	if !m.CreateObjectMock.invocationsDone() && afterCreateObjectCounter > 0 {
 		m.t.Errorf("Expected %d calls to RepositoryMock.CreateObject at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.CreateObjectMock.expectedInvocations), m.CreateObjectMock.expectedInvocationsOrigin, afterCreateObjectCounter)
+	}
+}
+
+type mRepositoryMockCreateStagingKnowledgeBase struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockCreateStagingKnowledgeBaseExpectation
+	expectations       []*RepositoryMockCreateStagingKnowledgeBaseExpectation
+
+	callArgs []*RepositoryMockCreateStagingKnowledgeBaseParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockCreateStagingKnowledgeBaseExpectation specifies expectation struct of the Repository.CreateStagingKnowledgeBase
+type RepositoryMockCreateStagingKnowledgeBaseExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockCreateStagingKnowledgeBaseParams
+	paramPtrs          *RepositoryMockCreateStagingKnowledgeBaseParamPtrs
+	expectationOrigins RepositoryMockCreateStagingKnowledgeBaseExpectationOrigins
+	results            *RepositoryMockCreateStagingKnowledgeBaseResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockCreateStagingKnowledgeBaseParams contains parameters of the Repository.CreateStagingKnowledgeBase
+type RepositoryMockCreateStagingKnowledgeBaseParams struct {
+	ctx                context.Context
+	original           *mm_repository.KnowledgeBaseModel
+	newEmbeddingConfig *mm_repository.EmbeddingConfigJSON
+	externalService    func(kbUID types.KBUIDType) error
+}
+
+// RepositoryMockCreateStagingKnowledgeBaseParamPtrs contains pointers to parameters of the Repository.CreateStagingKnowledgeBase
+type RepositoryMockCreateStagingKnowledgeBaseParamPtrs struct {
+	ctx                *context.Context
+	original           **mm_repository.KnowledgeBaseModel
+	newEmbeddingConfig **mm_repository.EmbeddingConfigJSON
+	externalService    *func(kbUID types.KBUIDType) error
+}
+
+// RepositoryMockCreateStagingKnowledgeBaseResults contains results of the Repository.CreateStagingKnowledgeBase
+type RepositoryMockCreateStagingKnowledgeBaseResults struct {
+	kp1 *mm_repository.KnowledgeBaseModel
+	err error
+}
+
+// RepositoryMockCreateStagingKnowledgeBaseOrigins contains origins of expectations of the Repository.CreateStagingKnowledgeBase
+type RepositoryMockCreateStagingKnowledgeBaseExpectationOrigins struct {
+	origin                   string
+	originCtx                string
+	originOriginal           string
+	originNewEmbeddingConfig string
+	originExternalService    string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmCreateStagingKnowledgeBase *mRepositoryMockCreateStagingKnowledgeBase) Optional() *mRepositoryMockCreateStagingKnowledgeBase {
+	mmCreateStagingKnowledgeBase.optional = true
+	return mmCreateStagingKnowledgeBase
+}
+
+// Expect sets up expected params for Repository.CreateStagingKnowledgeBase
+func (mmCreateStagingKnowledgeBase *mRepositoryMockCreateStagingKnowledgeBase) Expect(ctx context.Context, original *mm_repository.KnowledgeBaseModel, newEmbeddingConfig *mm_repository.EmbeddingConfigJSON, externalService func(kbUID types.KBUIDType) error) *mRepositoryMockCreateStagingKnowledgeBase {
+	if mmCreateStagingKnowledgeBase.mock.funcCreateStagingKnowledgeBase != nil {
+		mmCreateStagingKnowledgeBase.mock.t.Fatalf("RepositoryMock.CreateStagingKnowledgeBase mock is already set by Set")
+	}
+
+	if mmCreateStagingKnowledgeBase.defaultExpectation == nil {
+		mmCreateStagingKnowledgeBase.defaultExpectation = &RepositoryMockCreateStagingKnowledgeBaseExpectation{}
+	}
+
+	if mmCreateStagingKnowledgeBase.defaultExpectation.paramPtrs != nil {
+		mmCreateStagingKnowledgeBase.mock.t.Fatalf("RepositoryMock.CreateStagingKnowledgeBase mock is already set by ExpectParams functions")
+	}
+
+	mmCreateStagingKnowledgeBase.defaultExpectation.params = &RepositoryMockCreateStagingKnowledgeBaseParams{ctx, original, newEmbeddingConfig, externalService}
+	mmCreateStagingKnowledgeBase.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmCreateStagingKnowledgeBase.expectations {
+		if minimock.Equal(e.params, mmCreateStagingKnowledgeBase.defaultExpectation.params) {
+			mmCreateStagingKnowledgeBase.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmCreateStagingKnowledgeBase.defaultExpectation.params)
+		}
+	}
+
+	return mmCreateStagingKnowledgeBase
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.CreateStagingKnowledgeBase
+func (mmCreateStagingKnowledgeBase *mRepositoryMockCreateStagingKnowledgeBase) ExpectCtxParam1(ctx context.Context) *mRepositoryMockCreateStagingKnowledgeBase {
+	if mmCreateStagingKnowledgeBase.mock.funcCreateStagingKnowledgeBase != nil {
+		mmCreateStagingKnowledgeBase.mock.t.Fatalf("RepositoryMock.CreateStagingKnowledgeBase mock is already set by Set")
+	}
+
+	if mmCreateStagingKnowledgeBase.defaultExpectation == nil {
+		mmCreateStagingKnowledgeBase.defaultExpectation = &RepositoryMockCreateStagingKnowledgeBaseExpectation{}
+	}
+
+	if mmCreateStagingKnowledgeBase.defaultExpectation.params != nil {
+		mmCreateStagingKnowledgeBase.mock.t.Fatalf("RepositoryMock.CreateStagingKnowledgeBase mock is already set by Expect")
+	}
+
+	if mmCreateStagingKnowledgeBase.defaultExpectation.paramPtrs == nil {
+		mmCreateStagingKnowledgeBase.defaultExpectation.paramPtrs = &RepositoryMockCreateStagingKnowledgeBaseParamPtrs{}
+	}
+	mmCreateStagingKnowledgeBase.defaultExpectation.paramPtrs.ctx = &ctx
+	mmCreateStagingKnowledgeBase.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmCreateStagingKnowledgeBase
+}
+
+// ExpectOriginalParam2 sets up expected param original for Repository.CreateStagingKnowledgeBase
+func (mmCreateStagingKnowledgeBase *mRepositoryMockCreateStagingKnowledgeBase) ExpectOriginalParam2(original *mm_repository.KnowledgeBaseModel) *mRepositoryMockCreateStagingKnowledgeBase {
+	if mmCreateStagingKnowledgeBase.mock.funcCreateStagingKnowledgeBase != nil {
+		mmCreateStagingKnowledgeBase.mock.t.Fatalf("RepositoryMock.CreateStagingKnowledgeBase mock is already set by Set")
+	}
+
+	if mmCreateStagingKnowledgeBase.defaultExpectation == nil {
+		mmCreateStagingKnowledgeBase.defaultExpectation = &RepositoryMockCreateStagingKnowledgeBaseExpectation{}
+	}
+
+	if mmCreateStagingKnowledgeBase.defaultExpectation.params != nil {
+		mmCreateStagingKnowledgeBase.mock.t.Fatalf("RepositoryMock.CreateStagingKnowledgeBase mock is already set by Expect")
+	}
+
+	if mmCreateStagingKnowledgeBase.defaultExpectation.paramPtrs == nil {
+		mmCreateStagingKnowledgeBase.defaultExpectation.paramPtrs = &RepositoryMockCreateStagingKnowledgeBaseParamPtrs{}
+	}
+	mmCreateStagingKnowledgeBase.defaultExpectation.paramPtrs.original = &original
+	mmCreateStagingKnowledgeBase.defaultExpectation.expectationOrigins.originOriginal = minimock.CallerInfo(1)
+
+	return mmCreateStagingKnowledgeBase
+}
+
+// ExpectNewEmbeddingConfigParam3 sets up expected param newEmbeddingConfig for Repository.CreateStagingKnowledgeBase
+func (mmCreateStagingKnowledgeBase *mRepositoryMockCreateStagingKnowledgeBase) ExpectNewEmbeddingConfigParam3(newEmbeddingConfig *mm_repository.EmbeddingConfigJSON) *mRepositoryMockCreateStagingKnowledgeBase {
+	if mmCreateStagingKnowledgeBase.mock.funcCreateStagingKnowledgeBase != nil {
+		mmCreateStagingKnowledgeBase.mock.t.Fatalf("RepositoryMock.CreateStagingKnowledgeBase mock is already set by Set")
+	}
+
+	if mmCreateStagingKnowledgeBase.defaultExpectation == nil {
+		mmCreateStagingKnowledgeBase.defaultExpectation = &RepositoryMockCreateStagingKnowledgeBaseExpectation{}
+	}
+
+	if mmCreateStagingKnowledgeBase.defaultExpectation.params != nil {
+		mmCreateStagingKnowledgeBase.mock.t.Fatalf("RepositoryMock.CreateStagingKnowledgeBase mock is already set by Expect")
+	}
+
+	if mmCreateStagingKnowledgeBase.defaultExpectation.paramPtrs == nil {
+		mmCreateStagingKnowledgeBase.defaultExpectation.paramPtrs = &RepositoryMockCreateStagingKnowledgeBaseParamPtrs{}
+	}
+	mmCreateStagingKnowledgeBase.defaultExpectation.paramPtrs.newEmbeddingConfig = &newEmbeddingConfig
+	mmCreateStagingKnowledgeBase.defaultExpectation.expectationOrigins.originNewEmbeddingConfig = minimock.CallerInfo(1)
+
+	return mmCreateStagingKnowledgeBase
+}
+
+// ExpectExternalServiceParam4 sets up expected param externalService for Repository.CreateStagingKnowledgeBase
+func (mmCreateStagingKnowledgeBase *mRepositoryMockCreateStagingKnowledgeBase) ExpectExternalServiceParam4(externalService func(kbUID types.KBUIDType) error) *mRepositoryMockCreateStagingKnowledgeBase {
+	if mmCreateStagingKnowledgeBase.mock.funcCreateStagingKnowledgeBase != nil {
+		mmCreateStagingKnowledgeBase.mock.t.Fatalf("RepositoryMock.CreateStagingKnowledgeBase mock is already set by Set")
+	}
+
+	if mmCreateStagingKnowledgeBase.defaultExpectation == nil {
+		mmCreateStagingKnowledgeBase.defaultExpectation = &RepositoryMockCreateStagingKnowledgeBaseExpectation{}
+	}
+
+	if mmCreateStagingKnowledgeBase.defaultExpectation.params != nil {
+		mmCreateStagingKnowledgeBase.mock.t.Fatalf("RepositoryMock.CreateStagingKnowledgeBase mock is already set by Expect")
+	}
+
+	if mmCreateStagingKnowledgeBase.defaultExpectation.paramPtrs == nil {
+		mmCreateStagingKnowledgeBase.defaultExpectation.paramPtrs = &RepositoryMockCreateStagingKnowledgeBaseParamPtrs{}
+	}
+	mmCreateStagingKnowledgeBase.defaultExpectation.paramPtrs.externalService = &externalService
+	mmCreateStagingKnowledgeBase.defaultExpectation.expectationOrigins.originExternalService = minimock.CallerInfo(1)
+
+	return mmCreateStagingKnowledgeBase
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.CreateStagingKnowledgeBase
+func (mmCreateStagingKnowledgeBase *mRepositoryMockCreateStagingKnowledgeBase) Inspect(f func(ctx context.Context, original *mm_repository.KnowledgeBaseModel, newEmbeddingConfig *mm_repository.EmbeddingConfigJSON, externalService func(kbUID types.KBUIDType) error)) *mRepositoryMockCreateStagingKnowledgeBase {
+	if mmCreateStagingKnowledgeBase.mock.inspectFuncCreateStagingKnowledgeBase != nil {
+		mmCreateStagingKnowledgeBase.mock.t.Fatalf("Inspect function is already set for RepositoryMock.CreateStagingKnowledgeBase")
+	}
+
+	mmCreateStagingKnowledgeBase.mock.inspectFuncCreateStagingKnowledgeBase = f
+
+	return mmCreateStagingKnowledgeBase
+}
+
+// Return sets up results that will be returned by Repository.CreateStagingKnowledgeBase
+func (mmCreateStagingKnowledgeBase *mRepositoryMockCreateStagingKnowledgeBase) Return(kp1 *mm_repository.KnowledgeBaseModel, err error) *RepositoryMock {
+	if mmCreateStagingKnowledgeBase.mock.funcCreateStagingKnowledgeBase != nil {
+		mmCreateStagingKnowledgeBase.mock.t.Fatalf("RepositoryMock.CreateStagingKnowledgeBase mock is already set by Set")
+	}
+
+	if mmCreateStagingKnowledgeBase.defaultExpectation == nil {
+		mmCreateStagingKnowledgeBase.defaultExpectation = &RepositoryMockCreateStagingKnowledgeBaseExpectation{mock: mmCreateStagingKnowledgeBase.mock}
+	}
+	mmCreateStagingKnowledgeBase.defaultExpectation.results = &RepositoryMockCreateStagingKnowledgeBaseResults{kp1, err}
+	mmCreateStagingKnowledgeBase.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmCreateStagingKnowledgeBase.mock
+}
+
+// Set uses given function f to mock the Repository.CreateStagingKnowledgeBase method
+func (mmCreateStagingKnowledgeBase *mRepositoryMockCreateStagingKnowledgeBase) Set(f func(ctx context.Context, original *mm_repository.KnowledgeBaseModel, newEmbeddingConfig *mm_repository.EmbeddingConfigJSON, externalService func(kbUID types.KBUIDType) error) (kp1 *mm_repository.KnowledgeBaseModel, err error)) *RepositoryMock {
+	if mmCreateStagingKnowledgeBase.defaultExpectation != nil {
+		mmCreateStagingKnowledgeBase.mock.t.Fatalf("Default expectation is already set for the Repository.CreateStagingKnowledgeBase method")
+	}
+
+	if len(mmCreateStagingKnowledgeBase.expectations) > 0 {
+		mmCreateStagingKnowledgeBase.mock.t.Fatalf("Some expectations are already set for the Repository.CreateStagingKnowledgeBase method")
+	}
+
+	mmCreateStagingKnowledgeBase.mock.funcCreateStagingKnowledgeBase = f
+	mmCreateStagingKnowledgeBase.mock.funcCreateStagingKnowledgeBaseOrigin = minimock.CallerInfo(1)
+	return mmCreateStagingKnowledgeBase.mock
+}
+
+// When sets expectation for the Repository.CreateStagingKnowledgeBase which will trigger the result defined by the following
+// Then helper
+func (mmCreateStagingKnowledgeBase *mRepositoryMockCreateStagingKnowledgeBase) When(ctx context.Context, original *mm_repository.KnowledgeBaseModel, newEmbeddingConfig *mm_repository.EmbeddingConfigJSON, externalService func(kbUID types.KBUIDType) error) *RepositoryMockCreateStagingKnowledgeBaseExpectation {
+	if mmCreateStagingKnowledgeBase.mock.funcCreateStagingKnowledgeBase != nil {
+		mmCreateStagingKnowledgeBase.mock.t.Fatalf("RepositoryMock.CreateStagingKnowledgeBase mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockCreateStagingKnowledgeBaseExpectation{
+		mock:               mmCreateStagingKnowledgeBase.mock,
+		params:             &RepositoryMockCreateStagingKnowledgeBaseParams{ctx, original, newEmbeddingConfig, externalService},
+		expectationOrigins: RepositoryMockCreateStagingKnowledgeBaseExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmCreateStagingKnowledgeBase.expectations = append(mmCreateStagingKnowledgeBase.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.CreateStagingKnowledgeBase return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockCreateStagingKnowledgeBaseExpectation) Then(kp1 *mm_repository.KnowledgeBaseModel, err error) *RepositoryMock {
+	e.results = &RepositoryMockCreateStagingKnowledgeBaseResults{kp1, err}
+	return e.mock
+}
+
+// Times sets number of times Repository.CreateStagingKnowledgeBase should be invoked
+func (mmCreateStagingKnowledgeBase *mRepositoryMockCreateStagingKnowledgeBase) Times(n uint64) *mRepositoryMockCreateStagingKnowledgeBase {
+	if n == 0 {
+		mmCreateStagingKnowledgeBase.mock.t.Fatalf("Times of RepositoryMock.CreateStagingKnowledgeBase mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmCreateStagingKnowledgeBase.expectedInvocations, n)
+	mmCreateStagingKnowledgeBase.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmCreateStagingKnowledgeBase
+}
+
+func (mmCreateStagingKnowledgeBase *mRepositoryMockCreateStagingKnowledgeBase) invocationsDone() bool {
+	if len(mmCreateStagingKnowledgeBase.expectations) == 0 && mmCreateStagingKnowledgeBase.defaultExpectation == nil && mmCreateStagingKnowledgeBase.mock.funcCreateStagingKnowledgeBase == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmCreateStagingKnowledgeBase.mock.afterCreateStagingKnowledgeBaseCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmCreateStagingKnowledgeBase.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// CreateStagingKnowledgeBase implements mm_repository.Repository
+func (mmCreateStagingKnowledgeBase *RepositoryMock) CreateStagingKnowledgeBase(ctx context.Context, original *mm_repository.KnowledgeBaseModel, newEmbeddingConfig *mm_repository.EmbeddingConfigJSON, externalService func(kbUID types.KBUIDType) error) (kp1 *mm_repository.KnowledgeBaseModel, err error) {
+	mm_atomic.AddUint64(&mmCreateStagingKnowledgeBase.beforeCreateStagingKnowledgeBaseCounter, 1)
+	defer mm_atomic.AddUint64(&mmCreateStagingKnowledgeBase.afterCreateStagingKnowledgeBaseCounter, 1)
+
+	mmCreateStagingKnowledgeBase.t.Helper()
+
+	if mmCreateStagingKnowledgeBase.inspectFuncCreateStagingKnowledgeBase != nil {
+		mmCreateStagingKnowledgeBase.inspectFuncCreateStagingKnowledgeBase(ctx, original, newEmbeddingConfig, externalService)
+	}
+
+	mm_params := RepositoryMockCreateStagingKnowledgeBaseParams{ctx, original, newEmbeddingConfig, externalService}
+
+	// Record call args
+	mmCreateStagingKnowledgeBase.CreateStagingKnowledgeBaseMock.mutex.Lock()
+	mmCreateStagingKnowledgeBase.CreateStagingKnowledgeBaseMock.callArgs = append(mmCreateStagingKnowledgeBase.CreateStagingKnowledgeBaseMock.callArgs, &mm_params)
+	mmCreateStagingKnowledgeBase.CreateStagingKnowledgeBaseMock.mutex.Unlock()
+
+	for _, e := range mmCreateStagingKnowledgeBase.CreateStagingKnowledgeBaseMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.kp1, e.results.err
+		}
+	}
+
+	if mmCreateStagingKnowledgeBase.CreateStagingKnowledgeBaseMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmCreateStagingKnowledgeBase.CreateStagingKnowledgeBaseMock.defaultExpectation.Counter, 1)
+		mm_want := mmCreateStagingKnowledgeBase.CreateStagingKnowledgeBaseMock.defaultExpectation.params
+		mm_want_ptrs := mmCreateStagingKnowledgeBase.CreateStagingKnowledgeBaseMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockCreateStagingKnowledgeBaseParams{ctx, original, newEmbeddingConfig, externalService}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmCreateStagingKnowledgeBase.t.Errorf("RepositoryMock.CreateStagingKnowledgeBase got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCreateStagingKnowledgeBase.CreateStagingKnowledgeBaseMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.original != nil && !minimock.Equal(*mm_want_ptrs.original, mm_got.original) {
+				mmCreateStagingKnowledgeBase.t.Errorf("RepositoryMock.CreateStagingKnowledgeBase got unexpected parameter original, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCreateStagingKnowledgeBase.CreateStagingKnowledgeBaseMock.defaultExpectation.expectationOrigins.originOriginal, *mm_want_ptrs.original, mm_got.original, minimock.Diff(*mm_want_ptrs.original, mm_got.original))
+			}
+
+			if mm_want_ptrs.newEmbeddingConfig != nil && !minimock.Equal(*mm_want_ptrs.newEmbeddingConfig, mm_got.newEmbeddingConfig) {
+				mmCreateStagingKnowledgeBase.t.Errorf("RepositoryMock.CreateStagingKnowledgeBase got unexpected parameter newEmbeddingConfig, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCreateStagingKnowledgeBase.CreateStagingKnowledgeBaseMock.defaultExpectation.expectationOrigins.originNewEmbeddingConfig, *mm_want_ptrs.newEmbeddingConfig, mm_got.newEmbeddingConfig, minimock.Diff(*mm_want_ptrs.newEmbeddingConfig, mm_got.newEmbeddingConfig))
+			}
+
+			if mm_want_ptrs.externalService != nil && !minimock.Equal(*mm_want_ptrs.externalService, mm_got.externalService) {
+				mmCreateStagingKnowledgeBase.t.Errorf("RepositoryMock.CreateStagingKnowledgeBase got unexpected parameter externalService, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCreateStagingKnowledgeBase.CreateStagingKnowledgeBaseMock.defaultExpectation.expectationOrigins.originExternalService, *mm_want_ptrs.externalService, mm_got.externalService, minimock.Diff(*mm_want_ptrs.externalService, mm_got.externalService))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmCreateStagingKnowledgeBase.t.Errorf("RepositoryMock.CreateStagingKnowledgeBase got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmCreateStagingKnowledgeBase.CreateStagingKnowledgeBaseMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmCreateStagingKnowledgeBase.CreateStagingKnowledgeBaseMock.defaultExpectation.results
+		if mm_results == nil {
+			mmCreateStagingKnowledgeBase.t.Fatal("No results are set for the RepositoryMock.CreateStagingKnowledgeBase")
+		}
+		return (*mm_results).kp1, (*mm_results).err
+	}
+	if mmCreateStagingKnowledgeBase.funcCreateStagingKnowledgeBase != nil {
+		return mmCreateStagingKnowledgeBase.funcCreateStagingKnowledgeBase(ctx, original, newEmbeddingConfig, externalService)
+	}
+	mmCreateStagingKnowledgeBase.t.Fatalf("Unexpected call to RepositoryMock.CreateStagingKnowledgeBase. %v %v %v %v", ctx, original, newEmbeddingConfig, externalService)
+	return
+}
+
+// CreateStagingKnowledgeBaseAfterCounter returns a count of finished RepositoryMock.CreateStagingKnowledgeBase invocations
+func (mmCreateStagingKnowledgeBase *RepositoryMock) CreateStagingKnowledgeBaseAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmCreateStagingKnowledgeBase.afterCreateStagingKnowledgeBaseCounter)
+}
+
+// CreateStagingKnowledgeBaseBeforeCounter returns a count of RepositoryMock.CreateStagingKnowledgeBase invocations
+func (mmCreateStagingKnowledgeBase *RepositoryMock) CreateStagingKnowledgeBaseBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmCreateStagingKnowledgeBase.beforeCreateStagingKnowledgeBaseCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.CreateStagingKnowledgeBase.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmCreateStagingKnowledgeBase *mRepositoryMockCreateStagingKnowledgeBase) Calls() []*RepositoryMockCreateStagingKnowledgeBaseParams {
+	mmCreateStagingKnowledgeBase.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockCreateStagingKnowledgeBaseParams, len(mmCreateStagingKnowledgeBase.callArgs))
+	copy(argCopy, mmCreateStagingKnowledgeBase.callArgs)
+
+	mmCreateStagingKnowledgeBase.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockCreateStagingKnowledgeBaseDone returns true if the count of the CreateStagingKnowledgeBase invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockCreateStagingKnowledgeBaseDone() bool {
+	if m.CreateStagingKnowledgeBaseMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.CreateStagingKnowledgeBaseMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.CreateStagingKnowledgeBaseMock.invocationsDone()
+}
+
+// MinimockCreateStagingKnowledgeBaseInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockCreateStagingKnowledgeBaseInspect() {
+	for _, e := range m.CreateStagingKnowledgeBaseMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.CreateStagingKnowledgeBase at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterCreateStagingKnowledgeBaseCounter := mm_atomic.LoadUint64(&m.afterCreateStagingKnowledgeBaseCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.CreateStagingKnowledgeBaseMock.defaultExpectation != nil && afterCreateStagingKnowledgeBaseCounter < 1 {
+		if m.CreateStagingKnowledgeBaseMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.CreateStagingKnowledgeBase at\n%s", m.CreateStagingKnowledgeBaseMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.CreateStagingKnowledgeBase at\n%s with params: %#v", m.CreateStagingKnowledgeBaseMock.defaultExpectation.expectationOrigins.origin, *m.CreateStagingKnowledgeBaseMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcCreateStagingKnowledgeBase != nil && afterCreateStagingKnowledgeBaseCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.CreateStagingKnowledgeBase at\n%s", m.funcCreateStagingKnowledgeBaseOrigin)
+	}
+
+	if !m.CreateStagingKnowledgeBaseMock.invocationsDone() && afterCreateStagingKnowledgeBaseCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.CreateStagingKnowledgeBase at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.CreateStagingKnowledgeBaseMock.expectedInvocations), m.CreateStagingKnowledgeBaseMock.expectedInvocationsOrigin, afterCreateStagingKnowledgeBaseCounter)
 	}
 }
 
@@ -9129,6 +9795,348 @@ func (m *RepositoryMock) MinimockDeleteRepositoryTagInspect() {
 	}
 }
 
+type mRepositoryMockDeleteSystemProfile struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockDeleteSystemProfileExpectation
+	expectations       []*RepositoryMockDeleteSystemProfileExpectation
+
+	callArgs []*RepositoryMockDeleteSystemProfileParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockDeleteSystemProfileExpectation specifies expectation struct of the Repository.DeleteSystemProfile
+type RepositoryMockDeleteSystemProfileExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockDeleteSystemProfileParams
+	paramPtrs          *RepositoryMockDeleteSystemProfileParamPtrs
+	expectationOrigins RepositoryMockDeleteSystemProfileExpectationOrigins
+	results            *RepositoryMockDeleteSystemProfileResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockDeleteSystemProfileParams contains parameters of the Repository.DeleteSystemProfile
+type RepositoryMockDeleteSystemProfileParams struct {
+	ctx     context.Context
+	profile string
+}
+
+// RepositoryMockDeleteSystemProfileParamPtrs contains pointers to parameters of the Repository.DeleteSystemProfile
+type RepositoryMockDeleteSystemProfileParamPtrs struct {
+	ctx     *context.Context
+	profile *string
+}
+
+// RepositoryMockDeleteSystemProfileResults contains results of the Repository.DeleteSystemProfile
+type RepositoryMockDeleteSystemProfileResults struct {
+	err error
+}
+
+// RepositoryMockDeleteSystemProfileOrigins contains origins of expectations of the Repository.DeleteSystemProfile
+type RepositoryMockDeleteSystemProfileExpectationOrigins struct {
+	origin        string
+	originCtx     string
+	originProfile string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmDeleteSystemProfile *mRepositoryMockDeleteSystemProfile) Optional() *mRepositoryMockDeleteSystemProfile {
+	mmDeleteSystemProfile.optional = true
+	return mmDeleteSystemProfile
+}
+
+// Expect sets up expected params for Repository.DeleteSystemProfile
+func (mmDeleteSystemProfile *mRepositoryMockDeleteSystemProfile) Expect(ctx context.Context, profile string) *mRepositoryMockDeleteSystemProfile {
+	if mmDeleteSystemProfile.mock.funcDeleteSystemProfile != nil {
+		mmDeleteSystemProfile.mock.t.Fatalf("RepositoryMock.DeleteSystemProfile mock is already set by Set")
+	}
+
+	if mmDeleteSystemProfile.defaultExpectation == nil {
+		mmDeleteSystemProfile.defaultExpectation = &RepositoryMockDeleteSystemProfileExpectation{}
+	}
+
+	if mmDeleteSystemProfile.defaultExpectation.paramPtrs != nil {
+		mmDeleteSystemProfile.mock.t.Fatalf("RepositoryMock.DeleteSystemProfile mock is already set by ExpectParams functions")
+	}
+
+	mmDeleteSystemProfile.defaultExpectation.params = &RepositoryMockDeleteSystemProfileParams{ctx, profile}
+	mmDeleteSystemProfile.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmDeleteSystemProfile.expectations {
+		if minimock.Equal(e.params, mmDeleteSystemProfile.defaultExpectation.params) {
+			mmDeleteSystemProfile.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmDeleteSystemProfile.defaultExpectation.params)
+		}
+	}
+
+	return mmDeleteSystemProfile
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.DeleteSystemProfile
+func (mmDeleteSystemProfile *mRepositoryMockDeleteSystemProfile) ExpectCtxParam1(ctx context.Context) *mRepositoryMockDeleteSystemProfile {
+	if mmDeleteSystemProfile.mock.funcDeleteSystemProfile != nil {
+		mmDeleteSystemProfile.mock.t.Fatalf("RepositoryMock.DeleteSystemProfile mock is already set by Set")
+	}
+
+	if mmDeleteSystemProfile.defaultExpectation == nil {
+		mmDeleteSystemProfile.defaultExpectation = &RepositoryMockDeleteSystemProfileExpectation{}
+	}
+
+	if mmDeleteSystemProfile.defaultExpectation.params != nil {
+		mmDeleteSystemProfile.mock.t.Fatalf("RepositoryMock.DeleteSystemProfile mock is already set by Expect")
+	}
+
+	if mmDeleteSystemProfile.defaultExpectation.paramPtrs == nil {
+		mmDeleteSystemProfile.defaultExpectation.paramPtrs = &RepositoryMockDeleteSystemProfileParamPtrs{}
+	}
+	mmDeleteSystemProfile.defaultExpectation.paramPtrs.ctx = &ctx
+	mmDeleteSystemProfile.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmDeleteSystemProfile
+}
+
+// ExpectProfileParam2 sets up expected param profile for Repository.DeleteSystemProfile
+func (mmDeleteSystemProfile *mRepositoryMockDeleteSystemProfile) ExpectProfileParam2(profile string) *mRepositoryMockDeleteSystemProfile {
+	if mmDeleteSystemProfile.mock.funcDeleteSystemProfile != nil {
+		mmDeleteSystemProfile.mock.t.Fatalf("RepositoryMock.DeleteSystemProfile mock is already set by Set")
+	}
+
+	if mmDeleteSystemProfile.defaultExpectation == nil {
+		mmDeleteSystemProfile.defaultExpectation = &RepositoryMockDeleteSystemProfileExpectation{}
+	}
+
+	if mmDeleteSystemProfile.defaultExpectation.params != nil {
+		mmDeleteSystemProfile.mock.t.Fatalf("RepositoryMock.DeleteSystemProfile mock is already set by Expect")
+	}
+
+	if mmDeleteSystemProfile.defaultExpectation.paramPtrs == nil {
+		mmDeleteSystemProfile.defaultExpectation.paramPtrs = &RepositoryMockDeleteSystemProfileParamPtrs{}
+	}
+	mmDeleteSystemProfile.defaultExpectation.paramPtrs.profile = &profile
+	mmDeleteSystemProfile.defaultExpectation.expectationOrigins.originProfile = minimock.CallerInfo(1)
+
+	return mmDeleteSystemProfile
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.DeleteSystemProfile
+func (mmDeleteSystemProfile *mRepositoryMockDeleteSystemProfile) Inspect(f func(ctx context.Context, profile string)) *mRepositoryMockDeleteSystemProfile {
+	if mmDeleteSystemProfile.mock.inspectFuncDeleteSystemProfile != nil {
+		mmDeleteSystemProfile.mock.t.Fatalf("Inspect function is already set for RepositoryMock.DeleteSystemProfile")
+	}
+
+	mmDeleteSystemProfile.mock.inspectFuncDeleteSystemProfile = f
+
+	return mmDeleteSystemProfile
+}
+
+// Return sets up results that will be returned by Repository.DeleteSystemProfile
+func (mmDeleteSystemProfile *mRepositoryMockDeleteSystemProfile) Return(err error) *RepositoryMock {
+	if mmDeleteSystemProfile.mock.funcDeleteSystemProfile != nil {
+		mmDeleteSystemProfile.mock.t.Fatalf("RepositoryMock.DeleteSystemProfile mock is already set by Set")
+	}
+
+	if mmDeleteSystemProfile.defaultExpectation == nil {
+		mmDeleteSystemProfile.defaultExpectation = &RepositoryMockDeleteSystemProfileExpectation{mock: mmDeleteSystemProfile.mock}
+	}
+	mmDeleteSystemProfile.defaultExpectation.results = &RepositoryMockDeleteSystemProfileResults{err}
+	mmDeleteSystemProfile.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmDeleteSystemProfile.mock
+}
+
+// Set uses given function f to mock the Repository.DeleteSystemProfile method
+func (mmDeleteSystemProfile *mRepositoryMockDeleteSystemProfile) Set(f func(ctx context.Context, profile string) (err error)) *RepositoryMock {
+	if mmDeleteSystemProfile.defaultExpectation != nil {
+		mmDeleteSystemProfile.mock.t.Fatalf("Default expectation is already set for the Repository.DeleteSystemProfile method")
+	}
+
+	if len(mmDeleteSystemProfile.expectations) > 0 {
+		mmDeleteSystemProfile.mock.t.Fatalf("Some expectations are already set for the Repository.DeleteSystemProfile method")
+	}
+
+	mmDeleteSystemProfile.mock.funcDeleteSystemProfile = f
+	mmDeleteSystemProfile.mock.funcDeleteSystemProfileOrigin = minimock.CallerInfo(1)
+	return mmDeleteSystemProfile.mock
+}
+
+// When sets expectation for the Repository.DeleteSystemProfile which will trigger the result defined by the following
+// Then helper
+func (mmDeleteSystemProfile *mRepositoryMockDeleteSystemProfile) When(ctx context.Context, profile string) *RepositoryMockDeleteSystemProfileExpectation {
+	if mmDeleteSystemProfile.mock.funcDeleteSystemProfile != nil {
+		mmDeleteSystemProfile.mock.t.Fatalf("RepositoryMock.DeleteSystemProfile mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockDeleteSystemProfileExpectation{
+		mock:               mmDeleteSystemProfile.mock,
+		params:             &RepositoryMockDeleteSystemProfileParams{ctx, profile},
+		expectationOrigins: RepositoryMockDeleteSystemProfileExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmDeleteSystemProfile.expectations = append(mmDeleteSystemProfile.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.DeleteSystemProfile return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockDeleteSystemProfileExpectation) Then(err error) *RepositoryMock {
+	e.results = &RepositoryMockDeleteSystemProfileResults{err}
+	return e.mock
+}
+
+// Times sets number of times Repository.DeleteSystemProfile should be invoked
+func (mmDeleteSystemProfile *mRepositoryMockDeleteSystemProfile) Times(n uint64) *mRepositoryMockDeleteSystemProfile {
+	if n == 0 {
+		mmDeleteSystemProfile.mock.t.Fatalf("Times of RepositoryMock.DeleteSystemProfile mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmDeleteSystemProfile.expectedInvocations, n)
+	mmDeleteSystemProfile.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmDeleteSystemProfile
+}
+
+func (mmDeleteSystemProfile *mRepositoryMockDeleteSystemProfile) invocationsDone() bool {
+	if len(mmDeleteSystemProfile.expectations) == 0 && mmDeleteSystemProfile.defaultExpectation == nil && mmDeleteSystemProfile.mock.funcDeleteSystemProfile == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmDeleteSystemProfile.mock.afterDeleteSystemProfileCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmDeleteSystemProfile.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// DeleteSystemProfile implements mm_repository.Repository
+func (mmDeleteSystemProfile *RepositoryMock) DeleteSystemProfile(ctx context.Context, profile string) (err error) {
+	mm_atomic.AddUint64(&mmDeleteSystemProfile.beforeDeleteSystemProfileCounter, 1)
+	defer mm_atomic.AddUint64(&mmDeleteSystemProfile.afterDeleteSystemProfileCounter, 1)
+
+	mmDeleteSystemProfile.t.Helper()
+
+	if mmDeleteSystemProfile.inspectFuncDeleteSystemProfile != nil {
+		mmDeleteSystemProfile.inspectFuncDeleteSystemProfile(ctx, profile)
+	}
+
+	mm_params := RepositoryMockDeleteSystemProfileParams{ctx, profile}
+
+	// Record call args
+	mmDeleteSystemProfile.DeleteSystemProfileMock.mutex.Lock()
+	mmDeleteSystemProfile.DeleteSystemProfileMock.callArgs = append(mmDeleteSystemProfile.DeleteSystemProfileMock.callArgs, &mm_params)
+	mmDeleteSystemProfile.DeleteSystemProfileMock.mutex.Unlock()
+
+	for _, e := range mmDeleteSystemProfile.DeleteSystemProfileMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmDeleteSystemProfile.DeleteSystemProfileMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmDeleteSystemProfile.DeleteSystemProfileMock.defaultExpectation.Counter, 1)
+		mm_want := mmDeleteSystemProfile.DeleteSystemProfileMock.defaultExpectation.params
+		mm_want_ptrs := mmDeleteSystemProfile.DeleteSystemProfileMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockDeleteSystemProfileParams{ctx, profile}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmDeleteSystemProfile.t.Errorf("RepositoryMock.DeleteSystemProfile got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDeleteSystemProfile.DeleteSystemProfileMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.profile != nil && !minimock.Equal(*mm_want_ptrs.profile, mm_got.profile) {
+				mmDeleteSystemProfile.t.Errorf("RepositoryMock.DeleteSystemProfile got unexpected parameter profile, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDeleteSystemProfile.DeleteSystemProfileMock.defaultExpectation.expectationOrigins.originProfile, *mm_want_ptrs.profile, mm_got.profile, minimock.Diff(*mm_want_ptrs.profile, mm_got.profile))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmDeleteSystemProfile.t.Errorf("RepositoryMock.DeleteSystemProfile got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmDeleteSystemProfile.DeleteSystemProfileMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmDeleteSystemProfile.DeleteSystemProfileMock.defaultExpectation.results
+		if mm_results == nil {
+			mmDeleteSystemProfile.t.Fatal("No results are set for the RepositoryMock.DeleteSystemProfile")
+		}
+		return (*mm_results).err
+	}
+	if mmDeleteSystemProfile.funcDeleteSystemProfile != nil {
+		return mmDeleteSystemProfile.funcDeleteSystemProfile(ctx, profile)
+	}
+	mmDeleteSystemProfile.t.Fatalf("Unexpected call to RepositoryMock.DeleteSystemProfile. %v %v", ctx, profile)
+	return
+}
+
+// DeleteSystemProfileAfterCounter returns a count of finished RepositoryMock.DeleteSystemProfile invocations
+func (mmDeleteSystemProfile *RepositoryMock) DeleteSystemProfileAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmDeleteSystemProfile.afterDeleteSystemProfileCounter)
+}
+
+// DeleteSystemProfileBeforeCounter returns a count of RepositoryMock.DeleteSystemProfile invocations
+func (mmDeleteSystemProfile *RepositoryMock) DeleteSystemProfileBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmDeleteSystemProfile.beforeDeleteSystemProfileCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.DeleteSystemProfile.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmDeleteSystemProfile *mRepositoryMockDeleteSystemProfile) Calls() []*RepositoryMockDeleteSystemProfileParams {
+	mmDeleteSystemProfile.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockDeleteSystemProfileParams, len(mmDeleteSystemProfile.callArgs))
+	copy(argCopy, mmDeleteSystemProfile.callArgs)
+
+	mmDeleteSystemProfile.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockDeleteSystemProfileDone returns true if the count of the DeleteSystemProfile invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockDeleteSystemProfileDone() bool {
+	if m.DeleteSystemProfileMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.DeleteSystemProfileMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.DeleteSystemProfileMock.invocationsDone()
+}
+
+// MinimockDeleteSystemProfileInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockDeleteSystemProfileInspect() {
+	for _, e := range m.DeleteSystemProfileMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.DeleteSystemProfile at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterDeleteSystemProfileCounter := mm_atomic.LoadUint64(&m.afterDeleteSystemProfileCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.DeleteSystemProfileMock.defaultExpectation != nil && afterDeleteSystemProfileCounter < 1 {
+		if m.DeleteSystemProfileMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.DeleteSystemProfile at\n%s", m.DeleteSystemProfileMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.DeleteSystemProfile at\n%s with params: %#v", m.DeleteSystemProfileMock.defaultExpectation.expectationOrigins.origin, *m.DeleteSystemProfileMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcDeleteSystemProfile != nil && afterDeleteSystemProfileCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.DeleteSystemProfile at\n%s", m.funcDeleteSystemProfileOrigin)
+	}
+
+	if !m.DeleteSystemProfileMock.invocationsDone() && afterDeleteSystemProfileCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.DeleteSystemProfile at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.DeleteSystemProfileMock.expectedInvocations), m.DeleteSystemProfileMock.expectedInvocationsOrigin, afterDeleteSystemProfileCounter)
+	}
+}
+
 type mRepositoryMockDropCollection struct {
 	optional           bool
 	mock               *RepositoryMock
@@ -9810,6 +10818,349 @@ func (m *RepositoryMock) MinimockFlushCollectionInspect() {
 	if !m.FlushCollectionMock.invocationsDone() && afterFlushCollectionCounter > 0 {
 		m.t.Errorf("Expected %d calls to RepositoryMock.FlushCollection at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.FlushCollectionMock.expectedInvocations), m.FlushCollectionMock.expectedInvocationsOrigin, afterFlushCollectionCounter)
+	}
+}
+
+type mRepositoryMockGetActiveCollectionUID struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockGetActiveCollectionUIDExpectation
+	expectations       []*RepositoryMockGetActiveCollectionUIDExpectation
+
+	callArgs []*RepositoryMockGetActiveCollectionUIDParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockGetActiveCollectionUIDExpectation specifies expectation struct of the Repository.GetActiveCollectionUID
+type RepositoryMockGetActiveCollectionUIDExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockGetActiveCollectionUIDParams
+	paramPtrs          *RepositoryMockGetActiveCollectionUIDParamPtrs
+	expectationOrigins RepositoryMockGetActiveCollectionUIDExpectationOrigins
+	results            *RepositoryMockGetActiveCollectionUIDResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockGetActiveCollectionUIDParams contains parameters of the Repository.GetActiveCollectionUID
+type RepositoryMockGetActiveCollectionUIDParams struct {
+	ctx   context.Context
+	kbUID types.KBUIDType
+}
+
+// RepositoryMockGetActiveCollectionUIDParamPtrs contains pointers to parameters of the Repository.GetActiveCollectionUID
+type RepositoryMockGetActiveCollectionUIDParamPtrs struct {
+	ctx   *context.Context
+	kbUID *types.KBUIDType
+}
+
+// RepositoryMockGetActiveCollectionUIDResults contains results of the Repository.GetActiveCollectionUID
+type RepositoryMockGetActiveCollectionUIDResults struct {
+	kp1 *types.KBUIDType
+	err error
+}
+
+// RepositoryMockGetActiveCollectionUIDOrigins contains origins of expectations of the Repository.GetActiveCollectionUID
+type RepositoryMockGetActiveCollectionUIDExpectationOrigins struct {
+	origin      string
+	originCtx   string
+	originKbUID string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmGetActiveCollectionUID *mRepositoryMockGetActiveCollectionUID) Optional() *mRepositoryMockGetActiveCollectionUID {
+	mmGetActiveCollectionUID.optional = true
+	return mmGetActiveCollectionUID
+}
+
+// Expect sets up expected params for Repository.GetActiveCollectionUID
+func (mmGetActiveCollectionUID *mRepositoryMockGetActiveCollectionUID) Expect(ctx context.Context, kbUID types.KBUIDType) *mRepositoryMockGetActiveCollectionUID {
+	if mmGetActiveCollectionUID.mock.funcGetActiveCollectionUID != nil {
+		mmGetActiveCollectionUID.mock.t.Fatalf("RepositoryMock.GetActiveCollectionUID mock is already set by Set")
+	}
+
+	if mmGetActiveCollectionUID.defaultExpectation == nil {
+		mmGetActiveCollectionUID.defaultExpectation = &RepositoryMockGetActiveCollectionUIDExpectation{}
+	}
+
+	if mmGetActiveCollectionUID.defaultExpectation.paramPtrs != nil {
+		mmGetActiveCollectionUID.mock.t.Fatalf("RepositoryMock.GetActiveCollectionUID mock is already set by ExpectParams functions")
+	}
+
+	mmGetActiveCollectionUID.defaultExpectation.params = &RepositoryMockGetActiveCollectionUIDParams{ctx, kbUID}
+	mmGetActiveCollectionUID.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmGetActiveCollectionUID.expectations {
+		if minimock.Equal(e.params, mmGetActiveCollectionUID.defaultExpectation.params) {
+			mmGetActiveCollectionUID.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetActiveCollectionUID.defaultExpectation.params)
+		}
+	}
+
+	return mmGetActiveCollectionUID
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.GetActiveCollectionUID
+func (mmGetActiveCollectionUID *mRepositoryMockGetActiveCollectionUID) ExpectCtxParam1(ctx context.Context) *mRepositoryMockGetActiveCollectionUID {
+	if mmGetActiveCollectionUID.mock.funcGetActiveCollectionUID != nil {
+		mmGetActiveCollectionUID.mock.t.Fatalf("RepositoryMock.GetActiveCollectionUID mock is already set by Set")
+	}
+
+	if mmGetActiveCollectionUID.defaultExpectation == nil {
+		mmGetActiveCollectionUID.defaultExpectation = &RepositoryMockGetActiveCollectionUIDExpectation{}
+	}
+
+	if mmGetActiveCollectionUID.defaultExpectation.params != nil {
+		mmGetActiveCollectionUID.mock.t.Fatalf("RepositoryMock.GetActiveCollectionUID mock is already set by Expect")
+	}
+
+	if mmGetActiveCollectionUID.defaultExpectation.paramPtrs == nil {
+		mmGetActiveCollectionUID.defaultExpectation.paramPtrs = &RepositoryMockGetActiveCollectionUIDParamPtrs{}
+	}
+	mmGetActiveCollectionUID.defaultExpectation.paramPtrs.ctx = &ctx
+	mmGetActiveCollectionUID.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmGetActiveCollectionUID
+}
+
+// ExpectKbUIDParam2 sets up expected param kbUID for Repository.GetActiveCollectionUID
+func (mmGetActiveCollectionUID *mRepositoryMockGetActiveCollectionUID) ExpectKbUIDParam2(kbUID types.KBUIDType) *mRepositoryMockGetActiveCollectionUID {
+	if mmGetActiveCollectionUID.mock.funcGetActiveCollectionUID != nil {
+		mmGetActiveCollectionUID.mock.t.Fatalf("RepositoryMock.GetActiveCollectionUID mock is already set by Set")
+	}
+
+	if mmGetActiveCollectionUID.defaultExpectation == nil {
+		mmGetActiveCollectionUID.defaultExpectation = &RepositoryMockGetActiveCollectionUIDExpectation{}
+	}
+
+	if mmGetActiveCollectionUID.defaultExpectation.params != nil {
+		mmGetActiveCollectionUID.mock.t.Fatalf("RepositoryMock.GetActiveCollectionUID mock is already set by Expect")
+	}
+
+	if mmGetActiveCollectionUID.defaultExpectation.paramPtrs == nil {
+		mmGetActiveCollectionUID.defaultExpectation.paramPtrs = &RepositoryMockGetActiveCollectionUIDParamPtrs{}
+	}
+	mmGetActiveCollectionUID.defaultExpectation.paramPtrs.kbUID = &kbUID
+	mmGetActiveCollectionUID.defaultExpectation.expectationOrigins.originKbUID = minimock.CallerInfo(1)
+
+	return mmGetActiveCollectionUID
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.GetActiveCollectionUID
+func (mmGetActiveCollectionUID *mRepositoryMockGetActiveCollectionUID) Inspect(f func(ctx context.Context, kbUID types.KBUIDType)) *mRepositoryMockGetActiveCollectionUID {
+	if mmGetActiveCollectionUID.mock.inspectFuncGetActiveCollectionUID != nil {
+		mmGetActiveCollectionUID.mock.t.Fatalf("Inspect function is already set for RepositoryMock.GetActiveCollectionUID")
+	}
+
+	mmGetActiveCollectionUID.mock.inspectFuncGetActiveCollectionUID = f
+
+	return mmGetActiveCollectionUID
+}
+
+// Return sets up results that will be returned by Repository.GetActiveCollectionUID
+func (mmGetActiveCollectionUID *mRepositoryMockGetActiveCollectionUID) Return(kp1 *types.KBUIDType, err error) *RepositoryMock {
+	if mmGetActiveCollectionUID.mock.funcGetActiveCollectionUID != nil {
+		mmGetActiveCollectionUID.mock.t.Fatalf("RepositoryMock.GetActiveCollectionUID mock is already set by Set")
+	}
+
+	if mmGetActiveCollectionUID.defaultExpectation == nil {
+		mmGetActiveCollectionUID.defaultExpectation = &RepositoryMockGetActiveCollectionUIDExpectation{mock: mmGetActiveCollectionUID.mock}
+	}
+	mmGetActiveCollectionUID.defaultExpectation.results = &RepositoryMockGetActiveCollectionUIDResults{kp1, err}
+	mmGetActiveCollectionUID.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmGetActiveCollectionUID.mock
+}
+
+// Set uses given function f to mock the Repository.GetActiveCollectionUID method
+func (mmGetActiveCollectionUID *mRepositoryMockGetActiveCollectionUID) Set(f func(ctx context.Context, kbUID types.KBUIDType) (kp1 *types.KBUIDType, err error)) *RepositoryMock {
+	if mmGetActiveCollectionUID.defaultExpectation != nil {
+		mmGetActiveCollectionUID.mock.t.Fatalf("Default expectation is already set for the Repository.GetActiveCollectionUID method")
+	}
+
+	if len(mmGetActiveCollectionUID.expectations) > 0 {
+		mmGetActiveCollectionUID.mock.t.Fatalf("Some expectations are already set for the Repository.GetActiveCollectionUID method")
+	}
+
+	mmGetActiveCollectionUID.mock.funcGetActiveCollectionUID = f
+	mmGetActiveCollectionUID.mock.funcGetActiveCollectionUIDOrigin = minimock.CallerInfo(1)
+	return mmGetActiveCollectionUID.mock
+}
+
+// When sets expectation for the Repository.GetActiveCollectionUID which will trigger the result defined by the following
+// Then helper
+func (mmGetActiveCollectionUID *mRepositoryMockGetActiveCollectionUID) When(ctx context.Context, kbUID types.KBUIDType) *RepositoryMockGetActiveCollectionUIDExpectation {
+	if mmGetActiveCollectionUID.mock.funcGetActiveCollectionUID != nil {
+		mmGetActiveCollectionUID.mock.t.Fatalf("RepositoryMock.GetActiveCollectionUID mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockGetActiveCollectionUIDExpectation{
+		mock:               mmGetActiveCollectionUID.mock,
+		params:             &RepositoryMockGetActiveCollectionUIDParams{ctx, kbUID},
+		expectationOrigins: RepositoryMockGetActiveCollectionUIDExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmGetActiveCollectionUID.expectations = append(mmGetActiveCollectionUID.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.GetActiveCollectionUID return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockGetActiveCollectionUIDExpectation) Then(kp1 *types.KBUIDType, err error) *RepositoryMock {
+	e.results = &RepositoryMockGetActiveCollectionUIDResults{kp1, err}
+	return e.mock
+}
+
+// Times sets number of times Repository.GetActiveCollectionUID should be invoked
+func (mmGetActiveCollectionUID *mRepositoryMockGetActiveCollectionUID) Times(n uint64) *mRepositoryMockGetActiveCollectionUID {
+	if n == 0 {
+		mmGetActiveCollectionUID.mock.t.Fatalf("Times of RepositoryMock.GetActiveCollectionUID mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetActiveCollectionUID.expectedInvocations, n)
+	mmGetActiveCollectionUID.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmGetActiveCollectionUID
+}
+
+func (mmGetActiveCollectionUID *mRepositoryMockGetActiveCollectionUID) invocationsDone() bool {
+	if len(mmGetActiveCollectionUID.expectations) == 0 && mmGetActiveCollectionUID.defaultExpectation == nil && mmGetActiveCollectionUID.mock.funcGetActiveCollectionUID == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetActiveCollectionUID.mock.afterGetActiveCollectionUIDCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetActiveCollectionUID.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetActiveCollectionUID implements mm_repository.Repository
+func (mmGetActiveCollectionUID *RepositoryMock) GetActiveCollectionUID(ctx context.Context, kbUID types.KBUIDType) (kp1 *types.KBUIDType, err error) {
+	mm_atomic.AddUint64(&mmGetActiveCollectionUID.beforeGetActiveCollectionUIDCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetActiveCollectionUID.afterGetActiveCollectionUIDCounter, 1)
+
+	mmGetActiveCollectionUID.t.Helper()
+
+	if mmGetActiveCollectionUID.inspectFuncGetActiveCollectionUID != nil {
+		mmGetActiveCollectionUID.inspectFuncGetActiveCollectionUID(ctx, kbUID)
+	}
+
+	mm_params := RepositoryMockGetActiveCollectionUIDParams{ctx, kbUID}
+
+	// Record call args
+	mmGetActiveCollectionUID.GetActiveCollectionUIDMock.mutex.Lock()
+	mmGetActiveCollectionUID.GetActiveCollectionUIDMock.callArgs = append(mmGetActiveCollectionUID.GetActiveCollectionUIDMock.callArgs, &mm_params)
+	mmGetActiveCollectionUID.GetActiveCollectionUIDMock.mutex.Unlock()
+
+	for _, e := range mmGetActiveCollectionUID.GetActiveCollectionUIDMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.kp1, e.results.err
+		}
+	}
+
+	if mmGetActiveCollectionUID.GetActiveCollectionUIDMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetActiveCollectionUID.GetActiveCollectionUIDMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetActiveCollectionUID.GetActiveCollectionUIDMock.defaultExpectation.params
+		mm_want_ptrs := mmGetActiveCollectionUID.GetActiveCollectionUIDMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockGetActiveCollectionUIDParams{ctx, kbUID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetActiveCollectionUID.t.Errorf("RepositoryMock.GetActiveCollectionUID got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetActiveCollectionUID.GetActiveCollectionUIDMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.kbUID != nil && !minimock.Equal(*mm_want_ptrs.kbUID, mm_got.kbUID) {
+				mmGetActiveCollectionUID.t.Errorf("RepositoryMock.GetActiveCollectionUID got unexpected parameter kbUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetActiveCollectionUID.GetActiveCollectionUIDMock.defaultExpectation.expectationOrigins.originKbUID, *mm_want_ptrs.kbUID, mm_got.kbUID, minimock.Diff(*mm_want_ptrs.kbUID, mm_got.kbUID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetActiveCollectionUID.t.Errorf("RepositoryMock.GetActiveCollectionUID got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmGetActiveCollectionUID.GetActiveCollectionUIDMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetActiveCollectionUID.GetActiveCollectionUIDMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetActiveCollectionUID.t.Fatal("No results are set for the RepositoryMock.GetActiveCollectionUID")
+		}
+		return (*mm_results).kp1, (*mm_results).err
+	}
+	if mmGetActiveCollectionUID.funcGetActiveCollectionUID != nil {
+		return mmGetActiveCollectionUID.funcGetActiveCollectionUID(ctx, kbUID)
+	}
+	mmGetActiveCollectionUID.t.Fatalf("Unexpected call to RepositoryMock.GetActiveCollectionUID. %v %v", ctx, kbUID)
+	return
+}
+
+// GetActiveCollectionUIDAfterCounter returns a count of finished RepositoryMock.GetActiveCollectionUID invocations
+func (mmGetActiveCollectionUID *RepositoryMock) GetActiveCollectionUIDAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetActiveCollectionUID.afterGetActiveCollectionUIDCounter)
+}
+
+// GetActiveCollectionUIDBeforeCounter returns a count of RepositoryMock.GetActiveCollectionUID invocations
+func (mmGetActiveCollectionUID *RepositoryMock) GetActiveCollectionUIDBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetActiveCollectionUID.beforeGetActiveCollectionUIDCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.GetActiveCollectionUID.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetActiveCollectionUID *mRepositoryMockGetActiveCollectionUID) Calls() []*RepositoryMockGetActiveCollectionUIDParams {
+	mmGetActiveCollectionUID.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockGetActiveCollectionUIDParams, len(mmGetActiveCollectionUID.callArgs))
+	copy(argCopy, mmGetActiveCollectionUID.callArgs)
+
+	mmGetActiveCollectionUID.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetActiveCollectionUIDDone returns true if the count of the GetActiveCollectionUID invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockGetActiveCollectionUIDDone() bool {
+	if m.GetActiveCollectionUIDMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.GetActiveCollectionUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetActiveCollectionUIDMock.invocationsDone()
+}
+
+// MinimockGetActiveCollectionUIDInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockGetActiveCollectionUIDInspect() {
+	for _, e := range m.GetActiveCollectionUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.GetActiveCollectionUID at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterGetActiveCollectionUIDCounter := mm_atomic.LoadUint64(&m.afterGetActiveCollectionUIDCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetActiveCollectionUIDMock.defaultExpectation != nil && afterGetActiveCollectionUIDCounter < 1 {
+		if m.GetActiveCollectionUIDMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.GetActiveCollectionUID at\n%s", m.GetActiveCollectionUIDMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.GetActiveCollectionUID at\n%s with params: %#v", m.GetActiveCollectionUIDMock.defaultExpectation.expectationOrigins.origin, *m.GetActiveCollectionUIDMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetActiveCollectionUID != nil && afterGetActiveCollectionUIDCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.GetActiveCollectionUID at\n%s", m.funcGetActiveCollectionUIDOrigin)
+	}
+
+	if !m.GetActiveCollectionUIDMock.invocationsDone() && afterGetActiveCollectionUIDCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.GetActiveCollectionUID at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.GetActiveCollectionUIDMock.expectedInvocations), m.GetActiveCollectionUIDMock.expectedInvocationsOrigin, afterGetActiveCollectionUIDCounter)
 	}
 }
 
@@ -10530,6 +11881,349 @@ func (m *RepositoryMock) MinimockGetChatCacheMetadataInspect() {
 	}
 }
 
+type mRepositoryMockGetChunkCountByKBUID struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockGetChunkCountByKBUIDExpectation
+	expectations       []*RepositoryMockGetChunkCountByKBUIDExpectation
+
+	callArgs []*RepositoryMockGetChunkCountByKBUIDParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockGetChunkCountByKBUIDExpectation specifies expectation struct of the Repository.GetChunkCountByKBUID
+type RepositoryMockGetChunkCountByKBUIDExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockGetChunkCountByKBUIDParams
+	paramPtrs          *RepositoryMockGetChunkCountByKBUIDParamPtrs
+	expectationOrigins RepositoryMockGetChunkCountByKBUIDExpectationOrigins
+	results            *RepositoryMockGetChunkCountByKBUIDResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockGetChunkCountByKBUIDParams contains parameters of the Repository.GetChunkCountByKBUID
+type RepositoryMockGetChunkCountByKBUIDParams struct {
+	ctx   context.Context
+	kbUID types.KBUIDType
+}
+
+// RepositoryMockGetChunkCountByKBUIDParamPtrs contains pointers to parameters of the Repository.GetChunkCountByKBUID
+type RepositoryMockGetChunkCountByKBUIDParamPtrs struct {
+	ctx   *context.Context
+	kbUID *types.KBUIDType
+}
+
+// RepositoryMockGetChunkCountByKBUIDResults contains results of the Repository.GetChunkCountByKBUID
+type RepositoryMockGetChunkCountByKBUIDResults struct {
+	i1  int64
+	err error
+}
+
+// RepositoryMockGetChunkCountByKBUIDOrigins contains origins of expectations of the Repository.GetChunkCountByKBUID
+type RepositoryMockGetChunkCountByKBUIDExpectationOrigins struct {
+	origin      string
+	originCtx   string
+	originKbUID string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmGetChunkCountByKBUID *mRepositoryMockGetChunkCountByKBUID) Optional() *mRepositoryMockGetChunkCountByKBUID {
+	mmGetChunkCountByKBUID.optional = true
+	return mmGetChunkCountByKBUID
+}
+
+// Expect sets up expected params for Repository.GetChunkCountByKBUID
+func (mmGetChunkCountByKBUID *mRepositoryMockGetChunkCountByKBUID) Expect(ctx context.Context, kbUID types.KBUIDType) *mRepositoryMockGetChunkCountByKBUID {
+	if mmGetChunkCountByKBUID.mock.funcGetChunkCountByKBUID != nil {
+		mmGetChunkCountByKBUID.mock.t.Fatalf("RepositoryMock.GetChunkCountByKBUID mock is already set by Set")
+	}
+
+	if mmGetChunkCountByKBUID.defaultExpectation == nil {
+		mmGetChunkCountByKBUID.defaultExpectation = &RepositoryMockGetChunkCountByKBUIDExpectation{}
+	}
+
+	if mmGetChunkCountByKBUID.defaultExpectation.paramPtrs != nil {
+		mmGetChunkCountByKBUID.mock.t.Fatalf("RepositoryMock.GetChunkCountByKBUID mock is already set by ExpectParams functions")
+	}
+
+	mmGetChunkCountByKBUID.defaultExpectation.params = &RepositoryMockGetChunkCountByKBUIDParams{ctx, kbUID}
+	mmGetChunkCountByKBUID.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmGetChunkCountByKBUID.expectations {
+		if minimock.Equal(e.params, mmGetChunkCountByKBUID.defaultExpectation.params) {
+			mmGetChunkCountByKBUID.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetChunkCountByKBUID.defaultExpectation.params)
+		}
+	}
+
+	return mmGetChunkCountByKBUID
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.GetChunkCountByKBUID
+func (mmGetChunkCountByKBUID *mRepositoryMockGetChunkCountByKBUID) ExpectCtxParam1(ctx context.Context) *mRepositoryMockGetChunkCountByKBUID {
+	if mmGetChunkCountByKBUID.mock.funcGetChunkCountByKBUID != nil {
+		mmGetChunkCountByKBUID.mock.t.Fatalf("RepositoryMock.GetChunkCountByKBUID mock is already set by Set")
+	}
+
+	if mmGetChunkCountByKBUID.defaultExpectation == nil {
+		mmGetChunkCountByKBUID.defaultExpectation = &RepositoryMockGetChunkCountByKBUIDExpectation{}
+	}
+
+	if mmGetChunkCountByKBUID.defaultExpectation.params != nil {
+		mmGetChunkCountByKBUID.mock.t.Fatalf("RepositoryMock.GetChunkCountByKBUID mock is already set by Expect")
+	}
+
+	if mmGetChunkCountByKBUID.defaultExpectation.paramPtrs == nil {
+		mmGetChunkCountByKBUID.defaultExpectation.paramPtrs = &RepositoryMockGetChunkCountByKBUIDParamPtrs{}
+	}
+	mmGetChunkCountByKBUID.defaultExpectation.paramPtrs.ctx = &ctx
+	mmGetChunkCountByKBUID.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmGetChunkCountByKBUID
+}
+
+// ExpectKbUIDParam2 sets up expected param kbUID for Repository.GetChunkCountByKBUID
+func (mmGetChunkCountByKBUID *mRepositoryMockGetChunkCountByKBUID) ExpectKbUIDParam2(kbUID types.KBUIDType) *mRepositoryMockGetChunkCountByKBUID {
+	if mmGetChunkCountByKBUID.mock.funcGetChunkCountByKBUID != nil {
+		mmGetChunkCountByKBUID.mock.t.Fatalf("RepositoryMock.GetChunkCountByKBUID mock is already set by Set")
+	}
+
+	if mmGetChunkCountByKBUID.defaultExpectation == nil {
+		mmGetChunkCountByKBUID.defaultExpectation = &RepositoryMockGetChunkCountByKBUIDExpectation{}
+	}
+
+	if mmGetChunkCountByKBUID.defaultExpectation.params != nil {
+		mmGetChunkCountByKBUID.mock.t.Fatalf("RepositoryMock.GetChunkCountByKBUID mock is already set by Expect")
+	}
+
+	if mmGetChunkCountByKBUID.defaultExpectation.paramPtrs == nil {
+		mmGetChunkCountByKBUID.defaultExpectation.paramPtrs = &RepositoryMockGetChunkCountByKBUIDParamPtrs{}
+	}
+	mmGetChunkCountByKBUID.defaultExpectation.paramPtrs.kbUID = &kbUID
+	mmGetChunkCountByKBUID.defaultExpectation.expectationOrigins.originKbUID = minimock.CallerInfo(1)
+
+	return mmGetChunkCountByKBUID
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.GetChunkCountByKBUID
+func (mmGetChunkCountByKBUID *mRepositoryMockGetChunkCountByKBUID) Inspect(f func(ctx context.Context, kbUID types.KBUIDType)) *mRepositoryMockGetChunkCountByKBUID {
+	if mmGetChunkCountByKBUID.mock.inspectFuncGetChunkCountByKBUID != nil {
+		mmGetChunkCountByKBUID.mock.t.Fatalf("Inspect function is already set for RepositoryMock.GetChunkCountByKBUID")
+	}
+
+	mmGetChunkCountByKBUID.mock.inspectFuncGetChunkCountByKBUID = f
+
+	return mmGetChunkCountByKBUID
+}
+
+// Return sets up results that will be returned by Repository.GetChunkCountByKBUID
+func (mmGetChunkCountByKBUID *mRepositoryMockGetChunkCountByKBUID) Return(i1 int64, err error) *RepositoryMock {
+	if mmGetChunkCountByKBUID.mock.funcGetChunkCountByKBUID != nil {
+		mmGetChunkCountByKBUID.mock.t.Fatalf("RepositoryMock.GetChunkCountByKBUID mock is already set by Set")
+	}
+
+	if mmGetChunkCountByKBUID.defaultExpectation == nil {
+		mmGetChunkCountByKBUID.defaultExpectation = &RepositoryMockGetChunkCountByKBUIDExpectation{mock: mmGetChunkCountByKBUID.mock}
+	}
+	mmGetChunkCountByKBUID.defaultExpectation.results = &RepositoryMockGetChunkCountByKBUIDResults{i1, err}
+	mmGetChunkCountByKBUID.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmGetChunkCountByKBUID.mock
+}
+
+// Set uses given function f to mock the Repository.GetChunkCountByKBUID method
+func (mmGetChunkCountByKBUID *mRepositoryMockGetChunkCountByKBUID) Set(f func(ctx context.Context, kbUID types.KBUIDType) (i1 int64, err error)) *RepositoryMock {
+	if mmGetChunkCountByKBUID.defaultExpectation != nil {
+		mmGetChunkCountByKBUID.mock.t.Fatalf("Default expectation is already set for the Repository.GetChunkCountByKBUID method")
+	}
+
+	if len(mmGetChunkCountByKBUID.expectations) > 0 {
+		mmGetChunkCountByKBUID.mock.t.Fatalf("Some expectations are already set for the Repository.GetChunkCountByKBUID method")
+	}
+
+	mmGetChunkCountByKBUID.mock.funcGetChunkCountByKBUID = f
+	mmGetChunkCountByKBUID.mock.funcGetChunkCountByKBUIDOrigin = minimock.CallerInfo(1)
+	return mmGetChunkCountByKBUID.mock
+}
+
+// When sets expectation for the Repository.GetChunkCountByKBUID which will trigger the result defined by the following
+// Then helper
+func (mmGetChunkCountByKBUID *mRepositoryMockGetChunkCountByKBUID) When(ctx context.Context, kbUID types.KBUIDType) *RepositoryMockGetChunkCountByKBUIDExpectation {
+	if mmGetChunkCountByKBUID.mock.funcGetChunkCountByKBUID != nil {
+		mmGetChunkCountByKBUID.mock.t.Fatalf("RepositoryMock.GetChunkCountByKBUID mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockGetChunkCountByKBUIDExpectation{
+		mock:               mmGetChunkCountByKBUID.mock,
+		params:             &RepositoryMockGetChunkCountByKBUIDParams{ctx, kbUID},
+		expectationOrigins: RepositoryMockGetChunkCountByKBUIDExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmGetChunkCountByKBUID.expectations = append(mmGetChunkCountByKBUID.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.GetChunkCountByKBUID return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockGetChunkCountByKBUIDExpectation) Then(i1 int64, err error) *RepositoryMock {
+	e.results = &RepositoryMockGetChunkCountByKBUIDResults{i1, err}
+	return e.mock
+}
+
+// Times sets number of times Repository.GetChunkCountByKBUID should be invoked
+func (mmGetChunkCountByKBUID *mRepositoryMockGetChunkCountByKBUID) Times(n uint64) *mRepositoryMockGetChunkCountByKBUID {
+	if n == 0 {
+		mmGetChunkCountByKBUID.mock.t.Fatalf("Times of RepositoryMock.GetChunkCountByKBUID mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetChunkCountByKBUID.expectedInvocations, n)
+	mmGetChunkCountByKBUID.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmGetChunkCountByKBUID
+}
+
+func (mmGetChunkCountByKBUID *mRepositoryMockGetChunkCountByKBUID) invocationsDone() bool {
+	if len(mmGetChunkCountByKBUID.expectations) == 0 && mmGetChunkCountByKBUID.defaultExpectation == nil && mmGetChunkCountByKBUID.mock.funcGetChunkCountByKBUID == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetChunkCountByKBUID.mock.afterGetChunkCountByKBUIDCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetChunkCountByKBUID.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetChunkCountByKBUID implements mm_repository.Repository
+func (mmGetChunkCountByKBUID *RepositoryMock) GetChunkCountByKBUID(ctx context.Context, kbUID types.KBUIDType) (i1 int64, err error) {
+	mm_atomic.AddUint64(&mmGetChunkCountByKBUID.beforeGetChunkCountByKBUIDCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetChunkCountByKBUID.afterGetChunkCountByKBUIDCounter, 1)
+
+	mmGetChunkCountByKBUID.t.Helper()
+
+	if mmGetChunkCountByKBUID.inspectFuncGetChunkCountByKBUID != nil {
+		mmGetChunkCountByKBUID.inspectFuncGetChunkCountByKBUID(ctx, kbUID)
+	}
+
+	mm_params := RepositoryMockGetChunkCountByKBUIDParams{ctx, kbUID}
+
+	// Record call args
+	mmGetChunkCountByKBUID.GetChunkCountByKBUIDMock.mutex.Lock()
+	mmGetChunkCountByKBUID.GetChunkCountByKBUIDMock.callArgs = append(mmGetChunkCountByKBUID.GetChunkCountByKBUIDMock.callArgs, &mm_params)
+	mmGetChunkCountByKBUID.GetChunkCountByKBUIDMock.mutex.Unlock()
+
+	for _, e := range mmGetChunkCountByKBUID.GetChunkCountByKBUIDMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.i1, e.results.err
+		}
+	}
+
+	if mmGetChunkCountByKBUID.GetChunkCountByKBUIDMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetChunkCountByKBUID.GetChunkCountByKBUIDMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetChunkCountByKBUID.GetChunkCountByKBUIDMock.defaultExpectation.params
+		mm_want_ptrs := mmGetChunkCountByKBUID.GetChunkCountByKBUIDMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockGetChunkCountByKBUIDParams{ctx, kbUID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetChunkCountByKBUID.t.Errorf("RepositoryMock.GetChunkCountByKBUID got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetChunkCountByKBUID.GetChunkCountByKBUIDMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.kbUID != nil && !minimock.Equal(*mm_want_ptrs.kbUID, mm_got.kbUID) {
+				mmGetChunkCountByKBUID.t.Errorf("RepositoryMock.GetChunkCountByKBUID got unexpected parameter kbUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetChunkCountByKBUID.GetChunkCountByKBUIDMock.defaultExpectation.expectationOrigins.originKbUID, *mm_want_ptrs.kbUID, mm_got.kbUID, minimock.Diff(*mm_want_ptrs.kbUID, mm_got.kbUID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetChunkCountByKBUID.t.Errorf("RepositoryMock.GetChunkCountByKBUID got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmGetChunkCountByKBUID.GetChunkCountByKBUIDMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetChunkCountByKBUID.GetChunkCountByKBUIDMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetChunkCountByKBUID.t.Fatal("No results are set for the RepositoryMock.GetChunkCountByKBUID")
+		}
+		return (*mm_results).i1, (*mm_results).err
+	}
+	if mmGetChunkCountByKBUID.funcGetChunkCountByKBUID != nil {
+		return mmGetChunkCountByKBUID.funcGetChunkCountByKBUID(ctx, kbUID)
+	}
+	mmGetChunkCountByKBUID.t.Fatalf("Unexpected call to RepositoryMock.GetChunkCountByKBUID. %v %v", ctx, kbUID)
+	return
+}
+
+// GetChunkCountByKBUIDAfterCounter returns a count of finished RepositoryMock.GetChunkCountByKBUID invocations
+func (mmGetChunkCountByKBUID *RepositoryMock) GetChunkCountByKBUIDAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetChunkCountByKBUID.afterGetChunkCountByKBUIDCounter)
+}
+
+// GetChunkCountByKBUIDBeforeCounter returns a count of RepositoryMock.GetChunkCountByKBUID invocations
+func (mmGetChunkCountByKBUID *RepositoryMock) GetChunkCountByKBUIDBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetChunkCountByKBUID.beforeGetChunkCountByKBUIDCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.GetChunkCountByKBUID.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetChunkCountByKBUID *mRepositoryMockGetChunkCountByKBUID) Calls() []*RepositoryMockGetChunkCountByKBUIDParams {
+	mmGetChunkCountByKBUID.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockGetChunkCountByKBUIDParams, len(mmGetChunkCountByKBUID.callArgs))
+	copy(argCopy, mmGetChunkCountByKBUID.callArgs)
+
+	mmGetChunkCountByKBUID.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetChunkCountByKBUIDDone returns true if the count of the GetChunkCountByKBUID invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockGetChunkCountByKBUIDDone() bool {
+	if m.GetChunkCountByKBUIDMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.GetChunkCountByKBUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetChunkCountByKBUIDMock.invocationsDone()
+}
+
+// MinimockGetChunkCountByKBUIDInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockGetChunkCountByKBUIDInspect() {
+	for _, e := range m.GetChunkCountByKBUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.GetChunkCountByKBUID at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterGetChunkCountByKBUIDCounter := mm_atomic.LoadUint64(&m.afterGetChunkCountByKBUIDCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetChunkCountByKBUIDMock.defaultExpectation != nil && afterGetChunkCountByKBUIDCounter < 1 {
+		if m.GetChunkCountByKBUIDMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.GetChunkCountByKBUID at\n%s", m.GetChunkCountByKBUIDMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.GetChunkCountByKBUID at\n%s with params: %#v", m.GetChunkCountByKBUIDMock.defaultExpectation.expectationOrigins.origin, *m.GetChunkCountByKBUIDMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetChunkCountByKBUID != nil && afterGetChunkCountByKBUIDCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.GetChunkCountByKBUID at\n%s", m.funcGetChunkCountByKBUIDOrigin)
+	}
+
+	if !m.GetChunkCountByKBUIDMock.invocationsDone() && afterGetChunkCountByKBUIDCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.GetChunkCountByKBUID at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.GetChunkCountByKBUIDMock.expectedInvocations), m.GetChunkCountByKBUIDMock.expectedInvocationsOrigin, afterGetChunkCountByKBUIDCounter)
+	}
+}
+
 type mRepositoryMockGetConvertedFileByFileUID struct {
 	optional           bool
 	mock               *RepositoryMock
@@ -11247,53 +12941,53 @@ func (m *RepositoryMock) MinimockGetConvertedFileByFileUIDAndTypeInspect() {
 	}
 }
 
-type mRepositoryMockGetCountFilesByListKnowledgeBaseUID struct {
+type mRepositoryMockGetConvertedFileCountByKBUID struct {
 	optional           bool
 	mock               *RepositoryMock
-	defaultExpectation *RepositoryMockGetCountFilesByListKnowledgeBaseUIDExpectation
-	expectations       []*RepositoryMockGetCountFilesByListKnowledgeBaseUIDExpectation
+	defaultExpectation *RepositoryMockGetConvertedFileCountByKBUIDExpectation
+	expectations       []*RepositoryMockGetConvertedFileCountByKBUIDExpectation
 
-	callArgs []*RepositoryMockGetCountFilesByListKnowledgeBaseUIDParams
+	callArgs []*RepositoryMockGetConvertedFileCountByKBUIDParams
 	mutex    sync.RWMutex
 
 	expectedInvocations       uint64
 	expectedInvocationsOrigin string
 }
 
-// RepositoryMockGetCountFilesByListKnowledgeBaseUIDExpectation specifies expectation struct of the Repository.GetCountFilesByListKnowledgeBaseUID
-type RepositoryMockGetCountFilesByListKnowledgeBaseUIDExpectation struct {
+// RepositoryMockGetConvertedFileCountByKBUIDExpectation specifies expectation struct of the Repository.GetConvertedFileCountByKBUID
+type RepositoryMockGetConvertedFileCountByKBUIDExpectation struct {
 	mock               *RepositoryMock
-	params             *RepositoryMockGetCountFilesByListKnowledgeBaseUIDParams
-	paramPtrs          *RepositoryMockGetCountFilesByListKnowledgeBaseUIDParamPtrs
-	expectationOrigins RepositoryMockGetCountFilesByListKnowledgeBaseUIDExpectationOrigins
-	results            *RepositoryMockGetCountFilesByListKnowledgeBaseUIDResults
+	params             *RepositoryMockGetConvertedFileCountByKBUIDParams
+	paramPtrs          *RepositoryMockGetConvertedFileCountByKBUIDParamPtrs
+	expectationOrigins RepositoryMockGetConvertedFileCountByKBUIDExpectationOrigins
+	results            *RepositoryMockGetConvertedFileCountByKBUIDResults
 	returnOrigin       string
 	Counter            uint64
 }
 
-// RepositoryMockGetCountFilesByListKnowledgeBaseUIDParams contains parameters of the Repository.GetCountFilesByListKnowledgeBaseUID
-type RepositoryMockGetCountFilesByListKnowledgeBaseUIDParams struct {
-	ctx    context.Context
-	kbUIDs []types.KBUIDType
+// RepositoryMockGetConvertedFileCountByKBUIDParams contains parameters of the Repository.GetConvertedFileCountByKBUID
+type RepositoryMockGetConvertedFileCountByKBUIDParams struct {
+	ctx   context.Context
+	kbUID types.KBUIDType
 }
 
-// RepositoryMockGetCountFilesByListKnowledgeBaseUIDParamPtrs contains pointers to parameters of the Repository.GetCountFilesByListKnowledgeBaseUID
-type RepositoryMockGetCountFilesByListKnowledgeBaseUIDParamPtrs struct {
-	ctx    *context.Context
-	kbUIDs *[]types.KBUIDType
+// RepositoryMockGetConvertedFileCountByKBUIDParamPtrs contains pointers to parameters of the Repository.GetConvertedFileCountByKBUID
+type RepositoryMockGetConvertedFileCountByKBUIDParamPtrs struct {
+	ctx   *context.Context
+	kbUID *types.KBUIDType
 }
 
-// RepositoryMockGetCountFilesByListKnowledgeBaseUIDResults contains results of the Repository.GetCountFilesByListKnowledgeBaseUID
-type RepositoryMockGetCountFilesByListKnowledgeBaseUIDResults struct {
-	m1  map[types.KBUIDType]int64
+// RepositoryMockGetConvertedFileCountByKBUIDResults contains results of the Repository.GetConvertedFileCountByKBUID
+type RepositoryMockGetConvertedFileCountByKBUIDResults struct {
+	i1  int64
 	err error
 }
 
-// RepositoryMockGetCountFilesByListKnowledgeBaseUIDOrigins contains origins of expectations of the Repository.GetCountFilesByListKnowledgeBaseUID
-type RepositoryMockGetCountFilesByListKnowledgeBaseUIDExpectationOrigins struct {
-	origin       string
-	originCtx    string
-	originKbUIDs string
+// RepositoryMockGetConvertedFileCountByKBUIDOrigins contains origins of expectations of the Repository.GetConvertedFileCountByKBUID
+type RepositoryMockGetConvertedFileCountByKBUIDExpectationOrigins struct {
+	origin      string
+	originCtx   string
+	originKbUID string
 }
 
 // Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
@@ -11301,292 +12995,1321 @@ type RepositoryMockGetCountFilesByListKnowledgeBaseUIDExpectationOrigins struct 
 // Optional() makes method check to work in '0 or more' mode.
 // It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
 // catch the problems when the expected method call is totally skipped during test run.
-func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryMockGetCountFilesByListKnowledgeBaseUID) Optional() *mRepositoryMockGetCountFilesByListKnowledgeBaseUID {
-	mmGetCountFilesByListKnowledgeBaseUID.optional = true
-	return mmGetCountFilesByListKnowledgeBaseUID
+func (mmGetConvertedFileCountByKBUID *mRepositoryMockGetConvertedFileCountByKBUID) Optional() *mRepositoryMockGetConvertedFileCountByKBUID {
+	mmGetConvertedFileCountByKBUID.optional = true
+	return mmGetConvertedFileCountByKBUID
 }
 
-// Expect sets up expected params for Repository.GetCountFilesByListKnowledgeBaseUID
-func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryMockGetCountFilesByListKnowledgeBaseUID) Expect(ctx context.Context, kbUIDs []types.KBUIDType) *mRepositoryMockGetCountFilesByListKnowledgeBaseUID {
-	if mmGetCountFilesByListKnowledgeBaseUID.mock.funcGetCountFilesByListKnowledgeBaseUID != nil {
-		mmGetCountFilesByListKnowledgeBaseUID.mock.t.Fatalf("RepositoryMock.GetCountFilesByListKnowledgeBaseUID mock is already set by Set")
+// Expect sets up expected params for Repository.GetConvertedFileCountByKBUID
+func (mmGetConvertedFileCountByKBUID *mRepositoryMockGetConvertedFileCountByKBUID) Expect(ctx context.Context, kbUID types.KBUIDType) *mRepositoryMockGetConvertedFileCountByKBUID {
+	if mmGetConvertedFileCountByKBUID.mock.funcGetConvertedFileCountByKBUID != nil {
+		mmGetConvertedFileCountByKBUID.mock.t.Fatalf("RepositoryMock.GetConvertedFileCountByKBUID mock is already set by Set")
 	}
 
-	if mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation == nil {
-		mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation = &RepositoryMockGetCountFilesByListKnowledgeBaseUIDExpectation{}
+	if mmGetConvertedFileCountByKBUID.defaultExpectation == nil {
+		mmGetConvertedFileCountByKBUID.defaultExpectation = &RepositoryMockGetConvertedFileCountByKBUIDExpectation{}
 	}
 
-	if mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation.paramPtrs != nil {
-		mmGetCountFilesByListKnowledgeBaseUID.mock.t.Fatalf("RepositoryMock.GetCountFilesByListKnowledgeBaseUID mock is already set by ExpectParams functions")
+	if mmGetConvertedFileCountByKBUID.defaultExpectation.paramPtrs != nil {
+		mmGetConvertedFileCountByKBUID.mock.t.Fatalf("RepositoryMock.GetConvertedFileCountByKBUID mock is already set by ExpectParams functions")
 	}
 
-	mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation.params = &RepositoryMockGetCountFilesByListKnowledgeBaseUIDParams{ctx, kbUIDs}
-	mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
-	for _, e := range mmGetCountFilesByListKnowledgeBaseUID.expectations {
-		if minimock.Equal(e.params, mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation.params) {
-			mmGetCountFilesByListKnowledgeBaseUID.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation.params)
+	mmGetConvertedFileCountByKBUID.defaultExpectation.params = &RepositoryMockGetConvertedFileCountByKBUIDParams{ctx, kbUID}
+	mmGetConvertedFileCountByKBUID.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmGetConvertedFileCountByKBUID.expectations {
+		if minimock.Equal(e.params, mmGetConvertedFileCountByKBUID.defaultExpectation.params) {
+			mmGetConvertedFileCountByKBUID.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetConvertedFileCountByKBUID.defaultExpectation.params)
 		}
 	}
 
-	return mmGetCountFilesByListKnowledgeBaseUID
+	return mmGetConvertedFileCountByKBUID
 }
 
-// ExpectCtxParam1 sets up expected param ctx for Repository.GetCountFilesByListKnowledgeBaseUID
-func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryMockGetCountFilesByListKnowledgeBaseUID) ExpectCtxParam1(ctx context.Context) *mRepositoryMockGetCountFilesByListKnowledgeBaseUID {
-	if mmGetCountFilesByListKnowledgeBaseUID.mock.funcGetCountFilesByListKnowledgeBaseUID != nil {
-		mmGetCountFilesByListKnowledgeBaseUID.mock.t.Fatalf("RepositoryMock.GetCountFilesByListKnowledgeBaseUID mock is already set by Set")
+// ExpectCtxParam1 sets up expected param ctx for Repository.GetConvertedFileCountByKBUID
+func (mmGetConvertedFileCountByKBUID *mRepositoryMockGetConvertedFileCountByKBUID) ExpectCtxParam1(ctx context.Context) *mRepositoryMockGetConvertedFileCountByKBUID {
+	if mmGetConvertedFileCountByKBUID.mock.funcGetConvertedFileCountByKBUID != nil {
+		mmGetConvertedFileCountByKBUID.mock.t.Fatalf("RepositoryMock.GetConvertedFileCountByKBUID mock is already set by Set")
 	}
 
-	if mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation == nil {
-		mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation = &RepositoryMockGetCountFilesByListKnowledgeBaseUIDExpectation{}
+	if mmGetConvertedFileCountByKBUID.defaultExpectation == nil {
+		mmGetConvertedFileCountByKBUID.defaultExpectation = &RepositoryMockGetConvertedFileCountByKBUIDExpectation{}
 	}
 
-	if mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation.params != nil {
-		mmGetCountFilesByListKnowledgeBaseUID.mock.t.Fatalf("RepositoryMock.GetCountFilesByListKnowledgeBaseUID mock is already set by Expect")
+	if mmGetConvertedFileCountByKBUID.defaultExpectation.params != nil {
+		mmGetConvertedFileCountByKBUID.mock.t.Fatalf("RepositoryMock.GetConvertedFileCountByKBUID mock is already set by Expect")
 	}
 
-	if mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation.paramPtrs == nil {
-		mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation.paramPtrs = &RepositoryMockGetCountFilesByListKnowledgeBaseUIDParamPtrs{}
+	if mmGetConvertedFileCountByKBUID.defaultExpectation.paramPtrs == nil {
+		mmGetConvertedFileCountByKBUID.defaultExpectation.paramPtrs = &RepositoryMockGetConvertedFileCountByKBUIDParamPtrs{}
 	}
-	mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation.paramPtrs.ctx = &ctx
-	mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+	mmGetConvertedFileCountByKBUID.defaultExpectation.paramPtrs.ctx = &ctx
+	mmGetConvertedFileCountByKBUID.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
 
-	return mmGetCountFilesByListKnowledgeBaseUID
+	return mmGetConvertedFileCountByKBUID
 }
 
-// ExpectKbUIDsParam2 sets up expected param kbUIDs for Repository.GetCountFilesByListKnowledgeBaseUID
-func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryMockGetCountFilesByListKnowledgeBaseUID) ExpectKbUIDsParam2(kbUIDs []types.KBUIDType) *mRepositoryMockGetCountFilesByListKnowledgeBaseUID {
-	if mmGetCountFilesByListKnowledgeBaseUID.mock.funcGetCountFilesByListKnowledgeBaseUID != nil {
-		mmGetCountFilesByListKnowledgeBaseUID.mock.t.Fatalf("RepositoryMock.GetCountFilesByListKnowledgeBaseUID mock is already set by Set")
+// ExpectKbUIDParam2 sets up expected param kbUID for Repository.GetConvertedFileCountByKBUID
+func (mmGetConvertedFileCountByKBUID *mRepositoryMockGetConvertedFileCountByKBUID) ExpectKbUIDParam2(kbUID types.KBUIDType) *mRepositoryMockGetConvertedFileCountByKBUID {
+	if mmGetConvertedFileCountByKBUID.mock.funcGetConvertedFileCountByKBUID != nil {
+		mmGetConvertedFileCountByKBUID.mock.t.Fatalf("RepositoryMock.GetConvertedFileCountByKBUID mock is already set by Set")
 	}
 
-	if mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation == nil {
-		mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation = &RepositoryMockGetCountFilesByListKnowledgeBaseUIDExpectation{}
+	if mmGetConvertedFileCountByKBUID.defaultExpectation == nil {
+		mmGetConvertedFileCountByKBUID.defaultExpectation = &RepositoryMockGetConvertedFileCountByKBUIDExpectation{}
 	}
 
-	if mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation.params != nil {
-		mmGetCountFilesByListKnowledgeBaseUID.mock.t.Fatalf("RepositoryMock.GetCountFilesByListKnowledgeBaseUID mock is already set by Expect")
+	if mmGetConvertedFileCountByKBUID.defaultExpectation.params != nil {
+		mmGetConvertedFileCountByKBUID.mock.t.Fatalf("RepositoryMock.GetConvertedFileCountByKBUID mock is already set by Expect")
 	}
 
-	if mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation.paramPtrs == nil {
-		mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation.paramPtrs = &RepositoryMockGetCountFilesByListKnowledgeBaseUIDParamPtrs{}
+	if mmGetConvertedFileCountByKBUID.defaultExpectation.paramPtrs == nil {
+		mmGetConvertedFileCountByKBUID.defaultExpectation.paramPtrs = &RepositoryMockGetConvertedFileCountByKBUIDParamPtrs{}
 	}
-	mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation.paramPtrs.kbUIDs = &kbUIDs
-	mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation.expectationOrigins.originKbUIDs = minimock.CallerInfo(1)
+	mmGetConvertedFileCountByKBUID.defaultExpectation.paramPtrs.kbUID = &kbUID
+	mmGetConvertedFileCountByKBUID.defaultExpectation.expectationOrigins.originKbUID = minimock.CallerInfo(1)
 
-	return mmGetCountFilesByListKnowledgeBaseUID
+	return mmGetConvertedFileCountByKBUID
 }
 
-// Inspect accepts an inspector function that has same arguments as the Repository.GetCountFilesByListKnowledgeBaseUID
-func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryMockGetCountFilesByListKnowledgeBaseUID) Inspect(f func(ctx context.Context, kbUIDs []types.KBUIDType)) *mRepositoryMockGetCountFilesByListKnowledgeBaseUID {
-	if mmGetCountFilesByListKnowledgeBaseUID.mock.inspectFuncGetCountFilesByListKnowledgeBaseUID != nil {
-		mmGetCountFilesByListKnowledgeBaseUID.mock.t.Fatalf("Inspect function is already set for RepositoryMock.GetCountFilesByListKnowledgeBaseUID")
+// Inspect accepts an inspector function that has same arguments as the Repository.GetConvertedFileCountByKBUID
+func (mmGetConvertedFileCountByKBUID *mRepositoryMockGetConvertedFileCountByKBUID) Inspect(f func(ctx context.Context, kbUID types.KBUIDType)) *mRepositoryMockGetConvertedFileCountByKBUID {
+	if mmGetConvertedFileCountByKBUID.mock.inspectFuncGetConvertedFileCountByKBUID != nil {
+		mmGetConvertedFileCountByKBUID.mock.t.Fatalf("Inspect function is already set for RepositoryMock.GetConvertedFileCountByKBUID")
 	}
 
-	mmGetCountFilesByListKnowledgeBaseUID.mock.inspectFuncGetCountFilesByListKnowledgeBaseUID = f
+	mmGetConvertedFileCountByKBUID.mock.inspectFuncGetConvertedFileCountByKBUID = f
 
-	return mmGetCountFilesByListKnowledgeBaseUID
+	return mmGetConvertedFileCountByKBUID
 }
 
-// Return sets up results that will be returned by Repository.GetCountFilesByListKnowledgeBaseUID
-func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryMockGetCountFilesByListKnowledgeBaseUID) Return(m1 map[types.KBUIDType]int64, err error) *RepositoryMock {
-	if mmGetCountFilesByListKnowledgeBaseUID.mock.funcGetCountFilesByListKnowledgeBaseUID != nil {
-		mmGetCountFilesByListKnowledgeBaseUID.mock.t.Fatalf("RepositoryMock.GetCountFilesByListKnowledgeBaseUID mock is already set by Set")
+// Return sets up results that will be returned by Repository.GetConvertedFileCountByKBUID
+func (mmGetConvertedFileCountByKBUID *mRepositoryMockGetConvertedFileCountByKBUID) Return(i1 int64, err error) *RepositoryMock {
+	if mmGetConvertedFileCountByKBUID.mock.funcGetConvertedFileCountByKBUID != nil {
+		mmGetConvertedFileCountByKBUID.mock.t.Fatalf("RepositoryMock.GetConvertedFileCountByKBUID mock is already set by Set")
 	}
 
-	if mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation == nil {
-		mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation = &RepositoryMockGetCountFilesByListKnowledgeBaseUIDExpectation{mock: mmGetCountFilesByListKnowledgeBaseUID.mock}
+	if mmGetConvertedFileCountByKBUID.defaultExpectation == nil {
+		mmGetConvertedFileCountByKBUID.defaultExpectation = &RepositoryMockGetConvertedFileCountByKBUIDExpectation{mock: mmGetConvertedFileCountByKBUID.mock}
 	}
-	mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation.results = &RepositoryMockGetCountFilesByListKnowledgeBaseUIDResults{m1, err}
-	mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
-	return mmGetCountFilesByListKnowledgeBaseUID.mock
+	mmGetConvertedFileCountByKBUID.defaultExpectation.results = &RepositoryMockGetConvertedFileCountByKBUIDResults{i1, err}
+	mmGetConvertedFileCountByKBUID.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmGetConvertedFileCountByKBUID.mock
 }
 
-// Set uses given function f to mock the Repository.GetCountFilesByListKnowledgeBaseUID method
-func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryMockGetCountFilesByListKnowledgeBaseUID) Set(f func(ctx context.Context, kbUIDs []types.KBUIDType) (m1 map[types.KBUIDType]int64, err error)) *RepositoryMock {
-	if mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation != nil {
-		mmGetCountFilesByListKnowledgeBaseUID.mock.t.Fatalf("Default expectation is already set for the Repository.GetCountFilesByListKnowledgeBaseUID method")
+// Set uses given function f to mock the Repository.GetConvertedFileCountByKBUID method
+func (mmGetConvertedFileCountByKBUID *mRepositoryMockGetConvertedFileCountByKBUID) Set(f func(ctx context.Context, kbUID types.KBUIDType) (i1 int64, err error)) *RepositoryMock {
+	if mmGetConvertedFileCountByKBUID.defaultExpectation != nil {
+		mmGetConvertedFileCountByKBUID.mock.t.Fatalf("Default expectation is already set for the Repository.GetConvertedFileCountByKBUID method")
 	}
 
-	if len(mmGetCountFilesByListKnowledgeBaseUID.expectations) > 0 {
-		mmGetCountFilesByListKnowledgeBaseUID.mock.t.Fatalf("Some expectations are already set for the Repository.GetCountFilesByListKnowledgeBaseUID method")
+	if len(mmGetConvertedFileCountByKBUID.expectations) > 0 {
+		mmGetConvertedFileCountByKBUID.mock.t.Fatalf("Some expectations are already set for the Repository.GetConvertedFileCountByKBUID method")
 	}
 
-	mmGetCountFilesByListKnowledgeBaseUID.mock.funcGetCountFilesByListKnowledgeBaseUID = f
-	mmGetCountFilesByListKnowledgeBaseUID.mock.funcGetCountFilesByListKnowledgeBaseUIDOrigin = minimock.CallerInfo(1)
-	return mmGetCountFilesByListKnowledgeBaseUID.mock
+	mmGetConvertedFileCountByKBUID.mock.funcGetConvertedFileCountByKBUID = f
+	mmGetConvertedFileCountByKBUID.mock.funcGetConvertedFileCountByKBUIDOrigin = minimock.CallerInfo(1)
+	return mmGetConvertedFileCountByKBUID.mock
 }
 
-// When sets expectation for the Repository.GetCountFilesByListKnowledgeBaseUID which will trigger the result defined by the following
+// When sets expectation for the Repository.GetConvertedFileCountByKBUID which will trigger the result defined by the following
 // Then helper
-func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryMockGetCountFilesByListKnowledgeBaseUID) When(ctx context.Context, kbUIDs []types.KBUIDType) *RepositoryMockGetCountFilesByListKnowledgeBaseUIDExpectation {
-	if mmGetCountFilesByListKnowledgeBaseUID.mock.funcGetCountFilesByListKnowledgeBaseUID != nil {
-		mmGetCountFilesByListKnowledgeBaseUID.mock.t.Fatalf("RepositoryMock.GetCountFilesByListKnowledgeBaseUID mock is already set by Set")
+func (mmGetConvertedFileCountByKBUID *mRepositoryMockGetConvertedFileCountByKBUID) When(ctx context.Context, kbUID types.KBUIDType) *RepositoryMockGetConvertedFileCountByKBUIDExpectation {
+	if mmGetConvertedFileCountByKBUID.mock.funcGetConvertedFileCountByKBUID != nil {
+		mmGetConvertedFileCountByKBUID.mock.t.Fatalf("RepositoryMock.GetConvertedFileCountByKBUID mock is already set by Set")
 	}
 
-	expectation := &RepositoryMockGetCountFilesByListKnowledgeBaseUIDExpectation{
-		mock:               mmGetCountFilesByListKnowledgeBaseUID.mock,
-		params:             &RepositoryMockGetCountFilesByListKnowledgeBaseUIDParams{ctx, kbUIDs},
-		expectationOrigins: RepositoryMockGetCountFilesByListKnowledgeBaseUIDExpectationOrigins{origin: minimock.CallerInfo(1)},
+	expectation := &RepositoryMockGetConvertedFileCountByKBUIDExpectation{
+		mock:               mmGetConvertedFileCountByKBUID.mock,
+		params:             &RepositoryMockGetConvertedFileCountByKBUIDParams{ctx, kbUID},
+		expectationOrigins: RepositoryMockGetConvertedFileCountByKBUIDExpectationOrigins{origin: minimock.CallerInfo(1)},
 	}
-	mmGetCountFilesByListKnowledgeBaseUID.expectations = append(mmGetCountFilesByListKnowledgeBaseUID.expectations, expectation)
+	mmGetConvertedFileCountByKBUID.expectations = append(mmGetConvertedFileCountByKBUID.expectations, expectation)
 	return expectation
 }
 
-// Then sets up Repository.GetCountFilesByListKnowledgeBaseUID return parameters for the expectation previously defined by the When method
-func (e *RepositoryMockGetCountFilesByListKnowledgeBaseUIDExpectation) Then(m1 map[types.KBUIDType]int64, err error) *RepositoryMock {
-	e.results = &RepositoryMockGetCountFilesByListKnowledgeBaseUIDResults{m1, err}
+// Then sets up Repository.GetConvertedFileCountByKBUID return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockGetConvertedFileCountByKBUIDExpectation) Then(i1 int64, err error) *RepositoryMock {
+	e.results = &RepositoryMockGetConvertedFileCountByKBUIDResults{i1, err}
 	return e.mock
 }
 
-// Times sets number of times Repository.GetCountFilesByListKnowledgeBaseUID should be invoked
-func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryMockGetCountFilesByListKnowledgeBaseUID) Times(n uint64) *mRepositoryMockGetCountFilesByListKnowledgeBaseUID {
+// Times sets number of times Repository.GetConvertedFileCountByKBUID should be invoked
+func (mmGetConvertedFileCountByKBUID *mRepositoryMockGetConvertedFileCountByKBUID) Times(n uint64) *mRepositoryMockGetConvertedFileCountByKBUID {
 	if n == 0 {
-		mmGetCountFilesByListKnowledgeBaseUID.mock.t.Fatalf("Times of RepositoryMock.GetCountFilesByListKnowledgeBaseUID mock can not be zero")
+		mmGetConvertedFileCountByKBUID.mock.t.Fatalf("Times of RepositoryMock.GetConvertedFileCountByKBUID mock can not be zero")
 	}
-	mm_atomic.StoreUint64(&mmGetCountFilesByListKnowledgeBaseUID.expectedInvocations, n)
-	mmGetCountFilesByListKnowledgeBaseUID.expectedInvocationsOrigin = minimock.CallerInfo(1)
-	return mmGetCountFilesByListKnowledgeBaseUID
+	mm_atomic.StoreUint64(&mmGetConvertedFileCountByKBUID.expectedInvocations, n)
+	mmGetConvertedFileCountByKBUID.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmGetConvertedFileCountByKBUID
 }
 
-func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryMockGetCountFilesByListKnowledgeBaseUID) invocationsDone() bool {
-	if len(mmGetCountFilesByListKnowledgeBaseUID.expectations) == 0 && mmGetCountFilesByListKnowledgeBaseUID.defaultExpectation == nil && mmGetCountFilesByListKnowledgeBaseUID.mock.funcGetCountFilesByListKnowledgeBaseUID == nil {
+func (mmGetConvertedFileCountByKBUID *mRepositoryMockGetConvertedFileCountByKBUID) invocationsDone() bool {
+	if len(mmGetConvertedFileCountByKBUID.expectations) == 0 && mmGetConvertedFileCountByKBUID.defaultExpectation == nil && mmGetConvertedFileCountByKBUID.mock.funcGetConvertedFileCountByKBUID == nil {
 		return true
 	}
 
-	totalInvocations := mm_atomic.LoadUint64(&mmGetCountFilesByListKnowledgeBaseUID.mock.afterGetCountFilesByListKnowledgeBaseUIDCounter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmGetCountFilesByListKnowledgeBaseUID.expectedInvocations)
+	totalInvocations := mm_atomic.LoadUint64(&mmGetConvertedFileCountByKBUID.mock.afterGetConvertedFileCountByKBUIDCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetConvertedFileCountByKBUID.expectedInvocations)
 
 	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
 }
 
-// GetCountFilesByListKnowledgeBaseUID implements mm_repository.Repository
-func (mmGetCountFilesByListKnowledgeBaseUID *RepositoryMock) GetCountFilesByListKnowledgeBaseUID(ctx context.Context, kbUIDs []types.KBUIDType) (m1 map[types.KBUIDType]int64, err error) {
-	mm_atomic.AddUint64(&mmGetCountFilesByListKnowledgeBaseUID.beforeGetCountFilesByListKnowledgeBaseUIDCounter, 1)
-	defer mm_atomic.AddUint64(&mmGetCountFilesByListKnowledgeBaseUID.afterGetCountFilesByListKnowledgeBaseUIDCounter, 1)
+// GetConvertedFileCountByKBUID implements mm_repository.Repository
+func (mmGetConvertedFileCountByKBUID *RepositoryMock) GetConvertedFileCountByKBUID(ctx context.Context, kbUID types.KBUIDType) (i1 int64, err error) {
+	mm_atomic.AddUint64(&mmGetConvertedFileCountByKBUID.beforeGetConvertedFileCountByKBUIDCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetConvertedFileCountByKBUID.afterGetConvertedFileCountByKBUIDCounter, 1)
 
-	mmGetCountFilesByListKnowledgeBaseUID.t.Helper()
+	mmGetConvertedFileCountByKBUID.t.Helper()
 
-	if mmGetCountFilesByListKnowledgeBaseUID.inspectFuncGetCountFilesByListKnowledgeBaseUID != nil {
-		mmGetCountFilesByListKnowledgeBaseUID.inspectFuncGetCountFilesByListKnowledgeBaseUID(ctx, kbUIDs)
+	if mmGetConvertedFileCountByKBUID.inspectFuncGetConvertedFileCountByKBUID != nil {
+		mmGetConvertedFileCountByKBUID.inspectFuncGetConvertedFileCountByKBUID(ctx, kbUID)
 	}
 
-	mm_params := RepositoryMockGetCountFilesByListKnowledgeBaseUIDParams{ctx, kbUIDs}
+	mm_params := RepositoryMockGetConvertedFileCountByKBUIDParams{ctx, kbUID}
 
 	// Record call args
-	mmGetCountFilesByListKnowledgeBaseUID.GetCountFilesByListKnowledgeBaseUIDMock.mutex.Lock()
-	mmGetCountFilesByListKnowledgeBaseUID.GetCountFilesByListKnowledgeBaseUIDMock.callArgs = append(mmGetCountFilesByListKnowledgeBaseUID.GetCountFilesByListKnowledgeBaseUIDMock.callArgs, &mm_params)
-	mmGetCountFilesByListKnowledgeBaseUID.GetCountFilesByListKnowledgeBaseUIDMock.mutex.Unlock()
+	mmGetConvertedFileCountByKBUID.GetConvertedFileCountByKBUIDMock.mutex.Lock()
+	mmGetConvertedFileCountByKBUID.GetConvertedFileCountByKBUIDMock.callArgs = append(mmGetConvertedFileCountByKBUID.GetConvertedFileCountByKBUIDMock.callArgs, &mm_params)
+	mmGetConvertedFileCountByKBUID.GetConvertedFileCountByKBUIDMock.mutex.Unlock()
 
-	for _, e := range mmGetCountFilesByListKnowledgeBaseUID.GetCountFilesByListKnowledgeBaseUIDMock.expectations {
+	for _, e := range mmGetConvertedFileCountByKBUID.GetConvertedFileCountByKBUIDMock.expectations {
 		if minimock.Equal(*e.params, mm_params) {
 			mm_atomic.AddUint64(&e.Counter, 1)
-			return e.results.m1, e.results.err
+			return e.results.i1, e.results.err
 		}
 	}
 
-	if mmGetCountFilesByListKnowledgeBaseUID.GetCountFilesByListKnowledgeBaseUIDMock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmGetCountFilesByListKnowledgeBaseUID.GetCountFilesByListKnowledgeBaseUIDMock.defaultExpectation.Counter, 1)
-		mm_want := mmGetCountFilesByListKnowledgeBaseUID.GetCountFilesByListKnowledgeBaseUIDMock.defaultExpectation.params
-		mm_want_ptrs := mmGetCountFilesByListKnowledgeBaseUID.GetCountFilesByListKnowledgeBaseUIDMock.defaultExpectation.paramPtrs
+	if mmGetConvertedFileCountByKBUID.GetConvertedFileCountByKBUIDMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetConvertedFileCountByKBUID.GetConvertedFileCountByKBUIDMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetConvertedFileCountByKBUID.GetConvertedFileCountByKBUIDMock.defaultExpectation.params
+		mm_want_ptrs := mmGetConvertedFileCountByKBUID.GetConvertedFileCountByKBUIDMock.defaultExpectation.paramPtrs
 
-		mm_got := RepositoryMockGetCountFilesByListKnowledgeBaseUIDParams{ctx, kbUIDs}
+		mm_got := RepositoryMockGetConvertedFileCountByKBUIDParams{ctx, kbUID}
 
 		if mm_want_ptrs != nil {
 
 			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
-				mmGetCountFilesByListKnowledgeBaseUID.t.Errorf("RepositoryMock.GetCountFilesByListKnowledgeBaseUID got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmGetCountFilesByListKnowledgeBaseUID.GetCountFilesByListKnowledgeBaseUIDMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+				mmGetConvertedFileCountByKBUID.t.Errorf("RepositoryMock.GetConvertedFileCountByKBUID got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetConvertedFileCountByKBUID.GetConvertedFileCountByKBUIDMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
 			}
 
-			if mm_want_ptrs.kbUIDs != nil && !minimock.Equal(*mm_want_ptrs.kbUIDs, mm_got.kbUIDs) {
-				mmGetCountFilesByListKnowledgeBaseUID.t.Errorf("RepositoryMock.GetCountFilesByListKnowledgeBaseUID got unexpected parameter kbUIDs, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmGetCountFilesByListKnowledgeBaseUID.GetCountFilesByListKnowledgeBaseUIDMock.defaultExpectation.expectationOrigins.originKbUIDs, *mm_want_ptrs.kbUIDs, mm_got.kbUIDs, minimock.Diff(*mm_want_ptrs.kbUIDs, mm_got.kbUIDs))
+			if mm_want_ptrs.kbUID != nil && !minimock.Equal(*mm_want_ptrs.kbUID, mm_got.kbUID) {
+				mmGetConvertedFileCountByKBUID.t.Errorf("RepositoryMock.GetConvertedFileCountByKBUID got unexpected parameter kbUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetConvertedFileCountByKBUID.GetConvertedFileCountByKBUIDMock.defaultExpectation.expectationOrigins.originKbUID, *mm_want_ptrs.kbUID, mm_got.kbUID, minimock.Diff(*mm_want_ptrs.kbUID, mm_got.kbUID))
 			}
 
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
-			mmGetCountFilesByListKnowledgeBaseUID.t.Errorf("RepositoryMock.GetCountFilesByListKnowledgeBaseUID got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-				mmGetCountFilesByListKnowledgeBaseUID.GetCountFilesByListKnowledgeBaseUIDMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+			mmGetConvertedFileCountByKBUID.t.Errorf("RepositoryMock.GetConvertedFileCountByKBUID got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmGetConvertedFileCountByKBUID.GetConvertedFileCountByKBUIDMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
 		}
 
-		mm_results := mmGetCountFilesByListKnowledgeBaseUID.GetCountFilesByListKnowledgeBaseUIDMock.defaultExpectation.results
+		mm_results := mmGetConvertedFileCountByKBUID.GetConvertedFileCountByKBUIDMock.defaultExpectation.results
 		if mm_results == nil {
-			mmGetCountFilesByListKnowledgeBaseUID.t.Fatal("No results are set for the RepositoryMock.GetCountFilesByListKnowledgeBaseUID")
+			mmGetConvertedFileCountByKBUID.t.Fatal("No results are set for the RepositoryMock.GetConvertedFileCountByKBUID")
 		}
-		return (*mm_results).m1, (*mm_results).err
+		return (*mm_results).i1, (*mm_results).err
 	}
-	if mmGetCountFilesByListKnowledgeBaseUID.funcGetCountFilesByListKnowledgeBaseUID != nil {
-		return mmGetCountFilesByListKnowledgeBaseUID.funcGetCountFilesByListKnowledgeBaseUID(ctx, kbUIDs)
+	if mmGetConvertedFileCountByKBUID.funcGetConvertedFileCountByKBUID != nil {
+		return mmGetConvertedFileCountByKBUID.funcGetConvertedFileCountByKBUID(ctx, kbUID)
 	}
-	mmGetCountFilesByListKnowledgeBaseUID.t.Fatalf("Unexpected call to RepositoryMock.GetCountFilesByListKnowledgeBaseUID. %v %v", ctx, kbUIDs)
+	mmGetConvertedFileCountByKBUID.t.Fatalf("Unexpected call to RepositoryMock.GetConvertedFileCountByKBUID. %v %v", ctx, kbUID)
 	return
 }
 
-// GetCountFilesByListKnowledgeBaseUIDAfterCounter returns a count of finished RepositoryMock.GetCountFilesByListKnowledgeBaseUID invocations
-func (mmGetCountFilesByListKnowledgeBaseUID *RepositoryMock) GetCountFilesByListKnowledgeBaseUIDAfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmGetCountFilesByListKnowledgeBaseUID.afterGetCountFilesByListKnowledgeBaseUIDCounter)
+// GetConvertedFileCountByKBUIDAfterCounter returns a count of finished RepositoryMock.GetConvertedFileCountByKBUID invocations
+func (mmGetConvertedFileCountByKBUID *RepositoryMock) GetConvertedFileCountByKBUIDAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetConvertedFileCountByKBUID.afterGetConvertedFileCountByKBUIDCounter)
 }
 
-// GetCountFilesByListKnowledgeBaseUIDBeforeCounter returns a count of RepositoryMock.GetCountFilesByListKnowledgeBaseUID invocations
-func (mmGetCountFilesByListKnowledgeBaseUID *RepositoryMock) GetCountFilesByListKnowledgeBaseUIDBeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmGetCountFilesByListKnowledgeBaseUID.beforeGetCountFilesByListKnowledgeBaseUIDCounter)
+// GetConvertedFileCountByKBUIDBeforeCounter returns a count of RepositoryMock.GetConvertedFileCountByKBUID invocations
+func (mmGetConvertedFileCountByKBUID *RepositoryMock) GetConvertedFileCountByKBUIDBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetConvertedFileCountByKBUID.beforeGetConvertedFileCountByKBUIDCounter)
 }
 
-// Calls returns a list of arguments used in each call to RepositoryMock.GetCountFilesByListKnowledgeBaseUID.
+// Calls returns a list of arguments used in each call to RepositoryMock.GetConvertedFileCountByKBUID.
 // The list is in the same order as the calls were made (i.e. recent calls have a higher index)
-func (mmGetCountFilesByListKnowledgeBaseUID *mRepositoryMockGetCountFilesByListKnowledgeBaseUID) Calls() []*RepositoryMockGetCountFilesByListKnowledgeBaseUIDParams {
-	mmGetCountFilesByListKnowledgeBaseUID.mutex.RLock()
+func (mmGetConvertedFileCountByKBUID *mRepositoryMockGetConvertedFileCountByKBUID) Calls() []*RepositoryMockGetConvertedFileCountByKBUIDParams {
+	mmGetConvertedFileCountByKBUID.mutex.RLock()
 
-	argCopy := make([]*RepositoryMockGetCountFilesByListKnowledgeBaseUIDParams, len(mmGetCountFilesByListKnowledgeBaseUID.callArgs))
-	copy(argCopy, mmGetCountFilesByListKnowledgeBaseUID.callArgs)
+	argCopy := make([]*RepositoryMockGetConvertedFileCountByKBUIDParams, len(mmGetConvertedFileCountByKBUID.callArgs))
+	copy(argCopy, mmGetConvertedFileCountByKBUID.callArgs)
 
-	mmGetCountFilesByListKnowledgeBaseUID.mutex.RUnlock()
+	mmGetConvertedFileCountByKBUID.mutex.RUnlock()
 
 	return argCopy
 }
 
-// MinimockGetCountFilesByListKnowledgeBaseUIDDone returns true if the count of the GetCountFilesByListKnowledgeBaseUID invocations corresponds
+// MinimockGetConvertedFileCountByKBUIDDone returns true if the count of the GetConvertedFileCountByKBUID invocations corresponds
 // the number of defined expectations
-func (m *RepositoryMock) MinimockGetCountFilesByListKnowledgeBaseUIDDone() bool {
-	if m.GetCountFilesByListKnowledgeBaseUIDMock.optional {
+func (m *RepositoryMock) MinimockGetConvertedFileCountByKBUIDDone() bool {
+	if m.GetConvertedFileCountByKBUIDMock.optional {
 		// Optional methods provide '0 or more' call count restriction.
 		return true
 	}
 
-	for _, e := range m.GetCountFilesByListKnowledgeBaseUIDMock.expectations {
+	for _, e := range m.GetConvertedFileCountByKBUIDMock.expectations {
 		if mm_atomic.LoadUint64(&e.Counter) < 1 {
 			return false
 		}
 	}
 
-	return m.GetCountFilesByListKnowledgeBaseUIDMock.invocationsDone()
+	return m.GetConvertedFileCountByKBUIDMock.invocationsDone()
 }
 
-// MinimockGetCountFilesByListKnowledgeBaseUIDInspect logs each unmet expectation
-func (m *RepositoryMock) MinimockGetCountFilesByListKnowledgeBaseUIDInspect() {
-	for _, e := range m.GetCountFilesByListKnowledgeBaseUIDMock.expectations {
+// MinimockGetConvertedFileCountByKBUIDInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockGetConvertedFileCountByKBUIDInspect() {
+	for _, e := range m.GetConvertedFileCountByKBUIDMock.expectations {
 		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Errorf("Expected call to RepositoryMock.GetCountFilesByListKnowledgeBaseUID at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+			m.t.Errorf("Expected call to RepositoryMock.GetConvertedFileCountByKBUID at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
 		}
 	}
 
-	afterGetCountFilesByListKnowledgeBaseUIDCounter := mm_atomic.LoadUint64(&m.afterGetCountFilesByListKnowledgeBaseUIDCounter)
+	afterGetConvertedFileCountByKBUIDCounter := mm_atomic.LoadUint64(&m.afterGetConvertedFileCountByKBUIDCounter)
 	// if default expectation was set then invocations count should be greater than zero
-	if m.GetCountFilesByListKnowledgeBaseUIDMock.defaultExpectation != nil && afterGetCountFilesByListKnowledgeBaseUIDCounter < 1 {
-		if m.GetCountFilesByListKnowledgeBaseUIDMock.defaultExpectation.params == nil {
-			m.t.Errorf("Expected call to RepositoryMock.GetCountFilesByListKnowledgeBaseUID at\n%s", m.GetCountFilesByListKnowledgeBaseUIDMock.defaultExpectation.returnOrigin)
+	if m.GetConvertedFileCountByKBUIDMock.defaultExpectation != nil && afterGetConvertedFileCountByKBUIDCounter < 1 {
+		if m.GetConvertedFileCountByKBUIDMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.GetConvertedFileCountByKBUID at\n%s", m.GetConvertedFileCountByKBUIDMock.defaultExpectation.returnOrigin)
 		} else {
-			m.t.Errorf("Expected call to RepositoryMock.GetCountFilesByListKnowledgeBaseUID at\n%s with params: %#v", m.GetCountFilesByListKnowledgeBaseUIDMock.defaultExpectation.expectationOrigins.origin, *m.GetCountFilesByListKnowledgeBaseUIDMock.defaultExpectation.params)
+			m.t.Errorf("Expected call to RepositoryMock.GetConvertedFileCountByKBUID at\n%s with params: %#v", m.GetConvertedFileCountByKBUIDMock.defaultExpectation.expectationOrigins.origin, *m.GetConvertedFileCountByKBUIDMock.defaultExpectation.params)
 		}
 	}
 	// if func was set then invocations count should be greater than zero
-	if m.funcGetCountFilesByListKnowledgeBaseUID != nil && afterGetCountFilesByListKnowledgeBaseUIDCounter < 1 {
-		m.t.Errorf("Expected call to RepositoryMock.GetCountFilesByListKnowledgeBaseUID at\n%s", m.funcGetCountFilesByListKnowledgeBaseUIDOrigin)
+	if m.funcGetConvertedFileCountByKBUID != nil && afterGetConvertedFileCountByKBUIDCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.GetConvertedFileCountByKBUID at\n%s", m.funcGetConvertedFileCountByKBUIDOrigin)
 	}
 
-	if !m.GetCountFilesByListKnowledgeBaseUIDMock.invocationsDone() && afterGetCountFilesByListKnowledgeBaseUIDCounter > 0 {
-		m.t.Errorf("Expected %d calls to RepositoryMock.GetCountFilesByListKnowledgeBaseUID at\n%s but found %d calls",
-			mm_atomic.LoadUint64(&m.GetCountFilesByListKnowledgeBaseUIDMock.expectedInvocations), m.GetCountFilesByListKnowledgeBaseUIDMock.expectedInvocationsOrigin, afterGetCountFilesByListKnowledgeBaseUIDCounter)
+	if !m.GetConvertedFileCountByKBUIDMock.invocationsDone() && afterGetConvertedFileCountByKBUIDCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.GetConvertedFileCountByKBUID at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.GetConvertedFileCountByKBUIDMock.expectedInvocations), m.GetConvertedFileCountByKBUIDMock.expectedInvocationsOrigin, afterGetConvertedFileCountByKBUIDCounter)
+	}
+}
+
+type mRepositoryMockGetDefaultEmbeddingConfig struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockGetDefaultEmbeddingConfigExpectation
+	expectations       []*RepositoryMockGetDefaultEmbeddingConfigExpectation
+
+	callArgs []*RepositoryMockGetDefaultEmbeddingConfigParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockGetDefaultEmbeddingConfigExpectation specifies expectation struct of the Repository.GetDefaultEmbeddingConfig
+type RepositoryMockGetDefaultEmbeddingConfigExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockGetDefaultEmbeddingConfigParams
+	paramPtrs          *RepositoryMockGetDefaultEmbeddingConfigParamPtrs
+	expectationOrigins RepositoryMockGetDefaultEmbeddingConfigExpectationOrigins
+	results            *RepositoryMockGetDefaultEmbeddingConfigResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockGetDefaultEmbeddingConfigParams contains parameters of the Repository.GetDefaultEmbeddingConfig
+type RepositoryMockGetDefaultEmbeddingConfigParams struct {
+	ctx     context.Context
+	profile string
+}
+
+// RepositoryMockGetDefaultEmbeddingConfigParamPtrs contains pointers to parameters of the Repository.GetDefaultEmbeddingConfig
+type RepositoryMockGetDefaultEmbeddingConfigParamPtrs struct {
+	ctx     *context.Context
+	profile *string
+}
+
+// RepositoryMockGetDefaultEmbeddingConfigResults contains results of the Repository.GetDefaultEmbeddingConfig
+type RepositoryMockGetDefaultEmbeddingConfigResults struct {
+	ep1 *mm_repository.EmbeddingConfigJSON
+	err error
+}
+
+// RepositoryMockGetDefaultEmbeddingConfigOrigins contains origins of expectations of the Repository.GetDefaultEmbeddingConfig
+type RepositoryMockGetDefaultEmbeddingConfigExpectationOrigins struct {
+	origin        string
+	originCtx     string
+	originProfile string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmGetDefaultEmbeddingConfig *mRepositoryMockGetDefaultEmbeddingConfig) Optional() *mRepositoryMockGetDefaultEmbeddingConfig {
+	mmGetDefaultEmbeddingConfig.optional = true
+	return mmGetDefaultEmbeddingConfig
+}
+
+// Expect sets up expected params for Repository.GetDefaultEmbeddingConfig
+func (mmGetDefaultEmbeddingConfig *mRepositoryMockGetDefaultEmbeddingConfig) Expect(ctx context.Context, profile string) *mRepositoryMockGetDefaultEmbeddingConfig {
+	if mmGetDefaultEmbeddingConfig.mock.funcGetDefaultEmbeddingConfig != nil {
+		mmGetDefaultEmbeddingConfig.mock.t.Fatalf("RepositoryMock.GetDefaultEmbeddingConfig mock is already set by Set")
+	}
+
+	if mmGetDefaultEmbeddingConfig.defaultExpectation == nil {
+		mmGetDefaultEmbeddingConfig.defaultExpectation = &RepositoryMockGetDefaultEmbeddingConfigExpectation{}
+	}
+
+	if mmGetDefaultEmbeddingConfig.defaultExpectation.paramPtrs != nil {
+		mmGetDefaultEmbeddingConfig.mock.t.Fatalf("RepositoryMock.GetDefaultEmbeddingConfig mock is already set by ExpectParams functions")
+	}
+
+	mmGetDefaultEmbeddingConfig.defaultExpectation.params = &RepositoryMockGetDefaultEmbeddingConfigParams{ctx, profile}
+	mmGetDefaultEmbeddingConfig.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmGetDefaultEmbeddingConfig.expectations {
+		if minimock.Equal(e.params, mmGetDefaultEmbeddingConfig.defaultExpectation.params) {
+			mmGetDefaultEmbeddingConfig.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetDefaultEmbeddingConfig.defaultExpectation.params)
+		}
+	}
+
+	return mmGetDefaultEmbeddingConfig
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.GetDefaultEmbeddingConfig
+func (mmGetDefaultEmbeddingConfig *mRepositoryMockGetDefaultEmbeddingConfig) ExpectCtxParam1(ctx context.Context) *mRepositoryMockGetDefaultEmbeddingConfig {
+	if mmGetDefaultEmbeddingConfig.mock.funcGetDefaultEmbeddingConfig != nil {
+		mmGetDefaultEmbeddingConfig.mock.t.Fatalf("RepositoryMock.GetDefaultEmbeddingConfig mock is already set by Set")
+	}
+
+	if mmGetDefaultEmbeddingConfig.defaultExpectation == nil {
+		mmGetDefaultEmbeddingConfig.defaultExpectation = &RepositoryMockGetDefaultEmbeddingConfigExpectation{}
+	}
+
+	if mmGetDefaultEmbeddingConfig.defaultExpectation.params != nil {
+		mmGetDefaultEmbeddingConfig.mock.t.Fatalf("RepositoryMock.GetDefaultEmbeddingConfig mock is already set by Expect")
+	}
+
+	if mmGetDefaultEmbeddingConfig.defaultExpectation.paramPtrs == nil {
+		mmGetDefaultEmbeddingConfig.defaultExpectation.paramPtrs = &RepositoryMockGetDefaultEmbeddingConfigParamPtrs{}
+	}
+	mmGetDefaultEmbeddingConfig.defaultExpectation.paramPtrs.ctx = &ctx
+	mmGetDefaultEmbeddingConfig.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmGetDefaultEmbeddingConfig
+}
+
+// ExpectProfileParam2 sets up expected param profile for Repository.GetDefaultEmbeddingConfig
+func (mmGetDefaultEmbeddingConfig *mRepositoryMockGetDefaultEmbeddingConfig) ExpectProfileParam2(profile string) *mRepositoryMockGetDefaultEmbeddingConfig {
+	if mmGetDefaultEmbeddingConfig.mock.funcGetDefaultEmbeddingConfig != nil {
+		mmGetDefaultEmbeddingConfig.mock.t.Fatalf("RepositoryMock.GetDefaultEmbeddingConfig mock is already set by Set")
+	}
+
+	if mmGetDefaultEmbeddingConfig.defaultExpectation == nil {
+		mmGetDefaultEmbeddingConfig.defaultExpectation = &RepositoryMockGetDefaultEmbeddingConfigExpectation{}
+	}
+
+	if mmGetDefaultEmbeddingConfig.defaultExpectation.params != nil {
+		mmGetDefaultEmbeddingConfig.mock.t.Fatalf("RepositoryMock.GetDefaultEmbeddingConfig mock is already set by Expect")
+	}
+
+	if mmGetDefaultEmbeddingConfig.defaultExpectation.paramPtrs == nil {
+		mmGetDefaultEmbeddingConfig.defaultExpectation.paramPtrs = &RepositoryMockGetDefaultEmbeddingConfigParamPtrs{}
+	}
+	mmGetDefaultEmbeddingConfig.defaultExpectation.paramPtrs.profile = &profile
+	mmGetDefaultEmbeddingConfig.defaultExpectation.expectationOrigins.originProfile = minimock.CallerInfo(1)
+
+	return mmGetDefaultEmbeddingConfig
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.GetDefaultEmbeddingConfig
+func (mmGetDefaultEmbeddingConfig *mRepositoryMockGetDefaultEmbeddingConfig) Inspect(f func(ctx context.Context, profile string)) *mRepositoryMockGetDefaultEmbeddingConfig {
+	if mmGetDefaultEmbeddingConfig.mock.inspectFuncGetDefaultEmbeddingConfig != nil {
+		mmGetDefaultEmbeddingConfig.mock.t.Fatalf("Inspect function is already set for RepositoryMock.GetDefaultEmbeddingConfig")
+	}
+
+	mmGetDefaultEmbeddingConfig.mock.inspectFuncGetDefaultEmbeddingConfig = f
+
+	return mmGetDefaultEmbeddingConfig
+}
+
+// Return sets up results that will be returned by Repository.GetDefaultEmbeddingConfig
+func (mmGetDefaultEmbeddingConfig *mRepositoryMockGetDefaultEmbeddingConfig) Return(ep1 *mm_repository.EmbeddingConfigJSON, err error) *RepositoryMock {
+	if mmGetDefaultEmbeddingConfig.mock.funcGetDefaultEmbeddingConfig != nil {
+		mmGetDefaultEmbeddingConfig.mock.t.Fatalf("RepositoryMock.GetDefaultEmbeddingConfig mock is already set by Set")
+	}
+
+	if mmGetDefaultEmbeddingConfig.defaultExpectation == nil {
+		mmGetDefaultEmbeddingConfig.defaultExpectation = &RepositoryMockGetDefaultEmbeddingConfigExpectation{mock: mmGetDefaultEmbeddingConfig.mock}
+	}
+	mmGetDefaultEmbeddingConfig.defaultExpectation.results = &RepositoryMockGetDefaultEmbeddingConfigResults{ep1, err}
+	mmGetDefaultEmbeddingConfig.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmGetDefaultEmbeddingConfig.mock
+}
+
+// Set uses given function f to mock the Repository.GetDefaultEmbeddingConfig method
+func (mmGetDefaultEmbeddingConfig *mRepositoryMockGetDefaultEmbeddingConfig) Set(f func(ctx context.Context, profile string) (ep1 *mm_repository.EmbeddingConfigJSON, err error)) *RepositoryMock {
+	if mmGetDefaultEmbeddingConfig.defaultExpectation != nil {
+		mmGetDefaultEmbeddingConfig.mock.t.Fatalf("Default expectation is already set for the Repository.GetDefaultEmbeddingConfig method")
+	}
+
+	if len(mmGetDefaultEmbeddingConfig.expectations) > 0 {
+		mmGetDefaultEmbeddingConfig.mock.t.Fatalf("Some expectations are already set for the Repository.GetDefaultEmbeddingConfig method")
+	}
+
+	mmGetDefaultEmbeddingConfig.mock.funcGetDefaultEmbeddingConfig = f
+	mmGetDefaultEmbeddingConfig.mock.funcGetDefaultEmbeddingConfigOrigin = minimock.CallerInfo(1)
+	return mmGetDefaultEmbeddingConfig.mock
+}
+
+// When sets expectation for the Repository.GetDefaultEmbeddingConfig which will trigger the result defined by the following
+// Then helper
+func (mmGetDefaultEmbeddingConfig *mRepositoryMockGetDefaultEmbeddingConfig) When(ctx context.Context, profile string) *RepositoryMockGetDefaultEmbeddingConfigExpectation {
+	if mmGetDefaultEmbeddingConfig.mock.funcGetDefaultEmbeddingConfig != nil {
+		mmGetDefaultEmbeddingConfig.mock.t.Fatalf("RepositoryMock.GetDefaultEmbeddingConfig mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockGetDefaultEmbeddingConfigExpectation{
+		mock:               mmGetDefaultEmbeddingConfig.mock,
+		params:             &RepositoryMockGetDefaultEmbeddingConfigParams{ctx, profile},
+		expectationOrigins: RepositoryMockGetDefaultEmbeddingConfigExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmGetDefaultEmbeddingConfig.expectations = append(mmGetDefaultEmbeddingConfig.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.GetDefaultEmbeddingConfig return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockGetDefaultEmbeddingConfigExpectation) Then(ep1 *mm_repository.EmbeddingConfigJSON, err error) *RepositoryMock {
+	e.results = &RepositoryMockGetDefaultEmbeddingConfigResults{ep1, err}
+	return e.mock
+}
+
+// Times sets number of times Repository.GetDefaultEmbeddingConfig should be invoked
+func (mmGetDefaultEmbeddingConfig *mRepositoryMockGetDefaultEmbeddingConfig) Times(n uint64) *mRepositoryMockGetDefaultEmbeddingConfig {
+	if n == 0 {
+		mmGetDefaultEmbeddingConfig.mock.t.Fatalf("Times of RepositoryMock.GetDefaultEmbeddingConfig mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetDefaultEmbeddingConfig.expectedInvocations, n)
+	mmGetDefaultEmbeddingConfig.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmGetDefaultEmbeddingConfig
+}
+
+func (mmGetDefaultEmbeddingConfig *mRepositoryMockGetDefaultEmbeddingConfig) invocationsDone() bool {
+	if len(mmGetDefaultEmbeddingConfig.expectations) == 0 && mmGetDefaultEmbeddingConfig.defaultExpectation == nil && mmGetDefaultEmbeddingConfig.mock.funcGetDefaultEmbeddingConfig == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetDefaultEmbeddingConfig.mock.afterGetDefaultEmbeddingConfigCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetDefaultEmbeddingConfig.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetDefaultEmbeddingConfig implements mm_repository.Repository
+func (mmGetDefaultEmbeddingConfig *RepositoryMock) GetDefaultEmbeddingConfig(ctx context.Context, profile string) (ep1 *mm_repository.EmbeddingConfigJSON, err error) {
+	mm_atomic.AddUint64(&mmGetDefaultEmbeddingConfig.beforeGetDefaultEmbeddingConfigCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetDefaultEmbeddingConfig.afterGetDefaultEmbeddingConfigCounter, 1)
+
+	mmGetDefaultEmbeddingConfig.t.Helper()
+
+	if mmGetDefaultEmbeddingConfig.inspectFuncGetDefaultEmbeddingConfig != nil {
+		mmGetDefaultEmbeddingConfig.inspectFuncGetDefaultEmbeddingConfig(ctx, profile)
+	}
+
+	mm_params := RepositoryMockGetDefaultEmbeddingConfigParams{ctx, profile}
+
+	// Record call args
+	mmGetDefaultEmbeddingConfig.GetDefaultEmbeddingConfigMock.mutex.Lock()
+	mmGetDefaultEmbeddingConfig.GetDefaultEmbeddingConfigMock.callArgs = append(mmGetDefaultEmbeddingConfig.GetDefaultEmbeddingConfigMock.callArgs, &mm_params)
+	mmGetDefaultEmbeddingConfig.GetDefaultEmbeddingConfigMock.mutex.Unlock()
+
+	for _, e := range mmGetDefaultEmbeddingConfig.GetDefaultEmbeddingConfigMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.ep1, e.results.err
+		}
+	}
+
+	if mmGetDefaultEmbeddingConfig.GetDefaultEmbeddingConfigMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetDefaultEmbeddingConfig.GetDefaultEmbeddingConfigMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetDefaultEmbeddingConfig.GetDefaultEmbeddingConfigMock.defaultExpectation.params
+		mm_want_ptrs := mmGetDefaultEmbeddingConfig.GetDefaultEmbeddingConfigMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockGetDefaultEmbeddingConfigParams{ctx, profile}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetDefaultEmbeddingConfig.t.Errorf("RepositoryMock.GetDefaultEmbeddingConfig got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetDefaultEmbeddingConfig.GetDefaultEmbeddingConfigMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.profile != nil && !minimock.Equal(*mm_want_ptrs.profile, mm_got.profile) {
+				mmGetDefaultEmbeddingConfig.t.Errorf("RepositoryMock.GetDefaultEmbeddingConfig got unexpected parameter profile, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetDefaultEmbeddingConfig.GetDefaultEmbeddingConfigMock.defaultExpectation.expectationOrigins.originProfile, *mm_want_ptrs.profile, mm_got.profile, minimock.Diff(*mm_want_ptrs.profile, mm_got.profile))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetDefaultEmbeddingConfig.t.Errorf("RepositoryMock.GetDefaultEmbeddingConfig got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmGetDefaultEmbeddingConfig.GetDefaultEmbeddingConfigMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetDefaultEmbeddingConfig.GetDefaultEmbeddingConfigMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetDefaultEmbeddingConfig.t.Fatal("No results are set for the RepositoryMock.GetDefaultEmbeddingConfig")
+		}
+		return (*mm_results).ep1, (*mm_results).err
+	}
+	if mmGetDefaultEmbeddingConfig.funcGetDefaultEmbeddingConfig != nil {
+		return mmGetDefaultEmbeddingConfig.funcGetDefaultEmbeddingConfig(ctx, profile)
+	}
+	mmGetDefaultEmbeddingConfig.t.Fatalf("Unexpected call to RepositoryMock.GetDefaultEmbeddingConfig. %v %v", ctx, profile)
+	return
+}
+
+// GetDefaultEmbeddingConfigAfterCounter returns a count of finished RepositoryMock.GetDefaultEmbeddingConfig invocations
+func (mmGetDefaultEmbeddingConfig *RepositoryMock) GetDefaultEmbeddingConfigAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetDefaultEmbeddingConfig.afterGetDefaultEmbeddingConfigCounter)
+}
+
+// GetDefaultEmbeddingConfigBeforeCounter returns a count of RepositoryMock.GetDefaultEmbeddingConfig invocations
+func (mmGetDefaultEmbeddingConfig *RepositoryMock) GetDefaultEmbeddingConfigBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetDefaultEmbeddingConfig.beforeGetDefaultEmbeddingConfigCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.GetDefaultEmbeddingConfig.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetDefaultEmbeddingConfig *mRepositoryMockGetDefaultEmbeddingConfig) Calls() []*RepositoryMockGetDefaultEmbeddingConfigParams {
+	mmGetDefaultEmbeddingConfig.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockGetDefaultEmbeddingConfigParams, len(mmGetDefaultEmbeddingConfig.callArgs))
+	copy(argCopy, mmGetDefaultEmbeddingConfig.callArgs)
+
+	mmGetDefaultEmbeddingConfig.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetDefaultEmbeddingConfigDone returns true if the count of the GetDefaultEmbeddingConfig invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockGetDefaultEmbeddingConfigDone() bool {
+	if m.GetDefaultEmbeddingConfigMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.GetDefaultEmbeddingConfigMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetDefaultEmbeddingConfigMock.invocationsDone()
+}
+
+// MinimockGetDefaultEmbeddingConfigInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockGetDefaultEmbeddingConfigInspect() {
+	for _, e := range m.GetDefaultEmbeddingConfigMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.GetDefaultEmbeddingConfig at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterGetDefaultEmbeddingConfigCounter := mm_atomic.LoadUint64(&m.afterGetDefaultEmbeddingConfigCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetDefaultEmbeddingConfigMock.defaultExpectation != nil && afterGetDefaultEmbeddingConfigCounter < 1 {
+		if m.GetDefaultEmbeddingConfigMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.GetDefaultEmbeddingConfig at\n%s", m.GetDefaultEmbeddingConfigMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.GetDefaultEmbeddingConfig at\n%s with params: %#v", m.GetDefaultEmbeddingConfigMock.defaultExpectation.expectationOrigins.origin, *m.GetDefaultEmbeddingConfigMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetDefaultEmbeddingConfig != nil && afterGetDefaultEmbeddingConfigCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.GetDefaultEmbeddingConfig at\n%s", m.funcGetDefaultEmbeddingConfigOrigin)
+	}
+
+	if !m.GetDefaultEmbeddingConfigMock.invocationsDone() && afterGetDefaultEmbeddingConfigCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.GetDefaultEmbeddingConfig at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.GetDefaultEmbeddingConfigMock.expectedInvocations), m.GetDefaultEmbeddingConfigMock.expectedInvocationsOrigin, afterGetDefaultEmbeddingConfigCounter)
+	}
+}
+
+type mRepositoryMockGetDualProcessingTarget struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockGetDualProcessingTargetExpectation
+	expectations       []*RepositoryMockGetDualProcessingTargetExpectation
+
+	callArgs []*RepositoryMockGetDualProcessingTargetParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockGetDualProcessingTargetExpectation specifies expectation struct of the Repository.GetDualProcessingTarget
+type RepositoryMockGetDualProcessingTargetExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockGetDualProcessingTargetParams
+	paramPtrs          *RepositoryMockGetDualProcessingTargetParamPtrs
+	expectationOrigins RepositoryMockGetDualProcessingTargetExpectationOrigins
+	results            *RepositoryMockGetDualProcessingTargetResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockGetDualProcessingTargetParams contains parameters of the Repository.GetDualProcessingTarget
+type RepositoryMockGetDualProcessingTargetParams struct {
+	ctx          context.Context
+	productionKB *mm_repository.KnowledgeBaseModel
+}
+
+// RepositoryMockGetDualProcessingTargetParamPtrs contains pointers to parameters of the Repository.GetDualProcessingTarget
+type RepositoryMockGetDualProcessingTargetParamPtrs struct {
+	ctx          *context.Context
+	productionKB **mm_repository.KnowledgeBaseModel
+}
+
+// RepositoryMockGetDualProcessingTargetResults contains results of the Repository.GetDualProcessingTarget
+type RepositoryMockGetDualProcessingTargetResults struct {
+	dp1 *mm_repository.DualProcessingTarget
+	err error
+}
+
+// RepositoryMockGetDualProcessingTargetOrigins contains origins of expectations of the Repository.GetDualProcessingTarget
+type RepositoryMockGetDualProcessingTargetExpectationOrigins struct {
+	origin             string
+	originCtx          string
+	originProductionKB string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmGetDualProcessingTarget *mRepositoryMockGetDualProcessingTarget) Optional() *mRepositoryMockGetDualProcessingTarget {
+	mmGetDualProcessingTarget.optional = true
+	return mmGetDualProcessingTarget
+}
+
+// Expect sets up expected params for Repository.GetDualProcessingTarget
+func (mmGetDualProcessingTarget *mRepositoryMockGetDualProcessingTarget) Expect(ctx context.Context, productionKB *mm_repository.KnowledgeBaseModel) *mRepositoryMockGetDualProcessingTarget {
+	if mmGetDualProcessingTarget.mock.funcGetDualProcessingTarget != nil {
+		mmGetDualProcessingTarget.mock.t.Fatalf("RepositoryMock.GetDualProcessingTarget mock is already set by Set")
+	}
+
+	if mmGetDualProcessingTarget.defaultExpectation == nil {
+		mmGetDualProcessingTarget.defaultExpectation = &RepositoryMockGetDualProcessingTargetExpectation{}
+	}
+
+	if mmGetDualProcessingTarget.defaultExpectation.paramPtrs != nil {
+		mmGetDualProcessingTarget.mock.t.Fatalf("RepositoryMock.GetDualProcessingTarget mock is already set by ExpectParams functions")
+	}
+
+	mmGetDualProcessingTarget.defaultExpectation.params = &RepositoryMockGetDualProcessingTargetParams{ctx, productionKB}
+	mmGetDualProcessingTarget.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmGetDualProcessingTarget.expectations {
+		if minimock.Equal(e.params, mmGetDualProcessingTarget.defaultExpectation.params) {
+			mmGetDualProcessingTarget.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetDualProcessingTarget.defaultExpectation.params)
+		}
+	}
+
+	return mmGetDualProcessingTarget
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.GetDualProcessingTarget
+func (mmGetDualProcessingTarget *mRepositoryMockGetDualProcessingTarget) ExpectCtxParam1(ctx context.Context) *mRepositoryMockGetDualProcessingTarget {
+	if mmGetDualProcessingTarget.mock.funcGetDualProcessingTarget != nil {
+		mmGetDualProcessingTarget.mock.t.Fatalf("RepositoryMock.GetDualProcessingTarget mock is already set by Set")
+	}
+
+	if mmGetDualProcessingTarget.defaultExpectation == nil {
+		mmGetDualProcessingTarget.defaultExpectation = &RepositoryMockGetDualProcessingTargetExpectation{}
+	}
+
+	if mmGetDualProcessingTarget.defaultExpectation.params != nil {
+		mmGetDualProcessingTarget.mock.t.Fatalf("RepositoryMock.GetDualProcessingTarget mock is already set by Expect")
+	}
+
+	if mmGetDualProcessingTarget.defaultExpectation.paramPtrs == nil {
+		mmGetDualProcessingTarget.defaultExpectation.paramPtrs = &RepositoryMockGetDualProcessingTargetParamPtrs{}
+	}
+	mmGetDualProcessingTarget.defaultExpectation.paramPtrs.ctx = &ctx
+	mmGetDualProcessingTarget.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmGetDualProcessingTarget
+}
+
+// ExpectProductionKBParam2 sets up expected param productionKB for Repository.GetDualProcessingTarget
+func (mmGetDualProcessingTarget *mRepositoryMockGetDualProcessingTarget) ExpectProductionKBParam2(productionKB *mm_repository.KnowledgeBaseModel) *mRepositoryMockGetDualProcessingTarget {
+	if mmGetDualProcessingTarget.mock.funcGetDualProcessingTarget != nil {
+		mmGetDualProcessingTarget.mock.t.Fatalf("RepositoryMock.GetDualProcessingTarget mock is already set by Set")
+	}
+
+	if mmGetDualProcessingTarget.defaultExpectation == nil {
+		mmGetDualProcessingTarget.defaultExpectation = &RepositoryMockGetDualProcessingTargetExpectation{}
+	}
+
+	if mmGetDualProcessingTarget.defaultExpectation.params != nil {
+		mmGetDualProcessingTarget.mock.t.Fatalf("RepositoryMock.GetDualProcessingTarget mock is already set by Expect")
+	}
+
+	if mmGetDualProcessingTarget.defaultExpectation.paramPtrs == nil {
+		mmGetDualProcessingTarget.defaultExpectation.paramPtrs = &RepositoryMockGetDualProcessingTargetParamPtrs{}
+	}
+	mmGetDualProcessingTarget.defaultExpectation.paramPtrs.productionKB = &productionKB
+	mmGetDualProcessingTarget.defaultExpectation.expectationOrigins.originProductionKB = minimock.CallerInfo(1)
+
+	return mmGetDualProcessingTarget
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.GetDualProcessingTarget
+func (mmGetDualProcessingTarget *mRepositoryMockGetDualProcessingTarget) Inspect(f func(ctx context.Context, productionKB *mm_repository.KnowledgeBaseModel)) *mRepositoryMockGetDualProcessingTarget {
+	if mmGetDualProcessingTarget.mock.inspectFuncGetDualProcessingTarget != nil {
+		mmGetDualProcessingTarget.mock.t.Fatalf("Inspect function is already set for RepositoryMock.GetDualProcessingTarget")
+	}
+
+	mmGetDualProcessingTarget.mock.inspectFuncGetDualProcessingTarget = f
+
+	return mmGetDualProcessingTarget
+}
+
+// Return sets up results that will be returned by Repository.GetDualProcessingTarget
+func (mmGetDualProcessingTarget *mRepositoryMockGetDualProcessingTarget) Return(dp1 *mm_repository.DualProcessingTarget, err error) *RepositoryMock {
+	if mmGetDualProcessingTarget.mock.funcGetDualProcessingTarget != nil {
+		mmGetDualProcessingTarget.mock.t.Fatalf("RepositoryMock.GetDualProcessingTarget mock is already set by Set")
+	}
+
+	if mmGetDualProcessingTarget.defaultExpectation == nil {
+		mmGetDualProcessingTarget.defaultExpectation = &RepositoryMockGetDualProcessingTargetExpectation{mock: mmGetDualProcessingTarget.mock}
+	}
+	mmGetDualProcessingTarget.defaultExpectation.results = &RepositoryMockGetDualProcessingTargetResults{dp1, err}
+	mmGetDualProcessingTarget.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmGetDualProcessingTarget.mock
+}
+
+// Set uses given function f to mock the Repository.GetDualProcessingTarget method
+func (mmGetDualProcessingTarget *mRepositoryMockGetDualProcessingTarget) Set(f func(ctx context.Context, productionKB *mm_repository.KnowledgeBaseModel) (dp1 *mm_repository.DualProcessingTarget, err error)) *RepositoryMock {
+	if mmGetDualProcessingTarget.defaultExpectation != nil {
+		mmGetDualProcessingTarget.mock.t.Fatalf("Default expectation is already set for the Repository.GetDualProcessingTarget method")
+	}
+
+	if len(mmGetDualProcessingTarget.expectations) > 0 {
+		mmGetDualProcessingTarget.mock.t.Fatalf("Some expectations are already set for the Repository.GetDualProcessingTarget method")
+	}
+
+	mmGetDualProcessingTarget.mock.funcGetDualProcessingTarget = f
+	mmGetDualProcessingTarget.mock.funcGetDualProcessingTargetOrigin = minimock.CallerInfo(1)
+	return mmGetDualProcessingTarget.mock
+}
+
+// When sets expectation for the Repository.GetDualProcessingTarget which will trigger the result defined by the following
+// Then helper
+func (mmGetDualProcessingTarget *mRepositoryMockGetDualProcessingTarget) When(ctx context.Context, productionKB *mm_repository.KnowledgeBaseModel) *RepositoryMockGetDualProcessingTargetExpectation {
+	if mmGetDualProcessingTarget.mock.funcGetDualProcessingTarget != nil {
+		mmGetDualProcessingTarget.mock.t.Fatalf("RepositoryMock.GetDualProcessingTarget mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockGetDualProcessingTargetExpectation{
+		mock:               mmGetDualProcessingTarget.mock,
+		params:             &RepositoryMockGetDualProcessingTargetParams{ctx, productionKB},
+		expectationOrigins: RepositoryMockGetDualProcessingTargetExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmGetDualProcessingTarget.expectations = append(mmGetDualProcessingTarget.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.GetDualProcessingTarget return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockGetDualProcessingTargetExpectation) Then(dp1 *mm_repository.DualProcessingTarget, err error) *RepositoryMock {
+	e.results = &RepositoryMockGetDualProcessingTargetResults{dp1, err}
+	return e.mock
+}
+
+// Times sets number of times Repository.GetDualProcessingTarget should be invoked
+func (mmGetDualProcessingTarget *mRepositoryMockGetDualProcessingTarget) Times(n uint64) *mRepositoryMockGetDualProcessingTarget {
+	if n == 0 {
+		mmGetDualProcessingTarget.mock.t.Fatalf("Times of RepositoryMock.GetDualProcessingTarget mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetDualProcessingTarget.expectedInvocations, n)
+	mmGetDualProcessingTarget.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmGetDualProcessingTarget
+}
+
+func (mmGetDualProcessingTarget *mRepositoryMockGetDualProcessingTarget) invocationsDone() bool {
+	if len(mmGetDualProcessingTarget.expectations) == 0 && mmGetDualProcessingTarget.defaultExpectation == nil && mmGetDualProcessingTarget.mock.funcGetDualProcessingTarget == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetDualProcessingTarget.mock.afterGetDualProcessingTargetCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetDualProcessingTarget.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetDualProcessingTarget implements mm_repository.Repository
+func (mmGetDualProcessingTarget *RepositoryMock) GetDualProcessingTarget(ctx context.Context, productionKB *mm_repository.KnowledgeBaseModel) (dp1 *mm_repository.DualProcessingTarget, err error) {
+	mm_atomic.AddUint64(&mmGetDualProcessingTarget.beforeGetDualProcessingTargetCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetDualProcessingTarget.afterGetDualProcessingTargetCounter, 1)
+
+	mmGetDualProcessingTarget.t.Helper()
+
+	if mmGetDualProcessingTarget.inspectFuncGetDualProcessingTarget != nil {
+		mmGetDualProcessingTarget.inspectFuncGetDualProcessingTarget(ctx, productionKB)
+	}
+
+	mm_params := RepositoryMockGetDualProcessingTargetParams{ctx, productionKB}
+
+	// Record call args
+	mmGetDualProcessingTarget.GetDualProcessingTargetMock.mutex.Lock()
+	mmGetDualProcessingTarget.GetDualProcessingTargetMock.callArgs = append(mmGetDualProcessingTarget.GetDualProcessingTargetMock.callArgs, &mm_params)
+	mmGetDualProcessingTarget.GetDualProcessingTargetMock.mutex.Unlock()
+
+	for _, e := range mmGetDualProcessingTarget.GetDualProcessingTargetMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.dp1, e.results.err
+		}
+	}
+
+	if mmGetDualProcessingTarget.GetDualProcessingTargetMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetDualProcessingTarget.GetDualProcessingTargetMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetDualProcessingTarget.GetDualProcessingTargetMock.defaultExpectation.params
+		mm_want_ptrs := mmGetDualProcessingTarget.GetDualProcessingTargetMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockGetDualProcessingTargetParams{ctx, productionKB}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetDualProcessingTarget.t.Errorf("RepositoryMock.GetDualProcessingTarget got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetDualProcessingTarget.GetDualProcessingTargetMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.productionKB != nil && !minimock.Equal(*mm_want_ptrs.productionKB, mm_got.productionKB) {
+				mmGetDualProcessingTarget.t.Errorf("RepositoryMock.GetDualProcessingTarget got unexpected parameter productionKB, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetDualProcessingTarget.GetDualProcessingTargetMock.defaultExpectation.expectationOrigins.originProductionKB, *mm_want_ptrs.productionKB, mm_got.productionKB, minimock.Diff(*mm_want_ptrs.productionKB, mm_got.productionKB))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetDualProcessingTarget.t.Errorf("RepositoryMock.GetDualProcessingTarget got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmGetDualProcessingTarget.GetDualProcessingTargetMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetDualProcessingTarget.GetDualProcessingTargetMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetDualProcessingTarget.t.Fatal("No results are set for the RepositoryMock.GetDualProcessingTarget")
+		}
+		return (*mm_results).dp1, (*mm_results).err
+	}
+	if mmGetDualProcessingTarget.funcGetDualProcessingTarget != nil {
+		return mmGetDualProcessingTarget.funcGetDualProcessingTarget(ctx, productionKB)
+	}
+	mmGetDualProcessingTarget.t.Fatalf("Unexpected call to RepositoryMock.GetDualProcessingTarget. %v %v", ctx, productionKB)
+	return
+}
+
+// GetDualProcessingTargetAfterCounter returns a count of finished RepositoryMock.GetDualProcessingTarget invocations
+func (mmGetDualProcessingTarget *RepositoryMock) GetDualProcessingTargetAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetDualProcessingTarget.afterGetDualProcessingTargetCounter)
+}
+
+// GetDualProcessingTargetBeforeCounter returns a count of RepositoryMock.GetDualProcessingTarget invocations
+func (mmGetDualProcessingTarget *RepositoryMock) GetDualProcessingTargetBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetDualProcessingTarget.beforeGetDualProcessingTargetCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.GetDualProcessingTarget.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetDualProcessingTarget *mRepositoryMockGetDualProcessingTarget) Calls() []*RepositoryMockGetDualProcessingTargetParams {
+	mmGetDualProcessingTarget.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockGetDualProcessingTargetParams, len(mmGetDualProcessingTarget.callArgs))
+	copy(argCopy, mmGetDualProcessingTarget.callArgs)
+
+	mmGetDualProcessingTarget.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetDualProcessingTargetDone returns true if the count of the GetDualProcessingTarget invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockGetDualProcessingTargetDone() bool {
+	if m.GetDualProcessingTargetMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.GetDualProcessingTargetMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetDualProcessingTargetMock.invocationsDone()
+}
+
+// MinimockGetDualProcessingTargetInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockGetDualProcessingTargetInspect() {
+	for _, e := range m.GetDualProcessingTargetMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.GetDualProcessingTarget at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterGetDualProcessingTargetCounter := mm_atomic.LoadUint64(&m.afterGetDualProcessingTargetCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetDualProcessingTargetMock.defaultExpectation != nil && afterGetDualProcessingTargetCounter < 1 {
+		if m.GetDualProcessingTargetMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.GetDualProcessingTarget at\n%s", m.GetDualProcessingTargetMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.GetDualProcessingTarget at\n%s with params: %#v", m.GetDualProcessingTargetMock.defaultExpectation.expectationOrigins.origin, *m.GetDualProcessingTargetMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetDualProcessingTarget != nil && afterGetDualProcessingTargetCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.GetDualProcessingTarget at\n%s", m.funcGetDualProcessingTargetOrigin)
+	}
+
+	if !m.GetDualProcessingTargetMock.invocationsDone() && afterGetDualProcessingTargetCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.GetDualProcessingTarget at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.GetDualProcessingTargetMock.expectedInvocations), m.GetDualProcessingTargetMock.expectedInvocationsOrigin, afterGetDualProcessingTargetCounter)
+	}
+}
+
+type mRepositoryMockGetEmbeddingCountByKBUID struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockGetEmbeddingCountByKBUIDExpectation
+	expectations       []*RepositoryMockGetEmbeddingCountByKBUIDExpectation
+
+	callArgs []*RepositoryMockGetEmbeddingCountByKBUIDParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockGetEmbeddingCountByKBUIDExpectation specifies expectation struct of the Repository.GetEmbeddingCountByKBUID
+type RepositoryMockGetEmbeddingCountByKBUIDExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockGetEmbeddingCountByKBUIDParams
+	paramPtrs          *RepositoryMockGetEmbeddingCountByKBUIDParamPtrs
+	expectationOrigins RepositoryMockGetEmbeddingCountByKBUIDExpectationOrigins
+	results            *RepositoryMockGetEmbeddingCountByKBUIDResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockGetEmbeddingCountByKBUIDParams contains parameters of the Repository.GetEmbeddingCountByKBUID
+type RepositoryMockGetEmbeddingCountByKBUIDParams struct {
+	ctx   context.Context
+	kbUID types.KBUIDType
+}
+
+// RepositoryMockGetEmbeddingCountByKBUIDParamPtrs contains pointers to parameters of the Repository.GetEmbeddingCountByKBUID
+type RepositoryMockGetEmbeddingCountByKBUIDParamPtrs struct {
+	ctx   *context.Context
+	kbUID *types.KBUIDType
+}
+
+// RepositoryMockGetEmbeddingCountByKBUIDResults contains results of the Repository.GetEmbeddingCountByKBUID
+type RepositoryMockGetEmbeddingCountByKBUIDResults struct {
+	i1  int64
+	err error
+}
+
+// RepositoryMockGetEmbeddingCountByKBUIDOrigins contains origins of expectations of the Repository.GetEmbeddingCountByKBUID
+type RepositoryMockGetEmbeddingCountByKBUIDExpectationOrigins struct {
+	origin      string
+	originCtx   string
+	originKbUID string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmGetEmbeddingCountByKBUID *mRepositoryMockGetEmbeddingCountByKBUID) Optional() *mRepositoryMockGetEmbeddingCountByKBUID {
+	mmGetEmbeddingCountByKBUID.optional = true
+	return mmGetEmbeddingCountByKBUID
+}
+
+// Expect sets up expected params for Repository.GetEmbeddingCountByKBUID
+func (mmGetEmbeddingCountByKBUID *mRepositoryMockGetEmbeddingCountByKBUID) Expect(ctx context.Context, kbUID types.KBUIDType) *mRepositoryMockGetEmbeddingCountByKBUID {
+	if mmGetEmbeddingCountByKBUID.mock.funcGetEmbeddingCountByKBUID != nil {
+		mmGetEmbeddingCountByKBUID.mock.t.Fatalf("RepositoryMock.GetEmbeddingCountByKBUID mock is already set by Set")
+	}
+
+	if mmGetEmbeddingCountByKBUID.defaultExpectation == nil {
+		mmGetEmbeddingCountByKBUID.defaultExpectation = &RepositoryMockGetEmbeddingCountByKBUIDExpectation{}
+	}
+
+	if mmGetEmbeddingCountByKBUID.defaultExpectation.paramPtrs != nil {
+		mmGetEmbeddingCountByKBUID.mock.t.Fatalf("RepositoryMock.GetEmbeddingCountByKBUID mock is already set by ExpectParams functions")
+	}
+
+	mmGetEmbeddingCountByKBUID.defaultExpectation.params = &RepositoryMockGetEmbeddingCountByKBUIDParams{ctx, kbUID}
+	mmGetEmbeddingCountByKBUID.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmGetEmbeddingCountByKBUID.expectations {
+		if minimock.Equal(e.params, mmGetEmbeddingCountByKBUID.defaultExpectation.params) {
+			mmGetEmbeddingCountByKBUID.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetEmbeddingCountByKBUID.defaultExpectation.params)
+		}
+	}
+
+	return mmGetEmbeddingCountByKBUID
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.GetEmbeddingCountByKBUID
+func (mmGetEmbeddingCountByKBUID *mRepositoryMockGetEmbeddingCountByKBUID) ExpectCtxParam1(ctx context.Context) *mRepositoryMockGetEmbeddingCountByKBUID {
+	if mmGetEmbeddingCountByKBUID.mock.funcGetEmbeddingCountByKBUID != nil {
+		mmGetEmbeddingCountByKBUID.mock.t.Fatalf("RepositoryMock.GetEmbeddingCountByKBUID mock is already set by Set")
+	}
+
+	if mmGetEmbeddingCountByKBUID.defaultExpectation == nil {
+		mmGetEmbeddingCountByKBUID.defaultExpectation = &RepositoryMockGetEmbeddingCountByKBUIDExpectation{}
+	}
+
+	if mmGetEmbeddingCountByKBUID.defaultExpectation.params != nil {
+		mmGetEmbeddingCountByKBUID.mock.t.Fatalf("RepositoryMock.GetEmbeddingCountByKBUID mock is already set by Expect")
+	}
+
+	if mmGetEmbeddingCountByKBUID.defaultExpectation.paramPtrs == nil {
+		mmGetEmbeddingCountByKBUID.defaultExpectation.paramPtrs = &RepositoryMockGetEmbeddingCountByKBUIDParamPtrs{}
+	}
+	mmGetEmbeddingCountByKBUID.defaultExpectation.paramPtrs.ctx = &ctx
+	mmGetEmbeddingCountByKBUID.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmGetEmbeddingCountByKBUID
+}
+
+// ExpectKbUIDParam2 sets up expected param kbUID for Repository.GetEmbeddingCountByKBUID
+func (mmGetEmbeddingCountByKBUID *mRepositoryMockGetEmbeddingCountByKBUID) ExpectKbUIDParam2(kbUID types.KBUIDType) *mRepositoryMockGetEmbeddingCountByKBUID {
+	if mmGetEmbeddingCountByKBUID.mock.funcGetEmbeddingCountByKBUID != nil {
+		mmGetEmbeddingCountByKBUID.mock.t.Fatalf("RepositoryMock.GetEmbeddingCountByKBUID mock is already set by Set")
+	}
+
+	if mmGetEmbeddingCountByKBUID.defaultExpectation == nil {
+		mmGetEmbeddingCountByKBUID.defaultExpectation = &RepositoryMockGetEmbeddingCountByKBUIDExpectation{}
+	}
+
+	if mmGetEmbeddingCountByKBUID.defaultExpectation.params != nil {
+		mmGetEmbeddingCountByKBUID.mock.t.Fatalf("RepositoryMock.GetEmbeddingCountByKBUID mock is already set by Expect")
+	}
+
+	if mmGetEmbeddingCountByKBUID.defaultExpectation.paramPtrs == nil {
+		mmGetEmbeddingCountByKBUID.defaultExpectation.paramPtrs = &RepositoryMockGetEmbeddingCountByKBUIDParamPtrs{}
+	}
+	mmGetEmbeddingCountByKBUID.defaultExpectation.paramPtrs.kbUID = &kbUID
+	mmGetEmbeddingCountByKBUID.defaultExpectation.expectationOrigins.originKbUID = minimock.CallerInfo(1)
+
+	return mmGetEmbeddingCountByKBUID
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.GetEmbeddingCountByKBUID
+func (mmGetEmbeddingCountByKBUID *mRepositoryMockGetEmbeddingCountByKBUID) Inspect(f func(ctx context.Context, kbUID types.KBUIDType)) *mRepositoryMockGetEmbeddingCountByKBUID {
+	if mmGetEmbeddingCountByKBUID.mock.inspectFuncGetEmbeddingCountByKBUID != nil {
+		mmGetEmbeddingCountByKBUID.mock.t.Fatalf("Inspect function is already set for RepositoryMock.GetEmbeddingCountByKBUID")
+	}
+
+	mmGetEmbeddingCountByKBUID.mock.inspectFuncGetEmbeddingCountByKBUID = f
+
+	return mmGetEmbeddingCountByKBUID
+}
+
+// Return sets up results that will be returned by Repository.GetEmbeddingCountByKBUID
+func (mmGetEmbeddingCountByKBUID *mRepositoryMockGetEmbeddingCountByKBUID) Return(i1 int64, err error) *RepositoryMock {
+	if mmGetEmbeddingCountByKBUID.mock.funcGetEmbeddingCountByKBUID != nil {
+		mmGetEmbeddingCountByKBUID.mock.t.Fatalf("RepositoryMock.GetEmbeddingCountByKBUID mock is already set by Set")
+	}
+
+	if mmGetEmbeddingCountByKBUID.defaultExpectation == nil {
+		mmGetEmbeddingCountByKBUID.defaultExpectation = &RepositoryMockGetEmbeddingCountByKBUIDExpectation{mock: mmGetEmbeddingCountByKBUID.mock}
+	}
+	mmGetEmbeddingCountByKBUID.defaultExpectation.results = &RepositoryMockGetEmbeddingCountByKBUIDResults{i1, err}
+	mmGetEmbeddingCountByKBUID.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmGetEmbeddingCountByKBUID.mock
+}
+
+// Set uses given function f to mock the Repository.GetEmbeddingCountByKBUID method
+func (mmGetEmbeddingCountByKBUID *mRepositoryMockGetEmbeddingCountByKBUID) Set(f func(ctx context.Context, kbUID types.KBUIDType) (i1 int64, err error)) *RepositoryMock {
+	if mmGetEmbeddingCountByKBUID.defaultExpectation != nil {
+		mmGetEmbeddingCountByKBUID.mock.t.Fatalf("Default expectation is already set for the Repository.GetEmbeddingCountByKBUID method")
+	}
+
+	if len(mmGetEmbeddingCountByKBUID.expectations) > 0 {
+		mmGetEmbeddingCountByKBUID.mock.t.Fatalf("Some expectations are already set for the Repository.GetEmbeddingCountByKBUID method")
+	}
+
+	mmGetEmbeddingCountByKBUID.mock.funcGetEmbeddingCountByKBUID = f
+	mmGetEmbeddingCountByKBUID.mock.funcGetEmbeddingCountByKBUIDOrigin = minimock.CallerInfo(1)
+	return mmGetEmbeddingCountByKBUID.mock
+}
+
+// When sets expectation for the Repository.GetEmbeddingCountByKBUID which will trigger the result defined by the following
+// Then helper
+func (mmGetEmbeddingCountByKBUID *mRepositoryMockGetEmbeddingCountByKBUID) When(ctx context.Context, kbUID types.KBUIDType) *RepositoryMockGetEmbeddingCountByKBUIDExpectation {
+	if mmGetEmbeddingCountByKBUID.mock.funcGetEmbeddingCountByKBUID != nil {
+		mmGetEmbeddingCountByKBUID.mock.t.Fatalf("RepositoryMock.GetEmbeddingCountByKBUID mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockGetEmbeddingCountByKBUIDExpectation{
+		mock:               mmGetEmbeddingCountByKBUID.mock,
+		params:             &RepositoryMockGetEmbeddingCountByKBUIDParams{ctx, kbUID},
+		expectationOrigins: RepositoryMockGetEmbeddingCountByKBUIDExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmGetEmbeddingCountByKBUID.expectations = append(mmGetEmbeddingCountByKBUID.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.GetEmbeddingCountByKBUID return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockGetEmbeddingCountByKBUIDExpectation) Then(i1 int64, err error) *RepositoryMock {
+	e.results = &RepositoryMockGetEmbeddingCountByKBUIDResults{i1, err}
+	return e.mock
+}
+
+// Times sets number of times Repository.GetEmbeddingCountByKBUID should be invoked
+func (mmGetEmbeddingCountByKBUID *mRepositoryMockGetEmbeddingCountByKBUID) Times(n uint64) *mRepositoryMockGetEmbeddingCountByKBUID {
+	if n == 0 {
+		mmGetEmbeddingCountByKBUID.mock.t.Fatalf("Times of RepositoryMock.GetEmbeddingCountByKBUID mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetEmbeddingCountByKBUID.expectedInvocations, n)
+	mmGetEmbeddingCountByKBUID.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmGetEmbeddingCountByKBUID
+}
+
+func (mmGetEmbeddingCountByKBUID *mRepositoryMockGetEmbeddingCountByKBUID) invocationsDone() bool {
+	if len(mmGetEmbeddingCountByKBUID.expectations) == 0 && mmGetEmbeddingCountByKBUID.defaultExpectation == nil && mmGetEmbeddingCountByKBUID.mock.funcGetEmbeddingCountByKBUID == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetEmbeddingCountByKBUID.mock.afterGetEmbeddingCountByKBUIDCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetEmbeddingCountByKBUID.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetEmbeddingCountByKBUID implements mm_repository.Repository
+func (mmGetEmbeddingCountByKBUID *RepositoryMock) GetEmbeddingCountByKBUID(ctx context.Context, kbUID types.KBUIDType) (i1 int64, err error) {
+	mm_atomic.AddUint64(&mmGetEmbeddingCountByKBUID.beforeGetEmbeddingCountByKBUIDCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetEmbeddingCountByKBUID.afterGetEmbeddingCountByKBUIDCounter, 1)
+
+	mmGetEmbeddingCountByKBUID.t.Helper()
+
+	if mmGetEmbeddingCountByKBUID.inspectFuncGetEmbeddingCountByKBUID != nil {
+		mmGetEmbeddingCountByKBUID.inspectFuncGetEmbeddingCountByKBUID(ctx, kbUID)
+	}
+
+	mm_params := RepositoryMockGetEmbeddingCountByKBUIDParams{ctx, kbUID}
+
+	// Record call args
+	mmGetEmbeddingCountByKBUID.GetEmbeddingCountByKBUIDMock.mutex.Lock()
+	mmGetEmbeddingCountByKBUID.GetEmbeddingCountByKBUIDMock.callArgs = append(mmGetEmbeddingCountByKBUID.GetEmbeddingCountByKBUIDMock.callArgs, &mm_params)
+	mmGetEmbeddingCountByKBUID.GetEmbeddingCountByKBUIDMock.mutex.Unlock()
+
+	for _, e := range mmGetEmbeddingCountByKBUID.GetEmbeddingCountByKBUIDMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.i1, e.results.err
+		}
+	}
+
+	if mmGetEmbeddingCountByKBUID.GetEmbeddingCountByKBUIDMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetEmbeddingCountByKBUID.GetEmbeddingCountByKBUIDMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetEmbeddingCountByKBUID.GetEmbeddingCountByKBUIDMock.defaultExpectation.params
+		mm_want_ptrs := mmGetEmbeddingCountByKBUID.GetEmbeddingCountByKBUIDMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockGetEmbeddingCountByKBUIDParams{ctx, kbUID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetEmbeddingCountByKBUID.t.Errorf("RepositoryMock.GetEmbeddingCountByKBUID got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetEmbeddingCountByKBUID.GetEmbeddingCountByKBUIDMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.kbUID != nil && !minimock.Equal(*mm_want_ptrs.kbUID, mm_got.kbUID) {
+				mmGetEmbeddingCountByKBUID.t.Errorf("RepositoryMock.GetEmbeddingCountByKBUID got unexpected parameter kbUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetEmbeddingCountByKBUID.GetEmbeddingCountByKBUIDMock.defaultExpectation.expectationOrigins.originKbUID, *mm_want_ptrs.kbUID, mm_got.kbUID, minimock.Diff(*mm_want_ptrs.kbUID, mm_got.kbUID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetEmbeddingCountByKBUID.t.Errorf("RepositoryMock.GetEmbeddingCountByKBUID got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmGetEmbeddingCountByKBUID.GetEmbeddingCountByKBUIDMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetEmbeddingCountByKBUID.GetEmbeddingCountByKBUIDMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetEmbeddingCountByKBUID.t.Fatal("No results are set for the RepositoryMock.GetEmbeddingCountByKBUID")
+		}
+		return (*mm_results).i1, (*mm_results).err
+	}
+	if mmGetEmbeddingCountByKBUID.funcGetEmbeddingCountByKBUID != nil {
+		return mmGetEmbeddingCountByKBUID.funcGetEmbeddingCountByKBUID(ctx, kbUID)
+	}
+	mmGetEmbeddingCountByKBUID.t.Fatalf("Unexpected call to RepositoryMock.GetEmbeddingCountByKBUID. %v %v", ctx, kbUID)
+	return
+}
+
+// GetEmbeddingCountByKBUIDAfterCounter returns a count of finished RepositoryMock.GetEmbeddingCountByKBUID invocations
+func (mmGetEmbeddingCountByKBUID *RepositoryMock) GetEmbeddingCountByKBUIDAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetEmbeddingCountByKBUID.afterGetEmbeddingCountByKBUIDCounter)
+}
+
+// GetEmbeddingCountByKBUIDBeforeCounter returns a count of RepositoryMock.GetEmbeddingCountByKBUID invocations
+func (mmGetEmbeddingCountByKBUID *RepositoryMock) GetEmbeddingCountByKBUIDBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetEmbeddingCountByKBUID.beforeGetEmbeddingCountByKBUIDCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.GetEmbeddingCountByKBUID.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetEmbeddingCountByKBUID *mRepositoryMockGetEmbeddingCountByKBUID) Calls() []*RepositoryMockGetEmbeddingCountByKBUIDParams {
+	mmGetEmbeddingCountByKBUID.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockGetEmbeddingCountByKBUIDParams, len(mmGetEmbeddingCountByKBUID.callArgs))
+	copy(argCopy, mmGetEmbeddingCountByKBUID.callArgs)
+
+	mmGetEmbeddingCountByKBUID.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetEmbeddingCountByKBUIDDone returns true if the count of the GetEmbeddingCountByKBUID invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockGetEmbeddingCountByKBUIDDone() bool {
+	if m.GetEmbeddingCountByKBUIDMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.GetEmbeddingCountByKBUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetEmbeddingCountByKBUIDMock.invocationsDone()
+}
+
+// MinimockGetEmbeddingCountByKBUIDInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockGetEmbeddingCountByKBUIDInspect() {
+	for _, e := range m.GetEmbeddingCountByKBUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.GetEmbeddingCountByKBUID at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterGetEmbeddingCountByKBUIDCounter := mm_atomic.LoadUint64(&m.afterGetEmbeddingCountByKBUIDCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetEmbeddingCountByKBUIDMock.defaultExpectation != nil && afterGetEmbeddingCountByKBUIDCounter < 1 {
+		if m.GetEmbeddingCountByKBUIDMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.GetEmbeddingCountByKBUID at\n%s", m.GetEmbeddingCountByKBUIDMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.GetEmbeddingCountByKBUID at\n%s with params: %#v", m.GetEmbeddingCountByKBUIDMock.defaultExpectation.expectationOrigins.origin, *m.GetEmbeddingCountByKBUIDMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetEmbeddingCountByKBUID != nil && afterGetEmbeddingCountByKBUIDCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.GetEmbeddingCountByKBUID at\n%s", m.funcGetEmbeddingCountByKBUIDOrigin)
+	}
+
+	if !m.GetEmbeddingCountByKBUIDMock.invocationsDone() && afterGetEmbeddingCountByKBUIDCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.GetEmbeddingCountByKBUID at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.GetEmbeddingCountByKBUIDMock.expectedInvocations), m.GetEmbeddingCountByKBUIDMock.expectedInvocationsOrigin, afterGetEmbeddingCountByKBUIDCounter)
 	}
 }
 
@@ -11961,6 +14684,380 @@ func (m *RepositoryMock) MinimockGetFileInspect() {
 	if !m.GetFileMock.invocationsDone() && afterGetFileCounter > 0 {
 		m.t.Errorf("Expected %d calls to RepositoryMock.GetFile at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.GetFileMock.expectedInvocations), m.GetFileMock.expectedInvocationsOrigin, afterGetFileCounter)
+	}
+}
+
+type mRepositoryMockGetFileCountByKnowledgeBaseUID struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockGetFileCountByKnowledgeBaseUIDExpectation
+	expectations       []*RepositoryMockGetFileCountByKnowledgeBaseUIDExpectation
+
+	callArgs []*RepositoryMockGetFileCountByKnowledgeBaseUIDParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockGetFileCountByKnowledgeBaseUIDExpectation specifies expectation struct of the Repository.GetFileCountByKnowledgeBaseUID
+type RepositoryMockGetFileCountByKnowledgeBaseUIDExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockGetFileCountByKnowledgeBaseUIDParams
+	paramPtrs          *RepositoryMockGetFileCountByKnowledgeBaseUIDParamPtrs
+	expectationOrigins RepositoryMockGetFileCountByKnowledgeBaseUIDExpectationOrigins
+	results            *RepositoryMockGetFileCountByKnowledgeBaseUIDResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockGetFileCountByKnowledgeBaseUIDParams contains parameters of the Repository.GetFileCountByKnowledgeBaseUID
+type RepositoryMockGetFileCountByKnowledgeBaseUIDParams struct {
+	ctx           context.Context
+	kbUID         types.KBUIDType
+	processStatus string
+}
+
+// RepositoryMockGetFileCountByKnowledgeBaseUIDParamPtrs contains pointers to parameters of the Repository.GetFileCountByKnowledgeBaseUID
+type RepositoryMockGetFileCountByKnowledgeBaseUIDParamPtrs struct {
+	ctx           *context.Context
+	kbUID         *types.KBUIDType
+	processStatus *string
+}
+
+// RepositoryMockGetFileCountByKnowledgeBaseUIDResults contains results of the Repository.GetFileCountByKnowledgeBaseUID
+type RepositoryMockGetFileCountByKnowledgeBaseUIDResults struct {
+	i1  int64
+	err error
+}
+
+// RepositoryMockGetFileCountByKnowledgeBaseUIDOrigins contains origins of expectations of the Repository.GetFileCountByKnowledgeBaseUID
+type RepositoryMockGetFileCountByKnowledgeBaseUIDExpectationOrigins struct {
+	origin              string
+	originCtx           string
+	originKbUID         string
+	originProcessStatus string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmGetFileCountByKnowledgeBaseUID *mRepositoryMockGetFileCountByKnowledgeBaseUID) Optional() *mRepositoryMockGetFileCountByKnowledgeBaseUID {
+	mmGetFileCountByKnowledgeBaseUID.optional = true
+	return mmGetFileCountByKnowledgeBaseUID
+}
+
+// Expect sets up expected params for Repository.GetFileCountByKnowledgeBaseUID
+func (mmGetFileCountByKnowledgeBaseUID *mRepositoryMockGetFileCountByKnowledgeBaseUID) Expect(ctx context.Context, kbUID types.KBUIDType, processStatus string) *mRepositoryMockGetFileCountByKnowledgeBaseUID {
+	if mmGetFileCountByKnowledgeBaseUID.mock.funcGetFileCountByKnowledgeBaseUID != nil {
+		mmGetFileCountByKnowledgeBaseUID.mock.t.Fatalf("RepositoryMock.GetFileCountByKnowledgeBaseUID mock is already set by Set")
+	}
+
+	if mmGetFileCountByKnowledgeBaseUID.defaultExpectation == nil {
+		mmGetFileCountByKnowledgeBaseUID.defaultExpectation = &RepositoryMockGetFileCountByKnowledgeBaseUIDExpectation{}
+	}
+
+	if mmGetFileCountByKnowledgeBaseUID.defaultExpectation.paramPtrs != nil {
+		mmGetFileCountByKnowledgeBaseUID.mock.t.Fatalf("RepositoryMock.GetFileCountByKnowledgeBaseUID mock is already set by ExpectParams functions")
+	}
+
+	mmGetFileCountByKnowledgeBaseUID.defaultExpectation.params = &RepositoryMockGetFileCountByKnowledgeBaseUIDParams{ctx, kbUID, processStatus}
+	mmGetFileCountByKnowledgeBaseUID.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmGetFileCountByKnowledgeBaseUID.expectations {
+		if minimock.Equal(e.params, mmGetFileCountByKnowledgeBaseUID.defaultExpectation.params) {
+			mmGetFileCountByKnowledgeBaseUID.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetFileCountByKnowledgeBaseUID.defaultExpectation.params)
+		}
+	}
+
+	return mmGetFileCountByKnowledgeBaseUID
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.GetFileCountByKnowledgeBaseUID
+func (mmGetFileCountByKnowledgeBaseUID *mRepositoryMockGetFileCountByKnowledgeBaseUID) ExpectCtxParam1(ctx context.Context) *mRepositoryMockGetFileCountByKnowledgeBaseUID {
+	if mmGetFileCountByKnowledgeBaseUID.mock.funcGetFileCountByKnowledgeBaseUID != nil {
+		mmGetFileCountByKnowledgeBaseUID.mock.t.Fatalf("RepositoryMock.GetFileCountByKnowledgeBaseUID mock is already set by Set")
+	}
+
+	if mmGetFileCountByKnowledgeBaseUID.defaultExpectation == nil {
+		mmGetFileCountByKnowledgeBaseUID.defaultExpectation = &RepositoryMockGetFileCountByKnowledgeBaseUIDExpectation{}
+	}
+
+	if mmGetFileCountByKnowledgeBaseUID.defaultExpectation.params != nil {
+		mmGetFileCountByKnowledgeBaseUID.mock.t.Fatalf("RepositoryMock.GetFileCountByKnowledgeBaseUID mock is already set by Expect")
+	}
+
+	if mmGetFileCountByKnowledgeBaseUID.defaultExpectation.paramPtrs == nil {
+		mmGetFileCountByKnowledgeBaseUID.defaultExpectation.paramPtrs = &RepositoryMockGetFileCountByKnowledgeBaseUIDParamPtrs{}
+	}
+	mmGetFileCountByKnowledgeBaseUID.defaultExpectation.paramPtrs.ctx = &ctx
+	mmGetFileCountByKnowledgeBaseUID.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmGetFileCountByKnowledgeBaseUID
+}
+
+// ExpectKbUIDParam2 sets up expected param kbUID for Repository.GetFileCountByKnowledgeBaseUID
+func (mmGetFileCountByKnowledgeBaseUID *mRepositoryMockGetFileCountByKnowledgeBaseUID) ExpectKbUIDParam2(kbUID types.KBUIDType) *mRepositoryMockGetFileCountByKnowledgeBaseUID {
+	if mmGetFileCountByKnowledgeBaseUID.mock.funcGetFileCountByKnowledgeBaseUID != nil {
+		mmGetFileCountByKnowledgeBaseUID.mock.t.Fatalf("RepositoryMock.GetFileCountByKnowledgeBaseUID mock is already set by Set")
+	}
+
+	if mmGetFileCountByKnowledgeBaseUID.defaultExpectation == nil {
+		mmGetFileCountByKnowledgeBaseUID.defaultExpectation = &RepositoryMockGetFileCountByKnowledgeBaseUIDExpectation{}
+	}
+
+	if mmGetFileCountByKnowledgeBaseUID.defaultExpectation.params != nil {
+		mmGetFileCountByKnowledgeBaseUID.mock.t.Fatalf("RepositoryMock.GetFileCountByKnowledgeBaseUID mock is already set by Expect")
+	}
+
+	if mmGetFileCountByKnowledgeBaseUID.defaultExpectation.paramPtrs == nil {
+		mmGetFileCountByKnowledgeBaseUID.defaultExpectation.paramPtrs = &RepositoryMockGetFileCountByKnowledgeBaseUIDParamPtrs{}
+	}
+	mmGetFileCountByKnowledgeBaseUID.defaultExpectation.paramPtrs.kbUID = &kbUID
+	mmGetFileCountByKnowledgeBaseUID.defaultExpectation.expectationOrigins.originKbUID = minimock.CallerInfo(1)
+
+	return mmGetFileCountByKnowledgeBaseUID
+}
+
+// ExpectProcessStatusParam3 sets up expected param processStatus for Repository.GetFileCountByKnowledgeBaseUID
+func (mmGetFileCountByKnowledgeBaseUID *mRepositoryMockGetFileCountByKnowledgeBaseUID) ExpectProcessStatusParam3(processStatus string) *mRepositoryMockGetFileCountByKnowledgeBaseUID {
+	if mmGetFileCountByKnowledgeBaseUID.mock.funcGetFileCountByKnowledgeBaseUID != nil {
+		mmGetFileCountByKnowledgeBaseUID.mock.t.Fatalf("RepositoryMock.GetFileCountByKnowledgeBaseUID mock is already set by Set")
+	}
+
+	if mmGetFileCountByKnowledgeBaseUID.defaultExpectation == nil {
+		mmGetFileCountByKnowledgeBaseUID.defaultExpectation = &RepositoryMockGetFileCountByKnowledgeBaseUIDExpectation{}
+	}
+
+	if mmGetFileCountByKnowledgeBaseUID.defaultExpectation.params != nil {
+		mmGetFileCountByKnowledgeBaseUID.mock.t.Fatalf("RepositoryMock.GetFileCountByKnowledgeBaseUID mock is already set by Expect")
+	}
+
+	if mmGetFileCountByKnowledgeBaseUID.defaultExpectation.paramPtrs == nil {
+		mmGetFileCountByKnowledgeBaseUID.defaultExpectation.paramPtrs = &RepositoryMockGetFileCountByKnowledgeBaseUIDParamPtrs{}
+	}
+	mmGetFileCountByKnowledgeBaseUID.defaultExpectation.paramPtrs.processStatus = &processStatus
+	mmGetFileCountByKnowledgeBaseUID.defaultExpectation.expectationOrigins.originProcessStatus = minimock.CallerInfo(1)
+
+	return mmGetFileCountByKnowledgeBaseUID
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.GetFileCountByKnowledgeBaseUID
+func (mmGetFileCountByKnowledgeBaseUID *mRepositoryMockGetFileCountByKnowledgeBaseUID) Inspect(f func(ctx context.Context, kbUID types.KBUIDType, processStatus string)) *mRepositoryMockGetFileCountByKnowledgeBaseUID {
+	if mmGetFileCountByKnowledgeBaseUID.mock.inspectFuncGetFileCountByKnowledgeBaseUID != nil {
+		mmGetFileCountByKnowledgeBaseUID.mock.t.Fatalf("Inspect function is already set for RepositoryMock.GetFileCountByKnowledgeBaseUID")
+	}
+
+	mmGetFileCountByKnowledgeBaseUID.mock.inspectFuncGetFileCountByKnowledgeBaseUID = f
+
+	return mmGetFileCountByKnowledgeBaseUID
+}
+
+// Return sets up results that will be returned by Repository.GetFileCountByKnowledgeBaseUID
+func (mmGetFileCountByKnowledgeBaseUID *mRepositoryMockGetFileCountByKnowledgeBaseUID) Return(i1 int64, err error) *RepositoryMock {
+	if mmGetFileCountByKnowledgeBaseUID.mock.funcGetFileCountByKnowledgeBaseUID != nil {
+		mmGetFileCountByKnowledgeBaseUID.mock.t.Fatalf("RepositoryMock.GetFileCountByKnowledgeBaseUID mock is already set by Set")
+	}
+
+	if mmGetFileCountByKnowledgeBaseUID.defaultExpectation == nil {
+		mmGetFileCountByKnowledgeBaseUID.defaultExpectation = &RepositoryMockGetFileCountByKnowledgeBaseUIDExpectation{mock: mmGetFileCountByKnowledgeBaseUID.mock}
+	}
+	mmGetFileCountByKnowledgeBaseUID.defaultExpectation.results = &RepositoryMockGetFileCountByKnowledgeBaseUIDResults{i1, err}
+	mmGetFileCountByKnowledgeBaseUID.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmGetFileCountByKnowledgeBaseUID.mock
+}
+
+// Set uses given function f to mock the Repository.GetFileCountByKnowledgeBaseUID method
+func (mmGetFileCountByKnowledgeBaseUID *mRepositoryMockGetFileCountByKnowledgeBaseUID) Set(f func(ctx context.Context, kbUID types.KBUIDType, processStatus string) (i1 int64, err error)) *RepositoryMock {
+	if mmGetFileCountByKnowledgeBaseUID.defaultExpectation != nil {
+		mmGetFileCountByKnowledgeBaseUID.mock.t.Fatalf("Default expectation is already set for the Repository.GetFileCountByKnowledgeBaseUID method")
+	}
+
+	if len(mmGetFileCountByKnowledgeBaseUID.expectations) > 0 {
+		mmGetFileCountByKnowledgeBaseUID.mock.t.Fatalf("Some expectations are already set for the Repository.GetFileCountByKnowledgeBaseUID method")
+	}
+
+	mmGetFileCountByKnowledgeBaseUID.mock.funcGetFileCountByKnowledgeBaseUID = f
+	mmGetFileCountByKnowledgeBaseUID.mock.funcGetFileCountByKnowledgeBaseUIDOrigin = minimock.CallerInfo(1)
+	return mmGetFileCountByKnowledgeBaseUID.mock
+}
+
+// When sets expectation for the Repository.GetFileCountByKnowledgeBaseUID which will trigger the result defined by the following
+// Then helper
+func (mmGetFileCountByKnowledgeBaseUID *mRepositoryMockGetFileCountByKnowledgeBaseUID) When(ctx context.Context, kbUID types.KBUIDType, processStatus string) *RepositoryMockGetFileCountByKnowledgeBaseUIDExpectation {
+	if mmGetFileCountByKnowledgeBaseUID.mock.funcGetFileCountByKnowledgeBaseUID != nil {
+		mmGetFileCountByKnowledgeBaseUID.mock.t.Fatalf("RepositoryMock.GetFileCountByKnowledgeBaseUID mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockGetFileCountByKnowledgeBaseUIDExpectation{
+		mock:               mmGetFileCountByKnowledgeBaseUID.mock,
+		params:             &RepositoryMockGetFileCountByKnowledgeBaseUIDParams{ctx, kbUID, processStatus},
+		expectationOrigins: RepositoryMockGetFileCountByKnowledgeBaseUIDExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmGetFileCountByKnowledgeBaseUID.expectations = append(mmGetFileCountByKnowledgeBaseUID.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.GetFileCountByKnowledgeBaseUID return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockGetFileCountByKnowledgeBaseUIDExpectation) Then(i1 int64, err error) *RepositoryMock {
+	e.results = &RepositoryMockGetFileCountByKnowledgeBaseUIDResults{i1, err}
+	return e.mock
+}
+
+// Times sets number of times Repository.GetFileCountByKnowledgeBaseUID should be invoked
+func (mmGetFileCountByKnowledgeBaseUID *mRepositoryMockGetFileCountByKnowledgeBaseUID) Times(n uint64) *mRepositoryMockGetFileCountByKnowledgeBaseUID {
+	if n == 0 {
+		mmGetFileCountByKnowledgeBaseUID.mock.t.Fatalf("Times of RepositoryMock.GetFileCountByKnowledgeBaseUID mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetFileCountByKnowledgeBaseUID.expectedInvocations, n)
+	mmGetFileCountByKnowledgeBaseUID.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmGetFileCountByKnowledgeBaseUID
+}
+
+func (mmGetFileCountByKnowledgeBaseUID *mRepositoryMockGetFileCountByKnowledgeBaseUID) invocationsDone() bool {
+	if len(mmGetFileCountByKnowledgeBaseUID.expectations) == 0 && mmGetFileCountByKnowledgeBaseUID.defaultExpectation == nil && mmGetFileCountByKnowledgeBaseUID.mock.funcGetFileCountByKnowledgeBaseUID == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetFileCountByKnowledgeBaseUID.mock.afterGetFileCountByKnowledgeBaseUIDCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetFileCountByKnowledgeBaseUID.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetFileCountByKnowledgeBaseUID implements mm_repository.Repository
+func (mmGetFileCountByKnowledgeBaseUID *RepositoryMock) GetFileCountByKnowledgeBaseUID(ctx context.Context, kbUID types.KBUIDType, processStatus string) (i1 int64, err error) {
+	mm_atomic.AddUint64(&mmGetFileCountByKnowledgeBaseUID.beforeGetFileCountByKnowledgeBaseUIDCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetFileCountByKnowledgeBaseUID.afterGetFileCountByKnowledgeBaseUIDCounter, 1)
+
+	mmGetFileCountByKnowledgeBaseUID.t.Helper()
+
+	if mmGetFileCountByKnowledgeBaseUID.inspectFuncGetFileCountByKnowledgeBaseUID != nil {
+		mmGetFileCountByKnowledgeBaseUID.inspectFuncGetFileCountByKnowledgeBaseUID(ctx, kbUID, processStatus)
+	}
+
+	mm_params := RepositoryMockGetFileCountByKnowledgeBaseUIDParams{ctx, kbUID, processStatus}
+
+	// Record call args
+	mmGetFileCountByKnowledgeBaseUID.GetFileCountByKnowledgeBaseUIDMock.mutex.Lock()
+	mmGetFileCountByKnowledgeBaseUID.GetFileCountByKnowledgeBaseUIDMock.callArgs = append(mmGetFileCountByKnowledgeBaseUID.GetFileCountByKnowledgeBaseUIDMock.callArgs, &mm_params)
+	mmGetFileCountByKnowledgeBaseUID.GetFileCountByKnowledgeBaseUIDMock.mutex.Unlock()
+
+	for _, e := range mmGetFileCountByKnowledgeBaseUID.GetFileCountByKnowledgeBaseUIDMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.i1, e.results.err
+		}
+	}
+
+	if mmGetFileCountByKnowledgeBaseUID.GetFileCountByKnowledgeBaseUIDMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetFileCountByKnowledgeBaseUID.GetFileCountByKnowledgeBaseUIDMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetFileCountByKnowledgeBaseUID.GetFileCountByKnowledgeBaseUIDMock.defaultExpectation.params
+		mm_want_ptrs := mmGetFileCountByKnowledgeBaseUID.GetFileCountByKnowledgeBaseUIDMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockGetFileCountByKnowledgeBaseUIDParams{ctx, kbUID, processStatus}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetFileCountByKnowledgeBaseUID.t.Errorf("RepositoryMock.GetFileCountByKnowledgeBaseUID got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetFileCountByKnowledgeBaseUID.GetFileCountByKnowledgeBaseUIDMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.kbUID != nil && !minimock.Equal(*mm_want_ptrs.kbUID, mm_got.kbUID) {
+				mmGetFileCountByKnowledgeBaseUID.t.Errorf("RepositoryMock.GetFileCountByKnowledgeBaseUID got unexpected parameter kbUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetFileCountByKnowledgeBaseUID.GetFileCountByKnowledgeBaseUIDMock.defaultExpectation.expectationOrigins.originKbUID, *mm_want_ptrs.kbUID, mm_got.kbUID, minimock.Diff(*mm_want_ptrs.kbUID, mm_got.kbUID))
+			}
+
+			if mm_want_ptrs.processStatus != nil && !minimock.Equal(*mm_want_ptrs.processStatus, mm_got.processStatus) {
+				mmGetFileCountByKnowledgeBaseUID.t.Errorf("RepositoryMock.GetFileCountByKnowledgeBaseUID got unexpected parameter processStatus, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetFileCountByKnowledgeBaseUID.GetFileCountByKnowledgeBaseUIDMock.defaultExpectation.expectationOrigins.originProcessStatus, *mm_want_ptrs.processStatus, mm_got.processStatus, minimock.Diff(*mm_want_ptrs.processStatus, mm_got.processStatus))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetFileCountByKnowledgeBaseUID.t.Errorf("RepositoryMock.GetFileCountByKnowledgeBaseUID got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmGetFileCountByKnowledgeBaseUID.GetFileCountByKnowledgeBaseUIDMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetFileCountByKnowledgeBaseUID.GetFileCountByKnowledgeBaseUIDMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetFileCountByKnowledgeBaseUID.t.Fatal("No results are set for the RepositoryMock.GetFileCountByKnowledgeBaseUID")
+		}
+		return (*mm_results).i1, (*mm_results).err
+	}
+	if mmGetFileCountByKnowledgeBaseUID.funcGetFileCountByKnowledgeBaseUID != nil {
+		return mmGetFileCountByKnowledgeBaseUID.funcGetFileCountByKnowledgeBaseUID(ctx, kbUID, processStatus)
+	}
+	mmGetFileCountByKnowledgeBaseUID.t.Fatalf("Unexpected call to RepositoryMock.GetFileCountByKnowledgeBaseUID. %v %v %v", ctx, kbUID, processStatus)
+	return
+}
+
+// GetFileCountByKnowledgeBaseUIDAfterCounter returns a count of finished RepositoryMock.GetFileCountByKnowledgeBaseUID invocations
+func (mmGetFileCountByKnowledgeBaseUID *RepositoryMock) GetFileCountByKnowledgeBaseUIDAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetFileCountByKnowledgeBaseUID.afterGetFileCountByKnowledgeBaseUIDCounter)
+}
+
+// GetFileCountByKnowledgeBaseUIDBeforeCounter returns a count of RepositoryMock.GetFileCountByKnowledgeBaseUID invocations
+func (mmGetFileCountByKnowledgeBaseUID *RepositoryMock) GetFileCountByKnowledgeBaseUIDBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetFileCountByKnowledgeBaseUID.beforeGetFileCountByKnowledgeBaseUIDCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.GetFileCountByKnowledgeBaseUID.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetFileCountByKnowledgeBaseUID *mRepositoryMockGetFileCountByKnowledgeBaseUID) Calls() []*RepositoryMockGetFileCountByKnowledgeBaseUIDParams {
+	mmGetFileCountByKnowledgeBaseUID.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockGetFileCountByKnowledgeBaseUIDParams, len(mmGetFileCountByKnowledgeBaseUID.callArgs))
+	copy(argCopy, mmGetFileCountByKnowledgeBaseUID.callArgs)
+
+	mmGetFileCountByKnowledgeBaseUID.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetFileCountByKnowledgeBaseUIDDone returns true if the count of the GetFileCountByKnowledgeBaseUID invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockGetFileCountByKnowledgeBaseUIDDone() bool {
+	if m.GetFileCountByKnowledgeBaseUIDMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.GetFileCountByKnowledgeBaseUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetFileCountByKnowledgeBaseUIDMock.invocationsDone()
+}
+
+// MinimockGetFileCountByKnowledgeBaseUIDInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockGetFileCountByKnowledgeBaseUIDInspect() {
+	for _, e := range m.GetFileCountByKnowledgeBaseUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.GetFileCountByKnowledgeBaseUID at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterGetFileCountByKnowledgeBaseUIDCounter := mm_atomic.LoadUint64(&m.afterGetFileCountByKnowledgeBaseUIDCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetFileCountByKnowledgeBaseUIDMock.defaultExpectation != nil && afterGetFileCountByKnowledgeBaseUIDCounter < 1 {
+		if m.GetFileCountByKnowledgeBaseUIDMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.GetFileCountByKnowledgeBaseUID at\n%s", m.GetFileCountByKnowledgeBaseUIDMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.GetFileCountByKnowledgeBaseUID at\n%s with params: %#v", m.GetFileCountByKnowledgeBaseUIDMock.defaultExpectation.expectationOrigins.origin, *m.GetFileCountByKnowledgeBaseUIDMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetFileCountByKnowledgeBaseUID != nil && afterGetFileCountByKnowledgeBaseUIDCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.GetFileCountByKnowledgeBaseUID at\n%s", m.funcGetFileCountByKnowledgeBaseUIDOrigin)
+	}
+
+	if !m.GetFileCountByKnowledgeBaseUIDMock.invocationsDone() && afterGetFileCountByKnowledgeBaseUIDCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.GetFileCountByKnowledgeBaseUID at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.GetFileCountByKnowledgeBaseUIDMock.expectedInvocations), m.GetFileCountByKnowledgeBaseUIDMock.expectedInvocationsOrigin, afterGetFileCountByKnowledgeBaseUIDCounter)
 	}
 }
 
@@ -12702,6 +15799,349 @@ func (m *RepositoryMock) MinimockGetFilesTotalTokensInspect() {
 	if !m.GetFilesTotalTokensMock.invocationsDone() && afterGetFilesTotalTokensCounter > 0 {
 		m.t.Errorf("Expected %d calls to RepositoryMock.GetFilesTotalTokens at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.GetFilesTotalTokensMock.expectedInvocations), m.GetFilesTotalTokensMock.expectedInvocationsOrigin, afterGetFilesTotalTokensCounter)
+	}
+}
+
+type mRepositoryMockGetKnowledgeBaseByID struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockGetKnowledgeBaseByIDExpectation
+	expectations       []*RepositoryMockGetKnowledgeBaseByIDExpectation
+
+	callArgs []*RepositoryMockGetKnowledgeBaseByIDParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockGetKnowledgeBaseByIDExpectation specifies expectation struct of the Repository.GetKnowledgeBaseByID
+type RepositoryMockGetKnowledgeBaseByIDExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockGetKnowledgeBaseByIDParams
+	paramPtrs          *RepositoryMockGetKnowledgeBaseByIDParamPtrs
+	expectationOrigins RepositoryMockGetKnowledgeBaseByIDExpectationOrigins
+	results            *RepositoryMockGetKnowledgeBaseByIDResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockGetKnowledgeBaseByIDParams contains parameters of the Repository.GetKnowledgeBaseByID
+type RepositoryMockGetKnowledgeBaseByIDParams struct {
+	ctx  context.Context
+	kbID string
+}
+
+// RepositoryMockGetKnowledgeBaseByIDParamPtrs contains pointers to parameters of the Repository.GetKnowledgeBaseByID
+type RepositoryMockGetKnowledgeBaseByIDParamPtrs struct {
+	ctx  *context.Context
+	kbID *string
+}
+
+// RepositoryMockGetKnowledgeBaseByIDResults contains results of the Repository.GetKnowledgeBaseByID
+type RepositoryMockGetKnowledgeBaseByIDResults struct {
+	kp1 *mm_repository.KnowledgeBaseModel
+	err error
+}
+
+// RepositoryMockGetKnowledgeBaseByIDOrigins contains origins of expectations of the Repository.GetKnowledgeBaseByID
+type RepositoryMockGetKnowledgeBaseByIDExpectationOrigins struct {
+	origin     string
+	originCtx  string
+	originKbID string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmGetKnowledgeBaseByID *mRepositoryMockGetKnowledgeBaseByID) Optional() *mRepositoryMockGetKnowledgeBaseByID {
+	mmGetKnowledgeBaseByID.optional = true
+	return mmGetKnowledgeBaseByID
+}
+
+// Expect sets up expected params for Repository.GetKnowledgeBaseByID
+func (mmGetKnowledgeBaseByID *mRepositoryMockGetKnowledgeBaseByID) Expect(ctx context.Context, kbID string) *mRepositoryMockGetKnowledgeBaseByID {
+	if mmGetKnowledgeBaseByID.mock.funcGetKnowledgeBaseByID != nil {
+		mmGetKnowledgeBaseByID.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseByID mock is already set by Set")
+	}
+
+	if mmGetKnowledgeBaseByID.defaultExpectation == nil {
+		mmGetKnowledgeBaseByID.defaultExpectation = &RepositoryMockGetKnowledgeBaseByIDExpectation{}
+	}
+
+	if mmGetKnowledgeBaseByID.defaultExpectation.paramPtrs != nil {
+		mmGetKnowledgeBaseByID.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseByID mock is already set by ExpectParams functions")
+	}
+
+	mmGetKnowledgeBaseByID.defaultExpectation.params = &RepositoryMockGetKnowledgeBaseByIDParams{ctx, kbID}
+	mmGetKnowledgeBaseByID.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmGetKnowledgeBaseByID.expectations {
+		if minimock.Equal(e.params, mmGetKnowledgeBaseByID.defaultExpectation.params) {
+			mmGetKnowledgeBaseByID.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetKnowledgeBaseByID.defaultExpectation.params)
+		}
+	}
+
+	return mmGetKnowledgeBaseByID
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.GetKnowledgeBaseByID
+func (mmGetKnowledgeBaseByID *mRepositoryMockGetKnowledgeBaseByID) ExpectCtxParam1(ctx context.Context) *mRepositoryMockGetKnowledgeBaseByID {
+	if mmGetKnowledgeBaseByID.mock.funcGetKnowledgeBaseByID != nil {
+		mmGetKnowledgeBaseByID.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseByID mock is already set by Set")
+	}
+
+	if mmGetKnowledgeBaseByID.defaultExpectation == nil {
+		mmGetKnowledgeBaseByID.defaultExpectation = &RepositoryMockGetKnowledgeBaseByIDExpectation{}
+	}
+
+	if mmGetKnowledgeBaseByID.defaultExpectation.params != nil {
+		mmGetKnowledgeBaseByID.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseByID mock is already set by Expect")
+	}
+
+	if mmGetKnowledgeBaseByID.defaultExpectation.paramPtrs == nil {
+		mmGetKnowledgeBaseByID.defaultExpectation.paramPtrs = &RepositoryMockGetKnowledgeBaseByIDParamPtrs{}
+	}
+	mmGetKnowledgeBaseByID.defaultExpectation.paramPtrs.ctx = &ctx
+	mmGetKnowledgeBaseByID.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmGetKnowledgeBaseByID
+}
+
+// ExpectKbIDParam2 sets up expected param kbID for Repository.GetKnowledgeBaseByID
+func (mmGetKnowledgeBaseByID *mRepositoryMockGetKnowledgeBaseByID) ExpectKbIDParam2(kbID string) *mRepositoryMockGetKnowledgeBaseByID {
+	if mmGetKnowledgeBaseByID.mock.funcGetKnowledgeBaseByID != nil {
+		mmGetKnowledgeBaseByID.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseByID mock is already set by Set")
+	}
+
+	if mmGetKnowledgeBaseByID.defaultExpectation == nil {
+		mmGetKnowledgeBaseByID.defaultExpectation = &RepositoryMockGetKnowledgeBaseByIDExpectation{}
+	}
+
+	if mmGetKnowledgeBaseByID.defaultExpectation.params != nil {
+		mmGetKnowledgeBaseByID.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseByID mock is already set by Expect")
+	}
+
+	if mmGetKnowledgeBaseByID.defaultExpectation.paramPtrs == nil {
+		mmGetKnowledgeBaseByID.defaultExpectation.paramPtrs = &RepositoryMockGetKnowledgeBaseByIDParamPtrs{}
+	}
+	mmGetKnowledgeBaseByID.defaultExpectation.paramPtrs.kbID = &kbID
+	mmGetKnowledgeBaseByID.defaultExpectation.expectationOrigins.originKbID = minimock.CallerInfo(1)
+
+	return mmGetKnowledgeBaseByID
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.GetKnowledgeBaseByID
+func (mmGetKnowledgeBaseByID *mRepositoryMockGetKnowledgeBaseByID) Inspect(f func(ctx context.Context, kbID string)) *mRepositoryMockGetKnowledgeBaseByID {
+	if mmGetKnowledgeBaseByID.mock.inspectFuncGetKnowledgeBaseByID != nil {
+		mmGetKnowledgeBaseByID.mock.t.Fatalf("Inspect function is already set for RepositoryMock.GetKnowledgeBaseByID")
+	}
+
+	mmGetKnowledgeBaseByID.mock.inspectFuncGetKnowledgeBaseByID = f
+
+	return mmGetKnowledgeBaseByID
+}
+
+// Return sets up results that will be returned by Repository.GetKnowledgeBaseByID
+func (mmGetKnowledgeBaseByID *mRepositoryMockGetKnowledgeBaseByID) Return(kp1 *mm_repository.KnowledgeBaseModel, err error) *RepositoryMock {
+	if mmGetKnowledgeBaseByID.mock.funcGetKnowledgeBaseByID != nil {
+		mmGetKnowledgeBaseByID.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseByID mock is already set by Set")
+	}
+
+	if mmGetKnowledgeBaseByID.defaultExpectation == nil {
+		mmGetKnowledgeBaseByID.defaultExpectation = &RepositoryMockGetKnowledgeBaseByIDExpectation{mock: mmGetKnowledgeBaseByID.mock}
+	}
+	mmGetKnowledgeBaseByID.defaultExpectation.results = &RepositoryMockGetKnowledgeBaseByIDResults{kp1, err}
+	mmGetKnowledgeBaseByID.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmGetKnowledgeBaseByID.mock
+}
+
+// Set uses given function f to mock the Repository.GetKnowledgeBaseByID method
+func (mmGetKnowledgeBaseByID *mRepositoryMockGetKnowledgeBaseByID) Set(f func(ctx context.Context, kbID string) (kp1 *mm_repository.KnowledgeBaseModel, err error)) *RepositoryMock {
+	if mmGetKnowledgeBaseByID.defaultExpectation != nil {
+		mmGetKnowledgeBaseByID.mock.t.Fatalf("Default expectation is already set for the Repository.GetKnowledgeBaseByID method")
+	}
+
+	if len(mmGetKnowledgeBaseByID.expectations) > 0 {
+		mmGetKnowledgeBaseByID.mock.t.Fatalf("Some expectations are already set for the Repository.GetKnowledgeBaseByID method")
+	}
+
+	mmGetKnowledgeBaseByID.mock.funcGetKnowledgeBaseByID = f
+	mmGetKnowledgeBaseByID.mock.funcGetKnowledgeBaseByIDOrigin = minimock.CallerInfo(1)
+	return mmGetKnowledgeBaseByID.mock
+}
+
+// When sets expectation for the Repository.GetKnowledgeBaseByID which will trigger the result defined by the following
+// Then helper
+func (mmGetKnowledgeBaseByID *mRepositoryMockGetKnowledgeBaseByID) When(ctx context.Context, kbID string) *RepositoryMockGetKnowledgeBaseByIDExpectation {
+	if mmGetKnowledgeBaseByID.mock.funcGetKnowledgeBaseByID != nil {
+		mmGetKnowledgeBaseByID.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseByID mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockGetKnowledgeBaseByIDExpectation{
+		mock:               mmGetKnowledgeBaseByID.mock,
+		params:             &RepositoryMockGetKnowledgeBaseByIDParams{ctx, kbID},
+		expectationOrigins: RepositoryMockGetKnowledgeBaseByIDExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmGetKnowledgeBaseByID.expectations = append(mmGetKnowledgeBaseByID.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.GetKnowledgeBaseByID return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockGetKnowledgeBaseByIDExpectation) Then(kp1 *mm_repository.KnowledgeBaseModel, err error) *RepositoryMock {
+	e.results = &RepositoryMockGetKnowledgeBaseByIDResults{kp1, err}
+	return e.mock
+}
+
+// Times sets number of times Repository.GetKnowledgeBaseByID should be invoked
+func (mmGetKnowledgeBaseByID *mRepositoryMockGetKnowledgeBaseByID) Times(n uint64) *mRepositoryMockGetKnowledgeBaseByID {
+	if n == 0 {
+		mmGetKnowledgeBaseByID.mock.t.Fatalf("Times of RepositoryMock.GetKnowledgeBaseByID mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetKnowledgeBaseByID.expectedInvocations, n)
+	mmGetKnowledgeBaseByID.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmGetKnowledgeBaseByID
+}
+
+func (mmGetKnowledgeBaseByID *mRepositoryMockGetKnowledgeBaseByID) invocationsDone() bool {
+	if len(mmGetKnowledgeBaseByID.expectations) == 0 && mmGetKnowledgeBaseByID.defaultExpectation == nil && mmGetKnowledgeBaseByID.mock.funcGetKnowledgeBaseByID == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetKnowledgeBaseByID.mock.afterGetKnowledgeBaseByIDCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetKnowledgeBaseByID.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetKnowledgeBaseByID implements mm_repository.Repository
+func (mmGetKnowledgeBaseByID *RepositoryMock) GetKnowledgeBaseByID(ctx context.Context, kbID string) (kp1 *mm_repository.KnowledgeBaseModel, err error) {
+	mm_atomic.AddUint64(&mmGetKnowledgeBaseByID.beforeGetKnowledgeBaseByIDCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetKnowledgeBaseByID.afterGetKnowledgeBaseByIDCounter, 1)
+
+	mmGetKnowledgeBaseByID.t.Helper()
+
+	if mmGetKnowledgeBaseByID.inspectFuncGetKnowledgeBaseByID != nil {
+		mmGetKnowledgeBaseByID.inspectFuncGetKnowledgeBaseByID(ctx, kbID)
+	}
+
+	mm_params := RepositoryMockGetKnowledgeBaseByIDParams{ctx, kbID}
+
+	// Record call args
+	mmGetKnowledgeBaseByID.GetKnowledgeBaseByIDMock.mutex.Lock()
+	mmGetKnowledgeBaseByID.GetKnowledgeBaseByIDMock.callArgs = append(mmGetKnowledgeBaseByID.GetKnowledgeBaseByIDMock.callArgs, &mm_params)
+	mmGetKnowledgeBaseByID.GetKnowledgeBaseByIDMock.mutex.Unlock()
+
+	for _, e := range mmGetKnowledgeBaseByID.GetKnowledgeBaseByIDMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.kp1, e.results.err
+		}
+	}
+
+	if mmGetKnowledgeBaseByID.GetKnowledgeBaseByIDMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetKnowledgeBaseByID.GetKnowledgeBaseByIDMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetKnowledgeBaseByID.GetKnowledgeBaseByIDMock.defaultExpectation.params
+		mm_want_ptrs := mmGetKnowledgeBaseByID.GetKnowledgeBaseByIDMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockGetKnowledgeBaseByIDParams{ctx, kbID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetKnowledgeBaseByID.t.Errorf("RepositoryMock.GetKnowledgeBaseByID got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetKnowledgeBaseByID.GetKnowledgeBaseByIDMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.kbID != nil && !minimock.Equal(*mm_want_ptrs.kbID, mm_got.kbID) {
+				mmGetKnowledgeBaseByID.t.Errorf("RepositoryMock.GetKnowledgeBaseByID got unexpected parameter kbID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetKnowledgeBaseByID.GetKnowledgeBaseByIDMock.defaultExpectation.expectationOrigins.originKbID, *mm_want_ptrs.kbID, mm_got.kbID, minimock.Diff(*mm_want_ptrs.kbID, mm_got.kbID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetKnowledgeBaseByID.t.Errorf("RepositoryMock.GetKnowledgeBaseByID got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmGetKnowledgeBaseByID.GetKnowledgeBaseByIDMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetKnowledgeBaseByID.GetKnowledgeBaseByIDMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetKnowledgeBaseByID.t.Fatal("No results are set for the RepositoryMock.GetKnowledgeBaseByID")
+		}
+		return (*mm_results).kp1, (*mm_results).err
+	}
+	if mmGetKnowledgeBaseByID.funcGetKnowledgeBaseByID != nil {
+		return mmGetKnowledgeBaseByID.funcGetKnowledgeBaseByID(ctx, kbID)
+	}
+	mmGetKnowledgeBaseByID.t.Fatalf("Unexpected call to RepositoryMock.GetKnowledgeBaseByID. %v %v", ctx, kbID)
+	return
+}
+
+// GetKnowledgeBaseByIDAfterCounter returns a count of finished RepositoryMock.GetKnowledgeBaseByID invocations
+func (mmGetKnowledgeBaseByID *RepositoryMock) GetKnowledgeBaseByIDAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetKnowledgeBaseByID.afterGetKnowledgeBaseByIDCounter)
+}
+
+// GetKnowledgeBaseByIDBeforeCounter returns a count of RepositoryMock.GetKnowledgeBaseByID invocations
+func (mmGetKnowledgeBaseByID *RepositoryMock) GetKnowledgeBaseByIDBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetKnowledgeBaseByID.beforeGetKnowledgeBaseByIDCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.GetKnowledgeBaseByID.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetKnowledgeBaseByID *mRepositoryMockGetKnowledgeBaseByID) Calls() []*RepositoryMockGetKnowledgeBaseByIDParams {
+	mmGetKnowledgeBaseByID.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockGetKnowledgeBaseByIDParams, len(mmGetKnowledgeBaseByID.callArgs))
+	copy(argCopy, mmGetKnowledgeBaseByID.callArgs)
+
+	mmGetKnowledgeBaseByID.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetKnowledgeBaseByIDDone returns true if the count of the GetKnowledgeBaseByID invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockGetKnowledgeBaseByIDDone() bool {
+	if m.GetKnowledgeBaseByIDMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.GetKnowledgeBaseByIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetKnowledgeBaseByIDMock.invocationsDone()
+}
+
+// MinimockGetKnowledgeBaseByIDInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockGetKnowledgeBaseByIDInspect() {
+	for _, e := range m.GetKnowledgeBaseByIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.GetKnowledgeBaseByID at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterGetKnowledgeBaseByIDCounter := mm_atomic.LoadUint64(&m.afterGetKnowledgeBaseByIDCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetKnowledgeBaseByIDMock.defaultExpectation != nil && afterGetKnowledgeBaseByIDCounter < 1 {
+		if m.GetKnowledgeBaseByIDMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.GetKnowledgeBaseByID at\n%s", m.GetKnowledgeBaseByIDMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.GetKnowledgeBaseByID at\n%s with params: %#v", m.GetKnowledgeBaseByIDMock.defaultExpectation.expectationOrigins.origin, *m.GetKnowledgeBaseByIDMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetKnowledgeBaseByID != nil && afterGetKnowledgeBaseByIDCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.GetKnowledgeBaseByID at\n%s", m.funcGetKnowledgeBaseByIDOrigin)
+	}
+
+	if !m.GetKnowledgeBaseByIDMock.invocationsDone() && afterGetKnowledgeBaseByIDCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.GetKnowledgeBaseByID at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.GetKnowledgeBaseByIDMock.expectedInvocations), m.GetKnowledgeBaseByIDMock.expectedInvocationsOrigin, afterGetKnowledgeBaseByIDCounter)
 	}
 }
 
@@ -14167,6 +17607,380 @@ func (m *RepositoryMock) MinimockGetKnowledgeBaseFilesByFileUIDsInspect() {
 	if !m.GetKnowledgeBaseFilesByFileUIDsMock.invocationsDone() && afterGetKnowledgeBaseFilesByFileUIDsCounter > 0 {
 		m.t.Errorf("Expected %d calls to RepositoryMock.GetKnowledgeBaseFilesByFileUIDs at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.GetKnowledgeBaseFilesByFileUIDsMock.expectedInvocations), m.GetKnowledgeBaseFilesByFileUIDsMock.expectedInvocationsOrigin, afterGetKnowledgeBaseFilesByFileUIDsCounter)
+	}
+}
+
+type mRepositoryMockGetKnowledgeBaseFilesByName struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockGetKnowledgeBaseFilesByNameExpectation
+	expectations       []*RepositoryMockGetKnowledgeBaseFilesByNameExpectation
+
+	callArgs []*RepositoryMockGetKnowledgeBaseFilesByNameParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockGetKnowledgeBaseFilesByNameExpectation specifies expectation struct of the Repository.GetKnowledgeBaseFilesByName
+type RepositoryMockGetKnowledgeBaseFilesByNameExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockGetKnowledgeBaseFilesByNameParams
+	paramPtrs          *RepositoryMockGetKnowledgeBaseFilesByNameParamPtrs
+	expectationOrigins RepositoryMockGetKnowledgeBaseFilesByNameExpectationOrigins
+	results            *RepositoryMockGetKnowledgeBaseFilesByNameResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockGetKnowledgeBaseFilesByNameParams contains parameters of the Repository.GetKnowledgeBaseFilesByName
+type RepositoryMockGetKnowledgeBaseFilesByNameParams struct {
+	ctx      context.Context
+	kbUID    types.KBUIDType
+	fileName string
+}
+
+// RepositoryMockGetKnowledgeBaseFilesByNameParamPtrs contains pointers to parameters of the Repository.GetKnowledgeBaseFilesByName
+type RepositoryMockGetKnowledgeBaseFilesByNameParamPtrs struct {
+	ctx      *context.Context
+	kbUID    *types.KBUIDType
+	fileName *string
+}
+
+// RepositoryMockGetKnowledgeBaseFilesByNameResults contains results of the Repository.GetKnowledgeBaseFilesByName
+type RepositoryMockGetKnowledgeBaseFilesByNameResults struct {
+	ka1 []mm_repository.KnowledgeBaseFileModel
+	err error
+}
+
+// RepositoryMockGetKnowledgeBaseFilesByNameOrigins contains origins of expectations of the Repository.GetKnowledgeBaseFilesByName
+type RepositoryMockGetKnowledgeBaseFilesByNameExpectationOrigins struct {
+	origin         string
+	originCtx      string
+	originKbUID    string
+	originFileName string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmGetKnowledgeBaseFilesByName *mRepositoryMockGetKnowledgeBaseFilesByName) Optional() *mRepositoryMockGetKnowledgeBaseFilesByName {
+	mmGetKnowledgeBaseFilesByName.optional = true
+	return mmGetKnowledgeBaseFilesByName
+}
+
+// Expect sets up expected params for Repository.GetKnowledgeBaseFilesByName
+func (mmGetKnowledgeBaseFilesByName *mRepositoryMockGetKnowledgeBaseFilesByName) Expect(ctx context.Context, kbUID types.KBUIDType, fileName string) *mRepositoryMockGetKnowledgeBaseFilesByName {
+	if mmGetKnowledgeBaseFilesByName.mock.funcGetKnowledgeBaseFilesByName != nil {
+		mmGetKnowledgeBaseFilesByName.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseFilesByName mock is already set by Set")
+	}
+
+	if mmGetKnowledgeBaseFilesByName.defaultExpectation == nil {
+		mmGetKnowledgeBaseFilesByName.defaultExpectation = &RepositoryMockGetKnowledgeBaseFilesByNameExpectation{}
+	}
+
+	if mmGetKnowledgeBaseFilesByName.defaultExpectation.paramPtrs != nil {
+		mmGetKnowledgeBaseFilesByName.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseFilesByName mock is already set by ExpectParams functions")
+	}
+
+	mmGetKnowledgeBaseFilesByName.defaultExpectation.params = &RepositoryMockGetKnowledgeBaseFilesByNameParams{ctx, kbUID, fileName}
+	mmGetKnowledgeBaseFilesByName.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmGetKnowledgeBaseFilesByName.expectations {
+		if minimock.Equal(e.params, mmGetKnowledgeBaseFilesByName.defaultExpectation.params) {
+			mmGetKnowledgeBaseFilesByName.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetKnowledgeBaseFilesByName.defaultExpectation.params)
+		}
+	}
+
+	return mmGetKnowledgeBaseFilesByName
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.GetKnowledgeBaseFilesByName
+func (mmGetKnowledgeBaseFilesByName *mRepositoryMockGetKnowledgeBaseFilesByName) ExpectCtxParam1(ctx context.Context) *mRepositoryMockGetKnowledgeBaseFilesByName {
+	if mmGetKnowledgeBaseFilesByName.mock.funcGetKnowledgeBaseFilesByName != nil {
+		mmGetKnowledgeBaseFilesByName.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseFilesByName mock is already set by Set")
+	}
+
+	if mmGetKnowledgeBaseFilesByName.defaultExpectation == nil {
+		mmGetKnowledgeBaseFilesByName.defaultExpectation = &RepositoryMockGetKnowledgeBaseFilesByNameExpectation{}
+	}
+
+	if mmGetKnowledgeBaseFilesByName.defaultExpectation.params != nil {
+		mmGetKnowledgeBaseFilesByName.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseFilesByName mock is already set by Expect")
+	}
+
+	if mmGetKnowledgeBaseFilesByName.defaultExpectation.paramPtrs == nil {
+		mmGetKnowledgeBaseFilesByName.defaultExpectation.paramPtrs = &RepositoryMockGetKnowledgeBaseFilesByNameParamPtrs{}
+	}
+	mmGetKnowledgeBaseFilesByName.defaultExpectation.paramPtrs.ctx = &ctx
+	mmGetKnowledgeBaseFilesByName.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmGetKnowledgeBaseFilesByName
+}
+
+// ExpectKbUIDParam2 sets up expected param kbUID for Repository.GetKnowledgeBaseFilesByName
+func (mmGetKnowledgeBaseFilesByName *mRepositoryMockGetKnowledgeBaseFilesByName) ExpectKbUIDParam2(kbUID types.KBUIDType) *mRepositoryMockGetKnowledgeBaseFilesByName {
+	if mmGetKnowledgeBaseFilesByName.mock.funcGetKnowledgeBaseFilesByName != nil {
+		mmGetKnowledgeBaseFilesByName.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseFilesByName mock is already set by Set")
+	}
+
+	if mmGetKnowledgeBaseFilesByName.defaultExpectation == nil {
+		mmGetKnowledgeBaseFilesByName.defaultExpectation = &RepositoryMockGetKnowledgeBaseFilesByNameExpectation{}
+	}
+
+	if mmGetKnowledgeBaseFilesByName.defaultExpectation.params != nil {
+		mmGetKnowledgeBaseFilesByName.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseFilesByName mock is already set by Expect")
+	}
+
+	if mmGetKnowledgeBaseFilesByName.defaultExpectation.paramPtrs == nil {
+		mmGetKnowledgeBaseFilesByName.defaultExpectation.paramPtrs = &RepositoryMockGetKnowledgeBaseFilesByNameParamPtrs{}
+	}
+	mmGetKnowledgeBaseFilesByName.defaultExpectation.paramPtrs.kbUID = &kbUID
+	mmGetKnowledgeBaseFilesByName.defaultExpectation.expectationOrigins.originKbUID = minimock.CallerInfo(1)
+
+	return mmGetKnowledgeBaseFilesByName
+}
+
+// ExpectFileNameParam3 sets up expected param fileName for Repository.GetKnowledgeBaseFilesByName
+func (mmGetKnowledgeBaseFilesByName *mRepositoryMockGetKnowledgeBaseFilesByName) ExpectFileNameParam3(fileName string) *mRepositoryMockGetKnowledgeBaseFilesByName {
+	if mmGetKnowledgeBaseFilesByName.mock.funcGetKnowledgeBaseFilesByName != nil {
+		mmGetKnowledgeBaseFilesByName.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseFilesByName mock is already set by Set")
+	}
+
+	if mmGetKnowledgeBaseFilesByName.defaultExpectation == nil {
+		mmGetKnowledgeBaseFilesByName.defaultExpectation = &RepositoryMockGetKnowledgeBaseFilesByNameExpectation{}
+	}
+
+	if mmGetKnowledgeBaseFilesByName.defaultExpectation.params != nil {
+		mmGetKnowledgeBaseFilesByName.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseFilesByName mock is already set by Expect")
+	}
+
+	if mmGetKnowledgeBaseFilesByName.defaultExpectation.paramPtrs == nil {
+		mmGetKnowledgeBaseFilesByName.defaultExpectation.paramPtrs = &RepositoryMockGetKnowledgeBaseFilesByNameParamPtrs{}
+	}
+	mmGetKnowledgeBaseFilesByName.defaultExpectation.paramPtrs.fileName = &fileName
+	mmGetKnowledgeBaseFilesByName.defaultExpectation.expectationOrigins.originFileName = minimock.CallerInfo(1)
+
+	return mmGetKnowledgeBaseFilesByName
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.GetKnowledgeBaseFilesByName
+func (mmGetKnowledgeBaseFilesByName *mRepositoryMockGetKnowledgeBaseFilesByName) Inspect(f func(ctx context.Context, kbUID types.KBUIDType, fileName string)) *mRepositoryMockGetKnowledgeBaseFilesByName {
+	if mmGetKnowledgeBaseFilesByName.mock.inspectFuncGetKnowledgeBaseFilesByName != nil {
+		mmGetKnowledgeBaseFilesByName.mock.t.Fatalf("Inspect function is already set for RepositoryMock.GetKnowledgeBaseFilesByName")
+	}
+
+	mmGetKnowledgeBaseFilesByName.mock.inspectFuncGetKnowledgeBaseFilesByName = f
+
+	return mmGetKnowledgeBaseFilesByName
+}
+
+// Return sets up results that will be returned by Repository.GetKnowledgeBaseFilesByName
+func (mmGetKnowledgeBaseFilesByName *mRepositoryMockGetKnowledgeBaseFilesByName) Return(ka1 []mm_repository.KnowledgeBaseFileModel, err error) *RepositoryMock {
+	if mmGetKnowledgeBaseFilesByName.mock.funcGetKnowledgeBaseFilesByName != nil {
+		mmGetKnowledgeBaseFilesByName.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseFilesByName mock is already set by Set")
+	}
+
+	if mmGetKnowledgeBaseFilesByName.defaultExpectation == nil {
+		mmGetKnowledgeBaseFilesByName.defaultExpectation = &RepositoryMockGetKnowledgeBaseFilesByNameExpectation{mock: mmGetKnowledgeBaseFilesByName.mock}
+	}
+	mmGetKnowledgeBaseFilesByName.defaultExpectation.results = &RepositoryMockGetKnowledgeBaseFilesByNameResults{ka1, err}
+	mmGetKnowledgeBaseFilesByName.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmGetKnowledgeBaseFilesByName.mock
+}
+
+// Set uses given function f to mock the Repository.GetKnowledgeBaseFilesByName method
+func (mmGetKnowledgeBaseFilesByName *mRepositoryMockGetKnowledgeBaseFilesByName) Set(f func(ctx context.Context, kbUID types.KBUIDType, fileName string) (ka1 []mm_repository.KnowledgeBaseFileModel, err error)) *RepositoryMock {
+	if mmGetKnowledgeBaseFilesByName.defaultExpectation != nil {
+		mmGetKnowledgeBaseFilesByName.mock.t.Fatalf("Default expectation is already set for the Repository.GetKnowledgeBaseFilesByName method")
+	}
+
+	if len(mmGetKnowledgeBaseFilesByName.expectations) > 0 {
+		mmGetKnowledgeBaseFilesByName.mock.t.Fatalf("Some expectations are already set for the Repository.GetKnowledgeBaseFilesByName method")
+	}
+
+	mmGetKnowledgeBaseFilesByName.mock.funcGetKnowledgeBaseFilesByName = f
+	mmGetKnowledgeBaseFilesByName.mock.funcGetKnowledgeBaseFilesByNameOrigin = minimock.CallerInfo(1)
+	return mmGetKnowledgeBaseFilesByName.mock
+}
+
+// When sets expectation for the Repository.GetKnowledgeBaseFilesByName which will trigger the result defined by the following
+// Then helper
+func (mmGetKnowledgeBaseFilesByName *mRepositoryMockGetKnowledgeBaseFilesByName) When(ctx context.Context, kbUID types.KBUIDType, fileName string) *RepositoryMockGetKnowledgeBaseFilesByNameExpectation {
+	if mmGetKnowledgeBaseFilesByName.mock.funcGetKnowledgeBaseFilesByName != nil {
+		mmGetKnowledgeBaseFilesByName.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseFilesByName mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockGetKnowledgeBaseFilesByNameExpectation{
+		mock:               mmGetKnowledgeBaseFilesByName.mock,
+		params:             &RepositoryMockGetKnowledgeBaseFilesByNameParams{ctx, kbUID, fileName},
+		expectationOrigins: RepositoryMockGetKnowledgeBaseFilesByNameExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmGetKnowledgeBaseFilesByName.expectations = append(mmGetKnowledgeBaseFilesByName.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.GetKnowledgeBaseFilesByName return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockGetKnowledgeBaseFilesByNameExpectation) Then(ka1 []mm_repository.KnowledgeBaseFileModel, err error) *RepositoryMock {
+	e.results = &RepositoryMockGetKnowledgeBaseFilesByNameResults{ka1, err}
+	return e.mock
+}
+
+// Times sets number of times Repository.GetKnowledgeBaseFilesByName should be invoked
+func (mmGetKnowledgeBaseFilesByName *mRepositoryMockGetKnowledgeBaseFilesByName) Times(n uint64) *mRepositoryMockGetKnowledgeBaseFilesByName {
+	if n == 0 {
+		mmGetKnowledgeBaseFilesByName.mock.t.Fatalf("Times of RepositoryMock.GetKnowledgeBaseFilesByName mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetKnowledgeBaseFilesByName.expectedInvocations, n)
+	mmGetKnowledgeBaseFilesByName.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmGetKnowledgeBaseFilesByName
+}
+
+func (mmGetKnowledgeBaseFilesByName *mRepositoryMockGetKnowledgeBaseFilesByName) invocationsDone() bool {
+	if len(mmGetKnowledgeBaseFilesByName.expectations) == 0 && mmGetKnowledgeBaseFilesByName.defaultExpectation == nil && mmGetKnowledgeBaseFilesByName.mock.funcGetKnowledgeBaseFilesByName == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetKnowledgeBaseFilesByName.mock.afterGetKnowledgeBaseFilesByNameCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetKnowledgeBaseFilesByName.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetKnowledgeBaseFilesByName implements mm_repository.Repository
+func (mmGetKnowledgeBaseFilesByName *RepositoryMock) GetKnowledgeBaseFilesByName(ctx context.Context, kbUID types.KBUIDType, fileName string) (ka1 []mm_repository.KnowledgeBaseFileModel, err error) {
+	mm_atomic.AddUint64(&mmGetKnowledgeBaseFilesByName.beforeGetKnowledgeBaseFilesByNameCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetKnowledgeBaseFilesByName.afterGetKnowledgeBaseFilesByNameCounter, 1)
+
+	mmGetKnowledgeBaseFilesByName.t.Helper()
+
+	if mmGetKnowledgeBaseFilesByName.inspectFuncGetKnowledgeBaseFilesByName != nil {
+		mmGetKnowledgeBaseFilesByName.inspectFuncGetKnowledgeBaseFilesByName(ctx, kbUID, fileName)
+	}
+
+	mm_params := RepositoryMockGetKnowledgeBaseFilesByNameParams{ctx, kbUID, fileName}
+
+	// Record call args
+	mmGetKnowledgeBaseFilesByName.GetKnowledgeBaseFilesByNameMock.mutex.Lock()
+	mmGetKnowledgeBaseFilesByName.GetKnowledgeBaseFilesByNameMock.callArgs = append(mmGetKnowledgeBaseFilesByName.GetKnowledgeBaseFilesByNameMock.callArgs, &mm_params)
+	mmGetKnowledgeBaseFilesByName.GetKnowledgeBaseFilesByNameMock.mutex.Unlock()
+
+	for _, e := range mmGetKnowledgeBaseFilesByName.GetKnowledgeBaseFilesByNameMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.ka1, e.results.err
+		}
+	}
+
+	if mmGetKnowledgeBaseFilesByName.GetKnowledgeBaseFilesByNameMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetKnowledgeBaseFilesByName.GetKnowledgeBaseFilesByNameMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetKnowledgeBaseFilesByName.GetKnowledgeBaseFilesByNameMock.defaultExpectation.params
+		mm_want_ptrs := mmGetKnowledgeBaseFilesByName.GetKnowledgeBaseFilesByNameMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockGetKnowledgeBaseFilesByNameParams{ctx, kbUID, fileName}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetKnowledgeBaseFilesByName.t.Errorf("RepositoryMock.GetKnowledgeBaseFilesByName got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetKnowledgeBaseFilesByName.GetKnowledgeBaseFilesByNameMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.kbUID != nil && !minimock.Equal(*mm_want_ptrs.kbUID, mm_got.kbUID) {
+				mmGetKnowledgeBaseFilesByName.t.Errorf("RepositoryMock.GetKnowledgeBaseFilesByName got unexpected parameter kbUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetKnowledgeBaseFilesByName.GetKnowledgeBaseFilesByNameMock.defaultExpectation.expectationOrigins.originKbUID, *mm_want_ptrs.kbUID, mm_got.kbUID, minimock.Diff(*mm_want_ptrs.kbUID, mm_got.kbUID))
+			}
+
+			if mm_want_ptrs.fileName != nil && !minimock.Equal(*mm_want_ptrs.fileName, mm_got.fileName) {
+				mmGetKnowledgeBaseFilesByName.t.Errorf("RepositoryMock.GetKnowledgeBaseFilesByName got unexpected parameter fileName, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetKnowledgeBaseFilesByName.GetKnowledgeBaseFilesByNameMock.defaultExpectation.expectationOrigins.originFileName, *mm_want_ptrs.fileName, mm_got.fileName, minimock.Diff(*mm_want_ptrs.fileName, mm_got.fileName))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetKnowledgeBaseFilesByName.t.Errorf("RepositoryMock.GetKnowledgeBaseFilesByName got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmGetKnowledgeBaseFilesByName.GetKnowledgeBaseFilesByNameMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetKnowledgeBaseFilesByName.GetKnowledgeBaseFilesByNameMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetKnowledgeBaseFilesByName.t.Fatal("No results are set for the RepositoryMock.GetKnowledgeBaseFilesByName")
+		}
+		return (*mm_results).ka1, (*mm_results).err
+	}
+	if mmGetKnowledgeBaseFilesByName.funcGetKnowledgeBaseFilesByName != nil {
+		return mmGetKnowledgeBaseFilesByName.funcGetKnowledgeBaseFilesByName(ctx, kbUID, fileName)
+	}
+	mmGetKnowledgeBaseFilesByName.t.Fatalf("Unexpected call to RepositoryMock.GetKnowledgeBaseFilesByName. %v %v %v", ctx, kbUID, fileName)
+	return
+}
+
+// GetKnowledgeBaseFilesByNameAfterCounter returns a count of finished RepositoryMock.GetKnowledgeBaseFilesByName invocations
+func (mmGetKnowledgeBaseFilesByName *RepositoryMock) GetKnowledgeBaseFilesByNameAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetKnowledgeBaseFilesByName.afterGetKnowledgeBaseFilesByNameCounter)
+}
+
+// GetKnowledgeBaseFilesByNameBeforeCounter returns a count of RepositoryMock.GetKnowledgeBaseFilesByName invocations
+func (mmGetKnowledgeBaseFilesByName *RepositoryMock) GetKnowledgeBaseFilesByNameBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetKnowledgeBaseFilesByName.beforeGetKnowledgeBaseFilesByNameCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.GetKnowledgeBaseFilesByName.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetKnowledgeBaseFilesByName *mRepositoryMockGetKnowledgeBaseFilesByName) Calls() []*RepositoryMockGetKnowledgeBaseFilesByNameParams {
+	mmGetKnowledgeBaseFilesByName.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockGetKnowledgeBaseFilesByNameParams, len(mmGetKnowledgeBaseFilesByName.callArgs))
+	copy(argCopy, mmGetKnowledgeBaseFilesByName.callArgs)
+
+	mmGetKnowledgeBaseFilesByName.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetKnowledgeBaseFilesByNameDone returns true if the count of the GetKnowledgeBaseFilesByName invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockGetKnowledgeBaseFilesByNameDone() bool {
+	if m.GetKnowledgeBaseFilesByNameMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.GetKnowledgeBaseFilesByNameMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetKnowledgeBaseFilesByNameMock.invocationsDone()
+}
+
+// MinimockGetKnowledgeBaseFilesByNameInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockGetKnowledgeBaseFilesByNameInspect() {
+	for _, e := range m.GetKnowledgeBaseFilesByNameMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.GetKnowledgeBaseFilesByName at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterGetKnowledgeBaseFilesByNameCounter := mm_atomic.LoadUint64(&m.afterGetKnowledgeBaseFilesByNameCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetKnowledgeBaseFilesByNameMock.defaultExpectation != nil && afterGetKnowledgeBaseFilesByNameCounter < 1 {
+		if m.GetKnowledgeBaseFilesByNameMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.GetKnowledgeBaseFilesByName at\n%s", m.GetKnowledgeBaseFilesByNameMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.GetKnowledgeBaseFilesByName at\n%s with params: %#v", m.GetKnowledgeBaseFilesByNameMock.defaultExpectation.expectationOrigins.origin, *m.GetKnowledgeBaseFilesByNameMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetKnowledgeBaseFilesByName != nil && afterGetKnowledgeBaseFilesByNameCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.GetKnowledgeBaseFilesByName at\n%s", m.funcGetKnowledgeBaseFilesByNameOrigin)
+	}
+
+	if !m.GetKnowledgeBaseFilesByNameMock.invocationsDone() && afterGetKnowledgeBaseFilesByNameCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.GetKnowledgeBaseFilesByName at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.GetKnowledgeBaseFilesByNameMock.expectedInvocations), m.GetKnowledgeBaseFilesByNameMock.expectedInvocationsOrigin, afterGetKnowledgeBaseFilesByNameCounter)
 	}
 }
 
@@ -18191,6 +22005,380 @@ func (m *RepositoryMock) MinimockGetRepositoryTagInspect() {
 	}
 }
 
+type mRepositoryMockGetRollbackKBForProduction struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockGetRollbackKBForProductionExpectation
+	expectations       []*RepositoryMockGetRollbackKBForProductionExpectation
+
+	callArgs []*RepositoryMockGetRollbackKBForProductionParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockGetRollbackKBForProductionExpectation specifies expectation struct of the Repository.GetRollbackKBForProduction
+type RepositoryMockGetRollbackKBForProductionExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockGetRollbackKBForProductionParams
+	paramPtrs          *RepositoryMockGetRollbackKBForProductionParamPtrs
+	expectationOrigins RepositoryMockGetRollbackKBForProductionExpectationOrigins
+	results            *RepositoryMockGetRollbackKBForProductionResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockGetRollbackKBForProductionParams contains parameters of the Repository.GetRollbackKBForProduction
+type RepositoryMockGetRollbackKBForProductionParams struct {
+	ctx                 context.Context
+	ownerUID            types.OwnerUIDType
+	productionCatalogID string
+}
+
+// RepositoryMockGetRollbackKBForProductionParamPtrs contains pointers to parameters of the Repository.GetRollbackKBForProduction
+type RepositoryMockGetRollbackKBForProductionParamPtrs struct {
+	ctx                 *context.Context
+	ownerUID            *types.OwnerUIDType
+	productionCatalogID *string
+}
+
+// RepositoryMockGetRollbackKBForProductionResults contains results of the Repository.GetRollbackKBForProduction
+type RepositoryMockGetRollbackKBForProductionResults struct {
+	kp1 *mm_repository.KnowledgeBaseModel
+	err error
+}
+
+// RepositoryMockGetRollbackKBForProductionOrigins contains origins of expectations of the Repository.GetRollbackKBForProduction
+type RepositoryMockGetRollbackKBForProductionExpectationOrigins struct {
+	origin                    string
+	originCtx                 string
+	originOwnerUID            string
+	originProductionCatalogID string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmGetRollbackKBForProduction *mRepositoryMockGetRollbackKBForProduction) Optional() *mRepositoryMockGetRollbackKBForProduction {
+	mmGetRollbackKBForProduction.optional = true
+	return mmGetRollbackKBForProduction
+}
+
+// Expect sets up expected params for Repository.GetRollbackKBForProduction
+func (mmGetRollbackKBForProduction *mRepositoryMockGetRollbackKBForProduction) Expect(ctx context.Context, ownerUID types.OwnerUIDType, productionCatalogID string) *mRepositoryMockGetRollbackKBForProduction {
+	if mmGetRollbackKBForProduction.mock.funcGetRollbackKBForProduction != nil {
+		mmGetRollbackKBForProduction.mock.t.Fatalf("RepositoryMock.GetRollbackKBForProduction mock is already set by Set")
+	}
+
+	if mmGetRollbackKBForProduction.defaultExpectation == nil {
+		mmGetRollbackKBForProduction.defaultExpectation = &RepositoryMockGetRollbackKBForProductionExpectation{}
+	}
+
+	if mmGetRollbackKBForProduction.defaultExpectation.paramPtrs != nil {
+		mmGetRollbackKBForProduction.mock.t.Fatalf("RepositoryMock.GetRollbackKBForProduction mock is already set by ExpectParams functions")
+	}
+
+	mmGetRollbackKBForProduction.defaultExpectation.params = &RepositoryMockGetRollbackKBForProductionParams{ctx, ownerUID, productionCatalogID}
+	mmGetRollbackKBForProduction.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmGetRollbackKBForProduction.expectations {
+		if minimock.Equal(e.params, mmGetRollbackKBForProduction.defaultExpectation.params) {
+			mmGetRollbackKBForProduction.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetRollbackKBForProduction.defaultExpectation.params)
+		}
+	}
+
+	return mmGetRollbackKBForProduction
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.GetRollbackKBForProduction
+func (mmGetRollbackKBForProduction *mRepositoryMockGetRollbackKBForProduction) ExpectCtxParam1(ctx context.Context) *mRepositoryMockGetRollbackKBForProduction {
+	if mmGetRollbackKBForProduction.mock.funcGetRollbackKBForProduction != nil {
+		mmGetRollbackKBForProduction.mock.t.Fatalf("RepositoryMock.GetRollbackKBForProduction mock is already set by Set")
+	}
+
+	if mmGetRollbackKBForProduction.defaultExpectation == nil {
+		mmGetRollbackKBForProduction.defaultExpectation = &RepositoryMockGetRollbackKBForProductionExpectation{}
+	}
+
+	if mmGetRollbackKBForProduction.defaultExpectation.params != nil {
+		mmGetRollbackKBForProduction.mock.t.Fatalf("RepositoryMock.GetRollbackKBForProduction mock is already set by Expect")
+	}
+
+	if mmGetRollbackKBForProduction.defaultExpectation.paramPtrs == nil {
+		mmGetRollbackKBForProduction.defaultExpectation.paramPtrs = &RepositoryMockGetRollbackKBForProductionParamPtrs{}
+	}
+	mmGetRollbackKBForProduction.defaultExpectation.paramPtrs.ctx = &ctx
+	mmGetRollbackKBForProduction.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmGetRollbackKBForProduction
+}
+
+// ExpectOwnerUIDParam2 sets up expected param ownerUID for Repository.GetRollbackKBForProduction
+func (mmGetRollbackKBForProduction *mRepositoryMockGetRollbackKBForProduction) ExpectOwnerUIDParam2(ownerUID types.OwnerUIDType) *mRepositoryMockGetRollbackKBForProduction {
+	if mmGetRollbackKBForProduction.mock.funcGetRollbackKBForProduction != nil {
+		mmGetRollbackKBForProduction.mock.t.Fatalf("RepositoryMock.GetRollbackKBForProduction mock is already set by Set")
+	}
+
+	if mmGetRollbackKBForProduction.defaultExpectation == nil {
+		mmGetRollbackKBForProduction.defaultExpectation = &RepositoryMockGetRollbackKBForProductionExpectation{}
+	}
+
+	if mmGetRollbackKBForProduction.defaultExpectation.params != nil {
+		mmGetRollbackKBForProduction.mock.t.Fatalf("RepositoryMock.GetRollbackKBForProduction mock is already set by Expect")
+	}
+
+	if mmGetRollbackKBForProduction.defaultExpectation.paramPtrs == nil {
+		mmGetRollbackKBForProduction.defaultExpectation.paramPtrs = &RepositoryMockGetRollbackKBForProductionParamPtrs{}
+	}
+	mmGetRollbackKBForProduction.defaultExpectation.paramPtrs.ownerUID = &ownerUID
+	mmGetRollbackKBForProduction.defaultExpectation.expectationOrigins.originOwnerUID = minimock.CallerInfo(1)
+
+	return mmGetRollbackKBForProduction
+}
+
+// ExpectProductionCatalogIDParam3 sets up expected param productionCatalogID for Repository.GetRollbackKBForProduction
+func (mmGetRollbackKBForProduction *mRepositoryMockGetRollbackKBForProduction) ExpectProductionCatalogIDParam3(productionCatalogID string) *mRepositoryMockGetRollbackKBForProduction {
+	if mmGetRollbackKBForProduction.mock.funcGetRollbackKBForProduction != nil {
+		mmGetRollbackKBForProduction.mock.t.Fatalf("RepositoryMock.GetRollbackKBForProduction mock is already set by Set")
+	}
+
+	if mmGetRollbackKBForProduction.defaultExpectation == nil {
+		mmGetRollbackKBForProduction.defaultExpectation = &RepositoryMockGetRollbackKBForProductionExpectation{}
+	}
+
+	if mmGetRollbackKBForProduction.defaultExpectation.params != nil {
+		mmGetRollbackKBForProduction.mock.t.Fatalf("RepositoryMock.GetRollbackKBForProduction mock is already set by Expect")
+	}
+
+	if mmGetRollbackKBForProduction.defaultExpectation.paramPtrs == nil {
+		mmGetRollbackKBForProduction.defaultExpectation.paramPtrs = &RepositoryMockGetRollbackKBForProductionParamPtrs{}
+	}
+	mmGetRollbackKBForProduction.defaultExpectation.paramPtrs.productionCatalogID = &productionCatalogID
+	mmGetRollbackKBForProduction.defaultExpectation.expectationOrigins.originProductionCatalogID = minimock.CallerInfo(1)
+
+	return mmGetRollbackKBForProduction
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.GetRollbackKBForProduction
+func (mmGetRollbackKBForProduction *mRepositoryMockGetRollbackKBForProduction) Inspect(f func(ctx context.Context, ownerUID types.OwnerUIDType, productionCatalogID string)) *mRepositoryMockGetRollbackKBForProduction {
+	if mmGetRollbackKBForProduction.mock.inspectFuncGetRollbackKBForProduction != nil {
+		mmGetRollbackKBForProduction.mock.t.Fatalf("Inspect function is already set for RepositoryMock.GetRollbackKBForProduction")
+	}
+
+	mmGetRollbackKBForProduction.mock.inspectFuncGetRollbackKBForProduction = f
+
+	return mmGetRollbackKBForProduction
+}
+
+// Return sets up results that will be returned by Repository.GetRollbackKBForProduction
+func (mmGetRollbackKBForProduction *mRepositoryMockGetRollbackKBForProduction) Return(kp1 *mm_repository.KnowledgeBaseModel, err error) *RepositoryMock {
+	if mmGetRollbackKBForProduction.mock.funcGetRollbackKBForProduction != nil {
+		mmGetRollbackKBForProduction.mock.t.Fatalf("RepositoryMock.GetRollbackKBForProduction mock is already set by Set")
+	}
+
+	if mmGetRollbackKBForProduction.defaultExpectation == nil {
+		mmGetRollbackKBForProduction.defaultExpectation = &RepositoryMockGetRollbackKBForProductionExpectation{mock: mmGetRollbackKBForProduction.mock}
+	}
+	mmGetRollbackKBForProduction.defaultExpectation.results = &RepositoryMockGetRollbackKBForProductionResults{kp1, err}
+	mmGetRollbackKBForProduction.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmGetRollbackKBForProduction.mock
+}
+
+// Set uses given function f to mock the Repository.GetRollbackKBForProduction method
+func (mmGetRollbackKBForProduction *mRepositoryMockGetRollbackKBForProduction) Set(f func(ctx context.Context, ownerUID types.OwnerUIDType, productionCatalogID string) (kp1 *mm_repository.KnowledgeBaseModel, err error)) *RepositoryMock {
+	if mmGetRollbackKBForProduction.defaultExpectation != nil {
+		mmGetRollbackKBForProduction.mock.t.Fatalf("Default expectation is already set for the Repository.GetRollbackKBForProduction method")
+	}
+
+	if len(mmGetRollbackKBForProduction.expectations) > 0 {
+		mmGetRollbackKBForProduction.mock.t.Fatalf("Some expectations are already set for the Repository.GetRollbackKBForProduction method")
+	}
+
+	mmGetRollbackKBForProduction.mock.funcGetRollbackKBForProduction = f
+	mmGetRollbackKBForProduction.mock.funcGetRollbackKBForProductionOrigin = minimock.CallerInfo(1)
+	return mmGetRollbackKBForProduction.mock
+}
+
+// When sets expectation for the Repository.GetRollbackKBForProduction which will trigger the result defined by the following
+// Then helper
+func (mmGetRollbackKBForProduction *mRepositoryMockGetRollbackKBForProduction) When(ctx context.Context, ownerUID types.OwnerUIDType, productionCatalogID string) *RepositoryMockGetRollbackKBForProductionExpectation {
+	if mmGetRollbackKBForProduction.mock.funcGetRollbackKBForProduction != nil {
+		mmGetRollbackKBForProduction.mock.t.Fatalf("RepositoryMock.GetRollbackKBForProduction mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockGetRollbackKBForProductionExpectation{
+		mock:               mmGetRollbackKBForProduction.mock,
+		params:             &RepositoryMockGetRollbackKBForProductionParams{ctx, ownerUID, productionCatalogID},
+		expectationOrigins: RepositoryMockGetRollbackKBForProductionExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmGetRollbackKBForProduction.expectations = append(mmGetRollbackKBForProduction.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.GetRollbackKBForProduction return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockGetRollbackKBForProductionExpectation) Then(kp1 *mm_repository.KnowledgeBaseModel, err error) *RepositoryMock {
+	e.results = &RepositoryMockGetRollbackKBForProductionResults{kp1, err}
+	return e.mock
+}
+
+// Times sets number of times Repository.GetRollbackKBForProduction should be invoked
+func (mmGetRollbackKBForProduction *mRepositoryMockGetRollbackKBForProduction) Times(n uint64) *mRepositoryMockGetRollbackKBForProduction {
+	if n == 0 {
+		mmGetRollbackKBForProduction.mock.t.Fatalf("Times of RepositoryMock.GetRollbackKBForProduction mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetRollbackKBForProduction.expectedInvocations, n)
+	mmGetRollbackKBForProduction.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmGetRollbackKBForProduction
+}
+
+func (mmGetRollbackKBForProduction *mRepositoryMockGetRollbackKBForProduction) invocationsDone() bool {
+	if len(mmGetRollbackKBForProduction.expectations) == 0 && mmGetRollbackKBForProduction.defaultExpectation == nil && mmGetRollbackKBForProduction.mock.funcGetRollbackKBForProduction == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetRollbackKBForProduction.mock.afterGetRollbackKBForProductionCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetRollbackKBForProduction.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetRollbackKBForProduction implements mm_repository.Repository
+func (mmGetRollbackKBForProduction *RepositoryMock) GetRollbackKBForProduction(ctx context.Context, ownerUID types.OwnerUIDType, productionCatalogID string) (kp1 *mm_repository.KnowledgeBaseModel, err error) {
+	mm_atomic.AddUint64(&mmGetRollbackKBForProduction.beforeGetRollbackKBForProductionCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetRollbackKBForProduction.afterGetRollbackKBForProductionCounter, 1)
+
+	mmGetRollbackKBForProduction.t.Helper()
+
+	if mmGetRollbackKBForProduction.inspectFuncGetRollbackKBForProduction != nil {
+		mmGetRollbackKBForProduction.inspectFuncGetRollbackKBForProduction(ctx, ownerUID, productionCatalogID)
+	}
+
+	mm_params := RepositoryMockGetRollbackKBForProductionParams{ctx, ownerUID, productionCatalogID}
+
+	// Record call args
+	mmGetRollbackKBForProduction.GetRollbackKBForProductionMock.mutex.Lock()
+	mmGetRollbackKBForProduction.GetRollbackKBForProductionMock.callArgs = append(mmGetRollbackKBForProduction.GetRollbackKBForProductionMock.callArgs, &mm_params)
+	mmGetRollbackKBForProduction.GetRollbackKBForProductionMock.mutex.Unlock()
+
+	for _, e := range mmGetRollbackKBForProduction.GetRollbackKBForProductionMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.kp1, e.results.err
+		}
+	}
+
+	if mmGetRollbackKBForProduction.GetRollbackKBForProductionMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetRollbackKBForProduction.GetRollbackKBForProductionMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetRollbackKBForProduction.GetRollbackKBForProductionMock.defaultExpectation.params
+		mm_want_ptrs := mmGetRollbackKBForProduction.GetRollbackKBForProductionMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockGetRollbackKBForProductionParams{ctx, ownerUID, productionCatalogID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetRollbackKBForProduction.t.Errorf("RepositoryMock.GetRollbackKBForProduction got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetRollbackKBForProduction.GetRollbackKBForProductionMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.ownerUID != nil && !minimock.Equal(*mm_want_ptrs.ownerUID, mm_got.ownerUID) {
+				mmGetRollbackKBForProduction.t.Errorf("RepositoryMock.GetRollbackKBForProduction got unexpected parameter ownerUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetRollbackKBForProduction.GetRollbackKBForProductionMock.defaultExpectation.expectationOrigins.originOwnerUID, *mm_want_ptrs.ownerUID, mm_got.ownerUID, minimock.Diff(*mm_want_ptrs.ownerUID, mm_got.ownerUID))
+			}
+
+			if mm_want_ptrs.productionCatalogID != nil && !minimock.Equal(*mm_want_ptrs.productionCatalogID, mm_got.productionCatalogID) {
+				mmGetRollbackKBForProduction.t.Errorf("RepositoryMock.GetRollbackKBForProduction got unexpected parameter productionCatalogID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetRollbackKBForProduction.GetRollbackKBForProductionMock.defaultExpectation.expectationOrigins.originProductionCatalogID, *mm_want_ptrs.productionCatalogID, mm_got.productionCatalogID, minimock.Diff(*mm_want_ptrs.productionCatalogID, mm_got.productionCatalogID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetRollbackKBForProduction.t.Errorf("RepositoryMock.GetRollbackKBForProduction got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmGetRollbackKBForProduction.GetRollbackKBForProductionMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetRollbackKBForProduction.GetRollbackKBForProductionMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetRollbackKBForProduction.t.Fatal("No results are set for the RepositoryMock.GetRollbackKBForProduction")
+		}
+		return (*mm_results).kp1, (*mm_results).err
+	}
+	if mmGetRollbackKBForProduction.funcGetRollbackKBForProduction != nil {
+		return mmGetRollbackKBForProduction.funcGetRollbackKBForProduction(ctx, ownerUID, productionCatalogID)
+	}
+	mmGetRollbackKBForProduction.t.Fatalf("Unexpected call to RepositoryMock.GetRollbackKBForProduction. %v %v %v", ctx, ownerUID, productionCatalogID)
+	return
+}
+
+// GetRollbackKBForProductionAfterCounter returns a count of finished RepositoryMock.GetRollbackKBForProduction invocations
+func (mmGetRollbackKBForProduction *RepositoryMock) GetRollbackKBForProductionAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetRollbackKBForProduction.afterGetRollbackKBForProductionCounter)
+}
+
+// GetRollbackKBForProductionBeforeCounter returns a count of RepositoryMock.GetRollbackKBForProduction invocations
+func (mmGetRollbackKBForProduction *RepositoryMock) GetRollbackKBForProductionBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetRollbackKBForProduction.beforeGetRollbackKBForProductionCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.GetRollbackKBForProduction.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetRollbackKBForProduction *mRepositoryMockGetRollbackKBForProduction) Calls() []*RepositoryMockGetRollbackKBForProductionParams {
+	mmGetRollbackKBForProduction.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockGetRollbackKBForProductionParams, len(mmGetRollbackKBForProduction.callArgs))
+	copy(argCopy, mmGetRollbackKBForProduction.callArgs)
+
+	mmGetRollbackKBForProduction.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetRollbackKBForProductionDone returns true if the count of the GetRollbackKBForProduction invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockGetRollbackKBForProductionDone() bool {
+	if m.GetRollbackKBForProductionMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.GetRollbackKBForProductionMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetRollbackKBForProductionMock.invocationsDone()
+}
+
+// MinimockGetRollbackKBForProductionInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockGetRollbackKBForProductionInspect() {
+	for _, e := range m.GetRollbackKBForProductionMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.GetRollbackKBForProduction at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterGetRollbackKBForProductionCounter := mm_atomic.LoadUint64(&m.afterGetRollbackKBForProductionCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetRollbackKBForProductionMock.defaultExpectation != nil && afterGetRollbackKBForProductionCounter < 1 {
+		if m.GetRollbackKBForProductionMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.GetRollbackKBForProduction at\n%s", m.GetRollbackKBForProductionMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.GetRollbackKBForProduction at\n%s with params: %#v", m.GetRollbackKBForProductionMock.defaultExpectation.expectationOrigins.origin, *m.GetRollbackKBForProductionMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetRollbackKBForProduction != nil && afterGetRollbackKBForProductionCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.GetRollbackKBForProduction at\n%s", m.funcGetRollbackKBForProductionOrigin)
+	}
+
+	if !m.GetRollbackKBForProductionMock.invocationsDone() && afterGetRollbackKBForProductionCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.GetRollbackKBForProduction at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.GetRollbackKBForProductionMock.expectedInvocations), m.GetRollbackKBForProductionMock.expectedInvocationsOrigin, afterGetRollbackKBForProductionCounter)
+	}
+}
+
 type mRepositoryMockGetSourceByFileUID struct {
 	optional           bool
 	mock               *RepositoryMock
@@ -18889,6 +23077,723 @@ func (m *RepositoryMock) MinimockGetSourceTableAndUIDByFileUIDsInspect() {
 	if !m.GetSourceTableAndUIDByFileUIDsMock.invocationsDone() && afterGetSourceTableAndUIDByFileUIDsCounter > 0 {
 		m.t.Errorf("Expected %d calls to RepositoryMock.GetSourceTableAndUIDByFileUIDs at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.GetSourceTableAndUIDByFileUIDsMock.expectedInvocations), m.GetSourceTableAndUIDByFileUIDsMock.expectedInvocationsOrigin, afterGetSourceTableAndUIDByFileUIDsCounter)
+	}
+}
+
+type mRepositoryMockGetStagingKBForProduction struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockGetStagingKBForProductionExpectation
+	expectations       []*RepositoryMockGetStagingKBForProductionExpectation
+
+	callArgs []*RepositoryMockGetStagingKBForProductionParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockGetStagingKBForProductionExpectation specifies expectation struct of the Repository.GetStagingKBForProduction
+type RepositoryMockGetStagingKBForProductionExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockGetStagingKBForProductionParams
+	paramPtrs          *RepositoryMockGetStagingKBForProductionParamPtrs
+	expectationOrigins RepositoryMockGetStagingKBForProductionExpectationOrigins
+	results            *RepositoryMockGetStagingKBForProductionResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockGetStagingKBForProductionParams contains parameters of the Repository.GetStagingKBForProduction
+type RepositoryMockGetStagingKBForProductionParams struct {
+	ctx                 context.Context
+	ownerUID            types.OwnerUIDType
+	productionCatalogID string
+}
+
+// RepositoryMockGetStagingKBForProductionParamPtrs contains pointers to parameters of the Repository.GetStagingKBForProduction
+type RepositoryMockGetStagingKBForProductionParamPtrs struct {
+	ctx                 *context.Context
+	ownerUID            *types.OwnerUIDType
+	productionCatalogID *string
+}
+
+// RepositoryMockGetStagingKBForProductionResults contains results of the Repository.GetStagingKBForProduction
+type RepositoryMockGetStagingKBForProductionResults struct {
+	kp1 *mm_repository.KnowledgeBaseModel
+	err error
+}
+
+// RepositoryMockGetStagingKBForProductionOrigins contains origins of expectations of the Repository.GetStagingKBForProduction
+type RepositoryMockGetStagingKBForProductionExpectationOrigins struct {
+	origin                    string
+	originCtx                 string
+	originOwnerUID            string
+	originProductionCatalogID string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmGetStagingKBForProduction *mRepositoryMockGetStagingKBForProduction) Optional() *mRepositoryMockGetStagingKBForProduction {
+	mmGetStagingKBForProduction.optional = true
+	return mmGetStagingKBForProduction
+}
+
+// Expect sets up expected params for Repository.GetStagingKBForProduction
+func (mmGetStagingKBForProduction *mRepositoryMockGetStagingKBForProduction) Expect(ctx context.Context, ownerUID types.OwnerUIDType, productionCatalogID string) *mRepositoryMockGetStagingKBForProduction {
+	if mmGetStagingKBForProduction.mock.funcGetStagingKBForProduction != nil {
+		mmGetStagingKBForProduction.mock.t.Fatalf("RepositoryMock.GetStagingKBForProduction mock is already set by Set")
+	}
+
+	if mmGetStagingKBForProduction.defaultExpectation == nil {
+		mmGetStagingKBForProduction.defaultExpectation = &RepositoryMockGetStagingKBForProductionExpectation{}
+	}
+
+	if mmGetStagingKBForProduction.defaultExpectation.paramPtrs != nil {
+		mmGetStagingKBForProduction.mock.t.Fatalf("RepositoryMock.GetStagingKBForProduction mock is already set by ExpectParams functions")
+	}
+
+	mmGetStagingKBForProduction.defaultExpectation.params = &RepositoryMockGetStagingKBForProductionParams{ctx, ownerUID, productionCatalogID}
+	mmGetStagingKBForProduction.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmGetStagingKBForProduction.expectations {
+		if minimock.Equal(e.params, mmGetStagingKBForProduction.defaultExpectation.params) {
+			mmGetStagingKBForProduction.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetStagingKBForProduction.defaultExpectation.params)
+		}
+	}
+
+	return mmGetStagingKBForProduction
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.GetStagingKBForProduction
+func (mmGetStagingKBForProduction *mRepositoryMockGetStagingKBForProduction) ExpectCtxParam1(ctx context.Context) *mRepositoryMockGetStagingKBForProduction {
+	if mmGetStagingKBForProduction.mock.funcGetStagingKBForProduction != nil {
+		mmGetStagingKBForProduction.mock.t.Fatalf("RepositoryMock.GetStagingKBForProduction mock is already set by Set")
+	}
+
+	if mmGetStagingKBForProduction.defaultExpectation == nil {
+		mmGetStagingKBForProduction.defaultExpectation = &RepositoryMockGetStagingKBForProductionExpectation{}
+	}
+
+	if mmGetStagingKBForProduction.defaultExpectation.params != nil {
+		mmGetStagingKBForProduction.mock.t.Fatalf("RepositoryMock.GetStagingKBForProduction mock is already set by Expect")
+	}
+
+	if mmGetStagingKBForProduction.defaultExpectation.paramPtrs == nil {
+		mmGetStagingKBForProduction.defaultExpectation.paramPtrs = &RepositoryMockGetStagingKBForProductionParamPtrs{}
+	}
+	mmGetStagingKBForProduction.defaultExpectation.paramPtrs.ctx = &ctx
+	mmGetStagingKBForProduction.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmGetStagingKBForProduction
+}
+
+// ExpectOwnerUIDParam2 sets up expected param ownerUID for Repository.GetStagingKBForProduction
+func (mmGetStagingKBForProduction *mRepositoryMockGetStagingKBForProduction) ExpectOwnerUIDParam2(ownerUID types.OwnerUIDType) *mRepositoryMockGetStagingKBForProduction {
+	if mmGetStagingKBForProduction.mock.funcGetStagingKBForProduction != nil {
+		mmGetStagingKBForProduction.mock.t.Fatalf("RepositoryMock.GetStagingKBForProduction mock is already set by Set")
+	}
+
+	if mmGetStagingKBForProduction.defaultExpectation == nil {
+		mmGetStagingKBForProduction.defaultExpectation = &RepositoryMockGetStagingKBForProductionExpectation{}
+	}
+
+	if mmGetStagingKBForProduction.defaultExpectation.params != nil {
+		mmGetStagingKBForProduction.mock.t.Fatalf("RepositoryMock.GetStagingKBForProduction mock is already set by Expect")
+	}
+
+	if mmGetStagingKBForProduction.defaultExpectation.paramPtrs == nil {
+		mmGetStagingKBForProduction.defaultExpectation.paramPtrs = &RepositoryMockGetStagingKBForProductionParamPtrs{}
+	}
+	mmGetStagingKBForProduction.defaultExpectation.paramPtrs.ownerUID = &ownerUID
+	mmGetStagingKBForProduction.defaultExpectation.expectationOrigins.originOwnerUID = minimock.CallerInfo(1)
+
+	return mmGetStagingKBForProduction
+}
+
+// ExpectProductionCatalogIDParam3 sets up expected param productionCatalogID for Repository.GetStagingKBForProduction
+func (mmGetStagingKBForProduction *mRepositoryMockGetStagingKBForProduction) ExpectProductionCatalogIDParam3(productionCatalogID string) *mRepositoryMockGetStagingKBForProduction {
+	if mmGetStagingKBForProduction.mock.funcGetStagingKBForProduction != nil {
+		mmGetStagingKBForProduction.mock.t.Fatalf("RepositoryMock.GetStagingKBForProduction mock is already set by Set")
+	}
+
+	if mmGetStagingKBForProduction.defaultExpectation == nil {
+		mmGetStagingKBForProduction.defaultExpectation = &RepositoryMockGetStagingKBForProductionExpectation{}
+	}
+
+	if mmGetStagingKBForProduction.defaultExpectation.params != nil {
+		mmGetStagingKBForProduction.mock.t.Fatalf("RepositoryMock.GetStagingKBForProduction mock is already set by Expect")
+	}
+
+	if mmGetStagingKBForProduction.defaultExpectation.paramPtrs == nil {
+		mmGetStagingKBForProduction.defaultExpectation.paramPtrs = &RepositoryMockGetStagingKBForProductionParamPtrs{}
+	}
+	mmGetStagingKBForProduction.defaultExpectation.paramPtrs.productionCatalogID = &productionCatalogID
+	mmGetStagingKBForProduction.defaultExpectation.expectationOrigins.originProductionCatalogID = minimock.CallerInfo(1)
+
+	return mmGetStagingKBForProduction
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.GetStagingKBForProduction
+func (mmGetStagingKBForProduction *mRepositoryMockGetStagingKBForProduction) Inspect(f func(ctx context.Context, ownerUID types.OwnerUIDType, productionCatalogID string)) *mRepositoryMockGetStagingKBForProduction {
+	if mmGetStagingKBForProduction.mock.inspectFuncGetStagingKBForProduction != nil {
+		mmGetStagingKBForProduction.mock.t.Fatalf("Inspect function is already set for RepositoryMock.GetStagingKBForProduction")
+	}
+
+	mmGetStagingKBForProduction.mock.inspectFuncGetStagingKBForProduction = f
+
+	return mmGetStagingKBForProduction
+}
+
+// Return sets up results that will be returned by Repository.GetStagingKBForProduction
+func (mmGetStagingKBForProduction *mRepositoryMockGetStagingKBForProduction) Return(kp1 *mm_repository.KnowledgeBaseModel, err error) *RepositoryMock {
+	if mmGetStagingKBForProduction.mock.funcGetStagingKBForProduction != nil {
+		mmGetStagingKBForProduction.mock.t.Fatalf("RepositoryMock.GetStagingKBForProduction mock is already set by Set")
+	}
+
+	if mmGetStagingKBForProduction.defaultExpectation == nil {
+		mmGetStagingKBForProduction.defaultExpectation = &RepositoryMockGetStagingKBForProductionExpectation{mock: mmGetStagingKBForProduction.mock}
+	}
+	mmGetStagingKBForProduction.defaultExpectation.results = &RepositoryMockGetStagingKBForProductionResults{kp1, err}
+	mmGetStagingKBForProduction.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmGetStagingKBForProduction.mock
+}
+
+// Set uses given function f to mock the Repository.GetStagingKBForProduction method
+func (mmGetStagingKBForProduction *mRepositoryMockGetStagingKBForProduction) Set(f func(ctx context.Context, ownerUID types.OwnerUIDType, productionCatalogID string) (kp1 *mm_repository.KnowledgeBaseModel, err error)) *RepositoryMock {
+	if mmGetStagingKBForProduction.defaultExpectation != nil {
+		mmGetStagingKBForProduction.mock.t.Fatalf("Default expectation is already set for the Repository.GetStagingKBForProduction method")
+	}
+
+	if len(mmGetStagingKBForProduction.expectations) > 0 {
+		mmGetStagingKBForProduction.mock.t.Fatalf("Some expectations are already set for the Repository.GetStagingKBForProduction method")
+	}
+
+	mmGetStagingKBForProduction.mock.funcGetStagingKBForProduction = f
+	mmGetStagingKBForProduction.mock.funcGetStagingKBForProductionOrigin = minimock.CallerInfo(1)
+	return mmGetStagingKBForProduction.mock
+}
+
+// When sets expectation for the Repository.GetStagingKBForProduction which will trigger the result defined by the following
+// Then helper
+func (mmGetStagingKBForProduction *mRepositoryMockGetStagingKBForProduction) When(ctx context.Context, ownerUID types.OwnerUIDType, productionCatalogID string) *RepositoryMockGetStagingKBForProductionExpectation {
+	if mmGetStagingKBForProduction.mock.funcGetStagingKBForProduction != nil {
+		mmGetStagingKBForProduction.mock.t.Fatalf("RepositoryMock.GetStagingKBForProduction mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockGetStagingKBForProductionExpectation{
+		mock:               mmGetStagingKBForProduction.mock,
+		params:             &RepositoryMockGetStagingKBForProductionParams{ctx, ownerUID, productionCatalogID},
+		expectationOrigins: RepositoryMockGetStagingKBForProductionExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmGetStagingKBForProduction.expectations = append(mmGetStagingKBForProduction.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.GetStagingKBForProduction return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockGetStagingKBForProductionExpectation) Then(kp1 *mm_repository.KnowledgeBaseModel, err error) *RepositoryMock {
+	e.results = &RepositoryMockGetStagingKBForProductionResults{kp1, err}
+	return e.mock
+}
+
+// Times sets number of times Repository.GetStagingKBForProduction should be invoked
+func (mmGetStagingKBForProduction *mRepositoryMockGetStagingKBForProduction) Times(n uint64) *mRepositoryMockGetStagingKBForProduction {
+	if n == 0 {
+		mmGetStagingKBForProduction.mock.t.Fatalf("Times of RepositoryMock.GetStagingKBForProduction mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetStagingKBForProduction.expectedInvocations, n)
+	mmGetStagingKBForProduction.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmGetStagingKBForProduction
+}
+
+func (mmGetStagingKBForProduction *mRepositoryMockGetStagingKBForProduction) invocationsDone() bool {
+	if len(mmGetStagingKBForProduction.expectations) == 0 && mmGetStagingKBForProduction.defaultExpectation == nil && mmGetStagingKBForProduction.mock.funcGetStagingKBForProduction == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetStagingKBForProduction.mock.afterGetStagingKBForProductionCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetStagingKBForProduction.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetStagingKBForProduction implements mm_repository.Repository
+func (mmGetStagingKBForProduction *RepositoryMock) GetStagingKBForProduction(ctx context.Context, ownerUID types.OwnerUIDType, productionCatalogID string) (kp1 *mm_repository.KnowledgeBaseModel, err error) {
+	mm_atomic.AddUint64(&mmGetStagingKBForProduction.beforeGetStagingKBForProductionCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetStagingKBForProduction.afterGetStagingKBForProductionCounter, 1)
+
+	mmGetStagingKBForProduction.t.Helper()
+
+	if mmGetStagingKBForProduction.inspectFuncGetStagingKBForProduction != nil {
+		mmGetStagingKBForProduction.inspectFuncGetStagingKBForProduction(ctx, ownerUID, productionCatalogID)
+	}
+
+	mm_params := RepositoryMockGetStagingKBForProductionParams{ctx, ownerUID, productionCatalogID}
+
+	// Record call args
+	mmGetStagingKBForProduction.GetStagingKBForProductionMock.mutex.Lock()
+	mmGetStagingKBForProduction.GetStagingKBForProductionMock.callArgs = append(mmGetStagingKBForProduction.GetStagingKBForProductionMock.callArgs, &mm_params)
+	mmGetStagingKBForProduction.GetStagingKBForProductionMock.mutex.Unlock()
+
+	for _, e := range mmGetStagingKBForProduction.GetStagingKBForProductionMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.kp1, e.results.err
+		}
+	}
+
+	if mmGetStagingKBForProduction.GetStagingKBForProductionMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetStagingKBForProduction.GetStagingKBForProductionMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetStagingKBForProduction.GetStagingKBForProductionMock.defaultExpectation.params
+		mm_want_ptrs := mmGetStagingKBForProduction.GetStagingKBForProductionMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockGetStagingKBForProductionParams{ctx, ownerUID, productionCatalogID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetStagingKBForProduction.t.Errorf("RepositoryMock.GetStagingKBForProduction got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetStagingKBForProduction.GetStagingKBForProductionMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.ownerUID != nil && !minimock.Equal(*mm_want_ptrs.ownerUID, mm_got.ownerUID) {
+				mmGetStagingKBForProduction.t.Errorf("RepositoryMock.GetStagingKBForProduction got unexpected parameter ownerUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetStagingKBForProduction.GetStagingKBForProductionMock.defaultExpectation.expectationOrigins.originOwnerUID, *mm_want_ptrs.ownerUID, mm_got.ownerUID, minimock.Diff(*mm_want_ptrs.ownerUID, mm_got.ownerUID))
+			}
+
+			if mm_want_ptrs.productionCatalogID != nil && !minimock.Equal(*mm_want_ptrs.productionCatalogID, mm_got.productionCatalogID) {
+				mmGetStagingKBForProduction.t.Errorf("RepositoryMock.GetStagingKBForProduction got unexpected parameter productionCatalogID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetStagingKBForProduction.GetStagingKBForProductionMock.defaultExpectation.expectationOrigins.originProductionCatalogID, *mm_want_ptrs.productionCatalogID, mm_got.productionCatalogID, minimock.Diff(*mm_want_ptrs.productionCatalogID, mm_got.productionCatalogID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetStagingKBForProduction.t.Errorf("RepositoryMock.GetStagingKBForProduction got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmGetStagingKBForProduction.GetStagingKBForProductionMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetStagingKBForProduction.GetStagingKBForProductionMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetStagingKBForProduction.t.Fatal("No results are set for the RepositoryMock.GetStagingKBForProduction")
+		}
+		return (*mm_results).kp1, (*mm_results).err
+	}
+	if mmGetStagingKBForProduction.funcGetStagingKBForProduction != nil {
+		return mmGetStagingKBForProduction.funcGetStagingKBForProduction(ctx, ownerUID, productionCatalogID)
+	}
+	mmGetStagingKBForProduction.t.Fatalf("Unexpected call to RepositoryMock.GetStagingKBForProduction. %v %v %v", ctx, ownerUID, productionCatalogID)
+	return
+}
+
+// GetStagingKBForProductionAfterCounter returns a count of finished RepositoryMock.GetStagingKBForProduction invocations
+func (mmGetStagingKBForProduction *RepositoryMock) GetStagingKBForProductionAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetStagingKBForProduction.afterGetStagingKBForProductionCounter)
+}
+
+// GetStagingKBForProductionBeforeCounter returns a count of RepositoryMock.GetStagingKBForProduction invocations
+func (mmGetStagingKBForProduction *RepositoryMock) GetStagingKBForProductionBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetStagingKBForProduction.beforeGetStagingKBForProductionCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.GetStagingKBForProduction.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetStagingKBForProduction *mRepositoryMockGetStagingKBForProduction) Calls() []*RepositoryMockGetStagingKBForProductionParams {
+	mmGetStagingKBForProduction.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockGetStagingKBForProductionParams, len(mmGetStagingKBForProduction.callArgs))
+	copy(argCopy, mmGetStagingKBForProduction.callArgs)
+
+	mmGetStagingKBForProduction.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetStagingKBForProductionDone returns true if the count of the GetStagingKBForProduction invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockGetStagingKBForProductionDone() bool {
+	if m.GetStagingKBForProductionMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.GetStagingKBForProductionMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetStagingKBForProductionMock.invocationsDone()
+}
+
+// MinimockGetStagingKBForProductionInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockGetStagingKBForProductionInspect() {
+	for _, e := range m.GetStagingKBForProductionMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.GetStagingKBForProduction at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterGetStagingKBForProductionCounter := mm_atomic.LoadUint64(&m.afterGetStagingKBForProductionCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetStagingKBForProductionMock.defaultExpectation != nil && afterGetStagingKBForProductionCounter < 1 {
+		if m.GetStagingKBForProductionMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.GetStagingKBForProduction at\n%s", m.GetStagingKBForProductionMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.GetStagingKBForProduction at\n%s with params: %#v", m.GetStagingKBForProductionMock.defaultExpectation.expectationOrigins.origin, *m.GetStagingKBForProductionMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetStagingKBForProduction != nil && afterGetStagingKBForProductionCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.GetStagingKBForProduction at\n%s", m.funcGetStagingKBForProductionOrigin)
+	}
+
+	if !m.GetStagingKBForProductionMock.invocationsDone() && afterGetStagingKBForProductionCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.GetStagingKBForProduction at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.GetStagingKBForProductionMock.expectedInvocations), m.GetStagingKBForProductionMock.expectedInvocationsOrigin, afterGetStagingKBForProductionCounter)
+	}
+}
+
+type mRepositoryMockGetSystemProfile struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockGetSystemProfileExpectation
+	expectations       []*RepositoryMockGetSystemProfileExpectation
+
+	callArgs []*RepositoryMockGetSystemProfileParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockGetSystemProfileExpectation specifies expectation struct of the Repository.GetSystemProfile
+type RepositoryMockGetSystemProfileExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockGetSystemProfileParams
+	paramPtrs          *RepositoryMockGetSystemProfileParamPtrs
+	expectationOrigins RepositoryMockGetSystemProfileExpectationOrigins
+	results            *RepositoryMockGetSystemProfileResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockGetSystemProfileParams contains parameters of the Repository.GetSystemProfile
+type RepositoryMockGetSystemProfileParams struct {
+	ctx     context.Context
+	profile string
+}
+
+// RepositoryMockGetSystemProfileParamPtrs contains pointers to parameters of the Repository.GetSystemProfile
+type RepositoryMockGetSystemProfileParamPtrs struct {
+	ctx     *context.Context
+	profile *string
+}
+
+// RepositoryMockGetSystemProfileResults contains results of the Repository.GetSystemProfile
+type RepositoryMockGetSystemProfileResults struct {
+	sp1 *mm_repository.SystemProfileModel
+	err error
+}
+
+// RepositoryMockGetSystemProfileOrigins contains origins of expectations of the Repository.GetSystemProfile
+type RepositoryMockGetSystemProfileExpectationOrigins struct {
+	origin        string
+	originCtx     string
+	originProfile string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmGetSystemProfile *mRepositoryMockGetSystemProfile) Optional() *mRepositoryMockGetSystemProfile {
+	mmGetSystemProfile.optional = true
+	return mmGetSystemProfile
+}
+
+// Expect sets up expected params for Repository.GetSystemProfile
+func (mmGetSystemProfile *mRepositoryMockGetSystemProfile) Expect(ctx context.Context, profile string) *mRepositoryMockGetSystemProfile {
+	if mmGetSystemProfile.mock.funcGetSystemProfile != nil {
+		mmGetSystemProfile.mock.t.Fatalf("RepositoryMock.GetSystemProfile mock is already set by Set")
+	}
+
+	if mmGetSystemProfile.defaultExpectation == nil {
+		mmGetSystemProfile.defaultExpectation = &RepositoryMockGetSystemProfileExpectation{}
+	}
+
+	if mmGetSystemProfile.defaultExpectation.paramPtrs != nil {
+		mmGetSystemProfile.mock.t.Fatalf("RepositoryMock.GetSystemProfile mock is already set by ExpectParams functions")
+	}
+
+	mmGetSystemProfile.defaultExpectation.params = &RepositoryMockGetSystemProfileParams{ctx, profile}
+	mmGetSystemProfile.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmGetSystemProfile.expectations {
+		if minimock.Equal(e.params, mmGetSystemProfile.defaultExpectation.params) {
+			mmGetSystemProfile.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetSystemProfile.defaultExpectation.params)
+		}
+	}
+
+	return mmGetSystemProfile
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.GetSystemProfile
+func (mmGetSystemProfile *mRepositoryMockGetSystemProfile) ExpectCtxParam1(ctx context.Context) *mRepositoryMockGetSystemProfile {
+	if mmGetSystemProfile.mock.funcGetSystemProfile != nil {
+		mmGetSystemProfile.mock.t.Fatalf("RepositoryMock.GetSystemProfile mock is already set by Set")
+	}
+
+	if mmGetSystemProfile.defaultExpectation == nil {
+		mmGetSystemProfile.defaultExpectation = &RepositoryMockGetSystemProfileExpectation{}
+	}
+
+	if mmGetSystemProfile.defaultExpectation.params != nil {
+		mmGetSystemProfile.mock.t.Fatalf("RepositoryMock.GetSystemProfile mock is already set by Expect")
+	}
+
+	if mmGetSystemProfile.defaultExpectation.paramPtrs == nil {
+		mmGetSystemProfile.defaultExpectation.paramPtrs = &RepositoryMockGetSystemProfileParamPtrs{}
+	}
+	mmGetSystemProfile.defaultExpectation.paramPtrs.ctx = &ctx
+	mmGetSystemProfile.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmGetSystemProfile
+}
+
+// ExpectProfileParam2 sets up expected param profile for Repository.GetSystemProfile
+func (mmGetSystemProfile *mRepositoryMockGetSystemProfile) ExpectProfileParam2(profile string) *mRepositoryMockGetSystemProfile {
+	if mmGetSystemProfile.mock.funcGetSystemProfile != nil {
+		mmGetSystemProfile.mock.t.Fatalf("RepositoryMock.GetSystemProfile mock is already set by Set")
+	}
+
+	if mmGetSystemProfile.defaultExpectation == nil {
+		mmGetSystemProfile.defaultExpectation = &RepositoryMockGetSystemProfileExpectation{}
+	}
+
+	if mmGetSystemProfile.defaultExpectation.params != nil {
+		mmGetSystemProfile.mock.t.Fatalf("RepositoryMock.GetSystemProfile mock is already set by Expect")
+	}
+
+	if mmGetSystemProfile.defaultExpectation.paramPtrs == nil {
+		mmGetSystemProfile.defaultExpectation.paramPtrs = &RepositoryMockGetSystemProfileParamPtrs{}
+	}
+	mmGetSystemProfile.defaultExpectation.paramPtrs.profile = &profile
+	mmGetSystemProfile.defaultExpectation.expectationOrigins.originProfile = minimock.CallerInfo(1)
+
+	return mmGetSystemProfile
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.GetSystemProfile
+func (mmGetSystemProfile *mRepositoryMockGetSystemProfile) Inspect(f func(ctx context.Context, profile string)) *mRepositoryMockGetSystemProfile {
+	if mmGetSystemProfile.mock.inspectFuncGetSystemProfile != nil {
+		mmGetSystemProfile.mock.t.Fatalf("Inspect function is already set for RepositoryMock.GetSystemProfile")
+	}
+
+	mmGetSystemProfile.mock.inspectFuncGetSystemProfile = f
+
+	return mmGetSystemProfile
+}
+
+// Return sets up results that will be returned by Repository.GetSystemProfile
+func (mmGetSystemProfile *mRepositoryMockGetSystemProfile) Return(sp1 *mm_repository.SystemProfileModel, err error) *RepositoryMock {
+	if mmGetSystemProfile.mock.funcGetSystemProfile != nil {
+		mmGetSystemProfile.mock.t.Fatalf("RepositoryMock.GetSystemProfile mock is already set by Set")
+	}
+
+	if mmGetSystemProfile.defaultExpectation == nil {
+		mmGetSystemProfile.defaultExpectation = &RepositoryMockGetSystemProfileExpectation{mock: mmGetSystemProfile.mock}
+	}
+	mmGetSystemProfile.defaultExpectation.results = &RepositoryMockGetSystemProfileResults{sp1, err}
+	mmGetSystemProfile.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmGetSystemProfile.mock
+}
+
+// Set uses given function f to mock the Repository.GetSystemProfile method
+func (mmGetSystemProfile *mRepositoryMockGetSystemProfile) Set(f func(ctx context.Context, profile string) (sp1 *mm_repository.SystemProfileModel, err error)) *RepositoryMock {
+	if mmGetSystemProfile.defaultExpectation != nil {
+		mmGetSystemProfile.mock.t.Fatalf("Default expectation is already set for the Repository.GetSystemProfile method")
+	}
+
+	if len(mmGetSystemProfile.expectations) > 0 {
+		mmGetSystemProfile.mock.t.Fatalf("Some expectations are already set for the Repository.GetSystemProfile method")
+	}
+
+	mmGetSystemProfile.mock.funcGetSystemProfile = f
+	mmGetSystemProfile.mock.funcGetSystemProfileOrigin = minimock.CallerInfo(1)
+	return mmGetSystemProfile.mock
+}
+
+// When sets expectation for the Repository.GetSystemProfile which will trigger the result defined by the following
+// Then helper
+func (mmGetSystemProfile *mRepositoryMockGetSystemProfile) When(ctx context.Context, profile string) *RepositoryMockGetSystemProfileExpectation {
+	if mmGetSystemProfile.mock.funcGetSystemProfile != nil {
+		mmGetSystemProfile.mock.t.Fatalf("RepositoryMock.GetSystemProfile mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockGetSystemProfileExpectation{
+		mock:               mmGetSystemProfile.mock,
+		params:             &RepositoryMockGetSystemProfileParams{ctx, profile},
+		expectationOrigins: RepositoryMockGetSystemProfileExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmGetSystemProfile.expectations = append(mmGetSystemProfile.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.GetSystemProfile return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockGetSystemProfileExpectation) Then(sp1 *mm_repository.SystemProfileModel, err error) *RepositoryMock {
+	e.results = &RepositoryMockGetSystemProfileResults{sp1, err}
+	return e.mock
+}
+
+// Times sets number of times Repository.GetSystemProfile should be invoked
+func (mmGetSystemProfile *mRepositoryMockGetSystemProfile) Times(n uint64) *mRepositoryMockGetSystemProfile {
+	if n == 0 {
+		mmGetSystemProfile.mock.t.Fatalf("Times of RepositoryMock.GetSystemProfile mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetSystemProfile.expectedInvocations, n)
+	mmGetSystemProfile.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmGetSystemProfile
+}
+
+func (mmGetSystemProfile *mRepositoryMockGetSystemProfile) invocationsDone() bool {
+	if len(mmGetSystemProfile.expectations) == 0 && mmGetSystemProfile.defaultExpectation == nil && mmGetSystemProfile.mock.funcGetSystemProfile == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetSystemProfile.mock.afterGetSystemProfileCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetSystemProfile.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetSystemProfile implements mm_repository.Repository
+func (mmGetSystemProfile *RepositoryMock) GetSystemProfile(ctx context.Context, profile string) (sp1 *mm_repository.SystemProfileModel, err error) {
+	mm_atomic.AddUint64(&mmGetSystemProfile.beforeGetSystemProfileCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetSystemProfile.afterGetSystemProfileCounter, 1)
+
+	mmGetSystemProfile.t.Helper()
+
+	if mmGetSystemProfile.inspectFuncGetSystemProfile != nil {
+		mmGetSystemProfile.inspectFuncGetSystemProfile(ctx, profile)
+	}
+
+	mm_params := RepositoryMockGetSystemProfileParams{ctx, profile}
+
+	// Record call args
+	mmGetSystemProfile.GetSystemProfileMock.mutex.Lock()
+	mmGetSystemProfile.GetSystemProfileMock.callArgs = append(mmGetSystemProfile.GetSystemProfileMock.callArgs, &mm_params)
+	mmGetSystemProfile.GetSystemProfileMock.mutex.Unlock()
+
+	for _, e := range mmGetSystemProfile.GetSystemProfileMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.sp1, e.results.err
+		}
+	}
+
+	if mmGetSystemProfile.GetSystemProfileMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetSystemProfile.GetSystemProfileMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetSystemProfile.GetSystemProfileMock.defaultExpectation.params
+		mm_want_ptrs := mmGetSystemProfile.GetSystemProfileMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockGetSystemProfileParams{ctx, profile}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetSystemProfile.t.Errorf("RepositoryMock.GetSystemProfile got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetSystemProfile.GetSystemProfileMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.profile != nil && !minimock.Equal(*mm_want_ptrs.profile, mm_got.profile) {
+				mmGetSystemProfile.t.Errorf("RepositoryMock.GetSystemProfile got unexpected parameter profile, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetSystemProfile.GetSystemProfileMock.defaultExpectation.expectationOrigins.originProfile, *mm_want_ptrs.profile, mm_got.profile, minimock.Diff(*mm_want_ptrs.profile, mm_got.profile))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetSystemProfile.t.Errorf("RepositoryMock.GetSystemProfile got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmGetSystemProfile.GetSystemProfileMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetSystemProfile.GetSystemProfileMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetSystemProfile.t.Fatal("No results are set for the RepositoryMock.GetSystemProfile")
+		}
+		return (*mm_results).sp1, (*mm_results).err
+	}
+	if mmGetSystemProfile.funcGetSystemProfile != nil {
+		return mmGetSystemProfile.funcGetSystemProfile(ctx, profile)
+	}
+	mmGetSystemProfile.t.Fatalf("Unexpected call to RepositoryMock.GetSystemProfile. %v %v", ctx, profile)
+	return
+}
+
+// GetSystemProfileAfterCounter returns a count of finished RepositoryMock.GetSystemProfile invocations
+func (mmGetSystemProfile *RepositoryMock) GetSystemProfileAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetSystemProfile.afterGetSystemProfileCounter)
+}
+
+// GetSystemProfileBeforeCounter returns a count of RepositoryMock.GetSystemProfile invocations
+func (mmGetSystemProfile *RepositoryMock) GetSystemProfileBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetSystemProfile.beforeGetSystemProfileCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.GetSystemProfile.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetSystemProfile *mRepositoryMockGetSystemProfile) Calls() []*RepositoryMockGetSystemProfileParams {
+	mmGetSystemProfile.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockGetSystemProfileParams, len(mmGetSystemProfile.callArgs))
+	copy(argCopy, mmGetSystemProfile.callArgs)
+
+	mmGetSystemProfile.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetSystemProfileDone returns true if the count of the GetSystemProfile invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockGetSystemProfileDone() bool {
+	if m.GetSystemProfileMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.GetSystemProfileMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetSystemProfileMock.invocationsDone()
+}
+
+// MinimockGetSystemProfileInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockGetSystemProfileInspect() {
+	for _, e := range m.GetSystemProfileMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.GetSystemProfile at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterGetSystemProfileCounter := mm_atomic.LoadUint64(&m.afterGetSystemProfileCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetSystemProfileMock.defaultExpectation != nil && afterGetSystemProfileCounter < 1 {
+		if m.GetSystemProfileMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.GetSystemProfile at\n%s", m.GetSystemProfileMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.GetSystemProfile at\n%s with params: %#v", m.GetSystemProfileMock.defaultExpectation.expectationOrigins.origin, *m.GetSystemProfileMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetSystemProfile != nil && afterGetSystemProfileCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.GetSystemProfile at\n%s", m.funcGetSystemProfileOrigin)
+	}
+
+	if !m.GetSystemProfileMock.invocationsDone() && afterGetSystemProfileCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.GetSystemProfile at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.GetSystemProfileMock.expectedInvocations), m.GetSystemProfileMock.expectedInvocationsOrigin, afterGetSystemProfileCounter)
 	}
 }
 
@@ -22806,6 +27711,692 @@ func (m *RepositoryMock) MinimockInsertVectorsInCollectionInspect() {
 	}
 }
 
+type mRepositoryMockIsCollectionInUse struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockIsCollectionInUseExpectation
+	expectations       []*RepositoryMockIsCollectionInUseExpectation
+
+	callArgs []*RepositoryMockIsCollectionInUseParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockIsCollectionInUseExpectation specifies expectation struct of the Repository.IsCollectionInUse
+type RepositoryMockIsCollectionInUseExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockIsCollectionInUseParams
+	paramPtrs          *RepositoryMockIsCollectionInUseParamPtrs
+	expectationOrigins RepositoryMockIsCollectionInUseExpectationOrigins
+	results            *RepositoryMockIsCollectionInUseResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockIsCollectionInUseParams contains parameters of the Repository.IsCollectionInUse
+type RepositoryMockIsCollectionInUseParams struct {
+	ctx           context.Context
+	collectionUID types.CollectionUIDType
+}
+
+// RepositoryMockIsCollectionInUseParamPtrs contains pointers to parameters of the Repository.IsCollectionInUse
+type RepositoryMockIsCollectionInUseParamPtrs struct {
+	ctx           *context.Context
+	collectionUID *types.CollectionUIDType
+}
+
+// RepositoryMockIsCollectionInUseResults contains results of the Repository.IsCollectionInUse
+type RepositoryMockIsCollectionInUseResults struct {
+	b1  bool
+	err error
+}
+
+// RepositoryMockIsCollectionInUseOrigins contains origins of expectations of the Repository.IsCollectionInUse
+type RepositoryMockIsCollectionInUseExpectationOrigins struct {
+	origin              string
+	originCtx           string
+	originCollectionUID string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmIsCollectionInUse *mRepositoryMockIsCollectionInUse) Optional() *mRepositoryMockIsCollectionInUse {
+	mmIsCollectionInUse.optional = true
+	return mmIsCollectionInUse
+}
+
+// Expect sets up expected params for Repository.IsCollectionInUse
+func (mmIsCollectionInUse *mRepositoryMockIsCollectionInUse) Expect(ctx context.Context, collectionUID types.CollectionUIDType) *mRepositoryMockIsCollectionInUse {
+	if mmIsCollectionInUse.mock.funcIsCollectionInUse != nil {
+		mmIsCollectionInUse.mock.t.Fatalf("RepositoryMock.IsCollectionInUse mock is already set by Set")
+	}
+
+	if mmIsCollectionInUse.defaultExpectation == nil {
+		mmIsCollectionInUse.defaultExpectation = &RepositoryMockIsCollectionInUseExpectation{}
+	}
+
+	if mmIsCollectionInUse.defaultExpectation.paramPtrs != nil {
+		mmIsCollectionInUse.mock.t.Fatalf("RepositoryMock.IsCollectionInUse mock is already set by ExpectParams functions")
+	}
+
+	mmIsCollectionInUse.defaultExpectation.params = &RepositoryMockIsCollectionInUseParams{ctx, collectionUID}
+	mmIsCollectionInUse.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmIsCollectionInUse.expectations {
+		if minimock.Equal(e.params, mmIsCollectionInUse.defaultExpectation.params) {
+			mmIsCollectionInUse.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmIsCollectionInUse.defaultExpectation.params)
+		}
+	}
+
+	return mmIsCollectionInUse
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.IsCollectionInUse
+func (mmIsCollectionInUse *mRepositoryMockIsCollectionInUse) ExpectCtxParam1(ctx context.Context) *mRepositoryMockIsCollectionInUse {
+	if mmIsCollectionInUse.mock.funcIsCollectionInUse != nil {
+		mmIsCollectionInUse.mock.t.Fatalf("RepositoryMock.IsCollectionInUse mock is already set by Set")
+	}
+
+	if mmIsCollectionInUse.defaultExpectation == nil {
+		mmIsCollectionInUse.defaultExpectation = &RepositoryMockIsCollectionInUseExpectation{}
+	}
+
+	if mmIsCollectionInUse.defaultExpectation.params != nil {
+		mmIsCollectionInUse.mock.t.Fatalf("RepositoryMock.IsCollectionInUse mock is already set by Expect")
+	}
+
+	if mmIsCollectionInUse.defaultExpectation.paramPtrs == nil {
+		mmIsCollectionInUse.defaultExpectation.paramPtrs = &RepositoryMockIsCollectionInUseParamPtrs{}
+	}
+	mmIsCollectionInUse.defaultExpectation.paramPtrs.ctx = &ctx
+	mmIsCollectionInUse.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmIsCollectionInUse
+}
+
+// ExpectCollectionUIDParam2 sets up expected param collectionUID for Repository.IsCollectionInUse
+func (mmIsCollectionInUse *mRepositoryMockIsCollectionInUse) ExpectCollectionUIDParam2(collectionUID types.CollectionUIDType) *mRepositoryMockIsCollectionInUse {
+	if mmIsCollectionInUse.mock.funcIsCollectionInUse != nil {
+		mmIsCollectionInUse.mock.t.Fatalf("RepositoryMock.IsCollectionInUse mock is already set by Set")
+	}
+
+	if mmIsCollectionInUse.defaultExpectation == nil {
+		mmIsCollectionInUse.defaultExpectation = &RepositoryMockIsCollectionInUseExpectation{}
+	}
+
+	if mmIsCollectionInUse.defaultExpectation.params != nil {
+		mmIsCollectionInUse.mock.t.Fatalf("RepositoryMock.IsCollectionInUse mock is already set by Expect")
+	}
+
+	if mmIsCollectionInUse.defaultExpectation.paramPtrs == nil {
+		mmIsCollectionInUse.defaultExpectation.paramPtrs = &RepositoryMockIsCollectionInUseParamPtrs{}
+	}
+	mmIsCollectionInUse.defaultExpectation.paramPtrs.collectionUID = &collectionUID
+	mmIsCollectionInUse.defaultExpectation.expectationOrigins.originCollectionUID = minimock.CallerInfo(1)
+
+	return mmIsCollectionInUse
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.IsCollectionInUse
+func (mmIsCollectionInUse *mRepositoryMockIsCollectionInUse) Inspect(f func(ctx context.Context, collectionUID types.CollectionUIDType)) *mRepositoryMockIsCollectionInUse {
+	if mmIsCollectionInUse.mock.inspectFuncIsCollectionInUse != nil {
+		mmIsCollectionInUse.mock.t.Fatalf("Inspect function is already set for RepositoryMock.IsCollectionInUse")
+	}
+
+	mmIsCollectionInUse.mock.inspectFuncIsCollectionInUse = f
+
+	return mmIsCollectionInUse
+}
+
+// Return sets up results that will be returned by Repository.IsCollectionInUse
+func (mmIsCollectionInUse *mRepositoryMockIsCollectionInUse) Return(b1 bool, err error) *RepositoryMock {
+	if mmIsCollectionInUse.mock.funcIsCollectionInUse != nil {
+		mmIsCollectionInUse.mock.t.Fatalf("RepositoryMock.IsCollectionInUse mock is already set by Set")
+	}
+
+	if mmIsCollectionInUse.defaultExpectation == nil {
+		mmIsCollectionInUse.defaultExpectation = &RepositoryMockIsCollectionInUseExpectation{mock: mmIsCollectionInUse.mock}
+	}
+	mmIsCollectionInUse.defaultExpectation.results = &RepositoryMockIsCollectionInUseResults{b1, err}
+	mmIsCollectionInUse.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmIsCollectionInUse.mock
+}
+
+// Set uses given function f to mock the Repository.IsCollectionInUse method
+func (mmIsCollectionInUse *mRepositoryMockIsCollectionInUse) Set(f func(ctx context.Context, collectionUID types.CollectionUIDType) (b1 bool, err error)) *RepositoryMock {
+	if mmIsCollectionInUse.defaultExpectation != nil {
+		mmIsCollectionInUse.mock.t.Fatalf("Default expectation is already set for the Repository.IsCollectionInUse method")
+	}
+
+	if len(mmIsCollectionInUse.expectations) > 0 {
+		mmIsCollectionInUse.mock.t.Fatalf("Some expectations are already set for the Repository.IsCollectionInUse method")
+	}
+
+	mmIsCollectionInUse.mock.funcIsCollectionInUse = f
+	mmIsCollectionInUse.mock.funcIsCollectionInUseOrigin = minimock.CallerInfo(1)
+	return mmIsCollectionInUse.mock
+}
+
+// When sets expectation for the Repository.IsCollectionInUse which will trigger the result defined by the following
+// Then helper
+func (mmIsCollectionInUse *mRepositoryMockIsCollectionInUse) When(ctx context.Context, collectionUID types.CollectionUIDType) *RepositoryMockIsCollectionInUseExpectation {
+	if mmIsCollectionInUse.mock.funcIsCollectionInUse != nil {
+		mmIsCollectionInUse.mock.t.Fatalf("RepositoryMock.IsCollectionInUse mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockIsCollectionInUseExpectation{
+		mock:               mmIsCollectionInUse.mock,
+		params:             &RepositoryMockIsCollectionInUseParams{ctx, collectionUID},
+		expectationOrigins: RepositoryMockIsCollectionInUseExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmIsCollectionInUse.expectations = append(mmIsCollectionInUse.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.IsCollectionInUse return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockIsCollectionInUseExpectation) Then(b1 bool, err error) *RepositoryMock {
+	e.results = &RepositoryMockIsCollectionInUseResults{b1, err}
+	return e.mock
+}
+
+// Times sets number of times Repository.IsCollectionInUse should be invoked
+func (mmIsCollectionInUse *mRepositoryMockIsCollectionInUse) Times(n uint64) *mRepositoryMockIsCollectionInUse {
+	if n == 0 {
+		mmIsCollectionInUse.mock.t.Fatalf("Times of RepositoryMock.IsCollectionInUse mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmIsCollectionInUse.expectedInvocations, n)
+	mmIsCollectionInUse.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmIsCollectionInUse
+}
+
+func (mmIsCollectionInUse *mRepositoryMockIsCollectionInUse) invocationsDone() bool {
+	if len(mmIsCollectionInUse.expectations) == 0 && mmIsCollectionInUse.defaultExpectation == nil && mmIsCollectionInUse.mock.funcIsCollectionInUse == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmIsCollectionInUse.mock.afterIsCollectionInUseCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmIsCollectionInUse.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// IsCollectionInUse implements mm_repository.Repository
+func (mmIsCollectionInUse *RepositoryMock) IsCollectionInUse(ctx context.Context, collectionUID types.CollectionUIDType) (b1 bool, err error) {
+	mm_atomic.AddUint64(&mmIsCollectionInUse.beforeIsCollectionInUseCounter, 1)
+	defer mm_atomic.AddUint64(&mmIsCollectionInUse.afterIsCollectionInUseCounter, 1)
+
+	mmIsCollectionInUse.t.Helper()
+
+	if mmIsCollectionInUse.inspectFuncIsCollectionInUse != nil {
+		mmIsCollectionInUse.inspectFuncIsCollectionInUse(ctx, collectionUID)
+	}
+
+	mm_params := RepositoryMockIsCollectionInUseParams{ctx, collectionUID}
+
+	// Record call args
+	mmIsCollectionInUse.IsCollectionInUseMock.mutex.Lock()
+	mmIsCollectionInUse.IsCollectionInUseMock.callArgs = append(mmIsCollectionInUse.IsCollectionInUseMock.callArgs, &mm_params)
+	mmIsCollectionInUse.IsCollectionInUseMock.mutex.Unlock()
+
+	for _, e := range mmIsCollectionInUse.IsCollectionInUseMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.b1, e.results.err
+		}
+	}
+
+	if mmIsCollectionInUse.IsCollectionInUseMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmIsCollectionInUse.IsCollectionInUseMock.defaultExpectation.Counter, 1)
+		mm_want := mmIsCollectionInUse.IsCollectionInUseMock.defaultExpectation.params
+		mm_want_ptrs := mmIsCollectionInUse.IsCollectionInUseMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockIsCollectionInUseParams{ctx, collectionUID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmIsCollectionInUse.t.Errorf("RepositoryMock.IsCollectionInUse got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmIsCollectionInUse.IsCollectionInUseMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.collectionUID != nil && !minimock.Equal(*mm_want_ptrs.collectionUID, mm_got.collectionUID) {
+				mmIsCollectionInUse.t.Errorf("RepositoryMock.IsCollectionInUse got unexpected parameter collectionUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmIsCollectionInUse.IsCollectionInUseMock.defaultExpectation.expectationOrigins.originCollectionUID, *mm_want_ptrs.collectionUID, mm_got.collectionUID, minimock.Diff(*mm_want_ptrs.collectionUID, mm_got.collectionUID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmIsCollectionInUse.t.Errorf("RepositoryMock.IsCollectionInUse got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmIsCollectionInUse.IsCollectionInUseMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmIsCollectionInUse.IsCollectionInUseMock.defaultExpectation.results
+		if mm_results == nil {
+			mmIsCollectionInUse.t.Fatal("No results are set for the RepositoryMock.IsCollectionInUse")
+		}
+		return (*mm_results).b1, (*mm_results).err
+	}
+	if mmIsCollectionInUse.funcIsCollectionInUse != nil {
+		return mmIsCollectionInUse.funcIsCollectionInUse(ctx, collectionUID)
+	}
+	mmIsCollectionInUse.t.Fatalf("Unexpected call to RepositoryMock.IsCollectionInUse. %v %v", ctx, collectionUID)
+	return
+}
+
+// IsCollectionInUseAfterCounter returns a count of finished RepositoryMock.IsCollectionInUse invocations
+func (mmIsCollectionInUse *RepositoryMock) IsCollectionInUseAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmIsCollectionInUse.afterIsCollectionInUseCounter)
+}
+
+// IsCollectionInUseBeforeCounter returns a count of RepositoryMock.IsCollectionInUse invocations
+func (mmIsCollectionInUse *RepositoryMock) IsCollectionInUseBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmIsCollectionInUse.beforeIsCollectionInUseCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.IsCollectionInUse.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmIsCollectionInUse *mRepositoryMockIsCollectionInUse) Calls() []*RepositoryMockIsCollectionInUseParams {
+	mmIsCollectionInUse.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockIsCollectionInUseParams, len(mmIsCollectionInUse.callArgs))
+	copy(argCopy, mmIsCollectionInUse.callArgs)
+
+	mmIsCollectionInUse.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockIsCollectionInUseDone returns true if the count of the IsCollectionInUse invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockIsCollectionInUseDone() bool {
+	if m.IsCollectionInUseMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.IsCollectionInUseMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.IsCollectionInUseMock.invocationsDone()
+}
+
+// MinimockIsCollectionInUseInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockIsCollectionInUseInspect() {
+	for _, e := range m.IsCollectionInUseMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.IsCollectionInUse at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterIsCollectionInUseCounter := mm_atomic.LoadUint64(&m.afterIsCollectionInUseCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.IsCollectionInUseMock.defaultExpectation != nil && afterIsCollectionInUseCounter < 1 {
+		if m.IsCollectionInUseMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.IsCollectionInUse at\n%s", m.IsCollectionInUseMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.IsCollectionInUse at\n%s with params: %#v", m.IsCollectionInUseMock.defaultExpectation.expectationOrigins.origin, *m.IsCollectionInUseMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcIsCollectionInUse != nil && afterIsCollectionInUseCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.IsCollectionInUse at\n%s", m.funcIsCollectionInUseOrigin)
+	}
+
+	if !m.IsCollectionInUseMock.invocationsDone() && afterIsCollectionInUseCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.IsCollectionInUse at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.IsCollectionInUseMock.expectedInvocations), m.IsCollectionInUseMock.expectedInvocationsOrigin, afterIsCollectionInUseCounter)
+	}
+}
+
+type mRepositoryMockIsKBUpdating struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockIsKBUpdatingExpectation
+	expectations       []*RepositoryMockIsKBUpdatingExpectation
+
+	callArgs []*RepositoryMockIsKBUpdatingParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockIsKBUpdatingExpectation specifies expectation struct of the Repository.IsKBUpdating
+type RepositoryMockIsKBUpdatingExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockIsKBUpdatingParams
+	paramPtrs          *RepositoryMockIsKBUpdatingParamPtrs
+	expectationOrigins RepositoryMockIsKBUpdatingExpectationOrigins
+	results            *RepositoryMockIsKBUpdatingResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockIsKBUpdatingParams contains parameters of the Repository.IsKBUpdating
+type RepositoryMockIsKBUpdatingParams struct {
+	ctx   context.Context
+	kbUID types.KBUIDType
+}
+
+// RepositoryMockIsKBUpdatingParamPtrs contains pointers to parameters of the Repository.IsKBUpdating
+type RepositoryMockIsKBUpdatingParamPtrs struct {
+	ctx   *context.Context
+	kbUID *types.KBUIDType
+}
+
+// RepositoryMockIsKBUpdatingResults contains results of the Repository.IsKBUpdating
+type RepositoryMockIsKBUpdatingResults struct {
+	b1  bool
+	err error
+}
+
+// RepositoryMockIsKBUpdatingOrigins contains origins of expectations of the Repository.IsKBUpdating
+type RepositoryMockIsKBUpdatingExpectationOrigins struct {
+	origin      string
+	originCtx   string
+	originKbUID string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmIsKBUpdating *mRepositoryMockIsKBUpdating) Optional() *mRepositoryMockIsKBUpdating {
+	mmIsKBUpdating.optional = true
+	return mmIsKBUpdating
+}
+
+// Expect sets up expected params for Repository.IsKBUpdating
+func (mmIsKBUpdating *mRepositoryMockIsKBUpdating) Expect(ctx context.Context, kbUID types.KBUIDType) *mRepositoryMockIsKBUpdating {
+	if mmIsKBUpdating.mock.funcIsKBUpdating != nil {
+		mmIsKBUpdating.mock.t.Fatalf("RepositoryMock.IsKBUpdating mock is already set by Set")
+	}
+
+	if mmIsKBUpdating.defaultExpectation == nil {
+		mmIsKBUpdating.defaultExpectation = &RepositoryMockIsKBUpdatingExpectation{}
+	}
+
+	if mmIsKBUpdating.defaultExpectation.paramPtrs != nil {
+		mmIsKBUpdating.mock.t.Fatalf("RepositoryMock.IsKBUpdating mock is already set by ExpectParams functions")
+	}
+
+	mmIsKBUpdating.defaultExpectation.params = &RepositoryMockIsKBUpdatingParams{ctx, kbUID}
+	mmIsKBUpdating.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmIsKBUpdating.expectations {
+		if minimock.Equal(e.params, mmIsKBUpdating.defaultExpectation.params) {
+			mmIsKBUpdating.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmIsKBUpdating.defaultExpectation.params)
+		}
+	}
+
+	return mmIsKBUpdating
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.IsKBUpdating
+func (mmIsKBUpdating *mRepositoryMockIsKBUpdating) ExpectCtxParam1(ctx context.Context) *mRepositoryMockIsKBUpdating {
+	if mmIsKBUpdating.mock.funcIsKBUpdating != nil {
+		mmIsKBUpdating.mock.t.Fatalf("RepositoryMock.IsKBUpdating mock is already set by Set")
+	}
+
+	if mmIsKBUpdating.defaultExpectation == nil {
+		mmIsKBUpdating.defaultExpectation = &RepositoryMockIsKBUpdatingExpectation{}
+	}
+
+	if mmIsKBUpdating.defaultExpectation.params != nil {
+		mmIsKBUpdating.mock.t.Fatalf("RepositoryMock.IsKBUpdating mock is already set by Expect")
+	}
+
+	if mmIsKBUpdating.defaultExpectation.paramPtrs == nil {
+		mmIsKBUpdating.defaultExpectation.paramPtrs = &RepositoryMockIsKBUpdatingParamPtrs{}
+	}
+	mmIsKBUpdating.defaultExpectation.paramPtrs.ctx = &ctx
+	mmIsKBUpdating.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmIsKBUpdating
+}
+
+// ExpectKbUIDParam2 sets up expected param kbUID for Repository.IsKBUpdating
+func (mmIsKBUpdating *mRepositoryMockIsKBUpdating) ExpectKbUIDParam2(kbUID types.KBUIDType) *mRepositoryMockIsKBUpdating {
+	if mmIsKBUpdating.mock.funcIsKBUpdating != nil {
+		mmIsKBUpdating.mock.t.Fatalf("RepositoryMock.IsKBUpdating mock is already set by Set")
+	}
+
+	if mmIsKBUpdating.defaultExpectation == nil {
+		mmIsKBUpdating.defaultExpectation = &RepositoryMockIsKBUpdatingExpectation{}
+	}
+
+	if mmIsKBUpdating.defaultExpectation.params != nil {
+		mmIsKBUpdating.mock.t.Fatalf("RepositoryMock.IsKBUpdating mock is already set by Expect")
+	}
+
+	if mmIsKBUpdating.defaultExpectation.paramPtrs == nil {
+		mmIsKBUpdating.defaultExpectation.paramPtrs = &RepositoryMockIsKBUpdatingParamPtrs{}
+	}
+	mmIsKBUpdating.defaultExpectation.paramPtrs.kbUID = &kbUID
+	mmIsKBUpdating.defaultExpectation.expectationOrigins.originKbUID = minimock.CallerInfo(1)
+
+	return mmIsKBUpdating
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.IsKBUpdating
+func (mmIsKBUpdating *mRepositoryMockIsKBUpdating) Inspect(f func(ctx context.Context, kbUID types.KBUIDType)) *mRepositoryMockIsKBUpdating {
+	if mmIsKBUpdating.mock.inspectFuncIsKBUpdating != nil {
+		mmIsKBUpdating.mock.t.Fatalf("Inspect function is already set for RepositoryMock.IsKBUpdating")
+	}
+
+	mmIsKBUpdating.mock.inspectFuncIsKBUpdating = f
+
+	return mmIsKBUpdating
+}
+
+// Return sets up results that will be returned by Repository.IsKBUpdating
+func (mmIsKBUpdating *mRepositoryMockIsKBUpdating) Return(b1 bool, err error) *RepositoryMock {
+	if mmIsKBUpdating.mock.funcIsKBUpdating != nil {
+		mmIsKBUpdating.mock.t.Fatalf("RepositoryMock.IsKBUpdating mock is already set by Set")
+	}
+
+	if mmIsKBUpdating.defaultExpectation == nil {
+		mmIsKBUpdating.defaultExpectation = &RepositoryMockIsKBUpdatingExpectation{mock: mmIsKBUpdating.mock}
+	}
+	mmIsKBUpdating.defaultExpectation.results = &RepositoryMockIsKBUpdatingResults{b1, err}
+	mmIsKBUpdating.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmIsKBUpdating.mock
+}
+
+// Set uses given function f to mock the Repository.IsKBUpdating method
+func (mmIsKBUpdating *mRepositoryMockIsKBUpdating) Set(f func(ctx context.Context, kbUID types.KBUIDType) (b1 bool, err error)) *RepositoryMock {
+	if mmIsKBUpdating.defaultExpectation != nil {
+		mmIsKBUpdating.mock.t.Fatalf("Default expectation is already set for the Repository.IsKBUpdating method")
+	}
+
+	if len(mmIsKBUpdating.expectations) > 0 {
+		mmIsKBUpdating.mock.t.Fatalf("Some expectations are already set for the Repository.IsKBUpdating method")
+	}
+
+	mmIsKBUpdating.mock.funcIsKBUpdating = f
+	mmIsKBUpdating.mock.funcIsKBUpdatingOrigin = minimock.CallerInfo(1)
+	return mmIsKBUpdating.mock
+}
+
+// When sets expectation for the Repository.IsKBUpdating which will trigger the result defined by the following
+// Then helper
+func (mmIsKBUpdating *mRepositoryMockIsKBUpdating) When(ctx context.Context, kbUID types.KBUIDType) *RepositoryMockIsKBUpdatingExpectation {
+	if mmIsKBUpdating.mock.funcIsKBUpdating != nil {
+		mmIsKBUpdating.mock.t.Fatalf("RepositoryMock.IsKBUpdating mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockIsKBUpdatingExpectation{
+		mock:               mmIsKBUpdating.mock,
+		params:             &RepositoryMockIsKBUpdatingParams{ctx, kbUID},
+		expectationOrigins: RepositoryMockIsKBUpdatingExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmIsKBUpdating.expectations = append(mmIsKBUpdating.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.IsKBUpdating return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockIsKBUpdatingExpectation) Then(b1 bool, err error) *RepositoryMock {
+	e.results = &RepositoryMockIsKBUpdatingResults{b1, err}
+	return e.mock
+}
+
+// Times sets number of times Repository.IsKBUpdating should be invoked
+func (mmIsKBUpdating *mRepositoryMockIsKBUpdating) Times(n uint64) *mRepositoryMockIsKBUpdating {
+	if n == 0 {
+		mmIsKBUpdating.mock.t.Fatalf("Times of RepositoryMock.IsKBUpdating mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmIsKBUpdating.expectedInvocations, n)
+	mmIsKBUpdating.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmIsKBUpdating
+}
+
+func (mmIsKBUpdating *mRepositoryMockIsKBUpdating) invocationsDone() bool {
+	if len(mmIsKBUpdating.expectations) == 0 && mmIsKBUpdating.defaultExpectation == nil && mmIsKBUpdating.mock.funcIsKBUpdating == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmIsKBUpdating.mock.afterIsKBUpdatingCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmIsKBUpdating.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// IsKBUpdating implements mm_repository.Repository
+func (mmIsKBUpdating *RepositoryMock) IsKBUpdating(ctx context.Context, kbUID types.KBUIDType) (b1 bool, err error) {
+	mm_atomic.AddUint64(&mmIsKBUpdating.beforeIsKBUpdatingCounter, 1)
+	defer mm_atomic.AddUint64(&mmIsKBUpdating.afterIsKBUpdatingCounter, 1)
+
+	mmIsKBUpdating.t.Helper()
+
+	if mmIsKBUpdating.inspectFuncIsKBUpdating != nil {
+		mmIsKBUpdating.inspectFuncIsKBUpdating(ctx, kbUID)
+	}
+
+	mm_params := RepositoryMockIsKBUpdatingParams{ctx, kbUID}
+
+	// Record call args
+	mmIsKBUpdating.IsKBUpdatingMock.mutex.Lock()
+	mmIsKBUpdating.IsKBUpdatingMock.callArgs = append(mmIsKBUpdating.IsKBUpdatingMock.callArgs, &mm_params)
+	mmIsKBUpdating.IsKBUpdatingMock.mutex.Unlock()
+
+	for _, e := range mmIsKBUpdating.IsKBUpdatingMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.b1, e.results.err
+		}
+	}
+
+	if mmIsKBUpdating.IsKBUpdatingMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmIsKBUpdating.IsKBUpdatingMock.defaultExpectation.Counter, 1)
+		mm_want := mmIsKBUpdating.IsKBUpdatingMock.defaultExpectation.params
+		mm_want_ptrs := mmIsKBUpdating.IsKBUpdatingMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockIsKBUpdatingParams{ctx, kbUID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmIsKBUpdating.t.Errorf("RepositoryMock.IsKBUpdating got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmIsKBUpdating.IsKBUpdatingMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.kbUID != nil && !minimock.Equal(*mm_want_ptrs.kbUID, mm_got.kbUID) {
+				mmIsKBUpdating.t.Errorf("RepositoryMock.IsKBUpdating got unexpected parameter kbUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmIsKBUpdating.IsKBUpdatingMock.defaultExpectation.expectationOrigins.originKbUID, *mm_want_ptrs.kbUID, mm_got.kbUID, minimock.Diff(*mm_want_ptrs.kbUID, mm_got.kbUID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmIsKBUpdating.t.Errorf("RepositoryMock.IsKBUpdating got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmIsKBUpdating.IsKBUpdatingMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmIsKBUpdating.IsKBUpdatingMock.defaultExpectation.results
+		if mm_results == nil {
+			mmIsKBUpdating.t.Fatal("No results are set for the RepositoryMock.IsKBUpdating")
+		}
+		return (*mm_results).b1, (*mm_results).err
+	}
+	if mmIsKBUpdating.funcIsKBUpdating != nil {
+		return mmIsKBUpdating.funcIsKBUpdating(ctx, kbUID)
+	}
+	mmIsKBUpdating.t.Fatalf("Unexpected call to RepositoryMock.IsKBUpdating. %v %v", ctx, kbUID)
+	return
+}
+
+// IsKBUpdatingAfterCounter returns a count of finished RepositoryMock.IsKBUpdating invocations
+func (mmIsKBUpdating *RepositoryMock) IsKBUpdatingAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmIsKBUpdating.afterIsKBUpdatingCounter)
+}
+
+// IsKBUpdatingBeforeCounter returns a count of RepositoryMock.IsKBUpdating invocations
+func (mmIsKBUpdating *RepositoryMock) IsKBUpdatingBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmIsKBUpdating.beforeIsKBUpdatingCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.IsKBUpdating.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmIsKBUpdating *mRepositoryMockIsKBUpdating) Calls() []*RepositoryMockIsKBUpdatingParams {
+	mmIsKBUpdating.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockIsKBUpdatingParams, len(mmIsKBUpdating.callArgs))
+	copy(argCopy, mmIsKBUpdating.callArgs)
+
+	mmIsKBUpdating.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockIsKBUpdatingDone returns true if the count of the IsKBUpdating invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockIsKBUpdatingDone() bool {
+	if m.IsKBUpdatingMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.IsKBUpdatingMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.IsKBUpdatingMock.invocationsDone()
+}
+
+// MinimockIsKBUpdatingInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockIsKBUpdatingInspect() {
+	for _, e := range m.IsKBUpdatingMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.IsKBUpdating at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterIsKBUpdatingCounter := mm_atomic.LoadUint64(&m.afterIsKBUpdatingCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.IsKBUpdatingMock.defaultExpectation != nil && afterIsKBUpdatingCounter < 1 {
+		if m.IsKBUpdatingMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.IsKBUpdating at\n%s", m.IsKBUpdatingMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.IsKBUpdating at\n%s with params: %#v", m.IsKBUpdatingMock.defaultExpectation.expectationOrigins.origin, *m.IsKBUpdatingMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcIsKBUpdating != nil && afterIsKBUpdatingCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.IsKBUpdating at\n%s", m.funcIsKBUpdatingOrigin)
+	}
+
+	if !m.IsKBUpdatingMock.invocationsDone() && afterIsKBUpdatingCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.IsKBUpdating at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.IsKBUpdatingMock.expectedInvocations), m.IsKBUpdatingMock.expectedInvocationsOrigin, afterIsKBUpdatingCounter)
+	}
+}
+
 type mRepositoryMockListAllObjectURLs struct {
 	optional           bool
 	mock               *RepositoryMock
@@ -26048,6 +31639,1035 @@ func (m *RepositoryMock) MinimockListKnowledgeBasesByCatalogTypeInspect() {
 	}
 }
 
+type mRepositoryMockListKnowledgeBasesByUpdateStatus struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockListKnowledgeBasesByUpdateStatusExpectation
+	expectations       []*RepositoryMockListKnowledgeBasesByUpdateStatusExpectation
+
+	callArgs []*RepositoryMockListKnowledgeBasesByUpdateStatusParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockListKnowledgeBasesByUpdateStatusExpectation specifies expectation struct of the Repository.ListKnowledgeBasesByUpdateStatus
+type RepositoryMockListKnowledgeBasesByUpdateStatusExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockListKnowledgeBasesByUpdateStatusParams
+	paramPtrs          *RepositoryMockListKnowledgeBasesByUpdateStatusParamPtrs
+	expectationOrigins RepositoryMockListKnowledgeBasesByUpdateStatusExpectationOrigins
+	results            *RepositoryMockListKnowledgeBasesByUpdateStatusResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockListKnowledgeBasesByUpdateStatusParams contains parameters of the Repository.ListKnowledgeBasesByUpdateStatus
+type RepositoryMockListKnowledgeBasesByUpdateStatusParams struct {
+	ctx          context.Context
+	updateStatus string
+}
+
+// RepositoryMockListKnowledgeBasesByUpdateStatusParamPtrs contains pointers to parameters of the Repository.ListKnowledgeBasesByUpdateStatus
+type RepositoryMockListKnowledgeBasesByUpdateStatusParamPtrs struct {
+	ctx          *context.Context
+	updateStatus *string
+}
+
+// RepositoryMockListKnowledgeBasesByUpdateStatusResults contains results of the Repository.ListKnowledgeBasesByUpdateStatus
+type RepositoryMockListKnowledgeBasesByUpdateStatusResults struct {
+	ka1 []mm_repository.KnowledgeBaseModel
+	err error
+}
+
+// RepositoryMockListKnowledgeBasesByUpdateStatusOrigins contains origins of expectations of the Repository.ListKnowledgeBasesByUpdateStatus
+type RepositoryMockListKnowledgeBasesByUpdateStatusExpectationOrigins struct {
+	origin             string
+	originCtx          string
+	originUpdateStatus string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmListKnowledgeBasesByUpdateStatus *mRepositoryMockListKnowledgeBasesByUpdateStatus) Optional() *mRepositoryMockListKnowledgeBasesByUpdateStatus {
+	mmListKnowledgeBasesByUpdateStatus.optional = true
+	return mmListKnowledgeBasesByUpdateStatus
+}
+
+// Expect sets up expected params for Repository.ListKnowledgeBasesByUpdateStatus
+func (mmListKnowledgeBasesByUpdateStatus *mRepositoryMockListKnowledgeBasesByUpdateStatus) Expect(ctx context.Context, updateStatus string) *mRepositoryMockListKnowledgeBasesByUpdateStatus {
+	if mmListKnowledgeBasesByUpdateStatus.mock.funcListKnowledgeBasesByUpdateStatus != nil {
+		mmListKnowledgeBasesByUpdateStatus.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByUpdateStatus mock is already set by Set")
+	}
+
+	if mmListKnowledgeBasesByUpdateStatus.defaultExpectation == nil {
+		mmListKnowledgeBasesByUpdateStatus.defaultExpectation = &RepositoryMockListKnowledgeBasesByUpdateStatusExpectation{}
+	}
+
+	if mmListKnowledgeBasesByUpdateStatus.defaultExpectation.paramPtrs != nil {
+		mmListKnowledgeBasesByUpdateStatus.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByUpdateStatus mock is already set by ExpectParams functions")
+	}
+
+	mmListKnowledgeBasesByUpdateStatus.defaultExpectation.params = &RepositoryMockListKnowledgeBasesByUpdateStatusParams{ctx, updateStatus}
+	mmListKnowledgeBasesByUpdateStatus.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmListKnowledgeBasesByUpdateStatus.expectations {
+		if minimock.Equal(e.params, mmListKnowledgeBasesByUpdateStatus.defaultExpectation.params) {
+			mmListKnowledgeBasesByUpdateStatus.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmListKnowledgeBasesByUpdateStatus.defaultExpectation.params)
+		}
+	}
+
+	return mmListKnowledgeBasesByUpdateStatus
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.ListKnowledgeBasesByUpdateStatus
+func (mmListKnowledgeBasesByUpdateStatus *mRepositoryMockListKnowledgeBasesByUpdateStatus) ExpectCtxParam1(ctx context.Context) *mRepositoryMockListKnowledgeBasesByUpdateStatus {
+	if mmListKnowledgeBasesByUpdateStatus.mock.funcListKnowledgeBasesByUpdateStatus != nil {
+		mmListKnowledgeBasesByUpdateStatus.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByUpdateStatus mock is already set by Set")
+	}
+
+	if mmListKnowledgeBasesByUpdateStatus.defaultExpectation == nil {
+		mmListKnowledgeBasesByUpdateStatus.defaultExpectation = &RepositoryMockListKnowledgeBasesByUpdateStatusExpectation{}
+	}
+
+	if mmListKnowledgeBasesByUpdateStatus.defaultExpectation.params != nil {
+		mmListKnowledgeBasesByUpdateStatus.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByUpdateStatus mock is already set by Expect")
+	}
+
+	if mmListKnowledgeBasesByUpdateStatus.defaultExpectation.paramPtrs == nil {
+		mmListKnowledgeBasesByUpdateStatus.defaultExpectation.paramPtrs = &RepositoryMockListKnowledgeBasesByUpdateStatusParamPtrs{}
+	}
+	mmListKnowledgeBasesByUpdateStatus.defaultExpectation.paramPtrs.ctx = &ctx
+	mmListKnowledgeBasesByUpdateStatus.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmListKnowledgeBasesByUpdateStatus
+}
+
+// ExpectUpdateStatusParam2 sets up expected param updateStatus for Repository.ListKnowledgeBasesByUpdateStatus
+func (mmListKnowledgeBasesByUpdateStatus *mRepositoryMockListKnowledgeBasesByUpdateStatus) ExpectUpdateStatusParam2(updateStatus string) *mRepositoryMockListKnowledgeBasesByUpdateStatus {
+	if mmListKnowledgeBasesByUpdateStatus.mock.funcListKnowledgeBasesByUpdateStatus != nil {
+		mmListKnowledgeBasesByUpdateStatus.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByUpdateStatus mock is already set by Set")
+	}
+
+	if mmListKnowledgeBasesByUpdateStatus.defaultExpectation == nil {
+		mmListKnowledgeBasesByUpdateStatus.defaultExpectation = &RepositoryMockListKnowledgeBasesByUpdateStatusExpectation{}
+	}
+
+	if mmListKnowledgeBasesByUpdateStatus.defaultExpectation.params != nil {
+		mmListKnowledgeBasesByUpdateStatus.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByUpdateStatus mock is already set by Expect")
+	}
+
+	if mmListKnowledgeBasesByUpdateStatus.defaultExpectation.paramPtrs == nil {
+		mmListKnowledgeBasesByUpdateStatus.defaultExpectation.paramPtrs = &RepositoryMockListKnowledgeBasesByUpdateStatusParamPtrs{}
+	}
+	mmListKnowledgeBasesByUpdateStatus.defaultExpectation.paramPtrs.updateStatus = &updateStatus
+	mmListKnowledgeBasesByUpdateStatus.defaultExpectation.expectationOrigins.originUpdateStatus = minimock.CallerInfo(1)
+
+	return mmListKnowledgeBasesByUpdateStatus
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.ListKnowledgeBasesByUpdateStatus
+func (mmListKnowledgeBasesByUpdateStatus *mRepositoryMockListKnowledgeBasesByUpdateStatus) Inspect(f func(ctx context.Context, updateStatus string)) *mRepositoryMockListKnowledgeBasesByUpdateStatus {
+	if mmListKnowledgeBasesByUpdateStatus.mock.inspectFuncListKnowledgeBasesByUpdateStatus != nil {
+		mmListKnowledgeBasesByUpdateStatus.mock.t.Fatalf("Inspect function is already set for RepositoryMock.ListKnowledgeBasesByUpdateStatus")
+	}
+
+	mmListKnowledgeBasesByUpdateStatus.mock.inspectFuncListKnowledgeBasesByUpdateStatus = f
+
+	return mmListKnowledgeBasesByUpdateStatus
+}
+
+// Return sets up results that will be returned by Repository.ListKnowledgeBasesByUpdateStatus
+func (mmListKnowledgeBasesByUpdateStatus *mRepositoryMockListKnowledgeBasesByUpdateStatus) Return(ka1 []mm_repository.KnowledgeBaseModel, err error) *RepositoryMock {
+	if mmListKnowledgeBasesByUpdateStatus.mock.funcListKnowledgeBasesByUpdateStatus != nil {
+		mmListKnowledgeBasesByUpdateStatus.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByUpdateStatus mock is already set by Set")
+	}
+
+	if mmListKnowledgeBasesByUpdateStatus.defaultExpectation == nil {
+		mmListKnowledgeBasesByUpdateStatus.defaultExpectation = &RepositoryMockListKnowledgeBasesByUpdateStatusExpectation{mock: mmListKnowledgeBasesByUpdateStatus.mock}
+	}
+	mmListKnowledgeBasesByUpdateStatus.defaultExpectation.results = &RepositoryMockListKnowledgeBasesByUpdateStatusResults{ka1, err}
+	mmListKnowledgeBasesByUpdateStatus.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmListKnowledgeBasesByUpdateStatus.mock
+}
+
+// Set uses given function f to mock the Repository.ListKnowledgeBasesByUpdateStatus method
+func (mmListKnowledgeBasesByUpdateStatus *mRepositoryMockListKnowledgeBasesByUpdateStatus) Set(f func(ctx context.Context, updateStatus string) (ka1 []mm_repository.KnowledgeBaseModel, err error)) *RepositoryMock {
+	if mmListKnowledgeBasesByUpdateStatus.defaultExpectation != nil {
+		mmListKnowledgeBasesByUpdateStatus.mock.t.Fatalf("Default expectation is already set for the Repository.ListKnowledgeBasesByUpdateStatus method")
+	}
+
+	if len(mmListKnowledgeBasesByUpdateStatus.expectations) > 0 {
+		mmListKnowledgeBasesByUpdateStatus.mock.t.Fatalf("Some expectations are already set for the Repository.ListKnowledgeBasesByUpdateStatus method")
+	}
+
+	mmListKnowledgeBasesByUpdateStatus.mock.funcListKnowledgeBasesByUpdateStatus = f
+	mmListKnowledgeBasesByUpdateStatus.mock.funcListKnowledgeBasesByUpdateStatusOrigin = minimock.CallerInfo(1)
+	return mmListKnowledgeBasesByUpdateStatus.mock
+}
+
+// When sets expectation for the Repository.ListKnowledgeBasesByUpdateStatus which will trigger the result defined by the following
+// Then helper
+func (mmListKnowledgeBasesByUpdateStatus *mRepositoryMockListKnowledgeBasesByUpdateStatus) When(ctx context.Context, updateStatus string) *RepositoryMockListKnowledgeBasesByUpdateStatusExpectation {
+	if mmListKnowledgeBasesByUpdateStatus.mock.funcListKnowledgeBasesByUpdateStatus != nil {
+		mmListKnowledgeBasesByUpdateStatus.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByUpdateStatus mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockListKnowledgeBasesByUpdateStatusExpectation{
+		mock:               mmListKnowledgeBasesByUpdateStatus.mock,
+		params:             &RepositoryMockListKnowledgeBasesByUpdateStatusParams{ctx, updateStatus},
+		expectationOrigins: RepositoryMockListKnowledgeBasesByUpdateStatusExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmListKnowledgeBasesByUpdateStatus.expectations = append(mmListKnowledgeBasesByUpdateStatus.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.ListKnowledgeBasesByUpdateStatus return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockListKnowledgeBasesByUpdateStatusExpectation) Then(ka1 []mm_repository.KnowledgeBaseModel, err error) *RepositoryMock {
+	e.results = &RepositoryMockListKnowledgeBasesByUpdateStatusResults{ka1, err}
+	return e.mock
+}
+
+// Times sets number of times Repository.ListKnowledgeBasesByUpdateStatus should be invoked
+func (mmListKnowledgeBasesByUpdateStatus *mRepositoryMockListKnowledgeBasesByUpdateStatus) Times(n uint64) *mRepositoryMockListKnowledgeBasesByUpdateStatus {
+	if n == 0 {
+		mmListKnowledgeBasesByUpdateStatus.mock.t.Fatalf("Times of RepositoryMock.ListKnowledgeBasesByUpdateStatus mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmListKnowledgeBasesByUpdateStatus.expectedInvocations, n)
+	mmListKnowledgeBasesByUpdateStatus.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmListKnowledgeBasesByUpdateStatus
+}
+
+func (mmListKnowledgeBasesByUpdateStatus *mRepositoryMockListKnowledgeBasesByUpdateStatus) invocationsDone() bool {
+	if len(mmListKnowledgeBasesByUpdateStatus.expectations) == 0 && mmListKnowledgeBasesByUpdateStatus.defaultExpectation == nil && mmListKnowledgeBasesByUpdateStatus.mock.funcListKnowledgeBasesByUpdateStatus == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmListKnowledgeBasesByUpdateStatus.mock.afterListKnowledgeBasesByUpdateStatusCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmListKnowledgeBasesByUpdateStatus.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// ListKnowledgeBasesByUpdateStatus implements mm_repository.Repository
+func (mmListKnowledgeBasesByUpdateStatus *RepositoryMock) ListKnowledgeBasesByUpdateStatus(ctx context.Context, updateStatus string) (ka1 []mm_repository.KnowledgeBaseModel, err error) {
+	mm_atomic.AddUint64(&mmListKnowledgeBasesByUpdateStatus.beforeListKnowledgeBasesByUpdateStatusCounter, 1)
+	defer mm_atomic.AddUint64(&mmListKnowledgeBasesByUpdateStatus.afterListKnowledgeBasesByUpdateStatusCounter, 1)
+
+	mmListKnowledgeBasesByUpdateStatus.t.Helper()
+
+	if mmListKnowledgeBasesByUpdateStatus.inspectFuncListKnowledgeBasesByUpdateStatus != nil {
+		mmListKnowledgeBasesByUpdateStatus.inspectFuncListKnowledgeBasesByUpdateStatus(ctx, updateStatus)
+	}
+
+	mm_params := RepositoryMockListKnowledgeBasesByUpdateStatusParams{ctx, updateStatus}
+
+	// Record call args
+	mmListKnowledgeBasesByUpdateStatus.ListKnowledgeBasesByUpdateStatusMock.mutex.Lock()
+	mmListKnowledgeBasesByUpdateStatus.ListKnowledgeBasesByUpdateStatusMock.callArgs = append(mmListKnowledgeBasesByUpdateStatus.ListKnowledgeBasesByUpdateStatusMock.callArgs, &mm_params)
+	mmListKnowledgeBasesByUpdateStatus.ListKnowledgeBasesByUpdateStatusMock.mutex.Unlock()
+
+	for _, e := range mmListKnowledgeBasesByUpdateStatus.ListKnowledgeBasesByUpdateStatusMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.ka1, e.results.err
+		}
+	}
+
+	if mmListKnowledgeBasesByUpdateStatus.ListKnowledgeBasesByUpdateStatusMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmListKnowledgeBasesByUpdateStatus.ListKnowledgeBasesByUpdateStatusMock.defaultExpectation.Counter, 1)
+		mm_want := mmListKnowledgeBasesByUpdateStatus.ListKnowledgeBasesByUpdateStatusMock.defaultExpectation.params
+		mm_want_ptrs := mmListKnowledgeBasesByUpdateStatus.ListKnowledgeBasesByUpdateStatusMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockListKnowledgeBasesByUpdateStatusParams{ctx, updateStatus}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmListKnowledgeBasesByUpdateStatus.t.Errorf("RepositoryMock.ListKnowledgeBasesByUpdateStatus got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmListKnowledgeBasesByUpdateStatus.ListKnowledgeBasesByUpdateStatusMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.updateStatus != nil && !minimock.Equal(*mm_want_ptrs.updateStatus, mm_got.updateStatus) {
+				mmListKnowledgeBasesByUpdateStatus.t.Errorf("RepositoryMock.ListKnowledgeBasesByUpdateStatus got unexpected parameter updateStatus, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmListKnowledgeBasesByUpdateStatus.ListKnowledgeBasesByUpdateStatusMock.defaultExpectation.expectationOrigins.originUpdateStatus, *mm_want_ptrs.updateStatus, mm_got.updateStatus, minimock.Diff(*mm_want_ptrs.updateStatus, mm_got.updateStatus))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmListKnowledgeBasesByUpdateStatus.t.Errorf("RepositoryMock.ListKnowledgeBasesByUpdateStatus got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmListKnowledgeBasesByUpdateStatus.ListKnowledgeBasesByUpdateStatusMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmListKnowledgeBasesByUpdateStatus.ListKnowledgeBasesByUpdateStatusMock.defaultExpectation.results
+		if mm_results == nil {
+			mmListKnowledgeBasesByUpdateStatus.t.Fatal("No results are set for the RepositoryMock.ListKnowledgeBasesByUpdateStatus")
+		}
+		return (*mm_results).ka1, (*mm_results).err
+	}
+	if mmListKnowledgeBasesByUpdateStatus.funcListKnowledgeBasesByUpdateStatus != nil {
+		return mmListKnowledgeBasesByUpdateStatus.funcListKnowledgeBasesByUpdateStatus(ctx, updateStatus)
+	}
+	mmListKnowledgeBasesByUpdateStatus.t.Fatalf("Unexpected call to RepositoryMock.ListKnowledgeBasesByUpdateStatus. %v %v", ctx, updateStatus)
+	return
+}
+
+// ListKnowledgeBasesByUpdateStatusAfterCounter returns a count of finished RepositoryMock.ListKnowledgeBasesByUpdateStatus invocations
+func (mmListKnowledgeBasesByUpdateStatus *RepositoryMock) ListKnowledgeBasesByUpdateStatusAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmListKnowledgeBasesByUpdateStatus.afterListKnowledgeBasesByUpdateStatusCounter)
+}
+
+// ListKnowledgeBasesByUpdateStatusBeforeCounter returns a count of RepositoryMock.ListKnowledgeBasesByUpdateStatus invocations
+func (mmListKnowledgeBasesByUpdateStatus *RepositoryMock) ListKnowledgeBasesByUpdateStatusBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmListKnowledgeBasesByUpdateStatus.beforeListKnowledgeBasesByUpdateStatusCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.ListKnowledgeBasesByUpdateStatus.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmListKnowledgeBasesByUpdateStatus *mRepositoryMockListKnowledgeBasesByUpdateStatus) Calls() []*RepositoryMockListKnowledgeBasesByUpdateStatusParams {
+	mmListKnowledgeBasesByUpdateStatus.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockListKnowledgeBasesByUpdateStatusParams, len(mmListKnowledgeBasesByUpdateStatus.callArgs))
+	copy(argCopy, mmListKnowledgeBasesByUpdateStatus.callArgs)
+
+	mmListKnowledgeBasesByUpdateStatus.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockListKnowledgeBasesByUpdateStatusDone returns true if the count of the ListKnowledgeBasesByUpdateStatus invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockListKnowledgeBasesByUpdateStatusDone() bool {
+	if m.ListKnowledgeBasesByUpdateStatusMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.ListKnowledgeBasesByUpdateStatusMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.ListKnowledgeBasesByUpdateStatusMock.invocationsDone()
+}
+
+// MinimockListKnowledgeBasesByUpdateStatusInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockListKnowledgeBasesByUpdateStatusInspect() {
+	for _, e := range m.ListKnowledgeBasesByUpdateStatusMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.ListKnowledgeBasesByUpdateStatus at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterListKnowledgeBasesByUpdateStatusCounter := mm_atomic.LoadUint64(&m.afterListKnowledgeBasesByUpdateStatusCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.ListKnowledgeBasesByUpdateStatusMock.defaultExpectation != nil && afterListKnowledgeBasesByUpdateStatusCounter < 1 {
+		if m.ListKnowledgeBasesByUpdateStatusMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.ListKnowledgeBasesByUpdateStatus at\n%s", m.ListKnowledgeBasesByUpdateStatusMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.ListKnowledgeBasesByUpdateStatus at\n%s with params: %#v", m.ListKnowledgeBasesByUpdateStatusMock.defaultExpectation.expectationOrigins.origin, *m.ListKnowledgeBasesByUpdateStatusMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcListKnowledgeBasesByUpdateStatus != nil && afterListKnowledgeBasesByUpdateStatusCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.ListKnowledgeBasesByUpdateStatus at\n%s", m.funcListKnowledgeBasesByUpdateStatusOrigin)
+	}
+
+	if !m.ListKnowledgeBasesByUpdateStatusMock.invocationsDone() && afterListKnowledgeBasesByUpdateStatusCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.ListKnowledgeBasesByUpdateStatus at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.ListKnowledgeBasesByUpdateStatusMock.expectedInvocations), m.ListKnowledgeBasesByUpdateStatusMock.expectedInvocationsOrigin, afterListKnowledgeBasesByUpdateStatusCounter)
+	}
+}
+
+type mRepositoryMockListKnowledgeBasesForUpdate struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockListKnowledgeBasesForUpdateExpectation
+	expectations       []*RepositoryMockListKnowledgeBasesForUpdateExpectation
+
+	callArgs []*RepositoryMockListKnowledgeBasesForUpdateParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockListKnowledgeBasesForUpdateExpectation specifies expectation struct of the Repository.ListKnowledgeBasesForUpdate
+type RepositoryMockListKnowledgeBasesForUpdateExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockListKnowledgeBasesForUpdateParams
+	paramPtrs          *RepositoryMockListKnowledgeBasesForUpdateParamPtrs
+	expectationOrigins RepositoryMockListKnowledgeBasesForUpdateExpectationOrigins
+	results            *RepositoryMockListKnowledgeBasesForUpdateResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockListKnowledgeBasesForUpdateParams contains parameters of the Repository.ListKnowledgeBasesForUpdate
+type RepositoryMockListKnowledgeBasesForUpdateParams struct {
+	ctx        context.Context
+	tagFilters []string
+	catalogIDs []string
+}
+
+// RepositoryMockListKnowledgeBasesForUpdateParamPtrs contains pointers to parameters of the Repository.ListKnowledgeBasesForUpdate
+type RepositoryMockListKnowledgeBasesForUpdateParamPtrs struct {
+	ctx        *context.Context
+	tagFilters *[]string
+	catalogIDs *[]string
+}
+
+// RepositoryMockListKnowledgeBasesForUpdateResults contains results of the Repository.ListKnowledgeBasesForUpdate
+type RepositoryMockListKnowledgeBasesForUpdateResults struct {
+	ka1 []mm_repository.KnowledgeBaseModel
+	err error
+}
+
+// RepositoryMockListKnowledgeBasesForUpdateOrigins contains origins of expectations of the Repository.ListKnowledgeBasesForUpdate
+type RepositoryMockListKnowledgeBasesForUpdateExpectationOrigins struct {
+	origin           string
+	originCtx        string
+	originTagFilters string
+	originCatalogIDs string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmListKnowledgeBasesForUpdate *mRepositoryMockListKnowledgeBasesForUpdate) Optional() *mRepositoryMockListKnowledgeBasesForUpdate {
+	mmListKnowledgeBasesForUpdate.optional = true
+	return mmListKnowledgeBasesForUpdate
+}
+
+// Expect sets up expected params for Repository.ListKnowledgeBasesForUpdate
+func (mmListKnowledgeBasesForUpdate *mRepositoryMockListKnowledgeBasesForUpdate) Expect(ctx context.Context, tagFilters []string, catalogIDs []string) *mRepositoryMockListKnowledgeBasesForUpdate {
+	if mmListKnowledgeBasesForUpdate.mock.funcListKnowledgeBasesForUpdate != nil {
+		mmListKnowledgeBasesForUpdate.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesForUpdate mock is already set by Set")
+	}
+
+	if mmListKnowledgeBasesForUpdate.defaultExpectation == nil {
+		mmListKnowledgeBasesForUpdate.defaultExpectation = &RepositoryMockListKnowledgeBasesForUpdateExpectation{}
+	}
+
+	if mmListKnowledgeBasesForUpdate.defaultExpectation.paramPtrs != nil {
+		mmListKnowledgeBasesForUpdate.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesForUpdate mock is already set by ExpectParams functions")
+	}
+
+	mmListKnowledgeBasesForUpdate.defaultExpectation.params = &RepositoryMockListKnowledgeBasesForUpdateParams{ctx, tagFilters, catalogIDs}
+	mmListKnowledgeBasesForUpdate.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmListKnowledgeBasesForUpdate.expectations {
+		if minimock.Equal(e.params, mmListKnowledgeBasesForUpdate.defaultExpectation.params) {
+			mmListKnowledgeBasesForUpdate.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmListKnowledgeBasesForUpdate.defaultExpectation.params)
+		}
+	}
+
+	return mmListKnowledgeBasesForUpdate
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.ListKnowledgeBasesForUpdate
+func (mmListKnowledgeBasesForUpdate *mRepositoryMockListKnowledgeBasesForUpdate) ExpectCtxParam1(ctx context.Context) *mRepositoryMockListKnowledgeBasesForUpdate {
+	if mmListKnowledgeBasesForUpdate.mock.funcListKnowledgeBasesForUpdate != nil {
+		mmListKnowledgeBasesForUpdate.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesForUpdate mock is already set by Set")
+	}
+
+	if mmListKnowledgeBasesForUpdate.defaultExpectation == nil {
+		mmListKnowledgeBasesForUpdate.defaultExpectation = &RepositoryMockListKnowledgeBasesForUpdateExpectation{}
+	}
+
+	if mmListKnowledgeBasesForUpdate.defaultExpectation.params != nil {
+		mmListKnowledgeBasesForUpdate.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesForUpdate mock is already set by Expect")
+	}
+
+	if mmListKnowledgeBasesForUpdate.defaultExpectation.paramPtrs == nil {
+		mmListKnowledgeBasesForUpdate.defaultExpectation.paramPtrs = &RepositoryMockListKnowledgeBasesForUpdateParamPtrs{}
+	}
+	mmListKnowledgeBasesForUpdate.defaultExpectation.paramPtrs.ctx = &ctx
+	mmListKnowledgeBasesForUpdate.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmListKnowledgeBasesForUpdate
+}
+
+// ExpectTagFiltersParam2 sets up expected param tagFilters for Repository.ListKnowledgeBasesForUpdate
+func (mmListKnowledgeBasesForUpdate *mRepositoryMockListKnowledgeBasesForUpdate) ExpectTagFiltersParam2(tagFilters []string) *mRepositoryMockListKnowledgeBasesForUpdate {
+	if mmListKnowledgeBasesForUpdate.mock.funcListKnowledgeBasesForUpdate != nil {
+		mmListKnowledgeBasesForUpdate.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesForUpdate mock is already set by Set")
+	}
+
+	if mmListKnowledgeBasesForUpdate.defaultExpectation == nil {
+		mmListKnowledgeBasesForUpdate.defaultExpectation = &RepositoryMockListKnowledgeBasesForUpdateExpectation{}
+	}
+
+	if mmListKnowledgeBasesForUpdate.defaultExpectation.params != nil {
+		mmListKnowledgeBasesForUpdate.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesForUpdate mock is already set by Expect")
+	}
+
+	if mmListKnowledgeBasesForUpdate.defaultExpectation.paramPtrs == nil {
+		mmListKnowledgeBasesForUpdate.defaultExpectation.paramPtrs = &RepositoryMockListKnowledgeBasesForUpdateParamPtrs{}
+	}
+	mmListKnowledgeBasesForUpdate.defaultExpectation.paramPtrs.tagFilters = &tagFilters
+	mmListKnowledgeBasesForUpdate.defaultExpectation.expectationOrigins.originTagFilters = minimock.CallerInfo(1)
+
+	return mmListKnowledgeBasesForUpdate
+}
+
+// ExpectCatalogIDsParam3 sets up expected param catalogIDs for Repository.ListKnowledgeBasesForUpdate
+func (mmListKnowledgeBasesForUpdate *mRepositoryMockListKnowledgeBasesForUpdate) ExpectCatalogIDsParam3(catalogIDs []string) *mRepositoryMockListKnowledgeBasesForUpdate {
+	if mmListKnowledgeBasesForUpdate.mock.funcListKnowledgeBasesForUpdate != nil {
+		mmListKnowledgeBasesForUpdate.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesForUpdate mock is already set by Set")
+	}
+
+	if mmListKnowledgeBasesForUpdate.defaultExpectation == nil {
+		mmListKnowledgeBasesForUpdate.defaultExpectation = &RepositoryMockListKnowledgeBasesForUpdateExpectation{}
+	}
+
+	if mmListKnowledgeBasesForUpdate.defaultExpectation.params != nil {
+		mmListKnowledgeBasesForUpdate.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesForUpdate mock is already set by Expect")
+	}
+
+	if mmListKnowledgeBasesForUpdate.defaultExpectation.paramPtrs == nil {
+		mmListKnowledgeBasesForUpdate.defaultExpectation.paramPtrs = &RepositoryMockListKnowledgeBasesForUpdateParamPtrs{}
+	}
+	mmListKnowledgeBasesForUpdate.defaultExpectation.paramPtrs.catalogIDs = &catalogIDs
+	mmListKnowledgeBasesForUpdate.defaultExpectation.expectationOrigins.originCatalogIDs = minimock.CallerInfo(1)
+
+	return mmListKnowledgeBasesForUpdate
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.ListKnowledgeBasesForUpdate
+func (mmListKnowledgeBasesForUpdate *mRepositoryMockListKnowledgeBasesForUpdate) Inspect(f func(ctx context.Context, tagFilters []string, catalogIDs []string)) *mRepositoryMockListKnowledgeBasesForUpdate {
+	if mmListKnowledgeBasesForUpdate.mock.inspectFuncListKnowledgeBasesForUpdate != nil {
+		mmListKnowledgeBasesForUpdate.mock.t.Fatalf("Inspect function is already set for RepositoryMock.ListKnowledgeBasesForUpdate")
+	}
+
+	mmListKnowledgeBasesForUpdate.mock.inspectFuncListKnowledgeBasesForUpdate = f
+
+	return mmListKnowledgeBasesForUpdate
+}
+
+// Return sets up results that will be returned by Repository.ListKnowledgeBasesForUpdate
+func (mmListKnowledgeBasesForUpdate *mRepositoryMockListKnowledgeBasesForUpdate) Return(ka1 []mm_repository.KnowledgeBaseModel, err error) *RepositoryMock {
+	if mmListKnowledgeBasesForUpdate.mock.funcListKnowledgeBasesForUpdate != nil {
+		mmListKnowledgeBasesForUpdate.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesForUpdate mock is already set by Set")
+	}
+
+	if mmListKnowledgeBasesForUpdate.defaultExpectation == nil {
+		mmListKnowledgeBasesForUpdate.defaultExpectation = &RepositoryMockListKnowledgeBasesForUpdateExpectation{mock: mmListKnowledgeBasesForUpdate.mock}
+	}
+	mmListKnowledgeBasesForUpdate.defaultExpectation.results = &RepositoryMockListKnowledgeBasesForUpdateResults{ka1, err}
+	mmListKnowledgeBasesForUpdate.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmListKnowledgeBasesForUpdate.mock
+}
+
+// Set uses given function f to mock the Repository.ListKnowledgeBasesForUpdate method
+func (mmListKnowledgeBasesForUpdate *mRepositoryMockListKnowledgeBasesForUpdate) Set(f func(ctx context.Context, tagFilters []string, catalogIDs []string) (ka1 []mm_repository.KnowledgeBaseModel, err error)) *RepositoryMock {
+	if mmListKnowledgeBasesForUpdate.defaultExpectation != nil {
+		mmListKnowledgeBasesForUpdate.mock.t.Fatalf("Default expectation is already set for the Repository.ListKnowledgeBasesForUpdate method")
+	}
+
+	if len(mmListKnowledgeBasesForUpdate.expectations) > 0 {
+		mmListKnowledgeBasesForUpdate.mock.t.Fatalf("Some expectations are already set for the Repository.ListKnowledgeBasesForUpdate method")
+	}
+
+	mmListKnowledgeBasesForUpdate.mock.funcListKnowledgeBasesForUpdate = f
+	mmListKnowledgeBasesForUpdate.mock.funcListKnowledgeBasesForUpdateOrigin = minimock.CallerInfo(1)
+	return mmListKnowledgeBasesForUpdate.mock
+}
+
+// When sets expectation for the Repository.ListKnowledgeBasesForUpdate which will trigger the result defined by the following
+// Then helper
+func (mmListKnowledgeBasesForUpdate *mRepositoryMockListKnowledgeBasesForUpdate) When(ctx context.Context, tagFilters []string, catalogIDs []string) *RepositoryMockListKnowledgeBasesForUpdateExpectation {
+	if mmListKnowledgeBasesForUpdate.mock.funcListKnowledgeBasesForUpdate != nil {
+		mmListKnowledgeBasesForUpdate.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesForUpdate mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockListKnowledgeBasesForUpdateExpectation{
+		mock:               mmListKnowledgeBasesForUpdate.mock,
+		params:             &RepositoryMockListKnowledgeBasesForUpdateParams{ctx, tagFilters, catalogIDs},
+		expectationOrigins: RepositoryMockListKnowledgeBasesForUpdateExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmListKnowledgeBasesForUpdate.expectations = append(mmListKnowledgeBasesForUpdate.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.ListKnowledgeBasesForUpdate return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockListKnowledgeBasesForUpdateExpectation) Then(ka1 []mm_repository.KnowledgeBaseModel, err error) *RepositoryMock {
+	e.results = &RepositoryMockListKnowledgeBasesForUpdateResults{ka1, err}
+	return e.mock
+}
+
+// Times sets number of times Repository.ListKnowledgeBasesForUpdate should be invoked
+func (mmListKnowledgeBasesForUpdate *mRepositoryMockListKnowledgeBasesForUpdate) Times(n uint64) *mRepositoryMockListKnowledgeBasesForUpdate {
+	if n == 0 {
+		mmListKnowledgeBasesForUpdate.mock.t.Fatalf("Times of RepositoryMock.ListKnowledgeBasesForUpdate mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmListKnowledgeBasesForUpdate.expectedInvocations, n)
+	mmListKnowledgeBasesForUpdate.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmListKnowledgeBasesForUpdate
+}
+
+func (mmListKnowledgeBasesForUpdate *mRepositoryMockListKnowledgeBasesForUpdate) invocationsDone() bool {
+	if len(mmListKnowledgeBasesForUpdate.expectations) == 0 && mmListKnowledgeBasesForUpdate.defaultExpectation == nil && mmListKnowledgeBasesForUpdate.mock.funcListKnowledgeBasesForUpdate == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmListKnowledgeBasesForUpdate.mock.afterListKnowledgeBasesForUpdateCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmListKnowledgeBasesForUpdate.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// ListKnowledgeBasesForUpdate implements mm_repository.Repository
+func (mmListKnowledgeBasesForUpdate *RepositoryMock) ListKnowledgeBasesForUpdate(ctx context.Context, tagFilters []string, catalogIDs []string) (ka1 []mm_repository.KnowledgeBaseModel, err error) {
+	mm_atomic.AddUint64(&mmListKnowledgeBasesForUpdate.beforeListKnowledgeBasesForUpdateCounter, 1)
+	defer mm_atomic.AddUint64(&mmListKnowledgeBasesForUpdate.afterListKnowledgeBasesForUpdateCounter, 1)
+
+	mmListKnowledgeBasesForUpdate.t.Helper()
+
+	if mmListKnowledgeBasesForUpdate.inspectFuncListKnowledgeBasesForUpdate != nil {
+		mmListKnowledgeBasesForUpdate.inspectFuncListKnowledgeBasesForUpdate(ctx, tagFilters, catalogIDs)
+	}
+
+	mm_params := RepositoryMockListKnowledgeBasesForUpdateParams{ctx, tagFilters, catalogIDs}
+
+	// Record call args
+	mmListKnowledgeBasesForUpdate.ListKnowledgeBasesForUpdateMock.mutex.Lock()
+	mmListKnowledgeBasesForUpdate.ListKnowledgeBasesForUpdateMock.callArgs = append(mmListKnowledgeBasesForUpdate.ListKnowledgeBasesForUpdateMock.callArgs, &mm_params)
+	mmListKnowledgeBasesForUpdate.ListKnowledgeBasesForUpdateMock.mutex.Unlock()
+
+	for _, e := range mmListKnowledgeBasesForUpdate.ListKnowledgeBasesForUpdateMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.ka1, e.results.err
+		}
+	}
+
+	if mmListKnowledgeBasesForUpdate.ListKnowledgeBasesForUpdateMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmListKnowledgeBasesForUpdate.ListKnowledgeBasesForUpdateMock.defaultExpectation.Counter, 1)
+		mm_want := mmListKnowledgeBasesForUpdate.ListKnowledgeBasesForUpdateMock.defaultExpectation.params
+		mm_want_ptrs := mmListKnowledgeBasesForUpdate.ListKnowledgeBasesForUpdateMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockListKnowledgeBasesForUpdateParams{ctx, tagFilters, catalogIDs}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmListKnowledgeBasesForUpdate.t.Errorf("RepositoryMock.ListKnowledgeBasesForUpdate got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmListKnowledgeBasesForUpdate.ListKnowledgeBasesForUpdateMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.tagFilters != nil && !minimock.Equal(*mm_want_ptrs.tagFilters, mm_got.tagFilters) {
+				mmListKnowledgeBasesForUpdate.t.Errorf("RepositoryMock.ListKnowledgeBasesForUpdate got unexpected parameter tagFilters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmListKnowledgeBasesForUpdate.ListKnowledgeBasesForUpdateMock.defaultExpectation.expectationOrigins.originTagFilters, *mm_want_ptrs.tagFilters, mm_got.tagFilters, minimock.Diff(*mm_want_ptrs.tagFilters, mm_got.tagFilters))
+			}
+
+			if mm_want_ptrs.catalogIDs != nil && !minimock.Equal(*mm_want_ptrs.catalogIDs, mm_got.catalogIDs) {
+				mmListKnowledgeBasesForUpdate.t.Errorf("RepositoryMock.ListKnowledgeBasesForUpdate got unexpected parameter catalogIDs, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmListKnowledgeBasesForUpdate.ListKnowledgeBasesForUpdateMock.defaultExpectation.expectationOrigins.originCatalogIDs, *mm_want_ptrs.catalogIDs, mm_got.catalogIDs, minimock.Diff(*mm_want_ptrs.catalogIDs, mm_got.catalogIDs))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmListKnowledgeBasesForUpdate.t.Errorf("RepositoryMock.ListKnowledgeBasesForUpdate got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmListKnowledgeBasesForUpdate.ListKnowledgeBasesForUpdateMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmListKnowledgeBasesForUpdate.ListKnowledgeBasesForUpdateMock.defaultExpectation.results
+		if mm_results == nil {
+			mmListKnowledgeBasesForUpdate.t.Fatal("No results are set for the RepositoryMock.ListKnowledgeBasesForUpdate")
+		}
+		return (*mm_results).ka1, (*mm_results).err
+	}
+	if mmListKnowledgeBasesForUpdate.funcListKnowledgeBasesForUpdate != nil {
+		return mmListKnowledgeBasesForUpdate.funcListKnowledgeBasesForUpdate(ctx, tagFilters, catalogIDs)
+	}
+	mmListKnowledgeBasesForUpdate.t.Fatalf("Unexpected call to RepositoryMock.ListKnowledgeBasesForUpdate. %v %v %v", ctx, tagFilters, catalogIDs)
+	return
+}
+
+// ListKnowledgeBasesForUpdateAfterCounter returns a count of finished RepositoryMock.ListKnowledgeBasesForUpdate invocations
+func (mmListKnowledgeBasesForUpdate *RepositoryMock) ListKnowledgeBasesForUpdateAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmListKnowledgeBasesForUpdate.afterListKnowledgeBasesForUpdateCounter)
+}
+
+// ListKnowledgeBasesForUpdateBeforeCounter returns a count of RepositoryMock.ListKnowledgeBasesForUpdate invocations
+func (mmListKnowledgeBasesForUpdate *RepositoryMock) ListKnowledgeBasesForUpdateBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmListKnowledgeBasesForUpdate.beforeListKnowledgeBasesForUpdateCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.ListKnowledgeBasesForUpdate.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmListKnowledgeBasesForUpdate *mRepositoryMockListKnowledgeBasesForUpdate) Calls() []*RepositoryMockListKnowledgeBasesForUpdateParams {
+	mmListKnowledgeBasesForUpdate.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockListKnowledgeBasesForUpdateParams, len(mmListKnowledgeBasesForUpdate.callArgs))
+	copy(argCopy, mmListKnowledgeBasesForUpdate.callArgs)
+
+	mmListKnowledgeBasesForUpdate.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockListKnowledgeBasesForUpdateDone returns true if the count of the ListKnowledgeBasesForUpdate invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockListKnowledgeBasesForUpdateDone() bool {
+	if m.ListKnowledgeBasesForUpdateMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.ListKnowledgeBasesForUpdateMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.ListKnowledgeBasesForUpdateMock.invocationsDone()
+}
+
+// MinimockListKnowledgeBasesForUpdateInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockListKnowledgeBasesForUpdateInspect() {
+	for _, e := range m.ListKnowledgeBasesForUpdateMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.ListKnowledgeBasesForUpdate at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterListKnowledgeBasesForUpdateCounter := mm_atomic.LoadUint64(&m.afterListKnowledgeBasesForUpdateCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.ListKnowledgeBasesForUpdateMock.defaultExpectation != nil && afterListKnowledgeBasesForUpdateCounter < 1 {
+		if m.ListKnowledgeBasesForUpdateMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.ListKnowledgeBasesForUpdate at\n%s", m.ListKnowledgeBasesForUpdateMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.ListKnowledgeBasesForUpdate at\n%s with params: %#v", m.ListKnowledgeBasesForUpdateMock.defaultExpectation.expectationOrigins.origin, *m.ListKnowledgeBasesForUpdateMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcListKnowledgeBasesForUpdate != nil && afterListKnowledgeBasesForUpdateCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.ListKnowledgeBasesForUpdate at\n%s", m.funcListKnowledgeBasesForUpdateOrigin)
+	}
+
+	if !m.ListKnowledgeBasesForUpdateMock.invocationsDone() && afterListKnowledgeBasesForUpdateCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.ListKnowledgeBasesForUpdate at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.ListKnowledgeBasesForUpdateMock.expectedInvocations), m.ListKnowledgeBasesForUpdateMock.expectedInvocationsOrigin, afterListKnowledgeBasesForUpdateCounter)
+	}
+}
+
+type mRepositoryMockListSystemProfiles struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockListSystemProfilesExpectation
+	expectations       []*RepositoryMockListSystemProfilesExpectation
+
+	callArgs []*RepositoryMockListSystemProfilesParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockListSystemProfilesExpectation specifies expectation struct of the Repository.ListSystemProfiles
+type RepositoryMockListSystemProfilesExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockListSystemProfilesParams
+	paramPtrs          *RepositoryMockListSystemProfilesParamPtrs
+	expectationOrigins RepositoryMockListSystemProfilesExpectationOrigins
+	results            *RepositoryMockListSystemProfilesResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockListSystemProfilesParams contains parameters of the Repository.ListSystemProfiles
+type RepositoryMockListSystemProfilesParams struct {
+	ctx context.Context
+}
+
+// RepositoryMockListSystemProfilesParamPtrs contains pointers to parameters of the Repository.ListSystemProfiles
+type RepositoryMockListSystemProfilesParamPtrs struct {
+	ctx *context.Context
+}
+
+// RepositoryMockListSystemProfilesResults contains results of the Repository.ListSystemProfiles
+type RepositoryMockListSystemProfilesResults struct {
+	sa1 []mm_repository.SystemProfileModel
+	err error
+}
+
+// RepositoryMockListSystemProfilesOrigins contains origins of expectations of the Repository.ListSystemProfiles
+type RepositoryMockListSystemProfilesExpectationOrigins struct {
+	origin    string
+	originCtx string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmListSystemProfiles *mRepositoryMockListSystemProfiles) Optional() *mRepositoryMockListSystemProfiles {
+	mmListSystemProfiles.optional = true
+	return mmListSystemProfiles
+}
+
+// Expect sets up expected params for Repository.ListSystemProfiles
+func (mmListSystemProfiles *mRepositoryMockListSystemProfiles) Expect(ctx context.Context) *mRepositoryMockListSystemProfiles {
+	if mmListSystemProfiles.mock.funcListSystemProfiles != nil {
+		mmListSystemProfiles.mock.t.Fatalf("RepositoryMock.ListSystemProfiles mock is already set by Set")
+	}
+
+	if mmListSystemProfiles.defaultExpectation == nil {
+		mmListSystemProfiles.defaultExpectation = &RepositoryMockListSystemProfilesExpectation{}
+	}
+
+	if mmListSystemProfiles.defaultExpectation.paramPtrs != nil {
+		mmListSystemProfiles.mock.t.Fatalf("RepositoryMock.ListSystemProfiles mock is already set by ExpectParams functions")
+	}
+
+	mmListSystemProfiles.defaultExpectation.params = &RepositoryMockListSystemProfilesParams{ctx}
+	mmListSystemProfiles.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmListSystemProfiles.expectations {
+		if minimock.Equal(e.params, mmListSystemProfiles.defaultExpectation.params) {
+			mmListSystemProfiles.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmListSystemProfiles.defaultExpectation.params)
+		}
+	}
+
+	return mmListSystemProfiles
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.ListSystemProfiles
+func (mmListSystemProfiles *mRepositoryMockListSystemProfiles) ExpectCtxParam1(ctx context.Context) *mRepositoryMockListSystemProfiles {
+	if mmListSystemProfiles.mock.funcListSystemProfiles != nil {
+		mmListSystemProfiles.mock.t.Fatalf("RepositoryMock.ListSystemProfiles mock is already set by Set")
+	}
+
+	if mmListSystemProfiles.defaultExpectation == nil {
+		mmListSystemProfiles.defaultExpectation = &RepositoryMockListSystemProfilesExpectation{}
+	}
+
+	if mmListSystemProfiles.defaultExpectation.params != nil {
+		mmListSystemProfiles.mock.t.Fatalf("RepositoryMock.ListSystemProfiles mock is already set by Expect")
+	}
+
+	if mmListSystemProfiles.defaultExpectation.paramPtrs == nil {
+		mmListSystemProfiles.defaultExpectation.paramPtrs = &RepositoryMockListSystemProfilesParamPtrs{}
+	}
+	mmListSystemProfiles.defaultExpectation.paramPtrs.ctx = &ctx
+	mmListSystemProfiles.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmListSystemProfiles
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.ListSystemProfiles
+func (mmListSystemProfiles *mRepositoryMockListSystemProfiles) Inspect(f func(ctx context.Context)) *mRepositoryMockListSystemProfiles {
+	if mmListSystemProfiles.mock.inspectFuncListSystemProfiles != nil {
+		mmListSystemProfiles.mock.t.Fatalf("Inspect function is already set for RepositoryMock.ListSystemProfiles")
+	}
+
+	mmListSystemProfiles.mock.inspectFuncListSystemProfiles = f
+
+	return mmListSystemProfiles
+}
+
+// Return sets up results that will be returned by Repository.ListSystemProfiles
+func (mmListSystemProfiles *mRepositoryMockListSystemProfiles) Return(sa1 []mm_repository.SystemProfileModel, err error) *RepositoryMock {
+	if mmListSystemProfiles.mock.funcListSystemProfiles != nil {
+		mmListSystemProfiles.mock.t.Fatalf("RepositoryMock.ListSystemProfiles mock is already set by Set")
+	}
+
+	if mmListSystemProfiles.defaultExpectation == nil {
+		mmListSystemProfiles.defaultExpectation = &RepositoryMockListSystemProfilesExpectation{mock: mmListSystemProfiles.mock}
+	}
+	mmListSystemProfiles.defaultExpectation.results = &RepositoryMockListSystemProfilesResults{sa1, err}
+	mmListSystemProfiles.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmListSystemProfiles.mock
+}
+
+// Set uses given function f to mock the Repository.ListSystemProfiles method
+func (mmListSystemProfiles *mRepositoryMockListSystemProfiles) Set(f func(ctx context.Context) (sa1 []mm_repository.SystemProfileModel, err error)) *RepositoryMock {
+	if mmListSystemProfiles.defaultExpectation != nil {
+		mmListSystemProfiles.mock.t.Fatalf("Default expectation is already set for the Repository.ListSystemProfiles method")
+	}
+
+	if len(mmListSystemProfiles.expectations) > 0 {
+		mmListSystemProfiles.mock.t.Fatalf("Some expectations are already set for the Repository.ListSystemProfiles method")
+	}
+
+	mmListSystemProfiles.mock.funcListSystemProfiles = f
+	mmListSystemProfiles.mock.funcListSystemProfilesOrigin = minimock.CallerInfo(1)
+	return mmListSystemProfiles.mock
+}
+
+// When sets expectation for the Repository.ListSystemProfiles which will trigger the result defined by the following
+// Then helper
+func (mmListSystemProfiles *mRepositoryMockListSystemProfiles) When(ctx context.Context) *RepositoryMockListSystemProfilesExpectation {
+	if mmListSystemProfiles.mock.funcListSystemProfiles != nil {
+		mmListSystemProfiles.mock.t.Fatalf("RepositoryMock.ListSystemProfiles mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockListSystemProfilesExpectation{
+		mock:               mmListSystemProfiles.mock,
+		params:             &RepositoryMockListSystemProfilesParams{ctx},
+		expectationOrigins: RepositoryMockListSystemProfilesExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmListSystemProfiles.expectations = append(mmListSystemProfiles.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.ListSystemProfiles return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockListSystemProfilesExpectation) Then(sa1 []mm_repository.SystemProfileModel, err error) *RepositoryMock {
+	e.results = &RepositoryMockListSystemProfilesResults{sa1, err}
+	return e.mock
+}
+
+// Times sets number of times Repository.ListSystemProfiles should be invoked
+func (mmListSystemProfiles *mRepositoryMockListSystemProfiles) Times(n uint64) *mRepositoryMockListSystemProfiles {
+	if n == 0 {
+		mmListSystemProfiles.mock.t.Fatalf("Times of RepositoryMock.ListSystemProfiles mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmListSystemProfiles.expectedInvocations, n)
+	mmListSystemProfiles.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmListSystemProfiles
+}
+
+func (mmListSystemProfiles *mRepositoryMockListSystemProfiles) invocationsDone() bool {
+	if len(mmListSystemProfiles.expectations) == 0 && mmListSystemProfiles.defaultExpectation == nil && mmListSystemProfiles.mock.funcListSystemProfiles == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmListSystemProfiles.mock.afterListSystemProfilesCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmListSystemProfiles.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// ListSystemProfiles implements mm_repository.Repository
+func (mmListSystemProfiles *RepositoryMock) ListSystemProfiles(ctx context.Context) (sa1 []mm_repository.SystemProfileModel, err error) {
+	mm_atomic.AddUint64(&mmListSystemProfiles.beforeListSystemProfilesCounter, 1)
+	defer mm_atomic.AddUint64(&mmListSystemProfiles.afterListSystemProfilesCounter, 1)
+
+	mmListSystemProfiles.t.Helper()
+
+	if mmListSystemProfiles.inspectFuncListSystemProfiles != nil {
+		mmListSystemProfiles.inspectFuncListSystemProfiles(ctx)
+	}
+
+	mm_params := RepositoryMockListSystemProfilesParams{ctx}
+
+	// Record call args
+	mmListSystemProfiles.ListSystemProfilesMock.mutex.Lock()
+	mmListSystemProfiles.ListSystemProfilesMock.callArgs = append(mmListSystemProfiles.ListSystemProfilesMock.callArgs, &mm_params)
+	mmListSystemProfiles.ListSystemProfilesMock.mutex.Unlock()
+
+	for _, e := range mmListSystemProfiles.ListSystemProfilesMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.sa1, e.results.err
+		}
+	}
+
+	if mmListSystemProfiles.ListSystemProfilesMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmListSystemProfiles.ListSystemProfilesMock.defaultExpectation.Counter, 1)
+		mm_want := mmListSystemProfiles.ListSystemProfilesMock.defaultExpectation.params
+		mm_want_ptrs := mmListSystemProfiles.ListSystemProfilesMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockListSystemProfilesParams{ctx}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmListSystemProfiles.t.Errorf("RepositoryMock.ListSystemProfiles got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmListSystemProfiles.ListSystemProfilesMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmListSystemProfiles.t.Errorf("RepositoryMock.ListSystemProfiles got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmListSystemProfiles.ListSystemProfilesMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmListSystemProfiles.ListSystemProfilesMock.defaultExpectation.results
+		if mm_results == nil {
+			mmListSystemProfiles.t.Fatal("No results are set for the RepositoryMock.ListSystemProfiles")
+		}
+		return (*mm_results).sa1, (*mm_results).err
+	}
+	if mmListSystemProfiles.funcListSystemProfiles != nil {
+		return mmListSystemProfiles.funcListSystemProfiles(ctx)
+	}
+	mmListSystemProfiles.t.Fatalf("Unexpected call to RepositoryMock.ListSystemProfiles. %v", ctx)
+	return
+}
+
+// ListSystemProfilesAfterCounter returns a count of finished RepositoryMock.ListSystemProfiles invocations
+func (mmListSystemProfiles *RepositoryMock) ListSystemProfilesAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmListSystemProfiles.afterListSystemProfilesCounter)
+}
+
+// ListSystemProfilesBeforeCounter returns a count of RepositoryMock.ListSystemProfiles invocations
+func (mmListSystemProfiles *RepositoryMock) ListSystemProfilesBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmListSystemProfiles.beforeListSystemProfilesCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.ListSystemProfiles.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmListSystemProfiles *mRepositoryMockListSystemProfiles) Calls() []*RepositoryMockListSystemProfilesParams {
+	mmListSystemProfiles.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockListSystemProfilesParams, len(mmListSystemProfiles.callArgs))
+	copy(argCopy, mmListSystemProfiles.callArgs)
+
+	mmListSystemProfiles.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockListSystemProfilesDone returns true if the count of the ListSystemProfiles invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockListSystemProfilesDone() bool {
+	if m.ListSystemProfilesMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.ListSystemProfilesMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.ListSystemProfilesMock.invocationsDone()
+}
+
+// MinimockListSystemProfilesInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockListSystemProfilesInspect() {
+	for _, e := range m.ListSystemProfilesMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.ListSystemProfiles at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterListSystemProfilesCounter := mm_atomic.LoadUint64(&m.afterListSystemProfilesCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.ListSystemProfilesMock.defaultExpectation != nil && afterListSystemProfilesCounter < 1 {
+		if m.ListSystemProfilesMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.ListSystemProfiles at\n%s", m.ListSystemProfilesMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.ListSystemProfiles at\n%s with params: %#v", m.ListSystemProfilesMock.defaultExpectation.expectationOrigins.origin, *m.ListSystemProfilesMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcListSystemProfiles != nil && afterListSystemProfilesCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.ListSystemProfiles at\n%s", m.funcListSystemProfilesOrigin)
+	}
+
+	if !m.ListSystemProfilesMock.invocationsDone() && afterListSystemProfilesCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.ListSystemProfiles at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.ListSystemProfilesMock.expectedInvocations), m.ListSystemProfilesMock.expectedInvocationsOrigin, afterListSystemProfilesCounter)
+	}
+}
+
 type mRepositoryMockListTextChunksByFileUID struct {
 	optional           bool
 	mock               *RepositoryMock
@@ -28757,6 +35377,379 @@ func (m *RepositoryMock) MinimockUpdateConvertedFileInspect() {
 	}
 }
 
+type mRepositoryMockUpdateDefaultEmbeddingConfig struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockUpdateDefaultEmbeddingConfigExpectation
+	expectations       []*RepositoryMockUpdateDefaultEmbeddingConfigExpectation
+
+	callArgs []*RepositoryMockUpdateDefaultEmbeddingConfigParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockUpdateDefaultEmbeddingConfigExpectation specifies expectation struct of the Repository.UpdateDefaultEmbeddingConfig
+type RepositoryMockUpdateDefaultEmbeddingConfigExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockUpdateDefaultEmbeddingConfigParams
+	paramPtrs          *RepositoryMockUpdateDefaultEmbeddingConfigParamPtrs
+	expectationOrigins RepositoryMockUpdateDefaultEmbeddingConfigExpectationOrigins
+	results            *RepositoryMockUpdateDefaultEmbeddingConfigResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockUpdateDefaultEmbeddingConfigParams contains parameters of the Repository.UpdateDefaultEmbeddingConfig
+type RepositoryMockUpdateDefaultEmbeddingConfigParams struct {
+	ctx     context.Context
+	profile string
+	config  mm_repository.EmbeddingConfigJSON
+}
+
+// RepositoryMockUpdateDefaultEmbeddingConfigParamPtrs contains pointers to parameters of the Repository.UpdateDefaultEmbeddingConfig
+type RepositoryMockUpdateDefaultEmbeddingConfigParamPtrs struct {
+	ctx     *context.Context
+	profile *string
+	config  *mm_repository.EmbeddingConfigJSON
+}
+
+// RepositoryMockUpdateDefaultEmbeddingConfigResults contains results of the Repository.UpdateDefaultEmbeddingConfig
+type RepositoryMockUpdateDefaultEmbeddingConfigResults struct {
+	err error
+}
+
+// RepositoryMockUpdateDefaultEmbeddingConfigOrigins contains origins of expectations of the Repository.UpdateDefaultEmbeddingConfig
+type RepositoryMockUpdateDefaultEmbeddingConfigExpectationOrigins struct {
+	origin        string
+	originCtx     string
+	originProfile string
+	originConfig  string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmUpdateDefaultEmbeddingConfig *mRepositoryMockUpdateDefaultEmbeddingConfig) Optional() *mRepositoryMockUpdateDefaultEmbeddingConfig {
+	mmUpdateDefaultEmbeddingConfig.optional = true
+	return mmUpdateDefaultEmbeddingConfig
+}
+
+// Expect sets up expected params for Repository.UpdateDefaultEmbeddingConfig
+func (mmUpdateDefaultEmbeddingConfig *mRepositoryMockUpdateDefaultEmbeddingConfig) Expect(ctx context.Context, profile string, config mm_repository.EmbeddingConfigJSON) *mRepositoryMockUpdateDefaultEmbeddingConfig {
+	if mmUpdateDefaultEmbeddingConfig.mock.funcUpdateDefaultEmbeddingConfig != nil {
+		mmUpdateDefaultEmbeddingConfig.mock.t.Fatalf("RepositoryMock.UpdateDefaultEmbeddingConfig mock is already set by Set")
+	}
+
+	if mmUpdateDefaultEmbeddingConfig.defaultExpectation == nil {
+		mmUpdateDefaultEmbeddingConfig.defaultExpectation = &RepositoryMockUpdateDefaultEmbeddingConfigExpectation{}
+	}
+
+	if mmUpdateDefaultEmbeddingConfig.defaultExpectation.paramPtrs != nil {
+		mmUpdateDefaultEmbeddingConfig.mock.t.Fatalf("RepositoryMock.UpdateDefaultEmbeddingConfig mock is already set by ExpectParams functions")
+	}
+
+	mmUpdateDefaultEmbeddingConfig.defaultExpectation.params = &RepositoryMockUpdateDefaultEmbeddingConfigParams{ctx, profile, config}
+	mmUpdateDefaultEmbeddingConfig.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmUpdateDefaultEmbeddingConfig.expectations {
+		if minimock.Equal(e.params, mmUpdateDefaultEmbeddingConfig.defaultExpectation.params) {
+			mmUpdateDefaultEmbeddingConfig.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmUpdateDefaultEmbeddingConfig.defaultExpectation.params)
+		}
+	}
+
+	return mmUpdateDefaultEmbeddingConfig
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.UpdateDefaultEmbeddingConfig
+func (mmUpdateDefaultEmbeddingConfig *mRepositoryMockUpdateDefaultEmbeddingConfig) ExpectCtxParam1(ctx context.Context) *mRepositoryMockUpdateDefaultEmbeddingConfig {
+	if mmUpdateDefaultEmbeddingConfig.mock.funcUpdateDefaultEmbeddingConfig != nil {
+		mmUpdateDefaultEmbeddingConfig.mock.t.Fatalf("RepositoryMock.UpdateDefaultEmbeddingConfig mock is already set by Set")
+	}
+
+	if mmUpdateDefaultEmbeddingConfig.defaultExpectation == nil {
+		mmUpdateDefaultEmbeddingConfig.defaultExpectation = &RepositoryMockUpdateDefaultEmbeddingConfigExpectation{}
+	}
+
+	if mmUpdateDefaultEmbeddingConfig.defaultExpectation.params != nil {
+		mmUpdateDefaultEmbeddingConfig.mock.t.Fatalf("RepositoryMock.UpdateDefaultEmbeddingConfig mock is already set by Expect")
+	}
+
+	if mmUpdateDefaultEmbeddingConfig.defaultExpectation.paramPtrs == nil {
+		mmUpdateDefaultEmbeddingConfig.defaultExpectation.paramPtrs = &RepositoryMockUpdateDefaultEmbeddingConfigParamPtrs{}
+	}
+	mmUpdateDefaultEmbeddingConfig.defaultExpectation.paramPtrs.ctx = &ctx
+	mmUpdateDefaultEmbeddingConfig.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmUpdateDefaultEmbeddingConfig
+}
+
+// ExpectProfileParam2 sets up expected param profile for Repository.UpdateDefaultEmbeddingConfig
+func (mmUpdateDefaultEmbeddingConfig *mRepositoryMockUpdateDefaultEmbeddingConfig) ExpectProfileParam2(profile string) *mRepositoryMockUpdateDefaultEmbeddingConfig {
+	if mmUpdateDefaultEmbeddingConfig.mock.funcUpdateDefaultEmbeddingConfig != nil {
+		mmUpdateDefaultEmbeddingConfig.mock.t.Fatalf("RepositoryMock.UpdateDefaultEmbeddingConfig mock is already set by Set")
+	}
+
+	if mmUpdateDefaultEmbeddingConfig.defaultExpectation == nil {
+		mmUpdateDefaultEmbeddingConfig.defaultExpectation = &RepositoryMockUpdateDefaultEmbeddingConfigExpectation{}
+	}
+
+	if mmUpdateDefaultEmbeddingConfig.defaultExpectation.params != nil {
+		mmUpdateDefaultEmbeddingConfig.mock.t.Fatalf("RepositoryMock.UpdateDefaultEmbeddingConfig mock is already set by Expect")
+	}
+
+	if mmUpdateDefaultEmbeddingConfig.defaultExpectation.paramPtrs == nil {
+		mmUpdateDefaultEmbeddingConfig.defaultExpectation.paramPtrs = &RepositoryMockUpdateDefaultEmbeddingConfigParamPtrs{}
+	}
+	mmUpdateDefaultEmbeddingConfig.defaultExpectation.paramPtrs.profile = &profile
+	mmUpdateDefaultEmbeddingConfig.defaultExpectation.expectationOrigins.originProfile = minimock.CallerInfo(1)
+
+	return mmUpdateDefaultEmbeddingConfig
+}
+
+// ExpectConfigParam3 sets up expected param config for Repository.UpdateDefaultEmbeddingConfig
+func (mmUpdateDefaultEmbeddingConfig *mRepositoryMockUpdateDefaultEmbeddingConfig) ExpectConfigParam3(config mm_repository.EmbeddingConfigJSON) *mRepositoryMockUpdateDefaultEmbeddingConfig {
+	if mmUpdateDefaultEmbeddingConfig.mock.funcUpdateDefaultEmbeddingConfig != nil {
+		mmUpdateDefaultEmbeddingConfig.mock.t.Fatalf("RepositoryMock.UpdateDefaultEmbeddingConfig mock is already set by Set")
+	}
+
+	if mmUpdateDefaultEmbeddingConfig.defaultExpectation == nil {
+		mmUpdateDefaultEmbeddingConfig.defaultExpectation = &RepositoryMockUpdateDefaultEmbeddingConfigExpectation{}
+	}
+
+	if mmUpdateDefaultEmbeddingConfig.defaultExpectation.params != nil {
+		mmUpdateDefaultEmbeddingConfig.mock.t.Fatalf("RepositoryMock.UpdateDefaultEmbeddingConfig mock is already set by Expect")
+	}
+
+	if mmUpdateDefaultEmbeddingConfig.defaultExpectation.paramPtrs == nil {
+		mmUpdateDefaultEmbeddingConfig.defaultExpectation.paramPtrs = &RepositoryMockUpdateDefaultEmbeddingConfigParamPtrs{}
+	}
+	mmUpdateDefaultEmbeddingConfig.defaultExpectation.paramPtrs.config = &config
+	mmUpdateDefaultEmbeddingConfig.defaultExpectation.expectationOrigins.originConfig = minimock.CallerInfo(1)
+
+	return mmUpdateDefaultEmbeddingConfig
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.UpdateDefaultEmbeddingConfig
+func (mmUpdateDefaultEmbeddingConfig *mRepositoryMockUpdateDefaultEmbeddingConfig) Inspect(f func(ctx context.Context, profile string, config mm_repository.EmbeddingConfigJSON)) *mRepositoryMockUpdateDefaultEmbeddingConfig {
+	if mmUpdateDefaultEmbeddingConfig.mock.inspectFuncUpdateDefaultEmbeddingConfig != nil {
+		mmUpdateDefaultEmbeddingConfig.mock.t.Fatalf("Inspect function is already set for RepositoryMock.UpdateDefaultEmbeddingConfig")
+	}
+
+	mmUpdateDefaultEmbeddingConfig.mock.inspectFuncUpdateDefaultEmbeddingConfig = f
+
+	return mmUpdateDefaultEmbeddingConfig
+}
+
+// Return sets up results that will be returned by Repository.UpdateDefaultEmbeddingConfig
+func (mmUpdateDefaultEmbeddingConfig *mRepositoryMockUpdateDefaultEmbeddingConfig) Return(err error) *RepositoryMock {
+	if mmUpdateDefaultEmbeddingConfig.mock.funcUpdateDefaultEmbeddingConfig != nil {
+		mmUpdateDefaultEmbeddingConfig.mock.t.Fatalf("RepositoryMock.UpdateDefaultEmbeddingConfig mock is already set by Set")
+	}
+
+	if mmUpdateDefaultEmbeddingConfig.defaultExpectation == nil {
+		mmUpdateDefaultEmbeddingConfig.defaultExpectation = &RepositoryMockUpdateDefaultEmbeddingConfigExpectation{mock: mmUpdateDefaultEmbeddingConfig.mock}
+	}
+	mmUpdateDefaultEmbeddingConfig.defaultExpectation.results = &RepositoryMockUpdateDefaultEmbeddingConfigResults{err}
+	mmUpdateDefaultEmbeddingConfig.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmUpdateDefaultEmbeddingConfig.mock
+}
+
+// Set uses given function f to mock the Repository.UpdateDefaultEmbeddingConfig method
+func (mmUpdateDefaultEmbeddingConfig *mRepositoryMockUpdateDefaultEmbeddingConfig) Set(f func(ctx context.Context, profile string, config mm_repository.EmbeddingConfigJSON) (err error)) *RepositoryMock {
+	if mmUpdateDefaultEmbeddingConfig.defaultExpectation != nil {
+		mmUpdateDefaultEmbeddingConfig.mock.t.Fatalf("Default expectation is already set for the Repository.UpdateDefaultEmbeddingConfig method")
+	}
+
+	if len(mmUpdateDefaultEmbeddingConfig.expectations) > 0 {
+		mmUpdateDefaultEmbeddingConfig.mock.t.Fatalf("Some expectations are already set for the Repository.UpdateDefaultEmbeddingConfig method")
+	}
+
+	mmUpdateDefaultEmbeddingConfig.mock.funcUpdateDefaultEmbeddingConfig = f
+	mmUpdateDefaultEmbeddingConfig.mock.funcUpdateDefaultEmbeddingConfigOrigin = minimock.CallerInfo(1)
+	return mmUpdateDefaultEmbeddingConfig.mock
+}
+
+// When sets expectation for the Repository.UpdateDefaultEmbeddingConfig which will trigger the result defined by the following
+// Then helper
+func (mmUpdateDefaultEmbeddingConfig *mRepositoryMockUpdateDefaultEmbeddingConfig) When(ctx context.Context, profile string, config mm_repository.EmbeddingConfigJSON) *RepositoryMockUpdateDefaultEmbeddingConfigExpectation {
+	if mmUpdateDefaultEmbeddingConfig.mock.funcUpdateDefaultEmbeddingConfig != nil {
+		mmUpdateDefaultEmbeddingConfig.mock.t.Fatalf("RepositoryMock.UpdateDefaultEmbeddingConfig mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockUpdateDefaultEmbeddingConfigExpectation{
+		mock:               mmUpdateDefaultEmbeddingConfig.mock,
+		params:             &RepositoryMockUpdateDefaultEmbeddingConfigParams{ctx, profile, config},
+		expectationOrigins: RepositoryMockUpdateDefaultEmbeddingConfigExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmUpdateDefaultEmbeddingConfig.expectations = append(mmUpdateDefaultEmbeddingConfig.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.UpdateDefaultEmbeddingConfig return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockUpdateDefaultEmbeddingConfigExpectation) Then(err error) *RepositoryMock {
+	e.results = &RepositoryMockUpdateDefaultEmbeddingConfigResults{err}
+	return e.mock
+}
+
+// Times sets number of times Repository.UpdateDefaultEmbeddingConfig should be invoked
+func (mmUpdateDefaultEmbeddingConfig *mRepositoryMockUpdateDefaultEmbeddingConfig) Times(n uint64) *mRepositoryMockUpdateDefaultEmbeddingConfig {
+	if n == 0 {
+		mmUpdateDefaultEmbeddingConfig.mock.t.Fatalf("Times of RepositoryMock.UpdateDefaultEmbeddingConfig mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmUpdateDefaultEmbeddingConfig.expectedInvocations, n)
+	mmUpdateDefaultEmbeddingConfig.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmUpdateDefaultEmbeddingConfig
+}
+
+func (mmUpdateDefaultEmbeddingConfig *mRepositoryMockUpdateDefaultEmbeddingConfig) invocationsDone() bool {
+	if len(mmUpdateDefaultEmbeddingConfig.expectations) == 0 && mmUpdateDefaultEmbeddingConfig.defaultExpectation == nil && mmUpdateDefaultEmbeddingConfig.mock.funcUpdateDefaultEmbeddingConfig == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmUpdateDefaultEmbeddingConfig.mock.afterUpdateDefaultEmbeddingConfigCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmUpdateDefaultEmbeddingConfig.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// UpdateDefaultEmbeddingConfig implements mm_repository.Repository
+func (mmUpdateDefaultEmbeddingConfig *RepositoryMock) UpdateDefaultEmbeddingConfig(ctx context.Context, profile string, config mm_repository.EmbeddingConfigJSON) (err error) {
+	mm_atomic.AddUint64(&mmUpdateDefaultEmbeddingConfig.beforeUpdateDefaultEmbeddingConfigCounter, 1)
+	defer mm_atomic.AddUint64(&mmUpdateDefaultEmbeddingConfig.afterUpdateDefaultEmbeddingConfigCounter, 1)
+
+	mmUpdateDefaultEmbeddingConfig.t.Helper()
+
+	if mmUpdateDefaultEmbeddingConfig.inspectFuncUpdateDefaultEmbeddingConfig != nil {
+		mmUpdateDefaultEmbeddingConfig.inspectFuncUpdateDefaultEmbeddingConfig(ctx, profile, config)
+	}
+
+	mm_params := RepositoryMockUpdateDefaultEmbeddingConfigParams{ctx, profile, config}
+
+	// Record call args
+	mmUpdateDefaultEmbeddingConfig.UpdateDefaultEmbeddingConfigMock.mutex.Lock()
+	mmUpdateDefaultEmbeddingConfig.UpdateDefaultEmbeddingConfigMock.callArgs = append(mmUpdateDefaultEmbeddingConfig.UpdateDefaultEmbeddingConfigMock.callArgs, &mm_params)
+	mmUpdateDefaultEmbeddingConfig.UpdateDefaultEmbeddingConfigMock.mutex.Unlock()
+
+	for _, e := range mmUpdateDefaultEmbeddingConfig.UpdateDefaultEmbeddingConfigMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmUpdateDefaultEmbeddingConfig.UpdateDefaultEmbeddingConfigMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmUpdateDefaultEmbeddingConfig.UpdateDefaultEmbeddingConfigMock.defaultExpectation.Counter, 1)
+		mm_want := mmUpdateDefaultEmbeddingConfig.UpdateDefaultEmbeddingConfigMock.defaultExpectation.params
+		mm_want_ptrs := mmUpdateDefaultEmbeddingConfig.UpdateDefaultEmbeddingConfigMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockUpdateDefaultEmbeddingConfigParams{ctx, profile, config}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmUpdateDefaultEmbeddingConfig.t.Errorf("RepositoryMock.UpdateDefaultEmbeddingConfig got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateDefaultEmbeddingConfig.UpdateDefaultEmbeddingConfigMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.profile != nil && !minimock.Equal(*mm_want_ptrs.profile, mm_got.profile) {
+				mmUpdateDefaultEmbeddingConfig.t.Errorf("RepositoryMock.UpdateDefaultEmbeddingConfig got unexpected parameter profile, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateDefaultEmbeddingConfig.UpdateDefaultEmbeddingConfigMock.defaultExpectation.expectationOrigins.originProfile, *mm_want_ptrs.profile, mm_got.profile, minimock.Diff(*mm_want_ptrs.profile, mm_got.profile))
+			}
+
+			if mm_want_ptrs.config != nil && !minimock.Equal(*mm_want_ptrs.config, mm_got.config) {
+				mmUpdateDefaultEmbeddingConfig.t.Errorf("RepositoryMock.UpdateDefaultEmbeddingConfig got unexpected parameter config, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateDefaultEmbeddingConfig.UpdateDefaultEmbeddingConfigMock.defaultExpectation.expectationOrigins.originConfig, *mm_want_ptrs.config, mm_got.config, minimock.Diff(*mm_want_ptrs.config, mm_got.config))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmUpdateDefaultEmbeddingConfig.t.Errorf("RepositoryMock.UpdateDefaultEmbeddingConfig got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmUpdateDefaultEmbeddingConfig.UpdateDefaultEmbeddingConfigMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmUpdateDefaultEmbeddingConfig.UpdateDefaultEmbeddingConfigMock.defaultExpectation.results
+		if mm_results == nil {
+			mmUpdateDefaultEmbeddingConfig.t.Fatal("No results are set for the RepositoryMock.UpdateDefaultEmbeddingConfig")
+		}
+		return (*mm_results).err
+	}
+	if mmUpdateDefaultEmbeddingConfig.funcUpdateDefaultEmbeddingConfig != nil {
+		return mmUpdateDefaultEmbeddingConfig.funcUpdateDefaultEmbeddingConfig(ctx, profile, config)
+	}
+	mmUpdateDefaultEmbeddingConfig.t.Fatalf("Unexpected call to RepositoryMock.UpdateDefaultEmbeddingConfig. %v %v %v", ctx, profile, config)
+	return
+}
+
+// UpdateDefaultEmbeddingConfigAfterCounter returns a count of finished RepositoryMock.UpdateDefaultEmbeddingConfig invocations
+func (mmUpdateDefaultEmbeddingConfig *RepositoryMock) UpdateDefaultEmbeddingConfigAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateDefaultEmbeddingConfig.afterUpdateDefaultEmbeddingConfigCounter)
+}
+
+// UpdateDefaultEmbeddingConfigBeforeCounter returns a count of RepositoryMock.UpdateDefaultEmbeddingConfig invocations
+func (mmUpdateDefaultEmbeddingConfig *RepositoryMock) UpdateDefaultEmbeddingConfigBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateDefaultEmbeddingConfig.beforeUpdateDefaultEmbeddingConfigCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.UpdateDefaultEmbeddingConfig.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmUpdateDefaultEmbeddingConfig *mRepositoryMockUpdateDefaultEmbeddingConfig) Calls() []*RepositoryMockUpdateDefaultEmbeddingConfigParams {
+	mmUpdateDefaultEmbeddingConfig.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockUpdateDefaultEmbeddingConfigParams, len(mmUpdateDefaultEmbeddingConfig.callArgs))
+	copy(argCopy, mmUpdateDefaultEmbeddingConfig.callArgs)
+
+	mmUpdateDefaultEmbeddingConfig.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockUpdateDefaultEmbeddingConfigDone returns true if the count of the UpdateDefaultEmbeddingConfig invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockUpdateDefaultEmbeddingConfigDone() bool {
+	if m.UpdateDefaultEmbeddingConfigMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.UpdateDefaultEmbeddingConfigMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.UpdateDefaultEmbeddingConfigMock.invocationsDone()
+}
+
+// MinimockUpdateDefaultEmbeddingConfigInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockUpdateDefaultEmbeddingConfigInspect() {
+	for _, e := range m.UpdateDefaultEmbeddingConfigMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.UpdateDefaultEmbeddingConfig at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterUpdateDefaultEmbeddingConfigCounter := mm_atomic.LoadUint64(&m.afterUpdateDefaultEmbeddingConfigCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.UpdateDefaultEmbeddingConfigMock.defaultExpectation != nil && afterUpdateDefaultEmbeddingConfigCounter < 1 {
+		if m.UpdateDefaultEmbeddingConfigMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.UpdateDefaultEmbeddingConfig at\n%s", m.UpdateDefaultEmbeddingConfigMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.UpdateDefaultEmbeddingConfig at\n%s with params: %#v", m.UpdateDefaultEmbeddingConfigMock.defaultExpectation.expectationOrigins.origin, *m.UpdateDefaultEmbeddingConfigMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcUpdateDefaultEmbeddingConfig != nil && afterUpdateDefaultEmbeddingConfigCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.UpdateDefaultEmbeddingConfig at\n%s", m.funcUpdateDefaultEmbeddingConfigOrigin)
+	}
+
+	if !m.UpdateDefaultEmbeddingConfigMock.invocationsDone() && afterUpdateDefaultEmbeddingConfigCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.UpdateDefaultEmbeddingConfig at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.UpdateDefaultEmbeddingConfigMock.expectedInvocations), m.UpdateDefaultEmbeddingConfigMock.expectedInvocationsOrigin, afterUpdateDefaultEmbeddingConfigCounter)
+	}
+}
+
 type mRepositoryMockUpdateKnowledgeBase struct {
 	optional           bool
 	mock               *RepositoryMock
@@ -29533,6 +36526,1187 @@ func (m *RepositoryMock) MinimockUpdateKnowledgeBaseFileInspect() {
 	if !m.UpdateKnowledgeBaseFileMock.invocationsDone() && afterUpdateKnowledgeBaseFileCounter > 0 {
 		m.t.Errorf("Expected %d calls to RepositoryMock.UpdateKnowledgeBaseFile at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.UpdateKnowledgeBaseFileMock.expectedInvocations), m.UpdateKnowledgeBaseFileMock.expectedInvocationsOrigin, afterUpdateKnowledgeBaseFileCounter)
+	}
+}
+
+type mRepositoryMockUpdateKnowledgeBaseResources struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockUpdateKnowledgeBaseResourcesExpectation
+	expectations       []*RepositoryMockUpdateKnowledgeBaseResourcesExpectation
+
+	callArgs []*RepositoryMockUpdateKnowledgeBaseResourcesParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockUpdateKnowledgeBaseResourcesExpectation specifies expectation struct of the Repository.UpdateKnowledgeBaseResources
+type RepositoryMockUpdateKnowledgeBaseResourcesExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockUpdateKnowledgeBaseResourcesParams
+	paramPtrs          *RepositoryMockUpdateKnowledgeBaseResourcesParamPtrs
+	expectationOrigins RepositoryMockUpdateKnowledgeBaseResourcesExpectationOrigins
+	results            *RepositoryMockUpdateKnowledgeBaseResourcesResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockUpdateKnowledgeBaseResourcesParams contains parameters of the Repository.UpdateKnowledgeBaseResources
+type RepositoryMockUpdateKnowledgeBaseResourcesParams struct {
+	ctx       context.Context
+	fromKBUID types.KBUIDType
+	toKBUID   types.KBUIDType
+}
+
+// RepositoryMockUpdateKnowledgeBaseResourcesParamPtrs contains pointers to parameters of the Repository.UpdateKnowledgeBaseResources
+type RepositoryMockUpdateKnowledgeBaseResourcesParamPtrs struct {
+	ctx       *context.Context
+	fromKBUID *types.KBUIDType
+	toKBUID   *types.KBUIDType
+}
+
+// RepositoryMockUpdateKnowledgeBaseResourcesResults contains results of the Repository.UpdateKnowledgeBaseResources
+type RepositoryMockUpdateKnowledgeBaseResourcesResults struct {
+	err error
+}
+
+// RepositoryMockUpdateKnowledgeBaseResourcesOrigins contains origins of expectations of the Repository.UpdateKnowledgeBaseResources
+type RepositoryMockUpdateKnowledgeBaseResourcesExpectationOrigins struct {
+	origin          string
+	originCtx       string
+	originFromKBUID string
+	originToKBUID   string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmUpdateKnowledgeBaseResources *mRepositoryMockUpdateKnowledgeBaseResources) Optional() *mRepositoryMockUpdateKnowledgeBaseResources {
+	mmUpdateKnowledgeBaseResources.optional = true
+	return mmUpdateKnowledgeBaseResources
+}
+
+// Expect sets up expected params for Repository.UpdateKnowledgeBaseResources
+func (mmUpdateKnowledgeBaseResources *mRepositoryMockUpdateKnowledgeBaseResources) Expect(ctx context.Context, fromKBUID types.KBUIDType, toKBUID types.KBUIDType) *mRepositoryMockUpdateKnowledgeBaseResources {
+	if mmUpdateKnowledgeBaseResources.mock.funcUpdateKnowledgeBaseResources != nil {
+		mmUpdateKnowledgeBaseResources.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseResources mock is already set by Set")
+	}
+
+	if mmUpdateKnowledgeBaseResources.defaultExpectation == nil {
+		mmUpdateKnowledgeBaseResources.defaultExpectation = &RepositoryMockUpdateKnowledgeBaseResourcesExpectation{}
+	}
+
+	if mmUpdateKnowledgeBaseResources.defaultExpectation.paramPtrs != nil {
+		mmUpdateKnowledgeBaseResources.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseResources mock is already set by ExpectParams functions")
+	}
+
+	mmUpdateKnowledgeBaseResources.defaultExpectation.params = &RepositoryMockUpdateKnowledgeBaseResourcesParams{ctx, fromKBUID, toKBUID}
+	mmUpdateKnowledgeBaseResources.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmUpdateKnowledgeBaseResources.expectations {
+		if minimock.Equal(e.params, mmUpdateKnowledgeBaseResources.defaultExpectation.params) {
+			mmUpdateKnowledgeBaseResources.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmUpdateKnowledgeBaseResources.defaultExpectation.params)
+		}
+	}
+
+	return mmUpdateKnowledgeBaseResources
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.UpdateKnowledgeBaseResources
+func (mmUpdateKnowledgeBaseResources *mRepositoryMockUpdateKnowledgeBaseResources) ExpectCtxParam1(ctx context.Context) *mRepositoryMockUpdateKnowledgeBaseResources {
+	if mmUpdateKnowledgeBaseResources.mock.funcUpdateKnowledgeBaseResources != nil {
+		mmUpdateKnowledgeBaseResources.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseResources mock is already set by Set")
+	}
+
+	if mmUpdateKnowledgeBaseResources.defaultExpectation == nil {
+		mmUpdateKnowledgeBaseResources.defaultExpectation = &RepositoryMockUpdateKnowledgeBaseResourcesExpectation{}
+	}
+
+	if mmUpdateKnowledgeBaseResources.defaultExpectation.params != nil {
+		mmUpdateKnowledgeBaseResources.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseResources mock is already set by Expect")
+	}
+
+	if mmUpdateKnowledgeBaseResources.defaultExpectation.paramPtrs == nil {
+		mmUpdateKnowledgeBaseResources.defaultExpectation.paramPtrs = &RepositoryMockUpdateKnowledgeBaseResourcesParamPtrs{}
+	}
+	mmUpdateKnowledgeBaseResources.defaultExpectation.paramPtrs.ctx = &ctx
+	mmUpdateKnowledgeBaseResources.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmUpdateKnowledgeBaseResources
+}
+
+// ExpectFromKBUIDParam2 sets up expected param fromKBUID for Repository.UpdateKnowledgeBaseResources
+func (mmUpdateKnowledgeBaseResources *mRepositoryMockUpdateKnowledgeBaseResources) ExpectFromKBUIDParam2(fromKBUID types.KBUIDType) *mRepositoryMockUpdateKnowledgeBaseResources {
+	if mmUpdateKnowledgeBaseResources.mock.funcUpdateKnowledgeBaseResources != nil {
+		mmUpdateKnowledgeBaseResources.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseResources mock is already set by Set")
+	}
+
+	if mmUpdateKnowledgeBaseResources.defaultExpectation == nil {
+		mmUpdateKnowledgeBaseResources.defaultExpectation = &RepositoryMockUpdateKnowledgeBaseResourcesExpectation{}
+	}
+
+	if mmUpdateKnowledgeBaseResources.defaultExpectation.params != nil {
+		mmUpdateKnowledgeBaseResources.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseResources mock is already set by Expect")
+	}
+
+	if mmUpdateKnowledgeBaseResources.defaultExpectation.paramPtrs == nil {
+		mmUpdateKnowledgeBaseResources.defaultExpectation.paramPtrs = &RepositoryMockUpdateKnowledgeBaseResourcesParamPtrs{}
+	}
+	mmUpdateKnowledgeBaseResources.defaultExpectation.paramPtrs.fromKBUID = &fromKBUID
+	mmUpdateKnowledgeBaseResources.defaultExpectation.expectationOrigins.originFromKBUID = minimock.CallerInfo(1)
+
+	return mmUpdateKnowledgeBaseResources
+}
+
+// ExpectToKBUIDParam3 sets up expected param toKBUID for Repository.UpdateKnowledgeBaseResources
+func (mmUpdateKnowledgeBaseResources *mRepositoryMockUpdateKnowledgeBaseResources) ExpectToKBUIDParam3(toKBUID types.KBUIDType) *mRepositoryMockUpdateKnowledgeBaseResources {
+	if mmUpdateKnowledgeBaseResources.mock.funcUpdateKnowledgeBaseResources != nil {
+		mmUpdateKnowledgeBaseResources.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseResources mock is already set by Set")
+	}
+
+	if mmUpdateKnowledgeBaseResources.defaultExpectation == nil {
+		mmUpdateKnowledgeBaseResources.defaultExpectation = &RepositoryMockUpdateKnowledgeBaseResourcesExpectation{}
+	}
+
+	if mmUpdateKnowledgeBaseResources.defaultExpectation.params != nil {
+		mmUpdateKnowledgeBaseResources.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseResources mock is already set by Expect")
+	}
+
+	if mmUpdateKnowledgeBaseResources.defaultExpectation.paramPtrs == nil {
+		mmUpdateKnowledgeBaseResources.defaultExpectation.paramPtrs = &RepositoryMockUpdateKnowledgeBaseResourcesParamPtrs{}
+	}
+	mmUpdateKnowledgeBaseResources.defaultExpectation.paramPtrs.toKBUID = &toKBUID
+	mmUpdateKnowledgeBaseResources.defaultExpectation.expectationOrigins.originToKBUID = minimock.CallerInfo(1)
+
+	return mmUpdateKnowledgeBaseResources
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.UpdateKnowledgeBaseResources
+func (mmUpdateKnowledgeBaseResources *mRepositoryMockUpdateKnowledgeBaseResources) Inspect(f func(ctx context.Context, fromKBUID types.KBUIDType, toKBUID types.KBUIDType)) *mRepositoryMockUpdateKnowledgeBaseResources {
+	if mmUpdateKnowledgeBaseResources.mock.inspectFuncUpdateKnowledgeBaseResources != nil {
+		mmUpdateKnowledgeBaseResources.mock.t.Fatalf("Inspect function is already set for RepositoryMock.UpdateKnowledgeBaseResources")
+	}
+
+	mmUpdateKnowledgeBaseResources.mock.inspectFuncUpdateKnowledgeBaseResources = f
+
+	return mmUpdateKnowledgeBaseResources
+}
+
+// Return sets up results that will be returned by Repository.UpdateKnowledgeBaseResources
+func (mmUpdateKnowledgeBaseResources *mRepositoryMockUpdateKnowledgeBaseResources) Return(err error) *RepositoryMock {
+	if mmUpdateKnowledgeBaseResources.mock.funcUpdateKnowledgeBaseResources != nil {
+		mmUpdateKnowledgeBaseResources.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseResources mock is already set by Set")
+	}
+
+	if mmUpdateKnowledgeBaseResources.defaultExpectation == nil {
+		mmUpdateKnowledgeBaseResources.defaultExpectation = &RepositoryMockUpdateKnowledgeBaseResourcesExpectation{mock: mmUpdateKnowledgeBaseResources.mock}
+	}
+	mmUpdateKnowledgeBaseResources.defaultExpectation.results = &RepositoryMockUpdateKnowledgeBaseResourcesResults{err}
+	mmUpdateKnowledgeBaseResources.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmUpdateKnowledgeBaseResources.mock
+}
+
+// Set uses given function f to mock the Repository.UpdateKnowledgeBaseResources method
+func (mmUpdateKnowledgeBaseResources *mRepositoryMockUpdateKnowledgeBaseResources) Set(f func(ctx context.Context, fromKBUID types.KBUIDType, toKBUID types.KBUIDType) (err error)) *RepositoryMock {
+	if mmUpdateKnowledgeBaseResources.defaultExpectation != nil {
+		mmUpdateKnowledgeBaseResources.mock.t.Fatalf("Default expectation is already set for the Repository.UpdateKnowledgeBaseResources method")
+	}
+
+	if len(mmUpdateKnowledgeBaseResources.expectations) > 0 {
+		mmUpdateKnowledgeBaseResources.mock.t.Fatalf("Some expectations are already set for the Repository.UpdateKnowledgeBaseResources method")
+	}
+
+	mmUpdateKnowledgeBaseResources.mock.funcUpdateKnowledgeBaseResources = f
+	mmUpdateKnowledgeBaseResources.mock.funcUpdateKnowledgeBaseResourcesOrigin = minimock.CallerInfo(1)
+	return mmUpdateKnowledgeBaseResources.mock
+}
+
+// When sets expectation for the Repository.UpdateKnowledgeBaseResources which will trigger the result defined by the following
+// Then helper
+func (mmUpdateKnowledgeBaseResources *mRepositoryMockUpdateKnowledgeBaseResources) When(ctx context.Context, fromKBUID types.KBUIDType, toKBUID types.KBUIDType) *RepositoryMockUpdateKnowledgeBaseResourcesExpectation {
+	if mmUpdateKnowledgeBaseResources.mock.funcUpdateKnowledgeBaseResources != nil {
+		mmUpdateKnowledgeBaseResources.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseResources mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockUpdateKnowledgeBaseResourcesExpectation{
+		mock:               mmUpdateKnowledgeBaseResources.mock,
+		params:             &RepositoryMockUpdateKnowledgeBaseResourcesParams{ctx, fromKBUID, toKBUID},
+		expectationOrigins: RepositoryMockUpdateKnowledgeBaseResourcesExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmUpdateKnowledgeBaseResources.expectations = append(mmUpdateKnowledgeBaseResources.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.UpdateKnowledgeBaseResources return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockUpdateKnowledgeBaseResourcesExpectation) Then(err error) *RepositoryMock {
+	e.results = &RepositoryMockUpdateKnowledgeBaseResourcesResults{err}
+	return e.mock
+}
+
+// Times sets number of times Repository.UpdateKnowledgeBaseResources should be invoked
+func (mmUpdateKnowledgeBaseResources *mRepositoryMockUpdateKnowledgeBaseResources) Times(n uint64) *mRepositoryMockUpdateKnowledgeBaseResources {
+	if n == 0 {
+		mmUpdateKnowledgeBaseResources.mock.t.Fatalf("Times of RepositoryMock.UpdateKnowledgeBaseResources mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmUpdateKnowledgeBaseResources.expectedInvocations, n)
+	mmUpdateKnowledgeBaseResources.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmUpdateKnowledgeBaseResources
+}
+
+func (mmUpdateKnowledgeBaseResources *mRepositoryMockUpdateKnowledgeBaseResources) invocationsDone() bool {
+	if len(mmUpdateKnowledgeBaseResources.expectations) == 0 && mmUpdateKnowledgeBaseResources.defaultExpectation == nil && mmUpdateKnowledgeBaseResources.mock.funcUpdateKnowledgeBaseResources == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmUpdateKnowledgeBaseResources.mock.afterUpdateKnowledgeBaseResourcesCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmUpdateKnowledgeBaseResources.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// UpdateKnowledgeBaseResources implements mm_repository.Repository
+func (mmUpdateKnowledgeBaseResources *RepositoryMock) UpdateKnowledgeBaseResources(ctx context.Context, fromKBUID types.KBUIDType, toKBUID types.KBUIDType) (err error) {
+	mm_atomic.AddUint64(&mmUpdateKnowledgeBaseResources.beforeUpdateKnowledgeBaseResourcesCounter, 1)
+	defer mm_atomic.AddUint64(&mmUpdateKnowledgeBaseResources.afterUpdateKnowledgeBaseResourcesCounter, 1)
+
+	mmUpdateKnowledgeBaseResources.t.Helper()
+
+	if mmUpdateKnowledgeBaseResources.inspectFuncUpdateKnowledgeBaseResources != nil {
+		mmUpdateKnowledgeBaseResources.inspectFuncUpdateKnowledgeBaseResources(ctx, fromKBUID, toKBUID)
+	}
+
+	mm_params := RepositoryMockUpdateKnowledgeBaseResourcesParams{ctx, fromKBUID, toKBUID}
+
+	// Record call args
+	mmUpdateKnowledgeBaseResources.UpdateKnowledgeBaseResourcesMock.mutex.Lock()
+	mmUpdateKnowledgeBaseResources.UpdateKnowledgeBaseResourcesMock.callArgs = append(mmUpdateKnowledgeBaseResources.UpdateKnowledgeBaseResourcesMock.callArgs, &mm_params)
+	mmUpdateKnowledgeBaseResources.UpdateKnowledgeBaseResourcesMock.mutex.Unlock()
+
+	for _, e := range mmUpdateKnowledgeBaseResources.UpdateKnowledgeBaseResourcesMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmUpdateKnowledgeBaseResources.UpdateKnowledgeBaseResourcesMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmUpdateKnowledgeBaseResources.UpdateKnowledgeBaseResourcesMock.defaultExpectation.Counter, 1)
+		mm_want := mmUpdateKnowledgeBaseResources.UpdateKnowledgeBaseResourcesMock.defaultExpectation.params
+		mm_want_ptrs := mmUpdateKnowledgeBaseResources.UpdateKnowledgeBaseResourcesMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockUpdateKnowledgeBaseResourcesParams{ctx, fromKBUID, toKBUID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmUpdateKnowledgeBaseResources.t.Errorf("RepositoryMock.UpdateKnowledgeBaseResources got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateKnowledgeBaseResources.UpdateKnowledgeBaseResourcesMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.fromKBUID != nil && !minimock.Equal(*mm_want_ptrs.fromKBUID, mm_got.fromKBUID) {
+				mmUpdateKnowledgeBaseResources.t.Errorf("RepositoryMock.UpdateKnowledgeBaseResources got unexpected parameter fromKBUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateKnowledgeBaseResources.UpdateKnowledgeBaseResourcesMock.defaultExpectation.expectationOrigins.originFromKBUID, *mm_want_ptrs.fromKBUID, mm_got.fromKBUID, minimock.Diff(*mm_want_ptrs.fromKBUID, mm_got.fromKBUID))
+			}
+
+			if mm_want_ptrs.toKBUID != nil && !minimock.Equal(*mm_want_ptrs.toKBUID, mm_got.toKBUID) {
+				mmUpdateKnowledgeBaseResources.t.Errorf("RepositoryMock.UpdateKnowledgeBaseResources got unexpected parameter toKBUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateKnowledgeBaseResources.UpdateKnowledgeBaseResourcesMock.defaultExpectation.expectationOrigins.originToKBUID, *mm_want_ptrs.toKBUID, mm_got.toKBUID, minimock.Diff(*mm_want_ptrs.toKBUID, mm_got.toKBUID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmUpdateKnowledgeBaseResources.t.Errorf("RepositoryMock.UpdateKnowledgeBaseResources got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmUpdateKnowledgeBaseResources.UpdateKnowledgeBaseResourcesMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmUpdateKnowledgeBaseResources.UpdateKnowledgeBaseResourcesMock.defaultExpectation.results
+		if mm_results == nil {
+			mmUpdateKnowledgeBaseResources.t.Fatal("No results are set for the RepositoryMock.UpdateKnowledgeBaseResources")
+		}
+		return (*mm_results).err
+	}
+	if mmUpdateKnowledgeBaseResources.funcUpdateKnowledgeBaseResources != nil {
+		return mmUpdateKnowledgeBaseResources.funcUpdateKnowledgeBaseResources(ctx, fromKBUID, toKBUID)
+	}
+	mmUpdateKnowledgeBaseResources.t.Fatalf("Unexpected call to RepositoryMock.UpdateKnowledgeBaseResources. %v %v %v", ctx, fromKBUID, toKBUID)
+	return
+}
+
+// UpdateKnowledgeBaseResourcesAfterCounter returns a count of finished RepositoryMock.UpdateKnowledgeBaseResources invocations
+func (mmUpdateKnowledgeBaseResources *RepositoryMock) UpdateKnowledgeBaseResourcesAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateKnowledgeBaseResources.afterUpdateKnowledgeBaseResourcesCounter)
+}
+
+// UpdateKnowledgeBaseResourcesBeforeCounter returns a count of RepositoryMock.UpdateKnowledgeBaseResources invocations
+func (mmUpdateKnowledgeBaseResources *RepositoryMock) UpdateKnowledgeBaseResourcesBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateKnowledgeBaseResources.beforeUpdateKnowledgeBaseResourcesCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.UpdateKnowledgeBaseResources.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmUpdateKnowledgeBaseResources *mRepositoryMockUpdateKnowledgeBaseResources) Calls() []*RepositoryMockUpdateKnowledgeBaseResourcesParams {
+	mmUpdateKnowledgeBaseResources.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockUpdateKnowledgeBaseResourcesParams, len(mmUpdateKnowledgeBaseResources.callArgs))
+	copy(argCopy, mmUpdateKnowledgeBaseResources.callArgs)
+
+	mmUpdateKnowledgeBaseResources.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockUpdateKnowledgeBaseResourcesDone returns true if the count of the UpdateKnowledgeBaseResources invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockUpdateKnowledgeBaseResourcesDone() bool {
+	if m.UpdateKnowledgeBaseResourcesMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.UpdateKnowledgeBaseResourcesMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.UpdateKnowledgeBaseResourcesMock.invocationsDone()
+}
+
+// MinimockUpdateKnowledgeBaseResourcesInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockUpdateKnowledgeBaseResourcesInspect() {
+	for _, e := range m.UpdateKnowledgeBaseResourcesMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.UpdateKnowledgeBaseResources at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterUpdateKnowledgeBaseResourcesCounter := mm_atomic.LoadUint64(&m.afterUpdateKnowledgeBaseResourcesCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.UpdateKnowledgeBaseResourcesMock.defaultExpectation != nil && afterUpdateKnowledgeBaseResourcesCounter < 1 {
+		if m.UpdateKnowledgeBaseResourcesMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.UpdateKnowledgeBaseResources at\n%s", m.UpdateKnowledgeBaseResourcesMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.UpdateKnowledgeBaseResources at\n%s with params: %#v", m.UpdateKnowledgeBaseResourcesMock.defaultExpectation.expectationOrigins.origin, *m.UpdateKnowledgeBaseResourcesMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcUpdateKnowledgeBaseResources != nil && afterUpdateKnowledgeBaseResourcesCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.UpdateKnowledgeBaseResources at\n%s", m.funcUpdateKnowledgeBaseResourcesOrigin)
+	}
+
+	if !m.UpdateKnowledgeBaseResourcesMock.invocationsDone() && afterUpdateKnowledgeBaseResourcesCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.UpdateKnowledgeBaseResources at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.UpdateKnowledgeBaseResourcesMock.expectedInvocations), m.UpdateKnowledgeBaseResourcesMock.expectedInvocationsOrigin, afterUpdateKnowledgeBaseResourcesCounter)
+	}
+}
+
+type mRepositoryMockUpdateKnowledgeBaseUpdateStatus struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockUpdateKnowledgeBaseUpdateStatusExpectation
+	expectations       []*RepositoryMockUpdateKnowledgeBaseUpdateStatusExpectation
+
+	callArgs []*RepositoryMockUpdateKnowledgeBaseUpdateStatusParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockUpdateKnowledgeBaseUpdateStatusExpectation specifies expectation struct of the Repository.UpdateKnowledgeBaseUpdateStatus
+type RepositoryMockUpdateKnowledgeBaseUpdateStatusExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockUpdateKnowledgeBaseUpdateStatusParams
+	paramPtrs          *RepositoryMockUpdateKnowledgeBaseUpdateStatusParamPtrs
+	expectationOrigins RepositoryMockUpdateKnowledgeBaseUpdateStatusExpectationOrigins
+	results            *RepositoryMockUpdateKnowledgeBaseUpdateStatusResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockUpdateKnowledgeBaseUpdateStatusParams contains parameters of the Repository.UpdateKnowledgeBaseUpdateStatus
+type RepositoryMockUpdateKnowledgeBaseUpdateStatusParams struct {
+	ctx        context.Context
+	kbUID      types.KBUIDType
+	status     string
+	workflowID string
+}
+
+// RepositoryMockUpdateKnowledgeBaseUpdateStatusParamPtrs contains pointers to parameters of the Repository.UpdateKnowledgeBaseUpdateStatus
+type RepositoryMockUpdateKnowledgeBaseUpdateStatusParamPtrs struct {
+	ctx        *context.Context
+	kbUID      *types.KBUIDType
+	status     *string
+	workflowID *string
+}
+
+// RepositoryMockUpdateKnowledgeBaseUpdateStatusResults contains results of the Repository.UpdateKnowledgeBaseUpdateStatus
+type RepositoryMockUpdateKnowledgeBaseUpdateStatusResults struct {
+	err error
+}
+
+// RepositoryMockUpdateKnowledgeBaseUpdateStatusOrigins contains origins of expectations of the Repository.UpdateKnowledgeBaseUpdateStatus
+type RepositoryMockUpdateKnowledgeBaseUpdateStatusExpectationOrigins struct {
+	origin           string
+	originCtx        string
+	originKbUID      string
+	originStatus     string
+	originWorkflowID string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmUpdateKnowledgeBaseUpdateStatus *mRepositoryMockUpdateKnowledgeBaseUpdateStatus) Optional() *mRepositoryMockUpdateKnowledgeBaseUpdateStatus {
+	mmUpdateKnowledgeBaseUpdateStatus.optional = true
+	return mmUpdateKnowledgeBaseUpdateStatus
+}
+
+// Expect sets up expected params for Repository.UpdateKnowledgeBaseUpdateStatus
+func (mmUpdateKnowledgeBaseUpdateStatus *mRepositoryMockUpdateKnowledgeBaseUpdateStatus) Expect(ctx context.Context, kbUID types.KBUIDType, status string, workflowID string) *mRepositoryMockUpdateKnowledgeBaseUpdateStatus {
+	if mmUpdateKnowledgeBaseUpdateStatus.mock.funcUpdateKnowledgeBaseUpdateStatus != nil {
+		mmUpdateKnowledgeBaseUpdateStatus.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseUpdateStatus mock is already set by Set")
+	}
+
+	if mmUpdateKnowledgeBaseUpdateStatus.defaultExpectation == nil {
+		mmUpdateKnowledgeBaseUpdateStatus.defaultExpectation = &RepositoryMockUpdateKnowledgeBaseUpdateStatusExpectation{}
+	}
+
+	if mmUpdateKnowledgeBaseUpdateStatus.defaultExpectation.paramPtrs != nil {
+		mmUpdateKnowledgeBaseUpdateStatus.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseUpdateStatus mock is already set by ExpectParams functions")
+	}
+
+	mmUpdateKnowledgeBaseUpdateStatus.defaultExpectation.params = &RepositoryMockUpdateKnowledgeBaseUpdateStatusParams{ctx, kbUID, status, workflowID}
+	mmUpdateKnowledgeBaseUpdateStatus.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmUpdateKnowledgeBaseUpdateStatus.expectations {
+		if minimock.Equal(e.params, mmUpdateKnowledgeBaseUpdateStatus.defaultExpectation.params) {
+			mmUpdateKnowledgeBaseUpdateStatus.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmUpdateKnowledgeBaseUpdateStatus.defaultExpectation.params)
+		}
+	}
+
+	return mmUpdateKnowledgeBaseUpdateStatus
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.UpdateKnowledgeBaseUpdateStatus
+func (mmUpdateKnowledgeBaseUpdateStatus *mRepositoryMockUpdateKnowledgeBaseUpdateStatus) ExpectCtxParam1(ctx context.Context) *mRepositoryMockUpdateKnowledgeBaseUpdateStatus {
+	if mmUpdateKnowledgeBaseUpdateStatus.mock.funcUpdateKnowledgeBaseUpdateStatus != nil {
+		mmUpdateKnowledgeBaseUpdateStatus.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseUpdateStatus mock is already set by Set")
+	}
+
+	if mmUpdateKnowledgeBaseUpdateStatus.defaultExpectation == nil {
+		mmUpdateKnowledgeBaseUpdateStatus.defaultExpectation = &RepositoryMockUpdateKnowledgeBaseUpdateStatusExpectation{}
+	}
+
+	if mmUpdateKnowledgeBaseUpdateStatus.defaultExpectation.params != nil {
+		mmUpdateKnowledgeBaseUpdateStatus.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseUpdateStatus mock is already set by Expect")
+	}
+
+	if mmUpdateKnowledgeBaseUpdateStatus.defaultExpectation.paramPtrs == nil {
+		mmUpdateKnowledgeBaseUpdateStatus.defaultExpectation.paramPtrs = &RepositoryMockUpdateKnowledgeBaseUpdateStatusParamPtrs{}
+	}
+	mmUpdateKnowledgeBaseUpdateStatus.defaultExpectation.paramPtrs.ctx = &ctx
+	mmUpdateKnowledgeBaseUpdateStatus.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmUpdateKnowledgeBaseUpdateStatus
+}
+
+// ExpectKbUIDParam2 sets up expected param kbUID for Repository.UpdateKnowledgeBaseUpdateStatus
+func (mmUpdateKnowledgeBaseUpdateStatus *mRepositoryMockUpdateKnowledgeBaseUpdateStatus) ExpectKbUIDParam2(kbUID types.KBUIDType) *mRepositoryMockUpdateKnowledgeBaseUpdateStatus {
+	if mmUpdateKnowledgeBaseUpdateStatus.mock.funcUpdateKnowledgeBaseUpdateStatus != nil {
+		mmUpdateKnowledgeBaseUpdateStatus.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseUpdateStatus mock is already set by Set")
+	}
+
+	if mmUpdateKnowledgeBaseUpdateStatus.defaultExpectation == nil {
+		mmUpdateKnowledgeBaseUpdateStatus.defaultExpectation = &RepositoryMockUpdateKnowledgeBaseUpdateStatusExpectation{}
+	}
+
+	if mmUpdateKnowledgeBaseUpdateStatus.defaultExpectation.params != nil {
+		mmUpdateKnowledgeBaseUpdateStatus.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseUpdateStatus mock is already set by Expect")
+	}
+
+	if mmUpdateKnowledgeBaseUpdateStatus.defaultExpectation.paramPtrs == nil {
+		mmUpdateKnowledgeBaseUpdateStatus.defaultExpectation.paramPtrs = &RepositoryMockUpdateKnowledgeBaseUpdateStatusParamPtrs{}
+	}
+	mmUpdateKnowledgeBaseUpdateStatus.defaultExpectation.paramPtrs.kbUID = &kbUID
+	mmUpdateKnowledgeBaseUpdateStatus.defaultExpectation.expectationOrigins.originKbUID = minimock.CallerInfo(1)
+
+	return mmUpdateKnowledgeBaseUpdateStatus
+}
+
+// ExpectStatusParam3 sets up expected param status for Repository.UpdateKnowledgeBaseUpdateStatus
+func (mmUpdateKnowledgeBaseUpdateStatus *mRepositoryMockUpdateKnowledgeBaseUpdateStatus) ExpectStatusParam3(status string) *mRepositoryMockUpdateKnowledgeBaseUpdateStatus {
+	if mmUpdateKnowledgeBaseUpdateStatus.mock.funcUpdateKnowledgeBaseUpdateStatus != nil {
+		mmUpdateKnowledgeBaseUpdateStatus.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseUpdateStatus mock is already set by Set")
+	}
+
+	if mmUpdateKnowledgeBaseUpdateStatus.defaultExpectation == nil {
+		mmUpdateKnowledgeBaseUpdateStatus.defaultExpectation = &RepositoryMockUpdateKnowledgeBaseUpdateStatusExpectation{}
+	}
+
+	if mmUpdateKnowledgeBaseUpdateStatus.defaultExpectation.params != nil {
+		mmUpdateKnowledgeBaseUpdateStatus.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseUpdateStatus mock is already set by Expect")
+	}
+
+	if mmUpdateKnowledgeBaseUpdateStatus.defaultExpectation.paramPtrs == nil {
+		mmUpdateKnowledgeBaseUpdateStatus.defaultExpectation.paramPtrs = &RepositoryMockUpdateKnowledgeBaseUpdateStatusParamPtrs{}
+	}
+	mmUpdateKnowledgeBaseUpdateStatus.defaultExpectation.paramPtrs.status = &status
+	mmUpdateKnowledgeBaseUpdateStatus.defaultExpectation.expectationOrigins.originStatus = minimock.CallerInfo(1)
+
+	return mmUpdateKnowledgeBaseUpdateStatus
+}
+
+// ExpectWorkflowIDParam4 sets up expected param workflowID for Repository.UpdateKnowledgeBaseUpdateStatus
+func (mmUpdateKnowledgeBaseUpdateStatus *mRepositoryMockUpdateKnowledgeBaseUpdateStatus) ExpectWorkflowIDParam4(workflowID string) *mRepositoryMockUpdateKnowledgeBaseUpdateStatus {
+	if mmUpdateKnowledgeBaseUpdateStatus.mock.funcUpdateKnowledgeBaseUpdateStatus != nil {
+		mmUpdateKnowledgeBaseUpdateStatus.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseUpdateStatus mock is already set by Set")
+	}
+
+	if mmUpdateKnowledgeBaseUpdateStatus.defaultExpectation == nil {
+		mmUpdateKnowledgeBaseUpdateStatus.defaultExpectation = &RepositoryMockUpdateKnowledgeBaseUpdateStatusExpectation{}
+	}
+
+	if mmUpdateKnowledgeBaseUpdateStatus.defaultExpectation.params != nil {
+		mmUpdateKnowledgeBaseUpdateStatus.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseUpdateStatus mock is already set by Expect")
+	}
+
+	if mmUpdateKnowledgeBaseUpdateStatus.defaultExpectation.paramPtrs == nil {
+		mmUpdateKnowledgeBaseUpdateStatus.defaultExpectation.paramPtrs = &RepositoryMockUpdateKnowledgeBaseUpdateStatusParamPtrs{}
+	}
+	mmUpdateKnowledgeBaseUpdateStatus.defaultExpectation.paramPtrs.workflowID = &workflowID
+	mmUpdateKnowledgeBaseUpdateStatus.defaultExpectation.expectationOrigins.originWorkflowID = minimock.CallerInfo(1)
+
+	return mmUpdateKnowledgeBaseUpdateStatus
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.UpdateKnowledgeBaseUpdateStatus
+func (mmUpdateKnowledgeBaseUpdateStatus *mRepositoryMockUpdateKnowledgeBaseUpdateStatus) Inspect(f func(ctx context.Context, kbUID types.KBUIDType, status string, workflowID string)) *mRepositoryMockUpdateKnowledgeBaseUpdateStatus {
+	if mmUpdateKnowledgeBaseUpdateStatus.mock.inspectFuncUpdateKnowledgeBaseUpdateStatus != nil {
+		mmUpdateKnowledgeBaseUpdateStatus.mock.t.Fatalf("Inspect function is already set for RepositoryMock.UpdateKnowledgeBaseUpdateStatus")
+	}
+
+	mmUpdateKnowledgeBaseUpdateStatus.mock.inspectFuncUpdateKnowledgeBaseUpdateStatus = f
+
+	return mmUpdateKnowledgeBaseUpdateStatus
+}
+
+// Return sets up results that will be returned by Repository.UpdateKnowledgeBaseUpdateStatus
+func (mmUpdateKnowledgeBaseUpdateStatus *mRepositoryMockUpdateKnowledgeBaseUpdateStatus) Return(err error) *RepositoryMock {
+	if mmUpdateKnowledgeBaseUpdateStatus.mock.funcUpdateKnowledgeBaseUpdateStatus != nil {
+		mmUpdateKnowledgeBaseUpdateStatus.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseUpdateStatus mock is already set by Set")
+	}
+
+	if mmUpdateKnowledgeBaseUpdateStatus.defaultExpectation == nil {
+		mmUpdateKnowledgeBaseUpdateStatus.defaultExpectation = &RepositoryMockUpdateKnowledgeBaseUpdateStatusExpectation{mock: mmUpdateKnowledgeBaseUpdateStatus.mock}
+	}
+	mmUpdateKnowledgeBaseUpdateStatus.defaultExpectation.results = &RepositoryMockUpdateKnowledgeBaseUpdateStatusResults{err}
+	mmUpdateKnowledgeBaseUpdateStatus.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmUpdateKnowledgeBaseUpdateStatus.mock
+}
+
+// Set uses given function f to mock the Repository.UpdateKnowledgeBaseUpdateStatus method
+func (mmUpdateKnowledgeBaseUpdateStatus *mRepositoryMockUpdateKnowledgeBaseUpdateStatus) Set(f func(ctx context.Context, kbUID types.KBUIDType, status string, workflowID string) (err error)) *RepositoryMock {
+	if mmUpdateKnowledgeBaseUpdateStatus.defaultExpectation != nil {
+		mmUpdateKnowledgeBaseUpdateStatus.mock.t.Fatalf("Default expectation is already set for the Repository.UpdateKnowledgeBaseUpdateStatus method")
+	}
+
+	if len(mmUpdateKnowledgeBaseUpdateStatus.expectations) > 0 {
+		mmUpdateKnowledgeBaseUpdateStatus.mock.t.Fatalf("Some expectations are already set for the Repository.UpdateKnowledgeBaseUpdateStatus method")
+	}
+
+	mmUpdateKnowledgeBaseUpdateStatus.mock.funcUpdateKnowledgeBaseUpdateStatus = f
+	mmUpdateKnowledgeBaseUpdateStatus.mock.funcUpdateKnowledgeBaseUpdateStatusOrigin = minimock.CallerInfo(1)
+	return mmUpdateKnowledgeBaseUpdateStatus.mock
+}
+
+// When sets expectation for the Repository.UpdateKnowledgeBaseUpdateStatus which will trigger the result defined by the following
+// Then helper
+func (mmUpdateKnowledgeBaseUpdateStatus *mRepositoryMockUpdateKnowledgeBaseUpdateStatus) When(ctx context.Context, kbUID types.KBUIDType, status string, workflowID string) *RepositoryMockUpdateKnowledgeBaseUpdateStatusExpectation {
+	if mmUpdateKnowledgeBaseUpdateStatus.mock.funcUpdateKnowledgeBaseUpdateStatus != nil {
+		mmUpdateKnowledgeBaseUpdateStatus.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseUpdateStatus mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockUpdateKnowledgeBaseUpdateStatusExpectation{
+		mock:               mmUpdateKnowledgeBaseUpdateStatus.mock,
+		params:             &RepositoryMockUpdateKnowledgeBaseUpdateStatusParams{ctx, kbUID, status, workflowID},
+		expectationOrigins: RepositoryMockUpdateKnowledgeBaseUpdateStatusExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmUpdateKnowledgeBaseUpdateStatus.expectations = append(mmUpdateKnowledgeBaseUpdateStatus.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.UpdateKnowledgeBaseUpdateStatus return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockUpdateKnowledgeBaseUpdateStatusExpectation) Then(err error) *RepositoryMock {
+	e.results = &RepositoryMockUpdateKnowledgeBaseUpdateStatusResults{err}
+	return e.mock
+}
+
+// Times sets number of times Repository.UpdateKnowledgeBaseUpdateStatus should be invoked
+func (mmUpdateKnowledgeBaseUpdateStatus *mRepositoryMockUpdateKnowledgeBaseUpdateStatus) Times(n uint64) *mRepositoryMockUpdateKnowledgeBaseUpdateStatus {
+	if n == 0 {
+		mmUpdateKnowledgeBaseUpdateStatus.mock.t.Fatalf("Times of RepositoryMock.UpdateKnowledgeBaseUpdateStatus mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmUpdateKnowledgeBaseUpdateStatus.expectedInvocations, n)
+	mmUpdateKnowledgeBaseUpdateStatus.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmUpdateKnowledgeBaseUpdateStatus
+}
+
+func (mmUpdateKnowledgeBaseUpdateStatus *mRepositoryMockUpdateKnowledgeBaseUpdateStatus) invocationsDone() bool {
+	if len(mmUpdateKnowledgeBaseUpdateStatus.expectations) == 0 && mmUpdateKnowledgeBaseUpdateStatus.defaultExpectation == nil && mmUpdateKnowledgeBaseUpdateStatus.mock.funcUpdateKnowledgeBaseUpdateStatus == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmUpdateKnowledgeBaseUpdateStatus.mock.afterUpdateKnowledgeBaseUpdateStatusCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmUpdateKnowledgeBaseUpdateStatus.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// UpdateKnowledgeBaseUpdateStatus implements mm_repository.Repository
+func (mmUpdateKnowledgeBaseUpdateStatus *RepositoryMock) UpdateKnowledgeBaseUpdateStatus(ctx context.Context, kbUID types.KBUIDType, status string, workflowID string) (err error) {
+	mm_atomic.AddUint64(&mmUpdateKnowledgeBaseUpdateStatus.beforeUpdateKnowledgeBaseUpdateStatusCounter, 1)
+	defer mm_atomic.AddUint64(&mmUpdateKnowledgeBaseUpdateStatus.afterUpdateKnowledgeBaseUpdateStatusCounter, 1)
+
+	mmUpdateKnowledgeBaseUpdateStatus.t.Helper()
+
+	if mmUpdateKnowledgeBaseUpdateStatus.inspectFuncUpdateKnowledgeBaseUpdateStatus != nil {
+		mmUpdateKnowledgeBaseUpdateStatus.inspectFuncUpdateKnowledgeBaseUpdateStatus(ctx, kbUID, status, workflowID)
+	}
+
+	mm_params := RepositoryMockUpdateKnowledgeBaseUpdateStatusParams{ctx, kbUID, status, workflowID}
+
+	// Record call args
+	mmUpdateKnowledgeBaseUpdateStatus.UpdateKnowledgeBaseUpdateStatusMock.mutex.Lock()
+	mmUpdateKnowledgeBaseUpdateStatus.UpdateKnowledgeBaseUpdateStatusMock.callArgs = append(mmUpdateKnowledgeBaseUpdateStatus.UpdateKnowledgeBaseUpdateStatusMock.callArgs, &mm_params)
+	mmUpdateKnowledgeBaseUpdateStatus.UpdateKnowledgeBaseUpdateStatusMock.mutex.Unlock()
+
+	for _, e := range mmUpdateKnowledgeBaseUpdateStatus.UpdateKnowledgeBaseUpdateStatusMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmUpdateKnowledgeBaseUpdateStatus.UpdateKnowledgeBaseUpdateStatusMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmUpdateKnowledgeBaseUpdateStatus.UpdateKnowledgeBaseUpdateStatusMock.defaultExpectation.Counter, 1)
+		mm_want := mmUpdateKnowledgeBaseUpdateStatus.UpdateKnowledgeBaseUpdateStatusMock.defaultExpectation.params
+		mm_want_ptrs := mmUpdateKnowledgeBaseUpdateStatus.UpdateKnowledgeBaseUpdateStatusMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockUpdateKnowledgeBaseUpdateStatusParams{ctx, kbUID, status, workflowID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmUpdateKnowledgeBaseUpdateStatus.t.Errorf("RepositoryMock.UpdateKnowledgeBaseUpdateStatus got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateKnowledgeBaseUpdateStatus.UpdateKnowledgeBaseUpdateStatusMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.kbUID != nil && !minimock.Equal(*mm_want_ptrs.kbUID, mm_got.kbUID) {
+				mmUpdateKnowledgeBaseUpdateStatus.t.Errorf("RepositoryMock.UpdateKnowledgeBaseUpdateStatus got unexpected parameter kbUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateKnowledgeBaseUpdateStatus.UpdateKnowledgeBaseUpdateStatusMock.defaultExpectation.expectationOrigins.originKbUID, *mm_want_ptrs.kbUID, mm_got.kbUID, minimock.Diff(*mm_want_ptrs.kbUID, mm_got.kbUID))
+			}
+
+			if mm_want_ptrs.status != nil && !minimock.Equal(*mm_want_ptrs.status, mm_got.status) {
+				mmUpdateKnowledgeBaseUpdateStatus.t.Errorf("RepositoryMock.UpdateKnowledgeBaseUpdateStatus got unexpected parameter status, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateKnowledgeBaseUpdateStatus.UpdateKnowledgeBaseUpdateStatusMock.defaultExpectation.expectationOrigins.originStatus, *mm_want_ptrs.status, mm_got.status, minimock.Diff(*mm_want_ptrs.status, mm_got.status))
+			}
+
+			if mm_want_ptrs.workflowID != nil && !minimock.Equal(*mm_want_ptrs.workflowID, mm_got.workflowID) {
+				mmUpdateKnowledgeBaseUpdateStatus.t.Errorf("RepositoryMock.UpdateKnowledgeBaseUpdateStatus got unexpected parameter workflowID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateKnowledgeBaseUpdateStatus.UpdateKnowledgeBaseUpdateStatusMock.defaultExpectation.expectationOrigins.originWorkflowID, *mm_want_ptrs.workflowID, mm_got.workflowID, minimock.Diff(*mm_want_ptrs.workflowID, mm_got.workflowID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmUpdateKnowledgeBaseUpdateStatus.t.Errorf("RepositoryMock.UpdateKnowledgeBaseUpdateStatus got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmUpdateKnowledgeBaseUpdateStatus.UpdateKnowledgeBaseUpdateStatusMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmUpdateKnowledgeBaseUpdateStatus.UpdateKnowledgeBaseUpdateStatusMock.defaultExpectation.results
+		if mm_results == nil {
+			mmUpdateKnowledgeBaseUpdateStatus.t.Fatal("No results are set for the RepositoryMock.UpdateKnowledgeBaseUpdateStatus")
+		}
+		return (*mm_results).err
+	}
+	if mmUpdateKnowledgeBaseUpdateStatus.funcUpdateKnowledgeBaseUpdateStatus != nil {
+		return mmUpdateKnowledgeBaseUpdateStatus.funcUpdateKnowledgeBaseUpdateStatus(ctx, kbUID, status, workflowID)
+	}
+	mmUpdateKnowledgeBaseUpdateStatus.t.Fatalf("Unexpected call to RepositoryMock.UpdateKnowledgeBaseUpdateStatus. %v %v %v %v", ctx, kbUID, status, workflowID)
+	return
+}
+
+// UpdateKnowledgeBaseUpdateStatusAfterCounter returns a count of finished RepositoryMock.UpdateKnowledgeBaseUpdateStatus invocations
+func (mmUpdateKnowledgeBaseUpdateStatus *RepositoryMock) UpdateKnowledgeBaseUpdateStatusAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateKnowledgeBaseUpdateStatus.afterUpdateKnowledgeBaseUpdateStatusCounter)
+}
+
+// UpdateKnowledgeBaseUpdateStatusBeforeCounter returns a count of RepositoryMock.UpdateKnowledgeBaseUpdateStatus invocations
+func (mmUpdateKnowledgeBaseUpdateStatus *RepositoryMock) UpdateKnowledgeBaseUpdateStatusBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateKnowledgeBaseUpdateStatus.beforeUpdateKnowledgeBaseUpdateStatusCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.UpdateKnowledgeBaseUpdateStatus.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmUpdateKnowledgeBaseUpdateStatus *mRepositoryMockUpdateKnowledgeBaseUpdateStatus) Calls() []*RepositoryMockUpdateKnowledgeBaseUpdateStatusParams {
+	mmUpdateKnowledgeBaseUpdateStatus.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockUpdateKnowledgeBaseUpdateStatusParams, len(mmUpdateKnowledgeBaseUpdateStatus.callArgs))
+	copy(argCopy, mmUpdateKnowledgeBaseUpdateStatus.callArgs)
+
+	mmUpdateKnowledgeBaseUpdateStatus.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockUpdateKnowledgeBaseUpdateStatusDone returns true if the count of the UpdateKnowledgeBaseUpdateStatus invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockUpdateKnowledgeBaseUpdateStatusDone() bool {
+	if m.UpdateKnowledgeBaseUpdateStatusMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.UpdateKnowledgeBaseUpdateStatusMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.UpdateKnowledgeBaseUpdateStatusMock.invocationsDone()
+}
+
+// MinimockUpdateKnowledgeBaseUpdateStatusInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockUpdateKnowledgeBaseUpdateStatusInspect() {
+	for _, e := range m.UpdateKnowledgeBaseUpdateStatusMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.UpdateKnowledgeBaseUpdateStatus at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterUpdateKnowledgeBaseUpdateStatusCounter := mm_atomic.LoadUint64(&m.afterUpdateKnowledgeBaseUpdateStatusCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.UpdateKnowledgeBaseUpdateStatusMock.defaultExpectation != nil && afterUpdateKnowledgeBaseUpdateStatusCounter < 1 {
+		if m.UpdateKnowledgeBaseUpdateStatusMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.UpdateKnowledgeBaseUpdateStatus at\n%s", m.UpdateKnowledgeBaseUpdateStatusMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.UpdateKnowledgeBaseUpdateStatus at\n%s with params: %#v", m.UpdateKnowledgeBaseUpdateStatusMock.defaultExpectation.expectationOrigins.origin, *m.UpdateKnowledgeBaseUpdateStatusMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcUpdateKnowledgeBaseUpdateStatus != nil && afterUpdateKnowledgeBaseUpdateStatusCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.UpdateKnowledgeBaseUpdateStatus at\n%s", m.funcUpdateKnowledgeBaseUpdateStatusOrigin)
+	}
+
+	if !m.UpdateKnowledgeBaseUpdateStatusMock.invocationsDone() && afterUpdateKnowledgeBaseUpdateStatusCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.UpdateKnowledgeBaseUpdateStatus at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.UpdateKnowledgeBaseUpdateStatusMock.expectedInvocations), m.UpdateKnowledgeBaseUpdateStatusMock.expectedInvocationsOrigin, afterUpdateKnowledgeBaseUpdateStatusCounter)
+	}
+}
+
+type mRepositoryMockUpdateKnowledgeBaseWithMap struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockUpdateKnowledgeBaseWithMapExpectation
+	expectations       []*RepositoryMockUpdateKnowledgeBaseWithMapExpectation
+
+	callArgs []*RepositoryMockUpdateKnowledgeBaseWithMapParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockUpdateKnowledgeBaseWithMapExpectation specifies expectation struct of the Repository.UpdateKnowledgeBaseWithMap
+type RepositoryMockUpdateKnowledgeBaseWithMapExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockUpdateKnowledgeBaseWithMapParams
+	paramPtrs          *RepositoryMockUpdateKnowledgeBaseWithMapParamPtrs
+	expectationOrigins RepositoryMockUpdateKnowledgeBaseWithMapExpectationOrigins
+	results            *RepositoryMockUpdateKnowledgeBaseWithMapResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockUpdateKnowledgeBaseWithMapParams contains parameters of the Repository.UpdateKnowledgeBaseWithMap
+type RepositoryMockUpdateKnowledgeBaseWithMapParams struct {
+	ctx     context.Context
+	id      string
+	owner   string
+	updates map[string]any
+}
+
+// RepositoryMockUpdateKnowledgeBaseWithMapParamPtrs contains pointers to parameters of the Repository.UpdateKnowledgeBaseWithMap
+type RepositoryMockUpdateKnowledgeBaseWithMapParamPtrs struct {
+	ctx     *context.Context
+	id      *string
+	owner   *string
+	updates *map[string]any
+}
+
+// RepositoryMockUpdateKnowledgeBaseWithMapResults contains results of the Repository.UpdateKnowledgeBaseWithMap
+type RepositoryMockUpdateKnowledgeBaseWithMapResults struct {
+	err error
+}
+
+// RepositoryMockUpdateKnowledgeBaseWithMapOrigins contains origins of expectations of the Repository.UpdateKnowledgeBaseWithMap
+type RepositoryMockUpdateKnowledgeBaseWithMapExpectationOrigins struct {
+	origin        string
+	originCtx     string
+	originId      string
+	originOwner   string
+	originUpdates string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmUpdateKnowledgeBaseWithMap *mRepositoryMockUpdateKnowledgeBaseWithMap) Optional() *mRepositoryMockUpdateKnowledgeBaseWithMap {
+	mmUpdateKnowledgeBaseWithMap.optional = true
+	return mmUpdateKnowledgeBaseWithMap
+}
+
+// Expect sets up expected params for Repository.UpdateKnowledgeBaseWithMap
+func (mmUpdateKnowledgeBaseWithMap *mRepositoryMockUpdateKnowledgeBaseWithMap) Expect(ctx context.Context, id string, owner string, updates map[string]any) *mRepositoryMockUpdateKnowledgeBaseWithMap {
+	if mmUpdateKnowledgeBaseWithMap.mock.funcUpdateKnowledgeBaseWithMap != nil {
+		mmUpdateKnowledgeBaseWithMap.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseWithMap mock is already set by Set")
+	}
+
+	if mmUpdateKnowledgeBaseWithMap.defaultExpectation == nil {
+		mmUpdateKnowledgeBaseWithMap.defaultExpectation = &RepositoryMockUpdateKnowledgeBaseWithMapExpectation{}
+	}
+
+	if mmUpdateKnowledgeBaseWithMap.defaultExpectation.paramPtrs != nil {
+		mmUpdateKnowledgeBaseWithMap.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseWithMap mock is already set by ExpectParams functions")
+	}
+
+	mmUpdateKnowledgeBaseWithMap.defaultExpectation.params = &RepositoryMockUpdateKnowledgeBaseWithMapParams{ctx, id, owner, updates}
+	mmUpdateKnowledgeBaseWithMap.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmUpdateKnowledgeBaseWithMap.expectations {
+		if minimock.Equal(e.params, mmUpdateKnowledgeBaseWithMap.defaultExpectation.params) {
+			mmUpdateKnowledgeBaseWithMap.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmUpdateKnowledgeBaseWithMap.defaultExpectation.params)
+		}
+	}
+
+	return mmUpdateKnowledgeBaseWithMap
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.UpdateKnowledgeBaseWithMap
+func (mmUpdateKnowledgeBaseWithMap *mRepositoryMockUpdateKnowledgeBaseWithMap) ExpectCtxParam1(ctx context.Context) *mRepositoryMockUpdateKnowledgeBaseWithMap {
+	if mmUpdateKnowledgeBaseWithMap.mock.funcUpdateKnowledgeBaseWithMap != nil {
+		mmUpdateKnowledgeBaseWithMap.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseWithMap mock is already set by Set")
+	}
+
+	if mmUpdateKnowledgeBaseWithMap.defaultExpectation == nil {
+		mmUpdateKnowledgeBaseWithMap.defaultExpectation = &RepositoryMockUpdateKnowledgeBaseWithMapExpectation{}
+	}
+
+	if mmUpdateKnowledgeBaseWithMap.defaultExpectation.params != nil {
+		mmUpdateKnowledgeBaseWithMap.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseWithMap mock is already set by Expect")
+	}
+
+	if mmUpdateKnowledgeBaseWithMap.defaultExpectation.paramPtrs == nil {
+		mmUpdateKnowledgeBaseWithMap.defaultExpectation.paramPtrs = &RepositoryMockUpdateKnowledgeBaseWithMapParamPtrs{}
+	}
+	mmUpdateKnowledgeBaseWithMap.defaultExpectation.paramPtrs.ctx = &ctx
+	mmUpdateKnowledgeBaseWithMap.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmUpdateKnowledgeBaseWithMap
+}
+
+// ExpectIdParam2 sets up expected param id for Repository.UpdateKnowledgeBaseWithMap
+func (mmUpdateKnowledgeBaseWithMap *mRepositoryMockUpdateKnowledgeBaseWithMap) ExpectIdParam2(id string) *mRepositoryMockUpdateKnowledgeBaseWithMap {
+	if mmUpdateKnowledgeBaseWithMap.mock.funcUpdateKnowledgeBaseWithMap != nil {
+		mmUpdateKnowledgeBaseWithMap.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseWithMap mock is already set by Set")
+	}
+
+	if mmUpdateKnowledgeBaseWithMap.defaultExpectation == nil {
+		mmUpdateKnowledgeBaseWithMap.defaultExpectation = &RepositoryMockUpdateKnowledgeBaseWithMapExpectation{}
+	}
+
+	if mmUpdateKnowledgeBaseWithMap.defaultExpectation.params != nil {
+		mmUpdateKnowledgeBaseWithMap.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseWithMap mock is already set by Expect")
+	}
+
+	if mmUpdateKnowledgeBaseWithMap.defaultExpectation.paramPtrs == nil {
+		mmUpdateKnowledgeBaseWithMap.defaultExpectation.paramPtrs = &RepositoryMockUpdateKnowledgeBaseWithMapParamPtrs{}
+	}
+	mmUpdateKnowledgeBaseWithMap.defaultExpectation.paramPtrs.id = &id
+	mmUpdateKnowledgeBaseWithMap.defaultExpectation.expectationOrigins.originId = minimock.CallerInfo(1)
+
+	return mmUpdateKnowledgeBaseWithMap
+}
+
+// ExpectOwnerParam3 sets up expected param owner for Repository.UpdateKnowledgeBaseWithMap
+func (mmUpdateKnowledgeBaseWithMap *mRepositoryMockUpdateKnowledgeBaseWithMap) ExpectOwnerParam3(owner string) *mRepositoryMockUpdateKnowledgeBaseWithMap {
+	if mmUpdateKnowledgeBaseWithMap.mock.funcUpdateKnowledgeBaseWithMap != nil {
+		mmUpdateKnowledgeBaseWithMap.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseWithMap mock is already set by Set")
+	}
+
+	if mmUpdateKnowledgeBaseWithMap.defaultExpectation == nil {
+		mmUpdateKnowledgeBaseWithMap.defaultExpectation = &RepositoryMockUpdateKnowledgeBaseWithMapExpectation{}
+	}
+
+	if mmUpdateKnowledgeBaseWithMap.defaultExpectation.params != nil {
+		mmUpdateKnowledgeBaseWithMap.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseWithMap mock is already set by Expect")
+	}
+
+	if mmUpdateKnowledgeBaseWithMap.defaultExpectation.paramPtrs == nil {
+		mmUpdateKnowledgeBaseWithMap.defaultExpectation.paramPtrs = &RepositoryMockUpdateKnowledgeBaseWithMapParamPtrs{}
+	}
+	mmUpdateKnowledgeBaseWithMap.defaultExpectation.paramPtrs.owner = &owner
+	mmUpdateKnowledgeBaseWithMap.defaultExpectation.expectationOrigins.originOwner = minimock.CallerInfo(1)
+
+	return mmUpdateKnowledgeBaseWithMap
+}
+
+// ExpectUpdatesParam4 sets up expected param updates for Repository.UpdateKnowledgeBaseWithMap
+func (mmUpdateKnowledgeBaseWithMap *mRepositoryMockUpdateKnowledgeBaseWithMap) ExpectUpdatesParam4(updates map[string]any) *mRepositoryMockUpdateKnowledgeBaseWithMap {
+	if mmUpdateKnowledgeBaseWithMap.mock.funcUpdateKnowledgeBaseWithMap != nil {
+		mmUpdateKnowledgeBaseWithMap.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseWithMap mock is already set by Set")
+	}
+
+	if mmUpdateKnowledgeBaseWithMap.defaultExpectation == nil {
+		mmUpdateKnowledgeBaseWithMap.defaultExpectation = &RepositoryMockUpdateKnowledgeBaseWithMapExpectation{}
+	}
+
+	if mmUpdateKnowledgeBaseWithMap.defaultExpectation.params != nil {
+		mmUpdateKnowledgeBaseWithMap.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseWithMap mock is already set by Expect")
+	}
+
+	if mmUpdateKnowledgeBaseWithMap.defaultExpectation.paramPtrs == nil {
+		mmUpdateKnowledgeBaseWithMap.defaultExpectation.paramPtrs = &RepositoryMockUpdateKnowledgeBaseWithMapParamPtrs{}
+	}
+	mmUpdateKnowledgeBaseWithMap.defaultExpectation.paramPtrs.updates = &updates
+	mmUpdateKnowledgeBaseWithMap.defaultExpectation.expectationOrigins.originUpdates = minimock.CallerInfo(1)
+
+	return mmUpdateKnowledgeBaseWithMap
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.UpdateKnowledgeBaseWithMap
+func (mmUpdateKnowledgeBaseWithMap *mRepositoryMockUpdateKnowledgeBaseWithMap) Inspect(f func(ctx context.Context, id string, owner string, updates map[string]any)) *mRepositoryMockUpdateKnowledgeBaseWithMap {
+	if mmUpdateKnowledgeBaseWithMap.mock.inspectFuncUpdateKnowledgeBaseWithMap != nil {
+		mmUpdateKnowledgeBaseWithMap.mock.t.Fatalf("Inspect function is already set for RepositoryMock.UpdateKnowledgeBaseWithMap")
+	}
+
+	mmUpdateKnowledgeBaseWithMap.mock.inspectFuncUpdateKnowledgeBaseWithMap = f
+
+	return mmUpdateKnowledgeBaseWithMap
+}
+
+// Return sets up results that will be returned by Repository.UpdateKnowledgeBaseWithMap
+func (mmUpdateKnowledgeBaseWithMap *mRepositoryMockUpdateKnowledgeBaseWithMap) Return(err error) *RepositoryMock {
+	if mmUpdateKnowledgeBaseWithMap.mock.funcUpdateKnowledgeBaseWithMap != nil {
+		mmUpdateKnowledgeBaseWithMap.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseWithMap mock is already set by Set")
+	}
+
+	if mmUpdateKnowledgeBaseWithMap.defaultExpectation == nil {
+		mmUpdateKnowledgeBaseWithMap.defaultExpectation = &RepositoryMockUpdateKnowledgeBaseWithMapExpectation{mock: mmUpdateKnowledgeBaseWithMap.mock}
+	}
+	mmUpdateKnowledgeBaseWithMap.defaultExpectation.results = &RepositoryMockUpdateKnowledgeBaseWithMapResults{err}
+	mmUpdateKnowledgeBaseWithMap.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmUpdateKnowledgeBaseWithMap.mock
+}
+
+// Set uses given function f to mock the Repository.UpdateKnowledgeBaseWithMap method
+func (mmUpdateKnowledgeBaseWithMap *mRepositoryMockUpdateKnowledgeBaseWithMap) Set(f func(ctx context.Context, id string, owner string, updates map[string]any) (err error)) *RepositoryMock {
+	if mmUpdateKnowledgeBaseWithMap.defaultExpectation != nil {
+		mmUpdateKnowledgeBaseWithMap.mock.t.Fatalf("Default expectation is already set for the Repository.UpdateKnowledgeBaseWithMap method")
+	}
+
+	if len(mmUpdateKnowledgeBaseWithMap.expectations) > 0 {
+		mmUpdateKnowledgeBaseWithMap.mock.t.Fatalf("Some expectations are already set for the Repository.UpdateKnowledgeBaseWithMap method")
+	}
+
+	mmUpdateKnowledgeBaseWithMap.mock.funcUpdateKnowledgeBaseWithMap = f
+	mmUpdateKnowledgeBaseWithMap.mock.funcUpdateKnowledgeBaseWithMapOrigin = minimock.CallerInfo(1)
+	return mmUpdateKnowledgeBaseWithMap.mock
+}
+
+// When sets expectation for the Repository.UpdateKnowledgeBaseWithMap which will trigger the result defined by the following
+// Then helper
+func (mmUpdateKnowledgeBaseWithMap *mRepositoryMockUpdateKnowledgeBaseWithMap) When(ctx context.Context, id string, owner string, updates map[string]any) *RepositoryMockUpdateKnowledgeBaseWithMapExpectation {
+	if mmUpdateKnowledgeBaseWithMap.mock.funcUpdateKnowledgeBaseWithMap != nil {
+		mmUpdateKnowledgeBaseWithMap.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseWithMap mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockUpdateKnowledgeBaseWithMapExpectation{
+		mock:               mmUpdateKnowledgeBaseWithMap.mock,
+		params:             &RepositoryMockUpdateKnowledgeBaseWithMapParams{ctx, id, owner, updates},
+		expectationOrigins: RepositoryMockUpdateKnowledgeBaseWithMapExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmUpdateKnowledgeBaseWithMap.expectations = append(mmUpdateKnowledgeBaseWithMap.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.UpdateKnowledgeBaseWithMap return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockUpdateKnowledgeBaseWithMapExpectation) Then(err error) *RepositoryMock {
+	e.results = &RepositoryMockUpdateKnowledgeBaseWithMapResults{err}
+	return e.mock
+}
+
+// Times sets number of times Repository.UpdateKnowledgeBaseWithMap should be invoked
+func (mmUpdateKnowledgeBaseWithMap *mRepositoryMockUpdateKnowledgeBaseWithMap) Times(n uint64) *mRepositoryMockUpdateKnowledgeBaseWithMap {
+	if n == 0 {
+		mmUpdateKnowledgeBaseWithMap.mock.t.Fatalf("Times of RepositoryMock.UpdateKnowledgeBaseWithMap mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmUpdateKnowledgeBaseWithMap.expectedInvocations, n)
+	mmUpdateKnowledgeBaseWithMap.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmUpdateKnowledgeBaseWithMap
+}
+
+func (mmUpdateKnowledgeBaseWithMap *mRepositoryMockUpdateKnowledgeBaseWithMap) invocationsDone() bool {
+	if len(mmUpdateKnowledgeBaseWithMap.expectations) == 0 && mmUpdateKnowledgeBaseWithMap.defaultExpectation == nil && mmUpdateKnowledgeBaseWithMap.mock.funcUpdateKnowledgeBaseWithMap == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmUpdateKnowledgeBaseWithMap.mock.afterUpdateKnowledgeBaseWithMapCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmUpdateKnowledgeBaseWithMap.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// UpdateKnowledgeBaseWithMap implements mm_repository.Repository
+func (mmUpdateKnowledgeBaseWithMap *RepositoryMock) UpdateKnowledgeBaseWithMap(ctx context.Context, id string, owner string, updates map[string]any) (err error) {
+	mm_atomic.AddUint64(&mmUpdateKnowledgeBaseWithMap.beforeUpdateKnowledgeBaseWithMapCounter, 1)
+	defer mm_atomic.AddUint64(&mmUpdateKnowledgeBaseWithMap.afterUpdateKnowledgeBaseWithMapCounter, 1)
+
+	mmUpdateKnowledgeBaseWithMap.t.Helper()
+
+	if mmUpdateKnowledgeBaseWithMap.inspectFuncUpdateKnowledgeBaseWithMap != nil {
+		mmUpdateKnowledgeBaseWithMap.inspectFuncUpdateKnowledgeBaseWithMap(ctx, id, owner, updates)
+	}
+
+	mm_params := RepositoryMockUpdateKnowledgeBaseWithMapParams{ctx, id, owner, updates}
+
+	// Record call args
+	mmUpdateKnowledgeBaseWithMap.UpdateKnowledgeBaseWithMapMock.mutex.Lock()
+	mmUpdateKnowledgeBaseWithMap.UpdateKnowledgeBaseWithMapMock.callArgs = append(mmUpdateKnowledgeBaseWithMap.UpdateKnowledgeBaseWithMapMock.callArgs, &mm_params)
+	mmUpdateKnowledgeBaseWithMap.UpdateKnowledgeBaseWithMapMock.mutex.Unlock()
+
+	for _, e := range mmUpdateKnowledgeBaseWithMap.UpdateKnowledgeBaseWithMapMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmUpdateKnowledgeBaseWithMap.UpdateKnowledgeBaseWithMapMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmUpdateKnowledgeBaseWithMap.UpdateKnowledgeBaseWithMapMock.defaultExpectation.Counter, 1)
+		mm_want := mmUpdateKnowledgeBaseWithMap.UpdateKnowledgeBaseWithMapMock.defaultExpectation.params
+		mm_want_ptrs := mmUpdateKnowledgeBaseWithMap.UpdateKnowledgeBaseWithMapMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockUpdateKnowledgeBaseWithMapParams{ctx, id, owner, updates}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmUpdateKnowledgeBaseWithMap.t.Errorf("RepositoryMock.UpdateKnowledgeBaseWithMap got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateKnowledgeBaseWithMap.UpdateKnowledgeBaseWithMapMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.id != nil && !minimock.Equal(*mm_want_ptrs.id, mm_got.id) {
+				mmUpdateKnowledgeBaseWithMap.t.Errorf("RepositoryMock.UpdateKnowledgeBaseWithMap got unexpected parameter id, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateKnowledgeBaseWithMap.UpdateKnowledgeBaseWithMapMock.defaultExpectation.expectationOrigins.originId, *mm_want_ptrs.id, mm_got.id, minimock.Diff(*mm_want_ptrs.id, mm_got.id))
+			}
+
+			if mm_want_ptrs.owner != nil && !minimock.Equal(*mm_want_ptrs.owner, mm_got.owner) {
+				mmUpdateKnowledgeBaseWithMap.t.Errorf("RepositoryMock.UpdateKnowledgeBaseWithMap got unexpected parameter owner, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateKnowledgeBaseWithMap.UpdateKnowledgeBaseWithMapMock.defaultExpectation.expectationOrigins.originOwner, *mm_want_ptrs.owner, mm_got.owner, minimock.Diff(*mm_want_ptrs.owner, mm_got.owner))
+			}
+
+			if mm_want_ptrs.updates != nil && !minimock.Equal(*mm_want_ptrs.updates, mm_got.updates) {
+				mmUpdateKnowledgeBaseWithMap.t.Errorf("RepositoryMock.UpdateKnowledgeBaseWithMap got unexpected parameter updates, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateKnowledgeBaseWithMap.UpdateKnowledgeBaseWithMapMock.defaultExpectation.expectationOrigins.originUpdates, *mm_want_ptrs.updates, mm_got.updates, minimock.Diff(*mm_want_ptrs.updates, mm_got.updates))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmUpdateKnowledgeBaseWithMap.t.Errorf("RepositoryMock.UpdateKnowledgeBaseWithMap got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmUpdateKnowledgeBaseWithMap.UpdateKnowledgeBaseWithMapMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmUpdateKnowledgeBaseWithMap.UpdateKnowledgeBaseWithMapMock.defaultExpectation.results
+		if mm_results == nil {
+			mmUpdateKnowledgeBaseWithMap.t.Fatal("No results are set for the RepositoryMock.UpdateKnowledgeBaseWithMap")
+		}
+		return (*mm_results).err
+	}
+	if mmUpdateKnowledgeBaseWithMap.funcUpdateKnowledgeBaseWithMap != nil {
+		return mmUpdateKnowledgeBaseWithMap.funcUpdateKnowledgeBaseWithMap(ctx, id, owner, updates)
+	}
+	mmUpdateKnowledgeBaseWithMap.t.Fatalf("Unexpected call to RepositoryMock.UpdateKnowledgeBaseWithMap. %v %v %v %v", ctx, id, owner, updates)
+	return
+}
+
+// UpdateKnowledgeBaseWithMapAfterCounter returns a count of finished RepositoryMock.UpdateKnowledgeBaseWithMap invocations
+func (mmUpdateKnowledgeBaseWithMap *RepositoryMock) UpdateKnowledgeBaseWithMapAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateKnowledgeBaseWithMap.afterUpdateKnowledgeBaseWithMapCounter)
+}
+
+// UpdateKnowledgeBaseWithMapBeforeCounter returns a count of RepositoryMock.UpdateKnowledgeBaseWithMap invocations
+func (mmUpdateKnowledgeBaseWithMap *RepositoryMock) UpdateKnowledgeBaseWithMapBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateKnowledgeBaseWithMap.beforeUpdateKnowledgeBaseWithMapCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.UpdateKnowledgeBaseWithMap.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmUpdateKnowledgeBaseWithMap *mRepositoryMockUpdateKnowledgeBaseWithMap) Calls() []*RepositoryMockUpdateKnowledgeBaseWithMapParams {
+	mmUpdateKnowledgeBaseWithMap.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockUpdateKnowledgeBaseWithMapParams, len(mmUpdateKnowledgeBaseWithMap.callArgs))
+	copy(argCopy, mmUpdateKnowledgeBaseWithMap.callArgs)
+
+	mmUpdateKnowledgeBaseWithMap.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockUpdateKnowledgeBaseWithMapDone returns true if the count of the UpdateKnowledgeBaseWithMap invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockUpdateKnowledgeBaseWithMapDone() bool {
+	if m.UpdateKnowledgeBaseWithMapMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.UpdateKnowledgeBaseWithMapMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.UpdateKnowledgeBaseWithMapMock.invocationsDone()
+}
+
+// MinimockUpdateKnowledgeBaseWithMapInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockUpdateKnowledgeBaseWithMapInspect() {
+	for _, e := range m.UpdateKnowledgeBaseWithMapMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.UpdateKnowledgeBaseWithMap at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterUpdateKnowledgeBaseWithMapCounter := mm_atomic.LoadUint64(&m.afterUpdateKnowledgeBaseWithMapCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.UpdateKnowledgeBaseWithMapMock.defaultExpectation != nil && afterUpdateKnowledgeBaseWithMapCounter < 1 {
+		if m.UpdateKnowledgeBaseWithMapMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.UpdateKnowledgeBaseWithMap at\n%s", m.UpdateKnowledgeBaseWithMapMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.UpdateKnowledgeBaseWithMap at\n%s with params: %#v", m.UpdateKnowledgeBaseWithMapMock.defaultExpectation.expectationOrigins.origin, *m.UpdateKnowledgeBaseWithMapMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcUpdateKnowledgeBaseWithMap != nil && afterUpdateKnowledgeBaseWithMapCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.UpdateKnowledgeBaseWithMap at\n%s", m.funcUpdateKnowledgeBaseWithMapOrigin)
+	}
+
+	if !m.UpdateKnowledgeBaseWithMapMock.invocationsDone() && afterUpdateKnowledgeBaseWithMapCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.UpdateKnowledgeBaseWithMap at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.UpdateKnowledgeBaseWithMapMock.expectedInvocations), m.UpdateKnowledgeBaseWithMapMock.expectedInvocationsOrigin, afterUpdateKnowledgeBaseWithMapCounter)
 	}
 }
 
@@ -30623,6 +38797,410 @@ func (m *RepositoryMock) MinimockUpdateObjectByUpdateMapInspect() {
 	if !m.UpdateObjectByUpdateMapMock.invocationsDone() && afterUpdateObjectByUpdateMapCounter > 0 {
 		m.t.Errorf("Expected %d calls to RepositoryMock.UpdateObjectByUpdateMap at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.UpdateObjectByUpdateMapMock.expectedInvocations), m.UpdateObjectByUpdateMapMock.expectedInvocationsOrigin, afterUpdateObjectByUpdateMapCounter)
+	}
+}
+
+type mRepositoryMockUpdateSystemProfile struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockUpdateSystemProfileExpectation
+	expectations       []*RepositoryMockUpdateSystemProfileExpectation
+
+	callArgs []*RepositoryMockUpdateSystemProfileParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockUpdateSystemProfileExpectation specifies expectation struct of the Repository.UpdateSystemProfile
+type RepositoryMockUpdateSystemProfileExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockUpdateSystemProfileParams
+	paramPtrs          *RepositoryMockUpdateSystemProfileParamPtrs
+	expectationOrigins RepositoryMockUpdateSystemProfileExpectationOrigins
+	results            *RepositoryMockUpdateSystemProfileResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockUpdateSystemProfileParams contains parameters of the Repository.UpdateSystemProfile
+type RepositoryMockUpdateSystemProfileParams struct {
+	ctx         context.Context
+	profile     string
+	config      map[string]any
+	description string
+}
+
+// RepositoryMockUpdateSystemProfileParamPtrs contains pointers to parameters of the Repository.UpdateSystemProfile
+type RepositoryMockUpdateSystemProfileParamPtrs struct {
+	ctx         *context.Context
+	profile     *string
+	config      *map[string]any
+	description *string
+}
+
+// RepositoryMockUpdateSystemProfileResults contains results of the Repository.UpdateSystemProfile
+type RepositoryMockUpdateSystemProfileResults struct {
+	err error
+}
+
+// RepositoryMockUpdateSystemProfileOrigins contains origins of expectations of the Repository.UpdateSystemProfile
+type RepositoryMockUpdateSystemProfileExpectationOrigins struct {
+	origin            string
+	originCtx         string
+	originProfile     string
+	originConfig      string
+	originDescription string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmUpdateSystemProfile *mRepositoryMockUpdateSystemProfile) Optional() *mRepositoryMockUpdateSystemProfile {
+	mmUpdateSystemProfile.optional = true
+	return mmUpdateSystemProfile
+}
+
+// Expect sets up expected params for Repository.UpdateSystemProfile
+func (mmUpdateSystemProfile *mRepositoryMockUpdateSystemProfile) Expect(ctx context.Context, profile string, config map[string]any, description string) *mRepositoryMockUpdateSystemProfile {
+	if mmUpdateSystemProfile.mock.funcUpdateSystemProfile != nil {
+		mmUpdateSystemProfile.mock.t.Fatalf("RepositoryMock.UpdateSystemProfile mock is already set by Set")
+	}
+
+	if mmUpdateSystemProfile.defaultExpectation == nil {
+		mmUpdateSystemProfile.defaultExpectation = &RepositoryMockUpdateSystemProfileExpectation{}
+	}
+
+	if mmUpdateSystemProfile.defaultExpectation.paramPtrs != nil {
+		mmUpdateSystemProfile.mock.t.Fatalf("RepositoryMock.UpdateSystemProfile mock is already set by ExpectParams functions")
+	}
+
+	mmUpdateSystemProfile.defaultExpectation.params = &RepositoryMockUpdateSystemProfileParams{ctx, profile, config, description}
+	mmUpdateSystemProfile.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmUpdateSystemProfile.expectations {
+		if minimock.Equal(e.params, mmUpdateSystemProfile.defaultExpectation.params) {
+			mmUpdateSystemProfile.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmUpdateSystemProfile.defaultExpectation.params)
+		}
+	}
+
+	return mmUpdateSystemProfile
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.UpdateSystemProfile
+func (mmUpdateSystemProfile *mRepositoryMockUpdateSystemProfile) ExpectCtxParam1(ctx context.Context) *mRepositoryMockUpdateSystemProfile {
+	if mmUpdateSystemProfile.mock.funcUpdateSystemProfile != nil {
+		mmUpdateSystemProfile.mock.t.Fatalf("RepositoryMock.UpdateSystemProfile mock is already set by Set")
+	}
+
+	if mmUpdateSystemProfile.defaultExpectation == nil {
+		mmUpdateSystemProfile.defaultExpectation = &RepositoryMockUpdateSystemProfileExpectation{}
+	}
+
+	if mmUpdateSystemProfile.defaultExpectation.params != nil {
+		mmUpdateSystemProfile.mock.t.Fatalf("RepositoryMock.UpdateSystemProfile mock is already set by Expect")
+	}
+
+	if mmUpdateSystemProfile.defaultExpectation.paramPtrs == nil {
+		mmUpdateSystemProfile.defaultExpectation.paramPtrs = &RepositoryMockUpdateSystemProfileParamPtrs{}
+	}
+	mmUpdateSystemProfile.defaultExpectation.paramPtrs.ctx = &ctx
+	mmUpdateSystemProfile.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmUpdateSystemProfile
+}
+
+// ExpectProfileParam2 sets up expected param profile for Repository.UpdateSystemProfile
+func (mmUpdateSystemProfile *mRepositoryMockUpdateSystemProfile) ExpectProfileParam2(profile string) *mRepositoryMockUpdateSystemProfile {
+	if mmUpdateSystemProfile.mock.funcUpdateSystemProfile != nil {
+		mmUpdateSystemProfile.mock.t.Fatalf("RepositoryMock.UpdateSystemProfile mock is already set by Set")
+	}
+
+	if mmUpdateSystemProfile.defaultExpectation == nil {
+		mmUpdateSystemProfile.defaultExpectation = &RepositoryMockUpdateSystemProfileExpectation{}
+	}
+
+	if mmUpdateSystemProfile.defaultExpectation.params != nil {
+		mmUpdateSystemProfile.mock.t.Fatalf("RepositoryMock.UpdateSystemProfile mock is already set by Expect")
+	}
+
+	if mmUpdateSystemProfile.defaultExpectation.paramPtrs == nil {
+		mmUpdateSystemProfile.defaultExpectation.paramPtrs = &RepositoryMockUpdateSystemProfileParamPtrs{}
+	}
+	mmUpdateSystemProfile.defaultExpectation.paramPtrs.profile = &profile
+	mmUpdateSystemProfile.defaultExpectation.expectationOrigins.originProfile = minimock.CallerInfo(1)
+
+	return mmUpdateSystemProfile
+}
+
+// ExpectConfigParam3 sets up expected param config for Repository.UpdateSystemProfile
+func (mmUpdateSystemProfile *mRepositoryMockUpdateSystemProfile) ExpectConfigParam3(config map[string]any) *mRepositoryMockUpdateSystemProfile {
+	if mmUpdateSystemProfile.mock.funcUpdateSystemProfile != nil {
+		mmUpdateSystemProfile.mock.t.Fatalf("RepositoryMock.UpdateSystemProfile mock is already set by Set")
+	}
+
+	if mmUpdateSystemProfile.defaultExpectation == nil {
+		mmUpdateSystemProfile.defaultExpectation = &RepositoryMockUpdateSystemProfileExpectation{}
+	}
+
+	if mmUpdateSystemProfile.defaultExpectation.params != nil {
+		mmUpdateSystemProfile.mock.t.Fatalf("RepositoryMock.UpdateSystemProfile mock is already set by Expect")
+	}
+
+	if mmUpdateSystemProfile.defaultExpectation.paramPtrs == nil {
+		mmUpdateSystemProfile.defaultExpectation.paramPtrs = &RepositoryMockUpdateSystemProfileParamPtrs{}
+	}
+	mmUpdateSystemProfile.defaultExpectation.paramPtrs.config = &config
+	mmUpdateSystemProfile.defaultExpectation.expectationOrigins.originConfig = minimock.CallerInfo(1)
+
+	return mmUpdateSystemProfile
+}
+
+// ExpectDescriptionParam4 sets up expected param description for Repository.UpdateSystemProfile
+func (mmUpdateSystemProfile *mRepositoryMockUpdateSystemProfile) ExpectDescriptionParam4(description string) *mRepositoryMockUpdateSystemProfile {
+	if mmUpdateSystemProfile.mock.funcUpdateSystemProfile != nil {
+		mmUpdateSystemProfile.mock.t.Fatalf("RepositoryMock.UpdateSystemProfile mock is already set by Set")
+	}
+
+	if mmUpdateSystemProfile.defaultExpectation == nil {
+		mmUpdateSystemProfile.defaultExpectation = &RepositoryMockUpdateSystemProfileExpectation{}
+	}
+
+	if mmUpdateSystemProfile.defaultExpectation.params != nil {
+		mmUpdateSystemProfile.mock.t.Fatalf("RepositoryMock.UpdateSystemProfile mock is already set by Expect")
+	}
+
+	if mmUpdateSystemProfile.defaultExpectation.paramPtrs == nil {
+		mmUpdateSystemProfile.defaultExpectation.paramPtrs = &RepositoryMockUpdateSystemProfileParamPtrs{}
+	}
+	mmUpdateSystemProfile.defaultExpectation.paramPtrs.description = &description
+	mmUpdateSystemProfile.defaultExpectation.expectationOrigins.originDescription = minimock.CallerInfo(1)
+
+	return mmUpdateSystemProfile
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.UpdateSystemProfile
+func (mmUpdateSystemProfile *mRepositoryMockUpdateSystemProfile) Inspect(f func(ctx context.Context, profile string, config map[string]any, description string)) *mRepositoryMockUpdateSystemProfile {
+	if mmUpdateSystemProfile.mock.inspectFuncUpdateSystemProfile != nil {
+		mmUpdateSystemProfile.mock.t.Fatalf("Inspect function is already set for RepositoryMock.UpdateSystemProfile")
+	}
+
+	mmUpdateSystemProfile.mock.inspectFuncUpdateSystemProfile = f
+
+	return mmUpdateSystemProfile
+}
+
+// Return sets up results that will be returned by Repository.UpdateSystemProfile
+func (mmUpdateSystemProfile *mRepositoryMockUpdateSystemProfile) Return(err error) *RepositoryMock {
+	if mmUpdateSystemProfile.mock.funcUpdateSystemProfile != nil {
+		mmUpdateSystemProfile.mock.t.Fatalf("RepositoryMock.UpdateSystemProfile mock is already set by Set")
+	}
+
+	if mmUpdateSystemProfile.defaultExpectation == nil {
+		mmUpdateSystemProfile.defaultExpectation = &RepositoryMockUpdateSystemProfileExpectation{mock: mmUpdateSystemProfile.mock}
+	}
+	mmUpdateSystemProfile.defaultExpectation.results = &RepositoryMockUpdateSystemProfileResults{err}
+	mmUpdateSystemProfile.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmUpdateSystemProfile.mock
+}
+
+// Set uses given function f to mock the Repository.UpdateSystemProfile method
+func (mmUpdateSystemProfile *mRepositoryMockUpdateSystemProfile) Set(f func(ctx context.Context, profile string, config map[string]any, description string) (err error)) *RepositoryMock {
+	if mmUpdateSystemProfile.defaultExpectation != nil {
+		mmUpdateSystemProfile.mock.t.Fatalf("Default expectation is already set for the Repository.UpdateSystemProfile method")
+	}
+
+	if len(mmUpdateSystemProfile.expectations) > 0 {
+		mmUpdateSystemProfile.mock.t.Fatalf("Some expectations are already set for the Repository.UpdateSystemProfile method")
+	}
+
+	mmUpdateSystemProfile.mock.funcUpdateSystemProfile = f
+	mmUpdateSystemProfile.mock.funcUpdateSystemProfileOrigin = minimock.CallerInfo(1)
+	return mmUpdateSystemProfile.mock
+}
+
+// When sets expectation for the Repository.UpdateSystemProfile which will trigger the result defined by the following
+// Then helper
+func (mmUpdateSystemProfile *mRepositoryMockUpdateSystemProfile) When(ctx context.Context, profile string, config map[string]any, description string) *RepositoryMockUpdateSystemProfileExpectation {
+	if mmUpdateSystemProfile.mock.funcUpdateSystemProfile != nil {
+		mmUpdateSystemProfile.mock.t.Fatalf("RepositoryMock.UpdateSystemProfile mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockUpdateSystemProfileExpectation{
+		mock:               mmUpdateSystemProfile.mock,
+		params:             &RepositoryMockUpdateSystemProfileParams{ctx, profile, config, description},
+		expectationOrigins: RepositoryMockUpdateSystemProfileExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmUpdateSystemProfile.expectations = append(mmUpdateSystemProfile.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.UpdateSystemProfile return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockUpdateSystemProfileExpectation) Then(err error) *RepositoryMock {
+	e.results = &RepositoryMockUpdateSystemProfileResults{err}
+	return e.mock
+}
+
+// Times sets number of times Repository.UpdateSystemProfile should be invoked
+func (mmUpdateSystemProfile *mRepositoryMockUpdateSystemProfile) Times(n uint64) *mRepositoryMockUpdateSystemProfile {
+	if n == 0 {
+		mmUpdateSystemProfile.mock.t.Fatalf("Times of RepositoryMock.UpdateSystemProfile mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmUpdateSystemProfile.expectedInvocations, n)
+	mmUpdateSystemProfile.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmUpdateSystemProfile
+}
+
+func (mmUpdateSystemProfile *mRepositoryMockUpdateSystemProfile) invocationsDone() bool {
+	if len(mmUpdateSystemProfile.expectations) == 0 && mmUpdateSystemProfile.defaultExpectation == nil && mmUpdateSystemProfile.mock.funcUpdateSystemProfile == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmUpdateSystemProfile.mock.afterUpdateSystemProfileCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmUpdateSystemProfile.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// UpdateSystemProfile implements mm_repository.Repository
+func (mmUpdateSystemProfile *RepositoryMock) UpdateSystemProfile(ctx context.Context, profile string, config map[string]any, description string) (err error) {
+	mm_atomic.AddUint64(&mmUpdateSystemProfile.beforeUpdateSystemProfileCounter, 1)
+	defer mm_atomic.AddUint64(&mmUpdateSystemProfile.afterUpdateSystemProfileCounter, 1)
+
+	mmUpdateSystemProfile.t.Helper()
+
+	if mmUpdateSystemProfile.inspectFuncUpdateSystemProfile != nil {
+		mmUpdateSystemProfile.inspectFuncUpdateSystemProfile(ctx, profile, config, description)
+	}
+
+	mm_params := RepositoryMockUpdateSystemProfileParams{ctx, profile, config, description}
+
+	// Record call args
+	mmUpdateSystemProfile.UpdateSystemProfileMock.mutex.Lock()
+	mmUpdateSystemProfile.UpdateSystemProfileMock.callArgs = append(mmUpdateSystemProfile.UpdateSystemProfileMock.callArgs, &mm_params)
+	mmUpdateSystemProfile.UpdateSystemProfileMock.mutex.Unlock()
+
+	for _, e := range mmUpdateSystemProfile.UpdateSystemProfileMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmUpdateSystemProfile.UpdateSystemProfileMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmUpdateSystemProfile.UpdateSystemProfileMock.defaultExpectation.Counter, 1)
+		mm_want := mmUpdateSystemProfile.UpdateSystemProfileMock.defaultExpectation.params
+		mm_want_ptrs := mmUpdateSystemProfile.UpdateSystemProfileMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockUpdateSystemProfileParams{ctx, profile, config, description}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmUpdateSystemProfile.t.Errorf("RepositoryMock.UpdateSystemProfile got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateSystemProfile.UpdateSystemProfileMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.profile != nil && !minimock.Equal(*mm_want_ptrs.profile, mm_got.profile) {
+				mmUpdateSystemProfile.t.Errorf("RepositoryMock.UpdateSystemProfile got unexpected parameter profile, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateSystemProfile.UpdateSystemProfileMock.defaultExpectation.expectationOrigins.originProfile, *mm_want_ptrs.profile, mm_got.profile, minimock.Diff(*mm_want_ptrs.profile, mm_got.profile))
+			}
+
+			if mm_want_ptrs.config != nil && !minimock.Equal(*mm_want_ptrs.config, mm_got.config) {
+				mmUpdateSystemProfile.t.Errorf("RepositoryMock.UpdateSystemProfile got unexpected parameter config, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateSystemProfile.UpdateSystemProfileMock.defaultExpectation.expectationOrigins.originConfig, *mm_want_ptrs.config, mm_got.config, minimock.Diff(*mm_want_ptrs.config, mm_got.config))
+			}
+
+			if mm_want_ptrs.description != nil && !minimock.Equal(*mm_want_ptrs.description, mm_got.description) {
+				mmUpdateSystemProfile.t.Errorf("RepositoryMock.UpdateSystemProfile got unexpected parameter description, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateSystemProfile.UpdateSystemProfileMock.defaultExpectation.expectationOrigins.originDescription, *mm_want_ptrs.description, mm_got.description, minimock.Diff(*mm_want_ptrs.description, mm_got.description))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmUpdateSystemProfile.t.Errorf("RepositoryMock.UpdateSystemProfile got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmUpdateSystemProfile.UpdateSystemProfileMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmUpdateSystemProfile.UpdateSystemProfileMock.defaultExpectation.results
+		if mm_results == nil {
+			mmUpdateSystemProfile.t.Fatal("No results are set for the RepositoryMock.UpdateSystemProfile")
+		}
+		return (*mm_results).err
+	}
+	if mmUpdateSystemProfile.funcUpdateSystemProfile != nil {
+		return mmUpdateSystemProfile.funcUpdateSystemProfile(ctx, profile, config, description)
+	}
+	mmUpdateSystemProfile.t.Fatalf("Unexpected call to RepositoryMock.UpdateSystemProfile. %v %v %v %v", ctx, profile, config, description)
+	return
+}
+
+// UpdateSystemProfileAfterCounter returns a count of finished RepositoryMock.UpdateSystemProfile invocations
+func (mmUpdateSystemProfile *RepositoryMock) UpdateSystemProfileAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateSystemProfile.afterUpdateSystemProfileCounter)
+}
+
+// UpdateSystemProfileBeforeCounter returns a count of RepositoryMock.UpdateSystemProfile invocations
+func (mmUpdateSystemProfile *RepositoryMock) UpdateSystemProfileBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateSystemProfile.beforeUpdateSystemProfileCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.UpdateSystemProfile.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmUpdateSystemProfile *mRepositoryMockUpdateSystemProfile) Calls() []*RepositoryMockUpdateSystemProfileParams {
+	mmUpdateSystemProfile.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockUpdateSystemProfileParams, len(mmUpdateSystemProfile.callArgs))
+	copy(argCopy, mmUpdateSystemProfile.callArgs)
+
+	mmUpdateSystemProfile.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockUpdateSystemProfileDone returns true if the count of the UpdateSystemProfile invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockUpdateSystemProfileDone() bool {
+	if m.UpdateSystemProfileMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.UpdateSystemProfileMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.UpdateSystemProfileMock.invocationsDone()
+}
+
+// MinimockUpdateSystemProfileInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockUpdateSystemProfileInspect() {
+	for _, e := range m.UpdateSystemProfileMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.UpdateSystemProfile at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterUpdateSystemProfileCounter := mm_atomic.LoadUint64(&m.afterUpdateSystemProfileCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.UpdateSystemProfileMock.defaultExpectation != nil && afterUpdateSystemProfileCounter < 1 {
+		if m.UpdateSystemProfileMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.UpdateSystemProfile at\n%s", m.UpdateSystemProfileMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.UpdateSystemProfile at\n%s with params: %#v", m.UpdateSystemProfileMock.defaultExpectation.expectationOrigins.origin, *m.UpdateSystemProfileMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcUpdateSystemProfile != nil && afterUpdateSystemProfileCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.UpdateSystemProfile at\n%s", m.funcUpdateSystemProfileOrigin)
+	}
+
+	if !m.UpdateSystemProfileMock.invocationsDone() && afterUpdateSystemProfileCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.UpdateSystemProfile at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.UpdateSystemProfileMock.expectedInvocations), m.UpdateSystemProfileMock.expectedInvocationsOrigin, afterUpdateSystemProfileCounter)
 	}
 }
 
@@ -32138,6 +40716,8 @@ func (m *RepositoryMock) MinimockFinish() {
 
 			m.MinimockCreateObjectInspect()
 
+			m.MinimockCreateStagingKnowledgeBaseInspect()
+
 			m.MinimockCreateTextChunksInspect()
 
 			m.MinimockDeleteAllConvertedFilesInKbInspect()
@@ -32170,25 +40750,41 @@ func (m *RepositoryMock) MinimockFinish() {
 
 			m.MinimockDeleteRepositoryTagInspect()
 
+			m.MinimockDeleteSystemProfileInspect()
+
 			m.MinimockDropCollectionInspect()
 
 			m.MinimockFlushCollectionInspect()
+
+			m.MinimockGetActiveCollectionUIDInspect()
 
 			m.MinimockGetAllConvertedFilesByFileUIDInspect()
 
 			m.MinimockGetChatCacheMetadataInspect()
 
+			m.MinimockGetChunkCountByKBUIDInspect()
+
 			m.MinimockGetConvertedFileByFileUIDInspect()
 
 			m.MinimockGetConvertedFileByFileUIDAndTypeInspect()
 
-			m.MinimockGetCountFilesByListKnowledgeBaseUIDInspect()
+			m.MinimockGetConvertedFileCountByKBUIDInspect()
+
+			m.MinimockGetDefaultEmbeddingConfigInspect()
+
+			m.MinimockGetDualProcessingTargetInspect()
+
+			m.MinimockGetEmbeddingCountByKBUIDInspect()
 
 			m.MinimockGetFileInspect()
+
+			m.MinimockGetFileCountByKnowledgeBaseUIDInspect()
 
 			m.MinimockGetFileMetadataInspect()
 
 			m.MinimockGetFilesTotalTokensInspect()
+
+			m.MinimockGetKnowledgeBaseByIDInspect()
 
 			m.MinimockGetKnowledgeBaseByOwnerAndKbIDInspect()
 
@@ -32197,6 +40793,8 @@ func (m *RepositoryMock) MinimockFinish() {
 			m.MinimockGetKnowledgeBaseCountByOwnerInspect()
 
 			m.MinimockGetKnowledgeBaseFilesByFileUIDsInspect()
+
+			m.MinimockGetKnowledgeBaseFilesByNameInspect()
 
 			m.MinimockGetKnowledgeBasesByUIDsInspect()
 
@@ -32220,9 +40818,15 @@ func (m *RepositoryMock) MinimockFinish() {
 
 			m.MinimockGetRepositoryTagInspect()
 
+			m.MinimockGetRollbackKBForProductionInspect()
+
 			m.MinimockGetSourceByFileUIDInspect()
 
 			m.MinimockGetSourceTableAndUIDByFileUIDsInspect()
+
+			m.MinimockGetStagingKBForProductionInspect()
+
+			m.MinimockGetSystemProfileInspect()
 
 			m.MinimockGetTextChunksBySourceInspect()
 
@@ -32246,6 +40850,10 @@ func (m *RepositoryMock) MinimockFinish() {
 
 			m.MinimockInsertVectorsInCollectionInspect()
 
+			m.MinimockIsCollectionInUseInspect()
+
+			m.MinimockIsKBUpdatingInspect()
+
 			m.MinimockListAllObjectURLsInspect()
 
 			m.MinimockListAllObjectsInspect()
@@ -32264,6 +40872,12 @@ func (m *RepositoryMock) MinimockFinish() {
 
 			m.MinimockListKnowledgeBasesByCatalogTypeInspect()
 
+			m.MinimockListKnowledgeBasesByUpdateStatusInspect()
+
+			m.MinimockListKnowledgeBasesForUpdateInspect()
+
+			m.MinimockListSystemProfilesInspect()
+
 			m.MinimockListTextChunksByFileUIDInspect()
 
 			m.MinimockListTextChunksByKBFileUIDInspect()
@@ -32278,15 +40892,25 @@ func (m *RepositoryMock) MinimockFinish() {
 
 			m.MinimockUpdateConvertedFileInspect()
 
+			m.MinimockUpdateDefaultEmbeddingConfigInspect()
+
 			m.MinimockUpdateKnowledgeBaseInspect()
 
 			m.MinimockUpdateKnowledgeBaseFileInspect()
+
+			m.MinimockUpdateKnowledgeBaseResourcesInspect()
+
+			m.MinimockUpdateKnowledgeBaseUpdateStatusInspect()
+
+			m.MinimockUpdateKnowledgeBaseWithMapInspect()
 
 			m.MinimockUpdateKnowledgeFileMetadataInspect()
 
 			m.MinimockUpdateObjectInspect()
 
 			m.MinimockUpdateObjectByUpdateMapInspect()
+
+			m.MinimockUpdateSystemProfileInspect()
 
 			m.MinimockUpdateTextChunkInspect()
 
@@ -32325,6 +40949,7 @@ func (m *RepositoryMock) minimockDone() bool {
 		m.MinimockCreateKnowledgeBaseDone() &&
 		m.MinimockCreateKnowledgeBaseFileDone() &&
 		m.MinimockCreateObjectDone() &&
+		m.MinimockCreateStagingKnowledgeBaseDone() &&
 		m.MinimockCreateTextChunksDone() &&
 		m.MinimockDeleteAllConvertedFilesInKbDone() &&
 		m.MinimockDeleteAllKnowledgeBaseFilesDone() &&
@@ -32341,20 +40966,29 @@ func (m *RepositoryMock) minimockDone() bool {
 		m.MinimockDeleteObjectDone() &&
 		m.MinimockDeleteObjectURLDone() &&
 		m.MinimockDeleteRepositoryTagDone() &&
+		m.MinimockDeleteSystemProfileDone() &&
 		m.MinimockDropCollectionDone() &&
 		m.MinimockFlushCollectionDone() &&
+		m.MinimockGetActiveCollectionUIDDone() &&
 		m.MinimockGetAllConvertedFilesByFileUIDDone() &&
 		m.MinimockGetChatCacheMetadataDone() &&
+		m.MinimockGetChunkCountByKBUIDDone() &&
 		m.MinimockGetConvertedFileByFileUIDDone() &&
 		m.MinimockGetConvertedFileByFileUIDAndTypeDone() &&
-		m.MinimockGetCountFilesByListKnowledgeBaseUIDDone() &&
+		m.MinimockGetConvertedFileCountByKBUIDDone() &&
+		m.MinimockGetDefaultEmbeddingConfigDone() &&
+		m.MinimockGetDualProcessingTargetDone() &&
+		m.MinimockGetEmbeddingCountByKBUIDDone() &&
 		m.MinimockGetFileDone() &&
+		m.MinimockGetFileCountByKnowledgeBaseUIDDone() &&
 		m.MinimockGetFileMetadataDone() &&
 		m.MinimockGetFilesTotalTokensDone() &&
+		m.MinimockGetKnowledgeBaseByIDDone() &&
 		m.MinimockGetKnowledgeBaseByOwnerAndKbIDDone() &&
 		m.MinimockGetKnowledgeBaseByUIDDone() &&
 		m.MinimockGetKnowledgeBaseCountByOwnerDone() &&
 		m.MinimockGetKnowledgeBaseFilesByFileUIDsDone() &&
+		m.MinimockGetKnowledgeBaseFilesByNameDone() &&
 		m.MinimockGetKnowledgeBasesByUIDsDone() &&
 		m.MinimockGetKnowledgebaseFileByKBUIDAndFileIDDone() &&
 		m.MinimockGetObjectByUIDDone() &&
@@ -32366,8 +41000,11 @@ func (m *RepositoryMock) minimockDone() bool {
 		m.MinimockGetPresignedURLForDownloadDone() &&
 		m.MinimockGetPresignedURLForUploadDone() &&
 		m.MinimockGetRepositoryTagDone() &&
+		m.MinimockGetRollbackKBForProductionDone() &&
 		m.MinimockGetSourceByFileUIDDone() &&
 		m.MinimockGetSourceTableAndUIDByFileUIDsDone() &&
+		m.MinimockGetStagingKBForProductionDone() &&
+		m.MinimockGetSystemProfileDone() &&
 		m.MinimockGetTextChunksBySourceDone() &&
 		m.MinimockGetTextChunksByUIDsDone() &&
 		m.MinimockGetTotalTextChunksBySourcesDone() &&
@@ -32379,6 +41016,8 @@ func (m *RepositoryMock) minimockDone() bool {
 		m.MinimockHardDeleteTextChunksByKBUIDDone() &&
 		m.MinimockIncreaseKnowledgeBaseUsageDone() &&
 		m.MinimockInsertVectorsInCollectionDone() &&
+		m.MinimockIsCollectionInUseDone() &&
+		m.MinimockIsKBUpdatingDone() &&
 		m.MinimockListAllObjectURLsDone() &&
 		m.MinimockListAllObjectsDone() &&
 		m.MinimockListConvertedFilesByFileUIDDone() &&
@@ -32388,6 +41027,9 @@ func (m *RepositoryMock) minimockDone() bool {
 		m.MinimockListKnowledgeBaseFilesDone() &&
 		m.MinimockListKnowledgeBasesDone() &&
 		m.MinimockListKnowledgeBasesByCatalogTypeDone() &&
+		m.MinimockListKnowledgeBasesByUpdateStatusDone() &&
+		m.MinimockListKnowledgeBasesForUpdateDone() &&
+		m.MinimockListSystemProfilesDone() &&
 		m.MinimockListTextChunksByFileUIDDone() &&
 		m.MinimockListTextChunksByKBFileUIDDone() &&
 		m.MinimockProcessKnowledgeBaseFilesDone() &&
@@ -32395,11 +41037,16 @@ func (m *RepositoryMock) minimockDone() bool {
 		m.MinimockSetChatCacheMetadataDone() &&
 		m.MinimockSimilarVectorsInCollectionDone() &&
 		m.MinimockUpdateConvertedFileDone() &&
+		m.MinimockUpdateDefaultEmbeddingConfigDone() &&
 		m.MinimockUpdateKnowledgeBaseDone() &&
 		m.MinimockUpdateKnowledgeBaseFileDone() &&
+		m.MinimockUpdateKnowledgeBaseResourcesDone() &&
+		m.MinimockUpdateKnowledgeBaseUpdateStatusDone() &&
+		m.MinimockUpdateKnowledgeBaseWithMapDone() &&
 		m.MinimockUpdateKnowledgeFileMetadataDone() &&
 		m.MinimockUpdateObjectDone() &&
 		m.MinimockUpdateObjectByUpdateMapDone() &&
+		m.MinimockUpdateSystemProfileDone() &&
 		m.MinimockUpdateTextChunkDone() &&
 		m.MinimockUpdateTextChunkDestinationsDone() &&
 		m.MinimockUploadBase64FileDone() &&
