@@ -12,16 +12,16 @@ import (
 	errorsx "github.com/instill-ai/x/errors"
 )
 
-// Provider implements the ai.Provider interface for Gemini
-type Provider struct {
+// Client implements the ai.Client interface for Gemini
+type Client struct {
 	client *genai.Client
 }
 
-// NewProvider creates a new Gemini AI provider
-func NewProvider(ctx context.Context, apiKey string) (*Provider, error) {
+// NewClient creates a new Gemini AI client
+func NewClient(ctx context.Context, apiKey string) (*Client, error) {
 	if apiKey == "" {
 		err := errorsx.ErrInvalidArgument
-		return nil, errorsx.AddMessage(err, "AI provider configuration is missing. Please contact your administrator.")
+		return nil, errorsx.AddMessage(err, "AI client configuration is missing. Please contact your administrator.")
 	}
 
 	client, err := genai.NewClient(ctx, &genai.ClientConfig{
@@ -35,28 +35,37 @@ func NewProvider(ctx context.Context, apiKey string) (*Provider, error) {
 		)
 	}
 
-	return &Provider{
+	return &Client{
 		client: client,
 	}, nil
 }
 
-// Name returns the provider name
-func (p *Provider) Name() string {
+// Name returns the client name
+func (c *Client) Name() string {
 	return "gemini"
 }
 
 // GetEmbeddingDimensionality returns the Gemini embedding vector dimensionality (3072)
-func (p *Provider) GetEmbeddingDimensionality() int32 {
+func (c *Client) GetEmbeddingDimensionality() int32 {
 	return ai.GeminiEmbeddingDimDefault
 }
 
 // SupportsFileType returns true if Gemini can handle the file type
-func (p *Provider) SupportsFileType(fileType artifactpb.File_Type) bool {
+func (c *Client) SupportsFileType(fileType artifactpb.File_Type) bool {
 	return ai.SupportsFileType(fileType)
 }
 
-// Close releases provider resources
-func (p *Provider) Close() error {
+// GetModelFamily returns this client if the model family matches, otherwise error
+// For single clients, this returns self only for matching model family
+func (c *Client) GetModelFamily(modelFamily string) (ai.Client, error) {
+	if modelFamily == ai.ModelFamilyGemini {
+		return c, nil
+	}
+	return nil, fmt.Errorf("model family %s not supported by Gemini client", modelFamily)
+}
+
+// Close releases client resources
+func (c *Client) Close() error {
 	// The genai.Client doesn't need explicit closing in the current API
 	return nil
 }

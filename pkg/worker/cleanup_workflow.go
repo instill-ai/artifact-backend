@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
@@ -26,7 +27,8 @@ type CleanupFileWorkflowParam struct {
 
 // CleanupKnowledgeBaseWorkflowParam defines the parameters for the CleanupKnowledgeBaseWorkflow
 type CleanupKnowledgeBaseWorkflowParam struct {
-	KBUID types.KBUIDType
+	KBUID               types.KBUIDType
+	CleanupAfterSeconds int64 // If > 0, wait this many seconds before cleanup (for retention-based cleanup)
 }
 
 type cleanupFileWorkflow struct {
@@ -213,12 +215,33 @@ func (w *Worker) CleanupFileWorkflow(ctx workflow.Context, param CleanupFileWork
 // - All text chunk records in Postgres
 // - All embedding records in Postgres
 // - ACL permissions for the knowledge base
+//
+// If CleanupAfterSeconds > 0, the workflow will wait that many seconds before performing cleanup.
+// This is used for retention-based cleanup where old KBs should be deleted after a retention period.
+//
 // Use this when deleting an entire knowledge base (not individual files).
 func (w *Worker) CleanupKnowledgeBaseWorkflow(ctx workflow.Context, param CleanupKnowledgeBaseWorkflowParam) error {
 	logger := workflow.GetLogger(ctx)
-	logger.Info("Starting CleanupKnowledgeBaseWorkflow", "kbUID", param.KBUID.String())
+	logger.Info("Starting CleanupKnowledgeBaseWorkflow",
+		"kbUID", param.KBUID.String(),
+		"cleanupAfterSeconds", param.CleanupAfterSeconds)
 
 	kbUID := param.KBUID
+
+	// If a delay is specified, wait before cleanup (for retention-based cleanup)
+	if param.CleanupAfterSeconds > 0 {
+		logger.Info("Waiting before cleanup (retention period)",
+			"delaySeconds", param.CleanupAfterSeconds)
+
+		waitDuration := time.Duration(param.CleanupAfterSeconds) * time.Second
+		err := workflow.Sleep(ctx, waitDuration)
+		if err != nil {
+			logger.Error("Sleep interrupted", "error", err)
+			return err
+		}
+
+		logger.Info("Retention period expired, proceeding with cleanup", "kbUID", kbUID.String())
+	}
 
 	activityOptions := workflow.ActivityOptions{
 		StartToCloseTimeout: ActivityTimeoutLong,
@@ -307,7 +330,19 @@ func (w *Worker) CleanupKnowledgeBaseWorkflow(ctx workflow.Context, param Cleanu
 			"error", err.Error())
 	}
 
-	// Step 7: Purge ACL (must be done last)
+	// Step 7: Soft-delete the KB record itself
+	err = workflow.ExecuteActivity(ctx, w.SoftDeleteKBRecordActivity, &SoftDeleteKBRecordActivityParam{
+		KBUID: kbUID,
+	}).Get(ctx, nil)
+	if err != nil {
+		errMsg := fmt.Sprintf("soft-delete KB record: %s", errorsx.MessageOrErr(err))
+		errors = append(errors, errMsg)
+		logger.Error("Failed to soft-delete KB record",
+			"kbUID", kbUID.String(),
+			"error", err.Error())
+	}
+
+	// Step 8: Purge ACL (must be done last)
 	err = workflow.ExecuteActivity(ctx, w.PurgeKBACLActivity, &PurgeKBACLActivityParam{
 		KBUID: kbUID,
 	}).Get(ctx, nil)

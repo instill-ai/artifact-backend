@@ -8,7 +8,6 @@ import (
 
 	"github.com/gofrs/uuid"
 
-	"github.com/instill-ai/artifact-backend/internal/ai"
 	"github.com/instill-ai/artifact-backend/pkg/types"
 	"github.com/milvus-io/milvus-sdk-go/v2/client"
 	"github.com/milvus-io/milvus-sdk-go/v2/entity"
@@ -62,7 +61,7 @@ type SimilarVectorSearchParam struct {
 // VectorDatabase implements the necessary use cases to interact with a vector
 // database (e.g., Milvus).
 type VectorDatabase interface {
-	CreateCollection(_ context.Context, id string) error
+	CreateCollection(_ context.Context, id string, dimensionality uint32) error
 	InsertVectorsInCollection(_ context.Context, collID string, embeddings []VectorEmbedding) error
 	DropCollection(_ context.Context, id string) error
 	SimilarVectorsInCollection(context.Context, SimilarVectorSearchParam) ([][]SimilarVectorEmbedding, error)
@@ -111,9 +110,9 @@ func NewVectorDatabase(ctx context.Context, host, port string) (db VectorDatabas
 	}, c.Close, nil
 }
 
-func (m *milvusClient) CreateCollection(ctx context.Context, collectionName string) error {
+func (m *milvusClient) CreateCollection(ctx context.Context, collectionName string, dimensionality uint32) error {
 	logger, _ := logx.GetZapLogger(ctx)
-	logger = logger.With(zap.String("collection_name", collectionName))
+	logger = logger.With(zap.String("collection_name", collectionName), zap.Uint32("dimensionality", dimensionality))
 
 	// 1. Check if the collection already exists
 	has, err := m.c.HasCollection(ctx, collectionName)
@@ -126,7 +125,8 @@ func (m *milvusClient) CreateCollection(ctx context.Context, collectionName stri
 	}
 
 	// 2. Create the collection with the specified schema
-	vectorDimStr := fmt.Sprintf("%d", ai.GeminiEmbeddingDimDefault)
+	// Use the provided dimensionality from KB's embedding_config or system profile
+	vectorDimStr := fmt.Sprintf("%d", dimensionality)
 	schema := &entity.Schema{
 		CollectionName: collectionName,
 		Description:    "",
@@ -181,6 +181,28 @@ func (m *milvusClient) InsertVectorsInCollection(ctx context.Context, collection
 		return fmt.Errorf("collection does not exist: %w", errorsx.ErrNotFound)
 	}
 
+	// Get collection schema to determine vector dimension
+	collection, err := m.c.DescribeCollection(ctx, collectionName)
+	if err != nil {
+		return fmt.Errorf("describing collection: %w", err)
+	}
+
+	// Find the embedding field to get its dimension
+	var vectorDim int
+	for _, field := range collection.Schema.Fields {
+		if field.Name == kbCollectionFieldEmbedding {
+			if dimStr, ok := field.TypeParams["dim"]; ok {
+				if _, err := fmt.Sscanf(dimStr, "%d", &vectorDim); err != nil {
+					return fmt.Errorf("failed to parse vector dimension: %w", err)
+				}
+			}
+			break
+		}
+	}
+	if vectorDim == 0 {
+		return fmt.Errorf("could not determine vector dimension from collection schema")
+	}
+
 	// Prepare the data for insertion
 	vectorCount := len(embeddings)
 	sourceTables := make([]string, vectorCount)
@@ -213,7 +235,7 @@ func (m *milvusClient) InsertVectorsInCollection(ctx context.Context, collection
 		entity.NewColumnVarChar(kbCollectionFieldSourceTable, sourceTables),
 		entity.NewColumnVarChar(kbCollectionFieldSourceUID, sourceUIDs),
 		entity.NewColumnVarChar(kbCollectionFieldEmbeddingUID, embeddingUIDs),
-		entity.NewColumnFloatVector(kbCollectionFieldEmbedding, int(ai.GeminiEmbeddingDimDefault), vectors),
+		entity.NewColumnFloatVector(kbCollectionFieldEmbedding, vectorDim, vectors),
 	}
 
 	hasMetadata, hasFileUID, hasTags, err := m.checkMetadataFields(ctx, collectionName)

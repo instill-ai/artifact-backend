@@ -13,9 +13,9 @@ require (
 	github.com/google/go-cmp v0.7.0
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.1
-	github.com/instill-ai/protogen-go v0.3.3-alpha.0.20251016131944-fbf46a3f350f
+	github.com/instill-ai/protogen-go v0.3.3-alpha.0.20251020215452-9cefa8fe58b7
 	github.com/instill-ai/usage-client v0.4.0
-	github.com/instill-ai/x v0.10.0-alpha
+	github.com/instill-ai/x v0.10.1-alpha
 	github.com/knadh/koanf v1.5.0
 	github.com/milvus-io/milvus-sdk-go/v2 v2.4.2
 	github.com/minio/minio-go/v7 v7.0.92
@@ -37,8 +37,6 @@ require (
 	gorm.io/driver/postgres v1.5.0
 	gorm.io/gorm v1.30.0
 )
-
-require github.com/tidwall/sjson v1.2.5 // indirect
 
 require (
 	cloud.google.com/go v0.120.0 // indirect
@@ -120,6 +118,7 @@ require (
 	github.com/tidwall/gjson v1.18.0 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
+	github.com/tidwall/sjson v1.2.5 // indirect
 	github.com/tinylib/msgp v1.3.0 // indirect
 	github.com/twmb/murmur3 v1.1.8 // indirect
 	github.com/uber-go/tally/v4 v4.1.17 // indirect

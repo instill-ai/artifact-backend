@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/gofrs/uuid"
@@ -28,6 +29,7 @@ const (
 	KnowledgeBaseFileTableName = "knowledge_base_file"
 )
 
+// KnowledgeBaseFile interface defines the methods for the knowledge base file table
 type KnowledgeBaseFile interface {
 	// CreateKnowledgeBaseFile creates a new knowledge base file
 	CreateKnowledgeBaseFile(ctx context.Context, kb KnowledgeBaseFileModel, externalServiceCall func(fileUID string) error) (*KnowledgeBaseFileModel, error)
@@ -35,6 +37,9 @@ type KnowledgeBaseFile interface {
 	ListKnowledgeBaseFiles(context.Context, KnowledgeBaseFileListParams) (*KnowledgeBaseFileList, error)
 	// GetKnowledgeBaseFilesByFileUIDs returns the knowledge base files by file UIDs
 	GetKnowledgeBaseFilesByFileUIDs(ctx context.Context, fileUIDs []types.FileUIDType, columns ...string) ([]KnowledgeBaseFileModel, error)
+	// GetKnowledgeBaseFilesByName retrieves files by name in a specific KB
+	// Used for dual deletion to find corresponding files in staging/rollback KB
+	GetKnowledgeBaseFilesByName(ctx context.Context, kbUID types.KBUIDType, fileName string) ([]KnowledgeBaseFileModel, error)
 	// DeleteKnowledgeBaseFile deletes the knowledge base file by file UID
 	DeleteKnowledgeBaseFile(ctx context.Context, fileUID string) error
 	// DeleteAllKnowledgeBaseFiles deletes all files in the knowledge base
@@ -43,8 +48,10 @@ type KnowledgeBaseFile interface {
 	ProcessKnowledgeBaseFiles(ctx context.Context, fileUIDs []string, requester types.RequesterUIDType) ([]KnowledgeBaseFileModel, error)
 	// UpdateKnowledgeBaseFile updates the data and retrieves the latest data
 	UpdateKnowledgeBaseFile(ctx context.Context, fileUID string, updateMap map[string]any) (*KnowledgeBaseFileModel, error)
-	// GetCountFilesByListKnowledgeBaseUID returns the number of files associated with the knowledge base UID
-	GetCountFilesByListKnowledgeBaseUID(ctx context.Context, kbUIDs []types.KBUIDType) (map[types.KBUIDType]int64, error)
+	// GetFileCountByKnowledgeBaseUID returns the number of files for a KB, optionally filtered by process status
+	// If processStatus is empty, returns all non-deleted files
+	// If processStatus is provided (e.g., "FILE_PROCESS_STATUS_COMPLETED"), returns only files with that status
+	GetFileCountByKnowledgeBaseUID(ctx context.Context, kbUID types.KBUIDType, processStatus string) (int64, error)
 	// GetSourceTableAndUIDByFileUIDs returns the source table and uid by file UID list
 	GetSourceTableAndUIDByFileUIDs(ctx context.Context, files []KnowledgeBaseFileModel) (map[types.FileUIDType]struct {
 		SourceTable string
@@ -65,6 +72,7 @@ type KnowledgeBaseFile interface {
 	GetKnowledgebaseFileByKBUIDAndFileID(ctx context.Context, kbUID types.KBUIDType, fileID string) (*KnowledgeBaseFileModel, error)
 }
 
+// KnowledgeBaseFileModel is the model for the knowledge base file table
 type KnowledgeBaseFileModel struct {
 	UID types.FileUIDType `gorm:"column:uid;type:uuid;default:gen_random_uuid();primaryKey" json:"uid"`
 	// the knowledge base file is under the owner(namespace)
@@ -105,6 +113,7 @@ func (KnowledgeBaseFileModel) TableName() string {
 	return KnowledgeBaseFileTableName
 }
 
+// ExtraMetaData is the extra meta data of the knowledge base file
 type ExtraMetaData struct {
 	FailReason      string `json:"fail_reason"`
 	ConvertingPipe  string `json:"converting_pipe"`
@@ -122,7 +131,7 @@ type ExtraMetaData struct {
 	Length []uint32 `json:"length,omitempty"`
 }
 
-// table columns map
+// KnowledgeBaseFileColumns is the columns for the knowledge base file table
 type KnowledgeBaseFileColumns struct {
 	UID              string
 	Owner            string
@@ -141,6 +150,7 @@ type KnowledgeBaseFileColumns struct {
 	ExternalMetadata string
 }
 
+// KnowledgeBaseFileColumn is the columns for the knowledge base file table
 var KnowledgeBaseFileColumn = KnowledgeBaseFileColumns{
 	UID:              "uid",
 	Owner:            "owner",
@@ -183,7 +193,7 @@ func (kf *KnowledgeBaseFileModel) ExtraMetaDataMarshal() error {
 	return nil
 }
 
-// ExtraMetaDataUnmarshal unmarshal the ExtraMetaData JSON string to a struct
+// ExtraMetaDataUnmarshalFunc unmarshals the ExtraMetaData JSON string to a struct
 func (kf *KnowledgeBaseFileModel) ExtraMetaDataUnmarshalFunc() error {
 	var data ExtraMetaData
 	if kf.ExtraMetaData == "" {
@@ -245,7 +255,7 @@ func (kf *KnowledgeBaseFileModel) PublicExternalMetadataUnmarshal() *structpb.St
 	return md
 }
 
-// GORM hooks
+// BeforeCreate is a GORM hook that marshals the ExtraMetaData and ExternalMetadata fields
 func (kf *KnowledgeBaseFileModel) BeforeCreate(tx *gorm.DB) (err error) {
 	if err := kf.ExtraMetaDataMarshal(); err != nil {
 		return err
@@ -253,6 +263,7 @@ func (kf *KnowledgeBaseFileModel) BeforeCreate(tx *gorm.DB) (err error) {
 	return kf.ExternalMetadataToJSON()
 }
 
+// BeforeSave is a GORM hook that marshals the ExtraMetaData and ExternalMetadata fields
 func (kf *KnowledgeBaseFileModel) BeforeSave(tx *gorm.DB) (err error) {
 	if err := kf.ExtraMetaDataMarshal(); err != nil {
 		return err
@@ -260,6 +271,7 @@ func (kf *KnowledgeBaseFileModel) BeforeSave(tx *gorm.DB) (err error) {
 	return kf.ExternalMetadataToJSON()
 }
 
+// BeforeUpdate is a GORM hook that marshals the ExtraMetaData and ExternalMetadata fields
 func (kf *KnowledgeBaseFileModel) BeforeUpdate(tx *gorm.DB) (err error) {
 	if err := kf.ExtraMetaDataMarshal(); err != nil {
 		return err
@@ -267,6 +279,7 @@ func (kf *KnowledgeBaseFileModel) BeforeUpdate(tx *gorm.DB) (err error) {
 	return kf.ExternalMetadataToJSON()
 }
 
+// AfterFind is a GORM hook that unmarshals the ExtraMetaData and ExternalMetadata fields
 func (kf *KnowledgeBaseFileModel) AfterFind(tx *gorm.DB) (err error) {
 	if err := kf.ExtraMetaDataUnmarshalFunc(); err != nil {
 		return err
@@ -274,6 +287,7 @@ func (kf *KnowledgeBaseFileModel) AfterFind(tx *gorm.DB) (err error) {
 	return kf.JSONToExternalMetadata()
 }
 
+// CreateKnowledgeBaseFile creates a new knowledge base file
 func (r *repository) CreateKnowledgeBaseFile(ctx context.Context, kb KnowledgeBaseFileModel, externalServiceCall func(fileUID string) error) (*KnowledgeBaseFileModel, error) {
 	exists, err := r.checkIfKnowledgeBaseExists(ctx, kb.KBUID)
 	if err != nil {
@@ -488,33 +502,35 @@ func (r *repository) UpdateKnowledgeBaseFile(ctx context.Context, fileUID string
 	return &updatedFile, nil
 }
 
-// CountFilesByListKnowledgeBaseUID returns the number of files associated with the catalog UID
-func (r *repository) GetCountFilesByListKnowledgeBaseUID(ctx context.Context, kbUIDs []types.KBUIDType) (map[types.KBUIDType]int64, error) {
-	var results []struct {
-		KnowledgeBaseUID types.KBUIDType `gorm:"column:kb_uid"`
-		Count            int64           `gorm:"column:count"`
+// GetFileCountByKnowledgeBaseUID returns the number of files for a KB, optionally filtered by process status
+func (r *repository) GetFileCountByKnowledgeBaseUID(ctx context.Context, kbUID types.KBUIDType, processStatus string) (int64, error) {
+	var count int64
+
+	query := r.db.WithContext(ctx).
+		Table(KnowledgeBaseFileTableName).
+		Where(fmt.Sprintf("%v = ? AND %v IS NULL",
+			KnowledgeBaseFileColumn.KnowledgeBaseUID,
+			KnowledgeBaseFileColumn.DeleteTime), kbUID)
+
+	// Add process status filter if specified
+	// Support comma-separated list of statuses for IN clause
+	if processStatus != "" {
+		statuses := strings.Split(processStatus, ",")
+		if len(statuses) == 1 {
+			// Single status: use exact match
+			query = query.Where(fmt.Sprintf("%v = ?", KnowledgeBaseFileColumn.ProcessStatus), processStatus)
+		} else {
+			// Multiple statuses: use IN clause
+			query = query.Where(fmt.Sprintf("%v IN ?", KnowledgeBaseFileColumn.ProcessStatus), statuses)
+		}
 	}
 
-	selectClause := fmt.Sprintf("%v, COUNT(*) as count", KnowledgeBaseFileColumn.KnowledgeBaseUID)
-	whereClause := fmt.Sprintf("%v IN ? AND %v IS NULL", KnowledgeBaseFileColumn.KnowledgeBaseUID, KnowledgeBaseFileColumn.DeleteTime)
-
-	// Adjust the query to match the structure and requirements of your database and tables
-	err := r.db.Table(KnowledgeBaseFileTableName).
-		Select(selectClause).
-		Where(whereClause, kbUIDs).
-		Group(KnowledgeBaseFileColumn.KnowledgeBaseUID).
-		Find(&results).Error
-
+	err := query.Count(&count).Error
 	if err != nil {
-		return nil, fmt.Errorf("error querying database: %w", err)
+		return 0, fmt.Errorf("error counting files: %w", err)
 	}
 
-	counts := make(map[types.KBUIDType]int64)
-	for _, result := range results {
-		counts[result.KnowledgeBaseUID] = result.Count
-	}
-
-	return counts, nil
+	return count, nil
 }
 
 // GetSourceTableAndUIDByFileUIDs returns the source table and uid by file UID list
@@ -585,6 +601,32 @@ func (r *repository) GetKnowledgeBaseFilesByFileUIDs(
 	}
 
 	// Return the found files, or an empty slice if none were found
+	return files, nil
+}
+
+// GetKnowledgeBaseFilesByName retrieves files by name in a specific KB
+// Used for dual deletion to find corresponding files in staging/rollback KB
+func (r *repository) GetKnowledgeBaseFilesByName(
+	ctx context.Context,
+	kbUID types.KBUIDType,
+	fileName string,
+) ([]KnowledgeBaseFileModel, error) {
+	var files []KnowledgeBaseFileModel
+
+	where := fmt.Sprintf("%v = ? AND %v = ? AND %v IS NULL",
+		KnowledgeBaseFileColumn.KnowledgeBaseUID,
+		KnowledgeBaseFileColumn.Name,
+		KnowledgeBaseFileColumn.DeleteTime)
+
+	if err := r.db.WithContext(ctx).
+		Where(where, kbUID, fileName).
+		Find(&files).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return []KnowledgeBaseFileModel{}, nil
+		}
+		return nil, fmt.Errorf("querying files by name: %w", err)
+	}
+
 	return files, nil
 }
 

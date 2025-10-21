@@ -13,6 +13,7 @@ import (
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
+// SimChunk represents a similarity chunk with its UID and score.
 type SimChunk struct {
 	ChunkUID types.TextChunkUIDType
 	Score    float32
@@ -27,6 +28,12 @@ func (s *service) SimilarityChunksSearch(ctx context.Context, ownerUID types.Own
 	if err != nil {
 		return nil, fmt.Errorf("fetching knowledge base: %w", err)
 	}
+
+	// CRITICAL FIX: Removed dual-mode routing logic that was unnecessary.
+	// The atomic swap now properly renames KBs, so catalog_id always points to the correct KB:
+	// - Before swap: catalog_id="my-catalog" → old production KB
+	// - After swap: catalog_id="my-catalog" → new production KB (atomic rename)
+	// No need to query multiple KBs - the swap is instant and users always get the right data.
 
 	// Search similar embeddings in KB.
 	var fileType types.FileType
@@ -63,6 +70,8 @@ func (s *service) SimilarityChunksSearch(ctx context.Context, ownerUID types.Own
 	if topK == 0 {
 		topK = 5
 	}
+
+	// Single KB query - no dual-mode routing needed
 	sp := repository.SimilarVectorSearchParam{
 		CollectionID: constant.KBCollectionName(kb.UID),
 		Vectors:      textVector,
@@ -72,10 +81,7 @@ func (s *service) SimilarityChunksSearch(ctx context.Context, ownerUID types.Own
 		ChunkType:    string(chunkType),
 	}
 
-	// By default we'll filter the chunk search with the file UID metadata.
-	// However, certain legacy collections lack this field. In that case, we'll
-	// filter by filename. This field isn't indexed, so performance might be
-	// affected.
+	// Check file UID metadata availability
 	hasFileUID, err := s.repository.CheckFileUIDMetadata(ctx, sp.CollectionID)
 	if err != nil {
 		return nil, fmt.Errorf("check in collection metadata: %w", err)
@@ -95,28 +101,26 @@ func (s *service) SimilarityChunksSearch(ctx context.Context, ownerUID types.Own
 
 	simEmbeddings, err := s.repository.SimilarVectorsInCollection(ctx, sp)
 	if err != nil {
-		return nil, fmt.Errorf("searching similar embeddings in KB: %w", err)
+		return nil, fmt.Errorf("searching similar embeddings: %w", err)
 	}
 
-	// fetch chunks by their UIDs
-	res := make([]SimChunk, 0, len(simEmbeddings))
-	if len(simEmbeddings) == 0 {
-		return []SimChunk{}, nil
-	}
-
-	for _, simEmb := range simEmbeddings[0] {
-		if simEmb.SourceTable != repository.TextChunkTableName {
-			continue
+	// Process results
+	var results []SimChunk
+	if len(simEmbeddings) > 0 {
+		for _, simEmb := range simEmbeddings[0] {
+			if simEmb.SourceTable != repository.TextChunkTableName {
+				continue
+			}
+			simChunkUID, err := uuid.FromString(simEmb.SourceUID)
+			if err != nil {
+				return nil, fmt.Errorf("invalid chunk uid %s", simEmb.SourceUID)
+			}
+			results = append(results, SimChunk{
+				ChunkUID: types.TextChunkUIDType(simChunkUID),
+				Score:    simEmb.Score,
+			})
 		}
-		simChunkUID, err := uuid.FromString(simEmb.SourceUID)
-		if err != nil {
-			return nil, fmt.Errorf("invalid chunk uid %s", simEmb.SourceUID)
-		}
-		res = append(res, SimChunk{
-			ChunkUID: types.TextChunkUIDType(simChunkUID),
-			Score:    simEmb.Score,
-		})
 	}
 
-	return res, nil
+	return results, nil
 }

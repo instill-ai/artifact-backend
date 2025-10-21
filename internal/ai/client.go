@@ -9,10 +9,10 @@ import (
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
-// Embedding dimension constants for different AI providers
+// Embedding dimension constants for different AI clients
 const (
-	// Default provider family for backward compatibility
-	DefaultProviderFamily = "gemini"
+	// Default client family for backward compatibility
+	DefaultModelFamily = "gemini"
 
 	// Gemini model family
 	ModelFamilyGemini = "gemini"
@@ -56,9 +56,9 @@ type ConversionResult struct {
 	Markdown     string
 	PositionData *types.PositionData
 	Length       []uint32
-	Provider     string // "gemini", "openai", "anthropic"
-	// UsageMetadata contains token usage information from the AI provider
-	// The actual type depends on the provider
+	Client       string // "gemini", "openai", "anthropic"
+	// UsageMetadata contains token usage information from the AI client
+	// The actual type depends on the client
 	UsageMetadata any
 }
 
@@ -68,8 +68,8 @@ type CacheResult struct {
 	Model      string
 	CreateTime time.Time
 	ExpireTime time.Time
-	// UsageMetadata contains token usage information from the AI provider
-	// The actual type depends on the provider
+	// UsageMetadata contains token usage information from the AI client
+	// The actual type depends on the client
 	UsageMetadata any
 }
 
@@ -103,7 +103,7 @@ type FileContent struct {
 type ChatResult struct {
 	Answer        string // The AI-generated answer
 	Model         string // Model used (e.g., "gemini-1.5-pro-002")
-	UsageMetadata any    // Token usage metadata from the AI provider
+	UsageMetadata any    // Token usage metadata from the AI client
 }
 
 // EmbedResult represents the result of an embedding operation
@@ -113,10 +113,12 @@ type EmbedResult struct {
 	Dimensionality int32       // Vector dimensionality (e.g., 3072)
 }
 
-// Provider defines the interface for AI providers that understand unstructured data
+// Client defines the interface for AI vendor API clients that understand unstructured data
 // (documents, images, audio, video) and extract content to Markdown
-type Provider interface {
-	// Name returns the provider name (e.g., "gemini", "openai")
+// The client interface also includes routing capabilities to select the appropriate
+// implementation based on model family (for composite/multi-client scenarios)
+type Client interface {
+	// Name returns the client name (e.g., "gemini", "openai", "composite")
 	Name() string
 
 	// ConvertToMarkdownWithoutCache understands unstructured data content and extracts it to Markdown
@@ -145,28 +147,27 @@ type Provider interface {
 	// DeleteCache deletes a cached context
 	DeleteCache(ctx context.Context, cacheName string) error
 
-	// ChatWithCache responds to a prompt using a pre-cached context
-	// This enables instant chat without needing embeddings/retrieval for files still being processed
-	// The cached context contains the full file content(s) for the AI to reference
-	ChatWithCache(ctx context.Context, cacheName, prompt string) (*ChatResult, error)
-
-	// ChatWithFiles sends files + prompt directly to AI without caching
-	// Used for small files that couldn't be cached by Gemini (< 1024 tokens minimum)
-	// Enables chat during processing phase without needing embeddings or cache
-	ChatWithFiles(ctx context.Context, files []FileContent, prompt string) (*ChatResult, error)
-
 	// EmbedTexts generates embeddings with a specific task type optimization
 	// taskType specifies the optimization (e.g., "RETRIEVAL_DOCUMENT", "RETRIEVAL_QUERY", "QUESTION_ANSWERING")
-	EmbedTexts(ctx context.Context, texts []string, taskType string) (*EmbedResult, error)
+	// dimensionality specifies the desired embedding vector size (e.g., 1536, 3072)
+	//   - For OpenAI: always returns 1536 regardless of this parameter
+	//   - For Gemini: can dynamically output 768, 1536, or 3072 based on this parameter
+	EmbedTexts(ctx context.Context, texts []string, taskType string, dimensionality int32) (*EmbedResult, error)
 
-	// GetEmbeddingDimensionality returns the embedding vector dimensionality for this provider
+	// GetEmbeddingDimensionality returns the embedding vector dimensionality for this client
 	// For OpenAI: always returns 1536
 	// For Gemini: always returns 3072 (full dimensionality)
 	GetEmbeddingDimensionality() int32
 
-	// SupportsFileType returns true if this provider can understand and extract content from this file type
+	// SupportsFileType returns true if this client can understand and extract content from this file type
 	SupportsFileType(fileType artifactpb.File_Type) bool
 
-	// Close releases provider resources
+	// GetModelFamily returns the appropriate client for a specific model family
+	// This is used by composite clients to route requests to the correct implementation
+	// For single-client implementations, this returns self
+	// modelFamily examples: "gemini", "openai"
+	GetModelFamily(modelFamily string) (Client, error)
+
+	// Close releases client resources
 	Close() error
 }

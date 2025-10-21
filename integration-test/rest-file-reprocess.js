@@ -8,6 +8,90 @@ import { artifactPublicHost } from "./const.js";
 import * as constant from "./const.js";
 import * as helper from "./helper.js";
 
+export let options = {
+  setupTimeout: '30s',
+  iterations: 1,
+  duration: '120m',
+  insecureSkipTLSVerify: true,
+  thresholds: {
+    checks: ["rate == 1.0"],
+  },
+};
+
+export function setup() {
+  check(true, { [constant.banner('Artifact API Reprocess: Setup')]: () => true });
+
+  // Clean up any leftover test data from previous runs
+  try {
+    constant.db.exec(`DELETE FROM text_chunk WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+    constant.db.exec(`DELETE FROM embedding WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+    constant.db.exec(`DELETE FROM converted_file WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+    constant.db.exec(`DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`);
+    constant.db.exec(`DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`);
+  } catch (e) {
+    console.log(`Reprocess Setup cleanup warning: ${e}`);
+  }
+
+  var loginResp = http.request("POST", `${constant.mgmtPublicHost}/v1beta/auth/login`, JSON.stringify({
+    "username": constant.defaultUsername,
+    "password": constant.defaultPassword,
+  }))
+
+  check(loginResp, {
+    [`POST ${constant.mgmtPublicHost}/v1beta/auth/login response status is 200`]: (r) => r.status === 200,
+  });
+
+  var header = {
+    "headers": {
+      "Authorization": `Bearer ${loginResp.json().accessToken}`,
+      "Content-Type": "application/json",
+    },
+    "timeout": "600s",
+  }
+
+  var resp = http.request("GET", `${constant.mgmtPublicHost}/v1beta/user`, {}, {
+    headers: { "Authorization": `Bearer ${loginResp.json().accessToken}` }
+  })
+
+  return { header: header, expectedOwner: resp.json().user }
+}
+
+export default function (data) {
+  CheckFileReprocessing(data);
+}
+
+export function teardown(data) {
+  const groupName = "Artifact API Reprocess: Cleanup";
+  group(groupName, () => {
+    check(true, { [constant.banner(groupName)]: () => true });
+
+    // Clean up catalogs created by this test
+    var listResp = http.request("GET", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, data.header)
+    if (listResp.status === 200) {
+      var catalogs = Array.isArray(listResp.json().catalogs) ? listResp.json().catalogs : []
+
+      for (const catalog of catalogs) {
+        if (catalog.catalog_id && catalog.catalog_id.startsWith(constant.dbIDPrefix)) {
+          http.request("DELETE", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalog.catalog_id}`, null, data.header);
+        }
+      }
+    }
+
+    // Final DB cleanup
+    try {
+      constant.db.exec(`DELETE FROM text_chunk WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+      constant.db.exec(`DELETE FROM embedding WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+      constant.db.exec(`DELETE FROM converted_file WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+      constant.db.exec(`DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`);
+      constant.db.exec(`DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`);
+    } catch (e) {
+      console.log(`Reprocess Teardown cleanup warning: ${e}`);
+    }
+
+    constant.db.close();
+  });
+}
+
 /**
  * Test file reprocessing to ensure old intermediate data is cleaned up across all storage systems.
  *

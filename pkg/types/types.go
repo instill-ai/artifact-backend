@@ -91,6 +91,8 @@ type (
 
 	// KBUIDType is the Knowledge Base unique identifier
 	KBUIDType = uuid.UUID
+	// CollectionUIDType is the Collection unique identifier
+	CollectionUIDType = uuid.UUID
 	// FileUIDType is the File unique identifier
 	FileUIDType = uuid.UUID
 	// TextChunkUIDType is the Text chunk unique identifier

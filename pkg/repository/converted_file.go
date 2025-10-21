@@ -39,6 +39,7 @@ type ConvertedFile interface {
 	GetConvertedFileByFileUID(ctx context.Context, fileUID types.FileUIDType) (*ConvertedFileModel, error)
 	GetConvertedFileByFileUIDAndType(ctx context.Context, fileUID types.FileUIDType, convertedType artifactpb.ConvertedFileType) (*ConvertedFileModel, error)
 	GetAllConvertedFilesByFileUID(ctx context.Context, fileUID types.FileUIDType) ([]ConvertedFileModel, error)
+	GetConvertedFileCountByKBUID(ctx context.Context, kbUID types.KBUIDType) (int64, error)
 }
 
 type ConvertedFileModel struct {
@@ -252,4 +253,18 @@ func (cf *ConvertedFileModel) AfterFind(tx *gorm.DB) error {
 	}
 
 	return json.Unmarshal(cf.PositionDataJSON, cf.PositionData)
+}
+
+// GetConvertedFileCountByKBUID returns the count of converted files for a knowledge base
+func (r *repository) GetConvertedFileCountByKBUID(ctx context.Context, kbUID types.KBUIDType) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Table(ConvertedFileTableName).
+		Where("kb_uid = ?", kbUID).
+		Count(&count).
+		Error
+	if err != nil {
+		return 0, fmt.Errorf("counting converted files for KB %s: %w", kbUID, err)
+	}
+	return count, nil
 }

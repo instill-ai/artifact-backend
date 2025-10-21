@@ -77,7 +77,7 @@ func (w *processFileWorkflow) Execute(ctx context.Context, param ProcessFileWork
 // 4. For each file: Chunk content/summary and generate embeddings
 // 5. Store chat cache metadata and cleanup all caches
 //
-// Note: Format conversion happens BEFORE caching to ensure AI providers cache the correct file format
+// Note: Format conversion happens BEFORE caching to ensure AI clients cache the correct file format
 // (e.g., cache PDF instead of DOCX, cache PNG instead of GIF)
 func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWorkflowParam) error {
 	logger := workflow.GetLogger(ctx)
@@ -430,7 +430,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				Metadata:    fm.metadata.ExternalMetadata,
 			}).Get(ctx, &result); err != nil {
 				// Format conversion failure is not fatal - continue with original file
-				// Note: This may cause downstream AI providers to fail if they don't support the original format
+				// Note: This may cause downstream AI clients to fail if they don't support the original format
 				logger.Error("Format conversion failed, continuing with original file (AI may reject this format)",
 					"fileUID", fm.fileUID.String(),
 					"originalType", fm.fileType.String(),
@@ -777,20 +777,30 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			}
 
 			// Get text chunks from database
+			// Use shorter timeout (5 min) for this I/O-only activity (DB + MinIO reads)
+			chunksCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+				StartToCloseTimeout: ActivityTimeoutStandard, // 5 minutes for I/O operations
+				RetryPolicy: &temporal.RetryPolicy{
+					InitialInterval:    RetryInitialInterval,
+					BackoffCoefficient: RetryBackoffCoefficient,
+					MaximumInterval:    RetryMaximumIntervalStandard,
+					MaximumAttempts:    RetryMaximumAttempts,
+				},
+			})
 			var chunksData GetTextChunksForEmbeddingActivityResult
-			if err := workflow.ExecuteActivity(ctx, w.GetChunksForEmbeddingActivity, &GetChunksForEmbeddingActivityParam{
+			if err := workflow.ExecuteActivity(chunksCtx, w.GetChunksForEmbeddingActivity, &GetChunksForEmbeddingActivityParam{
 				FileUID: fileUID,
-			}).Get(ctx, &chunksData); err != nil {
+			}).Get(chunksCtx, &chunksData); err != nil {
 				_ = handleFileError(fileUID, "get text chunks for embedding", err)
 				filesCompleted[fileUID.String()] = true
 				continue
 			}
 
 			// Generate embeddings using activity
-			// Pass KBUID to enable provider selection based on KB's embedding config
+			// Pass KBUID to enable client selection based on KB's embedding config
 			var embeddingVectors [][]float32
 			if err := workflow.ExecuteActivity(ctx, w.EmbedTextsActivity, &EmbedTextsActivityParam{
-				KBUID:    &kbUID, // Pass KBUID for provider selection (Gemini 3072-dim vs OpenAI 1536-dim)
+				KBUID:    &kbUID, // Pass KBUID for client selection (Gemini 3072-dim vs OpenAI 1536-dim)
 				Texts:    chunksData.Texts,
 				TaskType: "RETRIEVAL_DOCUMENT", // For indexing document chunks
 			}).Get(ctx, &embeddingVectors); err != nil {
@@ -803,6 +813,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			embeddings := make([]repository.EmbeddingModel, len(chunksData.Chunks))
 			for j, chunk := range chunksData.Chunks {
 				embeddings[j] = repository.EmbeddingModel{
+					UID:         types.EmbeddingUIDType(uuid.Must(uuid.NewV4())),
 					SourceTable: repository.TextChunkTableName,
 					SourceUID:   chunk.UID,
 					Vector:      embeddingVectors[j],

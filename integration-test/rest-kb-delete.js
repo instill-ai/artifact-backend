@@ -7,6 +7,90 @@ import { artifactPublicHost } from "./const.js";
 import * as constant from "./const.js";
 import * as helper from "./helper.js";
 
+export let options = {
+  setupTimeout: '30s',
+  iterations: 1,
+  duration: '120m',
+  insecureSkipTLSVerify: true,
+  thresholds: {
+    checks: ["rate == 1.0"],
+  },
+};
+
+export function setup() {
+  check(true, { [constant.banner('Artifact API Cleanup: Setup')]: () => true });
+
+  // Clean up any leftover test data from previous runs
+  try {
+    constant.db.exec(`DELETE FROM text_chunk WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+    constant.db.exec(`DELETE FROM embedding WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+    constant.db.exec(`DELETE FROM converted_file WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+    constant.db.exec(`DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`);
+    constant.db.exec(`DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`);
+  } catch (e) {
+    console.log(`Cleanup Setup cleanup warning: ${e}`);
+  }
+
+  var loginResp = http.request("POST", `${constant.mgmtPublicHost}/v1beta/auth/login`, JSON.stringify({
+    "username": constant.defaultUsername,
+    "password": constant.defaultPassword,
+  }))
+
+  check(loginResp, {
+    [`POST ${constant.mgmtPublicHost}/v1beta/auth/login response status is 200`]: (r) => r.status === 200,
+  });
+
+  var header = {
+    "headers": {
+      "Authorization": `Bearer ${loginResp.json().accessToken}`,
+      "Content-Type": "application/json",
+    },
+    "timeout": "600s",
+  }
+
+  var resp = http.request("GET", `${constant.mgmtPublicHost}/v1beta/user`, {}, {
+    headers: { "Authorization": `Bearer ${loginResp.json().accessToken}` }
+  })
+
+  return { header: header, expectedOwner: resp.json().user }
+}
+
+export default function (data) {
+  CheckKnowledgeBaseDeletion(data);
+}
+
+export function teardown(data) {
+  const groupName = "Artifact API Cleanup: Cleanup";
+  group(groupName, () => {
+    check(true, { [constant.banner(groupName)]: () => true });
+
+    // Clean up catalogs created by this test
+    var listResp = http.request("GET", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, data.header)
+    if (listResp.status === 200) {
+      var catalogs = Array.isArray(listResp.json().catalogs) ? listResp.json().catalogs : []
+
+      for (const catalog of catalogs) {
+        if (catalog.catalog_id && catalog.catalog_id.startsWith(constant.dbIDPrefix)) {
+          http.request("DELETE", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalog.catalog_id}`, null, data.header);
+        }
+      }
+    }
+
+    // Final DB cleanup
+    try {
+      constant.db.exec(`DELETE FROM text_chunk WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+      constant.db.exec(`DELETE FROM embedding WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+      constant.db.exec(`DELETE FROM converted_file WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+      constant.db.exec(`DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`);
+      constant.db.exec(`DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`);
+    } catch (e) {
+      console.log(`Cleanup Teardown cleanup warning: ${e}`);
+    }
+
+    constant.db.close();
+  });
+}
+
 /**
  * Test comprehensive cleanup of all resources when a catalog is deleted.
  *
@@ -163,8 +247,8 @@ export function CheckKnowledgeBaseDeletion(data) {
       chunks: helper.pollMinIOObjects(catalogUid, fileUid, 'chunk'),
     };
 
-    // Poll database embeddings and Milvus vectors
-    const embeddingsBeforeDelete = helper.pollEmbeddings(fileUid);
+    // Poll database embeddings and Milvus vectors (longer timeout for embeddings)
+    const embeddingsBeforeDelete = helper.pollEmbeddings(fileUid, 30);
     const milvusVectorsBeforeDelete = helper.pollMilvusVectors(catalogUid, fileUid);
 
     // Verify all resources exist (this proves our cleanup test is valid)
@@ -209,21 +293,20 @@ export function CheckKnowledgeBaseDeletion(data) {
     });
     console.log("✓ Catalog deleted, cleanup workflow triggered");
 
-    // Step 6: Wait for Temporal cleanup workflow to complete
-    // The cleanup workflow runs asynchronously, so we need to wait
-    // for it to finish removing all resources
-    console.log("Step 6: Waiting 15s for cleanup workflow to complete...");
-    sleep(15);
+    // Step 6: Poll for cleanup workflow completion (wait for all resources to be removed)
+    // The cleanup workflow runs asynchronously via Temporal
+    // Poll each resource type until it goes to zero (or timeout after 60s)
+    console.log("Step 6: Polling for cleanup workflow completion (waiting for resources to be removed)...");
 
     // Step 7: Verify all resources are COMPLETELY REMOVED (FINAL VERIFICATION)
-    console.log("Step 7: Verifying all resources are completely removed...");
+    console.log("Step 7: Polling and verifying all resources are completely removed...");
     const minioBlobsAfterDelete = {
-      converted: helper.countMinioObjects(catalogUid, fileUid, 'converted-file'),
-      chunks: helper.countMinioObjects(catalogUid, fileUid, 'chunk'),
+      converted: helper.pollMinIOCleanup(catalogUid, fileUid, 'converted-file', 60),
+      chunks: helper.pollMinIOCleanup(catalogUid, fileUid, 'chunk', 60),
     };
 
-    const embeddingsAfterDelete = helper.countEmbeddings(fileUid);
-    const milvusVectorsAfterDelete = helper.countMilvusVectors(catalogUid, fileUid);
+    const embeddingsAfterDelete = helper.pollEmbeddingsCleanup(fileUid, 60);
+    const milvusVectorsAfterDelete = helper.pollMilvusVectorsCleanup(catalogUid, fileUid, 60);
 
     let dbRecordsAfterDelete = { converted: 0, chunks: 0 };
     try {

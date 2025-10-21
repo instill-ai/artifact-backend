@@ -31,26 +31,12 @@ type ServiceMock struct {
 	beforeACLClientCounter uint64
 	ACLClientMock          mServiceMockACLClient
 
-	funcChatWithCache          func(ctx context.Context, cp1 *repository.ChatCacheMetadata, s1 string) (s2 string, err error)
-	funcChatWithCacheOrigin    string
-	inspectFuncChatWithCache   func(ctx context.Context, cp1 *repository.ChatCacheMetadata, s1 string)
-	afterChatWithCacheCounter  uint64
-	beforeChatWithCacheCounter uint64
-	ChatWithCacheMock          mServiceMockChatWithCache
-
 	funcCheckCatalogUserPermission          func(ctx context.Context, s1 string, s2 string, s3 string) (np1 *resource.Namespace, kp1 *repository.KnowledgeBaseModel, err error)
 	funcCheckCatalogUserPermissionOrigin    string
 	inspectFuncCheckCatalogUserPermission   func(ctx context.Context, s1 string, s2 string, s3 string)
 	afterCheckCatalogUserPermissionCounter  uint64
 	beforeCheckCatalogUserPermissionCounter uint64
 	CheckCatalogUserPermissionMock          mServiceMockCheckCatalogUserPermission
-
-	funcCheckFilesProcessingStatus          func(ctx context.Context, fa1 []types.FileUIDType) (allCompleted bool, processingCount int, err error)
-	funcCheckFilesProcessingStatusOrigin    string
-	inspectFuncCheckFilesProcessingStatus   func(ctx context.Context, fa1 []types.FileUIDType)
-	afterCheckFilesProcessingStatusCounter  uint64
-	beforeCheckFilesProcessingStatusCounter uint64
-	CheckFilesProcessingStatusMock          mServiceMockCheckFilesProcessingStatus
 
 	funcCheckNamespacePermission          func(ctx context.Context, np1 *resource.Namespace) (err error)
 	funcCheckNamespacePermissionOrigin    string
@@ -94,6 +80,13 @@ type ServiceMock struct {
 	beforeDeleteRepositoryTagCounter uint64
 	DeleteRepositoryTagMock          mServiceMockDeleteRepositoryTag
 
+	funcDeleteSystemProfileAdmin          func(ctx context.Context, s1 string) (dp1 *artifactpb.DeleteSystemProfileAdminResponse, err error)
+	funcDeleteSystemProfileAdminOrigin    string
+	inspectFuncDeleteSystemProfileAdmin   func(ctx context.Context, s1 string)
+	afterDeleteSystemProfileAdminCounter  uint64
+	beforeDeleteSystemProfileAdminCounter uint64
+	DeleteSystemProfileAdminMock          mServiceMockDeleteSystemProfileAdmin
+
 	funcEmbedTexts          func(ctx context.Context, kp1 *types.KBUIDType, sa1 []string, s1 string) (faa1 [][]float32, err error)
 	funcEmbedTextsOrigin    string
 	inspectFuncEmbedTexts   func(ctx context.Context, kp1 *types.KBUIDType, sa1 []string, s1 string)
@@ -101,12 +94,12 @@ type ServiceMock struct {
 	beforeEmbedTextsCounter uint64
 	EmbedTextsMock          mServiceMockEmbedTexts
 
-	funcGetChatCacheForFiles          func(ctx context.Context, k1 types.KBUIDType, fa1 []types.FileUIDType) (cp1 *repository.ChatCacheMetadata, err error)
-	funcGetChatCacheForFilesOrigin    string
-	inspectFuncGetChatCacheForFiles   func(ctx context.Context, k1 types.KBUIDType, fa1 []types.FileUIDType)
-	afterGetChatCacheForFilesCounter  uint64
-	beforeGetChatCacheForFilesCounter uint64
-	GetChatCacheForFilesMock          mServiceMockGetChatCacheForFiles
+	funcExecuteKnowledgeBaseUpdateAdmin          func(ctx context.Context, ep1 *artifactpb.ExecuteKnowledgeBaseUpdateAdminRequest) (ep2 *artifactpb.ExecuteKnowledgeBaseUpdateAdminResponse, err error)
+	funcExecuteKnowledgeBaseUpdateAdminOrigin    string
+	inspectFuncExecuteKnowledgeBaseUpdateAdmin   func(ctx context.Context, ep1 *artifactpb.ExecuteKnowledgeBaseUpdateAdminRequest)
+	afterExecuteKnowledgeBaseUpdateAdminCounter  uint64
+	beforeExecuteKnowledgeBaseUpdateAdminCounter uint64
+	ExecuteKnowledgeBaseUpdateAdminMock          mServiceMockExecuteKnowledgeBaseUpdateAdmin
 
 	funcGetChunksByFile          func(ctx context.Context, kp1 *repository.KnowledgeBaseFileModel) (s1 types.SourceTableType, s2 types.SourceUIDType, ta1 []repository.TextChunkModel, sa1 []string, err error)
 	funcGetChunksByFileOrigin    string
@@ -136,6 +129,13 @@ type ServiceMock struct {
 	beforeGetFilesByPathsCounter uint64
 	GetFilesByPathsMock          mServiceMockGetFilesByPaths
 
+	funcGetKnowledgeBaseUpdateStatusAdmin          func(ctx context.Context) (gp1 *artifactpb.GetKnowledgeBaseUpdateStatusAdminResponse, err error)
+	funcGetKnowledgeBaseUpdateStatusAdminOrigin    string
+	inspectFuncGetKnowledgeBaseUpdateStatusAdmin   func(ctx context.Context)
+	afterGetKnowledgeBaseUpdateStatusAdminCounter  uint64
+	beforeGetKnowledgeBaseUpdateStatusAdminCounter uint64
+	GetKnowledgeBaseUpdateStatusAdminMock          mServiceMockGetKnowledgeBaseUpdateStatusAdmin
+
 	funcGetNamespaceAndCheckPermission          func(ctx context.Context, s1 string) (np1 *resource.Namespace, err error)
 	funcGetNamespaceAndCheckPermissionOrigin    string
 	inspectFuncGetNamespaceAndCheckPermission   func(ctx context.Context, s1 string)
@@ -156,6 +156,13 @@ type ServiceMock struct {
 	afterGetRepositoryTagCounter  uint64
 	beforeGetRepositoryTagCounter uint64
 	GetRepositoryTagMock          mServiceMockGetRepositoryTag
+
+	funcGetSystemProfileAdmin          func(ctx context.Context, s1 string) (gp1 *artifactpb.GetSystemProfileAdminResponse, err error)
+	funcGetSystemProfileAdminOrigin    string
+	inspectFuncGetSystemProfileAdmin   func(ctx context.Context, s1 string)
+	afterGetSystemProfileAdminCounter  uint64
+	beforeGetSystemProfileAdminCounter uint64
+	GetSystemProfileAdminMock          mServiceMockGetSystemProfileAdmin
 
 	funcGetTextChunkFilePathsByFileUID          func(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType) (sa1 []string, err error)
 	funcGetTextChunkFilePathsByFileUIDOrigin    string
@@ -178,6 +185,13 @@ type ServiceMock struct {
 	beforeListRepositoryTagsCounter uint64
 	ListRepositoryTagsMock          mServiceMockListRepositoryTags
 
+	funcListSystemProfilesAdmin          func(ctx context.Context) (lp1 *artifactpb.ListSystemProfilesAdminResponse, err error)
+	funcListSystemProfilesAdminOrigin    string
+	inspectFuncListSystemProfilesAdmin   func(ctx context.Context)
+	afterListSystemProfilesAdminCounter  uint64
+	beforeListSystemProfilesAdminCounter uint64
+	ListSystemProfilesAdminMock          mServiceMockListSystemProfilesAdmin
+
 	funcPipelinePublicClient          func() (p1 pipelinepb.PipelinePublicServiceClient)
 	funcPipelinePublicClientOrigin    string
 	inspectFuncPipelinePublicClient   func()
@@ -191,6 +205,20 @@ type ServiceMock struct {
 	afterProcessFileCounter  uint64
 	beforeProcessFileCounter uint64
 	ProcessFileMock          mServiceMockProcessFile
+
+	funcProcessFileDualMode          func(ctx context.Context, prodKBUID types.KBUIDType, stagingKBUID types.KBUIDType, fileUIDs []types.FileUIDType, userUID types.RequesterUIDType, requesterUID types.RequesterUIDType) (err error)
+	funcProcessFileDualModeOrigin    string
+	inspectFuncProcessFileDualMode   func(ctx context.Context, prodKBUID types.KBUIDType, stagingKBUID types.KBUIDType, fileUIDs []types.FileUIDType, userUID types.RequesterUIDType, requesterUID types.RequesterUIDType)
+	afterProcessFileDualModeCounter  uint64
+	beforeProcessFileDualModeCounter uint64
+	ProcessFileDualModeMock          mServiceMockProcessFileDualMode
+
+	funcPurgeRollbackAdmin          func(ctx context.Context, o1 types.OwnerUIDType, s1 string) (pp1 *artifactpb.PurgeRollbackAdminResponse, err error)
+	funcPurgeRollbackAdminOrigin    string
+	inspectFuncPurgeRollbackAdmin   func(ctx context.Context, o1 types.OwnerUIDType, s1 string)
+	afterPurgeRollbackAdminCounter  uint64
+	beforePurgeRollbackAdminCounter uint64
+	PurgeRollbackAdminMock          mServiceMockPurgeRollbackAdmin
 
 	funcRedisClient          func() (cp1 *redis.Client)
 	funcRedisClientOrigin    string
@@ -206,12 +234,33 @@ type ServiceMock struct {
 	beforeRepositoryCounter uint64
 	RepositoryMock          mServiceMockRepository
 
+	funcRollbackAdmin          func(ctx context.Context, o1 types.OwnerUIDType, s1 string) (rp1 *artifactpb.RollbackAdminResponse, err error)
+	funcRollbackAdminOrigin    string
+	inspectFuncRollbackAdmin   func(ctx context.Context, o1 types.OwnerUIDType, s1 string)
+	afterRollbackAdminCounter  uint64
+	beforeRollbackAdminCounter uint64
+	RollbackAdminMock          mServiceMockRollbackAdmin
+
+	funcSetRollbackRetentionAdmin          func(ctx context.Context, o1 types.OwnerUIDType, s1 string, i1 int32, s2 artifactpb.SetRollbackRetentionAdminRequest_TimeUnit) (sp1 *artifactpb.SetRollbackRetentionAdminResponse, err error)
+	funcSetRollbackRetentionAdminOrigin    string
+	inspectFuncSetRollbackRetentionAdmin   func(ctx context.Context, o1 types.OwnerUIDType, s1 string, i1 int32, s2 artifactpb.SetRollbackRetentionAdminRequest_TimeUnit)
+	afterSetRollbackRetentionAdminCounter  uint64
+	beforeSetRollbackRetentionAdminCounter uint64
+	SetRollbackRetentionAdminMock          mServiceMockSetRollbackRetentionAdmin
+
 	funcSimilarityChunksSearch          func(ctx context.Context, o1 types.OwnerUIDType, sp1 *artifactpb.SimilarityChunksSearchRequest, faa1 [][]float32) (sa1 []mm_service.SimChunk, err error)
 	funcSimilarityChunksSearchOrigin    string
 	inspectFuncSimilarityChunksSearch   func(ctx context.Context, o1 types.OwnerUIDType, sp1 *artifactpb.SimilarityChunksSearchRequest, faa1 [][]float32)
 	afterSimilarityChunksSearchCounter  uint64
 	beforeSimilarityChunksSearchCounter uint64
 	SimilarityChunksSearchMock          mServiceMockSimilarityChunksSearch
+
+	funcUpdateSystemProfileAdmin          func(ctx context.Context, up1 *artifactpb.UpdateSystemProfileAdminRequest) (up2 *artifactpb.UpdateSystemProfileAdminResponse, err error)
+	funcUpdateSystemProfileAdminOrigin    string
+	inspectFuncUpdateSystemProfileAdmin   func(ctx context.Context, up1 *artifactpb.UpdateSystemProfileAdminRequest)
+	afterUpdateSystemProfileAdminCounter  uint64
+	beforeUpdateSystemProfileAdminCounter uint64
+	UpdateSystemProfileAdminMock          mServiceMockUpdateSystemProfileAdmin
 }
 
 // NewServiceMock returns a mock for mm_service.Service
@@ -224,14 +273,8 @@ func NewServiceMock(t minimock.Tester) *ServiceMock {
 
 	m.ACLClientMock = mServiceMockACLClient{mock: m}
 
-	m.ChatWithCacheMock = mServiceMockChatWithCache{mock: m}
-	m.ChatWithCacheMock.callArgs = []*ServiceMockChatWithCacheParams{}
-
 	m.CheckCatalogUserPermissionMock = mServiceMockCheckCatalogUserPermission{mock: m}
 	m.CheckCatalogUserPermissionMock.callArgs = []*ServiceMockCheckCatalogUserPermissionParams{}
-
-	m.CheckFilesProcessingStatusMock = mServiceMockCheckFilesProcessingStatus{mock: m}
-	m.CheckFilesProcessingStatusMock.callArgs = []*ServiceMockCheckFilesProcessingStatusParams{}
 
 	m.CheckNamespacePermissionMock = mServiceMockCheckNamespacePermission{mock: m}
 	m.CheckNamespacePermissionMock.callArgs = []*ServiceMockCheckNamespacePermissionParams{}
@@ -251,11 +294,14 @@ func NewServiceMock(t minimock.Tester) *ServiceMock {
 	m.DeleteRepositoryTagMock = mServiceMockDeleteRepositoryTag{mock: m}
 	m.DeleteRepositoryTagMock.callArgs = []*ServiceMockDeleteRepositoryTagParams{}
 
+	m.DeleteSystemProfileAdminMock = mServiceMockDeleteSystemProfileAdmin{mock: m}
+	m.DeleteSystemProfileAdminMock.callArgs = []*ServiceMockDeleteSystemProfileAdminParams{}
+
 	m.EmbedTextsMock = mServiceMockEmbedTexts{mock: m}
 	m.EmbedTextsMock.callArgs = []*ServiceMockEmbedTextsParams{}
 
-	m.GetChatCacheForFilesMock = mServiceMockGetChatCacheForFiles{mock: m}
-	m.GetChatCacheForFilesMock.callArgs = []*ServiceMockGetChatCacheForFilesParams{}
+	m.ExecuteKnowledgeBaseUpdateAdminMock = mServiceMockExecuteKnowledgeBaseUpdateAdmin{mock: m}
+	m.ExecuteKnowledgeBaseUpdateAdminMock.callArgs = []*ServiceMockExecuteKnowledgeBaseUpdateAdminParams{}
 
 	m.GetChunksByFileMock = mServiceMockGetChunksByFile{mock: m}
 	m.GetChunksByFileMock.callArgs = []*ServiceMockGetChunksByFileParams{}
@@ -269,6 +315,9 @@ func NewServiceMock(t minimock.Tester) *ServiceMock {
 	m.GetFilesByPathsMock = mServiceMockGetFilesByPaths{mock: m}
 	m.GetFilesByPathsMock.callArgs = []*ServiceMockGetFilesByPathsParams{}
 
+	m.GetKnowledgeBaseUpdateStatusAdminMock = mServiceMockGetKnowledgeBaseUpdateStatusAdmin{mock: m}
+	m.GetKnowledgeBaseUpdateStatusAdminMock.callArgs = []*ServiceMockGetKnowledgeBaseUpdateStatusAdminParams{}
+
 	m.GetNamespaceAndCheckPermissionMock = mServiceMockGetNamespaceAndCheckPermission{mock: m}
 	m.GetNamespaceAndCheckPermissionMock.callArgs = []*ServiceMockGetNamespaceAndCheckPermissionParams{}
 
@@ -277,6 +326,9 @@ func NewServiceMock(t minimock.Tester) *ServiceMock {
 
 	m.GetRepositoryTagMock = mServiceMockGetRepositoryTag{mock: m}
 	m.GetRepositoryTagMock.callArgs = []*ServiceMockGetRepositoryTagParams{}
+
+	m.GetSystemProfileAdminMock = mServiceMockGetSystemProfileAdmin{mock: m}
+	m.GetSystemProfileAdminMock.callArgs = []*ServiceMockGetSystemProfileAdminParams{}
 
 	m.GetTextChunkFilePathsByFileUIDMock = mServiceMockGetTextChunkFilePathsByFileUID{mock: m}
 	m.GetTextChunkFilePathsByFileUIDMock.callArgs = []*ServiceMockGetTextChunkFilePathsByFileUIDParams{}
@@ -287,17 +339,35 @@ func NewServiceMock(t minimock.Tester) *ServiceMock {
 	m.ListRepositoryTagsMock = mServiceMockListRepositoryTags{mock: m}
 	m.ListRepositoryTagsMock.callArgs = []*ServiceMockListRepositoryTagsParams{}
 
+	m.ListSystemProfilesAdminMock = mServiceMockListSystemProfilesAdmin{mock: m}
+	m.ListSystemProfilesAdminMock.callArgs = []*ServiceMockListSystemProfilesAdminParams{}
+
 	m.PipelinePublicClientMock = mServiceMockPipelinePublicClient{mock: m}
 
 	m.ProcessFileMock = mServiceMockProcessFile{mock: m}
 	m.ProcessFileMock.callArgs = []*ServiceMockProcessFileParams{}
 
+	m.ProcessFileDualModeMock = mServiceMockProcessFileDualMode{mock: m}
+	m.ProcessFileDualModeMock.callArgs = []*ServiceMockProcessFileDualModeParams{}
+
+	m.PurgeRollbackAdminMock = mServiceMockPurgeRollbackAdmin{mock: m}
+	m.PurgeRollbackAdminMock.callArgs = []*ServiceMockPurgeRollbackAdminParams{}
+
 	m.RedisClientMock = mServiceMockRedisClient{mock: m}
 
 	m.RepositoryMock = mServiceMockRepository{mock: m}
 
+	m.RollbackAdminMock = mServiceMockRollbackAdmin{mock: m}
+	m.RollbackAdminMock.callArgs = []*ServiceMockRollbackAdminParams{}
+
+	m.SetRollbackRetentionAdminMock = mServiceMockSetRollbackRetentionAdmin{mock: m}
+	m.SetRollbackRetentionAdminMock.callArgs = []*ServiceMockSetRollbackRetentionAdminParams{}
+
 	m.SimilarityChunksSearchMock = mServiceMockSimilarityChunksSearch{mock: m}
 	m.SimilarityChunksSearchMock.callArgs = []*ServiceMockSimilarityChunksSearchParams{}
+
+	m.UpdateSystemProfileAdminMock = mServiceMockUpdateSystemProfileAdmin{mock: m}
+	m.UpdateSystemProfileAdminMock.callArgs = []*ServiceMockUpdateSystemProfileAdminParams{}
 
 	t.Cleanup(m.MinimockFinish)
 
@@ -487,380 +557,6 @@ func (m *ServiceMock) MinimockACLClientInspect() {
 	if !m.ACLClientMock.invocationsDone() && afterACLClientCounter > 0 {
 		m.t.Errorf("Expected %d calls to ServiceMock.ACLClient at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.ACLClientMock.expectedInvocations), m.ACLClientMock.expectedInvocationsOrigin, afterACLClientCounter)
-	}
-}
-
-type mServiceMockChatWithCache struct {
-	optional           bool
-	mock               *ServiceMock
-	defaultExpectation *ServiceMockChatWithCacheExpectation
-	expectations       []*ServiceMockChatWithCacheExpectation
-
-	callArgs []*ServiceMockChatWithCacheParams
-	mutex    sync.RWMutex
-
-	expectedInvocations       uint64
-	expectedInvocationsOrigin string
-}
-
-// ServiceMockChatWithCacheExpectation specifies expectation struct of the Service.ChatWithCache
-type ServiceMockChatWithCacheExpectation struct {
-	mock               *ServiceMock
-	params             *ServiceMockChatWithCacheParams
-	paramPtrs          *ServiceMockChatWithCacheParamPtrs
-	expectationOrigins ServiceMockChatWithCacheExpectationOrigins
-	results            *ServiceMockChatWithCacheResults
-	returnOrigin       string
-	Counter            uint64
-}
-
-// ServiceMockChatWithCacheParams contains parameters of the Service.ChatWithCache
-type ServiceMockChatWithCacheParams struct {
-	ctx context.Context
-	cp1 *repository.ChatCacheMetadata
-	s1  string
-}
-
-// ServiceMockChatWithCacheParamPtrs contains pointers to parameters of the Service.ChatWithCache
-type ServiceMockChatWithCacheParamPtrs struct {
-	ctx *context.Context
-	cp1 **repository.ChatCacheMetadata
-	s1  *string
-}
-
-// ServiceMockChatWithCacheResults contains results of the Service.ChatWithCache
-type ServiceMockChatWithCacheResults struct {
-	s2  string
-	err error
-}
-
-// ServiceMockChatWithCacheOrigins contains origins of expectations of the Service.ChatWithCache
-type ServiceMockChatWithCacheExpectationOrigins struct {
-	origin    string
-	originCtx string
-	originCp1 string
-	originS1  string
-}
-
-// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
-// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
-// Optional() makes method check to work in '0 or more' mode.
-// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
-// catch the problems when the expected method call is totally skipped during test run.
-func (mmChatWithCache *mServiceMockChatWithCache) Optional() *mServiceMockChatWithCache {
-	mmChatWithCache.optional = true
-	return mmChatWithCache
-}
-
-// Expect sets up expected params for Service.ChatWithCache
-func (mmChatWithCache *mServiceMockChatWithCache) Expect(ctx context.Context, cp1 *repository.ChatCacheMetadata, s1 string) *mServiceMockChatWithCache {
-	if mmChatWithCache.mock.funcChatWithCache != nil {
-		mmChatWithCache.mock.t.Fatalf("ServiceMock.ChatWithCache mock is already set by Set")
-	}
-
-	if mmChatWithCache.defaultExpectation == nil {
-		mmChatWithCache.defaultExpectation = &ServiceMockChatWithCacheExpectation{}
-	}
-
-	if mmChatWithCache.defaultExpectation.paramPtrs != nil {
-		mmChatWithCache.mock.t.Fatalf("ServiceMock.ChatWithCache mock is already set by ExpectParams functions")
-	}
-
-	mmChatWithCache.defaultExpectation.params = &ServiceMockChatWithCacheParams{ctx, cp1, s1}
-	mmChatWithCache.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
-	for _, e := range mmChatWithCache.expectations {
-		if minimock.Equal(e.params, mmChatWithCache.defaultExpectation.params) {
-			mmChatWithCache.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmChatWithCache.defaultExpectation.params)
-		}
-	}
-
-	return mmChatWithCache
-}
-
-// ExpectCtxParam1 sets up expected param ctx for Service.ChatWithCache
-func (mmChatWithCache *mServiceMockChatWithCache) ExpectCtxParam1(ctx context.Context) *mServiceMockChatWithCache {
-	if mmChatWithCache.mock.funcChatWithCache != nil {
-		mmChatWithCache.mock.t.Fatalf("ServiceMock.ChatWithCache mock is already set by Set")
-	}
-
-	if mmChatWithCache.defaultExpectation == nil {
-		mmChatWithCache.defaultExpectation = &ServiceMockChatWithCacheExpectation{}
-	}
-
-	if mmChatWithCache.defaultExpectation.params != nil {
-		mmChatWithCache.mock.t.Fatalf("ServiceMock.ChatWithCache mock is already set by Expect")
-	}
-
-	if mmChatWithCache.defaultExpectation.paramPtrs == nil {
-		mmChatWithCache.defaultExpectation.paramPtrs = &ServiceMockChatWithCacheParamPtrs{}
-	}
-	mmChatWithCache.defaultExpectation.paramPtrs.ctx = &ctx
-	mmChatWithCache.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
-
-	return mmChatWithCache
-}
-
-// ExpectCp1Param2 sets up expected param cp1 for Service.ChatWithCache
-func (mmChatWithCache *mServiceMockChatWithCache) ExpectCp1Param2(cp1 *repository.ChatCacheMetadata) *mServiceMockChatWithCache {
-	if mmChatWithCache.mock.funcChatWithCache != nil {
-		mmChatWithCache.mock.t.Fatalf("ServiceMock.ChatWithCache mock is already set by Set")
-	}
-
-	if mmChatWithCache.defaultExpectation == nil {
-		mmChatWithCache.defaultExpectation = &ServiceMockChatWithCacheExpectation{}
-	}
-
-	if mmChatWithCache.defaultExpectation.params != nil {
-		mmChatWithCache.mock.t.Fatalf("ServiceMock.ChatWithCache mock is already set by Expect")
-	}
-
-	if mmChatWithCache.defaultExpectation.paramPtrs == nil {
-		mmChatWithCache.defaultExpectation.paramPtrs = &ServiceMockChatWithCacheParamPtrs{}
-	}
-	mmChatWithCache.defaultExpectation.paramPtrs.cp1 = &cp1
-	mmChatWithCache.defaultExpectation.expectationOrigins.originCp1 = minimock.CallerInfo(1)
-
-	return mmChatWithCache
-}
-
-// ExpectS1Param3 sets up expected param s1 for Service.ChatWithCache
-func (mmChatWithCache *mServiceMockChatWithCache) ExpectS1Param3(s1 string) *mServiceMockChatWithCache {
-	if mmChatWithCache.mock.funcChatWithCache != nil {
-		mmChatWithCache.mock.t.Fatalf("ServiceMock.ChatWithCache mock is already set by Set")
-	}
-
-	if mmChatWithCache.defaultExpectation == nil {
-		mmChatWithCache.defaultExpectation = &ServiceMockChatWithCacheExpectation{}
-	}
-
-	if mmChatWithCache.defaultExpectation.params != nil {
-		mmChatWithCache.mock.t.Fatalf("ServiceMock.ChatWithCache mock is already set by Expect")
-	}
-
-	if mmChatWithCache.defaultExpectation.paramPtrs == nil {
-		mmChatWithCache.defaultExpectation.paramPtrs = &ServiceMockChatWithCacheParamPtrs{}
-	}
-	mmChatWithCache.defaultExpectation.paramPtrs.s1 = &s1
-	mmChatWithCache.defaultExpectation.expectationOrigins.originS1 = minimock.CallerInfo(1)
-
-	return mmChatWithCache
-}
-
-// Inspect accepts an inspector function that has same arguments as the Service.ChatWithCache
-func (mmChatWithCache *mServiceMockChatWithCache) Inspect(f func(ctx context.Context, cp1 *repository.ChatCacheMetadata, s1 string)) *mServiceMockChatWithCache {
-	if mmChatWithCache.mock.inspectFuncChatWithCache != nil {
-		mmChatWithCache.mock.t.Fatalf("Inspect function is already set for ServiceMock.ChatWithCache")
-	}
-
-	mmChatWithCache.mock.inspectFuncChatWithCache = f
-
-	return mmChatWithCache
-}
-
-// Return sets up results that will be returned by Service.ChatWithCache
-func (mmChatWithCache *mServiceMockChatWithCache) Return(s2 string, err error) *ServiceMock {
-	if mmChatWithCache.mock.funcChatWithCache != nil {
-		mmChatWithCache.mock.t.Fatalf("ServiceMock.ChatWithCache mock is already set by Set")
-	}
-
-	if mmChatWithCache.defaultExpectation == nil {
-		mmChatWithCache.defaultExpectation = &ServiceMockChatWithCacheExpectation{mock: mmChatWithCache.mock}
-	}
-	mmChatWithCache.defaultExpectation.results = &ServiceMockChatWithCacheResults{s2, err}
-	mmChatWithCache.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
-	return mmChatWithCache.mock
-}
-
-// Set uses given function f to mock the Service.ChatWithCache method
-func (mmChatWithCache *mServiceMockChatWithCache) Set(f func(ctx context.Context, cp1 *repository.ChatCacheMetadata, s1 string) (s2 string, err error)) *ServiceMock {
-	if mmChatWithCache.defaultExpectation != nil {
-		mmChatWithCache.mock.t.Fatalf("Default expectation is already set for the Service.ChatWithCache method")
-	}
-
-	if len(mmChatWithCache.expectations) > 0 {
-		mmChatWithCache.mock.t.Fatalf("Some expectations are already set for the Service.ChatWithCache method")
-	}
-
-	mmChatWithCache.mock.funcChatWithCache = f
-	mmChatWithCache.mock.funcChatWithCacheOrigin = minimock.CallerInfo(1)
-	return mmChatWithCache.mock
-}
-
-// When sets expectation for the Service.ChatWithCache which will trigger the result defined by the following
-// Then helper
-func (mmChatWithCache *mServiceMockChatWithCache) When(ctx context.Context, cp1 *repository.ChatCacheMetadata, s1 string) *ServiceMockChatWithCacheExpectation {
-	if mmChatWithCache.mock.funcChatWithCache != nil {
-		mmChatWithCache.mock.t.Fatalf("ServiceMock.ChatWithCache mock is already set by Set")
-	}
-
-	expectation := &ServiceMockChatWithCacheExpectation{
-		mock:               mmChatWithCache.mock,
-		params:             &ServiceMockChatWithCacheParams{ctx, cp1, s1},
-		expectationOrigins: ServiceMockChatWithCacheExpectationOrigins{origin: minimock.CallerInfo(1)},
-	}
-	mmChatWithCache.expectations = append(mmChatWithCache.expectations, expectation)
-	return expectation
-}
-
-// Then sets up Service.ChatWithCache return parameters for the expectation previously defined by the When method
-func (e *ServiceMockChatWithCacheExpectation) Then(s2 string, err error) *ServiceMock {
-	e.results = &ServiceMockChatWithCacheResults{s2, err}
-	return e.mock
-}
-
-// Times sets number of times Service.ChatWithCache should be invoked
-func (mmChatWithCache *mServiceMockChatWithCache) Times(n uint64) *mServiceMockChatWithCache {
-	if n == 0 {
-		mmChatWithCache.mock.t.Fatalf("Times of ServiceMock.ChatWithCache mock can not be zero")
-	}
-	mm_atomic.StoreUint64(&mmChatWithCache.expectedInvocations, n)
-	mmChatWithCache.expectedInvocationsOrigin = minimock.CallerInfo(1)
-	return mmChatWithCache
-}
-
-func (mmChatWithCache *mServiceMockChatWithCache) invocationsDone() bool {
-	if len(mmChatWithCache.expectations) == 0 && mmChatWithCache.defaultExpectation == nil && mmChatWithCache.mock.funcChatWithCache == nil {
-		return true
-	}
-
-	totalInvocations := mm_atomic.LoadUint64(&mmChatWithCache.mock.afterChatWithCacheCounter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmChatWithCache.expectedInvocations)
-
-	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
-}
-
-// ChatWithCache implements mm_service.Service
-func (mmChatWithCache *ServiceMock) ChatWithCache(ctx context.Context, cp1 *repository.ChatCacheMetadata, s1 string) (s2 string, err error) {
-	mm_atomic.AddUint64(&mmChatWithCache.beforeChatWithCacheCounter, 1)
-	defer mm_atomic.AddUint64(&mmChatWithCache.afterChatWithCacheCounter, 1)
-
-	mmChatWithCache.t.Helper()
-
-	if mmChatWithCache.inspectFuncChatWithCache != nil {
-		mmChatWithCache.inspectFuncChatWithCache(ctx, cp1, s1)
-	}
-
-	mm_params := ServiceMockChatWithCacheParams{ctx, cp1, s1}
-
-	// Record call args
-	mmChatWithCache.ChatWithCacheMock.mutex.Lock()
-	mmChatWithCache.ChatWithCacheMock.callArgs = append(mmChatWithCache.ChatWithCacheMock.callArgs, &mm_params)
-	mmChatWithCache.ChatWithCacheMock.mutex.Unlock()
-
-	for _, e := range mmChatWithCache.ChatWithCacheMock.expectations {
-		if minimock.Equal(*e.params, mm_params) {
-			mm_atomic.AddUint64(&e.Counter, 1)
-			return e.results.s2, e.results.err
-		}
-	}
-
-	if mmChatWithCache.ChatWithCacheMock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmChatWithCache.ChatWithCacheMock.defaultExpectation.Counter, 1)
-		mm_want := mmChatWithCache.ChatWithCacheMock.defaultExpectation.params
-		mm_want_ptrs := mmChatWithCache.ChatWithCacheMock.defaultExpectation.paramPtrs
-
-		mm_got := ServiceMockChatWithCacheParams{ctx, cp1, s1}
-
-		if mm_want_ptrs != nil {
-
-			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
-				mmChatWithCache.t.Errorf("ServiceMock.ChatWithCache got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmChatWithCache.ChatWithCacheMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
-			}
-
-			if mm_want_ptrs.cp1 != nil && !minimock.Equal(*mm_want_ptrs.cp1, mm_got.cp1) {
-				mmChatWithCache.t.Errorf("ServiceMock.ChatWithCache got unexpected parameter cp1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmChatWithCache.ChatWithCacheMock.defaultExpectation.expectationOrigins.originCp1, *mm_want_ptrs.cp1, mm_got.cp1, minimock.Diff(*mm_want_ptrs.cp1, mm_got.cp1))
-			}
-
-			if mm_want_ptrs.s1 != nil && !minimock.Equal(*mm_want_ptrs.s1, mm_got.s1) {
-				mmChatWithCache.t.Errorf("ServiceMock.ChatWithCache got unexpected parameter s1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmChatWithCache.ChatWithCacheMock.defaultExpectation.expectationOrigins.originS1, *mm_want_ptrs.s1, mm_got.s1, minimock.Diff(*mm_want_ptrs.s1, mm_got.s1))
-			}
-
-		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
-			mmChatWithCache.t.Errorf("ServiceMock.ChatWithCache got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-				mmChatWithCache.ChatWithCacheMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
-		}
-
-		mm_results := mmChatWithCache.ChatWithCacheMock.defaultExpectation.results
-		if mm_results == nil {
-			mmChatWithCache.t.Fatal("No results are set for the ServiceMock.ChatWithCache")
-		}
-		return (*mm_results).s2, (*mm_results).err
-	}
-	if mmChatWithCache.funcChatWithCache != nil {
-		return mmChatWithCache.funcChatWithCache(ctx, cp1, s1)
-	}
-	mmChatWithCache.t.Fatalf("Unexpected call to ServiceMock.ChatWithCache. %v %v %v", ctx, cp1, s1)
-	return
-}
-
-// ChatWithCacheAfterCounter returns a count of finished ServiceMock.ChatWithCache invocations
-func (mmChatWithCache *ServiceMock) ChatWithCacheAfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmChatWithCache.afterChatWithCacheCounter)
-}
-
-// ChatWithCacheBeforeCounter returns a count of ServiceMock.ChatWithCache invocations
-func (mmChatWithCache *ServiceMock) ChatWithCacheBeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmChatWithCache.beforeChatWithCacheCounter)
-}
-
-// Calls returns a list of arguments used in each call to ServiceMock.ChatWithCache.
-// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
-func (mmChatWithCache *mServiceMockChatWithCache) Calls() []*ServiceMockChatWithCacheParams {
-	mmChatWithCache.mutex.RLock()
-
-	argCopy := make([]*ServiceMockChatWithCacheParams, len(mmChatWithCache.callArgs))
-	copy(argCopy, mmChatWithCache.callArgs)
-
-	mmChatWithCache.mutex.RUnlock()
-
-	return argCopy
-}
-
-// MinimockChatWithCacheDone returns true if the count of the ChatWithCache invocations corresponds
-// the number of defined expectations
-func (m *ServiceMock) MinimockChatWithCacheDone() bool {
-	if m.ChatWithCacheMock.optional {
-		// Optional methods provide '0 or more' call count restriction.
-		return true
-	}
-
-	for _, e := range m.ChatWithCacheMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			return false
-		}
-	}
-
-	return m.ChatWithCacheMock.invocationsDone()
-}
-
-// MinimockChatWithCacheInspect logs each unmet expectation
-func (m *ServiceMock) MinimockChatWithCacheInspect() {
-	for _, e := range m.ChatWithCacheMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Errorf("Expected call to ServiceMock.ChatWithCache at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
-		}
-	}
-
-	afterChatWithCacheCounter := mm_atomic.LoadUint64(&m.afterChatWithCacheCounter)
-	// if default expectation was set then invocations count should be greater than zero
-	if m.ChatWithCacheMock.defaultExpectation != nil && afterChatWithCacheCounter < 1 {
-		if m.ChatWithCacheMock.defaultExpectation.params == nil {
-			m.t.Errorf("Expected call to ServiceMock.ChatWithCache at\n%s", m.ChatWithCacheMock.defaultExpectation.returnOrigin)
-		} else {
-			m.t.Errorf("Expected call to ServiceMock.ChatWithCache at\n%s with params: %#v", m.ChatWithCacheMock.defaultExpectation.expectationOrigins.origin, *m.ChatWithCacheMock.defaultExpectation.params)
-		}
-	}
-	// if func was set then invocations count should be greater than zero
-	if m.funcChatWithCache != nil && afterChatWithCacheCounter < 1 {
-		m.t.Errorf("Expected call to ServiceMock.ChatWithCache at\n%s", m.funcChatWithCacheOrigin)
-	}
-
-	if !m.ChatWithCacheMock.invocationsDone() && afterChatWithCacheCounter > 0 {
-		m.t.Errorf("Expected %d calls to ServiceMock.ChatWithCache at\n%s but found %d calls",
-			mm_atomic.LoadUint64(&m.ChatWithCacheMock.expectedInvocations), m.ChatWithCacheMock.expectedInvocationsOrigin, afterChatWithCacheCounter)
 	}
 }
 
@@ -1267,350 +963,6 @@ func (m *ServiceMock) MinimockCheckCatalogUserPermissionInspect() {
 	if !m.CheckCatalogUserPermissionMock.invocationsDone() && afterCheckCatalogUserPermissionCounter > 0 {
 		m.t.Errorf("Expected %d calls to ServiceMock.CheckCatalogUserPermission at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.CheckCatalogUserPermissionMock.expectedInvocations), m.CheckCatalogUserPermissionMock.expectedInvocationsOrigin, afterCheckCatalogUserPermissionCounter)
-	}
-}
-
-type mServiceMockCheckFilesProcessingStatus struct {
-	optional           bool
-	mock               *ServiceMock
-	defaultExpectation *ServiceMockCheckFilesProcessingStatusExpectation
-	expectations       []*ServiceMockCheckFilesProcessingStatusExpectation
-
-	callArgs []*ServiceMockCheckFilesProcessingStatusParams
-	mutex    sync.RWMutex
-
-	expectedInvocations       uint64
-	expectedInvocationsOrigin string
-}
-
-// ServiceMockCheckFilesProcessingStatusExpectation specifies expectation struct of the Service.CheckFilesProcessingStatus
-type ServiceMockCheckFilesProcessingStatusExpectation struct {
-	mock               *ServiceMock
-	params             *ServiceMockCheckFilesProcessingStatusParams
-	paramPtrs          *ServiceMockCheckFilesProcessingStatusParamPtrs
-	expectationOrigins ServiceMockCheckFilesProcessingStatusExpectationOrigins
-	results            *ServiceMockCheckFilesProcessingStatusResults
-	returnOrigin       string
-	Counter            uint64
-}
-
-// ServiceMockCheckFilesProcessingStatusParams contains parameters of the Service.CheckFilesProcessingStatus
-type ServiceMockCheckFilesProcessingStatusParams struct {
-	ctx context.Context
-	fa1 []types.FileUIDType
-}
-
-// ServiceMockCheckFilesProcessingStatusParamPtrs contains pointers to parameters of the Service.CheckFilesProcessingStatus
-type ServiceMockCheckFilesProcessingStatusParamPtrs struct {
-	ctx *context.Context
-	fa1 *[]types.FileUIDType
-}
-
-// ServiceMockCheckFilesProcessingStatusResults contains results of the Service.CheckFilesProcessingStatus
-type ServiceMockCheckFilesProcessingStatusResults struct {
-	allCompleted    bool
-	processingCount int
-	err             error
-}
-
-// ServiceMockCheckFilesProcessingStatusOrigins contains origins of expectations of the Service.CheckFilesProcessingStatus
-type ServiceMockCheckFilesProcessingStatusExpectationOrigins struct {
-	origin    string
-	originCtx string
-	originFa1 string
-}
-
-// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
-// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
-// Optional() makes method check to work in '0 or more' mode.
-// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
-// catch the problems when the expected method call is totally skipped during test run.
-func (mmCheckFilesProcessingStatus *mServiceMockCheckFilesProcessingStatus) Optional() *mServiceMockCheckFilesProcessingStatus {
-	mmCheckFilesProcessingStatus.optional = true
-	return mmCheckFilesProcessingStatus
-}
-
-// Expect sets up expected params for Service.CheckFilesProcessingStatus
-func (mmCheckFilesProcessingStatus *mServiceMockCheckFilesProcessingStatus) Expect(ctx context.Context, fa1 []types.FileUIDType) *mServiceMockCheckFilesProcessingStatus {
-	if mmCheckFilesProcessingStatus.mock.funcCheckFilesProcessingStatus != nil {
-		mmCheckFilesProcessingStatus.mock.t.Fatalf("ServiceMock.CheckFilesProcessingStatus mock is already set by Set")
-	}
-
-	if mmCheckFilesProcessingStatus.defaultExpectation == nil {
-		mmCheckFilesProcessingStatus.defaultExpectation = &ServiceMockCheckFilesProcessingStatusExpectation{}
-	}
-
-	if mmCheckFilesProcessingStatus.defaultExpectation.paramPtrs != nil {
-		mmCheckFilesProcessingStatus.mock.t.Fatalf("ServiceMock.CheckFilesProcessingStatus mock is already set by ExpectParams functions")
-	}
-
-	mmCheckFilesProcessingStatus.defaultExpectation.params = &ServiceMockCheckFilesProcessingStatusParams{ctx, fa1}
-	mmCheckFilesProcessingStatus.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
-	for _, e := range mmCheckFilesProcessingStatus.expectations {
-		if minimock.Equal(e.params, mmCheckFilesProcessingStatus.defaultExpectation.params) {
-			mmCheckFilesProcessingStatus.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmCheckFilesProcessingStatus.defaultExpectation.params)
-		}
-	}
-
-	return mmCheckFilesProcessingStatus
-}
-
-// ExpectCtxParam1 sets up expected param ctx for Service.CheckFilesProcessingStatus
-func (mmCheckFilesProcessingStatus *mServiceMockCheckFilesProcessingStatus) ExpectCtxParam1(ctx context.Context) *mServiceMockCheckFilesProcessingStatus {
-	if mmCheckFilesProcessingStatus.mock.funcCheckFilesProcessingStatus != nil {
-		mmCheckFilesProcessingStatus.mock.t.Fatalf("ServiceMock.CheckFilesProcessingStatus mock is already set by Set")
-	}
-
-	if mmCheckFilesProcessingStatus.defaultExpectation == nil {
-		mmCheckFilesProcessingStatus.defaultExpectation = &ServiceMockCheckFilesProcessingStatusExpectation{}
-	}
-
-	if mmCheckFilesProcessingStatus.defaultExpectation.params != nil {
-		mmCheckFilesProcessingStatus.mock.t.Fatalf("ServiceMock.CheckFilesProcessingStatus mock is already set by Expect")
-	}
-
-	if mmCheckFilesProcessingStatus.defaultExpectation.paramPtrs == nil {
-		mmCheckFilesProcessingStatus.defaultExpectation.paramPtrs = &ServiceMockCheckFilesProcessingStatusParamPtrs{}
-	}
-	mmCheckFilesProcessingStatus.defaultExpectation.paramPtrs.ctx = &ctx
-	mmCheckFilesProcessingStatus.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
-
-	return mmCheckFilesProcessingStatus
-}
-
-// ExpectFa1Param2 sets up expected param fa1 for Service.CheckFilesProcessingStatus
-func (mmCheckFilesProcessingStatus *mServiceMockCheckFilesProcessingStatus) ExpectFa1Param2(fa1 []types.FileUIDType) *mServiceMockCheckFilesProcessingStatus {
-	if mmCheckFilesProcessingStatus.mock.funcCheckFilesProcessingStatus != nil {
-		mmCheckFilesProcessingStatus.mock.t.Fatalf("ServiceMock.CheckFilesProcessingStatus mock is already set by Set")
-	}
-
-	if mmCheckFilesProcessingStatus.defaultExpectation == nil {
-		mmCheckFilesProcessingStatus.defaultExpectation = &ServiceMockCheckFilesProcessingStatusExpectation{}
-	}
-
-	if mmCheckFilesProcessingStatus.defaultExpectation.params != nil {
-		mmCheckFilesProcessingStatus.mock.t.Fatalf("ServiceMock.CheckFilesProcessingStatus mock is already set by Expect")
-	}
-
-	if mmCheckFilesProcessingStatus.defaultExpectation.paramPtrs == nil {
-		mmCheckFilesProcessingStatus.defaultExpectation.paramPtrs = &ServiceMockCheckFilesProcessingStatusParamPtrs{}
-	}
-	mmCheckFilesProcessingStatus.defaultExpectation.paramPtrs.fa1 = &fa1
-	mmCheckFilesProcessingStatus.defaultExpectation.expectationOrigins.originFa1 = minimock.CallerInfo(1)
-
-	return mmCheckFilesProcessingStatus
-}
-
-// Inspect accepts an inspector function that has same arguments as the Service.CheckFilesProcessingStatus
-func (mmCheckFilesProcessingStatus *mServiceMockCheckFilesProcessingStatus) Inspect(f func(ctx context.Context, fa1 []types.FileUIDType)) *mServiceMockCheckFilesProcessingStatus {
-	if mmCheckFilesProcessingStatus.mock.inspectFuncCheckFilesProcessingStatus != nil {
-		mmCheckFilesProcessingStatus.mock.t.Fatalf("Inspect function is already set for ServiceMock.CheckFilesProcessingStatus")
-	}
-
-	mmCheckFilesProcessingStatus.mock.inspectFuncCheckFilesProcessingStatus = f
-
-	return mmCheckFilesProcessingStatus
-}
-
-// Return sets up results that will be returned by Service.CheckFilesProcessingStatus
-func (mmCheckFilesProcessingStatus *mServiceMockCheckFilesProcessingStatus) Return(allCompleted bool, processingCount int, err error) *ServiceMock {
-	if mmCheckFilesProcessingStatus.mock.funcCheckFilesProcessingStatus != nil {
-		mmCheckFilesProcessingStatus.mock.t.Fatalf("ServiceMock.CheckFilesProcessingStatus mock is already set by Set")
-	}
-
-	if mmCheckFilesProcessingStatus.defaultExpectation == nil {
-		mmCheckFilesProcessingStatus.defaultExpectation = &ServiceMockCheckFilesProcessingStatusExpectation{mock: mmCheckFilesProcessingStatus.mock}
-	}
-	mmCheckFilesProcessingStatus.defaultExpectation.results = &ServiceMockCheckFilesProcessingStatusResults{allCompleted, processingCount, err}
-	mmCheckFilesProcessingStatus.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
-	return mmCheckFilesProcessingStatus.mock
-}
-
-// Set uses given function f to mock the Service.CheckFilesProcessingStatus method
-func (mmCheckFilesProcessingStatus *mServiceMockCheckFilesProcessingStatus) Set(f func(ctx context.Context, fa1 []types.FileUIDType) (allCompleted bool, processingCount int, err error)) *ServiceMock {
-	if mmCheckFilesProcessingStatus.defaultExpectation != nil {
-		mmCheckFilesProcessingStatus.mock.t.Fatalf("Default expectation is already set for the Service.CheckFilesProcessingStatus method")
-	}
-
-	if len(mmCheckFilesProcessingStatus.expectations) > 0 {
-		mmCheckFilesProcessingStatus.mock.t.Fatalf("Some expectations are already set for the Service.CheckFilesProcessingStatus method")
-	}
-
-	mmCheckFilesProcessingStatus.mock.funcCheckFilesProcessingStatus = f
-	mmCheckFilesProcessingStatus.mock.funcCheckFilesProcessingStatusOrigin = minimock.CallerInfo(1)
-	return mmCheckFilesProcessingStatus.mock
-}
-
-// When sets expectation for the Service.CheckFilesProcessingStatus which will trigger the result defined by the following
-// Then helper
-func (mmCheckFilesProcessingStatus *mServiceMockCheckFilesProcessingStatus) When(ctx context.Context, fa1 []types.FileUIDType) *ServiceMockCheckFilesProcessingStatusExpectation {
-	if mmCheckFilesProcessingStatus.mock.funcCheckFilesProcessingStatus != nil {
-		mmCheckFilesProcessingStatus.mock.t.Fatalf("ServiceMock.CheckFilesProcessingStatus mock is already set by Set")
-	}
-
-	expectation := &ServiceMockCheckFilesProcessingStatusExpectation{
-		mock:               mmCheckFilesProcessingStatus.mock,
-		params:             &ServiceMockCheckFilesProcessingStatusParams{ctx, fa1},
-		expectationOrigins: ServiceMockCheckFilesProcessingStatusExpectationOrigins{origin: minimock.CallerInfo(1)},
-	}
-	mmCheckFilesProcessingStatus.expectations = append(mmCheckFilesProcessingStatus.expectations, expectation)
-	return expectation
-}
-
-// Then sets up Service.CheckFilesProcessingStatus return parameters for the expectation previously defined by the When method
-func (e *ServiceMockCheckFilesProcessingStatusExpectation) Then(allCompleted bool, processingCount int, err error) *ServiceMock {
-	e.results = &ServiceMockCheckFilesProcessingStatusResults{allCompleted, processingCount, err}
-	return e.mock
-}
-
-// Times sets number of times Service.CheckFilesProcessingStatus should be invoked
-func (mmCheckFilesProcessingStatus *mServiceMockCheckFilesProcessingStatus) Times(n uint64) *mServiceMockCheckFilesProcessingStatus {
-	if n == 0 {
-		mmCheckFilesProcessingStatus.mock.t.Fatalf("Times of ServiceMock.CheckFilesProcessingStatus mock can not be zero")
-	}
-	mm_atomic.StoreUint64(&mmCheckFilesProcessingStatus.expectedInvocations, n)
-	mmCheckFilesProcessingStatus.expectedInvocationsOrigin = minimock.CallerInfo(1)
-	return mmCheckFilesProcessingStatus
-}
-
-func (mmCheckFilesProcessingStatus *mServiceMockCheckFilesProcessingStatus) invocationsDone() bool {
-	if len(mmCheckFilesProcessingStatus.expectations) == 0 && mmCheckFilesProcessingStatus.defaultExpectation == nil && mmCheckFilesProcessingStatus.mock.funcCheckFilesProcessingStatus == nil {
-		return true
-	}
-
-	totalInvocations := mm_atomic.LoadUint64(&mmCheckFilesProcessingStatus.mock.afterCheckFilesProcessingStatusCounter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmCheckFilesProcessingStatus.expectedInvocations)
-
-	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
-}
-
-// CheckFilesProcessingStatus implements mm_service.Service
-func (mmCheckFilesProcessingStatus *ServiceMock) CheckFilesProcessingStatus(ctx context.Context, fa1 []types.FileUIDType) (allCompleted bool, processingCount int, err error) {
-	mm_atomic.AddUint64(&mmCheckFilesProcessingStatus.beforeCheckFilesProcessingStatusCounter, 1)
-	defer mm_atomic.AddUint64(&mmCheckFilesProcessingStatus.afterCheckFilesProcessingStatusCounter, 1)
-
-	mmCheckFilesProcessingStatus.t.Helper()
-
-	if mmCheckFilesProcessingStatus.inspectFuncCheckFilesProcessingStatus != nil {
-		mmCheckFilesProcessingStatus.inspectFuncCheckFilesProcessingStatus(ctx, fa1)
-	}
-
-	mm_params := ServiceMockCheckFilesProcessingStatusParams{ctx, fa1}
-
-	// Record call args
-	mmCheckFilesProcessingStatus.CheckFilesProcessingStatusMock.mutex.Lock()
-	mmCheckFilesProcessingStatus.CheckFilesProcessingStatusMock.callArgs = append(mmCheckFilesProcessingStatus.CheckFilesProcessingStatusMock.callArgs, &mm_params)
-	mmCheckFilesProcessingStatus.CheckFilesProcessingStatusMock.mutex.Unlock()
-
-	for _, e := range mmCheckFilesProcessingStatus.CheckFilesProcessingStatusMock.expectations {
-		if minimock.Equal(*e.params, mm_params) {
-			mm_atomic.AddUint64(&e.Counter, 1)
-			return e.results.allCompleted, e.results.processingCount, e.results.err
-		}
-	}
-
-	if mmCheckFilesProcessingStatus.CheckFilesProcessingStatusMock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmCheckFilesProcessingStatus.CheckFilesProcessingStatusMock.defaultExpectation.Counter, 1)
-		mm_want := mmCheckFilesProcessingStatus.CheckFilesProcessingStatusMock.defaultExpectation.params
-		mm_want_ptrs := mmCheckFilesProcessingStatus.CheckFilesProcessingStatusMock.defaultExpectation.paramPtrs
-
-		mm_got := ServiceMockCheckFilesProcessingStatusParams{ctx, fa1}
-
-		if mm_want_ptrs != nil {
-
-			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
-				mmCheckFilesProcessingStatus.t.Errorf("ServiceMock.CheckFilesProcessingStatus got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmCheckFilesProcessingStatus.CheckFilesProcessingStatusMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
-			}
-
-			if mm_want_ptrs.fa1 != nil && !minimock.Equal(*mm_want_ptrs.fa1, mm_got.fa1) {
-				mmCheckFilesProcessingStatus.t.Errorf("ServiceMock.CheckFilesProcessingStatus got unexpected parameter fa1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmCheckFilesProcessingStatus.CheckFilesProcessingStatusMock.defaultExpectation.expectationOrigins.originFa1, *mm_want_ptrs.fa1, mm_got.fa1, minimock.Diff(*mm_want_ptrs.fa1, mm_got.fa1))
-			}
-
-		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
-			mmCheckFilesProcessingStatus.t.Errorf("ServiceMock.CheckFilesProcessingStatus got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-				mmCheckFilesProcessingStatus.CheckFilesProcessingStatusMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
-		}
-
-		mm_results := mmCheckFilesProcessingStatus.CheckFilesProcessingStatusMock.defaultExpectation.results
-		if mm_results == nil {
-			mmCheckFilesProcessingStatus.t.Fatal("No results are set for the ServiceMock.CheckFilesProcessingStatus")
-		}
-		return (*mm_results).allCompleted, (*mm_results).processingCount, (*mm_results).err
-	}
-	if mmCheckFilesProcessingStatus.funcCheckFilesProcessingStatus != nil {
-		return mmCheckFilesProcessingStatus.funcCheckFilesProcessingStatus(ctx, fa1)
-	}
-	mmCheckFilesProcessingStatus.t.Fatalf("Unexpected call to ServiceMock.CheckFilesProcessingStatus. %v %v", ctx, fa1)
-	return
-}
-
-// CheckFilesProcessingStatusAfterCounter returns a count of finished ServiceMock.CheckFilesProcessingStatus invocations
-func (mmCheckFilesProcessingStatus *ServiceMock) CheckFilesProcessingStatusAfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmCheckFilesProcessingStatus.afterCheckFilesProcessingStatusCounter)
-}
-
-// CheckFilesProcessingStatusBeforeCounter returns a count of ServiceMock.CheckFilesProcessingStatus invocations
-func (mmCheckFilesProcessingStatus *ServiceMock) CheckFilesProcessingStatusBeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmCheckFilesProcessingStatus.beforeCheckFilesProcessingStatusCounter)
-}
-
-// Calls returns a list of arguments used in each call to ServiceMock.CheckFilesProcessingStatus.
-// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
-func (mmCheckFilesProcessingStatus *mServiceMockCheckFilesProcessingStatus) Calls() []*ServiceMockCheckFilesProcessingStatusParams {
-	mmCheckFilesProcessingStatus.mutex.RLock()
-
-	argCopy := make([]*ServiceMockCheckFilesProcessingStatusParams, len(mmCheckFilesProcessingStatus.callArgs))
-	copy(argCopy, mmCheckFilesProcessingStatus.callArgs)
-
-	mmCheckFilesProcessingStatus.mutex.RUnlock()
-
-	return argCopy
-}
-
-// MinimockCheckFilesProcessingStatusDone returns true if the count of the CheckFilesProcessingStatus invocations corresponds
-// the number of defined expectations
-func (m *ServiceMock) MinimockCheckFilesProcessingStatusDone() bool {
-	if m.CheckFilesProcessingStatusMock.optional {
-		// Optional methods provide '0 or more' call count restriction.
-		return true
-	}
-
-	for _, e := range m.CheckFilesProcessingStatusMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			return false
-		}
-	}
-
-	return m.CheckFilesProcessingStatusMock.invocationsDone()
-}
-
-// MinimockCheckFilesProcessingStatusInspect logs each unmet expectation
-func (m *ServiceMock) MinimockCheckFilesProcessingStatusInspect() {
-	for _, e := range m.CheckFilesProcessingStatusMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Errorf("Expected call to ServiceMock.CheckFilesProcessingStatus at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
-		}
-	}
-
-	afterCheckFilesProcessingStatusCounter := mm_atomic.LoadUint64(&m.afterCheckFilesProcessingStatusCounter)
-	// if default expectation was set then invocations count should be greater than zero
-	if m.CheckFilesProcessingStatusMock.defaultExpectation != nil && afterCheckFilesProcessingStatusCounter < 1 {
-		if m.CheckFilesProcessingStatusMock.defaultExpectation.params == nil {
-			m.t.Errorf("Expected call to ServiceMock.CheckFilesProcessingStatus at\n%s", m.CheckFilesProcessingStatusMock.defaultExpectation.returnOrigin)
-		} else {
-			m.t.Errorf("Expected call to ServiceMock.CheckFilesProcessingStatus at\n%s with params: %#v", m.CheckFilesProcessingStatusMock.defaultExpectation.expectationOrigins.origin, *m.CheckFilesProcessingStatusMock.defaultExpectation.params)
-		}
-	}
-	// if func was set then invocations count should be greater than zero
-	if m.funcCheckFilesProcessingStatus != nil && afterCheckFilesProcessingStatusCounter < 1 {
-		m.t.Errorf("Expected call to ServiceMock.CheckFilesProcessingStatus at\n%s", m.funcCheckFilesProcessingStatusOrigin)
-	}
-
-	if !m.CheckFilesProcessingStatusMock.invocationsDone() && afterCheckFilesProcessingStatusCounter > 0 {
-		m.t.Errorf("Expected %d calls to ServiceMock.CheckFilesProcessingStatus at\n%s but found %d calls",
-			mm_atomic.LoadUint64(&m.CheckFilesProcessingStatusMock.expectedInvocations), m.CheckFilesProcessingStatusMock.expectedInvocationsOrigin, afterCheckFilesProcessingStatusCounter)
 	}
 }
 
@@ -3823,6 +3175,349 @@ func (m *ServiceMock) MinimockDeleteRepositoryTagInspect() {
 	}
 }
 
+type mServiceMockDeleteSystemProfileAdmin struct {
+	optional           bool
+	mock               *ServiceMock
+	defaultExpectation *ServiceMockDeleteSystemProfileAdminExpectation
+	expectations       []*ServiceMockDeleteSystemProfileAdminExpectation
+
+	callArgs []*ServiceMockDeleteSystemProfileAdminParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// ServiceMockDeleteSystemProfileAdminExpectation specifies expectation struct of the Service.DeleteSystemProfileAdmin
+type ServiceMockDeleteSystemProfileAdminExpectation struct {
+	mock               *ServiceMock
+	params             *ServiceMockDeleteSystemProfileAdminParams
+	paramPtrs          *ServiceMockDeleteSystemProfileAdminParamPtrs
+	expectationOrigins ServiceMockDeleteSystemProfileAdminExpectationOrigins
+	results            *ServiceMockDeleteSystemProfileAdminResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// ServiceMockDeleteSystemProfileAdminParams contains parameters of the Service.DeleteSystemProfileAdmin
+type ServiceMockDeleteSystemProfileAdminParams struct {
+	ctx context.Context
+	s1  string
+}
+
+// ServiceMockDeleteSystemProfileAdminParamPtrs contains pointers to parameters of the Service.DeleteSystemProfileAdmin
+type ServiceMockDeleteSystemProfileAdminParamPtrs struct {
+	ctx *context.Context
+	s1  *string
+}
+
+// ServiceMockDeleteSystemProfileAdminResults contains results of the Service.DeleteSystemProfileAdmin
+type ServiceMockDeleteSystemProfileAdminResults struct {
+	dp1 *artifactpb.DeleteSystemProfileAdminResponse
+	err error
+}
+
+// ServiceMockDeleteSystemProfileAdminOrigins contains origins of expectations of the Service.DeleteSystemProfileAdmin
+type ServiceMockDeleteSystemProfileAdminExpectationOrigins struct {
+	origin    string
+	originCtx string
+	originS1  string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmDeleteSystemProfileAdmin *mServiceMockDeleteSystemProfileAdmin) Optional() *mServiceMockDeleteSystemProfileAdmin {
+	mmDeleteSystemProfileAdmin.optional = true
+	return mmDeleteSystemProfileAdmin
+}
+
+// Expect sets up expected params for Service.DeleteSystemProfileAdmin
+func (mmDeleteSystemProfileAdmin *mServiceMockDeleteSystemProfileAdmin) Expect(ctx context.Context, s1 string) *mServiceMockDeleteSystemProfileAdmin {
+	if mmDeleteSystemProfileAdmin.mock.funcDeleteSystemProfileAdmin != nil {
+		mmDeleteSystemProfileAdmin.mock.t.Fatalf("ServiceMock.DeleteSystemProfileAdmin mock is already set by Set")
+	}
+
+	if mmDeleteSystemProfileAdmin.defaultExpectation == nil {
+		mmDeleteSystemProfileAdmin.defaultExpectation = &ServiceMockDeleteSystemProfileAdminExpectation{}
+	}
+
+	if mmDeleteSystemProfileAdmin.defaultExpectation.paramPtrs != nil {
+		mmDeleteSystemProfileAdmin.mock.t.Fatalf("ServiceMock.DeleteSystemProfileAdmin mock is already set by ExpectParams functions")
+	}
+
+	mmDeleteSystemProfileAdmin.defaultExpectation.params = &ServiceMockDeleteSystemProfileAdminParams{ctx, s1}
+	mmDeleteSystemProfileAdmin.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmDeleteSystemProfileAdmin.expectations {
+		if minimock.Equal(e.params, mmDeleteSystemProfileAdmin.defaultExpectation.params) {
+			mmDeleteSystemProfileAdmin.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmDeleteSystemProfileAdmin.defaultExpectation.params)
+		}
+	}
+
+	return mmDeleteSystemProfileAdmin
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Service.DeleteSystemProfileAdmin
+func (mmDeleteSystemProfileAdmin *mServiceMockDeleteSystemProfileAdmin) ExpectCtxParam1(ctx context.Context) *mServiceMockDeleteSystemProfileAdmin {
+	if mmDeleteSystemProfileAdmin.mock.funcDeleteSystemProfileAdmin != nil {
+		mmDeleteSystemProfileAdmin.mock.t.Fatalf("ServiceMock.DeleteSystemProfileAdmin mock is already set by Set")
+	}
+
+	if mmDeleteSystemProfileAdmin.defaultExpectation == nil {
+		mmDeleteSystemProfileAdmin.defaultExpectation = &ServiceMockDeleteSystemProfileAdminExpectation{}
+	}
+
+	if mmDeleteSystemProfileAdmin.defaultExpectation.params != nil {
+		mmDeleteSystemProfileAdmin.mock.t.Fatalf("ServiceMock.DeleteSystemProfileAdmin mock is already set by Expect")
+	}
+
+	if mmDeleteSystemProfileAdmin.defaultExpectation.paramPtrs == nil {
+		mmDeleteSystemProfileAdmin.defaultExpectation.paramPtrs = &ServiceMockDeleteSystemProfileAdminParamPtrs{}
+	}
+	mmDeleteSystemProfileAdmin.defaultExpectation.paramPtrs.ctx = &ctx
+	mmDeleteSystemProfileAdmin.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmDeleteSystemProfileAdmin
+}
+
+// ExpectS1Param2 sets up expected param s1 for Service.DeleteSystemProfileAdmin
+func (mmDeleteSystemProfileAdmin *mServiceMockDeleteSystemProfileAdmin) ExpectS1Param2(s1 string) *mServiceMockDeleteSystemProfileAdmin {
+	if mmDeleteSystemProfileAdmin.mock.funcDeleteSystemProfileAdmin != nil {
+		mmDeleteSystemProfileAdmin.mock.t.Fatalf("ServiceMock.DeleteSystemProfileAdmin mock is already set by Set")
+	}
+
+	if mmDeleteSystemProfileAdmin.defaultExpectation == nil {
+		mmDeleteSystemProfileAdmin.defaultExpectation = &ServiceMockDeleteSystemProfileAdminExpectation{}
+	}
+
+	if mmDeleteSystemProfileAdmin.defaultExpectation.params != nil {
+		mmDeleteSystemProfileAdmin.mock.t.Fatalf("ServiceMock.DeleteSystemProfileAdmin mock is already set by Expect")
+	}
+
+	if mmDeleteSystemProfileAdmin.defaultExpectation.paramPtrs == nil {
+		mmDeleteSystemProfileAdmin.defaultExpectation.paramPtrs = &ServiceMockDeleteSystemProfileAdminParamPtrs{}
+	}
+	mmDeleteSystemProfileAdmin.defaultExpectation.paramPtrs.s1 = &s1
+	mmDeleteSystemProfileAdmin.defaultExpectation.expectationOrigins.originS1 = minimock.CallerInfo(1)
+
+	return mmDeleteSystemProfileAdmin
+}
+
+// Inspect accepts an inspector function that has same arguments as the Service.DeleteSystemProfileAdmin
+func (mmDeleteSystemProfileAdmin *mServiceMockDeleteSystemProfileAdmin) Inspect(f func(ctx context.Context, s1 string)) *mServiceMockDeleteSystemProfileAdmin {
+	if mmDeleteSystemProfileAdmin.mock.inspectFuncDeleteSystemProfileAdmin != nil {
+		mmDeleteSystemProfileAdmin.mock.t.Fatalf("Inspect function is already set for ServiceMock.DeleteSystemProfileAdmin")
+	}
+
+	mmDeleteSystemProfileAdmin.mock.inspectFuncDeleteSystemProfileAdmin = f
+
+	return mmDeleteSystemProfileAdmin
+}
+
+// Return sets up results that will be returned by Service.DeleteSystemProfileAdmin
+func (mmDeleteSystemProfileAdmin *mServiceMockDeleteSystemProfileAdmin) Return(dp1 *artifactpb.DeleteSystemProfileAdminResponse, err error) *ServiceMock {
+	if mmDeleteSystemProfileAdmin.mock.funcDeleteSystemProfileAdmin != nil {
+		mmDeleteSystemProfileAdmin.mock.t.Fatalf("ServiceMock.DeleteSystemProfileAdmin mock is already set by Set")
+	}
+
+	if mmDeleteSystemProfileAdmin.defaultExpectation == nil {
+		mmDeleteSystemProfileAdmin.defaultExpectation = &ServiceMockDeleteSystemProfileAdminExpectation{mock: mmDeleteSystemProfileAdmin.mock}
+	}
+	mmDeleteSystemProfileAdmin.defaultExpectation.results = &ServiceMockDeleteSystemProfileAdminResults{dp1, err}
+	mmDeleteSystemProfileAdmin.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmDeleteSystemProfileAdmin.mock
+}
+
+// Set uses given function f to mock the Service.DeleteSystemProfileAdmin method
+func (mmDeleteSystemProfileAdmin *mServiceMockDeleteSystemProfileAdmin) Set(f func(ctx context.Context, s1 string) (dp1 *artifactpb.DeleteSystemProfileAdminResponse, err error)) *ServiceMock {
+	if mmDeleteSystemProfileAdmin.defaultExpectation != nil {
+		mmDeleteSystemProfileAdmin.mock.t.Fatalf("Default expectation is already set for the Service.DeleteSystemProfileAdmin method")
+	}
+
+	if len(mmDeleteSystemProfileAdmin.expectations) > 0 {
+		mmDeleteSystemProfileAdmin.mock.t.Fatalf("Some expectations are already set for the Service.DeleteSystemProfileAdmin method")
+	}
+
+	mmDeleteSystemProfileAdmin.mock.funcDeleteSystemProfileAdmin = f
+	mmDeleteSystemProfileAdmin.mock.funcDeleteSystemProfileAdminOrigin = minimock.CallerInfo(1)
+	return mmDeleteSystemProfileAdmin.mock
+}
+
+// When sets expectation for the Service.DeleteSystemProfileAdmin which will trigger the result defined by the following
+// Then helper
+func (mmDeleteSystemProfileAdmin *mServiceMockDeleteSystemProfileAdmin) When(ctx context.Context, s1 string) *ServiceMockDeleteSystemProfileAdminExpectation {
+	if mmDeleteSystemProfileAdmin.mock.funcDeleteSystemProfileAdmin != nil {
+		mmDeleteSystemProfileAdmin.mock.t.Fatalf("ServiceMock.DeleteSystemProfileAdmin mock is already set by Set")
+	}
+
+	expectation := &ServiceMockDeleteSystemProfileAdminExpectation{
+		mock:               mmDeleteSystemProfileAdmin.mock,
+		params:             &ServiceMockDeleteSystemProfileAdminParams{ctx, s1},
+		expectationOrigins: ServiceMockDeleteSystemProfileAdminExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmDeleteSystemProfileAdmin.expectations = append(mmDeleteSystemProfileAdmin.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Service.DeleteSystemProfileAdmin return parameters for the expectation previously defined by the When method
+func (e *ServiceMockDeleteSystemProfileAdminExpectation) Then(dp1 *artifactpb.DeleteSystemProfileAdminResponse, err error) *ServiceMock {
+	e.results = &ServiceMockDeleteSystemProfileAdminResults{dp1, err}
+	return e.mock
+}
+
+// Times sets number of times Service.DeleteSystemProfileAdmin should be invoked
+func (mmDeleteSystemProfileAdmin *mServiceMockDeleteSystemProfileAdmin) Times(n uint64) *mServiceMockDeleteSystemProfileAdmin {
+	if n == 0 {
+		mmDeleteSystemProfileAdmin.mock.t.Fatalf("Times of ServiceMock.DeleteSystemProfileAdmin mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmDeleteSystemProfileAdmin.expectedInvocations, n)
+	mmDeleteSystemProfileAdmin.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmDeleteSystemProfileAdmin
+}
+
+func (mmDeleteSystemProfileAdmin *mServiceMockDeleteSystemProfileAdmin) invocationsDone() bool {
+	if len(mmDeleteSystemProfileAdmin.expectations) == 0 && mmDeleteSystemProfileAdmin.defaultExpectation == nil && mmDeleteSystemProfileAdmin.mock.funcDeleteSystemProfileAdmin == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmDeleteSystemProfileAdmin.mock.afterDeleteSystemProfileAdminCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmDeleteSystemProfileAdmin.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// DeleteSystemProfileAdmin implements mm_service.Service
+func (mmDeleteSystemProfileAdmin *ServiceMock) DeleteSystemProfileAdmin(ctx context.Context, s1 string) (dp1 *artifactpb.DeleteSystemProfileAdminResponse, err error) {
+	mm_atomic.AddUint64(&mmDeleteSystemProfileAdmin.beforeDeleteSystemProfileAdminCounter, 1)
+	defer mm_atomic.AddUint64(&mmDeleteSystemProfileAdmin.afterDeleteSystemProfileAdminCounter, 1)
+
+	mmDeleteSystemProfileAdmin.t.Helper()
+
+	if mmDeleteSystemProfileAdmin.inspectFuncDeleteSystemProfileAdmin != nil {
+		mmDeleteSystemProfileAdmin.inspectFuncDeleteSystemProfileAdmin(ctx, s1)
+	}
+
+	mm_params := ServiceMockDeleteSystemProfileAdminParams{ctx, s1}
+
+	// Record call args
+	mmDeleteSystemProfileAdmin.DeleteSystemProfileAdminMock.mutex.Lock()
+	mmDeleteSystemProfileAdmin.DeleteSystemProfileAdminMock.callArgs = append(mmDeleteSystemProfileAdmin.DeleteSystemProfileAdminMock.callArgs, &mm_params)
+	mmDeleteSystemProfileAdmin.DeleteSystemProfileAdminMock.mutex.Unlock()
+
+	for _, e := range mmDeleteSystemProfileAdmin.DeleteSystemProfileAdminMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.dp1, e.results.err
+		}
+	}
+
+	if mmDeleteSystemProfileAdmin.DeleteSystemProfileAdminMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmDeleteSystemProfileAdmin.DeleteSystemProfileAdminMock.defaultExpectation.Counter, 1)
+		mm_want := mmDeleteSystemProfileAdmin.DeleteSystemProfileAdminMock.defaultExpectation.params
+		mm_want_ptrs := mmDeleteSystemProfileAdmin.DeleteSystemProfileAdminMock.defaultExpectation.paramPtrs
+
+		mm_got := ServiceMockDeleteSystemProfileAdminParams{ctx, s1}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmDeleteSystemProfileAdmin.t.Errorf("ServiceMock.DeleteSystemProfileAdmin got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDeleteSystemProfileAdmin.DeleteSystemProfileAdminMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.s1 != nil && !minimock.Equal(*mm_want_ptrs.s1, mm_got.s1) {
+				mmDeleteSystemProfileAdmin.t.Errorf("ServiceMock.DeleteSystemProfileAdmin got unexpected parameter s1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDeleteSystemProfileAdmin.DeleteSystemProfileAdminMock.defaultExpectation.expectationOrigins.originS1, *mm_want_ptrs.s1, mm_got.s1, minimock.Diff(*mm_want_ptrs.s1, mm_got.s1))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmDeleteSystemProfileAdmin.t.Errorf("ServiceMock.DeleteSystemProfileAdmin got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmDeleteSystemProfileAdmin.DeleteSystemProfileAdminMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmDeleteSystemProfileAdmin.DeleteSystemProfileAdminMock.defaultExpectation.results
+		if mm_results == nil {
+			mmDeleteSystemProfileAdmin.t.Fatal("No results are set for the ServiceMock.DeleteSystemProfileAdmin")
+		}
+		return (*mm_results).dp1, (*mm_results).err
+	}
+	if mmDeleteSystemProfileAdmin.funcDeleteSystemProfileAdmin != nil {
+		return mmDeleteSystemProfileAdmin.funcDeleteSystemProfileAdmin(ctx, s1)
+	}
+	mmDeleteSystemProfileAdmin.t.Fatalf("Unexpected call to ServiceMock.DeleteSystemProfileAdmin. %v %v", ctx, s1)
+	return
+}
+
+// DeleteSystemProfileAdminAfterCounter returns a count of finished ServiceMock.DeleteSystemProfileAdmin invocations
+func (mmDeleteSystemProfileAdmin *ServiceMock) DeleteSystemProfileAdminAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmDeleteSystemProfileAdmin.afterDeleteSystemProfileAdminCounter)
+}
+
+// DeleteSystemProfileAdminBeforeCounter returns a count of ServiceMock.DeleteSystemProfileAdmin invocations
+func (mmDeleteSystemProfileAdmin *ServiceMock) DeleteSystemProfileAdminBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmDeleteSystemProfileAdmin.beforeDeleteSystemProfileAdminCounter)
+}
+
+// Calls returns a list of arguments used in each call to ServiceMock.DeleteSystemProfileAdmin.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmDeleteSystemProfileAdmin *mServiceMockDeleteSystemProfileAdmin) Calls() []*ServiceMockDeleteSystemProfileAdminParams {
+	mmDeleteSystemProfileAdmin.mutex.RLock()
+
+	argCopy := make([]*ServiceMockDeleteSystemProfileAdminParams, len(mmDeleteSystemProfileAdmin.callArgs))
+	copy(argCopy, mmDeleteSystemProfileAdmin.callArgs)
+
+	mmDeleteSystemProfileAdmin.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockDeleteSystemProfileAdminDone returns true if the count of the DeleteSystemProfileAdmin invocations corresponds
+// the number of defined expectations
+func (m *ServiceMock) MinimockDeleteSystemProfileAdminDone() bool {
+	if m.DeleteSystemProfileAdminMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.DeleteSystemProfileAdminMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.DeleteSystemProfileAdminMock.invocationsDone()
+}
+
+// MinimockDeleteSystemProfileAdminInspect logs each unmet expectation
+func (m *ServiceMock) MinimockDeleteSystemProfileAdminInspect() {
+	for _, e := range m.DeleteSystemProfileAdminMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to ServiceMock.DeleteSystemProfileAdmin at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterDeleteSystemProfileAdminCounter := mm_atomic.LoadUint64(&m.afterDeleteSystemProfileAdminCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.DeleteSystemProfileAdminMock.defaultExpectation != nil && afterDeleteSystemProfileAdminCounter < 1 {
+		if m.DeleteSystemProfileAdminMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to ServiceMock.DeleteSystemProfileAdmin at\n%s", m.DeleteSystemProfileAdminMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to ServiceMock.DeleteSystemProfileAdmin at\n%s with params: %#v", m.DeleteSystemProfileAdminMock.defaultExpectation.expectationOrigins.origin, *m.DeleteSystemProfileAdminMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcDeleteSystemProfileAdmin != nil && afterDeleteSystemProfileAdminCounter < 1 {
+		m.t.Errorf("Expected call to ServiceMock.DeleteSystemProfileAdmin at\n%s", m.funcDeleteSystemProfileAdminOrigin)
+	}
+
+	if !m.DeleteSystemProfileAdminMock.invocationsDone() && afterDeleteSystemProfileAdminCounter > 0 {
+		m.t.Errorf("Expected %d calls to ServiceMock.DeleteSystemProfileAdmin at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.DeleteSystemProfileAdminMock.expectedInvocations), m.DeleteSystemProfileAdminMock.expectedInvocationsOrigin, afterDeleteSystemProfileAdminCounter)
+	}
+}
+
 type mServiceMockEmbedTexts struct {
 	optional           bool
 	mock               *ServiceMock
@@ -4228,56 +3923,53 @@ func (m *ServiceMock) MinimockEmbedTextsInspect() {
 	}
 }
 
-type mServiceMockGetChatCacheForFiles struct {
+type mServiceMockExecuteKnowledgeBaseUpdateAdmin struct {
 	optional           bool
 	mock               *ServiceMock
-	defaultExpectation *ServiceMockGetChatCacheForFilesExpectation
-	expectations       []*ServiceMockGetChatCacheForFilesExpectation
+	defaultExpectation *ServiceMockExecuteKnowledgeBaseUpdateAdminExpectation
+	expectations       []*ServiceMockExecuteKnowledgeBaseUpdateAdminExpectation
 
-	callArgs []*ServiceMockGetChatCacheForFilesParams
+	callArgs []*ServiceMockExecuteKnowledgeBaseUpdateAdminParams
 	mutex    sync.RWMutex
 
 	expectedInvocations       uint64
 	expectedInvocationsOrigin string
 }
 
-// ServiceMockGetChatCacheForFilesExpectation specifies expectation struct of the Service.GetChatCacheForFiles
-type ServiceMockGetChatCacheForFilesExpectation struct {
+// ServiceMockExecuteKnowledgeBaseUpdateAdminExpectation specifies expectation struct of the Service.ExecuteKnowledgeBaseUpdateAdmin
+type ServiceMockExecuteKnowledgeBaseUpdateAdminExpectation struct {
 	mock               *ServiceMock
-	params             *ServiceMockGetChatCacheForFilesParams
-	paramPtrs          *ServiceMockGetChatCacheForFilesParamPtrs
-	expectationOrigins ServiceMockGetChatCacheForFilesExpectationOrigins
-	results            *ServiceMockGetChatCacheForFilesResults
+	params             *ServiceMockExecuteKnowledgeBaseUpdateAdminParams
+	paramPtrs          *ServiceMockExecuteKnowledgeBaseUpdateAdminParamPtrs
+	expectationOrigins ServiceMockExecuteKnowledgeBaseUpdateAdminExpectationOrigins
+	results            *ServiceMockExecuteKnowledgeBaseUpdateAdminResults
 	returnOrigin       string
 	Counter            uint64
 }
 
-// ServiceMockGetChatCacheForFilesParams contains parameters of the Service.GetChatCacheForFiles
-type ServiceMockGetChatCacheForFilesParams struct {
+// ServiceMockExecuteKnowledgeBaseUpdateAdminParams contains parameters of the Service.ExecuteKnowledgeBaseUpdateAdmin
+type ServiceMockExecuteKnowledgeBaseUpdateAdminParams struct {
 	ctx context.Context
-	k1  types.KBUIDType
-	fa1 []types.FileUIDType
+	ep1 *artifactpb.ExecuteKnowledgeBaseUpdateAdminRequest
 }
 
-// ServiceMockGetChatCacheForFilesParamPtrs contains pointers to parameters of the Service.GetChatCacheForFiles
-type ServiceMockGetChatCacheForFilesParamPtrs struct {
+// ServiceMockExecuteKnowledgeBaseUpdateAdminParamPtrs contains pointers to parameters of the Service.ExecuteKnowledgeBaseUpdateAdmin
+type ServiceMockExecuteKnowledgeBaseUpdateAdminParamPtrs struct {
 	ctx *context.Context
-	k1  *types.KBUIDType
-	fa1 *[]types.FileUIDType
+	ep1 **artifactpb.ExecuteKnowledgeBaseUpdateAdminRequest
 }
 
-// ServiceMockGetChatCacheForFilesResults contains results of the Service.GetChatCacheForFiles
-type ServiceMockGetChatCacheForFilesResults struct {
-	cp1 *repository.ChatCacheMetadata
+// ServiceMockExecuteKnowledgeBaseUpdateAdminResults contains results of the Service.ExecuteKnowledgeBaseUpdateAdmin
+type ServiceMockExecuteKnowledgeBaseUpdateAdminResults struct {
+	ep2 *artifactpb.ExecuteKnowledgeBaseUpdateAdminResponse
 	err error
 }
 
-// ServiceMockGetChatCacheForFilesOrigins contains origins of expectations of the Service.GetChatCacheForFiles
-type ServiceMockGetChatCacheForFilesExpectationOrigins struct {
+// ServiceMockExecuteKnowledgeBaseUpdateAdminOrigins contains origins of expectations of the Service.ExecuteKnowledgeBaseUpdateAdmin
+type ServiceMockExecuteKnowledgeBaseUpdateAdminExpectationOrigins struct {
 	origin    string
 	originCtx string
-	originK1  string
-	originFa1 string
+	originEp1 string
 }
 
 // Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
@@ -4285,320 +3977,292 @@ type ServiceMockGetChatCacheForFilesExpectationOrigins struct {
 // Optional() makes method check to work in '0 or more' mode.
 // It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
 // catch the problems when the expected method call is totally skipped during test run.
-func (mmGetChatCacheForFiles *mServiceMockGetChatCacheForFiles) Optional() *mServiceMockGetChatCacheForFiles {
-	mmGetChatCacheForFiles.optional = true
-	return mmGetChatCacheForFiles
+func (mmExecuteKnowledgeBaseUpdateAdmin *mServiceMockExecuteKnowledgeBaseUpdateAdmin) Optional() *mServiceMockExecuteKnowledgeBaseUpdateAdmin {
+	mmExecuteKnowledgeBaseUpdateAdmin.optional = true
+	return mmExecuteKnowledgeBaseUpdateAdmin
 }
 
-// Expect sets up expected params for Service.GetChatCacheForFiles
-func (mmGetChatCacheForFiles *mServiceMockGetChatCacheForFiles) Expect(ctx context.Context, k1 types.KBUIDType, fa1 []types.FileUIDType) *mServiceMockGetChatCacheForFiles {
-	if mmGetChatCacheForFiles.mock.funcGetChatCacheForFiles != nil {
-		mmGetChatCacheForFiles.mock.t.Fatalf("ServiceMock.GetChatCacheForFiles mock is already set by Set")
+// Expect sets up expected params for Service.ExecuteKnowledgeBaseUpdateAdmin
+func (mmExecuteKnowledgeBaseUpdateAdmin *mServiceMockExecuteKnowledgeBaseUpdateAdmin) Expect(ctx context.Context, ep1 *artifactpb.ExecuteKnowledgeBaseUpdateAdminRequest) *mServiceMockExecuteKnowledgeBaseUpdateAdmin {
+	if mmExecuteKnowledgeBaseUpdateAdmin.mock.funcExecuteKnowledgeBaseUpdateAdmin != nil {
+		mmExecuteKnowledgeBaseUpdateAdmin.mock.t.Fatalf("ServiceMock.ExecuteKnowledgeBaseUpdateAdmin mock is already set by Set")
 	}
 
-	if mmGetChatCacheForFiles.defaultExpectation == nil {
-		mmGetChatCacheForFiles.defaultExpectation = &ServiceMockGetChatCacheForFilesExpectation{}
+	if mmExecuteKnowledgeBaseUpdateAdmin.defaultExpectation == nil {
+		mmExecuteKnowledgeBaseUpdateAdmin.defaultExpectation = &ServiceMockExecuteKnowledgeBaseUpdateAdminExpectation{}
 	}
 
-	if mmGetChatCacheForFiles.defaultExpectation.paramPtrs != nil {
-		mmGetChatCacheForFiles.mock.t.Fatalf("ServiceMock.GetChatCacheForFiles mock is already set by ExpectParams functions")
+	if mmExecuteKnowledgeBaseUpdateAdmin.defaultExpectation.paramPtrs != nil {
+		mmExecuteKnowledgeBaseUpdateAdmin.mock.t.Fatalf("ServiceMock.ExecuteKnowledgeBaseUpdateAdmin mock is already set by ExpectParams functions")
 	}
 
-	mmGetChatCacheForFiles.defaultExpectation.params = &ServiceMockGetChatCacheForFilesParams{ctx, k1, fa1}
-	mmGetChatCacheForFiles.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
-	for _, e := range mmGetChatCacheForFiles.expectations {
-		if minimock.Equal(e.params, mmGetChatCacheForFiles.defaultExpectation.params) {
-			mmGetChatCacheForFiles.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetChatCacheForFiles.defaultExpectation.params)
+	mmExecuteKnowledgeBaseUpdateAdmin.defaultExpectation.params = &ServiceMockExecuteKnowledgeBaseUpdateAdminParams{ctx, ep1}
+	mmExecuteKnowledgeBaseUpdateAdmin.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmExecuteKnowledgeBaseUpdateAdmin.expectations {
+		if minimock.Equal(e.params, mmExecuteKnowledgeBaseUpdateAdmin.defaultExpectation.params) {
+			mmExecuteKnowledgeBaseUpdateAdmin.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmExecuteKnowledgeBaseUpdateAdmin.defaultExpectation.params)
 		}
 	}
 
-	return mmGetChatCacheForFiles
+	return mmExecuteKnowledgeBaseUpdateAdmin
 }
 
-// ExpectCtxParam1 sets up expected param ctx for Service.GetChatCacheForFiles
-func (mmGetChatCacheForFiles *mServiceMockGetChatCacheForFiles) ExpectCtxParam1(ctx context.Context) *mServiceMockGetChatCacheForFiles {
-	if mmGetChatCacheForFiles.mock.funcGetChatCacheForFiles != nil {
-		mmGetChatCacheForFiles.mock.t.Fatalf("ServiceMock.GetChatCacheForFiles mock is already set by Set")
+// ExpectCtxParam1 sets up expected param ctx for Service.ExecuteKnowledgeBaseUpdateAdmin
+func (mmExecuteKnowledgeBaseUpdateAdmin *mServiceMockExecuteKnowledgeBaseUpdateAdmin) ExpectCtxParam1(ctx context.Context) *mServiceMockExecuteKnowledgeBaseUpdateAdmin {
+	if mmExecuteKnowledgeBaseUpdateAdmin.mock.funcExecuteKnowledgeBaseUpdateAdmin != nil {
+		mmExecuteKnowledgeBaseUpdateAdmin.mock.t.Fatalf("ServiceMock.ExecuteKnowledgeBaseUpdateAdmin mock is already set by Set")
 	}
 
-	if mmGetChatCacheForFiles.defaultExpectation == nil {
-		mmGetChatCacheForFiles.defaultExpectation = &ServiceMockGetChatCacheForFilesExpectation{}
+	if mmExecuteKnowledgeBaseUpdateAdmin.defaultExpectation == nil {
+		mmExecuteKnowledgeBaseUpdateAdmin.defaultExpectation = &ServiceMockExecuteKnowledgeBaseUpdateAdminExpectation{}
 	}
 
-	if mmGetChatCacheForFiles.defaultExpectation.params != nil {
-		mmGetChatCacheForFiles.mock.t.Fatalf("ServiceMock.GetChatCacheForFiles mock is already set by Expect")
+	if mmExecuteKnowledgeBaseUpdateAdmin.defaultExpectation.params != nil {
+		mmExecuteKnowledgeBaseUpdateAdmin.mock.t.Fatalf("ServiceMock.ExecuteKnowledgeBaseUpdateAdmin mock is already set by Expect")
 	}
 
-	if mmGetChatCacheForFiles.defaultExpectation.paramPtrs == nil {
-		mmGetChatCacheForFiles.defaultExpectation.paramPtrs = &ServiceMockGetChatCacheForFilesParamPtrs{}
+	if mmExecuteKnowledgeBaseUpdateAdmin.defaultExpectation.paramPtrs == nil {
+		mmExecuteKnowledgeBaseUpdateAdmin.defaultExpectation.paramPtrs = &ServiceMockExecuteKnowledgeBaseUpdateAdminParamPtrs{}
 	}
-	mmGetChatCacheForFiles.defaultExpectation.paramPtrs.ctx = &ctx
-	mmGetChatCacheForFiles.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+	mmExecuteKnowledgeBaseUpdateAdmin.defaultExpectation.paramPtrs.ctx = &ctx
+	mmExecuteKnowledgeBaseUpdateAdmin.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
 
-	return mmGetChatCacheForFiles
+	return mmExecuteKnowledgeBaseUpdateAdmin
 }
 
-// ExpectK1Param2 sets up expected param k1 for Service.GetChatCacheForFiles
-func (mmGetChatCacheForFiles *mServiceMockGetChatCacheForFiles) ExpectK1Param2(k1 types.KBUIDType) *mServiceMockGetChatCacheForFiles {
-	if mmGetChatCacheForFiles.mock.funcGetChatCacheForFiles != nil {
-		mmGetChatCacheForFiles.mock.t.Fatalf("ServiceMock.GetChatCacheForFiles mock is already set by Set")
+// ExpectEp1Param2 sets up expected param ep1 for Service.ExecuteKnowledgeBaseUpdateAdmin
+func (mmExecuteKnowledgeBaseUpdateAdmin *mServiceMockExecuteKnowledgeBaseUpdateAdmin) ExpectEp1Param2(ep1 *artifactpb.ExecuteKnowledgeBaseUpdateAdminRequest) *mServiceMockExecuteKnowledgeBaseUpdateAdmin {
+	if mmExecuteKnowledgeBaseUpdateAdmin.mock.funcExecuteKnowledgeBaseUpdateAdmin != nil {
+		mmExecuteKnowledgeBaseUpdateAdmin.mock.t.Fatalf("ServiceMock.ExecuteKnowledgeBaseUpdateAdmin mock is already set by Set")
 	}
 
-	if mmGetChatCacheForFiles.defaultExpectation == nil {
-		mmGetChatCacheForFiles.defaultExpectation = &ServiceMockGetChatCacheForFilesExpectation{}
+	if mmExecuteKnowledgeBaseUpdateAdmin.defaultExpectation == nil {
+		mmExecuteKnowledgeBaseUpdateAdmin.defaultExpectation = &ServiceMockExecuteKnowledgeBaseUpdateAdminExpectation{}
 	}
 
-	if mmGetChatCacheForFiles.defaultExpectation.params != nil {
-		mmGetChatCacheForFiles.mock.t.Fatalf("ServiceMock.GetChatCacheForFiles mock is already set by Expect")
+	if mmExecuteKnowledgeBaseUpdateAdmin.defaultExpectation.params != nil {
+		mmExecuteKnowledgeBaseUpdateAdmin.mock.t.Fatalf("ServiceMock.ExecuteKnowledgeBaseUpdateAdmin mock is already set by Expect")
 	}
 
-	if mmGetChatCacheForFiles.defaultExpectation.paramPtrs == nil {
-		mmGetChatCacheForFiles.defaultExpectation.paramPtrs = &ServiceMockGetChatCacheForFilesParamPtrs{}
+	if mmExecuteKnowledgeBaseUpdateAdmin.defaultExpectation.paramPtrs == nil {
+		mmExecuteKnowledgeBaseUpdateAdmin.defaultExpectation.paramPtrs = &ServiceMockExecuteKnowledgeBaseUpdateAdminParamPtrs{}
 	}
-	mmGetChatCacheForFiles.defaultExpectation.paramPtrs.k1 = &k1
-	mmGetChatCacheForFiles.defaultExpectation.expectationOrigins.originK1 = minimock.CallerInfo(1)
+	mmExecuteKnowledgeBaseUpdateAdmin.defaultExpectation.paramPtrs.ep1 = &ep1
+	mmExecuteKnowledgeBaseUpdateAdmin.defaultExpectation.expectationOrigins.originEp1 = minimock.CallerInfo(1)
 
-	return mmGetChatCacheForFiles
+	return mmExecuteKnowledgeBaseUpdateAdmin
 }
 
-// ExpectFa1Param3 sets up expected param fa1 for Service.GetChatCacheForFiles
-func (mmGetChatCacheForFiles *mServiceMockGetChatCacheForFiles) ExpectFa1Param3(fa1 []types.FileUIDType) *mServiceMockGetChatCacheForFiles {
-	if mmGetChatCacheForFiles.mock.funcGetChatCacheForFiles != nil {
-		mmGetChatCacheForFiles.mock.t.Fatalf("ServiceMock.GetChatCacheForFiles mock is already set by Set")
+// Inspect accepts an inspector function that has same arguments as the Service.ExecuteKnowledgeBaseUpdateAdmin
+func (mmExecuteKnowledgeBaseUpdateAdmin *mServiceMockExecuteKnowledgeBaseUpdateAdmin) Inspect(f func(ctx context.Context, ep1 *artifactpb.ExecuteKnowledgeBaseUpdateAdminRequest)) *mServiceMockExecuteKnowledgeBaseUpdateAdmin {
+	if mmExecuteKnowledgeBaseUpdateAdmin.mock.inspectFuncExecuteKnowledgeBaseUpdateAdmin != nil {
+		mmExecuteKnowledgeBaseUpdateAdmin.mock.t.Fatalf("Inspect function is already set for ServiceMock.ExecuteKnowledgeBaseUpdateAdmin")
 	}
 
-	if mmGetChatCacheForFiles.defaultExpectation == nil {
-		mmGetChatCacheForFiles.defaultExpectation = &ServiceMockGetChatCacheForFilesExpectation{}
-	}
+	mmExecuteKnowledgeBaseUpdateAdmin.mock.inspectFuncExecuteKnowledgeBaseUpdateAdmin = f
 
-	if mmGetChatCacheForFiles.defaultExpectation.params != nil {
-		mmGetChatCacheForFiles.mock.t.Fatalf("ServiceMock.GetChatCacheForFiles mock is already set by Expect")
-	}
-
-	if mmGetChatCacheForFiles.defaultExpectation.paramPtrs == nil {
-		mmGetChatCacheForFiles.defaultExpectation.paramPtrs = &ServiceMockGetChatCacheForFilesParamPtrs{}
-	}
-	mmGetChatCacheForFiles.defaultExpectation.paramPtrs.fa1 = &fa1
-	mmGetChatCacheForFiles.defaultExpectation.expectationOrigins.originFa1 = minimock.CallerInfo(1)
-
-	return mmGetChatCacheForFiles
+	return mmExecuteKnowledgeBaseUpdateAdmin
 }
 
-// Inspect accepts an inspector function that has same arguments as the Service.GetChatCacheForFiles
-func (mmGetChatCacheForFiles *mServiceMockGetChatCacheForFiles) Inspect(f func(ctx context.Context, k1 types.KBUIDType, fa1 []types.FileUIDType)) *mServiceMockGetChatCacheForFiles {
-	if mmGetChatCacheForFiles.mock.inspectFuncGetChatCacheForFiles != nil {
-		mmGetChatCacheForFiles.mock.t.Fatalf("Inspect function is already set for ServiceMock.GetChatCacheForFiles")
+// Return sets up results that will be returned by Service.ExecuteKnowledgeBaseUpdateAdmin
+func (mmExecuteKnowledgeBaseUpdateAdmin *mServiceMockExecuteKnowledgeBaseUpdateAdmin) Return(ep2 *artifactpb.ExecuteKnowledgeBaseUpdateAdminResponse, err error) *ServiceMock {
+	if mmExecuteKnowledgeBaseUpdateAdmin.mock.funcExecuteKnowledgeBaseUpdateAdmin != nil {
+		mmExecuteKnowledgeBaseUpdateAdmin.mock.t.Fatalf("ServiceMock.ExecuteKnowledgeBaseUpdateAdmin mock is already set by Set")
 	}
 
-	mmGetChatCacheForFiles.mock.inspectFuncGetChatCacheForFiles = f
-
-	return mmGetChatCacheForFiles
+	if mmExecuteKnowledgeBaseUpdateAdmin.defaultExpectation == nil {
+		mmExecuteKnowledgeBaseUpdateAdmin.defaultExpectation = &ServiceMockExecuteKnowledgeBaseUpdateAdminExpectation{mock: mmExecuteKnowledgeBaseUpdateAdmin.mock}
+	}
+	mmExecuteKnowledgeBaseUpdateAdmin.defaultExpectation.results = &ServiceMockExecuteKnowledgeBaseUpdateAdminResults{ep2, err}
+	mmExecuteKnowledgeBaseUpdateAdmin.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmExecuteKnowledgeBaseUpdateAdmin.mock
 }
 
-// Return sets up results that will be returned by Service.GetChatCacheForFiles
-func (mmGetChatCacheForFiles *mServiceMockGetChatCacheForFiles) Return(cp1 *repository.ChatCacheMetadata, err error) *ServiceMock {
-	if mmGetChatCacheForFiles.mock.funcGetChatCacheForFiles != nil {
-		mmGetChatCacheForFiles.mock.t.Fatalf("ServiceMock.GetChatCacheForFiles mock is already set by Set")
+// Set uses given function f to mock the Service.ExecuteKnowledgeBaseUpdateAdmin method
+func (mmExecuteKnowledgeBaseUpdateAdmin *mServiceMockExecuteKnowledgeBaseUpdateAdmin) Set(f func(ctx context.Context, ep1 *artifactpb.ExecuteKnowledgeBaseUpdateAdminRequest) (ep2 *artifactpb.ExecuteKnowledgeBaseUpdateAdminResponse, err error)) *ServiceMock {
+	if mmExecuteKnowledgeBaseUpdateAdmin.defaultExpectation != nil {
+		mmExecuteKnowledgeBaseUpdateAdmin.mock.t.Fatalf("Default expectation is already set for the Service.ExecuteKnowledgeBaseUpdateAdmin method")
 	}
 
-	if mmGetChatCacheForFiles.defaultExpectation == nil {
-		mmGetChatCacheForFiles.defaultExpectation = &ServiceMockGetChatCacheForFilesExpectation{mock: mmGetChatCacheForFiles.mock}
+	if len(mmExecuteKnowledgeBaseUpdateAdmin.expectations) > 0 {
+		mmExecuteKnowledgeBaseUpdateAdmin.mock.t.Fatalf("Some expectations are already set for the Service.ExecuteKnowledgeBaseUpdateAdmin method")
 	}
-	mmGetChatCacheForFiles.defaultExpectation.results = &ServiceMockGetChatCacheForFilesResults{cp1, err}
-	mmGetChatCacheForFiles.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
-	return mmGetChatCacheForFiles.mock
+
+	mmExecuteKnowledgeBaseUpdateAdmin.mock.funcExecuteKnowledgeBaseUpdateAdmin = f
+	mmExecuteKnowledgeBaseUpdateAdmin.mock.funcExecuteKnowledgeBaseUpdateAdminOrigin = minimock.CallerInfo(1)
+	return mmExecuteKnowledgeBaseUpdateAdmin.mock
 }
 
-// Set uses given function f to mock the Service.GetChatCacheForFiles method
-func (mmGetChatCacheForFiles *mServiceMockGetChatCacheForFiles) Set(f func(ctx context.Context, k1 types.KBUIDType, fa1 []types.FileUIDType) (cp1 *repository.ChatCacheMetadata, err error)) *ServiceMock {
-	if mmGetChatCacheForFiles.defaultExpectation != nil {
-		mmGetChatCacheForFiles.mock.t.Fatalf("Default expectation is already set for the Service.GetChatCacheForFiles method")
-	}
-
-	if len(mmGetChatCacheForFiles.expectations) > 0 {
-		mmGetChatCacheForFiles.mock.t.Fatalf("Some expectations are already set for the Service.GetChatCacheForFiles method")
-	}
-
-	mmGetChatCacheForFiles.mock.funcGetChatCacheForFiles = f
-	mmGetChatCacheForFiles.mock.funcGetChatCacheForFilesOrigin = minimock.CallerInfo(1)
-	return mmGetChatCacheForFiles.mock
-}
-
-// When sets expectation for the Service.GetChatCacheForFiles which will trigger the result defined by the following
+// When sets expectation for the Service.ExecuteKnowledgeBaseUpdateAdmin which will trigger the result defined by the following
 // Then helper
-func (mmGetChatCacheForFiles *mServiceMockGetChatCacheForFiles) When(ctx context.Context, k1 types.KBUIDType, fa1 []types.FileUIDType) *ServiceMockGetChatCacheForFilesExpectation {
-	if mmGetChatCacheForFiles.mock.funcGetChatCacheForFiles != nil {
-		mmGetChatCacheForFiles.mock.t.Fatalf("ServiceMock.GetChatCacheForFiles mock is already set by Set")
+func (mmExecuteKnowledgeBaseUpdateAdmin *mServiceMockExecuteKnowledgeBaseUpdateAdmin) When(ctx context.Context, ep1 *artifactpb.ExecuteKnowledgeBaseUpdateAdminRequest) *ServiceMockExecuteKnowledgeBaseUpdateAdminExpectation {
+	if mmExecuteKnowledgeBaseUpdateAdmin.mock.funcExecuteKnowledgeBaseUpdateAdmin != nil {
+		mmExecuteKnowledgeBaseUpdateAdmin.mock.t.Fatalf("ServiceMock.ExecuteKnowledgeBaseUpdateAdmin mock is already set by Set")
 	}
 
-	expectation := &ServiceMockGetChatCacheForFilesExpectation{
-		mock:               mmGetChatCacheForFiles.mock,
-		params:             &ServiceMockGetChatCacheForFilesParams{ctx, k1, fa1},
-		expectationOrigins: ServiceMockGetChatCacheForFilesExpectationOrigins{origin: minimock.CallerInfo(1)},
+	expectation := &ServiceMockExecuteKnowledgeBaseUpdateAdminExpectation{
+		mock:               mmExecuteKnowledgeBaseUpdateAdmin.mock,
+		params:             &ServiceMockExecuteKnowledgeBaseUpdateAdminParams{ctx, ep1},
+		expectationOrigins: ServiceMockExecuteKnowledgeBaseUpdateAdminExpectationOrigins{origin: minimock.CallerInfo(1)},
 	}
-	mmGetChatCacheForFiles.expectations = append(mmGetChatCacheForFiles.expectations, expectation)
+	mmExecuteKnowledgeBaseUpdateAdmin.expectations = append(mmExecuteKnowledgeBaseUpdateAdmin.expectations, expectation)
 	return expectation
 }
 
-// Then sets up Service.GetChatCacheForFiles return parameters for the expectation previously defined by the When method
-func (e *ServiceMockGetChatCacheForFilesExpectation) Then(cp1 *repository.ChatCacheMetadata, err error) *ServiceMock {
-	e.results = &ServiceMockGetChatCacheForFilesResults{cp1, err}
+// Then sets up Service.ExecuteKnowledgeBaseUpdateAdmin return parameters for the expectation previously defined by the When method
+func (e *ServiceMockExecuteKnowledgeBaseUpdateAdminExpectation) Then(ep2 *artifactpb.ExecuteKnowledgeBaseUpdateAdminResponse, err error) *ServiceMock {
+	e.results = &ServiceMockExecuteKnowledgeBaseUpdateAdminResults{ep2, err}
 	return e.mock
 }
 
-// Times sets number of times Service.GetChatCacheForFiles should be invoked
-func (mmGetChatCacheForFiles *mServiceMockGetChatCacheForFiles) Times(n uint64) *mServiceMockGetChatCacheForFiles {
+// Times sets number of times Service.ExecuteKnowledgeBaseUpdateAdmin should be invoked
+func (mmExecuteKnowledgeBaseUpdateAdmin *mServiceMockExecuteKnowledgeBaseUpdateAdmin) Times(n uint64) *mServiceMockExecuteKnowledgeBaseUpdateAdmin {
 	if n == 0 {
-		mmGetChatCacheForFiles.mock.t.Fatalf("Times of ServiceMock.GetChatCacheForFiles mock can not be zero")
+		mmExecuteKnowledgeBaseUpdateAdmin.mock.t.Fatalf("Times of ServiceMock.ExecuteKnowledgeBaseUpdateAdmin mock can not be zero")
 	}
-	mm_atomic.StoreUint64(&mmGetChatCacheForFiles.expectedInvocations, n)
-	mmGetChatCacheForFiles.expectedInvocationsOrigin = minimock.CallerInfo(1)
-	return mmGetChatCacheForFiles
+	mm_atomic.StoreUint64(&mmExecuteKnowledgeBaseUpdateAdmin.expectedInvocations, n)
+	mmExecuteKnowledgeBaseUpdateAdmin.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmExecuteKnowledgeBaseUpdateAdmin
 }
 
-func (mmGetChatCacheForFiles *mServiceMockGetChatCacheForFiles) invocationsDone() bool {
-	if len(mmGetChatCacheForFiles.expectations) == 0 && mmGetChatCacheForFiles.defaultExpectation == nil && mmGetChatCacheForFiles.mock.funcGetChatCacheForFiles == nil {
+func (mmExecuteKnowledgeBaseUpdateAdmin *mServiceMockExecuteKnowledgeBaseUpdateAdmin) invocationsDone() bool {
+	if len(mmExecuteKnowledgeBaseUpdateAdmin.expectations) == 0 && mmExecuteKnowledgeBaseUpdateAdmin.defaultExpectation == nil && mmExecuteKnowledgeBaseUpdateAdmin.mock.funcExecuteKnowledgeBaseUpdateAdmin == nil {
 		return true
 	}
 
-	totalInvocations := mm_atomic.LoadUint64(&mmGetChatCacheForFiles.mock.afterGetChatCacheForFilesCounter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmGetChatCacheForFiles.expectedInvocations)
+	totalInvocations := mm_atomic.LoadUint64(&mmExecuteKnowledgeBaseUpdateAdmin.mock.afterExecuteKnowledgeBaseUpdateAdminCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmExecuteKnowledgeBaseUpdateAdmin.expectedInvocations)
 
 	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
 }
 
-// GetChatCacheForFiles implements mm_service.Service
-func (mmGetChatCacheForFiles *ServiceMock) GetChatCacheForFiles(ctx context.Context, k1 types.KBUIDType, fa1 []types.FileUIDType) (cp1 *repository.ChatCacheMetadata, err error) {
-	mm_atomic.AddUint64(&mmGetChatCacheForFiles.beforeGetChatCacheForFilesCounter, 1)
-	defer mm_atomic.AddUint64(&mmGetChatCacheForFiles.afterGetChatCacheForFilesCounter, 1)
+// ExecuteKnowledgeBaseUpdateAdmin implements mm_service.Service
+func (mmExecuteKnowledgeBaseUpdateAdmin *ServiceMock) ExecuteKnowledgeBaseUpdateAdmin(ctx context.Context, ep1 *artifactpb.ExecuteKnowledgeBaseUpdateAdminRequest) (ep2 *artifactpb.ExecuteKnowledgeBaseUpdateAdminResponse, err error) {
+	mm_atomic.AddUint64(&mmExecuteKnowledgeBaseUpdateAdmin.beforeExecuteKnowledgeBaseUpdateAdminCounter, 1)
+	defer mm_atomic.AddUint64(&mmExecuteKnowledgeBaseUpdateAdmin.afterExecuteKnowledgeBaseUpdateAdminCounter, 1)
 
-	mmGetChatCacheForFiles.t.Helper()
+	mmExecuteKnowledgeBaseUpdateAdmin.t.Helper()
 
-	if mmGetChatCacheForFiles.inspectFuncGetChatCacheForFiles != nil {
-		mmGetChatCacheForFiles.inspectFuncGetChatCacheForFiles(ctx, k1, fa1)
+	if mmExecuteKnowledgeBaseUpdateAdmin.inspectFuncExecuteKnowledgeBaseUpdateAdmin != nil {
+		mmExecuteKnowledgeBaseUpdateAdmin.inspectFuncExecuteKnowledgeBaseUpdateAdmin(ctx, ep1)
 	}
 
-	mm_params := ServiceMockGetChatCacheForFilesParams{ctx, k1, fa1}
+	mm_params := ServiceMockExecuteKnowledgeBaseUpdateAdminParams{ctx, ep1}
 
 	// Record call args
-	mmGetChatCacheForFiles.GetChatCacheForFilesMock.mutex.Lock()
-	mmGetChatCacheForFiles.GetChatCacheForFilesMock.callArgs = append(mmGetChatCacheForFiles.GetChatCacheForFilesMock.callArgs, &mm_params)
-	mmGetChatCacheForFiles.GetChatCacheForFilesMock.mutex.Unlock()
+	mmExecuteKnowledgeBaseUpdateAdmin.ExecuteKnowledgeBaseUpdateAdminMock.mutex.Lock()
+	mmExecuteKnowledgeBaseUpdateAdmin.ExecuteKnowledgeBaseUpdateAdminMock.callArgs = append(mmExecuteKnowledgeBaseUpdateAdmin.ExecuteKnowledgeBaseUpdateAdminMock.callArgs, &mm_params)
+	mmExecuteKnowledgeBaseUpdateAdmin.ExecuteKnowledgeBaseUpdateAdminMock.mutex.Unlock()
 
-	for _, e := range mmGetChatCacheForFiles.GetChatCacheForFilesMock.expectations {
+	for _, e := range mmExecuteKnowledgeBaseUpdateAdmin.ExecuteKnowledgeBaseUpdateAdminMock.expectations {
 		if minimock.Equal(*e.params, mm_params) {
 			mm_atomic.AddUint64(&e.Counter, 1)
-			return e.results.cp1, e.results.err
+			return e.results.ep2, e.results.err
 		}
 	}
 
-	if mmGetChatCacheForFiles.GetChatCacheForFilesMock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmGetChatCacheForFiles.GetChatCacheForFilesMock.defaultExpectation.Counter, 1)
-		mm_want := mmGetChatCacheForFiles.GetChatCacheForFilesMock.defaultExpectation.params
-		mm_want_ptrs := mmGetChatCacheForFiles.GetChatCacheForFilesMock.defaultExpectation.paramPtrs
+	if mmExecuteKnowledgeBaseUpdateAdmin.ExecuteKnowledgeBaseUpdateAdminMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmExecuteKnowledgeBaseUpdateAdmin.ExecuteKnowledgeBaseUpdateAdminMock.defaultExpectation.Counter, 1)
+		mm_want := mmExecuteKnowledgeBaseUpdateAdmin.ExecuteKnowledgeBaseUpdateAdminMock.defaultExpectation.params
+		mm_want_ptrs := mmExecuteKnowledgeBaseUpdateAdmin.ExecuteKnowledgeBaseUpdateAdminMock.defaultExpectation.paramPtrs
 
-		mm_got := ServiceMockGetChatCacheForFilesParams{ctx, k1, fa1}
+		mm_got := ServiceMockExecuteKnowledgeBaseUpdateAdminParams{ctx, ep1}
 
 		if mm_want_ptrs != nil {
 
 			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
-				mmGetChatCacheForFiles.t.Errorf("ServiceMock.GetChatCacheForFiles got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmGetChatCacheForFiles.GetChatCacheForFilesMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+				mmExecuteKnowledgeBaseUpdateAdmin.t.Errorf("ServiceMock.ExecuteKnowledgeBaseUpdateAdmin got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmExecuteKnowledgeBaseUpdateAdmin.ExecuteKnowledgeBaseUpdateAdminMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
 			}
 
-			if mm_want_ptrs.k1 != nil && !minimock.Equal(*mm_want_ptrs.k1, mm_got.k1) {
-				mmGetChatCacheForFiles.t.Errorf("ServiceMock.GetChatCacheForFiles got unexpected parameter k1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmGetChatCacheForFiles.GetChatCacheForFilesMock.defaultExpectation.expectationOrigins.originK1, *mm_want_ptrs.k1, mm_got.k1, minimock.Diff(*mm_want_ptrs.k1, mm_got.k1))
-			}
-
-			if mm_want_ptrs.fa1 != nil && !minimock.Equal(*mm_want_ptrs.fa1, mm_got.fa1) {
-				mmGetChatCacheForFiles.t.Errorf("ServiceMock.GetChatCacheForFiles got unexpected parameter fa1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmGetChatCacheForFiles.GetChatCacheForFilesMock.defaultExpectation.expectationOrigins.originFa1, *mm_want_ptrs.fa1, mm_got.fa1, minimock.Diff(*mm_want_ptrs.fa1, mm_got.fa1))
+			if mm_want_ptrs.ep1 != nil && !minimock.Equal(*mm_want_ptrs.ep1, mm_got.ep1) {
+				mmExecuteKnowledgeBaseUpdateAdmin.t.Errorf("ServiceMock.ExecuteKnowledgeBaseUpdateAdmin got unexpected parameter ep1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmExecuteKnowledgeBaseUpdateAdmin.ExecuteKnowledgeBaseUpdateAdminMock.defaultExpectation.expectationOrigins.originEp1, *mm_want_ptrs.ep1, mm_got.ep1, minimock.Diff(*mm_want_ptrs.ep1, mm_got.ep1))
 			}
 
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
-			mmGetChatCacheForFiles.t.Errorf("ServiceMock.GetChatCacheForFiles got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-				mmGetChatCacheForFiles.GetChatCacheForFilesMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+			mmExecuteKnowledgeBaseUpdateAdmin.t.Errorf("ServiceMock.ExecuteKnowledgeBaseUpdateAdmin got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmExecuteKnowledgeBaseUpdateAdmin.ExecuteKnowledgeBaseUpdateAdminMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
 		}
 
-		mm_results := mmGetChatCacheForFiles.GetChatCacheForFilesMock.defaultExpectation.results
+		mm_results := mmExecuteKnowledgeBaseUpdateAdmin.ExecuteKnowledgeBaseUpdateAdminMock.defaultExpectation.results
 		if mm_results == nil {
-			mmGetChatCacheForFiles.t.Fatal("No results are set for the ServiceMock.GetChatCacheForFiles")
+			mmExecuteKnowledgeBaseUpdateAdmin.t.Fatal("No results are set for the ServiceMock.ExecuteKnowledgeBaseUpdateAdmin")
 		}
-		return (*mm_results).cp1, (*mm_results).err
+		return (*mm_results).ep2, (*mm_results).err
 	}
-	if mmGetChatCacheForFiles.funcGetChatCacheForFiles != nil {
-		return mmGetChatCacheForFiles.funcGetChatCacheForFiles(ctx, k1, fa1)
+	if mmExecuteKnowledgeBaseUpdateAdmin.funcExecuteKnowledgeBaseUpdateAdmin != nil {
+		return mmExecuteKnowledgeBaseUpdateAdmin.funcExecuteKnowledgeBaseUpdateAdmin(ctx, ep1)
 	}
-	mmGetChatCacheForFiles.t.Fatalf("Unexpected call to ServiceMock.GetChatCacheForFiles. %v %v %v", ctx, k1, fa1)
+	mmExecuteKnowledgeBaseUpdateAdmin.t.Fatalf("Unexpected call to ServiceMock.ExecuteKnowledgeBaseUpdateAdmin. %v %v", ctx, ep1)
 	return
 }
 
-// GetChatCacheForFilesAfterCounter returns a count of finished ServiceMock.GetChatCacheForFiles invocations
-func (mmGetChatCacheForFiles *ServiceMock) GetChatCacheForFilesAfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmGetChatCacheForFiles.afterGetChatCacheForFilesCounter)
+// ExecuteKnowledgeBaseUpdateAdminAfterCounter returns a count of finished ServiceMock.ExecuteKnowledgeBaseUpdateAdmin invocations
+func (mmExecuteKnowledgeBaseUpdateAdmin *ServiceMock) ExecuteKnowledgeBaseUpdateAdminAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmExecuteKnowledgeBaseUpdateAdmin.afterExecuteKnowledgeBaseUpdateAdminCounter)
 }
 
-// GetChatCacheForFilesBeforeCounter returns a count of ServiceMock.GetChatCacheForFiles invocations
-func (mmGetChatCacheForFiles *ServiceMock) GetChatCacheForFilesBeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmGetChatCacheForFiles.beforeGetChatCacheForFilesCounter)
+// ExecuteKnowledgeBaseUpdateAdminBeforeCounter returns a count of ServiceMock.ExecuteKnowledgeBaseUpdateAdmin invocations
+func (mmExecuteKnowledgeBaseUpdateAdmin *ServiceMock) ExecuteKnowledgeBaseUpdateAdminBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmExecuteKnowledgeBaseUpdateAdmin.beforeExecuteKnowledgeBaseUpdateAdminCounter)
 }
 
-// Calls returns a list of arguments used in each call to ServiceMock.GetChatCacheForFiles.
+// Calls returns a list of arguments used in each call to ServiceMock.ExecuteKnowledgeBaseUpdateAdmin.
 // The list is in the same order as the calls were made (i.e. recent calls have a higher index)
-func (mmGetChatCacheForFiles *mServiceMockGetChatCacheForFiles) Calls() []*ServiceMockGetChatCacheForFilesParams {
-	mmGetChatCacheForFiles.mutex.RLock()
+func (mmExecuteKnowledgeBaseUpdateAdmin *mServiceMockExecuteKnowledgeBaseUpdateAdmin) Calls() []*ServiceMockExecuteKnowledgeBaseUpdateAdminParams {
+	mmExecuteKnowledgeBaseUpdateAdmin.mutex.RLock()
 
-	argCopy := make([]*ServiceMockGetChatCacheForFilesParams, len(mmGetChatCacheForFiles.callArgs))
-	copy(argCopy, mmGetChatCacheForFiles.callArgs)
+	argCopy := make([]*ServiceMockExecuteKnowledgeBaseUpdateAdminParams, len(mmExecuteKnowledgeBaseUpdateAdmin.callArgs))
+	copy(argCopy, mmExecuteKnowledgeBaseUpdateAdmin.callArgs)
 
-	mmGetChatCacheForFiles.mutex.RUnlock()
+	mmExecuteKnowledgeBaseUpdateAdmin.mutex.RUnlock()
 
 	return argCopy
 }
 
-// MinimockGetChatCacheForFilesDone returns true if the count of the GetChatCacheForFiles invocations corresponds
+// MinimockExecuteKnowledgeBaseUpdateAdminDone returns true if the count of the ExecuteKnowledgeBaseUpdateAdmin invocations corresponds
 // the number of defined expectations
-func (m *ServiceMock) MinimockGetChatCacheForFilesDone() bool {
-	if m.GetChatCacheForFilesMock.optional {
+func (m *ServiceMock) MinimockExecuteKnowledgeBaseUpdateAdminDone() bool {
+	if m.ExecuteKnowledgeBaseUpdateAdminMock.optional {
 		// Optional methods provide '0 or more' call count restriction.
 		return true
 	}
 
-	for _, e := range m.GetChatCacheForFilesMock.expectations {
+	for _, e := range m.ExecuteKnowledgeBaseUpdateAdminMock.expectations {
 		if mm_atomic.LoadUint64(&e.Counter) < 1 {
 			return false
 		}
 	}
 
-	return m.GetChatCacheForFilesMock.invocationsDone()
+	return m.ExecuteKnowledgeBaseUpdateAdminMock.invocationsDone()
 }
 
-// MinimockGetChatCacheForFilesInspect logs each unmet expectation
-func (m *ServiceMock) MinimockGetChatCacheForFilesInspect() {
-	for _, e := range m.GetChatCacheForFilesMock.expectations {
+// MinimockExecuteKnowledgeBaseUpdateAdminInspect logs each unmet expectation
+func (m *ServiceMock) MinimockExecuteKnowledgeBaseUpdateAdminInspect() {
+	for _, e := range m.ExecuteKnowledgeBaseUpdateAdminMock.expectations {
 		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Errorf("Expected call to ServiceMock.GetChatCacheForFiles at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+			m.t.Errorf("Expected call to ServiceMock.ExecuteKnowledgeBaseUpdateAdmin at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
 		}
 	}
 
-	afterGetChatCacheForFilesCounter := mm_atomic.LoadUint64(&m.afterGetChatCacheForFilesCounter)
+	afterExecuteKnowledgeBaseUpdateAdminCounter := mm_atomic.LoadUint64(&m.afterExecuteKnowledgeBaseUpdateAdminCounter)
 	// if default expectation was set then invocations count should be greater than zero
-	if m.GetChatCacheForFilesMock.defaultExpectation != nil && afterGetChatCacheForFilesCounter < 1 {
-		if m.GetChatCacheForFilesMock.defaultExpectation.params == nil {
-			m.t.Errorf("Expected call to ServiceMock.GetChatCacheForFiles at\n%s", m.GetChatCacheForFilesMock.defaultExpectation.returnOrigin)
+	if m.ExecuteKnowledgeBaseUpdateAdminMock.defaultExpectation != nil && afterExecuteKnowledgeBaseUpdateAdminCounter < 1 {
+		if m.ExecuteKnowledgeBaseUpdateAdminMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to ServiceMock.ExecuteKnowledgeBaseUpdateAdmin at\n%s", m.ExecuteKnowledgeBaseUpdateAdminMock.defaultExpectation.returnOrigin)
 		} else {
-			m.t.Errorf("Expected call to ServiceMock.GetChatCacheForFiles at\n%s with params: %#v", m.GetChatCacheForFilesMock.defaultExpectation.expectationOrigins.origin, *m.GetChatCacheForFilesMock.defaultExpectation.params)
+			m.t.Errorf("Expected call to ServiceMock.ExecuteKnowledgeBaseUpdateAdmin at\n%s with params: %#v", m.ExecuteKnowledgeBaseUpdateAdminMock.defaultExpectation.expectationOrigins.origin, *m.ExecuteKnowledgeBaseUpdateAdminMock.defaultExpectation.params)
 		}
 	}
 	// if func was set then invocations count should be greater than zero
-	if m.funcGetChatCacheForFiles != nil && afterGetChatCacheForFilesCounter < 1 {
-		m.t.Errorf("Expected call to ServiceMock.GetChatCacheForFiles at\n%s", m.funcGetChatCacheForFilesOrigin)
+	if m.funcExecuteKnowledgeBaseUpdateAdmin != nil && afterExecuteKnowledgeBaseUpdateAdminCounter < 1 {
+		m.t.Errorf("Expected call to ServiceMock.ExecuteKnowledgeBaseUpdateAdmin at\n%s", m.funcExecuteKnowledgeBaseUpdateAdminOrigin)
 	}
 
-	if !m.GetChatCacheForFilesMock.invocationsDone() && afterGetChatCacheForFilesCounter > 0 {
-		m.t.Errorf("Expected %d calls to ServiceMock.GetChatCacheForFiles at\n%s but found %d calls",
-			mm_atomic.LoadUint64(&m.GetChatCacheForFilesMock.expectedInvocations), m.GetChatCacheForFilesMock.expectedInvocationsOrigin, afterGetChatCacheForFilesCounter)
+	if !m.ExecuteKnowledgeBaseUpdateAdminMock.invocationsDone() && afterExecuteKnowledgeBaseUpdateAdminCounter > 0 {
+		m.t.Errorf("Expected %d calls to ServiceMock.ExecuteKnowledgeBaseUpdateAdmin at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.ExecuteKnowledgeBaseUpdateAdminMock.expectedInvocations), m.ExecuteKnowledgeBaseUpdateAdminMock.expectedInvocationsOrigin, afterExecuteKnowledgeBaseUpdateAdminCounter)
 	}
 }
 
@@ -6101,6 +5765,318 @@ func (m *ServiceMock) MinimockGetFilesByPathsInspect() {
 	}
 }
 
+type mServiceMockGetKnowledgeBaseUpdateStatusAdmin struct {
+	optional           bool
+	mock               *ServiceMock
+	defaultExpectation *ServiceMockGetKnowledgeBaseUpdateStatusAdminExpectation
+	expectations       []*ServiceMockGetKnowledgeBaseUpdateStatusAdminExpectation
+
+	callArgs []*ServiceMockGetKnowledgeBaseUpdateStatusAdminParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// ServiceMockGetKnowledgeBaseUpdateStatusAdminExpectation specifies expectation struct of the Service.GetKnowledgeBaseUpdateStatusAdmin
+type ServiceMockGetKnowledgeBaseUpdateStatusAdminExpectation struct {
+	mock               *ServiceMock
+	params             *ServiceMockGetKnowledgeBaseUpdateStatusAdminParams
+	paramPtrs          *ServiceMockGetKnowledgeBaseUpdateStatusAdminParamPtrs
+	expectationOrigins ServiceMockGetKnowledgeBaseUpdateStatusAdminExpectationOrigins
+	results            *ServiceMockGetKnowledgeBaseUpdateStatusAdminResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// ServiceMockGetKnowledgeBaseUpdateStatusAdminParams contains parameters of the Service.GetKnowledgeBaseUpdateStatusAdmin
+type ServiceMockGetKnowledgeBaseUpdateStatusAdminParams struct {
+	ctx context.Context
+}
+
+// ServiceMockGetKnowledgeBaseUpdateStatusAdminParamPtrs contains pointers to parameters of the Service.GetKnowledgeBaseUpdateStatusAdmin
+type ServiceMockGetKnowledgeBaseUpdateStatusAdminParamPtrs struct {
+	ctx *context.Context
+}
+
+// ServiceMockGetKnowledgeBaseUpdateStatusAdminResults contains results of the Service.GetKnowledgeBaseUpdateStatusAdmin
+type ServiceMockGetKnowledgeBaseUpdateStatusAdminResults struct {
+	gp1 *artifactpb.GetKnowledgeBaseUpdateStatusAdminResponse
+	err error
+}
+
+// ServiceMockGetKnowledgeBaseUpdateStatusAdminOrigins contains origins of expectations of the Service.GetKnowledgeBaseUpdateStatusAdmin
+type ServiceMockGetKnowledgeBaseUpdateStatusAdminExpectationOrigins struct {
+	origin    string
+	originCtx string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmGetKnowledgeBaseUpdateStatusAdmin *mServiceMockGetKnowledgeBaseUpdateStatusAdmin) Optional() *mServiceMockGetKnowledgeBaseUpdateStatusAdmin {
+	mmGetKnowledgeBaseUpdateStatusAdmin.optional = true
+	return mmGetKnowledgeBaseUpdateStatusAdmin
+}
+
+// Expect sets up expected params for Service.GetKnowledgeBaseUpdateStatusAdmin
+func (mmGetKnowledgeBaseUpdateStatusAdmin *mServiceMockGetKnowledgeBaseUpdateStatusAdmin) Expect(ctx context.Context) *mServiceMockGetKnowledgeBaseUpdateStatusAdmin {
+	if mmGetKnowledgeBaseUpdateStatusAdmin.mock.funcGetKnowledgeBaseUpdateStatusAdmin != nil {
+		mmGetKnowledgeBaseUpdateStatusAdmin.mock.t.Fatalf("ServiceMock.GetKnowledgeBaseUpdateStatusAdmin mock is already set by Set")
+	}
+
+	if mmGetKnowledgeBaseUpdateStatusAdmin.defaultExpectation == nil {
+		mmGetKnowledgeBaseUpdateStatusAdmin.defaultExpectation = &ServiceMockGetKnowledgeBaseUpdateStatusAdminExpectation{}
+	}
+
+	if mmGetKnowledgeBaseUpdateStatusAdmin.defaultExpectation.paramPtrs != nil {
+		mmGetKnowledgeBaseUpdateStatusAdmin.mock.t.Fatalf("ServiceMock.GetKnowledgeBaseUpdateStatusAdmin mock is already set by ExpectParams functions")
+	}
+
+	mmGetKnowledgeBaseUpdateStatusAdmin.defaultExpectation.params = &ServiceMockGetKnowledgeBaseUpdateStatusAdminParams{ctx}
+	mmGetKnowledgeBaseUpdateStatusAdmin.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmGetKnowledgeBaseUpdateStatusAdmin.expectations {
+		if minimock.Equal(e.params, mmGetKnowledgeBaseUpdateStatusAdmin.defaultExpectation.params) {
+			mmGetKnowledgeBaseUpdateStatusAdmin.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetKnowledgeBaseUpdateStatusAdmin.defaultExpectation.params)
+		}
+	}
+
+	return mmGetKnowledgeBaseUpdateStatusAdmin
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Service.GetKnowledgeBaseUpdateStatusAdmin
+func (mmGetKnowledgeBaseUpdateStatusAdmin *mServiceMockGetKnowledgeBaseUpdateStatusAdmin) ExpectCtxParam1(ctx context.Context) *mServiceMockGetKnowledgeBaseUpdateStatusAdmin {
+	if mmGetKnowledgeBaseUpdateStatusAdmin.mock.funcGetKnowledgeBaseUpdateStatusAdmin != nil {
+		mmGetKnowledgeBaseUpdateStatusAdmin.mock.t.Fatalf("ServiceMock.GetKnowledgeBaseUpdateStatusAdmin mock is already set by Set")
+	}
+
+	if mmGetKnowledgeBaseUpdateStatusAdmin.defaultExpectation == nil {
+		mmGetKnowledgeBaseUpdateStatusAdmin.defaultExpectation = &ServiceMockGetKnowledgeBaseUpdateStatusAdminExpectation{}
+	}
+
+	if mmGetKnowledgeBaseUpdateStatusAdmin.defaultExpectation.params != nil {
+		mmGetKnowledgeBaseUpdateStatusAdmin.mock.t.Fatalf("ServiceMock.GetKnowledgeBaseUpdateStatusAdmin mock is already set by Expect")
+	}
+
+	if mmGetKnowledgeBaseUpdateStatusAdmin.defaultExpectation.paramPtrs == nil {
+		mmGetKnowledgeBaseUpdateStatusAdmin.defaultExpectation.paramPtrs = &ServiceMockGetKnowledgeBaseUpdateStatusAdminParamPtrs{}
+	}
+	mmGetKnowledgeBaseUpdateStatusAdmin.defaultExpectation.paramPtrs.ctx = &ctx
+	mmGetKnowledgeBaseUpdateStatusAdmin.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmGetKnowledgeBaseUpdateStatusAdmin
+}
+
+// Inspect accepts an inspector function that has same arguments as the Service.GetKnowledgeBaseUpdateStatusAdmin
+func (mmGetKnowledgeBaseUpdateStatusAdmin *mServiceMockGetKnowledgeBaseUpdateStatusAdmin) Inspect(f func(ctx context.Context)) *mServiceMockGetKnowledgeBaseUpdateStatusAdmin {
+	if mmGetKnowledgeBaseUpdateStatusAdmin.mock.inspectFuncGetKnowledgeBaseUpdateStatusAdmin != nil {
+		mmGetKnowledgeBaseUpdateStatusAdmin.mock.t.Fatalf("Inspect function is already set for ServiceMock.GetKnowledgeBaseUpdateStatusAdmin")
+	}
+
+	mmGetKnowledgeBaseUpdateStatusAdmin.mock.inspectFuncGetKnowledgeBaseUpdateStatusAdmin = f
+
+	return mmGetKnowledgeBaseUpdateStatusAdmin
+}
+
+// Return sets up results that will be returned by Service.GetKnowledgeBaseUpdateStatusAdmin
+func (mmGetKnowledgeBaseUpdateStatusAdmin *mServiceMockGetKnowledgeBaseUpdateStatusAdmin) Return(gp1 *artifactpb.GetKnowledgeBaseUpdateStatusAdminResponse, err error) *ServiceMock {
+	if mmGetKnowledgeBaseUpdateStatusAdmin.mock.funcGetKnowledgeBaseUpdateStatusAdmin != nil {
+		mmGetKnowledgeBaseUpdateStatusAdmin.mock.t.Fatalf("ServiceMock.GetKnowledgeBaseUpdateStatusAdmin mock is already set by Set")
+	}
+
+	if mmGetKnowledgeBaseUpdateStatusAdmin.defaultExpectation == nil {
+		mmGetKnowledgeBaseUpdateStatusAdmin.defaultExpectation = &ServiceMockGetKnowledgeBaseUpdateStatusAdminExpectation{mock: mmGetKnowledgeBaseUpdateStatusAdmin.mock}
+	}
+	mmGetKnowledgeBaseUpdateStatusAdmin.defaultExpectation.results = &ServiceMockGetKnowledgeBaseUpdateStatusAdminResults{gp1, err}
+	mmGetKnowledgeBaseUpdateStatusAdmin.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmGetKnowledgeBaseUpdateStatusAdmin.mock
+}
+
+// Set uses given function f to mock the Service.GetKnowledgeBaseUpdateStatusAdmin method
+func (mmGetKnowledgeBaseUpdateStatusAdmin *mServiceMockGetKnowledgeBaseUpdateStatusAdmin) Set(f func(ctx context.Context) (gp1 *artifactpb.GetKnowledgeBaseUpdateStatusAdminResponse, err error)) *ServiceMock {
+	if mmGetKnowledgeBaseUpdateStatusAdmin.defaultExpectation != nil {
+		mmGetKnowledgeBaseUpdateStatusAdmin.mock.t.Fatalf("Default expectation is already set for the Service.GetKnowledgeBaseUpdateStatusAdmin method")
+	}
+
+	if len(mmGetKnowledgeBaseUpdateStatusAdmin.expectations) > 0 {
+		mmGetKnowledgeBaseUpdateStatusAdmin.mock.t.Fatalf("Some expectations are already set for the Service.GetKnowledgeBaseUpdateStatusAdmin method")
+	}
+
+	mmGetKnowledgeBaseUpdateStatusAdmin.mock.funcGetKnowledgeBaseUpdateStatusAdmin = f
+	mmGetKnowledgeBaseUpdateStatusAdmin.mock.funcGetKnowledgeBaseUpdateStatusAdminOrigin = minimock.CallerInfo(1)
+	return mmGetKnowledgeBaseUpdateStatusAdmin.mock
+}
+
+// When sets expectation for the Service.GetKnowledgeBaseUpdateStatusAdmin which will trigger the result defined by the following
+// Then helper
+func (mmGetKnowledgeBaseUpdateStatusAdmin *mServiceMockGetKnowledgeBaseUpdateStatusAdmin) When(ctx context.Context) *ServiceMockGetKnowledgeBaseUpdateStatusAdminExpectation {
+	if mmGetKnowledgeBaseUpdateStatusAdmin.mock.funcGetKnowledgeBaseUpdateStatusAdmin != nil {
+		mmGetKnowledgeBaseUpdateStatusAdmin.mock.t.Fatalf("ServiceMock.GetKnowledgeBaseUpdateStatusAdmin mock is already set by Set")
+	}
+
+	expectation := &ServiceMockGetKnowledgeBaseUpdateStatusAdminExpectation{
+		mock:               mmGetKnowledgeBaseUpdateStatusAdmin.mock,
+		params:             &ServiceMockGetKnowledgeBaseUpdateStatusAdminParams{ctx},
+		expectationOrigins: ServiceMockGetKnowledgeBaseUpdateStatusAdminExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmGetKnowledgeBaseUpdateStatusAdmin.expectations = append(mmGetKnowledgeBaseUpdateStatusAdmin.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Service.GetKnowledgeBaseUpdateStatusAdmin return parameters for the expectation previously defined by the When method
+func (e *ServiceMockGetKnowledgeBaseUpdateStatusAdminExpectation) Then(gp1 *artifactpb.GetKnowledgeBaseUpdateStatusAdminResponse, err error) *ServiceMock {
+	e.results = &ServiceMockGetKnowledgeBaseUpdateStatusAdminResults{gp1, err}
+	return e.mock
+}
+
+// Times sets number of times Service.GetKnowledgeBaseUpdateStatusAdmin should be invoked
+func (mmGetKnowledgeBaseUpdateStatusAdmin *mServiceMockGetKnowledgeBaseUpdateStatusAdmin) Times(n uint64) *mServiceMockGetKnowledgeBaseUpdateStatusAdmin {
+	if n == 0 {
+		mmGetKnowledgeBaseUpdateStatusAdmin.mock.t.Fatalf("Times of ServiceMock.GetKnowledgeBaseUpdateStatusAdmin mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetKnowledgeBaseUpdateStatusAdmin.expectedInvocations, n)
+	mmGetKnowledgeBaseUpdateStatusAdmin.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmGetKnowledgeBaseUpdateStatusAdmin
+}
+
+func (mmGetKnowledgeBaseUpdateStatusAdmin *mServiceMockGetKnowledgeBaseUpdateStatusAdmin) invocationsDone() bool {
+	if len(mmGetKnowledgeBaseUpdateStatusAdmin.expectations) == 0 && mmGetKnowledgeBaseUpdateStatusAdmin.defaultExpectation == nil && mmGetKnowledgeBaseUpdateStatusAdmin.mock.funcGetKnowledgeBaseUpdateStatusAdmin == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetKnowledgeBaseUpdateStatusAdmin.mock.afterGetKnowledgeBaseUpdateStatusAdminCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetKnowledgeBaseUpdateStatusAdmin.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetKnowledgeBaseUpdateStatusAdmin implements mm_service.Service
+func (mmGetKnowledgeBaseUpdateStatusAdmin *ServiceMock) GetKnowledgeBaseUpdateStatusAdmin(ctx context.Context) (gp1 *artifactpb.GetKnowledgeBaseUpdateStatusAdminResponse, err error) {
+	mm_atomic.AddUint64(&mmGetKnowledgeBaseUpdateStatusAdmin.beforeGetKnowledgeBaseUpdateStatusAdminCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetKnowledgeBaseUpdateStatusAdmin.afterGetKnowledgeBaseUpdateStatusAdminCounter, 1)
+
+	mmGetKnowledgeBaseUpdateStatusAdmin.t.Helper()
+
+	if mmGetKnowledgeBaseUpdateStatusAdmin.inspectFuncGetKnowledgeBaseUpdateStatusAdmin != nil {
+		mmGetKnowledgeBaseUpdateStatusAdmin.inspectFuncGetKnowledgeBaseUpdateStatusAdmin(ctx)
+	}
+
+	mm_params := ServiceMockGetKnowledgeBaseUpdateStatusAdminParams{ctx}
+
+	// Record call args
+	mmGetKnowledgeBaseUpdateStatusAdmin.GetKnowledgeBaseUpdateStatusAdminMock.mutex.Lock()
+	mmGetKnowledgeBaseUpdateStatusAdmin.GetKnowledgeBaseUpdateStatusAdminMock.callArgs = append(mmGetKnowledgeBaseUpdateStatusAdmin.GetKnowledgeBaseUpdateStatusAdminMock.callArgs, &mm_params)
+	mmGetKnowledgeBaseUpdateStatusAdmin.GetKnowledgeBaseUpdateStatusAdminMock.mutex.Unlock()
+
+	for _, e := range mmGetKnowledgeBaseUpdateStatusAdmin.GetKnowledgeBaseUpdateStatusAdminMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.gp1, e.results.err
+		}
+	}
+
+	if mmGetKnowledgeBaseUpdateStatusAdmin.GetKnowledgeBaseUpdateStatusAdminMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetKnowledgeBaseUpdateStatusAdmin.GetKnowledgeBaseUpdateStatusAdminMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetKnowledgeBaseUpdateStatusAdmin.GetKnowledgeBaseUpdateStatusAdminMock.defaultExpectation.params
+		mm_want_ptrs := mmGetKnowledgeBaseUpdateStatusAdmin.GetKnowledgeBaseUpdateStatusAdminMock.defaultExpectation.paramPtrs
+
+		mm_got := ServiceMockGetKnowledgeBaseUpdateStatusAdminParams{ctx}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetKnowledgeBaseUpdateStatusAdmin.t.Errorf("ServiceMock.GetKnowledgeBaseUpdateStatusAdmin got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetKnowledgeBaseUpdateStatusAdmin.GetKnowledgeBaseUpdateStatusAdminMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetKnowledgeBaseUpdateStatusAdmin.t.Errorf("ServiceMock.GetKnowledgeBaseUpdateStatusAdmin got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmGetKnowledgeBaseUpdateStatusAdmin.GetKnowledgeBaseUpdateStatusAdminMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetKnowledgeBaseUpdateStatusAdmin.GetKnowledgeBaseUpdateStatusAdminMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetKnowledgeBaseUpdateStatusAdmin.t.Fatal("No results are set for the ServiceMock.GetKnowledgeBaseUpdateStatusAdmin")
+		}
+		return (*mm_results).gp1, (*mm_results).err
+	}
+	if mmGetKnowledgeBaseUpdateStatusAdmin.funcGetKnowledgeBaseUpdateStatusAdmin != nil {
+		return mmGetKnowledgeBaseUpdateStatusAdmin.funcGetKnowledgeBaseUpdateStatusAdmin(ctx)
+	}
+	mmGetKnowledgeBaseUpdateStatusAdmin.t.Fatalf("Unexpected call to ServiceMock.GetKnowledgeBaseUpdateStatusAdmin. %v", ctx)
+	return
+}
+
+// GetKnowledgeBaseUpdateStatusAdminAfterCounter returns a count of finished ServiceMock.GetKnowledgeBaseUpdateStatusAdmin invocations
+func (mmGetKnowledgeBaseUpdateStatusAdmin *ServiceMock) GetKnowledgeBaseUpdateStatusAdminAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetKnowledgeBaseUpdateStatusAdmin.afterGetKnowledgeBaseUpdateStatusAdminCounter)
+}
+
+// GetKnowledgeBaseUpdateStatusAdminBeforeCounter returns a count of ServiceMock.GetKnowledgeBaseUpdateStatusAdmin invocations
+func (mmGetKnowledgeBaseUpdateStatusAdmin *ServiceMock) GetKnowledgeBaseUpdateStatusAdminBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetKnowledgeBaseUpdateStatusAdmin.beforeGetKnowledgeBaseUpdateStatusAdminCounter)
+}
+
+// Calls returns a list of arguments used in each call to ServiceMock.GetKnowledgeBaseUpdateStatusAdmin.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetKnowledgeBaseUpdateStatusAdmin *mServiceMockGetKnowledgeBaseUpdateStatusAdmin) Calls() []*ServiceMockGetKnowledgeBaseUpdateStatusAdminParams {
+	mmGetKnowledgeBaseUpdateStatusAdmin.mutex.RLock()
+
+	argCopy := make([]*ServiceMockGetKnowledgeBaseUpdateStatusAdminParams, len(mmGetKnowledgeBaseUpdateStatusAdmin.callArgs))
+	copy(argCopy, mmGetKnowledgeBaseUpdateStatusAdmin.callArgs)
+
+	mmGetKnowledgeBaseUpdateStatusAdmin.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetKnowledgeBaseUpdateStatusAdminDone returns true if the count of the GetKnowledgeBaseUpdateStatusAdmin invocations corresponds
+// the number of defined expectations
+func (m *ServiceMock) MinimockGetKnowledgeBaseUpdateStatusAdminDone() bool {
+	if m.GetKnowledgeBaseUpdateStatusAdminMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.GetKnowledgeBaseUpdateStatusAdminMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetKnowledgeBaseUpdateStatusAdminMock.invocationsDone()
+}
+
+// MinimockGetKnowledgeBaseUpdateStatusAdminInspect logs each unmet expectation
+func (m *ServiceMock) MinimockGetKnowledgeBaseUpdateStatusAdminInspect() {
+	for _, e := range m.GetKnowledgeBaseUpdateStatusAdminMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to ServiceMock.GetKnowledgeBaseUpdateStatusAdmin at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterGetKnowledgeBaseUpdateStatusAdminCounter := mm_atomic.LoadUint64(&m.afterGetKnowledgeBaseUpdateStatusAdminCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetKnowledgeBaseUpdateStatusAdminMock.defaultExpectation != nil && afterGetKnowledgeBaseUpdateStatusAdminCounter < 1 {
+		if m.GetKnowledgeBaseUpdateStatusAdminMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to ServiceMock.GetKnowledgeBaseUpdateStatusAdmin at\n%s", m.GetKnowledgeBaseUpdateStatusAdminMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to ServiceMock.GetKnowledgeBaseUpdateStatusAdmin at\n%s with params: %#v", m.GetKnowledgeBaseUpdateStatusAdminMock.defaultExpectation.expectationOrigins.origin, *m.GetKnowledgeBaseUpdateStatusAdminMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetKnowledgeBaseUpdateStatusAdmin != nil && afterGetKnowledgeBaseUpdateStatusAdminCounter < 1 {
+		m.t.Errorf("Expected call to ServiceMock.GetKnowledgeBaseUpdateStatusAdmin at\n%s", m.funcGetKnowledgeBaseUpdateStatusAdminOrigin)
+	}
+
+	if !m.GetKnowledgeBaseUpdateStatusAdminMock.invocationsDone() && afterGetKnowledgeBaseUpdateStatusAdminCounter > 0 {
+		m.t.Errorf("Expected %d calls to ServiceMock.GetKnowledgeBaseUpdateStatusAdmin at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.GetKnowledgeBaseUpdateStatusAdminMock.expectedInvocations), m.GetKnowledgeBaseUpdateStatusAdminMock.expectedInvocationsOrigin, afterGetKnowledgeBaseUpdateStatusAdminCounter)
+	}
+}
+
 type mServiceMockGetNamespaceAndCheckPermission struct {
 	optional           bool
 	mock               *ServiceMock
@@ -7127,6 +7103,349 @@ func (m *ServiceMock) MinimockGetRepositoryTagInspect() {
 	if !m.GetRepositoryTagMock.invocationsDone() && afterGetRepositoryTagCounter > 0 {
 		m.t.Errorf("Expected %d calls to ServiceMock.GetRepositoryTag at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.GetRepositoryTagMock.expectedInvocations), m.GetRepositoryTagMock.expectedInvocationsOrigin, afterGetRepositoryTagCounter)
+	}
+}
+
+type mServiceMockGetSystemProfileAdmin struct {
+	optional           bool
+	mock               *ServiceMock
+	defaultExpectation *ServiceMockGetSystemProfileAdminExpectation
+	expectations       []*ServiceMockGetSystemProfileAdminExpectation
+
+	callArgs []*ServiceMockGetSystemProfileAdminParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// ServiceMockGetSystemProfileAdminExpectation specifies expectation struct of the Service.GetSystemProfileAdmin
+type ServiceMockGetSystemProfileAdminExpectation struct {
+	mock               *ServiceMock
+	params             *ServiceMockGetSystemProfileAdminParams
+	paramPtrs          *ServiceMockGetSystemProfileAdminParamPtrs
+	expectationOrigins ServiceMockGetSystemProfileAdminExpectationOrigins
+	results            *ServiceMockGetSystemProfileAdminResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// ServiceMockGetSystemProfileAdminParams contains parameters of the Service.GetSystemProfileAdmin
+type ServiceMockGetSystemProfileAdminParams struct {
+	ctx context.Context
+	s1  string
+}
+
+// ServiceMockGetSystemProfileAdminParamPtrs contains pointers to parameters of the Service.GetSystemProfileAdmin
+type ServiceMockGetSystemProfileAdminParamPtrs struct {
+	ctx *context.Context
+	s1  *string
+}
+
+// ServiceMockGetSystemProfileAdminResults contains results of the Service.GetSystemProfileAdmin
+type ServiceMockGetSystemProfileAdminResults struct {
+	gp1 *artifactpb.GetSystemProfileAdminResponse
+	err error
+}
+
+// ServiceMockGetSystemProfileAdminOrigins contains origins of expectations of the Service.GetSystemProfileAdmin
+type ServiceMockGetSystemProfileAdminExpectationOrigins struct {
+	origin    string
+	originCtx string
+	originS1  string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmGetSystemProfileAdmin *mServiceMockGetSystemProfileAdmin) Optional() *mServiceMockGetSystemProfileAdmin {
+	mmGetSystemProfileAdmin.optional = true
+	return mmGetSystemProfileAdmin
+}
+
+// Expect sets up expected params for Service.GetSystemProfileAdmin
+func (mmGetSystemProfileAdmin *mServiceMockGetSystemProfileAdmin) Expect(ctx context.Context, s1 string) *mServiceMockGetSystemProfileAdmin {
+	if mmGetSystemProfileAdmin.mock.funcGetSystemProfileAdmin != nil {
+		mmGetSystemProfileAdmin.mock.t.Fatalf("ServiceMock.GetSystemProfileAdmin mock is already set by Set")
+	}
+
+	if mmGetSystemProfileAdmin.defaultExpectation == nil {
+		mmGetSystemProfileAdmin.defaultExpectation = &ServiceMockGetSystemProfileAdminExpectation{}
+	}
+
+	if mmGetSystemProfileAdmin.defaultExpectation.paramPtrs != nil {
+		mmGetSystemProfileAdmin.mock.t.Fatalf("ServiceMock.GetSystemProfileAdmin mock is already set by ExpectParams functions")
+	}
+
+	mmGetSystemProfileAdmin.defaultExpectation.params = &ServiceMockGetSystemProfileAdminParams{ctx, s1}
+	mmGetSystemProfileAdmin.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmGetSystemProfileAdmin.expectations {
+		if minimock.Equal(e.params, mmGetSystemProfileAdmin.defaultExpectation.params) {
+			mmGetSystemProfileAdmin.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetSystemProfileAdmin.defaultExpectation.params)
+		}
+	}
+
+	return mmGetSystemProfileAdmin
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Service.GetSystemProfileAdmin
+func (mmGetSystemProfileAdmin *mServiceMockGetSystemProfileAdmin) ExpectCtxParam1(ctx context.Context) *mServiceMockGetSystemProfileAdmin {
+	if mmGetSystemProfileAdmin.mock.funcGetSystemProfileAdmin != nil {
+		mmGetSystemProfileAdmin.mock.t.Fatalf("ServiceMock.GetSystemProfileAdmin mock is already set by Set")
+	}
+
+	if mmGetSystemProfileAdmin.defaultExpectation == nil {
+		mmGetSystemProfileAdmin.defaultExpectation = &ServiceMockGetSystemProfileAdminExpectation{}
+	}
+
+	if mmGetSystemProfileAdmin.defaultExpectation.params != nil {
+		mmGetSystemProfileAdmin.mock.t.Fatalf("ServiceMock.GetSystemProfileAdmin mock is already set by Expect")
+	}
+
+	if mmGetSystemProfileAdmin.defaultExpectation.paramPtrs == nil {
+		mmGetSystemProfileAdmin.defaultExpectation.paramPtrs = &ServiceMockGetSystemProfileAdminParamPtrs{}
+	}
+	mmGetSystemProfileAdmin.defaultExpectation.paramPtrs.ctx = &ctx
+	mmGetSystemProfileAdmin.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmGetSystemProfileAdmin
+}
+
+// ExpectS1Param2 sets up expected param s1 for Service.GetSystemProfileAdmin
+func (mmGetSystemProfileAdmin *mServiceMockGetSystemProfileAdmin) ExpectS1Param2(s1 string) *mServiceMockGetSystemProfileAdmin {
+	if mmGetSystemProfileAdmin.mock.funcGetSystemProfileAdmin != nil {
+		mmGetSystemProfileAdmin.mock.t.Fatalf("ServiceMock.GetSystemProfileAdmin mock is already set by Set")
+	}
+
+	if mmGetSystemProfileAdmin.defaultExpectation == nil {
+		mmGetSystemProfileAdmin.defaultExpectation = &ServiceMockGetSystemProfileAdminExpectation{}
+	}
+
+	if mmGetSystemProfileAdmin.defaultExpectation.params != nil {
+		mmGetSystemProfileAdmin.mock.t.Fatalf("ServiceMock.GetSystemProfileAdmin mock is already set by Expect")
+	}
+
+	if mmGetSystemProfileAdmin.defaultExpectation.paramPtrs == nil {
+		mmGetSystemProfileAdmin.defaultExpectation.paramPtrs = &ServiceMockGetSystemProfileAdminParamPtrs{}
+	}
+	mmGetSystemProfileAdmin.defaultExpectation.paramPtrs.s1 = &s1
+	mmGetSystemProfileAdmin.defaultExpectation.expectationOrigins.originS1 = minimock.CallerInfo(1)
+
+	return mmGetSystemProfileAdmin
+}
+
+// Inspect accepts an inspector function that has same arguments as the Service.GetSystemProfileAdmin
+func (mmGetSystemProfileAdmin *mServiceMockGetSystemProfileAdmin) Inspect(f func(ctx context.Context, s1 string)) *mServiceMockGetSystemProfileAdmin {
+	if mmGetSystemProfileAdmin.mock.inspectFuncGetSystemProfileAdmin != nil {
+		mmGetSystemProfileAdmin.mock.t.Fatalf("Inspect function is already set for ServiceMock.GetSystemProfileAdmin")
+	}
+
+	mmGetSystemProfileAdmin.mock.inspectFuncGetSystemProfileAdmin = f
+
+	return mmGetSystemProfileAdmin
+}
+
+// Return sets up results that will be returned by Service.GetSystemProfileAdmin
+func (mmGetSystemProfileAdmin *mServiceMockGetSystemProfileAdmin) Return(gp1 *artifactpb.GetSystemProfileAdminResponse, err error) *ServiceMock {
+	if mmGetSystemProfileAdmin.mock.funcGetSystemProfileAdmin != nil {
+		mmGetSystemProfileAdmin.mock.t.Fatalf("ServiceMock.GetSystemProfileAdmin mock is already set by Set")
+	}
+
+	if mmGetSystemProfileAdmin.defaultExpectation == nil {
+		mmGetSystemProfileAdmin.defaultExpectation = &ServiceMockGetSystemProfileAdminExpectation{mock: mmGetSystemProfileAdmin.mock}
+	}
+	mmGetSystemProfileAdmin.defaultExpectation.results = &ServiceMockGetSystemProfileAdminResults{gp1, err}
+	mmGetSystemProfileAdmin.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmGetSystemProfileAdmin.mock
+}
+
+// Set uses given function f to mock the Service.GetSystemProfileAdmin method
+func (mmGetSystemProfileAdmin *mServiceMockGetSystemProfileAdmin) Set(f func(ctx context.Context, s1 string) (gp1 *artifactpb.GetSystemProfileAdminResponse, err error)) *ServiceMock {
+	if mmGetSystemProfileAdmin.defaultExpectation != nil {
+		mmGetSystemProfileAdmin.mock.t.Fatalf("Default expectation is already set for the Service.GetSystemProfileAdmin method")
+	}
+
+	if len(mmGetSystemProfileAdmin.expectations) > 0 {
+		mmGetSystemProfileAdmin.mock.t.Fatalf("Some expectations are already set for the Service.GetSystemProfileAdmin method")
+	}
+
+	mmGetSystemProfileAdmin.mock.funcGetSystemProfileAdmin = f
+	mmGetSystemProfileAdmin.mock.funcGetSystemProfileAdminOrigin = minimock.CallerInfo(1)
+	return mmGetSystemProfileAdmin.mock
+}
+
+// When sets expectation for the Service.GetSystemProfileAdmin which will trigger the result defined by the following
+// Then helper
+func (mmGetSystemProfileAdmin *mServiceMockGetSystemProfileAdmin) When(ctx context.Context, s1 string) *ServiceMockGetSystemProfileAdminExpectation {
+	if mmGetSystemProfileAdmin.mock.funcGetSystemProfileAdmin != nil {
+		mmGetSystemProfileAdmin.mock.t.Fatalf("ServiceMock.GetSystemProfileAdmin mock is already set by Set")
+	}
+
+	expectation := &ServiceMockGetSystemProfileAdminExpectation{
+		mock:               mmGetSystemProfileAdmin.mock,
+		params:             &ServiceMockGetSystemProfileAdminParams{ctx, s1},
+		expectationOrigins: ServiceMockGetSystemProfileAdminExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmGetSystemProfileAdmin.expectations = append(mmGetSystemProfileAdmin.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Service.GetSystemProfileAdmin return parameters for the expectation previously defined by the When method
+func (e *ServiceMockGetSystemProfileAdminExpectation) Then(gp1 *artifactpb.GetSystemProfileAdminResponse, err error) *ServiceMock {
+	e.results = &ServiceMockGetSystemProfileAdminResults{gp1, err}
+	return e.mock
+}
+
+// Times sets number of times Service.GetSystemProfileAdmin should be invoked
+func (mmGetSystemProfileAdmin *mServiceMockGetSystemProfileAdmin) Times(n uint64) *mServiceMockGetSystemProfileAdmin {
+	if n == 0 {
+		mmGetSystemProfileAdmin.mock.t.Fatalf("Times of ServiceMock.GetSystemProfileAdmin mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetSystemProfileAdmin.expectedInvocations, n)
+	mmGetSystemProfileAdmin.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmGetSystemProfileAdmin
+}
+
+func (mmGetSystemProfileAdmin *mServiceMockGetSystemProfileAdmin) invocationsDone() bool {
+	if len(mmGetSystemProfileAdmin.expectations) == 0 && mmGetSystemProfileAdmin.defaultExpectation == nil && mmGetSystemProfileAdmin.mock.funcGetSystemProfileAdmin == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetSystemProfileAdmin.mock.afterGetSystemProfileAdminCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetSystemProfileAdmin.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetSystemProfileAdmin implements mm_service.Service
+func (mmGetSystemProfileAdmin *ServiceMock) GetSystemProfileAdmin(ctx context.Context, s1 string) (gp1 *artifactpb.GetSystemProfileAdminResponse, err error) {
+	mm_atomic.AddUint64(&mmGetSystemProfileAdmin.beforeGetSystemProfileAdminCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetSystemProfileAdmin.afterGetSystemProfileAdminCounter, 1)
+
+	mmGetSystemProfileAdmin.t.Helper()
+
+	if mmGetSystemProfileAdmin.inspectFuncGetSystemProfileAdmin != nil {
+		mmGetSystemProfileAdmin.inspectFuncGetSystemProfileAdmin(ctx, s1)
+	}
+
+	mm_params := ServiceMockGetSystemProfileAdminParams{ctx, s1}
+
+	// Record call args
+	mmGetSystemProfileAdmin.GetSystemProfileAdminMock.mutex.Lock()
+	mmGetSystemProfileAdmin.GetSystemProfileAdminMock.callArgs = append(mmGetSystemProfileAdmin.GetSystemProfileAdminMock.callArgs, &mm_params)
+	mmGetSystemProfileAdmin.GetSystemProfileAdminMock.mutex.Unlock()
+
+	for _, e := range mmGetSystemProfileAdmin.GetSystemProfileAdminMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.gp1, e.results.err
+		}
+	}
+
+	if mmGetSystemProfileAdmin.GetSystemProfileAdminMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetSystemProfileAdmin.GetSystemProfileAdminMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetSystemProfileAdmin.GetSystemProfileAdminMock.defaultExpectation.params
+		mm_want_ptrs := mmGetSystemProfileAdmin.GetSystemProfileAdminMock.defaultExpectation.paramPtrs
+
+		mm_got := ServiceMockGetSystemProfileAdminParams{ctx, s1}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetSystemProfileAdmin.t.Errorf("ServiceMock.GetSystemProfileAdmin got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetSystemProfileAdmin.GetSystemProfileAdminMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.s1 != nil && !minimock.Equal(*mm_want_ptrs.s1, mm_got.s1) {
+				mmGetSystemProfileAdmin.t.Errorf("ServiceMock.GetSystemProfileAdmin got unexpected parameter s1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetSystemProfileAdmin.GetSystemProfileAdminMock.defaultExpectation.expectationOrigins.originS1, *mm_want_ptrs.s1, mm_got.s1, minimock.Diff(*mm_want_ptrs.s1, mm_got.s1))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetSystemProfileAdmin.t.Errorf("ServiceMock.GetSystemProfileAdmin got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmGetSystemProfileAdmin.GetSystemProfileAdminMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetSystemProfileAdmin.GetSystemProfileAdminMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetSystemProfileAdmin.t.Fatal("No results are set for the ServiceMock.GetSystemProfileAdmin")
+		}
+		return (*mm_results).gp1, (*mm_results).err
+	}
+	if mmGetSystemProfileAdmin.funcGetSystemProfileAdmin != nil {
+		return mmGetSystemProfileAdmin.funcGetSystemProfileAdmin(ctx, s1)
+	}
+	mmGetSystemProfileAdmin.t.Fatalf("Unexpected call to ServiceMock.GetSystemProfileAdmin. %v %v", ctx, s1)
+	return
+}
+
+// GetSystemProfileAdminAfterCounter returns a count of finished ServiceMock.GetSystemProfileAdmin invocations
+func (mmGetSystemProfileAdmin *ServiceMock) GetSystemProfileAdminAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetSystemProfileAdmin.afterGetSystemProfileAdminCounter)
+}
+
+// GetSystemProfileAdminBeforeCounter returns a count of ServiceMock.GetSystemProfileAdmin invocations
+func (mmGetSystemProfileAdmin *ServiceMock) GetSystemProfileAdminBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetSystemProfileAdmin.beforeGetSystemProfileAdminCounter)
+}
+
+// Calls returns a list of arguments used in each call to ServiceMock.GetSystemProfileAdmin.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetSystemProfileAdmin *mServiceMockGetSystemProfileAdmin) Calls() []*ServiceMockGetSystemProfileAdminParams {
+	mmGetSystemProfileAdmin.mutex.RLock()
+
+	argCopy := make([]*ServiceMockGetSystemProfileAdminParams, len(mmGetSystemProfileAdmin.callArgs))
+	copy(argCopy, mmGetSystemProfileAdmin.callArgs)
+
+	mmGetSystemProfileAdmin.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetSystemProfileAdminDone returns true if the count of the GetSystemProfileAdmin invocations corresponds
+// the number of defined expectations
+func (m *ServiceMock) MinimockGetSystemProfileAdminDone() bool {
+	if m.GetSystemProfileAdminMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.GetSystemProfileAdminMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetSystemProfileAdminMock.invocationsDone()
+}
+
+// MinimockGetSystemProfileAdminInspect logs each unmet expectation
+func (m *ServiceMock) MinimockGetSystemProfileAdminInspect() {
+	for _, e := range m.GetSystemProfileAdminMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to ServiceMock.GetSystemProfileAdmin at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterGetSystemProfileAdminCounter := mm_atomic.LoadUint64(&m.afterGetSystemProfileAdminCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetSystemProfileAdminMock.defaultExpectation != nil && afterGetSystemProfileAdminCounter < 1 {
+		if m.GetSystemProfileAdminMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to ServiceMock.GetSystemProfileAdmin at\n%s", m.GetSystemProfileAdminMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to ServiceMock.GetSystemProfileAdmin at\n%s with params: %#v", m.GetSystemProfileAdminMock.defaultExpectation.expectationOrigins.origin, *m.GetSystemProfileAdminMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetSystemProfileAdmin != nil && afterGetSystemProfileAdminCounter < 1 {
+		m.t.Errorf("Expected call to ServiceMock.GetSystemProfileAdmin at\n%s", m.funcGetSystemProfileAdminOrigin)
+	}
+
+	if !m.GetSystemProfileAdminMock.invocationsDone() && afterGetSystemProfileAdminCounter > 0 {
+		m.t.Errorf("Expected %d calls to ServiceMock.GetSystemProfileAdmin at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.GetSystemProfileAdminMock.expectedInvocations), m.GetSystemProfileAdminMock.expectedInvocationsOrigin, afterGetSystemProfileAdminCounter)
 	}
 }
 
@@ -8283,6 +8602,318 @@ func (m *ServiceMock) MinimockListRepositoryTagsInspect() {
 	}
 }
 
+type mServiceMockListSystemProfilesAdmin struct {
+	optional           bool
+	mock               *ServiceMock
+	defaultExpectation *ServiceMockListSystemProfilesAdminExpectation
+	expectations       []*ServiceMockListSystemProfilesAdminExpectation
+
+	callArgs []*ServiceMockListSystemProfilesAdminParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// ServiceMockListSystemProfilesAdminExpectation specifies expectation struct of the Service.ListSystemProfilesAdmin
+type ServiceMockListSystemProfilesAdminExpectation struct {
+	mock               *ServiceMock
+	params             *ServiceMockListSystemProfilesAdminParams
+	paramPtrs          *ServiceMockListSystemProfilesAdminParamPtrs
+	expectationOrigins ServiceMockListSystemProfilesAdminExpectationOrigins
+	results            *ServiceMockListSystemProfilesAdminResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// ServiceMockListSystemProfilesAdminParams contains parameters of the Service.ListSystemProfilesAdmin
+type ServiceMockListSystemProfilesAdminParams struct {
+	ctx context.Context
+}
+
+// ServiceMockListSystemProfilesAdminParamPtrs contains pointers to parameters of the Service.ListSystemProfilesAdmin
+type ServiceMockListSystemProfilesAdminParamPtrs struct {
+	ctx *context.Context
+}
+
+// ServiceMockListSystemProfilesAdminResults contains results of the Service.ListSystemProfilesAdmin
+type ServiceMockListSystemProfilesAdminResults struct {
+	lp1 *artifactpb.ListSystemProfilesAdminResponse
+	err error
+}
+
+// ServiceMockListSystemProfilesAdminOrigins contains origins of expectations of the Service.ListSystemProfilesAdmin
+type ServiceMockListSystemProfilesAdminExpectationOrigins struct {
+	origin    string
+	originCtx string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmListSystemProfilesAdmin *mServiceMockListSystemProfilesAdmin) Optional() *mServiceMockListSystemProfilesAdmin {
+	mmListSystemProfilesAdmin.optional = true
+	return mmListSystemProfilesAdmin
+}
+
+// Expect sets up expected params for Service.ListSystemProfilesAdmin
+func (mmListSystemProfilesAdmin *mServiceMockListSystemProfilesAdmin) Expect(ctx context.Context) *mServiceMockListSystemProfilesAdmin {
+	if mmListSystemProfilesAdmin.mock.funcListSystemProfilesAdmin != nil {
+		mmListSystemProfilesAdmin.mock.t.Fatalf("ServiceMock.ListSystemProfilesAdmin mock is already set by Set")
+	}
+
+	if mmListSystemProfilesAdmin.defaultExpectation == nil {
+		mmListSystemProfilesAdmin.defaultExpectation = &ServiceMockListSystemProfilesAdminExpectation{}
+	}
+
+	if mmListSystemProfilesAdmin.defaultExpectation.paramPtrs != nil {
+		mmListSystemProfilesAdmin.mock.t.Fatalf("ServiceMock.ListSystemProfilesAdmin mock is already set by ExpectParams functions")
+	}
+
+	mmListSystemProfilesAdmin.defaultExpectation.params = &ServiceMockListSystemProfilesAdminParams{ctx}
+	mmListSystemProfilesAdmin.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmListSystemProfilesAdmin.expectations {
+		if minimock.Equal(e.params, mmListSystemProfilesAdmin.defaultExpectation.params) {
+			mmListSystemProfilesAdmin.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmListSystemProfilesAdmin.defaultExpectation.params)
+		}
+	}
+
+	return mmListSystemProfilesAdmin
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Service.ListSystemProfilesAdmin
+func (mmListSystemProfilesAdmin *mServiceMockListSystemProfilesAdmin) ExpectCtxParam1(ctx context.Context) *mServiceMockListSystemProfilesAdmin {
+	if mmListSystemProfilesAdmin.mock.funcListSystemProfilesAdmin != nil {
+		mmListSystemProfilesAdmin.mock.t.Fatalf("ServiceMock.ListSystemProfilesAdmin mock is already set by Set")
+	}
+
+	if mmListSystemProfilesAdmin.defaultExpectation == nil {
+		mmListSystemProfilesAdmin.defaultExpectation = &ServiceMockListSystemProfilesAdminExpectation{}
+	}
+
+	if mmListSystemProfilesAdmin.defaultExpectation.params != nil {
+		mmListSystemProfilesAdmin.mock.t.Fatalf("ServiceMock.ListSystemProfilesAdmin mock is already set by Expect")
+	}
+
+	if mmListSystemProfilesAdmin.defaultExpectation.paramPtrs == nil {
+		mmListSystemProfilesAdmin.defaultExpectation.paramPtrs = &ServiceMockListSystemProfilesAdminParamPtrs{}
+	}
+	mmListSystemProfilesAdmin.defaultExpectation.paramPtrs.ctx = &ctx
+	mmListSystemProfilesAdmin.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmListSystemProfilesAdmin
+}
+
+// Inspect accepts an inspector function that has same arguments as the Service.ListSystemProfilesAdmin
+func (mmListSystemProfilesAdmin *mServiceMockListSystemProfilesAdmin) Inspect(f func(ctx context.Context)) *mServiceMockListSystemProfilesAdmin {
+	if mmListSystemProfilesAdmin.mock.inspectFuncListSystemProfilesAdmin != nil {
+		mmListSystemProfilesAdmin.mock.t.Fatalf("Inspect function is already set for ServiceMock.ListSystemProfilesAdmin")
+	}
+
+	mmListSystemProfilesAdmin.mock.inspectFuncListSystemProfilesAdmin = f
+
+	return mmListSystemProfilesAdmin
+}
+
+// Return sets up results that will be returned by Service.ListSystemProfilesAdmin
+func (mmListSystemProfilesAdmin *mServiceMockListSystemProfilesAdmin) Return(lp1 *artifactpb.ListSystemProfilesAdminResponse, err error) *ServiceMock {
+	if mmListSystemProfilesAdmin.mock.funcListSystemProfilesAdmin != nil {
+		mmListSystemProfilesAdmin.mock.t.Fatalf("ServiceMock.ListSystemProfilesAdmin mock is already set by Set")
+	}
+
+	if mmListSystemProfilesAdmin.defaultExpectation == nil {
+		mmListSystemProfilesAdmin.defaultExpectation = &ServiceMockListSystemProfilesAdminExpectation{mock: mmListSystemProfilesAdmin.mock}
+	}
+	mmListSystemProfilesAdmin.defaultExpectation.results = &ServiceMockListSystemProfilesAdminResults{lp1, err}
+	mmListSystemProfilesAdmin.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmListSystemProfilesAdmin.mock
+}
+
+// Set uses given function f to mock the Service.ListSystemProfilesAdmin method
+func (mmListSystemProfilesAdmin *mServiceMockListSystemProfilesAdmin) Set(f func(ctx context.Context) (lp1 *artifactpb.ListSystemProfilesAdminResponse, err error)) *ServiceMock {
+	if mmListSystemProfilesAdmin.defaultExpectation != nil {
+		mmListSystemProfilesAdmin.mock.t.Fatalf("Default expectation is already set for the Service.ListSystemProfilesAdmin method")
+	}
+
+	if len(mmListSystemProfilesAdmin.expectations) > 0 {
+		mmListSystemProfilesAdmin.mock.t.Fatalf("Some expectations are already set for the Service.ListSystemProfilesAdmin method")
+	}
+
+	mmListSystemProfilesAdmin.mock.funcListSystemProfilesAdmin = f
+	mmListSystemProfilesAdmin.mock.funcListSystemProfilesAdminOrigin = minimock.CallerInfo(1)
+	return mmListSystemProfilesAdmin.mock
+}
+
+// When sets expectation for the Service.ListSystemProfilesAdmin which will trigger the result defined by the following
+// Then helper
+func (mmListSystemProfilesAdmin *mServiceMockListSystemProfilesAdmin) When(ctx context.Context) *ServiceMockListSystemProfilesAdminExpectation {
+	if mmListSystemProfilesAdmin.mock.funcListSystemProfilesAdmin != nil {
+		mmListSystemProfilesAdmin.mock.t.Fatalf("ServiceMock.ListSystemProfilesAdmin mock is already set by Set")
+	}
+
+	expectation := &ServiceMockListSystemProfilesAdminExpectation{
+		mock:               mmListSystemProfilesAdmin.mock,
+		params:             &ServiceMockListSystemProfilesAdminParams{ctx},
+		expectationOrigins: ServiceMockListSystemProfilesAdminExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmListSystemProfilesAdmin.expectations = append(mmListSystemProfilesAdmin.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Service.ListSystemProfilesAdmin return parameters for the expectation previously defined by the When method
+func (e *ServiceMockListSystemProfilesAdminExpectation) Then(lp1 *artifactpb.ListSystemProfilesAdminResponse, err error) *ServiceMock {
+	e.results = &ServiceMockListSystemProfilesAdminResults{lp1, err}
+	return e.mock
+}
+
+// Times sets number of times Service.ListSystemProfilesAdmin should be invoked
+func (mmListSystemProfilesAdmin *mServiceMockListSystemProfilesAdmin) Times(n uint64) *mServiceMockListSystemProfilesAdmin {
+	if n == 0 {
+		mmListSystemProfilesAdmin.mock.t.Fatalf("Times of ServiceMock.ListSystemProfilesAdmin mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmListSystemProfilesAdmin.expectedInvocations, n)
+	mmListSystemProfilesAdmin.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmListSystemProfilesAdmin
+}
+
+func (mmListSystemProfilesAdmin *mServiceMockListSystemProfilesAdmin) invocationsDone() bool {
+	if len(mmListSystemProfilesAdmin.expectations) == 0 && mmListSystemProfilesAdmin.defaultExpectation == nil && mmListSystemProfilesAdmin.mock.funcListSystemProfilesAdmin == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmListSystemProfilesAdmin.mock.afterListSystemProfilesAdminCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmListSystemProfilesAdmin.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// ListSystemProfilesAdmin implements mm_service.Service
+func (mmListSystemProfilesAdmin *ServiceMock) ListSystemProfilesAdmin(ctx context.Context) (lp1 *artifactpb.ListSystemProfilesAdminResponse, err error) {
+	mm_atomic.AddUint64(&mmListSystemProfilesAdmin.beforeListSystemProfilesAdminCounter, 1)
+	defer mm_atomic.AddUint64(&mmListSystemProfilesAdmin.afterListSystemProfilesAdminCounter, 1)
+
+	mmListSystemProfilesAdmin.t.Helper()
+
+	if mmListSystemProfilesAdmin.inspectFuncListSystemProfilesAdmin != nil {
+		mmListSystemProfilesAdmin.inspectFuncListSystemProfilesAdmin(ctx)
+	}
+
+	mm_params := ServiceMockListSystemProfilesAdminParams{ctx}
+
+	// Record call args
+	mmListSystemProfilesAdmin.ListSystemProfilesAdminMock.mutex.Lock()
+	mmListSystemProfilesAdmin.ListSystemProfilesAdminMock.callArgs = append(mmListSystemProfilesAdmin.ListSystemProfilesAdminMock.callArgs, &mm_params)
+	mmListSystemProfilesAdmin.ListSystemProfilesAdminMock.mutex.Unlock()
+
+	for _, e := range mmListSystemProfilesAdmin.ListSystemProfilesAdminMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.lp1, e.results.err
+		}
+	}
+
+	if mmListSystemProfilesAdmin.ListSystemProfilesAdminMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmListSystemProfilesAdmin.ListSystemProfilesAdminMock.defaultExpectation.Counter, 1)
+		mm_want := mmListSystemProfilesAdmin.ListSystemProfilesAdminMock.defaultExpectation.params
+		mm_want_ptrs := mmListSystemProfilesAdmin.ListSystemProfilesAdminMock.defaultExpectation.paramPtrs
+
+		mm_got := ServiceMockListSystemProfilesAdminParams{ctx}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmListSystemProfilesAdmin.t.Errorf("ServiceMock.ListSystemProfilesAdmin got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmListSystemProfilesAdmin.ListSystemProfilesAdminMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmListSystemProfilesAdmin.t.Errorf("ServiceMock.ListSystemProfilesAdmin got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmListSystemProfilesAdmin.ListSystemProfilesAdminMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmListSystemProfilesAdmin.ListSystemProfilesAdminMock.defaultExpectation.results
+		if mm_results == nil {
+			mmListSystemProfilesAdmin.t.Fatal("No results are set for the ServiceMock.ListSystemProfilesAdmin")
+		}
+		return (*mm_results).lp1, (*mm_results).err
+	}
+	if mmListSystemProfilesAdmin.funcListSystemProfilesAdmin != nil {
+		return mmListSystemProfilesAdmin.funcListSystemProfilesAdmin(ctx)
+	}
+	mmListSystemProfilesAdmin.t.Fatalf("Unexpected call to ServiceMock.ListSystemProfilesAdmin. %v", ctx)
+	return
+}
+
+// ListSystemProfilesAdminAfterCounter returns a count of finished ServiceMock.ListSystemProfilesAdmin invocations
+func (mmListSystemProfilesAdmin *ServiceMock) ListSystemProfilesAdminAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmListSystemProfilesAdmin.afterListSystemProfilesAdminCounter)
+}
+
+// ListSystemProfilesAdminBeforeCounter returns a count of ServiceMock.ListSystemProfilesAdmin invocations
+func (mmListSystemProfilesAdmin *ServiceMock) ListSystemProfilesAdminBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmListSystemProfilesAdmin.beforeListSystemProfilesAdminCounter)
+}
+
+// Calls returns a list of arguments used in each call to ServiceMock.ListSystemProfilesAdmin.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmListSystemProfilesAdmin *mServiceMockListSystemProfilesAdmin) Calls() []*ServiceMockListSystemProfilesAdminParams {
+	mmListSystemProfilesAdmin.mutex.RLock()
+
+	argCopy := make([]*ServiceMockListSystemProfilesAdminParams, len(mmListSystemProfilesAdmin.callArgs))
+	copy(argCopy, mmListSystemProfilesAdmin.callArgs)
+
+	mmListSystemProfilesAdmin.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockListSystemProfilesAdminDone returns true if the count of the ListSystemProfilesAdmin invocations corresponds
+// the number of defined expectations
+func (m *ServiceMock) MinimockListSystemProfilesAdminDone() bool {
+	if m.ListSystemProfilesAdminMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.ListSystemProfilesAdminMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.ListSystemProfilesAdminMock.invocationsDone()
+}
+
+// MinimockListSystemProfilesAdminInspect logs each unmet expectation
+func (m *ServiceMock) MinimockListSystemProfilesAdminInspect() {
+	for _, e := range m.ListSystemProfilesAdminMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to ServiceMock.ListSystemProfilesAdmin at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterListSystemProfilesAdminCounter := mm_atomic.LoadUint64(&m.afterListSystemProfilesAdminCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.ListSystemProfilesAdminMock.defaultExpectation != nil && afterListSystemProfilesAdminCounter < 1 {
+		if m.ListSystemProfilesAdminMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to ServiceMock.ListSystemProfilesAdmin at\n%s", m.ListSystemProfilesAdminMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to ServiceMock.ListSystemProfilesAdmin at\n%s with params: %#v", m.ListSystemProfilesAdminMock.defaultExpectation.expectationOrigins.origin, *m.ListSystemProfilesAdminMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcListSystemProfilesAdmin != nil && afterListSystemProfilesAdminCounter < 1 {
+		m.t.Errorf("Expected call to ServiceMock.ListSystemProfilesAdmin at\n%s", m.funcListSystemProfilesAdminOrigin)
+	}
+
+	if !m.ListSystemProfilesAdminMock.invocationsDone() && afterListSystemProfilesAdminCounter > 0 {
+		m.t.Errorf("Expected %d calls to ServiceMock.ListSystemProfilesAdmin at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.ListSystemProfilesAdminMock.expectedInvocations), m.ListSystemProfilesAdminMock.expectedInvocationsOrigin, afterListSystemProfilesAdminCounter)
+	}
+}
+
 type mServiceMockPipelinePublicClient struct {
 	optional           bool
 	mock               *ServiceMock
@@ -8904,6 +9535,846 @@ func (m *ServiceMock) MinimockProcessFileInspect() {
 	}
 }
 
+type mServiceMockProcessFileDualMode struct {
+	optional           bool
+	mock               *ServiceMock
+	defaultExpectation *ServiceMockProcessFileDualModeExpectation
+	expectations       []*ServiceMockProcessFileDualModeExpectation
+
+	callArgs []*ServiceMockProcessFileDualModeParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// ServiceMockProcessFileDualModeExpectation specifies expectation struct of the Service.ProcessFileDualMode
+type ServiceMockProcessFileDualModeExpectation struct {
+	mock               *ServiceMock
+	params             *ServiceMockProcessFileDualModeParams
+	paramPtrs          *ServiceMockProcessFileDualModeParamPtrs
+	expectationOrigins ServiceMockProcessFileDualModeExpectationOrigins
+	results            *ServiceMockProcessFileDualModeResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// ServiceMockProcessFileDualModeParams contains parameters of the Service.ProcessFileDualMode
+type ServiceMockProcessFileDualModeParams struct {
+	ctx          context.Context
+	prodKBUID    types.KBUIDType
+	stagingKBUID types.KBUIDType
+	fileUIDs     []types.FileUIDType
+	userUID      types.RequesterUIDType
+	requesterUID types.RequesterUIDType
+}
+
+// ServiceMockProcessFileDualModeParamPtrs contains pointers to parameters of the Service.ProcessFileDualMode
+type ServiceMockProcessFileDualModeParamPtrs struct {
+	ctx          *context.Context
+	prodKBUID    *types.KBUIDType
+	stagingKBUID *types.KBUIDType
+	fileUIDs     *[]types.FileUIDType
+	userUID      *types.RequesterUIDType
+	requesterUID *types.RequesterUIDType
+}
+
+// ServiceMockProcessFileDualModeResults contains results of the Service.ProcessFileDualMode
+type ServiceMockProcessFileDualModeResults struct {
+	err error
+}
+
+// ServiceMockProcessFileDualModeOrigins contains origins of expectations of the Service.ProcessFileDualMode
+type ServiceMockProcessFileDualModeExpectationOrigins struct {
+	origin             string
+	originCtx          string
+	originProdKBUID    string
+	originStagingKBUID string
+	originFileUIDs     string
+	originUserUID      string
+	originRequesterUID string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmProcessFileDualMode *mServiceMockProcessFileDualMode) Optional() *mServiceMockProcessFileDualMode {
+	mmProcessFileDualMode.optional = true
+	return mmProcessFileDualMode
+}
+
+// Expect sets up expected params for Service.ProcessFileDualMode
+func (mmProcessFileDualMode *mServiceMockProcessFileDualMode) Expect(ctx context.Context, prodKBUID types.KBUIDType, stagingKBUID types.KBUIDType, fileUIDs []types.FileUIDType, userUID types.RequesterUIDType, requesterUID types.RequesterUIDType) *mServiceMockProcessFileDualMode {
+	if mmProcessFileDualMode.mock.funcProcessFileDualMode != nil {
+		mmProcessFileDualMode.mock.t.Fatalf("ServiceMock.ProcessFileDualMode mock is already set by Set")
+	}
+
+	if mmProcessFileDualMode.defaultExpectation == nil {
+		mmProcessFileDualMode.defaultExpectation = &ServiceMockProcessFileDualModeExpectation{}
+	}
+
+	if mmProcessFileDualMode.defaultExpectation.paramPtrs != nil {
+		mmProcessFileDualMode.mock.t.Fatalf("ServiceMock.ProcessFileDualMode mock is already set by ExpectParams functions")
+	}
+
+	mmProcessFileDualMode.defaultExpectation.params = &ServiceMockProcessFileDualModeParams{ctx, prodKBUID, stagingKBUID, fileUIDs, userUID, requesterUID}
+	mmProcessFileDualMode.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmProcessFileDualMode.expectations {
+		if minimock.Equal(e.params, mmProcessFileDualMode.defaultExpectation.params) {
+			mmProcessFileDualMode.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmProcessFileDualMode.defaultExpectation.params)
+		}
+	}
+
+	return mmProcessFileDualMode
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Service.ProcessFileDualMode
+func (mmProcessFileDualMode *mServiceMockProcessFileDualMode) ExpectCtxParam1(ctx context.Context) *mServiceMockProcessFileDualMode {
+	if mmProcessFileDualMode.mock.funcProcessFileDualMode != nil {
+		mmProcessFileDualMode.mock.t.Fatalf("ServiceMock.ProcessFileDualMode mock is already set by Set")
+	}
+
+	if mmProcessFileDualMode.defaultExpectation == nil {
+		mmProcessFileDualMode.defaultExpectation = &ServiceMockProcessFileDualModeExpectation{}
+	}
+
+	if mmProcessFileDualMode.defaultExpectation.params != nil {
+		mmProcessFileDualMode.mock.t.Fatalf("ServiceMock.ProcessFileDualMode mock is already set by Expect")
+	}
+
+	if mmProcessFileDualMode.defaultExpectation.paramPtrs == nil {
+		mmProcessFileDualMode.defaultExpectation.paramPtrs = &ServiceMockProcessFileDualModeParamPtrs{}
+	}
+	mmProcessFileDualMode.defaultExpectation.paramPtrs.ctx = &ctx
+	mmProcessFileDualMode.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmProcessFileDualMode
+}
+
+// ExpectProdKBUIDParam2 sets up expected param prodKBUID for Service.ProcessFileDualMode
+func (mmProcessFileDualMode *mServiceMockProcessFileDualMode) ExpectProdKBUIDParam2(prodKBUID types.KBUIDType) *mServiceMockProcessFileDualMode {
+	if mmProcessFileDualMode.mock.funcProcessFileDualMode != nil {
+		mmProcessFileDualMode.mock.t.Fatalf("ServiceMock.ProcessFileDualMode mock is already set by Set")
+	}
+
+	if mmProcessFileDualMode.defaultExpectation == nil {
+		mmProcessFileDualMode.defaultExpectation = &ServiceMockProcessFileDualModeExpectation{}
+	}
+
+	if mmProcessFileDualMode.defaultExpectation.params != nil {
+		mmProcessFileDualMode.mock.t.Fatalf("ServiceMock.ProcessFileDualMode mock is already set by Expect")
+	}
+
+	if mmProcessFileDualMode.defaultExpectation.paramPtrs == nil {
+		mmProcessFileDualMode.defaultExpectation.paramPtrs = &ServiceMockProcessFileDualModeParamPtrs{}
+	}
+	mmProcessFileDualMode.defaultExpectation.paramPtrs.prodKBUID = &prodKBUID
+	mmProcessFileDualMode.defaultExpectation.expectationOrigins.originProdKBUID = minimock.CallerInfo(1)
+
+	return mmProcessFileDualMode
+}
+
+// ExpectStagingKBUIDParam3 sets up expected param stagingKBUID for Service.ProcessFileDualMode
+func (mmProcessFileDualMode *mServiceMockProcessFileDualMode) ExpectStagingKBUIDParam3(stagingKBUID types.KBUIDType) *mServiceMockProcessFileDualMode {
+	if mmProcessFileDualMode.mock.funcProcessFileDualMode != nil {
+		mmProcessFileDualMode.mock.t.Fatalf("ServiceMock.ProcessFileDualMode mock is already set by Set")
+	}
+
+	if mmProcessFileDualMode.defaultExpectation == nil {
+		mmProcessFileDualMode.defaultExpectation = &ServiceMockProcessFileDualModeExpectation{}
+	}
+
+	if mmProcessFileDualMode.defaultExpectation.params != nil {
+		mmProcessFileDualMode.mock.t.Fatalf("ServiceMock.ProcessFileDualMode mock is already set by Expect")
+	}
+
+	if mmProcessFileDualMode.defaultExpectation.paramPtrs == nil {
+		mmProcessFileDualMode.defaultExpectation.paramPtrs = &ServiceMockProcessFileDualModeParamPtrs{}
+	}
+	mmProcessFileDualMode.defaultExpectation.paramPtrs.stagingKBUID = &stagingKBUID
+	mmProcessFileDualMode.defaultExpectation.expectationOrigins.originStagingKBUID = minimock.CallerInfo(1)
+
+	return mmProcessFileDualMode
+}
+
+// ExpectFileUIDsParam4 sets up expected param fileUIDs for Service.ProcessFileDualMode
+func (mmProcessFileDualMode *mServiceMockProcessFileDualMode) ExpectFileUIDsParam4(fileUIDs []types.FileUIDType) *mServiceMockProcessFileDualMode {
+	if mmProcessFileDualMode.mock.funcProcessFileDualMode != nil {
+		mmProcessFileDualMode.mock.t.Fatalf("ServiceMock.ProcessFileDualMode mock is already set by Set")
+	}
+
+	if mmProcessFileDualMode.defaultExpectation == nil {
+		mmProcessFileDualMode.defaultExpectation = &ServiceMockProcessFileDualModeExpectation{}
+	}
+
+	if mmProcessFileDualMode.defaultExpectation.params != nil {
+		mmProcessFileDualMode.mock.t.Fatalf("ServiceMock.ProcessFileDualMode mock is already set by Expect")
+	}
+
+	if mmProcessFileDualMode.defaultExpectation.paramPtrs == nil {
+		mmProcessFileDualMode.defaultExpectation.paramPtrs = &ServiceMockProcessFileDualModeParamPtrs{}
+	}
+	mmProcessFileDualMode.defaultExpectation.paramPtrs.fileUIDs = &fileUIDs
+	mmProcessFileDualMode.defaultExpectation.expectationOrigins.originFileUIDs = minimock.CallerInfo(1)
+
+	return mmProcessFileDualMode
+}
+
+// ExpectUserUIDParam5 sets up expected param userUID for Service.ProcessFileDualMode
+func (mmProcessFileDualMode *mServiceMockProcessFileDualMode) ExpectUserUIDParam5(userUID types.RequesterUIDType) *mServiceMockProcessFileDualMode {
+	if mmProcessFileDualMode.mock.funcProcessFileDualMode != nil {
+		mmProcessFileDualMode.mock.t.Fatalf("ServiceMock.ProcessFileDualMode mock is already set by Set")
+	}
+
+	if mmProcessFileDualMode.defaultExpectation == nil {
+		mmProcessFileDualMode.defaultExpectation = &ServiceMockProcessFileDualModeExpectation{}
+	}
+
+	if mmProcessFileDualMode.defaultExpectation.params != nil {
+		mmProcessFileDualMode.mock.t.Fatalf("ServiceMock.ProcessFileDualMode mock is already set by Expect")
+	}
+
+	if mmProcessFileDualMode.defaultExpectation.paramPtrs == nil {
+		mmProcessFileDualMode.defaultExpectation.paramPtrs = &ServiceMockProcessFileDualModeParamPtrs{}
+	}
+	mmProcessFileDualMode.defaultExpectation.paramPtrs.userUID = &userUID
+	mmProcessFileDualMode.defaultExpectation.expectationOrigins.originUserUID = minimock.CallerInfo(1)
+
+	return mmProcessFileDualMode
+}
+
+// ExpectRequesterUIDParam6 sets up expected param requesterUID for Service.ProcessFileDualMode
+func (mmProcessFileDualMode *mServiceMockProcessFileDualMode) ExpectRequesterUIDParam6(requesterUID types.RequesterUIDType) *mServiceMockProcessFileDualMode {
+	if mmProcessFileDualMode.mock.funcProcessFileDualMode != nil {
+		mmProcessFileDualMode.mock.t.Fatalf("ServiceMock.ProcessFileDualMode mock is already set by Set")
+	}
+
+	if mmProcessFileDualMode.defaultExpectation == nil {
+		mmProcessFileDualMode.defaultExpectation = &ServiceMockProcessFileDualModeExpectation{}
+	}
+
+	if mmProcessFileDualMode.defaultExpectation.params != nil {
+		mmProcessFileDualMode.mock.t.Fatalf("ServiceMock.ProcessFileDualMode mock is already set by Expect")
+	}
+
+	if mmProcessFileDualMode.defaultExpectation.paramPtrs == nil {
+		mmProcessFileDualMode.defaultExpectation.paramPtrs = &ServiceMockProcessFileDualModeParamPtrs{}
+	}
+	mmProcessFileDualMode.defaultExpectation.paramPtrs.requesterUID = &requesterUID
+	mmProcessFileDualMode.defaultExpectation.expectationOrigins.originRequesterUID = minimock.CallerInfo(1)
+
+	return mmProcessFileDualMode
+}
+
+// Inspect accepts an inspector function that has same arguments as the Service.ProcessFileDualMode
+func (mmProcessFileDualMode *mServiceMockProcessFileDualMode) Inspect(f func(ctx context.Context, prodKBUID types.KBUIDType, stagingKBUID types.KBUIDType, fileUIDs []types.FileUIDType, userUID types.RequesterUIDType, requesterUID types.RequesterUIDType)) *mServiceMockProcessFileDualMode {
+	if mmProcessFileDualMode.mock.inspectFuncProcessFileDualMode != nil {
+		mmProcessFileDualMode.mock.t.Fatalf("Inspect function is already set for ServiceMock.ProcessFileDualMode")
+	}
+
+	mmProcessFileDualMode.mock.inspectFuncProcessFileDualMode = f
+
+	return mmProcessFileDualMode
+}
+
+// Return sets up results that will be returned by Service.ProcessFileDualMode
+func (mmProcessFileDualMode *mServiceMockProcessFileDualMode) Return(err error) *ServiceMock {
+	if mmProcessFileDualMode.mock.funcProcessFileDualMode != nil {
+		mmProcessFileDualMode.mock.t.Fatalf("ServiceMock.ProcessFileDualMode mock is already set by Set")
+	}
+
+	if mmProcessFileDualMode.defaultExpectation == nil {
+		mmProcessFileDualMode.defaultExpectation = &ServiceMockProcessFileDualModeExpectation{mock: mmProcessFileDualMode.mock}
+	}
+	mmProcessFileDualMode.defaultExpectation.results = &ServiceMockProcessFileDualModeResults{err}
+	mmProcessFileDualMode.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmProcessFileDualMode.mock
+}
+
+// Set uses given function f to mock the Service.ProcessFileDualMode method
+func (mmProcessFileDualMode *mServiceMockProcessFileDualMode) Set(f func(ctx context.Context, prodKBUID types.KBUIDType, stagingKBUID types.KBUIDType, fileUIDs []types.FileUIDType, userUID types.RequesterUIDType, requesterUID types.RequesterUIDType) (err error)) *ServiceMock {
+	if mmProcessFileDualMode.defaultExpectation != nil {
+		mmProcessFileDualMode.mock.t.Fatalf("Default expectation is already set for the Service.ProcessFileDualMode method")
+	}
+
+	if len(mmProcessFileDualMode.expectations) > 0 {
+		mmProcessFileDualMode.mock.t.Fatalf("Some expectations are already set for the Service.ProcessFileDualMode method")
+	}
+
+	mmProcessFileDualMode.mock.funcProcessFileDualMode = f
+	mmProcessFileDualMode.mock.funcProcessFileDualModeOrigin = minimock.CallerInfo(1)
+	return mmProcessFileDualMode.mock
+}
+
+// When sets expectation for the Service.ProcessFileDualMode which will trigger the result defined by the following
+// Then helper
+func (mmProcessFileDualMode *mServiceMockProcessFileDualMode) When(ctx context.Context, prodKBUID types.KBUIDType, stagingKBUID types.KBUIDType, fileUIDs []types.FileUIDType, userUID types.RequesterUIDType, requesterUID types.RequesterUIDType) *ServiceMockProcessFileDualModeExpectation {
+	if mmProcessFileDualMode.mock.funcProcessFileDualMode != nil {
+		mmProcessFileDualMode.mock.t.Fatalf("ServiceMock.ProcessFileDualMode mock is already set by Set")
+	}
+
+	expectation := &ServiceMockProcessFileDualModeExpectation{
+		mock:               mmProcessFileDualMode.mock,
+		params:             &ServiceMockProcessFileDualModeParams{ctx, prodKBUID, stagingKBUID, fileUIDs, userUID, requesterUID},
+		expectationOrigins: ServiceMockProcessFileDualModeExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmProcessFileDualMode.expectations = append(mmProcessFileDualMode.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Service.ProcessFileDualMode return parameters for the expectation previously defined by the When method
+func (e *ServiceMockProcessFileDualModeExpectation) Then(err error) *ServiceMock {
+	e.results = &ServiceMockProcessFileDualModeResults{err}
+	return e.mock
+}
+
+// Times sets number of times Service.ProcessFileDualMode should be invoked
+func (mmProcessFileDualMode *mServiceMockProcessFileDualMode) Times(n uint64) *mServiceMockProcessFileDualMode {
+	if n == 0 {
+		mmProcessFileDualMode.mock.t.Fatalf("Times of ServiceMock.ProcessFileDualMode mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmProcessFileDualMode.expectedInvocations, n)
+	mmProcessFileDualMode.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmProcessFileDualMode
+}
+
+func (mmProcessFileDualMode *mServiceMockProcessFileDualMode) invocationsDone() bool {
+	if len(mmProcessFileDualMode.expectations) == 0 && mmProcessFileDualMode.defaultExpectation == nil && mmProcessFileDualMode.mock.funcProcessFileDualMode == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmProcessFileDualMode.mock.afterProcessFileDualModeCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmProcessFileDualMode.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// ProcessFileDualMode implements mm_service.Service
+func (mmProcessFileDualMode *ServiceMock) ProcessFileDualMode(ctx context.Context, prodKBUID types.KBUIDType, stagingKBUID types.KBUIDType, fileUIDs []types.FileUIDType, userUID types.RequesterUIDType, requesterUID types.RequesterUIDType) (err error) {
+	mm_atomic.AddUint64(&mmProcessFileDualMode.beforeProcessFileDualModeCounter, 1)
+	defer mm_atomic.AddUint64(&mmProcessFileDualMode.afterProcessFileDualModeCounter, 1)
+
+	mmProcessFileDualMode.t.Helper()
+
+	if mmProcessFileDualMode.inspectFuncProcessFileDualMode != nil {
+		mmProcessFileDualMode.inspectFuncProcessFileDualMode(ctx, prodKBUID, stagingKBUID, fileUIDs, userUID, requesterUID)
+	}
+
+	mm_params := ServiceMockProcessFileDualModeParams{ctx, prodKBUID, stagingKBUID, fileUIDs, userUID, requesterUID}
+
+	// Record call args
+	mmProcessFileDualMode.ProcessFileDualModeMock.mutex.Lock()
+	mmProcessFileDualMode.ProcessFileDualModeMock.callArgs = append(mmProcessFileDualMode.ProcessFileDualModeMock.callArgs, &mm_params)
+	mmProcessFileDualMode.ProcessFileDualModeMock.mutex.Unlock()
+
+	for _, e := range mmProcessFileDualMode.ProcessFileDualModeMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmProcessFileDualMode.ProcessFileDualModeMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmProcessFileDualMode.ProcessFileDualModeMock.defaultExpectation.Counter, 1)
+		mm_want := mmProcessFileDualMode.ProcessFileDualModeMock.defaultExpectation.params
+		mm_want_ptrs := mmProcessFileDualMode.ProcessFileDualModeMock.defaultExpectation.paramPtrs
+
+		mm_got := ServiceMockProcessFileDualModeParams{ctx, prodKBUID, stagingKBUID, fileUIDs, userUID, requesterUID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmProcessFileDualMode.t.Errorf("ServiceMock.ProcessFileDualMode got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmProcessFileDualMode.ProcessFileDualModeMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.prodKBUID != nil && !minimock.Equal(*mm_want_ptrs.prodKBUID, mm_got.prodKBUID) {
+				mmProcessFileDualMode.t.Errorf("ServiceMock.ProcessFileDualMode got unexpected parameter prodKBUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmProcessFileDualMode.ProcessFileDualModeMock.defaultExpectation.expectationOrigins.originProdKBUID, *mm_want_ptrs.prodKBUID, mm_got.prodKBUID, minimock.Diff(*mm_want_ptrs.prodKBUID, mm_got.prodKBUID))
+			}
+
+			if mm_want_ptrs.stagingKBUID != nil && !minimock.Equal(*mm_want_ptrs.stagingKBUID, mm_got.stagingKBUID) {
+				mmProcessFileDualMode.t.Errorf("ServiceMock.ProcessFileDualMode got unexpected parameter stagingKBUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmProcessFileDualMode.ProcessFileDualModeMock.defaultExpectation.expectationOrigins.originStagingKBUID, *mm_want_ptrs.stagingKBUID, mm_got.stagingKBUID, minimock.Diff(*mm_want_ptrs.stagingKBUID, mm_got.stagingKBUID))
+			}
+
+			if mm_want_ptrs.fileUIDs != nil && !minimock.Equal(*mm_want_ptrs.fileUIDs, mm_got.fileUIDs) {
+				mmProcessFileDualMode.t.Errorf("ServiceMock.ProcessFileDualMode got unexpected parameter fileUIDs, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmProcessFileDualMode.ProcessFileDualModeMock.defaultExpectation.expectationOrigins.originFileUIDs, *mm_want_ptrs.fileUIDs, mm_got.fileUIDs, minimock.Diff(*mm_want_ptrs.fileUIDs, mm_got.fileUIDs))
+			}
+
+			if mm_want_ptrs.userUID != nil && !minimock.Equal(*mm_want_ptrs.userUID, mm_got.userUID) {
+				mmProcessFileDualMode.t.Errorf("ServiceMock.ProcessFileDualMode got unexpected parameter userUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmProcessFileDualMode.ProcessFileDualModeMock.defaultExpectation.expectationOrigins.originUserUID, *mm_want_ptrs.userUID, mm_got.userUID, minimock.Diff(*mm_want_ptrs.userUID, mm_got.userUID))
+			}
+
+			if mm_want_ptrs.requesterUID != nil && !minimock.Equal(*mm_want_ptrs.requesterUID, mm_got.requesterUID) {
+				mmProcessFileDualMode.t.Errorf("ServiceMock.ProcessFileDualMode got unexpected parameter requesterUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmProcessFileDualMode.ProcessFileDualModeMock.defaultExpectation.expectationOrigins.originRequesterUID, *mm_want_ptrs.requesterUID, mm_got.requesterUID, minimock.Diff(*mm_want_ptrs.requesterUID, mm_got.requesterUID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmProcessFileDualMode.t.Errorf("ServiceMock.ProcessFileDualMode got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmProcessFileDualMode.ProcessFileDualModeMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmProcessFileDualMode.ProcessFileDualModeMock.defaultExpectation.results
+		if mm_results == nil {
+			mmProcessFileDualMode.t.Fatal("No results are set for the ServiceMock.ProcessFileDualMode")
+		}
+		return (*mm_results).err
+	}
+	if mmProcessFileDualMode.funcProcessFileDualMode != nil {
+		return mmProcessFileDualMode.funcProcessFileDualMode(ctx, prodKBUID, stagingKBUID, fileUIDs, userUID, requesterUID)
+	}
+	mmProcessFileDualMode.t.Fatalf("Unexpected call to ServiceMock.ProcessFileDualMode. %v %v %v %v %v %v", ctx, prodKBUID, stagingKBUID, fileUIDs, userUID, requesterUID)
+	return
+}
+
+// ProcessFileDualModeAfterCounter returns a count of finished ServiceMock.ProcessFileDualMode invocations
+func (mmProcessFileDualMode *ServiceMock) ProcessFileDualModeAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmProcessFileDualMode.afterProcessFileDualModeCounter)
+}
+
+// ProcessFileDualModeBeforeCounter returns a count of ServiceMock.ProcessFileDualMode invocations
+func (mmProcessFileDualMode *ServiceMock) ProcessFileDualModeBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmProcessFileDualMode.beforeProcessFileDualModeCounter)
+}
+
+// Calls returns a list of arguments used in each call to ServiceMock.ProcessFileDualMode.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmProcessFileDualMode *mServiceMockProcessFileDualMode) Calls() []*ServiceMockProcessFileDualModeParams {
+	mmProcessFileDualMode.mutex.RLock()
+
+	argCopy := make([]*ServiceMockProcessFileDualModeParams, len(mmProcessFileDualMode.callArgs))
+	copy(argCopy, mmProcessFileDualMode.callArgs)
+
+	mmProcessFileDualMode.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockProcessFileDualModeDone returns true if the count of the ProcessFileDualMode invocations corresponds
+// the number of defined expectations
+func (m *ServiceMock) MinimockProcessFileDualModeDone() bool {
+	if m.ProcessFileDualModeMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.ProcessFileDualModeMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.ProcessFileDualModeMock.invocationsDone()
+}
+
+// MinimockProcessFileDualModeInspect logs each unmet expectation
+func (m *ServiceMock) MinimockProcessFileDualModeInspect() {
+	for _, e := range m.ProcessFileDualModeMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to ServiceMock.ProcessFileDualMode at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterProcessFileDualModeCounter := mm_atomic.LoadUint64(&m.afterProcessFileDualModeCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.ProcessFileDualModeMock.defaultExpectation != nil && afterProcessFileDualModeCounter < 1 {
+		if m.ProcessFileDualModeMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to ServiceMock.ProcessFileDualMode at\n%s", m.ProcessFileDualModeMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to ServiceMock.ProcessFileDualMode at\n%s with params: %#v", m.ProcessFileDualModeMock.defaultExpectation.expectationOrigins.origin, *m.ProcessFileDualModeMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcProcessFileDualMode != nil && afterProcessFileDualModeCounter < 1 {
+		m.t.Errorf("Expected call to ServiceMock.ProcessFileDualMode at\n%s", m.funcProcessFileDualModeOrigin)
+	}
+
+	if !m.ProcessFileDualModeMock.invocationsDone() && afterProcessFileDualModeCounter > 0 {
+		m.t.Errorf("Expected %d calls to ServiceMock.ProcessFileDualMode at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.ProcessFileDualModeMock.expectedInvocations), m.ProcessFileDualModeMock.expectedInvocationsOrigin, afterProcessFileDualModeCounter)
+	}
+}
+
+type mServiceMockPurgeRollbackAdmin struct {
+	optional           bool
+	mock               *ServiceMock
+	defaultExpectation *ServiceMockPurgeRollbackAdminExpectation
+	expectations       []*ServiceMockPurgeRollbackAdminExpectation
+
+	callArgs []*ServiceMockPurgeRollbackAdminParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// ServiceMockPurgeRollbackAdminExpectation specifies expectation struct of the Service.PurgeRollbackAdmin
+type ServiceMockPurgeRollbackAdminExpectation struct {
+	mock               *ServiceMock
+	params             *ServiceMockPurgeRollbackAdminParams
+	paramPtrs          *ServiceMockPurgeRollbackAdminParamPtrs
+	expectationOrigins ServiceMockPurgeRollbackAdminExpectationOrigins
+	results            *ServiceMockPurgeRollbackAdminResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// ServiceMockPurgeRollbackAdminParams contains parameters of the Service.PurgeRollbackAdmin
+type ServiceMockPurgeRollbackAdminParams struct {
+	ctx context.Context
+	o1  types.OwnerUIDType
+	s1  string
+}
+
+// ServiceMockPurgeRollbackAdminParamPtrs contains pointers to parameters of the Service.PurgeRollbackAdmin
+type ServiceMockPurgeRollbackAdminParamPtrs struct {
+	ctx *context.Context
+	o1  *types.OwnerUIDType
+	s1  *string
+}
+
+// ServiceMockPurgeRollbackAdminResults contains results of the Service.PurgeRollbackAdmin
+type ServiceMockPurgeRollbackAdminResults struct {
+	pp1 *artifactpb.PurgeRollbackAdminResponse
+	err error
+}
+
+// ServiceMockPurgeRollbackAdminOrigins contains origins of expectations of the Service.PurgeRollbackAdmin
+type ServiceMockPurgeRollbackAdminExpectationOrigins struct {
+	origin    string
+	originCtx string
+	originO1  string
+	originS1  string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmPurgeRollbackAdmin *mServiceMockPurgeRollbackAdmin) Optional() *mServiceMockPurgeRollbackAdmin {
+	mmPurgeRollbackAdmin.optional = true
+	return mmPurgeRollbackAdmin
+}
+
+// Expect sets up expected params for Service.PurgeRollbackAdmin
+func (mmPurgeRollbackAdmin *mServiceMockPurgeRollbackAdmin) Expect(ctx context.Context, o1 types.OwnerUIDType, s1 string) *mServiceMockPurgeRollbackAdmin {
+	if mmPurgeRollbackAdmin.mock.funcPurgeRollbackAdmin != nil {
+		mmPurgeRollbackAdmin.mock.t.Fatalf("ServiceMock.PurgeRollbackAdmin mock is already set by Set")
+	}
+
+	if mmPurgeRollbackAdmin.defaultExpectation == nil {
+		mmPurgeRollbackAdmin.defaultExpectation = &ServiceMockPurgeRollbackAdminExpectation{}
+	}
+
+	if mmPurgeRollbackAdmin.defaultExpectation.paramPtrs != nil {
+		mmPurgeRollbackAdmin.mock.t.Fatalf("ServiceMock.PurgeRollbackAdmin mock is already set by ExpectParams functions")
+	}
+
+	mmPurgeRollbackAdmin.defaultExpectation.params = &ServiceMockPurgeRollbackAdminParams{ctx, o1, s1}
+	mmPurgeRollbackAdmin.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmPurgeRollbackAdmin.expectations {
+		if minimock.Equal(e.params, mmPurgeRollbackAdmin.defaultExpectation.params) {
+			mmPurgeRollbackAdmin.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmPurgeRollbackAdmin.defaultExpectation.params)
+		}
+	}
+
+	return mmPurgeRollbackAdmin
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Service.PurgeRollbackAdmin
+func (mmPurgeRollbackAdmin *mServiceMockPurgeRollbackAdmin) ExpectCtxParam1(ctx context.Context) *mServiceMockPurgeRollbackAdmin {
+	if mmPurgeRollbackAdmin.mock.funcPurgeRollbackAdmin != nil {
+		mmPurgeRollbackAdmin.mock.t.Fatalf("ServiceMock.PurgeRollbackAdmin mock is already set by Set")
+	}
+
+	if mmPurgeRollbackAdmin.defaultExpectation == nil {
+		mmPurgeRollbackAdmin.defaultExpectation = &ServiceMockPurgeRollbackAdminExpectation{}
+	}
+
+	if mmPurgeRollbackAdmin.defaultExpectation.params != nil {
+		mmPurgeRollbackAdmin.mock.t.Fatalf("ServiceMock.PurgeRollbackAdmin mock is already set by Expect")
+	}
+
+	if mmPurgeRollbackAdmin.defaultExpectation.paramPtrs == nil {
+		mmPurgeRollbackAdmin.defaultExpectation.paramPtrs = &ServiceMockPurgeRollbackAdminParamPtrs{}
+	}
+	mmPurgeRollbackAdmin.defaultExpectation.paramPtrs.ctx = &ctx
+	mmPurgeRollbackAdmin.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmPurgeRollbackAdmin
+}
+
+// ExpectO1Param2 sets up expected param o1 for Service.PurgeRollbackAdmin
+func (mmPurgeRollbackAdmin *mServiceMockPurgeRollbackAdmin) ExpectO1Param2(o1 types.OwnerUIDType) *mServiceMockPurgeRollbackAdmin {
+	if mmPurgeRollbackAdmin.mock.funcPurgeRollbackAdmin != nil {
+		mmPurgeRollbackAdmin.mock.t.Fatalf("ServiceMock.PurgeRollbackAdmin mock is already set by Set")
+	}
+
+	if mmPurgeRollbackAdmin.defaultExpectation == nil {
+		mmPurgeRollbackAdmin.defaultExpectation = &ServiceMockPurgeRollbackAdminExpectation{}
+	}
+
+	if mmPurgeRollbackAdmin.defaultExpectation.params != nil {
+		mmPurgeRollbackAdmin.mock.t.Fatalf("ServiceMock.PurgeRollbackAdmin mock is already set by Expect")
+	}
+
+	if mmPurgeRollbackAdmin.defaultExpectation.paramPtrs == nil {
+		mmPurgeRollbackAdmin.defaultExpectation.paramPtrs = &ServiceMockPurgeRollbackAdminParamPtrs{}
+	}
+	mmPurgeRollbackAdmin.defaultExpectation.paramPtrs.o1 = &o1
+	mmPurgeRollbackAdmin.defaultExpectation.expectationOrigins.originO1 = minimock.CallerInfo(1)
+
+	return mmPurgeRollbackAdmin
+}
+
+// ExpectS1Param3 sets up expected param s1 for Service.PurgeRollbackAdmin
+func (mmPurgeRollbackAdmin *mServiceMockPurgeRollbackAdmin) ExpectS1Param3(s1 string) *mServiceMockPurgeRollbackAdmin {
+	if mmPurgeRollbackAdmin.mock.funcPurgeRollbackAdmin != nil {
+		mmPurgeRollbackAdmin.mock.t.Fatalf("ServiceMock.PurgeRollbackAdmin mock is already set by Set")
+	}
+
+	if mmPurgeRollbackAdmin.defaultExpectation == nil {
+		mmPurgeRollbackAdmin.defaultExpectation = &ServiceMockPurgeRollbackAdminExpectation{}
+	}
+
+	if mmPurgeRollbackAdmin.defaultExpectation.params != nil {
+		mmPurgeRollbackAdmin.mock.t.Fatalf("ServiceMock.PurgeRollbackAdmin mock is already set by Expect")
+	}
+
+	if mmPurgeRollbackAdmin.defaultExpectation.paramPtrs == nil {
+		mmPurgeRollbackAdmin.defaultExpectation.paramPtrs = &ServiceMockPurgeRollbackAdminParamPtrs{}
+	}
+	mmPurgeRollbackAdmin.defaultExpectation.paramPtrs.s1 = &s1
+	mmPurgeRollbackAdmin.defaultExpectation.expectationOrigins.originS1 = minimock.CallerInfo(1)
+
+	return mmPurgeRollbackAdmin
+}
+
+// Inspect accepts an inspector function that has same arguments as the Service.PurgeRollbackAdmin
+func (mmPurgeRollbackAdmin *mServiceMockPurgeRollbackAdmin) Inspect(f func(ctx context.Context, o1 types.OwnerUIDType, s1 string)) *mServiceMockPurgeRollbackAdmin {
+	if mmPurgeRollbackAdmin.mock.inspectFuncPurgeRollbackAdmin != nil {
+		mmPurgeRollbackAdmin.mock.t.Fatalf("Inspect function is already set for ServiceMock.PurgeRollbackAdmin")
+	}
+
+	mmPurgeRollbackAdmin.mock.inspectFuncPurgeRollbackAdmin = f
+
+	return mmPurgeRollbackAdmin
+}
+
+// Return sets up results that will be returned by Service.PurgeRollbackAdmin
+func (mmPurgeRollbackAdmin *mServiceMockPurgeRollbackAdmin) Return(pp1 *artifactpb.PurgeRollbackAdminResponse, err error) *ServiceMock {
+	if mmPurgeRollbackAdmin.mock.funcPurgeRollbackAdmin != nil {
+		mmPurgeRollbackAdmin.mock.t.Fatalf("ServiceMock.PurgeRollbackAdmin mock is already set by Set")
+	}
+
+	if mmPurgeRollbackAdmin.defaultExpectation == nil {
+		mmPurgeRollbackAdmin.defaultExpectation = &ServiceMockPurgeRollbackAdminExpectation{mock: mmPurgeRollbackAdmin.mock}
+	}
+	mmPurgeRollbackAdmin.defaultExpectation.results = &ServiceMockPurgeRollbackAdminResults{pp1, err}
+	mmPurgeRollbackAdmin.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmPurgeRollbackAdmin.mock
+}
+
+// Set uses given function f to mock the Service.PurgeRollbackAdmin method
+func (mmPurgeRollbackAdmin *mServiceMockPurgeRollbackAdmin) Set(f func(ctx context.Context, o1 types.OwnerUIDType, s1 string) (pp1 *artifactpb.PurgeRollbackAdminResponse, err error)) *ServiceMock {
+	if mmPurgeRollbackAdmin.defaultExpectation != nil {
+		mmPurgeRollbackAdmin.mock.t.Fatalf("Default expectation is already set for the Service.PurgeRollbackAdmin method")
+	}
+
+	if len(mmPurgeRollbackAdmin.expectations) > 0 {
+		mmPurgeRollbackAdmin.mock.t.Fatalf("Some expectations are already set for the Service.PurgeRollbackAdmin method")
+	}
+
+	mmPurgeRollbackAdmin.mock.funcPurgeRollbackAdmin = f
+	mmPurgeRollbackAdmin.mock.funcPurgeRollbackAdminOrigin = minimock.CallerInfo(1)
+	return mmPurgeRollbackAdmin.mock
+}
+
+// When sets expectation for the Service.PurgeRollbackAdmin which will trigger the result defined by the following
+// Then helper
+func (mmPurgeRollbackAdmin *mServiceMockPurgeRollbackAdmin) When(ctx context.Context, o1 types.OwnerUIDType, s1 string) *ServiceMockPurgeRollbackAdminExpectation {
+	if mmPurgeRollbackAdmin.mock.funcPurgeRollbackAdmin != nil {
+		mmPurgeRollbackAdmin.mock.t.Fatalf("ServiceMock.PurgeRollbackAdmin mock is already set by Set")
+	}
+
+	expectation := &ServiceMockPurgeRollbackAdminExpectation{
+		mock:               mmPurgeRollbackAdmin.mock,
+		params:             &ServiceMockPurgeRollbackAdminParams{ctx, o1, s1},
+		expectationOrigins: ServiceMockPurgeRollbackAdminExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmPurgeRollbackAdmin.expectations = append(mmPurgeRollbackAdmin.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Service.PurgeRollbackAdmin return parameters for the expectation previously defined by the When method
+func (e *ServiceMockPurgeRollbackAdminExpectation) Then(pp1 *artifactpb.PurgeRollbackAdminResponse, err error) *ServiceMock {
+	e.results = &ServiceMockPurgeRollbackAdminResults{pp1, err}
+	return e.mock
+}
+
+// Times sets number of times Service.PurgeRollbackAdmin should be invoked
+func (mmPurgeRollbackAdmin *mServiceMockPurgeRollbackAdmin) Times(n uint64) *mServiceMockPurgeRollbackAdmin {
+	if n == 0 {
+		mmPurgeRollbackAdmin.mock.t.Fatalf("Times of ServiceMock.PurgeRollbackAdmin mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmPurgeRollbackAdmin.expectedInvocations, n)
+	mmPurgeRollbackAdmin.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmPurgeRollbackAdmin
+}
+
+func (mmPurgeRollbackAdmin *mServiceMockPurgeRollbackAdmin) invocationsDone() bool {
+	if len(mmPurgeRollbackAdmin.expectations) == 0 && mmPurgeRollbackAdmin.defaultExpectation == nil && mmPurgeRollbackAdmin.mock.funcPurgeRollbackAdmin == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmPurgeRollbackAdmin.mock.afterPurgeRollbackAdminCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmPurgeRollbackAdmin.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// PurgeRollbackAdmin implements mm_service.Service
+func (mmPurgeRollbackAdmin *ServiceMock) PurgeRollbackAdmin(ctx context.Context, o1 types.OwnerUIDType, s1 string) (pp1 *artifactpb.PurgeRollbackAdminResponse, err error) {
+	mm_atomic.AddUint64(&mmPurgeRollbackAdmin.beforePurgeRollbackAdminCounter, 1)
+	defer mm_atomic.AddUint64(&mmPurgeRollbackAdmin.afterPurgeRollbackAdminCounter, 1)
+
+	mmPurgeRollbackAdmin.t.Helper()
+
+	if mmPurgeRollbackAdmin.inspectFuncPurgeRollbackAdmin != nil {
+		mmPurgeRollbackAdmin.inspectFuncPurgeRollbackAdmin(ctx, o1, s1)
+	}
+
+	mm_params := ServiceMockPurgeRollbackAdminParams{ctx, o1, s1}
+
+	// Record call args
+	mmPurgeRollbackAdmin.PurgeRollbackAdminMock.mutex.Lock()
+	mmPurgeRollbackAdmin.PurgeRollbackAdminMock.callArgs = append(mmPurgeRollbackAdmin.PurgeRollbackAdminMock.callArgs, &mm_params)
+	mmPurgeRollbackAdmin.PurgeRollbackAdminMock.mutex.Unlock()
+
+	for _, e := range mmPurgeRollbackAdmin.PurgeRollbackAdminMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.pp1, e.results.err
+		}
+	}
+
+	if mmPurgeRollbackAdmin.PurgeRollbackAdminMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmPurgeRollbackAdmin.PurgeRollbackAdminMock.defaultExpectation.Counter, 1)
+		mm_want := mmPurgeRollbackAdmin.PurgeRollbackAdminMock.defaultExpectation.params
+		mm_want_ptrs := mmPurgeRollbackAdmin.PurgeRollbackAdminMock.defaultExpectation.paramPtrs
+
+		mm_got := ServiceMockPurgeRollbackAdminParams{ctx, o1, s1}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmPurgeRollbackAdmin.t.Errorf("ServiceMock.PurgeRollbackAdmin got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmPurgeRollbackAdmin.PurgeRollbackAdminMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.o1 != nil && !minimock.Equal(*mm_want_ptrs.o1, mm_got.o1) {
+				mmPurgeRollbackAdmin.t.Errorf("ServiceMock.PurgeRollbackAdmin got unexpected parameter o1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmPurgeRollbackAdmin.PurgeRollbackAdminMock.defaultExpectation.expectationOrigins.originO1, *mm_want_ptrs.o1, mm_got.o1, minimock.Diff(*mm_want_ptrs.o1, mm_got.o1))
+			}
+
+			if mm_want_ptrs.s1 != nil && !minimock.Equal(*mm_want_ptrs.s1, mm_got.s1) {
+				mmPurgeRollbackAdmin.t.Errorf("ServiceMock.PurgeRollbackAdmin got unexpected parameter s1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmPurgeRollbackAdmin.PurgeRollbackAdminMock.defaultExpectation.expectationOrigins.originS1, *mm_want_ptrs.s1, mm_got.s1, minimock.Diff(*mm_want_ptrs.s1, mm_got.s1))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmPurgeRollbackAdmin.t.Errorf("ServiceMock.PurgeRollbackAdmin got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmPurgeRollbackAdmin.PurgeRollbackAdminMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmPurgeRollbackAdmin.PurgeRollbackAdminMock.defaultExpectation.results
+		if mm_results == nil {
+			mmPurgeRollbackAdmin.t.Fatal("No results are set for the ServiceMock.PurgeRollbackAdmin")
+		}
+		return (*mm_results).pp1, (*mm_results).err
+	}
+	if mmPurgeRollbackAdmin.funcPurgeRollbackAdmin != nil {
+		return mmPurgeRollbackAdmin.funcPurgeRollbackAdmin(ctx, o1, s1)
+	}
+	mmPurgeRollbackAdmin.t.Fatalf("Unexpected call to ServiceMock.PurgeRollbackAdmin. %v %v %v", ctx, o1, s1)
+	return
+}
+
+// PurgeRollbackAdminAfterCounter returns a count of finished ServiceMock.PurgeRollbackAdmin invocations
+func (mmPurgeRollbackAdmin *ServiceMock) PurgeRollbackAdminAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmPurgeRollbackAdmin.afterPurgeRollbackAdminCounter)
+}
+
+// PurgeRollbackAdminBeforeCounter returns a count of ServiceMock.PurgeRollbackAdmin invocations
+func (mmPurgeRollbackAdmin *ServiceMock) PurgeRollbackAdminBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmPurgeRollbackAdmin.beforePurgeRollbackAdminCounter)
+}
+
+// Calls returns a list of arguments used in each call to ServiceMock.PurgeRollbackAdmin.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmPurgeRollbackAdmin *mServiceMockPurgeRollbackAdmin) Calls() []*ServiceMockPurgeRollbackAdminParams {
+	mmPurgeRollbackAdmin.mutex.RLock()
+
+	argCopy := make([]*ServiceMockPurgeRollbackAdminParams, len(mmPurgeRollbackAdmin.callArgs))
+	copy(argCopy, mmPurgeRollbackAdmin.callArgs)
+
+	mmPurgeRollbackAdmin.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockPurgeRollbackAdminDone returns true if the count of the PurgeRollbackAdmin invocations corresponds
+// the number of defined expectations
+func (m *ServiceMock) MinimockPurgeRollbackAdminDone() bool {
+	if m.PurgeRollbackAdminMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.PurgeRollbackAdminMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.PurgeRollbackAdminMock.invocationsDone()
+}
+
+// MinimockPurgeRollbackAdminInspect logs each unmet expectation
+func (m *ServiceMock) MinimockPurgeRollbackAdminInspect() {
+	for _, e := range m.PurgeRollbackAdminMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to ServiceMock.PurgeRollbackAdmin at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterPurgeRollbackAdminCounter := mm_atomic.LoadUint64(&m.afterPurgeRollbackAdminCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.PurgeRollbackAdminMock.defaultExpectation != nil && afterPurgeRollbackAdminCounter < 1 {
+		if m.PurgeRollbackAdminMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to ServiceMock.PurgeRollbackAdmin at\n%s", m.PurgeRollbackAdminMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to ServiceMock.PurgeRollbackAdmin at\n%s with params: %#v", m.PurgeRollbackAdminMock.defaultExpectation.expectationOrigins.origin, *m.PurgeRollbackAdminMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcPurgeRollbackAdmin != nil && afterPurgeRollbackAdminCounter < 1 {
+		m.t.Errorf("Expected call to ServiceMock.PurgeRollbackAdmin at\n%s", m.funcPurgeRollbackAdminOrigin)
+	}
+
+	if !m.PurgeRollbackAdminMock.invocationsDone() && afterPurgeRollbackAdminCounter > 0 {
+		m.t.Errorf("Expected %d calls to ServiceMock.PurgeRollbackAdmin at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.PurgeRollbackAdminMock.expectedInvocations), m.PurgeRollbackAdminMock.expectedInvocationsOrigin, afterPurgeRollbackAdminCounter)
+	}
+}
+
 type mServiceMockRedisClient struct {
 	optional           bool
 	mock               *ServiceMock
@@ -9273,6 +10744,816 @@ func (m *ServiceMock) MinimockRepositoryInspect() {
 	if !m.RepositoryMock.invocationsDone() && afterRepositoryCounter > 0 {
 		m.t.Errorf("Expected %d calls to ServiceMock.Repository at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.RepositoryMock.expectedInvocations), m.RepositoryMock.expectedInvocationsOrigin, afterRepositoryCounter)
+	}
+}
+
+type mServiceMockRollbackAdmin struct {
+	optional           bool
+	mock               *ServiceMock
+	defaultExpectation *ServiceMockRollbackAdminExpectation
+	expectations       []*ServiceMockRollbackAdminExpectation
+
+	callArgs []*ServiceMockRollbackAdminParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// ServiceMockRollbackAdminExpectation specifies expectation struct of the Service.RollbackAdmin
+type ServiceMockRollbackAdminExpectation struct {
+	mock               *ServiceMock
+	params             *ServiceMockRollbackAdminParams
+	paramPtrs          *ServiceMockRollbackAdminParamPtrs
+	expectationOrigins ServiceMockRollbackAdminExpectationOrigins
+	results            *ServiceMockRollbackAdminResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// ServiceMockRollbackAdminParams contains parameters of the Service.RollbackAdmin
+type ServiceMockRollbackAdminParams struct {
+	ctx context.Context
+	o1  types.OwnerUIDType
+	s1  string
+}
+
+// ServiceMockRollbackAdminParamPtrs contains pointers to parameters of the Service.RollbackAdmin
+type ServiceMockRollbackAdminParamPtrs struct {
+	ctx *context.Context
+	o1  *types.OwnerUIDType
+	s1  *string
+}
+
+// ServiceMockRollbackAdminResults contains results of the Service.RollbackAdmin
+type ServiceMockRollbackAdminResults struct {
+	rp1 *artifactpb.RollbackAdminResponse
+	err error
+}
+
+// ServiceMockRollbackAdminOrigins contains origins of expectations of the Service.RollbackAdmin
+type ServiceMockRollbackAdminExpectationOrigins struct {
+	origin    string
+	originCtx string
+	originO1  string
+	originS1  string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmRollbackAdmin *mServiceMockRollbackAdmin) Optional() *mServiceMockRollbackAdmin {
+	mmRollbackAdmin.optional = true
+	return mmRollbackAdmin
+}
+
+// Expect sets up expected params for Service.RollbackAdmin
+func (mmRollbackAdmin *mServiceMockRollbackAdmin) Expect(ctx context.Context, o1 types.OwnerUIDType, s1 string) *mServiceMockRollbackAdmin {
+	if mmRollbackAdmin.mock.funcRollbackAdmin != nil {
+		mmRollbackAdmin.mock.t.Fatalf("ServiceMock.RollbackAdmin mock is already set by Set")
+	}
+
+	if mmRollbackAdmin.defaultExpectation == nil {
+		mmRollbackAdmin.defaultExpectation = &ServiceMockRollbackAdminExpectation{}
+	}
+
+	if mmRollbackAdmin.defaultExpectation.paramPtrs != nil {
+		mmRollbackAdmin.mock.t.Fatalf("ServiceMock.RollbackAdmin mock is already set by ExpectParams functions")
+	}
+
+	mmRollbackAdmin.defaultExpectation.params = &ServiceMockRollbackAdminParams{ctx, o1, s1}
+	mmRollbackAdmin.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmRollbackAdmin.expectations {
+		if minimock.Equal(e.params, mmRollbackAdmin.defaultExpectation.params) {
+			mmRollbackAdmin.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmRollbackAdmin.defaultExpectation.params)
+		}
+	}
+
+	return mmRollbackAdmin
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Service.RollbackAdmin
+func (mmRollbackAdmin *mServiceMockRollbackAdmin) ExpectCtxParam1(ctx context.Context) *mServiceMockRollbackAdmin {
+	if mmRollbackAdmin.mock.funcRollbackAdmin != nil {
+		mmRollbackAdmin.mock.t.Fatalf("ServiceMock.RollbackAdmin mock is already set by Set")
+	}
+
+	if mmRollbackAdmin.defaultExpectation == nil {
+		mmRollbackAdmin.defaultExpectation = &ServiceMockRollbackAdminExpectation{}
+	}
+
+	if mmRollbackAdmin.defaultExpectation.params != nil {
+		mmRollbackAdmin.mock.t.Fatalf("ServiceMock.RollbackAdmin mock is already set by Expect")
+	}
+
+	if mmRollbackAdmin.defaultExpectation.paramPtrs == nil {
+		mmRollbackAdmin.defaultExpectation.paramPtrs = &ServiceMockRollbackAdminParamPtrs{}
+	}
+	mmRollbackAdmin.defaultExpectation.paramPtrs.ctx = &ctx
+	mmRollbackAdmin.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmRollbackAdmin
+}
+
+// ExpectO1Param2 sets up expected param o1 for Service.RollbackAdmin
+func (mmRollbackAdmin *mServiceMockRollbackAdmin) ExpectO1Param2(o1 types.OwnerUIDType) *mServiceMockRollbackAdmin {
+	if mmRollbackAdmin.mock.funcRollbackAdmin != nil {
+		mmRollbackAdmin.mock.t.Fatalf("ServiceMock.RollbackAdmin mock is already set by Set")
+	}
+
+	if mmRollbackAdmin.defaultExpectation == nil {
+		mmRollbackAdmin.defaultExpectation = &ServiceMockRollbackAdminExpectation{}
+	}
+
+	if mmRollbackAdmin.defaultExpectation.params != nil {
+		mmRollbackAdmin.mock.t.Fatalf("ServiceMock.RollbackAdmin mock is already set by Expect")
+	}
+
+	if mmRollbackAdmin.defaultExpectation.paramPtrs == nil {
+		mmRollbackAdmin.defaultExpectation.paramPtrs = &ServiceMockRollbackAdminParamPtrs{}
+	}
+	mmRollbackAdmin.defaultExpectation.paramPtrs.o1 = &o1
+	mmRollbackAdmin.defaultExpectation.expectationOrigins.originO1 = minimock.CallerInfo(1)
+
+	return mmRollbackAdmin
+}
+
+// ExpectS1Param3 sets up expected param s1 for Service.RollbackAdmin
+func (mmRollbackAdmin *mServiceMockRollbackAdmin) ExpectS1Param3(s1 string) *mServiceMockRollbackAdmin {
+	if mmRollbackAdmin.mock.funcRollbackAdmin != nil {
+		mmRollbackAdmin.mock.t.Fatalf("ServiceMock.RollbackAdmin mock is already set by Set")
+	}
+
+	if mmRollbackAdmin.defaultExpectation == nil {
+		mmRollbackAdmin.defaultExpectation = &ServiceMockRollbackAdminExpectation{}
+	}
+
+	if mmRollbackAdmin.defaultExpectation.params != nil {
+		mmRollbackAdmin.mock.t.Fatalf("ServiceMock.RollbackAdmin mock is already set by Expect")
+	}
+
+	if mmRollbackAdmin.defaultExpectation.paramPtrs == nil {
+		mmRollbackAdmin.defaultExpectation.paramPtrs = &ServiceMockRollbackAdminParamPtrs{}
+	}
+	mmRollbackAdmin.defaultExpectation.paramPtrs.s1 = &s1
+	mmRollbackAdmin.defaultExpectation.expectationOrigins.originS1 = minimock.CallerInfo(1)
+
+	return mmRollbackAdmin
+}
+
+// Inspect accepts an inspector function that has same arguments as the Service.RollbackAdmin
+func (mmRollbackAdmin *mServiceMockRollbackAdmin) Inspect(f func(ctx context.Context, o1 types.OwnerUIDType, s1 string)) *mServiceMockRollbackAdmin {
+	if mmRollbackAdmin.mock.inspectFuncRollbackAdmin != nil {
+		mmRollbackAdmin.mock.t.Fatalf("Inspect function is already set for ServiceMock.RollbackAdmin")
+	}
+
+	mmRollbackAdmin.mock.inspectFuncRollbackAdmin = f
+
+	return mmRollbackAdmin
+}
+
+// Return sets up results that will be returned by Service.RollbackAdmin
+func (mmRollbackAdmin *mServiceMockRollbackAdmin) Return(rp1 *artifactpb.RollbackAdminResponse, err error) *ServiceMock {
+	if mmRollbackAdmin.mock.funcRollbackAdmin != nil {
+		mmRollbackAdmin.mock.t.Fatalf("ServiceMock.RollbackAdmin mock is already set by Set")
+	}
+
+	if mmRollbackAdmin.defaultExpectation == nil {
+		mmRollbackAdmin.defaultExpectation = &ServiceMockRollbackAdminExpectation{mock: mmRollbackAdmin.mock}
+	}
+	mmRollbackAdmin.defaultExpectation.results = &ServiceMockRollbackAdminResults{rp1, err}
+	mmRollbackAdmin.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmRollbackAdmin.mock
+}
+
+// Set uses given function f to mock the Service.RollbackAdmin method
+func (mmRollbackAdmin *mServiceMockRollbackAdmin) Set(f func(ctx context.Context, o1 types.OwnerUIDType, s1 string) (rp1 *artifactpb.RollbackAdminResponse, err error)) *ServiceMock {
+	if mmRollbackAdmin.defaultExpectation != nil {
+		mmRollbackAdmin.mock.t.Fatalf("Default expectation is already set for the Service.RollbackAdmin method")
+	}
+
+	if len(mmRollbackAdmin.expectations) > 0 {
+		mmRollbackAdmin.mock.t.Fatalf("Some expectations are already set for the Service.RollbackAdmin method")
+	}
+
+	mmRollbackAdmin.mock.funcRollbackAdmin = f
+	mmRollbackAdmin.mock.funcRollbackAdminOrigin = minimock.CallerInfo(1)
+	return mmRollbackAdmin.mock
+}
+
+// When sets expectation for the Service.RollbackAdmin which will trigger the result defined by the following
+// Then helper
+func (mmRollbackAdmin *mServiceMockRollbackAdmin) When(ctx context.Context, o1 types.OwnerUIDType, s1 string) *ServiceMockRollbackAdminExpectation {
+	if mmRollbackAdmin.mock.funcRollbackAdmin != nil {
+		mmRollbackAdmin.mock.t.Fatalf("ServiceMock.RollbackAdmin mock is already set by Set")
+	}
+
+	expectation := &ServiceMockRollbackAdminExpectation{
+		mock:               mmRollbackAdmin.mock,
+		params:             &ServiceMockRollbackAdminParams{ctx, o1, s1},
+		expectationOrigins: ServiceMockRollbackAdminExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmRollbackAdmin.expectations = append(mmRollbackAdmin.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Service.RollbackAdmin return parameters for the expectation previously defined by the When method
+func (e *ServiceMockRollbackAdminExpectation) Then(rp1 *artifactpb.RollbackAdminResponse, err error) *ServiceMock {
+	e.results = &ServiceMockRollbackAdminResults{rp1, err}
+	return e.mock
+}
+
+// Times sets number of times Service.RollbackAdmin should be invoked
+func (mmRollbackAdmin *mServiceMockRollbackAdmin) Times(n uint64) *mServiceMockRollbackAdmin {
+	if n == 0 {
+		mmRollbackAdmin.mock.t.Fatalf("Times of ServiceMock.RollbackAdmin mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmRollbackAdmin.expectedInvocations, n)
+	mmRollbackAdmin.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmRollbackAdmin
+}
+
+func (mmRollbackAdmin *mServiceMockRollbackAdmin) invocationsDone() bool {
+	if len(mmRollbackAdmin.expectations) == 0 && mmRollbackAdmin.defaultExpectation == nil && mmRollbackAdmin.mock.funcRollbackAdmin == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmRollbackAdmin.mock.afterRollbackAdminCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmRollbackAdmin.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// RollbackAdmin implements mm_service.Service
+func (mmRollbackAdmin *ServiceMock) RollbackAdmin(ctx context.Context, o1 types.OwnerUIDType, s1 string) (rp1 *artifactpb.RollbackAdminResponse, err error) {
+	mm_atomic.AddUint64(&mmRollbackAdmin.beforeRollbackAdminCounter, 1)
+	defer mm_atomic.AddUint64(&mmRollbackAdmin.afterRollbackAdminCounter, 1)
+
+	mmRollbackAdmin.t.Helper()
+
+	if mmRollbackAdmin.inspectFuncRollbackAdmin != nil {
+		mmRollbackAdmin.inspectFuncRollbackAdmin(ctx, o1, s1)
+	}
+
+	mm_params := ServiceMockRollbackAdminParams{ctx, o1, s1}
+
+	// Record call args
+	mmRollbackAdmin.RollbackAdminMock.mutex.Lock()
+	mmRollbackAdmin.RollbackAdminMock.callArgs = append(mmRollbackAdmin.RollbackAdminMock.callArgs, &mm_params)
+	mmRollbackAdmin.RollbackAdminMock.mutex.Unlock()
+
+	for _, e := range mmRollbackAdmin.RollbackAdminMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.rp1, e.results.err
+		}
+	}
+
+	if mmRollbackAdmin.RollbackAdminMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmRollbackAdmin.RollbackAdminMock.defaultExpectation.Counter, 1)
+		mm_want := mmRollbackAdmin.RollbackAdminMock.defaultExpectation.params
+		mm_want_ptrs := mmRollbackAdmin.RollbackAdminMock.defaultExpectation.paramPtrs
+
+		mm_got := ServiceMockRollbackAdminParams{ctx, o1, s1}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmRollbackAdmin.t.Errorf("ServiceMock.RollbackAdmin got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmRollbackAdmin.RollbackAdminMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.o1 != nil && !minimock.Equal(*mm_want_ptrs.o1, mm_got.o1) {
+				mmRollbackAdmin.t.Errorf("ServiceMock.RollbackAdmin got unexpected parameter o1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmRollbackAdmin.RollbackAdminMock.defaultExpectation.expectationOrigins.originO1, *mm_want_ptrs.o1, mm_got.o1, minimock.Diff(*mm_want_ptrs.o1, mm_got.o1))
+			}
+
+			if mm_want_ptrs.s1 != nil && !minimock.Equal(*mm_want_ptrs.s1, mm_got.s1) {
+				mmRollbackAdmin.t.Errorf("ServiceMock.RollbackAdmin got unexpected parameter s1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmRollbackAdmin.RollbackAdminMock.defaultExpectation.expectationOrigins.originS1, *mm_want_ptrs.s1, mm_got.s1, minimock.Diff(*mm_want_ptrs.s1, mm_got.s1))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmRollbackAdmin.t.Errorf("ServiceMock.RollbackAdmin got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmRollbackAdmin.RollbackAdminMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmRollbackAdmin.RollbackAdminMock.defaultExpectation.results
+		if mm_results == nil {
+			mmRollbackAdmin.t.Fatal("No results are set for the ServiceMock.RollbackAdmin")
+		}
+		return (*mm_results).rp1, (*mm_results).err
+	}
+	if mmRollbackAdmin.funcRollbackAdmin != nil {
+		return mmRollbackAdmin.funcRollbackAdmin(ctx, o1, s1)
+	}
+	mmRollbackAdmin.t.Fatalf("Unexpected call to ServiceMock.RollbackAdmin. %v %v %v", ctx, o1, s1)
+	return
+}
+
+// RollbackAdminAfterCounter returns a count of finished ServiceMock.RollbackAdmin invocations
+func (mmRollbackAdmin *ServiceMock) RollbackAdminAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmRollbackAdmin.afterRollbackAdminCounter)
+}
+
+// RollbackAdminBeforeCounter returns a count of ServiceMock.RollbackAdmin invocations
+func (mmRollbackAdmin *ServiceMock) RollbackAdminBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmRollbackAdmin.beforeRollbackAdminCounter)
+}
+
+// Calls returns a list of arguments used in each call to ServiceMock.RollbackAdmin.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmRollbackAdmin *mServiceMockRollbackAdmin) Calls() []*ServiceMockRollbackAdminParams {
+	mmRollbackAdmin.mutex.RLock()
+
+	argCopy := make([]*ServiceMockRollbackAdminParams, len(mmRollbackAdmin.callArgs))
+	copy(argCopy, mmRollbackAdmin.callArgs)
+
+	mmRollbackAdmin.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockRollbackAdminDone returns true if the count of the RollbackAdmin invocations corresponds
+// the number of defined expectations
+func (m *ServiceMock) MinimockRollbackAdminDone() bool {
+	if m.RollbackAdminMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.RollbackAdminMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.RollbackAdminMock.invocationsDone()
+}
+
+// MinimockRollbackAdminInspect logs each unmet expectation
+func (m *ServiceMock) MinimockRollbackAdminInspect() {
+	for _, e := range m.RollbackAdminMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to ServiceMock.RollbackAdmin at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterRollbackAdminCounter := mm_atomic.LoadUint64(&m.afterRollbackAdminCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.RollbackAdminMock.defaultExpectation != nil && afterRollbackAdminCounter < 1 {
+		if m.RollbackAdminMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to ServiceMock.RollbackAdmin at\n%s", m.RollbackAdminMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to ServiceMock.RollbackAdmin at\n%s with params: %#v", m.RollbackAdminMock.defaultExpectation.expectationOrigins.origin, *m.RollbackAdminMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcRollbackAdmin != nil && afterRollbackAdminCounter < 1 {
+		m.t.Errorf("Expected call to ServiceMock.RollbackAdmin at\n%s", m.funcRollbackAdminOrigin)
+	}
+
+	if !m.RollbackAdminMock.invocationsDone() && afterRollbackAdminCounter > 0 {
+		m.t.Errorf("Expected %d calls to ServiceMock.RollbackAdmin at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.RollbackAdminMock.expectedInvocations), m.RollbackAdminMock.expectedInvocationsOrigin, afterRollbackAdminCounter)
+	}
+}
+
+type mServiceMockSetRollbackRetentionAdmin struct {
+	optional           bool
+	mock               *ServiceMock
+	defaultExpectation *ServiceMockSetRollbackRetentionAdminExpectation
+	expectations       []*ServiceMockSetRollbackRetentionAdminExpectation
+
+	callArgs []*ServiceMockSetRollbackRetentionAdminParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// ServiceMockSetRollbackRetentionAdminExpectation specifies expectation struct of the Service.SetRollbackRetentionAdmin
+type ServiceMockSetRollbackRetentionAdminExpectation struct {
+	mock               *ServiceMock
+	params             *ServiceMockSetRollbackRetentionAdminParams
+	paramPtrs          *ServiceMockSetRollbackRetentionAdminParamPtrs
+	expectationOrigins ServiceMockSetRollbackRetentionAdminExpectationOrigins
+	results            *ServiceMockSetRollbackRetentionAdminResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// ServiceMockSetRollbackRetentionAdminParams contains parameters of the Service.SetRollbackRetentionAdmin
+type ServiceMockSetRollbackRetentionAdminParams struct {
+	ctx context.Context
+	o1  types.OwnerUIDType
+	s1  string
+	i1  int32
+	s2  artifactpb.SetRollbackRetentionAdminRequest_TimeUnit
+}
+
+// ServiceMockSetRollbackRetentionAdminParamPtrs contains pointers to parameters of the Service.SetRollbackRetentionAdmin
+type ServiceMockSetRollbackRetentionAdminParamPtrs struct {
+	ctx *context.Context
+	o1  *types.OwnerUIDType
+	s1  *string
+	i1  *int32
+	s2  *artifactpb.SetRollbackRetentionAdminRequest_TimeUnit
+}
+
+// ServiceMockSetRollbackRetentionAdminResults contains results of the Service.SetRollbackRetentionAdmin
+type ServiceMockSetRollbackRetentionAdminResults struct {
+	sp1 *artifactpb.SetRollbackRetentionAdminResponse
+	err error
+}
+
+// ServiceMockSetRollbackRetentionAdminOrigins contains origins of expectations of the Service.SetRollbackRetentionAdmin
+type ServiceMockSetRollbackRetentionAdminExpectationOrigins struct {
+	origin    string
+	originCtx string
+	originO1  string
+	originS1  string
+	originI1  string
+	originS2  string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmSetRollbackRetentionAdmin *mServiceMockSetRollbackRetentionAdmin) Optional() *mServiceMockSetRollbackRetentionAdmin {
+	mmSetRollbackRetentionAdmin.optional = true
+	return mmSetRollbackRetentionAdmin
+}
+
+// Expect sets up expected params for Service.SetRollbackRetentionAdmin
+func (mmSetRollbackRetentionAdmin *mServiceMockSetRollbackRetentionAdmin) Expect(ctx context.Context, o1 types.OwnerUIDType, s1 string, i1 int32, s2 artifactpb.SetRollbackRetentionAdminRequest_TimeUnit) *mServiceMockSetRollbackRetentionAdmin {
+	if mmSetRollbackRetentionAdmin.mock.funcSetRollbackRetentionAdmin != nil {
+		mmSetRollbackRetentionAdmin.mock.t.Fatalf("ServiceMock.SetRollbackRetentionAdmin mock is already set by Set")
+	}
+
+	if mmSetRollbackRetentionAdmin.defaultExpectation == nil {
+		mmSetRollbackRetentionAdmin.defaultExpectation = &ServiceMockSetRollbackRetentionAdminExpectation{}
+	}
+
+	if mmSetRollbackRetentionAdmin.defaultExpectation.paramPtrs != nil {
+		mmSetRollbackRetentionAdmin.mock.t.Fatalf("ServiceMock.SetRollbackRetentionAdmin mock is already set by ExpectParams functions")
+	}
+
+	mmSetRollbackRetentionAdmin.defaultExpectation.params = &ServiceMockSetRollbackRetentionAdminParams{ctx, o1, s1, i1, s2}
+	mmSetRollbackRetentionAdmin.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmSetRollbackRetentionAdmin.expectations {
+		if minimock.Equal(e.params, mmSetRollbackRetentionAdmin.defaultExpectation.params) {
+			mmSetRollbackRetentionAdmin.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmSetRollbackRetentionAdmin.defaultExpectation.params)
+		}
+	}
+
+	return mmSetRollbackRetentionAdmin
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Service.SetRollbackRetentionAdmin
+func (mmSetRollbackRetentionAdmin *mServiceMockSetRollbackRetentionAdmin) ExpectCtxParam1(ctx context.Context) *mServiceMockSetRollbackRetentionAdmin {
+	if mmSetRollbackRetentionAdmin.mock.funcSetRollbackRetentionAdmin != nil {
+		mmSetRollbackRetentionAdmin.mock.t.Fatalf("ServiceMock.SetRollbackRetentionAdmin mock is already set by Set")
+	}
+
+	if mmSetRollbackRetentionAdmin.defaultExpectation == nil {
+		mmSetRollbackRetentionAdmin.defaultExpectation = &ServiceMockSetRollbackRetentionAdminExpectation{}
+	}
+
+	if mmSetRollbackRetentionAdmin.defaultExpectation.params != nil {
+		mmSetRollbackRetentionAdmin.mock.t.Fatalf("ServiceMock.SetRollbackRetentionAdmin mock is already set by Expect")
+	}
+
+	if mmSetRollbackRetentionAdmin.defaultExpectation.paramPtrs == nil {
+		mmSetRollbackRetentionAdmin.defaultExpectation.paramPtrs = &ServiceMockSetRollbackRetentionAdminParamPtrs{}
+	}
+	mmSetRollbackRetentionAdmin.defaultExpectation.paramPtrs.ctx = &ctx
+	mmSetRollbackRetentionAdmin.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmSetRollbackRetentionAdmin
+}
+
+// ExpectO1Param2 sets up expected param o1 for Service.SetRollbackRetentionAdmin
+func (mmSetRollbackRetentionAdmin *mServiceMockSetRollbackRetentionAdmin) ExpectO1Param2(o1 types.OwnerUIDType) *mServiceMockSetRollbackRetentionAdmin {
+	if mmSetRollbackRetentionAdmin.mock.funcSetRollbackRetentionAdmin != nil {
+		mmSetRollbackRetentionAdmin.mock.t.Fatalf("ServiceMock.SetRollbackRetentionAdmin mock is already set by Set")
+	}
+
+	if mmSetRollbackRetentionAdmin.defaultExpectation == nil {
+		mmSetRollbackRetentionAdmin.defaultExpectation = &ServiceMockSetRollbackRetentionAdminExpectation{}
+	}
+
+	if mmSetRollbackRetentionAdmin.defaultExpectation.params != nil {
+		mmSetRollbackRetentionAdmin.mock.t.Fatalf("ServiceMock.SetRollbackRetentionAdmin mock is already set by Expect")
+	}
+
+	if mmSetRollbackRetentionAdmin.defaultExpectation.paramPtrs == nil {
+		mmSetRollbackRetentionAdmin.defaultExpectation.paramPtrs = &ServiceMockSetRollbackRetentionAdminParamPtrs{}
+	}
+	mmSetRollbackRetentionAdmin.defaultExpectation.paramPtrs.o1 = &o1
+	mmSetRollbackRetentionAdmin.defaultExpectation.expectationOrigins.originO1 = minimock.CallerInfo(1)
+
+	return mmSetRollbackRetentionAdmin
+}
+
+// ExpectS1Param3 sets up expected param s1 for Service.SetRollbackRetentionAdmin
+func (mmSetRollbackRetentionAdmin *mServiceMockSetRollbackRetentionAdmin) ExpectS1Param3(s1 string) *mServiceMockSetRollbackRetentionAdmin {
+	if mmSetRollbackRetentionAdmin.mock.funcSetRollbackRetentionAdmin != nil {
+		mmSetRollbackRetentionAdmin.mock.t.Fatalf("ServiceMock.SetRollbackRetentionAdmin mock is already set by Set")
+	}
+
+	if mmSetRollbackRetentionAdmin.defaultExpectation == nil {
+		mmSetRollbackRetentionAdmin.defaultExpectation = &ServiceMockSetRollbackRetentionAdminExpectation{}
+	}
+
+	if mmSetRollbackRetentionAdmin.defaultExpectation.params != nil {
+		mmSetRollbackRetentionAdmin.mock.t.Fatalf("ServiceMock.SetRollbackRetentionAdmin mock is already set by Expect")
+	}
+
+	if mmSetRollbackRetentionAdmin.defaultExpectation.paramPtrs == nil {
+		mmSetRollbackRetentionAdmin.defaultExpectation.paramPtrs = &ServiceMockSetRollbackRetentionAdminParamPtrs{}
+	}
+	mmSetRollbackRetentionAdmin.defaultExpectation.paramPtrs.s1 = &s1
+	mmSetRollbackRetentionAdmin.defaultExpectation.expectationOrigins.originS1 = minimock.CallerInfo(1)
+
+	return mmSetRollbackRetentionAdmin
+}
+
+// ExpectI1Param4 sets up expected param i1 for Service.SetRollbackRetentionAdmin
+func (mmSetRollbackRetentionAdmin *mServiceMockSetRollbackRetentionAdmin) ExpectI1Param4(i1 int32) *mServiceMockSetRollbackRetentionAdmin {
+	if mmSetRollbackRetentionAdmin.mock.funcSetRollbackRetentionAdmin != nil {
+		mmSetRollbackRetentionAdmin.mock.t.Fatalf("ServiceMock.SetRollbackRetentionAdmin mock is already set by Set")
+	}
+
+	if mmSetRollbackRetentionAdmin.defaultExpectation == nil {
+		mmSetRollbackRetentionAdmin.defaultExpectation = &ServiceMockSetRollbackRetentionAdminExpectation{}
+	}
+
+	if mmSetRollbackRetentionAdmin.defaultExpectation.params != nil {
+		mmSetRollbackRetentionAdmin.mock.t.Fatalf("ServiceMock.SetRollbackRetentionAdmin mock is already set by Expect")
+	}
+
+	if mmSetRollbackRetentionAdmin.defaultExpectation.paramPtrs == nil {
+		mmSetRollbackRetentionAdmin.defaultExpectation.paramPtrs = &ServiceMockSetRollbackRetentionAdminParamPtrs{}
+	}
+	mmSetRollbackRetentionAdmin.defaultExpectation.paramPtrs.i1 = &i1
+	mmSetRollbackRetentionAdmin.defaultExpectation.expectationOrigins.originI1 = minimock.CallerInfo(1)
+
+	return mmSetRollbackRetentionAdmin
+}
+
+// ExpectS2Param5 sets up expected param s2 for Service.SetRollbackRetentionAdmin
+func (mmSetRollbackRetentionAdmin *mServiceMockSetRollbackRetentionAdmin) ExpectS2Param5(s2 artifactpb.SetRollbackRetentionAdminRequest_TimeUnit) *mServiceMockSetRollbackRetentionAdmin {
+	if mmSetRollbackRetentionAdmin.mock.funcSetRollbackRetentionAdmin != nil {
+		mmSetRollbackRetentionAdmin.mock.t.Fatalf("ServiceMock.SetRollbackRetentionAdmin mock is already set by Set")
+	}
+
+	if mmSetRollbackRetentionAdmin.defaultExpectation == nil {
+		mmSetRollbackRetentionAdmin.defaultExpectation = &ServiceMockSetRollbackRetentionAdminExpectation{}
+	}
+
+	if mmSetRollbackRetentionAdmin.defaultExpectation.params != nil {
+		mmSetRollbackRetentionAdmin.mock.t.Fatalf("ServiceMock.SetRollbackRetentionAdmin mock is already set by Expect")
+	}
+
+	if mmSetRollbackRetentionAdmin.defaultExpectation.paramPtrs == nil {
+		mmSetRollbackRetentionAdmin.defaultExpectation.paramPtrs = &ServiceMockSetRollbackRetentionAdminParamPtrs{}
+	}
+	mmSetRollbackRetentionAdmin.defaultExpectation.paramPtrs.s2 = &s2
+	mmSetRollbackRetentionAdmin.defaultExpectation.expectationOrigins.originS2 = minimock.CallerInfo(1)
+
+	return mmSetRollbackRetentionAdmin
+}
+
+// Inspect accepts an inspector function that has same arguments as the Service.SetRollbackRetentionAdmin
+func (mmSetRollbackRetentionAdmin *mServiceMockSetRollbackRetentionAdmin) Inspect(f func(ctx context.Context, o1 types.OwnerUIDType, s1 string, i1 int32, s2 artifactpb.SetRollbackRetentionAdminRequest_TimeUnit)) *mServiceMockSetRollbackRetentionAdmin {
+	if mmSetRollbackRetentionAdmin.mock.inspectFuncSetRollbackRetentionAdmin != nil {
+		mmSetRollbackRetentionAdmin.mock.t.Fatalf("Inspect function is already set for ServiceMock.SetRollbackRetentionAdmin")
+	}
+
+	mmSetRollbackRetentionAdmin.mock.inspectFuncSetRollbackRetentionAdmin = f
+
+	return mmSetRollbackRetentionAdmin
+}
+
+// Return sets up results that will be returned by Service.SetRollbackRetentionAdmin
+func (mmSetRollbackRetentionAdmin *mServiceMockSetRollbackRetentionAdmin) Return(sp1 *artifactpb.SetRollbackRetentionAdminResponse, err error) *ServiceMock {
+	if mmSetRollbackRetentionAdmin.mock.funcSetRollbackRetentionAdmin != nil {
+		mmSetRollbackRetentionAdmin.mock.t.Fatalf("ServiceMock.SetRollbackRetentionAdmin mock is already set by Set")
+	}
+
+	if mmSetRollbackRetentionAdmin.defaultExpectation == nil {
+		mmSetRollbackRetentionAdmin.defaultExpectation = &ServiceMockSetRollbackRetentionAdminExpectation{mock: mmSetRollbackRetentionAdmin.mock}
+	}
+	mmSetRollbackRetentionAdmin.defaultExpectation.results = &ServiceMockSetRollbackRetentionAdminResults{sp1, err}
+	mmSetRollbackRetentionAdmin.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmSetRollbackRetentionAdmin.mock
+}
+
+// Set uses given function f to mock the Service.SetRollbackRetentionAdmin method
+func (mmSetRollbackRetentionAdmin *mServiceMockSetRollbackRetentionAdmin) Set(f func(ctx context.Context, o1 types.OwnerUIDType, s1 string, i1 int32, s2 artifactpb.SetRollbackRetentionAdminRequest_TimeUnit) (sp1 *artifactpb.SetRollbackRetentionAdminResponse, err error)) *ServiceMock {
+	if mmSetRollbackRetentionAdmin.defaultExpectation != nil {
+		mmSetRollbackRetentionAdmin.mock.t.Fatalf("Default expectation is already set for the Service.SetRollbackRetentionAdmin method")
+	}
+
+	if len(mmSetRollbackRetentionAdmin.expectations) > 0 {
+		mmSetRollbackRetentionAdmin.mock.t.Fatalf("Some expectations are already set for the Service.SetRollbackRetentionAdmin method")
+	}
+
+	mmSetRollbackRetentionAdmin.mock.funcSetRollbackRetentionAdmin = f
+	mmSetRollbackRetentionAdmin.mock.funcSetRollbackRetentionAdminOrigin = minimock.CallerInfo(1)
+	return mmSetRollbackRetentionAdmin.mock
+}
+
+// When sets expectation for the Service.SetRollbackRetentionAdmin which will trigger the result defined by the following
+// Then helper
+func (mmSetRollbackRetentionAdmin *mServiceMockSetRollbackRetentionAdmin) When(ctx context.Context, o1 types.OwnerUIDType, s1 string, i1 int32, s2 artifactpb.SetRollbackRetentionAdminRequest_TimeUnit) *ServiceMockSetRollbackRetentionAdminExpectation {
+	if mmSetRollbackRetentionAdmin.mock.funcSetRollbackRetentionAdmin != nil {
+		mmSetRollbackRetentionAdmin.mock.t.Fatalf("ServiceMock.SetRollbackRetentionAdmin mock is already set by Set")
+	}
+
+	expectation := &ServiceMockSetRollbackRetentionAdminExpectation{
+		mock:               mmSetRollbackRetentionAdmin.mock,
+		params:             &ServiceMockSetRollbackRetentionAdminParams{ctx, o1, s1, i1, s2},
+		expectationOrigins: ServiceMockSetRollbackRetentionAdminExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmSetRollbackRetentionAdmin.expectations = append(mmSetRollbackRetentionAdmin.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Service.SetRollbackRetentionAdmin return parameters for the expectation previously defined by the When method
+func (e *ServiceMockSetRollbackRetentionAdminExpectation) Then(sp1 *artifactpb.SetRollbackRetentionAdminResponse, err error) *ServiceMock {
+	e.results = &ServiceMockSetRollbackRetentionAdminResults{sp1, err}
+	return e.mock
+}
+
+// Times sets number of times Service.SetRollbackRetentionAdmin should be invoked
+func (mmSetRollbackRetentionAdmin *mServiceMockSetRollbackRetentionAdmin) Times(n uint64) *mServiceMockSetRollbackRetentionAdmin {
+	if n == 0 {
+		mmSetRollbackRetentionAdmin.mock.t.Fatalf("Times of ServiceMock.SetRollbackRetentionAdmin mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmSetRollbackRetentionAdmin.expectedInvocations, n)
+	mmSetRollbackRetentionAdmin.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmSetRollbackRetentionAdmin
+}
+
+func (mmSetRollbackRetentionAdmin *mServiceMockSetRollbackRetentionAdmin) invocationsDone() bool {
+	if len(mmSetRollbackRetentionAdmin.expectations) == 0 && mmSetRollbackRetentionAdmin.defaultExpectation == nil && mmSetRollbackRetentionAdmin.mock.funcSetRollbackRetentionAdmin == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmSetRollbackRetentionAdmin.mock.afterSetRollbackRetentionAdminCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmSetRollbackRetentionAdmin.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// SetRollbackRetentionAdmin implements mm_service.Service
+func (mmSetRollbackRetentionAdmin *ServiceMock) SetRollbackRetentionAdmin(ctx context.Context, o1 types.OwnerUIDType, s1 string, i1 int32, s2 artifactpb.SetRollbackRetentionAdminRequest_TimeUnit) (sp1 *artifactpb.SetRollbackRetentionAdminResponse, err error) {
+	mm_atomic.AddUint64(&mmSetRollbackRetentionAdmin.beforeSetRollbackRetentionAdminCounter, 1)
+	defer mm_atomic.AddUint64(&mmSetRollbackRetentionAdmin.afterSetRollbackRetentionAdminCounter, 1)
+
+	mmSetRollbackRetentionAdmin.t.Helper()
+
+	if mmSetRollbackRetentionAdmin.inspectFuncSetRollbackRetentionAdmin != nil {
+		mmSetRollbackRetentionAdmin.inspectFuncSetRollbackRetentionAdmin(ctx, o1, s1, i1, s2)
+	}
+
+	mm_params := ServiceMockSetRollbackRetentionAdminParams{ctx, o1, s1, i1, s2}
+
+	// Record call args
+	mmSetRollbackRetentionAdmin.SetRollbackRetentionAdminMock.mutex.Lock()
+	mmSetRollbackRetentionAdmin.SetRollbackRetentionAdminMock.callArgs = append(mmSetRollbackRetentionAdmin.SetRollbackRetentionAdminMock.callArgs, &mm_params)
+	mmSetRollbackRetentionAdmin.SetRollbackRetentionAdminMock.mutex.Unlock()
+
+	for _, e := range mmSetRollbackRetentionAdmin.SetRollbackRetentionAdminMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.sp1, e.results.err
+		}
+	}
+
+	if mmSetRollbackRetentionAdmin.SetRollbackRetentionAdminMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmSetRollbackRetentionAdmin.SetRollbackRetentionAdminMock.defaultExpectation.Counter, 1)
+		mm_want := mmSetRollbackRetentionAdmin.SetRollbackRetentionAdminMock.defaultExpectation.params
+		mm_want_ptrs := mmSetRollbackRetentionAdmin.SetRollbackRetentionAdminMock.defaultExpectation.paramPtrs
+
+		mm_got := ServiceMockSetRollbackRetentionAdminParams{ctx, o1, s1, i1, s2}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmSetRollbackRetentionAdmin.t.Errorf("ServiceMock.SetRollbackRetentionAdmin got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmSetRollbackRetentionAdmin.SetRollbackRetentionAdminMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.o1 != nil && !minimock.Equal(*mm_want_ptrs.o1, mm_got.o1) {
+				mmSetRollbackRetentionAdmin.t.Errorf("ServiceMock.SetRollbackRetentionAdmin got unexpected parameter o1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmSetRollbackRetentionAdmin.SetRollbackRetentionAdminMock.defaultExpectation.expectationOrigins.originO1, *mm_want_ptrs.o1, mm_got.o1, minimock.Diff(*mm_want_ptrs.o1, mm_got.o1))
+			}
+
+			if mm_want_ptrs.s1 != nil && !minimock.Equal(*mm_want_ptrs.s1, mm_got.s1) {
+				mmSetRollbackRetentionAdmin.t.Errorf("ServiceMock.SetRollbackRetentionAdmin got unexpected parameter s1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmSetRollbackRetentionAdmin.SetRollbackRetentionAdminMock.defaultExpectation.expectationOrigins.originS1, *mm_want_ptrs.s1, mm_got.s1, minimock.Diff(*mm_want_ptrs.s1, mm_got.s1))
+			}
+
+			if mm_want_ptrs.i1 != nil && !minimock.Equal(*mm_want_ptrs.i1, mm_got.i1) {
+				mmSetRollbackRetentionAdmin.t.Errorf("ServiceMock.SetRollbackRetentionAdmin got unexpected parameter i1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmSetRollbackRetentionAdmin.SetRollbackRetentionAdminMock.defaultExpectation.expectationOrigins.originI1, *mm_want_ptrs.i1, mm_got.i1, minimock.Diff(*mm_want_ptrs.i1, mm_got.i1))
+			}
+
+			if mm_want_ptrs.s2 != nil && !minimock.Equal(*mm_want_ptrs.s2, mm_got.s2) {
+				mmSetRollbackRetentionAdmin.t.Errorf("ServiceMock.SetRollbackRetentionAdmin got unexpected parameter s2, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmSetRollbackRetentionAdmin.SetRollbackRetentionAdminMock.defaultExpectation.expectationOrigins.originS2, *mm_want_ptrs.s2, mm_got.s2, minimock.Diff(*mm_want_ptrs.s2, mm_got.s2))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmSetRollbackRetentionAdmin.t.Errorf("ServiceMock.SetRollbackRetentionAdmin got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmSetRollbackRetentionAdmin.SetRollbackRetentionAdminMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmSetRollbackRetentionAdmin.SetRollbackRetentionAdminMock.defaultExpectation.results
+		if mm_results == nil {
+			mmSetRollbackRetentionAdmin.t.Fatal("No results are set for the ServiceMock.SetRollbackRetentionAdmin")
+		}
+		return (*mm_results).sp1, (*mm_results).err
+	}
+	if mmSetRollbackRetentionAdmin.funcSetRollbackRetentionAdmin != nil {
+		return mmSetRollbackRetentionAdmin.funcSetRollbackRetentionAdmin(ctx, o1, s1, i1, s2)
+	}
+	mmSetRollbackRetentionAdmin.t.Fatalf("Unexpected call to ServiceMock.SetRollbackRetentionAdmin. %v %v %v %v %v", ctx, o1, s1, i1, s2)
+	return
+}
+
+// SetRollbackRetentionAdminAfterCounter returns a count of finished ServiceMock.SetRollbackRetentionAdmin invocations
+func (mmSetRollbackRetentionAdmin *ServiceMock) SetRollbackRetentionAdminAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmSetRollbackRetentionAdmin.afterSetRollbackRetentionAdminCounter)
+}
+
+// SetRollbackRetentionAdminBeforeCounter returns a count of ServiceMock.SetRollbackRetentionAdmin invocations
+func (mmSetRollbackRetentionAdmin *ServiceMock) SetRollbackRetentionAdminBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmSetRollbackRetentionAdmin.beforeSetRollbackRetentionAdminCounter)
+}
+
+// Calls returns a list of arguments used in each call to ServiceMock.SetRollbackRetentionAdmin.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmSetRollbackRetentionAdmin *mServiceMockSetRollbackRetentionAdmin) Calls() []*ServiceMockSetRollbackRetentionAdminParams {
+	mmSetRollbackRetentionAdmin.mutex.RLock()
+
+	argCopy := make([]*ServiceMockSetRollbackRetentionAdminParams, len(mmSetRollbackRetentionAdmin.callArgs))
+	copy(argCopy, mmSetRollbackRetentionAdmin.callArgs)
+
+	mmSetRollbackRetentionAdmin.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockSetRollbackRetentionAdminDone returns true if the count of the SetRollbackRetentionAdmin invocations corresponds
+// the number of defined expectations
+func (m *ServiceMock) MinimockSetRollbackRetentionAdminDone() bool {
+	if m.SetRollbackRetentionAdminMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.SetRollbackRetentionAdminMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.SetRollbackRetentionAdminMock.invocationsDone()
+}
+
+// MinimockSetRollbackRetentionAdminInspect logs each unmet expectation
+func (m *ServiceMock) MinimockSetRollbackRetentionAdminInspect() {
+	for _, e := range m.SetRollbackRetentionAdminMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to ServiceMock.SetRollbackRetentionAdmin at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterSetRollbackRetentionAdminCounter := mm_atomic.LoadUint64(&m.afterSetRollbackRetentionAdminCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.SetRollbackRetentionAdminMock.defaultExpectation != nil && afterSetRollbackRetentionAdminCounter < 1 {
+		if m.SetRollbackRetentionAdminMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to ServiceMock.SetRollbackRetentionAdmin at\n%s", m.SetRollbackRetentionAdminMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to ServiceMock.SetRollbackRetentionAdmin at\n%s with params: %#v", m.SetRollbackRetentionAdminMock.defaultExpectation.expectationOrigins.origin, *m.SetRollbackRetentionAdminMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcSetRollbackRetentionAdmin != nil && afterSetRollbackRetentionAdminCounter < 1 {
+		m.t.Errorf("Expected call to ServiceMock.SetRollbackRetentionAdmin at\n%s", m.funcSetRollbackRetentionAdminOrigin)
+	}
+
+	if !m.SetRollbackRetentionAdminMock.invocationsDone() && afterSetRollbackRetentionAdminCounter > 0 {
+		m.t.Errorf("Expected %d calls to ServiceMock.SetRollbackRetentionAdmin at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.SetRollbackRetentionAdminMock.expectedInvocations), m.SetRollbackRetentionAdminMock.expectedInvocationsOrigin, afterSetRollbackRetentionAdminCounter)
 	}
 }
 
@@ -9681,17 +11962,356 @@ func (m *ServiceMock) MinimockSimilarityChunksSearchInspect() {
 	}
 }
 
+type mServiceMockUpdateSystemProfileAdmin struct {
+	optional           bool
+	mock               *ServiceMock
+	defaultExpectation *ServiceMockUpdateSystemProfileAdminExpectation
+	expectations       []*ServiceMockUpdateSystemProfileAdminExpectation
+
+	callArgs []*ServiceMockUpdateSystemProfileAdminParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// ServiceMockUpdateSystemProfileAdminExpectation specifies expectation struct of the Service.UpdateSystemProfileAdmin
+type ServiceMockUpdateSystemProfileAdminExpectation struct {
+	mock               *ServiceMock
+	params             *ServiceMockUpdateSystemProfileAdminParams
+	paramPtrs          *ServiceMockUpdateSystemProfileAdminParamPtrs
+	expectationOrigins ServiceMockUpdateSystemProfileAdminExpectationOrigins
+	results            *ServiceMockUpdateSystemProfileAdminResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// ServiceMockUpdateSystemProfileAdminParams contains parameters of the Service.UpdateSystemProfileAdmin
+type ServiceMockUpdateSystemProfileAdminParams struct {
+	ctx context.Context
+	up1 *artifactpb.UpdateSystemProfileAdminRequest
+}
+
+// ServiceMockUpdateSystemProfileAdminParamPtrs contains pointers to parameters of the Service.UpdateSystemProfileAdmin
+type ServiceMockUpdateSystemProfileAdminParamPtrs struct {
+	ctx *context.Context
+	up1 **artifactpb.UpdateSystemProfileAdminRequest
+}
+
+// ServiceMockUpdateSystemProfileAdminResults contains results of the Service.UpdateSystemProfileAdmin
+type ServiceMockUpdateSystemProfileAdminResults struct {
+	up2 *artifactpb.UpdateSystemProfileAdminResponse
+	err error
+}
+
+// ServiceMockUpdateSystemProfileAdminOrigins contains origins of expectations of the Service.UpdateSystemProfileAdmin
+type ServiceMockUpdateSystemProfileAdminExpectationOrigins struct {
+	origin    string
+	originCtx string
+	originUp1 string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmUpdateSystemProfileAdmin *mServiceMockUpdateSystemProfileAdmin) Optional() *mServiceMockUpdateSystemProfileAdmin {
+	mmUpdateSystemProfileAdmin.optional = true
+	return mmUpdateSystemProfileAdmin
+}
+
+// Expect sets up expected params for Service.UpdateSystemProfileAdmin
+func (mmUpdateSystemProfileAdmin *mServiceMockUpdateSystemProfileAdmin) Expect(ctx context.Context, up1 *artifactpb.UpdateSystemProfileAdminRequest) *mServiceMockUpdateSystemProfileAdmin {
+	if mmUpdateSystemProfileAdmin.mock.funcUpdateSystemProfileAdmin != nil {
+		mmUpdateSystemProfileAdmin.mock.t.Fatalf("ServiceMock.UpdateSystemProfileAdmin mock is already set by Set")
+	}
+
+	if mmUpdateSystemProfileAdmin.defaultExpectation == nil {
+		mmUpdateSystemProfileAdmin.defaultExpectation = &ServiceMockUpdateSystemProfileAdminExpectation{}
+	}
+
+	if mmUpdateSystemProfileAdmin.defaultExpectation.paramPtrs != nil {
+		mmUpdateSystemProfileAdmin.mock.t.Fatalf("ServiceMock.UpdateSystemProfileAdmin mock is already set by ExpectParams functions")
+	}
+
+	mmUpdateSystemProfileAdmin.defaultExpectation.params = &ServiceMockUpdateSystemProfileAdminParams{ctx, up1}
+	mmUpdateSystemProfileAdmin.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmUpdateSystemProfileAdmin.expectations {
+		if minimock.Equal(e.params, mmUpdateSystemProfileAdmin.defaultExpectation.params) {
+			mmUpdateSystemProfileAdmin.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmUpdateSystemProfileAdmin.defaultExpectation.params)
+		}
+	}
+
+	return mmUpdateSystemProfileAdmin
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Service.UpdateSystemProfileAdmin
+func (mmUpdateSystemProfileAdmin *mServiceMockUpdateSystemProfileAdmin) ExpectCtxParam1(ctx context.Context) *mServiceMockUpdateSystemProfileAdmin {
+	if mmUpdateSystemProfileAdmin.mock.funcUpdateSystemProfileAdmin != nil {
+		mmUpdateSystemProfileAdmin.mock.t.Fatalf("ServiceMock.UpdateSystemProfileAdmin mock is already set by Set")
+	}
+
+	if mmUpdateSystemProfileAdmin.defaultExpectation == nil {
+		mmUpdateSystemProfileAdmin.defaultExpectation = &ServiceMockUpdateSystemProfileAdminExpectation{}
+	}
+
+	if mmUpdateSystemProfileAdmin.defaultExpectation.params != nil {
+		mmUpdateSystemProfileAdmin.mock.t.Fatalf("ServiceMock.UpdateSystemProfileAdmin mock is already set by Expect")
+	}
+
+	if mmUpdateSystemProfileAdmin.defaultExpectation.paramPtrs == nil {
+		mmUpdateSystemProfileAdmin.defaultExpectation.paramPtrs = &ServiceMockUpdateSystemProfileAdminParamPtrs{}
+	}
+	mmUpdateSystemProfileAdmin.defaultExpectation.paramPtrs.ctx = &ctx
+	mmUpdateSystemProfileAdmin.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmUpdateSystemProfileAdmin
+}
+
+// ExpectUp1Param2 sets up expected param up1 for Service.UpdateSystemProfileAdmin
+func (mmUpdateSystemProfileAdmin *mServiceMockUpdateSystemProfileAdmin) ExpectUp1Param2(up1 *artifactpb.UpdateSystemProfileAdminRequest) *mServiceMockUpdateSystemProfileAdmin {
+	if mmUpdateSystemProfileAdmin.mock.funcUpdateSystemProfileAdmin != nil {
+		mmUpdateSystemProfileAdmin.mock.t.Fatalf("ServiceMock.UpdateSystemProfileAdmin mock is already set by Set")
+	}
+
+	if mmUpdateSystemProfileAdmin.defaultExpectation == nil {
+		mmUpdateSystemProfileAdmin.defaultExpectation = &ServiceMockUpdateSystemProfileAdminExpectation{}
+	}
+
+	if mmUpdateSystemProfileAdmin.defaultExpectation.params != nil {
+		mmUpdateSystemProfileAdmin.mock.t.Fatalf("ServiceMock.UpdateSystemProfileAdmin mock is already set by Expect")
+	}
+
+	if mmUpdateSystemProfileAdmin.defaultExpectation.paramPtrs == nil {
+		mmUpdateSystemProfileAdmin.defaultExpectation.paramPtrs = &ServiceMockUpdateSystemProfileAdminParamPtrs{}
+	}
+	mmUpdateSystemProfileAdmin.defaultExpectation.paramPtrs.up1 = &up1
+	mmUpdateSystemProfileAdmin.defaultExpectation.expectationOrigins.originUp1 = minimock.CallerInfo(1)
+
+	return mmUpdateSystemProfileAdmin
+}
+
+// Inspect accepts an inspector function that has same arguments as the Service.UpdateSystemProfileAdmin
+func (mmUpdateSystemProfileAdmin *mServiceMockUpdateSystemProfileAdmin) Inspect(f func(ctx context.Context, up1 *artifactpb.UpdateSystemProfileAdminRequest)) *mServiceMockUpdateSystemProfileAdmin {
+	if mmUpdateSystemProfileAdmin.mock.inspectFuncUpdateSystemProfileAdmin != nil {
+		mmUpdateSystemProfileAdmin.mock.t.Fatalf("Inspect function is already set for ServiceMock.UpdateSystemProfileAdmin")
+	}
+
+	mmUpdateSystemProfileAdmin.mock.inspectFuncUpdateSystemProfileAdmin = f
+
+	return mmUpdateSystemProfileAdmin
+}
+
+// Return sets up results that will be returned by Service.UpdateSystemProfileAdmin
+func (mmUpdateSystemProfileAdmin *mServiceMockUpdateSystemProfileAdmin) Return(up2 *artifactpb.UpdateSystemProfileAdminResponse, err error) *ServiceMock {
+	if mmUpdateSystemProfileAdmin.mock.funcUpdateSystemProfileAdmin != nil {
+		mmUpdateSystemProfileAdmin.mock.t.Fatalf("ServiceMock.UpdateSystemProfileAdmin mock is already set by Set")
+	}
+
+	if mmUpdateSystemProfileAdmin.defaultExpectation == nil {
+		mmUpdateSystemProfileAdmin.defaultExpectation = &ServiceMockUpdateSystemProfileAdminExpectation{mock: mmUpdateSystemProfileAdmin.mock}
+	}
+	mmUpdateSystemProfileAdmin.defaultExpectation.results = &ServiceMockUpdateSystemProfileAdminResults{up2, err}
+	mmUpdateSystemProfileAdmin.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmUpdateSystemProfileAdmin.mock
+}
+
+// Set uses given function f to mock the Service.UpdateSystemProfileAdmin method
+func (mmUpdateSystemProfileAdmin *mServiceMockUpdateSystemProfileAdmin) Set(f func(ctx context.Context, up1 *artifactpb.UpdateSystemProfileAdminRequest) (up2 *artifactpb.UpdateSystemProfileAdminResponse, err error)) *ServiceMock {
+	if mmUpdateSystemProfileAdmin.defaultExpectation != nil {
+		mmUpdateSystemProfileAdmin.mock.t.Fatalf("Default expectation is already set for the Service.UpdateSystemProfileAdmin method")
+	}
+
+	if len(mmUpdateSystemProfileAdmin.expectations) > 0 {
+		mmUpdateSystemProfileAdmin.mock.t.Fatalf("Some expectations are already set for the Service.UpdateSystemProfileAdmin method")
+	}
+
+	mmUpdateSystemProfileAdmin.mock.funcUpdateSystemProfileAdmin = f
+	mmUpdateSystemProfileAdmin.mock.funcUpdateSystemProfileAdminOrigin = minimock.CallerInfo(1)
+	return mmUpdateSystemProfileAdmin.mock
+}
+
+// When sets expectation for the Service.UpdateSystemProfileAdmin which will trigger the result defined by the following
+// Then helper
+func (mmUpdateSystemProfileAdmin *mServiceMockUpdateSystemProfileAdmin) When(ctx context.Context, up1 *artifactpb.UpdateSystemProfileAdminRequest) *ServiceMockUpdateSystemProfileAdminExpectation {
+	if mmUpdateSystemProfileAdmin.mock.funcUpdateSystemProfileAdmin != nil {
+		mmUpdateSystemProfileAdmin.mock.t.Fatalf("ServiceMock.UpdateSystemProfileAdmin mock is already set by Set")
+	}
+
+	expectation := &ServiceMockUpdateSystemProfileAdminExpectation{
+		mock:               mmUpdateSystemProfileAdmin.mock,
+		params:             &ServiceMockUpdateSystemProfileAdminParams{ctx, up1},
+		expectationOrigins: ServiceMockUpdateSystemProfileAdminExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmUpdateSystemProfileAdmin.expectations = append(mmUpdateSystemProfileAdmin.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Service.UpdateSystemProfileAdmin return parameters for the expectation previously defined by the When method
+func (e *ServiceMockUpdateSystemProfileAdminExpectation) Then(up2 *artifactpb.UpdateSystemProfileAdminResponse, err error) *ServiceMock {
+	e.results = &ServiceMockUpdateSystemProfileAdminResults{up2, err}
+	return e.mock
+}
+
+// Times sets number of times Service.UpdateSystemProfileAdmin should be invoked
+func (mmUpdateSystemProfileAdmin *mServiceMockUpdateSystemProfileAdmin) Times(n uint64) *mServiceMockUpdateSystemProfileAdmin {
+	if n == 0 {
+		mmUpdateSystemProfileAdmin.mock.t.Fatalf("Times of ServiceMock.UpdateSystemProfileAdmin mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmUpdateSystemProfileAdmin.expectedInvocations, n)
+	mmUpdateSystemProfileAdmin.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmUpdateSystemProfileAdmin
+}
+
+func (mmUpdateSystemProfileAdmin *mServiceMockUpdateSystemProfileAdmin) invocationsDone() bool {
+	if len(mmUpdateSystemProfileAdmin.expectations) == 0 && mmUpdateSystemProfileAdmin.defaultExpectation == nil && mmUpdateSystemProfileAdmin.mock.funcUpdateSystemProfileAdmin == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmUpdateSystemProfileAdmin.mock.afterUpdateSystemProfileAdminCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmUpdateSystemProfileAdmin.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// UpdateSystemProfileAdmin implements mm_service.Service
+func (mmUpdateSystemProfileAdmin *ServiceMock) UpdateSystemProfileAdmin(ctx context.Context, up1 *artifactpb.UpdateSystemProfileAdminRequest) (up2 *artifactpb.UpdateSystemProfileAdminResponse, err error) {
+	mm_atomic.AddUint64(&mmUpdateSystemProfileAdmin.beforeUpdateSystemProfileAdminCounter, 1)
+	defer mm_atomic.AddUint64(&mmUpdateSystemProfileAdmin.afterUpdateSystemProfileAdminCounter, 1)
+
+	mmUpdateSystemProfileAdmin.t.Helper()
+
+	if mmUpdateSystemProfileAdmin.inspectFuncUpdateSystemProfileAdmin != nil {
+		mmUpdateSystemProfileAdmin.inspectFuncUpdateSystemProfileAdmin(ctx, up1)
+	}
+
+	mm_params := ServiceMockUpdateSystemProfileAdminParams{ctx, up1}
+
+	// Record call args
+	mmUpdateSystemProfileAdmin.UpdateSystemProfileAdminMock.mutex.Lock()
+	mmUpdateSystemProfileAdmin.UpdateSystemProfileAdminMock.callArgs = append(mmUpdateSystemProfileAdmin.UpdateSystemProfileAdminMock.callArgs, &mm_params)
+	mmUpdateSystemProfileAdmin.UpdateSystemProfileAdminMock.mutex.Unlock()
+
+	for _, e := range mmUpdateSystemProfileAdmin.UpdateSystemProfileAdminMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.up2, e.results.err
+		}
+	}
+
+	if mmUpdateSystemProfileAdmin.UpdateSystemProfileAdminMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmUpdateSystemProfileAdmin.UpdateSystemProfileAdminMock.defaultExpectation.Counter, 1)
+		mm_want := mmUpdateSystemProfileAdmin.UpdateSystemProfileAdminMock.defaultExpectation.params
+		mm_want_ptrs := mmUpdateSystemProfileAdmin.UpdateSystemProfileAdminMock.defaultExpectation.paramPtrs
+
+		mm_got := ServiceMockUpdateSystemProfileAdminParams{ctx, up1}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmUpdateSystemProfileAdmin.t.Errorf("ServiceMock.UpdateSystemProfileAdmin got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateSystemProfileAdmin.UpdateSystemProfileAdminMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.up1 != nil && !minimock.Equal(*mm_want_ptrs.up1, mm_got.up1) {
+				mmUpdateSystemProfileAdmin.t.Errorf("ServiceMock.UpdateSystemProfileAdmin got unexpected parameter up1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateSystemProfileAdmin.UpdateSystemProfileAdminMock.defaultExpectation.expectationOrigins.originUp1, *mm_want_ptrs.up1, mm_got.up1, minimock.Diff(*mm_want_ptrs.up1, mm_got.up1))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmUpdateSystemProfileAdmin.t.Errorf("ServiceMock.UpdateSystemProfileAdmin got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmUpdateSystemProfileAdmin.UpdateSystemProfileAdminMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmUpdateSystemProfileAdmin.UpdateSystemProfileAdminMock.defaultExpectation.results
+		if mm_results == nil {
+			mmUpdateSystemProfileAdmin.t.Fatal("No results are set for the ServiceMock.UpdateSystemProfileAdmin")
+		}
+		return (*mm_results).up2, (*mm_results).err
+	}
+	if mmUpdateSystemProfileAdmin.funcUpdateSystemProfileAdmin != nil {
+		return mmUpdateSystemProfileAdmin.funcUpdateSystemProfileAdmin(ctx, up1)
+	}
+	mmUpdateSystemProfileAdmin.t.Fatalf("Unexpected call to ServiceMock.UpdateSystemProfileAdmin. %v %v", ctx, up1)
+	return
+}
+
+// UpdateSystemProfileAdminAfterCounter returns a count of finished ServiceMock.UpdateSystemProfileAdmin invocations
+func (mmUpdateSystemProfileAdmin *ServiceMock) UpdateSystemProfileAdminAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateSystemProfileAdmin.afterUpdateSystemProfileAdminCounter)
+}
+
+// UpdateSystemProfileAdminBeforeCounter returns a count of ServiceMock.UpdateSystemProfileAdmin invocations
+func (mmUpdateSystemProfileAdmin *ServiceMock) UpdateSystemProfileAdminBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateSystemProfileAdmin.beforeUpdateSystemProfileAdminCounter)
+}
+
+// Calls returns a list of arguments used in each call to ServiceMock.UpdateSystemProfileAdmin.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmUpdateSystemProfileAdmin *mServiceMockUpdateSystemProfileAdmin) Calls() []*ServiceMockUpdateSystemProfileAdminParams {
+	mmUpdateSystemProfileAdmin.mutex.RLock()
+
+	argCopy := make([]*ServiceMockUpdateSystemProfileAdminParams, len(mmUpdateSystemProfileAdmin.callArgs))
+	copy(argCopy, mmUpdateSystemProfileAdmin.callArgs)
+
+	mmUpdateSystemProfileAdmin.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockUpdateSystemProfileAdminDone returns true if the count of the UpdateSystemProfileAdmin invocations corresponds
+// the number of defined expectations
+func (m *ServiceMock) MinimockUpdateSystemProfileAdminDone() bool {
+	if m.UpdateSystemProfileAdminMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.UpdateSystemProfileAdminMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.UpdateSystemProfileAdminMock.invocationsDone()
+}
+
+// MinimockUpdateSystemProfileAdminInspect logs each unmet expectation
+func (m *ServiceMock) MinimockUpdateSystemProfileAdminInspect() {
+	for _, e := range m.UpdateSystemProfileAdminMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to ServiceMock.UpdateSystemProfileAdmin at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterUpdateSystemProfileAdminCounter := mm_atomic.LoadUint64(&m.afterUpdateSystemProfileAdminCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.UpdateSystemProfileAdminMock.defaultExpectation != nil && afterUpdateSystemProfileAdminCounter < 1 {
+		if m.UpdateSystemProfileAdminMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to ServiceMock.UpdateSystemProfileAdmin at\n%s", m.UpdateSystemProfileAdminMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to ServiceMock.UpdateSystemProfileAdmin at\n%s with params: %#v", m.UpdateSystemProfileAdminMock.defaultExpectation.expectationOrigins.origin, *m.UpdateSystemProfileAdminMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcUpdateSystemProfileAdmin != nil && afterUpdateSystemProfileAdminCounter < 1 {
+		m.t.Errorf("Expected call to ServiceMock.UpdateSystemProfileAdmin at\n%s", m.funcUpdateSystemProfileAdminOrigin)
+	}
+
+	if !m.UpdateSystemProfileAdminMock.invocationsDone() && afterUpdateSystemProfileAdminCounter > 0 {
+		m.t.Errorf("Expected %d calls to ServiceMock.UpdateSystemProfileAdmin at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.UpdateSystemProfileAdminMock.expectedInvocations), m.UpdateSystemProfileAdminMock.expectedInvocationsOrigin, afterUpdateSystemProfileAdminCounter)
+	}
+}
+
 // MinimockFinish checks that all mocked methods have been called the expected number of times
 func (m *ServiceMock) MinimockFinish() {
 	m.finishOnce.Do(func() {
 		if !m.minimockDone() {
 			m.MinimockACLClientInspect()
 
-			m.MinimockChatWithCacheInspect()
-
 			m.MinimockCheckCatalogUserPermissionInspect()
-
-			m.MinimockCheckFilesProcessingStatusInspect()
 
 			m.MinimockCheckNamespacePermissionInspect()
 
@@ -9705,9 +12325,11 @@ func (m *ServiceMock) MinimockFinish() {
 
 			m.MinimockDeleteRepositoryTagInspect()
 
+			m.MinimockDeleteSystemProfileAdminInspect()
+
 			m.MinimockEmbedTextsInspect()
 
-			m.MinimockGetChatCacheForFilesInspect()
+			m.MinimockExecuteKnowledgeBaseUpdateAdminInspect()
 
 			m.MinimockGetChunksByFileInspect()
 
@@ -9717,11 +12339,15 @@ func (m *ServiceMock) MinimockFinish() {
 
 			m.MinimockGetFilesByPathsInspect()
 
+			m.MinimockGetKnowledgeBaseUpdateStatusAdminInspect()
+
 			m.MinimockGetNamespaceAndCheckPermissionInspect()
 
 			m.MinimockGetNamespaceByNsIDInspect()
 
 			m.MinimockGetRepositoryTagInspect()
+
+			m.MinimockGetSystemProfileAdminInspect()
 
 			m.MinimockGetTextChunkFilePathsByFileUIDInspect()
 
@@ -9729,15 +12355,27 @@ func (m *ServiceMock) MinimockFinish() {
 
 			m.MinimockListRepositoryTagsInspect()
 
+			m.MinimockListSystemProfilesAdminInspect()
+
 			m.MinimockPipelinePublicClientInspect()
 
 			m.MinimockProcessFileInspect()
+
+			m.MinimockProcessFileDualModeInspect()
+
+			m.MinimockPurgeRollbackAdminInspect()
 
 			m.MinimockRedisClientInspect()
 
 			m.MinimockRepositoryInspect()
 
+			m.MinimockRollbackAdminInspect()
+
+			m.MinimockSetRollbackRetentionAdminInspect()
+
 			m.MinimockSimilarityChunksSearchInspect()
+
+			m.MinimockUpdateSystemProfileAdminInspect()
 		}
 	})
 }
@@ -9762,30 +12400,37 @@ func (m *ServiceMock) minimockDone() bool {
 	done := true
 	return done &&
 		m.MinimockACLClientDone() &&
-		m.MinimockChatWithCacheDone() &&
 		m.MinimockCheckCatalogUserPermissionDone() &&
-		m.MinimockCheckFilesProcessingStatusDone() &&
 		m.MinimockCheckNamespacePermissionDone() &&
 		m.MinimockCleanupFileDone() &&
 		m.MinimockCleanupKnowledgeBaseDone() &&
 		m.MinimockCreateRepositoryTagDone() &&
 		m.MinimockDeleteFilesDone() &&
 		m.MinimockDeleteRepositoryTagDone() &&
+		m.MinimockDeleteSystemProfileAdminDone() &&
 		m.MinimockEmbedTextsDone() &&
-		m.MinimockGetChatCacheForFilesDone() &&
+		m.MinimockExecuteKnowledgeBaseUpdateAdminDone() &&
 		m.MinimockGetChunksByFileDone() &&
 		m.MinimockGetConvertedFilePathsByFileUIDDone() &&
 		m.MinimockGetDownloadURLDone() &&
 		m.MinimockGetFilesByPathsDone() &&
+		m.MinimockGetKnowledgeBaseUpdateStatusAdminDone() &&
 		m.MinimockGetNamespaceAndCheckPermissionDone() &&
 		m.MinimockGetNamespaceByNsIDDone() &&
 		m.MinimockGetRepositoryTagDone() &&
+		m.MinimockGetSystemProfileAdminDone() &&
 		m.MinimockGetTextChunkFilePathsByFileUIDDone() &&
 		m.MinimockGetUploadURLDone() &&
 		m.MinimockListRepositoryTagsDone() &&
+		m.MinimockListSystemProfilesAdminDone() &&
 		m.MinimockPipelinePublicClientDone() &&
 		m.MinimockProcessFileDone() &&
+		m.MinimockProcessFileDualModeDone() &&
+		m.MinimockPurgeRollbackAdminDone() &&
 		m.MinimockRedisClientDone() &&
 		m.MinimockRepositoryDone() &&
-		m.MinimockSimilarityChunksSearchDone()
+		m.MinimockRollbackAdminDone() &&
+		m.MinimockSetRollbackRetentionAdminDone() &&
+		m.MinimockSimilarityChunksSearchDone() &&
+		m.MinimockUpdateSystemProfileAdminDone()
 }

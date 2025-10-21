@@ -76,6 +76,27 @@ import (
 // - DeleteConvertedFileRecordActivity - Cleanup activity for DB record (on error)
 // - DeleteConvertedFileFromMinIOActivity - Cleanup activity for MinIO file (on error)
 
+// ===== ERROR CONSTANTS =====
+
+const (
+	getFileMetadataActivityError                = "GetFileMetadataActivity"
+	getFileContentActivityError                 = "GetFileContentActivity"
+	deleteOldConvertedFilesActivityError        = "DeleteOldConvertedFilesActivity"
+	createConvertedFileRecordActivityError      = "CreateConvertedFileRecordActivity"
+	uploadConvertedFileToMinIOActivityError     = "UploadConvertedFileToMinIOActivity"
+	deleteConvertedFileRecordActivityError      = "DeleteConvertedFileRecordActivity"
+	updateConvertedFileDestinationActivityError = "UpdateConvertedFileDestinationActivity"
+	deleteConvertedFileFromMinIOActivityError   = "DeleteConvertedFileFromMinIOActivity"
+	updateConversionMetadataActivityError       = "UpdateConversionMetadataActivity"
+	chunkContentActivityError                   = "ChunkContentActivity"
+	deleteOldTextChunksActivityError            = "DeleteOldTextChunksActivity"
+	saveTextChunksActivityError                 = "SaveTextChunksActivity"
+	standardizeFileTypeActivityError            = "StandardizeFileTypeActivity"
+	cacheContextActivityError                   = "CacheFileContextActivity"
+	processContentActivityError                 = "ProcessContentActivity"
+	processSummaryActivityError                 = "ProcessSummaryActivity"
+)
+
 // ===== METADATA & CONTENT ACTIVITIES =====
 
 // GetFileMetadataActivityParam for retrieving file and KB metadata
@@ -973,7 +994,7 @@ type CacheFileContextActivityResult struct {
 	CreateTime           time.Time // When cache was created
 	ExpireTime           time.Time // When cache will expire
 	CachedContextEnabled bool      // Flag indicating if cache was created (false means caching is disabled)
-	UsageMetadata        any       // Token usage metadata from AI provider (nil if cache was not created)
+	UsageMetadata        any       // Token usage metadata from AI client (nil if cache was not created)
 }
 
 // CacheFileContextActivity creates a cached context for the input file
@@ -985,16 +1006,16 @@ func (w *Worker) CacheFileContextActivity(ctx context.Context, param *CacheFileC
 		zap.String("fileType", param.FileType.String()),
 		zap.String("destination", param.Destination))
 
-	// Check if AI provider is available
-	if w.aiProvider == nil {
-		w.log.Info("CacheFileContextActivity: AI provider not available, skipping cache creation")
+	// Check if AI client is available
+	if w.aiClient == nil {
+		w.log.Info("CacheFileContextActivity: AI client not available, skipping cache creation")
 		return &CacheFileContextActivityResult{
 			CachedContextEnabled: false,
 		}, nil
 	}
 
 	// Check if file type is supported for caching
-	if !w.aiProvider.SupportsFileType(param.FileType) {
+	if !w.aiClient.SupportsFileType(param.FileType) {
 		w.log.Info("CacheFileContextActivity: File type not supported for caching",
 			zap.String("fileType", param.FileType.String()))
 		return &CacheFileContextActivityResult{
@@ -1031,10 +1052,10 @@ func (w *Worker) CacheFileContextActivity(ctx context.Context, param *CacheFileC
 	// Set cache TTL (5 minutes default)
 	cacheTTL := 5 * time.Minute
 
-	// Create the cache using AI provider
+	// Create the cache using AI client
 	// Note: Cache creation is optional - if it fails, we continue without cache
 	// Use RAG system instruction for conversion/summarization operations
-	cacheOutput, err := w.aiProvider.CreateCache(authCtx, []ai.FileContent{
+	cacheOutput, err := w.aiClient.CreateCache(authCtx, []ai.FileContent{
 		{
 			Content:  content,
 			FileType: param.FileType,
@@ -1083,13 +1104,13 @@ func (w *Worker) DeleteCacheActivity(ctx context.Context, param *DeleteCacheActi
 	w.log.Info("DeleteCacheActivity: Deleting cache",
 		zap.String("cacheName", param.CacheName))
 
-	// Check if AI provider is available
-	if w.aiProvider == nil {
-		w.log.Warn("DeleteCacheActivity: AI provider not available, cannot delete cache")
+	// Check if AI client is available
+	if w.aiClient == nil {
+		w.log.Warn("DeleteCacheActivity: AI client not available, cannot delete cache")
 		return nil
 	}
 
-	err := w.aiProvider.DeleteCache(ctx, param.CacheName)
+	err := w.aiClient.DeleteCache(ctx, param.CacheName)
 	if err != nil {
 		// Log error but don't fail the activity - cache will expire automatically
 		w.log.Warn("DeleteCacheActivity: Failed to delete cache (will expire automatically)",
@@ -1119,7 +1140,7 @@ type CacheChatContextActivityResult struct {
 	CreateTime           time.Time                   // When cache was created
 	ExpireTime           time.Time                   // When cache will expire
 	CachedContextEnabled bool                        // Flag indicating if cached context was created (false means caching is disabled)
-	UsageMetadata        any                         // Token usage metadata from AI provider (nil if cache was not created)
+	UsageMetadata        any                         // Token usage metadata from AI client (nil if cache was not created)
 	FileRefs             []repository.FileContentRef // File references for uncached small files
 }
 
@@ -1130,9 +1151,9 @@ func (w *Worker) CacheChatContextActivity(ctx context.Context, param *CacheChatC
 	w.log.Info("CacheChatContextActivity: Creating chat cache for multiple files",
 		zap.Int("fileCount", len(param.FileUIDs)))
 
-	// Check if AI provider is available
-	if w.aiProvider == nil {
-		w.log.Info("CacheChatContextActivity: AI provider not available, skipping cache creation")
+	// Check if AI client is available
+	if w.aiClient == nil {
+		w.log.Info("CacheChatContextActivity: AI client not available, skipping cache creation")
 		return &CacheChatContextActivityResult{
 			CachedContextEnabled: false,
 		}, nil
@@ -1177,7 +1198,7 @@ func (w *Worker) CacheChatContextActivity(ctx context.Context, param *CacheChatC
 		fileType := artifactpb.File_Type(artifactpb.File_Type_value[kbFile.FileType])
 
 		// Check if file type is supported for caching
-		if !w.aiProvider.SupportsFileType(fileType) {
+		if !w.aiClient.SupportsFileType(fileType) {
 			w.log.Info("CacheChatContextActivity: File type not supported for caching, skipping file",
 				zap.String("fileUID", fileUID.String()),
 				zap.String("fileType", fileType.String()))
@@ -1234,7 +1255,7 @@ func (w *Worker) CacheChatContextActivity(ctx context.Context, param *CacheChatC
 			zap.Int("fileCount", len(fileContents)))
 
 		// Use Chat system instruction for Q&A operations
-		cacheOutput, cacheErr = w.aiProvider.CreateCache(authCtx, fileContents, cacheTTL, ai.SystemInstructionChat)
+		cacheOutput, cacheErr = w.aiClient.CreateCache(authCtx, fileContents, cacheTTL, ai.SystemInstructionChat)
 		if cacheErr != nil {
 			// Real cache creation error (network, quota, API error, etc.)
 			// This is unexpected since we verified token count
@@ -1404,19 +1425,19 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 			)
 		}
 
-		// Check if AI provider is configured
-		if w.aiProvider == nil {
-			logger.Error("AI provider not configured")
+		// Check if AI client is configured
+		if w.aiClient == nil {
+			logger.Error("AI client not configured")
 			return nil, temporal.NewApplicationErrorWithCause(
-				"AI provider is required for content conversion. Please configure Gemini API key in the server configuration.",
+				"AI client is required for content conversion. Please configure Gemini API key in the server configuration.",
 				processContentActivityError,
-				fmt.Errorf("AI provider not configured"),
+				fmt.Errorf("AI client not configured"),
 			)
 		}
 
-		// Check if AI provider supports this file type
-		if !w.aiProvider.SupportsFileType(param.FileType) {
-			logger.Error("File type not supported by AI provider",
+		// Check if AI client supports this file type
+		if !w.aiClient.SupportsFileType(param.FileType) {
+			logger.Error("File type not supported by AI client",
 				zap.String("fileType", param.FileType.String()),
 				zap.String("hint", "File should have been converted by StandardizeFileTypeActivity"))
 			return nil, temporal.NewApplicationErrorWithCause(
@@ -1428,13 +1449,13 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 
 		var conversionErr error
 
-		// For other file types: Try AI provider with cache first (if available)
+		// For other file types: Try AI client with cache first (if available)
 		if param.CacheName != "" {
 			logger.Info("Attempting AI conversion with cache",
 				zap.String("cacheName", param.CacheName),
-				zap.String("provider", w.aiProvider.Name()))
+				zap.String("client", w.aiClient.Name()))
 
-			conversion, err := w.aiProvider.ConvertToMarkdownWithCache(
+			conversion, err := w.aiClient.ConvertToMarkdownWithCache(
 				authCtx,
 				param.CacheName,
 				gemini.GetRAGGenerateContentPrompt(),
@@ -1456,13 +1477,13 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 			}
 		}
 
-		// Try AI provider without cache if cached attempt failed or wasn't available
+		// Try AI client without cache if cached attempt failed or wasn't available
 		if contentInMarkdown == "" {
 			logger.Info("Attempting AI conversion without cache",
 				zap.String("fileType", param.FileType.String()),
-				zap.String("provider", w.aiProvider.Name()))
+				zap.String("client", w.aiClient.Name()))
 
-			conversion, err := w.aiProvider.ConvertToMarkdownWithoutCache(
+			conversion, err := w.aiClient.ConvertToMarkdownWithoutCache(
 				authCtx,
 				rawFileContent,
 				param.FileType,
@@ -1491,13 +1512,13 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 			logger.Error("AI conversion failed to produce content")
 			if conversionErr != nil {
 				return nil, temporal.NewApplicationErrorWithCause(
-					fmt.Sprintf("AI provider failed to convert file: %s", errorsx.MessageOrErr(conversionErr)),
+					fmt.Sprintf("AI client failed to convert file: %s", errorsx.MessageOrErr(conversionErr)),
 					processContentActivityError,
 					conversionErr,
 				)
 			}
 			return nil, temporal.NewApplicationErrorWithCause(
-				"AI provider failed to convert file: conversion produced empty content",
+				"AI client failed to convert file: conversion produced empty content",
 				processContentActivityError,
 				fmt.Errorf("empty conversion result"),
 			)
@@ -1658,13 +1679,13 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 		)
 	}
 
-	// Check if AI provider is configured
-	if w.aiProvider == nil {
-		logger.Error("AI provider not configured")
+	// Check if AI client is configured
+	if w.aiClient == nil {
+		logger.Error("AI client not configured")
 		return nil, temporal.NewApplicationErrorWithCause(
-			"AI provider is required for summary generation. Please configure Gemini API key in the server configuration.",
+			"AI client is required for summary generation. Please configure Gemini API key in the server configuration.",
 			processSummaryActivityError,
-			fmt.Errorf("AI provider not configured"),
+			fmt.Errorf("AI client not configured"),
 		)
 	}
 
@@ -1681,13 +1702,13 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 	// Use the file type from parameter (already converted in workflow)
 	fileType := param.FileType
 
-	// Try AI provider with cache first (if available)
-	if param.CacheName != "" && w.aiProvider.SupportsFileType(fileType) {
+	// Try AI client with cache first (if available)
+	if param.CacheName != "" && w.aiClient.SupportsFileType(fileType) {
 		logger.Info("Attempting AI summarization with cache",
 			zap.String("cacheName", param.CacheName),
-			zap.String("provider", w.aiProvider.Name()))
+			zap.String("client", w.aiClient.Name()))
 
-		conversion, err := w.aiProvider.ConvertToMarkdownWithCache(authCtx, param.CacheName, summaryPrompt)
+		conversion, err := w.aiClient.ConvertToMarkdownWithCache(authCtx, param.CacheName, summaryPrompt)
 		if err != nil {
 			logger.Warn("Cached AI summarization failed, will try without cache", zap.Error(err))
 			summarizationErr = err
@@ -1699,13 +1720,13 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 		}
 	}
 
-	// Try AI provider without cache if cached attempt failed or wasn't available
-	if summary == "" && w.aiProvider.SupportsFileType(fileType) {
+	// Try AI client without cache if cached attempt failed or wasn't available
+	if summary == "" && w.aiClient.SupportsFileType(fileType) {
 		logger.Info("Attempting AI summarization without cache",
 			zap.String("fileType", fileType.String()),
-			zap.String("provider", w.aiProvider.Name()))
+			zap.String("client", w.aiClient.Name()))
 
-		conversion, err := w.aiProvider.ConvertToMarkdownWithoutCache(
+		conversion, err := w.aiClient.ConvertToMarkdownWithoutCache(
 			authCtx,
 			content,
 			fileType,
@@ -1728,13 +1749,13 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 		logger.Error("AI summarization failed to produce content")
 		if summarizationErr != nil {
 			return nil, temporal.NewApplicationErrorWithCause(
-				fmt.Sprintf("AI provider failed to generate summary: %s", errorsx.MessageOrErr(summarizationErr)),
+				fmt.Sprintf("AI client failed to generate summary: %s", errorsx.MessageOrErr(summarizationErr)),
 				processSummaryActivityError,
 				summarizationErr,
 			)
 		}
 		return nil, temporal.NewApplicationErrorWithCause(
-			"AI provider failed to generate summary: summarization produced empty content",
+			"AI client failed to generate summary: summarization produced empty content",
 			processSummaryActivityError,
 			fmt.Errorf("empty summarization result"),
 		)
@@ -1977,27 +1998,6 @@ func ProcessAIConversionResult(markdown string, logger *zap.Logger, logContext m
 
 	return markdownWithPageTags, positionData, length
 }
-
-// ===== ERROR CONSTANTS =====
-
-const (
-	getFileMetadataActivityError                = "GetFileMetadataActivity"
-	getFileContentActivityError                 = "GetFileContentActivity"
-	deleteOldConvertedFilesActivityError        = "DeleteOldConvertedFilesActivity"
-	createConvertedFileRecordActivityError      = "CreateConvertedFileRecordActivity"
-	uploadConvertedFileToMinIOActivityError     = "UploadConvertedFileToMinIOActivity"
-	deleteConvertedFileRecordActivityError      = "DeleteConvertedFileRecordActivity"
-	updateConvertedFileDestinationActivityError = "UpdateConvertedFileDestinationActivity"
-	deleteConvertedFileFromMinIOActivityError   = "DeleteConvertedFileFromMinIOActivity"
-	updateConversionMetadataActivityError       = "UpdateConversionMetadataActivity"
-	chunkContentActivityError                   = "ChunkContentActivity"
-	deleteOldTextChunksActivityError            = "DeleteOldTextChunksActivity"
-	saveTextChunksActivityError                 = "SaveTextChunksActivity"
-	standardizeFileTypeActivityError            = "StandardizeFileTypeActivity"
-	cacheContextActivityError                   = "CacheFileContextActivity"
-	processContentActivityError                 = "ProcessContentActivity"
-	processSummaryActivityError                 = "ProcessSummaryActivity"
-)
 
 // decodeBlobURL decodes a blob URL to extract the presigned URL
 // This is a helper function copied from service package to avoid circular imports

@@ -26,6 +26,7 @@ type Embedding interface {
 	HardDeleteEmbeddingsByKBUID(_ context.Context, kbUID types.KBUIDType) error
 	HardDeleteEmbeddingsByKBFileUID(_ context.Context, kbFileUID types.FileUIDType) error
 	ListEmbeddingsByKBFileUID(_ context.Context, kbFileUID types.FileUIDType) ([]EmbeddingModel, error)
+	GetEmbeddingCountByKBUID(ctx context.Context, kbUID types.KBUIDType) (int64, error)
 }
 
 // EmbeddingModel is the model for the embedding table
@@ -255,4 +256,18 @@ func (r *repository) ListEmbeddingsByKBFileUID(ctx context.Context, kbFileUID ty
 		return nil, err
 	}
 	return embeddings, nil
+}
+
+// GetEmbeddingCountByKBUID returns the count of embeddings for a knowledge base
+func (r *repository) GetEmbeddingCountByKBUID(ctx context.Context, kbUID types.KBUIDType) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Table(EmbeddingTableName).
+		Where("kb_uid = ?", kbUID).
+		Count(&count).
+		Error
+	if err != nil {
+		return 0, fmt.Errorf("counting embeddings for KB %s: %w", kbUID, err)
+	}
+	return count, nil
 }
