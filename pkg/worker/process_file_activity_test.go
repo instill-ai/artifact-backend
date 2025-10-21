@@ -514,22 +514,20 @@ func TestContentVsSummaryConvertedFiles(t *testing.T) {
 
 	// Simulate content converted file
 	contentConvertedFile := &repository.ConvertedFileModel{
-		UID:              contentConvertedFileUID,
-		FileUID:          fileUID,
-		KBUID:            kbUID,
-		OriginalFileName: "test.pdf",
-		Destination:      "kb-" + kbUID.String() + "/file-" + fileUID.String() + "/converted-file/" + contentConvertedFileUID.String() + ".md",
-		PositionData:     &types.PositionData{PageDelimiters: []uint32{100, 200, 300}}, // Multi-page
+		UID:          contentConvertedFileUID,
+		FileUID:      fileUID,
+		KBUID:        kbUID,
+		Destination:  "kb-" + kbUID.String() + "/file-" + fileUID.String() + "/converted-file/" + contentConvertedFileUID.String() + ".md",
+		PositionData: &types.PositionData{PageDelimiters: []uint32{100, 200, 300}}, // Multi-page
 	}
 
 	// Simulate summary converted file
 	summaryConvertedFile := &repository.ConvertedFileModel{
-		UID:              summaryConvertedFileUID,
-		FileUID:          fileUID,
-		KBUID:            kbUID,
-		OriginalFileName: "test.pdf",
-		Destination:      "kb-" + kbUID.String() + "/file-" + fileUID.String() + "/converted-file/" + summaryConvertedFileUID.String() + ".md",
-		PositionData:     &types.PositionData{PageDelimiters: []uint32{50}}, // Single page (summary)
+		UID:          summaryConvertedFileUID,
+		FileUID:      fileUID,
+		KBUID:        kbUID,
+		Destination:  "kb-" + kbUID.String() + "/file-" + fileUID.String() + "/converted-file/" + summaryConvertedFileUID.String() + ".md",
+		PositionData: &types.PositionData{PageDelimiters: []uint32{50}}, // Single page (summary)
 	}
 
 	// Verify they have different UIDs
@@ -574,7 +572,7 @@ func TestTextChunkSourceUIDReferences(t *testing.T) {
 		StartPos:    0,
 		EndPos:      100,
 		ChunkType:   "content",
-		KBFileUID:   fileUID,
+		FileUID:     fileUID,
 		KBUID:       kbUID,
 	}
 
@@ -586,7 +584,7 @@ func TestTextChunkSourceUIDReferences(t *testing.T) {
 		StartPos:    0,
 		EndPos:      50,
 		ChunkType:   "summary",
-		KBFileUID:   fileUID,
+		FileUID:     fileUID,
 		KBUID:       kbUID,
 	}
 
@@ -594,7 +592,7 @@ func TestTextChunkSourceUIDReferences(t *testing.T) {
 	c.Assert(contentChunk.SourceUID, qt.Not(qt.Equals), summaryChunk.SourceUID)
 
 	// Verify chunks reference the same file and KB
-	c.Assert(contentChunk.KBFileUID, qt.Equals, summaryChunk.KBFileUID)
+	c.Assert(contentChunk.FileUID, qt.Equals, summaryChunk.FileUID)
 	c.Assert(contentChunk.KBUID, qt.Equals, summaryChunk.KBUID)
 
 	// Verify both use converted_file as source table

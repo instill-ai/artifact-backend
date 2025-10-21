@@ -2,8 +2,6 @@ import http from "k6/http";
 import { check, group, sleep } from "k6";
 import { randomString } from "https://jslib.k6.io/k6-utils/1.1.0/index.js";
 
-import { artifactPublicHost } from "./const.js";
-
 import * as constant from "./const.js";
 import * as helper from "./helper.js";
 
@@ -47,8 +45,8 @@ export function setup() {
 
   // Clean up any leftover test data from previous runs
   try {
-    constant.db.exec(`DELETE FROM text_chunk WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-    constant.db.exec(`DELETE FROM embedding WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+    constant.db.exec(`DELETE FROM text_chunk WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+    constant.db.exec(`DELETE FROM embedding WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
     constant.db.exec(`DELETE FROM converted_file WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
     constant.db.exec(`DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`);
     constant.db.exec(`DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`);
@@ -56,13 +54,13 @@ export function setup() {
     console.log(`Setup cleanup warning: ${e}`);
   }
 
-  var loginResp = http.request("POST", `${constant.mgmtPublicHost}/v1beta/auth/login`, JSON.stringify({
+  var loginResp = http.request("POST", `${constant.mgmtRESTPublicHost}/v1beta/auth/login`, JSON.stringify({
     "username": constant.defaultUsername,
     "password": constant.defaultPassword,
   }))
 
   check(loginResp, {
-    [`POST ${constant.mgmtPublicHost}/v1beta/auth/login response status is 200`]: (
+    [`POST ${constant.mgmtRESTPublicHost}/v1beta/auth/login response status is 200`]: (
       r
     ) => r.status === 200,
   });
@@ -75,7 +73,7 @@ export function setup() {
     "timeout": "600s",
   }
 
-  var resp = http.request("GET", `${constant.mgmtPublicHost}/v1beta/user`, {}, { headers: { "Authorization": `Bearer ${loginResp.json().accessToken}` } })
+  var resp = http.request("GET", `${constant.mgmtRESTPublicHost}/v1beta/user`, {}, { headers: { "Authorization": `Bearer ${loginResp.json().accessToken}` } })
   return { header: header, expectedOwner: resp.json().user }
 }
 
@@ -85,12 +83,12 @@ export function teardown(data) {
     check(true, { [constant.banner(groupName)]: () => true });
 
     // Delete catalogs via API (which triggers cleanup workflows)
-    var listResp = http.request("GET", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, data.header)
+    var listResp = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, data.header)
     if (listResp.status === 200) {
       var catalogs = Array.isArray(listResp.json().catalogs) ? listResp.json().catalogs : []
       for (const catalog of catalogs) {
         if (catalog.catalog_id && catalog.catalog_id.startsWith(constant.dbIDPrefix)) {
-          var delResp = http.request("DELETE", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalog.catalog_id}`, null, data.header);
+          var delResp = http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalog.catalog_id}`, null, data.header);
           check(delResp, {
             [`DELETE /v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalog.catalog_id} response status is 200 or 404`]: (r) => r.status === 200 || r.status === 404,
           });
@@ -101,8 +99,8 @@ export function teardown(data) {
     // Final DB cleanup (defensive - in case workflows didn't complete)
     // Delete from child tables first, before deleting parent records
     try {
-      constant.db.exec(`DELETE FROM text_chunk WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-      constant.db.exec(`DELETE FROM embedding WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+      constant.db.exec(`DELETE FROM text_chunk WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+      constant.db.exec(`DELETE FROM embedding WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
       constant.db.exec(`DELETE FROM converted_file WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
       constant.db.exec(`DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`);
       constant.db.exec(`DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`);
@@ -139,14 +137,14 @@ function runCatalogFileTest(data, opts) {
     const { fileType, originalName } = opts || {};
 
     // Create catalog (name must be < 32 chars: test-{4}-src-{8} = 23 chars)
-    const cRes = http.request("POST", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, JSON.stringify({ name: constant.dbIDPrefix + "src-" + randomString(8) }), data.header);
+    const cRes = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, JSON.stringify({ name: constant.dbIDPrefix + "src-" + randomString(8) }), data.header);
     logUnexpected(cRes, 'POST /v1alpha/namespaces/{namespace_id}/catalogs');
     const catalog = ((() => { try { return cRes.json(); } catch (e) { return {}; } })()).catalog || {};
     const catalogId = catalog.catalogId;
     check(cRes, { [`POST /v1alpha/namespaces/{namespace_id}/catalogs 200 (${catalogId})`]: (r) => r.status === 200 });
 
     // List catalogs and ensure our catalog is present
-    const listCatalogRes = http.request("GET", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, data.header);
+    const listCatalogRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, data.header);
     logUnexpected(listCatalogRes, 'GET /v1alpha/namespaces/{namespace_id}/catalogs');
     let listCatalogJson; try { listCatalogJson = listCatalogRes.json(); } catch (e) { listCatalogJson = {}; }
     const catalogsArr = Array.isArray(listCatalogJson.catalogs) ? listCatalogJson.catalogs : [];
@@ -163,7 +161,7 @@ function runCatalogFileTest(data, opts) {
     const s = (constant.sampleFiles.find(selector) || {});
     const fileName = constant.dbIDPrefix + (s.originalName || ("sample-" + randomString(6)));
     const fReq = { name: fileName, type: fileType, content: s.content || "" };
-    const uRes = http.request("POST", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`, JSON.stringify(fReq), data.header);
+    const uRes = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`, JSON.stringify(fReq), data.header);
     logUnexpected(uRes, 'POST /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files');
     const file = ((() => { try { return uRes.json(); } catch (e) { return {}; } })()).file || {};
     const fileUid = file.fileUid;
@@ -172,7 +170,7 @@ function runCatalogFileTest(data, opts) {
     // List catalog files and ensure our file is present
     const listCatalogFilesRes = http.request(
       "GET",
-      `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
       null,
       data.header
     );
@@ -188,7 +186,7 @@ function runCatalogFileTest(data, opts) {
     // GET single catalog file and validate
     const getCatalogFileRes = http.request(
       "GET",
-      `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${fileUid}`,
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${fileUid}`,
       null,
       data.header
     );
@@ -202,13 +200,13 @@ function runCatalogFileTest(data, opts) {
     });
 
     // Process file and wait for completion
-    const getProcessRes = http.request("POST", `${artifactPublicHost}/v1alpha/catalogs/files/processAsync`, JSON.stringify({ fileUids: [fileUid] }), data.header);
+    const getProcessRes = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/catalogs/files/processAsync`, JSON.stringify({ fileUids: [fileUid] }), data.header);
     logUnexpected(getProcessRes, 'POST /v1alpha/catalogs/files/processAsync');
     check(getProcessRes, { [`POST /v1alpha/catalogs/files/processAsync 200 (${fileUid})`]: (r) => r.status === 200 });
 
     let getProcessStatusRes; let completed = false; let failed = false; let failureReason = "";
     for (let i = 0; i < 3600; i++) {
-      getProcessStatusRes = http.request("GET", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${fileUid}`, null, data.header);
+      getProcessStatusRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${fileUid}`, null, data.header);
       try {
         const body = getProcessStatusRes.json();
         const st = (body.file && body.file.processStatus) || "";
@@ -240,17 +238,17 @@ function runCatalogFileTest(data, opts) {
     }
 
     // Get the single-source-of-truth processed file source
-    const getCatalogFileSource = http.request("GET", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${fileUid}/source`, null, data.header);
+    const getCatalogFileSource = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${fileUid}/source`, null, data.header);
     logUnexpected(getCatalogFileSource, 'GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid}/source');
     check(getCatalogFileSource, { [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid}/source 200 (${fileType})`]: (r) => r.status === 200 });
 
     // Get file summary
-    const getSummaryRes = http.request("GET", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${fileUid}/summary`, null, data.header);
+    const getSummaryRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${fileUid}/summary`, null, data.header);
     logUnexpected(getSummaryRes, 'GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid}/summary');
     check(getSummaryRes, { [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid}/summary 200 (${fileType})`]: (r) => r.status === 200 });
 
     // List chunks for this file
-    const listChunksUrl = `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/chunks?file_uid=${fileUid}&fileUid=${fileUid}`;
+    const listChunksUrl = `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/chunks?file_uid=${fileUid}&fileUid=${fileUid}`;
     const listChunksRes = http.request("GET", listChunksUrl, null, data.header);
     logUnexpected(listChunksRes, 'GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/chunks');
     let listChunksJson; try { listChunksJson = listChunksRes.json(); } catch (e) { listChunksJson = {}; }

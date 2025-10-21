@@ -124,7 +124,7 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 	// fetch the file names
 	fileUIDMapName := make(map[types.FileUIDType]string)
 	for _, chunk := range chunks {
-		fileUIDMapName[chunk.KBFileUID] = ""
+		fileUIDMapName[chunk.FileUID] = ""
 	}
 
 	fileUids := make([]types.FileUIDType, 0, len(fileUIDMapName))
@@ -161,7 +161,7 @@ func (ph *PublicHandler) SimilarityChunksSearch(
 			ChunkUid:        chunk.UID.String(),
 			SimilarityScore: float32(simChunksScores[i].Score),
 			TextContent:     string(chunkContents[i].Content),
-			SourceFile:      fileUIDMapName[chunk.KBFileUID],
+			SourceFile:      fileUIDMapName[chunk.FileUID],
 			ChunkMetadata:   convertToProtoChunk(chunk),
 		}
 

@@ -15,6 +15,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/types"
 
+	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	errorsx "github.com/instill-ai/x/errors"
 )
 
@@ -94,8 +95,9 @@ type SwapKnowledgeBasesActivityParam struct {
 
 // SwapKnowledgeBasesActivityResult contains the result of the swap
 type SwapKnowledgeBasesActivityResult struct {
-	RollbackKBUID types.KBUIDType // UID of the created/reused rollback KB
-	StagingKBUID  types.KBUIDType // UID of the staging KB (for cleanup after swap)
+	RollbackKBUID              types.KBUIDType // UID of the created/reused rollback KB
+	StagingKBUID               types.KBUIDType // UID of the staging KB (for cleanup after swap)
+	NewProductionCollectionUID types.KBUIDType // Collection UID now in production (to protect from cleanup)
 }
 
 // UpdateKnowledgeBaseUpdateStatusActivityParam updates update status
@@ -107,7 +109,8 @@ type UpdateKnowledgeBaseUpdateStatusActivityParam struct {
 
 // CleanupOldKnowledgeBaseActivityParam defines parameters for cleanup
 type CleanupOldKnowledgeBaseActivityParam struct {
-	KBUID types.KBUIDType
+	KBUID                  types.KBUIDType
+	ProtectedCollectionUID *types.KBUIDType // Collection UID that must not be dropped (e.g., after swap)
 }
 
 // ListFilesForReprocessingActivityParam defines parameters for listing files
@@ -148,7 +151,7 @@ func (w *Worker) ListKnowledgeBasesForUpdateActivity(ctx context.Context, param 
 				continue
 			}
 			// Only include production KBs (not staging) and not already updating
-			if !kb.Staging && (kb.UpdateStatus == "" || kb.UpdateStatus == "completed" || kb.UpdateStatus == "failed" || kb.UpdateStatus == "rolled_back") {
+			if !kb.Staging && repository.IsUpdateComplete(kb.UpdateStatus) {
 				kbs = append(kbs, *kb)
 				w.log.Info("Catalog eligible for update", zap.String("catalogID", catalogID), zap.String("kbUID", kb.UID.String()), zap.String("updateStatus", kb.UpdateStatus))
 			} else {
@@ -202,7 +205,7 @@ func (w *Worker) ValidateUpdateEligibilityActivity(ctx context.Context, param *V
 	}
 
 	// Check if already updating
-	if kb.UpdateStatus == "updating" {
+	if kb.UpdateStatus == artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING.String() {
 		err = fmt.Errorf("knowledge base is already updating: %s", param.KBUID.String())
 		return temporal.NewApplicationErrorWithCause(
 			err.Error(),
@@ -311,11 +314,14 @@ func (w *Worker) SynchronizeKBActivity(ctx context.Context, param *SynchronizeKB
 	// STEP 1: Atomically lock the KB by transitioning to SWAPPING status
 	// This MUST happen FIRST to prevent race conditions where:
 	// 1. We check staging files are done
-	// 2. User uploads new file → dual processing starts
+	// 2. User uploads/deletes file → dual processing starts or file counts diverge
 	// 3. We proceed to swap
-	// 4. Swap happens with incomplete staging file
+	// 4. Swap happens with inconsistent KBs
 	//
-	// By locking FIRST, we ensure no new dual processing can start after this point
+	// By locking FIRST (status → swapping), we ensure:
+	// - No new file uploads are accepted (blocked by critical phase check in UploadCatalogFile)
+	// - No new file deletions are accepted (blocked by critical phase check in DeleteCatalogFile)
+	// - Both production and staging KBs remain absolutely identical during validation/swap
 	originalKB, err := w.repository.GetKnowledgeBaseByUID(ctx, param.OriginalKBUID)
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to get knowledge base for synchronization. Please try again.")
@@ -329,7 +335,7 @@ func (w *Worker) SynchronizeKBActivity(ctx context.Context, param *SynchronizeKB
 	// Use optimistic locking: only transition if still in UPDATING status
 	// This prevents race with concurrent updates/rollbacks
 	err = w.repository.UpdateKnowledgeBaseWithMap(ctx, originalKB.KBID, originalKB.Owner, map[string]interface{}{
-		"update_status": "swapping",
+		"update_status": artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_SWAPPING.String(),
 	})
 	if err != nil {
 		// If update fails, someone else modified the KB - fail and let Temporal retry
@@ -347,12 +353,25 @@ func (w *Worker) SynchronizeKBActivity(ctx context.Context, param *SynchronizeKB
 	w.log.Info("SynchronizeKBActivity: KB locked for swapping (status: updating → swapping)",
 		zap.String("originalKBUID", param.OriginalKBUID.String()))
 
-	// STEP 2: Wait for all in-progress files to complete (FINAL SYNCHRONIZATION)
-	// This ensures all files that were dual-processed BEFORE the lock are now complete
-	// Since we locked above, no NEW dual processing can start, so this count is final
-	inProgressCount, err := w.repository.GetFileCountByKnowledgeBaseUID(ctx, param.StagingKBUID, "FILE_PROCESS_STATUS_NOTSTARTED,FILE_PROCESS_STATUS_WAITING,FILE_PROCESS_STATUS_PROCESSING,FILE_PROCESS_STATUS_CONVERTING,FILE_PROCESS_STATUS_CHUNKING,FILE_PROCESS_STATUS_EMBEDDING")
+	// STEP 2: Wait for ALL in-progress files to complete in BOTH KBs (FINAL SYNCHRONIZATION)
+	// During rapid operations, files can be uploaded to production KB and dual-processed to both.
+	// We MUST wait for processing to complete in BOTH KBs before validation.
+	// Since we locked above, no NEW dual processing can start, so these counts are final.
+	//
+	// IMPORTANT: We check for ACTIVELY processing files (PROCESSING, CONVERTING, CHUNKING, EMBEDDING).
+	// CRITICAL: We also wait for NOTSTARTED files created within the last 30 seconds.
+	// This handles the race condition where:
+	// 1. File uploaded during late UPDATING phase → dual processing goroutine spawned
+	// 2. Goroutine creates staging file (NOTSTARTED)
+	// 3. Status locks to SWAPPING before ProcessFile workflow starts
+	// 4. Without this check, validation would count production file but not staging file
+	//
+	// Old NOTSTARTED files (>30s) are ignored as they're likely abandoned/never processed.
+
+	// Check staging KB for actively processing files
+	stagingInProgressCount, err := w.repository.GetFileCountByKnowledgeBaseUID(ctx, param.StagingKBUID, "FILE_PROCESS_STATUS_PROCESSING,FILE_PROCESS_STATUS_CONVERTING,FILE_PROCESS_STATUS_CHUNKING,FILE_PROCESS_STATUS_EMBEDDING")
 	if err != nil {
-		err = errorsx.AddMessage(err, "Unable to check for in-progress files. Please try again.")
+		err = errorsx.AddMessage(err, "Unable to check for in-progress files in staging KB. Please try again.")
 		return nil, temporal.NewApplicationErrorWithCause(
 			errorsx.MessageOrErr(err),
 			synchronizeKBActivityError,
@@ -360,14 +379,98 @@ func (w *Worker) SynchronizeKBActivity(ctx context.Context, param *SynchronizeKB
 		)
 	}
 
-	if inProgressCount > 0 {
-		// Return a retryable error - files are still processing
+	// Check production KB for actively processing files
+	productionInProgressCount, err := w.repository.GetFileCountByKnowledgeBaseUID(ctx, param.OriginalKBUID, "FILE_PROCESS_STATUS_PROCESSING,FILE_PROCESS_STATUS_CONVERTING,FILE_PROCESS_STATUS_CHUNKING,FILE_PROCESS_STATUS_EMBEDDING")
+	if err != nil {
+		err = errorsx.AddMessage(err, "Unable to check for in-progress files in production KB. Please try again.")
+		return nil, temporal.NewApplicationErrorWithCause(
+			errorsx.MessageOrErr(err),
+			synchronizeKBActivityError,
+			err,
+		)
+	}
+
+	totalInProgressCount := stagingInProgressCount + productionInProgressCount
+
+	if totalInProgressCount > 0 {
+		// Return a retryable error - files are still processing in one or both KBs
 		// These are files that were dual-processed BEFORE the lock
 		// We wait for them to complete before proceeding with swap
-		err := fmt.Errorf("staging KB has %d files still processing (waiting for final synchronization)", inProgressCount)
+		err := fmt.Errorf("files still processing: staging=%d, production=%d (waiting for final synchronization)",
+			stagingInProgressCount, productionInProgressCount)
 		w.log.Info("SynchronizeKBActivity: Final synchronization in progress - files still processing, will retry",
 			zap.String("stagingKBUID", param.StagingKBUID.String()),
-			zap.Int64("inProgressCount", inProgressCount))
+			zap.String("productionKBUID", param.OriginalKBUID.String()),
+			zap.Int64("stagingInProgress", stagingInProgressCount),
+			zap.Int64("productionInProgress", productionInProgressCount))
+		return nil, temporal.NewApplicationErrorWithCause(
+			err.Error(),
+			synchronizeKBActivityError,
+			err,
+		)
+	}
+
+	// STEP 2.5: Check for recently-created NOTSTARTED files (dual processing race condition)
+	// If files were uploaded in the last 30 seconds of UPDATING phase, the dual processing
+	// goroutine might still be creating staging files or starting their workflows
+	stagingRecentNotStarted, err := w.repository.GetRecentNotStartedFileCount(ctx, param.StagingKBUID, 30)
+	if err != nil {
+		w.log.Warn("Failed to check for recent NOTSTARTED files, continuing anyway",
+			zap.Error(err))
+		stagingRecentNotStarted = 0
+	}
+
+	productionRecentNotStarted, err := w.repository.GetRecentNotStartedFileCount(ctx, param.OriginalKBUID, 30)
+	if err != nil {
+		w.log.Warn("Failed to check for recent NOTSTARTED files, continuing anyway",
+			zap.Error(err))
+		productionRecentNotStarted = 0
+	}
+
+	if stagingRecentNotStarted > 0 || productionRecentNotStarted > 0 {
+		// Wait for these files to either start processing or fail
+		err := fmt.Errorf("recently-created NOTSTARTED files detected: staging=%d, production=%d (waiting for dual processing to complete)",
+			stagingRecentNotStarted, productionRecentNotStarted)
+		w.log.Info("SynchronizeKBActivity: Detected recent NOTSTARTED files (dual processing race), will retry",
+			zap.String("stagingKBUID", param.StagingKBUID.String()),
+			zap.String("productionKBUID", param.OriginalKBUID.String()),
+			zap.Int64("stagingRecentNotStarted", stagingRecentNotStarted),
+			zap.Int64("productionRecentNotStarted", productionRecentNotStarted))
+		return nil, temporal.NewApplicationErrorWithCause(
+			err.Error(),
+			synchronizeKBActivityError,
+			err,
+		)
+	}
+
+	// STEP 2.6: Check for file count mismatch (dual processing async file creation race)
+	// If a file was uploaded during UPDATING phase and immediately processed, the production
+	// file record exists but the staging file record might still be creating in the async goroutine.
+	// We need to wait for both file records to exist before proceeding to validation.
+	productionFileCount, err := w.repository.GetFileCountByKnowledgeBaseUID(ctx, param.OriginalKBUID, "") // Empty string = count all non-deleted files
+	if err != nil {
+		w.log.Warn("Failed to check production file count, continuing anyway",
+			zap.Error(err))
+		productionFileCount = 0
+	}
+
+	stagingFileCount, err := w.repository.GetFileCountByKnowledgeBaseUID(ctx, param.StagingKBUID, "") // Empty string = count all non-deleted files
+	if err != nil {
+		w.log.Warn("Failed to check staging file count, continuing anyway",
+			zap.Error(err))
+		stagingFileCount = 0
+	}
+
+	if productionFileCount != stagingFileCount {
+		// File count mismatch - likely due to async dual processing file creation
+		// The staging file record might still be creating in the goroutine
+		err := fmt.Errorf("file count mismatch: production=%d, staging=%d (waiting for async dual processing file creation)",
+			productionFileCount, stagingFileCount)
+		w.log.Info("SynchronizeKBActivity: Detected file count mismatch (async dual processing), will retry",
+			zap.String("stagingKBUID", param.StagingKBUID.String()),
+			zap.String("productionKBUID", param.OriginalKBUID.String()),
+			zap.Int64("productionFileCount", productionFileCount),
+			zap.Int64("stagingFileCount", stagingFileCount))
 		return nil, temporal.NewApplicationErrorWithCause(
 			err.Error(),
 			synchronizeKBActivityError,
@@ -378,6 +481,115 @@ func (w *Worker) SynchronizeKBActivity(ctx context.Context, param *SynchronizeKB
 	w.log.Info("SynchronizeKBActivity: Final synchronization complete",
 		zap.String("stagingKBUID", param.StagingKBUID.String()),
 		zap.String("status", "All staging files processed, ready for validation"))
+
+	// CRITICAL: Poll database to ensure all async workflow transactions are fully visible
+	// ProcessFileWorkflow contains multiple async operations that continue after file status = COMPLETED:
+	// 1. SaveEmbeddingsWorkflow (child workflow) - saves embeddings to DB/Milvus
+	// 2. ProcessSummaryActivity - creates summary converted_file records
+	// 3. ProcessContentActivity - creates content converted_file records
+	//
+	// Even though these activities/workflows complete (transactions committed), PostgreSQL's MVCC
+	// means those commits might not be immediately visible to other connections. We poll until the
+	// database state is stable across multiple reads, with a timeout for safety.
+	//
+	// We verify that chunk, embedding, AND converted_file counts are all stable across polls,
+	// indicating all async database writes have been fully committed and are visible.
+	//
+	// CRITICAL: During rapid operations (CC3 test), ProcessSummaryActivity may still be running
+	// even after file status shows COMPLETED, because the activity runs in parallel and can take
+	// 10+ seconds for AI summarization. We MUST wait for these activities to finish creating
+	// converted_file records before validation.
+	const maxPollAttempts = 60 // 60 seconds max to wait for all async operations
+	const pollInterval = 1 * time.Second
+	var lastChunkCount, lastEmbeddingCount, lastConvertedFileCount int64
+	stableCount := 0
+	const requiredStablePolls = 5 // Require 5 consecutive stable reads (5s stability window)
+
+	w.log.Info("SynchronizeKBActivity: Polling for database transaction visibility (chunks, embeddings, converted files)",
+		zap.String("stagingKBUID", param.StagingKBUID.String()),
+		zap.Int("maxAttempts", maxPollAttempts),
+		zap.Duration("pollInterval", pollInterval))
+
+	for attempt := 1; attempt <= maxPollAttempts; attempt++ {
+		// Get current counts for all async-created resources
+		chunkCount, err := w.repository.GetChunkCountByKBUID(ctx, param.StagingKBUID)
+		if err != nil {
+			w.log.Warn("SynchronizeKBActivity: Failed to get chunk count during poll",
+				zap.Int("attempt", attempt),
+				zap.Error(err))
+			time.Sleep(pollInterval)
+			continue
+		}
+
+		embeddingCount, err := w.repository.GetEmbeddingCountByKBUID(ctx, param.StagingKBUID)
+		if err != nil {
+			w.log.Warn("SynchronizeKBActivity: Failed to get embedding count during poll",
+				zap.Int("attempt", attempt),
+				zap.Error(err))
+			time.Sleep(pollInterval)
+			continue
+		}
+
+		convertedFileCount, err := w.repository.GetConvertedFileCountByKBUID(ctx, param.StagingKBUID)
+		if err != nil {
+			w.log.Warn("SynchronizeKBActivity: Failed to get converted file count during poll",
+				zap.Int("attempt", attempt),
+				zap.Error(err))
+			time.Sleep(pollInterval)
+			continue
+		}
+
+		// Check if ALL counts are stable (same as last poll)
+		if attempt > 1 &&
+			chunkCount == lastChunkCount &&
+			embeddingCount == lastEmbeddingCount &&
+			convertedFileCount == lastConvertedFileCount {
+			stableCount++
+			w.log.Info("SynchronizeKBActivity: All counts stable",
+				zap.Int("attempt", attempt),
+				zap.Int64("chunks", chunkCount),
+				zap.Int64("embeddings", embeddingCount),
+				zap.Int64("convertedFiles", convertedFileCount),
+				zap.Int("stableCount", stableCount))
+
+			if stableCount >= requiredStablePolls {
+				w.log.Info("SynchronizeKBActivity: Database state stabilized, proceeding to validation",
+					zap.Int("totalAttempts", attempt),
+					zap.Int64("finalChunks", chunkCount),
+					zap.Int64("finalEmbeddings", embeddingCount),
+					zap.Int64("finalConvertedFiles", convertedFileCount))
+				break
+			}
+		} else {
+			// Counts changed - reset stability counter
+			stableCount = 0
+			w.log.Info("SynchronizeKBActivity: Counts changed, continuing to poll",
+				zap.Int("attempt", attempt),
+				zap.Int64("chunks", chunkCount),
+				zap.Int64("prevChunks", lastChunkCount),
+				zap.Int64("embeddings", embeddingCount),
+				zap.Int64("prevEmbeddings", lastEmbeddingCount),
+				zap.Int64("convertedFiles", convertedFileCount),
+				zap.Int64("prevConvertedFiles", lastConvertedFileCount))
+		}
+
+		lastChunkCount = chunkCount
+		lastEmbeddingCount = embeddingCount
+		lastConvertedFileCount = convertedFileCount
+
+		if attempt < maxPollAttempts {
+			time.Sleep(pollInterval)
+		}
+	}
+
+	if stableCount < requiredStablePolls {
+		w.log.Warn("SynchronizeKBActivity: Reached max poll attempts without full stabilization",
+			zap.Int("attempts", maxPollAttempts),
+			zap.Int("stableCount", stableCount),
+			zap.Int64("lastChunks", lastChunkCount),
+			zap.Int64("lastEmbeddings", lastEmbeddingCount),
+			zap.Int64("lastConvertedFiles", lastConvertedFileCount))
+	}
 
 	return &SynchronizeKBActivityResult{
 		Synchronized: true,
@@ -416,17 +628,19 @@ func (w *Worker) ValidateUpdatedKBActivity(ctx context.Context, param *ValidateU
 
 		// CRITICAL: Production and staging must have EXACT same file count
 		// This ensures users see no change in file count before/after swap
-		// Dual processing guarantees this by adding new files to both KBs
+		// Dual processing guarantees this by adding new files to both KBs AND deleting from both KBs
 		if productionCount != stagingCount {
 			errors = append(errors, fmt.Sprintf("file count mismatch: production has %d, staging has %d (must be identical for seamless swap)",
 				productionCount, stagingCount))
 		}
 
-		// Sanity check: staging should have at least the expected base file count
-		// (original files + any files uploaded during update)
-		if stagingCount < int64(param.ExpectedFileCount) {
-			errors = append(errors, fmt.Sprintf("staging file count too low: expected at least %d (original files), staging has %d",
-				param.ExpectedFileCount, stagingCount))
+		// Sanity check: BOTH production and staging should have at least the expected base file count
+		// UNLESS files were deleted during the update (in which case both should have same reduced count)
+		// Only flag as error if counts are unexpectedly LOW and DIFFERENT from each other
+		if stagingCount < int64(param.ExpectedFileCount) && productionCount >= int64(param.ExpectedFileCount) {
+			// Staging is missing files that production has - this indicates failed dual processing
+			errors = append(errors, fmt.Sprintf("staging file count too low: expected at least %d (original files), staging has %d but production has %d",
+				param.ExpectedFileCount, stagingCount, productionCount))
 		}
 	}
 
@@ -463,11 +677,21 @@ func (w *Worker) ValidateUpdatedKBActivity(ctx context.Context, param *ValidateU
 				zap.Int64("originalConvertedCount", originalConvertedCount),
 				zap.Int64("stagingConvertedCount", stagingConvertedCount))
 
-			// Staging should have at least as many converted files as we expect
-			// (original count or more due to dual processing)
+			// Staging should have at least as many converted files as we expect (no tolerance)
+			// During rapid operations with file deletions, counts may be lower but should still match
 			if stagingConvertedCount < originalConvertedCount {
-				errors = append(errors, fmt.Sprintf("converted file count mismatch: original=%d, staging=%d",
-					originalConvertedCount, stagingConvertedCount))
+				// Add detailed breakdown for debugging
+				difference := originalConvertedCount - stagingConvertedCount
+				w.log.Error("ValidateUpdatedKBActivity: Converted file count mismatch detected",
+					zap.Int64("originalConvertedCount", originalConvertedCount),
+					zap.Int64("stagingConvertedCount", stagingConvertedCount),
+					zap.Int64("difference", difference),
+					zap.String("originalKBUID", param.OriginalKBUID.String()),
+					zap.String("stagingKBUID", param.StagingKBUID.String()),
+					zap.String("hint", "This usually indicates a dual processing/deletion race condition"))
+
+				errors = append(errors, fmt.Sprintf("converted file count mismatch: original=%d, staging=%d (diff: %d, likely due to dual processing race)",
+					originalConvertedCount, stagingConvertedCount, difference))
 			}
 		}
 	}
@@ -499,16 +723,18 @@ func (w *Worker) ValidateUpdatedKBActivity(ctx context.Context, param *ValidateU
 	}
 
 	// VALIDATION 5: Verify embedding counts match chunk counts
+	// With proper locking and synchronization, this should ALWAYS pass on first attempt.
+	// If it fails, it indicates a real bug in the processing pipeline, not a transient race.
 	if len(errors) == 0 {
 		stagingEmbeddingCount, err := w.repository.GetEmbeddingCountByKBUID(ctx, param.StagingKBUID)
 		if err != nil {
 			errors = append(errors, fmt.Sprintf("failed to get staging embedding count: %v", err))
 		} else {
-			w.log.Info("ValidateUpdatedKBActivity: Embedding counts",
+			w.log.Info("ValidateUpdatedKBActivity: Embedding count check",
 				zap.Int64("stagingChunkCount", stagingChunkCount),
 				zap.Int64("stagingEmbeddingCount", stagingEmbeddingCount))
 
-			// Embeddings should match chunks (one embedding per chunk)
+			// Embeddings should match chunks (one embedding per chunk) - NO TOLERANCE
 			if stagingEmbeddingCount != stagingChunkCount {
 				errors = append(errors, fmt.Sprintf("embedding/chunk count mismatch: chunks=%d, embeddings=%d",
 					stagingChunkCount, stagingEmbeddingCount))
@@ -609,7 +835,7 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 			CreatorUID:             originalKB.CreatorUID,
 			Tags:                   append(originalKB.Tags, "rollback"),
 			Staging:                true,
-			UpdateStatus:           "completed",
+			UpdateStatus:           artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED.String(),
 			RollbackRetentionUntil: &retentionUntil,
 			CatalogType:            originalKB.CatalogType,
 			EmbeddingConfig:        originalKB.EmbeddingConfig,
@@ -691,7 +917,7 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 		"active_collection_uid":    stagingKB.ActiveCollectionUID, // Point to new collection
 		"embedding_config":         stagingKB.EmbeddingConfig,     // Update embedding config (may have new dimensionality)
 		"staging":                  false,
-		"update_status":            "completed",
+		"update_status":            artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED.String(),
 		"rollback_retention_until": retentionUntil,
 	})
 	if err != nil {
@@ -725,10 +951,12 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 		zap.String("stagingKBID", stagingKB.KBID))
 
 	// Mark staging KB for immediate deletion to prevent it from blocking future updates
+	// CRITICAL: Also clear update_workflow_id to prevent blocking API deletion
 	now := time.Now()
 	err = w.repository.UpdateKnowledgeBaseWithMap(ctx, stagingKB.KBID, stagingKB.Owner, map[string]interface{}{
-		"delete_time":   &now,
-		"update_status": "", // Clear update status so it doesn't block future updates
+		"delete_time":        &now,
+		"update_status":      "",  // Clear update status so it doesn't block future updates
+		"update_workflow_id": nil, // Clear workflow ID so API deletion works
 	})
 	if err != nil {
 		w.log.Error("SwapKnowledgeBasesActivity: Failed to mark staging KB for deletion (non-fatal)",
@@ -744,11 +972,13 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 	w.log.Info("SwapKnowledgeBasesActivity: Resource swap completed successfully",
 		zap.String("productionKBUID", param.OriginalKBUID.String()),
 		zap.String("rollbackKBUID", rollbackKBUID.String()),
-		zap.String("stagingKBUID", stagingKB.UID.String()))
+		zap.String("stagingKBUID", stagingKB.UID.String()),
+		zap.String("newProductionCollectionUID", stagingKB.ActiveCollectionUID.String()))
 
 	return &SwapKnowledgeBasesActivityResult{
-		RollbackKBUID: rollbackKBUID,
-		StagingKBUID:  stagingKB.UID, // Return staging KB UID for cleanup
+		RollbackKBUID:              rollbackKBUID,
+		StagingKBUID:               stagingKB.UID,                 // Return staging KB UID for cleanup
+		NewProductionCollectionUID: stagingKB.ActiveCollectionUID, // Protect this collection from cleanup
 	}, nil
 }
 

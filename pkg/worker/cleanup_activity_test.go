@@ -136,11 +136,13 @@ func TestDeleteConvertedFileActivity_Success(t *testing.T) {
 	convertedFileUID := uuid.Must(uuid.NewV4())
 
 	mockRepository := mock.NewRepositoryMock(mc)
-	mockRepository.GetConvertedFileByFileUIDMock.
+	mockRepository.GetAllConvertedFilesByFileUIDMock.
 		When(minimock.AnyContext, fileUID).
-		Then(&repository.ConvertedFileModel{
-			UID:   convertedFileUID,
-			KBUID: kbUID,
+		Then([]repository.ConvertedFileModel{
+			{
+				UID:   convertedFileUID,
+				KBUID: kbUID,
+			},
 		}, nil)
 
 	mockRepository.HardDeleteConvertedFileByFileUIDMock.
@@ -167,9 +169,9 @@ func TestDeleteConvertedFileActivity_NotFound(t *testing.T) {
 	fileUID := uuid.Must(uuid.NewV4())
 
 	mockRepository := mock.NewRepositoryMock(mc)
-	mockRepository.GetConvertedFileByFileUIDMock.
+	mockRepository.GetAllConvertedFilesByFileUIDMock.
 		When(minimock.AnyContext, fileUID).
-		Then(nil, fmt.Errorf("not found"))
+		Then([]repository.ConvertedFileModel{}, nil)
 
 	w := &Worker{repository: mockRepository, log: zap.NewNop()}
 

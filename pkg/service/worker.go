@@ -36,6 +36,10 @@ type Worker interface {
 	// If systemProfile is specified, uses config from that profile; otherwise uses KB's current config
 	ExecuteKnowledgeBaseUpdate(ctx context.Context, catalogIDs []string, systemProfile string) (*worker.UpdateRAGIndexResult, error)
 
+	// AbortKnowledgeBaseUpdate aborts ongoing KB update workflows and cleans up staging resources
+	// If catalogIDs is empty, aborts all currently updating catalogs
+	AbortKnowledgeBaseUpdate(ctx context.Context, catalogIDs []string) (*worker.AbortKBUpdateResult, error)
+
 	// RescheduleCleanupWorkflow cancels the existing cleanup workflow for a rollback KB
 	// and starts a new one with updated retention period
 	RescheduleCleanupWorkflow(ctx context.Context, kbUID types.KBUIDType, cleanupAfterSeconds int64) error

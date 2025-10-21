@@ -2,7 +2,7 @@ import http from "k6/http";
 import { check, group, sleep } from "k6";
 import { randomString } from "https://jslib.k6.io/k6-utils/1.1.0/index.js";
 
-import { artifactPublicHost } from "./const.js";
+import { artifactRESTPublicHost } from "./const.js";
 
 import * as constant from "./const.js";
 
@@ -20,7 +20,7 @@ function createCatalogAuthenticated(data) {
   const name = constant.dbIDPrefix + "jwt-" + randomString(8);
   const res = http.request(
     "POST",
-    `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+    `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
     JSON.stringify({ name }),
     data.header
   );
@@ -37,7 +37,7 @@ function createCatalogAuthenticated(data) {
 }
 
 function deleteCatalogAuthenticated(data, catalogId) {
-  http.request("DELETE", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+  http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
 }
 
 function createFileAuthenticated(data, catalogId) {
@@ -45,7 +45,7 @@ function createFileAuthenticated(data, catalogId) {
   const body = { name: fileName, type: "TYPE_TEXT", content: constant.sampleTxt };
   const res = http.request(
     "POST",
-    `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
+    `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
     JSON.stringify(body),
     data.header
   );
@@ -67,7 +67,7 @@ export function CheckCreateCatalogUnauthenticated(data) {
     check(true, { [constant.banner(groupName)]: () => true });
 
     const body = { name: constant.dbIDPrefix + randomString(8) };
-    const res = http.request("POST", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, JSON.stringify(body), constant.paramsHTTPWithJWT.headers);
+    const res = http.request("POST", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, JSON.stringify(body), constant.paramsHTTPWithJWT.headers);
     logUnexpected(res, "POST /v1alpha/namespaces/{namespace_id}/catalogs");
     check(res, { "POST /v1alpha/namespaces/{namespace_id}/catalogs 401": (r) => r.status === 401 });
   });
@@ -80,7 +80,7 @@ export function CheckListCatalogsUnauthenticated(data) {
 
     // Ensure at least one catalog exists, then attempt unauthorized list
     const created = createCatalogAuthenticated(data);
-    const res = http.request("GET", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, constant.paramsHTTPWithJWT.headers);
+    const res = http.request("GET", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, constant.paramsHTTPWithJWT.headers);
     logUnexpected(res, "GET /v1alpha/namespaces/{namespace_id}/catalogs");
     check(res, { "GET /v1alpha/namespaces/{namespace_id}/catalogs 401": (r) => r.status === 401 });
 
@@ -96,7 +96,7 @@ export function CheckGetCatalogUnauthenticated(data) {
 
     // Create one catalog, then try to list (as a proxy for get)
     const created = createCatalogAuthenticated(data);
-    const res = http.request("GET", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, constant.paramsHTTPWithJWT.headers);
+    const res = http.request("GET", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, constant.paramsHTTPWithJWT.headers);
     logUnexpected(res, "GET /v1alpha/namespaces/{namespace_id}/catalogs");
     check(res, { "GET /v1alpha/namespaces/{namespace_id}/catalogs 401": (r) => r.status === 401 });
 
@@ -113,7 +113,7 @@ export function CheckUpdateCatalogUnauthenticated(data) {
     // Create catalog with authorized header, then try to update with random user
     const created = createCatalogAuthenticated(data);
     const body = { description: "x" };
-    const res = http.request("PUT", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${created.catalogId}`, JSON.stringify(body), constant.paramsHTTPWithJWT.headers);
+    const res = http.request("PUT", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${created.catalogId}`, JSON.stringify(body), constant.paramsHTTPWithJWT.headers);
     logUnexpected(res, "PUT /v1alpha/namespaces/{namespace_id}/catalogs/{id}");
     check(res, { "PUT /v1alpha/namespaces/{namespace_id}/catalogs/{id} 401": (r) => r.status === 401 });
 
@@ -130,7 +130,7 @@ export function CheckCreateFileUnauthenticated(data) {
     // Create catalog with authorized header, then try to create file with random user
     const created = createCatalogAuthenticated(data);
     const body = { name: constant.dbIDPrefix + "x.txt", type: "TYPE_TEXT", content: constant.sampleTxt };
-    const res = http.request("POST", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${created.catalogId}/files`, JSON.stringify(body), constant.paramsHTTPWithJWT.headers);
+    const res = http.request("POST", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${created.catalogId}/files`, JSON.stringify(body), constant.paramsHTTPWithJWT.headers);
     logUnexpected(res, "POST /v1alpha/namespaces/{namespace_id}/catalogs/{id}/files");
     check(res, { "POST /v1alpha/namespaces/{namespace_id}/catalogs/{id}/files 401": (r) => r.status === 401 });
 
@@ -147,7 +147,7 @@ export function CheckListFilesUnauthenticated(data) {
     // Create catalog and at least one file authorized, then list with random user
     const created = createCatalogAuthenticated(data);
     createFileAuthenticated(data, created.catalogId);
-    const res = http.request("GET", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${created.catalogId}/files`, null, constant.paramsHTTPWithJWT.headers);
+    const res = http.request("GET", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${created.catalogId}/files`, null, constant.paramsHTTPWithJWT.headers);
     logUnexpected(res, "GET /v1alpha/namespaces/{namespace_id}/catalogs/{id}/files");
     check(res, { "GET /v1alpha/namespaces/{namespace_id}/catalogs/{id}/files 401": (r) => r.status === 401 });
 
@@ -165,7 +165,7 @@ export function CheckProcessFilesUnauthorized(data) {
     const created = createCatalogAuthenticated(data);
     const fileUid = createFileAuthenticated(data, created.catalogId);
     const body = { fileUids: [fileUid] };
-    const res = http.request("POST", `${artifactPublicHost}/v1alpha/catalogs/files/processAsync`, JSON.stringify(body), constant.paramsHTTPWithJWT.headers);
+    const res = http.request("POST", `${artifactRESTPublicHost}/v1alpha/catalogs/files/processAsync`, JSON.stringify(body), constant.paramsHTTPWithJWT.headers);
     logUnexpected(res, "POST /v1alpha/catalogs/files/processAsync");
     check(res, { "POST /v1alpha/catalogs/files/processAsync 403": (r) => r.status === 403 });
 
@@ -182,7 +182,7 @@ export function CheckGetFileUnauthenticated(data) {
     // Create catalog and file authorized, then get file with random user
     const created = createCatalogAuthenticated(data);
     const fileUid = createFileAuthenticated(data, created.catalogId);
-    const res = http.request("GET", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${created.catalogId}/files/${fileUid}`, null, constant.paramsHTTPWithJWT.headers);
+    const res = http.request("GET", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${created.catalogId}/files/${fileUid}`, null, constant.paramsHTTPWithJWT.headers);
     logUnexpected(res, "GET /v1alpha/namespaces/{namespace_id}/catalogs/{id}/files/{uid}");
     check(res, { "GET /v1alpha/namespaces/{namespace_id}/catalogs/{id}/files/{uid} 401": (r) => r.status === 401 });
 
@@ -199,7 +199,7 @@ export function CheckGetFileSourceUnauthorized(data) {
     // Create catalog and file authorized, then get source with random user
     const created = createCatalogAuthenticated(data);
     const fileUid = createFileAuthenticated(data, created.catalogId);
-    const res = http.request("GET", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${created.catalogId}/files/${fileUid}/source`, null, constant.paramsHTTPWithJWT.headers);
+    const res = http.request("GET", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${created.catalogId}/files/${fileUid}/source`, null, constant.paramsHTTPWithJWT.headers);
     logUnexpected(res, "GET /v1alpha/namespaces/{namespace_id}/catalogs/{id}/files/{uid}/source");
     check(res, { "GET /v1alpha/namespaces/{namespace_id}/catalogs/{id}/files/{uid}/source 403": (r) => r.status === 403 });
 
@@ -216,7 +216,7 @@ export function CheckGetFileSummaryUnauthenticated(data) {
     // Create catalog and file authorized, then get summary with random user
     const created = createCatalogAuthenticated(data);
     const fileUid = createFileAuthenticated(data, created.catalogId);
-    const res = http.request("GET", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${created.catalogId}/files/${fileUid}/summary`, null, constant.paramsHTTPWithJWT.headers);
+    const res = http.request("GET", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${created.catalogId}/files/${fileUid}/summary`, null, constant.paramsHTTPWithJWT.headers);
     logUnexpected(res, "GET /v1alpha/namespaces/{namespace_id}/catalogs/{id}/files/{uid}/summary");
     check(res, { "GET /v1alpha/namespaces/{namespace_id}/catalogs/{id}/files/{uid}/summary 401": (r) => r.status === 401 });
 
@@ -233,7 +233,7 @@ export function CheckListChunksUnauthenticated(data) {
     // Create catalog and a file with authorized header, then list chunks with random user using file_uid
     const created = createCatalogAuthenticated(data);
     const fileUid = createFileAuthenticated(data, created.catalogId);
-    const res = http.request("GET", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${created.catalogId}/chunks?fileUid=${fileUid}`, null, constant.paramsHTTPWithJWT.headers);
+    const res = http.request("GET", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${created.catalogId}/chunks?fileUid=${fileUid}`, null, constant.paramsHTTPWithJWT.headers);
     logUnexpected(res, "GET /v1alpha/namespaces/{namespace_id}/catalogs/{id}/chunks");
     check(res, { "GET /v1alpha/namespaces/{namespace_id}/catalogs/{id}/chunks 401": (r) => r.status === 401 });
 

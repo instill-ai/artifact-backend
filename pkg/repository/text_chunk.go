@@ -83,8 +83,8 @@ type TextChunkModel struct {
 	CreateTime  *time.Time `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
 	UpdateTime  *time.Time `gorm:"column:update_time;not null;default:CURRENT_TIMESTAMP" json:"update_time"`
 	// KBUID is the knowledge base UID
-	KBUID     types.KBUIDType   `gorm:"column:kb_uid;type:uuid" json:"kb_uid"`
-	KBFileUID types.FileUIDType `gorm:"column:kb_file_uid;type:uuid" json:"kb_file_uid"`
+	KBUID   types.KBUIDType   `gorm:"column:kb_uid;type:uuid" json:"kb_uid"`
+	FileUID types.FileUIDType `gorm:"column:file_uid;type:uuid" json:"file_uid"`
 	// ContentType stores the MIME type (always "text/markdown" for chunks)
 	ContentType string `gorm:"column:content_type;size:255;not null" json:"content_type"`
 	// ChunkType stores the chunk classification ("content", "summary", "augmented")
@@ -110,7 +110,7 @@ type TextChunkColumns struct {
 	CreateTime  string
 	UpdateTime  string
 	KBUID       string
-	KBFileUID   string
+	FileUID     string
 	ContentType string
 	ChunkType   string
 }
@@ -129,7 +129,7 @@ var TextChunkColumn = TextChunkColumns{
 	CreateTime:  "create_time",
 	UpdateTime:  "update_time",
 	KBUID:       "kb_uid",
-	KBFileUID:   "kb_file_uid",
+	FileUID:     "file_uid",
 	ContentType: "content_type",
 	ChunkType:   "chunk_type",
 }
@@ -148,7 +148,7 @@ func (r *repository) DeleteAndCreateTextChunks(
 
 	// Start a transaction
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		// Delete existing text chunks by source_uid (not kb_file_uid)
+		// Delete existing text chunks by source_uid (not file_uid)
 		// This ensures we only delete chunks for the specific converted_file being updated
 		// (e.g., content chunks or summary chunks), allowing them to coexist
 		if len(textChunks) > 0 {
@@ -420,7 +420,7 @@ func (r *repository) HardDeleteTextChunksByKBUID(ctx context.Context, kbUID type
 // ListTextChunksByKBFileUID returns the list of text chunks by kbFileUID
 func (r *repository) ListTextChunksByKBFileUID(ctx context.Context, kbFileUID types.FileUIDType) ([]TextChunkModel, error) {
 	var textChunks []TextChunkModel
-	where := fmt.Sprintf("%s = ?", TextChunkColumn.KBFileUID)
+	where := fmt.Sprintf("%s = ?", TextChunkColumn.FileUID)
 	if err := r.db.WithContext(ctx).Where(where, kbFileUID).Find(&textChunks).Error; err != nil {
 		return nil, err
 	}
@@ -429,7 +429,7 @@ func (r *repository) ListTextChunksByKBFileUID(ctx context.Context, kbFileUID ty
 
 // HardDeleteTextChunksByKBFileUID deletes all the text chunks associated with a certain kbFileUID.
 func (r *repository) HardDeleteTextChunksByKBFileUID(ctx context.Context, kbFileUID types.FileUIDType) error {
-	where := fmt.Sprintf("%s = ?", TextChunkColumn.KBFileUID)
+	where := fmt.Sprintf("%s = ?", TextChunkColumn.FileUID)
 	return r.db.WithContext(ctx).Where(where, kbFileUID).Unscoped().Delete(&TextChunkModel{}).Error
 }
 
@@ -537,8 +537,10 @@ func (tc *TextChunkModel) AfterFind(tx *gorm.DB) error {
 func (r *repository) GetChunkCountByKBUID(ctx context.Context, kbUID types.KBUIDType) (int64, error) {
 	var count int64
 	err := r.db.WithContext(ctx).
-		Table(TextChunkTableName).
-		Where("kb_uid = ?", kbUID).
+		Table(TextChunkTableName+" AS tc").
+		Joins("INNER JOIN "+KnowledgeBaseFileTableName+" AS f ON tc.file_uid = f.uid").
+		Where("tc.kb_uid = ?", kbUID).
+		Where("f.delete_time IS NULL").
 		Count(&count).
 		Error
 	if err != nil {

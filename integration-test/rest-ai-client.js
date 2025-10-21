@@ -4,18 +4,17 @@ import { randomString } from "https://jslib.k6.io/k6-utils/1.4.0/index.js";
 import encoding from "k6/encoding";
 
 import * as constant from "./const.js";
-import * as helper from "./helper.js";
 
-const apiHost = constant.artifactPublicHost;
+const apiHost = constant.artifactRESTPublicHost;
 
 export function setup() {
-    var loginResp = http.request("POST", `${constant.mgmtPublicHost}/v1beta/auth/login`, JSON.stringify({
+    var loginResp = http.request("POST", `${constant.mgmtRESTPublicHost}/v1beta/auth/login`, JSON.stringify({
         "username": constant.defaultUsername,
         "password": constant.defaultPassword,
     }))
 
     check(loginResp, {
-        [`POST ${constant.mgmtPublicHost}/v1beta/auth/login response status is 200`]: (r) => r.status === 200,
+        [`POST ${constant.mgmtRESTPublicHost}/v1beta/auth/login response status is 200`]: (r) => r.status === 200,
     });
 
     var header = {
@@ -26,7 +25,7 @@ export function setup() {
         "timeout": "600s",
     }
 
-    var resp = http.request("GET", `${constant.mgmtPublicHost}/v1beta/user`, {}, {
+    var resp = http.request("GET", `${constant.mgmtRESTPublicHost}/v1beta/user`, {}, {
         headers: {
             "Authorization": `Bearer ${loginResp.json().accessToken}`
         }
@@ -286,7 +285,7 @@ export default function (data) {
         // Verify embeddings were created by checking if embeddings exist in database
         if (processedStatus) {
             const embeddingResult = constant.db.query(
-                `SELECT COUNT(*) as count FROM embedding WHERE kb_file_uid = $1`,
+                `SELECT COUNT(*) as count FROM embedding WHERE file_uid = $1`,
                 fileUid
             );
 

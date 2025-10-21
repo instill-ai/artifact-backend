@@ -9,6 +9,8 @@ import (
 
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/types"
+
+	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
 // UpdateKnowledgeBaseWorkflowParam defines parameters for updating a single KB
@@ -75,7 +77,7 @@ func (w *Worker) UpdateKnowledgeBaseWorkflow(ctx workflow.Context, param UpdateK
 			// Mark original KB as failed
 			_ = workflow.ExecuteActivity(cleanupCtx, w.UpdateKnowledgeBaseUpdateStatusActivity, &UpdateKnowledgeBaseUpdateStatusActivityParam{
 				KBUID:      param.OriginalKBUID,
-				Status:     "failed",
+				Status:     artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_FAILED.String(),
 				WorkflowID: workflowID,
 			}).Get(cleanupCtx, nil)
 		}
@@ -96,7 +98,7 @@ func (w *Worker) UpdateKnowledgeBaseWorkflow(ctx workflow.Context, param UpdateK
 	// Update original KB status to updating after validation passes
 	err = workflow.ExecuteActivity(ctx, w.UpdateKnowledgeBaseUpdateStatusActivity, &UpdateKnowledgeBaseUpdateStatusActivityParam{
 		KBUID:      param.OriginalKBUID,
-		Status:     "updating",
+		Status:     artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING.String(),
 		WorkflowID: workflowID,
 	}).Get(ctx, nil)
 	if err != nil {
@@ -193,11 +195,23 @@ func (w *Worker) UpdateKnowledgeBaseWorkflow(ctx workflow.Context, param UpdateK
 	// ========== Phase 3: Synchronize ==========
 	logger.Info("Phase 3: Synchronize - Final synchronization before swap")
 
+	// Synchronization needs extended retries during rapid operations (e.g., CC3 test)
+	// where multiple files are uploaded/deleted concurrently and may take time to complete processing
+	syncCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: ActivityTimeoutLong,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    RetryInitialInterval,
+			BackoffCoefficient: RetryBackoffCoefficient,
+			MaximumInterval:    RetryMaximumIntervalLong,
+			MaximumAttempts:    20, // Increased from default 5 to 20 for rapid operations (up to ~5 minutes wait)
+		},
+	})
+
 	var syncResult SynchronizeKBActivityResult
-	err = workflow.ExecuteActivity(ctx, w.SynchronizeKBActivity, &SynchronizeKBActivityParam{
+	err = workflow.ExecuteActivity(syncCtx, w.SynchronizeKBActivity, &SynchronizeKBActivityParam{
 		OriginalKBUID: param.OriginalKBUID,
 		StagingKBUID:  stagingKBUID,
-	}).Get(ctx, &syncResult)
+	}).Get(syncCtx, &syncResult)
 	if err != nil {
 		logger.Error("Synchronization failed", "error", err)
 		return fmt.Errorf("synchronization failed: %w", err)
@@ -209,12 +223,21 @@ func (w *Worker) UpdateKnowledgeBaseWorkflow(ctx workflow.Context, param UpdateK
 	logger.Info("Phase 4: Validate - Validating KB resource integrity")
 
 	if config.Config.RAG.Update.ValidationEnabled {
+		// Validation should NEVER be retried - if it fails, it indicates a real bug in the locking/synchronization
+		// Retries just mask failures and waste time. With proper locking, validation passes on first attempt.
+		validationCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			StartToCloseTimeout: ActivityTimeoutStandard, // 5 min timeout
+			RetryPolicy: &temporal.RetryPolicy{
+				MaximumAttempts: 1, // NO RETRIES - fail fast to expose bugs
+			},
+		})
+
 		var validationResult ValidateUpdatedKBActivityResult
-		err = workflow.ExecuteActivity(ctx, w.ValidateUpdatedKBActivity, &ValidateUpdatedKBActivityParam{
+		err = workflow.ExecuteActivity(validationCtx, w.ValidateUpdatedKBActivity, &ValidateUpdatedKBActivityParam{
 			OriginalKBUID:     param.OriginalKBUID,
 			StagingKBUID:      stagingKBUID,
 			ExpectedFileCount: len(listFilesResult.FileUIDs),
-		}).Get(ctx, &validationResult)
+		}).Get(validationCtx, &validationResult)
 		if err != nil || !validationResult.Success {
 			logger.Error("Validation failed", "error", err, "validationErrors", validationResult.Errors)
 			return fmt.Errorf("validation failed: %v", validationResult.Errors)
@@ -237,19 +260,13 @@ func (w *Worker) UpdateKnowledgeBaseWorkflow(ctx workflow.Context, param UpdateK
 
 	logger.Info("Atomic swap completed successfully",
 		"rollbackKBUID", swapResult.RollbackKBUID.String(),
-		"stagingKBUID", swapResult.StagingKBUID.String())
+		"stagingKBUID", swapResult.StagingKBUID.String(),
+		"newProductionCollectionUID", swapResult.NewProductionCollectionUID.String())
 
-	// CRITICAL: Wait for swap transaction to be fully committed and visible to all queries
-	// This prevents a race condition where IsCollectionInUse might not see the updated
-	// active_collection_uid due to PostgreSQL transaction isolation
-	// Extended delay ensures database transaction is visible across all connections
-	logger.Info("Waiting for swap transaction to commit before cleanup")
-	_ = workflow.Sleep(ctx, 5*time.Second)
-
-	// CRITICAL: Trigger staging KB cleanup NOW (after swap transaction is committed)
-	// This ensures the production KB's active_collection_uid update is visible before
-	// the cleanup workflow checks IsCollectionInUse
-	logger.Info("Triggering staging KB cleanup (after swap transaction committed)")
+	// CRITICAL: Trigger staging KB cleanup with protected collection UID
+	// This is deterministic and prevents race conditions - the cleanup workflow
+	// will NOT drop the collection that was just swapped to production
+	logger.Info("Triggering staging KB cleanup (deterministic protection for new production collection)")
 	cleanupCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: time.Minute,
 		RetryPolicy: &temporal.RetryPolicy{
@@ -260,7 +277,8 @@ func (w *Worker) UpdateKnowledgeBaseWorkflow(ctx workflow.Context, param UpdateK
 		},
 	})
 	_ = workflow.ExecuteActivity(cleanupCtx, w.CleanupOldKnowledgeBaseActivity, &CleanupOldKnowledgeBaseActivityParam{
-		KBUID: swapResult.StagingKBUID,
+		KBUID:                  swapResult.StagingKBUID,
+		ProtectedCollectionUID: &swapResult.NewProductionCollectionUID,
 	}).Get(cleanupCtx, nil)
 
 	// ========== Phase 6: Cleanup ==========
@@ -289,6 +307,18 @@ func (w *Worker) UpdateKnowledgeBaseWorkflow(ctx workflow.Context, param UpdateK
 
 	// Mark upgrade as completed
 	upgradeCompleted = true
+
+	// CRITICAL: Set final COMPLETED status and clear workflow_id
+	// This allows the KB to be deleted and prevents catalog pileup
+	err = workflow.ExecuteActivity(ctx, w.UpdateKnowledgeBaseUpdateStatusActivity, &UpdateKnowledgeBaseUpdateStatusActivityParam{
+		KBUID:      param.OriginalKBUID,
+		Status:     artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED.String(),
+		WorkflowID: workflowID, // Will be cleared to NULL by UpdateKnowledgeBaseUpdateStatus for terminal states
+	}).Get(ctx, nil)
+	if err != nil {
+		logger.Error("Failed to set final COMPLETED status (non-fatal)", "error", err)
+		// Non-fatal: workflow still succeeded, just log the error
+	}
 
 	logger.Info("UpdateKnowledgeBaseWorkflow completed successfully",
 		"originalKBUID", param.OriginalKBUID.String(),

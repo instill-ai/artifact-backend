@@ -26,7 +26,7 @@ database:
   timezone: Etc/UTC
   pool:
     idleconnections: 10
-    maxconnections: 30
+    maxconnections: 100
     connlifetime: 30m # In minutes, e.g., '60m'
 influxdb:
   url: http://influxdb:8086

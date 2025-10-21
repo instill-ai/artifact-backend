@@ -18,18 +18,7 @@ const (
 	ConvertedFileTableName = "converted_file"
 )
 
-// ConvertedFileTypeToString converts protobuf ConvertedFileType enum to database string
-func ConvertedFileTypeToString(t artifactpb.ConvertedFileType) string {
-	switch t {
-	case artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_CONTENT:
-		return "content"
-	case artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_SUMMARY:
-		return "summary"
-	default:
-		return "content" // default to content
-	}
-}
-
+// ConvertedFile is the interface for the converted file repository
 type ConvertedFile interface {
 	CreateConvertedFileWithDestination(ctx context.Context, cf ConvertedFileModel) (*ConvertedFileModel, error)
 	UpdateConvertedFile(ctx context.Context, uid types.ConvertedFileUIDType, update map[string]any) error
@@ -42,12 +31,12 @@ type ConvertedFile interface {
 	GetConvertedFileCountByKBUID(ctx context.Context, kbUID types.KBUIDType) (int64, error)
 }
 
+// ConvertedFileModel is the model for the converted file
 type ConvertedFileModel struct {
 	UID   types.ConvertedFileUIDType `gorm:"column:uid;type:uuid;default:gen_random_uuid();primaryKey" json:"uid"`
 	KBUID types.KBUIDType            `gorm:"column:kb_uid;type:uuid;not null" json:"kb_uid"`
 	// FileUID is the original file UID in knowledge base file table
-	FileUID          types.FileUIDType `gorm:"column:file_uid;type:uuid;not null" json:"file_uid"`
-	OriginalFileName string            `gorm:"column:original_filename;size:255;not null" json:"original_filename"`
+	FileUID types.FileUIDType `gorm:"column:file_uid;type:uuid;not null" json:"file_uid"`
 	// ContentType stores the MIME type (always "text/markdown" for converted markdown files)
 	ContentType string `gorm:"column:content_type;size:100;not null" json:"content_type"`
 	// ConvertedType specifies the purpose of this converted file (content or summary)
@@ -67,28 +56,28 @@ func (ConvertedFileModel) TableName() string {
 	return ConvertedFileTableName
 }
 
+// ConvertedFileColumns is the columns for the converted file model
 type ConvertedFileColumns struct {
-	UID              string
-	KBUID            string
-	FileUID          string
-	OriginalFileName string
-	ContentType      string
-	ConvertedType    string
-	Destination      string
-	CreateTime       string
-	UpdateTime       string
+	UID           string
+	KBUID         string
+	FileUID       string
+	ContentType   string
+	ConvertedType string
+	Destination   string
+	CreateTime    string
+	UpdateTime    string
 }
 
+// ConvertedFileColumn is the column for the converted file model
 var ConvertedFileColumn = ConvertedFileColumns{
-	UID:              "uid",
-	KBUID:            "kb_uid",
-	FileUID:          "file_uid",
-	OriginalFileName: "original_filename",
-	ContentType:      "content_type",
-	ConvertedType:    "converted_type",
-	Destination:      "destination",
-	CreateTime:       "create_time",
-	UpdateTime:       "update_time",
+	UID:           "uid",
+	KBUID:         "kb_uid",
+	FileUID:       "file_uid",
+	ContentType:   "content_type",
+	ConvertedType: "converted_type",
+	Destination:   "destination",
+	CreateTime:    "create_time",
+	UpdateTime:    "update_time",
 }
 
 // CreateConvertedFileWithDestination creates a converted file record with a known destination.
@@ -104,9 +93,6 @@ func (r *repository) CreateConvertedFileWithDestination(ctx context.Context, cf 
 	}
 	if cf.Destination == "" {
 		return nil, fmt.Errorf("destination is required and cannot be empty")
-	}
-	if cf.OriginalFileName == "" {
-		return nil, fmt.Errorf("original_filename is required and cannot be empty")
 	}
 	if cf.ContentType == "" {
 		return nil, fmt.Errorf("content_type is required and cannot be empty")
@@ -151,8 +137,7 @@ func (r *repository) GetConvertedFileByFileUID(ctx context.Context, fileUID type
 func (r *repository) GetConvertedFileByFileUIDAndType(ctx context.Context, fileUID types.FileUIDType, convertedType artifactpb.ConvertedFileType) (*ConvertedFileModel, error) {
 	var cf ConvertedFileModel
 	where := fmt.Sprintf("%s = ? AND %s = ?", ConvertedFileColumn.FileUID, ConvertedFileColumn.ConvertedType)
-	convertedTypeStr := ConvertedFileTypeToString(convertedType)
-	if err := r.db.WithContext(ctx).Where(where, fileUID, convertedTypeStr).First(&cf).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where(where, fileUID, convertedType.String()).First(&cf).Error; err != nil {
 		return nil, err
 	}
 	return &cf, nil
@@ -259,8 +244,10 @@ func (cf *ConvertedFileModel) AfterFind(tx *gorm.DB) error {
 func (r *repository) GetConvertedFileCountByKBUID(ctx context.Context, kbUID types.KBUIDType) (int64, error) {
 	var count int64
 	err := r.db.WithContext(ctx).
-		Table(ConvertedFileTableName).
-		Where("kb_uid = ?", kbUID).
+		Table(ConvertedFileTableName+" AS cf").
+		Joins("INNER JOIN "+KnowledgeBaseFileTableName+" AS f ON cf.file_uid = f.uid").
+		Where("cf.kb_uid = ?", kbUID).
+		Where("f.delete_time IS NULL").
 		Count(&count).
 		Error
 	if err != nil {

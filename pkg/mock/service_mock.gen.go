@@ -31,6 +31,13 @@ type ServiceMock struct {
 	beforeACLClientCounter uint64
 	ACLClientMock          mServiceMockACLClient
 
+	funcAbortKnowledgeBaseUpdateAdmin          func(ctx context.Context, ap1 *artifactpb.AbortKnowledgeBaseUpdateAdminRequest) (ap2 *artifactpb.AbortKnowledgeBaseUpdateAdminResponse, err error)
+	funcAbortKnowledgeBaseUpdateAdminOrigin    string
+	inspectFuncAbortKnowledgeBaseUpdateAdmin   func(ctx context.Context, ap1 *artifactpb.AbortKnowledgeBaseUpdateAdminRequest)
+	afterAbortKnowledgeBaseUpdateAdminCounter  uint64
+	beforeAbortKnowledgeBaseUpdateAdminCounter uint64
+	AbortKnowledgeBaseUpdateAdminMock          mServiceMockAbortKnowledgeBaseUpdateAdmin
+
 	funcCheckCatalogUserPermission          func(ctx context.Context, s1 string, s2 string, s3 string) (np1 *resource.Namespace, kp1 *repository.KnowledgeBaseModel, err error)
 	funcCheckCatalogUserPermissionOrigin    string
 	inspectFuncCheckCatalogUserPermission   func(ctx context.Context, s1 string, s2 string, s3 string)
@@ -272,6 +279,9 @@ func NewServiceMock(t minimock.Tester) *ServiceMock {
 	}
 
 	m.ACLClientMock = mServiceMockACLClient{mock: m}
+
+	m.AbortKnowledgeBaseUpdateAdminMock = mServiceMockAbortKnowledgeBaseUpdateAdmin{mock: m}
+	m.AbortKnowledgeBaseUpdateAdminMock.callArgs = []*ServiceMockAbortKnowledgeBaseUpdateAdminParams{}
 
 	m.CheckCatalogUserPermissionMock = mServiceMockCheckCatalogUserPermission{mock: m}
 	m.CheckCatalogUserPermissionMock.callArgs = []*ServiceMockCheckCatalogUserPermissionParams{}
@@ -557,6 +567,349 @@ func (m *ServiceMock) MinimockACLClientInspect() {
 	if !m.ACLClientMock.invocationsDone() && afterACLClientCounter > 0 {
 		m.t.Errorf("Expected %d calls to ServiceMock.ACLClient at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.ACLClientMock.expectedInvocations), m.ACLClientMock.expectedInvocationsOrigin, afterACLClientCounter)
+	}
+}
+
+type mServiceMockAbortKnowledgeBaseUpdateAdmin struct {
+	optional           bool
+	mock               *ServiceMock
+	defaultExpectation *ServiceMockAbortKnowledgeBaseUpdateAdminExpectation
+	expectations       []*ServiceMockAbortKnowledgeBaseUpdateAdminExpectation
+
+	callArgs []*ServiceMockAbortKnowledgeBaseUpdateAdminParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// ServiceMockAbortKnowledgeBaseUpdateAdminExpectation specifies expectation struct of the Service.AbortKnowledgeBaseUpdateAdmin
+type ServiceMockAbortKnowledgeBaseUpdateAdminExpectation struct {
+	mock               *ServiceMock
+	params             *ServiceMockAbortKnowledgeBaseUpdateAdminParams
+	paramPtrs          *ServiceMockAbortKnowledgeBaseUpdateAdminParamPtrs
+	expectationOrigins ServiceMockAbortKnowledgeBaseUpdateAdminExpectationOrigins
+	results            *ServiceMockAbortKnowledgeBaseUpdateAdminResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// ServiceMockAbortKnowledgeBaseUpdateAdminParams contains parameters of the Service.AbortKnowledgeBaseUpdateAdmin
+type ServiceMockAbortKnowledgeBaseUpdateAdminParams struct {
+	ctx context.Context
+	ap1 *artifactpb.AbortKnowledgeBaseUpdateAdminRequest
+}
+
+// ServiceMockAbortKnowledgeBaseUpdateAdminParamPtrs contains pointers to parameters of the Service.AbortKnowledgeBaseUpdateAdmin
+type ServiceMockAbortKnowledgeBaseUpdateAdminParamPtrs struct {
+	ctx *context.Context
+	ap1 **artifactpb.AbortKnowledgeBaseUpdateAdminRequest
+}
+
+// ServiceMockAbortKnowledgeBaseUpdateAdminResults contains results of the Service.AbortKnowledgeBaseUpdateAdmin
+type ServiceMockAbortKnowledgeBaseUpdateAdminResults struct {
+	ap2 *artifactpb.AbortKnowledgeBaseUpdateAdminResponse
+	err error
+}
+
+// ServiceMockAbortKnowledgeBaseUpdateAdminOrigins contains origins of expectations of the Service.AbortKnowledgeBaseUpdateAdmin
+type ServiceMockAbortKnowledgeBaseUpdateAdminExpectationOrigins struct {
+	origin    string
+	originCtx string
+	originAp1 string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmAbortKnowledgeBaseUpdateAdmin *mServiceMockAbortKnowledgeBaseUpdateAdmin) Optional() *mServiceMockAbortKnowledgeBaseUpdateAdmin {
+	mmAbortKnowledgeBaseUpdateAdmin.optional = true
+	return mmAbortKnowledgeBaseUpdateAdmin
+}
+
+// Expect sets up expected params for Service.AbortKnowledgeBaseUpdateAdmin
+func (mmAbortKnowledgeBaseUpdateAdmin *mServiceMockAbortKnowledgeBaseUpdateAdmin) Expect(ctx context.Context, ap1 *artifactpb.AbortKnowledgeBaseUpdateAdminRequest) *mServiceMockAbortKnowledgeBaseUpdateAdmin {
+	if mmAbortKnowledgeBaseUpdateAdmin.mock.funcAbortKnowledgeBaseUpdateAdmin != nil {
+		mmAbortKnowledgeBaseUpdateAdmin.mock.t.Fatalf("ServiceMock.AbortKnowledgeBaseUpdateAdmin mock is already set by Set")
+	}
+
+	if mmAbortKnowledgeBaseUpdateAdmin.defaultExpectation == nil {
+		mmAbortKnowledgeBaseUpdateAdmin.defaultExpectation = &ServiceMockAbortKnowledgeBaseUpdateAdminExpectation{}
+	}
+
+	if mmAbortKnowledgeBaseUpdateAdmin.defaultExpectation.paramPtrs != nil {
+		mmAbortKnowledgeBaseUpdateAdmin.mock.t.Fatalf("ServiceMock.AbortKnowledgeBaseUpdateAdmin mock is already set by ExpectParams functions")
+	}
+
+	mmAbortKnowledgeBaseUpdateAdmin.defaultExpectation.params = &ServiceMockAbortKnowledgeBaseUpdateAdminParams{ctx, ap1}
+	mmAbortKnowledgeBaseUpdateAdmin.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmAbortKnowledgeBaseUpdateAdmin.expectations {
+		if minimock.Equal(e.params, mmAbortKnowledgeBaseUpdateAdmin.defaultExpectation.params) {
+			mmAbortKnowledgeBaseUpdateAdmin.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmAbortKnowledgeBaseUpdateAdmin.defaultExpectation.params)
+		}
+	}
+
+	return mmAbortKnowledgeBaseUpdateAdmin
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Service.AbortKnowledgeBaseUpdateAdmin
+func (mmAbortKnowledgeBaseUpdateAdmin *mServiceMockAbortKnowledgeBaseUpdateAdmin) ExpectCtxParam1(ctx context.Context) *mServiceMockAbortKnowledgeBaseUpdateAdmin {
+	if mmAbortKnowledgeBaseUpdateAdmin.mock.funcAbortKnowledgeBaseUpdateAdmin != nil {
+		mmAbortKnowledgeBaseUpdateAdmin.mock.t.Fatalf("ServiceMock.AbortKnowledgeBaseUpdateAdmin mock is already set by Set")
+	}
+
+	if mmAbortKnowledgeBaseUpdateAdmin.defaultExpectation == nil {
+		mmAbortKnowledgeBaseUpdateAdmin.defaultExpectation = &ServiceMockAbortKnowledgeBaseUpdateAdminExpectation{}
+	}
+
+	if mmAbortKnowledgeBaseUpdateAdmin.defaultExpectation.params != nil {
+		mmAbortKnowledgeBaseUpdateAdmin.mock.t.Fatalf("ServiceMock.AbortKnowledgeBaseUpdateAdmin mock is already set by Expect")
+	}
+
+	if mmAbortKnowledgeBaseUpdateAdmin.defaultExpectation.paramPtrs == nil {
+		mmAbortKnowledgeBaseUpdateAdmin.defaultExpectation.paramPtrs = &ServiceMockAbortKnowledgeBaseUpdateAdminParamPtrs{}
+	}
+	mmAbortKnowledgeBaseUpdateAdmin.defaultExpectation.paramPtrs.ctx = &ctx
+	mmAbortKnowledgeBaseUpdateAdmin.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmAbortKnowledgeBaseUpdateAdmin
+}
+
+// ExpectAp1Param2 sets up expected param ap1 for Service.AbortKnowledgeBaseUpdateAdmin
+func (mmAbortKnowledgeBaseUpdateAdmin *mServiceMockAbortKnowledgeBaseUpdateAdmin) ExpectAp1Param2(ap1 *artifactpb.AbortKnowledgeBaseUpdateAdminRequest) *mServiceMockAbortKnowledgeBaseUpdateAdmin {
+	if mmAbortKnowledgeBaseUpdateAdmin.mock.funcAbortKnowledgeBaseUpdateAdmin != nil {
+		mmAbortKnowledgeBaseUpdateAdmin.mock.t.Fatalf("ServiceMock.AbortKnowledgeBaseUpdateAdmin mock is already set by Set")
+	}
+
+	if mmAbortKnowledgeBaseUpdateAdmin.defaultExpectation == nil {
+		mmAbortKnowledgeBaseUpdateAdmin.defaultExpectation = &ServiceMockAbortKnowledgeBaseUpdateAdminExpectation{}
+	}
+
+	if mmAbortKnowledgeBaseUpdateAdmin.defaultExpectation.params != nil {
+		mmAbortKnowledgeBaseUpdateAdmin.mock.t.Fatalf("ServiceMock.AbortKnowledgeBaseUpdateAdmin mock is already set by Expect")
+	}
+
+	if mmAbortKnowledgeBaseUpdateAdmin.defaultExpectation.paramPtrs == nil {
+		mmAbortKnowledgeBaseUpdateAdmin.defaultExpectation.paramPtrs = &ServiceMockAbortKnowledgeBaseUpdateAdminParamPtrs{}
+	}
+	mmAbortKnowledgeBaseUpdateAdmin.defaultExpectation.paramPtrs.ap1 = &ap1
+	mmAbortKnowledgeBaseUpdateAdmin.defaultExpectation.expectationOrigins.originAp1 = minimock.CallerInfo(1)
+
+	return mmAbortKnowledgeBaseUpdateAdmin
+}
+
+// Inspect accepts an inspector function that has same arguments as the Service.AbortKnowledgeBaseUpdateAdmin
+func (mmAbortKnowledgeBaseUpdateAdmin *mServiceMockAbortKnowledgeBaseUpdateAdmin) Inspect(f func(ctx context.Context, ap1 *artifactpb.AbortKnowledgeBaseUpdateAdminRequest)) *mServiceMockAbortKnowledgeBaseUpdateAdmin {
+	if mmAbortKnowledgeBaseUpdateAdmin.mock.inspectFuncAbortKnowledgeBaseUpdateAdmin != nil {
+		mmAbortKnowledgeBaseUpdateAdmin.mock.t.Fatalf("Inspect function is already set for ServiceMock.AbortKnowledgeBaseUpdateAdmin")
+	}
+
+	mmAbortKnowledgeBaseUpdateAdmin.mock.inspectFuncAbortKnowledgeBaseUpdateAdmin = f
+
+	return mmAbortKnowledgeBaseUpdateAdmin
+}
+
+// Return sets up results that will be returned by Service.AbortKnowledgeBaseUpdateAdmin
+func (mmAbortKnowledgeBaseUpdateAdmin *mServiceMockAbortKnowledgeBaseUpdateAdmin) Return(ap2 *artifactpb.AbortKnowledgeBaseUpdateAdminResponse, err error) *ServiceMock {
+	if mmAbortKnowledgeBaseUpdateAdmin.mock.funcAbortKnowledgeBaseUpdateAdmin != nil {
+		mmAbortKnowledgeBaseUpdateAdmin.mock.t.Fatalf("ServiceMock.AbortKnowledgeBaseUpdateAdmin mock is already set by Set")
+	}
+
+	if mmAbortKnowledgeBaseUpdateAdmin.defaultExpectation == nil {
+		mmAbortKnowledgeBaseUpdateAdmin.defaultExpectation = &ServiceMockAbortKnowledgeBaseUpdateAdminExpectation{mock: mmAbortKnowledgeBaseUpdateAdmin.mock}
+	}
+	mmAbortKnowledgeBaseUpdateAdmin.defaultExpectation.results = &ServiceMockAbortKnowledgeBaseUpdateAdminResults{ap2, err}
+	mmAbortKnowledgeBaseUpdateAdmin.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmAbortKnowledgeBaseUpdateAdmin.mock
+}
+
+// Set uses given function f to mock the Service.AbortKnowledgeBaseUpdateAdmin method
+func (mmAbortKnowledgeBaseUpdateAdmin *mServiceMockAbortKnowledgeBaseUpdateAdmin) Set(f func(ctx context.Context, ap1 *artifactpb.AbortKnowledgeBaseUpdateAdminRequest) (ap2 *artifactpb.AbortKnowledgeBaseUpdateAdminResponse, err error)) *ServiceMock {
+	if mmAbortKnowledgeBaseUpdateAdmin.defaultExpectation != nil {
+		mmAbortKnowledgeBaseUpdateAdmin.mock.t.Fatalf("Default expectation is already set for the Service.AbortKnowledgeBaseUpdateAdmin method")
+	}
+
+	if len(mmAbortKnowledgeBaseUpdateAdmin.expectations) > 0 {
+		mmAbortKnowledgeBaseUpdateAdmin.mock.t.Fatalf("Some expectations are already set for the Service.AbortKnowledgeBaseUpdateAdmin method")
+	}
+
+	mmAbortKnowledgeBaseUpdateAdmin.mock.funcAbortKnowledgeBaseUpdateAdmin = f
+	mmAbortKnowledgeBaseUpdateAdmin.mock.funcAbortKnowledgeBaseUpdateAdminOrigin = minimock.CallerInfo(1)
+	return mmAbortKnowledgeBaseUpdateAdmin.mock
+}
+
+// When sets expectation for the Service.AbortKnowledgeBaseUpdateAdmin which will trigger the result defined by the following
+// Then helper
+func (mmAbortKnowledgeBaseUpdateAdmin *mServiceMockAbortKnowledgeBaseUpdateAdmin) When(ctx context.Context, ap1 *artifactpb.AbortKnowledgeBaseUpdateAdminRequest) *ServiceMockAbortKnowledgeBaseUpdateAdminExpectation {
+	if mmAbortKnowledgeBaseUpdateAdmin.mock.funcAbortKnowledgeBaseUpdateAdmin != nil {
+		mmAbortKnowledgeBaseUpdateAdmin.mock.t.Fatalf("ServiceMock.AbortKnowledgeBaseUpdateAdmin mock is already set by Set")
+	}
+
+	expectation := &ServiceMockAbortKnowledgeBaseUpdateAdminExpectation{
+		mock:               mmAbortKnowledgeBaseUpdateAdmin.mock,
+		params:             &ServiceMockAbortKnowledgeBaseUpdateAdminParams{ctx, ap1},
+		expectationOrigins: ServiceMockAbortKnowledgeBaseUpdateAdminExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmAbortKnowledgeBaseUpdateAdmin.expectations = append(mmAbortKnowledgeBaseUpdateAdmin.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Service.AbortKnowledgeBaseUpdateAdmin return parameters for the expectation previously defined by the When method
+func (e *ServiceMockAbortKnowledgeBaseUpdateAdminExpectation) Then(ap2 *artifactpb.AbortKnowledgeBaseUpdateAdminResponse, err error) *ServiceMock {
+	e.results = &ServiceMockAbortKnowledgeBaseUpdateAdminResults{ap2, err}
+	return e.mock
+}
+
+// Times sets number of times Service.AbortKnowledgeBaseUpdateAdmin should be invoked
+func (mmAbortKnowledgeBaseUpdateAdmin *mServiceMockAbortKnowledgeBaseUpdateAdmin) Times(n uint64) *mServiceMockAbortKnowledgeBaseUpdateAdmin {
+	if n == 0 {
+		mmAbortKnowledgeBaseUpdateAdmin.mock.t.Fatalf("Times of ServiceMock.AbortKnowledgeBaseUpdateAdmin mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmAbortKnowledgeBaseUpdateAdmin.expectedInvocations, n)
+	mmAbortKnowledgeBaseUpdateAdmin.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmAbortKnowledgeBaseUpdateAdmin
+}
+
+func (mmAbortKnowledgeBaseUpdateAdmin *mServiceMockAbortKnowledgeBaseUpdateAdmin) invocationsDone() bool {
+	if len(mmAbortKnowledgeBaseUpdateAdmin.expectations) == 0 && mmAbortKnowledgeBaseUpdateAdmin.defaultExpectation == nil && mmAbortKnowledgeBaseUpdateAdmin.mock.funcAbortKnowledgeBaseUpdateAdmin == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmAbortKnowledgeBaseUpdateAdmin.mock.afterAbortKnowledgeBaseUpdateAdminCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmAbortKnowledgeBaseUpdateAdmin.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// AbortKnowledgeBaseUpdateAdmin implements mm_service.Service
+func (mmAbortKnowledgeBaseUpdateAdmin *ServiceMock) AbortKnowledgeBaseUpdateAdmin(ctx context.Context, ap1 *artifactpb.AbortKnowledgeBaseUpdateAdminRequest) (ap2 *artifactpb.AbortKnowledgeBaseUpdateAdminResponse, err error) {
+	mm_atomic.AddUint64(&mmAbortKnowledgeBaseUpdateAdmin.beforeAbortKnowledgeBaseUpdateAdminCounter, 1)
+	defer mm_atomic.AddUint64(&mmAbortKnowledgeBaseUpdateAdmin.afterAbortKnowledgeBaseUpdateAdminCounter, 1)
+
+	mmAbortKnowledgeBaseUpdateAdmin.t.Helper()
+
+	if mmAbortKnowledgeBaseUpdateAdmin.inspectFuncAbortKnowledgeBaseUpdateAdmin != nil {
+		mmAbortKnowledgeBaseUpdateAdmin.inspectFuncAbortKnowledgeBaseUpdateAdmin(ctx, ap1)
+	}
+
+	mm_params := ServiceMockAbortKnowledgeBaseUpdateAdminParams{ctx, ap1}
+
+	// Record call args
+	mmAbortKnowledgeBaseUpdateAdmin.AbortKnowledgeBaseUpdateAdminMock.mutex.Lock()
+	mmAbortKnowledgeBaseUpdateAdmin.AbortKnowledgeBaseUpdateAdminMock.callArgs = append(mmAbortKnowledgeBaseUpdateAdmin.AbortKnowledgeBaseUpdateAdminMock.callArgs, &mm_params)
+	mmAbortKnowledgeBaseUpdateAdmin.AbortKnowledgeBaseUpdateAdminMock.mutex.Unlock()
+
+	for _, e := range mmAbortKnowledgeBaseUpdateAdmin.AbortKnowledgeBaseUpdateAdminMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.ap2, e.results.err
+		}
+	}
+
+	if mmAbortKnowledgeBaseUpdateAdmin.AbortKnowledgeBaseUpdateAdminMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmAbortKnowledgeBaseUpdateAdmin.AbortKnowledgeBaseUpdateAdminMock.defaultExpectation.Counter, 1)
+		mm_want := mmAbortKnowledgeBaseUpdateAdmin.AbortKnowledgeBaseUpdateAdminMock.defaultExpectation.params
+		mm_want_ptrs := mmAbortKnowledgeBaseUpdateAdmin.AbortKnowledgeBaseUpdateAdminMock.defaultExpectation.paramPtrs
+
+		mm_got := ServiceMockAbortKnowledgeBaseUpdateAdminParams{ctx, ap1}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmAbortKnowledgeBaseUpdateAdmin.t.Errorf("ServiceMock.AbortKnowledgeBaseUpdateAdmin got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmAbortKnowledgeBaseUpdateAdmin.AbortKnowledgeBaseUpdateAdminMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.ap1 != nil && !minimock.Equal(*mm_want_ptrs.ap1, mm_got.ap1) {
+				mmAbortKnowledgeBaseUpdateAdmin.t.Errorf("ServiceMock.AbortKnowledgeBaseUpdateAdmin got unexpected parameter ap1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmAbortKnowledgeBaseUpdateAdmin.AbortKnowledgeBaseUpdateAdminMock.defaultExpectation.expectationOrigins.originAp1, *mm_want_ptrs.ap1, mm_got.ap1, minimock.Diff(*mm_want_ptrs.ap1, mm_got.ap1))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmAbortKnowledgeBaseUpdateAdmin.t.Errorf("ServiceMock.AbortKnowledgeBaseUpdateAdmin got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmAbortKnowledgeBaseUpdateAdmin.AbortKnowledgeBaseUpdateAdminMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmAbortKnowledgeBaseUpdateAdmin.AbortKnowledgeBaseUpdateAdminMock.defaultExpectation.results
+		if mm_results == nil {
+			mmAbortKnowledgeBaseUpdateAdmin.t.Fatal("No results are set for the ServiceMock.AbortKnowledgeBaseUpdateAdmin")
+		}
+		return (*mm_results).ap2, (*mm_results).err
+	}
+	if mmAbortKnowledgeBaseUpdateAdmin.funcAbortKnowledgeBaseUpdateAdmin != nil {
+		return mmAbortKnowledgeBaseUpdateAdmin.funcAbortKnowledgeBaseUpdateAdmin(ctx, ap1)
+	}
+	mmAbortKnowledgeBaseUpdateAdmin.t.Fatalf("Unexpected call to ServiceMock.AbortKnowledgeBaseUpdateAdmin. %v %v", ctx, ap1)
+	return
+}
+
+// AbortKnowledgeBaseUpdateAdminAfterCounter returns a count of finished ServiceMock.AbortKnowledgeBaseUpdateAdmin invocations
+func (mmAbortKnowledgeBaseUpdateAdmin *ServiceMock) AbortKnowledgeBaseUpdateAdminAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmAbortKnowledgeBaseUpdateAdmin.afterAbortKnowledgeBaseUpdateAdminCounter)
+}
+
+// AbortKnowledgeBaseUpdateAdminBeforeCounter returns a count of ServiceMock.AbortKnowledgeBaseUpdateAdmin invocations
+func (mmAbortKnowledgeBaseUpdateAdmin *ServiceMock) AbortKnowledgeBaseUpdateAdminBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmAbortKnowledgeBaseUpdateAdmin.beforeAbortKnowledgeBaseUpdateAdminCounter)
+}
+
+// Calls returns a list of arguments used in each call to ServiceMock.AbortKnowledgeBaseUpdateAdmin.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmAbortKnowledgeBaseUpdateAdmin *mServiceMockAbortKnowledgeBaseUpdateAdmin) Calls() []*ServiceMockAbortKnowledgeBaseUpdateAdminParams {
+	mmAbortKnowledgeBaseUpdateAdmin.mutex.RLock()
+
+	argCopy := make([]*ServiceMockAbortKnowledgeBaseUpdateAdminParams, len(mmAbortKnowledgeBaseUpdateAdmin.callArgs))
+	copy(argCopy, mmAbortKnowledgeBaseUpdateAdmin.callArgs)
+
+	mmAbortKnowledgeBaseUpdateAdmin.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockAbortKnowledgeBaseUpdateAdminDone returns true if the count of the AbortKnowledgeBaseUpdateAdmin invocations corresponds
+// the number of defined expectations
+func (m *ServiceMock) MinimockAbortKnowledgeBaseUpdateAdminDone() bool {
+	if m.AbortKnowledgeBaseUpdateAdminMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.AbortKnowledgeBaseUpdateAdminMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.AbortKnowledgeBaseUpdateAdminMock.invocationsDone()
+}
+
+// MinimockAbortKnowledgeBaseUpdateAdminInspect logs each unmet expectation
+func (m *ServiceMock) MinimockAbortKnowledgeBaseUpdateAdminInspect() {
+	for _, e := range m.AbortKnowledgeBaseUpdateAdminMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to ServiceMock.AbortKnowledgeBaseUpdateAdmin at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterAbortKnowledgeBaseUpdateAdminCounter := mm_atomic.LoadUint64(&m.afterAbortKnowledgeBaseUpdateAdminCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.AbortKnowledgeBaseUpdateAdminMock.defaultExpectation != nil && afterAbortKnowledgeBaseUpdateAdminCounter < 1 {
+		if m.AbortKnowledgeBaseUpdateAdminMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to ServiceMock.AbortKnowledgeBaseUpdateAdmin at\n%s", m.AbortKnowledgeBaseUpdateAdminMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to ServiceMock.AbortKnowledgeBaseUpdateAdmin at\n%s with params: %#v", m.AbortKnowledgeBaseUpdateAdminMock.defaultExpectation.expectationOrigins.origin, *m.AbortKnowledgeBaseUpdateAdminMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcAbortKnowledgeBaseUpdateAdmin != nil && afterAbortKnowledgeBaseUpdateAdminCounter < 1 {
+		m.t.Errorf("Expected call to ServiceMock.AbortKnowledgeBaseUpdateAdmin at\n%s", m.funcAbortKnowledgeBaseUpdateAdminOrigin)
+	}
+
+	if !m.AbortKnowledgeBaseUpdateAdminMock.invocationsDone() && afterAbortKnowledgeBaseUpdateAdminCounter > 0 {
+		m.t.Errorf("Expected %d calls to ServiceMock.AbortKnowledgeBaseUpdateAdmin at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.AbortKnowledgeBaseUpdateAdminMock.expectedInvocations), m.AbortKnowledgeBaseUpdateAdminMock.expectedInvocationsOrigin, afterAbortKnowledgeBaseUpdateAdminCounter)
 	}
 }
 
@@ -12311,6 +12664,8 @@ func (m *ServiceMock) MinimockFinish() {
 		if !m.minimockDone() {
 			m.MinimockACLClientInspect()
 
+			m.MinimockAbortKnowledgeBaseUpdateAdminInspect()
+
 			m.MinimockCheckCatalogUserPermissionInspect()
 
 			m.MinimockCheckNamespacePermissionInspect()
@@ -12400,6 +12755,7 @@ func (m *ServiceMock) minimockDone() bool {
 	done := true
 	return done &&
 		m.MinimockACLClientDone() &&
+		m.MinimockAbortKnowledgeBaseUpdateAdminDone() &&
 		m.MinimockCheckCatalogUserPermissionDone() &&
 		m.MinimockCheckNamespacePermissionDone() &&
 		m.MinimockCleanupFileDone() &&

@@ -391,6 +391,66 @@ func (ph *PublicHandler) DeleteCatalog(ctx context.Context, req *artifactpb.Dele
 		)
 	}
 
+	// CRITICAL: Block deletion if update workflow is in progress (for production KBs only)
+	// Deleting a production KB during an update can cause race conditions where:
+	// - File processing workflows try to save to dropped Milvus collections
+	// - Staging/rollback KBs become orphaned
+	// - Validation fails with inconsistent state
+	// NOTE: Staging KBs are exempt from this check as they're temporary resources
+	if !kb.Staging && repository.IsUpdateInProgress(kb.UpdateStatus) {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("%w: catalog update in progress", errorsx.ErrRateLimiting),
+			fmt.Sprintf("Catalog is currently being updated (status: %s). Please wait for the update to complete or abort it before deleting.", kb.UpdateStatus),
+		)
+	}
+
+	// CRITICAL: Also check if there's an active workflow for production KBs
+	// This protects against race conditions where the workflow has started but status
+	// hasn't been written to DB yet (or is being retried after a failure)
+	// NOTE: Staging/rollback KBs are exempt - they're temporary and should be deletable
+	if !kb.Staging && kb.UpdateWorkflowID != "" {
+		// Verify the workflow is actually running (not completed/failed)
+		// If we can't check the workflow status, block deletion to be safe
+		logger.Warn("Catalog has an active workflow ID, blocking deletion for safety",
+			zap.String("catalogID", req.CatalogId),
+			zap.String("catalogUID", kb.UID.String()),
+			zap.String("workflowID", kb.UpdateWorkflowID))
+
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("%w: catalog update workflow is active", errorsx.ErrRateLimiting),
+			fmt.Sprintf("Catalog has an active update workflow (ID: %s). Please wait for the update to complete or abort it before deleting.", kb.UpdateWorkflowID),
+		)
+	}
+
+	// CRITICAL: Wait for any in-progress file processing to complete before cleanup
+	// This prevents race conditions where file workflows try to access resources
+	// (Milvus collections, DB records) that are being deleted by cleanup workflow
+	inProgressStatuses := artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_PROCESSING.String() + "," +
+		artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CONVERTING.String() + "," +
+		artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CHUNKING.String() + "," +
+		artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_EMBEDDING.String()
+
+	inProgressCount, err := ph.service.Repository().GetFileCountByKnowledgeBaseUID(ctx, kb.UID, inProgressStatuses)
+	if err != nil {
+		logger.Error("failed to check for in-progress files", zap.Error(err))
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to verify file processing status: %w", err),
+			"Unable to verify if files are being processed. Please try again.",
+		)
+	}
+
+	if inProgressCount > 0 {
+		logger.Warn("Catalog has in-progress file operations, blocking deletion",
+			zap.String("catalogID", req.CatalogId),
+			zap.String("catalogUID", kb.UID.String()),
+			zap.Int64("inProgressCount", inProgressCount))
+
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("%w: files are being processed", errorsx.ErrRateLimiting),
+			fmt.Sprintf("Catalog has %d files currently being processed. Please wait for processing to complete before deleting, or cancel the file processing operations first.", inProgressCount),
+		)
+	}
+
 	deletedKb, err := ph.service.Repository().DeleteKnowledgeBase(ctx, ns.NsUID.String(), req.CatalogId)
 	if err != nil {
 		logger.Error("failed to delete catalog", zap.Error(err))
@@ -398,6 +458,7 @@ func (ph *PublicHandler) DeleteCatalog(ctx context.Context, req *artifactpb.Dele
 	}
 
 	// Trigger Temporal workflow for background cleanup
+	// At this point, we've verified no files are actively processing and no update is in progress
 	if err := ph.service.CleanupKnowledgeBase(ctx, kb.UID); err != nil {
 		logger.Error("failed to trigger cleanup workflow", zap.Error(err), zap.String("catalog_id", kb.UID.String()))
 		// Don't fail the request - cleanup will be retried by Temporal

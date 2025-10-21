@@ -19,61 +19,23 @@ import (
 	errorsx "github.com/instill-ai/x/errors"
 )
 
-// Knowledge Base Update Status Constants
-// These constants represent the various states of a Knowledge Base update lifecycle
-const (
-	// KBUpdateStatusNone indicates the KB has never been updated
-	// This is the default state for newly created KBs
-	KBUpdateStatusNone = ""
-
-	// KBUpdateStatusUpdating indicates Phase 2: Reprocessing
-	// The staging KB is being populated by reprocessing all files with the new configuration
-	KBUpdateStatusUpdating = "updating"
-
-	// KBUpdateStatusSwapping indicates Phase 3: Atomic Swap
-	// Resources are being swapped between production, staging, and rollback KBs
-	// This phase is typically very brief (< 1 second) but file synchronization may occur
-	KBUpdateStatusSwapping = "swapping"
-
-	// KBUpdateStatusValidating indicates Phase 4: Validation
-	// The updated KB is being validated to ensure all resources were correctly processed
-	// Checks include file counts, chunk counts, and embedding counts
-	KBUpdateStatusValidating = "validating"
-
-	// KBUpdateStatusSyncing indicates Phase 5: Metadata Sync
-	// External metadata and statistics are being synchronized after the swap
-	KBUpdateStatusSyncing = "syncing"
-
-	// KBUpdateStatusCompleted indicates the update completed successfully
-	// Phase 6 (Cleanup/Retention) begins: Rollback KB is retained for the configured period
-	KBUpdateStatusCompleted = "completed"
-
-	// KBUpdateStatusFailed indicates the update failed at some point
-	// The production KB remains unchanged and can be used normally
-	KBUpdateStatusFailed = "failed"
-
-	// KBUpdateStatusRolledBack indicates the update was rolled back
-	// The previous version has been restored from the rollback KB
-	// Phase 6 (Cleanup/Retention) begins: The failed version is retained for analysis
-	KBUpdateStatusRolledBack = "rolled_back"
-)
-
 // IsUpdateInProgress returns true if the KB is currently being updated
 // This includes all active phases from reprocessing through metadata sync
 func IsUpdateInProgress(status string) bool {
-	return status == KBUpdateStatusUpdating ||
-		status == KBUpdateStatusSwapping ||
-		status == KBUpdateStatusValidating ||
-		status == KBUpdateStatusSyncing
+	return status == artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING.String() ||
+		status == artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_SWAPPING.String() ||
+		status == artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_VALIDATING.String() ||
+		status == artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_SYNCING.String()
 }
 
-// IsUpdateComplete returns true if the update has finished (success, failure, or rollback)
+// IsUpdateComplete returns true if the update has finished (success, failure, rollback, or aborted)
 // Used to determine if a new update can be started
 func IsUpdateComplete(status string) bool {
-	return status == KBUpdateStatusNone ||
-		status == KBUpdateStatusCompleted ||
-		status == KBUpdateStatusFailed ||
-		status == KBUpdateStatusRolledBack
+	return status == "" ||
+		status == artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED.String() ||
+		status == artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_FAILED.String() ||
+		status == artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_ROLLED_BACK.String() ||
+		status == artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_ABORTED.String()
 }
 
 // IsDualProcessingNeeded returns true if files uploaded to this KB require dual processing
@@ -84,7 +46,8 @@ func IsDualProcessingNeeded(status string) bool {
 		return true
 	}
 	// During retention period: dual process with rollback KB
-	if status == KBUpdateStatusCompleted || status == KBUpdateStatusRolledBack {
+	if status == artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED.String() ||
+		status == artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_ROLLED_BACK.String() {
 		return true
 	}
 	return false
@@ -127,6 +90,8 @@ type KnowledgeBase interface {
 	ListKnowledgeBasesByUpdateStatus(ctx context.Context, updateStatus string) ([]KnowledgeBaseModel, error)
 	// UpdateKnowledgeBaseUpdateStatus updates the update status of a KB
 	UpdateKnowledgeBaseUpdateStatus(ctx context.Context, kbUID types.KBUIDType, status string, workflowID string) error
+	// UpdateKnowledgeBaseAborted sets the KB status to ABORTED and explicitly clears the workflow ID to NULL
+	UpdateKnowledgeBaseAborted(ctx context.Context, kbUID types.KBUIDType) error
 	// UpdateKnowledgeBaseWithMap updates a KB using a map to allow zero values like false
 	UpdateKnowledgeBaseWithMap(ctx context.Context, id, owner string, updates map[string]any) error
 
@@ -621,7 +586,7 @@ func (r *repository) IsKBUpdating(ctx context.Context, kbUID types.KBUIDType) (b
 		}
 		return false, fmt.Errorf("checking KB update status: %w", err)
 	}
-	return updateStatus == KBUpdateStatusUpdating, nil
+	return updateStatus == artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING.String(), nil
 }
 
 // GetStagingKBForProduction finds the staging KB for a production catalog during an update
@@ -706,8 +671,13 @@ func (r *repository) GetDualProcessingTarget(ctx context.Context, productionKB *
 
 	// Scenario 1 & 2: Update in progress (Phase 2-5: updating, swapping, validating, syncing)
 	// Files uploaded during ANY active update phase should be dual-processed to both production and staging KBs
+	//
+	// CRITICAL FIX: During "swapping" status, after the actual swap happens (Phase 5), the staging KB is deleted
+	// and rollback KB is created. So we need to check BOTH: first try staging, then fallback to rollback.
 	if IsUpdateInProgress(status) {
 		ownerUID := types.OwnerUIDType(uuid.FromStringOrNil(productionKB.Owner))
+
+		// First, try to find staging KB (exists before swap)
 		stagingKB, err := r.GetStagingKBForProduction(ctx, ownerUID, productionKB.KBID)
 		if err != nil {
 			return nil, fmt.Errorf("checking for staging KB: %w", err)
@@ -717,26 +687,41 @@ func (r *repository) GetDualProcessingTarget(ctx context.Context, productionKB *
 			result.TargetKB = stagingKB
 			result.Phase = status
 			switch status {
-			case KBUpdateStatusUpdating:
+			case artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING.String():
 				result.Description = "Update in progress (Phase 2: Reprocess) - full dual processing with staging KB"
-			case KBUpdateStatusSwapping:
-				result.Description = "Update in progress (Phase 3: Swap) - file synchronization with staging KB"
-			case KBUpdateStatusValidating:
+			case artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_SWAPPING.String():
+				result.Description = "Update in progress (Phase 3-5: Pre-Swap) - file synchronization with staging KB"
+			case artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_VALIDATING.String():
 				result.Description = "Update in progress (Phase 4: Validation) - file synchronization with staging KB"
-			case KBUpdateStatusSyncing:
-				result.Description = "Update in progress (Phase 5: Sync) - file synchronization with staging KB"
+			case artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_SYNCING.String():
+				result.Description = "Update in progress (Phase 5: Pre-Swap Sync) - file synchronization with staging KB"
 			default:
 				result.Description = fmt.Sprintf("Update in progress (Phase: %s) - file synchronization with staging KB", status)
 			}
 			return result, nil
 		}
+
+		// If staging KB doesn't exist during update (swap already happened), check for rollback KB
+		// This happens when we're in "swapping" status but SwapKnowledgeBasesActivity has already run
+		rollbackKB, err := r.GetRollbackKBForProduction(ctx, ownerUID, productionKB.KBID)
+		if err != nil {
+			return nil, fmt.Errorf("checking for rollback KB during post-swap: %w", err)
+		}
+		if rollbackKB != nil {
+			result.IsNeeded = true
+			result.TargetKB = rollbackKB
+			result.Phase = status
+			result.Description = fmt.Sprintf("Update in progress (Phase: %s, Post-Swap) - file synchronization with rollback KB", status)
+			return result, nil
+		}
 	}
 
 	// Scenario 3 & 4: Retention period active (Phase 6)
-	// - After successful update: status = "completed"
-	// - After rollback: status = "rolled_back"
+	// - After successful update: status = KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED
+	// - After rollback: status = KNOWLEDGE_BASE_UPDATE_STATUS_ROLLED_BACK
 	// In both cases, if rollback KB exists, continue dual processing
-	if status == KBUpdateStatusCompleted || status == KBUpdateStatusRolledBack {
+	if status == artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED.String() ||
+		status == artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_ROLLED_BACK.String() {
 		ownerUID := types.OwnerUIDType(uuid.FromStringOrNil(productionKB.Owner))
 		rollbackKB, err := r.GetRollbackKBForProduction(ctx, ownerUID, productionKB.KBID)
 		if err != nil {
@@ -746,7 +731,7 @@ func (r *repository) GetDualProcessingTarget(ctx context.Context, productionKB *
 			result.IsNeeded = true
 			result.TargetKB = rollbackKB
 			result.Phase = "retention"
-			if status == KBUpdateStatusCompleted {
+			if status == artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED.String() {
 				result.Description = "Retention period active after update (Phase 6: Cleanup) - full dual processing with rollback KB (old RAG config)"
 			} else {
 				result.Description = "Retention period active after rollback (Phase 6: Cleanup) - full dual processing with rollback KB (rolled-back RAG config)"
@@ -782,7 +767,7 @@ func (r *repository) CreateStagingKnowledgeBase(ctx context.Context, original *K
 		CatalogType:     original.CatalogType,
 		EmbeddingConfig: embeddingConfig,
 		Staging:         true, // Mark as staging for staging KB
-		UpdateStatus:    KBUpdateStatusUpdating,
+		UpdateStatus:    artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING.String(),
 		CreateTime:      &now,
 		UpdateTime:      &now,
 		// ActiveCollectionUID will be set to staging KB's own UID by CreateKnowledgeBase
@@ -806,7 +791,7 @@ func (r *repository) ListKnowledgeBasesForUpdate(ctx context.Context, tagFilters
 	// Filter: Only KBs that have never been updated OR have completed updates
 	query = query.Where(
 		fmt.Sprintf("(%v IS NULL OR %v = ?)", KnowledgeBaseColumn.UpdateStatus, KnowledgeBaseColumn.UpdateStatus),
-		KBUpdateStatusCompleted,
+		artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED.String(),
 	)
 
 	// Filter by tags if specified (use OR logic - match any tag)
@@ -835,20 +820,45 @@ func (r *repository) ListKnowledgeBasesForUpdate(ctx context.Context, tagFilters
 // UpdateKnowledgeBaseUpdateStatus updates the update status and workflow ID
 func (r *repository) UpdateKnowledgeBaseUpdateStatus(ctx context.Context, kbUID types.KBUIDType, status string, workflowID string) error {
 	updates := map[string]any{
-		"update_status":      status,
-		"update_workflow_id": workflowID,
+		"update_status": status,
 	}
 
+	// Only set workflow ID if it's being started (UPDATING)
+	// For all terminal states (COMPLETED, FAILED, ABORTED), explicitly clear it to NULL
 	switch status {
-	case KBUpdateStatusUpdating:
+	case artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING.String():
 		now := time.Now()
 		updates["update_started_at"] = &now
-	case KBUpdateStatusCompleted, KBUpdateStatusFailed:
+		updates["update_workflow_id"] = workflowID
+	case artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED.String(),
+		artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_FAILED.String(),
+		artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_ABORTED.String(),
+		artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_ROLLED_BACK.String():
 		now := time.Now()
 		updates["update_completed_at"] = &now
+		updates["update_workflow_id"] = nil // Explicitly clear to NULL for all terminal states
+	default:
+		// For intermediate states (SYNCING, VALIDATING, SWAPPING), keep workflow ID if provided
+		if workflowID != "" {
+			updates["update_workflow_id"] = workflowID
+		}
 	}
 
 	return r.db.WithContext(ctx).Model(&KnowledgeBaseModel{}).
 		Where("uid = ?", kbUID).
 		Updates(updates).Error
+}
+
+// UpdateKnowledgeBaseAborted sets the KB status to ABORTED and explicitly clears the workflow ID to NULL
+// This is necessary because GORM's Updates() with empty string "" doesn't set it to NULL in the database
+// and the DeleteCatalog safeguards check for != "" which would still block deletion
+func (r *repository) UpdateKnowledgeBaseAborted(ctx context.Context, kbUID types.KBUIDType) error {
+	now := time.Now()
+	return r.db.WithContext(ctx).Model(&KnowledgeBaseModel{}).
+		Where("uid = ?", kbUID).
+		Updates(map[string]any{
+			"update_status":       artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_ABORTED.String(),
+			"update_workflow_id":  nil, // Explicitly set to NULL
+			"update_completed_at": &now,
+		}).Error
 }

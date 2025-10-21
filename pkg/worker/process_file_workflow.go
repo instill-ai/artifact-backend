@@ -622,7 +622,17 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				CacheName:   fileCacheName,
 			})
 
-			summaryFuture := workflow.ExecuteActivity(ctx, w.ProcessSummaryActivity, &ProcessSummaryActivityParam{
+			// ProcessSummaryActivity: Use shorter timeout (1min) for faster retries
+			summaryCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+				StartToCloseTimeout: ActivityTimeoutStandard, // 1 minute
+				RetryPolicy: &temporal.RetryPolicy{
+					InitialInterval:    RetryInitialInterval,
+					BackoffCoefficient: RetryBackoffCoefficient,
+					MaximumInterval:    RetryMaximumIntervalLong,
+					MaximumAttempts:    RetryMaximumAttempts,
+				},
+			})
+			summaryFuture := workflow.ExecuteActivity(summaryCtx, w.ProcessSummaryActivity, &ProcessSummaryActivityParam{
 				FileUID:     cr.fileUID,
 				KBUID:       kbUID,
 				Bucket:      cr.effectiveBucket,
@@ -798,12 +808,22 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 
 			// Generate embeddings using activity
 			// Pass KBUID to enable client selection based on KB's embedding config
+			// Use 2-minute timeout (embedding should complete within 1 minute normally)
+			embedCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+				StartToCloseTimeout: 2 * time.Minute, // Embedding should be fast, timeout if taking too long
+				RetryPolicy: &temporal.RetryPolicy{
+					InitialInterval:    RetryInitialInterval,
+					BackoffCoefficient: RetryBackoffCoefficient,
+					MaximumInterval:    RetryMaximumIntervalStandard,
+					MaximumAttempts:    RetryMaximumAttempts,
+				},
+			})
 			var embeddingVectors [][]float32
-			if err := workflow.ExecuteActivity(ctx, w.EmbedTextsActivity, &EmbedTextsActivityParam{
+			if err := workflow.ExecuteActivity(embedCtx, w.EmbedTextsActivity, &EmbedTextsActivityParam{
 				KBUID:    &kbUID, // Pass KBUID for client selection (Gemini 3072-dim vs OpenAI 1536-dim)
 				Texts:    chunksData.Texts,
 				TaskType: "RETRIEVAL_DOCUMENT", // For indexing document chunks
-			}).Get(ctx, &embeddingVectors); err != nil {
+			}).Get(embedCtx, &embeddingVectors); err != nil {
 				_ = handleFileError(fileUID, "generate embeddings", err)
 				filesCompleted[fileUID.String()] = true
 				continue
@@ -818,7 +838,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 					SourceUID:   chunk.UID,
 					Vector:      embeddingVectors[j],
 					KBUID:       kbUID,
-					KBFileUID:   fileUID,
+					FileUID:     fileUID,
 					ContentType: chunksData.ContentType,
 					ChunkType:   chunk.ChunkType,
 					Tags:        chunksData.Tags,

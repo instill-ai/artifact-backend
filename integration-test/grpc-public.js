@@ -218,8 +218,8 @@ export function CheckCleanupOnFileDeletion(client, data) {
     const checkAfter = `
       SELECT
         (SELECT COUNT(*) FROM converted_file WHERE file_uid = '${file.fileUid}') as converted,
-        (SELECT COUNT(*) FROM text_chunk WHERE kb_file_uid = '${file.fileUid}') as chunks,
-        (SELECT COUNT(*) FROM embedding WHERE kb_file_uid = '${file.fileUid}') as embeddings
+        (SELECT COUNT(*) FROM text_chunk WHERE file_uid = '${file.fileUid}') as chunks,
+        (SELECT COUNT(*) FROM embedding WHERE file_uid = '${file.fileUid}') as embeddings
     `;
     try {
       const result = constant.db.exec(checkAfter);

@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"sync"
+	"time"
 
 	"github.com/gofrs/uuid"
 
@@ -76,6 +76,17 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("%w: no permission over catalog", errorsx.ErrUnauthorized),
 			"You don't have permission to upload files to this catalog. Please contact the owner for access.",
+		)
+	}
+
+	// CRITICAL PHASE CHECK: Block file uploads ONLY during validation phase
+	// When KB is in KNOWLEDGE_BASE_UPDATE_STATUS_VALIDATING status, it's in the final validation phase where
+	// both production and staging KBs must remain absolutely identical.
+	// File operations are still allowed during KNOWLEDGE_BASE_UPDATE_STATUS_SWAPPING status with dual processing.
+	if kb.UpdateStatus == artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_VALIDATING.String() {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("%w: catalog is in critical update phase", errorsx.ErrRateLimiting),
+			fmt.Sprintf("Catalog is currently being validated (phase: %s). Please wait a moment and try again.", kb.UpdateStatus),
 		)
 	}
 
@@ -251,6 +262,14 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 	// - Files uploaded during update are available in both production and staging
 	// - Files added during swapping are synchronized to both KBs (for clean swap)
 	// - Files added during retention period work after rollback (no data loss)
+
+	logger.Info("Checking dual processing requirements",
+		zap.String("fileUID", res.UID.String()),
+		zap.String("fileName", res.Name),
+		zap.String("kbUID", kb.UID.String()),
+		zap.String("kbID", kb.KBID),
+		zap.String("updateStatus", kb.UpdateStatus))
+
 	dualTarget, err := ph.service.Repository().GetDualProcessingTarget(ctx, kb)
 	if err != nil {
 		// Log error but don't fail upload - fall back to normal processing
@@ -264,45 +283,62 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 			zap.String("targetKBUID", dualTarget.TargetKB.UID.String()),
 			zap.String("phase", dualTarget.Phase),
 			zap.String("description", dualTarget.Description))
+	} else {
+		logger.Info("Dual processing NOT needed - single KB processing only",
+			zap.String("fileUID", res.UID.String()),
+			zap.String("fileName", res.Name),
+			zap.String("kbUID", kb.UID.String()),
+			zap.String("kbID", kb.KBID),
+			zap.String("updateStatus", kb.UpdateStatus))
+	}
 
-		// Trigger dual processing asynchronously
-		// Don't wait for completion - return response immediately
-		go func() {
-			// Create new context for async operation (detached from request context)
-			asyncCtx := context.Background()
+	if dualTarget != nil && dualTarget.IsNeeded {
+		// CRITICAL FIX: Make dual processing FULLY SYNCHRONOUS to prevent goroutine starvation under heavy load
+		// Previously used async goroutines for both file record creation AND workflow queueing,
+		// but under parallel test execution (13 tests), Go runtime wouldn't schedule goroutines,
+		// causing staging files to never be created or processed.
+		//
+		// Synchronous execution adds minimal latency (~60-100ms total):
+		// - File record creation: ~10-50ms (DB write)
+		// - Workflow queueing: ~10-50ms (Temporal RPC, returns immediately)
+		// The actual processing happens asynchronously in Temporal anyway, so no blocking.
 
-			// Copy necessary metadata for authentication/authorization
-			if md, ok := metadata.FromIncomingContext(ctx); ok {
-				asyncCtx = metadata.NewIncomingContext(asyncCtx, md)
-			}
+		logger.Info("Dual processing started (fully synchronous: file record + workflow queueing)",
+			zap.String("prodFileUID", res.UID.String()),
+			zap.String("prodFileName", res.Name),
+			zap.String("prodKBUID", kb.UID.String()),
+			zap.String("targetKBUID", dualTarget.TargetKB.UID.String()),
+			zap.String("phase", dualTarget.Phase))
 
-			// Create a duplicate file record for target KB (staging or rollback)
-			// This file record will reference the same original file in MinIO
-			// but will have different processed outputs (chunks, embeddings)
-			targetFile := repository.KnowledgeBaseFileModel{
-				Name:                      res.Name,
-				FileType:                  res.FileType,
-				Owner:                     res.Owner,
-				CreatorUID:                res.CreatorUID,
-				KBUID:                     dualTarget.TargetKB.UID, // Different KB (staging or rollback)
-				Destination:               res.Destination,         // Same source file
-				Size:                      res.Size,
-				ProcessStatus:             artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_NOTSTARTED.String(),
-				ExternalMetadataUnmarshal: res.ExternalMetadataUnmarshal,
-				ExtraMetaDataUnmarshal:    res.ExtraMetaDataUnmarshal,
-			}
+		// Create a duplicate file record for target KB (staging or rollback)
+		// This file record will reference the same original file in MinIO
+		// but will have different processed outputs (chunks, embeddings)
+		targetFile := repository.KnowledgeBaseFileModel{
+			Name:                      res.Name,
+			FileType:                  res.FileType,
+			Owner:                     res.Owner,
+			CreatorUID:                res.CreatorUID,
+			KBUID:                     dualTarget.TargetKB.UID, // Different KB (staging or rollback)
+			Destination:               res.Destination,         // Same source file
+			Size:                      res.Size,
+			ProcessStatus:             artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_NOTSTARTED.String(),
+			ExternalMetadataUnmarshal: res.ExternalMetadataUnmarshal,
+			ExtraMetaDataUnmarshal:    res.ExtraMetaDataUnmarshal,
+		}
 
-			targetFileRes, err := ph.service.Repository().CreateKnowledgeBaseFile(asyncCtx, targetFile, nil)
-			if err != nil {
-				logger.Error("Failed to create target file record during dual processing",
-					zap.Error(err),
-					zap.String("targetKBUID", dualTarget.TargetKB.UID.String()),
-					zap.String("phase", dualTarget.Phase))
-				return
-			}
-
+		targetFileRes, err := ph.service.Repository().CreateKnowledgeBaseFile(ctx, targetFile, nil)
+		if err != nil {
+			logger.Error("Failed to create target file record during dual processing",
+				zap.Error(err),
+				zap.String("prodFileName", res.Name),
+				zap.String("prodFileUID", res.UID.String()),
+				zap.String("targetKBUID", dualTarget.TargetKB.UID.String()),
+				zap.String("targetKBID", dualTarget.TargetKB.KBID),
+				zap.String("phase", dualTarget.Phase))
+			// Log error but don't fail the upload - production file upload succeeded
+		} else {
 			// Increase target KB usage
-			err = ph.service.Repository().IncreaseKnowledgeBaseUsage(asyncCtx, nil, dualTarget.TargetKB.UID.String(), int(targetFile.Size))
+			err = ph.service.Repository().IncreaseKnowledgeBaseUsage(ctx, nil, dualTarget.TargetKB.UID.String(), int(targetFile.Size))
 			if err != nil {
 				logger.Warn("Failed to increase target KB usage",
 					zap.Error(err),
@@ -310,64 +346,50 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 				// Non-fatal, continue with processing
 			}
 
-			logger.Info("Created target file record, starting dual processing",
+			logger.Info("Created target file record, queueing workflow in Temporal",
 				zap.String("prodFileUID", res.UID.String()),
 				zap.String("targetFileUID", targetFileRes.UID.String()),
 				zap.String("phase", dualTarget.Phase))
 
-			// Trigger dual processing workflows
-			// IMPORTANT: Process files in parallel goroutines to avoid blocking
+			// Queue target file processing workflow in Temporal (SYNCHRONOUSLY)
+			// IMPORTANT: Only process the TARGET file here. The production file
+			// processing is triggered separately by the caller (UploadCatalogFile)
+			// to avoid race conditions with the unique constraint on converted files.
+			//
+			// CRITICAL FIX: ProcessFile() is FAST (~10-50ms) because it just queues
+			// the workflow in Temporal's task queue and returns immediately - the actual
+			// file processing happens asynchronously in the Temporal workflow executor.
+			//
+			// Previously we wrapped this in a goroutine, but under heavy parallel load
+			// (13 tests), the Go runtime wouldn't schedule goroutines, causing staging
+			// files to never be processed. Making this synchronous fixes the issue with
+			// minimal latency impact.
+			//
 			// Processing behavior depends on phase:
-			// - Phase 2 (updating): Full processing for both with respective configs
+			// - Phase 2 (updating): Full processing for target with new config
 			// - Phase 3 (swapping): Minimal sync (file record created, limited processing)
-			// - Phase 6 (retention): Full processing for both with respective configs
-
-			var wg sync.WaitGroup
-			wg.Add(2)
-
-			// Process production file for production KB
-			go func() {
-				defer wg.Done()
-				err := ph.service.ProcessFile(
-					asyncCtx,
-					kb.UID, // Production KB
-					[]types.FileUIDType{res.UID},
-					types.UserUIDType(uuid.FromStringOrNil(authUID)),
-					types.RequesterUIDType(uuid.FromStringOrNil(authUID)),
-				)
-				if err != nil {
-					logger.Error("Production file processing failed during dual processing",
-						zap.Error(err),
-						zap.String("prodFileUID", res.UID.String()),
-						zap.String("phase", dualTarget.Phase))
-				}
-			}()
-
-			// Process target file for target KB
-			go func() {
-				defer wg.Done()
-				err := ph.service.ProcessFile(
-					asyncCtx,
-					dualTarget.TargetKB.UID, // Target KB (staging or rollback)
-					[]types.FileUIDType{targetFileRes.UID},
-					types.UserUIDType(uuid.FromStringOrNil(authUID)),
-					types.RequesterUIDType(uuid.FromStringOrNil(authUID)),
-				)
-				if err != nil {
-					logger.Error("Target file processing failed during dual processing",
-						zap.Error(err),
-						zap.String("targetFileUID", targetFileRes.UID.String()),
-						zap.String("phase", dualTarget.Phase))
-				}
-			}()
-
-			wg.Wait()
-
-			logger.Info("Dual processing completed successfully",
-				zap.String("prodFileUID", res.UID.String()),
-				zap.String("targetFileUID", targetFileRes.UID.String()),
-				zap.String("phase", dualTarget.Phase))
-		}()
+			// - Phase 6 (retention): Full processing for target with old config
+			err = ph.service.ProcessFile(
+				ctx,
+				dualTarget.TargetKB.UID, // Target KB (staging or rollback)
+				[]types.FileUIDType{targetFileRes.UID},
+				types.UserUIDType(uuid.FromStringOrNil(authUID)),
+				types.RequesterUIDType(uuid.FromStringOrNil(authUID)),
+			)
+			if err != nil {
+				logger.Error("Target file processing workflow queueing failed during dual processing",
+					zap.Error(err),
+					zap.String("targetFileUID", targetFileRes.UID.String()),
+					zap.String("targetKBUID", dualTarget.TargetKB.UID.String()),
+					zap.String("phase", dualTarget.Phase))
+				// Non-fatal - file record exists, can be reprocessed manually or in next update
+			} else {
+				logger.Info("Dual processing: target file record created and workflow queued in Temporal",
+					zap.String("prodFileUID", res.UID.String()),
+					zap.String("targetFileUID", targetFileRes.UID.String()),
+					zap.String("phase", dualTarget.Phase))
+			}
+		}
 	}
 
 	return &artifactpb.UploadCatalogFileResponse{
@@ -928,6 +950,40 @@ func (ph *PublicHandler) DeleteCatalogFile(ctx context.Context, req *artifactpb.
 			"You don't have permission to delete files from this catalog. Please contact the owner for access.",
 		)
 	}
+
+	// CRITICAL PHASE CHECK: Block file deletions during synchronization/validation/swap
+	// When KB is in "swapping" or "validating" status, it's in a critical phase where
+	// both production and staging KBs must remain absolutely identical for safe swap.
+	// Any file modifications during this phase would break the synchronization guarantee.
+	// We check the production KB status (even for staging/rollback files)
+	var checkKB *repository.KnowledgeBaseModel
+	if kb.Staging {
+		// For staging/rollback files, check the production KB status
+		checkKB, err = ph.service.Repository().GetKnowledgeBaseByUID(ctx, aclCheckKBUID)
+		if err != nil {
+			logger.Error("failed to get production KB for critical phase check",
+				zap.String("prodKBUID", aclCheckKBUID.String()),
+				zap.Error(err))
+			return nil, errorsx.AddMessage(
+				fmt.Errorf("failed to verify catalog status: %w", err),
+				"Unable to verify catalog status. Please try again.",
+			)
+		}
+	} else {
+		checkKB = kb
+	}
+
+	// CRITICAL PHASE CHECK: Block file deletions ONLY during validation phase
+	// When KB is in KNOWLEDGE_BASE_UPDATE_STATUS_VALIDATING status, it's in the final validation phase where
+	// both production and staging KBs must remain absolutely identical.
+	// File operations are still allowed during KNOWLEDGE_BASE_UPDATE_STATUS_SWAPPING status with dual processing.
+	if checkKB.UpdateStatus == artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_VALIDATING.String() {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("%w: catalog is in critical update phase", errorsx.ErrRateLimiting),
+			fmt.Sprintf("Catalog is currently being validated (phase: %s). Please wait a moment and try again.", checkKB.UpdateStatus),
+		)
+	}
+
 	// check if file uid is empty
 	if req.FileUid == "" {
 		return nil, errorsx.AddMessage(
@@ -992,13 +1048,42 @@ func (ph *PublicHandler) DeleteCatalogFile(ctx context.Context, req *artifactpb.
 
 		// Find the corresponding file in target KB (by name)
 		// Files in staging/rollback KB share the same name as production
-		targetFiles, err := ph.service.Repository().GetKnowledgeBaseFilesByName(ctx, dualTarget.TargetKB.UID, files[0].Name)
-		if err != nil {
-			logger.Warn("Failed to find target file for dual deletion",
-				zap.Error(err),
-				zap.String("targetKBUID", dualTarget.TargetKB.UID.String()),
-				zap.String("fileName", files[0].Name))
-		} else if len(targetFiles) > 0 {
+		// CRITICAL: Retry logic to handle race condition where staging file is being created
+		// During dual processing, the staging file might not exist yet when deletion is triggered
+		// We retry up to 10 times (10 seconds total) to find the file before giving up
+		var targetFiles []repository.KnowledgeBaseFileModel
+		maxRetries := 10
+		for attempt := 0; attempt < maxRetries; attempt++ {
+			targetFiles, err = ph.service.Repository().GetKnowledgeBaseFilesByName(ctx, dualTarget.TargetKB.UID, files[0].Name)
+			if err != nil {
+				logger.Warn("Failed to find target file for dual deletion",
+					zap.Error(err),
+					zap.String("targetKBUID", dualTarget.TargetKB.UID.String()),
+					zap.String("fileName", files[0].Name),
+					zap.Int("attempt", attempt+1))
+				break // Stop retrying on error
+			}
+
+			if len(targetFiles) > 0 {
+				logger.Info("Found target file for dual deletion",
+					zap.String("targetFileUID", targetFiles[0].UID.String()),
+					zap.Int("attempt", attempt+1))
+				break // Found the file, stop retrying
+			}
+
+			// File not found yet - it might be in the process of being created
+			// Wait 1 second before retrying
+			if attempt < maxRetries-1 {
+				logger.Info("Target file not found yet, retrying dual deletion lookup",
+					zap.String("fileName", files[0].Name),
+					zap.String("targetKBUID", dualTarget.TargetKB.UID.String()),
+					zap.Int("attempt", attempt+1),
+					zap.Int("maxRetries", maxRetries))
+				time.Sleep(1 * time.Second)
+			}
+		}
+
+		if len(targetFiles) > 0 {
 			targetFile := targetFiles[0]
 
 			// Soft-delete the target file
@@ -1027,9 +1112,11 @@ func (ph *PublicHandler) DeleteCatalogFile(ctx context.Context, req *artifactpb.
 				}
 			}
 		} else {
-			logger.Info("No corresponding target file found for dual deletion (may not have been created yet)",
+			logger.Warn("No corresponding target file found for dual deletion after retries",
 				zap.String("fileName", files[0].Name),
-				zap.String("targetKBUID", dualTarget.TargetKB.UID.String()))
+				zap.String("targetKBUID", dualTarget.TargetKB.UID.String()),
+				zap.Int("retriesAttempted", maxRetries),
+				zap.String("warning", "This may cause validation mismatch if the file is created later"))
 		}
 	}
 

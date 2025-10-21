@@ -2,7 +2,7 @@ import http from "k6/http";
 import { check, group, sleep } from "k6";
 import { randomString } from "https://jslib.k6.io/k6-utils/1.1.0/index.js";
 
-import { artifactPublicHost } from "./const.js";
+import { artifactRESTPublicHost } from "./const.js";
 
 import * as constant from "./const.js";
 import * as helper from "./helper.js";
@@ -22,7 +22,7 @@ export function CheckCreateCatalog(data) {
     // Create a catalog
     var resOrigin = http.request(
       "POST",
-      `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
       JSON.stringify(reqBody),
       data.header
     );
@@ -52,7 +52,7 @@ export function CheckCreateCatalog(data) {
 
     let created = json.catalog;
     if (!created || !(created.catalogId)) {
-      const listRes = http.request("GET", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, data.header);
+      const listRes = http.request("GET", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, data.header);
       try {
         const listJson = listRes.json();
         const found = (listJson.catalogs || []).find(c => c.name === reqBody.name || c.catalogId === reqBody.name);
@@ -60,7 +60,7 @@ export function CheckCreateCatalog(data) {
       } catch (e) { }
     }
     if (created && created.catalogId) {
-      http.request("DELETE", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${created.catalogId}`, null, data.header);
+      http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${created.catalogId}`, null, data.header);
     }
   });
 }
@@ -72,7 +72,7 @@ export function CheckListCatalogs(data) {
 
     var resOrigin = http.request(
       "GET",
-      `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
       null,
       data.header
     );
@@ -93,7 +93,7 @@ export function CheckGetCatalog(data) {
 
     const cRes = http.request(
       "POST",
-      `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
       JSON.stringify({ name: constant.dbIDPrefix + randomString(10) }),
       data.header
     );
@@ -102,7 +102,7 @@ export function CheckGetCatalog(data) {
 
     const resOrigin = http.request(
       "GET",
-      `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
       null,
       data.header
     );
@@ -116,7 +116,7 @@ export function CheckGetCatalog(data) {
 
     http.request(
       "DELETE",
-      `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${created.catalogId}`,
+      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${created.catalogId}`,
       null,
       data.header
     );
@@ -130,7 +130,7 @@ export function CheckUpdateCatalog(data) {
 
     const cRes = http.request(
       "POST",
-      `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
       JSON.stringify({ name: constant.dbIDPrefix + randomString(10) }),
       data.header
     );
@@ -145,7 +145,7 @@ export function CheckUpdateCatalog(data) {
 
     const resOrigin = http.request(
       "PUT",
-      `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${created.catalogId}`,
+      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${created.catalogId}`,
       JSON.stringify(reqBody),
       data.header
     );
@@ -163,7 +163,7 @@ export function CheckUpdateCatalog(data) {
 
     http.request(
       "DELETE",
-      `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${created.catalogId}`,
+      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${created.catalogId}`,
       null,
       data.header
     );
@@ -179,7 +179,7 @@ export function CheckDeleteCatalog(data) {
     const createBody = { name: constant.dbIDPrefix + "del-" + randomString(8) };
     const cRes = http.request(
       "POST",
-      `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
       JSON.stringify(createBody),
       data.header
     );
@@ -190,7 +190,7 @@ export function CheckDeleteCatalog(data) {
     // Delete the created catalog
     const dRes = http.request(
       "DELETE",
-      `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`,
+      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`,
       null,
       data.header
     );
@@ -213,7 +213,7 @@ export function CheckCleanupFiles(data) {
     const catalogName = constant.dbIDPrefix + "cl-" + randomString(5);
     const createRes = http.request(
       "POST",
-      `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
       JSON.stringify({ name: catalogName, description: "Cleanup test" }),
       data.header
     );
@@ -234,7 +234,7 @@ export function CheckCleanupFiles(data) {
     const fileName = `${constant.dbIDPrefix}cl.pdf`;
     const uploadRes = http.request(
       "POST",
-      `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
+      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
       JSON.stringify({ name: fileName, type: "TYPE_PDF", content: constant.samplePdf }),
       data.header
     );
@@ -249,14 +249,14 @@ export function CheckCleanupFiles(data) {
     });
 
     if (!fileUid || !fileId) {
-      http.request("DELETE", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+      http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
       return;
     }
 
     // Trigger processing
     const processRes = http.request(
       "POST",
-      `${artifactPublicHost}/v1alpha/catalogs/files/processAsync`,
+      `${artifactRESTPublicHost}/v1alpha/catalogs/files/processAsync`,
       JSON.stringify({ fileUids: [fileUid] }),
       data.header
     );
@@ -273,7 +273,7 @@ export function CheckCleanupFiles(data) {
     // triggers the same cleanup logic for all files
     const deleteRes = http.request(
       "DELETE",
-      `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`,
+      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`,
       null,
       data.header
     );
@@ -289,8 +289,8 @@ export function CheckCleanupFiles(data) {
     const checkAfter = `
       SELECT
         (SELECT COUNT(*) FROM converted_file WHERE file_uid = '${fileUid}') as converted,
-        (SELECT COUNT(*) FROM text_chunk WHERE kb_file_uid = '${fileUid}') as chunks,
-        (SELECT COUNT(*) FROM embedding WHERE kb_file_uid = '${fileUid}') as embeddings
+        (SELECT COUNT(*) FROM text_chunk WHERE file_uid = '${fileUid}') as chunks,
+        (SELECT COUNT(*) FROM embedding WHERE file_uid = '${fileUid}') as embeddings
     `;
     try {
       const result = constant.db.exec(checkAfter);
@@ -322,7 +322,7 @@ export function CheckCatalog(data) {
     };
     const cRes = http.request(
       "POST",
-      `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
       JSON.stringify(createBody),
       data.header
     );
@@ -335,7 +335,7 @@ export function CheckCatalog(data) {
     });
 
     // List catalogs - ensure presence
-    const listRes = http.request("GET", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, data.header);
+    const listRes = http.request("GET", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, data.header);
     let listJson; try { listJson = listRes.json(); } catch (e) { listJson = {}; }
     const catalogs = Array.isArray(listJson.catalogs) ? listJson.catalogs : [];
     check(listRes, {
@@ -352,7 +352,7 @@ export function CheckCatalog(data) {
     };
     const uRes = http.request(
       "PUT",
-      `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`,
+      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`,
       JSON.stringify(updateBody),
       data.header
     );
@@ -375,7 +375,7 @@ export function CheckCatalog(data) {
         tags,
         req: {
           method: "POST",
-          url: `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
+          url: `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
           body: JSON.stringify({ name: fileName, type: s.type, content: s.content, tags: tags }),
           params: data.header,
         },
@@ -397,7 +397,7 @@ export function CheckCatalog(data) {
     const fileUids = uploaded.map((f) => f.fileUid);
     const pRes = http.request(
       "POST",
-      `${artifactPublicHost}/v1alpha/catalogs/files/processAsync`,
+      `${artifactRESTPublicHost}/v1alpha/catalogs/files/processAsync`,
       JSON.stringify({ fileUids }),
       data.header
     );
@@ -412,7 +412,7 @@ export function CheckCatalog(data) {
         lastBatch = http.batch(
           Array.from(pending).map((uid) => ({
             method: "GET",
-            url: `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${uid}`,
+            url: `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${uid}`,
             params: data.header,
           }))
         );
@@ -441,7 +441,7 @@ export function CheckCatalog(data) {
     for (const f of uploaded) {
       var viewPath = `/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files?filter.fileUids=${f.fileUid}`
       // Get the catalog file view (file-specific) per API doc
-      const viewRes = http.request("GET", artifactPublicHost + viewPath, null, data.header);
+      const viewRes = http.request("GET", artifactRESTPublicHost + viewPath, null, data.header);
       if (viewRes.status !== 200) {
         try { console.log(`Catalog view failed (${f.type}) status=${viewRes.status} body=${JSON.stringify(viewRes.json())}`); } catch (e) { console.log(`Catalog view failed (${f.type}) status=${viewRes.status}`); }
       }
@@ -486,7 +486,7 @@ export function CheckCatalog(data) {
     }
 
     // List catalog files
-    const listFilesRes = http.request("GET", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files?pageSize=100`, null, data.header);
+    const listFilesRes = http.request("GET", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files?pageSize=100`, null, data.header);
     let listFilesJson; try { listFilesJson = listFilesRes.json(); } catch (e) { listFilesJson = {}; }
     if (!(Array.isArray(listFilesJson.files) && listFilesJson.files.length === uploaded.length)) {
       console.log(`List files size mismatch: got=${(listFilesJson.files || []).length} expected=${uploaded.length}`);
@@ -503,7 +503,7 @@ export function CheckCatalog(data) {
 
     // List catalog file chunks
     for (const fileUid of fileUids) {
-      const listChunksRes = http.request("GET", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/chunks?fileUid=${fileUid}`, null, data.header);
+      const listChunksRes = http.request("GET", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/chunks?fileUid=${fileUid}`, null, data.header);
       let listChunksJson; try { listChunksJson = listChunksRes.json(); } catch (e) { listChunksJson = {}; }
       check(listChunksRes, {
         [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/chunks?fileUid={file_uid} 200`]: (r) => r.status === 200,
@@ -513,7 +513,7 @@ export function CheckCatalog(data) {
 
     // Get summary from a catalog file
     for (const fileUid of fileUids) {
-      const getSummaryRes = http.request("GET", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${fileUid}/summary`, null, data.header);
+      const getSummaryRes = http.request("GET", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${fileUid}/summary`, null, data.header);
       let summaryJson; try { summaryJson = getSummaryRes.json(); } catch (e) { summaryJson = {}; }
       check(getSummaryRes, {
         [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid}/summary 200`]: (r) => r.status === 200,
@@ -529,7 +529,7 @@ export function CheckCatalog(data) {
         };
         const updateTagsRes = http.request(
           "PUT",
-          `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${pdfFile.fileUid}/tags`,
+          `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${pdfFile.fileUid}/tags`,
           JSON.stringify(updateTagsBody),
           data.header
         );
@@ -560,7 +560,7 @@ export function CheckCatalog(data) {
       };
       const searchRes1 = http.request(
         "POST",
-        `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/chunks/retrieve`,
+        `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/chunks/retrieve`,
         JSON.stringify(searchBody1),
         data.header
       );
@@ -586,7 +586,7 @@ export function CheckCatalog(data) {
       };
       const searchRes2 = http.request(
         "POST",
-        `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/chunks/retrieve`,
+        `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/chunks/retrieve`,
         JSON.stringify(searchBody2),
         data.header
       );
@@ -622,7 +622,7 @@ export function CheckCatalog(data) {
         };
         const searchRes3 = http.request(
           "POST",
-          `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/chunks/retrieve`,
+          `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/chunks/retrieve`,
           JSON.stringify(searchBody3),
           data.header
         );
@@ -666,7 +666,7 @@ export function CheckCatalog(data) {
     }
 
     // Delete the catalog (cleanup)
-    const dRes = http.request("DELETE", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+    const dRes = http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
     check(dRes, { "DELETE /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id} 200": (r) => r.status === 200 || r.status === 204 });
   });
 }

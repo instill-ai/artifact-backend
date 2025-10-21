@@ -5,7 +5,7 @@ import {
   group,
 } from "k6";
 
-import { artifactPublicHost } from "./const.js";
+import { artifactRESTPublicHost } from "./const.js";
 
 import * as constant from "./const.js";
 import * as restPublic from './rest-public.js';
@@ -28,8 +28,8 @@ export function setup() {
   // Clean up any leftover test data from previous runs (especially important in CI)
   // This prevents unique constraint violations from stale data
   try {
-    constant.db.exec(`DELETE FROM text_chunk WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-    constant.db.exec(`DELETE FROM embedding WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+    constant.db.exec(`DELETE FROM text_chunk WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+    constant.db.exec(`DELETE FROM embedding WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
     constant.db.exec(`DELETE FROM converted_file WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
     constant.db.exec(`DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`);
     constant.db.exec(`DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`);
@@ -37,13 +37,13 @@ export function setup() {
     console.log(`Setup cleanup warning: ${e}`);
   }
 
-  var loginResp = http.request("POST", `${constant.mgmtPublicHost}/v1beta/auth/login`, JSON.stringify({
+  var loginResp = http.request("POST", `${constant.mgmtRESTPublicHost}/v1beta/auth/login`, JSON.stringify({
     "username": constant.defaultUsername,
     "password": constant.defaultPassword,
   }))
 
   check(loginResp, {
-    [`POST ${constant.mgmtPublicHost}/v1beta/auth/login response status is 200`]: (
+    [`POST ${constant.mgmtRESTPublicHost}/v1beta/auth/login response status is 200`]: (
       r
     ) => r.status === 200,
   });
@@ -56,7 +56,7 @@ export function setup() {
     "timeout": "600s",
   }
 
-  var resp = http.request("GET", `${constant.mgmtPublicHost}/v1beta/user`, {}, { headers: { "Authorization": `Bearer ${loginResp.json().accessToken}` } })
+  var resp = http.request("GET", `${constant.mgmtRESTPublicHost}/v1beta/user`, {}, { headers: { "Authorization": `Bearer ${loginResp.json().accessToken}` } })
   return { header: header, expectedOwner: resp.json().user }
 }
 
@@ -72,7 +72,7 @@ export default function (data) {
     group(groupName, () => {
       check(true, { [constant.banner(groupName)]: () => true });
 
-      check(http.request("GET", `${artifactPublicHost}/v1alpha/health/artifact`), {
+      check(http.request("GET", `${artifactRESTPublicHost}/v1alpha/health/artifact`), {
         "GET /health/artifact response status is 200": (r) => r.status === 200,
       });
     });
@@ -104,13 +104,13 @@ export function teardown(data) {
 
     // Note: dbIDPrefix is randomized per test run, so this only cleans up resources from THIS run
     // This allows parallel test execution without collisions
-    var listResp = http.request("GET", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, data.header)
+    var listResp = http.request("GET", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, data.header)
     if (listResp.status === 200) {
       var catalogs = Array.isArray(listResp.json().catalogs) ? listResp.json().catalogs : []
 
       for (const catalog of catalogs) {
         if (catalog.catalog_id && catalog.catalog_id.startsWith(constant.dbIDPrefix)) {
-          var delResp = http.request("DELETE", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalog.catalog_id}`, null, data.header);
+          var delResp = http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalog.catalog_id}`, null, data.header);
           check(delResp, {
             [`DELETE /v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalog.catalog_id} response status is 200 or 404`]: (r) => r.status === 200 || r.status === 404,
           });
@@ -121,8 +121,8 @@ export function teardown(data) {
     // Final DB cleanup (defensive - in case workflows didn't complete)
     // Delete from child tables first, before deleting parent records
     try {
-      constant.db.exec(`DELETE FROM text_chunk WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-      constant.db.exec(`DELETE FROM embedding WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+      constant.db.exec(`DELETE FROM text_chunk WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+      constant.db.exec(`DELETE FROM embedding WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
       constant.db.exec(`DELETE FROM converted_file WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
       constant.db.exec(`DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`);
       constant.db.exec(`DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`);

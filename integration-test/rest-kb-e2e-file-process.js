@@ -2,7 +2,7 @@ import http from "k6/http";
 import { check, group, sleep } from "k6";
 import { randomString } from "https://jslib.k6.io/k6-utils/1.1.0/index.js";
 
-import { artifactPublicHost } from "./const.js";
+import { artifactRESTPublicHost } from "./const.js";
 
 import * as constant from "./const.js";
 import * as helper from "./helper.js";
@@ -22,8 +22,8 @@ export function setup() {
 
   // Clean up any leftover test data from previous runs
   try {
-    constant.db.exec(`DELETE FROM text_chunk WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-    constant.db.exec(`DELETE FROM embedding WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+    constant.db.exec(`DELETE FROM text_chunk WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+    constant.db.exec(`DELETE FROM embedding WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
     constant.db.exec(`DELETE FROM converted_file WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
     constant.db.exec(`DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`);
     constant.db.exec(`DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`);
@@ -31,13 +31,13 @@ export function setup() {
     console.log(`E2E Setup cleanup warning: ${e}`);
   }
 
-  var loginResp = http.request("POST", `${constant.mgmtPublicHost}/v1beta/auth/login`, JSON.stringify({
+  var loginResp = http.request("POST", `${constant.mgmtRESTPublicHost}/v1beta/auth/login`, JSON.stringify({
     "username": constant.defaultUsername,
     "password": constant.defaultPassword,
   }))
 
   check(loginResp, {
-    [`POST ${constant.mgmtPublicHost}/v1beta/auth/login response status is 200`]: (r) => r.status === 200,
+    [`POST ${constant.mgmtRESTPublicHost}/v1beta/auth/login response status is 200`]: (r) => r.status === 200,
   });
 
   var header = {
@@ -48,7 +48,7 @@ export function setup() {
     "timeout": "600s",
   }
 
-  var resp = http.request("GET", `${constant.mgmtPublicHost}/v1beta/user`, {}, {
+  var resp = http.request("GET", `${constant.mgmtRESTPublicHost}/v1beta/user`, {}, {
     headers: { "Authorization": `Bearer ${loginResp.json().accessToken}` }
   })
 
@@ -65,21 +65,21 @@ export function teardown(data) {
     check(true, { [constant.banner(groupName)]: () => true });
 
     // Clean up catalogs created by this test
-    var listResp = http.request("GET", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, data.header)
+    var listResp = http.request("GET", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, data.header)
     if (listResp.status === 200) {
       var catalogs = Array.isArray(listResp.json().catalogs) ? listResp.json().catalogs : []
 
       for (const catalog of catalogs) {
         if (catalog.catalog_id && catalog.catalog_id.startsWith(constant.dbIDPrefix)) {
-          http.request("DELETE", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalog.catalog_id}`, null, data.header);
+          http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalog.catalog_id}`, null, data.header);
         }
       }
     }
 
     // Final DB cleanup
     try {
-      constant.db.exec(`DELETE FROM text_chunk WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-      constant.db.exec(`DELETE FROM embedding WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+      constant.db.exec(`DELETE FROM text_chunk WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+      constant.db.exec(`DELETE FROM embedding WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
       constant.db.exec(`DELETE FROM converted_file WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
       constant.db.exec(`DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`);
       constant.db.exec(`DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`);
@@ -151,7 +151,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
 
     const cRes = http.request(
       "POST",
-      `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
       JSON.stringify(createBody),
       data.header
     );
@@ -175,7 +175,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
     // Step 2: List catalogs - ensure presence
     const listRes = http.request(
       "GET",
-      `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
       null,
       data.header
     );
@@ -199,7 +199,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
 
     const uRes = http.request(
       "PUT",
-      `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`,
+      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`,
       JSON.stringify(updateBody),
       data.header
     );
@@ -224,7 +224,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
         fileName,
         req: {
           method: "POST",
-          url: `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
+          url: `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
           body: JSON.stringify({ name: fileName, type: s.type, content: s.content }),
           params: data.header,
         },
@@ -265,7 +265,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
     });
 
     if (uploaded.length === 0) {
-      http.request("DELETE", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+      http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
       return;
     }
 
@@ -273,7 +273,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
     const fileUids = uploaded.map((f) => f.fileUid);
     const pRes = http.request(
       "POST",
-      `${artifactPublicHost}/v1alpha/catalogs/files/processAsync`,
+      `${artifactRESTPublicHost}/v1alpha/catalogs/files/processAsync`,
       JSON.stringify({ fileUids }),
       data.header
     );
@@ -300,7 +300,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
         lastBatch = http.batch(
           Array.from(pending).map((uid) => ({
             method: "GET",
-            url: `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${uid}`,
+            url: `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${uid}`,
             params: data.header,
           }))
         );
@@ -365,7 +365,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
           check(false, { [`E2E: File processing failed: ${f.name} - ${f.outcome}`]: () => false });
         }
         // Cleanup and exit
-        http.request("DELETE", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+        http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
         return;
       }
     }
@@ -373,7 +373,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
     // Step 7: Verify each file's metadata and processing results
     for (const f of uploaded) {
       const viewPath = `/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files?filter.fileUids=${f.fileUid}`;
-      const viewRes = http.request("GET", artifactPublicHost + viewPath, null, data.header);
+      const viewRes = http.request("GET", artifactRESTPublicHost + viewPath, null, data.header);
 
       // Log errors for debugging, but don't fail the test yet (check assertions will catch issues)
       if (viewRes.status !== 200) {
@@ -434,7 +434,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
     // Step 8: List all files in catalog (pagination test)
     const listFilesRes = http.request(
       "GET",
-      `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files?pageSize=100`,
+      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files?pageSize=100`,
       null,
       data.header
     );
@@ -454,7 +454,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
     let totalChunksCount = 0;
     console.log(`E2E: Starting chunk verification for ${uploaded.length} files`);
     for (const f of uploaded) {
-      const chunkApiUrl = `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/chunks?fileUid=${f.fileUid}`;
+      const chunkApiUrl = `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/chunks?fileUid=${f.fileUid}`;
 
       console.log(`E2E: Polling chunks for ${f.originalName} (${f.fileUid})`);
       // Poll for chunks until they appear or timeout
@@ -488,7 +488,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
     for (const f of uploaded) {
       const getSummaryRes = http.request(
         "GET",
-        `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${f.fileUid}/summary`,
+        `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${f.fileUid}/summary`,
         null,
         data.header
       );
@@ -504,7 +504,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
     for (const f of uploaded) {
       const sourceRes = http.request(
         "GET",
-        `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${f.fileUid}/source`,
+        `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${f.fileUid}/source`,
         null,
         data.header
       );

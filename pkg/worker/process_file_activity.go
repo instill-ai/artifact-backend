@@ -200,7 +200,6 @@ type CreateConvertedFileRecordActivityParam struct {
 	KBUID            types.KBUIDType              // Knowledge base unique identifier
 	FileUID          types.FileUIDType            // Original file unique identifier
 	ConvertedFileUID types.FileUIDType            // Converted file unique identifier
-	OriginalFileName string                       // Original filename (e.g., "sample.pdf")
 	ConvertedType    artifactpb.ConvertedFileType // Converted file type: content or summary
 	Destination      string                       // MinIO destination path
 	PositionData     *types.PositionData          // Position data from conversion (e.g., page mappings)
@@ -277,7 +276,6 @@ func (w *Worker) DeleteOldConvertedFilesActivity(ctx context.Context, param *Del
 	for _, file := range allConvertedFiles {
 		w.log.Info("DeleteOldConvertedFilesActivity: Deleting old converted file",
 			zap.String("oldConvertedFileUID", file.UID.String()),
-			zap.String("originalFileName", file.OriginalFileName),
 			zap.String("destination", file.Destination))
 
 		// CRITICAL: Delete old chunk blobs FIRST (before deleting converted_file DB record)
@@ -359,14 +357,13 @@ func (w *Worker) CreateConvertedFileRecordActivity(ctx context.Context, param *C
 		zap.String("convertedFileUID", param.ConvertedFileUID.String()))
 
 	convertedFile := repository.ConvertedFileModel{
-		UID:              param.ConvertedFileUID,
-		KBUID:            param.KBUID,
-		FileUID:          param.FileUID,
-		OriginalFileName: param.OriginalFileName,
-		ContentType:      "text/markdown",
-		ConvertedType:    repository.ConvertedFileTypeToString(param.ConvertedType),
-		Destination:      param.Destination,
-		PositionData:     param.PositionData,
+		UID:           param.ConvertedFileUID,
+		KBUID:         param.KBUID,
+		FileUID:       param.FileUID,
+		ContentType:   "text/markdown",
+		ConvertedType: param.ConvertedType.String(),
+		Destination:   param.Destination,
+		PositionData:  param.PositionData,
 	}
 
 	createdFile, err := w.repository.CreateConvertedFileWithDestination(ctx, convertedFile)
@@ -724,26 +721,11 @@ func (w *Worker) SaveTextChunksActivity(ctx context.Context, param *SaveTextChun
 	textChunks := make([]*repository.TextChunkModel, len(chunksWithReferences))
 	texts := make([]string, len(chunksWithReferences))
 	for i, c := range chunksWithReferences {
-		// Convert protobuf Chunk.Type enum to string for database storage
-		var typeStr string
-		switch c.Type {
-		case artifactpb.Chunk_TYPE_CONTENT:
-			typeStr = "content"
-		case artifactpb.Chunk_TYPE_SUMMARY:
-			typeStr = "summary"
-		case artifactpb.Chunk_TYPE_AUGMENTED:
-			typeStr = "augmented"
-		case artifactpb.Chunk_TYPE_UNSPECIFIED:
+		// Convert protobuf Chunk.Type enum to string for database storage using .String() method
+		if c.Type == artifactpb.Chunk_TYPE_UNSPECIFIED {
 			w.log.Warn("SaveTextChunksActivity: Type is UNSPECIFIED, defaulting to content",
 				zap.Int("chunkIndex", i),
 				zap.String("fileUID", param.FileUID.String()))
-			typeStr = "content"
-		default:
-			w.log.Warn("SaveTextChunksActivity: Unknown Type, defaulting to content",
-				zap.Int("chunkIndex", i),
-				zap.Int32("type", int32(c.Type)),
-				zap.String("fileUID", param.FileUID.String()))
-			typeStr = "content"
 		}
 
 		textChunks[i] = &repository.TextChunkModel{
@@ -757,9 +739,9 @@ func (w *Worker) SaveTextChunksActivity(ctx context.Context, param *SaveTextChun
 			Retrievable: true,
 			InOrder:     i,
 			KBUID:       param.KBUID,
-			KBFileUID:   param.FileUID,
+			FileUID:     param.FileUID,
 			ContentType: "text/markdown",
-			ChunkType:   typeStr,
+			ChunkType:   c.Type.String(),
 		}
 		texts[i] = c.Text
 	}
@@ -1543,7 +1525,6 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 		KBUID:            param.KBUID,
 		FileUID:          param.FileUID,
 		ConvertedFileUID: convertedFileUID,
-		OriginalFileName: param.Filename,
 		ConvertedType:    artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_CONTENT,
 		Destination:      fmt.Sprintf("placeholder-pending-upload-%s", convertedFileUID.String()),
 		PositionData:     positionData,
@@ -1792,7 +1773,6 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 			KBUID:            param.KBUID,
 			FileUID:          param.FileUID,
 			ConvertedFileUID: convertedFileUID,
-			OriginalFileName: param.FileName,
 			ConvertedType:    artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_SUMMARY,
 			Destination:      fmt.Sprintf("placeholder-pending-upload-%s", convertedFileUID.String()),
 			PositionData:     result.PositionData,

@@ -40,7 +40,7 @@ type EmbeddingModel struct {
 	CreateTime  *time.Time          `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
 	UpdateTime  *time.Time          `gorm:"column:update_time;not null;default:CURRENT_TIMESTAMP" json:"update_time"`
 	KBUID       types.KBUIDType     `gorm:"column:kb_uid;type:uuid;not null" json:"kb_uid"`
-	KBFileUID   types.FileUIDType   `gorm:"column:kb_file_uid;type:uuid;not null" json:"kb_file_uid"`
+	FileUID     types.FileUIDType   `gorm:"column:file_uid;type:uuid;not null" json:"file_uid"`
 	// ContentType stores the MIME type (e.g., "text/markdown", "application/pdf")
 	ContentType string `gorm:"column:content_type;size:255;not null" json:"content_type"`
 	// ChunkType stores the chunk classification ("content", "summary", "augmented")
@@ -117,7 +117,7 @@ type EmbeddingColumns struct {
 	CreateTime  string
 	UpdateTime  string
 	KBUID       string
-	KBFileUID   string
+	FileUID     string
 	ContentType string
 	ChunkType   string
 }
@@ -131,7 +131,7 @@ var EmbeddingColumn = EmbeddingColumns{
 	CreateTime:  "create_time",
 	UpdateTime:  "update_time",
 	KBUID:       "kb_uid",
-	KBFileUID:   "kb_file_uid",
+	FileUID:     "file_uid",
 	ContentType: "content_type",
 	ChunkType:   "chunk_type",
 }
@@ -232,7 +232,7 @@ func (r *repository) CreateEmbeddings(
 // DeleteEmbeddingsByKBFileUID deletes all embeddings associated with a file
 // (soft delete, respects the model's DeletedAt field if present).
 func (r *repository) DeleteEmbeddingsByKBFileUID(ctx context.Context, kbFileUID types.FileUIDType) error {
-	where := fmt.Sprintf("%s = ?", EmbeddingColumn.KBFileUID)
+	where := fmt.Sprintf("%s = ?", EmbeddingColumn.FileUID)
 	return r.db.WithContext(ctx).Where(where, kbFileUID).Delete(&EmbeddingModel{}).Error
 }
 
@@ -244,14 +244,14 @@ func (r *repository) HardDeleteEmbeddingsByKBUID(ctx context.Context, kbUID type
 
 // HardDeleteEmbeddingsByKBFileUID deletes all the embeddings associated with a certain kbFileUID.
 func (r *repository) HardDeleteEmbeddingsByKBFileUID(ctx context.Context, kbFileUID types.FileUIDType) error {
-	where := fmt.Sprintf("%s = ?", EmbeddingColumn.KBFileUID)
+	where := fmt.Sprintf("%s = ?", EmbeddingColumn.FileUID)
 	return r.db.WithContext(ctx).Where(where, kbFileUID).Unscoped().Delete(&EmbeddingModel{}).Error
 }
 
 // ListEmbeddingsByKBFileUID fetches embeddings by their kbFileUID.
 func (r *repository) ListEmbeddingsByKBFileUID(ctx context.Context, kbFileUID types.FileUIDType) ([]EmbeddingModel, error) {
 	var embeddings []EmbeddingModel
-	where := fmt.Sprintf("%s = ?", EmbeddingColumn.KBFileUID)
+	where := fmt.Sprintf("%s = ?", EmbeddingColumn.FileUID)
 	if err := r.db.WithContext(ctx).Where(where, kbFileUID).Find(&embeddings).Error; err != nil {
 		return nil, err
 	}
@@ -262,8 +262,10 @@ func (r *repository) ListEmbeddingsByKBFileUID(ctx context.Context, kbFileUID ty
 func (r *repository) GetEmbeddingCountByKBUID(ctx context.Context, kbUID types.KBUIDType) (int64, error) {
 	var count int64
 	err := r.db.WithContext(ctx).
-		Table(EmbeddingTableName).
-		Where("kb_uid = ?", kbUID).
+		Table(EmbeddingTableName+" AS e").
+		Joins("INNER JOIN "+KnowledgeBaseFileTableName+" AS f ON e.file_uid = f.uid").
+		Where("e.kb_uid = ?", kbUID).
+		Where("f.delete_time IS NULL").
 		Count(&count).
 		Error
 	if err != nil {

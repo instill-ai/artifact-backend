@@ -3,8 +3,6 @@ import { check, group, sleep } from "k6";
 import { randomString } from "https://jslib.k6.io/k6-utils/1.1.0/index.js";
 import encoding from "k6/encoding";
 
-import { artifactPublicHost } from "./const.js";
-
 import * as constant from "./const.js";
 import * as helper from "./helper.js";
 
@@ -23,8 +21,8 @@ export function setup() {
 
   // Clean up any leftover test data from previous runs
   try {
-    constant.db.exec(`DELETE FROM text_chunk WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-    constant.db.exec(`DELETE FROM embedding WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+    constant.db.exec(`DELETE FROM text_chunk WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+    constant.db.exec(`DELETE FROM embedding WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
     constant.db.exec(`DELETE FROM converted_file WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
     constant.db.exec(`DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`);
     constant.db.exec(`DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`);
@@ -32,13 +30,13 @@ export function setup() {
     console.log(`Reprocess Setup cleanup warning: ${e}`);
   }
 
-  var loginResp = http.request("POST", `${constant.mgmtPublicHost}/v1beta/auth/login`, JSON.stringify({
+  var loginResp = http.request("POST", `${constant.mgmtRESTPublicHost}/v1beta/auth/login`, JSON.stringify({
     "username": constant.defaultUsername,
     "password": constant.defaultPassword,
   }))
 
   check(loginResp, {
-    [`POST ${constant.mgmtPublicHost}/v1beta/auth/login response status is 200`]: (r) => r.status === 200,
+    [`POST ${constant.mgmtRESTPublicHost}/v1beta/auth/login response status is 200`]: (r) => r.status === 200,
   });
 
   var header = {
@@ -49,7 +47,7 @@ export function setup() {
     "timeout": "600s",
   }
 
-  var resp = http.request("GET", `${constant.mgmtPublicHost}/v1beta/user`, {}, {
+  var resp = http.request("GET", `${constant.mgmtRESTPublicHost}/v1beta/user`, {}, {
     headers: { "Authorization": `Bearer ${loginResp.json().accessToken}` }
   })
 
@@ -66,21 +64,21 @@ export function teardown(data) {
     check(true, { [constant.banner(groupName)]: () => true });
 
     // Clean up catalogs created by this test
-    var listResp = http.request("GET", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, data.header)
+    var listResp = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, data.header)
     if (listResp.status === 200) {
       var catalogs = Array.isArray(listResp.json().catalogs) ? listResp.json().catalogs : []
 
       for (const catalog of catalogs) {
         if (catalog.catalog_id && catalog.catalog_id.startsWith(constant.dbIDPrefix)) {
-          http.request("DELETE", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalog.catalog_id}`, null, data.header);
+          http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalog.catalog_id}`, null, data.header);
         }
       }
     }
 
     // Final DB cleanup
     try {
-      constant.db.exec(`DELETE FROM text_chunk WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-      constant.db.exec(`DELETE FROM embedding WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+      constant.db.exec(`DELETE FROM text_chunk WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+      constant.db.exec(`DELETE FROM embedding WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
       constant.db.exec(`DELETE FROM converted_file WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
       constant.db.exec(`DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`);
       constant.db.exec(`DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`);
@@ -127,7 +125,7 @@ export function CheckFileReprocessing(data) {
     const catalogName = constant.dbIDPrefix + "reprocess-" + randomString(5);
     const createRes = http.request(
       "POST",
-      `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
       JSON.stringify({
         name: catalogName,
         description: "Reprocessing test",
@@ -161,7 +159,7 @@ export function CheckFileReprocessing(data) {
     const fileName = `${constant.dbIDPrefix}reprocess-test.pdf`;
     const uploadRes = http.request(
       "POST",
-      `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
       JSON.stringify({
         name: fileName,
         type: "TYPE_PDF",
@@ -181,7 +179,7 @@ export function CheckFileReprocessing(data) {
 
     if (!fileUid) {
       console.log("✗ Failed to upload file, cleaning up and aborting");
-      http.request("DELETE", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+      http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
       sleep(5); // Wait for cleanup workflow
       return;
     }
@@ -190,7 +188,7 @@ export function CheckFileReprocessing(data) {
     console.log("Step 3: Triggering first processing...");
     const process1Res = http.request(
       "POST",
-      `${artifactPublicHost}/v1alpha/catalogs/files/processAsync`,
+      `${constant.artifactRESTPublicHost}/v1alpha/catalogs/files/processAsync`,
       JSON.stringify({ fileUids: [fileUid] }),
       data.header
     );
@@ -207,7 +205,7 @@ export function CheckFileReprocessing(data) {
       sleep(1);
       const statusRes = http.request(
         "GET",
-        `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${fileUid}`,
+        `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${fileUid}`,
         null,
         data.header
       );
@@ -221,7 +219,7 @@ export function CheckFileReprocessing(data) {
         } else if (status === "FILE_PROCESS_STATUS_FAILED") {
           const errorMsg = body.file && body.file.processOutcome ? body.file.processOutcome : "Unknown error";
           check(false, { [`Reprocess: First processing failed - ${errorMsg}`]: () => false });
-          http.request("DELETE", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+          http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
           sleep(5); // Wait for cleanup workflow
           return;
         }
@@ -234,7 +232,7 @@ export function CheckFileReprocessing(data) {
 
     if (!firstProcessCompleted) {
       console.log("✗ First processing did not complete within timeout, cleaning up and aborting");
-      http.request("DELETE", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+      http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
       sleep(5); // Wait for cleanup workflow
       return;
     }
@@ -292,7 +290,7 @@ export function CheckFileReprocessing(data) {
       embeddingsAfterFirst === 0 || milvusVectorsAfterFirst === 0 ||
       pagesAfterFirst === 0 || textChunksAfterFirst === 0) {
       console.log("✗ Baseline verification failed, cleaning up and aborting");
-      http.request("DELETE", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+      http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
       sleep(5); // Wait for cleanup workflow
       return;
     }
@@ -309,7 +307,7 @@ export function CheckFileReprocessing(data) {
     // 7. Result: Same counts for all resources, different content
     const process2Res = http.request(
       "POST",
-      `${artifactPublicHost}/v1alpha/catalogs/files/processAsync`,
+      `${constant.artifactRESTPublicHost}/v1alpha/catalogs/files/processAsync`,
       JSON.stringify({ fileUids: [fileUid] }),
       data.header
     );
@@ -326,7 +324,7 @@ export function CheckFileReprocessing(data) {
       sleep(1);
       const statusRes = http.request(
         "GET",
-        `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${fileUid}`,
+        `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${fileUid}`,
         null,
         data.header
       );
@@ -339,7 +337,7 @@ export function CheckFileReprocessing(data) {
           break;
         } else if (status === "FILE_PROCESS_STATUS_FAILED") {
           check(false, { "Reprocess: Second processing failed": () => false });
-          http.request("DELETE", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+          http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
           sleep(5); // Wait for cleanup workflow
           return;
         }
@@ -352,7 +350,7 @@ export function CheckFileReprocessing(data) {
 
     if (!secondProcessCompleted) {
       console.log("✗ Reprocessing did not complete within timeout, cleaning up and aborting");
-      http.request("DELETE", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+      http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
       sleep(5); // Wait for cleanup workflow
       return;
     }
@@ -401,7 +399,7 @@ export function CheckFileReprocessing(data) {
     if (minioBlobsAfterSecond.converted === 0 || minioBlobsAfterSecond.chunks === 0 ||
       embeddingsAfterSecond === 0 || milvusVectorsAfterSecond === 0 ||
       pagesAfterSecond === 0 || textChunksAfterSecond === 0) {
-      http.request("DELETE", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+      http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
       sleep(5); // Wait for cleanup workflow
       return;
     }
@@ -438,7 +436,7 @@ export function CheckFileReprocessing(data) {
     console.log("=== File Reprocessing Test Complete ===\n");
 
     // Cleanup catalog - this triggers the cleanup workflow which deletes all remaining blobs
-    http.request("DELETE", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+    http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
 
     // Wait for cleanup workflow to complete before next test starts
     // This prevents race conditions with subsequent tests

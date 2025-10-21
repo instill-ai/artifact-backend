@@ -107,13 +107,16 @@ func (w *Worker) SaveEmbeddingsWorkflow(ctx workflow.Context, param SaveEmbeddin
 	//
 	// Alternative: If eventual consistency is acceptable (1-60s delay), this can be removed
 	// to rely on Milvus auto-flush, improving workflow performance by ~150-200ms
+	//
+	// Flush can take longer in resource-constrained CI environments (1-2 minutes),
+	// especially when multiple tests run in parallel
 	logger.Info("Flushing collection after all batches completed")
 	localActivityOptions := workflow.LocalActivityOptions{
-		StartToCloseTimeout: ActivityTimeoutStandard,
+		StartToCloseTimeout: ActivityTimeoutLong, // Use longer timeout - Milvus flush can be slow in CI
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval:    RetryInitialInterval,
 			BackoffCoefficient: RetryBackoffCoefficient,
-			MaximumInterval:    RetryMaximumIntervalStandard,
+			MaximumInterval:    RetryMaximumIntervalLong,
 			MaximumAttempts:    RetryMaximumAttempts,
 		},
 	}

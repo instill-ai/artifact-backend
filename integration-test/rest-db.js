@@ -2,7 +2,7 @@ import http from "k6/http";
 import { check, group, sleep } from "k6";
 import { randomString } from "https://jslib.k6.io/k6-utils/1.1.0/index.js";
 
-import { artifactPublicHost } from "./const.js";
+import { artifactRESTPublicHost } from "./const.js";
 
 import * as constant from "./const.js";
 import * as helper from "./helper.js";
@@ -45,8 +45,8 @@ export function setup() {
 
     // Clean up any leftover test data from previous runs
     try {
-        constant.db.exec(`DELETE FROM text_chunk WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-        constant.db.exec(`DELETE FROM embedding WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+        constant.db.exec(`DELETE FROM text_chunk WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+        constant.db.exec(`DELETE FROM embedding WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
         constant.db.exec(`DELETE FROM converted_file WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
         constant.db.exec(`DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`);
         constant.db.exec(`DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`);
@@ -54,13 +54,13 @@ export function setup() {
         console.log(`Setup cleanup warning: ${e}`);
     }
 
-    var loginResp = http.request("POST", `${constant.mgmtPublicHost}/v1beta/auth/login`, JSON.stringify({
+    var loginResp = http.request("POST", `${constant.mgmtRESTPublicHost}/v1beta/auth/login`, JSON.stringify({
         "username": constant.defaultUsername,
         "password": constant.defaultPassword,
     }))
 
     check(loginResp, {
-        [`POST ${constant.mgmtPublicHost}/v1beta/auth/login response status is 200`]: (
+        [`POST ${constant.mgmtRESTPublicHost}/v1beta/auth/login response status is 200`]: (
             r
         ) => r.status === 200,
     });
@@ -73,7 +73,7 @@ export function setup() {
         "timeout": "600s",
     }
 
-    var resp = http.request("GET", `${constant.mgmtPublicHost}/v1beta/user`, {}, { headers: { "Authorization": `Bearer ${loginResp.json().accessToken}` } })
+    var resp = http.request("GET", `${constant.mgmtRESTPublicHost}/v1beta/user`, {}, { headers: { "Authorization": `Bearer ${loginResp.json().accessToken}` } })
     return { header: header, expectedOwner: resp.json().user }
 }
 
@@ -83,12 +83,12 @@ export function teardown(data) {
         check(true, { [constant.banner(groupName)]: () => true });
 
         // Delete catalogs via API (which triggers cleanup workflows)
-        var listResp = http.request("GET", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, data.header)
+        var listResp = http.request("GET", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, data.header)
         if (listResp.status === 200) {
             var catalogs = Array.isArray(listResp.json().catalogs) ? listResp.json().catalogs : []
             for (const catalog of catalogs) {
                 if (catalog.catalogId && catalog.catalogId.startsWith(constant.dbIDPrefix)) {
-                    var delResp = http.request("DELETE", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalog.catalogId}`, null, data.header);
+                    var delResp = http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalog.catalogId}`, null, data.header);
                     check(delResp, {
                         [`DELETE /v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalog.catalogId} response status is 200 or 404`]: (r) => r.status === 200 || r.status === 404,
                     });
@@ -98,8 +98,8 @@ export function teardown(data) {
 
         // Final DB cleanup (defensive - in case workflows didn't complete)
         try {
-            constant.db.exec(`DELETE FROM text_chunk WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-            constant.db.exec(`DELETE FROM embedding WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+            constant.db.exec(`DELETE FROM text_chunk WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+            constant.db.exec(`DELETE FROM embedding WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
             constant.db.exec(`DELETE FROM converted_file WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
             constant.db.exec(`DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`);
             constant.db.exec(`DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`);
@@ -119,7 +119,7 @@ export function TEST_DB_SCHEMA(data) {
 
         // Create catalog
         const catalogName = constant.dbIDPrefix + "db-" + randomString(8);
-        const cRes = http.request("POST", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, JSON.stringify({
+        const cRes = http.request("POST", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, JSON.stringify({
             name: catalogName,
             description: "DB schema test catalog",
             tags: ["test", "db", "schema"],
@@ -154,7 +154,7 @@ export function TEST_DB_SCHEMA(data) {
         for (const s of testFiles) {
             const fileName = constant.dbIDPrefix + s.originalName;
             const fReq = { name: fileName, type: s.type, content: s.content };
-            const uRes = http.request("POST", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`, JSON.stringify(fReq), data.header);
+            const uRes = http.request("POST", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`, JSON.stringify(fReq), data.header);
 
             const file = ((() => { try { return uRes.json(); } catch (e) { return {}; } })()).file || {};
             if (uRes.status === 200 && file.fileUid) {
@@ -179,7 +179,7 @@ export function TEST_DB_SCHEMA(data) {
 
         // Trigger processing for all files
         const fileUids = uploaded.map(f => f.fileUid);
-        const pRes = http.request("POST", `${artifactPublicHost}/v1alpha/catalogs/files/processAsync`, JSON.stringify({ fileUids }), data.header);
+        const pRes = http.request("POST", `${artifactRESTPublicHost}/v1alpha/catalogs/files/processAsync`, JSON.stringify({ fileUids }), data.header);
         check(pRes, { [`DB Tests: Batch processing triggered`]: (r) => r.status === 200 });
 
         // Poll for completion
@@ -193,7 +193,7 @@ export function TEST_DB_SCHEMA(data) {
             const batch = http.batch(
                 Array.from(pending).map((uid) => ({
                     method: "GET",
-                    url: `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${uid}`,
+                    url: `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${uid}`,
                     params: data.header,
                 }))
             );
@@ -298,14 +298,14 @@ export function TEST_DB_SCHEMA(data) {
 
             // Count chunks with correct PascalCase PageRange
             const correctResult = constant.db.query(
-                `SELECT COUNT(*) as count FROM text_chunk WHERE kb_file_uid = $1 AND reference ? 'PageRange'`,
+                `SELECT COUNT(*) as count FROM text_chunk WHERE file_uid = $1 AND reference ? 'PageRange'`,
                 pdfFile.fileUid
             );
             const correctCount = correctResult.length > 0 ? parseInt(correctResult[0].count) : 0;
 
             // Count chunks with INCORRECT snake_case page_range
             const incorrectResult = constant.db.query(
-                `SELECT COUNT(*) as count FROM text_chunk WHERE kb_file_uid = $1 AND reference ? 'page_range'`,
+                `SELECT COUNT(*) as count FROM text_chunk WHERE file_uid = $1 AND reference ? 'page_range'`,
                 pdfFile.fileUid
             );
             const incorrectCount = incorrectResult.length > 0 ? parseInt(incorrectResult[0].count) : 0;
@@ -319,7 +319,7 @@ export function TEST_DB_SCHEMA(data) {
 
             // Sample a reference to verify structure
             const sampleResult = constant.db.query(
-                `SELECT reference::text as reference_text FROM text_chunk WHERE kb_file_uid = $1 AND reference IS NOT NULL LIMIT 1`,
+                `SELECT reference::text as reference_text FROM text_chunk WHERE file_uid = $1 AND reference IS NOT NULL LIMIT 1`,
                 pdfFile.fileUid
             );
 
@@ -459,12 +459,12 @@ export function TEST_DB_SCHEMA(data) {
 
             // Get content and summary chunks
             const contentChunkResult = constant.db.query(
-                `SELECT source_uid::text as source_uid_text, chunk_type FROM text_chunk WHERE kb_file_uid = $1 AND chunk_type = 'chunk' LIMIT 1`,
+                `SELECT source_uid::text as source_uid_text, chunk_type FROM text_chunk WHERE file_uid = $1 AND chunk_type = 'TYPE_CONTENT' LIMIT 1`,
                 testFile.fileUid
             );
 
             const summaryChunkResult = constant.db.query(
-                `SELECT source_uid::text as source_uid_text, chunk_type FROM text_chunk WHERE kb_file_uid = $1 AND chunk_type = 'summary' LIMIT 1`,
+                `SELECT source_uid::text as source_uid_text, chunk_type FROM text_chunk WHERE file_uid = $1 AND chunk_type = 'TYPE_SUMMARY' LIMIT 1`,
                 testFile.fileUid
             );
 
@@ -478,10 +478,10 @@ export function TEST_DB_SCHEMA(data) {
                 check({ contentSourceUid, summarySourceUid }, {
                     "DB Test 6: Content and summary chunks reference different source_uid": () =>
                         contentSourceUid !== summarySourceUid,
-                    "DB Test 6: Content chunk has chunk_type='chunk'": () =>
-                        contentChunkResult[0].chunk_type === "chunk",
-                    "DB Test 6: Summary chunk has chunk_type='summary'": () =>
-                        summaryChunkResult[0].chunk_type === "summary",
+                    "DB Test 6: Content chunk has chunk_type='TYPE_CONTENT'": () =>
+                        contentChunkResult[0].chunk_type === "TYPE_CONTENT",
+                    "DB Test 6: Summary chunk has chunk_type='TYPE_SUMMARY'": () =>
+                        summaryChunkResult[0].chunk_type === "TYPE_SUMMARY",
                 });
 
                 // Verify converted files exist
@@ -505,10 +505,10 @@ export function TEST_DB_SCHEMA(data) {
                     console.log(`DB Test 6: Summary destination: ${summaryFileResult[0].destination}`);
 
                     check({ contentFileResult, summaryFileResult }, {
-                        "DB Test 6: Content file has converted_type='content'": () =>
-                            contentFileResult[0].converted_type === "content",
-                        "DB Test 6: Summary file has converted_type='summary'": () =>
-                            summaryFileResult[0].converted_type === "summary",
+                        "DB Test 6: Content file has converted_type='CONVERTED_FILE_TYPE_CONTENT'": () =>
+                            contentFileResult[0].converted_type === "CONVERTED_FILE_TYPE_CONTENT",
+                        "DB Test 6: Summary file has converted_type='CONVERTED_FILE_TYPE_SUMMARY'": () =>
+                            summaryFileResult[0].converted_type === "CONVERTED_FILE_TYPE_SUMMARY",
                     });
                 }
             } else {
@@ -568,7 +568,7 @@ export function TEST_DB_SCHEMA(data) {
 
             // 7.3: text_chunk.content_type stores MIME type, chunk_type stores classification
             const chunkFieldsResult = constant.db.query(
-                `SELECT content_type, chunk_type FROM text_chunk WHERE kb_file_uid = $1 LIMIT 1`,
+                `SELECT content_type, chunk_type FROM text_chunk WHERE file_uid = $1 LIMIT 1`,
                 testFile.fileUid
             );
 
@@ -582,13 +582,13 @@ export function TEST_DB_SCHEMA(data) {
                     "DB Test 7.3: text_chunk.content_type is MIME type": () =>
                         chunkContentType && chunkContentType.includes("/"),
                     "DB Test 7.3: text_chunk.chunk_type is classification string": () =>
-                        chunkChunkType && ["content", "summary", "augmented"].includes(chunkChunkType),
+                        chunkChunkType && ["TYPE_CONTENT", "TYPE_SUMMARY", "TYPE_AUGMENTED"].includes(chunkChunkType),
                 });
             }
 
             // 7.4: embedding.content_type stores MIME type, chunk_type stores classification
             const embeddingFieldsResult = constant.db.query(
-                `SELECT content_type, chunk_type FROM embedding WHERE kb_file_uid = $1 LIMIT 1`,
+                `SELECT content_type, chunk_type FROM embedding WHERE file_uid = $1 LIMIT 1`,
                 testFile.fileUid
             );
 
@@ -602,7 +602,7 @@ export function TEST_DB_SCHEMA(data) {
                     "DB Test 7.4: embedding.content_type is MIME type": () =>
                         embContentType && embContentType.includes("/"),
                     "DB Test 7.4: embedding.chunk_type is classification string": () =>
-                        embChunkType && ["content", "summary", "augmented"].includes(embChunkType),
+                        embChunkType && ["TYPE_CONTENT", "TYPE_SUMMARY", "TYPE_AUGMENTED"].includes(embChunkType),
                 });
             }
 
@@ -617,10 +617,10 @@ export function TEST_DB_SCHEMA(data) {
                 console.log(`DB Test 7.5: converted_file.converted_type values: ${JSON.stringify(convertedTypes)}`);
 
                 check({ convertedTypes }, {
-                    "DB Test 7.5: converted_type has expected values (content/summary)": () =>
-                        convertedTypes.every(ct => ["content", "summary"].includes(ct)),
+                    "DB Test 7.5: converted_type has expected values (CONVERTED_FILE_TYPE_CONTENT/SUMMARY)": () =>
+                        convertedTypes.every(ct => ["CONVERTED_FILE_TYPE_CONTENT", "CONVERTED_FILE_TYPE_SUMMARY"].includes(ct)),
                     "DB Test 7.5: File has both content and summary types": () =>
-                        convertedTypes.includes("content") && convertedTypes.includes("summary"),
+                        convertedTypes.includes("CONVERTED_FILE_TYPE_CONTENT") && convertedTypes.includes("CONVERTED_FILE_TYPE_SUMMARY"),
                 });
             }
         });
@@ -634,7 +634,7 @@ export function TEST_DB_SCHEMA(data) {
             // 8.1: List Files API
             const listFilesRes = http.request(
                 "GET",
-                `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
+                `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
                 null,
                 data.header
             );
@@ -674,7 +674,7 @@ export function TEST_DB_SCHEMA(data) {
             const testFile = uploaded[0];
             const getFileRes = http.request(
                 "GET",
-                `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${testFile.fileUid}`,
+                `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${testFile.fileUid}`,
                 null,
                 data.header
             );
@@ -713,7 +713,7 @@ export function TEST_DB_SCHEMA(data) {
                 if (fileOfType) {
                     const fileRes = http.request(
                         "GET",
-                        `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${fileOfType.fileUid}`,
+                        `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${fileOfType.fileUid}`,
                         null,
                         data.header
                     );
