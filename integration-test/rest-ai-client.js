@@ -39,19 +39,19 @@ export function setup() {
 }
 
 export default function (data) {
-    group("AI Provider: Test Provider Detection and Configuration", function () {
-        // Test 1: Verify system initializes with configured provider
+    group("AI Client: Test Client Detection and Configuration", function () {
+        // Test 1: Verify system initializes with configured client
         // Note: Gemini is required for content conversion and summarization
         // OpenAI is optional and only used for legacy embedding support (1536-dim)
         const healthResp = http.get(`${apiHost}/v1alpha/health/artifact`, constant.params);
         check(healthResp, {
-            "AI Provider Test 1.1: Health check returns 200": (r) => r.status === 200,
+            "AI Client Test 1.1: Health check returns 200": (r) => r.status === 200,
         });
     });
 
-    group("AI Provider: Test Content Conversion with Gemini", function () {
+    group("AI Client: Test Content Conversion with Gemini", function () {
         // Note: This test requires Gemini API key to be configured
-        // OpenAI provider does NOT support content conversion
+        // OpenAI client does NOT support content conversion
         const kbName = `gem-conv-${randomString(8)}`; // Max 32 chars: gem-conv-12345678 = 20 chars
 
         // Create knowledge base
@@ -193,9 +193,9 @@ export default function (data) {
         });
     });
 
-    group("AI Provider: Test Gemini Embedding Generation (3072-dim)", function () {
+    group("AI Client: Test Gemini Embedding Generation (3072-dim)", function () {
         // Note: Tests Gemini's 3072-dimensional embeddings
-        // OpenAI provider (1536-dim) is legacy only and tested separately if needed
+        // OpenAI client (1536-dim) is legacy only and tested separately if needed
         const kbName = `gem-embed-${randomString(8)}`; // Max 32 chars: gem-embed-12345678 = 19 chars
 
         // Create knowledge base
@@ -339,7 +339,7 @@ export default function (data) {
         );
     });
 
-    group("AI Provider: Test Gemini Summary Generation", function () {
+    group("AI Client: Test Gemini Summary Generation", function () {
         // Note: Summary generation requires Gemini - OpenAI does NOT support this
         const kbName = `gem-summ-${randomString(8)}`; // Max 32 chars: gem-summ-12345678 = 19 chars
 
@@ -476,7 +476,7 @@ in artificial intelligence integration and customer satisfaction metrics.
         );
     });
 
-    group("AI Provider: Test Gemini Cache Functionality", function () {
+    group("AI Client: Test Gemini Cache Functionality", function () {
         // Note: Cache functionality requires Gemini - OpenAI does NOT support caching
         const kbName = `gem-cache-${randomString(8)}`; // Max 32 chars: gem-cache-12345678 = 20 chars
 
@@ -504,7 +504,7 @@ in artificial intelligence integration and customer satisfaction metrics.
         const catalogId = createKBResp.json().catalog.catalogId;
 
         // Upload file - this should create a Gemini cache during processing
-        const testContent = "Cache test content for Gemini provider validation with native caching support.";
+        const testContent = "Cache test content for Gemini client validation with native caching support.";
 
         const uploadResp = http.request(
             "POST",

@@ -74,8 +74,13 @@ func TestSaveEmbeddingBatchActivity_Success(t *testing.T) {
 	mockRepository := mock.NewRepositoryMock(mc)
 
 	embeddings := createActivityTestEmbeddings(50)
+	kbUID := uuid.Must(uuid.NewV4())
 
 	// Setup mocks
+	mockRepository.GetKnowledgeBaseByUIDMock.Return(&repository.KnowledgeBaseModel{
+		UID:                 kbUID,
+		ActiveCollectionUID: kbUID,
+	}, nil)
 	mockRepository.InsertVectorsInCollectionMock.Return(nil)
 	mockRepository.CreateEmbeddingsMock.Set(func(
 		ctx context.Context,
@@ -93,7 +98,7 @@ func TestSaveEmbeddingBatchActivity_Success(t *testing.T) {
 	w := &Worker{repository: mockRepository, log: zap.NewNop()}
 
 	param := &SaveEmbeddingBatchActivityParam{
-		KBUID:        uuid.Must(uuid.NewV4()),
+		KBUID:        kbUID,
 		FileUID:      uuid.Must(uuid.NewV4()),
 		FileName:     "test.pdf",
 		Embeddings:   embeddings,
@@ -131,6 +136,12 @@ func TestSaveEmbeddingBatchActivity_MilvusFailure(t *testing.T) {
 	mc := minimock.NewController(c)
 
 	mockRepository := mock.NewRepositoryMock(mc)
+	kbUID := uuid.Must(uuid.NewV4())
+
+	mockRepository.GetKnowledgeBaseByUIDMock.Return(&repository.KnowledgeBaseModel{
+		UID:                 kbUID,
+		ActiveCollectionUID: kbUID,
+	}, nil)
 	mockRepository.InsertVectorsInCollectionMock.Return(fmt.Errorf("milvus insert failed"))
 
 	embeddings := createActivityTestEmbeddings(50)
@@ -150,7 +161,7 @@ func TestSaveEmbeddingBatchActivity_MilvusFailure(t *testing.T) {
 	w := &Worker{repository: mockRepository, log: zap.NewNop()}
 
 	param := &SaveEmbeddingBatchActivityParam{
-		KBUID:        uuid.Must(uuid.NewV4()),
+		KBUID:        kbUID,
 		FileUID:      uuid.Must(uuid.NewV4()),
 		FileName:     "test.pdf",
 		Embeddings:   embeddings,
@@ -168,12 +179,18 @@ func TestSaveEmbeddingBatchActivity_DatabaseFailure(t *testing.T) {
 	mc := minimock.NewController(c)
 
 	mockRepository := mock.NewRepositoryMock(mc)
+	kbUID := uuid.Must(uuid.NewV4())
+
+	mockRepository.GetKnowledgeBaseByUIDMock.Return(&repository.KnowledgeBaseModel{
+		UID:                 kbUID,
+		ActiveCollectionUID: kbUID,
+	}, nil)
 	mockRepository.CreateEmbeddingsMock.Return(nil, fmt.Errorf("database insert failed"))
 
 	w := &Worker{repository: mockRepository, log: zap.NewNop()}
 
 	param := &SaveEmbeddingBatchActivityParam{
-		KBUID:        uuid.Must(uuid.NewV4()),
+		KBUID:        kbUID,
 		FileUID:      uuid.Must(uuid.NewV4()),
 		FileName:     "test.pdf",
 		Embeddings:   createActivityTestEmbeddings(50),
@@ -191,13 +208,19 @@ func TestDeleteOldEmbeddingsActivity_Success(t *testing.T) {
 	mc := minimock.NewController(c)
 	mockRepository := mock.NewRepositoryMock(mc)
 
+	kbUID := uuid.Must(uuid.NewV4())
+
+	mockRepository.GetKnowledgeBaseByUIDMock.Return(&repository.KnowledgeBaseModel{
+		UID:                 kbUID,
+		ActiveCollectionUID: kbUID,
+	}, nil)
 	mockRepository.DeleteEmbeddingsWithFileUIDMock.Return(nil)
 	mockRepository.DeleteEmbeddingsByKBFileUIDMock.Return(nil)
 
 	w := &Worker{repository: mockRepository, log: zap.NewNop()}
 
 	param := &DeleteOldEmbeddingsActivityParam{
-		KBUID:   uuid.Must(uuid.NewV4()),
+		KBUID:   kbUID,
 		FileUID: uuid.Must(uuid.NewV4()),
 	}
 
@@ -210,12 +233,18 @@ func TestDeleteOldEmbeddingsActivity_VectorDBFailure(t *testing.T) {
 	mc := minimock.NewController(c)
 
 	mockRepository := mock.NewRepositoryMock(mc)
+	kbUID := uuid.Must(uuid.NewV4())
+
+	mockRepository.GetKnowledgeBaseByUIDMock.Return(&repository.KnowledgeBaseModel{
+		UID:                 kbUID,
+		ActiveCollectionUID: kbUID,
+	}, nil)
 	mockRepository.DeleteEmbeddingsWithFileUIDMock.Return(fmt.Errorf("milvus connection error"))
 
 	w := &Worker{repository: mockRepository, log: zap.NewNop()}
 
 	param := &DeleteOldEmbeddingsActivityParam{
-		KBUID:   uuid.Must(uuid.NewV4()),
+		KBUID:   kbUID,
 		FileUID: uuid.Must(uuid.NewV4()),
 	}
 
@@ -229,13 +258,19 @@ func TestDeleteOldEmbeddingsActivity_DBFailure(t *testing.T) {
 	mc := minimock.NewController(c)
 
 	mockRepository := mock.NewRepositoryMock(mc)
+	kbUID := uuid.Must(uuid.NewV4())
+
+	mockRepository.GetKnowledgeBaseByUIDMock.Return(&repository.KnowledgeBaseModel{
+		UID:                 kbUID,
+		ActiveCollectionUID: kbUID,
+	}, nil)
 	mockRepository.DeleteEmbeddingsWithFileUIDMock.Return(nil)
 	mockRepository.DeleteEmbeddingsByKBFileUIDMock.Return(fmt.Errorf("database connection error"))
 
 	w := &Worker{repository: mockRepository, log: zap.NewNop()}
 
 	param := &DeleteOldEmbeddingsActivityParam{
-		KBUID:   uuid.Must(uuid.NewV4()),
+		KBUID:   kbUID,
 		FileUID: uuid.Must(uuid.NewV4()),
 	}
 
@@ -313,12 +348,18 @@ func TestFlushCollectionActivity_Success(t *testing.T) {
 	mc := minimock.NewController(c)
 
 	mockRepository := mock.NewRepositoryMock(mc)
+	kbUID := uuid.Must(uuid.NewV4())
+
+	mockRepository.GetKnowledgeBaseByUIDMock.Return(&repository.KnowledgeBaseModel{
+		UID:                 kbUID,
+		ActiveCollectionUID: kbUID,
+	}, nil)
 	mockRepository.FlushCollectionMock.Return(nil)
 
 	w := &Worker{repository: mockRepository, log: zap.NewNop()}
 
 	param := &DeleteOldEmbeddingsActivityParam{
-		KBUID:   uuid.Must(uuid.NewV4()),
+		KBUID:   kbUID,
 		FileUID: uuid.Must(uuid.NewV4()),
 	}
 
@@ -331,12 +372,18 @@ func TestFlushCollectionActivity_Failure(t *testing.T) {
 	mc := minimock.NewController(c)
 
 	mockRepository := mock.NewRepositoryMock(mc)
+	kbUID := uuid.Must(uuid.NewV4())
+
+	mockRepository.GetKnowledgeBaseByUIDMock.Return(&repository.KnowledgeBaseModel{
+		UID:                 kbUID,
+		ActiveCollectionUID: kbUID,
+	}, nil)
 	mockRepository.FlushCollectionMock.Return(fmt.Errorf("flush collection error"))
 
 	w := &Worker{repository: mockRepository, log: zap.NewNop()}
 
 	param := &DeleteOldEmbeddingsActivityParam{
-		KBUID:   uuid.Must(uuid.NewV4()),
+		KBUID:   kbUID,
 		FileUID: uuid.Must(uuid.NewV4()),
 	}
 

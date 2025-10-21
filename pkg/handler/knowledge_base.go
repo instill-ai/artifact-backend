@@ -13,7 +13,6 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc/metadata"
 
-	"github.com/instill-ai/artifact-backend/internal/ai"
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/types"
@@ -79,9 +78,18 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 		return nil, err
 	}
 
+	// Get default embedding configuration from system_metadata
+	// This ensures new KBs use the current system-wide standard
+	// (e.g., OpenAI/1536 during migration, Gemini/3072 after migration)
+	defaultConfig, err := ph.service.Repository().GetDefaultEmbeddingConfig(ctx, "default")
+	if err != nil {
+		return nil, fmt.Errorf("getting default embedding config: %w", err)
+	}
+
 	// external service call - create catalog collection and set ACL in openFAG
 	callExternalService := func(kbUID types.KBUIDType) error {
-		err := ph.service.Repository().CreateCollection(ctx, constant.KBCollectionName(kbUID))
+		// Create collection with dimensionality from default embedding config
+		err := ph.service.Repository().CreateCollection(ctx, constant.KBCollectionName(kbUID), defaultConfig.Dimensionality)
 		if err != nil {
 			return fmt.Errorf("creating vector database collection: %w", err)
 		}
@@ -101,22 +109,19 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 	}
 
 	// create catalog
-	// Set default embedding configuration: Gemini with default dimensions
+
 	dbData, err := ph.service.Repository().CreateKnowledgeBase(
 		ctx,
 		repository.KnowledgeBaseModel{
 			Name: req.Name,
 			// make name as kbID
-			KbID:        req.Name,
-			Description: req.Description,
-			Tags:        req.Tags,
-			Owner:       ns.NsUID.String(),
-			CreatorUID:  creatorUUID,
-			CatalogType: req.GetType().String(),
-			EmbeddingConfig: repository.EmbeddingConfigJSON{
-				ModelFamily:    ai.ModelFamilyGemini,
-				Dimensionality: uint32(ai.GeminiEmbeddingDimDefault),
-			},
+			KBID:            req.Name,
+			Description:     req.Description,
+			Tags:            req.Tags,
+			Owner:           ns.NsUID.String(),
+			CreatorUID:      creatorUUID,
+			CatalogType:     req.GetType().String(),
+			EmbeddingConfig: *defaultConfig, // Use system default
 		},
 		callExternalService,
 	)
@@ -124,19 +129,22 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 		return nil, err
 	}
 
+	activeCollectionUID := dbData.ActiveCollectionUID.String()
+
 	catalog := &artifactpb.Catalog{
-		Name:           dbData.Name,
-		CatalogUid:     dbData.UID.String(),
-		CatalogId:      dbData.KbID,
-		Description:    dbData.Description,
-		Tags:           dbData.Tags,
-		OwnerName:      dbData.Owner,
-		CreateTime:     dbData.CreateTime.String(),
-		UpdateTime:     dbData.UpdateTime.String(),
-		DownstreamApps: []string{},
-		TotalFiles:     0,
-		TotalTokens:    0,
-		UsedStorage:    0,
+		Name:                dbData.Name,
+		CatalogUid:          dbData.UID.String(),
+		CatalogId:           dbData.KBID,
+		Description:         dbData.Description,
+		Tags:                dbData.Tags,
+		OwnerName:           dbData.Owner,
+		CreateTime:          dbData.CreateTime.String(),
+		UpdateTime:          dbData.UpdateTime.String(),
+		DownstreamApps:      []string{},
+		TotalFiles:          0,
+		TotalTokens:         0,
+		UsedStorage:         0,
+		ActiveCollectionUid: activeCollectionUID,
 		EmbeddingConfig: &artifactpb.Catalog_EmbeddingConfig{
 			ModelFamily:    dbData.EmbeddingConfig.ModelFamily,
 			Dimensionality: dbData.EmbeddingConfig.Dimensionality,
@@ -194,11 +202,17 @@ func (ph *PublicHandler) ListCatalogs(ctx context.Context, req *artifactpb.ListC
 		kbUIDs[i] = kb.UID
 	}
 
-	fileCounts, err := ph.service.Repository().GetCountFilesByListKnowledgeBaseUID(ctx, kbUIDs)
-	if err != nil {
-		logger.Error("failed to get file counts", zap.Error(err))
-		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
+	// Get file counts for each KB
+	fileCounts := make(map[types.KBUIDType]int64)
+	for _, kbUID := range kbUIDs {
+		count, err := ph.service.Repository().GetFileCountByKnowledgeBaseUID(ctx, kbUID, "")
+		if err != nil {
+			logger.Error("failed to get file count", zap.Error(err), zap.String("kbUID", kbUID.String()))
+			return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
+		}
+		fileCounts[kbUID] = count
 	}
+
 	tokenCounts, err := ph.service.Repository().GetTotalTokensByListKBUIDs(ctx, kbUIDs)
 	if err != nil {
 		logger.Error("failed to get token counts", zap.Error(err))
@@ -206,19 +220,22 @@ func (ph *PublicHandler) ListCatalogs(ctx context.Context, req *artifactpb.ListC
 	}
 	kbs := make([]*artifactpb.Catalog, len(dbData))
 	for i, kb := range dbData {
+		activeCollectionUID := kb.ActiveCollectionUID.String()
+
 		kbs[i] = &artifactpb.Catalog{
-			CatalogUid:     kb.UID.String(),
-			Name:           kb.Name,
-			CatalogId:      kb.KbID,
-			Description:    kb.Description,
-			Tags:           kb.Tags,
-			CreateTime:     kb.CreateTime.String(),
-			UpdateTime:     kb.UpdateTime.String(),
-			OwnerName:      kb.Owner,
-			DownstreamApps: []string{},
-			TotalFiles:     uint32(fileCounts[kb.UID]),
-			TotalTokens:    uint32(tokenCounts[kb.UID]),
-			UsedStorage:    uint64(kb.Usage),
+			CatalogUid:          kb.UID.String(),
+			Name:                kb.Name,
+			CatalogId:           kb.KBID,
+			Description:         kb.Description,
+			Tags:                kb.Tags,
+			CreateTime:          kb.CreateTime.String(),
+			UpdateTime:          kb.UpdateTime.String(),
+			OwnerName:           kb.Owner,
+			DownstreamApps:      []string{},
+			TotalFiles:          uint32(fileCounts[kb.UID]),
+			TotalTokens:         uint32(tokenCounts[kb.UID]),
+			UsedStorage:         uint64(kb.Usage),
+			ActiveCollectionUid: activeCollectionUID,
 			EmbeddingConfig: &artifactpb.Catalog_EmbeddingConfig{
 				ModelFamily:    kb.EmbeddingConfig.ModelFamily,
 				Dimensionality: kb.EmbeddingConfig.Dimensionality,
@@ -241,9 +258,9 @@ func (ph *PublicHandler) UpdateCatalog(ctx context.Context, req *artifactpb.Upda
 	}
 	// check name if it is empty
 	if req.CatalogId == "" {
-		logger.Error("kb_id is empty", zap.Error(errorsx.ErrInvalidArgument))
+		logger.Error("KBID is empty", zap.Error(errorsx.ErrInvalidArgument))
 		return nil, errorsx.AddMessage(
-			fmt.Errorf("%w: kb_id is empty", errorsx.ErrInvalidArgument),
+			fmt.Errorf("%w: KBID is empty", errorsx.ErrInvalidArgument),
 			"Catalog ID is required. Please provide a catalog ID.",
 		)
 	}
@@ -296,10 +313,12 @@ func (ph *PublicHandler) UpdateCatalog(ctx context.Context, req *artifactpb.Upda
 		return nil, fmt.Errorf("updating catalog: %w", err)
 	}
 
-	fileCounts, err := ph.service.Repository().GetCountFilesByListKnowledgeBaseUID(ctx, []types.KBUIDType{kb.UID})
+	fileCount, err := ph.service.Repository().GetFileCountByKnowledgeBaseUID(ctx, kb.UID, "")
 	if err != nil {
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
+	fileCounts := map[types.KBUIDType]int64{kb.UID: fileCount}
+
 	tokenCounts, err := ph.service.Repository().GetTotalTokensByListKBUIDs(ctx, []types.KBUIDType{kb.UID})
 	if err != nil {
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
@@ -308,7 +327,7 @@ func (ph *PublicHandler) UpdateCatalog(ctx context.Context, req *artifactpb.Upda
 	// populate response
 	catalog := &artifactpb.Catalog{
 		Name:           kb.Name,
-		CatalogId:      kb.KbID,
+		CatalogId:      kb.KBID,
 		Description:    kb.Description,
 		Tags:           kb.Tags,
 		CreateTime:     kb.CreateTime.String(),
@@ -387,7 +406,7 @@ func (ph *PublicHandler) DeleteCatalog(ctx context.Context, req *artifactpb.Dele
 	return &artifactpb.DeleteCatalogResponse{
 		Catalog: &artifactpb.Catalog{
 			Name:           deletedKb.Name,
-			CatalogId:      deletedKb.KbID,
+			CatalogId:      deletedKb.KBID,
 			Description:    deletedKb.Description,
 			Tags:           deletedKb.Tags,
 			CreateTime:     deletedKb.CreateTime.String(),

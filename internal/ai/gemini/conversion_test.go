@@ -163,7 +163,7 @@ func TestIsVideoType(t *testing.T) {
 func TestCreateContentPart(t *testing.T) {
 	c := qt.New(t)
 
-	provider := &Provider{
+	client := &Client{
 		client: nil, // Not needed for this test
 	}
 
@@ -171,7 +171,7 @@ func TestCreateContentPart(t *testing.T) {
 		content := []byte("test content")
 		contentType := "application/pdf"
 
-		part, err := provider.createContentPart(content, contentType)
+		part, err := client.createContentPart(content, contentType)
 		c.Assert(err, qt.IsNil)
 		c.Assert(part, qt.Not(qt.IsNil))
 		c.Assert(part.InlineData, qt.Not(qt.IsNil))
@@ -183,7 +183,7 @@ func TestCreateContentPart(t *testing.T) {
 		content := []byte("test content")
 		contentType := ""
 
-		part, err := provider.createContentPart(content, contentType)
+		part, err := client.createContentPart(content, contentType)
 		c.Assert(err, qt.Not(qt.IsNil))
 		msg := errorsx.Message(err)
 		c.Assert(msg, qt.Contains, "Unsupported file type")
@@ -194,7 +194,7 @@ func TestCreateContentPart(t *testing.T) {
 		content := []byte{0x89, 0x50, 0x4E, 0x47} // PNG header
 		contentType := "image/png"
 
-		part, err := provider.createContentPart(content, contentType)
+		part, err := client.createContentPart(content, contentType)
 		c.Assert(err, qt.IsNil)
 		c.Assert(part, qt.Not(qt.IsNil))
 		c.Assert(part.InlineData.MIMEType, qt.Equals, "image/png")
@@ -204,7 +204,7 @@ func TestCreateContentPart(t *testing.T) {
 		content := []byte("video data")
 		contentType := "video/mp4"
 
-		part, err := provider.createContentPart(content, contentType)
+		part, err := client.createContentPart(content, contentType)
 		c.Assert(err, qt.IsNil)
 		c.Assert(part, qt.Not(qt.IsNil))
 		c.Assert(part.InlineData.MIMEType, qt.Equals, "video/mp4")
@@ -214,7 +214,7 @@ func TestCreateContentPart(t *testing.T) {
 		content := []byte("audio data")
 		contentType := "audio/mpeg"
 
-		part, err := provider.createContentPart(content, contentType)
+		part, err := client.createContentPart(content, contentType)
 		c.Assert(err, qt.IsNil)
 		c.Assert(part, qt.Not(qt.IsNil))
 		c.Assert(part.InlineData.MIMEType, qt.Equals, "audio/mpeg")
@@ -224,12 +224,12 @@ func TestCreateContentPart(t *testing.T) {
 func TestExtractMarkdownFromResponse_ErrorCases(t *testing.T) {
 	c := qt.New(t)
 
-	provider := &Provider{
+	client := &Client{
 		client: nil, // Not needed for this test
 	}
 
 	t.Run("nil response", func(t *testing.T) {
-		markdown, err := provider.extractMarkdownFromResponse(nil)
+		markdown, err := client.extractMarkdownFromResponse(nil)
 		c.Assert(err, qt.Not(qt.IsNil))
 		msg := errorsx.Message(err)
 		c.Assert(msg, qt.Contains, "AI service returned an invalid response")
@@ -240,7 +240,7 @@ func TestExtractMarkdownFromResponse_ErrorCases(t *testing.T) {
 func TestConversionInputValidation(t *testing.T) {
 	c := qt.New(t)
 
-	provider := &Provider{
+	client := &Client{
 		client: nil,
 	}
 
@@ -249,7 +249,7 @@ func TestConversionInputValidation(t *testing.T) {
 		contentType := "application/pdf"
 		prompt := "convert"
 
-		_, err := provider.convertToMarkdownWithoutCache(context.Background(), content, contentType, prompt)
+		_, err := client.convertToMarkdownWithoutCache(context.Background(), content, contentType, prompt)
 		c.Assert(err, qt.Not(qt.IsNil))
 		msg := errorsx.Message(err)
 		c.Assert(msg, qt.Contains, "file appears to be empty")
@@ -260,7 +260,7 @@ func TestConversionInputValidation(t *testing.T) {
 		contentType := ""
 		prompt := "convert"
 
-		_, err := provider.convertToMarkdownWithoutCache(context.Background(), content, contentType, prompt)
+		_, err := client.convertToMarkdownWithoutCache(context.Background(), content, contentType, prompt)
 		c.Assert(err, qt.Not(qt.IsNil))
 		msg := errorsx.Message(err)
 		c.Assert(msg, qt.Contains, "Unsupported file type")
@@ -270,12 +270,12 @@ func TestConversionInputValidation(t *testing.T) {
 func TestConvertToMarkdownWithCache_ValidationErrors(t *testing.T) {
 	c := qt.New(t)
 
-	provider := &Provider{
+	client := &Client{
 		client: nil,
 	}
 
 	t.Run("empty cache name", func(t *testing.T) {
-		_, err := provider.convertToMarkdownWithCache(context.Background(), "", "some prompt")
+		_, err := client.convertToMarkdownWithCache(context.Background(), "", "some prompt")
 		c.Assert(err, qt.Not(qt.IsNil))
 		msg := errorsx.Message(err)
 		c.Assert(msg, qt.Contains, "Internal processing error")

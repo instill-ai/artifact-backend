@@ -30,6 +30,9 @@ import (
 	"go.temporal.io/sdk/interceptor"
 
 	"github.com/instill-ai/artifact-backend/config"
+	"github.com/instill-ai/artifact-backend/internal/ai"
+	"github.com/instill-ai/artifact-backend/internal/ai/gemini"
+	"github.com/instill-ai/artifact-backend/internal/ai/openai"
 	"github.com/instill-ai/artifact-backend/pkg/acl"
 	"github.com/instill-ai/artifact-backend/pkg/handler"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
@@ -142,7 +145,13 @@ func main() {
 	// Initialize repository with vector database and Redis
 	repo := repository.NewRepository(db, vectorDB, minioClient, redisClient)
 
-	// Create worker
+	// Initialize AI client (shared by both worker and service)
+	ai, err := newAIClient(ctx, logger)
+	if err != nil {
+		logger.Fatal("Unable to initialize AI client", zap.Error(err))
+	}
+
+	// Create worker with AI client
 	w, err := worker.New(
 		temporalClient,
 		repo,
@@ -150,12 +159,13 @@ func main() {
 		aclClient,
 		redisClient,
 		logger,
+		ai,
 	)
 	if err != nil {
 		logger.Fatal("Unable to create worker", zap.Error(err))
 	}
 
-	// Create service with worker abstraction
+	// Create service with AI client (no longer needs to get it from worker)
 	svc := service.NewService(
 		repo,
 		mgmtPrivateServiceClient,
@@ -164,6 +174,7 @@ func main() {
 		redisClient,
 		aclClient,
 		w,
+		ai,
 	)
 
 	privateHandler := handler.NewPrivateHandler(svc, logger)
@@ -442,4 +453,53 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 	}
 
 	return pipelinePublicServiceClient, mgmtPrivateServiceClient, redisClient, db, minioClient, vectorDB, aclClient, temporalClient, closer
+}
+
+// newAIClient creates an AI client based on the configured API keys
+func newAIClient(ctx context.Context, logger *zap.Logger) (ai.Client, error) {
+	cfg := config.Config
+	aiClients := make(map[string]ai.Client)
+
+	// Initialize Gemini client if API key is provided
+	if cfg.RAG.Model.Gemini.APIKey != "" {
+		geminiClient, err := gemini.NewClient(ctx, cfg.RAG.Model.Gemini.APIKey)
+		if err != nil {
+			logger.Error("Failed to initialize Gemini client", zap.Error(err))
+		} else {
+			aiClients[ai.ModelFamilyGemini] = geminiClient
+			logger.Info("Gemini client initialized",
+				zap.String("client", geminiClient.Name()),
+				zap.Int32("embedding_dimension", geminiClient.GetEmbeddingDimensionality()))
+		}
+	} else {
+		logger.Warn("Gemini API key not configured. Content conversion and summarization will use pipeline fallback.")
+	}
+
+	// Initialize OpenAI client if API key is provided
+	if cfg.RAG.Model.OpenAI.APIKey != "" {
+		openaiClient, err := openai.NewClient(ctx, cfg.RAG.Model.OpenAI.APIKey)
+		if err != nil {
+			logger.Warn("Failed to initialize OpenAI client for legacy embeddings", zap.Error(err))
+		} else {
+			aiClients[ai.ModelFamilyOpenAI] = openaiClient
+			logger.Info("OpenAI client initialized for legacy embeddings",
+				zap.Int32("embedding_dimension", openaiClient.GetEmbeddingDimensionality()))
+		}
+	}
+
+	// Create composite client if we have clients
+	if len(aiClients) == 0 {
+		return nil, nil // No clients configured - not a fatal error
+	}
+
+	aiClient, err := ai.NewCompositeClient(aiClients, ai.DefaultModelFamily)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create composite client: %w", err)
+	}
+
+	logger.Info("AI client initialized successfully",
+		zap.String("client", aiClient.Name()),
+		zap.Int("available_clients", len(aiClients)))
+
+	return aiClient, nil
 }

@@ -112,6 +112,7 @@ jobs:
         run: |
           f=".env.secrets.component.test"
           printf 'CFG_COMPONENT_SECRETS_OPENAI_APIKEY=%s\n' "${{ secrets.OPENAIAPIKEY }}" >> "$f"
+          printf 'CFG_RAG_MODEL_OPENAI_APIKEY=%s\n' "${{ secrets.OPENAIAPIKEY }}" >> "$f"
           printf 'CFG_RAG_MODEL_GEMINI_APIKEY=%s\n' "${{ secrets.GEMINIAPIKEY }}" >> "$f"
           make compose-dev EDITION=docker-ce:test CI=true ARTIFACT_BACKEND_VERSION=${{ env.COMMIT_SHORT_SHA }}
 

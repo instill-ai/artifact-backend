@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/gofrs/uuid"
 
@@ -107,6 +108,7 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 	}
 
 	// upload file to minio and database
+	// Inherit RAG version from parent knowledge base
 	kbFile := repository.KnowledgeBaseFileModel{
 		Name:                      req.GetFile().GetName(),
 		FileType:                  req.File.Type.String(),
@@ -237,6 +239,135 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 			fmt.Errorf("increasing catalog usage: %w", err),
 			"File uploaded but catalog statistics update failed. The file is available for use.",
 		)
+	}
+
+	// DUAL PROCESSING: Check if dual processing is needed
+	// Dual processing is needed in three scenarios:
+	// 1. Phase 2 (updating): Staging KB exists - full dual processing with new config
+	// 2. Phase 3 (swapping): Staging KB exists - file synchronization for consistency
+	// 3. Phase 6 (retention): Rollback KB exists - full dual processing with old config
+	//
+	// This ensures:
+	// - Files uploaded during update are available in both production and staging
+	// - Files added during swapping are synchronized to both KBs (for clean swap)
+	// - Files added during retention period work after rollback (no data loss)
+	dualTarget, err := ph.service.Repository().GetDualProcessingTarget(ctx, kb)
+	if err != nil {
+		// Log error but don't fail upload - fall back to normal processing
+		logger.Warn("Failed to check dual processing requirements, falling back to normal processing",
+			zap.Error(err),
+			zap.String("kbUID", kb.UID.String()))
+	} else if dualTarget.IsNeeded {
+		logger.Info("Dual processing required for uploaded file",
+			zap.String("fileUID", res.UID.String()),
+			zap.String("prodKBUID", kb.UID.String()),
+			zap.String("targetKBUID", dualTarget.TargetKB.UID.String()),
+			zap.String("phase", dualTarget.Phase),
+			zap.String("description", dualTarget.Description))
+
+		// Trigger dual processing asynchronously
+		// Don't wait for completion - return response immediately
+		go func() {
+			// Create new context for async operation (detached from request context)
+			asyncCtx := context.Background()
+
+			// Copy necessary metadata for authentication/authorization
+			if md, ok := metadata.FromIncomingContext(ctx); ok {
+				asyncCtx = metadata.NewIncomingContext(asyncCtx, md)
+			}
+
+			// Create a duplicate file record for target KB (staging or rollback)
+			// This file record will reference the same original file in MinIO
+			// but will have different processed outputs (chunks, embeddings)
+			targetFile := repository.KnowledgeBaseFileModel{
+				Name:                      res.Name,
+				FileType:                  res.FileType,
+				Owner:                     res.Owner,
+				CreatorUID:                res.CreatorUID,
+				KBUID:                     dualTarget.TargetKB.UID, // Different KB (staging or rollback)
+				Destination:               res.Destination,         // Same source file
+				Size:                      res.Size,
+				ProcessStatus:             artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_NOTSTARTED.String(),
+				ExternalMetadataUnmarshal: res.ExternalMetadataUnmarshal,
+				ExtraMetaDataUnmarshal:    res.ExtraMetaDataUnmarshal,
+			}
+
+			targetFileRes, err := ph.service.Repository().CreateKnowledgeBaseFile(asyncCtx, targetFile, nil)
+			if err != nil {
+				logger.Error("Failed to create target file record during dual processing",
+					zap.Error(err),
+					zap.String("targetKBUID", dualTarget.TargetKB.UID.String()),
+					zap.String("phase", dualTarget.Phase))
+				return
+			}
+
+			// Increase target KB usage
+			err = ph.service.Repository().IncreaseKnowledgeBaseUsage(asyncCtx, nil, dualTarget.TargetKB.UID.String(), int(targetFile.Size))
+			if err != nil {
+				logger.Warn("Failed to increase target KB usage",
+					zap.Error(err),
+					zap.String("phase", dualTarget.Phase))
+				// Non-fatal, continue with processing
+			}
+
+			logger.Info("Created target file record, starting dual processing",
+				zap.String("prodFileUID", res.UID.String()),
+				zap.String("targetFileUID", targetFileRes.UID.String()),
+				zap.String("phase", dualTarget.Phase))
+
+			// Trigger dual processing workflows
+			// IMPORTANT: Process files in parallel goroutines to avoid blocking
+			// Processing behavior depends on phase:
+			// - Phase 2 (updating): Full processing for both with respective configs
+			// - Phase 3 (swapping): Minimal sync (file record created, limited processing)
+			// - Phase 6 (retention): Full processing for both with respective configs
+
+			var wg sync.WaitGroup
+			wg.Add(2)
+
+			// Process production file for production KB
+			go func() {
+				defer wg.Done()
+				err := ph.service.ProcessFile(
+					asyncCtx,
+					kb.UID, // Production KB
+					[]types.FileUIDType{res.UID},
+					types.UserUIDType(uuid.FromStringOrNil(authUID)),
+					types.RequesterUIDType(uuid.FromStringOrNil(authUID)),
+				)
+				if err != nil {
+					logger.Error("Production file processing failed during dual processing",
+						zap.Error(err),
+						zap.String("prodFileUID", res.UID.String()),
+						zap.String("phase", dualTarget.Phase))
+				}
+			}()
+
+			// Process target file for target KB
+			go func() {
+				defer wg.Done()
+				err := ph.service.ProcessFile(
+					asyncCtx,
+					dualTarget.TargetKB.UID, // Target KB (staging or rollback)
+					[]types.FileUIDType{targetFileRes.UID},
+					types.UserUIDType(uuid.FromStringOrNil(authUID)),
+					types.RequesterUIDType(uuid.FromStringOrNil(authUID)),
+				)
+				if err != nil {
+					logger.Error("Target file processing failed during dual processing",
+						zap.Error(err),
+						zap.String("targetFileUID", targetFileRes.UID.String()),
+						zap.String("phase", dualTarget.Phase))
+				}
+			}()
+
+			wg.Wait()
+
+			logger.Info("Dual processing completed successfully",
+				zap.String("prodFileUID", res.UID.String()),
+				zap.String("targetFileUID", targetFileRes.UID.String()),
+				zap.String("phase", dualTarget.Phase))
+		}()
 	}
 
 	return &artifactpb.UploadCatalogFileResponse{
@@ -436,7 +567,7 @@ func (ph *PublicHandler) MoveFileToCatalog(ctx context.Context, req *artifactpb.
 	// Step 4: Create file in target catalog
 	uploadReq := &artifactpb.UploadCatalogFileRequest{
 		NamespaceId: req.NamespaceId,
-		CatalogId:   targetCatalog.KbID,
+		CatalogId:   targetCatalog.KBID,
 		File: &artifactpb.File{
 			Name:             sourceFile.Name,
 			Content:          fileContentBase64,
@@ -732,7 +863,58 @@ func (ph *PublicHandler) DeleteCatalogFile(ctx context.Context, req *artifactpb.
 			"File not found. Please check the file ID and try again.",
 		)
 	}
-	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kbfs[0].KBUID, "writer")
+
+	// Get the KB to determine if it's a staging/rollback KB
+	kb, err := ph.service.Repository().GetKnowledgeBaseByUID(ctx, kbfs[0].KBUID)
+	if err != nil {
+		logger.Error("failed to get knowledge base", zap.Error(err))
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to get knowledge base: %w", err),
+			"Unable to retrieve catalog information. Please try again.",
+		)
+	}
+
+	// For staging/rollback KBs (staging=true), check permission against the production KB
+	// This is necessary because:
+	// 1. Staging/rollback KBs are system-managed entities
+	// 2. Users have permission on the production KB, not on temporary staging/rollback KBs
+	// 3. File operations on staging/rollback KBs (via dual processing/deletion) should be allowed
+	//    if the user has permission on the production KB
+	var aclCheckKBUID types.KBUIDType
+	if kb.Staging {
+		// Extract production catalog ID from staging/rollback ID
+		// Format: {production-catalog-id}-staging or {production-catalog-id}-rollback
+		prodCatalogID := kb.KBID
+		if len(prodCatalogID) > 8 {
+			if prodCatalogID[len(prodCatalogID)-8:] == "-staging" {
+				prodCatalogID = prodCatalogID[:len(prodCatalogID)-8]
+			} else if len(prodCatalogID) > 9 && prodCatalogID[len(prodCatalogID)-9:] == "-rollback" {
+				prodCatalogID = prodCatalogID[:len(prodCatalogID)-9]
+			}
+		}
+
+		// Get production KB UID for ACL check
+		prodKB, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, types.OwnerUIDType(uuid.FromStringOrNil(kb.Owner)), prodCatalogID)
+		if err != nil {
+			logger.Error("failed to get production KB for ACL check",
+				zap.String("stagingKBID", kb.KBID),
+				zap.String("prodCatalogID", prodCatalogID),
+				zap.Error(err))
+			return nil, errorsx.AddMessage(
+				fmt.Errorf("failed to get production catalog for permission check: %w", err),
+				"Unable to verify access permissions for this file. Please try again.",
+			)
+		}
+		aclCheckKBUID = prodKB.UID
+		logger.Info("Checking permission against production KB for staging/rollback file deletion",
+			zap.String("fileKBUID", kbfs[0].KBUID.String()),
+			zap.String("prodKBUID", aclCheckKBUID.String()))
+	} else {
+		// Normal production KB - check permission directly
+		aclCheckKBUID = kbfs[0].KBUID
+	}
+
+	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", aclCheckKBUID, "writer")
 	if err != nil {
 		logger.Error("failed to check permission", zap.Error(err))
 		return nil, errorsx.AddMessage(
@@ -781,7 +963,77 @@ func (ph *PublicHandler) DeleteCatalogFile(ctx context.Context, req *artifactpb.
 		return nil, err
 	}
 
-	// Fire-and-forget: trigger background cleanup workflow
+	// DUAL DELETION: Check if dual deletion is needed (kb was already retrieved for ACL check above)
+	// Similar to dual processing for uploads, we need to delete from both KBs:
+	// 1. Phase 2 (updating): Delete from both production and staging
+	// 2. Phase 3 (swapping): Delete from both for synchronization
+	// 3. Phase 6 (retention): Delete from both production and rollback
+	logger.Info("Checking dual deletion requirements",
+		zap.String("kbUID", kb.UID.String()),
+		zap.String("kbID", kb.KBID),
+		zap.String("status", kb.UpdateStatus),
+		zap.Bool("staging", kb.Staging))
+
+	dualTarget, err := ph.service.Repository().GetDualProcessingTarget(ctx, kb)
+	if err != nil {
+		logger.Warn("Failed to check dual deletion requirements",
+			zap.Error(err),
+			zap.String("kbUID", kb.UID.String()))
+	} else if !dualTarget.IsNeeded {
+		logger.Info("Dual deletion NOT needed - file only deleted from single KB",
+			zap.String("fileUID", fUID.String()),
+			zap.String("kbUID", kb.UID.String()))
+	} else if dualTarget.IsNeeded {
+		logger.Info("Dual deletion required",
+			zap.String("fileUID", fUID.String()),
+			zap.String("prodKBUID", kb.UID.String()),
+			zap.String("targetKBUID", dualTarget.TargetKB.UID.String()),
+			zap.String("phase", dualTarget.Phase))
+
+		// Find the corresponding file in target KB (by name)
+		// Files in staging/rollback KB share the same name as production
+		targetFiles, err := ph.service.Repository().GetKnowledgeBaseFilesByName(ctx, dualTarget.TargetKB.UID, files[0].Name)
+		if err != nil {
+			logger.Warn("Failed to find target file for dual deletion",
+				zap.Error(err),
+				zap.String("targetKBUID", dualTarget.TargetKB.UID.String()),
+				zap.String("fileName", files[0].Name))
+		} else if len(targetFiles) > 0 {
+			targetFile := targetFiles[0]
+
+			// Soft-delete the target file
+			err = ph.service.Repository().DeleteKnowledgeBaseFileAndDecreaseUsage(ctx, targetFile.UID)
+			if err != nil {
+				logger.Error("Failed to delete target file during dual deletion",
+					zap.Error(err),
+					zap.String("targetFileUID", targetFile.UID.String()),
+					zap.String("phase", dualTarget.Phase))
+				// Non-fatal - production file is already deleted
+			} else {
+				logger.Info("Target file deleted successfully during dual deletion",
+					zap.String("targetFileUID", targetFile.UID.String()),
+					zap.String("phase", dualTarget.Phase))
+
+				// Trigger cleanup workflow for target file
+				targetWorkflowID := uuid.Must(uuid.NewV4()).String()
+				backgroundCtx := context.Background()
+
+				err = ph.service.CleanupFile(backgroundCtx, targetFile.UID, targetFile.Owner, targetFile.RequesterUID, targetWorkflowID, true)
+				if err != nil {
+					logger.Error("Failed to trigger cleanup workflow for target file",
+						zap.String("targetFileUID", targetFile.UID.String()),
+						zap.String("workflowID", targetWorkflowID),
+						zap.Error(err))
+				}
+			}
+		} else {
+			logger.Info("No corresponding target file found for dual deletion (may not have been created yet)",
+				zap.String("fileName", files[0].Name),
+				zap.String("targetKBUID", dualTarget.TargetKB.UID.String()))
+		}
+	}
+
+	// Fire-and-forget: trigger background cleanup workflow for production file
 	// If this fails, log the error but don't fail the user's delete request
 	// Generate workflow ID for tracking
 	workflowID := uuid.Must(uuid.NewV4()).String()

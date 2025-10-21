@@ -23,6 +23,9 @@ import (
 	temporalclient "go.temporal.io/sdk/client"
 
 	"github.com/instill-ai/artifact-backend/config"
+	"github.com/instill-ai/artifact-backend/internal/ai"
+	"github.com/instill-ai/artifact-backend/internal/ai/gemini"
+	"github.com/instill-ai/artifact-backend/internal/ai/openai"
 	"github.com/instill-ai/artifact-backend/pkg/acl"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/x/client"
@@ -87,6 +90,12 @@ func main() {
 	// Initialize repository with vector database and Redis
 	repo := repository.NewRepository(db, vectorDB, minioClient, redisClient)
 
+	// Initialize AI client
+	aiClient, err := newAIClient(ctx, logger)
+	if err != nil {
+		logger.Fatal("Failed to initialize AI client", zap.Error(err))
+	}
+
 	// Create worker with direct dependencies (primitives only - no service layer to avoid circular deps)
 	cw, err := artifactworker.New(
 		temporalClient,
@@ -95,6 +104,7 @@ func main() {
 		aclClient,
 		redisClient,
 		logger,
+		aiClient,
 	)
 	if err != nil {
 		logger.Fatal("Unable to create worker", zap.Error(err))
@@ -128,11 +138,11 @@ func main() {
 	w.RegisterWorkflow(cw.ProcessFileWorkflow)          // Main file processing orchestration workflow (batch)
 	w.RegisterWorkflow(cw.CleanupFileWorkflow)          // Single file cleanup and deletion workflow
 	w.RegisterWorkflow(cw.CleanupKnowledgeBaseWorkflow) // Knowledge base cleanup and deletion workflow
-	w.RegisterWorkflow(cw.DeleteFilesWorkflow)          // Batch file deletion workflow
-	w.RegisterWorkflow(cw.GetFilesWorkflow)             // Batch file retrieval workflow
+
+	// RAG update workflows
+	w.RegisterWorkflow(cw.UpdateKnowledgeBaseWorkflow) // Single KB update workflow (6-phase)
 
 	// Child workflows (called by main workflows)
-	w.RegisterWorkflow(cw.EmbedTextsWorkflow)     // Batch text embedding generation
 	w.RegisterWorkflow(cw.SaveEmbeddingsWorkflow) // Vector embedding storage
 
 	// ===== Shared Activities (Used by Multiple Workflows) =====
@@ -141,10 +151,8 @@ func main() {
 	w.RegisterActivity(cw.EmbedTextsActivity) // Generate vector embeddings for text batches
 
 	// MinIO operations
-	w.RegisterActivity(cw.SaveTextChunkBatchActivity)          // Save text chunk batch to MinIO
-	w.RegisterActivity(cw.DeleteFileActivity)                  // Delete single file from MinIO
-	w.RegisterActivity(cw.GetFileActivity)                     // Retrieve single file from MinIO
-	w.RegisterActivity(cw.UpdateTextChunkDestinationsActivity) // Update text chunk MinIO destinations in DB
+	w.RegisterActivity(cw.DeleteFilesBatchActivity) // Delete multiple files from MinIO (parallel)
+	w.RegisterActivity(cw.GetFilesBatchActivity)    // Retrieve multiple files from MinIO (parallel)
 
 	// File status management
 	w.RegisterActivity(cw.GetFileStatusActivity)    // Retrieve current file processing status
@@ -166,7 +174,21 @@ func main() {
 	w.RegisterActivity(cw.DeleteKBConvertedFileRecordsActivity) // Delete all converted file records
 	w.RegisterActivity(cw.DeleteKBTextChunkRecordsActivity)     // Delete all chunk records
 	w.RegisterActivity(cw.DeleteKBEmbeddingRecordsActivity)     // Delete all embedding records
+	w.RegisterActivity(cw.SoftDeleteKBRecordActivity)           // Soft-delete the KB record itself
 	w.RegisterActivity(cw.PurgeKBACLActivity)                   // Remove all ACL permissions for KB
+
+	// ===== RAG update activities =====
+	// Activities for knowledge base update workflow (6-phase)
+	w.RegisterActivity(cw.ListKnowledgeBasesForUpdateActivity)     // Find KBs needing update
+	w.RegisterActivity(cw.ValidateUpdateEligibilityActivity)       // Check if KB can be updated
+	w.RegisterActivity(cw.CreateStagingKnowledgeBaseActivity)      // Create staging KB for update
+	w.RegisterActivity(cw.ListFilesForReprocessingActivity)        // List files for reprocessing
+	w.RegisterActivity(cw.CloneFileToStagingKBActivity)            // Clone file to staging KB
+	w.RegisterActivity(cw.SynchronizeKBActivity)                   // Lock KB and wait for dual-processed files
+	w.RegisterActivity(cw.ValidateUpdatedKBActivity)               // Validate data integrity after sync
+	w.RegisterActivity(cw.SwapKnowledgeBasesActivity)              // Atomic pointer swap of collections
+	w.RegisterActivity(cw.UpdateKnowledgeBaseUpdateStatusActivity) // Update KB update status
+	w.RegisterActivity(cw.CleanupOldKnowledgeBaseActivity)         // Cleanup rollback KB after retention
 
 	// ===== ProcessFileWorkflow Activities (Main Workflow) =====
 	// Main workflow orchestrating the entire file processing pipeline
@@ -358,4 +380,53 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 
 	return pipelinePublicServiceClient, mgmtPrivateServiceClient,
 		redisClient, db, minioClient, vectorDB, aclClient, temporalClient, closer
+}
+
+// newAIClient creates an AI client based on the configured API keys
+func newAIClient(ctx context.Context, logger *zap.Logger) (ai.Client, error) {
+	cfg := config.Config
+	aiClients := make(map[string]ai.Client)
+
+	// Initialize Gemini client if API key is provided
+	if cfg.RAG.Model.Gemini.APIKey != "" {
+		geminiClient, err := gemini.NewClient(ctx, cfg.RAG.Model.Gemini.APIKey)
+		if err != nil {
+			logger.Error("Failed to initialize Gemini client", zap.Error(err))
+		} else {
+			aiClients[ai.ModelFamilyGemini] = geminiClient
+			logger.Info("Gemini client initialized",
+				zap.String("client", geminiClient.Name()),
+				zap.Int32("embedding_dimension", geminiClient.GetEmbeddingDimensionality()))
+		}
+	} else {
+		logger.Warn("Gemini API key not configured. Content conversion and summarization will use pipeline fallback.")
+	}
+
+	// Initialize OpenAI client if API key is provided
+	if cfg.RAG.Model.OpenAI.APIKey != "" {
+		openaiClient, err := openai.NewClient(ctx, cfg.RAG.Model.OpenAI.APIKey)
+		if err != nil {
+			logger.Warn("Failed to initialize OpenAI client for legacy embeddings", zap.Error(err))
+		} else {
+			aiClients[ai.ModelFamilyOpenAI] = openaiClient
+			logger.Info("OpenAI client initialized for legacy embeddings",
+				zap.Int32("embedding_dimension", openaiClient.GetEmbeddingDimensionality()))
+		}
+	}
+
+	// Create composite client if we have clients
+	if len(aiClients) == 0 {
+		return nil, nil // No clients configured - not a fatal error
+	}
+
+	aiClient, err := ai.NewCompositeClient(aiClients, ai.DefaultModelFamily)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create composite client: %w", err)
+	}
+
+	logger.Info("AI client initialized successfully",
+		zap.String("client", aiClient.Name()),
+		zap.Int("available_clients", len(aiClients)))
+
+	return aiClient, nil
 }

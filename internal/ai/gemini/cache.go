@@ -19,11 +19,11 @@ const MaxInlineSize = 20 * 1024 * 1024
 // FileUploadTimeout is the timeout for file upload and processing
 const FileUploadTimeout = 5 * time.Minute
 
-// CreateCache implements ai.Provider
+// CreateCache implements ai.Client
 // Creates a cached context for efficient content understanding of unstructured data
 // Supports both single file and batch operations (pass multiple files for batch caching)
 // systemInstruction specifies the AI's behavior (e.g., RAG instruction for conversion, Chat instruction for Q&A)
-func (p *Provider) CreateCache(ctx context.Context, files []ai.FileContent, ttl time.Duration, systemInstruction string) (*ai.CacheResult, error) {
+func (c *Client) CreateCache(ctx context.Context, files []ai.FileContent, ttl time.Duration, systemInstruction string) (*ai.CacheResult, error) {
 	if len(files) == 0 {
 		return nil, errorsx.AddMessage(errorsx.ErrInvalidArgument, "No files provided for caching")
 	}
@@ -34,7 +34,7 @@ func (p *Provider) CreateCache(ctx context.Context, files []ai.FileContent, ttl 
 		displayName = fmt.Sprintf("cache-%s", files[0].Filename)
 	}
 
-	output, err := p.createBatchCache(ctx, GetModel(), files, ttl, displayName, systemInstruction)
+	output, err := c.createBatchCache(ctx, GetModel(), files, ttl, displayName, systemInstruction)
 	if err != nil {
 		return nil, errorsx.AddMessage(err, "Unable to optimize file processing. The file will be processed without optimization.")
 	}
@@ -42,9 +42,9 @@ func (p *Provider) CreateCache(ctx context.Context, files []ai.FileContent, ttl 
 	return convertToCacheResult(output), nil
 }
 
-// ListCaches implements ai.Provider
+// ListCaches implements ai.Client
 // Lists all cached contexts with pagination support
-func (p *Provider) ListCaches(ctx context.Context, options *ai.CacheListOptions) (*ai.CacheListResult, error) {
+func (c *Client) ListCaches(ctx context.Context, options *ai.CacheListOptions) (*ai.CacheListResult, error) {
 	config := &genai.ListCachedContentsConfig{}
 
 	if options != nil {
@@ -56,7 +56,7 @@ func (p *Provider) ListCaches(ctx context.Context, options *ai.CacheListOptions)
 		}
 	}
 
-	page, err := p.client.Caches.List(ctx, config)
+	page, err := c.client.Caches.List(ctx, config)
 	if err != nil {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("failed to list caches: %w", err),
@@ -82,14 +82,14 @@ func (p *Provider) ListCaches(ctx context.Context, options *ai.CacheListOptions)
 	}, nil
 }
 
-// GetCache implements ai.Provider
+// GetCache implements ai.Client
 // Retrieves details of a specific cached context
-func (p *Provider) GetCache(ctx context.Context, cacheName string) (*ai.CacheResult, error) {
+func (c *Client) GetCache(ctx context.Context, cacheName string) (*ai.CacheResult, error) {
 	if cacheName == "" {
 		return nil, errorsx.AddMessage(errorsx.ErrInvalidArgument, "Cache name is required")
 	}
 
-	cached, err := p.client.Caches.Get(ctx, cacheName, &genai.GetCachedContentConfig{})
+	cached, err := c.client.Caches.Get(ctx, cacheName, &genai.GetCachedContentConfig{})
 	if err != nil {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("failed to get cache: %w", err),
@@ -106,9 +106,9 @@ func (p *Provider) GetCache(ctx context.Context, cacheName string) (*ai.CacheRes
 	}), nil
 }
 
-// UpdateCache implements ai.Provider
+// UpdateCache implements ai.Client
 // Updates the expiration of a cached context (only expiration can be updated)
-func (p *Provider) UpdateCache(ctx context.Context, cacheName string, options *ai.CacheUpdateOptions) (*ai.CacheResult, error) {
+func (c *Client) UpdateCache(ctx context.Context, cacheName string, options *ai.CacheUpdateOptions) (*ai.CacheResult, error) {
 	if cacheName == "" {
 		return nil, errorsx.AddMessage(errorsx.ErrInvalidArgument, "Cache name is required")
 	}
@@ -125,7 +125,7 @@ func (p *Provider) UpdateCache(ctx context.Context, cacheName string, options *a
 		config.ExpireTime = *options.ExpireTime
 	}
 
-	cached, err := p.client.Caches.Update(ctx, cacheName, config)
+	cached, err := c.client.Caches.Update(ctx, cacheName, config)
 	if err != nil {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("failed to update cache: %w", err),
@@ -142,20 +142,20 @@ func (p *Provider) UpdateCache(ctx context.Context, cacheName string, options *a
 	}), nil
 }
 
-// DeleteCache implements ai.Provider
+// DeleteCache implements ai.Client
 // Deletes a cached context by name
-func (p *Provider) DeleteCache(ctx context.Context, cacheName string) error {
+func (c *Client) DeleteCache(ctx context.Context, cacheName string) error {
 	if cacheName == "" {
 		return nil
 	}
-	return p.deleteCache(ctx, cacheName)
+	return c.deleteCache(ctx, cacheName)
 }
 
 // uploadAndWaitForFile uploads a file to Gemini File API and waits for it to be active
 // This is shared logic used by both caching and conversion operations
-func (p *Provider) uploadAndWaitForFile(ctx context.Context, data []byte, mimeType string) (*genai.Part, string, error) {
+func (c *Client) uploadAndWaitForFile(ctx context.Context, data []byte, mimeType string) (*genai.Part, string, error) {
 	// Upload file
-	file, err := p.client.Files.Upload(ctx, bytes.NewReader(data), &genai.UploadFileConfig{
+	file, err := c.client.Files.Upload(ctx, bytes.NewReader(data), &genai.UploadFileConfig{
 		MIMEType: mimeType,
 	})
 	if err != nil {
@@ -171,9 +171,9 @@ func (p *Provider) uploadAndWaitForFile(ctx context.Context, data []byte, mimeTy
 	timeoutCtx, cancel := context.WithTimeout(ctx, FileUploadTimeout)
 	defer cancel()
 
-	if err := p.waitForFileActive(timeoutCtx, fileName); err != nil {
+	if err := c.waitForFileActive(timeoutCtx, fileName); err != nil {
 		// Clean up the uploaded file on timeout/failure
-		_, _ = p.client.Files.Delete(ctx, fileName, nil)
+		_, _ = c.client.Files.Delete(ctx, fileName, nil)
 		return nil, "", err
 	}
 
@@ -187,12 +187,12 @@ func (p *Provider) uploadAndWaitForFile(ctx context.Context, data []byte, mimeTy
 
 // waitForFileActive waits for an uploaded file to become ACTIVE state before using it
 // This is shared logic used by both caching and conversion operations
-func (p *Provider) waitForFileActive(ctx context.Context, fileName string) error {
+func (c *Client) waitForFileActive(ctx context.Context, fileName string) error {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
 	// Check immediately first (file might already be active)
-	if fileInfo, err := p.client.Files.Get(ctx, fileName, nil); err == nil {
+	if fileInfo, err := c.client.Files.Get(ctx, fileName, nil); err == nil {
 		if fileInfo.State == genai.FileStateActive {
 			return nil
 		}
@@ -213,7 +213,7 @@ func (p *Provider) waitForFileActive(ctx context.Context, fileName string) error
 				"File upload timed out. The file may be too large or the service is busy. Please try again later.",
 			)
 		case <-ticker.C:
-			fileInfo, err := p.client.Files.Get(ctx, fileName, nil)
+			fileInfo, err := c.client.Files.Get(ctx, fileName, nil)
 			if err != nil {
 				return errorsx.AddMessage(
 					fmt.Errorf("failed to get file status: %w", err),
@@ -242,7 +242,7 @@ func (p *Provider) waitForFileActive(ctx context.Context, fileName string) error
 }
 
 // createBatchCache creates a cache for multiple files with specified system instruction
-func (p *Provider) createBatchCache(ctx context.Context, model string, files []ai.FileContent, ttl time.Duration, displayName, systemInstruction string) (*CacheOutput, error) {
+func (c *Client) createBatchCache(ctx context.Context, model string, files []ai.FileContent, ttl time.Duration, displayName, systemInstruction string) (*CacheOutput, error) {
 	if len(files) == 0 {
 		return nil, errorsx.AddMessage(errorsx.ErrInvalidArgument, "Invalid request. No files provided for batch caching.")
 	}
@@ -272,7 +272,7 @@ func (p *Provider) createBatchCache(ctx context.Context, model string, files []a
 	defer func() {
 		for _, fileName := range uploadedFileNames {
 			if fileName != "" {
-				_, _ = p.client.Files.Delete(ctx, fileName, nil)
+				_, _ = c.client.Files.Delete(ctx, fileName, nil)
 			}
 		}
 	}()
@@ -289,7 +289,7 @@ func (p *Provider) createBatchCache(ctx context.Context, model string, files []a
 		if useFileAPI {
 			// Upload file and wait for it to become active
 			var uploadedFileName string
-			part, uploadedFileName, err = p.uploadAndWaitForFile(ctx, file.Content, mimeType)
+			part, uploadedFileName, err = c.uploadAndWaitForFile(ctx, file.Content, mimeType)
 			if err != nil {
 				return nil, errorsx.AddMessage(
 					fmt.Errorf("failed to upload file %s for batch caching: %w", file.Filename, err),
@@ -349,7 +349,7 @@ func (p *Provider) createBatchCache(ctx context.Context, model string, files []a
 	}
 
 	// Create the cache
-	cached, err := p.client.Caches.Create(ctx, model, config)
+	cached, err := c.client.Caches.Create(ctx, model, config)
 	if err != nil {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("failed to create batch cache: %w", err),
@@ -370,13 +370,13 @@ func (p *Provider) createBatchCache(ctx context.Context, model string, files []a
 }
 
 // deleteCache deletes a cached content by name
-func (p *Provider) deleteCache(ctx context.Context, cacheName string) error {
+func (c *Client) deleteCache(ctx context.Context, cacheName string) error {
 	if cacheName == "" {
 		err := errorsx.ErrInvalidArgument
 		return errorsx.AddMessage(err, "Internal error during cache cleanup.")
 	}
 
-	_, err := p.client.Caches.Delete(ctx, cacheName, &genai.DeleteCachedContentConfig{})
+	_, err := c.client.Caches.Delete(ctx, cacheName, &genai.DeleteCachedContentConfig{})
 	if err != nil {
 		return errorsx.AddMessage(
 			fmt.Errorf("failed to delete cache: %w", err),

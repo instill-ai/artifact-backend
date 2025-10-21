@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/gofrs/uuid"
 	"go.temporal.io/sdk/temporal"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -20,19 +21,21 @@ import (
 )
 
 // This file contains embedding activities used by ProcessFileWorkflow and SaveEmbeddingsWorkflow:
-// - EmbedTextsActivity - Generates vector embeddings for text chunks using AI models
 // - GetTextChunksForEmbeddingActivity - Retrieves text chunk content for embedding generation
 // - SaveEmbeddingBatchActivity - Saves embedding vectors to vector database in batches
 // - DeleteOldEmbeddingsActivity - Removes outdated embeddings from both VectorDB and PostgreSQL
 // - FlushCollectionActivity - Flushes vector database collection to ensure immediate search availability
 // - UpdateEmbeddingMetadataActivity - Updates embedding metadata after processing
 
-// EmbedTextsActivityParam defines the parameters for the EmbedTextsActivity
-type EmbedTextsActivityParam struct {
-	KBUID    *types.KBUIDType // Optional: Knowledge base UID for provider selection
-	Texts    []string         // Texts to generate embeddings for
-	TaskType string           // Task type for embedding optimization (e.g., "RETRIEVAL_DOCUMENT", "RETRIEVAL_QUERY")
-}
+// Activity error type constants
+const (
+	getChunksForEmbeddingActivityError   = "GetChunksForEmbeddingActivity"
+	saveEmbeddingsActivityError          = "SaveEmbeddingBatchActivity"
+	deleteOldEmbeddingsActivityError     = "DeleteOldEmbeddingsActivity"
+	flushCollectionActivityError         = "FlushCollectionActivity"
+	updateEmbeddingMetadataActivityError = "UpdateEmbeddingMetadataActivity"
+	embedTextsActivityError              = "EmbedTextsActivity"
+)
 
 // GetChunksForEmbeddingActivityParam retrieves text chunks for embedding generation
 type GetChunksForEmbeddingActivityParam struct {
@@ -143,8 +146,28 @@ func (w *Worker) SaveEmbeddingBatchActivity(ctx context.Context, param *SaveEmbe
 		return nil
 	}
 
+	// CRITICAL: Query active_collection_uid from database
+	// A KB's active collection may be different from its own UID (e.g., during updates)
+	kb, err := w.repository.GetKnowledgeBaseByUID(ctx, param.KBUID)
+	if err != nil {
+		return temporal.NewApplicationErrorWithCause(
+			"Unable to get knowledge base for embedding save",
+			saveEmbeddingsActivityError,
+			err,
+		)
+	}
+
+	collectionUID := param.KBUID
+	if kb.ActiveCollectionUID != uuid.Nil {
+		collectionUID = kb.ActiveCollectionUID
+	}
+
+	w.log.Info("SaveEmbeddingBatchActivity: Using active collection",
+		zap.String("kbUID", param.KBUID.String()),
+		zap.String("activeCollectionUID", collectionUID.String()))
+
 	// Build vectors for vector db
-	collection := constant.KBCollectionName(param.KBUID)
+	collection := constant.KBCollectionName(collectionUID)
 
 	externalServiceCall := func(insertedEmbeddings []repository.EmbeddingModel) error {
 		// Convert repository.Embedding to repository.VectorEmbedding for vector DB
@@ -170,7 +193,7 @@ func (w *Worker) SaveEmbeddingBatchActivity(ctx context.Context, param *SaveEmbe
 	}
 
 	// Insert embeddings in transaction
-	_, err := w.repository.CreateEmbeddings(ctx, param.Embeddings, externalServiceCall)
+	_, err = w.repository.CreateEmbeddings(ctx, param.Embeddings, externalServiceCall)
 	if err != nil {
 		err = errorsx.AddMessage(err, fmt.Sprintf("Unable to save embeddings (batch %d/%d). Please try again.", param.BatchNumber, param.TotalBatches))
 		return temporal.NewApplicationErrorWithCause(
@@ -190,8 +213,33 @@ func (w *Worker) DeleteOldEmbeddingsActivity(ctx context.Context, param *DeleteO
 		zap.String("kbUID", param.KBUID.String()),
 		zap.String("fileUID", param.FileUID.String()))
 
+	// Query active_collection_uid from database (don't use KB UID directly)
+	kb, err := w.repository.GetKnowledgeBaseByUID(ctx, param.KBUID)
+	if err != nil {
+		err = errorsx.AddMessage(err, "Unable to retrieve knowledge base configuration. Please try again.")
+		return temporal.NewApplicationErrorWithCause(
+			errorsx.MessageOrErr(err),
+			deleteOldEmbeddingsActivityError,
+			err,
+		)
+	}
+
+	activeCollectionUID := kb.ActiveCollectionUID
+	if activeCollectionUID.IsNil() {
+		err = errorsx.AddMessage(fmt.Errorf("active collection UID is nil"), "Knowledge base has no active collection. Please try again.")
+		return temporal.NewApplicationErrorWithCause(
+			errorsx.MessageOrErr(err),
+			deleteOldEmbeddingsActivityError,
+			err,
+		)
+	}
+
+	collection := constant.KBCollectionName(activeCollectionUID)
+	w.log.Info("DeleteOldEmbeddingsActivity: Using active collection",
+		zap.String("kbUID", param.KBUID.String()),
+		zap.String("activeCollectionUID", activeCollectionUID.String()))
+
 	// Step 1: Delete from VectorDB (Milvus)
-	collection := constant.KBCollectionName(param.KBUID)
 	if err := w.repository.DeleteEmbeddingsWithFileUID(ctx, collection, param.FileUID); err != nil {
 		err = errorsx.AddMessage(err, "Unable to delete old embeddings from vector database. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
@@ -224,7 +272,31 @@ func (w *Worker) FlushCollectionActivity(ctx context.Context, param *DeleteOldEm
 	w.log.Info("FlushCollectionActivity: Flushing collection",
 		zap.String("kbUID", param.KBUID.String()))
 
-	collection := constant.KBCollectionName(param.KBUID)
+	// Query active_collection_uid from database (don't use KB UID directly)
+	kb, err := w.repository.GetKnowledgeBaseByUID(ctx, param.KBUID)
+	if err != nil {
+		err = errorsx.AddMessage(err, "Unable to retrieve knowledge base configuration. Please try again.")
+		return temporal.NewApplicationErrorWithCause(
+			errorsx.MessageOrErr(err),
+			flushCollectionActivityError,
+			err,
+		)
+	}
+
+	activeCollectionUID := kb.ActiveCollectionUID
+	if activeCollectionUID.IsNil() {
+		err = errorsx.AddMessage(fmt.Errorf("active collection UID is nil"), "Knowledge base has no active collection. Please try again.")
+		return temporal.NewApplicationErrorWithCause(
+			errorsx.MessageOrErr(err),
+			flushCollectionActivityError,
+			err,
+		)
+	}
+
+	collection := constant.KBCollectionName(activeCollectionUID)
+	w.log.Info("FlushCollectionActivity: Using active collection",
+		zap.String("kbUID", param.KBUID.String()),
+		zap.String("activeCollectionUID", activeCollectionUID.String()))
 
 	if err := w.repository.FlushCollection(ctx, collection); err != nil {
 		err = errorsx.AddMessage(err, "Unable to flush vector database collection. Please try again.")
@@ -267,7 +339,18 @@ func (w *Worker) UpdateEmbeddingMetadataActivity(ctx context.Context, param *Upd
 	return nil
 }
 
-// EmbedTextsActivity handles embedding texts
+// ===== EMBED TEXTS ACTIVITY =====
+
+// EmbedTextsActivityParam defines parameters for EmbedTextsActivity
+type EmbedTextsActivityParam struct {
+	KBUID    *types.KBUIDType // Optional: Knowledge base UID for client selection
+	Texts    []string         // Texts to embed
+	TaskType string           // Task type for embedding optimization (e.g., "RETRIEVAL_DOCUMENT", "RETRIEVAL_QUERY")
+}
+
+// EmbedTextsActivity handles embedding texts for workflow use
+// NOTE: This activity is ONLY for use within workflows (like ProcessFileWorkflow).
+// For synchronous user requests (retrieval/QA), use service.EmbedTexts() directly.
 func (w *Worker) EmbedTextsActivity(ctx context.Context, param *EmbedTextsActivityParam) ([][]float32, error) {
 	w.log.Info("Starting EmbedTextsActivity",
 		zap.Int("textCount", len(param.Texts)),
@@ -278,8 +361,8 @@ func (w *Worker) EmbedTextsActivity(ctx context.Context, param *EmbedTextsActivi
 	}
 
 	// Use the specified task type for optimal embedding generation
-	// Select provider based on KB's embedding config if KBUID is provided
-	vectors, err := w.embedTextsWithProviderSelection(ctx, param.KBUID, param.Texts, param.TaskType)
+	// Select client based on KB's embedding_config if KBUID is provided
+	vectors, err := w.embedTextsWithKBConfig(ctx, param.KBUID, param.Texts, param.TaskType)
 	if err != nil {
 		w.log.Error("Failed to embed texts",
 			zap.Int("textCount", len(param.Texts)),
@@ -300,12 +383,42 @@ func (w *Worker) EmbedTextsActivity(ctx context.Context, param *EmbedTextsActivi
 	return vectors, nil
 }
 
-// Activity error type constants
-const (
-	getChunksForEmbeddingActivityError   = "GetChunksForEmbeddingActivity"
-	saveEmbeddingsActivityError          = "SaveEmbeddingBatchActivity"
-	deleteOldEmbeddingsActivityError     = "DeleteOldEmbeddingsActivity"
-	flushCollectionActivityError         = "FlushCollectionActivity"
-	updateEmbeddingMetadataActivityError = "UpdateEmbeddingMetadataActivity"
-	embedTextsActivityError              = "EmbedTextsActivity"
-)
+// embedTextsWithKBConfig generates embeddings using the appropriate client
+// based on the KB's embedding configuration. This delegates to the shared helper in the ai package.
+func (w *Worker) embedTextsWithKBConfig(ctx context.Context, kbUID *types.KBUIDType, texts []string, taskType string) ([][]float32, error) {
+	if kbUID == nil {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("KB UID is required for embedding"),
+			"Knowledge base context is required for query processing.",
+		)
+	}
+
+	// Use GetKnowledgeBaseByUID which doesn't filter by delete_time, as we need to support
+	// embedding activities that are still running for staging KBs that have been soft-deleted
+	kb, err := w.repository.GetKnowledgeBaseByUID(ctx, *kbUID)
+	if err != nil {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to fetch KB embedding config: %w", err),
+			"Unable to retrieve knowledge base configuration. Please try again.",
+		)
+	}
+
+	// Delegate to shared helper
+	vectors, err := ai.EmbedTexts(
+		ctx,
+		w.aiClient,
+		kb.EmbeddingConfig.ModelFamily,
+		int32(kb.EmbeddingConfig.Dimensionality),
+		texts,
+		taskType,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	w.log.Info("Embedded texts using client routing",
+		zap.Int("textCount", len(texts)),
+		zap.String("taskType", taskType))
+
+	return vectors, nil
+}

@@ -55,6 +55,7 @@ type TextChunk interface {
 	}) (map[types.FileUIDType]int, error)
 	UpdateTextChunk(_ context.Context, chunkUID string, updates map[string]any) (*TextChunkModel, error)
 	UpdateTextChunkDestinations(_ context.Context, destinations map[string]string) error
+	GetChunkCountByKBUID(ctx context.Context, kbUID types.KBUIDType) (int64, error)
 }
 
 // TextChunkModel is the model for the text chunk table.
@@ -530,4 +531,18 @@ func (tc *TextChunkModel) AfterFind(tx *gorm.DB) error {
 	}
 
 	return json.Unmarshal(tc.ReferenceJSON, tc.Reference)
+}
+
+// GetChunkCountByKBUID returns the count of text chunks for a knowledge base
+func (r *repository) GetChunkCountByKBUID(ctx context.Context, kbUID types.KBUIDType) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Table(TextChunkTableName).
+		Where("kb_uid = ?", kbUID).
+		Count(&count).
+		Error
+	if err != nil {
+		return 0, fmt.Errorf("counting text chunks for KB %s: %w", kbUID, err)
+	}
+	return count, nil
 }

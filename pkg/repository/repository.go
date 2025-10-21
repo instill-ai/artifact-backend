@@ -5,10 +5,12 @@ import (
 	"gorm.io/gorm"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	"github.com/minio/minio-go/v7"
 )
 
 // Type aliases to help minimock detect imports from embedded interfaces
 var _ artifactpb.CatalogType
+var _ *minio.ObjectInfo
 
 // Repository interface defines the methods for the repository.
 type Repository interface {
@@ -34,6 +36,8 @@ type Repository interface {
 	ObjectStorage
 	// ChatCache manages chat conversation caching in Redis for performance optimization
 	ChatCache
+	// SystemProfile manages system-wide configuration profiles
+	SystemProfile
 }
 
 // repository implements Artifact storage functions in PostgreSQL, vector database, object storage, and Redis.

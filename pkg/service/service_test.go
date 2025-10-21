@@ -227,7 +227,7 @@ func TestService_ListRepositoryTags(t *testing.T) {
 				}
 			}
 
-			s := service.NewService(repository, nil, nil, registry, nil, nil, nil)
+			s := service.NewService(repository, nil, nil, registry, nil, nil, nil, nil)
 			req := newReq(tc.in)
 			resp, err := s.ListRepositoryTags(ctx, req)
 			if tc.wantErr != "" {
@@ -269,7 +269,7 @@ func TestService_CreateRepositoryTag(t *testing.T) {
 		t.Name = "shake/home:1.3.0"
 		req := &artifactpb.CreateRepositoryTagRequest{Tag: t}
 
-		s := service.NewService(nil, nil, nil, nil, nil, nil, nil)
+		s := service.NewService(nil, nil, nil, nil, nil, nil, nil, nil)
 		_, err := s.CreateRepositoryTag(ctx, req)
 		c.Check(err, qt.ErrorMatches, "invalid tag name")
 	})
@@ -279,7 +279,7 @@ func TestService_CreateRepositoryTag(t *testing.T) {
 		t.Id = "latest"
 		req := &artifactpb.CreateRepositoryTagRequest{Tag: t}
 
-		s := service.NewService(nil, nil, nil, nil, nil, nil, nil)
+		s := service.NewService(nil, nil, nil, nil, nil, nil, nil, nil)
 		_, err := s.CreateRepositoryTag(ctx, req)
 		c.Check(err, qt.ErrorMatches, "invalid tag name")
 	})
@@ -298,7 +298,7 @@ func TestService_CreateRepositoryTag(t *testing.T) {
 			c.Check(tag.Digest, qt.Equals, "sha256:ab9ed2553e5a1c7f717436ffa070a06da8f2fe15caab4b71e2f02ce4efcae423")
 		}).Return(nil, fmt.Errorf("foo"))
 
-		s := service.NewService(repository, nil, nil, nil, nil, nil, nil)
+		s := service.NewService(repository, nil, nil, nil, nil, nil, nil, nil)
 		_, err := s.CreateRepositoryTag(ctx, req)
 		c.Check(err, qt.ErrorMatches, "failed to upsert tag .*: foo")
 	})
@@ -313,7 +313,7 @@ func TestService_CreateRepositoryTag(t *testing.T) {
 			c.Check(tag.Digest, qt.Equals, "sha256:ab9ed2553e5a1c7f717436ffa070a06da8f2fe15caab4b71e2f02ce4efcae423")
 		}).Return(wantDomain, nil)
 
-		s := service.NewService(repository, nil, nil, nil, nil, nil, nil)
+		s := service.NewService(repository, nil, nil, nil, nil, nil, nil, nil)
 		resp, err := s.CreateRepositoryTag(ctx, req)
 		c.Check(err, qt.IsNil)
 		c.Check(resp.GetTag(), cmpPB, want)

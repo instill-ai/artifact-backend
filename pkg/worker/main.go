@@ -3,18 +3,19 @@ package worker
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/gofrs/uuid"
 	"github.com/redis/go-redis/v9"
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/temporal"
 	"go.uber.org/zap"
+	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/internal/ai"
-	"github.com/instill-ai/artifact-backend/internal/ai/gemini"
-	"github.com/instill-ai/artifact-backend/internal/ai/openai"
 	"github.com/instill-ai/artifact-backend/pkg/acl"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/types"
@@ -40,8 +41,8 @@ const EmbeddingBatchSize = 50
 // ActivityTimeoutStandard is timeout for normal activities. ActivityTimeoutLong is for heavy operations.
 // Too short = premature failures. Too long = blocked worker slots.
 const (
-	ActivityTimeoutStandard = 5 * time.Minute  // File I/O, DB, MinIO
-	ActivityTimeoutLong     = 10 * time.Minute // File conversion, embeddings
+	ActivityTimeoutStandard = 1 * time.Minute // File I/O, DB, MinIO
+	ActivityTimeoutLong     = 5 * time.Minute // File conversion, embeddings
 )
 
 // RetryInitialInterval, RetryBackoffCoefficient, RetryMaximumInterval*, and RetryMaximumAttempts control retry behavior.
@@ -50,7 +51,7 @@ const (
 	RetryInitialInterval         = 1 * time.Second   // Prevents retry storms
 	RetryBackoffCoefficient      = 2.0               // Exponential: 1s→2s→4s→8s→16s
 	RetryMaximumIntervalStandard = 30 * time.Second  // Caps exponential backoff for transient failures
-	RetryMaximumIntervalLong     = 100 * time.Second // Service recovery (AI provider rate limits)
+	RetryMaximumIntervalLong     = 100 * time.Second // Service recovery (AI client rate limits)
 	RetryMaximumAttempts         = 5                 // 5 attempts = ~30-60s max (better for 503/rate limit errors)
 )
 
@@ -66,10 +67,8 @@ type Worker struct {
 	temporalClient client.Client
 
 	// Worker-specific dependencies
-	aiProvider     ai.Provider // Default AI provider (Gemini for content processing)
-	geminiProvider ai.Provider // Gemini provider for 3072-dim embeddings
-	openaiProvider ai.Provider // OpenAI provider for 1536-dim legacy embeddings
-	log            *zap.Logger
+	aiClient ai.Client // AI client (can be single or composite with routing capabilities)
+	log      *zap.Logger
 }
 
 // TemporalClient returns the Temporal client for workflow execution
@@ -77,10 +76,11 @@ func (w *Worker) TemporalClient() client.Client {
 	return w.temporalClient
 }
 
-// GetAIProvider returns the AI provider for external use (e.g., service layer)
-// This enables the service layer to perform AI operations without circular dependencies
-func (w *Worker) GetAIProvider() ai.Provider {
-	return w.aiProvider
+// GetAIClient returns the AI client for external use (e.g., service layer)
+// This client includes routing capabilities via GetClientForModelFamily
+// Returns as interface{} (any) to avoid circular imports in the service package
+func (w *Worker) GetAIClient() any {
+	return w.aiClient
 }
 
 // GetRepository returns the repository for external use (e.g., EE worker overrides)
@@ -106,6 +106,7 @@ func New(
 	aclClient *acl.ACLClient,
 	redisClient *redis.Client,
 	log *zap.Logger,
+	ai ai.Client,
 ) (*Worker, error) {
 	w := &Worker{
 		repository:     repo,
@@ -114,56 +115,8 @@ func New(
 		redisClient:    redisClient,
 		temporalClient: temporalClient,
 		log:            log,
+		aiClient:       ai,
 	}
-
-	// Initialize AI provider for unstructured data content understanding
-	// Gemini is required for content conversion, caching, and summarization
-	// OpenAI is optional and only used for legacy embedding generation (1536-dim)
-	var provider ai.Provider
-	cfg := config.Config // Access global config
-
-	// Initialize Gemini provider (required for content processing)
-	if cfg.RAG.Model.Gemini.APIKey != "" {
-		geminiProvider, err := gemini.NewProvider(context.Background(), cfg.RAG.Model.Gemini.APIKey)
-		if err != nil {
-			log.Error("Failed to initialize Gemini AI provider",
-				zap.Error(err))
-		} else {
-			provider = geminiProvider
-			w.geminiProvider = geminiProvider
-			log.Info("Gemini AI provider initialized successfully",
-				zap.String("provider", provider.Name()),
-				zap.Int32("embedding_dimension", provider.GetEmbeddingDimensionality()))
-		}
-	} else {
-		log.Warn("Gemini API key not configured. Content conversion and summarization will use pipeline fallback.")
-	}
-
-	// Initialize OpenAI provider if configured (optional, for legacy embedding support only)
-	// Note: OpenAI provider only supports embedding generation (1536-dim vectors)
-	// It does not support content conversion, caching, or chat
-	if cfg.RAG.Model.OpenAI.APIKey != "" {
-		openaiProvider, err := openai.NewProvider(context.Background(), cfg.RAG.Model.OpenAI.APIKey)
-		if err != nil {
-			log.Warn("Failed to initialize OpenAI provider for legacy embeddings",
-				zap.Error(err))
-		} else {
-			w.openaiProvider = openaiProvider
-			// If Gemini is not available, use OpenAI for embeddings only
-			if provider == nil {
-				provider = openaiProvider
-				log.Info("OpenAI provider initialized for embedding generation only",
-					zap.String("provider", provider.Name()),
-					zap.Int32("embedding_dimension", provider.GetEmbeddingDimensionality()))
-				log.Warn("Using OpenAI for embeddings only. Content conversion requires Gemini configuration.")
-			} else {
-				log.Info("OpenAI provider available for legacy embeddings (1536-dim)",
-					zap.Int32("embedding_dimension", openaiProvider.GetEmbeddingDimensionality()))
-			}
-		}
-	}
-
-	w.aiProvider = provider
 
 	return w, nil
 }
@@ -182,6 +135,51 @@ func (w *Worker) ProcessFile(ctx context.Context, kbUID types.KBUIDType, fileUID
 	})
 }
 
+// ProcessFileDualMode processes files for both production and staging KBs in parallel
+// Used when files are uploaded during a RAG index update to ensure:
+// 1. Files are immediately queryable in production (old config)
+// 2. Files are ready in staging with new config (for seamless swap)
+func (w *Worker) ProcessFileDualMode(ctx context.Context, prodKBUID, stagingKBUID types.KBUIDType, fileUIDs []types.FileUIDType, userUID, requesterUID types.RequesterUIDType) error {
+	// Process for production KB (primary, must succeed)
+	errProd := w.ProcessFile(ctx, prodKBUID, fileUIDs, userUID, requesterUID)
+	if errProd != nil {
+		w.log.Error("Production KB processing failed during dual processing",
+			zap.Error(errProd),
+			zap.String("prodKBUID", prodKBUID.String()),
+			zap.Strings("fileUIDs", func() []string {
+				strs := make([]string, len(fileUIDs))
+				for i, uid := range fileUIDs {
+					strs[i] = uid.String()
+				}
+				return strs
+			}()))
+		return errProd
+	}
+
+	// Process for staging KB (secondary, failure is non-fatal)
+	// If this fails, file will be reprocessed in next update cycle
+	if err := w.ProcessFile(ctx, stagingKBUID, fileUIDs, userUID, requesterUID); err != nil {
+		w.log.Warn("Staging KB processing failed during dual processing, file will be reprocessed in next update",
+			zap.Error(err),
+			zap.String("stagingKBUID", stagingKBUID.String()),
+			zap.Strings("fileUIDs", func() []string {
+				strs := make([]string, len(fileUIDs))
+				for i, uid := range fileUIDs {
+					strs[i] = uid.String()
+				}
+				return strs
+			}()))
+		// Don't return error - production is what matters for user experience
+	} else {
+		w.log.Info("Dual processing completed successfully",
+			zap.String("prodKBUID", prodKBUID.String()),
+			zap.String("stagingKBUID", stagingKBUID.String()),
+			zap.Int("fileCount", len(fileUIDs)))
+	}
+
+	return nil
+}
+
 // CleanupFile orchestrates the file cleanup workflow
 func (w *Worker) CleanupFile(ctx context.Context, fileUID types.FileUIDType, userUID, requesterUID types.RequesterUIDType, workflowID string, includeOriginalFile bool) error {
 	workflow := NewCleanupFileWorkflow(w.temporalClient, w)
@@ -194,19 +192,166 @@ func (w *Worker) CleanupFile(ctx context.Context, fileUID types.FileUIDType, use
 	})
 }
 
-// GetFilesByPaths retrieves files by their paths using workflow
+// ===== MinIO Batch Activities =====
+
+// FileContent represents file content with metadata
+type FileContent struct {
+	Index   int
+	Name    string
+	Content []byte
+}
+
+// DeleteFilesBatchActivityParam defines parameters for deleting multiple files
+type DeleteFilesBatchActivityParam struct {
+	Bucket    string   // MinIO bucket containing the files
+	FilePaths []string // MinIO paths to the files
+}
+
+// DeleteFilesBatchActivity deletes multiple files from MinIO in parallel using goroutines
+// This is more efficient than using a workflow for simple parallel I/O operations
+func (w *Worker) DeleteFilesBatchActivity(ctx context.Context, param *DeleteFilesBatchActivityParam) error {
+	w.log.Info("Starting DeleteFilesBatchActivity",
+		zap.String("bucket", param.Bucket),
+		zap.Int("fileCount", len(param.FilePaths)))
+
+	if len(param.FilePaths) == 0 {
+		return nil
+	}
+
+	// Use buffered channel to collect errors
+	errChan := make(chan error, len(param.FilePaths))
+
+	// Delete files in parallel using goroutines
+	for _, filePath := range param.FilePaths {
+		filePath := filePath // Capture loop variable
+		go func() {
+			err := w.repository.DeleteFile(ctx, param.Bucket, filePath)
+			errChan <- err
+		}()
+	}
+
+	// Collect results and check for errors
+	var errors []error
+	for i := 0; i < len(param.FilePaths); i++ {
+		if err := <-errChan; err != nil {
+			errors = append(errors, err)
+		}
+	}
+
+	if len(errors) > 0 {
+		// Return first error
+		err := errorsx.AddMessage(errors[0], fmt.Sprintf("Failed to delete %d/%d files. Please try again.", len(errors), len(param.FilePaths)))
+		return temporal.NewApplicationErrorWithCause(
+			errorsx.MessageOrErr(err),
+			"DeleteFilesBatchActivity",
+			err,
+		)
+	}
+
+	w.log.Info("DeleteFilesBatchActivity completed successfully",
+		zap.Int("filesDeleted", len(param.FilePaths)))
+
+	return nil
+}
+
+// GetFilesBatchActivityParam defines parameters for getting multiple files
+type GetFilesBatchActivityParam struct {
+	Bucket    string           // MinIO bucket containing the files
+	FilePaths []string         // MinIO paths to the files
+	Metadata  *structpb.Struct // Request metadata for authentication context
+}
+
+// GetFilesBatchActivityResult contains the batch file retrieval results
+type GetFilesBatchActivityResult struct {
+	Files []FileContent // Retrieved files in order
+}
+
+// GetFilesBatchActivity retrieves multiple files from MinIO in parallel using goroutines
+// This is more efficient than using a workflow for simple parallel I/O operations
+func (w *Worker) GetFilesBatchActivity(ctx context.Context, param *GetFilesBatchActivityParam) (*GetFilesBatchActivityResult, error) {
+	w.log.Info("Starting GetFilesBatchActivity",
+		zap.String("bucket", param.Bucket),
+		zap.Int("fileCount", len(param.FilePaths)))
+
+	if len(param.FilePaths) == 0 {
+		return &GetFilesBatchActivityResult{Files: []FileContent{}}, nil
+	}
+
+	// Create authenticated context if metadata provided
+	authCtx := ctx
+	if param.Metadata != nil {
+		var err error
+		authCtx, err = CreateAuthenticatedContext(ctx, param.Metadata)
+		if err != nil {
+			err = errorsx.AddMessage(err, "Authentication failed. Please try again.")
+			return nil, temporal.NewApplicationErrorWithCause(
+				errorsx.MessageOrErr(err),
+				"GetFilesBatchActivity",
+				err,
+			)
+		}
+	}
+
+	// Use buffered channel to collect results
+	type result struct {
+		index   int
+		content []byte
+		err     error
+	}
+	resultChan := make(chan result, len(param.FilePaths))
+
+	// Get files in parallel using goroutines
+	for i, filePath := range param.FilePaths {
+		i := i // Capture loop variable
+		filePath := filePath
+		go func() {
+			content, err := w.repository.GetFile(authCtx, param.Bucket, filePath)
+			resultChan <- result{index: i, content: content, err: err}
+		}()
+	}
+
+	// Collect results and check for errors
+	results := make([]FileContent, len(param.FilePaths))
+	for i := 0; i < len(param.FilePaths); i++ {
+		res := <-resultChan
+		if res.err != nil {
+			err := errorsx.AddMessage(res.err, fmt.Sprintf("Failed to retrieve file: %s. Please try again.", param.FilePaths[res.index]))
+			return nil, temporal.NewApplicationErrorWithCause(
+				errorsx.MessageOrErr(err),
+				"GetFilesBatchActivity",
+				err,
+			)
+		}
+		results[res.index] = FileContent{
+			Index:   res.index,
+			Name:    filepath.Base(param.FilePaths[res.index]),
+			Content: res.content,
+		}
+	}
+
+	w.log.Info("GetFilesBatchActivity completed successfully",
+		zap.Int("filesRetrieved", len(results)))
+
+	return &GetFilesBatchActivityResult{Files: results}, nil
+}
+
+// GetFilesByPaths retrieves files by their paths using batch activity
+// Batch activities are more efficient than workflows for simple parallel I/O operations
 func (w *Worker) GetFilesByPaths(ctx context.Context, bucket string, filePaths []string) ([]FileContent, error) {
-	workflow := NewGetFilesWorkflow(w.temporalClient, w)
-	return workflow.Execute(ctx, GetFilesWorkflowParam{
+	result, err := w.GetFilesBatchActivity(ctx, &GetFilesBatchActivityParam{
 		Bucket:    bucket,
 		FilePaths: filePaths,
 	})
+	if err != nil {
+		return nil, err
+	}
+	return result.Files, nil
 }
 
-// DeleteFiles deletes files using workflow
+// DeleteFiles deletes files using batch activity
+// Batch activities are more efficient than workflows for simple parallel I/O operations
 func (w *Worker) DeleteFiles(ctx context.Context, bucket string, filePaths []string) error {
-	workflow := NewDeleteFilesWorkflow(w.temporalClient, w)
-	return workflow.Execute(ctx, DeleteFilesWorkflowParam{
+	return w.DeleteFilesBatchActivity(ctx, &DeleteFilesBatchActivityParam{
 		Bucket:    bucket,
 		FilePaths: filePaths,
 	})
@@ -220,20 +365,148 @@ func (w *Worker) CleanupKnowledgeBase(ctx context.Context, kbUID types.KBUIDType
 	})
 }
 
-// EmbedTexts embeds texts with a specific task type optimization using Temporal workflow
-// kbUID is optional and used to select the appropriate provider based on KB's embedding config
-// taskType specifies the optimization (e.g., gemini.TaskTypeRetrievalDocument, gemini.TaskTypeRetrievalQuery, gemini.TaskTypeQuestionAnswering)
-// This method triggers a workflow for better reliability and retries
-func (w *Worker) EmbedTexts(ctx context.Context, kbUID *types.KBUIDType, texts []string, taskType string) ([][]float32, error) {
-	// Use workflow for orchestrated, reliable embedding with retries
-	workflowParam := EmbedTextsWorkflowParam{
-		KBUID:    kbUID,
-		Texts:    texts,
-		TaskType: taskType,
+// UpdateRAGIndexResult contains the result of knowledge base update execution
+type UpdateRAGIndexResult struct {
+	Started bool
+	Message string
+}
+
+// ExecuteKnowledgeBaseUpdate triggers knowledge base updates for specified catalogs
+// This method is the entry point for the 6-phase UpdateKnowledgeBaseWorkflow
+// If catalogIDs is empty, updates all eligible KBs. Otherwise, updates only specified KBs.
+// If systemProfile is specified, uses config from that profile; otherwise uses KB's current config.
+func (w *Worker) ExecuteKnowledgeBaseUpdate(ctx context.Context, catalogIDs []string, systemProfile string) (*UpdateRAGIndexResult, error) {
+	// Get list of KBs to update
+	var kbs []repository.KnowledgeBaseModel
+	var err error
+
+	if len(catalogIDs) > 0 {
+		// Update specific catalogs
+		for _, catalogID := range catalogIDs {
+			kb, getErr := w.repository.GetKnowledgeBaseByID(ctx, catalogID)
+			if getErr != nil {
+				w.log.Warn("Unable to get catalog for update",
+					zap.String("catalogID", catalogID),
+					zap.Error(getErr))
+				continue
+			}
+			// Only include production KBs (not staging) and not already updating
+			if !kb.Staging && (kb.UpdateStatus == "" || kb.UpdateStatus == "completed" || kb.UpdateStatus == "failed" || kb.UpdateStatus == "rolled_back") {
+				kbs = append(kbs, *kb)
+			}
+		}
+	} else {
+		// Update all eligible KBs
+		kbs, err = w.repository.ListKnowledgeBasesForUpdate(ctx, nil, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list eligible catalogs: %w", err)
+		}
 	}
 
-	workflow := NewEmbedTextsWorkflow(w.temporalClient, w)
-	return workflow.Execute(ctx, workflowParam)
+	if len(kbs) == 0 {
+		return &UpdateRAGIndexResult{
+			Started: false,
+			Message: "No eligible catalogs found for update",
+		}, nil
+	}
+
+	// Start UpdateKnowledgeBaseWorkflow for each KB
+	// Note: We start all workflows immediately (fire-and-forget) rather than batching
+	// because Temporal handles concurrency control via its worker pool. Each workflow
+	// runs independently and will process its files in batches using config.RAG.Update.BatchSize.
+	successCount := 0
+	for _, kb := range kbs {
+		// Parse owner UID
+		ownerUID, err := uuid.FromString(kb.Owner)
+		if err != nil {
+			w.log.Error("Failed to parse owner UID",
+				zap.String("catalogID", kb.KBID),
+				zap.String("kbUID", kb.UID.String()),
+				zap.Error(err))
+			continue
+		}
+
+		// Start child workflow for this KB
+		// Use unique workflow ID by adding timestamp to support rollback → re-update scenarios
+		workflowOptions := client.StartWorkflowOptions{
+			ID:                       fmt.Sprintf("update-kb-%s-%d", kb.UID.String(), time.Now().UnixNano()),
+			TaskQueue:                "artifact-backend",
+			WorkflowExecutionTimeout: 24 * time.Hour,
+		}
+
+		_, err = w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, w.UpdateKnowledgeBaseWorkflow, UpdateKnowledgeBaseWorkflowParam{
+			OriginalKBUID: kb.UID,
+			UserUID:       types.UserUIDType(ownerUID),
+			RequesterUID:  types.RequesterUIDType(kb.CreatorUID),
+			SystemProfile: systemProfile,
+		})
+
+		if err != nil {
+			w.log.Error("Failed to start update workflow for KB",
+				zap.String("catalogID", kb.KBID),
+				zap.String("kbUID", kb.UID.String()),
+				zap.Error(err))
+			continue
+		}
+
+		successCount++
+		w.log.Info("Update workflow started for KB",
+			zap.String("catalogID", kb.KBID),
+			zap.String("kbUID", kb.UID.String()))
+	}
+
+	if successCount == 0 {
+		return &UpdateRAGIndexResult{
+			Started: false,
+			Message: "Failed to start update workflows for any catalogs",
+		}, fmt.Errorf("failed to start any update workflows")
+	}
+
+	return &UpdateRAGIndexResult{
+		Started: true,
+		Message: fmt.Sprintf("Knowledge base update initiated for %d/%d catalogs", successCount, len(kbs)),
+	}, nil
+}
+
+// RescheduleCleanupWorkflow cancels the existing cleanup workflow for a rollback KB
+// and starts a new one with updated retention period.
+// This is used by SetRollbackRetention to update the cleanup schedule.
+func (w *Worker) RescheduleCleanupWorkflow(ctx context.Context, kbUID types.KBUIDType, cleanupAfterSeconds int64) error {
+	workflowID := fmt.Sprintf("cleanup-rollback-kb-%s", kbUID.String())
+
+	// Cancel the old cleanup workflow
+	err := w.temporalClient.CancelWorkflow(ctx, workflowID, "")
+	if err != nil {
+		// Log but don't fail - workflow might not exist or already completed
+		w.log.Info("Could not cancel old cleanup workflow (may not exist)",
+			zap.String("workflowID", workflowID),
+			zap.Error(err))
+	}
+
+	// Start new cleanup workflow with updated retention
+	workflowOptions := client.StartWorkflowOptions{
+		ID:                       workflowID, // Reuse same ID
+		TaskQueue:                "artifact-backend",
+		WorkflowExecutionTimeout: 7 * 24 * time.Hour, // Max 7 days
+	}
+
+	_, err = w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, w.CleanupKnowledgeBaseWorkflow, CleanupKnowledgeBaseWorkflowParam{
+		KBUID:               kbUID,
+		CleanupAfterSeconds: cleanupAfterSeconds,
+	})
+	if err != nil {
+		w.log.Warn("Could not reschedule cleanup workflow",
+			zap.String("kbUID", kbUID.String()),
+			zap.Error(err))
+		return fmt.Errorf("failed to reschedule cleanup workflow: %w", err)
+	}
+
+	w.log.Info("Cleanup workflow rescheduled successfully",
+		zap.String("workflowID", workflowID),
+		zap.String("kbUID", kbUID.String()),
+		zap.Int64("cleanupAfterSeconds", cleanupAfterSeconds))
+
+	return nil
 }
 
 // Helper methods (high-level operations used by activities)
@@ -304,6 +577,7 @@ func (w *Worker) deleteTextChunksByFileUIDSync(ctx context.Context, kbUID, fileU
 
 // getTextChunksByFile returns the text chunks of a file
 // Fetches text chunk content directly from MinIO using parallel goroutines for better performance
+// IMPORTANT: Returns ALL chunks for the file (content chunks + summary chunks)
 func (w *Worker) getTextChunksByFile(ctx context.Context, file *repository.KnowledgeBaseFileModel) (
 	types.SourceTableType,
 	types.SourceUIDType,
@@ -315,20 +589,46 @@ func (w *Worker) getTextChunksByFile(ctx context.Context, file *repository.Knowl
 	var sourceTable string
 	var sourceUID types.SourceUIDType
 
-	// Get converted file for all types
-	convertedFile, err := w.repository.GetConvertedFileByFileUID(ctx, file.UID)
+	// Get ALL converted files for this file (there may be multiple: content + summary)
+	convertedFiles, err := w.repository.GetAllConvertedFilesByFileUID(ctx, file.UID)
+	if err != nil || len(convertedFiles) == 0 {
+		// CRITICAL FIX: Create proper error if err is nil (when no converted files exist)
+		if err == nil {
+			err = errorsx.AddMessage(errorsx.ErrNotFound, fmt.Sprintf("No converted files found for file UID %s", file.UID.String()))
+		}
+		w.log.Error("Failed to get converted files metadata",
+			zap.String("fileUID", file.UID.String()),
+			zap.Error(err))
+		return sourceTable, sourceUID, nil, nil, nil, errorsx.AddMessage(
+			err,
+			"Unable to retrieve file information. Please try again.",
+		)
+	}
+	// Use the first converted file for source metadata (legacy compatibility)
+	sourceTable = repository.ConvertedFileTableName
+	sourceUID = convertedFiles[0].UID
+
+	// Get ALL text chunks for this file (including both content and summary chunks)
+	// This is critical for embedding generation - we need to embed ALL chunks, not just content chunks
+	chunks, err := w.repository.ListTextChunksByKBFileUID(ctx, file.UID)
 	if err != nil {
-		w.log.Error("Failed to get converted file metadata.", zap.String("File uid", file.UID.String()))
+		w.log.Error("Failed to get text chunks from database", zap.String("fileUID", file.UID.String()), zap.Error(err))
 		return sourceTable, sourceUID, nil, nil, nil, err
 	}
-	sourceTable = repository.ConvertedFileTableName
-	sourceUID = convertedFile.UID
 
-	// Get text chunks metadata from database
-	chunks, err := w.repository.GetTextChunksBySource(ctx, sourceTable, sourceUID)
-	if err != nil {
-		w.log.Error("Failed to get text chunks from database.", zap.String("SourceUID", sourceUID.String()))
-		return sourceTable, sourceUID, nil, nil, nil, err
+	w.log.Info("getTextChunksByFile: Retrieved all chunks for file",
+		zap.String("fileUID", file.UID.String()),
+		zap.Int("totalChunks", len(chunks)))
+
+	// CRITICAL FIX: Handle case where chunking hasn't completed yet (race condition)
+	// If no chunks exist, the file is likely still being chunked - fail early
+	if len(chunks) == 0 {
+		w.log.Error("No text chunks found for file - chunking may not have completed",
+			zap.String("fileUID", file.UID.String()))
+		return sourceTable, sourceUID, nil, nil, nil, errorsx.AddMessage(
+			fmt.Errorf("no text chunks found for file %s", file.UID.String()),
+			"File has no text chunks. The chunking process may still be in progress. Please try again.",
+		)
 	}
 
 	// Fetch text chunks from MinIO in parallel using goroutines with retry
@@ -344,22 +644,48 @@ func (w *Worker) getTextChunksByFile(ctx context.Context, file *repository.Knowl
 		go func(idx int, path string) {
 			defer wg.Done()
 
+			// CRITICAL FIX: Check if context is already cancelled before starting
+			if ctx.Err() != nil {
+				mu.Lock()
+				if fetchErr == nil {
+					fetchErr = ctx.Err()
+				}
+				mu.Unlock()
+				return
+			}
+
 			// Retry up to 3 times with exponential backoff for transient failures
 			var content []byte
 			var err error
 			maxAttempts := 3
 
 			for attempt := range maxAttempts {
-				content, err = w.repository.GetFile(ctx, bucket, path)
+				// Create a timeout context for this MinIO fetch (max 10s per attempt)
+				fetchCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+				content, err = w.repository.GetFile(fetchCtx, bucket, path)
+				cancel() // Always cancel to free resources
+
 				if err == nil {
 					break // Success!
 				}
 
+				// Check if parent context was cancelled
+				if ctx.Err() != nil {
+					err = ctx.Err()
+					break
+				}
+
 				// Don't sleep after last attempt
 				if attempt < maxAttempts-1 {
-					// Exponential backoff: 1s, 2s
+					// Exponential backoff: 1s, 2s (context-aware)
 					backoff := time.Duration(1<<uint(attempt)) * time.Second
-					time.Sleep(backoff)
+					select {
+					case <-time.After(backoff):
+						// Continue to next attempt
+					case <-ctx.Done():
+						err = ctx.Err()
+						break
+					}
 				}
 			}
 
@@ -398,82 +724,4 @@ func (w *Worker) getTextChunksByFile(ctx context.Context, file *repository.Knowl
 	}
 
 	return sourceTable, sourceUID, chunks, chunkUIDToContents, texts, nil
-}
-
-// embedTextsWithProviderSelection generates embeddings using the appropriate provider
-// based on the KB's embedding configuration. If KBUID is provided, it checks the KB's
-// embedding_config to determine which provider to use (Gemini 3072-dim vs OpenAI 1536-dim).
-// This ensures embedding dimensionality consistency within each knowledge base.
-func (w *Worker) embedTextsWithProviderSelection(ctx context.Context, kbUID *types.KBUIDType, texts []string, taskType string) ([][]float32, error) {
-	if len(texts) == 0 {
-		return [][]float32{}, nil
-	}
-
-	// Determine which provider to use based on KB's embedding config
-	var selectedProvider ai.Provider
-	var providerName string
-
-	if kbUID != nil {
-		// Fetch KB's embedding configuration to determine appropriate provider
-		kbs, err := w.repository.GetKnowledgeBasesByUIDs(ctx, []types.KBUIDType{*kbUID})
-		if err != nil || len(kbs) == 0 {
-			w.log.Warn("Failed to fetch KB embedding config, using default provider",
-				zap.String("kbUID", kbUID.String()),
-				zap.Error(err))
-		} else {
-			kb := kbs[0]
-			// Check KB's configured embedding model family
-			switch kb.EmbeddingConfig.ModelFamily {
-			case ai.ModelFamilyOpenAI:
-				// KB was created with OpenAI embeddings (1536-dim), use OpenAI provider
-				if w.openaiProvider != nil {
-					selectedProvider = w.openaiProvider
-					providerName = "OpenAI (legacy 1536-dim for KB compatibility)"
-				} else {
-					w.log.Warn("KB requires OpenAI embeddings but OpenAI provider not configured",
-						zap.String("kbUID", kbUID.String()))
-				}
-			case ai.ModelFamilyGemini:
-				// KB was created with Gemini embeddings (3072-dim), use Gemini provider
-				if w.geminiProvider != nil {
-					selectedProvider = w.geminiProvider
-					providerName = "Gemini (3072-dim for KB compatibility)"
-				} else {
-					w.log.Warn("KB requires Gemini embeddings but Gemini provider not configured",
-						zap.String("kbUID", kbUID.String()))
-				}
-			}
-		}
-	}
-
-	// Fall back to default provider if no KB-specific provider selected
-	if selectedProvider == nil {
-		selectedProvider = w.aiProvider
-		providerName = "default"
-	}
-
-	if selectedProvider == nil {
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("no AI provider available"),
-			"AI provider is not configured. Please configure Gemini or OpenAI API key in your settings.",
-		)
-	}
-
-	// Generate embeddings using selected provider
-	result, err := selectedProvider.EmbedTexts(ctx, texts, taskType)
-	if err != nil {
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("failed to generate embeddings: %w", err),
-			"Unable to generate embeddings. Please try again.",
-		)
-	}
-
-	w.log.Info("Embedded texts using selected AI provider",
-		zap.Int("textCount", len(texts)),
-		zap.String("provider", result.Model),
-		zap.String("selection", providerName),
-		zap.Int32("dimensionality", result.Dimensionality),
-		zap.String("taskType", taskType))
-
-	return result.Vectors, nil
 }
