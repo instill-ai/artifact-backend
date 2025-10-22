@@ -2,7 +2,7 @@ import http from "k6/http";
 import { check, group, sleep } from "k6";
 import { randomString } from "https://jslib.k6.io/k6-utils/1.1.0/index.js";
 
-import { artifactPublicHost } from "./const.js";
+import { artifactRESTPublicHost } from "./const.js";
 
 import * as constant from "./const.js";
 import * as helper from "./helper.js";
@@ -22,8 +22,8 @@ export function setup() {
 
   // Clean up any leftover test data from previous runs
   try {
-    constant.db.exec(`DELETE FROM text_chunk WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-    constant.db.exec(`DELETE FROM embedding WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+    constant.db.exec(`DELETE FROM text_chunk WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+    constant.db.exec(`DELETE FROM embedding WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
     constant.db.exec(`DELETE FROM converted_file WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
     constant.db.exec(`DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`);
     constant.db.exec(`DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`);
@@ -31,13 +31,13 @@ export function setup() {
     console.log(`Cleanup Setup cleanup warning: ${e}`);
   }
 
-  var loginResp = http.request("POST", `${constant.mgmtPublicHost}/v1beta/auth/login`, JSON.stringify({
+  var loginResp = http.request("POST", `${constant.mgmtRESTPublicHost}/v1beta/auth/login`, JSON.stringify({
     "username": constant.defaultUsername,
     "password": constant.defaultPassword,
   }))
 
   check(loginResp, {
-    [`POST ${constant.mgmtPublicHost}/v1beta/auth/login response status is 200`]: (r) => r.status === 200,
+    [`POST ${constant.mgmtRESTPublicHost}/v1beta/auth/login response status is 200`]: (r) => r.status === 200,
   });
 
   var header = {
@@ -48,7 +48,7 @@ export function setup() {
     "timeout": "600s",
   }
 
-  var resp = http.request("GET", `${constant.mgmtPublicHost}/v1beta/user`, {}, {
+  var resp = http.request("GET", `${constant.mgmtRESTPublicHost}/v1beta/user`, {}, {
     headers: { "Authorization": `Bearer ${loginResp.json().accessToken}` }
   })
 
@@ -65,21 +65,21 @@ export function teardown(data) {
     check(true, { [constant.banner(groupName)]: () => true });
 
     // Clean up catalogs created by this test
-    var listResp = http.request("GET", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, data.header)
+    var listResp = http.request("GET", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, data.header)
     if (listResp.status === 200) {
       var catalogs = Array.isArray(listResp.json().catalogs) ? listResp.json().catalogs : []
 
       for (const catalog of catalogs) {
         if (catalog.catalog_id && catalog.catalog_id.startsWith(constant.dbIDPrefix)) {
-          http.request("DELETE", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalog.catalog_id}`, null, data.header);
+          http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalog.catalog_id}`, null, data.header);
         }
       }
     }
 
     // Final DB cleanup
     try {
-      constant.db.exec(`DELETE FROM text_chunk WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-      constant.db.exec(`DELETE FROM embedding WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+      constant.db.exec(`DELETE FROM text_chunk WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+      constant.db.exec(`DELETE FROM embedding WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
       constant.db.exec(`DELETE FROM converted_file WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
       constant.db.exec(`DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`);
       constant.db.exec(`DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`);
@@ -126,7 +126,7 @@ export function CheckKnowledgeBaseDeletion(data) {
     const catalogName = constant.dbIDPrefix + "cleanup-" + randomString(5);
     const createRes = http.request(
       "POST",
-      `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
       JSON.stringify({
         name: catalogName,
         description: "Catalog deletion cleanup test",
@@ -163,7 +163,7 @@ export function CheckKnowledgeBaseDeletion(data) {
     const fileName = `${constant.dbIDPrefix}cleanup-test.pdf`;
     const uploadRes = http.request(
       "POST",
-      `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
+      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
       JSON.stringify({
         name: fileName,
         type: "TYPE_PDF",
@@ -183,7 +183,7 @@ export function CheckKnowledgeBaseDeletion(data) {
 
     if (!fileUid) {
       console.log("✗ Failed to upload file, cleaning up and aborting");
-      http.request("DELETE", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+      http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
       return;
     }
 
@@ -191,7 +191,7 @@ export function CheckKnowledgeBaseDeletion(data) {
     console.log("Step 3: Triggering file processing...");
     const processRes = http.request(
       "POST",
-      `${artifactPublicHost}/v1alpha/catalogs/files/processAsync`,
+      `${artifactRESTPublicHost}/v1alpha/catalogs/files/processAsync`,
       JSON.stringify({ fileUids: [fileUid] }),
       data.header
     );
@@ -208,7 +208,7 @@ export function CheckKnowledgeBaseDeletion(data) {
       sleep(1);
       const statusRes = http.request(
         "GET",
-        `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${fileUid}`,
+        `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${fileUid}`,
         null,
         data.header
       );
@@ -222,7 +222,7 @@ export function CheckKnowledgeBaseDeletion(data) {
         } else if (status === "FILE_PROCESS_STATUS_FAILED") {
           const errorMsg = body.file && body.file.processOutcome ? body.file.processOutcome : "Unknown error";
           check(false, { [`Cleanup: Processing failed - ${errorMsg}`]: () => false });
-          http.request("DELETE", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+          http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
           return;
         }
       } catch (e) { /* continue polling */ }
@@ -234,7 +234,7 @@ export function CheckKnowledgeBaseDeletion(data) {
 
     if (!processingCompleted) {
       console.log("✗ Processing did not complete within timeout, cleaning up and aborting");
-      http.request("DELETE", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+      http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
       return;
     }
     console.log("✓ File processing completed successfully");
@@ -269,7 +269,7 @@ export function CheckKnowledgeBaseDeletion(data) {
     // Early exit if baseline verification fails
     if (minioBlobsBeforeDelete.converted === 0 || minioBlobsBeforeDelete.chunks === 0) {
       console.log("✗ Baseline verification failed, cleaning up and aborting");
-      http.request("DELETE", `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+      http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
       return;
     }
 
@@ -283,7 +283,7 @@ export function CheckKnowledgeBaseDeletion(data) {
     // 5. Delete the catalog itself
     const deleteRes = http.request(
       "DELETE",
-      `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`,
+      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`,
       null,
       data.header
     );
@@ -313,7 +313,7 @@ export function CheckKnowledgeBaseDeletion(data) {
       const convertedResults = constant.db.query('SELECT uid FROM converted_file WHERE file_uid = $1', fileUid);
       dbRecordsAfterDelete.converted = convertedResults ? convertedResults.length : 0;
 
-      const chunksResults = constant.db.query('SELECT uid FROM text_chunk WHERE kb_file_uid = $1', fileUid);
+      const chunksResults = constant.db.query('SELECT uid FROM text_chunk WHERE file_uid = $1', fileUid);
       dbRecordsAfterDelete.chunks = chunksResults ? chunksResults.length : 0;
     } catch (e) {
       console.error(`Failed to query database records after deletion: ${e}`);
@@ -345,7 +345,7 @@ export function CheckKnowledgeBaseDeletion(data) {
     // Additional verification: Catalog should also be removed
     const catalogCheckRes = http.request(
       "GET",
-      `${artifactPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`,
+      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`,
       null,
       data.header
     );

@@ -88,9 +88,16 @@ func (w *Worker) GetChunksForEmbeddingActivity(ctx context.Context, param *GetCh
 	w.log.Info("GetChunksForEmbeddingActivity: Fetching text chunks",
 		zap.String("fileUID", param.FileUID.String()))
 
-	// Get file
-	files, err := w.repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{param.FileUID})
+	// CRITICAL: Get file INCLUDING soft-deleted files
+	// During dual processing, a file might be soft-deleted (via dual deletion) while its
+	// SaveEmbeddingsWorkflow is still queued/running. We MUST still generate embeddings
+	// for the chunks that already exist, even if the file has been marked for deletion.
+	// The chunks will be cleaned up later by CleanupFileWorkflow.
+	files, err := w.repository.GetKnowledgeBaseFilesByFileUIDsIncludingDeleted(ctx, []types.FileUIDType{param.FileUID})
 	if err != nil || len(files) == 0 {
+		if err == nil {
+			err = fmt.Errorf("no file found with UID %s", param.FileUID.String())
+		}
 		err = errorsx.AddMessage(err, "Unable to retrieve file information. Please try again.")
 		return nil, temporal.NewApplicationErrorWithCause(
 			errorsx.MessageOrErr(err),
@@ -178,7 +185,7 @@ func (w *Worker) SaveEmbeddingBatchActivity(ctx context.Context, param *SaveEmbe
 				SourceUID:    emb.SourceUID.String(),
 				EmbeddingUID: emb.UID.String(),
 				Vector:       emb.Vector,
-				FileUID:      emb.KBFileUID,
+				FileUID:      emb.FileUID,
 				FileName:     param.FileName,
 				ContentType:  emb.ContentType,
 				ChunkType:    emb.ChunkType,

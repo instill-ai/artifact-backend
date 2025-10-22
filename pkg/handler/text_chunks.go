@@ -39,7 +39,7 @@ func convertToProtoChunk(textChunk repository.TextChunkModel) *artifactpb.Chunk 
 		Retrievable:     textChunk.Retrievable,
 		Tokens:          uint32(textChunk.Tokens),
 		CreateTime:      timestamppb.New(*textChunk.CreateTime),
-		OriginalFileUid: textChunk.KBFileUID.String(),
+		OriginalFileUid: textChunk.FileUID.String(),
 		Type:            chunkType,
 	}
 

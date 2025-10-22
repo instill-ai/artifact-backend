@@ -20,6 +20,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/types"
 
+	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	pipelinepb "github.com/instill-ai/protogen-go/pipeline/pipeline/v1beta"
 	errorsx "github.com/instill-ai/x/errors"
 )
@@ -42,7 +43,7 @@ const EmbeddingBatchSize = 50
 // Too short = premature failures. Too long = blocked worker slots.
 const (
 	ActivityTimeoutStandard = 1 * time.Minute // File I/O, DB, MinIO
-	ActivityTimeoutLong     = 5 * time.Minute // File conversion, embeddings
+	ActivityTimeoutLong     = 5 * time.Minute // File conversion, embeddings, synchronization with reconciliation
 )
 
 // RetryInitialInterval, RetryBackoffCoefficient, RetryMaximumInterval*, and RetryMaximumAttempts control retry behavior.
@@ -391,7 +392,7 @@ func (w *Worker) ExecuteKnowledgeBaseUpdate(ctx context.Context, catalogIDs []st
 				continue
 			}
 			// Only include production KBs (not staging) and not already updating
-			if !kb.Staging && (kb.UpdateStatus == "" || kb.UpdateStatus == "completed" || kb.UpdateStatus == "failed" || kb.UpdateStatus == "rolled_back") {
+			if !kb.Staging && repository.IsUpdateComplete(kb.UpdateStatus) {
 				kbs = append(kbs, *kb)
 			}
 		}
@@ -465,6 +466,162 @@ func (w *Worker) ExecuteKnowledgeBaseUpdate(ctx context.Context, catalogIDs []st
 	return &UpdateRAGIndexResult{
 		Started: true,
 		Message: fmt.Sprintf("Knowledge base update initiated for %d/%d catalogs", successCount, len(kbs)),
+	}, nil
+}
+
+// AbortKBUpdateResult holds results of abort operation
+type AbortKBUpdateResult struct {
+	Success       bool
+	Message       string
+	AbortedCount  int
+	CatalogStatus []CatalogAbortStatus
+}
+
+// CatalogAbortStatus holds status for an individual aborted catalog
+type CatalogAbortStatus struct {
+	CatalogID    string
+	CatalogUID   string
+	WorkflowID   string
+	Status       string
+	ErrorMessage string
+}
+
+// AbortKnowledgeBaseUpdate aborts ongoing KB update workflows and cleans up staging resources
+func (w *Worker) AbortKnowledgeBaseUpdate(ctx context.Context, catalogIDs []string) (*AbortKBUpdateResult, error) {
+	// Get list of KBs currently updating
+	var kbs []repository.KnowledgeBaseModel
+
+	if len(catalogIDs) > 0 {
+		// Abort specific catalogs
+		for _, catalogID := range catalogIDs {
+			kb, getErr := w.repository.GetKnowledgeBaseByID(ctx, catalogID)
+			if getErr != nil {
+				w.log.Warn("Unable to get catalog for abort",
+					zap.String("catalogID", catalogID),
+					zap.Error(getErr))
+				continue
+			}
+			// Only include KBs currently in an active update state
+			if repository.IsUpdateInProgress(kb.UpdateStatus) && kb.UpdateWorkflowID != "" {
+				kbs = append(kbs, *kb)
+			}
+		}
+	} else {
+		// Abort all currently in-progress KBs (UPDATING, SYNCING, VALIDATING, SWAPPING)
+		inProgressStatuses := []string{
+			artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING.String(),
+			artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_SYNCING.String(),
+			artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_VALIDATING.String(),
+			artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_SWAPPING.String(),
+		}
+		for _, status := range inProgressStatuses {
+			statusKBs, err := w.repository.ListKnowledgeBasesByUpdateStatus(ctx, status)
+			if err != nil {
+				w.log.Warn("Failed to list KBs by status",
+					zap.String("status", status),
+					zap.Error(err))
+				continue
+			}
+			for _, kb := range statusKBs {
+				if kb.UpdateWorkflowID != "" {
+					kbs = append(kbs, kb)
+				}
+			}
+		}
+	}
+
+	if len(kbs) == 0 {
+		return &AbortKBUpdateResult{
+			Success: true,
+			Message: "No catalogs currently updating",
+		}, nil
+	}
+
+	// Abort each KB update
+	abortedCount := 0
+	var catalogStatuses []CatalogAbortStatus
+
+	for _, kb := range kbs {
+		status := CatalogAbortStatus{
+			CatalogID:  kb.KBID,
+			CatalogUID: kb.UID.String(),
+			WorkflowID: kb.UpdateWorkflowID,
+			Status:     artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_ABORTED.String(),
+		}
+
+		// Cancel the workflow
+		if kb.UpdateWorkflowID != "" {
+			err := w.temporalClient.CancelWorkflow(ctx, kb.UpdateWorkflowID, "")
+			if err != nil {
+				w.log.Warn("Failed to cancel workflow (may have already completed)",
+					zap.String("catalogID", kb.KBID),
+					zap.String("workflowID", kb.UpdateWorkflowID),
+					zap.Error(err))
+				// Continue with cleanup even if cancel fails
+			}
+		}
+
+		// Find and cleanup staging KB
+		stagingKBID := fmt.Sprintf("%s-staging", kb.KBID)
+		ownerUID, err := uuid.FromString(kb.Owner)
+		if err != nil {
+			w.log.Warn("Failed to parse owner UID",
+				zap.String("catalogID", kb.KBID),
+				zap.String("owner", kb.Owner),
+				zap.Error(err))
+		} else {
+			stagingKB, err := w.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, types.OwnerUIDType(ownerUID), stagingKBID)
+			if err == nil && stagingKB != nil {
+				// Cleanup staging KB resources
+				err = w.CleanupOldKnowledgeBaseActivity(ctx, &CleanupOldKnowledgeBaseActivityParam{
+					KBUID: stagingKB.UID,
+				})
+				if err != nil {
+					w.log.Warn("Failed to cleanup staging KB",
+						zap.String("stagingKBUID", stagingKB.UID.String()),
+						zap.Error(err))
+					status.ErrorMessage = fmt.Sprintf("failed to cleanup staging KB: %v", err)
+				}
+			}
+		}
+
+		// Update original KB status to "aborted" and clear workflow ID
+		// CRITICAL: We need to explicitly set update_workflow_id to NULL (not empty string)
+		// so that the DeleteCatalog safeguards don't block deletion
+		// Using "" with Updates() doesn't set it to NULL in the DB
+		err = w.repository.UpdateKnowledgeBaseAborted(ctx, kb.UID)
+		if err != nil {
+			w.log.Error("Failed to update KB status to aborted",
+				zap.String("catalogID", kb.KBID),
+				zap.String("kbUID", kb.UID.String()),
+				zap.Error(err))
+			status.ErrorMessage = fmt.Sprintf("failed to update status: %v", err)
+			status.Status = artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_FAILED.String()
+		} else {
+			abortedCount++
+			w.log.Info("Successfully aborted KB update",
+				zap.String("catalogID", kb.KBID),
+				zap.String("kbUID", kb.UID.String()),
+				zap.String("workflowID", kb.UpdateWorkflowID))
+		}
+
+		catalogStatuses = append(catalogStatuses, status)
+	}
+
+	if abortedCount == 0 {
+		return &AbortKBUpdateResult{
+			Success:       false,
+			Message:       "Failed to abort any catalog updates",
+			AbortedCount:  0,
+			CatalogStatus: catalogStatuses,
+		}, fmt.Errorf("failed to abort any catalog updates")
+	}
+
+	return &AbortKBUpdateResult{
+		Success:       true,
+		Message:       fmt.Sprintf("Successfully aborted %d/%d catalog updates", abortedCount, len(kbs)),
+		AbortedCount:  abortedCount,
+		CatalogStatus: catalogStatuses,
 	}, nil
 }
 

@@ -28,6 +28,7 @@ import (
 // - DeleteKBConvertedFileRecordsActivity - Deletes converted file records
 // - DeleteKBTextChunkRecordsActivity - Deletes text chunk records for a knowledge base
 // - DeleteKBEmbeddingRecordsActivity - Deletes embedding records for a knowledge base
+// - GetInProgressFileCountActivity - Checks for in-progress files before cleanup
 
 // Activity error type constants
 const (
@@ -43,6 +44,7 @@ const (
 	deleteKBEmbeddingRecordsActivityError = "DeleteKBEmbeddingRecordsActivity"
 	purgeKBACLActivityError               = "PurgeKBACLActivity"
 	softDeleteKBRecordActivityError       = "SoftDeleteKBRecordActivity"
+	getInProgressFileCountActivityError   = "GetInProgressFileCountActivity"
 )
 
 // DeleteOriginalFileActivityParam defines parameters for deleting original file
@@ -106,42 +108,66 @@ func (w *Worker) DeleteOriginalFileActivity(ctx context.Context, param *DeleteOr
 
 // DeleteConvertedFileActivity deletes converted file from MinIO and DB
 func (w *Worker) DeleteConvertedFileActivity(ctx context.Context, param *DeleteConvertedFileActivityParam) error {
-	w.log.Info("DeleteConvertedFileActivity: Deleting converted file",
+	w.log.Info("DeleteConvertedFileActivity: Deleting converted files",
 		zap.String("fileUID", param.FileUID.String()))
 
-	// Check if converted file exists and get KB UID from it
-	convertedFile, err := w.repository.GetConvertedFileByFileUID(ctx, param.FileUID)
+	// CRITICAL: Get ALL converted files for this file UID (not just one)
+	// Files can have multiple converted versions (e.g., content + summary)
+	// Using GetConvertedFileByFileUID() only returns ONE, leaving orphaned records
+	convertedFiles, err := w.repository.GetAllConvertedFilesByFileUID(ctx, param.FileUID)
 	if err != nil {
-		w.log.Info("DeleteConvertedFileActivity: No converted file found, skipping",
+		w.log.Info("DeleteConvertedFileActivity: Error fetching converted files, skipping",
+			zap.String("fileUID", param.FileUID.String()),
+			zap.Error(err))
+		return nil
+	}
+
+	if len(convertedFiles) == 0 {
+		w.log.Info("DeleteConvertedFileActivity: No converted files found, skipping",
 			zap.String("fileUID", param.FileUID.String()))
 		return nil
 	}
 
-	// Delete from MinIO using KB UID from the converted file record
-	err = w.deleteConvertedFileByFileUIDSync(ctx, convertedFile.KBUID, param.FileUID)
-	if err != nil {
-		err = errorsx.AddMessage(err, "Unable to delete converted file from storage. Please try again.")
-		return temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			deleteConvertedFileActivityError,
-			err,
-		)
+	w.log.Info("DeleteConvertedFileActivity: Found converted files to delete",
+		zap.String("fileUID", param.FileUID.String()),
+		zap.Int("count", len(convertedFiles)))
+
+	// Delete all converted files from MinIO and DB
+	for _, convertedFile := range convertedFiles {
+		// Delete from MinIO using KB UID from the converted file record
+		err = w.deleteConvertedFileByFileUIDSync(ctx, convertedFile.KBUID, param.FileUID)
+		if err != nil {
+			w.log.Error("DeleteConvertedFileActivity: Failed to delete converted file from MinIO",
+				zap.String("convertedFileUID", convertedFile.UID.String()),
+				zap.Error(err))
+			err = errorsx.AddMessage(err, "Unable to delete converted file from storage. Please try again.")
+			return temporal.NewApplicationErrorWithCause(
+				errorsx.MessageOrErr(err),
+				deleteConvertedFileActivityError,
+				err,
+			)
+		}
+
+		w.log.Info("DeleteConvertedFileActivity: Deleted from MinIO",
+			zap.String("convertedFileUID", convertedFile.UID.String()),
+			zap.String("kbUID", convertedFile.KBUID.String()),
+			zap.String("convertedType", convertedFile.ConvertedType))
 	}
 
-	w.log.Info("DeleteConvertedFileActivity: Deleted from MinIO",
-		zap.String("convertedFileUID", convertedFile.UID.String()),
-		zap.String("kbUID", convertedFile.KBUID.String()))
-
-	// Delete record from DB
+	// Delete all records from DB in one operation
 	err = w.repository.HardDeleteConvertedFileByFileUID(ctx, param.FileUID)
 	if err != nil {
-		err = errorsx.AddMessage(err, "Unable to delete converted file record. Please try again.")
+		err = errorsx.AddMessage(err, "Unable to delete converted file records. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
 			errorsx.MessageOrErr(err),
 			deleteConvertedFileActivityError,
 			err,
 		)
 	}
+
+	w.log.Info("DeleteConvertedFileActivity: Successfully deleted all converted files",
+		zap.String("fileUID", param.FileUID.String()),
+		zap.Int("count", len(convertedFiles)))
 
 	return nil
 }
@@ -261,7 +287,8 @@ type DeleteKBFilesFromMinIOActivityParam struct {
 
 // DropVectorDBCollectionActivityParam defines parameters for dropping vector db collection
 type DropVectorDBCollectionActivityParam struct {
-	KBUID types.KBUIDType // Knowledge base unique identifier
+	KBUID                  types.KBUIDType  // Knowledge base unique identifier
+	ProtectedCollectionUID *types.KBUIDType // Collection UID that must not be dropped (e.g., after swap)
 }
 
 // DeleteKBFileRecordsActivityParam defines parameters for deleting KB file records
@@ -286,6 +313,11 @@ type DeleteKBEmbeddingRecordsActivityParam struct {
 
 // PurgeKBACLActivityParam defines parameters for purging KB ACL
 type PurgeKBACLActivityParam struct {
+	KBUID types.KBUIDType // Knowledge base unique identifier
+}
+
+// GetInProgressFileCountActivityParam defines parameters for checking in-progress file count
+type GetInProgressFileCountActivityParam struct {
 	KBUID types.KBUIDType // Knowledge base unique identifier
 }
 
@@ -330,6 +362,14 @@ func (w *Worker) DropVectorDBCollectionActivity(ctx context.Context, param *Drop
 	collectionUID := param.KBUID
 	if kb.ActiveCollectionUID != uuid.Nil {
 		collectionUID = kb.ActiveCollectionUID
+	}
+
+	// CRITICAL: Check if this collection is explicitly protected (e.g., just swapped to production)
+	// This is deterministic and prevents race conditions with swap transaction commits
+	if param.ProtectedCollectionUID != nil && collectionUID == *param.ProtectedCollectionUID {
+		w.log.Info("DropVectorDBCollectionActivity: Collection is explicitly protected (recently swapped to production)",
+			zap.String("collectionUID", collectionUID.String()))
+		return nil
 	}
 
 	// Check if the collection is still in use by other KBs
@@ -523,4 +563,34 @@ func (w *Worker) SoftDeleteKBRecordActivity(ctx context.Context, param *SoftDele
 		zap.String("kbID", kb.KBID))
 
 	return nil
+}
+
+// GetInProgressFileCountActivity returns the count of files currently being processed for a KB
+// This is used by CleanupKnowledgeBaseWorkflow to ensure no files are being processed
+// before dropping the Milvus collection, preventing "collection does not exist" errors
+func (w *Worker) GetInProgressFileCountActivity(ctx context.Context, param *GetInProgressFileCountActivityParam) (int64, error) {
+	w.log.Info("GetInProgressFileCountActivity: Checking for in-progress files",
+		zap.String("kbUID", param.KBUID.String()))
+
+	// Count files in active processing states (PROCESSING, CONVERTING, CHUNKING, EMBEDDING)
+	// Do NOT count NOTSTARTED or WAITING files as they haven't begun processing yet
+	inProgressStatuses := "FILE_PROCESS_STATUS_PROCESSING,FILE_PROCESS_STATUS_CONVERTING,FILE_PROCESS_STATUS_CHUNKING,FILE_PROCESS_STATUS_EMBEDDING"
+
+	count, err := w.repository.GetFileCountByKnowledgeBaseUID(ctx, param.KBUID, inProgressStatuses)
+	if err != nil {
+		w.log.Error("GetInProgressFileCountActivity: Failed to get file count",
+			zap.String("kbUID", param.KBUID.String()),
+			zap.Error(err))
+		return 0, temporal.NewApplicationErrorWithCause(
+			errorsx.MessageOrErr(err),
+			getInProgressFileCountActivityError,
+			err,
+		)
+	}
+
+	w.log.Info("GetInProgressFileCountActivity: In-progress file count",
+		zap.String("kbUID", param.KBUID.String()),
+		zap.Int64("count", count))
+
+	return count, nil
 }

@@ -33,6 +33,12 @@ parse_results() {
         "rest-kb-delete.js" \
         "grpc-kb-update.js"; do
 
+        # Check if this test file had any errors (timeout, execution failure, etc.)
+        # Exclude warnings and informational error logs (level=warning, [POLL] logs)
+        # Use word boundary to ensure exact test file match
+        # Note: All actual failures now have explicit check() calls, so this is just a safety net
+        local has_error=$(grep "^integration-test/${test_file}[[:space:]]" "$log_file" | grep -E "timed out|This job failed" | grep -v -E "level=warning|\[POLL\]" | head -1)
+
         # Find the line with checks_total for this specific test file
         # Format: "integration-test/test.js    checks_total.......: 20      0.659725/s"
         local total_line=$(grep "integration-test/${test_file}" "$log_file" | \
@@ -62,7 +68,11 @@ parse_results() {
                     local percentage=$((succeeded * 100 / total))
 
                     # Determine status icon
-                    if [ "$succeeded" -eq "$total" ]; then
+                    # Mark as failed if there are errors, even if checks passed
+                    if [ -n "$has_error" ]; then
+                        echo -e "${RED}❌${NC} ${test_name} ${succeeded}/${total}   (${percentage}%) [ERROR/TIMEOUT]"
+                        all_passed=false
+                    elif [ "$succeeded" -eq "$total" ]; then
                         echo -e "${GREEN}✅${NC} ${test_name} ${succeeded}/${total}   (${percentage}%)"
                     else
                         echo -e "${RED}❌${NC} ${test_name} ${succeeded}/${total}   (${percentage}%)"

@@ -419,6 +419,22 @@ func (h *PrivateHandler) ExecuteKnowledgeBaseUpdateAdmin(ctx context.Context, re
 	return resp, nil
 }
 
+// AbortKnowledgeBaseUpdateAdmin aborts ongoing KB update workflows (admin only)
+func (h *PrivateHandler) AbortKnowledgeBaseUpdateAdmin(ctx context.Context, req *artifactpb.AbortKnowledgeBaseUpdateAdminRequest) (*artifactpb.AbortKnowledgeBaseUpdateAdminResponse, error) {
+	logger, _ := logx.GetZapLogger(ctx)
+	logger.Info("AbortKnowledgeBaseUpdateAdmin handler called", zap.Int("catalogCount", len(req.CatalogIds)), zap.Strings("catalogIds", req.CatalogIds))
+
+	// Call service
+	resp, err := h.service.AbortKnowledgeBaseUpdateAdmin(ctx, req)
+	if err != nil {
+		logger.Error("AbortKnowledgeBaseUpdateAdmin service error", zap.Error(err))
+		return nil, status.Errorf(codes.Internal, "failed to abort update: %v", err)
+	}
+
+	logger.Info("AbortKnowledgeBaseUpdateAdmin handler response", zap.Bool("success", resp.Success), zap.String("message", resp.Message))
+	return resp, nil
+}
+
 // GetKnowledgeBaseUpdateStatusAdmin returns the current status of system update (admin only)
 func (h *PrivateHandler) GetKnowledgeBaseUpdateStatusAdmin(ctx context.Context, req *artifactpb.GetKnowledgeBaseUpdateStatusAdminRequest) (*artifactpb.GetKnowledgeBaseUpdateStatusAdminResponse, error) {
 	// Call service

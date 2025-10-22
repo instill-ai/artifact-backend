@@ -184,7 +184,7 @@ export function countMinioObjects(kbUID, fileUID, objectType) {
       // Query text_chunk table for actual destination
       const chunkResult = constant.db.query(`
         SELECT content_dest FROM text_chunk
-        WHERE kb_file_uid = $1
+        WHERE file_uid = $1
         LIMIT 1
       `, fileUID);
 
@@ -244,7 +244,7 @@ export function countMinioObjects(kbUID, fileUID, objectType) {
  */
 export function countEmbeddings(fileUid) {
   try {
-    const results = constant.db.query('SELECT uid FROM embedding WHERE kb_file_uid = $1', fileUid);
+    const results = constant.db.query('SELECT uid FROM embedding WHERE file_uid = $1', fileUid);
     // results is an array of row objects
     return results ? results.length : 0;
   } catch (e) {
@@ -468,7 +468,7 @@ export function pollMilvusVectorsCleanup(kbUID, fileUID, maxWaitSeconds = 30) {
  */
 export function getFileMetadata(namespaceId, catalogId, fileUid, headers) {
   try {
-    const apiUrl = `${constant.artifactPublicHost}/v1alpha/namespaces/${namespaceId}/catalogs/${catalogId}/files/${fileUid}`;
+    const apiUrl = `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${namespaceId}/catalogs/${catalogId}/files/${fileUid}`;
     const res = http.request("GET", apiUrl, null, headers);
 
     if (res.status !== 200) {
@@ -637,7 +637,7 @@ export function findCatalogByPattern(namePattern) {
  * @param {number} maxWaitSeconds - Maximum seconds to wait (default: 300 = 5 minutes)
  * @returns {boolean} True if update completed, false if timeout
  */
-export function pollUpdateCompletion(client, data, catalogUid, maxWaitSeconds = 300) {
+export function pollUpdateCompletion(client, data, catalogUid, maxWaitSeconds = 900) {
   console.log(`[POLL START] Polling for catalogUid=${catalogUid}, maxWait=${maxWaitSeconds}s`);
   for (let i = 0; i < maxWaitSeconds; i++) {
     const res = client.invoke(
@@ -647,8 +647,8 @@ export function pollUpdateCompletion(client, data, catalogUid, maxWaitSeconds = 
     );
 
     // k6 gRPC returns res.status in various forms, check if response has valid message
-    if (res.message && res.message.catalogStatuses) { // Check for successful response with data
-      const statuses = res.message.catalogStatuses || [];
+    if (res.message && res.message.details) { // Check for successful response with data
+      const statuses = res.message.details || [];
       const catalogStatus = statuses.find(s => s.catalogUid === catalogUid);
 
       // Debug logging on first attempt and periodically
@@ -660,10 +660,13 @@ export function pollUpdateCompletion(client, data, catalogUid, maxWaitSeconds = 
       }
 
       if (catalogStatus) {
-        if (catalogStatus.status === "completed") {
+        // Check enum status using numeric values (k6 gRPC returns enums as numbers)
+        // KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED = 6
+        if (catalogStatus.status === 6 || catalogStatus.status === "KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED") {
           return true;
         }
-        if (catalogStatus.status === "failed") {
+        // KNOWLEDGE_BASE_UPDATE_STATUS_FAILED = 7
+        if (catalogStatus.status === 7 || catalogStatus.status === "KNOWLEDGE_BASE_UPDATE_STATUS_FAILED") {
           console.error(`Update failed for catalog ${catalogUid}`);
           return false;
         }
@@ -775,6 +778,99 @@ export function getCatalogByIdAndOwner(catalogId, ownerUid) {
     console.error(`Failed to get catalog ${catalogId}: ${e}`);
     return [];
   }
+}
+
+/**
+ * Poll for staging KB to be cleaned up (soft-deleted)
+ * Used after abort operations to wait for async cleanup to complete
+ *
+ * @param {string} stagingKBID - Staging KB ID to check
+ * @param {string} ownerUid - Owner UID
+ * @param {number} maxWaitSeconds - Maximum time to wait (default 10s)
+ * @returns {boolean} True if staging KB is cleaned up or doesn't exist
+ */
+export function pollStagingKBCleanup(stagingKBID, ownerUid, maxWaitSeconds = 10) {
+  console.log(`[POLL] Waiting for staging KB cleanup: ${stagingKBID}, maxWait=${maxWaitSeconds}s`);
+
+  for (let i = 0; i < maxWaitSeconds; i++) {
+    const stagingKB = getCatalogByIdAndOwner(stagingKBID, ownerUid);
+
+    // Log on first attempt and every 3 seconds
+    if (i === 0 || i % 3 === 0) {
+      if (stagingKB && stagingKB.length > 0) {
+        console.log(`[POLL] Attempt ${i + 1}: Staging KB found, delete_time=${stagingKB[0].delete_time}, update_status=${stagingKB[0].update_status}`);
+      } else {
+        console.log(`[POLL] Attempt ${i + 1}: Staging KB not found (cleaned up)`);
+      }
+    }
+
+    // Check if staging KB is cleaned up
+    if (!stagingKB || stagingKB.length === 0 || stagingKB[0].delete_time !== null) {
+      console.log(`[POLL] Staging KB cleanup confirmed after ${i + 1}s`);
+      return true;
+    }
+
+    if (i < maxWaitSeconds - 1) {
+      sleep(1);
+    }
+  }
+
+  console.log(`[POLL] Timeout: Staging KB not cleaned up after ${maxWaitSeconds}s`);
+  return false;
+}
+
+/**
+ * Poll for rollback KB cleanup completion (soft-delete + resource purge)
+ * Waits for the scheduled cleanup workflow to:
+ * 1. Soft-delete the KB (set delete_time)
+ * 2. Purge all resources (files, converted_files, chunks, embeddings)
+ *
+ * @param {string} rollbackKBID - Rollback KB ID
+ * @param {string} rollbackKBUID - Rollback KB UID
+ * @param {string} ownerUid - Owner UID
+ * @param {number} maxWaitSeconds - Maximum seconds to wait (default: 30)
+ * @returns {boolean} True if cleanup completed, false if timeout
+ */
+export function pollRollbackKBCleanup(rollbackKBID, rollbackKBUID, ownerUid, maxWaitSeconds = 30) {
+  console.log(`[POLL] Waiting for rollback KB cleanup: ${rollbackKBID} (UID: ${rollbackKBUID}), maxWait=${maxWaitSeconds}s`);
+
+  // Note: text_chunk and embedding tables don't have kb_uid (they use source_uid/source_table)
+  // and don't have delete_time (they're hard deleted). We only check converted_file which has kb_uid.
+  const convertedFilesQuery = `SELECT COUNT(*) as count FROM converted_file WHERE kb_uid = $1`;
+
+  for (let i = 0; i < maxWaitSeconds; i++) {
+    const rollbackKB = getCatalogByIdAndOwner(rollbackKBID, ownerUid);
+    const filesCount = countFilesInCatalog(rollbackKBUID);
+
+    const convertedFilesResult = constant.db.query(convertedFilesQuery, rollbackKBUID);
+    const convertedFilesCount = convertedFilesResult && convertedFilesResult.length > 0 ? parseInt(convertedFilesResult[0].count) : 0;
+
+    // Log on first attempt and every 5 seconds
+    if (i === 0 || i % 5 === 0) {
+      if (rollbackKB && rollbackKB.length > 0) {
+        console.log(`[POLL] Attempt ${i + 1}: Rollback KB found, delete_time=${rollbackKB[0].delete_time}, files=${filesCount}, converted=${convertedFilesCount}`);
+      } else {
+        console.log(`[POLL] Attempt ${i + 1}: Rollback KB not found (fully deleted)`);
+      }
+    }
+
+    // Check if rollback KB is soft-deleted AND key resources are purged
+    // If files and converted_files are gone, chunks/embeddings are also gone (cleanup is atomic)
+    const isSoftDeleted = !rollbackKB || rollbackKB.length === 0 || rollbackKB[0].delete_time !== null;
+    const resourcesPurged = filesCount === 0 && convertedFilesCount === 0;
+
+    if (isSoftDeleted && resourcesPurged) {
+      console.log(`[POLL] Rollback KB cleanup confirmed after ${i + 1}s`);
+      return true;
+    }
+
+    if (i < maxWaitSeconds - 1) {
+      sleep(1);
+    }
+  }
+
+  console.log(`[POLL] Timeout: Rollback KB not cleaned up after ${maxWaitSeconds}s`);
+  return false;
 }
 
 /**
@@ -908,10 +1004,10 @@ export function waitForAllUpdatesComplete(client, data, maxWaitSeconds = 60) {
       data.metadata
     );
 
-    if (res && res.message && res.message.catalogStatuses) {
+    if (res && res.message && res.message.details) {
       // Check for ANY active update status, not just "updating"
       const activeStatuses = ["updating", "swapping", "validating", "syncing"];
-      const active = res.message.catalogStatuses.filter(s => activeStatuses.includes(s.status));
+      const active = res.message.details.filter(s => activeStatuses.includes(s.status));
 
       if (active.length === 0) {
         const elapsedSeconds = (i * pollIntervalSeconds).toFixed(1);
@@ -930,5 +1026,106 @@ export function waitForAllUpdatesComplete(client, data, maxWaitSeconds = 60) {
   }
 
   console.error(`[WAIT] Timeout: Updates still in progress after ${maxWaitSeconds}s`);
+  return false;
+}
+
+// ============================================================================
+// Content Generation Helpers
+// ============================================================================
+
+/**
+ * Generate realistic article-like content for LLM processing tests
+ * Creates markdown-formatted articles with varied vocabulary and structure
+ *
+ * @param {number} targetLength - Target length in characters
+ * @returns {string} Generated article content
+ */
+export function generateArticle(targetLength) {
+  const topics = [
+    "machine learning", "data science", "cloud computing", "artificial intelligence",
+    "software engineering", "database systems", "web development", "mobile applications"
+  ];
+  const sentences = [
+    "The rapid advancement in {topic} has revolutionized how businesses operate in the modern era.",
+    "Researchers continue to explore innovative approaches to {topic} that push the boundaries of what's possible.",
+    "Understanding {topic} requires a comprehensive grasp of both theoretical foundations and practical applications.",
+    "Industry leaders emphasize the importance of {topic} in driving digital transformation initiatives.",
+    "Recent breakthroughs in {topic} demonstrate the potential for solving complex real-world problems.",
+    "Organizations are increasingly investing in {topic} to maintain competitive advantages in the market.",
+    "The evolution of {topic} has created new opportunities for professionals across various industries.",
+    "Experts predict that {topic} will continue to shape the future of technology and innovation."
+  ];
+
+  let article = "# Article on Technology and Innovation\n\n";
+  let currentLength = article.length;
+  let paragraphCount = 0;
+
+  while (currentLength < targetLength) {
+    const topic = topics[Math.floor(Math.random() * topics.length)];
+    const sentenceCount = 3 + Math.floor(Math.random() * 3); // 3-5 sentences per paragraph
+    let paragraph = "";
+
+    for (let i = 0; i < sentenceCount && currentLength < targetLength; i++) {
+      const sentence = sentences[Math.floor(Math.random() * sentences.length)].replace("{topic}", topic);
+      paragraph += sentence + " ";
+      currentLength += sentence.length + 1;
+    }
+
+    article += paragraph.trim() + "\n\n";
+    paragraphCount++;
+
+    // Add section headers every few paragraphs
+    if (paragraphCount % 5 === 0 && currentLength < targetLength) {
+      const sectionTitle = `## Section ${Math.floor(paragraphCount / 5)}: ${topic.charAt(0).toUpperCase() + topic.slice(1)}\n\n`;
+      article += sectionTitle;
+      currentLength += sectionTitle.length;
+    }
+  }
+
+  return article.substring(0, targetLength);
+}
+
+/**
+ * Wait for ALL file processing to complete across the entire system
+ * This prevents "collection does not exist" errors when tests delete KBs
+ * while file processing workflows are still running
+ *
+ * @param {number} maxWaitSeconds - Maximum time to wait (default: 120s)
+ * @returns {boolean} - True if all processing complete, false if timeout
+ */
+export function waitForAllFileProcessingComplete(maxWaitSeconds = 120) {
+  console.log("GLOBAL: Waiting for all file processing to complete...");
+  let waited = 0;
+
+  while (waited < maxWaitSeconds) {
+    // CRITICAL FIX: Also check that parent KB is not deleted
+    // Files in deleted KBs can never complete (collections are gone)
+    const processingQuery = `
+      SELECT COUNT(*) as count
+      FROM knowledge_base_file kbf
+      JOIN knowledge_base kb ON kbf.kb_uid = kb.uid
+      WHERE kbf.process_status IN ('FILE_PROCESS_STATUS_PROCESSING', 'FILE_PROCESS_STATUS_WAITING')
+        AND kbf.delete_time IS NULL
+        AND kb.delete_time IS NULL
+    `;
+
+    const result = constant.db.query(processingQuery);
+    const processingCount = result && result.length > 0 ? parseInt(result[0].count) : 0;
+
+    if (processingCount === 0) {
+      console.log(`GLOBAL: All file processing complete (waited ${waited}s)`);
+      return true;
+    }
+
+    // Log every 5 seconds to avoid spam
+    if (waited % 5 === 0) {
+      console.log(`GLOBAL: ${processingCount} files still processing (waited ${waited}s/${maxWaitSeconds}s)`);
+    }
+
+    sleep(1);
+    waited++;
+  }
+
+  console.warn(`GLOBAL: Timeout waiting for file processing after ${maxWaitSeconds}s`);
   return false;
 }

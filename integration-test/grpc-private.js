@@ -8,7 +8,7 @@ export function CheckListRepositoryTags(client, data) {
     check(true, { [constant.banner(groupName)]: () => true });
 
     var resOrigin = client.invoke(
-      "artifact.artifact.v1alpha.ArtifactPrivateService/ListRepositoryTags",
+      "artifact.artifact.v1alpha.ArtifactPrivateService/ListRepositoryTagsAdmin",
       {
         parent: `repositories/${data.expectedOwner.id}`,
         pageSize: 10
@@ -16,8 +16,8 @@ export function CheckListRepositoryTags(client, data) {
       data.metadata
     );
     check(resOrigin, {
-      "artifact.artifact.v1alpha.ArtifactPrivateService/ListRepositoryTags response status is StatusOK": (r) => r.status === grpc.StatusOK,
-      "artifact.artifact.v1alpha.ArtifactPrivateService/ListRepositoryTags response tags is array": (r) =>
+      "artifact.artifact.v1alpha.ArtifactPrivateService/ListRepositoryTagsAdmin response status is StatusOK": (r) => r.status === grpc.StatusOK,
+      "artifact.artifact.v1alpha.ArtifactPrivateService/ListRepositoryTagsAdmin response tags is array": (r) =>
         Array.isArray(r.message.tags),
     });
   });
@@ -35,7 +35,7 @@ export function CheckGetRepositoryTag(client, data) {
     }
 
     var res = client.invoke(
-      "artifact.artifact.v1alpha.ArtifactPrivateService/GetRepositoryTag",
+      "artifact.artifact.v1alpha.ArtifactPrivateService/GetRepositoryTagAdmin",
       {
         name: tagName,
       },
@@ -58,7 +58,7 @@ export function CheckCreateAndDeleteRepositoryTag(client, data) {
     const tagName = `repositories/${repoId}/tags/${tagId}`;
 
     var createRes = client.invoke(
-      "artifact.artifact.v1alpha.ArtifactPrivateService/CreateRepositoryTag",
+      "artifact.artifact.v1alpha.ArtifactPrivateService/CreateRepositoryTagAdmin",
       {
         tag: {
           name: tagName,
@@ -72,7 +72,7 @@ export function CheckCreateAndDeleteRepositoryTag(client, data) {
     });
 
     var deleteRes = client.invoke(
-      "artifact.artifact.v1alpha.ArtifactPrivateService/DeleteRepositoryTag",
+      "artifact.artifact.v1alpha.ArtifactPrivateService/DeleteRepositoryTagAdmin",
       {
         name: tagName,
       },
@@ -94,7 +94,7 @@ export function CheckGetObject(client, data) {
       return;
     }
     var res = client.invoke(
-      "artifact.artifact.v1alpha.ArtifactPrivateService/GetObject",
+      "artifact.artifact.v1alpha.ArtifactPrivateService/GetObjectAdmin",
       { uid: uid },
       data.metadata
     );
@@ -116,7 +116,7 @@ export function CheckGetObjectURL(client, data) {
       return;
     }
     var res = client.invoke(
-      "artifact.artifact.v1alpha.ArtifactPrivateService/GetObjectURL",
+      "artifact.artifact.v1alpha.ArtifactPrivateService/GetObjectURLAdmin",
       uid ? { uid: uid } : { encodedUrlPath: encoded },
       data.metadata
     );
@@ -136,7 +136,7 @@ export function CheckUpdateObject(client, data) {
       return;
     }
     var res = client.invoke(
-      "artifact.artifact.v1alpha.ArtifactPrivateService/UpdateObject",
+      "artifact.artifact.v1alpha.ArtifactPrivateService/UpdateObjectAdmin",
       { uid: uid, isUploaded: true },
       data.metadata
     );
@@ -156,7 +156,7 @@ export function CheckGetFileAsMarkdown(client, data) {
       return;
     }
     var res = client.invoke(
-      "artifact.artifact.v1alpha.ArtifactPrivateService/GetFileAsMarkdown",
+      "artifact.artifact.v1alpha.ArtifactPrivateService/GetFileAsMarkdownAdmin",
       { fileUid: fileUid },
       data.metadata
     );

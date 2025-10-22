@@ -168,6 +168,7 @@ func main() {
 
 	// ===== CleanupKnowledgeBaseWorkflow Activities =====
 	// Activities for cleaning up entire knowledge base resources
+	w.RegisterActivity(cw.GetInProgressFileCountActivity)       // Check for in-progress files before cleanup
 	w.RegisterActivity(cw.DeleteKBFilesFromMinIOActivity)       // Delete all KB files from MinIO
 	w.RegisterActivity(cw.DropVectorDBCollectionActivity)       // Drop Milvus collection for KB
 	w.RegisterActivity(cw.DeleteKBFileRecordsActivity)          // Delete all file records from database

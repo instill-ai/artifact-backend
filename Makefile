@@ -92,7 +92,7 @@ unit-test:       				## Run unit test
 integration-test:		## Run integration tests in parallel using GNU parallel
 	@echo "Running integration tests in parallel..."
 	@parallel --halt now,fail=1 --tag --line-buffer \
-		"TEST_FOLDER_ABS_PATH=${PWD} k6 run \
+		"TEST_FOLDER_ABS_PATH=${PWD} k6 run --address=\"\" \
 		-e API_GATEWAY_PROTOCOL=${API_GATEWAY_PROTOCOL} -e API_GATEWAY_URL=${API_GATEWAY_URL} \
 		-e DB_HOST=${DB_HOST} \
 		{} --no-usage-report" ::: \

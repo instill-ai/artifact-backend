@@ -3,7 +3,7 @@ import http from "k6/http";
 
 import { check, group } from "k6";
 
-import * as catalogPrivate from "./grpc-private.js";
+import * as grpcPrivate from "./grpc-private.js";
 import * as grpcPublic from "./grpc-public.js";
 import * as grpcPublicWithJwt from "./grpc-public-with-jwt.js";
 
@@ -39,8 +39,8 @@ export function setup() {
 
   // Clean up any leftover test data from previous runs
   try {
-    constant.db.exec(`DELETE FROM text_chunk WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-    constant.db.exec(`DELETE FROM embedding WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+    constant.db.exec(`DELETE FROM text_chunk WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+    constant.db.exec(`DELETE FROM embedding WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
     constant.db.exec(`DELETE FROM converted_file WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
     constant.db.exec(`DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`);
     constant.db.exec(`DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`);
@@ -48,13 +48,13 @@ export function setup() {
     console.log(`Setup cleanup warning: ${e}`);
   }
 
-  var loginResp = http.request("POST", `${constant.mgmtPublicHost}/v1beta/auth/login`, JSON.stringify({
+  var loginResp = http.request("POST", `${constant.mgmtRESTPublicHost}/v1beta/auth/login`, JSON.stringify({
     "username": constant.defaultUsername,
     "password": constant.defaultPassword,
   }))
 
   check(loginResp, {
-    [`POST ${constant.mgmtPublicHost}/v1beta/auth/login response status is 200`]: (
+    [`POST ${constant.mgmtRESTPublicHost}/v1beta/auth/login response status is 200`]: (
       r
     ) => r.status === 200,
   });
@@ -115,13 +115,13 @@ export default function (data) {
     privateClient.connect(constant.artifactGRPCPrivateHost, {
       plaintext: true,
     });
-    catalogPrivate.CheckListRepositoryTags(privateClient, data);
-    catalogPrivate.CheckGetRepositoryTag(privateClient, data);
-    catalogPrivate.CheckCreateAndDeleteRepositoryTag(privateClient, data);
-    catalogPrivate.CheckGetObject(privateClient, data);
-    catalogPrivate.CheckGetObjectURL(privateClient, data);
-    catalogPrivate.CheckUpdateObject(privateClient, data);
-    catalogPrivate.CheckGetFileAsMarkdown(privateClient, data);
+    grpcPrivate.CheckListRepositoryTags(privateClient, data);
+    grpcPrivate.CheckGetRepositoryTag(privateClient, data);
+    grpcPrivate.CheckCreateAndDeleteRepositoryTag(privateClient, data);
+    grpcPrivate.CheckGetObject(privateClient, data);
+    grpcPrivate.CheckGetObjectURL(privateClient, data);
+    grpcPrivate.CheckUpdateObject(privateClient, data);
+    grpcPrivate.CheckGetFileAsMarkdown(privateClient, data);
     privateClient.close();
   }
 
@@ -156,8 +156,8 @@ export function teardown(data) {
     check(true, { [constant.banner(groupName)]: () => true });
 
     // Delete from child tables first, before deleting parent records
-    constant.db.exec(`DELETE FROM text_chunk WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-    constant.db.exec(`DELETE FROM embedding WHERE kb_file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+    constant.db.exec(`DELETE FROM text_chunk WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
+    constant.db.exec(`DELETE FROM embedding WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
     constant.db.exec(`DELETE FROM converted_file WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
 
     // Now delete parent tables

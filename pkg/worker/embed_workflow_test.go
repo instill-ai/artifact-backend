@@ -322,14 +322,14 @@ func TestSaveEmbeddingsWorkflow_BatchSizeCalculation(t *testing.T) {
 // Helper functions
 func createWorkflowTestEmbeddings(count int) []repository.EmbeddingModel {
 	embeddings := make([]repository.EmbeddingModel, count)
-	kbFileUID := uuid.Must(uuid.NewV4())
+	fileUID := uuid.Must(uuid.NewV4())
 
 	for i := 0; i < count; i++ {
 		embeddings[i] = repository.EmbeddingModel{
 			UID:         uuid.Must(uuid.NewV4()),
 			SourceTable: "text_chunk",
 			SourceUID:   uuid.Must(uuid.NewV4()),
-			KBFileUID:   kbFileUID,
+			FileUID:     fileUID,
 			Vector:      createWorkflowTestVector(768),
 			ContentType: "application/pdf",
 			ChunkType:   "content",

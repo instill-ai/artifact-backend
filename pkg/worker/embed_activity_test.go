@@ -481,14 +481,14 @@ func TestUpdateEmbeddingMetadataActivityParam_Validation(t *testing.T) {
 
 func createActivityTestEmbeddings(count int) []repository.EmbeddingModel {
 	embeddings := make([]repository.EmbeddingModel, count)
-	kbFileUID := uuid.Must(uuid.NewV4())
+	fileUID := uuid.Must(uuid.NewV4())
 
 	for i := 0; i < count; i++ {
 		embeddings[i] = repository.EmbeddingModel{
 			UID:         uuid.Must(uuid.NewV4()),
 			SourceTable: "text_chunk",
 			SourceUID:   uuid.Must(uuid.NewV4()),
-			KBFileUID:   kbFileUID,
+			FileUID:     fileUID,
 			Vector:      createActivityTestVector(768),
 			ContentType: "application/pdf",
 			ChunkType:   "content",

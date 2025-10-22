@@ -17,13 +17,15 @@ if (__ENV.API_GATEWAY_PROTOCOL) {
   proto = "http"
 }
 
-export const artifactPrivateHost = `http://artifact-backend:3082`;
-export const artifactPublicHost = apiGatewayMode ? `${proto}://${__ENV.API_GATEWAY_URL}` : `http://api-gateway:8080`
-export const mgmtPublicHost = apiGatewayMode ? `${proto}://${__ENV.API_GATEWAY_URL}` : `http://api-gateway:8080`
-export const artifactGRPCPrivateHost = `artifact-backend:3082`;
+export const artifactRESTPublicHost = apiGatewayMode ? `${proto}://${__ENV.API_GATEWAY_URL}` : `http://api-gateway:8080`
+export const mgmtRESTPublicHost = apiGatewayMode ? `${proto}://${__ENV.API_GATEWAY_URL}` : `http://api-gateway:8080`
+
 export const artifactGRPCPublicHost = apiGatewayMode ? `${__ENV.API_GATEWAY_URL}` : `api-gateway:8080`;
+export const artifactGRPCPrivateHost = apiGatewayMode ? `localhost:3082` : `artifact-backend:3082`;
+
 export const mgmtGRPCPublicHost = apiGatewayMode ? `${__ENV.API_GATEWAY_URL}` : `api-gateway:8080`;
-export const mgmtGRPCPrivateHost = `mgmt-backend:3084`;
+export const mgmtGRPCPrivateHost = apiGatewayMode ? `localhost:3084` : `mgmt-backend:3084`;
+
 export const mgmtVersion = 'v1beta';
 
 export const namespace = "users/admin"

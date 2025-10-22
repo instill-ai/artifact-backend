@@ -55,6 +55,7 @@ type Service interface {
 
 	// RAG System Update - manual-triggered update management
 	ExecuteKnowledgeBaseUpdateAdmin(context.Context, *artifactpb.ExecuteKnowledgeBaseUpdateAdminRequest) (*artifactpb.ExecuteKnowledgeBaseUpdateAdminResponse, error)
+	AbortKnowledgeBaseUpdateAdmin(context.Context, *artifactpb.AbortKnowledgeBaseUpdateAdminRequest) (*artifactpb.AbortKnowledgeBaseUpdateAdminResponse, error)
 
 	// System Profile Management use cases (admin only)
 	GetSystemProfileAdmin(context.Context, string) (*artifactpb.GetSystemProfileAdminResponse, error)

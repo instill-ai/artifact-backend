@@ -111,9 +111,11 @@ func TestCleanupFileWorkflow_Success(t *testing.T) {
 	mockRepository.ListConvertedFilesByFileUIDMock.Return([]string{}, nil)
 
 	// Mock for DeleteConvertedFileActivity
-	mockRepository.GetConvertedFileByFileUIDMock.Return(&repository.ConvertedFileModel{
-		UID:   uuid.Must(uuid.NewV4()),
-		KBUID: kbUID,
+	mockRepository.GetAllConvertedFilesByFileUIDMock.Return([]repository.ConvertedFileModel{
+		{
+			UID:   uuid.Must(uuid.NewV4()),
+			KBUID: kbUID,
+		},
 	}, nil)
 	mockRepository.HardDeleteConvertedFileByFileUIDMock.Return(nil)
 
@@ -168,9 +170,11 @@ func TestCleanupFileWorkflow_WithoutOriginalFile(t *testing.T) {
 	// Note: No mock for DeleteOriginalFileActivity since IncludeOriginalFile=false
 
 	// Mock for DeleteConvertedFileActivity
-	mockRepository.GetConvertedFileByFileUIDMock.Return(&repository.ConvertedFileModel{
-		UID:   uuid.Must(uuid.NewV4()),
-		KBUID: kbUID,
+	mockRepository.GetAllConvertedFilesByFileUIDMock.Return([]repository.ConvertedFileModel{
+		{
+			UID:   uuid.Must(uuid.NewV4()),
+			KBUID: kbUID,
+		},
 	}, nil)
 	mockRepository.ListConvertedFilesByFileUIDMock.Return([]string{}, nil)
 	mockRepository.HardDeleteConvertedFileByFileUIDMock.Return(nil)

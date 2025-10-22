@@ -37,6 +37,9 @@ type KnowledgeBaseFile interface {
 	ListKnowledgeBaseFiles(context.Context, KnowledgeBaseFileListParams) (*KnowledgeBaseFileList, error)
 	// GetKnowledgeBaseFilesByFileUIDs returns the knowledge base files by file UIDs
 	GetKnowledgeBaseFilesByFileUIDs(ctx context.Context, fileUIDs []types.FileUIDType, columns ...string) ([]KnowledgeBaseFileModel, error)
+	// GetKnowledgeBaseFilesByFileUIDsIncludingDeleted returns files by UIDs, INCLUDING soft-deleted files
+	// Used for SaveEmbeddingsWorkflow to generate embeddings even if file was deleted during processing
+	GetKnowledgeBaseFilesByFileUIDsIncludingDeleted(ctx context.Context, fileUIDs []types.FileUIDType, columns ...string) ([]KnowledgeBaseFileModel, error)
 	// GetKnowledgeBaseFilesByName retrieves files by name in a specific KB
 	// Used for dual deletion to find corresponding files in staging/rollback KB
 	GetKnowledgeBaseFilesByName(ctx context.Context, kbUID types.KBUIDType, fileName string) ([]KnowledgeBaseFileModel, error)
@@ -52,6 +55,9 @@ type KnowledgeBaseFile interface {
 	// If processStatus is empty, returns all non-deleted files
 	// If processStatus is provided (e.g., "FILE_PROCESS_STATUS_COMPLETED"), returns only files with that status
 	GetFileCountByKnowledgeBaseUID(ctx context.Context, kbUID types.KBUIDType, processStatus string) (int64, error)
+	// GetRecentNotStartedFileCount counts files in NOTSTARTED status created within the last N seconds
+	// Used to detect dual processing race conditions
+	GetRecentNotStartedFileCount(ctx context.Context, kbUID types.KBUIDType, withinSeconds int) (int64, error)
 	// GetSourceTableAndUIDByFileUIDs returns the source table and uid by file UID list
 	GetSourceTableAndUIDByFileUIDs(ctx context.Context, files []KnowledgeBaseFileModel) (map[types.FileUIDType]struct {
 		SourceTable string
@@ -502,7 +508,35 @@ func (r *repository) UpdateKnowledgeBaseFile(ctx context.Context, fileUID string
 	return &updatedFile, nil
 }
 
-// GetFileCountByKnowledgeBaseUID returns the number of files for a KB, optionally filtered by process status
+// GetRecentNotStartedFileCount counts files in NOTSTARTED status created within the last N seconds
+// This is used to detect dual processing race conditions where files are being created
+// but haven't started processing yet
+func (r *repository) GetRecentNotStartedFileCount(ctx context.Context, kbUID types.KBUIDType, withinSeconds int) (int64, error) {
+	var count int64
+
+	// Calculate cutoff time
+	cutoff := time.Now().Add(-time.Duration(withinSeconds) * time.Second)
+
+	err := r.db.WithContext(ctx).
+		Table(KnowledgeBaseFileTableName).
+		Where(fmt.Sprintf("%v = ? AND %v IS NULL AND %v = ? AND %v > ?",
+			KnowledgeBaseFileColumn.KnowledgeBaseUID,
+			KnowledgeBaseFileColumn.DeleteTime,
+			KnowledgeBaseFileColumn.ProcessStatus,
+			KnowledgeBaseFileColumn.CreateTime),
+			kbUID,
+			artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_NOTSTARTED.String(),
+			cutoff).
+		Count(&count).
+		Error
+
+	if err != nil {
+		return 0, fmt.Errorf("failed to count recent NOTSTARTED files: %w", err)
+	}
+
+	return count, nil
+}
+
 func (r *repository) GetFileCountByKnowledgeBaseUID(ctx context.Context, kbUID types.KBUIDType, processStatus string) (int64, error) {
 	var count int64
 
@@ -604,6 +638,41 @@ func (r *repository) GetKnowledgeBaseFilesByFileUIDs(
 	return files, nil
 }
 
+// GetKnowledgeBaseFilesByFileUIDsIncludingDeleted retrieves files by UIDs, INCLUDING soft-deleted files
+// This is needed for SaveEmbeddingsWorkflow which may run after a file has been soft-deleted during
+// dual deletion. The embeddings must still be generated for existing chunks.
+func (r *repository) GetKnowledgeBaseFilesByFileUIDsIncludingDeleted(
+	ctx context.Context,
+	fileUIDs []types.FileUIDType,
+	columns ...string,
+) ([]KnowledgeBaseFileModel, error) {
+
+	var files []KnowledgeBaseFileModel
+	// Convert UUIDs to strings as GORM works with strings in queries
+	var stringUIDs []string
+	for _, uid := range fileUIDs {
+		stringUIDs = append(stringUIDs, uid.String())
+	}
+	// CRITICAL: Do NOT filter by delete_time - include soft-deleted files
+	where := fmt.Sprintf("%v IN ?", KnowledgeBaseFileColumn.UID)
+	query := r.db.WithContext(ctx)
+	if len(columns) > 0 {
+		query = query.Select(columns)
+	}
+	// Query the database for files with the given UIDs
+	if err := query.Where(where, stringUIDs).Find(&files).Error; err != nil {
+		// If GORM returns ErrRecordNotFound, it's not considered an error in this context
+		if err == gorm.ErrRecordNotFound {
+			return []KnowledgeBaseFileModel{}, nil
+		}
+		// Return any other error that might have occurred during the query
+		return nil, err
+	}
+
+	// Return the found files, or an empty slice if none were found
+	return files, nil
+}
+
 // GetKnowledgeBaseFilesByName retrieves files by name in a specific KB
 // Used for dual deletion to find corresponding files in staging/rollback KB
 func (r *repository) GetKnowledgeBaseFilesByName(
@@ -661,8 +730,7 @@ func (r *repository) GetSourceByFileUID(ctx context.Context, fileUID types.FileU
 	// For other files (PDF/DOC/etc.), the content is the markdown conversion
 	where = fmt.Sprintf("%s = ? AND %s = ?", ConvertedFileColumn.FileUID, ConvertedFileColumn.ConvertedType)
 	var convertedFile ConvertedFileModel
-	contentTypeStr := ConvertedFileTypeToString(artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_CONTENT)
-	err := r.db.WithContext(ctx).Where(where, fileUID, contentTypeStr).First(&convertedFile).Error
+	err := r.db.WithContext(ctx).Where(where, fileUID, artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_CONTENT.String()).First(&convertedFile).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			err = fmt.Errorf(`

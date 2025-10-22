@@ -27,8 +27,9 @@ type CleanupFileWorkflowParam struct {
 
 // CleanupKnowledgeBaseWorkflowParam defines the parameters for the CleanupKnowledgeBaseWorkflow
 type CleanupKnowledgeBaseWorkflowParam struct {
-	KBUID               types.KBUIDType
-	CleanupAfterSeconds int64 // If > 0, wait this many seconds before cleanup (for retention-based cleanup)
+	KBUID                  types.KBUIDType
+	CleanupAfterSeconds    int64            // If > 0, wait this many seconds before cleanup (for retention-based cleanup)
+	ProtectedCollectionUID *types.KBUIDType // Collection UID that must not be dropped (e.g., after swap)
 }
 
 type cleanupFileWorkflow struct {
@@ -254,6 +255,51 @@ func (w *Worker) CleanupKnowledgeBaseWorkflow(ctx workflow.Context, param Cleanu
 	}
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
 
+	// CRITICAL: Wait for any in-progress file processing to complete before cleanup
+	// This prevents race conditions where:
+	// 1. File processing workflows try to save embeddings to Milvus
+	// 2. This cleanup workflow drops the Milvus collection
+	// 3. File processing fails with "collection does not exist"
+	//
+	// We poll every 5 seconds for up to 2 minutes (24 attempts)
+	// File processing (especially embedding) should complete within 1-2 minutes normally
+	maxWaitAttempts := 24 // 24 * 5s = 2 minutes
+	for attempt := range maxWaitAttempts {
+		var inProgressCount int64
+		err := workflow.ExecuteActivity(ctx, w.GetInProgressFileCountActivity, &GetInProgressFileCountActivityParam{
+			KBUID: kbUID,
+		}).Get(ctx, &inProgressCount)
+
+		if err != nil {
+			logger.Error("Failed to check for in-progress files, proceeding with cleanup anyway",
+				"kbUID", kbUID.String(),
+				"error", err.Error(),
+				"attempt", attempt+1)
+			break // Proceed with cleanup if we can't check
+		}
+
+		if inProgressCount == 0 {
+			logger.Info("No in-progress files, safe to proceed with cleanup",
+				"kbUID", kbUID.String(),
+				"attempts", attempt+1)
+			break
+		}
+
+		logger.Info("Waiting for file processing to complete before cleanup",
+			"kbUID", kbUID.String(),
+			"inProgressCount", inProgressCount,
+			"attempt", attempt+1,
+			"maxAttempts", maxWaitAttempts)
+
+		if attempt < maxWaitAttempts-1 {
+			err := workflow.Sleep(ctx, 5*time.Second)
+			if err != nil {
+				logger.Error("Sleep interrupted while waiting for file processing", "error", err)
+				return err
+			}
+		}
+	}
+
 	// Collect errors to ensure we attempt all cleanup operations
 	// but still report failures
 	var errors []string
@@ -272,7 +318,8 @@ func (w *Worker) CleanupKnowledgeBaseWorkflow(ctx workflow.Context, param Cleanu
 
 	// Step 2: Drop Milvus collection
 	err = workflow.ExecuteActivity(ctx, w.DropVectorDBCollectionActivity, &DropVectorDBCollectionActivityParam{
-		KBUID: kbUID,
+		KBUID:                  kbUID,
+		ProtectedCollectionUID: param.ProtectedCollectionUID,
 	}).Get(ctx, nil)
 	if err != nil {
 		errMsg := fmt.Sprintf("drop Milvus collection: %s", errorsx.MessageOrErr(err))
