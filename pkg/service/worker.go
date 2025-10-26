@@ -33,8 +33,8 @@ type Worker interface {
 
 	// ExecuteKnowledgeBaseUpdate triggers knowledge base updates for specified catalogs
 	// This is the entry point for the 6-phase UpdateKnowledgeBaseWorkflow
-	// If systemProfile is specified, uses config from that profile; otherwise uses KB's current config
-	ExecuteKnowledgeBaseUpdate(ctx context.Context, catalogIDs []string, systemProfile string) (*worker.UpdateRAGIndexResult, error)
+	// If systemID is specified, uses config from that system; otherwise uses KB's current config
+	ExecuteKnowledgeBaseUpdate(ctx context.Context, catalogIDs []string, systemID string) (*worker.UpdateRAGIndexResult, error)
 
 	// AbortKnowledgeBaseUpdate aborts ongoing KB update workflows and cleans up staging resources
 	// If catalogIDs is empty, aborts all currently updating catalogs

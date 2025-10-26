@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/gofrs/uuid"
@@ -18,6 +19,18 @@ import (
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	errorsx "github.com/instill-ai/x/errors"
 )
+
+// This file contains KB update activities used by UpdateKnowledgeBaseWorkflow:
+// - ListKnowledgeBasesForUpdateActivity - Lists KBs that need system config updates
+// - ValidateUpdateEligibilityActivity - Validates KB can be updated (captures previous system UID)
+// - CreateStagingKnowledgeBaseActivity - Creates staging KB with new system config
+// - ListFilesForReprocessingActivity - Lists files to be reprocessed in staging KB
+// - CloneFileToStagingKBActivity - Clones individual file from production to staging KB
+// - SynchronizeKBActivity - Ensures all files are processed before swap (handles dual-processing)
+// - ValidateUpdatedKBActivity - Validates staging KB data integrity before swap
+// - SwapKnowledgeBasesActivity - Performs atomic 3-step resource swap (production ↔ staging ↔ rollback)
+// - CleanupOldKnowledgeBaseActivity - Cleans up staging/rollback KB resources (files, Milvus collection)
+// - UpdateKnowledgeBaseUpdateStatusActivity - Updates KB update status and workflow ID
 
 // Activity error type constants
 const (
@@ -49,12 +62,16 @@ type ValidateUpdateEligibilityActivityParam struct {
 	KBUID types.KBUIDType
 }
 
+type ValidateUpdateEligibilityActivityResult struct {
+	PreviousSystemUID types.SystemUIDType // Current system UID (before update starts)
+}
+
 // CreateStagingKnowledgeBaseActivityParam defines parameters for creating staging KB
 type CreateStagingKnowledgeBaseActivityParam struct {
 	OriginalKBUID types.KBUIDType
-	// SystemProfile specifies which system profile to use for the new embedding config
+	// SystemID specifies which system ID to use for the new embedding config
 	// If empty, uses the original KB's embedding config
-	SystemProfile string
+	SystemID string
 }
 
 // CreateStagingKnowledgeBaseActivityResult contains the created staging KB
@@ -64,13 +81,15 @@ type CreateStagingKnowledgeBaseActivityResult struct {
 
 // SynchronizeKBActivityParam defines parameters for final synchronization before swap
 type SynchronizeKBActivityParam struct {
-	OriginalKBUID types.KBUIDType
-	StagingKBUID  types.KBUIDType
+	OriginalKBUID              types.KBUIDType
+	StagingKBUID               types.KBUIDType
+	RecentlyReconciledFileUIDs []types.FileUIDType // Files created by reconciliation in previous retry, exclude from NOTSTARTED check
 }
 
 // SynchronizeKBActivityResult contains synchronization results
 type SynchronizeKBActivityResult struct {
-	Synchronized bool
+	Synchronized       bool
+	ReconciledFileUIDs []types.FileUIDType // Files created by reconciliation in this attempt
 }
 
 // ValidateUpdatedKBActivityParam defines parameters for validation
@@ -102,9 +121,11 @@ type SwapKnowledgeBasesActivityResult struct {
 
 // UpdateKnowledgeBaseUpdateStatusActivityParam updates update status
 type UpdateKnowledgeBaseUpdateStatusActivityParam struct {
-	KBUID      types.KBUIDType
-	Status     string
-	WorkflowID string
+	KBUID             types.KBUIDType
+	Status            string
+	WorkflowID        string
+	ErrorMessage      string              // Only used when Status is FAILED
+	PreviousSystemUID types.SystemUIDType // Only used when Status is UPDATING (captured at workflow start for audit trail)
 }
 
 // CleanupOldKnowledgeBaseActivityParam defines parameters for cleanup
@@ -190,14 +211,14 @@ func (w *Worker) ListKnowledgeBasesForUpdateActivity(ctx context.Context, param 
 }
 
 // ValidateUpdateEligibilityActivity checks if KB can be updated
-func (w *Worker) ValidateUpdateEligibilityActivity(ctx context.Context, param *ValidateUpdateEligibilityActivityParam) error {
+func (w *Worker) ValidateUpdateEligibilityActivity(ctx context.Context, param *ValidateUpdateEligibilityActivityParam) (*ValidateUpdateEligibilityActivityResult, error) {
 	w.log.Info("ValidateUpdateEligibilityActivity: Checking eligibility",
 		zap.String("kbUID", param.KBUID.String()))
 
 	kb, err := w.repository.GetKnowledgeBaseByUID(ctx, param.KBUID)
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to get knowledge base for validation. Please try again.")
-		return temporal.NewApplicationErrorWithCause(
+		return nil, temporal.NewApplicationErrorWithCause(
 			errorsx.MessageOrErr(err),
 			validateUpdateEligibilityActivityError,
 			err,
@@ -207,7 +228,7 @@ func (w *Worker) ValidateUpdateEligibilityActivity(ctx context.Context, param *V
 	// Check if already updating
 	if kb.UpdateStatus == artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING.String() {
 		err = fmt.Errorf("knowledge base is already updating: %s", param.KBUID.String())
-		return temporal.NewApplicationErrorWithCause(
+		return nil, temporal.NewApplicationErrorWithCause(
 			err.Error(),
 			validateUpdateEligibilityActivityError,
 			err,
@@ -215,18 +236,21 @@ func (w *Worker) ValidateUpdateEligibilityActivity(ctx context.Context, param *V
 	}
 
 	w.log.Info("ValidateUpdateEligibilityActivity: KB is eligible",
-		zap.String("kbUID", param.KBUID.String()))
+		zap.String("kbUID", param.KBUID.String()),
+		zap.String("currentSystemUID", kb.SystemUID.String()))
 
-	return nil
+	return &ValidateUpdateEligibilityActivityResult{
+		PreviousSystemUID: kb.SystemUID,
+	}, nil
 }
 
 // CreateStagingKnowledgeBaseActivity creates a staging KB for updating
 func (w *Worker) CreateStagingKnowledgeBaseActivity(ctx context.Context, param *CreateStagingKnowledgeBaseActivityParam) (*CreateStagingKnowledgeBaseActivityResult, error) {
 	w.log.Info("CreateStagingKnowledgeBaseActivity: Creating staging KB for updating",
 		zap.String("originalKBUID", param.OriginalKBUID.String()),
-		zap.String("systemProfile", param.SystemProfile))
+		zap.String("systemID", param.SystemID))
 
-	originalKB, err := w.repository.GetKnowledgeBaseByUID(ctx, param.OriginalKBUID)
+	originalKB, err := w.repository.GetKnowledgeBaseByUIDWithConfig(ctx, param.OriginalKBUID)
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to get original knowledge base. Please try again.")
 		return nil, temporal.NewApplicationErrorWithCause(
@@ -236,38 +260,50 @@ func (w *Worker) CreateStagingKnowledgeBaseActivity(ctx context.Context, param *
 		)
 	}
 
-	// Determine which embedding config to use
-	var newEmbeddingConfig *repository.EmbeddingConfigJSON
-	if param.SystemProfile != "" {
-		// Use config from specified system profile
-		embeddingConfig, err := w.repository.GetDefaultEmbeddingConfig(ctx, param.SystemProfile)
+	// Determine which system UID to use
+	var newSystemUID *types.SystemUIDType
+	var newSystemConfig *repository.SystemConfigJSON
+	if param.SystemID != "" {
+		// Get the system record by ID to retrieve both UID and config
+		system, err := w.repository.GetSystem(ctx, param.SystemID)
 		if err != nil {
-			err = errorsx.AddMessage(err, fmt.Sprintf("Unable to get embedding config from system profile %q. Please try again.", param.SystemProfile))
+			err = errorsx.AddMessage(err, fmt.Sprintf("Unable to get system from system ID %q. Please try again.", param.SystemID))
 			return nil, temporal.NewApplicationErrorWithCause(
 				errorsx.MessageOrErr(err),
 				createStagingKnowledgeBaseActivityError,
 				err,
 			)
 		}
-		newEmbeddingConfig = embeddingConfig
-		w.log.Info("Using embedding config from system profile",
-			zap.String("systemProfile", param.SystemProfile),
-			zap.String("modelFamily", embeddingConfig.ModelFamily),
-			zap.Uint32("dimensionality", embeddingConfig.Dimensionality))
+		newSystemUID = &system.UID
+		// Also get the config for dimensionality calculation and logging
+		systemConfig, err := system.GetConfigJSON()
+		if err != nil {
+			err = errorsx.AddMessage(err, fmt.Sprintf("Unable to parse system config from system ID %q. Please try again.", param.SystemID))
+			return nil, temporal.NewApplicationErrorWithCause(
+				errorsx.MessageOrErr(err),
+				createStagingKnowledgeBaseActivityError,
+				err,
+			)
+		}
+		newSystemConfig = systemConfig
+		w.log.Info("Using system config",
+			zap.String("systemID", param.SystemID),
+			zap.String("modelFamily", systemConfig.RAG.Embedding.ModelFamily),
+			zap.Uint32("dimensionality", systemConfig.RAG.Embedding.Dimensionality))
 	} else {
-		// Use original KB's config (for reprocessing without changing config)
-		w.log.Info("Using original KB's embedding config",
-			zap.String("modelFamily", originalKB.EmbeddingConfig.ModelFamily),
-			zap.Uint32("dimensionality", originalKB.EmbeddingConfig.Dimensionality))
+		// Use original KB's system (for reprocessing without changing config)
+		w.log.Info("Using original KB's system config",
+			zap.String("modelFamily", originalKB.SystemConfig.RAG.Embedding.ModelFamily),
+			zap.Uint32("dimensionality", originalKB.SystemConfig.RAG.Embedding.Dimensionality))
 	}
 
 	// Determine dimensionality for the new collection
-	// Use the new embedding config if specified (from system profile), otherwise use original KB's config
+	// Use the new system config if specified, otherwise use original KB's config
 	var dimensionality uint32
-	if newEmbeddingConfig != nil {
-		dimensionality = newEmbeddingConfig.Dimensionality
+	if newSystemConfig != nil {
+		dimensionality = newSystemConfig.RAG.Embedding.Dimensionality
 	} else {
-		dimensionality = originalKB.EmbeddingConfig.Dimensionality
+		dimensionality = originalKB.SystemConfig.RAG.Embedding.Dimensionality
 	}
 
 	// Create Milvus collection for staging KB
@@ -285,7 +321,7 @@ func (w *Worker) CreateStagingKnowledgeBaseActivity(ctx context.Context, param *
 		return nil
 	}
 
-	stagingKB, err := w.repository.CreateStagingKnowledgeBase(ctx, originalKB, newEmbeddingConfig, externalServiceCall)
+	stagingKB, err := w.repository.CreateStagingKnowledgeBase(ctx, &originalKB.KnowledgeBaseModel, newSystemUID, externalServiceCall)
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to create staging knowledge base. Please try again.")
 		return nil, temporal.NewApplicationErrorWithCause(
@@ -324,6 +360,20 @@ func (w *Worker) SynchronizeKBActivity(ctx context.Context, param *SynchronizeKB
 	// - Both production and staging KBs remain absolutely identical during validation/swap
 	originalKB, err := w.repository.GetKnowledgeBaseByUID(ctx, param.OriginalKBUID)
 	if err != nil {
+		// CRITICAL: If KB is deleted, fail permanently (non-retryable)
+		// This prevents zombie workflows that retry infinitely trying to sync a deleted KB
+		// Common scenario: Test aborts update + deletes KB before workflow processes abort signal
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			w.log.Error("SynchronizeKBActivity: KB was deleted - failing workflow permanently",
+				zap.String("originalKBUID", param.OriginalKBUID.String()),
+				zap.Error(err))
+			return nil, temporal.NewNonRetryableApplicationError(
+				fmt.Sprintf("Knowledge base %s was deleted during update workflow. Cannot synchronize deleted KB.", param.OriginalKBUID),
+				synchronizeKBActivityError,
+				err,
+			)
+		}
+		// Other errors (network, DB connection) are retryable
 		err = errorsx.AddMessage(err, "Unable to get knowledge base for synchronization. Please try again.")
 		return nil, temporal.NewApplicationErrorWithCause(
 			errorsx.MessageOrErr(err),
@@ -369,7 +419,7 @@ func (w *Worker) SynchronizeKBActivity(ctx context.Context, param *SynchronizeKB
 	// Old NOTSTARTED files (>30s) are ignored as they're likely abandoned/never processed.
 
 	// Check staging KB for actively processing files
-	stagingInProgressCount, err := w.repository.GetFileCountByKnowledgeBaseUID(ctx, param.StagingKBUID, "FILE_PROCESS_STATUS_PROCESSING,FILE_PROCESS_STATUS_CONVERTING,FILE_PROCESS_STATUS_CHUNKING,FILE_PROCESS_STATUS_EMBEDDING")
+	stagingInProgressCount, err := w.repository.GetFileCountByKnowledgeBaseUID(ctx, param.StagingKBUID, "FILE_PROCESS_STATUS_PROCESSING,FILE_PROCESS_STATUS_CHUNKING,FILE_PROCESS_STATUS_EMBEDDING")
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to check for in-progress files in staging KB. Please try again.")
 		return nil, temporal.NewApplicationErrorWithCause(
@@ -380,7 +430,7 @@ func (w *Worker) SynchronizeKBActivity(ctx context.Context, param *SynchronizeKB
 	}
 
 	// Check production KB for actively processing files
-	productionInProgressCount, err := w.repository.GetFileCountByKnowledgeBaseUID(ctx, param.OriginalKBUID, "FILE_PROCESS_STATUS_PROCESSING,FILE_PROCESS_STATUS_CONVERTING,FILE_PROCESS_STATUS_CHUNKING,FILE_PROCESS_STATUS_EMBEDDING")
+	productionInProgressCount, err := w.repository.GetFileCountByKnowledgeBaseUID(ctx, param.OriginalKBUID, "FILE_PROCESS_STATUS_PROCESSING,FILE_PROCESS_STATUS_CHUNKING,FILE_PROCESS_STATUS_EMBEDDING")
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to check for in-progress files in production KB. Please try again.")
 		return nil, temporal.NewApplicationErrorWithCause(
@@ -410,32 +460,74 @@ func (w *Worker) SynchronizeKBActivity(ctx context.Context, param *SynchronizeKB
 		)
 	}
 
-	// STEP 2.5: Check for recently-created NOTSTARTED files (dual processing race condition)
-	// If files were uploaded in the last 30 seconds of UPDATING phase, the dual processing
-	// goroutine might still be creating staging files or starting their workflows
-	stagingRecentNotStarted, err := w.repository.GetRecentNotStartedFileCount(ctx, param.StagingKBUID, 30)
+	// STEP 2.5: Check for NOTSTARTED files (excluding recently reconciled files)
+	//
+	// CRITICAL INVARIANT: NEITHER production NOR staging KB should have NOTSTARTED files before swap
+	//
+	// With auto-trigger + sequential dual-processing + reconciliation:
+	// 1. Initial update: All cloned staging files are immediately triggered → PROCESSING
+	// 2. New uploads during update: UploadCatalogFile auto-triggers production → PROCESSING
+	// 3. Sequential dual-processing: Production completion triggers staging → PROCESSING
+	// 4. Reconciliation: Creates missing files with NOTSTARTED, then triggers workflows
+	//
+	// IMPORTANT: Reconciliation creates files with NOTSTARTED status, then calls ProcessFile.
+	// On the NEXT retry, we exclude these specific files from the check (passed via RecentlyReconciledFileUIDs).
+	// This avoids false positives while Temporal picks up the workflows.
+	//
+	// Files that remain NOTSTARTED (and are NOT in the exclusion list) indicate a system error:
+	// - UploadCatalogFile failed to auto-trigger (Temporal down, network issue)
+	// - ProcessFileWorkflow failed to trigger staging (sequential dual-processing broken)
+	// - Reconciliation ProcessFile call failed silently
+	// - File record created but workflow never started (DB/Temporal inconsistency)
+
+	// Check for NOTSTARTED files in production KB, excluding recently reconciled files
+	productionNotStarted, err := w.repository.GetNotStartedFileCountExcluding(ctx, param.OriginalKBUID, param.RecentlyReconciledFileUIDs)
 	if err != nil {
-		w.log.Warn("Failed to check for recent NOTSTARTED files, continuing anyway",
-			zap.Error(err))
-		stagingRecentNotStarted = 0
+		err = errorsx.AddMessage(err, "Unable to check production KB file status. Please try again.")
+		return nil, temporal.NewApplicationErrorWithCause(
+			errorsx.MessageOrErr(err),
+			synchronizeKBActivityError,
+			err,
+		)
 	}
 
-	productionRecentNotStarted, err := w.repository.GetRecentNotStartedFileCount(ctx, param.OriginalKBUID, 30)
-	if err != nil {
-		w.log.Warn("Failed to check for recent NOTSTARTED files, continuing anyway",
-			zap.Error(err))
-		productionRecentNotStarted = 0
+	if productionNotStarted > 0 {
+		// CRITICAL ERROR: Production files stuck in NOTSTARTED (excluding recently reconciled)
+		err := fmt.Errorf("production KB has %d files in NOTSTARTED status (excluding %d recently reconciled) - this indicates auto-trigger failed or Temporal is down. Manual investigation required", productionNotStarted, len(param.RecentlyReconciledFileUIDs))
+		w.log.Error("SynchronizeKBActivity: Production files stuck in NOTSTARTED - SYSTEM ERROR",
+			zap.String("productionKBUID", param.OriginalKBUID.String()),
+			zap.Int64("notStartedCount", productionNotStarted),
+			zap.Int("excludedReconciledCount", len(param.RecentlyReconciledFileUIDs)),
+			zap.String("likely_cause", "UploadCatalogFile auto-trigger failed or Temporal service is down"),
+			zap.String("required_action", "Manually trigger via ProcessCatalogFiles API or check Temporal service"))
+		return nil, temporal.NewApplicationErrorWithCause(
+			err.Error(),
+			synchronizeKBActivityError,
+			err,
+		)
 	}
 
-	if stagingRecentNotStarted > 0 || productionRecentNotStarted > 0 {
-		// Wait for these files to either start processing or fail
-		err := fmt.Errorf("recently-created NOTSTARTED files detected: staging=%d, production=%d (waiting for dual processing to complete)",
-			stagingRecentNotStarted, productionRecentNotStarted)
-		w.log.Info("SynchronizeKBActivity: Detected recent NOTSTARTED files (dual processing race), will retry",
+	// Check for NOTSTARTED files in staging KB, excluding recently reconciled files
+	stagingNotStarted, err := w.repository.GetNotStartedFileCountExcluding(ctx, param.StagingKBUID, param.RecentlyReconciledFileUIDs)
+	if err != nil {
+		err = errorsx.AddMessage(err, "Unable to check staging KB file status. Please try again.")
+		return nil, temporal.NewApplicationErrorWithCause(
+			errorsx.MessageOrErr(err),
+			synchronizeKBActivityError,
+			err,
+		)
+	}
+
+	if stagingNotStarted > 0 {
+		// CRITICAL ERROR: Staging files stuck in NOTSTARTED (excluding recently reconciled)
+		err := fmt.Errorf("staging KB has %d files in NOTSTARTED status (excluding %d recently reconciled) - this indicates sequential dual-processing or reconciliation failed. Manual investigation required", stagingNotStarted, len(param.RecentlyReconciledFileUIDs))
+		w.log.Error("SynchronizeKBActivity: Staging files stuck in NOTSTARTED - SYSTEM ERROR",
 			zap.String("stagingKBUID", param.StagingKBUID.String()),
 			zap.String("productionKBUID", param.OriginalKBUID.String()),
-			zap.Int64("stagingRecentNotStarted", stagingRecentNotStarted),
-			zap.Int64("productionRecentNotStarted", productionRecentNotStarted))
+			zap.Int64("notStartedCount", stagingNotStarted),
+			zap.Int("excludedReconciledCount", len(param.RecentlyReconciledFileUIDs)),
+			zap.String("likely_cause", "Initial clone not triggered OR production workflows failed to trigger staging OR reconciliation ProcessFile failed"),
+			zap.String("required_action", "Manually trigger via ProcessCatalogFiles API or check workflow logs"))
 		return nil, temporal.NewApplicationErrorWithCause(
 			err.Error(),
 			synchronizeKBActivityError,
@@ -472,7 +564,7 @@ func (w *Worker) SynchronizeKBActivity(ctx context.Context, param *SynchronizeKB
 			zap.Int64("stagingFileCount", stagingFileCount))
 
 		// Reconcile: Find and fix the mismatch
-		err := w.reconcileKBFiles(ctx, param.OriginalKBUID, param.StagingKBUID)
+		reconciledFileUIDs, err := w.reconcileKBFiles(ctx, param.OriginalKBUID, param.StagingKBUID)
 		if err != nil {
 			w.log.Error("SynchronizeKBActivity: Auto-reconciliation failed",
 				zap.Error(err),
@@ -489,15 +581,20 @@ func (w *Worker) SynchronizeKBActivity(ctx context.Context, param *SynchronizeKB
 		}
 
 		// Reconciliation succeeded, but return retryable error to re-check counts and wait for processing
+		// Pass reconciled file UIDs in result so next retry can exclude them from NOTSTARTED check
 		w.log.Info("SynchronizeKBActivity: Auto-reconciliation completed, will retry to verify synchronization",
 			zap.String("stagingKBUID", param.StagingKBUID.String()),
-			zap.String("productionKBUID", param.OriginalKBUID.String()))
-		return nil, temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("file count mismatch: production=%d, staging=%d (reconciliation completed, waiting for processing)",
-				productionFileCount, stagingFileCount),
-			synchronizeKBActivityError,
-			fmt.Errorf("reconciliation in progress"),
-		)
+			zap.String("productionKBUID", param.OriginalKBUID.String()),
+			zap.Int("reconciledFileCount", len(reconciledFileUIDs)))
+		return &SynchronizeKBActivityResult{
+				Synchronized:       false,
+				ReconciledFileUIDs: reconciledFileUIDs,
+			}, temporal.NewApplicationErrorWithCause(
+				fmt.Sprintf("file count mismatch: production=%d, staging=%d (reconciliation completed, waiting for processing)",
+					productionFileCount, stagingFileCount),
+				synchronizeKBActivityError,
+				fmt.Errorf("reconciliation in progress"),
+			)
 	}
 
 	w.log.Info("SynchronizeKBActivity: Final synchronization complete",
@@ -621,15 +718,19 @@ func (w *Worker) SynchronizeKBActivity(ctx context.Context, param *SynchronizeKB
 // reconcileKBFiles ensures production and staging KBs have identical files
 // This is called when file count mismatch is detected during synchronization.
 // It actively fixes the mismatch by creating missing file records and queueing workflows.
-func (w *Worker) reconcileKBFiles(ctx context.Context, productionKBUID, stagingKBUID types.KBUIDType) error {
+// reconcileKBFiles ensures production and staging KBs have identical files and returns the UIDs of created files
+func (w *Worker) reconcileKBFiles(ctx context.Context, productionKBUID, stagingKBUID types.KBUIDType) ([]types.FileUIDType, error) {
 	w.log.Info("Starting KB file reconciliation",
 		zap.String("productionKBUID", productionKBUID.String()),
 		zap.String("stagingKBUID", stagingKBUID.String()))
 
+	// Track file UIDs created during reconciliation
+	var reconciledFileUIDs []types.FileUIDType
+
 	// Get production KB to retrieve OwnerUID
 	productionKB, err := w.repository.GetKnowledgeBaseByUID(ctx, productionKBUID)
 	if err != nil {
-		return fmt.Errorf("failed to get production KB: %w", err)
+		return nil, fmt.Errorf("failed to get production KB: %w", err)
 	}
 
 	ownerUID := productionKB.Owner
@@ -645,7 +746,7 @@ func (w *Worker) reconcileKBFiles(ctx context.Context, productionKBUID, stagingK
 			PageToken: pageToken,
 		})
 		if err != nil {
-			return fmt.Errorf("failed to get production files: %w", err)
+			return nil, fmt.Errorf("failed to get production files: %w", err)
 		}
 		productionFiles = append(productionFiles, productionFileList.Files...)
 
@@ -666,7 +767,7 @@ func (w *Worker) reconcileKBFiles(ctx context.Context, productionKBUID, stagingK
 			PageToken: pageToken,
 		})
 		if err != nil {
-			return fmt.Errorf("failed to get staging files: %w", err)
+			return nil, fmt.Errorf("failed to get staging files: %w", err)
 		}
 		stagingFiles = append(stagingFiles, stagingFileList.Files...)
 
@@ -676,10 +777,10 @@ func (w *Worker) reconcileKBFiles(ctx context.Context, productionKBUID, stagingK
 		pageToken = stagingFileList.NextPageToken
 	}
 
-	// Build map of staging files by name for quick lookup
-	stagingFileMap := make(map[string]*repository.KnowledgeBaseFileModel)
-	for i := range stagingFiles {
-		stagingFileMap[stagingFiles[i].Name] = &stagingFiles[i]
+	// Build map of staging files by name - use slice to detect duplicates
+	stagingFilesByName := make(map[string][]repository.KnowledgeBaseFileModel)
+	for _, stagingFile := range stagingFiles {
+		stagingFilesByName[stagingFile.Name] = append(stagingFilesByName[stagingFile.Name], stagingFile)
 	}
 
 	// Build map of production files by name
@@ -691,16 +792,37 @@ func (w *Worker) reconcileKBFiles(ctx context.Context, productionKBUID, stagingK
 	// Find files in production but missing in staging
 	var missingInStaging []repository.KnowledgeBaseFileModel
 	for _, prodFile := range productionFiles {
-		if _, exists := stagingFileMap[prodFile.Name]; !exists {
+		if _, exists := stagingFilesByName[prodFile.Name]; !exists {
 			missingInStaging = append(missingInStaging, prodFile)
 		}
 	}
 
 	// Find files in staging but missing in production (shouldn't happen, but check for consistency)
 	var missingInProduction []repository.KnowledgeBaseFileModel
-	for _, stagingFile := range stagingFiles {
-		if _, exists := productionFileMap[stagingFile.Name]; !exists {
-			missingInProduction = append(missingInProduction, stagingFile)
+	for _, stagingFileList := range stagingFilesByName {
+		// Use first file in list for name comparison
+		if len(stagingFileList) > 0 {
+			if _, exists := productionFileMap[stagingFileList[0].Name]; !exists {
+				missingInProduction = append(missingInProduction, stagingFileList[0])
+			}
+		}
+	}
+
+	// CRITICAL: Detect duplicate files in staging (race condition from dual processing)
+	// Keep the oldest file and soft-delete the newer duplicates
+	var duplicatesInStaging []repository.KnowledgeBaseFileModel
+	for fileName, fileList := range stagingFilesByName {
+		if len(fileList) > 1 {
+			w.log.Warn("Detected duplicate files in staging KB during reconciliation",
+				zap.String("fileName", fileName),
+				zap.Int("count", len(fileList)),
+				zap.String("stagingKBUID", stagingKBUID.String()))
+
+			// Sort by create_time (keep oldest)
+			// The remaining files after the first are duplicates to remove
+			for i := 1; i < len(fileList); i++ {
+				duplicatesInStaging = append(duplicatesInStaging, fileList[i])
+			}
 		}
 	}
 
@@ -708,7 +830,8 @@ func (w *Worker) reconcileKBFiles(ctx context.Context, productionKBUID, stagingK
 		zap.Int("productionFileCount", len(productionFiles)),
 		zap.Int("stagingFileCount", len(stagingFiles)),
 		zap.Int("missingInStaging", len(missingInStaging)),
-		zap.Int("missingInProduction", len(missingInProduction)))
+		zap.Int("missingInProduction", len(missingInProduction)),
+		zap.Int("duplicatesInStaging", len(duplicatesInStaging)))
 
 	// Create missing files in staging
 	for _, prodFile := range missingInStaging {
@@ -752,8 +875,11 @@ func (w *Worker) reconcileKBFiles(ctx context.Context, productionKBUID, stagingK
 			w.log.Error("Failed to create staging file after retries during reconciliation",
 				zap.Error(err),
 				zap.String("fileName", prodFile.Name))
-			return fmt.Errorf("failed to create staging file %s: %w", prodFile.Name, err)
+			return nil, fmt.Errorf("failed to create staging file %s: %w", prodFile.Name, err)
 		}
+
+		// Track this file for exclusion from NOTSTARTED check on next retry
+		reconciledFileUIDs = append(reconciledFileUIDs, createdFile.UID)
 
 		// Update KB usage
 		err = w.repository.IncreaseKnowledgeBaseUsage(ctx, nil, stagingKBUID.String(), int(stagingFile.Size))
@@ -771,7 +897,7 @@ func (w *Worker) reconcileKBFiles(ctx context.Context, productionKBUID, stagingK
 				zap.Error(err),
 				zap.String("fileName", prodFile.Name),
 				zap.String("fileUID", createdFile.UID.String()))
-			return fmt.Errorf("failed to queue processing for file %s: %w", prodFile.Name, err)
+			return nil, fmt.Errorf("failed to queue processing for file %s: %w", prodFile.Name, err)
 		}
 
 		w.log.Info("Successfully created and queued staging file during reconciliation",
@@ -793,12 +919,36 @@ func (w *Worker) reconcileKBFiles(ctx context.Context, productionKBUID, stagingK
 		// Don't delete these files - they might be legitimate uploads that haven't synced yet
 	}
 
+	// CRITICAL: Soft-delete duplicate files in staging (race condition cleanup)
+	// These are extra files created by dual processing race conditions
+	for _, dupFile := range duplicatesInStaging {
+		w.log.Info("Soft-deleting duplicate file in staging KB",
+			zap.String("fileName", dupFile.Name),
+			zap.String("fileUID", dupFile.UID.String()),
+			zap.String("stagingKBUID", stagingKBUID.String()))
+
+		err := w.repository.DeleteKnowledgeBaseFile(ctx, dupFile.UID.String())
+		if err != nil {
+			w.log.Error("Failed to soft-delete duplicate file during reconciliation",
+				zap.Error(err),
+				zap.String("fileName", dupFile.Name),
+				zap.String("fileUID", dupFile.UID.String()))
+			return nil, fmt.Errorf("failed to soft-delete duplicate file %s: %w", dupFile.Name, err)
+		}
+
+		w.log.Info("Successfully soft-deleted duplicate file",
+			zap.String("fileName", dupFile.Name),
+			zap.String("fileUID", dupFile.UID.String()))
+	}
+
 	w.log.Info("KB file reconciliation complete",
 		zap.Int("filesCreatedInStaging", len(missingInStaging)),
+		zap.Int("reconciledFileUIDs", len(reconciledFileUIDs)),
+		zap.Int("duplicatesRemoved", len(duplicatesInStaging)),
 		zap.String("productionKBUID", productionKBUID.String()),
 		zap.String("stagingKBUID", stagingKBUID.String()))
 
-	return nil
+	return reconciledFileUIDs, nil
 }
 
 // ValidateUpdatedKBActivity validates data integrity after synchronization (Phase 4)
@@ -850,23 +1000,29 @@ func (w *Worker) ValidateUpdatedKBActivity(ctx context.Context, param *ValidateU
 	}
 
 	// VALIDATION 2: Verify active collection UID is set for staging KB
-	collectionUID, err := w.repository.GetActiveCollectionUID(ctx, param.StagingKBUID)
-	if err != nil {
-		errors = append(errors, fmt.Sprintf("failed to get staging collection UID: %v", err))
-	} else if collectionUID == nil {
-		errors = append(errors, "staging KB has no active collection UID set")
+	// SPECIAL CASE: For empty KBs (0 files), no collection is created, so skip this validation
+	if param.ExpectedFileCount > 0 {
+		collectionUID, err := w.repository.GetActiveCollectionUID(ctx, param.StagingKBUID)
+		if err != nil {
+			errors = append(errors, fmt.Sprintf("failed to get staging collection UID: %v", err))
+		} else if collectionUID == nil {
+			errors = append(errors, "staging KB has no active collection UID set")
+		} else {
+			// Use constant.KBCollectionName to generate the correct Milvus collection name
+			// Format: kb_<uuid_with_underscores> (e.g., kb_12345678_1234_1234_1234_123456789012)
+			collectionName := constant.KBCollectionName(*collectionUID)
+			w.log.Info("ValidateUpdatedKBActivity: Collection UID verified",
+				zap.String("collectionName", collectionName),
+				zap.String("collectionUID", collectionUID.String()),
+				zap.String("stagingKBUID", param.StagingKBUID.String()))
+		}
 	} else {
-		// Use constant.KBCollectionName to generate the correct Milvus collection name
-		// Format: kb_<uuid_with_underscores> (e.g., kb_12345678_1234_1234_1234_123456789012)
-		collectionName := constant.KBCollectionName(*collectionUID)
-		w.log.Info("ValidateUpdatedKBActivity: Collection UID verified",
-			zap.String("collectionName", collectionName),
-			zap.String("collectionUID", collectionUID.String()),
-			zap.String("stagingKBUID", param.StagingKBUID.String()))
+		w.log.Info("ValidateUpdatedKBActivity: Skipping collection validation for empty KB (0 files)")
 	}
 
 	// VALIDATION 3: Verify converted file counts
-	if len(errors) == 0 {
+	// SPECIAL CASE: For empty KBs (0 files), skip this validation
+	if param.ExpectedFileCount > 0 && len(errors) == 0 {
 		originalConvertedCount, err := w.repository.GetConvertedFileCountByKBUID(ctx, param.OriginalKBUID)
 		if err != nil {
 			errors = append(errors, fmt.Sprintf("failed to get original converted file count: %v", err))
@@ -899,11 +1055,14 @@ func (w *Worker) ValidateUpdatedKBActivity(ctx context.Context, param *ValidateU
 					originalConvertedCount, stagingConvertedCount, difference))
 			}
 		}
+	} else if param.ExpectedFileCount == 0 {
+		w.log.Info("ValidateUpdatedKBActivity: Skipping converted file count validation for empty KB (0 files)")
 	}
 
 	// VALIDATION 4: Verify chunk counts
+	// SPECIAL CASE: For empty KBs (0 files), skip this validation
 	var stagingChunkCount int64
-	if len(errors) == 0 {
+	if param.ExpectedFileCount > 0 && len(errors) == 0 {
 		originalChunkCount, err := w.repository.GetChunkCountByKBUID(ctx, param.OriginalKBUID)
 		if err != nil {
 			errors = append(errors, fmt.Sprintf("failed to get original chunk count: %v", err))
@@ -925,12 +1084,15 @@ func (w *Worker) ValidateUpdatedKBActivity(ctx context.Context, param *ValidateU
 				errors = append(errors, "staging KB has no chunks but original had chunks")
 			}
 		}
+	} else if param.ExpectedFileCount == 0 {
+		w.log.Info("ValidateUpdatedKBActivity: Skipping chunk count validation for empty KB (0 files)")
 	}
 
 	// VALIDATION 5: Verify embedding counts match chunk counts
 	// With proper locking and synchronization, this should ALWAYS pass on first attempt.
 	// If it fails, it indicates a real bug in the processing pipeline, not a transient race.
-	if len(errors) == 0 {
+	// SPECIAL CASE: For empty KBs (0 files), skip this validation
+	if param.ExpectedFileCount > 0 && len(errors) == 0 {
 		stagingEmbeddingCount, err := w.repository.GetEmbeddingCountByKBUID(ctx, param.StagingKBUID)
 		if err != nil {
 			errors = append(errors, fmt.Sprintf("failed to get staging embedding count: %v", err))
@@ -945,6 +1107,8 @@ func (w *Worker) ValidateUpdatedKBActivity(ctx context.Context, param *ValidateU
 					stagingChunkCount, stagingEmbeddingCount))
 			}
 		}
+	} else if param.ExpectedFileCount == 0 {
+		w.log.Info("ValidateUpdatedKBActivity: Skipping embedding count validation for empty KB (0 files)")
 	}
 
 	success := len(errors) == 0
@@ -984,7 +1148,7 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 		zap.String("originalKBUID", param.OriginalKBUID.String()),
 		zap.String("stagingKBUID", param.StagingKBUID.String()))
 
-	originalKB, err := w.repository.GetKnowledgeBaseByUID(ctx, param.OriginalKBUID)
+	originalKB, err := w.repository.GetKnowledgeBaseByUIDWithConfig(ctx, param.OriginalKBUID)
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to get original knowledge base. Please try again.")
 		return nil, temporal.NewApplicationErrorWithCause(
@@ -994,7 +1158,7 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 		)
 	}
 
-	stagingKB, err := w.repository.GetKnowledgeBaseByUID(ctx, param.StagingKBUID)
+	stagingKB, err := w.repository.GetKnowledgeBaseByUIDWithConfig(ctx, param.StagingKBUID)
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to get staging knowledge base. Please try again.")
 		return nil, temporal.NewApplicationErrorWithCause(
@@ -1043,7 +1207,7 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 			UpdateStatus:           artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED.String(),
 			RollbackRetentionUntil: &retentionUntil,
 			CatalogType:            originalKB.CatalogType,
-			EmbeddingConfig:        originalKB.EmbeddingConfig,
+			SystemUID:              originalKB.SystemUID,
 		}
 
 		// Create rollback KB without external service callback (no ACL needed for staging KB)
@@ -1113,14 +1277,53 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 		)
 	}
 
-	w.log.Info("SwapKnowledgeBasesActivity: Swapping collection pointers",
+	// CRITICAL: Validate that both collections actually exist in Milvus before swapping pointers
+	// This prevents "collection does not exist" errors in SaveEmbeddingsWorkflow
+	originalCollectionName := constant.KBCollectionName(originalKB.ActiveCollectionUID)
+	stagingCollectionName := constant.KBCollectionName(stagingKB.ActiveCollectionUID)
+
+	originalCollectionExists, err := w.repository.CollectionExists(ctx, originalCollectionName)
+	if err != nil {
+		return nil, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to check if original collection exists: %s", originalCollectionName),
+			swapKnowledgeBasesActivityError,
+			err,
+		)
+	}
+	if !originalCollectionExists {
+		return nil, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Original KB's collection does not exist in Milvus: %s (UID: %s)", originalCollectionName, originalKB.ActiveCollectionUID),
+			swapKnowledgeBasesActivityError,
+			fmt.Errorf("collection %s not found", originalCollectionName),
+		)
+	}
+
+	stagingCollectionExists, err := w.repository.CollectionExists(ctx, stagingCollectionName)
+	if err != nil {
+		return nil, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to check if staging collection exists: %s", stagingCollectionName),
+			swapKnowledgeBasesActivityError,
+			err,
+		)
+	}
+	if !stagingCollectionExists {
+		return nil, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Staging KB's collection does not exist in Milvus: %s (UID: %s)", stagingCollectionName, stagingKB.ActiveCollectionUID),
+			swapKnowledgeBasesActivityError,
+			fmt.Errorf("collection %s not found", stagingCollectionName),
+		)
+	}
+
+	w.log.Info("SwapKnowledgeBasesActivity: Collection existence validated, swapping pointers",
 		zap.String("originalCollectionUID", originalKB.ActiveCollectionUID.String()),
-		zap.String("stagingCollectionUID", stagingKB.ActiveCollectionUID.String()))
+		zap.String("originalCollectionName", originalCollectionName),
+		zap.String("stagingCollectionUID", stagingKB.ActiveCollectionUID.String()),
+		zap.String("stagingCollectionName", stagingCollectionName))
 
 	// Update production KB to point to staging's collection
 	err = w.repository.UpdateKnowledgeBaseWithMap(ctx, originalKB.KBID, originalKB.Owner, map[string]interface{}{
 		"active_collection_uid":    stagingKB.ActiveCollectionUID, // Point to new collection
-		"embedding_config":         stagingKB.EmbeddingConfig,     // Update embedding config (may have new dimensionality)
+		"system_uid":               stagingKB.SystemUID,           // Update system UID (may reference different system with new dimensionality)
 		"staging":                  false,
 		"update_status":            artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED.String(),
 		"rollback_retention_until": retentionUntil,
@@ -1139,7 +1342,7 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 	rollbackKBIDStr := fmt.Sprintf("%s-rollback", originalKB.KBID)
 	err = w.repository.UpdateKnowledgeBaseWithMap(ctx, rollbackKBIDStr, originalKB.Owner, map[string]interface{}{
 		"active_collection_uid": originalKB.ActiveCollectionUID, // Keep original collection pointer
-		"embedding_config":      originalKB.EmbeddingConfig,     // Keep original embedding config
+		"system_uid":            originalKB.SystemUID,           // Keep original system UID
 	})
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to update rollback KB metadata. Please try again.")
@@ -1157,12 +1360,15 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 
 	// Mark staging KB for immediate deletion to prevent it from blocking future updates
 	// CRITICAL: Also clear update_workflow_id to prevent blocking API deletion
-	now := time.Now()
+	// First clear the update fields, then soft delete using GORM's Delete()
 	err = w.repository.UpdateKnowledgeBaseWithMap(ctx, stagingKB.KBID, stagingKB.Owner, map[string]interface{}{
-		"delete_time":        &now,
 		"update_status":      "",  // Clear update status so it doesn't block future updates
 		"update_workflow_id": nil, // Clear workflow ID so API deletion works
 	})
+	if err == nil {
+		// Now perform soft delete using GORM's Delete method (which sets delete_time automatically)
+		_, err = w.repository.DeleteKnowledgeBase(ctx, stagingKB.Owner, stagingKB.KBID)
+	}
 	if err != nil {
 		w.log.Error("SwapKnowledgeBasesActivity: Failed to mark staging KB for deletion (non-fatal)",
 			zap.String("stagingKBUID", stagingKB.UID.String()),
@@ -1209,9 +1415,11 @@ func (w *Worker) updateResourceKBUIDs(ctx context.Context, fromKBUID, toKBUID ty
 func (w *Worker) UpdateKnowledgeBaseUpdateStatusActivity(ctx context.Context, param *UpdateKnowledgeBaseUpdateStatusActivityParam) error {
 	w.log.Info("UpdateKnowledgeBaseUpdateStatusActivity: Updating status",
 		zap.String("kbUID", param.KBUID.String()),
-		zap.String("status", param.Status))
+		zap.String("status", param.Status),
+		zap.String("errorMessage", param.ErrorMessage),
+		zap.String("previousSystemUID", param.PreviousSystemUID.String()))
 
-	err := w.repository.UpdateKnowledgeBaseUpdateStatus(ctx, param.KBUID, param.Status, param.WorkflowID)
+	err := w.repository.UpdateKnowledgeBaseUpdateStatus(ctx, param.KBUID, param.Status, param.WorkflowID, param.ErrorMessage, param.PreviousSystemUID)
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to update knowledge base update status. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
@@ -1246,11 +1454,15 @@ func (w *Worker) CleanupOldKnowledgeBaseActivity(ctx context.Context, param *Cle
 	}
 
 	// Only soft delete if not already deleted
-	if kb.DeleteTime == nil {
+	if !kb.DeleteTime.Valid {
+		w.log.Info("CleanupOldKnowledgeBaseActivity: Soft-deleting KB",
+			zap.String("kbUID", param.KBUID.String()))
 		_, err = w.repository.DeleteKnowledgeBase(ctx, kb.Owner, kb.KBID)
 		if err != nil {
 			// If already deleted, that's okay - continue with collection drop
-			if !errors.Is(err, gorm.ErrRecordNotFound) {
+			// With row-level locking, DeleteKnowledgeBase will return error if KB is already deleted
+			// (because it checks delete_time IS NULL in the WHERE clause)
+			if !errors.Is(err, gorm.ErrRecordNotFound) && !strings.Contains(err.Error(), "not found") {
 				err = errorsx.AddMessage(err, "Unable to delete knowledge base. Please try again.")
 				return temporal.NewApplicationErrorWithCause(
 					errorsx.MessageOrErr(err),
@@ -1258,13 +1470,14 @@ func (w *Worker) CleanupOldKnowledgeBaseActivity(ctx context.Context, param *Cle
 					err,
 				)
 			}
-			w.log.Info("CleanupOldKnowledgeBaseActivity: KB already soft-deleted, continuing",
-				zap.String("kbUID", param.KBUID.String()))
+			w.log.Info("CleanupOldKnowledgeBaseActivity: KB already soft-deleted during deletion attempt, continuing",
+				zap.String("kbUID", param.KBUID.String()),
+				zap.Error(err))
 		}
 	} else {
 		w.log.Info("CleanupOldKnowledgeBaseActivity: KB already soft-deleted, skipping soft-delete",
 			zap.String("kbUID", param.KBUID.String()),
-			zap.Time("deleteTime", *kb.DeleteTime))
+			zap.Time("deleteTime", kb.DeleteTime.Time))
 	}
 
 	// Drop Milvus collection using active_collection_uid
@@ -1297,7 +1510,27 @@ func (w *Worker) CleanupOldKnowledgeBaseActivity(ctx context.Context, param *Cle
 			zap.Error(err))
 	}
 
-	// Note: Embeddings and files are handled by CASCADE delete in PostgreSQL
+	// CRITICAL: Explicitly hard-delete files and converted files
+	// CASCADE delete only works for hard deletes, not soft deletes
+	// When we soft-delete a KB, files remain with their KB soft-deleted (zombie files)
+	w.log.Info("CleanupOldKnowledgeBaseActivity: Hard-deleting files",
+		zap.String("kbUID", param.KBUID.String()))
+
+	// Hard-delete all files (including those in PROCESSING status)
+	err = w.repository.DeleteAllKnowledgeBaseFiles(ctx, param.KBUID.String())
+	if err != nil {
+		w.log.Warn("Failed to delete files, continuing cleanup",
+			zap.String("kbUID", param.KBUID.String()),
+			zap.Error(err))
+	}
+
+	// Hard-delete all converted files
+	err = w.repository.DeleteAllConvertedFilesInKb(ctx, param.KBUID)
+	if err != nil {
+		w.log.Warn("Failed to delete converted files, continuing cleanup",
+			zap.String("kbUID", param.KBUID.String()),
+			zap.Error(err))
+	}
 
 	w.log.Info("CleanupOldKnowledgeBaseActivity: Cleanup completed successfully")
 	return nil
@@ -1337,11 +1570,9 @@ func (w *Worker) ListFilesForReprocessingActivity(ctx context.Context, param *Li
 	files := fileList.Files
 	fileUIDs := make([]types.FileUIDType, 0, len(files))
 	for _, file := range files {
-		// Only include successfully processed or failed files (skip already processing ones)
-		if file.ProcessStatus != "FILE_PROCESS_STATUS_WAITING" &&
-			file.ProcessStatus != "FILE_PROCESS_STATUS_CONVERTING" {
-			fileUIDs = append(fileUIDs, file.UID)
-		}
+		// Include all files - even those in processing states
+		// The update workflow will handle reprocessing them
+		fileUIDs = append(fileUIDs, file.UID)
 	}
 
 	w.log.Info("ListFilesForReprocessingActivity: Files listed",
@@ -1368,13 +1599,18 @@ func (w *Worker) CloneFileToStagingKBActivity(ctx context.Context, param *CloneF
 			err,
 		)
 	}
+
+	// CRITICAL: Gracefully handle deleted files
+	// If a file was deleted between Phase 2 listing and cloning, skip it
+	// This is expected behavior - users can delete files during updates
+	// The update should proceed with remaining files
 	if len(originalFiles) == 0 {
-		err := fmt.Errorf("original file not found: %s", param.OriginalFileUID.String())
-		return nil, temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			cloneFileToStagingKBActivityError,
-			err,
-		)
+		w.log.Warn("CloneFileToStagingKBActivity: Original file not found (likely deleted during update), skipping",
+			zap.String("fileUID", param.OriginalFileUID.String()),
+			zap.String("stagingKBUID", param.StagingKBUID.String()))
+		return &CloneFileToStagingKBActivityResult{
+			NewFileUID: types.FileUIDType(uuid.Nil), // Return nil UID to indicate skipped file
+		}, nil
 	}
 	originalFile := originalFiles[0]
 
@@ -1403,6 +1639,12 @@ func (w *Worker) CloneFileToStagingKBActivity(ctx context.Context, param *CloneF
 	// Create new file record in staging KB
 	// Note: We reuse the same source file in MinIO (same Destination)
 	// but create a new database record in the staging KB
+	//
+	// IMPORTANT: No duplicate check needed here because:
+	// - Snapshot is taken BEFORE status changes to UPDATING
+	// - Dual-processing only activates AFTER status changes
+	// - Therefore, files in snapshot are never dual-processed
+	// - Clean separation prevents race conditions
 	newFile := repository.KnowledgeBaseFileModel{
 		Name:                      originalFile.Name,
 		FileType:                  originalFile.FileType,

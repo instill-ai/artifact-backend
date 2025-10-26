@@ -36,8 +36,8 @@ type Repository interface {
 	ObjectStorage
 	// ChatCache manages chat conversation caching in Redis for performance optimization
 	ChatCache
-	// SystemProfile manages system-wide configuration profiles
-	SystemProfile
+	// System manages system-wide Knowledge Base configuration
+	System
 }
 
 // repository implements Artifact storage functions in PostgreSQL, vector database, object storage, and Redis.

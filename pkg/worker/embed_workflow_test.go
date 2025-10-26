@@ -40,12 +40,13 @@ func TestSaveEmbeddingsWorkflow_Success(t *testing.T) {
 	}
 
 	// Setup mock expectations (VectorDatabase methods are on Repository now)
-	mockRepository.GetKnowledgeBaseByUIDMock.Return(&repository.KnowledgeBaseModel{
+	mockRepository.GetKnowledgeBaseByUIDIncludingDeletedMock.Return(&repository.KnowledgeBaseModel{
 		UID:                 kbUID,
 		ActiveCollectionUID: kbUID,
 	}, nil)
 	mockRepository.DeleteEmbeddingsWithFileUIDMock.Return(nil)
 	mockRepository.DeleteEmbeddingsByKBFileUIDMock.Return(nil)
+	mockRepository.CollectionExistsMock.Return(true, nil)
 	mockRepository.CreateEmbeddingsMock.Set(func(
 		ctx context.Context,
 		embeddings []repository.EmbeddingModel,
@@ -113,7 +114,7 @@ func TestSaveEmbeddingsWorkflow_DeleteMilvusFailure(t *testing.T) {
 	mockRepository := mock.NewRepositoryMock(mc)
 	kbUID := uuid.Must(uuid.NewV4())
 
-	mockRepository.GetKnowledgeBaseByUIDMock.Return(&repository.KnowledgeBaseModel{
+	mockRepository.GetKnowledgeBaseByUIDIncludingDeletedMock.Return(&repository.KnowledgeBaseModel{
 		UID:                 kbUID,
 		ActiveCollectionUID: kbUID,
 	}, nil)
@@ -153,7 +154,7 @@ func TestSaveEmbeddingsWorkflow_DeleteDBFailure(t *testing.T) {
 	mockRepository := mock.NewRepositoryMock(mc)
 	kbUID := uuid.Must(uuid.NewV4())
 
-	mockRepository.GetKnowledgeBaseByUIDMock.Return(&repository.KnowledgeBaseModel{
+	mockRepository.GetKnowledgeBaseByUIDIncludingDeletedMock.Return(&repository.KnowledgeBaseModel{
 		UID:                 kbUID,
 		ActiveCollectionUID: kbUID,
 	}, nil)
@@ -191,12 +192,13 @@ func TestSaveEmbeddingsWorkflow_BatchFailure(t *testing.T) {
 	mockRepository := mock.NewRepositoryMock(mc)
 	kbUID := uuid.Must(uuid.NewV4())
 
-	mockRepository.GetKnowledgeBaseByUIDMock.Return(&repository.KnowledgeBaseModel{
+	mockRepository.GetKnowledgeBaseByUIDIncludingDeletedMock.Return(&repository.KnowledgeBaseModel{
 		UID:                 kbUID,
 		ActiveCollectionUID: kbUID,
 	}, nil)
 	mockRepository.DeleteEmbeddingsByKBFileUIDMock.Return(nil)
 	mockRepository.DeleteEmbeddingsWithFileUIDMock.Return(nil)
+	mockRepository.CollectionExistsMock.Return(true, nil)
 	mockRepository.CreateEmbeddingsMock.Return(nil, fmt.Errorf("batch insert failed"))
 
 	param := SaveEmbeddingsWorkflowParam{
@@ -243,12 +245,13 @@ func TestSaveEmbeddingsWorkflow_LargeDataset(t *testing.T) {
 		RequesterUID: uuid.Must(uuid.NewV4()),
 	}
 
-	mockRepository.GetKnowledgeBaseByUIDMock.Return(&repository.KnowledgeBaseModel{
+	mockRepository.GetKnowledgeBaseByUIDIncludingDeletedMock.Return(&repository.KnowledgeBaseModel{
 		UID:                 kbUID,
 		ActiveCollectionUID: kbUID,
 	}, nil)
 	mockRepository.DeleteEmbeddingsByKBFileUIDMock.Return(nil)
 	mockRepository.DeleteEmbeddingsWithFileUIDMock.Return(nil)
+	mockRepository.CollectionExistsMock.Return(true, nil)
 	mockRepository.InsertVectorsInCollectionMock.Return(nil)
 	mockRepository.FlushCollectionMock.Return(nil)
 	mockRepository.CreateEmbeddingsMock.Set(func(

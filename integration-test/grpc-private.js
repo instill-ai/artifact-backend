@@ -1,6 +1,76 @@
 import grpc from "k6/net/grpc";
+import http from "k6/http";
 import { check, group } from "k6";
 import * as constant from "./const.js";
+import * as helper from "./helper.js";
+
+const dbIDPrefix = constant.generateDBIDPrefix();
+
+export function setup() {
+  // Stagger test execution to reduce parallel resource contention
+  helper.staggerTestExecution(2);
+
+  var loginResp = http.request("POST", `${constant.mgmtRESTPublicHost}/v1beta/auth/login`, JSON.stringify({
+    "username": constant.defaultUsername,
+    "password": constant.defaultPassword,
+  }))
+
+  check(loginResp, {
+    [`POST ${constant.mgmtRESTPublicHost}/v1beta/auth/login response status is 200`]: (r) => r.status === 200,
+  });
+
+  var header = {
+    "headers": {
+      "Authorization": `Bearer ${loginResp.json().accessToken}`,
+      "Content-Type": "application/json",
+    },
+    "timeout": "600s",
+  }
+
+  var resp = http.request("GET", `${constant.mgmtRESTPublicHost}/v1beta/user`, {}, {
+    headers: {
+      "Authorization": `Bearer ${loginResp.json().accessToken}`
+    }
+  })
+
+  return {
+    header: header,
+    metadata: { Authorization: `Bearer ${loginResp.json().accessToken}` },
+    expectedOwner: resp.json().user
+  }
+}
+
+export function teardown(data) {
+  // Cleanup: Remove any test catalogs created (private API tests may create test data)
+  console.log("\n=== TEARDOWN: Cleaning up gRPC private test data ===");
+  try {
+    // Clean up any catalogs with dbIDPrefix
+    const listResp = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, data.header);
+    if (listResp.status === 200) {
+      const catalogs = Array.isArray(listResp.json().catalogs) ? listResp.json().catalogs : [];
+      let cleanedCount = 0;
+      for (const catalog of catalogs) {
+        const catId = catalog.catalogId || catalog.catalog_id;
+        if (catId && catId.includes(dbIDPrefix)) {
+          const delResp = http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catId}`, null, data.header);
+          if (delResp.status === 200 || delResp.status === 204) {
+            cleanedCount++;
+          }
+        }
+      }
+      if (cleanedCount > 0) {
+        console.log(`Cleaned ${cleanedCount} test catalogs`);
+      }
+    }
+
+    // Note: Repository tags are ephemeral test data created with timestamp-based IDs
+    // They are cleaned up within each test function via DeleteRepositoryTagAdmin
+    console.log("Repository tags are cleaned up inline by test functions");
+  } catch (e) {
+    console.log(`Teardown cleanup warning: ${e}`);
+  }
+  console.log("=== TEARDOWN: gRPC private tests cleanup complete ===\n");
+}
 
 export function CheckListRepositoryTags(client, data) {
   const groupName = "Artifact API: List repository tags (private gRPC)";
@@ -54,7 +124,7 @@ export function CheckCreateAndDeleteRepositoryTag(client, data) {
     check(true, { [constant.banner(groupName)]: () => true });
 
     const repoId = constant.testRepositoryId || `${data.expectedOwner.id}/test-repo`;
-    const tagId = `${constant.dbIDPrefix}tag-${Date.now()}`;
+    const tagId = `${dbIDPrefix}tag-${Date.now()}`;
     const tagName = `repositories/${repoId}/tags/${tagId}`;
 
     var createRes = client.invoke(

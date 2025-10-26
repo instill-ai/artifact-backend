@@ -12,13 +12,13 @@ func TestPipelineReleaseFromName(t *testing.T) {
 	testcases := []struct {
 		name    string
 		input   string
-		want    PipelineRelease
+		want    Release
 		wantErr string
 	}{
 		{
 			name:  "ok - valid pipeline release name",
 			input: "namespace/pipeline@v1.0.0",
-			want: PipelineRelease{
+			want: Release{
 				Namespace: "namespace",
 				ID:        "pipeline",
 				Version:   "v1.0.0",
@@ -27,7 +27,7 @@ func TestPipelineReleaseFromName(t *testing.T) {
 		{
 			name:  "ok - valid pipeline release name with complex version",
 			input: "my-namespace/my-pipeline@v1.2.3-beta",
-			want: PipelineRelease{
+			want: Release{
 				Namespace: "my-namespace",
 				ID:        "my-pipeline",
 				Version:   "v1.2.3-beta",
@@ -62,7 +62,7 @@ func TestPipelineReleaseFromName(t *testing.T) {
 
 	for _, tc := range testcases {
 		c.Run(tc.name, func(c *qt.C) {
-			got, err := PipelineReleaseFromName(tc.input)
+			got, err := ReleaseFromName(tc.input)
 
 			if tc.wantErr != "" {
 				c.Check(err, qt.IsNotNil)
@@ -79,7 +79,7 @@ func TestPipelineReleaseFromName(t *testing.T) {
 func TestPipelineRelease_Name(t *testing.T) {
 	c := qt.New(t)
 
-	got := PipelineRelease{
+	got := Release{
 		Namespace: "namespace",
 		ID:        "pipeline",
 		Version:   "v1.0.0",
@@ -93,12 +93,12 @@ func TestPipelineReleases_Names(t *testing.T) {
 
 	testcases := []struct {
 		name      string
-		pipelines PipelineReleases
+		pipelines Releases
 		want      []string
 	}{
 		{
 			name: "ok - single pipeline",
-			pipelines: PipelineReleases{
+			pipelines: Releases{
 				{
 					Namespace: "namespace",
 					ID:        "pipeline",
@@ -109,7 +109,7 @@ func TestPipelineReleases_Names(t *testing.T) {
 		},
 		{
 			name: "ok - multiple pipelines",
-			pipelines: PipelineReleases{
+			pipelines: Releases{
 				{
 					Namespace: "namespace1",
 					ID:        "pipeline1",

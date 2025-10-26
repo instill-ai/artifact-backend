@@ -6,6 +6,7 @@ import { check, group } from "k6";
 import * as grpcPrivate from "./grpc-private.js";
 import * as grpcPublic from "./grpc-public.js";
 import * as grpcPublicWithJwt from "./grpc-public-with-jwt.js";
+import * as helper from "./helper.js";
 
 const publicClient = new grpc.Client();
 const privateClient = new grpc.Client();
@@ -28,6 +29,9 @@ export let options = {
 };
 
 export function setup() {
+  // Add stagger to reduce parallel resource contention
+  helper.staggerTestExecution(2);
+
   publicClient.connect(constant.artifactGRPCPublicHost, {
     plaintext: true,
     timeout: "300s",
@@ -36,17 +40,6 @@ export function setup() {
     plaintext: true,
     timeout: "300s",
   });
-
-  // Clean up any leftover test data from previous runs
-  try {
-    constant.db.exec(`DELETE FROM text_chunk WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-    constant.db.exec(`DELETE FROM embedding WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-    constant.db.exec(`DELETE FROM converted_file WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-    constant.db.exec(`DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`);
-    constant.db.exec(`DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`);
-  } catch (e) {
-    console.log(`Setup cleanup warning: ${e}`);
-  }
 
   var loginResp = http.request("POST", `${constant.mgmtRESTPublicHost}/v1beta/auth/login`, JSON.stringify({
     "username": constant.defaultUsername,
@@ -75,6 +68,13 @@ export function setup() {
   publicClient.close();
   mgmtClient.close();
   return { metadata: metadata, expectedOwner: authResp.message.user };
+}
+
+export function teardown(data) {
+  const groupName = "Artifact API: Delete data created by this test";
+  group(groupName, () => {
+    check(true, { [constant.banner(groupName)]: () => true });
+  });
 }
 
 export default function (data) {
@@ -148,22 +148,4 @@ export default function (data) {
   grpcPublicWithJwt.CheckGetCatalogFile(publicClient, data);
 
   publicClient.close();
-}
-
-export function teardown(data) {
-  const groupName = "Artifact API: Delete data created by this test";
-  group(groupName, () => {
-    check(true, { [constant.banner(groupName)]: () => true });
-
-    // Delete from child tables first, before deleting parent records
-    constant.db.exec(`DELETE FROM text_chunk WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-    constant.db.exec(`DELETE FROM embedding WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-    constant.db.exec(`DELETE FROM converted_file WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-
-    // Now delete parent tables
-    constant.db.exec(`DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`);
-    constant.db.exec(`DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`);
-
-    constant.db.close();
-  });
 }

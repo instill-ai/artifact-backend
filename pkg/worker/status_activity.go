@@ -17,6 +17,7 @@ import (
 // This file contains status tracking activities used by ProcessFileWorkflow:
 // - GetFileStatusActivity - Retrieves current file processing status
 // - UpdateFileStatusActivity - Updates file processing status and error messages
+// - GetKBSystemConfigActivity - Retrieves KB's system configuration
 
 // UpdateFileStatusActivityParam defines the parameters for the UpdateFileStatusActivity
 type UpdateFileStatusActivityParam struct {
@@ -117,8 +118,32 @@ func (w *Worker) UpdateFileStatusActivity(ctx context.Context, param *UpdateFile
 	return nil
 }
 
+// GetKBSystemConfigActivityParam defines the parameters for GetKBSystemConfigActivity
+type GetKBSystemConfigActivityParam struct {
+	KBUID types.KBUIDType // Knowledge base unique identifier
+}
+
+// GetKBSystemConfigActivity retrieves the system configuration for a knowledge base
+// This is used to determine routing logic (e.g., OpenAI vs Gemini routes)
+func (w *Worker) GetKBSystemConfigActivity(ctx context.Context, param *GetKBSystemConfigActivityParam) (repository.SystemConfigJSON, error) {
+	w.log.Info("Getting KB system config", zap.String("kbUID", param.KBUID.String()))
+
+	kb, err := w.repository.GetKnowledgeBaseByUIDWithConfig(ctx, param.KBUID)
+	if err != nil {
+		err = errorsx.AddMessage(err, "Unable to retrieve knowledge base configuration. Please try again.")
+		return repository.SystemConfigJSON{}, temporal.NewApplicationErrorWithCause(
+			errorsx.MessageOrErr(err),
+			getKBSystemConfigActivityError,
+			err,
+		)
+	}
+
+	return kb.SystemConfig, nil
+}
+
 // Activity error type constants
 const (
-	getFileStatusActivityError    = "GetFileStatusActivity"
-	updateFileStatusActivityError = "UpdateFileStatusActivity"
+	getFileStatusActivityError     = "GetFileStatusActivity"
+	updateFileStatusActivityError  = "UpdateFileStatusActivity"
+	getKBSystemConfigActivityError = "GetKBSystemConfigActivity"
 )

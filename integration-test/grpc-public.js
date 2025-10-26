@@ -1,9 +1,72 @@
 import grpc from "k6/net/grpc";
+import http from "k6/http";
 import { check, group, sleep } from "k6";
 import { randomString } from "https://jslib.k6.io/k6-utils/1.1.0/index.js";
 
 import * as constant from "./const.js";
 import * as helper from "./helper.js";
+
+const dbIDPrefix = constant.generateDBIDPrefix();
+
+export function setup() {
+  // Stagger test execution to reduce parallel resource contention
+  helper.staggerTestExecution(2);
+
+  var loginResp = http.request("POST", `${constant.mgmtRESTPublicHost}/v1beta/auth/login`, JSON.stringify({
+    "username": constant.defaultUsername,
+    "password": constant.defaultPassword,
+  }))
+
+  check(loginResp, {
+    [`POST ${constant.mgmtRESTPublicHost}/v1beta/auth/login response status is 200`]: (r) => r.status === 200,
+  });
+
+  var header = {
+    "headers": {
+      "Authorization": `Bearer ${loginResp.json().accessToken}`,
+      "Content-Type": "application/json",
+    },
+    "timeout": "600s",
+  }
+
+  var resp = http.request("GET", `${constant.mgmtRESTPublicHost}/v1beta/user`, {}, {
+    headers: {
+      "Authorization": `Bearer ${loginResp.json().accessToken}`
+    }
+  })
+
+  return {
+    header: header,
+    metadata: { Authorization: `Bearer ${loginResp.json().accessToken}` },
+    expectedOwner: resp.json().user
+  }
+}
+
+export function teardown(data) {
+  // Cleanup: Remove catalogs created by gRPC tests (identified by dbIDPrefix)
+  console.log("\n=== TEARDOWN: Cleaning up gRPC test catalogs ===");
+  try {
+    const listResp = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, data.header);
+    if (listResp.status === 200) {
+      const catalogs = Array.isArray(listResp.json().catalogs) ? listResp.json().catalogs : [];
+      let cleanedCount = 0;
+      for (const catalog of catalogs) {
+        const catId = catalog.catalogId || catalog.catalog_id;
+        // Clean up catalogs with dbIDPrefix or clf- prefix (cleanup test)
+        if (catId && (catId.includes(dbIDPrefix) || catId.match(/^clf-/))) {
+          const delResp = http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catId}`, null, data.header);
+          if (delResp.status === 200 || delResp.status === 204) {
+            cleanedCount++;
+          }
+        }
+      }
+      console.log(`Cleaned ${cleanedCount} gRPC test catalogs`);
+    }
+  } catch (e) {
+    console.log(`Teardown cleanup warning: ${e}`);
+  }
+  console.log("=== TEARDOWN: gRPC tests cleanup complete ===\n");
+}
 
 export function CheckUploadCatalogFile(client, data) {
   const groupName = "Artifact API: Upload file (gRPC)";
@@ -12,12 +75,12 @@ export function CheckUploadCatalogFile(client, data) {
 
     const cRes = client.invoke(
       "artifact.artifact.v1alpha.ArtifactPublicService/CreateCatalog",
-      { namespaceId: data.expectedOwner.id, name: constant.dbIDPrefix + randomString(10), description: randomString(30), tags: ["test", "integration", "grpc"], type: "CATALOG_TYPE_PERSISTENT" },
+      { namespaceId: data.expectedOwner.id, name: dbIDPrefix + randomString(10), description: randomString(30), tags: ["test", "integration", "grpc"], type: "CATALOG_TYPE_PERSISTENT" },
       data.metadata
     );
     const catalog = cRes.message && cRes.message.catalog ? cRes.message.catalog : {};
 
-    const reqBody = { namespaceId: data.expectedOwner.id, catalogId: catalog.catalogId, file: { name: constant.dbIDPrefix + "test-file-grpc-" + randomString(5) + ".doc", type: "TYPE_DOC", content: constant.sampleDoc } };
+    const reqBody = { namespaceId: data.expectedOwner.id, catalogId: catalog.catalogId, file: { name: dbIDPrefix + "test-file-grpc-" + randomString(5) + ".doc", type: "TYPE_DOC", content: constant.sampleDoc } };
     const resOrigin = client.invoke("artifact.artifact.v1alpha.ArtifactPublicService/UploadCatalogFile", reqBody, data.metadata);
     check(resOrigin, {
       "artifact.artifact.v1alpha.ArtifactPublicService/UploadCatalogFile response status is StatusOK": (r) => r.status === grpc.StatusOK,
@@ -37,9 +100,9 @@ export function CheckListCatalogFiles(client, data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
-    const cRes = client.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateCatalog", { namespaceId: data.expectedOwner.id, name: constant.dbIDPrefix + randomString(10), description: randomString(30), tags: ["test", "integration", "grpc"], type: "CATALOG_TYPE_PERSISTENT" }, data.metadata);
+    const cRes = client.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateCatalog", { namespaceId: data.expectedOwner.id, name: dbIDPrefix + randomString(10), description: randomString(30), tags: ["test", "integration", "grpc"], type: "CATALOG_TYPE_PERSISTENT" }, data.metadata);
     const catalog = cRes.message && cRes.message.catalog ? cRes.message.catalog : {};
-    const fRes = client.invoke("artifact.artifact.v1alpha.ArtifactPublicService/UploadCatalogFile", { namespaceId: data.expectedOwner.id, catalogId: catalog.catalogId, file: { name: constant.dbIDPrefix + "test-file-grpc-" + randomString(5) + ".doc", type: "TYPE_DOC", content: constant.sampleDoc } }, data.metadata);
+    const fRes = client.invoke("artifact.artifact.v1alpha.ArtifactPublicService/UploadCatalogFile", { namespaceId: data.expectedOwner.id, catalogId: catalog.catalogId, file: { name: dbIDPrefix + "test-file-grpc-" + randomString(5) + ".doc", type: "TYPE_DOC", content: constant.sampleDoc } }, data.metadata);
 
     const resOrigin = client.invoke("artifact.artifact.v1alpha.ArtifactPublicService/ListCatalogFiles", { namespaceId: data.expectedOwner.id, catalogId: catalog.catalogId, pageSize: 10 }, data.metadata);
     check(resOrigin, {
@@ -56,9 +119,9 @@ export function CheckGetCatalogFile(client, data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
-    const cRes = client.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateCatalog", { namespaceId: data.expectedOwner.id, name: constant.dbIDPrefix + randomString(10), description: randomString(30), tags: ["test", "integration", "grpc"], type: "CATALOG_TYPE_PERSISTENT" }, data.metadata);
+    const cRes = client.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateCatalog", { namespaceId: data.expectedOwner.id, name: dbIDPrefix + randomString(10), description: randomString(30), tags: ["test", "integration", "grpc"], type: "CATALOG_TYPE_PERSISTENT" }, data.metadata);
     const catalog = cRes.message && cRes.message.catalog ? cRes.message.catalog : {};
-    const fRes = client.invoke("artifact.artifact.v1alpha.ArtifactPublicService/UploadCatalogFile", { namespaceId: data.expectedOwner.id, catalogId: catalog.catalogId, file: { name: constant.dbIDPrefix + "test-file-grpc-" + randomString(5) + ".doc", type: "TYPE_DOC", content: constant.sampleDoc } }, data.metadata);
+    const fRes = client.invoke("artifact.artifact.v1alpha.ArtifactPublicService/UploadCatalogFile", { namespaceId: data.expectedOwner.id, catalogId: catalog.catalogId, file: { name: dbIDPrefix + "test-file-grpc-" + randomString(5) + ".doc", type: "TYPE_DOC", content: constant.sampleDoc } }, data.metadata);
     const file = fRes.message.file;
 
     const resOrigin = client.invoke("artifact.artifact.v1alpha.ArtifactPublicService/GetCatalogFile", { namespaceId: data.expectedOwner.id, catalogId: catalog.catalogId, fileUid: file.fileUid }, data.metadata);
@@ -78,7 +141,7 @@ export function CheckCreateCatalog(client, data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
-    const name = constant.dbIDPrefix + randomString(10);
+    const name = dbIDPrefix + randomString(10);
     const req = { namespaceId: data.expectedOwner.id, name, description: randomString(30), tags: ["test", "grpc"], type: "CATALOG_TYPE_PERSISTENT" };
     const res = client.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateCatalog", req, data.metadata);
     check(res, {
@@ -110,7 +173,7 @@ export function CheckGetCatalog(client, data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
-    const name = constant.dbIDPrefix + randomString(10);
+    const name = dbIDPrefix + randomString(10);
     const cRes = client.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateCatalog", { namespaceId: data.expectedOwner.id, name, description: randomString(20), tags: ["test", "grpc"], type: "CATALOG_TYPE_PERSISTENT" }, data.metadata);
     const catalog = cRes.message.catalog;
     const res = client.invoke("artifact.artifact.v1alpha.ArtifactPublicService/ListCatalogs", { namespaceId: data.expectedOwner.id }, data.metadata);
@@ -127,7 +190,7 @@ export function CheckUpdateCatalog(client, data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
-    const name = constant.dbIDPrefix + randomString(10);
+    const name = dbIDPrefix + randomString(10);
     const cRes = client.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateCatalog", { namespaceId: data.expectedOwner.id, name, description: randomString(20), tags: ["test", "grpc"], type: "CATALOG_TYPE_PERSISTENT" }, data.metadata);
     const catalog = cRes.message.catalog;
     const updateReq = { namespaceId: data.expectedOwner.id, catalogId: catalog.catalogId, description: randomString(25), tags: ["test", "grpc", "updated"] };
@@ -146,7 +209,7 @@ export function CheckDeleteCatalog(client, data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
-    const name = constant.dbIDPrefix + randomString(10);
+    const name = dbIDPrefix + randomString(10);
     const cRes = client.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateCatalog", { namespaceId: data.expectedOwner.id, name, description: randomString(20), tags: ["test", "grpc"], type: "CATALOG_TYPE_PERSISTENT" }, data.metadata);
     const catalog = cRes.message.catalog;
     const res = client.invoke("artifact.artifact.v1alpha.ArtifactPublicService/DeleteCatalog", { namespaceId: data.expectedOwner.id, catalogId: catalog.catalogId }, data.metadata);
@@ -164,7 +227,7 @@ export function CheckCleanupOnFileDeletion(client, data) {
     // Create catalog
     const cRes = client.invoke(
       "artifact.artifact.v1alpha.ArtifactPublicService/CreateCatalog",
-      { namespaceId: data.expectedOwner.id, name: constant.dbIDPrefix + "clf-" + randomString(5), description: "Cleanup test", tags: ["test", "cleanup"], type: "CATALOG_TYPE_PERSISTENT" },
+      { namespaceId: data.expectedOwner.id, name: dbIDPrefix + "clf-" + randomString(5), description: "Cleanup test", tags: ["test", "cleanup"], type: "CATALOG_TYPE_PERSISTENT" },
       data.metadata
     );
     const catalog = cRes.message && cRes.message.catalog ? cRes.message.catalog : {};
@@ -172,7 +235,7 @@ export function CheckCleanupOnFileDeletion(client, data) {
     // Upload a PDF file (will trigger conversion)
     const fRes = client.invoke(
       "artifact.artifact.v1alpha.ArtifactPublicService/UploadCatalogFile",
-      { namespaceId: data.expectedOwner.id, catalogId: catalog.catalogId, file: { name: constant.dbIDPrefix + "clf.pdf", type: "TYPE_PDF", content: constant.samplePdf } },
+      { namespaceId: data.expectedOwner.id, catalogId: catalog.catalogId, file: { name: dbIDPrefix + "clf.pdf", type: "TYPE_PDF", content: constant.samplePdf } },
       data.metadata
     );
     const file = fRes.message && fRes.message.file ? fRes.message.file : {};

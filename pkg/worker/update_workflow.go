@@ -1,14 +1,17 @@
 package worker
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
+	"github.com/gofrs/uuid"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/types"
+	errorsx "github.com/instill-ai/x/errors"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
@@ -18,19 +21,19 @@ type UpdateKnowledgeBaseWorkflowParam struct {
 	OriginalKBUID types.KBUIDType
 	UserUID       types.UserUIDType
 	RequesterUID  types.RequesterUIDType
-	// SystemProfile specifies which system profile to use for the new embedding config
+	// SystemID specifies which system ID to use for the new embedding config
 	// If empty, uses the KB's current embedding config (useful for reprocessing)
-	SystemProfile string
+	SystemID string
 }
 
-// UpdateKnowledgeBaseWorkflow upgrades a single knowledge base through 6 phases:
+// UpdateKnowledgeBaseWorkflow updates a single knowledge base through 6 phases:
 // 1. Prepare: Create staging KB with new collection
 // 2. Reprocess: Clone and reprocess all files with new config
 // 3. Synchronize: Lock KB and wait for all dual-processed files to complete
 // 4. Validate: Verify data integrity (file counts, embeddings, chunks)
 // 5. Swap: Atomic pointer swap of collections and metadata
 // 6. Cleanup: Schedule rollback KB deletion after retention period
-func (w *Worker) UpdateKnowledgeBaseWorkflow(ctx workflow.Context, param UpdateKnowledgeBaseWorkflowParam) error {
+func (w *Worker) UpdateKnowledgeBaseWorkflow(ctx workflow.Context, param UpdateKnowledgeBaseWorkflowParam) (retErr error) {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("Starting UpdateKnowledgeBaseWorkflow",
 		"originalKBUID", param.OriginalKBUID.String())
@@ -50,12 +53,14 @@ func (w *Worker) UpdateKnowledgeBaseWorkflow(ctx workflow.Context, param UpdateK
 
 	// Track completion for cleanup
 	var stagingKBUID types.KBUIDType
-	upgradeCompleted := false
+	updateCompleted := false
 
 	// Defer cleanup on failure
+	// Note: Does NOT run if workflow was explicitly canceled via AbortKnowledgeBaseUpdate
+	// (abort service handles cleanup and status update to avoid race condition)
 	defer func() {
-		if !upgradeCompleted && stagingKBUID.String() != "" {
-			// Cleanup failed upgrade - delete staging KB
+		if !updateCompleted {
+			// Prepare cleanup context
 			cleanupCtx, _ := workflow.NewDisconnectedContext(ctx)
 			cleanupCtx = workflow.WithActivityOptions(cleanupCtx, workflow.ActivityOptions{
 				StartToCloseTimeout: time.Minute,
@@ -67,18 +72,37 @@ func (w *Worker) UpdateKnowledgeBaseWorkflow(ctx workflow.Context, param UpdateK
 				},
 			})
 
-			logger.Warn("Upgrade failed, cleaning up staging KB",
-				"stagingKBUID", stagingKBUID)
+			// CRITICAL: Cleanup staging KB only if it was created
+			// If workflow fails before Phase 1 completes, stagingKBUID will be empty
+			if stagingKBUID.String() != "" {
+				logger.Warn("update failed, cleaning up staging KB",
+					"stagingKBUID", stagingKBUID)
 
-			_ = workflow.ExecuteActivity(cleanupCtx, w.CleanupOldKnowledgeBaseActivity, &CleanupOldKnowledgeBaseActivityParam{
-				KBUID: stagingKBUID,
-			}).Get(cleanupCtx, nil)
+				_ = workflow.ExecuteActivity(cleanupCtx, w.CleanupOldKnowledgeBaseActivity, &CleanupOldKnowledgeBaseActivityParam{
+					KBUID: stagingKBUID,
+				}).Get(cleanupCtx, nil)
+			}
 
-			// Mark original KB as failed
+			// CRITICAL: ALWAYS mark production KB as failed, even if staging KB was never created
+			// This ensures pollUpdateCompletion doesn't timeout waiting for a status that never comes
+			// Mark original KB as failed with error message
+			// IMPORTANT: This only runs for actual failures, not cancellations
+			// Canceled workflows are handled by AbortKnowledgeBaseUpdate which sets status to ABORTED
+			errorMessage := ""
+			if retErr != nil {
+				errorMessage = retErr.Error()
+				// Truncate very long error messages to avoid DB issues
+				if len(errorMessage) > 1000 {
+					errorMessage = errorMessage[:1000] + "... (truncated)"
+				}
+			}
+
 			_ = workflow.ExecuteActivity(cleanupCtx, w.UpdateKnowledgeBaseUpdateStatusActivity, &UpdateKnowledgeBaseUpdateStatusActivityParam{
-				KBUID:      param.OriginalKBUID,
-				Status:     artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_FAILED.String(),
-				WorkflowID: workflowID,
+				KBUID:             param.OriginalKBUID,
+				Status:            artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_FAILED.String(),
+				WorkflowID:        workflowID,
+				ErrorMessage:      errorMessage,
+				PreviousSystemUID: types.SystemUIDType(uuid.Nil), // Don't update, already set when status changed to UPDATING
 			}).Get(cleanupCtx, nil)
 		}
 	}()
@@ -87,19 +111,45 @@ func (w *Worker) UpdateKnowledgeBaseWorkflow(ctx workflow.Context, param UpdateK
 	logger.Info("Phase 1: Prepare - Validating and creating staging KB")
 
 	// Validate eligibility FIRST before marking as updating
+	// This also captures the current system UID for audit trail
+	var validateResult ValidateUpdateEligibilityActivityResult
 	err := workflow.ExecuteActivity(ctx, w.ValidateUpdateEligibilityActivity, &ValidateUpdateEligibilityActivityParam{
 		KBUID: param.OriginalKBUID,
-	}).Get(ctx, nil)
+	}).Get(ctx, &validateResult)
 	if err != nil {
 		logger.Error("KB is not eligible for update", "error", err)
 		return err
 	}
 
-	// Update original KB status to updating after validation passes
+	previousSystemUID := validateResult.PreviousSystemUID
+	logger.Info("Captured previous system UID for audit trail", "previousSystemUID", previousSystemUID.String())
+
+	// ========== Phase 1.5: Take Snapshot ==========
+	// CRITICAL: Take snapshot BEFORE status changes to UPDATING
+	// This ensures clean separation between cloning and dual-processing:
+	// - Files in snapshot: Will be cloned to staging
+	// - Files uploaded after status change: Will be dual-processed to staging
+	// - NO OVERLAP! (prevents duplicate files race condition)
+	logger.Info("Phase 1.5: Taking snapshot of files before status change")
+
+	var listFilesResult ListFilesForReprocessingActivityResult
+	err = workflow.ExecuteActivity(ctx, w.ListFilesForReprocessingActivity, &ListFilesForReprocessingActivityParam{
+		KBUID: param.OriginalKBUID,
+	}).Get(ctx, &listFilesResult)
+	if err != nil {
+		logger.Error("Failed to list files for reprocessing", "error", err)
+		return err
+	}
+
+	logger.Info("Snapshot taken", "fileCount", len(listFilesResult.FileUIDs))
+
+	// Update original KB status to updating after snapshot is taken
+	// Pass previousSystemUID for historical audit trail
 	err = workflow.ExecuteActivity(ctx, w.UpdateKnowledgeBaseUpdateStatusActivity, &UpdateKnowledgeBaseUpdateStatusActivityParam{
-		KBUID:      param.OriginalKBUID,
-		Status:     artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING.String(),
-		WorkflowID: workflowID,
+		KBUID:             param.OriginalKBUID,
+		Status:            artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING.String(),
+		WorkflowID:        workflowID,
+		PreviousSystemUID: previousSystemUID,
 	}).Get(ctx, nil)
 	if err != nil {
 		logger.Error("Failed to update KB status to updating", "error", err)
@@ -110,7 +160,7 @@ func (w *Worker) UpdateKnowledgeBaseWorkflow(ctx workflow.Context, param UpdateK
 	var stagingResult CreateStagingKnowledgeBaseActivityResult
 	err = workflow.ExecuteActivity(ctx, w.CreateStagingKnowledgeBaseActivity, &CreateStagingKnowledgeBaseActivityParam{
 		OriginalKBUID: param.OriginalKBUID,
-		SystemProfile: param.SystemProfile,
+		SystemID:      param.SystemID,
 	}).Get(ctx, &stagingResult)
 	if err != nil {
 		logger.Error("Failed to create staging KB", "error", err)
@@ -121,19 +171,7 @@ func (w *Worker) UpdateKnowledgeBaseWorkflow(ctx workflow.Context, param UpdateK
 	logger.Info("Staging KB created", "stagingKBUID", stagingKBUID.String())
 
 	// ========== Phase 2: Reprocess ==========
-	logger.Info("Phase 2: Reprocess - Reprocessing all files")
-
-	// List all files from original KB
-	var listFilesResult ListFilesForReprocessingActivityResult
-	err = workflow.ExecuteActivity(ctx, w.ListFilesForReprocessingActivity, &ListFilesForReprocessingActivityParam{
-		KBUID: param.OriginalKBUID,
-	}).Get(ctx, &listFilesResult)
-	if err != nil {
-		logger.Error("Failed to list files for reprocessing", "error", err)
-		return err
-	}
-
-	logger.Info("Files to reprocess", "count", len(listFilesResult.FileUIDs))
+	logger.Info("Phase 2: Reprocess - Reprocessing all files from snapshot", "fileCount", len(listFilesResult.FileUIDs))
 
 	// Reprocess files in batches
 	batchSize := config.Config.RAG.Update.BatchSize
@@ -164,9 +202,17 @@ func (w *Worker) UpdateKnowledgeBaseWorkflow(ctx workflow.Context, param UpdateK
 				return err
 			}
 
+			// CRITICAL: Skip processing if file was deleted during update
+			// CloneFileToStagingKBActivity returns nil UID when original file is not found
+			// This is expected behavior - users can delete files during updates
+			if cloneResult.NewFileUID.String() == uuid.Nil.String() {
+				logger.Info("Skipping processing for deleted file", "originalFileUID", fileUID)
+				continue
+			}
+
 			// Trigger ProcessFileWorkflow for the cloned file
 			childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
-				WorkflowID: fmt.Sprintf("process-file-%s-upgrade", cloneResult.NewFileUID.String()),
+				WorkflowID: fmt.Sprintf("process-file-%s-update", cloneResult.NewFileUID.String()),
 			})
 
 			future := workflow.ExecuteChildWorkflow(childCtx, "ProcessFileWorkflow", ProcessFileWorkflowParam{
@@ -197,24 +243,68 @@ func (w *Worker) UpdateKnowledgeBaseWorkflow(ctx workflow.Context, param UpdateK
 
 	// Synchronization needs extended retries during rapid operations (e.g., CC3 test)
 	// where multiple files are uploaded/deleted concurrently and may take time to complete processing
+	// IMPORTANT: We handle retries at workflow level (not activity level) to pass reconciled file UIDs between attempts
 	syncCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: ActivityTimeoutLong,
 		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval:    RetryInitialInterval,
-			BackoffCoefficient: RetryBackoffCoefficient,
-			MaximumInterval:    RetryMaximumIntervalLong,
-			MaximumAttempts:    20, // Increased from default 5 to 20 for rapid operations (up to ~5 minutes wait)
+			MaximumAttempts: 1, // NO activity retries - we handle retries in workflow
 		},
 	})
 
+	// Track reconciled file UIDs across retry attempts
+	var reconciledFileUIDs []types.FileUIDType
+	maxSyncAttempts := 20
 	var syncResult SynchronizeKBActivityResult
-	err = workflow.ExecuteActivity(syncCtx, w.SynchronizeKBActivity, &SynchronizeKBActivityParam{
-		OriginalKBUID: param.OriginalKBUID,
-		StagingKBUID:  stagingKBUID,
-	}).Get(syncCtx, &syncResult)
-	if err != nil {
-		logger.Error("Synchronization failed", "error", err)
-		return fmt.Errorf("synchronization failed: %w", err)
+
+	for attempt := 1; attempt <= maxSyncAttempts; attempt++ {
+		err = workflow.ExecuteActivity(syncCtx, w.SynchronizeKBActivity, &SynchronizeKBActivityParam{
+			OriginalKBUID:              param.OriginalKBUID,
+			StagingKBUID:               stagingKBUID,
+			RecentlyReconciledFileUIDs: reconciledFileUIDs, // Pass UIDs from previous attempt
+		}).Get(syncCtx, &syncResult)
+
+		if err == nil {
+			// Success!
+			logger.Info("Synchronization complete - KB locked and all files processed",
+				"attempts", attempt)
+			break
+		}
+
+		// Check if this is a non-retryable error (e.g., KB deleted)
+		// Non-retryable errors should fail immediately, not retry 20 times
+		var applicationErr *temporal.ApplicationError
+		if errors.As(err, &applicationErr) && applicationErr.NonRetryable() {
+			logger.Error("Synchronization failed with non-retryable error (failing immediately)",
+				"error", err,
+				"attempt", attempt)
+			return temporal.NewNonRetryableApplicationError(
+				fmt.Sprintf("Synchronization failed with non-retryable error (attempt %d): %s", attempt, errorsx.MessageOrErr(err)),
+				"UpdateKnowledgeBaseWorkflow",
+				err,
+			)
+		}
+
+		// Check if we got reconciled file UIDs in the result (even with error)
+		if len(syncResult.ReconciledFileUIDs) > 0 {
+			reconciledFileUIDs = append(reconciledFileUIDs, syncResult.ReconciledFileUIDs...)
+			logger.Info("Reconciliation created files, will exclude from NOTSTARTED check on next attempt",
+				"reconciledFileCount", len(syncResult.ReconciledFileUIDs),
+				"totalReconciledFileCount", len(reconciledFileUIDs))
+		}
+
+		// If this was the last attempt, return the error
+		if attempt >= maxSyncAttempts {
+			logger.Error("Synchronization failed after maximum attempts", "error", err, "attempts", attempt)
+			return fmt.Errorf("synchronization failed after %d attempts: %w", attempt, err)
+		}
+
+		// Sleep with exponential backoff before retry
+		sleepDuration := workflow.Now(ctx).Add(time.Duration(attempt) * time.Second).Sub(workflow.Now(ctx))
+		err := workflow.Sleep(ctx, sleepDuration)
+		if err != nil {
+			logger.Error("Sleep interrupted", "error", err)
+			return err
+		}
 	}
 
 	logger.Info("Synchronization complete - KB locked and all files processed")
@@ -276,10 +366,16 @@ func (w *Worker) UpdateKnowledgeBaseWorkflow(ctx workflow.Context, param UpdateK
 			MaximumAttempts:    3,
 		},
 	})
-	_ = workflow.ExecuteActivity(cleanupCtx, w.CleanupOldKnowledgeBaseActivity, &CleanupOldKnowledgeBaseActivityParam{
+	if err := workflow.ExecuteActivity(cleanupCtx, w.CleanupOldKnowledgeBaseActivity, &CleanupOldKnowledgeBaseActivityParam{
 		KBUID:                  swapResult.StagingKBUID,
 		ProtectedCollectionUID: &swapResult.NewProductionCollectionUID,
-	}).Get(cleanupCtx, nil)
+	}).Get(cleanupCtx, nil); err != nil {
+		// Log error but don't fail workflow - swap already succeeded
+		// Orphaned staging KB will need manual cleanup
+		logger.Error("Failed to cleanup staging KB after successful swap - manual cleanup may be needed",
+			"stagingKBUID", swapResult.StagingKBUID.String(),
+			"error", err)
+	}
 
 	// ========== Phase 6: Cleanup ==========
 	logger.Info("Phase 6: Cleanup - Scheduling rollback KB deletion after retention period")
@@ -294,26 +390,38 @@ func (w *Worker) UpdateKnowledgeBaseWorkflow(ctx workflow.Context, param UpdateK
 	rollbackCleanupCtx := workflow.WithChildOptions(ctx, childWorkflowOptions)
 
 	// Start cleanup workflow with retention delay (it will wait before cleanup)
-	_ = workflow.ExecuteChildWorkflow(rollbackCleanupCtx, w.CleanupKnowledgeBaseWorkflow, CleanupKnowledgeBaseWorkflowParam{
+	// Note: We start the child workflow but don't wait for it to complete (fire-and-forget)
+	// The workflow will run in background and clean up the rollback KB after retention period
+	childWF := workflow.ExecuteChildWorkflow(rollbackCleanupCtx, w.CleanupKnowledgeBaseWorkflow, CleanupKnowledgeBaseWorkflowParam{
 		KBUID:               swapResult.RollbackKBUID,
 		CleanupAfterSeconds: retentionSeconds,
 	})
 
-	// Don't wait for cleanup - let it run in background
-	logger.Info("Cleanup workflow scheduled for rollback KB",
-		"rollbackKBUID", swapResult.RollbackKBUID.String(),
-		"retentionSeconds", retentionSeconds,
-		"retentionDays", config.Config.RAG.Update.RollbackRetentionDays)
+	// Get the workflow execution to verify it started (but don't wait for completion)
+	if err := childWF.GetChildWorkflowExecution().Get(rollbackCleanupCtx, nil); err != nil {
+		// Log error but don't fail - rollback KB can be cleaned up manually later
+		logger.Error("Failed to start cleanup workflow for rollback KB - manual cleanup may be needed",
+			"rollbackKBUID", swapResult.RollbackKBUID.String(),
+			"retentionDays", config.Config.RAG.Update.RollbackRetentionDays,
+			"error", err)
+	} else {
+		// Workflow started successfully - it will run in background
+		logger.Info("Cleanup workflow scheduled for rollback KB",
+			"rollbackKBUID", swapResult.RollbackKBUID.String(),
+			"retentionSeconds", retentionSeconds,
+			"retentionDays", config.Config.RAG.Update.RollbackRetentionDays)
+	}
 
-	// Mark upgrade as completed
-	upgradeCompleted = true
+	// Mark update as completed
+	updateCompleted = true
 
 	// CRITICAL: Set final COMPLETED status and clear workflow_id
 	// This allows the KB to be deleted and prevents catalog pileup
 	err = workflow.ExecuteActivity(ctx, w.UpdateKnowledgeBaseUpdateStatusActivity, &UpdateKnowledgeBaseUpdateStatusActivityParam{
-		KBUID:      param.OriginalKBUID,
-		Status:     artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED.String(),
-		WorkflowID: workflowID, // Will be cleared to NULL by UpdateKnowledgeBaseUpdateStatus for terminal states
+		KBUID:             param.OriginalKBUID,
+		Status:            artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED.String(),
+		WorkflowID:        workflowID,                    // Will be cleared to NULL by UpdateKnowledgeBaseUpdateStatus for terminal states
+		PreviousSystemUID: types.SystemUIDType(uuid.Nil), // Don't update, already set when status changed to UPDATING
 	}).Get(ctx, nil)
 	if err != nil {
 		logger.Error("Failed to set final COMPLETED status (non-fatal)", "error", err)

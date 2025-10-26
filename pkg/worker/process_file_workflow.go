@@ -100,6 +100,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 
 	// Track workflow completion status for each file
 	filesCompleted := make(map[string]bool, fileCount)
+	filesFailed := make(map[string]error, fileCount) // Track failures to return error at end
 	allFilesCompleted := false
 
 	// Defer cleanup: If workflow is terminated/cancelled/timeout, mark all incomplete files as FAILED
@@ -172,6 +173,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 	}
 
 	// Step 1: Get metadata for all files and check their statuses
+	// We'll also get the KB's model family from the first file to determine caching strategy
 	logger.Info("Fetching metadata for all files", "fileCount", fileCount)
 
 	type fileMetadata struct {
@@ -186,6 +188,8 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 	}
 
 	filesMetadata := make([]fileMetadata, 0, fileCount)
+	var kbModelFamily string                                // Will be set from first file's metadata
+	var dualProcessingInfo *repository.DualProcessingTarget // Will be set from first file's metadata
 
 	for _, fileUID := range param.FileUIDs {
 		// Get current file status
@@ -193,14 +197,21 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 		if err := workflow.ExecuteActivity(ctx, w.GetFileStatusActivity, &GetFileStatusActivityParam{
 			FileUID: fileUID,
 		}).Get(ctx, &startStatus); err != nil {
+			// If file not found, it may have been deleted during processing - skip it gracefully
+			// This handles concurrent deletion scenarios (e.g., files deleted during KB updates)
+			// GetFileStatusActivity returns: "File not found. It may have been deleted." (capital F)
+			if strings.Contains(err.Error(), "File not found") {
+				logger.Info("File not found when checking status, skipping",
+					"fileUID", fileUID.String())
+				filesCompleted[fileUID.String()] = true
+				continue
+			}
 			return handleFileError(fileUID, "get file status", err)
 		}
 
 		// Handle different starting statuses
 		if startStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED ||
-			startStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_FAILED ||
-			startStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CONVERTING ||
-			startStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_SUMMARIZING {
+			startStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_FAILED {
 			logger.Info("Reprocessing file from beginning",
 				"fileUID", fileUID.String(),
 				"previousStatus", startStatus.String())
@@ -214,6 +225,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			KBUID:   kbUID,
 		}).Get(ctx, &metadata); err != nil {
 			// If file not found, it may have been deleted - skip it
+			// GetFileMetadataActivity returns: "file not found: <uid>" (lowercase f)
 			if strings.Contains(err.Error(), "file not found") {
 				logger.Info("File not found during processing, skipping",
 					"fileUID", fileUID.String())
@@ -225,6 +237,21 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 
 		bucket := repository.BucketFromDestination(metadata.File.Destination)
 		fileType := artifactpb.File_Type(artifactpb.File_Type_value[metadata.File.FileType])
+
+		// Capture KB model family and dual-processing info from first file
+		// (all files in a workflow belong to same KB, so we only need to check once)
+		if kbModelFamily == "" {
+			kbModelFamily = metadata.KBModelFamily
+			dualProcessingInfo = metadata.DualProcessingInfo
+			logger.Info("KB model family detected from first file",
+				"modelFamily", kbModelFamily,
+				"fileUID", fileUID.String())
+			if dualProcessingInfo != nil && dualProcessingInfo.IsNeeded {
+				logger.Info("Dual-processing will be coordinated after completion",
+					"targetKBUID", dualProcessingInfo.TargetKB.UID.String(),
+					"phase", dualProcessingInfo.Phase)
+			}
+		}
 
 		filesMetadata = append(filesMetadata, fileMetadata{
 			fileUID:            fileUID,
@@ -244,6 +271,13 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 		allFilesCompleted = true
 		return nil
 	}
+
+	// Determine caching strategy based on KB model family
+	// Caching is only supported for Gemini model family
+	useCaching := kbModelFamily == "gemini"
+	logger.Info("Determined caching strategy",
+		"modelFamily", kbModelFamily,
+		"useCaching", useCaching)
 
 	// Step 2: Process files that need full processing (NOTSTARTED/PROCESSING)
 	filesToProcessFull := make([]fileMetadata, 0)
@@ -268,22 +302,29 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 
 		// Step 2b: Create chat cache for all files (for future Chat API)
 		// Optimization: If only 1 file, we'll reuse its individual file cache instead of creating a separate chat cache
+		// NOTE: Caching is only enabled for Gemini model family (useCaching flag)
 		var chatCacheFuture workflow.Future
 		var chatCacheName string
 
-		if fileCount > 1 {
-			// Multiple files: Create a separate chat cache (runs in parallel with individual file processing)
-			logger.Info("Creating chat cache for multiple files", "fileCount", len(filesToProcessFull))
+		if useCaching {
+			if fileCount > 1 {
+				// Multiple files: Create a separate chat cache (runs in parallel with individual file processing)
+				logger.Info("Creating chat cache for multiple files (Gemini)", "fileCount", len(filesToProcessFull))
 
-			chatCacheFuture = workflow.ExecuteActivity(ctx, w.CacheChatContextActivity, &CacheChatContextActivityParam{
-				FileUIDs: param.FileUIDs,
-				KBUID:    kbUID,
-				Metadata: filesToProcessFull[0].metadata.ExternalMetadata,
-			})
+				chatCacheFuture = workflow.ExecuteActivity(ctx, w.CacheChatContextActivity, &CacheChatContextActivityParam{
+					FileUIDs: param.FileUIDs,
+					KBUID:    kbUID,
+					Metadata: filesToProcessFull[0].metadata.ExternalMetadata,
+				})
+			} else {
+				// Single file: Will reuse the individual file cache as chat cache (no separate chat cache needed)
+				logger.Info("Single file upload - will reuse file cache as chat cache (Gemini)")
+				// chatCacheFuture will be set when we create the individual file cache below
+			}
 		} else {
-			// Single file: Will reuse the individual file cache as chat cache (no separate chat cache needed)
-			logger.Info("Single file upload - will reuse file cache as chat cache")
-			// chatCacheFuture will be set when we create the individual file cache below
+			// OpenAI or other non-Gemini model family: Skip caching entirely
+			logger.Info("Skipping chat cache creation (non-Gemini model family)",
+				"modelFamily", kbModelFamily)
 		}
 
 		// Store chat cache metadata in Redis (async, non-blocking)
@@ -426,7 +467,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				Destination: fm.metadata.File.Destination,
 				FileType:    fm.fileType,
 				Filename:    fm.metadata.File.Name,
-				Pipelines:   []pipeline.PipelineRelease{pipeline.ConvertFileTypePipeline},
+				Pipelines:   []pipeline.Release{pipeline.ConvertFileTypePipeline},
 				Metadata:    fm.metadata.ExternalMetadata,
 			}).Get(ctx, &result); err != nil {
 				// Format conversion failure is not fatal - continue with original file
@@ -468,7 +509,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			}
 		}
 
-		// Step 2d: Create caches using the converted files
+		// Step 2d: Create caches using the converted files (Gemini only)
 		// Each file: cache → content/summary → chunking → embedding (no blocking between files)
 		logger.Info("Starting cache creation and file processing", "fileCount", len(stdResults))
 
@@ -480,31 +521,39 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 
 		processingFutures := make([]fileProcessingFuture, len(stdResults))
 
-		// Start cache creation for each file immediately (using converted files)
+		// Start cache creation for each file immediately (using converted files) - Gemini only
 		for i, cr := range stdResults {
 			cr := cr // Create a copy for closure/pointer safety
 
-			// Start file cache creation for this file (non-blocking)
-			// Use the CONVERTED file for caching, not the original
-			// Use 2-minute timeout for cache creation (AI API calls should complete quickly)
-			cacheCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-				StartToCloseTimeout: 2 * time.Minute,
-				RetryPolicy: &temporal.RetryPolicy{
-					InitialInterval:    RetryInitialInterval,
-					BackoffCoefficient: RetryBackoffCoefficient,
-					MaximumInterval:    RetryMaximumIntervalStandard,
-					MaximumAttempts:    RetryMaximumAttempts,
-				},
-			})
-			fileCacheFuture := workflow.ExecuteActivity(cacheCtx, w.CacheFileContextActivity, &CacheFileContextActivityParam{
-				FileUID:     cr.fileUID,
-				KBUID:       kbUID,
-				Bucket:      cr.effectiveBucket,
-				Destination: cr.effectiveDestination,
-				FileType:    cr.effectiveFileType,
-				Filename:    cr.fileMetadata.metadata.File.Name,
-				Metadata:    cr.fileMetadata.metadata.ExternalMetadata,
-			})
+			var fileCacheFuture workflow.Future
+
+			if useCaching {
+				// Start file cache creation for this file (non-blocking) - Gemini only
+				// Use the CONVERTED file for caching, not the original
+				// Use 2-minute timeout for cache creation (AI API calls should complete quickly)
+				cacheCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+					StartToCloseTimeout: 2 * time.Minute,
+					RetryPolicy: &temporal.RetryPolicy{
+						InitialInterval:    RetryInitialInterval,
+						BackoffCoefficient: RetryBackoffCoefficient,
+						MaximumInterval:    RetryMaximumIntervalStandard,
+						MaximumAttempts:    RetryMaximumAttempts,
+					},
+				})
+				fileCacheFuture = workflow.ExecuteActivity(cacheCtx, w.CacheFileContextActivity, &CacheFileContextActivityParam{
+					FileUID:     cr.fileUID,
+					KBUID:       kbUID,
+					Bucket:      cr.effectiveBucket,
+					Destination: cr.effectiveDestination,
+					FileType:    cr.effectiveFileType,
+					Filename:    cr.fileMetadata.metadata.File.Name,
+					Metadata:    cr.fileMetadata.metadata.ExternalMetadata,
+				})
+				logger.Info("Creating file cache (Gemini)", "fileUID", cr.fileUID.String())
+			} else {
+				// OpenAI or other non-Gemini: No file cache needed
+				logger.Info("Skipping file cache creation (non-Gemini)", "fileUID", cr.fileUID.String())
+			}
 
 			processingFutures[i] = fileProcessingFuture{
 				fileUID:         cr.fileUID,
@@ -512,10 +561,10 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				conversionData:  &cr,
 			}
 
-			// For single file case: reuse the file cache as the chat cache
-			if fileCount == 1 {
+			// For single file case: reuse the file cache as the chat cache (Gemini only)
+			if useCaching && fileCount == 1 {
 				chatCacheFuture = fileCacheFuture
-				logger.Info("Single file: reusing file cache as chat cache")
+				logger.Info("Single file: reusing file cache as chat cache (Gemini)")
 			}
 
 			// Schedule cleanup of temporary converted file (if conversion happened)
@@ -544,17 +593,26 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 
 		// Now start content/summary activities for each file - they'll wait for their own file cache
 		type fileWorkflowFutures struct {
-			fileUID        types.FileUIDType
-			contentFuture  workflow.Future // Activity future (not child workflow)
-			summaryFuture  workflow.Future // Activity future (not child workflow)
-			conversionData *stdFileResult
+			fileUID            types.FileUIDType
+			contentFuture      workflow.Future  // Activity future (not child workflow)
+			summaryFuture      workflow.Future  // Activity future (not child workflow) - for Gemini, or placeholder for OpenAI
+			summaryFutureChan  workflow.Channel // For OpenAI: channel to receive actual summary future after content completes
+			isOpenAISequential bool             // Flag to indicate OpenAI sequential processing
+			conversionData     *stdFileResult
 		}
 
 		workflowFutures := make([]fileWorkflowFutures, len(processingFutures))
 		fileCacheNames := make(map[string]string) // Map fileUID -> cacheName
 
-		// Phase 1: Collect cache names for all files
+		// Phase 1: Collect cache names for all files (Gemini only)
 		for _, pf := range processingFutures {
+			// Skip cache collection if caching is disabled (OpenAI or other non-Gemini)
+			if !useCaching || pf.fileCacheFuture == nil {
+				logger.Info("No file cache to collect (non-Gemini)",
+					"fileUID", pf.fileUID.String())
+				continue
+			}
+
 			// Get file cache name for this file (wait only for THIS file's cache)
 			var fileCacheResult CacheFileContextActivityResult
 			var fileCacheName string
@@ -614,10 +672,12 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			}
 		}
 
-		// Phase 3: Start all content and summary activities in parallel for all files
+		// Phase 3: Start content and summary activities
+		// For Gemini: Both activities run in parallel (both process raw file independently)
+		// For OpenAI: Sequential execution (summary needs markdown from content generation)
 		for i, pf := range processingFutures {
 			cr := pf.conversionData
-			// Get cache name for this file (if it exists)
+			// Get cache name for this file (if it exists - Gemini only)
 			fileCacheName := fileCacheNames[cr.fileUID.String()]
 
 			// Use the CONVERTED file location (effectiveBucket/effectiveDestination/effectiveFileType)
@@ -632,32 +692,108 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				CacheName:   fileCacheName,
 			})
 
-			// ProcessSummaryActivity: Use shorter timeout (1min) for faster retries
-			summaryCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-				StartToCloseTimeout: ActivityTimeoutStandard, // 1 minute
-				RetryPolicy: &temporal.RetryPolicy{
-					InitialInterval:    RetryInitialInterval,
-					BackoffCoefficient: RetryBackoffCoefficient,
-					MaximumInterval:    RetryMaximumIntervalLong,
-					MaximumAttempts:    RetryMaximumAttempts,
-				},
-			})
-			summaryFuture := workflow.ExecuteActivity(summaryCtx, w.ProcessSummaryActivity, &ProcessSummaryActivityParam{
-				FileUID:     cr.fileUID,
-				KBUID:       kbUID,
-				Bucket:      cr.effectiveBucket,
-				Destination: cr.effectiveDestination,
-				FileName:    cr.fileMetadata.metadata.File.Name,
-				FileType:    cr.effectiveFileType,
-				Metadata:    cr.fileMetadata.metadata.ExternalMetadata,
-				CacheName:   fileCacheName,
-			})
+			var summaryFuture workflow.Future
+			var summaryFutureChan workflow.Channel
+
+			if kbModelFamily == "gemini" {
+				// Gemini route: Start summary in parallel (processes raw file independently)
+				logger.Info("Starting content and summary in parallel (Gemini)",
+					"fileUID", cr.fileUID.String())
+
+				summaryCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+					StartToCloseTimeout: ActivityTimeoutStandard, // 1 minute
+					RetryPolicy: &temporal.RetryPolicy{
+						InitialInterval:    RetryInitialInterval,
+						BackoffCoefficient: RetryBackoffCoefficient,
+						MaximumInterval:    RetryMaximumIntervalLong,
+						MaximumAttempts:    RetryMaximumAttempts,
+					},
+				})
+				summaryFuture = workflow.ExecuteActivity(summaryCtx, w.ProcessSummaryActivity, &ProcessSummaryActivityParam{
+					FileUID:     cr.fileUID,
+					KBUID:       kbUID,
+					Bucket:      cr.effectiveBucket,
+					Destination: cr.effectiveDestination,
+					FileName:    cr.fileMetadata.metadata.File.Name,
+					FileType:    cr.effectiveFileType,
+					Metadata:    cr.fileMetadata.metadata.ExternalMetadata,
+					CacheName:   fileCacheName,
+					// ContentMarkdown left empty - Gemini reads raw file
+				})
+				summaryFutureChan = nil // No channel for Gemini
+			} else {
+				// OpenAI route: Summary depends on content generation output
+				// Execute content → summary sequentially using goroutine
+				logger.Info("Sequential content → summary (OpenAI)",
+					"fileUID", cr.fileUID.String())
+
+				// Capture variables for closure
+				fileUID := cr.fileUID
+				bucket := cr.effectiveBucket
+				destination := cr.effectiveDestination
+				fileName := cr.fileMetadata.metadata.File.Name
+				fileType := cr.effectiveFileType
+				metadata := cr.fileMetadata.metadata.ExternalMetadata
+
+				// Create a channel to communicate the summary future
+				summaryFutureChan = workflow.NewChannel(ctx)
+
+				// Start goroutine to wait for content, then execute summary
+				workflow.Go(ctx, func(gCtx workflow.Context) {
+					// Step 1: Wait for content generation to complete
+					var contentResult ProcessContentActivityResult
+					if err := contentFuture.Get(gCtx, &contentResult); err != nil {
+						logger.Error("Content generation failed, cannot start summary (OpenAI)",
+							"fileUID", fileUID.String(),
+							"error", err.Error())
+						// Send nil future to indicate failure
+						summaryFutureChan.Send(gCtx, nil)
+						return
+					}
+
+					logger.Info("Content generation completed, starting summary with markdown (OpenAI)",
+						"fileUID", fileUID.String(),
+						"contentLength", len(contentResult.Content))
+
+					// Step 2: Execute summary with the generated markdown content
+					summaryCtx := workflow.WithActivityOptions(gCtx, workflow.ActivityOptions{
+						StartToCloseTimeout: ActivityTimeoutStandard, // 1 minute
+						RetryPolicy: &temporal.RetryPolicy{
+							InitialInterval:    RetryInitialInterval,
+							BackoffCoefficient: RetryBackoffCoefficient,
+							MaximumInterval:    RetryMaximumIntervalLong,
+							MaximumAttempts:    RetryMaximumAttempts,
+						},
+					})
+
+					actualSummaryFuture := workflow.ExecuteActivity(summaryCtx, w.ProcessSummaryActivity, &ProcessSummaryActivityParam{
+						FileUID:         fileUID,
+						KBUID:           kbUID,
+						Bucket:          bucket,      // Not used when ContentMarkdown is provided
+						Destination:     destination, // Not used when ContentMarkdown is provided
+						FileName:        fileName,
+						FileType:        fileType,
+						Metadata:        metadata,
+						CacheName:       "",                    // No cache for OpenAI
+						ContentMarkdown: contentResult.Content, // Pass markdown from content generation
+					})
+
+					// Send the actual future to the channel
+					summaryFutureChan.Send(gCtx, actualSummaryFuture)
+				})
+
+				// Don't block here - we'll receive from the channel in the main waiting loop
+				// Set summaryFuture to nil as placeholder
+				summaryFuture = nil
+			}
 
 			workflowFutures[i] = fileWorkflowFutures{
-				fileUID:        cr.fileUID,
-				contentFuture:  contentFuture,
-				summaryFuture:  summaryFuture,
-				conversionData: cr,
+				fileUID:            cr.fileUID,
+				contentFuture:      contentFuture,
+				summaryFuture:      summaryFuture,     // nil for OpenAI (will receive from channel later)
+				summaryFutureChan:  summaryFutureChan, // Only set for OpenAI
+				isOpenAISequential: kbModelFamily != "gemini",
+				conversionData:     cr,
 			}
 		}
 
@@ -667,16 +803,51 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			var summaryResult ProcessSummaryActivityResult
 
 			contentErr := wf.contentFuture.Get(ctx, &contentResult)
-			summaryErr := wf.summaryFuture.Get(ctx, &summaryResult)
+
+			// For OpenAI sequential processing, receive the summary future from the channel
+			// (which was sent after content completed in the goroutine)
+			var summaryErr error
+			if wf.isOpenAISequential && wf.summaryFutureChan != nil {
+				// OpenAI route: Receive the actual summary future from the goroutine
+				logger.Info("OpenAI sequential processing: receiving summary future from channel",
+					"fileUID", wf.fileUID.String())
+				var actualSummaryFuture workflow.Future
+				wf.summaryFutureChan.Receive(ctx, &actualSummaryFuture)
+
+				if actualSummaryFuture == nil {
+					// Content failed, summary was not started
+					logger.Warn("Summary future is nil (content failed)", "fileUID", wf.fileUID.String())
+					summaryErr = contentErr // Use content error
+				} else {
+					// Get result from the actual summary future
+					summaryErr = actualSummaryFuture.Get(ctx, &summaryResult)
+				}
+			} else {
+				// Gemini route: get result from pre-started summary future
+				logger.Info("Gemini parallel processing: getting summary result",
+					"fileUID", wf.fileUID.String(),
+					"isOpenAISequential", wf.isOpenAISequential,
+					"summaryFutureChan", wf.summaryFutureChan != nil,
+					"summaryFuture", wf.summaryFuture != nil)
+
+				if wf.summaryFuture == nil {
+					// This should never happen for Gemini, but handle gracefully
+					logger.Error("Summary future is nil for Gemini processing (BUG!)",
+						"fileUID", wf.fileUID.String())
+					summaryErr = fmt.Errorf("summary future is nil")
+				} else {
+					summaryErr = wf.summaryFuture.Get(ctx, &summaryResult)
+				}
+			}
 
 			// Check for errors
 			if contentErr != nil {
-				_ = handleFileError(wf.fileUID, "process content workflow", contentErr)
+				filesFailed[wf.fileUID.String()] = handleFileError(wf.fileUID, "process content workflow", contentErr)
 				filesCompleted[wf.fileUID.String()] = true
 				continue
 			}
 			if summaryErr != nil {
-				_ = handleFileError(wf.fileUID, "process summary workflow", summaryErr)
+				filesFailed[wf.fileUID.String()] = handleFileError(wf.fileUID, "process summary workflow", summaryErr)
 				filesCompleted[wf.fileUID.String()] = true
 				continue
 			}
@@ -686,13 +857,15 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				"summaryLength", len(summaryResult.Summary))
 
 			// Update conversion metadata for this file
-			// Note: Content conversion now exclusively via AI (no pipeline fallback)
+			// Pipelines array contains all pipelines used: [content_pipeline, summary_pipeline]
+			// Each can be a pipeline name (e.g., "instill-ai/indexing-generate-content@v1.4.0") or empty if AI client was used
+			pipelines := []string{contentResult.Pipeline, summaryResult.Pipeline}
 			if err := workflow.ExecuteActivity(ctx, w.UpdateConversionMetadataActivity, &UpdateConversionMetadataActivityParam{
-				FileUID:  wf.fileUID,
-				Length:   contentResult.Length,
-				Pipeline: "", // Content conversion now exclusively via AI
+				FileUID:   wf.fileUID,
+				Length:    contentResult.Length,
+				Pipelines: pipelines,
 			}).Get(ctx, nil); err != nil {
-				_ = handleFileError(wf.fileUID, "update conversion metadata", err)
+				filesFailed[wf.fileUID.String()] = handleFileError(wf.fileUID, "update conversion metadata", err)
 				filesCompleted[wf.fileUID.String()] = true
 				continue
 			}
@@ -714,7 +887,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			if err := workflow.ExecuteActivity(ctx, w.DeleteOldTextChunksActivity, &DeleteOldTextChunksActivityParam{
 				FileUID: fileUID,
 			}).Get(ctx, nil); err != nil {
-				_ = handleFileError(fileUID, "delete old text chunks", err)
+				filesFailed[fileUID.String()] = handleFileError(fileUID, "delete old text chunks", err)
 				filesCompleted[fileUID.String()] = true
 				continue
 			}
@@ -729,7 +902,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				Type:         artifactpb.Chunk_TYPE_CONTENT, // Mark as content chunks
 				PositionData: contentResult.PositionData,    // Pass position data from content processing
 			}).Get(ctx, &contentChunks); err != nil {
-				_ = handleFileError(fileUID, "chunk content", err)
+				filesFailed[fileUID.String()] = handleFileError(fileUID, "chunk content", err)
 				filesCompleted[fileUID.String()] = true
 				continue
 			}
@@ -741,7 +914,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				TextChunks:       contentChunks.TextChunks,
 				ConvertedFileUID: contentResult.ConvertedFileUID, // Use UID from ProcessContentActivity
 			}).Get(ctx, nil); err != nil {
-				_ = handleFileError(fileUID, "save content chunks", err)
+				filesFailed[fileUID.String()] = handleFileError(fileUID, "save content chunks", err)
 				filesCompleted[fileUID.String()] = true
 				continue
 			}
@@ -761,7 +934,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 					Type:         artifactpb.Chunk_TYPE_SUMMARY, // Mark as summary chunks
 					PositionData: summaryResult.PositionData,    // Pass position data from summary processing
 				}).Get(ctx, &summaryChunks); err != nil {
-					_ = handleFileError(fileUID, "chunk summary", err)
+					filesFailed[fileUID.String()] = handleFileError(fileUID, "chunk summary", err)
 					filesCompleted[fileUID.String()] = true
 					continue
 				}
@@ -773,7 +946,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 					TextChunks:       summaryChunks.TextChunks,
 					ConvertedFileUID: summaryResult.ConvertedFileUID, // Summary chunks reference summary converted_file
 				}).Get(ctx, nil); err != nil {
-					_ = handleFileError(fileUID, "save summary chunks", err)
+					filesFailed[fileUID.String()] = handleFileError(fileUID, "save summary chunks", err)
 					filesCompleted[fileUID.String()] = true
 					continue
 				}
@@ -811,7 +984,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			if err := workflow.ExecuteActivity(chunksCtx, w.GetChunksForEmbeddingActivity, &GetChunksForEmbeddingActivityParam{
 				FileUID: fileUID,
 			}).Get(chunksCtx, &chunksData); err != nil {
-				_ = handleFileError(fileUID, "get text chunks for embedding", err)
+				filesFailed[fileUID.String()] = handleFileError(fileUID, "get text chunks for embedding", err)
 				filesCompleted[fileUID.String()] = true
 				continue
 			}
@@ -828,13 +1001,14 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 					MaximumAttempts:    RetryMaximumAttempts,
 				},
 			})
-			var embeddingVectors [][]float32
+			var embeddingResult EmbedTextsActivityResult
 			if err := workflow.ExecuteActivity(embedCtx, w.EmbedTextsActivity, &EmbedTextsActivityParam{
 				KBUID:    &kbUID, // Pass KBUID for client selection (Gemini 3072-dim vs OpenAI 1536-dim)
 				Texts:    chunksData.Texts,
-				TaskType: "RETRIEVAL_DOCUMENT", // For indexing document chunks
-			}).Get(embedCtx, &embeddingVectors); err != nil {
-				_ = handleFileError(fileUID, "generate embeddings", err)
+				TaskType: "RETRIEVAL_DOCUMENT",                                     // For indexing document chunks
+				Metadata: wf.conversionData.fileMetadata.metadata.ExternalMetadata, // Pass metadata for authentication
+			}).Get(embedCtx, &embeddingResult); err != nil {
+				filesFailed[fileUID.String()] = handleFileError(fileUID, "generate embeddings", err)
 				filesCompleted[fileUID.String()] = true
 				continue
 			}
@@ -846,7 +1020,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 					UID:         types.EmbeddingUIDType(uuid.Must(uuid.NewV4())),
 					SourceTable: repository.TextChunkTableName,
 					SourceUID:   chunk.UID,
-					Vector:      embeddingVectors[j],
+					Vector:      embeddingResult.Vectors[j],
 					KBUID:       kbUID,
 					FileUID:     fileUID,
 					ContentType: chunksData.ContentType,
@@ -869,17 +1043,19 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				UserUID:      userUID,
 				RequesterUID: requesterUID,
 			}).Get(childCtx, nil); err != nil {
-				_ = handleFileError(fileUID, "save embeddings to vector DB", err)
+				filesFailed[fileUID.String()] = handleFileError(fileUID, "save embeddings to vector DB", err)
 				filesCompleted[fileUID.String()] = true
 				continue
 			}
 
-			// Update embedding metadata
+			// Update embedding metadata with pipeline information
+			// Pipeline field contains the embedding pipeline name if used (e.g., "preset/indexing-embed@v1.0.0"),
+			// or empty string if AI client was used directly
 			if err := workflow.ExecuteActivity(ctx, w.UpdateEmbeddingMetadataActivity, &UpdateEmbeddingMetadataActivityParam{
 				FileUID:  fileUID,
-				Pipeline: "",
+				Pipeline: embeddingResult.Pipeline,
 			}).Get(ctx, nil); err != nil {
-				_ = handleFileError(fileUID, "update embedding metadata", err)
+				filesFailed[fileUID.String()] = handleFileError(fileUID, "update embedding metadata", err)
 				filesCompleted[fileUID.String()] = true
 				continue
 			}
@@ -890,7 +1066,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				Status:  artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED,
 				Message: "File processing completed successfully",
 			}).Get(ctx, nil); err != nil {
-				_ = handleFileError(fileUID, "update final status", err)
+				filesFailed[fileUID.String()] = handleFileError(fileUID, "update final status", err)
 				filesCompleted[fileUID.String()] = true
 				continue
 			}
@@ -901,10 +1077,117 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 		}
 	}
 
-	// Mark all successfully completed files
+	// Mark all files as processed
 	allFilesCompleted = true
+
+	// Check if any files failed
+	if len(filesFailed) > 0 {
+		// Build error message with all failures
+		failedFileIDs := make([]string, 0, len(filesFailed))
+		for fileUID := range filesFailed {
+			failedFileIDs = append(failedFileIDs, fileUID)
+		}
+
+		logger.Error("ProcessFileWorkflow completed with failures",
+			"fileCount", len(filesMetadata),
+			"completedCount", len(filesCompleted),
+			"failedCount", len(filesFailed),
+			"failedFiles", failedFileIDs)
+
+		// Return the first error (all are already logged and files marked as FAILED)
+		var firstError error
+		for _, err := range filesFailed {
+			firstError = err
+			break
+		}
+		return fmt.Errorf("%d of %d files failed processing: %w", len(filesFailed), len(filesMetadata), firstError)
+	}
+
 	logger.Info("ProcessFileWorkflow completed successfully",
 		"fileCount", len(filesMetadata),
 		"completedCount", len(filesCompleted))
+
+	// SEQUENTIAL DUAL PROCESSING: After production files complete successfully,
+	// trigger target (staging/rollback) file processing if needed.
+	// This ensures proper synchronization - target only processes if production succeeds.
+	if dualProcessingInfo != nil && dualProcessingInfo.IsNeeded {
+		logger.Info("Sequential dual-processing: Production completed, triggering target file processing",
+			"prodKBUID", kbUID.String(),
+			"targetKBUID", dualProcessingInfo.TargetKB.UID.String(),
+			"phase", dualProcessingInfo.Phase,
+			"fileCount", len(param.FileUIDs))
+
+		// Find target files by matching names
+		targetFileUIDs := make([]types.FileUIDType, 0, len(filesMetadata))
+		for _, prodFileMeta := range filesMetadata {
+			var findResult FindTargetFileByNameActivityResult
+			err := workflow.ExecuteActivity(ctx, w.FindTargetFileByNameActivity, &FindTargetFileByNameActivityParam{
+				TargetKBUID:    dualProcessingInfo.TargetKB.UID,
+				TargetOwnerUID: dualProcessingInfo.TargetKB.Owner,
+				FileName:       prodFileMeta.metadata.File.Name,
+			}).Get(ctx, &findResult)
+			if err != nil {
+				// CRITICAL: Activity execution failed (e.g., not registered, DB error)
+				// This is a system error, not a "file not found" scenario
+				logger.Error("FindTargetFileByNameActivity failed - dual-processing cannot proceed",
+					"fileName", prodFileMeta.metadata.File.Name,
+					"targetKBUID", dualProcessingInfo.TargetKB.UID.String(),
+					"error", err)
+				return err
+			}
+			if !findResult.Found {
+				// WARNING: Target file not found - expected during dual-processing
+				// This could happen if target file was deleted or cloning failed
+				logger.Warn("Target file not found for dual processing",
+					"fileName", prodFileMeta.metadata.File.Name,
+					"targetKBUID", dualProcessingInfo.TargetKB.UID.String())
+				// Continue - we'll process what we can find
+				continue
+			}
+			targetFileUIDs = append(targetFileUIDs, findResult.FileUID)
+		}
+
+		// Trigger target file processing workflows
+		if len(targetFileUIDs) > 0 {
+			// Use ExecuteChildWorkflow to trigger target processing asynchronously
+			// (fire-and-forget pattern - we don't wait for completion)
+			// IMPORTANT: Use nanosecond precision to avoid workflow ID collisions when multiple files complete in the same second
+			// CRITICAL: Set ParentClosePolicy to ABANDON so child workflows continue running after parent completes
+			childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
+				WorkflowID:        fmt.Sprintf("process-file-target-%s-%d", kbUID.String(), workflow.Now(ctx).UnixNano()),
+				ParentClosePolicy: enums.PARENT_CLOSE_POLICY_ABANDON,
+			})
+
+			childFuture := workflow.ExecuteChildWorkflow(childCtx, w.ProcessFileWorkflow, ProcessFileWorkflowParam{
+				FileUIDs:     targetFileUIDs,
+				KBUID:        dualProcessingInfo.TargetKB.UID,
+				UserUID:      param.UserUID,
+				RequesterUID: param.RequesterUID,
+			})
+
+			// Wait just for the workflow to start (not complete)
+			var childWE workflow.Execution
+			if err := childFuture.GetChildWorkflowExecution().Get(ctx, &childWE); err != nil {
+				// CRITICAL: Failed to start target workflow during dual-processing
+				// This means target files won't be processed, which will cause synchronization to fail
+				// (SynchronizeKBActivity checks for NOTSTARTED files in target KB)
+				logger.Error("Failed to start target file processing workflow - dual-processing incomplete",
+					"targetFileCount", len(targetFileUIDs),
+					"targetKBUID", dualProcessingInfo.TargetKB.UID.String(),
+					"error", err)
+				return err
+			}
+
+			logger.Info("Sequential dual-processing: Target file processing started",
+				"targetFileCount", len(targetFileUIDs),
+				"targetKBUID", dualProcessingInfo.TargetKB.UID.String(),
+				"targetWorkflowID", childWE.ID)
+		} else {
+			logger.Warn("No target files found for dual processing",
+				"prodFileCount", len(filesMetadata),
+				"targetKBUID", dualProcessingInfo.TargetKB.UID.String())
+		}
+	}
+
 	return nil
 }

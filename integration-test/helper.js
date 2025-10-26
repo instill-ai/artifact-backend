@@ -221,7 +221,7 @@ export function countMinioObjects(kbUID, fileUID, objectType) {
 
     // Execute the shell script to count MinIO objects
     const result = exec.command('sh', [
-      `${__ENV.TEST_FOLDER_ABS_PATH}/integration-test/count-minio-objects.sh`,
+      `${__ENV.TEST_FOLDER_ABS_PATH}/integration-test/scripts/count-minio-objects.sh`,
       constant.minioConfig.bucket,
       prefix
     ]);
@@ -295,7 +295,7 @@ export function countMilvusVectors(kbUID, fileUID) {
 
     // Execute the shell script to count Milvus vectors using milvus_cli
     const result = exec.command('sh', [
-      `${__ENV.TEST_FOLDER_ABS_PATH}/integration-test/count-milvus-vectors.sh`,
+      `${__ENV.TEST_FOLDER_ABS_PATH}/integration-test/scripts/count-milvus-vectors.sh`,
       collectionName,
       fileUID
     ]);
@@ -639,6 +639,10 @@ export function findCatalogByPattern(namePattern) {
  */
 export function pollUpdateCompletion(client, data, catalogUid, maxWaitSeconds = 900) {
   console.log(`[POLL START] Polling for catalogUid=${catalogUid}, maxWait=${maxWaitSeconds}s`);
+
+  let notFoundCount = 0;
+  const MAX_NOT_FOUND_WAIT = 60; // Wait up to 60s for KB to appear in status list (workflow startup time)
+
   for (let i = 0; i < maxWaitSeconds; i++) {
     const res = client.invoke(
       "artifact.artifact.v1alpha.ArtifactPrivateService/GetKnowledgeBaseUpdateStatusAdmin",
@@ -660,14 +664,43 @@ export function pollUpdateCompletion(client, data, catalogUid, maxWaitSeconds = 
       }
 
       if (catalogStatus) {
+        // KB found in status list - reset not-found counter
+        notFoundCount = 0;
+
         // Check enum status using numeric values (k6 gRPC returns enums as numbers)
         // KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED = 6
         if (catalogStatus.status === 6 || catalogStatus.status === "KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED") {
+          console.log(`✓ Update completed successfully for catalog ${catalogUid}`);
           return true;
         }
         // KNOWLEDGE_BASE_UPDATE_STATUS_FAILED = 7
         if (catalogStatus.status === 7 || catalogStatus.status === "KNOWLEDGE_BASE_UPDATE_STATUS_FAILED") {
-          console.error(`Update failed for catalog ${catalogUid}`);
+          console.error(`✗ Update FAILED for catalog ${catalogUid}`);
+          console.error(`   Error message: ${catalogStatus.errorMessage || 'No error message provided'}`);
+          console.error(`   Workflow ID: ${catalogStatus.workflowId || 'N/A'}`);
+          return false;
+        }
+        // KNOWLEDGE_BASE_UPDATE_STATUS_ABORTED = 8
+        if (catalogStatus.status === 8 || catalogStatus.status === "KNOWLEDGE_BASE_UPDATE_STATUS_ABORTED") {
+          console.error(`✗ Update ABORTED for catalog ${catalogUid}`);
+          return false;
+        }
+        // Log current status periodically
+        if (i === 0 || (i > 0 && i % 30 === 0)) {
+          console.log(`   Current status: ${catalogStatus.status} (${typeof catalogStatus.status})`);
+        }
+      } else {
+        // KB not found in status list yet - might be race condition with workflow startup
+        notFoundCount++;
+
+        if (notFoundCount <= MAX_NOT_FOUND_WAIT) {
+          // Still within grace period - workflow might be starting up
+          if (notFoundCount === 1 || notFoundCount % 10 === 0) {
+            console.log(`   KB not in status list yet (${notFoundCount}s) - waiting for workflow to start...`);
+          }
+        } else {
+          // Exceeded grace period - workflow likely failed to start or KB was deleted
+          console.error(`   KB not found in status list after ${MAX_NOT_FOUND_WAIT}s - workflow may have failed to start`);
           return false;
         }
       }
@@ -1093,39 +1126,530 @@ export function generateArticle(targetLength) {
  * @param {number} maxWaitSeconds - Maximum time to wait (default: 120s)
  * @returns {boolean} - True if all processing complete, false if timeout
  */
-export function waitForAllFileProcessingComplete(maxWaitSeconds = 120) {
-  console.log("GLOBAL: Waiting for all file processing to complete...");
+export function waitForAllFileProcessingComplete(maxWaitSeconds = 120, dbIDPrefix = null) {
+  const scope = dbIDPrefix ? `this test (${dbIDPrefix})` : "GLOBAL";
+  console.log(`${scope}: Waiting for file processing to complete...`);
   let waited = 0;
 
   while (waited < maxWaitSeconds) {
-    // CRITICAL FIX: Also check that parent KB is not deleted
-    // Files in deleted KBs can never complete (collections are gone)
+    // CRITICAL: Filter by dbIDPrefix if provided to only wait for THIS test's files
+    // This prevents tests from blocking on each other's file processing
+    const prefixFilter = dbIDPrefix
+      ? `AND kb.id LIKE '${dbIDPrefix}%'`
+      : '';
+
     const processingQuery = `
       SELECT COUNT(*) as count
       FROM knowledge_base_file kbf
       JOIN knowledge_base kb ON kbf.kb_uid = kb.uid
-      WHERE kbf.process_status IN ('FILE_PROCESS_STATUS_PROCESSING', 'FILE_PROCESS_STATUS_WAITING')
+      WHERE kbf.process_status IN (
+          'FILE_PROCESS_STATUS_NOTSTARTED',
+          'FILE_PROCESS_STATUS_PROCESSING',
+          'FILE_PROCESS_STATUS_CHUNKING',
+          'FILE_PROCESS_STATUS_EMBEDDING'
+        )
         AND kbf.delete_time IS NULL
         AND kb.delete_time IS NULL
+        ${prefixFilter}
     `;
 
     const result = constant.db.query(processingQuery);
     const processingCount = result && result.length > 0 ? parseInt(result[0].count) : 0;
 
     if (processingCount === 0) {
-      console.log(`GLOBAL: All file processing complete (waited ${waited}s)`);
+      console.log(`${scope}: All file processing complete (waited ${waited}s)`);
       return true;
     }
 
     // Log every 5 seconds to avoid spam
     if (waited % 5 === 0) {
-      console.log(`GLOBAL: ${processingCount} files still processing (waited ${waited}s/${maxWaitSeconds}s)`);
+      console.log(`${scope}: ${processingCount} files still processing (waited ${waited}s/${maxWaitSeconds}s)`);
     }
 
     sleep(1);
     waited++;
   }
 
-  console.warn(`GLOBAL: Timeout waiting for file processing after ${maxWaitSeconds}s`);
+  console.warn(`${scope}: Timeout waiting for file processing after ${maxWaitSeconds}s`);
   return false;
+}
+
+/**
+ * Wait for a single file to complete processing via API polling.
+ *
+ * Polls the Get File API endpoint to check processStatus until:
+ * - FILE_PROCESS_STATUS_COMPLETED: Returns { completed: true, status: "COMPLETED" }
+ * - FILE_PROCESS_STATUS_FAILED: Returns { completed: false, status: "FAILED", error: "..." }
+ * - Timeout: Returns { completed: false, status: "TIMEOUT" }
+ *
+ * @param {string} namespaceId - The namespace ID
+ * @param {string} catalogId - The catalog ID
+ * @param {string} fileUid - The file UID to poll
+ * @param {object} headers - HTTP headers including Authorization
+ * @param {number} maxWaitSeconds - Maximum seconds to wait (default: 300)
+ * @param {number} notStartedThreshold - Seconds to wait before failing if file stuck in NOTSTARTED (default: 60)
+ * @returns {object} - { completed: boolean, status: string, error?: string }
+ */
+export function waitForFileProcessingComplete(namespaceId, catalogId, fileUid, headers, maxWaitSeconds = 300, notStartedThreshold = 60) {
+  console.log(`Waiting for file ${fileUid} to complete processing (max ${maxWaitSeconds}s)...`);
+
+  let consecutiveNotStarted = 0;
+  const NOTSTARTED_THRESHOLD = notStartedThreshold; // If file stays NOTSTARTED for this long, workflow likely never started
+
+  for (let i = 0; i < maxWaitSeconds; i++) {
+    sleep(1);
+
+    const statusRes = http.request(
+      "GET",
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${namespaceId}/catalogs/${catalogId}/files/${fileUid}`,
+      null,
+      headers
+    );
+
+    // Check for HTTP errors first (e.g., 404 Not Found means catalog or file was deleted)
+    if (statusRes.status === 404) {
+      console.error(`✗ File or catalog not found (404) - catalog/file may have been deleted`);
+      return { completed: false, status: "NOT_FOUND", error: "Catalog or file not found" };
+    } else if (statusRes.status >= 400) {
+      console.error(`✗ API error ${statusRes.status} while checking file status`);
+      return { completed: false, status: "API_ERROR", error: `HTTP ${statusRes.status}` };
+    }
+
+    try {
+      const body = statusRes.json();
+      const status = body.file ? (body.file.processStatus || body.file.process_status) : "";
+
+      if (status === "FILE_PROCESS_STATUS_COMPLETED") {
+        console.log(`✓ File processing completed after ${i + 1}s`);
+        return { completed: true, status: "COMPLETED" };
+      } else if (status === "FILE_PROCESS_STATUS_FAILED") {
+        const errorMsg = body.file && body.file.processOutcome ? body.file.processOutcome : "Unknown error";
+        console.log(`✗ File processing failed after ${i + 1}s: ${errorMsg}`);
+        return { completed: false, status: "FAILED", error: errorMsg };
+      } else if (status === "FILE_PROCESS_STATUS_NOTSTARTED") {
+        // FAST-FAIL: If file stays NOTSTARTED for too long, workflow likely never triggered
+        // This happens when Temporal worker is down or auto-trigger fails
+        consecutiveNotStarted++;
+        if (consecutiveNotStarted >= NOTSTARTED_THRESHOLD) {
+          console.error(`✗ File stuck in NOTSTARTED for ${NOTSTARTED_THRESHOLD}s - workflow likely never triggered (worker down?)`);
+          return { completed: false, status: "WORKFLOW_NOT_STARTED", error: `File stuck in NOTSTARTED for ${NOTSTARTED_THRESHOLD}s - ProcessFileWorkflow likely never triggered. Check if Temporal worker is running.` };
+        }
+      } else {
+        // File is processing (PROCESSING, CHUNKING, EMBEDDING, etc.) - reset counter
+        consecutiveNotStarted = 0;
+      }
+
+      // Log progress every 30 seconds to avoid spam
+      if (i > 0 && i % 30 === 0) {
+        console.log(`Still waiting for file processing... (${i}s/${maxWaitSeconds}s, status: ${status})`);
+      }
+    } catch (e) {
+      // Log parse errors but continue polling (might be transient)
+      if (i === 0 || i % 60 === 0) {
+        console.warn(`Parse error checking file status: ${e.message}`);
+      }
+    }
+  }
+
+  console.warn(`⚠ File processing timeout after ${maxWaitSeconds}s`);
+  return { completed: false, status: "TIMEOUT" };
+}
+
+/**
+ * Wait for multiple files to complete processing via API polling (batched).
+ *
+ * Efficiently polls multiple files in parallel, checking all files in each iteration.
+ * Returns as soon as all files complete or any file fails.
+ *
+ * @param {string} namespaceId - The namespace ID
+ * @param {string} catalogId - The catalog ID
+ * @param {Array<string>} fileUids - Array of file UIDs to wait for
+ * @param {object} headers - HTTP headers including Authorization
+ * @param {number} maxWaitSeconds - Maximum seconds to wait (default: 600)
+ * @returns {object} - { completed: boolean, status: string, processedCount: number, error?: string }
+ */
+export function waitForMultipleFilesProcessingComplete(namespaceId, catalogId, fileUids, headers, maxWaitSeconds = 600) {
+  console.log(`Waiting for ${fileUids.length} files to complete processing (max ${maxWaitSeconds}s)...`);
+
+  const pending = new Set(fileUids);
+  const notStartedCounters = {}; // Track consecutive NOTSTARTED for each file
+  let processedCount = 0;
+  const NOTSTARTED_THRESHOLD = 60; // seconds
+
+  for (let i = 0; i < maxWaitSeconds * 2; i++) { // *2 because we sleep 0.5s
+    sleep(0.5);
+
+    // Batch check all pending files
+    const checks = Array.from(pending).map(fileUid =>
+      http.request(
+        "GET",
+        `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${namespaceId}/catalogs/${catalogId}/files/${fileUid}`,
+        null,
+        headers
+      )
+    );
+
+    const pendingArray = Array.from(pending);
+    for (let j = 0; j < checks.length; j++) {
+      const fileUid = pendingArray[j];
+      const response = checks[j];
+
+      try {
+        const body = response.json();
+        const status = body.file ? (body.file.processStatus || body.file.process_status) : "";
+
+        if (status === "FILE_PROCESS_STATUS_COMPLETED") {
+          pending.delete(fileUid);
+          delete notStartedCounters[fileUid];
+          processedCount++;
+        } else if (status === "FILE_PROCESS_STATUS_FAILED") {
+          const errorMsg = body.file && body.file.processOutcome ? body.file.processOutcome : "Unknown error";
+          console.log(`✗ File ${fileUid} processing failed: ${errorMsg}`);
+          return {
+            completed: false,
+            status: "FAILED",
+            processedCount,
+            error: `File ${fileUid}: ${errorMsg}`
+          };
+        } else if (status === "FILE_PROCESS_STATUS_NOTSTARTED") {
+          // FAST-FAIL: Track how long file has been stuck in NOTSTARTED
+          notStartedCounters[fileUid] = (notStartedCounters[fileUid] || 0) + 0.5;
+          if (notStartedCounters[fileUid] >= NOTSTARTED_THRESHOLD) {
+            console.error(`✗ File ${fileUid} stuck in NOTSTARTED for ${NOTSTARTED_THRESHOLD}s - workflow likely never triggered`);
+            return {
+              completed: false,
+              status: "WORKFLOW_NOT_STARTED",
+              processedCount,
+              error: `File ${fileUid} stuck in NOTSTARTED for ${NOTSTARTED_THRESHOLD}s - ProcessFileWorkflow likely never triggered. Check if Temporal worker is running.`
+            };
+          }
+        } else {
+          // File is processing (PROCESSING, CHUNKING, EMBEDDING, etc.) - reset counter
+          delete notStartedCounters[fileUid];
+        }
+      } catch (e) {
+        // Continue polling on parse errors
+      }
+    }
+
+    // All files completed
+    if (pending.size === 0) {
+      console.log(`✓ All ${fileUids.length} files completed processing after ${(i * 0.5).toFixed(1)}s`);
+      return { completed: true, status: "COMPLETED", processedCount };
+    }
+
+    // Log progress every 30 seconds to avoid spam
+    if (i > 0 && (i * 0.5) % 30 === 0) {
+      console.log(`Still waiting... ${processedCount}/${fileUids.length} completed (${(i * 0.5).toFixed(0)}s/${maxWaitSeconds}s)`);
+    }
+  }
+
+  console.warn(`⚠ Multiple files processing timeout after ${maxWaitSeconds}s (${processedCount}/${fileUids.length} completed)`);
+  return { completed: false, status: "TIMEOUT", processedCount };
+}
+
+/**
+ * Upload a file with automatic retry logic to handle transient failures.
+ *
+ * When tests run in parallel, file uploads can intermittently fail with:
+ * - HTTP 500 errors (temporary resource exhaustion)
+ * - Response returns UID: null (race condition in resource allocation)
+ *
+ * This function implements exponential backoff retry to handle these transient failures.
+ *
+ * @param {string} url - The upload endpoint URL
+ * @param {object} payload - The file upload payload (name, type, content)
+ * @param {object} headers - HTTP headers including Authorization
+ * @param {number} maxRetries - Maximum number of retry attempts (default: 3)
+ * @returns {object|null} - HTTP response object, or null if all retries failed
+ */
+export function uploadFileWithRetry(url, payload, headers, maxRetries = 3) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const response = http.request("POST", url, JSON.stringify(payload), headers);
+
+    try {
+      // Check if response is successful and has a valid file UID
+      const body = response.json();
+      const file = body.file || body;
+      const fileUid = file ? (file.fileUid || file.file_uid) : null;
+
+      if (response.status === 200 && fileUid) {
+        if (attempt > 1) {
+          console.log(`✓ File upload succeeded on attempt ${attempt}/${maxRetries}`);
+        }
+        return response;
+      }
+
+      // Log the failure reason
+      const errorMsg = body.message || body.error || 'Unknown error';
+      console.log(`⚠ Upload attempt ${attempt}/${maxRetries} failed: status=${response.status}, fileUid=${fileUid}, error=${errorMsg}`);
+
+    } catch (e) {
+      console.log(`⚠ Upload attempt ${attempt}/${maxRetries} exception: ${e}`);
+    }
+
+    // Exponential backoff before retry (0.5s, 1s, 2s, 4s, ...)
+    if (attempt < maxRetries) {
+      const backoff = Math.pow(2, attempt - 1) * 0.5;
+      console.log(`⏳ Retrying in ${backoff.toFixed(1)}s...`);
+      sleep(backoff);
+    }
+  }
+
+  console.log(`✗ File upload failed after ${maxRetries} attempts`);
+  return null;
+}
+
+/**
+ * Add random delay to stagger parallel test execution and reduce resource contention.
+ *
+ * When multiple tests run in parallel, they compete for:
+ * - Database connection pool
+ * - MinIO connections
+ * - Temporal worker capacity
+ * - API gateway rate limits
+ *
+ * Adding a random delay at test start spreads out resource usage and reduces
+ * the probability of simultaneous requests causing temporary exhaustion.
+ *
+ * @param {number} maxDelaySeconds - Maximum delay in seconds (default: 2)
+ */
+export function staggerTestExecution(maxDelaySeconds = 2) {
+  const delay = Math.random() * maxDelaySeconds;
+  console.log(`⏸ Test stagger: ${delay.toFixed(2)}s delay to reduce parallel contention`);
+  sleep(delay);
+}
+
+/**
+ * Poll until a KB appears in the database with the expected state.
+ * Used to deterministically wait for KB creation after workflow operations.
+ *
+ * @param {string} catalogId - The catalog ID to check
+ * @param {string} ownerUid - The owner UID
+ * @param {number} maxWaitSeconds - Maximum time to wait (default: 30)
+ * @param {boolean} expectDeleted - If true, wait for delete_time to be set (default: false)
+ * @returns {object|null} - The KB object if found, null if timeout
+ */
+export function pollForKBState(catalogId, ownerUid, maxWaitSeconds = 30, expectDeleted = false) {
+  const startTime = Date.now();
+
+  while ((Date.now() - startTime) / 1000 < maxWaitSeconds) {
+    const kbs = getCatalogByIdAndOwner(catalogId, ownerUid);
+
+    if (!kbs || kbs.length === 0) {
+      if (expectDeleted) {
+        // KB fully deleted (not even soft-deleted) - this is OK if expecting deletion
+        return null;
+      }
+      sleep(0.5);
+      continue;
+    }
+
+    const kb = kbs[0];
+
+    if (expectDeleted) {
+      // Waiting for soft-deletion (delete_time set)
+      if (kb.delete_time !== null) {
+        return kb;
+      }
+    } else {
+      // Waiting for KB to exist and be active
+      if (kb.delete_time === null) {
+        return kb;
+      }
+    }
+
+    sleep(0.5);
+  }
+
+  return null;
+}
+
+/**
+ * Poll until staging KB is soft-deleted after an update completes.
+ * The update workflow should clean up the staging KB as part of swap/completion.
+ *
+ * @param {string} catalogId - The base catalog ID (staging KB is {catalogId}-staging)
+ * @param {string} ownerUid - The owner UID
+ * @param {number} maxWaitSeconds - Maximum time to wait (default: 10)
+ * @returns {boolean} - True if staging KB is deleted, false if timeout
+ */
+export function pollForStagingKBCleanup(catalogId, ownerUid, maxWaitSeconds = 10) {
+  const stagingKBID = `${catalogId}-staging`;
+  const result = pollForKBState(stagingKBID, ownerUid, maxWaitSeconds, true);
+
+  // Result is null if KB is fully deleted, or has delete_time set if soft-deleted
+  // Both are acceptable states for "cleaned up"
+  return result === null || (result && result.delete_time !== null);
+}
+
+/**
+ * Poll until rollback KB exists after an update completes.
+ * The update workflow creates the rollback KB during the swap phase.
+ *
+ * @param {string} catalogId - The base catalog ID (rollback KB is {catalogId}-rollback)
+ * @param {string} ownerUid - The owner UID
+ * @param {number} maxWaitSeconds - Maximum time to wait (default: 10)
+ * @returns {object|null} - The rollback KB object if found, null if timeout
+ */
+export function pollForRollbackKBCreation(catalogId, ownerUid, maxWaitSeconds = 10) {
+  const rollbackKBID = `${catalogId}-rollback`;
+  return pollForKBState(rollbackKBID, ownerUid, maxWaitSeconds, false);
+}
+
+// ============================================================================
+// Global Test Cleanup Helpers
+// ============================================================================
+
+/**
+ * Clean up all previous test catalogs before starting a new test run.
+ *
+ * SAFETY: This function should ONLY be called in setup() BEFORE generating
+ * the current test's unique prefix. At that point, ALL test-% catalogs are
+ * from previous test runs and safe to delete.
+ *
+ * This prevents zombie files/catalogs from previous failed test runs from
+ * blocking the worker queue and causing new tests to hang.
+ *
+ * Process:
+ * 1. Mark any stuck files (NOTSTARTED/PROCESSING/CHUNKING/EMBEDDING) as FAILED
+ * 2. Delete all test-% catalogs via API (respects business logic)
+ *
+ * USAGE PATTERN (recommended order):
+ * ```javascript
+ * export function setup() {
+ *   // 1. Stagger execution (optional, for parallel test runs)
+ *   helper.staggerTestExecution(2);
+ *
+ *   // 2. Authenticate FIRST (required for API calls)
+ *   const loginResp = http.request("POST", `${mgmtHost}/auth/login`, ...);
+ *   const header = { headers: { Authorization: `Bearer ${loginResp.json().accessToken}` } };
+ *   const userResp = http.request("GET", `${mgmtHost}/user`, {}, header);
+ *
+ *   // 3. CLEAN UP ALL test-% catalogs from previous runs
+ *   //    CRITICAL: Do this BEFORE generating this run's prefix!
+ *   helper.cleanupPreviousTestCatalogs(userResp.json().user.id, header);
+ *
+ *   // 4. NOW generate this run's unique prefix (after cleanup)
+ *   const dbIDPrefix = constant.generateDBIDPrefix(); // e.g., "test-ab12-"
+ *
+ *   // 5. Create catalogs using the unique prefix
+ *   //    e.g., `${dbIDPrefix}my-catalog-1`, `${dbIDPrefix}my-catalog-2`
+ *   //    These will be the ONLY test-% catalogs in the system
+ *
+ *   return { header, userResp, dbIDPrefix };
+ * }
+ * ```
+ *
+ * WHY THIS IS SAFE FOR PARALLEL TESTS:
+ * - Each test file generates a unique prefix (e.g., test-ab12-, test-cd34-)
+ * - Cleanup runs BEFORE prefix generation, so ALL test-% catalogs are old
+ * - After cleanup, each test creates its own isolated set of catalogs
+ * - Tests cannot interfere with each other's catalogs
+ *
+ * @param {string} namespaceId - The namespace ID for API calls
+ * @param {object} headers - HTTP headers including Authorization
+ * @returns {object} - { catalogsDeleted: number, filesMarkedFailed: number, errors: Array }
+ */
+export function cleanupPreviousTestCatalogs(namespaceId, headers) {
+  console.log("=== GLOBAL CLEANUP: Removing previous test catalogs ===");
+
+  const result = {
+    catalogsDeleted: 0,
+    filesMarkedFailed: 0,
+    errors: []
+  };
+
+  try {
+    // Step 1: Mark any stuck files in test catalogs as FAILED
+    // This prevents worker queue from being blocked by zombie files
+    console.log("Step 1: Marking zombie files as FAILED...");
+    const updateFilesQuery = `
+      UPDATE knowledge_base_file
+      SET process_status = 'FILE_PROCESS_STATUS_FAILED'
+      WHERE kb_uid IN (
+        SELECT uid FROM knowledge_base
+        WHERE id LIKE 'test-%' AND staging = false
+      )
+      AND process_status IN (
+        'FILE_PROCESS_STATUS_NOTSTARTED',
+        'FILE_PROCESS_STATUS_PROCESSING',
+        'FILE_PROCESS_STATUS_CHUNKING',
+        'FILE_PROCESS_STATUS_EMBEDDING'
+      )
+      AND delete_time IS NULL
+    `;
+
+    try {
+      const updateResult = constant.db.execute(updateFilesQuery);
+      result.filesMarkedFailed = updateResult || 0;
+      if (result.filesMarkedFailed > 0) {
+        console.log(`✓ Marked ${result.filesMarkedFailed} zombie files as FAILED`);
+      }
+    } catch (e) {
+      console.warn(`Failed to mark zombie files (non-fatal): ${e}`);
+      result.errors.push(`Mark files: ${e.message || e}`);
+    }
+
+    // Step 2: Get all production test catalogs (excluding staging/rollback)
+    console.log("Step 2: Querying for test catalogs...");
+    const testCatalogsQuery = `
+      SELECT id, create_time
+      FROM knowledge_base
+      WHERE id LIKE 'test-%'
+        AND staging = false
+        AND delete_time IS NULL
+      ORDER BY create_time ASC
+    `;
+
+    const testCatalogs = constant.db.query(testCatalogsQuery);
+
+    if (!testCatalogs || testCatalogs.length === 0) {
+      console.log("✓ No previous test catalogs found - system is clean");
+      return result;
+    }
+
+    console.log(`Found ${testCatalogs.length} test catalogs to delete`);
+
+    // Step 3: Delete each catalog via API (respects business logic, cascades properly)
+    for (const catalog of testCatalogs) {
+      const catalogId = byteArrayToString(catalog.id);
+
+      try {
+        const deleteRes = http.request(
+          "DELETE",
+          `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${namespaceId}/catalogs/${catalogId}`,
+          null,
+          headers
+        );
+
+        if (deleteRes.status === 204 || deleteRes.status === 200) {
+          result.catalogsDeleted++;
+          console.log(`  ✓ Deleted: ${catalogId}`);
+        } else if (deleteRes.status === 404) {
+          // Already deleted (race condition or concurrent cleanup)
+          result.catalogsDeleted++;
+          console.log(`  ✓ Already deleted: ${catalogId}`);
+        } else {
+          console.warn(`  ✗ Failed to delete ${catalogId}: HTTP ${deleteRes.status}`);
+          result.errors.push(`Delete ${catalogId}: HTTP ${deleteRes.status}`);
+        }
+      } catch (e) {
+        console.warn(`  ✗ Exception deleting ${catalogId}: ${e}`);
+        result.errors.push(`Delete ${catalogId}: ${e.message || e}`);
+      }
+    }
+
+    console.log(`=== CLEANUP COMPLETE: ${result.catalogsDeleted}/${testCatalogs.length} catalogs deleted ===`);
+
+    if (result.errors.length > 0) {
+      console.warn(`Cleanup had ${result.errors.length} non-fatal errors`);
+    }
+
+  } catch (e) {
+    console.error(`Global cleanup failed: ${e}`);
+    result.errors.push(`Global error: ${e.message || e}`);
+  }
+
+  return result;
 }

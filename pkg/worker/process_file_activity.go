@@ -30,7 +30,9 @@ import (
 // Workflow Execution Flow:
 // 1. File Preparation Phase:
 //    - GetFileMetadataActivity - Retrieves file information and pipeline configuration
+//    - GetFileContentActivity - Retrieves file content from MinIO
 //    - StandardizeFileTypeActivity - Standardizes file formats (DOCX→PDF, GIF→PNG, MKV→MP4, etc.)
+//    - FindTargetFileByNameActivity - Finds target file by name for dual processing
 //
 // 2. Caching Phase (uses standardized files):
 //    - CacheFileContextActivity - Creates individual AI cache per file for efficient processing
@@ -45,23 +47,25 @@ import (
 //
 // 4. Chunking & Embedding Phase:
 //    - ChunkContentActivity - Splits content/summary into manageable text chunks
+//    - DeleteOldTextChunksActivity - Removes outdated text chunks before saving new ones
 //    - SaveTextChunksActivity - Persists text chunks to database and MinIO storage
 //      Content chunks reference content converted_file UID
 //      Summary chunks reference summary converted_file UID (separate source_uid)
-//    - GetChunksForEmbeddingActivity - Retrieves text chunks for embedding generation
-//    - EmbedTextsActivity - Generates embeddings for all text chunks
-//    - SaveEmbeddingsWorkflow - Orchestrates parallel saving of embeddings
+//    - (GetChunksForEmbeddingActivity - in embed_activity.go)
+//    - (EmbedTextsActivity - in embed_activity.go)
+//    - (SaveEmbeddingsWorkflow - in embed_workflow.go)
 //
 // 5. Metadata & Cleanup:
 //    - UpdateConversionMetadataActivity - Updates file conversion metadata
-//    - UpdateEmbeddingMetadataActivity - Updates embedding metadata
-//    - UpdateFileStatusActivity - Updates file processing status
+//    - (UpdateEmbeddingMetadataActivity - in embed_activity.go)
+//    - (UpdateFileStatusActivity - in status_activity.go)
 //    - DeleteCacheActivity - Cleans up AI caches
 //    - DeleteTemporaryConvertedFileActivity - Cleans up temporary converted files from MinIO
 //    - StoreChatCacheMetadataActivity - Stores chat cache metadata in Redis
 //
 // Sub-activities called by ProcessContentActivity:
 // - (Inline AI conversion to Markdown - AI is required)
+// - DeleteOldConvertedFilesActivity - Removes outdated converted files before creating new ones
 // - CreateConvertedFileRecordActivity - Creates DB record for content converted_file
 // - UploadConvertedFileToMinIOActivity - Uploads converted content to MinIO
 // - UpdateConvertedFileDestinationActivity - Updates DB with actual MinIO destination
@@ -70,6 +74,7 @@ import (
 //
 // Sub-activities called by ProcessSummaryActivity:
 // - (Inline AI summary generation - AI is required)
+// - DeleteOldConvertedFilesActivity - Removes outdated converted files before creating new ones
 // - CreateConvertedFileRecordActivity - Creates DB record for summary converted_file
 // - UploadConvertedFileToMinIOActivity - Uploads summary to MinIO
 // - UpdateConvertedFileDestinationActivity - Updates DB with actual MinIO destination
@@ -107,8 +112,10 @@ type GetFileMetadataActivityParam struct {
 
 // GetFileMetadataActivityResult contains file and KB configuration
 type GetFileMetadataActivityResult struct {
-	File             *repository.KnowledgeBaseFileModel // File metadata from database
-	ExternalMetadata *structpb.Struct                   // External metadata from request
+	File               *repository.KnowledgeBaseFileModel // File metadata from database
+	ExternalMetadata   *structpb.Struct                   // External metadata from request
+	KBModelFamily      string                             // KB's model family (e.g., "openai", "gemini") - used for caching decisions
+	DualProcessingInfo *repository.DualProcessingTarget   // Dual-processing target info (if needed) - used for sequential coordination after completion
 }
 
 // GetFileContentActivityParam for retrieving file content from MinIO
@@ -149,9 +156,62 @@ func (w *Worker) GetFileMetadataActivity(ctx context.Context, param *GetFileMeta
 	}
 	file := files[0]
 
+	// Get KB's model family to determine caching strategy (Gemini only)
+	kbWithConfig, err := w.repository.GetKnowledgeBaseByUIDWithConfig(ctx, param.KBUID)
+	if err != nil {
+		return nil, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to get KB config: %s", errorsx.MessageOrErr(err)),
+			getFileMetadataActivityError,
+			err,
+		)
+	}
+
+	modelFamily := kbWithConfig.SystemConfig.RAG.Embedding.ModelFamily
+
+	// Check if dual-processing is needed (for sequential coordination after completion)
+	// We query this here to avoid additional DB roundtrips later
+	kb, err := w.repository.GetKnowledgeBaseByUID(ctx, param.KBUID)
+	if err != nil {
+		return nil, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to get KB: %s", errorsx.MessageOrErr(err)),
+			getFileMetadataActivityError,
+			err,
+		)
+	}
+
+	// Check if dual-processing is needed (critical for KB updates)
+	// IMPORTANT: Only check for production KBs - staging/rollback KBs are already targets
+	var dualProcessingInfo *repository.DualProcessingTarget
+	if kb.Staging {
+		// This is a staging or rollback KB - no dual-processing needed
+		w.log.Debug("Skipping dual-processing check (staging/rollback KB)",
+			zap.String("kbUID", param.KBUID.String()),
+			zap.String("kbID", kb.KBID))
+	} else {
+		// This is a production KB - check if we need to trigger target files
+		dualTarget, err := w.repository.GetDualProcessingTarget(ctx, kb)
+		if err != nil {
+			// CRITICAL: If we can't check dual-processing requirements, we might miss triggering target files
+			// This would cause target KB files to remain NOTSTARTED, blocking synchronization
+			return nil, temporal.NewApplicationErrorWithCause(
+				fmt.Sprintf("Failed to check dual-processing requirements for KB %s: %s", param.KBUID.String(), errorsx.MessageOrErr(err)),
+				getFileMetadataActivityError,
+				err,
+			)
+		}
+		if dualTarget != nil && dualTarget.IsNeeded {
+			dualProcessingInfo = dualTarget
+			w.log.Info("Dual-processing will be coordinated after completion",
+				zap.String("targetKBUID", dualTarget.TargetKB.UID.String()),
+				zap.String("phase", dualTarget.Phase))
+		}
+	}
+
 	return &GetFileMetadataActivityResult{
-		File:             &file,
-		ExternalMetadata: file.ExternalMetadataUnmarshal,
+		File:               &file,
+		ExternalMetadata:   file.ExternalMetadataUnmarshal,
+		KBModelFamily:      modelFamily,
+		DualProcessingInfo: dualProcessingInfo,
 	}, nil
 }
 
@@ -242,9 +302,9 @@ type UpdateConvertedFileDestinationActivityParam struct {
 
 // UpdateConversionMetadataActivityParam for updating file metadata after conversion
 type UpdateConversionMetadataActivityParam struct {
-	FileUID  types.FileUIDType // File unique identifier
-	Length   []uint32          // Length of markdown sections
-	Pipeline string            // Pipeline used for conversion (empty if AI was used)
+	FileUID   types.FileUIDType // File unique identifier
+	Length    []uint32          // Length of markdown sections
+	Pipelines []string          // Pipelines used: [content_pipeline, summary_pipeline] (empty strings if AI client was used)
 }
 
 // DeleteOldConvertedFilesActivity removes old converted file from MinIO and DB if it exists
@@ -484,11 +544,22 @@ func (w *Worker) DeleteConvertedFileFromMinIOActivity(ctx context.Context, param
 // This is a single DB write operation - idempotent
 func (w *Worker) UpdateConversionMetadataActivity(ctx context.Context, param *UpdateConversionMetadataActivityParam) error {
 	w.log.Info("UpdateConversionMetadataActivity: Updating file metadata",
-		zap.String("fileUID", param.FileUID.String()))
+		zap.String("fileUID", param.FileUID.String()),
+		zap.Strings("pipelines", param.Pipelines))
+
+	// Extract content and summary pipelines from array
+	var contentPipeline, summaryPipeline string
+	if len(param.Pipelines) > 0 {
+		contentPipeline = param.Pipelines[0]
+	}
+	if len(param.Pipelines) > 1 {
+		summaryPipeline = param.Pipelines[1]
+	}
 
 	mdUpdate := repository.ExtraMetaData{
-		Length:         param.Length,
-		ConvertingPipe: param.Pipeline,
+		Length:          param.Length,
+		ConvertingPipe:  contentPipeline,
+		SummarizingPipe: summaryPipeline,
 	}
 
 	err := w.repository.UpdateKnowledgeFileMetadata(ctx, param.FileUID, mdUpdate)
@@ -813,24 +884,24 @@ func (w *Worker) SaveTextChunksActivity(ctx context.Context, param *SaveTextChun
 
 // StandardizeFileTypeActivityParam defines the parameters for StandardizeFileTypeActivity
 type StandardizeFileTypeActivityParam struct {
-	FileUID     types.FileUIDType          // File unique identifier
-	KBUID       types.KBUIDType            // Knowledge base unique identifier
-	Bucket      string                     // MinIO bucket containing the file
-	Destination string                     // MinIO path to the file
-	FileType    artifactpb.File_Type       // Original file type to convert from
-	Filename    string                     // Filename for identification
-	Pipelines   []pipeline.PipelineRelease // indexing-convert-file-type pipeline
-	Metadata    *structpb.Struct           // Request metadata for authentication
+	FileUID     types.FileUIDType    // File unique identifier
+	KBUID       types.KBUIDType      // Knowledge base unique identifier
+	Bucket      string               // MinIO bucket containing the file
+	Destination string               // MinIO path to the file
+	FileType    artifactpb.File_Type // Original file type to convert from
+	Filename    string               // Filename for identification
+	Pipelines   []pipeline.Release   // indexing-convert-file-type pipeline
+	Metadata    *structpb.Struct     // Request metadata for authentication
 }
 
 // StandardizeFileTypeActivityResult defines the result of StandardizeFileTypeActivity
 type StandardizeFileTypeActivityResult struct {
-	ConvertedDestination string                   // MinIO path to converted file (empty if no conversion)
-	ConvertedBucket      string                   // MinIO bucket for converted file (empty if no conversion)
-	ConvertedType        artifactpb.File_Type     // New file type after conversion
-	OriginalType         artifactpb.File_Type     // Original file type
-	Converted            bool                     // Whether conversion was performed
-	PipelineRelease      pipeline.PipelineRelease // Pipeline used for conversion
+	ConvertedDestination string               // MinIO path to converted file (empty if no conversion)
+	ConvertedBucket      string               // MinIO bucket for converted file (empty if no conversion)
+	ConvertedType        artifactpb.File_Type // New file type after conversion
+	OriginalType         artifactpb.File_Type // Original file type
+	Converted            bool                 // Whether conversion was performed
+	PipelineRelease      pipeline.Release     // Pipeline used for conversion
 }
 
 // StandardizeFileTypeActivity standardizes non-AI-native file types to AI-supported formats
@@ -887,7 +958,7 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 
 	// Determine which pipeline to use and prepare input
 	var convertedContent []byte
-	var usedPipeline pipeline.PipelineRelease
+	var usedPipeline pipeline.Release
 
 	// Try indexing-convert-file-type pipeline
 	if len(param.Pipelines) > 0 {
@@ -1327,6 +1398,7 @@ type ProcessContentActivityResult struct {
 	ConvertedType    artifactpb.File_Type       // Converted file type
 	UsageMetadata    any                        // AI token usage
 	ConvertedFileUID types.ConvertedFileUIDType // Content converted file UID
+	Pipeline         string                     // Pipeline used (e.g., "instill-ai/indexing-generate-content/v1.4.0" for OpenAI route, empty for AI client)
 }
 
 // ProcessContentActivity handles the entire content processing pipeline:
@@ -1386,6 +1458,15 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 	var length []uint32
 	var usageMetadata any
 
+	// Fetch KB with config to check embedding model family for routing
+	kb, err := w.repository.GetKnowledgeBaseByUIDWithConfig(authCtx, param.KBUID)
+	if err != nil {
+		logger.Error("Failed to get KB for routing", zap.Error(err))
+		return nil, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to get knowledge base: %s", errorsx.MessageOrErr(err)),
+			processContentActivityError, err)
+	}
+
 	// For text-based files (TEXT/MARKDOWN/CSV/HTML), no AI conversion needed - content is already in usable format
 	// These file types are directly readable as text and don't require AI processing
 	if param.FileType == artifactpb.File_TYPE_TEXT ||
@@ -1407,104 +1488,148 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 			)
 		}
 
-		// Check if AI client is configured
-		if w.aiClient == nil {
-			logger.Error("AI client not configured")
-			return nil, temporal.NewApplicationErrorWithCause(
-				"AI client is required for content conversion. Please configure Gemini API key in the server configuration.",
-				processContentActivityError,
-				fmt.Errorf("AI client not configured"),
-			)
-		}
+		// Route based on embedding config model family
+		if kb.SystemConfig.RAG.Embedding.ModelFamily == "openai" {
+			logger.Info("Using OpenAI pipeline route for content conversion")
 
-		// Check if AI client supports this file type
-		if !w.aiClient.SupportsFileType(param.FileType) {
-			logger.Error("File type not supported by AI client",
-				zap.String("fileType", param.FileType.String()),
-				zap.String("hint", "File should have been converted by StandardizeFileTypeActivity"))
-			return nil, temporal.NewApplicationErrorWithCause(
-				fmt.Sprintf("File type %s is not supported. The file may need to be converted to a supported format first.", param.FileType.String()),
-				processContentActivityError,
-				fmt.Errorf("unsupported file type: %s", param.FileType.String()),
-			)
-		}
-
-		var conversionErr error
-
-		// For other file types: Try AI client with cache first (if available)
-		if param.CacheName != "" {
-			logger.Info("Attempting AI conversion with cache",
-				zap.String("cacheName", param.CacheName),
-				zap.String("client", w.aiClient.Name()))
-
-			conversion, err := w.aiClient.ConvertToMarkdownWithCache(
-				authCtx,
-				param.CacheName,
-				gemini.GetRAGGenerateContentPrompt(),
-			)
-			if err != nil {
-				logger.Warn("Cached AI conversion failed, will try without cache", zap.Error(err))
-				conversionErr = err
-			} else {
-				logger.Info("Cached AI conversion successful",
-					zap.Int("markdownLength", len(conversion.Markdown)))
-
-				// Process AI conversion result
-				contentInMarkdown, positionData, length = ProcessAIConversionResult(
-					conversion.Markdown,
-					w.log,
-					map[string]any{"cacheName": param.CacheName},
-				)
-				usageMetadata = conversion.UsageMetadata
-			}
-		}
-
-		// Try AI client without cache if cached attempt failed or wasn't available
-		if contentInMarkdown == "" {
-			logger.Info("Attempting AI conversion without cache",
-				zap.String("fileType", param.FileType.String()),
-				zap.String("client", w.aiClient.Name()))
-
-			conversion, err := w.aiClient.ConvertToMarkdownWithoutCache(
-				authCtx,
-				rawFileContent,
-				param.FileType,
-				param.Filename,
-				gemini.GetRAGGenerateContentPrompt(),
-			)
-			if err != nil {
-				logger.Error("AI conversion failed", zap.Error(err))
-				conversionErr = err
-			} else {
-				logger.Info("AI conversion successful",
-					zap.Int("markdownLength", len(conversion.Markdown)))
-
-				// Process AI conversion result
-				contentInMarkdown, positionData, length = ProcessAIConversionResult(
-					conversion.Markdown,
-					w.log,
-					map[string]any{"fileType": param.FileType.String()},
-				)
-				usageMetadata = conversion.UsageMetadata
-			}
-		}
-
-		// If conversion still failed, return the actual error
-		if contentInMarkdown == "" {
-			logger.Error("AI conversion failed to produce content")
-			if conversionErr != nil {
+			if w.pipelineClient == nil {
 				return nil, temporal.NewApplicationErrorWithCause(
-					fmt.Sprintf("AI client failed to convert file: %s", errorsx.MessageOrErr(conversionErr)),
+					"Pipeline client not configured for OpenAI route",
+					processContentActivityError, fmt.Errorf("pipeline client is nil"))
+			}
+
+			// Base64 encode file content
+			base64Content := base64.StdEncoding.EncodeToString(rawFileContent)
+
+			// Call OpenAI pipeline
+			pipelineResult, err := pipeline.GenerateContentPipe(authCtx, w.pipelineClient, pipeline.GenerateContentParams{
+				Base64Content: base64Content,
+				Type:          param.FileType,
+			})
+			if err != nil {
+				logger.Error("OpenAI pipeline conversion failed", zap.Error(err))
+				return nil, temporal.NewApplicationErrorWithCause(
+					fmt.Sprintf("OpenAI pipeline failed: %s", errorsx.MessageOrErr(err)),
+					processContentActivityError, err)
+			}
+
+			// Record pipeline used (e.g., "instill-ai/indexing-generate-content@v1.4.0")
+			result.Pipeline = pipelineResult.PipelineRelease.Name()
+
+			// Process pipeline result (extracts [Page: X] tags and creates PageDelimiters)
+			contentInMarkdown, positionData, length = ExtractPageDelimiters(
+				pipelineResult.Markdown, w.log, map[string]any{"route": "openai-pipeline"})
+
+			logger.Info("OpenAI pipeline conversion successful",
+				zap.Int("markdownLength", len(contentInMarkdown)),
+				zap.Int("pageCount", func() int {
+					if positionData != nil {
+						return len(positionData.PageDelimiters)
+					}
+					return 0
+				}()))
+		} else {
+			logger.Info("Using Gemini AI client route for content conversion")
+
+			// Check if AI client is configured
+			if w.aiClient == nil {
+				logger.Error("AI client not configured")
+				return nil, temporal.NewApplicationErrorWithCause(
+					"AI client is required for content conversion. Please configure Gemini API key in the server configuration.",
 					processContentActivityError,
-					conversionErr,
+					fmt.Errorf("AI client not configured"),
 				)
 			}
-			return nil, temporal.NewApplicationErrorWithCause(
-				"AI client failed to convert file: conversion produced empty content",
-				processContentActivityError,
-				fmt.Errorf("empty conversion result"),
-			)
-		}
+
+			// Check if AI client supports this file type
+			if !w.aiClient.SupportsFileType(param.FileType) {
+				logger.Error("File type not supported by AI client",
+					zap.String("fileType", param.FileType.String()),
+					zap.String("hint", "File should have been converted by StandardizeFileTypeActivity"))
+				return nil, temporal.NewApplicationErrorWithCause(
+					fmt.Sprintf("File type %s is not supported. The file may need to be converted to a supported format first.", param.FileType.String()),
+					processContentActivityError,
+					fmt.Errorf("unsupported file type: %s", param.FileType.String()),
+				)
+			}
+
+			var conversionErr error
+
+			// For other file types: Try AI client with cache first (if available)
+			if param.CacheName != "" {
+				logger.Info("Attempting AI conversion with cache",
+					zap.String("cacheName", param.CacheName),
+					zap.String("client", w.aiClient.Name()))
+
+				conversion, err := w.aiClient.ConvertToMarkdownWithCache(
+					authCtx,
+					param.CacheName,
+					gemini.GetRAGGenerateContentPrompt(),
+				)
+				if err != nil {
+					logger.Warn("Cached AI conversion failed, will try without cache", zap.Error(err))
+					conversionErr = err
+				} else {
+					logger.Info("Cached AI conversion successful",
+						zap.Int("markdownLength", len(conversion.Markdown)))
+
+					// Process AI conversion result
+					contentInMarkdown, positionData, length = ExtractPageDelimiters(
+						conversion.Markdown,
+						w.log,
+						map[string]any{"cacheName": param.CacheName},
+					)
+					usageMetadata = conversion.UsageMetadata
+				}
+			}
+
+			// Try AI client without cache if cached attempt failed or wasn't available
+			if contentInMarkdown == "" {
+				logger.Info("Attempting AI conversion without cache",
+					zap.String("fileType", param.FileType.String()),
+					zap.String("client", w.aiClient.Name()))
+
+				conversion, err := w.aiClient.ConvertToMarkdownWithoutCache(
+					authCtx,
+					rawFileContent,
+					param.FileType,
+					param.Filename,
+					gemini.GetRAGGenerateContentPrompt(),
+				)
+				if err != nil {
+					logger.Error("AI conversion failed", zap.Error(err))
+					conversionErr = err
+				} else {
+					logger.Info("AI conversion successful",
+						zap.Int("markdownLength", len(conversion.Markdown)))
+
+					// Process AI conversion result
+					contentInMarkdown, positionData, length = ExtractPageDelimiters(
+						conversion.Markdown,
+						w.log,
+						map[string]any{"fileType": param.FileType.String()},
+					)
+					usageMetadata = conversion.UsageMetadata
+				}
+			}
+
+			// If conversion still failed, return the actual error
+			if contentInMarkdown == "" {
+				logger.Error("AI conversion failed to produce content")
+				if conversionErr != nil {
+					return nil, temporal.NewApplicationErrorWithCause(
+						fmt.Sprintf("AI client failed to convert file: %s", errorsx.MessageOrErr(conversionErr)),
+						processContentActivityError,
+						conversionErr,
+					)
+				}
+				return nil, temporal.NewApplicationErrorWithCause(
+					"AI client failed to convert file: conversion produced empty content",
+					processContentActivityError,
+					fmt.Errorf("empty conversion result"),
+				)
+			}
+		} // End of Gemini route
 	}
 
 	result.Content = contentInMarkdown
@@ -1587,14 +1712,15 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 
 // ProcessSummaryActivityParam defines input for ProcessSummaryActivity
 type ProcessSummaryActivityParam struct {
-	FileUID     types.FileUIDType    // File unique identifier
-	KBUID       types.KBUIDType      // Knowledge base unique identifier
-	Bucket      string               // MinIO bucket
-	Destination string               // MinIO path
-	FileName    string               // File name
-	FileType    artifactpb.File_Type // File type
-	Metadata    *structpb.Struct     // Request metadata
-	CacheName   string               // AI cache name
+	FileUID         types.FileUIDType    // File unique identifier
+	KBUID           types.KBUIDType      // Knowledge base unique identifier
+	Bucket          string               // MinIO bucket
+	Destination     string               // MinIO path
+	FileName        string               // File name
+	FileType        artifactpb.File_Type // File type
+	Metadata        *structpb.Struct     // Request metadata
+	CacheName       string               // Optional: AI cache name (used for Gemini route to reuse cached file context; empty for OpenAI route which doesn't support caching)
+	ContentMarkdown string               // Optional: Pre-processed markdown content (used for OpenAI route where summary depends on content generation output)
 }
 
 // ProcessSummaryActivityResult defines output from ProcessSummaryActivity
@@ -1607,6 +1733,7 @@ type ProcessSummaryActivityResult struct {
 	ConvertedType    artifactpb.File_Type       // Converted file type (same as original)
 	UsageMetadata    any                        // AI token usage
 	ConvertedFileUID types.ConvertedFileUIDType // Summary converted file UID (zero if no summary)
+	Pipeline         string                     // Pipeline used (e.g., "instill-ai/indexing-generate-summary/v1.0.0" for OpenAI route, empty for AI client)
 }
 
 // ProcessSummaryActivity handles the entire summary generation:
@@ -1622,7 +1749,6 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 
 	result := &ProcessSummaryActivityResult{}
 
-	// Phase 1: Generate summary from file content
 	// Create authenticated context if metadata provided
 	authCtx := ctx
 	if param.Metadata != nil {
@@ -1638,109 +1764,165 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 		}
 	}
 
-	// Fetch content from MinIO
-	content, err := w.repository.GetFile(authCtx, param.Bucket, param.Destination)
-	if err != nil {
-		logger.Error("Failed to retrieve file from storage", zap.Error(err))
-		return nil, temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to retrieve file from storage: %s", errorsx.MessageOrErr(err)),
-			processSummaryActivityError,
-			err,
-		)
+	// Phase 1: Prepare content for summary generation
+	var content []byte
+	var contentStr string
+
+	if param.ContentMarkdown != "" {
+		// OpenAI route: Use pre-processed markdown content from content generation
+		// This is necessary because OpenAI summary pipeline expects markdown input, not raw file
+		logger.Info("Using pre-processed markdown content (OpenAI route)",
+			zap.Int("contentLength", len(param.ContentMarkdown)))
+		contentStr = param.ContentMarkdown
+	} else {
+		// Gemini route: Read raw file content and process independently
+		// Fetch content from MinIO
+		var err error
+		content, err = w.repository.GetFile(authCtx, param.Bucket, param.Destination)
+		if err != nil {
+			logger.Error("Failed to retrieve file from storage", zap.Error(err))
+			return nil, temporal.NewApplicationErrorWithCause(
+				fmt.Sprintf("Failed to retrieve file from storage: %s", errorsx.MessageOrErr(err)),
+				processSummaryActivityError,
+				err,
+			)
+		}
+
+		logger.Info("Content retrieved from storage (Gemini route)",
+			zap.Int("contentBytes", len(content)))
+
+		// Convert bytes to valid UTF-8 string, replacing any invalid sequences
+		// This prevents gRPC marshaling errors when content contains invalid UTF-8
+		contentStr = strings.ToValidUTF8(string(content), "�")
 	}
 
-	logger.Info("Content prepared for summarization",
-		zap.Int("contentBytes", len(content)))
-
 	// Verify content is not empty
-	if len(strings.TrimSpace(string(content))) == 0 {
+	if len(strings.TrimSpace(contentStr)) == 0 {
 		return nil, temporal.NewApplicationError(
 			fmt.Sprintf("content is empty for file %s", param.FileUID.String()),
 			processSummaryActivityError,
 		)
 	}
 
-	// Check if AI client is configured
-	if w.aiClient == nil {
-		logger.Error("AI client not configured")
+	// Fetch KB with config to check embedding model family for routing
+	kb, err := w.repository.GetKnowledgeBaseByUIDWithConfig(authCtx, param.KBUID)
+	if err != nil {
+		logger.Error("Failed to get KB for routing", zap.Error(err))
 		return nil, temporal.NewApplicationErrorWithCause(
-			"AI client is required for summary generation. Please configure Gemini API key in the server configuration.",
-			processSummaryActivityError,
-			fmt.Errorf("AI client not configured"),
-		)
+			fmt.Sprintf("Failed to get KB: %s", errorsx.MessageOrErr(err)),
+			processSummaryActivityError, err)
 	}
 
 	var summary string
 	var usageMetadata any
-	var summarizationErr error
 
-	// Build prompt with filename context
-	summaryPrompt := gemini.GetRAGGenerateSummaryPrompt()
-	if param.FileName != "" {
-		summaryPrompt = strings.ReplaceAll(gemini.GetRAGGenerateSummaryPrompt(), "[filename]", param.FileName)
-	}
+	// Route based on model family
+	if kb.SystemConfig.RAG.Embedding.ModelFamily == "openai" {
+		logger.Info("Using OpenAI pipeline route for summary generation")
 
-	// Use the file type from parameter (already converted in workflow)
-	fileType := param.FileType
-
-	// Try AI client with cache first (if available)
-	if param.CacheName != "" && w.aiClient.SupportsFileType(fileType) {
-		logger.Info("Attempting AI summarization with cache",
-			zap.String("cacheName", param.CacheName),
-			zap.String("client", w.aiClient.Name()))
-
-		conversion, err := w.aiClient.ConvertToMarkdownWithCache(authCtx, param.CacheName, summaryPrompt)
-		if err != nil {
-			logger.Warn("Cached AI summarization failed, will try without cache", zap.Error(err))
-			summarizationErr = err
-		} else {
-			summary = conversion.Markdown
-			usageMetadata = conversion.UsageMetadata
-			logger.Info("AI summarization with cache succeeded",
-				zap.Int("summaryLength", len(summary)))
-		}
-	}
-
-	// Try AI client without cache if cached attempt failed or wasn't available
-	if summary == "" && w.aiClient.SupportsFileType(fileType) {
-		logger.Info("Attempting AI summarization without cache",
-			zap.String("fileType", fileType.String()),
-			zap.String("client", w.aiClient.Name()))
-
-		conversion, err := w.aiClient.ConvertToMarkdownWithoutCache(
-			authCtx,
-			content,
-			fileType,
-			param.FileName,
-			summaryPrompt,
-		)
-		if err != nil {
-			logger.Error("AI summarization failed", zap.Error(err))
-			summarizationErr = err
-		} else {
-			summary = conversion.Markdown
-			usageMetadata = conversion.UsageMetadata
-			logger.Info("AI summarization without cache succeeded",
-				zap.Int("summaryLength", len(summary)))
-		}
-	}
-
-	// If summarization failed, return the actual error
-	if summary == "" {
-		logger.Error("AI summarization failed to produce content")
-		if summarizationErr != nil {
+		if w.pipelineClient == nil {
 			return nil, temporal.NewApplicationErrorWithCause(
-				fmt.Sprintf("AI client failed to generate summary: %s", errorsx.MessageOrErr(summarizationErr)),
+				"Pipeline client not configured for OpenAI route",
+				processSummaryActivityError, fmt.Errorf("pipeline client is nil"))
+		}
+
+		// Call OpenAI summary pipeline with sanitized UTF-8 content
+		summary, err = pipeline.GenerateSummaryPipe(authCtx, w.pipelineClient, contentStr, param.FileType)
+		if err != nil {
+			logger.Error("OpenAI pipeline summarization failed", zap.Error(err))
+			return nil, temporal.NewApplicationErrorWithCause(
+				fmt.Sprintf("OpenAI pipeline failed: %s", errorsx.MessageOrErr(err)),
+				processSummaryActivityError, err)
+		}
+
+		// Record pipeline used (e.g., "instill-ai/indexing-generate-summary@v1.0.0")
+		result.Pipeline = pipeline.GenerateSummaryPipeline.Name()
+
+		logger.Info("OpenAI pipeline summarization successful", zap.Int("summaryLength", len(summary)))
+
+	} else {
+		logger.Info("Using Gemini AI client route for summary generation")
+
+		// Check if AI client is configured
+		if w.aiClient == nil {
+			logger.Error("AI client not configured")
+			return nil, temporal.NewApplicationErrorWithCause(
+				"AI client is required for summary generation. Please configure Gemini API key in the server configuration.",
 				processSummaryActivityError,
-				summarizationErr,
+				fmt.Errorf("AI client not configured"),
 			)
 		}
-		return nil, temporal.NewApplicationErrorWithCause(
-			"AI client failed to generate summary: summarization produced empty content",
-			processSummaryActivityError,
-			fmt.Errorf("empty summarization result"),
-		)
-	}
+
+		var summarizationErr error
+
+		// Build prompt with filename context
+		summaryPrompt := gemini.GetRAGGenerateSummaryPrompt()
+		if param.FileName != "" {
+			summaryPrompt = strings.ReplaceAll(gemini.GetRAGGenerateSummaryPrompt(), "[filename]", param.FileName)
+		}
+
+		// Use the file type from parameter (already converted in workflow)
+		fileType := param.FileType
+
+		// Try AI client with cache first (if available)
+		if param.CacheName != "" && w.aiClient.SupportsFileType(fileType) {
+			logger.Info("Attempting AI summarization with cache",
+				zap.String("cacheName", param.CacheName),
+				zap.String("client", w.aiClient.Name()))
+
+			conversion, err := w.aiClient.ConvertToMarkdownWithCache(authCtx, param.CacheName, summaryPrompt)
+			if err != nil {
+				logger.Warn("Cached AI summarization failed, will try without cache", zap.Error(err))
+				summarizationErr = err
+			} else {
+				summary = conversion.Markdown
+				usageMetadata = conversion.UsageMetadata
+				logger.Info("AI summarization with cache succeeded",
+					zap.Int("summaryLength", len(summary)))
+			}
+		}
+
+		// Try AI client without cache if cached attempt failed or wasn't available
+		if summary == "" && w.aiClient.SupportsFileType(fileType) {
+			logger.Info("Attempting AI summarization without cache",
+				zap.String("fileType", fileType.String()),
+				zap.String("client", w.aiClient.Name()))
+
+			conversion, err := w.aiClient.ConvertToMarkdownWithoutCache(
+				authCtx,
+				content,
+				fileType,
+				param.FileName,
+				summaryPrompt,
+			)
+			if err != nil {
+				logger.Error("AI summarization failed", zap.Error(err))
+				summarizationErr = err
+			} else {
+				summary = conversion.Markdown
+				usageMetadata = conversion.UsageMetadata
+				logger.Info("AI summarization without cache succeeded",
+					zap.Int("summaryLength", len(summary)))
+			}
+		}
+
+		// If summarization failed, return the actual error
+		if summary == "" {
+			logger.Error("AI summarization failed to produce content")
+			if summarizationErr != nil {
+				return nil, temporal.NewApplicationErrorWithCause(
+					fmt.Sprintf("AI client failed to generate summary: %s", errorsx.MessageOrErr(summarizationErr)),
+					processSummaryActivityError,
+					summarizationErr,
+				)
+			}
+			return nil, temporal.NewApplicationErrorWithCause(
+				"AI client failed to generate summary: summarization produced empty content",
+				processSummaryActivityError,
+				fmt.Errorf("empty summarization result"),
+			)
+		}
+	} // End of Gemini route
 
 	// Set result fields (symmetric with ProcessContentActivityResult)
 	summaryLength := uint32(len([]rune(summary))) // Use rune count for consistency with content
@@ -1945,10 +2127,10 @@ func (w *Worker) DeleteTemporaryConvertedFileActivity(ctx context.Context, param
 
 // ===== MARKDOWN CONVERSION HELPERS =====
 
-// ProcessAIConversionResult processes AI conversion output by parsing page tags and preparing the result
+// ExtractPageDelimiters parses [Page: X] tags from AI-generated markdown and extracts page delimiter positions
 // Returns markdown WITH page tags preserved, position data for visual grounding, and length array
 // (Exported for EE worker overrides)
-func ProcessAIConversionResult(markdown string, logger *zap.Logger, logContext map[string]any) (string, *types.PositionData, []uint32) {
+func ExtractPageDelimiters(markdown string, logger *zap.Logger, logContext map[string]any) (string, *types.PositionData, []uint32) {
 	// Parse pages from AI-generated Markdown
 	// Expected format: [Page: 1] ... [Page: n] ...
 	// The page tags are KEPT in the stored markdown for robust extraction
@@ -2013,4 +2195,68 @@ func decodeBlobURL(blobURL string) (string, error) {
 	}
 
 	return "", fmt.Errorf("blob URL segment not found in URL")
+}
+
+// ============================================================================
+// FindTargetFileByNameActivity - used for dual-processing coordination
+// ============================================================================
+
+// FindTargetFileByNameActivityParam contains parameters for finding a file by name in a target KB
+type FindTargetFileByNameActivityParam struct {
+	TargetKBUID    types.KBUIDType // Target KB UID to search in
+	TargetOwnerUID string          // Target KB owner UID
+	FileName       string          // File name to search for
+}
+
+// FindTargetFileByNameActivityResult contains the found file information
+type FindTargetFileByNameActivityResult struct {
+	Found   bool              // Whether the file was found
+	FileUID types.FileUIDType // File UID if found
+}
+
+const findTargetFileByNameActivityError = "findTargetFileByNameActivityError"
+
+// FindTargetFileByNameActivity finds a file by name in the target KB.
+// Used during dual-processing coordination to locate target files that correspond to production files.
+// This is a simple wrapper around ListKnowledgeBaseFiles repository method with post-filtering by name.
+func (w *Worker) FindTargetFileByNameActivity(ctx context.Context, param *FindTargetFileByNameActivityParam) (*FindTargetFileByNameActivityResult, error) {
+	w.log.Info("FindTargetFileByNameActivity: Searching for file",
+		zap.String("targetKBUID", param.TargetKBUID.String()),
+		zap.String("fileName", param.FileName))
+
+	// List all files in the target KB and filter by name
+	// Note: We don't paginate since dual-processing typically involves a small number of files
+	files, err := w.repository.ListKnowledgeBaseFiles(ctx, repository.KnowledgeBaseFileListParams{
+		OwnerUID: param.TargetOwnerUID,
+		KBUID:    param.TargetKBUID.String(),
+		PageSize: 1000, // Large enough to cover typical KB update scenarios
+	})
+	if err != nil {
+		return nil, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to list files: %s", errorsx.MessageOrErr(err)),
+			findTargetFileByNameActivityError,
+			err,
+		)
+	}
+
+	result := &FindTargetFileByNameActivityResult{
+		Found: false,
+	}
+
+	// Find the file with matching name
+	for _, file := range files.Files {
+		if file.Name == param.FileName {
+			result.Found = true
+			result.FileUID = file.UID
+			w.log.Info("FindTargetFileByNameActivity: File found",
+				zap.String("fileUID", result.FileUID.String()))
+			break
+		}
+	}
+
+	if !result.Found {
+		w.log.Info("FindTargetFileByNameActivity: File not found in target KB")
+	}
+
+	return result, nil
 }

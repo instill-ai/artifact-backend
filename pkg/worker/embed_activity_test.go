@@ -77,10 +77,11 @@ func TestSaveEmbeddingBatchActivity_Success(t *testing.T) {
 	kbUID := uuid.Must(uuid.NewV4())
 
 	// Setup mocks
-	mockRepository.GetKnowledgeBaseByUIDMock.Return(&repository.KnowledgeBaseModel{
+	mockRepository.GetKnowledgeBaseByUIDIncludingDeletedMock.Return(&repository.KnowledgeBaseModel{
 		UID:                 kbUID,
 		ActiveCollectionUID: kbUID,
 	}, nil)
+	mockRepository.CollectionExistsMock.Return(true, nil)
 	mockRepository.InsertVectorsInCollectionMock.Return(nil)
 	mockRepository.CreateEmbeddingsMock.Set(func(
 		ctx context.Context,
@@ -138,10 +139,11 @@ func TestSaveEmbeddingBatchActivity_MilvusFailure(t *testing.T) {
 	mockRepository := mock.NewRepositoryMock(mc)
 	kbUID := uuid.Must(uuid.NewV4())
 
-	mockRepository.GetKnowledgeBaseByUIDMock.Return(&repository.KnowledgeBaseModel{
+	mockRepository.GetKnowledgeBaseByUIDIncludingDeletedMock.Return(&repository.KnowledgeBaseModel{
 		UID:                 kbUID,
 		ActiveCollectionUID: kbUID,
 	}, nil)
+	mockRepository.CollectionExistsMock.Return(true, nil)
 	mockRepository.InsertVectorsInCollectionMock.Return(fmt.Errorf("milvus insert failed"))
 
 	embeddings := createActivityTestEmbeddings(50)
@@ -181,10 +183,11 @@ func TestSaveEmbeddingBatchActivity_DatabaseFailure(t *testing.T) {
 	mockRepository := mock.NewRepositoryMock(mc)
 	kbUID := uuid.Must(uuid.NewV4())
 
-	mockRepository.GetKnowledgeBaseByUIDMock.Return(&repository.KnowledgeBaseModel{
+	mockRepository.GetKnowledgeBaseByUIDIncludingDeletedMock.Return(&repository.KnowledgeBaseModel{
 		UID:                 kbUID,
 		ActiveCollectionUID: kbUID,
 	}, nil)
+	mockRepository.CollectionExistsMock.Return(true, nil)
 	mockRepository.CreateEmbeddingsMock.Return(nil, fmt.Errorf("database insert failed"))
 
 	w := &Worker{repository: mockRepository, log: zap.NewNop()}
@@ -210,7 +213,7 @@ func TestDeleteOldEmbeddingsActivity_Success(t *testing.T) {
 
 	kbUID := uuid.Must(uuid.NewV4())
 
-	mockRepository.GetKnowledgeBaseByUIDMock.Return(&repository.KnowledgeBaseModel{
+	mockRepository.GetKnowledgeBaseByUIDIncludingDeletedMock.Return(&repository.KnowledgeBaseModel{
 		UID:                 kbUID,
 		ActiveCollectionUID: kbUID,
 	}, nil)
@@ -235,7 +238,7 @@ func TestDeleteOldEmbeddingsActivity_VectorDBFailure(t *testing.T) {
 	mockRepository := mock.NewRepositoryMock(mc)
 	kbUID := uuid.Must(uuid.NewV4())
 
-	mockRepository.GetKnowledgeBaseByUIDMock.Return(&repository.KnowledgeBaseModel{
+	mockRepository.GetKnowledgeBaseByUIDIncludingDeletedMock.Return(&repository.KnowledgeBaseModel{
 		UID:                 kbUID,
 		ActiveCollectionUID: kbUID,
 	}, nil)
@@ -260,7 +263,7 @@ func TestDeleteOldEmbeddingsActivity_DBFailure(t *testing.T) {
 	mockRepository := mock.NewRepositoryMock(mc)
 	kbUID := uuid.Must(uuid.NewV4())
 
-	mockRepository.GetKnowledgeBaseByUIDMock.Return(&repository.KnowledgeBaseModel{
+	mockRepository.GetKnowledgeBaseByUIDIncludingDeletedMock.Return(&repository.KnowledgeBaseModel{
 		UID:                 kbUID,
 		ActiveCollectionUID: kbUID,
 	}, nil)
@@ -350,7 +353,7 @@ func TestFlushCollectionActivity_Success(t *testing.T) {
 	mockRepository := mock.NewRepositoryMock(mc)
 	kbUID := uuid.Must(uuid.NewV4())
 
-	mockRepository.GetKnowledgeBaseByUIDMock.Return(&repository.KnowledgeBaseModel{
+	mockRepository.GetKnowledgeBaseByUIDIncludingDeletedMock.Return(&repository.KnowledgeBaseModel{
 		UID:                 kbUID,
 		ActiveCollectionUID: kbUID,
 	}, nil)
@@ -374,7 +377,7 @@ func TestFlushCollectionActivity_Failure(t *testing.T) {
 	mockRepository := mock.NewRepositoryMock(mc)
 	kbUID := uuid.Must(uuid.NewV4())
 
-	mockRepository.GetKnowledgeBaseByUIDMock.Return(&repository.KnowledgeBaseModel{
+	mockRepository.GetKnowledgeBaseByUIDIncludingDeletedMock.Return(&repository.KnowledgeBaseModel{
 		UID:                 kbUID,
 		ActiveCollectionUID: kbUID,
 	}, nil)

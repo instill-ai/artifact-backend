@@ -64,8 +64,7 @@ func TestFileProcessStatus_Values(t *testing.T) {
 	c := qt.New(t)
 
 	statuses := []artifactpb.FileProcessStatus{
-		artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CONVERTING,
-		artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_SUMMARIZING,
+		artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_PROCESSING,
 		artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CHUNKING,
 		artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_EMBEDDING,
 		artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED,
@@ -175,7 +174,7 @@ func TestUpdateFileStatusActivity_WithMessage(t *testing.T) {
 	mockRepository.GetKnowledgeBaseFilesByFileUIDsMock.
 		When(minimock.AnyContext, []uuid.UUID{fileUID}).
 		Then([]repository.KnowledgeBaseFileModel{
-			{UID: fileUID, ProcessStatus: "FILE_PROCESS_STATUS_CONVERTING"},
+			{UID: fileUID, ProcessStatus: "FILE_PROCESS_STATUS_PROCESSING"},
 		}, nil)
 
 	metadataUpdateCalled := false

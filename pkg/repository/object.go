@@ -30,12 +30,12 @@ type ObjectModel struct {
 	CreatorUID   types.CreatorUIDType   `gorm:"column:creator_uid;type:uuid;not null" json:"creator_uid"`
 	IsUploaded   bool                   `gorm:"column:is_uploaded;not null;default:false" json:"is_uploaded"`
 	// BucketName/ns:<nid>/obj:<uid>
-	Destination      string     `gorm:"column:destination;size:255" json:"destination"`
-	ObjectExpireDays *int       `gorm:"column:object_expire_days" json:"object_expire_days"`
-	LastModifiedTime *time.Time `gorm:"column:last_modified_time" json:"last_modified_time"`
-	CreateTime       time.Time  `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
-	UpdateTime       time.Time  `gorm:"column:update_time;not null;autoUpdateTime" json:"update_time"`
-	DeleteTime       *time.Time `gorm:"column:delete_time" json:"delete_time"`
+	Destination      string         `gorm:"column:destination;size:255" json:"destination"`
+	ObjectExpireDays *int           `gorm:"column:object_expire_days" json:"object_expire_days"`
+	LastModifiedTime *time.Time     `gorm:"column:last_modified_time" json:"last_modified_time"`
+	CreateTime       time.Time      `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
+	UpdateTime       time.Time      `gorm:"column:update_time;not null;autoUpdateTime" json:"update_time"`
+	DeleteTime       gorm.DeletedAt `gorm:"column:delete_time;index" json:"delete_time"`
 }
 
 // TableName overrides the default table name for GORM
@@ -86,7 +86,8 @@ func (r *repository) CreateObject(ctx context.Context, obj ObjectModel) (*Object
 // ListAllObjects fetches all ObjectModel records from the database for a given namespace and creator, excluding soft-deleted ones.
 func (r *repository) ListAllObjects(ctx context.Context, namespaceUID types.NamespaceUIDType, creatorUID types.CreatorUIDType) ([]ObjectModel, error) {
 	var objects []ObjectModel
-	whereString := fmt.Sprintf("%v IS NULL AND %v = ? AND %v = ?", ObjectColumn.DeleteTime, ObjectColumn.NamespaceUID, ObjectColumn.CreatorUID)
+	// GORM's DeletedAt automatically filters out soft-deleted records
+	whereString := fmt.Sprintf("%v = ? AND %v = ?", ObjectColumn.NamespaceUID, ObjectColumn.CreatorUID)
 	if err := r.db.WithContext(ctx).Where(whereString, namespaceUID, creatorUID).Find(&objects).Error; err != nil {
 		return nil, err
 	}

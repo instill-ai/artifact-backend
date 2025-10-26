@@ -14,28 +14,31 @@ import (
 )
 
 //go:embed preset/pipelines/*
+
+// PresetPipelinesFS is the filesystem that contains the preset pipelines to release.
 var PresetPipelinesFS embed.FS
 
 // DefaultNamespaceID is the namespace that owns the preset pipelines.
 const DefaultNamespaceID = "preset"
 
-// PipelineRelease identifies a pipeline used in catalog file processing.
-type PipelineRelease struct {
+// Release identifies a pipeline used in catalog file processing.
+type Release struct {
 	Namespace string
 	ID        string
 	Version   string
 }
 
 // Name returns a human-readable, unique identifier for a pipeline release.
-func (pr PipelineRelease) Name() string {
+func (pr Release) Name() string {
 	return pr.Namespace + "/" + pr.ID + "@" + pr.Version
 }
 
-// PipelineReleases is defined to implement common methods over pipeline
+// Releases is defined to implement common methods over pipeline
 // release lists.
-type PipelineReleases []PipelineRelease
+type Releases []Release
 
-func (prs PipelineReleases) Names() []string {
+// Names returns the names of the releases.
+func (prs Releases) Names() []string {
 	names := make([]string, len(prs))
 	for i, pr := range prs {
 		names[i] = pr.Name()
@@ -45,10 +48,10 @@ func (prs PipelineReleases) Names() []string {
 
 }
 
-// PipelineReleaseFromName parses a PipelineRelease from its name, with the
+// ReleaseFromName parses a Release from its name, with the
 // format {namespace}/{id}@{version}.
-func PipelineReleaseFromName(name string) (PipelineRelease, error) {
-	pr := PipelineRelease{}
+func ReleaseFromName(name string) (Release, error) {
+	pr := Release{}
 
 	parts := strings.Split(name, "/")
 	if len(parts) != 2 {
@@ -78,36 +81,66 @@ var (
 	// - HEIC → JPEG (for image processing)
 	// - AVIF → PNG (for web image formats)
 	// - Additional conversions for audio, video, and other formats
-	ConvertFileTypePipeline = PipelineRelease{
+	ConvertFileTypePipeline = Release{
 		Namespace: DefaultNamespaceID,
 		ID:        "indexing-convert-file-type",
 		Version:   "v1.0.0",
 	}
 
+	// GenerateContentPipeline converts documents to markdown using OpenAI GPT-4o
+	// VLM for OCR and content extraction. Used for OpenAI model family.
+	GenerateContentPipeline = Release{
+		Namespace: DefaultNamespaceID,
+		ID:        "indexing-generate-content",
+		Version:   "v1.4.0",
+	}
+
+	// GenerateSummaryPipeline generates file summaries using OpenAI text models
+	// with a map-reduce pattern. Used for OpenAI model family.
+	GenerateSummaryPipeline = Release{
+		Namespace: DefaultNamespaceID,
+		ID:        "indexing-generate-summary",
+		Version:   "v1.0.0",
+	}
+
+	// EmbedPipeline generates embeddings using OpenAI text-embedding models.
+	// Used for OpenAI model family.
+	EmbedPipeline = Release{
+		Namespace: DefaultNamespaceID,
+		ID:        "indexing-embed",
+		Version:   "v1.0.0",
+	}
+
 	// QAPipeline is the default pipeline for question & answering.
-	QAPipeline = PipelineRelease{
+	QAPipeline = Release{
 		Namespace: DefaultNamespaceID,
 		ID:        "retrieving-qna",
 		Version:   "v1.2.0",
 	}
 
 	// PresetPipelinesList contains the preset pipelines used in catalogs.
-	PresetPipelinesList = PipelineReleases{
+	PresetPipelinesList = Releases{
 		ConvertFileTypePipeline,
+		GenerateContentPipeline,
+		GenerateSummaryPipeline,
+		EmbedPipeline,
 		QAPipeline,
 	}
+
+	// DefaultConversionPipelines contains the default pipeline used for document conversion.
+	DefaultConversionPipelines = Releases{GenerateContentPipeline}
 )
 
-// PipelineReleaseUpserter is used to upsert predefined pipeline releases into
+// ReleaseUpserter is used to upsert predefined pipeline releases into
 // the database.
-type PipelineReleaseUpserter struct {
+type ReleaseUpserter struct {
 	FS                          embed.FS
 	PipelinePublicServiceClient pipelinepb.PipelinePublicServiceClient
 }
 
 // Upsert creates or updates a pipeline release according to the information
 // (readme, description and recipe) from the filesystem.
-func (u *PipelineReleaseUpserter) Upsert(ctx context.Context, pr PipelineRelease) error {
+func (u *ReleaseUpserter) Upsert(ctx context.Context, pr Release) error {
 	basePath := filepath.Join(pr.Namespace, "pipelines", pr.ID, pr.Version)
 	descriptionContent, err := u.FS.ReadFile(filepath.Join(basePath, "description.md"))
 	if err != nil {

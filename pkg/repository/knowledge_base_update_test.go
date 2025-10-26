@@ -167,20 +167,24 @@ func TestEmbeddingConfigJSON_Value(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		config   EmbeddingConfigJSON
+		config   SystemConfigJSON
 		expected string
 	}{
 		{
 			name: "Valid config",
-			config: EmbeddingConfigJSON{
-				ModelFamily:    "gemini",
-				Dimensionality: 3072,
+			config: SystemConfigJSON{
+				RAG: RAGConfig{
+					Embedding: EmbeddingConfig{
+						ModelFamily:    "gemini",
+						Dimensionality: 3072,
+					},
+				},
 			},
-			expected: `{"model_family":"gemini","dimensionality":3072}`,
+			expected: `{"rag":{"embedding":{"model_family":"gemini","dimensionality":3072}}}`,
 		},
 		{
 			name:     "Empty config",
-			config:   EmbeddingConfigJSON{},
+			config:   SystemConfigJSON{},
 			expected: "",
 		},
 	}
@@ -205,42 +209,46 @@ func TestEmbeddingConfigJSON_Scan(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    interface{}
-		expected EmbeddingConfigJSON
+		expected SystemConfigJSON
 		hasError bool
 	}{
 		{
 			name:  "Valid JSON",
-			input: []byte(`{"model_family":"gemini","dimensionality":3072}`),
-			expected: EmbeddingConfigJSON{
-				ModelFamily:    "gemini",
-				Dimensionality: 3072,
+			input: []byte(`{"rag":{"embedding":{"model_family":"gemini","dimensionality":3072}}}`),
+			expected: SystemConfigJSON{
+				RAG: RAGConfig{
+					Embedding: EmbeddingConfig{
+						ModelFamily:    "gemini",
+						Dimensionality: 3072,
+					},
+				},
 			},
 			hasError: false,
 		},
 		{
 			name:     "Nil input",
 			input:    nil,
-			expected: EmbeddingConfigJSON{},
+			expected: SystemConfigJSON{},
 			hasError: false,
 		},
 		{
 			name:     "Invalid type",
 			input:    123,
-			expected: EmbeddingConfigJSON{},
+			expected: SystemConfigJSON{},
 			hasError: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var config EmbeddingConfigJSON
+			var config SystemConfigJSON
 			err := config.Scan(tt.input)
 			if tt.hasError {
 				c.Check(err, qt.Not(qt.IsNil))
 			} else {
 				c.Check(err, qt.IsNil)
-				c.Check(config.ModelFamily, qt.Equals, tt.expected.ModelFamily)
-				c.Check(config.Dimensionality, qt.Equals, tt.expected.Dimensionality)
+				c.Check(config.RAG.Embedding.ModelFamily, qt.Equals, tt.expected.RAG.Embedding.ModelFamily)
+				c.Check(config.RAG.Embedding.Dimensionality, qt.Equals, tt.expected.RAG.Embedding.Dimensionality)
 			}
 		})
 	}

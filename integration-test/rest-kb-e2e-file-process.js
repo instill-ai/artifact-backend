@@ -1,3 +1,55 @@
+
+/**
+ * Test the complete end-to-end catalog and file processing workflow.
+ *
+ * This comprehensive test verifies the entire lifecycle of a knowledge base catalog:
+ * 1. Catalog Management: Create, list, update, delete catalog
+ * 2. Multi-File Upload: Upload all supported file types (13 files)
+ * 3. Batch Processing: Process all files asynchronously
+ * 4. File Metadata Verification: Verify file metadata and processing results
+ * 5. Storage Verification: Verify resources in MinIO, Postgres, and Milvus
+ * 6. API Completeness: Test all file-related endpoints (chunks, summary, source)
+ * 7. Type-Specific Validation: Verify file type-specific processing (PDF, DOC, TEXT, etc.)
+ * 7.5. Position Data Validation: Verify PDF files have correct position data and page references
+ * 8. Resource Cleanup: Verify proper cleanup on catalog deletion
+ *
+ * Note: Database schema and data format tests (enum storage, JSONB formats, field naming,
+ * content/summary separation, File.Type enum serialization) are in rest-db.js
+ *
+ * Test Flow:
+ * - Step 1: Create catalog
+ * - Step 2: List catalogs (verify presence)
+ * - Step 3: Update catalog metadata
+ * - Step 4: Upload 13 files of different types in parallel
+ * - Step 5: Trigger batch processing for all files
+ * - Step 6: Poll until all files reach COMPLETED status
+ * - Step 7: Verify each file's metadata (name, size, chunks, tokens, etc.)
+ *   - Verify type-specific attributes (pages for PDF/DOC, characters for TEXT)
+ * - Step 7.5: Verify position data for PDF files
+ *   - Database: PageDelimiters in converted_file, PageRange in text_chunk
+ *   - API: UNIT_PAGE references, markdown_reference with UNIT_CHARACTER
+ *   - PascalCase validation for JSON fields
+ * - Step 8: List all files in catalog
+ * - Step 9: List chunks for each file
+ * - Step 10: Get summary for each file
+ * - Step 11: Get source file for each file
+ * - Step 12: Verify storage layer resources (MinIO, Postgres, Milvus)
+ * - Step 13: Delete catalog and verify cleanup
+ *
+ * Supported File Types Tested:
+ * - TEXT, MARKDOWN, CSV, HTML
+ * - PDF, DOC, DOCX, PPT, PPTX, XLS, XLSX
+ * - Case variations (uppercase filenames)
+ *
+ * This test ensures:
+ * - All file types are processed correctly
+ * - Batch processing works reliably
+ * - All file types (including TEXT/MARKDOWN) create converted files
+ * - Storage layers are populated correctly
+ * - All API endpoints return expected data
+ * - Cleanup removes all resources
+ */
+
 import http from "k6/http";
 import { check, group, sleep } from "k6";
 import { randomString } from "https://jslib.k6.io/k6-utils/1.1.0/index.js";
@@ -9,6 +61,7 @@ import * as helper from "./helper.js";
 
 export let options = {
   setupTimeout: '30s',
+  teardownTimeout: '180s',
   iterations: 1,
   duration: '120m',
   insecureSkipTLSVerify: true,
@@ -20,16 +73,12 @@ export let options = {
 export function setup() {
   check(true, { [constant.banner('Artifact API E2E: Setup')]: () => true });
 
-  // Clean up any leftover test data from previous runs
-  try {
-    constant.db.exec(`DELETE FROM text_chunk WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-    constant.db.exec(`DELETE FROM embedding WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-    constant.db.exec(`DELETE FROM converted_file WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-    constant.db.exec(`DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`);
-    constant.db.exec(`DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`);
-  } catch (e) {
-    console.log(`E2E Setup cleanup warning: ${e}`);
-  }
+  // Add stagger to reduce parallel resource contention
+  helper.staggerTestExecution(2);
+
+  // Generate unique test prefix (must be in setup, not module-level, to avoid k6 parallel init issues)
+  const dbIDPrefix = constant.generateDBIDPrefix();
+  console.log(`rest-kb-e2e-file-process.js: Using unique test prefix: ${dbIDPrefix}`);
 
   var loginResp = http.request("POST", `${constant.mgmtRESTPublicHost}/v1beta/auth/login`, JSON.stringify({
     "username": constant.defaultUsername,
@@ -52,7 +101,31 @@ export function setup() {
     headers: { "Authorization": `Bearer ${loginResp.json().accessToken}` }
   })
 
-  return { header: header, expectedOwner: resp.json().user }
+  // Cleanup orphaned catalogs from previous failed test runs OF THIS SPECIFIC TEST
+  // Use API-only cleanup to properly trigger workflows (no direct DB manipulation)
+  console.log("\n=== SETUP: Cleaning up previous test data (e2e pattern only) ===");
+  try {
+    const listResp = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${resp.json().user.id}/catalogs`, null, header);
+    if (listResp.status === 200) {
+      const catalogs = Array.isArray(listResp.json().catalogs) ? listResp.json().catalogs : [];
+      let cleanedCount = 0;
+      for (const catalog of catalogs) {
+        const catId = catalog.catalogId || catalog.catalog_id;
+        if (catId && catId.match(/test-[a-z0-9]+-e2e-/)) {
+          const delResp = http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${resp.json().user.id}/catalogs/${catId}`, null, header);
+          if (delResp.status === 200 || delResp.status === 204) {
+            cleanedCount++;
+          }
+        }
+      }
+      console.log(`Cleaned ${cleanedCount} orphaned catalogs from previous test runs`);
+    }
+  } catch (e) {
+    console.log(`Setup cleanup warning: ${e}`);
+  }
+  console.log("=== SETUP: Cleanup complete ===\n");
+
+  return { header: header, expectedOwner: resp.json().user, dbIDPrefix: dbIDPrefix }
 }
 
 export default function (data) {
@@ -64,78 +137,33 @@ export function teardown(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
+    // CRITICAL: Wait for THIS TEST's file processing to complete before deleting catalogs
+    // Deleting catalogs triggers cleanup workflows that drop vector DB collections
+    // If we delete while files are still processing, we get "collection does not exist" errors
+    console.log("Teardown: Waiting for this test's file processing to complete...");
+    const allProcessingComplete = helper.waitForAllFileProcessingComplete(120, data.dbIDPrefix);
+    if (!allProcessingComplete) {
+      console.warn("Teardown: Some files still processing after 120s, proceeding anyway");
+    }
+
     // Clean up catalogs created by this test
     var listResp = http.request("GET", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, data.header)
     if (listResp.status === 200) {
       var catalogs = Array.isArray(listResp.json().catalogs) ? listResp.json().catalogs : []
 
       for (const catalog of catalogs) {
-        if (catalog.catalog_id && catalog.catalog_id.startsWith(constant.dbIDPrefix)) {
-          http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalog.catalog_id}`, null, data.header);
+        // API returns catalogId (camelCase), not catalog_id
+        const catId = catalog.catalogId || catalog.catalog_id;
+        if (catId && catId.startsWith(data.dbIDPrefix)) {
+          http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catId}`, null, data.header);
+          console.log(`Teardown: Deleted catalog ${catId}`);
         }
       }
     }
 
-    // Final DB cleanup
-    try {
-      constant.db.exec(`DELETE FROM text_chunk WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-      constant.db.exec(`DELETE FROM embedding WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-      constant.db.exec(`DELETE FROM converted_file WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-      constant.db.exec(`DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`);
-      constant.db.exec(`DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`);
-    } catch (e) {
-      console.log(`E2E Teardown cleanup warning: ${e}`);
-    }
-
-    constant.db.close();
   });
 }
 
-/**
- * Test the complete end-to-end catalog and file processing workflow.
- *
- * This comprehensive test verifies the entire lifecycle of a knowledge base catalog:
- * 1. Catalog Management: Create, list, update, delete catalog
- * 2. Multi-File Upload: Upload all supported file types (13 files)
- * 3. Batch Processing: Process all files asynchronously
- * 4. File Metadata Verification: Verify file metadata and processing results
- * 5. Storage Verification: Verify resources in MinIO, Postgres, and Milvus
- * 6. API Completeness: Test all file-related endpoints (chunks, summary, source)
- * 7. Type-Specific Validation: Verify file type-specific processing (PDF, DOC, TEXT, etc.)
- * 8. Resource Cleanup: Verify proper cleanup on catalog deletion
- *
- * Note: Database schema and data format tests (enum storage, JSONB formats, field naming,
- * content/summary separation, File.Type enum serialization) are in rest-db.js
- *
- * Test Flow:
- * - Create catalog
- * - List catalogs (verify presence)
- * - Update catalog metadata
- * - Upload 13 files of different types in parallel
- * - Trigger batch processing for all files
- * - Poll until all files reach COMPLETED status
- * - Verify each file's metadata (name, size, chunks, tokens, etc.)
- * - Verify type-specific attributes (pages for PDF/DOC, characters for TEXT)
- * - List all files in catalog
- * - List chunks for each file
- * - Get summary for each file
- * - Get source file for each file
- * - Verify storage layer resources (MinIO, Postgres, Milvus)
- * - Delete catalog and verify cleanup
- *
- * Supported File Types Tested:
- * - TEXT, MARKDOWN, CSV, HTML
- * - PDF, DOC, DOCX, PPT, PPTX, XLS, XLSX
- * - Case variations (uppercase filenames)
- *
- * This test ensures:
- * - All file types are processed correctly
- * - Batch processing works reliably
- * - All file types (including TEXT/MARKDOWN) create converted files
- * - Storage layers are populated correctly
- * - All API endpoints return expected data
- * - Cleanup removes all resources
- */
 export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
   const groupName = "Artifact API: Knowledge base end-to-end file processing";
   group(groupName, () => {
@@ -143,7 +171,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
 
     // Step 1: Create catalog
     const createBody = {
-      name: constant.dbIDPrefix + "e2e-" + randomString(8),
+      name: data.dbIDPrefix + "e2e-" + randomString(8),
       description: "E2E test catalog for multi-file processing",
       tags: ["test", "integration", "e2e", "multi-file"],
       type: "CATALOG_TYPE_PERSISTENT",
@@ -218,7 +246,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
     // This tests the system's ability to handle multiple file types simultaneously
     const uploaded = [];
     const uploadReqs = constant.sampleFiles.map((s) => {
-      const fileName = `${constant.dbIDPrefix}${s.originalName}`;
+      const fileName = `${data.dbIDPrefix}${s.originalName}`;
       return {
         s,
         fileName,
@@ -269,18 +297,9 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
       return;
     }
 
-    // Step 5: Trigger batch processing for all files
+    // Step 5: Wait for batch processing to complete
+    // Auto-trigger: Processing starts automatically on upload (no manual trigger needed)
     const fileUids = uploaded.map((f) => f.fileUid);
-    const pRes = http.request(
-      "POST",
-      `${artifactRESTPublicHost}/v1alpha/catalogs/files/processAsync`,
-      JSON.stringify({ fileUids }),
-      data.header
-    );
-
-    check(pRes, {
-      "E2E: Batch processing triggered successfully": (r) => r.status === 200,
-    });
 
     // Step 6: Poll for completion (batched polling for efficiency)
     // Wait for all files to complete processing
@@ -330,7 +349,6 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
               st === "FILE_PROCESS_STATUS_PROCESSING" ||
               st === "FILE_PROCESS_STATUS_CHUNKING" ||
               st === "FILE_PROCESS_STATUS_EMBEDDING" ||
-              st === "FILE_PROCESS_STATUS_WAITING" ||
               st === "FILE_PROCESS_STATUS_NOTSTARTED"
             )) {
               processingCount++;
@@ -429,6 +447,136 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
             fileData.length && fileData.length.coordinates[0] > 0,
         });
       }
+    }
+
+    // Step 7.5: Verify Position Data for PDF Files
+    console.log("\n=== Step 7.5: Verifying position data for PDF files ===");
+    const pdfFiles = uploaded.filter(f => f.type === "TYPE_PDF");
+
+    for (const pdfFile of pdfFiles) {
+      console.log(`E2E Position Data: Testing ${pdfFile.originalName} (${pdfFile.fileUid})`);
+
+      // 1. Verify converted_file has position_data with PageDelimiters
+      const convertedFileQuery = constant.db.query(
+        `SELECT position_data::text as position_data_text FROM converted_file
+         WHERE file_uid = $1 AND converted_type = 'CONVERTED_FILE_TYPE_CONTENT' AND position_data IS NOT NULL LIMIT 1`,
+        pdfFile.fileUid
+      );
+
+      if (convertedFileQuery && convertedFileQuery.length > 0) {
+        let posData;
+        try {
+          posData = JSON.parse(convertedFileQuery[0].position_data_text);
+          console.log(`E2E Position Data: ${pdfFile.originalName} has ${posData.PageDelimiters ? posData.PageDelimiters.length : 0} page delimiters`);
+        } catch (e) {
+          posData = null;
+          console.log(`E2E Position Data: Failed to parse position_data for ${pdfFile.originalName}: ${e}`);
+        }
+
+        check({ posData, fileName: pdfFile.originalName }, {
+          [`E2E Position Data: PDF has position_data (${pdfFile.originalName})`]: () => posData !== null,
+          [`E2E Position Data: position_data has PageDelimiters (${pdfFile.originalName})`]: () =>
+            posData && posData.PageDelimiters !== undefined,
+          [`E2E Position Data: PageDelimiters is an array (${pdfFile.originalName})`]: () =>
+            posData && Array.isArray(posData.PageDelimiters),
+          [`E2E Position Data: PageDelimiters is non-empty (${pdfFile.originalName})`]: () =>
+            posData && posData.PageDelimiters && posData.PageDelimiters.length > 0,
+          [`E2E Position Data: Uses PascalCase (${pdfFile.originalName})`]: () =>
+            posData && posData.PageDelimiters !== undefined && posData.page_delimiters === undefined,
+        });
+      } else {
+        check(false, {
+          [`E2E Position Data: PDF has position_data in converted_file (${pdfFile.originalName})`]: () => false,
+        });
+      }
+
+      // 2. Verify text_chunk has reference with PageRange
+      const chunkQuery = constant.db.query(
+        `SELECT reference::text as reference_text FROM text_chunk
+         WHERE file_uid = $1 AND reference IS NOT NULL LIMIT 1`,
+        pdfFile.fileUid
+      );
+
+      if (chunkQuery && chunkQuery.length > 0) {
+        let refData;
+        try {
+          refData = JSON.parse(chunkQuery[0].reference_text);
+          console.log(`E2E Position Data: ${pdfFile.originalName} chunk reference = ${JSON.stringify(refData)}`);
+        } catch (e) {
+          refData = null;
+          console.log(`E2E Position Data: Failed to parse reference for ${pdfFile.originalName}: ${e}`);
+        }
+
+        check({ refData, fileName: pdfFile.originalName }, {
+          [`E2E Position Data: Chunk has reference (${pdfFile.originalName})`]: () => refData !== null,
+          [`E2E Position Data: Reference has PageRange (${pdfFile.originalName})`]: () =>
+            refData && refData.PageRange !== undefined,
+          [`E2E Position Data: PageRange is array with 2 elements (${pdfFile.originalName})`]: () =>
+            refData && Array.isArray(refData.PageRange) && refData.PageRange.length === 2,
+          [`E2E Position Data: PageRange values are valid (${pdfFile.originalName})`]: () =>
+            refData && refData.PageRange && refData.PageRange[0] > 0 && refData.PageRange[1] > 0,
+          [`E2E Position Data: Uses PascalCase PageRange (${pdfFile.originalName})`]: () =>
+            refData && refData.PageRange !== undefined && refData.page_range === undefined,
+        });
+      }
+
+      // 3. Verify chunk API returns UNIT_PAGE references
+      const chunksResp = http.request(
+        "GET",
+        `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/chunks?fileUid=${pdfFile.fileUid}`,
+        null,
+        data.header
+      );
+
+      if (chunksResp.status === 200) {
+        let chunksJson;
+        try {
+          chunksJson = chunksResp.json();
+        } catch (e) {
+          chunksJson = null;
+        }
+
+        if (chunksJson && chunksJson.chunks && chunksJson.chunks.length > 0) {
+          const firstChunk = chunksJson.chunks[0];
+          console.log(`E2E Position Data: ${pdfFile.originalName} has ${chunksJson.chunks.length} chunks in API`);
+
+          check({ chunk: firstChunk, fileName: pdfFile.originalName }, {
+            [`E2E Position Data: Chunk has reference in API (${pdfFile.originalName})`]: () =>
+              firstChunk.reference !== null && firstChunk.reference !== undefined,
+            [`E2E Position Data: Reference has start position (${pdfFile.originalName})`]: () =>
+              firstChunk.reference && firstChunk.reference.start !== null,
+            [`E2E Position Data: Start position unit is UNIT_PAGE (${pdfFile.originalName})`]: () =>
+              firstChunk.reference && firstChunk.reference.start &&
+              firstChunk.reference.start.unit === "UNIT_PAGE",
+            [`E2E Position Data: Start position has coordinates (${pdfFile.originalName})`]: () =>
+              firstChunk.reference && firstChunk.reference.start &&
+              Array.isArray(firstChunk.reference.start.coordinates) &&
+              firstChunk.reference.start.coordinates.length > 0,
+            [`E2E Position Data: End position unit is UNIT_PAGE (${pdfFile.originalName})`]: () =>
+              firstChunk.reference && firstChunk.reference.end &&
+              firstChunk.reference.end.unit === "UNIT_PAGE",
+            [`E2E Position Data: Chunk has markdown_reference (${pdfFile.originalName})`]: () =>
+              firstChunk.markdownReference !== null && firstChunk.markdownReference !== undefined,
+            [`E2E Position Data: Markdown reference unit is UNIT_CHARACTER (${pdfFile.originalName})`]: () =>
+              firstChunk.markdownReference && firstChunk.markdownReference.start &&
+              firstChunk.markdownReference.start.unit === "UNIT_CHARACTER",
+          });
+        } else {
+          check(false, {
+            [`E2E Position Data: Chunks available in API for verification (${pdfFile.originalName})`]: () => false,
+          });
+        }
+      } else {
+        check(false, {
+          [`E2E Position Data: Chunks API successful (${pdfFile.originalName})`]: () => false,
+        });
+      }
+    }
+
+    if (pdfFiles.length === 0) {
+      console.log("E2E Position Data: No PDF files found for position data validation");
+    } else {
+      console.log(`E2E Position Data: Verified position data for ${pdfFiles.length} PDF file(s)`);
     }
 
     // Step 8: List all files in catalog (pagination test)

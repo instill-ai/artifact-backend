@@ -540,7 +540,7 @@ func (r *repository) GetChunkCountByKBUID(ctx context.Context, kbUID types.KBUID
 		Table(TextChunkTableName+" AS tc").
 		Joins("INNER JOIN "+KnowledgeBaseFileTableName+" AS f ON tc.file_uid = f.uid").
 		Where("tc.kb_uid = ?", kbUID).
-		Where("f.delete_time IS NULL").
+		Where("f.delete_time IS NULL"). // Exclude soft-deleted files
 		Count(&count).
 		Error
 	if err != nil {

@@ -33,6 +33,12 @@ RUN --mount=type=bind,target=. \
     go build -ldflags "-X main.serviceVersion=${SERVICE_VERSION} -X main.serviceName=${SERVICE_NAME}-worker" \
     -o /${SERVICE_NAME}-worker ./cmd/worker
 
+RUN --mount=type=bind,target=. \
+    --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    GOOS=$TARGETOS GOARCH=$TARGETARCH CGO_ENABLED=0 \
+    go install github.com/fullstorydev/grpcurl/cmd/grpcurl@latest
+
 FROM golang:${GOLANG_VERSION}
 
 USER nobody:nogroup
@@ -45,6 +51,7 @@ COPY --from=build --chown=nobody:nogroup /${SERVICE_NAME}-migrate ./
 COPY --from=build --chown=nobody:nogroup /${SERVICE_NAME}-init ./
 COPY --from=build --chown=nobody:nogroup /${SERVICE_NAME}-worker ./
 COPY --from=build --chown=nobody:nogroup /${SERVICE_NAME} ./
+COPY --from=build --chown=nobody:nogroup /go/bin/grpcurl /usr/local/bin/
 
 COPY --chown=nobody:nogroup ./config ./config
 COPY --chown=nobody:nogroup ./pkg/db/migration ./pkg/db/migration

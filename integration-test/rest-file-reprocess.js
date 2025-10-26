@@ -8,6 +8,7 @@ import * as helper from "./helper.js";
 
 export let options = {
   setupTimeout: '30s',
+  teardownTimeout: '180s', // Increased to accommodate file processing wait (120s) + cleanup
   iterations: 1,
   duration: '120m',
   insecureSkipTLSVerify: true,
@@ -19,16 +20,12 @@ export let options = {
 export function setup() {
   check(true, { [constant.banner('Artifact API Reprocess: Setup')]: () => true });
 
-  // Clean up any leftover test data from previous runs
-  try {
-    constant.db.exec(`DELETE FROM text_chunk WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-    constant.db.exec(`DELETE FROM embedding WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-    constant.db.exec(`DELETE FROM converted_file WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-    constant.db.exec(`DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`);
-    constant.db.exec(`DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`);
-  } catch (e) {
-    console.log(`Reprocess Setup cleanup warning: ${e}`);
-  }
+  // Add stagger to reduce parallel resource contention
+  helper.staggerTestExecution(2);
+
+  // Generate unique test prefix (must be in setup, not module-level, to avoid k6 parallel init issues)
+  const dbIDPrefix = constant.generateDBIDPrefix();
+  console.log(`rest-file-reprocess.js: Using unique test prefix: ${dbIDPrefix}`);
 
   var loginResp = http.request("POST", `${constant.mgmtRESTPublicHost}/v1beta/auth/login`, JSON.stringify({
     "username": constant.defaultUsername,
@@ -51,7 +48,31 @@ export function setup() {
     headers: { "Authorization": `Bearer ${loginResp.json().accessToken}` }
   })
 
-  return { header: header, expectedOwner: resp.json().user }
+  // Cleanup orphaned catalogs from previous failed test runs OF THIS SPECIFIC TEST
+  // Use API-only cleanup to properly trigger workflows (no direct DB manipulation)
+  console.log("\n=== SETUP: Cleaning up previous test data (reprocess pattern only) ===");
+  try {
+    const listResp = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${resp.json().user.id}/catalogs`, null, header);
+    if (listResp.status === 200) {
+      const catalogs = Array.isArray(listResp.json().catalogs) ? listResp.json().catalogs : [];
+      let cleanedCount = 0;
+      for (const catalog of catalogs) {
+        const catId = catalog.catalogId || catalog.catalog_id;
+        if (catId && catId.match(/test-[a-z0-9]+-reprocess-/)) {
+          const delResp = http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${resp.json().user.id}/catalogs/${catId}`, null, header);
+          if (delResp.status === 200 || delResp.status === 204) {
+            cleanedCount++;
+          }
+        }
+      }
+      console.log(`Cleaned ${cleanedCount} orphaned catalogs from previous test runs`);
+    }
+  } catch (e) {
+    console.log(`Setup cleanup warning: ${e}`);
+  }
+  console.log("=== SETUP: Cleanup complete ===\n");
+
+  return { header: header, expectedOwner: resp.json().user, dbIDPrefix: dbIDPrefix }
 }
 
 export default function (data) {
@@ -63,30 +84,29 @@ export function teardown(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
+    // CRITICAL: Wait for THIS TEST's file processing to complete before deleting catalogs
+    // Deleting catalogs triggers cleanup workflows that drop vector DB collections
+    // If we delete while files are still processing, we get "collection does not exist" errors
+    console.log("Teardown: Waiting for this test's file processing to complete...");
+    const allProcessingComplete = helper.waitForAllFileProcessingComplete(120, data.dbIDPrefix);
+    if (!allProcessingComplete) {
+      console.warn("Teardown: Some files still processing after 120s, proceeding anyway");
+    }
+
     // Clean up catalogs created by this test
     var listResp = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, data.header)
     if (listResp.status === 200) {
       var catalogs = Array.isArray(listResp.json().catalogs) ? listResp.json().catalogs : []
 
       for (const catalog of catalogs) {
-        if (catalog.catalog_id && catalog.catalog_id.startsWith(constant.dbIDPrefix)) {
-          http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalog.catalog_id}`, null, data.header);
+        // API returns catalogId (camelCase), not catalog_id
+        const catId = catalog.catalogId || catalog.catalog_id;
+        if (catId && catId.startsWith(data.dbIDPrefix)) {
+          http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catId}`, null, data.header);
+          console.log(`Teardown: Deleted catalog ${catId}`);
         }
       }
     }
-
-    // Final DB cleanup
-    try {
-      constant.db.exec(`DELETE FROM text_chunk WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-      constant.db.exec(`DELETE FROM embedding WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-      constant.db.exec(`DELETE FROM converted_file WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-      constant.db.exec(`DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`);
-      constant.db.exec(`DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`);
-    } catch (e) {
-      console.log(`Reprocess Teardown cleanup warning: ${e}`);
-    }
-
-    constant.db.close();
   });
 }
 
@@ -122,7 +142,7 @@ export function CheckFileReprocessing(data) {
 
     // Step 1: Create a test catalog
     console.log("Step 1: Creating test catalog...");
-    const catalogName = constant.dbIDPrefix + "reprocess-" + randomString(5);
+    const catalogName = data.dbIDPrefix + "reprocess-" + randomString(5);
     const createRes = http.request(
       "POST",
       `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
@@ -156,7 +176,7 @@ export function CheckFileReprocessing(data) {
     // - Chunking step (creates chunk blobs in MinIO)
     // - Embedding step (creates vectors in Milvus)
     // This provides comprehensive coverage of reprocessing cleanup logic
-    const fileName = `${constant.dbIDPrefix}reprocess-test.pdf`;
+    const fileName = `${data.dbIDPrefix}reprocess-test.pdf`;
     const uploadRes = http.request(
       "POST",
       `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
@@ -184,54 +204,33 @@ export function CheckFileReprocessing(data) {
       return;
     }
 
-    // Step 3: Trigger first processing and wait for completion
-    console.log("Step 3: Triggering first processing...");
-    const process1Res = http.request(
-      "POST",
-      `${constant.artifactRESTPublicHost}/v1alpha/catalogs/files/processAsync`,
-      JSON.stringify({ fileUids: [fileUid] }),
-      data.header
+    // Step 3: Wait for first processing to complete
+    // Auto-trigger: Processing starts automatically on upload (no manual trigger needed)
+    console.log("Step 3: Waiting for first processing to complete...");
+
+    // Wait for first processing to complete (600s timeout for PDF processing)
+    // PDF files require: conversion -> summarizing -> chunking -> embedding
+    const firstProcessResult = helper.waitForFileProcessingComplete(
+      data.expectedOwner.id,
+      catalogId,
+      fileUid,
+      data.header,
+      600 // 5 minutes for PDF processing
     );
 
-    check(process1Res, {
-      "Reprocess: First processing triggered": (r) => r.status === 200,
-    });
-    console.log("✓ First processing triggered, waiting for completion...");
-
-    // Poll for completion (300 timeout for PDF processing)
-    // PDF files require: conversion -> summarizing -> chunking -> embedding
-    let firstProcessCompleted = false;
-    for (let i = 0; i < 300; i++) {
-      sleep(1);
-      const statusRes = http.request(
-        "GET",
-        `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${fileUid}`,
-        null,
-        data.header
-      );
-
-      try {
-        const body = statusRes.json();
-        const status = body.file ? (body.file.processStatus || body.file.process_status) : "";
-        if (status === "FILE_PROCESS_STATUS_COMPLETED") {
-          firstProcessCompleted = true;
-          break;
-        } else if (status === "FILE_PROCESS_STATUS_FAILED") {
-          const errorMsg = body.file && body.file.processOutcome ? body.file.processOutcome : "Unknown error";
-          check(false, { [`Reprocess: First processing failed - ${errorMsg}`]: () => false });
-          http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
-          sleep(5); // Wait for cleanup workflow
-          return;
-        }
-      } catch (e) { /* continue polling */ }
+    if (firstProcessResult.status === "FAILED") {
+      check(false, { [`Reprocess: First processing failed - ${firstProcessResult.error}`]: () => false });
+      http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+      sleep(5); // Wait for cleanup workflow
+      return;
     }
 
-    check({ completed: firstProcessCompleted }, {
-      "Reprocess: First processing completed": () => firstProcessCompleted,
+    check(firstProcessResult, {
+      "Reprocess: First processing completed": (r) => r.completed && r.status === "COMPLETED",
     });
 
-    if (!firstProcessCompleted) {
-      console.log("✗ First processing did not complete within timeout, cleaning up and aborting");
+    if (!firstProcessResult.completed) {
+      console.log(`✗ First processing did not complete (${firstProcessResult.status}), cleaning up and aborting`);
       http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
       sleep(5); // Wait for cleanup workflow
       return;
@@ -305,51 +304,32 @@ export function CheckFileReprocessing(data) {
     // 5. Generate new embeddings and store in Milvus
     // 6. Save new converted-file and chunks to MinIO
     // 7. Result: Same counts for all resources, different content
-    const process2Res = http.request(
-      "POST",
-      `${constant.artifactRESTPublicHost}/v1alpha/catalogs/files/processAsync`,
-      JSON.stringify({ fileUids: [fileUid] }),
-      data.header
+    // Auto-trigger: Processing starts automatically on upload (no manual trigger needed)
+    console.log("✓ Waiting for reprocessing to complete...");
+
+    // Wait for reprocessing to complete (600s timeout for PDF reprocessing)
+    // Note: Temporal workflows may take a few seconds to start due to task queue polling
+    const secondProcessResult = helper.waitForFileProcessingComplete(
+      data.expectedOwner.id,
+      catalogId,
+      fileUid,
+      data.header,
+      600
     );
 
-    check(process2Res, {
-      "Reprocess: Second processing triggered": (r) => r.status === 200,
-    });
-    console.log("✓ Reprocessing triggered, waiting for completion...");
-
-    // Poll for completion (300s timeout for PDF reprocessing)
-    // Note: Temporal workflows may take a few seconds to start due to task queue polling
-    let secondProcessCompleted = false;
-    for (let i = 0; i < 300; i++) {
-      sleep(1);
-      const statusRes = http.request(
-        "GET",
-        `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${fileUid}`,
-        null,
-        data.header
-      );
-
-      try {
-        const body = statusRes.json();
-        const status = body.file ? (body.file.processStatus || body.file.process_status) : "";
-        if (status === "FILE_PROCESS_STATUS_COMPLETED") {
-          secondProcessCompleted = true;
-          break;
-        } else if (status === "FILE_PROCESS_STATUS_FAILED") {
-          check(false, { "Reprocess: Second processing failed": () => false });
-          http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
-          sleep(5); // Wait for cleanup workflow
-          return;
-        }
-      } catch (e) { /* continue polling */ }
+    if (secondProcessResult.status === "FAILED") {
+      check(false, { [`Reprocess: Second processing failed - ${secondProcessResult.error}`]: () => false });
+      http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+      sleep(5); // Wait for cleanup workflow
+      return;
     }
 
-    check({ completed: secondProcessCompleted }, {
-      "Reprocess: Second processing completed": () => secondProcessCompleted,
+    check(secondProcessResult, {
+      "Reprocess: Second processing completed": (r) => r.completed && r.status === "COMPLETED",
     });
 
-    if (!secondProcessCompleted) {
-      console.log("✗ Reprocessing did not complete within timeout, cleaning up and aborting");
+    if (!secondProcessResult.completed) {
+      console.log(`✗ Reprocessing did not complete (${secondProcessResult.status}), cleaning up and aborting`);
       http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
       sleep(5); // Wait for cleanup workflow
       return;

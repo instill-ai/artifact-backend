@@ -1,96 +1,3 @@
-import http from "k6/http";
-import { check, group, sleep } from "k6";
-import { randomString } from "https://jslib.k6.io/k6-utils/1.1.0/index.js";
-
-import { artifactRESTPublicHost } from "./const.js";
-
-import * as constant from "./const.js";
-import * as helper from "./helper.js";
-
-export let options = {
-  setupTimeout: '30s',
-  iterations: 1,
-  duration: '120m',
-  insecureSkipTLSVerify: true,
-  thresholds: {
-    checks: ["rate == 1.0"],
-  },
-};
-
-export function setup() {
-  check(true, { [constant.banner('Artifact API Cleanup: Setup')]: () => true });
-
-  // Clean up any leftover test data from previous runs
-  try {
-    constant.db.exec(`DELETE FROM text_chunk WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-    constant.db.exec(`DELETE FROM embedding WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-    constant.db.exec(`DELETE FROM converted_file WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-    constant.db.exec(`DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`);
-    constant.db.exec(`DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`);
-  } catch (e) {
-    console.log(`Cleanup Setup cleanup warning: ${e}`);
-  }
-
-  var loginResp = http.request("POST", `${constant.mgmtRESTPublicHost}/v1beta/auth/login`, JSON.stringify({
-    "username": constant.defaultUsername,
-    "password": constant.defaultPassword,
-  }))
-
-  check(loginResp, {
-    [`POST ${constant.mgmtRESTPublicHost}/v1beta/auth/login response status is 200`]: (r) => r.status === 200,
-  });
-
-  var header = {
-    "headers": {
-      "Authorization": `Bearer ${loginResp.json().accessToken}`,
-      "Content-Type": "application/json",
-    },
-    "timeout": "600s",
-  }
-
-  var resp = http.request("GET", `${constant.mgmtRESTPublicHost}/v1beta/user`, {}, {
-    headers: { "Authorization": `Bearer ${loginResp.json().accessToken}` }
-  })
-
-  return { header: header, expectedOwner: resp.json().user }
-}
-
-export default function (data) {
-  CheckKnowledgeBaseDeletion(data);
-}
-
-export function teardown(data) {
-  const groupName = "Artifact API Cleanup: Cleanup";
-  group(groupName, () => {
-    check(true, { [constant.banner(groupName)]: () => true });
-
-    // Clean up catalogs created by this test
-    var listResp = http.request("GET", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, data.header)
-    if (listResp.status === 200) {
-      var catalogs = Array.isArray(listResp.json().catalogs) ? listResp.json().catalogs : []
-
-      for (const catalog of catalogs) {
-        if (catalog.catalog_id && catalog.catalog_id.startsWith(constant.dbIDPrefix)) {
-          http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalog.catalog_id}`, null, data.header);
-        }
-      }
-    }
-
-    // Final DB cleanup
-    try {
-      constant.db.exec(`DELETE FROM text_chunk WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-      constant.db.exec(`DELETE FROM embedding WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-      constant.db.exec(`DELETE FROM converted_file WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-      constant.db.exec(`DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`);
-      constant.db.exec(`DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`);
-    } catch (e) {
-      console.log(`Cleanup Teardown cleanup warning: ${e}`);
-    }
-
-    constant.db.close();
-  });
-}
-
 /**
  * Test comprehensive cleanup of all resources when a catalog is deleted.
  *
@@ -115,6 +22,121 @@ export function teardown(data) {
  * - Postgres: File records, converted_file, text_chunk, embedding tables
  * - Milvus: Vector collections and vectors
  */
+
+import http from "k6/http";
+import { check, group, sleep } from "k6";
+import { randomString } from "https://jslib.k6.io/k6-utils/1.1.0/index.js";
+
+import { artifactRESTPublicHost } from "./const.js";
+
+import * as constant from "./const.js";
+import * as helper from "./helper.js";
+
+export let options = {
+  setupTimeout: '30s',
+  teardownTimeout: '180s', // Increased to accommodate file processing wait (120s) + cleanup
+  iterations: 1,
+  duration: '120m',
+  insecureSkipTLSVerify: true,
+  thresholds: {
+    checks: ["rate == 1.0"],
+  },
+};
+
+export function setup() {
+  check(true, { [constant.banner('Artifact API Cleanup: Setup')]: () => true });
+
+  // Stagger test execution to reduce parallel resource contention
+  // PDF processing test needs longer delay due to heavy resource usage
+  helper.staggerTestExecution(3);
+
+  // Generate unique test prefix (must be in setup, not module-level, to avoid k6 parallel init issues)
+  const dbIDPrefix = constant.generateDBIDPrefix();
+  console.log(`rest-kb-delete.js: Using unique test prefix: ${dbIDPrefix}`);
+
+  var loginResp = http.request("POST", `${constant.mgmtRESTPublicHost}/v1beta/auth/login`, JSON.stringify({
+    "username": constant.defaultUsername,
+    "password": constant.defaultPassword,
+  }))
+
+  check(loginResp, {
+    [`POST ${constant.mgmtRESTPublicHost}/v1beta/auth/login response status is 200`]: (r) => r.status === 200,
+  });
+
+  var header = {
+    "headers": {
+      "Authorization": `Bearer ${loginResp.json().accessToken}`,
+      "Content-Type": "application/json",
+    },
+    "timeout": "600s",
+  }
+
+  var resp = http.request("GET", `${constant.mgmtRESTPublicHost}/v1beta/user`, {}, {
+    headers: { "Authorization": `Bearer ${loginResp.json().accessToken}` }
+  })
+
+  // Cleanup orphaned catalogs from previous failed test runs OF THIS SPECIFIC TEST
+  // Use API-only cleanup to properly trigger workflows (no direct DB manipulation)
+  console.log("\n=== SETUP: Cleaning up previous test data (cleanup pattern only) ===");
+  try {
+    const listResp = http.request("GET", `${artifactRESTPublicHost}/v1alpha/namespaces/${resp.json().user.id}/catalogs`, null, header);
+    if (listResp.status === 200) {
+      const catalogs = Array.isArray(listResp.json().catalogs) ? listResp.json().catalogs : [];
+      let cleanedCount = 0;
+      for (const catalog of catalogs) {
+        const catId = catalog.catalogId || catalog.catalog_id;
+        if (catId && catId.match(/test-[a-z0-9]+-cleanup-/)) {
+          const delResp = http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${resp.json().user.id}/catalogs/${catId}`, null, header);
+          if (delResp.status === 200 || delResp.status === 204) {
+            cleanedCount++;
+          }
+        }
+      }
+      console.log(`Cleaned ${cleanedCount} orphaned catalogs from previous test runs`);
+    }
+  } catch (e) {
+    console.log(`Setup cleanup warning: ${e}`);
+  }
+  console.log("=== SETUP: Cleanup complete ===\n");
+
+  return { header: header, expectedOwner: resp.json().user, dbIDPrefix: dbIDPrefix }
+}
+
+export default function (data) {
+  CheckKnowledgeBaseDeletion(data);
+}
+
+export function teardown(data) {
+  const groupName = "Artifact API Cleanup: Cleanup";
+  group(groupName, () => {
+    check(true, { [constant.banner(groupName)]: () => true });
+
+    // CRITICAL: Wait for THIS TEST's file processing to complete before deleting catalogs
+    // Deleting catalogs triggers cleanup workflows that drop vector DB collections
+    // If we delete while files are still processing, we get "collection does not exist" errors
+    console.log("Teardown: Waiting for this test's file processing to complete...");
+    const allProcessingComplete = helper.waitForAllFileProcessingComplete(120, data.dbIDPrefix);
+    if (!allProcessingComplete) {
+      console.warn("Teardown: Some files still processing after 120s, proceeding anyway");
+    }
+
+    // Clean up catalogs created by this test
+    var listResp = http.request("GET", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, data.header)
+    if (listResp.status === 200) {
+      var catalogs = Array.isArray(listResp.json().catalogs) ? listResp.json().catalogs : []
+
+      for (const catalog of catalogs) {
+        // API returns catalogId (camelCase), not catalog_id
+        const catId = catalog.catalogId || catalog.catalog_id;
+        if (catId && catId.startsWith(data.dbIDPrefix)) {
+          http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catId}`, null, data.header);
+          console.log(`Teardown: Deleted catalog ${catId}`);
+        }
+      }
+    }
+  });
+}
+
 export function CheckKnowledgeBaseDeletion(data) {
   const groupName = "Artifact API: Knowledge base deletion";
   group(groupName, () => {
@@ -123,7 +145,7 @@ export function CheckKnowledgeBaseDeletion(data) {
 
     // Step 1: Create a test catalog
     console.log("Step 1: Creating test catalog...");
-    const catalogName = constant.dbIDPrefix + "cleanup-" + randomString(5);
+    const catalogName = data.dbIDPrefix + "cleanup-" + randomString(5);
     const createRes = http.request(
       "POST",
       `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
@@ -160,24 +182,27 @@ export function CheckKnowledgeBaseDeletion(data) {
     // - Chunking step (creates chunk blobs in MinIO)
     // - Embedding step (creates vectors in Milvus)
     // This provides comprehensive coverage of cleanup logic
-    const fileName = `${constant.dbIDPrefix}cleanup-test.pdf`;
-    const uploadRes = http.request(
-      "POST",
+    const fileName = `${data.dbIDPrefix}cleanup-test.pdf`;
+    const uploadRes = helper.uploadFileWithRetry(
       `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
-      JSON.stringify({
+      {
         name: fileName,
         type: "TYPE_PDF",
         content: constant.samplePdf
-      }),
-      data.header
+      },
+      data.header,
+      5 // max retries (PDF upload can be slow under parallel load)
     );
 
     let uploadedFile;
-    try { uploadedFile = uploadRes.json().file; } catch (e) { uploadedFile = {}; }
-    const fileUid = uploadedFile ? (uploadedFile.fileUid || uploadedFile.file_uid) : null;
+    let fileUid = null;
+    if (uploadRes) {
+      try { uploadedFile = uploadRes.json().file; } catch (e) { uploadedFile = {}; }
+      fileUid = uploadedFile ? (uploadedFile.fileUid || uploadedFile.file_uid) : null;
+    }
 
     check(uploadRes, {
-      "Cleanup: File uploaded": (r) => r.status === 200 && fileUid,
+      "Cleanup: File uploaded": (r) => r && r.status === 200 && fileUid,
     });
     console.log(`✓ File uploaded: ${fileName} (UID: ${fileUid})`);
 
@@ -187,19 +212,9 @@ export function CheckKnowledgeBaseDeletion(data) {
       return;
     }
 
-    // Step 3: Trigger processing and wait for completion
-    console.log("Step 3: Triggering file processing...");
-    const processRes = http.request(
-      "POST",
-      `${artifactRESTPublicHost}/v1alpha/catalogs/files/processAsync`,
-      JSON.stringify({ fileUids: [fileUid] }),
-      data.header
-    );
-
-    check(processRes, {
-      "Cleanup: Processing triggered": (r) => r.status === 200,
-    });
-    console.log("✓ Processing triggered, waiting for completion...");
+    // Step 3: Wait for file processing to complete
+    // Auto-trigger: Processing starts automatically on upload (no manual trigger needed)
+    console.log("Step 3: Waiting for file processing to complete...");
 
     // Poll for completion (300s timeout for PDF processing)
     // We need the file to be fully processed to create all intermediate resources

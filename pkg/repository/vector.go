@@ -72,6 +72,8 @@ type VectorDatabase interface {
 	CheckFileUIDMetadata(_ context.Context, collectionID string) (bool, error)
 	// FlushCollection flushes a collection to persist data immediately
 	FlushCollection(_ context.Context, collectionID string) error
+	// CollectionExists checks if a collection exists in the vector database
+	CollectionExists(_ context.Context, collectionID string) (bool, error)
 }
 
 // Milvus implementation constants
@@ -125,7 +127,7 @@ func (m *milvusClient) CreateCollection(ctx context.Context, collectionName stri
 	}
 
 	// 2. Create the collection with the specified schema
-	// Use the provided dimensionality from KB's embedding_config or system profile
+	// Use the provided dimensionality from KB's system config
 	vectorDimStr := fmt.Sprintf("%d", dimensionality)
 	schema := &entity.Schema{
 		CollectionName: collectionName,
@@ -603,4 +605,23 @@ func getStringData(col entity.Column) ([]string, error) {
 	default:
 		return nil, fmt.Errorf("unexpected column type for string data: %T", col)
 	}
+}
+
+// CollectionExists checks if a collection exists in Milvus
+func (m *milvusClient) CollectionExists(ctx context.Context, collectionID string) (bool, error) {
+	logger, _ := logx.GetZapLogger(ctx)
+	logger = logger.With(zap.String("collection_id", collectionID))
+
+	has, err := m.c.HasCollection(ctx, collectionID)
+	if err != nil {
+		logger.Error("Failed to check collection existence",
+			zap.String("collection", collectionID),
+			zap.Error(err))
+		return false, fmt.Errorf("checking collection existence: %w", err)
+	}
+
+	logger.Debug("Collection existence check completed",
+		zap.Bool("exists", has))
+
+	return has, nil
 }

@@ -16,6 +16,9 @@ ARG TARGETOS TARGETARCH K6_VERSION XK6_VERSION XK6_SQL_VERSION XK6_SQL_POSTGRES_
 # air
 RUN --mount=target=. --mount=type=cache,target=/root/.cache/go-build --mount=type=cache,target=/go/pkg GOOS=$TARGETOS GOARCH=$TARGETARCH go install github.com/cosmtrek/air@v1.49.0
 
+# grpcurl
+RUN --mount=target=. --mount=type=cache,target=/root/.cache/go-build --mount=type=cache,target=/go/pkg GOOS=$TARGETOS GOARCH=$TARGETARCH go install github.com/fullstorydev/grpcurl/cmd/grpcurl@latest
+
 # k6
 RUN --mount=target=. --mount=type=cache,target=/root/.cache/go-build --mount=type=cache,target=/go/pkg GOOS=$TARGETOS GOARCH=$TARGETARCH go install go.k6.io/xk6/cmd/xk6@v${XK6_VERSION}
 RUN --mount=target=. --mount=type=cache,target=/root/.cache/go-build --mount=type=cache,target=/go/pkg GOOS=$TARGETOS GOARCH=$TARGETARCH xk6 build v${K6_VERSION} \

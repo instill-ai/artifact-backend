@@ -217,7 +217,8 @@ func TestProcessFileWorkflow_GetFileMetadataFailure(t *testing.T) {
 	env.ExecuteWorkflow(w.ProcessFileWorkflow, param)
 
 	c.Assert(env.IsWorkflowCompleted(), qt.IsTrue)
-	c.Assert(env.GetWorkflowError(), qt.ErrorMatches, ".*file status.*")
+	// File not found is now handled gracefully - workflow completes successfully by skipping missing files
+	c.Assert(env.GetWorkflowError(), qt.IsNil)
 }
 
 // TestProcessFileWorkflow_GetFileMetadataSuccess validates the workflow can handle successful
@@ -239,13 +240,34 @@ func TestProcessFileWorkflow_GetFileMetadataSuccess(t *testing.T) {
 		{
 			UID:           fileUID,
 			KBUID:         kbUID,
-			ProcessStatus: "FILE_PROCESS_STATUS_WAITING",
+			ProcessStatus: "FILE_PROCESS_STATUS_NOTSTARTED",
 			Name:          "test.pdf",
 			FileType:      "FILE_TYPE_PDF",
 			Destination:   "test/file.pdf",
 		},
 	}, nil)
-	// NOTE: GetKnowledgeBaseByUID is no longer called - conversion pipelines are retired
+
+	// GetKnowledgeBaseByUIDWithConfig is called to retrieve system config
+	mockRepository.GetKnowledgeBaseByUIDWithConfigMock.Return(&repository.KnowledgeBaseWithConfig{
+		KnowledgeBaseModel: repository.KnowledgeBaseModel{
+			UID: kbUID,
+		},
+	}, nil)
+
+	// GetKnowledgeBaseByUID is called to check for dual-processing
+	mockRepository.GetKnowledgeBaseByUIDMock.Return(&repository.KnowledgeBaseModel{
+		UID:     kbUID,
+		Staging: false,
+	}, nil)
+
+	// GetDualProcessingTarget is called to check for dual-processing targets
+	mockRepository.GetDualProcessingTargetMock.Return(nil, nil)
+
+	// UpdateKnowledgeBaseFile is called when status updates
+	mockRepository.UpdateKnowledgeBaseFileMock.Return(&repository.KnowledgeBaseFileModel{}, nil)
+
+	// UpdateKnowledgeFileMetadata is also called when status updates
+	mockRepository.UpdateKnowledgeFileMetadataMock.Return(nil)
 
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
