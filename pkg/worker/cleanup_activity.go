@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/gofrs/uuid"
@@ -11,6 +12,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/instill-ai/artifact-backend/pkg/constant"
+	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/types"
 
 	errorsx "github.com/instill-ai/x/errors"
@@ -28,7 +30,10 @@ import (
 // - DeleteKBConvertedFileRecordsActivity - Deletes converted file records
 // - DeleteKBTextChunkRecordsActivity - Deletes text chunk records for a knowledge base
 // - DeleteKBEmbeddingRecordsActivity - Deletes embedding records for a knowledge base
+// - PurgeKBACLActivity - Removes ACL permissions for a knowledge base
+// - SoftDeleteKBRecordActivity - Soft-deletes knowledge base record in database
 // - GetInProgressFileCountActivity - Checks for in-progress files before cleanup
+// - ClearProductionKBRetentionActivity - Clears rollback retention timestamp on production KB
 
 // Activity error type constants
 const (
@@ -568,17 +573,27 @@ func (w *Worker) SoftDeleteKBRecordActivity(ctx context.Context, param *SoftDele
 // GetInProgressFileCountActivity returns the count of files currently being processed for a KB
 // This is used by CleanupKnowledgeBaseWorkflow to ensure no files are being processed
 // before dropping the Milvus collection, preventing "collection does not exist" errors
+//
+// CRITICAL: This checks BOTH database file status AND active Temporal workflows
+// to prevent race conditions where:
+// 1. File status is optimistically updated to COMPLETED in DB
+// 2. But SaveEmbeddingsWorkflow (child workflow) is still running/retrying
+// 3. Cleanup drops collection while SaveEmbeddingsWorkflow tries to flush
 func (w *Worker) GetInProgressFileCountActivity(ctx context.Context, param *GetInProgressFileCountActivityParam) (int64, error) {
-	w.log.Info("GetInProgressFileCountActivity: Checking for in-progress files",
+	w.log.Info("GetInProgressFileCountActivity: Checking for in-progress files and workflows",
 		zap.String("kbUID", param.KBUID.String()))
 
-	// Count files in active processing states (PROCESSING, CONVERTING, CHUNKING, EMBEDDING)
+	// STEP 1: Count files in active processing states (PROCESSING, CONVERTING, CHUNKING, EMBEDDING)
 	// Do NOT count NOTSTARTED or WAITING files as they haven't begun processing yet
-	inProgressStatuses := "FILE_PROCESS_STATUS_PROCESSING,FILE_PROCESS_STATUS_CONVERTING,FILE_PROCESS_STATUS_CHUNKING,FILE_PROCESS_STATUS_EMBEDDING"
+	//
+	// CRITICAL: We must count soft-deleted files too!
+	// When KB is deleted, files are CASCADE soft-deleted, but their workflows may still be running.
+	// If we only count non-deleted files, cleanup will drop the collection while workflows are still saving embeddings.
+	inProgressStatuses := "FILE_PROCESS_STATUS_PROCESSING,FILE_PROCESS_STATUS_CHUNKING,FILE_PROCESS_STATUS_EMBEDDING"
 
-	count, err := w.repository.GetFileCountByKnowledgeBaseUID(ctx, param.KBUID, inProgressStatuses)
+	dbCount, err := w.repository.GetFileCountByKnowledgeBaseUIDIncludingDeleted(ctx, param.KBUID, inProgressStatuses)
 	if err != nil {
-		w.log.Error("GetInProgressFileCountActivity: Failed to get file count",
+		w.log.Error("GetInProgressFileCountActivity: Failed to get DB file count",
 			zap.String("kbUID", param.KBUID.String()),
 			zap.Error(err))
 		return 0, temporal.NewApplicationErrorWithCause(
@@ -588,9 +603,165 @@ func (w *Worker) GetInProgressFileCountActivity(ctx context.Context, param *GetI
 		)
 	}
 
-	w.log.Info("GetInProgressFileCountActivity: In-progress file count",
-		zap.String("kbUID", param.KBUID.String()),
-		zap.Int64("count", count))
+	// STEP 2: Check for active Temporal workflows related to this KB
+	// This catches child workflows (SaveEmbeddingsWorkflow) that may still be running
+	// even after the parent workflow updated the file status to COMPLETED
+	activeWorkflowCount := w.getActiveWorkflowCount(ctx, param.KBUID)
 
-	return count, nil
+	totalCount := dbCount + activeWorkflowCount
+
+	w.log.Info("GetInProgressFileCountActivity: Activity count",
+		zap.String("kbUID", param.KBUID.String()),
+		zap.Int64("dbFileCount", dbCount),
+		zap.Int64("activeWorkflowCount", activeWorkflowCount),
+		zap.Int64("totalCount", totalCount))
+
+	return totalCount, nil
+}
+
+// getActiveWorkflowCount queries Temporal for running workflows related to this KB
+// Returns the count of ProcessFileWorkflow and SaveEmbeddingsWorkflow instances
+func (w *Worker) getActiveWorkflowCount(ctx context.Context, kbUID types.KBUIDType) int64 {
+	// Get the KB first to retrieve owner information
+	kb, err := w.repository.GetKnowledgeBaseByUID(ctx, kbUID)
+	if err != nil {
+		w.log.Warn("Failed to get KB for workflow check, assuming 0 active workflows",
+			zap.String("kbUID", kbUID.String()),
+			zap.Error(err))
+		return 0
+	}
+
+	// Get all files for this KB (including COMPLETED ones, since their workflows might still be running)
+	files, err := w.repository.ListKnowledgeBaseFiles(ctx, repository.KnowledgeBaseFileListParams{
+		OwnerUID: kb.Owner,
+		KBUID:    kbUID.String(),
+	})
+	if err != nil {
+		w.log.Warn("Failed to list files for workflow check, assuming 0 active workflows",
+			zap.String("kbUID", kbUID.String()),
+			zap.Error(err))
+		return 0
+	}
+
+	if len(files.Files) == 0 {
+		// No files, so no workflows
+		return 0
+	}
+
+	activeCount := int64(0)
+
+	// Check for each file's SaveEmbeddingsWorkflow
+	// This is the most critical workflow to check since it's the one that flushes collections
+	for _, file := range files.Files {
+		// SaveEmbeddingsWorkflow ID format: "save-embeddings-{fileUID}"
+		saveEmbeddingsWorkflowID := fmt.Sprintf("save-embeddings-%s", file.UID.String())
+		if w.isWorkflowRunning(ctx, saveEmbeddingsWorkflowID) {
+			w.log.Info("Found active SaveEmbeddingsWorkflow",
+				zap.String("workflowID", saveEmbeddingsWorkflowID),
+				zap.String("fileUID", file.UID.String()))
+			activeCount++
+		}
+	}
+
+	return activeCount
+}
+
+// isWorkflowRunning checks if a workflow with the given ID is currently running
+func (w *Worker) isWorkflowRunning(ctx context.Context, workflowID string) bool {
+	// Use DescribeWorkflowExecution to check workflow status
+	// If workflow doesn't exist or is completed, this will return an error
+	resp, err := w.temporalClient.DescribeWorkflowExecution(ctx, workflowID, "")
+	if err != nil {
+		// Workflow doesn't exist or error occurred - assume not running
+		return false
+	}
+
+	// Check if workflow is still running
+	if resp.WorkflowExecutionInfo.Status == 1 { // 1 = WORKFLOW_EXECUTION_STATUS_RUNNING
+		return true
+	}
+
+	return false
+}
+
+// ClearProductionKBRetentionActivityParam defines parameters for clearing production KB retention
+type ClearProductionKBRetentionActivityParam struct {
+	RollbackKBUID types.KBUIDType
+}
+
+// ClearProductionKBRetentionActivity clears the rollback_retention_until field on the production KB
+// This is called after the rollback KB cleanup completes (either via automatic retention expiry or manual purge)
+func (w *Worker) ClearProductionKBRetentionActivity(ctx context.Context, param *ClearProductionKBRetentionActivityParam) error {
+	w.log.Info("ClearProductionKBRetentionActivity: Clearing retention field",
+		zap.String("rollbackKBUID", param.RollbackKBUID.String()))
+
+	// Get the rollback KB to find its ID
+	// Use IncludingDeleted to query soft-deleted records since the rollback KB is already soft-deleted
+	rollbackKB, err := w.repository.GetKnowledgeBaseByUIDIncludingDeleted(ctx, param.RollbackKBUID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// Rollback KB already deleted - this is expected
+			w.log.Info("ClearProductionKBRetentionActivity: Rollback KB not found (already deleted)",
+				zap.String("rollbackKBUID", param.RollbackKBUID.String()))
+			return nil
+		}
+		w.log.Error("ClearProductionKBRetentionActivity: Failed to get rollback KB",
+			zap.String("rollbackKBUID", param.RollbackKBUID.String()),
+			zap.Error(err))
+		// Non-fatal - don't fail the workflow
+		return nil
+	}
+
+	// Check if this is a rollback KB (ends with "-rollback")
+	if !strings.HasSuffix(rollbackKB.KBID, "-rollback") {
+		w.log.Info("ClearProductionKBRetentionActivity: Not a rollback KB, skipping",
+			zap.String("kbID", rollbackKB.KBID))
+		return nil
+	}
+
+	// Derive production KB ID by removing "-rollback" suffix
+	productionKBID := strings.TrimSuffix(rollbackKB.KBID, "-rollback")
+
+	// Parse owner UUID
+	ownerUUID, err := uuid.FromString(rollbackKB.Owner)
+	if err != nil {
+		w.log.Error("ClearProductionKBRetentionActivity: Invalid owner UUID",
+			zap.String("owner", rollbackKB.Owner),
+			zap.Error(err))
+		return nil
+	}
+	ownerUID := types.OwnerUIDType(ownerUUID)
+
+	// Get production KB to verify it exists
+	productionKB, err := w.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, productionKBID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			w.log.Info("ClearProductionKBRetentionActivity: Production KB not found",
+				zap.String("productionKBID", productionKBID))
+			return nil
+		}
+		w.log.Error("ClearProductionKBRetentionActivity: Failed to get production KB",
+			zap.String("productionKBID", productionKBID),
+			zap.Error(err))
+		// Non-fatal - don't fail the workflow
+		return nil
+	}
+
+	// Clear the retention field
+	err = w.repository.UpdateKnowledgeBaseWithMap(ctx, productionKBID, productionKB.Owner, map[string]any{
+		"rollback_retention_until": nil,
+	})
+	if err != nil {
+		w.log.Error("ClearProductionKBRetentionActivity: Failed to clear retention field",
+			zap.String("productionKBID", productionKBID),
+			zap.Error(err))
+		// Non-fatal - don't fail the workflow
+		return nil
+	}
+
+	w.log.Info("ClearProductionKBRetentionActivity: Cleared retention field successfully",
+		zap.String("productionKBID", productionKBID),
+		zap.String("rollbackKBID", rollbackKB.KBID))
+
+	return nil
 }

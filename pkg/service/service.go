@@ -57,11 +57,15 @@ type Service interface {
 	ExecuteKnowledgeBaseUpdateAdmin(context.Context, *artifactpb.ExecuteKnowledgeBaseUpdateAdminRequest) (*artifactpb.ExecuteKnowledgeBaseUpdateAdminResponse, error)
 	AbortKnowledgeBaseUpdateAdmin(context.Context, *artifactpb.AbortKnowledgeBaseUpdateAdminRequest) (*artifactpb.AbortKnowledgeBaseUpdateAdminResponse, error)
 
-	// System Profile Management use cases (admin only)
-	GetSystemProfileAdmin(context.Context, string) (*artifactpb.GetSystemProfileAdminResponse, error)
-	UpdateSystemProfileAdmin(context.Context, *artifactpb.UpdateSystemProfileAdminRequest) (*artifactpb.UpdateSystemProfileAdminResponse, error)
-	ListSystemProfilesAdmin(context.Context) (*artifactpb.ListSystemProfilesAdminResponse, error)
-	DeleteSystemProfileAdmin(context.Context, string) (*artifactpb.DeleteSystemProfileAdminResponse, error)
+	// System Management use cases (admin only)
+	GetSystemAdmin(context.Context, string) (*artifactpb.GetSystemAdminResponse, error)
+	CreateSystemAdmin(context.Context, *artifactpb.CreateSystemAdminRequest) (*artifactpb.CreateSystemAdminResponse, error)
+	UpdateSystemAdmin(context.Context, *artifactpb.UpdateSystemAdminRequest) (*artifactpb.UpdateSystemAdminResponse, error)
+	ListSystemsAdmin(context.Context) (*artifactpb.ListSystemsAdminResponse, error)
+	DeleteSystemAdmin(context.Context, string) (*artifactpb.DeleteSystemAdminResponse, error)
+	RenameSystemAdmin(context.Context, *artifactpb.RenameSystemAdminRequest) (*artifactpb.RenameSystemAdminResponse, error)
+	SetDefaultSystemAdmin(context.Context, *artifactpb.SetDefaultSystemAdminRequest) (*artifactpb.SetDefaultSystemAdminResponse, error)
+	GetDefaultSystemAdmin(context.Context, *artifactpb.GetDefaultSystemAdminRequest) (*artifactpb.GetDefaultSystemAdminResponse, error)
 
 	// TODO instead of exposing these dependencies, Service should expose use
 	// cases. We're drawing a line for now here in the refactor and take this

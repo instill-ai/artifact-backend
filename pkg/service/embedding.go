@@ -16,8 +16,12 @@ import (
 // kbUID is required and used to fetch the KB's model family configuration.
 // taskType specifies the optimization (e.g., "RETRIEVAL_DOCUMENT", "RETRIEVAL_QUERY", "QUESTION_ANSWERING")
 //
-// This is used for synchronous user requests (retrieval/QA). For workflow embedding, see
-// Worker.EmbedTextsActivity in process_file_activity.go.
+// RAG Phase: RETRIEVAL - This is primarily used for synchronous user requests during the
+// retrieval phase (e.g., similarity search, Q&A). Typical task type is "RETRIEVAL_QUERY"
+// which optimizes embeddings for matching against stored document embeddings.
+//
+// For RAG INDEXING phase (embedding document chunks during ingestion), see
+// Worker.EmbedTextsActivity which uses task type "RETRIEVAL_DOCUMENT".
 func (s *service) EmbedTexts(ctx context.Context, kbUID *types.KBUIDType, texts []string, taskType string) ([][]float32, error) {
 	if kbUID == nil {
 		return nil, errorsx.AddMessage(
@@ -26,8 +30,8 @@ func (s *service) EmbedTexts(ctx context.Context, kbUID *types.KBUIDType, texts 
 		)
 	}
 
-	// Fetch KB's embedding configuration
-	kb, err := s.repository.GetKnowledgeBaseByUID(ctx, *kbUID)
+	// Fetch KB with system configuration for embedding
+	kb, err := s.repository.GetKnowledgeBaseByUIDWithConfig(ctx, *kbUID)
 	if err != nil {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("failed to fetch KB embedding config: %w", err),
@@ -39,8 +43,8 @@ func (s *service) EmbedTexts(ctx context.Context, kbUID *types.KBUIDType, texts 
 	return ai.EmbedTexts(
 		ctx,
 		s.aiClient,
-		kb.EmbeddingConfig.ModelFamily,
-		int32(kb.EmbeddingConfig.Dimensionality),
+		kb.SystemConfig.RAG.Embedding.ModelFamily,
+		int32(kb.SystemConfig.RAG.Embedding.Dimensionality),
 		texts,
 		taskType,
 	)

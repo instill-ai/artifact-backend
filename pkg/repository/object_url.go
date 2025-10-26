@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"gorm.io/gorm"
 
 	"github.com/instill-ai/artifact-backend/pkg/types"
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
@@ -38,10 +39,10 @@ type ObjectURLModel struct {
 	MinioURLPath   string                 `gorm:"column:minio_url_path;type:text;not null" json:"minio_url_path"`
 	EncodedURLPath string                 `gorm:"column:encoded_url_path;type:text;not null" json:"encoded_url_path"`
 	// download or upload
-	Type       string     `gorm:"column:type;size:10;not null" json:"type"`
-	CreateTime time.Time  `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
-	UpdateTime time.Time  `gorm:"column:update_time;not null;autoUpdateTime" json:"update_time"`
-	DeleteTime *time.Time `gorm:"column:delete_time" json:"delete_time"`
+	Type       string         `gorm:"column:type;size:10;not null" json:"type"`
+	CreateTime time.Time      `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
+	UpdateTime time.Time      `gorm:"column:update_time;not null;autoUpdateTime" json:"update_time"`
+	DeleteTime gorm.DeletedAt `gorm:"column:delete_time;index" json:"delete_time"`
 }
 
 // Override the table name
@@ -83,7 +84,8 @@ const (
 // ListAllObjectURLs fetches all ObjectURLModel records from the database for a given namespace and object, excluding soft-deleted ones.
 func (r *repository) ListAllObjectURLs(ctx context.Context, namespaceUID types.NamespaceUIDType, objectUID types.ObjectUIDType) ([]ObjectURLModel, error) {
 	var objectURLs []ObjectURLModel
-	whereString := fmt.Sprintf("%v IS NULL AND %v = ? AND %v = ?", ObjectURLColumn.DeleteTime, ObjectURLColumn.NamespaceUID, ObjectURLColumn.ObjectUID)
+	// GORM's DeletedAt automatically filters out soft-deleted records
+	whereString := fmt.Sprintf("%v = ? AND %v = ?", ObjectURLColumn.NamespaceUID, ObjectURLColumn.ObjectUID)
 	if err := r.db.WithContext(ctx).Where(whereString, namespaceUID, objectUID).Find(&objectURLs).Error; err != nil {
 		return nil, err
 	}
@@ -164,8 +166,8 @@ func TurnObjectURLToResponse(objectURL *ObjectURLModel) *artifactpb.GetObjectURL
 			UpdateTime:     timestamppb.New(objectURL.UpdateTime),
 		},
 	}
-	if objectURL.DeleteTime != nil {
-		response.ObjectUrl.DeleteTime = timestamppb.New(*objectURL.DeleteTime)
+	if objectURL.DeleteTime.Valid {
+		response.ObjectUrl.DeleteTime = timestamppb.New(objectURL.DeleteTime.Time)
 	}
 	return response
 }

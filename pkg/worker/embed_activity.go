@@ -13,6 +13,7 @@ import (
 
 	"github.com/instill-ai/artifact-backend/internal/ai"
 	"github.com/instill-ai/artifact-backend/pkg/constant"
+	"github.com/instill-ai/artifact-backend/pkg/pipeline"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/types"
 
@@ -21,7 +22,8 @@ import (
 )
 
 // This file contains embedding activities used by ProcessFileWorkflow and SaveEmbeddingsWorkflow:
-// - GetTextChunksForEmbeddingActivity - Retrieves text chunk content for embedding generation
+// - GetChunksForEmbeddingActivity - Retrieves text chunk content for embedding generation
+// - EmbedTextsActivity - Generates embeddings using AI/ML models
 // - SaveEmbeddingBatchActivity - Saves embedding vectors to vector database in batches
 // - DeleteOldEmbeddingsActivity - Removes outdated embeddings from both VectorDB and PostgreSQL
 // - FlushCollectionActivity - Flushes vector database collection to ensure immediate search availability
@@ -155,7 +157,9 @@ func (w *Worker) SaveEmbeddingBatchActivity(ctx context.Context, param *SaveEmbe
 
 	// CRITICAL: Query active_collection_uid from database
 	// A KB's active collection may be different from its own UID (e.g., during updates)
-	kb, err := w.repository.GetKnowledgeBaseByUID(ctx, param.KBUID)
+	// CRITICAL: Must include soft-deleted KBs because SaveEmbeddingsWorkflow may run
+	// after the staging KB has been soft-deleted during swap
+	kb, err := w.repository.GetKnowledgeBaseByUIDIncludingDeleted(ctx, param.KBUID)
 	if err != nil {
 		return temporal.NewApplicationErrorWithCause(
 			"Unable to get knowledge base for embedding save",
@@ -169,12 +173,30 @@ func (w *Worker) SaveEmbeddingBatchActivity(ctx context.Context, param *SaveEmbe
 		collectionUID = kb.ActiveCollectionUID
 	}
 
+	collection := constant.KBCollectionName(collectionUID)
+
 	w.log.Info("SaveEmbeddingBatchActivity: Using active collection",
 		zap.String("kbUID", param.KBUID.String()),
-		zap.String("activeCollectionUID", collectionUID.String()))
+		zap.String("activeCollectionUID", collectionUID.String()),
+		zap.String("collectionName", collection))
 
-	// Build vectors for vector db
-	collection := constant.KBCollectionName(collectionUID)
+	// CRITICAL: Validate collection exists before attempting to insert embeddings
+	// This provides a clear error message if the collection is missing
+	collectionExists, err := w.repository.CollectionExists(ctx, collection)
+	if err != nil {
+		return temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to verify collection existence: %s", collection),
+			saveEmbeddingsActivityError,
+			err,
+		)
+	}
+	if !collectionExists {
+		return temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Collection does not exist in Milvus: %s (KB UID: %s, Collection UID: %s). The collection may have been dropped or never created. Please check if the KB was created successfully or contact support.", collection, param.KBUID, collectionUID),
+			saveEmbeddingsActivityError,
+			fmt.Errorf("collection %s not found", collection),
+		)
+	}
 
 	externalServiceCall := func(insertedEmbeddings []repository.EmbeddingModel) error {
 		// Convert repository.Embedding to repository.VectorEmbedding for vector DB
@@ -221,7 +243,9 @@ func (w *Worker) DeleteOldEmbeddingsActivity(ctx context.Context, param *DeleteO
 		zap.String("fileUID", param.FileUID.String()))
 
 	// Query active_collection_uid from database (don't use KB UID directly)
-	kb, err := w.repository.GetKnowledgeBaseByUID(ctx, param.KBUID)
+	// CRITICAL: Must include soft-deleted KBs because DeleteOldEmbeddingsActivity may run
+	// after the staging KB has been soft-deleted during swap
+	kb, err := w.repository.GetKnowledgeBaseByUIDIncludingDeleted(ctx, param.KBUID)
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to retrieve knowledge base configuration. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
@@ -233,7 +257,7 @@ func (w *Worker) DeleteOldEmbeddingsActivity(ctx context.Context, param *DeleteO
 
 	activeCollectionUID := kb.ActiveCollectionUID
 	if activeCollectionUID.IsNil() {
-		err = errorsx.AddMessage(fmt.Errorf("active collection UID is nil"), "Knowledge base has no active collection. Please try again.")
+		err := errorsx.AddMessage(fmt.Errorf("active collection UID is nil"), "Knowledge base has no active collection. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
 			errorsx.MessageOrErr(err),
 			deleteOldEmbeddingsActivityError,
@@ -280,7 +304,9 @@ func (w *Worker) FlushCollectionActivity(ctx context.Context, param *DeleteOldEm
 		zap.String("kbUID", param.KBUID.String()))
 
 	// Query active_collection_uid from database (don't use KB UID directly)
-	kb, err := w.repository.GetKnowledgeBaseByUID(ctx, param.KBUID)
+	// CRITICAL: Must include soft-deleted KBs because FlushCollectionActivity may run
+	// after the staging KB has been soft-deleted during swap
+	kb, err := w.repository.GetKnowledgeBaseByUIDIncludingDeleted(ctx, param.KBUID)
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to retrieve knowledge base configuration. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
@@ -292,7 +318,7 @@ func (w *Worker) FlushCollectionActivity(ctx context.Context, param *DeleteOldEm
 
 	activeCollectionUID := kb.ActiveCollectionUID
 	if activeCollectionUID.IsNil() {
-		err = errorsx.AddMessage(fmt.Errorf("active collection UID is nil"), "Knowledge base has no active collection. Please try again.")
+		err := errorsx.AddMessage(fmt.Errorf("active collection UID is nil"), "Knowledge base has no active collection. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
 			errorsx.MessageOrErr(err),
 			flushCollectionActivityError,
@@ -353,29 +379,40 @@ type EmbedTextsActivityParam struct {
 	KBUID    *types.KBUIDType // Optional: Knowledge base UID for client selection
 	Texts    []string         // Texts to embed
 	TaskType string           // Task type for embedding optimization (e.g., "RETRIEVAL_DOCUMENT", "RETRIEVAL_QUERY")
+	Metadata *structpb.Struct // Request metadata for authentication
+}
+
+// EmbedTextsActivityResult defines the result from EmbedTextsActivity
+type EmbedTextsActivityResult struct {
+	Vectors  [][]float32 // Generated embedding vectors
+	Pipeline string      // Pipeline used (e.g., "preset/indexing-embed@v1.0.0" for OpenAI route, empty for AI client)
 }
 
 // EmbedTextsActivity handles embedding texts for workflow use
 // NOTE: This activity is ONLY for use within workflows (like ProcessFileWorkflow).
-// For synchronous user requests (retrieval/QA), use service.EmbedTexts() directly.
-func (w *Worker) EmbedTextsActivity(ctx context.Context, param *EmbedTextsActivityParam) ([][]float32, error) {
+//
+// RAG Phase: INDEXING - Used during document ingestion to embed chunks for storage in vector DB
+// Typical task type: "RETRIEVAL_DOCUMENT" (optimizes embeddings to be stored and retrieved)
+//
+// For RAG RETRIEVAL phase (embedding user queries), use service.EmbedTexts() directly.
+func (w *Worker) EmbedTextsActivity(ctx context.Context, param *EmbedTextsActivityParam) (*EmbedTextsActivityResult, error) {
 	w.log.Info("Starting EmbedTextsActivity",
 		zap.Int("textCount", len(param.Texts)),
 		zap.String("taskType", param.TaskType))
 
+	result := &EmbedTextsActivityResult{}
+
 	if len(param.Texts) == 0 {
-		return [][]float32{}, nil
+		result.Vectors = [][]float32{}
+		return result, nil
 	}
 
-	// Use the specified task type for optimal embedding generation
-	// Select client based on KB's embedding_config if KBUID is provided
-	vectors, err := w.embedTextsWithKBConfig(ctx, param.KBUID, param.Texts, param.TaskType)
-	if err != nil {
-		w.log.Error("Failed to embed texts",
-			zap.Int("textCount", len(param.Texts)),
-			zap.String("taskType", param.TaskType),
-			zap.Error(err))
-		err = errorsx.AddMessage(err, "Unable to generate embeddings. Please try again.")
+	// Validate KB UID is provided
+	if param.KBUID == nil {
+		err := errorsx.AddMessage(
+			fmt.Errorf("KB UID is required for embedding"),
+			"Knowledge base context is required for query processing.",
+		)
 		return nil, temporal.NewApplicationErrorWithCause(
 			errorsx.MessageOrErr(err),
 			embedTextsActivityError,
@@ -383,49 +420,109 @@ func (w *Worker) EmbedTextsActivity(ctx context.Context, param *EmbedTextsActivi
 		)
 	}
 
+	// Create authenticated context if metadata provided
+	// This is required for calling pipeline-backend with proper authentication
+	authCtx := ctx
+	if param.Metadata != nil {
+		var err error
+		authCtx, err = CreateAuthenticatedContext(ctx, param.Metadata)
+		if err != nil {
+			w.log.Error("Failed to create authenticated context", zap.Error(err))
+			return nil, temporal.NewApplicationErrorWithCause(
+				fmt.Sprintf("Failed to create authenticated context: %s", errorsx.MessageOrErr(err)),
+				embedTextsActivityError,
+				err,
+			)
+		}
+	}
+
+	// Fetch KB with system configuration (model family and dimensionality)
+	// Use GetKnowledgeBaseByUIDWithConfig which doesn't filter by delete_time, as we need to support
+	// embedding activities that are still running for staging KBs that have been soft-deleted
+	kb, err := w.repository.GetKnowledgeBaseByUIDWithConfig(authCtx, *param.KBUID)
+	if err != nil {
+		err = errorsx.AddMessage(
+			fmt.Errorf("failed to fetch KB system config: %w", err),
+			"Unable to retrieve knowledge base configuration. Please try again.",
+		)
+		return nil, temporal.NewApplicationErrorWithCause(
+			errorsx.MessageOrErr(err),
+			embedTextsActivityError,
+			err,
+		)
+	}
+
+	// Generate embeddings - route based on model family
+	var vectors [][]float32
+
+	if kb.SystemConfig.RAG.Embedding.ModelFamily == "openai" {
+		// Use OpenAI embedding pipeline
+		w.log.Info("Using OpenAI embedding pipeline route")
+
+		if w.pipelineClient == nil {
+			return nil, temporal.NewApplicationErrorWithCause(
+				"Pipeline client not configured for OpenAI embedding route",
+				embedTextsActivityError,
+				fmt.Errorf("pipeline client is nil"))
+		}
+
+		// Use authenticated context for pipeline call
+		vectors, err = pipeline.EmbedPipe(authCtx, w.pipelineClient, param.Texts)
+		if err != nil {
+			w.log.Error("OpenAI embedding pipeline failed",
+				zap.Int("textCount", len(param.Texts)),
+				zap.String("taskType", param.TaskType),
+				zap.Error(err))
+			err = errorsx.AddMessage(err, "Unable to generate embeddings using OpenAI pipeline. Please try again.")
+			return nil, temporal.NewApplicationErrorWithCause(
+				errorsx.MessageOrErr(err),
+				embedTextsActivityError,
+				err,
+			)
+		}
+
+		// Record the pipeline used
+		result.Pipeline = pipeline.EmbedPipeline.Name()
+
+		w.log.Info("OpenAI embedding pipeline completed",
+			zap.Int("vectorCount", len(vectors)),
+			zap.String("pipeline", result.Pipeline))
+
+	} else {
+		// Use AI client (Gemini) for other model families
+		w.log.Info("Using AI client route for embeddings",
+			zap.String("modelFamily", kb.SystemConfig.RAG.Embedding.ModelFamily))
+
+		// Use authenticated context for AI client call
+		vectors, err = ai.EmbedTexts(
+			authCtx,
+			w.aiClient,
+			kb.SystemConfig.RAG.Embedding.ModelFamily,
+			int32(kb.SystemConfig.RAG.Embedding.Dimensionality),
+			param.Texts,
+			param.TaskType,
+		)
+		if err != nil {
+			w.log.Error("Failed to embed texts",
+				zap.Int("textCount", len(param.Texts)),
+				zap.String("taskType", param.TaskType),
+				zap.Error(err))
+			err = errorsx.AddMessage(err, "Unable to generate embeddings. Please try again.")
+			return nil, temporal.NewApplicationErrorWithCause(
+				errorsx.MessageOrErr(err),
+				embedTextsActivityError,
+				err,
+			)
+		}
+
+		// No pipeline used (AI client), leave result.Pipeline empty
+	}
+
+	result.Vectors = vectors
+
 	w.log.Info("Embedding completed",
 		zap.Int("vectorCount", len(vectors)),
 		zap.String("taskType", param.TaskType))
 
-	return vectors, nil
-}
-
-// embedTextsWithKBConfig generates embeddings using the appropriate client
-// based on the KB's embedding configuration. This delegates to the shared helper in the ai package.
-func (w *Worker) embedTextsWithKBConfig(ctx context.Context, kbUID *types.KBUIDType, texts []string, taskType string) ([][]float32, error) {
-	if kbUID == nil {
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("KB UID is required for embedding"),
-			"Knowledge base context is required for query processing.",
-		)
-	}
-
-	// Use GetKnowledgeBaseByUID which doesn't filter by delete_time, as we need to support
-	// embedding activities that are still running for staging KBs that have been soft-deleted
-	kb, err := w.repository.GetKnowledgeBaseByUID(ctx, *kbUID)
-	if err != nil {
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("failed to fetch KB embedding config: %w", err),
-			"Unable to retrieve knowledge base configuration. Please try again.",
-		)
-	}
-
-	// Delegate to shared helper
-	vectors, err := ai.EmbedTexts(
-		ctx,
-		w.aiClient,
-		kb.EmbeddingConfig.ModelFamily,
-		int32(kb.EmbeddingConfig.Dimensionality),
-		texts,
-		taskType,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	w.log.Info("Embedded texts using client routing",
-		zap.Int("textCount", len(texts)),
-		zap.String("taskType", taskType))
-
-	return vectors, nil
+	return result, nil
 }

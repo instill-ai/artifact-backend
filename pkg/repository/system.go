@@ -2,153 +2,279 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 
 	"github.com/instill-ai/artifact-backend/internal/ai"
+	"github.com/instill-ai/artifact-backend/pkg/types"
 )
 
-// SystemProfile interface defines methods for system-wide configuration profiles
-type SystemProfile interface {
-	// GetSystemProfile retrieves a complete system configuration profile
-	GetSystemProfile(ctx context.Context, profile string) (*SystemProfileModel, error)
+// System interface defines methods for system-wide configurations
+type System interface {
+	// GetSystem retrieves a complete system configuration by ID
+	GetSystem(ctx context.Context, id string) (*SystemModel, error)
+	// GetSystemByUID retrieves a complete system configuration by UID
+	GetSystemByUID(ctx context.Context, uid types.SystemUIDType) (*SystemModel, error)
 
-	// UpdateSystemProfile creates or updates a system configuration profile
-	UpdateSystemProfile(ctx context.Context, profile string, config map[string]any, description string) error
+	// CreateSystem creates a new system configuration (fails if ID already exists)
+	CreateSystem(ctx context.Context, id string, config map[string]any, description string) error
 
-	// ListSystemProfiles lists all system configuration profiles
-	ListSystemProfiles(ctx context.Context) ([]SystemProfileModel, error)
+	// UpdateSystem updates an existing system configuration (fails if ID doesn't exist)
+	UpdateSystem(ctx context.Context, id string, config map[string]any, description string) error
 
-	// DeleteSystemProfile deletes a system configuration profile
-	DeleteSystemProfile(ctx context.Context, profile string) error
+	// ListSystems lists all system configurations
+	ListSystems(ctx context.Context) ([]SystemModel, error)
 
-	// GetDefaultEmbeddingConfig retrieves the default embedding configuration for a given profile
-	// If the profile doesn't exist, it falls back to "default" profile
+	// DeleteSystem deletes a system configuration
+	DeleteSystem(ctx context.Context, id string) error
+
+	// RenameSystemByID changes the ID of a system configuration
+	RenameSystemByID(ctx context.Context, id string, newID string) error
+
+	// GetConfigByID retrieves the system configuration for a given system ID
+	// If the ID doesn't exist, it falls back to "default"
 	// If "default" doesn't exist, it returns hardcoded new standard (Gemini/3072)
-	GetDefaultEmbeddingConfig(ctx context.Context, profile string) (*EmbeddingConfigJSON, error)
+	GetConfigByID(ctx context.Context, id string) (*SystemConfigJSON, error)
 
-	// UpdateDefaultEmbeddingConfig updates the default embedding configuration for a profile
-	UpdateDefaultEmbeddingConfig(ctx context.Context, profile string, config EmbeddingConfigJSON) error
+	// UpdateConfigByID updates the system configuration for a system ID
+	UpdateConfigByID(ctx context.Context, id string, config SystemConfigJSON) error
+
+	// GetDefaultSystem retrieves the current default system configuration
+	GetDefaultSystem(ctx context.Context) (*SystemModel, error)
+
+	// SetDefaultSystem sets a system as the default, unsetting any previous default
+	SetDefaultSystem(ctx context.Context, id string) error
 }
 
-// SystemProfileModel represents the system table structure
-type SystemProfileModel struct {
-	Profile     string                 `gorm:"column:profile;type:varchar(255);primaryKey;default:default" json:"profile"`
-	Config      map[string]any `gorm:"column:config;type:jsonb;not null;serializer:json" json:"config"`
-	Description string                 `gorm:"column:description;type:text" json:"description"`
-	UpdatedAt   time.Time              `gorm:"column:updated_at;not null;default:CURRENT_TIMESTAMP" json:"updated_at"`
+// SystemModel represents the system table structure
+// Follows standard resource table pattern with uid, id, and timestamps
+// Systems are global resources (no owner field, resource name is computed as systems/{id})
+type SystemModel struct {
+	UID         types.SystemUIDType `gorm:"column:uid;type:uuid;default:uuid_generate_v4();primaryKey" json:"uid"`
+	ID          string              `gorm:"column:id;type:varchar(255);not null;unique" json:"id"` // User-facing ID (e.g., "openai", "gemini")
+	Config      map[string]any      `gorm:"column:config;type:jsonb;not null;serializer:json" json:"config"`
+	Description string              `gorm:"column:description;type:text" json:"description"`
+	IsDefault   bool                `gorm:"column:is_default;type:boolean;not null;default:false" json:"is_default"`
+	CreateTime  *time.Time          `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
+	UpdateTime  *time.Time          `gorm:"column:update_time;not null;autoUpdateTime" json:"update_time"`
+	DeleteTime  gorm.DeletedAt      `gorm:"column:delete_time;index" json:"delete_time"`
 }
 
 // TableName overrides the default table name for GORM
-func (SystemProfileModel) TableName() string {
+func (SystemModel) TableName() string {
 	return "system"
 }
 
-// GetSystemProfile retrieves a complete system configuration profile
-func (r *repository) GetSystemProfile(ctx context.Context, profile string) (*SystemProfileModel, error) {
-	var systemProfile SystemProfileModel
+// GetConfigJSON converts the Config map to SystemConfigJSON
+func (s *SystemModel) GetConfigJSON() (*SystemConfigJSON, error) {
+	// The Config is stored as map[string]any by GORM's JSONB deserializer
+	// We need to convert it to our typed struct
+
+	// Marshal to JSON bytes then unmarshal to SystemConfigJSON
+	jsonBytes, err := json.Marshal(s.Config)
+	if err != nil {
+		return nil, fmt.Errorf("marshaling config to JSON: %w", err)
+	}
+
+	var config SystemConfigJSON
+	if err := json.Unmarshal(jsonBytes, &config); err != nil {
+		return nil, fmt.Errorf("unmarshaling config to SystemConfigJSON (raw: %s): %w", string(jsonBytes), err)
+	}
+
+	// Validate the config has required fields
+	if config.RAG.Embedding.ModelFamily == "" {
+		return nil, fmt.Errorf("invalid config: missing model_family (raw: %s)", string(jsonBytes))
+	}
+	if config.RAG.Embedding.Dimensionality == 0 {
+		return nil, fmt.Errorf("invalid config: dimensionality is 0 (raw: %s)", string(jsonBytes))
+	}
+
+	return &config, nil
+}
+
+// GetSystem retrieves a complete system configuration by ID
+// Filters out soft-deleted records (automatically handled by gorm.DeletedAt)
+func (r *repository) GetSystem(ctx context.Context, id string) (*SystemModel, error) {
+	var system SystemModel
 
 	err := r.db.WithContext(ctx).
-		Where("profile = ?", profile).
-		First(&systemProfile).Error
+		Where("id = ?", id).
+		First(&system).Error
 
 	if err != nil {
 		return nil, err
 	}
 
-	return &systemProfile, nil
+	return &system, nil
 }
 
-// UpdateSystemProfile creates or updates a system configuration profile
-func (r *repository) UpdateSystemProfile(ctx context.Context, profile string, config map[string]any, description string) error {
+// GetSystemByUID retrieves a complete system configuration by UID
+// Filters out soft-deleted records (automatically handled by gorm.DeletedAt)
+func (r *repository) GetSystemByUID(ctx context.Context, uid types.SystemUIDType) (*SystemModel, error) {
+	var system SystemModel
+
+	err := r.db.WithContext(ctx).
+		Where("uid = ?", uid).
+		First(&system).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &system, nil
+}
+
+// CreateSystem creates a new system configuration
+// Returns error if a system with the same ID already exists
+func (r *repository) CreateSystem(ctx context.Context, id string, config map[string]any, description string) error {
 	now := time.Now()
 
-	systemProfile := SystemProfileModel{
-		Profile:     profile,
+	system := SystemModel{
+		ID:          id,
 		Config:      config,
 		Description: description,
-		UpdatedAt:   now,
+		IsDefault:   false, // New systems are not default by default
+		CreateTime:  &now,
+		UpdateTime:  &now,
+	}
+
+	// Create will fail if ID already exists (unique constraint)
+	return r.db.WithContext(ctx).Create(&system).Error
+}
+
+// UpdateSystem updates an existing system configuration
+// Returns error if the system doesn't exist
+func (r *repository) UpdateSystem(ctx context.Context, id string, config map[string]any, description string) error {
+	// Verify the system exists first
+	var existing SystemModel
+	if err := r.db.WithContext(ctx).Where("id = ?", id).First(&existing).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("system with id %q not found", id)
+		}
+		return err
+	}
+
+	// Update only the specified fields
+	updates := map[string]interface{}{
+		"config":      config,
+		"description": description,
+		"update_time": time.Now(),
 	}
 
 	return r.db.WithContext(ctx).
-		Clauses(clause.OnConflict{
-			Columns:   []clause.Column{{Name: "profile"}},
-			DoUpdates: clause.AssignmentColumns([]string{"config", "description", "updated_at"}),
-		}).
-		Create(&systemProfile).Error
+		Model(&SystemModel{}).
+		Where("id = ?", id).
+		Updates(updates).Error
 }
 
-// ListSystemProfiles lists all system configuration profiles
-func (r *repository) ListSystemProfiles(ctx context.Context) ([]SystemProfileModel, error) {
-	var profiles []SystemProfileModel
+// ListSystems lists all system configurations
+// Filters out soft-deleted records
+func (r *repository) ListSystems(ctx context.Context) ([]SystemModel, error) {
+	var systems []SystemModel
 
 	err := r.db.WithContext(ctx).
-		Order("profile").
-		Find(&profiles).Error
+		Order("id").
+		Find(&systems).Error
 
 	if err != nil {
 		return nil, err
 	}
 
-	return profiles, nil
+	return systems, nil
 }
 
-// DeleteSystemProfile deletes a system configuration profile
-func (r *repository) DeleteSystemProfile(ctx context.Context, profile string) error {
-	// Prevent deletion of the default profile
-	if profile == "default" {
-		return errors.New("cannot delete default system profile")
+// DeleteSystem soft-deletes a system configuration
+func (r *repository) DeleteSystem(ctx context.Context, id string) error {
+	// Prevent deletion of the openai system (default for existing KBs)
+	if id == "openai" {
+		return errors.New("cannot delete openai system configuration")
 	}
 
 	return r.db.WithContext(ctx).
-		Where("profile = ?", profile).
-		Delete(&SystemProfileModel{}).Error
+		Where("id = ?", id).
+		Delete(&SystemModel{}).Error
 }
 
-// GetDefaultEmbeddingConfig retrieves the default embedding configuration for a profile
-func (r *repository) GetDefaultEmbeddingConfig(ctx context.Context, profile string) (*EmbeddingConfigJSON, error) {
-	systemProfile, err := r.GetSystemProfile(ctx, profile)
+// RenameSystemByID changes the ID of a system configuration
+func (r *repository) RenameSystemByID(ctx context.Context, id string, newID string) error {
+	// Prevent renaming the openai system
+	if id == "openai" {
+		return errors.New("cannot rename openai system configuration")
+	}
+
+	result := r.db.WithContext(ctx).
+		Model(&SystemModel{}).
+		Where("id = ?", id).
+		Update("id", newID)
+
+	if result.Error != nil {
+		return result.Error
+	}
+
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("system with id %q not found", id)
+	}
+
+	return nil
+}
+
+// GetConfigByID retrieves the system configuration for a given system ID
+func (r *repository) GetConfigByID(ctx context.Context, id string) (*SystemConfigJSON, error) {
+	system, err := r.GetSystem(ctx, id)
 
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			// Fallback to 'default' profile if specific profile not found
-			if profile != "default" {
-				return r.GetDefaultEmbeddingConfig(ctx, "default")
+			// Fallback to 'openai' if specific ID not found (default for existing KBs)
+			if id != "openai" {
+				return r.GetConfigByID(ctx, "openai")
 			}
-			// Final fallback to hardcoded new standard if 'default' profile doesn't exist
-			return &EmbeddingConfigJSON{
-				ModelFamily:    ai.ModelFamilyGemini,
-				Dimensionality: uint32(ai.GeminiEmbeddingDimDefault),
+			// Final fallback to hardcoded OpenAI standard if 'openai' doesn't exist
+			return &SystemConfigJSON{
+				RAG: RAGConfig{
+					Embedding: EmbeddingConfig{
+						ModelFamily:    ai.ModelFamilyOpenAI,
+						Dimensionality: uint32(ai.OpenAIEmbeddingDim),
+					},
+				},
 			}, nil
 		}
 		return nil, err
 	}
 
-	// Navigate the nested config: config.rag.default_embedding_config
-	ragConfig, ok := systemProfile.Config["rag"].(map[string]any)
+	// Navigate the nested config: config.rag.embedding
+	ragConfig, ok := system.Config["rag"].(map[string]any)
 	if !ok {
-		// No rag config, fallback to default profile or hardcoded
-		if profile != "default" {
-			return r.GetDefaultEmbeddingConfig(ctx, "default")
+		// No rag config, fallback to openai or hardcoded
+		if id != "openai" {
+			return r.GetConfigByID(ctx, "openai")
 		}
-		return &EmbeddingConfigJSON{
-			ModelFamily:    ai.ModelFamilyGemini,
-			Dimensionality: uint32(ai.GeminiEmbeddingDimDefault),
+		return &SystemConfigJSON{
+			RAG: RAGConfig{
+				Embedding: EmbeddingConfig{
+					ModelFamily:    ai.ModelFamilyOpenAI,
+					Dimensionality: uint32(ai.OpenAIEmbeddingDim),
+				},
+			},
 		}, nil
 	}
 
-	embeddingConfig, ok := ragConfig["default_embedding_config"].(map[string]any)
+	embeddingConfig, ok := ragConfig["embedding"].(map[string]any)
 	if !ok {
-		// No default_embedding_config, fallback
-		if profile != "default" {
-			return r.GetDefaultEmbeddingConfig(ctx, "default")
+		// No embedding config, fallback
+		if id != "openai" {
+			return r.GetConfigByID(ctx, "openai")
 		}
-		return &EmbeddingConfigJSON{
-			ModelFamily:    ai.ModelFamilyGemini,
-			Dimensionality: uint32(ai.GeminiEmbeddingDimDefault),
+		return &SystemConfigJSON{
+			RAG: RAGConfig{
+				Embedding: EmbeddingConfig{
+					ModelFamily:    ai.ModelFamilyOpenAI,
+					Dimensionality: uint32(ai.OpenAIEmbeddingDim),
+				},
+			},
 		}, nil
 	}
 
@@ -165,41 +291,78 @@ func (r *repository) GetDefaultEmbeddingConfig(ctx context.Context, profile stri
 		dimensionality = uint32(v)
 	}
 
-	return &EmbeddingConfigJSON{
-		ModelFamily:    modelFamily,
-		Dimensionality: dimensionality,
+	return &SystemConfigJSON{
+		RAG: RAGConfig{
+			Embedding: EmbeddingConfig{
+				ModelFamily:    modelFamily,
+				Dimensionality: dimensionality,
+			},
+		},
 	}, nil
 }
 
-// UpdateDefaultEmbeddingConfig updates the default embedding configuration for a profile
-func (r *repository) UpdateDefaultEmbeddingConfig(ctx context.Context, profile string, config EmbeddingConfigJSON) error {
-	// Get existing profile or create new one
-	systemProfile, err := r.GetSystemProfile(ctx, profile)
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+// UpdateConfigByID updates the system configuration for a system ID
+func (r *repository) UpdateConfigByID(ctx context.Context, id string, config SystemConfigJSON) error {
+	// Verify system exists
+	_, err := r.GetSystem(ctx, id)
+	if err != nil {
 		return err
 	}
 
-	// Initialize config if profile doesn't exist
-	if systemProfile == nil {
-		systemProfile = &SystemProfileModel{
-			Profile: profile,
-			Config:  make(map[string]any),
+	// Set the entire config from the struct
+	// The SystemConfigJSON will be marshaled to proper JSON structure
+	configJSON, err := json.Marshal(config)
+	if err != nil {
+		return err
+	}
+
+	var configMap map[string]any
+	if err := json.Unmarshal(configJSON, &configMap); err != nil {
+		return err
+	}
+
+	// Save the updated system
+	return r.UpdateSystem(ctx, id, configMap, "System configuration for knowledge bases")
+}
+
+// GetDefaultSystem retrieves the current default system configuration
+func (r *repository) GetDefaultSystem(ctx context.Context) (*SystemModel, error) {
+	var system SystemModel
+	if err := r.db.WithContext(ctx).Where("is_default = ?", true).First(&system).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// No default system set, fallback to "openai"
+			return r.GetSystem(ctx, "openai")
 		}
+		return nil, err
+	}
+	return &system, nil
+}
+
+// SetDefaultSystem sets a system as the default, unsetting any previous default
+func (r *repository) SetDefaultSystem(ctx context.Context, id string) error {
+	// Verify the system exists and is not soft-deleted
+	system, err := r.GetSystem(ctx, id)
+	if err != nil {
+		return err
+	}
+	if system == nil {
+		return fmt.Errorf("system with id %s not found", id)
 	}
 
-	// Ensure rag category exists
-	ragConfig, ok := systemProfile.Config["rag"].(map[string]any)
-	if !ok {
-		ragConfig = make(map[string]any)
-	}
+	// Use a transaction to ensure atomic update:
+	// 1. Unset any current default
+	// 2. Set the new default
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Unset all defaults (should only be one, but to be safe)
+		if err := tx.Model(&SystemModel{}).Where("is_default = ?", true).Update("is_default", false).Error; err != nil {
+			return err
+		}
 
-	// Set default_embedding_config
-	ragConfig["default_embedding_config"] = map[string]any{
-		"model_family":   string(config.ModelFamily),
-		"dimensionality": config.Dimensionality,
-	}
-	systemProfile.Config["rag"] = ragConfig
+		// Set new default
+		if err := tx.Model(&SystemModel{}).Where("id = ?", id).Update("is_default", true).Error; err != nil {
+			return err
+		}
 
-	// Save the updated profile
-	return r.UpdateSystemProfile(ctx, profile, systemProfile.Config, "Default embedding configuration for newly created knowledge bases")
+		return nil
+	})
 }

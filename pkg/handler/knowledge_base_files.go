@@ -132,7 +132,7 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 	if req.GetFile().GetConvertingPipeline() != "" {
 		// TODO jvallesm: validate existence, permissions & recipe of provided
 		// pipeline.
-		if _, err := pipeline.PipelineReleaseFromName(req.GetFile().GetConvertingPipeline()); err != nil {
+		if _, err := pipeline.ReleaseFromName(req.GetFile().GetConvertingPipeline()); err != nil {
 			err = fmt.Errorf("%w: invalid conversion pipeline format: %w", errorsx.ErrInvalidArgument, err)
 			return nil, errorsx.AddMessage(
 				err,
@@ -162,6 +162,9 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 				"Unsupported file type. Please upload a supported file format.",
 			)
 		}
+
+		// Update kbFile.FileType after determining the type
+		kbFile.FileType = req.File.Type.String()
 
 		if strings.Contains(req.File.Name, "/") {
 			return nil, errorsx.AddMessage(
@@ -369,50 +372,64 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 				// Non-fatal, continue with processing
 			}
 
-			logger.Info("Created target file record, queueing workflow in Temporal",
+			logger.Info("Created target file record for dual processing",
 				zap.String("prodFileUID", res.UID.String()),
 				zap.String("targetFileUID", targetFileRes.UID.String()),
 				zap.String("phase", dualTarget.Phase))
 
-			// Queue target file processing workflow in Temporal (SYNCHRONOUSLY)
-			// IMPORTANT: Only process the TARGET file here. The production file
-			// processing is triggered separately by the caller (UploadCatalogFile)
-			// to avoid race conditions with the unique constraint on converted files.
+			// SEQUENTIAL PROCESSING: Target file processing will be triggered by the production workflow
+			// AFTER the production file completes successfully. This ensures:
+			// 1. Production is processed first (correct priority for user-facing KB)
+			// 2. Target processing waits for production to complete (proper synchronization)
+			// 3. No race conditions with converted file unique constraints
+			// 4. Simpler recovery logic (if production fails, target won't be processed)
 			//
-			// CRITICAL FIX: ProcessFile() is FAST (~10-50ms) because it just queues
-			// the workflow in Temporal's task queue and returns immediately - the actual
-			// file processing happens asynchronously in the Temporal workflow executor.
-			//
-			// Previously we wrapped this in a goroutine, but under heavy parallel load
-			// (13 tests), the Go runtime wouldn't schedule goroutines, causing staging
-			// files to never be processed. Making this synchronous fixes the issue with
-			// minimal latency impact.
-			//
-			// Processing behavior depends on phase:
-			// - Phase 2 (updating): Full processing for target with new config
-			// - Phase 3 (swapping): Minimal sync (file record created, limited processing)
-			// - Phase 6 (retention): Full processing for target with old config
-			err = ph.service.ProcessFile(
-				ctx,
-				dualTarget.TargetKB.UID, // Target KB (staging or rollback)
-				[]types.FileUIDType{targetFileRes.UID},
-				types.UserUIDType(uuid.FromStringOrNil(authUID)),
-				types.RequesterUIDType(uuid.FromStringOrNil(authUID)),
-			)
-			if err != nil {
-				logger.Error("Target file processing workflow queueing failed during dual processing",
-					zap.Error(err),
-					zap.String("targetFileUID", targetFileRes.UID.String()),
-					zap.String("targetKBUID", dualTarget.TargetKB.UID.String()),
-					zap.String("phase", dualTarget.Phase))
-				// Non-fatal - file record exists, can be reprocessed manually or in next update
-			} else {
-				logger.Info("Dual processing: target file record created and workflow queued in Temporal",
-					zap.String("prodFileUID", res.UID.String()),
-					zap.String("targetFileUID", targetFileRes.UID.String()),
-					zap.String("phase", dualTarget.Phase))
-			}
+			// The production workflow's ProcessFileWorkflow will:
+			// - Detect dual-processing is needed via GetFileMetadataActivity (checks KB update_status)
+			// - After production completes, call FindTargetFileByNameActivity to locate target file by name
+			// - Trigger a child ProcessFileWorkflow for the target file (fire-and-forget pattern)
+			logger.Info("Target file record created, will be processed after production file completes",
+				zap.String("prodFileUID", res.UID.String()),
+				zap.String("targetFileUID", targetFileRes.UID.String()),
+				zap.String("targetKBUID", dualTarget.TargetKB.UID.String()),
+				zap.String("phase", dualTarget.Phase))
 		}
+	}
+
+	// AUTO-TRIGGER PROCESSING: Immediately start processing the uploaded file
+	// This guarantees production KB never has NOTSTARTED files, which is critical for:
+	// 1. Sequential dual-processing: Staging files depend on production completing
+	// 2. KB update synchronization: Must ensure all files are processing/completed before swap
+	// 3. User experience: Automatic processing without requiring separate API call
+	//
+	// The ProcessCatalogFiles API is now deprecated (kept for backward compatibility only).
+	logger.Info("Auto-triggering file processing",
+		zap.String("fileUID", res.UID.String()),
+		zap.String("fileName", res.Name),
+		zap.String("kbUID", kb.UID.String()))
+
+	ownerUID := types.UserUIDType(ns.NsUID)
+	requesterUID := types.RequesterUIDType(uuid.FromStringOrNil(authUID))
+
+	err = ph.service.ProcessFile(ctx, kb.UID, []types.FileUIDType{res.UID}, ownerUID, requesterUID)
+	if err != nil {
+		// Non-fatal: File is uploaded, user can manually trigger via ProcessCatalogFiles if needed
+		logger.Error("Failed to auto-trigger file processing",
+			zap.Error(err),
+			zap.String("fileUID", res.UID.String()),
+			zap.String("fileName", res.Name),
+			zap.String("kbUID", kb.UID.String()),
+			zap.String("kbID", kb.KBID),
+			zap.String("updateStatus", kb.UpdateStatus))
+		// Don't fail the upload - file record exists and can be processed later
+	} else {
+		logger.Info("File processing started successfully (auto-trigger)",
+			zap.String("fileUID", res.UID.String()),
+			zap.String("fileName", res.Name),
+			zap.String("kbUID", kb.UID.String()),
+			zap.String("kbID", kb.KBID),
+			zap.String("updateStatus", kb.UpdateStatus),
+			zap.Bool("hasDualProcessing", dualTarget != nil && dualTarget.IsNeeded))
 	}
 
 	return &artifactpb.UploadCatalogFileResponse{
@@ -1186,8 +1203,18 @@ func (ph *PublicHandler) DeleteCatalogFile(ctx context.Context, req *artifactpb.
 
 // ProcessCatalogFiles triggers the conversion, chunking, embedding and
 // summarizing process for a set of files.
+//
+// DEPRECATED: This API is no longer required as of the auto-trigger feature.
+// File processing now starts automatically when files are uploaded via UploadCatalogFile.
+// This endpoint is kept for backward compatibility and can still be used to:
+// - Retry failed file processing
+// - Manually trigger processing for files in edge cases
+// However, normal file uploads no longer need to call this API.
 func (ph *PublicHandler) ProcessCatalogFiles(ctx context.Context, req *artifactpb.ProcessCatalogFilesRequest) (*artifactpb.ProcessCatalogFilesResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
+
+	logger.Info("ProcessCatalogFiles called (NOTE: This API is deprecated - processing now auto-triggers on upload)",
+		zap.Int("fileCount", len(req.FileUids)))
 	// ACL - check if the uid can process file. ACL.
 	// check the file's kb_uid and use kb_uid to check if user has write permission
 	fileUIDs := make([]types.FileUIDType, 0, len(req.FileUids))
@@ -1258,6 +1285,9 @@ func (ph *PublicHandler) ProcessCatalogFiles(ctx context.Context, req *artifactp
 	}
 
 	// Trigger Temporal workflow once for all files (batch processing)
+	// NOTE: The workflow itself will handle sequential dual-processing:
+	// After production file completes successfully, it will automatically
+	// trigger target (staging/rollback) file processing if needed.
 	err = ph.service.ProcessFile(ctx, kbUID, fileUIDs, ownerUID, requesterUIDFromFile)
 	if err != nil {
 		logger.Error("Failed to start batch file processing workflow",
@@ -1270,7 +1300,8 @@ func (ph *PublicHandler) ProcessCatalogFiles(ctx context.Context, req *artifactp
 	}
 
 	logger.Info("Batch file processing workflow started successfully",
-		zap.Int("fileCount", len(fileUIDs)))
+		zap.Int("fileCount", len(fileUIDs)),
+		zap.String("note", "Dual-processing will be handled automatically by workflow if needed"))
 
 	// populate the files into response
 	var resFiles []*artifactpb.File

@@ -1,0 +1,18 @@
+version: v1beta
+variable:
+  text:
+    title: Text
+    description: Input text to generate embeddings for
+    type: string
+component:
+  text-embedder:
+    type: openai
+    task: TASK_TEXT_EMBEDDINGS
+    input:
+      text: ${variable.text}
+      model: text-embedding-3-small
+output:
+  embedding:
+    title: Embedding
+    description: Generated embedding vector
+    value: ${text-embedder.output.embedding}

@@ -43,7 +43,7 @@ func (s *service) RollbackAdmin(ctx context.Context, ownerUID types.OwnerUIDType
 
 	// Check both production and rollback KBs for in-progress files
 	// These are files in any non-final state (not COMPLETED or FAILED)
-	inProgressStatuses := "FILE_PROCESS_STATUS_NOTSTARTED,FILE_PROCESS_STATUS_WAITING,FILE_PROCESS_STATUS_PROCESSING,FILE_PROCESS_STATUS_CONVERTING,FILE_PROCESS_STATUS_CHUNKING,FILE_PROCESS_STATUS_EMBEDDING"
+	inProgressStatuses := "FILE_PROCESS_STATUS_NOTSTARTED,FILE_PROCESS_STATUS_PROCESSING,FILE_PROCESS_STATUS_CHUNKING,FILE_PROCESS_STATUS_EMBEDDING"
 
 	prodInProgress, err := s.repository.GetFileCountByKnowledgeBaseUID(ctx, productionKB.UID, inProgressStatuses)
 	if err != nil {
@@ -113,6 +113,15 @@ func (s *service) RollbackAdmin(ctx context.Context, ownerUID types.OwnerUIDType
 		zap.String("productionKBUID", productionKB.UID.String()),
 		zap.String("rollbackKBUID", rollbackKB.UID.String()))
 
+	// Save system UIDs before swapping - these need to be swapped along with resources
+	// Production currently has new system config, rollback has old system config
+	productionSystemUID := productionKB.SystemUID
+	rollbackSystemUID := rollbackKB.SystemUID
+
+	logger.Info("Rollback: System configs before swap",
+		zap.String("productionSystemUID", productionSystemUID.String()),
+		zap.String("rollbackSystemUID", rollbackSystemUID.String()))
+
 	// Use temp UID to avoid conflicts during the swap
 	tempUID := uuid.Must(uuid.NewV4())
 
@@ -132,14 +141,32 @@ func (s *service) RollbackAdmin(ctx context.Context, ownerUID types.OwnerUIDType
 		return nil, fmt.Errorf("failed to move current resources to rollback: %w", err)
 	}
 
-	// Update production KB metadata
-	err = s.repository.UpdateKnowledgeBaseWithMap(ctx, productionKB.KBID, productionKB.Owner, map[string]interface{}{
+	// Step 4: Swap system configs
+	// Production KB gets the old system config (from rollback)
+	// This ensures the restored embeddings match their original system config
+	err = s.repository.UpdateKnowledgeBaseWithMap(ctx, productionKB.KBID, productionKB.Owner, map[string]any{
 		"update_status": artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_ROLLED_BACK.String(),
 		"staging":       false, // Ensure it stays as production
+		"system_uid":    rollbackSystemUID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to update production KB metadata: %w", err)
 	}
+
+	// Step 5: Update rollback KB to have the new system config
+	// Rollback KB gets the new system config (from production)
+	// This maintains consistency - rollback KB represents what was rolled back from
+	rollbackKBIDStr := fmt.Sprintf("%s-rollback", catalogID)
+	err = s.repository.UpdateKnowledgeBaseWithMap(ctx, rollbackKBIDStr, productionKB.Owner, map[string]any{
+		"system_uid": productionSystemUID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to update rollback KB system config: %w", err)
+	}
+
+	logger.Info("Rollback: System configs after swap",
+		zap.String("productionSystemUID", rollbackSystemUID.String()),
+		zap.String("rollbackSystemUID", productionSystemUID.String()))
 
 	// Get updated catalog
 	updatedKB, err := s.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, catalogID)
@@ -174,7 +201,7 @@ func (s *service) PurgeRollbackAdmin(ctx context.Context, ownerUID types.OwnerUI
 	logger.Info("PurgeRollback: Checking for in-progress file operations",
 		zap.String("rollbackKBUID", rollbackKB.UID.String()))
 
-	inProgressStatuses := "FILE_PROCESS_STATUS_NOTSTARTED,FILE_PROCESS_STATUS_WAITING,FILE_PROCESS_STATUS_PROCESSING,FILE_PROCESS_STATUS_CONVERTING,FILE_PROCESS_STATUS_CHUNKING,FILE_PROCESS_STATUS_EMBEDDING"
+	inProgressStatuses := "FILE_PROCESS_STATUS_NOTSTARTED,FILE_PROCESS_STATUS_PROCESSING,FILE_PROCESS_STATUS_CHUNKING,FILE_PROCESS_STATUS_EMBEDDING"
 
 	rollbackInProgress, err := s.repository.GetFileCountByKnowledgeBaseUID(ctx, rollbackKB.UID, inProgressStatuses)
 	if err != nil {
@@ -237,6 +264,24 @@ func (s *service) PurgeRollbackAdmin(ctx context.Context, ownerUID types.OwnerUI
 		return nil, fmt.Errorf("failed to start cleanup workflow: %w", err)
 	}
 
+	// Clear the rollback_retention_until field on the production KB
+	// Since the rollback KB is now being purged, there's no need to track retention anymore
+	productionKB, err := s.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, catalogID)
+	if err == nil && productionKB != nil {
+		err = s.repository.UpdateKnowledgeBaseWithMap(ctx, catalogID, productionKB.Owner, map[string]any{
+			"rollback_retention_until": nil,
+		})
+		if err != nil {
+			logger.Warn("PurgeRollback: Failed to clear retention field on production KB",
+				zap.String("catalogID", catalogID),
+				zap.Error(err))
+			// Don't fail the purge operation if we can't clear the retention field
+		} else {
+			logger.Info("PurgeRollback: Cleared retention field on production KB",
+				zap.String("catalogID", catalogID))
+		}
+	}
+
 	logger.Info("PurgeRollback: Successfully triggered cleanup workflow",
 		zap.String("rollbackKBUID", rollbackKB.UID.String()),
 		zap.Int32("fileCount", fileCount))
@@ -282,15 +327,7 @@ func (s *service) SetRollbackRetentionAdmin(ctx context.Context, ownerUID types.
 	// Set retention to exactly duration from NOW
 	newRetention := time.Now().Add(retentionDuration)
 
-	// Update retention timestamp
-	_, err = s.repository.UpdateKnowledgeBase(ctx, currentKB.KBID, currentKB.Owner, repository.KnowledgeBaseModel{
-		RollbackRetentionUntil: &newRetention,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to update retention: %w", err)
-	}
-
-	// Find and reschedule the cleanup workflow with new retention
+	// Find the rollback KB first
 	// The workflow ID is deterministic: cleanup-rollback-kb-{rollbackKBUID}
 	// Query for the rollback KB by looking for KBs with the "-rollback" suffix and "rollback" tag
 	//
@@ -322,6 +359,23 @@ func (s *service) SetRollbackRetentionAdmin(ctx context.Context, ownerUID types.
 		return nil, fmt.Errorf("rollback KB not found after %d attempts: %s", maxRetries, rollbackKBID)
 	}
 
+	// CRITICAL: Update retention timestamp on ROLLBACK KB (not production KB)
+	// The cleanup workflow checks the rollback KB's retention field to decide when to clean up
+	_, err = s.repository.UpdateKnowledgeBase(ctx, rollbackKB.KBID, rollbackKB.Owner, repository.KnowledgeBaseModel{
+		RollbackRetentionUntil: &newRetention,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to update rollback KB retention: %w", err)
+	}
+
+	// Also update production KB's retention field for reference/audit trail
+	_, err = s.repository.UpdateKnowledgeBase(ctx, currentKB.KBID, currentKB.Owner, repository.KnowledgeBaseModel{
+		RollbackRetentionUntil: &newRetention,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to update production KB retention: %w", err)
+	}
+
 	// Reschedule cleanup workflow with new retention period
 	retentionSeconds := int64(retentionDuration.Seconds())
 	err = s.worker.RescheduleCleanupWorkflow(ctx, rollbackKB.UID, retentionSeconds)
@@ -344,20 +398,10 @@ func (s *service) SetRollbackRetentionAdmin(ctx context.Context, ownerUID types.
 
 // GetKnowledgeBaseUpdateStatusAdmin returns the current status of system update
 func (s *service) GetKnowledgeBaseUpdateStatusAdmin(ctx context.Context) (*artifactpb.GetKnowledgeBaseUpdateStatusAdminResponse, error) {
-	// Query each status separately and combine results
-	// IMPORTANT: Include rolled_back and aborted so we can track KBs attempting to update from those states
-	var kbs []repository.KnowledgeBaseModel
-	for _, status := range []string{
-		artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING.String(),
-		artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED.String(),
-		artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_FAILED.String(),
-		artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_ROLLED_BACK.String(),
-		artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_ABORTED.String(),
-	} {
-		statusKBs, err := s.repository.ListKnowledgeBasesByUpdateStatus(ctx, status)
-		if err == nil {
-			kbs = append(kbs, statusKBs...)
-		}
+	// Get all production KBs across all owners
+	kbs, err := s.repository.ListAllKnowledgeBasesAdmin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list all knowledge bases: %w", err)
 	}
 
 	if len(kbs) == 0 {
@@ -365,74 +409,114 @@ func (s *service) GetKnowledgeBaseUpdateStatusAdmin(ctx context.Context) (*artif
 		return &artifactpb.GetKnowledgeBaseUpdateStatusAdminResponse{
 			UpdateInProgress: false,
 			Details:          []*artifactpb.KnowledgeBaseUpdateDetails{},
-			Message:          "No catalogs with update status found",
+			Message:          "No catalogs found",
 		}, nil
+	}
+
+	// OPTIMIZATION: Pre-fetch all systems in a single query to avoid N+1 problem
+	// Fetch all systems once and build a UID->ID lookup map
+	systems, err := s.repository.ListSystems(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list systems: %w", err)
+	}
+
+	systemCache := make(map[string]string) // systemUID -> systemID
+	for _, system := range systems {
+		systemCache[system.UID.String()] = system.ID
 	}
 
 	var catalogStatuses []*artifactpb.KnowledgeBaseUpdateDetails
 	updateInProgress := false
-	totalCatalogs := 0
+	totalCatalogs := len(kbs)
 	catalogsCompleted := 0
 	catalogsFailed := 0
 	catalogsInProgress := 0
 
 	for _, kb := range kbs {
-		if kb.UpdateStatus != "" && kb.UpdateStatus != "idle" {
-			totalCatalogs++
+		// Count status for summary
+		switch kb.UpdateStatus {
+		case artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING.String():
+			updateInProgress = true
+			catalogsInProgress++
+		case artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED.String():
+			catalogsCompleted++
+		case artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_FAILED.String():
+			catalogsFailed++
+		}
 
-			switch kb.UpdateStatus {
-			case artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING.String():
-				updateInProgress = true
-				catalogsInProgress++
-			case artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED.String():
-				catalogsCompleted++
-			case artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_FAILED.String():
-				catalogsFailed++
+		// Get total file count for this KB
+		totalFiles := int32(0)
+		if count, err := s.repository.GetFileCountByKnowledgeBaseUID(ctx, kb.UID, ""); err == nil {
+			totalFiles = int32(count)
+		}
+
+		// For updating KBs, find the associated staging KB to count completed files and get current system ID
+		filesProcessed := int32(0)
+		currentSystemID := ""
+		previousSystemID := ""
+
+		// Get previous system ID from previous_system_uid (if set)
+		if kb.PreviousSystemUID.String() != uuid.Nil.String() {
+			if prevSystemID, ok := systemCache[kb.PreviousSystemUID.String()]; ok {
+				previousSystemID = prevSystemID
 			}
+		}
 
-			// Get total file count for this KB
-			totalFiles := int32(0)
-			if count, err := s.repository.GetFileCountByKnowledgeBaseUID(ctx, kb.UID, ""); err == nil {
-				totalFiles = int32(count)
-			}
+		// Get current system ID - for UPDATING status, this is the staging KB's system (what we're updating TO)
+		// For all other statuses, this is the production KB's current system
+		switch kb.UpdateStatus {
+		case artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING.String():
+			// Find the staging KB (it has the same ID with "-staging" suffix)
+			stagingKBID := fmt.Sprintf("%s-staging", kb.KBID)
+			stagingKB, err := s.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, types.OwnerUIDType(uuid.FromStringOrNil(kb.Owner)), stagingKBID)
+			if err == nil && stagingKB != nil {
+				// Count completed files in the staging KB
+				if count, err := s.repository.GetFileCountByKnowledgeBaseUID(ctx, stagingKB.UID, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED.String()); err == nil {
+					filesProcessed = int32(count)
+				}
 
-			// For updating KBs, find the associated staging KB to count completed files
-			filesProcessed := int32(0)
-			if kb.UpdateStatus == artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING.String() {
-				// Find the staging KB (it has the same ID with "-staging" suffix)
-				stagingKBID := fmt.Sprintf("%s-staging", kb.KBID)
-				stagingKBs, err := s.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, types.OwnerUIDType(uuid.FromStringOrNil(kb.Owner)), stagingKBID)
-				if err == nil && stagingKBs != nil {
-					// Count completed files in the staging KB
-					if count, err := s.repository.GetFileCountByKnowledgeBaseUID(ctx, stagingKBs.UID, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED.String()); err == nil {
-						filesProcessed = int32(count)
-					}
+				// Get current system ID from staging KB's system_uid (use cache)
+				// During UPDATING, the staging KB represents the "current" target we're updating to
+				if stagingSystemID, ok := systemCache[stagingKB.SystemUID.String()]; ok {
+					currentSystemID = stagingSystemID
 				}
 			}
 
-			// Convert database string status to protobuf enum using value map
-			statusEnum := artifactpb.KnowledgeBaseUpdateStatus(artifactpb.KnowledgeBaseUpdateStatus_value[kb.UpdateStatus])
-			if statusEnum == 0 && kb.UpdateStatus != "" {
-				// If conversion failed and string is not empty, default to NONE
-				statusEnum = artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_NONE
+		default:
+			// For all other statuses (COMPLETED, FAILED, ROLLED_BACK, ABORTED, NONE),
+			// show the production KB's current system ID
+			if prodSystemID, ok := systemCache[kb.SystemUID.String()]; ok {
+				currentSystemID = prodSystemID
 			}
-
-			catalogStatuses = append(catalogStatuses, &artifactpb.KnowledgeBaseUpdateDetails{
-				CatalogUid:     kb.UID.String(),
-				Status:         statusEnum,
-				WorkflowId:     kb.UpdateWorkflowID,
-				StartedAt:      formatTime(kb.UpdateStartedAt),
-				CompletedAt:    formatTime(kb.UpdateCompletedAt),
-				FilesProcessed: filesProcessed,
-				TotalFiles:     totalFiles,
-			})
 		}
+
+		// Convert database string status to protobuf enum using value map
+		// If update_status is empty or null, it defaults to NONE
+		statusEnum := artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_NONE
+		if kb.UpdateStatus != "" {
+			if val, ok := artifactpb.KnowledgeBaseUpdateStatus_value[kb.UpdateStatus]; ok {
+				statusEnum = artifactpb.KnowledgeBaseUpdateStatus(val)
+			}
+		}
+
+		catalogStatuses = append(catalogStatuses, &artifactpb.KnowledgeBaseUpdateDetails{
+			CatalogUid:       kb.UID.String(),
+			Status:           statusEnum,
+			WorkflowId:       kb.UpdateWorkflowID,
+			StartedAt:        formatTime(kb.UpdateStartedAt),
+			CompletedAt:      formatTime(kb.UpdateCompletedAt),
+			FilesProcessed:   filesProcessed,
+			TotalFiles:       totalFiles,
+			ErrorMessage:     kb.UpdateErrorMessage, // Populated only for FAILED status
+			CurrentSystemId:  currentSystemID,       // Current system (staging during UPDATING, production otherwise)
+			PreviousSystemId: previousSystemID,      // System before update started (for audit trail)
+		})
 	}
 
 	response := &artifactpb.GetKnowledgeBaseUpdateStatusAdminResponse{
 		UpdateInProgress: updateInProgress,
 		Details:          catalogStatuses,
-		Message:          fmt.Sprintf("Update status: %d in progress, %d completed, %d failed", catalogsInProgress, catalogsCompleted, catalogsFailed),
+		Message:          fmt.Sprintf("Total catalogs: %d. Update status: %d in progress, %d completed, %d failed", totalCatalogs, catalogsInProgress, catalogsCompleted, catalogsFailed),
 	}
 
 	return response, nil
@@ -489,13 +573,13 @@ func (s *service) ExecuteKnowledgeBaseUpdateAdmin(ctx context.Context, req *arti
 	}
 
 	// Execute knowledge base update via worker
-	// Pass system_profile to worker (empty string if not specified)
-	systemProfile := ""
-	if req.SystemProfile != nil {
-		systemProfile = *req.SystemProfile
+	// Pass system_id to worker (empty string if not specified)
+	systemID := ""
+	if req.SystemId != nil {
+		systemID = *req.SystemId
 	}
 
-	result, err := s.worker.ExecuteKnowledgeBaseUpdate(ctx, catalogIDs, systemProfile)
+	result, err := s.worker.ExecuteKnowledgeBaseUpdate(ctx, catalogIDs, systemID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute knowledge base update: %w", err)
 	}

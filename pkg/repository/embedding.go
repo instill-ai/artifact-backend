@@ -265,7 +265,7 @@ func (r *repository) GetEmbeddingCountByKBUID(ctx context.Context, kbUID types.K
 		Table(EmbeddingTableName+" AS e").
 		Joins("INNER JOIN "+KnowledgeBaseFileTableName+" AS f ON e.file_uid = f.uid").
 		Where("e.kb_uid = ?", kbUID).
-		Where("f.delete_time IS NULL").
+		Where("f.delete_time IS NULL"). // Exclude soft-deleted files
 		Count(&count).
 		Error
 	if err != nil {

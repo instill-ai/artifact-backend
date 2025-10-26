@@ -58,6 +58,7 @@ type KnowledgeBase interface {
 	CreateKnowledgeBase(ctx context.Context, kb KnowledgeBaseModel, externalService func(kbUID types.KBUIDType) error) (*KnowledgeBaseModel, error)
 	ListKnowledgeBases(ctx context.Context, ownerUID string) ([]KnowledgeBaseModel, error)
 	ListKnowledgeBasesByCatalogType(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType) ([]KnowledgeBaseModel, error)
+	ListKnowledgeBasesByCatalogTypeWithConfig(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType) ([]KnowledgeBaseWithConfig, error)
 	UpdateKnowledgeBase(ctx context.Context, id, ownerUID string, kb KnowledgeBaseModel) (*KnowledgeBaseModel, error)
 	DeleteKnowledgeBase(ctx context.Context, ownerUID, kbID string) (*KnowledgeBaseModel, error)
 	GetKnowledgeBaseByOwnerAndKbID(ctx context.Context, ownerUID types.OwnerUIDType, kbID string) (*KnowledgeBaseModel, error)
@@ -65,7 +66,14 @@ type KnowledgeBase interface {
 	GetKnowledgeBaseCountByOwner(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType) (int64, error)
 	IncreaseKnowledgeBaseUsage(ctx context.Context, tx *gorm.DB, kbUID string, amount int) error
 	GetKnowledgeBasesByUIDs(ctx context.Context, kbUIDs []types.KBUIDType) ([]KnowledgeBaseModel, error)
+	// GetKnowledgeBasesByUIDsWithConfig retrieves multiple KBs with their system configs
+	GetKnowledgeBasesByUIDsWithConfig(ctx context.Context, kbUIDs []types.KBUIDType) ([]KnowledgeBaseWithConfig, error)
 	GetKnowledgeBaseByUID(context.Context, types.KBUIDType) (*KnowledgeBaseModel, error)
+	// GetKnowledgeBaseByUIDIncludingDeleted retrieves a KB by UID, INCLUDING soft-deleted KBs
+	// Used by embedding activities that may run after a KB has been soft-deleted during swap
+	GetKnowledgeBaseByUIDIncludingDeleted(ctx context.Context, kbUID types.KBUIDType) (*KnowledgeBaseModel, error)
+	// GetKnowledgeBaseByUIDWithConfig retrieves a KB with its system config joined from the system table
+	GetKnowledgeBaseByUIDWithConfig(ctx context.Context, kbUID types.KBUIDType) (*KnowledgeBaseWithConfig, error)
 	// GetActiveCollectionUID retrieves the active collection UID for a KB
 	// This supports collection versioning for dimension changes
 	GetActiveCollectionUID(ctx context.Context, kbUID types.KBUIDType) (*types.KBUIDType, error)
@@ -83,14 +91,16 @@ type KnowledgeBase interface {
 	// Returns a DualProcessingTarget with IsNeeded=false if no dual processing is needed
 	GetDualProcessingTarget(ctx context.Context, productionKB *KnowledgeBaseModel) (*DualProcessingTarget, error)
 	// RAG update methods
-	CreateStagingKnowledgeBase(ctx context.Context, original *KnowledgeBaseModel, newEmbeddingConfig *EmbeddingConfigJSON, externalService func(kbUID types.KBUIDType) error) (*KnowledgeBaseModel, error)
+	CreateStagingKnowledgeBase(ctx context.Context, original *KnowledgeBaseModel, newSystemUID *types.SystemUIDType, externalService func(kbUID types.KBUIDType) error) (*KnowledgeBaseModel, error)
 	// ListKnowledgeBasesForUpdate finds KBs ready for the next update cycle
 	ListKnowledgeBasesForUpdate(ctx context.Context, tagFilters []string, catalogIDs []string) ([]KnowledgeBaseModel, error)
 	// ListKnowledgeBasesByUpdateStatus lists all KBs with a specific update_status
 	ListKnowledgeBasesByUpdateStatus(ctx context.Context, updateStatus string) ([]KnowledgeBaseModel, error)
-	// UpdateKnowledgeBaseUpdateStatus updates the update status of a KB
-	UpdateKnowledgeBaseUpdateStatus(ctx context.Context, kbUID types.KBUIDType, status string, workflowID string) error
-	// UpdateKnowledgeBaseAborted sets the KB status to ABORTED and explicitly clears the workflow ID to NULL
+	// ListAllKnowledgeBasesAdmin lists all production KBs across all owners (admin only)
+	ListAllKnowledgeBasesAdmin(ctx context.Context) ([]KnowledgeBaseModel, error)
+	// UpdateKnowledgeBaseUpdateStatus updates the update status of a KB. Stores error message if status is FAILED. Stores previous system UID for audit trail when status is UPDATING.
+	UpdateKnowledgeBaseUpdateStatus(ctx context.Context, kbUID types.KBUIDType, status string, workflowID string, errorMessage string, previousSystemUID types.SystemUIDType) error
+	// UpdateKnowledgeBaseAborted sets the KB status to ABORTED (workflow ID is kept for historical tracking)
 	UpdateKnowledgeBaseAborted(ctx context.Context, kbUID types.KBUIDType) error
 	// UpdateKnowledgeBaseWithMap updates a KB using a map to allow zero values like false
 	UpdateKnowledgeBaseWithMap(ctx context.Context, id, owner string, updates map[string]any) error
@@ -100,27 +110,33 @@ type KnowledgeBase interface {
 	UpdateKnowledgeBaseResources(ctx context.Context, fromKBUID, toKBUID types.KBUIDType) error
 }
 
+// KnowledgeBaseWithConfig represents a KB with its system config joined
+type KnowledgeBaseWithConfig struct {
+	KnowledgeBaseModel
+	SystemConfig SystemConfigJSON `gorm:"-"` // Populated from joined system table
+}
+
 // KnowledgeBaseModel defines the structure of a knowledge base
 type KnowledgeBaseModel struct {
 	UID  types.KBUIDType `gorm:"column:uid;type:uuid;default:uuid_generate_v4();primaryKey" json:"uid"`
 	KBID string          `gorm:"column:id;size:255;not null" json:"kb_id"`
 	// current name is the kb_id
-	Name        string     `gorm:"column:name;size:255;not null" json:"name"`
-	Description string     `gorm:"column:description;size:1023" json:"description"`
-	Tags        TagsArray  `gorm:"column:tags;type:VARCHAR(255)[]" json:"tags"`
-	Owner       string     `gorm:"column:owner;type:uuid;not null" json:"owner"`
-	CreateTime  *time.Time `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
-	UpdateTime  *time.Time `gorm:"column:update_time;not null;autoUpdateTime" json:"update_time"` // Use autoUpdateTime
-	DeleteTime  *time.Time `gorm:"column:delete_time" json:"delete_time"`
+	Name        string         `gorm:"column:name;size:255;not null" json:"name"`
+	Description string         `gorm:"column:description;size:1023" json:"description"`
+	Tags        TagsArray      `gorm:"column:tags;type:VARCHAR(255)[]" json:"tags"`
+	Owner       string         `gorm:"column:owner;type:uuid;not null" json:"owner"`
+	CreateTime  *time.Time     `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
+	UpdateTime  *time.Time     `gorm:"column:update_time;not null;autoUpdateTime" json:"update_time"` // Use autoUpdateTime
+	DeleteTime  gorm.DeletedAt `gorm:"column:delete_time;index" json:"delete_time"`
 	// creator
 	CreatorUID types.CreatorUIDType `gorm:"column:creator_uid;type:uuid;not null" json:"creator_uid"`
 	Usage      int64                `gorm:"column:usage;not null;default:0" json:"usage"`
 	// this type is defined in artifact/artifact/v1alpha/catalog.proto
 	CatalogType string `gorm:"column:catalog_type;size:255" json:"catalog_type"`
 
-	// Embedding configuration stored as JSONB
-	// Format: {"model_family": "gemini", "dimensionality": 3072}
-	EmbeddingConfig EmbeddingConfigJSON `gorm:"column:embedding_config;type:jsonb" json:"embedding_config"`
+	// SystemUID is a foreign key reference to the system table
+	// Following the pattern: {referenced_table}_uid
+	SystemUID types.SystemUIDType `gorm:"column:system_uid;type:uuid;not null" json:"system_uid"`
 
 	// ActiveCollectionUID points to the Milvus collection currently used by this KB
 	// This allows collection versioning when embedding dimensions change
@@ -134,22 +150,35 @@ type KnowledgeBaseModel struct {
 	// Staging flag for KB update management
 	// staging=false: Production KB (actively used for queries)
 	// staging=true: Staging/rollback KB (held for potential rollback)
-	Staging                bool       `gorm:"column:staging;not null;default:false" json:"staging"`
-	UpdateStatus           string     `gorm:"column:update_status;size:50" json:"update_status"`
-	UpdateWorkflowID       string     `gorm:"column:update_workflow_id;size:255" json:"update_workflow_id"`
-	UpdateStartedAt        *time.Time `gorm:"column:update_started_at" json:"update_started_at"`
-	UpdateCompletedAt      *time.Time `gorm:"column:update_completed_at" json:"update_completed_at"`
-	RollbackRetentionUntil *time.Time `gorm:"column:rollback_retention_until" json:"rollback_retention_until"`
+	Staging                bool                `gorm:"column:staging;not null;default:false" json:"staging"`
+	UpdateStatus           string              `gorm:"column:update_status;size:50" json:"update_status"`
+	UpdateWorkflowID       string              `gorm:"column:update_workflow_id;size:255" json:"update_workflow_id"`
+	UpdateStartedAt        *time.Time          `gorm:"column:update_started_at" json:"update_started_at"`
+	UpdateCompletedAt      *time.Time          `gorm:"column:update_completed_at" json:"update_completed_at"`
+	UpdateErrorMessage     string              `gorm:"column:update_error_message;type:text" json:"update_error_message"`
+	PreviousSystemUID      types.SystemUIDType `gorm:"column:previous_system_uid;type:uuid" json:"previous_system_uid"`
+	RollbackRetentionUntil *time.Time          `gorm:"column:rollback_retention_until" json:"rollback_retention_until"`
 }
 
-// EmbeddingConfigJSON represents the embedding configuration in the database
-type EmbeddingConfigJSON struct {
+// SystemConfigJSON represents the system configuration in the database
+// It maps to the config column structure: {"rag": {"embedding": {...}}}
+type SystemConfigJSON struct {
+	RAG RAGConfig `json:"rag"`
+}
+
+// RAGConfig represents the RAG-specific configuration
+type RAGConfig struct {
+	Embedding EmbeddingConfig `json:"embedding"`
+}
+
+// EmbeddingConfig represents the embedding model configuration
+type EmbeddingConfig struct {
 	ModelFamily    string `json:"model_family"`
 	Dimensionality uint32 `json:"dimensionality"`
 }
 
-// Scan implements the Scanner interface for EmbeddingConfigJSON
-func (e *EmbeddingConfigJSON) Scan(value any) error {
+// Scan implements the Scanner interface for SystemConfigJSON
+func (e *SystemConfigJSON) Scan(value any) error {
 	if value == nil {
 		return nil
 	}
@@ -162,9 +191,9 @@ func (e *EmbeddingConfigJSON) Scan(value any) error {
 	return json.Unmarshal(bytes, e)
 }
 
-// Value implements the driver Valuer interface for EmbeddingConfigJSON
-func (e EmbeddingConfigJSON) Value() (driver.Value, error) {
-	if e.ModelFamily == "" {
+// Value implements the driver Valuer interface for SystemConfigJSON
+func (e SystemConfigJSON) Value() (driver.Value, error) {
+	if e.RAG.Embedding.ModelFamily == "" {
 		return nil, nil
 	}
 	jsonBytes, err := json.Marshal(e)
@@ -312,11 +341,13 @@ func (r *repository) CreateKnowledgeBase(ctx context.Context, kb KnowledgeBaseMo
 }
 
 // GetKnowledgeBase fetches all KnowledgeBaseModel records from the database, excluding soft-deleted ones.
+// Only returns production KBs (staging=false), as staging KBs are internal implementation details
 func (r *repository) ListKnowledgeBases(ctx context.Context, owner string) ([]KnowledgeBaseModel, error) {
 	var knowledgeBases []KnowledgeBaseModel
-	// Exclude records where DeleteTime is not null and filter by owner
-	whereString := fmt.Sprintf("%v IS NULL AND %v = ?", KnowledgeBaseColumn.DeleteTime, KnowledgeBaseColumn.Owner)
-	if err := r.db.WithContext(ctx).Where(whereString, owner).Find(&knowledgeBases).Error; err != nil {
+	// GORM's DeletedAt automatically filters out soft-deleted records
+	// Filter for staging=false to exclude staging/rollback KBs from user-facing APIs
+	whereString := fmt.Sprintf("%v = ? AND %v = ?", KnowledgeBaseColumn.Owner, KnowledgeBaseColumn.Staging)
+	if err := r.db.WithContext(ctx).Where(whereString, owner, false).Find(&knowledgeBases).Error; err != nil {
 		return nil, err
 	}
 
@@ -324,15 +355,54 @@ func (r *repository) ListKnowledgeBases(ctx context.Context, owner string) ([]Kn
 }
 
 // ListKnowledgeBasesByCatalogType fetches all KnowledgeBaseModel records from the database, excluding soft-deleted ones.
+// Only returns production KBs (staging=false), as staging KBs are internal implementation details
 func (r *repository) ListKnowledgeBasesByCatalogType(ctx context.Context, owner string, catalogType artifactpb.CatalogType) ([]KnowledgeBaseModel, error) {
 	var knowledgeBases []KnowledgeBaseModel
-	// Exclude records where DeleteTime is not null and filter by owner
-	whereString := fmt.Sprintf("%v IS NULL AND %v = ? AND %v = ?", KnowledgeBaseColumn.DeleteTime, KnowledgeBaseColumn.Owner, KnowledgeBaseColumn.CatalogType)
-	if err := r.db.WithContext(ctx).Where(whereString, owner, catalogType.String()).Find(&knowledgeBases).Error; err != nil {
+	// GORM's DeletedAt automatically filters out soft-deleted records
+	// Filter for staging=false to exclude staging/rollback KBs from user-facing APIs
+	whereString := fmt.Sprintf("%v = ? AND %v = ? AND %v = ?", KnowledgeBaseColumn.Owner, KnowledgeBaseColumn.CatalogType, KnowledgeBaseColumn.Staging)
+	if err := r.db.WithContext(ctx).Where(whereString, owner, catalogType.String(), false).Find(&knowledgeBases).Error; err != nil {
 		return nil, err
 	}
 
 	return knowledgeBases, nil
+}
+
+// ListKnowledgeBasesByCatalogTypeWithConfig retrieves KBs by catalog type with their system configs joined
+// Only returns production KBs (staging=false), as staging KBs are internal implementation details
+func (r *repository) ListKnowledgeBasesByCatalogTypeWithConfig(ctx context.Context, owner string, catalogType artifactpb.CatalogType) ([]KnowledgeBaseWithConfig, error) {
+	type tempResult struct {
+		KnowledgeBaseModel
+		ConfigJSON json.RawMessage `gorm:"column:config"`
+	}
+
+	var tempResults []tempResult
+	err := r.db.WithContext(ctx).
+		Table("knowledge_base kb").
+		Select("kb.*, s.config").
+		Joins("INNER JOIN system s ON kb.system_uid = s.uid").
+		Where("kb.delete_time IS NULL").
+		Where("kb.owner = ?", owner).
+		Where("kb.catalog_type = ?", catalogType.String()).
+		Where("kb.staging = ?", false).
+		Scan(&tempResults).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]KnowledgeBaseWithConfig, len(tempResults))
+	for i, temp := range tempResults {
+		results[i].KnowledgeBaseModel = temp.KnowledgeBaseModel
+
+		// Unmarshal the config JSON
+		err = json.Unmarshal(temp.ConfigJSON, &results[i].SystemConfig)
+		if err != nil {
+			return nil, fmt.Errorf("failed to unmarshal system config for KB %s: %w", temp.UID, err)
+		}
+	}
+
+	return results, nil
 }
 
 // UpdateKnowledgeBase updates a KnowledgeBaseModel record in the database.
@@ -360,7 +430,7 @@ func (r *repository) UpdateKnowledgeBase(ctx context.Context, id, owner string, 
 }
 
 // UpdateKnowledgeBaseWithMap updates a knowledge base using a map, allowing zero values like false
-func (r *repository) UpdateKnowledgeBaseWithMap(ctx context.Context, id, owner string, updates map[string]interface{}) error {
+func (r *repository) UpdateKnowledgeBaseWithMap(ctx context.Context, id, owner string, updates map[string]any) error {
 	where := fmt.Sprintf("%s = ? AND %s = ? AND %s is NULL", KnowledgeBaseColumn.KBID, KnowledgeBaseColumn.Owner, KnowledgeBaseColumn.DeleteTime)
 
 	// Convert tags if present to TagsArray type for proper PostgreSQL array handling
@@ -411,25 +481,45 @@ func (r *repository) UpdateKnowledgeBaseResources(ctx context.Context, fromKBUID
 
 // DeleteKnowledgeBase sets the DeleteTime to the current time to perform a soft delete.
 func (r *repository) DeleteKnowledgeBase(ctx context.Context, ownerUID string, kbID string) (*KnowledgeBaseModel, error) {
-	// Fetch the existing record to ensure it exists
+	// CRITICAL: Use a database transaction with row-level locking to prevent race conditions
+	// Without locking, this race can occur:
+	// 1. Check: No files in progress ✓
+	// 2. File created & workflow starts updating file status to PROCESSING
+	// 3. KB deleted (CASCADE deletes files)
+	// 4. File workflow completes update → zombie file in PROCESSING with no KB
+	//
+	// With locking (SELECT ... FOR UPDATE):
+	// 1. Transaction locks KB row
+	// 2. File creation/updates block waiting for lock
+	// 3. KB deleted (CASCADE deletes files)
+	// 4. Transaction commits, releases lock
+	// 5. File operations fail (KB already deleted) ✓
 	var existingKB KnowledgeBaseModel
-	conds := fmt.Sprintf("%v = ? AND %v = ? AND %v IS NULL", KnowledgeBaseColumn.Owner, KnowledgeBaseColumn.KBID, KnowledgeBaseColumn.DeleteTime)
-	if err := r.db.WithContext(ctx).First(&existingKB, conds, ownerUID, kbID).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return nil, fmt.Errorf("knowledge base ID not found: %v. err: %w", kbID, gorm.ErrRecordNotFound)
-		}
-		return nil, err
-	}
 
-	// Set the DeleteTime to the current time
-	deleteTime := time.Now().UTC()
-	existingKB.DeleteTime = &deleteTime
-
-	// Save the changes to mark the record as soft deleted
-	if err := r.db.WithContext(ctx).Save(&existingKB).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("knowledge base ID not found: %v. err: %w", existingKB.KBID, gorm.ErrRecordNotFound)
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Lock the KB row with SELECT ... FOR UPDATE
+		// This prevents concurrent file operations from proceeding until we commit/rollback
+		conds := fmt.Sprintf("%v = ? AND %v = ? AND %v IS NULL", KnowledgeBaseColumn.Owner, KnowledgeBaseColumn.KBID, KnowledgeBaseColumn.DeleteTime)
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&existingKB, conds, ownerUID, kbID).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				return fmt.Errorf("knowledge base ID not found: %v. err: %w", kbID, gorm.ErrRecordNotFound)
+			}
+			return err
 		}
+
+		// Perform soft delete using GORM's Delete() method (which sets delete_time automatically)
+		// This will CASCADE soft-delete all related files due to FK constraints
+		if err := tx.Delete(&existingKB).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return fmt.Errorf("knowledge base ID not found: %v. err: %w", existingKB.KBID, gorm.ErrRecordNotFound)
+			}
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
 		return nil, err
 	}
 
@@ -438,7 +528,7 @@ func (r *repository) DeleteKnowledgeBase(ctx context.Context, ownerUID string, k
 
 func (r *repository) checkIfKBIDUnique(ctx context.Context, owner string, kbID string) (bool, error) {
 	var existingKB KnowledgeBaseModel
-	whereString := fmt.Sprintf("%v = ? AND %v = ? AND %s is NULL", KnowledgeBaseColumn.Owner, KnowledgeBaseColumn.KBID, KnowledgeBaseColumn.DeleteTime)
+	whereString := fmt.Sprintf("%v = ? AND %v = ?", KnowledgeBaseColumn.Owner, KnowledgeBaseColumn.KBID)
 	if err := r.db.WithContext(ctx).Where(whereString, owner, kbID).First(&existingKB).Error; err != nil {
 		if err != gorm.ErrRecordNotFound {
 			return false, err
@@ -447,21 +537,6 @@ func (r *repository) checkIfKBIDUnique(ctx context.Context, owner string, kbID s
 		return true, nil
 	}
 	return false, nil
-}
-
-// check if knowledge base exists by kb_uid
-func (r *repository) checkIfKnowledgeBaseExists(ctx context.Context, kbUID types.KBUIDType) (bool, error) {
-	whereString := fmt.Sprintf("%v = ? AND %s is NULL", KnowledgeBaseColumn.UID, KnowledgeBaseColumn.DeleteTime)
-	err := r.db.WithContext(ctx).Where(whereString, kbUID).First(&KnowledgeBaseModel{}).Error
-	if err != nil {
-		if err != gorm.ErrRecordNotFound {
-			return false, err
-		}
-
-		return false, nil
-	}
-
-	return true, nil
 }
 
 // get the knowledge base by (owner, kb_id)
@@ -485,20 +560,38 @@ func (r *repository) GetKnowledgeBaseByID(ctx context.Context, kbID string) (*Kn
 }
 
 // ListKnowledgeBasesByUpdateStatus lists all knowledge bases with a specific update status
+// Only returns production KBs (staging=false), as staging KBs are internal implementation details
 func (r *repository) ListKnowledgeBasesByUpdateStatus(ctx context.Context, updateStatus string) ([]KnowledgeBaseModel, error) {
 	var kbs []KnowledgeBaseModel
-	whereString := fmt.Sprintf("%v = ? AND %v is NULL", KnowledgeBaseColumn.UpdateStatus, KnowledgeBaseColumn.DeleteTime)
-	if err := r.db.WithContext(ctx).Where(whereString, updateStatus).Find(&kbs).Error; err != nil {
+	// GORM automatically excludes soft-deleted records (delete_time IS NULL) with gorm.DeletedAt
+	// Filter for staging=false to exclude staging KBs from status monitoring
+	if err := r.db.WithContext(ctx).Where("update_status = ? AND staging = false", updateStatus).Find(&kbs).Error; err != nil {
+		return nil, err
+	}
+	return kbs, nil
+}
+
+// ListAllKnowledgeBasesAdmin lists all production knowledge bases across all owners (admin only)
+// Only returns production KBs (staging=false), as staging KBs are internal implementation details
+func (r *repository) ListAllKnowledgeBasesAdmin(ctx context.Context) ([]KnowledgeBaseModel, error) {
+	var kbs []KnowledgeBaseModel
+	// GORM automatically excludes soft-deleted records (delete_time IS NULL) with gorm.DeletedAt
+	// Filter for staging=false to exclude staging/rollback KBs
+	if err := r.db.WithContext(ctx).Where("staging = false").Find(&kbs).Error; err != nil {
 		return nil, err
 	}
 	return kbs, nil
 }
 
 // get the count of knowledge bases by owner
+// Only counts production KBs (staging=false), as staging KBs are internal implementation details
 func (r *repository) GetKnowledgeBaseCountByOwner(ctx context.Context, owner string, catalogType artifactpb.CatalogType) (int64, error) {
 	var count int64
-	whereString := fmt.Sprintf("%v = ? AND %v is NULL AND %v = ?", KnowledgeBaseColumn.Owner, KnowledgeBaseColumn.DeleteTime, KnowledgeBaseColumn.CatalogType)
-	if err := r.db.WithContext(ctx).Model(&KnowledgeBaseModel{}).Where(whereString, owner, catalogType.String()).Count(&count).Error; err != nil {
+	// GORM automatically excludes soft-deleted records with gorm.DeletedAt
+	// Filter for staging=false to exclude staging/rollback KBs from user-facing counts
+	if err := r.db.WithContext(ctx).Model(&KnowledgeBaseModel{}).
+		Where("owner = ? AND catalog_type = ? AND staging = ?", owner, catalogType.String(), false).
+		Count(&count).Error; err != nil {
 		return 0, err
 	}
 	return count, nil
@@ -528,11 +621,88 @@ func (r *repository) GetKnowledgeBasesByUIDs(ctx context.Context, kbUIDs []types
 	return knowledgeBases, nil
 }
 
+// GetKnowledgeBasesByUIDsWithConfig retrieves multiple KBs with their system configs by joining the system table
+func (r *repository) GetKnowledgeBasesByUIDsWithConfig(ctx context.Context, kbUIDs []types.KBUIDType) ([]KnowledgeBaseWithConfig, error) {
+	if len(kbUIDs) == 0 {
+		return []KnowledgeBaseWithConfig{}, nil
+	}
+
+	type tempResult struct {
+		KnowledgeBaseModel
+		ConfigJSON json.RawMessage `gorm:"column:config"`
+	}
+
+	var tempResults []tempResult
+	err := r.db.WithContext(ctx).
+		Table("knowledge_base kb").
+		Select("kb.*, s.config").
+		Joins("INNER JOIN system s ON kb.system_uid = s.uid").
+		Where("kb.uid IN ?", kbUIDs).
+		Scan(&tempResults).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]KnowledgeBaseWithConfig, len(tempResults))
+	for i, temp := range tempResults {
+		results[i].KnowledgeBaseModel = temp.KnowledgeBaseModel
+
+		// Unmarshal the config JSON
+		err = json.Unmarshal(temp.ConfigJSON, &results[i].SystemConfig)
+		if err != nil {
+			return nil, fmt.Errorf("failed to unmarshal system config for KB %s: %w", temp.UID, err)
+		}
+	}
+
+	return results, nil
+}
+
 // GetKnowledgeBaseByUID fetches a knowledge base by its primary key.
 func (r *repository) GetKnowledgeBaseByUID(ctx context.Context, uid types.KBUIDType) (*KnowledgeBaseModel, error) {
 	kb := new(KnowledgeBaseModel)
 	err := r.db.WithContext(ctx).Where("uid = ?", uid).First(kb).Error
 	return kb, err
+}
+
+// GetKnowledgeBaseByUIDIncludingDeleted retrieves a KB by UID, INCLUDING soft-deleted KBs
+// This is needed for embedding activities that may run after a KB has been soft-deleted during swap
+func (r *repository) GetKnowledgeBaseByUIDIncludingDeleted(ctx context.Context, uid types.KBUIDType) (*KnowledgeBaseModel, error) {
+	kb := new(KnowledgeBaseModel)
+	err := r.db.WithContext(ctx).Unscoped().Where("uid = ?", uid).First(kb).Error
+	return kb, err
+}
+
+// GetKnowledgeBaseByUIDWithConfig retrieves a KB with its system config by joining the system table
+func (r *repository) GetKnowledgeBaseByUIDWithConfig(ctx context.Context, kbUID types.KBUIDType) (*KnowledgeBaseWithConfig, error) {
+	var result KnowledgeBaseWithConfig
+
+	// First, get the KB record (with system_uid)
+	err := r.db.WithContext(ctx).
+		Table("knowledge_base kb").
+		Select("kb.*").
+		Where("kb.uid = ?", kbUID).
+		Scan(&result).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Then fetch the system config
+	// Fetch the complete system record and use its GetConfigJSON method
+	system, err := r.GetSystemByUID(ctx, result.SystemUID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get system: %w", err)
+	}
+
+	configJSON, err := system.GetConfigJSON()
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse system config: %w", err)
+	}
+
+	result.SystemConfig = *configJSON
+
+	return &result, nil
 }
 
 // GetActiveCollectionUID retrieves the active collection UID for a KB
@@ -561,7 +731,7 @@ func (r *repository) IsCollectionInUse(ctx context.Context, collectionUID types.
 	var count int64
 	err := r.db.WithContext(ctx).
 		Model(&KnowledgeBaseModel{}).
-		Where("active_collection_uid = ? AND delete_time IS NULL", collectionUID).
+		Where("active_collection_uid = ?", collectionUID).
 		Count(&count).
 		Error
 	if err != nil {
@@ -577,7 +747,7 @@ func (r *repository) IsKBUpdating(ctx context.Context, kbUID types.KBUIDType) (b
 	err := r.db.WithContext(ctx).
 		Model(&KnowledgeBaseModel{}).
 		Select("update_status").
-		Where("uid = ? AND delete_time IS NULL", kbUID).
+		Where("uid = ?", kbUID).
 		Scan(&updateStatus).
 		Error
 	if err != nil {
@@ -745,31 +915,31 @@ func (r *repository) GetDualProcessingTarget(ctx context.Context, productionKB *
 }
 
 // CreateStagingKnowledgeBase creates a staging KB for update with a new UID
-// If newEmbeddingConfig is provided, uses it; otherwise uses original's config
-func (r *repository) CreateStagingKnowledgeBase(ctx context.Context, original *KnowledgeBaseModel, newEmbeddingConfig *EmbeddingConfigJSON, externalService func(kbUID types.KBUIDType) error) (*KnowledgeBaseModel, error) {
+// If newSystemUID is provided, uses it; otherwise uses original's system_uid
+func (r *repository) CreateStagingKnowledgeBase(ctx context.Context, original *KnowledgeBaseModel, newSystemUID *types.SystemUIDType, externalService func(kbUID types.KBUIDType) error) (*KnowledgeBaseModel, error) {
 	now := time.Now()
 
-	// Use new config if provided, otherwise use original's config
-	embeddingConfig := original.EmbeddingConfig
-	if newEmbeddingConfig != nil {
-		embeddingConfig = *newEmbeddingConfig
+	// Use new system_uid if provided, otherwise use original's system_uid
+	systemUID := original.SystemUID
+	if newSystemUID != nil {
+		systemUID = *newSystemUID
 	}
 
 	stagingKB := KnowledgeBaseModel{
 		// New UID is generated automatically by GORM
 		// Shadow KB naming: {original}-staging (simpler than version-based naming)
-		Name:            fmt.Sprintf("%s-staging", original.Name),
-		KBID:            fmt.Sprintf("%s-staging", original.KBID),
-		Description:     original.Description,
-		Tags:            append(original.Tags, "staging"),
-		Owner:           original.Owner,
-		CreatorUID:      original.CreatorUID,
-		CatalogType:     original.CatalogType,
-		EmbeddingConfig: embeddingConfig,
-		Staging:         true, // Mark as staging for staging KB
-		UpdateStatus:    artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING.String(),
-		CreateTime:      &now,
-		UpdateTime:      &now,
+		Name:         fmt.Sprintf("%s-staging", original.Name),
+		KBID:         fmt.Sprintf("%s-staging", original.KBID),
+		Description:  original.Description,
+		Tags:         append(original.Tags, "staging"),
+		Owner:        original.Owner,
+		CreatorUID:   original.CreatorUID,
+		CatalogType:  original.CatalogType,
+		SystemUID:    systemUID,
+		Staging:      true, // Mark as staging for staging KB
+		UpdateStatus: artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING.String(),
+		CreateTime:   &now,
+		UpdateTime:   &now,
 		// ActiveCollectionUID will be set to staging KB's own UID by CreateKnowledgeBase
 		// This allows the staging KB to have its own collection with potentially different dimensionality
 	}
@@ -818,25 +988,40 @@ func (r *repository) ListKnowledgeBasesForUpdate(ctx context.Context, tagFilters
 }
 
 // UpdateKnowledgeBaseUpdateStatus updates the update status and workflow ID
-func (r *repository) UpdateKnowledgeBaseUpdateStatus(ctx context.Context, kbUID types.KBUIDType, status string, workflowID string) error {
+func (r *repository) UpdateKnowledgeBaseUpdateStatus(ctx context.Context, kbUID types.KBUIDType, status string, workflowID string, errorMessage string, previousSystemUID types.SystemUIDType) error {
 	updates := map[string]any{
 		"update_status": status,
 	}
 
 	// Only set workflow ID if it's being started (UPDATING)
-	// For all terminal states (COMPLETED, FAILED, ABORTED), explicitly clear it to NULL
+	// For terminal states (COMPLETED, FAILED, ABORTED), keep the workflow ID for historical tracking and test polling
 	switch status {
 	case artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING.String():
 		now := time.Now()
 		updates["update_started_at"] = &now
 		updates["update_workflow_id"] = workflowID
+		// Clear any previous error message when starting a new update
+		updates["update_error_message"] = ""
+		// Capture previous system UID for historical audit trail
+		if previousSystemUID.String() != uuid.Nil.String() {
+			updates["previous_system_uid"] = previousSystemUID
+		}
 	case artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED.String(),
 		artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_FAILED.String(),
 		artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_ABORTED.String(),
 		artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_ROLLED_BACK.String():
 		now := time.Now()
 		updates["update_completed_at"] = &now
-		updates["update_workflow_id"] = nil // Explicitly clear to NULL for all terminal states
+		// Keep workflow ID for historical tracking and test polling - don't clear it
+		// Keep previous_system_uid for historical audit trail - don't clear it
+
+		// Store error message for FAILED status
+		if status == artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_FAILED.String() && errorMessage != "" {
+			updates["update_error_message"] = errorMessage
+		} else {
+			// Clear error message for successful completion or rollback
+			updates["update_error_message"] = ""
+		}
 	default:
 		// For intermediate states (SYNCING, VALIDATING, SWAPPING), keep workflow ID if provided
 		if workflowID != "" {
@@ -849,16 +1034,15 @@ func (r *repository) UpdateKnowledgeBaseUpdateStatus(ctx context.Context, kbUID 
 		Updates(updates).Error
 }
 
-// UpdateKnowledgeBaseAborted sets the KB status to ABORTED and explicitly clears the workflow ID to NULL
-// This is necessary because GORM's Updates() with empty string "" doesn't set it to NULL in the database
-// and the DeleteCatalog safeguards check for != "" which would still block deletion
+// UpdateKnowledgeBaseAborted sets the KB status to ABORTED
+// Note: Workflow ID is kept for historical tracking and debugging
 func (r *repository) UpdateKnowledgeBaseAborted(ctx context.Context, kbUID types.KBUIDType) error {
 	now := time.Now()
 	return r.db.WithContext(ctx).Model(&KnowledgeBaseModel{}).
 		Where("uid = ?", kbUID).
 		Updates(map[string]any{
 			"update_status":       artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_ABORTED.String(),
-			"update_workflow_id":  nil, // Explicitly set to NULL
 			"update_completed_at": &now,
+			// Keep workflow ID for historical tracking - don't clear it
 		}).Error
 }

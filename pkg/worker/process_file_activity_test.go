@@ -138,7 +138,21 @@ func TestGetFileMetadataActivity_Success(t *testing.T) {
 		},
 	}, nil)
 
-	// NOTE: GetKnowledgeBaseByUID is no longer called - conversion pipelines are retired
+	// GetKnowledgeBaseByUIDWithConfig is called to retrieve system config
+	mockRepository.GetKnowledgeBaseByUIDWithConfigMock.Return(&repository.KnowledgeBaseWithConfig{
+		KnowledgeBaseModel: repository.KnowledgeBaseModel{
+			UID: kbUID,
+		},
+	}, nil)
+
+	// GetKnowledgeBaseByUID is called to check for dual-processing
+	mockRepository.GetKnowledgeBaseByUIDMock.Return(&repository.KnowledgeBaseModel{
+		UID:     kbUID,
+		Staging: false,
+	}, nil)
+
+	// GetDualProcessingTarget is called to check for dual-processing targets
+	mockRepository.GetDualProcessingTargetMock.Return(nil, nil)
 
 	w := &Worker{repository: mockRepository, log: zap.NewNop()}
 

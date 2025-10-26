@@ -7,13 +7,74 @@ import { artifactRESTPublicHost } from "./const.js";
 import * as constant from "./const.js";
 import * as helper from "./helper.js";
 
+const dbIDPrefix = constant.generateDBIDPrefix();
+
+export function setup() {
+  // Stagger test execution to reduce parallel resource contention
+  helper.staggerTestExecution(2);
+
+  var loginResp = http.request("POST", `${constant.mgmtRESTPublicHost}/v1beta/auth/login`, JSON.stringify({
+    "username": constant.defaultUsername,
+    "password": constant.defaultPassword,
+  }))
+
+  check(loginResp, {
+    [`POST ${constant.mgmtRESTPublicHost}/v1beta/auth/login response status is 200`]: (r) => r.status === 200,
+  });
+
+  var header = {
+    "headers": {
+      "Authorization": `Bearer ${loginResp.json().accessToken}`,
+      "Content-Type": "application/json",
+    },
+    "timeout": "600s",
+  }
+
+  var resp = http.request("GET", `${constant.mgmtRESTPublicHost}/v1beta/user`, {}, {
+    headers: {
+      "Authorization": `Bearer ${loginResp.json().accessToken}`
+    }
+  })
+
+  return {
+    header: header,
+    expectedOwner: resp.json().user
+  }
+}
+
+export function teardown(data) {
+  // Cleanup: Remove catalogs created by this test (identified by dbIDPrefix)
+  console.log("\n=== TEARDOWN: Cleaning up test catalogs ===");
+  try {
+    const listResp = http.request("GET", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, data.header);
+    if (listResp.status === 200) {
+      const catalogs = Array.isArray(listResp.json().catalogs) ? listResp.json().catalogs : [];
+      let cleanedCount = 0;
+      for (const catalog of catalogs) {
+        const catId = catalog.catalogId || catalog.catalog_id;
+        // Clean up catalogs with our test prefix (cl-, cat-, del-)
+        if (catId && (catId.includes(dbIDPrefix) || catId.match(/^(cl|cat|del)-/))) {
+          const delResp = http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catId}`, null, data.header);
+          if (delResp.status === 200 || delResp.status === 204) {
+            cleanedCount++;
+          }
+        }
+      }
+      console.log(`Cleaned ${cleanedCount} test catalogs`);
+    }
+  } catch (e) {
+    console.log(`Teardown cleanup warning: ${e}`);
+  }
+  console.log("=== TEARDOWN: Cleanup complete ===\n");
+}
+
 export function CheckCreateCatalog(data) {
   const groupName = "Artifact API: Create a catalog";
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
     var reqBody = {
-      name: constant.dbIDPrefix + randomString(10),
+      name: dbIDPrefix + randomString(10),
       description: randomString(50),
       tags: ["test", "integration"],
       type: "CATALOG_TYPE_PERSISTENT"
@@ -94,7 +155,7 @@ export function CheckGetCatalog(data) {
     const cRes = http.request(
       "POST",
       `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
-      JSON.stringify({ name: constant.dbIDPrefix + randomString(10) }),
+      JSON.stringify({ name: dbIDPrefix + randomString(10) }),
       data.header
     );
     check(cRes, { "POST /v1alpha/namespaces/{namespace_id}/catalogs 200": (r) => r.status === 200 });
@@ -131,7 +192,7 @@ export function CheckUpdateCatalog(data) {
     const cRes = http.request(
       "POST",
       `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
-      JSON.stringify({ name: constant.dbIDPrefix + randomString(10) }),
+      JSON.stringify({ name: dbIDPrefix + randomString(10) }),
       data.header
     );
     const created = (cRes.json() || {}).catalog || {};
@@ -176,7 +237,7 @@ export function CheckDeleteCatalog(data) {
     check(true, { [constant.banner(groupName)]: () => true });
 
     // Create a catalog to delete
-    const createBody = { name: constant.dbIDPrefix + "del-" + randomString(8) };
+    const createBody = { name: dbIDPrefix + "del-" + randomString(8) };
     const cRes = http.request(
       "POST",
       `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
@@ -210,7 +271,7 @@ export function CheckCleanupFiles(data) {
     check(true, { [constant.banner(groupName)]: () => true });
 
     // Create a catalog (keep name short to avoid 32 char limit)
-    const catalogName = constant.dbIDPrefix + "cl-" + randomString(5);
+    const catalogName = dbIDPrefix + "cl-" + randomString(5);
     const createRes = http.request(
       "POST",
       `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
@@ -231,7 +292,7 @@ export function CheckCleanupFiles(data) {
     }
 
     // Upload a PDF file (will trigger conversion)
-    const fileName = `${constant.dbIDPrefix}cl.pdf`;
+    const fileName = `${dbIDPrefix}cl.pdf`;
     const uploadRes = http.request(
       "POST",
       `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
@@ -253,18 +314,7 @@ export function CheckCleanupFiles(data) {
       return;
     }
 
-    // Trigger processing
-    const processRes = http.request(
-      "POST",
-      `${artifactRESTPublicHost}/v1alpha/catalogs/files/processAsync`,
-      JSON.stringify({ fileUids: [fileUid] }),
-      data.header
-    );
-
-    check(processRes, {
-      "Cleanup: Processing triggered": (r) => r.status === 200,
-    });
-
+    // Auto-trigger: Processing starts automatically on upload (no manual trigger needed)
     // Wait for processing to create temporary files
     sleep(3);
 
@@ -315,7 +365,7 @@ export function CheckCatalog(data) {
 
     // Create catalog
     const createBody = {
-      name: constant.dbIDPrefix + "cat-" + randomString(8),
+      name: dbIDPrefix + "cat-" + randomString(8),
       description: randomString(40),
       tags: ["test", "integration", "catalog-e2e"],
       type: "CATALOG_TYPE_PERSISTENT",
@@ -366,7 +416,7 @@ export function CheckCatalog(data) {
     // Upload all file types (parallel)
     const uploaded = [];
     const uploadReqs = constant.sampleFiles.map((s) => {
-      const fileName = `${constant.dbIDPrefix}${s.originalName}`;
+      const fileName = `${dbIDPrefix}${s.originalName}`;
       // Add tags to file upload - using same tags for all files initially
       const tags = ["kim", "knives"];
       return {
@@ -393,15 +443,8 @@ export function CheckCatalog(data) {
       if (file && file.fileUid) uploaded.push({ fileUid: file.fileUid, name: fileName, type: s.type, tags: tags });
     }
 
-    // Trigger processing for all files in one call
     const fileUids = uploaded.map((f) => f.fileUid);
-    const pRes = http.request(
-      "POST",
-      `${artifactRESTPublicHost}/v1alpha/catalogs/files/processAsync`,
-      JSON.stringify({ fileUids }),
-      data.header
-    );
-    check(pRes, { "POST /v1alpha/catalogs/files/processAsync 200": (r) => r.status === 200 });
+    // Auto-trigger: Processing starts automatically on upload (no manual trigger needed)
 
     // Wait for completion (batched polling), then verify file-catalog view per file
     {

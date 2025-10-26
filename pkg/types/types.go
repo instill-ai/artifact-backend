@@ -112,4 +112,7 @@ type (
 
 	// EmbeddingUIDType is the Embedding unique identifier
 	EmbeddingUIDType = uuid.UUID
+
+	// SystemUIDType is the System unique identifier
+	SystemUIDType = uuid.UUID
 )

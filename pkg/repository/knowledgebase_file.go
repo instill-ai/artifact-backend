@@ -55,9 +55,15 @@ type KnowledgeBaseFile interface {
 	// If processStatus is empty, returns all non-deleted files
 	// If processStatus is provided (e.g., "FILE_PROCESS_STATUS_COMPLETED"), returns only files with that status
 	GetFileCountByKnowledgeBaseUID(ctx context.Context, kbUID types.KBUIDType, processStatus string) (int64, error)
-	// GetRecentNotStartedFileCount counts files in NOTSTARTED status created within the last N seconds
-	// Used to detect dual processing race conditions
-	GetRecentNotStartedFileCount(ctx context.Context, kbUID types.KBUIDType, withinSeconds int) (int64, error)
+	// GetFileCountByKnowledgeBaseUIDIncludingDeleted counts files INCLUDING soft-deleted ones
+	// Used by cleanup workflows to wait for in-progress workflows to complete before dropping collections
+	GetFileCountByKnowledgeBaseUIDIncludingDeleted(ctx context.Context, kbUID types.KBUIDType, processStatus string) (int64, error)
+	// GetNotStartedFileCount counts files in NOTSTARTED status (regardless of creation time)
+	// Used by synchronization to detect files waiting to start processing
+	GetNotStartedFileCount(ctx context.Context, kbUID types.KBUIDType) (int64, error)
+	// GetNotStartedFileCountExcluding counts NOTSTARTED files excluding specific UIDs (for recently reconciled files)
+	// Used during synchronization to exclude files that were just created by reconciliation
+	GetNotStartedFileCountExcluding(ctx context.Context, kbUID types.KBUIDType, excludeUIDs []types.FileUIDType) (int64, error)
 	// GetSourceTableAndUIDByFileUIDs returns the source table and uid by file UID list
 	GetSourceTableAndUIDByFileUIDs(ctx context.Context, files []KnowledgeBaseFileModel) (map[types.FileUIDType]struct {
 		SourceTable string
@@ -97,9 +103,9 @@ type KnowledgeBaseFileModel struct {
 	ExtraMetaData string `gorm:"column:extra_meta_data;type:jsonb" json:"extra_meta_data"`
 	// Note: Content and summary are now stored as separate converted_file records and chunks in MinIO
 	// They are no longer duplicated in this table
-	CreateTime *time.Time `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
-	UpdateTime *time.Time `gorm:"column:update_time;not null;autoUpdateTime" json:"update_time"` // Use autoUpdateTime
-	DeleteTime *time.Time `gorm:"column:delete_time" json:"delete_time"`
+	CreateTime *time.Time     `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
+	UpdateTime *time.Time     `gorm:"column:update_time;not null;autoUpdateTime" json:"update_time"` // Use autoUpdateTime
+	DeleteTime gorm.DeletedAt `gorm:"column:delete_time;index" json:"delete_time"`
 	// Size
 	Size int64 `gorm:"column:size" json:"size"`
 	// Process requester UID
@@ -295,17 +301,31 @@ func (kf *KnowledgeBaseFileModel) AfterFind(tx *gorm.DB) (err error) {
 
 // CreateKnowledgeBaseFile creates a new knowledge base file
 func (r *repository) CreateKnowledgeBaseFile(ctx context.Context, kb KnowledgeBaseFileModel, externalServiceCall func(fileUID string) error) (*KnowledgeBaseFileModel, error) {
-	exists, err := r.checkIfKnowledgeBaseExists(ctx, kb.KBUID)
-	if err != nil {
-		return nil, fmt.Errorf("checking knowledge base existence: %w", err)
-	}
+	// CRITICAL: Use transaction with row-level locking to prevent race conditions
+	// Without locking, this race can occur:
+	// 1. Check: KB exists ✓
+	// 2. DeleteKB starts and locks KB row
+	// 3. File created (succeeds because no FK constraint)
+	// 4. DeleteKB completes (CASCADE doesn't affect file - no FK)
+	// 5. Result: Zombie file referencing deleted KB
+	//
+	// With locking (SELECT ... FOR UPDATE):
+	// 1. Transaction locks KB row
+	// 2. DeleteKB blocks waiting for lock
+	// 3. File created
+	// 4. Transaction commits, releases lock
+	// 5. DeleteKB proceeds and CASCADE deletes file ✓
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Lock the KB row with SELECT ... FOR UPDATE to prevent concurrent deletion
+		var existingKB KnowledgeBaseModel
+		whereString := fmt.Sprintf("%v = ? AND %s IS NULL", KnowledgeBaseColumn.UID, KnowledgeBaseColumn.DeleteTime)
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where(whereString, kb.KBUID).First(&existingKB).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				return fmt.Errorf("catalog does not exist or has been deleted")
+			}
+			return fmt.Errorf("checking knowledge base existence: %w", err)
+		}
 
-	if !exists {
-		return nil, fmt.Errorf("catalog does not exist")
-	}
-
-	// Use a transaction to create the knowledge base file and call the external service
-	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// Create the knowledge base file
 		if err := tx.Create(&kb).Error; err != nil {
 			return err
@@ -358,8 +378,7 @@ func (r *repository) ListKnowledgeBaseFiles(ctx context.Context, params Knowledg
 
 	q := r.db.Model(&KnowledgeBaseFileModel{}).
 		Where("owner = ?", params.OwnerUID).
-		Where("kb_uid = ?", params.KBUID).
-		Where("delete_time is NULL")
+		Where("kb_uid = ?", params.KBUID)
 
 	if len(params.FileUIDs) > 0 {
 		q = q.Where("uid IN ?", params.FileUIDs)
@@ -442,7 +461,8 @@ func (r *repository) DeleteKnowledgeBaseFile(ctx context.Context, fileUID string
 // hard delete all files in the catalog
 func (r *repository) DeleteAllKnowledgeBaseFiles(ctx context.Context, kbUID string) error {
 	whereClause := fmt.Sprintf("%v = ?", KnowledgeBaseFileColumn.KnowledgeBaseUID)
-	if err := r.db.WithContext(ctx).Model(&KnowledgeBaseFileModel{}).
+	// Use Unscoped() to perform actual hard delete (physical removal), not soft delete
+	if err := r.db.WithContext(ctx).Unscoped().Model(&KnowledgeBaseFileModel{}).
 		Where(whereClause, kbUID).
 		Delete(&KnowledgeBaseFileModel{}).Error; err != nil {
 		return err
@@ -461,7 +481,7 @@ func (r *repository) ProcessKnowledgeBaseFiles(
 
 	// Update the process status of the files
 	updates := map[string]any{
-		"process_status": artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CONVERTING.String(),
+		"process_status": artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_PROCESSING.String(),
 		"requester_uid":  requester,
 		// Clear previous failure reason
 		"extra_meta_data": gorm.Expr("COALESCE(extra_meta_data, '{}'::jsonb) || ?::jsonb", `{"fail_reason": ""}`),
@@ -508,30 +528,54 @@ func (r *repository) UpdateKnowledgeBaseFile(ctx context.Context, fileUID string
 	return &updatedFile, nil
 }
 
-// GetRecentNotStartedFileCount counts files in NOTSTARTED status created within the last N seconds
-// This is used to detect dual processing race conditions where files are being created
-// but haven't started processing yet
-func (r *repository) GetRecentNotStartedFileCount(ctx context.Context, kbUID types.KBUIDType, withinSeconds int) (int64, error) {
+// GetNotStartedFileCount counts files in NOTSTARTED status (regardless of creation time)
+// Used by synchronization to detect files waiting to start processing.
+// With sequential dual-processing, staging files legitimately stay NOTSTARTED
+// until production completes, so we don't filter by age.
+func (r *repository) GetNotStartedFileCount(ctx context.Context, kbUID types.KBUIDType) (int64, error) {
 	var count int64
-
-	// Calculate cutoff time
-	cutoff := time.Now().Add(-time.Duration(withinSeconds) * time.Second)
 
 	err := r.db.WithContext(ctx).
 		Table(KnowledgeBaseFileTableName).
-		Where(fmt.Sprintf("%v = ? AND %v IS NULL AND %v = ? AND %v > ?",
+		Where(fmt.Sprintf("%v = ? AND %v IS NULL AND %v = ?",
 			KnowledgeBaseFileColumn.KnowledgeBaseUID,
 			KnowledgeBaseFileColumn.DeleteTime,
-			KnowledgeBaseFileColumn.ProcessStatus,
-			KnowledgeBaseFileColumn.CreateTime),
+			KnowledgeBaseFileColumn.ProcessStatus),
 			kbUID,
-			artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_NOTSTARTED.String(),
-			cutoff).
+			artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_NOTSTARTED.String()).
 		Count(&count).
 		Error
 
 	if err != nil {
-		return 0, fmt.Errorf("failed to count recent NOTSTARTED files: %w", err)
+		return 0, fmt.Errorf("failed to count NOTSTARTED files: %w", err)
+	}
+
+	return count, nil
+}
+
+// GetNotStartedFileCountExcluding counts files in NOTSTARTED status excluding specific file UIDs
+// This is used during synchronization to exclude files that were just created by reconciliation
+// and haven't been picked up by Temporal yet (avoiding false positives)
+func (r *repository) GetNotStartedFileCountExcluding(ctx context.Context, kbUID types.KBUIDType, excludeUIDs []types.FileUIDType) (int64, error) {
+	var count int64
+
+	query := r.db.WithContext(ctx).
+		Table(KnowledgeBaseFileTableName).
+		Where(fmt.Sprintf("%v = ? AND %v IS NULL AND %v = ?",
+			KnowledgeBaseFileColumn.KnowledgeBaseUID,
+			KnowledgeBaseFileColumn.DeleteTime,
+			KnowledgeBaseFileColumn.ProcessStatus),
+			kbUID,
+			artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_NOTSTARTED.String())
+
+	// Exclude specific file UIDs if provided
+	if len(excludeUIDs) > 0 {
+		query = query.Where(fmt.Sprintf("%v NOT IN ?", KnowledgeBaseFileColumn.UID), excludeUIDs)
+	}
+
+	err := query.Count(&count).Error
+	if err != nil {
+		return 0, fmt.Errorf("failed to count NOTSTARTED files (excluding %d UIDs): %w", len(excludeUIDs), err)
 	}
 
 	return count, nil
@@ -562,6 +606,41 @@ func (r *repository) GetFileCountByKnowledgeBaseUID(ctx context.Context, kbUID t
 	err := query.Count(&count).Error
 	if err != nil {
 		return 0, fmt.Errorf("error counting files: %w", err)
+	}
+
+	return count, nil
+}
+
+// GetFileCountByKnowledgeBaseUIDIncludingDeleted counts files by KB UID and process status, INCLUDING soft-deleted files
+// This is used by cleanup workflows to wait for in-progress file processing to complete before dropping collections
+// CRITICAL: Must include deleted files because:
+// 1. When KB is deleted, files are CASCADE soft-deleted
+// 2. But file processing workflows continue running (designed to handle soft-deleted files)
+// 3. Cleanup must wait for these workflows to complete before dropping the Milvus collection
+func (r *repository) GetFileCountByKnowledgeBaseUIDIncludingDeleted(ctx context.Context, kbUID types.KBUIDType, processStatus string) (int64, error) {
+	var count int64
+
+	// Do NOT filter by delete_time - we need to count soft-deleted files too
+	query := r.db.WithContext(ctx).
+		Table(KnowledgeBaseFileTableName).
+		Where(fmt.Sprintf("%v = ?", KnowledgeBaseFileColumn.KnowledgeBaseUID), kbUID)
+
+	// Add process status filter if specified
+	// Support comma-separated list of statuses for IN clause
+	if processStatus != "" {
+		statuses := strings.Split(processStatus, ",")
+		if len(statuses) == 1 {
+			// Single status: use exact match
+			query = query.Where(fmt.Sprintf("%v = ?", KnowledgeBaseFileColumn.ProcessStatus), processStatus)
+		} else {
+			// Multiple statuses: use IN clause
+			query = query.Where(fmt.Sprintf("%v IN ?", KnowledgeBaseFileColumn.ProcessStatus), statuses)
+		}
+	}
+
+	err := query.Count(&count).Error
+	if err != nil {
+		return 0, fmt.Errorf("error counting files (including deleted): %w", err)
 	}
 
 	return count, nil
@@ -654,8 +733,9 @@ func (r *repository) GetKnowledgeBaseFilesByFileUIDsIncludingDeleted(
 		stringUIDs = append(stringUIDs, uid.String())
 	}
 	// CRITICAL: Do NOT filter by delete_time - include soft-deleted files
+	// Use .Unscoped() to bypass gorm.DeletedAt filtering
 	where := fmt.Sprintf("%v IN ?", KnowledgeBaseFileColumn.UID)
-	query := r.db.WithContext(ctx)
+	query := r.db.WithContext(ctx).Unscoped() // Include soft-deleted files
 	if len(columns) > 0 {
 		query = query.Select(columns)
 	}
@@ -682,10 +762,10 @@ func (r *repository) GetKnowledgeBaseFilesByName(
 ) ([]KnowledgeBaseFileModel, error) {
 	var files []KnowledgeBaseFileModel
 
-	where := fmt.Sprintf("%v = ? AND %v = ? AND %v IS NULL",
+	// GORM's DeletedAt automatically filters out soft-deleted files, so no manual check needed
+	where := fmt.Sprintf("%v = ? AND %v = ?",
 		KnowledgeBaseFileColumn.KnowledgeBaseUID,
-		KnowledgeBaseFileColumn.Name,
-		KnowledgeBaseFileColumn.DeleteTime)
+		KnowledgeBaseFileColumn.Name)
 
 	if err := r.db.WithContext(ctx).
 		Where(where, kbUID, fileName).

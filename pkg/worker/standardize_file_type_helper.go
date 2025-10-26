@@ -93,9 +93,9 @@ func needsFileConversion(fileType artifactpb.File_Type) (bool, string) {
 }
 
 // convertUsingPipeline converts a file using the indexing-convert-file-type pipeline
-func (w *Worker) convertUsingPipeline(ctx context.Context, content []byte, sourceType artifactpb.File_Type, targetFormat string, pipelines []pipeline.PipelineRelease) ([]byte, pipeline.PipelineRelease, error) {
+func (w *Worker) convertUsingPipeline(ctx context.Context, content []byte, sourceType artifactpb.File_Type, targetFormat string, pipelines []pipeline.Release) ([]byte, pipeline.Release, error) {
 	if len(pipelines) == 0 {
-		return nil, pipeline.PipelineRelease{}, fmt.Errorf("no pipelines provided")
+		return nil, pipeline.Release{}, fmt.Errorf("no pipelines provided")
 	}
 
 	// Use the first available pipeline (indexing-convert-file-type)

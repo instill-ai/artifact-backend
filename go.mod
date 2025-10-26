@@ -13,10 +13,12 @@ require (
 	github.com/google/go-cmp v0.7.0
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.1
-	github.com/instill-ai/protogen-go v0.3.3-alpha.0.20251021120500-309474e9c8c4
+	github.com/iancoleman/strcase v0.3.0
+	github.com/instill-ai/protogen-go v0.3.3-alpha.0.20251025213338-ef545c5cfb61
 	github.com/instill-ai/usage-client v0.4.0
 	github.com/instill-ai/x v0.10.1-alpha
 	github.com/knadh/koanf v1.5.0
+	github.com/mennanov/fieldmask-utils v1.1.2
 	github.com/milvus-io/milvus-sdk-go/v2 v2.4.2
 	github.com/minio/minio-go/v7 v7.0.92
 	github.com/openai/openai-go/v3 v3.4.0
@@ -147,6 +149,7 @@ require (
 	golang.org/x/sys v0.33.0 // indirect
 	golang.org/x/text v0.26.0 // indirect
 	golang.org/x/time v0.11.0 // indirect
+	google.golang.org/genproto v0.0.0-20250303144028-a0af3efb3deb // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250603155806-513f23925822 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250603155806-513f23925822 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect

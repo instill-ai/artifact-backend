@@ -8,11 +8,13 @@ import {
 import { artifactRESTPublicHost } from "./const.js";
 
 import * as constant from "./const.js";
+import * as helper from "./helper.js";
 import * as restPublic from './rest-public.js';
 import * as restPublicWithJwt from './rest-public-with-jwt.js';
 
 export let options = {
   setupTimeout: '30s',
+  teardownTimeout: '180s',
   iterations: 1,
   duration: '120m',
   insecureSkipTLSVerify: true,
@@ -25,17 +27,12 @@ export function setup() {
 
   check(true, { [constant.banner('Artifact API: Setup')]: () => true });
 
-  // Clean up any leftover test data from previous runs (especially important in CI)
-  // This prevents unique constraint violations from stale data
-  try {
-    constant.db.exec(`DELETE FROM text_chunk WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-    constant.db.exec(`DELETE FROM embedding WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-    constant.db.exec(`DELETE FROM converted_file WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-    constant.db.exec(`DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`);
-    constant.db.exec(`DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`);
-  } catch (e) {
-    console.log(`Setup cleanup warning: ${e}`);
-  }
+  // Add stagger to reduce parallel resource contention
+  helper.staggerTestExecution(2);
+
+  // CRITICAL: Generate unique prefix for THIS test file to avoid parallel test conflicts
+  const testPrefix = constant.generateDBIDPrefix();
+  console.log(`rest.js: Using unique test prefix: ${testPrefix}`);
 
   var loginResp = http.request("POST", `${constant.mgmtRESTPublicHost}/v1beta/auth/login`, JSON.stringify({
     "username": constant.defaultUsername,
@@ -57,7 +54,7 @@ export function setup() {
   }
 
   var resp = http.request("GET", `${constant.mgmtRESTPublicHost}/v1beta/user`, {}, { headers: { "Authorization": `Bearer ${loginResp.json().accessToken}` } })
-  return { header: header, expectedOwner: resp.json().user }
+  return { header: header, expectedOwner: resp.json().user, testPrefix: testPrefix }
 }
 
 export default function (data) {
@@ -102,34 +99,32 @@ export function teardown(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
-    // Note: dbIDPrefix is randomized per test run, so this only cleans up resources from THIS run
-    // This allows parallel test execution without collisions
+    // CRITICAL: Wait for THIS TEST's file processing to complete before deleting catalogs
+    // Deleting catalogs triggers cleanup workflows that drop vector DB collections
+    // If we delete while files are still processing, we get "collection does not exist" errors
+    console.log("Teardown: Waiting for this test's file processing to complete...");
+    const allProcessingComplete = helper.waitForAllFileProcessingComplete(120, data.testPrefix);
+    if (!allProcessingComplete) {
+      console.warn("Teardown: Some files still processing after 120s, proceeding anyway");
+    }
+
+    // Note: testPrefix is unique per test file, so this only cleans up resources from THIS test file
+    // This prevents parallel tests from interfering with each other
+    console.log(`rest.js teardown: Cleaning up resources with prefix: ${data.testPrefix}`);
     var listResp = http.request("GET", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, data.header)
     if (listResp.status === 200) {
       var catalogs = Array.isArray(listResp.json().catalogs) ? listResp.json().catalogs : []
 
       for (const catalog of catalogs) {
-        if (catalog.catalog_id && catalog.catalog_id.startsWith(constant.dbIDPrefix)) {
-          var delResp = http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalog.catalog_id}`, null, data.header);
+        // API returns catalogId (camelCase), not catalog_id
+        const catId = catalog.catalogId || catalog.catalog_id;
+        if (catId && catId.startsWith(data.testPrefix)) {
+          var delResp = http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catId}`, null, data.header);
           check(delResp, {
-            [`DELETE /v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalog.catalog_id} response status is 200 or 404`]: (r) => r.status === 200 || r.status === 404,
+            [`DELETE /v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catId} response status is 200 or 404`]: (r) => r.status === 200 || r.status === 404,
           });
         }
       }
     }
-
-    // Final DB cleanup (defensive - in case workflows didn't complete)
-    // Delete from child tables first, before deleting parent records
-    try {
-      constant.db.exec(`DELETE FROM text_chunk WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-      constant.db.exec(`DELETE FROM embedding WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-      constant.db.exec(`DELETE FROM converted_file WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-      constant.db.exec(`DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`);
-      constant.db.exec(`DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`);
-    } catch (e) {
-      console.log(`Teardown DB cleanup warning: ${e}`);
-    }
-
-    constant.db.close();
   });
 }

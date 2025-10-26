@@ -78,18 +78,41 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 		return nil, err
 	}
 
-	// Get default embedding configuration from system_metadata
-	// This ensures new KBs use the current system-wide standard
-	// (e.g., OpenAI/1536 during migration, Gemini/3072 after migration)
-	defaultConfig, err := ph.service.Repository().GetDefaultEmbeddingConfig(ctx, "default")
-	if err != nil {
-		return nil, fmt.Errorf("getting default embedding config: %w", err)
+	// Determine system to use
+	// System ID defines how the knowledge base will be created based on the system's
+	// RAG configurations including AI model family, embedding vector dimensionality,
+	// chunking method, and other RAG-related settings
+	var system *repository.SystemModel
+	if req.SystemId != nil && *req.SystemId != "" {
+		// Get system record from system table using the specified ID
+		// This retrieves both the UID (for FK) and config (for dimensionality)
+		system, err = ph.service.Repository().GetSystem(ctx, *req.SystemId)
+	} else {
+		// No system_id specified, use the default system
+		system, err = ph.service.Repository().GetDefaultSystem(ctx)
 	}
+	if err != nil {
+		if req.SystemId != nil && *req.SystemId != "" {
+			return nil, fmt.Errorf("getting system for ID %q: %w", *req.SystemId, err)
+		}
+		return nil, fmt.Errorf("getting default system: %w", err)
+	}
+
+	systemConfig, err := system.GetConfigJSON()
+	if err != nil {
+		return nil, fmt.Errorf("parsing system config for ID %q: %w", system.ID, err)
+	}
+
+	logger.Info("Using system config",
+		zap.String("systemID", system.ID),
+		zap.Bool("is_default", system.IsDefault),
+		zap.String("modelFamily", systemConfig.RAG.Embedding.ModelFamily),
+		zap.Uint32("dimensionality", systemConfig.RAG.Embedding.Dimensionality))
 
 	// external service call - create catalog collection and set ACL in openFAG
 	callExternalService := func(kbUID types.KBUIDType) error {
-		// Create collection with dimensionality from default embedding config
-		err := ph.service.Repository().CreateCollection(ctx, constant.KBCollectionName(kbUID), defaultConfig.Dimensionality)
+		// Create collection with dimensionality from system config
+		err := ph.service.Repository().CreateCollection(ctx, constant.KBCollectionName(kbUID), systemConfig.RAG.Embedding.Dimensionality)
 		if err != nil {
 			return fmt.Errorf("creating vector database collection: %w", err)
 		}
@@ -115,13 +138,13 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 		repository.KnowledgeBaseModel{
 			Name: req.Name,
 			// make name as kbID
-			KBID:            req.Name,
-			Description:     req.Description,
-			Tags:            req.Tags,
-			Owner:           ns.NsUID.String(),
-			CreatorUID:      creatorUUID,
-			CatalogType:     req.GetType().String(),
-			EmbeddingConfig: *defaultConfig, // Use system default
+			KBID:        req.Name,
+			Description: req.Description,
+			Tags:        req.Tags,
+			Owner:       ns.NsUID.String(),
+			CreatorUID:  creatorUUID,
+			CatalogType: req.GetType().String(),
+			SystemUID:   system.UID,
 		},
 		callExternalService,
 	)
@@ -146,8 +169,8 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 		UsedStorage:         0,
 		ActiveCollectionUid: activeCollectionUID,
 		EmbeddingConfig: &artifactpb.Catalog_EmbeddingConfig{
-			ModelFamily:    dbData.EmbeddingConfig.ModelFamily,
-			Dimensionality: dbData.EmbeddingConfig.Dimensionality,
+			ModelFamily:    systemConfig.RAG.Embedding.ModelFamily,
+			Dimensionality: systemConfig.RAG.Embedding.Dimensionality,
 		},
 	}
 
@@ -191,7 +214,8 @@ func (ph *PublicHandler) ListCatalogs(ctx context.Context, req *artifactpb.ListC
 		)
 	}
 
-	dbData, err := ph.service.Repository().ListKnowledgeBasesByCatalogType(ctx, ns.NsUID.String(), artifactpb.CatalogType_CATALOG_TYPE_PERSISTENT)
+	// Use ListKnowledgeBasesByCatalogTypeWithConfig to get KBs with their system configs
+	dbData, err := ph.service.Repository().ListKnowledgeBasesByCatalogTypeWithConfig(ctx, ns.NsUID.String(), artifactpb.CatalogType_CATALOG_TYPE_PERSISTENT)
 	if err != nil {
 		logger.Error("failed to get catalogs", zap.Error(err))
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
@@ -237,8 +261,8 @@ func (ph *PublicHandler) ListCatalogs(ctx context.Context, req *artifactpb.ListC
 			UsedStorage:         uint64(kb.Usage),
 			ActiveCollectionUid: activeCollectionUID,
 			EmbeddingConfig: &artifactpb.Catalog_EmbeddingConfig{
-				ModelFamily:    kb.EmbeddingConfig.ModelFamily,
-				Dimensionality: kb.EmbeddingConfig.Dimensionality,
+				ModelFamily:    kb.SystemConfig.RAG.Embedding.ModelFamily,
+				Dimensionality: kb.SystemConfig.RAG.Embedding.Dimensionality,
 			},
 		}
 
@@ -313,6 +337,12 @@ func (ph *PublicHandler) UpdateCatalog(ctx context.Context, req *artifactpb.Upda
 		return nil, fmt.Errorf("updating catalog: %w", err)
 	}
 
+	// Fetch KB with system config for the response
+	kbWithConfig, err := ph.service.Repository().GetKnowledgeBaseByUIDWithConfig(ctx, kb.UID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get KB with config: %w", err)
+	}
+
 	fileCount, err := ph.service.Repository().GetFileCountByKnowledgeBaseUID(ctx, kb.UID, "")
 	if err != nil {
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
@@ -338,8 +368,8 @@ func (ph *PublicHandler) UpdateCatalog(ctx context.Context, req *artifactpb.Upda
 		TotalTokens:    uint32(tokenCounts[kb.UID]),
 		UsedStorage:    uint64(kb.Usage),
 		EmbeddingConfig: &artifactpb.Catalog_EmbeddingConfig{
-			ModelFamily:    kb.EmbeddingConfig.ModelFamily,
-			Dimensionality: kb.EmbeddingConfig.Dimensionality,
+			ModelFamily:    kbWithConfig.SystemConfig.RAG.Embedding.ModelFamily,
+			Dimensionality: kbWithConfig.SystemConfig.RAG.Embedding.Dimensionality,
 		},
 	}
 
@@ -422,39 +452,53 @@ func (ph *PublicHandler) DeleteCatalog(ctx context.Context, req *artifactpb.Dele
 		)
 	}
 
-	// CRITICAL: Wait for any in-progress file processing to complete before cleanup
-	// This prevents race conditions where file workflows try to access resources
-	// (Milvus collections, DB records) that are being deleted by cleanup workflow
-	inProgressStatuses := artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_PROCESSING.String() + "," +
-		artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CONVERTING.String() + "," +
-		artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CHUNKING.String() + "," +
-		artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_EMBEDDING.String()
+	// CRITICAL: For production KBs, block deletion if files are being processed
+	// For staging/rollback KBs, deletion will use a transaction with row-level locking
+	// to atomically delete the KB and CASCADE delete all files
+	if !kb.Staging {
+		inProgressStatuses := artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_PROCESSING.String() + "," +
+			artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CHUNKING.String() + "," +
+			artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_EMBEDDING.String()
 
-	inProgressCount, err := ph.service.Repository().GetFileCountByKnowledgeBaseUID(ctx, kb.UID, inProgressStatuses)
-	if err != nil {
-		logger.Error("failed to check for in-progress files", zap.Error(err))
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("failed to verify file processing status: %w", err),
-			"Unable to verify if files are being processed. Please try again.",
-		)
-	}
+		inProgressCount, err := ph.service.Repository().GetFileCountByKnowledgeBaseUID(ctx, kb.UID, inProgressStatuses)
+		if err != nil {
+			logger.Error("failed to check for in-progress files", zap.Error(err))
+			return nil, errorsx.AddMessage(
+				fmt.Errorf("failed to verify file processing status: %w", err),
+				"Unable to verify if files are being processed. Please try again.",
+			)
+		}
 
-	if inProgressCount > 0 {
-		logger.Warn("Catalog has in-progress file operations, blocking deletion",
-			zap.String("catalogID", req.CatalogId),
-			zap.String("catalogUID", kb.UID.String()),
-			zap.Int64("inProgressCount", inProgressCount))
+		if inProgressCount > 0 {
+			// Production KB: Block deletion to protect user data
+			logger.Warn("Production catalog has in-progress file operations, blocking deletion",
+				zap.String("catalogID", req.CatalogId),
+				zap.String("catalogUID", kb.UID.String()),
+				zap.Int64("inProgressCount", inProgressCount))
 
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("%w: files are being processed", errorsx.ErrRateLimiting),
-			fmt.Sprintf("Catalog has %d files currently being processed. Please wait for processing to complete before deleting, or cancel the file processing operations first.", inProgressCount),
-		)
+			return nil, errorsx.AddMessage(
+				fmt.Errorf("%w: files are being processed", errorsx.ErrRateLimiting),
+				fmt.Sprintf("Catalog has %d files currently being processed. Please wait for processing to complete before deleting, or cancel the file processing operations first.", inProgressCount),
+			)
+		}
 	}
 
 	deletedKb, err := ph.service.Repository().DeleteKnowledgeBase(ctx, ns.NsUID.String(), req.CatalogId)
 	if err != nil {
 		logger.Error("failed to delete catalog", zap.Error(err))
 		return nil, err
+	}
+
+	// Get system configuration for the response
+	system, err := ph.service.Repository().GetSystemByUID(ctx, deletedKb.SystemUID)
+	if err != nil {
+		logger.Error("failed to get system config for deleted catalog", zap.Error(err))
+		return nil, fmt.Errorf("failed to retrieve system config: %w", err)
+	}
+	systemConfig, err := system.GetConfigJSON()
+	if err != nil {
+		logger.Error("failed to parse system config for deleted catalog", zap.Error(err))
+		return nil, fmt.Errorf("failed to parse system config: %w", err)
 	}
 
 	// Trigger Temporal workflow for background cleanup
@@ -478,8 +522,8 @@ func (ph *PublicHandler) DeleteCatalog(ctx context.Context, req *artifactpb.Dele
 			TotalTokens:    0,
 			UsedStorage:    0,
 			EmbeddingConfig: &artifactpb.Catalog_EmbeddingConfig{
-				ModelFamily:    deletedKb.EmbeddingConfig.ModelFamily,
-				Dimensionality: deletedKb.EmbeddingConfig.Dimensionality,
+				ModelFamily:    systemConfig.RAG.Embedding.ModelFamily,
+				Dimensionality: systemConfig.RAG.Embedding.Dimensionality,
 			},
 		},
 	}, nil

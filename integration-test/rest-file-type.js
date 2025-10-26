@@ -17,11 +17,13 @@ function logUnexpected(res, label) {
 
 export let options = {
   setupTimeout: '300s',
+  teardownTimeout: '180s',
   insecureSkipTLSVerify: true,
   thresholds: {
     checks: ["rate == 1.0"],
   },
   // Parallel source scenarios per file type (exec functions are defined below)
+  // startTime staggers HTTP requests to prevent k6 HTTP client overload (13 parallel connections)
   scenarios: {
     test_type_text: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_TEXT' },
     test_type_markdown: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MARKDOWN' },
@@ -36,6 +38,19 @@ export let options = {
     test_type_docx: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOCX' },
     test_type_doc_uppercase: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOC_UPPERCASE' },
     test_type_docx_uppercase: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOCX_UPPERCASE' },
+    // Regression tests: Type inference from filename (type field omitted)
+    // These tests ensure the backend correctly infers file type from extension when type is not provided
+    test_type_text_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_TEXT_INFERRED' },
+    test_type_markdown_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MARKDOWN_INFERRED' },
+    test_type_csv_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_CSV_INFERRED' },
+    test_type_html_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_HTML_INFERRED' },
+    test_type_pdf_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PDF_INFERRED' },
+    test_type_ppt_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PPT_INFERRED' },
+    test_type_pptx_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PPTX_INFERRED' },
+    test_type_xls_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_XLS_INFERRED' },
+    test_type_xlsx_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_XLSX_INFERRED' },
+    test_type_doc_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOC_INFERRED' },
+    test_type_docx_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOCX_INFERRED' },
   },
 };
 
@@ -43,17 +58,7 @@ export function setup() {
 
   check(true, { [constant.banner('Artifact API: Setup')]: () => true });
 
-  // Clean up any leftover test data from previous runs
-  try {
-    constant.db.exec(`DELETE FROM text_chunk WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-    constant.db.exec(`DELETE FROM embedding WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-    constant.db.exec(`DELETE FROM converted_file WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-    constant.db.exec(`DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`);
-    constant.db.exec(`DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`);
-  } catch (e) {
-    console.log(`Setup cleanup warning: ${e}`);
-  }
-
+  // Authenticate FIRST (required for API calls and cleanup)
   var loginResp = http.request("POST", `${constant.mgmtRESTPublicHost}/v1beta/auth/login`, JSON.stringify({
     "username": constant.defaultUsername,
     "password": constant.defaultPassword,
@@ -74,7 +79,17 @@ export function setup() {
   }
 
   var resp = http.request("GET", `${constant.mgmtRESTPublicHost}/v1beta/user`, {}, { headers: { "Authorization": `Bearer ${loginResp.json().accessToken}` } })
-  return { header: header, expectedOwner: resp.json().user }
+
+  // CRITICAL: Clean up ALL test-% catalogs from previous runs BEFORE generating this run's prefix
+  // This prevents zombie files from blocking the worker queue and causing tests to hang
+  helper.cleanupPreviousTestCatalogs(resp.json().user.id, header);
+
+  // NOW generate THIS test run's unique prefix (after cleanup)
+  // From this point forward, ALL test-% catalogs belong to THIS test run
+  const dbIDPrefix = constant.generateDBIDPrefix();
+  console.log(`rest-file-type.js: Using unique test prefix: ${dbIDPrefix}`);
+
+  return { header: header, expectedOwner: resp.json().user, dbIDPrefix: dbIDPrefix }
 }
 
 export function teardown(data) {
@@ -82,33 +97,42 @@ export function teardown(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
+    // CRITICAL: Wait for THIS TEST's file processing to complete before deleting catalogs
+    // Deleting catalogs triggers cleanup workflows that drop vector DB collections
+    // If we delete while files are still processing, we get "collection does not exist" errors
+    // IMPORTANT: We MUST NOT proceed with deletion if files are still processing, as this creates
+    // zombie workflows that continue running after the KB/files are deleted.
+    console.log("Teardown: Waiting for this test's file processing to complete...");
+    const allProcessingComplete = helper.waitForAllFileProcessingComplete(300, data.dbIDPrefix); // Increased to 5 minutes
+
+    check({ allProcessingComplete }, {
+      "Teardown: All files processed before cleanup (no zombie workflows)": () => allProcessingComplete === true,
+    });
+
+    if (!allProcessingComplete) {
+      console.error("Teardown: Files still processing after timeout - CANNOT safely delete catalogs");
+      console.error("Teardown: Leaving catalogs in place to avoid zombie workflows");
+      console.error("Teardown: Manual cleanup may be required or increase timeout");
+      // CRITICAL: Do NOT proceed with deletion - this would create zombie workflows
+      // Better to leave test artifacts than to create workflows that fail with "collection does not exist"
+      return;
+    }
+
     // Delete catalogs via API (which triggers cleanup workflows)
     var listResp = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, data.header)
     if (listResp.status === 200) {
       var catalogs = Array.isArray(listResp.json().catalogs) ? listResp.json().catalogs : []
       for (const catalog of catalogs) {
-        if (catalog.catalog_id && catalog.catalog_id.startsWith(constant.dbIDPrefix)) {
-          var delResp = http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalog.catalog_id}`, null, data.header);
+        // API returns catalogId (camelCase), not catalog_id
+        const catId = catalog.catalogId || catalog.catalog_id;
+        if (catId && catId.startsWith(data.dbIDPrefix)) {
+          var delResp = http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catId}`, null, data.header);
           check(delResp, {
-            [`DELETE /v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalog.catalog_id} response status is 200 or 404`]: (r) => r.status === 200 || r.status === 404,
+            [`DELETE /v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catId} response status is 200 or 404`]: (r) => r.status === 200 || r.status === 404,
           });
         }
       }
     }
-
-    // Final DB cleanup (defensive - in case workflows didn't complete)
-    // Delete from child tables first, before deleting parent records
-    try {
-      constant.db.exec(`DELETE FROM text_chunk WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-      constant.db.exec(`DELETE FROM embedding WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-      constant.db.exec(`DELETE FROM converted_file WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-      constant.db.exec(`DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`);
-      constant.db.exec(`DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`);
-    } catch (e) {
-      console.log(`Teardown DB cleanup warning: ${e}`);
-    }
-
-    constant.db.close();
   });
 }
 
@@ -128,16 +152,30 @@ export function TEST_TYPE_DOCX(data) { runCatalogFileTest(data, { originalName: 
 export function TEST_TYPE_DOC_UPPERCASE(data) { runCatalogFileTest(data, { originalName: "SAMPLE-UPPERCASE-FILENAME.DOC", fileType: "TYPE_DOC" }); }
 export function TEST_TYPE_DOCX_UPPERCASE(data) { runCatalogFileTest(data, { originalName: "SAMPLE-UPPERCASE-FILENAME.DOCX", fileType: "TYPE_DOCX" }); }
 
+// Regression tests: Type inference from filename (type field omitted)
+// These tests ensure the backend correctly infers file type from extension
+export function TEST_TYPE_TEXT_INFERRED(data) { runCatalogFileTest(data, { originalName: "sample.txt", fileType: "TYPE_TEXT", omitType: true }); }
+export function TEST_TYPE_MARKDOWN_INFERRED(data) { runCatalogFileTest(data, { originalName: "sample.md", fileType: "TYPE_MARKDOWN", omitType: true }); }
+export function TEST_TYPE_CSV_INFERRED(data) { runCatalogFileTest(data, { originalName: "sample.csv", fileType: "TYPE_CSV", omitType: true }); }
+export function TEST_TYPE_HTML_INFERRED(data) { runCatalogFileTest(data, { originalName: "sample.html", fileType: "TYPE_HTML", omitType: true }); }
+export function TEST_TYPE_PDF_INFERRED(data) { runCatalogFileTest(data, { originalName: "sample.pdf", fileType: "TYPE_PDF", omitType: true }); }
+export function TEST_TYPE_PPT_INFERRED(data) { runCatalogFileTest(data, { originalName: "sample.ppt", fileType: "TYPE_PPT", omitType: true }); }
+export function TEST_TYPE_PPTX_INFERRED(data) { runCatalogFileTest(data, { originalName: "sample.pptx", fileType: "TYPE_PPTX", omitType: true }); }
+export function TEST_TYPE_XLS_INFERRED(data) { runCatalogFileTest(data, { originalName: "sample.xls", fileType: "TYPE_XLS", omitType: true }); }
+export function TEST_TYPE_XLSX_INFERRED(data) { runCatalogFileTest(data, { originalName: "sample.xlsx", fileType: "TYPE_XLSX", omitType: true }); }
+export function TEST_TYPE_DOC_INFERRED(data) { runCatalogFileTest(data, { originalName: "sample.doc", fileType: "TYPE_DOC", omitType: true }); }
+export function TEST_TYPE_DOCX_INFERRED(data) { runCatalogFileTest(data, { originalName: "sample.docx", fileType: "TYPE_DOCX", omitType: true }); }
+
 // Internal helper to run catalog file test for each file type
 function runCatalogFileTest(data, opts) {
   const groupName = "Artifact API: Catalog file type test";
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
-    const { fileType, originalName } = opts || {};
+    const { fileType, originalName, omitType } = opts || {};
 
     // Create catalog (name must be < 32 chars: test-{4}-src-{8} = 23 chars)
-    const cRes = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, JSON.stringify({ name: constant.dbIDPrefix + "src-" + randomString(8) }), data.header);
+    const cRes = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, JSON.stringify({ name: data.dbIDPrefix + "src-" + randomString(8) }), data.header);
     logUnexpected(cRes, 'POST /v1alpha/namespaces/{namespace_id}/catalogs');
     const catalog = ((() => { try { return cRes.json(); } catch (e) { return {}; } })()).catalog || {};
     const catalogId = catalog.catalogId;
@@ -159,13 +197,23 @@ function runCatalogFileTest(data, opts) {
       ? ((x) => x.originalName === originalName)
       : ((x) => x.type === fileType);
     const s = (constant.sampleFiles.find(selector) || {});
-    const fileName = constant.dbIDPrefix + (s.originalName || ("sample-" + randomString(6)));
-    const fReq = { name: fileName, type: fileType, content: s.content || "" };
+    const fileName = data.dbIDPrefix + (s.originalName || ("sample-" + randomString(6)));
+
+    // If omitType is true, don't include the type field to test backend type inference
+    const fReq = omitType
+      ? { name: fileName, content: s.content || "" }
+      : { name: fileName, type: fileType, content: s.content || "" };
+
+    if (omitType) {
+      console.log(`Testing type inference for ${fileType}: uploading with filename only (no type field)`);
+    }
+
     const uRes = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`, JSON.stringify(fReq), data.header);
     logUnexpected(uRes, 'POST /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files');
     const file = ((() => { try { return uRes.json(); } catch (e) { return {}; } })()).file || {};
     const fileUid = file.fileUid;
-    check(uRes, { [`POST /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files 200 (${fileUid})`]: (r) => r.status === 200 });
+    const testLabel = omitType ? `${fileType} [TYPE INFERRED]` : fileType;
+    check(uRes, { [`POST /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files 200 (${testLabel})`]: (r) => r.status === 200 });
 
     // List catalog files and ensure our file is present
     const listCatalogFilesRes = http.request(
@@ -179,8 +227,8 @@ function runCatalogFileTest(data, opts) {
     const catalogFilesArr = Array.isArray(listCatalogFilesJson.files) ? listCatalogFilesJson.files : [];
     const containsUploadedCatalogFile = catalogFilesArr.some((f) => f.fileUid === fileUid);
     check(listCatalogFilesRes, {
-      [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files 200 (${fileType})`]: (r) => r.status === 200,
-      [`List contains uploaded file (${fileType})`]: () => containsUploadedCatalogFile,
+      [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files 200 (${testLabel})`]: (r) => r.status === 200,
+      [`List contains uploaded file (${testLabel})`]: () => containsUploadedCatalogFile,
     });
 
     // GET single catalog file and validate
@@ -193,17 +241,14 @@ function runCatalogFileTest(data, opts) {
     logUnexpected(getCatalogFileRes, 'GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid}');
     let getCatalogFileJson; try { getCatalogFileJson = getCatalogFileRes.json(); } catch (e) { getCatalogFileJson = {}; }
     check(getCatalogFileRes, {
-      [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid} 200 (${fileType})`]: (r) => r.status === 200,
-      [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid} uid matches (${fileType})`]: () => getCatalogFileJson.file && getCatalogFileJson.file.fileUid === fileUid,
-      [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid} name matches (${fileType})`]: () => getCatalogFileJson.file && getCatalogFileJson.file.name === fileName,
-      [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid} is valid (${fileType})`]: () => getCatalogFileJson.file && helper.validateFile(getCatalogFileJson.file, false),
+      [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid} 200 (${testLabel})`]: (r) => r.status === 200,
+      [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid} uid matches (${testLabel})`]: () => getCatalogFileJson.file && getCatalogFileJson.file.fileUid === fileUid,
+      [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid} name matches (${testLabel})`]: () => getCatalogFileJson.file && getCatalogFileJson.file.name === fileName,
+      [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid} is valid (${testLabel})`]: () => getCatalogFileJson.file && helper.validateFile(getCatalogFileJson.file, false),
     });
 
-    // Process file and wait for completion
-    const getProcessRes = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/catalogs/files/processAsync`, JSON.stringify({ fileUids: [fileUid] }), data.header);
-    logUnexpected(getProcessRes, 'POST /v1alpha/catalogs/files/processAsync');
-    check(getProcessRes, { [`POST /v1alpha/catalogs/files/processAsync 200 (${fileUid})`]: (r) => r.status === 200 });
-
+    // Auto-trigger: Processing starts automatically on upload (no manual trigger needed)
+    // Wait for file processing to complete by polling status
     let getProcessStatusRes; let completed = false; let failed = false; let failureReason = "";
     for (let i = 0; i < 3600; i++) {
       getProcessStatusRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${fileUid}`, null, data.header);
@@ -216,23 +261,23 @@ function runCatalogFileTest(data, opts) {
         } else if (getProcessStatusRes.status === 200 && st === "FILE_PROCESS_STATUS_FAILED") {
           failed = true;
           failureReason = (body.file && body.file.processOutcome) || "Unknown error";
-          console.log(`✗ File processing failed for ${fileType}: ${failureReason}`);
+          console.log(`✗ File processing failed for ${testLabel}: ${failureReason}`);
           break;
         }
         // Log progress every 30 seconds for slow processing files
         if (i > 0 && i % 60 === 0) {
-          console.log(`⏳ Still processing ${fileType} after ${i * 0.5}s, status: ${st}`);
+          console.log(`⏳ Still processing ${testLabel} after ${i * 0.5}s, status: ${st}`);
         }
       } catch (e) { }
       sleep(0.5);
     }
     check(getProcessStatusRes, {
-      [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid} 200 and Process Status Reached COMPLETED (${fileType})`]: () => completed === true,
-      [`File processing did not fail (${fileType})`]: () => !failed,
+      [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid} 200 and Process Status Reached COMPLETED (${testLabel})`]: () => completed === true,
+      [`File processing did not fail (${testLabel})`]: () => !failed,
     });
 
     if (failed) {
-      console.log(`✗ Skipping remaining checks for ${fileType} due to processing failure: ${failureReason}`);
+      console.log(`✗ Skipping remaining checks for ${testLabel} due to processing failure: ${failureReason}`);
       // Don't delete here - let teardown handle cleanup
       return;
     }
@@ -240,12 +285,12 @@ function runCatalogFileTest(data, opts) {
     // Get the single-source-of-truth processed file source
     const getCatalogFileSource = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${fileUid}/source`, null, data.header);
     logUnexpected(getCatalogFileSource, 'GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid}/source');
-    check(getCatalogFileSource, { [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid}/source 200 (${fileType})`]: (r) => r.status === 200 });
+    check(getCatalogFileSource, { [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid}/source 200 (${testLabel})`]: (r) => r.status === 200 });
 
     // Get file summary
     const getSummaryRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${fileUid}/summary`, null, data.header);
     logUnexpected(getSummaryRes, 'GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid}/summary');
-    check(getSummaryRes, { [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid}/summary 200 (${fileType})`]: (r) => r.status === 200 });
+    check(getSummaryRes, { [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid}/summary 200 (${testLabel})`]: (r) => r.status === 200 });
 
     // List chunks for this file
     const listChunksUrl = `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/chunks?file_uid=${fileUid}&fileUid=${fileUid}`;
@@ -253,7 +298,7 @@ function runCatalogFileTest(data, opts) {
     logUnexpected(listChunksRes, 'GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/chunks');
     let listChunksJson; try { listChunksJson = listChunksRes.json(); } catch (e) { listChunksJson = {}; }
     check(listChunksRes, {
-      [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/chunks 200 (${fileType})`]: (r) => r.status === 200,
+      [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/chunks 200 (${testLabel})`]: (r) => r.status === 200,
     });
   });
 }

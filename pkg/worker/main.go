@@ -375,8 +375,8 @@ type UpdateRAGIndexResult struct {
 // ExecuteKnowledgeBaseUpdate triggers knowledge base updates for specified catalogs
 // This method is the entry point for the 6-phase UpdateKnowledgeBaseWorkflow
 // If catalogIDs is empty, updates all eligible KBs. Otherwise, updates only specified KBs.
-// If systemProfile is specified, uses config from that profile; otherwise uses KB's current config.
-func (w *Worker) ExecuteKnowledgeBaseUpdate(ctx context.Context, catalogIDs []string, systemProfile string) (*UpdateRAGIndexResult, error) {
+// If systemID is specified, uses config from that system; otherwise uses KB's current config.
+func (w *Worker) ExecuteKnowledgeBaseUpdate(ctx context.Context, catalogIDs []string, systemID string) (*UpdateRAGIndexResult, error) {
 	// Get list of KBs to update
 	var kbs []repository.KnowledgeBaseModel
 	var err error
@@ -439,7 +439,7 @@ func (w *Worker) ExecuteKnowledgeBaseUpdate(ctx context.Context, catalogIDs []st
 			OriginalKBUID: kb.UID,
 			UserUID:       types.UserUIDType(ownerUID),
 			RequesterUID:  types.RequesterUIDType(kb.CreatorUID),
-			SystemProfile: systemProfile,
+			SystemID:      systemID,
 		})
 
 		if err != nil {
@@ -625,24 +625,27 @@ func (w *Worker) AbortKnowledgeBaseUpdate(ctx context.Context, catalogIDs []stri
 	}, nil
 }
 
-// RescheduleCleanupWorkflow cancels the existing cleanup workflow for a rollback KB
+// RescheduleCleanupWorkflow terminates the existing cleanup workflow for a rollback KB
 // and starts a new one with updated retention period.
 // This is used by SetRollbackRetention to update the cleanup schedule.
 func (w *Worker) RescheduleCleanupWorkflow(ctx context.Context, kbUID types.KBUIDType, cleanupAfterSeconds int64) error {
 	workflowID := fmt.Sprintf("cleanup-rollback-kb-%s", kbUID.String())
 
-	// Cancel the old cleanup workflow
-	err := w.temporalClient.CancelWorkflow(ctx, workflowID, "")
+	// CRITICAL: Terminate (not cancel) the old cleanup workflow
+	// Terminate is immediate and synchronous, while Cancel is async and the workflow keeps running
+	// until it checks for cancellation. We need immediate termination so we can reuse the workflow ID.
+	err := w.temporalClient.TerminateWorkflow(ctx, workflowID, "", "Retention period updated, rescheduling cleanup")
 	if err != nil {
 		// Log but don't fail - workflow might not exist or already completed
-		w.log.Info("Could not cancel old cleanup workflow (may not exist)",
+		w.log.Info("Could not terminate old cleanup workflow (may not exist or already completed)",
 			zap.String("workflowID", workflowID),
 			zap.Error(err))
 	}
 
 	// Start new cleanup workflow with updated retention
+	// Use the same workflow ID - now safe because old workflow was terminated
 	workflowOptions := client.StartWorkflowOptions{
-		ID:                       workflowID, // Reuse same ID
+		ID:                       workflowID,
 		TaskQueue:                "artifact-backend",
 		WorkflowExecutionTimeout: 7 * 24 * time.Hour, // Max 7 days
 	}

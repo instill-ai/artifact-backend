@@ -60,7 +60,7 @@ func main() {
 	defer cancel()
 	ctx = metadata.AppendToOutgoingContext(ctx, "Instill-Service", "instill")
 
-	upserter := &pipeline.PipelineReleaseUpserter{
+	upserter := &pipeline.ReleaseUpserter{
 		FS:                          pipeline.PresetPipelinesFS,
 		PipelinePublicServiceClient: pipelinePublicServiceClient,
 	}

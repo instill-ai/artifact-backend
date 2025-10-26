@@ -1,3 +1,68 @@
+/**
+ * Database Schema and Data Format Integration Tests
+ *
+ * This comprehensive test suite validates database schema correctness, data format
+ * consistency, and enum serialization across the Artifact backend.
+ *
+ * Test Coverage:
+ *
+ * 1. Catalog Type Enum Storage
+ *    - Verifies catalog_type uses full enum names (CATALOG_TYPE_PERSISTENT)
+ *    - Ensures enums are NOT stored as short forms ("persistent")
+ *
+ * 2. System Config Foreign Key and JSONB Format
+ *    - Validates system_uid foreign key relationship
+ *    - Verifies system.config JSONB structure (nested rag.embedding)
+ *    - Checks presence of model_family and dimensionality fields
+ *
+ * 3. Text Chunk Reference Format (PageRange)
+ *    - Verifies text_chunk.reference JSONB uses PascalCase "PageRange"
+ *    - Ensures NO snake_case "page_range" usage
+ *    - Validates reference structure integrity
+ *
+ * 4. Converted File Position Data Format (PageDelimiters)
+ *    - Verifies converted_file.position_data uses PascalCase "PageDelimiters"
+ *    - Ensures NO snake_case "page_delimiters" usage
+ *    - Validates position data structure
+ *
+ * 5. Single-Page File Position Data
+ *    - Verifies CSV, TEXT, MARKDOWN files have position_data populated
+ *    - Validates PageDelimiters array structure
+ *    - Checks delimiter values are positive integers
+ *
+ * 6. Content/Summary Chunk Separation
+ *    - Verifies content and summary reference different converted_file records
+ *    - Validates chunk_type field (TYPE_CONTENT vs TYPE_SUMMARY)
+ *    - Checks converted_type field (CONVERTED_FILE_TYPE_CONTENT/SUMMARY)
+ *
+ * 7. Field Naming Conventions (Multi-table Validation)
+ *    - 7.1: knowledge_base_file.file_type stores FileType enum (TYPE_*)
+ *    - 7.2: converted_file.content_type stores MIME type (text/markdown)
+ *    - 7.3: text_chunk uses MIME type (content_type) and classification (chunk_type)
+ *    - 7.4: embedding uses MIME type (content_type) and classification (chunk_type)
+ *    - 7.5: converted_file.converted_type has expected enum values
+ *
+ * 8. File.Type Enum Serialization in API Responses
+ *    - 8.1: List Files API returns valid TYPE_* enum strings
+ *    - 8.2: Get File API returns matching enum values
+ *    - 8.3: All file types (PDF, TEXT, MARKDOWN, CSV, DOCX) serialize correctly
+ *
+ * Test Data Management:
+ * - Creates test catalog with prefix pattern: test-{random}-db-{random}
+ * - Uploads multiple file types: PDF, TEXT, MARKDOWN, CSV, DOCX
+ * - Waits for file processing completion (up to 5 minutes)
+ * - Setup: Cleans orphaned catalogs from previous failed runs
+ * - Teardown: Waits for processing completion, then deletes test catalogs
+ *
+ * Database Access:
+ * - Uses direct SQL queries via constant.db for validation
+ * - Tests JSONB field structure using PostgreSQL ? operator
+ * - Validates data consistency between database and API responses
+ *
+ * @requires Database connection configured in constant.db
+ * @requires Multiple file types in constant.sampleFiles
+ */
+
 import http from "k6/http";
 import { check, group, sleep } from "k6";
 import { randomString } from "https://jslib.k6.io/k6-utils/1.1.0/index.js";
@@ -6,18 +71,6 @@ import { artifactRESTPublicHost } from "./const.js";
 
 import * as constant from "./const.js";
 import * as helper from "./helper.js";
-
-/**
- * Database Schema and Data Format Integration Tests
- *
- * This test suite verifies that the database schema and data formats are correct:
- * 1. Enum Storage: Verify enum values are stored as full strings (e.g., "CATALOG_TYPE_PERSISTENT")
- * 2. JSONB Formats: Verify JSONB fields use PascalCase (e.g., PageRange, PageDelimiters)
- * 3. Field Naming: Verify consistent field naming conventions across tables
- * 4. Content/Summary Separation: Verify content and summary are stored in separate converted_file records
- * 5. File.Type Enum: Verify File.Type enum is correctly serialized in API responses
- * 6. Position Data: Verify single-page files (CSV, TXT, MD, HTML) have position_data populated
- */
 
 function logUnexpected(res, label) {
     if (res && res.status !== 200) {
@@ -31,6 +84,7 @@ function logUnexpected(res, label) {
 
 export let options = {
     setupTimeout: '300s',
+    teardownTimeout: '180s',// Increased to accommodate file processing wait (120s) + cleanup
     insecureSkipTLSVerify: true,
     thresholds: {
         checks: ["rate == 1.0"],
@@ -43,16 +97,12 @@ export let options = {
 export function setup() {
     check(true, { [constant.banner('Artifact API: DB Tests Setup')]: () => true });
 
-    // Clean up any leftover test data from previous runs
-    try {
-        constant.db.exec(`DELETE FROM text_chunk WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-        constant.db.exec(`DELETE FROM embedding WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-        constant.db.exec(`DELETE FROM converted_file WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-        constant.db.exec(`DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`);
-        constant.db.exec(`DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`);
-    } catch (e) {
-        console.log(`Setup cleanup warning: ${e}`);
-    }
+    // Stagger test execution to reduce parallel resource contention
+    helper.staggerTestExecution(2);
+
+    // Generate unique test prefix (must be in setup, not module-level, to avoid k6 parallel init issues)
+    const dbIDPrefix = constant.generateDBIDPrefix();
+    console.log(`rest-db.js: Using unique test prefix: ${dbIDPrefix}`);
 
     var loginResp = http.request("POST", `${constant.mgmtRESTPublicHost}/v1beta/auth/login`, JSON.stringify({
         "username": constant.defaultUsername,
@@ -74,7 +124,32 @@ export function setup() {
     }
 
     var resp = http.request("GET", `${constant.mgmtRESTPublicHost}/v1beta/user`, {}, { headers: { "Authorization": `Bearer ${loginResp.json().accessToken}` } })
-    return { header: header, expectedOwner: resp.json().user }
+
+    // Cleanup orphaned catalogs from previous failed test runs OF THIS SPECIFIC TEST
+    // Use API-only cleanup to properly trigger workflows (no direct DB manipulation)
+    console.log("\n=== SETUP: Cleaning up previous test data (db pattern only) ===");
+    try {
+        const listResp = http.request("GET", `${artifactRESTPublicHost}/v1alpha/namespaces/${resp.json().user.id}/catalogs`, null, header);
+        if (listResp.status === 200) {
+            const catalogs = Array.isArray(listResp.json().catalogs) ? listResp.json().catalogs : [];
+            let cleanedCount = 0;
+            for (const catalog of catalogs) {
+                const catId = catalog.catalogId || catalog.catalog_id;
+                if (catId && catId.match(/test-[a-z0-9]+-db-/)) {
+                    const delResp = http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${resp.json().user.id}/catalogs/${catId}`, null, header);
+                    if (delResp.status === 200 || delResp.status === 204) {
+                        cleanedCount++;
+                    }
+                }
+            }
+            console.log(`Cleaned ${cleanedCount} orphaned catalogs from previous test runs`);
+        }
+    } catch (e) {
+        console.log(`Setup cleanup warning: ${e}`);
+    }
+    console.log("=== SETUP: Cleanup complete ===\n");
+
+    return { header: header, expectedOwner: resp.json().user, dbIDPrefix: dbIDPrefix }
 }
 
 export function teardown(data) {
@@ -82,12 +157,21 @@ export function teardown(data) {
     group(groupName, () => {
         check(true, { [constant.banner(groupName)]: () => true });
 
+        // CRITICAL: Wait for THIS TEST's file processing to complete before deleting catalogs
+        // Deleting catalogs triggers cleanup workflows that drop vector DB collections
+        // If we delete while files are still processing, we get "collection does not exist" errors
+        console.log("Teardown: Waiting for this test's file processing to complete...");
+        const allProcessingComplete = helper.waitForAllFileProcessingComplete(120, data.dbIDPrefix);
+        if (!allProcessingComplete) {
+            console.warn("Teardown: Some files still processing after 120s, proceeding anyway");
+        }
+
         // Delete catalogs via API (which triggers cleanup workflows)
         var listResp = http.request("GET", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, data.header)
         if (listResp.status === 200) {
             var catalogs = Array.isArray(listResp.json().catalogs) ? listResp.json().catalogs : []
             for (const catalog of catalogs) {
-                if (catalog.catalogId && catalog.catalogId.startsWith(constant.dbIDPrefix)) {
+                if (catalog.catalogId && catalog.catalogId.startsWith(data.dbIDPrefix)) {
                     var delResp = http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalog.catalogId}`, null, data.header);
                     check(delResp, {
                         [`DELETE /v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalog.catalogId} response status is 200 or 404`]: (r) => r.status === 200 || r.status === 404,
@@ -95,19 +179,6 @@ export function teardown(data) {
                 }
             }
         }
-
-        // Final DB cleanup (defensive - in case workflows didn't complete)
-        try {
-            constant.db.exec(`DELETE FROM text_chunk WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-            constant.db.exec(`DELETE FROM embedding WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-            constant.db.exec(`DELETE FROM converted_file WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%')`);
-            constant.db.exec(`DELETE FROM knowledge_base_file WHERE name LIKE '${constant.dbIDPrefix}%'`);
-            constant.db.exec(`DELETE FROM knowledge_base WHERE id LIKE '${constant.dbIDPrefix}%'`);
-        } catch (e) {
-            console.log(`Teardown DB cleanup warning: ${e}`);
-        }
-
-        constant.db.close();
     });
 }
 
@@ -118,7 +189,7 @@ export function TEST_DB_SCHEMA(data) {
         check(true, { [constant.banner(groupName)]: () => true });
 
         // Create catalog
-        const catalogName = constant.dbIDPrefix + "db-" + randomString(8);
+        const catalogName = data.dbIDPrefix + "db-" + randomString(8);
         const cRes = http.request("POST", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, JSON.stringify({
             name: catalogName,
             description: "DB schema test catalog",
@@ -152,19 +223,32 @@ export function TEST_DB_SCHEMA(data) {
 
         const uploaded = [];
         for (const s of testFiles) {
-            const fileName = constant.dbIDPrefix + s.originalName;
+            const fileName = data.dbIDPrefix + s.originalName;
             const fReq = { name: fileName, type: s.type, content: s.content };
-            const uRes = http.request("POST", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`, JSON.stringify(fReq), data.header);
 
-            const file = ((() => { try { return uRes.json(); } catch (e) { return {}; } })()).file || {};
-            if (uRes.status === 200 && file.fileUid) {
-                uploaded.push({
-                    fileUid: file.fileUid,
-                    name: fileName,
-                    type: s.type,
-                    originalName: s.originalName
-                });
-                console.log(`DB Tests: Uploaded ${s.originalName} (${file.fileUid})`);
+            // Use retry logic to handle transient upload failures during parallel execution
+            const uRes = helper.uploadFileWithRetry(
+                `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
+                fReq,
+                data.header,
+                3 // max retries
+            );
+
+            if (uRes) {
+                const file = ((() => { try { return uRes.json(); } catch (e) { return {}; } })()).file || {};
+                if (uRes.status === 200 && file.fileUid) {
+                    uploaded.push({
+                        fileUid: file.fileUid,
+                        name: fileName,
+                        type: s.type,
+                        originalName: s.originalName
+                    });
+                    console.log(`DB Tests: Uploaded ${s.originalName} (${file.fileUid})`);
+                } else {
+                    console.log(`DB Tests: Upload succeeded but invalid response for ${s.originalName}`);
+                }
+            } else {
+                console.log(`DB Tests: Upload failed after retries for ${s.originalName}`);
             }
         }
 
@@ -177,10 +261,8 @@ export function TEST_DB_SCHEMA(data) {
             return;
         }
 
-        // Trigger processing for all files
         const fileUids = uploaded.map(f => f.fileUid);
-        const pRes = http.request("POST", `${artifactRESTPublicHost}/v1alpha/catalogs/files/processAsync`, JSON.stringify({ fileUids }), data.header);
-        check(pRes, { [`DB Tests: Batch processing triggered`]: (r) => r.status === 200 });
+        // Auto-trigger: Processing starts automatically on upload (no manual trigger needed)
 
         // Poll for completion
         console.log(`DB Tests: Waiting for ${uploaded.length} files to complete processing...`);
@@ -254,32 +336,42 @@ export function TEST_DB_SCHEMA(data) {
         });
 
         // ==========================================================================
-        // TEST 2: Embedding Config JSONB Format
+        // TEST 2: System Config Foreign Key and JSONB Format
         // ==========================================================================
-        group("DB Test 2: Embedding Config JSONB Format", function () {
-            console.log(`\nDB Test 2: Verifying embedding_config JSONB format...`);
+        group("DB Test 2: System Config Foreign Key and JSONB Format", function () {
+            console.log(`\nDB Test 2: Verifying system_uid FK and system config JSONB format...`);
 
-            const embeddingConfigResult = constant.db.query(
-                `SELECT embedding_config::text as embedding_config_text FROM knowledge_base WHERE uid = $1`,
+            const systemConfigResult = constant.db.query(
+                `SELECT kb.system_uid, s.config::text as system_config_text
+                 FROM knowledge_base kb
+                 JOIN system s ON kb.system_uid = s.uid
+                 WHERE kb.uid = $1`,
                 catalogUid
             );
 
-            if (embeddingConfigResult.length > 0) {
-                const embeddingConfigText = embeddingConfigResult[0].embedding_config_text;
+            if (systemConfigResult.length > 0) {
+                const systemUID = systemConfigResult[0].system_uid;
+                const systemConfigText = systemConfigResult[0].system_config_text;
                 let parsedConfig;
                 try {
-                    parsedConfig = JSON.parse(embeddingConfigText);
-                    console.log(`DB Test 2: embedding_config = ${JSON.stringify(parsedConfig)}`);
+                    parsedConfig = JSON.parse(systemConfigText);
+                    console.log(`DB Test 2: system_uid = ${systemUID}`);
+                    console.log(`DB Test 2: system.config = ${JSON.stringify(parsedConfig)}`);
                 } catch (e) {
                     parsedConfig = null;
                 }
 
-                check({ parsedConfig }, {
-                    "DB Test 2: embedding_config is valid JSON": () => parsedConfig !== null,
-                    "DB Test 2: embedding_config has model_family field": () =>
-                        parsedConfig && parsedConfig.model_family !== undefined,
-                    "DB Test 2: embedding_config has dimensionality field": () =>
-                        parsedConfig && parsedConfig.dimensionality !== undefined,
+                check({ systemUID, parsedConfig }, {
+                    "DB Test 2: system_uid is present": () => systemUID !== null && systemUID !== undefined,
+                    "DB Test 2: system.config is valid JSON": () => parsedConfig !== null,
+                    "DB Test 2: system.config has nested rag.embedding structure": () =>
+                        parsedConfig && parsedConfig.rag && parsedConfig.rag.embedding !== undefined,
+                    "DB Test 2: system.config has model_family field": () =>
+                        parsedConfig && parsedConfig.rag && parsedConfig.rag.embedding &&
+                        parsedConfig.rag.embedding.model_family !== undefined,
+                    "DB Test 2: system.config has dimensionality field": () =>
+                        parsedConfig && parsedConfig.rag && parsedConfig.rag.embedding &&
+                        parsedConfig.rag.embedding.dimensionality !== undefined,
                 });
             }
         });

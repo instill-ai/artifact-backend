@@ -104,8 +104,10 @@ integration-test:		## Run integration tests in parallel using GNU parallel
 		integration-test/rest-kb-e2e-file-process.js \
 		integration-test/rest-file-reprocess.js \
 		integration-test/rest-kb-delete.js \
-		integration-test/grpc-kb-update.js 2>&1 | tee /tmp/artifact-integration-test.log; \
-	bash integration-test/report-summary.sh /tmp/artifact-integration-test.log
+		integration-test/grpc-kb-update.js \
+		integration-test/grpc-system-config-update.js \
+		integration-test/grpc-system-admin.js 2>&1 | tee /tmp/artifact-integration-test.log; \
+	bash integration-test/scripts/report-summary.sh /tmp/artifact-integration-test.log
 
 .PHONY: help
 help:       	 				## Show this help

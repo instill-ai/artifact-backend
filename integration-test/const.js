@@ -89,6 +89,9 @@ export const sampleCsv = encoding.b64encode(
 export const samplePdf = encoding.b64encode(
   open(`${__ENV.TEST_FOLDER_ABS_PATH}/integration-test/data/sample.pdf`, "b")
 );
+export const sampleMultiPagePdf = encoding.b64encode(
+  open(`${__ENV.TEST_FOLDER_ABS_PATH}/integration-test/data/sample-multi-page.pdf`, "b")
+);
 export const samplePpt = encoding.b64encode(
   open(`${__ENV.TEST_FOLDER_ABS_PATH}/integration-test/data/sample.ppt`, "b")
 );
@@ -131,9 +134,13 @@ export const db = sql.open(driver, `postgresql://postgres:password@${dbHost}:543
 import { randomString } from "https://jslib.k6.io/k6-utils/1.1.0/index.js";
 
 // Add randomization to prevent collisions between parallel/sequential test runs
-// This allows tests to run without waiting for cleanup workflows
+// Generate unique prefix per test file to avoid parallel test interference
 // Format: test-{4 random chars}- = 11 chars, leaving 21 chars for catalog-specific names
-export const dbIDPrefix = `test-${randomString(4)}-`;
+// CRITICAL: Each test MUST call this in setup() to get a unique prefix
+// DO NOT create a const export - it would be shared across all parallel tests!
+export function generateDBIDPrefix() {
+  return `test-${randomString(4)}-`;
+}
 
 // Pretty banner for k6 checks table; accounts for default left indent
 export function banner(title) {

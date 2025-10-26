@@ -9,6 +9,7 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/gojuno/minimock/v3"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 
 	qt "github.com/frankban/quicktest"
 
@@ -102,9 +103,10 @@ func TestValidateUpdateEligibilityActivity_Success(t *testing.T) {
 	param := &ValidateUpdateEligibilityActivityParam{
 		KBUID: kbUID,
 	}
-	err := w.ValidateUpdateEligibilityActivity(ctx, param)
+	result, err := w.ValidateUpdateEligibilityActivity(ctx, param)
 
 	c.Assert(err, qt.IsNil)
+	c.Assert(result, qt.IsNotNil)
 }
 
 func TestValidateUpdateEligibilityActivity_AlreadyUpdating(t *testing.T) {
@@ -127,9 +129,10 @@ func TestValidateUpdateEligibilityActivity_AlreadyUpdating(t *testing.T) {
 	param := &ValidateUpdateEligibilityActivityParam{
 		KBUID: kbUID,
 	}
-	err := w.ValidateUpdateEligibilityActivity(ctx, param)
+	result, err := w.ValidateUpdateEligibilityActivity(ctx, param)
 
 	c.Assert(err, qt.Not(qt.IsNil))
+	c.Assert(result, qt.IsNil)
 }
 
 func TestCreateStagingKnowledgeBaseActivity_Success(t *testing.T) {
@@ -141,19 +144,27 @@ func TestCreateStagingKnowledgeBaseActivity_Success(t *testing.T) {
 	stagingKBUID := types.KBUIDType(uuid.Must(uuid.NewV4()))
 
 	mockRepository := mock.NewRepositoryMock(mc)
-	mockRepository.GetKnowledgeBaseByUIDMock.
+	systemUID := types.SystemUIDType(uuid.Must(uuid.NewV4()))
+	mockRepository.GetKnowledgeBaseByUIDWithConfigMock.
 		When(minimock.AnyContext, originalKBUID).
-		Then(&repository.KnowledgeBaseModel{
-			UID:  originalKBUID,
-			KBID: "test-kb",
-			Name: "Test KB",
-			EmbeddingConfig: repository.EmbeddingConfigJSON{
-				ModelFamily:    "gemini",
-				Dimensionality: 3072,
+		Then(&repository.KnowledgeBaseWithConfig{
+			KnowledgeBaseModel: repository.KnowledgeBaseModel{
+				UID:       originalKBUID,
+				KBID:      "test-kb",
+				Name:      "Test KB",
+				SystemUID: systemUID,
+			},
+			SystemConfig: repository.SystemConfigJSON{
+				RAG: repository.RAGConfig{
+					Embedding: repository.EmbeddingConfig{
+						ModelFamily:    "gemini",
+						Dimensionality: 3072,
+					},
+				},
 			},
 		}, nil)
 	mockRepository.CreateStagingKnowledgeBaseMock.
-		Set(func(ctx context.Context, original *repository.KnowledgeBaseModel, newEmbeddingConfig *repository.EmbeddingConfigJSON, externalService func(kbUID types.KBUIDType) error) (*repository.KnowledgeBaseModel, error) {
+		Set(func(ctx context.Context, original *repository.KnowledgeBaseModel, newSystemUID *types.SystemUIDType, externalService func(kbUID types.KBUIDType) error) (*repository.KnowledgeBaseModel, error) {
 			// Call the external service to create the collection
 			if externalService != nil {
 				if err := externalService(stagingKBUID); err != nil {
@@ -192,15 +203,17 @@ func TestUpdateKnowledgeBaseUpdateStatusActivity_Success(t *testing.T) {
 
 	mockRepository := mock.NewRepositoryMock(mc)
 	mockRepository.UpdateKnowledgeBaseUpdateStatusMock.
-		When(minimock.AnyContext, kbUID, artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING.String(), workflowID).
+		When(minimock.AnyContext, kbUID, artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING.String(), workflowID, "", types.SystemUIDType(uuid.Nil)).
 		Then(nil)
 
 	w := &Worker{repository: mockRepository, log: zap.NewNop()}
 
 	param := &UpdateKnowledgeBaseUpdateStatusActivityParam{
-		KBUID:      kbUID,
-		Status:     artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING.String(),
-		WorkflowID: workflowID,
+		KBUID:             kbUID,
+		Status:            artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING.String(),
+		WorkflowID:        workflowID,
+		ErrorMessage:      "",
+		PreviousSystemUID: types.SystemUIDType(uuid.Nil),
 	}
 	err := w.UpdateKnowledgeBaseUpdateStatusActivity(ctx, param)
 
@@ -223,8 +236,10 @@ func TestCleanupOldKnowledgeBaseActivity_Success(t *testing.T) {
 			KBID:                "test-kb",
 			Owner:               uuid.Must(uuid.NewV4()).String(),
 			ActiveCollectionUID: activeCollectionUID,
-			DeleteTime:          nil,
+			DeleteTime:          gorm.DeletedAt{},
 		}, nil)
+	mockRepository.DeleteAllKnowledgeBaseFilesMock.Return(nil)
+	mockRepository.DeleteAllConvertedFilesInKbMock.Return(nil)
 	mockRepository.DeleteKnowledgeBaseMock.Return(&repository.KnowledgeBaseModel{}, nil)
 	mockRepository.IsCollectionInUseMock.Return(false, nil)
 	mockRepository.DropCollectionMock.Return(nil)
@@ -460,27 +475,31 @@ func TestSwapKnowledgeBasesActivity_Success(t *testing.T) {
 
 	mockRepository := mock.NewRepositoryMock(mc)
 
-	// Get original KB
-	mockRepository.GetKnowledgeBaseByUIDMock.
+	// Get original KB with config
+	mockRepository.GetKnowledgeBaseByUIDWithConfigMock.
 		When(minimock.AnyContext, originalKBUID).
-		Then(&repository.KnowledgeBaseModel{
-			UID:                 originalKBUID,
-			KBID:                "test-kb",
-			Name:                "Test KB",
-			Owner:               ownerUID.String(),
-			CreatorUID:          types.CreatorUIDType(ownerUID),
-			ActiveCollectionUID: originalCollectionUID,
+		Then(&repository.KnowledgeBaseWithConfig{
+			KnowledgeBaseModel: repository.KnowledgeBaseModel{
+				UID:                 originalKBUID,
+				KBID:                "test-kb",
+				Name:                "Test KB",
+				Owner:               ownerUID.String(),
+				CreatorUID:          types.CreatorUIDType(ownerUID),
+				ActiveCollectionUID: originalCollectionUID,
+			},
 		}, nil)
 
-	// Get staging KB
-	mockRepository.GetKnowledgeBaseByUIDMock.
+	// Get staging KB with config
+	mockRepository.GetKnowledgeBaseByUIDWithConfigMock.
 		When(minimock.AnyContext, stagingKBUID).
-		Then(&repository.KnowledgeBaseModel{
-			UID:                 stagingKBUID,
-			KBID:                "test-kb-staging",
-			Name:                "Test KB-staging",
-			Owner:               ownerUID.String(),
-			ActiveCollectionUID: stagingCollectionUID,
+		Then(&repository.KnowledgeBaseWithConfig{
+			KnowledgeBaseModel: repository.KnowledgeBaseModel{
+				UID:                 stagingKBUID,
+				KBID:                "test-kb-staging",
+				Name:                "Test KB-staging",
+				Owner:               ownerUID.String(),
+				ActiveCollectionUID: stagingCollectionUID,
+			},
 		}, nil)
 
 	// Check for existing rollback KB
@@ -497,11 +516,17 @@ func TestSwapKnowledgeBasesActivity_Success(t *testing.T) {
 			}, nil
 		})
 
+	// Check if collections exist (both original and staging)
+	mockRepository.CollectionExistsMock.Return(true, nil)
+
 	// Update resource KB UIDs (3 times for swap)
 	mockRepository.UpdateKnowledgeBaseResourcesMock.Return(nil)
 
-	// Update KB metadata
+	// Update KB metadata (called multiple times)
 	mockRepository.UpdateKnowledgeBaseWithMapMock.Return(nil)
+
+	// Delete staging KB after swap
+	mockRepository.DeleteKnowledgeBaseMock.Return(&repository.KnowledgeBaseModel{}, nil)
 
 	w := &Worker{repository: mockRepository, log: zap.NewNop()}
 
@@ -545,12 +570,12 @@ func TestSynchronizeKBActivity_FilesStillProcessing(t *testing.T) {
 
 	// Check for in-progress files in staging KB - still processing
 	mockRepository.GetFileCountByKnowledgeBaseUIDMock.
-		When(minimock.AnyContext, stagingKBUID, "FILE_PROCESS_STATUS_PROCESSING,FILE_PROCESS_STATUS_CONVERTING,FILE_PROCESS_STATUS_CHUNKING,FILE_PROCESS_STATUS_EMBEDDING").
+		When(minimock.AnyContext, stagingKBUID, "FILE_PROCESS_STATUS_PROCESSING,FILE_PROCESS_STATUS_CHUNKING,FILE_PROCESS_STATUS_EMBEDDING").
 		Then(int64(2), nil) // 2 files still processing
 
 	// Check production KB
 	mockRepository.GetFileCountByKnowledgeBaseUIDMock.
-		When(minimock.AnyContext, originalKBUID, "FILE_PROCESS_STATUS_PROCESSING,FILE_PROCESS_STATUS_CONVERTING,FILE_PROCESS_STATUS_CHUNKING,FILE_PROCESS_STATUS_EMBEDDING").
+		When(minimock.AnyContext, originalKBUID, "FILE_PROCESS_STATUS_PROCESSING,FILE_PROCESS_STATUS_CHUNKING,FILE_PROCESS_STATUS_EMBEDDING").
 		Then(int64(0), nil)
 
 	w := &Worker{repository: mockRepository, log: zap.NewNop()}
@@ -592,8 +617,8 @@ func TestSynchronizeKBActivity_Success(t *testing.T) {
 	// No files in progress
 	mockRepository.GetFileCountByKnowledgeBaseUIDMock.Return(int64(0), nil)
 
-	// No recently-created NOTSTARTED files (CC4 race condition check)
-	mockRepository.GetRecentNotStartedFileCountMock.Return(int64(0), nil)
+	// No NOTSTARTED files (excluding recently reconciled)
+	mockRepository.GetNotStartedFileCountExcludingMock.Return(int64(0), nil)
 
 	// Stable counts for polling
 	mockRepository.GetChunkCountByKBUIDMock.Return(int64(100), nil)

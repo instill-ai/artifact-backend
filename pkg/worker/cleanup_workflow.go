@@ -401,6 +401,18 @@ func (w *Worker) CleanupKnowledgeBaseWorkflow(ctx workflow.Context, param Cleanu
 			"error", err.Error())
 	}
 
+	// Step 9: Clear retention field on production KB if this is a rollback KB cleanup
+	// This should be done after all cleanup operations to ensure the rollback KB is fully cleaned up
+	err = workflow.ExecuteActivity(ctx, w.ClearProductionKBRetentionActivity, &ClearProductionKBRetentionActivityParam{
+		RollbackKBUID: kbUID,
+	}).Get(ctx, nil)
+	if err != nil {
+		// Non-fatal: Log warning but don't fail the workflow
+		logger.Warn("Failed to clear retention field on production KB (non-fatal)",
+			"kbUID", kbUID.String(),
+			"error", err.Error())
+	}
+
 	// If any cleanup operation failed, return an error
 	if len(errors) > 0 {
 		logger.Error("CleanupKnowledgeBaseWorkflow completed with errors",

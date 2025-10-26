@@ -177,6 +177,7 @@ func main() {
 	w.RegisterActivity(cw.DeleteKBEmbeddingRecordsActivity)     // Delete all embedding records
 	w.RegisterActivity(cw.SoftDeleteKBRecordActivity)           // Soft-delete the KB record itself
 	w.RegisterActivity(cw.PurgeKBACLActivity)                   // Remove all ACL permissions for KB
+	w.RegisterActivity(cw.ClearProductionKBRetentionActivity)   // Clear retention field on production KB after rollback cleanup
 
 	// ===== RAG update activities =====
 	// Activities for knowledge base update workflow (6-phase)
@@ -197,6 +198,7 @@ func main() {
 
 	// File Metadata and Setup Phase
 	w.RegisterActivity(cw.GetFileMetadataActivity)                // Fetch file metadata from database
+	w.RegisterActivity(cw.FindTargetFileByNameActivity)           // Find target file for dual-processing coordination
 	w.RegisterActivity(cw.GetFileContentActivity)                 // Retrieve file binary content from MinIO
 	w.RegisterActivity(cw.DeleteOldConvertedFilesActivity)        // Remove previous conversion artifacts
 	w.RegisterActivity(cw.CreateConvertedFileRecordActivity)      // Create DB record for converted file

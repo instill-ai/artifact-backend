@@ -241,13 +241,16 @@ func (cf *ConvertedFileModel) AfterFind(tx *gorm.DB) error {
 }
 
 // GetConvertedFileCountByKBUID returns the count of converted files for a knowledge base
+// IMPORTANT: Only counts converted files for active (non-deleted) files
+// This is critical for validation during updates to avoid counting converted files
+// belonging to soft-deleted files that are awaiting cleanup
 func (r *repository) GetConvertedFileCountByKBUID(ctx context.Context, kbUID types.KBUIDType) (int64, error) {
 	var count int64
 	err := r.db.WithContext(ctx).
 		Table(ConvertedFileTableName+" AS cf").
 		Joins("INNER JOIN "+KnowledgeBaseFileTableName+" AS f ON cf.file_uid = f.uid").
 		Where("cf.kb_uid = ?", kbUID).
-		Where("f.delete_time IS NULL").
+		Where("f.delete_time IS NULL"). // CRITICAL: Exclude converted files for deleted files
 		Count(&count).
 		Error
 	if err != nil {

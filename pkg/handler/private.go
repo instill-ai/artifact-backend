@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/gofrs/uuid"
+	"github.com/iancoleman/strcase"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -14,12 +15,23 @@ import (
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/types"
+	"github.com/instill-ai/x/checkfield"
 
 	artifact "github.com/instill-ai/artifact-backend/pkg/service"
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	constantx "github.com/instill-ai/x/constant"
 	errorsx "github.com/instill-ai/x/errors"
 	logx "github.com/instill-ai/x/log"
+	fieldmask_utils "github.com/mennanov/fieldmask-utils"
+)
+
+// System field definitions for field mask validation
+var (
+	// outputOnlySystemFields are fields that cannot be specified in create/update requests
+	outputOnlySystemFields = []string{"name", "uid", "is_default", "create_time", "update_time", "delete_time"}
+
+	// immutableSystemFields are fields that cannot be changed via Update (use Rename endpoint to change ID)
+	immutableSystemFields = []string{"id"}
 )
 
 // PrivateHandler handles the private Artifact endpoints.
@@ -446,51 +458,159 @@ func (h *PrivateHandler) GetKnowledgeBaseUpdateStatusAdmin(ctx context.Context, 
 	return resp, nil
 }
 
-// GetSystemProfileAdmin retrieves a system configuration profile (admin only)
-func (h *PrivateHandler) GetSystemProfileAdmin(ctx context.Context, req *artifactpb.GetSystemProfileAdminRequest) (*artifactpb.GetSystemProfileAdminResponse, error) {
+// GetSystemAdmin retrieves a system configuration (admin only)
+func (h *PrivateHandler) GetSystemAdmin(ctx context.Context, req *artifactpb.GetSystemAdminRequest) (*artifactpb.GetSystemAdminResponse, error) {
 	// Call service
-	resp, err := h.service.GetSystemProfileAdmin(ctx, req.Profile)
+	resp, err := h.service.GetSystemAdmin(ctx, req.Id)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to get system profile: %v", err)
+		return nil, status.Errorf(codes.Internal, "failed to get system: %v", err)
 	}
 
-	h.logger.Info("GetSystemProfileAdmin", zap.String("profile", req.Profile))
+	h.logger.Info("GetSystemAdmin", zap.String("id", req.Id))
 	return resp, nil
 }
 
-// UpdateSystemProfileAdmin creates or updates a system configuration profile (admin only)
-func (h *PrivateHandler) UpdateSystemProfileAdmin(ctx context.Context, req *artifactpb.UpdateSystemProfileAdminRequest) (*artifactpb.UpdateSystemProfileAdminResponse, error) {
+// CreateSystemAdmin creates a new system configuration (admin only)
+func (h *PrivateHandler) CreateSystemAdmin(ctx context.Context, req *artifactpb.CreateSystemAdminRequest) (*artifactpb.CreateSystemAdminResponse, error) {
 	// Call service
-	resp, err := h.service.UpdateSystemProfileAdmin(ctx, req)
+	resp, err := h.service.CreateSystemAdmin(ctx, req)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to update system profile: %v", err)
+		return nil, status.Errorf(codes.Internal, "failed to create system: %v", err)
 	}
 
-	h.logger.Info("UpdateSystemProfileAdmin", zap.String("profile", req.SystemProfile.Profile))
+	h.logger.Info("CreateSystemAdmin", zap.String("id", req.System.Id))
 	return resp, nil
 }
 
-// ListSystemProfilesAdmin lists all system configuration profiles (admin only)
-func (h *PrivateHandler) ListSystemProfilesAdmin(ctx context.Context, req *artifactpb.ListSystemProfilesAdminRequest) (*artifactpb.ListSystemProfilesAdminResponse, error) {
-	// Call service
-	resp, err := h.service.ListSystemProfilesAdmin(ctx)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to list system profiles: %v", err)
+// UpdateSystemAdmin updates an existing system configuration (admin only)
+func (h *PrivateHandler) UpdateSystemAdmin(ctx context.Context, req *artifactpb.UpdateSystemAdminRequest) (*artifactpb.UpdateSystemAdminResponse, error) {
+	pbSystemReq := req.GetSystem()
+	if pbSystemReq == nil {
+		return nil, status.Errorf(codes.InvalidArgument, "system is required")
+	}
+	if pbSystemReq.Id == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "system id is required")
 	}
 
-	h.logger.Info("ListSystemProfilesAdmin", zap.Int("count", len(resp.SystemProfiles)))
+	pbUpdateMask := req.GetUpdateMask()
+
+	// Config field is type google.protobuf.Struct, which needs to be updated as a whole
+	for idx, path := range pbUpdateMask.Paths {
+		if strings.Contains(path, "config") {
+			pbUpdateMask.Paths[idx] = "config"
+		}
+	}
+
+	// Validate the field mask
+	if !pbUpdateMask.IsValid(pbSystemReq) {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid field mask")
+	}
+
+	// Get existing system
+	getResp, err := h.service.GetSystemAdmin(ctx, req.System.Id)
+	if err != nil {
+		return nil, status.Errorf(codes.NotFound, "failed to get system: %v", err)
+	}
+
+	// Check and remove output-only fields from mask
+	pbUpdateMask, err = checkfield.CheckUpdateOutputOnlyFields(pbUpdateMask, outputOnlySystemFields)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid output-only fields: %v", err)
+	}
+
+	// Convert to fieldmask-utils mask
+	mask, err := fieldmask_utils.MaskFromProtoFieldMask(pbUpdateMask, strcase.ToCamel)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid field mask: %v", err)
+	}
+
+	// Empty mask means no updates
+	if mask.IsEmpty() {
+		return &artifactpb.UpdateSystemAdminResponse{System: getResp.System}, nil
+	}
+
+	pbSystemToUpdate := getResp.GetSystem()
+
+	// Return error if IMMUTABLE fields are intentionally changed
+	if err := checkfield.CheckUpdateImmutableFields(pbSystemReq, pbSystemToUpdate, immutableSystemFields); err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "immutable field changed: %v", err)
+	}
+
+	// Only the fields mentioned in the field mask will be copied to pbSystemToUpdate
+	if err := fieldmask_utils.StructToStruct(mask, pbSystemReq, pbSystemToUpdate); err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to apply field mask: %v", err)
+	}
+
+	// Call service to update
+	resp, err := h.service.UpdateSystemAdmin(ctx, &artifactpb.UpdateSystemAdminRequest{
+		System:     pbSystemToUpdate,
+		UpdateMask: pbUpdateMask,
+	})
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to update system: %v", err)
+	}
+
+	h.logger.Info("UpdateSystemAdmin", zap.String("id", req.System.Id), zap.Strings("fields", pbUpdateMask.Paths))
 	return resp, nil
 }
 
-// DeleteSystemProfileAdmin deletes a system configuration profile (admin only)
-func (h *PrivateHandler) DeleteSystemProfileAdmin(ctx context.Context, req *artifactpb.DeleteSystemProfileAdminRequest) (*artifactpb.DeleteSystemProfileAdminResponse, error) {
+// ListSystemsAdmin lists all system configurations (admin only)
+func (h *PrivateHandler) ListSystemsAdmin(ctx context.Context, req *artifactpb.ListSystemsAdminRequest) (*artifactpb.ListSystemsAdminResponse, error) {
 	// Call service
-	resp, err := h.service.DeleteSystemProfileAdmin(ctx, req.Profile)
+	resp, err := h.service.ListSystemsAdmin(ctx)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to delete system profile: %v", err)
+		return nil, status.Errorf(codes.Internal, "failed to list systems: %v", err)
 	}
 
-	h.logger.Info("DeleteSystemProfileAdmin", zap.String("profile", req.Profile), zap.Bool("success", resp.Success))
+	h.logger.Info("ListSystemsAdmin", zap.Int("count", len(resp.Systems)))
+	return resp, nil
+}
+
+// DeleteSystemAdmin deletes a system configuration (admin only)
+func (h *PrivateHandler) DeleteSystemAdmin(ctx context.Context, req *artifactpb.DeleteSystemAdminRequest) (*artifactpb.DeleteSystemAdminResponse, error) {
+	// Call service
+	resp, err := h.service.DeleteSystemAdmin(ctx, req.Id)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to delete system: %v", err)
+	}
+
+	h.logger.Info("DeleteSystemAdmin", zap.String("id", req.Id), zap.Bool("success", resp.Success))
+	return resp, nil
+}
+
+// RenameSystemAdmin renames a system configuration (admin only)
+func (h *PrivateHandler) RenameSystemAdmin(ctx context.Context, req *artifactpb.RenameSystemAdminRequest) (*artifactpb.RenameSystemAdminResponse, error) {
+	// Call service
+	resp, err := h.service.RenameSystemAdmin(ctx, req)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to rename system: %v", err)
+	}
+
+	h.logger.Info("RenameSystemAdmin", zap.String("old_id", req.SystemId), zap.String("new_id", req.NewSystemId))
+	return resp, nil
+}
+
+// SetDefaultSystemAdmin sets a system as the default (admin only)
+func (h *PrivateHandler) SetDefaultSystemAdmin(ctx context.Context, req *artifactpb.SetDefaultSystemAdminRequest) (*artifactpb.SetDefaultSystemAdminResponse, error) {
+	// Call service
+	resp, err := h.service.SetDefaultSystemAdmin(ctx, req)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to set default system: %v", err)
+	}
+
+	h.logger.Info("SetDefaultSystemAdmin", zap.String("id", req.Id), zap.Bool("is_default", resp.System.IsDefault))
+	return resp, nil
+}
+
+// GetDefaultSystemAdmin retrieves the current default system (admin only)
+func (h *PrivateHandler) GetDefaultSystemAdmin(ctx context.Context, req *artifactpb.GetDefaultSystemAdminRequest) (*artifactpb.GetDefaultSystemAdminResponse, error) {
+	// Call service
+	resp, err := h.service.GetDefaultSystemAdmin(ctx, req)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to get default system: %v", err)
+	}
+
+	h.logger.Info("GetDefaultSystemAdmin", zap.String("id", resp.System.Id), zap.Bool("is_default", resp.System.IsDefault))
 	return resp, nil
 }
 

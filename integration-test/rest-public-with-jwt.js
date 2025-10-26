@@ -5,6 +5,68 @@ import { randomString } from "https://jslib.k6.io/k6-utils/1.1.0/index.js";
 import { artifactRESTPublicHost } from "./const.js";
 
 import * as constant from "./const.js";
+import * as helper from "./helper.js";
+
+const dbIDPrefix = constant.generateDBIDPrefix();
+
+export function setup() {
+  // Stagger test execution to reduce parallel resource contention
+  helper.staggerTestExecution(2);
+
+  var loginResp = http.request("POST", `${constant.mgmtRESTPublicHost}/v1beta/auth/login`, JSON.stringify({
+    "username": constant.defaultUsername,
+    "password": constant.defaultPassword,
+  }))
+
+  check(loginResp, {
+    [`POST ${constant.mgmtRESTPublicHost}/v1beta/auth/login response status is 200`]: (r) => r.status === 200,
+  });
+
+  var header = {
+    "headers": {
+      "Authorization": `Bearer ${loginResp.json().accessToken}`,
+      "Content-Type": "application/json",
+    },
+    "timeout": "600s",
+  }
+
+  var resp = http.request("GET", `${constant.mgmtRESTPublicHost}/v1beta/user`, {}, {
+    headers: {
+      "Authorization": `Bearer ${loginResp.json().accessToken}`
+    }
+  })
+
+  return {
+    header: header,
+    expectedOwner: resp.json().user
+  }
+}
+
+export function teardown(data) {
+  // Cleanup: Remove any test catalogs created during JWT tests
+  console.log("\n=== TEARDOWN: Cleaning up JWT test catalogs ===");
+  try {
+    const listResp = http.request("GET", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, data.header);
+    if (listResp.status === 200) {
+      const catalogs = Array.isArray(listResp.json().catalogs) ? listResp.json().catalogs : [];
+      let cleanedCount = 0;
+      for (const catalog of catalogs) {
+        const catId = catalog.catalogId || catalog.catalog_id;
+        // Clean up catalogs with jwt prefix or dbIDPrefix
+        if (catId && (catId.includes(dbIDPrefix) || catId.includes("jwt-"))) {
+          const delResp = http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catId}`, null, data.header);
+          if (delResp.status === 200 || delResp.status === 204) {
+            cleanedCount++;
+          }
+        }
+      }
+      console.log(`Cleaned ${cleanedCount} JWT test catalogs`);
+    }
+  } catch (e) {
+    console.log(`Teardown cleanup warning: ${e}`);
+  }
+  console.log("=== TEARDOWN: JWT tests cleanup complete ===\n");
+}
 
 function logUnexpected(res, label) {
   if (!res || res.status === 401 || res.status === 403) return;
@@ -17,7 +79,7 @@ function logUnexpected(res, label) {
 
 // Helpers to create resources with authorized header, then test unauthorized access
 function createCatalogAuthenticated(data) {
-  const name = constant.dbIDPrefix + "jwt-" + randomString(8);
+  const name = dbIDPrefix + "jwt-" + randomString(8);
   const res = http.request(
     "POST",
     `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
@@ -41,7 +103,7 @@ function deleteCatalogAuthenticated(data, catalogId) {
 }
 
 function createFileAuthenticated(data, catalogId) {
-  const fileName = constant.dbIDPrefix + "jwt-file-" + randomString(6) + ".txt";
+  const fileName = dbIDPrefix + "jwt-file-" + randomString(6) + ".txt";
   const body = { name: fileName, type: "TYPE_TEXT", content: constant.sampleTxt };
   const res = http.request(
     "POST",
@@ -66,7 +128,7 @@ export function CheckCreateCatalogUnauthenticated(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
-    const body = { name: constant.dbIDPrefix + randomString(8) };
+    const body = { name: dbIDPrefix + randomString(8) };
     const res = http.request("POST", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, JSON.stringify(body), constant.paramsHTTPWithJWT.headers);
     logUnexpected(res, "POST /v1alpha/namespaces/{namespace_id}/catalogs");
     check(res, { "POST /v1alpha/namespaces/{namespace_id}/catalogs 401": (r) => r.status === 401 });
@@ -129,7 +191,7 @@ export function CheckCreateFileUnauthenticated(data) {
 
     // Create catalog with authorized header, then try to create file with random user
     const created = createCatalogAuthenticated(data);
-    const body = { name: constant.dbIDPrefix + "x.txt", type: "TYPE_TEXT", content: constant.sampleTxt };
+    const body = { name: dbIDPrefix + "x.txt", type: "TYPE_TEXT", content: constant.sampleTxt };
     const res = http.request("POST", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${created.catalogId}/files`, JSON.stringify(body), constant.paramsHTTPWithJWT.headers);
     logUnexpected(res, "POST /v1alpha/namespaces/{namespace_id}/catalogs/{id}/files");
     check(res, { "POST /v1alpha/namespaces/{namespace_id}/catalogs/{id}/files 401": (r) => r.status === 401 });
@@ -161,11 +223,20 @@ export function CheckProcessFilesUnauthorized(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
-    // Create catalog and file authorized, then process with random user
+    // Create catalog and file authorized, then try to trigger processing as unauthorized user
+    // Note: Processing auto-triggers on upload, but this test verifies that manual
+    // triggering via ProcessCatalogFiles API is still rejected for unauthorized users
     const created = createCatalogAuthenticated(data);
     const fileUid = createFileAuthenticated(data, created.catalogId);
     const body = { fileUids: [fileUid] };
-    const res = http.request("POST", `${artifactRESTPublicHost}/v1alpha/catalogs/files/processAsync`, JSON.stringify(body), constant.paramsHTTPWithJWT.headers);
+
+    // Try to call deprecated ProcessCatalogFiles API as unauthorized user (has user ID but no permission)
+    const res = http.request(
+      "POST",
+      `${constant.artifactRESTPublicHost}/v1alpha/catalogs/files/processAsync`,
+      JSON.stringify(body),
+      constant.paramsHTTPWithJWT.headers
+    );
     logUnexpected(res, "POST /v1alpha/catalogs/files/processAsync");
     check(res, { "POST /v1alpha/catalogs/files/processAsync 403": (r) => r.status === 403 });
 
