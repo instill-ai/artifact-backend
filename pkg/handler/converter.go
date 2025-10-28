@@ -11,16 +11,16 @@ import (
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
-// convertKBToCatalogPB converts database KnowledgeBase to protobuf Catalog.
+// convertKBToCatalogPB converts database KnowledgeBase to protobuf KnowledgeBase.
 // Following the pattern from pipeline/model/mgmt backends, the `name` field
 // is computed dynamically rather than stored in the database.
-func convertKBToCatalogPB(kb *repository.KnowledgeBaseModel, ns *resource.Namespace) *artifactpb.Catalog {
+func convertKBToCatalogPB(kb *repository.KnowledgeBaseModel, ns *resource.Namespace) *artifactpb.KnowledgeBase {
 	ownerName := ns.Name()
 
-	catalog := &artifactpb.Catalog{
+	knowledgeBase := &artifactpb.KnowledgeBase{
 		Uid:         kb.UID.String(),
-		Id:          kb.KBID,                                           // Database field KBID maps to protobuf id
-		Name:        fmt.Sprintf("%s/catalogs/%s", ownerName, kb.KBID), // Computed dynamically!
+		Id:          kb.KBID,                                                  // Database field KBID maps to protobuf id
+		Name:        fmt.Sprintf("%s/knowledge-bases/%s", ownerName, kb.KBID), // Computed dynamically!
 		Description: kb.Description,
 		CreateTime:  timestamppb.New(*kb.CreateTime),
 		UpdateTime:  timestamppb.New(*kb.UpdateTime),
@@ -31,10 +31,10 @@ func convertKBToCatalogPB(kb *repository.KnowledgeBaseModel, ns *resource.Namesp
 	// Handle optional fields
 	// Check if ActiveCollectionUID is not zero (nil UUID)
 	if kb.ActiveCollectionUID.String() != "00000000-0000-0000-0000-000000000000" {
-		catalog.ActiveCollectionUid = kb.ActiveCollectionUID.String()
+		knowledgeBase.ActiveCollectionUid = kb.ActiveCollectionUID.String()
 	}
 
-	return catalog
+	return knowledgeBase
 }
 
 // convertKBFileToPB converts database KnowledgeBaseFile to protobuf File.
@@ -44,18 +44,18 @@ func convertKBFileToPB(kbf *repository.KnowledgeBaseFileModel, ns *resource.Name
 	fileIDStr := kbf.UID.String()
 
 	file := &artifactpb.File{
-		Uid:           fileIDStr,
-		Id:            fileIDStr,                                                             // For files, id = uid
-		Name:          fmt.Sprintf("%s/catalogs/%s/files/%s", ownerName, kb.KBID, fileIDStr), // Computed!
-		Filename:      kbf.Filename,                                                          // Database "filename" field is the user's filename
-		Type:          convertFileType(kbf.FileType),
-		CreateTime:    timestamppb.New(*kbf.CreateTime),
-		UpdateTime:    timestamppb.New(*kbf.UpdateTime),
-		OwnerUid:      kbf.Owner.String(),
-		CreatorUid:    kbf.CreatorUID.String(),
-		CatalogUid:    kbf.KBUID.String(),
-		Size:          kbf.Size,
-		ProcessStatus: convertFileProcessStatus(kbf.ProcessStatus),
+		Uid:              fileIDStr,
+		Id:               fileIDStr,                                                                    // For files, id = uid
+		Name:             fmt.Sprintf("%s/knowledge-bases/%s/files/%s", ownerName, kb.KBID, fileIDStr), // Computed!
+		Filename:         kbf.Filename,                                                                 // Database "filename" field is the user's filename
+		Type:             convertFileType(kbf.FileType),
+		CreateTime:       timestamppb.New(*kbf.CreateTime),
+		UpdateTime:       timestamppb.New(*kbf.UpdateTime),
+		OwnerUid:         kbf.Owner.String(),
+		CreatorUid:       kbf.CreatorUID.String(),
+		KnowledgeBaseUid: kbf.KBUID.String(),
+		Size:             kbf.Size,
+		ProcessStatus:    convertFileProcessStatus(kbf.ProcessStatus),
 	}
 
 	// Handle optional fields

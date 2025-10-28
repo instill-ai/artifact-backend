@@ -80,34 +80,34 @@ export function isValidOwner(owner, expectedOwner) {
   return deepEqual(owner.user.profile, expectedOwner.profile)
 }
 
-export function validateCatalog(catalog, isPrivate) {
-  if (!("uid" in catalog)) {
-    console.log("Catalog has no uid field");
+export function validateKnowledgeBase(knowledgeBase, isPrivate) {
+  if (!("uid" in knowledgeBase)) {
+    console.log("Knowledge base has no uid field");
     return false;
   }
 
-  if (!("id" in catalog)) {
-    console.log("Catalog has no id field");
+  if (!("id" in knowledgeBase)) {
+    console.log("Knowledge base has no id field");
     return false;
   }
 
-  if (!("name" in catalog)) {
-    console.log("Catalog has no name field");
+  if (!("name" in knowledgeBase)) {
+    console.log("Knowledge base has no name field");
     return false;
   }
 
-  if (!("description" in catalog)) {
-    console.log("Catalog has no description field");
+  if (!("description" in knowledgeBase)) {
+    console.log("Knowledge base has no description field");
     return false;
   }
 
-  if (!("createTime" in catalog)) {
-    console.log("Catalog has no create_time field");
+  if (!("createTime" in knowledgeBase)) {
+    console.log("Knowledge base has no create_time field");
     return false;
   }
 
-  if (!("updateTime" in catalog)) {
-    console.log("Catalog has no update_time field");
+  if (!("updateTime" in knowledgeBase)) {
+    console.log("Knowledge base has no update_time field");
     return false;
   }
 
@@ -158,34 +158,34 @@ export function validateFile(file, isPrivate) {
   return true;
 }
 
-export function validateCatalogGRPC(catalog, isPrivate) {
-  if (!("uid" in catalog)) {
-    console.log("Catalog has no uid field");
+export function validateKnowledgeBaseGRPC(knowledgeBase, isPrivate) {
+  if (!("uid" in knowledgeBase)) {
+    console.log("Knowledge base has no uid field");
     return false;
   }
 
-  if (!("id" in catalog)) {
-    console.log("Catalog has no id field");
+  if (!("id" in knowledgeBase)) {
+    console.log("Knowledge base has no id field");
     return false;
   }
 
-  if (!("name" in catalog)) {
-    console.log("Catalog has no name field");
+  if (!("name" in knowledgeBase)) {
+    console.log("Knowledge base has no name field");
     return false;
   }
 
-  if (!("description" in catalog)) {
-    console.log("Catalog has no description field");
+  if (!("description" in knowledgeBase)) {
+    console.log("Knowledge base has no description field");
     return false;
   }
 
-  if (!("createTime" in catalog)) {
-    console.log("Catalog has no createTime field");
+  if (!("createTime" in knowledgeBase)) {
+    console.log("Knowledge base has no createTime field");
     return false;
   }
 
-  if (!("updateTime" in catalog)) {
-    console.log("Catalog has no updateTime field");
+  if (!("updateTime" in knowledgeBase)) {
+    console.log("Knowledge base has no updateTime field");
     return false;
   }
 
@@ -326,7 +326,7 @@ import * as helper from './helper.js';
  * Count MinIO objects directly using MinIO CLI (mc)
  * Provides direct verification of blob storage
  *
- * @param {string} kbUID - Knowledge base (catalog) UUID
+ * @param {string} kbUID - Knowledge base UUID
  * @param {string} fileUID - File UUID
  * @param {string} objectType - Type of MinIO object ('converted-file' or 'chunk')
  * @returns {number} Count of objects (0 = no objects, -1 = error)
@@ -338,9 +338,9 @@ export function countMinioObjects(kbUID, fileUID, objectType) {
     let prefix;
 
     if (objectType === 'chunk') {
-      // Query text_chunk table for actual destination
+      // Query chunk table for actual destination
       const chunkResult = safeQuery(`
-        SELECT content_dest FROM text_chunk
+        SELECT content_dest FROM chunk
         WHERE file_uid = $1
         LIMIT 1
       `, fileUID);
@@ -417,7 +417,7 @@ export function countEmbeddings(fileUid) {
  * CRITICAL: This function queries the database for active_collection_uid first
  * to ensure we count vectors from the correct collection during KB updates.
  *
- * @param {string} kbUID - Knowledge base (catalog) UUID
+ * @param {string} kbUID - Knowledge base UUID
  * @param {string} fileUID - File UUID
  * @returns {number} Count of vectors (0 = no vectors, -1 = error)
  */
@@ -546,7 +546,7 @@ export function pollMilvusVectors(kbUID, fileUID, maxWaitSeconds = 3) {
 
 /**
  * Poll MinIO objects until they are cleaned up (count becomes zero)
- * Used to verify cleanup workflow completion after catalog deletion
+ * Used to verify cleanup workflow completion after knowledge base deletion
  *
  * @param {string} kbUID - Knowledge base UUID
  * @param {string} fileUID - File UUID
@@ -570,7 +570,7 @@ export function pollMinIOCleanup(kbUID, fileUID, objectType, maxWaitSeconds = 30
 
 /**
  * Poll embeddings until they are cleaned up (count becomes zero)
- * Used to verify cleanup workflow completion after catalog deletion
+ * Used to verify cleanup workflow completion after knowledge base deletion
  *
  * @param {string} fileUid - File UUID
  * @param {number} maxWaitSeconds - Maximum seconds to wait (default: 30)
@@ -592,7 +592,7 @@ export function pollEmbeddingsCleanup(fileUid, maxWaitSeconds = 30) {
 
 /**
  * Poll Milvus vectors until they are cleaned up (count becomes zero)
- * Used to verify cleanup workflow completion after catalog deletion
+ * Used to verify cleanup workflow completion after knowledge base deletion
  *
  * @param {string} kbUID - Knowledge base UUID
  * @param {string} fileUID - File UUID
@@ -618,14 +618,14 @@ export function pollMilvusVectorsCleanup(kbUID, fileUID, maxWaitSeconds = 30) {
  * Returns page count and chunk count from the file response
  *
  * @param {string} namespaceId - Namespace ID
- * @param {string} catalogId - Catalog ID
+ * @param {string} knowledgeBaseId - Knowledge Base ID
  * @param {string} fileUid - File UUID
  * @param {object} headers - Request headers
  * @returns {object} { pages: number, chunks: number, status: string } or null on error
  */
-export function getFileMetadata(namespaceId, catalogId, fileUid, headers) {
+export function getFileMetadata(namespaceId, knowledgeBaseId, fileUid, headers) {
   try {
-    const apiUrl = `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${namespaceId}/catalogs/${catalogId}/files/${fileUid}`;
+    const apiUrl = `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${namespaceId}/knowledge-bases/${knowledgeBaseId}/files/${fileUid}`;
     const res = http.request("GET", apiUrl, null, headers);
 
     if (res.status !== 200) {
@@ -666,19 +666,19 @@ export function getFileMetadata(namespaceId, catalogId, fileUid, headers) {
  * Handles transaction commit delays and API eventual consistency
  *
  * @param {string} namespaceId - Namespace ID
- * @param {string} catalogId - Catalog ID
+ * @param {string} knowledgeBaseId - Knowledge Base ID
  * @param {string} fileUid - File UUID
  * @param {object} headers - Request headers
  * @param {number} maxWaitSeconds - Maximum seconds to wait (default: 10)
  * @returns {object} { pages: number, chunks: number }
  */
-export function pollFileMetadata(namespaceId, catalogId, fileUid, headers, maxWaitSeconds = 10) {
+export function pollFileMetadata(namespaceId, knowledgeBaseId, fileUid, headers, maxWaitSeconds = 10) {
   let bestResult = { pages: 0, chunks: 0, processStatus: 'UNKNOWN' };
   let attemptCount = 0;
 
   for (let i = 0; i < maxWaitSeconds; i++) {
     attemptCount++;
-    const metadata = getFileMetadata(namespaceId, catalogId, fileUid, headers);
+    const metadata = getFileMetadata(namespaceId, knowledgeBaseId, fileUid, headers);
 
     if (metadata) {
       // Track the best result we've seen (in case one appears before the other)
@@ -701,7 +701,7 @@ export function pollFileMetadata(namespaceId, catalogId, fileUid, headers, maxWa
 
   // Final attempt after waiting
   attemptCount++;
-  const finalMetadata = getFileMetadata(namespaceId, catalogId, fileUid, headers);
+  const finalMetadata = getFileMetadata(namespaceId, knowledgeBaseId, fileUid, headers);
   if (finalMetadata && (finalMetadata.pages > bestResult.pages || finalMetadata.chunks > bestResult.chunks)) {
     console.log(`pollFileMetadata FINAL attempt ${attemptCount}: pages=${finalMetadata.pages}, chunks=${finalMetadata.chunks}, status=${finalMetadata.processStatus}`);
     return finalMetadata;
@@ -767,35 +767,35 @@ export function pollChunksAPI(apiUrl, headers, maxWaitSeconds = 15) {
 // ============================================================================
 
 /**
- * Poll database for catalog by name pattern
+ * Poll database for knowledge base by name pattern
  * Used to find staging/rollback KBs during update workflow
  *
  * @param {string} namePattern - SQL LIKE pattern (e.g., '%staging', '%rollback')
- * @returns {Array} Array of catalog rows from database
+ * @returns {Array} Array of knowledge base rows from database
  */
-export function findCatalogByPattern(namePattern) {
+export function findKnowledgeBaseByPattern(namePattern) {
   try {
     const query = `SELECT * FROM knowledge_base WHERE id LIKE $1`;
     const results = safeQuery(query, namePattern);
     return results ? results.map(row => normalizeDBRow(row)) : [];
   } catch (e) {
-    console.error(`Failed to find catalog by pattern ${namePattern}: ${e}`);
+    console.error(`Failed to find knowledge base by pattern ${namePattern}: ${e}`);
     return [];
   }
 }
 
 /**
- * Poll for update completion by monitoring catalog update status
- * Waits until catalog reaches "completed" status or timeout
+ * Poll for update completion by monitoring knowledge base update status
+ * Waits until knowledge base reaches "completed" status or timeout
  *
  * @param {object} client - gRPC client
  * @param {object} data - Test data with metadata
- * @param {string} catalogUid - Catalog UID to monitor
+ * @param {string} knowledgeBaseUid - Knowledge Base UID to monitor
  * @param {number} maxWaitSeconds - Maximum seconds to wait (default: 300 = 5 minutes)
  * @returns {boolean} True if update completed, false if timeout
  */
-export function pollUpdateCompletion(client, data, catalogUid, maxWaitSeconds = 900) {
-  console.log(`[POLL START] Polling for catalogUid=${catalogUid}, maxWait=${maxWaitSeconds}s`);
+export function pollUpdateCompletion(client, data, knowledgeBaseUid, maxWaitSeconds = 900) {
+  console.log(`[POLL START] Polling for knowledgeBaseUid=${knowledgeBaseUid}, maxWait=${maxWaitSeconds}s`);
 
   let notFoundCount = 0;
   const MAX_NOT_FOUND_WAIT = 60; // Wait up to 60s for KB to appear in status list (workflow startup time)
@@ -810,41 +810,41 @@ export function pollUpdateCompletion(client, data, catalogUid, maxWaitSeconds = 
     // k6 gRPC returns res.status in various forms, check if response has valid message
     if (res.message && res.message.details) { // Check for successful response with data
       const statuses = res.message.details || [];
-      const catalogStatus = statuses.find(s => s.catalogUid === catalogUid);
+      const kbStatus = statuses.find(s => s.knowledgeBaseUid === knowledgeBaseUid);
 
       // Debug logging on first attempt and periodically
       if (i === 0 || (i > 0 && i % 30 === 0)) {
-        console.log(`Poll attempt ${i + 1}: Looking for catalogUid=${catalogUid}, found ${statuses.length} statuses`);
-        if (statuses.length > 0 && !catalogStatus) {
-          console.log(`Available UIDs: ${statuses.map(s => s.catalogUid).join(', ')}`);
+        console.log(`Poll attempt ${i + 1}: Looking for knowledgeBaseUid=${knowledgeBaseUid}, found ${statuses.length} statuses`);
+        if (statuses.length > 0 && !kbStatus) {
+          console.log(`Available UIDs: ${statuses.map(s => s.knowledgeBaseUid).join(', ')}`);
         }
       }
 
-      if (catalogStatus) {
+      if (kbStatus) {
         // KB found in status list - reset not-found counter
         notFoundCount = 0;
 
         // Check enum status using numeric values (k6 gRPC returns enums as numbers)
         // KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED = 6
-        if (catalogStatus.status === 6 || catalogStatus.status === "KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED") {
-          console.log(`✓ Update completed successfully for catalog ${catalogUid}`);
+        if (kbStatus.status === 6 || kbStatus.status === "KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED") {
+          console.log(`✓ Update completed successfully for knowledge base ${knowledgeBaseUid}`);
           return true;
         }
         // KNOWLEDGE_BASE_UPDATE_STATUS_FAILED = 7
-        if (catalogStatus.status === 7 || catalogStatus.status === "KNOWLEDGE_BASE_UPDATE_STATUS_FAILED") {
-          console.error(`✗ Update FAILED for catalog ${catalogUid}`);
-          console.error(`   Error message: ${catalogStatus.errorMessage || 'No error message provided'}`);
-          console.error(`   Workflow ID: ${catalogStatus.workflowId || 'N/A'}`);
+        if (kbStatus.status === 7 || kbStatus.status === "KNOWLEDGE_BASE_UPDATE_STATUS_FAILED") {
+          console.error(`✗ Update FAILED for knowledge base ${knowledgeBaseUid}`);
+          console.error(`   Error message: ${kbStatus.errorMessage || 'No error message provided'}`);
+          console.error(`   Workflow ID: ${kbStatus.workflowId || 'N/A'}`);
           return false;
         }
         // KNOWLEDGE_BASE_UPDATE_STATUS_ABORTED = 8
-        if (catalogStatus.status === 8 || catalogStatus.status === "KNOWLEDGE_BASE_UPDATE_STATUS_ABORTED") {
-          console.error(`✗ Update ABORTED for catalog ${catalogUid}`);
+        if (kbStatus.status === 8 || kbStatus.status === "KNOWLEDGE_BASE_UPDATE_STATUS_ABORTED") {
+          console.error(`✗ Update ABORTED for knowledge base ${knowledgeBaseUid}`);
           return false;
         }
         // Log current status periodically
         if (i === 0 || (i > 0 && i % 30 === 0)) {
-          console.log(`   Current status: ${catalogStatus.status} (${typeof catalogStatus.status})`);
+          console.log(`   Current status: ${kbStatus.status} (${typeof kbStatus.status})`);
         }
       } else {
         // KB not found in status list yet - might be race condition with workflow startup
@@ -873,7 +873,7 @@ export function pollUpdateCompletion(client, data, catalogUid, maxWaitSeconds = 
     }
   }
 
-  console.error(`Timeout waiting for update completion of catalog ${catalogUid}`);
+  console.error(`Timeout waiting for update completion of knowledge base ${knowledgeBaseUid}`);
   return false;
 }
 
@@ -881,7 +881,7 @@ export function pollUpdateCompletion(client, data, catalogUid, maxWaitSeconds = 
  * Verify rollback KB exists in database
  * Checks for KB with -rollback suffix and correct attributes
  *
- * @param {string} catalogId - Original catalog ID (without suffix)
+ * @param {string} knowledgeBaseId - Original knowledge base ID (without suffix)
  * @param {string} ownerUid - Owner UID
  * @returns {Array} Array of rollback KB rows (should be 1 or 0)
  */
@@ -908,8 +908,8 @@ function normalizeDBRow(row) {
   return normalized;
 }
 
-export function verifyRollbackKB(catalogId, ownerUid) {
-  const rollbackKbId = `${catalogId}-rollback`;
+export function verifyRollbackKB(knowledgeBaseId, ownerUid) {
+  const rollbackKbId = `${knowledgeBaseId}-rollback`;
   try {
     const query = `
       SELECT id, uid, staging, update_status, rollback_retention_until, tags, active_collection_uid
@@ -919,7 +919,7 @@ export function verifyRollbackKB(catalogId, ownerUid) {
     const results = safeQuery(query, rollbackKbId, ownerUid);
     return results ? results.map(row => normalizeDBRow(row)) : [];
   } catch (e) {
-    console.error(`Failed to verify rollback KB for ${catalogId}: ${e}`);
+    console.error(`Failed to verify rollback KB for ${knowledgeBaseId}: ${e}`);
     return [];
   }
 }
@@ -928,12 +928,12 @@ export function verifyRollbackKB(catalogId, ownerUid) {
  * Verify staging KB exists in database
  * Checks for KB with -staging suffix during update workflow
  *
- * @param {string} catalogId - Original catalog ID (without suffix)
+ * @param {string} knowledgeBaseId - Original knowledge base ID (without suffix)
  * @param {string} ownerUid - Owner UID
  * @returns {Array} Array of staging KB rows (should be 1 or 0)
  */
-export function verifyStagingKB(catalogId, ownerUid) {
-  const stagingKbId = `${catalogId}-staging`;
+export function verifyStagingKB(knowledgeBaseId, ownerUid) {
+  const stagingKbId = `${knowledgeBaseId}-staging`;
   try {
     const query = `
       SELECT uid, id, staging, update_status, active_collection_uid
@@ -943,29 +943,29 @@ export function verifyStagingKB(catalogId, ownerUid) {
     const results = safeQuery(query, stagingKbId, ownerUid);
     return results ? results.map(row => normalizeDBRow(row)) : [];
   } catch (e) {
-    console.error(`Failed to verify staging KB for ${catalogId}: ${e}`);
+    console.error(`Failed to verify staging KB for ${knowledgeBaseId}: ${e}`);
     return [];
   }
 }
 
 /**
- * Get catalog by catalog_id and owner
- * Helper to retrieve catalog details from database
+ * Get knowledge base by knowledge_base_id and owner
+ * Helper to retrieve knowledge base details from database
  *
- * @param {string} catalogId - Catalog ID
+ * @param {string} knowledgeBaseId - Knowledge Base ID
  * @param {string} ownerUid - Owner UID
- * @returns {Array} Array of catalog rows (should be 1 or 0)
+ * @returns {Array} Array of knowledge base rows (should be 1 or 0)
  */
-export function getCatalogByIdAndOwner(catalogId, ownerUid) {
+export function getKnowledgeBaseByIdAndOwner(knowledgeBaseId, ownerUid) {
   try {
     const query = `
       SELECT * FROM knowledge_base
       WHERE id = $1 AND owner = $2
     `;
-    const results = safeQuery(query, catalogId, ownerUid);
+    const results = safeQuery(query, knowledgeBaseId, ownerUid);
     return results ? results.map(row => normalizeDBRow(row)) : [];
   } catch (e) {
-    console.error(`Failed to get catalog ${catalogId}: ${e}`);
+    console.error(`Failed to get knowledge base ${knowledgeBaseId}: ${e}`);
     return [];
   }
 }
@@ -983,7 +983,7 @@ export function pollStagingKBCleanup(stagingKBID, ownerUid, maxWaitSeconds = 10)
   console.log(`[POLL] Waiting for staging KB cleanup: ${stagingKBID}, maxWait=${maxWaitSeconds}s`);
 
   for (let i = 0; i < maxWaitSeconds; i++) {
-    const stagingKB = getCatalogByIdAndOwner(stagingKBID, ownerUid);
+    const stagingKB = getKnowledgeBaseByIdAndOwner(stagingKBID, ownerUid);
 
     // Log on first attempt and every 3 seconds
     if (i === 0 || i % 3 === 0) {
@@ -1024,13 +1024,13 @@ export function pollStagingKBCleanup(stagingKBID, ownerUid, maxWaitSeconds = 10)
 export function pollRollbackKBCleanup(rollbackKBID, rollbackKBUID, ownerUid, maxWaitSeconds = 30) {
   console.log(`[POLL] Waiting for rollback KB cleanup: ${rollbackKBID} (UID: ${rollbackKBUID}), maxWait=${maxWaitSeconds}s`);
 
-  // Note: text_chunk and embedding tables don't have kb_uid (they use source_uid/source_table)
+  // Note: chunk and embedding tables don't have kb_uid (they use source_uid/source_table)
   // and don't have delete_time (they're hard deleted). We only check converted_file which has kb_uid.
   const convertedFilesQuery = `SELECT COUNT(*) as count FROM converted_file WHERE kb_uid = $1`;
 
   for (let i = 0; i < maxWaitSeconds; i++) {
-    const rollbackKB = getCatalogByIdAndOwner(rollbackKBID, ownerUid);
-    const filesCount = countFilesInCatalog(rollbackKBUID);
+    const rollbackKB = getKnowledgeBaseByIdAndOwner(rollbackKBID, ownerUid);
+    const filesCount = countFilesInKnowledgeBase(rollbackKBUID);
 
     const convertedFilesResult = safeQuery(convertedFilesQuery, rollbackKBUID);
     const convertedFilesCount = convertedFilesResult && convertedFilesResult.length > 0 ? parseInt(convertedFilesResult[0].count) : 0;
@@ -1085,14 +1085,14 @@ export function verifyResourceKBUIDs(newProdKBUID, rollbackKBUID) {
   };
 
   try {
-    // Check knowledge_base_file
-    const fileQuery = `SELECT COUNT(*) as count FROM knowledge_base_file WHERE kb_uid = $1`;
+    // Check file
+    const fileQuery = `SELECT COUNT(*) as count FROM file WHERE kb_uid = $1`;
     const fileResults = safeQuery(fileQuery, newProdKBUID);
     result.fileCount = fileResults && fileResults.length > 0 ? parseInt(fileResults[0].count) : 0;
     result.filesCorrect = result.fileCount > 0;
 
-    // Check text_chunk
-    const chunkQuery = `SELECT COUNT(*) as count FROM text_chunk WHERE kb_uid = $1`;
+    // Check chunk
+    const chunkQuery = `SELECT COUNT(*) as count FROM chunk WHERE kb_uid = $1`;
     const chunkResults = safeQuery(chunkQuery, newProdKBUID);
     result.chunkCount = chunkResults && chunkResults.length > 0 ? parseInt(chunkResults[0].count) : 0;
     result.chunksCorrect = result.chunkCount > 0;
@@ -1117,30 +1117,30 @@ export function verifyResourceKBUIDs(newProdKBUID, rollbackKBUID) {
 }
 
 /**
- * Count files in a catalog by catalog UID
+ * Count files in a knowledge base by KB UID
  *
- * @param {string} catalogUid - Catalog UID
- * @returns {number} Number of files in catalog
+ * @param {string} knowledgeBaseUid - Knowledge Base UID
+ * @returns {number} Number of files in knowledge base
  */
-export function countFilesInCatalog(catalogUid) {
+export function countFilesInKnowledgeBase(knowledgeBaseUid) {
   try {
-    const query = `SELECT COUNT(*) as count FROM knowledge_base_file WHERE kb_uid = $1 AND delete_time IS NULL`;
-    const results = safeQuery(query, catalogUid);
+    const query = `SELECT COUNT(*) as count FROM file WHERE kb_uid = $1 AND delete_time IS NULL`;
+    const results = safeQuery(query, knowledgeBaseUid);
     return results && results.length > 0 ? parseInt(results[0].count) : 0;
   } catch (e) {
-    console.error(`Failed to count files in catalog ${catalogUid}: ${e}`);
+    console.error(`Failed to count files in knowledge base ${knowledgeBaseUid}: ${e}`);
     return 0;
   }
 }
 
 /**
- * Get all catalogs matching a pattern (uses SQL LIKE)
+ * Get all knowledge bases matching a pattern (uses SQL LIKE)
  *
- * @param {string} pattern - SQL LIKE pattern (e.g., "catalog%")
+ * @param {string} pattern - SQL LIKE pattern (e.g., "kb%")
  * @param {string} ownerUid - Owner UID
- * @returns {Array} Array of catalog objects
+ * @returns {Array} Array of knowledge base objects
  */
-export function getCatalogsByPattern(pattern, ownerUid) {
+export function getKnowledgeBasesByPattern(pattern, ownerUid) {
   try {
     // Note: 'name' column removed from DB - using 'id' for pattern matching
     const query = `
@@ -1151,7 +1151,7 @@ export function getCatalogsByPattern(pattern, ownerUid) {
     `;
     return safeQuery(query, ownerUid, pattern);
   } catch (e) {
-    console.error(`Failed to get catalogs by pattern ${pattern}: ${e}`);
+    console.error(`Failed to get knowledge bases by pattern ${pattern}: ${e}`);
     return null;
   }
 }
@@ -1159,14 +1159,14 @@ export function getCatalogsByPattern(pattern, ownerUid) {
 /**
  * Poll for staging KB to appear during Phase 1 (Prepare)
  *
- * @param {string} catalogId - Original catalog ID (without suffix)
+ * @param {string} knowledgeBaseId - Original knowledge base ID (without suffix)
  * @param {string} ownerUid - Owner UID
  * @param {number} maxWaitSeconds - Maximum seconds to wait (default: 30)
  * @returns {boolean} True if staging KB found, false otherwise
  */
-export function pollForStagingKB(catalogId, ownerUid, maxWaitSeconds = 30) {
+export function pollForStagingKB(knowledgeBaseId, ownerUid, maxWaitSeconds = 30) {
   for (let i = 0; i < maxWaitSeconds; i++) {
-    const stagingKBs = verifyStagingKB(catalogId, ownerUid);
+    const stagingKBs = verifyStagingKB(knowledgeBaseId, ownerUid);
     if (stagingKBs && stagingKBs.length > 0) {
       return true;
     }
@@ -1209,7 +1209,7 @@ export function waitForAllUpdatesComplete(client, data, maxWaitSeconds = 60) {
       // Log every 10 seconds
       if (i % 20 === 0 && i > 0) {
         const elapsedSeconds = (i * pollIntervalSeconds).toFixed(1);
-        console.log(`[WAIT] Still waiting... ${active.length} catalogs active (${elapsedSeconds}s elapsed)`);
+        console.log(`[WAIT] Still waiting... ${active.length} knowledge bases active (${elapsedSeconds}s elapsed)`);
       }
     }
 
@@ -1283,7 +1283,7 @@ export function generateArticle(targetLength) {
  * This is faster than API polling and doesn't require authentication.
  *
  * WHEN TO USE:
- * - Teardown/cleanup: Ensure no workflows are running before deleting catalogs
+ * - Teardown/cleanup: Ensure no workflows are running before deleting knowledge bases
  * - Race condition prevention: Avoid "collection does not exist" errors
  *
  * VS waitForFileProcessingComplete:
@@ -1295,7 +1295,7 @@ export function generateArticle(targetLength) {
  * - waitForMultipleFilesProcessingComplete checks a specific list (test assertions)
  *
  * @param {number} maxWaitSeconds - Maximum time to wait (default: 120s)
- * @param {string|null} dbIDPrefix - Catalog ID prefix to filter (e.g., "test-ab12-"), null = global
+ * @param {string|null} dbIDPrefix - Knowledge Base ID prefix to filter (e.g., "test-ab12-"), null = global
  * @returns {boolean} - True if all processing complete, false if timeout
  */
 export function waitForAllFileProcessingComplete(maxWaitSeconds = 120, dbIDPrefix = null) {
@@ -1312,7 +1312,7 @@ export function waitForAllFileProcessingComplete(maxWaitSeconds = 120, dbIDPrefi
 
     const processingQuery = `
       SELECT COUNT(*) as count
-      FROM knowledge_base_file kbf
+      FROM file kbf
       JOIN knowledge_base kb ON kbf.kb_uid = kb.uid
       WHERE kbf.process_status IN (
           'FILE_PROCESS_STATUS_NOTSTARTED',
@@ -1370,14 +1370,14 @@ export function waitForAllFileProcessingComplete(maxWaitSeconds = 120, dbIDPrefi
  * - Timeout: Returns { completed: false, status: "TIMEOUT" }
  *
  * @param {string} namespaceId - The namespace ID
- * @param {string} catalogId - The catalog ID
+ * @param {string} knowledgeBaseId - The knowledge base ID
  * @param {string} fileUid - The file UID to poll
  * @param {object} headers - HTTP headers including Authorization
  * @param {number} maxWaitSeconds - Maximum seconds to wait (default: 300)
  * @param {number} notStartedThreshold - Seconds to wait before failing if file stuck in NOTSTARTED (default: 60)
  * @returns {object} - { completed: boolean, status: string, error?: string }
  */
-export function waitForFileProcessingComplete(namespaceId, catalogId, fileUid, headers, maxWaitSeconds = 300, notStartedThreshold = 60) {
+export function waitForFileProcessingComplete(namespaceId, knowledgeBaseId, fileUid, headers, maxWaitSeconds = 300, notStartedThreshold = 60) {
   console.log(`Waiting for file ${fileUid} to complete processing (max ${maxWaitSeconds}s)...`);
 
   let consecutiveNotStarted = 0;
@@ -1388,15 +1388,15 @@ export function waitForFileProcessingComplete(namespaceId, catalogId, fileUid, h
 
     const statusRes = http.request(
       "GET",
-      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${namespaceId}/catalogs/${catalogId}/files/${fileUid}`,
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${namespaceId}/knowledge-bases/${knowledgeBaseId}/files/${fileUid}`,
       null,
       headers
     );
 
-    // Check for HTTP errors first (e.g., 404 Not Found means catalog or file was deleted)
+    // Check for HTTP errors first (e.g., 404 Not Found means knowledge base or file was deleted)
     if (statusRes.status === 404) {
-      console.error(`✗ File or catalog not found (404) - catalog/file may have been deleted`);
-      return { completed: false, status: "NOT_FOUND", error: "Catalog or file not found" };
+      console.error(`✗ File or knowledge base not found (404) - knowledge base/file may have been deleted`);
+      return { completed: false, status: "NOT_FOUND", error: "Knowledge base or file not found" };
     } else if (statusRes.status >= 400) {
       console.error(`✗ API error ${statusRes.status} while checking file status`);
       return { completed: false, status: "API_ERROR", error: `HTTP ${statusRes.status}` };
@@ -1464,13 +1464,13 @@ export function waitForFileProcessingComplete(namespaceId, catalogId, fileUid, h
  * Returns as soon as all files complete or any file fails.
  *
  * @param {string} namespaceId - The namespace ID
- * @param {string} catalogId - The catalog ID
+ * @param {string} knowledgeBaseId - The knowledge base ID
  * @param {Array<string>} fileUids - Array of file UIDs to wait for
  * @param {object} headers - HTTP headers including Authorization
  * @param {number} maxWaitSeconds - Maximum seconds to wait (default: 600)
  * @returns {object} - { completed: boolean, status: string, processedCount: number, error?: string }
  */
-export function waitForMultipleFilesProcessingComplete(namespaceId, catalogId, fileUids, headers, maxWaitSeconds = 600) {
+export function waitForMultipleFilesProcessingComplete(namespaceId, knowledgeBaseId, fileUids, headers, maxWaitSeconds = 600) {
   console.log(`Waiting for ${fileUids.length} files to complete processing (max ${maxWaitSeconds}s)...`);
 
   const pending = new Set(fileUids);
@@ -1485,7 +1485,7 @@ export function waitForMultipleFilesProcessingComplete(namespaceId, catalogId, f
     const checks = Array.from(pending).map(fileUid =>
       http.request(
         "GET",
-        `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${namespaceId}/catalogs/${catalogId}/files/${fileUid}`,
+        `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${namespaceId}/knowledge-bases/${knowledgeBaseId}/files/${fileUid}`,
         null,
         headers
       )
@@ -1626,17 +1626,17 @@ export function staggerTestExecution(maxDelaySeconds = 2) {
  * Poll until a KB appears in the database with the expected state.
  * Used to deterministically wait for KB creation after workflow operations.
  *
- * @param {string} catalogId - The catalog ID to check
+ * @param {string} knowledgeBaseId - The knowledge base ID to check
  * @param {string} ownerUid - The owner UID
  * @param {number} maxWaitSeconds - Maximum time to wait (default: 30)
  * @param {boolean} expectDeleted - If true, wait for delete_time to be set (default: false)
  * @returns {object|null} - The KB object if found, null if timeout
  */
-export function pollForKBState(catalogId, ownerUid, maxWaitSeconds = 30, expectDeleted = false) {
+export function pollForKBState(knowledgeBaseId, ownerUid, maxWaitSeconds = 30, expectDeleted = false) {
   const startTime = Date.now();
 
   while ((Date.now() - startTime) / 1000 < maxWaitSeconds) {
-    const kbs = getCatalogByIdAndOwner(catalogId, ownerUid);
+    const kbs = getKnowledgeBaseByIdAndOwner(knowledgeBaseId, ownerUid);
 
     if (!kbs || kbs.length === 0) {
       if (expectDeleted) {
@@ -1671,13 +1671,13 @@ export function pollForKBState(catalogId, ownerUid, maxWaitSeconds = 30, expectD
  * Poll until staging KB is soft-deleted after an update completes.
  * The update workflow should clean up the staging KB as part of swap/completion.
  *
- * @param {string} catalogId - The base catalog ID (staging KB is {catalogId}-staging)
+ * @param {string} knowledgeBaseId - The base knowledge base ID (staging KB is {knowledgeBaseId}-staging)
  * @param {string} ownerUid - The owner UID
  * @param {number} maxWaitSeconds - Maximum time to wait (default: 10)
  * @returns {boolean} - True if staging KB is deleted, false if timeout
  */
-export function pollForStagingKBCleanup(catalogId, ownerUid, maxWaitSeconds = 10) {
-  const stagingKBID = `${catalogId}-staging`;
+export function pollForStagingKBCleanup(knowledgeBaseId, ownerUid, maxWaitSeconds = 10) {
+  const stagingKBID = `${knowledgeBaseId}-staging`;
   const result = pollForKBState(stagingKBID, ownerUid, maxWaitSeconds, true);
 
   // Result is null if KB is fully deleted, or has delete_time set if soft-deleted
@@ -1689,13 +1689,13 @@ export function pollForStagingKBCleanup(catalogId, ownerUid, maxWaitSeconds = 10
  * Poll until rollback KB exists after an update completes.
  * The update workflow creates the rollback KB during the swap phase.
  *
- * @param {string} catalogId - The base catalog ID (rollback KB is {catalogId}-rollback)
+ * @param {string} knowledgeBaseId - The base knowledge base ID (rollback KB is {knowledgeBaseId}-rollback)
  * @param {string} ownerUid - The owner UID
  * @param {number} maxWaitSeconds - Maximum time to wait (default: 10)
  * @returns {object|null} - The rollback KB object if found, null if timeout
  */
-export function pollForRollbackKBCreation(catalogId, ownerUid, maxWaitSeconds = 10) {
-  const rollbackKBID = `${catalogId}-rollback`;
+export function pollForRollbackKBCreation(knowledgeBaseId, ownerUid, maxWaitSeconds = 10) {
+  const rollbackKBID = `${knowledgeBaseId}-rollback`;
   return pollForKBState(rollbackKBID, ownerUid, maxWaitSeconds, false);
 }
 
@@ -1704,18 +1704,18 @@ export function pollForRollbackKBCreation(catalogId, ownerUid, maxWaitSeconds = 
 // ============================================================================
 
 /**
- * Clean up all previous test catalogs before starting a new test run.
+ * Clean up all previous test knowledge bases before starting a new test run.
  *
  * SAFETY: This function should ONLY be called in setup() BEFORE generating
- * the current test's unique prefix. At that point, ALL test-% catalogs are
+ * the current test's unique prefix. At that point, ALL test-% knowledge bases are
  * from previous test runs and safe to delete.
  *
- * This prevents zombie files/catalogs from previous failed test runs from
+ * This prevents zombie files/knowledge-bases from previous failed test runs from
  * blocking the worker queue and causing new tests to hang.
  *
  * Process:
  * 1. Mark any stuck files (NOTSTARTED/PROCESSING/CHUNKING/EMBEDDING) as FAILED
- * 2. Delete all test-% catalogs via API (respects business logic)
+ * 2. Delete all test-% knowledge bases via API (respects business logic)
  *
  * USAGE PATTERN (recommended order):
  * ```javascript
@@ -1728,16 +1728,16 @@ export function pollForRollbackKBCreation(catalogId, ownerUid, maxWaitSeconds = 
  *   const header = { headers: { Authorization: `Bearer ${loginResp.json().accessToken}` } };
  *   const userResp = http.request("GET", `${mgmtHost}/user`, {}, header);
  *
- *   // 3. CLEAN UP ALL test-% catalogs from previous runs
+ *   // 3. CLEAN UP ALL test-% knowledge bases from previous runs
  *   //    CRITICAL: Do this BEFORE generating this run's prefix!
- *   helper.cleanupPreviousTestCatalogs(userResp.json().user.id, header);
+ *   helper.cleanupPreviousTestKnowledgeBases(userResp.json().user.id, header);
  *
  *   // 4. NOW generate this run's unique prefix (after cleanup)
  *   const dbIDPrefix = constant.generateDBIDPrefix(); // e.g., "test-ab12-"
  *
- *   // 5. Create catalogs using the unique prefix
- *   //    e.g., `${dbIDPrefix}my-catalog-1`, `${dbIDPrefix}my-catalog-2`
- *   //    These will be the ONLY test-% catalogs in the system
+ *   // 5. Create knowledge bases using the unique prefix
+ *   //    e.g., `${dbIDPrefix}my-kb-1`, `${dbIDPrefix}my-kb-2`
+ *   //    These will be the ONLY test-% knowledge bases in the system
  *
  *   return { header, userResp, dbIDPrefix };
  * }
@@ -1745,29 +1745,29 @@ export function pollForRollbackKBCreation(catalogId, ownerUid, maxWaitSeconds = 
  *
  * WHY THIS IS SAFE FOR PARALLEL TESTS:
  * - Each test file generates a unique prefix (e.g., test-ab12-, test-cd34-)
- * - Cleanup runs BEFORE prefix generation, so ALL test-% catalogs are old
- * - After cleanup, each test creates its own isolated set of catalogs
- * - Tests cannot interfere with each other's catalogs
+ * - Cleanup runs BEFORE prefix generation, so ALL test-% knowledge bases are old
+ * - After cleanup, each test creates its own isolated set of knowledge bases
+ * - Tests cannot interfere with each other's knowledge bases
  *
  * @param {string} namespaceId - The namespace ID for API calls
  * @param {object} headers - HTTP headers including Authorization
- * @returns {object} - { catalogsDeleted: number, filesMarkedFailed: number, errors: Array }
+ * @returns {object} - { knowledgeBasesDeleted: number, filesMarkedFailed: number, errors: Array }
  */
-export function cleanupPreviousTestCatalogs(namespaceId, headers) {
-  console.log("=== GLOBAL CLEANUP: Removing previous test catalogs ===");
+export function cleanupPreviousTestKnowledgeBases(namespaceId, headers) {
+  console.log("=== GLOBAL CLEANUP: Removing previous test knowledge bases ===");
 
   const result = {
-    catalogsDeleted: 0,
+    knowledgeBasesDeleted: 0,
     filesMarkedFailed: 0,
     errors: []
   };
 
   try {
-    // Step 1: Mark any stuck files in test catalogs as FAILED
+    // Step 1: Mark any stuck files in test knowledge bases as FAILED
     // This prevents worker queue from being blocked by zombie files
     console.log("Step 1: Marking zombie files as FAILED...");
     const updateFilesQuery = `
-      UPDATE knowledge_base_file
+      UPDATE file
       SET process_status = 'FILE_PROCESS_STATUS_FAILED'
       WHERE kb_uid IN (
         SELECT uid FROM knowledge_base
@@ -1793,9 +1793,9 @@ export function cleanupPreviousTestCatalogs(namespaceId, headers) {
       result.errors.push(`Mark files: ${e.message || e}`);
     }
 
-    // Step 2: Get all production test catalogs (excluding staging/rollback)
-    console.log("Step 2: Querying for test catalogs...");
-    const testCatalogsQuery = `
+    // Step 2: Get all production test knowledge bases (excluding staging/rollback)
+    console.log("Step 2: Querying for test knowledge bases...");
+    const testKBsQuery = `
       SELECT id, create_time
       FROM knowledge_base
       WHERE id LIKE 'test-%'
@@ -1804,45 +1804,45 @@ export function cleanupPreviousTestCatalogs(namespaceId, headers) {
       ORDER BY create_time ASC
     `;
 
-    const testCatalogs = safeQuery(testCatalogsQuery);
+    const testKBs = safeQuery(testKBsQuery);
 
-    if (!testCatalogs || testCatalogs.length === 0) {
-      console.log("✓ No previous test catalogs found - system is clean");
+    if (!testKBs || testKBs.length === 0) {
+      console.log("✓ No previous test knowledge bases found - system is clean");
       return result;
     }
 
-    console.log(`Found ${testCatalogs.length} test catalogs to delete`);
+    console.log(`Found ${testKBs.length} test knowledge bases to delete`);
 
-    // Step 3: Delete each catalog via API (respects business logic, cascades properly)
-    for (const catalog of testCatalogs) {
-      const catalogId = byteArrayToString(catalog.id);
+    // Step 3: Delete each knowledge base via API (respects business logic, cascades properly)
+    for (const kb of testKBs) {
+      const knowledgeBaseId = byteArrayToString(kb.id);
 
       try {
         const deleteRes = http.request(
           "DELETE",
-          `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${namespaceId}/catalogs/${catalogId}`,
+          `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${namespaceId}/knowledge-bases/${knowledgeBaseId}`,
           null,
           headers
         );
 
         if (deleteRes.status === 204 || deleteRes.status === 200) {
-          result.catalogsDeleted++;
-          console.log(`  ✓ Deleted: ${catalogId}`);
+          result.knowledge_basesDeleted++;
+          console.log(`  ✓ Deleted: ${knowledgeBaseId}`);
         } else if (deleteRes.status === 404) {
           // Already deleted (race condition or concurrent cleanup)
-          result.catalogsDeleted++;
-          console.log(`  ✓ Already deleted: ${catalogId}`);
+          result.knowledge_basesDeleted++;
+          console.log(`  ✓ Already deleted: ${knowledgeBaseId}`);
         } else {
-          console.warn(`  ✗ Failed to delete ${catalogId}: HTTP ${deleteRes.status}`);
-          result.errors.push(`Delete ${catalogId}: HTTP ${deleteRes.status}`);
+          console.warn(`  ✗ Failed to delete ${knowledgeBaseId}: HTTP ${deleteRes.status}`);
+          result.errors.push(`Delete ${knowledgeBaseId}: HTTP ${deleteRes.status}`);
         }
       } catch (e) {
-        console.warn(`  ✗ Exception deleting ${catalogId}: ${e}`);
-        result.errors.push(`Delete ${catalogId}: ${e.message || e}`);
+        console.warn(`  ✗ Exception deleting ${knowledgeBaseId}: ${e}`);
+        result.errors.push(`Delete ${knowledgeBaseId}: ${e.message || e}`);
       }
     }
 
-    console.log(`=== CLEANUP COMPLETE: ${result.catalogsDeleted}/${testCatalogs.length} catalogs deleted ===`);
+    console.log(`=== CLEANUP COMPLETE: ${result.knowledge_basesDeleted}/${testKBs.length} knowledge bases deleted ===`);
 
     if (result.errors.length > 0) {
       console.warn(`Cleanup had ${result.errors.length} non-fatal errors`);

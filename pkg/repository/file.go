@@ -27,7 +27,7 @@ import (
 
 const (
 	// KnowledgeBaseFileTableName is the table name for knowledge base files
-	KnowledgeBaseFileTableName = "knowledge_base_file"
+	KnowledgeBaseFileTableName = "file"
 )
 
 // KnowledgeBaseFile interface defines the methods for the knowledge base file table
@@ -81,7 +81,7 @@ type KnowledgeBaseFile interface {
 
 	// GetKnowledgebaseFileByKBUIDAndFileID returns the knowledge base file by
 	// knowledge base ID and file ID. File ID (filename) isn't unique by
-	// catalog anymore, so this method is deprecated. Files should be identified by their UID.
+	// knowledge base anymore, so this method is deprecated. Files should be identified by their UID.
 	GetKnowledgebaseFileByKBUIDAndFileID(ctx context.Context, kbUID types.KBUIDType, fileID string) (*KnowledgeBaseFileModel, error)
 }
 
@@ -324,7 +324,7 @@ func (r *repository) CreateKnowledgeBaseFile(ctx context.Context, kb KnowledgeBa
 		whereString := fmt.Sprintf("%v = ? AND %s IS NULL", KnowledgeBaseColumn.UID, KnowledgeBaseColumn.DeleteTime)
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where(whereString, kb.KBUID).First(&existingKB).Error; err != nil {
 			if err == gorm.ErrRecordNotFound {
-				return fmt.Errorf("catalog does not exist or has been deleted")
+				return fmt.Errorf("knowledge base does not exist or has been deleted")
 			}
 			return fmt.Errorf("checking knowledge base existence: %w", err)
 		}
@@ -465,7 +465,7 @@ func (r *repository) DeleteKnowledgeBaseFile(ctx context.Context, fileUID string
 	return nil
 }
 
-// hard delete all files in the catalog
+// hard delete all files in the knowledge base
 func (r *repository) DeleteAllKnowledgeBaseFiles(ctx context.Context, kbUID string) error {
 	whereClause := fmt.Sprintf("%v = ?", KnowledgeBaseFileColumn.KnowledgeBaseUID)
 	// Use Unscoped() to perform actual hard delete (physical removal), not soft delete
@@ -961,7 +961,7 @@ func (r *repository) GetKnowledgebaseFileByKBUIDAndFileID(ctx context.Context, k
 		KnowledgeBaseFileColumn.KnowledgeBaseUID, KnowledgeBaseFileColumn.Filename, KnowledgeBaseFileColumn.DeleteTime)
 	if err := r.db.WithContext(ctx).Where(where, kbUID, fileID).First(&file).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return nil, fmt.Errorf("file not found by catalog ID: %v and file ID: %v", kbUID, fileID)
+			return nil, fmt.Errorf("file not found by knowledge base ID: %v and file ID: %v", kbUID, fileID)
 		}
 		return nil, err
 	}

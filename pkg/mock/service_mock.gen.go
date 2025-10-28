@@ -234,9 +234,9 @@ type ServiceMock struct {
 	beforeRepositoryCounter uint64
 	RepositoryMock          mServiceMockRepository
 
-	funcRollbackAdmin          func(ctx context.Context, o1 types.OwnerUIDType, s1 string) (rp1 *artifactpb.RollbackAdminResponse, err error)
+	funcRollbackAdmin          func(ctx context.Context, o1 types.OwnerUIDType, s1 string, s2 string) (rp1 *artifactpb.RollbackAdminResponse, err error)
 	funcRollbackAdminOrigin    string
-	inspectFuncRollbackAdmin   func(ctx context.Context, o1 types.OwnerUIDType, s1 string)
+	inspectFuncRollbackAdmin   func(ctx context.Context, o1 types.OwnerUIDType, s1 string, s2 string)
 	afterRollbackAdminCounter  uint64
 	beforeRollbackAdminCounter uint64
 	RollbackAdminMock          mServiceMockRollbackAdmin
@@ -10786,6 +10786,7 @@ type ServiceMockRollbackAdminParams struct {
 	ctx context.Context
 	o1  types.OwnerUIDType
 	s1  string
+	s2  string
 }
 
 // ServiceMockRollbackAdminParamPtrs contains pointers to parameters of the Service.RollbackAdmin
@@ -10793,6 +10794,7 @@ type ServiceMockRollbackAdminParamPtrs struct {
 	ctx *context.Context
 	o1  *types.OwnerUIDType
 	s1  *string
+	s2  *string
 }
 
 // ServiceMockRollbackAdminResults contains results of the Service.RollbackAdmin
@@ -10807,6 +10809,7 @@ type ServiceMockRollbackAdminExpectationOrigins struct {
 	originCtx string
 	originO1  string
 	originS1  string
+	originS2  string
 }
 
 // Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
@@ -10820,7 +10823,7 @@ func (mmRollbackAdmin *mServiceMockRollbackAdmin) Optional() *mServiceMockRollba
 }
 
 // Expect sets up expected params for Service.RollbackAdmin
-func (mmRollbackAdmin *mServiceMockRollbackAdmin) Expect(ctx context.Context, o1 types.OwnerUIDType, s1 string) *mServiceMockRollbackAdmin {
+func (mmRollbackAdmin *mServiceMockRollbackAdmin) Expect(ctx context.Context, o1 types.OwnerUIDType, s1 string, s2 string) *mServiceMockRollbackAdmin {
 	if mmRollbackAdmin.mock.funcRollbackAdmin != nil {
 		mmRollbackAdmin.mock.t.Fatalf("ServiceMock.RollbackAdmin mock is already set by Set")
 	}
@@ -10833,7 +10836,7 @@ func (mmRollbackAdmin *mServiceMockRollbackAdmin) Expect(ctx context.Context, o1
 		mmRollbackAdmin.mock.t.Fatalf("ServiceMock.RollbackAdmin mock is already set by ExpectParams functions")
 	}
 
-	mmRollbackAdmin.defaultExpectation.params = &ServiceMockRollbackAdminParams{ctx, o1, s1}
+	mmRollbackAdmin.defaultExpectation.params = &ServiceMockRollbackAdminParams{ctx, o1, s1, s2}
 	mmRollbackAdmin.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
 	for _, e := range mmRollbackAdmin.expectations {
 		if minimock.Equal(e.params, mmRollbackAdmin.defaultExpectation.params) {
@@ -10913,8 +10916,31 @@ func (mmRollbackAdmin *mServiceMockRollbackAdmin) ExpectS1Param3(s1 string) *mSe
 	return mmRollbackAdmin
 }
 
+// ExpectS2Param4 sets up expected param s2 for Service.RollbackAdmin
+func (mmRollbackAdmin *mServiceMockRollbackAdmin) ExpectS2Param4(s2 string) *mServiceMockRollbackAdmin {
+	if mmRollbackAdmin.mock.funcRollbackAdmin != nil {
+		mmRollbackAdmin.mock.t.Fatalf("ServiceMock.RollbackAdmin mock is already set by Set")
+	}
+
+	if mmRollbackAdmin.defaultExpectation == nil {
+		mmRollbackAdmin.defaultExpectation = &ServiceMockRollbackAdminExpectation{}
+	}
+
+	if mmRollbackAdmin.defaultExpectation.params != nil {
+		mmRollbackAdmin.mock.t.Fatalf("ServiceMock.RollbackAdmin mock is already set by Expect")
+	}
+
+	if mmRollbackAdmin.defaultExpectation.paramPtrs == nil {
+		mmRollbackAdmin.defaultExpectation.paramPtrs = &ServiceMockRollbackAdminParamPtrs{}
+	}
+	mmRollbackAdmin.defaultExpectation.paramPtrs.s2 = &s2
+	mmRollbackAdmin.defaultExpectation.expectationOrigins.originS2 = minimock.CallerInfo(1)
+
+	return mmRollbackAdmin
+}
+
 // Inspect accepts an inspector function that has same arguments as the Service.RollbackAdmin
-func (mmRollbackAdmin *mServiceMockRollbackAdmin) Inspect(f func(ctx context.Context, o1 types.OwnerUIDType, s1 string)) *mServiceMockRollbackAdmin {
+func (mmRollbackAdmin *mServiceMockRollbackAdmin) Inspect(f func(ctx context.Context, o1 types.OwnerUIDType, s1 string, s2 string)) *mServiceMockRollbackAdmin {
 	if mmRollbackAdmin.mock.inspectFuncRollbackAdmin != nil {
 		mmRollbackAdmin.mock.t.Fatalf("Inspect function is already set for ServiceMock.RollbackAdmin")
 	}
@@ -10939,7 +10965,7 @@ func (mmRollbackAdmin *mServiceMockRollbackAdmin) Return(rp1 *artifactpb.Rollbac
 }
 
 // Set uses given function f to mock the Service.RollbackAdmin method
-func (mmRollbackAdmin *mServiceMockRollbackAdmin) Set(f func(ctx context.Context, o1 types.OwnerUIDType, s1 string) (rp1 *artifactpb.RollbackAdminResponse, err error)) *ServiceMock {
+func (mmRollbackAdmin *mServiceMockRollbackAdmin) Set(f func(ctx context.Context, o1 types.OwnerUIDType, s1 string, s2 string) (rp1 *artifactpb.RollbackAdminResponse, err error)) *ServiceMock {
 	if mmRollbackAdmin.defaultExpectation != nil {
 		mmRollbackAdmin.mock.t.Fatalf("Default expectation is already set for the Service.RollbackAdmin method")
 	}
@@ -10955,14 +10981,14 @@ func (mmRollbackAdmin *mServiceMockRollbackAdmin) Set(f func(ctx context.Context
 
 // When sets expectation for the Service.RollbackAdmin which will trigger the result defined by the following
 // Then helper
-func (mmRollbackAdmin *mServiceMockRollbackAdmin) When(ctx context.Context, o1 types.OwnerUIDType, s1 string) *ServiceMockRollbackAdminExpectation {
+func (mmRollbackAdmin *mServiceMockRollbackAdmin) When(ctx context.Context, o1 types.OwnerUIDType, s1 string, s2 string) *ServiceMockRollbackAdminExpectation {
 	if mmRollbackAdmin.mock.funcRollbackAdmin != nil {
 		mmRollbackAdmin.mock.t.Fatalf("ServiceMock.RollbackAdmin mock is already set by Set")
 	}
 
 	expectation := &ServiceMockRollbackAdminExpectation{
 		mock:               mmRollbackAdmin.mock,
-		params:             &ServiceMockRollbackAdminParams{ctx, o1, s1},
+		params:             &ServiceMockRollbackAdminParams{ctx, o1, s1, s2},
 		expectationOrigins: ServiceMockRollbackAdminExpectationOrigins{origin: minimock.CallerInfo(1)},
 	}
 	mmRollbackAdmin.expectations = append(mmRollbackAdmin.expectations, expectation)
@@ -10997,17 +11023,17 @@ func (mmRollbackAdmin *mServiceMockRollbackAdmin) invocationsDone() bool {
 }
 
 // RollbackAdmin implements mm_service.Service
-func (mmRollbackAdmin *ServiceMock) RollbackAdmin(ctx context.Context, o1 types.OwnerUIDType, s1 string) (rp1 *artifactpb.RollbackAdminResponse, err error) {
+func (mmRollbackAdmin *ServiceMock) RollbackAdmin(ctx context.Context, o1 types.OwnerUIDType, s1 string, s2 string) (rp1 *artifactpb.RollbackAdminResponse, err error) {
 	mm_atomic.AddUint64(&mmRollbackAdmin.beforeRollbackAdminCounter, 1)
 	defer mm_atomic.AddUint64(&mmRollbackAdmin.afterRollbackAdminCounter, 1)
 
 	mmRollbackAdmin.t.Helper()
 
 	if mmRollbackAdmin.inspectFuncRollbackAdmin != nil {
-		mmRollbackAdmin.inspectFuncRollbackAdmin(ctx, o1, s1)
+		mmRollbackAdmin.inspectFuncRollbackAdmin(ctx, o1, s1, s2)
 	}
 
-	mm_params := ServiceMockRollbackAdminParams{ctx, o1, s1}
+	mm_params := ServiceMockRollbackAdminParams{ctx, o1, s1, s2}
 
 	// Record call args
 	mmRollbackAdmin.RollbackAdminMock.mutex.Lock()
@@ -11026,7 +11052,7 @@ func (mmRollbackAdmin *ServiceMock) RollbackAdmin(ctx context.Context, o1 types.
 		mm_want := mmRollbackAdmin.RollbackAdminMock.defaultExpectation.params
 		mm_want_ptrs := mmRollbackAdmin.RollbackAdminMock.defaultExpectation.paramPtrs
 
-		mm_got := ServiceMockRollbackAdminParams{ctx, o1, s1}
+		mm_got := ServiceMockRollbackAdminParams{ctx, o1, s1, s2}
 
 		if mm_want_ptrs != nil {
 
@@ -11045,6 +11071,11 @@ func (mmRollbackAdmin *ServiceMock) RollbackAdmin(ctx context.Context, o1 types.
 					mmRollbackAdmin.RollbackAdminMock.defaultExpectation.expectationOrigins.originS1, *mm_want_ptrs.s1, mm_got.s1, minimock.Diff(*mm_want_ptrs.s1, mm_got.s1))
 			}
 
+			if mm_want_ptrs.s2 != nil && !minimock.Equal(*mm_want_ptrs.s2, mm_got.s2) {
+				mmRollbackAdmin.t.Errorf("ServiceMock.RollbackAdmin got unexpected parameter s2, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmRollbackAdmin.RollbackAdminMock.defaultExpectation.expectationOrigins.originS2, *mm_want_ptrs.s2, mm_got.s2, minimock.Diff(*mm_want_ptrs.s2, mm_got.s2))
+			}
+
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
 			mmRollbackAdmin.t.Errorf("ServiceMock.RollbackAdmin got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
 				mmRollbackAdmin.RollbackAdminMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
@@ -11057,9 +11088,9 @@ func (mmRollbackAdmin *ServiceMock) RollbackAdmin(ctx context.Context, o1 types.
 		return (*mm_results).rp1, (*mm_results).err
 	}
 	if mmRollbackAdmin.funcRollbackAdmin != nil {
-		return mmRollbackAdmin.funcRollbackAdmin(ctx, o1, s1)
+		return mmRollbackAdmin.funcRollbackAdmin(ctx, o1, s1, s2)
 	}
-	mmRollbackAdmin.t.Fatalf("Unexpected call to ServiceMock.RollbackAdmin. %v %v %v", ctx, o1, s1)
+	mmRollbackAdmin.t.Fatalf("Unexpected call to ServiceMock.RollbackAdmin. %v %v %v %v", ctx, o1, s1, s2)
 	return
 }
 

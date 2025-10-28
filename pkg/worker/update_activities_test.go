@@ -58,14 +58,14 @@ func TestListKnowledgeBasesForUpdateActivity_WithCatalogIDs(t *testing.T) {
 
 	ctx := context.Background()
 	kbUID := types.KBUIDType(uuid.Must(uuid.NewV4()))
-	catalogID := "test-catalog-1"
+	knowledgeBaseID := "test-kb-1"
 
 	mockRepository := mock.NewRepositoryMock(mc)
 	mockRepository.GetKnowledgeBaseByIDMock.
-		When(minimock.AnyContext, catalogID).
+		When(minimock.AnyContext, knowledgeBaseID).
 		Then(&repository.KnowledgeBaseModel{
 			UID:          kbUID,
-			KBID:         catalogID,
+			KBID:         knowledgeBaseID,
 			Staging:      false,
 			UpdateStatus: artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED.String(),
 		}, nil)
@@ -74,14 +74,14 @@ func TestListKnowledgeBasesForUpdateActivity_WithCatalogIDs(t *testing.T) {
 	w := &Worker{repository: mockRepository, log: zap.NewNop()}
 
 	param := &ListKnowledgeBasesForUpdateActivityParam{
-		CatalogIDs: []string{catalogID},
+		KnowledgeBaseIDs: []string{knowledgeBaseID},
 	}
 	result, err := w.ListKnowledgeBasesForUpdateActivity(ctx, param)
 
 	c.Assert(err, qt.IsNil)
 	c.Assert(result, qt.Not(qt.IsNil))
 	c.Assert(len(result.KnowledgeBases), qt.Equals, 1)
-	c.Assert(result.KnowledgeBases[0].KBID, qt.Equals, catalogID)
+	c.Assert(result.KnowledgeBases[0].KBID, qt.Equals, knowledgeBaseID)
 }
 
 func TestValidateUpdateEligibilityActivity_Success(t *testing.T) {

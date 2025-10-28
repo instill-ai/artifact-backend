@@ -83,7 +83,7 @@ func (w *cleanupKnowledgeBaseWorkflow) Execute(ctx context.Context, param Cleanu
 
 	_, err := w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, w.worker.CleanupKnowledgeBaseWorkflow, param)
 	if err != nil {
-		return errorsx.AddMessage(err, "Unable to start catalog cleanup workflow. Please try again.")
+		return errorsx.AddMessage(err, "Unable to start knowledge base cleanup workflow. Please try again.")
 	}
 	return nil
 }
@@ -421,7 +421,7 @@ func (w *Worker) CleanupKnowledgeBaseWorkflow(ctx workflow.Context, param Cleanu
 			"errors", errors)
 		err := errorsx.AddMessage(
 			fmt.Errorf("cleanup failed with %d error(s): %v", len(errors), errors),
-			"Catalog cleanup encountered errors. Some cleanup operations may not have completed.",
+			"Knowledge base cleanup encountered errors. Some cleanup operations may not have completed.",
 		)
 		return err
 	}

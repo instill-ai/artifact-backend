@@ -345,7 +345,7 @@ func (w *Worker) DeleteKBFilesFromMinIOActivity(ctx context.Context, param *Dele
 
 	err := w.deleteKnowledgeBaseSync(ctx, param.KBUID.String())
 	if err != nil {
-		err = errorsx.AddMessage(err, "Unable to delete catalog files from storage. Please try again.")
+		err = errorsx.AddMessage(err, "Unable to delete knowledge base files from storage. Please try again.")
 		return temporal.NewApplicationErrorWithCause(
 			errorsx.MessageOrErr(err),
 			deleteKBFilesActivityError,

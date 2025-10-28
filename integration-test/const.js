@@ -135,7 +135,7 @@ import { randomString } from "https://jslib.k6.io/k6-utils/1.1.0/index.js";
 
 // Add randomization to prevent collisions between parallel/sequential test runs
 // Generate unique prefix per test file to avoid parallel test interference
-// Format: test-{4 random chars}- = 11 chars, leaving 21 chars for catalog-specific names
+// Format: test-{4 random chars}- = 11 chars, leaving 21 chars for knowledge-base-specific names
 // CRITICAL: Each test MUST call this in setup() to get a unique prefix
 // DO NOT create a const export - it would be shared across all parallel tests!
 export function generateDBIDPrefix() {

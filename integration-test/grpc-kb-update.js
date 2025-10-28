@@ -10,28 +10,28 @@
  * ARCHITECTURE OVERVIEW:
  * The RAG update framework uses a staging approach for zero-downtime updates:
  * - Production KB: Current live version (staging=false, constant UID)
- * - Staging KB: New version being built (staging=true, catalog_id suffix="-staging")
- * - Rollback KB: Stores previous resources (staging=true, catalog_id suffix="-rollback")
+ * - Staging KB: New version being built (staging=true, knowledge_base_id suffix="-staging")
+ * - Rollback KB: Stores previous resources (staging=true, knowledge_base_id suffix="-rollback")
  *
  * CRITICAL DESIGN DECISION: Production KB UID remains constant throughout all updates/rollbacks.
  * Only resources (files, chunks, embeddings, converted_files) are swapped between KBs, NOT the KB identity itself.
- * This preserves ACL permissions and ensures catalog_id always points to the same KB entity.
+ * This preserves ACL permissions and ensures knowledge_base_id always points to the same KB entity.
  *
  * What are "resources"?
- * - Files: knowledge_base_file table records
- * - Chunks: text_chunk table records
+ * - Files: file table records
+ * - Chunks: chunk table records
  * - Embeddings: embedding table records (vectors in Milvus)
  * - Converted files: converted_file table records
  * All these tables have a kb_uid foreign key that gets updated during swap via UpdateKBUIDInResources().
  *
  * The atomic swap swaps RESOURCES between KBs, not KB identities:
- * - Before: catalog_id="my-catalog" (KB UID: ABC) → contains old resources
- * - After: catalog_id="my-catalog" (KB UID: ABC) → contains new resources (instant cutover)
+ * - Before: knowledge_base_id="my-kb" (KB UID: ABC) → contains old resources
+ * - After: knowledge_base_id="my-kb" (KB UID: ABC) → contains new resources (instant cutover)
  * - The KB UID (ABC) never changes, only its resources are swapped
  * - No dual-mode routing needed - queries always use the single production KB
  *
  * 6-PHASE WORKFLOW:
- * Phase 1 (Prepare): Create staging KB with NEW UID and catalog_id="{name}-staging"
+ * Phase 1 (Prepare): Create staging KB with NEW UID and knowledge_base_id="{name}-staging"
  *   - New UID is generated for staging KB
  *   - Staging KB copies metadata from production (embedding config, tags, etc.)
  *   - Creates new Milvus collection for staging KB
@@ -49,7 +49,7 @@
  *   - Verify production and staging KBs have identical file counts
  *   - Validate collection UIDs, converted files, chunks, and embeddings
  * Phase 5 (Swap): Atomic resource swap using temp UID (3-step process)
- *   - Create/reuse rollback KB (catalog_id="{name}-rollback")
+ *   - Create/reuse rollback KB (knowledge_base_id="{name}-rollback")
  *   - Step 1: Move production KB's resources → temp UID
  *   - Step 2: Move staging KB's resources → production KB (production UID stays constant!)
  *   - Step 3: Move temp resources → rollback KB
@@ -76,8 +76,8 @@
  *   - ExecuteKnowledgeBaseUpdate: Trigger system-wide updates
  *   - GetKnowledgeBaseUpdateStatusAdmin: Monitor update progress
  *   - Concurrency protection: Returns details when update already in progress
- *   - Empty catalog ID array (update all eligible KBs)
- *   - Specific catalog ID array (update selected KBs)
+ *   - Empty KB ID array (update all eligible KBs)
+ *   - Specific KB ID array (update selected KBs)
  *
  * Group 2: Complete Update Workflow
  *   - End-to-end validation of all 6 phases
@@ -91,7 +91,7 @@
  *   - Staging KB created with new UID
  *   - staging=true flag set correctly
  *   - update_status='KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING'
- *   - Catalog ID has -staging suffix
+ *   - KB ID has -staging suffix
  *   - Metadata copied from production (embedding config, tags, description)
  *   - New Milvus collection created for staging KB
  *   - active_collection_uid points to staging KB's own collection
@@ -192,8 +192,8 @@
  * Group 11: Multiple KB Updates
  *   - Simultaneous Updates:
  *     * Update 10 KBs with single API call
- *     * Empty catalogIds array updates all eligible KBs
- *     * Specific catalogIds array updates only those KBs
+ *     * Empty knowledgeBaseIds array updates all eligible KBs
+ *     * Specific knowledgeBaseIds array updates only those KBs
  *   - Workflow Independence:
  *     * Each KB has separate workflow execution
  *     * Failures in one KB don't affect others
@@ -204,7 +204,7 @@
  *     * Resource integrity for all KBs after updates
  *
  * Group 12: Edge Cases
- *   - Empty/Minimal Data (empty catalog updates, single file, failed files)
+ *   - Empty/Minimal Data (empty KB updates, single file, failed files)
  *   - Name Edge Cases (length limits, special characters, Unicode)
  *   - Metadata Edge Cases (special characters, long descriptions, large tags)
  *   - Operation Edge Cases (update after KB creation, rapid operations)
@@ -217,10 +217,10 @@
  *
  * Group 14: Abort Knowledge Base Update
  *   - Abort with no ongoing updates (empty abort succeeds gracefully)
- *   - Abort specific catalog (cancel workflow, cleanup staging KB, set status to aborted)
- *   - Abort all ongoing updates (empty catalog_ids aborts all)
+ *   - Abort specific KB (cancel workflow, cleanup staging KB, set status to aborted)
+ *   - Abort all ongoing updates (empty knowledge_base_ids aborts all)
  *   - Verify staging KB cleanup (staging resources removed after abort)
- *   - Status verification (catalog status set to "aborted")
+ *   - Status verification (KB status set to "aborted")
  *
  * WHAT IS NOT TESTED (Requires Manual/Unit Testing):
  * - Phase 2 failure recovery (requires simulating file processing failures)
@@ -231,7 +231,7 @@
  *
  * TEST EXECUTION:
  * This test runs as a single comprehensive suite that:
- * 1. Creates catalogs and processes files
+ * 1. Creates knowledge bases and processes files
  * 2. Triggers update workflows
  * 3. Monitors progress through completion
  * 4. Verifies production KB UID remains constant
@@ -335,25 +335,25 @@ export function setup() {
         "timeout": "600s"
     };
 
-    // Cleanup orphaned catalogs from previous failed test runs OF THIS SPECIFIC TEST
+    // Cleanup orphaned knowledge bases from previous failed test runs OF THIS SPECIFIC TEST
     // Use API-only cleanup to properly trigger workflows (no direct DB manipulation)
     console.log("\n=== SETUP: Cleaning up previous test data (workflow/prepare patterns only) ===");
     try {
-        const listResp = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${userResp.json().user.id}/catalogs`, null, header);
+        const listResp = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${userResp.json().user.id}/knowledge-bases`, null, header);
         if (listResp.status === 200) {
-            const catalogs = Array.isArray(listResp.json().catalogs) ? listResp.json().catalogs : [];
+            const knowledgeBases = Array.isArray(listResp.json().knowledgeBases) ? listResp.json().knowledgeBases : [];
             let cleanedCount = 0;
-            for (const catalog of catalogs) {
-                const catId = catalog.id;
+            for (const kb of knowledgeBases) {
+                const kbId = kb.id;
                 // Match patterns: test-{prefix}workflow-{random} or test-{prefix}prepare-{random}
                 if (catId && catId.match(/test-[a-z0-9]+-(workflow|prepare)-/)) {
-                    const delResp = http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${userResp.json().user.id}/catalogs/${catId}`, null, header);
+                    const delResp = http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${userResp.json().user.id}/knowledge-bases/${catId}`, null, header);
                     if (delResp.status === 200 || delResp.status === 204) {
                         cleanedCount++;
                     }
                 }
             }
-            console.log(`Cleaned ${cleanedCount} orphaned catalogs from previous test runs`);
+            console.log(`Cleaned ${cleanedCount} orphaned knowledge bases from previous test runs`);
         }
     } catch (e) {
         console.log(`Setup cleanup warning: ${e}`);
@@ -382,7 +382,7 @@ export function teardown(data) {
         try {
             const orphanedFilesResult = helper.safeQuery(`
                 SELECT COUNT(*) as count
-                FROM knowledge_base_file kbf
+                FROM file kbf
                 JOIN knowledge_base kb ON kbf.kb_uid = kb.uid
                 WHERE kbf.process_status IN ('FILE_PROCESS_STATUS_NOTSTARTED', 'FILE_PROCESS_STATUS_PROCESSING', 'FILE_PROCESS_STATUS_CHUNKING', 'FILE_PROCESS_STATUS_EMBEDDING')
                   AND kbf.delete_time IS NULL
@@ -394,12 +394,12 @@ export function teardown(data) {
             if (orphanedCount > 0) {
                 console.log(`Found ${orphanedCount} orphaned files, marking as FAILED...`);
                 const updated = helper.safeExecute(`
-                    UPDATE knowledge_base_file
+                    UPDATE file
                     SET process_status = 'FILE_PROCESS_STATUS_FAILED',
                         process_outcome_message = 'Parent KB was deleted before processing completed'
                     WHERE uid IN (
                         SELECT kbf.uid
-                        FROM knowledge_base_file kbf
+                        FROM file kbf
                         JOIN knowledge_base kb ON kbf.kb_uid = kb.uid
                         WHERE kbf.process_status IN ('FILE_PROCESS_STATUS_NOTSTARTED', 'FILE_PROCESS_STATUS_PROCESSING', 'FILE_PROCESS_STATUS_CHUNKING', 'FILE_PROCESS_STATUS_EMBEDDING')
                           AND kbf.delete_time IS NULL
@@ -487,15 +487,15 @@ export function teardown(data) {
             `);
 
             if (catalogsToAbort && catalogsToAbort.length > 0) {
-                const catalogIds = catalogsToAbort.map(c => c.id);
+                const knowledgeBaseIds = catalogsToAbort.map(c => c.id);
                 try {
                     client.connect(constant.artifactGRPCPrivateHost, { plaintext: true });
                     const abortRes = client.invoke(
                         "artifact.artifact.v1alpha.ArtifactPrivateService/AbortKnowledgeBaseUpdateAdmin",
-                        { catalogIds: catalogIds },
+                        { knowledgeBaseIds: knowledgeBaseIds },
                         data.metadata
                     );
-                    console.log(`TEARDOWN: Aborted ${catalogIds.length} workflows via API`);
+                    console.log(`TEARDOWN: Aborted ${knowledgeBaseIds.length} workflows via API`);
                     client.close();
 
                     // Wait for abort to propagate
@@ -570,22 +570,22 @@ export function teardown(data) {
                     client.connect(constant.artifactGRPCPrivateHost, { plaintext: true });
 
                     for (const kb of rollbackKBs) {
-                        // Extract production catalog ID (remove "-rollback" suffix)
-                        const catalogId = kb.id.replace('-rollback', '');
-                        console.log(`Step 3: Purging rollback KB for catalog: ${catalogId}`);
+                        // Extract production KB ID (remove "-rollback" suffix)
+                        const knowledgeBaseId = kb.id.replace('-rollback', '');
+                        console.log(`Step 3: Purging rollback KB for KB: ${knowledgeBaseId}`);
 
                         const purgeRes = client.invoke(
                             "artifact.artifact.v1alpha.ArtifactPrivateService/PurgeRollbackAdmin",
                             {
-                                name: `users/${data.expectedOwner.uid}/catalogs/${catalogId}`
+                                name: `users/${data.expectedOwner.uid}/knowledge-bases/${knowledgeBaseId}`
                             },
                             data.metadata
                         );
 
                         if (purgeRes.status === grpc.StatusOK) {
-                            console.log(`Step 3: Successfully purged rollback KB for ${catalogId}`);
+                            console.log(`Step 3: Successfully purged rollback KB for ${knowledgeBaseId}`);
                         } else {
-                            console.warn(`Step 3: Failed to purge rollback KB for ${catalogId}: ${purgeRes.status}`);
+                            console.warn(`Step 3: Failed to purge rollback KB for ${knowledgeBaseId}: ${purgeRes.status}`);
                         }
                     }
 
@@ -766,12 +766,12 @@ function TestAdminAPIs(client, data) {
             "Admin API: Response has details": (r) => Array.isArray(r.message.details),
         });
 
-        // Test 1.2: SKIPPED - ExecuteKnowledgeBaseUpdate with empty catalogIds
-        // CRITICAL: We CANNOT test ExecuteKnowledgeBaseUpdate with empty catalogIds because
+        // Test 1.2: SKIPPED - ExecuteKnowledgeBaseUpdate with empty knowledgeBaseIds
+        // CRITICAL: We CANNOT test ExecuteKnowledgeBaseUpdate with empty knowledgeBaseIds because
         // it triggers updates on ALL eligible KBs in the system, which will interfere with
         // other test groups that may have eligible catalogs.
         //
-        // Empty catalogIds means "update ALL eligible KBs" per backend logic:
+        // Empty knowledgeBaseIds means "update ALL eligible KBs" per backend logic:
         //   if len(catalogIDs) > 0 { /* update specific */ } else { /* update ALL */ }
         //
         // This would cause unpredictable cross-test interference depending on timing.
@@ -793,33 +793,33 @@ function TestCompleteUpdateWorkflow(client, data) {
         // OPTIMIZATION: Increased to 30s for heavy test groups with many concurrent updates
         helper.waitForAllUpdatesComplete(client, data, 30);
 
-        // Create catalog with 2 files
-        const catalogId = data.dbIDPrefix + "workflow-" + randomString(8);
+        // Create knowledge base with 2 files
+        const knowledgeBaseId = data.dbIDPrefix + "workflow-" + randomString(8);
         const createBody = {
-            id: catalogId,
-            description: "Test catalog for complete workflow",
+            id: knowledgeBaseId,
+            description: "Test KB for complete workflow",
             tags: ["test", "workflow", "e2e"],
         };
 
         const createRes = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
             JSON.stringify(createBody),
             data.header
         );
 
-        let catalog;
+        let kb;
         try {
-            catalog = createRes.json().catalog;
+            kb = createRes.json().knowledgeBase;
         } catch (e) {
-            check(false, { "Workflow: Failed to create catalog": () => false });
+            check(false, { "Workflow: Failed to create knowledge base": () => false });
             return;
         }
 
-        const catalogUid = catalog.uid;
+        const knowledgeBaseUid = kb.uid;
 
         check(createRes, {
-            "Workflow: Catalog created": (r) => r.status === 200,
+            "Workflow: Knowledge base created": (r) => r.status === 200,
         });
 
         // Upload 2 files
@@ -828,14 +828,14 @@ function TestCompleteUpdateWorkflow(client, data) {
 
         const uploadRes1 = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
             JSON.stringify({ filename: file1Name, type: "TYPE_TEXT", content: constant.sampleTxt }),
             data.header
         );
 
         const uploadRes2 = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
             JSON.stringify({ filename: file2Name, type: "TYPE_TEXT", content: constant.sampleTxt }),
             data.header
         );
@@ -845,7 +845,7 @@ function TestCompleteUpdateWorkflow(client, data) {
             fileUid1 = uploadRes1.json().file.uid;
             fileUid2 = uploadRes2.json().file.uid;
         } catch (e) {
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
             return;
         }
 
@@ -858,7 +858,7 @@ function TestCompleteUpdateWorkflow(client, data) {
         // Wait for completion (using helper function - 600 second timeout)
         const result = helper.waitForMultipleFilesProcessingComplete(
             data.expectedOwner.id,
-            catalogId,
+            knowledgeBaseId,
             [fileUid1, fileUid2],
             data.header,
             600
@@ -869,7 +869,7 @@ function TestCompleteUpdateWorkflow(client, data) {
         });
 
         if (!result.completed) {
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
             return;
         }
 
@@ -877,7 +877,7 @@ function TestCompleteUpdateWorkflow(client, data) {
         console.log("Workflow: Triggering update...");
         const executeRes = client.invoke(
             "artifact.artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
-            { catalogIds: [catalogId] },
+            { knowledgeBaseIds: [knowledgeBaseId] },
             data.metadata
         );
 
@@ -891,14 +891,14 @@ function TestCompleteUpdateWorkflow(client, data) {
 
         // PHASE 1: Wait for staging KB creation
         console.log("Workflow: Waiting for Phase 1 (Staging KB creation)...");
-        const stagingFound = helper.pollForStagingKB(catalogId, data.expectedOwner.uid, 60);
+        const stagingFound = helper.pollForStagingKB(knowledgeBaseId, data.expectedOwner.uid, 60);
 
         check({ stagingFound }, {
             "Workflow Phase 1: Staging KB created": () => stagingFound === true,
         });
 
         if (stagingFound) {
-            const stagingKBs = helper.verifyStagingKB(catalogId, data.expectedOwner.uid);
+            const stagingKBs = helper.verifyStagingKB(knowledgeBaseId, data.expectedOwner.uid);
             if (stagingKBs && stagingKBs.length > 0) {
                 const stagingKB = stagingKBs[0];
                 check(stagingKB, {
@@ -906,14 +906,14 @@ function TestCompleteUpdateWorkflow(client, data) {
                     "Workflow Phase 1: Staging has update_status='KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING'": () =>
                         stagingKB.update_status === "KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING",
                     "Workflow Phase 1: Staging has correct name": () =>
-                        stagingKB.id === `${catalogId}-staging`,
+                        stagingKB.id === `${knowledgeBaseId}-staging`,
                 });
             }
         }
 
         // PHASE 2-5: Wait for workflow completion (includes file reprocessing, synchronization, validation, and atomic swap)
         console.log("Workflow: Waiting for workflow completion (Phases 2-5)...");
-        const updateCompleted = helper.pollUpdateCompletion(client, data, catalogUid, 900);
+        const updateCompleted = helper.pollUpdateCompletion(client, data, knowledgeBaseUid, 900);
 
         check({ updateCompleted }, {
             "Workflow Phase 5: Update completed": () => updateCompleted === true,
@@ -921,7 +921,7 @@ function TestCompleteUpdateWorkflow(client, data) {
 
         if (updateCompleted) {
             // Verify swap results
-            const prodKBs = helper.getCatalogByIdAndOwner(catalogId, data.expectedOwner.uid);
+            const prodKBs = helper.getKnowledgeBaseByIdAndOwner(knowledgeBaseId, data.expectedOwner.uid);
             check(prodKBs, {
                 "Workflow Phase 5: Production KB exists": () => prodKBs && prodKBs.length > 0,
                 "Workflow Phase 5: Production has staging=false": () =>
@@ -931,7 +931,7 @@ function TestCompleteUpdateWorkflow(client, data) {
             });
 
             // Poll for rollback KB creation (deterministic wait)
-            const rollbackKBs = helper.verifyRollbackKB(catalogId, data.expectedOwner.uid);
+            const rollbackKBs = helper.verifyRollbackKB(knowledgeBaseId, data.expectedOwner.uid);
             check(rollbackKBs, {
                 "Workflow Phase 5: Rollback KB created": () => rollbackKBs && rollbackKBs.length > 0,
                 "Workflow Phase 5: Rollback has staging=true": () =>
@@ -950,12 +950,12 @@ function TestCompleteUpdateWorkflow(client, data) {
         while (maxWaitIterations > 0 && !allFilesProcessed) {
             const fileStatusQuery = `
                 SELECT COUNT(*) as count
-                FROM knowledge_base_file
+                FROM file
                 WHERE kb_uid = $1
                   AND process_status = 'FILE_PROCESS_STATUS_PROCESSING'
                   AND delete_time IS NULL
             `;
-            const result = helper.safeQuery(fileStatusQuery, catalogUid);
+            const result = helper.safeQuery(fileStatusQuery, knowledgeBaseUid);
             const processing = result && result.length > 0 ? parseInt(result[0].count) : 0;
 
             if (processing === 0) {
@@ -968,8 +968,8 @@ function TestCompleteUpdateWorkflow(client, data) {
         }
 
         // Cleanup
-        console.log("Workflow: Cleaning up test catalog...");
-        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+        console.log("Workflow: Cleaning up test knowledge base...");
+        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
     });
 }
 
@@ -985,40 +985,40 @@ function TestPhasePrepare(client, data) {
         // OPTIMIZATION: Skip wait - this test only creates staging KB, doesn't trigger updates
         // helper.waitForAllUpdatesComplete(client, data, 15);
 
-        // Create catalog
-        const catalogId = data.dbIDPrefix + "prepare-" + randomString(8);
-        const testDescription = "Test catalog for Phase 1 - Prepare staging KB";
+        // Create knowledge base
+        const knowledgeBaseId = data.dbIDPrefix + "prepare-" + randomString(8);
+        const testDescription = "Test KB for Phase 1 - Prepare staging KB";
         const testTags = ["test", "phase1", "prepare"];
 
         const createBody = {
-            id: catalogId,
+            id: knowledgeBaseId,
             description: testDescription,
             tags: testTags,
         };
 
         const createRes = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
             JSON.stringify(createBody),
             data.header
         );
 
-        let catalog;
+        let kb;
         try {
-            catalog = createRes.json().catalog;
+            kb = createRes.json().knowledgeBase;
         } catch (e) {
-            check(false, { "Phase 1 Prepare: Failed to create catalog": () => false });
+            check(false, { "Phase 1 Prepare: Failed to create knowledge base": () => false });
             return;
         }
 
-        const catalogUid = catalog.uid;
-        const stagingKBID = `${catalogId}-staging`;
+        const knowledgeBaseUid = kb.uid;
+        const stagingKBID = `${knowledgeBaseId}-staging`;
 
         // Upload and process file
         const filename = data.dbIDPrefix + "prepare-test.txt";
         const uploadRes = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
             JSON.stringify({
                 filename: filename,
                 type: "TYPE_TEXT",
@@ -1031,7 +1031,7 @@ function TestPhasePrepare(client, data) {
         try {
             fileUid = uploadRes.json().file.uid;
         } catch (e) {
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
             return;
         }
 
@@ -1040,7 +1040,7 @@ function TestPhasePrepare(client, data) {
         // Wait for completion (using helper function)
         const result = helper.waitForFileProcessingComplete(
             data.expectedOwner.id,
-            catalogId,
+            knowledgeBaseId,
             fileUid,
             data.header,
             600
@@ -1051,7 +1051,7 @@ function TestPhasePrepare(client, data) {
         });
 
         if (!result.completed) {
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
             return;
         }
 
@@ -1060,7 +1060,7 @@ function TestPhasePrepare(client, data) {
         // Trigger update
         const executeRes = client.invoke(
             "artifact.artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
-            { catalogIds: [catalogId] },
+            { knowledgeBaseIds: [knowledgeBaseId] },
             data.metadata
         );
 
@@ -1070,23 +1070,23 @@ function TestPhasePrepare(client, data) {
         });
         if (executeRes.status !== grpc.StatusOK || !executeRes.message.started) {
             console.error("Phase 1 Prepare: Update failed to start");
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
             return;
         }
 
         // Wait for staging KB creation (Phase 1 completes)
         console.log("Phase 1 Prepare: Waiting for staging KB creation...");
-        const stagingFound = helper.pollForStagingKB(catalogId, data.expectedOwner.uid, 60);
+        const stagingFound = helper.pollForStagingKB(knowledgeBaseId, data.expectedOwner.uid, 60);
 
         if (!stagingFound) {
             console.error("Phase 1 Prepare: Staging KB not created");
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
             return;
         }
 
         // PHASE 1 VALIDATIONS: Staging KB exists and has correct properties
-        const stagingKBs = helper.getCatalogByIdAndOwner(stagingKBID, data.expectedOwner.uid);
-        const prodKB = helper.getCatalogByIdAndOwner(catalogId, data.expectedOwner.uid);
+        const stagingKBs = helper.getKnowledgeBaseByIdAndOwner(stagingKBID, data.expectedOwner.uid);
+        const prodKB = helper.getKnowledgeBaseByIdAndOwner(knowledgeBaseId, data.expectedOwner.uid);
 
         check({ stagingKBs, prodKB }, {
             "Phase 1 Prepare: Staging KB created": () => stagingKBs && stagingKBs.length > 0,
@@ -1095,7 +1095,7 @@ function TestPhasePrepare(client, data) {
 
         if (!stagingKBs || stagingKBs.length === 0 || !prodKB || prodKB.length === 0) {
             console.error("Phase 1 Prepare: Cannot verify without both KBs");
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
             return;
         }
 
@@ -1136,15 +1136,15 @@ function TestPhasePrepare(client, data) {
         console.log(`Phase 1 Prepare: Staging collection UID: ${stagingKB.active_collection_uid}`);
 
         // Wait for update to complete so we can clean up properly
-        const updateCompleted = helper.pollUpdateCompletion(client, data, catalogUid, 900);
+        const updateCompleted = helper.pollUpdateCompletion(client, data, knowledgeBaseUid, 900);
 
         check({ updateCompleted }, {
             "Phase 1 Prepare: Update completed successfully": () => updateCompleted === true,
         });
 
         // Cleanup
-        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
-        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}-rollback`, null, data.header);
+        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
+        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}-rollback`, null, data.header);
     });
 }
 
@@ -1167,35 +1167,35 @@ function TestReprocessAndDualProcessing(client, data) {
 
         // TEST A: File Deletion During Update (Dual Deletion)
         console.log("Group 4: Testing dual deletion...");
-        const catalogId = data.dbIDPrefix + "dual-del-" + randomString(8);
+        const knowledgeBaseId = data.dbIDPrefix + "dual-del-" + randomString(8);
 
         const createRes = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
             JSON.stringify({
-                id: catalogId,
-                description: "Test catalog for dual deletion",
+                id: knowledgeBaseId,
+                description: "Test KB for dual deletion",
                 tags: ["test", "dual-deletion"],
             }),
             data.header
         );
 
-        let catalog;
+        let kb;
         try {
-            catalog = createRes.json().catalog;
+            kb = createRes.json().knowledgeBase;
         } catch (e) {
-            console.error(`Group 4: Failed to create catalog: ${e}`);
+            console.error(`Group 4: Failed to create knowledge base: ${e}`);
             return;
         }
 
-        const catalogUid = catalog.uid;
-        const rollbackKBID = `${catalogId}-rollback`;
+        const knowledgeBaseUid = kb.uid;
+        const rollbackKBID = `${knowledgeBaseId}-rollback`;
 
         // Upload and process 1 initial file to ensure update workflow runs long enough for dual processing
         const file1Name = data.dbIDPrefix + "initial.txt";
         const uploadRes1 = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
             JSON.stringify({ filename: file1Name, type: "TYPE_TEXT", content: constant.sampleTxt }),
             data.header
         );
@@ -1204,7 +1204,7 @@ function TestReprocessAndDualProcessing(client, data) {
         try {
             fileUid1 = uploadRes1.json().file.uid;
         } catch (e) {
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
             return;
         }
 
@@ -1213,7 +1213,7 @@ function TestReprocessAndDualProcessing(client, data) {
         // Wait for processing (using helper function)
         const result = helper.waitForFileProcessingComplete(
             data.expectedOwner.id,
-            catalogId,
+            knowledgeBaseId,
             fileUid1,
             data.header,
             600
@@ -1224,7 +1224,7 @@ function TestReprocessAndDualProcessing(client, data) {
         });
 
         if (!result.completed) {
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
             return;
         }
 
@@ -1233,7 +1233,7 @@ function TestReprocessAndDualProcessing(client, data) {
         // Trigger update
         const updateRes = client.invoke(
             "artifact.artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
-            { catalogIds: [catalogId] },
+            { knowledgeBaseIds: [knowledgeBaseId] },
             data.metadata
         );
 
@@ -1243,24 +1243,24 @@ function TestReprocessAndDualProcessing(client, data) {
         });
         if (updateRes.status !== grpc.StatusOK || !updateRes.message.started) {
             console.error("Group 4: Update failed to start");
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
             return;
         }
 
         // Wait for staging KB creation and reprocessing to START
-        const stagingFound = helper.pollForStagingKB(catalogId, data.expectedOwner.uid, 60);
+        const stagingFound = helper.pollForStagingKB(knowledgeBaseId, data.expectedOwner.uid, 60);
         if (!stagingFound) {
             console.error("Group 4: Staging KB not created");
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
             return;
         }
 
         // Get staging KB UID
-        const stagingKBID = `${catalogId}-staging`;
-        const stagingKBs = helper.getCatalogByIdAndOwner(stagingKBID, data.expectedOwner.uid);
+        const stagingKBID = `${knowledgeBaseId}-staging`;
+        const stagingKBs = helper.getKnowledgeBaseByIdAndOwner(stagingKBID, data.expectedOwner.uid);
         if (!stagingKBs || stagingKBs.length === 0) {
             console.error("Group 4: Could not get staging KB");
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
             return;
         }
         const stagingKBUID = stagingKBs[0].uid;
@@ -1269,7 +1269,7 @@ function TestReprocessAndDualProcessing(client, data) {
         console.log("Group 4: Polling for file reprocessing to start in staging KB...");
         let reprocessingStarted = false;
         for (let i = 0; i < 30; i++) {
-            const stagingFileQuery = `SELECT COUNT(*) as count FROM knowledge_base_file WHERE kb_uid = $1 AND delete_time IS NULL`;
+            const stagingFileQuery = `SELECT COUNT(*) as count FROM file WHERE kb_uid = $1 AND delete_time IS NULL`;
             const stagingFileCount = helper.safeQuery(stagingFileQuery, stagingKBUID);
             const count = stagingFileCount && stagingFileCount.length > 0 ? parseInt(stagingFileCount[0].count) : 0;
 
@@ -1291,7 +1291,7 @@ function TestReprocessAndDualProcessing(client, data) {
         const fileToDelete = data.dbIDPrefix + "to-delete.txt";
         const uploadRes2 = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
             JSON.stringify({ filename: fileToDelete, type: "TYPE_TEXT", content: constant.sampleTxt }),
             data.header
         );
@@ -1302,19 +1302,19 @@ function TestReprocessAndDualProcessing(client, data) {
             console.log(`Group 4: Uploaded file to delete: ${fileUid2}`);
         } catch (e) {
             console.error(`Group 4: Failed to upload file: ${e}`);
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
             return;
         }
 
         // Poll for dual processing to create both file records
         // Extended timeout to handle resource contention during parallel test execution
-        const prodFileQuery = `SELECT uid, delete_time FROM knowledge_base_file WHERE kb_uid = $1 AND filename = $2`;
+        const prodFileQuery = `SELECT uid, delete_time FROM file WHERE kb_uid = $1 AND filename = $2`;
         let prodFileBefore, stagingFileBefore;
         let bothFilesExist = false;
 
         for (let i = 0; i < 1200; i++) {  // Max 600 seconds (10 minutes) for CI under heavy parallel load
             sleep(1);
-            prodFileBefore = helper.safeQuery(prodFileQuery, catalogUid, fileToDelete);
+            prodFileBefore = helper.safeQuery(prodFileQuery, knowledgeBaseUid, fileToDelete);
             stagingFileBefore = helper.safeQuery(prodFileQuery, stagingKBUID, fileToDelete);
 
             const prodExists = prodFileBefore && prodFileBefore.length > 0 && prodFileBefore[0].delete_time === null;
@@ -1391,7 +1391,7 @@ function TestReprocessAndDualProcessing(client, data) {
 
         for (let i = 0; i < retries; i++) {
             sleep(1);
-            prodFileAfter = helper.safeQuery(prodFileQuery, catalogUid, fileToDelete);
+            prodFileAfter = helper.safeQuery(prodFileQuery, knowledgeBaseUid, fileToDelete);
             stagingFileAfter = helper.safeQuery(prodFileQuery, stagingKBUID, fileToDelete);
 
             prodSoftDeleted = prodFileAfter && prodFileAfter.length > 0 && prodFileAfter[0].delete_time !== null;
@@ -1436,7 +1436,7 @@ function TestReprocessAndDualProcessing(client, data) {
 
         // Wait for update to complete
         console.log("Group 4: Waiting for update to complete...");
-        const updateCompleted = helper.pollUpdateCompletion(client, data, catalogUid, 900);
+        const updateCompleted = helper.pollUpdateCompletion(client, data, knowledgeBaseUid, 900);
 
         check({ updateCompleted }, {
             "Group 4: Update completed successfully": () => updateCompleted === true,
@@ -1445,14 +1445,14 @@ function TestReprocessAndDualProcessing(client, data) {
         if (updateCompleted) {
             // VERIFY: Deleted file does NOT exist in production or rollback after swap
             // Poll for rollback KB creation before checking state
-            const rollbackKBObj = helper.pollForRollbackKBCreation(catalogId, data.expectedOwner.uid);
-            const prodKB = helper.getCatalogByIdAndOwner(catalogId, data.expectedOwner.uid);
+            const rollbackKBObj = helper.pollForRollbackKBCreation(knowledgeBaseId, data.expectedOwner.uid);
+            const prodKB = helper.getKnowledgeBaseByIdAndOwner(knowledgeBaseId, data.expectedOwner.uid);
 
             if (prodKB && prodKB.length > 0 && rollbackKBObj) {
                 const finalProdKBUID = prodKB[0].uid;
                 const finalRollbackKBUID = rollbackKBObj.uid;
 
-                const prodFileCountQuery = `SELECT COUNT(*) as count FROM knowledge_base_file WHERE kb_uid = $1 AND filename = $2 AND delete_time IS NULL`;
+                const prodFileCountQuery = `SELECT COUNT(*) as count FROM file WHERE kb_uid = $1 AND filename = $2 AND delete_time IS NULL`;
                 const prodFinalFile = helper.safeQuery(prodFileCountQuery, finalProdKBUID, fileToDelete);
                 const rollbackFinalFile = helper.safeQuery(prodFileCountQuery, finalRollbackKBUID, fileToDelete);
 
@@ -1487,8 +1487,8 @@ function TestReprocessAndDualProcessing(client, data) {
         }
 
         // Cleanup
-        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
-        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${rollbackKBID}`, null, data.header);
+        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
+        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${rollbackKBID}`, null, data.header);
 
         console.log("Group 4: Test completed");
     });
@@ -1507,13 +1507,13 @@ function TestCC01_AddingFilesDuringSwap(client, data) {
         console.log("Corner Case 1: Adding Files During `swapping` Status");
         console.log("=".repeat(80));
 
-        const catalogIdCC1 = data.dbIDPrefix + "cc1-" + randomString(6);
+        const knowledgeBaseIdCC1 = data.dbIDPrefix + "cc1-" + randomString(6);
         const createResCC1 = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
             JSON.stringify({
-                id: catalogIdCC1,
-                description: "Test catalog for CC1 - adding files during swapping",
+                id: knowledgeBaseIdCC1,
+                description: "Test KB for CC1 - adding files during swapping",
                 tags: ["test", "cc1", "swapping-add"],
             }),
             data.header
@@ -1521,22 +1521,22 @@ function TestCC01_AddingFilesDuringSwap(client, data) {
 
         let catalogCC1;
         try {
-            catalogCC1 = createResCC1.json().catalog;
+            catalogCC1 = createResCC1.json().knowledgeBase;
         } catch (e) {
             check(false, {
-                "CC1: Failed to create catalog": () => false
+                "CC1: Failed to create knowledge base": () => false
             });
-            console.error(`CC1: Failed to create catalog: ${e}`);
+            console.error(`CC1: Failed to create knowledge base: ${e}`);
             return;
         }
 
-        const catalogUidCC1 = catalogCC1.uid;
-        const rollbackKBIDCC1 = `${catalogIdCC1}-rollback`;
+        const knowledgeBaseUidCC1 = catalogCC1.uid;
+        const rollbackKBIDCC1 = `${knowledgeBaseIdCC1}-rollback`;
 
         // Upload and process 1 initial file (simplified for faster test)
         const uploadResCC1Initial = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC1}/files`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC1}/files`,
             JSON.stringify({
                 filename: `${data.dbIDPrefix}cc1-initial.txt`,
                 type: "TYPE_TEXT",
@@ -1553,7 +1553,7 @@ function TestCC01_AddingFilesDuringSwap(client, data) {
                 "CC1: Failed to upload initial file": () => false
             });
             console.error(`CC1: Failed to upload initial file: ${e}`);
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC1}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC1}`, null, data.header);
             return;
         }
 
@@ -1561,7 +1561,7 @@ function TestCC01_AddingFilesDuringSwap(client, data) {
         // Wait for initial file to be processed (using helper function)
         const resultCC1 = helper.waitForFileProcessingComplete(
             data.expectedOwner.id,
-            catalogIdCC1,
+            knowledgeBaseIdCC1,
             initialFileUidCC1,
             data.header,
             600
@@ -1572,7 +1572,7 @@ function TestCC01_AddingFilesDuringSwap(client, data) {
         });
 
         if (!resultCC1.completed) {
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC1}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC1}`, null, data.header);
             return;
         }
 
@@ -1581,7 +1581,7 @@ function TestCC01_AddingFilesDuringSwap(client, data) {
         // Trigger update
         const updateResCC1 = client.invoke(
             "artifact.artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
-            { catalogIds: [catalogIdCC1] },
+            { knowledgeBaseIds: [knowledgeBaseIdCC1] },
             data.metadata
         );
 
@@ -1591,15 +1591,15 @@ function TestCC01_AddingFilesDuringSwap(client, data) {
         });
         if (updateResCC1.status !== grpc.StatusOK || !updateResCC1.message.started) {
             console.error("CC1: Update failed to start");
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC1}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC1}`, null, data.header);
             return;
         }
 
         // Wait for staging KB creation
-        const stagingFoundCC1 = helper.pollForStagingKB(catalogIdCC1, data.expectedOwner.uid, 60);
+        const stagingFoundCC1 = helper.pollForStagingKB(knowledgeBaseIdCC1, data.expectedOwner.uid, 60);
         if (!stagingFoundCC1) {
             console.error("CC1: Staging KB not created");
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC1}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC1}`, null, data.header);
             return;
         }
 
@@ -1613,7 +1613,7 @@ function TestCC01_AddingFilesDuringSwap(client, data) {
 
         const uploadRes2CC1 = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC1}/files`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC1}/files`,
             JSON.stringify({
                 filename: fileAddedDuringSwapping,
                 type: "TYPE_TEXT",
@@ -1631,7 +1631,7 @@ function TestCC01_AddingFilesDuringSwap(client, data) {
             newFileUidCC1 = uploadRes2CC1.json().file.uid;
         } catch (e) {
             console.error(`CC1: Failed to get file UID: ${e}`);
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC1}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC1}`, null, data.header);
             return;
         }
 
@@ -1639,24 +1639,24 @@ function TestCC01_AddingFilesDuringSwap(client, data) {
 
         // Wait for update to complete
         console.log("CC1: Waiting for update to complete...");
-        const updateCompletedCC1 = helper.pollUpdateCompletion(client, data, catalogUidCC1, 900);
+        const updateCompletedCC1 = helper.pollUpdateCompletion(client, data, knowledgeBaseUidCC1, 900);
 
         check(updateCompletedCC1, {
             "CC1: Update completed": (c) => c === true
         });
 
         if (!updateCompletedCC1) {
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC1}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC1}`, null, data.header);
             return;
         }
 
         // CRITICAL: Re-query file by name to get the correct UID after swap
         // Dual-processing creates separate file records with different UIDs in production and staging KBs
-        // After swap, the catalog points to the new production (was staging), so we need the new UID
+        // After swap, the knowledge base points to the new production (was staging), so we need the new UID
         console.log("CC1: Re-querying file by name after swap to get correct UID...");
         const listFilesResCC1 = http.request(
             "GET",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC1}/files`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC1}/files`,
             null,
             data.header
         );
@@ -1679,7 +1679,7 @@ function TestCC01_AddingFilesDuringSwap(client, data) {
         console.log("CC1: Waiting for file uploaded during swap to complete processing...");
         const newFileResult = helper.waitForFileProcessingComplete(
             data.expectedOwner.id,
-            catalogIdCC1,
+            knowledgeBaseIdCC1,
             swappedFileUidCC1,
             data.header,
             600
@@ -1694,26 +1694,26 @@ function TestCC01_AddingFilesDuringSwap(client, data) {
             check(false, {
                 "CC1: CRITICAL - File processing failed, collection may be missing": () => false
             });
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC1}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC1}`, null, data.header);
             return;
         }
 
         console.log("CC1: File processing completed, verifying file synchronization...");
 
         // VERIFY: File exists in BOTH new production and rollback KBs
-        const prodKBCC1 = helper.getCatalogByIdAndOwner(catalogIdCC1, data.expectedOwner.uid);
-        const rollbackKBCC1 = helper.getCatalogByIdAndOwner(rollbackKBIDCC1, data.expectedOwner.uid);
+        const prodKBCC1 = helper.getKnowledgeBaseByIdAndOwner(knowledgeBaseIdCC1, data.expectedOwner.uid);
+        const rollbackKBCC1 = helper.getKnowledgeBaseByIdAndOwner(rollbackKBIDCC1, data.expectedOwner.uid);
 
         if (!prodKBCC1 || prodKBCC1.length === 0 || !rollbackKBCC1 || rollbackKBCC1.length === 0) {
             console.error("CC1: Cannot proceed without both KBs");
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC1}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC1}`, null, data.header);
             return;
         }
 
         const prodKBUIDCC1 = Array.isArray(prodKBCC1[0].uid) ? String.fromCharCode(...prodKBCC1[0].uid) : prodKBCC1[0].uid;
         const rollbackKBUIDCC1 = Array.isArray(rollbackKBCC1[0].uid) ? String.fromCharCode(...rollbackKBCC1[0].uid) : rollbackKBCC1[0].uid;
 
-        const fileCountQueryCC1 = `SELECT COUNT(*) as count FROM knowledge_base_file WHERE kb_uid = $1 AND filename = $2 AND delete_time IS NULL`;
+        const fileCountQueryCC1 = `SELECT COUNT(*) as count FROM file WHERE kb_uid = $1 AND filename = $2 AND delete_time IS NULL`;
         const prodFileCC1 = helper.safeQuery(fileCountQueryCC1, prodKBUIDCC1, fileAddedDuringSwapping);
         const rollbackFileCC1 = helper.safeQuery(fileCountQueryCC1, rollbackKBUIDCC1, fileAddedDuringSwapping);
 
@@ -1728,8 +1728,8 @@ function TestCC01_AddingFilesDuringSwap(client, data) {
         console.log(`CC1: Verification - Production: ${prodCountCC1}, Rollback: ${rollbackCountCC1} (expected: 1, 1)`);
 
         // Cleanup CC1
-        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC1}`, null, data.header);
-        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${rollbackKBIDCC1}`, null, data.header);
+        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC1}`, null, data.header);
+        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${rollbackKBIDCC1}`, null, data.header);
 
         console.log("CC1: Test completed\n");
     });
@@ -1748,48 +1748,48 @@ function TestCC02_DeletingFilesDuringSwap(client, data) {
         console.log("Corner Case 2: Deleting Files During `swapping` Status");
         console.log("=".repeat(80));
 
-        const catalogIdCC2 = data.dbIDPrefix + "cc2-" + randomString(6);
+        const knowledgeBaseIdCC2 = data.dbIDPrefix + "cc2-" + randomString(6);
         const createResCC2 = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
             JSON.stringify({
-                id: catalogIdCC2,
-                description: "Test catalog for CC2 - deleting files during swapping",
+                id: knowledgeBaseIdCC2,
+                description: "Test KB for CC2 - deleting files during swapping",
                 tags: ["test", "cc2", "swapping-delete"],
             }),
             data.header
         );
 
         check(createResCC2, {
-            "CC2: Catalog creation returns OK status": (r) => r.status === 200 || r.status === 201
+            "CC2: Knowledge base creation returns OK status": (r) => r.status === 200 || r.status === 201
         });
 
         if (createResCC2.status !== 200 && createResCC2.status !== 201) {
-            console.error(`CC2: Catalog creation failed with status ${createResCC2.status}`);
+            console.error(`CC2: Knowledge base creation failed with status ${createResCC2.status}`);
             console.error(`CC2: Response body: ${createResCC2.body}`);
             return;
         }
 
         let catalogCC2;
         try {
-            catalogCC2 = createResCC2.json().catalog;
+            catalogCC2 = createResCC2.json().knowledgeBase;
         } catch (e) {
             check(false, {
-                "CC2: Failed to parse catalog response": () => false
+                "CC2: Failed to parse knowledge base response": () => false
             });
-            console.error(`CC2: Failed to parse catalog: ${e}`);
+            console.error(`CC2: Failed to parse knowledge base: ${e}`);
             console.error(`CC2: Response status: ${createResCC2.status}`);
             console.error(`CC2: Response body: ${createResCC2.body}`);
             return;
         }
 
-        const catalogUidCC2 = catalogCC2.uid;
-        const rollbackKBIDCC2 = `${catalogIdCC2}-rollback`;
+        const knowledgeBaseUidCC2 = catalogCC2.uid;
+        const rollbackKBIDCC2 = `${knowledgeBaseIdCC2}-rollback`;
 
         // Upload 2 initial files
-        const uploadRes1 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC2}/files`,
+        const uploadRes1 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC2}/files`,
             JSON.stringify({ filename: data.dbIDPrefix + "cc2-keep-1.txt", type: "TYPE_TEXT", content: constant.sampleTxt }), data.header);
-        const uploadRes2 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC2}/files`,
+        const uploadRes2 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC2}/files`,
             JSON.stringify({ filename: data.dbIDPrefix + "cc2-keep-2.txt", type: "TYPE_TEXT", content: constant.sampleTxt }), data.header);
 
         let fileUid1, fileUid2;
@@ -1801,7 +1801,7 @@ function TestCC02_DeletingFilesDuringSwap(client, data) {
                 "CC2: Failed to upload files": () => false
             });
             console.error(`CC2: Failed to upload files: ${e}`);
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC2}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC2}`, null, data.header);
             return;
         }
 
@@ -1810,7 +1810,7 @@ function TestCC02_DeletingFilesDuringSwap(client, data) {
         // Wait for processing (using helper function)
         const resultCC2 = helper.waitForMultipleFilesProcessingComplete(
             data.expectedOwner.id,
-            catalogIdCC2,
+            knowledgeBaseIdCC2,
             [fileUid1, fileUid2],
             data.header,
             600
@@ -1821,7 +1821,7 @@ function TestCC02_DeletingFilesDuringSwap(client, data) {
         });
 
         if (!resultCC2.completed) {
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC2}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC2}`, null, data.header);
             return;
         }
 
@@ -1830,7 +1830,7 @@ function TestCC02_DeletingFilesDuringSwap(client, data) {
         // Trigger update
         const updateRes = client.invoke(
             "artifact.artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
-            { catalogIds: [catalogIdCC2] },
+            { knowledgeBaseIds: [knowledgeBaseIdCC2] },
             data.metadata
         );
 
@@ -1840,15 +1840,15 @@ function TestCC02_DeletingFilesDuringSwap(client, data) {
         });
         if (updateRes.status !== grpc.StatusOK || !updateRes.message.started) {
             console.error("CC2: Update failed to start");
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC2}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC2}`, null, data.header);
             return;
         }
 
         // Wait for staging KB
-        const stagingFound = helper.pollForStagingKB(catalogIdCC2, data.expectedOwner.uid, 60);
+        const stagingFound = helper.pollForStagingKB(knowledgeBaseIdCC2, data.expectedOwner.uid, 60);
         if (!stagingFound) {
             console.error("CC2: Staging KB not created");
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC2}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC2}`, null, data.header);
             return;
         }
 
@@ -1868,27 +1868,27 @@ function TestCC02_DeletingFilesDuringSwap(client, data) {
 
         // Wait for update completion
         console.log("CC2: Waiting for update to complete...");
-        const updateCompleted = helper.pollUpdateCompletion(client, data, catalogUidCC2, 900);
+        const updateCompleted = helper.pollUpdateCompletion(client, data, knowledgeBaseUidCC2, 900);
 
         check(updateCompleted, {
             "CC2: Update completed": (c) => c === true
         });
 
         if (!updateCompleted) {
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC2}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC2}`, null, data.header);
             return;
         }
 
         // Verify deletion in both KBs (poll for rollback KB creation)
-        const rollbackKBObj = helper.pollForRollbackKBCreation(catalogIdCC2, data.expectedOwner.uid);
-        const prodKB = helper.getCatalogByIdAndOwner(catalogIdCC2, data.expectedOwner.uid);
+        const rollbackKBObj = helper.pollForRollbackKBCreation(knowledgeBaseIdCC2, data.expectedOwner.uid);
+        const prodKB = helper.getKnowledgeBaseByIdAndOwner(knowledgeBaseIdCC2, data.expectedOwner.uid);
         const rollbackKB = rollbackKBObj ? [rollbackKBObj] : null;
 
         if (prodKB && prodKB.length > 0 && rollbackKB && rollbackKB.length > 0) {
             const prodKBUID = Array.isArray(prodKB[0].uid) ? String.fromCharCode(...prodKB[0].uid) : prodKB[0].uid;
             const rollbackKBUID = Array.isArray(rollbackKB[0].uid) ? String.fromCharCode(...rollbackKB[0].uid) : rollbackKB[0].uid;
 
-            const query = `SELECT COUNT(*) as count FROM knowledge_base_file WHERE kb_uid = $1 AND delete_time IS NULL`;
+            const query = `SELECT COUNT(*) as count FROM file WHERE kb_uid = $1 AND delete_time IS NULL`;
             const prodCount = parseInt(helper.safeQuery(query, prodKBUID)[0].count);
             const rollbackCount = parseInt(helper.safeQuery(query, rollbackKBUID)[0].count);
 
@@ -1900,8 +1900,8 @@ function TestCC02_DeletingFilesDuringSwap(client, data) {
         }
 
         // Cleanup
-        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC2}`, null, data.header);
-        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${rollbackKBIDCC2}`, null, data.header);
+        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC2}`, null, data.header);
+        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${rollbackKBIDCC2}`, null, data.header);
 
         console.log("CC2: Test completed\n");
     });
@@ -1920,13 +1920,13 @@ function TestCC03_RapidOperations(client, data) {
         console.log("Corner Case 3: Rapid Operations During Transition");
         console.log("=".repeat(80));
 
-        const catalogIdCC3 = data.dbIDPrefix + "cc3-" + randomString(6);
+        const knowledgeBaseIdCC3 = data.dbIDPrefix + "cc3-" + randomString(6);
         const createResCC3 = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
             JSON.stringify({
-                id: catalogIdCC3,
-                description: "Test catalog for CC3 - rapid operations",
+                id: knowledgeBaseIdCC3,
+                description: "Test KB for CC3 - rapid operations",
                 tags: ["test", "cc3", "rapid-ops"],
             }),
             data.header
@@ -1934,22 +1934,22 @@ function TestCC03_RapidOperations(client, data) {
 
         let catalogCC3;
         try {
-            catalogCC3 = createResCC3.json().catalog;
+            catalogCC3 = createResCC3.json().knowledgeBase;
         } catch (e) {
             check(false, {
-                "CC3: Failed to create catalog": () => false
+                "CC3: Failed to create knowledge base": () => false
             });
-            console.error(`CC3: Failed to create catalog: ${e}`);
+            console.error(`CC3: Failed to create knowledge base: ${e}`);
             return;
         }
 
-        const catalogUidCC3 = catalogCC3.uid;
-        const rollbackKBIDCC3 = `${catalogIdCC3}-rollback`;
+        const knowledgeBaseUidCC3 = catalogCC3.uid;
+        const rollbackKBIDCC3 = `${knowledgeBaseIdCC3}-rollback`;
 
         // Upload initial files
-        const uploadRes1 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC3}/files`,
+        const uploadRes1 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC3}/files`,
             JSON.stringify({ filename: data.dbIDPrefix + "cc3-init-1.txt", type: "TYPE_TEXT", content: constant.sampleTxt }), data.header);
-        const uploadRes2 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC3}/files`,
+        const uploadRes2 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC3}/files`,
             JSON.stringify({ filename: data.dbIDPrefix + "cc3-init-2.txt", type: "TYPE_TEXT", content: constant.sampleTxt }), data.header);
 
         let fileUid1, fileUid2;
@@ -1961,7 +1961,7 @@ function TestCC03_RapidOperations(client, data) {
                 "CC3: Failed to upload files": () => false
             });
             console.error(`CC3: Failed to upload files: ${e}`);
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC3}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC3}`, null, data.header);
             return;
         }
 
@@ -1970,7 +1970,7 @@ function TestCC03_RapidOperations(client, data) {
         // Wait for processing (using helper function)
         const resultCC3 = helper.waitForMultipleFilesProcessingComplete(
             data.expectedOwner.id,
-            catalogIdCC3,
+            knowledgeBaseIdCC3,
             [fileUid1, fileUid2],
             data.header,
             600
@@ -1981,7 +1981,7 @@ function TestCC03_RapidOperations(client, data) {
         });
 
         if (!resultCC3.completed) {
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC3}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC3}`, null, data.header);
             return;
         }
 
@@ -1990,7 +1990,7 @@ function TestCC03_RapidOperations(client, data) {
         // Trigger update
         const updateRes = client.invoke(
             "artifact.artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
-            { catalogIds: [catalogIdCC3] },
+            { knowledgeBaseIds: [knowledgeBaseIdCC3] },
             data.metadata
         );
 
@@ -2000,25 +2000,25 @@ function TestCC03_RapidOperations(client, data) {
         });
         if (updateRes.status !== grpc.StatusOK || !updateRes.message.started) {
             console.error("CC3: Update failed to start");
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC3}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC3}`, null, data.header);
             return;
         }
 
         // Wait for staging KB
-        const stagingFound = helper.pollForStagingKB(catalogIdCC3, data.expectedOwner.uid, 60);
+        const stagingFound = helper.pollForStagingKB(knowledgeBaseIdCC3, data.expectedOwner.uid, 60);
         if (!stagingFound) {
             console.error("CC3: Staging KB not created");
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC3}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC3}`, null, data.header);
             return;
         }
 
         console.log("CC3: Staging KB ready, performing rapid operations...");
         // Rapid operations: Upload 3 files
-        const newUpload1 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC3}/files`,
+        const newUpload1 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC3}/files`,
             JSON.stringify({ filename: data.dbIDPrefix + "cc3-rapid-1.txt", type: "TYPE_TEXT", content: constant.sampleTxt }), data.header);
-        const newUpload2 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC3}/files`,
+        const newUpload2 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC3}/files`,
             JSON.stringify({ filename: data.dbIDPrefix + "cc3-rapid-2.txt", type: "TYPE_TEXT", content: constant.sampleTxt }), data.header);
-        const newUpload3 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC3}/files`,
+        const newUpload3 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC3}/files`,
             JSON.stringify({ filename: data.dbIDPrefix + "cc3-rapid-3.txt", type: "TYPE_TEXT", content: constant.sampleTxt }), data.header);
 
         let newFileUid1, newFileUid2, newFileUid3;
@@ -2031,7 +2031,7 @@ function TestCC03_RapidOperations(client, data) {
                 "CC3: Failed to upload rapid files": () => false
             });
             console.error(`CC3: Failed to upload rapid files: ${e}`);
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC3}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC3}`, null, data.header);
             return;
         }
 
@@ -2049,14 +2049,14 @@ function TestCC03_RapidOperations(client, data) {
 
         console.log("CC3: Waiting for update completion...");
         // Extended timeout for rapid operations with dual processing + stabilization
-        const updateCompleted = helper.pollUpdateCompletion(client, data, catalogUidCC3, 900);
+        const updateCompleted = helper.pollUpdateCompletion(client, data, knowledgeBaseUidCC3, 900);
 
         check(updateCompleted, {
             "CC3: Update completed": (c) => c === true
         });
 
         if (!updateCompleted) {
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC3}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC3}`, null, data.header);
             return;
         }
 
@@ -2066,7 +2066,7 @@ function TestCC03_RapidOperations(client, data) {
         console.log("CC3: Re-querying files by name after swap to get correct UIDs...");
         const listFilesResCC3 = http.request(
             "GET",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC3}/files`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC3}/files`,
             null,
             data.header
         );
@@ -2091,7 +2091,7 @@ function TestCC03_RapidOperations(client, data) {
         console.log("CC3: Waiting for new files to complete processing...");
         const newFilesResult = helper.waitForMultipleFilesProcessingComplete(
             data.expectedOwner.id,
-            catalogIdCC3,
+            knowledgeBaseIdCC3,
             [swappedFileUid1, swappedFileUid2, swappedFileUid3],
             data.header,
             600
@@ -2106,7 +2106,7 @@ function TestCC03_RapidOperations(client, data) {
             check(false, {
                 "CC3: CRITICAL - File processing failed, collection may be missing": () => false
             });
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC3}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC3}`, null, data.header);
             return;
         }
 
@@ -2115,14 +2115,14 @@ function TestCC03_RapidOperations(client, data) {
         // Verify: Both Production and Rollback should have 4 files (2 initial - 1 deleted + 3 new)
         // With dual processing during update, all file operations (uploads, deletions) are synchronized
         // to both KBs, so they should be identical after the update completes.
-        const prodKB = helper.getCatalogByIdAndOwner(catalogIdCC3, data.expectedOwner.uid);
-        const rollbackKB = helper.getCatalogByIdAndOwner(rollbackKBIDCC3, data.expectedOwner.uid);
+        const prodKB = helper.getKnowledgeBaseByIdAndOwner(knowledgeBaseIdCC3, data.expectedOwner.uid);
+        const rollbackKB = helper.getKnowledgeBaseByIdAndOwner(rollbackKBIDCC3, data.expectedOwner.uid);
 
         if (prodKB && prodKB.length > 0 && rollbackKB && rollbackKB.length > 0) {
             const prodKBUID = Array.isArray(prodKB[0].uid) ? String.fromCharCode(...prodKB[0].uid) : prodKB[0].uid;
             const rollbackKBUID = Array.isArray(rollbackKB[0].uid) ? String.fromCharCode(...rollbackKB[0].uid) : rollbackKB[0].uid;
 
-            const query = `SELECT COUNT(*) as count FROM knowledge_base_file WHERE kb_uid = $1 AND delete_time IS NULL`;
+            const query = `SELECT COUNT(*) as count FROM file WHERE kb_uid = $1 AND delete_time IS NULL`;
             const prodCount = parseInt(helper.safeQuery(query, prodKBUID)[0].count);
             const rollbackCount = parseInt(helper.safeQuery(query, rollbackKBUID)[0].count);
 
@@ -2134,8 +2134,8 @@ function TestCC03_RapidOperations(client, data) {
         }
 
         // Cleanup
-        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC3}`, null, data.header);
-        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${rollbackKBIDCC3}`, null, data.header);
+        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC3}`, null, data.header);
+        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${rollbackKBIDCC3}`, null, data.header);
 
         console.log("CC3: Test completed\n");
     });
@@ -2153,13 +2153,13 @@ function TestCC04_RaceConditions(client, data) {
         console.log("Corner Case 4: Race Conditions Near Lock Point");
         console.log("=".repeat(80));
 
-        const catalogIdCC4 = data.dbIDPrefix + "cc4-" + randomString(6);
+        const knowledgeBaseIdCC4 = data.dbIDPrefix + "cc4-" + randomString(6);
         const createResCC4 = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
             JSON.stringify({
-                id: catalogIdCC4,
-                description: "Test catalog for CC4 - race condition at lock point",
+                id: knowledgeBaseIdCC4,
+                description: "Test KB for CC4 - race condition at lock point",
                 tags: ["test", "cc4", "race-condition"],
             }),
             data.header
@@ -2167,22 +2167,22 @@ function TestCC04_RaceConditions(client, data) {
 
         let catalogCC4;
         try {
-            catalogCC4 = createResCC4.json().catalog;
+            catalogCC4 = createResCC4.json().knowledgeBase;
         } catch (e) {
             check(false, {
-                "CC4: Failed to create catalog": () => false
+                "CC4: Failed to create knowledge base": () => false
             });
-            console.error(`CC4: Failed to create catalog: ${e}`);
+            console.error(`CC4: Failed to create knowledge base: ${e}`);
             return;
         }
 
-        const catalogUidCC4 = catalogCC4.uid;
-        const rollbackKBIDCC4 = `${catalogIdCC4}-rollback`;
+        const knowledgeBaseUidCC4 = catalogCC4.uid;
+        const rollbackKBIDCC4 = `${knowledgeBaseIdCC4}-rollback`;
 
         // Upload initial file
         const uploadResCC4 = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC4}/files`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC4}/files`,
             JSON.stringify({ filename: data.dbIDPrefix + "cc4-initial.txt", type: "TYPE_TEXT", content: constant.sampleTxt }),
             data.header
         );
@@ -2191,7 +2191,7 @@ function TestCC04_RaceConditions(client, data) {
         try {
             fileUidCC4 = uploadResCC4.json().file.uid;
         } catch (e) {
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC4}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC4}`, null, data.header);
             return;
         }
 
@@ -2200,7 +2200,7 @@ function TestCC04_RaceConditions(client, data) {
         // Wait for processing (using helper function)
         const resultCC4 = helper.waitForFileProcessingComplete(
             data.expectedOwner.id,
-            catalogIdCC4,
+            knowledgeBaseIdCC4,
             fileUidCC4,
             data.header,
             600
@@ -2211,7 +2211,7 @@ function TestCC04_RaceConditions(client, data) {
         });
 
         if (!resultCC4.completed) {
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC4}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC4}`, null, data.header);
             return;
         }
 
@@ -2220,7 +2220,7 @@ function TestCC04_RaceConditions(client, data) {
         // Trigger update
         const updateResCC4 = client.invoke(
             "artifact.artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
-            { catalogIds: [catalogIdCC4] },
+            { knowledgeBaseIds: [knowledgeBaseIdCC4] },
             data.metadata
         );
 
@@ -2230,7 +2230,7 @@ function TestCC04_RaceConditions(client, data) {
         });
         if (updateResCC4.status !== grpc.StatusOK || !updateResCC4.message.started) {
             console.error("CC4: Update failed to start");
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC4}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC4}`, null, data.header);
             return;
         }
 
@@ -2247,8 +2247,8 @@ function TestCC04_RaceConditions(client, data) {
             );
 
             if (statusRes.status === grpc.StatusOK && statusRes.message && statusRes.message.details) {
-                // Find our specific catalog in the response
-                const catalogStatus = statusRes.message.details.find(cs => (cs.catalog_uid || cs.catalogUid || cs.uid) === catalogUidCC4);
+                // Find our specific knowledge base in the response
+                const catalogStatus = statusRes.message.details.find(cs => (cs.knowledge_base_uid || cs.knowledgeBaseUid || cs.uid) === knowledgeBaseUidCC4);
                 const currentStatus = catalogStatus ? catalogStatus.status : null;
 
                 // If we're still in 'KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING' phase, upload the race file
@@ -2257,7 +2257,7 @@ function TestCC04_RaceConditions(client, data) {
                     console.log("CC4: Still in 'KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING' phase, uploading race file...");
                     const raceUploadCC4 = http.request(
                         "POST",
-                        `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC4}/files`,
+                        `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC4}/files`,
                         JSON.stringify({ filename: raceFileNameCC4, type: "TYPE_TEXT", content: encoding.b64encode("File uploaded near lock point") }),
                         data.header
                     );
@@ -2291,7 +2291,7 @@ function TestCC04_RaceConditions(client, data) {
         }
 
         // Wait for update to complete (extended timeout for CI - race condition testing is resource-intensive)
-        const updateCompletedCC4 = helper.pollUpdateCompletion(client, data, catalogUidCC4, 900);
+        const updateCompletedCC4 = helper.pollUpdateCompletion(client, data, knowledgeBaseUidCC4, 900);
 
 
         check(updateCompletedCC4, {
@@ -2299,7 +2299,7 @@ function TestCC04_RaceConditions(client, data) {
         });
         if (!updateCompletedCC4) {
             console.error("CC4: Update did not complete");
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC4}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC4}`, null, data.header);
             return;
         }
 
@@ -2309,11 +2309,11 @@ function TestCC04_RaceConditions(client, data) {
 
             // Re-query files by name to get correct UID after swap
             // Dual-processing creates separate file records with different UIDs in production and staging KBs
-            // After swap, the catalog points to the new production (was staging), so we need the new UID
+            // After swap, the knowledge base points to the new production (was staging), so we need the new UID
             console.log("CC4: Re-querying race file by name after swap to get correct UID...");
             const listFilesResCC4 = http.request(
                 "GET",
-                `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC4}/files`,
+                `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC4}/files`,
                 null,
                 data.header
             );
@@ -2335,7 +2335,7 @@ function TestCC04_RaceConditions(client, data) {
             if (raceFileUidToCheck) {
                 const raceFileResult = helper.waitForFileProcessingComplete(
                     data.expectedOwner.id,
-                    catalogIdCC4,
+                    knowledgeBaseIdCC4,
                     raceFileUidToCheck,
                     data.header,
                     600
@@ -2350,27 +2350,27 @@ function TestCC04_RaceConditions(client, data) {
                     check(false, {
                         "CC4: CRITICAL - Race file processing failed, collection may be missing": () => false
                     });
-                    http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC4}`, null, data.header);
+                    http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC4}`, null, data.header);
                     return;
                 }
 
                 console.log("CC4: Race file processing completed");
             } else {
-                console.warn("CC4: Race file not found in new production catalog after swap - cannot validate processing");
+                console.warn("CC4: Race file not found in new production knowledge base after swap - cannot validate processing");
             }
         }
 
         console.log("CC4: Verifying race file synchronization...");
 
         // Verify: Race file exists in both KBs
-        const prodKB = helper.getCatalogByIdAndOwner(catalogIdCC4, data.expectedOwner.uid);
-        const rollbackKB = helper.getCatalogByIdAndOwner(rollbackKBIDCC4, data.expectedOwner.uid);
+        const prodKB = helper.getKnowledgeBaseByIdAndOwner(knowledgeBaseIdCC4, data.expectedOwner.uid);
+        const rollbackKB = helper.getKnowledgeBaseByIdAndOwner(rollbackKBIDCC4, data.expectedOwner.uid);
 
         if (prodKB && prodKB.length > 0 && rollbackKB && rollbackKB.length > 0) {
             const prodKBUID = Array.isArray(prodKB[0].uid) ? String.fromCharCode(...prodKB[0].uid) : prodKB[0].uid;
             const rollbackKBUID = Array.isArray(rollbackKB[0].uid) ? String.fromCharCode(...rollbackKB[0].uid) : rollbackKB[0].uid;
 
-            const fileQuery = `SELECT uid, kb_uid, filename FROM knowledge_base_file WHERE filename = $1 AND delete_time IS NULL`;
+            const fileQuery = `SELECT uid, kb_uid, filename FROM file WHERE filename = $1 AND delete_time IS NULL`;
             const raceFiles = helper.safeQuery(fileQuery, raceFileNameCC4);
 
             check({ raceFiles }, {
@@ -2381,8 +2381,8 @@ function TestCC04_RaceConditions(client, data) {
         }
 
         // Cleanup
-        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC4}`, null, data.header);
-        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${rollbackKBIDCC4}`, null, data.header);
+        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC4}`, null, data.header);
+        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${rollbackKBIDCC4}`, null, data.header);
 
         console.log("CC4: Test completed\n");
     });
@@ -2400,13 +2400,13 @@ function TestCC05_AddingFilesAfterSwap(client, data) {
         console.log("Corner Case 5: Adding Files After Swap (Retention Period)");
         console.log("=".repeat(80));
 
-        const catalogIdCC5 = data.dbIDPrefix + "cc5-" + randomString(6);
+        const knowledgeBaseIdCC5 = data.dbIDPrefix + "cc5-" + randomString(6);
         const createResCC5 = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
             JSON.stringify({
-                id: catalogIdCC5,
-                description: "Test catalog for CC5 - adding files after swap",
+                id: knowledgeBaseIdCC5,
+                description: "Test KB for CC5 - adding files after swap",
                 tags: ["test", "cc5", "retention-add"],
             }),
             data.header
@@ -2414,22 +2414,22 @@ function TestCC05_AddingFilesAfterSwap(client, data) {
 
         let catalogCC5;
         try {
-            catalogCC5 = createResCC5.json().catalog;
+            catalogCC5 = createResCC5.json().knowledgeBase;
         } catch (e) {
             check(false, {
-                "CC5: Failed to create catalog": () => false
+                "CC5: Failed to create knowledge base": () => false
             });
-            console.error(`CC5: Failed to create catalog: ${e}`);
+            console.error(`CC5: Failed to create knowledge base: ${e}`);
             return;
         }
 
-        const catalogUidCC5 = catalogCC5.uid;
-        const rollbackKBIDCC5 = `${catalogIdCC5}-rollback`;
+        const knowledgeBaseUidCC5 = catalogCC5.uid;
+        const rollbackKBIDCC5 = `${knowledgeBaseIdCC5}-rollback`;
 
         // Upload and process initial file
         const uploadResCC5 = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC5}/files`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC5}/files`,
             JSON.stringify({ filename: data.dbIDPrefix + "cc5-initial.txt", type: "TYPE_TEXT", content: constant.sampleTxt }),
             data.header
         );
@@ -2438,7 +2438,7 @@ function TestCC05_AddingFilesAfterSwap(client, data) {
         try {
             fileUidCC5 = uploadResCC5.json().file.uid;
         } catch (e) {
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC5}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC5}`, null, data.header);
             return;
         }
 
@@ -2446,7 +2446,7 @@ function TestCC05_AddingFilesAfterSwap(client, data) {
         // Wait for processing (using helper function)
         const resultCC5 = helper.waitForFileProcessingComplete(
             data.expectedOwner.id,
-            catalogIdCC5,
+            knowledgeBaseIdCC5,
             fileUidCC5,
             data.header,
             600
@@ -2457,7 +2457,7 @@ function TestCC05_AddingFilesAfterSwap(client, data) {
         });
 
         if (!resultCC5.completed) {
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC5}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC5}`, null, data.header);
             return;
         }
 
@@ -2466,7 +2466,7 @@ function TestCC05_AddingFilesAfterSwap(client, data) {
         // Trigger update
         const updateResCC5 = client.invoke(
             "artifact.artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
-            { catalogIds: [catalogIdCC5] },
+            { knowledgeBaseIds: [knowledgeBaseIdCC5] },
             data.metadata
         );
 
@@ -2476,13 +2476,13 @@ function TestCC05_AddingFilesAfterSwap(client, data) {
         });
         if (updateResCC5.status !== grpc.StatusOK || !updateResCC5.message.started) {
             console.error("CC5: Update failed to start");
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC5}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC5}`, null, data.header);
             return;
         }
 
         // Wait for update to complete
         console.log("CC5: Waiting for update to complete...");
-        const updateCompletedCC5 = helper.pollUpdateCompletion(client, data, catalogUidCC5, 900);
+        const updateCompletedCC5 = helper.pollUpdateCompletion(client, data, knowledgeBaseUidCC5, 900);
 
 
         check(updateCompletedCC5, {
@@ -2490,13 +2490,13 @@ function TestCC05_AddingFilesAfterSwap(client, data) {
         });
         if (!updateCompletedCC5) {
             console.error("CC5: Update did not complete");
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC5}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC5}`, null, data.header);
             return;
         }
 
         // Verify: Status is 'completed' and rollback KB exists (poll for rollback KB)
-        const rollbackKBCC5Obj = helper.pollForRollbackKBCreation(catalogIdCC5, data.expectedOwner.uid);
-        const prodKBCC5 = helper.getCatalogByIdAndOwner(catalogIdCC5, data.expectedOwner.uid);
+        const rollbackKBCC5Obj = helper.pollForRollbackKBCreation(knowledgeBaseIdCC5, data.expectedOwner.uid);
+        const prodKBCC5 = helper.getKnowledgeBaseByIdAndOwner(knowledgeBaseIdCC5, data.expectedOwner.uid);
         const rollbackKBCC5 = rollbackKBCC5Obj ? [rollbackKBCC5Obj] : null;
 
         check({ prodKBCC5, rollbackKBCC5 }, {
@@ -2521,7 +2521,7 @@ function TestCC05_AddingFilesAfterSwap(client, data) {
 
         if (!prodKBCC5 || prodKBCC5.length === 0 || !rollbackKBCC5 || rollbackKBCC5.length === 0) {
             console.error("CC5: Cannot proceed without both KBs");
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC5}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC5}`, null, data.header);
             return;
         }
 
@@ -2537,7 +2537,7 @@ function TestCC05_AddingFilesAfterSwap(client, data) {
 
         const uploadRes2CC5 = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC5}/files`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC5}/files`,
             JSON.stringify({
                 filename: fileAfterSwap,
                 type: "TYPE_TEXT",
@@ -2555,7 +2555,7 @@ function TestCC05_AddingFilesAfterSwap(client, data) {
             newFileUidCC5 = uploadRes2CC5.json().file.uid;
         } catch (e) {
             console.error(`CC5: Failed to get file UID: ${e}`);
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC5}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC5}`, null, data.header);
             return;
         }
 
@@ -2565,7 +2565,7 @@ function TestCC05_AddingFilesAfterSwap(client, data) {
         console.log("CC5: Waiting for new file to process (sequential dual processing to production then rollback)...");
         const newFileResult = helper.waitForFileProcessingComplete(
             data.expectedOwner.id,
-            catalogIdCC5,
+            knowledgeBaseIdCC5,
             newFileUidCC5,
             data.header,
             600
@@ -2580,14 +2580,14 @@ function TestCC05_AddingFilesAfterSwap(client, data) {
             check(false, {
                 "CC5: CRITICAL - File processing failed, collection may be missing": () => false
             });
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC5}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC5}`, null, data.header);
             return;
         }
 
         console.log("CC5: File processing completed, verifying dual processing...");
 
         // Verify: File exists in BOTH production and rollback KBs
-        const fileQuery = `SELECT uid, kb_uid, filename, destination, process_status FROM knowledge_base_file WHERE filename = $1 AND delete_time IS NULL`;
+        const fileQuery = `SELECT uid, kb_uid, filename, destination, process_status FROM file WHERE filename = $1 AND delete_time IS NULL`;
         const fileRecords = helper.safeQuery(fileQuery, fileAfterSwap);
 
         console.log(`CC5: Found ${fileRecords ? fileRecords.length : 0} file records for ${fileAfterSwap}`);
@@ -2624,8 +2624,8 @@ function TestCC05_AddingFilesAfterSwap(client, data) {
         });
 
         // Cleanup
-        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC5}`, null, data.header);
-        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${rollbackKBIDCC5}`, null, data.header);
+        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC5}`, null, data.header);
+        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${rollbackKBIDCC5}`, null, data.header);
 
         console.log("CC5: Test completed\n");
     });
@@ -2643,13 +2643,13 @@ function TestCC06_DeletingFilesAfterSwap(client, data) {
         console.log("Corner Case 6: Deleting Files After Swap (Retention Period)");
         console.log("=".repeat(80));
 
-        const catalogIdCC6 = data.dbIDPrefix + "cc6-" + randomString(6);
+        const knowledgeBaseIdCC6 = data.dbIDPrefix + "cc6-" + randomString(6);
         const createResCC6 = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
             JSON.stringify({
-                id: catalogIdCC6,
-                description: "Test catalog for CC6 - deleting files after swap",
+                id: knowledgeBaseIdCC6,
+                description: "Test KB for CC6 - deleting files after swap",
                 tags: ["test", "cc6", "retention-delete"],
             }),
             data.header
@@ -2657,17 +2657,17 @@ function TestCC06_DeletingFilesAfterSwap(client, data) {
 
         let catalogCC6;
         try {
-            catalogCC6 = createResCC6.json().catalog;
+            catalogCC6 = createResCC6.json().knowledgeBase;
         } catch (e) {
             check(false, {
-                "CC6: Failed to create catalog": () => false
+                "CC6: Failed to create knowledge base": () => false
             });
-            console.error(`CC6: Failed to create catalog: ${e}`);
+            console.error(`CC6: Failed to create knowledge base: ${e}`);
             return;
         }
 
-        const catalogUidCC6 = catalogCC6.uid;
-        const rollbackKBIDCC6 = `${catalogIdCC6}-rollback`;
+        const knowledgeBaseUidCC6 = catalogCC6.uid;
+        const rollbackKBIDCC6 = `${knowledgeBaseIdCC6}-rollback`;
 
         // Upload and process TWO files (one to keep, one to delete)
         const file1NameCC6 = data.dbIDPrefix + "cc6-keep.txt";
@@ -2675,14 +2675,14 @@ function TestCC06_DeletingFilesAfterSwap(client, data) {
 
         const upload1CC6 = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC6}/files`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC6}/files`,
             JSON.stringify({ filename: file1NameCC6, type: "TYPE_TEXT", content: constant.sampleTxt }),
             data.header
         );
 
         const upload2CC6 = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC6}/files`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC6}/files`,
             JSON.stringify({ filename: file2NameCC6, type: "TYPE_TEXT", content: encoding.b64encode("File to delete after swap") }),
             data.header
         );
@@ -2692,7 +2692,7 @@ function TestCC06_DeletingFilesAfterSwap(client, data) {
             fileUid1CC6 = upload1CC6.json().file.uid;
             fileUid2CC6 = upload2CC6.json().file.uid;
         } catch (e) {
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC6}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC6}`, null, data.header);
             return;
         }
 
@@ -2701,7 +2701,7 @@ function TestCC06_DeletingFilesAfterSwap(client, data) {
         // Wait for processing (using helper function)
         const resultCC6 = helper.waitForMultipleFilesProcessingComplete(
             data.expectedOwner.id,
-            catalogIdCC6,
+            knowledgeBaseIdCC6,
             [fileUid1CC6, fileUid2CC6],
             data.header,
             600
@@ -2712,7 +2712,7 @@ function TestCC06_DeletingFilesAfterSwap(client, data) {
         });
 
         if (!resultCC6.completed) {
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC6}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC6}`, null, data.header);
             return;
         }
 
@@ -2721,7 +2721,7 @@ function TestCC06_DeletingFilesAfterSwap(client, data) {
         // Trigger update
         const updateResCC6 = client.invoke(
             "artifact.artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
-            { catalogIds: [catalogIdCC6] },
+            { knowledgeBaseIds: [knowledgeBaseIdCC6] },
             data.metadata
         );
 
@@ -2731,13 +2731,13 @@ function TestCC06_DeletingFilesAfterSwap(client, data) {
         });
         if (updateResCC6.status !== grpc.StatusOK || !updateResCC6.message.started) {
             console.error("CC6: Update failed to start");
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC6}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC6}`, null, data.header);
             return;
         }
 
         // Wait for update to complete
         console.log("CC6: Waiting for update to complete...");
-        const updateCompletedCC6 = helper.pollUpdateCompletion(client, data, catalogUidCC6, 900);
+        const updateCompletedCC6 = helper.pollUpdateCompletion(client, data, knowledgeBaseUidCC6, 900);
 
 
         check(updateCompletedCC6, {
@@ -2745,13 +2745,13 @@ function TestCC06_DeletingFilesAfterSwap(client, data) {
         });
         if (!updateCompletedCC6) {
             console.error("CC6: Update did not complete");
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC6}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC6}`, null, data.header);
             return;
         }
 
         // Verify: Status is 'completed' and rollback KB exists (poll for rollback KB)
-        const rollbackKBCC6Obj = helper.pollForRollbackKBCreation(catalogIdCC6, data.expectedOwner.uid);
-        const prodKBCC6 = helper.getCatalogByIdAndOwner(catalogIdCC6, data.expectedOwner.uid);
+        const rollbackKBCC6Obj = helper.pollForRollbackKBCreation(knowledgeBaseIdCC6, data.expectedOwner.uid);
+        const prodKBCC6 = helper.getKnowledgeBaseByIdAndOwner(knowledgeBaseIdCC6, data.expectedOwner.uid);
         const rollbackKBCC6 = rollbackKBCC6Obj ? [rollbackKBCC6Obj] : null;
 
         check({ prodKBCC6, rollbackKBCC6 }, {
@@ -2761,7 +2761,7 @@ function TestCC06_DeletingFilesAfterSwap(client, data) {
 
         if (!prodKBCC6 || prodKBCC6.length === 0 || !rollbackKBCC6 || rollbackKBCC6.length === 0) {
             console.error("CC6: Cannot proceed without both KBs");
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC6}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC6}`, null, data.header);
             return;
         }
 
@@ -2774,7 +2774,7 @@ function TestCC06_DeletingFilesAfterSwap(client, data) {
         // List files to get the file UID after swap
         const listFilesRes = http.request(
             "GET",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC6}/files`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC6}/files`,
             null,
             data.header
         );
@@ -2792,7 +2792,7 @@ function TestCC06_DeletingFilesAfterSwap(client, data) {
 
         if (!fileToDeleteUID) {
             console.error("CC6: Could not find file to delete");
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC6}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC6}`, null, data.header);
             return;
         }
 
@@ -2813,7 +2813,7 @@ function TestCC06_DeletingFilesAfterSwap(client, data) {
         sleep(5);
 
         // Verify: File is soft-deleted in BOTH production and rollback KBs
-        const fileCountQueryCC6After = `SELECT COUNT(*) as count FROM knowledge_base_file WHERE kb_uid = $1 AND delete_time IS NULL`;
+        const fileCountQueryCC6After = `SELECT COUNT(*) as count FROM file WHERE kb_uid = $1 AND delete_time IS NULL`;
         const prodFilesAfter = helper.safeQuery(fileCountQueryCC6After, prodKBUIDCC6);
         const rollbackFilesAfter = helper.safeQuery(fileCountQueryCC6After, rollbackKBUIDCC6);
 
@@ -2844,8 +2844,8 @@ function TestCC06_DeletingFilesAfterSwap(client, data) {
         });
 
         // Cleanup
-        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC6}`, null, data.header);
-        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${rollbackKBIDCC6}`, null, data.header);
+        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC6}`, null, data.header);
+        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${rollbackKBIDCC6}`, null, data.header);
 
         console.log("CC6: Test completed\n");
     });
@@ -2863,13 +2863,13 @@ function TestCC07_MultipleOperations(client, data) {
         console.log("Corner Case 7: Multiple Operations After Swap");
         console.log("=".repeat(80));
 
-        const catalogIdCC7 = data.dbIDPrefix + "cc7-" + randomString(6);
+        const knowledgeBaseIdCC7 = data.dbIDPrefix + "cc7-" + randomString(6);
         const createResCC7 = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
             JSON.stringify({
-                id: catalogIdCC7,
-                description: "Test catalog for CC7 - multiple operations during retention",
+                id: knowledgeBaseIdCC7,
+                description: "Test KB for CC7 - multiple operations during retention",
                 tags: ["test", "cc7", "multi-ops"],
             }),
             data.header
@@ -2877,28 +2877,28 @@ function TestCC07_MultipleOperations(client, data) {
 
         let catalogCC7;
         try {
-            catalogCC7 = createResCC7.json().catalog;
+            catalogCC7 = createResCC7.json().knowledgeBase;
         } catch (e) {
             check(false, {
-                "CC7: Failed to create catalog": () => false
+                "CC7: Failed to create knowledge base": () => false
             });
-            console.error(`CC7: Failed to create catalog: ${e}`);
+            console.error(`CC7: Failed to create knowledge base: ${e}`);
             return;
         }
 
-        const catalogUidCC7 = catalogCC7.uid;
-        const rollbackKBIDCC7 = `${catalogIdCC7}-rollback`;
+        const knowledgeBaseUidCC7 = catalogCC7.uid;
+        const rollbackKBIDCC7 = `${knowledgeBaseIdCC7}-rollback`;
 
         // Upload 3 initial files
         const file1NameCC7 = data.dbIDPrefix + "cc7-file1.txt";
         const file2NameCC7 = data.dbIDPrefix + "cc7-file2.txt";
         const file3NameCC7 = data.dbIDPrefix + "cc7-file3.txt";
 
-        const upload1CC7 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC7}/files`,
+        const upload1CC7 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC7}/files`,
             JSON.stringify({ filename: file1NameCC7, type: "TYPE_TEXT", content: constant.sampleTxt }), data.header);
-        const upload2CC7 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC7}/files`,
+        const upload2CC7 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC7}/files`,
             JSON.stringify({ filename: file2NameCC7, type: "TYPE_TEXT", content: constant.sampleTxt }), data.header);
-        const upload3CC7 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC7}/files`,
+        const upload3CC7 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC7}/files`,
             JSON.stringify({ filename: file3NameCC7, type: "TYPE_TEXT", content: constant.sampleTxt }), data.header);
 
         let fileUid1CC7, fileUid2CC7, fileUid3CC7;
@@ -2907,7 +2907,7 @@ function TestCC07_MultipleOperations(client, data) {
             fileUid2CC7 = upload2CC7.json().file.uid;
             fileUid3CC7 = upload3CC7.json().file.uid;
         } catch (e) {
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC7}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC7}`, null, data.header);
             return;
         }
 
@@ -2916,7 +2916,7 @@ function TestCC07_MultipleOperations(client, data) {
         // Wait for processing (using helper function)
         const resultCC7 = helper.waitForMultipleFilesProcessingComplete(
             data.expectedOwner.id,
-            catalogIdCC7,
+            knowledgeBaseIdCC7,
             [fileUid1CC7, fileUid2CC7, fileUid3CC7],
             data.header,
             600
@@ -2927,7 +2927,7 @@ function TestCC07_MultipleOperations(client, data) {
         });
 
         if (!resultCC7.completed) {
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC7}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC7}`, null, data.header);
             return;
         }
 
@@ -2936,7 +2936,7 @@ function TestCC07_MultipleOperations(client, data) {
         // Trigger update
         const updateResCC7 = client.invoke(
             "artifact.artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
-            { catalogIds: [catalogIdCC7] },
+            { knowledgeBaseIds: [knowledgeBaseIdCC7] },
             data.metadata
         );
 
@@ -2946,13 +2946,13 @@ function TestCC07_MultipleOperations(client, data) {
         });
         if (updateResCC7.status !== grpc.StatusOK || !updateResCC7.message.started) {
             console.error("CC7: Update failed to start");
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC7}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC7}`, null, data.header);
             return;
         }
 
         // Wait for update to complete
         console.log("CC7: Waiting for update to complete...");
-        const updateCompletedCC7 = helper.pollUpdateCompletion(client, data, catalogUidCC7, 900);
+        const updateCompletedCC7 = helper.pollUpdateCompletion(client, data, knowledgeBaseUidCC7, 900);
 
 
         check(updateCompletedCC7, {
@@ -2960,17 +2960,17 @@ function TestCC07_MultipleOperations(client, data) {
         });
         if (!updateCompletedCC7) {
             console.error("CC7: Update did not complete");
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC7}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC7}`, null, data.header);
             return;
         }
 
         // Get production KB UID (file UIDs change after swap)
-        const prodKBCC7 = helper.getCatalogByIdAndOwner(catalogIdCC7, data.expectedOwner.uid);
-        const rollbackKBCC7 = helper.getCatalogByIdAndOwner(rollbackKBIDCC7, data.expectedOwner.uid);
+        const prodKBCC7 = helper.getKnowledgeBaseByIdAndOwner(knowledgeBaseIdCC7, data.expectedOwner.uid);
+        const rollbackKBCC7 = helper.getKnowledgeBaseByIdAndOwner(rollbackKBIDCC7, data.expectedOwner.uid);
 
         if (!prodKBCC7 || !rollbackKBCC7) {
             console.error("CC7: Missing KBs");
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC7}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC7}`, null, data.header);
             return;
         }
 
@@ -2978,8 +2978,8 @@ function TestCC07_MultipleOperations(client, data) {
         const rollbackKBUIDCC7 = Array.isArray(rollbackKBCC7[0].uid) ? String.fromCharCode(...rollbackKBCC7[0].uid) : rollbackKBCC7[0].uid;
 
         // Get NEW production file UIDs (post-swap)
-        const prodFile1Query = helper.safeQuery(`SELECT uid FROM knowledge_base_file WHERE kb_uid = $1 AND filename = $2 AND delete_time IS NULL`, prodKBUIDCC7, file1NameCC7);
-        const prodFile2Query = helper.safeQuery(`SELECT uid FROM knowledge_base_file WHERE kb_uid = $1 AND filename = $2 AND delete_time IS NULL`, prodKBUIDCC7, file2NameCC7);
+        const prodFile1Query = helper.safeQuery(`SELECT uid FROM file WHERE kb_uid = $1 AND filename = $2 AND delete_time IS NULL`, prodKBUIDCC7, file1NameCC7);
+        const prodFile2Query = helper.safeQuery(`SELECT uid FROM file WHERE kb_uid = $1 AND filename = $2 AND delete_time IS NULL`, prodKBUIDCC7, file2NameCC7);
 
         const prodFileUid1CC7 = prodFile1Query && prodFile1Query.length > 0 ? (Array.isArray(prodFile1Query[0].uid) ? String.fromCharCode(...prodFile1Query[0].uid) : prodFile1Query[0].uid) : null;
         const prodFileUid2CC7 = prodFile2Query && prodFile2Query.length > 0 ? (Array.isArray(prodFile2Query[0].uid) ? String.fromCharCode(...prodFile2Query[0].uid) : prodFile2Query[0].uid) : null;
@@ -2987,11 +2987,11 @@ function TestCC07_MultipleOperations(client, data) {
         // Multiple operations: Upload 3 new, delete 2 existing
         console.log("CC7: Executing multiple operations during retention...");
 
-        const uploadNew1CC7 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC7}/files`,
+        const uploadNew1CC7 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC7}/files`,
             JSON.stringify({ filename: data.dbIDPrefix + "cc7-new1.txt", type: "TYPE_TEXT", content: encoding.b64encode("New1") }), data.header);
-        const uploadNew2CC7 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC7}/files`,
+        const uploadNew2CC7 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC7}/files`,
             JSON.stringify({ filename: data.dbIDPrefix + "cc7-new2.txt", type: "TYPE_TEXT", content: encoding.b64encode("New2") }), data.header);
-        const uploadNew3CC7 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC7}/files`,
+        const uploadNew3CC7 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC7}/files`,
             JSON.stringify({ filename: data.dbIDPrefix + "cc7-new3.txt", type: "TYPE_TEXT", content: encoding.b64encode("New3") }), data.header);
 
         let newFileUids = [];
@@ -3003,7 +3003,7 @@ function TestCC07_MultipleOperations(client, data) {
             ];
         } catch (e) {
             console.error(`CC7: Failed to get new file UIDs: ${e}`);
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC7}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC7}`, null, data.header);
             return;
         }
 
@@ -3018,7 +3018,7 @@ function TestCC07_MultipleOperations(client, data) {
         console.log("CC7: Waiting for 3 new files to complete sequential dual processing...");
         const newFilesResult = helper.waitForMultipleFilesProcessingComplete(
             data.expectedOwner.id,
-            catalogIdCC7,
+            knowledgeBaseIdCC7,
             newFileUids,
             data.header,
             600
@@ -3033,14 +3033,14 @@ function TestCC07_MultipleOperations(client, data) {
             check(false, {
                 "CC7: CRITICAL - File processing failed, collection may be missing": () => false
             });
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC7}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC7}`, null, data.header);
             return;
         }
 
         console.log("CC7: All files processed, verifying results...");
 
         // Verify: Expected 4 files (3 initial - 2 deleted + 3 new)
-        const fileCountQuery = `SELECT COUNT(*) as count FROM knowledge_base_file WHERE kb_uid = $1 AND delete_time IS NULL`;
+        const fileCountQuery = `SELECT COUNT(*) as count FROM file WHERE kb_uid = $1 AND delete_time IS NULL`;
         const prodFilesCC7 = helper.safeQuery(fileCountQuery, prodKBUIDCC7);
         const rollbackFilesCC7 = helper.safeQuery(fileCountQuery, rollbackKBUIDCC7);
 
@@ -3055,8 +3055,8 @@ function TestCC07_MultipleOperations(client, data) {
         console.log(`CC7: Verification - Production: ${prodCountCC7}, Rollback: ${rollbackCountCC7} (expected: 4, 4)`);
 
         // Cleanup
-        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC7}`, null, data.header);
-        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${rollbackKBIDCC7}`, null, data.header);
+        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC7}`, null, data.header);
+        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${rollbackKBIDCC7}`, null, data.header);
 
         console.log("CC7: Test completed\n");
     });
@@ -3074,13 +3074,13 @@ function TestCC08_RollbackDuringProcessing(client, data) {
         console.log("Corner Case 8: Rollback During Active File Processing");
         console.log("=".repeat(80));
 
-        const catalogIdCC8 = data.dbIDPrefix + "cc8-" + randomString(6);
+        const knowledgeBaseIdCC8 = data.dbIDPrefix + "cc8-" + randomString(6);
         const createResCC8 = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
             JSON.stringify({
-                id: catalogIdCC8,
-                description: "Test catalog for CC8 - rollback during file processing",
+                id: knowledgeBaseIdCC8,
+                description: "Test KB for CC8 - rollback during file processing",
                 tags: ["test", "cc8", "rollback-processing"],
             }),
             data.header
@@ -3088,27 +3088,27 @@ function TestCC08_RollbackDuringProcessing(client, data) {
 
         let catalogCC8;
         try {
-            catalogCC8 = createResCC8.json().catalog;
+            catalogCC8 = createResCC8.json().knowledgeBase;
         } catch (e) {
             check(false, {
-                "CC8: Failed to create catalog": () => false
+                "CC8: Failed to create knowledge base": () => false
             });
-            console.error(`CC8: Failed to create catalog: ${e}`);
+            console.error(`CC8: Failed to create knowledge base: ${e}`);
             return;
         }
 
-        const catalogUidCC8 = catalogCC8.uid;
-        const rollbackKBIDCC8 = `${catalogIdCC8}-rollback`;
+        const knowledgeBaseUidCC8 = catalogCC8.uid;
+        const rollbackKBIDCC8 = `${knowledgeBaseIdCC8}-rollback`;
 
         // Upload and process initial file
-        const uploadResCC8 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC8}/files`,
+        const uploadResCC8 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC8}/files`,
             JSON.stringify({ filename: data.dbIDPrefix + "cc8-initial.txt", type: "TYPE_TEXT", content: constant.sampleTxt }), data.header);
 
         let fileUidCC8;
         try {
             fileUidCC8 = uploadResCC8.json().file.uid;
         } catch (e) {
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC8}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC8}`, null, data.header);
             return;
         }
 
@@ -3116,7 +3116,7 @@ function TestCC08_RollbackDuringProcessing(client, data) {
         // Wait for processing (using helper function)
         const resultCC8 = helper.waitForFileProcessingComplete(
             data.expectedOwner.id,
-            catalogIdCC8,
+            knowledgeBaseIdCC8,
             fileUidCC8,
             data.header,
             600
@@ -3127,7 +3127,7 @@ function TestCC08_RollbackDuringProcessing(client, data) {
         });
 
         if (!resultCC8.completed) {
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC8}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC8}`, null, data.header);
             return;
         }
 
@@ -3136,7 +3136,7 @@ function TestCC08_RollbackDuringProcessing(client, data) {
         // Trigger update
         const updateResCC8 = client.invoke(
             "artifact.artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
-            { catalogIds: [catalogIdCC8] },
+            { knowledgeBaseIds: [knowledgeBaseIdCC8] },
             data.metadata
         );
 
@@ -3146,13 +3146,13 @@ function TestCC08_RollbackDuringProcessing(client, data) {
         });
         if (updateResCC8.status !== grpc.StatusOK || !updateResCC8.message.started) {
             console.error("CC8: Update failed to start");
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC8}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC8}`, null, data.header);
             return;
         }
 
         // Wait for update to complete
         console.log("CC8: Waiting for update to complete...");
-        const updateCompletedCC8 = helper.pollUpdateCompletion(client, data, catalogUidCC8, 900);
+        const updateCompletedCC8 = helper.pollUpdateCompletion(client, data, knowledgeBaseUidCC8, 900);
 
 
         check(updateCompletedCC8, {
@@ -3160,7 +3160,7 @@ function TestCC08_RollbackDuringProcessing(client, data) {
         });
         if (!updateCompletedCC8) {
             console.error("CC8: Update did not complete");
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC8}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC8}`, null, data.header);
             return;
         }
 
@@ -3170,7 +3170,7 @@ function TestCC08_RollbackDuringProcessing(client, data) {
         const largeContent = helper.generateArticle(5000);
 
         console.log("CC8: Uploading large file during retention...");
-        const largeUploadCC8 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC8}/files`,
+        const largeUploadCC8 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC8}/files`,
             JSON.stringify({ filename: largeFileName, type: "TYPE_TEXT", content: encoding.b64encode(largeContent) }), data.header);
 
         check(largeUploadCC8, {
@@ -3186,7 +3186,7 @@ function TestCC08_RollbackDuringProcessing(client, data) {
                 "CC8: Failed to get large file UID": () => false
             });
             console.error(`CC8: Failed to get large file UID: ${e}`);
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC8}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC8}`, null, data.header);
             return;
         }
 
@@ -3195,7 +3195,7 @@ function TestCC08_RollbackDuringProcessing(client, data) {
         console.log("CC8: Triggering rollback IMMEDIATELY...");
         const rollbackResCC8 = client.invoke(
             "artifact.artifact.v1alpha.ArtifactPrivateService/RollbackAdmin",
-            { name: `users/${data.expectedOwner.uid}/catalogs/${catalogIdCC8}` },
+            { name: `users/${data.expectedOwner.uid}/knowledge-bases/${knowledgeBaseIdCC8}` },
             data.metadata
         );
 
@@ -3207,7 +3207,7 @@ function TestCC08_RollbackDuringProcessing(client, data) {
         sleep(5);
 
         // Verify system state
-        const prodKBCC8 = helper.getCatalogByIdAndOwner(catalogIdCC8, data.expectedOwner.uid);
+        const prodKBCC8 = helper.getKnowledgeBaseByIdAndOwner(knowledgeBaseIdCC8, data.expectedOwner.uid);
 
         check({ prodKBCC8 }, {
             "CC8: Production KB exists after rollback": () => prodKBCC8 && prodKBCC8.length > 0,
@@ -3217,7 +3217,7 @@ function TestCC08_RollbackDuringProcessing(client, data) {
         console.log("CC8: Rollback completed, system stable");
 
         // Cleanup
-        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC8}`, null, data.header);
+        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC8}`, null, data.header);
 
         console.log("CC8: Test completed\n");
     });
@@ -3235,33 +3235,33 @@ function TestCC09_DualProcessingStops(client, data) {
         console.log("Corner Case 9: Dual Processing Stops After Purge");
         console.log("=".repeat(80));
 
-        const catalogIdCC9 = data.dbIDPrefix + "cc9-" + randomString(6);
-        const createResCC9 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
-            JSON.stringify({ id: catalogIdCC9, description: "CC9 - dual processing stops", tags: ["test", "cc9", "purge"] }), data.header);
+        const knowledgeBaseIdCC9 = data.dbIDPrefix + "cc9-" + randomString(6);
+        const createResCC9 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
+            JSON.stringify({ id: knowledgeBaseIdCC9, description: "CC9 - dual processing stops", tags: ["test", "cc9", "purge"] }), data.header);
 
         let catalogCC9;
         try {
-            catalogCC9 = createResCC9.json().catalog;
+            catalogCC9 = createResCC9.json().knowledgeBase;
         } catch (e) {
             check(false, {
-                "CC9: Failed to create catalog": () => false
+                "CC9: Failed to create knowledge base": () => false
             });
-            console.error(`CC9: Failed to create catalog: ${e}`);
+            console.error(`CC9: Failed to create knowledge base: ${e}`);
             return;
         }
 
-        const catalogUidCC9 = catalogCC9.uid;
-        const rollbackKBIDCC9 = `${catalogIdCC9}-rollback`;
+        const knowledgeBaseUidCC9 = catalogCC9.uid;
+        const rollbackKBIDCC9 = `${knowledgeBaseIdCC9}-rollback`;
 
         // Upload, process, and trigger update
-        const uploadResCC9 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC9}/files`,
+        const uploadResCC9 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC9}/files`,
             JSON.stringify({ filename: data.dbIDPrefix + "cc9-init.txt", type: "TYPE_TEXT", content: constant.sampleTxt }), data.header);
 
         let fileUidCC9;
         try {
             fileUidCC9 = uploadResCC9.json().file.uid;
         } catch (e) {
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC9}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC9}`, null, data.header);
             return;
         }
 
@@ -3269,7 +3269,7 @@ function TestCC09_DualProcessingStops(client, data) {
         // Wait for processing (using helper function)
         helper.waitForFileProcessingComplete(
             data.expectedOwner.id,
-            catalogIdCC9,
+            knowledgeBaseIdCC9,
             fileUidCC9,
             data.header,
             600
@@ -3277,30 +3277,30 @@ function TestCC09_DualProcessingStops(client, data) {
 
         // Trigger update
         client.invoke("artifact.artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
-            { catalogIds: [catalogIdCC9] }, data.metadata);
+            { knowledgeBaseIds: [knowledgeBaseIdCC9] }, data.metadata);
 
         // Wait for completion
-        const updateCompletedCC9 = helper.pollUpdateCompletion(client, data, catalogUidCC9, 900);
+        const updateCompletedCC9 = helper.pollUpdateCompletion(client, data, knowledgeBaseUidCC9, 900);
 
         check({ updateCompletedCC9 }, {
             "CC9: Update completed successfully": () => updateCompletedCC9 === true,
         });
 
         // Verify rollback KB exists (poll for rollback KB creation)
-        const rollbackKBCC9Obj = helper.pollForRollbackKBCreation(catalogIdCC9, data.expectedOwner.uid);
+        const rollbackKBCC9Obj = helper.pollForRollbackKBCreation(knowledgeBaseIdCC9, data.expectedOwner.uid);
         const rollbackKBCC9 = rollbackKBCC9Obj ? [rollbackKBCC9Obj] : null;
         check({ rollbackKBCC9 }, {
             "CC9: Rollback KB exists (retention active)": () => rollbackKBCC9 && rollbackKBCC9.length > 0,
         });
 
         if (!rollbackKBCC9 || rollbackKBCC9.length === 0) {
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC9}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC9}`, null, data.header);
             return;
         }
 
         // Upload file BEFORE purge (should be dual-processed)
         const fileBeforePurge = data.dbIDPrefix + "before-purge.txt";
-        const uploadBeforePurgeCC9 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC9}/files`,
+        const uploadBeforePurgeCC9 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC9}/files`,
             JSON.stringify({ filename: fileBeforePurge, type: "TYPE_TEXT", content: encoding.b64encode("Before purge") }), data.header);
 
         let fileBeforePurgeUid;
@@ -3308,7 +3308,7 @@ function TestCC09_DualProcessingStops(client, data) {
             fileBeforePurgeUid = uploadBeforePurgeCC9.json().file.uid;
         } catch (e) {
             console.error(`CC9: Failed to get file UID: ${e}`);
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC9}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC9}`, null, data.header);
             return;
         }
 
@@ -3318,7 +3318,7 @@ function TestCC09_DualProcessingStops(client, data) {
         console.log("CC9: Waiting for file to complete sequential dual processing before purge...");
         const fileBeforePurgeResult = helper.waitForFileProcessingComplete(
             data.expectedOwner.id,
-            catalogIdCC9,
+            knowledgeBaseIdCC9,
             fileBeforePurgeUid,
             data.header,
             600
@@ -3333,7 +3333,7 @@ function TestCC09_DualProcessingStops(client, data) {
             check(false, {
                 "CC9: CRITICAL - File processing failed, collection may be missing": () => false
             });
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC9}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC9}`, null, data.header);
             return;
         }
 
@@ -3343,7 +3343,7 @@ function TestCC09_DualProcessingStops(client, data) {
         console.log("CC9: Purging rollback KB...");
         const purgeRes = client.invoke(
             "artifact.artifact.v1alpha.ArtifactPrivateService/PurgeRollbackAdmin",
-            { name: `users/${data.expectedOwner.uid}/catalogs/${catalogIdCC9}` },
+            { name: `users/${data.expectedOwner.uid}/knowledge-bases/${knowledgeBaseIdCC9}` },
             data.metadata
         );
 
@@ -3359,7 +3359,7 @@ function TestCC09_DualProcessingStops(client, data) {
 
         // Upload file AFTER purge (should be single-processed)
         const fileAfterPurge = data.dbIDPrefix + "after-purge.txt";
-        const uploadAfterPurgeRes = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC9}/files`,
+        const uploadAfterPurgeRes = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC9}/files`,
             JSON.stringify({ filename: fileAfterPurge, type: "TYPE_TEXT", content: encoding.b64encode("After purge") }), data.header);
 
         // Wait for file to process using helper (deterministic instead of fixed 10s)
@@ -3367,7 +3367,7 @@ function TestCC09_DualProcessingStops(client, data) {
         try {
             const uploadBody = uploadAfterPurgeRes.json();
             fileAfterPurgeUid = uploadBody.file.fileUid;
-            helper.waitForFileProcessingComplete(data.expectedOwner.id, catalogIdCC9, fileAfterPurgeUid, data.header, 60);
+            helper.waitForFileProcessingComplete(data.expectedOwner.id, knowledgeBaseIdCC9, fileAfterPurgeUid, data.header, 60);
         } catch (e) {
             console.warn(`CC9: Could not wait for file processing: ${e}`);
         }
@@ -3379,7 +3379,7 @@ function TestCC09_DualProcessingStops(client, data) {
         console.log("CC9: Verified dual processing lifecycle (start → run → stop)");
 
         // Cleanup
-        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC9}`, null, data.header);
+        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC9}`, null, data.header);
 
         console.log("CC9: Test completed\n");
     });
@@ -3397,40 +3397,40 @@ function TestCC10_RetentionExpiration(client, data) {
         console.log("Corner Case 10: Retention Expiration During Operations");
         console.log("=".repeat(80));
 
-        const catalogIdCC10 = data.dbIDPrefix + "cc10-" + randomString(6);
-        console.log(`CC10: Creating catalog ${catalogIdCC10}...`);
-        const createResCC10 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
-            JSON.stringify({ id: catalogIdCC10, description: "CC10 - retention expiration", tags: ["test", "cc10"] }), data.header);
+        const knowledgeBaseIdCC10 = data.dbIDPrefix + "cc10-" + randomString(6);
+        console.log(`CC10: Creating knowledge base ${knowledgeBaseIdCC10}...`);
+        const createResCC10 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
+            JSON.stringify({ id: knowledgeBaseIdCC10, description: "CC10 - retention expiration", tags: ["test", "cc10"] }), data.header);
 
         check(createResCC10, {
-            "CC10: Catalog creation returns OK status": (r) => r.status === 200 || r.status === 201
+            "CC10: Knowledge base creation returns OK status": (r) => r.status === 200 || r.status === 201
         });
 
         if (createResCC10.status !== 200 && createResCC10.status !== 201) {
-            console.error(`CC10: Catalog creation failed with status ${createResCC10.status}`);
+            console.error(`CC10: Knowledge base creation failed with status ${createResCC10.status}`);
             console.error(`CC10: Response body: ${createResCC10.body}`);
             return;
         }
 
-        let catalogCC10;
+        let kbCC10;
         try {
-            catalogCC10 = createResCC10.json().catalog;
-            console.log(`CC10: Catalog created with UID: ${catalogCC10.uid}`);
+            kbCC10 = createResCC10.json().knowledgeBase;
+            console.log(`CC10: Knowledge base created with UID: ${kbCC10.uid}`);
         } catch (e) {
             check(false, {
-                "CC10: Failed to parse catalog response": () => false
+                "CC10: Failed to parse knowledge base response": () => false
             });
-            console.error(`CC10: Failed to parse catalog: ${e}`);
+            console.error(`CC10: Failed to parse knowledge base: ${e}`);
             console.error(`CC10: Response: ${createResCC10.body}`);
             return;
         }
 
-        const catalogUidCC10 = catalogCC10.uid;
-        const rollbackKBIDCC10 = `${catalogIdCC10}-rollback`;
+        const knowledgeBaseUidCC10 = kbCC10.uid;
+        const rollbackKBIDCC10 = `${knowledgeBaseIdCC10}-rollback`;
 
         // Upload and process initial file
         console.log("CC10: Uploading initial file...");
-        const uploadResCC10 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC10}/files`,
+        const uploadResCC10 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC10}/files`,
             JSON.stringify({ filename: data.dbIDPrefix + "cc10-init.txt", type: "TYPE_TEXT", content: constant.sampleTxt }), data.header);
 
         check(uploadResCC10, {
@@ -3444,7 +3444,7 @@ function TestCC10_RetentionExpiration(client, data) {
         } catch (e) {
             console.error(`CC10: Failed to upload file: ${e}`);
             console.error(`CC10: Upload status: ${uploadResCC10.status}, body: ${uploadResCC10.body}`);
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC10}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC10}`, null, data.header);
             return;
         }
 
@@ -3452,7 +3452,7 @@ function TestCC10_RetentionExpiration(client, data) {
         console.log("CC10: Waiting for initial file processing...");
         const initialFileResult = helper.waitForFileProcessingComplete(
             data.expectedOwner.id,
-            catalogIdCC10,
+            knowledgeBaseIdCC10,
             fileUidCC10,
             data.header,
             600
@@ -3460,7 +3460,7 @@ function TestCC10_RetentionExpiration(client, data) {
 
         if (!initialFileResult.completed) {
             console.error(`CC10: Initial file processing did not complete: ${initialFileResult.status}`);
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC10}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC10}`, null, data.header);
             return;
         }
         console.log("CC10: Initial file processing completed");
@@ -3468,7 +3468,7 @@ function TestCC10_RetentionExpiration(client, data) {
         // Trigger update
         console.log("CC10: Triggering KB update...");
         const updateResCC10 = client.invoke("artifact.artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
-            { catalogIds: [catalogIdCC10] }, data.metadata);
+            { knowledgeBaseIds: [knowledgeBaseIdCC10] }, data.metadata);
 
         check(updateResCC10, {
             "CC10: Update started successfully": (r) => r.status === grpc.StatusOK && r.message && r.message.started === true
@@ -3479,13 +3479,13 @@ function TestCC10_RetentionExpiration(client, data) {
             if (updateResCC10.error) {
                 console.error(`CC10: Error: ${updateResCC10.error.message}`);
             }
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC10}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC10}`, null, data.header);
             return;
         }
         console.log("CC10: Update started, waiting for completion...");
 
         // Wait for completion
-        const updateCompletedCC10 = helper.pollUpdateCompletion(client, data, catalogUidCC10, 900);
+        const updateCompletedCC10 = helper.pollUpdateCompletion(client, data, knowledgeBaseUidCC10, 900);
 
         check({ updateCompletedCC10 }, {
             "CC10: Update completed successfully": () => updateCompletedCC10 === true,
@@ -3493,20 +3493,20 @@ function TestCC10_RetentionExpiration(client, data) {
 
         if (!updateCompletedCC10) {
             console.error("CC10: Update did not complete within timeout");
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC10}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC10}`, null, data.header);
             return;
         }
         console.log("CC10: Update completed successfully");
 
         // Verify rollback KB exists (poll for rollback KB creation)
-        const rollbackKBCC10Obj = helper.pollForRollbackKBCreation(catalogIdCC10, data.expectedOwner.uid);
+        const rollbackKBCC10Obj = helper.pollForRollbackKBCreation(knowledgeBaseIdCC10, data.expectedOwner.uid);
         const rollbackKBCC10 = rollbackKBCC10Obj ? [rollbackKBCC10Obj] : null;
         check({ rollbackKBCC10 }, {
             "CC10: Rollback KB exists (retention active)": () => rollbackKBCC10 && rollbackKBCC10.length > 0,
         });
 
         if (!rollbackKBCC10 || rollbackKBCC10.length === 0) {
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC10}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC10}`, null, data.header);
             return;
         }
 
@@ -3515,7 +3515,7 @@ function TestCC10_RetentionExpiration(client, data) {
         const setRetentionResCC10 = client.invoke(
             "artifact.artifact.v1alpha.ArtifactPrivateService/SetRollbackRetentionAdmin",
             {
-                name: `users/${data.expectedOwner.uid}/catalogs/${catalogIdCC10}`,
+                name: `users/${data.expectedOwner.uid}/knowledge-bases/${knowledgeBaseIdCC10}`,
                 duration: 5,
                 timeUnit: 1  // TIME_UNIT_SECOND
             },
@@ -3528,10 +3528,10 @@ function TestCC10_RetentionExpiration(client, data) {
 
         // Upload files continuously
         console.log("CC10: Uploading files during retention...");
-        const file1ResCC10 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC10}/files`,
+        const file1ResCC10 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC10}/files`,
             JSON.stringify({ filename: data.dbIDPrefix + "cc10-file1.txt", type: "TYPE_TEXT", content: encoding.b64encode("File 1") }), data.header);
 
-        const file2ResCC10 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC10}/files`,
+        const file2ResCC10 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC10}/files`,
             JSON.stringify({ filename: data.dbIDPrefix + "cc10-file2.txt", type: "TYPE_TEXT", content: encoding.b64encode("File 2") }), data.header);
 
         // Track uploaded file UIDs for cleanup verification
@@ -3548,43 +3548,43 @@ function TestCC10_RetentionExpiration(client, data) {
             console.warn(`CC10: Error tracking uploaded files: ${e}`);
         }
 
-        // Wait for THIS catalog's files to complete processing
-        console.log("CC10: Waiting for this catalog's files to complete processing...");
+        // Wait for THIS knowledge base's files to complete processing
+        console.log("CC10: Waiting for this knowledge base's files to complete processing...");
         const maxQueueWaitCC10 = 600;
         let queueDrainedCC10 = false;
 
         for (let i = 0; i < maxQueueWaitCC10; i++) {
             const queueCheckQueryCC10 = `
                 SELECT COUNT(*) as count
-                FROM knowledge_base_file f
+                FROM file f
                 INNER JOIN knowledge_base kb ON f.kb_uid = kb.uid
                 WHERE f.process_status IN ('FILE_PROCESS_STATUS_NOTSTARTED', 'FILE_PROCESS_STATUS_PROCESSING', 'FILE_PROCESS_STATUS_CHUNKING', 'FILE_PROCESS_STATUS_EMBEDDING')
                   AND f.delete_time IS NULL
                   AND (kb.id = $1 OR kb.id LIKE $2)
             `;
-            const queueCheckCC10 = helper.safeQuery(queueCheckQueryCC10, catalogIdCC10, `${catalogIdCC10}-%`);
+            const queueCheckCC10 = helper.safeQuery(queueCheckQueryCC10, knowledgeBaseIdCC10, `${knowledgeBaseIdCC10}-%`);
             const queuedFilesCC10 = queueCheckCC10 && queueCheckCC10.length > 0 ? parseInt(queueCheckCC10[0].count) : 0;
 
             if (queuedFilesCC10 === 0) {
                 queueDrainedCC10 = true;
-                console.log(`CC10: All files for this catalog completed processing after ${i}s`);
+                console.log(`CC10: All files for this knowledge base completed processing after ${i}s`);
                 break;
             }
 
             if (i === 0 || i % 10 === 0) {
-                console.log(`CC10: Catalog has ${queuedFilesCC10} files still processing, waiting... (${i}/${maxQueueWaitCC10}s)`);
+                console.log(`CC10: Knowledge base has ${queuedFilesCC10} files still processing, waiting... (${i}/${maxQueueWaitCC10}s)`);
             }
 
             sleep(1);
         }
 
         if (!queueDrainedCC10) {
-            console.error(`CC10: This catalog's files did not complete processing after ${maxQueueWaitCC10}s`);
+            console.error(`CC10: This knowledge base's files did not complete processing after ${maxQueueWaitCC10}s`);
             console.error(`CC10: This indicates files are stuck in processing`);
             check(false, {
                 "CC10: Worker queue drained before testing": () => false
             });
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC10}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC10}`, null, data.header);
             return;
         }
 
@@ -3599,7 +3599,7 @@ function TestCC10_RetentionExpiration(client, data) {
         }
 
         // Verify rollback KB auto-deleted after expiration
-        const rollbackKBAfterExpire = helper.getCatalogByIdAndOwner(rollbackKBIDCC10, data.expectedOwner.uid);
+        const rollbackKBAfterExpire = helper.getKnowledgeBaseByIdAndOwner(rollbackKBIDCC10, data.expectedOwner.uid);
         check({ rollbackKBAfterExpire }, {
             "CC10: Rollback KB auto-deleted after expiration": () => {
                 const deleted = !rollbackKBAfterExpire || rollbackKBAfterExpire.length === 0 || rollbackKBAfterExpire[0].delete_time !== null;
@@ -3613,7 +3613,7 @@ function TestCC10_RetentionExpiration(client, data) {
         console.log("CC10: Verified time-based automatic cleanup");
 
         // Cleanup
-        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIdCC10}`, null, data.header);
+        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC10}`, null, data.header);
 
         console.log("CC10: Test completed\n");
     });
@@ -3668,36 +3668,36 @@ function TestPhaseValidate(client, data) {
         // ================================================================
         console.log("\n--- Test 1: Validation Success Path ---");
 
-        const catalogId = data.dbIDPrefix + "validate-" + randomString(6);
+        const knowledgeBaseId = data.dbIDPrefix + "validate-" + randomString(6);
         const createRes = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
             JSON.stringify({
-                id: catalogId,
-                description: "Test catalog for Phase 4 validation checks",
+                id: knowledgeBaseId,
+                description: "Test KB for Phase 4 validation checks",
                 tags: ["test", "phase4", "validation"],
             }),
             data.header
         );
 
-        let catalog;
+        let kb;
         try {
             const responseBody = createRes.json();
-            catalog = responseBody.catalog;
-            if (!catalog || !catalog.uid) {
-                console.error(`Validate: Catalog creation failed - status: ${createRes.status}, body: ${JSON.stringify(responseBody)}`);
+            kb = responseBody.knowledgeBase;
+            if (!kb || !kb.uid) {
+                console.error(`Validate: Knowledge base creation failed - status: ${createRes.status}, body: ${JSON.stringify(responseBody)}`);
                 return;
             }
         } catch (e) {
-            console.error(`Validate: Failed to parse catalog response: ${e}, status: ${createRes.status}, body: ${createRes.body}`);
+            console.error(`Validate: Failed to parse knowledge base response: ${e}, status: ${createRes.status}, body: ${createRes.body}`);
             return;
         }
 
-        const catalogUid = catalog.uid;
-        const stagingKBID = `${catalogId}-staging`;
-        const rollbackKBID = `${catalogId}-rollback`;
+        const knowledgeBaseUid = kb.uid;
+        const stagingKBID = `${knowledgeBaseId}-staging`;
+        const rollbackKBID = `${knowledgeBaseId}-rollback`;
 
-        console.log(`Validate: Created catalog ${catalogId} with UID ${catalogUid}`);
+        console.log(`Validate: Created knowledge base ${knowledgeBaseId} with UID ${knowledgeBaseUid}`);
 
         // Upload 3 files to create a meaningful dataset
         const file1 = data.dbIDPrefix + "validate-1.txt";
@@ -3706,19 +3706,19 @@ function TestPhaseValidate(client, data) {
 
         const upload1 = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
             JSON.stringify({ filename: file1, type: "TYPE_TEXT", content: constant.sampleTxt }),
             data.header
         );
         const upload2 = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
             JSON.stringify({ filename: file2, type: "TYPE_TEXT", content: constant.sampleTxt }),
             data.header
         );
         const upload3 = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
             JSON.stringify({ filename: file3, type: "TYPE_TEXT", content: constant.sampleTxt }),
             data.header
         );
@@ -3730,7 +3730,7 @@ function TestPhaseValidate(client, data) {
             fileUid3 = upload3.json().file.uid;
         } catch (e) {
             console.error(`Validate: Failed to upload files: ${e}`);
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
             return;
         }
 
@@ -3739,7 +3739,7 @@ function TestPhaseValidate(client, data) {
         // Wait for processing to complete (using helper function - 600 second timeout)
         const result = helper.waitForMultipleFilesProcessingComplete(
             data.expectedOwner.id,
-            catalogId,
+            knowledgeBaseId,
             [fileUid1, fileUid2, fileUid3],
             data.header,
             600
@@ -3750,20 +3750,20 @@ function TestPhaseValidate(client, data) {
         });
 
         if (!result.completed) {
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
             return;
         }
 
         console.log("Validate: All files processed, capturing baseline metrics...");
 
         // CAPTURE BASELINE METRICS (Production KB before update)
-        const prodKBBefore = helper.getCatalogByIdAndOwner(catalogId, data.expectedOwner.uid);
+        const prodKBBefore = helper.getKnowledgeBaseByIdAndOwner(knowledgeBaseId, data.expectedOwner.uid);
         // Convert KB UID from Buffer to string if needed
         const prodKBUIDBefore = Array.isArray(prodKBBefore[0].uid) ? String.fromCharCode(...prodKBBefore[0].uid) : prodKBBefore[0].uid;
 
-        const fileCountQuery = `SELECT COUNT(*) as count FROM knowledge_base_file WHERE kb_uid = $1 AND delete_time IS NULL`;
-        const convertedFilesQuery = `SELECT COUNT(*) as count FROM converted_file WHERE file_uid IN (SELECT uid FROM knowledge_base_file WHERE kb_uid = $1 AND delete_time IS NULL)`;
-        const chunksQuery = `SELECT COUNT(*) as count FROM text_chunk WHERE kb_uid = $1`;
+        const fileCountQuery = `SELECT COUNT(*) as count FROM file WHERE kb_uid = $1 AND delete_time IS NULL`;
+        const convertedFilesQuery = `SELECT COUNT(*) as count FROM converted_file WHERE file_uid IN (SELECT uid FROM file WHERE kb_uid = $1 AND delete_time IS NULL)`;
+        const chunksQuery = `SELECT COUNT(*) as count FROM chunk WHERE kb_uid = $1`;
         const embeddingsQuery = `SELECT COUNT(*) as count FROM embedding WHERE kb_uid = $1`;
 
         const prodFilesBefore = helper.safeQuery(fileCountQuery, prodKBUIDBefore);
@@ -3818,7 +3818,7 @@ function TestPhaseValidate(client, data) {
 
         const updateRes = client.invoke(
             "artifact.artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
-            { catalogIds: [catalogId] },
+            { knowledgeBaseIds: [knowledgeBaseId] },
             data.metadata
         );
 
@@ -3827,7 +3827,7 @@ function TestPhaseValidate(client, data) {
         });
 
         if (updateRes.status !== grpc.StatusOK || !updateRes.message || !updateRes.message.started) {
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
             return;
         }
 
@@ -3835,22 +3835,22 @@ function TestPhaseValidate(client, data) {
         // Phase 4 validation happens automatically during the workflow (between Phase 3 and Phase 5)
         console.log("Validate: Waiting for update to complete (validation happens automatically in workflow)...");
 
-        const updateCompleted = helper.pollUpdateCompletion(client, data, catalogUid, 900);
+        const updateCompleted = helper.pollUpdateCompletion(client, data, knowledgeBaseUid, 900);
 
         check({ updateCompleted }, {
             "Validate: Update completed successfully (validation passed)": () => updateCompleted === true,
         });
 
         if (!updateCompleted) {
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
             return;
         }
 
         // VERIFY POST-SWAP: Validation succeeded and swap happened (poll for rollback KB)
-        const rollbackKBAfterObj = helper.pollForRollbackKBCreation(catalogId, data.expectedOwner.uid);
+        const rollbackKBAfterObj = helper.pollForRollbackKBCreation(knowledgeBaseId, data.expectedOwner.uid);
         const rollbackKBAfter = rollbackKBAfterObj ? [rollbackKBAfterObj] : null;
-        const prodKBAfter = helper.getCatalogByIdAndOwner(catalogId, data.expectedOwner.uid);
-        const stagingKBAfter = helper.getCatalogByIdAndOwner(stagingKBID, data.expectedOwner.uid);
+        const prodKBAfter = helper.getKnowledgeBaseByIdAndOwner(knowledgeBaseId, data.expectedOwner.uid);
+        const stagingKBAfter = helper.getKnowledgeBaseByIdAndOwner(stagingKBID, data.expectedOwner.uid);
 
         check({ prodKBAfter, stagingKBAfter, rollbackKBAfter }, {
             "Validate: Production KB exists after validation": () => prodKBAfter && prodKBAfter.length > 0,
@@ -3914,7 +3914,7 @@ function TestPhaseValidate(client, data) {
 
         while (pollAttempts < maxPollAttempts) {
             newFileUIDs = helper.safeQuery(`
-            SELECT uid FROM knowledge_base_file
+            SELECT uid FROM file
             WHERE kb_uid = $1 AND delete_time IS NULL
             ORDER BY create_time ASC
             LIMIT 3
@@ -4054,7 +4054,7 @@ function TestPhaseValidate(client, data) {
         while (maxWaitIterations > 0 && !allFilesProcessed) {
             const fileStatusQuery = `
                 SELECT COUNT(*) as count
-                FROM knowledge_base_file
+                FROM file
                 WHERE kb_uid IN ($1, $2)
                   AND process_status = 'FILE_PROCESS_STATUS_PROCESSING'
                   AND delete_time IS NULL
@@ -4078,9 +4078,9 @@ function TestPhaseValidate(client, data) {
         }
 
         // Cleanup
-        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
         if (rollbackKBAfter && rollbackKBAfter.length > 0) {
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${rollbackKBID}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${rollbackKBID}`, null, data.header);
         }
 
         console.log("\n" + "=".repeat(80));
@@ -4118,37 +4118,37 @@ function TestPhaseSwap(client, data) {
         // Wait for any ongoing updates to complete before starting this test
         helper.waitForAllUpdatesComplete(client, data, 15);
 
-        // Create catalog
-        const catalogId = data.dbIDPrefix + "swap-" + randomString(8);
+        // Create knowledge base
+        const knowledgeBaseId = data.dbIDPrefix + "swap-" + randomString(8);
         const createBody = {
-            id: catalogId,
-            description: "Test catalog for Phase 5 - Atomic Swap",
+            id: knowledgeBaseId,
+            description: "Test KB for Phase 5 - Atomic Swap",
             tags: ["test", "phase5", "swap"],
         };
 
         const createRes = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
             JSON.stringify(createBody),
             data.header
         );
 
-        let catalog;
+        let kb;
         try {
-            catalog = createRes.json().catalog;
+            kb = createRes.json().knowledgeBase;
         } catch (e) {
-            check(false, { "Phase 5 Swap: Failed to create catalog": () => false });
+            check(false, { "Phase 5 Swap: Failed to create knowledge base": () => false });
             return;
         }
 
-        const catalogUid = catalog.uid;
-        const originalKBUID = catalogUid; // CRITICAL: This UID must remain constant
+        const knowledgeBaseUid = kb.uid;
+        const originalKBUID = knowledgeBaseUid; // CRITICAL: This UID must remain constant
 
         // Upload and process file
         const filename = data.dbIDPrefix + "swap-test.txt";
         const uploadRes = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
             JSON.stringify({
                 filename: filename,
                 type: "TYPE_TEXT",
@@ -4161,7 +4161,7 @@ function TestPhaseSwap(client, data) {
         try {
             fileUid = uploadRes.json().file.uid;
         } catch (e) {
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
             return;
         }
 
@@ -4170,7 +4170,7 @@ function TestPhaseSwap(client, data) {
         // Wait for completion (using helper function)
         const result = helper.waitForFileProcessingComplete(
             data.expectedOwner.id,
-            catalogId,
+            knowledgeBaseId,
             fileUid,
             data.header,
             600
@@ -4181,7 +4181,7 @@ function TestPhaseSwap(client, data) {
         });
 
         if (!result.completed) {
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
             return;
         }
 
@@ -4190,7 +4190,7 @@ function TestPhaseSwap(client, data) {
         // Trigger update
         const executeRes = client.invoke(
             "artifact.artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
-            { catalogIds: [catalogId] },
+            { knowledgeBaseIds: [knowledgeBaseId] },
             data.metadata
         );
 
@@ -4200,13 +4200,13 @@ function TestPhaseSwap(client, data) {
         });
         if (executeRes.status !== grpc.StatusOK || !executeRes.message.started) {
             console.error("Phase 5 Swap: Update failed to start");
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
             return;
         }
 
         // Wait for completion (swap happens automatically during workflow)
         console.log("Phase 5 Swap: Waiting for update to complete (swap happens in workflow)...");
-        const updateCompleted = helper.pollUpdateCompletion(client, data, catalogUid, 900);
+        const updateCompleted = helper.pollUpdateCompletion(client, data, knowledgeBaseUid, 900);
 
 
         check(updateCompleted, {
@@ -4214,13 +4214,13 @@ function TestPhaseSwap(client, data) {
         });
         if (!updateCompleted) {
             console.error("Phase 5 Swap: Update did not complete");
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
             return;
         }
 
         // PHASE 5 VALIDATIONS: Verify atomic swap results (poll for rollback KB)
-        const rollbackKBObj = helper.pollForRollbackKBCreation(catalogId, data.expectedOwner.uid);
-        const newProdKBs = helper.getCatalogByIdAndOwner(catalogId, data.expectedOwner.uid);
+        const rollbackKBObj = helper.pollForRollbackKBCreation(knowledgeBaseId, data.expectedOwner.uid);
+        const newProdKBs = helper.getKnowledgeBaseByIdAndOwner(knowledgeBaseId, data.expectedOwner.uid);
 
         check({ newProdKBs }, {
             "Phase 5 Swap: Production KB exists after swap": () => newProdKBs && newProdKBs.length > 0,
@@ -4236,7 +4236,7 @@ function TestPhaseSwap(client, data) {
 
         check(newProdKB, {
             "Phase 5 Swap: Production KB has correct KBID": () =>
-                newProdKB.id === catalogId,
+                newProdKB.id === knowledgeBaseId,
             "Phase 5 Swap: Production KB has staging=false": () =>
                 newProdKB.staging === false,
             "Phase 5 Swap: Production KB has status='KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED'": () =>
@@ -4252,8 +4252,8 @@ function TestPhaseSwap(client, data) {
         });
 
         // Verify rollback KB created
-        const rollbackKBID = `${catalogId}-rollback`;
-        const rollbackKBs = helper.getCatalogByIdAndOwner(rollbackKBID, data.expectedOwner.uid);
+        const rollbackKBID = `${knowledgeBaseId}-rollback`;
+        const rollbackKBs = helper.getKnowledgeBaseByIdAndOwner(rollbackKBID, data.expectedOwner.uid);
 
         check({ rollbackKBs }, {
             "Phase 5 Swap: Rollback KB created": () => rollbackKBs && rollbackKBs.length > 0,
@@ -4283,8 +4283,8 @@ function TestPhaseSwap(client, data) {
         }
 
         // Verify staging KB was soft-deleted
-        const stagingKBID = `${catalogId}-staging`;
-        const stagingKBs = helper.getCatalogByIdAndOwner(stagingKBID, data.expectedOwner.uid);
+        const stagingKBID = `${knowledgeBaseId}-staging`;
+        const stagingKBs = helper.getKnowledgeBaseByIdAndOwner(stagingKBID, data.expectedOwner.uid);
 
         check({ stagingKBs }, {
             "Phase 5 Swap: Staging KB soft-deleted after swap": () => {
@@ -4310,12 +4310,12 @@ function TestPhaseSwap(client, data) {
 
         // Verify queries work after swap (no downtime)
         // After swap, the file still belongs to the same production KB (UID constant)
-        // but we need to verify it's accessible via the catalog API
+        // but we need to verify it's accessible via the knowledge base API
 
         // First, list files to get the current file UID in production KB
         const listFilesRes = http.request(
             "GET",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
             null,
             data.header
         );
@@ -4336,7 +4336,7 @@ function TestPhaseSwap(client, data) {
 
         const chunksRes = http.request(
             "GET",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${currentFileUid}/chunks`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${currentFileUid}/chunks`,
             null,
             data.header
         );
@@ -4354,15 +4354,15 @@ function TestPhaseSwap(client, data) {
         console.log(`Phase 5 Swap: Test completed - Production UID constant: ${originalKBUID === newProdUID}`);
 
         // Cleanup
-        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
-        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${rollbackKBID}`, null, data.header);
+        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
+        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${rollbackKBID}`, null, data.header);
     });
 }
 
 /**
  * GROUP 8: Phase 6 - Cleanup (Staging Cleanup & Rollback Retention)
  * Tests that intermediate resources (staging KB, rollback KB) are properly cleaned up
- * and don't accumulate over time. Creates its own catalog, performs update, validates purge.
+ * and don't accumulate over time. Creates its own knowledge base, performs update, validates purge.
  */
 function TestResourceCleanup(client, data) {
     const groupName = "Group 8: Phase 6 - Cleanup";
@@ -4370,42 +4370,42 @@ function TestResourceCleanup(client, data) {
         check(true, { [constant.banner(groupName)]: () => true });
 
         // NOTE: Skip global queue drain check - each test is responsible for its own files
-        // This test creates its own catalog and only needs to wait for its own files to complete
+        // This test creates its own knowledge base and only needs to wait for its own files to complete
         console.log("Cleanup: Starting test (each test manages its own files)...");
 
-        // Create a fresh catalog for this test
+        // Create a fresh knowledge base for this test
         // Use "g8-" prefix to avoid any pattern matching with "cleanup" or other keywords
-        const catalogId = data.dbIDPrefix + "g8-purge-" + randomString(8);
+        const knowledgeBaseId = data.dbIDPrefix + "g8-purge-" + randomString(8);
         const createBody = {
-            id: catalogId,
+            id: knowledgeBaseId,
             description: "Test resource cleanup with purge (Group 8)",
             tags: ["test", "group8", "purge-testing"],
         };
 
         const createRes = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
             JSON.stringify(createBody),
             data.header
         );
 
-        let catalog;
+        let kb;
         try {
-            catalog = createRes.json().catalog;
+            kb = createRes.json().knowledgeBase;
         } catch (e) {
-            console.error(`Cleanup: Failed to create catalog: ${e}`);
+            console.error(`Cleanup: Failed to create knowledge base: ${e}`);
             return;
         }
 
-        const catalogUid = catalog.uid;
-        console.log(`Cleanup: Created catalog "${catalogId}" with UID ${catalogUid}`);
+        const knowledgeBaseUid = kb.uid;
+        console.log(`Cleanup: Created knowledge base "${knowledgeBaseId}" with UID ${knowledgeBaseUid}`);
 
         // Upload a test file
         const filename = data.dbIDPrefix + "cleanup-test.txt";
 
         const uploadRes = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
             JSON.stringify({ filename: filename, type: "TYPE_TEXT", content: constant.sampleTxt }),
             data.header
         );
@@ -4423,7 +4423,7 @@ function TestResourceCleanup(client, data) {
             console.error(`Cleanup: Failed to upload file: ${e}, status=${uploadRes.status}`);
             console.error(`Cleanup: Response body: ${uploadRes.body}`);
             // Cleanup and return
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
             return;
         }
 
@@ -4432,7 +4432,7 @@ function TestResourceCleanup(client, data) {
         // Wait for file processing (using helper function with standard timeout)
         const result = helper.waitForFileProcessingComplete(
             data.expectedOwner.id,
-            catalogId,
+            knowledgeBaseId,
             fileUid,
             data.header,
             600
@@ -4445,7 +4445,7 @@ function TestResourceCleanup(client, data) {
         if (!result.completed) {
             console.error(`Cleanup: File processing failed with status: ${result.status}`);
             console.error(`Cleanup: This should not happen since queue was drained - indicates real bug`);
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
             return;
         }
 
@@ -4455,7 +4455,7 @@ function TestResourceCleanup(client, data) {
         console.log("Cleanup: Triggering system update...");
         const updateRes = client.invoke(
             "artifact.artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
-            { catalogIds: [catalogId] },
+            { knowledgeBaseIds: [knowledgeBaseId] },
             data.metadata
         );
 
@@ -4464,7 +4464,7 @@ function TestResourceCleanup(client, data) {
         });
 
         // Wait for update to complete (longer timeout for CI environment)
-        const updateCompleted = helper.pollUpdateCompletion(client, data, catalogUid, 900);
+        const updateCompleted = helper.pollUpdateCompletion(client, data, knowledgeBaseUid, 900);
         check({ updateCompleted }, {
             "Cleanup: Update completed": () => updateCompleted === true,
         });
@@ -4476,8 +4476,8 @@ function TestResourceCleanup(client, data) {
         }
 
         // Verify staging KB is soft-deleted
-        const stagingKBID = `${catalogId}-staging`;
-        const stagingKBAfterUpdate = helper.getCatalogByIdAndOwner(stagingKBID, data.expectedOwner.uid);
+        const stagingKBID = `${knowledgeBaseId}-staging`;
+        const stagingKBAfterUpdate = helper.getKnowledgeBaseByIdAndOwner(stagingKBID, data.expectedOwner.uid);
 
         check(stagingKBAfterUpdate, {
             "Cleanup: Staging KB soft-deleted after update": () => {
@@ -4489,8 +4489,8 @@ function TestResourceCleanup(client, data) {
         });
 
         // Verify rollback KB exists and has resources
-        const rollbackKBID = `${catalogId}-rollback`;
-        const rollbackKBs = helper.getCatalogByIdAndOwner(rollbackKBID, data.expectedOwner.uid);
+        const rollbackKBID = `${knowledgeBaseId}-rollback`;
+        const rollbackKBs = helper.getKnowledgeBaseByIdAndOwner(rollbackKBID, data.expectedOwner.uid);
 
         check(rollbackKBs, {
             "Cleanup: Rollback KB created": () => rollbackKBs && rollbackKBs.length > 0,
@@ -4498,7 +4498,7 @@ function TestResourceCleanup(client, data) {
 
         if (!rollbackKBs || rollbackKBs.length === 0) {
             console.error("Cleanup: Rollback KB not found");
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
             return;
         }
 
@@ -4508,9 +4508,9 @@ function TestResourceCleanup(client, data) {
         // Count ALL resources in rollback KB BEFORE purge (database records)
         // Note: This validates database integrity. MinIO and Milvus cleanup is handled by
         // the cleanup workflow but we focus on database records here as they're authoritative.
-        const filesBeforePurge = helper.countFilesInCatalog(rollbackKBUID);
+        const filesBeforePurge = helper.countFilesInKnowledgeBase(rollbackKBUID);
 
-        const chunksQuery = `SELECT COUNT(*) as count FROM text_chunk WHERE kb_uid = $1`;
+        const chunksQuery = `SELECT COUNT(*) as count FROM chunk WHERE kb_uid = $1`;
         const chunksBeforePurge = helper.safeQuery(chunksQuery, rollbackKBUID);
         const chunkCount = chunksBeforePurge && chunksBeforePurge.length > 0 ? parseInt(chunksBeforePurge[0].count) : 0;
 
@@ -4539,7 +4539,7 @@ function TestResourceCleanup(client, data) {
         const setRetentionRes = client.invoke(
             "artifact.artifact.v1alpha.ArtifactPrivateService/SetRollbackRetentionAdmin",
             {
-                name: `users/${data.expectedOwner.uid}/catalogs/${catalogId}`,
+                name: `users/${data.expectedOwner.uid}/knowledge-bases/${knowledgeBaseId}`,
                 duration: 5,  // Set retention to exactly 5 seconds from now
                 timeUnit: 1   // TIME_UNIT_SECOND = 1
             },
@@ -4554,43 +4554,43 @@ function TestResourceCleanup(client, data) {
             console.log(`Cleanup: Retention set - Previous: ${setRetentionRes.message.previousRetentionUntil}, New: ${setRetentionRes.message.newRetentionUntil}, Total seconds: ${setRetentionRes.message.totalRetentionSeconds}`);
         }
 
-        // Wait for THIS catalog's files to complete processing before testing cleanup
-        console.log("Cleanup: Waiting for this catalog's files to complete processing...");
+        // Wait for THIS knowledge base's files to complete processing before testing cleanup
+        console.log("Cleanup: Waiting for this knowledge base's files to complete processing...");
         const maxQueueWait = 600;
         let queueDrained = false;
 
         for (let i = 0; i < maxQueueWait; i++) {
             const queueCheckQuery = `
                 SELECT COUNT(*) as count
-                FROM knowledge_base_file f
+                FROM file f
                 INNER JOIN knowledge_base kb ON f.kb_uid = kb.uid
                 WHERE f.process_status IN ('FILE_PROCESS_STATUS_NOTSTARTED', 'FILE_PROCESS_STATUS_PROCESSING', 'FILE_PROCESS_STATUS_CHUNKING', 'FILE_PROCESS_STATUS_EMBEDDING')
                   AND f.delete_time IS NULL
                   AND (kb.id = $1 OR kb.id LIKE $2)
             `;
-            const queueCheck = helper.safeQuery(queueCheckQuery, catalogId, `${catalogId}-%`);
+            const queueCheck = helper.safeQuery(queueCheckQuery, knowledgeBaseId, `${knowledgeBaseId}-%`);
             const queuedFiles = queueCheck && queueCheck.length > 0 ? parseInt(queueCheck[0].count) : 0;
 
             if (queuedFiles === 0) {
                 queueDrained = true;
-                console.log(`Cleanup: All files for this catalog completed processing after ${i}s`);
+                console.log(`Cleanup: All files for this knowledge base completed processing after ${i}s`);
                 break;
             }
 
             if (i === 0 || i % 10 === 0) {
-                console.log(`Cleanup: Catalog has ${queuedFiles} files still processing, waiting... (${i}/${maxQueueWait}s)`);
+                console.log(`Cleanup: Knowledge base has ${queuedFiles} files still processing, waiting... (${i}/${maxQueueWait}s)`);
             }
 
             sleep(1);
         }
 
         if (!queueDrained) {
-            console.error(`Cleanup: This catalog's files did not complete processing after ${maxQueueWait}s`);
+            console.error(`Cleanup: This knowledge base's files did not complete processing after ${maxQueueWait}s`);
             console.error(`Cleanup: This indicates files are stuck in processing`);
             check(false, {
-                "Cleanup: Catalog files completed processing before testing": () => false
+                "Cleanup: Knowledge base files completed processing before testing": () => false
             });
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
             return;
         }
 
@@ -4623,13 +4623,13 @@ function TestResourceCleanup(client, data) {
             FROM knowledge_base
             WHERE owner = $1 AND id LIKE $2
         `;
-        const allRelatedKBs = helper.safeQuery(queryAllKBs, data.expectedOwner.uid, `${catalogId}%`);
+        const allRelatedKBs = helper.safeQuery(queryAllKBs, data.expectedOwner.uid, `${knowledgeBaseId}%`);
         const activeKBs = allRelatedKBs ? allRelatedKBs.filter(kb => kb.delete_time === null) : [];
 
         check({ activeKBs }, {
             "Cleanup: Only production KB remains active": () => {
                 const count = activeKBs.length;
-                const hasOnlyProd = count === 1 && activeKBs[0].id === catalogId;
+                const hasOnlyProd = count === 1 && activeKBs[0].id === knowledgeBaseId;
                 if (!hasOnlyProd) {
                     console.error(`Expected 1 active KB, found ${count}: ${activeKBs.map(kb => kb.id).join(', ')}`);
                 }
@@ -4645,7 +4645,7 @@ function TestResourceCleanup(client, data) {
         // Trigger another update to create a new rollback KB
         const secondUpdateRes = client.invoke(
             "artifact.artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
-            { catalogIds: [catalogId] },
+            { knowledgeBaseIds: [knowledgeBaseId] },
             data.metadata
         );
 
@@ -4654,33 +4654,33 @@ function TestResourceCleanup(client, data) {
         });
 
         // Wait for second update to complete
-        const secondUpdateCompleted = helper.pollUpdateCompletion(client, data, catalogUid, 900);
+        const secondUpdateCompleted = helper.pollUpdateCompletion(client, data, knowledgeBaseUid, 900);
         check({ secondUpdateCompleted }, {
             "Cleanup: Second update completed for purge test": () => secondUpdateCompleted === true,
         });
 
         if (!secondUpdateCompleted) {
             console.error("Cleanup: Second update timed out");
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
             return;
         }
 
         // Verify new rollback KB exists
-        const newRollbackKBs = helper.getCatalogByIdAndOwner(rollbackKBID, data.expectedOwner.uid);
+        const newRollbackKBs = helper.getKnowledgeBaseByIdAndOwner(rollbackKBID, data.expectedOwner.uid);
         check(newRollbackKBs, {
             "Cleanup: New rollback KB created for purge test": () => newRollbackKBs && newRollbackKBs.length > 0,
         });
 
         if (!newRollbackKBs || newRollbackKBs.length === 0) {
             console.error("Cleanup: New rollback KB not found");
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
             return;
         }
 
         const newRollbackKBUID = newRollbackKBs[0].uid;
 
         // Count resources in new rollback KB before manual purge
-        const filesBeforeManualPurge = helper.countFilesInCatalog(newRollbackKBUID);
+        const filesBeforeManualPurge = helper.countFilesInKnowledgeBase(newRollbackKBUID);
         const chunksBeforeManualPurge = helper.safeQuery(chunksQuery, newRollbackKBUID);
         const chunksCountBeforeManualPurge = chunksBeforeManualPurge && chunksBeforeManualPurge.length > 0 ? parseInt(chunksBeforeManualPurge[0].count) : 0;
 
@@ -4693,7 +4693,7 @@ function TestResourceCleanup(client, data) {
         const purgeRes = client.invoke(
             "artifact.artifact.v1alpha.ArtifactPrivateService/PurgeRollbackAdmin",
             {
-                name: `users/${data.expectedOwner.uid}/catalogs/${catalogId}`
+                name: `users/${data.expectedOwner.uid}/knowledge-bases/${knowledgeBaseId}`
             },
             data.metadata
         );
@@ -4743,7 +4743,7 @@ function TestResourceCleanup(client, data) {
             });
 
             // Verify resources were purged by manual purge
-            const filesAfterManualPurge = helper.countFilesInCatalog(newRollbackKBUID);
+            const filesAfterManualPurge = helper.countFilesInKnowledgeBase(newRollbackKBUID);
             const chunksAfterManualPurge = helper.safeQuery(chunksQuery, newRollbackKBUID);
             const chunksCountAfterManualPurge = chunksAfterManualPurge && chunksAfterManualPurge.length > 0 ? parseInt(chunksAfterManualPurge[0].count) : 0;
 
@@ -4757,15 +4757,15 @@ function TestResourceCleanup(client, data) {
             console.log("Cleanup: Skipping manual purge verification (rollback KB was empty or already purged)");
         }
 
-        // Cleanup: Delete test catalog and all related KBs
-        console.log("Cleanup: Deleting test catalog...");
-        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+        // Cleanup: Delete test knowledge base and all related KBs
+        console.log("Cleanup: Deleting test knowledge base...");
+        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
 
         // Also cleanup rollback KB if it wasn't purged
-        const rollbackKBAfterCleanup = helper.getCatalogByIdAndOwner(rollbackKBID, data.expectedOwner.uid);
+        const rollbackKBAfterCleanup = helper.getKnowledgeBaseByIdAndOwner(rollbackKBID, data.expectedOwner.uid);
         if (rollbackKBAfterCleanup && rollbackKBAfterCleanup.length > 0 && rollbackKBAfterCleanup[0].delete_time === null) {
             console.log("Cleanup: Manually deleting rollback KB that wasn't auto-purged");
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${rollbackKBID}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${rollbackKBID}`, null, data.header);
         }
     });
 }
@@ -4798,45 +4798,45 @@ function TestCollectionVersioning(client, data) {
         // OPTIMIZATION: Increased to 30s for heavy test groups with many concurrent updates
         helper.waitForAllUpdatesComplete(client, data, 30);
 
-        // Create a catalog for testing
-        const catalogId = data.dbIDPrefix + "col-" + randomString(5);
+        // Create a knowledge base for testing
+        const knowledgeBaseId = data.dbIDPrefix + "col-" + randomString(5);
         const createBody = {
-            id: catalogId,
-            description: "Test catalog for collection versioning",
+            id: knowledgeBaseId,
+            description: "Test KB for collection versioning",
             tags: ["test", "collection-versioning"],
         };
 
         const createRes = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
             JSON.stringify(createBody),
             data.header
         );
 
-        let catalog;
+        let kb;
         try {
             const responseBody = createRes.json();
             console.log(`Collection Versioning: Create response status: ${createRes.status}`);
             console.log(`Collection Versioning: Create response body: ${JSON.stringify(responseBody)}`);
-            catalog = responseBody.catalog;
-            if (!catalog) {
-                console.error(`Collection Versioning: No catalog in response. Response: ${JSON.stringify(responseBody)}`);
+            kb = responseBody.knowledgeBase;
+            if (!kb) {
+                console.error(`Collection Versioning: No knowledge base in response. Response: ${JSON.stringify(responseBody)}`);
                 return;
             }
         } catch (e) {
-            console.error(`Collection Versioning: Failed to create catalog: ${e}`);
+            console.error(`Collection Versioning: Failed to create knowledge base: ${e}`);
             return;
         }
 
-        const catalogUid = catalog.uid;
-        if (!catalogUid) {
-            console.error(`Collection Versioning: catalog.uid is undefined. Catalog: ${JSON.stringify(catalog)}`);
+        const knowledgeBaseUid = kb.uid;
+        if (!knowledgeBaseUid) {
+            console.error(`Collection Versioning: kb.uid is undefined. Knowledge base: ${JSON.stringify(kb)}`);
             return;
         }
-        console.log(`Collection Versioning: Created catalog "${catalogId}" with UID ${catalogUid}`);
+        console.log(`Collection Versioning: Created knowledge base "${knowledgeBaseId}" with UID ${knowledgeBaseUid}`);
 
         // TEST 1: Verify active_collection_uid is set on creation
-        const kbAfterCreate = helper.getCatalogByIdAndOwner(catalogId, data.expectedOwner.uid);
+        const kbAfterCreate = helper.getKnowledgeBaseByIdAndOwner(knowledgeBaseId, data.expectedOwner.uid);
         check(kbAfterCreate, {
             "Collection Versioning: KB has active_collection_uid after creation": () => {
                 if (!kbAfterCreate || kbAfterCreate.length === 0) {
@@ -4862,7 +4862,7 @@ function TestCollectionVersioning(client, data) {
         const filename = data.dbIDPrefix + "collection-ver-file.txt";
         const uploadRes = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
             JSON.stringify({ filename: filename, type: "TYPE_TEXT", content: constant.sampleTxt }),
             data.header
         );
@@ -4873,7 +4873,7 @@ function TestCollectionVersioning(client, data) {
             console.log(`Collection Versioning: Uploaded file ${fileUid}`);
         } catch (e) {
             console.error(`Collection Versioning: Failed to upload file: ${e}`);
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
             return;
         }
 
@@ -4882,7 +4882,7 @@ function TestCollectionVersioning(client, data) {
         // Wait for processing (using helper function)
         const result = helper.waitForFileProcessingComplete(
             data.expectedOwner.id,
-            catalogId,
+            knowledgeBaseId,
             fileUid,
             data.header,
             600
@@ -4893,14 +4893,14 @@ function TestCollectionVersioning(client, data) {
         });
 
         if (!result.completed) {
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
             return;
         }
 
         console.log(`Collection Versioning: File processed successfully`);
 
         // Store original collection UID
-        const originalKB = helper.getCatalogByIdAndOwner(catalogId, data.expectedOwner.uid)[0];
+        const originalKB = helper.getKnowledgeBaseByIdAndOwner(knowledgeBaseId, data.expectedOwner.uid)[0];
         const originalCollectionUID = originalKB.active_collection_uid;
         console.log(`Collection Versioning: Original collection UID: ${originalCollectionUID}`);
 
@@ -4908,7 +4908,7 @@ function TestCollectionVersioning(client, data) {
         console.log("Collection Versioning: Triggering update...");
         const updateRes = client.invoke(
             "artifact.artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
-            { catalogIds: [catalogId] },
+            { knowledgeBaseIds: [knowledgeBaseId] },
             data.metadata
         );
 
@@ -4917,13 +4917,13 @@ function TestCollectionVersioning(client, data) {
         });
 
         // Wait for staging KB creation
-        const stagingFound = helper.pollForStagingKB(catalogId, data.expectedOwner.uid, 60);
+        const stagingFound = helper.pollForStagingKB(knowledgeBaseId, data.expectedOwner.uid, 60);
         check({ stagingFound }, {
             "Collection Versioning: Staging KB created": () => stagingFound === true,
         });
 
         if (stagingFound) {
-            const stagingKBs = helper.verifyStagingKB(catalogId, data.expectedOwner.uid);
+            const stagingKBs = helper.verifyStagingKB(knowledgeBaseId, data.expectedOwner.uid);
             if (stagingKBs && stagingKBs.length > 0) {
                 const stagingKB = stagingKBs[0];
                 const stagingCollectionUID = stagingKB.active_collection_uid;
@@ -4954,7 +4954,7 @@ function TestCollectionVersioning(client, data) {
 
         // TEST 3: Wait for update completion and verify collection pointer swap
         console.log("Collection Versioning: Waiting for update completion...");
-        const updateCompleted = helper.pollUpdateCompletion(client, data, catalogUid, 900);
+        const updateCompleted = helper.pollUpdateCompletion(client, data, knowledgeBaseUid, 900);
 
         check({ updateCompleted }, {
             "Collection Versioning: Update completed": () => updateCompleted === true,
@@ -4962,8 +4962,8 @@ function TestCollectionVersioning(client, data) {
 
         if (updateCompleted) {
             // Get production and rollback KBs (poll for rollback KB creation)
-            const rollbackKBs = helper.verifyRollbackKB(catalogId, data.expectedOwner.uid);
-            const prodKBs = helper.getCatalogByIdAndOwner(catalogId, data.expectedOwner.uid);
+            const rollbackKBs = helper.verifyRollbackKB(knowledgeBaseId, data.expectedOwner.uid);
+            const prodKBs = helper.getKnowledgeBaseByIdAndOwner(knowledgeBaseId, data.expectedOwner.uid);
 
             if (prodKBs && prodKBs.length > 0 && rollbackKBs && rollbackKBs.length > 0) {
                 const prodKB = prodKBs[0];
@@ -4975,7 +4975,7 @@ function TestCollectionVersioning(client, data) {
                 console.log(`Collection Versioning: After swap - Production collection: ${prodCollectionUID}, Rollback collection: ${rollbackCollectionUID}`);
 
                 check({ prodKB, rollbackKB }, {
-                    "Collection Versioning: Production KB UID unchanged": () => prodKB.uid === catalogUid,
+                    "Collection Versioning: Production KB UID unchanged": () => prodKB.uid === knowledgeBaseUid,
                     "Collection Versioning: Production collection pointer updated": () => {
                         // Production should now point to what was the staging collection
                         // The staging KB's collection UID should now be the production's active_collection_uid
@@ -5007,7 +5007,7 @@ function TestCollectionVersioning(client, data) {
                 // After swap, need to get the current file UID from the new production KB
                 const listFilesRes = http.request(
                     "GET",
-                    `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
+                    `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
                     null,
                     data.header
                 );
@@ -5027,7 +5027,7 @@ function TestCollectionVersioning(client, data) {
 
                 const chunksRes = http.request(
                     "GET",
-                    `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${currentFileUid}/chunks`,
+                    `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${currentFileUid}/chunks`,
                     null,
                     data.header
                 );
@@ -5044,8 +5044,8 @@ function TestCollectionVersioning(client, data) {
 
                 // TEST 5: Verify cleanup preserves collections still in use
                 // Manually trigger cleanup of staging KB (which should have been deleted already)
-                const stagingKBID = `${catalogId}-staging`;
-                const stagingKBAfterSwap = helper.getCatalogByIdAndOwner(stagingKBID, data.expectedOwner.uid);
+                const stagingKBID = `${knowledgeBaseId}-staging`;
+                const stagingKBAfterSwap = helper.getKnowledgeBaseByIdAndOwner(stagingKBID, data.expectedOwner.uid);
 
                 if (stagingKBAfterSwap && stagingKBAfterSwap.length > 0) {
                     const stagingKBUID = stagingKBAfterSwap[0].uid;
@@ -5084,8 +5084,8 @@ function TestCollectionVersioning(client, data) {
         }
 
         // Cleanup
-        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
-        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}-rollback`, null, data.header);
+        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
+        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}-rollback`, null, data.header);
     });
 }
 
@@ -5112,34 +5112,34 @@ function TestRollbackAndReUpdate(client, data) {
         // Wait for any ongoing updates to complete before starting this test
         helper.waitForAllUpdatesComplete(client, data, 15);
 
-        // Create catalog with files
-        const catalogId = data.dbIDPrefix + "reupdate-" + randomString(8);
+        // Create knowledge base with files
+        const knowledgeBaseId = data.dbIDPrefix + "reupdate-" + randomString(8);
         const createRes = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
             JSON.stringify({
-                id: catalogId,
+                id: knowledgeBaseId,
                 description: "Test rollback and re-update cycle",
                 tags: ["test", "rollback-cycle"],
             }),
             data.header
         );
 
-        let catalog;
+        let kb;
         try {
-            catalog = createRes.json().catalog;
+            kb = createRes.json().knowledgeBase;
         } catch (e) {
             return;
         }
 
-        const catalogUid = catalog.uid;
-        const originalKBUID = catalogUid; // Store original UID for multiple rollback cycles
+        const knowledgeBaseUid = kb.uid;
+        const originalKBUID = knowledgeBaseUid; // Store original UID for multiple rollback cycles
 
         // Upload and process a file
         const filename = data.dbIDPrefix + "reupdate-v1.txt";
         const uploadRes = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
             JSON.stringify({
                 filename: filename,
                 type: "TYPE_TEXT",
@@ -5152,7 +5152,7 @@ function TestRollbackAndReUpdate(client, data) {
         try {
             fileUid = uploadRes.json().file.uid;
         } catch (e) {
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
             return;
         }
 
@@ -5161,22 +5161,22 @@ function TestRollbackAndReUpdate(client, data) {
         // Wait for file processing (using helper function)
         const result = helper.waitForFileProcessingComplete(
             data.expectedOwner.id,
-            catalogId,
+            knowledgeBaseId,
             fileUid,
             data.header,
             600
         );
 
         if (!result.completed) {
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
             return;
         }
 
         // STEP 1: First update
-        console.log(`Rollback Cycle: Executing first update for catalogId=${catalogId}, catalogUid=${catalogUid}...`);
+        console.log(`Rollback Cycle: Executing first update for knowledgeBaseId=${knowledgeBaseId}, knowledgeBaseUid=${knowledgeBaseUid}...`);
         const firstUpdateRes = client.invoke(
             "artifact.artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
-            { catalogIds: [catalogId] },
+            { knowledgeBaseIds: [knowledgeBaseId] },
             data.metadata
         );
 
@@ -5192,26 +5192,26 @@ function TestRollbackAndReUpdate(client, data) {
         // Wait for first update to complete
         // Extended timeout for CI environments where resources are constrained
         // Increased to 900s to handle sustained stress testing scenarios
-        const firstUpdateCompleted = helper.pollUpdateCompletion(client, data, catalogUid, 900);
+        const firstUpdateCompleted = helper.pollUpdateCompletion(client, data, knowledgeBaseUid, 900);
         check({ firstUpdateCompleted }, {
             "Rollback Cycle: First update completed": () => firstUpdateCompleted === true,
         });
 
         if (!firstUpdateCompleted) {
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
             return;
         }
 
         // Verify rollback KB exists after first update
-        const rollbackKBID = `${catalogId}-rollback`;
-        const rollbackKBsAfterUpdate = helper.getCatalogByIdAndOwner(rollbackKBID, data.expectedOwner.uid);
+        const rollbackKBID = `${knowledgeBaseId}-rollback`;
+        const rollbackKBsAfterUpdate = helper.getKnowledgeBaseByIdAndOwner(rollbackKBID, data.expectedOwner.uid);
         check(rollbackKBsAfterUpdate, {
             "Rollback Cycle: Rollback KB exists after first update": () =>
                 rollbackKBsAfterUpdate && rollbackKBsAfterUpdate.length > 0,
         });
 
         if (!rollbackKBsAfterUpdate || rollbackKBsAfterUpdate.length === 0) {
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
             return;
         }
 
@@ -5221,7 +5221,7 @@ function TestRollbackAndReUpdate(client, data) {
         console.log("Rollback Cycle: Executing rollback...");
         const rollbackRes = client.invoke(
             "artifact.artifact.v1alpha.ArtifactPrivateService/RollbackAdmin",
-            { name: `users/${data.expectedOwner.uid}/catalogs/${catalogId}` },
+            { name: `users/${data.expectedOwner.uid}/knowledge-bases/${knowledgeBaseId}` },
             data.metadata
         );
 
@@ -5235,7 +5235,7 @@ function TestRollbackAndReUpdate(client, data) {
         });
 
         // Verify rollback kept the production KB UID constant
-        const kbAfterRollback = helper.getCatalogByIdAndOwner(catalogId, data.expectedOwner.uid);
+        const kbAfterRollback = helper.getKnowledgeBaseByIdAndOwner(knowledgeBaseId, data.expectedOwner.uid);
         check(kbAfterRollback, {
             "Rollback Cycle: Production KB exists after rollback": () =>
                 kbAfterRollback && kbAfterRollback.length > 0,
@@ -5255,11 +5255,11 @@ function TestRollbackAndReUpdate(client, data) {
         // With the new design, KB UID is constant (no change after rollback)
         // Use the original UID for all operations
         const currentCatalogUid = originalKBUID;
-        console.log(`Rollback Cycle: Using constant catalogUid ${currentCatalogUid} for second update`);
+        console.log(`Rollback Cycle: Using constant knowledgeBaseUid ${currentCatalogUid} for second update`);
 
         const secondUpdateRes = client.invoke(
             "artifact.artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
-            { catalogIds: [catalogId] },
+            { knowledgeBaseIds: [knowledgeBaseId] },
             data.metadata
         );
 
@@ -5276,7 +5276,7 @@ function TestRollbackAndReUpdate(client, data) {
             console.log(`Rollback Cycle: KB status before polling - status=${kbStatusCheck[0].update_status}, workflow=${kbStatusCheck[0].update_workflow_id}, staging=${kbStatusCheck[0].staging}`);
         }
 
-        // Wait for second update to complete using the current catalog UID
+        // Wait for second update to complete using the current KB UID
         // Increased timeout for CI environments and stress testing (updates after rollback should be faster but still need margin)
         const secondUpdateCompleted = helper.pollUpdateCompletion(client, data, currentCatalogUid, 600);
 
@@ -5295,7 +5295,7 @@ function TestRollbackAndReUpdate(client, data) {
 
         if (!secondUpdateCompleted) {
             console.warn("Rollback Cycle: Second update timed out after 180s, skipping remainder of test");
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
             return;
         }
 
@@ -5304,7 +5304,7 @@ function TestRollbackAndReUpdate(client, data) {
         // After re-update, need to get the current file UID from production KB
         const listFilesAfterReUpdateRes = http.request(
             "GET",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
             null,
             data.header
         );
@@ -5325,7 +5325,7 @@ function TestRollbackAndReUpdate(client, data) {
         // Verify chunks are accessible after second update
         const chunksAfterReUpdateRes = http.request(
             "GET",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${currentFileUidAfterReUpdate}/chunks`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${currentFileUidAfterReUpdate}/chunks`,
             null,
             data.header
         );
@@ -5353,7 +5353,7 @@ function TestRollbackAndReUpdate(client, data) {
         });
 
         // Verify new rollback KB was created for the second update
-        const rollbackKBsAfterSecondUpdate = helper.getCatalogByIdAndOwner(rollbackKBID, data.expectedOwner.uid);
+        const rollbackKBsAfterSecondUpdate = helper.getKnowledgeBaseByIdAndOwner(rollbackKBID, data.expectedOwner.uid);
         check(rollbackKBsAfterSecondUpdate, {
             "Rollback Cycle: New rollback KB created after second update": () =>
                 rollbackKBsAfterSecondUpdate && rollbackKBsAfterSecondUpdate.length > 0,
@@ -5373,7 +5373,7 @@ function TestRollbackAndReUpdate(client, data) {
         });
 
         // Verify database integrity: check that resource kb_uids are correct
-        const finalKB = helper.getCatalogByIdAndOwner(catalogId, data.expectedOwner.uid);
+        const finalKB = helper.getKnowledgeBaseByIdAndOwner(knowledgeBaseId, data.expectedOwner.uid);
         if (finalKB && finalKB.length > 0) {
             const finalKBUID = finalKB[0].uid; // Should be originalKBUID (constant)
             const currentRollbackKBUID = rollbackKBsAfterSecondUpdate && rollbackKBsAfterSecondUpdate[0] ? rollbackKBsAfterSecondUpdate[0].uid : null;
@@ -5393,15 +5393,15 @@ function TestRollbackAndReUpdate(client, data) {
         console.log("Rollback Cycle: Test completed with update → rollback → update sequence");
 
         // Cleanup
-        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
-        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${rollbackKBID}`, null, data.header);
+        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
+        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${rollbackKBID}`, null, data.header);
     });
 }
 
 /**
  * GROUP 11: Multiple KB Updates
  * Tests updating multiple knowledge bases simultaneously to validate the ExecuteKnowledgeBaseUpdate
- * implementation that processes multiple catalog IDs in a single API call
+ * implementation that processes multiple KB IDs in a single API call
  *
  * OPTIMIZATION: Reduced from 10 to 3 KBs for ~70% time reduction while maintaining
  * concurrent update validation
@@ -5430,50 +5430,50 @@ function TestMultipleKBUpdates(client, data) {
         // OPTIMIZATION: Reduced from 10 to 3 KBs for faster test execution (~70% time reduction)
         // while still validating concurrent update processing
         const numKBs = 3;
-        const catalogIds = [];
-        const catalogUids = [];
+        const knowledgeBaseIds = [];
+        const knowledgeBaseUids = [];
         const rollbackKBIDs = [];
 
         // Create test catalogs with files
         console.log(`Multiple KB Updates: Creating ${numKBs} catalogs...`);
 
         for (let i = 0; i < numKBs; i++) {
-            const catalogId = data.dbIDPrefix + "multi-" + randomString(5) + "-" + i;
-            catalogIds.push(catalogId);
-            rollbackKBIDs.push(`${catalogId}-rollback`);
+            const knowledgeBaseId = data.dbIDPrefix + "multi-" + randomString(5) + "-" + i;
+            knowledgeBaseIds.push(knowledgeBaseId);
+            rollbackKBIDs.push(`${knowledgeBaseId}-rollback`);
 
             const createBody = {
-                id: catalogId,
-                description: `Test catalog ${i + 1}/${numKBs} for multiple KB updates`,
+                id: knowledgeBaseId,
+                description: `Test KB ${i + 1}/${numKBs} for multiple KB updates`,
                 tags: ["test", "multi-update", `batch-${i}`],
             };
 
             const createRes = http.request(
                 "POST",
-                `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+                `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
                 JSON.stringify(createBody),
                 data.header
             );
 
-            let catalog;
+            let kb;
             try {
-                catalog = createRes.json().catalog;
-                catalogUids.push(catalog.uid);
-                console.log(`Multiple KB Updates: Created catalog ${i + 1}/${numKBs}: ${catalogId} (UID: ${catalog.uid})`);
+                kb = createRes.json().knowledgeBase;
+                knowledgeBaseUids.push(kb.uid);
+                console.log(`Multiple KB Updates: Created knowledge base ${i + 1}/${numKBs}: ${knowledgeBaseId} (UID: ${kb.uid})`);
             } catch (e) {
-                console.error(`Multiple KB Updates: Failed to create catalog ${i + 1}: ${e}`);
+                console.error(`Multiple KB Updates: Failed to create knowledge base ${i + 1}: ${e}`);
                 // Cleanup already created catalogs
                 for (let j = 0; j < i; j++) {
-                    http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIds[j]}`, null, data.header);
+                    http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIds[j]}`, null, data.header);
                 }
                 return;
             }
 
-            // Upload and process a file for this catalog
+            // Upload and process a file for this KB
             const filename = data.dbIDPrefix + `multi-file-${i}.txt`;
             const uploadRes = http.request(
                 "POST",
-                `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
+                `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
                 JSON.stringify({ filename: filename, type: "TYPE_TEXT", content: constant.sampleTxt }),
                 data.header
             );
@@ -5482,7 +5482,7 @@ function TestMultipleKBUpdates(client, data) {
             try {
                 fileUid = uploadRes.json().file.uid;
             } catch (e) {
-                console.error(`Multiple KB Updates: Failed to upload file for catalog ${i + 1}: ${e}`);
+                console.error(`Multiple KB Updates: Failed to upload file for KB ${i + 1}: ${e}`);
                 continue;
             }
 
@@ -5502,12 +5502,12 @@ function TestMultipleKBUpdates(client, data) {
             for (let i = 0; i < numKBs; i++) {
                 const fileCheckQuery = `
                     SELECT COUNT(*) as count
-                    FROM knowledge_base_file
+                    FROM file
                     WHERE kb_uid = $1
                       AND process_status = 'FILE_PROCESS_STATUS_COMPLETED'
                       AND delete_time IS NULL
                 `;
-                const result = helper.safeQuery(fileCheckQuery, catalogUids[i]);
+                const result = helper.safeQuery(fileCheckQuery, knowledgeBaseUids[i]);
                 const processedCount = result && result.length > 0 ? parseInt(result[0].count) : 0;
 
                 if (processedCount === 0) {
@@ -5532,14 +5532,14 @@ function TestMultipleKBUpdates(client, data) {
         }
 
         check({ allProcessed }, {
-            "Multiple KB Updates: All catalog files processed before update": () => allProcessed,
+            "Multiple KB Updates: All knowledge base files processed before update": () => allProcessed,
         });
 
         if (!allProcessed) {
             console.error("Multiple KB Updates: Not all files processed, skipping update test");
             // Cleanup
             for (let i = 0; i < numKBs; i++) {
-                http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIds[i]}`, null, data.header);
+                http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIds[i]}`, null, data.header);
             }
             return;
         }
@@ -5548,18 +5548,18 @@ function TestMultipleKBUpdates(client, data) {
         console.log(`Multiple KB Updates: Triggering update for ${numKBs} catalogs...`);
         const updateRes = client.invoke(
             "artifact.artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
-            { catalogIds: catalogIds },
+            { knowledgeBaseIds: knowledgeBaseIds },
             data.metadata
         );
 
         check(updateRes, {
-            "Multiple KB Updates: Update API accepts multiple catalog IDs": (r) => r.status === grpc.StatusOK,
+            "Multiple KB Updates: Update API accepts multiple KB IDs": (r) => r.status === grpc.StatusOK,
             "Multiple KB Updates: Update started successfully": (r) => r.message && r.message.started === true,
             "Multiple KB Updates: Response message indicates multiple catalogs": (r) => {
                 if (r.message && r.message.message) {
                     console.log(`Multiple KB Updates: Response message: ${r.message.message}`);
                     // Message should mention multiple catalogs
-                    return r.message.message.includes(`${numKBs}`) || r.message.message.includes("catalog");
+                    return r.message.message.includes(`${numKBs}`) || r.message.message.includes("knowledge base");
                 }
                 return false;
             },
@@ -5569,7 +5569,7 @@ function TestMultipleKBUpdates(client, data) {
             console.error("Multiple KB Updates: Failed to start updates");
             // Cleanup
             for (let i = 0; i < numKBs; i++) {
-                http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIds[i]}`, null, data.header);
+                http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIds[i]}`, null, data.header);
             }
             return;
         }
@@ -5586,8 +5586,8 @@ function TestMultipleKBUpdates(client, data) {
             }
             stagingKBsCreated = 0;
             for (let i = 0; i < numKBs; i++) {
-                const stagingKBID = `${catalogIds[i]}-staging`;
-                const stagingKBs = helper.getCatalogByIdAndOwner(stagingKBID, data.expectedOwner.uid);
+                const stagingKBID = `${knowledgeBaseIds[i]}-staging`;
+                const stagingKBs = helper.getKnowledgeBaseByIdAndOwner(stagingKBID, data.expectedOwner.uid);
                 if (stagingKBs && stagingKBs.length > 0) {
                     stagingKBsCreated++;
                 }
@@ -5628,14 +5628,14 @@ function TestMultipleKBUpdates(client, data) {
             failedKBIds = [];
 
             for (let i = 0; i < numKBs; i++) {
-                const kb = helper.getCatalogByIdAndOwner(catalogIds[i], data.expectedOwner.uid);
+                const kb = helper.getKnowledgeBaseByIdAndOwner(knowledgeBaseIds[i], data.expectedOwner.uid);
                 if (kb && kb.length > 0) {
                     if (kb[0].update_status === "KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED") {
                         completedKBs++;
                     } else if (kb[0].update_status === "KNOWLEDGE_BASE_UPDATE_STATUS_FAILED" ||
                         kb[0].update_status === "KNOWLEDGE_BASE_UPDATE_STATUS_ABORTED") {
                         failedKBs++;
-                        failedKBIds.push(catalogIds[i]);
+                        failedKBIds.push(knowledgeBaseIds[i]);
                     }
                 }
             }
@@ -5671,17 +5671,17 @@ function TestMultipleKBUpdates(client, data) {
         let rollbackKBsCreated = 0;
 
         for (let i = 0; i < numKBs; i++) {
-            const prodKB = helper.getCatalogByIdAndOwner(catalogIds[i], data.expectedOwner.uid);
-            const rollbackKB = helper.getCatalogByIdAndOwner(rollbackKBIDs[i], data.expectedOwner.uid);
+            const prodKB = helper.getKnowledgeBaseByIdAndOwner(knowledgeBaseIds[i], data.expectedOwner.uid);
+            const rollbackKB = helper.getKnowledgeBaseByIdAndOwner(rollbackKBIDs[i], data.expectedOwner.uid);
 
             if (prodKB && prodKB.length > 0) {
                 const kb = prodKB[0];
                 if (kb.staging === false &&
                     kb.update_status === "KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED" &&
-                    kb.uid === catalogUids[i]) { // UID remains constant
+                    kb.uid === knowledgeBaseUids[i]) { // UID remains constant
                     correctStates++;
                 } else {
-                    console.error(`Multiple KB Updates: Catalog ${i + 1} has incorrect state - staging=${kb.staging}, status=${kb.update_status}, uidMatch=${kb.uid === catalogUids[i]}`);
+                    console.error(`Multiple KB Updates: Knowledge base ${i + 1} has incorrect state - staging=${kb.staging}, status=${kb.update_status}, uidMatch=${kb.uid === knowledgeBaseUids[i]}`);
                 }
             }
 
@@ -5716,16 +5716,16 @@ function TestMultipleKBUpdates(client, data) {
         for (let i = 0; i < numKBs; i++) {
             const prodFileCountQuery = `
                 SELECT COUNT(*) as count
-                FROM knowledge_base_file
+                FROM file
                 WHERE kb_uid = $1 AND delete_time IS NULL
             `;
-            const prodFiles = helper.safeQuery(prodFileCountQuery, catalogUids[i]);
+            const prodFiles = helper.safeQuery(prodFileCountQuery, knowledgeBaseUids[i]);
             const prodFileCount = prodFiles && prodFiles.length > 0 ? parseInt(prodFiles[0].count) : 0;
 
             if (prodFileCount > 0) {
                 resourceIntegrityPassed++;
             } else {
-                console.error(`Multiple KB Updates: Catalog ${i + 1} has no files after update`);
+                console.error(`Multiple KB Updates: Knowledge base ${i + 1} has no files after update`);
             }
         }
 
@@ -5743,8 +5743,8 @@ function TestMultipleKBUpdates(client, data) {
         console.log("Multiple KB Updates: Verifying staging KBs cleanup...");
         let stagingKBsCleanedUp = 0;
         for (let i = 0; i < numKBs; i++) {
-            const stagingKBID = `${catalogIds[i]}-staging`;
-            const stagingKBs = helper.getCatalogByIdAndOwner(stagingKBID, data.expectedOwner.uid);
+            const stagingKBID = `${knowledgeBaseIds[i]}-staging`;
+            const stagingKBs = helper.getKnowledgeBaseByIdAndOwner(stagingKBID, data.expectedOwner.uid);
 
             if (stagingKBs && stagingKBs.length > 0) {
                 // Staging KB should be soft-deleted (delete_time IS NOT NULL)
@@ -5774,7 +5774,7 @@ function TestMultipleKBUpdates(client, data) {
         let retentionSetSuccessfully = 0;
 
         for (let i = 0; i < numKBs; i++) {
-            const catalogName = `users/${data.expectedOwner.uid}/catalogs/${catalogIds[i]}`;
+            const catalogName = `users/${data.expectedOwner.uid}/knowledge-bases/${knowledgeBaseIds[i]}`;
             const retentionRes = client.invoke(
                 "artifact.artifact.v1alpha.ArtifactPrivateService/SetRollbackRetentionAdmin",
                 {
@@ -5811,15 +5811,15 @@ function TestMultipleKBUpdates(client, data) {
             // Build list of KB IDs to check (production + staging + rollback)
             const kbIdsToCheck = [];
             for (let j = 0; j < numKBs; j++) {
-                kbIdsToCheck.push(catalogIds[j]);
-                kbIdsToCheck.push(`${catalogIds[j]}-staging`);
-                kbIdsToCheck.push(`${catalogIds[j]}-rollback`);
+                kbIdsToCheck.push(knowledgeBaseIds[j]);
+                kbIdsToCheck.push(`${knowledgeBaseIds[j]}-staging`);
+                kbIdsToCheck.push(`${knowledgeBaseIds[j]}-rollback`);
             }
 
             const placeholders = kbIdsToCheck.map((_, idx) => `$${idx + 1}`).join(',');
             const queueCheckQuery = `
                 SELECT COUNT(*) as count
-                FROM knowledge_base_file f
+                FROM file f
                 INNER JOIN knowledge_base kb ON f.kb_uid = kb.uid
                 WHERE f.process_status IN ('FILE_PROCESS_STATUS_NOTSTARTED', 'FILE_PROCESS_STATUS_PROCESSING', 'FILE_PROCESS_STATUS_CHUNKING', 'FILE_PROCESS_STATUS_EMBEDDING')
                   AND f.delete_time IS NULL
@@ -5848,7 +5848,7 @@ function TestMultipleKBUpdates(client, data) {
                 "Multiple KB Updates: Catalogs' files completed processing before testing": () => false
             });
             for (let i = 0; i < numKBs; i++) {
-                http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIds[i]}`, null, data.header);
+                http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIds[i]}`, null, data.header);
             }
             return;
         }
@@ -5890,7 +5890,7 @@ function TestMultipleKBUpdates(client, data) {
 
         // Get file UIDs for the first KB to verify resource cleanup
         const firstKBFiles = helper.safeQuery(
-            `SELECT uid FROM knowledge_base_file WHERE kb_uid IN (
+            `SELECT uid FROM file WHERE kb_uid IN (
                 SELECT uid FROM knowledge_base WHERE id = $1 AND owner = $2
             ) LIMIT 1`,
             rollbackKBIDs[0],
@@ -5900,7 +5900,7 @@ function TestMultipleKBUpdates(client, data) {
         const sampleFileUid = firstKBFiles && firstKBFiles.length > 0 ? firstKBFiles[0].uid : null;
 
         for (let i = 0; i < numKBs; i++) {
-            const rollbackKB = helper.getCatalogByIdAndOwner(rollbackKBIDs[i], data.expectedOwner.uid);
+            const rollbackKB = helper.getKnowledgeBaseByIdAndOwner(rollbackKBIDs[i], data.expectedOwner.uid);
 
             // Check if rollback KB is purged (soft-deleted or fully deleted)
             const kbPurged = !rollbackKB || rollbackKB.length === 0 || rollbackKB[0].delete_time !== null;
@@ -5962,7 +5962,7 @@ function TestMultipleKBUpdates(client, data) {
         // TEST 8: Verify production KBs still operational after rollback purge
         let prodKBsOperational = 0;
         for (let i = 0; i < numKBs; i++) {
-            const prodKB = helper.getCatalogByIdAndOwner(catalogIds[i], data.expectedOwner.uid);
+            const prodKB = helper.getKnowledgeBaseByIdAndOwner(knowledgeBaseIds[i], data.expectedOwner.uid);
 
             if (prodKB && prodKB.length > 0) {
                 const kb = prodKB[0];
@@ -6001,12 +6001,12 @@ function TestMultipleKBUpdates(client, data) {
             for (let i = 0; i < numKBs; i++) {
                 const fileStatusQuery = `
                     SELECT COUNT(*) as count
-                    FROM knowledge_base_file
+                    FROM file
                     WHERE kb_uid = $1
                       AND process_status = 'FILE_PROCESS_STATUS_PROCESSING'
                       AND delete_time IS NULL
                 `;
-                const result = helper.safeQuery(fileStatusQuery, catalogUids[i]);
+                const result = helper.safeQuery(fileStatusQuery, knowledgeBaseUids[i]);
                 const processing = result && result.length > 0 ? parseInt(result[0].count) : 0;
 
                 if (processing > 0) {
@@ -6031,9 +6031,9 @@ function TestMultipleKBUpdates(client, data) {
         // Cleanup all test catalogs (rollback KBs should already be purged)
         console.log("Multiple KB Updates: Cleaning up test catalogs...");
         for (let i = 0; i < numKBs; i++) {
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogIds[i]}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIds[i]}`, null, data.header);
             // Try to delete rollback KBs (in case retention hasn't fully purged them yet)
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${rollbackKBIDs[i]}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${rollbackKBIDs[i]}`, null, data.header);
         }
 
         console.log(`Multiple KB Updates: Test completed - ${completedKBs}/${numKBs} catalogs updated successfully`);
@@ -6049,49 +6049,49 @@ function TestEdgeCases(client, data) {
     group(groupName, () => {
         check(true, { [constant.banner(groupName)]: () => true });
 
-        // Test 1: Empty catalog update
+        // Test 1: Empty knowledge base update
         // Verifies that KBs with 0 files can be updated successfully (e.g., to change system config)
-        const emptyCatalogId = data.dbIDPrefix + "empty-" + randomString(8);
+        const emptyKBId = data.dbIDPrefix + "empty-" + randomString(8);
         const createBody = {
-            id: emptyCatalogId,
-            description: "Test empty catalog",
+            id: emptyKBId,
+            description: "Test empty knowledge base",
             tags: ["test", "empty"],
         };
 
         const createRes = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
             JSON.stringify(createBody),
             data.header
         );
 
-        let catalog;
+        let kb;
         try {
-            catalog = createRes.json().catalog;
+            kb = createRes.json().knowledgeBase;
         } catch (e) {
             return;
         }
 
-        const emptyCatalogUid = catalog.uid;
+        const emptyKBUid = kb.uid;
 
-        // Trigger update on empty catalog
-        console.log(`Edge Cases: Triggering update on empty catalog ${emptyCatalogId} (UID: ${emptyCatalogUid})...`);
+        // Trigger update on empty knowledge base
+        console.log(`Edge Cases: Triggering update on empty knowledge base ${emptyKBId} (UID: ${emptyKBUid})...`);
         const executeRes = client.invoke(
             "artifact.artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
-            { catalogIds: [emptyCatalogId] },
+            { knowledgeBaseIds: [emptyKBId] },
             data.metadata
         );
 
         check(executeRes, {
-            "Edge Cases: Empty catalog update started": (r) => r.status === grpc.StatusOK,
+            "Edge Cases: Empty knowledge base update started": (r) => r.status === grpc.StatusOK,
         });
 
         if (!executeRes || executeRes.status !== grpc.StatusOK) {
-            console.error(`Edge Cases: Failed to start empty catalog update: ${executeRes ? executeRes.status : 'no response'}`);
+            console.error(`Edge Cases: Failed to start empty knowledge base update: ${executeRes ? executeRes.status : 'no response'}`);
             if (executeRes && executeRes.error) {
                 console.error(`Edge Cases: Error details: ${JSON.stringify(executeRes.error)}`);
             }
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${emptyCatalogId}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${emptyKBId}`, null, data.header);
             return;
         }
 
@@ -6105,25 +6105,25 @@ function TestEdgeCases(client, data) {
         );
 
         if (statusRes.status === grpc.StatusOK && statusRes.message.details) {
-            const initialStatus = statusRes.message.details.find(d => (d.catalog_uid || d.catalogUid || d.uid) === emptyCatalogUid);
+            const initialStatus = statusRes.message.details.find(d => (d.knowledge_base_uid || d.knowledgeBaseUid || d.uid) === emptyKBUid);
             if (initialStatus) {
                 console.log(`Edge Cases: Initial KB status: ${initialStatus.status}, workflowId: ${initialStatus.workflowId}`);
             } else {
-                const availableUids = statusRes.message.details.map(d => d ? (d.catalog_uid || d.catalogUid || d.uid || 'null') : 'undefined').slice(0, 5).join(', ');
+                const availableUids = statusRes.message.details.map(d => d ? (d.knowledge_base_uid || d.knowledgeBaseUid || d.uid || 'null') : 'undefined').slice(0, 5).join(', ');
                 console.log(`Edge Cases: KB not found in status list yet. Available UIDs: ${availableUids}...`);
             }
         }
 
         // Wait for update to complete (should succeed even with 0 files)
-        console.log(`Edge Cases: Waiting for empty catalog update to complete (max 300s)...`);
-        const updateCompletedEmpty = helper.pollUpdateCompletion(client, data, emptyCatalogUid, 300);
+        console.log(`Edge Cases: Waiting for empty knowledge base update to complete (max 300s)...`);
+        const updateCompletedEmpty = helper.pollUpdateCompletion(client, data, emptyKBUid, 300);
 
         if (updateCompletedEmpty !== true) {
-            console.error(`Edge Cases: Empty catalog update did NOT complete successfully: ${updateCompletedEmpty}`);
+            console.error(`Edge Cases: Empty knowledge base update did NOT complete successfully: ${updateCompletedEmpty}`);
         }
 
         check(updateCompletedEmpty, {
-            "Edge Cases: Empty catalog update completed successfully": (c) => c === true
+            "Edge Cases: Empty knowledge base update completed successfully": (c) => c === true
         });
 
         // CRITICAL: Only proceed with status check and cleanup if update completed or timed out
@@ -6138,7 +6138,7 @@ function TestEdgeCases(client, data) {
 
             let emptyKBStatus = null;
             if (statusRes.status === grpc.StatusOK && statusRes.message.details) {
-                emptyKBStatus = statusRes.message.details.find(d => (d.catalog_uid || d.catalogUid || d.uid) === emptyCatalogUid);
+                emptyKBStatus = statusRes.message.details.find(d => (d.knowledge_base_uid || d.knowledgeBaseUid || d.uid) === emptyKBUid);
                 if (emptyKBStatus) {
                     console.log(`Edge Cases: Final KB status: ${emptyKBStatus.status} (type: ${typeof emptyKBStatus.status})`);
                     console.log(`Edge Cases: Workflow ID: ${emptyKBStatus.workflowId}`);
@@ -6170,26 +6170,26 @@ function TestEdgeCases(client, data) {
                             s.status === "KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED" || s.status === 6
                     });
                 } else {
-                    const availableUids = statusRes.message.details.map(d => d ? (d.catalog_uid || d.catalogUid || d.uid || 'null') : 'undefined').slice(0, 5).join(', ');
+                    const availableUids = statusRes.message.details.map(d => d ? (d.knowledge_base_uid || d.knowledgeBaseUid || d.uid || 'null') : 'undefined').slice(0, 5).join(', ');
                     console.error(`Edge Cases: Empty KB status not found in final check. Available UIDs: ${availableUids}...`);
                 }
             }
 
             // Safe to delete now - workflow has completed or timed out
-            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${emptyCatalogId}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${emptyKBId}`, null, data.header);
         } else {
             console.error("Edge Cases: Poll result was not boolean - unexpected state, skipping cleanup");
         }
 
-        // Test 2: Catalog name edge cases
+        // Test 2: Knowledge base name edge cases
         const baseName = "edge-name-test";
-        const catalogId = data.dbIDPrefix + baseName;
+        const knowledgeBaseId = data.dbIDPrefix + baseName;
 
         const createRes2 = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
             JSON.stringify({
-                id: catalogId,
+                id: knowledgeBaseId,
                 description: "Test special chars",
                 tags: ["test", "name-edge"],
             }),
@@ -6197,20 +6197,20 @@ function TestEdgeCases(client, data) {
         );
 
         try {
-            catalog = createRes2.json().catalog;
+            kb = createRes2.json().knowledgeBase;
         } catch (e) {
             return;
         }
 
-        const stagingName = `${catalogId}-staging`;
-        const rollbackName = `${catalogId}-rollback`;
+        const stagingName = `${knowledgeBaseId}-staging`;
+        const rollbackName = `${knowledgeBaseId}-rollback`;
 
         check({ stagingName, rollbackName }, {
             "Edge Cases: Staging name length acceptable": () => stagingName.length <= 64,
             "Edge Cases: Rollback name length acceptable": () => rollbackName.length <= 64,
         });
 
-        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
     });
 }
 
@@ -6237,12 +6237,12 @@ function TestObservability(client, data) {
                 "details" in r.message && Array.isArray(r.message.details),
         });
 
-        // Verify catalog status structure if any are updating
+        // Verify knowledge base status structure if any are updating
         if (statusRes.message.details && statusRes.message.details.length > 0) {
             const catalogStatus = statusRes.message.details[0];
 
             check(catalogStatus, {
-                "Observability: Status has catalogUid": () => "catalogUid" in catalogStatus,
+                "Observability: Status has knowledgeBaseUid": () => "knowledgeBaseUid" in catalogStatus,
                 "Observability: Status has status field": () => "status" in catalogStatus,
                 "Observability: Status has workflowId": () => "workflowId" in catalogStatus,
             });
@@ -6260,41 +6260,41 @@ function TestAbortKnowledgeBaseUpdate(client, data) {
         check(true, { [constant.banner(groupName)]: () => true });
 
         // Test 14.1: SKIPPED - Abort with no ongoing updates
-        // CRITICAL: We CANNOT test abort with empty catalogIds in the middle of the test suite
+        // CRITICAL: We CANNOT test abort with empty knowledgeBaseIds in the middle of the test suite
         // because it would abort ALL in-progress updates from previous test groups.
         // This would interfere with async tests like TEST_GROUP_12 (Edge Cases).
         // If we want to test this, it must be at the very beginning of the suite.
         console.log("\n=== Test 14.1: Skipping empty abort test (would interfere with other tests) ===");
 
-        // Test 14.2: Create a catalog and start an update
-        console.log("\n=== Test 14.2: Setup catalog for abort test ===");
-        const catalogIdAbort = `abort-test-${Math.random().toString(36).substring(7)}`;
+        // Test 14.2: Create a knowledge base and start an update
+        console.log("\n=== Test 14.2: Setup knowledge base for abort test ===");
+        const knowledgeBaseIdAbort = `abort-test-${Math.random().toString(36).substring(7)}`;
 
-        // Create catalog (name must also be unique, not just ID)
+        // Create knowledge base (name must also be unique, not just ID)
         const createRes = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
             JSON.stringify({
-                id: catalogIdAbort,  // Use the unique ID
-                description: "Test catalog for abort functionality",
+                id: knowledgeBaseIdAbort,  // Use the unique ID
+                description: "Test KB for abort functionality",
                 tags: ["abort-test"],
             }),
             data.header
         );
 
         check(createRes, {
-            "Abort Setup: Catalog created": (r) => r.status === 200 || r.status === 201,
+            "Abort Setup: Knowledge base created": (r) => r.status === 200 || r.status === 201,
         });
 
         if (createRes.status !== 200 && createRes.status !== 201) {
-            console.error(`Abort: Failed to create catalog, status: ${createRes.status}, body: ${createRes.body}`);
+            console.error(`Abort: Failed to create knowledge base, status: ${createRes.status}, body: ${createRes.body}`);
             return;
         }
 
-        // Start update on this catalog (no file needed for abort test)
+        // Start update on this knowledge base (no file needed for abort test)
         const executeRes = client.invoke(
             "artifact.artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
-            { catalogIds: [catalogIdAbort] },
+            { knowledgeBaseIds: [knowledgeBaseIdAbort] },
             data.metadata
         );
 
@@ -6303,20 +6303,20 @@ function TestAbortKnowledgeBaseUpdate(client, data) {
             "Abort Setup: Update initiated": (r) => r.message.started === true,
         });
 
-        // Test 14.3: Abort the specific catalog
-        console.log("\n=== Test 14.3: Abort specific catalog ===");
+        // Test 14.3: Abort the specific knowledge base
+        console.log("\n=== Test 14.3: Abort specific knowledge base ===");
         const abortRes = client.invoke(
             "artifact.artifact.v1alpha.ArtifactPrivateService/AbortKnowledgeBaseUpdateAdmin",
-            { catalogIds: [catalogIdAbort] },
+            { knowledgeBaseIds: [knowledgeBaseIdAbort] },
             data.metadata
         );
 
         check(abortRes, {
             "Abort: Specific abort returns OK": (r) => r.status === grpc.StatusOK,
             "Abort: Specific abort succeeds": (r) => r.message.success === true,
-            "Abort: Has catalog statuses": (r) => Array.isArray(r.message.details),
-            // Note: Empty catalogs may complete instantly, so there might be nothing to abort
-            "Abort: Aborted catalog listed": (r) =>
+            "Abort: Has knowledge base statuses": (r) => Array.isArray(r.message.details),
+            // Note: Empty knowledge bases may complete instantly, so there might be nothing to abort
+            "Abort: Aborted knowledge base listed": (r) =>
                 r.message.details && (r.message.details.length >= 0),
         });
 
@@ -6324,18 +6324,18 @@ function TestAbortKnowledgeBaseUpdate(client, data) {
         if (abortRes.message.details && abortRes.message.details.length > 0) {
             const catalogStatus = abortRes.message.details[0];
             check(catalogStatus, {
-                "Abort: Status has catalogUid": () => "catalogUid" in catalogStatus,
+                "Abort: Status has knowledgeBaseUid": () => "knowledgeBaseUid" in catalogStatus,
                 "Abort: Status is KNOWLEDGE_BASE_UPDATE_STATUS_ABORTED": () => catalogStatus.status === "KNOWLEDGE_BASE_UPDATE_STATUS_ABORTED",
                 "Abort: Status has workflowId": () => "workflowId" in catalogStatus,
             });
             actuallyAborted = true;
             console.log("Abort: Update was actually aborted (workflow was still running)");
         } else {
-            console.log("Abort: No workflows were aborted (empty catalog update likely completed before abort was called)");
+            console.log("Abort: No workflows were aborted (empty knowledge base update likely completed before abort was called)");
         }
 
-        // Test 14.4: Verify catalog status is now "KNOWLEDGE_BASE_UPDATE_STATUS_ABORTED"
-        console.log("\n=== Test 14.4: Verify catalog status ===");
+        // Test 14.4: Verify knowledge base status is now "KNOWLEDGE_BASE_UPDATE_STATUS_ABORTED"
+        console.log("\n=== Test 14.4: Verify knowledge base status ===");
         const statusCheckRes = client.invoke(
             "artifact.artifact.v1alpha.ArtifactPrivateService/GetKnowledgeBaseUpdateStatusAdmin",
             {},
@@ -6346,19 +6346,19 @@ function TestAbortKnowledgeBaseUpdate(client, data) {
             "Abort: Status check returns OK": (r) => r.status === grpc.StatusOK,
         });
 
-        // Find our catalog in the status list
+        // Find our knowledge base in the status list
         const details = statusCheckRes.message.details || [];
         const ourCatalog = details.find(c => c.status === "KNOWLEDGE_BASE_UPDATE_STATUS_ABORTED");
 
         if (ourCatalog) {
-            console.log("Abort: Found aborted catalog in status list");
+            console.log("Abort: Found aborted knowledge base in status list");
         }
 
         // Test 14.5: Verify staging KB was cleaned up (only if we actually aborted something)
         console.log("\n=== Test 14.5: Verify staging KB cleanup ===");
 
         if (actuallyAborted) {
-            const stagingKBID = `${catalogIdAbort}-staging`;
+            const stagingKBID = `${knowledgeBaseIdAbort}-staging`;
 
             // Poll for staging KB cleanup (abort triggers async cleanup workflow)
             // Use generous timeout as cleanup involves Temporal workflow + DB operations
@@ -6380,17 +6380,17 @@ function TestAbortKnowledgeBaseUpdate(client, data) {
         console.log("\n=== Test 14.6: Abort multiple ongoing updates ===");
 
         // Create two more catalogs and start updates
-        const catalogIds = [];
+        const knowledgeBaseIds = [];
         for (let i = 0; i < 2; i++) {
             const catId = `abort-all-${i}-${Math.random().toString(36).substring(7)}`;
-            catalogIds.push(catId);
+            knowledgeBaseIds.push(catId);
 
             const createRes2 = http.request(
                 "POST",
-                `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+                `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
                 JSON.stringify({
-                    id: catId,  // Use unique ID as catalog identifier
-                    description: "Test catalog for abort all",
+                    id: catId,  // Use unique ID as KB identifier
+                    description: "Test KB for abort all",
                     tags: ["abort-all-test"],
                 }),
                 data.header
@@ -6400,7 +6400,7 @@ function TestAbortKnowledgeBaseUpdate(client, data) {
         // Start updates on these catalogs
         const executeAllRes = client.invoke(
             "artifact.artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
-            { catalogIds: catalogIds },
+            { knowledgeBaseIds: knowledgeBaseIds },
             data.metadata
         );
 
@@ -6408,29 +6408,29 @@ function TestAbortKnowledgeBaseUpdate(client, data) {
             "Abort All Setup: Updates started": (r) => r.status === grpc.StatusOK,
         });
 
-        // Abort the specific catalogs we just created (not ALL catalogs)
-        // CRITICAL: We must specify catalogIds to avoid aborting updates from other test groups
+        // Abort the specific knowledge bases we just created (not ALL catalogs)
+        // CRITICAL: We must specify knowledgeBaseIds to avoid aborting updates from other test groups
         // that may still be running asynchronously (e.g., TEST_GROUP_12's empty KB update)
         const abortAllRes = client.invoke(
             "artifact.artifact.v1alpha.ArtifactPrivateService/AbortKnowledgeBaseUpdateAdmin",
-            { catalogIds: catalogIds },  // Abort only our 2 test catalogs
+            { knowledgeBaseIds: knowledgeBaseIds },  // Abort only our 2 test catalogs
             data.metadata
         );
 
         check(abortAllRes, {
             "Abort Multiple: Returns OK": (r) => r.status === grpc.StatusOK,
             "Abort Multiple: Succeeds": (r) => r.message.success === true,
-            // Note: Empty catalogs may complete instantly, so there might be nothing to abort
+            // Note: Empty knowledge bases may complete instantly, so there might be nothing to abort
             "Abort Multiple: Catalogs aborted": (r) =>
                 r.message.details && r.message.details.length >= 0,
         });
 
         // Cleanup - delete test catalogs
         console.log("\n=== Cleanup test catalogs ===");
-        [catalogIdAbort, ...catalogIds].forEach(catId => {
+        [knowledgeBaseIdAbort, ...knowledgeBaseIds].forEach(catId => {
             http.request(
                 "DELETE",
-                `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catId}`,
+                `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${catId}`,
                 null,
                 data.header
             );

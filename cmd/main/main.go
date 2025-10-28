@@ -41,7 +41,6 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/utils"
 	"github.com/instill-ai/artifact-backend/pkg/worker"
 
-	httpclient "github.com/instill-ai/artifact-backend/pkg/client/http"
 	database "github.com/instill-ai/artifact-backend/pkg/db"
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	mgmtpb "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
@@ -170,7 +169,6 @@ func main() {
 		repo,
 		mgmtPrivateServiceClient,
 		pipelinePublicServiceClient,
-		httpclient.NewRegistryClient(ctx),
 		redisClient,
 		aclClient,
 		w,

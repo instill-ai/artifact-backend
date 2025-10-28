@@ -246,12 +246,12 @@ func (m *minioClient) ListKnowledgeBaseFilePaths(ctx context.Context, kbUID type
 
 	paths1, err := m.ListFilePathsWithPrefix(ctx, bucket, "kb-"+legacyPrefix)
 	if err != nil {
-		return nil, fmt.Errorf("listing catalog files: %w", err)
+		return nil, fmt.Errorf("listing knowledge base files: %w", err)
 	}
 
 	paths2, err := m.ListFilePathsWithPrefix(ctx, bucket, legacyPrefix)
 	if err != nil {
-		return nil, fmt.Errorf("listing legacy catalog files: %w", err)
+		return nil, fmt.Errorf("listing legacy knowledge base files: %w", err)
 	}
 
 	return append(paths1, paths2...), nil

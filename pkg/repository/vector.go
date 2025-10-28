@@ -47,7 +47,7 @@ type SearchVectorParam struct {
 	ContentType  string // MIME type filter (e.g., "text/markdown", "application/pdf")
 	ChunkType    string // Chunk classification filter ("content", "summary", "augmented")
 
-	// The filename filter was implemented back when the filename in a catalog was
+	// The filename filter was implemented back when the filename in a knowledge base was
 	// unique, which isn't the case anymore. Using this filter might yield
 	// unexpected results if there are several files with the same name in the
 	// collection.

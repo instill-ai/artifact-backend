@@ -22,7 +22,7 @@ import (
 // Following Google AIP-121 (Resource-oriented design) and AIP-122 (Resource names)
 // ========================================================================
 
-// GetChunk retrieves a specific chunk from a catalog.
+// GetChunk retrieves a specific chunk from a knowledge base.
 // Returns chunk metadata only. For chunk content, use SearchChunks which returns
 // text content along with similarity scores.
 func (ph *PublicHandler) GetChunk(ctx context.Context, req *artifactpb.GetChunkRequest) (*artifactpb.GetChunkResponse, error) {
@@ -37,16 +37,16 @@ func (ph *PublicHandler) GetChunk(ctx context.Context, req *artifactpb.GetChunkR
 		)
 	}
 
-	// Get catalog
-	kb, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.GetCatalogId())
+	// Get knowledge base
+	kb, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.GetKnowledgeBaseId())
 	if err != nil {
 		return nil, errorsx.AddMessage(
-			fmt.Errorf("fetching catalog: %w", err),
-			"Unable to access the specified catalog. Please check the catalog ID and try again.",
+			fmt.Errorf("fetching knowledge base: %w", err),
+			"Unable to access the specified knowledge base. Please check the knowledge base ID and try again.",
 		)
 	}
 
-	// ACL - check user has access to the catalog
+	// ACL - check user has access to the knowledge base
 	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kb.UID, "reader")
 	if err != nil {
 		return nil, errorsx.AddMessage(
@@ -57,7 +57,7 @@ func (ph *PublicHandler) GetChunk(ctx context.Context, req *artifactpb.GetChunkR
 	if !granted {
 		return nil, errorsx.AddMessage(
 			errorsx.ErrUnauthenticated,
-			"You don't have permission to access this catalog. Please contact the owner for access.",
+			"You don't have permission to access this knowledge base. Please contact the owner for access.",
 		)
 	}
 
@@ -92,7 +92,7 @@ func (ph *PublicHandler) GetChunk(ctx context.Context, req *artifactpb.GetChunkR
 	}, nil
 }
 
-// SearchChunks performs vector similarity search across chunks in a catalog (AIP-compliant version of SearchChunks).
+// SearchChunks performs vector similarity search across chunks in a knowledge base (AIP-compliant version of SearchChunks).
 // Returns the top-K most similar chunks to a text prompt.
 func (ph *PublicHandler) SearchChunks(
 	ctx context.Context,
@@ -101,7 +101,7 @@ func (ph *PublicHandler) SearchChunks(
 	logger, _ := logx.GetZapLogger(ctx)
 	logger = logger.With(
 		zap.String("namespace", req.GetNamespaceId()),
-		zap.String("catalog", req.GetCatalogId()),
+		zap.String("knowledge_base", req.GetKnowledgeBaseId()),
 	)
 
 	// Get namespace
@@ -113,17 +113,17 @@ func (ph *PublicHandler) SearchChunks(
 		)
 	}
 
-	// Get catalog
+	// Get knowledge base
 	ownerUID := ns.NsUID
-	kb, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, req.CatalogId)
+	kb, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, req.KnowledgeBaseId)
 	if err != nil {
 		return nil, errorsx.AddMessage(
-			fmt.Errorf("fetching catalog: %w", err),
-			"Unable to access the specified catalog. Please check the catalog ID and try again.",
+			fmt.Errorf("fetching knowledge base: %w", err),
+			"Unable to access the specified knowledge base. Please check the knowledge base ID and try again.",
 		)
 	}
 
-	// ACL - check user has access to the catalog
+	// ACL - check user has access to the knowledge base
 	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kb.UID, "reader")
 	if err != nil {
 		return nil, errorsx.AddMessage(
@@ -134,7 +134,7 @@ func (ph *PublicHandler) SearchChunks(
 	if !granted {
 		return nil, errorsx.AddMessage(
 			errorsx.ErrUnauthenticated,
-			"You don't have permission to access this catalog. Please contact the owner for access.",
+			"You don't have permission to access this knowledge base. Please contact the owner for access.",
 		)
 	}
 

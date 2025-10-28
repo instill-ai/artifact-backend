@@ -416,7 +416,7 @@ func (w *Worker) UpdateKnowledgeBaseWorkflow(ctx workflow.Context, param UpdateK
 	updateCompleted = true
 
 	// CRITICAL: Set final COMPLETED status and clear workflow_id
-	// This allows the KB to be deleted and prevents catalog pileup
+	// This allows the KB to be deleted and prevents knowledge base pileup
 	err = workflow.ExecuteActivity(ctx, w.UpdateKnowledgeBaseUpdateStatusActivity, &UpdateKnowledgeBaseUpdateStatusActivityParam{
 		KBUID:             param.OriginalKBUID,
 		Status:            artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED.String(),

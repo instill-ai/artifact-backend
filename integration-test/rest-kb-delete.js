@@ -1,7 +1,7 @@
 /**
- * Test comprehensive cleanup of all resources when a catalog is deleted.
+ * Test comprehensive cleanup of all resources when a knowledge base is deleted.
  *
- * This test verifies that when a catalog is deleted:
+ * This test verifies that when a knowledge base is deleted:
  * 1. All intermediate files (converted files, chunks) are deleted from MinIO
  * 2. All embeddings are deleted from Postgres
  * 3. All vectors are deleted from Milvus
@@ -9,17 +9,17 @@
  * 5. The cleanup workflow handles both completed and in-progress files
  *
  * Test Flow:
- * - Create a test catalog
+ * - Create a test knowledge base
  * - Upload a PDF file (full processing pipeline: convert → chunk → embed)
  * - Process the file completely
  * - Verify all resources exist (baseline verification)
- * - Delete the catalog (triggers cleanup workflow)
+ * - Delete the knowledge base (triggers cleanup workflow)
  * - Verify all resources are completely removed
  *
  * This ensures the CleanupWorkflow and CleanupFilesActivity properly
- * remove all traces of catalog data across all storage systems:
+ * remove all traces of knowledge base data across all storage systems:
  * - MinIO: Converted files, text chunks
- * - Postgres: File records, converted_file, text_chunk, embedding tables
+ * - Postgres: File records, converted_file, chunk, embedding tables
  * - Milvus: Vector collections and vectors
  */
 
@@ -75,24 +75,24 @@ export function setup() {
     headers: { "Authorization": `Bearer ${loginResp.json().accessToken}` }
   })
 
-  // Cleanup orphaned catalogs from previous failed test runs OF THIS SPECIFIC TEST
+  // Cleanup orphaned knowledge bases from previous failed test runs OF THIS SPECIFIC TEST
   // Use API-only cleanup to properly trigger workflows (no direct DB manipulation)
   console.log("\n=== SETUP: Cleaning up previous test data (cleanup pattern only) ===");
   try {
-    const listResp = http.request("GET", `${artifactRESTPublicHost}/v1alpha/namespaces/${resp.json().user.id}/catalogs`, null, header);
+    const listResp = http.request("GET", `${artifactRESTPublicHost}/v1alpha/namespaces/${resp.json().user.id}/knowledge-bases`, null, header);
     if (listResp.status === 200) {
-      const catalogs = Array.isArray(listResp.json().catalogs) ? listResp.json().catalogs : [];
+      const knowledgeBases = Array.isArray(listResp.json().knowledgeBases) ? listResp.json().knowledgeBases : [];
       let cleanedCount = 0;
-      for (const catalog of catalogs) {
-        const catId = catalog.id;
+      for (const kb of knowledgeBases) {
+        const kbId = kb.id;
         if (catId && catId.match(/test-[a-z0-9]+-cleanup-/)) {
-          const delResp = http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${resp.json().user.id}/catalogs/${catId}`, null, header);
+          const delResp = http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${resp.json().user.id}/knowledge-bases/${catId}`, null, header);
           if (delResp.status === 200 || delResp.status === 204) {
             cleanedCount++;
           }
         }
       }
-      console.log(`Cleaned ${cleanedCount} orphaned catalogs from previous test runs`);
+      console.log(`Cleaned ${cleanedCount} orphaned knowledge bases from previous test runs`);
     }
   } catch (e) {
     console.log(`Setup cleanup warning: ${e}`);
@@ -111,8 +111,8 @@ export function teardown(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
-    // CRITICAL: Wait for THIS TEST's file processing to complete before deleting catalogs
-    // Deleting catalogs triggers cleanup workflows that drop vector DB collections
+    // CRITICAL: Wait for THIS TEST's file processing to complete before deleting knowledge bases
+    // Deleting knowledge bases triggers cleanup workflows that drop vector DB collections
     // If we delete while files are still processing, we get "collection does not exist" errors
     console.log("Teardown: Waiting for this test's file processing to complete...");
     const allProcessingComplete = helper.waitForAllFileProcessingComplete(120, data.dbIDPrefix);
@@ -120,17 +120,17 @@ export function teardown(data) {
       console.warn("Teardown: Some files still processing after 120s, proceeding anyway");
     }
 
-    // Clean up catalogs created by this test
-    var listResp = http.request("GET", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, data.header)
+    // Clean up knowledge bases created by this test
+    var listResp = http.request("GET", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`, null, data.header)
     if (listResp.status === 200) {
-      var catalogs = Array.isArray(listResp.json().catalogs) ? listResp.json().catalogs : []
+      var knowledgeBases = Array.isArray(listResp.json().knowledgeBases) ? listResp.json().knowledgeBases : []
 
-      for (const catalog of catalogs) {
-        // API returns catalogId (camelCase), not catalog_id
-        const catId = catalog.id;
-        if (catId && catId.startsWith(data.dbIDPrefix)) {
-          http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catId}`, null, data.header);
-          console.log(`Teardown: Deleted catalog ${catId}`);
+      for (const kb of knowledgeBases) {
+        // API returns knowledgeBaseId (camelCase), not knowledge_base_id
+        const kbId = kb.id;
+        if (kbId && kbId.startsWith(data.dbIDPrefix)) {
+          http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${kbId}`, null, data.header);
+          console.log(`Teardown: Deleted knowledge base ${kbId}`);
         }
       }
     }
@@ -143,32 +143,32 @@ export function CheckKnowledgeBaseDeletion(data) {
     check(true, { [constant.banner(groupName)]: () => true });
     console.log("=== Starting Knowledge Base Deletion Test ===");
 
-    // Step 1: Create a test catalog
-    console.log("Step 1: Creating test catalog...");
-    const catalogName = data.dbIDPrefix + "cleanup-" + randomString(5);
+    // Step 1: Create a test knowledge base
+    console.log("Step 1: Creating test knowledge base...");
+    const kbName = data.dbIDPrefix + "cleanup-" + randomString(5);
     const createRes = http.request(
       "POST",
-      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
       JSON.stringify({
-        id: catalogName,
-        description: "Catalog deletion cleanup test",
+        id: kbName,
+        description: "Knowledge base deletion cleanup test",
         tags: ["test", "cleanup"]
       }),
       data.header
     );
 
-    let catalog;
-    try { catalog = createRes.json().catalog; } catch (e) { catalog = {}; }
-    const catalogId = catalog ? catalog.id : null;
-    const catalogUid = catalog ? catalog.uid : null;
+    let kb;
+    try { kb = createRes.json().knowledgeBase; } catch (e) { kb = {}; }
+    const knowledgeBaseId = kb ? kb.id : null;
+    const knowledgeBaseUid = kb ? kb.uid : null;
 
     check(createRes, {
-      "Cleanup: Catalog created": (r) => r.status === 200 && catalogId && catalogUid,
+      "Cleanup: Knowledge base created": (r) => r.status === 200 && knowledgeBaseId && knowledgeBaseUid,
     });
-    console.log(`✓ Catalog created: ${catalogId} (UID: ${catalogUid})`);
+    console.log(`✓ Knowledge base created: ${knowledgeBaseId} (UID: ${knowledgeBaseUid})`);
 
-    if (!catalogId || !catalogUid) {
-      console.log("✗ Failed to create catalog, aborting test");
+    if (!knowledgeBaseId || !knowledgeBaseUid) {
+      console.log("✗ Failed to create knowledge base, aborting test");
       return;
     }
 
@@ -184,7 +184,7 @@ export function CheckKnowledgeBaseDeletion(data) {
     // This provides comprehensive coverage of cleanup logic
     const filename = `${data.dbIDPrefix}cleanup-test.pdf`;
     const uploadRes = helper.uploadFileWithRetry(
-      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
+      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
       {
         filename: filename,
         type: "TYPE_PDF",
@@ -208,7 +208,7 @@ export function CheckKnowledgeBaseDeletion(data) {
 
     if (!fileUid) {
       console.log("✗ Failed to upload file, cleaning up and aborting");
-      http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+      http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
       return;
     }
 
@@ -219,7 +219,7 @@ export function CheckKnowledgeBaseDeletion(data) {
     // Wait for file processing using robust helper function
     const result = helper.waitForFileProcessingComplete(
       data.expectedOwner.id,
-      catalogId,
+      knowledgeBaseId,
       fileUid,
       data.header,
       300, // Max 300 seconds for PDF processing
@@ -231,7 +231,7 @@ export function CheckKnowledgeBaseDeletion(data) {
     if (result.status === "FAILED") {
       const errorMsg = result.error || "Unknown error";
       check(false, { [`Cleanup: Processing failed - ${errorMsg}`]: () => false });
-      http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+      http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
       return;
     } else if (!processingCompleted) {
       console.log(`Step 3: File processing did not complete. Status: ${result.status}`);
@@ -243,7 +243,7 @@ export function CheckKnowledgeBaseDeletion(data) {
 
     if (!processingCompleted) {
       console.log("✗ Processing did not complete within timeout, cleaning up and aborting");
-      http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+      http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
       return;
     }
     console.log("✓ File processing completed successfully");
@@ -252,13 +252,13 @@ export function CheckKnowledgeBaseDeletion(data) {
     console.log("Step 4: Verifying baseline - all resources should exist...");
     // Poll storage systems until data appears (handles eventual consistency)
     const minioBlobsBeforeDelete = {
-      converted: helper.pollMinIOObjects(catalogUid, fileUid, 'converted-file'),
-      chunks: helper.pollMinIOObjects(catalogUid, fileUid, 'chunk'),
+      converted: helper.pollMinIOObjects(knowledgeBaseUid, fileUid, 'converted-file'),
+      chunks: helper.pollMinIOObjects(knowledgeBaseUid, fileUid, 'chunk'),
     };
 
     // Poll database embeddings and Milvus vectors (longer timeout for embeddings)
     const embeddingsBeforeDelete = helper.pollEmbeddings(fileUid, 30);
-    const milvusVectorsBeforeDelete = helper.pollMilvusVectors(catalogUid, fileUid);
+    const milvusVectorsBeforeDelete = helper.pollMilvusVectors(knowledgeBaseUid, fileUid);
 
     // Verify all resources exist (this proves our cleanup test is valid)
     check(minioBlobsBeforeDelete, {
@@ -278,29 +278,29 @@ export function CheckKnowledgeBaseDeletion(data) {
     // Early exit if baseline verification fails
     if (minioBlobsBeforeDelete.converted === 0 || minioBlobsBeforeDelete.chunks === 0) {
       console.log("✗ Baseline verification failed, cleaning up and aborting");
-      http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+      http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
       return;
     }
 
-    // Step 5: Delete catalog (triggers cleanup workflow)
-    console.log("Step 5: Deleting catalog (triggers cleanup workflow)...");
+    // Step 5: Delete knowledge base (triggers cleanup workflow)
+    console.log("Step 5: Deleting knowledge base (triggers cleanup workflow)...");
     // This should:
-    // 1. Trigger CleanupWorkflow for each file in the catalog
+    // 1. Trigger CleanupWorkflow for each file in the knowledge base
     // 2. Delete all converted-file and chunks from MinIO
     // 3. Delete all embeddings from database and Milvus
-    // 4. Delete all database records (converted_file, text_chunk, embedding)
-    // 5. Delete the catalog itself
+    // 4. Delete all database records (converted_file, chunk, embedding)
+    // 5. Delete the knowledge base itself
     const deleteRes = http.request(
       "DELETE",
-      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`,
+      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`,
       null,
       data.header
     );
 
     check(deleteRes, {
-      "Cleanup: Catalog deleted (triggers cleanup workflow)": (r) => r.status === 200 || r.status === 204,
+      "Cleanup: Knowledge base deleted (triggers cleanup workflow)": (r) => r.status === 200 || r.status === 204,
     });
-    console.log("✓ Catalog deleted, cleanup workflow triggered");
+    console.log("✓ Knowledge base deleted, cleanup workflow triggered");
 
     // Step 6: Poll for cleanup workflow completion (wait for all resources to be removed)
     // The cleanup workflow runs asynchronously via Temporal
@@ -310,19 +310,19 @@ export function CheckKnowledgeBaseDeletion(data) {
     // Step 7: Verify all resources are COMPLETELY REMOVED (FINAL VERIFICATION)
     console.log("Step 7: Polling and verifying all resources are completely removed...");
     const minioBlobsAfterDelete = {
-      converted: helper.pollMinIOCleanup(catalogUid, fileUid, 'converted-file', 60),
-      chunks: helper.pollMinIOCleanup(catalogUid, fileUid, 'chunk', 60),
+      converted: helper.pollMinIOCleanup(knowledgeBaseUid, fileUid, 'converted-file', 60),
+      chunks: helper.pollMinIOCleanup(knowledgeBaseUid, fileUid, 'chunk', 60),
     };
 
     const embeddingsAfterDelete = helper.pollEmbeddingsCleanup(fileUid, 60);
-    const milvusVectorsAfterDelete = helper.pollMilvusVectorsCleanup(catalogUid, fileUid, 60);
+    const milvusVectorsAfterDelete = helper.pollMilvusVectorsCleanup(knowledgeBaseUid, fileUid, 60);
 
     let dbRecordsAfterDelete = { converted: 0, chunks: 0 };
     try {
       const convertedResults = helper.safeQuery('SELECT uid FROM converted_file WHERE file_uid = $1', fileUid);
       dbRecordsAfterDelete.converted = convertedResults ? convertedResults.length : 0;
 
-      const chunksResults = helper.safeQuery('SELECT uid FROM text_chunk WHERE file_uid = $1', fileUid);
+      const chunksResults = helper.safeQuery('SELECT uid FROM chunk WHERE file_uid = $1', fileUid);
       dbRecordsAfterDelete.chunks = chunksResults ? chunksResults.length : 0;
     } catch (e) {
       console.error(`Failed to query database records after deletion: ${e}`);
@@ -331,7 +331,7 @@ export function CheckKnowledgeBaseDeletion(data) {
     // THE CRITICAL VERIFICATION: All resources should be COMPLETELY REMOVED
     // This validates that the CleanupWorkflow properly cleans up:
     // - MinIO blobs (converted files and chunks)
-    // - Postgres records (converted_file, text_chunk, embedding)
+    // - Postgres records (converted_file, chunk, embedding)
     // - Milvus vectors
 
     // Verify all resources are completely removed after cleanup workflow
@@ -348,19 +348,19 @@ export function CheckKnowledgeBaseDeletion(data) {
       "Cleanup: Postgres embeddings COMPLETELY REMOVED": (r) => r.embeddingsRemoved,
       "Cleanup: Milvus vectors COMPLETELY REMOVED": (r) => r.milvusVectorsRemoved,
       "Cleanup: Postgres converted_file records COMPLETELY REMOVED": (r) => r.convertedRecordsRemoved,
-      "Cleanup: Postgres text_chunk records COMPLETELY REMOVED": (r) => r.chunkRecordsRemoved,
+      "Cleanup: Postgres chunk records COMPLETELY REMOVED": (r) => r.chunkRecordsRemoved,
     });
 
-    // Additional verification: Catalog should also be removed
-    const catalogCheckRes = http.request(
+    // Additional verification: Knowledge base should also be removed
+    const kbCheckRes = http.request(
       "GET",
-      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`,
+      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`,
       null,
       data.header
     );
 
-    check(catalogCheckRes, {
-      "Cleanup: Catalog record removed (404 or empty response)": (r) => r.status === 404 || r.status === 400,
+    check(kbCheckRes, {
+      "Cleanup: Knowledge base record removed (404 or empty response)": (r) => r.status === 404 || r.status === 400,
     });
     console.log(`✓ Final verification: MinIO(converted=${minioBlobsAfterDelete.converted}, chunks=${minioBlobsAfterDelete.chunks}), Postgres(embeddings=${embeddingsAfterDelete}, converted=${dbRecordsAfterDelete.converted}, chunks=${dbRecordsAfterDelete.chunks}), Milvus(vectors=${milvusVectorsAfterDelete})`);
     console.log("=== Knowledge Base Deletion Test Complete ===\n");

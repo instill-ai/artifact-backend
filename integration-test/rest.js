@@ -20,21 +20,21 @@ export let options = {
     // test_01_health: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_01_Health' },
 
     // Basic CRUD operations
-    test_02_create_catalog: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_02_CreateCatalog' },
-    test_03_list_catalogs: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_03_ListCatalogs' },
-    test_04_get_catalog: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_04_GetCatalog' },
-    test_05_update_catalog: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_05_UpdateCatalog' },
-    test_06_delete_catalog: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_06_DeleteCatalog' },
+    test_02_create_knowledge_base: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_02_CreateKnowledgeBase' },
+    test_03_list_knowledge_bases: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_03_ListKnowledgeBases' },
+    test_04_get_knowledge_base: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_04_GetKnowledgeBase' },
+    test_05_update_knowledge_base: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_05_UpdateKnowledgeBase' },
+    test_06_delete_knowledge_base: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_06_DeleteKnowledgeBase' },
 
     // End-to-end tests
     test_07_cleanup_files: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_07_CleanupFiles' },
-    test_08_e2e_catalog: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_08_E2ECatalog' },
+    test_08_e2e_knowledge_base: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_08_E2EKnowledgeBase' },
 
     // JWT/Auth tests
-    test_09_jwt_create_catalog: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_09_JWT_CreateCatalog' },
-    test_10_jwt_list_catalogs: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_10_JWT_ListCatalogs' },
-    test_11_jwt_get_catalog: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_11_JWT_GetCatalog' },
-    test_12_jwt_update_catalog: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_12_JWT_UpdateCatalog' },
+    test_09_jwt_create_knowledge_base: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_09_JWT_CreateKnowledgeBase' },
+    test_10_jwt_list_knowledge_bases: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_10_JWT_ListKnowledgeBases' },
+    test_11_jwt_get_knowledge_base: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_11_JWT_GetKnowledgeBase' },
+    test_12_jwt_update_knowledge_base: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_12_JWT_UpdateKnowledgeBase' },
     test_13_jwt_create_file: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_13_JWT_CreateFile' },
     test_14_jwt_list_files: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_14_JWT_ListFiles' },
     test_15_jwt_get_file: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_15_JWT_GetFile' },
@@ -85,7 +85,7 @@ export function teardown(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
-    // Wait for THIS TEST's file processing to complete before deleting catalogs
+    // Wait for THIS TEST's file processing to complete before deleting knowledge bases
     console.log("Teardown: Waiting for this test's file processing to complete...");
     const allProcessingComplete = helper.waitForAllFileProcessingComplete(120, data.dbIDPrefix);
     if (!allProcessingComplete) {
@@ -93,20 +93,20 @@ export function teardown(data) {
     }
 
     console.log(`rest.js teardown: Cleaning up resources with prefix: ${data.dbIDPrefix}`);
-    var listResp = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, data.header)
+    var listResp = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`, null, data.header)
     if (listResp.status === 200) {
-      var catalogs = Array.isArray(listResp.json().catalogs) ? listResp.json().catalogs : []
+      var knowledgeBases = Array.isArray(listResp.json().knowledgeBases) ? listResp.json().knowledgeBases : []
       let cleanedCount = 0;
-      for (const catalog of catalogs) {
-        // Clean up catalogs with our test prefix (includes cl-, cat-, del-, jwt- prefixes)
-        if (catalog.id && (catalog.id.startsWith(data.dbIDPrefix) || catalog.id.includes(data.dbIDPrefix))) {
-          var delResp = http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalog.id}`, null, data.header);
+      for (const kb of knowledgeBases) {
+        // Clean up knowledge bases with our test prefix (includes cl-, cat-, del-, jwt- prefixes)
+        if (kb.id && (kb.id.startsWith(data.dbIDPrefix) || kb.id.includes(data.dbIDPrefix))) {
+          var delResp = http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${kb.id}`, null, data.header);
           if (delResp.status === 200 || delResp.status === 204 || delResp.status === 404) {
             cleanedCount++;
           }
         }
       }
-      console.log(`Cleaned ${cleanedCount} test catalogs`);
+      console.log(`Cleaned ${cleanedCount} test knowledge bases`);
     }
   });
 }
@@ -128,8 +128,8 @@ export function TEST_01_Health(data) {
 // ============================================================================
 // TEST GROUP 02-06: Basic CRUD Operations
 // ============================================================================
-export function TEST_02_CreateCatalog(data) {
-  const groupName = "Artifact API: Create a catalog";
+export function TEST_02_CreateKnowledgeBase(data) {
+  const groupName = "Artifact API: Create a knowledge base";
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
@@ -137,116 +137,116 @@ export function TEST_02_CreateCatalog(data) {
       id: "test-" + data.dbIDPrefix + randomString(10),
       description: randomString(50),
       tags: ["test", "integration"],
-      type: "CATALOG_TYPE_PERSISTENT"
+      type: "KNOWLEDGE_BASE_TYPE_PERSISTENT"
     };
 
     var resOrigin = http.request(
       "POST",
-      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
       JSON.stringify(reqBody),
       data.header
     );
     let json; try { json = resOrigin.json(); } catch (e) { json = {}; }
-    const cat = json.catalog || {};
+    const cat = json.knowledgeBase || {};
     const uid = cat.uid;
     const id = cat.id;
     const createTime = cat.createTime || cat.create_time;
     const updateTime = cat.updateTime || cat.update_time;
 
     check(resOrigin, {
-      "POST /v1alpha/namespaces/{namespace_id}/catalogs response status is 200": (r) => r.status === 200,
-      "POST /v1alpha/namespaces/{namespace_id}/catalogs response catalog name": () =>
-        cat && cat.name === `namespaces/${data.expectedOwner.id}/catalogs/${reqBody.id}`,
-      "POST /v1alpha/namespaces/{namespace_id}/catalogs response catalog uid": () =>
+      "POST /v1alpha/namespaces/{namespace_id}/knowledge-bases response status is 200": (r) => r.status === 200,
+      "POST /v1alpha/namespaces/{namespace_id}/knowledge-bases response knowledge base name": () =>
+        cat && cat.name === `namespaces/${data.expectedOwner.id}/knowledge-bases/${reqBody.id}`,
+      "POST /v1alpha/namespaces/{namespace_id}/knowledge-bases response knowledge base uid": () =>
         cat && helper.isUUID(uid),
-      "POST /v1alpha/namespaces/{namespace_id}/catalogs response catalog id": () =>
+      "POST /v1alpha/namespaces/{namespace_id}/knowledge-bases response knowledge base id": () =>
         cat && id === reqBody.id,
-      "POST /v1alpha/namespaces/{namespace_id}/catalogs response catalog description": () =>
+      "POST /v1alpha/namespaces/{namespace_id}/knowledge-bases response knowledge base description": () =>
         cat && cat.description === reqBody.description,
-      "POST /v1alpha/namespaces/{namespace_id}/catalogs response catalog is valid": () =>
-        cat && helper.validateCatalog(cat, false),
-      "POST /v1alpha/namespaces/{namespace_id}/catalogs response catalog createTime": () =>
+      "POST /v1alpha/namespaces/{namespace_id}/knowledge-bases response knowledge base is valid": () =>
+        cat && helper.validateKnowledgeBase(cat, false),
+      "POST /v1alpha/namespaces/{namespace_id}/knowledge-bases response knowledge base createTime": () =>
         cat && typeof createTime === 'string' && createTime.length > 0,
-      "POST /v1alpha/namespaces/{namespace_id}/catalogs response catalog updateTime": () =>
+      "POST /v1alpha/namespaces/{namespace_id}/knowledge-bases response knowledge base updateTime": () =>
         cat && typeof updateTime === 'string' && updateTime.length > 0,
     });
 
     // Cleanup
     if (cat && cat.id) {
-      http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${cat.id}`, null, data.header);
+      http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${cat.id}`, null, data.header);
     }
   });
 }
 
-export function TEST_03_ListCatalogs(data) {
-  const groupName = "Artifact API: List catalogs";
+export function TEST_03_ListKnowledgeBases(data) {
+  const groupName = "Artifact API: List knowledge bases";
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
     var resOrigin = http.request(
       "GET",
-      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
       null,
       data.header
     );
     let json; try { json = resOrigin.json(); } catch (e) { json = {}; }
     check(resOrigin, {
-      "GET /v1alpha/namespaces/{namespace_id}/catalogs response status is 200": (r) => r.status === 200,
-      "GET /v1alpha/namespaces/{namespace_id}/catalogs response catalogs is array": () =>
-        Array.isArray(json.catalogs),
+      "GET /v1alpha/namespaces/{namespace_id}/knowledge-bases response status is 200": (r) => r.status === 200,
+      "GET /v1alpha/namespaces/{namespace_id}/knowledge-bases response knowledge bases is array": () =>
+        Array.isArray(json.knowledgeBases),
     });
   });
 }
 
-export function TEST_04_GetCatalog(data) {
-  const groupName = "Artifact API: Get catalog";
+export function TEST_04_GetKnowledgeBase(data) {
+  const groupName = "Artifact API: Get knowledge base";
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
     const cRes = http.request(
       "POST",
-      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
       JSON.stringify({ id: "test-" + data.dbIDPrefix + randomString(10) }),
       data.header
     );
-    check(cRes, { "POST /v1alpha/namespaces/{namespace_id}/catalogs 200": (r) => r.status === 200 });
-    const created = (cRes.json() || {}).catalog || {};
+    check(cRes, { "POST /v1alpha/namespaces/{namespace_id}/knowledge-bases 200": (r) => r.status === 200 });
+    const created = (cRes.json() || {}).knowledgeBase || {};
 
     const resOrigin = http.request(
       "GET",
-      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
       null,
       data.header
     );
     let json; try { json = resOrigin.json(); } catch (e) { json = {}; }
-    const catalogs = Array.isArray(json.catalogs) ? json.catalogs : [];
+    const knowledgeBases = Array.isArray(json.knowledgeBases) ? json.knowledgeBases : [];
     check(resOrigin, {
-      "GET /v1alpha/namespaces/{namespace_id}/catalogs response status is 200": (r) => r.status === 200,
-      "GET /v1alpha/namespaces/{namespace_id}/catalogs response catalogs is array": () => Array.isArray(json.catalogs),
-      "GET /v1alpha/namespaces/{namespace_id}/catalogs response contains our catalog": () => catalogs.some(c => c.id === created.id),
+      "GET /v1alpha/namespaces/{namespace_id}/knowledge-bases response status is 200": (r) => r.status === 200,
+      "GET /v1alpha/namespaces/{namespace_id}/knowledge-bases response knowledge_bases is array": () => Array.isArray(json.knowledgeBases),
+      "GET /v1alpha/namespaces/{namespace_id}/knowledge-bases response contains our knowledge base": () => knowledgeBases.some(kb => kb.id === created.id),
     });
 
     // Cleanup
-    http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${created.id}`, null, data.header);
+    http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}`, null, data.header);
   });
 }
 
-export function TEST_05_UpdateCatalog(data) {
-  const groupName = "Artifact API: Update catalog";
+export function TEST_05_UpdateKnowledgeBase(data) {
+  const groupName = "Artifact API: Update knowledge base";
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
     const cRes = http.request(
       "POST",
-      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
       JSON.stringify({ id: "test-" + data.dbIDPrefix + randomString(10) }),
       data.header
     );
-    const created = (cRes.json() || {}).catalog || {};
+    const created = (cRes.json() || {}).knowledgeBase || {};
 
     const newDescription = randomString(50);
     const reqBody = {
-      catalog: {
+      knowledgeBase: {
         description: newDescription,
         tags: ["test", "integration", "updated"]
       },
@@ -255,51 +255,51 @@ export function TEST_05_UpdateCatalog(data) {
 
     const resOrigin = http.request(
       "PUT",
-      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${created.id}`,
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}`,
       JSON.stringify(reqBody),
       data.header
     );
     const json = (function () { try { return resOrigin.json(); } catch (e) { return {}; } })();
-    const cat2 = json.catalog || {};
+    const cat2 = json.knowledgeBase || {};
     check(resOrigin, {
-      "PUT /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id} response status is 200": (r) => r.status === 200,
-      "PUT /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id} response catalog id": () =>
+      "PUT /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id} response status is 200": (r) => r.status === 200,
+      "PUT /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id} response knowledge base id": () =>
         cat2.id === created.id,
-      "PUT /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id} response catalog description updated": () =>
+      "PUT /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id} response knowledge base description updated": () =>
         cat2.description === newDescription,
-      "PUT /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id} response catalog is valid": () =>
-        helper.validateCatalog(cat2, false),
+      "PUT /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id} response knowledge base is valid": () =>
+        helper.validateKnowledgeBase(cat2, false),
     });
 
     // Cleanup
-    http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${created.id}`, null, data.header);
+    http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}`, null, data.header);
   });
 }
 
-export function TEST_06_DeleteCatalog(data) {
-  const groupName = "Artifact API: Delete catalog";
+export function TEST_06_DeleteKnowledgeBase(data) {
+  const groupName = "Artifact API: Delete knowledge base";
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
     const createBody = { id: "test-" + data.dbIDPrefix + "del-" + randomString(8) };
     const cRes = http.request(
       "POST",
-      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
       JSON.stringify(createBody),
       data.header
     );
-    let created; try { created = (cRes.json() || {}).catalog; } catch (e) { created = {}; }
-    const catalogId = created && created.id;
-    check(cRes, { "POST /v1alpha/namespaces/{namespace_id}/catalogs 200": (r) => r.status === 200 });
+    let created; try { created = (cRes.json() || {}).knowledgeBase; } catch (e) { created = {}; }
+    const knowledgeBaseId = created && created.id;
+    check(cRes, { "POST /v1alpha/namespaces/{namespace_id}/knowledge-bases 200": (r) => r.status === 200 });
 
     const dRes = http.request(
       "DELETE",
-      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`,
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`,
       null,
       data.header
     );
     check(dRes, {
-      "DELETE /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id} response status is 2xx": (r) => r.status >= 200 && r.status < 300,
+      "DELETE /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id} response status is 2xx": (r) => r.status >= 200 && r.status < 300,
     });
   });
 }
@@ -312,28 +312,28 @@ export function TEST_07_CleanupFiles(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
-    const catalogName = "test-" + data.dbIDPrefix + "cl-" + randomString(5);
+    const kbName = "test-" + data.dbIDPrefix + "cl-" + randomString(5);
     const createRes = http.request(
       "POST",
-      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
-      JSON.stringify({ id: catalogName, description: "Cleanup test" }),
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
+      JSON.stringify({ id: kbName, description: "Cleanup test" }),
       data.header
     );
 
-    let catalog;
-    try { catalog = createRes.json().catalog; } catch (e) { catalog = {}; }
-    const catalogId = catalog ? catalog.id : null;
+    let kb;
+    try { kb = createRes.json().knowledgeBase; } catch (e) { kb = {}; }
+    const knowledgeBaseId = kb ? kb.id : null;
 
     check(createRes, {
-      "Cleanup: Catalog created": (r) => r.status === 200 && catalogId,
+      "Cleanup: Knowledge base created": (r) => r.status === 200 && knowledgeBaseId,
     });
 
-    if (!catalogId) return;
+    if (!knowledgeBaseId) return;
 
     const filename = `${data.dbIDPrefix}cl.pdf`;
     const uploadRes = http.request(
       "POST",
-      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
       JSON.stringify({ filename: filename, type: "TYPE_PDF", content: constant.samplePdf }),
       data.header
     );
@@ -353,15 +353,15 @@ export function TEST_07_CleanupFiles(data) {
     });
 
     if (!fileUid || !fileId) {
-      console.log("Cleanup: Skipping test due to file upload failure, deleting catalog...");
-      http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+      console.log("Cleanup: Skipping test due to file upload failure, deleting knowledge base...");
+      http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
       return;
     }
 
     // Wait for file processing to complete (max 60 seconds)
     const processingResult = helper.waitForFileProcessingComplete(
       data.expectedOwner.id,
-      catalogId,
+      knowledgeBaseId,
       fileUid,
       data.header,
       60 // maxWaitSeconds
@@ -369,20 +369,20 @@ export function TEST_07_CleanupFiles(data) {
 
     if (!processingResult.completed) {
       console.log(`Cleanup: File processing did not complete: ${processingResult.status}${processingResult.error ? ' - ' + processingResult.error : ''}`);
-      // Clean up the catalog even if file processing failed/timeout
-      http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+      // Clean up the knowledge base even if file processing failed/timeout
+      http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
       return;
     }
 
     const deleteRes = http.request(
       "DELETE",
-      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`,
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`,
       null,
       data.header
     );
 
     check(deleteRes, {
-      "Cleanup: Catalog deleted (triggers file cleanup)": (r) => {
+      "Cleanup: Knowledge base deleted (triggers file cleanup)": (r) => {
         if (r.status !== 200 && r.status !== 204) {
           console.log(`Cleanup delete failed: status=${r.status}, body=${r.body}`);
         }
@@ -395,7 +395,7 @@ export function TEST_07_CleanupFiles(data) {
     const checkAfter = `
       SELECT
         (SELECT COUNT(*) FROM converted_file WHERE file_uid = '${fileUid}') as converted,
-        (SELECT COUNT(*) FROM text_chunk WHERE file_uid = '${fileUid}') as chunks,
+        (SELECT COUNT(*) FROM chunk WHERE file_uid = '${fileUid}') as chunks,
         (SELECT COUNT(*) FROM embedding WHERE file_uid = '${fileUid}') as embeddings
     `;
     try {
@@ -415,34 +415,34 @@ export function TEST_07_CleanupFiles(data) {
 }
 
 // ============================================================================
-// TEST GROUP 08: Catalog End-to-End (Comprehensive)
+// TEST GROUP 08: Knowledge Base End-to-End (Comprehensive)
 // ============================================================================
-export function TEST_08_E2ECatalog(data) {
-  const groupName = "Artifact API: Catalog end-to-end (comprehensive)";
+export function TEST_08_E2EKnowledgeBase(data) {
+  const groupName = "Artifact API: Knowledge base end-to-end (comprehensive)";
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
-    // Create catalog
+    // Create knowledge base
     const createBody = {
       id: "test-" + data.dbIDPrefix + "cat-" + randomString(8),
       description: randomString(40),
-      tags: ["test", "integration", "catalog-e2e"],
-      type: "CATALOG_TYPE_PERSISTENT",
+      tags: ["test", "integration", "kb-e2e"],
+      type: "KNOWLEDGE_BASE_TYPE_PERSISTENT",
     };
     const cRes = http.request(
       "POST",
-      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
       JSON.stringify(createBody),
       data.header
     );
-    let created; try { created = (cRes.json() || {}).catalog; } catch (e) { created = {}; }
-    const catalogId = created && created.id;
+    let created; try { created = (cRes.json() || {}).knowledgeBase; } catch (e) { created = {}; }
+    const knowledgeBaseId = created && created.id;
     check(cRes, {
-      "E2E: Catalog created": (r) => r.status === 200,
-      "E2E: Catalog is valid": () => created && helper.validateCatalog(created, false),
+      "E2E: Knowledge base created": (r) => r.status === 200,
+      "E2E: Knowledge base is valid": () => created && helper.validateKnowledgeBase(created, false),
     });
 
-    if (!catalogId) return;
+    if (!knowledgeBaseId) return;
 
     // Upload 4 file types for testing (multi-page PDF, TEXT, DOCX, XLS)
     const testFiles = constant.sampleFiles.filter(s =>
@@ -461,7 +461,7 @@ export function TEST_08_E2ECatalog(data) {
         tags,
         req: {
           method: "POST",
-          url: `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
+          url: `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
           body: JSON.stringify({ filename: filename, type: s.type, content: s.content, tags: tags }),
           params: data.header,
         },
@@ -500,7 +500,7 @@ export function TEST_08_E2ECatalog(data) {
         const lastBatch = http.batch(
           Array.from(pending).map((uid) => ({
             method: "GET",
-            url: `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${uid}`,
+            url: `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${uid}`,
             params: data.header,
           }))
         );
@@ -553,7 +553,7 @@ export function TEST_08_E2ECatalog(data) {
 
     // Verify file metadata
     for (const f of uploaded) {
-      var viewPath = `/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files?filter=${encodeURIComponent(`id = "${f.fileId}"`)}`
+      var viewPath = `/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files?filter=${encodeURIComponent(`id = "${f.fileId}"`)}`
       const viewRes = http.request("GET", constant.artifactRESTPublicHost + viewPath, null, data.header);
 
       if (viewRes.status === 200) {
@@ -573,8 +573,8 @@ export function TEST_08_E2ECatalog(data) {
       }
     }
 
-    // List catalog files
-    const listFilesRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files?pageSize=100`, null, data.header);
+    // List knowledge base files
+    const listFilesRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files?pageSize=100`, null, data.header);
     let listFilesJson; try { listFilesJson = listFilesRes.json(); } catch (e) { listFilesJson = {}; }
     check(listFilesRes, {
       "E2E: List files returns all uploaded": () =>
@@ -583,7 +583,7 @@ export function TEST_08_E2ECatalog(data) {
 
     // List chunks for first file
     if (fileUids.length > 0) {
-      const listChunksRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${fileUids[0]}/chunks`, null, data.header);
+      const listChunksRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileUids[0]}/chunks`, null, data.header);
       check(listChunksRes, {
         "E2E: List chunks returns array": (r) => {
           try {
@@ -597,7 +597,7 @@ export function TEST_08_E2ECatalog(data) {
 
     // Get summary
     if (fileUids.length > 0) {
-      const getSummaryRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${fileUids[0]}?view=VIEW_SUMMARY`, null, data.header);
+      const getSummaryRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileUids[0]}?view=VIEW_SUMMARY`, null, data.header);
       check(getSummaryRes, {
         "E2E: Get summary returns derived resource URI": (r) => {
           try {
@@ -618,7 +618,7 @@ export function TEST_08_E2ECatalog(data) {
         const updateTagsBody = { tags: ["scott", "kim"] };
         const updateTagsRes = http.request(
           "PATCH",
-          `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${pdfFile.fileUid}?updateMask=tags`,
+          `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${pdfFile.fileUid}?updateMask=tags`,
           JSON.stringify(updateTagsBody),
           data.header
         );
@@ -651,7 +651,7 @@ export function TEST_08_E2ECatalog(data) {
       };
       const searchRes1 = http.request(
         "POST",
-        `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/searchChunks`,
+        `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/searchChunks`,
         JSON.stringify(searchBody1),
         data.header
       );
@@ -678,7 +678,7 @@ export function TEST_08_E2ECatalog(data) {
       };
       const searchRes2 = http.request(
         "POST",
-        `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/searchChunks`,
+        `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/searchChunks`,
         JSON.stringify(searchBody2),
         data.header
       );
@@ -709,7 +709,7 @@ export function TEST_08_E2ECatalog(data) {
         };
         const searchRes3 = http.request(
           "POST",
-          `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/searchChunks`,
+          `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/searchChunks`,
           JSON.stringify(searchBody3),
           data.header
         );
@@ -763,7 +763,7 @@ export function TEST_08_E2ECatalog(data) {
     }
 
     // Cleanup
-    http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+    http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
   });
 }
 
@@ -779,33 +779,33 @@ function logUnexpected(res, label) {
   }
 }
 
-function createCatalogAuthenticated(data) {
+function createKBAuthenticated(data) {
   const name = "test-" + data.dbIDPrefix + "jwt-" + randomString(8);
   const res = http.request(
     "POST",
-    `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+    `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
     JSON.stringify({ id: name }),
     data.header
   );
   try {
     const json = res.json();
-    const cat = (json && json.catalog) || {};
+    const cat = (json && json.knowledgeBase) || {};
     return { id: cat.id || name, namespaceId: data.expectedOwner.id };
   } catch (e) {
     return { id: name, namespaceId: data.expectedOwner.id };
   }
 }
 
-function deleteCatalogAuthenticated(data, catalogId) {
-  http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+function deleteKBAuthenticated(data, knowledgeBaseId) {
+  http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
 }
 
-function createFileAuthenticated(data, catalogId) {
+function createFileAuthenticated(data, knowledgeBaseId) {
   const filename = data.dbIDPrefix + "jwt-file-" + randomString(6) + ".txt";
   const body = { filename: filename, type: "TYPE_TEXT", content: constant.sampleTxt };
   const res = http.request(
     "POST",
-    `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
+    `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
     JSON.stringify(body),
     data.header
   );
@@ -818,55 +818,55 @@ function createFileAuthenticated(data, catalogId) {
   }
 }
 
-export function TEST_09_JWT_CreateCatalog(data) {
-  const groupName = "Artifact API [JWT]: Create catalog rejects random user";
+export function TEST_09_JWT_CreateKnowledgeBase(data) {
+  const groupName = "Artifact API [JWT]: Create knowledge base rejects random user";
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
     const body = { id: "test-" + data.dbIDPrefix + randomString(8) };
-    const res = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, JSON.stringify(body), constant.paramsHTTPWithJWT.headers);
-    logUnexpected(res, "JWT: POST catalogs");
-    check(res, { "JWT: POST catalogs 401": (r) => r.status === 401 });
+    const res = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`, JSON.stringify(body), constant.paramsHTTPWithJWT.headers);
+    logUnexpected(res, "JWT: POST knowledge-bases");
+    check(res, { "JWT: POST knowledge bases 401": (r) => r.status === 401 });
   });
 }
 
-export function TEST_10_JWT_ListCatalogs(data) {
-  const groupName = "Artifact API [JWT]: List catalogs rejects random user";
+export function TEST_10_JWT_ListKnowledgeBases(data) {
+  const groupName = "Artifact API [JWT]: List knowledge bases rejects random user";
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
-    const created = createCatalogAuthenticated(data);
-    const res = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, constant.paramsHTTPWithJWT.headers);
-    logUnexpected(res, "JWT: GET catalogs");
-    check(res, { "JWT: GET catalogs 401": (r) => r.status === 401 });
-    deleteCatalogAuthenticated(data, created.id);
+    const created = createKBAuthenticated(data);
+    const res = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`, null, constant.paramsHTTPWithJWT.headers);
+    logUnexpected(res, "JWT: GET knowledge-bases");
+    check(res, { "JWT: GET knowledge bases 401": (r) => r.status === 401 });
+    deleteKBAuthenticated(data, created.id);
   });
 }
 
-export function TEST_11_JWT_GetCatalog(data) {
-  const groupName = "Artifact API [JWT]: Get catalogs rejects random user";
+export function TEST_11_JWT_GetKnowledgeBase(data) {
+  const groupName = "Artifact API [JWT]: Get knowledge base rejects random user";
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
-    const created = createCatalogAuthenticated(data);
-    const res = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, constant.paramsHTTPWithJWT.headers);
-    logUnexpected(res, "JWT: GET catalogs");
-    check(res, { "JWT: GET catalogs 401": (r) => r.status === 401 });
-    deleteCatalogAuthenticated(data, created.id);
+    const created = createKBAuthenticated(data);
+    const res = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`, null, constant.paramsHTTPWithJWT.headers);
+    logUnexpected(res, "JWT: GET knowledge-bases");
+    check(res, { "JWT: GET knowledge bases 401": (r) => r.status === 401 });
+    deleteKBAuthenticated(data, created.id);
   });
 }
 
-export function TEST_12_JWT_UpdateCatalog(data) {
-  const groupName = "Artifact API [JWT]: Update catalog rejects random user";
+export function TEST_12_JWT_UpdateKnowledgeBase(data) {
+  const groupName = "Artifact API [JWT]: Update knowledge base rejects random user";
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
-    const created = createCatalogAuthenticated(data);
-    const body = { catalog: { description: "x" }, updateMask: "description" };
-    const res = http.request("PUT", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${created.id}`, JSON.stringify(body), constant.paramsHTTPWithJWT.headers);
-    logUnexpected(res, "JWT: PUT catalog");
-    check(res, { "JWT: PUT catalog 401": (r) => r.status === 401 });
-    deleteCatalogAuthenticated(data, created.id);
+    const created = createKBAuthenticated(data);
+    const body = { knowledgeBase: { description: "x" }, updateMask: "description" };
+    const res = http.request("PUT", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}`, JSON.stringify(body), constant.paramsHTTPWithJWT.headers);
+    logUnexpected(res, "JWT: PUT knowledge base");
+    check(res, { "JWT: PUT knowledge base 401": (r) => r.status === 401 });
+    deleteKBAuthenticated(data, created.id);
   });
 }
 
@@ -875,12 +875,12 @@ export function TEST_13_JWT_CreateFile(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
-    const created = createCatalogAuthenticated(data);
+    const created = createKBAuthenticated(data);
     const body = { filename: data.dbIDPrefix + "x.txt", type: "TYPE_TEXT", content: constant.sampleTxt };
-    const res = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${created.id}/files`, JSON.stringify(body), constant.paramsHTTPWithJWT.headers);
+    const res = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}/files`, JSON.stringify(body), constant.paramsHTTPWithJWT.headers);
     logUnexpected(res, "JWT: POST file");
     check(res, { "JWT: POST file 401": (r) => r.status === 401 });
-    deleteCatalogAuthenticated(data, created.id);
+    deleteKBAuthenticated(data, created.id);
   });
 }
 
@@ -889,12 +889,12 @@ export function TEST_14_JWT_ListFiles(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
-    const created = createCatalogAuthenticated(data);
+    const created = createKBAuthenticated(data);
     createFileAuthenticated(data, created.id);
-    const res = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${created.id}/files`, null, constant.paramsHTTPWithJWT.headers);
+    const res = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}/files`, null, constant.paramsHTTPWithJWT.headers);
     logUnexpected(res, "JWT: GET files");
     check(res, { "JWT: GET files 401": (r) => r.status === 401 });
-    deleteCatalogAuthenticated(data, created.id);
+    deleteKBAuthenticated(data, created.id);
   });
 }
 
@@ -903,12 +903,12 @@ export function TEST_15_JWT_GetFile(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
-    const created = createCatalogAuthenticated(data);
+    const created = createKBAuthenticated(data);
     const fileUid = createFileAuthenticated(data, created.id);
-    const res = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${created.id}/files/${fileUid}`, null, constant.paramsHTTPWithJWT.headers);
+    const res = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}/files/${fileUid}`, null, constant.paramsHTTPWithJWT.headers);
     logUnexpected(res, "JWT: GET file");
     check(res, { "JWT: GET file 401": (r) => r.status === 401 });
-    deleteCatalogAuthenticated(data, created.id);
+    deleteKBAuthenticated(data, created.id);
   });
 }
 
@@ -917,12 +917,12 @@ export function TEST_16_JWT_GetFileContent(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
-    const created = createCatalogAuthenticated(data);
+    const created = createKBAuthenticated(data);
     const fileUid = createFileAuthenticated(data, created.id);
-    const res = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${created.id}/files/${fileUid}?view=VIEW_CONTENT`, null, constant.paramsHTTPWithJWT.headers);
+    const res = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}/files/${fileUid}?view=VIEW_CONTENT`, null, constant.paramsHTTPWithJWT.headers);
     logUnexpected(res, "JWT: GET file content");
     check(res, { "JWT: GET file content 401": (r) => r.status === 401 });
-    deleteCatalogAuthenticated(data, created.id);
+    deleteKBAuthenticated(data, created.id);
   });
 }
 
@@ -931,12 +931,12 @@ export function TEST_17_JWT_GetFileSummary(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
-    const created = createCatalogAuthenticated(data);
+    const created = createKBAuthenticated(data);
     const fileUid = createFileAuthenticated(data, created.id);
-    const res = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${created.id}/files/${fileUid}?view=VIEW_SUMMARY`, null, constant.paramsHTTPWithJWT.headers);
+    const res = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}/files/${fileUid}?view=VIEW_SUMMARY`, null, constant.paramsHTTPWithJWT.headers);
     logUnexpected(res, "JWT: GET file summary");
     check(res, { "JWT: GET file summary 401": (r) => r.status === 401 });
-    deleteCatalogAuthenticated(data, created.id);
+    deleteKBAuthenticated(data, created.id);
   });
 }
 
@@ -945,11 +945,11 @@ export function TEST_18_JWT_ListChunks(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
-    const created = createCatalogAuthenticated(data);
+    const created = createKBAuthenticated(data);
     const fileUid = createFileAuthenticated(data, created.id);
-    const res = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${created.id}/files/${fileUid}/chunks`, null, constant.paramsHTTPWithJWT.headers);
+    const res = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}/files/${fileUid}/chunks`, null, constant.paramsHTTPWithJWT.headers);
     logUnexpected(res, "JWT: GET chunks");
     check(res, { "JWT: GET chunks 401 or 404": (r) => r.status === 401 || r.status === 404 });
-    deleteCatalogAuthenticated(data, created.id);
+    deleteKBAuthenticated(data, created.id);
   });
 }

@@ -1,9 +1,9 @@
 
 /**
- * Test the complete end-to-end catalog and file processing workflow.
+ * Test the complete end-to-end knowledge base and file processing workflow.
  *
- * This comprehensive test verifies the entire lifecycle of a knowledge base catalog:
- * 1. Catalog Management: Create, list, update, delete catalog
+ * This comprehensive test verifies the entire lifecycle of a knowledge base:
+ * 1. Knowledge Base Management: Create, list, update, delete knowledge base
  * 2. Multi-File Upload: Upload all supported file types (13 files)
  * 3. Batch Processing: Process all files asynchronously
  * 4. File Metadata Verification: Verify file metadata and processing results
@@ -11,30 +11,30 @@
  * 6. API Completeness: Test all file-related endpoints (chunks, summary, source)
  * 7. Type-Specific Validation: Verify file type-specific processing (PDF, DOC, TEXT, etc.)
  * 7.5. Position Data Validation: Verify PDF files have correct position data and page references
- * 8. Resource Cleanup: Verify proper cleanup on catalog deletion
+ * 8. Resource Cleanup: Verify proper cleanup on knowledge base deletion
  *
  * Note: Database schema and data format tests (enum storage, JSONB formats, field naming,
  * content/summary separation, File.Type enum serialization) are in rest-db.js
  *
  * Test Flow:
- * - Step 1: Create catalog
- * - Step 2: List catalogs (verify presence)
- * - Step 3: Update catalog metadata
+ * - Step 1: Create knowledge base
+ * - Step 2: List knowledge bases (verify presence)
+ * - Step 3: Update knowledge base metadata
  * - Step 4: Upload 13 files of different types in parallel
  * - Step 5: Trigger batch processing for all files
  * - Step 6: Poll until all files reach COMPLETED status
  * - Step 7: Verify each file's metadata (name, size, chunks, tokens, etc.)
  *   - Verify type-specific attributes (pages for PDF/DOC, characters for TEXT)
  * - Step 7.5: Verify position data for PDF files
- *   - Database: PageDelimiters in converted_file, PageRange in text_chunk
+ *   - Database: PageDelimiters in converted_file, PageRange in chunk
  *   - API: UNIT_PAGE references, markdown_reference with UNIT_CHARACTER
  *   - PascalCase validation for JSON fields
- * - Step 8: List all files in catalog
+ * - Step 8: List all files in knowledge base
  * - Step 9: List chunks for each file
  * - Step 10: Get summary for each file
  * - Step 11: Get source file for each file
  * - Step 12: Verify storage layer resources (MinIO, Postgres, Milvus)
- * - Step 13: Delete catalog and verify cleanup
+ * - Step 13: Delete knowledge base and verify cleanup
  *
  * Supported File Types Tested:
  * - TEXT, MARKDOWN, CSV, HTML
@@ -101,24 +101,24 @@ export function setup() {
     headers: { "Authorization": `Bearer ${loginResp.json().accessToken}` }
   })
 
-  // Cleanup orphaned catalogs from previous failed test runs OF THIS SPECIFIC TEST
+  // Cleanup orphaned knowledge bases from previous failed test runs OF THIS SPECIFIC TEST
   // Use API-only cleanup to properly trigger workflows (no direct DB manipulation)
   console.log("\n=== SETUP: Cleaning up previous test data (e2e pattern only) ===");
   try {
-    const listResp = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${resp.json().user.id}/catalogs`, null, header);
+    const listResp = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${resp.json().user.id}/knowledge-bases`, null, header);
     if (listResp.status === 200) {
-      const catalogs = Array.isArray(listResp.json().catalogs) ? listResp.json().catalogs : [];
+      const knowledgeBases = Array.isArray(listResp.json().knowledgeBases) ? listResp.json().knowledgeBases : [];
       let cleanedCount = 0;
-      for (const catalog of catalogs) {
-        const catId = catalog.id;
+      for (const kb of knowledgeBases) {
+        const kbId = kb.id;
         if (catId && catId.match(/test-[a-z0-9]+-e2e-/)) {
-          const delResp = http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${resp.json().user.id}/catalogs/${catId}`, null, header);
+          const delResp = http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${resp.json().user.id}/knowledge-bases/${catId}`, null, header);
           if (delResp.status === 200 || delResp.status === 204) {
             cleanedCount++;
           }
         }
       }
-      console.log(`Cleaned ${cleanedCount} orphaned catalogs from previous test runs`);
+      console.log(`Cleaned ${cleanedCount} orphaned knowledge bases from previous test runs`);
     }
   } catch (e) {
     console.log(`Setup cleanup warning: ${e}`);
@@ -137,8 +137,8 @@ export function teardown(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
-    // CRITICAL: Wait for THIS TEST's file processing to complete before deleting catalogs
-    // Deleting catalogs triggers cleanup workflows that drop vector DB collections
+    // CRITICAL: Wait for THIS TEST's file processing to complete before deleting knowledge bases
+    // Deleting knowledge bases triggers cleanup workflows that drop vector DB collections
     // If we delete while files are still processing, we get "collection does not exist" errors
     console.log("Teardown: Waiting for this test's file processing to complete...");
     const allProcessingComplete = helper.waitForAllFileProcessingComplete(120, data.dbIDPrefix);
@@ -146,17 +146,17 @@ export function teardown(data) {
       console.warn("Teardown: Some files still processing after 120s, proceeding anyway");
     }
 
-    // Clean up catalogs created by this test
-    var listResp = http.request("GET", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, data.header)
+    // Clean up knowledge bases created by this test
+    var listResp = http.request("GET", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`, null, data.header)
     if (listResp.status === 200) {
-      var catalogs = Array.isArray(listResp.json().catalogs) ? listResp.json().catalogs : []
+      var knowledgeBases = Array.isArray(listResp.json().knowledgeBases) ? listResp.json().knowledgeBases : []
 
-      for (const catalog of catalogs) {
-        // API returns catalogId (camelCase), not catalog_id
-        const catId = catalog.id;
-        if (catId && catId.startsWith(data.dbIDPrefix)) {
-          http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catId}`, null, data.header);
-          console.log(`Teardown: Deleted catalog ${catId}`);
+      for (const kb of knowledgeBases) {
+        // API returns knowledgeBaseId (camelCase), not knowledge_base_id
+        const kbId = kb.id;
+        if (kbId && kbId.startsWith(data.dbIDPrefix)) {
+          http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${kbId}`, null, data.header);
+          console.log(`Teardown: Deleted knowledge base ${kbId}`);
         }
       }
     }
@@ -169,59 +169,59 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
-    // Step 1: Create catalog
+    // Step 1: Create knowledge base
     const createBody = {
       id: data.dbIDPrefix + "e2e-" + randomString(8),
-      description: "E2E test catalog for multi-file processing",
+      description: "E2E test knowledge base for multi-file processing",
       tags: ["test", "integration", "e2e", "multi-file"],
-      type: "CATALOG_TYPE_PERSISTENT",
+      type: "KNOWLEDGE_BASE_TYPE_PERSISTENT",
     };
 
     const cRes = http.request(
       "POST",
-      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
       JSON.stringify(createBody),
       data.header
     );
 
     let created;
-    try { created = (cRes.json() || {}).catalog; } catch (e) { created = {}; }
-    const catalogId = created && created.id;
-    const catalogUid = created && created.uid;
+    try { created = (cRes.json() || {}).knowledgeBase; } catch (e) { created = {}; }
+    const knowledgeBaseId = created && created.id;
+    const knowledgeBaseUid = created && created.uid;
 
     check(cRes, {
-      "E2E: Catalog created successfully": (r) => r.status === 200,
-      "E2E: Catalog ID matches requested id": () => catalogId === createBody.id,
-      "E2E: Catalog has valid UID": () => catalogUid && catalogUid.length > 0,
-      "E2E: Catalog is valid": () => created && helper.validateCatalog(created, false),
+      "E2E: Knowledge base created successfully": (r) => r.status === 200,
+      "E2E: Knowledge base ID matches requested id": () => knowledgeBaseId === createBody.id,
+      "E2E: Knowledge base has valid UID": () => knowledgeBaseUid && knowledgeBaseUid.length > 0,
+      "E2E: Knowledge base is valid": () => created && helper.validateKnowledgeBase(created, false),
     });
 
-    if (!catalogId || !catalogUid) {
+    if (!knowledgeBaseId || !knowledgeBaseUid) {
       return;
     }
 
-    // Step 2: List catalogs - ensure presence
+    // Step 2: List knowledge bases - ensure presence
     const listRes = http.request(
       "GET",
-      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
       null,
       data.header
     );
 
     let listJson;
     try { listJson = listRes.json(); } catch (e) { listJson = {}; }
-    const catalogs = Array.isArray(listJson.catalogs) ? listJson.catalogs : [];
+    const knowledgeBases = Array.isArray(listJson.knowledgeBases) ? listJson.knowledgeBases : [];
 
     check(listRes, {
-      "E2E: List catalogs successful": (r) => r.status === 200,
-      "E2E: List contains created catalog": () => catalogs.some((c) => c.id === catalogId),
+      "E2E: List knowledge bases successful": (r) => r.status === 200,
+      "E2E: List contains created knowledge base": () => knowledgeBases.some((c) => c.id === knowledgeBaseId),
     });
 
-    // Step 3: Update catalog metadata
-    const newDesc = "Updated E2E test catalog - testing metadata update";
+    // Step 3: Update knowledge base metadata
+    const newDesc = "Updated E2E test knowledge base - testing metadata update";
     const newTags = ["test", "integration", "e2e", "updated"];
     const updateBody = {
-      catalog: {
+      knowledgeBase: {
         description: newDesc,
         tags: newTags,
       },
@@ -230,19 +230,19 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
 
     const uRes = http.request(
       "PUT",
-      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`,
+      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`,
       JSON.stringify(updateBody),
       data.header
     );
 
     let updated;
-    try { updated = (uRes.json() || {}).catalog; } catch (e) { updated = {}; }
+    try { updated = (uRes.json() || {}).knowledgeBase; } catch (e) { updated = {}; }
 
     check(uRes, {
-      "E2E: Update catalog successful": (r) => r.status === 200,
-      "E2E: Catalog ID remains stable after update": () => updated.id === catalogId,
-      "E2E: Catalog description updated": () => updated && updated.description === newDesc,
-      "E2E: Catalog tags updated": () => updated && JSON.stringify(updated.tags) === JSON.stringify(newTags),
+      "E2E: Update knowledge base successful": (r) => r.status === 200,
+      "E2E: Knowledge base ID remains stable after update": () => updated.id === knowledgeBaseId,
+      "E2E: Knowledge base description updated": () => updated && updated.description === newDesc,
+      "E2E: Knowledge base tags updated": () => updated && JSON.stringify(updated.tags) === JSON.stringify(newTags),
     });
 
     // Step 4: Upload all file types (parallel batch upload)
@@ -255,7 +255,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
         filename: filename,
         req: {
           method: "POST",
-          url: `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
+          url: `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
           body: JSON.stringify({ filename: filename, type: s.type, content: s.content }),
           params: data.header,
         },
@@ -296,7 +296,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
     });
 
     if (uploaded.length === 0) {
-      http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+      http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
       return;
     }
 
@@ -322,7 +322,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
         lastBatch = http.batch(
           Array.from(pending).map((uid) => ({
             method: "GET",
-            url: `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${uid}`,
+            url: `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${uid}`,
             params: data.header,
           }))
         );
@@ -386,14 +386,14 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
           check(false, { [`E2E: File processing failed: ${f.name} - ${f.outcome}`]: () => false });
         }
         // Cleanup and exit
-        http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+        http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
         return;
       }
     }
 
     // Step 7: Verify each file's metadata and processing results
     for (const f of uploaded) {
-      const viewPath = `/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files?filter=${encodeURIComponent(`id = "${f.fileId}"`)}`;
+      const viewPath = `/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files?filter=${encodeURIComponent(`id = "${f.fileId}"`)}`;
 
       const viewRes = http.request("GET", artifactRESTPublicHost + viewPath, null, data.header);
 
@@ -407,7 +407,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
 
       check(viewRes, {
         [`E2E: File view successful (${f.originalName})`]: (r) => r.status === 200,
-        [`E2E: File has correct resource name format (${f.originalName})`]: () => fileData && fileData.name && fileData.name.startsWith(`namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/`),
+        [`E2E: File has correct resource name format (${f.originalName})`]: () => fileData && fileData.name && fileData.name.startsWith(`namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/`),
         [`E2E: File has correct filename (${f.originalName})`]: () => fileData && fileData.filename === f.filename,
         [`E2E: File status is COMPLETED (${f.originalName})`]: () => fileData && fileData.processStatus === "FILE_PROCESS_STATUS_COMPLETED",
         [`E2E: File has creator UID (${f.originalName})`]: () => fileData && fileData.creatorUid === data.expectedOwner.uid,
@@ -486,9 +486,9 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
         });
       }
 
-      // 2. Verify text_chunk has reference with PageRange
+      // 2. Verify chunk has reference with PageRange
       const chunkQuery = helper.safeQuery(
-        `SELECT reference::text as reference_text FROM text_chunk
+        `SELECT reference::text as reference_text FROM chunk
          WHERE file_uid = $1 AND reference IS NOT NULL LIMIT 1`,
         pdfFile.fileUid
       );
@@ -519,7 +519,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
       // 3. Verify chunk API returns UNIT_PAGE references
       const chunksResp = http.request(
         "GET",
-        `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${pdfFile.fileUid}/chunks`,
+        `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${pdfFile.fileUid}/chunks`,
         null,
         data.header
       );
@@ -575,10 +575,10 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
       console.log(`E2E Position Data: Verified position data for ${pdfFiles.length} PDF file(s)`);
     }
 
-    // Step 8: List all files in catalog (pagination test)
+    // Step 8: List all files in knowledge base (pagination test)
     const listFilesRes = http.request(
       "GET",
-      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files?pageSize=100`,
+      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files?pageSize=100`,
       null,
       data.header
     );
@@ -598,7 +598,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
     let totalChunksCount = 0;
     console.log(`E2E: Starting chunk verification for ${uploaded.length} files`);
     for (const f of uploaded) {
-      const chunkApiUrl = `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${f.fileUid}/chunks`;
+      const chunkApiUrl = `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${f.fileUid}/chunks`;
 
       console.log(`E2E: Polling chunks for ${f.originalName} (${f.fileUid})`);
       // Poll for chunks until they appear or timeout
@@ -632,7 +632,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
     for (const f of uploaded) {
       const getSummaryRes = http.request(
         "GET",
-        `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${f.fileUid}?view=VIEW_SUMMARY`,
+        `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${f.fileUid}?view=VIEW_SUMMARY`,
         null,
         data.header
       );
@@ -650,7 +650,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
     for (const f of uploaded) {
       const contentRes = http.request(
         "GET",
-        `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${f.fileUid}?view=VIEW_CONTENT`,
+        `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${f.fileUid}?view=VIEW_CONTENT`,
         null,
         data.header
       );
@@ -685,11 +685,11 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
       // Direct count - no polling needed since API already confirmed COMPLETED status
       // All storage operations (MinIO, Postgres, Milvus) are synchronous in the workflow
       const minioCounts = {
-        converted: helper.countMinioObjects(catalogUid, f.fileUid, 'converted-file'),
-        chunks: helper.countMinioObjects(catalogUid, f.fileUid, 'chunk'),
+        converted: helper.countMinioObjects(knowledgeBaseUid, f.fileUid, 'converted-file'),
+        chunks: helper.countMinioObjects(knowledgeBaseUid, f.fileUid, 'chunk'),
       };
       const embeddings = helper.countEmbeddings(f.fileUid);
-      const vectors = helper.countMilvusVectors(catalogUid, f.fileUid);
+      const vectors = helper.countMilvusVectors(knowledgeBaseUid, f.fileUid);
       console.log(`E2E: Storage verified for ${f.originalName}: converted=${minioCounts.converted}, chunks=${minioCounts.chunks}, embeddings=${embeddings}, vectors=${vectors}`);
 
       totalMinioConverted += minioCounts.converted;
@@ -723,16 +723,16 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
       "E2E: Total Milvus vectors across all files is positive": () => totalMilvusVectors > 0,
     });
 
-    // Step 13: Delete catalog and verify cleanup
+    // Step 13: Delete knowledge base and verify cleanup
     const delRes = http.request(
       "DELETE",
-      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`,
+      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`,
       null,
       data.header
     );
 
     check(delRes, {
-      "E2E: Catalog deleted successfully": (r) => r.status === 200 || r.status === 204,
+      "E2E: Knowledge base deleted successfully": (r) => r.status === 200 || r.status === 204,
     });
   });
 }

@@ -140,7 +140,7 @@ func (w *Worker) GetFileMetadataActivity(ctx context.Context, param *GetFileMeta
 	}
 	if len(files) == 0 {
 		// File was deleted during processing - this is OK in scenarios like:
-		// - Catalog/file deletion triggered while workflow is running
+		// - Knowledge base/file deletion triggered while workflow is running
 		// - Test cleanup happening concurrently with processing
 		// Return a non-retryable error to exit the workflow gracefully
 		w.log.Info("GetFileMetadataActivity: File not found (may have been deleted during processing)",
@@ -717,7 +717,7 @@ type DeleteOldTextChunksActivityParam struct {
 
 // DeleteOldTextChunksActivity deletes old text chunk DB records for a file
 // Note: Chunk blobs are deleted by DeleteOldConvertedFilesActivity (when converted files are deleted)
-// This activity only deletes the text_chunk table records
+// This activity only deletes the chunk table records
 func (w *Worker) DeleteOldTextChunksActivity(ctx context.Context, param *DeleteOldTextChunksActivityParam) error {
 	w.log.Info("DeleteOldTextChunksActivity: Deleting old text chunk records",
 		zap.String("fileUID", param.FileUID.String()))

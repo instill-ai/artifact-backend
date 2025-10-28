@@ -57,13 +57,13 @@ func IsDualProcessingNeeded(status string) bool {
 type KnowledgeBase interface {
 	CreateKnowledgeBase(ctx context.Context, kb KnowledgeBaseModel, externalService func(kbUID types.KBUIDType) error) (*KnowledgeBaseModel, error)
 	ListKnowledgeBases(ctx context.Context, ownerUID string) ([]KnowledgeBaseModel, error)
-	ListKnowledgeBasesByCatalogType(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType) ([]KnowledgeBaseModel, error)
-	ListKnowledgeBasesByCatalogTypeWithConfig(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType) ([]KnowledgeBaseWithConfig, error)
+	ListKnowledgeBasesByType(ctx context.Context, ownerUID string, kbType artifactpb.KnowledgeBaseType) ([]KnowledgeBaseModel, error)
+	ListKnowledgeBasesByTypeWithConfig(ctx context.Context, ownerUID string, kbType artifactpb.KnowledgeBaseType) ([]KnowledgeBaseWithConfig, error)
 	UpdateKnowledgeBase(ctx context.Context, id, ownerUID string, kb KnowledgeBaseModel) (*KnowledgeBaseModel, error)
 	DeleteKnowledgeBase(ctx context.Context, ownerUID, kbID string) (*KnowledgeBaseModel, error)
 	GetKnowledgeBaseByOwnerAndKbID(ctx context.Context, ownerUID types.OwnerUIDType, kbID string) (*KnowledgeBaseModel, error)
 	GetKnowledgeBaseByID(ctx context.Context, kbID string) (*KnowledgeBaseModel, error)
-	GetKnowledgeBaseCountByOwner(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType) (int64, error)
+	GetKnowledgeBaseCountByOwner(ctx context.Context, ownerUID string, kbType artifactpb.KnowledgeBaseType) (int64, error)
 	IncreaseKnowledgeBaseUsage(ctx context.Context, tx *gorm.DB, kbUID string, amount int) error
 	GetKnowledgeBasesByUIDs(ctx context.Context, kbUIDs []types.KBUIDType) ([]KnowledgeBaseModel, error)
 	// GetKnowledgeBasesByUIDsWithConfig retrieves multiple KBs with their system configs
@@ -81,19 +81,19 @@ type KnowledgeBase interface {
 	IsCollectionInUse(ctx context.Context, collectionUID types.CollectionUIDType) (bool, error)
 	// IsKBUpdating checks if a KB is currently in updating state
 	IsKBUpdating(ctx context.Context, kbUID types.KBUIDType) (bool, error)
-	// GetStagingKBForProduction finds the staging KB associated with a production catalog
+	// GetStagingKBForProduction finds the staging KB associated with a production knowledge base
 	// Returns nil if no staging KB exists (no update in progress)
-	GetStagingKBForProduction(ctx context.Context, ownerUID types.OwnerUIDType, productionCatalogID string) (*KnowledgeBaseModel, error)
-	// GetRollbackKBForProduction finds the rollback KB for a production catalog during retention period
+	GetStagingKBForProduction(ctx context.Context, ownerUID types.OwnerUIDType, productionKBID string) (*KnowledgeBaseModel, error)
+	// GetRollbackKBForProduction finds the rollback KB for a production knowledge base during retention period
 	// Returns nil if no rollback KB exists (no retention period active)
-	GetRollbackKBForProduction(ctx context.Context, ownerUID types.OwnerUIDType, productionCatalogID string) (*KnowledgeBaseModel, error)
+	GetRollbackKBForProduction(ctx context.Context, ownerUID types.OwnerUIDType, productionKBID string) (*KnowledgeBaseModel, error)
 	// GetDualProcessingTarget determines if dual processing is needed and returns the target KB
 	// Returns a DualProcessingTarget with IsNeeded=false if no dual processing is needed
 	GetDualProcessingTarget(ctx context.Context, productionKB *KnowledgeBaseModel) (*DualProcessingTarget, error)
 	// RAG update methods
 	CreateStagingKnowledgeBase(ctx context.Context, original *KnowledgeBaseModel, newSystemUID *types.SystemUIDType, externalService func(kbUID types.KBUIDType) error) (*KnowledgeBaseModel, error)
 	// ListKnowledgeBasesForUpdate finds KBs ready for the next update cycle
-	ListKnowledgeBasesForUpdate(ctx context.Context, tagFilters []string, catalogIDs []string) ([]KnowledgeBaseModel, error)
+	ListKnowledgeBasesForUpdate(ctx context.Context, tagFilters []string, knowledgeBaseIDs []string) ([]KnowledgeBaseModel, error)
 	// ListKnowledgeBasesByUpdateStatus lists all KBs with a specific update_status
 	ListKnowledgeBasesByUpdateStatus(ctx context.Context, updateStatus string) ([]KnowledgeBaseModel, error)
 	// ListAllKnowledgeBasesAdmin lists all production KBs across all owners (admin only)
@@ -129,8 +129,8 @@ type KnowledgeBaseModel struct {
 	// creator
 	CreatorUID types.CreatorUIDType `gorm:"column:creator_uid;type:uuid;not null" json:"creator_uid"`
 	Usage      int64                `gorm:"column:usage;not null;default:0" json:"usage"`
-	// this type is defined in artifact/artifact/v1alpha/catalog.proto
-	CatalogType string `gorm:"column:catalog_type;size:255" json:"catalog_type"`
+	// this type is defined in artifact/artifact/v1alpha/knowledge_base.proto
+	KnowledgeBaseType string `gorm:"column:knowledge_base_type;size:255" json:"knowledge_base_type"`
 
 	// SystemUID is a foreign key reference to the system table
 	// Following the pattern: {referenced_table}_uid
@@ -217,7 +217,7 @@ type KnowledgeBaseColumns struct {
 	UpdateTime             string
 	DeleteTime             string
 	Usage                  string
-	CatalogType            string
+	KnowledgeBaseType      string
 	ActiveCollectionUID    string
 	Staging                string
 	UpdateStatus           string
@@ -238,7 +238,7 @@ var KnowledgeBaseColumn = KnowledgeBaseColumns{
 	UpdateTime:             "update_time",
 	DeleteTime:             "delete_time",
 	Usage:                  "usage",
-	CatalogType:            "catalog_type",
+	KnowledgeBaseType:      "knowledge_base_type",
 	ActiveCollectionUID:    "active_collection_uid",
 	Staging:                "staging",
 	UpdateStatus:           "update_status",
@@ -350,23 +350,23 @@ func (r *repository) ListKnowledgeBases(ctx context.Context, owner string) ([]Kn
 	return knowledgeBases, nil
 }
 
-// ListKnowledgeBasesByCatalogType fetches all KnowledgeBaseModel records from the database, excluding soft-deleted ones.
+// ListKnowledgeBasesByType fetches all KnowledgeBaseModel records from the database, excluding soft-deleted ones.
 // Only returns production KBs (staging=false), as staging KBs are internal implementation details
-func (r *repository) ListKnowledgeBasesByCatalogType(ctx context.Context, owner string, catalogType artifactpb.CatalogType) ([]KnowledgeBaseModel, error) {
+func (r *repository) ListKnowledgeBasesByType(ctx context.Context, owner string, kbType artifactpb.KnowledgeBaseType) ([]KnowledgeBaseModel, error) {
 	var knowledgeBases []KnowledgeBaseModel
 	// GORM's DeletedAt automatically filters out soft-deleted records
 	// Filter for staging=false to exclude staging/rollback KBs from user-facing APIs
-	whereString := fmt.Sprintf("%v = ? AND %v = ? AND %v = ?", KnowledgeBaseColumn.Owner, KnowledgeBaseColumn.CatalogType, KnowledgeBaseColumn.Staging)
-	if err := r.db.WithContext(ctx).Where(whereString, owner, catalogType.String(), false).Find(&knowledgeBases).Error; err != nil {
+	whereString := fmt.Sprintf("%v = ? AND %v = ? AND %v = ?", KnowledgeBaseColumn.Owner, KnowledgeBaseColumn.KnowledgeBaseType, KnowledgeBaseColumn.Staging)
+	if err := r.db.WithContext(ctx).Where(whereString, owner, kbType.String(), false).Find(&knowledgeBases).Error; err != nil {
 		return nil, err
 	}
 
 	return knowledgeBases, nil
 }
 
-// ListKnowledgeBasesByCatalogTypeWithConfig retrieves KBs by catalog type with their system configs joined
+// ListKnowledgeBasesByTypeWithConfig retrieves KBs by type with their system configs joined
 // Only returns production KBs (staging=false), as staging KBs are internal implementation details
-func (r *repository) ListKnowledgeBasesByCatalogTypeWithConfig(ctx context.Context, owner string, catalogType artifactpb.CatalogType) ([]KnowledgeBaseWithConfig, error) {
+func (r *repository) ListKnowledgeBasesByTypeWithConfig(ctx context.Context, owner string, kbType artifactpb.KnowledgeBaseType) ([]KnowledgeBaseWithConfig, error) {
 	type tempResult struct {
 		KnowledgeBaseModel
 		ConfigJSON json.RawMessage `gorm:"column:config"`
@@ -379,7 +379,7 @@ func (r *repository) ListKnowledgeBasesByCatalogTypeWithConfig(ctx context.Conte
 		Joins("INNER JOIN system s ON kb.system_uid = s.uid").
 		Where("kb.delete_time IS NULL").
 		Where("kb.owner = ?", owner).
-		Where("kb.catalog_type = ?", catalogType.String()).
+		Where("kb.knowledge_base_type = ?", kbType.String()).
 		Where("kb.staging = ?", false).
 		Scan(&tempResults).Error
 
@@ -456,8 +456,8 @@ func (r *repository) UpdateKnowledgeBaseWithMap(ctx context.Context, id, owner s
 // Without this, queries will fail because resources point to old KB UIDs.
 func (r *repository) UpdateKnowledgeBaseResources(ctx context.Context, fromKBUID, toKBUID types.KBUIDType) error {
 	tables := []string{
-		"knowledge_base_file",
-		"text_chunk",
+		"file",
+		"chunk",
 		"embedding",
 		"converted_file",
 	}
@@ -545,7 +545,7 @@ func (r *repository) GetKnowledgeBaseByOwnerAndKbID(ctx context.Context, owner t
 	return &existingKB, nil
 }
 
-// GetKnowledgeBaseByID gets a knowledge base by catalog ID (without owner filtering)
+// GetKnowledgeBaseByID gets a knowledge base by ID (without owner filtering)
 func (r *repository) GetKnowledgeBaseByID(ctx context.Context, kbID string) (*KnowledgeBaseModel, error) {
 	var kb KnowledgeBaseModel
 	whereString := fmt.Sprintf("%v = ? AND %v is NULL", KnowledgeBaseColumn.KBID, KnowledgeBaseColumn.DeleteTime)
@@ -581,12 +581,12 @@ func (r *repository) ListAllKnowledgeBasesAdmin(ctx context.Context) ([]Knowledg
 
 // get the count of knowledge bases by owner
 // Only counts production KBs (staging=false), as staging KBs are internal implementation details
-func (r *repository) GetKnowledgeBaseCountByOwner(ctx context.Context, owner string, catalogType artifactpb.CatalogType) (int64, error) {
+func (r *repository) GetKnowledgeBaseCountByOwner(ctx context.Context, owner string, kbType artifactpb.KnowledgeBaseType) (int64, error) {
 	var count int64
 	// GORM automatically excludes soft-deleted records with gorm.DeletedAt
 	// Filter for staging=false to exclude staging/rollback KBs from user-facing counts
 	if err := r.db.WithContext(ctx).Model(&KnowledgeBaseModel{}).
-		Where("owner = ? AND catalog_type = ? AND staging = ?", owner, catalogType.String(), false).
+		Where("owner = ? AND knowledge_base_type = ? AND staging = ?", owner, kbType.String(), false).
 		Count(&count).Error; err != nil {
 		return 0, err
 	}
@@ -755,11 +755,11 @@ func (r *repository) IsKBUpdating(ctx context.Context, kbUID types.KBUIDType) (b
 	return updateStatus == artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING.String(), nil
 }
 
-// GetStagingKBForProduction finds the staging KB for a production catalog during an update
+// GetStagingKBForProduction finds the staging KB for a production knowledge base during an update
 // Returns nil if no staging KB exists (no update in progress)
-func (r *repository) GetStagingKBForProduction(ctx context.Context, ownerUID types.OwnerUIDType, productionCatalogID string) (*KnowledgeBaseModel, error) {
-	// Staging KB naming convention: {production-catalog-id}-staging
-	stagingCatalogID := fmt.Sprintf("%s-staging", productionCatalogID)
+func (r *repository) GetStagingKBForProduction(ctx context.Context, ownerUID types.OwnerUIDType, productionKBID string) (*KnowledgeBaseModel, error) {
+	// Staging KB naming convention: {production-kb-id}-staging
+	stagingKBID := fmt.Sprintf("%s-staging", productionKBID)
 
 	var stagingKB KnowledgeBaseModel
 	err := r.db.WithContext(ctx).
@@ -768,7 +768,7 @@ func (r *repository) GetStagingKBForProduction(ctx context.Context, ownerUID typ
 			KnowledgeBaseColumn.KBID,
 			KnowledgeBaseColumn.Staging,
 			KnowledgeBaseColumn.DeleteTime),
-			ownerUID, stagingCatalogID, true).
+			ownerUID, stagingKBID, true).
 		First(&stagingKB).
 		Error
 
@@ -777,17 +777,17 @@ func (r *repository) GetStagingKBForProduction(ctx context.Context, ownerUID typ
 			// No staging KB found - not an error, just means no update in progress
 			return nil, nil
 		}
-		return nil, fmt.Errorf("finding staging KB for %s: %w", productionCatalogID, err)
+		return nil, fmt.Errorf("finding staging KB for %s: %w", productionKBID, err)
 	}
 
 	return &stagingKB, nil
 }
 
-// GetRollbackKBForProduction finds the rollback KB for a production catalog during retention period
+// GetRollbackKBForProduction finds the rollback KB for a production knowledge base during retention period
 // Returns nil if no rollback KB exists (no retention period active)
-func (r *repository) GetRollbackKBForProduction(ctx context.Context, ownerUID types.OwnerUIDType, productionCatalogID string) (*KnowledgeBaseModel, error) {
-	// Rollback KB naming convention: {production-catalog-id}-rollback
-	rollbackCatalogID := fmt.Sprintf("%s-rollback", productionCatalogID)
+func (r *repository) GetRollbackKBForProduction(ctx context.Context, ownerUID types.OwnerUIDType, productionKBID string) (*KnowledgeBaseModel, error) {
+	// Rollback KB naming convention: {production-kb-id}-rollback
+	rollbackKBID := fmt.Sprintf("%s-rollback", productionKBID)
 
 	var rollbackKB KnowledgeBaseModel
 	err := r.db.WithContext(ctx).
@@ -796,7 +796,7 @@ func (r *repository) GetRollbackKBForProduction(ctx context.Context, ownerUID ty
 			KnowledgeBaseColumn.KBID,
 			KnowledgeBaseColumn.Staging,
 			KnowledgeBaseColumn.DeleteTime),
-			ownerUID, rollbackCatalogID, true).
+			ownerUID, rollbackKBID, true).
 		First(&rollbackKB).
 		Error
 
@@ -805,7 +805,7 @@ func (r *repository) GetRollbackKBForProduction(ctx context.Context, ownerUID ty
 			// No rollback KB found - not an error, just means no retention period active
 			return nil, nil
 		}
-		return nil, fmt.Errorf("finding rollback KB for %s: %w", productionCatalogID, err)
+		return nil, fmt.Errorf("finding rollback KB for %s: %w", productionKBID, err)
 	}
 
 	return &rollbackKB, nil
@@ -924,17 +924,17 @@ func (r *repository) CreateStagingKnowledgeBase(ctx context.Context, original *K
 	stagingKB := KnowledgeBaseModel{
 		// New UID is generated automatically by GORM
 		// Shadow KB naming: {original}-staging (simpler than version-based naming)
-		KBID:         fmt.Sprintf("%s-staging", original.KBID),
-		Description:  original.Description,
-		Tags:         append(original.Tags, "staging"),
-		Owner:        original.Owner,
-		CreatorUID:   original.CreatorUID,
-		CatalogType:  original.CatalogType,
-		SystemUID:    systemUID,
-		Staging:      true, // Mark as staging for staging KB
-		UpdateStatus: artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING.String(),
-		CreateTime:   &now,
-		UpdateTime:   &now,
+		KBID:              fmt.Sprintf("%s-staging", original.KBID),
+		Description:       original.Description,
+		Tags:              append(original.Tags, "staging"),
+		Owner:             original.Owner,
+		CreatorUID:        original.CreatorUID,
+		KnowledgeBaseType: original.KnowledgeBaseType,
+		SystemUID:         systemUID,
+		Staging:           true, // Mark as staging for staging KB
+		UpdateStatus:      artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING.String(),
+		CreateTime:        &now,
+		UpdateTime:        &now,
 		// ActiveCollectionUID will be set to staging KB's own UID by CreateKnowledgeBase
 		// This allows the staging KB to have its own collection with potentially different dimensionality
 	}
@@ -944,7 +944,7 @@ func (r *repository) CreateStagingKnowledgeBase(ctx context.Context, original *K
 
 // ListKnowledgeBasesForUpdate finds KBs ready for the next update cycle
 // It filters for production KBs that either have never been updated or have completed updates
-func (r *repository) ListKnowledgeBasesForUpdate(ctx context.Context, tagFilters []string, catalogIDs []string) ([]KnowledgeBaseModel, error) {
+func (r *repository) ListKnowledgeBasesForUpdate(ctx context.Context, tagFilters []string, knowledgeBaseIDs []string) ([]KnowledgeBaseModel, error) {
 	var kbs []KnowledgeBaseModel
 
 	// Filter: Not deleted
@@ -970,9 +970,9 @@ func (r *repository) ListKnowledgeBasesForUpdate(ctx context.Context, tagFilters
 		}
 	}
 
-	// Filter by specific catalog IDs if provided
-	if len(catalogIDs) > 0 {
-		query = query.Where(fmt.Sprintf("%v IN ?", KnowledgeBaseColumn.KBID), catalogIDs)
+	// Filter by specific knowledge base IDs if provided
+	if len(knowledgeBaseIDs) > 0 {
+		query = query.Where(fmt.Sprintf("%v IN ?", KnowledgeBaseColumn.KBID), knowledgeBaseIDs)
 	}
 
 	if err := query.Find(&kbs).Error; err != nil {

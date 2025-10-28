@@ -31,10 +31,10 @@
  *    - Cache support depends on the configured model
  *
  * Test Data Management:
- * - All test catalogs use "test-" prefix for easy identification
- * - Setup: Cleans up orphaned catalogs from previous failed runs
- * - Teardown: Removes all test catalogs after completion
- * - Each test group creates and cleans up its own catalog
+ * - All test knowledge bases use "test-" prefix for easy identification
+ * - Setup: Cleans up orphaned knowledge bases from previous failed runs
+ * - Teardown: Removes all test knowledge bases after completion
+ * - Each test group creates and cleans up its own knowledge base
  *
  * API Key Requirements:
  * - AI client API key must be configured for these tests to pass
@@ -88,24 +88,24 @@ export function setup() {
         }
     })
 
-    // Cleanup orphaned catalogs from previous failed test runs OF THIS SPECIFIC TEST
+    // Cleanup orphaned knowledge bases from previous failed test runs OF THIS SPECIFIC TEST
     // Use API-only cleanup to properly trigger workflows (no direct DB manipulation)
     console.log("\n=== SETUP: Cleaning up previous test data (test-ai-* pattern only) ===");
     try {
-        const listResp = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${resp.json().user.id}/catalogs`, null, header);
+        const listResp = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${resp.json().user.id}/knowledge-bases`, null, header);
         if (listResp.status === 200) {
-            const catalogs = Array.isArray(listResp.json().catalogs) ? listResp.json().catalogs : [];
+            const knowledgeBases = Array.isArray(listResp.json().knowledgeBases) ? listResp.json().knowledgeBases : [];
             let cleanedCount = 0;
-            for (const catalog of catalogs) {
-                const catId = catalog.id;
-                if (catId && catId.match(/^test-ai-/)) {
-                    const delResp = http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${resp.json().user.id}/catalogs/${catId}`, null, header);
+            for (const kb of knowledgeBases) {
+                const kbId = kb.id;
+                if (kbId && kbId.match(/^test-ai-/)) {
+                    const delResp = http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${resp.json().user.id}/knowledge-bases/${kbId}`, null, header);
                     if (delResp.status === 200 || delResp.status === 204) {
                         cleanedCount++;
                     }
                 }
             }
-            console.log(`Cleaned ${cleanedCount} orphaned catalogs from previous test runs`);
+            console.log(`Cleaned ${cleanedCount} orphaned knowledge bases from previous test runs`);
         }
     } catch (e) {
         console.log(`Setup cleanup warning: ${e}`);
@@ -119,24 +119,24 @@ export function setup() {
 }
 
 export function teardown(data) {
-    // Final cleanup: Remove any remaining test catalogs (test-ai-* pattern only)
-    // This catches any catalogs left behind if tests failed or were interrupted
+    // Final cleanup: Remove any remaining test knowledge bases (test-ai-* pattern only)
+    // This catches any knowledge bases left behind if tests failed or were interrupted
     console.log("\n=== TEARDOWN: Final cleanup of test data (test-ai-* pattern only) ===");
     try {
-        const listResp = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, data.header);
+        const listResp = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`, null, data.header);
         if (listResp.status === 200) {
-            const catalogs = Array.isArray(listResp.json().catalogs) ? listResp.json().catalogs : [];
+            const knowledgeBases = Array.isArray(listResp.json().knowledgeBases) ? listResp.json().knowledgeBases : [];
             let cleanedCount = 0;
-            for (const catalog of catalogs) {
-                const catId = catalog.id;
-                if (catId && catId.match(/^test-ai-/)) {
-                    const delResp = http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catId}`, null, data.header);
+            for (const kb of knowledgeBases) {
+                const kbId = kb.id;
+                if (kbId && kbId.match(/^test-ai-/)) {
+                    const delResp = http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${kbId}`, null, data.header);
                     if (delResp.status === 200 || delResp.status === 204) {
                         cleanedCount++;
                     }
                 }
             }
-            console.log(`Cleaned ${cleanedCount} remaining catalogs after test completion`);
+            console.log(`Cleaned ${cleanedCount} remaining knowledge bases after test completion`);
         }
     } catch (e) {
         console.log(`Teardown cleanup warning: ${e}`);
@@ -163,7 +163,7 @@ export default function (data) {
         // Create knowledge base
         const createKBResp = http.request(
             "POST",
-            `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+            `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
             JSON.stringify({
                 id: kbName,
                 description: "Test KB for AI content conversion",
@@ -180,14 +180,14 @@ export default function (data) {
             return; // Skip rest of test if KB creation failed
         }
 
-        const kbUid = createKBResp.json().catalog.uid;
-        const catalogId = createKBResp.json().catalog.id;
+        const kbUid = createKBResp.json().knowledgeBase.uid;
+        const knowledgeBaseId = createKBResp.json().knowledgeBase.id;
 
         // Upload a text file for conversion testing with Gemini
         const testContent = "This is a test document for Gemini content conversion testing.\n\nIt contains multiple paragraphs.\n\nAnd tests markdown extraction.";
 
         const uploadResp = helper.uploadFileWithRetry(
-            `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
+            `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
             {
                 filename: "test-gemini-conversion.txt",
                 type: "TYPE_TEXT",
@@ -204,7 +204,7 @@ export default function (data) {
         if (!uploadResp || uploadResp.status !== 200) {
             console.log(`AI Test 2.2 FAILED: Status ${uploadResp.status}, Body: ${uploadResp.body}`);
             // Cleanup KB before returning (no files to wait for since upload failed)
-            http.request("DELETE", `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+            http.request("DELETE", `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
             return;
         }
 
@@ -216,7 +216,7 @@ export default function (data) {
         console.log(`AI Test 2.3: Waiting for file processing (fileUid: ${fileUid})...`);
         const result = helper.waitForFileProcessingComplete(
             data.expectedOwner.id,
-            catalogId,
+            knowledgeBaseId,
             fileUid, // Use UID, not short ID
             data.header,
             120, // Max 120 seconds
@@ -244,7 +244,7 @@ export default function (data) {
                 sleep(1); // Wait 1 second between retries
                 chunksResp = http.request(
                     "GET",
-                    `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${fileId}/chunks`,
+                    `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileId}/chunks`,
                     null,
                     data.header
                 );
@@ -281,14 +281,14 @@ export default function (data) {
             }
         }
 
-        // Cleanup: Wait for all file processing in this catalog to complete
-        // Use the helper function with catalog ID as prefix filter
-        console.log(`AI Test 2.6: Ensuring all catalog file processing complete before cleanup...`);
-        helper.waitForAllFileProcessingComplete(30, catalogId);
+        // Cleanup: Wait for all file processing in this knowledge base to complete
+        // Use the helper function with knowledge base ID as prefix filter
+        console.log(`AI Test 2.6: Ensuring all knowledge base file processing complete before cleanup...`);
+        helper.waitForAllFileProcessingComplete(30, knowledgeBaseId);
 
         const deleteResp = http.request(
             "DELETE",
-            `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`,
+            `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`,
             null,
             data.header
         );
@@ -310,7 +310,7 @@ export default function (data) {
         // Create knowledge base
         const createKBResp = http.request(
             "POST",
-            `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+            `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
             JSON.stringify({
                 id: kbName,
                 description: "Test KB for AI embedding generation",
@@ -327,14 +327,14 @@ export default function (data) {
             return;
         }
 
-        const kbUid = createKBResp.json().catalog.uid;
-        const catalogId = createKBResp.json().catalog.id;
+        const kbUid = createKBResp.json().knowledgeBase.uid;
+        const knowledgeBaseId = createKBResp.json().knowledgeBase.id;
 
         // Upload a file for embedding testing
         const testContent = "Artificial Intelligence and Machine Learning are transforming technology. Deep learning models process vast amounts of data.";
 
         const uploadResp = helper.uploadFileWithRetry(
-            `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
+            `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
             {
                 filename: "test-embedding.txt",
                 type: "TYPE_TEXT",
@@ -351,7 +351,7 @@ export default function (data) {
         if (!uploadResp || uploadResp.status !== 200) {
             console.log(`AI Test 3.2 FAILED: Status ${uploadResp.status}, Body: ${uploadResp.body}`);
             // Cleanup KB before returning (no files to wait for since upload failed)
-            http.request("DELETE", `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+            http.request("DELETE", `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
             return;
         }
 
@@ -363,7 +363,7 @@ export default function (data) {
         console.log(`AI Test 3.3: Waiting for file embedding processing (fileUid: ${fileUid})...`);
         const result = helper.waitForFileProcessingComplete(
             data.expectedOwner.id,
-            catalogId,
+            knowledgeBaseId,
             fileUid, // Use UID, not short ID
             data.header,
             120, // Max 120 seconds
@@ -402,7 +402,7 @@ export default function (data) {
         if (processedStatus) {
             const searchResp = http.request(
                 "POST",
-                `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/searchChunks`,
+                `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/searchChunks`,
                 JSON.stringify({
                     textPrompt: "machine learning",
                     topK: 5,
@@ -427,13 +427,13 @@ export default function (data) {
             }
         }
 
-        // Cleanup: Wait for file processing before deleting catalog
+        // Cleanup: Wait for file processing before deleting knowledge base
         console.log(`AI Test 3.6: Waiting for file processing before cleanup...`);
         sleep(2); // Small grace period for workflow to complete final steps
 
         http.request(
             "DELETE",
-            `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`,
+            `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`,
             null,
             data.header
         );
@@ -447,7 +447,7 @@ export default function (data) {
         // Create knowledge base
         const createKBResp = http.request(
             "POST",
-            `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+            `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
             JSON.stringify({
                 id: kbName,
                 description: "Test KB for AI summary generation",
@@ -464,8 +464,8 @@ export default function (data) {
             return;
         }
 
-        const kbUid = createKBResp.json().catalog.uid;
-        const catalogId = createKBResp.json().catalog.id;
+        const kbUid = createKBResp.json().knowledgeBase.uid;
+        const knowledgeBaseId = createKBResp.json().knowledgeBase.id;
 
         // Upload a longer text file for summary testing
         const longContent = `
@@ -487,7 +487,7 @@ in artificial intelligence integration and customer satisfaction metrics.
         `.trim();
 
         const uploadResp = helper.uploadFileWithRetry(
-            `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
+            `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
             {
                 filename: "test-summary.txt",
                 type: "TYPE_TEXT",
@@ -504,7 +504,7 @@ in artificial intelligence integration and customer satisfaction metrics.
         if (!uploadResp || uploadResp.status !== 200) {
             console.log(`AI Test 4.2 FAILED: Status ${uploadResp.status}, Body: ${uploadResp.body}`);
             // Cleanup KB before returning (no files to wait for since upload failed)
-            http.request("DELETE", `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+            http.request("DELETE", `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
             return;
         }
 
@@ -516,7 +516,7 @@ in artificial intelligence integration and customer satisfaction metrics.
         console.log(`AI Test 4.3: Waiting for file summary processing (fileUid: ${fileUid})...`);
         const result = helper.waitForFileProcessingComplete(
             data.expectedOwner.id,
-            catalogId,
+            knowledgeBaseId,
             fileUid, // Use UID, not short ID
             data.header,
             120, // Max 120 seconds
@@ -544,7 +544,7 @@ in artificial intelligence integration and customer satisfaction metrics.
                 sleep(1); // Wait 1 second between retries
                 summaryResp = http.request(
                     "GET",
-                    `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${fileId}?view=VIEW_SUMMARY`,
+                    `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileId}?view=VIEW_SUMMARY`,
                     null,
                     data.header
                 );
@@ -570,13 +570,13 @@ in artificial intelligence integration and customer satisfaction metrics.
             });
         }
 
-        // Cleanup: Wait for file processing before deleting catalog
+        // Cleanup: Wait for file processing before deleting knowledge base
         console.log(`AI Test 4.6: Waiting for file processing before cleanup...`);
         sleep(2); // Small grace period for workflow to complete final steps
 
         http.request(
             "DELETE",
-            `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`,
+            `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`,
             null,
             data.header
         );
@@ -590,7 +590,7 @@ in artificial intelligence integration and customer satisfaction metrics.
         // Create knowledge base
         const createKBResp = http.request(
             "POST",
-            `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+            `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
             JSON.stringify({
                 id: kbName,
                 description: "Test KB for AI cache functionality",
@@ -607,14 +607,14 @@ in artificial intelligence integration and customer satisfaction metrics.
             return;
         }
 
-        const kbUid = createKBResp.json().catalog.uid;
-        const catalogId = createKBResp.json().catalog.id;
+        const kbUid = createKBResp.json().knowledgeBase.uid;
+        const knowledgeBaseId = createKBResp.json().knowledgeBase.id;
 
         // Upload file - this should create a Gemini cache during processing
         const testContent = "Cache test content for Gemini client validation with native caching support.";
 
         const uploadResp = helper.uploadFileWithRetry(
-            `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
+            `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
             {
                 filename: "test-gemini-cache.txt",
                 type: "TYPE_TEXT",
@@ -631,7 +631,7 @@ in artificial intelligence integration and customer satisfaction metrics.
         if (!uploadResp || uploadResp.status !== 200) {
             console.log(`AI Test 5.2 FAILED: Status ${uploadResp.status}, Body: ${uploadResp.body}`);
             // Cleanup KB before returning (no files to wait for since upload failed)
-            http.request("DELETE", `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+            http.request("DELETE", `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
             return;
         }
 
@@ -643,7 +643,7 @@ in artificial intelligence integration and customer satisfaction metrics.
         console.log(`AI Test 5.3: Waiting for file processing with native cache (fileUid: ${fileUid})...`);
         const result = helper.waitForFileProcessingComplete(
             data.expectedOwner.id,
-            catalogId,
+            knowledgeBaseId,
             fileUid, // Use UID, not short ID
             data.header,
             120, // Max 120 seconds
@@ -660,14 +660,14 @@ in artificial intelligence integration and customer satisfaction metrics.
             "AI Test 5.3: File processes with native cache support": () => processedStatus,
         });
 
-        // Cleanup: Wait for all file processing in this catalog to complete
-        // Use the helper function with catalog ID as prefix filter
-        console.log(`AI Test 5.4: Ensuring all catalog file processing complete before cleanup...`);
-        helper.waitForAllFileProcessingComplete(30, catalogId);
+        // Cleanup: Wait for all file processing in this knowledge base to complete
+        // Use the helper function with knowledge base ID as prefix filter
+        console.log(`AI Test 5.4: Ensuring all knowledge base file processing complete before cleanup...`);
+        helper.waitForAllFileProcessingComplete(30, knowledgeBaseId);
 
         http.request(
             "DELETE",
-            `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`,
+            `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`,
             null,
             data.header
         );

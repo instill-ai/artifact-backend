@@ -48,24 +48,24 @@ export function setup() {
     headers: { "Authorization": `Bearer ${loginResp.json().accessToken}` }
   })
 
-  // Cleanup orphaned catalogs from previous failed test runs OF THIS SPECIFIC TEST
+  // Cleanup orphaned knowledge bases from previous failed test runs OF THIS SPECIFIC TEST
   // Use API-only cleanup to properly trigger workflows (no direct DB manipulation)
   console.log("\n=== SETUP: Cleaning up previous test data (reprocess pattern only) ===");
   try {
-    const listResp = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${resp.json().user.id}/catalogs`, null, header);
+    const listResp = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${resp.json().user.id}/knowledge-bases`, null, header);
     if (listResp.status === 200) {
-      const catalogs = Array.isArray(listResp.json().catalogs) ? listResp.json().catalogs : [];
+      const knowledgeBases = Array.isArray(listResp.json().knowledgeBases) ? listResp.json().knowledgeBases : [];
       let cleanedCount = 0;
-      for (const catalog of catalogs) {
-        const catId = catalog.id;
-        if (catId && catId.match(/test-[a-z0-9]+-reprocess-/)) {
-          const delResp = http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${resp.json().user.id}/catalogs/${catId}`, null, header);
+      for (const kb of knowledgeBases) {
+        const kbId = kb.id;
+        if (kbId && kbId.match(/test-[a-z0-9]+-reprocess-/)) {
+          const delResp = http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${resp.json().user.id}/knowledge-bases/${kbId}`, null, header);
           if (delResp.status === 200 || delResp.status === 204) {
             cleanedCount++;
           }
         }
       }
-      console.log(`Cleaned ${cleanedCount} orphaned catalogs from previous test runs`);
+      console.log(`Cleaned ${cleanedCount} orphaned knowledge bases from previous test runs`);
     }
   } catch (e) {
     console.log(`Setup cleanup warning: ${e}`);
@@ -84,8 +84,8 @@ export function teardown(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
-    // CRITICAL: Wait for THIS TEST's file processing to complete before deleting catalogs
-    // Deleting catalogs triggers cleanup workflows that drop vector DB collections
+    // CRITICAL: Wait for THIS TEST's file processing to complete before deleting knowledge bases
+    // Deleting knowledge bases triggers cleanup workflows that drop vector DB collections
     // If we delete while files are still processing, we get "collection does not exist" errors
     console.log("Teardown: Waiting for this test's file processing to complete...");
     const allProcessingComplete = helper.waitForAllFileProcessingComplete(120, data.dbIDPrefix);
@@ -93,17 +93,17 @@ export function teardown(data) {
       console.warn("Teardown: Some files still processing after 120s, proceeding anyway");
     }
 
-    // Clean up catalogs created by this test
-    var listResp = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, data.header)
+    // Clean up knowledge bases created by this test
+    var listResp = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`, null, data.header)
     if (listResp.status === 200) {
-      var catalogs = Array.isArray(listResp.json().catalogs) ? listResp.json().catalogs : []
+      var knowledgeBases = Array.isArray(listResp.json().knowledgeBases) ? listResp.json().knowledgeBases : []
 
-      for (const catalog of catalogs) {
-        // API returns catalogId (camelCase), not catalog_id
-        const catId = catalog.id;
-        if (catId && catId.startsWith(data.dbIDPrefix)) {
-          http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catId}`, null, data.header);
-          console.log(`Teardown: Deleted catalog ${catId}`);
+      for (const kb of knowledgeBases) {
+        // API returns knowledgeBaseId (camelCase), not knowledge_base_id
+        const kbId = kb.id;
+        if (kbId && kbId.startsWith(data.dbIDPrefix)) {
+          http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${kbId}`, null, data.header);
+          console.log(`Teardown: Deleted knowledge base ${kbId}`);
         }
       }
     }
@@ -140,32 +140,32 @@ export function CheckFileReprocessing(data) {
     check(true, { [constant.banner(groupName)]: () => true });
     console.log("=== Starting File Reprocessing Test ===");
 
-    // Step 1: Create a test catalog
-    console.log("Step 1: Creating test catalog...");
-    const catalogName = data.dbIDPrefix + "reprocess-" + randomString(5);
+    // Step 1: Create a test knowledge base
+    console.log("Step 1: Creating test knowledge base...");
+    const kbName = data.dbIDPrefix + "reprocess-" + randomString(5);
     const createRes = http.request(
       "POST",
-      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
       JSON.stringify({
-        id: catalogName,
+        id: kbName,
         description: "Reprocessing test",
         tags: ["test", "reprocess"]
       }),
       data.header
     );
 
-    let catalog;
-    try { catalog = createRes.json().catalog; } catch (e) { catalog = {}; }
-    const catalogId = catalog ? catalog.id : null;
-    const catalogUid = catalog ? catalog.uid : null;
+    let kb;
+    try { kb = createRes.json().knowledgeBase; } catch (e) { kb = {}; }
+    const knowledgeBaseId = kb ? kb.id : null;
+    const knowledgeBaseUid = kb ? kb.uid : null;
 
     check(createRes, {
-      "Reprocess: Catalog created": (r) => r.status === 200 && catalogId && catalogUid,
+      "Reprocess: Knowledge base created": (r) => r.status === 200 && knowledgeBaseId && knowledgeBaseUid,
     });
-    console.log(`✓ Catalog created: ${catalogId} (UID: ${catalogUid})`);
+    console.log(`✓ Knowledge base created: ${knowledgeBaseId} (UID: ${knowledgeBaseUid})`);
 
-    if (!catalogId || !catalogUid) {
-      console.log("✗ Failed to create catalog, aborting test");
+    if (!knowledgeBaseId || !knowledgeBaseUid) {
+      console.log("✗ Failed to create knowledge base, aborting test");
       return;
     }
 
@@ -179,7 +179,7 @@ export function CheckFileReprocessing(data) {
     const filename = `${data.dbIDPrefix}reprocess-test.pdf`;
     const uploadRes = http.request(
       "POST",
-      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
       JSON.stringify({
         filename: filename,
         type: "TYPE_PDF",
@@ -199,7 +199,7 @@ export function CheckFileReprocessing(data) {
 
     if (!fileUid) {
       console.log("✗ Failed to upload file, cleaning up and aborting");
-      http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+      http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
       sleep(5); // Wait for cleanup workflow
       return;
     }
@@ -212,7 +212,7 @@ export function CheckFileReprocessing(data) {
     // PDF files require: conversion -> summarizing -> chunking -> embedding
     const firstProcessResult = helper.waitForFileProcessingComplete(
       data.expectedOwner.id,
-      catalogId,
+      knowledgeBaseId,
       fileUid,
       data.header,
       600 // 5 minutes for PDF processing
@@ -220,7 +220,7 @@ export function CheckFileReprocessing(data) {
 
     if (firstProcessResult.status === "FAILED") {
       check(false, { [`Reprocess: First processing failed - ${firstProcessResult.error}`]: () => false });
-      http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+      http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
       sleep(5); // Wait for cleanup workflow
       return;
     }
@@ -231,7 +231,7 @@ export function CheckFileReprocessing(data) {
 
     if (!firstProcessResult.completed) {
       console.log(`✗ First processing did not complete (${firstProcessResult.status}), cleaning up and aborting`);
-      http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+      http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
       sleep(5); // Wait for cleanup workflow
       return;
     }
@@ -244,18 +244,18 @@ export function CheckFileReprocessing(data) {
     // Milvus: Vector inserts need time to be indexed and become queryable
     // This polling approach fixes race conditions that caused intermittent test failures
     const minioBlobsAfterFirst = {
-      converted: helper.pollMinIOObjects(catalogUid, fileUid, 'converted-file'),
-      chunks: helper.pollMinIOObjects(catalogUid, fileUid, 'chunk'),
+      converted: helper.pollMinIOObjects(knowledgeBaseUid, fileUid, 'converted-file'),
+      chunks: helper.pollMinIOObjects(knowledgeBaseUid, fileUid, 'chunk'),
     };
 
     // Poll database embeddings (handles transaction commit delays)
     const embeddingsAfterFirst = helper.pollEmbeddings(fileUid);
 
     // Poll Milvus vectors (handles indexing delays - can take 5-10 seconds)
-    const milvusVectorsAfterFirst = helper.pollMilvusVectors(catalogUid, fileUid);
+    const milvusVectorsAfterFirst = helper.pollMilvusVectors(knowledgeBaseUid, fileUid);
 
     // Poll pages and text chunks from API endpoint
-    const metadataAfterFirst = helper.pollFileMetadata(data.expectedOwner.id, catalogId, fileUid, data.header);
+    const metadataAfterFirst = helper.pollFileMetadata(data.expectedOwner.id, knowledgeBaseId, fileUid, data.header);
     const pagesAfterFirst = metadataAfterFirst.pages;
     const textChunksAfterFirst = metadataAfterFirst.chunks;
 
@@ -289,7 +289,7 @@ export function CheckFileReprocessing(data) {
       embeddingsAfterFirst === 0 || milvusVectorsAfterFirst === 0 ||
       pagesAfterFirst === 0 || textChunksAfterFirst === 0) {
       console.log("✗ Baseline verification failed, cleaning up and aborting");
-      http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+      http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
       sleep(5); // Wait for cleanup workflow
       return;
     }
@@ -311,7 +311,7 @@ export function CheckFileReprocessing(data) {
     // Note: Temporal workflows may take a few seconds to start due to task queue polling
     const secondProcessResult = helper.waitForFileProcessingComplete(
       data.expectedOwner.id,
-      catalogId,
+      knowledgeBaseId,
       fileUid,
       data.header,
       600
@@ -319,7 +319,7 @@ export function CheckFileReprocessing(data) {
 
     if (secondProcessResult.status === "FAILED") {
       check(false, { [`Reprocess: Second processing failed - ${secondProcessResult.error}`]: () => false });
-      http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+      http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
       sleep(5); // Wait for cleanup workflow
       return;
     }
@@ -330,7 +330,7 @@ export function CheckFileReprocessing(data) {
 
     if (!secondProcessResult.completed) {
       console.log(`✗ Reprocessing did not complete (${secondProcessResult.status}), cleaning up and aborting`);
-      http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+      http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
       sleep(5); // Wait for cleanup workflow
       return;
     }
@@ -339,17 +339,17 @@ export function CheckFileReprocessing(data) {
     // Step 6: Verify all intermediate data after reprocessing (FINAL COUNT)
     console.log("Step 6: Verifying resource counts after reprocessing...");
     // Poll storage systems again to handle eventual consistency after reprocessing
-    // IMPORTANT: Must count BEFORE catalog deletion, which triggers cleanup workflow
+    // IMPORTANT: Must count BEFORE knowledge base deletion, which triggers cleanup workflow
     const minioBlobsAfterSecond = {
-      converted: helper.pollMinIOObjects(catalogUid, fileUid, 'converted-file'),
-      chunks: helper.pollMinIOObjects(catalogUid, fileUid, 'chunk'),
+      converted: helper.pollMinIOObjects(knowledgeBaseUid, fileUid, 'converted-file'),
+      chunks: helper.pollMinIOObjects(knowledgeBaseUid, fileUid, 'chunk'),
     };
 
     const embeddingsAfterSecond = helper.pollEmbeddings(fileUid);
-    const milvusVectorsAfterSecond = helper.pollMilvusVectors(catalogUid, fileUid);
+    const milvusVectorsAfterSecond = helper.pollMilvusVectors(knowledgeBaseUid, fileUid);
 
     // Poll pages and text chunks from API endpoint after reprocessing
-    const metadataAfterSecond = helper.pollFileMetadata(data.expectedOwner.id, catalogId, fileUid, data.header);
+    const metadataAfterSecond = helper.pollFileMetadata(data.expectedOwner.id, knowledgeBaseId, fileUid, data.header);
     const pagesAfterSecond = metadataAfterSecond.pages;
     const textChunksAfterSecond = metadataAfterSecond.chunks;
 
@@ -379,7 +379,7 @@ export function CheckFileReprocessing(data) {
     if (minioBlobsAfterSecond.converted === 0 || minioBlobsAfterSecond.chunks === 0 ||
       embeddingsAfterSecond === 0 || milvusVectorsAfterSecond === 0 ||
       pagesAfterSecond === 0 || textChunksAfterSecond === 0) {
-      http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+      http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
       sleep(5); // Wait for cleanup workflow
       return;
     }
@@ -415,8 +415,8 @@ export function CheckFileReprocessing(data) {
     console.log(`✓ Verification: All counts unchanged (old resources deleted, new ones created)`);
     console.log("=== File Reprocessing Test Complete ===\n");
 
-    // Cleanup catalog - this triggers the cleanup workflow which deletes all remaining blobs
-    http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+    // Cleanup knowledge base - this triggers the cleanup workflow which deletes all remaining blobs
+    http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
 
     // Wait for cleanup workflow to complete before next test starts
     // This prevents race conditions with subsequent tests

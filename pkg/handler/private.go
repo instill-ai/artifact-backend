@@ -135,13 +135,13 @@ func (h *PrivateHandler) UpdateObjectAdmin(ctx context.Context, req *artifactpb.
 // GetFileAsMarkdownAdmin and GetChatFileAdmin have been removed.
 // Use GetFile with VIEW_CONTENT instead to get the converted markdown via pre-signed URL.
 
-// DeleteFileAdmin deletes a file from a catalog (admin only).
+// DeleteFileAdmin deletes a file from a knowledge base (admin only).
 // This is a private gRPC-only method for internal operations like integration tests.
 func (h *PrivateHandler) DeleteFileAdmin(ctx context.Context, req *artifactpb.DeleteFileAdminRequest) (*artifactpb.DeleteFileAdminResponse, error) {
 	h.logger.Info("DeleteFileAdmin CALLED",
 		zap.String("file_id_from_request", req.GetFileId()))
 
-	// For the admin endpoint, we only receive file_id, so we need to look up the namespace and catalog
+	// For the admin endpoint, we only receive file_id, so we need to look up the namespace and knowledge base
 	// from the file's KB to construct the full request for the public handler
 	fileUID := uuid.FromStringOrNil(req.GetFileId())
 
@@ -155,7 +155,7 @@ func (h *PrivateHandler) DeleteFileAdmin(ctx context.Context, req *artifactpb.De
 	kb, err := h.service.Repository().GetKnowledgeBaseByUID(ctx, file.KBUID)
 	if err != nil {
 		h.logger.Error("DeleteFileAdmin: failed to get KB", zap.Error(err))
-		return nil, fmt.Errorf("catalog not found: %w", err)
+		return nil, fmt.Errorf("knowledge base not found: %w", err)
 	}
 
 	// Create namespace ID from owner UID for the public API
@@ -188,9 +188,9 @@ func (h *PrivateHandler) DeleteFileAdmin(ctx context.Context, req *artifactpb.De
 	// - Dual deletion to staging/rollback KB if applicable
 	// - Cleanup workflow triggering
 	publicReq := &artifactpb.DeleteFileRequest{
-		NamespaceId: namespaceID,
-		CatalogId:   kb.KBID,
-		FileId:      req.FileId,
+		NamespaceId:     namespaceID,
+		KnowledgeBaseId: kb.KBID,
+		FileId:          req.FileId,
 	}
 
 	resp, err := publicHandler.DeleteFile(ctx, publicReq)
@@ -209,14 +209,14 @@ func (h *PrivateHandler) DeleteFileAdmin(ctx context.Context, req *artifactpb.De
 
 // RollbackAdmin rolls back a knowledge base to its previous version (admin only)
 func (h *PrivateHandler) RollbackAdmin(ctx context.Context, req *artifactpb.RollbackAdminRequest) (*artifactpb.RollbackAdminResponse, error) {
-	// Parse resource name: users/{user}/catalogs/{catalog}
+	// Parse resource name: users/{user}/knowledge-bases/{knowledge_base}
 	parts := strings.Split(req.Name, "/")
-	if len(parts) != 4 || parts[0] != "users" || parts[2] != "catalogs" {
+	if len(parts) != 4 || parts[0] != "users" || parts[2] != "knowledge-bases" {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid resource name format: %s", req.Name)
 	}
 
 	namespaceID := parts[1]
-	catalogID := parts[3]
+	knowledgeBaseID := parts[3]
 
 	// Parse owner UID
 	ownerUID, err := parseOwnerUID(namespaceID)
@@ -225,7 +225,7 @@ func (h *PrivateHandler) RollbackAdmin(ctx context.Context, req *artifactpb.Roll
 	}
 
 	// Call service with namespace ID for proper resource name construction
-	resp, err := h.service.RollbackAdmin(ctx, ownerUID, namespaceID, catalogID)
+	resp, err := h.service.RollbackAdmin(ctx, ownerUID, namespaceID, knowledgeBaseID)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to rollback: %v", err)
 	}
@@ -237,12 +237,12 @@ func (h *PrivateHandler) RollbackAdmin(ctx context.Context, req *artifactpb.Roll
 func (h *PrivateHandler) PurgeRollbackAdmin(ctx context.Context, req *artifactpb.PurgeRollbackAdminRequest) (*artifactpb.PurgeRollbackAdminResponse, error) {
 	// Parse resource name
 	parts := strings.Split(req.Name, "/")
-	if len(parts) != 4 || parts[0] != "users" || parts[2] != "catalogs" {
+	if len(parts) != 4 || parts[0] != "users" || parts[2] != "knowledge-bases" {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid resource name format: %s", req.Name)
 	}
 
 	userID := parts[1]
-	catalogID := parts[3]
+	knowledgeBaseID := parts[3]
 
 	// Parse owner UID
 	ownerUID, err := parseOwnerUID(userID)
@@ -251,7 +251,7 @@ func (h *PrivateHandler) PurgeRollbackAdmin(ctx context.Context, req *artifactpb
 	}
 
 	// Call service
-	resp, err := h.service.PurgeRollbackAdmin(ctx, ownerUID, catalogID)
+	resp, err := h.service.PurgeRollbackAdmin(ctx, ownerUID, knowledgeBaseID)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to purge rollback: %v", err)
 	}
@@ -263,12 +263,12 @@ func (h *PrivateHandler) PurgeRollbackAdmin(ctx context.Context, req *artifactpb
 func (h *PrivateHandler) SetRollbackRetentionAdmin(ctx context.Context, req *artifactpb.SetRollbackRetentionAdminRequest) (*artifactpb.SetRollbackRetentionAdminResponse, error) {
 	// Parse resource name
 	parts := strings.Split(req.Name, "/")
-	if len(parts) != 4 || parts[0] != "users" || parts[2] != "catalogs" {
+	if len(parts) != 4 || parts[0] != "users" || parts[2] != "knowledge-bases" {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid resource name format: %s", req.Name)
 	}
 
 	userID := parts[1]
-	catalogID := parts[3]
+	knowledgeBaseID := parts[3]
 
 	// Parse owner UID
 	ownerUID, err := parseOwnerUID(userID)
@@ -282,7 +282,7 @@ func (h *PrivateHandler) SetRollbackRetentionAdmin(ctx context.Context, req *art
 	}
 
 	// Call service
-	resp, err := h.service.SetRollbackRetentionAdmin(ctx, ownerUID, catalogID, req.Duration, req.TimeUnit)
+	resp, err := h.service.SetRollbackRetentionAdmin(ctx, ownerUID, knowledgeBaseID, req.Duration, req.TimeUnit)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to set rollback retention: %v", err)
 	}
@@ -293,7 +293,7 @@ func (h *PrivateHandler) SetRollbackRetentionAdmin(ctx context.Context, req *art
 // ExecuteKnowledgeBaseUpdateAdmin executes the prepared knowledge base update (admin only)
 func (h *PrivateHandler) ExecuteKnowledgeBaseUpdateAdmin(ctx context.Context, req *artifactpb.ExecuteKnowledgeBaseUpdateAdminRequest) (*artifactpb.ExecuteKnowledgeBaseUpdateAdminResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
-	logger.Info("ExecuteKnowledgeBaseUpdateAdmin handler called", zap.Int("catalogCount", len(req.CatalogIds)), zap.Strings("catalogIds", req.CatalogIds))
+	logger.Info("ExecuteKnowledgeBaseUpdateAdmin handler called", zap.Int("knowledgeBaseCount", len(req.KnowledgeBaseIds)), zap.Strings("knowledgeBaseIds", req.KnowledgeBaseIds))
 
 	// Call service - pass Admin request directly
 	resp, err := h.service.ExecuteKnowledgeBaseUpdateAdmin(ctx, req)
@@ -309,7 +309,7 @@ func (h *PrivateHandler) ExecuteKnowledgeBaseUpdateAdmin(ctx context.Context, re
 // AbortKnowledgeBaseUpdateAdmin aborts ongoing KB update workflows (admin only)
 func (h *PrivateHandler) AbortKnowledgeBaseUpdateAdmin(ctx context.Context, req *artifactpb.AbortKnowledgeBaseUpdateAdminRequest) (*artifactpb.AbortKnowledgeBaseUpdateAdminResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
-	logger.Info("AbortKnowledgeBaseUpdateAdmin handler called", zap.Int("catalogCount", len(req.CatalogIds)), zap.Strings("catalogIds", req.CatalogIds))
+	logger.Info("AbortKnowledgeBaseUpdateAdmin handler called", zap.Int("knowledgeBaseCount", len(req.KnowledgeBaseIds)), zap.Strings("knowledgeBaseIds", req.KnowledgeBaseIds))
 
 	// Call service
 	resp, err := h.service.AbortKnowledgeBaseUpdateAdmin(ctx, req)

@@ -31,14 +31,14 @@ type Worker interface {
 	// CleanupKnowledgeBase cleans up a knowledge base using workflow
 	CleanupKnowledgeBase(ctx context.Context, kbUID types.KBUIDType) error
 
-	// ExecuteKnowledgeBaseUpdate triggers knowledge base updates for specified catalogs
+	// ExecuteKnowledgeBaseUpdate triggers knowledge base updates for specified knowledge bases
 	// This is the entry point for the 6-phase UpdateKnowledgeBaseWorkflow
 	// If systemID is specified, uses config from that system; otherwise uses KB's current config
-	ExecuteKnowledgeBaseUpdate(ctx context.Context, catalogIDs []string, systemID string) (*worker.UpdateRAGIndexResult, error)
+	ExecuteKnowledgeBaseUpdate(ctx context.Context, knowledgeBaseIDs []string, systemID string) (*worker.UpdateRAGIndexResult, error)
 
 	// AbortKnowledgeBaseUpdate aborts ongoing KB update workflows and cleans up staging resources
-	// If catalogIDs is empty, aborts all currently updating catalogs
-	AbortKnowledgeBaseUpdate(ctx context.Context, catalogIDs []string) (*worker.AbortKBUpdateResult, error)
+	// If knowledgeBaseIDs is empty, aborts all currently updating knowledge bases
+	AbortKnowledgeBaseUpdate(ctx context.Context, knowledgeBaseIDs []string) (*worker.AbortKBUpdateResult, error)
 
 	// RescheduleCleanupWorkflow cancels the existing cleanup workflow for a rollback KB
 	// and starts a new one with updated retention period

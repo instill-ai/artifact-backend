@@ -399,7 +399,7 @@ func TestKnowledgeBaseColumns(t *testing.T) {
 	c.Check(KnowledgeBaseColumn.UpdateTime, qt.Equals, "update_time")
 	c.Check(KnowledgeBaseColumn.DeleteTime, qt.Equals, "delete_time")
 	c.Check(KnowledgeBaseColumn.Usage, qt.Equals, "usage")
-	c.Check(KnowledgeBaseColumn.CatalogType, qt.Equals, "catalog_type")
+	c.Check(KnowledgeBaseColumn.KnowledgeBaseType, qt.Equals, "knowledge_base_type")
 	c.Check(KnowledgeBaseColumn.ActiveCollectionUID, qt.Equals, "active_collection_uid")
 	c.Check(KnowledgeBaseColumn.Staging, qt.Equals, "staging")
 	c.Check(KnowledgeBaseColumn.UpdateStatus, qt.Equals, "update_status")
