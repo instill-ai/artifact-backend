@@ -111,7 +111,7 @@ func (ph *PublicHandler) ListChunks(ctx context.Context, req *artifactpb.ListChu
 		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
 	}
 	if !granted {
-		return nil, fmt.Errorf("%w: no permission over catalog", errorsx.ErrUnauthorized)
+		return nil, fmt.Errorf("%w: no permission over knowledge base", errorsx.ErrUnauthorized)
 	}
 	// Get ALL text chunks for this file (content + summary + augmented)
 	// Note: A file can have multiple converted_files (e.g., content converted_file + summary converted_file)
@@ -182,7 +182,7 @@ func (ph *PublicHandler) UpdateChunk(ctx context.Context, req *artifactpb.Update
 		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
 	}
 	if !granted {
-		return nil, fmt.Errorf("%w: no permission over catalog", errorsx.ErrUnauthorized)
+		return nil, fmt.Errorf("%w: no permission over knowledge base", errorsx.ErrUnauthorized)
 	}
 
 	retrievable := req.Retrievable

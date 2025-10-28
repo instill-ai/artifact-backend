@@ -372,22 +372,22 @@ type UpdateRAGIndexResult struct {
 	Message string
 }
 
-// ExecuteKnowledgeBaseUpdate triggers knowledge base updates for specified catalogs
+// ExecuteKnowledgeBaseUpdate triggers knowledge base updates for specified knowledge bases
 // This method is the entry point for the 6-phase UpdateKnowledgeBaseWorkflow
-// If catalogIDs is empty, updates all eligible KBs. Otherwise, updates only specified KBs.
+// If knowledgeBaseIDs is empty, updates all eligible KBs. Otherwise, updates only specified KBs.
 // If systemID is specified, uses config from that system; otherwise uses KB's current config.
-func (w *Worker) ExecuteKnowledgeBaseUpdate(ctx context.Context, catalogIDs []string, systemID string) (*UpdateRAGIndexResult, error) {
+func (w *Worker) ExecuteKnowledgeBaseUpdate(ctx context.Context, knowledgeBaseIDs []string, systemID string) (*UpdateRAGIndexResult, error) {
 	// Get list of KBs to update
 	var kbs []repository.KnowledgeBaseModel
 	var err error
 
-	if len(catalogIDs) > 0 {
-		// Update specific catalogs
-		for _, catalogID := range catalogIDs {
-			kb, getErr := w.repository.GetKnowledgeBaseByID(ctx, catalogID)
+	if len(knowledgeBaseIDs) > 0 {
+		// Update specific knowledge bases
+		for _, knowledgeBaseID := range knowledgeBaseIDs {
+			kb, getErr := w.repository.GetKnowledgeBaseByID(ctx, knowledgeBaseID)
 			if getErr != nil {
-				w.log.Warn("Unable to get catalog for update",
-					zap.String("catalogID", catalogID),
+				w.log.Warn("Unable to get knowledge base for update",
+					zap.String("knowledgeBaseID", knowledgeBaseID),
 					zap.Error(getErr))
 				continue
 			}
@@ -400,14 +400,14 @@ func (w *Worker) ExecuteKnowledgeBaseUpdate(ctx context.Context, catalogIDs []st
 		// Update all eligible KBs
 		kbs, err = w.repository.ListKnowledgeBasesForUpdate(ctx, nil, nil)
 		if err != nil {
-			return nil, fmt.Errorf("failed to list eligible catalogs: %w", err)
+			return nil, fmt.Errorf("failed to list eligible knowledge bases: %w", err)
 		}
 	}
 
 	if len(kbs) == 0 {
 		return &UpdateRAGIndexResult{
 			Started: false,
-			Message: "No eligible catalogs found for update",
+			Message: "No eligible knowledge bases found for update",
 		}, nil
 	}
 
@@ -421,7 +421,7 @@ func (w *Worker) ExecuteKnowledgeBaseUpdate(ctx context.Context, catalogIDs []st
 		ownerUID, err := uuid.FromString(kb.Owner)
 		if err != nil {
 			w.log.Error("Failed to parse owner UID",
-				zap.String("catalogID", kb.KBID),
+				zap.String("knowledgeBaseID", kb.KBID),
 				zap.String("kbUID", kb.UID.String()),
 				zap.Error(err))
 			continue
@@ -444,7 +444,7 @@ func (w *Worker) ExecuteKnowledgeBaseUpdate(ctx context.Context, catalogIDs []st
 
 		if err != nil {
 			w.log.Error("Failed to start update workflow for KB",
-				zap.String("catalogID", kb.KBID),
+				zap.String("knowledgeBaseID", kb.KBID),
 				zap.String("kbUID", kb.UID.String()),
 				zap.Error(err))
 			continue
@@ -452,52 +452,52 @@ func (w *Worker) ExecuteKnowledgeBaseUpdate(ctx context.Context, catalogIDs []st
 
 		successCount++
 		w.log.Info("Update workflow started for KB",
-			zap.String("catalogID", kb.KBID),
+			zap.String("knowledgeBaseID", kb.KBID),
 			zap.String("kbUID", kb.UID.String()))
 	}
 
 	if successCount == 0 {
 		return &UpdateRAGIndexResult{
 			Started: false,
-			Message: "Failed to start update workflows for any catalogs",
+			Message: "Failed to start update workflows for any knowledge bases",
 		}, fmt.Errorf("failed to start any update workflows")
 	}
 
 	return &UpdateRAGIndexResult{
 		Started: true,
-		Message: fmt.Sprintf("Knowledge base update initiated for %d/%d catalogs", successCount, len(kbs)),
+		Message: fmt.Sprintf("Knowledge base update initiated for %d/%d knowledge bases", successCount, len(kbs)),
 	}, nil
 }
 
 // AbortKBUpdateResult holds results of abort operation
 type AbortKBUpdateResult struct {
-	Success       bool
-	Message       string
-	AbortedCount  int
-	CatalogStatus []CatalogAbortStatus
+	Success             bool
+	Message             string
+	AbortedCount        int
+	KnowledgeBaseStatus []KnowledgeBaseAbortStatus
 }
 
-// CatalogAbortStatus holds status for an individual aborted catalog
-type CatalogAbortStatus struct {
-	CatalogID    string
-	CatalogUID   string
-	WorkflowID   string
-	Status       string
-	ErrorMessage string
+// KnowledgeBaseAbortStatus holds status for an individual aborted knowledge base
+type KnowledgeBaseAbortStatus struct {
+	KnowledgeBaseID  string // Keep field name for backward compatibility with existing code
+	KnowledgeBaseUID string // Keep field name for backward compatibility with existing code
+	WorkflowID       string
+	Status           string
+	ErrorMessage     string
 }
 
 // AbortKnowledgeBaseUpdate aborts ongoing KB update workflows and cleans up staging resources
-func (w *Worker) AbortKnowledgeBaseUpdate(ctx context.Context, catalogIDs []string) (*AbortKBUpdateResult, error) {
+func (w *Worker) AbortKnowledgeBaseUpdate(ctx context.Context, knowledgeBaseIDs []string) (*AbortKBUpdateResult, error) {
 	// Get list of KBs currently updating
 	var kbs []repository.KnowledgeBaseModel
 
-	if len(catalogIDs) > 0 {
-		// Abort specific catalogs
-		for _, catalogID := range catalogIDs {
-			kb, getErr := w.repository.GetKnowledgeBaseByID(ctx, catalogID)
+	if len(knowledgeBaseIDs) > 0 {
+		// Abort specific knowledge bases
+		for _, knowledgeBaseID := range knowledgeBaseIDs {
+			kb, getErr := w.repository.GetKnowledgeBaseByID(ctx, knowledgeBaseID)
 			if getErr != nil {
-				w.log.Warn("Unable to get catalog for abort",
-					zap.String("catalogID", catalogID),
+				w.log.Warn("Unable to get knowledge base for abort",
+					zap.String("knowledgeBaseID", knowledgeBaseID),
 					zap.Error(getErr))
 				continue
 			}
@@ -533,20 +533,20 @@ func (w *Worker) AbortKnowledgeBaseUpdate(ctx context.Context, catalogIDs []stri
 	if len(kbs) == 0 {
 		return &AbortKBUpdateResult{
 			Success: true,
-			Message: "No catalogs currently updating",
+			Message: "No knowledge bases currently updating",
 		}, nil
 	}
 
 	// Abort each KB update
 	abortedCount := 0
-	var catalogStatuses []CatalogAbortStatus
+	var knowledgeBaseStatuses []KnowledgeBaseAbortStatus
 
 	for _, kb := range kbs {
-		status := CatalogAbortStatus{
-			CatalogID:  kb.KBID,
-			CatalogUID: kb.UID.String(),
-			WorkflowID: kb.UpdateWorkflowID,
-			Status:     artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_ABORTED.String(),
+		status := KnowledgeBaseAbortStatus{
+			KnowledgeBaseID:  kb.KBID,
+			KnowledgeBaseUID: kb.UID.String(),
+			WorkflowID:       kb.UpdateWorkflowID,
+			Status:           artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_ABORTED.String(),
 		}
 
 		// Cancel the workflow
@@ -554,7 +554,7 @@ func (w *Worker) AbortKnowledgeBaseUpdate(ctx context.Context, catalogIDs []stri
 			err := w.temporalClient.CancelWorkflow(ctx, kb.UpdateWorkflowID, "")
 			if err != nil {
 				w.log.Warn("Failed to cancel workflow (may have already completed)",
-					zap.String("catalogID", kb.KBID),
+					zap.String("knowledgeBaseID", kb.KBID),
 					zap.String("workflowID", kb.UpdateWorkflowID),
 					zap.Error(err))
 				// Continue with cleanup even if cancel fails
@@ -566,7 +566,7 @@ func (w *Worker) AbortKnowledgeBaseUpdate(ctx context.Context, catalogIDs []stri
 		ownerUID, err := uuid.FromString(kb.Owner)
 		if err != nil {
 			w.log.Warn("Failed to parse owner UID",
-				zap.String("catalogID", kb.KBID),
+				zap.String("knowledgeBaseID", kb.KBID),
 				zap.String("owner", kb.Owner),
 				zap.Error(err))
 		} else {
@@ -592,7 +592,7 @@ func (w *Worker) AbortKnowledgeBaseUpdate(ctx context.Context, catalogIDs []stri
 		err = w.repository.UpdateKnowledgeBaseAborted(ctx, kb.UID)
 		if err != nil {
 			w.log.Error("Failed to update KB status to aborted",
-				zap.String("catalogID", kb.KBID),
+				zap.String("knowledgeBaseID", kb.KBID),
 				zap.String("kbUID", kb.UID.String()),
 				zap.Error(err))
 			status.ErrorMessage = fmt.Sprintf("failed to update status: %v", err)
@@ -600,28 +600,28 @@ func (w *Worker) AbortKnowledgeBaseUpdate(ctx context.Context, catalogIDs []stri
 		} else {
 			abortedCount++
 			w.log.Info("Successfully aborted KB update",
-				zap.String("catalogID", kb.KBID),
+				zap.String("knowledgeBaseID", kb.KBID),
 				zap.String("kbUID", kb.UID.String()),
 				zap.String("workflowID", kb.UpdateWorkflowID))
 		}
 
-		catalogStatuses = append(catalogStatuses, status)
+		knowledgeBaseStatuses = append(knowledgeBaseStatuses, status)
 	}
 
 	if abortedCount == 0 {
 		return &AbortKBUpdateResult{
-			Success:       false,
-			Message:       "Failed to abort any catalog updates",
-			AbortedCount:  0,
-			CatalogStatus: catalogStatuses,
-		}, fmt.Errorf("failed to abort any catalog updates")
+			Success:             false,
+			Message:             "Failed to abort any knowledge base updates",
+			AbortedCount:        0,
+			KnowledgeBaseStatus: knowledgeBaseStatuses,
+		}, fmt.Errorf("failed to abort any knowledge base updates")
 	}
 
 	return &AbortKBUpdateResult{
-		Success:       true,
-		Message:       fmt.Sprintf("Successfully aborted %d/%d catalog updates", abortedCount, len(kbs)),
-		AbortedCount:  abortedCount,
-		CatalogStatus: catalogStatuses,
+		Success:             true,
+		Message:             fmt.Sprintf("Successfully aborted %d/%d knowledge base updates", abortedCount, len(kbs)),
+		AbortedCount:        abortedCount,
+		KnowledgeBaseStatus: knowledgeBaseStatuses,
 	}, nil
 }
 
@@ -697,7 +697,7 @@ func (w *Worker) deleteKnowledgeBaseSync(ctx context.Context, kbUID string) erro
 	if err != nil {
 		return errorsx.AddMessage(
 			fmt.Errorf("invalid knowledge base UID: %w", err),
-			"Invalid catalog identifier. Please check the catalog ID and try again.",
+			"Invalid knowledge base identifier. Please check the knowledge base ID and try again.",
 		)
 	}
 
@@ -705,7 +705,7 @@ func (w *Worker) deleteKnowledgeBaseSync(ctx context.Context, kbUID string) erro
 	if err != nil {
 		return errorsx.AddMessage(
 			fmt.Errorf("failed to list knowledge base files: %w", err),
-			"Unable to list catalog files. Please try again.",
+			"Unable to list knowledge base files. Please try again.",
 		)
 	}
 	return w.deleteFilesSync(ctx, config.Config.Minio.BucketName, filePaths)

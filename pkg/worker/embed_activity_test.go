@@ -489,7 +489,7 @@ func createActivityTestEmbeddings(count int) []repository.EmbeddingModel {
 	for i := 0; i < count; i++ {
 		embeddings[i] = repository.EmbeddingModel{
 			UID:         uuid.Must(uuid.NewV4()),
-			SourceTable: "text_chunk",
+			SourceTable: "chunk",
 			SourceUID:   uuid.Must(uuid.NewV4()),
 			FileUID:     fileUID,
 			Vector:      createActivityTestVector(768),

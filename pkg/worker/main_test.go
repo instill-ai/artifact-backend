@@ -186,15 +186,15 @@ func TestExecuteKnowledgeBaseUpdate_NoEligibleKBs(t *testing.T) {
 	mc := minimock.NewController(t)
 
 	ctx := context.Background()
-	catalogID := "test-catalog"
+	knowledgeBaseID := "test-knowledge-base"
 
 	mockRepository := mock.NewRepositoryMock(mc)
 	// Return KB that's already updating (not eligible)
 	mockRepository.GetKnowledgeBaseByIDMock.
-		When(minimock.AnyContext, catalogID).
+		When(minimock.AnyContext, knowledgeBaseID).
 		Then(&repository.KnowledgeBaseModel{
 			UID:          types.KBUIDType(uuid.Must(uuid.NewV4())),
-			KBID:         catalogID,
+			KBID:         knowledgeBaseID,
 			Staging:      false,
 			UpdateStatus: artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING.String(),
 		}, nil)
@@ -204,7 +204,7 @@ func TestExecuteKnowledgeBaseUpdate_NoEligibleKBs(t *testing.T) {
 		log:        zap.NewNop(),
 	}
 
-	result, err := w.ExecuteKnowledgeBaseUpdate(ctx, []string{catalogID}, "")
+	result, err := w.ExecuteKnowledgeBaseUpdate(ctx, []string{knowledgeBaseID}, "")
 
 	c.Assert(err, qt.IsNil)
 	c.Assert(result, qt.Not(qt.IsNil))
@@ -241,15 +241,15 @@ func TestAbortKnowledgeBaseUpdate_NoInProgressKBs(t *testing.T) {
 	mc := minimock.NewController(t)
 
 	ctx := context.Background()
-	catalogID := "test-catalog"
+	knowledgeBaseID := "test-knowledge-base"
 
 	mockRepository := mock.NewRepositoryMock(mc)
 	// Return KB that's not updating
 	mockRepository.GetKnowledgeBaseByIDMock.
-		When(minimock.AnyContext, catalogID).
+		When(minimock.AnyContext, knowledgeBaseID).
 		Then(&repository.KnowledgeBaseModel{
 			UID:          types.KBUIDType(uuid.Must(uuid.NewV4())),
-			KBID:         catalogID,
+			KBID:         knowledgeBaseID,
 			UpdateStatus: artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED.String(),
 		}, nil)
 
@@ -258,12 +258,12 @@ func TestAbortKnowledgeBaseUpdate_NoInProgressKBs(t *testing.T) {
 		log:        zap.NewNop(),
 	}
 
-	result, err := w.AbortKnowledgeBaseUpdate(ctx, []string{catalogID})
+	result, err := w.AbortKnowledgeBaseUpdate(ctx, []string{knowledgeBaseID})
 
 	c.Assert(err, qt.IsNil)
 	c.Assert(result, qt.Not(qt.IsNil))
 	c.Assert(result.Success, qt.IsTrue)
-	c.Assert(result.Message, qt.Contains, "No catalogs")
+	c.Assert(result.Message, qt.Contains, "No knowledge bases")
 }
 
 func TestAbortKnowledgeBaseUpdate_ListAll(t *testing.T) {
@@ -321,19 +321,19 @@ func TestAbortKBUpdateResult(t *testing.T) {
 		Success:      true,
 		Message:      "Aborted successfully",
 		AbortedCount: 2,
-		CatalogStatus: []CatalogAbortStatus{
+		KnowledgeBaseStatus: []KnowledgeBaseAbortStatus{
 			{
-				CatalogID:  "catalog-1",
-				CatalogUID: uuid.Must(uuid.NewV4()).String(),
-				WorkflowID: "workflow-1",
-				Status:     artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_ABORTED.String(),
+				KnowledgeBaseID:  "knowledge-base-1",
+				KnowledgeBaseUID: uuid.Must(uuid.NewV4()).String(),
+				WorkflowID:       "workflow-1",
+				Status:           artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_ABORTED.String(),
 			},
 		},
 	}
 
 	c.Assert(result.Success, qt.IsTrue)
 	c.Assert(result.AbortedCount, qt.Equals, 2)
-	c.Assert(len(result.CatalogStatus), qt.Equals, 1)
+	c.Assert(len(result.KnowledgeBaseStatus), qt.Equals, 1)
 }
 
 func TestFileContent(t *testing.T) {

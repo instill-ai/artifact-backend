@@ -24,15 +24,15 @@ func (s *service) SearchChunks(ctx context.Context, ownerUID types.OwnerUIDType,
 		return nil, fmt.Errorf("empty text prompt")
 	}
 
-	kb, err := s.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, req.CatalogId)
+	kb, err := s.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, req.KnowledgeBaseId)
 	if err != nil {
 		return nil, fmt.Errorf("fetching knowledge base: %w", err)
 	}
 
 	// CRITICAL FIX: Removed dual-mode routing logic that was unnecessary.
-	// The atomic swap now properly renames KBs, so catalog_id always points to the correct KB:
-	// - Before swap: catalog_id="my-catalog" → old production KB
-	// - After swap: catalog_id="my-catalog" → new production KB (atomic rename)
+	// The atomic swap now properly renames KBs, so knowledge_base_id always points to the correct KB:
+	// - Before swap: knowledge_base_id="my-kb" → old production KB
+	// - After swap: knowledge_base_id="my-kb" → new production KB (atomic rename)
 	// No need to query multiple KBs - the swap is instant and users always get the right data.
 
 	// Search similar embeddings in KB.

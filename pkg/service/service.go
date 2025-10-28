@@ -75,14 +75,13 @@ type Service interface {
 }
 
 type service struct {
-	repository     repository.Repository
-	mgmtPrv        mgmtpb.MgmtPrivateServiceClient
-	pipelinePub    pipelinepb.PipelinePublicServiceClient
-	registryClient RegistryClient
-	redisClient    *redis.Client
-	aclClient      *acl.ACLClient
-	worker         Worker
-	aiClient       ai.Client
+	repository  repository.Repository
+	mgmtPrv     mgmtpb.MgmtPrivateServiceClient
+	pipelinePub pipelinepb.PipelinePublicServiceClient
+	redisClient *redis.Client
+	aclClient   *acl.ACLClient
+	worker      Worker
+	aiClient    ai.Client
 }
 
 // NewService initiates a service instance
@@ -90,21 +89,19 @@ func NewService(
 	r repository.Repository,
 	mgmtPrv mgmtpb.MgmtPrivateServiceClient,
 	pipelinePub pipelinepb.PipelinePublicServiceClient,
-	rgc RegistryClient,
 	rc *redis.Client,
 	aclClient *acl.ACLClient,
 	w Worker,
 	aiClient ai.Client,
 ) Service {
 	return &service{
-		repository:     r,
-		mgmtPrv:        mgmtPrv,
-		pipelinePub:    pipelinePub,
-		registryClient: rgc,
-		redisClient:    rc,
-		aclClient:      aclClient,
-		worker:         w,
-		aiClient:       aiClient,
+		repository:  r,
+		mgmtPrv:     mgmtPrv,
+		pipelinePub: pipelinePub,
+		redisClient: rc,
+		aclClient:   aclClient,
+		worker:      w,
+		aiClient:    aiClient,
 	}
 }
 

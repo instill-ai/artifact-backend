@@ -6,8 +6,8 @@
  *
  * Test Coverage:
  *
- * 1. Catalog Type Enum Storage
- *    - Verifies catalog_type uses full enum names (CATALOG_TYPE_PERSISTENT)
+ * 1. Knowledge Base Type Enum Storage
+ *    - Verifies knowledge_base_type uses full enum names (KNOWLEDGE_BASE_TYPE_PERSISTENT)
  *    - Ensures enums are NOT stored as short forms ("persistent")
  *
  * 2. System Config Foreign Key and JSONB Format
@@ -16,7 +16,7 @@
  *    - Checks presence of model_family and dimensionality fields
  *
  * 3. Text Chunk Reference Format (PageRange)
- *    - Verifies text_chunk.reference JSONB uses PascalCase "PageRange"
+ *    - Verifies chunk.reference JSONB uses PascalCase "PageRange"
  *    - Ensures NO snake_case "page_range" usage
  *    - Validates reference structure integrity
  *
@@ -36,9 +36,9 @@
  *    - Checks converted_type field (CONVERTED_FILE_TYPE_CONTENT/SUMMARY)
  *
  * 7. Field Naming Conventions (Multi-table Validation)
- *    - 7.1: knowledge_base_file.file_type stores FileType enum (TYPE_*)
+ *    - 7.1: file.file_type stores FileType enum (TYPE_*)
  *    - 7.2: converted_file.content_type stores MIME type (e.g., application/pdf, text/markdown)
- *    - 7.3: text_chunk uses MIME type (content_type) and classification (chunk_type)
+ *    - 7.3: chunk uses MIME type (content_type) and classification (chunk_type)
  *    - 7.4: embedding uses MIME type (content_type) and classification (chunk_type)
  *    - 7.5: converted_file.converted_type has expected enum values
  *
@@ -48,11 +48,11 @@
  *    - 8.3: All file types (PDF, TEXT, MARKDOWN, CSV, DOCX) serialize correctly
  *
  * Test Data Management:
- * - Creates test catalog with prefix pattern: test-{random}-db-{random}
+ * - Creates test knowledge base with prefix pattern: test-{random}-db-{random}
  * - Uploads multiple file types: PDF, TEXT, MARKDOWN, CSV, DOCX
  * - Waits for file processing completion (up to 5 minutes)
- * - Setup: Cleans orphaned catalogs from previous failed runs
- * - Teardown: Waits for processing completion, then deletes test catalogs
+ * - Setup: Cleans orphaned knowledge bases from previous failed runs
+ * - Teardown: Waits for processing completion, then deletes test knowledge bases
  *
  * Database Access:
  * - Uses direct SQL queries via constant.db for validation
@@ -125,24 +125,24 @@ export function setup() {
 
     var resp = http.request("GET", `${constant.mgmtRESTPublicHost}/v1beta/user`, {}, { headers: { "Authorization": `Bearer ${loginResp.json().accessToken}` } })
 
-    // Cleanup orphaned catalogs from previous failed test runs OF THIS SPECIFIC TEST
+    // Cleanup orphaned knowledge bases from previous failed test runs OF THIS SPECIFIC TEST
     // Use API-only cleanup to properly trigger workflows (no direct DB manipulation)
     console.log("\n=== SETUP: Cleaning up previous test data (db pattern only) ===");
     try {
-        const listResp = http.request("GET", `${artifactRESTPublicHost}/v1alpha/namespaces/${resp.json().user.id}/catalogs`, null, header);
+        const listResp = http.request("GET", `${artifactRESTPublicHost}/v1alpha/namespaces/${resp.json().user.id}/knowledge-bases`, null, header);
         if (listResp.status === 200) {
-            const catalogs = Array.isArray(listResp.json().catalogs) ? listResp.json().catalogs : [];
+            const knowledgeBases = Array.isArray(listResp.json().knowledgeBases) ? listResp.json().knowledgeBases : [];
             let cleanedCount = 0;
-            for (const catalog of catalogs) {
-                const catId = catalog.id;
-                if (catId && catId.match(/test-[a-z0-9]+-db-/)) {
-                    const delResp = http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${resp.json().user.id}/catalogs/${catId}`, null, header);
+            for (const kb of knowledgeBases) {
+                const kbId = kb.id;
+                if (kbId && kbId.match(/test-[a-z0-9]+-db-/)) {
+                    const delResp = http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${resp.json().user.id}/knowledge-bases/${kbId}`, null, header);
                     if (delResp.status === 200 || delResp.status === 204) {
                         cleanedCount++;
                     }
                 }
             }
-            console.log(`Cleaned ${cleanedCount} orphaned catalogs from previous test runs`);
+            console.log(`Cleaned ${cleanedCount} orphaned knowledge bases from previous test runs`);
         }
     } catch (e) {
         console.log(`Setup cleanup warning: ${e}`);
@@ -157,8 +157,8 @@ export function teardown(data) {
     group(groupName, () => {
         check(true, { [constant.banner(groupName)]: () => true });
 
-        // CRITICAL: Wait for THIS TEST's file processing to complete before deleting catalogs
-        // Deleting catalogs triggers cleanup workflows that drop vector DB collections
+        // CRITICAL: Wait for THIS TEST's file processing to complete before deleting knowledge bases
+        // Deleting knowledge bases triggers cleanup workflows that drop vector DB collections
         // If we delete while files are still processing, we get "collection does not exist" errors
         console.log("Teardown: Waiting for this test's file processing to complete...");
         const allProcessingComplete = helper.waitForAllFileProcessingComplete(120, data.dbIDPrefix);
@@ -166,15 +166,15 @@ export function teardown(data) {
             console.warn("Teardown: Some files still processing after 120s, proceeding anyway");
         }
 
-        // Delete catalogs via API (which triggers cleanup workflows)
-        var listResp = http.request("GET", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, data.header)
+        // Delete knowledge bases via API (which triggers cleanup workflows)
+        var listResp = http.request("GET", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`, null, data.header)
         if (listResp.status === 200) {
-            var catalogs = Array.isArray(listResp.json().catalogs) ? listResp.json().catalogs : []
-            for (const catalog of catalogs) {
-                if (catalog.id && catalog.id.startsWith(data.dbIDPrefix)) {
-                    var delResp = http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalog.id}`, null, data.header);
+            var knowledgeBases = Array.isArray(listResp.json().knowledgeBases) ? listResp.json().knowledgeBases : []
+            for (const kb of knowledgeBases) {
+                if (kb.id && kb.id.startsWith(data.dbIDPrefix)) {
+                    var delResp = http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${kb.id}`, null, data.header);
                     check(delResp, {
-                        [`DELETE /v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalog.id} response status is 200 or 404`]: (r) => r.status === 200 || r.status === 404,
+                        [`DELETE /v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${kb.id} response status is 200 or 404`]: (r) => r.status === 200 || r.status === 404,
                     });
                 }
             }
@@ -188,27 +188,27 @@ export function TEST_DB_SCHEMA(data) {
     group(groupName, () => {
         check(true, { [constant.banner(groupName)]: () => true });
 
-        // Create catalog
-        const catalogName = data.dbIDPrefix + "db-" + randomString(8);
-        const cRes = http.request("POST", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, JSON.stringify({
-            id: catalogName,
-            description: "DB schema test catalog",
+        // Create knowledge base
+        const kbName = data.dbIDPrefix + "db-" + randomString(8);
+        const cRes = http.request("POST", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`, JSON.stringify({
+            id: kbName,
+            description: "DB schema test knowledge base",
             tags: ["test", "db", "schema"],
-            type: "CATALOG_TYPE_PERSISTENT"
+            type: "KNOWLEDGE_BASE_TYPE_PERSISTENT"
         }), data.header);
 
-        logUnexpected(cRes, 'POST /v1alpha/namespaces/{namespace_id}/catalogs');
-        const catalog = ((() => { try { return cRes.json(); } catch (e) { return {}; } })()).catalog || {};
-        const catalogId = catalog.id;
-        const catalogUid = catalog.uid;
+        logUnexpected(cRes, 'POST /v1alpha/namespaces/{namespace_id}/knowledge-bases');
+        const kb = ((() => { try { return cRes.json(); } catch (e) { return {}; } })()).knowledgeBase || {};
+        const knowledgeBaseId = kb.id;
+        const knowledgeBaseUid = kb.uid;
 
         check(cRes, {
-            [`DB Tests: Catalog created successfully (${catalogId})`]: (r) => r.status === 200,
-            [`DB Tests: Catalog has valid UID`]: () => catalogUid && catalogUid.length > 0,
+            [`DB Tests: Knowledge base created successfully (${knowledgeBaseId})`]: (r) => r.status === 200,
+            [`DB Tests: Knowledge base has valid UID`]: () => knowledgeBaseUid && knowledgeBaseUid.length > 0,
         });
 
-        if (!catalogId || !catalogUid) {
-            console.log("DB Tests: Failed to create catalog, aborting test");
+        if (!knowledgeBaseId || !knowledgeBaseUid) {
+            console.log("DB Tests: Failed to create knowledge base, aborting test");
             return;
         }
 
@@ -228,7 +228,7 @@ export function TEST_DB_SCHEMA(data) {
 
             // Use retry logic to handle transient upload failures during parallel execution
             const uRes = helper.uploadFileWithRetry(
-                `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
+                `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
                 fReq,
                 data.header,
                 3 // max retries
@@ -268,7 +268,7 @@ export function TEST_DB_SCHEMA(data) {
         console.log(`DB Tests: Waiting for ${uploaded.length} files to complete processing...`);
         const result = helper.waitForMultipleFilesProcessingComplete(
             data.expectedOwner.id,
-            catalogId,
+            knowledgeBaseId,
             fileUids,
             data.header,
             600 // 10 minutes max
@@ -288,28 +288,28 @@ export function TEST_DB_SCHEMA(data) {
         }
 
         // ==========================================================================
-        // TEST 1: Catalog Type Enum Storage
+        // TEST 1: Knowledge Base Type Enum Storage
         // ==========================================================================
-        group("DB Test 1: Catalog Type Enum Storage", function () {
-            console.log(`\nDB Test 1: Verifying catalog_type enum storage format...`);
+        group("DB Test 1: Knowledge Base Type Enum Storage", function () {
+            console.log(`\nDB Test 1: Verifying knowledge_base_type enum storage format...`);
 
-            const catalogTypeResult = helper.safeQuery(
-                `SELECT catalog_type FROM knowledge_base WHERE uid = $1`,
-                catalogUid
+            const kbTypeResult = helper.safeQuery(
+                `SELECT knowledge_base_type FROM knowledge_base WHERE uid = $1`,
+                knowledgeBaseUid
             );
 
-            if (catalogTypeResult.length > 0) {
-                const catalogType = catalogTypeResult[0].catalog_type;
-                console.log(`DB Test 1: catalog_type = '${catalogType}'`);
+            if (kbTypeResult.length > 0) {
+                const kbType = kbTypeResult[0].knowledge_base_type;
+                console.log(`DB Test 1: knowledge_base_type = '${kbType}'`);
 
-                check({ catalogType }, {
-                    "DB Test 1: catalog_type uses full enum name (CATALOG_TYPE_PERSISTENT)": () =>
-                        catalogType === "CATALOG_TYPE_PERSISTENT",
-                    "DB Test 1: catalog_type is NOT short form ('persistent')": () =>
-                        catalogType !== "persistent",
+                check({ kbType }, {
+                    "DB Test 1: knowledge_base_type uses full enum name (KNOWLEDGE_BASE_TYPE_PERSISTENT)": () =>
+                        kbType === "KNOWLEDGE_BASE_TYPE_PERSISTENT",
+                    "DB Test 1: knowledge_base_type is NOT short form ('persistent')": () =>
+                        kbType !== "persistent",
                 });
             } else {
-                check(false, { "DB Test 1: Catalog record exists in database": () => false });
+                check(false, { "DB Test 1: Knowledge base record exists in database": () => false });
             }
         });
 
@@ -324,7 +324,7 @@ export function TEST_DB_SCHEMA(data) {
                  FROM knowledge_base kb
                  JOIN system s ON kb.system_uid = s.uid
                  WHERE kb.uid = $1`,
-                catalogUid
+                knowledgeBaseUid
             );
 
             if (systemConfigResult.length > 0) {
@@ -358,7 +358,7 @@ export function TEST_DB_SCHEMA(data) {
         // TEST 3: Text Chunk Reference Format (PageRange)
         // ==========================================================================
         group("DB Test 3: Text Chunk Reference Format", function () {
-            console.log(`\nDB Test 3: Verifying text_chunk.reference uses PascalCase PageRange...`);
+            console.log(`\nDB Test 3: Verifying chunk.reference uses PascalCase PageRange...`);
 
             const pdfFile = uploaded.find(f => f.type === "TYPE_PDF") || uploaded[0];
             if (!pdfFile) {
@@ -368,14 +368,14 @@ export function TEST_DB_SCHEMA(data) {
 
             // Count chunks with correct PascalCase PageRange
             const correctResult = helper.safeQuery(
-                `SELECT COUNT(*) as count FROM text_chunk WHERE file_uid = $1 AND reference ? 'PageRange'`,
+                `SELECT COUNT(*) as count FROM chunk WHERE file_uid = $1 AND reference ? 'PageRange'`,
                 pdfFile.fileUid
             );
             const correctCount = correctResult.length > 0 ? parseInt(correctResult[0].count) : 0;
 
             // Count chunks with INCORRECT snake_case page_range
             const incorrectResult = helper.safeQuery(
-                `SELECT COUNT(*) as count FROM text_chunk WHERE file_uid = $1 AND reference ? 'page_range'`,
+                `SELECT COUNT(*) as count FROM chunk WHERE file_uid = $1 AND reference ? 'page_range'`,
                 pdfFile.fileUid
             );
             const incorrectCount = incorrectResult.length > 0 ? parseInt(incorrectResult[0].count) : 0;
@@ -383,13 +383,13 @@ export function TEST_DB_SCHEMA(data) {
             console.log(`DB Test 3: PascalCase PageRange: ${correctCount}, snake_case page_range: ${incorrectCount}`);
 
             check({ correctCount, incorrectCount }, {
-                "DB Test 3: All text_chunk.reference use PascalCase PageRange": () =>
+                "DB Test 3: All chunk.reference use PascalCase PageRange": () =>
                     correctCount > 0 && incorrectCount === 0,
             });
 
             // Sample a reference to verify structure
             const sampleResult = helper.safeQuery(
-                `SELECT reference::text as reference_text FROM text_chunk WHERE file_uid = $1 AND reference IS NOT NULL LIMIT 1`,
+                `SELECT reference::text as reference_text FROM chunk WHERE file_uid = $1 AND reference IS NOT NULL LIMIT 1`,
                 pdfFile.fileUid
             );
 
@@ -529,12 +529,12 @@ export function TEST_DB_SCHEMA(data) {
 
             // Get content and summary chunks
             const contentChunkResult = helper.safeQuery(
-                `SELECT source_uid::text as source_uid_text, chunk_type FROM text_chunk WHERE file_uid = $1 AND chunk_type = 'TYPE_CONTENT' LIMIT 1`,
+                `SELECT source_uid::text as source_uid_text, chunk_type FROM chunk WHERE file_uid = $1 AND chunk_type = 'TYPE_CONTENT' LIMIT 1`,
                 testFile.fileUid
             );
 
             const summaryChunkResult = helper.safeQuery(
-                `SELECT source_uid::text as source_uid_text, chunk_type FROM text_chunk WHERE file_uid = $1 AND chunk_type = 'TYPE_SUMMARY' LIMIT 1`,
+                `SELECT source_uid::text as source_uid_text, chunk_type FROM chunk WHERE file_uid = $1 AND chunk_type = 'TYPE_SUMMARY' LIMIT 1`,
                 testFile.fileUid
             );
 
@@ -598,15 +598,15 @@ export function TEST_DB_SCHEMA(data) {
                 return;
             }
 
-            // 7.1: knowledge_base_file.file_type stores FileType enum string
+            // 7.1: file.file_type stores FileType enum string
             const kbFileTypeResult = helper.safeQuery(
-                `SELECT file_type FROM knowledge_base_file WHERE uid = $1`,
+                `SELECT file_type FROM file WHERE uid = $1`,
                 testFile.fileUid
             );
 
             if (kbFileTypeResult.length > 0) {
                 const fileType = kbFileTypeResult[0].file_type;
-                console.log(`DB Test 7.1: knowledge_base_file.file_type = "${fileType}"`);
+                console.log(`DB Test 7.1: file.file_type = "${fileType}"`);
 
                 check({ fileType }, {
                     "DB Test 7.1: file_type is FileType enum string (TYPE_*)": () =>
@@ -636,22 +636,22 @@ export function TEST_DB_SCHEMA(data) {
                 });
             }
 
-            // 7.3: text_chunk.content_type stores MIME type, chunk_type stores classification
+            // 7.3: chunk.content_type stores MIME type, chunk_type stores classification
             const chunkFieldsResult = helper.safeQuery(
-                `SELECT content_type, chunk_type FROM text_chunk WHERE file_uid = $1 LIMIT 1`,
+                `SELECT content_type, chunk_type FROM chunk WHERE file_uid = $1 LIMIT 1`,
                 testFile.fileUid
             );
 
             if (chunkFieldsResult.length > 0) {
                 const chunkContentType = chunkFieldsResult[0].content_type;
                 const chunkChunkType = chunkFieldsResult[0].chunk_type;
-                console.log(`DB Test 7.3: text_chunk.content_type = "${chunkContentType}"`);
-                console.log(`DB Test 7.3: text_chunk.chunk_type = "${chunkChunkType}"`);
+                console.log(`DB Test 7.3: chunk.content_type = "${chunkContentType}"`);
+                console.log(`DB Test 7.3: chunk.chunk_type = "${chunkChunkType}"`);
 
                 check({ chunkContentType, chunkChunkType }, {
-                    "DB Test 7.3: text_chunk.content_type is MIME type": () =>
+                    "DB Test 7.3: chunk.content_type is MIME type": () =>
                         chunkContentType && chunkContentType.includes("/"),
-                    "DB Test 7.3: text_chunk.chunk_type is classification string": () =>
+                    "DB Test 7.3: chunk.chunk_type is classification string": () =>
                         chunkChunkType && ["TYPE_CONTENT", "TYPE_SUMMARY", "TYPE_AUGMENTED"].includes(chunkChunkType),
                 });
             }
@@ -704,7 +704,7 @@ export function TEST_DB_SCHEMA(data) {
             // 8.1: List Files API
             const listFilesRes = http.request(
                 "GET",
-                `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
+                `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
                 null,
                 data.header
             );
@@ -744,7 +744,7 @@ export function TEST_DB_SCHEMA(data) {
             const testFile = uploaded[0];
             const getFileRes = http.request(
                 "GET",
-                `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${testFile.fileUid}`,
+                `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${testFile.fileUid}`,
                 null,
                 data.header
             );
@@ -783,7 +783,7 @@ export function TEST_DB_SCHEMA(data) {
                 if (fileOfType) {
                     const fileRes = http.request(
                         "GET",
-                        `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${fileOfType.fileUid}`,
+                        `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileOfType.fileUid}`,
                         null,
                         data.header
                     );
@@ -808,6 +808,6 @@ export function TEST_DB_SCHEMA(data) {
             });
         });
 
-        console.log(`\nDB Tests: All tests completed for catalog ${catalogId}`);
+        console.log(`\nDB Tests: All tests completed for knowledge base ${knowledgeBaseId}`);
     });
 }

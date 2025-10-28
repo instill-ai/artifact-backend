@@ -21,7 +21,7 @@ var PresetPipelinesFS embed.FS
 // DefaultNamespaceID is the namespace that owns the preset pipelines.
 const DefaultNamespaceID = "preset"
 
-// Release identifies a pipeline used in catalog file processing.
+// Release identifies a pipeline used in knowledge base file processing.
 type Release struct {
 	Namespace string
 	ID        string
@@ -111,20 +111,12 @@ var (
 		Version:   "v1.0.0",
 	}
 
-	// QAPipeline is the default pipeline for question & answering.
-	QAPipeline = Release{
-		Namespace: DefaultNamespaceID,
-		ID:        "retrieving-qna",
-		Version:   "v1.2.0",
-	}
-
-	// PresetPipelinesList contains the preset pipelines used in catalogs.
+	// PresetPipelinesList contains the preset pipelines used in knowledge bases.
 	PresetPipelinesList = Releases{
 		ConvertFileTypePipeline,
 		GenerateContentPipeline,
 		GenerateSummaryPipeline,
 		EmbedPipeline,
-		QAPipeline,
 	}
 
 	// DefaultConversionPipelines contains the default pipeline used for document conversion.

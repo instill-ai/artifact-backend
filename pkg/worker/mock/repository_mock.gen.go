@@ -397,9 +397,9 @@ type RepositoryMock struct {
 	beforeGetKnowledgeBaseByUIDWithConfigCounter uint64
 	GetKnowledgeBaseByUIDWithConfigMock          mRepositoryMockGetKnowledgeBaseByUIDWithConfig
 
-	funcGetKnowledgeBaseCountByOwner          func(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType) (i1 int64, err error)
+	funcGetKnowledgeBaseCountByOwner          func(ctx context.Context, ownerUID string, kbType artifactpb.KnowledgeBaseType) (i1 int64, err error)
 	funcGetKnowledgeBaseCountByOwnerOrigin    string
-	inspectFuncGetKnowledgeBaseCountByOwner   func(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType)
+	inspectFuncGetKnowledgeBaseCountByOwner   func(ctx context.Context, ownerUID string, kbType artifactpb.KnowledgeBaseType)
 	afterGetKnowledgeBaseCountByOwnerCounter  uint64
 	beforeGetKnowledgeBaseCountByOwnerCounter uint64
 	GetKnowledgeBaseCountByOwnerMock          mRepositoryMockGetKnowledgeBaseCountByOwner
@@ -523,9 +523,9 @@ type RepositoryMock struct {
 	beforeGetRepositoryTagCounter uint64
 	GetRepositoryTagMock          mRepositoryMockGetRepositoryTag
 
-	funcGetRollbackKBForProduction          func(ctx context.Context, ownerUID types.OwnerUIDType, productionCatalogID string) (kp1 *mm_repository.KnowledgeBaseModel, err error)
+	funcGetRollbackKBForProduction          func(ctx context.Context, ownerUID types.OwnerUIDType, productionKBID string) (kp1 *mm_repository.KnowledgeBaseModel, err error)
 	funcGetRollbackKBForProductionOrigin    string
-	inspectFuncGetRollbackKBForProduction   func(ctx context.Context, ownerUID types.OwnerUIDType, productionCatalogID string)
+	inspectFuncGetRollbackKBForProduction   func(ctx context.Context, ownerUID types.OwnerUIDType, productionKBID string)
 	afterGetRollbackKBForProductionCounter  uint64
 	beforeGetRollbackKBForProductionCounter uint64
 	GetRollbackKBForProductionMock          mRepositoryMockGetRollbackKBForProduction
@@ -537,9 +537,9 @@ type RepositoryMock struct {
 	beforeGetSourceByFileUIDCounter uint64
 	GetSourceByFileUIDMock          mRepositoryMockGetSourceByFileUID
 
-	funcGetStagingKBForProduction          func(ctx context.Context, ownerUID types.OwnerUIDType, productionCatalogID string) (kp1 *mm_repository.KnowledgeBaseModel, err error)
+	funcGetStagingKBForProduction          func(ctx context.Context, ownerUID types.OwnerUIDType, productionKBID string) (kp1 *mm_repository.KnowledgeBaseModel, err error)
 	funcGetStagingKBForProductionOrigin    string
-	inspectFuncGetStagingKBForProduction   func(ctx context.Context, ownerUID types.OwnerUIDType, productionCatalogID string)
+	inspectFuncGetStagingKBForProduction   func(ctx context.Context, ownerUID types.OwnerUIDType, productionKBID string)
 	afterGetStagingKBForProductionCounter  uint64
 	beforeGetStagingKBForProductionCounter uint64
 	GetStagingKBForProductionMock          mRepositoryMockGetStagingKBForProduction
@@ -718,19 +718,19 @@ type RepositoryMock struct {
 	beforeListKnowledgeBasesCounter uint64
 	ListKnowledgeBasesMock          mRepositoryMockListKnowledgeBases
 
-	funcListKnowledgeBasesByCatalogType          func(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType) (ka1 []mm_repository.KnowledgeBaseModel, err error)
-	funcListKnowledgeBasesByCatalogTypeOrigin    string
-	inspectFuncListKnowledgeBasesByCatalogType   func(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType)
-	afterListKnowledgeBasesByCatalogTypeCounter  uint64
-	beforeListKnowledgeBasesByCatalogTypeCounter uint64
-	ListKnowledgeBasesByCatalogTypeMock          mRepositoryMockListKnowledgeBasesByCatalogType
+	funcListKnowledgeBasesByType          func(ctx context.Context, ownerUID string, kbType artifactpb.KnowledgeBaseType) (ka1 []mm_repository.KnowledgeBaseModel, err error)
+	funcListKnowledgeBasesByTypeOrigin    string
+	inspectFuncListKnowledgeBasesByType   func(ctx context.Context, ownerUID string, kbType artifactpb.KnowledgeBaseType)
+	afterListKnowledgeBasesByTypeCounter  uint64
+	beforeListKnowledgeBasesByTypeCounter uint64
+	ListKnowledgeBasesByTypeMock          mRepositoryMockListKnowledgeBasesByType
 
-	funcListKnowledgeBasesByCatalogTypeWithConfig          func(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType) (ka1 []mm_repository.KnowledgeBaseWithConfig, err error)
-	funcListKnowledgeBasesByCatalogTypeWithConfigOrigin    string
-	inspectFuncListKnowledgeBasesByCatalogTypeWithConfig   func(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType)
-	afterListKnowledgeBasesByCatalogTypeWithConfigCounter  uint64
-	beforeListKnowledgeBasesByCatalogTypeWithConfigCounter uint64
-	ListKnowledgeBasesByCatalogTypeWithConfigMock          mRepositoryMockListKnowledgeBasesByCatalogTypeWithConfig
+	funcListKnowledgeBasesByTypeWithConfig          func(ctx context.Context, ownerUID string, kbType artifactpb.KnowledgeBaseType) (ka1 []mm_repository.KnowledgeBaseWithConfig, err error)
+	funcListKnowledgeBasesByTypeWithConfigOrigin    string
+	inspectFuncListKnowledgeBasesByTypeWithConfig   func(ctx context.Context, ownerUID string, kbType artifactpb.KnowledgeBaseType)
+	afterListKnowledgeBasesByTypeWithConfigCounter  uint64
+	beforeListKnowledgeBasesByTypeWithConfigCounter uint64
+	ListKnowledgeBasesByTypeWithConfigMock          mRepositoryMockListKnowledgeBasesByTypeWithConfig
 
 	funcListKnowledgeBasesByUpdateStatus          func(ctx context.Context, updateStatus string) (ka1 []mm_repository.KnowledgeBaseModel, err error)
 	funcListKnowledgeBasesByUpdateStatusOrigin    string
@@ -739,9 +739,9 @@ type RepositoryMock struct {
 	beforeListKnowledgeBasesByUpdateStatusCounter uint64
 	ListKnowledgeBasesByUpdateStatusMock          mRepositoryMockListKnowledgeBasesByUpdateStatus
 
-	funcListKnowledgeBasesForUpdate          func(ctx context.Context, tagFilters []string, catalogIDs []string) (ka1 []mm_repository.KnowledgeBaseModel, err error)
+	funcListKnowledgeBasesForUpdate          func(ctx context.Context, tagFilters []string, knowledgeBaseIDs []string) (ka1 []mm_repository.KnowledgeBaseModel, err error)
 	funcListKnowledgeBasesForUpdateOrigin    string
-	inspectFuncListKnowledgeBasesForUpdate   func(ctx context.Context, tagFilters []string, catalogIDs []string)
+	inspectFuncListKnowledgeBasesForUpdate   func(ctx context.Context, tagFilters []string, knowledgeBaseIDs []string)
 	afterListKnowledgeBasesForUpdateCounter  uint64
 	beforeListKnowledgeBasesForUpdateCounter uint64
 	ListKnowledgeBasesForUpdateMock          mRepositoryMockListKnowledgeBasesForUpdate
@@ -1228,11 +1228,11 @@ func NewRepositoryMock(t minimock.Tester) *RepositoryMock {
 	m.ListKnowledgeBasesMock = mRepositoryMockListKnowledgeBases{mock: m}
 	m.ListKnowledgeBasesMock.callArgs = []*RepositoryMockListKnowledgeBasesParams{}
 
-	m.ListKnowledgeBasesByCatalogTypeMock = mRepositoryMockListKnowledgeBasesByCatalogType{mock: m}
-	m.ListKnowledgeBasesByCatalogTypeMock.callArgs = []*RepositoryMockListKnowledgeBasesByCatalogTypeParams{}
+	m.ListKnowledgeBasesByTypeMock = mRepositoryMockListKnowledgeBasesByType{mock: m}
+	m.ListKnowledgeBasesByTypeMock.callArgs = []*RepositoryMockListKnowledgeBasesByTypeParams{}
 
-	m.ListKnowledgeBasesByCatalogTypeWithConfigMock = mRepositoryMockListKnowledgeBasesByCatalogTypeWithConfig{mock: m}
-	m.ListKnowledgeBasesByCatalogTypeWithConfigMock.callArgs = []*RepositoryMockListKnowledgeBasesByCatalogTypeWithConfigParams{}
+	m.ListKnowledgeBasesByTypeWithConfigMock = mRepositoryMockListKnowledgeBasesByTypeWithConfig{mock: m}
+	m.ListKnowledgeBasesByTypeWithConfigMock.callArgs = []*RepositoryMockListKnowledgeBasesByTypeWithConfigParams{}
 
 	m.ListKnowledgeBasesByUpdateStatusMock = mRepositoryMockListKnowledgeBasesByUpdateStatus{mock: m}
 	m.ListKnowledgeBasesByUpdateStatusMock.callArgs = []*RepositoryMockListKnowledgeBasesByUpdateStatusParams{}
@@ -19887,16 +19887,16 @@ type RepositoryMockGetKnowledgeBaseCountByOwnerExpectation struct {
 
 // RepositoryMockGetKnowledgeBaseCountByOwnerParams contains parameters of the Repository.GetKnowledgeBaseCountByOwner
 type RepositoryMockGetKnowledgeBaseCountByOwnerParams struct {
-	ctx         context.Context
-	ownerUID    string
-	catalogType artifactpb.CatalogType
+	ctx      context.Context
+	ownerUID string
+	kbType   artifactpb.KnowledgeBaseType
 }
 
 // RepositoryMockGetKnowledgeBaseCountByOwnerParamPtrs contains pointers to parameters of the Repository.GetKnowledgeBaseCountByOwner
 type RepositoryMockGetKnowledgeBaseCountByOwnerParamPtrs struct {
-	ctx         *context.Context
-	ownerUID    *string
-	catalogType *artifactpb.CatalogType
+	ctx      *context.Context
+	ownerUID *string
+	kbType   *artifactpb.KnowledgeBaseType
 }
 
 // RepositoryMockGetKnowledgeBaseCountByOwnerResults contains results of the Repository.GetKnowledgeBaseCountByOwner
@@ -19907,10 +19907,10 @@ type RepositoryMockGetKnowledgeBaseCountByOwnerResults struct {
 
 // RepositoryMockGetKnowledgeBaseCountByOwnerOrigins contains origins of expectations of the Repository.GetKnowledgeBaseCountByOwner
 type RepositoryMockGetKnowledgeBaseCountByOwnerExpectationOrigins struct {
-	origin            string
-	originCtx         string
-	originOwnerUID    string
-	originCatalogType string
+	origin         string
+	originCtx      string
+	originOwnerUID string
+	originKbType   string
 }
 
 // Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
@@ -19924,7 +19924,7 @@ func (mmGetKnowledgeBaseCountByOwner *mRepositoryMockGetKnowledgeBaseCountByOwne
 }
 
 // Expect sets up expected params for Repository.GetKnowledgeBaseCountByOwner
-func (mmGetKnowledgeBaseCountByOwner *mRepositoryMockGetKnowledgeBaseCountByOwner) Expect(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType) *mRepositoryMockGetKnowledgeBaseCountByOwner {
+func (mmGetKnowledgeBaseCountByOwner *mRepositoryMockGetKnowledgeBaseCountByOwner) Expect(ctx context.Context, ownerUID string, kbType artifactpb.KnowledgeBaseType) *mRepositoryMockGetKnowledgeBaseCountByOwner {
 	if mmGetKnowledgeBaseCountByOwner.mock.funcGetKnowledgeBaseCountByOwner != nil {
 		mmGetKnowledgeBaseCountByOwner.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseCountByOwner mock is already set by Set")
 	}
@@ -19937,7 +19937,7 @@ func (mmGetKnowledgeBaseCountByOwner *mRepositoryMockGetKnowledgeBaseCountByOwne
 		mmGetKnowledgeBaseCountByOwner.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseCountByOwner mock is already set by ExpectParams functions")
 	}
 
-	mmGetKnowledgeBaseCountByOwner.defaultExpectation.params = &RepositoryMockGetKnowledgeBaseCountByOwnerParams{ctx, ownerUID, catalogType}
+	mmGetKnowledgeBaseCountByOwner.defaultExpectation.params = &RepositoryMockGetKnowledgeBaseCountByOwnerParams{ctx, ownerUID, kbType}
 	mmGetKnowledgeBaseCountByOwner.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
 	for _, e := range mmGetKnowledgeBaseCountByOwner.expectations {
 		if minimock.Equal(e.params, mmGetKnowledgeBaseCountByOwner.defaultExpectation.params) {
@@ -19994,8 +19994,8 @@ func (mmGetKnowledgeBaseCountByOwner *mRepositoryMockGetKnowledgeBaseCountByOwne
 	return mmGetKnowledgeBaseCountByOwner
 }
 
-// ExpectCatalogTypeParam3 sets up expected param catalogType for Repository.GetKnowledgeBaseCountByOwner
-func (mmGetKnowledgeBaseCountByOwner *mRepositoryMockGetKnowledgeBaseCountByOwner) ExpectCatalogTypeParam3(catalogType artifactpb.CatalogType) *mRepositoryMockGetKnowledgeBaseCountByOwner {
+// ExpectKbTypeParam3 sets up expected param kbType for Repository.GetKnowledgeBaseCountByOwner
+func (mmGetKnowledgeBaseCountByOwner *mRepositoryMockGetKnowledgeBaseCountByOwner) ExpectKbTypeParam3(kbType artifactpb.KnowledgeBaseType) *mRepositoryMockGetKnowledgeBaseCountByOwner {
 	if mmGetKnowledgeBaseCountByOwner.mock.funcGetKnowledgeBaseCountByOwner != nil {
 		mmGetKnowledgeBaseCountByOwner.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseCountByOwner mock is already set by Set")
 	}
@@ -20011,14 +20011,14 @@ func (mmGetKnowledgeBaseCountByOwner *mRepositoryMockGetKnowledgeBaseCountByOwne
 	if mmGetKnowledgeBaseCountByOwner.defaultExpectation.paramPtrs == nil {
 		mmGetKnowledgeBaseCountByOwner.defaultExpectation.paramPtrs = &RepositoryMockGetKnowledgeBaseCountByOwnerParamPtrs{}
 	}
-	mmGetKnowledgeBaseCountByOwner.defaultExpectation.paramPtrs.catalogType = &catalogType
-	mmGetKnowledgeBaseCountByOwner.defaultExpectation.expectationOrigins.originCatalogType = minimock.CallerInfo(1)
+	mmGetKnowledgeBaseCountByOwner.defaultExpectation.paramPtrs.kbType = &kbType
+	mmGetKnowledgeBaseCountByOwner.defaultExpectation.expectationOrigins.originKbType = minimock.CallerInfo(1)
 
 	return mmGetKnowledgeBaseCountByOwner
 }
 
 // Inspect accepts an inspector function that has same arguments as the Repository.GetKnowledgeBaseCountByOwner
-func (mmGetKnowledgeBaseCountByOwner *mRepositoryMockGetKnowledgeBaseCountByOwner) Inspect(f func(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType)) *mRepositoryMockGetKnowledgeBaseCountByOwner {
+func (mmGetKnowledgeBaseCountByOwner *mRepositoryMockGetKnowledgeBaseCountByOwner) Inspect(f func(ctx context.Context, ownerUID string, kbType artifactpb.KnowledgeBaseType)) *mRepositoryMockGetKnowledgeBaseCountByOwner {
 	if mmGetKnowledgeBaseCountByOwner.mock.inspectFuncGetKnowledgeBaseCountByOwner != nil {
 		mmGetKnowledgeBaseCountByOwner.mock.t.Fatalf("Inspect function is already set for RepositoryMock.GetKnowledgeBaseCountByOwner")
 	}
@@ -20043,7 +20043,7 @@ func (mmGetKnowledgeBaseCountByOwner *mRepositoryMockGetKnowledgeBaseCountByOwne
 }
 
 // Set uses given function f to mock the Repository.GetKnowledgeBaseCountByOwner method
-func (mmGetKnowledgeBaseCountByOwner *mRepositoryMockGetKnowledgeBaseCountByOwner) Set(f func(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType) (i1 int64, err error)) *RepositoryMock {
+func (mmGetKnowledgeBaseCountByOwner *mRepositoryMockGetKnowledgeBaseCountByOwner) Set(f func(ctx context.Context, ownerUID string, kbType artifactpb.KnowledgeBaseType) (i1 int64, err error)) *RepositoryMock {
 	if mmGetKnowledgeBaseCountByOwner.defaultExpectation != nil {
 		mmGetKnowledgeBaseCountByOwner.mock.t.Fatalf("Default expectation is already set for the Repository.GetKnowledgeBaseCountByOwner method")
 	}
@@ -20059,14 +20059,14 @@ func (mmGetKnowledgeBaseCountByOwner *mRepositoryMockGetKnowledgeBaseCountByOwne
 
 // When sets expectation for the Repository.GetKnowledgeBaseCountByOwner which will trigger the result defined by the following
 // Then helper
-func (mmGetKnowledgeBaseCountByOwner *mRepositoryMockGetKnowledgeBaseCountByOwner) When(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType) *RepositoryMockGetKnowledgeBaseCountByOwnerExpectation {
+func (mmGetKnowledgeBaseCountByOwner *mRepositoryMockGetKnowledgeBaseCountByOwner) When(ctx context.Context, ownerUID string, kbType artifactpb.KnowledgeBaseType) *RepositoryMockGetKnowledgeBaseCountByOwnerExpectation {
 	if mmGetKnowledgeBaseCountByOwner.mock.funcGetKnowledgeBaseCountByOwner != nil {
 		mmGetKnowledgeBaseCountByOwner.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseCountByOwner mock is already set by Set")
 	}
 
 	expectation := &RepositoryMockGetKnowledgeBaseCountByOwnerExpectation{
 		mock:               mmGetKnowledgeBaseCountByOwner.mock,
-		params:             &RepositoryMockGetKnowledgeBaseCountByOwnerParams{ctx, ownerUID, catalogType},
+		params:             &RepositoryMockGetKnowledgeBaseCountByOwnerParams{ctx, ownerUID, kbType},
 		expectationOrigins: RepositoryMockGetKnowledgeBaseCountByOwnerExpectationOrigins{origin: minimock.CallerInfo(1)},
 	}
 	mmGetKnowledgeBaseCountByOwner.expectations = append(mmGetKnowledgeBaseCountByOwner.expectations, expectation)
@@ -20101,17 +20101,17 @@ func (mmGetKnowledgeBaseCountByOwner *mRepositoryMockGetKnowledgeBaseCountByOwne
 }
 
 // GetKnowledgeBaseCountByOwner implements mm_repository.Repository
-func (mmGetKnowledgeBaseCountByOwner *RepositoryMock) GetKnowledgeBaseCountByOwner(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType) (i1 int64, err error) {
+func (mmGetKnowledgeBaseCountByOwner *RepositoryMock) GetKnowledgeBaseCountByOwner(ctx context.Context, ownerUID string, kbType artifactpb.KnowledgeBaseType) (i1 int64, err error) {
 	mm_atomic.AddUint64(&mmGetKnowledgeBaseCountByOwner.beforeGetKnowledgeBaseCountByOwnerCounter, 1)
 	defer mm_atomic.AddUint64(&mmGetKnowledgeBaseCountByOwner.afterGetKnowledgeBaseCountByOwnerCounter, 1)
 
 	mmGetKnowledgeBaseCountByOwner.t.Helper()
 
 	if mmGetKnowledgeBaseCountByOwner.inspectFuncGetKnowledgeBaseCountByOwner != nil {
-		mmGetKnowledgeBaseCountByOwner.inspectFuncGetKnowledgeBaseCountByOwner(ctx, ownerUID, catalogType)
+		mmGetKnowledgeBaseCountByOwner.inspectFuncGetKnowledgeBaseCountByOwner(ctx, ownerUID, kbType)
 	}
 
-	mm_params := RepositoryMockGetKnowledgeBaseCountByOwnerParams{ctx, ownerUID, catalogType}
+	mm_params := RepositoryMockGetKnowledgeBaseCountByOwnerParams{ctx, ownerUID, kbType}
 
 	// Record call args
 	mmGetKnowledgeBaseCountByOwner.GetKnowledgeBaseCountByOwnerMock.mutex.Lock()
@@ -20130,7 +20130,7 @@ func (mmGetKnowledgeBaseCountByOwner *RepositoryMock) GetKnowledgeBaseCountByOwn
 		mm_want := mmGetKnowledgeBaseCountByOwner.GetKnowledgeBaseCountByOwnerMock.defaultExpectation.params
 		mm_want_ptrs := mmGetKnowledgeBaseCountByOwner.GetKnowledgeBaseCountByOwnerMock.defaultExpectation.paramPtrs
 
-		mm_got := RepositoryMockGetKnowledgeBaseCountByOwnerParams{ctx, ownerUID, catalogType}
+		mm_got := RepositoryMockGetKnowledgeBaseCountByOwnerParams{ctx, ownerUID, kbType}
 
 		if mm_want_ptrs != nil {
 
@@ -20144,9 +20144,9 @@ func (mmGetKnowledgeBaseCountByOwner *RepositoryMock) GetKnowledgeBaseCountByOwn
 					mmGetKnowledgeBaseCountByOwner.GetKnowledgeBaseCountByOwnerMock.defaultExpectation.expectationOrigins.originOwnerUID, *mm_want_ptrs.ownerUID, mm_got.ownerUID, minimock.Diff(*mm_want_ptrs.ownerUID, mm_got.ownerUID))
 			}
 
-			if mm_want_ptrs.catalogType != nil && !minimock.Equal(*mm_want_ptrs.catalogType, mm_got.catalogType) {
-				mmGetKnowledgeBaseCountByOwner.t.Errorf("RepositoryMock.GetKnowledgeBaseCountByOwner got unexpected parameter catalogType, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmGetKnowledgeBaseCountByOwner.GetKnowledgeBaseCountByOwnerMock.defaultExpectation.expectationOrigins.originCatalogType, *mm_want_ptrs.catalogType, mm_got.catalogType, minimock.Diff(*mm_want_ptrs.catalogType, mm_got.catalogType))
+			if mm_want_ptrs.kbType != nil && !minimock.Equal(*mm_want_ptrs.kbType, mm_got.kbType) {
+				mmGetKnowledgeBaseCountByOwner.t.Errorf("RepositoryMock.GetKnowledgeBaseCountByOwner got unexpected parameter kbType, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetKnowledgeBaseCountByOwner.GetKnowledgeBaseCountByOwnerMock.defaultExpectation.expectationOrigins.originKbType, *mm_want_ptrs.kbType, mm_got.kbType, minimock.Diff(*mm_want_ptrs.kbType, mm_got.kbType))
 			}
 
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
@@ -20161,9 +20161,9 @@ func (mmGetKnowledgeBaseCountByOwner *RepositoryMock) GetKnowledgeBaseCountByOwn
 		return (*mm_results).i1, (*mm_results).err
 	}
 	if mmGetKnowledgeBaseCountByOwner.funcGetKnowledgeBaseCountByOwner != nil {
-		return mmGetKnowledgeBaseCountByOwner.funcGetKnowledgeBaseCountByOwner(ctx, ownerUID, catalogType)
+		return mmGetKnowledgeBaseCountByOwner.funcGetKnowledgeBaseCountByOwner(ctx, ownerUID, kbType)
 	}
-	mmGetKnowledgeBaseCountByOwner.t.Fatalf("Unexpected call to RepositoryMock.GetKnowledgeBaseCountByOwner. %v %v %v", ctx, ownerUID, catalogType)
+	mmGetKnowledgeBaseCountByOwner.t.Fatalf("Unexpected call to RepositoryMock.GetKnowledgeBaseCountByOwner. %v %v %v", ctx, ownerUID, kbType)
 	return
 }
 
@@ -21032,7 +21032,7 @@ type RepositoryMockGetKnowledgeBaseFilesByNameExpectationOrigins struct {
 	origin         string
 	originCtx      string
 	originKbUID    string
-	originFileName string
+	originFilename string
 }
 
 // Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
@@ -21116,8 +21116,8 @@ func (mmGetKnowledgeBaseFilesByName *mRepositoryMockGetKnowledgeBaseFilesByName)
 	return mmGetKnowledgeBaseFilesByName
 }
 
-// ExpectFileNameParam3 sets up expected param filename for Repository.GetKnowledgeBaseFilesByName
-func (mmGetKnowledgeBaseFilesByName *mRepositoryMockGetKnowledgeBaseFilesByName) ExpectFileNameParam3(filename string) *mRepositoryMockGetKnowledgeBaseFilesByName {
+// ExpectFilenameParam3 sets up expected param filename for Repository.GetKnowledgeBaseFilesByName
+func (mmGetKnowledgeBaseFilesByName *mRepositoryMockGetKnowledgeBaseFilesByName) ExpectFilenameParam3(filename string) *mRepositoryMockGetKnowledgeBaseFilesByName {
 	if mmGetKnowledgeBaseFilesByName.mock.funcGetKnowledgeBaseFilesByName != nil {
 		mmGetKnowledgeBaseFilesByName.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseFilesByName mock is already set by Set")
 	}
@@ -21134,7 +21134,7 @@ func (mmGetKnowledgeBaseFilesByName *mRepositoryMockGetKnowledgeBaseFilesByName)
 		mmGetKnowledgeBaseFilesByName.defaultExpectation.paramPtrs = &RepositoryMockGetKnowledgeBaseFilesByNameParamPtrs{}
 	}
 	mmGetKnowledgeBaseFilesByName.defaultExpectation.paramPtrs.filename = &filename
-	mmGetKnowledgeBaseFilesByName.defaultExpectation.expectationOrigins.originFileName = minimock.CallerInfo(1)
+	mmGetKnowledgeBaseFilesByName.defaultExpectation.expectationOrigins.originFilename = minimock.CallerInfo(1)
 
 	return mmGetKnowledgeBaseFilesByName
 }
@@ -21268,7 +21268,7 @@ func (mmGetKnowledgeBaseFilesByName *RepositoryMock) GetKnowledgeBaseFilesByName
 
 			if mm_want_ptrs.filename != nil && !minimock.Equal(*mm_want_ptrs.filename, mm_got.filename) {
 				mmGetKnowledgeBaseFilesByName.t.Errorf("RepositoryMock.GetKnowledgeBaseFilesByName got unexpected parameter filename, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmGetKnowledgeBaseFilesByName.GetKnowledgeBaseFilesByNameMock.defaultExpectation.expectationOrigins.originFileName, *mm_want_ptrs.filename, mm_got.filename, minimock.Diff(*mm_want_ptrs.filename, mm_got.filename))
+					mmGetKnowledgeBaseFilesByName.GetKnowledgeBaseFilesByNameMock.defaultExpectation.expectationOrigins.originFilename, *mm_want_ptrs.filename, mm_got.filename, minimock.Diff(*mm_want_ptrs.filename, mm_got.filename))
 			}
 
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
@@ -26464,16 +26464,16 @@ type RepositoryMockGetRollbackKBForProductionExpectation struct {
 
 // RepositoryMockGetRollbackKBForProductionParams contains parameters of the Repository.GetRollbackKBForProduction
 type RepositoryMockGetRollbackKBForProductionParams struct {
-	ctx                 context.Context
-	ownerUID            types.OwnerUIDType
-	productionCatalogID string
+	ctx            context.Context
+	ownerUID       types.OwnerUIDType
+	productionKBID string
 }
 
 // RepositoryMockGetRollbackKBForProductionParamPtrs contains pointers to parameters of the Repository.GetRollbackKBForProduction
 type RepositoryMockGetRollbackKBForProductionParamPtrs struct {
-	ctx                 *context.Context
-	ownerUID            *types.OwnerUIDType
-	productionCatalogID *string
+	ctx            *context.Context
+	ownerUID       *types.OwnerUIDType
+	productionKBID *string
 }
 
 // RepositoryMockGetRollbackKBForProductionResults contains results of the Repository.GetRollbackKBForProduction
@@ -26484,10 +26484,10 @@ type RepositoryMockGetRollbackKBForProductionResults struct {
 
 // RepositoryMockGetRollbackKBForProductionOrigins contains origins of expectations of the Repository.GetRollbackKBForProduction
 type RepositoryMockGetRollbackKBForProductionExpectationOrigins struct {
-	origin                    string
-	originCtx                 string
-	originOwnerUID            string
-	originProductionCatalogID string
+	origin               string
+	originCtx            string
+	originOwnerUID       string
+	originProductionKBID string
 }
 
 // Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
@@ -26501,7 +26501,7 @@ func (mmGetRollbackKBForProduction *mRepositoryMockGetRollbackKBForProduction) O
 }
 
 // Expect sets up expected params for Repository.GetRollbackKBForProduction
-func (mmGetRollbackKBForProduction *mRepositoryMockGetRollbackKBForProduction) Expect(ctx context.Context, ownerUID types.OwnerUIDType, productionCatalogID string) *mRepositoryMockGetRollbackKBForProduction {
+func (mmGetRollbackKBForProduction *mRepositoryMockGetRollbackKBForProduction) Expect(ctx context.Context, ownerUID types.OwnerUIDType, productionKBID string) *mRepositoryMockGetRollbackKBForProduction {
 	if mmGetRollbackKBForProduction.mock.funcGetRollbackKBForProduction != nil {
 		mmGetRollbackKBForProduction.mock.t.Fatalf("RepositoryMock.GetRollbackKBForProduction mock is already set by Set")
 	}
@@ -26514,7 +26514,7 @@ func (mmGetRollbackKBForProduction *mRepositoryMockGetRollbackKBForProduction) E
 		mmGetRollbackKBForProduction.mock.t.Fatalf("RepositoryMock.GetRollbackKBForProduction mock is already set by ExpectParams functions")
 	}
 
-	mmGetRollbackKBForProduction.defaultExpectation.params = &RepositoryMockGetRollbackKBForProductionParams{ctx, ownerUID, productionCatalogID}
+	mmGetRollbackKBForProduction.defaultExpectation.params = &RepositoryMockGetRollbackKBForProductionParams{ctx, ownerUID, productionKBID}
 	mmGetRollbackKBForProduction.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
 	for _, e := range mmGetRollbackKBForProduction.expectations {
 		if minimock.Equal(e.params, mmGetRollbackKBForProduction.defaultExpectation.params) {
@@ -26571,8 +26571,8 @@ func (mmGetRollbackKBForProduction *mRepositoryMockGetRollbackKBForProduction) E
 	return mmGetRollbackKBForProduction
 }
 
-// ExpectProductionCatalogIDParam3 sets up expected param productionCatalogID for Repository.GetRollbackKBForProduction
-func (mmGetRollbackKBForProduction *mRepositoryMockGetRollbackKBForProduction) ExpectProductionCatalogIDParam3(productionCatalogID string) *mRepositoryMockGetRollbackKBForProduction {
+// ExpectProductionKBIDParam3 sets up expected param productionKBID for Repository.GetRollbackKBForProduction
+func (mmGetRollbackKBForProduction *mRepositoryMockGetRollbackKBForProduction) ExpectProductionKBIDParam3(productionKBID string) *mRepositoryMockGetRollbackKBForProduction {
 	if mmGetRollbackKBForProduction.mock.funcGetRollbackKBForProduction != nil {
 		mmGetRollbackKBForProduction.mock.t.Fatalf("RepositoryMock.GetRollbackKBForProduction mock is already set by Set")
 	}
@@ -26588,14 +26588,14 @@ func (mmGetRollbackKBForProduction *mRepositoryMockGetRollbackKBForProduction) E
 	if mmGetRollbackKBForProduction.defaultExpectation.paramPtrs == nil {
 		mmGetRollbackKBForProduction.defaultExpectation.paramPtrs = &RepositoryMockGetRollbackKBForProductionParamPtrs{}
 	}
-	mmGetRollbackKBForProduction.defaultExpectation.paramPtrs.productionCatalogID = &productionCatalogID
-	mmGetRollbackKBForProduction.defaultExpectation.expectationOrigins.originProductionCatalogID = minimock.CallerInfo(1)
+	mmGetRollbackKBForProduction.defaultExpectation.paramPtrs.productionKBID = &productionKBID
+	mmGetRollbackKBForProduction.defaultExpectation.expectationOrigins.originProductionKBID = minimock.CallerInfo(1)
 
 	return mmGetRollbackKBForProduction
 }
 
 // Inspect accepts an inspector function that has same arguments as the Repository.GetRollbackKBForProduction
-func (mmGetRollbackKBForProduction *mRepositoryMockGetRollbackKBForProduction) Inspect(f func(ctx context.Context, ownerUID types.OwnerUIDType, productionCatalogID string)) *mRepositoryMockGetRollbackKBForProduction {
+func (mmGetRollbackKBForProduction *mRepositoryMockGetRollbackKBForProduction) Inspect(f func(ctx context.Context, ownerUID types.OwnerUIDType, productionKBID string)) *mRepositoryMockGetRollbackKBForProduction {
 	if mmGetRollbackKBForProduction.mock.inspectFuncGetRollbackKBForProduction != nil {
 		mmGetRollbackKBForProduction.mock.t.Fatalf("Inspect function is already set for RepositoryMock.GetRollbackKBForProduction")
 	}
@@ -26620,7 +26620,7 @@ func (mmGetRollbackKBForProduction *mRepositoryMockGetRollbackKBForProduction) R
 }
 
 // Set uses given function f to mock the Repository.GetRollbackKBForProduction method
-func (mmGetRollbackKBForProduction *mRepositoryMockGetRollbackKBForProduction) Set(f func(ctx context.Context, ownerUID types.OwnerUIDType, productionCatalogID string) (kp1 *mm_repository.KnowledgeBaseModel, err error)) *RepositoryMock {
+func (mmGetRollbackKBForProduction *mRepositoryMockGetRollbackKBForProduction) Set(f func(ctx context.Context, ownerUID types.OwnerUIDType, productionKBID string) (kp1 *mm_repository.KnowledgeBaseModel, err error)) *RepositoryMock {
 	if mmGetRollbackKBForProduction.defaultExpectation != nil {
 		mmGetRollbackKBForProduction.mock.t.Fatalf("Default expectation is already set for the Repository.GetRollbackKBForProduction method")
 	}
@@ -26636,14 +26636,14 @@ func (mmGetRollbackKBForProduction *mRepositoryMockGetRollbackKBForProduction) S
 
 // When sets expectation for the Repository.GetRollbackKBForProduction which will trigger the result defined by the following
 // Then helper
-func (mmGetRollbackKBForProduction *mRepositoryMockGetRollbackKBForProduction) When(ctx context.Context, ownerUID types.OwnerUIDType, productionCatalogID string) *RepositoryMockGetRollbackKBForProductionExpectation {
+func (mmGetRollbackKBForProduction *mRepositoryMockGetRollbackKBForProduction) When(ctx context.Context, ownerUID types.OwnerUIDType, productionKBID string) *RepositoryMockGetRollbackKBForProductionExpectation {
 	if mmGetRollbackKBForProduction.mock.funcGetRollbackKBForProduction != nil {
 		mmGetRollbackKBForProduction.mock.t.Fatalf("RepositoryMock.GetRollbackKBForProduction mock is already set by Set")
 	}
 
 	expectation := &RepositoryMockGetRollbackKBForProductionExpectation{
 		mock:               mmGetRollbackKBForProduction.mock,
-		params:             &RepositoryMockGetRollbackKBForProductionParams{ctx, ownerUID, productionCatalogID},
+		params:             &RepositoryMockGetRollbackKBForProductionParams{ctx, ownerUID, productionKBID},
 		expectationOrigins: RepositoryMockGetRollbackKBForProductionExpectationOrigins{origin: minimock.CallerInfo(1)},
 	}
 	mmGetRollbackKBForProduction.expectations = append(mmGetRollbackKBForProduction.expectations, expectation)
@@ -26678,17 +26678,17 @@ func (mmGetRollbackKBForProduction *mRepositoryMockGetRollbackKBForProduction) i
 }
 
 // GetRollbackKBForProduction implements mm_repository.Repository
-func (mmGetRollbackKBForProduction *RepositoryMock) GetRollbackKBForProduction(ctx context.Context, ownerUID types.OwnerUIDType, productionCatalogID string) (kp1 *mm_repository.KnowledgeBaseModel, err error) {
+func (mmGetRollbackKBForProduction *RepositoryMock) GetRollbackKBForProduction(ctx context.Context, ownerUID types.OwnerUIDType, productionKBID string) (kp1 *mm_repository.KnowledgeBaseModel, err error) {
 	mm_atomic.AddUint64(&mmGetRollbackKBForProduction.beforeGetRollbackKBForProductionCounter, 1)
 	defer mm_atomic.AddUint64(&mmGetRollbackKBForProduction.afterGetRollbackKBForProductionCounter, 1)
 
 	mmGetRollbackKBForProduction.t.Helper()
 
 	if mmGetRollbackKBForProduction.inspectFuncGetRollbackKBForProduction != nil {
-		mmGetRollbackKBForProduction.inspectFuncGetRollbackKBForProduction(ctx, ownerUID, productionCatalogID)
+		mmGetRollbackKBForProduction.inspectFuncGetRollbackKBForProduction(ctx, ownerUID, productionKBID)
 	}
 
-	mm_params := RepositoryMockGetRollbackKBForProductionParams{ctx, ownerUID, productionCatalogID}
+	mm_params := RepositoryMockGetRollbackKBForProductionParams{ctx, ownerUID, productionKBID}
 
 	// Record call args
 	mmGetRollbackKBForProduction.GetRollbackKBForProductionMock.mutex.Lock()
@@ -26707,7 +26707,7 @@ func (mmGetRollbackKBForProduction *RepositoryMock) GetRollbackKBForProduction(c
 		mm_want := mmGetRollbackKBForProduction.GetRollbackKBForProductionMock.defaultExpectation.params
 		mm_want_ptrs := mmGetRollbackKBForProduction.GetRollbackKBForProductionMock.defaultExpectation.paramPtrs
 
-		mm_got := RepositoryMockGetRollbackKBForProductionParams{ctx, ownerUID, productionCatalogID}
+		mm_got := RepositoryMockGetRollbackKBForProductionParams{ctx, ownerUID, productionKBID}
 
 		if mm_want_ptrs != nil {
 
@@ -26721,9 +26721,9 @@ func (mmGetRollbackKBForProduction *RepositoryMock) GetRollbackKBForProduction(c
 					mmGetRollbackKBForProduction.GetRollbackKBForProductionMock.defaultExpectation.expectationOrigins.originOwnerUID, *mm_want_ptrs.ownerUID, mm_got.ownerUID, minimock.Diff(*mm_want_ptrs.ownerUID, mm_got.ownerUID))
 			}
 
-			if mm_want_ptrs.productionCatalogID != nil && !minimock.Equal(*mm_want_ptrs.productionCatalogID, mm_got.productionCatalogID) {
-				mmGetRollbackKBForProduction.t.Errorf("RepositoryMock.GetRollbackKBForProduction got unexpected parameter productionCatalogID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmGetRollbackKBForProduction.GetRollbackKBForProductionMock.defaultExpectation.expectationOrigins.originProductionCatalogID, *mm_want_ptrs.productionCatalogID, mm_got.productionCatalogID, minimock.Diff(*mm_want_ptrs.productionCatalogID, mm_got.productionCatalogID))
+			if mm_want_ptrs.productionKBID != nil && !minimock.Equal(*mm_want_ptrs.productionKBID, mm_got.productionKBID) {
+				mmGetRollbackKBForProduction.t.Errorf("RepositoryMock.GetRollbackKBForProduction got unexpected parameter productionKBID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetRollbackKBForProduction.GetRollbackKBForProductionMock.defaultExpectation.expectationOrigins.originProductionKBID, *mm_want_ptrs.productionKBID, mm_got.productionKBID, minimock.Diff(*mm_want_ptrs.productionKBID, mm_got.productionKBID))
 			}
 
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
@@ -26738,9 +26738,9 @@ func (mmGetRollbackKBForProduction *RepositoryMock) GetRollbackKBForProduction(c
 		return (*mm_results).kp1, (*mm_results).err
 	}
 	if mmGetRollbackKBForProduction.funcGetRollbackKBForProduction != nil {
-		return mmGetRollbackKBForProduction.funcGetRollbackKBForProduction(ctx, ownerUID, productionCatalogID)
+		return mmGetRollbackKBForProduction.funcGetRollbackKBForProduction(ctx, ownerUID, productionKBID)
 	}
-	mmGetRollbackKBForProduction.t.Fatalf("Unexpected call to RepositoryMock.GetRollbackKBForProduction. %v %v %v", ctx, ownerUID, productionCatalogID)
+	mmGetRollbackKBForProduction.t.Fatalf("Unexpected call to RepositoryMock.GetRollbackKBForProduction. %v %v %v", ctx, ownerUID, productionKBID)
 	return
 }
 
@@ -27181,16 +27181,16 @@ type RepositoryMockGetStagingKBForProductionExpectation struct {
 
 // RepositoryMockGetStagingKBForProductionParams contains parameters of the Repository.GetStagingKBForProduction
 type RepositoryMockGetStagingKBForProductionParams struct {
-	ctx                 context.Context
-	ownerUID            types.OwnerUIDType
-	productionCatalogID string
+	ctx            context.Context
+	ownerUID       types.OwnerUIDType
+	productionKBID string
 }
 
 // RepositoryMockGetStagingKBForProductionParamPtrs contains pointers to parameters of the Repository.GetStagingKBForProduction
 type RepositoryMockGetStagingKBForProductionParamPtrs struct {
-	ctx                 *context.Context
-	ownerUID            *types.OwnerUIDType
-	productionCatalogID *string
+	ctx            *context.Context
+	ownerUID       *types.OwnerUIDType
+	productionKBID *string
 }
 
 // RepositoryMockGetStagingKBForProductionResults contains results of the Repository.GetStagingKBForProduction
@@ -27201,10 +27201,10 @@ type RepositoryMockGetStagingKBForProductionResults struct {
 
 // RepositoryMockGetStagingKBForProductionOrigins contains origins of expectations of the Repository.GetStagingKBForProduction
 type RepositoryMockGetStagingKBForProductionExpectationOrigins struct {
-	origin                    string
-	originCtx                 string
-	originOwnerUID            string
-	originProductionCatalogID string
+	origin               string
+	originCtx            string
+	originOwnerUID       string
+	originProductionKBID string
 }
 
 // Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
@@ -27218,7 +27218,7 @@ func (mmGetStagingKBForProduction *mRepositoryMockGetStagingKBForProduction) Opt
 }
 
 // Expect sets up expected params for Repository.GetStagingKBForProduction
-func (mmGetStagingKBForProduction *mRepositoryMockGetStagingKBForProduction) Expect(ctx context.Context, ownerUID types.OwnerUIDType, productionCatalogID string) *mRepositoryMockGetStagingKBForProduction {
+func (mmGetStagingKBForProduction *mRepositoryMockGetStagingKBForProduction) Expect(ctx context.Context, ownerUID types.OwnerUIDType, productionKBID string) *mRepositoryMockGetStagingKBForProduction {
 	if mmGetStagingKBForProduction.mock.funcGetStagingKBForProduction != nil {
 		mmGetStagingKBForProduction.mock.t.Fatalf("RepositoryMock.GetStagingKBForProduction mock is already set by Set")
 	}
@@ -27231,7 +27231,7 @@ func (mmGetStagingKBForProduction *mRepositoryMockGetStagingKBForProduction) Exp
 		mmGetStagingKBForProduction.mock.t.Fatalf("RepositoryMock.GetStagingKBForProduction mock is already set by ExpectParams functions")
 	}
 
-	mmGetStagingKBForProduction.defaultExpectation.params = &RepositoryMockGetStagingKBForProductionParams{ctx, ownerUID, productionCatalogID}
+	mmGetStagingKBForProduction.defaultExpectation.params = &RepositoryMockGetStagingKBForProductionParams{ctx, ownerUID, productionKBID}
 	mmGetStagingKBForProduction.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
 	for _, e := range mmGetStagingKBForProduction.expectations {
 		if minimock.Equal(e.params, mmGetStagingKBForProduction.defaultExpectation.params) {
@@ -27288,8 +27288,8 @@ func (mmGetStagingKBForProduction *mRepositoryMockGetStagingKBForProduction) Exp
 	return mmGetStagingKBForProduction
 }
 
-// ExpectProductionCatalogIDParam3 sets up expected param productionCatalogID for Repository.GetStagingKBForProduction
-func (mmGetStagingKBForProduction *mRepositoryMockGetStagingKBForProduction) ExpectProductionCatalogIDParam3(productionCatalogID string) *mRepositoryMockGetStagingKBForProduction {
+// ExpectProductionKBIDParam3 sets up expected param productionKBID for Repository.GetStagingKBForProduction
+func (mmGetStagingKBForProduction *mRepositoryMockGetStagingKBForProduction) ExpectProductionKBIDParam3(productionKBID string) *mRepositoryMockGetStagingKBForProduction {
 	if mmGetStagingKBForProduction.mock.funcGetStagingKBForProduction != nil {
 		mmGetStagingKBForProduction.mock.t.Fatalf("RepositoryMock.GetStagingKBForProduction mock is already set by Set")
 	}
@@ -27305,14 +27305,14 @@ func (mmGetStagingKBForProduction *mRepositoryMockGetStagingKBForProduction) Exp
 	if mmGetStagingKBForProduction.defaultExpectation.paramPtrs == nil {
 		mmGetStagingKBForProduction.defaultExpectation.paramPtrs = &RepositoryMockGetStagingKBForProductionParamPtrs{}
 	}
-	mmGetStagingKBForProduction.defaultExpectation.paramPtrs.productionCatalogID = &productionCatalogID
-	mmGetStagingKBForProduction.defaultExpectation.expectationOrigins.originProductionCatalogID = minimock.CallerInfo(1)
+	mmGetStagingKBForProduction.defaultExpectation.paramPtrs.productionKBID = &productionKBID
+	mmGetStagingKBForProduction.defaultExpectation.expectationOrigins.originProductionKBID = minimock.CallerInfo(1)
 
 	return mmGetStagingKBForProduction
 }
 
 // Inspect accepts an inspector function that has same arguments as the Repository.GetStagingKBForProduction
-func (mmGetStagingKBForProduction *mRepositoryMockGetStagingKBForProduction) Inspect(f func(ctx context.Context, ownerUID types.OwnerUIDType, productionCatalogID string)) *mRepositoryMockGetStagingKBForProduction {
+func (mmGetStagingKBForProduction *mRepositoryMockGetStagingKBForProduction) Inspect(f func(ctx context.Context, ownerUID types.OwnerUIDType, productionKBID string)) *mRepositoryMockGetStagingKBForProduction {
 	if mmGetStagingKBForProduction.mock.inspectFuncGetStagingKBForProduction != nil {
 		mmGetStagingKBForProduction.mock.t.Fatalf("Inspect function is already set for RepositoryMock.GetStagingKBForProduction")
 	}
@@ -27337,7 +27337,7 @@ func (mmGetStagingKBForProduction *mRepositoryMockGetStagingKBForProduction) Ret
 }
 
 // Set uses given function f to mock the Repository.GetStagingKBForProduction method
-func (mmGetStagingKBForProduction *mRepositoryMockGetStagingKBForProduction) Set(f func(ctx context.Context, ownerUID types.OwnerUIDType, productionCatalogID string) (kp1 *mm_repository.KnowledgeBaseModel, err error)) *RepositoryMock {
+func (mmGetStagingKBForProduction *mRepositoryMockGetStagingKBForProduction) Set(f func(ctx context.Context, ownerUID types.OwnerUIDType, productionKBID string) (kp1 *mm_repository.KnowledgeBaseModel, err error)) *RepositoryMock {
 	if mmGetStagingKBForProduction.defaultExpectation != nil {
 		mmGetStagingKBForProduction.mock.t.Fatalf("Default expectation is already set for the Repository.GetStagingKBForProduction method")
 	}
@@ -27353,14 +27353,14 @@ func (mmGetStagingKBForProduction *mRepositoryMockGetStagingKBForProduction) Set
 
 // When sets expectation for the Repository.GetStagingKBForProduction which will trigger the result defined by the following
 // Then helper
-func (mmGetStagingKBForProduction *mRepositoryMockGetStagingKBForProduction) When(ctx context.Context, ownerUID types.OwnerUIDType, productionCatalogID string) *RepositoryMockGetStagingKBForProductionExpectation {
+func (mmGetStagingKBForProduction *mRepositoryMockGetStagingKBForProduction) When(ctx context.Context, ownerUID types.OwnerUIDType, productionKBID string) *RepositoryMockGetStagingKBForProductionExpectation {
 	if mmGetStagingKBForProduction.mock.funcGetStagingKBForProduction != nil {
 		mmGetStagingKBForProduction.mock.t.Fatalf("RepositoryMock.GetStagingKBForProduction mock is already set by Set")
 	}
 
 	expectation := &RepositoryMockGetStagingKBForProductionExpectation{
 		mock:               mmGetStagingKBForProduction.mock,
-		params:             &RepositoryMockGetStagingKBForProductionParams{ctx, ownerUID, productionCatalogID},
+		params:             &RepositoryMockGetStagingKBForProductionParams{ctx, ownerUID, productionKBID},
 		expectationOrigins: RepositoryMockGetStagingKBForProductionExpectationOrigins{origin: minimock.CallerInfo(1)},
 	}
 	mmGetStagingKBForProduction.expectations = append(mmGetStagingKBForProduction.expectations, expectation)
@@ -27395,17 +27395,17 @@ func (mmGetStagingKBForProduction *mRepositoryMockGetStagingKBForProduction) inv
 }
 
 // GetStagingKBForProduction implements mm_repository.Repository
-func (mmGetStagingKBForProduction *RepositoryMock) GetStagingKBForProduction(ctx context.Context, ownerUID types.OwnerUIDType, productionCatalogID string) (kp1 *mm_repository.KnowledgeBaseModel, err error) {
+func (mmGetStagingKBForProduction *RepositoryMock) GetStagingKBForProduction(ctx context.Context, ownerUID types.OwnerUIDType, productionKBID string) (kp1 *mm_repository.KnowledgeBaseModel, err error) {
 	mm_atomic.AddUint64(&mmGetStagingKBForProduction.beforeGetStagingKBForProductionCounter, 1)
 	defer mm_atomic.AddUint64(&mmGetStagingKBForProduction.afterGetStagingKBForProductionCounter, 1)
 
 	mmGetStagingKBForProduction.t.Helper()
 
 	if mmGetStagingKBForProduction.inspectFuncGetStagingKBForProduction != nil {
-		mmGetStagingKBForProduction.inspectFuncGetStagingKBForProduction(ctx, ownerUID, productionCatalogID)
+		mmGetStagingKBForProduction.inspectFuncGetStagingKBForProduction(ctx, ownerUID, productionKBID)
 	}
 
-	mm_params := RepositoryMockGetStagingKBForProductionParams{ctx, ownerUID, productionCatalogID}
+	mm_params := RepositoryMockGetStagingKBForProductionParams{ctx, ownerUID, productionKBID}
 
 	// Record call args
 	mmGetStagingKBForProduction.GetStagingKBForProductionMock.mutex.Lock()
@@ -27424,7 +27424,7 @@ func (mmGetStagingKBForProduction *RepositoryMock) GetStagingKBForProduction(ctx
 		mm_want := mmGetStagingKBForProduction.GetStagingKBForProductionMock.defaultExpectation.params
 		mm_want_ptrs := mmGetStagingKBForProduction.GetStagingKBForProductionMock.defaultExpectation.paramPtrs
 
-		mm_got := RepositoryMockGetStagingKBForProductionParams{ctx, ownerUID, productionCatalogID}
+		mm_got := RepositoryMockGetStagingKBForProductionParams{ctx, ownerUID, productionKBID}
 
 		if mm_want_ptrs != nil {
 
@@ -27438,9 +27438,9 @@ func (mmGetStagingKBForProduction *RepositoryMock) GetStagingKBForProduction(ctx
 					mmGetStagingKBForProduction.GetStagingKBForProductionMock.defaultExpectation.expectationOrigins.originOwnerUID, *mm_want_ptrs.ownerUID, mm_got.ownerUID, minimock.Diff(*mm_want_ptrs.ownerUID, mm_got.ownerUID))
 			}
 
-			if mm_want_ptrs.productionCatalogID != nil && !minimock.Equal(*mm_want_ptrs.productionCatalogID, mm_got.productionCatalogID) {
-				mmGetStagingKBForProduction.t.Errorf("RepositoryMock.GetStagingKBForProduction got unexpected parameter productionCatalogID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmGetStagingKBForProduction.GetStagingKBForProductionMock.defaultExpectation.expectationOrigins.originProductionCatalogID, *mm_want_ptrs.productionCatalogID, mm_got.productionCatalogID, minimock.Diff(*mm_want_ptrs.productionCatalogID, mm_got.productionCatalogID))
+			if mm_want_ptrs.productionKBID != nil && !minimock.Equal(*mm_want_ptrs.productionKBID, mm_got.productionKBID) {
+				mmGetStagingKBForProduction.t.Errorf("RepositoryMock.GetStagingKBForProduction got unexpected parameter productionKBID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetStagingKBForProduction.GetStagingKBForProductionMock.defaultExpectation.expectationOrigins.originProductionKBID, *mm_want_ptrs.productionKBID, mm_got.productionKBID, minimock.Diff(*mm_want_ptrs.productionKBID, mm_got.productionKBID))
 			}
 
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
@@ -27455,9 +27455,9 @@ func (mmGetStagingKBForProduction *RepositoryMock) GetStagingKBForProduction(ctx
 		return (*mm_results).kp1, (*mm_results).err
 	}
 	if mmGetStagingKBForProduction.funcGetStagingKBForProduction != nil {
-		return mmGetStagingKBForProduction.funcGetStagingKBForProduction(ctx, ownerUID, productionCatalogID)
+		return mmGetStagingKBForProduction.funcGetStagingKBForProduction(ctx, ownerUID, productionKBID)
 	}
-	mmGetStagingKBForProduction.t.Fatalf("Unexpected call to RepositoryMock.GetStagingKBForProduction. %v %v %v", ctx, ownerUID, productionCatalogID)
+	mmGetStagingKBForProduction.t.Fatalf("Unexpected call to RepositoryMock.GetStagingKBForProduction. %v %v %v", ctx, ownerUID, productionKBID)
 	return
 }
 
@@ -35995,56 +35995,56 @@ func (m *RepositoryMock) MinimockListKnowledgeBasesInspect() {
 	}
 }
 
-type mRepositoryMockListKnowledgeBasesByCatalogType struct {
+type mRepositoryMockListKnowledgeBasesByType struct {
 	optional           bool
 	mock               *RepositoryMock
-	defaultExpectation *RepositoryMockListKnowledgeBasesByCatalogTypeExpectation
-	expectations       []*RepositoryMockListKnowledgeBasesByCatalogTypeExpectation
+	defaultExpectation *RepositoryMockListKnowledgeBasesByTypeExpectation
+	expectations       []*RepositoryMockListKnowledgeBasesByTypeExpectation
 
-	callArgs []*RepositoryMockListKnowledgeBasesByCatalogTypeParams
+	callArgs []*RepositoryMockListKnowledgeBasesByTypeParams
 	mutex    sync.RWMutex
 
 	expectedInvocations       uint64
 	expectedInvocationsOrigin string
 }
 
-// RepositoryMockListKnowledgeBasesByCatalogTypeExpectation specifies expectation struct of the Repository.ListKnowledgeBasesByCatalogType
-type RepositoryMockListKnowledgeBasesByCatalogTypeExpectation struct {
+// RepositoryMockListKnowledgeBasesByTypeExpectation specifies expectation struct of the Repository.ListKnowledgeBasesByType
+type RepositoryMockListKnowledgeBasesByTypeExpectation struct {
 	mock               *RepositoryMock
-	params             *RepositoryMockListKnowledgeBasesByCatalogTypeParams
-	paramPtrs          *RepositoryMockListKnowledgeBasesByCatalogTypeParamPtrs
-	expectationOrigins RepositoryMockListKnowledgeBasesByCatalogTypeExpectationOrigins
-	results            *RepositoryMockListKnowledgeBasesByCatalogTypeResults
+	params             *RepositoryMockListKnowledgeBasesByTypeParams
+	paramPtrs          *RepositoryMockListKnowledgeBasesByTypeParamPtrs
+	expectationOrigins RepositoryMockListKnowledgeBasesByTypeExpectationOrigins
+	results            *RepositoryMockListKnowledgeBasesByTypeResults
 	returnOrigin       string
 	Counter            uint64
 }
 
-// RepositoryMockListKnowledgeBasesByCatalogTypeParams contains parameters of the Repository.ListKnowledgeBasesByCatalogType
-type RepositoryMockListKnowledgeBasesByCatalogTypeParams struct {
-	ctx         context.Context
-	ownerUID    string
-	catalogType artifactpb.CatalogType
+// RepositoryMockListKnowledgeBasesByTypeParams contains parameters of the Repository.ListKnowledgeBasesByType
+type RepositoryMockListKnowledgeBasesByTypeParams struct {
+	ctx      context.Context
+	ownerUID string
+	kbType   artifactpb.KnowledgeBaseType
 }
 
-// RepositoryMockListKnowledgeBasesByCatalogTypeParamPtrs contains pointers to parameters of the Repository.ListKnowledgeBasesByCatalogType
-type RepositoryMockListKnowledgeBasesByCatalogTypeParamPtrs struct {
-	ctx         *context.Context
-	ownerUID    *string
-	catalogType *artifactpb.CatalogType
+// RepositoryMockListKnowledgeBasesByTypeParamPtrs contains pointers to parameters of the Repository.ListKnowledgeBasesByType
+type RepositoryMockListKnowledgeBasesByTypeParamPtrs struct {
+	ctx      *context.Context
+	ownerUID *string
+	kbType   *artifactpb.KnowledgeBaseType
 }
 
-// RepositoryMockListKnowledgeBasesByCatalogTypeResults contains results of the Repository.ListKnowledgeBasesByCatalogType
-type RepositoryMockListKnowledgeBasesByCatalogTypeResults struct {
+// RepositoryMockListKnowledgeBasesByTypeResults contains results of the Repository.ListKnowledgeBasesByType
+type RepositoryMockListKnowledgeBasesByTypeResults struct {
 	ka1 []mm_repository.KnowledgeBaseModel
 	err error
 }
 
-// RepositoryMockListKnowledgeBasesByCatalogTypeOrigins contains origins of expectations of the Repository.ListKnowledgeBasesByCatalogType
-type RepositoryMockListKnowledgeBasesByCatalogTypeExpectationOrigins struct {
-	origin            string
-	originCtx         string
-	originOwnerUID    string
-	originCatalogType string
+// RepositoryMockListKnowledgeBasesByTypeOrigins contains origins of expectations of the Repository.ListKnowledgeBasesByType
+type RepositoryMockListKnowledgeBasesByTypeExpectationOrigins struct {
+	origin         string
+	originCtx      string
+	originOwnerUID string
+	originKbType   string
 }
 
 // Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
@@ -36052,373 +36052,373 @@ type RepositoryMockListKnowledgeBasesByCatalogTypeExpectationOrigins struct {
 // Optional() makes method check to work in '0 or more' mode.
 // It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
 // catch the problems when the expected method call is totally skipped during test run.
-func (mmListKnowledgeBasesByCatalogType *mRepositoryMockListKnowledgeBasesByCatalogType) Optional() *mRepositoryMockListKnowledgeBasesByCatalogType {
-	mmListKnowledgeBasesByCatalogType.optional = true
-	return mmListKnowledgeBasesByCatalogType
+func (mmListKnowledgeBasesByType *mRepositoryMockListKnowledgeBasesByType) Optional() *mRepositoryMockListKnowledgeBasesByType {
+	mmListKnowledgeBasesByType.optional = true
+	return mmListKnowledgeBasesByType
 }
 
-// Expect sets up expected params for Repository.ListKnowledgeBasesByCatalogType
-func (mmListKnowledgeBasesByCatalogType *mRepositoryMockListKnowledgeBasesByCatalogType) Expect(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType) *mRepositoryMockListKnowledgeBasesByCatalogType {
-	if mmListKnowledgeBasesByCatalogType.mock.funcListKnowledgeBasesByCatalogType != nil {
-		mmListKnowledgeBasesByCatalogType.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByCatalogType mock is already set by Set")
+// Expect sets up expected params for Repository.ListKnowledgeBasesByType
+func (mmListKnowledgeBasesByType *mRepositoryMockListKnowledgeBasesByType) Expect(ctx context.Context, ownerUID string, kbType artifactpb.KnowledgeBaseType) *mRepositoryMockListKnowledgeBasesByType {
+	if mmListKnowledgeBasesByType.mock.funcListKnowledgeBasesByType != nil {
+		mmListKnowledgeBasesByType.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByType mock is already set by Set")
 	}
 
-	if mmListKnowledgeBasesByCatalogType.defaultExpectation == nil {
-		mmListKnowledgeBasesByCatalogType.defaultExpectation = &RepositoryMockListKnowledgeBasesByCatalogTypeExpectation{}
+	if mmListKnowledgeBasesByType.defaultExpectation == nil {
+		mmListKnowledgeBasesByType.defaultExpectation = &RepositoryMockListKnowledgeBasesByTypeExpectation{}
 	}
 
-	if mmListKnowledgeBasesByCatalogType.defaultExpectation.paramPtrs != nil {
-		mmListKnowledgeBasesByCatalogType.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByCatalogType mock is already set by ExpectParams functions")
+	if mmListKnowledgeBasesByType.defaultExpectation.paramPtrs != nil {
+		mmListKnowledgeBasesByType.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByType mock is already set by ExpectParams functions")
 	}
 
-	mmListKnowledgeBasesByCatalogType.defaultExpectation.params = &RepositoryMockListKnowledgeBasesByCatalogTypeParams{ctx, ownerUID, catalogType}
-	mmListKnowledgeBasesByCatalogType.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
-	for _, e := range mmListKnowledgeBasesByCatalogType.expectations {
-		if minimock.Equal(e.params, mmListKnowledgeBasesByCatalogType.defaultExpectation.params) {
-			mmListKnowledgeBasesByCatalogType.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmListKnowledgeBasesByCatalogType.defaultExpectation.params)
+	mmListKnowledgeBasesByType.defaultExpectation.params = &RepositoryMockListKnowledgeBasesByTypeParams{ctx, ownerUID, kbType}
+	mmListKnowledgeBasesByType.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmListKnowledgeBasesByType.expectations {
+		if minimock.Equal(e.params, mmListKnowledgeBasesByType.defaultExpectation.params) {
+			mmListKnowledgeBasesByType.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmListKnowledgeBasesByType.defaultExpectation.params)
 		}
 	}
 
-	return mmListKnowledgeBasesByCatalogType
+	return mmListKnowledgeBasesByType
 }
 
-// ExpectCtxParam1 sets up expected param ctx for Repository.ListKnowledgeBasesByCatalogType
-func (mmListKnowledgeBasesByCatalogType *mRepositoryMockListKnowledgeBasesByCatalogType) ExpectCtxParam1(ctx context.Context) *mRepositoryMockListKnowledgeBasesByCatalogType {
-	if mmListKnowledgeBasesByCatalogType.mock.funcListKnowledgeBasesByCatalogType != nil {
-		mmListKnowledgeBasesByCatalogType.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByCatalogType mock is already set by Set")
+// ExpectCtxParam1 sets up expected param ctx for Repository.ListKnowledgeBasesByType
+func (mmListKnowledgeBasesByType *mRepositoryMockListKnowledgeBasesByType) ExpectCtxParam1(ctx context.Context) *mRepositoryMockListKnowledgeBasesByType {
+	if mmListKnowledgeBasesByType.mock.funcListKnowledgeBasesByType != nil {
+		mmListKnowledgeBasesByType.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByType mock is already set by Set")
 	}
 
-	if mmListKnowledgeBasesByCatalogType.defaultExpectation == nil {
-		mmListKnowledgeBasesByCatalogType.defaultExpectation = &RepositoryMockListKnowledgeBasesByCatalogTypeExpectation{}
+	if mmListKnowledgeBasesByType.defaultExpectation == nil {
+		mmListKnowledgeBasesByType.defaultExpectation = &RepositoryMockListKnowledgeBasesByTypeExpectation{}
 	}
 
-	if mmListKnowledgeBasesByCatalogType.defaultExpectation.params != nil {
-		mmListKnowledgeBasesByCatalogType.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByCatalogType mock is already set by Expect")
+	if mmListKnowledgeBasesByType.defaultExpectation.params != nil {
+		mmListKnowledgeBasesByType.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByType mock is already set by Expect")
 	}
 
-	if mmListKnowledgeBasesByCatalogType.defaultExpectation.paramPtrs == nil {
-		mmListKnowledgeBasesByCatalogType.defaultExpectation.paramPtrs = &RepositoryMockListKnowledgeBasesByCatalogTypeParamPtrs{}
+	if mmListKnowledgeBasesByType.defaultExpectation.paramPtrs == nil {
+		mmListKnowledgeBasesByType.defaultExpectation.paramPtrs = &RepositoryMockListKnowledgeBasesByTypeParamPtrs{}
 	}
-	mmListKnowledgeBasesByCatalogType.defaultExpectation.paramPtrs.ctx = &ctx
-	mmListKnowledgeBasesByCatalogType.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+	mmListKnowledgeBasesByType.defaultExpectation.paramPtrs.ctx = &ctx
+	mmListKnowledgeBasesByType.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
 
-	return mmListKnowledgeBasesByCatalogType
+	return mmListKnowledgeBasesByType
 }
 
-// ExpectOwnerUIDParam2 sets up expected param ownerUID for Repository.ListKnowledgeBasesByCatalogType
-func (mmListKnowledgeBasesByCatalogType *mRepositoryMockListKnowledgeBasesByCatalogType) ExpectOwnerUIDParam2(ownerUID string) *mRepositoryMockListKnowledgeBasesByCatalogType {
-	if mmListKnowledgeBasesByCatalogType.mock.funcListKnowledgeBasesByCatalogType != nil {
-		mmListKnowledgeBasesByCatalogType.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByCatalogType mock is already set by Set")
+// ExpectOwnerUIDParam2 sets up expected param ownerUID for Repository.ListKnowledgeBasesByType
+func (mmListKnowledgeBasesByType *mRepositoryMockListKnowledgeBasesByType) ExpectOwnerUIDParam2(ownerUID string) *mRepositoryMockListKnowledgeBasesByType {
+	if mmListKnowledgeBasesByType.mock.funcListKnowledgeBasesByType != nil {
+		mmListKnowledgeBasesByType.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByType mock is already set by Set")
 	}
 
-	if mmListKnowledgeBasesByCatalogType.defaultExpectation == nil {
-		mmListKnowledgeBasesByCatalogType.defaultExpectation = &RepositoryMockListKnowledgeBasesByCatalogTypeExpectation{}
+	if mmListKnowledgeBasesByType.defaultExpectation == nil {
+		mmListKnowledgeBasesByType.defaultExpectation = &RepositoryMockListKnowledgeBasesByTypeExpectation{}
 	}
 
-	if mmListKnowledgeBasesByCatalogType.defaultExpectation.params != nil {
-		mmListKnowledgeBasesByCatalogType.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByCatalogType mock is already set by Expect")
+	if mmListKnowledgeBasesByType.defaultExpectation.params != nil {
+		mmListKnowledgeBasesByType.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByType mock is already set by Expect")
 	}
 
-	if mmListKnowledgeBasesByCatalogType.defaultExpectation.paramPtrs == nil {
-		mmListKnowledgeBasesByCatalogType.defaultExpectation.paramPtrs = &RepositoryMockListKnowledgeBasesByCatalogTypeParamPtrs{}
+	if mmListKnowledgeBasesByType.defaultExpectation.paramPtrs == nil {
+		mmListKnowledgeBasesByType.defaultExpectation.paramPtrs = &RepositoryMockListKnowledgeBasesByTypeParamPtrs{}
 	}
-	mmListKnowledgeBasesByCatalogType.defaultExpectation.paramPtrs.ownerUID = &ownerUID
-	mmListKnowledgeBasesByCatalogType.defaultExpectation.expectationOrigins.originOwnerUID = minimock.CallerInfo(1)
+	mmListKnowledgeBasesByType.defaultExpectation.paramPtrs.ownerUID = &ownerUID
+	mmListKnowledgeBasesByType.defaultExpectation.expectationOrigins.originOwnerUID = minimock.CallerInfo(1)
 
-	return mmListKnowledgeBasesByCatalogType
+	return mmListKnowledgeBasesByType
 }
 
-// ExpectCatalogTypeParam3 sets up expected param catalogType for Repository.ListKnowledgeBasesByCatalogType
-func (mmListKnowledgeBasesByCatalogType *mRepositoryMockListKnowledgeBasesByCatalogType) ExpectCatalogTypeParam3(catalogType artifactpb.CatalogType) *mRepositoryMockListKnowledgeBasesByCatalogType {
-	if mmListKnowledgeBasesByCatalogType.mock.funcListKnowledgeBasesByCatalogType != nil {
-		mmListKnowledgeBasesByCatalogType.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByCatalogType mock is already set by Set")
+// ExpectKbTypeParam3 sets up expected param kbType for Repository.ListKnowledgeBasesByType
+func (mmListKnowledgeBasesByType *mRepositoryMockListKnowledgeBasesByType) ExpectKbTypeParam3(kbType artifactpb.KnowledgeBaseType) *mRepositoryMockListKnowledgeBasesByType {
+	if mmListKnowledgeBasesByType.mock.funcListKnowledgeBasesByType != nil {
+		mmListKnowledgeBasesByType.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByType mock is already set by Set")
 	}
 
-	if mmListKnowledgeBasesByCatalogType.defaultExpectation == nil {
-		mmListKnowledgeBasesByCatalogType.defaultExpectation = &RepositoryMockListKnowledgeBasesByCatalogTypeExpectation{}
+	if mmListKnowledgeBasesByType.defaultExpectation == nil {
+		mmListKnowledgeBasesByType.defaultExpectation = &RepositoryMockListKnowledgeBasesByTypeExpectation{}
 	}
 
-	if mmListKnowledgeBasesByCatalogType.defaultExpectation.params != nil {
-		mmListKnowledgeBasesByCatalogType.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByCatalogType mock is already set by Expect")
+	if mmListKnowledgeBasesByType.defaultExpectation.params != nil {
+		mmListKnowledgeBasesByType.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByType mock is already set by Expect")
 	}
 
-	if mmListKnowledgeBasesByCatalogType.defaultExpectation.paramPtrs == nil {
-		mmListKnowledgeBasesByCatalogType.defaultExpectation.paramPtrs = &RepositoryMockListKnowledgeBasesByCatalogTypeParamPtrs{}
+	if mmListKnowledgeBasesByType.defaultExpectation.paramPtrs == nil {
+		mmListKnowledgeBasesByType.defaultExpectation.paramPtrs = &RepositoryMockListKnowledgeBasesByTypeParamPtrs{}
 	}
-	mmListKnowledgeBasesByCatalogType.defaultExpectation.paramPtrs.catalogType = &catalogType
-	mmListKnowledgeBasesByCatalogType.defaultExpectation.expectationOrigins.originCatalogType = minimock.CallerInfo(1)
+	mmListKnowledgeBasesByType.defaultExpectation.paramPtrs.kbType = &kbType
+	mmListKnowledgeBasesByType.defaultExpectation.expectationOrigins.originKbType = minimock.CallerInfo(1)
 
-	return mmListKnowledgeBasesByCatalogType
+	return mmListKnowledgeBasesByType
 }
 
-// Inspect accepts an inspector function that has same arguments as the Repository.ListKnowledgeBasesByCatalogType
-func (mmListKnowledgeBasesByCatalogType *mRepositoryMockListKnowledgeBasesByCatalogType) Inspect(f func(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType)) *mRepositoryMockListKnowledgeBasesByCatalogType {
-	if mmListKnowledgeBasesByCatalogType.mock.inspectFuncListKnowledgeBasesByCatalogType != nil {
-		mmListKnowledgeBasesByCatalogType.mock.t.Fatalf("Inspect function is already set for RepositoryMock.ListKnowledgeBasesByCatalogType")
+// Inspect accepts an inspector function that has same arguments as the Repository.ListKnowledgeBasesByType
+func (mmListKnowledgeBasesByType *mRepositoryMockListKnowledgeBasesByType) Inspect(f func(ctx context.Context, ownerUID string, kbType artifactpb.KnowledgeBaseType)) *mRepositoryMockListKnowledgeBasesByType {
+	if mmListKnowledgeBasesByType.mock.inspectFuncListKnowledgeBasesByType != nil {
+		mmListKnowledgeBasesByType.mock.t.Fatalf("Inspect function is already set for RepositoryMock.ListKnowledgeBasesByType")
 	}
 
-	mmListKnowledgeBasesByCatalogType.mock.inspectFuncListKnowledgeBasesByCatalogType = f
+	mmListKnowledgeBasesByType.mock.inspectFuncListKnowledgeBasesByType = f
 
-	return mmListKnowledgeBasesByCatalogType
+	return mmListKnowledgeBasesByType
 }
 
-// Return sets up results that will be returned by Repository.ListKnowledgeBasesByCatalogType
-func (mmListKnowledgeBasesByCatalogType *mRepositoryMockListKnowledgeBasesByCatalogType) Return(ka1 []mm_repository.KnowledgeBaseModel, err error) *RepositoryMock {
-	if mmListKnowledgeBasesByCatalogType.mock.funcListKnowledgeBasesByCatalogType != nil {
-		mmListKnowledgeBasesByCatalogType.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByCatalogType mock is already set by Set")
+// Return sets up results that will be returned by Repository.ListKnowledgeBasesByType
+func (mmListKnowledgeBasesByType *mRepositoryMockListKnowledgeBasesByType) Return(ka1 []mm_repository.KnowledgeBaseModel, err error) *RepositoryMock {
+	if mmListKnowledgeBasesByType.mock.funcListKnowledgeBasesByType != nil {
+		mmListKnowledgeBasesByType.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByType mock is already set by Set")
 	}
 
-	if mmListKnowledgeBasesByCatalogType.defaultExpectation == nil {
-		mmListKnowledgeBasesByCatalogType.defaultExpectation = &RepositoryMockListKnowledgeBasesByCatalogTypeExpectation{mock: mmListKnowledgeBasesByCatalogType.mock}
+	if mmListKnowledgeBasesByType.defaultExpectation == nil {
+		mmListKnowledgeBasesByType.defaultExpectation = &RepositoryMockListKnowledgeBasesByTypeExpectation{mock: mmListKnowledgeBasesByType.mock}
 	}
-	mmListKnowledgeBasesByCatalogType.defaultExpectation.results = &RepositoryMockListKnowledgeBasesByCatalogTypeResults{ka1, err}
-	mmListKnowledgeBasesByCatalogType.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
-	return mmListKnowledgeBasesByCatalogType.mock
+	mmListKnowledgeBasesByType.defaultExpectation.results = &RepositoryMockListKnowledgeBasesByTypeResults{ka1, err}
+	mmListKnowledgeBasesByType.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmListKnowledgeBasesByType.mock
 }
 
-// Set uses given function f to mock the Repository.ListKnowledgeBasesByCatalogType method
-func (mmListKnowledgeBasesByCatalogType *mRepositoryMockListKnowledgeBasesByCatalogType) Set(f func(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType) (ka1 []mm_repository.KnowledgeBaseModel, err error)) *RepositoryMock {
-	if mmListKnowledgeBasesByCatalogType.defaultExpectation != nil {
-		mmListKnowledgeBasesByCatalogType.mock.t.Fatalf("Default expectation is already set for the Repository.ListKnowledgeBasesByCatalogType method")
+// Set uses given function f to mock the Repository.ListKnowledgeBasesByType method
+func (mmListKnowledgeBasesByType *mRepositoryMockListKnowledgeBasesByType) Set(f func(ctx context.Context, ownerUID string, kbType artifactpb.KnowledgeBaseType) (ka1 []mm_repository.KnowledgeBaseModel, err error)) *RepositoryMock {
+	if mmListKnowledgeBasesByType.defaultExpectation != nil {
+		mmListKnowledgeBasesByType.mock.t.Fatalf("Default expectation is already set for the Repository.ListKnowledgeBasesByType method")
 	}
 
-	if len(mmListKnowledgeBasesByCatalogType.expectations) > 0 {
-		mmListKnowledgeBasesByCatalogType.mock.t.Fatalf("Some expectations are already set for the Repository.ListKnowledgeBasesByCatalogType method")
+	if len(mmListKnowledgeBasesByType.expectations) > 0 {
+		mmListKnowledgeBasesByType.mock.t.Fatalf("Some expectations are already set for the Repository.ListKnowledgeBasesByType method")
 	}
 
-	mmListKnowledgeBasesByCatalogType.mock.funcListKnowledgeBasesByCatalogType = f
-	mmListKnowledgeBasesByCatalogType.mock.funcListKnowledgeBasesByCatalogTypeOrigin = minimock.CallerInfo(1)
-	return mmListKnowledgeBasesByCatalogType.mock
+	mmListKnowledgeBasesByType.mock.funcListKnowledgeBasesByType = f
+	mmListKnowledgeBasesByType.mock.funcListKnowledgeBasesByTypeOrigin = minimock.CallerInfo(1)
+	return mmListKnowledgeBasesByType.mock
 }
 
-// When sets expectation for the Repository.ListKnowledgeBasesByCatalogType which will trigger the result defined by the following
+// When sets expectation for the Repository.ListKnowledgeBasesByType which will trigger the result defined by the following
 // Then helper
-func (mmListKnowledgeBasesByCatalogType *mRepositoryMockListKnowledgeBasesByCatalogType) When(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType) *RepositoryMockListKnowledgeBasesByCatalogTypeExpectation {
-	if mmListKnowledgeBasesByCatalogType.mock.funcListKnowledgeBasesByCatalogType != nil {
-		mmListKnowledgeBasesByCatalogType.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByCatalogType mock is already set by Set")
+func (mmListKnowledgeBasesByType *mRepositoryMockListKnowledgeBasesByType) When(ctx context.Context, ownerUID string, kbType artifactpb.KnowledgeBaseType) *RepositoryMockListKnowledgeBasesByTypeExpectation {
+	if mmListKnowledgeBasesByType.mock.funcListKnowledgeBasesByType != nil {
+		mmListKnowledgeBasesByType.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByType mock is already set by Set")
 	}
 
-	expectation := &RepositoryMockListKnowledgeBasesByCatalogTypeExpectation{
-		mock:               mmListKnowledgeBasesByCatalogType.mock,
-		params:             &RepositoryMockListKnowledgeBasesByCatalogTypeParams{ctx, ownerUID, catalogType},
-		expectationOrigins: RepositoryMockListKnowledgeBasesByCatalogTypeExpectationOrigins{origin: minimock.CallerInfo(1)},
+	expectation := &RepositoryMockListKnowledgeBasesByTypeExpectation{
+		mock:               mmListKnowledgeBasesByType.mock,
+		params:             &RepositoryMockListKnowledgeBasesByTypeParams{ctx, ownerUID, kbType},
+		expectationOrigins: RepositoryMockListKnowledgeBasesByTypeExpectationOrigins{origin: minimock.CallerInfo(1)},
 	}
-	mmListKnowledgeBasesByCatalogType.expectations = append(mmListKnowledgeBasesByCatalogType.expectations, expectation)
+	mmListKnowledgeBasesByType.expectations = append(mmListKnowledgeBasesByType.expectations, expectation)
 	return expectation
 }
 
-// Then sets up Repository.ListKnowledgeBasesByCatalogType return parameters for the expectation previously defined by the When method
-func (e *RepositoryMockListKnowledgeBasesByCatalogTypeExpectation) Then(ka1 []mm_repository.KnowledgeBaseModel, err error) *RepositoryMock {
-	e.results = &RepositoryMockListKnowledgeBasesByCatalogTypeResults{ka1, err}
+// Then sets up Repository.ListKnowledgeBasesByType return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockListKnowledgeBasesByTypeExpectation) Then(ka1 []mm_repository.KnowledgeBaseModel, err error) *RepositoryMock {
+	e.results = &RepositoryMockListKnowledgeBasesByTypeResults{ka1, err}
 	return e.mock
 }
 
-// Times sets number of times Repository.ListKnowledgeBasesByCatalogType should be invoked
-func (mmListKnowledgeBasesByCatalogType *mRepositoryMockListKnowledgeBasesByCatalogType) Times(n uint64) *mRepositoryMockListKnowledgeBasesByCatalogType {
+// Times sets number of times Repository.ListKnowledgeBasesByType should be invoked
+func (mmListKnowledgeBasesByType *mRepositoryMockListKnowledgeBasesByType) Times(n uint64) *mRepositoryMockListKnowledgeBasesByType {
 	if n == 0 {
-		mmListKnowledgeBasesByCatalogType.mock.t.Fatalf("Times of RepositoryMock.ListKnowledgeBasesByCatalogType mock can not be zero")
+		mmListKnowledgeBasesByType.mock.t.Fatalf("Times of RepositoryMock.ListKnowledgeBasesByType mock can not be zero")
 	}
-	mm_atomic.StoreUint64(&mmListKnowledgeBasesByCatalogType.expectedInvocations, n)
-	mmListKnowledgeBasesByCatalogType.expectedInvocationsOrigin = minimock.CallerInfo(1)
-	return mmListKnowledgeBasesByCatalogType
+	mm_atomic.StoreUint64(&mmListKnowledgeBasesByType.expectedInvocations, n)
+	mmListKnowledgeBasesByType.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmListKnowledgeBasesByType
 }
 
-func (mmListKnowledgeBasesByCatalogType *mRepositoryMockListKnowledgeBasesByCatalogType) invocationsDone() bool {
-	if len(mmListKnowledgeBasesByCatalogType.expectations) == 0 && mmListKnowledgeBasesByCatalogType.defaultExpectation == nil && mmListKnowledgeBasesByCatalogType.mock.funcListKnowledgeBasesByCatalogType == nil {
+func (mmListKnowledgeBasesByType *mRepositoryMockListKnowledgeBasesByType) invocationsDone() bool {
+	if len(mmListKnowledgeBasesByType.expectations) == 0 && mmListKnowledgeBasesByType.defaultExpectation == nil && mmListKnowledgeBasesByType.mock.funcListKnowledgeBasesByType == nil {
 		return true
 	}
 
-	totalInvocations := mm_atomic.LoadUint64(&mmListKnowledgeBasesByCatalogType.mock.afterListKnowledgeBasesByCatalogTypeCounter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmListKnowledgeBasesByCatalogType.expectedInvocations)
+	totalInvocations := mm_atomic.LoadUint64(&mmListKnowledgeBasesByType.mock.afterListKnowledgeBasesByTypeCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmListKnowledgeBasesByType.expectedInvocations)
 
 	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
 }
 
-// ListKnowledgeBasesByCatalogType implements mm_repository.Repository
-func (mmListKnowledgeBasesByCatalogType *RepositoryMock) ListKnowledgeBasesByCatalogType(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType) (ka1 []mm_repository.KnowledgeBaseModel, err error) {
-	mm_atomic.AddUint64(&mmListKnowledgeBasesByCatalogType.beforeListKnowledgeBasesByCatalogTypeCounter, 1)
-	defer mm_atomic.AddUint64(&mmListKnowledgeBasesByCatalogType.afterListKnowledgeBasesByCatalogTypeCounter, 1)
+// ListKnowledgeBasesByType implements mm_repository.Repository
+func (mmListKnowledgeBasesByType *RepositoryMock) ListKnowledgeBasesByType(ctx context.Context, ownerUID string, kbType artifactpb.KnowledgeBaseType) (ka1 []mm_repository.KnowledgeBaseModel, err error) {
+	mm_atomic.AddUint64(&mmListKnowledgeBasesByType.beforeListKnowledgeBasesByTypeCounter, 1)
+	defer mm_atomic.AddUint64(&mmListKnowledgeBasesByType.afterListKnowledgeBasesByTypeCounter, 1)
 
-	mmListKnowledgeBasesByCatalogType.t.Helper()
+	mmListKnowledgeBasesByType.t.Helper()
 
-	if mmListKnowledgeBasesByCatalogType.inspectFuncListKnowledgeBasesByCatalogType != nil {
-		mmListKnowledgeBasesByCatalogType.inspectFuncListKnowledgeBasesByCatalogType(ctx, ownerUID, catalogType)
+	if mmListKnowledgeBasesByType.inspectFuncListKnowledgeBasesByType != nil {
+		mmListKnowledgeBasesByType.inspectFuncListKnowledgeBasesByType(ctx, ownerUID, kbType)
 	}
 
-	mm_params := RepositoryMockListKnowledgeBasesByCatalogTypeParams{ctx, ownerUID, catalogType}
+	mm_params := RepositoryMockListKnowledgeBasesByTypeParams{ctx, ownerUID, kbType}
 
 	// Record call args
-	mmListKnowledgeBasesByCatalogType.ListKnowledgeBasesByCatalogTypeMock.mutex.Lock()
-	mmListKnowledgeBasesByCatalogType.ListKnowledgeBasesByCatalogTypeMock.callArgs = append(mmListKnowledgeBasesByCatalogType.ListKnowledgeBasesByCatalogTypeMock.callArgs, &mm_params)
-	mmListKnowledgeBasesByCatalogType.ListKnowledgeBasesByCatalogTypeMock.mutex.Unlock()
+	mmListKnowledgeBasesByType.ListKnowledgeBasesByTypeMock.mutex.Lock()
+	mmListKnowledgeBasesByType.ListKnowledgeBasesByTypeMock.callArgs = append(mmListKnowledgeBasesByType.ListKnowledgeBasesByTypeMock.callArgs, &mm_params)
+	mmListKnowledgeBasesByType.ListKnowledgeBasesByTypeMock.mutex.Unlock()
 
-	for _, e := range mmListKnowledgeBasesByCatalogType.ListKnowledgeBasesByCatalogTypeMock.expectations {
+	for _, e := range mmListKnowledgeBasesByType.ListKnowledgeBasesByTypeMock.expectations {
 		if minimock.Equal(*e.params, mm_params) {
 			mm_atomic.AddUint64(&e.Counter, 1)
 			return e.results.ka1, e.results.err
 		}
 	}
 
-	if mmListKnowledgeBasesByCatalogType.ListKnowledgeBasesByCatalogTypeMock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmListKnowledgeBasesByCatalogType.ListKnowledgeBasesByCatalogTypeMock.defaultExpectation.Counter, 1)
-		mm_want := mmListKnowledgeBasesByCatalogType.ListKnowledgeBasesByCatalogTypeMock.defaultExpectation.params
-		mm_want_ptrs := mmListKnowledgeBasesByCatalogType.ListKnowledgeBasesByCatalogTypeMock.defaultExpectation.paramPtrs
+	if mmListKnowledgeBasesByType.ListKnowledgeBasesByTypeMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmListKnowledgeBasesByType.ListKnowledgeBasesByTypeMock.defaultExpectation.Counter, 1)
+		mm_want := mmListKnowledgeBasesByType.ListKnowledgeBasesByTypeMock.defaultExpectation.params
+		mm_want_ptrs := mmListKnowledgeBasesByType.ListKnowledgeBasesByTypeMock.defaultExpectation.paramPtrs
 
-		mm_got := RepositoryMockListKnowledgeBasesByCatalogTypeParams{ctx, ownerUID, catalogType}
+		mm_got := RepositoryMockListKnowledgeBasesByTypeParams{ctx, ownerUID, kbType}
 
 		if mm_want_ptrs != nil {
 
 			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
-				mmListKnowledgeBasesByCatalogType.t.Errorf("RepositoryMock.ListKnowledgeBasesByCatalogType got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmListKnowledgeBasesByCatalogType.ListKnowledgeBasesByCatalogTypeMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+				mmListKnowledgeBasesByType.t.Errorf("RepositoryMock.ListKnowledgeBasesByType got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmListKnowledgeBasesByType.ListKnowledgeBasesByTypeMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
 			}
 
 			if mm_want_ptrs.ownerUID != nil && !minimock.Equal(*mm_want_ptrs.ownerUID, mm_got.ownerUID) {
-				mmListKnowledgeBasesByCatalogType.t.Errorf("RepositoryMock.ListKnowledgeBasesByCatalogType got unexpected parameter ownerUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmListKnowledgeBasesByCatalogType.ListKnowledgeBasesByCatalogTypeMock.defaultExpectation.expectationOrigins.originOwnerUID, *mm_want_ptrs.ownerUID, mm_got.ownerUID, minimock.Diff(*mm_want_ptrs.ownerUID, mm_got.ownerUID))
+				mmListKnowledgeBasesByType.t.Errorf("RepositoryMock.ListKnowledgeBasesByType got unexpected parameter ownerUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmListKnowledgeBasesByType.ListKnowledgeBasesByTypeMock.defaultExpectation.expectationOrigins.originOwnerUID, *mm_want_ptrs.ownerUID, mm_got.ownerUID, minimock.Diff(*mm_want_ptrs.ownerUID, mm_got.ownerUID))
 			}
 
-			if mm_want_ptrs.catalogType != nil && !minimock.Equal(*mm_want_ptrs.catalogType, mm_got.catalogType) {
-				mmListKnowledgeBasesByCatalogType.t.Errorf("RepositoryMock.ListKnowledgeBasesByCatalogType got unexpected parameter catalogType, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmListKnowledgeBasesByCatalogType.ListKnowledgeBasesByCatalogTypeMock.defaultExpectation.expectationOrigins.originCatalogType, *mm_want_ptrs.catalogType, mm_got.catalogType, minimock.Diff(*mm_want_ptrs.catalogType, mm_got.catalogType))
+			if mm_want_ptrs.kbType != nil && !minimock.Equal(*mm_want_ptrs.kbType, mm_got.kbType) {
+				mmListKnowledgeBasesByType.t.Errorf("RepositoryMock.ListKnowledgeBasesByType got unexpected parameter kbType, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmListKnowledgeBasesByType.ListKnowledgeBasesByTypeMock.defaultExpectation.expectationOrigins.originKbType, *mm_want_ptrs.kbType, mm_got.kbType, minimock.Diff(*mm_want_ptrs.kbType, mm_got.kbType))
 			}
 
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
-			mmListKnowledgeBasesByCatalogType.t.Errorf("RepositoryMock.ListKnowledgeBasesByCatalogType got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-				mmListKnowledgeBasesByCatalogType.ListKnowledgeBasesByCatalogTypeMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+			mmListKnowledgeBasesByType.t.Errorf("RepositoryMock.ListKnowledgeBasesByType got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmListKnowledgeBasesByType.ListKnowledgeBasesByTypeMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
 		}
 
-		mm_results := mmListKnowledgeBasesByCatalogType.ListKnowledgeBasesByCatalogTypeMock.defaultExpectation.results
+		mm_results := mmListKnowledgeBasesByType.ListKnowledgeBasesByTypeMock.defaultExpectation.results
 		if mm_results == nil {
-			mmListKnowledgeBasesByCatalogType.t.Fatal("No results are set for the RepositoryMock.ListKnowledgeBasesByCatalogType")
+			mmListKnowledgeBasesByType.t.Fatal("No results are set for the RepositoryMock.ListKnowledgeBasesByType")
 		}
 		return (*mm_results).ka1, (*mm_results).err
 	}
-	if mmListKnowledgeBasesByCatalogType.funcListKnowledgeBasesByCatalogType != nil {
-		return mmListKnowledgeBasesByCatalogType.funcListKnowledgeBasesByCatalogType(ctx, ownerUID, catalogType)
+	if mmListKnowledgeBasesByType.funcListKnowledgeBasesByType != nil {
+		return mmListKnowledgeBasesByType.funcListKnowledgeBasesByType(ctx, ownerUID, kbType)
 	}
-	mmListKnowledgeBasesByCatalogType.t.Fatalf("Unexpected call to RepositoryMock.ListKnowledgeBasesByCatalogType. %v %v %v", ctx, ownerUID, catalogType)
+	mmListKnowledgeBasesByType.t.Fatalf("Unexpected call to RepositoryMock.ListKnowledgeBasesByType. %v %v %v", ctx, ownerUID, kbType)
 	return
 }
 
-// ListKnowledgeBasesByCatalogTypeAfterCounter returns a count of finished RepositoryMock.ListKnowledgeBasesByCatalogType invocations
-func (mmListKnowledgeBasesByCatalogType *RepositoryMock) ListKnowledgeBasesByCatalogTypeAfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmListKnowledgeBasesByCatalogType.afterListKnowledgeBasesByCatalogTypeCounter)
+// ListKnowledgeBasesByTypeAfterCounter returns a count of finished RepositoryMock.ListKnowledgeBasesByType invocations
+func (mmListKnowledgeBasesByType *RepositoryMock) ListKnowledgeBasesByTypeAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmListKnowledgeBasesByType.afterListKnowledgeBasesByTypeCounter)
 }
 
-// ListKnowledgeBasesByCatalogTypeBeforeCounter returns a count of RepositoryMock.ListKnowledgeBasesByCatalogType invocations
-func (mmListKnowledgeBasesByCatalogType *RepositoryMock) ListKnowledgeBasesByCatalogTypeBeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmListKnowledgeBasesByCatalogType.beforeListKnowledgeBasesByCatalogTypeCounter)
+// ListKnowledgeBasesByTypeBeforeCounter returns a count of RepositoryMock.ListKnowledgeBasesByType invocations
+func (mmListKnowledgeBasesByType *RepositoryMock) ListKnowledgeBasesByTypeBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmListKnowledgeBasesByType.beforeListKnowledgeBasesByTypeCounter)
 }
 
-// Calls returns a list of arguments used in each call to RepositoryMock.ListKnowledgeBasesByCatalogType.
+// Calls returns a list of arguments used in each call to RepositoryMock.ListKnowledgeBasesByType.
 // The list is in the same order as the calls were made (i.e. recent calls have a higher index)
-func (mmListKnowledgeBasesByCatalogType *mRepositoryMockListKnowledgeBasesByCatalogType) Calls() []*RepositoryMockListKnowledgeBasesByCatalogTypeParams {
-	mmListKnowledgeBasesByCatalogType.mutex.RLock()
+func (mmListKnowledgeBasesByType *mRepositoryMockListKnowledgeBasesByType) Calls() []*RepositoryMockListKnowledgeBasesByTypeParams {
+	mmListKnowledgeBasesByType.mutex.RLock()
 
-	argCopy := make([]*RepositoryMockListKnowledgeBasesByCatalogTypeParams, len(mmListKnowledgeBasesByCatalogType.callArgs))
-	copy(argCopy, mmListKnowledgeBasesByCatalogType.callArgs)
+	argCopy := make([]*RepositoryMockListKnowledgeBasesByTypeParams, len(mmListKnowledgeBasesByType.callArgs))
+	copy(argCopy, mmListKnowledgeBasesByType.callArgs)
 
-	mmListKnowledgeBasesByCatalogType.mutex.RUnlock()
+	mmListKnowledgeBasesByType.mutex.RUnlock()
 
 	return argCopy
 }
 
-// MinimockListKnowledgeBasesByCatalogTypeDone returns true if the count of the ListKnowledgeBasesByCatalogType invocations corresponds
+// MinimockListKnowledgeBasesByTypeDone returns true if the count of the ListKnowledgeBasesByType invocations corresponds
 // the number of defined expectations
-func (m *RepositoryMock) MinimockListKnowledgeBasesByCatalogTypeDone() bool {
-	if m.ListKnowledgeBasesByCatalogTypeMock.optional {
+func (m *RepositoryMock) MinimockListKnowledgeBasesByTypeDone() bool {
+	if m.ListKnowledgeBasesByTypeMock.optional {
 		// Optional methods provide '0 or more' call count restriction.
 		return true
 	}
 
-	for _, e := range m.ListKnowledgeBasesByCatalogTypeMock.expectations {
+	for _, e := range m.ListKnowledgeBasesByTypeMock.expectations {
 		if mm_atomic.LoadUint64(&e.Counter) < 1 {
 			return false
 		}
 	}
 
-	return m.ListKnowledgeBasesByCatalogTypeMock.invocationsDone()
+	return m.ListKnowledgeBasesByTypeMock.invocationsDone()
 }
 
-// MinimockListKnowledgeBasesByCatalogTypeInspect logs each unmet expectation
-func (m *RepositoryMock) MinimockListKnowledgeBasesByCatalogTypeInspect() {
-	for _, e := range m.ListKnowledgeBasesByCatalogTypeMock.expectations {
+// MinimockListKnowledgeBasesByTypeInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockListKnowledgeBasesByTypeInspect() {
+	for _, e := range m.ListKnowledgeBasesByTypeMock.expectations {
 		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Errorf("Expected call to RepositoryMock.ListKnowledgeBasesByCatalogType at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+			m.t.Errorf("Expected call to RepositoryMock.ListKnowledgeBasesByType at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
 		}
 	}
 
-	afterListKnowledgeBasesByCatalogTypeCounter := mm_atomic.LoadUint64(&m.afterListKnowledgeBasesByCatalogTypeCounter)
+	afterListKnowledgeBasesByTypeCounter := mm_atomic.LoadUint64(&m.afterListKnowledgeBasesByTypeCounter)
 	// if default expectation was set then invocations count should be greater than zero
-	if m.ListKnowledgeBasesByCatalogTypeMock.defaultExpectation != nil && afterListKnowledgeBasesByCatalogTypeCounter < 1 {
-		if m.ListKnowledgeBasesByCatalogTypeMock.defaultExpectation.params == nil {
-			m.t.Errorf("Expected call to RepositoryMock.ListKnowledgeBasesByCatalogType at\n%s", m.ListKnowledgeBasesByCatalogTypeMock.defaultExpectation.returnOrigin)
+	if m.ListKnowledgeBasesByTypeMock.defaultExpectation != nil && afterListKnowledgeBasesByTypeCounter < 1 {
+		if m.ListKnowledgeBasesByTypeMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.ListKnowledgeBasesByType at\n%s", m.ListKnowledgeBasesByTypeMock.defaultExpectation.returnOrigin)
 		} else {
-			m.t.Errorf("Expected call to RepositoryMock.ListKnowledgeBasesByCatalogType at\n%s with params: %#v", m.ListKnowledgeBasesByCatalogTypeMock.defaultExpectation.expectationOrigins.origin, *m.ListKnowledgeBasesByCatalogTypeMock.defaultExpectation.params)
+			m.t.Errorf("Expected call to RepositoryMock.ListKnowledgeBasesByType at\n%s with params: %#v", m.ListKnowledgeBasesByTypeMock.defaultExpectation.expectationOrigins.origin, *m.ListKnowledgeBasesByTypeMock.defaultExpectation.params)
 		}
 	}
 	// if func was set then invocations count should be greater than zero
-	if m.funcListKnowledgeBasesByCatalogType != nil && afterListKnowledgeBasesByCatalogTypeCounter < 1 {
-		m.t.Errorf("Expected call to RepositoryMock.ListKnowledgeBasesByCatalogType at\n%s", m.funcListKnowledgeBasesByCatalogTypeOrigin)
+	if m.funcListKnowledgeBasesByType != nil && afterListKnowledgeBasesByTypeCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.ListKnowledgeBasesByType at\n%s", m.funcListKnowledgeBasesByTypeOrigin)
 	}
 
-	if !m.ListKnowledgeBasesByCatalogTypeMock.invocationsDone() && afterListKnowledgeBasesByCatalogTypeCounter > 0 {
-		m.t.Errorf("Expected %d calls to RepositoryMock.ListKnowledgeBasesByCatalogType at\n%s but found %d calls",
-			mm_atomic.LoadUint64(&m.ListKnowledgeBasesByCatalogTypeMock.expectedInvocations), m.ListKnowledgeBasesByCatalogTypeMock.expectedInvocationsOrigin, afterListKnowledgeBasesByCatalogTypeCounter)
+	if !m.ListKnowledgeBasesByTypeMock.invocationsDone() && afterListKnowledgeBasesByTypeCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.ListKnowledgeBasesByType at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.ListKnowledgeBasesByTypeMock.expectedInvocations), m.ListKnowledgeBasesByTypeMock.expectedInvocationsOrigin, afterListKnowledgeBasesByTypeCounter)
 	}
 }
 
-type mRepositoryMockListKnowledgeBasesByCatalogTypeWithConfig struct {
+type mRepositoryMockListKnowledgeBasesByTypeWithConfig struct {
 	optional           bool
 	mock               *RepositoryMock
-	defaultExpectation *RepositoryMockListKnowledgeBasesByCatalogTypeWithConfigExpectation
-	expectations       []*RepositoryMockListKnowledgeBasesByCatalogTypeWithConfigExpectation
+	defaultExpectation *RepositoryMockListKnowledgeBasesByTypeWithConfigExpectation
+	expectations       []*RepositoryMockListKnowledgeBasesByTypeWithConfigExpectation
 
-	callArgs []*RepositoryMockListKnowledgeBasesByCatalogTypeWithConfigParams
+	callArgs []*RepositoryMockListKnowledgeBasesByTypeWithConfigParams
 	mutex    sync.RWMutex
 
 	expectedInvocations       uint64
 	expectedInvocationsOrigin string
 }
 
-// RepositoryMockListKnowledgeBasesByCatalogTypeWithConfigExpectation specifies expectation struct of the Repository.ListKnowledgeBasesByCatalogTypeWithConfig
-type RepositoryMockListKnowledgeBasesByCatalogTypeWithConfigExpectation struct {
+// RepositoryMockListKnowledgeBasesByTypeWithConfigExpectation specifies expectation struct of the Repository.ListKnowledgeBasesByTypeWithConfig
+type RepositoryMockListKnowledgeBasesByTypeWithConfigExpectation struct {
 	mock               *RepositoryMock
-	params             *RepositoryMockListKnowledgeBasesByCatalogTypeWithConfigParams
-	paramPtrs          *RepositoryMockListKnowledgeBasesByCatalogTypeWithConfigParamPtrs
-	expectationOrigins RepositoryMockListKnowledgeBasesByCatalogTypeWithConfigExpectationOrigins
-	results            *RepositoryMockListKnowledgeBasesByCatalogTypeWithConfigResults
+	params             *RepositoryMockListKnowledgeBasesByTypeWithConfigParams
+	paramPtrs          *RepositoryMockListKnowledgeBasesByTypeWithConfigParamPtrs
+	expectationOrigins RepositoryMockListKnowledgeBasesByTypeWithConfigExpectationOrigins
+	results            *RepositoryMockListKnowledgeBasesByTypeWithConfigResults
 	returnOrigin       string
 	Counter            uint64
 }
 
-// RepositoryMockListKnowledgeBasesByCatalogTypeWithConfigParams contains parameters of the Repository.ListKnowledgeBasesByCatalogTypeWithConfig
-type RepositoryMockListKnowledgeBasesByCatalogTypeWithConfigParams struct {
-	ctx         context.Context
-	ownerUID    string
-	catalogType artifactpb.CatalogType
+// RepositoryMockListKnowledgeBasesByTypeWithConfigParams contains parameters of the Repository.ListKnowledgeBasesByTypeWithConfig
+type RepositoryMockListKnowledgeBasesByTypeWithConfigParams struct {
+	ctx      context.Context
+	ownerUID string
+	kbType   artifactpb.KnowledgeBaseType
 }
 
-// RepositoryMockListKnowledgeBasesByCatalogTypeWithConfigParamPtrs contains pointers to parameters of the Repository.ListKnowledgeBasesByCatalogTypeWithConfig
-type RepositoryMockListKnowledgeBasesByCatalogTypeWithConfigParamPtrs struct {
-	ctx         *context.Context
-	ownerUID    *string
-	catalogType *artifactpb.CatalogType
+// RepositoryMockListKnowledgeBasesByTypeWithConfigParamPtrs contains pointers to parameters of the Repository.ListKnowledgeBasesByTypeWithConfig
+type RepositoryMockListKnowledgeBasesByTypeWithConfigParamPtrs struct {
+	ctx      *context.Context
+	ownerUID *string
+	kbType   *artifactpb.KnowledgeBaseType
 }
 
-// RepositoryMockListKnowledgeBasesByCatalogTypeWithConfigResults contains results of the Repository.ListKnowledgeBasesByCatalogTypeWithConfig
-type RepositoryMockListKnowledgeBasesByCatalogTypeWithConfigResults struct {
+// RepositoryMockListKnowledgeBasesByTypeWithConfigResults contains results of the Repository.ListKnowledgeBasesByTypeWithConfig
+type RepositoryMockListKnowledgeBasesByTypeWithConfigResults struct {
 	ka1 []mm_repository.KnowledgeBaseWithConfig
 	err error
 }
 
-// RepositoryMockListKnowledgeBasesByCatalogTypeWithConfigOrigins contains origins of expectations of the Repository.ListKnowledgeBasesByCatalogTypeWithConfig
-type RepositoryMockListKnowledgeBasesByCatalogTypeWithConfigExpectationOrigins struct {
-	origin            string
-	originCtx         string
-	originOwnerUID    string
-	originCatalogType string
+// RepositoryMockListKnowledgeBasesByTypeWithConfigOrigins contains origins of expectations of the Repository.ListKnowledgeBasesByTypeWithConfig
+type RepositoryMockListKnowledgeBasesByTypeWithConfigExpectationOrigins struct {
+	origin         string
+	originCtx      string
+	originOwnerUID string
+	originKbType   string
 }
 
 // Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
@@ -36426,320 +36426,320 @@ type RepositoryMockListKnowledgeBasesByCatalogTypeWithConfigExpectationOrigins s
 // Optional() makes method check to work in '0 or more' mode.
 // It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
 // catch the problems when the expected method call is totally skipped during test run.
-func (mmListKnowledgeBasesByCatalogTypeWithConfig *mRepositoryMockListKnowledgeBasesByCatalogTypeWithConfig) Optional() *mRepositoryMockListKnowledgeBasesByCatalogTypeWithConfig {
-	mmListKnowledgeBasesByCatalogTypeWithConfig.optional = true
-	return mmListKnowledgeBasesByCatalogTypeWithConfig
+func (mmListKnowledgeBasesByTypeWithConfig *mRepositoryMockListKnowledgeBasesByTypeWithConfig) Optional() *mRepositoryMockListKnowledgeBasesByTypeWithConfig {
+	mmListKnowledgeBasesByTypeWithConfig.optional = true
+	return mmListKnowledgeBasesByTypeWithConfig
 }
 
-// Expect sets up expected params for Repository.ListKnowledgeBasesByCatalogTypeWithConfig
-func (mmListKnowledgeBasesByCatalogTypeWithConfig *mRepositoryMockListKnowledgeBasesByCatalogTypeWithConfig) Expect(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType) *mRepositoryMockListKnowledgeBasesByCatalogTypeWithConfig {
-	if mmListKnowledgeBasesByCatalogTypeWithConfig.mock.funcListKnowledgeBasesByCatalogTypeWithConfig != nil {
-		mmListKnowledgeBasesByCatalogTypeWithConfig.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByCatalogTypeWithConfig mock is already set by Set")
+// Expect sets up expected params for Repository.ListKnowledgeBasesByTypeWithConfig
+func (mmListKnowledgeBasesByTypeWithConfig *mRepositoryMockListKnowledgeBasesByTypeWithConfig) Expect(ctx context.Context, ownerUID string, kbType artifactpb.KnowledgeBaseType) *mRepositoryMockListKnowledgeBasesByTypeWithConfig {
+	if mmListKnowledgeBasesByTypeWithConfig.mock.funcListKnowledgeBasesByTypeWithConfig != nil {
+		mmListKnowledgeBasesByTypeWithConfig.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByTypeWithConfig mock is already set by Set")
 	}
 
-	if mmListKnowledgeBasesByCatalogTypeWithConfig.defaultExpectation == nil {
-		mmListKnowledgeBasesByCatalogTypeWithConfig.defaultExpectation = &RepositoryMockListKnowledgeBasesByCatalogTypeWithConfigExpectation{}
+	if mmListKnowledgeBasesByTypeWithConfig.defaultExpectation == nil {
+		mmListKnowledgeBasesByTypeWithConfig.defaultExpectation = &RepositoryMockListKnowledgeBasesByTypeWithConfigExpectation{}
 	}
 
-	if mmListKnowledgeBasesByCatalogTypeWithConfig.defaultExpectation.paramPtrs != nil {
-		mmListKnowledgeBasesByCatalogTypeWithConfig.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByCatalogTypeWithConfig mock is already set by ExpectParams functions")
+	if mmListKnowledgeBasesByTypeWithConfig.defaultExpectation.paramPtrs != nil {
+		mmListKnowledgeBasesByTypeWithConfig.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByTypeWithConfig mock is already set by ExpectParams functions")
 	}
 
-	mmListKnowledgeBasesByCatalogTypeWithConfig.defaultExpectation.params = &RepositoryMockListKnowledgeBasesByCatalogTypeWithConfigParams{ctx, ownerUID, catalogType}
-	mmListKnowledgeBasesByCatalogTypeWithConfig.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
-	for _, e := range mmListKnowledgeBasesByCatalogTypeWithConfig.expectations {
-		if minimock.Equal(e.params, mmListKnowledgeBasesByCatalogTypeWithConfig.defaultExpectation.params) {
-			mmListKnowledgeBasesByCatalogTypeWithConfig.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmListKnowledgeBasesByCatalogTypeWithConfig.defaultExpectation.params)
+	mmListKnowledgeBasesByTypeWithConfig.defaultExpectation.params = &RepositoryMockListKnowledgeBasesByTypeWithConfigParams{ctx, ownerUID, kbType}
+	mmListKnowledgeBasesByTypeWithConfig.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmListKnowledgeBasesByTypeWithConfig.expectations {
+		if minimock.Equal(e.params, mmListKnowledgeBasesByTypeWithConfig.defaultExpectation.params) {
+			mmListKnowledgeBasesByTypeWithConfig.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmListKnowledgeBasesByTypeWithConfig.defaultExpectation.params)
 		}
 	}
 
-	return mmListKnowledgeBasesByCatalogTypeWithConfig
+	return mmListKnowledgeBasesByTypeWithConfig
 }
 
-// ExpectCtxParam1 sets up expected param ctx for Repository.ListKnowledgeBasesByCatalogTypeWithConfig
-func (mmListKnowledgeBasesByCatalogTypeWithConfig *mRepositoryMockListKnowledgeBasesByCatalogTypeWithConfig) ExpectCtxParam1(ctx context.Context) *mRepositoryMockListKnowledgeBasesByCatalogTypeWithConfig {
-	if mmListKnowledgeBasesByCatalogTypeWithConfig.mock.funcListKnowledgeBasesByCatalogTypeWithConfig != nil {
-		mmListKnowledgeBasesByCatalogTypeWithConfig.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByCatalogTypeWithConfig mock is already set by Set")
+// ExpectCtxParam1 sets up expected param ctx for Repository.ListKnowledgeBasesByTypeWithConfig
+func (mmListKnowledgeBasesByTypeWithConfig *mRepositoryMockListKnowledgeBasesByTypeWithConfig) ExpectCtxParam1(ctx context.Context) *mRepositoryMockListKnowledgeBasesByTypeWithConfig {
+	if mmListKnowledgeBasesByTypeWithConfig.mock.funcListKnowledgeBasesByTypeWithConfig != nil {
+		mmListKnowledgeBasesByTypeWithConfig.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByTypeWithConfig mock is already set by Set")
 	}
 
-	if mmListKnowledgeBasesByCatalogTypeWithConfig.defaultExpectation == nil {
-		mmListKnowledgeBasesByCatalogTypeWithConfig.defaultExpectation = &RepositoryMockListKnowledgeBasesByCatalogTypeWithConfigExpectation{}
+	if mmListKnowledgeBasesByTypeWithConfig.defaultExpectation == nil {
+		mmListKnowledgeBasesByTypeWithConfig.defaultExpectation = &RepositoryMockListKnowledgeBasesByTypeWithConfigExpectation{}
 	}
 
-	if mmListKnowledgeBasesByCatalogTypeWithConfig.defaultExpectation.params != nil {
-		mmListKnowledgeBasesByCatalogTypeWithConfig.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByCatalogTypeWithConfig mock is already set by Expect")
+	if mmListKnowledgeBasesByTypeWithConfig.defaultExpectation.params != nil {
+		mmListKnowledgeBasesByTypeWithConfig.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByTypeWithConfig mock is already set by Expect")
 	}
 
-	if mmListKnowledgeBasesByCatalogTypeWithConfig.defaultExpectation.paramPtrs == nil {
-		mmListKnowledgeBasesByCatalogTypeWithConfig.defaultExpectation.paramPtrs = &RepositoryMockListKnowledgeBasesByCatalogTypeWithConfigParamPtrs{}
+	if mmListKnowledgeBasesByTypeWithConfig.defaultExpectation.paramPtrs == nil {
+		mmListKnowledgeBasesByTypeWithConfig.defaultExpectation.paramPtrs = &RepositoryMockListKnowledgeBasesByTypeWithConfigParamPtrs{}
 	}
-	mmListKnowledgeBasesByCatalogTypeWithConfig.defaultExpectation.paramPtrs.ctx = &ctx
-	mmListKnowledgeBasesByCatalogTypeWithConfig.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+	mmListKnowledgeBasesByTypeWithConfig.defaultExpectation.paramPtrs.ctx = &ctx
+	mmListKnowledgeBasesByTypeWithConfig.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
 
-	return mmListKnowledgeBasesByCatalogTypeWithConfig
+	return mmListKnowledgeBasesByTypeWithConfig
 }
 
-// ExpectOwnerUIDParam2 sets up expected param ownerUID for Repository.ListKnowledgeBasesByCatalogTypeWithConfig
-func (mmListKnowledgeBasesByCatalogTypeWithConfig *mRepositoryMockListKnowledgeBasesByCatalogTypeWithConfig) ExpectOwnerUIDParam2(ownerUID string) *mRepositoryMockListKnowledgeBasesByCatalogTypeWithConfig {
-	if mmListKnowledgeBasesByCatalogTypeWithConfig.mock.funcListKnowledgeBasesByCatalogTypeWithConfig != nil {
-		mmListKnowledgeBasesByCatalogTypeWithConfig.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByCatalogTypeWithConfig mock is already set by Set")
+// ExpectOwnerUIDParam2 sets up expected param ownerUID for Repository.ListKnowledgeBasesByTypeWithConfig
+func (mmListKnowledgeBasesByTypeWithConfig *mRepositoryMockListKnowledgeBasesByTypeWithConfig) ExpectOwnerUIDParam2(ownerUID string) *mRepositoryMockListKnowledgeBasesByTypeWithConfig {
+	if mmListKnowledgeBasesByTypeWithConfig.mock.funcListKnowledgeBasesByTypeWithConfig != nil {
+		mmListKnowledgeBasesByTypeWithConfig.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByTypeWithConfig mock is already set by Set")
 	}
 
-	if mmListKnowledgeBasesByCatalogTypeWithConfig.defaultExpectation == nil {
-		mmListKnowledgeBasesByCatalogTypeWithConfig.defaultExpectation = &RepositoryMockListKnowledgeBasesByCatalogTypeWithConfigExpectation{}
+	if mmListKnowledgeBasesByTypeWithConfig.defaultExpectation == nil {
+		mmListKnowledgeBasesByTypeWithConfig.defaultExpectation = &RepositoryMockListKnowledgeBasesByTypeWithConfigExpectation{}
 	}
 
-	if mmListKnowledgeBasesByCatalogTypeWithConfig.defaultExpectation.params != nil {
-		mmListKnowledgeBasesByCatalogTypeWithConfig.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByCatalogTypeWithConfig mock is already set by Expect")
+	if mmListKnowledgeBasesByTypeWithConfig.defaultExpectation.params != nil {
+		mmListKnowledgeBasesByTypeWithConfig.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByTypeWithConfig mock is already set by Expect")
 	}
 
-	if mmListKnowledgeBasesByCatalogTypeWithConfig.defaultExpectation.paramPtrs == nil {
-		mmListKnowledgeBasesByCatalogTypeWithConfig.defaultExpectation.paramPtrs = &RepositoryMockListKnowledgeBasesByCatalogTypeWithConfigParamPtrs{}
+	if mmListKnowledgeBasesByTypeWithConfig.defaultExpectation.paramPtrs == nil {
+		mmListKnowledgeBasesByTypeWithConfig.defaultExpectation.paramPtrs = &RepositoryMockListKnowledgeBasesByTypeWithConfigParamPtrs{}
 	}
-	mmListKnowledgeBasesByCatalogTypeWithConfig.defaultExpectation.paramPtrs.ownerUID = &ownerUID
-	mmListKnowledgeBasesByCatalogTypeWithConfig.defaultExpectation.expectationOrigins.originOwnerUID = minimock.CallerInfo(1)
+	mmListKnowledgeBasesByTypeWithConfig.defaultExpectation.paramPtrs.ownerUID = &ownerUID
+	mmListKnowledgeBasesByTypeWithConfig.defaultExpectation.expectationOrigins.originOwnerUID = minimock.CallerInfo(1)
 
-	return mmListKnowledgeBasesByCatalogTypeWithConfig
+	return mmListKnowledgeBasesByTypeWithConfig
 }
 
-// ExpectCatalogTypeParam3 sets up expected param catalogType for Repository.ListKnowledgeBasesByCatalogTypeWithConfig
-func (mmListKnowledgeBasesByCatalogTypeWithConfig *mRepositoryMockListKnowledgeBasesByCatalogTypeWithConfig) ExpectCatalogTypeParam3(catalogType artifactpb.CatalogType) *mRepositoryMockListKnowledgeBasesByCatalogTypeWithConfig {
-	if mmListKnowledgeBasesByCatalogTypeWithConfig.mock.funcListKnowledgeBasesByCatalogTypeWithConfig != nil {
-		mmListKnowledgeBasesByCatalogTypeWithConfig.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByCatalogTypeWithConfig mock is already set by Set")
+// ExpectKbTypeParam3 sets up expected param kbType for Repository.ListKnowledgeBasesByTypeWithConfig
+func (mmListKnowledgeBasesByTypeWithConfig *mRepositoryMockListKnowledgeBasesByTypeWithConfig) ExpectKbTypeParam3(kbType artifactpb.KnowledgeBaseType) *mRepositoryMockListKnowledgeBasesByTypeWithConfig {
+	if mmListKnowledgeBasesByTypeWithConfig.mock.funcListKnowledgeBasesByTypeWithConfig != nil {
+		mmListKnowledgeBasesByTypeWithConfig.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByTypeWithConfig mock is already set by Set")
 	}
 
-	if mmListKnowledgeBasesByCatalogTypeWithConfig.defaultExpectation == nil {
-		mmListKnowledgeBasesByCatalogTypeWithConfig.defaultExpectation = &RepositoryMockListKnowledgeBasesByCatalogTypeWithConfigExpectation{}
+	if mmListKnowledgeBasesByTypeWithConfig.defaultExpectation == nil {
+		mmListKnowledgeBasesByTypeWithConfig.defaultExpectation = &RepositoryMockListKnowledgeBasesByTypeWithConfigExpectation{}
 	}
 
-	if mmListKnowledgeBasesByCatalogTypeWithConfig.defaultExpectation.params != nil {
-		mmListKnowledgeBasesByCatalogTypeWithConfig.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByCatalogTypeWithConfig mock is already set by Expect")
+	if mmListKnowledgeBasesByTypeWithConfig.defaultExpectation.params != nil {
+		mmListKnowledgeBasesByTypeWithConfig.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByTypeWithConfig mock is already set by Expect")
 	}
 
-	if mmListKnowledgeBasesByCatalogTypeWithConfig.defaultExpectation.paramPtrs == nil {
-		mmListKnowledgeBasesByCatalogTypeWithConfig.defaultExpectation.paramPtrs = &RepositoryMockListKnowledgeBasesByCatalogTypeWithConfigParamPtrs{}
+	if mmListKnowledgeBasesByTypeWithConfig.defaultExpectation.paramPtrs == nil {
+		mmListKnowledgeBasesByTypeWithConfig.defaultExpectation.paramPtrs = &RepositoryMockListKnowledgeBasesByTypeWithConfigParamPtrs{}
 	}
-	mmListKnowledgeBasesByCatalogTypeWithConfig.defaultExpectation.paramPtrs.catalogType = &catalogType
-	mmListKnowledgeBasesByCatalogTypeWithConfig.defaultExpectation.expectationOrigins.originCatalogType = minimock.CallerInfo(1)
+	mmListKnowledgeBasesByTypeWithConfig.defaultExpectation.paramPtrs.kbType = &kbType
+	mmListKnowledgeBasesByTypeWithConfig.defaultExpectation.expectationOrigins.originKbType = minimock.CallerInfo(1)
 
-	return mmListKnowledgeBasesByCatalogTypeWithConfig
+	return mmListKnowledgeBasesByTypeWithConfig
 }
 
-// Inspect accepts an inspector function that has same arguments as the Repository.ListKnowledgeBasesByCatalogTypeWithConfig
-func (mmListKnowledgeBasesByCatalogTypeWithConfig *mRepositoryMockListKnowledgeBasesByCatalogTypeWithConfig) Inspect(f func(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType)) *mRepositoryMockListKnowledgeBasesByCatalogTypeWithConfig {
-	if mmListKnowledgeBasesByCatalogTypeWithConfig.mock.inspectFuncListKnowledgeBasesByCatalogTypeWithConfig != nil {
-		mmListKnowledgeBasesByCatalogTypeWithConfig.mock.t.Fatalf("Inspect function is already set for RepositoryMock.ListKnowledgeBasesByCatalogTypeWithConfig")
+// Inspect accepts an inspector function that has same arguments as the Repository.ListKnowledgeBasesByTypeWithConfig
+func (mmListKnowledgeBasesByTypeWithConfig *mRepositoryMockListKnowledgeBasesByTypeWithConfig) Inspect(f func(ctx context.Context, ownerUID string, kbType artifactpb.KnowledgeBaseType)) *mRepositoryMockListKnowledgeBasesByTypeWithConfig {
+	if mmListKnowledgeBasesByTypeWithConfig.mock.inspectFuncListKnowledgeBasesByTypeWithConfig != nil {
+		mmListKnowledgeBasesByTypeWithConfig.mock.t.Fatalf("Inspect function is already set for RepositoryMock.ListKnowledgeBasesByTypeWithConfig")
 	}
 
-	mmListKnowledgeBasesByCatalogTypeWithConfig.mock.inspectFuncListKnowledgeBasesByCatalogTypeWithConfig = f
+	mmListKnowledgeBasesByTypeWithConfig.mock.inspectFuncListKnowledgeBasesByTypeWithConfig = f
 
-	return mmListKnowledgeBasesByCatalogTypeWithConfig
+	return mmListKnowledgeBasesByTypeWithConfig
 }
 
-// Return sets up results that will be returned by Repository.ListKnowledgeBasesByCatalogTypeWithConfig
-func (mmListKnowledgeBasesByCatalogTypeWithConfig *mRepositoryMockListKnowledgeBasesByCatalogTypeWithConfig) Return(ka1 []mm_repository.KnowledgeBaseWithConfig, err error) *RepositoryMock {
-	if mmListKnowledgeBasesByCatalogTypeWithConfig.mock.funcListKnowledgeBasesByCatalogTypeWithConfig != nil {
-		mmListKnowledgeBasesByCatalogTypeWithConfig.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByCatalogTypeWithConfig mock is already set by Set")
+// Return sets up results that will be returned by Repository.ListKnowledgeBasesByTypeWithConfig
+func (mmListKnowledgeBasesByTypeWithConfig *mRepositoryMockListKnowledgeBasesByTypeWithConfig) Return(ka1 []mm_repository.KnowledgeBaseWithConfig, err error) *RepositoryMock {
+	if mmListKnowledgeBasesByTypeWithConfig.mock.funcListKnowledgeBasesByTypeWithConfig != nil {
+		mmListKnowledgeBasesByTypeWithConfig.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByTypeWithConfig mock is already set by Set")
 	}
 
-	if mmListKnowledgeBasesByCatalogTypeWithConfig.defaultExpectation == nil {
-		mmListKnowledgeBasesByCatalogTypeWithConfig.defaultExpectation = &RepositoryMockListKnowledgeBasesByCatalogTypeWithConfigExpectation{mock: mmListKnowledgeBasesByCatalogTypeWithConfig.mock}
+	if mmListKnowledgeBasesByTypeWithConfig.defaultExpectation == nil {
+		mmListKnowledgeBasesByTypeWithConfig.defaultExpectation = &RepositoryMockListKnowledgeBasesByTypeWithConfigExpectation{mock: mmListKnowledgeBasesByTypeWithConfig.mock}
 	}
-	mmListKnowledgeBasesByCatalogTypeWithConfig.defaultExpectation.results = &RepositoryMockListKnowledgeBasesByCatalogTypeWithConfigResults{ka1, err}
-	mmListKnowledgeBasesByCatalogTypeWithConfig.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
-	return mmListKnowledgeBasesByCatalogTypeWithConfig.mock
+	mmListKnowledgeBasesByTypeWithConfig.defaultExpectation.results = &RepositoryMockListKnowledgeBasesByTypeWithConfigResults{ka1, err}
+	mmListKnowledgeBasesByTypeWithConfig.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmListKnowledgeBasesByTypeWithConfig.mock
 }
 
-// Set uses given function f to mock the Repository.ListKnowledgeBasesByCatalogTypeWithConfig method
-func (mmListKnowledgeBasesByCatalogTypeWithConfig *mRepositoryMockListKnowledgeBasesByCatalogTypeWithConfig) Set(f func(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType) (ka1 []mm_repository.KnowledgeBaseWithConfig, err error)) *RepositoryMock {
-	if mmListKnowledgeBasesByCatalogTypeWithConfig.defaultExpectation != nil {
-		mmListKnowledgeBasesByCatalogTypeWithConfig.mock.t.Fatalf("Default expectation is already set for the Repository.ListKnowledgeBasesByCatalogTypeWithConfig method")
+// Set uses given function f to mock the Repository.ListKnowledgeBasesByTypeWithConfig method
+func (mmListKnowledgeBasesByTypeWithConfig *mRepositoryMockListKnowledgeBasesByTypeWithConfig) Set(f func(ctx context.Context, ownerUID string, kbType artifactpb.KnowledgeBaseType) (ka1 []mm_repository.KnowledgeBaseWithConfig, err error)) *RepositoryMock {
+	if mmListKnowledgeBasesByTypeWithConfig.defaultExpectation != nil {
+		mmListKnowledgeBasesByTypeWithConfig.mock.t.Fatalf("Default expectation is already set for the Repository.ListKnowledgeBasesByTypeWithConfig method")
 	}
 
-	if len(mmListKnowledgeBasesByCatalogTypeWithConfig.expectations) > 0 {
-		mmListKnowledgeBasesByCatalogTypeWithConfig.mock.t.Fatalf("Some expectations are already set for the Repository.ListKnowledgeBasesByCatalogTypeWithConfig method")
+	if len(mmListKnowledgeBasesByTypeWithConfig.expectations) > 0 {
+		mmListKnowledgeBasesByTypeWithConfig.mock.t.Fatalf("Some expectations are already set for the Repository.ListKnowledgeBasesByTypeWithConfig method")
 	}
 
-	mmListKnowledgeBasesByCatalogTypeWithConfig.mock.funcListKnowledgeBasesByCatalogTypeWithConfig = f
-	mmListKnowledgeBasesByCatalogTypeWithConfig.mock.funcListKnowledgeBasesByCatalogTypeWithConfigOrigin = minimock.CallerInfo(1)
-	return mmListKnowledgeBasesByCatalogTypeWithConfig.mock
+	mmListKnowledgeBasesByTypeWithConfig.mock.funcListKnowledgeBasesByTypeWithConfig = f
+	mmListKnowledgeBasesByTypeWithConfig.mock.funcListKnowledgeBasesByTypeWithConfigOrigin = minimock.CallerInfo(1)
+	return mmListKnowledgeBasesByTypeWithConfig.mock
 }
 
-// When sets expectation for the Repository.ListKnowledgeBasesByCatalogTypeWithConfig which will trigger the result defined by the following
+// When sets expectation for the Repository.ListKnowledgeBasesByTypeWithConfig which will trigger the result defined by the following
 // Then helper
-func (mmListKnowledgeBasesByCatalogTypeWithConfig *mRepositoryMockListKnowledgeBasesByCatalogTypeWithConfig) When(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType) *RepositoryMockListKnowledgeBasesByCatalogTypeWithConfigExpectation {
-	if mmListKnowledgeBasesByCatalogTypeWithConfig.mock.funcListKnowledgeBasesByCatalogTypeWithConfig != nil {
-		mmListKnowledgeBasesByCatalogTypeWithConfig.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByCatalogTypeWithConfig mock is already set by Set")
+func (mmListKnowledgeBasesByTypeWithConfig *mRepositoryMockListKnowledgeBasesByTypeWithConfig) When(ctx context.Context, ownerUID string, kbType artifactpb.KnowledgeBaseType) *RepositoryMockListKnowledgeBasesByTypeWithConfigExpectation {
+	if mmListKnowledgeBasesByTypeWithConfig.mock.funcListKnowledgeBasesByTypeWithConfig != nil {
+		mmListKnowledgeBasesByTypeWithConfig.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesByTypeWithConfig mock is already set by Set")
 	}
 
-	expectation := &RepositoryMockListKnowledgeBasesByCatalogTypeWithConfigExpectation{
-		mock:               mmListKnowledgeBasesByCatalogTypeWithConfig.mock,
-		params:             &RepositoryMockListKnowledgeBasesByCatalogTypeWithConfigParams{ctx, ownerUID, catalogType},
-		expectationOrigins: RepositoryMockListKnowledgeBasesByCatalogTypeWithConfigExpectationOrigins{origin: minimock.CallerInfo(1)},
+	expectation := &RepositoryMockListKnowledgeBasesByTypeWithConfigExpectation{
+		mock:               mmListKnowledgeBasesByTypeWithConfig.mock,
+		params:             &RepositoryMockListKnowledgeBasesByTypeWithConfigParams{ctx, ownerUID, kbType},
+		expectationOrigins: RepositoryMockListKnowledgeBasesByTypeWithConfigExpectationOrigins{origin: minimock.CallerInfo(1)},
 	}
-	mmListKnowledgeBasesByCatalogTypeWithConfig.expectations = append(mmListKnowledgeBasesByCatalogTypeWithConfig.expectations, expectation)
+	mmListKnowledgeBasesByTypeWithConfig.expectations = append(mmListKnowledgeBasesByTypeWithConfig.expectations, expectation)
 	return expectation
 }
 
-// Then sets up Repository.ListKnowledgeBasesByCatalogTypeWithConfig return parameters for the expectation previously defined by the When method
-func (e *RepositoryMockListKnowledgeBasesByCatalogTypeWithConfigExpectation) Then(ka1 []mm_repository.KnowledgeBaseWithConfig, err error) *RepositoryMock {
-	e.results = &RepositoryMockListKnowledgeBasesByCatalogTypeWithConfigResults{ka1, err}
+// Then sets up Repository.ListKnowledgeBasesByTypeWithConfig return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockListKnowledgeBasesByTypeWithConfigExpectation) Then(ka1 []mm_repository.KnowledgeBaseWithConfig, err error) *RepositoryMock {
+	e.results = &RepositoryMockListKnowledgeBasesByTypeWithConfigResults{ka1, err}
 	return e.mock
 }
 
-// Times sets number of times Repository.ListKnowledgeBasesByCatalogTypeWithConfig should be invoked
-func (mmListKnowledgeBasesByCatalogTypeWithConfig *mRepositoryMockListKnowledgeBasesByCatalogTypeWithConfig) Times(n uint64) *mRepositoryMockListKnowledgeBasesByCatalogTypeWithConfig {
+// Times sets number of times Repository.ListKnowledgeBasesByTypeWithConfig should be invoked
+func (mmListKnowledgeBasesByTypeWithConfig *mRepositoryMockListKnowledgeBasesByTypeWithConfig) Times(n uint64) *mRepositoryMockListKnowledgeBasesByTypeWithConfig {
 	if n == 0 {
-		mmListKnowledgeBasesByCatalogTypeWithConfig.mock.t.Fatalf("Times of RepositoryMock.ListKnowledgeBasesByCatalogTypeWithConfig mock can not be zero")
+		mmListKnowledgeBasesByTypeWithConfig.mock.t.Fatalf("Times of RepositoryMock.ListKnowledgeBasesByTypeWithConfig mock can not be zero")
 	}
-	mm_atomic.StoreUint64(&mmListKnowledgeBasesByCatalogTypeWithConfig.expectedInvocations, n)
-	mmListKnowledgeBasesByCatalogTypeWithConfig.expectedInvocationsOrigin = minimock.CallerInfo(1)
-	return mmListKnowledgeBasesByCatalogTypeWithConfig
+	mm_atomic.StoreUint64(&mmListKnowledgeBasesByTypeWithConfig.expectedInvocations, n)
+	mmListKnowledgeBasesByTypeWithConfig.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmListKnowledgeBasesByTypeWithConfig
 }
 
-func (mmListKnowledgeBasesByCatalogTypeWithConfig *mRepositoryMockListKnowledgeBasesByCatalogTypeWithConfig) invocationsDone() bool {
-	if len(mmListKnowledgeBasesByCatalogTypeWithConfig.expectations) == 0 && mmListKnowledgeBasesByCatalogTypeWithConfig.defaultExpectation == nil && mmListKnowledgeBasesByCatalogTypeWithConfig.mock.funcListKnowledgeBasesByCatalogTypeWithConfig == nil {
+func (mmListKnowledgeBasesByTypeWithConfig *mRepositoryMockListKnowledgeBasesByTypeWithConfig) invocationsDone() bool {
+	if len(mmListKnowledgeBasesByTypeWithConfig.expectations) == 0 && mmListKnowledgeBasesByTypeWithConfig.defaultExpectation == nil && mmListKnowledgeBasesByTypeWithConfig.mock.funcListKnowledgeBasesByTypeWithConfig == nil {
 		return true
 	}
 
-	totalInvocations := mm_atomic.LoadUint64(&mmListKnowledgeBasesByCatalogTypeWithConfig.mock.afterListKnowledgeBasesByCatalogTypeWithConfigCounter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmListKnowledgeBasesByCatalogTypeWithConfig.expectedInvocations)
+	totalInvocations := mm_atomic.LoadUint64(&mmListKnowledgeBasesByTypeWithConfig.mock.afterListKnowledgeBasesByTypeWithConfigCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmListKnowledgeBasesByTypeWithConfig.expectedInvocations)
 
 	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
 }
 
-// ListKnowledgeBasesByCatalogTypeWithConfig implements mm_repository.Repository
-func (mmListKnowledgeBasesByCatalogTypeWithConfig *RepositoryMock) ListKnowledgeBasesByCatalogTypeWithConfig(ctx context.Context, ownerUID string, catalogType artifactpb.CatalogType) (ka1 []mm_repository.KnowledgeBaseWithConfig, err error) {
-	mm_atomic.AddUint64(&mmListKnowledgeBasesByCatalogTypeWithConfig.beforeListKnowledgeBasesByCatalogTypeWithConfigCounter, 1)
-	defer mm_atomic.AddUint64(&mmListKnowledgeBasesByCatalogTypeWithConfig.afterListKnowledgeBasesByCatalogTypeWithConfigCounter, 1)
+// ListKnowledgeBasesByTypeWithConfig implements mm_repository.Repository
+func (mmListKnowledgeBasesByTypeWithConfig *RepositoryMock) ListKnowledgeBasesByTypeWithConfig(ctx context.Context, ownerUID string, kbType artifactpb.KnowledgeBaseType) (ka1 []mm_repository.KnowledgeBaseWithConfig, err error) {
+	mm_atomic.AddUint64(&mmListKnowledgeBasesByTypeWithConfig.beforeListKnowledgeBasesByTypeWithConfigCounter, 1)
+	defer mm_atomic.AddUint64(&mmListKnowledgeBasesByTypeWithConfig.afterListKnowledgeBasesByTypeWithConfigCounter, 1)
 
-	mmListKnowledgeBasesByCatalogTypeWithConfig.t.Helper()
+	mmListKnowledgeBasesByTypeWithConfig.t.Helper()
 
-	if mmListKnowledgeBasesByCatalogTypeWithConfig.inspectFuncListKnowledgeBasesByCatalogTypeWithConfig != nil {
-		mmListKnowledgeBasesByCatalogTypeWithConfig.inspectFuncListKnowledgeBasesByCatalogTypeWithConfig(ctx, ownerUID, catalogType)
+	if mmListKnowledgeBasesByTypeWithConfig.inspectFuncListKnowledgeBasesByTypeWithConfig != nil {
+		mmListKnowledgeBasesByTypeWithConfig.inspectFuncListKnowledgeBasesByTypeWithConfig(ctx, ownerUID, kbType)
 	}
 
-	mm_params := RepositoryMockListKnowledgeBasesByCatalogTypeWithConfigParams{ctx, ownerUID, catalogType}
+	mm_params := RepositoryMockListKnowledgeBasesByTypeWithConfigParams{ctx, ownerUID, kbType}
 
 	// Record call args
-	mmListKnowledgeBasesByCatalogTypeWithConfig.ListKnowledgeBasesByCatalogTypeWithConfigMock.mutex.Lock()
-	mmListKnowledgeBasesByCatalogTypeWithConfig.ListKnowledgeBasesByCatalogTypeWithConfigMock.callArgs = append(mmListKnowledgeBasesByCatalogTypeWithConfig.ListKnowledgeBasesByCatalogTypeWithConfigMock.callArgs, &mm_params)
-	mmListKnowledgeBasesByCatalogTypeWithConfig.ListKnowledgeBasesByCatalogTypeWithConfigMock.mutex.Unlock()
+	mmListKnowledgeBasesByTypeWithConfig.ListKnowledgeBasesByTypeWithConfigMock.mutex.Lock()
+	mmListKnowledgeBasesByTypeWithConfig.ListKnowledgeBasesByTypeWithConfigMock.callArgs = append(mmListKnowledgeBasesByTypeWithConfig.ListKnowledgeBasesByTypeWithConfigMock.callArgs, &mm_params)
+	mmListKnowledgeBasesByTypeWithConfig.ListKnowledgeBasesByTypeWithConfigMock.mutex.Unlock()
 
-	for _, e := range mmListKnowledgeBasesByCatalogTypeWithConfig.ListKnowledgeBasesByCatalogTypeWithConfigMock.expectations {
+	for _, e := range mmListKnowledgeBasesByTypeWithConfig.ListKnowledgeBasesByTypeWithConfigMock.expectations {
 		if minimock.Equal(*e.params, mm_params) {
 			mm_atomic.AddUint64(&e.Counter, 1)
 			return e.results.ka1, e.results.err
 		}
 	}
 
-	if mmListKnowledgeBasesByCatalogTypeWithConfig.ListKnowledgeBasesByCatalogTypeWithConfigMock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmListKnowledgeBasesByCatalogTypeWithConfig.ListKnowledgeBasesByCatalogTypeWithConfigMock.defaultExpectation.Counter, 1)
-		mm_want := mmListKnowledgeBasesByCatalogTypeWithConfig.ListKnowledgeBasesByCatalogTypeWithConfigMock.defaultExpectation.params
-		mm_want_ptrs := mmListKnowledgeBasesByCatalogTypeWithConfig.ListKnowledgeBasesByCatalogTypeWithConfigMock.defaultExpectation.paramPtrs
+	if mmListKnowledgeBasesByTypeWithConfig.ListKnowledgeBasesByTypeWithConfigMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmListKnowledgeBasesByTypeWithConfig.ListKnowledgeBasesByTypeWithConfigMock.defaultExpectation.Counter, 1)
+		mm_want := mmListKnowledgeBasesByTypeWithConfig.ListKnowledgeBasesByTypeWithConfigMock.defaultExpectation.params
+		mm_want_ptrs := mmListKnowledgeBasesByTypeWithConfig.ListKnowledgeBasesByTypeWithConfigMock.defaultExpectation.paramPtrs
 
-		mm_got := RepositoryMockListKnowledgeBasesByCatalogTypeWithConfigParams{ctx, ownerUID, catalogType}
+		mm_got := RepositoryMockListKnowledgeBasesByTypeWithConfigParams{ctx, ownerUID, kbType}
 
 		if mm_want_ptrs != nil {
 
 			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
-				mmListKnowledgeBasesByCatalogTypeWithConfig.t.Errorf("RepositoryMock.ListKnowledgeBasesByCatalogTypeWithConfig got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmListKnowledgeBasesByCatalogTypeWithConfig.ListKnowledgeBasesByCatalogTypeWithConfigMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+				mmListKnowledgeBasesByTypeWithConfig.t.Errorf("RepositoryMock.ListKnowledgeBasesByTypeWithConfig got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmListKnowledgeBasesByTypeWithConfig.ListKnowledgeBasesByTypeWithConfigMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
 			}
 
 			if mm_want_ptrs.ownerUID != nil && !minimock.Equal(*mm_want_ptrs.ownerUID, mm_got.ownerUID) {
-				mmListKnowledgeBasesByCatalogTypeWithConfig.t.Errorf("RepositoryMock.ListKnowledgeBasesByCatalogTypeWithConfig got unexpected parameter ownerUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmListKnowledgeBasesByCatalogTypeWithConfig.ListKnowledgeBasesByCatalogTypeWithConfigMock.defaultExpectation.expectationOrigins.originOwnerUID, *mm_want_ptrs.ownerUID, mm_got.ownerUID, minimock.Diff(*mm_want_ptrs.ownerUID, mm_got.ownerUID))
+				mmListKnowledgeBasesByTypeWithConfig.t.Errorf("RepositoryMock.ListKnowledgeBasesByTypeWithConfig got unexpected parameter ownerUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmListKnowledgeBasesByTypeWithConfig.ListKnowledgeBasesByTypeWithConfigMock.defaultExpectation.expectationOrigins.originOwnerUID, *mm_want_ptrs.ownerUID, mm_got.ownerUID, minimock.Diff(*mm_want_ptrs.ownerUID, mm_got.ownerUID))
 			}
 
-			if mm_want_ptrs.catalogType != nil && !minimock.Equal(*mm_want_ptrs.catalogType, mm_got.catalogType) {
-				mmListKnowledgeBasesByCatalogTypeWithConfig.t.Errorf("RepositoryMock.ListKnowledgeBasesByCatalogTypeWithConfig got unexpected parameter catalogType, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmListKnowledgeBasesByCatalogTypeWithConfig.ListKnowledgeBasesByCatalogTypeWithConfigMock.defaultExpectation.expectationOrigins.originCatalogType, *mm_want_ptrs.catalogType, mm_got.catalogType, minimock.Diff(*mm_want_ptrs.catalogType, mm_got.catalogType))
+			if mm_want_ptrs.kbType != nil && !minimock.Equal(*mm_want_ptrs.kbType, mm_got.kbType) {
+				mmListKnowledgeBasesByTypeWithConfig.t.Errorf("RepositoryMock.ListKnowledgeBasesByTypeWithConfig got unexpected parameter kbType, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmListKnowledgeBasesByTypeWithConfig.ListKnowledgeBasesByTypeWithConfigMock.defaultExpectation.expectationOrigins.originKbType, *mm_want_ptrs.kbType, mm_got.kbType, minimock.Diff(*mm_want_ptrs.kbType, mm_got.kbType))
 			}
 
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
-			mmListKnowledgeBasesByCatalogTypeWithConfig.t.Errorf("RepositoryMock.ListKnowledgeBasesByCatalogTypeWithConfig got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-				mmListKnowledgeBasesByCatalogTypeWithConfig.ListKnowledgeBasesByCatalogTypeWithConfigMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+			mmListKnowledgeBasesByTypeWithConfig.t.Errorf("RepositoryMock.ListKnowledgeBasesByTypeWithConfig got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmListKnowledgeBasesByTypeWithConfig.ListKnowledgeBasesByTypeWithConfigMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
 		}
 
-		mm_results := mmListKnowledgeBasesByCatalogTypeWithConfig.ListKnowledgeBasesByCatalogTypeWithConfigMock.defaultExpectation.results
+		mm_results := mmListKnowledgeBasesByTypeWithConfig.ListKnowledgeBasesByTypeWithConfigMock.defaultExpectation.results
 		if mm_results == nil {
-			mmListKnowledgeBasesByCatalogTypeWithConfig.t.Fatal("No results are set for the RepositoryMock.ListKnowledgeBasesByCatalogTypeWithConfig")
+			mmListKnowledgeBasesByTypeWithConfig.t.Fatal("No results are set for the RepositoryMock.ListKnowledgeBasesByTypeWithConfig")
 		}
 		return (*mm_results).ka1, (*mm_results).err
 	}
-	if mmListKnowledgeBasesByCatalogTypeWithConfig.funcListKnowledgeBasesByCatalogTypeWithConfig != nil {
-		return mmListKnowledgeBasesByCatalogTypeWithConfig.funcListKnowledgeBasesByCatalogTypeWithConfig(ctx, ownerUID, catalogType)
+	if mmListKnowledgeBasesByTypeWithConfig.funcListKnowledgeBasesByTypeWithConfig != nil {
+		return mmListKnowledgeBasesByTypeWithConfig.funcListKnowledgeBasesByTypeWithConfig(ctx, ownerUID, kbType)
 	}
-	mmListKnowledgeBasesByCatalogTypeWithConfig.t.Fatalf("Unexpected call to RepositoryMock.ListKnowledgeBasesByCatalogTypeWithConfig. %v %v %v", ctx, ownerUID, catalogType)
+	mmListKnowledgeBasesByTypeWithConfig.t.Fatalf("Unexpected call to RepositoryMock.ListKnowledgeBasesByTypeWithConfig. %v %v %v", ctx, ownerUID, kbType)
 	return
 }
 
-// ListKnowledgeBasesByCatalogTypeWithConfigAfterCounter returns a count of finished RepositoryMock.ListKnowledgeBasesByCatalogTypeWithConfig invocations
-func (mmListKnowledgeBasesByCatalogTypeWithConfig *RepositoryMock) ListKnowledgeBasesByCatalogTypeWithConfigAfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmListKnowledgeBasesByCatalogTypeWithConfig.afterListKnowledgeBasesByCatalogTypeWithConfigCounter)
+// ListKnowledgeBasesByTypeWithConfigAfterCounter returns a count of finished RepositoryMock.ListKnowledgeBasesByTypeWithConfig invocations
+func (mmListKnowledgeBasesByTypeWithConfig *RepositoryMock) ListKnowledgeBasesByTypeWithConfigAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmListKnowledgeBasesByTypeWithConfig.afterListKnowledgeBasesByTypeWithConfigCounter)
 }
 
-// ListKnowledgeBasesByCatalogTypeWithConfigBeforeCounter returns a count of RepositoryMock.ListKnowledgeBasesByCatalogTypeWithConfig invocations
-func (mmListKnowledgeBasesByCatalogTypeWithConfig *RepositoryMock) ListKnowledgeBasesByCatalogTypeWithConfigBeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmListKnowledgeBasesByCatalogTypeWithConfig.beforeListKnowledgeBasesByCatalogTypeWithConfigCounter)
+// ListKnowledgeBasesByTypeWithConfigBeforeCounter returns a count of RepositoryMock.ListKnowledgeBasesByTypeWithConfig invocations
+func (mmListKnowledgeBasesByTypeWithConfig *RepositoryMock) ListKnowledgeBasesByTypeWithConfigBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmListKnowledgeBasesByTypeWithConfig.beforeListKnowledgeBasesByTypeWithConfigCounter)
 }
 
-// Calls returns a list of arguments used in each call to RepositoryMock.ListKnowledgeBasesByCatalogTypeWithConfig.
+// Calls returns a list of arguments used in each call to RepositoryMock.ListKnowledgeBasesByTypeWithConfig.
 // The list is in the same order as the calls were made (i.e. recent calls have a higher index)
-func (mmListKnowledgeBasesByCatalogTypeWithConfig *mRepositoryMockListKnowledgeBasesByCatalogTypeWithConfig) Calls() []*RepositoryMockListKnowledgeBasesByCatalogTypeWithConfigParams {
-	mmListKnowledgeBasesByCatalogTypeWithConfig.mutex.RLock()
+func (mmListKnowledgeBasesByTypeWithConfig *mRepositoryMockListKnowledgeBasesByTypeWithConfig) Calls() []*RepositoryMockListKnowledgeBasesByTypeWithConfigParams {
+	mmListKnowledgeBasesByTypeWithConfig.mutex.RLock()
 
-	argCopy := make([]*RepositoryMockListKnowledgeBasesByCatalogTypeWithConfigParams, len(mmListKnowledgeBasesByCatalogTypeWithConfig.callArgs))
-	copy(argCopy, mmListKnowledgeBasesByCatalogTypeWithConfig.callArgs)
+	argCopy := make([]*RepositoryMockListKnowledgeBasesByTypeWithConfigParams, len(mmListKnowledgeBasesByTypeWithConfig.callArgs))
+	copy(argCopy, mmListKnowledgeBasesByTypeWithConfig.callArgs)
 
-	mmListKnowledgeBasesByCatalogTypeWithConfig.mutex.RUnlock()
+	mmListKnowledgeBasesByTypeWithConfig.mutex.RUnlock()
 
 	return argCopy
 }
 
-// MinimockListKnowledgeBasesByCatalogTypeWithConfigDone returns true if the count of the ListKnowledgeBasesByCatalogTypeWithConfig invocations corresponds
+// MinimockListKnowledgeBasesByTypeWithConfigDone returns true if the count of the ListKnowledgeBasesByTypeWithConfig invocations corresponds
 // the number of defined expectations
-func (m *RepositoryMock) MinimockListKnowledgeBasesByCatalogTypeWithConfigDone() bool {
-	if m.ListKnowledgeBasesByCatalogTypeWithConfigMock.optional {
+func (m *RepositoryMock) MinimockListKnowledgeBasesByTypeWithConfigDone() bool {
+	if m.ListKnowledgeBasesByTypeWithConfigMock.optional {
 		// Optional methods provide '0 or more' call count restriction.
 		return true
 	}
 
-	for _, e := range m.ListKnowledgeBasesByCatalogTypeWithConfigMock.expectations {
+	for _, e := range m.ListKnowledgeBasesByTypeWithConfigMock.expectations {
 		if mm_atomic.LoadUint64(&e.Counter) < 1 {
 			return false
 		}
 	}
 
-	return m.ListKnowledgeBasesByCatalogTypeWithConfigMock.invocationsDone()
+	return m.ListKnowledgeBasesByTypeWithConfigMock.invocationsDone()
 }
 
-// MinimockListKnowledgeBasesByCatalogTypeWithConfigInspect logs each unmet expectation
-func (m *RepositoryMock) MinimockListKnowledgeBasesByCatalogTypeWithConfigInspect() {
-	for _, e := range m.ListKnowledgeBasesByCatalogTypeWithConfigMock.expectations {
+// MinimockListKnowledgeBasesByTypeWithConfigInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockListKnowledgeBasesByTypeWithConfigInspect() {
+	for _, e := range m.ListKnowledgeBasesByTypeWithConfigMock.expectations {
 		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Errorf("Expected call to RepositoryMock.ListKnowledgeBasesByCatalogTypeWithConfig at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+			m.t.Errorf("Expected call to RepositoryMock.ListKnowledgeBasesByTypeWithConfig at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
 		}
 	}
 
-	afterListKnowledgeBasesByCatalogTypeWithConfigCounter := mm_atomic.LoadUint64(&m.afterListKnowledgeBasesByCatalogTypeWithConfigCounter)
+	afterListKnowledgeBasesByTypeWithConfigCounter := mm_atomic.LoadUint64(&m.afterListKnowledgeBasesByTypeWithConfigCounter)
 	// if default expectation was set then invocations count should be greater than zero
-	if m.ListKnowledgeBasesByCatalogTypeWithConfigMock.defaultExpectation != nil && afterListKnowledgeBasesByCatalogTypeWithConfigCounter < 1 {
-		if m.ListKnowledgeBasesByCatalogTypeWithConfigMock.defaultExpectation.params == nil {
-			m.t.Errorf("Expected call to RepositoryMock.ListKnowledgeBasesByCatalogTypeWithConfig at\n%s", m.ListKnowledgeBasesByCatalogTypeWithConfigMock.defaultExpectation.returnOrigin)
+	if m.ListKnowledgeBasesByTypeWithConfigMock.defaultExpectation != nil && afterListKnowledgeBasesByTypeWithConfigCounter < 1 {
+		if m.ListKnowledgeBasesByTypeWithConfigMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.ListKnowledgeBasesByTypeWithConfig at\n%s", m.ListKnowledgeBasesByTypeWithConfigMock.defaultExpectation.returnOrigin)
 		} else {
-			m.t.Errorf("Expected call to RepositoryMock.ListKnowledgeBasesByCatalogTypeWithConfig at\n%s with params: %#v", m.ListKnowledgeBasesByCatalogTypeWithConfigMock.defaultExpectation.expectationOrigins.origin, *m.ListKnowledgeBasesByCatalogTypeWithConfigMock.defaultExpectation.params)
+			m.t.Errorf("Expected call to RepositoryMock.ListKnowledgeBasesByTypeWithConfig at\n%s with params: %#v", m.ListKnowledgeBasesByTypeWithConfigMock.defaultExpectation.expectationOrigins.origin, *m.ListKnowledgeBasesByTypeWithConfigMock.defaultExpectation.params)
 		}
 	}
 	// if func was set then invocations count should be greater than zero
-	if m.funcListKnowledgeBasesByCatalogTypeWithConfig != nil && afterListKnowledgeBasesByCatalogTypeWithConfigCounter < 1 {
-		m.t.Errorf("Expected call to RepositoryMock.ListKnowledgeBasesByCatalogTypeWithConfig at\n%s", m.funcListKnowledgeBasesByCatalogTypeWithConfigOrigin)
+	if m.funcListKnowledgeBasesByTypeWithConfig != nil && afterListKnowledgeBasesByTypeWithConfigCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.ListKnowledgeBasesByTypeWithConfig at\n%s", m.funcListKnowledgeBasesByTypeWithConfigOrigin)
 	}
 
-	if !m.ListKnowledgeBasesByCatalogTypeWithConfigMock.invocationsDone() && afterListKnowledgeBasesByCatalogTypeWithConfigCounter > 0 {
-		m.t.Errorf("Expected %d calls to RepositoryMock.ListKnowledgeBasesByCatalogTypeWithConfig at\n%s but found %d calls",
-			mm_atomic.LoadUint64(&m.ListKnowledgeBasesByCatalogTypeWithConfigMock.expectedInvocations), m.ListKnowledgeBasesByCatalogTypeWithConfigMock.expectedInvocationsOrigin, afterListKnowledgeBasesByCatalogTypeWithConfigCounter)
+	if !m.ListKnowledgeBasesByTypeWithConfigMock.invocationsDone() && afterListKnowledgeBasesByTypeWithConfigCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.ListKnowledgeBasesByTypeWithConfig at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.ListKnowledgeBasesByTypeWithConfigMock.expectedInvocations), m.ListKnowledgeBasesByTypeWithConfigMock.expectedInvocationsOrigin, afterListKnowledgeBasesByTypeWithConfigCounter)
 	}
 }
 
@@ -37112,16 +37112,16 @@ type RepositoryMockListKnowledgeBasesForUpdateExpectation struct {
 
 // RepositoryMockListKnowledgeBasesForUpdateParams contains parameters of the Repository.ListKnowledgeBasesForUpdate
 type RepositoryMockListKnowledgeBasesForUpdateParams struct {
-	ctx        context.Context
-	tagFilters []string
-	catalogIDs []string
+	ctx              context.Context
+	tagFilters       []string
+	knowledgeBaseIDs []string
 }
 
 // RepositoryMockListKnowledgeBasesForUpdateParamPtrs contains pointers to parameters of the Repository.ListKnowledgeBasesForUpdate
 type RepositoryMockListKnowledgeBasesForUpdateParamPtrs struct {
-	ctx        *context.Context
-	tagFilters *[]string
-	catalogIDs *[]string
+	ctx              *context.Context
+	tagFilters       *[]string
+	knowledgeBaseIDs *[]string
 }
 
 // RepositoryMockListKnowledgeBasesForUpdateResults contains results of the Repository.ListKnowledgeBasesForUpdate
@@ -37132,10 +37132,10 @@ type RepositoryMockListKnowledgeBasesForUpdateResults struct {
 
 // RepositoryMockListKnowledgeBasesForUpdateOrigins contains origins of expectations of the Repository.ListKnowledgeBasesForUpdate
 type RepositoryMockListKnowledgeBasesForUpdateExpectationOrigins struct {
-	origin           string
-	originCtx        string
-	originTagFilters string
-	originCatalogIDs string
+	origin                 string
+	originCtx              string
+	originTagFilters       string
+	originKnowledgeBaseIDs string
 }
 
 // Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
@@ -37149,7 +37149,7 @@ func (mmListKnowledgeBasesForUpdate *mRepositoryMockListKnowledgeBasesForUpdate)
 }
 
 // Expect sets up expected params for Repository.ListKnowledgeBasesForUpdate
-func (mmListKnowledgeBasesForUpdate *mRepositoryMockListKnowledgeBasesForUpdate) Expect(ctx context.Context, tagFilters []string, catalogIDs []string) *mRepositoryMockListKnowledgeBasesForUpdate {
+func (mmListKnowledgeBasesForUpdate *mRepositoryMockListKnowledgeBasesForUpdate) Expect(ctx context.Context, tagFilters []string, knowledgeBaseIDs []string) *mRepositoryMockListKnowledgeBasesForUpdate {
 	if mmListKnowledgeBasesForUpdate.mock.funcListKnowledgeBasesForUpdate != nil {
 		mmListKnowledgeBasesForUpdate.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesForUpdate mock is already set by Set")
 	}
@@ -37162,7 +37162,7 @@ func (mmListKnowledgeBasesForUpdate *mRepositoryMockListKnowledgeBasesForUpdate)
 		mmListKnowledgeBasesForUpdate.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesForUpdate mock is already set by ExpectParams functions")
 	}
 
-	mmListKnowledgeBasesForUpdate.defaultExpectation.params = &RepositoryMockListKnowledgeBasesForUpdateParams{ctx, tagFilters, catalogIDs}
+	mmListKnowledgeBasesForUpdate.defaultExpectation.params = &RepositoryMockListKnowledgeBasesForUpdateParams{ctx, tagFilters, knowledgeBaseIDs}
 	mmListKnowledgeBasesForUpdate.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
 	for _, e := range mmListKnowledgeBasesForUpdate.expectations {
 		if minimock.Equal(e.params, mmListKnowledgeBasesForUpdate.defaultExpectation.params) {
@@ -37219,8 +37219,8 @@ func (mmListKnowledgeBasesForUpdate *mRepositoryMockListKnowledgeBasesForUpdate)
 	return mmListKnowledgeBasesForUpdate
 }
 
-// ExpectCatalogIDsParam3 sets up expected param catalogIDs for Repository.ListKnowledgeBasesForUpdate
-func (mmListKnowledgeBasesForUpdate *mRepositoryMockListKnowledgeBasesForUpdate) ExpectCatalogIDsParam3(catalogIDs []string) *mRepositoryMockListKnowledgeBasesForUpdate {
+// ExpectKnowledgeBaseIDsParam3 sets up expected param knowledgeBaseIDs for Repository.ListKnowledgeBasesForUpdate
+func (mmListKnowledgeBasesForUpdate *mRepositoryMockListKnowledgeBasesForUpdate) ExpectKnowledgeBaseIDsParam3(knowledgeBaseIDs []string) *mRepositoryMockListKnowledgeBasesForUpdate {
 	if mmListKnowledgeBasesForUpdate.mock.funcListKnowledgeBasesForUpdate != nil {
 		mmListKnowledgeBasesForUpdate.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesForUpdate mock is already set by Set")
 	}
@@ -37236,14 +37236,14 @@ func (mmListKnowledgeBasesForUpdate *mRepositoryMockListKnowledgeBasesForUpdate)
 	if mmListKnowledgeBasesForUpdate.defaultExpectation.paramPtrs == nil {
 		mmListKnowledgeBasesForUpdate.defaultExpectation.paramPtrs = &RepositoryMockListKnowledgeBasesForUpdateParamPtrs{}
 	}
-	mmListKnowledgeBasesForUpdate.defaultExpectation.paramPtrs.catalogIDs = &catalogIDs
-	mmListKnowledgeBasesForUpdate.defaultExpectation.expectationOrigins.originCatalogIDs = minimock.CallerInfo(1)
+	mmListKnowledgeBasesForUpdate.defaultExpectation.paramPtrs.knowledgeBaseIDs = &knowledgeBaseIDs
+	mmListKnowledgeBasesForUpdate.defaultExpectation.expectationOrigins.originKnowledgeBaseIDs = minimock.CallerInfo(1)
 
 	return mmListKnowledgeBasesForUpdate
 }
 
 // Inspect accepts an inspector function that has same arguments as the Repository.ListKnowledgeBasesForUpdate
-func (mmListKnowledgeBasesForUpdate *mRepositoryMockListKnowledgeBasesForUpdate) Inspect(f func(ctx context.Context, tagFilters []string, catalogIDs []string)) *mRepositoryMockListKnowledgeBasesForUpdate {
+func (mmListKnowledgeBasesForUpdate *mRepositoryMockListKnowledgeBasesForUpdate) Inspect(f func(ctx context.Context, tagFilters []string, knowledgeBaseIDs []string)) *mRepositoryMockListKnowledgeBasesForUpdate {
 	if mmListKnowledgeBasesForUpdate.mock.inspectFuncListKnowledgeBasesForUpdate != nil {
 		mmListKnowledgeBasesForUpdate.mock.t.Fatalf("Inspect function is already set for RepositoryMock.ListKnowledgeBasesForUpdate")
 	}
@@ -37268,7 +37268,7 @@ func (mmListKnowledgeBasesForUpdate *mRepositoryMockListKnowledgeBasesForUpdate)
 }
 
 // Set uses given function f to mock the Repository.ListKnowledgeBasesForUpdate method
-func (mmListKnowledgeBasesForUpdate *mRepositoryMockListKnowledgeBasesForUpdate) Set(f func(ctx context.Context, tagFilters []string, catalogIDs []string) (ka1 []mm_repository.KnowledgeBaseModel, err error)) *RepositoryMock {
+func (mmListKnowledgeBasesForUpdate *mRepositoryMockListKnowledgeBasesForUpdate) Set(f func(ctx context.Context, tagFilters []string, knowledgeBaseIDs []string) (ka1 []mm_repository.KnowledgeBaseModel, err error)) *RepositoryMock {
 	if mmListKnowledgeBasesForUpdate.defaultExpectation != nil {
 		mmListKnowledgeBasesForUpdate.mock.t.Fatalf("Default expectation is already set for the Repository.ListKnowledgeBasesForUpdate method")
 	}
@@ -37284,14 +37284,14 @@ func (mmListKnowledgeBasesForUpdate *mRepositoryMockListKnowledgeBasesForUpdate)
 
 // When sets expectation for the Repository.ListKnowledgeBasesForUpdate which will trigger the result defined by the following
 // Then helper
-func (mmListKnowledgeBasesForUpdate *mRepositoryMockListKnowledgeBasesForUpdate) When(ctx context.Context, tagFilters []string, catalogIDs []string) *RepositoryMockListKnowledgeBasesForUpdateExpectation {
+func (mmListKnowledgeBasesForUpdate *mRepositoryMockListKnowledgeBasesForUpdate) When(ctx context.Context, tagFilters []string, knowledgeBaseIDs []string) *RepositoryMockListKnowledgeBasesForUpdateExpectation {
 	if mmListKnowledgeBasesForUpdate.mock.funcListKnowledgeBasesForUpdate != nil {
 		mmListKnowledgeBasesForUpdate.mock.t.Fatalf("RepositoryMock.ListKnowledgeBasesForUpdate mock is already set by Set")
 	}
 
 	expectation := &RepositoryMockListKnowledgeBasesForUpdateExpectation{
 		mock:               mmListKnowledgeBasesForUpdate.mock,
-		params:             &RepositoryMockListKnowledgeBasesForUpdateParams{ctx, tagFilters, catalogIDs},
+		params:             &RepositoryMockListKnowledgeBasesForUpdateParams{ctx, tagFilters, knowledgeBaseIDs},
 		expectationOrigins: RepositoryMockListKnowledgeBasesForUpdateExpectationOrigins{origin: minimock.CallerInfo(1)},
 	}
 	mmListKnowledgeBasesForUpdate.expectations = append(mmListKnowledgeBasesForUpdate.expectations, expectation)
@@ -37326,17 +37326,17 @@ func (mmListKnowledgeBasesForUpdate *mRepositoryMockListKnowledgeBasesForUpdate)
 }
 
 // ListKnowledgeBasesForUpdate implements mm_repository.Repository
-func (mmListKnowledgeBasesForUpdate *RepositoryMock) ListKnowledgeBasesForUpdate(ctx context.Context, tagFilters []string, catalogIDs []string) (ka1 []mm_repository.KnowledgeBaseModel, err error) {
+func (mmListKnowledgeBasesForUpdate *RepositoryMock) ListKnowledgeBasesForUpdate(ctx context.Context, tagFilters []string, knowledgeBaseIDs []string) (ka1 []mm_repository.KnowledgeBaseModel, err error) {
 	mm_atomic.AddUint64(&mmListKnowledgeBasesForUpdate.beforeListKnowledgeBasesForUpdateCounter, 1)
 	defer mm_atomic.AddUint64(&mmListKnowledgeBasesForUpdate.afterListKnowledgeBasesForUpdateCounter, 1)
 
 	mmListKnowledgeBasesForUpdate.t.Helper()
 
 	if mmListKnowledgeBasesForUpdate.inspectFuncListKnowledgeBasesForUpdate != nil {
-		mmListKnowledgeBasesForUpdate.inspectFuncListKnowledgeBasesForUpdate(ctx, tagFilters, catalogIDs)
+		mmListKnowledgeBasesForUpdate.inspectFuncListKnowledgeBasesForUpdate(ctx, tagFilters, knowledgeBaseIDs)
 	}
 
-	mm_params := RepositoryMockListKnowledgeBasesForUpdateParams{ctx, tagFilters, catalogIDs}
+	mm_params := RepositoryMockListKnowledgeBasesForUpdateParams{ctx, tagFilters, knowledgeBaseIDs}
 
 	// Record call args
 	mmListKnowledgeBasesForUpdate.ListKnowledgeBasesForUpdateMock.mutex.Lock()
@@ -37355,7 +37355,7 @@ func (mmListKnowledgeBasesForUpdate *RepositoryMock) ListKnowledgeBasesForUpdate
 		mm_want := mmListKnowledgeBasesForUpdate.ListKnowledgeBasesForUpdateMock.defaultExpectation.params
 		mm_want_ptrs := mmListKnowledgeBasesForUpdate.ListKnowledgeBasesForUpdateMock.defaultExpectation.paramPtrs
 
-		mm_got := RepositoryMockListKnowledgeBasesForUpdateParams{ctx, tagFilters, catalogIDs}
+		mm_got := RepositoryMockListKnowledgeBasesForUpdateParams{ctx, tagFilters, knowledgeBaseIDs}
 
 		if mm_want_ptrs != nil {
 
@@ -37369,9 +37369,9 @@ func (mmListKnowledgeBasesForUpdate *RepositoryMock) ListKnowledgeBasesForUpdate
 					mmListKnowledgeBasesForUpdate.ListKnowledgeBasesForUpdateMock.defaultExpectation.expectationOrigins.originTagFilters, *mm_want_ptrs.tagFilters, mm_got.tagFilters, minimock.Diff(*mm_want_ptrs.tagFilters, mm_got.tagFilters))
 			}
 
-			if mm_want_ptrs.catalogIDs != nil && !minimock.Equal(*mm_want_ptrs.catalogIDs, mm_got.catalogIDs) {
-				mmListKnowledgeBasesForUpdate.t.Errorf("RepositoryMock.ListKnowledgeBasesForUpdate got unexpected parameter catalogIDs, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmListKnowledgeBasesForUpdate.ListKnowledgeBasesForUpdateMock.defaultExpectation.expectationOrigins.originCatalogIDs, *mm_want_ptrs.catalogIDs, mm_got.catalogIDs, minimock.Diff(*mm_want_ptrs.catalogIDs, mm_got.catalogIDs))
+			if mm_want_ptrs.knowledgeBaseIDs != nil && !minimock.Equal(*mm_want_ptrs.knowledgeBaseIDs, mm_got.knowledgeBaseIDs) {
+				mmListKnowledgeBasesForUpdate.t.Errorf("RepositoryMock.ListKnowledgeBasesForUpdate got unexpected parameter knowledgeBaseIDs, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmListKnowledgeBasesForUpdate.ListKnowledgeBasesForUpdateMock.defaultExpectation.expectationOrigins.originKnowledgeBaseIDs, *mm_want_ptrs.knowledgeBaseIDs, mm_got.knowledgeBaseIDs, minimock.Diff(*mm_want_ptrs.knowledgeBaseIDs, mm_got.knowledgeBaseIDs))
 			}
 
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
@@ -37386,9 +37386,9 @@ func (mmListKnowledgeBasesForUpdate *RepositoryMock) ListKnowledgeBasesForUpdate
 		return (*mm_results).ka1, (*mm_results).err
 	}
 	if mmListKnowledgeBasesForUpdate.funcListKnowledgeBasesForUpdate != nil {
-		return mmListKnowledgeBasesForUpdate.funcListKnowledgeBasesForUpdate(ctx, tagFilters, catalogIDs)
+		return mmListKnowledgeBasesForUpdate.funcListKnowledgeBasesForUpdate(ctx, tagFilters, knowledgeBaseIDs)
 	}
-	mmListKnowledgeBasesForUpdate.t.Fatalf("Unexpected call to RepositoryMock.ListKnowledgeBasesForUpdate. %v %v %v", ctx, tagFilters, catalogIDs)
+	mmListKnowledgeBasesForUpdate.t.Fatalf("Unexpected call to RepositoryMock.ListKnowledgeBasesForUpdate. %v %v %v", ctx, tagFilters, knowledgeBaseIDs)
 	return
 }
 
@@ -47492,9 +47492,9 @@ func (m *RepositoryMock) MinimockFinish() {
 
 			m.MinimockListKnowledgeBasesInspect()
 
-			m.MinimockListKnowledgeBasesByCatalogTypeInspect()
+			m.MinimockListKnowledgeBasesByTypeInspect()
 
-			m.MinimockListKnowledgeBasesByCatalogTypeWithConfigInspect()
+			m.MinimockListKnowledgeBasesByTypeWithConfigInspect()
 
 			m.MinimockListKnowledgeBasesByUpdateStatusInspect()
 
@@ -47671,8 +47671,8 @@ func (m *RepositoryMock) minimockDone() bool {
 		m.MinimockListKnowledgeBaseFilePathsDone() &&
 		m.MinimockListKnowledgeBaseFilesDone() &&
 		m.MinimockListKnowledgeBasesDone() &&
-		m.MinimockListKnowledgeBasesByCatalogTypeDone() &&
-		m.MinimockListKnowledgeBasesByCatalogTypeWithConfigDone() &&
+		m.MinimockListKnowledgeBasesByTypeDone() &&
+		m.MinimockListKnowledgeBasesByTypeWithConfigDone() &&
 		m.MinimockListKnowledgeBasesByUpdateStatusDone() &&
 		m.MinimockListKnowledgeBasesForUpdateDone() &&
 		m.MinimockListSystemsDone() &&

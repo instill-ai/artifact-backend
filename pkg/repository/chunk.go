@@ -20,7 +20,7 @@ import (
 
 const (
 	// TextChunkTableName is the table name for text chunks
-	TextChunkTableName = "text_chunk"
+	TextChunkTableName = "chunk"
 )
 
 // TextChunk is the interface for the text chunk repository
@@ -73,7 +73,7 @@ type TextChunkModel struct {
 	EndPos      int                   `gorm:"column:end_pos;not null" json:"end"`
 
 	ReferenceJSON datatypes.JSON            `gorm:"column:reference;type:jsonb" json:"reference_json"`
-	Reference     *types.TextChunkReference `gorm:"-" json:"text_chunk_reference"`
+	Reference     *types.TextChunkReference `gorm:"-" json:"chunk_reference"`
 
 	// ContentDest is the destination path in minio
 	ContentDest string     `gorm:"column:content_dest;size:255;not null" json:"content_dest"`
@@ -470,7 +470,7 @@ func (r *repository) UpdateTextChunkDestinations(ctx context.Context, destinatio
 		}
 
 		// Build a CASE WHEN statement for bulk update
-		// UPDATE text_chunk SET content_dest = CASE
+		// UPDATE chunk SET content_dest = CASE
 		//   WHEN uid = 'uid1' THEN 'dest1'
 		//   WHEN uid = 'uid2' THEN 'dest2'
 		//   ...

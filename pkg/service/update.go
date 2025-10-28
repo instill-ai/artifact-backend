@@ -19,15 +19,15 @@ import (
 // RollbackAdmin rolls back a knowledge base to its previous state
 // CRITICAL DESIGN: The production KB UID remains constant - only resources are swapped
 // This preserves the KB identity and ACL permissions throughout the rollback
-func (s *service) RollbackAdmin(ctx context.Context, ownerUID types.OwnerUIDType, namespaceID string, catalogID string) (*artifactpb.RollbackAdminResponse, error) {
-	// Get the current production catalog
-	productionKB, err := s.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, catalogID)
+func (s *service) RollbackAdmin(ctx context.Context, ownerUID types.OwnerUIDType, namespaceID string, knowledgeBaseID string) (*artifactpb.RollbackAdminResponse, error) {
+	// Get the current production knowledge base
+	productionKB, err := s.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, knowledgeBaseID)
 	if err != nil {
-		return nil, fmt.Errorf("catalog not found: %w", err)
+		return nil, fmt.Errorf("knowledge base not found: %w", err)
 	}
 
 	// Find the rollback KB (contains the old resources to restore)
-	rollbackKBID := fmt.Sprintf("%s-rollback", catalogID)
+	rollbackKBID := fmt.Sprintf("%s-rollback", knowledgeBaseID)
 	rollbackKB, err := s.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, rollbackKBID)
 	if err != nil {
 		return nil, fmt.Errorf("rollback version not found: %w", err)
@@ -157,7 +157,7 @@ func (s *service) RollbackAdmin(ctx context.Context, ownerUID types.OwnerUIDType
 	// Step 5: Update rollback KB to have the new system config
 	// Rollback KB gets the new system config (from production)
 	// This maintains consistency - rollback KB represents what was rolled back from
-	rollbackKBIDStr := fmt.Sprintf("%s-rollback", catalogID)
+	rollbackKBIDStr := fmt.Sprintf("%s-rollback", knowledgeBaseID)
 	err = s.repository.UpdateKnowledgeBaseWithMap(ctx, rollbackKBIDStr, productionKB.Owner, map[string]any{
 		"system_uid": productionSystemUID,
 	})
@@ -169,28 +169,28 @@ func (s *service) RollbackAdmin(ctx context.Context, ownerUID types.OwnerUIDType
 		zap.String("productionSystemUID", rollbackSystemUID.String()),
 		zap.String("rollbackSystemUID", productionSystemUID.String()))
 
-	// Get updated catalog
-	updatedKB, err := s.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, catalogID)
+	// Get updated knowledge base
+	updatedKB, err := s.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, knowledgeBaseID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get updated catalog: %w", err)
+		return nil, fmt.Errorf("failed to get updated knowledge base: %w", err)
 	}
 
 	logger.Info("Rollback: Successfully rolled back",
-		zap.String("catalogID", catalogID),
+		zap.String("knowledgeBaseID", knowledgeBaseID),
 		zap.String("productionKBUID", productionKB.UID.String()))
 
 	return &artifactpb.RollbackAdminResponse{
-		Catalog: convertKBToCatalogProto(updatedKB, namespaceID),
-		Message: "Successfully rolled back to previous version",
+		KnowledgeBase: convertKBToCatalogProto(updatedKB, namespaceID),
+		Message:       "Successfully rolled back to previous version",
 	}, nil
 }
 
 // PurgeRollbackAdmin manually purges the rollback knowledge base immediately
-func (s *service) PurgeRollbackAdmin(ctx context.Context, ownerUID types.OwnerUIDType, catalogID string) (*artifactpb.PurgeRollbackAdminResponse, error) {
+func (s *service) PurgeRollbackAdmin(ctx context.Context, ownerUID types.OwnerUIDType, knowledgeBaseID string) (*artifactpb.PurgeRollbackAdminResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 
 	// Find rollback KB (named with -rollback suffix)
-	rollbackKBID := fmt.Sprintf("%s-rollback", catalogID)
+	rollbackKBID := fmt.Sprintf("%s-rollback", knowledgeBaseID)
 	rollbackKB, err := s.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, rollbackKBID)
 	if err != nil {
 		return nil, fmt.Errorf("rollback version not found: %w", err)
@@ -267,19 +267,19 @@ func (s *service) PurgeRollbackAdmin(ctx context.Context, ownerUID types.OwnerUI
 
 	// Clear the rollback_retention_until field on the production KB
 	// Since the rollback KB is now being purged, there's no need to track retention anymore
-	productionKB, err := s.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, catalogID)
+	productionKB, err := s.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, knowledgeBaseID)
 	if err == nil && productionKB != nil {
-		err = s.repository.UpdateKnowledgeBaseWithMap(ctx, catalogID, productionKB.Owner, map[string]any{
+		err = s.repository.UpdateKnowledgeBaseWithMap(ctx, knowledgeBaseID, productionKB.Owner, map[string]any{
 			"rollback_retention_until": nil,
 		})
 		if err != nil {
 			logger.Warn("PurgeRollback: Failed to clear retention field on production KB",
-				zap.String("catalogID", catalogID),
+				zap.String("knowledgeBaseID", knowledgeBaseID),
 				zap.Error(err))
 			// Don't fail the purge operation if we can't clear the retention field
 		} else {
 			logger.Info("PurgeRollback: Cleared retention field on production KB",
-				zap.String("catalogID", catalogID))
+				zap.String("knowledgeBaseID", knowledgeBaseID))
 		}
 	}
 
@@ -288,24 +288,24 @@ func (s *service) PurgeRollbackAdmin(ctx context.Context, ownerUID types.OwnerUI
 		zap.Int32("fileCount", fileCount))
 
 	return &artifactpb.PurgeRollbackAdminResponse{
-		Success:          true,
-		PurgedCatalogUid: rollbackKB.UID.String(),
-		DeletedFiles:     fileCount,
-		Message:          "Rollback knowledge base purged successfully",
+		Success:                true,
+		PurgedKnowledgeBaseUid: rollbackKB.UID.String(),
+		DeletedFiles:           fileCount,
+		Message:                "Rollback knowledge base purged successfully",
 	}, nil
 }
 
 // SetRollbackRetentionAdmin sets the rollback retention period with flexible time units.
 // This also reschedules the cleanup workflow to use the new retention period.
-func (s *service) SetRollbackRetentionAdmin(ctx context.Context, ownerUID types.OwnerUIDType, catalogID string, duration int32, timeUnit artifactpb.SetRollbackRetentionAdminRequest_TimeUnit) (*artifactpb.SetRollbackRetentionAdminResponse, error) {
-	// Get current catalog
-	currentKB, err := s.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, catalogID)
+func (s *service) SetRollbackRetentionAdmin(ctx context.Context, ownerUID types.OwnerUIDType, knowledgeBaseID string, duration int32, timeUnit artifactpb.SetRollbackRetentionAdminRequest_TimeUnit) (*artifactpb.SetRollbackRetentionAdminResponse, error) {
+	// Get current knowledge base
+	currentKB, err := s.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, knowledgeBaseID)
 	if err != nil {
-		return nil, fmt.Errorf("catalog not found: %w", err)
+		return nil, fmt.Errorf("knowledge base not found: %w", err)
 	}
 
 	if currentKB.RollbackRetentionUntil == nil {
-		return nil, fmt.Errorf("no rollback retention set for this catalog")
+		return nil, fmt.Errorf("no rollback retention set for this knowledge base")
 	}
 
 	previousRetention := *currentKB.RollbackRetentionUntil
@@ -410,7 +410,7 @@ func (s *service) GetKnowledgeBaseUpdateStatusAdmin(ctx context.Context) (*artif
 		return &artifactpb.GetKnowledgeBaseUpdateStatusAdminResponse{
 			UpdateInProgress: false,
 			Details:          []*artifactpb.KnowledgeBaseUpdateDetails{},
-			Message:          "No catalogs found",
+			Message:          "No knowledge bases found",
 		}, nil
 	}
 
@@ -426,23 +426,23 @@ func (s *service) GetKnowledgeBaseUpdateStatusAdmin(ctx context.Context) (*artif
 		systemCache[system.UID.String()] = system.ID
 	}
 
-	var catalogStatuses []*artifactpb.KnowledgeBaseUpdateDetails
+	var knowledgeBaseStatuses []*artifactpb.KnowledgeBaseUpdateDetails
 	updateInProgress := false
-	totalCatalogs := len(kbs)
-	catalogsCompleted := 0
-	catalogsFailed := 0
-	catalogsInProgress := 0
+	totalKnowledgeBases := len(kbs)
+	knowledgeBasesCompleted := 0
+	knowledgeBasesFailed := 0
+	knowledgeBasesInProgress := 0
 
 	for _, kb := range kbs {
 		// Count status for summary
 		switch kb.UpdateStatus {
 		case artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING.String():
 			updateInProgress = true
-			catalogsInProgress++
+			knowledgeBasesInProgress++
 		case artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED.String():
-			catalogsCompleted++
+			knowledgeBasesCompleted++
 		case artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_FAILED.String():
-			catalogsFailed++
+			knowledgeBasesFailed++
 		}
 
 		// Get total file count for this KB
@@ -500,8 +500,8 @@ func (s *service) GetKnowledgeBaseUpdateStatusAdmin(ctx context.Context) (*artif
 			}
 		}
 
-		catalogStatuses = append(catalogStatuses, &artifactpb.KnowledgeBaseUpdateDetails{
-			CatalogUid:       kb.UID.String(),
+		knowledgeBaseStatuses = append(knowledgeBaseStatuses, &artifactpb.KnowledgeBaseUpdateDetails{
+			KnowledgeBaseUid: kb.UID.String(),
 			Status:           statusEnum,
 			WorkflowId:       kb.UpdateWorkflowID,
 			StartedAt:        formatTime(kb.UpdateStartedAt),
@@ -516,14 +516,14 @@ func (s *service) GetKnowledgeBaseUpdateStatusAdmin(ctx context.Context) (*artif
 
 	response := &artifactpb.GetKnowledgeBaseUpdateStatusAdminResponse{
 		UpdateInProgress: updateInProgress,
-		Details:          catalogStatuses,
-		Message:          fmt.Sprintf("Total catalogs: %d. Update status: %d in progress, %d completed, %d failed", totalCatalogs, catalogsInProgress, catalogsCompleted, catalogsFailed),
+		Details:          knowledgeBaseStatuses,
+		Message:          fmt.Sprintf("Total knowledge bases: %d. Update status: %d in progress, %d completed, %d failed", totalKnowledgeBases, knowledgeBasesInProgress, knowledgeBasesCompleted, knowledgeBasesFailed),
 	}
 
 	return response, nil
 }
 
-// ExecuteKnowledgeBaseUpdateAdmin executes update for specified catalogs or all eligible catalogs
+// ExecuteKnowledgeBaseUpdateAdmin executes update for specified knowledge bases or all eligible knowledge bases
 func (s *service) ExecuteKnowledgeBaseUpdateAdmin(ctx context.Context, req *artifactpb.ExecuteKnowledgeBaseUpdateAdminRequest) (*artifactpb.ExecuteKnowledgeBaseUpdateAdminResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 
@@ -534,21 +534,21 @@ func (s *service) ExecuteKnowledgeBaseUpdateAdmin(ctx context.Context, req *arti
 
 	// Get target KBs (filtering already excludes KBs with update_status="updating")
 	var kbs []repository.KnowledgeBaseModel
-	if len(req.CatalogIds) > 0 {
-		// Update specific catalogs
-		for _, catalogID := range req.CatalogIds {
-			kb, err := s.repository.GetKnowledgeBaseByID(ctx, catalogID)
+	if len(req.KnowledgeBaseIds) > 0 {
+		// Update specific knowledge bases
+		for _, knowledgeBaseID := range req.KnowledgeBaseIds {
+			kb, err := s.repository.GetKnowledgeBaseByID(ctx, knowledgeBaseID)
 			if err != nil {
-				logger.Error("ExecuteKnowledgeBaseUpdate: Failed to get catalog", zap.String("catalogID", catalogID), zap.Error(err))
-				return nil, fmt.Errorf("failed to get catalog %s: %w", catalogID, err)
+				logger.Error("ExecuteKnowledgeBaseUpdate: Failed to get knowledge base", zap.String("knowledgeBaseID", knowledgeBaseID), zap.Error(err))
+				return nil, fmt.Errorf("failed to get knowledge base %s: %w", knowledgeBaseID, err)
 			}
-			logger.Info("ExecuteKnowledgeBaseUpdate: Checking catalog eligibility", zap.String("catalogID", catalogID), zap.String("kbUID", kb.UID.String()), zap.Bool("staging", kb.Staging), zap.String("updateStatus", kb.UpdateStatus))
+			logger.Info("ExecuteKnowledgeBaseUpdate: Checking knowledge base eligibility", zap.String("knowledgeBaseID", knowledgeBaseID), zap.String("kbUID", kb.UID.String()), zap.Bool("staging", kb.Staging), zap.String("updateStatus", kb.UpdateStatus))
 			// Only include production KBs (not staging) and not already updating
 			if !kb.Staging && repository.IsUpdateComplete(kb.UpdateStatus) {
 				kbs = append(kbs, *kb)
-				logger.Info("ExecuteKnowledgeBaseUpdate: Catalog eligible for update", zap.String("catalogID", catalogID), zap.String("kbUID", kb.UID.String()))
+				logger.Info("ExecuteKnowledgeBaseUpdate: Knowledge base eligible for update", zap.String("knowledgeBaseID", knowledgeBaseID), zap.String("kbUID", kb.UID.String()))
 			} else {
-				logger.Warn("ExecuteKnowledgeBaseUpdate: Catalog not eligible", zap.String("catalogID", catalogID), zap.String("kbUID", kb.UID.String()), zap.Bool("staging", kb.Staging), zap.String("updateStatus", kb.UpdateStatus))
+				logger.Warn("ExecuteKnowledgeBaseUpdate: Knowledge base not eligible", zap.String("knowledgeBaseID", knowledgeBaseID), zap.String("kbUID", kb.UID.String()), zap.Bool("staging", kb.Staging), zap.String("updateStatus", kb.UpdateStatus))
 			}
 		}
 	} else {
@@ -556,21 +556,21 @@ func (s *service) ExecuteKnowledgeBaseUpdateAdmin(ctx context.Context, req *arti
 		var err error
 		kbs, err = s.repository.ListKnowledgeBasesForUpdate(ctx, nil, nil)
 		if err != nil {
-			return nil, fmt.Errorf("failed to list eligible catalogs: %w", err)
+			return nil, fmt.Errorf("failed to list eligible knowledge bases: %w", err)
 		}
 	}
 
 	if len(kbs) == 0 {
 		return &artifactpb.ExecuteKnowledgeBaseUpdateAdminResponse{
 			Started: false,
-			Message: "No eligible catalogs found for update",
+			Message: "No eligible knowledge bases found for update",
 		}, nil
 	}
 
-	// Extract catalog IDs
-	catalogIDs := make([]string, len(kbs))
+	// Extract knowledge base IDs
+	knowledgeBaseIDs := make([]string, len(kbs))
 	for i, kb := range kbs {
-		catalogIDs[i] = kb.KBID
+		knowledgeBaseIDs[i] = kb.KBID
 	}
 
 	// Execute knowledge base update via worker
@@ -580,7 +580,7 @@ func (s *service) ExecuteKnowledgeBaseUpdateAdmin(ctx context.Context, req *arti
 		systemID = *req.SystemId
 	}
 
-	result, err := s.worker.ExecuteKnowledgeBaseUpdate(ctx, catalogIDs, systemID)
+	result, err := s.worker.ExecuteKnowledgeBaseUpdate(ctx, knowledgeBaseIDs, systemID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute knowledge base update: %w", err)
 	}
@@ -594,18 +594,18 @@ func (s *service) ExecuteKnowledgeBaseUpdateAdmin(ctx context.Context, req *arti
 // AbortKnowledgeBaseUpdateAdmin aborts ongoing KB update workflows
 func (s *service) AbortKnowledgeBaseUpdateAdmin(ctx context.Context, req *artifactpb.AbortKnowledgeBaseUpdateAdminRequest) (*artifactpb.AbortKnowledgeBaseUpdateAdminResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
-	logger.Info("AbortKnowledgeBaseUpdateAdmin called", zap.Int("catalogCount", len(req.CatalogIds)), zap.Strings("catalogIds", req.CatalogIds))
+	logger.Info("AbortKnowledgeBaseUpdateAdmin called", zap.Int("knowledgeBaseCount", len(req.KnowledgeBaseIds)), zap.Strings("knowledgeBaseIds", req.KnowledgeBaseIds))
 
 	// Execute abort via worker
-	result, err := s.worker.AbortKnowledgeBaseUpdate(ctx, req.CatalogIds)
+	result, err := s.worker.AbortKnowledgeBaseUpdate(ctx, req.KnowledgeBaseIds)
 	if err != nil {
 		logger.Error("AbortKnowledgeBaseUpdateAdmin failed", zap.Error(err))
 		return nil, fmt.Errorf("failed to abort knowledge base update: %w", err)
 	}
 
 	// Convert worker result to protobuf response
-	var catalogStatuses []*artifactpb.KnowledgeBaseUpdateDetails
-	for _, status := range result.CatalogStatus {
+	var knowledgeBaseStatuses []*artifactpb.KnowledgeBaseUpdateDetails
+	for _, status := range result.KnowledgeBaseStatus {
 		// Convert status string to protobuf enum using value map
 		statusEnum := artifactpb.KnowledgeBaseUpdateStatus(artifactpb.KnowledgeBaseUpdateStatus_value[status.Status])
 		if statusEnum == 0 && status.Status != "" {
@@ -613,10 +613,10 @@ func (s *service) AbortKnowledgeBaseUpdateAdmin(ctx context.Context, req *artifa
 			statusEnum = artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_UNSPECIFIED
 		}
 
-		catalogStatuses = append(catalogStatuses, &artifactpb.KnowledgeBaseUpdateDetails{
-			CatalogUid: status.CatalogUID,
-			Status:     statusEnum,
-			WorkflowId: status.WorkflowID,
+		knowledgeBaseStatuses = append(knowledgeBaseStatuses, &artifactpb.KnowledgeBaseUpdateDetails{
+			KnowledgeBaseUid: status.KnowledgeBaseUID,
+			Status:           statusEnum,
+			WorkflowId:       status.WorkflowID,
 		})
 	}
 
@@ -628,18 +628,18 @@ func (s *service) AbortKnowledgeBaseUpdateAdmin(ctx context.Context, req *artifa
 	return &artifactpb.AbortKnowledgeBaseUpdateAdminResponse{
 		Success: result.Success,
 		Message: result.Message,
-		Details: catalogStatuses,
+		Details: knowledgeBaseStatuses,
 	}, nil
 }
 
 // Helper functions
 
-func convertKBToCatalogProto(kb *repository.KnowledgeBaseModel, namespaceID string) *artifactpb.Catalog {
-	// Construct Google AIP resource name: namespaces/{namespace}/catalogs/{catalog}
+func convertKBToCatalogProto(kb *repository.KnowledgeBaseModel, namespaceID string) *artifactpb.KnowledgeBase {
+	// Construct Google AIP resource name: namespaces/{namespace}/knowledge-bases/{knowledge_base}
 	// Note: namespace format is "users/user-123" or "organizations/org-456"
-	resourceName := fmt.Sprintf("namespaces/%s/catalogs/%s", namespaceID, kb.KBID)
+	resourceName := fmt.Sprintf("namespaces/%s/knowledge-bases/%s", namespaceID, kb.KBID)
 
-	return &artifactpb.Catalog{
+	return &artifactpb.KnowledgeBase{
 		Name:           resourceName,
 		Uid:            kb.UID.String(),
 		Id:             kb.KBID,

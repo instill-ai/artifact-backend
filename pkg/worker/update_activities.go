@@ -48,7 +48,7 @@ const (
 
 // ListKnowledgeBasesForUpdateActivityParam defines parameters for listing KBs needing update
 type ListKnowledgeBasesForUpdateActivityParam struct {
-	CatalogIDs []string
+	KnowledgeBaseIDs []string
 }
 
 // ListKnowledgeBasesForUpdateActivityResult contains the list of KBs needing update
@@ -158,25 +158,25 @@ type CloneFileToStagingKBActivityResult struct {
 // ListKnowledgeBasesForUpdateActivity finds KBs that need update
 func (w *Worker) ListKnowledgeBasesForUpdateActivity(ctx context.Context, param *ListKnowledgeBasesForUpdateActivityParam) (*ListKnowledgeBasesForUpdateActivityResult, error) {
 	w.log.Info("ListKnowledgeBasesForUpdateActivity: Finding KBs needing update",
-		zap.Strings("catalogIDs", param.CatalogIDs))
+		zap.Strings("knowledgeBaseIDs", param.KnowledgeBaseIDs))
 
 	var kbs []repository.KnowledgeBaseModel
 	var err error
 
-	if len(param.CatalogIDs) > 0 {
-		// Get specific catalogs by ID
-		for _, catalogID := range param.CatalogIDs {
-			kb, getErr := w.repository.GetKnowledgeBaseByID(ctx, catalogID)
+	if len(param.KnowledgeBaseIDs) > 0 {
+		// Get specific knowledge bases by ID
+		for _, knowledgeBaseID := range param.KnowledgeBaseIDs {
+			kb, getErr := w.repository.GetKnowledgeBaseByID(ctx, knowledgeBaseID)
 			if getErr != nil {
-				w.log.Warn("Unable to get catalog", zap.String("catalogID", catalogID), zap.Error(getErr))
+				w.log.Warn("Unable to get knowledge base", zap.String("knowledgeBaseID", knowledgeBaseID), zap.Error(getErr))
 				continue
 			}
 			// Only include production KBs (not staging) and not already updating
 			if !kb.Staging && repository.IsUpdateComplete(kb.UpdateStatus) {
 				kbs = append(kbs, *kb)
-				w.log.Info("Catalog eligible for update", zap.String("catalogID", catalogID), zap.String("kbUID", kb.UID.String()), zap.String("updateStatus", kb.UpdateStatus))
+				w.log.Info("Knowledge base eligible for update", zap.String("knowledgeBaseID", knowledgeBaseID), zap.String("kbUID", kb.UID.String()), zap.String("updateStatus", kb.UpdateStatus))
 			} else {
-				w.log.Warn("Catalog filtered out", zap.String("catalogID", catalogID), zap.String("kbUID", kb.UID.String()), zap.Bool("staging", kb.Staging), zap.String("updateStatus", kb.UpdateStatus))
+				w.log.Warn("Knowledge base filtered out", zap.String("knowledgeBaseID", knowledgeBaseID), zap.String("kbUID", kb.UID.String()), zap.Bool("staging", kb.Staging), zap.String("updateStatus", kb.UpdateStatus))
 			}
 		}
 	} else {
@@ -1278,14 +1278,14 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 
 		rollbackKB := &repository.KnowledgeBaseModel{
 			UID:                    rollbackKBUID,
-			KBID:                   rollbackKBID, // Use rollback catalog ID
+			KBID:                   rollbackKBID, // Use rollback knowledge base ID
 			Owner:                  originalKB.Owner,
 			CreatorUID:             originalKB.CreatorUID,
 			Tags:                   append(originalKB.Tags, "rollback"),
 			Staging:                true,
 			UpdateStatus:           artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED.String(),
 			RollbackRetentionUntil: &retentionUntil,
-			CatalogType:            originalKB.CatalogType,
+			KnowledgeBaseType:      originalKB.KnowledgeBaseType,
 			SystemUID:              originalKB.SystemUID,
 		}
 

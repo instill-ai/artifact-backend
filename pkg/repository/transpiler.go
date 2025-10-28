@@ -181,7 +181,7 @@ func (t *transpiler) transpileComparisonCallExpr(e *expr.Expr, op interface{}) (
 	switch op.(type) {
 	case clause.Eq:
 		switch ident.SQL {
-		// Fuzzy search for catalogs
+		// Fuzzy search for knowledge bases
 		case "q":
 			sql = "((SIMILARITY(id, ?) > 0.2) OR (LOWER(id) LIKE LOWER(?)) OR (LOWER(description) LIKE LOWER(?)))"
 			vars = append(vars, con.Vars[0], fmt.Sprintf("%%%s%%", con.Vars[0]), fmt.Sprintf("%%%s%%", con.Vars[0]))

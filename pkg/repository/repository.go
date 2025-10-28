@@ -9,7 +9,7 @@ import (
 )
 
 // Type aliases to help minimock detect imports from embedded interfaces
-var _ artifactpb.CatalogType
+var _ artifactpb.KnowledgeBaseType
 var _ *minio.ObjectInfo
 
 // Repository interface defines the methods for the repository.
