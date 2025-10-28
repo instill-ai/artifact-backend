@@ -1,3 +1,62 @@
+// ============================================================================
+// Safe Database Query Helpers
+// ============================================================================
+
+import * as constant from './const.js';
+
+/**
+ * Safe database query wrapper with proper error handling.
+ *
+ * Prevents silent failures where SQL errors cause queries to return undefined/null,
+ * which can lead to tests passing when they should fail.
+ *
+ * @param {string} query - SQL query string
+ * @param {...any} params - Query parameters (passed individually, not as array)
+ * @returns {Array} - Query results array, or empty array on error
+ * @throws {Error} - Throws error if query fails (caller should handle)
+ */
+export function safeQuery(query, ...params) {
+  try {
+    const result = constant.db.query(query, ...params);
+    if (result === undefined || result === null) {
+      throw new Error("Query returned undefined/null - possible SQL error");
+    }
+    return result;
+  } catch (e) {
+    console.error(`[DB ERROR] Query failed: ${e}`);
+    console.error(`[DB ERROR] Query: ${query}`);
+    console.error(`[DB ERROR] Params: ${JSON.stringify(params)}`);
+    throw e; // Re-throw so caller knows the query failed
+  }
+}
+
+/**
+ * Safe database execute wrapper for UPDATE/DELETE/INSERT statements.
+ *
+ * NOTE: k6 SQL driver only has query() method, not execute().
+ * For UPDATE/DELETE/INSERT, query() returns an empty result set but still executes.
+ * We can't get affected row count, so we return 0 on success.
+ *
+ * @param {string} statement - SQL statement
+ * @param {...any} params - Statement parameters
+ * @returns {number} - Always returns 0 (k6 SQL driver doesn't provide affected row count)
+ * @throws {Error} - Throws error if statement fails
+ */
+export function safeExecute(statement, ...params) {
+  try {
+    // k6 SQL driver only has query(), use it for UPDATE/DELETE/INSERT too
+    const result = constant.db.query(statement, ...params);
+    // query() succeeds but returns empty array for UPDATE/DELETE/INSERT
+    // If no exception, assume success
+    return 0;
+  } catch (e) {
+    console.error(`[DB ERROR] Execute failed: ${e}`);
+    console.error(`[DB ERROR] Statement: ${statement}`);
+    console.error(`[DB ERROR] Params: ${JSON.stringify(params)}`);
+    throw e;
+  }
+}
+
 export function deepEqual(x, y) {
   const ok = Object.keys,
     tx = typeof x,
@@ -22,13 +81,13 @@ export function isValidOwner(owner, expectedOwner) {
 }
 
 export function validateCatalog(catalog, isPrivate) {
-  if (!("catalogUid" in catalog)) {
-    console.log("Catalog has no catalog_uid field");
+  if (!("uid" in catalog)) {
+    console.log("Catalog has no uid field");
     return false;
   }
 
-  if (!("catalogId" in catalog)) {
-    console.log("Catalog has no catalog_id field");
+  if (!("id" in catalog)) {
+    console.log("Catalog has no id field");
     return false;
   }
 
@@ -56,13 +115,23 @@ export function validateCatalog(catalog, isPrivate) {
 }
 
 export function validateFile(file, isPrivate) {
-  if (!("fileUid" in file)) {
-    console.log("File has no file_uid field");
+  if (!("uid" in file)) {
+    console.log("File has no uid field");
+    return false;
+  }
+
+  if (!("id" in file)) {
+    console.log("File has no id field");
     return false;
   }
 
   if (!("name" in file)) {
-    console.log("File has no name field");
+    console.log("File has no name field (resource path)");
+    return false;
+  }
+
+  if (!("filename" in file)) {
+    console.log("File has no filename field");
     return false;
   }
 
@@ -90,13 +159,13 @@ export function validateFile(file, isPrivate) {
 }
 
 export function validateCatalogGRPC(catalog, isPrivate) {
-  if (!("catalogUid" in catalog)) {
-    console.log("Catalog has no catalogUid field");
+  if (!("uid" in catalog)) {
+    console.log("Catalog has no uid field");
     return false;
   }
 
-  if (!("catalogId" in catalog)) {
-    console.log("Catalog has no catalogId field");
+  if (!("id" in catalog)) {
+    console.log("Catalog has no id field");
     return false;
   }
 
@@ -124,13 +193,23 @@ export function validateCatalogGRPC(catalog, isPrivate) {
 }
 
 export function validateFileGRPC(file, isPrivate) {
-  if (!("fileUid" in file)) {
-    console.log("File has no fileUid field");
+  if (!("uid" in file)) {
+    console.log("File has no uid field");
+    return false;
+  }
+
+  if (!("id" in file)) {
+    console.log("File has no id field");
     return false;
   }
 
   if (!("name" in file)) {
-    console.log("File has no name field");
+    console.log("File has no name field (resource path)");
+    return false;
+  }
+
+  if (!("filename" in file)) {
+    console.log("File has no filename field");
     return false;
   }
 
@@ -157,13 +236,91 @@ export function validateFileGRPC(file, isPrivate) {
   return true;
 }
 
+export function validateChunk(chunk, isPrivate) {
+  if (!("uid" in chunk)) {
+    console.log("Chunk has no uid field");
+    return false;
+  }
+
+  if (!("id" in chunk)) {
+    console.log("Chunk has no id field");
+    return false;
+  }
+
+  if (!("name" in chunk)) {
+    console.log("Chunk has no name field (resource path)");
+    return false;
+  }
+
+  if (!("originalFileId" in chunk)) {
+    console.log("Chunk has no originalFileId field");
+    return false;
+  }
+
+  if (!("tokens" in chunk)) {
+    console.log("Chunk has no tokens field");
+    return false;
+  }
+
+  if (!("createTime" in chunk)) {
+    console.log("Chunk has no createTime field");
+    return false;
+  }
+
+  if (!("type" in chunk)) {
+    console.log("Chunk has no type field");
+    return false;
+  }
+
+  return true;
+}
+
+export function validateChunkGRPC(chunk, isPrivate) {
+  if (!("uid" in chunk)) {
+    console.log("Chunk has no uid field");
+    return false;
+  }
+
+  if (!("id" in chunk)) {
+    console.log("Chunk has no id field");
+    return false;
+  }
+
+  if (!("name" in chunk)) {
+    console.log("Chunk has no name field (resource path)");
+    return false;
+  }
+
+  if (!("originalFileId" in chunk)) {
+    console.log("Chunk has no originalFileId field");
+    return false;
+  }
+
+  if (!("tokens" in chunk)) {
+    console.log("Chunk has no tokens field");
+    return false;
+  }
+
+  if (!("createTime" in chunk)) {
+    console.log("Chunk has no createTime field");
+    return false;
+  }
+
+  if (!("type" in chunk)) {
+    console.log("Chunk has no type field");
+    return false;
+  }
+
+  return true;
+}
+
 // ============================================================================
 // Storage Verification Helpers for Reprocessing Tests
 // ============================================================================
 
 import { sleep } from 'k6';
 import exec from 'k6/x/exec';
-import * as constant from './const.js';
+import * as helper from './helper.js';
 
 /**
  * Count MinIO objects directly using MinIO CLI (mc)
@@ -182,7 +339,7 @@ export function countMinioObjects(kbUID, fileUID, objectType) {
 
     if (objectType === 'chunk') {
       // Query text_chunk table for actual destination
-      const chunkResult = constant.db.query(`
+      const chunkResult = safeQuery(`
         SELECT content_dest FROM text_chunk
         WHERE file_uid = $1
         LIMIT 1
@@ -199,7 +356,7 @@ export function countMinioObjects(kbUID, fileUID, objectType) {
       }
     } else if (objectType === 'converted-file') {
       // Query converted_file table for actual destination
-      const convertedResult = constant.db.query(`
+      const convertedResult = safeQuery(`
         SELECT destination FROM converted_file
         WHERE file_uid = $1
         LIMIT 1
@@ -244,7 +401,7 @@ export function countMinioObjects(kbUID, fileUID, objectType) {
  */
 export function countEmbeddings(fileUid) {
   try {
-    const results = constant.db.query('SELECT uid FROM embedding WHERE file_uid = $1', fileUid);
+    const results = safeQuery('SELECT uid FROM embedding WHERE file_uid = $1', fileUid);
     // results is an array of row objects
     return results ? results.length : 0;
   } catch (e) {
@@ -268,7 +425,7 @@ export function countMilvusVectors(kbUID, fileUID) {
   try {
     // CRITICAL FIX: Query active_collection_uid from database
     // During updates, a KB's active_collection_uid may point to a different collection than its own UID
-    const kbResult = constant.db.query(`
+    const kbResult = safeQuery(`
       SELECT active_collection_uid
       FROM knowledge_base
       WHERE uid = $1
@@ -619,7 +776,7 @@ export function pollChunksAPI(apiUrl, headers, maxWaitSeconds = 15) {
 export function findCatalogByPattern(namePattern) {
   try {
     const query = `SELECT * FROM knowledge_base WHERE id LIKE $1`;
-    const results = constant.db.query(query, namePattern);
+    const results = safeQuery(query, namePattern);
     return results ? results.map(row => normalizeDBRow(row)) : [];
   } catch (e) {
     console.error(`Failed to find catalog by pattern ${namePattern}: ${e}`);
@@ -759,7 +916,7 @@ export function verifyRollbackKB(catalogId, ownerUid) {
       FROM knowledge_base
       WHERE id = $1 AND owner = $2
     `;
-    const results = constant.db.query(query, rollbackKbId, ownerUid);
+    const results = safeQuery(query, rollbackKbId, ownerUid);
     return results ? results.map(row => normalizeDBRow(row)) : [];
   } catch (e) {
     console.error(`Failed to verify rollback KB for ${catalogId}: ${e}`);
@@ -783,7 +940,7 @@ export function verifyStagingKB(catalogId, ownerUid) {
       FROM knowledge_base
       WHERE id = $1 AND owner = $2
     `;
-    const results = constant.db.query(query, stagingKbId, ownerUid);
+    const results = safeQuery(query, stagingKbId, ownerUid);
     return results ? results.map(row => normalizeDBRow(row)) : [];
   } catch (e) {
     console.error(`Failed to verify staging KB for ${catalogId}: ${e}`);
@@ -805,7 +962,7 @@ export function getCatalogByIdAndOwner(catalogId, ownerUid) {
       SELECT * FROM knowledge_base
       WHERE id = $1 AND owner = $2
     `;
-    const results = constant.db.query(query, catalogId, ownerUid);
+    const results = safeQuery(query, catalogId, ownerUid);
     return results ? results.map(row => normalizeDBRow(row)) : [];
   } catch (e) {
     console.error(`Failed to get catalog ${catalogId}: ${e}`);
@@ -875,7 +1032,7 @@ export function pollRollbackKBCleanup(rollbackKBID, rollbackKBUID, ownerUid, max
     const rollbackKB = getCatalogByIdAndOwner(rollbackKBID, ownerUid);
     const filesCount = countFilesInCatalog(rollbackKBUID);
 
-    const convertedFilesResult = constant.db.query(convertedFilesQuery, rollbackKBUID);
+    const convertedFilesResult = safeQuery(convertedFilesQuery, rollbackKBUID);
     const convertedFilesCount = convertedFilesResult && convertedFilesResult.length > 0 ? parseInt(convertedFilesResult[0].count) : 0;
 
     // Log on first attempt and every 5 seconds
@@ -930,25 +1087,25 @@ export function verifyResourceKBUIDs(newProdKBUID, rollbackKBUID) {
   try {
     // Check knowledge_base_file
     const fileQuery = `SELECT COUNT(*) as count FROM knowledge_base_file WHERE kb_uid = $1`;
-    const fileResults = constant.db.query(fileQuery, newProdKBUID);
+    const fileResults = safeQuery(fileQuery, newProdKBUID);
     result.fileCount = fileResults && fileResults.length > 0 ? parseInt(fileResults[0].count) : 0;
     result.filesCorrect = result.fileCount > 0;
 
     // Check text_chunk
     const chunkQuery = `SELECT COUNT(*) as count FROM text_chunk WHERE kb_uid = $1`;
-    const chunkResults = constant.db.query(chunkQuery, newProdKBUID);
+    const chunkResults = safeQuery(chunkQuery, newProdKBUID);
     result.chunkCount = chunkResults && chunkResults.length > 0 ? parseInt(chunkResults[0].count) : 0;
     result.chunksCorrect = result.chunkCount > 0;
 
     // Check embedding (optional - may not exist yet)
     const embeddingQuery = `SELECT COUNT(*) as count FROM embedding WHERE kb_uid = $1`;
-    const embeddingResults = constant.db.query(embeddingQuery, newProdKBUID);
+    const embeddingResults = safeQuery(embeddingQuery, newProdKBUID);
     result.embeddingCount = embeddingResults && embeddingResults.length > 0 ? parseInt(embeddingResults[0].count) : 0;
     result.embeddingsCorrect = true; // Always true, embeddings are optional
 
     // Check converted_file
     const convertedQuery = `SELECT COUNT(*) as count FROM converted_file WHERE kb_uid = $1`;
-    const convertedResults = constant.db.query(convertedQuery, newProdKBUID);
+    const convertedResults = safeQuery(convertedQuery, newProdKBUID);
     result.convertedFileCount = convertedResults && convertedResults.length > 0 ? parseInt(convertedResults[0].count) : 0;
     result.convertedFilesCorrect = result.convertedFileCount > 0;
 
@@ -968,7 +1125,7 @@ export function verifyResourceKBUIDs(newProdKBUID, rollbackKBUID) {
 export function countFilesInCatalog(catalogUid) {
   try {
     const query = `SELECT COUNT(*) as count FROM knowledge_base_file WHERE kb_uid = $1 AND delete_time IS NULL`;
-    const results = constant.db.query(query, catalogUid);
+    const results = safeQuery(query, catalogUid);
     return results && results.length > 0 ? parseInt(results[0].count) : 0;
   } catch (e) {
     console.error(`Failed to count files in catalog ${catalogUid}: ${e}`);
@@ -985,13 +1142,14 @@ export function countFilesInCatalog(catalogUid) {
  */
 export function getCatalogsByPattern(pattern, ownerUid) {
   try {
+    // Note: 'name' column removed from DB - using 'id' for pattern matching
     const query = `
-      SELECT uid, id, name, staging, update_status, delete_time, rollback_retention_until
+      SELECT uid, id, staging, update_status, delete_time, rollback_retention_until
       FROM knowledge_base
-      WHERE owner = $1 AND name LIKE $2
+      WHERE owner = $1 AND id LIKE $2
       ORDER BY create_time ASC
     `;
-    return constant.db.query(query, ownerUid, pattern);
+    return safeQuery(query, ownerUid, pattern);
   } catch (e) {
     console.error(`Failed to get catalogs by pattern ${pattern}: ${e}`);
     return null;
@@ -1119,11 +1277,25 @@ export function generateArticle(targetLength) {
 }
 
 /**
- * Wait for ALL file processing to complete across the entire system
- * This prevents "collection does not exist" errors when tests delete KBs
- * while file processing workflows are still running
+ * Wait for ALL file processing to complete (database-level check).
+ *
+ * Uses direct database queries to check for any files in processing states.
+ * This is faster than API polling and doesn't require authentication.
+ *
+ * WHEN TO USE:
+ * - Teardown/cleanup: Ensure no workflows are running before deleting catalogs
+ * - Race condition prevention: Avoid "collection does not exist" errors
+ *
+ * VS waitForFileProcessingComplete:
+ * - This checks DB directly (faster, no auth needed)
+ * - waitForFileProcessingComplete checks via API (proper test isolation, includes permissions)
+ *
+ * VS waitForMultipleFilesProcessingComplete:
+ * - This checks ALL files matching a pattern (cleanup use case)
+ * - waitForMultipleFilesProcessingComplete checks a specific list (test assertions)
  *
  * @param {number} maxWaitSeconds - Maximum time to wait (default: 120s)
+ * @param {string|null} dbIDPrefix - Catalog ID prefix to filter (e.g., "test-ab12-"), null = global
  * @returns {boolean} - True if all processing complete, false if timeout
  */
 export function waitForAllFileProcessingComplete(maxWaitSeconds = 120, dbIDPrefix = null) {
@@ -1153,7 +1325,7 @@ export function waitForAllFileProcessingComplete(maxWaitSeconds = 120, dbIDPrefi
         ${prefixFilter}
     `;
 
-    const result = constant.db.query(processingQuery);
+    const result = safeQuery(processingQuery);
     const processingCount = result && result.length > 0 ? parseInt(result[0].count) : 0;
 
     if (processingCount === 0) {
@@ -1176,6 +1348,21 @@ export function waitForAllFileProcessingComplete(maxWaitSeconds = 120, dbIDPrefi
 
 /**
  * Wait for a single file to complete processing via API polling.
+ *
+ * Uses REST API to poll file status, providing proper test isolation and
+ * respecting API-level permissions/authentication.
+ *
+ * WHEN TO USE:
+ * - Test assertions: Verify a specific file completed successfully
+ * - Single file uploads: Wait for one file to finish before proceeding
+ *
+ * VS waitForAllFileProcessingComplete:
+ * - This checks via API (proper test isolation, includes permissions)
+ * - waitForAllFileProcessingComplete checks DB directly (faster, cleanup use case)
+ *
+ * VS waitForMultipleFilesProcessingComplete:
+ * - This polls one file at a time (simpler, good for single uploads)
+ * - waitForMultipleFilesProcessingComplete batches multiple files (more efficient for bulk)
  *
  * Polls the Get File API endpoint to check processStatus until:
  * - FILE_PROCESS_STATUS_COMPLETED: Returns { completed: true, status: "COMPLETED" }
@@ -1257,6 +1444,21 @@ export function waitForFileProcessingComplete(namespaceId, catalogId, fileUid, h
 
 /**
  * Wait for multiple files to complete processing via API polling (batched).
+ *
+ * Efficiently polls multiple files in parallel using k6's http.batch().
+ * More efficient than calling waitForFileProcessingComplete() in a loop.
+ *
+ * WHEN TO USE:
+ * - Batch uploads: Wait for multiple files uploaded together
+ * - Test setup: Ensure all test data is ready before running assertions
+ *
+ * VS waitForFileProcessingComplete:
+ * - This batches multiple API calls (more efficient for 2+ files)
+ * - waitForFileProcessingComplete polls one file (simpler for single file)
+ *
+ * VS waitForAllFileProcessingComplete:
+ * - This checks a specific list via API (test assertions on known files)
+ * - waitForAllFileProcessingComplete checks DB for ANY matching files (cleanup)
  *
  * Efficiently polls multiple files in parallel, checking all files in each iteration.
  * Returns as soon as all files complete or any file fails.
@@ -1371,7 +1573,7 @@ export function uploadFileWithRetry(url, payload, headers, maxRetries = 3) {
       // Check if response is successful and has a valid file UID
       const body = response.json();
       const file = body.file || body;
-      const fileUid = file ? (file.fileUid || file.file_uid) : null;
+      const fileUid = file ? file.uid : null;
 
       if (response.status === 200 && fileUid) {
         if (attempt > 1) {
@@ -1581,7 +1783,7 @@ export function cleanupPreviousTestCatalogs(namespaceId, headers) {
     `;
 
     try {
-      const updateResult = constant.db.execute(updateFilesQuery);
+      const updateResult = safeExecute(updateFilesQuery);
       result.filesMarkedFailed = updateResult || 0;
       if (result.filesMarkedFailed > 0) {
         console.log(`✓ Marked ${result.filesMarkedFailed} zombie files as FAILED`);
@@ -1602,7 +1804,7 @@ export function cleanupPreviousTestCatalogs(namespaceId, headers) {
       ORDER BY create_time ASC
     `;
 
-    const testCatalogs = constant.db.query(testCatalogsQuery);
+    const testCatalogs = safeQuery(testCatalogsQuery);
 
     if (!testCatalogs || testCatalogs.length === 0) {
       console.log("✓ No previous test catalogs found - system is clean");

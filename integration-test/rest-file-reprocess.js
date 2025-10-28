@@ -57,7 +57,7 @@ export function setup() {
       const catalogs = Array.isArray(listResp.json().catalogs) ? listResp.json().catalogs : [];
       let cleanedCount = 0;
       for (const catalog of catalogs) {
-        const catId = catalog.catalogId || catalog.catalog_id;
+        const catId = catalog.id;
         if (catId && catId.match(/test-[a-z0-9]+-reprocess-/)) {
           const delResp = http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${resp.json().user.id}/catalogs/${catId}`, null, header);
           if (delResp.status === 200 || delResp.status === 204) {
@@ -100,7 +100,7 @@ export function teardown(data) {
 
       for (const catalog of catalogs) {
         // API returns catalogId (camelCase), not catalog_id
-        const catId = catalog.catalogId || catalog.catalog_id;
+        const catId = catalog.id;
         if (catId && catId.startsWith(data.dbIDPrefix)) {
           http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catId}`, null, data.header);
           console.log(`Teardown: Deleted catalog ${catId}`);
@@ -147,7 +147,7 @@ export function CheckFileReprocessing(data) {
       "POST",
       `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
       JSON.stringify({
-        name: catalogName,
+        id: catalogName,
         description: "Reprocessing test",
         tags: ["test", "reprocess"]
       }),
@@ -156,8 +156,8 @@ export function CheckFileReprocessing(data) {
 
     let catalog;
     try { catalog = createRes.json().catalog; } catch (e) { catalog = {}; }
-    const catalogId = catalog ? catalog.catalogId : null;
-    const catalogUid = catalog ? catalog.catalogUid : null;
+    const catalogId = catalog ? catalog.id : null;
+    const catalogUid = catalog ? catalog.uid : null;
 
     check(createRes, {
       "Reprocess: Catalog created": (r) => r.status === 200 && catalogId && catalogUid,
@@ -176,12 +176,12 @@ export function CheckFileReprocessing(data) {
     // - Chunking step (creates chunk blobs in MinIO)
     // - Embedding step (creates vectors in Milvus)
     // This provides comprehensive coverage of reprocessing cleanup logic
-    const fileName = `${data.dbIDPrefix}reprocess-test.pdf`;
+    const filename = `${data.dbIDPrefix}reprocess-test.pdf`;
     const uploadRes = http.request(
       "POST",
       `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
       JSON.stringify({
-        name: fileName,
+        filename: filename,
         type: "TYPE_PDF",
         content: constant.samplePdf
       }),
@@ -190,12 +190,12 @@ export function CheckFileReprocessing(data) {
 
     let uploadedFile;
     try { uploadedFile = uploadRes.json().file; } catch (e) { uploadedFile = {}; }
-    const fileUid = uploadedFile ? (uploadedFile.fileUid || uploadedFile.file_uid) : null;
+    const fileUid = uploadedFile ? uploadedFile.uid : null;
 
     check(uploadRes, {
       "Reprocess: File uploaded": (r) => r.status === 200 && fileUid,
     });
-    console.log(`✓ File uploaded: ${fileName} (UID: ${fileUid})`);
+    console.log(`✓ File uploaded: ${filename} (UID: ${fileUid})`);
 
     if (!fileUid) {
       console.log("✗ Failed to upload file, cleaning up and aborting");

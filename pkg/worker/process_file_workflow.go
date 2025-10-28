@@ -197,12 +197,13 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 		if err := workflow.ExecuteActivity(ctx, w.GetFileStatusActivity, &GetFileStatusActivityParam{
 			FileUID: fileUID,
 		}).Get(ctx, &startStatus); err != nil {
-			// If file not found, it may have been deleted during processing - skip it gracefully
+			// If file not found, it may have been deleted during processing - mark as failed
 			// This handles concurrent deletion scenarios (e.g., files deleted during KB updates)
 			// GetFileStatusActivity returns: "File not found. It may have been deleted." (capital F)
 			if strings.Contains(err.Error(), "File not found") {
-				logger.Info("File not found when checking status, skipping",
+				logger.Warn("File not found when checking status, marking as failed",
 					"fileUID", fileUID.String())
+				filesFailed[fileUID.String()] = handleFileError(fileUID, "get file status", err)
 				filesCompleted[fileUID.String()] = true
 				continue
 			}
@@ -224,11 +225,12 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			FileUID: fileUID,
 			KBUID:   kbUID,
 		}).Get(ctx, &metadata); err != nil {
-			// If file not found, it may have been deleted - skip it
+			// If file not found, it may have been deleted - mark as failed
 			// GetFileMetadataActivity returns: "file not found: <uid>" (lowercase f)
 			if strings.Contains(err.Error(), "file not found") {
-				logger.Info("File not found during processing, skipping",
+				logger.Warn("File not found during processing, marking as failed",
 					"fileUID", fileUID.String())
+				filesFailed[fileUID.String()] = handleFileError(fileUID, "get file metadata", err)
 				filesCompleted[fileUID.String()] = true
 				continue
 			}
@@ -282,10 +284,20 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 	// Step 2: Process files that need full processing (NOTSTARTED/PROCESSING)
 	filesToProcessFull := make([]fileMetadata, 0)
 	for _, fm := range filesMetadata {
+		logger.Info("Checking file processing requirements",
+			"fileUID", fm.fileUID.String(),
+			"startStatus", fm.startStatus.String(),
+			"shouldProcessFull", fm.shouldProcessFull,
+			"shouldProcessChunk", fm.shouldProcessChunk,
+			"shouldProcessEmbed", fm.shouldProcessEmbed)
 		if fm.shouldProcessFull {
 			filesToProcessFull = append(filesToProcessFull, fm)
 		}
 	}
+
+	logger.Info("Determined files for full processing",
+		"totalFiles", len(filesMetadata),
+		"filesToProcessFull", len(filesToProcessFull))
 
 	if len(filesToProcessFull) > 0 {
 		logger.Info("Starting full processing for files", "count", len(filesToProcessFull))
@@ -300,146 +312,21 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			}
 		}
 
-		// Step 2b: Create chat cache for all files (for future Chat API)
-		// Optimization: If only 1 file, we'll reuse its individual file cache instead of creating a separate chat cache
-		// NOTE: Caching is only enabled for Gemini model family (useCaching flag)
-		var chatCacheFuture workflow.Future
-		var chatCacheName string
-
-		if useCaching {
-			if fileCount > 1 {
-				// Multiple files: Create a separate chat cache (runs in parallel with individual file processing)
-				logger.Info("Creating chat cache for multiple files (Gemini)", "fileCount", len(filesToProcessFull))
-
-				chatCacheFuture = workflow.ExecuteActivity(ctx, w.CacheChatContextActivity, &CacheChatContextActivityParam{
-					FileUIDs: param.FileUIDs,
-					KBUID:    kbUID,
-					Metadata: filesToProcessFull[0].metadata.ExternalMetadata,
-				})
-			} else {
-				// Single file: Will reuse the individual file cache as chat cache (no separate chat cache needed)
-				logger.Info("Single file upload - will reuse file cache as chat cache (Gemini)")
-				// chatCacheFuture will be set when we create the individual file cache below
+		// Step 2b: Clean up old converted files BEFORE standardization (for reprocessing)
+		// This ensures old PDFs/content/summary are deleted before new ones are created
+		logger.Info("Cleaning up old converted files before standardization", "fileCount", len(filesToProcessFull))
+		for _, fm := range filesToProcessFull {
+			if err := workflow.ExecuteActivity(ctx, w.DeleteOldConvertedFilesActivity, &DeleteOldConvertedFilesActivityParam{
+				FileUID: fm.fileUID,
+			}).Get(ctx, nil); err != nil {
+				logger.Error("Failed to cleanup old converted files before standardization",
+					"fileUID", fm.fileUID.String(),
+					"error", err)
+				// Don't fail the workflow - continue with standardization
 			}
-		} else {
-			// OpenAI or other non-Gemini model family: Skip caching entirely
-			logger.Info("Skipping chat cache creation (non-Gemini model family)",
-				"modelFamily", kbModelFamily)
 		}
 
-		// Store chat cache metadata in Redis (async, non-blocking)
-		// This runs in parallel and doesn't block file processing
-		workflow.Go(ctx, func(gCtx workflow.Context) {
-			if chatCacheFuture != nil {
-				var chatCacheResult CacheChatContextActivityResult
-				if err := chatCacheFuture.Get(gCtx, &chatCacheResult); err != nil {
-					logger.Warn("Failed to get chat cache result for Redis storage",
-						"error", err)
-					return
-				}
-
-				// Store metadata in Redis even if cached context is not enabled (for uncached file refs)
-				// Skip only if no cached context AND no file references
-				if !chatCacheResult.CachedContextEnabled && len(chatCacheResult.FileRefs) == 0 {
-					logger.Info("No chat cache or file references, skipping Redis storage")
-					return
-				}
-
-				// Calculate TTL based on expire time
-				ttl := chatCacheResult.ExpireTime.Sub(workflow.Now(gCtx))
-				if ttl <= 0 {
-					// For uncached files, use default TTL
-					ttl = 5 * time.Minute
-					chatCacheResult.CreateTime = workflow.Now(gCtx)
-					chatCacheResult.ExpireTime = workflow.Now(gCtx).Add(ttl)
-				}
-
-				// Store metadata in Redis with TTL matching AI cache expiration (or default for uncached)
-				storeCtx := workflow.WithActivityOptions(gCtx, workflow.ActivityOptions{
-					StartToCloseTimeout: 30 * time.Second,
-					RetryPolicy: &temporal.RetryPolicy{
-						InitialInterval:    time.Second,
-						BackoffCoefficient: 2.0,
-						MaximumInterval:    10 * time.Second,
-						MaximumAttempts:    3,
-					},
-				})
-
-				err := workflow.ExecuteActivity(storeCtx, w.StoreChatCacheMetadataActivity, &StoreChatCacheMetadataActivityParam{
-					KBUID:                kbUID,
-					FileUIDs:             param.FileUIDs,
-					CacheName:            chatCacheResult.CacheName,
-					Model:                chatCacheResult.Model,
-					FileCount:            len(param.FileUIDs),
-					CreateTime:           chatCacheResult.CreateTime,
-					ExpireTime:           chatCacheResult.ExpireTime,
-					TTL:                  ttl,
-					CachedContextEnabled: chatCacheResult.CachedContextEnabled,
-					FileRefs:             chatCacheResult.FileRefs,
-				}).Get(storeCtx, nil)
-
-				if err != nil {
-					logger.Warn("Failed to store chat cache metadata in Redis (non-fatal)",
-						"cachedContextEnabled", chatCacheResult.CachedContextEnabled,
-						"fileRefCount", len(chatCacheResult.FileRefs),
-						"error", err)
-				} else {
-					if chatCacheResult.CachedContextEnabled {
-						logger.Info("Chat cache metadata stored in Redis",
-							"cacheName", chatCacheResult.CacheName,
-							"fileCount", len(param.FileUIDs),
-							"ttl", ttl)
-					} else {
-						logger.Info("File content stored in Redis for uncached chat",
-							"fileCount", len(chatCacheResult.FileRefs),
-							"ttl", ttl)
-					}
-				}
-			}
-		})
-
-		// Schedule cleanup for chat cache at the end
-		// This handles both cases:
-		// - Multi-file: cleanup the chat cache
-		// - Single-file: cleanup the reused file cache
-		defer func() {
-			if chatCacheFuture != nil {
-				var chatCacheResult CacheChatContextActivityResult
-				if err := chatCacheFuture.Get(ctx, &chatCacheResult); err == nil && chatCacheResult.CachedContextEnabled {
-					// Use the cache name from the result if we haven't set it yet
-					if chatCacheName == "" {
-						chatCacheName = chatCacheResult.CacheName
-					}
-
-					cleanupCtx, _ := workflow.NewDisconnectedContext(ctx)
-					cleanupCtx = workflow.WithActivityOptions(cleanupCtx, workflow.ActivityOptions{
-						StartToCloseTimeout: time.Minute,
-						RetryPolicy: &temporal.RetryPolicy{
-							InitialInterval:    time.Second,
-							BackoffCoefficient: 2.0,
-							MaximumInterval:    30 * time.Second,
-							MaximumAttempts:    3,
-						},
-					})
-
-					if err := workflow.ExecuteActivity(cleanupCtx, w.DeleteCacheActivity, &DeleteCacheActivityParam{
-						CacheName: chatCacheName,
-					}).Get(cleanupCtx, nil); err != nil {
-						logger.Warn("Chat cache cleanup failed (cache will expire automatically)",
-							"cacheName", chatCacheName, "error", err)
-					} else {
-						cacheType := "chat (multi-file)"
-						if fileCount == 1 {
-							cacheType = "chat (reused file cache)"
-						}
-						logger.Info("Chat cache cleaned up successfully",
-							"cacheName", chatCacheName, "type", cacheType)
-					}
-				}
-			}
-		}()
-
-		// Step 2c: File type standardization for all files (DOCX→PDF, etc.) - MUST happen before caching
+		// Step 2d: File type standardization for all files (DOCX→PDF, etc.) - MUST happen after cleanup and before caching
 		logger.Info("Starting file type standardization for all files", "fileCount", len(filesToProcessFull))
 
 		type stdFileResult struct {
@@ -466,7 +353,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				Bucket:      fm.bucket,
 				Destination: fm.metadata.File.Destination,
 				FileType:    fm.fileType,
-				Filename:    fm.metadata.File.Name,
+				Filename:    fm.metadata.File.Filename,
 				Pipelines:   []pipeline.Release{pipeline.ConvertFileTypePipeline},
 				Metadata:    fm.metadata.ExternalMetadata,
 			}).Get(ctx, &result); err != nil {
@@ -546,7 +433,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 					Bucket:      cr.effectiveBucket,
 					Destination: cr.effectiveDestination,
 					FileType:    cr.effectiveFileType,
-					Filename:    cr.fileMetadata.metadata.File.Name,
+					Filename:    cr.fileMetadata.metadata.File.Filename,
 					Metadata:    cr.fileMetadata.metadata.ExternalMetadata,
 				})
 				logger.Info("Creating file cache (Gemini)", "fileUID", cr.fileUID.String())
@@ -561,14 +448,12 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				conversionData:  &cr,
 			}
 
-			// For single file case: reuse the file cache as the chat cache (Gemini only)
-			if useCaching && fileCount == 1 {
-				chatCacheFuture = fileCacheFuture
-				logger.Info("Single file: reusing file cache as chat cache (Gemini)")
-			}
-
-			// Schedule cleanup of temporary converted file (if conversion happened)
-			if cr.converted && cr.convertedDestination != "" {
+			// REFACTORED: PDF handling moved to StandardizeFileTypeActivity
+			// - PDFs (converted or original) are now saved directly to converted-file folder during standardization
+			// - No need for deferred SavePDFAsConvertedFileActivity calls
+			// - Non-PDF temporary files (GIF→PNG, MKV→MP4) still need cleanup
+			if cr.converted && cr.convertedDestination != "" && cr.effectiveFileType != artifactpb.File_TYPE_PDF {
+				// For non-PDF (PNG, OGG, MP4): Delete temporary file after processing
 				defer func(bucket, destination string, fuid types.FileUIDType) {
 					cleanupCtx, _ := workflow.NewDisconnectedContext(ctx)
 					cleanupCtx = workflow.WithActivityOptions(cleanupCtx, workflow.ActivityOptions{
@@ -626,53 +511,33 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 					"fileUID", pf.fileUID.String(),
 					"cacheName", fileCacheName)
 
-				// For single file: cache is reused as chat cache, so skip individual cleanup
-				// (chat cache cleanup will handle it)
-				if fileCount > 1 {
-					// Schedule file cache cleanup for this file (multi-file case only)
-					defer func(cn string, fuid types.FileUIDType) {
-						cleanupCtx, _ := workflow.NewDisconnectedContext(ctx)
-						cleanupCtx = workflow.WithActivityOptions(cleanupCtx, workflow.ActivityOptions{
-							StartToCloseTimeout: time.Minute,
-							RetryPolicy: &temporal.RetryPolicy{
-								InitialInterval:    time.Second,
-								BackoffCoefficient: 2.0,
-								MaximumInterval:    30 * time.Second,
-								MaximumAttempts:    3,
-							},
-						})
+				// Schedule file cache cleanup for this file
+				defer func(cn string, fuid types.FileUIDType) {
+					cleanupCtx, _ := workflow.NewDisconnectedContext(ctx)
+					cleanupCtx = workflow.WithActivityOptions(cleanupCtx, workflow.ActivityOptions{
+						StartToCloseTimeout: time.Minute,
+						RetryPolicy: &temporal.RetryPolicy{
+							InitialInterval:    time.Second,
+							BackoffCoefficient: 2.0,
+							MaximumInterval:    30 * time.Second,
+							MaximumAttempts:    3,
+						},
+					})
 
-						if err := workflow.ExecuteActivity(cleanupCtx, w.DeleteCacheActivity, &DeleteCacheActivityParam{
-							CacheName: cn,
-						}).Get(cleanupCtx, nil); err != nil {
-							logger.Warn("File cache cleanup failed (will expire automatically)",
-								"fileUID", fuid.String(), "cacheName", cn, "error", err)
-						} else {
-							logger.Info("File cache cleaned up", "fileUID", fuid.String(), "cacheName", cn)
-						}
-					}(fileCacheName, pf.fileUID)
-				} else {
-					// Store chat cache name for cleanup in the deferred chat cleanup function
-					chatCacheName = fileCacheName
-					logger.Info("Single file: cache will be cleaned up as chat cache",
-						"cacheName", fileCacheName)
-				}
-			}
-		}
-
-		// Cleanup old converted files for ALL files BEFORE starting ANY parallel content/summary processing
-		// This prevents race conditions where cleanup might delete newly created files
-		for _, pf := range processingFutures {
-			cr := pf.conversionData
-			if err := workflow.ExecuteActivity(ctx, w.DeleteOldConvertedFilesActivity, &DeleteOldConvertedFilesActivityParam{
-				FileUID: cr.fileUID,
-			}).Get(ctx, nil); err != nil {
-				logger.Error("Failed to cleanup old converted files, continuing anyway",
-					"fileUID", cr.fileUID.String(), "error", err)
+					if err := workflow.ExecuteActivity(cleanupCtx, w.DeleteCacheActivity, &DeleteCacheActivityParam{
+						CacheName: cn,
+					}).Get(cleanupCtx, nil); err != nil {
+						logger.Warn("File cache cleanup failed (will expire automatically)",
+							"fileUID", fuid.String(), "cacheName", cn, "error", err)
+					} else {
+						logger.Info("File cache cleaned up", "fileUID", fuid.String(), "cacheName", cn)
+					}
+				}(fileCacheName, pf.fileUID)
 			}
 		}
 
 		// Phase 3: Start content and summary activities
+		// Old converted files already cleaned up in Step 2c (before standardization)
 		// For Gemini: Both activities run in parallel (both process raw file independently)
 		// For OpenAI: Sequential execution (summary needs markdown from content generation)
 		for i, pf := range processingFutures {
@@ -687,7 +552,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				Bucket:      cr.effectiveBucket,
 				Destination: cr.effectiveDestination,
 				FileType:    cr.effectiveFileType,
-				Filename:    cr.fileMetadata.metadata.File.Name,
+				Filename:    cr.fileMetadata.metadata.File.Filename,
 				Metadata:    cr.fileMetadata.metadata.ExternalMetadata,
 				CacheName:   fileCacheName,
 			})
@@ -714,7 +579,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 					KBUID:       kbUID,
 					Bucket:      cr.effectiveBucket,
 					Destination: cr.effectiveDestination,
-					FileName:    cr.fileMetadata.metadata.File.Name,
+					Filename:    cr.fileMetadata.metadata.File.Filename,
 					FileType:    cr.effectiveFileType,
 					Metadata:    cr.fileMetadata.metadata.ExternalMetadata,
 					CacheName:   fileCacheName,
@@ -731,7 +596,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				fileUID := cr.fileUID
 				bucket := cr.effectiveBucket
 				destination := cr.effectiveDestination
-				fileName := cr.fileMetadata.metadata.File.Name
+				filename := cr.fileMetadata.metadata.File.Filename
 				fileType := cr.effectiveFileType
 				metadata := cr.fileMetadata.metadata.ExternalMetadata
 
@@ -771,7 +636,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 						KBUID:           kbUID,
 						Bucket:          bucket,      // Not used when ContentMarkdown is provided
 						Destination:     destination, // Not used when ContentMarkdown is provided
-						FileName:        fileName,
+						Filename:        filename,
 						FileType:        fileType,
 						Metadata:        metadata,
 						CacheName:       "",                    // No cache for OpenAI
@@ -1038,7 +903,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			if err := workflow.ExecuteChildWorkflow(childCtx, w.SaveEmbeddingsWorkflow, SaveEmbeddingsWorkflowParam{
 				KBUID:        kbUID,
 				FileUID:      fileUID,
-				FileName:     chunksData.FileName,
+				Filename:     chunksData.Filename,
 				Embeddings:   embeddings,
 				UserUID:      userUID,
 				RequesterUID: requesterUID,
@@ -1124,13 +989,13 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			err := workflow.ExecuteActivity(ctx, w.FindTargetFileByNameActivity, &FindTargetFileByNameActivityParam{
 				TargetKBUID:    dualProcessingInfo.TargetKB.UID,
 				TargetOwnerUID: dualProcessingInfo.TargetKB.Owner,
-				FileName:       prodFileMeta.metadata.File.Name,
+				Filename:       prodFileMeta.metadata.File.Filename,
 			}).Get(ctx, &findResult)
 			if err != nil {
 				// CRITICAL: Activity execution failed (e.g., not registered, DB error)
 				// This is a system error, not a "file not found" scenario
 				logger.Error("FindTargetFileByNameActivity failed - dual-processing cannot proceed",
-					"fileName", prodFileMeta.metadata.File.Name,
+					"filename", prodFileMeta.metadata.File.Filename,
 					"targetKBUID", dualProcessingInfo.TargetKB.UID.String(),
 					"error", err)
 				return err
@@ -1139,7 +1004,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				// WARNING: Target file not found - expected during dual-processing
 				// This could happen if target file was deleted or cloning failed
 				logger.Warn("Target file not found for dual processing",
-					"fileName", prodFileMeta.metadata.File.Name,
+					"filename", prodFileMeta.metadata.File.Filename,
 					"targetKBUID", dualProcessingInfo.TargetKB.UID.String())
 				// Continue - we'll process what we can find
 				continue

@@ -8,6 +8,7 @@ import (
 
 	"github.com/gofrs/uuid"
 	"github.com/gojuno/minimock/v3"
+	"github.com/minio/minio-go/v7"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 
@@ -151,7 +152,6 @@ func TestCreateStagingKnowledgeBaseActivity_Success(t *testing.T) {
 			KnowledgeBaseModel: repository.KnowledgeBaseModel{
 				UID:       originalKBUID,
 				KBID:      "test-kb",
-				Name:      "Test KB",
 				SystemUID: systemUID,
 			},
 			SystemConfig: repository.SystemConfigJSON{
@@ -174,7 +174,6 @@ func TestCreateStagingKnowledgeBaseActivity_Success(t *testing.T) {
 			return &repository.KnowledgeBaseModel{
 				UID:  stagingKBUID,
 				KBID: "test-kb-staging",
-				Name: "Test KB-staging",
 			}, nil
 		})
 	mockRepository.CreateCollectionMock.Set(func(ctx context.Context, collectionName string, dimensionality uint32) error {
@@ -332,12 +331,16 @@ func TestCloneFileToStagingKBActivity_Success(t *testing.T) {
 		Then([]repository.KnowledgeBaseFileModel{
 			{
 				UID:         originalFileUID,
-				Name:        "test.pdf",
+				Filename:    "test.pdf",
 				FileType:    "application/pdf",
 				Destination: "kb/file/test.pdf",
 				Size:        1024,
 			},
 		}, nil)
+	// Mock GetFileMetadata to verify blob exists
+	mockRepository.GetFileMetadataMock.Return(&minio.ObjectInfo{
+		Size: 1024,
+	}, nil)
 	mockRepository.GetKnowledgeBaseByUIDMock.
 		When(minimock.AnyContext, stagingKBUID).
 		Then(&repository.KnowledgeBaseModel{
@@ -347,8 +350,8 @@ func TestCloneFileToStagingKBActivity_Success(t *testing.T) {
 	mockRepository.CreateKnowledgeBaseFileMock.
 		Set(func(ctx context.Context, model repository.KnowledgeBaseFileModel, externalServiceCall func(fileUID string) error) (*repository.KnowledgeBaseFileModel, error) {
 			return &repository.KnowledgeBaseFileModel{
-				UID:  newFileUID,
-				Name: "test.pdf",
+				UID:      newFileUID,
+				Filename: "test.pdf",
 			}, nil
 		})
 
@@ -482,7 +485,6 @@ func TestSwapKnowledgeBasesActivity_Success(t *testing.T) {
 			KnowledgeBaseModel: repository.KnowledgeBaseModel{
 				UID:                 originalKBUID,
 				KBID:                "test-kb",
-				Name:                "Test KB",
 				Owner:               ownerUID.String(),
 				CreatorUID:          types.CreatorUIDType(ownerUID),
 				ActiveCollectionUID: originalCollectionUID,
@@ -496,7 +498,6 @@ func TestSwapKnowledgeBasesActivity_Success(t *testing.T) {
 			KnowledgeBaseModel: repository.KnowledgeBaseModel{
 				UID:                 stagingKBUID,
 				KBID:                "test-kb-staging",
-				Name:                "Test KB-staging",
 				Owner:               ownerUID.String(),
 				ActiveCollectionUID: stagingCollectionUID,
 			},

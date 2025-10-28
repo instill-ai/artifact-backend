@@ -96,14 +96,20 @@ integration-test:		## Run integration tests in parallel using GNU parallel
 		-e API_GATEWAY_PROTOCOL=${API_GATEWAY_PROTOCOL} -e API_GATEWAY_URL=${API_GATEWAY_URL} \
 		-e DB_HOST=${DB_HOST} \
 		{} --no-usage-report" ::: \
-		integration-test/grpc.js \
 		integration-test/rest.js \
 		integration-test/rest-file-type.js \
 		integration-test/rest-db.js \
 		integration-test/rest-ai-client.js \
 		integration-test/rest-kb-e2e-file-process.js \
 		integration-test/rest-file-reprocess.js \
-		integration-test/rest-kb-delete.js \
+		integration-test/rest-kb-delete.js 2>&1 | tee /tmp/artifact-integration-test.log; \
+	bash integration-test/scripts/report-summary.sh /tmp/artifact-integration-test.log
+	@parallel --halt now,fail=1 --tag --line-buffer \
+		"TEST_FOLDER_ABS_PATH=${PWD} k6 run --address=\"\" \
+		-e API_GATEWAY_PROTOCOL=${API_GATEWAY_PROTOCOL} -e API_GATEWAY_URL=${API_GATEWAY_URL} \
+		-e DB_HOST=${DB_HOST} \
+		{} --no-usage-report" ::: \
+		integration-test/grpc.js \
 		integration-test/grpc-kb-update.js \
 		integration-test/grpc-system-config-update.js \
 		integration-test/grpc-system-admin.js 2>&1 | tee /tmp/artifact-integration-test.log; \

@@ -51,7 +51,7 @@ type GetTextChunksForEmbeddingActivityResult struct {
 	Chunks      []repository.TextChunkModel // Text chunks with metadata
 	Texts       []string                    // Text chunk content for embedding generation
 	Metadata    *structpb.Struct            // External metadata from request
-	FileName    string                      // File name for identification
+	Filename    string                      // File name for identification
 	Tags        []string                    // File tags to propagate to embeddings
 	ContentType string                      // MIME type of the file content (e.g., "text/markdown", "application/pdf")
 }
@@ -60,7 +60,7 @@ type GetTextChunksForEmbeddingActivityResult struct {
 type SaveEmbeddingBatchActivityParam struct {
 	KBUID        types.KBUIDType             // Knowledge base unique identifier
 	FileUID      types.FileUIDType           // File unique identifier
-	FileName     string                      // File name for identification
+	Filename     string                      // File name for identification
 	Embeddings   []repository.EmbeddingModel // Embeddings batch to save
 	BatchNumber  int                         // Current batch number (1-based)
 	TotalBatches int                         // Total number of batches
@@ -135,7 +135,7 @@ func (w *Worker) GetChunksForEmbeddingActivity(ctx context.Context, param *GetCh
 		Chunks:      chunks,
 		Texts:       texts,
 		Metadata:    file.ExternalMetadataUnmarshal,
-		FileName:    file.Name,
+		Filename:    file.Filename,
 		Tags:        file.Tags,
 		ContentType: contentType,
 	}, nil
@@ -208,7 +208,7 @@ func (w *Worker) SaveEmbeddingBatchActivity(ctx context.Context, param *SaveEmbe
 				EmbeddingUID: emb.UID.String(),
 				Vector:       emb.Vector,
 				FileUID:      emb.FileUID,
-				FileName:     param.FileName,
+				Filename:     param.Filename,
 				ContentType:  emb.ContentType,
 				ChunkType:    emb.ChunkType,
 				Tags:         emb.Tags,

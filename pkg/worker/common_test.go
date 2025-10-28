@@ -22,8 +22,8 @@ func TestGetFileByUID_Success(t *testing.T) {
 	ctx := context.Background()
 	fileUID := uuid.Must(uuid.NewV4())
 	expectedFile := repository.KnowledgeBaseFileModel{
-		UID:  fileUID,
-		Name: "test.pdf",
+		UID:      fileUID,
+		Filename: "test.pdf",
 	}
 
 	mockRepository := mock.NewRepositoryMock(mc)

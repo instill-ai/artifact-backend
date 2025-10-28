@@ -6,8 +6,8 @@ import (
 )
 
 // DetermineMimeType determines the MIME type based on the file extension
-func DetermineMimeType(fileName string) string {
-	ext := strings.ToLower(filepath.Ext(fileName))
+func DetermineMimeType(filename string) string {
+	ext := strings.ToLower(filepath.Ext(filename))
 	switch ext {
 	case ".pdf":
 		return "application/pdf"

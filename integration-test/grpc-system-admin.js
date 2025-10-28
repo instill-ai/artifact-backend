@@ -51,6 +51,10 @@ export let options = {
 export function setup() {
     check(true, { [constant.banner('System Admin API Test: Setup')]: () => true });
 
+    // Generate unique test prefix
+    const dbIDPrefix = constant.generateDBIDPrefix();
+    console.log(`grpc-system-admin.js: Using unique test prefix: ${dbIDPrefix}`);
+
     // Authenticate
     const loginResp = http.request("POST", `${constant.mgmtRESTPublicHost}/v1beta/auth/login`, JSON.stringify({
         "username": constant.defaultUsername,
@@ -62,17 +66,15 @@ export function setup() {
     });
 
     const grpcMetadata = {
-        "Authorization": `Bearer ${loginResp.json().accessToken}`,
+        "metadata": {
+            "Authorization": `Bearer ${loginResp.json().accessToken}`,
+        },
+        "timeout": "300s",
     };
-
-    // Connect to gRPC
-    client.connect(constant.artifactGRPCPrivateHost, {
-        plaintext: true,
-        timeout: "300s",
-    });
 
     return {
         metadata: grpcMetadata,
+        dbIDPrefix: dbIDPrefix,
     };
 }
 
@@ -81,7 +83,10 @@ export function teardown(data) {
     group("System Admin Test: Teardown", () => {
         check(true, { [constant.banner('Teardown')]: () => true });
 
-        const testSystemIds = ["test-custom-system", "test-custom-renamed"];
+        // Clean up systems created during the test
+        const testSystemIds = [];
+        if (data.customSystemId) testSystemIds.push(data.customSystemId);
+        if (data.renamedSystemId) testSystemIds.push(data.renamedSystemId);
 
         for (const systemId of testSystemIds) {
             try {
@@ -90,8 +95,9 @@ export function teardown(data) {
                     { id: systemId },
                     data.metadata
                 );
+                console.log(`Teardown: Deleted system ${systemId}`);
             } catch (e) {
-                // Ignore errors during cleanup
+                // Ignore errors during cleanup (system might already be deleted)
             }
         }
 
@@ -100,6 +106,11 @@ export function teardown(data) {
 }
 
 export default function (data) {
+    // Connect gRPC client to private service
+    client.connect(constant.artifactGRPCPrivateHost, {
+        plaintext: true,
+    });
+
     group("System Admin API: Complete Test Suite", () => {
 
         // ====================================================================
@@ -198,14 +209,18 @@ export default function (data) {
         // PHASE 4: Create Custom System
         // ====================================================================
         let customSystemUid = null;
+        let customSystemId = null;
         group("Phase 4: Create custom system configuration", () => {
             console.log("\n=== Phase 4: Creating custom system ===");
+
+            // Use unique system ID to avoid conflicts with previous test runs
+            customSystemId = `${data.dbIDPrefix}sysadmin-custom`;
 
             const createRes = client.invoke(
                 "artifact.artifact.v1alpha.ArtifactPrivateService/CreateSystemAdmin",
                 {
                     system: {
-                        id: "test-custom-system",
+                        id: customSystemId,
                         config: {
                             rag: {
                                 embedding: {
@@ -222,16 +237,19 @@ export default function (data) {
 
             check(createRes, {
                 "Phase 4: Create system successful": (r) => r && r.status === grpc.StatusOK,
-                "Phase 4: Created system has correct ID": (r) => r.message.system.id === "test-custom-system",
-                "Phase 4: Created system has UID": (r) => r.message.system.uid && r.message.system.uid.length > 0,
-                "Phase 4: Created system has resource name": (r) => r.message.system.name === "systems/test-custom-system",
-                "Phase 4: Created system is not default": (r) => r.message.system.isDefault === false,
-                "Phase 4: Created system has timestamps": (r) => r.message.system.createTime && r.message.system.updateTime,
+                "Phase 4: Created system has correct ID": (r) => r && r.message && r.message.system && r.message.system.id === customSystemId,
+                "Phase 4: Created system has UID": (r) => r && r.message && r.message.system && r.message.system.uid && r.message.system.uid.length > 0,
+                "Phase 4: Created system has resource name": (r) => r && r.message && r.message.system && r.message.system.name === `systems/${customSystemId}`,
+                "Phase 4: Created system is not default": (r) => r && r.message && r.message.system && r.message.system.isDefault === false,
+                "Phase 4: Created system has timestamps": (r) => r && r.message && r.message.system && r.message.system.createTime && r.message.system.updateTime,
             });
 
             if (createRes.status === grpc.StatusOK) {
                 customSystemUid = createRes.message.system.uid;
-                console.log(`Phase 4: Created system with UID: ${customSystemUid}`);
+                data.customSystemId = customSystemId; // Store for teardown
+                console.log(`Phase 4: Created system with ID: ${customSystemId}, UID: ${customSystemUid}`);
+            } else {
+                console.error(`Phase 4: Create system FAILED - Status: ${createRes.status}, Error: ${createRes.error ? createRes.error.message : 'unknown'}`);
             }
         });
 
@@ -241,29 +259,41 @@ export default function (data) {
         group("Phase 5: Update system with field mask", () => {
             console.log("\n=== Phase 5: Updating system description only (field mask) ===");
 
+            if (!customSystemId) {
+                console.error("Phase 5: Skipping - custom system ID not available from Phase 4");
+                return;
+            }
+
+            console.log(`Phase 5: Using customSystemId: ${customSystemId} (type: ${typeof customSystemId})`);
+
+            const updateRequest = {
+                system: {
+                    id: customSystemId,
+                    description: "Updated description via field mask"
+                },
+                update_mask: "description"  // k6 gRPC uses snake_case string for field mask
+            };
+            console.log(`Phase 5: Request object: ${JSON.stringify(updateRequest)}`);
+
             const updateRes = client.invoke(
                 "artifact.artifact.v1alpha.ArtifactPrivateService/UpdateSystemAdmin",
-                {
-                    system: {
-                        id: "test-custom-system",
-                        description: "Updated description via field mask",
-                        // Note: config is not included in update_mask, so it should remain unchanged
-                    },
-                    updateMask: {
-                        paths: ["description"]
-                    }
-                },
+                updateRequest,
                 data.metadata
             );
+
+            if (updateRes.status !== grpc.StatusOK) {
+                console.error(`Phase 5: Update FAILED - Status: ${updateRes.status}, Error: ${updateRes.error ? updateRes.error.message : 'unknown'}`);
+            }
 
             check(updateRes, {
                 "Phase 5: Update system successful": (r) => r && r.status === grpc.StatusOK,
                 "Phase 5: Description was updated": (r) =>
-                    r.message.system.description === "Updated description via field mask",
+                    r && r.message && r.message.system && r.message.system.description === "Updated description via field mask",
                 "Phase 5: Config remains unchanged": (r) =>
+                    r && r.message && r.message.system && r.message.system.config &&
                     r.message.system.config.rag.embedding.model_family === "openai" &&
                     r.message.system.config.rag.embedding.dimensionality === 1536,
-                "Phase 5: UID unchanged": (r) => r.message.system.uid === customSystemUid,
+                "Phase 5: UID unchanged": (r) => r && r.message && r.message.system && r.message.system.uid === customSystemUid,
             });
 
             // Update both config and description
@@ -273,7 +303,7 @@ export default function (data) {
                 "artifact.artifact.v1alpha.ArtifactPrivateService/UpdateSystemAdmin",
                 {
                     system: {
-                        id: "test-custom-system",
+                        id: customSystemId,
                         config: {
                             rag: {
                                 embedding: {
@@ -284,21 +314,25 @@ export default function (data) {
                         },
                         description: "Updated config to Gemini"
                     },
-                    updateMask: {
-                        paths: ["config", "description"]
-                    }
+                    update_mask: "config,description"  // Comma-separated string for multiple fields
                 },
                 data.metadata
             );
 
+            if (updateConfigRes.status !== grpc.StatusOK) {
+                console.error(`Phase 5: Config update FAILED - Status: ${updateConfigRes.status}, Error: ${updateConfigRes.error ? updateConfigRes.error.message : 'unknown'}`);
+            }
+
             check(updateConfigRes, {
                 "Phase 5: Update config successful": (r) => r && r.status === grpc.StatusOK,
                 "Phase 5: Config was updated to Gemini": (r) =>
+                    r && r.message && r.message.system && r.message.system.config &&
                     r.message.system.config.rag.embedding.model_family === "gemini",
                 "Phase 5: Dimensionality was updated": (r) =>
+                    r && r.message && r.message.system && r.message.system.config &&
                     r.message.system.config.rag.embedding.dimensionality === 3072,
                 "Phase 5: Description was also updated": (r) =>
-                    r.message.system.description === "Updated config to Gemini",
+                    r && r.message && r.message.system && r.message.system.description === "Updated config to Gemini",
             });
         });
 
@@ -308,28 +342,40 @@ export default function (data) {
         group("Phase 6: Rename system configuration", () => {
             console.log("\n=== Phase 6: Renaming system ID ===");
 
+            if (!customSystemId) {
+                console.error("Phase 6: Skipping - custom system ID not available from Phase 4");
+                return;
+            }
+
+            const newSystemId = `${data.dbIDPrefix}sysadmin-renamed`;
+
             const renameRes = client.invoke(
                 "artifact.artifact.v1alpha.ArtifactPrivateService/RenameSystemAdmin",
                 {
-                    systemId: "test-custom-system",
-                    newSystemId: "test-custom-renamed"
+                    systemId: customSystemId,
+                    newSystemId: newSystemId
                 },
                 data.metadata
             );
 
             check(renameRes, {
                 "Phase 6: Rename system successful": (r) => r && r.status === grpc.StatusOK,
-                "Phase 6: System ID was changed": (r) => r.message.system.id === "test-custom-renamed",
-                "Phase 6: Resource name was updated": (r) => r.message.system.name === "systems/test-custom-renamed",
+                "Phase 6: System ID was changed": (r) => r.message.system.id === newSystemId,
+                "Phase 6: Resource name was updated": (r) => r.message.system.name === `systems/${newSystemId}`,
                 "Phase 6: UID remains unchanged": (r) => r.message.system.uid === customSystemUid,
                 "Phase 6: Config preserved": (r) =>
                     r.message.system.config.rag.embedding.model_family === "gemini",
             });
 
+            if (renameRes.status === grpc.StatusOK) {
+                data.renamedSystemId = newSystemId; // Store for teardown
+                data.customSystemId = null; // Old ID no longer valid
+            }
+
             // Verify old ID no longer exists
             const getOldRes = client.invoke(
                 "artifact.artifact.v1alpha.ArtifactPrivateService/GetSystemAdmin",
-                { id: "test-custom-system" },
+                { id: customSystemId },
                 data.metadata
             );
 
@@ -340,13 +386,13 @@ export default function (data) {
             // Verify new ID is accessible
             const getNewRes = client.invoke(
                 "artifact.artifact.v1alpha.ArtifactPrivateService/GetSystemAdmin",
-                { id: "test-custom-renamed" },
+                { id: newSystemId },
                 data.metadata
             );
 
             check(getNewRes, {
                 "Phase 6: New ID is accessible": (r) => r && r.status === grpc.StatusOK,
-                "Phase 6: Retrieved system has new ID": (r) => r.message.system.id === "test-custom-renamed",
+                "Phase 6: Retrieved system has new ID": (r) => r.message.system.id === newSystemId,
             });
         });
 
@@ -355,6 +401,12 @@ export default function (data) {
         // ====================================================================
         group("Phase 7: Change default system", () => {
             console.log("\n=== Phase 7: Setting custom system as default ===");
+
+            const renamedSystemId = data.renamedSystemId;
+            if (!renamedSystemId) {
+                console.error("Phase 7: Skipping - renamed system ID not available from Phase 6");
+                return;
+            }
 
             // First, get current default
             const getCurrentDefaultRes = client.invoke(
@@ -372,14 +424,14 @@ export default function (data) {
             // Set custom system as default
             const setDefaultRes = client.invoke(
                 "artifact.artifact.v1alpha.ArtifactPrivateService/SetDefaultSystemAdmin",
-                { id: "test-custom-renamed" },
+                { id: renamedSystemId },
                 data.metadata
             );
 
             check(setDefaultRes, {
                 "Phase 7: Set default successful": (r) => r && r.status === grpc.StatusOK,
                 "Phase 7: System is now default": (r) => r.message.system.isDefault === true,
-                "Phase 7: Correct system was set": (r) => r.message.system.id === "test-custom-renamed",
+                "Phase 7: Correct system was set": (r) => r.message.system.id === renamedSystemId,
             });
 
             // Verify via GetDefaultSystemAdmin
@@ -392,11 +444,11 @@ export default function (data) {
             check(verifyDefaultRes, {
                 "Phase 7: GetDefault returns new default": (r) =>
                     r && r.status === grpc.StatusOK &&
-                    r.message.system.id === "test-custom-renamed",
+                    r.message.system.id === renamedSystemId,
             });
 
             // Restore original default
-            if (previousDefaultId && previousDefaultId !== "test-custom-renamed") {
+            if (previousDefaultId && previousDefaultId !== renamedSystemId) {
                 console.log(`Phase 7: Restoring original default: ${previousDefaultId}`);
                 const restoreRes = client.invoke(
                     "artifact.artifact.v1alpha.ArtifactPrivateService/SetDefaultSystemAdmin",
@@ -416,9 +468,15 @@ export default function (data) {
         group("Phase 8: Delete custom system", () => {
             console.log("\n=== Phase 8: Deleting custom system ===");
 
+            const renamedSystemId = data.renamedSystemId;
+            if (!renamedSystemId) {
+                console.error("Phase 8: Skipping - renamed system ID not available");
+                return;
+            }
+
             const deleteRes = client.invoke(
                 "artifact.artifact.v1alpha.ArtifactPrivateService/DeleteSystemAdmin",
-                { id: "test-custom-renamed" },
+                { id: renamedSystemId },
                 data.metadata
             );
 
@@ -430,13 +488,18 @@ export default function (data) {
             // Verify system is deleted
             const getDeletedRes = client.invoke(
                 "artifact.artifact.v1alpha.ArtifactPrivateService/GetSystemAdmin",
-                { id: "test-custom-renamed" },
+                { id: renamedSystemId },
                 data.metadata
             );
 
             check(getDeletedRes, {
                 "Phase 8: Deleted system not accessible": (r) => r && r.status !== grpc.StatusOK,
             });
+
+            // Mark as deleted for teardown
+            if (deleteRes.status === grpc.StatusOK) {
+                data.renamedSystemId = null;
+            }
         });
 
         // ====================================================================

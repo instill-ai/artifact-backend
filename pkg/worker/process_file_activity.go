@@ -36,7 +36,6 @@ import (
 //
 // 2. Caching Phase (uses standardized files):
 //    - CacheFileContextActivity - Creates individual AI cache per file for efficient processing
-//    - CacheChatContextActivity - Creates multi-file chat cache (for future Chat API)
 //
 // 3. Content & Summary Processing (run in parallel, both use the same cache):
 //    - ProcessContentActivity - Converts files to Markdown, creates content converted_file
@@ -61,7 +60,6 @@ import (
 //    - (UpdateFileStatusActivity - in status_activity.go)
 //    - DeleteCacheActivity - Cleans up AI caches
 //    - DeleteTemporaryConvertedFileActivity - Cleans up temporary converted files from MinIO
-//    - StoreChatCacheMetadataActivity - Stores chat cache metadata in Redis
 //
 // Sub-activities called by ProcessContentActivity:
 // - (Inline AI conversion to Markdown - AI is required)
@@ -331,11 +329,13 @@ func (w *Worker) DeleteOldConvertedFilesActivity(ctx context.Context, param *Del
 	w.log.Info("DeleteOldConvertedFilesActivity: Found converted files to delete",
 		zap.Int("count", len(allConvertedFiles)))
 
-	// Delete ALL old converted files (content, summary, etc.)
+	// Delete ALL old converted files (content, summary, PDF, etc.)
 	// When reprocessing, we recreate all converted files from scratch
+	// This runs BEFORE StandardizeFileTypeActivity, so old standardized files (PDF, PNG, etc.) are cleaned before new ones are created
 	for _, file := range allConvertedFiles {
 		w.log.Info("DeleteOldConvertedFilesActivity: Deleting old converted file",
 			zap.String("oldConvertedFileUID", file.UID.String()),
+			zap.String("convertedType", file.ConvertedType),
 			zap.String("destination", file.Destination))
 
 		// CRITICAL: Delete old chunk blobs FIRST (before deleting converted_file DB record)
@@ -902,6 +902,8 @@ type StandardizeFileTypeActivityResult struct {
 	OriginalType         artifactpb.File_Type // Original file type
 	Converted            bool                 // Whether conversion was performed
 	PipelineRelease      pipeline.Release     // Pipeline used for conversion
+	ConvertedFileUID     types.FileUIDType    // UUID of created converted_file record (nil if not saved as converted_file)
+	PositionData         *types.PositionData  // Position data from conversion (for PDFs)
 }
 
 // StandardizeFileTypeActivity standardizes non-AI-native file types to AI-supported formats
@@ -916,12 +918,119 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 	if !needsConversion {
 		w.log.Info("StandardizeFileTypeActivity: File type is AI-native, no standardization needed",
 			zap.String("fileType", param.FileType.String()))
+
+		// REFACTORED: For already-PDF files, copy to converted-file folder for VIEW_STANDARD_FILE_TYPE support
+		// Original blob remains in place for consistency with other file types
+		// Converted-file folder copy provides unified VIEW_STANDARD_FILE_TYPE access
+		if param.FileType == artifactpb.File_TYPE_PDF {
+			w.log.Info("StandardizeFileTypeActivity: Copying original PDF to converted-file folder for VIEW_STANDARD_FILE_TYPE support")
+
+			// Create authenticated context if metadata provided
+			authCtx := ctx
+			if param.Metadata != nil {
+				var err error
+				authCtx, err = CreateAuthenticatedContext(ctx, param.Metadata)
+				if err != nil {
+					return nil, temporal.NewApplicationErrorWithCause(
+						fmt.Sprintf("Failed to create authenticated context: %s", errorsx.MessageOrErr(err)),
+						standardizeFileTypeActivityError,
+						err,
+					)
+				}
+			}
+
+			// Fetch original PDF content from MinIO blob location
+			pdfContent, err := w.repository.GetFile(authCtx, param.Bucket, param.Destination)
+			if err != nil {
+				return nil, temporal.NewApplicationErrorWithCause(
+					fmt.Sprintf("Failed to retrieve original PDF from storage: %s", errorsx.MessageOrErr(err)),
+					standardizeFileTypeActivityError,
+					err,
+				)
+			}
+
+			// Generate UUID for the converted file
+			convertedFileUID := types.FileUIDType(uuid.Must(uuid.NewV4()))
+
+			// Create converted_file DB record
+			convertedFileRecord := repository.ConvertedFileModel{
+				UID:           convertedFileUID,
+				KBUID:         param.KBUID,
+				FileUID:       param.FileUID,
+				ContentType:   "application/pdf",
+				ConvertedType: artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_DOCUMENT.String(),
+				Destination:   "placeholder",
+				PositionData:  nil,
+			}
+
+			_, err = w.repository.CreateConvertedFileWithDestination(authCtx, convertedFileRecord)
+			if err != nil {
+				return nil, temporal.NewApplicationErrorWithCause(
+					fmt.Sprintf("Failed to create converted_file record: %s", errorsx.MessageOrErr(err)),
+					standardizeFileTypeActivityError,
+					err,
+				)
+			}
+
+			// Copy PDF to converted-file folder (original blob remains at param.Destination)
+			convertedDestination, err := w.repository.SaveConvertedFile(
+				authCtx,
+				param.KBUID,
+				param.FileUID,
+				convertedFileUID,
+				"pdf",
+				pdfContent,
+			)
+			if err != nil {
+				_ = w.repository.DeleteConvertedFile(authCtx, convertedFileUID)
+				return nil, temporal.NewApplicationErrorWithCause(
+					fmt.Sprintf("Failed to copy original PDF to converted-file folder: %s", errorsx.MessageOrErr(err)),
+					standardizeFileTypeActivityError,
+					err,
+				)
+			}
+
+			// Update DB record with actual destination
+			updateMap := map[string]any{"destination": convertedDestination}
+			err = w.repository.UpdateConvertedFile(authCtx, convertedFileUID, updateMap)
+			if err != nil {
+				_ = w.repository.DeleteConvertedFile(authCtx, convertedFileUID)
+				_ = w.repository.DeleteFile(authCtx, config.Config.Minio.BucketName, convertedDestination)
+				return nil, temporal.NewApplicationErrorWithCause(
+					fmt.Sprintf("Failed to update converted_file destination: %s", errorsx.MessageOrErr(err)),
+					standardizeFileTypeActivityError,
+					err,
+				)
+			}
+
+			w.log.Info("StandardizeFileTypeActivity: Original PDF copied to converted-file folder",
+				zap.String("originalDestination", param.Destination),
+				zap.String("convertedFileUID", convertedFileUID.String()),
+				zap.String("convertedDestination", convertedDestination))
+
+			// Return original location for processing (ProcessContentActivity needs original blob)
+			// but also include converted file info for VIEW_STANDARD_FILE_TYPE access
+			return &StandardizeFileTypeActivityResult{
+				ConvertedDestination: param.Destination, // Use original blob for processing
+				ConvertedBucket:      param.Bucket,      // Use original blob bucket
+				ConvertedType:        param.FileType,
+				OriginalType:         param.FileType,
+				Converted:            false,            // Not converted, just copied
+				ConvertedFileUID:     convertedFileUID, // Track the converted_file record
+				PositionData:         nil,
+			}, nil
+		}
+
+		// For AI-native files that don't need conversion (images, audio, video)
+		// Note: TEXT, MARKDOWN, HTML, CSV are converted to PDF (handled above)
 		return &StandardizeFileTypeActivityResult{
 			ConvertedDestination: "", // No conversion, use original file
 			ConvertedBucket:      "",
 			ConvertedType:        param.FileType,
 			OriginalType:         param.FileType,
 			Converted:            false,
+			ConvertedFileUID:     types.FileUIDType(uuid.Nil),
+			PositionData:         nil,
 		}, nil
 	}
 
@@ -989,24 +1098,83 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 	// Map target format string to FileType enum
 	convertedFileType := mapFormatToFileType(targetFormat)
 
-	// Upload converted content to MinIO (avoid passing large blobs through Temporal)
-	// Use a temporary path in the blob bucket for intermediate conversion results
-	// Generate unique destination for converted file in tmp directory
-	convertedDestination := fmt.Sprintf("tmp/%s/%s.%s",
-		param.FileUID.String(),
-		uuid.Must(uuid.NewV4()).String(),
-		targetFormat)
-
-	// Encode content to base64 for MinIO upload
-	base64Content := base64.StdEncoding.EncodeToString(convertedContent)
-
 	// Get MIME type for the converted file type
 	mimeType := ai.FileTypeToMIME(convertedFileType)
 
-	err = w.repository.UploadBase64File(authCtx, repository.BlobBucketName, convertedDestination, base64Content, mimeType)
+	// Map target format to ConvertedFileType enum
+	var convertedFileTypeEnum artifactpb.ConvertedFileType
+	var fileExtension string
+	switch targetFormat {
+	case "pdf":
+		convertedFileTypeEnum = artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_DOCUMENT
+		fileExtension = "pdf"
+	case "png":
+		convertedFileTypeEnum = artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_IMAGE
+		fileExtension = "png"
+	case "ogg":
+		convertedFileTypeEnum = artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_AUDIO
+		fileExtension = "ogg"
+	case "mp4":
+		convertedFileTypeEnum = artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_VIDEO
+		fileExtension = "mp4"
+	default:
+		return nil, temporal.NewApplicationError(
+			fmt.Sprintf("Unsupported target format: %s", targetFormat),
+			standardizeFileTypeActivityError,
+		)
+	}
+
+	// REFACTORED: Save ALL standardized files (PDF, PNG, OGG, MP4) directly to converted-file folder (not tmp/)
+	// This provides unified VIEW_STANDARD_FILE_TYPE support for all media types:
+	// - Documents → PDF
+	// - Images → PNG
+	// - Audio → OGG
+	// - Video → MP4
+	w.log.Info("StandardizeFileTypeActivity: Saving standardized file directly to converted-file folder",
+		zap.String("targetFormat", targetFormat),
+		zap.String("convertedFileType", convertedFileTypeEnum.String()))
+
+	// Generate UUID for the converted file
+	convertedFileUID := types.FileUIDType(uuid.Must(uuid.NewV4()))
+
+	// Create converted_file DB record with placeholder destination
+	convertedFileRecord := repository.ConvertedFileModel{
+		UID:           convertedFileUID,
+		KBUID:         param.KBUID,
+		FileUID:       param.FileUID,
+		ContentType:   mimeType,
+		ConvertedType: convertedFileTypeEnum.String(),
+		Destination:   "placeholder", // Will be updated after upload
+		PositionData:  nil,           // Position data extraction not yet implemented for converted files
+	}
+
+	_, err = w.repository.CreateConvertedFileWithDestination(authCtx, convertedFileRecord)
 	if err != nil {
 		return nil, temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to upload converted file to MinIO: %s", errorsx.MessageOrErr(err)),
+			fmt.Sprintf("Failed to create converted_file record: %s", errorsx.MessageOrErr(err)),
+			standardizeFileTypeActivityError,
+			err,
+		)
+	}
+
+	w.log.Info("StandardizeFileTypeActivity: Created converted_file DB record",
+		zap.String("convertedFileUID", convertedFileUID.String()),
+		zap.String("convertedType", convertedFileTypeEnum.String()))
+
+	// Upload standardized file to converted-file folder (final destination)
+	convertedDestination, err := w.repository.SaveConvertedFile(
+		authCtx,
+		param.KBUID,
+		param.FileUID,
+		convertedFileUID,
+		fileExtension,
+		convertedContent,
+	)
+	if err != nil {
+		// Cleanup: delete DB record
+		_ = w.repository.DeleteConvertedFile(authCtx, convertedFileUID)
+		return nil, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to upload standardized file to MinIO: %s", errorsx.MessageOrErr(err)),
 			standardizeFileTypeActivityError,
 			err,
 		)
@@ -1014,16 +1182,37 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 
 	w.log.Info("StandardizeFileTypeActivity: Standardized file uploaded to MinIO",
 		zap.String("destination", convertedDestination),
-		zap.String("bucket", repository.BlobBucketName),
-		zap.String("mimeType", mimeType))
+		zap.String("format", targetFormat))
+
+	// Update DB record with actual destination
+	updateMap := map[string]any{"destination": convertedDestination}
+	err = w.repository.UpdateConvertedFile(authCtx, convertedFileUID, updateMap)
+	if err != nil {
+		// Cleanup: delete both DB record and MinIO file
+		_ = w.repository.DeleteConvertedFile(authCtx, convertedFileUID)
+		_ = w.repository.DeleteFile(authCtx, config.Config.Minio.BucketName, convertedDestination)
+		return nil, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to update converted_file destination: %s", errorsx.MessageOrErr(err)),
+			standardizeFileTypeActivityError,
+			err,
+		)
+	}
+
+	w.log.Info("StandardizeFileTypeActivity: Standardized file saved to converted-file folder",
+		zap.String("convertedFileUID", convertedFileUID.String()),
+		zap.String("destination", convertedDestination),
+		zap.String("format", targetFormat),
+		zap.String("convertedType", convertedFileTypeEnum.String()))
 
 	return &StandardizeFileTypeActivityResult{
 		ConvertedDestination: convertedDestination,
-		ConvertedBucket:      repository.BlobBucketName,
+		ConvertedBucket:      config.Config.Minio.BucketName, // Converted files go to artifact bucket
 		ConvertedType:        convertedFileType,
 		OriginalType:         param.FileType,
 		Converted:            true,
 		PipelineRelease:      usedPipeline,
+		ConvertedFileUID:     convertedFileUID, // Return the created converted_file UID
+		PositionData:         nil,              // Position data extraction not yet implemented
 	}, nil
 }
 
@@ -1057,6 +1246,7 @@ func (w *Worker) CacheFileContextActivity(ctx context.Context, param *CacheFileC
 	w.log.Info("CacheFileContextActivity: Creating cache for input content",
 		zap.String("fileUID", param.FileUID.String()),
 		zap.String("fileType", param.FileType.String()),
+		zap.String("bucket", param.Bucket),
 		zap.String("destination", param.Destination))
 
 	// Check if AI client is available
@@ -1090,11 +1280,16 @@ func (w *Worker) CacheFileContextActivity(ctx context.Context, param *CacheFileC
 	// Fetch file content from MinIO (either original or converted file)
 	content, err := w.repository.GetFile(authCtx, param.Bucket, param.Destination)
 	if err != nil {
-		return nil, temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to retrieve file from storage: %s", errorsx.MessageOrErr(err)),
-			cacheContextActivityError,
-			err,
-		)
+		// If file doesn't exist (e.g., original blob deleted or never uploaded),
+		// gracefully skip caching instead of failing the workflow
+		// Caching is a performance optimization, not a requirement
+		w.log.Warn("CacheFileContextActivity: File not found in storage, skipping cache creation",
+			zap.String("bucket", param.Bucket),
+			zap.String("destination", param.Destination),
+			zap.Error(err))
+		return &CacheFileContextActivityResult{
+			CachedContextEnabled: false,
+		}, nil
 	}
 
 	w.log.Info("CacheFileContextActivity: File content retrieved from MinIO",
@@ -1175,205 +1370,6 @@ func (w *Worker) DeleteCacheActivity(ctx context.Context, param *DeleteCacheActi
 	return nil
 }
 
-// CacheChatContextActivityParam defines the parameters for CacheChatContextActivity
-type CacheChatContextActivityParam struct {
-	FileUIDs []types.FileUIDType // File unique identifiers to cache together
-	KBUID    types.KBUIDType     // Knowledge base unique identifier
-	Metadata *structpb.Struct    // Request metadata for authentication
-}
-
-// CacheChatContextActivityResult defines the output from CacheChatContextActivity
-// This has the same structure as CacheFileContextActivityResult but is a separate type for clarity
-// Supports two modes:
-// 1. Cached mode: CachedContextEnabled=true, CacheName set, FileRefs empty (large files)
-// 2. Uncached mode: CachedContextEnabled=false, CacheName empty, FileRefs set (small files)
-type CacheChatContextActivityResult struct {
-	CacheName            string                      // AI cache name (empty if cache creation failed)
-	Model                string                      // Model used for cache
-	CreateTime           time.Time                   // When cache was created
-	ExpireTime           time.Time                   // When cache will expire
-	CachedContextEnabled bool                        // Flag indicating if cached context was created (false means caching is disabled)
-	UsageMetadata        any                         // Token usage metadata from AI client (nil if cache was not created)
-	FileRefs             []repository.FileContentRef // File references for uncached small files
-}
-
-// CacheChatContextActivity creates a chat cached context for multiple files
-// This enables efficient multi-file operations like question answering across multiple documents
-// The chat cache contains all files together, optimized for cross-file queries
-func (w *Worker) CacheChatContextActivity(ctx context.Context, param *CacheChatContextActivityParam) (*CacheChatContextActivityResult, error) {
-	w.log.Info("CacheChatContextActivity: Creating chat cache for multiple files",
-		zap.Int("fileCount", len(param.FileUIDs)))
-
-	// Check if AI client is available
-	if w.aiClient == nil {
-		w.log.Info("CacheChatContextActivity: AI client not available, skipping cache creation")
-		return &CacheChatContextActivityResult{
-			CachedContextEnabled: false,
-		}, nil
-	}
-
-	// Create authenticated context if metadata provided
-	authCtx := ctx
-	if param.Metadata != nil {
-		var err error
-		authCtx, err = CreateAuthenticatedContext(ctx, param.Metadata)
-		if err != nil {
-			w.log.Warn("CacheChatContextActivity: Failed to create authenticated context, proceeding without auth",
-				zap.Error(err))
-		}
-	}
-
-	// Fetch metadata and content for all files
-	fileContents := make([]ai.FileContent, 0, len(param.FileUIDs))
-
-	for _, fileUID := range param.FileUIDs {
-		// Get file metadata
-		kbFiles, err := w.repository.GetKnowledgeBaseFilesByFileUIDs(authCtx, []uuid.UUID{fileUID})
-		if err != nil || len(kbFiles) == 0 {
-			w.log.Warn("CacheChatContextActivity: Failed to get file metadata, skipping file",
-				zap.String("fileUID", fileUID.String()),
-				zap.Error(err))
-			continue
-		}
-		kbFile := kbFiles[0]
-
-		// Fetch file content from MinIO
-		bucket := repository.BucketFromDestination(kbFile.Destination)
-		content, err := w.repository.GetFile(authCtx, bucket, kbFile.Destination)
-		if err != nil {
-			w.log.Warn("CacheChatContextActivity: Failed to retrieve file content, skipping file",
-				zap.String("fileUID", fileUID.String()),
-				zap.String("destination", kbFile.Destination),
-				zap.Error(err))
-			continue
-		}
-
-		fileType := artifactpb.File_Type(artifactpb.File_Type_value[kbFile.FileType])
-
-		// Check if file type is supported for caching
-		if !w.aiClient.SupportsFileType(fileType) {
-			w.log.Info("CacheChatContextActivity: File type not supported for caching, skipping file",
-				zap.String("fileUID", fileUID.String()),
-				zap.String("fileType", fileType.String()))
-			continue
-		}
-
-		fileContents = append(fileContents, ai.FileContent{
-			FileUID:  fileUID,
-			Content:  content,
-			FileType: fileType,
-			Filename: kbFile.Name,
-		})
-
-		w.log.Info("CacheChatContextActivity: File content retrieved",
-			zap.String("fileUID", fileUID.String()),
-			zap.String("filename", kbFile.Name),
-			zap.Int("contentSize", len(content)))
-	}
-
-	// Check if we have any files to cache
-	if len(fileContents) == 0 {
-		w.log.Warn("CacheChatContextActivity: No valid files to cache")
-		return &CacheChatContextActivityResult{
-			CachedContextEnabled: false,
-		}, nil
-	}
-
-	// Set cache TTL (5 minutes default)
-	cacheTTL := 5 * time.Minute
-
-	// Proactively check if total content meets minimum cache size (1024 tokens)
-	// This avoids unnecessary API calls for small files
-	estimatedTokens, err := ai.EstimateTotalTokens(fileContents)
-	if err != nil {
-		w.log.Warn("CacheChatContextActivity: Failed to estimate tokens, will attempt cache creation anyway",
-			zap.Error(err))
-		estimatedTokens = ai.MinCacheTokens // Assume sufficient tokens if estimation fails
-	}
-
-	var cacheOutput *ai.CacheResult
-	var cacheErr error
-
-	if estimatedTokens < ai.MinCacheTokens {
-		// Content is too small for AI cache (expected, not an error)
-		// Skip cache creation and directly store content for fallback chat
-		w.log.Info("CacheChatContextActivity: Content too small for AI cache, storing directly in Redis",
-			zap.Int("estimatedTokens", estimatedTokens),
-			zap.Int("minRequired", ai.MinCacheTokens),
-			zap.Int("fileCount", len(fileContents)))
-	} else {
-		// Content is large enough, attempt cache creation
-		w.log.Info("CacheChatContextActivity: Attempting to create AI cache",
-			zap.Int("estimatedTokens", estimatedTokens),
-			zap.Int("fileCount", len(fileContents)))
-
-		// Use Chat system instruction for Q&A operations
-		cacheOutput, cacheErr = w.aiClient.CreateCache(authCtx, fileContents, cacheTTL, ai.SystemInstructionChat)
-		if cacheErr != nil {
-			// Real cache creation error (network, quota, API error, etc.)
-			// This is unexpected since we verified token count
-			w.log.Error("CacheChatContextActivity: Cache creation failed unexpectedly",
-				zap.Error(cacheErr),
-				zap.Int("estimatedTokens", estimatedTokens),
-				zap.Int("fileCount", len(fileContents)))
-		} else {
-			// Cache created successfully!
-			w.log.Info("CacheChatContextActivity: Chat cache created successfully",
-				zap.String("cacheName", cacheOutput.CacheName),
-				zap.String("model", cacheOutput.Model),
-				zap.Int("fileCount", len(fileContents)))
-
-			return &CacheChatContextActivityResult{
-				CacheName:            cacheOutput.CacheName,
-				Model:                cacheOutput.Model,
-				CreateTime:           cacheOutput.CreateTime,
-				ExpireTime:           cacheOutput.ExpireTime,
-				CachedContextEnabled: true,
-				UsageMetadata:        cacheOutput.UsageMetadata,
-			}, nil
-		}
-	}
-
-	// If we reach here, either:
-	// 1. Content is too small (< 1024 tokens) - expected
-	// 2. Cache creation failed for other reasons - unexpected but we continue
-	// In both cases, store file content directly in Redis for fallback chat
-	fileRefs := make([]repository.FileContentRef, 0, len(fileContents))
-	for _, fc := range fileContents {
-		// Get file metadata for type information
-		kbFiles, err := w.repository.GetKnowledgeBaseFilesByFileUIDs(authCtx, []uuid.UUID{fc.FileUID})
-		if err != nil || len(kbFiles) == 0 {
-			continue
-		}
-		kbFile := kbFiles[0]
-
-		// Store actual content in Redis
-		fileRefs = append(fileRefs, repository.FileContentRef{
-			FileUID:  fc.FileUID,
-			Content:  fc.Content,
-			FileType: kbFile.FileType,
-			Filename: kbFile.Name,
-		})
-	}
-
-	w.log.Info("CacheChatContextActivity: Stored file content in Redis for uncached chat",
-		zap.Int("fileCount", len(fileRefs)),
-		zap.Int("totalBytes", func() int {
-			total := 0
-			for _, ref := range fileRefs {
-				total += len(ref.Content)
-			}
-			return total
-		}()))
-
-	return &CacheChatContextActivityResult{
-		CachedContextEnabled: false,
-		FileRefs:             fileRefs,
-		Model:                "gemini-2.5-flash", // Default model for uncached chat
-		ExpireTime:           time.Now().Add(cacheTTL),
-	}, nil
-}
-
 // ===== CONTENT PROCESSING ACTIVITIES =====
 
 // ProcessContentActivityParam defines input for ProcessContentActivity
@@ -1442,6 +1438,26 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 	// Fetch file rawFileContent from MinIO
 	rawFileContent, err := w.repository.GetFile(authCtx, param.Bucket, param.Destination)
 	if err != nil {
+		// Check if a converted file already exists (reprocessing scenario)
+		existingConverted, checkErr := w.repository.GetConvertedFileByFileUIDAndType(ctx, param.FileUID, artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_CONTENT)
+		if checkErr == nil && existingConverted != nil {
+			// Original file is missing but converted content exists - skip reprocessing
+			// This can happen during KB updates when original blob files are no longer available
+			logger.Warn("Original file not found in storage, but converted content exists - skipping reprocessing",
+				zap.String("bucket", param.Bucket),
+				zap.String("destination", param.Destination),
+				zap.String("existingConvertedUID", existingConverted.UID.String()),
+				zap.Error(err))
+			// Return success with existing content metadata
+			return &ProcessContentActivityResult{
+				OriginalType:     param.FileType,
+				ConvertedType:    param.FileType,
+				ConvertedFileUID: existingConverted.UID,
+				Content:          "(using existing converted content)",
+			}, nil
+		}
+
+		// No existing converted content - this is a real error
 		logger.Error("Failed to retrieve file from storage", zap.Error(err))
 		return nil, temporal.NewApplicationErrorWithCause(
 			fmt.Sprintf("Failed to retrieve file from storage: %s", errorsx.MessageOrErr(err)),
@@ -1716,7 +1732,7 @@ type ProcessSummaryActivityParam struct {
 	KBUID           types.KBUIDType      // Knowledge base unique identifier
 	Bucket          string               // MinIO bucket
 	Destination     string               // MinIO path
-	FileName        string               // File name
+	Filename        string               // File name
 	FileType        artifactpb.File_Type // File type
 	Metadata        *structpb.Struct     // Request metadata
 	CacheName       string               // Optional: AI cache name (used for Gemini route to reuse cached file context; empty for OpenAI route which doesn't support caching)
@@ -1780,6 +1796,25 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 		var err error
 		content, err = w.repository.GetFile(authCtx, param.Bucket, param.Destination)
 		if err != nil {
+			// Check if a summary file already exists (reprocessing scenario)
+			existingConverted, checkErr := w.repository.GetConvertedFileByFileUIDAndType(ctx, param.FileUID, artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_SUMMARY)
+			if checkErr == nil && existingConverted != nil {
+				// Original file is missing but summary exists - skip reprocessing
+				logger.Warn("Original file not found in storage, but summary exists - skipping reprocessing",
+					zap.String("bucket", param.Bucket),
+					zap.String("destination", param.Destination),
+					zap.String("existingSummaryUID", existingConverted.UID.String()),
+					zap.Error(err))
+				// Return success with existing summary metadata
+				return &ProcessSummaryActivityResult{
+					OriginalType:     param.FileType,
+					ConvertedType:    param.FileType,
+					ConvertedFileUID: existingConverted.UID,
+					Summary:          "(using existing summary)",
+				}, nil
+			}
+
+			// No existing summary - this is a real error
 			logger.Error("Failed to retrieve file from storage", zap.Error(err))
 			return nil, temporal.NewApplicationErrorWithCause(
 				fmt.Sprintf("Failed to retrieve file from storage: %s", errorsx.MessageOrErr(err)),
@@ -1857,8 +1892,8 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 
 		// Build prompt with filename context
 		summaryPrompt := gemini.GetRAGGenerateSummaryPrompt()
-		if param.FileName != "" {
-			summaryPrompt = strings.ReplaceAll(gemini.GetRAGGenerateSummaryPrompt(), "[filename]", param.FileName)
+		if param.Filename != "" {
+			summaryPrompt = strings.ReplaceAll(gemini.GetRAGGenerateSummaryPrompt(), "[filename]", param.Filename)
 		}
 
 		// Use the file type from parameter (already converted in workflow)
@@ -1892,7 +1927,7 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 				authCtx,
 				content,
 				fileType,
-				param.FileName,
+				param.Filename,
 				summaryPrompt,
 			)
 			if err != nil {
@@ -2019,67 +2054,12 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 	return result, nil
 }
 
-// ===== STORE CHAT CACHE METADATA ACTIVITY =====
-
-// StoreChatCacheMetadataActivityParam defines parameters for storing chat cache metadata in Redis
-type StoreChatCacheMetadataActivityParam struct {
-	KBUID                types.KBUIDType             // Knowledge base UID
-	FileUIDs             []types.FileUIDType         // File UIDs included in the chat cache
-	CacheName            string                      // AI cache name (empty if cache creation failed)
-	Model                string                      // Model used for caching
-	FileCount            int                         // Number of files in cache
-	CreateTime           time.Time                   // When cache was created
-	ExpireTime           time.Time                   // When cache will expire
-	TTL                  time.Duration               // Time-to-live for Redis key
-	CachedContextEnabled bool                        // Whether AI cache exists
-	FileRefs             []repository.FileContentRef // File references for uncached small files
-}
-
-// StoreChatCacheMetadataActivity stores chat cache metadata in Redis
-// This enables the Chat API to quickly lookup and use cached contexts
-// for files that are still being processed (before embeddings are ready)
-func (w *Worker) StoreChatCacheMetadataActivity(
-	ctx context.Context,
-	param *StoreChatCacheMetadataActivityParam,
-) error {
-	w.log.Info("StoreChatCacheMetadataActivity: Storing chat cache metadata in Redis",
-		zap.String("cacheName", param.CacheName),
-		zap.Int("fileCount", param.FileCount),
-		zap.Duration("ttl", param.TTL))
-
-	// Convert types.FileUIDType to uuid.UUID for repository layer
-	fileUIDs := make([]uuid.UUID, len(param.FileUIDs))
-	for i, fuid := range param.FileUIDs {
-		fileUIDs[i] = uuid.UUID(fuid)
-	}
-
-	metadata := &repository.ChatCacheMetadata{
-		CacheName:            param.CacheName,
-		Model:                param.Model,
-		FileUIDs:             fileUIDs,
-		FileCount:            param.FileCount,
-		CreateTime:           param.CreateTime,
-		ExpireTime:           param.ExpireTime,
-		CachedContextEnabled: param.CachedContextEnabled,
-		FileContents:         param.FileRefs,
-	}
-
-	kbUID := uuid.UUID(param.KBUID)
-
-	if err := w.repository.SetChatCacheMetadata(ctx, kbUID, fileUIDs, metadata, param.TTL); err != nil {
-		w.log.Error("StoreChatCacheMetadataActivity: Failed to store metadata",
-			zap.Error(err),
-			zap.String("cacheName", param.CacheName))
-		return err
-	}
-
-	w.log.Info("StoreChatCacheMetadataActivity: Successfully stored chat cache metadata",
-		zap.String("cacheName", param.CacheName),
-		zap.String("kbUID", kbUID.String()),
-		zap.Int("fileCount", param.FileCount))
-
-	return nil
-}
+// DEPRECATED: SavePDFAsConvertedFileActivity
+// This activity has been merged into StandardizeFileTypeActivity for better efficiency:
+// - PDFs (converted or original) are now saved directly to converted-file folder during standardization
+// - No intermediate tmp/ storage needed for PDFs
+// - This refactoring fixes the dual-processing bug where original blobs were being deleted
+//   before rollback KB could process them.
 
 // DeleteTemporaryConvertedFileActivityParam defines the parameters for DeleteTemporaryConvertedFileActivity
 type DeleteTemporaryConvertedFileActivityParam struct {
@@ -2090,19 +2070,20 @@ type DeleteTemporaryConvertedFileActivityParam struct {
 // DeleteTemporaryConvertedFileActivity deletes a temporary format-converted file from MinIO
 // after it has been used for AI caching and markdown conversion.
 //
-// Purpose: When processing files like DOCX, GIF, or MKV, we first convert them to AI-friendly
-// formats (DOCX→PDF, GIF→PNG, MKV→MP4) using the indexing-convert-file-type pipeline.
-// These converted files are temporarily stored in MinIO (e.g., tmp/fileUID/uuid.pdf) and used
+// Purpose: When processing files like GIF or MKV, we first convert them to AI-friendly
+// formats (GIF→PNG, MKV→MP4) using the indexing-convert-file-type pipeline.
+// These converted files are temporarily stored in MinIO (e.g., tmp/fileUID/uuid.png) and used
 // for AI caching and markdown conversion. Once processing is complete, these intermediate files
 // are no longer needed and should be cleaned up to avoid storage waste.
 //
-// Lifecycle:
-//  1. Original file: kb-123/file-456/example.docx (kept permanently)
-//  2. Temporary converted: tmp/file-456/abc-123.pdf (deleted by this activity)
-//  3. Final markdown: kb-123/file-456/converted_example.md (kept permanently)
+// Note: PDFs are now handled directly by StandardizeFileTypeActivity and saved to converted-file folder,
+// so they don't use this cleanup activity.
 //
-// Note: This is different from DeleteConvertedFileActivity, which deletes the final markdown
-// output from both DB and MinIO when a file is removed from the knowledge base.
+// TODO: Standardize image, video and audio files to store in converted-file folder too, to deprecate this activity.
+//
+// Lifecycle:
+//  1. Original file: kb-123/file-456/example.gif (kept permanently)
+//  2. Temporary converted: tmp/file-456/abc-123.png (deleted by this activity)
 func (w *Worker) DeleteTemporaryConvertedFileActivity(ctx context.Context, param *DeleteTemporaryConvertedFileActivityParam) error {
 	if param.Destination == "" {
 		w.log.Info("DeleteTemporaryConvertedFileActivity: No destination provided, skipping deletion")
@@ -2205,7 +2186,7 @@ func decodeBlobURL(blobURL string) (string, error) {
 type FindTargetFileByNameActivityParam struct {
 	TargetKBUID    types.KBUIDType // Target KB UID to search in
 	TargetOwnerUID string          // Target KB owner UID
-	FileName       string          // File name to search for
+	Filename       string          // File name to search for
 }
 
 // FindTargetFileByNameActivityResult contains the found file information
@@ -2222,7 +2203,7 @@ const findTargetFileByNameActivityError = "findTargetFileByNameActivityError"
 func (w *Worker) FindTargetFileByNameActivity(ctx context.Context, param *FindTargetFileByNameActivityParam) (*FindTargetFileByNameActivityResult, error) {
 	w.log.Info("FindTargetFileByNameActivity: Searching for file",
 		zap.String("targetKBUID", param.TargetKBUID.String()),
-		zap.String("fileName", param.FileName))
+		zap.String("filename", param.Filename))
 
 	// List all files in the target KB and filter by name
 	// Note: We don't paginate since dual-processing typically involves a small number of files
@@ -2245,7 +2226,7 @@ func (w *Worker) FindTargetFileByNameActivity(ctx context.Context, param *FindTa
 
 	// Find the file with matching name
 	for _, file := range files.Files {
-		if file.Name == param.FileName {
+		if file.Filename == param.Filename {
 			result.Found = true
 			result.FileUID = file.UID
 			w.log.Info("FindTargetFileByNameActivity: File found",

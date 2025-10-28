@@ -108,6 +108,18 @@ func (w *Worker) DeleteOriginalFileActivity(ctx context.Context, param *DeleteOr
 		)
 	}
 
+	// CRITICAL: Also delete the blob object record from the object table
+	// This prevents orphaned records when blob files are deleted from MinIO
+	// The destination format is "ns-{namespaceUID}/obj-{objectUID}"
+	// We need to delete the object record to keep DB and MinIO in sync
+	if err := w.repository.DeleteObjectByDestination(ctx, file.Destination); err != nil {
+		// Log but don't fail - this is cleanup, and the object might already be deleted
+		w.log.Warn("DeleteOriginalFileActivity: Failed to delete object record (may not exist)",
+			zap.String("fileUID", param.FileUID.String()),
+			zap.String("destination", file.Destination),
+			zap.Error(err))
+	}
+
 	return nil
 }
 
@@ -583,8 +595,8 @@ func (w *Worker) GetInProgressFileCountActivity(ctx context.Context, param *GetI
 	w.log.Info("GetInProgressFileCountActivity: Checking for in-progress files and workflows",
 		zap.String("kbUID", param.KBUID.String()))
 
-	// STEP 1: Count files in active processing states (PROCESSING, CONVERTING, CHUNKING, EMBEDDING)
-	// Do NOT count NOTSTARTED or WAITING files as they haven't begun processing yet
+	// STEP 1: Count files in active processing states (PROCESSING, CHUNKING, EMBEDDING)
+	// Do NOT count NOTSTARTED files as they haven't begun processing yet
 	//
 	// CRITICAL: We must count soft-deleted files too!
 	// When KB is deleted, files are CASCADE soft-deleted, but their workflows may still be running.

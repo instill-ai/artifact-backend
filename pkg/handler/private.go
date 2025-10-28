@@ -12,7 +12,8 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	"github.com/instill-ai/artifact-backend/config"
+	fieldmask_utils "github.com/mennanov/fieldmask-utils"
+
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/types"
 	"github.com/instill-ai/x/checkfield"
@@ -20,9 +21,7 @@ import (
 	artifact "github.com/instill-ai/artifact-backend/pkg/service"
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	constantx "github.com/instill-ai/x/constant"
-	errorsx "github.com/instill-ai/x/errors"
 	logx "github.com/instill-ai/x/log"
-	fieldmask_utils "github.com/mennanov/fieldmask-utils"
 )
 
 // System field definitions for field mask validation
@@ -47,53 +46,6 @@ func NewPrivateHandler(s artifact.Service, log *zap.Logger) *PrivateHandler {
 		service: s,
 		logger:  log,
 	}
-}
-
-// ListRepositoryTagsAdmin returns the versions of a distribution registry
-// repository (admin only).
-func (h *PrivateHandler) ListRepositoryTagsAdmin(ctx context.Context, req *artifactpb.ListRepositoryTagsAdminRequest) (*artifactpb.ListRepositoryTagsAdminResponse, error) {
-
-	resp, err := h.service.ListRepositoryTags(ctx, (*artifactpb.ListRepositoryTagsRequest)(req))
-	if err != nil {
-		return nil, err
-	}
-
-	h.logger.Info("ListRepositoryTagsAdmin")
-	return (*artifactpb.ListRepositoryTagsAdminResponse)(resp), nil
-}
-
-// CreateRepositoryTagAdmin registers the information of a repository tag after it
-// has been pushed to the registry (admin only).
-func (h *PrivateHandler) CreateRepositoryTagAdmin(ctx context.Context, req *artifactpb.CreateRepositoryTagAdminRequest) (*artifactpb.CreateRepositoryTagAdminResponse, error) {
-	resp, err := h.service.CreateRepositoryTag(ctx, (*artifactpb.CreateRepositoryTagRequest)(req))
-	if err != nil {
-		return nil, err
-	}
-
-	h.logger.Info("CreateRepositoryTagAdmin")
-	return (*artifactpb.CreateRepositoryTagAdminResponse)(resp), nil
-}
-
-// GetRepositoryTagAdmin retrieve the information of a repository tag (admin only).
-func (h *PrivateHandler) GetRepositoryTagAdmin(ctx context.Context, req *artifactpb.GetRepositoryTagAdminRequest) (*artifactpb.GetRepositoryTagAdminResponse, error) {
-	resp, err := h.service.GetRepositoryTag(ctx, (*artifactpb.GetRepositoryTagRequest)(req))
-	if err != nil {
-		return nil, err
-	}
-
-	h.logger.Info("GetRepositoryTagAdmin")
-	return (*artifactpb.GetRepositoryTagAdminResponse)(resp), nil
-}
-
-// DeleteRepositoryTagAdmin deletes the information of a repository tag in registry (admin only).
-func (h *PrivateHandler) DeleteRepositoryTagAdmin(ctx context.Context, req *artifactpb.DeleteRepositoryTagAdminRequest) (*artifactpb.DeleteRepositoryTagAdminResponse, error) {
-	resp, err := h.service.DeleteRepositoryTag(ctx, (*artifactpb.DeleteRepositoryTagRequest)(req))
-	if err != nil {
-		return nil, err
-	}
-
-	h.logger.Info("DeleteRepositoryTagAdmin")
-	return (*artifactpb.DeleteRepositoryTagAdminResponse)(resp), nil
 }
 
 // GetObjectURLAdmin retrieves the information of an object URL (admin only).
@@ -180,106 +132,29 @@ func (h *PrivateHandler) UpdateObjectAdmin(ctx context.Context, req *artifactpb.
 	}, nil
 }
 
-// GetFileAsMarkdownAdmin returns the Markdown representation of a file (admin only).
-func (h *PrivateHandler) GetFileAsMarkdownAdmin(ctx context.Context, req *artifactpb.GetFileAsMarkdownAdminRequest) (*artifactpb.GetFileAsMarkdownAdminResponse, error) {
-	fileUID := uuid.FromStringOrNil(req.GetFileUid())
-	source, err := h.service.Repository().GetSourceByFileUID(ctx, fileUID)
-	if err != nil {
-		return nil, fmt.Errorf("fetching truth source: %w", err)
-	}
+// GetFileAsMarkdownAdmin and GetChatFileAdmin have been removed.
+// Use GetFile with VIEW_CONTENT instead to get the converted markdown via pre-signed URL.
 
-	// get the source file sourceContent from minIO using dest of source
-	sourceContent, err := h.service.Repository().GetFile(ctx, config.Config.Minio.BucketName, source.Dest)
-	if err != nil {
-		return nil, fmt.Errorf("getting source file from blob storage: %w", err)
-	}
-
-	return &artifactpb.GetFileAsMarkdownAdminResponse{Markdown: string(sourceContent)}, nil
-}
-
-// GetChatFileAdmin returns the Markdown representation of a file (admin only, deprecated).
-// This method is deprecated and GetFileAsMarkdownAdmin should be used instead.
-// TODO: As soon as clients update to GetFileAsMarkdownAdmin, this endpoint should
-// be be removed.
-func (h *PrivateHandler) GetChatFileAdmin(ctx context.Context, req *artifactpb.GetChatFileAdminRequest) (*artifactpb.GetChatFileAdminResponse, error) {
-	// use catalog id and file id to get kbFile
-	fileID := req.FileId
-	if fileID == "" {
-		h.logger.Error("file id is empty", zap.String("file_id", fileID))
-		return nil, fmt.Errorf("need either file uid or file id is")
-	}
-	ns, err := h.service.GetNamespaceByNsID(ctx, req.NamespaceId)
-	if err != nil {
-		h.logger.Error("failed to get namespace by ns id", zap.Error(err))
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("failed to get namespace by ns id: %w", err),
-			"Unable to access the specified namespace. Please check the namespace ID and try again.",
-		)
-	}
-	kb, err := h.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.CatalogId)
-	if err != nil {
-		h.logger.Error("failed to get knowledge base by owner and kb id", zap.Error(err))
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("failed to get catalog by namespace and catalog id: %w", err),
-			"Unable to access the specified catalog. Please check the catalog ID and try again.",
-		)
-	}
-
-	kbFile, err := h.service.Repository().GetKnowledgebaseFileByKBUIDAndFileID(ctx, kb.UID, fileID)
-	if err != nil {
-		h.logger.Error("failed to get file by file id", zap.Error(err))
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("failed to get file by file id: %w", err),
-			"File not found. Please check the file ID and try again.",
-		)
-	}
-
-	// get source file
-	source, err := h.service.Repository().GetSourceByFileUID(ctx, kbFile.UID)
-	if err != nil {
-		h.logger.Error("failed to get truth source by file uid", zap.Error(err))
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("failed to get truth source by file uid: %w", err),
-			"Unable to retrieve file source. Please try again.",
-		)
-	}
-
-	// get the source file sourceContent from minIO using dest of source
-	sourceContent, err := h.service.Repository().GetFile(ctx, config.Config.Minio.BucketName, source.Dest)
-	if err != nil {
-		h.logger.Error("failed to get file from minio", zap.Error(err))
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("failed to get file from minio: %w", err),
-			"Unable to retrieve file content. Please try again.",
-		)
-	}
-
-	// Add the originalData field to the response
-	return &artifactpb.GetChatFileAdminResponse{
-		Markdown: sourceContent,
-	}, nil
-}
-
-// DeleteCatalogFileAdmin deletes a file from a catalog (admin only).
+// DeleteFileAdmin deletes a file from a catalog (admin only).
 // This is a private gRPC-only method for internal operations like integration tests.
-func (h *PrivateHandler) DeleteCatalogFileAdmin(ctx context.Context, req *artifactpb.DeleteCatalogFileAdminRequest) (*artifactpb.DeleteCatalogFileAdminResponse, error) {
-	h.logger.Info("DeleteCatalogFileAdmin CALLED",
-		zap.String("file_uid_from_request", req.GetFileUid()))
+func (h *PrivateHandler) DeleteFileAdmin(ctx context.Context, req *artifactpb.DeleteFileAdminRequest) (*artifactpb.DeleteFileAdminResponse, error) {
+	h.logger.Info("DeleteFileAdmin CALLED",
+		zap.String("file_id_from_request", req.GetFileId()))
 
-	// For the admin endpoint, we only receive file_uid, so we need to look up the namespace and catalog
+	// For the admin endpoint, we only receive file_id, so we need to look up the namespace and catalog
 	// from the file's KB to construct the full request for the public handler
-	fileUID := uuid.FromStringOrNil(req.GetFileUid())
+	fileUID := uuid.FromStringOrNil(req.GetFileId())
 
 	files, err := h.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{types.FileUIDType(fileUID)})
 	if err != nil || len(files) == 0 {
-		h.logger.Error("DeleteCatalogFileAdmin: failed to get file", zap.Error(err))
+		h.logger.Error("DeleteFileAdmin: failed to get file", zap.Error(err))
 		return nil, fmt.Errorf("file not found: %w", err)
 	}
 
 	file := files[0]
 	kb, err := h.service.Repository().GetKnowledgeBaseByUID(ctx, file.KBUID)
 	if err != nil {
-		h.logger.Error("DeleteCatalogFileAdmin: failed to get KB", zap.Error(err))
+		h.logger.Error("DeleteFileAdmin: failed to get KB", zap.Error(err))
 		return nil, fmt.Errorf("catalog not found: %w", err)
 	}
 
@@ -298,7 +173,7 @@ func (h *PrivateHandler) DeleteCatalogFileAdmin(ctx context.Context, req *artifa
 	md.Set(strings.ToLower(constantx.HeaderUserUIDKey), kb.Owner)
 	ctx = metadata.NewIncomingContext(ctx, md)
 
-	h.logger.Info("DeleteCatalogFileAdmin: Injected metadata",
+	h.logger.Info("DeleteFileAdmin: Injected metadata",
 		zap.String("auth_type", "user"),
 		zap.String("user_uid", kb.Owner))
 
@@ -307,28 +182,28 @@ func (h *PrivateHandler) DeleteCatalogFileAdmin(ctx context.Context, req *artifa
 		service: h.service,
 	}
 
-	// Delegate to the public handler's implementation which includes:
+	// Delegate to the public handler's DeleteFile implementation which includes:
 	// - ACL checks (with staging/rollback KB bypass)
 	// - Soft-deletion of file
 	// - Dual deletion to staging/rollback KB if applicable
 	// - Cleanup workflow triggering
-	publicReq := &artifactpb.DeleteCatalogFileRequest{
+	publicReq := &artifactpb.DeleteFileRequest{
 		NamespaceId: namespaceID,
 		CatalogId:   kb.KBID,
-		FileUid:     req.FileUid,
+		FileId:      req.FileId,
 	}
 
-	resp, err := publicHandler.DeleteCatalogFile(ctx, publicReq)
+	resp, err := publicHandler.DeleteFile(ctx, publicReq)
 	if err != nil {
-		h.logger.Error("DeleteCatalogFileAdmin", zap.Error(err))
+		h.logger.Error("DeleteFileAdmin", zap.Error(err))
 		return nil, err
 	}
 
-	h.logger.Info("DeleteCatalogFileAdmin: file deleted successfully",
-		zap.String("file_uid", req.FileUid))
+	h.logger.Info("DeleteFileAdmin: file deleted successfully",
+		zap.String("file_id", req.FileId))
 
-	return &artifactpb.DeleteCatalogFileAdminResponse{
-		FileUid: resp.FileUid,
+	return &artifactpb.DeleteFileAdminResponse{
+		FileId: resp.FileId,
 	}, nil
 }
 
@@ -340,17 +215,17 @@ func (h *PrivateHandler) RollbackAdmin(ctx context.Context, req *artifactpb.Roll
 		return nil, status.Errorf(codes.InvalidArgument, "invalid resource name format: %s", req.Name)
 	}
 
-	userID := parts[1]
+	namespaceID := parts[1]
 	catalogID := parts[3]
 
 	// Parse owner UID
-	ownerUID, err := parseOwnerUID(userID)
+	ownerUID, err := parseOwnerUID(namespaceID)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid user ID: %v", err)
 	}
 
-	// Call service
-	resp, err := h.service.RollbackAdmin(ctx, ownerUID, catalogID)
+	// Call service with namespace ID for proper resource name construction
+	resp, err := h.service.RollbackAdmin(ctx, ownerUID, namespaceID, catalogID)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to rollback: %v", err)
 	}

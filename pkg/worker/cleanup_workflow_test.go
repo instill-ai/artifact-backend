@@ -108,6 +108,7 @@ func TestCleanupFileWorkflow_Success(t *testing.T) {
 		{UID: fileUID, Destination: "kb/test-file.pdf"},
 	}, nil)
 	mockRepository.DeleteFileMock.Return(nil)
+	mockRepository.DeleteObjectByDestinationMock.Return(nil)
 	mockRepository.ListConvertedFilesByFileUIDMock.Return([]string{}, nil)
 
 	// Mock for DeleteConvertedFileActivity

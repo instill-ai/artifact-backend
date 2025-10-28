@@ -12,6 +12,7 @@ import (
 
 	"go.uber.org/zap"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
@@ -61,15 +62,15 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 		return nil, fmt.Errorf(ErrorCreateKnowledgeBaseMsg, err)
 	}
 
-	// check name if it is empty
-	if req.Name == "" {
-		req.Name = generateID()
+	// check id if it is empty
+	if req.Id == "" {
+		req.Id = generateID()
 	}
-	nameOk := isValidName(req.Name)
+	nameOk := isValidName(req.Id)
 	if !nameOk {
-		msg := "the catalog name should be lowercase without any space or special character besides the hyphen, " +
-			"it can not start with number or hyphen, and should be less than 32 characters. name: %v. err: %w"
-		return nil, fmt.Errorf(msg, req.Name, errorsx.ErrInvalidArgument)
+		msg := "the catalog id should be lowercase without any space or special character besides the hyphen, " +
+			"it can not start with number or hyphen, and should be less than 32 characters. id: %v. err: %w"
+		return nil, fmt.Errorf(msg, req.Id, errorsx.ErrInvalidArgument)
 	}
 
 	creatorUUID, err := uuid.FromString(authUID)
@@ -136,9 +137,7 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 	dbData, err := ph.service.Repository().CreateKnowledgeBase(
 		ctx,
 		repository.KnowledgeBaseModel{
-			Name: req.Name,
-			// make name as kbID
-			KBID:        req.Name,
+			KBID:        req.Id,
 			Description: req.Description,
 			Tags:        req.Tags,
 			Owner:       ns.NsUID.String(),
@@ -155,14 +154,14 @@ func (ph *PublicHandler) CreateCatalog(ctx context.Context, req *artifactpb.Crea
 	activeCollectionUID := dbData.ActiveCollectionUID.String()
 
 	catalog := &artifactpb.Catalog{
-		Name:                dbData.Name,
-		CatalogUid:          dbData.UID.String(),
-		CatalogId:           dbData.KBID,
+		Name:                fmt.Sprintf("namespaces/%s/catalogs/%s", req.GetNamespaceId(), dbData.KBID),
+		Uid:                 dbData.UID.String(),
+		Id:                  dbData.KBID,
 		Description:         dbData.Description,
 		Tags:                dbData.Tags,
 		OwnerName:           dbData.Owner,
-		CreateTime:          dbData.CreateTime.String(),
-		UpdateTime:          dbData.UpdateTime.String(),
+		CreateTime:          timestamppb.New(*dbData.CreateTime),
+		UpdateTime:          timestamppb.New(*dbData.UpdateTime),
 		DownstreamApps:      []string{},
 		TotalFiles:          0,
 		TotalTokens:         0,
@@ -247,13 +246,13 @@ func (ph *PublicHandler) ListCatalogs(ctx context.Context, req *artifactpb.ListC
 		activeCollectionUID := kb.ActiveCollectionUID.String()
 
 		kbs[i] = &artifactpb.Catalog{
-			CatalogUid:          kb.UID.String(),
-			Name:                kb.Name,
-			CatalogId:           kb.KBID,
+			Uid:                 kb.UID.String(),
+			Name:                fmt.Sprintf("namespaces/%s/catalogs/%s", req.GetNamespaceId(), kb.KBID),
+			Id:                  kb.KBID,
 			Description:         kb.Description,
 			Tags:                kb.Tags,
-			CreateTime:          kb.CreateTime.String(),
-			UpdateTime:          kb.UpdateTime.String(),
+			CreateTime:          timestamppb.New(*kb.CreateTime),
+			UpdateTime:          timestamppb.New(*kb.UpdateTime),
 			OwnerName:           kb.Owner,
 			DownstreamApps:      []string{},
 			TotalFiles:          uint32(fileCounts[kb.UID]),
@@ -329,8 +328,8 @@ func (ph *PublicHandler) UpdateCatalog(ctx context.Context, req *artifactpb.Upda
 		req.GetCatalogId(),
 		ns.NsUID.String(),
 		repository.KnowledgeBaseModel{
-			Description: req.GetDescription(),
-			Tags:        req.GetTags(),
+			Description: req.GetCatalog().GetDescription(),
+			Tags:        req.GetCatalog().GetTags(),
 		},
 	)
 	if err != nil {
@@ -356,12 +355,13 @@ func (ph *PublicHandler) UpdateCatalog(ctx context.Context, req *artifactpb.Upda
 
 	// populate response
 	catalog := &artifactpb.Catalog{
-		Name:           kb.Name,
-		CatalogId:      kb.KBID,
+		Name:           fmt.Sprintf("namespaces/%s/catalogs/%s", req.GetNamespaceId(), kb.KBID),
+		Uid:            kb.UID.String(),
+		Id:             kb.KBID,
 		Description:    kb.Description,
 		Tags:           kb.Tags,
-		CreateTime:     kb.CreateTime.String(),
-		UpdateTime:     kb.UpdateTime.String(),
+		CreateTime:     timestamppb.New(*kb.CreateTime),
+		UpdateTime:     timestamppb.New(*kb.UpdateTime),
 		OwnerName:      kb.Owner,
 		DownstreamApps: []string{},
 		TotalFiles:     uint32(fileCounts[kb.UID]),
@@ -510,12 +510,13 @@ func (ph *PublicHandler) DeleteCatalog(ctx context.Context, req *artifactpb.Dele
 
 	return &artifactpb.DeleteCatalogResponse{
 		Catalog: &artifactpb.Catalog{
-			Name:           deletedKb.Name,
-			CatalogId:      deletedKb.KBID,
+			Name:           fmt.Sprintf("namespaces/%s/catalogs/%s", req.GetNamespaceId(), deletedKb.KBID),
+			Uid:            deletedKb.UID.String(),
+			Id:             deletedKb.KBID,
 			Description:    deletedKb.Description,
 			Tags:           deletedKb.Tags,
-			CreateTime:     deletedKb.CreateTime.String(),
-			UpdateTime:     deletedKb.UpdateTime.String(),
+			CreateTime:     timestamppb.New(*deletedKb.CreateTime),
+			UpdateTime:     timestamppb.New(*deletedKb.UpdateTime),
 			OwnerName:      deletedKb.Owner,
 			DownstreamApps: []string{},
 			TotalFiles:     0,
@@ -526,6 +527,37 @@ func (ph *PublicHandler) DeleteCatalog(ctx context.Context, req *artifactpb.Dele
 				Dimensionality: systemConfig.RAG.Embedding.Dimensionality,
 			},
 		},
+	}, nil
+}
+
+// GetCatalog returns the details of a specific catalog
+func (ph *PublicHandler) GetCatalog(ctx context.Context, req *artifactpb.GetCatalogRequest) (*artifactpb.GetCatalogResponse, error) {
+	// Get namespace
+	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
+	if err != nil {
+		return nil, fmt.Errorf("getting namespace: %w", err)
+	}
+
+	// Get catalog from repository
+	kb, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.GetCatalogId())
+	if err != nil {
+		return nil, fmt.Errorf("fetching catalog: %w", err)
+	}
+
+	// Check permissions
+	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kb.UID, "reader")
+	switch {
+	case err != nil:
+		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
+	case !granted:
+		return nil, fmt.Errorf("%w: no permission over catalog", errorsx.ErrUnauthorized)
+	}
+
+	// Convert to protobuf using the new converter
+	pbCatalog := convertKBToCatalogPB(kb, ns)
+
+	return &artifactpb.GetCatalogResponse{
+		Catalog: pbCatalog,
 	}, nil
 }
 

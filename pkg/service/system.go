@@ -119,17 +119,26 @@ func (s *service) UpdateSystemAdmin(ctx context.Context, req *artifactpb.UpdateS
 		return nil, fmt.Errorf("system id is required")
 	}
 
-	// Convert structpb.Struct to map[string]interface{}
-	config := req.System.Config.AsMap()
+	// Build update map based on field mask
+	updateFields := make(map[string]interface{})
 
-	// Get description (default to empty string if not provided)
-	description := ""
-	if req.System.Description != nil {
-		description = *req.System.Description
+	for _, path := range req.UpdateMask.GetPaths() {
+		switch path {
+		case "config":
+			// Convert structpb.Struct to map[string]interface{}
+			updateFields["config"] = req.System.Config.AsMap()
+		case "description":
+			// Get description (default to empty string if not provided)
+			description := ""
+			if req.System.Description != nil {
+				description = *req.System.Description
+			}
+			updateFields["description"] = description
+		}
 	}
 
-	// Update system in repository
-	err := s.repository.UpdateSystem(ctx, req.System.Id, config, description)
+	// Update system in repository using selective update
+	err := s.repository.UpdateSystemByUpdateMap(ctx, req.System.Id, updateFields)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update system: %w", err)
 	}
@@ -210,10 +219,8 @@ func (s *service) DeleteSystemAdmin(ctx context.Context, id string) (*artifactpb
 	// Delete system from repository
 	err := s.repository.DeleteSystem(ctx, id)
 	if err != nil {
-		return &artifactpb.DeleteSystemAdminResponse{
-			Success: false,
-			Message: fmt.Sprintf("Failed to delete system: %v", err),
-		}, nil
+		// Return error instead of Success: false to properly propagate protection errors
+		return nil, fmt.Errorf("failed to delete system: %w", err)
 	}
 
 	resp := &artifactpb.DeleteSystemAdminResponse{

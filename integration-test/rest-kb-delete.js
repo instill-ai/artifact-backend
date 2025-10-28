@@ -84,7 +84,7 @@ export function setup() {
       const catalogs = Array.isArray(listResp.json().catalogs) ? listResp.json().catalogs : [];
       let cleanedCount = 0;
       for (const catalog of catalogs) {
-        const catId = catalog.catalogId || catalog.catalog_id;
+        const catId = catalog.id;
         if (catId && catId.match(/test-[a-z0-9]+-cleanup-/)) {
           const delResp = http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${resp.json().user.id}/catalogs/${catId}`, null, header);
           if (delResp.status === 200 || delResp.status === 204) {
@@ -127,7 +127,7 @@ export function teardown(data) {
 
       for (const catalog of catalogs) {
         // API returns catalogId (camelCase), not catalog_id
-        const catId = catalog.catalogId || catalog.catalog_id;
+        const catId = catalog.id;
         if (catId && catId.startsWith(data.dbIDPrefix)) {
           http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catId}`, null, data.header);
           console.log(`Teardown: Deleted catalog ${catId}`);
@@ -150,7 +150,7 @@ export function CheckKnowledgeBaseDeletion(data) {
       "POST",
       `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`,
       JSON.stringify({
-        name: catalogName,
+        id: catalogName,
         description: "Catalog deletion cleanup test",
         tags: ["test", "cleanup"]
       }),
@@ -159,8 +159,8 @@ export function CheckKnowledgeBaseDeletion(data) {
 
     let catalog;
     try { catalog = createRes.json().catalog; } catch (e) { catalog = {}; }
-    const catalogId = catalog ? catalog.catalogId : null;
-    const catalogUid = catalog ? catalog.catalogUid : null;
+    const catalogId = catalog ? catalog.id : null;
+    const catalogUid = catalog ? catalog.uid : null;
 
     check(createRes, {
       "Cleanup: Catalog created": (r) => r.status === 200 && catalogId && catalogUid,
@@ -182,11 +182,11 @@ export function CheckKnowledgeBaseDeletion(data) {
     // - Chunking step (creates chunk blobs in MinIO)
     // - Embedding step (creates vectors in Milvus)
     // This provides comprehensive coverage of cleanup logic
-    const fileName = `${data.dbIDPrefix}cleanup-test.pdf`;
+    const filename = `${data.dbIDPrefix}cleanup-test.pdf`;
     const uploadRes = helper.uploadFileWithRetry(
       `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
       {
-        name: fileName,
+        filename: filename,
         type: "TYPE_PDF",
         content: constant.samplePdf
       },
@@ -198,13 +198,13 @@ export function CheckKnowledgeBaseDeletion(data) {
     let fileUid = null;
     if (uploadRes) {
       try { uploadedFile = uploadRes.json().file; } catch (e) { uploadedFile = {}; }
-      fileUid = uploadedFile ? (uploadedFile.fileUid || uploadedFile.file_uid) : null;
+      fileUid = uploadedFile ? uploadedFile.uid : null;
     }
 
     check(uploadRes, {
       "Cleanup: File uploaded": (r) => r && r.status === 200 && fileUid,
     });
-    console.log(`✓ File uploaded: ${fileName} (UID: ${fileUid})`);
+    console.log(`✓ File uploaded: ${filename} (UID: ${fileUid})`);
 
     if (!fileUid) {
       console.log("✗ Failed to upload file, cleaning up and aborting");
@@ -214,33 +214,27 @@ export function CheckKnowledgeBaseDeletion(data) {
 
     // Step 3: Wait for file processing to complete
     // Auto-trigger: Processing starts automatically on upload (no manual trigger needed)
-    console.log("Step 3: Waiting for file processing to complete...");
+    console.log("Step 3: Waiting for file processing to complete using robust helper...");
 
-    // Poll for completion (300s timeout for PDF processing)
-    // We need the file to be fully processed to create all intermediate resources
-    let processingCompleted = false;
-    for (let i = 0; i < 300; i++) {
-      sleep(1);
-      const statusRes = http.request(
-        "GET",
-        `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${fileUid}`,
-        null,
-        data.header
-      );
+    // Wait for file processing using robust helper function
+    const result = helper.waitForFileProcessingComplete(
+      data.expectedOwner.id,
+      catalogId,
+      fileUid,
+      data.header,
+      300, // Max 300 seconds for PDF processing
+      60   // Fast-fail after 60s if stuck in NOTSTARTED
+    );
 
-      try {
-        const body = statusRes.json();
-        const status = body.file ? (body.file.processStatus || body.file.process_status) : "";
-        if (status === "FILE_PROCESS_STATUS_COMPLETED") {
-          processingCompleted = true;
-          break;
-        } else if (status === "FILE_PROCESS_STATUS_FAILED") {
-          const errorMsg = body.file && body.file.processOutcome ? body.file.processOutcome : "Unknown error";
-          check(false, { [`Cleanup: Processing failed - ${errorMsg}`]: () => false });
-          http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
-          return;
-        }
-      } catch (e) { /* continue polling */ }
+    const processingCompleted = result.completed && result.status === "COMPLETED";
+
+    if (result.status === "FAILED") {
+      const errorMsg = result.error || "Unknown error";
+      check(false, { [`Cleanup: Processing failed - ${errorMsg}`]: () => false });
+      http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`, null, data.header);
+      return;
+    } else if (!processingCompleted) {
+      console.log(`Step 3: File processing did not complete. Status: ${result.status}`);
     }
 
     check({ completed: processingCompleted }, {
@@ -325,10 +319,10 @@ export function CheckKnowledgeBaseDeletion(data) {
 
     let dbRecordsAfterDelete = { converted: 0, chunks: 0 };
     try {
-      const convertedResults = constant.db.query('SELECT uid FROM converted_file WHERE file_uid = $1', fileUid);
+      const convertedResults = helper.safeQuery('SELECT uid FROM converted_file WHERE file_uid = $1', fileUid);
       dbRecordsAfterDelete.converted = convertedResults ? convertedResults.length : 0;
 
-      const chunksResults = constant.db.query('SELECT uid FROM text_chunk WHERE file_uid = $1', fileUid);
+      const chunksResults = helper.safeQuery('SELECT uid FROM text_chunk WHERE file_uid = $1', fileUid);
       dbRecordsAfterDelete.chunks = chunksResults ? chunksResults.length : 0;
     } catch (e) {
       console.error(`Failed to query database records after deletion: ${e}`);

@@ -18,7 +18,7 @@ import (
 // FileContentRef stores a small file's content directly in Redis
 // Used for small files that couldn't be cached by AI client (< 1024 tokens ≈ 3-4KB)
 // Since these files are small, storing content in Redis is more efficient than
-// fetching from MinIO again during chat operations
+// fetching from MinIO again during cache retrieval operations
 type FileContentRef struct {
 	FileUID  types.FileUIDType `json:"file_uid"`  // File unique identifier
 	Content  []byte            `json:"content"`   // Actual file content (small, typically < 4KB)
@@ -26,12 +26,12 @@ type FileContentRef struct {
 	Filename string            `json:"filename"`  // Original filename
 }
 
-// ChatCacheMetadata represents the metadata stored in Redis for chat caches
+// CacheMetadata represents the metadata stored in Redis for cache operations
 // This is ephemeral data with TTL matching the AI cached context expiration
 // Supports two modes:
 // 1. Cached mode: CachedContextEnabled=true, CacheName set, FileContents empty (large files, cached context exists)
 // 2. Uncached mode: CachedContextEnabled=false, CacheName empty, FileContents set (small files, cached context does not exist)
-type ChatCacheMetadata struct {
+type CacheMetadata struct {
 	CacheName            string              `json:"cache_name,omitempty"`    // AI cache name (empty if cache creation failed)
 	Model                string              `json:"model"`                   // Model used (e.g., "gemini-1.5-pro-002")
 	FileUIDs             []types.FileUIDType `json:"file_uids"`               // File UIDs included in this cache
@@ -42,38 +42,38 @@ type ChatCacheMetadata struct {
 	FileContents         []FileContentRef    `json:"file_contents,omitempty"` // File references for uncached small files
 }
 
-// ChatCache interface defines operations for ephemeral chat cache metadata
-type ChatCache interface {
-	// SetChatCacheMetadata stores chat cache metadata in Redis with TTL
-	SetChatCacheMetadata(ctx context.Context, kbUID types.KBUIDType, fileUIDs []types.FileUIDType, metadata *ChatCacheMetadata, ttl time.Duration) error
+// Cache interface defines operations for ephemeral cache metadata
+type Cache interface {
+	// SetCacheMetadata stores cache metadata in Redis with TTL
+	SetCacheMetadata(ctx context.Context, kbUID types.KBUIDType, fileUIDs []types.FileUIDType, metadata *CacheMetadata, ttl time.Duration) error
 
-	// GetChatCacheMetadata retrieves chat cache metadata from Redis
+	// GetCacheMetadata retrieves cache metadata from Redis
 	// Returns nil if cache not found or expired
-	GetChatCacheMetadata(ctx context.Context, kbUID types.KBUIDType, fileUIDs []types.FileUIDType) (*ChatCacheMetadata, error)
+	GetCacheMetadata(ctx context.Context, kbUID types.KBUIDType, fileUIDs []types.FileUIDType) (*CacheMetadata, error)
 
-	// DeleteChatCacheMetadata removes chat cache metadata from Redis
+	// DeleteCacheMetadata removes cache metadata from Redis
 	// Used for manual cleanup (e.g., when cache is explicitly invalidated)
-	DeleteChatCacheMetadata(ctx context.Context, kbUID types.KBUIDType, fileUIDs []types.FileUIDType) error
+	DeleteCacheMetadata(ctx context.Context, kbUID types.KBUIDType, fileUIDs []types.FileUIDType) error
 }
 
-// chatCacheRepository implements ChatCache interface using Redis
-type chatCacheRepository struct {
+// cacheRepository implements Cache interface using Redis
+type cacheRepository struct {
 	redisClient *redis.Client
 }
 
-// NewChatCacheRepository creates a new chat cache repository
-func NewChatCacheRepository(redisClient *redis.Client) ChatCache {
-	return &chatCacheRepository{
+// NewCacheRepository creates a new cache repository
+func NewCacheRepository(redisClient *redis.Client) Cache {
+	return &cacheRepository{
 		redisClient: redisClient,
 	}
 }
 
-// SetChatCacheMetadata stores chat cache metadata in Redis with TTL
-func (r *chatCacheRepository) SetChatCacheMetadata(
+// SetCacheMetadata stores cache metadata in Redis with TTL
+func (r *cacheRepository) SetCacheMetadata(
 	ctx context.Context,
 	kbUID types.KBUIDType,
 	fileUIDs []types.FileUIDType,
-	metadata *ChatCacheMetadata,
+	metadata *CacheMetadata,
 	ttl time.Duration,
 ) error {
 	if metadata == nil {
@@ -84,27 +84,27 @@ func (r *chatCacheRepository) SetChatCacheMetadata(
 		return fmt.Errorf("TTL must be positive, got: %v", ttl)
 	}
 
-	key := ChatCacheKey(kbUID, fileUIDs)
+	key := CacheKey(kbUID, fileUIDs)
 
 	data, err := json.Marshal(metadata)
 	if err != nil {
-		return fmt.Errorf("failed to marshal chat cache metadata: %w", err)
+		return fmt.Errorf("failed to marshal cache metadata: %w", err)
 	}
 
 	if err := r.redisClient.Set(ctx, key, data, ttl).Err(); err != nil {
-		return fmt.Errorf("failed to store chat cache metadata in Redis: %w", err)
+		return fmt.Errorf("failed to store cache metadata in Redis: %w", err)
 	}
 
 	return nil
 }
 
-// GetChatCacheMetadata retrieves chat cache metadata from Redis
-func (r *chatCacheRepository) GetChatCacheMetadata(
+// GetCacheMetadata retrieves cache metadata from Redis
+func (r *cacheRepository) GetCacheMetadata(
 	ctx context.Context,
 	kbUID types.KBUIDType,
 	fileUIDs []types.FileUIDType,
-) (*ChatCacheMetadata, error) {
-	key := ChatCacheKey(kbUID, fileUIDs)
+) (*CacheMetadata, error) {
+	key := CacheKey(kbUID, fileUIDs)
 
 	data, err := r.redisClient.Get(ctx, key).Result()
 	if err == redis.Nil {
@@ -112,12 +112,12 @@ func (r *chatCacheRepository) GetChatCacheMetadata(
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to get chat cache metadata from Redis: %w", err)
+		return nil, fmt.Errorf("failed to get cache metadata from Redis: %w", err)
 	}
 
-	var metadata ChatCacheMetadata
+	var metadata CacheMetadata
 	if err := json.Unmarshal([]byte(data), &metadata); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal chat cache metadata: %w", err)
+		return nil, fmt.Errorf("failed to unmarshal cache metadata: %w", err)
 	}
 
 	// Double-check expiration (redundant but safe)
@@ -131,27 +131,27 @@ func (r *chatCacheRepository) GetChatCacheMetadata(
 	return &metadata, nil
 }
 
-// DeleteChatCacheMetadata removes chat cache metadata from Redis
-func (r *chatCacheRepository) DeleteChatCacheMetadata(
+// DeleteCacheMetadata removes cache metadata from Redis
+func (r *cacheRepository) DeleteCacheMetadata(
 	ctx context.Context,
 	kbUID types.KBUIDType,
 	fileUIDs []types.FileUIDType,
 ) error {
-	key := ChatCacheKey(kbUID, fileUIDs)
+	key := CacheKey(kbUID, fileUIDs)
 
 	if err := r.redisClient.Del(ctx, key).Err(); err != nil {
-		return fmt.Errorf("failed to delete chat cache metadata from Redis: %w", err)
+		return fmt.Errorf("failed to delete cache metadata from Redis: %w", err)
 	}
 
 	return nil
 }
 
-// ChatCacheKey generates a deterministic Redis key for a set of file UIDs
-// Format: artifact:chat-cache:kb:{kb_uid}:files:{hash}
+// CacheKey generates a deterministic Redis key for a set of file UIDs
+// Format: artifact:cache:kb:{kb_uid}:files:{hash}
 //
 // The "artifact:" prefix ensures proper namespacing in shared Redis instances
 // The hash is generated from sorted file UIDs for deterministic key generation
-func ChatCacheKey(kbUID types.KBUIDType, fileUIDs []types.FileUIDType) string {
+func CacheKey(kbUID types.KBUIDType, fileUIDs []types.FileUIDType) string {
 	// Sort file UIDs for deterministic key generation
 	// This ensures that the same set of files always produces the same key,
 	// regardless of the order they're provided in
@@ -166,17 +166,17 @@ func ChatCacheKey(kbUID types.KBUIDType, fileUIDs []types.FileUIDType) string {
 	hash := sha256.Sum256([]byte(combined))
 	hashStr := hex.EncodeToString(hash[:])[:16] // Use first 16 chars for readability
 
-	return fmt.Sprintf("artifact:chat-cache:kb:%s:files:%s", kbUID.String(), hashStr)
+	return fmt.Sprintf("artifact:cache:kb:%s:files:%s", kbUID.String(), hashStr)
 }
 
-// ChatCacheKeyPattern returns a pattern for matching all chat cache keys for a KB
+// CacheKeyPattern returns a pattern for matching all cache keys for a KB
 // Useful for debugging or bulk operations
-func ChatCacheKeyPattern(kbUID types.KBUIDType) string {
-	return fmt.Sprintf("artifact:chat-cache:kb:%s:files:*", kbUID.String())
+func CacheKeyPattern(kbUID types.KBUIDType) string {
+	return fmt.Sprintf("artifact:cache:kb:%s:files:*", kbUID.String())
 }
 
-// AllChatCacheKeysPattern returns a pattern for matching all chat cache keys
+// AllCacheKeysPattern returns a pattern for matching all cache keys
 // Useful for global cache statistics or cleanup operations
-func AllChatCacheKeysPattern() string {
-	return "artifact:chat-cache:*"
+func AllCacheKeysPattern() string {
+	return "artifact:cache:*"
 }

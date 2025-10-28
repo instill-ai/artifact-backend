@@ -26,6 +26,9 @@ type System interface {
 	// UpdateSystem updates an existing system configuration (fails if ID doesn't exist)
 	UpdateSystem(ctx context.Context, id string, config map[string]any, description string) error
 
+	// UpdateSystemByUpdateMap updates a system using a selective update map (fails if ID doesn't exist)
+	UpdateSystemByUpdateMap(ctx context.Context, id string, updateFields map[string]interface{}) error
+
 	// ListSystems lists all system configurations
 	ListSystems(ctx context.Context) ([]SystemModel, error)
 
@@ -169,6 +172,38 @@ func (r *repository) UpdateSystem(ctx context.Context, id string, config map[str
 		Model(&SystemModel{}).
 		Where("id = ?", id).
 		Updates(updates).Error
+}
+
+// UpdateSystemByUpdateMap updates a system by ID using a selective update map
+// Only fields present in the updateFields map will be updated
+// Returns error if the system doesn't exist
+func (r *repository) UpdateSystemByUpdateMap(ctx context.Context, id string, updateFields map[string]interface{}) error {
+	// Verify the system exists first
+	var existing SystemModel
+	if err := r.db.WithContext(ctx).Where("id = ?", id).First(&existing).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("system with id %q not found", id)
+		}
+		return err
+	}
+
+	// Handle config field specially - marshal to JSON string for JSONB column
+	if configVal, ok := updateFields["config"]; ok {
+		configBytes, err := json.Marshal(configVal)
+		if err != nil {
+			return fmt.Errorf("failed to marshal config: %w", err)
+		}
+		// PostgreSQL JSONB expects a string, not bytes
+		updateFields["config"] = string(configBytes)
+	}
+
+	// Always update the timestamp
+	updateFields["update_time"] = time.Now()
+
+	return r.db.WithContext(ctx).
+		Model(&SystemModel{}).
+		Where("id = ?", id).
+		Updates(updateFields).Error
 }
 
 // ListSystems lists all system configurations

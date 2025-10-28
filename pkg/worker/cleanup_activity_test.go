@@ -62,6 +62,7 @@ func TestDeleteOriginalFileActivity_Success(t *testing.T) {
 			{UID: fileUID, Destination: destination},
 		}, nil)
 	mockRepository.DeleteFileMock.Return(nil)
+	mockRepository.DeleteObjectByDestinationMock.Return(nil)
 
 	w := &Worker{repository: mockRepository, log: zap.NewNop()}
 
