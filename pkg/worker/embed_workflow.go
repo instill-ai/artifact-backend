@@ -16,7 +16,7 @@ import (
 type SaveEmbeddingsWorkflowParam struct {
 	KBUID        types.KBUIDType             // Knowledge base unique identifier
 	FileUID      types.FileUIDType           // File unique identifier
-	FileName     string                      // File name for identification
+	Filename     string                      // File name for identification
 	Embeddings   []repository.EmbeddingModel // Embeddings to save
 	UserUID      types.UserUIDType           // User unique identifier
 	RequesterUID types.RequesterUIDType      // Requester unique identifier
@@ -76,7 +76,7 @@ func (w *Worker) SaveEmbeddingsWorkflow(ctx workflow.Context, param SaveEmbeddin
 		batchParam := &SaveEmbeddingBatchActivityParam{
 			KBUID:        param.KBUID,
 			FileUID:      param.FileUID,
-			FileName:     param.FileName,
+			Filename:     param.Filename,
 			Embeddings:   batchEmbeddings,
 			BatchNumber:  i + 1,
 			TotalBatches: totalBatches,

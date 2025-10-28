@@ -30,28 +30,3 @@ func (s *service) CheckNamespacePermission(ctx context.Context, ns *resource.Nam
 	}
 	return nil
 }
-
-const (
-	defaultPageSize = 10
-	maxPageSize     = 100
-)
-
-func pageInRange(page int32) int {
-	if page <= 0 {
-		return 0
-	}
-
-	return int(page)
-}
-
-func pageSizeInRange(pageSize int32) int {
-	if pageSize <= 0 {
-		return defaultPageSize
-	}
-
-	if pageSize > maxPageSize {
-		return maxPageSize
-	}
-
-	return int(pageSize)
-}

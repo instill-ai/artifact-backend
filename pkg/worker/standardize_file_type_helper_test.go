@@ -263,32 +263,32 @@ func TestNeedsFileConversion(t *testing.T) {
 
 		// Text-based documents
 		{
-			name:             "HTML - no conversion",
+			name:             "HTML - convert to PDF",
 			fileType:         artifactpb.File_TYPE_HTML,
-			wantNeedsConvert: false,
-			wantTargetFormat: "",
-			description:      "HTML is text-based, no conversion needed",
+			wantNeedsConvert: true,
+			wantTargetFormat: "pdf",
+			description:      "HTML is converted to PDF for unified processing",
 		},
 		{
-			name:             "TEXT - no conversion",
+			name:             "TEXT - convert to PDF",
 			fileType:         artifactpb.File_TYPE_TEXT,
-			wantNeedsConvert: false,
-			wantTargetFormat: "",
-			description:      "TEXT is text-based, no conversion needed",
+			wantNeedsConvert: true,
+			wantTargetFormat: "pdf",
+			description:      "TEXT is converted to PDF for unified processing",
 		},
 		{
-			name:             "MARKDOWN - no conversion",
+			name:             "MARKDOWN - convert to PDF",
 			fileType:         artifactpb.File_TYPE_MARKDOWN,
-			wantNeedsConvert: false,
-			wantTargetFormat: "",
-			description:      "MARKDOWN is text-based, no conversion needed",
+			wantNeedsConvert: true,
+			wantTargetFormat: "pdf",
+			description:      "MARKDOWN is converted to PDF for unified processing",
 		},
 		{
-			name:             "CSV - no conversion",
+			name:             "CSV - convert to PDF",
 			fileType:         artifactpb.File_TYPE_CSV,
-			wantNeedsConvert: false,
-			wantTargetFormat: "",
-			description:      "CSV is text-based, no conversion needed",
+			wantNeedsConvert: true,
+			wantTargetFormat: "pdf",
+			description:      "CSV is converted to PDF for unified processing",
 		},
 
 		// Unknown/default

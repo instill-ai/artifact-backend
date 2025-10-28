@@ -25,7 +25,7 @@ type VectorEmbedding struct {
 	EmbeddingUID string
 	Vector       []float32
 	FileUID      types.FileUIDType
-	FileName     string
+	Filename     string
 	ContentType  string // MIME type (e.g., "text/markdown", "application/pdf")
 	ChunkType    string // Chunk classification ("content", "summary", "augmented")
 	Tags         []string
@@ -37,9 +37,9 @@ type SimilarVectorEmbedding struct {
 	Score float32
 }
 
-// SimilarVectorSearchParam contains the parameters for a similarity vector
+// SearchVectorParam contains the parameters for a similarity vector
 // search.
-type SimilarVectorSearchParam struct {
+type SearchVectorParam struct {
 	CollectionID string
 	Vectors      [][]float32
 	TopK         uint32
@@ -55,7 +55,7 @@ type SimilarVectorSearchParam struct {
 	// have a file UID in the schema. Some collections have rigid schemas
 	// without dynamic fields, so the original schema (with filename) couldn't
 	// be extended and backfilled to have a file UID.
-	FileNames []string
+	Filenames []string
 }
 
 // VectorDatabase implements the necessary use cases to interact with a vector
@@ -64,7 +64,7 @@ type VectorDatabase interface {
 	CreateCollection(_ context.Context, id string, dimensionality uint32) error
 	InsertVectorsInCollection(_ context.Context, collID string, embeddings []VectorEmbedding) error
 	DropCollection(_ context.Context, id string) error
-	SimilarVectorsInCollection(context.Context, SimilarVectorSearchParam) ([][]SimilarVectorEmbedding, error)
+	SearchVectorsInCollection(context.Context, SearchVectorParam) ([][]SimilarVectorEmbedding, error)
 	DeleteEmbeddingsWithFileUID(_ context.Context, collID string, fileUID types.FileUIDType) error
 	// CheckFileUIDMetadata checks if the collection has the file UID metadata
 	// field, which wasn't introduced since the beginning and is not present in
@@ -222,7 +222,7 @@ func (m *milvusClient) InsertVectorsInCollection(ctx context.Context, collection
 		sourceUIDs[i] = embedding.SourceUID
 		embeddingUIDs[i] = embedding.EmbeddingUID // Use the embeddingUID from the input struct
 		fileUIDs[i] = embedding.FileUID.String()
-		fileNames[i] = embedding.FileName
+		fileNames[i] = embedding.Filename
 		fileTypes[i] = embedding.ContentType  // MIME type
 		contentTypes[i] = embedding.ChunkType // chunk type
 		tags[i] = embedding.Tags
@@ -387,7 +387,7 @@ func (m *milvusClient) fileUIDFilter(fileUIDs []types.FileUIDType) string {
 	return fmt.Sprintf("%s in [%s]", kbCollectionFieldFileUID, strings.Join(validUIDs, ","))
 }
 
-func (m *milvusClient) SimilarVectorsInCollection(ctx context.Context, p SimilarVectorSearchParam) ([][]SimilarVectorEmbedding, error) {
+func (m *milvusClient) SearchVectorsInCollection(ctx context.Context, p SearchVectorParam) ([][]SimilarVectorEmbedding, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 
 	collectionName := p.CollectionID
@@ -443,10 +443,10 @@ func (m *milvusClient) SimilarVectorsInCollection(ctx context.Context, p Similar
 			if filter != "" {
 				filterStrs = append(filterStrs, filter)
 			}
-		} else if len(p.FileNames) > 0 {
+		} else if len(p.Filenames) > 0 {
 			// Filename filter is only used for backwards compatibility in
 			// collections that lack the file UID metadata.
-			filter := fmt.Sprintf(`%s in ["%s"]`, kbCollectionFieldFileName, strings.Join(p.FileNames, `","`))
+			filter := fmt.Sprintf(`%s in ["%s"]`, kbCollectionFieldFileName, strings.Join(p.Filenames, `","`))
 			filterStrs = append(filterStrs, filter)
 		}
 
@@ -545,7 +545,7 @@ func (m *milvusClient) SimilarVectorsInCollection(ctx context.Context, p Similar
 				Vector:       vectors.Data()[i],
 			}
 			if hasMetadata {
-				emb.FileName = fileNames[i]
+				emb.Filename = fileNames[i]
 				emb.ContentType = fileTypes[i]  // MIME type from file_type field
 				emb.ChunkType = contentTypes[i] // chunk type from content_type field
 				if hasFileUID {

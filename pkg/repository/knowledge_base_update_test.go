@@ -392,7 +392,6 @@ func TestKnowledgeBaseColumns(t *testing.T) {
 	// Test that column constants are properly defined
 	c.Check(KnowledgeBaseColumn.UID, qt.Equals, "uid")
 	c.Check(KnowledgeBaseColumn.KBID, qt.Equals, "id")
-	c.Check(KnowledgeBaseColumn.Name, qt.Equals, "name")
 	c.Check(KnowledgeBaseColumn.Description, qt.Equals, "description")
 	c.Check(KnowledgeBaseColumn.Tags, qt.Equals, "tags")
 	c.Check(KnowledgeBaseColumn.Owner, qt.Equals, "owner")

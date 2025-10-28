@@ -34,8 +34,8 @@ type Repository interface {
 	VectorDatabase
 	// ObjectStorage handles object storage operations for file persistence (e.g., MinIO, S3)
 	ObjectStorage
-	// ChatCache manages chat conversation caching in Redis for performance optimization
-	ChatCache
+	// ChatCache manages file cache metadata in Redis for instant GetFile?view=VIEW_CACHE responses
+	Cache
 	// System manages system-wide Knowledge Base configuration
 	System
 }
@@ -45,7 +45,7 @@ type repository struct {
 	db *gorm.DB
 	VectorDatabase
 	ObjectStorage
-	ChatCache
+	Cache
 }
 
 // NewRepository returns an initialized repository.
@@ -54,6 +54,6 @@ func NewRepository(db *gorm.DB, vectorDatabase VectorDatabase, objectStorage Obj
 		db:             db,
 		VectorDatabase: vectorDatabase,
 		ObjectStorage:  objectStorage,
-		ChatCache:      NewChatCacheRepository(redisClient),
+		Cache:          NewCacheRepository(redisClient),
 	}
 }

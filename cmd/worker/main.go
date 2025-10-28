@@ -209,14 +209,12 @@ func main() {
 	w.RegisterActivity(cw.UpdateConversionMetadataActivity)       // Update file status and conversion metadata
 
 	// Format Standardization Phase - Executed before caching
-	w.RegisterActivity(cw.StandardizeFileTypeActivity)          // Convert non-AI-native formats (DOCX→PDF, GIF→PNG, MKV→MP4)
-	w.RegisterActivity(cw.DeleteTemporaryConvertedFileActivity) // Clean up temporary converted file from MinIO (core-blob/tmp/*)
+	w.RegisterActivity(cw.StandardizeFileTypeActivity)          // Convert non-AI-native formats (DOCX→PDF, GIF→PNG, MKV→MP4) and save PDFs to converted-file folder
+	w.RegisterActivity(cw.DeleteTemporaryConvertedFileActivity) // Clean up temporary converted file from MinIO (core-blob/tmp/*) - only for non-PDF conversions
 
 	// AI Caching Phase - Create caches for efficient processing
-	w.RegisterActivity(cw.CacheFileContextActivity)       // Create AI cache for individual file processing
-	w.RegisterActivity(cw.CacheChatContextActivity)       // Create AI cache for multi-file chat (Chat API)
-	w.RegisterActivity(cw.StoreChatCacheMetadataActivity) // Store chat cache metadata in Redis for Chat API
-	w.RegisterActivity(cw.DeleteCacheActivity)            // Clean up AI cache after processing
+	w.RegisterActivity(cw.CacheFileContextActivity) // Create AI cache for individual file processing
+	w.RegisterActivity(cw.DeleteCacheActivity)      // Clean up AI cache after processing
 
 	// Content and Summary Processing Phase - Composite activities (flattened from child workflows)
 	w.RegisterActivity(cw.ProcessContentActivity) // Complete content processing: markdown conversion → save to DB

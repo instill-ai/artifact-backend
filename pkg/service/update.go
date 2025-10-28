@@ -7,6 +7,7 @@ import (
 
 	"github.com/gofrs/uuid"
 	"go.uber.org/zap"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/types"
@@ -18,7 +19,7 @@ import (
 // RollbackAdmin rolls back a knowledge base to its previous state
 // CRITICAL DESIGN: The production KB UID remains constant - only resources are swapped
 // This preserves the KB identity and ACL permissions throughout the rollback
-func (s *service) RollbackAdmin(ctx context.Context, ownerUID types.OwnerUIDType, catalogID string) (*artifactpb.RollbackAdminResponse, error) {
+func (s *service) RollbackAdmin(ctx context.Context, ownerUID types.OwnerUIDType, namespaceID string, catalogID string) (*artifactpb.RollbackAdminResponse, error) {
 	// Get the current production catalog
 	productionKB, err := s.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, catalogID)
 	if err != nil {
@@ -179,7 +180,7 @@ func (s *service) RollbackAdmin(ctx context.Context, ownerUID types.OwnerUIDType
 		zap.String("productionKBUID", productionKB.UID.String()))
 
 	return &artifactpb.RollbackAdminResponse{
-		Catalog: convertKBToCatalogProto(updatedKB),
+		Catalog: convertKBToCatalogProto(updatedKB, namespaceID),
 		Message: "Successfully rolled back to previous version",
 	}, nil
 }
@@ -633,16 +634,20 @@ func (s *service) AbortKnowledgeBaseUpdateAdmin(ctx context.Context, req *artifa
 
 // Helper functions
 
-func convertKBToCatalogProto(kb *repository.KnowledgeBaseModel) *artifactpb.Catalog {
+func convertKBToCatalogProto(kb *repository.KnowledgeBaseModel, namespaceID string) *artifactpb.Catalog {
+	// Construct Google AIP resource name: namespaces/{namespace}/catalogs/{catalog}
+	// Note: namespace format is "users/user-123" or "organizations/org-456"
+	resourceName := fmt.Sprintf("namespaces/%s/catalogs/%s", namespaceID, kb.KBID)
+
 	return &artifactpb.Catalog{
-		Name:           kb.Name,
-		CatalogUid:     kb.UID.String(),
-		CatalogId:      kb.KBID,
+		Name:           resourceName,
+		Uid:            kb.UID.String(),
+		Id:             kb.KBID,
 		Description:    kb.Description,
 		Tags:           kb.Tags,
 		OwnerName:      kb.Owner,
-		CreateTime:     kb.CreateTime.String(),
-		UpdateTime:     kb.UpdateTime.String(),
+		CreateTime:     timestamppb.New(*kb.CreateTime),
+		UpdateTime:     timestamppb.New(*kb.UpdateTime),
 		DownstreamApps: []string{},
 		TotalFiles:     0, // Would need to query file count if needed
 		TotalTokens:    0,

@@ -186,8 +186,8 @@ func (s *service) GetDownloadURL(
 	// Get presigned URL for downloading object
 	presignedURL, err := s.repository.GetPresignedURLForDownload(
 		ctx,
-		object.NamespaceUID,
-		object.UID,
+		repository.BlobBucketName,
+		object.Destination,
 		object.Name,
 		object.ContentType,
 		expirationTime,

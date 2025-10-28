@@ -80,12 +80,8 @@ export function setup() {
 
   var resp = http.request("GET", `${constant.mgmtRESTPublicHost}/v1beta/user`, {}, { headers: { "Authorization": `Bearer ${loginResp.json().accessToken}` } })
 
-  // CRITICAL: Clean up ALL test-% catalogs from previous runs BEFORE generating this run's prefix
-  // This prevents zombie files from blocking the worker queue and causing tests to hang
-  helper.cleanupPreviousTestCatalogs(resp.json().user.id, header);
-
-  // NOW generate THIS test run's unique prefix (after cleanup)
-  // From this point forward, ALL test-% catalogs belong to THIS test run
+  // Generate THIS test run's unique prefix
+  // Each test run gets a unique prefix to avoid conflicts with parallel tests
   const dbIDPrefix = constant.generateDBIDPrefix();
   console.log(`rest-file-type.js: Using unique test prefix: ${dbIDPrefix}`);
 
@@ -123,8 +119,8 @@ export function teardown(data) {
     if (listResp.status === 200) {
       var catalogs = Array.isArray(listResp.json().catalogs) ? listResp.json().catalogs : []
       for (const catalog of catalogs) {
-        // API returns catalogId (camelCase), not catalog_id
-        const catId = catalog.catalogId || catalog.catalog_id;
+        // API returns id (AIP-compliant)
+        const catId = catalog.id;
         if (catId && catId.startsWith(data.dbIDPrefix)) {
           var delResp = http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catId}`, null, data.header);
           check(delResp, {
@@ -174,11 +170,11 @@ function runCatalogFileTest(data, opts) {
 
     const { fileType, originalName, omitType } = opts || {};
 
-    // Create catalog (name must be < 32 chars: test-{4}-src-{8} = 23 chars)
-    const cRes = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, JSON.stringify({ name: data.dbIDPrefix + "src-" + randomString(8) }), data.header);
+    // Create catalog (id must be < 32 chars: test-{4}-src-{8} = 23 chars)
+    const cRes = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, JSON.stringify({ id: data.dbIDPrefix + "src-" + randomString(8) }), data.header);
     logUnexpected(cRes, 'POST /v1alpha/namespaces/{namespace_id}/catalogs');
     const catalog = ((() => { try { return cRes.json(); } catch (e) { return {}; } })()).catalog || {};
-    const catalogId = catalog.catalogId;
+    const catalogId = catalog.id;
     check(cRes, { [`POST /v1alpha/namespaces/{namespace_id}/catalogs 200 (${catalogId})`]: (r) => r.status === 200 });
 
     // List catalogs and ensure our catalog is present
@@ -186,7 +182,7 @@ function runCatalogFileTest(data, opts) {
     logUnexpected(listCatalogRes, 'GET /v1alpha/namespaces/{namespace_id}/catalogs');
     let listCatalogJson; try { listCatalogJson = listCatalogRes.json(); } catch (e) { listCatalogJson = {}; }
     const catalogsArr = Array.isArray(listCatalogJson.catalogs) ? listCatalogJson.catalogs : [];
-    const containsUploadedCatalog = catalogsArr.some((c) => c.catalogId === catalogId);
+    const containsUploadedCatalog = catalogsArr.some((c) => c.id === catalogId);
     check(listCatalogRes, {
       [`GET /v1alpha/namespaces/{namespace_id}/catalogs 200 (${catalogId})`]: (r) => r.status === 200,
       [`List contains uploaded catalog (${catalogId})`]: () => containsUploadedCatalog,
@@ -197,12 +193,12 @@ function runCatalogFileTest(data, opts) {
       ? ((x) => x.originalName === originalName)
       : ((x) => x.type === fileType);
     const s = (constant.sampleFiles.find(selector) || {});
-    const fileName = data.dbIDPrefix + (s.originalName || ("sample-" + randomString(6)));
+    const filename = data.dbIDPrefix + (s.originalName || ("sample-" + randomString(6)));
 
     // If omitType is true, don't include the type field to test backend type inference
     const fReq = omitType
-      ? { name: fileName, content: s.content || "" }
-      : { name: fileName, type: fileType, content: s.content || "" };
+      ? { filename: filename, content: s.content || "" }
+      : { filename: filename, type: fileType, content: s.content || "" };
 
     if (omitType) {
       console.log(`Testing type inference for ${fileType}: uploading with filename only (no type field)`);
@@ -211,8 +207,11 @@ function runCatalogFileTest(data, opts) {
     const uRes = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`, JSON.stringify(fReq), data.header);
     logUnexpected(uRes, 'POST /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files');
     const file = ((() => { try { return uRes.json(); } catch (e) { return {}; } })()).file || {};
-    const fileUid = file.fileUid;
+    const fileUid = file.uid;
     const testLabel = omitType ? `${fileType} [TYPE INFERRED]` : fileType;
+    if (!fileUid) {
+      console.log(`WARN ${testLabel}: No fileUid in response. Response status: ${uRes.status}, body: ${uRes.body}`);
+    }
     check(uRes, { [`POST /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files 200 (${testLabel})`]: (r) => r.status === 200 });
 
     // List catalog files and ensure our file is present
@@ -225,7 +224,7 @@ function runCatalogFileTest(data, opts) {
     logUnexpected(listCatalogFilesRes, 'GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files');
     let listCatalogFilesJson; try { listCatalogFilesJson = listCatalogFilesRes.json(); } catch (e) { listCatalogFilesJson = {}; }
     const catalogFilesArr = Array.isArray(listCatalogFilesJson.files) ? listCatalogFilesJson.files : [];
-    const containsUploadedCatalogFile = catalogFilesArr.some((f) => f.fileUid === fileUid);
+    const containsUploadedCatalogFile = catalogFilesArr.some((f) => f.uid === fileUid);
     check(listCatalogFilesRes, {
       [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files 200 (${testLabel})`]: (r) => r.status === 200,
       [`List contains uploaded file (${testLabel})`]: () => containsUploadedCatalogFile,
@@ -242,36 +241,34 @@ function runCatalogFileTest(data, opts) {
     let getCatalogFileJson; try { getCatalogFileJson = getCatalogFileRes.json(); } catch (e) { getCatalogFileJson = {}; }
     check(getCatalogFileRes, {
       [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid} 200 (${testLabel})`]: (r) => r.status === 200,
-      [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid} uid matches (${testLabel})`]: () => getCatalogFileJson.file && getCatalogFileJson.file.fileUid === fileUid,
-      [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid} name matches (${testLabel})`]: () => getCatalogFileJson.file && getCatalogFileJson.file.name === fileName,
+      [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid} uid matches (${testLabel})`]: () => getCatalogFileJson.file && getCatalogFileJson.file.uid === fileUid,
+      [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid} filename matches (${testLabel})`]: () => getCatalogFileJson.file && getCatalogFileJson.file.filename === filename,
       [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid} is valid (${testLabel})`]: () => getCatalogFileJson.file && helper.validateFile(getCatalogFileJson.file, false),
     });
 
     // Auto-trigger: Processing starts automatically on upload (no manual trigger needed)
-    // Wait for file processing to complete by polling status
-    let getProcessStatusRes; let completed = false; let failed = false; let failureReason = "";
-    for (let i = 0; i < 3600; i++) {
-      getProcessStatusRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${fileUid}`, null, data.header);
-      try {
-        const body = getProcessStatusRes.json();
-        const st = (body.file && body.file.processStatus) || "";
-        if (getProcessStatusRes.status === 200 && st === "FILE_PROCESS_STATUS_COMPLETED") {
-          completed = true;
-          break;
-        } else if (getProcessStatusRes.status === 200 && st === "FILE_PROCESS_STATUS_FAILED") {
-          failed = true;
-          failureReason = (body.file && body.file.processOutcome) || "Unknown error";
-          console.log(`✗ File processing failed for ${testLabel}: ${failureReason}`);
-          break;
-        }
-        // Log progress every 30 seconds for slow processing files
-        if (i > 0 && i % 60 === 0) {
-          console.log(`⏳ Still processing ${testLabel} after ${i * 0.5}s, status: ${st}`);
-        }
-      } catch (e) { }
-      sleep(0.5);
+    // Wait for file processing to complete using robust helper function
+    console.log(`⏳ Waiting for file processing: ${testLabel} (fileUid: ${fileUid})...`);
+    const result = helper.waitForFileProcessingComplete(
+      data.expectedOwner.id,
+      catalogId,
+      fileUid,
+      data.header,
+      600, // Max 600 seconds (10 minutes) for large file processing
+      120   // Fast-fail after 120s if stuck in NOTSTARTED
+    );
+
+    const completed = result.completed && result.status === "COMPLETED";
+    const failed = result.status === "FAILED";
+    const failureReason = result.error || "";
+
+    if (failed) {
+      console.log(`✗ File processing failed for ${testLabel}: ${failureReason}`);
+    } else if (!completed) {
+      console.log(`✗ File processing timed out for ${testLabel}: Status ${result.status}`);
     }
-    check(getProcessStatusRes, {
+
+    check({ completed, failed }, {
       [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid} 200 and Process Status Reached COMPLETED (${testLabel})`]: () => completed === true,
       [`File processing did not fail (${testLabel})`]: () => !failed,
     });
@@ -282,23 +279,100 @@ function runCatalogFileTest(data, opts) {
       return;
     }
 
-    // Get the single-source-of-truth processed file source
-    const getCatalogFileSource = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${fileUid}/source`, null, data.header);
-    logUnexpected(getCatalogFileSource, 'GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid}/source');
-    check(getCatalogFileSource, { [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid}/source 200 (${testLabel})`]: (r) => r.status === 200 });
+    // Get file content (using VIEW_CONTENT)
+    const getCatalogFileContent = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${fileUid}?view=VIEW_CONTENT`, null, data.header);
+    logUnexpected(getCatalogFileContent, 'GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid}?view=VIEW_CONTENT');
+    let contentData; try { contentData = getCatalogFileContent.json(); } catch (e) { contentData = {}; }
+    const contentUri = contentData.derivedResourceUri || ""; // derivedResourceUri is at top level, not inside .file
+    check(getCatalogFileContent, {
+      [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid}?view=VIEW_CONTENT 200 (${testLabel})`]: (r) => r.status === 200,
+      [`VIEW_CONTENT returns derivedResourceUri (${testLabel})`]: () => contentUri && contentUri.length > 0,
+    });
 
-    // Get file summary
-    const getSummaryRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${fileUid}/summary`, null, data.header);
-    logUnexpected(getSummaryRes, 'GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid}/summary');
-    check(getSummaryRes, { [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid}/summary 200 (${testLabel})`]: (r) => r.status === 200 });
+    // Get file summary (using VIEW_SUMMARY)
+    const getSummaryRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${fileUid}?view=VIEW_SUMMARY`, null, data.header);
+    logUnexpected(getSummaryRes, 'GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid}?view=VIEW_SUMMARY');
+    let summaryData; try { summaryData = getSummaryRes.json(); } catch (e) { summaryData = {}; }
+    const summaryUri = summaryData.derivedResourceUri || ""; // derivedResourceUri is at top level, not inside .file
+    check(getSummaryRes, {
+      [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid}?view=VIEW_SUMMARY 200 (${testLabel})`]: (r) => r.status === 200,
+      [`VIEW_SUMMARY returns derivedResourceUri (${testLabel})`]: () => summaryUri && summaryUri.length > 0,
+    });
+
+    // Get file standardized format (using VIEW_STANDARD_FILE_TYPE)
+    // Standardized view returns:
+    // - Documents → PDF (e.g., DOC, DOCX, PPT, PPTX, XLS, XLSX, HTML, TEXT, MARKDOWN, CSV)
+    // - Images → PNG (e.g., GIF, BMP, TIFF, AVIF)
+    // - Audio → OGG (e.g., M4A, WMA)
+    // - Video → MP4 (e.g., MKV)
+    // AI-native formats (PDF, PNG, JPEG, MP3, WAV, MP4, etc.) are also accessible as standardized files
+    const standardizableTypes = ["TYPE_PDF", "TYPE_DOC", "TYPE_DOCX", "TYPE_PPT", "TYPE_PPTX", "TYPE_XLS", "TYPE_XLSX", "TYPE_HTML", "TYPE_TEXT", "TYPE_MARKDOWN", "TYPE_CSV"];
+    const isStandardizable = standardizableTypes.includes(fileType);
+
+    const getStandardRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${fileUid}?view=VIEW_STANDARD_FILE_TYPE`, null, data.header);
+    logUnexpected(getStandardRes, 'GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid}?view=VIEW_STANDARD_FILE_TYPE');
+    let standardData; try { standardData = getStandardRes.json(); } catch (e) { standardData = {}; }
+    const standardUri = standardData.derivedResourceUri || ""; // derivedResourceUri is at top level, not inside .file
+
+    if (isStandardizable) {
+      check(getStandardRes, {
+        [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid}?view=VIEW_STANDARD_FILE_TYPE 200 (${testLabel})`]: (r) => r.status === 200,
+        [`VIEW_STANDARD_FILE_TYPE returns derivedResourceUri for standardizable type (${testLabel})`]: () => standardUri && standardUri.length > 0,
+      });
+
+      // Verify the URL is accessible (basic check)
+      if (standardUri) {
+        console.log(`✓ VIEW_STANDARD_FILE_TYPE returned URL for ${testLabel}: ${standardUri.substring(0, 50)}...`);
+      }
+    } else {
+      // For non-standardizable types (TEXT, MARKDOWN, CSV, HTML), VIEW_STANDARD_FILE_TYPE should still return 200 but may not have a standardized file
+      check(getStandardRes, {
+        [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid}?view=VIEW_STANDARD_FILE_TYPE 200 (${testLabel})`]: (r) => r.status === 200,
+      });
+      if (standardUri) {
+        console.log(`INFO: Unexpected standardized file available for non-standardizable type ${testLabel}`);
+      }
+    }
+
+    // Get original file (using VIEW_ORIGINAL_FILE_TYPE)
+    // This should return the original uploaded file for ALL file types
+    const getOriginalRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${fileUid}?view=VIEW_ORIGINAL_FILE_TYPE`, null, data.header);
+    logUnexpected(getOriginalRes, 'GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid}?view=VIEW_ORIGINAL_FILE_TYPE');
+    let originalData; try { originalData = getOriginalRes.json(); } catch (e) { originalData = {}; }
+    const originalUri = originalData.derivedResourceUri || ""; // derivedResourceUri is at top level, not inside .file
+
+    check(getOriginalRes, {
+      [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_uid}?view=VIEW_ORIGINAL_FILE_TYPE 200 (${testLabel})`]: (r) => r.status === 200,
+      [`VIEW_ORIGINAL_FILE_TYPE returns derivedResourceUri (${testLabel})`]: () => originalUri && originalUri.length > 0,
+    });
+
+    if (originalUri) {
+      console.log(`✓ VIEW_ORIGINAL_FILE_TYPE returned URL for ${testLabel}: ${originalUri.substring(0, 50)}...`);
+    }
+
+    // Compare VIEW_STANDARD_FILE_TYPE and VIEW_ORIGINAL_FILE_TYPE URLs
+    // For PDF files, they may point to the same file (since PDF is already standardized)
+    // For convertible documents, they should be different
+    if (isStandardizable && standardUri && originalUri) {
+      const sameFile = standardUri === originalUri;
+      const isPdfType = fileType === "TYPE_PDF";
+
+      if (isPdfType && sameFile) {
+        console.log(`✓ ${testLabel}: Standard and original URLs are same (expected for native PDF)`);
+      } else if (!isPdfType && !sameFile) {
+        console.log(`✓ ${testLabel}: Standard and original URLs are different (expected for converted documents)`);
+      } else {
+        console.log(`⚠ ${testLabel}: URL comparison unexpected - isPDF:${isPdfType}, same:${sameFile}`);
+      }
+    }
 
     // List chunks for this file
-    const listChunksUrl = `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/chunks?file_uid=${fileUid}&fileUid=${fileUid}`;
+    const listChunksUrl = `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${fileUid}/chunks`;
     const listChunksRes = http.request("GET", listChunksUrl, null, data.header);
-    logUnexpected(listChunksRes, 'GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/chunks');
+    logUnexpected(listChunksRes, 'GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_id}/chunks');
     let listChunksJson; try { listChunksJson = listChunksRes.json(); } catch (e) { listChunksJson = {}; }
     check(listChunksRes, {
-      [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/chunks 200 (${testLabel})`]: (r) => r.status === 200,
+      [`GET /v1alpha/namespaces/{namespace_id}/catalogs/{catalog_id}/files/{file_id}/chunks 200 (${testLabel})`]: (r) => r.status === 200,
     });
   });
 }

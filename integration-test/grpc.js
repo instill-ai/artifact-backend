@@ -1,45 +1,64 @@
 import grpc from "k6/net/grpc";
 import http from "k6/http";
-
-import { check, group } from "k6";
-
-import * as grpcPrivate from "./grpc-private.js";
-import * as grpcPublic from "./grpc-public.js";
-import * as grpcPublicWithJwt from "./grpc-public-with-jwt.js";
-import * as helper from "./helper.js";
-
-const publicClient = new grpc.Client();
-const privateClient = new grpc.Client();
-const mgmtClient = new grpc.Client();
-
-// Load proto files using repo proto root and v1alpha dir so google/api resolves
-publicClient.load(["./proto", "./proto/artifact/artifact/v1alpha"], "artifact/artifact/v1alpha/artifact_public_service.proto");
-publicClient.load(["./proto", "./proto/artifact/artifact/v1alpha"], "artifact/artifact/v1alpha/artifact_private_service.proto");
-privateClient.load(["./proto", "./proto/artifact/artifact/v1alpha"], "artifact/artifact/v1alpha/artifact_private_service.proto");
-mgmtClient.load(["./proto", "./proto/core/mgmt/v1beta"], "core/mgmt/v1beta/mgmt_public_service.proto");
+import { check, group, sleep } from "k6";
+import { randomString } from "https://jslib.k6.io/k6-utils/1.1.0/index.js";
 
 import * as constant from "./const.js";
+import * as helper from "./helper.js";
+
+const dbIDPrefix = constant.generateDBIDPrefix();
+
+// Initialize gRPC clients in init context (required by k6)
+const publicClient = new grpc.Client();
+const privateClient = new grpc.Client();
+
+// Load proto files in init context (required by k6)
+publicClient.load(["./proto", "./proto/artifact/artifact/v1alpha"], "artifact/artifact/v1alpha/artifact_public_service.proto");
+privateClient.load(["./proto", "./proto/artifact/artifact/v1alpha"], "artifact/artifact/v1alpha/artifact_private_service.proto");
 
 export let options = {
-  setupTimeout: "300s",
+  setupTimeout: "10s",
+  teardownTimeout: "180s",
   insecureSkipTLSVerify: true,
   thresholds: {
     checks: ["rate == 1.0"],
   },
+  scenarios: {
+    // Health checks
+    test_01_health: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_01_Health' },
+
+    // Public gRPC tests - Catalogs
+    test_02_create_catalog: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_02_CreateCatalog' },
+    test_03_list_catalogs: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_03_ListCatalogs' },
+    test_04_get_catalog: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_04_GetCatalog' },
+    test_05_update_catalog: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_05_UpdateCatalog' },
+    test_06_delete_catalog: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_06_DeleteCatalog' },
+
+    // Public gRPC tests - Files
+    test_07_upload_file: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_07_UploadFile' },
+    test_08_list_files: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_08_ListFiles' },
+    test_09_get_file: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_09_GetFile' },
+    test_10_cleanup_on_delete: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_10_CleanupOnDelete' },
+
+    // JWT/Auth tests
+    test_11_jwt_upload_file: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_11_JWT_UploadFile' },
+    test_12_jwt_list_files: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_12_JWT_ListFiles' },
+    test_13_jwt_get_file: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_13_JWT_GetFile' },
+
+    // Private gRPC tests (admin only)
+    test_14_get_object: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_14_GetObject' },
+    test_15_get_object_url: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_15_GetObjectURL' },
+    test_16_update_object: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_16_UpdateObject' },
+  },
 };
 
 export function setup() {
-  // Add stagger to reduce parallel resource contention
+  check(true, { [constant.banner('Artifact API (gRPC): Setup')]: () => true });
+
+  // Stagger test execution to reduce parallel resource contention
   helper.staggerTestExecution(2);
 
-  publicClient.connect(constant.artifactGRPCPublicHost, {
-    plaintext: true,
-    timeout: "300s",
-  });
-  mgmtClient.connect(constant.mgmtGRPCPublicHost, {
-    plaintext: true,
-    timeout: "300s",
-  });
+  console.log(`grpc.js: Using unique test prefix: ${dbIDPrefix}`);
 
   var loginResp = http.request("POST", `${constant.mgmtRESTPublicHost}/v1beta/auth/login`, JSON.stringify({
     "username": constant.defaultUsername,
@@ -47,105 +66,544 @@ export function setup() {
   }))
 
   check(loginResp, {
-    [`POST ${constant.mgmtRESTPublicHost}/v1beta/auth/login response status is 200`]: (
-      r
-    ) => r.status === 200,
+    [`POST ${constant.mgmtRESTPublicHost}/v1beta/auth/login response status is 200`]: (r) => r.status === 200,
   });
 
-  var metadata = {
-    "metadata": {
+  var header = {
+    "headers": {
       "Authorization": `Bearer ${loginResp.json().accessToken}`,
+      "Content-Type": "application/json",
     },
     "timeout": "600s",
   }
 
-  var authResp = mgmtClient.invoke(
-    "core.mgmt.v1beta.MgmtPublicService/GetAuthenticatedUser",
-    {},
-    metadata
-  );
+  var grpcMetadata = {
+    "metadata": {
+      "Authorization": `Bearer ${loginResp.json().accessToken}`,
+    },
+  }
 
-  publicClient.close();
-  mgmtClient.close();
-  return { metadata: metadata, expectedOwner: authResp.message.user };
+  var resp = http.request("GET", `${constant.mgmtRESTPublicHost}/v1beta/user`, {}, {
+    headers: { "Authorization": `Bearer ${loginResp.json().accessToken}` }
+  })
+
+  return {
+    header: header,
+    metadata: grpcMetadata,
+    expectedOwner: resp.json().user,
+    dbIDPrefix: dbIDPrefix
+  }
 }
 
 export function teardown(data) {
-  const groupName = "Artifact API: Delete data created by this test";
+  const groupName = "Artifact API (gRPC): Teardown - Delete all test resources";
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
+
+    // Wait for THIS TEST's file processing to complete before deleting catalogs
+    console.log("Teardown: Waiting for this test's file processing to complete...");
+    const allProcessingComplete = helper.waitForAllFileProcessingComplete(120, data.dbIDPrefix);
+    if (!allProcessingComplete) {
+      console.warn("Teardown: Some files still processing after 120s, proceeding anyway");
+    }
+
+    console.log(`grpc.js teardown: Cleaning up resources with prefix: ${data.dbIDPrefix}`);
+    var listResp = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs`, null, data.header)
+    if (listResp.status === 200) {
+      var catalogs = Array.isArray(listResp.json().catalogs) ? listResp.json().catalogs : []
+      let cleanedCount = 0;
+      for (const catalog of catalogs) {
+        // Clean up catalogs with our test prefix
+        if (catalog.id && (catalog.id.startsWith(data.dbIDPrefix) || catalog.id.includes(data.dbIDPrefix))) {
+          var delResp = http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalog.id}`, null, data.header);
+          if (delResp.status === 200 || delResp.status === 204 || delResp.status === 404) {
+            cleanedCount++;
+          }
+        }
+      }
+      console.log(`Cleaned ${cleanedCount} test catalogs`);
+    }
   });
 }
 
-export default function (data) {
-  // Health check
-  {
-    const groupName = "Artifact API: Health check (gRPC)";
-    group(groupName, () => {
-      check(true, { [constant.banner(groupName)]: () => true });
+// ============================================================================
+// TEST GROUP 01: Health Check
+// ============================================================================
+export function TEST_01_Health(data) {
+  const groupName = "Artifact API: Health check (gRPC)";
+  group(groupName, () => {
+    check(true, { [constant.banner(groupName)]: () => true });
 
-      publicClient.connect(constant.artifactGRPCPublicHost, {
-        plaintext: true,
-      });
-      check(
-        publicClient.invoke(
-          "artifact.artifact.v1alpha.ArtifactPublicService/Liveness",
-          {}
-        ),
-        {
-          "Liveness response status is StatusOK": (r) =>
-            r.status === grpc.StatusOK,
-        }
-      );
-      check(
-        publicClient.invoke(
-          "artifact.artifact.v1alpha.ArtifactPublicService/Readiness",
-          {}
-        ),
-        {
-          "Readiness response status is StatusOK": (r) =>
-            r.status === grpc.StatusOK,
-        }
-      );
-      publicClient.close();
-    });
-  }
+    publicClient.connect(constant.artifactGRPCPublicHost, { plaintext: true });
 
-  if (!constant.apiGatewayMode) {
-    privateClient.connect(constant.artifactGRPCPrivateHost, {
-      plaintext: true,
-    });
-    grpcPrivate.CheckListRepositoryTags(privateClient, data);
-    grpcPrivate.CheckGetRepositoryTag(privateClient, data);
-    grpcPrivate.CheckCreateAndDeleteRepositoryTag(privateClient, data);
-    grpcPrivate.CheckGetObject(privateClient, data);
-    grpcPrivate.CheckGetObjectURL(privateClient, data);
-    grpcPrivate.CheckUpdateObject(privateClient, data);
-    grpcPrivate.CheckGetFileAsMarkdown(privateClient, data);
-    privateClient.close();
-  }
+    check(
+      publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/Liveness", {}),
+      { "Liveness response status is StatusOK": (r) => r.status === grpc.StatusOK }
+    );
+    check(
+      publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/Readiness", {}),
+      { "Readiness response status is StatusOK": (r) => r.status === grpc.StatusOK }
+    );
 
-  // Test public endpoints (gRPC) analogous to REST tests
-  publicClient.connect(constant.artifactGRPCPublicHost, {
-    plaintext: true,
+    publicClient.close();
   });
+}
 
-  // Catalog flows
-  grpcPublic.CheckCreateCatalog(publicClient, data);
-  grpcPublic.CheckListCatalogs(publicClient, data);
-  grpcPublic.CheckGetCatalog(publicClient, data);
-  grpcPublic.CheckUpdateCatalog(publicClient, data);
+// ============================================================================
+// TEST GROUP 02-06: Catalog Operations (Public gRPC)
+// ============================================================================
+export function TEST_02_CreateCatalog(data) {
+  const groupName = "Artifact API: Create catalog (gRPC)";
+  group(groupName, () => {
+    check(true, { [constant.banner(groupName)]: () => true });
 
-  // File flows
-  grpcPublic.CheckUploadCatalogFile(publicClient, data);
-  grpcPublic.CheckListCatalogFiles(publicClient, data);
-  grpcPublic.CheckGetCatalogFile(publicClient, data);
-  grpcPublic.CheckCleanupOnFileDeletion(publicClient, data);
+    publicClient.connect(constant.artifactGRPCPublicHost, { plaintext: true });
 
-  // JWT variants for file operations
-  grpcPublicWithJwt.CheckUploadCatalogFile(publicClient, data);
-  grpcPublicWithJwt.CheckListCatalogFiles(publicClient, data);
-  grpcPublicWithJwt.CheckGetCatalogFile(publicClient, data);
+    const id = "test-" + data.dbIDPrefix + randomString(10);
+    const req = { namespaceId: data.expectedOwner.id, id, description: randomString(30), tags: ["test", "grpc"], type: "CATALOG_TYPE_PERSISTENT" };
+    const res = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateCatalog", req, data.metadata);
 
-  publicClient.close();
+    check(res, {
+      "CreateCatalog response status is StatusOK": (r) => r.status === grpc.StatusOK,
+      "CreateCatalog response catalog id matches": (r) => r.message && r.message.catalog && r.message.catalog.id === id,
+    });
+
+    // Cleanup
+    if (res.message && res.message.catalog) {
+      publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/DeleteCatalog", { namespaceId: data.expectedOwner.id, catalogId: res.message.catalog.id }, data.metadata);
+    }
+
+    publicClient.close();
+  });
+}
+
+export function TEST_03_ListCatalogs(data) {
+  const groupName = "Artifact API: List catalogs (gRPC)";
+  group(groupName, () => {
+    check(true, { [constant.banner(groupName)]: () => true });
+
+    publicClient.connect(constant.artifactGRPCPublicHost, { plaintext: true });
+
+    const res = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/ListCatalogs", { namespaceId: data.expectedOwner.id }, data.metadata);
+    check(res, {
+      "ListCatalogs response status is StatusOK": (r) => r.status === grpc.StatusOK,
+      "ListCatalogs response catalogs is array": (r) => Array.isArray(r.message.catalogs),
+    });
+
+    publicClient.close();
+  });
+}
+
+export function TEST_04_GetCatalog(data) {
+  const groupName = "Artifact API: Get catalog (gRPC)";
+  group(groupName, () => {
+    check(true, { [constant.banner(groupName)]: () => true });
+
+    publicClient.connect(constant.artifactGRPCPublicHost, { plaintext: true });
+
+    const id = "test-" + data.dbIDPrefix + randomString(10);
+    const cRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateCatalog", { namespaceId: data.expectedOwner.id, id, description: randomString(20), tags: ["test", "grpc"], type: "CATALOG_TYPE_PERSISTENT" }, data.metadata);
+    const catalog = cRes.message.catalog;
+
+    const res = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/ListCatalogs", { namespaceId: data.expectedOwner.id }, data.metadata);
+    const found = Array.isArray(res.message.catalogs) && res.message.catalogs.some((c) => c.id === catalog.id);
+
+    check(res, {
+      "ListCatalogs response includes created catalog": () => found,
+    });
+
+    publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/DeleteCatalog", { namespaceId: data.expectedOwner.id, catalogId: catalog.id }, data.metadata);
+    publicClient.close();
+  });
+}
+
+export function TEST_05_UpdateCatalog(data) {
+  const groupName = "Artifact API: Update catalog (gRPC)";
+  group(groupName, () => {
+    check(true, { [constant.banner(groupName)]: () => true });
+
+    publicClient.connect(constant.artifactGRPCPublicHost, { plaintext: true });
+
+    const id = "test-" + data.dbIDPrefix + randomString(10);
+    const cRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateCatalog", { namespaceId: data.expectedOwner.id, id, description: randomString(20), tags: ["test", "grpc"], type: "CATALOG_TYPE_PERSISTENT" }, data.metadata);
+    const catalog = cRes.message.catalog;
+
+    const newDescription = randomString(25);
+    const uRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/UpdateCatalog", {
+      namespaceId: data.expectedOwner.id,
+      catalogId: catalog.id,
+      catalog: {
+        description: newDescription,
+        tags: ["test", "grpc", "updated"]
+      },
+      update_mask: "description,tags"
+    }, data.metadata);
+
+    check(uRes, {
+      "UpdateCatalog response status is StatusOK": (r) => r.status === grpc.StatusOK,
+      "UpdateCatalog response id stable": (r) => r.message.catalog.id === catalog.id,
+      "UpdateCatalog response description applied": (r) => r.message.catalog.description === newDescription,
+    });
+
+    publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/DeleteCatalog", { namespaceId: data.expectedOwner.id, catalogId: catalog.id }, data.metadata);
+    publicClient.close();
+  });
+}
+
+export function TEST_06_DeleteCatalog(data) {
+  const groupName = "Artifact API: Delete catalog (gRPC)";
+  group(groupName, () => {
+    check(true, { [constant.banner(groupName)]: () => true });
+
+    publicClient.connect(constant.artifactGRPCPublicHost, { plaintext: true });
+
+    const id = "test-" + data.dbIDPrefix + randomString(10);
+    const cRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateCatalog", { namespaceId: data.expectedOwner.id, id, description: randomString(20), tags: ["test", "grpc"], type: "CATALOG_TYPE_PERSISTENT" }, data.metadata);
+    const catalog = cRes.message.catalog;
+
+    const res = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/DeleteCatalog", { namespaceId: data.expectedOwner.id, catalogId: catalog.id }, data.metadata);
+    check(res, {
+      "DeleteCatalog response status is StatusOK": (r) => r.status === grpc.StatusOK,
+    });
+
+    publicClient.close();
+  });
+}
+
+// ============================================================================
+// TEST GROUP 07-10: File Operations (Public gRPC)
+// ============================================================================
+export function TEST_07_UploadFile(data) {
+  const groupName = "Artifact API: Upload file (gRPC)";
+  group(groupName, () => {
+    check(true, { [constant.banner(groupName)]: () => true });
+
+    publicClient.connect(constant.artifactGRPCPublicHost, { plaintext: true });
+
+    const cRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateCatalog",
+      { namespaceId: data.expectedOwner.id, id: "test-" + data.dbIDPrefix + randomString(10), description: randomString(30), tags: ["test", "integration", "grpc"], type: "CATALOG_TYPE_PERSISTENT" },
+      data.metadata
+    );
+    const catalog = cRes.message && cRes.message.catalog ? cRes.message.catalog : {};
+
+    const reqBody = { namespaceId: data.expectedOwner.id, catalogId: catalog.id, file: { filename: data.dbIDPrefix + "test-file-grpc-" + randomString(5) + ".doc", type: "TYPE_DOC", content: constant.sampleDoc } };
+    const resOrigin = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateFile", reqBody, data.metadata);
+
+    check(resOrigin, {
+      "CreateFile response status is StatusOK": (r) => r.status === grpc.StatusOK,
+      "CreateFile response file filename": (r) => r.message.file.filename === reqBody.file.filename,
+      "CreateFile response file uid": (r) => helper.isUUID(r.message.file.uid),
+      "CreateFile response file type": (r) => r.message.file.type === "TYPE_DOC",
+      "CreateFile response file is valid": (r) => helper.validateFileGRPC(r.message.file, false),
+    });
+
+    publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/DeleteFile", { namespaceId: data.expectedOwner.id, catalogId: catalog.id, fileId: resOrigin.message.file.uid }, data.metadata);
+    publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/DeleteCatalog", { namespaceId: data.expectedOwner.id, catalogId: catalog.id }, data.metadata);
+    publicClient.close();
+  });
+}
+
+export function TEST_08_ListFiles(data) {
+  const groupName = "Artifact API: List files (gRPC)";
+  group(groupName, () => {
+    check(true, { [constant.banner(groupName)]: () => true });
+
+    publicClient.connect(constant.artifactGRPCPublicHost, { plaintext: true });
+
+    const cRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateCatalog", { namespaceId: data.expectedOwner.id, id: "test-" + data.dbIDPrefix + randomString(10), description: randomString(30), tags: ["test", "integration", "grpc"], type: "CATALOG_TYPE_PERSISTENT" }, data.metadata);
+    const catalog = cRes.message && cRes.message.catalog ? cRes.message.catalog : {};
+    const fRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateFile", { namespaceId: data.expectedOwner.id, catalogId: catalog.id, file: { filename: data.dbIDPrefix + "test-file-grpc-" + randomString(5) + ".doc", type: "TYPE_DOC", content: constant.sampleDoc } }, data.metadata);
+
+    const resOrigin = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/ListFiles", { namespaceId: data.expectedOwner.id, catalogId: catalog.id, pageSize: 10 }, data.metadata);
+    check(resOrigin, {
+      "ListFiles response status is StatusOK": (r) => r.status === grpc.StatusOK,
+      "ListFiles response files is array": (r) => Array.isArray(r.message.files)
+    });
+
+    publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/DeleteFile", { namespaceId: data.expectedOwner.id, catalogId: catalog.id, fileId: fRes.message.file.uid }, data.metadata);
+    publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/DeleteCatalog", { namespaceId: data.expectedOwner.id, catalogId: catalog.id }, data.metadata);
+    publicClient.close();
+  });
+}
+
+export function TEST_09_GetFile(data) {
+  const groupName = "Artifact API: Get file (gRPC)";
+  group(groupName, () => {
+    check(true, { [constant.banner(groupName)]: () => true });
+
+    publicClient.connect(constant.artifactGRPCPublicHost, { plaintext: true });
+
+    const cRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateCatalog", { namespaceId: data.expectedOwner.id, id: "test-" + data.dbIDPrefix + randomString(10), description: randomString(30), tags: ["test", "integration", "grpc"], type: "CATALOG_TYPE_PERSISTENT" }, data.metadata);
+    const catalog = cRes.message && cRes.message.catalog ? cRes.message.catalog : {};
+    const fRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateFile", { namespaceId: data.expectedOwner.id, catalogId: catalog.id, file: { filename: data.dbIDPrefix + "test-file-grpc-" + randomString(5) + ".doc", type: "TYPE_DOC", content: constant.sampleDoc } }, data.metadata);
+    const file = fRes.message.file;
+
+    const resOrigin = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/GetFile", { namespaceId: data.expectedOwner.id, catalogId: catalog.id, fileId: file.uid }, data.metadata);
+    check(resOrigin, {
+      "GetFile response status is StatusOK": (r) => r.status === grpc.StatusOK,
+      "GetFile response file uid": (r) => r.message.file.uid === file.uid,
+      "GetFile response file name": (r) => r.message.file.filename === file.filename,
+      "GetFile response file is valid": (r) => helper.validateFileGRPC(r.message.file, false)
+    });
+
+    publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/DeleteFile", { namespaceId: data.expectedOwner.id, catalogId: catalog.id, fileId: file.uid }, data.metadata);
+    publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/DeleteCatalog", { namespaceId: data.expectedOwner.id, catalogId: catalog.id }, data.metadata);
+    publicClient.close();
+  });
+}
+
+export function TEST_10_CleanupOnDelete(data) {
+  const groupName = "Artifact API: Cleanup intermediate files when file deleted (gRPC)";
+  group(groupName, () => {
+    check(true, { [constant.banner(groupName)]: () => true });
+
+    publicClient.connect(constant.artifactGRPCPublicHost, { plaintext: true });
+
+    // Create catalog
+    const cRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateCatalog",
+      { namespaceId: data.expectedOwner.id, id: "test-" + data.dbIDPrefix + "clf-" + randomString(5), description: "Cleanup test", tags: ["test", "cleanup"], type: "CATALOG_TYPE_PERSISTENT" },
+      data.metadata
+    );
+    const catalog = cRes.message && cRes.message.catalog ? cRes.message.catalog : {};
+
+    // Upload a PDF file
+    const fRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateFile",
+      { namespaceId: data.expectedOwner.id, catalogId: catalog.id, file: { filename: data.dbIDPrefix + "clf.pdf", type: "TYPE_PDF", content: constant.samplePdf } },
+      data.metadata
+    );
+    const file = fRes.message && fRes.message.file ? fRes.message.file : {};
+
+    check(fRes, {
+      "DeleteFile: File uploaded": (r) => r.status === grpc.StatusOK && file.uid,
+    });
+
+    if (!file.uid) {
+      publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/DeleteCatalog", { namespaceId: data.expectedOwner.id, catalogId: catalog.id }, data.metadata);
+      publicClient.close();
+      return;
+    }
+
+    // Wait for processing to create temporary files
+    sleep(5);
+
+    // Delete file (triggers CleanupFileWorkflow)
+    const dRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/DeleteFile",
+      { namespaceId: data.expectedOwner.id, catalogId: catalog.id, fileId: file.uid },
+      data.metadata
+    );
+
+    check(dRes, {
+      "DeleteFile: File deleted": (r) => r.status === grpc.StatusOK,
+    });
+
+    // Wait for Temporal workflow cleanup
+    sleep(10);
+
+    // Verify cleanup
+    const checkAfter = `
+      SELECT
+        (SELECT COUNT(*) FROM converted_file WHERE file_uid = '${file.uid}') as converted,
+        (SELECT COUNT(*) FROM text_chunk WHERE file_uid = '${file.uid}') as chunks,
+        (SELECT COUNT(*) FROM embedding WHERE file_uid = '${file.uid}') as embeddings
+    `;
+    try {
+      const result = constant.db.exec(checkAfter);
+      if (result && result.length > 0) {
+        const after = result[0];
+        check(after, {
+          "DeleteFile: Converted files removed": () => parseInt(after.converted) === 0,
+          "DeleteFile: Chunks removed": () => parseInt(after.chunks) === 0,
+          "DeleteFile: Embeddings removed": () => parseInt(after.embeddings) === 0,
+        });
+      }
+    } catch (e) {
+      // Cleanup verification failed
+    }
+
+    // Cleanup catalog
+    publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/DeleteCatalog", { namespaceId: data.expectedOwner.id, catalogId: catalog.id }, data.metadata);
+    publicClient.close();
+  });
+}
+
+// ============================================================================
+// TEST GROUP 11-13: JWT/Auth Tests
+// ============================================================================
+export function TEST_11_JWT_UploadFile(data) {
+  const groupName = "Artifact API [gRPC/JWT]: Upload file rejects random user";
+  group(groupName, () => {
+    check(true, { [constant.banner(groupName)]: () => true });
+
+    publicClient.connect(constant.artifactGRPCPublicHost, { plaintext: true });
+
+    // Create catalog with authorized metadata
+    const cRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateCatalog",
+      { namespaceId: data.expectedOwner.id, id: "test-" + data.dbIDPrefix + randomString(10), description: randomString(30), tags: ["test", "integration", "grpc"], type: "CATALOG_TYPE_PERSISTENT" },
+      data.metadata
+    );
+    const catalog = cRes.message.catalog;
+
+    const reqBody = { namespaceId: data.expectedOwner.id, catalogId: catalog.id, file: { filename: data.dbIDPrefix + "test-file-grpc-jwt-" + randomString(5) + ".docx", type: "TYPE_DOCX", content: constant.sampleDocx } };
+    // Invoke with invalid Authorization metadata
+    const resNeg = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateFile", reqBody, constant.paramsGRPCWithJwt);
+    check(resNeg, {
+      "CreateFile unauthenticated/denied": (r) => r.status === grpc.StatusPermissionDenied,
+    });
+
+    // Cleanup
+    publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/DeleteCatalog", { namespaceId: data.expectedOwner.id, catalogId: catalog.id }, data.metadata);
+    publicClient.close();
+  });
+}
+
+export function TEST_12_JWT_ListFiles(data) {
+  const groupName = "Artifact API [gRPC/JWT]: List files rejects random user";
+  group(groupName, () => {
+    check(true, { [constant.banner(groupName)]: () => true });
+
+    publicClient.connect(constant.artifactGRPCPublicHost, { plaintext: true });
+
+    // Create resources with authorized metadata
+    const cRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateCatalog",
+      { namespaceId: data.expectedOwner.id, id: "test-" + data.dbIDPrefix + randomString(10), description: randomString(30), tags: ["test", "integration", "grpc"], type: "CATALOG_TYPE_PERSISTENT" },
+      data.metadata
+    );
+    const catalog = cRes.message.catalog;
+    publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateFile",
+      { namespaceId: data.expectedOwner.id, catalogId: catalog.id, file: { filename: data.dbIDPrefix + "test-file-grpc-jwt-" + randomString(5) + ".docx", type: "TYPE_DOCX", content: constant.sampleDocx } },
+      data.metadata
+    );
+
+    // Negative: list with invalid Authorization
+    const resNeg = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/ListFiles", { namespaceId: data.expectedOwner.id, catalogId: catalog.id, pageSize: 10 }, constant.paramsGRPCWithJwt);
+    check(resNeg, { "ListFiles unauthenticated/denied": (r) => r.status === grpc.StatusPermissionDenied });
+
+    // Cleanup
+    publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/DeleteCatalog", { namespaceId: data.expectedOwner.id, catalogId: catalog.id }, data.metadata);
+    publicClient.close();
+  });
+}
+
+export function TEST_13_JWT_GetFile(data) {
+  const groupName = "Artifact API [gRPC/JWT]: Get file rejects random user";
+  group(groupName, () => {
+    check(true, { [constant.banner(groupName)]: () => true });
+
+    publicClient.connect(constant.artifactGRPCPublicHost, { plaintext: true });
+
+    const cRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateCatalog",
+      { namespaceId: data.expectedOwner.id, id: "test-" + data.dbIDPrefix + randomString(10), description: randomString(30), tags: ["test", "integration", "grpc"], type: "CATALOG_TYPE_PERSISTENT" },
+      data.metadata
+    );
+    const catalog = cRes.message.catalog;
+    const fRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateFile",
+      { namespaceId: data.expectedOwner.id, catalogId: catalog.id, file: { filename: data.dbIDPrefix + "test-file-grpc-jwt-" + randomString(5) + ".docx", type: "TYPE_DOCX", content: constant.sampleDocx } },
+      data.metadata
+    );
+    const file = fRes.message.file;
+
+    // Negative: get file with invalid Authorization
+    const resNeg = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/GetFile", { namespaceId: data.expectedOwner.id, catalogId: catalog.id, fileId: file.uid }, constant.paramsGRPCWithJwt);
+    check(resNeg, { "GetFile unauthenticated/denied": (r) => r.status === grpc.StatusPermissionDenied });
+
+    // Cleanup
+    publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/DeleteFile", { namespaceId: data.expectedOwner.id, catalogId: catalog.id, fileId: file.uid }, data.metadata);
+    publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/DeleteCatalog", { namespaceId: data.expectedOwner.id, catalogId: catalog.id }, data.metadata);
+    publicClient.close();
+  });
+}
+
+// ============================================================================
+// TEST GROUP 14-16: Private gRPC Tests (Admin only)
+// ============================================================================
+export function TEST_14_GetObject(data) {
+  const groupName = "Artifact API: Get Object (private gRPC)";
+  group(groupName, () => {
+    check(true, { [constant.banner(groupName)]: () => true });
+
+    if (constant.apiGatewayMode) {
+      check(true, { "skipped: apiGatewayMode enabled": () => true });
+      return;
+    }
+
+    privateClient.connect(constant.artifactGRPCPrivateHost, { plaintext: true });
+
+    const uid = constant.testObjectUid;
+    if (!uid) {
+      check(true, { "skipped: testObjectUid not provided": () => true });
+      privateClient.close();
+      return;
+    }
+
+    var res = privateClient.invoke("artifact.artifact.v1alpha.ArtifactPrivateService/GetObjectAdmin", { uid: uid }, data.metadata);
+    check(res, {
+      "GetObject returns StatusOK": (r) => r.status === grpc.StatusOK,
+      "GetObject returns object": (r) => !!r.message && !!r.message.object,
+    });
+
+    privateClient.close();
+  });
+}
+
+export function TEST_15_GetObjectURL(data) {
+  const groupName = "Artifact API: Get Object URL (private gRPC)";
+  group(groupName, () => {
+    check(true, { [constant.banner(groupName)]: () => true });
+
+    if (constant.apiGatewayMode) {
+      check(true, { "skipped: apiGatewayMode enabled": () => true });
+      return;
+    }
+
+    privateClient.connect(constant.artifactGRPCPrivateHost, { plaintext: true });
+
+    const uid = constant.testObjectUrlUid;
+    const encoded = constant.testEncodedUrlPath;
+    if (!uid && !encoded) {
+      check(true, { "skipped: testObjectUrlUid or testEncodedUrlPath not provided": () => true });
+      privateClient.close();
+      return;
+    }
+
+    var res = privateClient.invoke("artifact.artifact.v1alpha.ArtifactPrivateService/GetObjectURLAdmin",
+      uid ? { uid: uid } : { encodedUrlPath: encoded },
+      data.metadata
+    );
+    check(res, {
+      "GetObjectURL returns a response": (r) => r && typeof r.status === grpc.StatusOK,
+    });
+
+    privateClient.close();
+  });
+}
+
+export function TEST_16_UpdateObject(data) {
+  const groupName = "Artifact API: Update Object (private gRPC)";
+  group(groupName, () => {
+    check(true, { [constant.banner(groupName)]: () => true });
+
+    if (constant.apiGatewayMode) {
+      check(true, { "skipped: apiGatewayMode enabled": () => true });
+      return;
+    }
+
+    privateClient.connect(constant.artifactGRPCPrivateHost, { plaintext: true });
+
+    const uid = constant.testObjectUidToUpdate;
+    if (!uid) {
+      check(true, { "skipped: testObjectUidToUpdate not provided": () => true });
+      privateClient.close();
+      return;
+    }
+
+    var res = privateClient.invoke("artifact.artifact.v1alpha.ArtifactPrivateService/UpdateObjectAdmin",
+      { uid: uid, isUploaded: true },
+      data.metadata
+    );
+    check(res, {
+      "UpdateObject returns a response": (r) => r && typeof r.status === grpc.StatusOK,
+    });
+
+    privateClient.close();
+  });
 }

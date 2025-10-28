@@ -10,11 +10,10 @@ require (
 	github.com/gogo/status v1.1.1
 	github.com/gojuno/minimock/v3 v3.4.5
 	github.com/golang-migrate/migrate/v4 v4.17.0
-	github.com/google/go-cmp v0.7.0
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.1
 	github.com/iancoleman/strcase v0.3.0
-	github.com/instill-ai/protogen-go v0.3.3-alpha.0.20251025213338-ef545c5cfb61
+	github.com/instill-ai/protogen-go v0.3.3-alpha.0.20251028105332-ff3e16534a85
 	github.com/instill-ai/usage-client v0.4.0
 	github.com/instill-ai/x v0.10.1-alpha
 	github.com/knadh/koanf v1.5.0
@@ -25,6 +24,7 @@ require (
 	github.com/openfga/api/proto v0.0.0-20240723155248-7e5be7b65c27
 	github.com/pkoukk/tiktoken-go v0.1.8
 	github.com/redis/go-redis/v9 v9.9.0
+	go.einride.tech/aip v0.73.0
 	go.opentelemetry.io/otel v1.37.0
 	go.temporal.io/api v1.51.0
 	go.temporal.io/sdk v1.35.0
@@ -39,6 +39,8 @@ require (
 	gorm.io/driver/postgres v1.5.0
 	gorm.io/gorm v1.30.0
 )
+
+require github.com/google/go-cmp v0.7.0 // indirect
 
 require (
 	cloud.google.com/go v0.120.0 // indirect
@@ -150,7 +152,7 @@ require (
 	golang.org/x/text v0.26.0 // indirect
 	golang.org/x/time v0.11.0 // indirect
 	google.golang.org/genproto v0.0.0-20250303144028-a0af3efb3deb // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20250603155806-513f23925822 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20250603155806-513f23925822
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250603155806-513f23925822 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gorm.io/driver/mysql v1.5.6 // indirect

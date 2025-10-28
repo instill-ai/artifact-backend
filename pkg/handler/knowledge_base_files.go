@@ -10,6 +10,7 @@ import (
 
 	"github.com/gofrs/uuid"
 
+	"go.einride.tech/aip/filtering"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -21,16 +22,21 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/service"
 	"github.com/instill-ai/artifact-backend/pkg/types"
-	"github.com/instill-ai/x/resource"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
-	constantx "github.com/instill-ai/x/constant"
 	errorsx "github.com/instill-ai/x/errors"
 	logx "github.com/instill-ai/x/log"
 )
 
-// UploadCatalogFile adds a file to a catalog.
-func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.UploadCatalogFileRequest) (*artifactpb.UploadCatalogFileResponse, error) {
+// ========================================================================
+// NEW AIP-COMPLIANT FILE HANDLERS
+// Following Google AIP-121 (Resource-oriented design) and AIP-122 (Resource names)
+// ========================================================================
+
+// CreateFile adds a file to a catalog (AIP-compliant version of UploadCatalogFile).
+// It handles file upload, validation, ACL checks, dual processing for staging/rollback KBs,
+// and auto-triggers the processing workflow.
+func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateFileRequest) (*artifactpb.CreateFileResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 	authUID, err := getUserUIDFromContext(ctx)
 	if err != nil {
@@ -121,7 +127,7 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 	// upload file to minio and database
 	// Inherit RAG version from parent knowledge base
 	kbFile := repository.KnowledgeBaseFileModel{
-		Name:                      req.GetFile().GetName(),
+		Filename:                  req.GetFile().GetFilename(),
 		FileType:                  req.File.Type.String(),
 		Owner:                     ns.NsUID,
 		KBUID:                     kb.UID,
@@ -147,15 +153,15 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 
 	if !hasObject {
 		// check file name length based on character count
-		if len(req.File.Name) > 255 {
+		if len(req.File.Filename) > 255 {
 			return nil, errorsx.AddMessage(
 				fmt.Errorf("file name is too long. max length is 255. name: %s err: %w",
-					req.File.Name, errorsx.ErrInvalidArgument),
+					req.File.Filename, errorsx.ErrInvalidArgument),
 				"File name is too long. Please use a name with 255 characters or less.",
 			)
 		}
 		// determine the file type by its extension
-		req.File.Type = determineFileType(req.File.Name)
+		req.File.Type = determineFileType(req.File.Filename)
 		if req.File.Type == artifactpb.File_TYPE_UNSPECIFIED {
 			return nil, errorsx.AddMessage(
 				fmt.Errorf("%w: unsupported file extension", errorsx.ErrInvalidArgument),
@@ -166,7 +172,7 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 		// Update kbFile.FileType after determining the type
 		kbFile.FileType = req.File.Type.String()
 
-		if strings.Contains(req.File.Name, "/") {
+		if strings.Contains(req.File.Filename, "/") {
 			return nil, errorsx.AddMessage(
 				fmt.Errorf("%w: file name cannot contain slashes ('/')", errorsx.ErrInvalidArgument),
 				"File name cannot contain slashes ('/'). Please rename the file and try again.",
@@ -182,7 +188,7 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 		}
 
 		// upload the file to MinIO and create the object in the object table
-		objectUID, err := ph.uploadBase64FileToMinIO(ctx, ns.NsID, ns.NsUID, creatorUID, req.File.Name, req.File.Content, req.File.Type)
+		objectUID, err := ph.uploadBase64FileToMinIO(ctx, ns.NsID, ns.NsUID, creatorUID, req.File.Filename, req.File.Content, req.File.Type)
 		if err != nil {
 			return nil, errorsx.AddMessage(
 				fmt.Errorf("fetching upload URL: %w", err),
@@ -220,7 +226,7 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 			object.IsUploaded = true
 		}
 
-		kbFile.Name = object.Name
+		kbFile.Filename = object.Name
 		kbFile.CreatorUID = object.CreatorUID
 		kbFile.Destination = object.Destination
 		kbFile.Size = object.Size
@@ -268,7 +274,7 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 
 	logger.Info("Checking dual processing requirements",
 		zap.String("fileUID", res.UID.String()),
-		zap.String("fileName", res.Name),
+		zap.String("filename", res.Filename),
 		zap.String("kbUID", kb.UID.String()),
 		zap.String("kbID", kb.KBID),
 		zap.String("updateStatus", kb.UpdateStatus))
@@ -289,7 +295,7 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 	} else {
 		logger.Info("Dual processing NOT needed - single KB processing only",
 			zap.String("fileUID", res.UID.String()),
-			zap.String("fileName", res.Name),
+			zap.String("filename", res.Filename),
 			zap.String("kbUID", kb.UID.String()),
 			zap.String("kbID", kb.KBID),
 			zap.String("updateStatus", kb.UpdateStatus))
@@ -308,7 +314,7 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 
 		logger.Info("Dual processing started (fully synchronous: file record + workflow queueing)",
 			zap.String("prodFileUID", res.UID.String()),
-			zap.String("prodFileName", res.Name),
+			zap.String("prodFileName", res.Filename),
 			zap.String("prodKBUID", kb.UID.String()),
 			zap.String("targetKBUID", dualTarget.TargetKB.UID.String()),
 			zap.String("phase", dualTarget.Phase))
@@ -317,7 +323,7 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 		// This file record will reference the same original file in MinIO
 		// but will have different processed outputs (chunks, embeddings)
 		targetFile := repository.KnowledgeBaseFileModel{
-			Name:                      res.Name,
+			Filename:                  res.Filename,
 			FileType:                  res.FileType,
 			Owner:                     res.Owner,
 			CreatorUID:                res.CreatorUID,
@@ -343,7 +349,7 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 				backoffDuration := time.Duration(100*(1<<uint(attempt-1))) * time.Millisecond // 100ms, 200ms, 400ms
 				logger.Warn("Failed to create target file record during dual processing, retrying...",
 					zap.Error(err),
-					zap.String("prodFileName", res.Name),
+					zap.String("prodFileName", res.Filename),
 					zap.String("targetKBUID", dualTarget.TargetKB.UID.String()),
 					zap.Int("attempt", attempt),
 					zap.Int("maxRetries", maxRetries),
@@ -355,7 +361,7 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 		if err != nil {
 			logger.Error("Failed to create target file record during dual processing after retries",
 				zap.Error(err),
-				zap.String("prodFileName", res.Name),
+				zap.String("prodFileName", res.Filename),
 				zap.String("prodFileUID", res.UID.String()),
 				zap.String("targetKBUID", dualTarget.TargetKB.UID.String()),
 				zap.String("targetKBID", dualTarget.TargetKB.KBID),
@@ -405,7 +411,7 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 	// The ProcessCatalogFiles API is now deprecated (kept for backward compatibility only).
 	logger.Info("Auto-triggering file processing",
 		zap.String("fileUID", res.UID.String()),
-		zap.String("fileName", res.Name),
+		zap.String("filename", res.Filename),
 		zap.String("kbUID", kb.UID.String()))
 
 	ownerUID := types.UserUIDType(ns.NsUID)
@@ -417,7 +423,7 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 		logger.Error("Failed to auto-trigger file processing",
 			zap.Error(err),
 			zap.String("fileUID", res.UID.String()),
-			zap.String("fileName", res.Name),
+			zap.String("filename", res.Filename),
 			zap.String("kbUID", kb.UID.String()),
 			zap.String("kbID", kb.KBID),
 			zap.String("updateStatus", kb.UpdateStatus))
@@ -425,20 +431,22 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 	} else {
 		logger.Info("File processing started successfully (auto-trigger)",
 			zap.String("fileUID", res.UID.String()),
-			zap.String("fileName", res.Name),
+			zap.String("filename", res.Filename),
 			zap.String("kbUID", kb.UID.String()),
 			zap.String("kbID", kb.KBID),
 			zap.String("updateStatus", kb.UpdateStatus),
 			zap.Bool("hasDualProcessing", dualTarget != nil && dualTarget.IsNeeded))
 	}
 
-	return &artifactpb.UploadCatalogFileResponse{
+	return &artifactpb.CreateFileResponse{
 		File: &artifactpb.File{
-			FileUid:            res.UID.String(),
+			Uid:                res.UID.String(),
+			Id:                 res.UID.String(),
 			OwnerUid:           res.Owner.String(),
 			CreatorUid:         res.CreatorUID.String(),
 			CatalogUid:         res.KBUID.String(),
-			Name:               res.Name,
+			Name:               fmt.Sprintf("namespaces/%s/catalogs/%s/files/%s", req.NamespaceId, req.CatalogId, res.UID.String()),
+			Filename:           res.Filename,
 			Type:               req.File.Type,
 			CreateTime:         timestamppb.New(*res.CreateTime),
 			UpdateTime:         timestamppb.New(*res.UpdateTime),
@@ -453,232 +461,9 @@ func (ph *PublicHandler) UploadCatalogFile(ctx context.Context, req *artifactpb.
 	}, nil
 }
 
-// appendRequestMetadata appends the gRPC metadata present in the context to
-// the provided ExternalMetadata under the key constant.MetadataRequestKey.
-func appendRequestMetadata(ctx context.Context, externalMetadata *structpb.Struct) (*structpb.Struct, error) {
-	if externalMetadata == nil {
-		externalMetadata = &structpb.Struct{
-			Fields: make(map[string]*structpb.Value, 1),
-		}
-	}
-
-	md, hasMetadata := metadata.FromIncomingContext(ctx)
-	if !hasMetadata {
-		return externalMetadata, nil
-	}
-
-	// In order to simplify the code translating metadata.MD <->
-	// structpb.Struct, JSON marshalling is used. This is less efficient than
-	// leveraging the knowledge about the metadata structure (a
-	// map[string][]string), but readability has been prioritized.
-	j, err := json.Marshal(md)
-	if err != nil {
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("marshalling metadata: %w", err),
-			"Unable to process request metadata. Please try again.",
-		)
-	}
-
-	mdStruct := new(structpb.Struct)
-	if err := mdStruct.UnmarshalJSON(j); err != nil {
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("unmarshalling metadata into struct: %w", err),
-			"Unable to process request metadata. Please try again.",
-		)
-	}
-
-	externalMetadata.Fields[constant.MetadataRequestKey] = structpb.NewStructValue(mdStruct)
-	return externalMetadata, nil
-}
-
-// getFileSize returns the size of the file in bytes and a human-readable string
-func getFileSize(base64String string) (int64, string) {
-	// Get the length of the base64 string
-	base64Length := len(base64String)
-
-	// Calculate the size of the decoded data
-	// The actual size is approximately 3/4 of the base64 string length
-	decodedSize := base64Length / 4 * 3
-
-	// Remove padding characters
-	if base64String[base64Length-1] == '=' {
-		decodedSize--
-		if base64String[base64Length-2] == '=' {
-			decodedSize--
-		}
-	}
-
-	// Convert to appropriate unit
-	const unit = 1024
-	if decodedSize < unit {
-		return int64(decodedSize), fmt.Sprintf("%d B", decodedSize)
-	}
-	div, exp := int64(unit), 0
-	for n := int64(decodedSize) / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	size := float64(decodedSize) / float64(div)
-	return int64(decodedSize), fmt.Sprintf("%.1f %cB", size, "KMGTPE"[exp])
-}
-
-// Check if objectUID is provided, and all other required fields if not
-func checkUploadKnowledgeBaseFileRequest(req *artifactpb.UploadCatalogFileRequest) (hasObject bool, _ error) {
-	if req.GetNamespaceId() == "" {
-		return false, fmt.Errorf("%w: owner UID is required", errorsx.ErrInvalidArgument)
-	}
-
-	if req.GetCatalogId() == "" {
-		return false, fmt.Errorf("%w: catalog UID is required", errorsx.ErrInvalidArgument)
-	}
-
-	if req.GetFile().GetObjectUid() == "" {
-		// File upload doesn't reference object, so request must contain the
-		// file contents.
-		if req.GetFile().GetName() == "" {
-			return false, fmt.Errorf("%w: file name is required", errorsx.ErrInvalidArgument)
-		}
-		if req.GetFile().GetContent() == "" {
-			return false, fmt.Errorf("%w: file content is required", errorsx.ErrInvalidArgument)
-		}
-
-		return false, nil
-	}
-
-	return true, nil
-}
-
-// MoveFileToCatalog moves a file from one catalog to another within the same namespace.
-// It copies the file content and metadata to the target catalog and deletes
-// the file from the source catalog.
-func (ph *PublicHandler) MoveFileToCatalog(ctx context.Context, req *artifactpb.MoveFileToCatalogRequest) (*artifactpb.MoveFileToCatalogResponse, error) {
-	logger, _ := logx.GetZapLogger(ctx)
-
-	// Validate authentication and request parameters
-	_, err := getUserUIDFromContext(ctx)
-	if err != nil {
-		err := fmt.Errorf("failed to get user uid from header: %v. err: %w", err, errorsx.ErrUnauthenticated)
-		return nil, err
-	}
-	if req.FileUid == "" {
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("file uid is required. err: %w", errorsx.ErrInvalidArgument),
-			"File ID is required. Please specify which file to move.",
-		)
-	}
-	if req.ToCatalogId == "" {
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("to catalog id is required. err: %w", errorsx.ErrInvalidArgument),
-			"Target catalog ID is required. Please specify the destination catalog.",
-		)
-	}
-
-	// Step 1: Verify source file exists and check namespace permissions
-	sourceFiles, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{types.FileUIDType(uuid.FromStringOrNil(req.FileUid))})
-	if err != nil || len(sourceFiles) == 0 {
-		logger.Error("file not found", zap.Error(err))
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("file not found: %w", errorsx.ErrNotFound),
-			"File not found. Please check the file ID and try again.",
-		)
-	}
-
-	sourceFile := sourceFiles[0]
-	// Verify namespace exists and get its details
-	reqNamespace, err := ph.service.GetNamespaceByNsID(ctx, req.NamespaceId)
-	if err != nil {
-		logger.Error("failed to get namespace uid from source file", zap.Error(err))
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("failed to get namespace: %w", err),
-			"Unable to access the specified namespace. Please check the namespace ID and try again.",
-		)
-	}
-	// Ensure file movement occurs within the same namespace
-	if reqNamespace.NsUID.String() != sourceFile.Owner.String() {
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("%w: source file is not in the same namespace", errorsx.ErrInvalidArgument),
-			"File can only be moved within the same namespace. Please select a target catalog in the same namespace.",
-		)
-	}
-
-	// Step 2: Verify target catalog exists
-	targetCatalog, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, reqNamespace.NsUID, req.ToCatalogId)
-	if err != nil {
-		logger.Error("target catalog not found", zap.Error(err))
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("target catalog not found: %w", err),
-			"Target catalog not found. Please check the catalog ID and try again.",
-		)
-	}
-
-	// Step 3: Retrieve file content from MinIO storage
-	fileContent, err := ph.service.Repository().GetFile(ctx, config.Config.Minio.BucketName, sourceFile.Destination)
-	if err != nil {
-		logger.Error("failed to get file content from MinIO", zap.Error(err))
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("failed to get file content: %w", err),
-			"Unable to retrieve file content. Please try again.",
-		)
-	}
-
-	// Prepare file content and metadata for upload
-	fileContentBase64 := base64.StdEncoding.EncodeToString(fileContent)
-	fileType := artifactpb.File_Type(artifactpb.File_Type_value[sourceFile.FileType])
-	externalMetadata := sourceFile.PublicExternalMetadataUnmarshal()
-
-	// Step 4: Create file in target catalog
-	uploadReq := &artifactpb.UploadCatalogFileRequest{
-		NamespaceId: req.NamespaceId,
-		CatalogId:   targetCatalog.KBID,
-		File: &artifactpb.File{
-			Name:             sourceFile.Name,
-			Content:          fileContentBase64,
-			Type:             fileType,
-			ExternalMetadata: externalMetadata,
-		},
-	}
-
-	uploadResp, err := ph.UploadCatalogFile(ctx, uploadReq)
-	if err != nil {
-		logger.Error("failed to upload file to target catalog", zap.Error(err))
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("failed to upload file to target catalog: %w", err),
-			"Unable to upload file to the target catalog. Please try again.",
-		)
-	}
-
-	// process the file
-	processReq := &artifactpb.ProcessCatalogFilesRequest{
-		FileUids: []string{uploadResp.File.FileUid},
-	}
-	_, err = ph.ProcessCatalogFiles(ctx, processReq)
-	if err != nil {
-		logger.Error("failed to process file", zap.Error(err))
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("failed to process file: %w", err),
-			"File moved but processing failed. The file is in the target catalog but may need to be processed manually.",
-		)
-	}
-
-	// Step 5: delete the source file
-	deleteReq := &artifactpb.DeleteCatalogFileRequest{
-		FileUid: sourceFile.UID.String(),
-	}
-	_, err = ph.DeleteCatalogFile(ctx, deleteReq)
-	if err != nil {
-		logger.Error("failed to delete file from original catalog",
-			zap.String("file_uid", sourceFile.UID.String()),
-			zap.Error(err))
-	}
-
-	// Return the UID of the newly created file
-	return &artifactpb.MoveFileToCatalogResponse{
-		FileUid: uploadResp.File.FileUid,
-	}, nil
-}
-
-// ListCatalogFiles lists the files in a catalog
-func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.ListCatalogFilesRequest) (*artifactpb.ListCatalogFilesResponse, error) {
+// ListFiles lists files in a catalog with pagination and filtering (AIP-compliant version of ListCatalogFiles).
+// Supports filtering by file IDs and process status, with token/chunk count enrichment.
+func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFilesRequest) (*artifactpb.ListFilesResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 	authUID, err := getUserUIDFromContext(ctx)
 	if err != nil {
@@ -724,13 +509,36 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 		)
 	}
 
+	// Parse AIP-160 filter expression
+	declarations, err := filtering.NewDeclarations([]filtering.DeclarationOption{
+		filtering.DeclareStandardFunctions(),
+		filtering.DeclareIdent("uid", filtering.TypeString),
+		filtering.DeclareIdent("id", filtering.TypeString),
+		filtering.DeclareIdent("process_status", filtering.TypeString),
+	}...)
+	if err != nil {
+		logger.Error("failed to create filter declarations", zap.Error(err))
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("filter configuration error: %w", err),
+			"Unable to configure filter. Please try again.",
+		)
+	}
+
+	filter, err := filtering.ParseFilter(req, declarations)
+	if err != nil {
+		logger.Error("failed to parse filter", zap.Error(err))
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("invalid filter expression: %w", err),
+			"Unable to parse filter. Please check the filter syntax and try again.",
+		)
+	}
+
 	kbFileList, err := ph.service.Repository().ListKnowledgeBaseFiles(ctx, repository.KnowledgeBaseFileListParams{
-		OwnerUID:      ns.NsUID.String(),
-		KBUID:         kb.UID.String(),
-		PageSize:      int(req.GetPageSize()),
-		PageToken:     req.GetPageToken(),
-		FileUIDs:      req.GetFilter().GetFileUids(),
-		ProcessStatus: req.GetFilter().GetProcessStatus(),
+		OwnerUID:  ns.NsUID.String(),
+		KBUID:     kb.UID.String(),
+		PageSize:  int(req.GetPageSize()),
+		PageToken: req.GetPageToken(),
+		Filter:    filter,
 	})
 	if err != nil {
 		return nil, errorsx.AddMessage(
@@ -740,7 +548,7 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 	}
 
 	// Get the tokens and chunks using the source table and source UID.
-	sources, err := ph.service.Repository().GetSourceTableAndUIDByFileUIDs(ctx, kbFileList.Files)
+	sources, err := ph.service.Repository().GetContentByFileUIDs(ctx, kbFileList.Files)
 	if err != nil {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("fetching sources: %w", err),
@@ -781,7 +589,7 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 		// adopt the new flow. So the old flow can be deprecated and
 		// removed.
 		if strings.Split(kbFile.Destination, "/")[1] == "uploaded-file" {
-			fileName := strings.Split(kbFile.Destination, "/")[2]
+			filename := strings.Split(kbFile.Destination, "/")[2]
 
 			content, err := ph.service.Repository().GetFile(ctx, config.Config.Minio.BucketName, kbFile.Destination)
 			if err != nil {
@@ -793,7 +601,7 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 			contentBase64 := base64.StdEncoding.EncodeToString(content)
 			fileType := artifactpb.File_Type(artifactpb.File_Type_value[kbFile.FileType])
 
-			objectUID, err = ph.uploadBase64FileToMinIO(ctx, ns.NsID, ns.NsUID, ns.NsUID, fileName, contentBase64, fileType)
+			objectUID, err = ph.uploadBase64FileToMinIO(ctx, ns.NsID, ns.NsUID, ns.NsUID, filename, contentBase64, fileType)
 			if err != nil {
 				return nil, errorsx.AddMessage(
 					fmt.Errorf("uploading migrated file to MinIO: %w", err),
@@ -825,11 +633,13 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 		}
 
 		file := &artifactpb.File{
-			FileUid:            kbFile.UID.String(),
+			Uid:                kbFile.UID.String(),
+			Id:                 kbFile.UID.String(),
 			OwnerUid:           kbFile.Owner.String(),
 			CreatorUid:         kbFile.CreatorUID.String(),
 			CatalogUid:         kbFile.KBUID.String(),
-			Name:               kbFile.Name,
+			Name:               fmt.Sprintf("namespaces/%s/catalogs/%s/files/%s", req.NamespaceId, req.CatalogId, kbFile.UID.String()),
+			Filename:           kbFile.Filename,
 			Type:               artifactpb.File_Type(artifactpb.File_Type_value[kbFile.FileType]),
 			CreateTime:         timestamppb.New(*kbFile.CreateTime),
 			UpdateTime:         timestamppb.New(*kbFile.UpdateTime),
@@ -849,7 +659,7 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 			file.ProcessOutcome = kbFile.ExtraMetaDataUnmarshal.FailReason
 		}
 
-		if kbFile.ExtraMetaDataUnmarshal != nil && kbFile.ExtraMetaDataUnmarshal.Length != nil {
+		if kbFile.ExtraMetaDataUnmarshal != nil && len(kbFile.ExtraMetaDataUnmarshal.Length) > 0 {
 			fileType := artifactpb.File_Type(artifactpb.File_Type_value[kbFile.FileType])
 			file.Length = &artifactpb.File_Position{
 				Unit:        getPositionUnit(fileType),
@@ -860,26 +670,27 @@ func (ph *PublicHandler) ListCatalogFiles(ctx context.Context, req *artifactpb.L
 		files = append(files, file)
 	}
 
-	return &artifactpb.ListCatalogFilesResponse{
+	return &artifactpb.ListFilesResponse{
 		Files:         files,
 		TotalSize:     int32(kbFileList.TotalCount),
 		PageSize:      int32(len(kbFileList.Files)),
 		NextPageToken: kbFileList.NextPageToken,
-		Filter:        req.Filter,
 	}, nil
 }
 
-// GetCatalogFile gets a file in a catalog
-func (ph *PublicHandler) GetCatalogFile(ctx context.Context, req *artifactpb.GetCatalogFileRequest) (*artifactpb.GetCatalogFileResponse, error) {
+// GetFile retrieves a file from a catalog with support for different views (AIP-compliant version of GetCatalogFile).
+// Supports VIEW_BASIC, VIEW_FULL (metadata), VIEW_SUMMARY, VIEW_CONTENT, VIEW_STANDARD_FILE_TYPE (standardized files), VIEW_ORIGINAL_FILE_TYPE (original files), and VIEW_CACHE (Gemini cache).
+func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileRequest) (*artifactpb.GetFileResponse, error) {
+	logger, _ := logx.GetZapLogger(ctx)
 
-	files, err := ph.ListCatalogFiles(ctx, &artifactpb.ListCatalogFilesRequest{
+	// Get the file metadata first
+	filterExpr := fmt.Sprintf(`id = "%s"`, req.FileId)
+	pageSize := int32(1)
+	files, err := ph.ListFiles(ctx, &artifactpb.ListFilesRequest{
 		NamespaceId: req.NamespaceId,
 		CatalogId:   req.CatalogId,
-		PageSize:    1,
-		PageToken:   "",
-		Filter: &artifactpb.ListCatalogFilesFilter{
-			FileUids: []string{req.FileUid},
-		},
+		PageSize:    &pageSize,
+		Filter:      &filterExpr,
 	})
 	if err != nil {
 		return nil, err
@@ -891,14 +702,283 @@ func (ph *PublicHandler) GetCatalogFile(ctx context.Context, req *artifactpb.Get
 		)
 	}
 
-	return &artifactpb.GetCatalogFileResponse{
-		File: files.Files[0],
-	}, nil
+	file := files.Files[0]
 
+	// Handle view-specific content
+	var derivedResourceURI *string
+	view := req.GetView()
+
+	// For VIEW_BASIC and VIEW_FULL, only return metadata (no derived content)
+	if view == artifactpb.File_VIEW_BASIC || view == artifactpb.File_VIEW_FULL || view == artifactpb.File_VIEW_UNSPECIFIED {
+		return &artifactpb.GetFileResponse{
+			File:               file,
+			DerivedResourceUri: nil,
+		}, nil
+	}
+
+	// Get namespace and KB for MinIO/cache access
+	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
+	if err != nil {
+		logger.Warn("failed to get namespace for view content", zap.Error(err))
+		return &artifactpb.GetFileResponse{File: file}, nil
+	}
+
+	kb, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.CatalogId)
+	if err != nil {
+		logger.Warn("failed to get catalog for view content", zap.Error(err))
+		return &artifactpb.GetFileResponse{File: file}, nil
+	}
+
+	fileUID := uuid.FromStringOrNil(req.FileId)
+	kbFiles, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{types.FileUIDType(fileUID)})
+	if err != nil || len(kbFiles) == 0 {
+		logger.Warn("failed to get file for view content", zap.Error(err))
+		return &artifactpb.GetFileResponse{File: file}, nil
+	}
+	kbFile := kbFiles[0]
+
+	// Generate view-specific content with proper download headers
+	switch view {
+	case artifactpb.File_VIEW_SUMMARY:
+		// Get converted summary file and generate pre-signed URL with proper headers
+		convertedFile, err := ph.service.Repository().GetConvertedFileByFileUIDAndType(
+			ctx,
+			kbFile.UID,
+			artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_SUMMARY,
+		)
+		if err == nil && convertedFile != nil {
+			// Generate filename for download
+			filename := fmt.Sprintf("%s-summary.md", kbFile.Filename)
+			minioURL, err := ph.service.Repository().GetPresignedURLForDownload(
+				ctx,
+				config.Config.Minio.BucketName,
+				convertedFile.Destination,
+				filename,
+				convertedFile.ContentType, // Usually "text/markdown"
+				15*time.Minute,            // 15 minutes
+			)
+			if err == nil {
+				// Encode MinIO presigned URL to be accessible through API gateway
+				gatewayURL, err := service.EncodeBlobURL(minioURL)
+				if err == nil {
+					derivedResourceURI = &gatewayURL
+				} else {
+					logger.Warn("failed to encode blob URL for summary", zap.Error(err))
+				}
+			} else {
+				logger.Warn("failed to generate pre-signed URL for summary", zap.Error(err))
+			}
+		} else {
+			logger.Info("summary not available for file", zap.String("fileUID", kbFile.UID.String()))
+		}
+
+	case artifactpb.File_VIEW_CONTENT:
+		// Get converted content file and generate pre-signed URL with proper headers
+		convertedFile, err := ph.service.Repository().GetConvertedFileByFileUIDAndType(
+			ctx,
+			kbFile.UID,
+			artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_CONTENT,
+		)
+		if err == nil && convertedFile != nil {
+			// Generate filename for download
+			filename := fmt.Sprintf("%s-content.md", kbFile.Filename)
+			minioURL, err := ph.service.Repository().GetPresignedURLForDownload(
+				ctx,
+				config.Config.Minio.BucketName,
+				convertedFile.Destination,
+				filename,
+				convertedFile.ContentType, // Usually "text/markdown"
+				15*time.Minute,            // 15 minutes
+			)
+			if err == nil {
+				// Encode MinIO presigned URL to be accessible through API gateway
+				gatewayURL, err := service.EncodeBlobURL(minioURL)
+				if err == nil {
+					derivedResourceURI = &gatewayURL
+				} else {
+					logger.Warn("failed to encode blob URL for content", zap.Error(err))
+				}
+			} else {
+				logger.Warn("failed to generate pre-signed URL for content", zap.Error(err))
+			}
+		} else {
+			logger.Info("content not available for file", zap.String("fileUID", kbFile.UID.String()))
+		}
+
+	case artifactpb.File_VIEW_STANDARD_FILE_TYPE:
+		// Get standardized file:
+		// - Documents → PDF
+		// - Images → PNG
+		// - Audio → OGG
+		// - Video → MP4
+
+		// Parse file type to determine which converted file type to query
+		fileType, ok := artifactpb.File_Type_value[kbFile.FileType]
+		if !ok {
+			fileType = int32(artifactpb.File_TYPE_UNSPECIFIED)
+		}
+		fileProtoType := artifactpb.File_Type(fileType)
+
+		// Determine the converted file type and file extension based on media category
+		var convertedFileType artifactpb.ConvertedFileType
+		var fileExtension string
+
+		switch fileProtoType {
+		// Documents → PDF
+		case artifactpb.File_TYPE_PDF,
+			artifactpb.File_TYPE_DOC,
+			artifactpb.File_TYPE_DOCX,
+			artifactpb.File_TYPE_PPT,
+			artifactpb.File_TYPE_PPTX,
+			artifactpb.File_TYPE_XLS,
+			artifactpb.File_TYPE_XLSX,
+			artifactpb.File_TYPE_HTML,
+			artifactpb.File_TYPE_TEXT,
+			artifactpb.File_TYPE_MARKDOWN,
+			artifactpb.File_TYPE_CSV:
+			convertedFileType = artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_DOCUMENT
+			fileExtension = "pdf"
+
+		// Images → PNG
+		case artifactpb.File_TYPE_PNG,
+			artifactpb.File_TYPE_JPEG,
+			artifactpb.File_TYPE_JPG,
+			artifactpb.File_TYPE_WEBP,
+			artifactpb.File_TYPE_HEIC,
+			artifactpb.File_TYPE_HEIF,
+			artifactpb.File_TYPE_GIF,
+			artifactpb.File_TYPE_BMP,
+			artifactpb.File_TYPE_TIFF,
+			artifactpb.File_TYPE_AVIF:
+			convertedFileType = artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_IMAGE
+			fileExtension = "png"
+
+		// Audio → OGG
+		case artifactpb.File_TYPE_MP3,
+			artifactpb.File_TYPE_WAV,
+			artifactpb.File_TYPE_AAC,
+			artifactpb.File_TYPE_OGG,
+			artifactpb.File_TYPE_FLAC,
+			artifactpb.File_TYPE_AIFF,
+			artifactpb.File_TYPE_M4A,
+			artifactpb.File_TYPE_WMA:
+			convertedFileType = artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_AUDIO
+			fileExtension = "ogg"
+
+		// Video → MP4
+		case artifactpb.File_TYPE_MP4,
+			artifactpb.File_TYPE_MPEG,
+			artifactpb.File_TYPE_MOV,
+			artifactpb.File_TYPE_AVI,
+			artifactpb.File_TYPE_FLV,
+			artifactpb.File_TYPE_WEBM_VIDEO,
+			artifactpb.File_TYPE_WMV,
+			artifactpb.File_TYPE_MKV:
+			convertedFileType = artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_VIDEO
+			fileExtension = "mp4"
+
+		default:
+			logger.Warn("unsupported file type for VIEW_STANDARD_FILE_TYPE",
+				zap.String("fileType", kbFile.FileType),
+				zap.String("fileUID", kbFile.UID.String()))
+			convertedFileType = artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_UNSPECIFIED
+			fileExtension = ""
+		}
+
+		if convertedFileType != artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_UNSPECIFIED {
+			convertedFile, err := ph.service.Repository().GetConvertedFileByFileUIDAndType(
+				ctx,
+				kbFile.UID,
+				convertedFileType,
+			)
+			if err == nil && convertedFile != nil {
+				// Generate filename for download with appropriate extension
+				filename := fmt.Sprintf("%s.%s", kbFile.Filename, fileExtension)
+				minioURL, err := ph.service.Repository().GetPresignedURLForDownload(
+					ctx,
+					config.Config.Minio.BucketName,
+					convertedFile.Destination,
+					filename,
+					convertedFile.ContentType,
+					15*time.Minute,
+				)
+				if err == nil {
+					gatewayURL, err := service.EncodeBlobURL(minioURL)
+					if err == nil {
+						derivedResourceURI = &gatewayURL
+						logger.Debug("generated standardized file URL",
+							zap.String("fileType", fileExtension),
+							zap.String("convertedType", convertedFileType.String()))
+					} else {
+						logger.Warn("failed to encode blob URL for standardized file", zap.Error(err))
+					}
+				} else {
+					logger.Warn("failed to generate pre-signed URL for standardized file", zap.Error(err))
+				}
+			} else {
+				logger.Info("standardized file not available",
+					zap.String("fileUID", kbFile.UID.String()),
+					zap.String("convertedFileType", convertedFileType.String()))
+			}
+		}
+
+	case artifactpb.File_VIEW_ORIGINAL_FILE_TYPE:
+		// Get the original uploaded file
+		// Parse file type from stored string
+		fileType, ok := artifactpb.File_Type_value[kbFile.FileType]
+		if !ok {
+			fileType = int32(artifactpb.File_TYPE_UNSPECIFIED)
+		}
+		fileProtoType := artifactpb.File_Type(fileType)
+
+		// Get the appropriate bucket for this file
+		bucket := repository.BucketFromDestination(kbFile.Destination)
+
+		// Get MIME type for the original file
+		contentType := fileTypeConvertToMime(fileProtoType)
+
+		// Generate pre-signed URL for the original file
+		minioURL, err := ph.service.Repository().GetPresignedURLForDownload(
+			ctx,
+			bucket,
+			kbFile.Destination,
+			kbFile.Filename,
+			contentType,
+			15*time.Minute,
+		)
+		if err == nil {
+			gatewayURL, err := service.EncodeBlobURL(minioURL)
+			if err == nil {
+				derivedResourceURI = &gatewayURL
+			} else {
+				logger.Warn("failed to encode blob URL for original file", zap.Error(err))
+			}
+		} else {
+			logger.Warn("failed to generate pre-signed URL for original file", zap.Error(err))
+		}
+
+	case artifactpb.File_VIEW_CACHE:
+		// Get Gemini cache resource name from chat cache metadata
+		// Note: Chat cache uses KB UID + file UIDs as key
+		cacheMetadata, err := ph.service.Repository().GetCacheMetadata(ctx, kb.UID, []types.FileUIDType{kbFile.UID})
+		if err == nil && cacheMetadata != nil && cacheMetadata.CacheName != "" {
+			derivedResourceURI = &cacheMetadata.CacheName
+		} else {
+			logger.Info("cache not available for file",
+				zap.String("fileUID", kbFile.UID.String()),
+				zap.Error(err))
+		}
+	}
+
+	return &artifactpb.GetFileResponse{
+		File:               file,
+		DerivedResourceUri: derivedResourceURI,
+	}, nil
 }
 
-// DeleteCatalogFile deletes a file in a catalog
-func (ph *PublicHandler) DeleteCatalogFile(ctx context.Context, req *artifactpb.DeleteCatalogFileRequest) (*artifactpb.DeleteCatalogFileResponse, error) {
+// DeleteFile deletes a file from a catalog (AIP-compliant version of DeleteCatalogFile).
+// Handles soft deletion, dual deletion for staging/rollback KBs, and triggers cleanup workflows.
+func (ph *PublicHandler) DeleteFile(ctx context.Context, req *artifactpb.DeleteFileRequest) (*artifactpb.DeleteFileResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 
 	// Get authenticated user UID for ACL checks
@@ -912,7 +992,7 @@ func (ph *PublicHandler) DeleteCatalogFile(ctx context.Context, req *artifactpb.
 	}
 
 	// ACL - check user's permission to write catalog of kb file
-	kbfs, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{types.FileUIDType(uuid.FromStringOrNil(req.FileUid))})
+	kbfs, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{types.FileUIDType(uuid.FromStringOrNil(req.FileId))})
 	if err != nil {
 		logger.Error("failed to get catalog files", zap.Error(err))
 		return nil, errorsx.AddMessage(
@@ -1025,14 +1105,14 @@ func (ph *PublicHandler) DeleteCatalogFile(ctx context.Context, req *artifactpb.
 	}
 
 	// check if file uid is empty
-	if req.FileUid == "" {
+	if req.FileId == "" {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("%w: file uid is required", errorsx.ErrInvalidArgument),
 			"File ID is required. Please specify which file to delete.",
 		)
 	}
 
-	fUID, err := uuid.FromString(req.FileUid)
+	fUID, err := uuid.FromString(req.FileId)
 	if err != nil {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("failed to parse file uid: %w", errorsx.ErrInvalidArgument),
@@ -1096,12 +1176,12 @@ func (ph *PublicHandler) DeleteCatalogFile(ctx context.Context, req *artifactpb.
 		var targetFiles []repository.KnowledgeBaseFileModel
 		maxRetries := 30
 		for attempt := 0; attempt < maxRetries; attempt++ {
-			targetFiles, err = ph.service.Repository().GetKnowledgeBaseFilesByName(ctx, dualTarget.TargetKB.UID, files[0].Name)
+			targetFiles, err = ph.service.Repository().GetKnowledgeBaseFilesByName(ctx, dualTarget.TargetKB.UID, files[0].Filename)
 			if err != nil {
 				logger.Warn("Failed to find target file for dual deletion",
 					zap.Error(err),
 					zap.String("targetKBUID", dualTarget.TargetKB.UID.String()),
-					zap.String("fileName", files[0].Name),
+					zap.String("filename", files[0].Filename),
 					zap.Int("attempt", attempt+1))
 				break // Stop retrying on error
 			}
@@ -1120,7 +1200,7 @@ func (ph *PublicHandler) DeleteCatalogFile(ctx context.Context, req *artifactpb.
 				// Log only on first few attempts and then every 5th attempt to reduce noise
 				if attempt < 3 || (attempt+1)%5 == 0 {
 					logger.Info("Target file not found yet, retrying dual deletion lookup",
-						zap.String("fileName", files[0].Name),
+						zap.String("filename", files[0].Filename),
 						zap.String("targetKBUID", dualTarget.TargetKB.UID.String()),
 						zap.Int("attempt", attempt+1),
 						zap.Int("maxRetries", maxRetries))
@@ -1164,7 +1244,7 @@ func (ph *PublicHandler) DeleteCatalogFile(ctx context.Context, req *artifactpb.
 			}
 		} else {
 			logger.Warn("No corresponding target file found for dual deletion after retries",
-				zap.String("fileName", files[0].Name),
+				zap.String("filename", files[0].Filename),
 				zap.String("targetKBUID", dualTarget.TargetKB.UID.String()),
 				zap.Int("retriesAttempted", maxRetries),
 				zap.String("warning", "This may cause validation mismatch if the file is created later"))
@@ -1195,10 +1275,112 @@ func (ph *PublicHandler) DeleteCatalogFile(ctx context.Context, req *artifactpb.
 			zap.String("workflowID", workflowID))
 	}
 
-	return &artifactpb.DeleteCatalogFileResponse{
-		FileUid: fUID.String(),
+	return &artifactpb.DeleteFileResponse{
+		FileId: fUID.String(),
 	}, nil
 
+}
+
+// UpdateFile updates a file's metadata fields based on the provided field mask.
+// Supports updating: external_metadata, tags
+func (ph *PublicHandler) UpdateFile(ctx context.Context, req *artifactpb.UpdateFileRequest) (*artifactpb.UpdateFileResponse, error) {
+	logger, _ := logx.GetZapLogger(ctx)
+
+	// Validate authentication
+	_, err := getUserUIDFromContext(ctx)
+	if err != nil {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to get user id from header: %v: %w", err, errorsx.ErrUnauthenticated),
+			"Authentication failed. Please log in and try again.",
+		)
+	}
+
+	// Get namespace
+	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
+	if err != nil {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("fetching namespace: %w", err),
+			"Unable to access the specified namespace. Please check the namespace ID and try again.",
+		)
+	}
+
+	// Get catalog
+	kb, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.CatalogId)
+	if err != nil {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("fetching catalog: %w", err),
+			"Unable to access the specified catalog. Please check the catalog ID and try again.",
+		)
+	}
+
+	// Check ACL permissions
+	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kb.UID, "writer")
+	if err != nil {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("checking permissions: %w", err),
+			"Unable to verify access permissions. Please try again.",
+		)
+	}
+	if !granted {
+		return nil, errorsx.AddMessage(
+			errorsx.ErrUnauthenticated,
+			"You don't have permission to update files in this catalog. Please contact the owner for access.",
+		)
+	}
+
+	// Get file
+	fileUID := uuid.FromStringOrNil(req.FileId)
+	kbFiles, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{types.FileUIDType(fileUID)})
+	if err != nil || len(kbFiles) == 0 {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("file not found: %w", errorsx.ErrNotFound),
+			"File not found. Please check the file ID and try again.",
+		)
+	}
+
+	// Build update map based on field mask
+	updates := make(map[string]any)
+
+	if req.UpdateMask != nil {
+		for _, path := range req.UpdateMask.Paths {
+			switch path {
+			case "external_metadata":
+				// Update external metadata
+				updates[repository.KnowledgeBaseFileColumn.ExternalMetadata] = req.File.ExternalMetadata
+			case "tags":
+				// Update tags
+				updates[repository.KnowledgeBaseFileColumn.Tags] = req.File.Tags
+			default:
+				logger.Warn("unsupported field path in update mask", zap.String("path", path))
+			}
+		}
+	} else {
+		// If no update mask, update external metadata by default
+		updates[repository.KnowledgeBaseFileColumn.ExternalMetadata] = req.File.ExternalMetadata
+	}
+
+	if len(updates) == 0 {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("%w: no fields to update", errorsx.ErrInvalidArgument),
+			"No valid fields specified for update. Please check the update mask.",
+		)
+	}
+
+	// Perform the update
+	updatedFile, err := ph.service.Repository().UpdateKnowledgeBaseFile(ctx, fileUID.String(), updates)
+	if err != nil {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("updating file: %w", err),
+			"Unable to update file. Please try again.",
+		)
+	}
+
+	// Convert to protobuf
+	pbFile := convertKBFileToPB(updatedFile, ns, kb)
+
+	return &artifactpb.UpdateFileResponse{
+		File: pbFile,
+	}, nil
 }
 
 // ProcessCatalogFiles triggers the conversion, chunking, embedding and
@@ -1210,129 +1392,78 @@ func (ph *PublicHandler) DeleteCatalogFile(ctx context.Context, req *artifactpb.
 // - Retry failed file processing
 // - Manually trigger processing for files in edge cases
 // However, normal file uploads no longer need to call this API.
-func (ph *PublicHandler) ProcessCatalogFiles(ctx context.Context, req *artifactpb.ProcessCatalogFilesRequest) (*artifactpb.ProcessCatalogFilesResponse, error) {
-	logger, _ := logx.GetZapLogger(ctx)
 
-	logger.Info("ProcessCatalogFiles called (NOTE: This API is deprecated - processing now auto-triggers on upload)",
-		zap.Int("fileCount", len(req.FileUids)))
-	// ACL - check if the uid can process file. ACL.
-	// check the file's kb_uid and use kb_uid to check if user has write permission
-	fileUIDs := make([]types.FileUIDType, 0, len(req.FileUids))
-	for _, fileUID := range req.FileUids {
-		fUID, err := uuid.FromString(fileUID)
-		if err != nil {
-			return nil, errorsx.AddMessage(
-				fmt.Errorf("failed to parse file uid: %w", errorsx.ErrInvalidArgument),
-				"Invalid file ID format. Please check the file IDs and try again.",
-			)
-		}
-		fileUIDs = append(fileUIDs, types.FileUIDType(fUID))
-	}
-	kbfs, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, fileUIDs)
-	if err != nil {
-		return nil, err
-	} else if len(kbfs) == 0 {
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("file not found: %w", errorsx.ErrNotFound),
-			"No files found with the provided IDs. Please check the file IDs and try again.",
-		)
-	}
-	// check write permission for the catalog
-	for _, kbf := range kbfs {
-		granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kbf.KBUID, "writer")
-		if err != nil {
-			return nil, err
-		}
-		if !granted {
-			return nil, errorsx.AddMessage(
-				fmt.Errorf("%w: no permission over catalog", errorsx.ErrUnauthorized),
-				"You don't have permission to process files in this catalog. Please contact the owner for access.",
-			)
+// ========================================================================
+// HELPER FUNCTIONS
+// ========================================================================
+
+// appendRequestMetadata appends the gRPC metadata present in the context to
+// the provided ExternalMetadata under the key constant.MetadataRequestKey.
+func appendRequestMetadata(ctx context.Context, externalMetadata *structpb.Struct) (*structpb.Struct, error) {
+	if externalMetadata == nil {
+		externalMetadata = &structpb.Struct{
+			Fields: make(map[string]*structpb.Value, 1),
 		}
 	}
 
-	// check auth user has access to the requester
-	err = ph.service.ACLClient().CheckRequesterPermission(ctx)
+	md, hasMetadata := metadata.FromIncomingContext(ctx)
+	if !hasMetadata {
+		return externalMetadata, nil
+	}
+
+	// In order to simplify the code translating metadata.MD <->
+	// structpb.Struct, JSON marshalling is used. This is less efficient than
+	// leveraging the knowledge about the metadata structure (a
+	// map[string][]string), but readability has been prioritized.
+	j, err := json.Marshal(md)
 	if err != nil {
-		logger.Error("failed to check requester permission", zap.Error(err))
 		return nil, errorsx.AddMessage(
-			fmt.Errorf("failed to check requester permission: %w", err),
-			"Unable to verify requester permissions. Please try again.",
+			fmt.Errorf("marshalling metadata: %w", err),
+			"Unable to process request metadata. Please try again.",
 		)
 	}
 
-	requesterUID := resource.GetRequestSingleHeader(ctx, constantx.HeaderRequesterUIDKey)
-	requesterUUID := uuid.FromStringOrNil(requesterUID)
-
-	files, err := ph.service.Repository().ProcessKnowledgeBaseFiles(ctx, req.FileUids, requesterUUID)
-	if err != nil {
-		return nil, err
-	}
-
-	// Collect file information for batch processing
-	if len(files) == 0 {
-		return &artifactpb.ProcessCatalogFilesResponse{Files: []*artifactpb.File{}}, nil
-	}
-
-	// Extract file UIDs and common metadata
-	fileUIDs = make([]types.FileUIDType, 0, len(files))
-	kbUID := files[0].KBUID
-	ownerUID := files[0].Owner
-	requesterUIDFromFile := files[0].RequesterUID
-
-	for _, file := range files {
-		fileUIDs = append(fileUIDs, file.UID)
-	}
-
-	// Trigger Temporal workflow once for all files (batch processing)
-	// NOTE: The workflow itself will handle sequential dual-processing:
-	// After production file completes successfully, it will automatically
-	// trigger target (staging/rollback) file processing if needed.
-	err = ph.service.ProcessFile(ctx, kbUID, fileUIDs, ownerUID, requesterUIDFromFile)
-	if err != nil {
-		logger.Error("Failed to start batch file processing workflow",
-			zap.Int("fileCount", len(fileUIDs)),
-			zap.Error(err))
+	mdStruct := new(structpb.Struct)
+	if err := mdStruct.UnmarshalJSON(j); err != nil {
 		return nil, errorsx.AddMessage(
-			fmt.Errorf("failed to start batch file processing workflow: %w", err),
-			"Unable to start file processing. Please try again.",
+			fmt.Errorf("unmarshalling metadata into struct: %w", err),
+			"Unable to process request metadata. Please try again.",
 		)
 	}
 
-	logger.Info("Batch file processing workflow started successfully",
-		zap.Int("fileCount", len(fileUIDs)),
-		zap.String("note", "Dual-processing will be handled automatically by workflow if needed"))
+	externalMetadata.Fields[constant.MetadataRequestKey] = structpb.NewStructValue(mdStruct)
+	return externalMetadata, nil
+}
 
-	// populate the files into response
-	var resFiles []*artifactpb.File
-	for _, file := range files {
+// getFileSize returns the size of the file in bytes and a human-readable string
+func getFileSize(base64String string) (int64, string) {
+	// Get the length of the base64 string
+	base64Length := len(base64String)
 
-		objectUID := uuid.FromStringOrNil(strings.TrimPrefix(strings.Split(file.Destination, "/")[1], "obj-"))
+	// Calculate the size of the decoded data
+	// The actual size is approximately 3/4 of the base64 string length
+	decodedSize := base64Length / 4 * 3
 
-		resFile := &artifactpb.File{
-			FileUid:            file.UID.String(),
-			OwnerUid:           file.Owner.String(),
-			CreatorUid:         file.CreatorUID.String(),
-			CatalogUid:         file.KBUID.String(),
-			Name:               file.Name,
-			Type:               artifactpb.File_Type(artifactpb.File_Type_value[file.FileType]),
-			CreateTime:         timestamppb.New(*file.CreateTime),
-			UpdateTime:         timestamppb.New(*file.UpdateTime),
-			ProcessStatus:      artifactpb.FileProcessStatus(artifactpb.FileProcessStatus_value[file.ProcessStatus]),
-			ObjectUid:          objectUID.String(),
-			ConvertingPipeline: file.ConvertingPipeline(),
+	// Remove padding characters
+	if base64String[base64Length-1] == '=' {
+		decodedSize--
+		if base64String[base64Length-2] == '=' {
+			decodedSize--
 		}
-
-		// Include error message if processing failed
-		if file.ExtraMetaDataUnmarshal != nil && file.ExtraMetaDataUnmarshal.FailReason != "" {
-			resFile.ProcessOutcome = file.ExtraMetaDataUnmarshal.FailReason
-		}
-
-		resFiles = append(resFiles, resFile)
 	}
-	return &artifactpb.ProcessCatalogFilesResponse{
-		Files: resFiles,
-	}, nil
+
+	// Convert to appropriate unit
+	const unit = 1024
+	if decodedSize < unit {
+		return int64(decodedSize), fmt.Sprintf("%d B", decodedSize)
+	}
+	div, exp := int64(unit), 0
+	for n := int64(decodedSize) / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	size := float64(decodedSize) / float64(div)
+	return int64(decodedSize), fmt.Sprintf("%.1f %cB", size, "KMGTPE"[exp])
 }
 
 func fileTypeConvertToMime(t artifactpb.File_Type) string {
@@ -1364,8 +1495,8 @@ func fileTypeConvertToMime(t artifactpb.File_Type) string {
 	}
 }
 
-func determineFileType(fileName string) artifactpb.File_Type {
-	fileNameLower := strings.ToLower(fileName)
+func determineFileType(filename string) artifactpb.File_Type {
+	fileNameLower := strings.ToLower(filename)
 	if strings.HasSuffix(fileNameLower, ".pdf") {
 		return artifactpb.File_TYPE_PDF
 	} else if strings.HasSuffix(fileNameLower, ".md") {
@@ -1392,7 +1523,6 @@ func determineFileType(fileName string) artifactpb.File_Type {
 	return artifactpb.File_TYPE_UNSPECIFIED
 }
 
-// getPositionUnit returns the appropriate unit for file position based on file type
 func getPositionUnit(fileType artifactpb.File_Type) artifactpb.File_Position_Unit {
 	switch fileType {
 	case artifactpb.File_TYPE_TEXT,
@@ -1413,89 +1543,41 @@ func getPositionUnit(fileType artifactpb.File_Type) artifactpb.File_Position_Uni
 	return artifactpb.File_Position_UNIT_UNSPECIFIED
 }
 
-// GetFileSummary returns the summary of the file from the summary converted_file
-func (ph *PublicHandler) GetFileSummary(ctx context.Context, req *artifactpb.GetFileSummaryRequest) (*artifactpb.GetFileSummaryResponse, error) {
-	logger, _ := logx.GetZapLogger(ctx)
-	_, err := getUserUIDFromContext(ctx)
-	if err != nil {
-		logger.Error("failed to get user id from header", zap.Error(err))
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("failed to get user id from header: %v: %w", err, errorsx.ErrUnauthenticated),
-			"Authentication failed. Please log in and try again.",
-		)
+// Check if objectUID is provided, and all other required fields if not
+func checkUploadKnowledgeBaseFileRequest(req *artifactpb.CreateFileRequest) (hasObject bool, _ error) {
+	if req.GetNamespaceId() == "" {
+		return false, fmt.Errorf("%w: owner UID is required", errorsx.ErrInvalidArgument)
 	}
 
-	// Check if user can access the namespace
-	_, err = ph.service.GetNamespaceAndCheckPermission(ctx, req.NamespaceId)
-	if err != nil {
-		logger.Error("failed to get namespace and check permission", zap.Error(err))
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("failed to get namespace and check permission: %w", err),
-			"Unable to access the specified namespace. Please check permissions and try again.",
-		)
+	if req.GetCatalogId() == "" {
+		return false, fmt.Errorf("%w: catalog UID is required", errorsx.ErrInvalidArgument)
 	}
 
-	fileUID := uuid.FromStringOrNil(req.FileUid)
+	if req.GetFile().GetObjectUid() == "" {
+		// File upload doesn't reference object, so request must contain the
+		// file contents.
+		if req.GetFile().GetFilename() == "" {
+			return false, fmt.Errorf("%w: filename is required", errorsx.ErrInvalidArgument)
+		}
+		if req.GetFile().GetContent() == "" {
+			return false, fmt.Errorf("%w: file content is required", errorsx.ErrInvalidArgument)
+		}
 
-	// Verify file exists
-	kbFiles, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{types.FileUIDType(fileUID)})
-	if err != nil || len(kbFiles) == 0 {
-		logger.Error("file not found", zap.Error(err))
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("file not found: %w", errorsx.ErrNotFound),
-			"File not found. Please check the file ID and try again.",
-		)
+		return false, nil
 	}
 
-	// Get the SUMMARY converted file using explicit type query
-	summaryConvertedFile, err := ph.service.Repository().GetConvertedFileByFileUIDAndType(
-		ctx,
-		types.FileUIDType(fileUID),
-		artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_SUMMARY,
-	)
-	if err != nil {
-		logger.Error("failed to get summary converted file", zap.Error(err))
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("summary not yet available: %w", errorsx.ErrNotFound),
-			"File summary not yet available. The file may still be processing.",
-		)
-	}
-
-	// Fetch summary content from MinIO
-	content, err := ph.service.Repository().GetFile(ctx, config.Config.Minio.BucketName, summaryConvertedFile.Destination)
-	if err != nil {
-		logger.Error("failed to get summary from MinIO",
-			zap.String("destination", summaryConvertedFile.Destination),
-			zap.Error(err))
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("failed to retrieve summary content: %w", err),
-			"Unable to retrieve file summary. Please try again later.",
-		)
-	}
-
-	return &artifactpb.GetFileSummaryResponse{
-		Summary: string(content),
-	}, nil
+	return true, nil
 }
 
-// uploadBase64FileToMinIO uploads a base64-encoded file to MinIO and updates the object in the database.
-//
-// This function bridges the legacy upload flow with the new upload flow:
-// - Legacy flow: Users upload files directly without using the getUploadUrl API, bypassing object creation in the object table
-// - New flow: Users first get an upload URL, create an object in the object table, then bind the catalog file to this object
-//
-// This middleware enables legacy uploads to maintain compatibility with the new data structure by:
-// 1. Using the getUploadUrl API to obtain object UID and destination
-// 2. Uploading the base64 file to MinIO
-// 3. Creating the object record in the database
-//
-// This ensures both flows result in the same consistent data structure.
-func (ph *PublicHandler) uploadBase64FileToMinIO(ctx context.Context, nsID string, nsUID, creatorUID types.CreatorUIDType, fileName string, content string, fileType artifactpb.File_Type) (types.ObjectUIDType, error) {
+// MoveFileToCatalog moves a file from one catalog to another within the same namespace.
+// It copies the file content and metadata to the target catalog and deletes
+// the file from the source catalog.
+func (ph *PublicHandler) uploadBase64FileToMinIO(ctx context.Context, nsID string, nsUID, creatorUID types.CreatorUIDType, filename string, content string, fileType artifactpb.File_Type) (types.ObjectUIDType, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 	response, err := ph.service.GetUploadURL(ctx, &artifactpb.GetObjectUploadURLRequest{
 		NamespaceId: nsID,
-		ObjectName:  fileName,
-	}, nsUID, fileName, creatorUID)
+		ObjectName:  filename,
+	}, nsUID, filename, creatorUID)
 	if err != nil {
 		logger.Error("failed to get upload URL", zap.Error(err))
 		return uuid.Nil, errorsx.AddMessage(

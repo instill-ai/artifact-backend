@@ -101,7 +101,7 @@ func TestSaveEmbeddingBatchActivity_Success(t *testing.T) {
 	param := &SaveEmbeddingBatchActivityParam{
 		KBUID:        kbUID,
 		FileUID:      uuid.Must(uuid.NewV4()),
-		FileName:     "test.pdf",
+		Filename:     "test.pdf",
 		Embeddings:   embeddings,
 		BatchNumber:  1,
 		TotalBatches: 2,
@@ -122,7 +122,7 @@ func TestSaveEmbeddingBatchActivity_EmptyBatch(t *testing.T) {
 	param := &SaveEmbeddingBatchActivityParam{
 		KBUID:        uuid.Must(uuid.NewV4()),
 		FileUID:      uuid.Must(uuid.NewV4()),
-		FileName:     "test.pdf",
+		Filename:     "test.pdf",
 		Embeddings:   []repository.EmbeddingModel{}, // Empty
 		BatchNumber:  1,
 		TotalBatches: 1,
@@ -165,7 +165,7 @@ func TestSaveEmbeddingBatchActivity_MilvusFailure(t *testing.T) {
 	param := &SaveEmbeddingBatchActivityParam{
 		KBUID:        kbUID,
 		FileUID:      uuid.Must(uuid.NewV4()),
-		FileName:     "test.pdf",
+		Filename:     "test.pdf",
 		Embeddings:   embeddings,
 		BatchNumber:  1,
 		TotalBatches: 1,
@@ -195,7 +195,7 @@ func TestSaveEmbeddingBatchActivity_DatabaseFailure(t *testing.T) {
 	param := &SaveEmbeddingBatchActivityParam{
 		KBUID:        kbUID,
 		FileUID:      uuid.Must(uuid.NewV4()),
-		FileName:     "test.pdf",
+		Filename:     "test.pdf",
 		Embeddings:   createActivityTestEmbeddings(50),
 		BatchNumber:  1,
 		TotalBatches: 1,
@@ -294,7 +294,7 @@ func TestSaveEmbeddingBatchActivityParam_Validation(t *testing.T) {
 			param: &SaveEmbeddingBatchActivityParam{
 				KBUID:        uuid.Must(uuid.NewV4()),
 				FileUID:      uuid.Must(uuid.NewV4()),
-				FileName:     "test.pdf",
+				Filename:     "test.pdf",
 				Embeddings:   createActivityTestEmbeddings(50),
 				BatchNumber:  1,
 				TotalBatches: 2,
@@ -305,7 +305,7 @@ func TestSaveEmbeddingBatchActivityParam_Validation(t *testing.T) {
 			param: &SaveEmbeddingBatchActivityParam{
 				KBUID:        uuid.Must(uuid.NewV4()),
 				FileUID:      uuid.Must(uuid.NewV4()),
-				FileName:     "test.pdf",
+				Filename:     "test.pdf",
 				Embeddings:   []repository.EmbeddingModel{},
 				BatchNumber:  1,
 				TotalBatches: 1,
@@ -316,7 +316,7 @@ func TestSaveEmbeddingBatchActivityParam_Validation(t *testing.T) {
 			param: &SaveEmbeddingBatchActivityParam{
 				KBUID:        uuid.Must(uuid.NewV4()),
 				FileUID:      uuid.Must(uuid.NewV4()),
-				FileName:     "test.pdf",
+				Filename:     "test.pdf",
 				Embeddings:   createActivityTestEmbeddings(25),
 				BatchNumber:  3,
 				TotalBatches: 5,

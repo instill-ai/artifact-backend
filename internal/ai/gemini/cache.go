@@ -165,15 +165,15 @@ func (c *Client) uploadAndWaitForFile(ctx context.Context, data []byte, mimeType
 		)
 	}
 
-	fileName := file.Name
+	filename := file.Name
 
 	// Wait for file to become ACTIVE with timeout
 	timeoutCtx, cancel := context.WithTimeout(ctx, FileUploadTimeout)
 	defer cancel()
 
-	if err := c.waitForFileActive(timeoutCtx, fileName); err != nil {
+	if err := c.waitForFileActive(timeoutCtx, filename); err != nil {
 		// Clean up the uploaded file on timeout/failure
-		_, _ = c.client.Files.Delete(ctx, fileName, nil)
+		_, _ = c.client.Files.Delete(ctx, filename, nil)
 		return nil, "", err
 	}
 
@@ -182,17 +182,17 @@ func (c *Client) uploadAndWaitForFile(ctx context.Context, data []byte, mimeType
 			FileURI:  file.URI,
 			MIMEType: mimeType,
 		},
-	}, fileName, nil
+	}, filename, nil
 }
 
 // waitForFileActive waits for an uploaded file to become ACTIVE state before using it
 // This is shared logic used by both caching and conversion operations
-func (c *Client) waitForFileActive(ctx context.Context, fileName string) error {
+func (c *Client) waitForFileActive(ctx context.Context, filename string) error {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
 	// Check immediately first (file might already be active)
-	if fileInfo, err := c.client.Files.Get(ctx, fileName, nil); err == nil {
+	if fileInfo, err := c.client.Files.Get(ctx, filename, nil); err == nil {
 		if fileInfo.State == genai.FileStateActive {
 			return nil
 		}
@@ -213,7 +213,7 @@ func (c *Client) waitForFileActive(ctx context.Context, fileName string) error {
 				"File upload timed out. The file may be too large or the service is busy. Please try again later.",
 			)
 		case <-ticker.C:
-			fileInfo, err := c.client.Files.Get(ctx, fileName, nil)
+			fileInfo, err := c.client.Files.Get(ctx, filename, nil)
 			if err != nil {
 				return errorsx.AddMessage(
 					fmt.Errorf("failed to get file status: %w", err),
@@ -270,9 +270,9 @@ func (c *Client) createBatchCache(ctx context.Context, model string, files []ai.
 
 	// Clean up uploaded files on error or completion
 	defer func() {
-		for _, fileName := range uploadedFileNames {
-			if fileName != "" {
-				_, _ = c.client.Files.Delete(ctx, fileName, nil)
+		for _, filename := range uploadedFileNames {
+			if filename != "" {
+				_, _ = c.client.Files.Delete(ctx, filename, nil)
 			}
 		}
 	}()

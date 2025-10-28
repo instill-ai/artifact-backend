@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
+	"go.einride.tech/aip/filtering"
 
 	"github.com/instill-ai/artifact-backend/pkg/types"
 	"go.uber.org/zap"
@@ -42,7 +43,7 @@ type KnowledgeBaseFile interface {
 	GetKnowledgeBaseFilesByFileUIDsIncludingDeleted(ctx context.Context, fileUIDs []types.FileUIDType, columns ...string) ([]KnowledgeBaseFileModel, error)
 	// GetKnowledgeBaseFilesByName retrieves files by name in a specific KB
 	// Used for dual deletion to find corresponding files in staging/rollback KB
-	GetKnowledgeBaseFilesByName(ctx context.Context, kbUID types.KBUIDType, fileName string) ([]KnowledgeBaseFileModel, error)
+	GetKnowledgeBaseFilesByName(ctx context.Context, kbUID types.KBUIDType, filename string) ([]KnowledgeBaseFileModel, error)
 	// DeleteKnowledgeBaseFile deletes the knowledge base file by file UID
 	DeleteKnowledgeBaseFile(ctx context.Context, fileUID string) error
 	// DeleteAllKnowledgeBaseFiles deletes all files in the knowledge base
@@ -64,8 +65,8 @@ type KnowledgeBaseFile interface {
 	// GetNotStartedFileCountExcluding counts NOTSTARTED files excluding specific UIDs (for recently reconciled files)
 	// Used during synchronization to exclude files that were just created by reconciliation
 	GetNotStartedFileCountExcluding(ctx context.Context, kbUID types.KBUIDType, excludeUIDs []types.FileUIDType) (int64, error)
-	// GetSourceTableAndUIDByFileUIDs returns the source table and uid by file UID list
-	GetSourceTableAndUIDByFileUIDs(ctx context.Context, files []KnowledgeBaseFileModel) (map[types.FileUIDType]struct {
+	// GetContentByFileUIDs returns the content converted file source table and uid by file UID list
+	GetContentByFileUIDs(ctx context.Context, files []KnowledgeBaseFileModel) (map[types.FileUIDType]struct {
 		SourceTable string
 		SourceUID   types.SourceUIDType
 	}, error)
@@ -91,7 +92,7 @@ type KnowledgeBaseFileModel struct {
 	Owner      types.NamespaceUIDType `gorm:"column:owner;type:uuid;not null" json:"owner"`
 	KBUID      types.KBUIDType        `gorm:"column:kb_uid;type:uuid;not null" json:"kb_uid"`
 	CreatorUID types.CreatorUIDType   `gorm:"column:creator_uid;type:uuid;not null" json:"creator_uid"`
-	Name       string                 `gorm:"column:name;size:255;not null" json:"name"`
+	Filename   string                 `gorm:"column:filename;size:255;not null" json:"filename"`
 	// FileType stores the FileType enum string (e.g., "FILE_TYPE_PDF", "FILE_TYPE_TEXT")
 	FileType string `gorm:"column:file_type;not null" json:"file_type"`
 	// Destination is the path in the MinIO bucket
@@ -117,7 +118,7 @@ type KnowledgeBaseFileModel struct {
 	// This field is not stored in the database. It is used to unmarshal the ExternalMetadata field
 	ExternalMetadataUnmarshal *structpb.Struct `gorm:"-" json:"external_metadata_unmarshal"`
 	// Array of tags associated with the file
-	Tags []string `gorm:"column:tags;type:VARCHAR(255)[]" json:"tags"`
+	Tags TagsArray `gorm:"column:tags;type:VARCHAR(255)[]" json:"tags"`
 }
 
 // TableName overrides the default table name for GORM
@@ -149,7 +150,7 @@ type KnowledgeBaseFileColumns struct {
 	Owner            string
 	KnowledgeBaseUID string
 	CreatorUID       string
-	Name             string
+	Filename         string
 	FileType         string
 	Destination      string
 	ProcessStatus    string
@@ -160,6 +161,7 @@ type KnowledgeBaseFileColumns struct {
 	RequesterUID     string
 	Size             string
 	ExternalMetadata string
+	Tags             string
 }
 
 // KnowledgeBaseFileColumn is the columns for the knowledge base file table
@@ -168,7 +170,7 @@ var KnowledgeBaseFileColumn = KnowledgeBaseFileColumns{
 	Owner:            "owner",
 	KnowledgeBaseUID: "kb_uid",
 	CreatorUID:       "creator_uid",
-	Name:             "name",
+	Filename:         "filename",
 	FileType:         "file_type",
 	Destination:      "destination",
 	ProcessStatus:    "process_status",
@@ -179,6 +181,7 @@ var KnowledgeBaseFileColumn = KnowledgeBaseFileColumns{
 	Size:             "size",
 	RequesterUID:     "requester_uid",
 	ExternalMetadata: "external_metadata",
+	Tags:             "tags",
 }
 
 // ConvertingPipeline extracts the conversion pipeline, if present, from the
@@ -354,9 +357,8 @@ type KnowledgeBaseFileListParams struct {
 	OwnerUID string
 	KBUID    string
 
-	// Optional filters
-	FileUIDs      []string
-	ProcessStatus artifactpb.FileProcessStatus
+	// AIP-160 filter expression
+	Filter filtering.Filter
 
 	// Pagination
 	PageSize  int
@@ -371,21 +373,26 @@ type KnowledgeBaseFileList struct {
 }
 
 // ListKnowledgeBaseFiles returns a paginated list of files within a knowledge
-// base. The list can optionally be filtered by file UIDs or status.
+// base. The list can optionally be filtered by AIP-160 filter expressions.
 func (r *repository) ListKnowledgeBaseFiles(ctx context.Context, params KnowledgeBaseFileListParams) (*KnowledgeBaseFileList, error) {
 	var kbs []KnowledgeBaseFileModel
 	var totalCount int64
 
-	q := r.db.Model(&KnowledgeBaseFileModel{}).
-		Where("owner = ?", params.OwnerUID).
-		Where("kb_uid = ?", params.KBUID)
+	where := "owner = ? AND kb_uid = ?"
+	whereArgs := []interface{}{params.OwnerUID, params.KBUID}
 
-	if len(params.FileUIDs) > 0 {
-		q = q.Where("uid IN ?", params.FileUIDs)
+	// Apply AIP-160 filter if provided
+	var expr *clause.Expr
+	var err error
+	if expr, err = r.TranspileFilter(params.Filter); err != nil {
+		return nil, fmt.Errorf("transpiling filter: %w", err)
 	}
 
-	if params.ProcessStatus != 0 {
-		q = q.Where("process_status = ?", params.ProcessStatus.String())
+	q := r.db.Model(&KnowledgeBaseFileModel{}).Where(where, whereArgs...)
+
+	if expr != nil {
+		// Apply the filter expression directly using Where with SQL and Vars
+		q = q.Where(expr.SQL, expr.Vars...)
 	}
 
 	// Count the total number of matching records
@@ -503,6 +510,13 @@ func (r *repository) ProcessKnowledgeBaseFiles(
 // UpdateKnowledgeBaseFile updates the data and retrieves the latest data
 func (r *repository) UpdateKnowledgeBaseFile(ctx context.Context, fileUID string, updateMap map[string]any) (*KnowledgeBaseFileModel, error) {
 	var updatedFile KnowledgeBaseFileModel
+
+	// Convert tags if present to TagsArray type for proper PostgreSQL array handling
+	if tags, ok := updateMap["tags"]; ok {
+		if tagSlice, ok := tags.([]string); ok {
+			updateMap["tags"] = TagsArray(tagSlice)
+		}
+	}
 
 	// Use a transaction to update and then fetch the latest data
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -646,8 +660,8 @@ func (r *repository) GetFileCountByKnowledgeBaseUIDIncludingDeleted(ctx context.
 	return count, nil
 }
 
-// GetSourceTableAndUIDByFileUIDs returns the source table and uid by file UID list
-func (r *repository) GetSourceTableAndUIDByFileUIDs(ctx context.Context, files []KnowledgeBaseFileModel) (
+// GetContentByFileUIDs returns the content converted file source table and uid by file UID list
+func (r *repository) GetContentByFileUIDs(ctx context.Context, files []KnowledgeBaseFileModel) (
 	map[types.FileUIDType]struct {
 		SourceTable string
 		SourceUID   types.SourceUIDType
@@ -661,7 +675,8 @@ func (r *repository) GetSourceTableAndUIDByFileUIDs(ctx context.Context, files [
 		// find the source table and source uid by file uid
 		// All file types now use converted_file as the source after the refactoring
 		// TEXT/MARKDOWN files also have converted file records (pointing to original files)
-		convertedFile, err := r.GetConvertedFileByFileUID(ctx, file.UID)
+		// We specifically need the CONTENT converted file for chunks and tokens
+		convertedFile, err := r.GetConvertedFileByFileUIDAndType(ctx, file.UID, artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_CONTENT)
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				// Skip files without converted records
@@ -758,17 +773,17 @@ func (r *repository) GetKnowledgeBaseFilesByFileUIDsIncludingDeleted(
 func (r *repository) GetKnowledgeBaseFilesByName(
 	ctx context.Context,
 	kbUID types.KBUIDType,
-	fileName string,
+	filename string,
 ) ([]KnowledgeBaseFileModel, error) {
 	var files []KnowledgeBaseFileModel
 
 	// GORM's DeletedAt automatically filters out soft-deleted files, so no manual check needed
 	where := fmt.Sprintf("%v = ? AND %v = ?",
 		KnowledgeBaseFileColumn.KnowledgeBaseUID,
-		KnowledgeBaseFileColumn.Name)
+		KnowledgeBaseFileColumn.Filename)
 
 	if err := r.db.WithContext(ctx).
-		Where(where, kbUID, fileName).
+		Where(where, kbUID, filename).
 		Find(&files).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return []KnowledgeBaseFileModel{}, nil
@@ -825,7 +840,7 @@ func (r *repository) GetSourceByFileUID(ctx context.Context, fileUID types.FileU
 
 	return &SourceMeta{
 		OriginalFileUID:  file.UID,
-		OriginalFileName: file.Name,
+		OriginalFileName: file.Filename,
 		Dest:             convertedFile.Destination,
 		CreateTime:       *convertedFile.CreateTime,
 		UpdateTime:       *convertedFile.UpdateTime,
@@ -943,7 +958,7 @@ func (r *repository) DeleteKnowledgeBaseFileAndDecreaseUsage(ctx context.Context
 func (r *repository) GetKnowledgebaseFileByKBUIDAndFileID(ctx context.Context, kbUID types.KBUIDType, fileID string) (*KnowledgeBaseFileModel, error) {
 	var file KnowledgeBaseFileModel
 	where := fmt.Sprintf("%v = ? AND %v = ? AND %v IS NULL",
-		KnowledgeBaseFileColumn.KnowledgeBaseUID, KnowledgeBaseFileColumn.Name, KnowledgeBaseFileColumn.DeleteTime)
+		KnowledgeBaseFileColumn.KnowledgeBaseUID, KnowledgeBaseFileColumn.Filename, KnowledgeBaseFileColumn.DeleteTime)
 	if err := r.db.WithContext(ctx).Where(where, kbUID, fileID).First(&file).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, fmt.Errorf("file not found by catalog ID: %v and file ID: %v", kbUID, fileID)

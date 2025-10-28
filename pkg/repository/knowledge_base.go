@@ -118,16 +118,14 @@ type KnowledgeBaseWithConfig struct {
 
 // KnowledgeBaseModel defines the structure of a knowledge base
 type KnowledgeBaseModel struct {
-	UID  types.KBUIDType `gorm:"column:uid;type:uuid;default:uuid_generate_v4();primaryKey" json:"uid"`
-	KBID string          `gorm:"column:id;size:255;not null" json:"kb_id"`
-	// current name is the kb_id
-	Name        string         `gorm:"column:name;size:255;not null" json:"name"`
-	Description string         `gorm:"column:description;size:1023" json:"description"`
-	Tags        TagsArray      `gorm:"column:tags;type:VARCHAR(255)[]" json:"tags"`
-	Owner       string         `gorm:"column:owner;type:uuid;not null" json:"owner"`
-	CreateTime  *time.Time     `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
-	UpdateTime  *time.Time     `gorm:"column:update_time;not null;autoUpdateTime" json:"update_time"` // Use autoUpdateTime
-	DeleteTime  gorm.DeletedAt `gorm:"column:delete_time;index" json:"delete_time"`
+	UID         types.KBUIDType `gorm:"column:uid;type:uuid;default:uuid_generate_v4();primaryKey" json:"uid"`
+	KBID        string          `gorm:"column:id;size:255;not null" json:"kb_id"`
+	Description string          `gorm:"column:description;size:1023" json:"description"`
+	Tags        TagsArray       `gorm:"column:tags;type:VARCHAR(255)[]" json:"tags"`
+	Owner       string          `gorm:"column:owner;type:uuid;not null" json:"owner"`
+	CreateTime  *time.Time      `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
+	UpdateTime  *time.Time      `gorm:"column:update_time;not null;autoUpdateTime" json:"update_time"` // Use autoUpdateTime
+	DeleteTime  gorm.DeletedAt  `gorm:"column:delete_time;index" json:"delete_time"`
 	// creator
 	CreatorUID types.CreatorUIDType `gorm:"column:creator_uid;type:uuid;not null" json:"creator_uid"`
 	Usage      int64                `gorm:"column:usage;not null;default:0" json:"usage"`
@@ -212,7 +210,6 @@ func (KnowledgeBaseModel) TableName() string {
 type KnowledgeBaseColumns struct {
 	UID                    string
 	KBID                   string
-	Name                   string
 	Description            string
 	Tags                   string
 	Owner                  string
@@ -234,7 +231,6 @@ type KnowledgeBaseColumns struct {
 var KnowledgeBaseColumn = KnowledgeBaseColumns{
 	UID:                    "uid",
 	KBID:                   "id",
-	Name:                   "name",
 	Description:            "description",
 	Tags:                   "tags",
 	Owner:                  "owner",
@@ -928,7 +924,6 @@ func (r *repository) CreateStagingKnowledgeBase(ctx context.Context, original *K
 	stagingKB := KnowledgeBaseModel{
 		// New UID is generated automatically by GORM
 		// Shadow KB naming: {original}-staging (simpler than version-based naming)
-		Name:         fmt.Sprintf("%s-staging", original.Name),
 		KBID:         fmt.Sprintf("%s-staging", original.KBID),
 		Description:  original.Description,
 		Tags:         append(original.Tags, "staging"),

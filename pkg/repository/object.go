@@ -16,6 +16,7 @@ type Object interface {
 	CreateObject(ctx context.Context, obj ObjectModel) (*ObjectModel, error)
 	ListAllObjects(ctx context.Context, namespaceUID types.NamespaceUIDType, creatorUID types.CreatorUIDType) ([]ObjectModel, error)
 	UpdateObject(ctx context.Context, obj ObjectModel) (*ObjectModel, error)
+	DeleteObjectByDestination(ctx context.Context, destination string) error
 	DeleteObject(ctx context.Context, uid types.ObjectUIDType) error
 	GetObjectByUID(ctx context.Context, uid types.ObjectUIDType) (*ObjectModel, error)
 	UpdateObjectByUpdateMap(ctx context.Context, objUID types.ObjectUIDType, updateMap map[string]any) (*ObjectModel, error)
@@ -125,6 +126,17 @@ func (r *repository) DeleteObject(ctx context.Context, uid types.ObjectUIDType) 
 	deleteTime := time.Now().UTC()
 	whereString := fmt.Sprintf("%v = ? AND %v IS NULL", ObjectColumn.UID, ObjectColumn.DeleteTime)
 	if err := r.db.WithContext(ctx).Model(&ObjectModel{}).Where(whereString, uid).Update(ObjectColumn.DeleteTime, deleteTime).Error; err != nil {
+		return err
+	}
+	return nil
+}
+
+// DeleteObjectByDestination soft deletes an object by its destination path
+// This is used when cleaning up blob objects after file deletion
+func (r *repository) DeleteObjectByDestination(ctx context.Context, destination string) error {
+	deleteTime := time.Now().UTC()
+	whereString := fmt.Sprintf("%v = ? AND %v IS NULL", ObjectColumn.Destination, ObjectColumn.DeleteTime)
+	if err := r.db.WithContext(ctx).Model(&ObjectModel{}).Where(whereString, destination).Update(ObjectColumn.DeleteTime, deleteTime).Error; err != nil {
 		return err
 	}
 	return nil

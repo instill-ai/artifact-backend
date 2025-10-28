@@ -19,7 +19,7 @@ type SimChunk struct {
 	Score    float32
 }
 
-func (s *service) SimilarityChunksSearch(ctx context.Context, ownerUID types.OwnerUIDType, req *artifactpb.SimilarityChunksSearchRequest, textVector [][]float32) ([]SimChunk, error) {
+func (s *service) SearchChunks(ctx context.Context, ownerUID types.OwnerUIDType, req *artifactpb.SearchChunksRequest, textVector [][]float32) ([]SimChunk, error) {
 	if req.TextPrompt == "" {
 		return nil, fmt.Errorf("empty text prompt")
 	}
@@ -38,9 +38,9 @@ func (s *service) SimilarityChunksSearch(ctx context.Context, ownerUID types.Own
 	// Search similar embeddings in KB.
 	var fileType types.FileType
 	switch req.GetFileMediaType() {
-	case artifactpb.FileMediaType_FILE_MEDIA_TYPE_DOCUMENT:
+	case artifactpb.File_FILE_MEDIA_TYPE_DOCUMENT:
 		fileType = types.DocumentFileType
-	case artifactpb.FileMediaType_FILE_MEDIA_TYPE_UNSPECIFIED:
+	case artifactpb.File_FILE_MEDIA_TYPE_UNSPECIFIED:
 		fileType = ""
 	default:
 		return nil, fmt.Errorf("unsupported file type: %v", req.GetFileMediaType())
@@ -61,8 +61,8 @@ func (s *service) SimilarityChunksSearch(ctx context.Context, ownerUID types.Own
 		return nil, fmt.Errorf("unsupported chunk type: %v", req.GetType())
 	}
 
-	fileUIDs := make([]types.FileUIDType, 0, len(req.GetFileUids()))
-	for _, uid := range req.GetFileUids() {
+	fileUIDs := make([]types.FileUIDType, 0, len(req.GetFileIds()))
+	for _, uid := range req.GetFileIds() {
 		fileUIDs = append(fileUIDs, types.FileUIDType(uuid.FromStringOrNil(uid)))
 	}
 
@@ -72,7 +72,7 @@ func (s *service) SimilarityChunksSearch(ctx context.Context, ownerUID types.Own
 	}
 
 	// Single KB query - no dual-mode routing needed
-	sp := repository.SimilarVectorSearchParam{
+	sp := repository.SearchVectorParam{
 		CollectionID: constant.KBCollectionName(kb.UID),
 		Vectors:      textVector,
 		TopK:         topK,
@@ -93,13 +93,13 @@ func (s *service) SimilarityChunksSearch(ctx context.Context, ownerUID types.Own
 			return nil, fmt.Errorf("fetching files: %w", err)
 		}
 
-		sp.FileNames = make([]string, 0, len(files))
+		sp.Filenames = make([]string, 0, len(files))
 		for _, file := range files {
-			sp.FileNames = append(sp.FileNames, file.Name)
+			sp.Filenames = append(sp.Filenames, file.Filename)
 		}
 	}
 
-	simEmbeddings, err := s.repository.SimilarVectorsInCollection(ctx, sp)
+	simEmbeddings, err := s.repository.SearchVectorsInCollection(ctx, sp)
 	if err != nil {
 		return nil, fmt.Errorf("searching similar embeddings: %w", err)
 	}

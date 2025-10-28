@@ -241,7 +241,7 @@ func TestProcessFileWorkflow_GetFileMetadataSuccess(t *testing.T) {
 			UID:           fileUID,
 			KBUID:         kbUID,
 			ProcessStatus: "FILE_PROCESS_STATUS_NOTSTARTED",
-			Name:          "test.pdf",
+			Filename:      "test.pdf",
 			FileType:      "FILE_TYPE_PDF",
 			Destination:   "test/file.pdf",
 		},
@@ -283,7 +283,6 @@ func TestProcessFileWorkflow_GetFileMetadataSuccess(t *testing.T) {
 	env.RegisterActivity(w.GetFileStatusActivity)
 	env.RegisterActivity(w.UpdateFileStatusActivity)
 	env.RegisterActivity(w.CacheFileContextActivity)
-	env.RegisterActivity(w.CacheChatContextActivity)
 
 	// Register workflow
 	env.RegisterWorkflow(w.ProcessFileWorkflow)

@@ -71,21 +71,18 @@ func needsFileConversion(fileType artifactpb.File_Type) (bool, string) {
 	case artifactpb.File_TYPE_PDF:
 		return false, ""
 
-	// Convertible document formats - convert to PDF (widely supported visual document format)
+	// Convertible document formats - convert to PDF (all document types for unified VIEW_STANDARD_FILE_TYPE support)
 	case artifactpb.File_TYPE_DOC,
 		artifactpb.File_TYPE_DOCX,
 		artifactpb.File_TYPE_PPT,
 		artifactpb.File_TYPE_PPTX,
 		artifactpb.File_TYPE_XLS,
-		artifactpb.File_TYPE_XLSX:
-		return true, "pdf"
-
-	// Text-based documents - no conversion needed (will be used as text)
-	case artifactpb.File_TYPE_HTML,
+		artifactpb.File_TYPE_XLSX,
+		artifactpb.File_TYPE_HTML,
 		artifactpb.File_TYPE_TEXT,
 		artifactpb.File_TYPE_MARKDOWN,
 		artifactpb.File_TYPE_CSV:
-		return false, ""
+		return true, "pdf"
 
 	default:
 		return false, ""
@@ -246,7 +243,11 @@ func getInputVariableName(fileType artifactpb.File_Type) string {
 		artifactpb.File_TYPE_PPT,
 		artifactpb.File_TYPE_PPTX,
 		artifactpb.File_TYPE_XLS,
-		artifactpb.File_TYPE_XLSX:
+		artifactpb.File_TYPE_XLSX,
+		artifactpb.File_TYPE_HTML,
+		artifactpb.File_TYPE_TEXT,
+		artifactpb.File_TYPE_MARKDOWN,
+		artifactpb.File_TYPE_CSV:
 		return "document"
 	default:
 		return ""

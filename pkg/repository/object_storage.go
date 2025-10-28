@@ -40,7 +40,9 @@ type ObjectStorage interface {
 
 	// Object (blob) operations
 	GetPresignedURLForUpload(ctx context.Context, namespaceUUID types.NamespaceUIDType, objectUUID types.ObjectUIDType, filename string, urlExpiration time.Duration) (*url.URL, error)
-	GetPresignedURLForDownload(ctx context.Context, namespaceUUID types.NamespaceUIDType, objectUUID types.ObjectUIDType, filename string, contentType string, urlExpiration time.Duration) (*url.URL, error)
+	// GetPresignedURLForDownload generates a presigned URL for downloading any object with proper Content-Disposition and Content-Type headers.
+	// This ensures proper browser download behavior with correct filename and MIME type handling.
+	GetPresignedURLForDownload(ctx context.Context, bucket string, objectPath string, filename string, contentType string, expiration time.Duration) (*url.URL, error)
 }
 
 // MinIO implementation constants
@@ -116,12 +118,12 @@ func (m *minioClient) UploadBase64File(ctx context.Context, bucket string, fileP
 	if err != nil {
 		return err
 	}
-	// Convert the decoded content to an io.Reader
-	contentReader := strings.NewReader(string(decodedContent))
 	// Upload the content to MinIO
 	size := int64(len(decodedContent))
-	// Create the file path with folder structure
+	// Retry loop with fresh reader on each attempt
 	for i := 0; i < 3; i++ {
+		// Create a fresh reader for each attempt (readers can only be read once)
+		contentReader := strings.NewReader(string(decodedContent))
 		_, err = m.client.PutObject(
 			ctx,
 			bucket,
@@ -301,34 +303,42 @@ func (m *minioClient) GetPresignedURLForUpload(ctx context.Context, namespaceUUI
 	return presignedURL, nil
 }
 
-// GetPresignedURLForDownload generates a presigned URL for downloading an object from MinIO
-func (m *minioClient) GetPresignedURLForDownload(ctx context.Context, namespaceUUID types.NamespaceUIDType, objectUUID types.ObjectUIDType, filename string, contentType string, expiration time.Duration) (*url.URL, error) {
+// GetPresignedURLForDownload generates a presigned URL for downloading any object from MinIO
+// with proper Content-Disposition and Content-Type headers for browser download behavior.
+// This single method handles all download URL generation needs: original files, converted files, summaries, PDFs, etc.
+func (m *minioClient) GetPresignedURLForDownload(ctx context.Context, bucket string, objectPath string, filename string, contentType string, expiration time.Duration) (*url.URL, error) {
 	logger, err := logx.GetZapLogger(ctx)
 	if err != nil {
 		return nil, err
 	}
-	// check if the expiration is within the range of 1sec to 7 days.
+
+	// Validate expiration is within reasonable range (1sec to 7 days)
 	if expiration > time.Hour*24*7 {
 		return nil, errors.New("expiration time must be within 1sec to 7 days")
 	}
 
-	// These headers will be used to set the content-disposition and content-type headers when downloading the object.
+	// Set response headers for proper download behavior
 	reqParams := url.Values{}
 	reqParams.Set("response-content-disposition", fmt.Sprintf(`inline; filename="%s"`, filename))
 	reqParams.Set("response-content-type", contentType)
 
-	// Get presigned URL for downloading object
-	presignedURL, err := m.client.PresignHeader(
+	// Generate presigned URL using PresignedGetObject (public download URL)
+	// Unlike PresignHeader, this doesn't sign custom headers, creating a truly public URL
+	// that works from any client (browser, curl, etc.) without special headers.
+	// This is appropriate for downloads where we want broad accessibility.
+	presignedURL, err := m.client.PresignedGetObject(
 		ctx,
-		http.MethodGet,
-		BlobBucketName,
-		GetBlobObjectPath(namespaceUUID, objectUUID),
+		bucket,
+		objectPath,
 		expiration,
 		reqParams,
-		m.presignHeaders(),
 	)
 	if err != nil {
-		logger.Error("Failed to make presigned URL for download", zap.Error(err))
+		logger.Error("Failed to generate presigned URL",
+			zap.String("bucket", bucket),
+			zap.String("objectPath", objectPath),
+			zap.String("filename", filename),
+			zap.Error(err))
 		return nil, err
 	}
 

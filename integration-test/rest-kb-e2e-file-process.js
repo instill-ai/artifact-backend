@@ -110,7 +110,7 @@ export function setup() {
       const catalogs = Array.isArray(listResp.json().catalogs) ? listResp.json().catalogs : [];
       let cleanedCount = 0;
       for (const catalog of catalogs) {
-        const catId = catalog.catalogId || catalog.catalog_id;
+        const catId = catalog.id;
         if (catId && catId.match(/test-[a-z0-9]+-e2e-/)) {
           const delResp = http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${resp.json().user.id}/catalogs/${catId}`, null, header);
           if (delResp.status === 200 || delResp.status === 204) {
@@ -153,7 +153,7 @@ export function teardown(data) {
 
       for (const catalog of catalogs) {
         // API returns catalogId (camelCase), not catalog_id
-        const catId = catalog.catalogId || catalog.catalog_id;
+        const catId = catalog.id;
         if (catId && catId.startsWith(data.dbIDPrefix)) {
           http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catId}`, null, data.header);
           console.log(`Teardown: Deleted catalog ${catId}`);
@@ -171,7 +171,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
 
     // Step 1: Create catalog
     const createBody = {
-      name: data.dbIDPrefix + "e2e-" + randomString(8),
+      id: data.dbIDPrefix + "e2e-" + randomString(8),
       description: "E2E test catalog for multi-file processing",
       tags: ["test", "integration", "e2e", "multi-file"],
       type: "CATALOG_TYPE_PERSISTENT",
@@ -186,12 +186,12 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
 
     let created;
     try { created = (cRes.json() || {}).catalog; } catch (e) { created = {}; }
-    const catalogId = created && created.catalogId;
-    const catalogUid = created && created.catalogUid;
+    const catalogId = created && created.id;
+    const catalogUid = created && created.uid;
 
     check(cRes, {
       "E2E: Catalog created successfully": (r) => r.status === 200,
-      "E2E: Catalog ID matches name": () => catalogId === createBody.name,
+      "E2E: Catalog ID matches requested id": () => catalogId === createBody.id,
       "E2E: Catalog has valid UID": () => catalogUid && catalogUid.length > 0,
       "E2E: Catalog is valid": () => created && helper.validateCatalog(created, false),
     });
@@ -214,15 +214,18 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
 
     check(listRes, {
       "E2E: List catalogs successful": (r) => r.status === 200,
-      "E2E: List contains created catalog": () => catalogs.some((c) => c.catalogId === catalogId),
+      "E2E: List contains created catalog": () => catalogs.some((c) => c.id === catalogId),
     });
 
     // Step 3: Update catalog metadata
+    const newDesc = "Updated E2E test catalog - testing metadata update";
+    const newTags = ["test", "integration", "e2e", "updated"];
     const updateBody = {
-      catalogId: catalogId,
-      namespaceId: data.expectedOwner.id,
-      description: "Updated E2E test catalog - testing metadata update",
-      tags: ["test", "integration", "e2e", "updated"],
+      catalog: {
+        description: newDesc,
+        tags: newTags,
+      },
+      updateMask: "description,tags"
     };
 
     const uRes = http.request(
@@ -237,23 +240,23 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
 
     check(uRes, {
       "E2E: Update catalog successful": (r) => r.status === 200,
-      "E2E: Catalog ID remains stable after update": () => updated.catalogId === catalogId,
-      "E2E: Catalog description updated": () => updated && updated.description === updateBody.description,
-      "E2E: Catalog tags updated": () => updated && JSON.stringify(updated.tags) === JSON.stringify(updateBody.tags),
+      "E2E: Catalog ID remains stable after update": () => updated.id === catalogId,
+      "E2E: Catalog description updated": () => updated && updated.description === newDesc,
+      "E2E: Catalog tags updated": () => updated && JSON.stringify(updated.tags) === JSON.stringify(newTags),
     });
 
     // Step 4: Upload all file types (parallel batch upload)
     // This tests the system's ability to handle multiple file types simultaneously
     const uploaded = [];
     const uploadReqs = constant.sampleFiles.map((s) => {
-      const fileName = `${data.dbIDPrefix}${s.originalName}`;
+      const filename = `${data.dbIDPrefix}${s.originalName}`;
       return {
         s,
-        fileName,
+        filename: filename,
         req: {
           method: "POST",
           url: `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files`,
-          body: JSON.stringify({ name: fileName, type: s.type, content: s.content }),
+          body: JSON.stringify({ filename: filename, type: s.type, content: s.content }),
           params: data.header,
         },
       };
@@ -264,7 +267,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
     for (let i = 0; i < uploadResponses.length; i++) {
       const resp = uploadResponses[i];
       const s = uploadReqs[i].s;
-      const fileName = uploadReqs[i].fileName;
+      const filename = uploadReqs[i].filename;
 
       const fJson = (function () {
         try { return resp.json(); } catch (e) { return {}; }
@@ -273,15 +276,15 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
 
       check(resp, {
         [`E2E: File uploaded successfully (${s.originalName})`]: (r) => r.status === 200,
-        [`E2E: File has UID (${s.originalName})`]: () => file.fileUid && file.fileUid.length > 0,
+        [`E2E: File has UID (${s.originalName})`]: () => file.uid && file.uid.length > 0,
         [`E2E: File type matches (${s.originalName})`]: () => file.type === s.type,
       });
 
-      if (file && file.fileUid) {
+      if (file && file.uid) {
         uploaded.push({
-          fileUid: file.fileUid,
-          fileId: file.fileId,
-          name: fileName,
+          fileUid: file.uid,
+          fileId: file.id,
+          filename: filename,
           type: s.type,
           originalName: s.originalName
         });
@@ -331,20 +334,20 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
           try {
             const body = r.json();
             const st = (body.file && body.file.processStatus) || "";
-            const fileName = (body.file && body.file.name) || uid;
+            const filename = (body.file && body.file.filename) || uid;
 
             if (r.status === 200 && st === "FILE_PROCESS_STATUS_COMPLETED") {
               pending.delete(uid);
               completedCount++;
-              console.log(`[${iter}] ✓ Completed: ${fileName} (${completedCount}/${uploaded.length})`);
+              console.log(`[${iter}] ✓ Completed: ${filename} (${completedCount}/${uploaded.length})`);
             } else if (r.status === 200 && st === "FILE_PROCESS_STATUS_FAILED") {
               pending.delete(uid);
               failedFiles.push({
                 uid,
-                name: fileName,
+                name: filename,
                 outcome: (body.file && body.file.processOutcome) || "Unknown error"
               });
-              console.log(`[${iter}] ✗ Failed: ${fileName} - ${failedFiles[failedFiles.length - 1].outcome}`);
+              console.log(`[${iter}] ✗ Failed: ${filename} - ${failedFiles[failedFiles.length - 1].outcome}`);
             } else if (r.status === 200 && (
               st === "FILE_PROCESS_STATUS_PROCESSING" ||
               st === "FILE_PROCESS_STATUS_CHUNKING" ||
@@ -390,17 +393,9 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
 
     // Step 7: Verify each file's metadata and processing results
     for (const f of uploaded) {
-      const viewPath = `/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files?filter.fileUids=${f.fileUid}`;
-      const viewRes = http.request("GET", artifactRESTPublicHost + viewPath, null, data.header);
+      const viewPath = `/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files?filter=${encodeURIComponent(`id = "${f.fileId}"`)}`;
 
-      // Log errors for debugging, but don't fail the test yet (check assertions will catch issues)
-      if (viewRes.status !== 200) {
-        try {
-          console.log(`E2E: File view failed (${f.originalName}) status=${viewRes.status} body=${JSON.stringify(viewRes.json())}`);
-        } catch (e) {
-          console.log(`E2E: File view failed (${f.originalName}) status=${viewRes.status}`);
-        }
-      }
+      const viewRes = http.request("GET", artifactRESTPublicHost + viewPath, null, data.header);
 
       let fileData;
       try {
@@ -412,7 +407,8 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
 
       check(viewRes, {
         [`E2E: File view successful (${f.originalName})`]: (r) => r.status === 200,
-        [`E2E: File has correct name (${f.originalName})`]: () => fileData && fileData.name === f.name,
+        [`E2E: File has correct resource name format (${f.originalName})`]: () => fileData && fileData.name && fileData.name.startsWith(`namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/`),
+        [`E2E: File has correct filename (${f.originalName})`]: () => fileData && fileData.filename === f.filename,
         [`E2E: File status is COMPLETED (${f.originalName})`]: () => fileData && fileData.processStatus === "FILE_PROCESS_STATUS_COMPLETED",
         [`E2E: File has creator UID (${f.originalName})`]: () => fileData && fileData.creatorUid === data.expectedOwner.uid,
         [`E2E: File has positive size (${f.originalName})`]: () => fileData && fileData.size > 0,
@@ -457,7 +453,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
       console.log(`E2E Position Data: Testing ${pdfFile.originalName} (${pdfFile.fileUid})`);
 
       // 1. Verify converted_file has position_data with PageDelimiters
-      const convertedFileQuery = constant.db.query(
+      const convertedFileQuery = helper.safeQuery(
         `SELECT position_data::text as position_data_text FROM converted_file
          WHERE file_uid = $1 AND converted_type = 'CONVERTED_FILE_TYPE_CONTENT' AND position_data IS NOT NULL LIMIT 1`,
         pdfFile.fileUid
@@ -473,7 +469,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
           console.log(`E2E Position Data: Failed to parse position_data for ${pdfFile.originalName}: ${e}`);
         }
 
-        check({ posData, fileName: pdfFile.originalName }, {
+        check({ posData, filename: pdfFile.originalName }, {
           [`E2E Position Data: PDF has position_data (${pdfFile.originalName})`]: () => posData !== null,
           [`E2E Position Data: position_data has PageDelimiters (${pdfFile.originalName})`]: () =>
             posData && posData.PageDelimiters !== undefined,
@@ -491,7 +487,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
       }
 
       // 2. Verify text_chunk has reference with PageRange
-      const chunkQuery = constant.db.query(
+      const chunkQuery = helper.safeQuery(
         `SELECT reference::text as reference_text FROM text_chunk
          WHERE file_uid = $1 AND reference IS NOT NULL LIMIT 1`,
         pdfFile.fileUid
@@ -507,7 +503,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
           console.log(`E2E Position Data: Failed to parse reference for ${pdfFile.originalName}: ${e}`);
         }
 
-        check({ refData, fileName: pdfFile.originalName }, {
+        check({ refData, filename: pdfFile.originalName }, {
           [`E2E Position Data: Chunk has reference (${pdfFile.originalName})`]: () => refData !== null,
           [`E2E Position Data: Reference has PageRange (${pdfFile.originalName})`]: () =>
             refData && refData.PageRange !== undefined,
@@ -523,7 +519,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
       // 3. Verify chunk API returns UNIT_PAGE references
       const chunksResp = http.request(
         "GET",
-        `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/chunks?fileUid=${pdfFile.fileUid}`,
+        `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${pdfFile.fileUid}/chunks`,
         null,
         data.header
       );
@@ -540,7 +536,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
           const firstChunk = chunksJson.chunks[0];
           console.log(`E2E Position Data: ${pdfFile.originalName} has ${chunksJson.chunks.length} chunks in API`);
 
-          check({ chunk: firstChunk, fileName: pdfFile.originalName }, {
+          check({ chunk: firstChunk, filename: pdfFile.originalName }, {
             [`E2E Position Data: Chunk has reference in API (${pdfFile.originalName})`]: () =>
               firstChunk.reference !== null && firstChunk.reference !== undefined,
             [`E2E Position Data: Reference has start position (${pdfFile.originalName})`]: () =>
@@ -602,7 +598,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
     let totalChunksCount = 0;
     console.log(`E2E: Starting chunk verification for ${uploaded.length} files`);
     for (const f of uploaded) {
-      const chunkApiUrl = `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/chunks?fileUid=${f.fileUid}`;
+      const chunkApiUrl = `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${f.fileUid}/chunks`;
 
       console.log(`E2E: Polling chunks for ${f.originalName} (${f.fileUid})`);
       // Poll for chunks until they appear or timeout
@@ -632,56 +628,46 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
     });
 
     // Step 10: Get summary for each file
-    console.log(`E2E: Getting summaries for ${uploaded.length} files`);
+    console.log(`E2E: Getting summaries for ${uploaded.length} files using VIEW_SUMMARY`);
     for (const f of uploaded) {
       const getSummaryRes = http.request(
         "GET",
-        `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${f.fileUid}/summary`,
+        `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${f.fileUid}?view=VIEW_SUMMARY`,
         null,
         data.header
       );
 
+      const summaryJson = (() => { try { return getSummaryRes.json(); } catch (e) { return {}; } })();
       check(getSummaryRes, {
         [`E2E: Get summary successful (${f.originalName})`]: (r) => r.status === 200,
+        [`E2E: Summary has derived_resource_uri (${f.originalName})`]: () => summaryJson.derivedResourceUri && summaryJson.derivedResourceUri.length > 0,
       });
     }
     console.log(`E2E: All summaries retrieved`);
 
-    // Step 11: Get source file for each file
-    console.log(`E2E: Getting source files for ${uploaded.length} files`);
+    // Step 11: Get content file for each file using VIEW_CONTENT
+    console.log(`E2E: Getting content files for ${uploaded.length} files using VIEW_CONTENT`);
     for (const f of uploaded) {
-      const sourceRes = http.request(
+      const contentRes = http.request(
         "GET",
-        `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${f.fileUid}/source`,
+        `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}/files/${f.fileUid}?view=VIEW_CONTENT`,
         null,
         data.header
       );
 
-      let sourceData;
+      let contentData;
       try {
-        sourceData = sourceRes.json();
+        contentData = contentRes.json();
       } catch (e) {
-        sourceData = null;
+        contentData = null;
       }
 
-      check(sourceRes, {
-        [`E2E: Get source successful (${f.originalName})`]: (r) => r.status === 200,
+      check(contentRes, {
+        [`E2E: Get content successful (${f.originalName})`]: (r) => r.status === 200,
+        [`E2E: Content has derived_resource_uri (${f.originalName})`]: () => contentData && contentData.derivedResourceUri && contentData.derivedResourceUri.length > 0,
       });
-
-      if (sourceData && sourceData.sourceFile) {
-        const source = sourceData.sourceFile;
-
-        check({ source }, {
-          [`E2E: Source returns content (${f.originalName})`]: () =>
-            source.content && source.content.length > 0,
-          [`E2E: Source has originalFileUid (${f.originalName})`]: () =>
-            source.originalFileUid && source.originalFileUid === f.fileUid,
-          [`E2E: Source has originalFileName (${f.originalName})`]: () =>
-            source.originalFileName && source.originalFileName.length > 0,
-        });
-      }
     }
-    console.log(`E2E: All source files retrieved`);
+    console.log(`E2E: All content files retrieved`);
 
     // Step 12: Verify storage layer resources (MinIO, Postgres, Milvus)
     // Direct count checks - no polling since API confirmed COMPLETED status
@@ -738,7 +724,15 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
     });
 
     // Step 13: Delete catalog and verify cleanup
-    // DEBUG: Cleanup disabled to inspect final database state
-    console.log(`E2E: Test completed successfully! (cleanup skipped for debugging)`);
+    const delRes = http.request(
+      "DELETE",
+      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/catalogs/${catalogId}`,
+      null,
+      data.header
+    );
+
+    check(delRes, {
+      "E2E: Catalog deleted successfully": (r) => r.status === 200 || r.status === 204,
+    });
   });
 }

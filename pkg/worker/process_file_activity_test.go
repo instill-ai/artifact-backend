@@ -131,7 +131,7 @@ func TestGetFileMetadataActivity_Success(t *testing.T) {
 		{
 			UID:         fileUID,
 			KBUID:       kbUID,
-			Name:        "test.pdf",
+			Filename:    "test.pdf",
 			FileType:    "FILE_TYPE_PDF",
 			Size:        1024,
 			Destination: "kb/test.pdf",
@@ -167,7 +167,7 @@ func TestGetFileMetadataActivity_Success(t *testing.T) {
 	c.Assert(result.File, qt.IsNotNil)
 	c.Assert(result.File.UID, qt.Equals, fileUID)
 	c.Assert(result.File.KBUID, qt.Equals, kbUID)
-	c.Assert(result.File.Name, qt.Equals, "test.pdf")
+	c.Assert(result.File.Filename, qt.Equals, "test.pdf")
 	c.Assert(result.File.FileType, qt.Equals, "FILE_TYPE_PDF")
 }
 
@@ -480,7 +480,7 @@ func TestProcessSummaryActivity_ConvertedFileCreation(t *testing.T) {
 		FileUID:  fileUID,
 		KBUID:    kbUID,
 		FileType: artifactpb.File_TYPE_PDF,
-		FileName: "test.pdf",
+		Filename: "test.pdf",
 	}
 
 	// Verify the structure of what would be created

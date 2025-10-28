@@ -23,15 +23,12 @@ type FileContent = worker.FileContent
 // Service defines the Artifact domain use cases.
 type Service interface {
 	CheckNamespacePermission(context.Context, *resource.Namespace) error
-	SimilarityChunksSearch(context.Context, types.OwnerUIDType, *artifactpb.SimilarityChunksSearchRequest, [][]float32) ([]SimChunk, error)
+	SearchChunks(context.Context, types.OwnerUIDType, *artifactpb.SearchChunksRequest, [][]float32) ([]SimChunk, error)
 	GetNamespaceByNsID(context.Context, string) (*resource.Namespace, error)
 	GetChunksByFile(context.Context, *repository.KnowledgeBaseFileModel) (types.SourceTableType, types.SourceUIDType, []repository.TextChunkModel, []string, error)
 	GetConvertedFilePathsByFileUID(context.Context, types.KBUIDType, types.FileUIDType) ([]string, error)
 	GetTextChunkFilePathsByFileUID(context.Context, types.KBUIDType, types.FileUIDType) ([]string, error)
-	ListRepositoryTags(context.Context, *artifactpb.ListRepositoryTagsRequest) (*artifactpb.ListRepositoryTagsResponse, error)
-	CreateRepositoryTag(context.Context, *artifactpb.CreateRepositoryTagRequest) (*artifactpb.CreateRepositoryTagResponse, error)
-	GetRepositoryTag(context.Context, *artifactpb.GetRepositoryTagRequest) (*artifactpb.GetRepositoryTagResponse, error)
-	DeleteRepositoryTag(context.Context, *artifactpb.DeleteRepositoryTagRequest) (*artifactpb.DeleteRepositoryTagResponse, error)
+	// Repository tag methods removed - tag.proto was removed from protobuf definitions
 	GetUploadURL(context.Context, *artifactpb.GetObjectUploadURLRequest, types.NamespaceUIDType, string, types.CreatorUIDType) (*artifactpb.GetObjectUploadURLResponse, error)
 	GetDownloadURL(context.Context, *artifactpb.GetObjectDownloadURLRequest, types.NamespaceUIDType, string) (*artifactpb.GetObjectDownloadURLResponse, error)
 	CheckCatalogUserPermission(context.Context, string, string, string) (*resource.Namespace, *repository.KnowledgeBaseModel, error)
@@ -48,7 +45,7 @@ type Service interface {
 	EmbedTexts(context.Context, *types.KBUIDType, []string, string) ([][]float32, error)
 
 	// RAG System Update use cases
-	RollbackAdmin(context.Context, types.OwnerUIDType, string) (*artifactpb.RollbackAdminResponse, error)
+	RollbackAdmin(context.Context, types.OwnerUIDType, string, string) (*artifactpb.RollbackAdminResponse, error)
 	PurgeRollbackAdmin(context.Context, types.OwnerUIDType, string) (*artifactpb.PurgeRollbackAdminResponse, error)
 	SetRollbackRetentionAdmin(context.Context, types.OwnerUIDType, string, int32, artifactpb.SetRollbackRetentionAdminRequest_TimeUnit) (*artifactpb.SetRollbackRetentionAdminResponse, error)
 	GetKnowledgeBaseUpdateStatusAdmin(context.Context) (*artifactpb.GetKnowledgeBaseUpdateStatusAdminResponse, error)

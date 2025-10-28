@@ -33,7 +33,7 @@ func TestSaveEmbeddingsWorkflow_Success(t *testing.T) {
 	param := SaveEmbeddingsWorkflowParam{
 		KBUID:        kbUID,
 		FileUID:      fileUID,
-		FileName:     "test.pdf",
+		Filename:     "test.pdf",
 		Embeddings:   embeddings,
 		UserUID:      uuid.Must(uuid.NewV4()),
 		RequesterUID: uuid.Must(uuid.NewV4()),
@@ -87,7 +87,7 @@ func TestSaveEmbeddingsWorkflow_EmptyEmbeddings(t *testing.T) {
 	param := SaveEmbeddingsWorkflowParam{
 		KBUID:        uuid.Must(uuid.NewV4()),
 		FileUID:      uuid.Must(uuid.NewV4()),
-		FileName:     "test.pdf",
+		Filename:     "test.pdf",
 		Embeddings:   []repository.EmbeddingModel{}, // Empty
 		UserUID:      uuid.Must(uuid.NewV4()),
 		RequesterUID: uuid.Must(uuid.NewV4()),
@@ -125,7 +125,7 @@ func TestSaveEmbeddingsWorkflow_DeleteMilvusFailure(t *testing.T) {
 	param := SaveEmbeddingsWorkflowParam{
 		KBUID:        kbUID,
 		FileUID:      uuid.Must(uuid.NewV4()),
-		FileName:     "test.pdf",
+		Filename:     "test.pdf",
 		Embeddings:   createWorkflowTestEmbeddings(50),
 		UserUID:      uuid.Must(uuid.NewV4()),
 		RequesterUID: uuid.Must(uuid.NewV4()),
@@ -164,7 +164,7 @@ func TestSaveEmbeddingsWorkflow_DeleteDBFailure(t *testing.T) {
 	param := SaveEmbeddingsWorkflowParam{
 		KBUID:        kbUID,
 		FileUID:      uuid.Must(uuid.NewV4()),
-		FileName:     "test.pdf",
+		Filename:     "test.pdf",
 		Embeddings:   createWorkflowTestEmbeddings(50),
 		UserUID:      uuid.Must(uuid.NewV4()),
 		RequesterUID: uuid.Must(uuid.NewV4()),
@@ -204,7 +204,7 @@ func TestSaveEmbeddingsWorkflow_BatchFailure(t *testing.T) {
 	param := SaveEmbeddingsWorkflowParam{
 		KBUID:        kbUID,
 		FileUID:      uuid.Must(uuid.NewV4()),
-		FileName:     "test.pdf",
+		Filename:     "test.pdf",
 		Embeddings:   createWorkflowTestEmbeddings(50),
 		UserUID:      uuid.Must(uuid.NewV4()),
 		RequesterUID: uuid.Must(uuid.NewV4()),
@@ -239,7 +239,7 @@ func TestSaveEmbeddingsWorkflow_LargeDataset(t *testing.T) {
 	param := SaveEmbeddingsWorkflowParam{
 		KBUID:        kbUID,
 		FileUID:      uuid.Must(uuid.NewV4()),
-		FileName:     "large.pdf",
+		Filename:     "large.pdf",
 		Embeddings:   embeddings,
 		UserUID:      uuid.Must(uuid.NewV4()),
 		RequesterUID: uuid.Must(uuid.NewV4()),
