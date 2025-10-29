@@ -566,7 +566,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 					"fileUID", cr.fileUID.String())
 
 				summaryCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-					StartToCloseTimeout: ActivityTimeoutStandard, // 1 minute
+					StartToCloseTimeout: ActivityTimeoutLong, // 5 minutes (pipeline timeout is 5 min)
 					RetryPolicy: &temporal.RetryPolicy{
 						InitialInterval:    RetryInitialInterval,
 						BackoffCoefficient: RetryBackoffCoefficient,
@@ -622,7 +622,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 
 					// Step 2: Execute summary with the generated markdown content
 					summaryCtx := workflow.WithActivityOptions(gCtx, workflow.ActivityOptions{
-						StartToCloseTimeout: ActivityTimeoutStandard, // 1 minute
+						StartToCloseTimeout: ActivityTimeoutLong, // 5 minutes (pipeline timeout is 5 min)
 						RetryPolicy: &temporal.RetryPolicy{
 							InitialInterval:    RetryInitialInterval,
 							BackoffCoefficient: RetryBackoffCoefficient,

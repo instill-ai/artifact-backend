@@ -30,9 +30,9 @@ import (
 	"go.temporal.io/sdk/interceptor"
 
 	"github.com/instill-ai/artifact-backend/config"
-	"github.com/instill-ai/artifact-backend/internal/ai"
-	"github.com/instill-ai/artifact-backend/internal/ai/gemini"
-	"github.com/instill-ai/artifact-backend/internal/ai/openai"
+	"github.com/instill-ai/artifact-backend/pkg/ai"
+	"github.com/instill-ai/artifact-backend/pkg/ai/gemini"
+	"github.com/instill-ai/artifact-backend/pkg/ai/openai"
 	"github.com/instill-ai/artifact-backend/pkg/acl"
 	"github.com/instill-ai/artifact-backend/pkg/handler"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
