@@ -7,7 +7,7 @@ import (
 
 	"github.com/openai/openai-go/v3"
 
-	"github.com/instill-ai/artifact-backend/internal/ai"
+	"github.com/instill-ai/artifact-backend/pkg/ai"
 
 	errorsx "github.com/instill-ai/x/errors"
 )

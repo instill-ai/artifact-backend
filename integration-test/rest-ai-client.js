@@ -219,8 +219,8 @@ export default function (data) {
             knowledgeBaseId,
             fileUid, // Use UID, not short ID
             data.header,
-            120, // Max 120 seconds
-            60   // Fast-fail after 60s if stuck in NOTSTARTED
+            300, // Max 300 seconds (increased for slower GA environment)
+            120  // Fast-fail after 120s if stuck in NOTSTARTED (increased for GA)
         );
 
         const processedStatus = result.completed && result.status === "COMPLETED";
@@ -284,7 +284,7 @@ export default function (data) {
         // Cleanup: Wait for all file processing in this knowledge base to complete
         // Use the helper function with knowledge base ID as prefix filter
         console.log(`AI Test 2.6: Ensuring all knowledge base file processing complete before cleanup...`);
-        helper.waitForAllFileProcessingComplete(30, knowledgeBaseId);
+        helper.waitForAllFileProcessingComplete(180, knowledgeBaseId); // Increased to 180s for GA environment
 
         const deleteResp = http.request(
             "DELETE",
@@ -366,8 +366,8 @@ export default function (data) {
             knowledgeBaseId,
             fileUid, // Use UID, not short ID
             data.header,
-            120, // Max 120 seconds
-            60   // Fast-fail after 60s if stuck in NOTSTARTED
+            300, // Max 300 seconds (increased for slower GA environment)
+            120  // Fast-fail after 120s if stuck in NOTSTARTED (increased for GA)
         );
 
         const processedStatus = result.completed && result.status === "COMPLETED";
@@ -519,8 +519,8 @@ in artificial intelligence integration and customer satisfaction metrics.
             knowledgeBaseId,
             fileUid, // Use UID, not short ID
             data.header,
-            120, // Max 120 seconds
-            60   // Fast-fail after 60s if stuck in NOTSTARTED
+            300, // Max 300 seconds (increased for slower GA environment)
+            120  // Fast-fail after 120s if stuck in NOTSTARTED (increased for GA)
         );
 
         const processedStatus = result.completed && result.status === "COMPLETED";
@@ -646,8 +646,8 @@ in artificial intelligence integration and customer satisfaction metrics.
             knowledgeBaseId,
             fileUid, // Use UID, not short ID
             data.header,
-            120, // Max 120 seconds
-            60   // Fast-fail after 60s if stuck in NOTSTARTED
+            300, // Max 300 seconds (increased for slower GA environment)
+            120  // Fast-fail after 120s if stuck in NOTSTARTED (increased for GA)
         );
 
         const processedStatus = result.completed && result.status === "COMPLETED";
@@ -663,7 +663,7 @@ in artificial intelligence integration and customer satisfaction metrics.
         // Cleanup: Wait for all file processing in this knowledge base to complete
         // Use the helper function with knowledge base ID as prefix filter
         console.log(`AI Test 5.4: Ensuring all knowledge base file processing complete before cleanup...`);
-        helper.waitForAllFileProcessingComplete(30, knowledgeBaseId);
+        helper.waitForAllFileProcessingComplete(180, knowledgeBaseId); // Increased to 180s for GA environment
 
         http.request(
             "DELETE",

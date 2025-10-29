@@ -11,7 +11,7 @@ import (
 
 	"google.golang.org/protobuf/types/known/structpb"
 
-	"github.com/instill-ai/artifact-backend/internal/ai"
+	"github.com/instill-ai/artifact-backend/pkg/ai"
 	"github.com/instill-ai/artifact-backend/pkg/pipeline"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
