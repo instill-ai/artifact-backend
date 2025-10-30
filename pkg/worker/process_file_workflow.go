@@ -936,6 +936,16 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				continue
 			}
 
+			if w.postFileCompletion != nil {
+				effectiveFileType := wf.conversionData.effectiveFileType
+				file := wf.conversionData.fileMetadata.metadata.File
+				if err := w.postFileCompletion(ctx, file, effectiveFileType); err != nil {
+					filesFailed[fileUID.String()] = handleFileError(fileUID, "post-completion logic", err)
+					filesCompleted[fileUID.String()] = true
+					continue
+				}
+			}
+
 			// Mark file as successfully completed
 			filesCompleted[fileUID.String()] = true
 			logger.Info("File processing completed successfully", "fileUID", fileUID.String())

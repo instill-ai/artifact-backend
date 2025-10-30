@@ -11,6 +11,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/workflow"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/structpb"
 
@@ -56,6 +57,10 @@ const (
 	RetryMaximumAttempts         = 5                 // 5 attempts = ~30-60s max (better for 503/rate limit errors)
 )
 
+// PostFileCompletionFn allows extensions of the worker to provide some logic
+// to be executed after a file is successfully processed.
+type PostFileCompletionFn func(_ workflow.Context, file *repository.KnowledgeBaseFileModel, effectiveFileTyep artifactpb.File_Type) error
+
 // Worker implements the Temporal worker with all workflows and activities
 type Worker struct {
 	// Infrastructure dependencies (primitives)
@@ -70,6 +75,8 @@ type Worker struct {
 	// Worker-specific dependencies
 	aiClient ai.Client // AI client (can be single or composite with routing capabilities)
 	log      *zap.Logger
+
+	postFileCompletion PostFileCompletionFn
 }
 
 // TemporalClient returns the Temporal client for workflow execution
@@ -97,6 +104,12 @@ func (w *Worker) GetPipelineClient() pipelinepb.PipelinePublicServiceClient {
 // GetLogger returns the logger for external use (e.g., EE worker overrides)
 func (w *Worker) GetLogger() *zap.Logger {
 	return w.log
+}
+
+// SetPostFileCompletionFn allows clients to add logic for files that have been
+// successfully processed.
+func (w *Worker) SetPostFileCompletionFn(fn PostFileCompletionFn) {
+	w.postFileCompletion = fn
 }
 
 // New creates a new worker instance with direct dependencies (no circular dependency)
