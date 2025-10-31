@@ -69,14 +69,14 @@ VALUES (
         'openai',
         '{"rag": {"embedding": {"model_family": "openai", "dimensionality": 1536}}}'::jsonb,
         'OpenAI embedding configuration (1536 dimensions)',
-        true -- OpenAI is the default system for existing and new knowledge bases
+        false -- OpenAI is available but not the default
     ),
     (
         uuid_generate_v4(),
         'gemini',
         '{"rag": {"embedding": {"model_family": "gemini", "dimensionality": 3072}}}'::jsonb,
-        'Google Gemini embedding configuration (3072 dimensions)',
-        false
+        'Google Gemini embedding configuration (3072 dimensions) - Default for new knowledge bases',
+        true -- Gemini is the default system for new knowledge bases
     ) ON CONFLICT (id) DO
 UPDATE
 SET config = EXCLUDED.config,
