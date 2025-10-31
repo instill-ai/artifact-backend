@@ -312,26 +312,25 @@ func (w *Worker) UpdateKnowledgeBaseWorkflow(ctx workflow.Context, param UpdateK
 	// ========== Phase 4: Validate ==========
 	logger.Info("Phase 4: Validate - Validating KB resource integrity")
 
-	if config.Config.RAG.Update.ValidationEnabled {
-		// Validation should NEVER be retried - if it fails, it indicates a real bug in the locking/synchronization
-		// Retries just mask failures and waste time. With proper locking, validation passes on first attempt.
-		validationCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-			StartToCloseTimeout: ActivityTimeoutStandard, // 5 min timeout
-			RetryPolicy: &temporal.RetryPolicy{
-				MaximumAttempts: 1, // NO RETRIES - fail fast to expose bugs
-			},
-		})
+	// Validation is MANDATORY before swapping to ensure data integrity
+	// Validation should NEVER be retried - if it fails, it indicates a real bug in the locking/synchronization
+	// Retries just mask failures and waste time. With proper locking, validation passes on first attempt.
+	validationCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: ActivityTimeoutStandard, // 5 min timeout
+		RetryPolicy: &temporal.RetryPolicy{
+			MaximumAttempts: 1, // NO RETRIES - fail fast to expose bugs
+		},
+	})
 
-		var validationResult ValidateUpdatedKBActivityResult
-		err = workflow.ExecuteActivity(validationCtx, w.ValidateUpdatedKBActivity, &ValidateUpdatedKBActivityParam{
-			OriginalKBUID:     param.OriginalKBUID,
-			StagingKBUID:      stagingKBUID,
-			ExpectedFileCount: len(listFilesResult.FileUIDs),
-		}).Get(validationCtx, &validationResult)
-		if err != nil || !validationResult.Success {
-			logger.Error("Validation failed", "error", err, "validationErrors", validationResult.Errors)
-			return fmt.Errorf("validation failed: %v", validationResult.Errors)
-		}
+	var validationResult ValidateUpdatedKBActivityResult
+	err = workflow.ExecuteActivity(validationCtx, w.ValidateUpdatedKBActivity, &ValidateUpdatedKBActivityParam{
+		OriginalKBUID:     param.OriginalKBUID,
+		StagingKBUID:      stagingKBUID,
+		ExpectedFileCount: len(listFilesResult.FileUIDs),
+	}).Get(validationCtx, &validationResult)
+	if err != nil || !validationResult.Success {
+		logger.Error("Validation failed", "error", err, "validationErrors", validationResult.Errors)
+		return fmt.Errorf("validation failed: %v", validationResult.Errors)
 	}
 
 	// ========== Phase 5: Swap ==========

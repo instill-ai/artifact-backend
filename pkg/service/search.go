@@ -50,11 +50,11 @@ func (s *service) SearchChunks(ctx context.Context, ownerUID types.OwnerUIDType,
 	var chunkType string
 	switch req.GetType() {
 	case artifactpb.Chunk_TYPE_CONTENT:
-		chunkType = "content"
+		chunkType = "TYPE_CONTENT"
 	case artifactpb.Chunk_TYPE_SUMMARY:
-		chunkType = "summary"
+		chunkType = "TYPE_SUMMARY"
 	case artifactpb.Chunk_TYPE_AUGMENTED:
-		chunkType = "augmented"
+		chunkType = "TYPE_AUGMENTED"
 	case artifactpb.Chunk_TYPE_UNSPECIFIED:
 		chunkType = ""
 	default:

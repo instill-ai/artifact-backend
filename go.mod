@@ -13,7 +13,7 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.1
 	github.com/iancoleman/strcase v0.3.0
-	github.com/instill-ai/protogen-go v0.3.3-alpha.0.20251028223539-37963555b549
+	github.com/instill-ai/protogen-go v0.3.3-alpha.0.20251031090146-1014830f9fee
 	github.com/instill-ai/usage-client v0.4.0
 	github.com/instill-ai/x v0.10.1-alpha
 	github.com/knadh/koanf v1.5.0
@@ -39,8 +39,6 @@ require (
 	gorm.io/driver/postgres v1.5.0
 	gorm.io/gorm v1.30.0
 )
-
-require github.com/google/go-cmp v0.7.0 // indirect
 
 require (
 	cloud.google.com/go v0.120.0 // indirect
@@ -75,6 +73,7 @@ require (
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/mock v1.6.0 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
+	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.6 // indirect

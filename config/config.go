@@ -146,9 +146,8 @@ type RAGConfig struct {
 
 // RAGUpdateConfig defines the configuration for RAG system updates
 type RAGUpdateConfig struct {
-	RollbackRetentionDays int  `koanf:"rollback_retention_days"` // Days to keep old KB after swap
-	ValidationEnabled     bool `koanf:"validation_enabled"`      // Validate shadow KB before swap
-	BatchSize             int  `koanf:"batch_size"`              // KBs to process concurrently
+	RollbackRetentionDays int `koanf:"rollback_retention_days"` // Days to keep old KB after swap
+	BatchSize             int `koanf:"batch_size"`              // KBs to process concurrently
 }
 
 // ModelConfig defines the configuration for AI model providers

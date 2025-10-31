@@ -3,10 +3,8 @@ package handler
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/gofrs/uuid"
 
@@ -23,8 +21,6 @@ import (
 	errorsx "github.com/instill-ai/x/errors"
 	logx "github.com/instill-ai/x/log"
 )
-
-var alphabet = "abcdefghijklmnopqrstuvwxyz"
 
 type ErrorMsg map[int]string
 
@@ -64,7 +60,7 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 
 	// check id if it is empty
 	if req.Id == "" {
-		req.Id = generateID()
+		return nil, fmt.Errorf("knowledge base id is required. err: %w", errorsx.ErrInvalidArgument)
 	}
 	nameOk := isValidName(req.Id)
 	if !nameOk {
@@ -582,14 +578,4 @@ func isValidName(name string) bool {
 	re := regexp.MustCompile(pattern)
 	// Match the name against the regular expression
 	return re.MatchString(name)
-}
-
-func generateID() string {
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	id := make([]byte, 8)
-	for i := range id {
-		id[i] = alphabet[r.Intn(len(alphabet))]
-	}
-
-	return string(id)
 }
