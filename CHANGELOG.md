@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.34.0](https://github.com/instill-ai/artifact-backend/compare/v0.33.0...v0.34.0) (2025-10-31)
+
+
+### Features
+
+* **ai:** add multi-provider support with OpenAI for legacy embeddings ([#271](https://github.com/instill-ai/artifact-backend/issues/271)) ([6896341](https://github.com/instill-ai/artifact-backend/commit/689634194af655d533a3f6dda4afd98b110abfb3))
+* **file,retrieval:** add tag filter to similarity chunk search ([#266](https://github.com/instill-ai/artifact-backend/issues/266)) ([d384282](https://github.com/instill-ai/artifact-backend/commit/d3842822277abb5574379e5670e3d97e017a97ed))
+* **file:** add tag update endpoint ([#267](https://github.com/instill-ai/artifact-backend/issues/267)) ([fde1952](https://github.com/instill-ai/artifact-backend/commit/fde1952577d53e944c65e8122ca79e80f555c2f8))
+* **kb:** add abort capability and enum standardization for zero-downtime update ([#274](https://github.com/instill-ai/artifact-backend/issues/274)) ([89d3bf7](https://github.com/instill-ai/artifact-backend/commit/89d3bf7821ff876624a53a6b17d378a482fb7f78))
+* **kb:** implement zero-downtime KB update ([#273](https://github.com/instill-ai/artifact-backend/issues/273)) ([28ca0d0](https://github.com/instill-ai/artifact-backend/commit/28ca0d0a81d595c040a50ba002da10c00eca1771))
+* **rag:** implement zero-downtime KB update framework with system config management ([#275](https://github.com/instill-ai/artifact-backend/issues/275)) ([6b3733d](https://github.com/instill-ai/artifact-backend/commit/6b3733d1ca1be4840c33a4eb2cdfad28ea161e4d))
+* **worker:** implement Temporal worker to replace Go routine ([#264](https://github.com/instill-ai/artifact-backend/issues/264)) ([941299a](https://github.com/instill-ai/artifact-backend/commit/941299aed69734460c16071c9882fb2c9827f1c6))
+
+
+### Miscellaneous
+
+* **file:** add post-file-processing hook ([#281](https://github.com/instill-ai/artifact-backend/issues/281)) ([850e6a1](https://github.com/instill-ai/artifact-backend/commit/850e6a1a7404cab4538a0e36278edd55cefe6512))
+* **main:** fix manifest.json release version ([6ac591d](https://github.com/instill-ai/artifact-backend/commit/6ac591de088523e5c37363d53ae675b6c7978be1))
+* **main:** revert back to previous value scheme ([#268](https://github.com/instill-ai/artifact-backend/issues/268)) ([0511ed1](https://github.com/instill-ai/artifact-backend/commit/0511ed14046ba6fce3106da6af2db85cc31c90fe))
+* release v0.34.0 ([851a3dc](https://github.com/instill-ai/artifact-backend/commit/851a3dc21736d9fc598cfcc219b156215b09a170))
+
+
+### Refactor
+
+* **ai:** move AI client from internal to public API ([#280](https://github.com/instill-ai/artifact-backend/issues/280)) ([d6dd9b4](https://github.com/instill-ai/artifact-backend/commit/d6dd9b4f8d6c92290fd87c608337d634d2becd27))
+* **api:** align artifact backend with Google AIP standards ([#278](https://github.com/instill-ai/artifact-backend/issues/278)) ([128a286](https://github.com/instill-ai/artifact-backend/commit/128a286c64ba141eb81e0f252838d5839f6f1de2))
+* **api:** rename Catalog to Knowledge Base across entire codebase ([#279](https://github.com/instill-ai/artifact-backend/issues/279)) ([edade9d](https://github.com/instill-ai/artifact-backend/commit/edade9d798016954c2773964fd0f768469e2b0f0))
+* **artifact:** remove deprecated start_pos and end_pos fields from Chunk message ([#282](https://github.com/instill-ai/artifact-backend/issues/282)) ([eeb433d](https://github.com/instill-ai/artifact-backend/commit/eeb433df49cb42a6b0261302033a5b7069d0dbd1))
+* **artifact:** simplify chunk retrieval and align chunk type naming with protobuf ([#270](https://github.com/instill-ai/artifact-backend/issues/270)) ([04a3c69](https://github.com/instill-ai/artifact-backend/commit/04a3c693d9714820738b5294f5e938095781f711))
+* **embeddings:** replace preset pipeline with direct model API call ([#269](https://github.com/instill-ai/artifact-backend/issues/269)) ([89d528f](https://github.com/instill-ai/artifact-backend/commit/89d528fb2107b9140e4d4fb9b8af59865925a4fc))
+* **worker:** implement symmetric cleanup patterns and simplify embedding workflow ([#272](https://github.com/instill-ai/artifact-backend/issues/272)) ([e29b676](https://github.com/instill-ai/artifact-backend/commit/e29b676b03234f92c03a5d3fd161547b810d38f5))
+
 ## [0.32.1](https://github.com/instill-ai/artifact-backend/compare/v0.32.0...v0.32.1) (2025-09-30)
 
 
