@@ -28,11 +28,6 @@ import (
 	logx "github.com/instill-ai/x/log"
 )
 
-// ========================================================================
-// NEW AIP-COMPLIANT FILE HANDLERS
-// Following Google AIP-121 (Resource-oriented design) and AIP-122 (Resource names)
-// ========================================================================
-
 // CreateFile adds a file to a knowledge base (AIP-compliant version of UploadKnowledgeBaseFile).
 // It handles file upload, validation, ACL checks, dual processing for staging/rollback KBs,
 // and auto-triggers the processing workflow.
@@ -217,13 +212,24 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 				)
 			}
 
-			// check if file exists in minio
-			_, err := ph.service.Repository().GetFile(ctx, repository.BlobBucketName, object.Destination)
+			// Check if file exists in minio and get its metadata
+			fileMetadata, err := ph.service.Repository().GetFileMetadata(ctx, repository.BlobBucketName, object.Destination)
 			if err != nil {
 				logger.Error("failed to get file from minio", zap.Error(err))
 				return nil, err
 			}
 			object.IsUploaded = true
+
+			// Update object size from MinIO if it's 0
+			if object.Size == 0 && fileMetadata.Size > 0 {
+				object.Size = fileMetadata.Size
+				_, err = ph.service.Repository().UpdateObject(ctx, *object)
+				if err != nil {
+					logger.Warn("failed to update object size", zap.Error(err))
+				} else {
+					logger.Info("updated object size from MinIO", zap.Int64("size", object.Size))
+				}
+			}
 		}
 
 		kbFile.Filename = object.Name
@@ -1383,15 +1389,161 @@ func (ph *PublicHandler) UpdateFile(ctx context.Context, req *artifactpb.UpdateF
 	}, nil
 }
 
-// ProcessCatalogFiles triggers the conversion, chunking, embedding and
-// summarizing process for a set of files.
-//
-// DEPRECATED: This API is no longer required as of the auto-trigger feature.
-// File processing now starts automatically when files are uploaded via UploadCatalogFile.
-// This endpoint is kept for backward compatibility and can still be used to:
-// - Retry failed file processing
-// - Manually trigger processing for files in edge cases
-// However, normal file uploads no longer need to call this API.
+// ReprocessFile triggers reprocessing of a file.
+// This will regenerate all converted files, chunks, embeddings with the current KB configuration.
+func (ph *PublicHandler) ReprocessFile(ctx context.Context, req *artifactpb.ReprocessFileRequest) (*artifactpb.ReprocessFileResponse, error) {
+	logger, _ := logx.GetZapLogger(ctx)
+	authUID, err := getUserUIDFromContext(ctx)
+	if err != nil {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to get user id: %w", errorsx.ErrUnauthenticated),
+			"Authentication required. Please log in and try again.",
+		)
+	}
+
+	// Get namespace
+	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
+	if err != nil {
+		logger.Error("failed to get namespace", zap.Error(err))
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to get namespace: %w", err),
+			"Unable to access the specified namespace. Please check the namespace ID and try again.",
+		)
+	}
+
+	// Get knowledge base
+	kb, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.KnowledgeBaseId)
+	if err != nil {
+		logger.Error("failed to get knowledge base", zap.Error(err))
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to get knowledge base: %w", err),
+			"Unable to access the specified knowledge base. Please check the knowledge base ID and try again.",
+		)
+	}
+
+	// ACL - check user's permission to write knowledge base
+	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kb.UID, "writer")
+	if err != nil {
+		logger.Error("failed to check permission", zap.Error(err))
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to check permission: %w", err),
+			"Unable to verify access permissions. Please try again.",
+		)
+	}
+	if !granted {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("%w: no permission to reprocess files", errorsx.ErrUnauthorized),
+			"You don't have permission to reprocess files in this knowledge base. Please contact the owner for access.",
+		)
+	}
+
+	// Get file
+	fileUID := uuid.FromStringOrNil(req.FileId)
+	if fileUID == uuid.Nil {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("%w: invalid file ID format", errorsx.ErrInvalidArgument),
+			"Invalid file ID. Please provide a valid file identifier.",
+		)
+	}
+
+	files, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{fileUID})
+	if err != nil {
+		logger.Error("failed to get file", zap.Error(err))
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to get file: %w", err),
+			"Unable to find the specified file. It may have been deleted.",
+		)
+	}
+	if len(files) == 0 {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("%w: file not found", errorsx.ErrNotFound),
+			"Unable to find the specified file. It may have been deleted.",
+		)
+	}
+	file := files[0]
+
+	// Verify file belongs to this KB
+	if file.KBUID != kb.UID {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("%w: file does not belong to this knowledge base", errorsx.ErrInvalidArgument),
+			"The file does not belong to the specified knowledge base.",
+		)
+	}
+
+	// Check if file is already processing
+	if file.ProcessStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_PROCESSING.String() ||
+		file.ProcessStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CHUNKING.String() ||
+		file.ProcessStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_EMBEDDING.String() {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("%w: file is currently being processed", errorsx.ErrRateLimiting),
+			fmt.Sprintf("File is currently being processed (status: %s). Please wait for it to complete.", file.ProcessStatus),
+		)
+	}
+
+	// CRITICAL: Block reprocessing during validation phase (same as file upload)
+	if kb.UpdateStatus == artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_VALIDATING.String() {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("%w: knowledge base is in critical update phase", errorsx.ErrRateLimiting),
+			"Knowledge base is currently being validated. Please wait a moment and try again.",
+		)
+	}
+
+	logger.Info("Starting file reprocessing",
+		zap.String("fileUID", file.UID.String()),
+		zap.String("filename", file.Filename),
+		zap.String("currentStatus", file.ProcessStatus),
+		zap.String("kbUID", kb.UID.String()))
+
+	// Update file status to PROCESSING before triggering the workflow
+	ownerUID := types.UserUIDType(ns.NsUID)
+	requesterUID := types.RequesterUIDType(uuid.FromStringOrNil(authUID))
+
+	updatedFiles, err := ph.service.Repository().ProcessKnowledgeBaseFiles(ctx, []string{file.UID.String()}, requesterUID)
+	if err != nil {
+		logger.Error("Failed to update file status to PROCESSING",
+			zap.Error(err),
+			zap.String("fileUID", file.UID.String()))
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to update file status: %w", err),
+			"Unable to prepare file for reprocessing. Please try again.",
+		)
+	}
+
+	if len(updatedFiles) == 0 {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("file not found after status update"),
+			"File not found. It may have been deleted.",
+		)
+	}
+
+	updatedFile := updatedFiles[0]
+
+	// Trigger file processing workflow
+	err = ph.service.ProcessFile(ctx, kb.UID, []types.FileUIDType{file.UID}, ownerUID, requesterUID)
+	if err != nil {
+		logger.Error("Failed to trigger file reprocessing",
+			zap.Error(err),
+			zap.String("fileUID", file.UID.String()),
+			zap.String("filename", file.Filename))
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to start reprocessing: %w", err),
+			"Unable to start file reprocessing. Please try again.",
+		)
+	}
+
+	logger.Info("File reprocessing started successfully",
+		zap.String("fileUID", file.UID.String()),
+		zap.String("filename", file.Filename),
+		zap.String("kbUID", kb.UID.String()))
+
+	// Convert to protobuf response with updated file status
+	pbFile := convertKBFileToPB(&updatedFile, ns, kb)
+
+	return &artifactpb.ReprocessFileResponse{
+		File:    pbFile,
+		Message: "File reprocessing started successfully. The file will be reprocessed with the current knowledge base configuration.",
+	}, nil
+}
 
 // ========================================================================
 // HELPER FUNCTIONS

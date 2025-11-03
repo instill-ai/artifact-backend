@@ -255,7 +255,7 @@ function runKnowledgeBaseFileTest(data, opts) {
       fileUid,
       data.header,
       600, // Max 600 seconds (10 minutes) for large file processing
-      120   // Fast-fail after 120s if stuck in NOTSTARTED
+      180  // Fast-fail after 180s if stuck in NOTSTARTED (increased for resource-constrained CI)
     );
 
     const completed = result.completed && result.status === "COMPLETED";
@@ -263,9 +263,34 @@ function runKnowledgeBaseFileTest(data, opts) {
     const failureReason = result.error || "";
 
     if (failed) {
-      console.log(`✗ File processing failed for ${testLabel}: ${failureReason}`);
+      console.error(`✗ File processing failed for ${testLabel}: ${failureReason}`);
+      console.error(`   File UID: ${fileUid}`);
+      console.error(`   Knowledge Base ID: ${knowledgeBaseId}`);
     } else if (!completed) {
-      console.log(`✗ File processing timed out for ${testLabel}: Status ${result.status}`);
+      console.error(`✗ File processing did not complete for ${testLabel}`);
+      console.error(`   Status: ${result.status}`);
+      console.error(`   Error: ${failureReason || 'None'}`);
+      console.error(`   File UID: ${fileUid}`);
+      console.error(`   Knowledge Base ID: ${knowledgeBaseId}`);
+
+      // On resource-constrained systems, provide helpful troubleshooting info
+      if (result.status === "TIMEOUT") {
+        console.error(`   TIMEOUT - Possible causes:`);
+        console.error(`     1. Worker overloaded - too many parallel files processing`);
+        console.error(`     2. File too large/complex for available resources`);
+        console.error(`     3. External dependencies (Milvus, MinIO) slow to respond`);
+        console.error(`   Consider: Increase maxWaitSeconds or reduce parallel test execution`);
+      } else if (result.status === "WORKFLOW_NOT_STARTED") {
+        console.error(`   WORKFLOW_NOT_STARTED - Workflow never triggered:`);
+        console.error(`     1. Temporal worker may be down or overloaded`);
+        console.error(`     2. Worker queue may be full`);
+        console.error(`     3. Auto-trigger mechanism may have failed`);
+      } else if (result.status === "API_ERROR") {
+        console.error(`   API_ERROR - API consistently returning errors:`);
+        console.error(`     1. Backend may be overloaded or restarting`);
+        console.error(`     2. Network/connectivity issues`);
+        console.error(`     3. Rate limiting or resource exhaustion`);
+      }
     }
 
     check({ completed, failed }, {

@@ -121,10 +121,13 @@ export function teardown(data) {
  * 5. All resource counts remain constant (proving old data was cleaned up)
  *
  * Test Flow:
- * - Upload a PDF file (full processing pipeline: convert → chunk → embed)
- * - Process it once, count MinIO blobs, embeddings, pages, and text chunks (baseline)
- * - Reprocess the same file
- * - Count all resources again
+ * - Step 1: Create knowledge base
+ * - Step 2: Upload a PDF file (full processing pipeline: convert → chunk → embed)
+ * - Step 3: Wait for first processing to complete
+ * - Step 4: Count MinIO blobs, embeddings, pages, and text chunks (baseline)
+ * - Step 5: Call reprocess API endpoint
+ * - Step 6: Wait for reprocessing to complete
+ * - Step 7: Count all resources again
  * - Verify counts are unchanged (old deleted, new created)
  *
  * This prevents resource accumulation bugs where reprocessing would
@@ -304,9 +307,32 @@ export function CheckFileReprocessing(data) {
     // 5. Generate new embeddings and store in Milvus
     // 6. Save new converted-file and chunks to MinIO
     // 7. Result: Same counts for all resources, different content
-    // Auto-trigger: Processing starts automatically on upload (no manual trigger needed)
-    console.log("✓ Waiting for reprocessing to complete...");
 
+    const reprocessRes = http.request(
+      "POST",
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileUid}/reprocess`,
+      null,
+      data.header
+    );
+
+    check(reprocessRes, {
+      "Reprocess: Reprocess API call successful": (r) => r.status === 200,
+    });
+
+    if (reprocessRes.status !== 200) {
+      console.log(`✗ Failed to trigger reprocessing (status ${reprocessRes.status}), cleaning up and aborting`);
+      try {
+        console.log(`Reprocess error response: ${reprocessRes.body}`);
+      } catch (e) {
+        console.log(`Could not parse error response: ${e}`);
+      }
+      http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
+      sleep(5); // Wait for cleanup workflow
+      return;
+    }
+    console.log("✓ Reprocess API triggered successfully");
+
+    console.log("Step 6: Waiting for reprocessing to complete...");
     // Wait for reprocessing to complete (600s timeout for PDF reprocessing)
     // Note: Temporal workflows may take a few seconds to start due to task queue polling
     const secondProcessResult = helper.waitForFileProcessingComplete(
@@ -336,8 +362,8 @@ export function CheckFileReprocessing(data) {
     }
     console.log("✓ Reprocessing completed successfully");
 
-    // Step 6: Verify all intermediate data after reprocessing (FINAL COUNT)
-    console.log("Step 6: Verifying resource counts after reprocessing...");
+    // Step 7: Verify all intermediate data after reprocessing (FINAL COUNT)
+    console.log("Step 7: Verifying resource counts after reprocessing...");
     // Poll storage systems again to handle eventual consistency after reprocessing
     // IMPORTANT: Must count BEFORE knowledge base deletion, which triggers cleanup workflow
     const minioBlobsAfterSecond = {
@@ -353,26 +379,29 @@ export function CheckFileReprocessing(data) {
     const pagesAfterSecond = metadataAfterSecond.pages;
     const textChunksAfterSecond = metadataAfterSecond.chunks;
 
+    // THE CRITICAL VERIFICATION: Compare counts to detect resource accumulation bugs
+    // If counts INCREASE: Bug! Old resources weren't deleted (accumulation)
+    // If counts SAME: Correct! Old resources were deleted before new ones were created
+    // If counts DECREASE: Bug! Some resources weren't recreated
     check(minioBlobsAfterSecond, {
-      "Reprocess: MinIO still has converted file blob after reprocessing": (r) => r.converted > 0,
-      "Reprocess: MinIO still has chunk blobs after reprocessing": (r) => r.chunks > 0,
+      "Reprocess: MinIO converted file count UNCHANGED (no accumulation)": (r) => r.converted === minioBlobsAfterFirst.converted,
+      "Reprocess: MinIO chunk count UNCHANGED (no accumulation)": (r) => r.chunks === minioBlobsAfterFirst.chunks,
     });
 
-    // Verify all resources exist after reprocessing
-    check({ embeddings: embeddingsAfterSecond }, {
-      "Reprocess: Database still has embeddings after reprocessing": (r) => r.embeddings > 0,
+    check({ embeddingsAfterSecond, embeddingsAfterFirst }, {
+      "Reprocess: Database embedding count UNCHANGED (no accumulation)": (r) => r.embeddingsAfterSecond === r.embeddingsAfterFirst,
     });
 
-    check({ vectors: milvusVectorsAfterSecond }, {
-      "Reprocess: Milvus still has vectors after reprocessing": (r) => r.vectors > 0,
+    check({ milvusVectorsAfterSecond, milvusVectorsAfterFirst }, {
+      "Reprocess: Milvus vector count UNCHANGED (no accumulation)": (r) => r.milvusVectorsAfterSecond === r.milvusVectorsAfterFirst,
     });
 
-    check({ pages: pagesAfterSecond }, {
-      "Reprocess: Database still has pages after reprocessing": (r) => r.pages > 0,
+    check({ pagesAfterSecond, pagesAfterFirst }, {
+      "Reprocess: Page count UNCHANGED (no accumulation)": (r) => r.pagesAfterSecond === r.pagesAfterFirst,
     });
 
-    check({ chunks: textChunksAfterSecond }, {
-      "Reprocess: Database still has text chunks after reprocessing": (r) => r.chunks > 0,
+    check({ textChunksAfterSecond, textChunksAfterFirst }, {
+      "Reprocess: Text chunk count UNCHANGED (no accumulation)": (r) => r.textChunksAfterSecond === r.textChunksAfterFirst,
     });
 
     // Early exit if reprocessing didn't create resources (indicates failure)

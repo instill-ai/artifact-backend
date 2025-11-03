@@ -16,8 +16,8 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/instill-ai/artifact-backend/config"
-	"github.com/instill-ai/artifact-backend/pkg/ai"
 	"github.com/instill-ai/artifact-backend/pkg/acl"
+	"github.com/instill-ai/artifact-backend/pkg/ai"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/types"
 
@@ -59,7 +59,7 @@ const (
 
 // PostFileCompletionFn allows extensions of the worker to provide some logic
 // to be executed after a file is successfully processed.
-type PostFileCompletionFn func(_ workflow.Context, file *repository.KnowledgeBaseFileModel, effectiveFileTyep artifactpb.File_Type) error
+type PostFileCompletionFn func(_ workflow.Context, file *repository.KnowledgeBaseFileModel, effectiveFileType artifactpb.File_Type) error
 
 // Worker implements the Temporal worker with all workflows and activities
 type Worker struct {
