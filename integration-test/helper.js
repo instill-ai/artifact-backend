@@ -1381,11 +1381,17 @@ export function waitForFileProcessingComplete(namespaceId, knowledgeBaseId, file
   console.log(`Waiting for file ${fileUid} to complete processing (max ${maxWaitSeconds}s)...`);
 
   let consecutiveNotStarted = 0;
+  let consecutiveErrors = 0;
   const NOTSTARTED_THRESHOLD = notStartedThreshold; // If file stays NOTSTARTED for this long, workflow likely never started
+  const MAX_CONSECUTIVE_ERRORS = 5; // Tolerate up to 5 consecutive API errors before giving up
 
-  for (let i = 0; i < maxWaitSeconds; i++) {
-    sleep(1);
+  // Adaptive polling: Start with faster polls, then back off
+  // This reduces load on resource-constrained systems while maintaining responsiveness
+  let pollInterval = 1; // Start with 1 second
+  let elapsed = 0;
 
+  while (elapsed < maxWaitSeconds) {
+    // Check status FIRST, then sleep (don't waste the first interval)
     const statusRes = http.request(
       "GET",
       `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${namespaceId}/knowledge-bases/${knowledgeBaseId}/files/${fileUid}`,
@@ -1397,26 +1403,43 @@ export function waitForFileProcessingComplete(namespaceId, knowledgeBaseId, file
     if (statusRes.status === 404) {
       console.error(`✗ File or knowledge base not found (404) - knowledge base/file may have been deleted`);
       return { completed: false, status: "NOT_FOUND", error: "Knowledge base or file not found" };
+    } else if (statusRes.status >= 500) {
+      // 5xx errors might be transient on resource-constrained systems - tolerate a few
+      consecutiveErrors++;
+      console.warn(`⚠ API error ${statusRes.status} while checking file status (${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS})`);
+
+      if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+        console.error(`✗ Too many consecutive API errors (${MAX_CONSECUTIVE_ERRORS})`);
+        return { completed: false, status: "API_ERROR", error: `HTTP ${statusRes.status} - ${MAX_CONSECUTIVE_ERRORS} consecutive failures` };
+      }
+
+      // Back off more aggressively on errors
+      sleep(Math.min(pollInterval * 2, 5));
+      elapsed += Math.min(pollInterval * 2, 5);
+      continue;
     } else if (statusRes.status >= 400) {
-      console.error(`✗ API error ${statusRes.status} while checking file status`);
+      console.error(`✗ Client API error ${statusRes.status} while checking file status`);
       return { completed: false, status: "API_ERROR", error: `HTTP ${statusRes.status}` };
     }
+
+    // Reset error counter on successful response
+    consecutiveErrors = 0;
 
     try {
       const body = statusRes.json();
       const status = body.file ? (body.file.processStatus || body.file.process_status) : "";
 
       if (status === "FILE_PROCESS_STATUS_COMPLETED") {
-        console.log(`✓ File processing completed after ${i + 1}s`);
+        console.log(`✓ File processing completed after ${elapsed}s`);
         return { completed: true, status: "COMPLETED" };
       } else if (status === "FILE_PROCESS_STATUS_FAILED") {
         const errorMsg = body.file && body.file.processOutcome ? body.file.processOutcome : "Unknown error";
-        console.log(`✗ File processing failed after ${i + 1}s: ${errorMsg}`);
+        console.log(`✗ File processing failed after ${elapsed}s: ${errorMsg}`);
         return { completed: false, status: "FAILED", error: errorMsg };
       } else if (status === "FILE_PROCESS_STATUS_NOTSTARTED") {
         // FAST-FAIL: If file stays NOTSTARTED for too long, workflow likely never triggered
         // This happens when Temporal worker is down or auto-trigger fails
-        consecutiveNotStarted++;
+        consecutiveNotStarted += pollInterval;
         if (consecutiveNotStarted >= NOTSTARTED_THRESHOLD) {
           console.error(`✗ File stuck in NOTSTARTED for ${NOTSTARTED_THRESHOLD}s - workflow likely never triggered (worker down?)`);
           return { completed: false, status: "WORKFLOW_NOT_STARTED", error: `File stuck in NOTSTARTED for ${NOTSTARTED_THRESHOLD}s - ProcessFileWorkflow likely never triggered. Check if Temporal worker is running.` };
@@ -1427,15 +1450,36 @@ export function waitForFileProcessingComplete(namespaceId, knowledgeBaseId, file
       }
 
       // Log progress every 30 seconds to avoid spam
-      if (i > 0 && i % 30 === 0) {
-        console.log(`Still waiting for file processing... (${i}s/${maxWaitSeconds}s, status: ${status})`);
+      if (elapsed > 0 && elapsed % 30 === 0) {
+        console.log(`Still waiting for file processing... (${elapsed}s/${maxWaitSeconds}s, status: ${status})`);
       }
     } catch (e) {
       // Log parse errors but continue polling (might be transient)
-      if (i === 0 || i % 60 === 0) {
-        console.warn(`Parse error checking file status: ${e.message}`);
+      consecutiveErrors++;
+      if (elapsed === 0 || elapsed % 60 === 0) {
+        console.warn(`Parse error checking file status (${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS}): ${e.message}`);
+      }
+
+      if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+        console.error(`✗ Too many consecutive parse errors (${MAX_CONSECUTIVE_ERRORS})`);
+        return { completed: false, status: "PARSE_ERROR", error: `${MAX_CONSECUTIVE_ERRORS} consecutive parse errors` };
       }
     }
+
+    // Adaptive polling interval: increase gradually to reduce load on slow systems
+    // 0-60s: 1s interval (responsive for quick files)
+    // 60-180s: 2s interval (file is taking a while)
+    // 180s+: 3s interval (long-running file, reduce API load)
+    if (elapsed < 60) {
+      pollInterval = 1;
+    } else if (elapsed < 180) {
+      pollInterval = 2;
+    } else {
+      pollInterval = 3;
+    }
+
+    sleep(pollInterval);
+    elapsed += pollInterval;
   }
 
   console.warn(`⚠ File processing timeout after ${maxWaitSeconds}s`);

@@ -925,7 +925,21 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				continue
 			}
 
+			// IMPORTANT: Execute post-completion logic BEFORE marking as COMPLETED
+			// This ensures that if the post completion logic fails, the file remains in PROCESSING state
+			// and can be properly marked as FAILED
+			if w.postFileCompletion != nil {
+				effectiveFileType := wf.conversionData.effectiveFileType
+				file := wf.conversionData.fileMetadata.metadata.File
+				if err := w.postFileCompletion(ctx, file, effectiveFileType); err != nil {
+					filesFailed[fileUID.String()] = handleFileError(fileUID, "credit subtraction", err)
+					filesCompleted[fileUID.String()] = true
+					continue
+				}
+			}
+
 			// Update final status to COMPLETED
+			// This is done AFTER post file completion to ensure proper failure handling
 			if err := workflow.ExecuteActivity(ctx, w.UpdateFileStatusActivity, &UpdateFileStatusActivityParam{
 				FileUID: fileUID,
 				Status:  artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED,
@@ -934,16 +948,6 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				filesFailed[fileUID.String()] = handleFileError(fileUID, "update final status", err)
 				filesCompleted[fileUID.String()] = true
 				continue
-			}
-
-			if w.postFileCompletion != nil {
-				effectiveFileType := wf.conversionData.effectiveFileType
-				file := wf.conversionData.fileMetadata.metadata.File
-				if err := w.postFileCompletion(ctx, file, effectiveFileType); err != nil {
-					filesFailed[fileUID.String()] = handleFileError(fileUID, "post-completion logic", err)
-					filesCompleted[fileUID.String()] = true
-					continue
-				}
 			}
 
 			// Mark file as successfully completed
