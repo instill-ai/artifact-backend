@@ -31,10 +31,9 @@ func loadPrompts() {
 		promptCache = make(map[string]string)
 
 		prompts := map[string]string{
-			"chat_system_instruction": "prompt/chat_system_instruction.md",
-			"rag_system_instruction":  "prompt/rag_system_instruction.md",
-			"rag_generate_content":    "prompt/rag_generate_content.md",
-			"rag_generate_summary":    "prompt/rag_generate_summary.md",
+			"rag_system_instruction": "prompt/rag_system_instruction.md",
+			"rag_generate_content":   "prompt/rag_generate_content.md",
+			"rag_generate_summary":   "prompt/rag_generate_summary.md",
 		}
 
 		for key, path := range prompts {
@@ -64,20 +63,20 @@ func GetChatSystemInstruction() string {
 	return getPrompt("chat_system_instruction")
 }
 
-// GetRAGSystemInstruction returns the RAG system instruction from embedded template
-func GetRAGSystemInstruction() string {
+// GetSystemInstruction returns the RAG system instruction from embedded template
+func GetSystemInstruction() string {
 	loadPrompts()
 	return getPrompt("rag_system_instruction")
 }
 
-// GetRAGGenerateContentPrompt returns the content generation prompt from embedded template
-func GetRAGGenerateContentPrompt() string {
+// GetGenerateContentPrompt returns the content generation prompt from embedded template
+func GetGenerateContentPrompt() string {
 	loadPrompts()
 	return getPrompt("rag_generate_content")
 }
 
-// GetRAGGenerateSummaryPrompt returns the summary generation prompt from embedded template
-func GetRAGGenerateSummaryPrompt() string {
+// GetGenerateSummaryPrompt returns the summary generation prompt from embedded template
+func GetGenerateSummaryPrompt() string {
 	loadPrompts()
 	return getPrompt("rag_generate_summary")
 }

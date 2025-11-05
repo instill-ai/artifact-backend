@@ -79,37 +79,38 @@ func GetFileTypePrefix(fileType artifactpb.File_Type) string {
 	}
 }
 
-// ConvertPagesToTaggedMarkdown converts a slice of page strings to [Page: X] tagged format
-// This makes the OpenAI pipeline output compatible with the current page delimiter parsing logic
-func ConvertPagesToTaggedMarkdown(pages []string) string {
-	var builder strings.Builder
-	for i, page := range pages {
-		if i > 0 {
-			builder.WriteString("\n")
-		}
-		// Inject [Page: X] tag at start of each page (same format as Gemini)
-		builder.WriteString(fmt.Sprintf("[Page: %d]\n", i+1))
-		builder.WriteString(page)
-	}
-	return builder.String()
-}
-
 // ProtoListToStrings converts a protobuf ListValue to a slice of strings
+// This is used to extract pages from multi-page documents
 func ProtoListToStrings(list *structpb.ListValue, suffix string) []string {
 	values := list.GetValues()
-	asStrings := make([]string, 0, len(values))
-	for i, v := range values {
-		s := v.GetStringValue()
-		if s == "" {
-			continue
+	pages := make([]string, len(values))
+
+	for i, val := range values {
+		if str := val.GetStringValue(); str != "" {
+			pages[i] = str + suffix
 		}
-		// Add suffix if needed (e.g., newline between pages)
-		if len(suffix) > 0 && !strings.HasSuffix(s, suffix) && i < len(values)-1 {
-			s = s + suffix
-		}
-		asStrings = append(asStrings, s)
 	}
-	return asStrings
+
+	return pages
+}
+
+// ConvertPagesToTaggedMarkdown converts page array to [Page: X] tagged format
+// This preserves page information for position data extraction
+func ConvertPagesToTaggedMarkdown(pages []string) string {
+	if len(pages) == 0 {
+		return ""
+	}
+
+	var sb strings.Builder
+	for i, page := range pages {
+		// Add page tag before each page (starting from page 1)
+		sb.WriteString(fmt.Sprintf("[Page: %d]\n", i+1))
+		sb.WriteString(page)
+		if i < len(pages)-1 {
+			sb.WriteString("\n")
+		}
+	}
+	return sb.String()
 }
 
 // convertResultParser extracts markdown content from pipeline response
@@ -240,4 +241,68 @@ func extractPipelineTraceErrors(resp *pipelinepb.TriggerNamespacePipelineRelease
 		return ""
 	}
 	return strings.Join(errors, "; ")
+}
+
+// enhanceErrorWithPipelineMetadata enhances error messages with pipeline execution metadata
+// This adds component trace information and other debugging details to help trace pipeline failures
+// If pipelineRelease is provided, it adds the pipeline identity to help locate the execution
+func enhanceErrorWithPipelineMetadata(err error, resp *pipelinepb.TriggerNamespacePipelineReleaseResponse, pipelineRelease *Release) error {
+	if err == nil {
+		return nil
+	}
+
+	// Extract metadata if available
+	var metadataInfo []string
+
+	// Add pipeline identity first for context
+	if pipelineRelease != nil {
+		pipelineID := fmt.Sprintf("pipeline=%s/%s@%s", pipelineRelease.Namespace, pipelineRelease.ID, pipelineRelease.Version)
+		metadataInfo = append(metadataInfo, pipelineID)
+	}
+
+	if resp != nil && resp.Metadata != nil {
+		metadata := resp.Metadata
+		traces := metadata.GetTraces()
+
+		// Add component trace information for failed components
+		if len(traces) > 0 {
+			var failedComponents []string
+			var componentDetails []string
+
+			for componentName, trace := range traces {
+				// Check if component has error status
+				if len(trace.Statuses) > 0 && trace.Statuses[0] == pipelinepb.Trace_STATUS_ERROR {
+					failedComponents = append(failedComponents, componentName)
+
+					// Extract detailed error information from the error struct
+					if trace.Error != nil && trace.Error.Fields != nil {
+						if errTypeField := trace.Error.Fields["type"]; errTypeField != nil {
+							if errType := errTypeField.GetStringValue(); errType != "" {
+								componentDetails = append(componentDetails, fmt.Sprintf("%s:%s", componentName, errType))
+							}
+						}
+					}
+				}
+			}
+
+			if len(failedComponents) > 0 {
+				metadataInfo = append(metadataInfo, fmt.Sprintf("failedComponents=%s", strings.Join(failedComponents, ",")))
+			}
+
+			if len(componentDetails) > 0 {
+				metadataInfo = append(metadataInfo, fmt.Sprintf("errorDetails=%s", strings.Join(componentDetails, ";")))
+			}
+
+			// Add total component count for context
+			metadataInfo = append(metadataInfo, fmt.Sprintf("totalComponents=%d", len(traces)))
+		}
+	}
+
+	// If we have metadata, enhance the error message
+	if len(metadataInfo) > 0 {
+		return fmt.Errorf("%w [Pipeline debug: %s]", err, strings.Join(metadataInfo, ", "))
+	}
+
+	// No metadata available, return original error
+	return err
 }

@@ -77,19 +77,19 @@ func TestConstants(t *testing.T) {
 	})
 
 	t.Run("RAG system instruction loaded from prompt", func(t *testing.T) {
-		instruction := GetRAGSystemInstruction()
+		instruction := GetSystemInstruction()
 		c.Assert(instruction, qt.Not(qt.Equals), "")
 		c.Assert(len(instruction) > 50, qt.IsTrue, qt.Commentf("System instruction should be descriptive"))
 	})
 
 	t.Run("Generate content prompt loaded from file", func(t *testing.T) {
-		prompt := GetRAGGenerateContentPrompt()
+		prompt := GetGenerateContentPrompt()
 		c.Assert(prompt, qt.Not(qt.Equals), "")
 		c.Assert(len(prompt) > 100, qt.IsTrue, qt.Commentf("Prompt template should be comprehensive"))
 	})
 
 	t.Run("Generate content prompt contains key instructions", func(t *testing.T) {
-		prompt := GetRAGGenerateContentPrompt()
+		prompt := GetGenerateContentPrompt()
 		c.Assert(prompt, qt.Contains, "document")
 		c.Assert(prompt, qt.Contains, "image")
 		c.Assert(prompt, qt.Contains, "audio")
@@ -98,7 +98,7 @@ func TestConstants(t *testing.T) {
 	})
 
 	t.Run("RAG system instruction mentions multimodal", func(t *testing.T) {
-		instruction := GetRAGSystemInstruction()
+		instruction := GetSystemInstruction()
 		c.Assert(instruction, qt.Contains, "multimodal")
 	})
 }

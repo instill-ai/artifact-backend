@@ -1807,13 +1807,13 @@ function TestCC02_DeletingFilesDuringSwap(client, data) {
 
         // Process files
 
-        // Wait for processing (using helper function)
+        // Wait for processing (using helper function) - increased timeout for CI
         const resultCC2 = helper.waitForMultipleFilesProcessingComplete(
             data.expectedOwner.id,
             knowledgeBaseIdCC2,
             [fileUid1, fileUid2],
             data.header,
-            600
+            900
         );
 
         check(resultCC2, {
@@ -1967,13 +1967,13 @@ function TestCC03_RapidOperations(client, data) {
 
         // Process files
 
-        // Wait for processing (using helper function)
+        // Wait for processing (using helper function) - increased timeout for CI
         const resultCC3 = helper.waitForMultipleFilesProcessingComplete(
             data.expectedOwner.id,
             knowledgeBaseIdCC3,
             [fileUid1, fileUid2],
             data.header,
-            600
+            900
         );
 
         check(resultCC3, {
@@ -2087,14 +2087,14 @@ function TestCC03_RapidOperations(client, data) {
             console.warn(`CC3: Failed to re-query files: ${e}, using original UIDs`);
         }
 
-        // Wait for new files to complete processing
+        // Wait for new files to complete processing - increased timeout for CI
         console.log("CC3: Waiting for new files to complete processing...");
         const newFilesResult = helper.waitForMultipleFilesProcessingComplete(
             data.expectedOwner.id,
             knowledgeBaseIdCC3,
             [swappedFileUid1, swappedFileUid2, swappedFileUid3],
             data.header,
-            600
+            900
         );
 
         check(newFilesResult, {
@@ -2197,13 +2197,13 @@ function TestCC04_RaceConditions(client, data) {
 
         // Process initial file
         // Auto-trigger: Processing starts automatically on upload
-        // Wait for processing (using helper function)
+        // Wait for processing (using helper function) - increased timeout for CI
         const resultCC4 = helper.waitForFileProcessingComplete(
             data.expectedOwner.id,
             knowledgeBaseIdCC4,
             fileUidCC4,
             data.header,
-            600
+            900
         );
 
         check(resultCC4, {
@@ -2338,7 +2338,7 @@ function TestCC04_RaceConditions(client, data) {
                     knowledgeBaseIdCC4,
                     raceFileUidToCheck,
                     data.header,
-                    600
+                    900
                 );
 
                 check(raceFileResult, {
@@ -2698,13 +2698,13 @@ function TestCC06_DeletingFilesAfterSwap(client, data) {
 
         // Process files
         // Auto-trigger: Processing starts automatically on upload
-        // Wait for processing (using helper function)
+        // Wait for processing (using helper function) - increased timeout for CI
         const resultCC6 = helper.waitForMultipleFilesProcessingComplete(
             data.expectedOwner.id,
             knowledgeBaseIdCC6,
             [fileUid1CC6, fileUid2CC6],
             data.header,
-            600
+            900
         );
 
         check(resultCC6, {
@@ -2771,7 +2771,18 @@ function TestCC06_DeletingFilesAfterSwap(client, data) {
 
         console.log(`CC6: Retention period active - Production UID: ${prodKBUIDCC6}, Rollback UID: ${rollbackKBUIDCC6}`);
 
-        // List files to get the file UID after swap
+        // Add extra wait time for async operations to settle in CI environments
+        console.log("CC6: Waiting for post-update operations to settle...");
+        sleep(5);
+
+        // List files with retry logic for CI environments (files may not be immediately available)
+        let fileToDeleteUID = null;
+        let listAttempts = 0;
+        const MAX_LIST_ATTEMPTS = 5;
+
+        while (!fileToDeleteUID && listAttempts < MAX_LIST_ATTEMPTS) {
+            listAttempts++;
+
         const listFilesRes = http.request(
             "GET",
             `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC6}/files`,
@@ -2779,19 +2790,29 @@ function TestCC06_DeletingFilesAfterSwap(client, data) {
             data.header
         );
 
-        let fileToDeleteUID = null;
         if (listFilesRes.status === 200) {
             const files = listFilesRes.json().files || [];
+                console.log(`CC6: List attempt ${listAttempts}/${MAX_LIST_ATTEMPTS} - Found ${files.length} files`);
+
             for (const file of files) {
                 if (file.filename === file2NameCC6) {
                     fileToDeleteUID = file.fileUid;
                     break;
                 }
+                }
+
+                if (!fileToDeleteUID && listAttempts < MAX_LIST_ATTEMPTS) {
+                    console.log(`CC6: File not found yet, waiting 3s before retry...`);
+                    sleep(3);
+                }
+            } else {
+                console.warn(`CC6: List files returned status ${listFilesRes.status}, retrying in 3s...`);
+                sleep(3);
             }
         }
 
         if (!fileToDeleteUID) {
-            console.error("CC6: Could not find file to delete");
+            console.error(`CC6: Could not find file to delete after ${MAX_LIST_ATTEMPTS} attempts`);
             http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC6}`, null, data.header);
             return;
         }
@@ -2913,13 +2934,13 @@ function TestCC07_MultipleOperations(client, data) {
 
         // Process all files
 
-        // Wait for processing (using helper function)
+        // Wait for processing (using helper function) - increased timeout for CI
         const resultCC7 = helper.waitForMultipleFilesProcessingComplete(
             data.expectedOwner.id,
             knowledgeBaseIdCC7,
             [fileUid1CC7, fileUid2CC7, fileUid3CC7],
             data.header,
-            600
+            900
         );
 
         check(resultCC7, {
@@ -3014,14 +3035,14 @@ function TestCC07_MultipleOperations(client, data) {
             client.invoke("artifact.artifact.v1alpha.ArtifactPrivateService/DeleteFileAdmin", { file_id: prodFileUid2CC7 }, data.metadata);
         }
 
-        // CRITICAL: Wait for new files to complete processing before validation
+        // CRITICAL: Wait for new files to complete processing before validation - increased timeout for CI
         console.log("CC7: Waiting for 3 new files to complete sequential dual processing...");
         const newFilesResult = helper.waitForMultipleFilesProcessingComplete(
             data.expectedOwner.id,
             knowledgeBaseIdCC7,
             newFileUids,
             data.header,
-            600
+            900
         );
 
         check(newFilesResult, {

@@ -80,8 +80,8 @@ func (c *compositeClient) ConvertToMarkdownWithCache(ctx context.Context, cacheN
 }
 
 // CreateCache delegates to the default client
-func (c *compositeClient) CreateCache(ctx context.Context, files []FileContent, ttl time.Duration, systemInstruction string) (*CacheResult, error) {
-	return c.defaultClient.CreateCache(ctx, files, ttl, systemInstruction)
+func (c *compositeClient) CreateCache(ctx context.Context, files []FileContent, ttl time.Duration) (*CacheResult, error) {
+	return c.defaultClient.CreateCache(ctx, files, ttl)
 }
 
 // ListCaches delegates to the default client

@@ -59,7 +59,6 @@ func extractRequestMetadata(externalMetadata *structpb.Struct) (metadata.MD, err
 // CreateAuthenticatedContext creates a context with the authentication metadata
 // from the file's ExternalMetadata. This allows activities to make authenticated
 // calls to other services (like pipeline-backend).
-// CreateAuthenticatedContext creates an authenticated context from external metadata
 func CreateAuthenticatedContext(ctx context.Context, externalMetadata *structpb.Struct) (context.Context, error) {
 	md, err := extractRequestMetadata(externalMetadata)
 	if err != nil {

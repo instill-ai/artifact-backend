@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -964,15 +965,109 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 		}
 
 	case artifactpb.File_VIEW_CACHE:
-		// Get Gemini cache resource name from chat cache metadata
-		// Note: Chat cache uses KB UID + file UIDs as key
-		cacheMetadata, err := ph.service.Repository().GetCacheMetadata(ctx, kb.UID, []types.FileUIDType{kbFile.UID})
-		if err == nil && cacheMetadata != nil && cacheMetadata.CacheName != "" {
-			derivedResourceURI = &cacheMetadata.CacheName
+		// Get or create Gemini cache for the file with automatic TTL renewal
+		// This endpoint provides cache names for efficient AI operations
+		logger.Info("GetFile with VIEW_CACHE",
+			zap.String("fileUID", kbFile.UID.String()),
+			zap.String("kbUID", kb.UID.String()))
+
+		// Check if cache already exists in Redis
+		fileUIDs := []types.FileUIDType{kbFile.UID}
+		cacheMetadata, _ := ph.service.Repository().GetCacheMetadata(ctx, kb.UID, fileUIDs)
+
+		if cacheMetadata != nil {
+			// Cache exists - renew it
+			logger.Info("Cache exists, renewing TTL",
+				zap.String("cacheName", cacheMetadata.CacheName),
+				zap.Bool("cachedContextEnabled", cacheMetadata.CachedContextEnabled))
+
+			renewedCache, err := ph.service.RenewFileCache(ctx, kb.UID, kbFile.UID, cacheMetadata.CacheName)
+			if err != nil {
+				logger.Warn("Failed to renew cache, will return existing cache name",
+					zap.Error(err),
+					zap.String("cacheName", cacheMetadata.CacheName))
+				// Return existing cache name even if renewal failed
+				if cacheMetadata.CacheName != "" {
+					derivedResourceURI = &cacheMetadata.CacheName
+				}
+			} else {
+				// Successfully renewed
+				logger.Info("Cache TTL renewed successfully",
+					zap.String("cacheName", renewedCache.CacheName),
+					zap.Time("newExpireTime", renewedCache.ExpireTime))
+				if renewedCache.CacheName != "" {
+					derivedResourceURI = &renewedCache.CacheName
+				}
+			}
 		} else {
-			logger.Info("cache not available for file",
-				zap.String("fileUID", kbFile.UID.String()),
-				zap.Error(err))
+			// Cache doesn't exist - create it
+			logger.Info("Cache not found, creating new cache",
+				zap.String("fileUID", kbFile.UID.String()))
+
+			// Parse file type
+			fileType, ok := artifactpb.File_Type_value[kbFile.FileType]
+			if !ok {
+				fileType = int32(artifactpb.File_TYPE_UNSPECIFIED)
+			}
+			fileProtoType := artifactpb.File_Type(fileType)
+
+			// Determine bucketName and objectName
+			// For cache creation, we prefer converted files if available
+			var bucketName, objectName string
+
+			// Try to use converted PDF for documents (better for caching)
+			convertedFile, err := ph.service.Repository().GetConvertedFileByFileUIDAndType(
+				ctx,
+				kbFile.UID,
+				artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_DOCUMENT,
+			)
+			if err == nil && convertedFile != nil {
+				bucketName = config.Config.Minio.BucketName
+				objectName = convertedFile.Destination
+				fileProtoType = artifactpb.File_TYPE_PDF
+				logger.Info("Using converted PDF for cache creation",
+					zap.String("destination", objectName))
+			} else {
+				// Use original file
+				bucketName = repository.BucketFromDestination(kbFile.Destination)
+			}
+
+			// Create cache using service method
+			cacheResult, err := ph.service.GetOrCreateFileCache(
+				ctx,
+				kb.UID,
+				kbFile.UID,
+				bucketName,
+				objectName,
+				fileProtoType,
+				kbFile.Filename,
+			)
+
+			if err != nil {
+				// Cache creation failed
+				logger.Warn("Failed to create cache",
+					zap.Error(err),
+					zap.String("fileUID", kbFile.UID.String()))
+
+				// Return error to client for unsupported file types
+				// For other errors, return empty response (graceful degradation)
+				if errors.Is(err, errorsx.ErrInvalidArgument) {
+					return nil, err
+				}
+				// For other errors, log and continue with empty derived_resource_uri
+			} else {
+				// Successfully created cache
+				logger.Info("Cache created successfully",
+					zap.String("cacheName", cacheResult.CacheName),
+					zap.Bool("cachedContextEnabled", cacheResult.CachedContextEnabled),
+					zap.Time("expireTime", cacheResult.ExpireTime))
+
+				// Return cache name if in cached mode
+				// For uncached mode (small files), return empty string
+				if cacheResult.CacheName != "" {
+					derivedResourceURI = &cacheResult.CacheName
+				}
+			}
 		}
 	}
 

@@ -51,10 +51,10 @@ const (
 // Prevents retry storms under high concurrency.
 const (
 	RetryInitialInterval         = 1 * time.Second   // Prevents retry storms
-	RetryBackoffCoefficient      = 2.0               // Exponential: 1s→2s→4s→8s→16s
+	RetryBackoffCoefficient      = 2.0               // Exponential: 1s→2s→4s→8s→16s→32s→64s→100s (capped)
 	RetryMaximumIntervalStandard = 30 * time.Second  // Caps exponential backoff for transient failures
 	RetryMaximumIntervalLong     = 100 * time.Second // Service recovery (AI client rate limits)
-	RetryMaximumAttempts         = 5                 // 5 attempts = ~30-60s max (better for 503/rate limit errors)
+	RetryMaximumAttempts         = 8                 // 8 attempts = up to ~3 minutes with backoff (handles AI rate limiting)
 )
 
 // PostFileCompletionFn allows extensions of the worker to provide some logic

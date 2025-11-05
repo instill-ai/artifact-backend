@@ -1383,7 +1383,7 @@ export function waitForFileProcessingComplete(namespaceId, knowledgeBaseId, file
   let consecutiveNotStarted = 0;
   let consecutiveErrors = 0;
   const NOTSTARTED_THRESHOLD = notStartedThreshold; // If file stays NOTSTARTED for this long, workflow likely never started
-  const MAX_CONSECUTIVE_ERRORS = 5; // Tolerate up to 5 consecutive API errors before giving up
+  const MAX_CONSECUTIVE_ERRORS = 10; // Tolerate up to 10 consecutive API errors before giving up (increased for CI)
 
   // Adaptive polling: Start with faster polls, then back off
   // This reduces load on resource-constrained systems while maintaining responsiveness
@@ -1404,7 +1404,7 @@ export function waitForFileProcessingComplete(namespaceId, knowledgeBaseId, file
       console.error(`✗ File or knowledge base not found (404) - knowledge base/file may have been deleted`);
       return { completed: false, status: "NOT_FOUND", error: "Knowledge base or file not found" };
     } else if (statusRes.status >= 500) {
-      // 5xx errors might be transient on resource-constrained systems - tolerate a few
+      // 5xx errors might be transient on resource-constrained systems - tolerate more in CI
       consecutiveErrors++;
       console.warn(`⚠ API error ${statusRes.status} while checking file status (${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS})`);
 
@@ -1413,9 +1413,11 @@ export function waitForFileProcessingComplete(namespaceId, knowledgeBaseId, file
         return { completed: false, status: "API_ERROR", error: `HTTP ${statusRes.status} - ${MAX_CONSECUTIVE_ERRORS} consecutive failures` };
       }
 
-      // Back off more aggressively on errors
-      sleep(Math.min(pollInterval * 2, 5));
-      elapsed += Math.min(pollInterval * 2, 5);
+      // Exponential backoff on errors - more aggressive for CI environments
+      const backoff = Math.min(Math.pow(2, consecutiveErrors - 1), 10);
+      console.log(`   Backing off for ${backoff}s due to API error...`);
+      sleep(backoff);
+      elapsed += backoff;
       continue;
     } else if (statusRes.status >= 400) {
       console.error(`✗ Client API error ${statusRes.status} while checking file status`);

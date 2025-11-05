@@ -409,7 +409,7 @@ export default function (data) {
             console.log(`Waiting for ${allInitialFiles.length} initial files to process...`);
             console.log(`File UIDs: ${allInitialFiles.map(f => f.uid).join(', ')}`);
 
-            // Wait for files in KB1
+            // Wait for files in KB1 (increased timeout for AI-intensive operations in CI)
             if (initialFiles1.length > 0) {
                 console.log(`Waiting for ${initialFiles1.length} files in KB1...`);
                 const result1 = helper.waitForMultipleFilesProcessingComplete(
@@ -417,14 +417,14 @@ export default function (data) {
                     knowledgeBaseId1,
                     initialFiles1.map(f => f.uid),
                     data.header,
-                    360 // Max 360 seconds
+                    900 // 15 minutes for AI conversion with rate limiting
                 );
                 if (!result1.completed) {
                     console.log(`KB1 files incomplete: ${result1.status}, processed ${result1.processedCount}/${initialFiles1.length}`);
                 }
             }
 
-            // Wait for files in KB2
+            // Wait for files in KB2 (increased timeout for AI-intensive operations in CI)
             if (initialFiles2.length > 0) {
                 console.log(`Waiting for ${initialFiles2.length} files in KB2...`);
                 const result2 = helper.waitForMultipleFilesProcessingComplete(
@@ -432,7 +432,7 @@ export default function (data) {
                     knowledgeBaseId2,
                     initialFiles2.map(f => f.uid),
                     data.header,
-                    360 // Max 360 seconds
+                    900 // 15 minutes for AI conversion with rate limiting
                 );
                 if (!result2.completed) {
                     console.log(`KB2 files incomplete: ${result2.status}, processed ${result2.processedCount}/${initialFiles2.length}`);
@@ -1075,48 +1075,63 @@ export default function (data) {
             // Wait for production retention files using robust helper
             console.log(`Waiting for ${retentionFileUids.length} production retention files...`);
 
-            // Wait for KB1 retention files
+            // Wait for KB1 retention files (increased timeout for AI-intensive operations in CI)
+            let kb1Result = { completed: true, processedCount: 0 };
             if (retentionFiles1.length > 0) {
-                const result1 = helper.waitForMultipleFilesProcessingComplete(
+                kb1Result = helper.waitForMultipleFilesProcessingComplete(
                     data.expectedOwner.id,
                     data.kb1_initial.knowledgeBaseId,
                     retentionFiles1.map(f => f.uid),
                     data.header,
-                    360
+                    900 // 15 minutes for AI conversion with rate limiting
                 );
-                if (!result1.completed) {
-                    console.log(`KB1 retention files incomplete: ${result1.status}`);
+                if (!kb1Result.completed) {
+                    console.error(`✗ KB1 retention files incomplete: ${kb1Result.status}, processed ${kb1Result.processedCount}/${retentionFiles1.length}`);
                 }
             }
 
-            // Wait for KB2 retention files
+            // Wait for KB2 retention files (increased timeout for AI-intensive operations in CI)
+            let kb2Result = { completed: true, processedCount: 0 };
             if (retentionFiles2.length > 0) {
-                const result2 = helper.waitForMultipleFilesProcessingComplete(
+                kb2Result = helper.waitForMultipleFilesProcessingComplete(
                     data.expectedOwner.id,
                     data.kb2_initial.knowledgeBaseId,
                     retentionFiles2.map(f => f.uid),
                     data.header,
-                    360
+                    900 // 15 minutes for AI conversion with rate limiting
                 );
-                if (!result2.completed) {
-                    console.log(`KB2 retention files incomplete: ${result2.status}`);
+                if (!kb2Result.completed) {
+                    console.error(`✗ KB2 retention files incomplete: ${kb2Result.status}, processed ${kb2Result.processedCount}/${retentionFiles2.length}`);
                 }
             }
 
-            const productionCompleted = true;
-            console.log(`All ${retentionFileUids.length} production retention files processed`);
+            const productionCompleted = kb1Result.completed && kb2Result.completed;
+
+            if (productionCompleted) {
+                console.log(`✓ All ${retentionFileUids.length} production retention files processed`);
+            } else {
+                console.error(`✗ Production retention files failed: KB1=${kb1Result.completed}, KB2=${kb2Result.completed}`);
+            }
 
             check({ productionCompleted }, {
                 "Phase 5: Production retention files processed": () => productionCompleted === true,
             });
 
+            // FAIL EARLY: If production files didn't complete, don't proceed with rollback verification
+            if (!productionCompleted) {
+                console.error("Phase 5: Aborting - production retention files did not complete in time");
+                console.error("This prevents invalid test results in subsequent phases");
+                return;
+            }
+
             // CRITICAL: Also wait for rollback KB files to complete
             // Sequential dual-processing triggers rollback files after production completes
             // Rollback workflow will block if any files are NOTSTARTED in rollback KB
+            // Increased timeout for CI environments with AI rate limiting (900s = 15 minutes)
             console.log("Waiting for retention file processing in rollback KBs (sequential dual-processing)...");
             let rollbackCompleted = false;
             if (data.kb1_rollback && data.kb2_rollback) {
-                for (let i = 0; i < 360; i++) {
+                for (let i = 0; i < 1800; i++) { // 1800 * 0.5s = 900s (15 minutes)
                     let kb1Count = 0;
                     let kb2Count = 0;
 
@@ -1165,9 +1180,16 @@ export default function (data) {
                     "Phase 5: Rollback KB files processed (dual-processing)": () => rollbackCompleted === true,
                 });
 
+                // FAIL EARLY: If rollback files didn't complete, don't proceed with subsequent phases
                 if (!rollbackCompleted) {
-                    console.warn("Rollback KB files did not complete in time - rollback may be blocked");
+                    console.error("✗ Phase 5: Rollback KB files did not complete in time");
+                    console.error(`   Final state: KB1=${kb1Count}/2, KB2=${kb2Count}/2`);
+                    console.error("   Sequential dual-processing may be blocked or AI service overloaded");
+                    console.error("Phase 5: Aborting - cannot verify rollback behavior without complete data");
+                    return;
                 }
+
+                console.log("✓ All rollback KB files processed successfully");
             }
 
             // ====================================================================

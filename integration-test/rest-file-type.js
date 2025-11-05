@@ -17,40 +17,42 @@ function logUnexpected(res, label) {
 
 export let options = {
   setupTimeout: '300s',
-  teardownTimeout: '180s',
+  teardownTimeout: '300s', // Increased to match longer processing times with AI rate limiting
   insecureSkipTLSVerify: true,
   thresholds: {
     checks: ["rate == 1.0"],
   },
   // Parallel source scenarios per file type (exec functions are defined below)
-  // startTime staggers HTTP requests to prevent k6 HTTP client overload (13 parallel connections)
+  // CRITICAL: Staggered start times prevent AI service rate limiting
+  // 23 parallel tests hitting Gemini API simultaneously causes "no content in candidate" errors
+  // Stagger by 3s intervals to spread load: 0s, 3s, 6s, 9s, ... (69s max delay)
   scenarios: {
-    test_type_text: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_TEXT' },
-    test_type_markdown: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MARKDOWN' },
-    test_type_csv: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_CSV' },
-    test_type_html: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_HTML' },
-    test_type_pdf: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PDF' },
-    test_type_ppt: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PPT' },
-    test_type_pptx: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PPTX' },
-    test_type_xls: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_XLS' },
-    test_type_xlsx: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_XLSX' },
-    test_type_doc: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOC' },
-    test_type_docx: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOCX' },
-    test_type_doc_uppercase: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOC_UPPERCASE' },
-    test_type_docx_uppercase: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOCX_UPPERCASE' },
+    test_type_text: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_TEXT', startTime: '0s' },
+    test_type_markdown: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MARKDOWN', startTime: '3s' },
+    test_type_csv: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_CSV', startTime: '6s' },
+    test_type_html: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_HTML', startTime: '9s' },
+    test_type_pdf: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PDF', startTime: '12s' },
+    test_type_ppt: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PPT', startTime: '15s' },
+    test_type_pptx: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PPTX', startTime: '18s' },
+    test_type_xls: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_XLS', startTime: '21s' },
+    test_type_xlsx: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_XLSX', startTime: '24s' },
+    test_type_doc: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOC', startTime: '27s' },
+    test_type_docx: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOCX', startTime: '30s' },
+    test_type_doc_uppercase: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOC_UPPERCASE', startTime: '33s' },
+    test_type_docx_uppercase: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOCX_UPPERCASE', startTime: '36s' },
     // Regression tests: Type inference from filename (type field omitted)
     // These tests ensure the backend correctly infers file type from extension when type is not provided
-    test_type_text_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_TEXT_INFERRED' },
-    test_type_markdown_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MARKDOWN_INFERRED' },
-    test_type_csv_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_CSV_INFERRED' },
-    test_type_html_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_HTML_INFERRED' },
-    test_type_pdf_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PDF_INFERRED' },
-    test_type_ppt_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PPT_INFERRED' },
-    test_type_pptx_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PPTX_INFERRED' },
-    test_type_xls_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_XLS_INFERRED' },
-    test_type_xlsx_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_XLSX_INFERRED' },
-    test_type_doc_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOC_INFERRED' },
-    test_type_docx_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOCX_INFERRED' },
+    test_type_text_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_TEXT_INFERRED', startTime: '39s' },
+    test_type_markdown_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MARKDOWN_INFERRED', startTime: '42s' },
+    test_type_csv_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_CSV_INFERRED', startTime: '45s' },
+    test_type_html_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_HTML_INFERRED', startTime: '48s' },
+    test_type_pdf_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PDF_INFERRED', startTime: '51s' },
+    test_type_ppt_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PPT_INFERRED', startTime: '54s' },
+    test_type_pptx_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PPTX_INFERRED', startTime: '57s' },
+    test_type_xls_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_XLS_INFERRED', startTime: '60s' },
+    test_type_xlsx_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_XLSX_INFERRED', startTime: '63s' },
+    test_type_doc_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOC_INFERRED', startTime: '66s' },
+    test_type_docx_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOCX_INFERRED', startTime: '69s' },
   },
 };
 
@@ -99,7 +101,7 @@ export function teardown(data) {
     // IMPORTANT: We MUST NOT proceed with deletion if files are still processing, as this creates
     // zombie workflows that continue running after the KB/files are deleted.
     console.log("Teardown: Waiting for this test's file processing to complete...");
-    const allProcessingComplete = helper.waitForAllFileProcessingComplete(300, data.dbIDPrefix); // Increased to 5 minutes
+    const allProcessingComplete = helper.waitForAllFileProcessingComplete(600, data.dbIDPrefix); // Increased to 10 minutes for AI-intensive operations
 
     check({ allProcessingComplete }, {
       "Teardown: All files processed before cleanup (no zombie workflows)": () => allProcessingComplete === true,
@@ -254,8 +256,8 @@ function runKnowledgeBaseFileTest(data, opts) {
       knowledgeBaseId,
       fileUid,
       data.header,
-      600, // Max 600 seconds (10 minutes) for large file processing
-      180  // Fast-fail after 180s if stuck in NOTSTARTED (increased for resource-constrained CI)
+      900, // Max 900 seconds (15 minutes) for AI-intensive conversions with potential rate limiting
+      240  // Fast-fail after 240s if stuck in NOTSTARTED (increased for AI service delays in CI)
     );
 
     const completed = result.completed && result.status === "COMPLETED";
@@ -266,6 +268,20 @@ function runKnowledgeBaseFileTest(data, opts) {
       console.error(`✗ File processing failed for ${testLabel}: ${failureReason}`);
       console.error(`   File UID: ${fileUid}`);
       console.error(`   Knowledge Base ID: ${knowledgeBaseId}`);
+
+      // Check if failure is due to AI service issues (rate limiting or instability)
+      if (failureReason.includes("no content in candidate") ||
+        failureReason.includes("rate limit") ||
+        failureReason.includes("AI service") ||
+        failureReason.includes("temporarily unavailable")) {
+        console.error(`   ⚠ AI SERVICE ISSUE: This appears to be a transient AI service failure.`);
+        console.error(`   The backend already retries (3 AI client + 8 Temporal activity attempts).`);
+        console.error(`   With exponential backoff, this allows up to ~3 minutes for recovery.`);
+        console.error(`   If failures persist, consider:`);
+        console.error(`     1. Reduce parallel test execution (current: 23 scenarios with 3s stagger)`);
+        console.error(`     2. Check AI service quota/rate limits`);
+        console.error(`     3. Verify AI service is healthy and responsive`);
+      }
     } else if (!completed) {
       console.error(`✗ File processing did not complete for ${testLabel}`);
       console.error(`   Status: ${result.status}`);

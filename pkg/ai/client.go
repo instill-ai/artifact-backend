@@ -49,6 +49,15 @@ const (
 
 	// Default embedding model for openai
 	OpenAIEmbeddingModelDefault = "text-embedding-3-small"
+
+	// ViewCacheTTL is the TTL for GetFile?view=VIEW_CACHE responses
+	// Both Gemini cache and Redis cache metadata use this TTL
+	// Every call to VIEW_CACHE renews the TTL for both caches
+	ViewCacheTTL = 1 * time.Minute
+
+	// MinCacheTokens is the minimum token count for cache creation
+	// This is a common requirement across AI clients (e.g., Gemini requires 1024 tokens)
+	MinCacheTokens = 1024
 )
 
 // ConversionResult represents the result of understanding unstructured data content and extracting it to Markdown
@@ -93,7 +102,6 @@ type CacheUpdateOptions struct {
 
 // FileContent represents a single file's content for batch caching
 type FileContent struct {
-	FileUID  types.FileUIDType
 	Content  []byte
 	FileType artifactpb.File_Type
 	Filename string
@@ -132,8 +140,7 @@ type Client interface {
 
 	// CreateCache creates a cached context for efficient content understanding of unstructured data
 	// Supports both single file and batch operations (pass multiple files for batch caching)
-	// systemInstruction specifies the AI's behavior (e.g., RAG instruction for conversion, Chat instruction for chat)
-	CreateCache(ctx context.Context, files []FileContent, ttl time.Duration, systemInstruction string) (*CacheResult, error)
+	CreateCache(ctx context.Context, files []FileContent, ttl time.Duration) (*CacheResult, error)
 
 	// ListCaches lists all cached contexts with pagination support
 	ListCaches(ctx context.Context, options *CacheListOptions) (*CacheListResult, error)
