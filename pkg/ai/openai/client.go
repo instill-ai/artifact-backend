@@ -88,7 +88,7 @@ func (c *Client) ConvertToMarkdownWithCache(ctx context.Context, cacheName, prom
 }
 
 // CreateCache is not supported by OpenAI client
-func (c *Client) CreateCache(ctx context.Context, files []ai.FileContent, ttl time.Duration, systemInstruction string) (*ai.CacheResult, error) {
+func (c *Client) CreateCache(ctx context.Context, files []ai.FileContent, ttl time.Duration) (*ai.CacheResult, error) {
 	return nil, errorsx.AddMessage(
 		fmt.Errorf("caching not supported"),
 		"Caching is not supported by OpenAI client. Please configure Gemini for file processing.",

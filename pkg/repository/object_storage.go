@@ -181,21 +181,21 @@ func (m *minioClient) ListFilePathsWithPrefix(ctx context.Context, bucket string
 	return filePaths, nil
 }
 
-func (m *minioClient) GetFile(ctx context.Context, bucket string, filePathName string) ([]byte, error) {
+func (m *minioClient) GetFile(ctx context.Context, bucketName string, objectName string) ([]byte, error) {
 	var object *minio.Object
 	var err error
 	for attempt := 1; attempt <= 3; attempt++ {
 		opts := minio.GetObjectOptions{}
 		opts.Set(miniox.MinIOHeaderUserUID, m.authenticatedUser(ctx))
-		object, err = m.client.GetObject(ctx, bucket, filePathName, opts)
+		object, err = m.client.GetObject(ctx, bucketName, objectName, opts)
 		if err == nil {
 			break
 		}
-		m.logger.Error("Failed to get file from MinIO, retrying...", zap.String("filePathName", filePathName), zap.Int("attempt", attempt), zap.Error(err))
+		m.logger.Error("Failed to get file from MinIO, retrying...", zap.String("filePathName", objectName), zap.Int("attempt", attempt), zap.Error(err))
 		time.Sleep(time.Duration(attempt) * time.Second)
 	}
 	if err != nil {
-		m.logger.Error("Failed to get file from MinIO after 3 attempts", zap.String("filePathName", filePathName), zap.Error(err))
+		m.logger.Error("Failed to get file from MinIO after 3 attempts", zap.String("filePathName", objectName), zap.Error(err))
 		return nil, err
 	}
 	defer object.Close()

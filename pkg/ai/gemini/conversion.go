@@ -332,7 +332,7 @@ func buildConversionResult(output *conversionOutput, err error) (*ai.ConversionR
 	return &ai.ConversionResult{
 		Markdown:      output.Markdown,
 		Length:        []uint32{uint32(len(output.Markdown))},
-		Client:      "gemini",
+		Client:        "gemini",
 		PositionData:  nil,
 		UsageMetadata: output.UsageMetadata,
 	}, nil
@@ -363,7 +363,7 @@ func createGenerateContentConfig(cacheName string) *genai.GenerateContentConfig 
 		// Not using cache - set system instruction directly
 		config.SystemInstruction = &genai.Content{
 			Parts: []*genai.Part{
-				{Text: GetRAGSystemInstruction()},
+				{Text: GetSystemInstruction()},
 			},
 		}
 	}

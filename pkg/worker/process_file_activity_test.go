@@ -375,7 +375,6 @@ func TestProcessSummaryActivityResult_SymmetricWithContent(t *testing.T) {
 		Summary:          "Test summary content",
 		Length:           []uint32{100},
 		PositionData:     &types.PositionData{PageDelimiters: []uint32{100}},
-		FormatConverted:  false,
 		OriginalType:     artifactpb.File_TYPE_PDF,
 		ConvertedType:    artifactpb.File_TYPE_PDF,
 		UsageMetadata:    map[string]interface{}{"tokens": 50},
@@ -386,7 +385,6 @@ func TestProcessSummaryActivityResult_SymmetricWithContent(t *testing.T) {
 		Content:          "Test content",
 		Length:           []uint32{200},
 		PositionData:     &types.PositionData{PageDelimiters: []uint32{200}},
-		FormatConverted:  false,
 		OriginalType:     artifactpb.File_TYPE_PDF,
 		ConvertedType:    artifactpb.File_TYPE_PDF,
 		UsageMetadata:    map[string]interface{}{"tokens": 100},
@@ -491,7 +489,6 @@ func TestProcessSummaryActivity_ConvertedFileCreation(t *testing.T) {
 		Summary:          expectedSummary,
 		Length:           []uint32{summaryLength},
 		PositionData:     &types.PositionData{PageDelimiters: []uint32{summaryLength}},
-		FormatConverted:  false,
 		OriginalType:     artifactpb.File_TYPE_PDF,
 		ConvertedType:    artifactpb.File_TYPE_PDF,
 		ConvertedFileUID: uuid.Must(uuid.NewV4()), // Would be generated in activity
@@ -503,7 +500,6 @@ func TestProcessSummaryActivity_ConvertedFileCreation(t *testing.T) {
 	c.Assert(expectedResult.PositionData, qt.IsNotNil)
 	c.Assert(expectedResult.PositionData.PageDelimiters, qt.HasLen, 1)
 	c.Assert(expectedResult.PositionData.PageDelimiters[0], qt.Equals, summaryLength)
-	c.Assert(expectedResult.FormatConverted, qt.IsFalse)
 	c.Assert(expectedResult.OriginalType, qt.Equals, param.FileType)
 	c.Assert(expectedResult.ConvertedType, qt.Equals, param.FileType)
 	c.Assert(expectedResult.ConvertedFileUID, qt.Not(qt.Equals), uuid.Nil)
@@ -678,49 +674,6 @@ func TestSummaryLength_RuneCount(t *testing.T) {
 				PageDelimiters: []uint32{runeCount},
 			}
 			c.Assert(positionData.PageDelimiters[0], qt.Equals, tt.expectedRunes)
-		})
-	}
-}
-
-// TestProcessSummaryActivity_FormatConvertedField verifies that
-// FormatConverted is always false for summaries
-func TestProcessSummaryActivity_FormatConvertedField(t *testing.T) {
-	c := qt.New(t)
-
-	tests := []struct {
-		name          string
-		fileType      artifactpb.File_Type
-		wantConverted bool
-	}{
-		{
-			name:          "PDF summary",
-			fileType:      artifactpb.File_TYPE_PDF,
-			wantConverted: false,
-		},
-		{
-			name:          "DOCX summary",
-			fileType:      artifactpb.File_TYPE_DOCX,
-			wantConverted: false,
-		},
-		{
-			name:          "TEXT summary",
-			fileType:      artifactpb.File_TYPE_TEXT,
-			wantConverted: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := &ProcessSummaryActivityResult{
-				FormatConverted: false,
-				OriginalType:    tt.fileType,
-				ConvertedType:   tt.fileType, // Same as original for summaries
-			}
-
-			c.Assert(result.FormatConverted, qt.Equals, tt.wantConverted,
-				qt.Commentf("Summaries should never have format conversion"))
-			c.Assert(result.OriginalType, qt.Equals, result.ConvertedType,
-				qt.Commentf("Summary types should match"))
 		})
 	}
 }

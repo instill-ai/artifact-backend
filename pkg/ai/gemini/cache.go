@@ -22,8 +22,7 @@ const FileUploadTimeout = 5 * time.Minute
 // CreateCache implements ai.Client
 // Creates a cached context for efficient content understanding of unstructured data
 // Supports both single file and batch operations (pass multiple files for batch caching)
-// systemInstruction specifies the AI's behavior (e.g., RAG instruction for conversion, Chat instruction for Q&A)
-func (c *Client) CreateCache(ctx context.Context, files []ai.FileContent, ttl time.Duration, systemInstruction string) (*ai.CacheResult, error) {
+func (c *Client) CreateCache(ctx context.Context, files []ai.FileContent, ttl time.Duration) (*ai.CacheResult, error) {
 	if len(files) == 0 {
 		return nil, errorsx.AddMessage(errorsx.ErrInvalidArgument, "No files provided for caching")
 	}
@@ -34,7 +33,7 @@ func (c *Client) CreateCache(ctx context.Context, files []ai.FileContent, ttl ti
 		displayName = fmt.Sprintf("cache-%s", files[0].Filename)
 	}
 
-	output, err := c.createBatchCache(ctx, GetModel(), files, ttl, displayName, systemInstruction)
+	output, err := c.createBatchCache(ctx, GetModel(), files, ttl, displayName)
 	if err != nil {
 		return nil, errorsx.AddMessage(err, "Unable to optimize file processing. The file will be processed without optimization.")
 	}
@@ -242,7 +241,7 @@ func (c *Client) waitForFileActive(ctx context.Context, filename string) error {
 }
 
 // createBatchCache creates a cache for multiple files with specified system instruction
-func (c *Client) createBatchCache(ctx context.Context, model string, files []ai.FileContent, ttl time.Duration, displayName, systemInstruction string) (*CacheOutput, error) {
+func (c *Client) createBatchCache(ctx context.Context, model string, files []ai.FileContent, ttl time.Duration, displayName string) (*CacheOutput, error) {
 	if len(files) == 0 {
 		return nil, errorsx.AddMessage(errorsx.ErrInvalidArgument, "Invalid request. No files provided for batch caching.")
 	}
@@ -326,25 +325,10 @@ func (c *Client) createBatchCache(ctx context.Context, model string, files []ai.
 		config.DisplayName = displayName
 	}
 
-	// Set system instruction based on the instruction type
-	// Default to RAG instruction if not specified
-	var instruction string
-	switch systemInstruction {
-	case ai.SystemInstructionRAG:
-		instruction = GetRAGSystemInstruction()
-	case ai.SystemInstructionChat:
-		instruction = GetChatSystemInstruction()
-	case "":
-		// Default to RAG for backward compatibility
-		instruction = GetRAGSystemInstruction()
-	default:
-		// Allow custom system instructions for flexibility
-		instruction = systemInstruction
-	}
-
+	// Set system instruction
 	config.SystemInstruction = &genai.Content{
 		Parts: []*genai.Part{
-			{Text: instruction},
+			{Text: GetSystemInstruction()},
 		},
 	}
 

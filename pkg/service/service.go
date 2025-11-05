@@ -44,6 +44,10 @@ type Service interface {
 	DeleteFiles(context.Context, string, []string) error
 	EmbedTexts(context.Context, *types.KBUIDType, []string, string) ([][]float32, error)
 
+	// Cache management use cases
+	GetOrCreateFileCache(context.Context, types.KBUIDType, types.FileUIDType, string, string, artifactpb.File_Type, string) (*FileCacheResult, error)
+	RenewFileCache(context.Context, types.KBUIDType, types.FileUIDType, string) (*FileCacheResult, error)
+
 	// RAG System Update use cases
 	RollbackAdmin(context.Context, types.OwnerUIDType, string, string) (*artifactpb.RollbackAdminResponse, error)
 	PurgeRollbackAdmin(context.Context, types.OwnerUIDType, string) (*artifactpb.PurgeRollbackAdminResponse, error)

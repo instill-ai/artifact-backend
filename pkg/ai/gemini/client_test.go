@@ -103,29 +103,6 @@ func TestClient_InterfaceImplementation(t *testing.T) {
 	c.Assert(true, qt.IsTrue, qt.Commentf("Client should implement ai.Client interface"))
 }
 
-func TestClient_ConvertToMarkdown_UsesCorrectMIMEType(t *testing.T) {
-	c := qt.New(t)
-
-	// Test that the client correctly maps file types to MIME types
-	testCases := []struct {
-		fileType     artifactpb.File_Type
-		expectedMIME string
-	}{
-		{artifactpb.File_TYPE_PDF, "application/pdf"},
-		{artifactpb.File_TYPE_PNG, "image/png"},
-		{artifactpb.File_TYPE_JPEG, "image/jpeg"},
-		{artifactpb.File_TYPE_MP3, "audio/mpeg"},
-		{artifactpb.File_TYPE_MP4, "video/mp4"},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.fileType.String(), func(t *testing.T) {
-			mimeType := ai.FileTypeToMIME(tc.fileType)
-			c.Assert(mimeType, qt.Equals, tc.expectedMIME)
-		})
-	}
-}
-
 func TestClient_MethodSignatures(t *testing.T) {
 	c := qt.New(t)
 

@@ -357,17 +357,9 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				Pipelines:   []pipeline.Release{pipeline.ConvertFileTypePipeline},
 				Metadata:    fm.metadata.ExternalMetadata,
 			}).Get(ctx, &result); err != nil {
-				// Format conversion failure is not fatal - continue with original file
-				// Note: This may cause downstream AI clients to fail if they don't support the original format
-				logger.Error("Format conversion failed, continuing with original file (AI may reject this format)",
-					"fileUID", fm.fileUID.String(),
-					"originalType", fm.fileType.String(),
-					"error", err)
-				result = StandardizeFileTypeActivityResult{
-					Converted:     false,
-					ConvertedType: fm.fileType,
-					OriginalType:  fm.fileType,
-				}
+				// File type standardization failure is fatal - fail the workflow immediately
+				// This prevents downstream AI processing failures when the format is not supported
+				return handleFileError(fm.fileUID, "file type standardization", err)
 			}
 
 			// Determine effective file location for caching and processing
@@ -998,13 +990,25 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 
 		// Find target files by matching names
 		targetFileUIDs := make([]types.FileUIDType, 0, len(filesMetadata))
+
+		// Create context with explicit activity options for FindTargetFileByNameActivity
+		findActivityCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			StartToCloseTimeout: ActivityTimeoutStandard, // 1 minute for DB query
+			RetryPolicy: &temporal.RetryPolicy{
+				InitialInterval:    RetryInitialInterval,
+				BackoffCoefficient: RetryBackoffCoefficient,
+				MaximumInterval:    RetryMaximumIntervalStandard,
+				MaximumAttempts:    RetryMaximumAttempts,
+			},
+		})
+
 		for _, prodFileMeta := range filesMetadata {
 			var findResult FindTargetFileByNameActivityResult
-			err := workflow.ExecuteActivity(ctx, w.FindTargetFileByNameActivity, &FindTargetFileByNameActivityParam{
+			err := workflow.ExecuteActivity(findActivityCtx, w.FindTargetFileByNameActivity, &FindTargetFileByNameActivityParam{
 				TargetKBUID:    dualProcessingInfo.TargetKB.UID,
 				TargetOwnerUID: dualProcessingInfo.TargetKB.Owner,
 				Filename:       prodFileMeta.metadata.File.Filename,
-			}).Get(ctx, &findResult)
+			}).Get(findActivityCtx, &findResult)
 			if err != nil {
 				// CRITICAL: Activity execution failed (e.g., not registered, DB error)
 				// This is a system error, not a "file not found" scenario
@@ -1060,11 +1064,25 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			logger.Info("Sequential dual-processing: Target file processing started",
 				"targetFileCount", len(targetFileUIDs),
 				"targetKBUID", dualProcessingInfo.TargetKB.UID.String(),
-				"targetWorkflowID", childWE.ID)
+				"targetWorkflowID", childWE.ID,
+				"targetFileUIDs", func() []string {
+					uids := make([]string, len(targetFileUIDs))
+					for i, uid := range targetFileUIDs {
+						uids[i] = uid.String()
+					}
+					return uids
+				}())
 		} else {
-			logger.Warn("No target files found for dual processing",
+			logger.Warn("No target files found for dual processing - rollback KB files may not have been cloned",
 				"prodFileCount", len(filesMetadata),
-				"targetKBUID", dualProcessingInfo.TargetKB.UID.String())
+				"targetKBUID", dualProcessingInfo.TargetKB.UID.String(),
+				"prodFileNames", func() []string {
+					names := make([]string, len(filesMetadata))
+					for i, meta := range filesMetadata {
+						names[i] = meta.metadata.File.Filename
+					}
+					return names
+				}())
 		}
 	}
 

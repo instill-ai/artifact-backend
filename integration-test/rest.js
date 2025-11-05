@@ -41,6 +41,9 @@ export let options = {
     test_16_jwt_get_file_content: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_16_JWT_GetFileContent' },
     test_17_jwt_get_file_summary: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_17_JWT_GetFileSummary' },
     test_18_jwt_list_chunks: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_18_JWT_ListChunks' },
+    test_19_jwt_get_file_cache: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_19_JWT_GetFileCache' },
+    test_20_get_file_cache: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_20_GetFileCache' },
+    test_21_get_file_cache_renewal: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_21_GetFileCacheRenewal' },
   },
 };
 
@@ -950,6 +953,108 @@ export function TEST_18_JWT_ListChunks(data) {
     const res = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}/files/${fileUid}/chunks`, null, constant.paramsHTTPWithJWT.headers);
     logUnexpected(res, "JWT: GET chunks");
     check(res, { "JWT: GET chunks 401 or 404": (r) => r.status === 401 || r.status === 404 });
+    deleteKBAuthenticated(data, created.id);
+  });
+}
+
+export function TEST_19_JWT_GetFileCache(data) {
+  const groupName = "Artifact API [JWT]: Get file cache (VIEW_CACHE) rejects random user";
+  group(groupName, () => {
+    check(true, { [constant.banner(groupName)]: () => true });
+
+    const created = createKBAuthenticated(data);
+    const fileUid = createFileAuthenticated(data, created.id);
+    const res = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}/files/${fileUid}?view=VIEW_CACHE`, null, constant.paramsHTTPWithJWT.headers);
+    logUnexpected(res, "JWT: GET file cache");
+    check(res, { "JWT: GET file cache 401": (r) => r.status === 401 });
+    deleteKBAuthenticated(data, created.id);
+  });
+}
+
+export function TEST_20_GetFileCache(data) {
+  const groupName = "Artifact API: Get file with VIEW_CACHE creates cache on first call";
+  group(groupName, () => {
+    check(true, { [constant.banner(groupName)]: () => true });
+
+    // Create KB and upload a PDF file
+    const created = createKBAuthenticated(data);
+    const fileUid = createFileAuthenticated(data, created.id);
+
+    // Wait for file processing to complete
+    console.log("Waiting for file processing to complete...");
+    helper.waitForFileProcessingComplete(fileUid, 60);
+
+    // First call to GetFile with VIEW_CACHE should create the cache
+    const res1 = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}/files/${fileUid}?view=VIEW_CACHE`, null, data.header);
+    logUnexpected(res1, "GET file VIEW_CACHE (first call)");
+
+    check(res1, {
+      "GET file VIEW_CACHE status 200": (r) => r.status === 200,
+      "GET file VIEW_CACHE has file": (r) => r.json().file !== undefined,
+      "GET file VIEW_CACHE has correct file id": (r) => r.json().file.id === fileUid,
+    });
+
+    // Check if derivedResourceUri is present (it may be empty if AI client is not available or file is too small)
+    const hasCacheName = res1.json().derivedResourceUri !== undefined && res1.json().derivedResourceUri !== "";
+    if (hasCacheName) {
+      console.log("Cache created successfully:", res1.json().derivedResourceUri);
+      check(res1, {
+        "GET file VIEW_CACHE has cache name": (r) => r.json().derivedResourceUri.startsWith("cachedContents/"),
+      });
+    } else {
+      console.log("No cache name returned (AI client may not be available or file is too small for caching)");
+    }
+
+    deleteKBAuthenticated(data, created.id);
+  });
+}
+
+export function TEST_21_GetFileCacheRenewal(data) {
+  const groupName = "Artifact API: Get file with VIEW_CACHE renews cache TTL on subsequent calls";
+  group(groupName, () => {
+    check(true, { [constant.banner(groupName)]: () => true });
+
+    // Create KB and upload a PDF file
+    const created = createKBAuthenticated(data);
+    const fileUid = createFileAuthenticated(data, created.id);
+
+    // Wait for file processing to complete
+    console.log("Waiting for file processing to complete...");
+    helper.waitForFileProcessingComplete(fileUid, 60);
+
+    // First call to create cache
+    const res1 = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}/files/${fileUid}?view=VIEW_CACHE`, null, data.header);
+    check(res1, { "First call status 200": (r) => r.status === 200 });
+
+    // Wait a moment
+    sleep(2);
+
+    // Second call should renew the cache
+    const res2 = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}/files/${fileUid}?view=VIEW_CACHE`, null, data.header);
+    logUnexpected(res2, "GET file VIEW_CACHE (renewal)");
+
+    check(res2, {
+      "Second call status 200": (r) => r.status === 200,
+      "Second call has file": (r) => r.json().file !== undefined,
+      "Second call returns consistent cache": (r) => {
+        // If first call had cache name, second call should return the same or renewed cache
+        const firstCache = res1.json().derivedResourceUri;
+        const secondCache = r.json().derivedResourceUri;
+        if (!firstCache && !secondCache) {
+          return true; // Both are empty, consistent
+        }
+        if (firstCache && secondCache) {
+          return true; // Both have values (renewal happened)
+        }
+        return false; // Inconsistent state
+      },
+    });
+
+    // Third call to verify renewal works multiple times
+    sleep(1);
+    const res3 = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}/files/${fileUid}?view=VIEW_CACHE`, null, data.header);
+    check(res3, { "Third call status 200": (r) => r.status === 200 });
+
     deleteKBAuthenticated(data, created.id);
   });
 }

@@ -91,11 +91,9 @@ const (
 	updateConvertedFileDestinationActivityError = "UpdateConvertedFileDestinationActivity"
 	deleteConvertedFileFromMinIOActivityError   = "DeleteConvertedFileFromMinIOActivity"
 	updateConversionMetadataActivityError       = "UpdateConversionMetadataActivity"
-	chunkContentActivityError                   = "ChunkContentActivity"
 	deleteOldTextChunksActivityError            = "DeleteOldTextChunksActivity"
 	saveTextChunksActivityError                 = "SaveTextChunksActivity"
 	standardizeFileTypeActivityError            = "StandardizeFileTypeActivity"
-	cacheContextActivityError                   = "CacheFileContextActivity"
 	processContentActivityError                 = "ProcessContentActivity"
 	processSummaryActivityError                 = "ProcessSummaryActivity"
 )
@@ -914,12 +912,11 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 		zap.String("filename", param.Filename))
 
 	// Check if file needs conversion
-	needsConversion, targetFormat := needsFileConversion(param.FileType)
+	needsConversion, targetFormat := ai.NeedsFileTypeConversion(param.FileType)
 	if !needsConversion {
 		w.log.Info("StandardizeFileTypeActivity: File type is AI-native, no standardization needed",
 			zap.String("fileType", param.FileType.String()))
 
-		// REFACTORED: For already-PDF files, copy to converted-file folder for VIEW_STANDARD_FILE_TYPE support
 		// Original blob remains in place for consistency with other file types
 		// Converted-file folder copy provides unified VIEW_STANDARD_FILE_TYPE access
 		if param.FileType == artifactpb.File_TYPE_PDF {
@@ -1022,7 +1019,6 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 		}
 
 		// For AI-native files that don't need conversion (images, audio, video)
-		// Note: TEXT, MARKDOWN, HTML, CSV are converted to PDF (handled above)
 		return &StandardizeFileTypeActivityResult{
 			ConvertedDestination: "", // No conversion, use original file
 			ConvertedBucket:      "",
@@ -1065,27 +1061,17 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 	w.log.Info("StandardizeFileTypeActivity: File content retrieved from MinIO",
 		zap.Int("contentSize", len(content)))
 
-	// Determine which pipeline to use and prepare input
-	var convertedContent []byte
-	var usedPipeline pipeline.Release
-
-	// Try indexing-convert-file-type pipeline
-	if len(param.Pipelines) > 0 {
-		convertedContent, usedPipeline, err = w.convertUsingPipeline(authCtx, content, param.FileType, targetFormat, param.Pipelines)
-		if err != nil {
-			w.log.Warn("StandardizeFileTypeActivity: Pipeline standardization failed",
-				zap.Error(err),
-				zap.String("pipeline", usedPipeline.Name()))
-			return nil, temporal.NewApplicationErrorWithCause(
-				fmt.Sprintf("Failed to convert file: %s", errorsx.MessageOrErr(err)),
-				standardizeFileTypeActivityError,
-				err,
-			)
-		}
-	} else {
-		return nil, temporal.NewApplicationError(
-			"No conversion pipeline available",
+	// Convert using indexing-convert-file-type pipeline (handles both data URI and blob URL outputs)
+	mimeType := ai.FileTypeToMIME(param.FileType)
+	convertedContent, err := pipeline.ConvertFileTypePipe(authCtx, w.pipelineClient, content, param.FileType, mimeType)
+	if err != nil {
+		w.log.Warn("StandardizeFileTypeActivity: Pipeline standardization failed",
+			zap.Error(err),
+			zap.String("pipeline", pipeline.ConvertFileTypePipeline.Name()))
+		return nil, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to convert file: %s", errorsx.MessageOrErr(err)),
 			standardizeFileTypeActivityError,
+			err,
 		)
 	}
 
@@ -1096,10 +1082,10 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 		zap.Int("convertedSize", len(convertedContent)))
 
 	// Map target format string to FileType enum
-	convertedFileType := mapFormatToFileType(targetFormat)
+	convertedFileType := ai.MapFormatToFileType(targetFormat)
 
 	// Get MIME type for the converted file type
-	mimeType := ai.FileTypeToMIME(convertedFileType)
+	convertedMimeType := ai.FileTypeToMIME(convertedFileType)
 
 	// Map target format to ConvertedFileType enum
 	var convertedFileTypeEnum artifactpb.ConvertedFileType
@@ -1124,7 +1110,7 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 		)
 	}
 
-	// REFACTORED: Save ALL standardized files (PDF, PNG, OGG, MP4) directly to converted-file folder (not tmp/)
+	// Save ALL standardized files (PDF, PNG, OGG, MP4) directly to converted-file folder
 	// This provides unified VIEW_STANDARD_FILE_TYPE support for all media types:
 	// - Documents → PDF
 	// - Images → PNG
@@ -1142,7 +1128,7 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 		UID:           convertedFileUID,
 		KBUID:         param.KBUID,
 		FileUID:       param.FileUID,
-		ContentType:   mimeType,
+		ContentType:   convertedMimeType,
 		ConvertedType: convertedFileTypeEnum.String(),
 		Destination:   "placeholder", // Will be updated after upload
 		PositionData:  nil,           // Position data extraction not yet implemented for converted files
@@ -1210,7 +1196,7 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 		ConvertedType:        convertedFileType,
 		OriginalType:         param.FileType,
 		Converted:            true,
-		PipelineRelease:      usedPipeline,
+		PipelineRelease:      pipeline.ConvertFileTypePipeline,
 		ConvertedFileUID:     convertedFileUID, // Return the created converted_file UID
 		PositionData:         nil,              // Position data extraction not yet implemented
 	}, nil
@@ -1302,14 +1288,13 @@ func (w *Worker) CacheFileContextActivity(ctx context.Context, param *CacheFileC
 
 	// Create the cache using AI client
 	// Note: Cache creation is optional - if it fails, we continue without cache
-	// Use RAG system instruction for conversion/summarization operations
 	cacheOutput, err := w.aiClient.CreateCache(authCtx, []ai.FileContent{
 		{
 			Content:  content,
 			FileType: param.FileType,
 			Filename: param.Filename,
 		},
-	}, cacheTTL, ai.SystemInstructionRAG)
+	}, cacheTTL)
 	if err != nil {
 		// Log the error but don't fail the activity
 		// Common reasons for cache failure:
@@ -1389,7 +1374,6 @@ type ProcessContentActivityResult struct {
 	Content          string                     // Converted markdown content
 	Length           []uint32                   // Length information
 	PositionData     *types.PositionData        // Position data for PDF
-	FormatConverted  bool                       // Whether format conversion occurred
 	OriginalType     artifactpb.File_Type       // Original file type
 	ConvertedType    artifactpb.File_Type       // Converted file type
 	UsageMetadata    any                        // AI token usage
@@ -1524,6 +1508,25 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 			})
 			if err != nil {
 				logger.Error("OpenAI pipeline conversion failed", zap.Error(err))
+
+				// Check for specific OpenAI API issues that indicate non-retryable problems
+				errMsg := err.Error()
+				isReferenceError := strings.Contains(errMsg, "Couldn't resolve reference") &&
+					strings.Contains(errMsg, "output.texts[0]")
+				isEmptyOutput := strings.Contains(errMsg, "fields in the output are nil") ||
+					strings.Contains(errMsg, "response is nil or has no outputs")
+
+				if isReferenceError || isEmptyOutput {
+					// OpenAI returned empty response - likely content filtering or model issue
+					// Mark as end-user error (non-retryable) with helpful message
+					// Note: Pipeline debug information (failed components, error details) is included in the error message
+					return nil, temporal.NewNonRetryableApplicationError(
+						fmt.Sprintf("AI service failed to generate content. This may be due to content filtering, document complexity, or AI service issues. Please try with a different document or contact support if the problem persists. Details: %s", err.Error()),
+						processContentActivityError, err)
+				}
+
+				// Other errors (network, timeout, etc.) should retry
+				// Note: Pipeline debug information (failed components, error details) is included in the error message
 				return nil, temporal.NewApplicationErrorWithCause(
 					fmt.Sprintf("OpenAI pipeline failed: %s", errorsx.MessageOrErr(err)),
 					processContentActivityError, err)
@@ -1580,7 +1583,7 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 				conversion, err := w.aiClient.ConvertToMarkdownWithCache(
 					authCtx,
 					param.CacheName,
-					gemini.GetRAGGenerateContentPrompt(),
+					gemini.GetGenerateContentPrompt(),
 				)
 				if err != nil {
 					logger.Warn("Cached AI conversion failed, will try without cache", zap.Error(err))
@@ -1610,7 +1613,7 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 					rawFileContent,
 					param.FileType,
 					param.Filename,
-					gemini.GetRAGGenerateContentPrompt(),
+					gemini.GetGenerateContentPrompt(),
 				)
 				if err != nil {
 					logger.Error("AI conversion failed", zap.Error(err))
@@ -1653,7 +1656,6 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 	result.PositionData = positionData
 	result.UsageMetadata = usageMetadata
 	result.ConvertedType = param.FileType // Already converted at workflow level
-	result.FormatConverted = false        // Not converted here (already done at workflow level)
 
 	logger.Info("Content in Markdown conversion completed", zap.Int("contentInMarkdownLength", len(contentInMarkdown)))
 
@@ -1744,7 +1746,6 @@ type ProcessSummaryActivityResult struct {
 	Summary          string                     // Generated summary content
 	Length           []uint32                   // Length information (summary length)
 	PositionData     *types.PositionData        // Position data (single page with delimiter at end)
-	FormatConverted  bool                       // Whether format conversion occurred (false for summaries)
 	OriginalType     artifactpb.File_Type       // Original file type
 	ConvertedType    artifactpb.File_Type       // Converted file type (same as original)
 	UsageMetadata    any                        // AI token usage
@@ -1891,9 +1892,9 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 		var summarizationErr error
 
 		// Build prompt with filename context
-		summaryPrompt := gemini.GetRAGGenerateSummaryPrompt()
+		summaryPrompt := gemini.GetGenerateSummaryPrompt()
 		if param.Filename != "" {
-			summaryPrompt = strings.ReplaceAll(gemini.GetRAGGenerateSummaryPrompt(), "[filename]", param.Filename)
+			summaryPrompt = strings.ReplaceAll(gemini.GetGenerateSummaryPrompt(), "[filename]", param.Filename)
 		}
 
 		// Use the file type from parameter (already converted in workflow)
@@ -1964,7 +1965,6 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 	result.Summary = summary
 	result.Length = []uint32{summaryLength}
 	result.UsageMetadata = usageMetadata
-	result.FormatConverted = false        // No format conversion for summaries
 	result.OriginalType = param.FileType  // File type being summarized
 	result.ConvertedType = param.FileType // Same as original (no conversion)
 
@@ -2140,42 +2140,6 @@ func ExtractPageDelimiters(markdown string, logger *zap.Logger, logContext map[s
 	}
 
 	return markdownWithPageTags, positionData, length
-}
-
-// decodeBlobURL decodes a blob URL to extract the presigned URL
-// This is a helper function copied from service package to avoid circular imports
-func decodeBlobURL(blobURL string) (string, error) {
-	// Check if it's a blob URL
-	if !strings.Contains(blobURL, "/v1alpha/blob-urls/") {
-		return "", fmt.Errorf("not a valid blob URL format")
-	}
-
-	// Parse the blob URL and extract the base64-encoded presigned URL
-	urlParts := strings.Split(blobURL, "/")
-	if len(urlParts) < 4 {
-		return "", fmt.Errorf("invalid blob URL format")
-	}
-
-	// Find the "blob-urls" segment and get the next segment
-	for i, part := range urlParts {
-		if part == "blob-urls" && i+1 < len(urlParts) {
-			base64EncodedURL := urlParts[i+1]
-
-			// Decode the base64-encoded presigned URL
-			decodedURL, err := base64.URLEncoding.DecodeString(base64EncodedURL)
-			if err != nil {
-				// Try standard encoding if URL encoding fails
-				decodedURL, err = base64.StdEncoding.DecodeString(base64EncodedURL)
-				if err != nil {
-					return "", fmt.Errorf("failed to decode presigned URL: %w", err)
-				}
-			}
-
-			return string(decodedURL), nil
-		}
-	}
-
-	return "", fmt.Errorf("blob URL segment not found in URL")
 }
 
 // ============================================================================

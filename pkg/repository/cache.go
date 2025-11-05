@@ -51,6 +51,10 @@ type Cache interface {
 	// Returns nil if cache not found or expired
 	GetCacheMetadata(ctx context.Context, kbUID types.KBUIDType, fileUIDs []types.FileUIDType) (*CacheMetadata, error)
 
+	// RenewCacheMetadataTTL updates the TTL and expire time for existing cache metadata
+	// Used when GetFile?view=VIEW_CACHE is called to extend the cache lifetime
+	RenewCacheMetadataTTL(ctx context.Context, kbUID types.KBUIDType, fileUIDs []types.FileUIDType, newTTL time.Duration, newExpireTime time.Time) error
+
 	// DeleteCacheMetadata removes cache metadata from Redis
 	// Used for manual cleanup (e.g., when cache is explicitly invalidated)
 	DeleteCacheMetadata(ctx context.Context, kbUID types.KBUIDType, fileUIDs []types.FileUIDType) error
@@ -129,6 +133,46 @@ func (r *cacheRepository) GetCacheMetadata(
 	}
 
 	return &metadata, nil
+}
+
+// RenewCacheMetadataTTL updates the TTL and expire time for existing cache metadata
+// This is more efficient than re-marshaling and setting the entire metadata
+func (r *cacheRepository) RenewCacheMetadataTTL(
+	ctx context.Context,
+	kbUID types.KBUIDType,
+	fileUIDs []types.FileUIDType,
+	newTTL time.Duration,
+	newExpireTime time.Time,
+) error {
+	if newTTL <= 0 {
+		return fmt.Errorf("TTL must be positive, got: %v", newTTL)
+	}
+
+	key := CacheKey(kbUID, fileUIDs)
+
+	// Get existing metadata
+	metadata, err := r.GetCacheMetadata(ctx, kbUID, fileUIDs)
+	if err != nil {
+		return fmt.Errorf("failed to get cache metadata for renewal: %w", err)
+	}
+	if metadata == nil {
+		return fmt.Errorf("cache metadata not found for renewal")
+	}
+
+	// Update expire time
+	metadata.ExpireTime = newExpireTime
+
+	// Re-serialize and store with new TTL
+	data, err := json.Marshal(metadata)
+	if err != nil {
+		return fmt.Errorf("failed to marshal cache metadata for renewal: %w", err)
+	}
+
+	if err := r.redisClient.Set(ctx, key, data, newTTL).Err(); err != nil {
+		return fmt.Errorf("failed to renew cache metadata TTL in Redis: %w", err)
+	}
+
+	return nil
 }
 
 // DeleteCacheMetadata removes cache metadata from Redis
