@@ -166,12 +166,31 @@ func getInputVariableName(fileType artifactpb.File_Type) string {
 	case artifactpb.File_TYPE_GIF,
 		artifactpb.File_TYPE_BMP,
 		artifactpb.File_TYPE_TIFF,
-		artifactpb.File_TYPE_AVIF:
+		artifactpb.File_TYPE_AVIF,
+		artifactpb.File_TYPE_JPG,
+		artifactpb.File_TYPE_JPEG,
+		artifactpb.File_TYPE_WEBP,
+		artifactpb.File_TYPE_HEIC,
+		artifactpb.File_TYPE_HEIF,
+		artifactpb.File_TYPE_PNG:
 		return "image"
 	case artifactpb.File_TYPE_M4A,
-		artifactpb.File_TYPE_WMA:
+		artifactpb.File_TYPE_WMA,
+		artifactpb.File_TYPE_MP3,
+		artifactpb.File_TYPE_WAV,
+		artifactpb.File_TYPE_AAC,
+		artifactpb.File_TYPE_OGG,
+		artifactpb.File_TYPE_FLAC,
+		artifactpb.File_TYPE_AIFF:
 		return "audio"
-	case artifactpb.File_TYPE_MKV:
+	case artifactpb.File_TYPE_MKV,
+		artifactpb.File_TYPE_MPEG,
+		artifactpb.File_TYPE_MOV,
+		artifactpb.File_TYPE_AVI,
+		artifactpb.File_TYPE_FLV,
+		artifactpb.File_TYPE_WEBM_VIDEO,
+		artifactpb.File_TYPE_WMV,
+		artifactpb.File_TYPE_MP4:
 		return "video"
 	case artifactpb.File_TYPE_DOC,
 		artifactpb.File_TYPE_DOCX,

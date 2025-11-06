@@ -186,7 +186,7 @@ export function CheckFileReprocessing(data) {
       JSON.stringify({
         filename: filename,
         type: "TYPE_PDF",
-        content: constant.samplePdf
+        content: constant.docSamplePdf
       }),
       data.header
     );
