@@ -37,7 +37,6 @@ func NeedsFileTypeConversion(fileType artifactpb.File_Type) (bool, string) {
 		artifactpb.File_TYPE_TIFF,
 		artifactpb.File_TYPE_AVIF,
 		artifactpb.File_TYPE_JPEG,
-		artifactpb.File_TYPE_JPG,
 		artifactpb.File_TYPE_WEBP,
 		artifactpb.File_TYPE_HEIC,
 		artifactpb.File_TYPE_HEIF:
@@ -54,7 +53,8 @@ func NeedsFileTypeConversion(fileType artifactpb.File_Type) (bool, string) {
 		artifactpb.File_TYPE_M4A,
 		artifactpb.File_TYPE_WMA,
 		artifactpb.File_TYPE_FLAC,
-		artifactpb.File_TYPE_AIFF:
+		artifactpb.File_TYPE_AIFF,
+		artifactpb.File_TYPE_WEBM_AUDIO:
 		return true, "ogg"
 
 	// Standard video format - no conversion needed
@@ -67,8 +67,8 @@ func NeedsFileTypeConversion(fileType artifactpb.File_Type) (bool, string) {
 		artifactpb.File_TYPE_MOV,
 		artifactpb.File_TYPE_AVI,
 		artifactpb.File_TYPE_FLV,
-		artifactpb.File_TYPE_WEBM_VIDEO,
-		artifactpb.File_TYPE_WMV:
+		artifactpb.File_TYPE_WMV,
+		artifactpb.File_TYPE_WEBM_VIDEO:
 		return true, "mp4"
 
 	// Standard document format - no conversion needed
@@ -114,7 +114,6 @@ func SupportsFileType(fileType artifactpb.File_Type) bool {
 	// Images - supported by pipeline-backend/pkg/data/image.go
 	case artifactpb.File_TYPE_PNG,
 		artifactpb.File_TYPE_JPEG,
-		artifactpb.File_TYPE_JPG,
 		artifactpb.File_TYPE_WEBP,
 		artifactpb.File_TYPE_HEIC,
 		artifactpb.File_TYPE_HEIF,
@@ -132,7 +131,8 @@ func SupportsFileType(fileType artifactpb.File_Type) bool {
 		artifactpb.File_TYPE_FLAC,
 		artifactpb.File_TYPE_AIFF,
 		artifactpb.File_TYPE_M4A,
-		artifactpb.File_TYPE_WMA:
+		artifactpb.File_TYPE_WMA,
+		artifactpb.File_TYPE_WEBM_AUDIO:
 		return true
 
 	// Video - supported by pipeline-backend/pkg/data/video.go
@@ -141,9 +141,9 @@ func SupportsFileType(fileType artifactpb.File_Type) bool {
 		artifactpb.File_TYPE_MOV,
 		artifactpb.File_TYPE_AVI,
 		artifactpb.File_TYPE_FLV,
-		artifactpb.File_TYPE_WEBM_VIDEO,
 		artifactpb.File_TYPE_WMV,
-		artifactpb.File_TYPE_MKV:
+		artifactpb.File_TYPE_MKV,
+		artifactpb.File_TYPE_WEBM_VIDEO:
 		return true
 
 	default:

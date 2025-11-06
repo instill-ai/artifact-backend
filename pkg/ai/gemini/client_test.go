@@ -61,7 +61,6 @@ func TestClient_SupportsFileType(t *testing.T) {
 	t.Run("supports images", func(t *testing.T) {
 		c.Assert(client.SupportsFileType(artifactpb.File_TYPE_PNG), qt.IsTrue)
 		c.Assert(client.SupportsFileType(artifactpb.File_TYPE_JPEG), qt.IsTrue)
-		c.Assert(client.SupportsFileType(artifactpb.File_TYPE_JPG), qt.IsTrue)
 		c.Assert(client.SupportsFileType(artifactpb.File_TYPE_WEBP), qt.IsTrue)
 		c.Assert(client.SupportsFileType(artifactpb.File_TYPE_GIF), qt.IsTrue)
 		c.Assert(client.SupportsFileType(artifactpb.File_TYPE_AVIF), qt.IsTrue)
