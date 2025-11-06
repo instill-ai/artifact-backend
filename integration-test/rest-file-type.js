@@ -71,15 +71,16 @@ export let options = {
     test_type_aiff: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_AIFF' },
     test_type_m4a: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_M4A' },
     test_type_wma: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WMA' },
+    test_type_webm_audio: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WEBM_AUDIO' },
     // Video file types
     test_type_mp4: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MP4' },
     test_type_mkv: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MKV' },
     test_type_avi: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_AVI' },
     test_type_mov: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MOV' },
     test_type_flv: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_FLV' },
-    test_type_webm: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WEBM_VIDEO' },
     test_type_wmv: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WMV' },
     test_type_mpeg: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MPEG' },
+    test_type_webm_video: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WEBM_VIDEO' },
   },
 };
 
@@ -209,6 +210,7 @@ export function TEST_TYPE_FLAC(data) { runKnowledgeBaseFileTest(data, { original
 export function TEST_TYPE_AIFF(data) { runKnowledgeBaseFileTest(data, { originalName: "audio-sample.aiff", fileType: "TYPE_AIFF" }); }
 export function TEST_TYPE_M4A(data) { runKnowledgeBaseFileTest(data, { originalName: "audio-sample.m4a", fileType: "TYPE_M4A" }); }
 export function TEST_TYPE_WMA(data) { runKnowledgeBaseFileTest(data, { originalName: "audio-sample.wma", fileType: "TYPE_WMA" }); }
+export function TEST_TYPE_WEBM_AUDIO(data) { runKnowledgeBaseFileTest(data, { originalName: "audio-sample.webm", fileType: "TYPE_WEBM_AUDIO" }); }
 
 // Video file types
 export function TEST_TYPE_MP4(data) { runKnowledgeBaseFileTest(data, { originalName: "video-sample.mp4", fileType: "TYPE_MP4" }); }
@@ -216,9 +218,9 @@ export function TEST_TYPE_MKV(data) { runKnowledgeBaseFileTest(data, { originalN
 export function TEST_TYPE_AVI(data) { runKnowledgeBaseFileTest(data, { originalName: "video-sample.avi", fileType: "TYPE_AVI" }); }
 export function TEST_TYPE_MOV(data) { runKnowledgeBaseFileTest(data, { originalName: "video-sample.mov", fileType: "TYPE_MOV" }); }
 export function TEST_TYPE_FLV(data) { runKnowledgeBaseFileTest(data, { originalName: "video-sample.flv", fileType: "TYPE_FLV" }); }
-export function TEST_TYPE_WEBM_VIDEO(data) { runKnowledgeBaseFileTest(data, { originalName: "video-sample.webm", fileType: "TYPE_WEBM_VIDEO" }); }
 export function TEST_TYPE_WMV(data) { runKnowledgeBaseFileTest(data, { originalName: "video-sample.wmv", fileType: "TYPE_WMV" }); }
 export function TEST_TYPE_MPEG(data) { runKnowledgeBaseFileTest(data, { originalName: "video-sample.mpeg", fileType: "TYPE_MPEG" }); }
+export function TEST_TYPE_WEBM_VIDEO(data) { runKnowledgeBaseFileTest(data, { originalName: "video-sample.webm", fileType: "TYPE_WEBM_VIDEO" }); }
 
 // Internal helper to run knowledge base file test for each file type
 function runKnowledgeBaseFileTest(data, opts) {

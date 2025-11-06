@@ -167,7 +167,6 @@ func getInputVariableName(fileType artifactpb.File_Type) string {
 		artifactpb.File_TYPE_BMP,
 		artifactpb.File_TYPE_TIFF,
 		artifactpb.File_TYPE_AVIF,
-		artifactpb.File_TYPE_JPG,
 		artifactpb.File_TYPE_JPEG,
 		artifactpb.File_TYPE_WEBP,
 		artifactpb.File_TYPE_HEIC,
@@ -181,7 +180,8 @@ func getInputVariableName(fileType artifactpb.File_Type) string {
 		artifactpb.File_TYPE_AAC,
 		artifactpb.File_TYPE_OGG,
 		artifactpb.File_TYPE_FLAC,
-		artifactpb.File_TYPE_AIFF:
+		artifactpb.File_TYPE_AIFF,
+		artifactpb.File_TYPE_WEBM_AUDIO:
 		return "audio"
 	case artifactpb.File_TYPE_MKV,
 		artifactpb.File_TYPE_MPEG,

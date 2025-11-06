@@ -92,8 +92,52 @@ func convertFileType(dbType string) artifactpb.File_Type {
 		return artifactpb.File_TYPE_PNG
 	case "FILE_TYPE_JPEG":
 		return artifactpb.File_TYPE_JPEG
-	case "FILE_TYPE_JPG":
-		return artifactpb.File_TYPE_JPG
+	case "FILE_TYPE_GIF":
+		return artifactpb.File_TYPE_GIF
+	case "FILE_TYPE_WEBP":
+		return artifactpb.File_TYPE_WEBP
+	case "FILE_TYPE_TIFF":
+		return artifactpb.File_TYPE_TIFF
+	case "FILE_TYPE_HEIC":
+		return artifactpb.File_TYPE_HEIC
+	case "FILE_TYPE_HEIF":
+		return artifactpb.File_TYPE_HEIF
+	case "FILE_TYPE_AVIF":
+		return artifactpb.File_TYPE_AVIF
+	case "FILE_TYPE_BMP":
+		return artifactpb.File_TYPE_BMP
+	case "FILE_TYPE_MP3":
+		return artifactpb.File_TYPE_MP3
+	case "FILE_TYPE_WAV":
+		return artifactpb.File_TYPE_WAV
+	case "FILE_TYPE_AAC":
+		return artifactpb.File_TYPE_AAC
+	case "FILE_TYPE_OGG":
+		return artifactpb.File_TYPE_OGG
+	case "FILE_TYPE_FLAC":
+		return artifactpb.File_TYPE_FLAC
+	case "FILE_TYPE_AIFF":
+		return artifactpb.File_TYPE_AIFF
+	case "FILE_TYPE_M4A":
+		return artifactpb.File_TYPE_M4A
+	case "FILE_TYPE_WMA":
+		return artifactpb.File_TYPE_WMA
+	case "FILE_TYPE_WEBM_AUDIO":
+		return artifactpb.File_TYPE_WEBM_AUDIO
+	case "FILE_TYPE_MP4":
+		return artifactpb.File_TYPE_MP4
+	case "FILE_TYPE_AVI":
+		return artifactpb.File_TYPE_AVI
+	case "FILE_TYPE_MOV":
+		return artifactpb.File_TYPE_MOV
+	case "FILE_TYPE_FLV":
+		return artifactpb.File_TYPE_FLV
+	case "FILE_TYPE_WEBM_VIDEO":
+		return artifactpb.File_TYPE_WEBM_VIDEO
+	case "FILE_TYPE_WMV":
+		return artifactpb.File_TYPE_WMV
+	case "FILE_TYPE_MKV":
+		return artifactpb.File_TYPE_MKV
 	case "FILE_TYPE_HTML":
 		return artifactpb.File_TYPE_HTML
 	case "FILE_TYPE_DOCX":

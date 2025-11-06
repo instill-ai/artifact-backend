@@ -153,6 +153,9 @@ export const audioSampleM4a = encoding.b64encode(
 export const audioSampleWma = encoding.b64encode(
   open(`${__ENV.TEST_FOLDER_ABS_PATH}/integration-test/data/audio-sample.wma`, "b")
 );
+export const audioSampleWebmAudio = encoding.b64encode(
+  open(`${__ENV.TEST_FOLDER_ABS_PATH}/integration-test/data/audio-sample.webm`, "b")
+);
 
 // Test video sample data files
 export const videoSampleMp4 = encoding.b64encode(
@@ -170,14 +173,14 @@ export const videoSampleMov = encoding.b64encode(
 export const videoSampleFlv = encoding.b64encode(
   open(`${__ENV.TEST_FOLDER_ABS_PATH}/integration-test/data/video-sample.flv`, "b")
 );
-export const videoSampleWebm = encoding.b64encode(
-  open(`${__ENV.TEST_FOLDER_ABS_PATH}/integration-test/data/video-sample.webm`, "b")
-);
 export const videoSampleWmv = encoding.b64encode(
   open(`${__ENV.TEST_FOLDER_ABS_PATH}/integration-test/data/video-sample.wmv`, "b")
 );
 export const videoSampleMpeg = encoding.b64encode(
   open(`${__ENV.TEST_FOLDER_ABS_PATH}/integration-test/data/video-sample.mpeg`, "b")
+);
+export const videoSampleWebm = encoding.b64encode(
+  open(`${__ENV.TEST_FOLDER_ABS_PATH}/integration-test/data/video-sample.webm`, "b")
 );
 
 // Mapping of sample files to their intended artifact file types
@@ -210,14 +213,15 @@ export const sampleFiles = [
   { originalName: "audio-sample.aiff", type: "TYPE_AIFF", content: audioSampleAiff },
   { originalName: "audio-sample.m4a", type: "TYPE_M4A", content: audioSampleM4a },
   { originalName: "audio-sample.wma", type: "TYPE_WMA", content: audioSampleWma },
+  { originalName: "audio-sample.webm", type: "TYPE_WEBM_AUDIO", content: audioSampleWebmAudio },
   { originalName: "video-sample.mp4", type: "TYPE_MP4", content: videoSampleMp4 },
   { originalName: "video-sample.mkv", type: "TYPE_MKV", content: videoSampleMkv },
   { originalName: "video-sample.avi", type: "TYPE_AVI", content: videoSampleAvi },
   { originalName: "video-sample.mov", type: "TYPE_MOV", content: videoSampleMov },
   { originalName: "video-sample.flv", type: "TYPE_FLV", content: videoSampleFlv },
-  { originalName: "video-sample.webm", type: "TYPE_WEBM_VIDEO", content: videoSampleWebm },
   { originalName: "video-sample.wmv", type: "TYPE_WMV", content: videoSampleWmv },
   { originalName: "video-sample.mpeg", type: "TYPE_MPEG", content: videoSampleMpeg },
+  { originalName: "video-sample.webm", type: "TYPE_WEBM_VIDEO", content: videoSampleWebm },
 ];
 
 let dbHost = 'localhost';

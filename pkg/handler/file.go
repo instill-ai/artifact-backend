@@ -156,13 +156,30 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 				"File name is too long. Please use a name with 255 characters or less.",
 			)
 		}
-		// determine the file type by its extension
-		req.File.Type = determineFileType(req.File.Filename)
+
+		// Determine file type if not explicitly provided
 		if req.File.Type == artifactpb.File_TYPE_UNSPECIFIED {
-			return nil, errorsx.AddMessage(
-				fmt.Errorf("%w: unsupported file extension", errorsx.ErrInvalidArgument),
-				"Unsupported file type. Please upload a supported file format.",
-			)
+			req.File.Type = determineFileType(req.File.Filename)
+			if req.File.Type == artifactpb.File_TYPE_UNSPECIFIED {
+				return nil, errorsx.AddMessage(
+					fmt.Errorf("%w: unsupported file extension", errorsx.ErrInvalidArgument),
+					"Unsupported file type. Please upload a supported file format.",
+				)
+			}
+		}
+
+		// Special handling for WebM files - determine if audio-only or video by inspecting content
+		// Only do this if type wasn't explicitly specified or if it was inferred as WEBM_VIDEO
+		if strings.HasSuffix(strings.ToLower(req.File.Filename), ".webm") && req.File.Content != "" {
+			// If type was explicitly set to WEBM_AUDIO or WEBM_VIDEO, respect it
+			// Otherwise, detect from content
+			if req.File.Type == artifactpb.File_TYPE_WEBM_VIDEO {
+				detectedType := detectWebMType(req.File.Content)
+				req.File.Type = detectedType
+				logger.Info("Detected WebM type from content",
+					zap.String("filename", req.File.Filename),
+					zap.String("detectedType", detectedType.String()))
+			}
 		}
 
 		// Update kbFile.FileType after determining the type
@@ -239,6 +256,27 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 		kbFile.Size = object.Size
 
 		req.File.Type = determineFileType(object.Name)
+
+		// Special handling for WebM files - determine if audio-only or video by inspecting content
+		if strings.HasSuffix(strings.ToLower(object.Name), ".webm") {
+			// Read the file to detect codec type
+			// Note: GetFile reads entire file, but detectWebMType only checks first 8KB
+			fileBytes, err := ph.service.Repository().GetFile(ctx, repository.BlobBucketName, object.Destination)
+			if err == nil && len(fileBytes) > 0 {
+				// Encode to base64 for detectWebMType function
+				base64Content := base64.StdEncoding.EncodeToString(fileBytes)
+				req.File.Type = detectWebMType(base64Content)
+				logger.Info("Detected WebM type from content",
+					zap.String("filename", object.Name),
+					zap.String("type", req.File.Type.String()))
+			} else {
+				logger.Warn("Failed to read WebM file for type detection, defaulting to video",
+					zap.String("filename", object.Name),
+					zap.Error(err))
+			}
+			// If we can't read the file, keep the default WEBM_VIDEO type
+		}
+
 		kbFile.FileType = req.File.Type.String()
 	}
 
@@ -849,7 +887,6 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 		// Images → PNG
 		case artifactpb.File_TYPE_PNG,
 			artifactpb.File_TYPE_JPEG,
-			artifactpb.File_TYPE_JPG,
 			artifactpb.File_TYPE_WEBP,
 			artifactpb.File_TYPE_HEIC,
 			artifactpb.File_TYPE_HEIF,
@@ -868,7 +905,8 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 			artifactpb.File_TYPE_FLAC,
 			artifactpb.File_TYPE_AIFF,
 			artifactpb.File_TYPE_M4A,
-			artifactpb.File_TYPE_WMA:
+			artifactpb.File_TYPE_WMA,
+			artifactpb.File_TYPE_WEBM_AUDIO:
 			convertedFileType = artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_AUDIO
 			fileExtension = "ogg"
 
@@ -878,9 +916,9 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 			artifactpb.File_TYPE_MOV,
 			artifactpb.File_TYPE_AVI,
 			artifactpb.File_TYPE_FLV,
-			artifactpb.File_TYPE_WEBM_VIDEO,
 			artifactpb.File_TYPE_WMV,
-			artifactpb.File_TYPE_MKV:
+			artifactpb.File_TYPE_MKV,
+			artifactpb.File_TYPE_WEBM_VIDEO:
 			convertedFileType = artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_VIDEO
 			fileExtension = "mp4"
 
@@ -1712,31 +1750,127 @@ func getFileSize(base64String string) (int64, string) {
 
 func fileTypeConvertToMime(t artifactpb.File_Type) string {
 	switch t {
+	// Document types
 	case artifactpb.File_TYPE_PDF:
 		return "application/pdf"
 	case artifactpb.File_TYPE_MARKDOWN:
 		return "text/markdown"
 	case artifactpb.File_TYPE_TEXT:
 		return "text/plain"
+	case artifactpb.File_TYPE_HTML:
+		return "text/html"
+	case artifactpb.File_TYPE_CSV:
+		return "text/csv"
 	case artifactpb.File_TYPE_DOC:
 		return "application/msword"
 	case artifactpb.File_TYPE_DOCX:
 		return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-	case artifactpb.File_TYPE_HTML:
-		return "text/html"
 	case artifactpb.File_TYPE_PPT:
 		return "application/vnd.ms-powerpoint"
 	case artifactpb.File_TYPE_PPTX:
 		return "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-	case artifactpb.File_TYPE_XLSX:
-		return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 	case artifactpb.File_TYPE_XLS:
 		return "application/vnd.ms-excel"
-	case artifactpb.File_TYPE_CSV:
-		return "text/csv"
+	case artifactpb.File_TYPE_XLSX:
+		return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+	// Image types
+	case artifactpb.File_TYPE_PNG:
+		return "image/png"
+	case artifactpb.File_TYPE_JPEG:
+		return "image/jpeg"
+	case artifactpb.File_TYPE_GIF:
+		return "image/gif"
+	case artifactpb.File_TYPE_WEBP:
+		return "image/webp"
+	case artifactpb.File_TYPE_BMP:
+		return "image/bmp"
+	case artifactpb.File_TYPE_TIFF:
+		return "image/tiff"
+	case artifactpb.File_TYPE_AVIF:
+		return "image/avif"
+	case artifactpb.File_TYPE_HEIC:
+		return "image/heic"
+	case artifactpb.File_TYPE_HEIF:
+		return "image/heif"
+
+	// Audio types
+	case artifactpb.File_TYPE_MP3:
+		return "audio/mpeg"
+	case artifactpb.File_TYPE_WAV:
+		return "audio/wav"
+	case artifactpb.File_TYPE_AAC:
+		return "audio/aac"
+	case artifactpb.File_TYPE_OGG:
+		return "audio/ogg"
+	case artifactpb.File_TYPE_FLAC:
+		return "audio/flac"
+	case artifactpb.File_TYPE_AIFF:
+		return "audio/aiff"
+	case artifactpb.File_TYPE_M4A:
+		return "audio/mp4"
+	case artifactpb.File_TYPE_WMA:
+		return "audio/x-ms-wma"
+	case artifactpb.File_TYPE_WEBM_AUDIO:
+		return "audio/webm"
+
+	// Video types
+	case artifactpb.File_TYPE_MP4:
+		return "video/mp4"
+	case artifactpb.File_TYPE_AVI:
+		return "video/x-msvideo"
+	case artifactpb.File_TYPE_MOV:
+		return "video/quicktime"
+	case artifactpb.File_TYPE_FLV:
+		return "video/x-flv"
+	case artifactpb.File_TYPE_WMV:
+		return "video/x-ms-wmv"
+	case artifactpb.File_TYPE_MKV:
+		return "video/x-matroska"
+	case artifactpb.File_TYPE_MPEG:
+		return "video/mpeg"
+	case artifactpb.File_TYPE_WEBM_VIDEO:
+		return "video/webm"
+
 	default:
 		return "application/octet-stream"
 	}
+}
+
+// detectWebMType inspects WebM file content to determine if it's audio-only or video
+// WebM files can contain audio-only or audio+video streams
+// Returns FILE_TYPE_WEBM_AUDIO for audio-only, FILE_TYPE_WEBM_VIDEO for video
+func detectWebMType(base64Content string) artifactpb.File_Type {
+	// Decode the base64 content to inspect the file header
+	decoded, err := base64.StdEncoding.DecodeString(base64Content)
+	if err != nil {
+		// If we can't decode, default to video
+		return artifactpb.File_TYPE_WEBM_VIDEO
+	}
+
+	// WebM is based on Matroska container format
+	// We need at least 512 bytes to reliably detect tracks
+	// However, for a simple heuristic, we can check for video codec identifiers in the first few KB
+	// Video codecs: VP8 (V_VP8), VP9 (V_VP9), AV1 (V_AV1)
+	// Audio codecs: Opus (A_OPUS), Vorbis (A_VORBIS)
+
+	checkSize := min(len(decoded), 8192) // Check first 8KB
+
+	header := string(decoded[:checkSize])
+
+	// Look for video codec identifiers in the header
+	// These are typically encoded as ASCII strings in the Matroska/WebM structure
+	hasVideo := strings.Contains(header, "V_VP8") ||
+		strings.Contains(header, "V_VP9") ||
+		strings.Contains(header, "V_AV1") ||
+		strings.Contains(header, "V_MPEG4")
+
+	if hasVideo {
+		return artifactpb.File_TYPE_WEBM_VIDEO
+	}
+
+	// If no video codec found, treat as audio-only
+	return artifactpb.File_TYPE_WEBM_AUDIO
 }
 
 func determineFileType(filename string) artifactpb.File_Type {
@@ -1765,8 +1899,6 @@ func determineFileType(filename string) artifactpb.File_Type {
 		return artifactpb.File_TYPE_CSV
 	} else if strings.HasSuffix(fileNameLower, ".png") {
 		return artifactpb.File_TYPE_PNG
-	} else if strings.HasSuffix(fileNameLower, ".jpg") {
-		return artifactpb.File_TYPE_JPG
 	} else if strings.HasSuffix(fileNameLower, ".jpeg") {
 		return artifactpb.File_TYPE_JPEG
 	} else if strings.HasSuffix(fileNameLower, ".gif") {
@@ -1808,6 +1940,8 @@ func determineFileType(filename string) artifactpb.File_Type {
 	} else if strings.HasSuffix(fileNameLower, ".flv") {
 		return artifactpb.File_TYPE_FLV
 	} else if strings.HasSuffix(fileNameLower, ".webm") {
+		// WebM type will be determined by content inspection
+		// Return a placeholder that will be replaced by detectWebMType
 		return artifactpb.File_TYPE_WEBM_VIDEO
 	} else if strings.HasSuffix(fileNameLower, ".wmv") {
 		return artifactpb.File_TYPE_WMV
