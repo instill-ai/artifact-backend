@@ -5,8 +5,8 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"github.com/instill-ai/artifact-backend/pkg/ai"
 	"github.com/instill-ai/artifact-backend/pkg/acl"
+	"github.com/instill-ai/artifact-backend/pkg/ai"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/resource"
 	"github.com/instill-ai/artifact-backend/pkg/types"
@@ -45,8 +45,8 @@ type Service interface {
 	EmbedTexts(context.Context, *types.KBUIDType, []string, string) ([][]float32, error)
 
 	// Cache management use cases
-	GetOrCreateFileCache(context.Context, types.KBUIDType, types.FileUIDType, string, string, artifactpb.File_Type, string) (*FileCacheResult, error)
-	RenewFileCache(context.Context, types.KBUIDType, types.FileUIDType, string) (*FileCacheResult, error)
+	GetOrCreateFileCache(context.Context, types.KBUIDType, types.FileUIDType, string, string, artifactpb.File_Type, string) (*repository.CacheMetadata, error)
+	RenewFileCache(context.Context, types.KBUIDType, types.FileUIDType, string) (*repository.CacheMetadata, error)
 
 	// RAG System Update use cases
 	RollbackAdmin(context.Context, types.OwnerUIDType, string, string) (*artifactpb.RollbackAdminResponse, error)

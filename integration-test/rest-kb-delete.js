@@ -188,7 +188,7 @@ export function CheckKnowledgeBaseDeletion(data) {
       {
         filename: filename,
         type: "TYPE_PDF",
-        content: constant.samplePdf
+        content: constant.docSamplePdf
       },
       data.header,
       5 // max retries (PDF upload can be slow under parallel load)

@@ -7,6 +7,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/ai"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/types"
@@ -17,15 +18,8 @@ import (
 )
 
 // FileCacheResult represents the result of getting or creating a file cache
-type FileCacheResult struct {
-	CacheName            string
-	Model                string
-	CreateTime           time.Time
-	ExpireTime           time.Time
-	CachedContextEnabled bool
-	// FileContents contains file content refs if cache creation failed (uncached mode)
-	FileContents []repository.FileContentRef
-}
+// Uses the same structure as repository.CacheMetadata for consistency
+type FileCacheResult = repository.CacheMetadata
 
 // GetOrCreateFileCache retrieves an existing cache or creates a new one for a file
 // This is used by GetFile?view=VIEW_CACHE to ensure cache exists with proper TTL
@@ -51,14 +45,7 @@ func (s *service) GetOrCreateFileCache(
 
 	// If cache exists and is valid, return it (it will be renewed by caller)
 	if cacheMetadata != nil {
-		return &FileCacheResult{
-			CacheName:            cacheMetadata.CacheName,
-			Model:                cacheMetadata.Model,
-			CreateTime:           cacheMetadata.CreateTime,
-			ExpireTime:           cacheMetadata.ExpireTime,
-			CachedContextEnabled: cacheMetadata.CachedContextEnabled,
-			FileContents:         cacheMetadata.FileContents,
-		}, nil
+		return cacheMetadata, nil
 	}
 
 	// Cache doesn't exist, need to create it
@@ -77,6 +64,36 @@ func (s *service) GetOrCreateFileCache(
 			fmt.Errorf("file type not supported for caching: %s", fileType.String()),
 			fmt.Sprintf("File type %s is not supported for caching. Only documents, images, audio, and video files can be cached.", fileType.String()),
 		)
+	}
+
+	// Check if file has enough tokens for caching
+	files, err := s.repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{fileUID})
+	if err != nil {
+		logger.Warn("Failed to get file metadata, proceeding with cache creation",
+			zap.Error(err),
+			zap.String("fileUID", fileUID.String()))
+	} else if len(files) > 0 {
+		// Get the actual token count for the file
+		fileModels := []repository.KnowledgeBaseFileModel{files[0]}
+		sources, err := s.repository.GetContentByFileUIDs(ctx, fileModels)
+		if err != nil {
+			logger.Warn("Failed to get content sources for token count, proceeding with cache creation",
+				zap.Error(err),
+				zap.String("fileUID", fileUID.String()))
+		} else {
+			totalTokens, err := s.repository.GetFilesTotalTokens(ctx, sources)
+			if err != nil {
+				logger.Warn("Failed to get token count, proceeding with cache creation",
+					zap.Error(err),
+					zap.String("fileUID", fileUID.String()))
+			} else {
+				fileTokenCount := totalTokens[fileUID]
+				if fileTokenCount < ai.MinCacheTokens {
+					// Get the content converted file URL instead of caching
+					return s.getContentMarkdownURL(ctx, kbUID, fileUID, filename)
+				}
+			}
+		}
 	}
 
 	// Fetch file content from MinIO
@@ -119,14 +136,6 @@ func (s *service) GetOrCreateFileCache(
 			CreateTime:           now,
 			ExpireTime:           expireTime,
 			CachedContextEnabled: false,
-			FileContents: []repository.FileContentRef{
-				{
-					FileUID:  fileUID,
-					Content:  content,
-					FileType: fileType.String(),
-					Filename: filename,
-				},
-			},
 		}
 
 		if err := s.repository.SetCacheMetadata(ctx, kbUID, fileUIDs, metadata, ai.ViewCacheTTL); err != nil {
@@ -135,13 +144,14 @@ func (s *service) GetOrCreateFileCache(
 				zap.String("fileUID", fileUID.String()))
 		}
 
-		return &FileCacheResult{
+		return &repository.CacheMetadata{
 			CacheName:            "",
 			Model:                "",
+			FileUIDs:             fileUIDs,
+			FileCount:            1,
 			CreateTime:           now,
 			ExpireTime:           expireTime,
 			CachedContextEnabled: false,
-			FileContents:         metadata.FileContents,
 		}, nil
 	}
 
@@ -158,7 +168,6 @@ func (s *service) GetOrCreateFileCache(
 		CreateTime:           cacheResult.CreateTime,
 		ExpireTime:           cacheResult.ExpireTime,
 		CachedContextEnabled: true,
-		FileContents:         nil, // No file contents in cached mode
 	}
 
 	if err := s.repository.SetCacheMetadata(ctx, kbUID, fileUIDs, metadata, ai.ViewCacheTTL); err != nil {
@@ -167,13 +176,14 @@ func (s *service) GetOrCreateFileCache(
 			zap.String("cacheName", cacheResult.CacheName))
 	}
 
-	return &FileCacheResult{
+	return &repository.CacheMetadata{
 		CacheName:            cacheResult.CacheName,
 		Model:                cacheResult.Model,
+		FileUIDs:             fileUIDs,
+		FileCount:            1,
 		CreateTime:           cacheResult.CreateTime,
 		ExpireTime:           cacheResult.ExpireTime,
 		CachedContextEnabled: true,
-		FileContents:         nil,
 	}, nil
 }
 
@@ -200,14 +210,7 @@ func (s *service) RenewFileCache(
 		// Get updated metadata to return
 		metadata, _ := s.repository.GetCacheMetadata(ctx, kbUID, fileUIDs)
 		if metadata != nil {
-			return &FileCacheResult{
-				CacheName:            "",
-				Model:                metadata.Model,
-				CreateTime:           metadata.CreateTime,
-				ExpireTime:           metadata.ExpireTime,
-				CachedContextEnabled: false,
-				FileContents:         metadata.FileContents,
-			}, nil
+			return metadata, nil
 		}
 		return nil, fmt.Errorf("failed to retrieve renewed cache metadata")
 	}
@@ -253,27 +256,113 @@ func (s *service) RenewFileCache(
 	// Get updated metadata to return
 	metadata, _ := s.repository.GetCacheMetadata(ctx, kbUID, fileUIDs)
 	if metadata != nil {
-		return &FileCacheResult{
-			CacheName:            metadata.CacheName,
-			Model:                metadata.Model,
-			CreateTime:           metadata.CreateTime,
-			ExpireTime:           metadata.ExpireTime,
-			CachedContextEnabled: true,
-			FileContents:         nil,
-		}, nil
+		return metadata, nil
 	}
 
 	// Fallback to UpdateCache result if Redis metadata is not available
 	if updatedCache != nil {
-		return &FileCacheResult{
+		return &repository.CacheMetadata{
 			CacheName:            updatedCache.CacheName,
 			Model:                updatedCache.Model,
+			FileUIDs:             fileUIDs,
+			FileCount:            1,
 			CreateTime:           updatedCache.CreateTime,
 			ExpireTime:           updatedCache.ExpireTime,
 			CachedContextEnabled: true,
-			FileContents:         nil,
 		}, nil
 	}
 
 	return nil, fmt.Errorf("failed to renew cache")
+}
+
+// getContentMarkdownURL returns the MinIO presigned URL for the content markdown file
+// This is used when files are too small for caching (< 1024 tokens)
+func (s *service) getContentMarkdownURL(ctx context.Context, kbUID types.KBUIDType, fileUID types.FileUIDType, filename string) (*repository.CacheMetadata, error) {
+	logger, _ := logx.GetZapLogger(ctx)
+
+	logger.Info("Attempting to get content markdown URL for small file",
+		zap.String("fileUID", fileUID.String()),
+		zap.String("filename", filename))
+
+	// Get the content converted file
+	convertedFile, err := s.repository.GetConvertedFileByFileUIDAndType(
+		ctx,
+		fileUID,
+		artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_CONTENT,
+	)
+	if err != nil || convertedFile == nil {
+		logger.Info("Content converted file not available yet (file still processing)",
+			zap.Error(err),
+			zap.String("fileUID", fileUID.String()))
+		// Return empty result if content file doesn't exist yet
+		// The file is still being processed - client should retry later
+		return &repository.CacheMetadata{
+			CacheName:            "",
+			Model:                "",
+			FileUIDs:             []types.FileUIDType{fileUID},
+			FileCount:            1,
+			CreateTime:           time.Now(),
+			ExpireTime:           time.Now().Add(ai.ViewCacheTTL),
+			CachedContextEnabled: false,
+		}, nil
+	}
+
+	// Generate presigned URL for the content markdown file
+	contentFilename := fmt.Sprintf("%s-content.md", filename)
+	minioURL, err := s.repository.GetPresignedURLForDownload(
+		ctx,
+		config.Config.Minio.BucketName,
+		convertedFile.Destination,
+		contentFilename,
+		convertedFile.ContentType,
+		ai.ViewCacheTTL, // Same TTL as cache operations
+	)
+	if err != nil {
+		logger.Warn("Failed to generate presigned URL for content markdown",
+			zap.Error(err),
+			zap.String("fileUID", fileUID.String()))
+		// Return empty result if URL generation fails
+		return &repository.CacheMetadata{
+			CacheName:            "",
+			Model:                "",
+			FileUIDs:             []types.FileUIDType{fileUID},
+			FileCount:            1,
+			CreateTime:           time.Now(),
+			ExpireTime:           time.Now().Add(ai.ViewCacheTTL),
+			CachedContextEnabled: false,
+		}, nil
+	}
+
+	// Encode the URL for API gateway access
+	gatewayURL, err := EncodeBlobURL(minioURL)
+	if err != nil {
+		logger.Warn("Failed to encode blob URL for content markdown",
+			zap.Error(err),
+			zap.String("fileUID", fileUID.String()))
+		// Return empty result if encoding fails
+		return &repository.CacheMetadata{
+			CacheName:            "",
+			Model:                "",
+			FileUIDs:             []types.FileUIDType{fileUID},
+			FileCount:            1,
+			CreateTime:           time.Now(),
+			ExpireTime:           time.Now().Add(ai.ViewCacheTTL),
+			CachedContextEnabled: false,
+		}, nil
+	}
+
+	logger.Info("Returning content markdown blob URL for small file",
+		zap.String("fileUID", fileUID.String()),
+		zap.String("url", gatewayURL))
+
+	// Return result with the content URL as CacheName (for compatibility with handler)
+	return &repository.CacheMetadata{
+		CacheName:            gatewayURL, // Use URL as CacheName for handler compatibility
+		Model:                "",
+		FileUIDs:             []types.FileUIDType{fileUID},
+		FileCount:            1,
+		CreateTime:           time.Now(),
+		ExpireTime:           time.Now().Add(ai.ViewCacheTTL),
+		CachedContextEnabled: false, // Not cached, but we have content URL
+	}, nil
 }

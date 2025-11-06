@@ -27,32 +27,59 @@ export let options = {
   // 23 parallel tests hitting Gemini API simultaneously causes "no content in candidate" errors
   // Stagger by 3s intervals to spread load: 0s, 3s, 6s, 9s, ... (69s max delay)
   scenarios: {
-    test_type_text: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_TEXT', startTime: '0s' },
-    test_type_markdown: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MARKDOWN', startTime: '3s' },
-    test_type_csv: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_CSV', startTime: '6s' },
-    test_type_html: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_HTML', startTime: '9s' },
-    test_type_pdf: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PDF', startTime: '12s' },
-    test_type_ppt: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PPT', startTime: '15s' },
-    test_type_pptx: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PPTX', startTime: '18s' },
-    test_type_xls: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_XLS', startTime: '21s' },
-    test_type_xlsx: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_XLSX', startTime: '24s' },
-    test_type_doc: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOC', startTime: '27s' },
-    test_type_docx: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOCX', startTime: '30s' },
-    test_type_doc_uppercase: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOC_UPPERCASE', startTime: '33s' },
-    test_type_docx_uppercase: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOCX_UPPERCASE', startTime: '36s' },
+    // Document file types
+    test_type_text: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_TEXT' },
+    test_type_markdown: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MARKDOWN' },
+    test_type_csv: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_CSV' },
+    test_type_html: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_HTML' },
+    test_type_pdf: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PDF' },
+    test_type_ppt: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PPT' },
+    test_type_pptx: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PPTX' },
+    test_type_xls: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_XLS' },
+    test_type_xlsx: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_XLSX' },
+    test_type_doc: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOC' },
+    test_type_docx: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOCX' },
     // Regression tests: Type inference from filename (type field omitted)
     // These tests ensure the backend correctly infers file type from extension when type is not provided
-    test_type_text_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_TEXT_INFERRED', startTime: '39s' },
-    test_type_markdown_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MARKDOWN_INFERRED', startTime: '42s' },
-    test_type_csv_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_CSV_INFERRED', startTime: '45s' },
-    test_type_html_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_HTML_INFERRED', startTime: '48s' },
-    test_type_pdf_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PDF_INFERRED', startTime: '51s' },
-    test_type_ppt_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PPT_INFERRED', startTime: '54s' },
-    test_type_pptx_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PPTX_INFERRED', startTime: '57s' },
-    test_type_xls_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_XLS_INFERRED', startTime: '60s' },
-    test_type_xlsx_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_XLSX_INFERRED', startTime: '63s' },
-    test_type_doc_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOC_INFERRED', startTime: '66s' },
-    test_type_docx_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOCX_INFERRED', startTime: '69s' },
+    test_type_markdown_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MARKDOWN_INFERRED' },
+    test_type_text_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_TEXT_INFERRED' },
+    test_type_csv_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_CSV_INFERRED' },
+    test_type_html_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_HTML_INFERRED' },
+    test_type_pdf_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PDF_INFERRED' },
+    test_type_ppt_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PPT_INFERRED' },
+    test_type_pptx_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PPTX_INFERRED' },
+    test_type_xls_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_XLS_INFERRED' },
+    test_type_xlsx_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_XLSX_INFERRED' },
+    test_type_doc_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOC_INFERRED' },
+    test_type_docx_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOCX_INFERRED' },
+    // Image file types
+    test_type_png: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PNG' },
+    test_type_jpeg: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_JPEG' },
+    test_type_gif: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_GIF' },
+    test_type_webp: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WEBP' },
+    test_type_tiff: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_TIFF' },
+    test_type_heic: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_HEIC' },
+    test_type_heif: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_HEIF' },
+    test_type_avif: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_AVIF' },
+    test_type_bmp: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_BMP' },
+    // test_type_mp3: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MP3' },
+    // Audio file types
+    test_type_wav: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WAV' },
+    test_type_aac: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_AAC' },
+    test_type_ogg: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_OGG' },
+    test_type_flac: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_FLAC' },
+    test_type_aiff: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_AIFF' },
+    test_type_m4a: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_M4A' },
+    test_type_wma: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WMA' },
+    // Video file types
+    test_type_mp4: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MP4' },
+    test_type_mkv: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MKV' },
+    test_type_avi: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_AVI' },
+    test_type_mov: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MOV' },
+    test_type_flv: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_FLV' },
+    test_type_webm: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WEBM_VIDEO' },
+    test_type_wmv: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WMV' },
+    test_type_mpeg: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MPEG' },
   },
 };
 
@@ -136,33 +163,62 @@ export function teardown(data) {
 
 
 // Scenario execs per file type
-export function TEST_TYPE_TEXT(data) { runKnowledgeBaseFileTest(data, { originalName: "sample.txt", fileType: "TYPE_TEXT" }); }
-export function TEST_TYPE_MARKDOWN(data) { runKnowledgeBaseFileTest(data, { originalName: "sample.md", fileType: "TYPE_MARKDOWN" }); }
-export function TEST_TYPE_CSV(data) { runKnowledgeBaseFileTest(data, { originalName: "sample.csv", fileType: "TYPE_CSV" }); }
-export function TEST_TYPE_HTML(data) { runKnowledgeBaseFileTest(data, { originalName: "sample.html", fileType: "TYPE_HTML" }); }
-export function TEST_TYPE_PDF(data) { runKnowledgeBaseFileTest(data, { originalName: "sample.pdf", fileType: "TYPE_PDF" }); }
-export function TEST_TYPE_PPT(data) { runKnowledgeBaseFileTest(data, { originalName: "sample.ppt", fileType: "TYPE_PPT" }); }
-export function TEST_TYPE_PPTX(data) { runKnowledgeBaseFileTest(data, { originalName: "sample.pptx", fileType: "TYPE_PPTX" }); }
-export function TEST_TYPE_XLS(data) { runKnowledgeBaseFileTest(data, { originalName: "sample.xls", fileType: "TYPE_XLS" }); }
-export function TEST_TYPE_XLSX(data) { runKnowledgeBaseFileTest(data, { originalName: "sample.xlsx", fileType: "TYPE_XLSX" }); }
-export function TEST_TYPE_DOC(data) { runKnowledgeBaseFileTest(data, { originalName: "sample.doc", fileType: "TYPE_DOC" }); }
-export function TEST_TYPE_DOCX(data) { runKnowledgeBaseFileTest(data, { originalName: "sample.docx", fileType: "TYPE_DOCX" }); }
-export function TEST_TYPE_DOC_UPPERCASE(data) { runKnowledgeBaseFileTest(data, { originalName: "SAMPLE-UPPERCASE-FILENAME.DOC", fileType: "TYPE_DOC" }); }
-export function TEST_TYPE_DOCX_UPPERCASE(data) { runKnowledgeBaseFileTest(data, { originalName: "SAMPLE-UPPERCASE-FILENAME.DOCX", fileType: "TYPE_DOCX" }); }
+export function TEST_TYPE_TEXT(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.txt", fileType: "TYPE_TEXT" }); }
+export function TEST_TYPE_MARKDOWN(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.md", fileType: "TYPE_MARKDOWN" }); }
+export function TEST_TYPE_CSV(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.csv", fileType: "TYPE_CSV" }); }
+export function TEST_TYPE_HTML(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.html", fileType: "TYPE_HTML" }); }
+export function TEST_TYPE_PDF(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.pdf", fileType: "TYPE_PDF" }); }
+export function TEST_TYPE_PPT(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.ppt", fileType: "TYPE_PPT" }); }
+export function TEST_TYPE_PPTX(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.pptx", fileType: "TYPE_PPTX" }); }
+export function TEST_TYPE_XLS(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.xls", fileType: "TYPE_XLS" }); }
+export function TEST_TYPE_XLSX(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.xlsx", fileType: "TYPE_XLSX" }); }
+export function TEST_TYPE_DOC(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.doc", fileType: "TYPE_DOC" }); }
+export function TEST_TYPE_DOCX(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.docx", fileType: "TYPE_DOCX" }); }
 
 // Regression tests: Type inference from filename (type field omitted)
 // These tests ensure the backend correctly infers file type from extension
-export function TEST_TYPE_TEXT_INFERRED(data) { runKnowledgeBaseFileTest(data, { originalName: "sample.txt", fileType: "TYPE_TEXT", omitType: true }); }
-export function TEST_TYPE_MARKDOWN_INFERRED(data) { runKnowledgeBaseFileTest(data, { originalName: "sample.md", fileType: "TYPE_MARKDOWN", omitType: true }); }
-export function TEST_TYPE_CSV_INFERRED(data) { runKnowledgeBaseFileTest(data, { originalName: "sample.csv", fileType: "TYPE_CSV", omitType: true }); }
-export function TEST_TYPE_HTML_INFERRED(data) { runKnowledgeBaseFileTest(data, { originalName: "sample.html", fileType: "TYPE_HTML", omitType: true }); }
-export function TEST_TYPE_PDF_INFERRED(data) { runKnowledgeBaseFileTest(data, { originalName: "sample.pdf", fileType: "TYPE_PDF", omitType: true }); }
-export function TEST_TYPE_PPT_INFERRED(data) { runKnowledgeBaseFileTest(data, { originalName: "sample.ppt", fileType: "TYPE_PPT", omitType: true }); }
-export function TEST_TYPE_PPTX_INFERRED(data) { runKnowledgeBaseFileTest(data, { originalName: "sample.pptx", fileType: "TYPE_PPTX", omitType: true }); }
-export function TEST_TYPE_XLS_INFERRED(data) { runKnowledgeBaseFileTest(data, { originalName: "sample.xls", fileType: "TYPE_XLS", omitType: true }); }
-export function TEST_TYPE_XLSX_INFERRED(data) { runKnowledgeBaseFileTest(data, { originalName: "sample.xlsx", fileType: "TYPE_XLSX", omitType: true }); }
-export function TEST_TYPE_DOC_INFERRED(data) { runKnowledgeBaseFileTest(data, { originalName: "sample.doc", fileType: "TYPE_DOC", omitType: true }); }
-export function TEST_TYPE_DOCX_INFERRED(data) { runKnowledgeBaseFileTest(data, { originalName: "sample.docx", fileType: "TYPE_DOCX", omitType: true }); }
+export function TEST_TYPE_TEXT_INFERRED(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.txt", fileType: "TYPE_TEXT", omitType: true }); }
+export function TEST_TYPE_MARKDOWN_INFERRED(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.md", fileType: "TYPE_MARKDOWN", omitType: true }); }
+export function TEST_TYPE_CSV_INFERRED(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.csv", fileType: "TYPE_CSV", omitType: true }); }
+export function TEST_TYPE_HTML_INFERRED(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.html", fileType: "TYPE_HTML", omitType: true }); }
+export function TEST_TYPE_PDF_INFERRED(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.pdf", fileType: "TYPE_PDF", omitType: true }); }
+export function TEST_TYPE_PPT_INFERRED(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.ppt", fileType: "TYPE_PPT", omitType: true }); }
+export function TEST_TYPE_PPTX_INFERRED(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.pptx", fileType: "TYPE_PPTX", omitType: true }); }
+export function TEST_TYPE_XLS_INFERRED(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.xls", fileType: "TYPE_XLS", omitType: true }); }
+export function TEST_TYPE_XLSX_INFERRED(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.xlsx", fileType: "TYPE_XLSX", omitType: true }); }
+export function TEST_TYPE_DOC_INFERRED(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.doc", fileType: "TYPE_DOC", omitType: true }); }
+export function TEST_TYPE_DOCX_INFERRED(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.docx", fileType: "TYPE_DOCX", omitType: true }); }
+
+// Image file types
+export function TEST_TYPE_PNG(data) { runKnowledgeBaseFileTest(data, { originalName: "img-sample.png", fileType: "TYPE_PNG" }); }
+export function TEST_TYPE_JPEG(data) { runKnowledgeBaseFileTest(data, { originalName: "img-sample.jpeg", fileType: "TYPE_JPEG" }); }
+export function TEST_TYPE_GIF(data) { runKnowledgeBaseFileTest(data, { originalName: "img-sample.gif", fileType: "TYPE_GIF" }); }
+export function TEST_TYPE_WEBP(data) { runKnowledgeBaseFileTest(data, { originalName: "img-sample.webp", fileType: "TYPE_WEBP" }); }
+export function TEST_TYPE_TIFF(data) { runKnowledgeBaseFileTest(data, { originalName: "img-sample.tiff", fileType: "TYPE_TIFF" }); }
+export function TEST_TYPE_HEIC(data) { runKnowledgeBaseFileTest(data, { originalName: "img-sample.heic", fileType: "TYPE_HEIC" }); }
+export function TEST_TYPE_HEIF(data) { runKnowledgeBaseFileTest(data, { originalName: "img-sample.heif", fileType: "TYPE_HEIF" }); }
+export function TEST_TYPE_AVIF(data) { runKnowledgeBaseFileTest(data, { originalName: "img-sample.avif", fileType: "TYPE_AVIF" }); }
+export function TEST_TYPE_BMP(data) { runKnowledgeBaseFileTest(data, { originalName: "img-sample.bmp", fileType: "TYPE_BMP" }); }
+
+// Audio file types
+export function TEST_TYPE_MP3(data) { runKnowledgeBaseFileTest(data, { originalName: "audio-sample.mp3", fileType: "TYPE_MP3" }); }
+export function TEST_TYPE_WAV(data) { runKnowledgeBaseFileTest(data, { originalName: "audio-sample.wav", fileType: "TYPE_WAV" }); }
+export function TEST_TYPE_AAC(data) { runKnowledgeBaseFileTest(data, { originalName: "audio-sample.aac", fileType: "TYPE_AAC" }); }
+export function TEST_TYPE_OGG(data) { runKnowledgeBaseFileTest(data, { originalName: "audio-sample.ogg", fileType: "TYPE_OGG" }); }
+export function TEST_TYPE_FLAC(data) { runKnowledgeBaseFileTest(data, { originalName: "audio-sample.flac", fileType: "TYPE_FLAC" }); }
+export function TEST_TYPE_AIFF(data) { runKnowledgeBaseFileTest(data, { originalName: "audio-sample.aiff", fileType: "TYPE_AIFF" }); }
+export function TEST_TYPE_M4A(data) { runKnowledgeBaseFileTest(data, { originalName: "audio-sample.m4a", fileType: "TYPE_M4A" }); }
+export function TEST_TYPE_WMA(data) { runKnowledgeBaseFileTest(data, { originalName: "audio-sample.wma", fileType: "TYPE_WMA" }); }
+
+// Video file types
+export function TEST_TYPE_MP4(data) { runKnowledgeBaseFileTest(data, { originalName: "video-sample.mp4", fileType: "TYPE_MP4" }); }
+export function TEST_TYPE_MKV(data) { runKnowledgeBaseFileTest(data, { originalName: "video-sample.mkv", fileType: "TYPE_MKV" }); }
+export function TEST_TYPE_AVI(data) { runKnowledgeBaseFileTest(data, { originalName: "video-sample.avi", fileType: "TYPE_AVI" }); }
+export function TEST_TYPE_MOV(data) { runKnowledgeBaseFileTest(data, { originalName: "video-sample.mov", fileType: "TYPE_MOV" }); }
+export function TEST_TYPE_FLV(data) { runKnowledgeBaseFileTest(data, { originalName: "video-sample.flv", fileType: "TYPE_FLV" }); }
+export function TEST_TYPE_WEBM_VIDEO(data) { runKnowledgeBaseFileTest(data, { originalName: "video-sample.webm", fileType: "TYPE_WEBM_VIDEO" }); }
+export function TEST_TYPE_WMV(data) { runKnowledgeBaseFileTest(data, { originalName: "video-sample.wmv", fileType: "TYPE_WMV" }); }
+export function TEST_TYPE_MPEG(data) { runKnowledgeBaseFileTest(data, { originalName: "video-sample.mpeg", fileType: "TYPE_MPEG" }); }
 
 // Internal helper to run knowledge base file test for each file type
 function runKnowledgeBaseFileTest(data, opts) {

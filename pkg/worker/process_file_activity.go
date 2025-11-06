@@ -137,17 +137,17 @@ func (w *Worker) GetFileMetadataActivity(ctx context.Context, param *GetFileMeta
 		)
 	}
 	if len(files) == 0 {
-		// File was deleted during processing - this is OK in scenarios like:
-		// - Knowledge base/file deletion triggered while workflow is running
-		// - Test cleanup happening concurrently with processing
-		// Return a non-retryable error to exit the workflow gracefully
-		w.log.Info("GetFileMetadataActivity: File not found (may have been deleted during processing)",
+		// File record not found in database - this indicates:
+		// - File was deleted before processing started
+		// - Invalid file UID was provided
+		// - Test uploaded file without creating proper DB record (e.g., undefined content constant)
+		// Return a non-retryable error to fail the workflow immediately without retries
+		w.log.Info("GetFileMetadataActivity: File not found (file record missing from database)",
 			zap.String("fileUID", param.FileUID.String()))
 		err := fmt.Errorf("file not found: %s", param.FileUID.String())
-		return nil, temporal.NewApplicationErrorWithCause(
+		return nil, temporal.NewNonRetryableApplicationError(
 			"File not found",
-			getFileMetadataActivityError,
-			err,
+			getFileMetadataActivityError, err,
 		)
 	}
 	file := files[0]

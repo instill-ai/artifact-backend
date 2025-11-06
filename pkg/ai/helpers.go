@@ -27,51 +27,51 @@ func MapFormatToFileType(format string) artifactpb.File_Type {
 // Based on format definitions in the AI component
 func NeedsFileTypeConversion(fileType artifactpb.File_Type) (bool, string) {
 	switch fileType {
-	// AI-native image formats - no conversion needed
-	case artifactpb.File_TYPE_PNG,
-		artifactpb.File_TYPE_JPEG,
-		artifactpb.File_TYPE_JPG,
-		artifactpb.File_TYPE_WEBP,
-		artifactpb.File_TYPE_HEIC,
-		artifactpb.File_TYPE_HEIF:
+	// Standard image format - no conversion needed
+	case artifactpb.File_TYPE_PNG:
 		return false, ""
 
 	// Convertible image formats - convert to PNG
 	case artifactpb.File_TYPE_GIF,
 		artifactpb.File_TYPE_BMP,
 		artifactpb.File_TYPE_TIFF,
-		artifactpb.File_TYPE_AVIF:
+		artifactpb.File_TYPE_AVIF,
+		artifactpb.File_TYPE_JPEG,
+		artifactpb.File_TYPE_JPG,
+		artifactpb.File_TYPE_WEBP,
+		artifactpb.File_TYPE_HEIC,
+		artifactpb.File_TYPE_HEIF:
 		return true, "png"
 
-	// AI-native audio formats - no conversion needed
-	case artifactpb.File_TYPE_MP3,
-		artifactpb.File_TYPE_WAV,
-		artifactpb.File_TYPE_AAC,
-		artifactpb.File_TYPE_OGG,
-		artifactpb.File_TYPE_FLAC,
-		artifactpb.File_TYPE_AIFF:
+	// Standard audio format - no conversion needed
+	case artifactpb.File_TYPE_OGG:
 		return false, ""
 
 	// Convertible audio formats - convert to OGG
-	case artifactpb.File_TYPE_M4A,
-		artifactpb.File_TYPE_WMA:
+	case artifactpb.File_TYPE_MP3,
+		artifactpb.File_TYPE_WAV,
+		artifactpb.File_TYPE_AAC,
+		artifactpb.File_TYPE_M4A,
+		artifactpb.File_TYPE_WMA,
+		artifactpb.File_TYPE_FLAC,
+		artifactpb.File_TYPE_AIFF:
 		return true, "ogg"
 
-	// AI-native video formats - no conversion needed
-	case artifactpb.File_TYPE_MP4,
+	// Standard video format - no conversion needed
+	case artifactpb.File_TYPE_MP4:
+		return false, ""
+
+	// Convertible video formats - convert to MP4
+	case artifactpb.File_TYPE_MKV,
 		artifactpb.File_TYPE_MPEG,
 		artifactpb.File_TYPE_MOV,
 		artifactpb.File_TYPE_AVI,
 		artifactpb.File_TYPE_FLV,
 		artifactpb.File_TYPE_WEBM_VIDEO,
 		artifactpb.File_TYPE_WMV:
-		return false, ""
-
-	// Convertible video formats - convert to MP4
-	case artifactpb.File_TYPE_MKV:
 		return true, "mp4"
 
-	// AI-native document format - no conversion needed
+	// Standard document format - no conversion needed
 	case artifactpb.File_TYPE_PDF:
 		return false, ""
 

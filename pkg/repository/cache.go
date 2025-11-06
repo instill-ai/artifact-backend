@@ -32,14 +32,13 @@ type FileContentRef struct {
 // 1. Cached mode: CachedContextEnabled=true, CacheName set, FileContents empty (large files, cached context exists)
 // 2. Uncached mode: CachedContextEnabled=false, CacheName empty, FileContents set (small files, cached context does not exist)
 type CacheMetadata struct {
-	CacheName            string              `json:"cache_name,omitempty"`    // AI cache name (empty if cache creation failed)
-	Model                string              `json:"model"`                   // Model used (e.g., "gemini-1.5-pro-002")
-	FileUIDs             []types.FileUIDType `json:"file_uids"`               // File UIDs included in this cache
-	FileCount            int                 `json:"file_count"`              // Number of files (denormalized for convenience)
-	CreateTime           time.Time           `json:"create_time"`             // When cache was created
-	ExpireTime           time.Time           `json:"expire_time"`             // When cache will expire
-	CachedContextEnabled bool                `json:"cached_context_enabled"`  // Whether AI cached context exists
-	FileContents         []FileContentRef    `json:"file_contents,omitempty"` // File references for uncached small files
+	CacheName            string              `json:"cache_name,omitempty"`   // AI cache name (empty if cache creation failed)
+	Model                string              `json:"model"`                  // Model used (e.g., "gemini-1.5-pro-002")
+	FileUIDs             []types.FileUIDType `json:"file_uids"`              // File UIDs included in this cache
+	FileCount            int                 `json:"file_count"`             // Number of files (denormalized for convenience)
+	CreateTime           time.Time           `json:"create_time"`            // When cache was created
+	ExpireTime           time.Time           `json:"expire_time"`            // When cache will expire
+	CachedContextEnabled bool                `json:"cached_context_enabled"` // Whether AI cached context exists
 }
 
 // Cache interface defines operations for ephemeral cache metadata

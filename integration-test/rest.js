@@ -44,6 +44,7 @@ export let options = {
     test_19_jwt_get_file_cache: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_19_JWT_GetFileCache' },
     test_20_get_file_cache: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_20_GetFileCache' },
     test_21_get_file_cache_renewal: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_21_GetFileCacheRenewal' },
+    test_22_get_file_cache_large_file: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_22_GetFileCacheLargeFile' },
   },
 };
 
@@ -337,7 +338,7 @@ export function TEST_07_CleanupFiles(data) {
     const uploadRes = http.request(
       "POST",
       `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
-      JSON.stringify({ filename: filename, type: "TYPE_PDF", content: constant.samplePdf }),
+      JSON.stringify({ filename: filename, type: "TYPE_PDF", content: constant.docSamplePdf }),
       data.header
     );
 
@@ -774,7 +775,12 @@ export function TEST_08_E2EKnowledgeBase(data) {
 // TEST GROUP 09-18: JWT/Auth Tests
 // ============================================================================
 function logUnexpected(res, label) {
-  if (!res || res.status === 401 || res.status === 403) return;
+  // Only log truly unexpected status codes (not 200-299 success range)
+  if (!res) return;
+  if (res.status >= 200 && res.status < 300) return; // Success range - don't log
+  if (res.status === 401 || res.status === 403) return; // Expected auth failures
+
+  // Log unexpected errors (4xx, 5xx except auth)
   try {
     console.log(`${label} unexpected status=${res.status} body=${JSON.stringify(res.json())}`);
   } catch (e) {
@@ -805,7 +811,7 @@ function deleteKBAuthenticated(data, knowledgeBaseId) {
 
 function createFileAuthenticated(data, knowledgeBaseId) {
   const filename = data.dbIDPrefix + "jwt-file-" + randomString(6) + ".txt";
-  const body = { filename: filename, type: "TYPE_TEXT", content: constant.sampleTxt };
+  const body = { filename: filename, type: "TYPE_TEXT", content: constant.docSampleTxt };
   const res = http.request(
     "POST",
     `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
@@ -879,7 +885,7 @@ export function TEST_13_JWT_CreateFile(data) {
     check(true, { [constant.banner(groupName)]: () => true });
 
     const created = createKBAuthenticated(data);
-    const body = { filename: data.dbIDPrefix + "x.txt", type: "TYPE_TEXT", content: constant.sampleTxt };
+    const body = { filename: data.dbIDPrefix + "x.txt", type: "TYPE_TEXT", content: constant.docSampleTxt };
     const res = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}/files`, JSON.stringify(body), constant.paramsHTTPWithJWT.headers);
     logUnexpected(res, "JWT: POST file");
     check(res, { "JWT: POST file 401": (r) => r.status === 401 });
@@ -971,6 +977,63 @@ export function TEST_19_JWT_GetFileCache(data) {
   });
 }
 
+// waitForCacheReady polls the VIEW_CACHE endpoint until derivedResourceUri has a definitive value
+function waitForCacheReady(namespaceId, knowledgeBaseId, fileUid, headers, maxWaitSeconds = 30) {
+  console.log(`Waiting for cache readiness determination for file ${fileUid} (max ${maxWaitSeconds}s)...`);
+
+  const startTime = new Date().getTime();
+  const endTime = startTime + (maxWaitSeconds * 1000);
+  let consecutiveEmptyResponses = 0;
+  const MAX_CONSECUTIVE_EMPTY = 5; // If we get 5 consecutive empty responses, consider it stable
+
+  while (new Date().getTime() < endTime) {
+    const res = http.request(
+      "GET",
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${namespaceId}/knowledge-bases/${knowledgeBaseId}/files/${fileUid}?view=VIEW_CACHE`,
+      null,
+      headers
+    );
+
+    if (res.status === 200) {
+      try {
+        const data = res.json();
+        const derivedUri = data.derivedResourceUri;
+
+        // Check if derivedResourceUri field exists (it should always be present now)
+        if (derivedUri !== undefined) {
+          if (derivedUri && derivedUri !== "") {
+            // Cache URI is ready!
+            console.log(`Cache URI ready after ${Math.round((new Date().getTime() - startTime) / 1000)}s: ${derivedUri}`);
+            return { ready: true, derivedResourceUri: derivedUri, available: true };
+          } else {
+            // Empty string - count consecutive empty responses
+            consecutiveEmptyResponses++;
+            if (consecutiveEmptyResponses >= MAX_CONSECUTIVE_EMPTY) {
+              console.log(`Cache determined to be unavailable after ${Math.round((new Date().getTime() - startTime) / 1000)}s (consecutive empty responses)`);
+              return { ready: true, derivedResourceUri: "", available: false };
+            }
+          }
+        } else {
+          console.log(`derivedResourceUri field missing from response`);
+          consecutiveEmptyResponses = 0; // Reset counter for unexpected responses
+        }
+      } catch (e) {
+        console.log(`JSON parse error while waiting for cache: ${e.message}`);
+        consecutiveEmptyResponses = 0;
+      }
+    } else {
+      console.log(`HTTP error while waiting for cache: ${res.status}`);
+      consecutiveEmptyResponses = 0;
+    }
+
+    // Wait 1 second before next attempt
+    sleep(1);
+  }
+
+  console.log(`Cache readiness could not be determined within ${maxWaitSeconds}s`);
+  return { ready: false };
+}
+
 export function TEST_20_GetFileCache(data) {
   const groupName = "Artifact API: Get file with VIEW_CACHE creates cache on first call";
   group(groupName, () => {
@@ -978,13 +1041,60 @@ export function TEST_20_GetFileCache(data) {
 
     // Create KB and upload a PDF file
     const created = createKBAuthenticated(data);
-    const fileUid = createFileAuthenticated(data, created.id);
+    const filename = `${data.dbIDPrefix}cache-test.pdf`;
+    const uploadRes = http.request(
+      "POST",
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}/files`,
+      JSON.stringify({ filename: filename, type: "TYPE_PDF", content: constant.docSamplePdf }),
+      data.header
+    );
+
+    let uploadedFile;
+    try { uploadedFile = uploadRes.json().file; } catch (e) { uploadedFile = {}; }
+    const fileUid = uploadedFile ? uploadedFile.uid : null;
+    const fileId = uploadedFile ? uploadedFile.id : null;
+
+    check(uploadRes, {
+      "Cache test: PDF file uploaded": (r) => {
+        if (r.status !== 200 || !fileUid || !fileId) {
+          console.log(`PDF upload failed: status=${r.status}, fileUid=${fileUid}, fileId=${fileId}, body=${r.body}`);
+        }
+        return r.status === 200 && fileUid && fileId;
+      }
+    });
 
     // Wait for file processing to complete
     console.log("Waiting for file processing to complete...");
-    helper.waitForFileProcessingComplete(fileUid, 60);
+    const processingResult = helper.waitForFileProcessingComplete(
+      data.expectedOwner.id,
+      created.id,
+      fileUid,
+      data.header,
+      60
+    );
 
-    // First call to GetFile with VIEW_CACHE should create the cache
+    if (!processingResult.completed) {
+      console.log(`File processing did not complete: ${processingResult.status}${processingResult.error ? ' - ' + processingResult.error : ''}`);
+      deleteKBAuthenticated(data, created.id);
+      return;
+    }
+
+    // Wait for cache readiness determination (cache available or determined unavailable)
+    console.log("Waiting for cache readiness determination...");
+    const cacheReady = waitForCacheReady(data.expectedOwner.id, created.id, fileUid, data.header, 30);
+    check(cacheReady, {
+      "Cache readiness should be determined within 30 seconds": (r) => r.ready,
+    });
+
+    if (cacheReady.available) {
+      console.log("Cache is available and ready");
+    } else if (cacheReady.ready) {
+      console.log("Cache determined to be unavailable (AI client not available or other issue)");
+    } else {
+      console.log("Cache readiness could not be determined, proceeding with test anyway...");
+    }
+
+    // First call to GetFile with VIEW_CACHE should have the cache ready
     const res1 = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}/files/${fileUid}?view=VIEW_CACHE`, null, data.header);
     logUnexpected(res1, "GET file VIEW_CACHE (first call)");
 
@@ -994,15 +1104,24 @@ export function TEST_20_GetFileCache(data) {
       "GET file VIEW_CACHE has correct file id": (r) => r.json().file.id === fileUid,
     });
 
-    // Check if derivedResourceUri is present (it may be empty if AI client is not available or file is too small)
-    const hasCacheName = res1.json().derivedResourceUri !== undefined && res1.json().derivedResourceUri !== "";
-    if (hasCacheName) {
-      console.log("Cache created successfully:", res1.json().derivedResourceUri);
+    // Check derivedResourceUri - it should always be present
+    const derivedUri = res1.json().derivedResourceUri;
+    check(res1, {
+      "GET file VIEW_CACHE has derivedResourceUri field": (r) => r.json().derivedResourceUri !== undefined,
+    });
+
+    if (derivedUri && derivedUri.startsWith("cachedContents/")) {
+      console.log("Gemini cache created successfully:", derivedUri);
       check(res1, {
-        "GET file VIEW_CACHE has cache name": (r) => r.json().derivedResourceUri.startsWith("cachedContents/"),
+        "GET file VIEW_CACHE has Gemini cache name": (r) => r.json().derivedResourceUri.startsWith("cachedContents/"),
+      });
+    } else if (derivedUri && derivedUri !== "") {
+      console.log("Content URL returned for small file:", derivedUri);
+      check(res1, {
+        "GET file VIEW_CACHE has content URL": (r) => r.json().derivedResourceUri !== "" && !r.json().derivedResourceUri.startsWith("cachedContents/"),
       });
     } else {
-      console.log("No cache name returned (AI client may not be available or file is too small for caching)");
+      console.log("No cache or content URL returned (caching completely unavailable)");
     }
 
     deleteKBAuthenticated(data, created.id);
@@ -1016,11 +1135,54 @@ export function TEST_21_GetFileCacheRenewal(data) {
 
     // Create KB and upload a PDF file
     const created = createKBAuthenticated(data);
-    const fileUid = createFileAuthenticated(data, created.id);
+    const filename = `${data.dbIDPrefix}cache-test.pdf`;
+    const uploadRes = http.request(
+      "POST",
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}/files`,
+      JSON.stringify({ filename: filename, type: "TYPE_PDF", content: constant.docSamplePdf }),
+      data.header
+    );
+
+    let uploadedFile;
+    try { uploadedFile = uploadRes.json().file; } catch (e) { uploadedFile = {}; }
+    const fileUid = uploadedFile ? uploadedFile.uid : null;
+    const fileId = uploadedFile ? uploadedFile.id : null;
+
+    check(uploadRes, {
+      "Cache test: PDF file uploaded": (r) => {
+        if (r.status !== 200 || !fileUid || !fileId) {
+          console.log(`PDF upload failed: status=${r.status}, fileUid=${fileUid}, fileId=${fileId}, body=${r.body}`);
+        }
+        return r.status === 200 && fileUid && fileId;
+      }
+    });
 
     // Wait for file processing to complete
     console.log("Waiting for file processing to complete...");
-    helper.waitForFileProcessingComplete(fileUid, 60);
+    const processingResult = helper.waitForFileProcessingComplete(
+      data.expectedOwner.id,
+      created.id,
+      fileUid,
+      data.header,
+      60
+    );
+
+    if (!processingResult.completed) {
+      console.log(`File processing did not complete: ${processingResult.status}${processingResult.error ? ' - ' + processingResult.error : ''}`);
+      deleteKBAuthenticated(data, created.id);
+      return;
+    }
+
+    // Wait for initial cache readiness determination
+    console.log("Waiting for initial cache readiness determination...");
+    const initialCacheReady = waitForCacheReady(data.expectedOwner.id, created.id, fileUid, data.header, 30);
+    if (!initialCacheReady.ready) {
+      console.log("Initial cache readiness could not be determined, proceeding with test anyway...");
+    } else if (initialCacheReady.available) {
+      console.log("Initial cache is available");
+    } else {
+      console.log("Initial cache determined to be unavailable");
+    }
 
     // First call to create cache
     const res1 = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}/files/${fileUid}?view=VIEW_CACHE`, null, data.header);
@@ -1036,17 +1198,33 @@ export function TEST_21_GetFileCacheRenewal(data) {
     check(res2, {
       "Second call status 200": (r) => r.status === 200,
       "Second call has file": (r) => r.json().file !== undefined,
-      "Second call returns consistent cache": (r) => {
-        // If first call had cache name, second call should return the same or renewed cache
-        const firstCache = res1.json().derivedResourceUri;
-        const secondCache = r.json().derivedResourceUri;
-        if (!firstCache && !secondCache) {
-          return true; // Both are empty, consistent
+      "Second call returns consistent derivedResourceUri type": (r) => {
+        // Both calls should return the same type of derivedResourceUri:
+        // - Both are Gemini cache names (start with "cachedContents/")
+        // - Both are content blob URLs (contain "/v1alpha/blob-urls/")
+        // - Both are empty strings
+        const firstUri = res1.json().derivedResourceUri || "";
+        const secondUri = r.json().derivedResourceUri || "";
+
+        // Check if both are Gemini cache names
+        if (firstUri.startsWith("cachedContents/") && secondUri.startsWith("cachedContents/")) {
+          // For Gemini cache, the names should be exactly the same
+          return firstUri === secondUri;
         }
-        if (firstCache && secondCache) {
-          return true; // Both have values (renewal happened)
+
+        // Check if both are blob URLs (for small files)
+        if (firstUri.includes("/v1alpha/blob-urls/") && secondUri.includes("/v1alpha/blob-urls/")) {
+          // For blob URLs, they will have different signatures but should both be blob URLs
+          return true;
         }
-        return false; // Inconsistent state
+
+        // Check if both are empty
+        if (firstUri === "" && secondUri === "") {
+          return true;
+        }
+
+        // Mixed types - inconsistent
+        return false;
       },
     });
 
@@ -1054,6 +1232,164 @@ export function TEST_21_GetFileCacheRenewal(data) {
     sleep(1);
     const res3 = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}/files/${fileUid}?view=VIEW_CACHE`, null, data.header);
     check(res3, { "Third call status 200": (r) => r.status === 200 });
+
+    deleteKBAuthenticated(data, created.id);
+  });
+}
+
+export function TEST_22_GetFileCacheLargeFile(data) {
+  const groupName = "Artifact API: Get file with VIEW_CACHE creates Gemini cache for large files";
+  group(groupName, () => {
+    check(true, { [constant.banner(groupName)]: () => true });
+
+    // Create KB and upload a large multi-page PDF file
+    const created = createKBAuthenticated(data);
+    const filename = `${data.dbIDPrefix}large-cache-test.pdf`;
+    const uploadRes = http.request(
+      "POST",
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}/files`,
+      JSON.stringify({ filename: filename, type: "TYPE_PDF", content: constant.docSampleMultiPagePdf }),
+      data.header
+    );
+
+    let uploadedFile;
+    try { uploadedFile = uploadRes.json().file; } catch (e) { uploadedFile = {}; }
+    const fileUid = uploadedFile ? uploadedFile.uid : null;
+    const fileId = uploadedFile ? uploadedFile.id : null;
+
+    check(uploadRes, {
+      "Large file cache test: Multi-page PDF file uploaded": (r) => {
+        if (r.status !== 200 || !fileUid || !fileId) {
+          console.log(`Large PDF upload failed: status=${r.status}, fileUid=${fileUid}, fileId=${fileId}, body=${r.body}`);
+        }
+        return r.status === 200 && fileUid && fileId;
+      }
+    });
+
+    if (!fileUid || !fileId) {
+      console.log("Large file cache test: Skipping test due to file upload failure");
+      deleteKBAuthenticated(data, created.id);
+      return;
+    }
+
+    // Wait for file processing to complete
+    console.log("Large file cache test: Waiting for file processing to complete...");
+    const processingResult = helper.waitForFileProcessingComplete(
+      data.expectedOwner.id,
+      created.id,
+      fileUid,
+      data.header,
+      120 // Large file may take longer to process
+    );
+
+    if (!processingResult.completed) {
+      console.log(`Large file cache test: File processing did not complete: ${processingResult.status}${processingResult.error ? ' - ' + processingResult.error : ''}`);
+      deleteKBAuthenticated(data, created.id);
+      return;
+    }
+
+    console.log("Large file cache test: File processing completed successfully");
+
+    // Wait for cache readiness determination (cache available or determined unavailable)
+    console.log("Large file cache test: Waiting for Gemini cache creation...");
+    const cacheReady = waitForCacheReady(data.expectedOwner.id, created.id, fileUid, data.header, 60);
+    check(cacheReady, {
+      "Large file: Cache readiness should be determined within 60 seconds": (r) => r.ready,
+    });
+
+    if (cacheReady.available) {
+      console.log("Large file cache test: Gemini cache created successfully");
+    } else if (cacheReady.ready) {
+      console.log("Large file cache test: Cache determined to be unavailable (AI client not available)");
+    } else {
+      console.log("Large file cache test: Cache readiness could not be determined");
+    }
+
+    // Call GetFile with VIEW_CACHE
+    const res1 = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}/files/${fileUid}?view=VIEW_CACHE`, null, data.header);
+    logUnexpected(res1, "Large file: GET file VIEW_CACHE");
+
+    check(res1, {
+      "Large file: GET file VIEW_CACHE status 200": (r) => r.status === 200,
+      "Large file: GET file VIEW_CACHE has file": (r) => r.json().file !== undefined,
+      "Large file: GET file VIEW_CACHE has derivedResourceUri field": (r) => r.json().derivedResourceUri !== undefined,
+    });
+
+    // Check the derivedResourceUri content
+    const derivedUri = res1.json().derivedResourceUri;
+
+    if (derivedUri && derivedUri.startsWith("cachedContents/")) {
+      console.log("Large file cache test: Gemini cache name returned:", derivedUri);
+      check(res1, {
+        "Large file: derivedResourceUri is Gemini cache name": (r) => r.json().derivedResourceUri.startsWith("cachedContents/"),
+      });
+    } else if (derivedUri && derivedUri.includes("/v1alpha/blob-urls/")) {
+      console.log("Large file cache test: Content blob URL returned (file might be small):", derivedUri);
+      check(res1, {
+        "Large file: derivedResourceUri is content blob URL": (r) => r.json().derivedResourceUri.includes("/v1alpha/blob-urls/"),
+      });
+    } else if (derivedUri === "") {
+      console.log("Large file cache test: Empty derivedResourceUri (caching unavailable or content not ready)");
+    } else {
+      console.log("Large file cache test: Unexpected derivedResourceUri format:", derivedUri);
+    }
+
+    // Test cache renewal for large files
+    sleep(2);
+    const res2 = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}/files/${fileUid}?view=VIEW_CACHE`, null, data.header);
+
+    check(res2, {
+      "Large file: Second call status 200": (r) => r.status === 200,
+      "Large file: Second call has consistent cache type": (r) => {
+        const firstUri = res1.json().derivedResourceUri || "";
+        const secondUri = r.json().derivedResourceUri || "";
+
+        // For Gemini cache, should return the same cache name
+        if (firstUri.startsWith("cachedContents/") && secondUri.startsWith("cachedContents/")) {
+          const isSame = firstUri === secondUri;
+          if (isSame) {
+            console.log("Large file cache test: Cache name consistent across calls:", firstUri);
+          } else {
+            console.log("Large file cache test: Cache name changed:", firstUri, "->", secondUri);
+          }
+          return isSame;
+        }
+
+        // For blob URLs, both should be blob URLs
+        if (firstUri.includes("/v1alpha/blob-urls/") && secondUri.includes("/v1alpha/blob-urls/")) {
+          console.log("Large file cache test: Both calls returned blob URLs (consistent)");
+          return true;
+        }
+
+        // For empty strings, both should be empty
+        if (firstUri === "" && secondUri === "") {
+          return true;
+        }
+
+        // Mixed types - inconsistent
+        console.log("Large file cache test: Inconsistent URI types:", firstUri, "vs", secondUri);
+        return false;
+      },
+    });
+
+    // Verify file metadata
+    const fileRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}/files/${fileUid}`, null, data.header);
+    if (fileRes.status === 200) {
+      try {
+        const fileData = fileRes.json().file;
+        check(fileRes, {
+          "Large file: Has sufficient tokens for caching": () => {
+            const tokenCount = fileData.totalTokens || 0;
+            const minTokens = 1024; // ai.MinCacheTokens
+            const hasSufficientTokens = tokenCount >= minTokens;
+            console.log(`Large file cache test: Token count=${tokenCount}, minTokens=${minTokens}, sufficient=${hasSufficientTokens}`);
+            return hasSufficientTokens;
+          },
+        });
+      } catch (e) {
+        console.log(`Large file cache test: Error checking token count: ${e}`);
+      }
+    }
 
     deleteKBAuthenticated(data, created.id);
   });

@@ -225,15 +225,9 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			FileUID: fileUID,
 			KBUID:   kbUID,
 		}).Get(ctx, &metadata); err != nil {
-			// If file not found, it may have been deleted - mark as failed
-			// GetFileMetadataActivity returns: "file not found: <uid>" (lowercase f)
-			if strings.Contains(err.Error(), "file not found") {
-				logger.Warn("File not found during processing, marking as failed",
-					"fileUID", fileUID.String())
-				filesFailed[fileUID.String()] = handleFileError(fileUID, "get file metadata", err)
-				filesCompleted[fileUID.String()] = true
-				continue
-			}
+			// GetFileMetadataActivity failed - fail the workflow immediately
+			// This includes "file not found" errors where file record doesn't exist in DB
+			// (which is different from missing MinIO objects, caught later in processing)
 			return handleFileError(fileUID, "get file metadata", err)
 		}
 

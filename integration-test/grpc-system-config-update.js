@@ -355,13 +355,13 @@ export default function (data) {
                 const uploadRes = http.request(
                     "POST",
                     `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId1}/files`,
-                    JSON.stringify({ filename: filename, type: "TYPE_PDF", content: constant.sampleMultiPagePdf }),
+                    JSON.stringify({ filename: filename, type: "TYPE_PDF", content: constant.docSampleMultiPagePdf }),
                     data.header
                 );
 
                 if (uploadRes.status === 200) {
                     const fileObj = uploadRes.json().file;
-                    console.log(`KB1 File ${i} uploaded: uid=${fileObj ? fileObj.uid : 'missing'}, fileUid=${fileObj ? fileObj.fileUid : 'missing'}`);
+                    console.log(`KB1 File ${i} uploaded: uid=${fileObj ? fileObj.uid : 'missing'}`);
                     initialFiles1.push(fileObj);
                 } else {
                     console.error(`KB1 File ${i} upload FAILED: status=${uploadRes.status}, body=${uploadRes.body}`);
@@ -381,13 +381,13 @@ export default function (data) {
                 const uploadRes = http.request(
                     "POST",
                     `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId2}/files`,
-                    JSON.stringify({ filename: filename, type: "TYPE_TEXT", content: constant.sampleTxt }),
+                    JSON.stringify({ filename: filename, type: "TYPE_TEXT", content: constant.docSampleTxt }),
                     data.header
                 );
 
                 if (uploadRes.status === 200) {
                     const fileObj = uploadRes.json().file;
-                    console.log(`KB2 File ${i} uploaded: uid=${fileObj ? fileObj.uid : 'missing'}, fileUid=${fileObj ? fileObj.fileUid : 'missing'}`);
+                    console.log(`KB2 File ${i} uploaded: uid=${fileObj ? fileObj.uid : 'missing'}`);
                     initialFiles2.push(fileObj);
                 } else {
                     console.error(`KB2 File ${i} upload FAILED: status=${uploadRes.status}, body=${uploadRes.body}`);
@@ -1029,7 +1029,7 @@ export default function (data) {
                 const uploadRes = http.request(
                     "POST",
                     `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${data.kb1_initial.knowledgeBaseId}/files`,
-                    JSON.stringify({ filename: filename, type: "TYPE_PDF", content: constant.sampleMultiPagePdf }),
+                    JSON.stringify({ filename: filename, type: "TYPE_PDF", content: constant.docSampleMultiPagePdf }),
                     data.header
                 );
 
@@ -1049,7 +1049,7 @@ export default function (data) {
                 const uploadRes = http.request(
                     "POST",
                     `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${data.kb2_initial.knowledgeBaseId}/files`,
-                    JSON.stringify({ filename: filename, type: "TYPE_MARKDOWN", content: constant.sampleMd }),
+                    JSON.stringify({ filename: filename, type: "TYPE_MARKDOWN", content: constant.docSampleMd }),
                     data.header
                 );
 
@@ -1130,10 +1130,25 @@ export default function (data) {
             // Increased timeout for CI environments with AI rate limiting (900s = 15 minutes)
             console.log("Waiting for retention file processing in rollback KBs (sequential dual-processing)...");
             let rollbackCompleted = false;
+            let kb1Count = 0;
+            let kb2Count = 0;
+
+            // Verify rollback KBs exist before waiting (KB2 might not exist if update failed)
+            if (!data.kb1_rollback) {
+                console.error("✗ Phase 5: Rollback KB1 not found - KB1 update may have failed");
+                return;
+            }
+
+            if (!data.kb2_rollback) {
+                console.warn("⚠ Phase 5: Rollback KB2 not found - KB2 update likely failed, skipping KB2 rollback file wait");
+                console.warn("   Continuing with KB1 rollback verification only");
+            }
+
+            // Wait for rollback KB files - only wait for KB2 if rollback KB2 exists
             if (data.kb1_rollback && data.kb2_rollback) {
                 for (let i = 0; i < 1800; i++) { // 1800 * 0.5s = 900s (15 minutes)
-                    let kb1Count = 0;
-                    let kb2Count = 0;
+                    kb1Count = 0;
+                    kb2Count = 0;
 
                     // Check files in rollback KB1 by filename (same filenames as production)
                     for (const filename of [`${data.dbIDPrefix}sysconfig-retention-kb1-1.pdf`, `${data.dbIDPrefix}sysconfig-retention-kb1-2.pdf`]) {
@@ -1149,28 +1164,35 @@ export default function (data) {
                         }
                     }
 
-                    // Check files in rollback KB2 by filename
-                    for (const filename of [`${data.dbIDPrefix}sysconfig-retention-kb2-1.md`, `${data.dbIDPrefix}sysconfig-retention-kb2-2.md`]) {
-                        const fileQuery = helper.safeQuery(
-                            `SELECT process_status FROM file
-                             WHERE kb_uid = $1 AND filename = $2 AND delete_time IS NULL`,
-                            data.kb2_rollback.kbUid,
-                            filename
-                        );
+                    // Check files in rollback KB2 by filename (only if rollback KB2 exists)
+                    if (data.kb2_rollback) {
+                        for (const filename of [`${data.dbIDPrefix}sysconfig-retention-kb2-1.md`, `${data.dbIDPrefix}sysconfig-retention-kb2-2.md`]) {
+                            const fileQuery = helper.safeQuery(
+                                `SELECT process_status FROM file
+                                 WHERE kb_uid = $1 AND filename = $2 AND delete_time IS NULL`,
+                                data.kb2_rollback.kbUid,
+                                filename
+                            );
 
-                        if (fileQuery && fileQuery.length > 0 && fileQuery[0].process_status === "FILE_PROCESS_STATUS_COMPLETED") {
-                            kb2Count++;
+                            if (fileQuery && fileQuery.length > 0 && fileQuery[0].process_status === "FILE_PROCESS_STATUS_COMPLETED") {
+                                kb2Count++;
+                            }
                         }
                     }
 
-                    if (kb1Count === 2 && kb2Count === 2) {
+                    // Complete if KB1 is done AND (KB2 is done OR KB2 rollback doesn't exist)
+                    const kb1Done = kb1Count === 2;
+                    const kb2Done = !data.kb2_rollback || kb2Count === 2; // If no rollback KB2, consider it "done"
+
+                    if (kb1Done && kb2Done) {
                         rollbackCompleted = true;
                         console.log("All rollback KB files processed (sequential dual-processing complete)");
                         break;
                     }
 
                     if (i % 10 === 0 && i > 0) {
-                        console.log(`Waiting for rollback files... KB1: ${kb1Count}/2, KB2: ${kb2Count}/2`);
+                        const kb2Status = data.kb2_rollback ? `${kb2Count}/2` : 'N/A (no rollback KB2)';
+                        console.log(`Waiting for rollback files... KB1: ${kb1Count}/2, KB2: ${kb2Status}`);
                     }
 
                     sleep(0.5);
@@ -1182,14 +1204,59 @@ export default function (data) {
 
                 // FAIL EARLY: If rollback files didn't complete, don't proceed with subsequent phases
                 if (!rollbackCompleted) {
+                    const kb2Status = data.kb2_rollback ? `${kb2Count}/2` : 'N/A (no rollback KB2)';
                     console.error("✗ Phase 5: Rollback KB files did not complete in time");
-                    console.error(`   Final state: KB1=${kb1Count}/2, KB2=${kb2Count}/2`);
+                    console.error(`   Final state: KB1=${kb1Count}/2, KB2=${kb2Status}`);
+                    if (data.kb2_rollback && kb2Count < 2) {
+                        console.error("   KB2 rollback files stuck - KB2 update may have failed");
+                        console.error("   Check Phase 4 logs for KB2 update failure details");
+                    }
                     console.error("   Sequential dual-processing may be blocked or AI service overloaded");
                     console.error("Phase 5: Aborting - cannot verify rollback behavior without complete data");
                     return;
                 }
 
                 console.log("✓ All rollback KB files processed successfully");
+            } else if (data.kb1_rollback) {
+                // Only KB1 rollback exists - wait for KB1 files only
+                console.log("Only KB1 rollback exists, waiting for KB1 rollback files only...");
+                for (let i = 0; i < 1800; i++) {
+                    kb1Count = 0;
+
+                    for (const filename of [`${data.dbIDPrefix}sysconfig-retention-kb1-1.pdf`, `${data.dbIDPrefix}sysconfig-retention-kb1-2.pdf`]) {
+                        const fileQuery = helper.safeQuery(
+                            `SELECT process_status FROM file
+                             WHERE kb_uid = $1 AND filename = $2 AND delete_time IS NULL`,
+                            data.kb1_rollback.kbUid,
+                            filename
+                        );
+
+                        if (fileQuery && fileQuery.length > 0 && fileQuery[0].process_status === "FILE_PROCESS_STATUS_COMPLETED") {
+                            kb1Count++;
+                        }
+                    }
+
+                    if (kb1Count === 2) {
+                        rollbackCompleted = true;
+                        console.log("KB1 rollback files processed successfully");
+                        break;
+                    }
+
+                    if (i % 10 === 0 && i > 0) {
+                        console.log(`Waiting for KB1 rollback files... ${kb1Count}/2`);
+                    }
+
+                    sleep(0.5);
+                }
+
+                check({ rollbackCompleted }, {
+                    "Phase 5: KB1 rollback files processed": () => rollbackCompleted === true,
+                });
+
+                if (!rollbackCompleted) {
+                    console.error(`✗ Phase 5: KB1 rollback files did not complete in time (${kb1Count}/2)`);
+                    return;
+                }
             }
 
             // ====================================================================

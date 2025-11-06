@@ -987,17 +987,13 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 					zap.Error(err),
 					zap.String("cacheName", cacheMetadata.CacheName))
 				// Return existing cache name even if renewal failed
-				if cacheMetadata.CacheName != "" {
-					derivedResourceURI = &cacheMetadata.CacheName
-				}
+				derivedResourceURI = &cacheMetadata.CacheName
 			} else {
 				// Successfully renewed
 				logger.Info("Cache TTL renewed successfully",
 					zap.String("cacheName", renewedCache.CacheName),
 					zap.Time("newExpireTime", renewedCache.ExpireTime))
-				if renewedCache.CacheName != "" {
-					derivedResourceURI = &renewedCache.CacheName
-				}
+				derivedResourceURI = &renewedCache.CacheName
 			}
 		} else {
 			// Cache doesn't exist - create it
@@ -1030,6 +1026,7 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 			} else {
 				// Use original file
 				bucketName = repository.BucketFromDestination(kbFile.Destination)
+				objectName = kbFile.Destination
 			}
 
 			// Create cache using service method
@@ -1055,6 +1052,8 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 					return nil, err
 				}
 				// For other errors, log and continue with empty derived_resource_uri
+				emptyString := ""
+				derivedResourceURI = &emptyString
 			} else {
 				// Successfully created cache
 				logger.Info("Cache created successfully",
@@ -1062,11 +1061,9 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 					zap.Bool("cachedContextEnabled", cacheResult.CachedContextEnabled),
 					zap.Time("expireTime", cacheResult.ExpireTime))
 
-				// Return cache name if in cached mode
-				// For uncached mode (small files), return empty string
-				if cacheResult.CacheName != "" {
-					derivedResourceURI = &cacheResult.CacheName
-				}
+				// Return cache name for both cached and uncached modes
+				// For uncached mode, CacheName will be empty string
+				derivedResourceURI = &cacheResult.CacheName
 			}
 		}
 	}
@@ -1766,6 +1763,58 @@ func determineFileType(filename string) artifactpb.File_Type {
 		return artifactpb.File_TYPE_XLS
 	} else if strings.HasSuffix(fileNameLower, ".csv") {
 		return artifactpb.File_TYPE_CSV
+	} else if strings.HasSuffix(fileNameLower, ".png") {
+		return artifactpb.File_TYPE_PNG
+	} else if strings.HasSuffix(fileNameLower, ".jpg") {
+		return artifactpb.File_TYPE_JPG
+	} else if strings.HasSuffix(fileNameLower, ".jpeg") {
+		return artifactpb.File_TYPE_JPEG
+	} else if strings.HasSuffix(fileNameLower, ".gif") {
+		return artifactpb.File_TYPE_GIF
+	} else if strings.HasSuffix(fileNameLower, ".webp") {
+		return artifactpb.File_TYPE_WEBP
+	} else if strings.HasSuffix(fileNameLower, ".tiff") {
+		return artifactpb.File_TYPE_TIFF
+	} else if strings.HasSuffix(fileNameLower, ".heic") {
+		return artifactpb.File_TYPE_HEIC
+	} else if strings.HasSuffix(fileNameLower, ".heif") {
+		return artifactpb.File_TYPE_HEIF
+	} else if strings.HasSuffix(fileNameLower, ".avif") {
+		return artifactpb.File_TYPE_AVIF
+	} else if strings.HasSuffix(fileNameLower, ".bmp") {
+		return artifactpb.File_TYPE_BMP
+	} else if strings.HasSuffix(fileNameLower, ".mp3") {
+		return artifactpb.File_TYPE_MP3
+	} else if strings.HasSuffix(fileNameLower, ".wav") {
+		return artifactpb.File_TYPE_WAV
+	} else if strings.HasSuffix(fileNameLower, ".aac") {
+		return artifactpb.File_TYPE_AAC
+	} else if strings.HasSuffix(fileNameLower, ".ogg") {
+		return artifactpb.File_TYPE_OGG
+	} else if strings.HasSuffix(fileNameLower, ".flac") {
+		return artifactpb.File_TYPE_FLAC
+	} else if strings.HasSuffix(fileNameLower, ".aiff") {
+		return artifactpb.File_TYPE_AIFF
+	} else if strings.HasSuffix(fileNameLower, ".m4a") {
+		return artifactpb.File_TYPE_M4A
+	} else if strings.HasSuffix(fileNameLower, ".wma") {
+		return artifactpb.File_TYPE_WMA
+	} else if strings.HasSuffix(fileNameLower, ".mp4") {
+		return artifactpb.File_TYPE_MP4
+	} else if strings.HasSuffix(fileNameLower, ".avi") {
+		return artifactpb.File_TYPE_AVI
+	} else if strings.HasSuffix(fileNameLower, ".mov") {
+		return artifactpb.File_TYPE_MOV
+	} else if strings.HasSuffix(fileNameLower, ".flv") {
+		return artifactpb.File_TYPE_FLV
+	} else if strings.HasSuffix(fileNameLower, ".webm") {
+		return artifactpb.File_TYPE_WEBM_VIDEO
+	} else if strings.HasSuffix(fileNameLower, ".wmv") {
+		return artifactpb.File_TYPE_WMV
+	} else if strings.HasSuffix(fileNameLower, ".mkv") {
+		return artifactpb.File_TYPE_MKV
+	} else if strings.HasSuffix(fileNameLower, ".mpeg") {
+		return artifactpb.File_TYPE_MPEG
 	}
 	return artifactpb.File_TYPE_UNSPECIFIED
 }
