@@ -55,13 +55,16 @@ func TestDeleteOriginalFileActivity_Success(t *testing.T) {
 	bucket := "test-bucket"
 	destination := "kb/file/test.pdf"
 
+	mockStorage := mock.NewStorageMock(mc)
+	mockStorage.DeleteFileMock.Return(nil)
+
 	mockRepository := mock.NewRepositoryMock(mc)
 	mockRepository.GetKnowledgeBaseFilesByFileUIDsMock.
 		When(minimock.AnyContext, []uuid.UUID{fileUID}).
 		Then([]repository.KnowledgeBaseFileModel{
 			{UID: fileUID, Destination: destination},
 		}, nil)
-	mockRepository.DeleteFileMock.Return(nil)
+	mockRepository.GetMinIOStorageMock.Return(mockStorage)
 	mockRepository.DeleteObjectByDestinationMock.Return(nil)
 
 	w := &Worker{repository: mockRepository, log: zap.NewNop()}
@@ -136,6 +139,9 @@ func TestDeleteConvertedFileActivity_Success(t *testing.T) {
 	kbUID := uuid.Must(uuid.NewV4())
 	convertedFileUID := uuid.Must(uuid.NewV4())
 
+	mockStorage := mock.NewStorageMock(mc)
+	mockStorage.ListConvertedFilesByFileUIDMock.Return([]string{}, nil)
+
 	mockRepository := mock.NewRepositoryMock(mc)
 	mockRepository.GetAllConvertedFilesByFileUIDMock.
 		When(minimock.AnyContext, fileUID).
@@ -149,7 +155,7 @@ func TestDeleteConvertedFileActivity_Success(t *testing.T) {
 	mockRepository.HardDeleteConvertedFileByFileUIDMock.
 		When(minimock.AnyContext, fileUID).
 		Then(nil)
-	mockRepository.ListConvertedFilesByFileUIDMock.Return([]string{}, nil)
+	mockRepository.GetMinIOStorageMock.Return(mockStorage)
 
 	w := &Worker{repository: mockRepository, log: zap.NewNop()}
 
@@ -194,6 +200,12 @@ func TestDeleteTextChunksFromMinIOActivity_Success(t *testing.T) {
 	kbUID := uuid.Must(uuid.NewV4())
 	textChunkUID := uuid.Must(uuid.NewV4())
 
+	mockStorage := mock.NewStorageMock(mc)
+	mockStorage.ListTextChunksByFileUIDMock.
+		When(minimock.AnyContext, kbUID, fileUID).
+		Then([]string{"chunk-path-1"}, nil)
+	mockStorage.DeleteFileMock.Return(nil)
+
 	mockRepository := mock.NewRepositoryMock(mc)
 	mockRepository.ListTextChunksByKBFileUIDMock.
 		When(minimock.AnyContext, fileUID).
@@ -201,11 +213,7 @@ func TestDeleteTextChunksFromMinIOActivity_Success(t *testing.T) {
 			{UID: textChunkUID, KBUID: kbUID},
 		}, nil)
 
-	mockRepository.ListTextChunksByFileUIDMock.
-		When(minimock.AnyContext, kbUID, fileUID).
-		Then([]string{"chunk-path-1"}, nil)
-
-	mockRepository.DeleteFileMock.Return(nil)
+	mockRepository.GetMinIOStorageMock.Return(mockStorage)
 
 	mockRepository.HardDeleteTextChunksByKBFileUIDMock.
 		When(minimock.AnyContext, fileUID).

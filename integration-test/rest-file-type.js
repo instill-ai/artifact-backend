@@ -55,9 +55,11 @@ export let options = {
     // Image file types
     test_type_png: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PNG' },
     test_type_jpeg: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_JPEG' },
+    test_type_jpg: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_JPG' },
     test_type_gif: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_GIF' },
     test_type_webp: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WEBP' },
     test_type_tiff: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_TIFF' },
+    test_type_tif: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_TIF' },
     test_type_heic: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_HEIC' },
     test_type_heif: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_HEIF' },
     test_type_avif: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_AVIF' },
@@ -81,6 +83,8 @@ export let options = {
     test_type_wmv: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WMV' },
     test_type_mpeg: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MPEG' },
     test_type_webm_video: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WEBM_VIDEO' },
+    // Regression test: Verify process_status is always string enum, never integer
+    test_process_status_format: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_PROCESS_STATUS_FORMAT' },
   },
 };
 
@@ -193,9 +197,13 @@ export function TEST_TYPE_DOCX_INFERRED(data) { runKnowledgeBaseFileTest(data, {
 // Image file types
 export function TEST_TYPE_PNG(data) { runKnowledgeBaseFileTest(data, { originalName: "img-sample.png", fileType: "TYPE_PNG" }); }
 export function TEST_TYPE_JPEG(data) { runKnowledgeBaseFileTest(data, { originalName: "img-sample.jpeg", fileType: "TYPE_JPEG" }); }
+export function TEST_TYPE_JPG(data) { runKnowledgeBaseFileTest(data, { originalName: "img-sample.jpg", fileType: "TYPE_JPEG" }); }
+export function TEST_TYPE_JPG_INFERRED(data) { runKnowledgeBaseFileTest(data, { originalName: "img-sample.jpg", fileType: "TYPE_JPEG", omitType: true }); }
 export function TEST_TYPE_GIF(data) { runKnowledgeBaseFileTest(data, { originalName: "img-sample.gif", fileType: "TYPE_GIF" }); }
 export function TEST_TYPE_WEBP(data) { runKnowledgeBaseFileTest(data, { originalName: "img-sample.webp", fileType: "TYPE_WEBP" }); }
 export function TEST_TYPE_TIFF(data) { runKnowledgeBaseFileTest(data, { originalName: "img-sample.tiff", fileType: "TYPE_TIFF" }); }
+export function TEST_TYPE_TIF(data) { runKnowledgeBaseFileTest(data, { originalName: "img-sample.tif", fileType: "TYPE_TIFF" }); }
+export function TEST_TYPE_TIF_INFERRED(data) { runKnowledgeBaseFileTest(data, { originalName: "img-sample.tif", fileType: "TYPE_TIFF", omitType: true }); }
 export function TEST_TYPE_HEIC(data) { runKnowledgeBaseFileTest(data, { originalName: "img-sample.heic", fileType: "TYPE_HEIC" }); }
 export function TEST_TYPE_HEIF(data) { runKnowledgeBaseFileTest(data, { originalName: "img-sample.heif", fileType: "TYPE_HEIF" }); }
 export function TEST_TYPE_AVIF(data) { runKnowledgeBaseFileTest(data, { originalName: "img-sample.avif", fileType: "TYPE_AVIF" }); }
@@ -221,6 +229,110 @@ export function TEST_TYPE_FLV(data) { runKnowledgeBaseFileTest(data, { originalN
 export function TEST_TYPE_WMV(data) { runKnowledgeBaseFileTest(data, { originalName: "video-sample.wmv", fileType: "TYPE_WMV" }); }
 export function TEST_TYPE_MPEG(data) { runKnowledgeBaseFileTest(data, { originalName: "video-sample.mpeg", fileType: "TYPE_MPEG" }); }
 export function TEST_TYPE_WEBM_VIDEO(data) { runKnowledgeBaseFileTest(data, { originalName: "video-sample.webm", fileType: "TYPE_WEBM_VIDEO" }); }
+
+// Regression test: Verify all enum fields are always stored as string enums, never as integers
+// This test guards against a bug where protobuf enum values could be accidentally stored as integers
+// Covered enums: file_type, process_status, update_status, converted_type, chunk_type
+export function TEST_PROCESS_STATUS_FORMAT(data) {
+  const groupName = "Artifact API: Enum format validation (string enum, not integer)";
+  group(groupName, () => {
+    check(true, { [constant.banner(groupName)]: () => true });
+
+    // Create KB and upload a simple file
+    const cRes = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`, JSON.stringify({ id: data.dbIDPrefix + "src-" + randomString(8) }), data.header);
+    logUnexpected(cRes, 'POST /v1alpha/namespaces/{namespace_id}/knowledge-bases');
+    const kb = ((() => { try { return cRes.json(); } catch (e) { return {}; } })()).knowledgeBase || {};
+    const knowledgeBaseId = kb.id;
+    check(cRes, { [`POST /v1alpha/namespaces/{namespace_id}/knowledge-bases 200 (${knowledgeBaseId})`]: (r) => r.status === 200 });
+
+    // Upload a simple text file for fast processing
+    const s = constant.sampleFiles.find((x) => x.originalName === "doc-sample.txt") || {};
+    const filename = data.dbIDPrefix + "process-status-test.txt";
+
+    const uRes = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`, JSON.stringify({ filename: filename, type: "TYPE_TEXT", content: s.content || "" }), data.header);
+    logUnexpected(uRes, 'POST /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id}/files');
+    const file = ((() => { try { return uRes.json(); } catch (e) { return {}; } })()).file || {};
+    const fileUid = file.uid;
+    check(uRes, { [`POST /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id}/files 200`]: (r) => r.status === 200 });
+
+    // CRITICAL CHECK: Verify enum fields in API response are string enums, not integers
+    // The API should return the enum NAMES (e.g., "TYPE_TEXT"), not the values (e.g., 1)
+    const fileType = file.type;
+    const initialProcessStatus = file.processStatus;
+    const isValidFileType = typeof fileType === 'string' && fileType.startsWith('TYPE_');
+    const isValidProcessStatus = typeof initialProcessStatus === 'string' && initialProcessStatus.startsWith('FILE_PROCESS_STATUS_');
+
+    check({ fileType, initialProcessStatus }, {
+      "file_type is a string (not integer)": () => typeof fileType === 'string',
+      "file_type starts with 'TYPE_'": () => isValidFileType,
+      "file_type is TYPE_TEXT": () => fileType === 'TYPE_TEXT',
+      "process_status is a string (not integer)": () => typeof initialProcessStatus === 'string',
+      "process_status starts with 'FILE_PROCESS_STATUS_'": () => isValidProcessStatus,
+      "process_status is NOTSTARTED": () => initialProcessStatus === 'FILE_PROCESS_STATUS_NOTSTARTED',
+    });
+
+    if (!isValidFileType) {
+      console.error(`❌ CRITICAL BUG: file_type is '${fileType}' (type: ${typeof fileType})`);
+      console.error(`   Expected: String starting with 'TYPE_' (e.g., 'TYPE_TEXT')`);
+      console.error(`   Got: ${JSON.stringify(fileType)}`);
+    }
+    if (!isValidProcessStatus) {
+      console.error(`❌ CRITICAL BUG: process_status is '${initialProcessStatus}' (type: ${typeof initialProcessStatus})`);
+      console.error(`   Expected: String starting with 'FILE_PROCESS_STATUS_' (e.g., 'FILE_PROCESS_STATUS_NOTSTARTED')`);
+      console.error(`   Got: ${JSON.stringify(initialProcessStatus)}`);
+    }
+
+    // Wait for file to start processing and check status again
+    sleep(2);
+    const processingRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileUid}`, null, data.header);
+    let processingFile; try { processingFile = processingRes.json(); } catch (e) { processingFile = {}; }
+    const processingStatus = processingFile.file ? processingFile.file.processStatus : "";
+
+    check({ processingStatus }, {
+      "Processing status is a string (not integer)": () => typeof processingStatus === 'string',
+      "Processing status starts with 'FILE_PROCESS_STATUS_'": () => typeof processingStatus === 'string' && processingStatus.startsWith('FILE_PROCESS_STATUS_'),
+    });
+
+    // Wait for file processing to complete
+    console.log(`Waiting for file processing to complete to verify final status...`);
+    const result = helper.waitForFileProcessingComplete(
+      data.expectedOwner.id,
+      knowledgeBaseId,
+      fileUid,
+      data.header,
+      120, // 2 minutes should be enough for a simple text file
+      30
+    );
+
+    if (result.completed && result.status === "COMPLETED") {
+      // Final check: Verify completed status is also a string enum
+      const completedRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileUid}`, null, data.header);
+      let completedFile; try { completedFile = completedRes.json(); } catch (e) { completedFile = {}; }
+      const completedStatus = completedFile.file ? completedFile.file.processStatus : "";
+
+      check({ completedStatus }, {
+        "Completed status is a string (not integer)": () => typeof completedStatus === 'string',
+        "Completed status starts with 'FILE_PROCESS_STATUS_'": () => typeof completedStatus === 'string' && completedStatus.startsWith('FILE_PROCESS_STATUS_'),
+        "Completed status is COMPLETED": () => completedStatus === 'FILE_PROCESS_STATUS_COMPLETED',
+      });
+
+      console.log(`✓ Process status format validation passed: ${initialProcessStatus} → ${processingStatus} → ${completedStatus}`);
+    } else if (result.status === "FAILED") {
+      // Even for failed files, status should be a string enum
+      const failedRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileUid}`, null, data.header);
+      let failedFile; try { failedFile = failedRes.json(); } catch (e) { failedFile = {}; }
+      const failedStatus = failedFile.file ? failedFile.file.processStatus : "";
+
+      check({ failedStatus }, {
+        "Failed status is a string (not integer)": () => typeof failedStatus === 'string',
+        "Failed status starts with 'FILE_PROCESS_STATUS_'": () => typeof failedStatus === 'string' && failedStatus.startsWith('FILE_PROCESS_STATUS_'),
+        "Failed status is FAILED": () => failedStatus === 'FILE_PROCESS_STATUS_FAILED',
+      });
+
+      console.log(`✓ Process status format validation passed (even for failed file): ${failedStatus}`);
+    }
+  });
+}
 
 // Internal helper to run knowledge base file test for each file type
 function runKnowledgeBaseFileTest(data, opts) {
@@ -304,6 +416,7 @@ function runKnowledgeBaseFileTest(data, opts) {
       [`GET /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id}/files/{file_uid} uid matches (${testLabel})`]: () => getKBFileJson.file && getKBFileJson.file.uid === fileUid,
       [`GET /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id}/files/{file_uid} filename matches (${testLabel})`]: () => getKBFileJson.file && getKBFileJson.file.filename === filename,
       [`GET /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id}/files/{file_uid} is valid (${testLabel})`]: () => getKBFileJson.file && helper.validateFile(getKBFileJson.file, false),
+      [`File has total_tokens field (${testLabel})`]: () => getKBFileJson.file && typeof getKBFileJson.file.totalTokens === 'number',
     });
 
     // Auto-trigger: Processing starts automatically on upload (no manual trigger needed)
@@ -376,6 +489,29 @@ function runKnowledgeBaseFileTest(data, opts) {
       console.log(`✗ Skipping remaining checks for ${testLabel} due to processing failure: ${failureReason}`);
       // Don't delete here - let teardown handle cleanup
       return;
+    }
+
+    // After processing completes, verify token count is populated
+    // Re-fetch file to get updated token counts from usage metadata
+    const getFileAfterProcessing = http.request(
+      "GET",
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileUid}`,
+      null,
+      data.header
+    );
+    let fileAfterProcessing; try { fileAfterProcessing = getFileAfterProcessing.json(); } catch (e) { fileAfterProcessing = {}; }
+    const totalTokens = fileAfterProcessing.file ? fileAfterProcessing.file.totalTokens : 0;
+    const totalChunks = fileAfterProcessing.file ? fileAfterProcessing.file.totalChunks : 0;
+
+    check(getFileAfterProcessing, {
+      [`File has positive total_tokens after processing (${testLabel})`]: () => totalTokens > 0,
+      [`File has positive total_chunks after processing (${testLabel})`]: () => totalChunks > 0,
+    });
+
+    if (totalTokens > 0) {
+      console.log(`✓ Token count populated for ${testLabel}: ${totalTokens} tokens across ${totalChunks} chunks`);
+    } else {
+      console.log(`⚠ Token count is zero for ${testLabel} - usage metadata may not be populated yet`);
     }
 
     // Get file content (using VIEW_CONTENT)

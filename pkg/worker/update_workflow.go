@@ -110,6 +110,13 @@ func (w *Worker) UpdateKnowledgeBaseWorkflow(ctx workflow.Context, param UpdateK
 	// ========== Phase 1: Prepare ==========
 	logger.Info("Phase 1: Prepare - Validating and creating staging KB")
 
+	// Check for cancellation BEFORE validating
+	// This handles the race condition where abort is called before workflow starts executing
+	if err := ctx.Err(); err != nil {
+		logger.Warn("Workflow canceled before validation", "error", err)
+		return err
+	}
+
 	// Validate eligibility FIRST before marking as updating
 	// This also captures the current system UID for audit trail
 	var validateResult ValidateUpdateEligibilityActivityResult

@@ -106,6 +106,9 @@ export const imageSamplePng = encoding.b64encode(
 export const imageSampleJpeg = encoding.b64encode(
   open(`${__ENV.TEST_FOLDER_ABS_PATH}/integration-test/data/img-sample.jpeg`, "b")
 );
+export const imageSampleJpg = encoding.b64encode(
+  open(`${__ENV.TEST_FOLDER_ABS_PATH}/integration-test/data/img-sample.jpg`, "b")
+);
 export const imageSampleGif = encoding.b64encode(
   open(`${__ENV.TEST_FOLDER_ABS_PATH}/integration-test/data/img-sample.gif`, "b")
 );
@@ -114,6 +117,9 @@ export const imageSampleWebp = encoding.b64encode(
 );
 export const imageSampleTiff = encoding.b64encode(
   open(`${__ENV.TEST_FOLDER_ABS_PATH}/integration-test/data/img-sample.tiff`, "b")
+);
+export const imageSampleTif = encoding.b64encode(
+  open(`${__ENV.TEST_FOLDER_ABS_PATH}/integration-test/data/img-sample.tif`, "b")
 );
 export const imageSampleHeic = encoding.b64encode(
   open(`${__ENV.TEST_FOLDER_ABS_PATH}/integration-test/data/img-sample.heic`, "b")
@@ -198,9 +204,11 @@ export const sampleFiles = [
   { originalName: "doc-sample.docx", type: "TYPE_DOCX", content: docSampleDocx },
   { originalName: "img-sample.png", type: "TYPE_PNG", content: imageSamplePng },
   { originalName: "img-sample.jpeg", type: "TYPE_JPEG", content: imageSampleJpeg },
+  { originalName: "img-sample.jpg", type: "TYPE_JPEG", content: imageSampleJpg },
   { originalName: "img-sample.gif", type: "TYPE_GIF", content: imageSampleGif },
   { originalName: "img-sample.webp", type: "TYPE_WEBP", content: imageSampleWebp },
   { originalName: "img-sample.tiff", type: "TYPE_TIFF", content: imageSampleTiff },
+  { originalName: "img-sample.tif", type: "TYPE_TIFF", content: imageSampleTif },
   { originalName: "img-sample.heic", type: "TYPE_HEIC", content: imageSampleHeic },
   { originalName: "img-sample.heif", type: "TYPE_HEIF", content: imageSampleHeif },
   { originalName: "img-sample.avif", type: "TYPE_AVIF", content: imageSampleAvif },

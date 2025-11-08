@@ -5,13 +5,15 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/instill-ai/artifact-backend/pkg/types"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"gorm.io/gorm"
+
+	"github.com/instill-ai/artifact-backend/pkg/types"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
+// Object interface defines database operations for objects
 type Object interface {
 	CreateObject(ctx context.Context, obj ObjectModel) (*ObjectModel, error)
 	ListAllObjects(ctx context.Context, namespaceUID types.NamespaceUIDType, creatorUID types.CreatorUIDType) ([]ObjectModel, error)
@@ -22,6 +24,7 @@ type Object interface {
 	UpdateObjectByUpdateMap(ctx context.Context, objUID types.ObjectUIDType, updateMap map[string]any) (*ObjectModel, error)
 }
 
+// ObjectModel represents an object in the database
 type ObjectModel struct {
 	UID          types.ObjectUIDType    `gorm:"column:uid;type:uuid;default:gen_random_uuid();primaryKey" json:"uid"`
 	Name         string                 `gorm:"column:name;size:1040" json:"name"`
@@ -44,6 +47,7 @@ func (ObjectModel) TableName() string {
 	return "object"
 }
 
+// ObjectColumns defines column names for the object table
 type ObjectColumns struct {
 	UID              string
 	Name             string
@@ -60,6 +64,7 @@ type ObjectColumns struct {
 	DeleteTime       string
 }
 
+// ObjectColumn contains all column names for the object table
 var ObjectColumn = ObjectColumns{
 	UID:              "uid",
 	Name:             "name",

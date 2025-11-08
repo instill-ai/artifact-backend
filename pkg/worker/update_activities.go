@@ -14,6 +14,7 @@ import (
 
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
+	"github.com/instill-ai/artifact-backend/pkg/repository/object"
 	"github.com/instill-ai/artifact-backend/pkg/types"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
@@ -217,6 +218,18 @@ func (w *Worker) ValidateUpdateEligibilityActivity(ctx context.Context, param *V
 
 	kb, err := w.repository.GetKnowledgeBaseByUID(ctx, param.KBUID)
 	if err != nil {
+		// If KB is not found (deleted), return non-retryable error to fail fast
+		// This prevents wasting time retrying when the KB has been deleted
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			w.log.Warn("ValidateUpdateEligibilityActivity: KB not found (may have been deleted)",
+				zap.String("kbUID", param.KBUID.String()))
+			return nil, temporal.NewNonRetryableApplicationError(
+				fmt.Sprintf("Knowledge base not found (may have been deleted): %s", param.KBUID.String()),
+				validateUpdateEligibilityActivityError,
+				err,
+			)
+		}
+		// For other errors (DB connection issues, etc.), allow retries
 		err = errorsx.AddMessage(err, "Unable to get knowledge base for validation. Please try again.")
 		return nil, temporal.NewApplicationErrorWithCause(
 			errorsx.MessageOrErr(err),
@@ -863,8 +876,8 @@ func (w *Worker) reconcileKBFiles(ctx context.Context, productionKBUID, stagingK
 		// Creating staging records for missing blobs would cause ProcessFileWorkflow to fail.
 		// Instead, we skip these files during reconciliation to maintain system stability.
 		// The production KB will retain the orphaned record, but at least the update can proceed.
-		bucket := repository.BucketFromDestination(prodFile.Destination)
-		_, err := w.repository.GetFileMetadata(ctx, bucket, prodFile.Destination)
+		bucket := object.BucketFromDestination(prodFile.Destination)
+		_, err := w.repository.GetMinIOStorage().GetFileMetadata(ctx, bucket, prodFile.Destination)
 		if err != nil {
 			skippedDueToMissingBlobs++
 			w.log.Error("reconcileKBFiles: Original blob file not found in MinIO - skipping file during reconciliation",
@@ -1714,8 +1727,8 @@ func (w *Worker) CloneFileToStagingKBActivity(ctx context.Context, param *CloneF
 	// of potential data loss requiring investigation.
 	//
 	// Use GetFileMetadata (StatObject) instead of GetFile to avoid reading entire file.
-	bucket := repository.BucketFromDestination(originalFile.Destination)
-	_, err = w.repository.GetFileMetadata(ctx, bucket, originalFile.Destination)
+	bucket := object.BucketFromDestination(originalFile.Destination)
+	_, err = w.repository.GetMinIOStorage().GetFileMetadata(ctx, bucket, originalFile.Destination)
 	if err != nil {
 		w.log.Error("CloneFileToStagingKBActivity: Original blob file not found in MinIO - skipping file",
 			zap.String("fileUID", param.OriginalFileUID.String()),

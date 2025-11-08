@@ -1,13 +1,14 @@
 #!/bin/bash
 # Milvus Vector Counter for Integration Tests
-# Usage: ./count-milvus-vectors.sh <collection_name> <file_uid>
+# Usage: ./count-milvus-vectors.sh <collection_name> <file_uid> [milvus_host] [milvus_port]
 
 COLLECTION="$1"
 FILE_UID="$2"
 
 # Support both Docker service name (default) and localhost for CI
-MILVUS_HOST="${MILVUS_HOST:-milvus}"
-MILVUS_PORT="${MILVUS_PORT:-19530}"
+# Arguments take precedence over environment variables
+MILVUS_HOST="${3:-${MILVUS_HOST:-milvus}}"
+MILVUS_PORT="${4:-${MILVUS_PORT:-19530}}"
 
 # Use pymilvus directly - simpler and more reliable than milvus_cli for scripting
 COUNT=$(python3 - "${COLLECTION}" "${FILE_UID}" "${MILVUS_HOST}" "${MILVUS_PORT}" <<'PYTHON_EOF'

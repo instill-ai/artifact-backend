@@ -269,7 +269,10 @@ func (r *repository) GetTotalTokensByListKBUIDs(ctx context.Context, kbUIDs []ty
 	return totalTokensMap, nil
 }
 
-// GetFilesTotalTokens returns the total tokens of the text chunks by list of source table and source UID
+// GetFilesTotalTokens returns the total tokens from the usage_metadata field in the file table
+// According to Gemini API docs: https://ai.google.dev/gemini-api/docs/tokens?lang=python
+// total_tokens = content.total_token_count + summary.total_token_count
+// This replaces the old implementation that summed chunk tokens (which were estimated, not actual)
 func (r *repository) GetFilesTotalTokens(ctx context.Context, sources map[types.FileUIDType]struct {
 	SourceTable types.SourceTableType
 	SourceUID   types.SourceUIDType
@@ -279,43 +282,61 @@ func (r *repository) GetFilesTotalTokens(ctx context.Context, sources map[types.
 		return result, nil
 	}
 
-	// Prepare the conditions for the query
-	var conditions []string
-	var values []any
-
-	for _, source := range sources {
-		conditions = append(conditions, "(source_table = ? AND source_uid = ?)")
-		values = append(values, source.SourceTable, source.SourceUID)
+	// Extract file UIDs from sources
+	fileUIDs := make([]types.FileUIDType, 0, len(sources))
+	for fileUID := range sources {
+		fileUIDs = append(fileUIDs, fileUID)
 	}
 
-	// Combine all conditions
-	whereClause := strings.Join(conditions, " OR ")
-
-	// Query to get total tokens grouped by source_table and source_uid
-	var tokenSums []struct {
-		SourceTable types.SourceTableType `gorm:"column:source_table"`
-		SourceUID   types.SourceUIDType   `gorm:"column:source_uid"`
-		TotalTokens int                   `gorm:"column:total_tokens"`
-	}
-
-	err := r.db.WithContext(ctx).Model(&TextChunkModel{}).
-		Select("source_table, source_uid, COALESCE(SUM(tokens), 0) as total_tokens").
-		Where(whereClause, values...).
-		Group("source_table, source_uid").
-		Find(&tokenSums).Error
+	// Query files to get usage_metadata
+	var files []KnowledgeBaseFileModel
+	err := r.db.WithContext(ctx).
+		Select("uid, usage_metadata").
+		Where("uid IN ?", fileUIDs).
+		Find(&files).Error
 
 	if err != nil {
 		return nil, err
 	}
 
-	// Populate the result map
-	for _, sum := range tokenSums {
-		for fileUID, source := range sources {
-			if source.SourceTable == sum.SourceTable && source.SourceUID == sum.SourceUID {
-				result[fileUID] = sum.TotalTokens
-				break
-			}
+	// Parse usage_metadata and calculate total tokens for each file
+	for _, file := range files {
+		// Unmarshal usage_metadata
+		if err := file.UsageMetadataUnmarshalFunc(); err != nil {
+			// If unmarshal fails, skip this file (no usage metadata available yet)
+			continue
 		}
+
+		if file.UsageMetadataUnmarshal == nil {
+			// No usage metadata, skip
+			continue
+		}
+
+		// Extract total_token_count from content and summary
+		// According to Gemini API docs: https://ai.google.dev/gemini-api/docs/tokens?lang=python
+		// The usage metadata is stored directly (not nested) in the JSONB field
+		contentTokens := 0
+		summaryTokens := 0
+
+		// Get content total tokens (stored as content.totalTokenCount)
+		if totalTokenCount, ok := file.UsageMetadataUnmarshal.Content["totalTokenCount"].(float64); ok {
+			contentTokens = int(totalTokenCount)
+		} else if totalTokenCount, ok := file.UsageMetadataUnmarshal.Content["totalTokenCount"].(int); ok {
+			contentTokens = totalTokenCount
+		}
+
+		// Get summary total tokens (stored as summary.totalTokenCount)
+		if totalTokenCount, ok := file.UsageMetadataUnmarshal.Summary["totalTokenCount"].(float64); ok {
+			summaryTokens = int(totalTokenCount)
+		} else if totalTokenCount, ok := file.UsageMetadataUnmarshal.Summary["totalTokenCount"].(int); ok {
+			summaryTokens = totalTokenCount
+		}
+
+		// Calculate total tokens (content + summary)
+		totalTokens := contentTokens + summaryTokens
+
+		// Store in result map
+		result[file.UID] = totalTokens
 	}
 
 	return result, nil

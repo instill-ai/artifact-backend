@@ -9,6 +9,7 @@ import (
 
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/ai"
+	"github.com/instill-ai/artifact-backend/pkg/ai/gemini"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/types"
 
@@ -88,7 +89,7 @@ func (s *service) GetOrCreateFileCache(
 					zap.String("fileUID", fileUID.String()))
 			} else {
 				fileTokenCount := totalTokens[fileUID]
-				if fileTokenCount < ai.MinCacheTokens {
+				if fileTokenCount < gemini.MinCacheTokens {
 					// Get the content converted file URL instead of caching
 					return s.getContentMarkdownURL(ctx, kbUID, fileUID, filename)
 				}
@@ -97,7 +98,7 @@ func (s *service) GetOrCreateFileCache(
 	}
 
 	// Fetch file content from MinIO
-	content, err := s.repository.GetFile(ctx, bucketName, objectName)
+	content, err := s.repository.GetMinIOStorage().GetFile(ctx, bucketName, objectName)
 	if err != nil {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("failed to fetch file content: %w", err),
@@ -109,7 +110,7 @@ func (s *service) GetOrCreateFileCache(
 	logger.Info("Creating new Gemini cache for file",
 		zap.String("fileUID", fileUID.String()),
 		zap.String("fileType", fileType.String()),
-		zap.Duration("ttl", ai.ViewCacheTTL))
+		zap.Duration("ttl", gemini.DefaultCacheTTL))
 
 	cacheResult, err := s.aiClient.CreateCache(ctx, []ai.FileContent{
 		{
@@ -117,7 +118,7 @@ func (s *service) GetOrCreateFileCache(
 			FileType: fileType,
 			Filename: filename,
 		},
-	}, ai.ViewCacheTTL)
+	}, gemini.DefaultCacheTTL)
 
 	if err != nil {
 		// Cache creation failed, use fallback mode (store content in Redis)
@@ -127,7 +128,7 @@ func (s *service) GetOrCreateFileCache(
 
 		// Store in Redis as uncached mode
 		now := time.Now()
-		expireTime := now.Add(ai.ViewCacheTTL)
+		expireTime := now.Add(gemini.DefaultCacheTTL)
 		metadata := &repository.CacheMetadata{
 			CacheName:            "", // Empty for uncached mode
 			Model:                "",
@@ -138,7 +139,7 @@ func (s *service) GetOrCreateFileCache(
 			CachedContextEnabled: false,
 		}
 
-		if err := s.repository.SetCacheMetadata(ctx, kbUID, fileUIDs, metadata, ai.ViewCacheTTL); err != nil {
+		if err := s.repository.SetCacheMetadata(ctx, kbUID, fileUIDs, metadata, gemini.DefaultCacheTTL); err != nil {
 			logger.Warn("Failed to store uncached metadata in Redis",
 				zap.Error(err),
 				zap.String("fileUID", fileUID.String()))
@@ -170,7 +171,7 @@ func (s *service) GetOrCreateFileCache(
 		CachedContextEnabled: true,
 	}
 
-	if err := s.repository.SetCacheMetadata(ctx, kbUID, fileUIDs, metadata, ai.ViewCacheTTL); err != nil {
+	if err := s.repository.SetCacheMetadata(ctx, kbUID, fileUIDs, metadata, gemini.DefaultCacheTTL); err != nil {
 		logger.Warn("Failed to store cache metadata in Redis",
 			zap.Error(err),
 			zap.String("cacheName", cacheResult.CacheName))
@@ -200,8 +201,8 @@ func (s *service) RenewFileCache(
 
 	// If no cache name, this is uncached mode - just renew Redis TTL
 	if cacheName == "" {
-		newExpireTime := time.Now().Add(ai.ViewCacheTTL)
-		if err := s.repository.RenewCacheMetadataTTL(ctx, kbUID, fileUIDs, ai.ViewCacheTTL, newExpireTime); err != nil {
+		newExpireTime := time.Now().Add(gemini.DefaultCacheTTL)
+		if err := s.repository.RenewCacheMetadataTTL(ctx, kbUID, fileUIDs, gemini.DefaultCacheTTL, newExpireTime); err != nil {
 			logger.Warn("Failed to renew uncached metadata TTL in Redis",
 				zap.Error(err),
 				zap.String("fileUID", fileUID.String()))
@@ -228,9 +229,9 @@ func (s *service) RenewFileCache(
 	// Renew Gemini cache TTL
 	logger.Info("Renewing Gemini cache TTL",
 		zap.String("cacheName", cacheName),
-		zap.Duration("ttl", ai.ViewCacheTTL))
+		zap.Duration("ttl", gemini.DefaultCacheTTL))
 
-	ttl := ai.ViewCacheTTL
+	ttl := gemini.DefaultCacheTTL
 	updatedCache, err := s.aiClient.UpdateCache(ctx, cacheName, &ai.CacheUpdateOptions{
 		TTL: &ttl,
 	})
@@ -242,12 +243,12 @@ func (s *service) RenewFileCache(
 	}
 
 	// Renew Redis metadata TTL
-	newExpireTime := time.Now().Add(ai.ViewCacheTTL)
+	newExpireTime := time.Now().Add(gemini.DefaultCacheTTL)
 	if updatedCache != nil {
 		newExpireTime = updatedCache.ExpireTime
 	}
 
-	if err := s.repository.RenewCacheMetadataTTL(ctx, kbUID, fileUIDs, ai.ViewCacheTTL, newExpireTime); err != nil {
+	if err := s.repository.RenewCacheMetadataTTL(ctx, kbUID, fileUIDs, gemini.DefaultCacheTTL, newExpireTime); err != nil {
 		logger.Warn("Failed to renew cache metadata TTL in Redis",
 			zap.Error(err),
 			zap.String("cacheName", cacheName))
@@ -302,20 +303,20 @@ func (s *service) getContentMarkdownURL(ctx context.Context, kbUID types.KBUIDTy
 			FileUIDs:             []types.FileUIDType{fileUID},
 			FileCount:            1,
 			CreateTime:           time.Now(),
-			ExpireTime:           time.Now().Add(ai.ViewCacheTTL),
+			ExpireTime:           time.Now().Add(gemini.DefaultCacheTTL),
 			CachedContextEnabled: false,
 		}, nil
 	}
 
 	// Generate presigned URL for the content markdown file
 	contentFilename := fmt.Sprintf("%s-content.md", filename)
-	minioURL, err := s.repository.GetPresignedURLForDownload(
+	minioURL, err := s.repository.GetMinIOStorage().GetPresignedURLForDownload(
 		ctx,
 		config.Config.Minio.BucketName,
 		convertedFile.Destination,
 		contentFilename,
 		convertedFile.ContentType,
-		ai.ViewCacheTTL, // Same TTL as cache operations
+		gemini.DefaultCacheTTL, // Same TTL as cache operations
 	)
 	if err != nil {
 		logger.Warn("Failed to generate presigned URL for content markdown",
@@ -328,7 +329,7 @@ func (s *service) getContentMarkdownURL(ctx context.Context, kbUID types.KBUIDTy
 			FileUIDs:             []types.FileUIDType{fileUID},
 			FileCount:            1,
 			CreateTime:           time.Now(),
-			ExpireTime:           time.Now().Add(ai.ViewCacheTTL),
+			ExpireTime:           time.Now().Add(gemini.DefaultCacheTTL),
 			CachedContextEnabled: false,
 		}, nil
 	}
@@ -346,7 +347,7 @@ func (s *service) getContentMarkdownURL(ctx context.Context, kbUID types.KBUIDTy
 			FileUIDs:             []types.FileUIDType{fileUID},
 			FileCount:            1,
 			CreateTime:           time.Now(),
-			ExpireTime:           time.Now().Add(ai.ViewCacheTTL),
+			ExpireTime:           time.Now().Add(gemini.DefaultCacheTTL),
 			CachedContextEnabled: false,
 		}, nil
 	}
@@ -362,7 +363,7 @@ func (s *service) getContentMarkdownURL(ctx context.Context, kbUID types.KBUIDTy
 		FileUIDs:             []types.FileUIDType{fileUID},
 		FileCount:            1,
 		CreateTime:           time.Now(),
-		ExpireTime:           time.Now().Add(ai.ViewCacheTTL),
+		ExpireTime:           time.Now().Add(gemini.DefaultCacheTTL),
 		CachedContextEnabled: false, // Not cached, but we have content URL
 	}, nil
 }

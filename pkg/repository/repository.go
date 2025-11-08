@@ -4,8 +4,11 @@ import (
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	"github.com/minio/minio-go/v7"
+
+	"github.com/instill-ai/artifact-backend/pkg/repository/object"
+
+	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
 // Type aliases to help minimock detect imports from embedded interfaces
@@ -28,32 +31,48 @@ type Repository interface {
 	Embedding
 	// Object manages object metadata and CRUD operations
 	Object
-	// ObjectURL manages object URL generation and access control
-	ObjectURL
 	// VectorDatabase provides vector database operations for similarity search (e.g., Milvus, Qdrant)
 	VectorDatabase
-	// ObjectStorage handles object storage operations for file persistence (e.g., MinIO, S3)
-	ObjectStorage
 	// ChatCache manages file cache metadata in Redis for instant GetFile?view=VIEW_CACHE responses
 	Cache
 	// System manages system-wide Knowledge Base configuration
 	System
+	// GetMinIOStorage returns the MinIO storage instance (primary/default storage for all uploads)
+	GetMinIOStorage() object.Storage
+	// GetGCSStorage returns the GCS storage instance for on-demand use (returns nil if not configured)
+	GetGCSStorage() object.Storage
 }
 
 // repository implements Artifact storage functions in PostgreSQL, vector database, object storage, and Redis.
 type repository struct {
 	db *gorm.DB
 	VectorDatabase
-	ObjectStorage
+	minioStorage object.Storage // Primary storage (always MinIO for uploads)
+	gcsStorage   object.Storage // On-demand GCS storage (optional)
 	Cache
 }
 
 // NewRepository returns an initialized repository.
-func NewRepository(db *gorm.DB, vectorDatabase VectorDatabase, objectStorage ObjectStorage, redisClient *redis.Client) Repository {
+// minioStorage is always MinIO for uploads and persistence.
+// gcsStorage is optional and used only for on-demand GetFile requests with storage_provider=STORAGE_PROVIDER_GCS.
+func NewRepository(db *gorm.DB, vectorDatabase VectorDatabase, minioStorage object.Storage, redisClient *redis.Client, gcsStorage object.Storage) Repository {
 	return &repository{
 		db:             db,
 		VectorDatabase: vectorDatabase,
-		ObjectStorage:  objectStorage,
-		Cache:          NewCacheRepository(redisClient),
+		minioStorage:   minioStorage,
+		gcsStorage:     gcsStorage,
+		Cache:          NewCache(redisClient),
 	}
+}
+
+// GetMinIOStorage returns the MinIO storage instance for primary storage operations.
+// This is always available and used for all file uploads.
+func (r *repository) GetMinIOStorage() object.Storage {
+	return r.minioStorage
+}
+
+// GetGCSStorage returns the GCS storage instance for on-demand use.
+// Returns nil if GCS is not configured.
+func (r *repository) GetGCSStorage() object.Storage {
+	return r.gcsStorage
 }

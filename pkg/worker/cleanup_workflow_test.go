@@ -98,18 +98,22 @@ func TestCleanupFileWorkflow_Success(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 
-	mockRepository := mock.NewRepositoryMock(mc)
-
 	fileUID := uuid.Must(uuid.NewV4())
 	kbUID := uuid.Must(uuid.NewV4())
+
+	mockStorage := mock.NewStorageMock(mc)
+	mockStorage.DeleteFileMock.Return(nil)
+	mockStorage.ListConvertedFilesByFileUIDMock.Return([]string{}, nil)
+	mockStorage.ListTextChunksByFileUIDMock.When(minimock.AnyContext, kbUID, fileUID).Then([]string{}, nil)
+
+	mockRepository := mock.NewRepositoryMock(mc)
 
 	// Mock for DeleteOriginalFileActivity
 	mockRepository.GetKnowledgeBaseFilesByFileUIDsMock.Return([]repository.KnowledgeBaseFileModel{
 		{UID: fileUID, Destination: "kb/test-file.pdf"},
 	}, nil)
-	mockRepository.DeleteFileMock.Return(nil)
+	mockRepository.GetMinIOStorageMock.Return(mockStorage)
 	mockRepository.DeleteObjectByDestinationMock.Return(nil)
-	mockRepository.ListConvertedFilesByFileUIDMock.Return([]string{}, nil)
 
 	// Mock for DeleteConvertedFileActivity
 	mockRepository.GetAllConvertedFilesByFileUIDMock.Return([]repository.ConvertedFileModel{
@@ -124,7 +128,6 @@ func TestCleanupFileWorkflow_Success(t *testing.T) {
 	mockRepository.ListTextChunksByKBFileUIDMock.Return([]repository.TextChunkModel{
 		{UID: uuid.Must(uuid.NewV4()), KBUID: kbUID},
 	}, nil)
-	mockRepository.ListTextChunksByFileUIDMock.When(minimock.AnyContext, kbUID, fileUID).Then([]string{}, nil)
 	mockRepository.HardDeleteTextChunksByKBFileUIDMock.Return(nil)
 
 	// Mock for DeleteEmbeddingsFromVectorDBActivity and DeleteEmbeddingRecordsActivity
@@ -163,10 +166,13 @@ func TestCleanupFileWorkflow_WithoutOriginalFile(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 
-	mockRepository := mock.NewRepositoryMock(mc)
-
 	fileUID := uuid.Must(uuid.NewV4())
 	kbUID := uuid.Must(uuid.NewV4())
+
+	mockStorage := mock.NewStorageMock(mc)
+	mockStorage.ListConvertedFilesByFileUIDMock.Return([]string{}, nil)
+
+	mockRepository := mock.NewRepositoryMock(mc)
 
 	// Note: No mock for DeleteOriginalFileActivity since IncludeOriginalFile=false
 
@@ -177,7 +183,7 @@ func TestCleanupFileWorkflow_WithoutOriginalFile(t *testing.T) {
 			KBUID: kbUID,
 		},
 	}, nil)
-	mockRepository.ListConvertedFilesByFileUIDMock.Return([]string{}, nil)
+	mockRepository.GetMinIOStorageMock.Return(mockStorage)
 	mockRepository.HardDeleteConvertedFileByFileUIDMock.Return(nil)
 
 	// Mock for DeleteTextChunksFromMinIOActivity (empty chunks - activity returns early)
@@ -217,13 +223,16 @@ func TestCleanupKnowledgeBaseWorkflow_Success(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 
-	mockRepository := mock.NewRepositoryMock(mc)
-
 	kbUID := uuid.Must(uuid.NewV4())
 	activeCollectionUID := uuid.Must(uuid.NewV4())
 
+	mockStorage := mock.NewStorageMock(mc)
+	mockStorage.ListKnowledgeBaseFilePathsMock.Return([]string{}, nil)
+
+	mockRepository := mock.NewRepositoryMock(mc)
+
 	// Mock for DeleteKBFilesFromMinIOActivity
-	mockRepository.ListKnowledgeBaseFilePathsMock.Return([]string{}, nil)
+	mockRepository.GetMinIOStorageMock.Return(mockStorage)
 
 	// Mock for DropVectorDBCollectionActivity
 	mockRepository.GetKnowledgeBaseByUIDMock.Return(&repository.KnowledgeBaseModel{
@@ -274,13 +283,16 @@ func TestCleanupKnowledgeBaseWorkflow_VectorDBError(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 
-	mockRepository := mock.NewRepositoryMock(mc)
-
 	kbUID := uuid.Must(uuid.NewV4())
 	activeCollectionUID := uuid.Must(uuid.NewV4())
 
+	mockStorage := mock.NewStorageMock(mc)
+	mockStorage.ListKnowledgeBaseFilePathsMock.Return([]string{}, nil)
+
+	mockRepository := mock.NewRepositoryMock(mc)
+
 	// Mock for DeleteKBFilesFromMinIOActivity
-	mockRepository.ListKnowledgeBaseFilePathsMock.Return([]string{}, nil)
+	mockRepository.GetMinIOStorageMock.Return(mockStorage)
 
 	// Mock for DropVectorDBCollectionActivity (fails but is handled)
 	mockRepository.GetKnowledgeBaseByUIDMock.Return(&repository.KnowledgeBaseModel{

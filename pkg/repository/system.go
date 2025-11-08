@@ -10,6 +10,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/instill-ai/artifact-backend/pkg/ai"
+	"github.com/instill-ai/artifact-backend/pkg/ai/openai"
 	"github.com/instill-ai/artifact-backend/pkg/types"
 )
 
@@ -272,7 +273,7 @@ func (r *repository) GetConfigByID(ctx context.Context, id string) (*SystemConfi
 				RAG: RAGConfig{
 					Embedding: EmbeddingConfig{
 						ModelFamily:    ai.ModelFamilyOpenAI,
-						Dimensionality: uint32(ai.OpenAIEmbeddingDim),
+						Dimensionality: uint32(openai.DefaultEmbeddingDimension),
 					},
 				},
 			}, nil
@@ -291,7 +292,7 @@ func (r *repository) GetConfigByID(ctx context.Context, id string) (*SystemConfi
 			RAG: RAGConfig{
 				Embedding: EmbeddingConfig{
 					ModelFamily:    ai.ModelFamilyOpenAI,
-					Dimensionality: uint32(ai.OpenAIEmbeddingDim),
+					Dimensionality: uint32(openai.DefaultEmbeddingDimension),
 				},
 			},
 		}, nil
@@ -307,7 +308,7 @@ func (r *repository) GetConfigByID(ctx context.Context, id string) (*SystemConfi
 			RAG: RAGConfig{
 				Embedding: EmbeddingConfig{
 					ModelFamily:    ai.ModelFamilyOpenAI,
-					Dimensionality: uint32(ai.OpenAIEmbeddingDim),
+					Dimensionality: uint32(openai.DefaultEmbeddingDimension),
 				},
 			},
 		}, nil

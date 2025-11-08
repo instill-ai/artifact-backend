@@ -17,10 +17,10 @@ import (
 // Note: OpenAI's text-embedding-3-small only supports 1536 dimensions
 func (c *Client) EmbedTexts(ctx context.Context, texts []string, taskType string, dimensionality int32) (*ai.EmbedResult, error) {
 	// Validate dimensionality - OpenAI only supports 1536
-	if dimensionality != ai.OpenAIEmbeddingDim {
+	if dimensionality != DefaultEmbeddingDimension {
 		return nil, errorsx.AddMessage(
-			fmt.Errorf("openai text-embedding-3-small only supports %d dimensions, got %d", ai.OpenAIEmbeddingDim, dimensionality),
-			fmt.Sprintf("OpenAI embeddings only support %d dimensions. Please update your knowledge base configuration to use dimensionality %d, or switch to Gemini which supports 768, 1536, or 3072 dimensions.", ai.OpenAIEmbeddingDim, ai.OpenAIEmbeddingDim),
+			fmt.Errorf("openai text-embedding-3-small only supports %d dimensions, got %d", DefaultEmbeddingDimension, dimensionality),
+			fmt.Sprintf("OpenAI embeddings only support %d dimensions. Please update your knowledge base configuration to use dimensionality %d, or switch to Gemini which supports 768, 1536, or 3072 dimensions.", DefaultEmbeddingDimension, DefaultEmbeddingDimension),
 		)
 	}
 
@@ -28,7 +28,7 @@ func (c *Client) EmbedTexts(ctx context.Context, texts []string, taskType string
 		return &ai.EmbedResult{
 			Vectors:        [][]float32{},
 			Model:          c.embeddingModel,
-			Dimensionality: ai.OpenAIEmbeddingDim,
+			Dimensionality: DefaultEmbeddingDimension,
 		}, nil
 	}
 
@@ -135,6 +135,6 @@ func (c *Client) EmbedTexts(ctx context.Context, texts []string, taskType string
 	return &ai.EmbedResult{
 		Vectors:        vectors,
 		Model:          c.embeddingModel,
-		Dimensionality: ai.OpenAIEmbeddingDim,
+		Dimensionality: DefaultEmbeddingDimension,
 	}, nil
 }

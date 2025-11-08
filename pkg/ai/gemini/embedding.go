@@ -41,7 +41,7 @@ func (c *Client) EmbedTexts(ctx context.Context, texts []string, taskType string
 	if len(texts) == 0 {
 		return &ai.EmbedResult{
 			Vectors:        [][]float32{},
-			Model:          ai.GeminiEmbeddingModelDefault,
+			Model:          DefaultEmbeddingModel,
 			Dimensionality: dimensionality,
 		}, nil
 	}
@@ -82,7 +82,7 @@ func (c *Client) EmbedTexts(ctx context.Context, texts []string, taskType string
 				}
 
 				// Call Gemini API for embedding with task-specific optimization
-				result, apiErr := c.client.Models.EmbedContent(ctx, ai.GeminiEmbeddingModelDefault, contents, &genai.EmbedContentConfig{
+				result, apiErr := c.client.Models.EmbedContent(ctx, DefaultEmbeddingModel, contents, &genai.EmbedContentConfig{
 					TaskType:             taskType,
 					OutputDimensionality: genai.Ptr(dimensionality),
 				})
@@ -173,7 +173,7 @@ func (c *Client) EmbedTexts(ctx context.Context, texts []string, taskType string
 
 	return &ai.EmbedResult{
 		Vectors:        vectors,
-		Model:          ai.GeminiEmbeddingModelDefault,
+		Model:          DefaultEmbeddingModel,
 		Dimensionality: dimensionality,
 	}, nil
 }

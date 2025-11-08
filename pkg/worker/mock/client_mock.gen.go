@@ -40,6 +40,13 @@ type ClientMock struct {
 	beforeConvertToMarkdownWithoutCacheCounter uint64
 	ConvertToMarkdownWithoutCacheMock          mClientMockConvertToMarkdownWithoutCache
 
+	funcCountTokens          func(ctx context.Context, content []byte, fileType artifactpb.File_Type, filename string) (i1 int, a1 any, err error)
+	funcCountTokensOrigin    string
+	inspectFuncCountTokens   func(ctx context.Context, content []byte, fileType artifactpb.File_Type, filename string)
+	afterCountTokensCounter  uint64
+	beforeCountTokensCounter uint64
+	CountTokensMock          mClientMockCountTokens
+
 	funcCreateCache          func(ctx context.Context, files []mm_ai.FileContent, ttl time.Duration) (cp1 *mm_ai.CacheResult, err error)
 	funcCreateCacheOrigin    string
 	inspectFuncCreateCache   func(ctx context.Context, files []mm_ai.FileContent, ttl time.Duration)
@@ -126,6 +133,9 @@ func NewClientMock(t minimock.Tester) *ClientMock {
 
 	m.ConvertToMarkdownWithoutCacheMock = mClientMockConvertToMarkdownWithoutCache{mock: m}
 	m.ConvertToMarkdownWithoutCacheMock.callArgs = []*ClientMockConvertToMarkdownWithoutCacheParams{}
+
+	m.CountTokensMock = mClientMockCountTokens{mock: m}
+	m.CountTokensMock.callArgs = []*ClientMockCountTokensParams{}
 
 	m.CreateCacheMock = mClientMockCreateCache{mock: m}
 	m.CreateCacheMock.callArgs = []*ClientMockCreateCacheParams{}
@@ -1153,6 +1163,412 @@ func (m *ClientMock) MinimockConvertToMarkdownWithoutCacheInspect() {
 	if !m.ConvertToMarkdownWithoutCacheMock.invocationsDone() && afterConvertToMarkdownWithoutCacheCounter > 0 {
 		m.t.Errorf("Expected %d calls to ClientMock.ConvertToMarkdownWithoutCache at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.ConvertToMarkdownWithoutCacheMock.expectedInvocations), m.ConvertToMarkdownWithoutCacheMock.expectedInvocationsOrigin, afterConvertToMarkdownWithoutCacheCounter)
+	}
+}
+
+type mClientMockCountTokens struct {
+	optional           bool
+	mock               *ClientMock
+	defaultExpectation *ClientMockCountTokensExpectation
+	expectations       []*ClientMockCountTokensExpectation
+
+	callArgs []*ClientMockCountTokensParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// ClientMockCountTokensExpectation specifies expectation struct of the Client.CountTokens
+type ClientMockCountTokensExpectation struct {
+	mock               *ClientMock
+	params             *ClientMockCountTokensParams
+	paramPtrs          *ClientMockCountTokensParamPtrs
+	expectationOrigins ClientMockCountTokensExpectationOrigins
+	results            *ClientMockCountTokensResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// ClientMockCountTokensParams contains parameters of the Client.CountTokens
+type ClientMockCountTokensParams struct {
+	ctx      context.Context
+	content  []byte
+	fileType artifactpb.File_Type
+	filename string
+}
+
+// ClientMockCountTokensParamPtrs contains pointers to parameters of the Client.CountTokens
+type ClientMockCountTokensParamPtrs struct {
+	ctx      *context.Context
+	content  *[]byte
+	fileType *artifactpb.File_Type
+	filename *string
+}
+
+// ClientMockCountTokensResults contains results of the Client.CountTokens
+type ClientMockCountTokensResults struct {
+	i1  int
+	a1  any
+	err error
+}
+
+// ClientMockCountTokensOrigins contains origins of expectations of the Client.CountTokens
+type ClientMockCountTokensExpectationOrigins struct {
+	origin         string
+	originCtx      string
+	originContent  string
+	originFileType string
+	originFilename string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmCountTokens *mClientMockCountTokens) Optional() *mClientMockCountTokens {
+	mmCountTokens.optional = true
+	return mmCountTokens
+}
+
+// Expect sets up expected params for Client.CountTokens
+func (mmCountTokens *mClientMockCountTokens) Expect(ctx context.Context, content []byte, fileType artifactpb.File_Type, filename string) *mClientMockCountTokens {
+	if mmCountTokens.mock.funcCountTokens != nil {
+		mmCountTokens.mock.t.Fatalf("ClientMock.CountTokens mock is already set by Set")
+	}
+
+	if mmCountTokens.defaultExpectation == nil {
+		mmCountTokens.defaultExpectation = &ClientMockCountTokensExpectation{}
+	}
+
+	if mmCountTokens.defaultExpectation.paramPtrs != nil {
+		mmCountTokens.mock.t.Fatalf("ClientMock.CountTokens mock is already set by ExpectParams functions")
+	}
+
+	mmCountTokens.defaultExpectation.params = &ClientMockCountTokensParams{ctx, content, fileType, filename}
+	mmCountTokens.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmCountTokens.expectations {
+		if minimock.Equal(e.params, mmCountTokens.defaultExpectation.params) {
+			mmCountTokens.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmCountTokens.defaultExpectation.params)
+		}
+	}
+
+	return mmCountTokens
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Client.CountTokens
+func (mmCountTokens *mClientMockCountTokens) ExpectCtxParam1(ctx context.Context) *mClientMockCountTokens {
+	if mmCountTokens.mock.funcCountTokens != nil {
+		mmCountTokens.mock.t.Fatalf("ClientMock.CountTokens mock is already set by Set")
+	}
+
+	if mmCountTokens.defaultExpectation == nil {
+		mmCountTokens.defaultExpectation = &ClientMockCountTokensExpectation{}
+	}
+
+	if mmCountTokens.defaultExpectation.params != nil {
+		mmCountTokens.mock.t.Fatalf("ClientMock.CountTokens mock is already set by Expect")
+	}
+
+	if mmCountTokens.defaultExpectation.paramPtrs == nil {
+		mmCountTokens.defaultExpectation.paramPtrs = &ClientMockCountTokensParamPtrs{}
+	}
+	mmCountTokens.defaultExpectation.paramPtrs.ctx = &ctx
+	mmCountTokens.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmCountTokens
+}
+
+// ExpectContentParam2 sets up expected param content for Client.CountTokens
+func (mmCountTokens *mClientMockCountTokens) ExpectContentParam2(content []byte) *mClientMockCountTokens {
+	if mmCountTokens.mock.funcCountTokens != nil {
+		mmCountTokens.mock.t.Fatalf("ClientMock.CountTokens mock is already set by Set")
+	}
+
+	if mmCountTokens.defaultExpectation == nil {
+		mmCountTokens.defaultExpectation = &ClientMockCountTokensExpectation{}
+	}
+
+	if mmCountTokens.defaultExpectation.params != nil {
+		mmCountTokens.mock.t.Fatalf("ClientMock.CountTokens mock is already set by Expect")
+	}
+
+	if mmCountTokens.defaultExpectation.paramPtrs == nil {
+		mmCountTokens.defaultExpectation.paramPtrs = &ClientMockCountTokensParamPtrs{}
+	}
+	mmCountTokens.defaultExpectation.paramPtrs.content = &content
+	mmCountTokens.defaultExpectation.expectationOrigins.originContent = minimock.CallerInfo(1)
+
+	return mmCountTokens
+}
+
+// ExpectFileTypeParam3 sets up expected param fileType for Client.CountTokens
+func (mmCountTokens *mClientMockCountTokens) ExpectFileTypeParam3(fileType artifactpb.File_Type) *mClientMockCountTokens {
+	if mmCountTokens.mock.funcCountTokens != nil {
+		mmCountTokens.mock.t.Fatalf("ClientMock.CountTokens mock is already set by Set")
+	}
+
+	if mmCountTokens.defaultExpectation == nil {
+		mmCountTokens.defaultExpectation = &ClientMockCountTokensExpectation{}
+	}
+
+	if mmCountTokens.defaultExpectation.params != nil {
+		mmCountTokens.mock.t.Fatalf("ClientMock.CountTokens mock is already set by Expect")
+	}
+
+	if mmCountTokens.defaultExpectation.paramPtrs == nil {
+		mmCountTokens.defaultExpectation.paramPtrs = &ClientMockCountTokensParamPtrs{}
+	}
+	mmCountTokens.defaultExpectation.paramPtrs.fileType = &fileType
+	mmCountTokens.defaultExpectation.expectationOrigins.originFileType = minimock.CallerInfo(1)
+
+	return mmCountTokens
+}
+
+// ExpectFilenameParam4 sets up expected param filename for Client.CountTokens
+func (mmCountTokens *mClientMockCountTokens) ExpectFilenameParam4(filename string) *mClientMockCountTokens {
+	if mmCountTokens.mock.funcCountTokens != nil {
+		mmCountTokens.mock.t.Fatalf("ClientMock.CountTokens mock is already set by Set")
+	}
+
+	if mmCountTokens.defaultExpectation == nil {
+		mmCountTokens.defaultExpectation = &ClientMockCountTokensExpectation{}
+	}
+
+	if mmCountTokens.defaultExpectation.params != nil {
+		mmCountTokens.mock.t.Fatalf("ClientMock.CountTokens mock is already set by Expect")
+	}
+
+	if mmCountTokens.defaultExpectation.paramPtrs == nil {
+		mmCountTokens.defaultExpectation.paramPtrs = &ClientMockCountTokensParamPtrs{}
+	}
+	mmCountTokens.defaultExpectation.paramPtrs.filename = &filename
+	mmCountTokens.defaultExpectation.expectationOrigins.originFilename = minimock.CallerInfo(1)
+
+	return mmCountTokens
+}
+
+// Inspect accepts an inspector function that has same arguments as the Client.CountTokens
+func (mmCountTokens *mClientMockCountTokens) Inspect(f func(ctx context.Context, content []byte, fileType artifactpb.File_Type, filename string)) *mClientMockCountTokens {
+	if mmCountTokens.mock.inspectFuncCountTokens != nil {
+		mmCountTokens.mock.t.Fatalf("Inspect function is already set for ClientMock.CountTokens")
+	}
+
+	mmCountTokens.mock.inspectFuncCountTokens = f
+
+	return mmCountTokens
+}
+
+// Return sets up results that will be returned by Client.CountTokens
+func (mmCountTokens *mClientMockCountTokens) Return(i1 int, a1 any, err error) *ClientMock {
+	if mmCountTokens.mock.funcCountTokens != nil {
+		mmCountTokens.mock.t.Fatalf("ClientMock.CountTokens mock is already set by Set")
+	}
+
+	if mmCountTokens.defaultExpectation == nil {
+		mmCountTokens.defaultExpectation = &ClientMockCountTokensExpectation{mock: mmCountTokens.mock}
+	}
+	mmCountTokens.defaultExpectation.results = &ClientMockCountTokensResults{i1, a1, err}
+	mmCountTokens.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmCountTokens.mock
+}
+
+// Set uses given function f to mock the Client.CountTokens method
+func (mmCountTokens *mClientMockCountTokens) Set(f func(ctx context.Context, content []byte, fileType artifactpb.File_Type, filename string) (i1 int, a1 any, err error)) *ClientMock {
+	if mmCountTokens.defaultExpectation != nil {
+		mmCountTokens.mock.t.Fatalf("Default expectation is already set for the Client.CountTokens method")
+	}
+
+	if len(mmCountTokens.expectations) > 0 {
+		mmCountTokens.mock.t.Fatalf("Some expectations are already set for the Client.CountTokens method")
+	}
+
+	mmCountTokens.mock.funcCountTokens = f
+	mmCountTokens.mock.funcCountTokensOrigin = minimock.CallerInfo(1)
+	return mmCountTokens.mock
+}
+
+// When sets expectation for the Client.CountTokens which will trigger the result defined by the following
+// Then helper
+func (mmCountTokens *mClientMockCountTokens) When(ctx context.Context, content []byte, fileType artifactpb.File_Type, filename string) *ClientMockCountTokensExpectation {
+	if mmCountTokens.mock.funcCountTokens != nil {
+		mmCountTokens.mock.t.Fatalf("ClientMock.CountTokens mock is already set by Set")
+	}
+
+	expectation := &ClientMockCountTokensExpectation{
+		mock:               mmCountTokens.mock,
+		params:             &ClientMockCountTokensParams{ctx, content, fileType, filename},
+		expectationOrigins: ClientMockCountTokensExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmCountTokens.expectations = append(mmCountTokens.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Client.CountTokens return parameters for the expectation previously defined by the When method
+func (e *ClientMockCountTokensExpectation) Then(i1 int, a1 any, err error) *ClientMock {
+	e.results = &ClientMockCountTokensResults{i1, a1, err}
+	return e.mock
+}
+
+// Times sets number of times Client.CountTokens should be invoked
+func (mmCountTokens *mClientMockCountTokens) Times(n uint64) *mClientMockCountTokens {
+	if n == 0 {
+		mmCountTokens.mock.t.Fatalf("Times of ClientMock.CountTokens mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmCountTokens.expectedInvocations, n)
+	mmCountTokens.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmCountTokens
+}
+
+func (mmCountTokens *mClientMockCountTokens) invocationsDone() bool {
+	if len(mmCountTokens.expectations) == 0 && mmCountTokens.defaultExpectation == nil && mmCountTokens.mock.funcCountTokens == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmCountTokens.mock.afterCountTokensCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmCountTokens.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// CountTokens implements mm_ai.Client
+func (mmCountTokens *ClientMock) CountTokens(ctx context.Context, content []byte, fileType artifactpb.File_Type, filename string) (i1 int, a1 any, err error) {
+	mm_atomic.AddUint64(&mmCountTokens.beforeCountTokensCounter, 1)
+	defer mm_atomic.AddUint64(&mmCountTokens.afterCountTokensCounter, 1)
+
+	mmCountTokens.t.Helper()
+
+	if mmCountTokens.inspectFuncCountTokens != nil {
+		mmCountTokens.inspectFuncCountTokens(ctx, content, fileType, filename)
+	}
+
+	mm_params := ClientMockCountTokensParams{ctx, content, fileType, filename}
+
+	// Record call args
+	mmCountTokens.CountTokensMock.mutex.Lock()
+	mmCountTokens.CountTokensMock.callArgs = append(mmCountTokens.CountTokensMock.callArgs, &mm_params)
+	mmCountTokens.CountTokensMock.mutex.Unlock()
+
+	for _, e := range mmCountTokens.CountTokensMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.i1, e.results.a1, e.results.err
+		}
+	}
+
+	if mmCountTokens.CountTokensMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmCountTokens.CountTokensMock.defaultExpectation.Counter, 1)
+		mm_want := mmCountTokens.CountTokensMock.defaultExpectation.params
+		mm_want_ptrs := mmCountTokens.CountTokensMock.defaultExpectation.paramPtrs
+
+		mm_got := ClientMockCountTokensParams{ctx, content, fileType, filename}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmCountTokens.t.Errorf("ClientMock.CountTokens got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCountTokens.CountTokensMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.content != nil && !minimock.Equal(*mm_want_ptrs.content, mm_got.content) {
+				mmCountTokens.t.Errorf("ClientMock.CountTokens got unexpected parameter content, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCountTokens.CountTokensMock.defaultExpectation.expectationOrigins.originContent, *mm_want_ptrs.content, mm_got.content, minimock.Diff(*mm_want_ptrs.content, mm_got.content))
+			}
+
+			if mm_want_ptrs.fileType != nil && !minimock.Equal(*mm_want_ptrs.fileType, mm_got.fileType) {
+				mmCountTokens.t.Errorf("ClientMock.CountTokens got unexpected parameter fileType, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCountTokens.CountTokensMock.defaultExpectation.expectationOrigins.originFileType, *mm_want_ptrs.fileType, mm_got.fileType, minimock.Diff(*mm_want_ptrs.fileType, mm_got.fileType))
+			}
+
+			if mm_want_ptrs.filename != nil && !minimock.Equal(*mm_want_ptrs.filename, mm_got.filename) {
+				mmCountTokens.t.Errorf("ClientMock.CountTokens got unexpected parameter filename, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCountTokens.CountTokensMock.defaultExpectation.expectationOrigins.originFilename, *mm_want_ptrs.filename, mm_got.filename, minimock.Diff(*mm_want_ptrs.filename, mm_got.filename))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmCountTokens.t.Errorf("ClientMock.CountTokens got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmCountTokens.CountTokensMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmCountTokens.CountTokensMock.defaultExpectation.results
+		if mm_results == nil {
+			mmCountTokens.t.Fatal("No results are set for the ClientMock.CountTokens")
+		}
+		return (*mm_results).i1, (*mm_results).a1, (*mm_results).err
+	}
+	if mmCountTokens.funcCountTokens != nil {
+		return mmCountTokens.funcCountTokens(ctx, content, fileType, filename)
+	}
+	mmCountTokens.t.Fatalf("Unexpected call to ClientMock.CountTokens. %v %v %v %v", ctx, content, fileType, filename)
+	return
+}
+
+// CountTokensAfterCounter returns a count of finished ClientMock.CountTokens invocations
+func (mmCountTokens *ClientMock) CountTokensAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmCountTokens.afterCountTokensCounter)
+}
+
+// CountTokensBeforeCounter returns a count of ClientMock.CountTokens invocations
+func (mmCountTokens *ClientMock) CountTokensBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmCountTokens.beforeCountTokensCounter)
+}
+
+// Calls returns a list of arguments used in each call to ClientMock.CountTokens.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmCountTokens *mClientMockCountTokens) Calls() []*ClientMockCountTokensParams {
+	mmCountTokens.mutex.RLock()
+
+	argCopy := make([]*ClientMockCountTokensParams, len(mmCountTokens.callArgs))
+	copy(argCopy, mmCountTokens.callArgs)
+
+	mmCountTokens.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockCountTokensDone returns true if the count of the CountTokens invocations corresponds
+// the number of defined expectations
+func (m *ClientMock) MinimockCountTokensDone() bool {
+	if m.CountTokensMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.CountTokensMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.CountTokensMock.invocationsDone()
+}
+
+// MinimockCountTokensInspect logs each unmet expectation
+func (m *ClientMock) MinimockCountTokensInspect() {
+	for _, e := range m.CountTokensMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to ClientMock.CountTokens at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterCountTokensCounter := mm_atomic.LoadUint64(&m.afterCountTokensCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.CountTokensMock.defaultExpectation != nil && afterCountTokensCounter < 1 {
+		if m.CountTokensMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to ClientMock.CountTokens at\n%s", m.CountTokensMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to ClientMock.CountTokens at\n%s with params: %#v", m.CountTokensMock.defaultExpectation.expectationOrigins.origin, *m.CountTokensMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcCountTokens != nil && afterCountTokensCounter < 1 {
+		m.t.Errorf("Expected call to ClientMock.CountTokens at\n%s", m.funcCountTokensOrigin)
+	}
+
+	if !m.CountTokensMock.invocationsDone() && afterCountTokensCounter > 0 {
+		m.t.Errorf("Expected %d calls to ClientMock.CountTokens at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.CountTokensMock.expectedInvocations), m.CountTokensMock.expectedInvocationsOrigin, afterCountTokensCounter)
 	}
 }
 
@@ -4342,6 +4758,8 @@ func (m *ClientMock) MinimockFinish() {
 
 			m.MinimockConvertToMarkdownWithoutCacheInspect()
 
+			m.MinimockCountTokensInspect()
+
 			m.MinimockCreateCacheInspect()
 
 			m.MinimockDeleteCacheInspect()
@@ -4387,6 +4805,7 @@ func (m *ClientMock) minimockDone() bool {
 		m.MinimockCloseDone() &&
 		m.MinimockConvertToMarkdownWithCacheDone() &&
 		m.MinimockConvertToMarkdownWithoutCacheDone() &&
+		m.MinimockCountTokensDone() &&
 		m.MinimockCreateCacheDone() &&
 		m.MinimockDeleteCacheDone() &&
 		m.MinimockEmbedTextsDone() &&

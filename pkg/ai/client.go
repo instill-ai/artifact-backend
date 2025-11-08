@@ -9,55 +9,14 @@ import (
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 )
 
-// Embedding dimension constants for different AI clients
+// Model family constants
 const (
-	// Default client family for backward compatibility
+	// DefaultModelFamily is the default client family for backward compatibility
 	DefaultModelFamily = "gemini"
 
-	// Gemini model family
+	// Model family identifiers for routing requests
 	ModelFamilyGemini = "gemini"
-
-	// Gemini embedding dimensions (configurable via Matryoshka Representation Learning)
-	// - 768: Recommended by Google for optimal balance of storage efficiency and quality
-	// - 1536: Compatible with OpenAI for migration scenarios
-	// - 3072: Maximum quality (full-size embeddings)
-	GeminiEmbeddingDimDefault = 3072
-
-	// Default embedding model for Gemini
-	GeminiEmbeddingModelDefault = "gemini-embedding-001"
-
-	// TaskTypeRetrievalDocument is used for embedding document chunks that will be stored in the vector database
-	// This optimizes embeddings for being retrieved by search queries
-	TaskTypeRetrievalDocument = "RETRIEVAL_DOCUMENT"
-
-	// TaskTypeRetrievalQuery is used for embedding search queries to find similar document chunks
-	// This is used in similarity search operations to find relevant chunks
-	TaskTypeRetrievalQuery = "RETRIEVAL_QUERY"
-
-	// TaskTypeQuestionAnswering is used for embedding questions in a Q&A system
-	// This optimizes for finding documents that answer the question
-	TaskTypeQuestionAnswering = "QUESTION_ANSWERING"
-
-	// Default chat model for gemini
-	GeminiChatModelDefault = "gemini-2.5-flash"
-
-	// OpenAI model family
 	ModelFamilyOpenAI = "openai"
-
-	// OpenAI embedding dimensions (constant, not configurable)
-	OpenAIEmbeddingDim = 1536
-
-	// Default embedding model for openai
-	OpenAIEmbeddingModelDefault = "text-embedding-3-small"
-
-	// ViewCacheTTL is the TTL for GetFile?view=VIEW_CACHE responses
-	// Both Gemini cache and Redis cache metadata use this TTL
-	// Every call to VIEW_CACHE renews the TTL for both caches
-	ViewCacheTTL = 1 * time.Minute
-
-	// MinCacheTokens is the minimum token count for cache creation
-	// This is a common requirement across AI clients (e.g., Gemini requires 1024 tokens)
-	MinCacheTokens = 1024
 )
 
 // ConversionResult represents the result of understanding unstructured data content and extracting it to Markdown
@@ -168,6 +127,11 @@ type Client interface {
 
 	// SupportsFileType returns true if this client can understand and extract content from this file type
 	SupportsFileType(fileType artifactpb.File_Type) bool
+
+	// CountTokens counts the total tokens for the given content without actually processing it
+	// This is useful for determining whether to use caching or direct processing
+	// Returns the total token count and any usage metadata from the AI client
+	CountTokens(ctx context.Context, content []byte, fileType artifactpb.File_Type, filename string) (int, any, error)
 
 	// GetModelFamily returns the appropriate client for a specific model family
 	// This is used by composite clients to route requests to the correct implementation

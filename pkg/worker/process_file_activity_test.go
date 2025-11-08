@@ -178,8 +178,11 @@ func TestGetFileContentActivity_Success(t *testing.T) {
 	ctx := context.Background()
 	fileContent := []byte("test file content")
 
+	mockStorage := mock.NewStorageMock(mc)
+	mockStorage.GetFileMock.Return(fileContent, nil)
+
 	mockRepository := mock.NewRepositoryMock(mc)
-	mockRepository.GetFileMock.Return(fileContent, nil)
+	mockRepository.GetMinIOStorageMock.Return(mockStorage)
 
 	w := &Worker{repository: mockRepository, log: zap.NewNop()}
 
@@ -266,12 +269,15 @@ func TestCacheFileContextActivity_Success(t *testing.T) {
 	mc := minimock.NewController(t)
 
 	ctx := context.Background()
-	mockRepositoryMock := mock.NewRepositoryMock(mc)
-
 	logger := zap.NewNop()
 
 	fileContent := []byte("test file content")
-	mockRepositoryMock.GetFileMock.Return(fileContent, nil)
+
+	mockStorage := mock.NewStorageMock(mc)
+	mockStorage.GetFileMock.Return(fileContent, nil)
+
+	mockRepositoryMock := mock.NewRepositoryMock(mc)
+	mockRepositoryMock.GetMinIOStorageMock.Return(mockStorage)
 
 	cacheName := "test-cache-123"
 	now := time.Now()

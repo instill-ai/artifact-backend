@@ -50,6 +50,7 @@ const (
 	purgeKBACLActivityError               = "PurgeKBACLActivity"
 	softDeleteKBRecordActivityError       = "SoftDeleteKBRecordActivity"
 	getInProgressFileCountActivityError   = "GetInProgressFileCountActivity"
+	cleanupExpiredGCSFilesActivityError   = "CleanupExpiredGCSFilesActivity"
 )
 
 // DeleteOriginalFileActivityParam defines parameters for deleting original file
@@ -775,5 +776,88 @@ func (w *Worker) ClearProductionKBRetentionActivity(ctx context.Context, param *
 		zap.String("productionKBID", productionKBID),
 		zap.String("rollbackKBID", rollbackKB.KBID))
 
+	return nil
+}
+
+// CleanupExpiredGCSFilesActivityParam defines parameters for cleaning up expired GCS files
+type CleanupExpiredGCSFilesActivityParam struct {
+	MaxFilesToClean int64 // Maximum number of files to clean up in one batch
+}
+
+// CleanupExpiredGCSFilesActivity scans Redis for expired GCS files and deletes them
+// This activity should be run periodically (e.g., every 1-2 minutes) to clean up
+// on-demand GCS files that have exceeded their 10-minute TTL
+func (w *Worker) CleanupExpiredGCSFilesActivity(ctx context.Context, param *CleanupExpiredGCSFilesActivityParam) error {
+	w.log.Info("CleanupExpiredGCSFilesActivity: Scanning for expired GCS files",
+		zap.Int64("maxFiles", param.MaxFilesToClean))
+
+	// Scan Redis for GCS files that are expiring soon (within 1 minute)
+	gcsFiles, err := w.repository.ScanGCSFilesForCleanup(ctx, param.MaxFilesToClean)
+	if err != nil {
+		w.log.Error("CleanupExpiredGCSFilesActivity: Failed to scan Redis for GCS files",
+			zap.Error(err))
+		return temporal.NewApplicationErrorWithCause(
+			"Failed to scan Redis for expired GCS files",
+			cleanupExpiredGCSFilesActivityError,
+			err,
+		)
+	}
+
+	if len(gcsFiles) == 0 {
+		w.log.Debug("CleanupExpiredGCSFilesActivity: No expired GCS files found")
+		return nil
+	}
+
+	w.log.Info("CleanupExpiredGCSFilesActivity: Found GCS files to clean up",
+		zap.Int("count", len(gcsFiles)))
+
+	// Delete each file from GCS and remove from Redis cache
+	successCount := 0
+	errorCount := 0
+
+	for _, gcsFile := range gcsFiles {
+		kbUID := types.KBUIDType(uuid.FromStringOrNil(gcsFile.KBUIDStr))
+		fileUID := types.FileUIDType(uuid.FromStringOrNil(gcsFile.FileUIDStr))
+
+		w.log.Debug("CleanupExpiredGCSFilesActivity: Deleting GCS file",
+			zap.String("bucket", gcsFile.GCSBucket),
+			zap.String("path", gcsFile.GCSObjectPath),
+			zap.String("view", gcsFile.View),
+			zap.Time("uploadTime", gcsFile.UploadTime),
+			zap.Time("expiresAt", gcsFile.ExpiresAt))
+
+		// Delete file from GCS
+		err := w.repository.GetMinIOStorage().DeleteFile(ctx, gcsFile.GCSBucket, gcsFile.GCSObjectPath)
+		if err != nil {
+			w.log.Warn("CleanupExpiredGCSFilesActivity: Failed to delete GCS file (may not exist)",
+				zap.String("path", gcsFile.GCSObjectPath),
+				zap.Error(err))
+			errorCount++
+			// Continue with next file - don't fail the entire activity
+		} else {
+			w.log.Debug("CleanupExpiredGCSFilesActivity: Successfully deleted GCS file",
+				zap.String("path", gcsFile.GCSObjectPath))
+			successCount++
+		}
+
+		// Remove from Redis cache (always attempt, even if GCS deletion failed)
+		err = w.repository.DeleteGCSFileCache(ctx, kbUID, fileUID, gcsFile.View)
+		if err != nil {
+			w.log.Warn("CleanupExpiredGCSFilesActivity: Failed to delete Redis cache entry",
+				zap.String("kbUID", kbUID.String()),
+				zap.String("fileUID", fileUID.String()),
+				zap.String("view", gcsFile.View),
+				zap.Error(err))
+			// Non-fatal - Redis will auto-expire the key anyway
+		}
+	}
+
+	w.log.Info("CleanupExpiredGCSFilesActivity: Cleanup completed",
+		zap.Int("total", len(gcsFiles)),
+		zap.Int("success", successCount),
+		zap.Int("errors", errorCount))
+
+	// Don't fail the activity if some files couldn't be deleted
+	// These files will be retried in the next cleanup cycle
 	return nil
 }

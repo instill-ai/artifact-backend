@@ -1024,7 +1024,10 @@ func (r *repository) UpdateKnowledgeBaseUpdateStatus(ctx context.Context, kbUID 
 		}
 	}
 
-	return r.db.WithContext(ctx).Model(&KnowledgeBaseModel{}).
+	// Use Unscoped() to allow updating soft-deleted KBs
+	// This is important for terminal states (FAILED, ABORTED, COMPLETED) where we want to record
+	// the final status even if the KB was deleted during the update process
+	return r.db.WithContext(ctx).Unscoped().Model(&KnowledgeBaseModel{}).
 		Where("uid = ?", kbUID).
 		Updates(updates).Error
 }
@@ -1033,7 +1036,9 @@ func (r *repository) UpdateKnowledgeBaseUpdateStatus(ctx context.Context, kbUID 
 // Note: Workflow ID is kept for historical tracking and debugging
 func (r *repository) UpdateKnowledgeBaseAborted(ctx context.Context, kbUID types.KBUIDType) error {
 	now := time.Now()
-	return r.db.WithContext(ctx).Model(&KnowledgeBaseModel{}).
+	// Use Unscoped() to allow updating soft-deleted KBs
+	// This ensures we can record ABORTED status even if the KB was deleted during the update
+	return r.db.WithContext(ctx).Unscoped().Model(&KnowledgeBaseModel{}).
 		Where("uid = ?", kbUID).
 		Updates(map[string]any{
 			"update_status":       artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_ABORTED.String(),
