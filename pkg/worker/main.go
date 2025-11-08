@@ -239,7 +239,7 @@ func (w *Worker) DeleteFilesBatchActivity(ctx context.Context, param *DeleteFile
 	for _, filePath := range param.FilePaths {
 		filePath := filePath // Capture loop variable
 		go func() {
-			err := w.repository.DeleteFile(ctx, param.Bucket, filePath)
+			err := w.repository.GetMinIOStorage().DeleteFile(ctx, param.Bucket, filePath)
 			errChan <- err
 		}()
 	}
@@ -319,7 +319,7 @@ func (w *Worker) GetFilesBatchActivity(ctx context.Context, param *GetFilesBatch
 		i := i // Capture loop variable
 		filePath := filePath
 		go func() {
-			content, err := w.repository.GetFile(authCtx, param.Bucket, filePath)
+			content, err := w.repository.GetMinIOStorage().GetFile(authCtx, param.Bucket, filePath)
 			resultChan <- result{index: i, content: content, err: err}
 		}()
 	}
@@ -693,7 +693,7 @@ func (w *Worker) deleteFilesSync(ctx context.Context, bucket string, filePaths [
 	// Synchronous deletion (no workflow orchestration)
 	// For parallel/reliable deletion, use worker.DeleteFiles workflow instead
 	for _, filePath := range filePaths {
-		if err := w.repository.DeleteFile(ctx, bucket, filePath); err != nil {
+		if err := w.repository.GetMinIOStorage().DeleteFile(ctx, bucket, filePath); err != nil {
 			return errorsx.AddMessage(
 				fmt.Errorf("failed to delete file %s: %w", filePath, err),
 				"Unable to delete file. Please try again.",
@@ -714,7 +714,7 @@ func (w *Worker) deleteKnowledgeBaseSync(ctx context.Context, kbUID string) erro
 		)
 	}
 
-	filePaths, err := w.repository.ListKnowledgeBaseFilePaths(ctx, kbUUID)
+	filePaths, err := w.repository.GetMinIOStorage().ListKnowledgeBaseFilePaths(ctx, kbUUID)
 	if err != nil {
 		return errorsx.AddMessage(
 			fmt.Errorf("failed to list knowledge base files: %w", err),
@@ -726,7 +726,7 @@ func (w *Worker) deleteKnowledgeBaseSync(ctx context.Context, kbUID string) erro
 
 // deleteConvertedFileByFileUIDSync deletes converted files for a specific file UID
 func (w *Worker) deleteConvertedFileByFileUIDSync(ctx context.Context, kbUID, fileUID types.FileUIDType) error {
-	filePaths, err := w.repository.ListConvertedFilesByFileUID(ctx, kbUID, fileUID)
+	filePaths, err := w.repository.GetMinIOStorage().ListConvertedFilesByFileUID(ctx, kbUID, fileUID)
 	if err != nil {
 		return errorsx.AddMessage(
 			fmt.Errorf("failed to list converted files: %w", err),
@@ -738,7 +738,7 @@ func (w *Worker) deleteConvertedFileByFileUIDSync(ctx context.Context, kbUID, fi
 
 // deleteTextChunksByFileUIDSync deletes text chunks for a specific file UID
 func (w *Worker) deleteTextChunksByFileUIDSync(ctx context.Context, kbUID, fileUID types.FileUIDType) error {
-	filePaths, err := w.repository.ListTextChunksByFileUID(ctx, kbUID, fileUID)
+	filePaths, err := w.repository.GetMinIOStorage().ListTextChunksByFileUID(ctx, kbUID, fileUID)
 	if err != nil {
 		return errorsx.AddMessage(
 			fmt.Errorf("failed to list text chunk files: %w", err),
@@ -835,7 +835,7 @@ func (w *Worker) getTextChunksByFile(ctx context.Context, file *repository.Knowl
 			for attempt := range maxAttempts {
 				// Create a timeout context for this MinIO fetch (max 10s per attempt)
 				fetchCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-				content, err = w.repository.GetFile(fetchCtx, bucket, path)
+				content, err = w.repository.GetMinIOStorage().GetFile(fetchCtx, bucket, path)
 				cancel() // Always cancel to free resources
 
 				if err == nil {

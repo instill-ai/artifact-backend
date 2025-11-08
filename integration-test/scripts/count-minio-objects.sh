@@ -1,6 +1,6 @@
 #!/bin/bash
 # MinIO Object Counter for Integration Tests
-# Usage: ./count-minio-objects.sh <bucket> <prefix>
+# Usage: ./count-minio-objects.sh <bucket> <prefix> [minio_host] [minio_port]
 
 set -e
 
@@ -11,8 +11,9 @@ PREFIX="$2"
 export HOME=/tmp
 
 # Support both Docker service name (default) and localhost for CI
-MINIO_HOST="${MINIO_HOST:-minio}"
-MINIO_PORT="${MINIO_PORT:-9000}"
+# Arguments take precedence over environment variables
+MINIO_HOST="${3:-${MINIO_HOST:-minio}}"
+MINIO_PORT="${4:-${MINIO_PORT:-9000}}"
 
 # Configure MinIO alias (idempotent)
 mc alias set myminio http://${MINIO_HOST}:${MINIO_PORT} minioadmin minioadmin --api s3v4 > /dev/null 2>&1 || true

@@ -65,7 +65,7 @@ func (s *service) GetChunksByFile(ctx context.Context, file *repository.Knowledg
 			maxAttempts := 3
 
 			for attempt := range maxAttempts {
-				content, err = s.repository.GetFile(ctx, bucket, path)
+				content, err = s.repository.GetMinIOStorage().GetFile(ctx, bucket, path)
 				if err == nil {
 					break // Success!
 				}

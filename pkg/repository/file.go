@@ -74,6 +74,9 @@ type KnowledgeBaseFile interface {
 	GetSourceByFileUID(ctx context.Context, fileUID types.FileUIDType) (*SourceMeta, error)
 	// UpdateKnowledgeFileMetadata updates the metadata fields of a knowledge base file.
 	UpdateKnowledgeFileMetadata(_ context.Context, fileUID types.FileUIDType, _ ExtraMetaData) error
+	// UpdateKnowledgeFileUsageMetadata updates the usage metadata (AI token counts) for a knowledge base file.
+	// According to Gemini API docs: https://ai.google.dev/gemini-api/docs/tokens?lang=python
+	UpdateKnowledgeFileUsageMetadata(_ context.Context, fileUID types.FileUIDType, _ UsageMetadata) error
 	// DeleteKnowledgeBaseFileAndDecreaseUsage deletes the knowledge base file and decreases the knowledge base usage
 	DeleteKnowledgeBaseFileAndDecreaseUsage(ctx context.Context, fileUID types.FileUIDType) error
 
@@ -119,6 +122,10 @@ type KnowledgeBaseFileModel struct {
 	ExternalMetadataUnmarshal *structpb.Struct `gorm:"-" json:"external_metadata_unmarshal"`
 	// Array of tags associated with the file
 	Tags TagsArray `gorm:"column:tags;type:VARCHAR(255)[]" json:"tags"`
+	// AI usage metadata from content and summary generation (stored as JSONB)
+	UsageMetadata string `gorm:"column:usage_metadata;type:jsonb" json:"usage_metadata"`
+	// This field is not stored in the database. It is used to unmarshal the UsageMetadata field
+	UsageMetadataUnmarshal *UsageMetadata `gorm:"-" json:"usage_metadata_unmarshal"`
 }
 
 // TableName overrides the default table name for GORM
@@ -144,6 +151,13 @@ type ExtraMetaData struct {
 	Length []uint32 `json:"length,omitempty"`
 }
 
+// UsageMetadata stores AI usage metadata from content and summary generation
+// Format: {"content": {...}, "summary": {...}}
+type UsageMetadata struct {
+	Content map[string]interface{} `json:"content,omitempty"`
+	Summary map[string]interface{} `json:"summary,omitempty"`
+}
+
 // KnowledgeBaseFileColumns is the columns for the knowledge base file table
 type KnowledgeBaseFileColumns struct {
 	UID              string
@@ -162,6 +176,7 @@ type KnowledgeBaseFileColumns struct {
 	Size             string
 	ExternalMetadata string
 	Tags             string
+	UsageMetadata    string
 }
 
 // KnowledgeBaseFileColumn is the columns for the knowledge base file table
@@ -182,6 +197,7 @@ var KnowledgeBaseFileColumn = KnowledgeBaseFileColumns{
 	RequesterUID:     "requester_uid",
 	ExternalMetadata: "external_metadata",
 	Tags:             "tags",
+	UsageMetadata:    "usage_metadata",
 }
 
 // ConvertingPipeline extracts the conversion pipeline, if present, from the
@@ -270,36 +286,76 @@ func (kf *KnowledgeBaseFileModel) PublicExternalMetadataUnmarshal() *structpb.St
 	return md
 }
 
-// BeforeCreate is a GORM hook that marshals the ExtraMetaData and ExternalMetadata fields
+// UsageMetadataMarshal marshals the UsageMetadata struct to a JSON string
+func (kf *KnowledgeBaseFileModel) UsageMetadataMarshal() error {
+	if kf.UsageMetadataUnmarshal == nil {
+		kf.UsageMetadata = "{}"
+		return nil
+	}
+	data, err := json.Marshal(kf.UsageMetadataUnmarshal)
+	if err != nil {
+		return fmt.Errorf("failed to marshal usage metadata: %v", err)
+	}
+	kf.UsageMetadata = string(data)
+	return nil
+}
+
+// UsageMetadataUnmarshalFunc unmarshals the UsageMetadata JSON string to a struct
+func (kf *KnowledgeBaseFileModel) UsageMetadataUnmarshalFunc() error {
+	if kf.UsageMetadata == "" || kf.UsageMetadata == "{}" {
+		kf.UsageMetadataUnmarshal = nil
+		return nil
+	}
+	var data UsageMetadata
+	if err := json.Unmarshal([]byte(kf.UsageMetadata), &data); err != nil {
+		return fmt.Errorf("failed to unmarshal usage metadata: %v", err)
+	}
+	kf.UsageMetadataUnmarshal = &data
+	return nil
+}
+
+// BeforeCreate is a GORM hook that marshals the ExtraMetaData, ExternalMetadata, and UsageMetadata fields
 func (kf *KnowledgeBaseFileModel) BeforeCreate(tx *gorm.DB) (err error) {
 	if err := kf.ExtraMetaDataMarshal(); err != nil {
 		return err
 	}
-	return kf.ExternalMetadataToJSON()
+	if err := kf.ExternalMetadataToJSON(); err != nil {
+		return err
+	}
+	return kf.UsageMetadataMarshal()
 }
 
-// BeforeSave is a GORM hook that marshals the ExtraMetaData and ExternalMetadata fields
+// BeforeSave is a GORM hook that marshals the ExtraMetaData, ExternalMetadata, and UsageMetadata fields
 func (kf *KnowledgeBaseFileModel) BeforeSave(tx *gorm.DB) (err error) {
 	if err := kf.ExtraMetaDataMarshal(); err != nil {
 		return err
 	}
-	return kf.ExternalMetadataToJSON()
+	if err := kf.ExternalMetadataToJSON(); err != nil {
+		return err
+	}
+	return kf.UsageMetadataMarshal()
 }
 
-// BeforeUpdate is a GORM hook that marshals the ExtraMetaData and ExternalMetadata fields
+// BeforeUpdate is a GORM hook that marshals the ExtraMetaData, ExternalMetadata, and UsageMetadata fields
 func (kf *KnowledgeBaseFileModel) BeforeUpdate(tx *gorm.DB) (err error) {
 	if err := kf.ExtraMetaDataMarshal(); err != nil {
 		return err
 	}
-	return kf.ExternalMetadataToJSON()
+	if err := kf.ExternalMetadataToJSON(); err != nil {
+		return err
+	}
+	return kf.UsageMetadataMarshal()
 }
 
-// AfterFind is a GORM hook that unmarshals the ExtraMetaData and ExternalMetadata fields
+// AfterFind is a GORM hook that unmarshals the ExtraMetaData, ExternalMetadata, and UsageMetadata fields
 func (kf *KnowledgeBaseFileModel) AfterFind(tx *gorm.DB) (err error) {
 	if err := kf.ExtraMetaDataUnmarshalFunc(); err != nil {
 		return err
 	}
-	return kf.JSONToExternalMetadata()
+	if err := kf.JSONToExternalMetadata(); err != nil {
+		return err
+	}
+	return kf.UsageMetadataUnmarshalFunc()
 }
 
 // CreateKnowledgeBaseFile creates a new knowledge base file
@@ -913,6 +969,41 @@ func (r *repository) UpdateKnowledgeFileMetadata(ctx context.Context, fileUID ty
 		// Marshal the updated ExtraMetaData.
 		if err := file.ExtraMetaDataMarshal(); err != nil {
 			return fmt.Errorf("marshalling metadata: %w", err)
+		}
+
+		// Save the updated KnowledgeBaseFileModel within the transaction
+		if err := tx.Save(&file).Error; err != nil {
+			return fmt.Errorf("storing record: %w", err)
+		}
+
+		return nil
+	})
+
+	return err
+}
+
+// UpdateKnowledgeFileUsageMetadata updates the usage metadata for a file
+// This stores AI usage metadata (token counts) from content and summary processing
+// According to Gemini API docs: https://ai.google.dev/gemini-api/docs/tokens?lang=python
+func (r *repository) UpdateKnowledgeFileUsageMetadata(ctx context.Context, fileUID types.FileUIDType, usageMetadata UsageMetadata) error {
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var file KnowledgeBaseFileModel
+
+		// Lock the row for update within the transaction
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where(KnowledgeBaseFileColumn.UID+" = ?", fileUID).
+			First(&file).Error
+
+		if err != nil {
+			return fmt.Errorf("fetching file: %w", err)
+		}
+
+		// Set the usage metadata (will be marshaled by GORM hooks on Save)
+		file.UsageMetadataUnmarshal = &usageMetadata
+
+		// Marshal the usage metadata
+		if err := file.UsageMetadataMarshal(); err != nil {
+			return fmt.Errorf("marshalling usage metadata: %w", err)
 		}
 
 		// Save the updated KnowledgeBaseFileModel within the transaction

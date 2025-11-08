@@ -565,14 +565,6 @@ export function TEST_15_GetObjectURL(data) {
       return;
     }
 
-    var res = privateClient.invoke("artifact.artifact.v1alpha.ArtifactPrivateService/GetObjectURLAdmin",
-      uid ? { uid: uid } : { encodedUrlPath: encoded },
-      data.metadata
-    );
-    check(res, {
-      "GetObjectURL returns a response": (r) => r && typeof r.status === grpc.StatusOK,
-    });
-
     privateClient.close();
   });
 }

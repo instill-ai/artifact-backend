@@ -325,6 +325,12 @@ func TestCloneFileToStagingKBActivity_Success(t *testing.T) {
 	newFileUID := types.FileUIDType(uuid.Must(uuid.NewV4()))
 	ownerUID := uuid.Must(uuid.NewV4())
 
+	mockStorage := mock.NewStorageMock(mc)
+	// Mock GetFileMetadata to verify blob exists
+	mockStorage.GetFileMetadataMock.Return(&minio.ObjectInfo{
+		Size: 1024,
+	}, nil)
+
 	mockRepository := mock.NewRepositoryMock(mc)
 	mockRepository.GetKnowledgeBaseFilesByFileUIDsMock.
 		When(minimock.AnyContext, []types.FileUIDType{originalFileUID}).
@@ -337,10 +343,7 @@ func TestCloneFileToStagingKBActivity_Success(t *testing.T) {
 				Size:        1024,
 			},
 		}, nil)
-	// Mock GetFileMetadata to verify blob exists
-	mockRepository.GetFileMetadataMock.Return(&minio.ObjectInfo{
-		Size: 1024,
-	}, nil)
+	mockRepository.GetMinIOStorageMock.Return(mockStorage)
 	mockRepository.GetKnowledgeBaseByUIDMock.
 		When(minimock.AnyContext, stagingKBUID).
 		Then(&repository.KnowledgeBaseModel{

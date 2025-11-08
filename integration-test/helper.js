@@ -377,10 +377,15 @@ export function countMinioObjects(kbUID, fileUID, objectType) {
     }
 
     // Execute the shell script to count MinIO objects
+    // Pass MinIO host/port from environment or use defaults
+    const minioHost = __ENV.MINIO_HOST || 'minio';
+    const minioPort = __ENV.MINIO_PORT || '9000';
     const result = exec.command('sh', [
       `${__ENV.TEST_FOLDER_ABS_PATH}/integration-test/scripts/count-minio-objects.sh`,
       constant.minioConfig.bucket,
-      prefix
+      prefix,
+      minioHost,
+      minioPort
     ]);
 
     // Parse the output (should be a number)
@@ -451,10 +456,15 @@ export function countMilvusVectors(kbUID, fileUID) {
     const collectionName = `kb_${activeCollectionUID.replace(/-/g, '_')}`;
 
     // Execute the shell script to count Milvus vectors using milvus_cli
+    // Pass Milvus host/port from environment or use defaults
+    const milvusHost = __ENV.MILVUS_HOST || 'milvus';
+    const milvusPort = __ENV.MILVUS_PORT || '19530';
     const result = exec.command('sh', [
       `${__ENV.TEST_FOLDER_ABS_PATH}/integration-test/scripts/count-milvus-vectors.sh`,
       collectionName,
-      fileUID
+      fileUID,
+      milvusHost,
+      milvusPort
     ]);
 
     // DEBUG: Log the raw output from the script
@@ -1197,7 +1207,13 @@ export function waitForAllUpdatesComplete(client, data, maxWaitSeconds = 60) {
 
     if (res && res.message && res.message.details) {
       // Check for ANY active update status, not just "updating"
-      const activeStatuses = ["updating", "swapping", "validating", "syncing"];
+      // Note: gRPC returns full enum names or numeric values, not lowercase short forms
+      const activeStatuses = [
+        "KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING", 2,   // Phase 1-2: Preparing and reprocessing
+        "KNOWLEDGE_BASE_UPDATE_STATUS_SYNCING", 3,    // Phase 3: Synchronization
+        "KNOWLEDGE_BASE_UPDATE_STATUS_VALIDATING", 4, // Phase 4: Validation
+        "KNOWLEDGE_BASE_UPDATE_STATUS_SWAPPING", 5    // Phase 5: Atomic Swap
+      ];
       const active = res.message.details.filter(s => activeStatuses.includes(s.status));
 
       if (active.length === 0) {

@@ -91,12 +91,25 @@ milvus:
   port: 19530
 blob:
   hostport: http://localhost:8080
+
+# Google Cloud Storage configuration - alternative object storage backend to MinIO
+# GCS can be used as the primary object storage for all file operations
+# When configured with VertexAI, GCS becomes the default storage backend
+gcs:
+  projectid:
+  region:
+  bucket:
+  sakey:
 rag:
   update:
     # Update settings - simple tag-based management without versioning
     rollback_retention_days: 7 # Days to keep old KB after swap before cleanup
     batch_size: 10 # KBs to process concurrently
   model:
+    vertexai:
+      projectid:
+      region:
+      sakey:
     gemini:
       apikey:
     openai:

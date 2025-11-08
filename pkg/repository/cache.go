@@ -26,7 +26,7 @@ type FileContentRef struct {
 	Filename string            `json:"filename"`  // Original filename
 }
 
-// CacheMetadata represents the metadata stored in Redis for cache operations
+// CacheMetadata represents the metadata stored in Redis for AI context cache operations
 // This is ephemeral data with TTL matching the AI cached context expiration
 // Supports two modes:
 // 1. Cached mode: CachedContextEnabled=true, CacheName set, FileContents empty (large files, cached context exists)
@@ -39,6 +39,17 @@ type CacheMetadata struct {
 	CreateTime           time.Time           `json:"create_time"`            // When cache was created
 	ExpireTime           time.Time           `json:"expire_time"`            // When cache will expire
 	CachedContextEnabled bool                `json:"cached_context_enabled"` // Whether AI cached context exists
+}
+
+// GCSFileInfo stores GCS file metadata for TTL-based cleanup
+type GCSFileInfo struct {
+	KBUIDStr      string    `json:"kb_uid"`      // Knowledge base UID as string
+	FileUIDStr    string    `json:"file_uid"`    // File UID as string
+	View          string    `json:"view"`        // View type (e.g., "VIEW_CONTENT")
+	GCSBucket     string    `json:"gcs_bucket"`  // GCS bucket name
+	GCSObjectPath string    `json:"gcs_path"`    // GCS object path
+	UploadTime    time.Time `json:"upload_time"` // When file was uploaded to GCS
+	ExpiresAt     time.Time `json:"expires_at"`  // When file should be deleted from GCS
 }
 
 // Cache interface defines operations for ephemeral cache metadata
@@ -57,22 +68,41 @@ type Cache interface {
 	// DeleteCacheMetadata removes cache metadata from Redis
 	// Used for manual cleanup (e.g., when cache is explicitly invalidated)
 	DeleteCacheMetadata(ctx context.Context, kbUID types.KBUIDType, fileUIDs []types.FileUIDType) error
+
+	// CheckGCSFileExists checks if a file exists in GCS (cached check)
+	// Returns true if file exists in GCS cache, false otherwise
+	CheckGCSFileExists(ctx context.Context, kbUID types.KBUIDType, fileUID types.FileUIDType, view string) (bool, error)
+
+	// SetGCSFileInfo stores GCS file metadata in Redis with TTL for cleanup
+	// ttl should be 10 minutes for on-demand GCS files
+	SetGCSFileInfo(ctx context.Context, kbUID types.KBUIDType, fileUID types.FileUIDType, view string, gcsInfo *GCSFileInfo, ttl time.Duration) error
+
+	// GetGCSFileInfo retrieves GCS file metadata from Redis
+	// Returns nil if not found or expired
+	GetGCSFileInfo(ctx context.Context, kbUID types.KBUIDType, fileUID types.FileUIDType, view string) (*GCSFileInfo, error)
+
+	// DeleteGCSFileCache removes GCS file metadata from Redis
+	DeleteGCSFileCache(ctx context.Context, kbUID types.KBUIDType, fileUID types.FileUIDType, view string) error
+
+	// ScanGCSFilesForCleanup scans Redis for GCS files that need cleanup
+	// Returns list of GCS files whose TTL has expired or is about to expire
+	ScanGCSFilesForCleanup(ctx context.Context, maxCount int64) ([]GCSFileInfo, error)
 }
 
-// cacheRepository implements Cache interface using Redis
-type cacheRepository struct {
+// cache implements Cache interface using Redis
+type cache struct {
 	redisClient *redis.Client
 }
 
-// NewCacheRepository creates a new cache repository
-func NewCacheRepository(redisClient *redis.Client) Cache {
-	return &cacheRepository{
+// NewCache implements Cache interface using Redis
+func NewCache(redisClient *redis.Client) Cache {
+	return &cache{
 		redisClient: redisClient,
 	}
 }
 
 // SetCacheMetadata stores cache metadata in Redis with TTL
-func (r *cacheRepository) SetCacheMetadata(
+func (r *cache) SetCacheMetadata(
 	ctx context.Context,
 	kbUID types.KBUIDType,
 	fileUIDs []types.FileUIDType,
@@ -102,7 +132,7 @@ func (r *cacheRepository) SetCacheMetadata(
 }
 
 // GetCacheMetadata retrieves cache metadata from Redis
-func (r *cacheRepository) GetCacheMetadata(
+func (r *cache) GetCacheMetadata(
 	ctx context.Context,
 	kbUID types.KBUIDType,
 	fileUIDs []types.FileUIDType,
@@ -136,7 +166,7 @@ func (r *cacheRepository) GetCacheMetadata(
 
 // RenewCacheMetadataTTL updates the TTL and expire time for existing cache metadata
 // This is more efficient than re-marshaling and setting the entire metadata
-func (r *cacheRepository) RenewCacheMetadataTTL(
+func (r *cache) RenewCacheMetadataTTL(
 	ctx context.Context,
 	kbUID types.KBUIDType,
 	fileUIDs []types.FileUIDType,
@@ -175,7 +205,7 @@ func (r *cacheRepository) RenewCacheMetadataTTL(
 }
 
 // DeleteCacheMetadata removes cache metadata from Redis
-func (r *cacheRepository) DeleteCacheMetadata(
+func (r *cache) DeleteCacheMetadata(
 	ctx context.Context,
 	kbUID types.KBUIDType,
 	fileUIDs []types.FileUIDType,
@@ -222,4 +252,166 @@ func CacheKeyPattern(kbUID types.KBUIDType) string {
 // Useful for global cache statistics or cleanup operations
 func AllCacheKeysPattern() string {
 	return "artifact:cache:*"
+}
+
+// ============================================================================
+// GCS File Cache Methods (for TTL-based cleanup and existence checking)
+// ============================================================================
+
+// GCSFileKey generates a Redis key for GCS file metadata
+// Format: artifact:gcs:kb:{kb_uid}:file:{file_uid}:view:{view}
+func GCSFileKey(kbUID types.KBUIDType, fileUID types.FileUIDType, view string) string {
+	return fmt.Sprintf("artifact:gcs:kb:%s:file:%s:view:%s", kbUID.String(), fileUID.String(), view)
+}
+
+// GCSFileKeyPattern returns a pattern for matching all GCS file keys
+func GCSFileKeyPattern() string {
+	return "artifact:gcs:*"
+}
+
+// CheckGCSFileExists checks if a file exists in GCS (cached check)
+func (r *cache) CheckGCSFileExists(
+	ctx context.Context,
+	kbUID types.KBUIDType,
+	fileUID types.FileUIDType,
+	view string,
+) (bool, error) {
+	key := GCSFileKey(kbUID, fileUID, view)
+
+	exists, err := r.redisClient.Exists(ctx, key).Result()
+	if err != nil {
+		return false, fmt.Errorf("failed to check GCS file existence in Redis: %w", err)
+	}
+
+	return exists > 0, nil
+}
+
+// SetGCSFileInfo stores GCS file metadata in Redis with TTL
+func (r *cache) SetGCSFileInfo(
+	ctx context.Context,
+	kbUID types.KBUIDType,
+	fileUID types.FileUIDType,
+	view string,
+	gcsInfo *GCSFileInfo,
+	ttl time.Duration,
+) error {
+	if gcsInfo == nil {
+		return fmt.Errorf("gcsInfo cannot be nil")
+	}
+
+	if ttl <= 0 {
+		return fmt.Errorf("TTL must be positive, got: %v", ttl)
+	}
+
+	key := GCSFileKey(kbUID, fileUID, view)
+
+	data, err := json.Marshal(gcsInfo)
+	if err != nil {
+		return fmt.Errorf("failed to marshal GCS file info: %w", err)
+	}
+
+	if err := r.redisClient.Set(ctx, key, data, ttl).Err(); err != nil {
+		return fmt.Errorf("failed to store GCS file info in Redis: %w", err)
+	}
+
+	return nil
+}
+
+// GetGCSFileInfo retrieves GCS file metadata from Redis
+func (r *cache) GetGCSFileInfo(
+	ctx context.Context,
+	kbUID types.KBUIDType,
+	fileUID types.FileUIDType,
+	view string,
+) (*GCSFileInfo, error) {
+	key := GCSFileKey(kbUID, fileUID, view)
+
+	data, err := r.redisClient.Get(ctx, key).Result()
+	if err == redis.Nil {
+		// Not found or expired
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get GCS file info from Redis: %w", err)
+	}
+
+	var gcsInfo GCSFileInfo
+	if err := json.Unmarshal([]byte(data), &gcsInfo); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal GCS file info: %w", err)
+	}
+
+	return &gcsInfo, nil
+}
+
+// DeleteGCSFileCache removes GCS file metadata from Redis
+func (r *cache) DeleteGCSFileCache(
+	ctx context.Context,
+	kbUID types.KBUIDType,
+	fileUID types.FileUIDType,
+	view string,
+) error {
+	key := GCSFileKey(kbUID, fileUID, view)
+
+	if err := r.redisClient.Del(ctx, key).Err(); err != nil {
+		return fmt.Errorf("failed to delete GCS file cache from Redis: %w", err)
+	}
+
+	return nil
+}
+
+// ScanGCSFilesForCleanup scans Redis for GCS files that need cleanup
+// Returns list of GCS files whose TTL is expiring soon (for background cleanup)
+func (r *cache) ScanGCSFilesForCleanup(ctx context.Context, maxCount int64) ([]GCSFileInfo, error) {
+	pattern := GCSFileKeyPattern()
+
+	var allKeys []string
+	var cursor uint64
+
+	// Scan all GCS file keys
+	for {
+		keys, nextCursor, err := r.redisClient.Scan(ctx, cursor, pattern, maxCount).Result()
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan GCS file keys: %w", err)
+		}
+
+		allKeys = append(allKeys, keys...)
+		cursor = nextCursor
+
+		if cursor == 0 {
+			break
+		}
+	}
+
+	// Retrieve metadata for each key
+	var gcsFiles []GCSFileInfo
+	for _, key := range allKeys {
+		data, err := r.redisClient.Get(ctx, key).Result()
+		if err == redis.Nil {
+			// Key expired between scan and get
+			continue
+		}
+		if err != nil {
+			// Log error but continue with other keys
+			continue
+		}
+
+		var gcsInfo GCSFileInfo
+		if err := json.Unmarshal([]byte(data), &gcsInfo); err != nil {
+			// Log error but continue
+			continue
+		}
+
+		// Check TTL to see if file is expiring soon (within 1 minute)
+		ttl, err := r.redisClient.TTL(ctx, key).Result()
+		if err != nil {
+			continue
+		}
+
+		// Include files that are expiring within 1 minute or already expired
+		if ttl <= 1*time.Minute {
+			gcsFiles = append(gcsFiles, gcsInfo)
+		}
+	}
+
+	return gcsFiles, nil
 }

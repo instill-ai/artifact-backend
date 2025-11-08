@@ -72,7 +72,17 @@ message File {
     VIEW_CACHE = 7;
   }
 
-  // Supported file types by the pipeline-backend.
+  // Storage provider for file resources
+  enum StorageProvider {
+    // Unspecified, defaults to MinIO for backward compatibility
+    STORAGE_PROVIDER_UNSPECIFIED = 0;
+    // Use MinIO as the storage backend (default)
+    STORAGE_PROVIDER_MINIO = 1;
+    // Use Google Cloud Storage as the storage backend
+    STORAGE_PROVIDER_GCS = 2;
+  }
+
+  // Supported file types
   enum Type {
     // unspecified
     TYPE_UNSPECIFIED = 0;
@@ -80,86 +90,86 @@ message File {
     // Text-based document types
     // text
     TYPE_TEXT = 1;
-    // PDF
-    TYPE_PDF = 2;
     // MARKDOWN
-    TYPE_MARKDOWN = 3;
+    TYPE_MARKDOWN = 2;
     // HTML
-    TYPE_HTML = 7;
+    TYPE_HTML = 3;
     // CSV
-    TYPE_CSV = 14;
+    TYPE_CSV = 4;
 
-    // Microsoft Office document types
-    // DOCX
-    TYPE_DOCX = 8;
+    // Container-based document types
+    // PDF
+    TYPE_PDF = 5;
     // DOC
-    TYPE_DOC = 9;
+    TYPE_DOC = 6;
+    // DOCX
+    TYPE_DOCX = 7;
     // PPT
-    TYPE_PPT = 10;
+    TYPE_PPT = 8;
     // PPTX
-    TYPE_PPTX = 11;
+    TYPE_PPTX = 9;
     // XLS
-    TYPE_XLS = 12;
+    TYPE_XLS = 10;
     // XLSX
-    TYPE_XLSX = 13;
+    TYPE_XLSX = 11;
 
-    // Image types (supported by pipeline-backend/pkg/data/image.go)
+    // Image types
     // PNG
-    TYPE_PNG = 4;
+    TYPE_PNG = 12;
     // JPEG
-    TYPE_JPEG = 5;
-    // JPG
-    TYPE_JPG = 6;
+    TYPE_JPEG = 13;
     // GIF
-    TYPE_GIF = 15;
+    TYPE_GIF = 14;
     // WEBP
-    TYPE_WEBP = 16;
+    TYPE_WEBP = 15;
     // TIFF
-    TYPE_TIFF = 17;
+    TYPE_TIFF = 16;
     // BMP
-    TYPE_BMP = 18;
+    TYPE_BMP = 17;
     // HEIC
-    TYPE_HEIC = 19;
+    TYPE_HEIC = 18;
     // HEIF
-    TYPE_HEIF = 20;
+    TYPE_HEIF = 19;
     // AVIF
-    TYPE_AVIF = 21;
+    TYPE_AVIF = 20;
 
-    // Audio types (supported by pipeline-backend/pkg/data/audio.go)
+    // Audio types
     // MP3
-    TYPE_MP3 = 22;
+    TYPE_MP3 = 21;
     // WAV
-    TYPE_WAV = 23;
+    TYPE_WAV = 22;
     // AAC
-    TYPE_AAC = 24;
+    TYPE_AAC = 23;
     // OGG
-    TYPE_OGG = 25;
+    TYPE_OGG = 24;
     // FLAC
-    TYPE_FLAC = 26;
+    TYPE_FLAC = 25;
     // M4A
-    TYPE_M4A = 27;
+    TYPE_M4A = 26;
     // WMA
-    TYPE_WMA = 28;
+    TYPE_WMA = 27;
     // AIFF
-    TYPE_AIFF = 29;
+    TYPE_AIFF = 28;
+    // WEBM (audio)
+    TYPE_WEBM_AUDIO = 29;
 
-    // Video types (supported by pipeline-backend/pkg/data/video.go)
+    // Video types
     // MP4
     TYPE_MP4 = 30;
     // AVI
     TYPE_AVI = 31;
     // MOV
     TYPE_MOV = 32;
-    // WEBM (video)
-    TYPE_WEBM_VIDEO = 33;
     // MKV
-    TYPE_MKV = 34;
+    TYPE_MKV = 33;
     // FLV
-    TYPE_FLV = 35;
+    TYPE_FLV = 34;
     // WMV
-    TYPE_WMV = 36;
+    TYPE_WMV = 35;
     // MPEG
-    TYPE_MPEG = 37;
+    TYPE_MPEG = 36;
+    // WEBM (video)
+    TYPE_WEBM_VIDEO = 37;
   }
 
   // FileMediaType describes the media category of a knowledge base file.
@@ -240,8 +250,13 @@ message File {
   int32 total_tokens = 18 [(google.api.field_behavior) = OUTPUT_ONLY];
   // Custom metadata provided by the user during file upload
   optional google.protobuf.Struct external_metadata = 19 [(google.api.field_behavior) = OPTIONAL];
-  // objectUid in blob storage. user can upload to blob storage directly, then put objectUid here.
-  // then no need the base64 encoding for the file content.
+  // Object UID referencing a file already uploaded to blob storage.
+  // Two upload approaches are supported:
+  // 1. Direct upload: Upload file directly to MinIO via GetObjectUploadURL, then provide the object_uid here.
+  //    This avoids base64 encoding overhead and is preferred for large files.
+  // 2. Inline content: Provide base64-encoded file content in the 'content' field (field 9).
+  //    The system will handle the blob storage upload internally.
+  // When object_uid is provided, the 'content' field is ignored.
   string object_uid = 20 [(google.api.field_behavior) = OPTIONAL];
   // Summary of the file.
   // Deprecated: Use GetFile with VIEW_SUMMARY to retrieve file summaries.
@@ -377,21 +392,29 @@ message GetFileRequest {
   string file_id = 3 [(google.api.field_behavior) = REQUIRED];
   // View allows clients to specify the desired file view in the response.
   optional File.View view = 4 [(google.api.field_behavior) = OPTIONAL];
+  // Storage provider specifies which storage backend to use for the file resource.
+  // This field is only applicable for views that return file content:
+  // VIEW_SUMMARY, VIEW_CONTENT, VIEW_STANDARD_FILE_TYPE, VIEW_ORIGINAL_FILE_TYPE.
+  // - STORAGE_PROVIDER_UNSPECIFIED or STORAGE_PROVIDER_MINIO: Returns MinIO pre-signed URL (default)
+  // - STORAGE_PROVIDER_GCS: Uploads file to GCS if not present (with cache check), returns GCS signed URL
+  // GCS requires proper configuration in system settings.
+  optional File.StorageProvider storage_provider = 5 [(google.api.field_behavior) = OPTIONAL];
 }
 
 // GetFileResponse represents a response for getting a file.
 message GetFileResponse {
   // The file metadata (always included).
   File file = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
-  // Derived resource URI based on view:
-  // - VIEW_SUMMARY/CONTENT/STANDARD_FILE_TYPE/ORIGINAL_FILE_TYPE: MinIO pre-signed URL to content
-  // - VIEW_CACHE: Gemini cache resource name
-  // Only populated for VIEW_SUMMARY, VIEW_CONTENT, VIEW_STANDARD_FILE_TYPE, VIEW_ORIGINAL_FILE_TYPE, and VIEW_CACHE.
+  // Derived resource URI based on view and storage provider:
+  // - VIEW_SUMMARY/CONTENT/STANDARD_FILE_TYPE/ORIGINAL_FILE_TYPE:
+  //   * STORAGE_PROVIDER_MINIO (default): MinIO pre-signed URL
+  //   * STORAGE_PROVIDER_GCS: GCS signed URL (file uploaded to GCS if needed)
+  // - VIEW_CACHE: Gemini/VertexAI cache resource name (format: cacheContent/<cacheId>)
+  // Only populated for views that return file content.
   optional string derived_resource_uri = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 
 // UpdateFileRequest represents a request to update a file.
-// Deprecated: Use UpdateFile with field_mask to update file properties including tags.
 message UpdateFileRequest {
   // Namespace ID.
   string namespace_id = 1 [(google.api.field_behavior) = REQUIRED];
@@ -412,4 +435,22 @@ message UpdateFileRequest {
 message UpdateFileResponse {
   // Updated file.
   File file = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
+}
+
+// ReprocessFileRequest represents a request to reprocess a file.
+message ReprocessFileRequest {
+  // The namespace id.
+  string namespace_id = 1 [(google.api.field_behavior) = REQUIRED];
+  // The knowledge base id.
+  string knowledge_base_id = 2 [(google.api.field_behavior) = REQUIRED];
+  // The file id to reprocess.
+  string file_id = 3 [(google.api.field_behavior) = REQUIRED];
+}
+
+// ReprocessFileResponse represents a response for reprocessing a file.
+message ReprocessFileResponse {
+  // The file being reprocessed.
+  File file = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // Status message.
+  string message = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
 }

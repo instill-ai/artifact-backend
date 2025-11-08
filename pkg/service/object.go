@@ -13,13 +13,14 @@ import (
 	"github.com/gofrs/uuid"
 
 	"github.com/gogo/status"
-	"github.com/instill-ai/artifact-backend/pkg/types"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
+	"github.com/instill-ai/artifact-backend/pkg/repository/object"
+	"github.com/instill-ai/artifact-backend/pkg/types"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
@@ -73,7 +74,7 @@ func (s *service) GetUploadURL(
 	lastModifiedTime := req.GetLastModifiedTime().AsTime()
 	contentType := utils.DetermineMimeType(req.GetObjectName())
 	// create object
-	object := &repository.ObjectModel{
+	obj := &repository.ObjectModel{
 		Name:             req.GetObjectName(),
 		NamespaceUID:     namespaceUID,
 		CreatorUID:       creatorUID,
@@ -86,14 +87,14 @@ func (s *service) GetUploadURL(
 	}
 
 	// create object
-	createdObject, err := s.repository.CreateObject(ctx, *object)
+	createdObject, err := s.repository.CreateObject(ctx, *obj)
 	if err != nil {
 		logger.Error("failed to create object", zap.Error(err))
 		return nil, status.Errorf(codes.Internal, "failed to create object: %v", err)
 	}
 
 	// get path of the object
-	minioPath := repository.GetBlobObjectPath(createdObject.NamespaceUID, createdObject.UID)
+	minioPath := object.GetBlobObjectPath(createdObject.NamespaceUID, createdObject.UID)
 	// update the object destination
 	createdObject.Destination = minioPath
 	_, err = s.repository.UpdateObject(ctx, *createdObject)
@@ -104,7 +105,7 @@ func (s *service) GetUploadURL(
 
 	// get presigned url for uploading object
 	expirationTime := time.Duration(req.GetUrlExpireDays()) * time.Hour * 24
-	presignedURL, err := s.repository.GetPresignedURLForUpload(ctx, namespaceUID, createdObject.UID, req.GetObjectName(), expirationTime)
+	presignedURL, err := s.repository.GetMinIOStorage().GetPresignedURLForUpload(ctx, namespaceUID, createdObject.UID, req.GetObjectName(), expirationTime)
 	if err != nil {
 		logger.Error("failed to make presigned url for upload", zap.Error(err))
 		return nil, status.Errorf(codes.Internal, "failed to make presigned url for upload: %v", err)
@@ -144,32 +145,32 @@ func (s *service) GetDownloadURL(
 		return nil, status.Errorf(codes.InvalidArgument, "failed to parse object uid: %v", err)
 	}
 	// Get the object from database
-	object, err := s.repository.GetObjectByUID(ctx, types.ObjectUIDType(objectUID))
+	obj, err := s.repository.GetObjectByUID(ctx, types.ObjectUIDType(objectUID))
 	if err != nil {
 		logger.Error("failed to get object", zap.Error(err))
 		return nil, status.Errorf(codes.NotFound, "object not found: %v", err)
 	}
 
 	// Verify namespace matches
-	if object.NamespaceUID != namespaceUID {
+	if obj.NamespaceUID != namespaceUID {
 		logger.Error("namespace mismatch")
 		return nil, status.Error(codes.PermissionDenied, "namespace mismatch")
 	}
 
-	if !object.IsUploaded {
-		if !strings.HasPrefix(object.Destination, "ns-") {
+	if !obj.IsUploaded {
+		if !strings.HasPrefix(obj.Destination, "ns-") {
 			return nil, ErrObjectNotUploaded
 		}
 
-		objectInfo, err := s.repository.GetFileMetadata(ctx, repository.BlobBucketName, object.Destination)
+		objectInfo, err := s.repository.GetMinIOStorage().GetFileMetadata(ctx, object.BlobBucketName, obj.Destination)
 		if err != nil {
 			logger.Error("failed to get file", zap.Error(err))
 			return nil, status.Errorf(codes.Internal, "failed to get file: %v", err)
 		}
-		object.IsUploaded = true
-		object.Size = objectInfo.Size
-		object.LastModifiedTime = &objectInfo.LastModified
-		object.ContentType = objectInfo.ContentType
+		obj.IsUploaded = true
+		obj.Size = objectInfo.Size
+		obj.LastModifiedTime = &objectInfo.LastModified
+		obj.ContentType = objectInfo.ContentType
 	}
 
 	// Check URL expiration days
@@ -184,12 +185,12 @@ func (s *service) GetDownloadURL(
 	expirationTime := time.Duration(urlExpireDays) * time.Hour * 24
 
 	// Get presigned URL for downloading object
-	presignedURL, err := s.repository.GetPresignedURLForDownload(
+	presignedURL, err := s.repository.GetMinIOStorage().GetPresignedURLForDownload(
 		ctx,
-		repository.BlobBucketName,
-		object.Destination,
-		object.Name,
-		object.ContentType,
+		object.BlobBucketName,
+		obj.Destination,
+		obj.Name,
+		obj.ContentType,
 		expirationTime,
 	)
 	if err != nil {
@@ -209,7 +210,7 @@ func (s *service) GetDownloadURL(
 		return nil, status.Errorf(codes.Internal, "failed to get expire at ts: %v", err)
 	}
 
-	objectInProto := repository.TurnObjectInDBToObjectInProto(object)
+	objectInProto := repository.TurnObjectInDBToObjectInProto(obj)
 
 	return &artifactpb.GetObjectDownloadURLResponse{
 		DownloadUrl: downloadURL,
@@ -296,13 +297,26 @@ func DecodeBlobURL(blobURL string) (string, error) {
 
 func getExpireAtTS(presignedURL *url.URL) (time.Time, error) {
 	issuedAt := presignedURL.Query().Get("X-Amz-Date")
-	expireTimeSeconds, err := strconv.Atoi(presignedURL.Query().Get("X-Amz-Expires"))
-	if err != nil {
-		return time.Time{}, err
+	expiresStr := presignedURL.Query().Get("X-Amz-Expires")
+
+	// Handle empty expiration parameter - default to 24 hours from now
+	if expiresStr == "" {
+		return time.Now().Add(24 * time.Hour), nil
 	}
+
+	expireTimeSeconds, err := strconv.Atoi(expiresStr)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("failed to parse X-Amz-Expires '%s': %w", expiresStr, err)
+	}
+
+	// Handle empty issued date - use current time
+	if issuedAt == "" {
+		return time.Now().Add(time.Duration(expireTimeSeconds) * time.Second), nil
+	}
+
 	issuedAtTS, err := time.Parse("20060102T150405Z", issuedAt)
 	if err != nil {
-		return time.Time{}, err
+		return time.Time{}, fmt.Errorf("failed to parse X-Amz-Date '%s': %w", issuedAt, err)
 	}
 	expireAtTS := issuedAtTS.Add(time.Duration(expireTimeSeconds) * time.Second)
 	return expireAtTS, nil

@@ -21,6 +21,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/pipeline"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
+	"github.com/instill-ai/artifact-backend/pkg/repository/object"
 	"github.com/instill-ai/artifact-backend/pkg/service"
 	"github.com/instill-ai/artifact-backend/pkg/types"
 
@@ -208,7 +209,7 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 				"Unable to upload file. Please check your network connection and try again.",
 			)
 		}
-		destination := repository.GetBlobObjectPath(ns.NsUID, objectUID)
+		destination := object.GetBlobObjectPath(ns.NsUID, objectUID)
 
 		kbFile.CreatorUID = creatorUID
 		kbFile.Destination = destination
@@ -216,14 +217,14 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 		fileSize, _ := getFileSize(req.File.Content)
 		kbFile.Size = fileSize
 	} else {
-		object, err := ph.service.Repository().GetObjectByUID(ctx, uuid.FromStringOrNil(req.GetFile().GetObjectUid()))
+		obj, err := ph.service.Repository().GetObjectByUID(ctx, uuid.FromStringOrNil(req.GetFile().GetObjectUid()))
 		if err != nil {
 			logger.Error("failed to get knowledge base object with provided UID", zap.Error(err))
 			return nil, err
 		}
 
-		if !object.IsUploaded {
-			if !strings.HasPrefix(object.Destination, "ns-") {
+		if !obj.IsUploaded {
+			if !strings.HasPrefix(obj.Destination, "ns-") {
 				return nil, errorsx.AddMessage(
 					fmt.Errorf("file has not been uploaded yet"),
 					"File upload is not complete. Please wait for the upload to finish and try again.",
@@ -231,47 +232,47 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 			}
 
 			// Check if file exists in minio and get its metadata
-			fileMetadata, err := ph.service.Repository().GetFileMetadata(ctx, repository.BlobBucketName, object.Destination)
+			fileMetadata, err := ph.service.Repository().GetMinIOStorage().GetFileMetadata(ctx, object.BlobBucketName, obj.Destination)
 			if err != nil {
 				logger.Error("failed to get file from minio", zap.Error(err))
 				return nil, err
 			}
-			object.IsUploaded = true
+			obj.IsUploaded = true
 
 			// Update object size from MinIO if it's 0
-			if object.Size == 0 && fileMetadata.Size > 0 {
-				object.Size = fileMetadata.Size
-				_, err = ph.service.Repository().UpdateObject(ctx, *object)
+			if obj.Size == 0 && fileMetadata.Size > 0 {
+				obj.Size = fileMetadata.Size
+				_, err = ph.service.Repository().UpdateObject(ctx, *obj)
 				if err != nil {
 					logger.Warn("failed to update object size", zap.Error(err))
 				} else {
-					logger.Info("updated object size from MinIO", zap.Int64("size", object.Size))
+					logger.Info("updated object size from MinIO", zap.Int64("size", obj.Size))
 				}
 			}
 		}
 
-		kbFile.Filename = object.Name
-		kbFile.CreatorUID = object.CreatorUID
-		kbFile.Destination = object.Destination
-		kbFile.Size = object.Size
+		kbFile.Filename = obj.Name
+		kbFile.CreatorUID = obj.CreatorUID
+		kbFile.Destination = obj.Destination
+		kbFile.Size = obj.Size
 
-		req.File.Type = determineFileType(object.Name)
+		req.File.Type = determineFileType(obj.Name)
 
 		// Special handling for WebM files - determine if audio-only or video by inspecting content
-		if strings.HasSuffix(strings.ToLower(object.Name), ".webm") {
+		if strings.HasSuffix(strings.ToLower(obj.Name), ".webm") {
 			// Read the file to detect codec type
 			// Note: GetFile reads entire file, but detectWebMType only checks first 8KB
-			fileBytes, err := ph.service.Repository().GetFile(ctx, repository.BlobBucketName, object.Destination)
+			fileBytes, err := ph.service.Repository().GetMinIOStorage().GetFile(ctx, object.BlobBucketName, obj.Destination)
 			if err == nil && len(fileBytes) > 0 {
 				// Encode to base64 for detectWebMType function
 				base64Content := base64.StdEncoding.EncodeToString(fileBytes)
 				req.File.Type = detectWebMType(base64Content)
 				logger.Info("Detected WebM type from content",
-					zap.String("filename", object.Name),
+					zap.String("filename", obj.Name),
 					zap.String("type", req.File.Type.String()))
 			} else {
 				logger.Warn("Failed to read WebM file for type detection, defaulting to video",
-					zap.String("filename", object.Name),
+					zap.String("filename", obj.Name),
 					zap.Error(err))
 			}
 			// If we can't read the file, keep the default WEBM_VIDEO type
@@ -636,7 +637,7 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 		if strings.Split(kbFile.Destination, "/")[1] == "uploaded-file" {
 			filename := strings.Split(kbFile.Destination, "/")[2]
 
-			content, err := ph.service.Repository().GetFile(ctx, config.Config.Minio.BucketName, kbFile.Destination)
+			content, err := ph.service.Repository().GetMinIOStorage().GetFile(ctx, config.Config.Minio.BucketName, kbFile.Destination)
 			if err != nil {
 				return nil, errorsx.AddMessage(
 					fmt.Errorf("fetching file blob: %w", err),
@@ -654,7 +655,7 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 				)
 			}
 
-			newDestination := repository.GetBlobObjectPath(ns.NsUID, objectUID)
+			newDestination := object.GetBlobObjectPath(ns.NsUID, objectUID)
 			fmt.Println("newDestination", newDestination)
 			_, err = ph.service.Repository().UpdateKnowledgeBaseFile(ctx, kbFile.UID.String(), map[string]any{
 				repository.KnowledgeBaseFileColumn.Destination: newDestination,
@@ -782,6 +783,168 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 	}
 	kbFile := kbFiles[0]
 
+	// Check which storage provider is requested
+	storageProvider := req.GetStorageProvider()
+	useGCSStorage := storageProvider == artifactpb.File_STORAGE_PROVIDER_GCS
+
+	// Helper function to get file URL (MinIO or GCS)
+	getFileURL := func(bucket, objectPath, filename, contentType string) (string, error) {
+		if useGCSStorage {
+			// Use GCS storage for on-demand access
+			gcsStorage := ph.service.Repository().GetGCSStorage()
+			if gcsStorage == nil {
+				return "", errorsx.AddMessage(
+					fmt.Errorf("GCS is not configured"),
+					"GCS storage is not configured. Please configure GCS in the system settings or use STORAGE_PROVIDER_MINIO.",
+				)
+			}
+
+			// Use the same object path as MinIO for consistency
+			// objectPath already contains the full path (e.g., kb-{uuid}/file-{uuid}/original-file)
+			gcsObjectPath := objectPath
+			gcsBucket := config.Config.GCS.Bucket
+
+			// TTL for on-demand GCS files (10 minutes)
+			const gcsTTL = 10 * time.Minute
+
+			// Check Redis cache first for fast existence check
+			fileExistsInGCS := false
+			cacheExists, err := ph.service.Repository().CheckGCSFileExists(ctx, kb.UID, kbFile.UID, view.String())
+			if err != nil {
+				logger.Warn("Failed to check GCS file cache in Redis",
+					zap.Error(err),
+					zap.String("fileUID", kbFile.UID.String()))
+			} else if cacheExists {
+				fileExistsInGCS = true
+				logger.Debug("File exists in GCS (Redis cache hit)",
+					zap.String("gcsPath", gcsObjectPath),
+					zap.String("view", view.String()))
+			} else {
+				// Redis cache miss - check GCS directly
+				logger.Debug("Redis cache miss, checking GCS directly",
+					zap.String("fileUID", kbFile.UID.String()),
+					zap.String("view", view.String()))
+
+				_, err := gcsStorage.GetFileMetadata(ctx, gcsBucket, gcsObjectPath)
+				if err == nil {
+					fileExistsInGCS = true
+					logger.Debug("File already exists in GCS (direct check)",
+						zap.String("gcsPath", gcsObjectPath))
+
+					// Update Redis cache for future requests
+					now := time.Now()
+					gcsInfo := &repository.GCSFileInfo{
+						KBUIDStr:      kb.UID.String(),
+						FileUIDStr:    kbFile.UID.String(),
+						View:          view.String(),
+						GCSBucket:     gcsBucket,
+						GCSObjectPath: gcsObjectPath,
+						UploadTime:    now,
+						ExpiresAt:     now.Add(gcsTTL),
+					}
+					if err := ph.service.Repository().SetGCSFileInfo(ctx, kb.UID, kbFile.UID, view.String(), gcsInfo, gcsTTL); err != nil {
+						logger.Warn("Failed to update GCS file cache in Redis",
+							zap.Error(err))
+					}
+				}
+			}
+
+			// Upload to GCS if not exists
+			if !fileExistsInGCS {
+				logger.Info("Uploading file to GCS",
+					zap.String("gcsPath", gcsObjectPath),
+					zap.String("sourceObject", objectPath),
+					zap.String("view", view.String()))
+
+				// Get file from MinIO (primary storage)
+				fileContent, err := ph.service.Repository().GetMinIOStorage().GetFile(ctx, bucket, objectPath)
+				if err != nil {
+					return "", errorsx.AddMessage(
+						fmt.Errorf("failed to read file from MinIO: %w", err),
+						"Unable to read file for GCS upload. Please try again.",
+					)
+				}
+
+				// Upload to GCS using GCS storage client
+				base64Content := base64.StdEncoding.EncodeToString(fileContent)
+				err = gcsStorage.UploadBase64File(ctx, gcsBucket, gcsObjectPath, base64Content, contentType)
+				if err != nil {
+					return "", errorsx.AddMessage(
+						fmt.Errorf("failed to upload file to GCS: %w", err),
+						"Unable to upload file to GCS. Please check GCS configuration and try again.",
+					)
+				}
+
+				logger.Info("File uploaded to GCS successfully",
+					zap.String("gcsPath", gcsObjectPath),
+					zap.Int("size", len(fileContent)))
+
+				// Store GCS file metadata in Redis with 10-minute TTL for cleanup
+				now := time.Now()
+				gcsInfo := &repository.GCSFileInfo{
+					KBUIDStr:      kb.UID.String(),
+					FileUIDStr:    kbFile.UID.String(),
+					View:          view.String(),
+					GCSBucket:     gcsBucket,
+					GCSObjectPath: gcsObjectPath,
+					UploadTime:    now,
+					ExpiresAt:     now.Add(gcsTTL),
+				}
+				if err := ph.service.Repository().SetGCSFileInfo(ctx, kb.UID, kbFile.UID, view.String(), gcsInfo, gcsTTL); err != nil {
+					logger.Warn("Failed to store GCS file info in Redis for TTL cleanup",
+						zap.Error(err),
+						zap.String("gcsPath", gcsObjectPath))
+					// Non-fatal error - continue with URL generation
+				} else {
+					logger.Debug("Stored GCS file info in Redis with TTL",
+						zap.String("gcsPath", gcsObjectPath),
+						zap.Duration("ttl", gcsTTL))
+				}
+			}
+
+			// Generate GCS signed URL using GCS storage client
+			signedURL, err := gcsStorage.GetPresignedURLForDownload(
+				ctx,
+				gcsBucket,
+				gcsObjectPath,
+				filename,
+				contentType,
+				15*time.Minute,
+			)
+			if err != nil {
+				return "", errorsx.AddMessage(
+					fmt.Errorf("failed to generate GCS signed URL: %w", err),
+					"Unable to generate GCS access URL for file. Please try again.",
+				)
+			}
+
+			logger.Info("GCS signed URL generated",
+				zap.String("path", gcsObjectPath))
+			return signedURL.String(), nil
+		}
+
+		// Use MinIO storage (default)
+		minioURL, err := ph.service.Repository().GetMinIOStorage().GetPresignedURLForDownload(
+			ctx,
+			bucket,
+			objectPath,
+			filename,
+			contentType,
+			15*time.Minute,
+		)
+		if err != nil {
+			return "", err
+		}
+
+		// Encode MinIO presigned URL to be accessible through API gateway
+		gatewayURL, err := service.EncodeBlobURL(minioURL)
+		if err != nil {
+			return "", err
+		}
+
+		return gatewayURL, nil
+	}
+
 	// Generate view-specific content with proper download headers
 	switch view {
 	case artifactpb.File_VIEW_SUMMARY:
@@ -794,24 +957,20 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 		if err == nil && convertedFile != nil {
 			// Generate filename for download
 			filename := fmt.Sprintf("%s-summary.md", kbFile.Filename)
-			minioURL, err := ph.service.Repository().GetPresignedURLForDownload(
-				ctx,
+			fileURL, err := getFileURL(
 				config.Config.Minio.BucketName,
 				convertedFile.Destination,
 				filename,
 				convertedFile.ContentType, // Usually "text/markdown"
-				15*time.Minute,            // 15 minutes
 			)
-			if err == nil {
-				// Encode MinIO presigned URL to be accessible through API gateway
-				gatewayURL, err := service.EncodeBlobURL(minioURL)
-				if err == nil {
-					derivedResourceURI = &gatewayURL
-				} else {
-					logger.Warn("failed to encode blob URL for summary", zap.Error(err))
+			if err != nil {
+				// If GCS is explicitly requested but fails, return error instead of falling back
+				if useGCSStorage {
+					return nil, err
 				}
+				logger.Warn("failed to generate file URL for summary", zap.Error(err))
 			} else {
-				logger.Warn("failed to generate pre-signed URL for summary", zap.Error(err))
+				derivedResourceURI = &fileURL
 			}
 		} else {
 			logger.Info("summary not available for file", zap.String("fileUID", kbFile.UID.String()))
@@ -827,24 +986,20 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 		if err == nil && convertedFile != nil {
 			// Generate filename for download
 			filename := fmt.Sprintf("%s-content.md", kbFile.Filename)
-			minioURL, err := ph.service.Repository().GetPresignedURLForDownload(
-				ctx,
+			fileURL, err := getFileURL(
 				config.Config.Minio.BucketName,
 				convertedFile.Destination,
 				filename,
 				convertedFile.ContentType, // Usually "text/markdown"
-				15*time.Minute,            // 15 minutes
 			)
-			if err == nil {
-				// Encode MinIO presigned URL to be accessible through API gateway
-				gatewayURL, err := service.EncodeBlobURL(minioURL)
-				if err == nil {
-					derivedResourceURI = &gatewayURL
-				} else {
-					logger.Warn("failed to encode blob URL for content", zap.Error(err))
+			if err != nil {
+				// If GCS is explicitly requested but fails, return error instead of falling back
+				if useGCSStorage {
+					return nil, err
 				}
+				logger.Warn("failed to generate file URL for content", zap.Error(err))
 			} else {
-				logger.Warn("failed to generate pre-signed URL for content", zap.Error(err))
+				derivedResourceURI = &fileURL
 			}
 		} else {
 			logger.Info("content not available for file", zap.String("fileUID", kbFile.UID.String()))
@@ -939,26 +1094,23 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 			if err == nil && convertedFile != nil {
 				// Generate filename for download with appropriate extension
 				filename := fmt.Sprintf("%s.%s", kbFile.Filename, fileExtension)
-				minioURL, err := ph.service.Repository().GetPresignedURLForDownload(
-					ctx,
+				fileURL, err := getFileURL(
 					config.Config.Minio.BucketName,
 					convertedFile.Destination,
 					filename,
 					convertedFile.ContentType,
-					15*time.Minute,
 				)
-				if err == nil {
-					gatewayURL, err := service.EncodeBlobURL(minioURL)
-					if err == nil {
-						derivedResourceURI = &gatewayURL
-						logger.Debug("generated standardized file URL",
-							zap.String("fileType", fileExtension),
-							zap.String("convertedType", convertedFileType.String()))
-					} else {
-						logger.Warn("failed to encode blob URL for standardized file", zap.Error(err))
+				if err != nil {
+					// If GCS is explicitly requested but fails, return error instead of falling back
+					if useGCSStorage {
+						return nil, err
 					}
+					logger.Warn("failed to generate file URL for standardized file", zap.Error(err))
 				} else {
-					logger.Warn("failed to generate pre-signed URL for standardized file", zap.Error(err))
+					derivedResourceURI = &fileURL
+					logger.Debug("generated standardized file URL",
+						zap.String("fileType", fileExtension),
+						zap.String("convertedType", convertedFileType.String()))
 				}
 			} else {
 				logger.Info("standardized file not available",
@@ -977,29 +1129,26 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 		fileProtoType := artifactpb.File_Type(fileType)
 
 		// Get the appropriate bucket for this file
-		bucket := repository.BucketFromDestination(kbFile.Destination)
+		bucket := object.BucketFromDestination(kbFile.Destination)
 
 		// Get MIME type for the original file
 		contentType := fileTypeConvertToMime(fileProtoType)
 
-		// Generate pre-signed URL for the original file
-		minioURL, err := ph.service.Repository().GetPresignedURLForDownload(
-			ctx,
+		// Generate file URL for the original file
+		fileURL, err := getFileURL(
 			bucket,
 			kbFile.Destination,
 			kbFile.Filename,
 			contentType,
-			15*time.Minute,
 		)
-		if err == nil {
-			gatewayURL, err := service.EncodeBlobURL(minioURL)
-			if err == nil {
-				derivedResourceURI = &gatewayURL
-			} else {
-				logger.Warn("failed to encode blob URL for original file", zap.Error(err))
+		if err != nil {
+			// If GCS is explicitly requested but fails, return error instead of falling back
+			if useGCSStorage {
+				return nil, err
 			}
+			logger.Warn("failed to generate file URL for original file", zap.Error(err))
 		} else {
-			logger.Warn("failed to generate pre-signed URL for original file", zap.Error(err))
+			derivedResourceURI = &fileURL
 		}
 
 	case artifactpb.File_VIEW_CACHE:
@@ -1063,7 +1212,7 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 					zap.String("destination", objectName))
 			} else {
 				// Use original file
-				bucketName = repository.BucketFromDestination(kbFile.Destination)
+				bucketName = object.BucketFromDestination(kbFile.Destination)
 				objectName = kbFile.Destination
 			}
 
@@ -1104,6 +1253,7 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 				derivedResourceURI = &cacheResult.CacheName
 			}
 		}
+
 	}
 
 	return &artifactpb.GetFileResponse{
@@ -1901,11 +2051,15 @@ func determineFileType(filename string) artifactpb.File_Type {
 		return artifactpb.File_TYPE_PNG
 	} else if strings.HasSuffix(fileNameLower, ".jpeg") {
 		return artifactpb.File_TYPE_JPEG
+	} else if strings.HasSuffix(fileNameLower, ".jpg") {
+		return artifactpb.File_TYPE_JPEG
 	} else if strings.HasSuffix(fileNameLower, ".gif") {
 		return artifactpb.File_TYPE_GIF
 	} else if strings.HasSuffix(fileNameLower, ".webp") {
 		return artifactpb.File_TYPE_WEBP
 	} else if strings.HasSuffix(fileNameLower, ".tiff") {
+		return artifactpb.File_TYPE_TIFF
+	} else if strings.HasSuffix(fileNameLower, ".tif") {
 		return artifactpb.File_TYPE_TIFF
 	} else if strings.HasSuffix(fileNameLower, ".heic") {
 		return artifactpb.File_TYPE_HEIC
@@ -2016,8 +2170,8 @@ func (ph *PublicHandler) uploadBase64FileToMinIO(ctx context.Context, nsID strin
 		)
 	}
 	objectUID := uuid.FromStringOrNil(response.Object.Uid)
-	destination := repository.GetBlobObjectPath(nsUID, objectUID)
-	err = ph.service.Repository().UploadBase64File(ctx, repository.BlobBucketName, destination, content, fileTypeConvertToMime(fileType))
+	destination := object.GetBlobObjectPath(nsUID, objectUID)
+	err = ph.service.Repository().GetMinIOStorage().UploadBase64File(ctx, object.BlobBucketName, destination, content, fileTypeConvertToMime(fileType))
 	if err != nil {
 		return uuid.Nil, errorsx.AddMessage(
 			fmt.Errorf("failed to upload file to MinIO: %w", err),

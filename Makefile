@@ -97,6 +97,7 @@ integration-test:		## Run integration tests in parallel using GNU parallel
 		-e DB_HOST=${DB_HOST} \
 		{} --no-usage-report" ::: \
 		integration-test/rest.js \
+		integration-test/rest-object-storage.js \
 		integration-test/rest-file-type.js 2>&1 | tee /tmp/artifact-integration-test.log; \
 	bash integration-test/scripts/report-summary.sh /tmp/artifact-integration-test.log
 	@parallel --halt now,fail=1 --tag --line-buffer \

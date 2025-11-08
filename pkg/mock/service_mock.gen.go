@@ -157,7 +157,7 @@ type ServiceMock struct {
 	beforeGetNamespaceByNsIDCounter uint64
 	GetNamespaceByNsIDMock          mServiceMockGetNamespaceByNsID
 
-	funcGetOrCreateFileCache          func(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType, s1 string, s2 string, f2 artifactpb.File_Type, s3 string) (fp1 *mm_service.FileCacheResult, err error)
+	funcGetOrCreateFileCache          func(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType, s1 string, s2 string, f2 artifactpb.File_Type, s3 string) (cp1 *repository.CacheMetadata, err error)
 	funcGetOrCreateFileCacheOrigin    string
 	inspectFuncGetOrCreateFileCache   func(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType, s1 string, s2 string, f2 artifactpb.File_Type, s3 string)
 	afterGetOrCreateFileCacheCounter  uint64
@@ -234,7 +234,7 @@ type ServiceMock struct {
 	beforeRenameSystemAdminCounter uint64
 	RenameSystemAdminMock          mServiceMockRenameSystemAdmin
 
-	funcRenewFileCache          func(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType, s1 string) (fp1 *mm_service.FileCacheResult, err error)
+	funcRenewFileCache          func(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType, s1 string) (cp1 *repository.CacheMetadata, err error)
 	funcRenewFileCacheOrigin    string
 	inspectFuncRenewFileCache   func(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType, s1 string)
 	afterRenewFileCacheCounter  uint64
@@ -7184,7 +7184,7 @@ type ServiceMockGetOrCreateFileCacheParamPtrs struct {
 
 // ServiceMockGetOrCreateFileCacheResults contains results of the Service.GetOrCreateFileCache
 type ServiceMockGetOrCreateFileCacheResults struct {
-	fp1 *mm_service.FileCacheResult
+	cp1 *repository.CacheMetadata
 	err error
 }
 
@@ -7408,7 +7408,7 @@ func (mmGetOrCreateFileCache *mServiceMockGetOrCreateFileCache) Inspect(f func(c
 }
 
 // Return sets up results that will be returned by Service.GetOrCreateFileCache
-func (mmGetOrCreateFileCache *mServiceMockGetOrCreateFileCache) Return(fp1 *mm_service.FileCacheResult, err error) *ServiceMock {
+func (mmGetOrCreateFileCache *mServiceMockGetOrCreateFileCache) Return(cp1 *repository.CacheMetadata, err error) *ServiceMock {
 	if mmGetOrCreateFileCache.mock.funcGetOrCreateFileCache != nil {
 		mmGetOrCreateFileCache.mock.t.Fatalf("ServiceMock.GetOrCreateFileCache mock is already set by Set")
 	}
@@ -7416,13 +7416,13 @@ func (mmGetOrCreateFileCache *mServiceMockGetOrCreateFileCache) Return(fp1 *mm_s
 	if mmGetOrCreateFileCache.defaultExpectation == nil {
 		mmGetOrCreateFileCache.defaultExpectation = &ServiceMockGetOrCreateFileCacheExpectation{mock: mmGetOrCreateFileCache.mock}
 	}
-	mmGetOrCreateFileCache.defaultExpectation.results = &ServiceMockGetOrCreateFileCacheResults{fp1, err}
+	mmGetOrCreateFileCache.defaultExpectation.results = &ServiceMockGetOrCreateFileCacheResults{cp1, err}
 	mmGetOrCreateFileCache.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
 	return mmGetOrCreateFileCache.mock
 }
 
 // Set uses given function f to mock the Service.GetOrCreateFileCache method
-func (mmGetOrCreateFileCache *mServiceMockGetOrCreateFileCache) Set(f func(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType, s1 string, s2 string, f2 artifactpb.File_Type, s3 string) (fp1 *mm_service.FileCacheResult, err error)) *ServiceMock {
+func (mmGetOrCreateFileCache *mServiceMockGetOrCreateFileCache) Set(f func(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType, s1 string, s2 string, f2 artifactpb.File_Type, s3 string) (cp1 *repository.CacheMetadata, err error)) *ServiceMock {
 	if mmGetOrCreateFileCache.defaultExpectation != nil {
 		mmGetOrCreateFileCache.mock.t.Fatalf("Default expectation is already set for the Service.GetOrCreateFileCache method")
 	}
@@ -7453,8 +7453,8 @@ func (mmGetOrCreateFileCache *mServiceMockGetOrCreateFileCache) When(ctx context
 }
 
 // Then sets up Service.GetOrCreateFileCache return parameters for the expectation previously defined by the When method
-func (e *ServiceMockGetOrCreateFileCacheExpectation) Then(fp1 *mm_service.FileCacheResult, err error) *ServiceMock {
-	e.results = &ServiceMockGetOrCreateFileCacheResults{fp1, err}
+func (e *ServiceMockGetOrCreateFileCacheExpectation) Then(cp1 *repository.CacheMetadata, err error) *ServiceMock {
+	e.results = &ServiceMockGetOrCreateFileCacheResults{cp1, err}
 	return e.mock
 }
 
@@ -7480,7 +7480,7 @@ func (mmGetOrCreateFileCache *mServiceMockGetOrCreateFileCache) invocationsDone(
 }
 
 // GetOrCreateFileCache implements mm_service.Service
-func (mmGetOrCreateFileCache *ServiceMock) GetOrCreateFileCache(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType, s1 string, s2 string, f2 artifactpb.File_Type, s3 string) (fp1 *mm_service.FileCacheResult, err error) {
+func (mmGetOrCreateFileCache *ServiceMock) GetOrCreateFileCache(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType, s1 string, s2 string, f2 artifactpb.File_Type, s3 string) (cp1 *repository.CacheMetadata, err error) {
 	mm_atomic.AddUint64(&mmGetOrCreateFileCache.beforeGetOrCreateFileCacheCounter, 1)
 	defer mm_atomic.AddUint64(&mmGetOrCreateFileCache.afterGetOrCreateFileCacheCounter, 1)
 
@@ -7500,7 +7500,7 @@ func (mmGetOrCreateFileCache *ServiceMock) GetOrCreateFileCache(ctx context.Cont
 	for _, e := range mmGetOrCreateFileCache.GetOrCreateFileCacheMock.expectations {
 		if minimock.Equal(*e.params, mm_params) {
 			mm_atomic.AddUint64(&e.Counter, 1)
-			return e.results.fp1, e.results.err
+			return e.results.cp1, e.results.err
 		}
 	}
 
@@ -7557,7 +7557,7 @@ func (mmGetOrCreateFileCache *ServiceMock) GetOrCreateFileCache(ctx context.Cont
 		if mm_results == nil {
 			mmGetOrCreateFileCache.t.Fatal("No results are set for the ServiceMock.GetOrCreateFileCache")
 		}
-		return (*mm_results).fp1, (*mm_results).err
+		return (*mm_results).cp1, (*mm_results).err
 	}
 	if mmGetOrCreateFileCache.funcGetOrCreateFileCache != nil {
 		return mmGetOrCreateFileCache.funcGetOrCreateFileCache(ctx, k1, f1, s1, s2, f2, s3)
@@ -11131,7 +11131,7 @@ type ServiceMockRenewFileCacheParamPtrs struct {
 
 // ServiceMockRenewFileCacheResults contains results of the Service.RenewFileCache
 type ServiceMockRenewFileCacheResults struct {
-	fp1 *mm_service.FileCacheResult
+	cp1 *repository.CacheMetadata
 	err error
 }
 
@@ -11283,7 +11283,7 @@ func (mmRenewFileCache *mServiceMockRenewFileCache) Inspect(f func(ctx context.C
 }
 
 // Return sets up results that will be returned by Service.RenewFileCache
-func (mmRenewFileCache *mServiceMockRenewFileCache) Return(fp1 *mm_service.FileCacheResult, err error) *ServiceMock {
+func (mmRenewFileCache *mServiceMockRenewFileCache) Return(cp1 *repository.CacheMetadata, err error) *ServiceMock {
 	if mmRenewFileCache.mock.funcRenewFileCache != nil {
 		mmRenewFileCache.mock.t.Fatalf("ServiceMock.RenewFileCache mock is already set by Set")
 	}
@@ -11291,13 +11291,13 @@ func (mmRenewFileCache *mServiceMockRenewFileCache) Return(fp1 *mm_service.FileC
 	if mmRenewFileCache.defaultExpectation == nil {
 		mmRenewFileCache.defaultExpectation = &ServiceMockRenewFileCacheExpectation{mock: mmRenewFileCache.mock}
 	}
-	mmRenewFileCache.defaultExpectation.results = &ServiceMockRenewFileCacheResults{fp1, err}
+	mmRenewFileCache.defaultExpectation.results = &ServiceMockRenewFileCacheResults{cp1, err}
 	mmRenewFileCache.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
 	return mmRenewFileCache.mock
 }
 
 // Set uses given function f to mock the Service.RenewFileCache method
-func (mmRenewFileCache *mServiceMockRenewFileCache) Set(f func(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType, s1 string) (fp1 *mm_service.FileCacheResult, err error)) *ServiceMock {
+func (mmRenewFileCache *mServiceMockRenewFileCache) Set(f func(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType, s1 string) (cp1 *repository.CacheMetadata, err error)) *ServiceMock {
 	if mmRenewFileCache.defaultExpectation != nil {
 		mmRenewFileCache.mock.t.Fatalf("Default expectation is already set for the Service.RenewFileCache method")
 	}
@@ -11328,8 +11328,8 @@ func (mmRenewFileCache *mServiceMockRenewFileCache) When(ctx context.Context, k1
 }
 
 // Then sets up Service.RenewFileCache return parameters for the expectation previously defined by the When method
-func (e *ServiceMockRenewFileCacheExpectation) Then(fp1 *mm_service.FileCacheResult, err error) *ServiceMock {
-	e.results = &ServiceMockRenewFileCacheResults{fp1, err}
+func (e *ServiceMockRenewFileCacheExpectation) Then(cp1 *repository.CacheMetadata, err error) *ServiceMock {
+	e.results = &ServiceMockRenewFileCacheResults{cp1, err}
 	return e.mock
 }
 
@@ -11355,7 +11355,7 @@ func (mmRenewFileCache *mServiceMockRenewFileCache) invocationsDone() bool {
 }
 
 // RenewFileCache implements mm_service.Service
-func (mmRenewFileCache *ServiceMock) RenewFileCache(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType, s1 string) (fp1 *mm_service.FileCacheResult, err error) {
+func (mmRenewFileCache *ServiceMock) RenewFileCache(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType, s1 string) (cp1 *repository.CacheMetadata, err error) {
 	mm_atomic.AddUint64(&mmRenewFileCache.beforeRenewFileCacheCounter, 1)
 	defer mm_atomic.AddUint64(&mmRenewFileCache.afterRenewFileCacheCounter, 1)
 
@@ -11375,7 +11375,7 @@ func (mmRenewFileCache *ServiceMock) RenewFileCache(ctx context.Context, k1 type
 	for _, e := range mmRenewFileCache.RenewFileCacheMock.expectations {
 		if minimock.Equal(*e.params, mm_params) {
 			mm_atomic.AddUint64(&e.Counter, 1)
-			return e.results.fp1, e.results.err
+			return e.results.cp1, e.results.err
 		}
 	}
 
@@ -11417,7 +11417,7 @@ func (mmRenewFileCache *ServiceMock) RenewFileCache(ctx context.Context, k1 type
 		if mm_results == nil {
 			mmRenewFileCache.t.Fatal("No results are set for the ServiceMock.RenewFileCache")
 		}
-		return (*mm_results).fp1, (*mm_results).err
+		return (*mm_results).cp1, (*mm_results).err
 	}
 	if mmRenewFileCache.funcRenewFileCache != nil {
 		return mmRenewFileCache.funcRenewFileCache(ctx, k1, f1, s1)

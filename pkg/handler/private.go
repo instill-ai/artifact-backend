@@ -48,33 +48,6 @@ func NewPrivateHandler(s artifact.Service, log *zap.Logger) *PrivateHandler {
 	}
 }
 
-// GetObjectURLAdmin retrieves the information of an object URL (admin only).
-func (h *PrivateHandler) GetObjectURLAdmin(ctx context.Context, req *artifactpb.GetObjectURLAdminRequest) (*artifactpb.GetObjectURLAdminResponse, error) {
-	// check if both UID and EncodedURLPath, one of them is provided
-	if req.GetUid() != "" && req.GetEncodedUrlPath() != "" {
-		return nil, fmt.Errorf("one of UID or EncodedURLPath must be provided")
-	}
-
-	var resp *repository.ObjectURLModel
-	var err error
-	objectURLUID := uuid.FromStringOrNil(req.GetUid())
-	if objectURLUID != uuid.Nil {
-		resp, err = h.service.Repository().GetObjectURLByUID(ctx, objectURLUID)
-		if err != nil {
-			h.logger.Error("GetObjectURLAdmin", zap.Error(err))
-			return nil, fmt.Errorf("cannot get object URL by UID: %w", err)
-		}
-	} else if req.GetEncodedUrlPath() != "" {
-		resp, err = h.service.Repository().GetObjectURLByEncodedURLPath(ctx, req.GetEncodedUrlPath())
-		if err != nil {
-			h.logger.Error("GetObjectURLAdmin", zap.Error(err))
-			return nil, fmt.Errorf("cannot get object URL by encoded URL path: %w", err)
-		}
-	}
-
-	return (*artifactpb.GetObjectURLAdminResponse)(repository.TurnObjectURLToResponse(resp)), nil
-}
-
 // GetObjectAdmin retrieves the information of an object (admin only).
 func (h *PrivateHandler) GetObjectAdmin(ctx context.Context, req *artifactpb.GetObjectAdminRequest) (*artifactpb.GetObjectAdminResponse, error) {
 	objectUID, err := uuid.FromString(req.GetUid())

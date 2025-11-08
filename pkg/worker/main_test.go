@@ -59,8 +59,11 @@ func TestDeleteFilesBatchActivity_Success(t *testing.T) {
 		"file3.txt",
 	}
 
+	mockStorage := mock.NewStorageMock(mc)
+	mockStorage.DeleteFileMock.Return(nil)
+
 	mockRepository := mock.NewRepositoryMock(mc)
-	mockRepository.DeleteFileMock.Return(nil)
+	mockRepository.GetMinIOStorageMock.Return(mockStorage)
 
 	w := &Worker{
 		repository: mockRepository,
@@ -104,16 +107,19 @@ func TestDeleteFilesBatchActivity_PartialFailure(t *testing.T) {
 		"file2.txt",
 	}
 
-	mockRepository := mock.NewRepositoryMock(mc)
+	mockStorage := mock.NewStorageMock(mc)
 	// First file succeeds, second file fails
 	var callCount atomic.Int32
-	mockRepository.DeleteFileMock.Set(func(ctx context.Context, bucket string, path string) error {
+	mockStorage.DeleteFileMock.Set(func(ctx context.Context, bucket string, path string) error {
 		count := callCount.Add(1)
 		if count == 1 {
 			return nil
 		}
 		return fmt.Errorf("delete failed")
 	})
+
+	mockRepository := mock.NewRepositoryMock(mc)
+	mockRepository.GetMinIOStorageMock.Return(mockStorage)
 
 	w := &Worker{
 		repository: mockRepository,
@@ -140,10 +146,13 @@ func TestGetFilesBatchActivity_Success(t *testing.T) {
 		"file2.txt",
 	}
 
-	mockRepository := mock.NewRepositoryMock(mc)
-	mockRepository.GetFileMock.Set(func(ctx context.Context, bucket string, path string) ([]byte, error) {
+	mockStorage := mock.NewStorageMock(mc)
+	mockStorage.GetFileMock.Set(func(ctx context.Context, bucket string, path string) ([]byte, error) {
 		return []byte("content of " + path), nil
 	})
+
+	mockRepository := mock.NewRepositoryMock(mc)
+	mockRepository.GetMinIOStorageMock.Return(mockStorage)
 
 	w := &Worker{
 		repository: mockRepository,
@@ -358,10 +367,13 @@ func TestGetFilesByPaths_Success(t *testing.T) {
 	bucket := "test-bucket"
 	filePaths := []string{"file1.txt"}
 
-	mockRepository := mock.NewRepositoryMock(mc)
-	mockRepository.GetFileMock.
+	mockStorage := mock.NewStorageMock(mc)
+	mockStorage.GetFileMock.
 		When(minimock.AnyContext, bucket, "file1.txt").
 		Then([]byte("content"), nil)
+
+	mockRepository := mock.NewRepositoryMock(mc)
+	mockRepository.GetMinIOStorageMock.Return(mockStorage)
 
 	w := &Worker{
 		repository: mockRepository,
@@ -383,8 +395,11 @@ func TestDeleteFiles_Success(t *testing.T) {
 	bucket := "test-bucket"
 	filePaths := []string{"file1.txt"}
 
+	mockStorage := mock.NewStorageMock(mc)
+	mockStorage.DeleteFileMock.Return(nil)
+
 	mockRepository := mock.NewRepositoryMock(mc)
-	mockRepository.DeleteFileMock.Return(nil)
+	mockRepository.GetMinIOStorageMock.Return(mockStorage)
 
 	w := &Worker{
 		repository: mockRepository,

@@ -429,3 +429,103 @@ func (w *Worker) CleanupKnowledgeBaseWorkflow(ctx workflow.Context, param Cleanu
 	logger.Info("CleanupKnowledgeBaseWorkflow completed successfully", "kbUID", param.KBUID.String())
 	return nil
 }
+
+// GCSCleanupWorkflow periodically scans Redis for expired GCS files and deletes them
+// This workflow runs continuously on a schedule (every 2 minutes) to clean up
+// on-demand GCS files that were uploaded for GetFile requests with STORAGE_PROVIDER_GCS
+//
+// GCS files have a 10-minute TTL from upload time. This workflow checks every 2 minutes
+// for files whose Redis TTL is expiring (within 1 minute) and deletes them from GCS.
+//
+// Workflow name: GCSCleanupWorkflow
+// Schedule: Every 2 minutes (via cron or manual schedule)
+// Retry policy: Unlimited retries with exponential backoff
+func (w *Worker) GCSCleanupWorkflow(ctx workflow.Context) error {
+	logger := workflow.GetLogger(ctx)
+	logger.Info("GCSCleanupWorkflow: Starting GCS cleanup workflow")
+
+	// Activity options with reasonable timeouts
+	activityOptions := workflow.ActivityOptions{
+		StartToCloseTimeout: 5 * time.Minute,  // Allow up to 5 minutes for cleanup
+		HeartbeatTimeout:    30 * time.Second, // Heartbeat every 30s for long-running cleanup
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    10 * time.Second,
+			BackoffCoefficient: 2.0,
+			MaximumInterval:    5 * time.Minute,
+			MaximumAttempts:    3, // Retry up to 3 times per cycle
+		},
+	}
+	ctx = workflow.WithActivityOptions(ctx, activityOptions)
+
+	// Clean up expired GCS files
+	param := &CleanupExpiredGCSFilesActivityParam{
+		MaxFilesToClean: 1000, // Process up to 1000 files per cycle
+	}
+
+	err := workflow.ExecuteActivity(ctx, "CleanupExpiredGCSFilesActivity", param).Get(ctx, nil)
+	if err != nil {
+		logger.Error("GCSCleanupWorkflow: Failed to execute cleanup activity",
+			"error", err.Error())
+		// Don't fail the workflow - log and continue
+		// The next scheduled run will retry
+		return err
+	}
+
+	logger.Info("GCSCleanupWorkflow: GCS cleanup workflow completed successfully")
+	return nil
+}
+
+// GCSCleanupContinuousWorkflow runs the GCS cleanup in a continuous loop with timer
+// This is an alternative to using Temporal's cron schedules
+// It runs every 2 minutes indefinitely until cancelled
+//
+// Workflow name: GCSCleanupContinuousWorkflow
+// Usage: Start once and it will run forever on a 2-minute interval
+func (w *Worker) GCSCleanupContinuousWorkflow(ctx workflow.Context) error {
+	logger := workflow.GetLogger(ctx)
+	logger.Info("GCSCleanupContinuousWorkflow: Starting continuous GCS cleanup workflow")
+
+	// Activity options
+	activityOptions := workflow.ActivityOptions{
+		StartToCloseTimeout: 5 * time.Minute,
+		HeartbeatTimeout:    30 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    10 * time.Second,
+			BackoffCoefficient: 2.0,
+			MaximumInterval:    5 * time.Minute,
+			MaximumAttempts:    3,
+		},
+	}
+	ctx = workflow.WithActivityOptions(ctx, activityOptions)
+
+	// Run cleanup every 2 minutes
+	cleanupInterval := 2 * time.Minute
+
+	for {
+		logger.Info("GCSCleanupContinuousWorkflow: Starting cleanup cycle")
+
+		// Execute cleanup activity
+		param := &CleanupExpiredGCSFilesActivityParam{
+			MaxFilesToClean: 1000,
+		}
+
+		err := workflow.ExecuteActivity(ctx, "CleanupExpiredGCSFilesActivity", param).Get(ctx, nil)
+		if err != nil {
+			logger.Warn("GCSCleanupContinuousWorkflow: Cleanup cycle failed, will retry in next cycle",
+				"error", err.Error())
+			// Don't fail - just log and continue to next cycle
+		} else {
+			logger.Info("GCSCleanupContinuousWorkflow: Cleanup cycle completed successfully")
+		}
+
+		// Wait for next cycle
+		logger.Debug("GCSCleanupContinuousWorkflow: Sleeping until next cycle",
+			"interval", cleanupInterval)
+
+		if err := workflow.Sleep(ctx, cleanupInterval); err != nil {
+			logger.Error("GCSCleanupContinuousWorkflow: Workflow sleep interrupted",
+				"error", err.Error())
+			return err
+		}
+	}
+}

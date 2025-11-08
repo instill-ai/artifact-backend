@@ -4,9 +4,9 @@ package artifact.artifact.v1alpha;
 
 // Artifact definitions
 import "artifact/artifact/v1alpha/artifact.proto";
-import "artifact/artifact/v1alpha/knowledge_base.proto";
 import "artifact/artifact/v1alpha/chunk.proto";
 import "artifact/artifact/v1alpha/file.proto";
+import "artifact/artifact/v1alpha/knowledge_base.proto";
 import "artifact/artifact/v1alpha/object.proto";
 // Google API
 import "google/api/annotations.proto";
@@ -171,6 +171,24 @@ service ArtifactPublicService {
     option (google.api.http) = {
       patch: "/v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id}/files/{file_id}"
       body: "file"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      tags: "Artifact"
+      extensions: {
+        key: "x-stage"
+        value: {string_value: "alpha"}
+      }
+    };
+  }
+
+  // Reprocess a file
+  //
+  // Triggers reprocessing of a file with its current configuration.
+  // This will regenerate embeddings, chunks, and summaries.
+  rpc ReprocessFile(ReprocessFileRequest) returns (ReprocessFileResponse) {
+    option (google.api.http) = {
+      post: "/v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id}/files/{file_id}/reprocess"
+      body: "*"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       tags: "Artifact"

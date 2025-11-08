@@ -14,6 +14,7 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/instill-ai/artifact-backend/pkg/pipeline"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
+	"github.com/instill-ai/artifact-backend/pkg/repository/object"
 	"github.com/instill-ai/artifact-backend/pkg/types"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
@@ -231,7 +232,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			return handleFileError(fileUID, "get file metadata", err)
 		}
 
-		bucket := repository.BucketFromDestination(metadata.File.Destination)
+		bucket := object.BucketFromDestination(metadata.File.Destination)
 		fileType := artifactpb.File_Type(artifactpb.File_Type_value[metadata.File.FileType])
 
 		// Capture KB model family and dual-processing info from first file
@@ -719,6 +720,21 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				filesFailed[wf.fileUID.String()] = handleFileError(wf.fileUID, "update conversion metadata", err)
 				filesCompleted[wf.fileUID.String()] = true
 				continue
+			}
+
+			// Update usage metadata (token counts from AI processing)
+			// Store the usage metadata from both content and summary for later retrieval
+			// According to Gemini API docs: https://ai.google.dev/gemini-api/docs/tokens?lang=python
+			if err := workflow.ExecuteActivity(ctx, w.UpdateUsageMetadataActivity, &UpdateUsageMetadataActivityParam{
+				FileUID:         wf.fileUID,
+				ContentMetadata: contentResult.UsageMetadata,
+				SummaryMetadata: summaryResult.UsageMetadata,
+			}).Get(ctx, nil); err != nil {
+				// Non-fatal error - log warning and continue
+				// Usage metadata is for billing/monitoring, not critical for file processing
+				logger.Warn("Failed to update usage metadata (continuing anyway)",
+					"fileUID", wf.fileUID.String(),
+					"error", err.Error())
 			}
 
 			// Step 2d: Process chunking and embedding for this file

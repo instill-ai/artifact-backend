@@ -1,4 +1,4 @@
-package repository
+package object
 
 import (
 	"bytes"
@@ -12,69 +12,35 @@ import (
 	"strings"
 	"time"
 
-	"github.com/instill-ai/artifact-backend/pkg/types"
 	"github.com/minio/minio-go/v7"
 	"go.uber.org/zap"
 
 	"github.com/instill-ai/artifact-backend/config"
+	"github.com/instill-ai/artifact-backend/pkg/types"
 	"github.com/instill-ai/x/resource"
 
 	logx "github.com/instill-ai/x/log"
 	miniox "github.com/instill-ai/x/minio"
 )
 
-// ObjectStorage defines the interface for object storage operations
-type ObjectStorage interface {
-	// Basic file operations
-	UploadBase64File(ctx context.Context, bucket string, filePath string, base64Content string, fileMimeType string) error
-	DeleteFile(ctx context.Context, bucket string, filePath string) error
-	GetFile(ctx context.Context, bucket string, filePath string) ([]byte, error)
-	GetFileMetadata(ctx context.Context, bucket string, filePath string) (*minio.ObjectInfo, error)
-	ListFilePathsWithPrefix(ctx context.Context, bucket string, prefix string) ([]string, error)
-
-	// Knowledge base operations
-	SaveConvertedFile(ctx context.Context, kbUID types.KBUIDType, fileUID types.FileUIDType, convertedFileUID types.ConvertedFileUIDType, fileExt string, content []byte) (path string, _ error)
-	ListKnowledgeBaseFilePaths(ctx context.Context, kbUID types.KBUIDType) ([]string, error)
-	ListConvertedFilesByFileUID(ctx context.Context, kbUID types.KBUIDType, fileUID types.FileUIDType) ([]string, error)
-	ListTextChunksByFileUID(ctx context.Context, kbUID types.KBUIDType, fileUID types.FileUIDType) ([]string, error)
-
-	// Object (blob) operations
-	GetPresignedURLForUpload(ctx context.Context, namespaceUUID types.NamespaceUIDType, objectUUID types.ObjectUIDType, filename string, urlExpiration time.Duration) (*url.URL, error)
-	// GetPresignedURLForDownload generates a presigned URL for downloading any object with proper Content-Disposition and Content-Type headers.
-	// This ensures proper browser download behavior with correct filename and MIME type handling.
-	GetPresignedURLForDownload(ctx context.Context, bucket string, objectPath string, filename string, contentType string, expiration time.Duration) (*url.URL, error)
-}
-
-// MinIO implementation constants
 const (
-	// BlobBucketName is used to interact with data upload by clients via
-	// presigned upload URLs.
-	BlobBucketName = "core-blob"
-
-	convertedFileDir = "converted-file"
-	chunkDir         = "chunk"
-
-	// presignAgent is a hard-coded value for the presigned URLs. Since the client
-	// that requests the presigned URL (console) and the one that interacts with
-	// MinIO (api-gateway) are different, the first step to audit the MinIO clients
-	// is setting this value as a constant.
+	// presignAgent is a hard-coded value for the presigned URLs
 	presignAgent = "artifact-backend-presign"
 )
 
-type minioClient struct {
+type minioStorage struct {
 	client *minio.Client
 	logger *zap.Logger
 }
 
-// NewMinioObjectStorage creates a new ObjectStorage implementation using MinIO.
-func NewMinioObjectStorage(ctx context.Context, params miniox.ClientParams) (ObjectStorage, error) {
+// NewMinIOStorage creates a new object.Storage implementation using MinIO
+func NewMinIOStorage(ctx context.Context, params miniox.ClientParams) (Storage, error) {
 	params.Logger = params.Logger.With(
 		zap.String("host:port", params.Config.Host+":"+params.Config.Port),
 		zap.String("user", params.Config.User),
 	)
 
-	// We'll initialise a client and create the knowledge base bucket. Then,
-	// we'll create the blob bucket.
+	// Initialize client and create the knowledge base bucket
 	kbParams := params
 	xClient, err := miniox.NewMinIOClientAndInitBucket(ctx, kbParams)
 	if err != nil {
@@ -104,15 +70,14 @@ func NewMinioObjectStorage(ctx context.Context, params miniox.ClientParams) (Obj
 		}
 	}
 
-	return &minioClient{
+	return &minioStorage{
 		client: client,
 		logger: params.Logger,
 	}, nil
 }
 
-// Basic file operations
-
-func (m *minioClient) UploadBase64File(ctx context.Context, bucket string, filePathName string, base64Content string, fileMimeType string) error {
+// UploadBase64File implements object.Storage.UploadBase64File
+func (m *minioStorage) UploadBase64File(ctx context.Context, bucket string, filePathName string, base64Content string, fileMimeType string) error {
 	// Decode the base64 content
 	decodedContent, err := base64.StdEncoding.DecodeString(base64Content)
 	if err != nil {
@@ -148,7 +113,8 @@ func (m *minioClient) UploadBase64File(ctx context.Context, bucket string, fileP
 	return nil
 }
 
-func (m *minioClient) DeleteFile(ctx context.Context, bucket string, filePathName string) error {
+// DeleteFile implements object.Storage.DeleteFile
+func (m *minioStorage) DeleteFile(ctx context.Context, bucket string, filePathName string) error {
 	// Delete the file from MinIO
 	for attempt := 1; attempt <= 3; attempt++ {
 		err := m.client.RemoveObject(ctx, bucket, filePathName, minio.RemoveObjectOptions{})
@@ -161,27 +127,8 @@ func (m *minioClient) DeleteFile(ctx context.Context, bucket string, filePathNam
 	return fmt.Errorf("failed to delete file from MinIO after 3 attempts")
 }
 
-func (m *minioClient) ListFilePathsWithPrefix(ctx context.Context, bucket string, prefix string) ([]string, error) {
-	opts := minio.ListObjectsOptions{
-		Prefix:    prefix,
-		Recursive: true,
-	}
-	opts.Set(miniox.MinIOHeaderUserUID, m.authenticatedUser(ctx))
-	objectCh := m.client.ListObjects(ctx, bucket, opts)
-
-	var filePaths []string
-	for object := range objectCh {
-		if object.Err != nil {
-			m.logger.Error("Failed to list object from MinIO", zap.Error(object.Err))
-			return nil, fmt.Errorf("failed to list objects: %w", object.Err)
-		}
-		filePaths = append(filePaths, object.Key)
-	}
-
-	return filePaths, nil
-}
-
-func (m *minioClient) GetFile(ctx context.Context, bucketName string, objectName string) ([]byte, error) {
+// GetFile implements object.Storage.GetFile
+func (m *minioStorage) GetFile(ctx context.Context, bucketName string, objectName string) ([]byte, error) {
 	var object *minio.Object
 	var err error
 	for attempt := 1; attempt <= 3; attempt++ {
@@ -211,7 +158,8 @@ func (m *minioClient) GetFile(ctx context.Context, bucketName string, objectName
 	return buf.Bytes(), nil
 }
 
-func (m *minioClient) GetFileMetadata(ctx context.Context, bucket string, filePathName string) (*minio.ObjectInfo, error) {
+// GetFileMetadata implements object.Storage.GetFileMetadata
+func (m *minioStorage) GetFileMetadata(ctx context.Context, bucket string, filePathName string) (*minio.ObjectInfo, error) {
 	object, err := m.client.StatObject(ctx, bucket, filePathName, minio.StatObjectOptions{})
 	if err != nil {
 		return nil, err
@@ -219,10 +167,29 @@ func (m *minioClient) GetFileMetadata(ctx context.Context, bucket string, filePa
 	return &object, nil
 }
 
-// Knowledge base operations
+// ListFilePathsWithPrefix implements object.Storage.ListFilePathsWithPrefix
+func (m *minioStorage) ListFilePathsWithPrefix(ctx context.Context, bucket string, prefix string) ([]string, error) {
+	opts := minio.ListObjectsOptions{
+		Prefix:    prefix,
+		Recursive: true,
+	}
+	opts.Set(miniox.MinIOHeaderUserUID, m.authenticatedUser(ctx))
+	objectCh := m.client.ListObjects(ctx, bucket, opts)
 
-// SaveConvertedFile saves the converted file to MinIO
-func (m *minioClient) SaveConvertedFile(ctx context.Context, kbUID types.KBUIDType, fileUID types.FileUIDType, convertedFileUID types.ConvertedFileUIDType, fileExt string, content []byte) (string, error) {
+	var filePaths []string
+	for object := range objectCh {
+		if object.Err != nil {
+			m.logger.Error("Failed to list object from MinIO", zap.Error(object.Err))
+			return nil, fmt.Errorf("failed to list objects: %w", object.Err)
+		}
+		filePaths = append(filePaths, object.Key)
+	}
+
+	return filePaths, nil
+}
+
+// SaveConvertedFile implements object.Storage.SaveConvertedFile
+func (m *minioStorage) SaveConvertedFile(ctx context.Context, kbUID types.KBUIDType, fileUID types.FileUIDType, convertedFileUID types.ConvertedFileUIDType, fileExt string, content []byte) (string, error) {
 	filename := convertedFileUID.String() + "." + fileExt
 	path := filepath.Join(convertedFileBasePath(kbUID, fileUID), filename)
 
@@ -239,8 +206,8 @@ func (m *minioClient) SaveConvertedFile(ctx context.Context, kbUID types.KBUIDTy
 	return path, nil
 }
 
-// ListKnowledgeBaseFilePaths lists the file paths for a knowledge base
-func (m *minioClient) ListKnowledgeBaseFilePaths(ctx context.Context, kbUID types.KBUIDType) ([]string, error) {
+// ListKnowledgeBaseFilePaths implements object.Storage.ListKnowledgeBaseFilePaths
+func (m *minioStorage) ListKnowledgeBaseFilePaths(ctx context.Context, kbUID types.KBUIDType) ([]string, error) {
 	bucket := config.Config.Minio.BucketName
 	legacyPrefix := kbUID.String()
 
@@ -257,20 +224,18 @@ func (m *minioClient) ListKnowledgeBaseFilePaths(ctx context.Context, kbUID type
 	return append(paths1, paths2...), nil
 }
 
-// ListConvertedFilesByFileUID lists the converted file paths for a file
-func (m *minioClient) ListConvertedFilesByFileUID(ctx context.Context, kbUID types.KBUIDType, fileUID types.FileUIDType) ([]string, error) {
+// ListConvertedFilesByFileUID implements object.Storage.ListConvertedFilesByFileUID
+func (m *minioStorage) ListConvertedFilesByFileUID(ctx context.Context, kbUID types.KBUIDType, fileUID types.FileUIDType) ([]string, error) {
 	return m.ListFilePathsWithPrefix(ctx, config.Config.Minio.BucketName, convertedFileBasePath(kbUID, fileUID))
 }
 
-// ListTextChunksByFileUID lists the text chunk paths for a file
-func (m *minioClient) ListTextChunksByFileUID(ctx context.Context, kbUID types.KBUIDType, fileUID types.FileUIDType) ([]string, error) {
+// ListTextChunksByFileUID implements object.Storage.ListTextChunksByFileUID
+func (m *minioStorage) ListTextChunksByFileUID(ctx context.Context, kbUID types.KBUIDType, fileUID types.FileUIDType) ([]string, error) {
 	return m.ListFilePathsWithPrefix(ctx, config.Config.Minio.BucketName, chunkBasePath(kbUID, fileUID))
 }
 
-// Object (blob) operations
-
-// GetPresignedURLForUpload generates a presigned URL for uploading an object to MinIO
-func (m *minioClient) GetPresignedURLForUpload(ctx context.Context, namespaceUUID types.NamespaceUIDType, objectUUID types.ObjectUIDType, filename string, expiration time.Duration) (*url.URL, error) {
+// GetPresignedURLForUpload implements object.Storage.GetPresignedURLForUpload
+func (m *minioStorage) GetPresignedURLForUpload(ctx context.Context, namespaceUUID types.NamespaceUIDType, objectUUID types.ObjectUIDType, filename string, expiration time.Duration) (*url.URL, error) {
 	logger, err := logx.GetZapLogger(ctx)
 	if err != nil {
 		return nil, err
@@ -303,10 +268,8 @@ func (m *minioClient) GetPresignedURLForUpload(ctx context.Context, namespaceUUI
 	return presignedURL, nil
 }
 
-// GetPresignedURLForDownload generates a presigned URL for downloading any object from MinIO
-// with proper Content-Disposition and Content-Type headers for browser download behavior.
-// This single method handles all download URL generation needs: original files, converted files, summaries, PDFs, etc.
-func (m *minioClient) GetPresignedURLForDownload(ctx context.Context, bucket string, objectPath string, filename string, contentType string, expiration time.Duration) (*url.URL, error) {
+// GetPresignedURLForDownload implements Storage.GetPresignedURLForDownload
+func (m *minioStorage) GetPresignedURLForDownload(ctx context.Context, bucket string, objectPath string, filename string, contentType string, expiration time.Duration) (*url.URL, error) {
 	logger, err := logx.GetZapLogger(ctx)
 	if err != nil {
 		return nil, err
@@ -323,9 +286,6 @@ func (m *minioClient) GetPresignedURLForDownload(ctx context.Context, bucket str
 	reqParams.Set("response-content-type", contentType)
 
 	// Generate presigned URL using PresignedGetObject (public download URL)
-	// Unlike PresignHeader, this doesn't sign custom headers, creating a truly public URL
-	// that works from any client (browser, curl, etc.) without special headers.
-	// This is appropriate for downloads where we want broad accessibility.
 	presignedURL, err := m.client.PresignedGetObject(
 		ctx,
 		bucket,
@@ -347,41 +307,30 @@ func (m *minioClient) GetPresignedURLForDownload(ctx context.Context, bucket str
 
 // Helper functions
 
-func (m *minioClient) authenticatedUser(ctx context.Context) string {
+func (m *minioStorage) authenticatedUser(ctx context.Context) string {
 	_, userUID := resource.GetRequesterUIDAndUserUID(ctx)
 	return userUID.String()
 }
 
-func (m *minioClient) presignHeaders() http.Header {
+func (m *minioStorage) presignHeaders() http.Header {
 	h := http.Header{}
 	h.Set("User-Agent", presignAgent)
 	return h
 }
 
-func fileBasePath(kbUID, fileUID types.FileUIDType) string {
+func fileBasePath(kbUID types.KBUIDType, fileUID types.FileUIDType) string {
 	return filepath.Join("kb-"+kbUID.String(), "file-"+fileUID.String())
 }
 
-func convertedFileBasePath(kbUID, fileUID types.FileUIDType) string {
-	return filepath.Join(fileBasePath(kbUID, fileUID), convertedFileDir)
+func convertedFileBasePath(kbUID types.KBUIDType, fileUID types.FileUIDType) string {
+	return filepath.Join(fileBasePath(kbUID, fileUID), ConvertedFileDir)
 }
 
-func chunkBasePath(kbUID, fileUID types.FileUIDType) string {
-	return filepath.Join(fileBasePath(kbUID, fileUID), chunkDir)
+func chunkBasePath(kbUID types.KBUIDType, fileUID types.FileUIDType) string {
+	return filepath.Join(fileBasePath(kbUID, fileUID), ChunkDir)
 }
 
-// GetBlobObjectPath makes object path from objectUUID.
-// Format: ns-{namespaceUUID}/obj-{objectUUID}
-func GetBlobObjectPath(namespaceUUID types.NamespaceUIDType, objectUUID types.ObjectUIDType) string {
-	return fmt.Sprintf("ns-%s/obj-%s", namespaceUUID.String(), objectUUID.String())
-}
-
-// BucketFromDestination infers the bucket from the file destination string.
-// Since there's a runtime migration for the object-based flow, this is used to
-// retrieve files that might not have been updated their destination yet.
-// - Legacy paths with "uploaded-file": artifact bucket (pre-migration)
-// - Blob objects (uploaded files): ns-{uuid}/obj-{uuid} → BlobBucketName (core-blob)
-// - Artifact files (converted, chunks): kb-{uuid}/... → artifact bucket
+// BucketFromDestination infers the bucket from the file destination string
 func BucketFromDestination(destination string) string {
 	// Legacy: paths with "uploaded-file" are in the artifact bucket (pre-migration)
 	if strings.Contains(destination, "uploaded-file") {
@@ -394,5 +343,10 @@ func BucketFromDestination(destination string) string {
 	}
 
 	// All other paths (kb-{uuid}/..., legacy paths) use the artifact bucket
+	return config.Config.Minio.BucketName
+}
+
+// GetBucket returns the default MinIO bucket name
+func (m *minioStorage) GetBucket() string {
 	return config.Config.Minio.BucketName
 }

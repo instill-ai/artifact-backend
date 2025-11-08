@@ -40,6 +40,7 @@ type AppConfig struct {
 	Minio           miniox.Config         `koanf:"minio"`
 	Milvus          MilvusConfig          `koanf:"milvus"`
 	Blob            BlobConfig            `koanf:"blob"`
+	GCS             GCSConfig             `koanf:"gcs"`
 	RAG             RAGConfig             `koanf:"rag"`
 }
 
@@ -152,8 +153,9 @@ type RAGUpdateConfig struct {
 
 // ModelConfig defines the configuration for AI model providers
 type ModelConfig struct {
-	Gemini GeminiConfig `koanf:"gemini"`
-	OpenAI OpenAIConfig `koanf:"openai"`
+	Gemini   GeminiConfig   `koanf:"gemini"`
+	OpenAI   OpenAIConfig   `koanf:"openai"`
+	VertexAI VertexAIConfig `koanf:"vertexai"`
 	// Future AI providers:
 	// Anthropic   AnthropicConfig   `koanf:"anthropic"`
 }
@@ -166,6 +168,22 @@ type GeminiConfig struct {
 // OpenAIConfig defines the configuration for OpenAI
 type OpenAIConfig struct {
 	APIKey string `koanf:"apikey"`
+}
+
+// VertexAIConfig defines the configuration for VertexAI
+type VertexAIConfig struct {
+	ProjectID string `koanf:"projectid"`
+	Region    string `koanf:"region"`
+	SAKey     string `koanf:"sakey"` // JSON string of service account key
+}
+
+// GCSConfig defines the configuration for Google Cloud Storage as an object storage backend
+// GCS serves as an alternative to MinIO and becomes the default storage when VertexAI is configured
+type GCSConfig struct {
+	ProjectID string `koanf:"projectid"`
+	Region    string `koanf:"region"`
+	Bucket    string `koanf:"bucket"`
+	SAKey     string `koanf:"sakey"` // JSON string of service account key
 }
 
 // Init - Assign global config to decoded config struct

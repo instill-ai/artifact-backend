@@ -26,6 +26,7 @@ parse_results() {
         "grpc.js" \
         "rest.js" \
         "rest-file-type.js" \
+        "rest-object-storage.js" \
         "rest-db.js" \
         "rest-ai-client.js" \
         "rest-kb-e2e-file-process.js" \

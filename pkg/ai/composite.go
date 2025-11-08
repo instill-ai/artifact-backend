@@ -99,6 +99,11 @@ func (c *compositeClient) UpdateCache(ctx context.Context, cacheName string, opt
 	return c.defaultClient.UpdateCache(ctx, cacheName, options)
 }
 
+// CountTokens delegates to the default client
+func (c *compositeClient) CountTokens(ctx context.Context, content []byte, fileType artifactpb.File_Type, filename string) (int, any, error) {
+	return c.defaultClient.CountTokens(ctx, content, fileType, filename)
+}
+
 // DeleteCache delegates to the default client
 func (c *compositeClient) DeleteCache(ctx context.Context, cacheName string) error {
 	return c.defaultClient.DeleteCache(ctx, cacheName)

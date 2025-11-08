@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -91,6 +92,7 @@ const (
 	updateConvertedFileDestinationActivityError = "UpdateConvertedFileDestinationActivity"
 	deleteConvertedFileFromMinIOActivityError   = "DeleteConvertedFileFromMinIOActivity"
 	updateConversionMetadataActivityError       = "UpdateConversionMetadataActivity"
+	updateUsageMetadataActivityError            = "UpdateUsageMetadataActivity"
 	deleteOldTextChunksActivityError            = "DeleteOldTextChunksActivity"
 	saveTextChunksActivityError                 = "SaveTextChunksActivity"
 	standardizeFileTypeActivityError            = "StandardizeFileTypeActivity"
@@ -232,7 +234,7 @@ func (w *Worker) GetFileContentActivity(ctx context.Context, param *GetFileConte
 		}
 	}
 
-	content, err := w.repository.GetFile(authCtx, param.Bucket, param.Destination)
+	content, err := w.repository.GetMinIOStorage().GetFile(authCtx, param.Bucket, param.Destination)
 	if err != nil {
 		return nil, temporal.NewApplicationErrorWithCause(
 			fmt.Sprintf("Failed to retrieve file from storage: %s", errorsx.MessageOrErr(err)),
@@ -301,6 +303,13 @@ type UpdateConversionMetadataActivityParam struct {
 	FileUID   types.FileUIDType // File unique identifier
 	Length    []uint32          // Length of markdown sections
 	Pipelines []string          // Pipelines used: [content_pipeline, summary_pipeline] (empty strings if AI client was used)
+}
+
+// UpdateUsageMetadataActivityParam for updating file usage metadata after content/summary processing
+type UpdateUsageMetadataActivityParam struct {
+	FileUID         types.FileUIDType // File unique identifier
+	ContentMetadata any               // Usage metadata from content processing (from AI response)
+	SummaryMetadata any               // Usage metadata from summary processing (from AI response)
 }
 
 // DeleteOldConvertedFilesActivity removes old converted file from MinIO and DB if it exists
@@ -372,7 +381,7 @@ func (w *Worker) DeleteOldConvertedFilesActivity(ctx context.Context, param *Del
 		// Delete converted file from MinIO
 		// Note: MinIO DeleteFile is idempotent - if file doesn't exist, it succeeds.
 		// Any error returned here is a real error (network, permissions, etc.) that should be retried.
-		err = w.repository.DeleteFile(ctx, config.Config.Minio.BucketName, file.Destination)
+		err = w.repository.GetMinIOStorage().DeleteFile(ctx, config.Config.Minio.BucketName, file.Destination)
 		if err != nil {
 			w.log.Error("DeleteOldConvertedFilesActivity: Failed to delete old converted file from MinIO",
 				zap.String("destination", file.Destination),
@@ -448,7 +457,7 @@ func (w *Worker) UploadConvertedFileToMinIOActivity(ctx context.Context, param *
 		zap.String("convertedFileUID", param.ConvertedFileUID.String()))
 
 	blobStorage := w.repository
-	destination, err := blobStorage.SaveConvertedFile(
+	destination, err := blobStorage.GetMinIOStorage().SaveConvertedFile(
 		ctx,
 		param.KBUID,
 		param.FileUID,
@@ -523,7 +532,7 @@ func (w *Worker) DeleteConvertedFileFromMinIOActivity(ctx context.Context, param
 		zap.String("destination", param.Destination))
 
 	blobStorage := w.repository
-	err := blobStorage.DeleteFile(ctx, param.Bucket, param.Destination)
+	err := blobStorage.GetMinIOStorage().DeleteFile(ctx, param.Bucket, param.Destination)
 	if err != nil {
 		w.log.Error("DeleteConvertedFileFromMinIOActivity: Failed to delete from MinIO",
 			zap.String("destination", param.Destination),
@@ -578,6 +587,79 @@ func (w *Worker) UpdateConversionMetadataActivity(ctx context.Context, param *Up
 	return nil
 }
 
+// UpdateUsageMetadataActivity stores AI usage metadata (token counts) from content and summary processing
+// This activity aggregates usage metadata from both content and summary processing activities
+// and stores it in the file's usage_metadata JSONB column for later retrieval
+// According to Gemini API docs: https://ai.google.dev/gemini-api/docs/tokens?lang=python
+// The usage metadata includes prompt_token_count, candidates_token_count, total_token_count, etc.
+func (w *Worker) UpdateUsageMetadataActivity(ctx context.Context, param *UpdateUsageMetadataActivityParam) error {
+	w.log.Info("UpdateUsageMetadataActivity: Storing usage metadata",
+		zap.String("fileUID", param.FileUID.String()),
+		zap.Bool("hasContentMetadata", param.ContentMetadata != nil),
+		zap.Bool("hasSummaryMetadata", param.SummaryMetadata != nil))
+
+	// Early return if both metadata are nil - no need to do a database update
+	// This will be the case until we implement CountTokens in ProcessContent/ProcessSummary activities
+	if param.ContentMetadata == nil && param.SummaryMetadata == nil {
+		w.log.Info("UpdateUsageMetadataActivity: Skipping - no usage metadata available yet",
+			zap.String("fileUID", param.FileUID.String()))
+		return nil
+	}
+
+	// Build usage metadata structure
+	// Format: {"content": {...}, "summary": {...}}
+	usageMetadata := repository.UsageMetadata{
+		Content: make(map[string]interface{}),
+		Summary: make(map[string]interface{}),
+	}
+
+	// Store content metadata if available
+	if param.ContentMetadata != nil {
+		if contentMap, ok := param.ContentMetadata.(map[string]interface{}); ok {
+			usageMetadata.Content = contentMap
+		} else {
+			// If it's a struct, convert it to map via JSON marshaling
+			contentBytes, err := json.Marshal(param.ContentMetadata)
+			if err == nil {
+				_ = json.Unmarshal(contentBytes, &usageMetadata.Content)
+			}
+		}
+	}
+
+	// Store summary metadata if available
+	if param.SummaryMetadata != nil {
+		if summaryMap, ok := param.SummaryMetadata.(map[string]interface{}); ok {
+			usageMetadata.Summary = summaryMap
+		} else {
+			// If it's a struct, convert it to map via JSON marshaling
+			summaryBytes, err := json.Marshal(param.SummaryMetadata)
+			if err == nil {
+				_ = json.Unmarshal(summaryBytes, &usageMetadata.Summary)
+			}
+		}
+	}
+
+	// Update file record with usage metadata using the repository method
+	err := w.repository.UpdateKnowledgeFileUsageMetadata(ctx, param.FileUID, usageMetadata)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			w.log.Info("UpdateUsageMetadataActivity: File not found (may have been deleted), skipping metadata update",
+				zap.String("fileUID", param.FileUID.String()))
+			return nil
+		}
+		return temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to update usage metadata: %s", errorsx.MessageOrErr(err)),
+			updateUsageMetadataActivityError,
+			err,
+		)
+	}
+
+	w.log.Info("UpdateUsageMetadataActivity: Successfully stored usage metadata",
+		zap.String("fileUID", param.FileUID.String()))
+
+	return nil
+}
+
 // ===== CHUNKING ACTIVITIES =====
 
 // ChunkContentActivityParam for internal text chunking (page-based)
@@ -608,6 +690,9 @@ func (w *Worker) ChunkContentActivity(ctx context.Context, param *ChunkContentAc
 	if param.PositionData == nil || len(param.PositionData.PageDelimiters) == 0 {
 		w.log.Info("ChunkContentActivity: No page delimiters, treating entire file as single chunk")
 		// For non-paginated files (TXT, MD, CSV, HTML), treat entire content as one chunk
+		// TODO: Replace EstimateTokenCount with actual AI token count from CountTokens API
+		// This estimation is inaccurate and should be replaced with actual token counts from the AI model
+		// For now, we use a simple heuristic: 1 token ≈ 4 characters
 		tokens := ai.EstimateTokenCount(param.Content)
 		chunk := types.TextChunk{
 			Text:   param.Content,
@@ -638,6 +723,7 @@ func (w *Worker) ChunkContentActivity(ctx context.Context, param *ChunkContentAc
 			zap.Uint32("contentLen", contentLen),
 			zap.Uint32("expectedLen", lastDelimiter))
 		// Fall back to single chunk for summaries or mismatched content
+		// TODO: Replace EstimateTokenCount with actual AI token count from CountTokens API
 		tokens := ai.EstimateTokenCount(param.Content)
 		chunk := types.TextChunk{
 			Text:   param.Content,
@@ -683,6 +769,7 @@ func (w *Worker) ChunkContentActivity(ctx context.Context, param *ChunkContentAc
 		}
 
 		// Create chunk for this page
+		// TODO: Replace EstimateTokenCount with actual AI token count from CountTokens API
 		tokens := ai.EstimateTokenCount(pageText)
 		chunk := types.TextChunk{
 			Text:   pageText,
@@ -841,7 +928,7 @@ func (w *Worker) SaveTextChunksActivity(ctx context.Context, param *SaveTextChun
 		base64Content := base64.StdEncoding.EncodeToString([]byte(texts[i]))
 
 		// Save text chunk content to MinIO
-		err := w.repository.UploadBase64File(
+		err := w.repository.GetMinIOStorage().UploadBase64File(
 			ctx,
 			config.Config.Minio.BucketName,
 			path,
@@ -937,7 +1024,7 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 			}
 
 			// Fetch original PDF content from MinIO blob location
-			pdfContent, err := w.repository.GetFile(authCtx, param.Bucket, param.Destination)
+			pdfContent, err := w.repository.GetMinIOStorage().GetFile(authCtx, param.Bucket, param.Destination)
 			if err != nil {
 				return nil, temporal.NewApplicationErrorWithCause(
 					fmt.Sprintf("Failed to retrieve original PDF from storage: %s", errorsx.MessageOrErr(err)),
@@ -970,7 +1057,7 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 			}
 
 			// Copy PDF to converted-file folder (original blob remains at param.Destination)
-			convertedDestination, err := w.repository.SaveConvertedFile(
+			convertedDestination, err := w.repository.GetMinIOStorage().SaveConvertedFile(
 				authCtx,
 				param.KBUID,
 				param.FileUID,
@@ -992,7 +1079,7 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 			err = w.repository.UpdateConvertedFile(authCtx, convertedFileUID, updateMap)
 			if err != nil {
 				_ = w.repository.DeleteConvertedFile(authCtx, convertedFileUID)
-				_ = w.repository.DeleteFile(authCtx, config.Config.Minio.BucketName, convertedDestination)
+				_ = w.repository.GetMinIOStorage().DeleteFile(authCtx, config.Config.Minio.BucketName, convertedDestination)
 				return nil, temporal.NewApplicationErrorWithCause(
 					fmt.Sprintf("Failed to update converted_file destination: %s", errorsx.MessageOrErr(err)),
 					standardizeFileTypeActivityError,
@@ -1049,7 +1136,7 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 	}
 
 	// Fetch original file content from MinIO
-	content, err := w.repository.GetFile(authCtx, param.Bucket, param.Destination)
+	content, err := w.repository.GetMinIOStorage().GetFile(authCtx, param.Bucket, param.Destination)
 	if err != nil {
 		return nil, temporal.NewApplicationErrorWithCause(
 			fmt.Sprintf("Failed to retrieve file from storage: %s", errorsx.MessageOrErr(err)),
@@ -1148,7 +1235,7 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 		zap.String("convertedType", convertedFileTypeEnum.String()))
 
 	// Upload standardized file to converted-file folder (final destination)
-	convertedDestination, err := w.repository.SaveConvertedFile(
+	convertedDestination, err := w.repository.GetMinIOStorage().SaveConvertedFile(
 		authCtx,
 		param.KBUID,
 		param.FileUID,
@@ -1176,7 +1263,7 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 	if err != nil {
 		// Cleanup: delete both DB record and MinIO file
 		_ = w.repository.DeleteConvertedFile(authCtx, convertedFileUID)
-		_ = w.repository.DeleteFile(authCtx, config.Config.Minio.BucketName, convertedDestination)
+		_ = w.repository.GetMinIOStorage().DeleteFile(authCtx, config.Config.Minio.BucketName, convertedDestination)
 		return nil, temporal.NewApplicationErrorWithCause(
 			fmt.Sprintf("Failed to update converted_file destination: %s", errorsx.MessageOrErr(err)),
 			standardizeFileTypeActivityError,
@@ -1264,7 +1351,7 @@ func (w *Worker) CacheFileContextActivity(ctx context.Context, param *CacheFileC
 	}
 
 	// Fetch file content from MinIO (either original or converted file)
-	content, err := w.repository.GetFile(authCtx, param.Bucket, param.Destination)
+	content, err := w.repository.GetMinIOStorage().GetFile(authCtx, param.Bucket, param.Destination)
 	if err != nil {
 		// If file doesn't exist (e.g., original blob deleted or never uploaded),
 		// gracefully skip caching instead of failing the workflow
@@ -1420,7 +1507,7 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 	}
 
 	// Fetch file rawFileContent from MinIO
-	rawFileContent, err := w.repository.GetFile(authCtx, param.Bucket, param.Destination)
+	rawFileContent, err := w.repository.GetMinIOStorage().GetFile(authCtx, param.Bucket, param.Destination)
 	if err != nil {
 		// Check if a converted file already exists (reprocessing scenario)
 		existingConverted, checkErr := w.repository.GetConvertedFileByFileUIDAndType(ctx, param.FileUID, artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_CONTENT)
@@ -1795,7 +1882,7 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 		// Gemini route: Read raw file content and process independently
 		// Fetch content from MinIO
 		var err error
-		content, err = w.repository.GetFile(authCtx, param.Bucket, param.Destination)
+		content, err = w.repository.GetMinIOStorage().GetFile(authCtx, param.Bucket, param.Destination)
 		if err != nil {
 			// Check if a summary file already exists (reprocessing scenario)
 			existingConverted, checkErr := w.repository.GetConvertedFileByFileUIDAndType(ctx, param.FileUID, artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_SUMMARY)
@@ -2094,7 +2181,7 @@ func (w *Worker) DeleteTemporaryConvertedFileActivity(ctx context.Context, param
 		zap.String("bucket", param.Bucket),
 		zap.String("destination", param.Destination))
 
-	err := w.repository.DeleteFile(ctx, param.Bucket, param.Destination)
+	err := w.repository.GetMinIOStorage().DeleteFile(ctx, param.Bucket, param.Destination)
 	if err != nil {
 		// Log error but don't fail the activity - temporary files can accumulate but won't break functionality
 		w.log.Warn("DeleteTemporaryConvertedFileActivity: Failed to delete temporary file (will remain in MinIO)",

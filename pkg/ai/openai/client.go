@@ -36,7 +36,7 @@ func NewClient(ctx context.Context, apiKey string) (*Client, error) {
 
 	return &Client{
 		client:         &client,
-		embeddingModel: ai.OpenAIEmbeddingModelDefault,
+		embeddingModel: DefaultEmbeddingModel,
 	}, nil
 }
 
@@ -47,7 +47,7 @@ func (c *Client) Name() string {
 
 // GetEmbeddingDimensionality returns the OpenAI embedding vector dimensionality (1536)
 func (c *Client) GetEmbeddingDimensionality() int32 {
-	return ai.OpenAIEmbeddingDim
+	return DefaultEmbeddingDimension
 }
 
 // SupportsFileType returns false - OpenAI client doesn't process files
@@ -55,6 +55,17 @@ func (c *Client) GetEmbeddingDimensionality() int32 {
 // Use Gemini client for content conversion and file processing
 func (c *Client) SupportsFileType(fileType artifactpb.File_Type) bool {
 	return false // OpenAI client doesn't process files, only generates embeddings
+}
+
+// CountTokens is not fully supported by OpenAI client for multimodal content
+// OpenAI only supports text tokenization via tiktoken: https://github.com/openai/tiktoken
+// For multimodal files (images, audio, video, documents), this returns an error
+// Text tokenization could be implemented using tiktoken library in the future
+func (c *Client) CountTokens(ctx context.Context, content []byte, fileType artifactpb.File_Type, filename string) (int, any, error) {
+	return 0, nil, errorsx.AddMessage(
+		fmt.Errorf("token counting not supported for multimodal content"),
+		"OpenAI only supports text tokenization via tiktoken. Use Gemini/VertexAI for multimodal token counting.",
+	)
 }
 
 // GetModelFamily returns this client if the model family matches, otherwise error

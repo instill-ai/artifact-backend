@@ -30,12 +30,14 @@ import (
 	"go.temporal.io/sdk/interceptor"
 
 	"github.com/instill-ai/artifact-backend/config"
+	"github.com/instill-ai/artifact-backend/pkg/acl"
 	"github.com/instill-ai/artifact-backend/pkg/ai"
 	"github.com/instill-ai/artifact-backend/pkg/ai/gemini"
 	"github.com/instill-ai/artifact-backend/pkg/ai/openai"
-	"github.com/instill-ai/artifact-backend/pkg/acl"
+	"github.com/instill-ai/artifact-backend/pkg/ai/vertexai"
 	"github.com/instill-ai/artifact-backend/pkg/handler"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
+	"github.com/instill-ai/artifact-backend/pkg/repository/object"
 	"github.com/instill-ai/artifact-backend/pkg/service"
 	"github.com/instill-ai/artifact-backend/pkg/usage"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
@@ -141,11 +143,48 @@ func main() {
 		redisClient, db, minioClient, vectorDB, aclClient, temporalClient, closer := newClients(ctx, logger)
 	defer closer()
 
-	// Initialize repository with vector database and Redis
-	repo := repository.NewRepository(db, vectorDB, minioClient, redisClient)
+	// Initialize object storage
+	// MinIO is ALWAYS the primary/default storage for file uploads and persistence
+	// GCS is initialized separately for on-demand use when explicitly requested via storage_provider parameter
+	objectStorage := minioClient
+	logger.Info("MinIO object storage initialized as primary storage")
+
+	// Initialize GCS storage for on-demand use (if configured)
+	// GCS is only used when GetFile is called with storage_provider=STORAGE_PROVIDER_GCS
+	var gcsStorage object.Storage
+	if config.Config.GCS.ProjectID != "" && config.Config.GCS.Region != "" && config.Config.GCS.Bucket != "" && config.Config.GCS.SAKey != "" {
+		// Trim whitespace from service account key to handle YAML multiline formatting
+		saKey := strings.TrimSpace(config.Config.GCS.SAKey)
+
+		gcsStorage, err = object.NewGCSStorage(ctx, object.GCSConfig{
+			ProjectID:         config.Config.GCS.ProjectID,
+			Region:            config.Config.GCS.Region,
+			Bucket:            config.Config.GCS.Bucket,
+			ServiceAccountKey: saKey,
+		})
+		if err != nil {
+			logger.Warn("GCS object storage initialization failed (will not be available for on-demand use)", zap.Error(err))
+			gcsStorage = nil
+		} else {
+			logger.Info("GCS object storage initialized for on-demand use",
+				zap.String("project", config.Config.GCS.ProjectID),
+				zap.String("region", config.Config.GCS.Region),
+				zap.String("bucket", config.Config.GCS.Bucket))
+		}
+	} else {
+		logger.Info("GCS not configured, will not be available for on-demand use")
+	}
+
+	repo := repository.NewRepository(db, vectorDB, objectStorage, redisClient, gcsStorage)
 
 	// Initialize AI client (shared by both worker and service)
-	ai, err := newAIClient(ctx, logger)
+	// VertexAI client requires GCS storage, while Gemini/OpenAI don't need storage
+	// Pass GCS storage if configured, otherwise pass nil (Gemini File API will be used)
+	var aiStorage object.Storage
+	if gcsStorage != nil {
+		aiStorage = gcsStorage // VertexAI needs GCS for file operations
+	}
+	ai, err := newAIClient(ctx, logger, aiStorage)
 	if err != nil {
 		logger.Fatal("Unable to initialize AI client", zap.Error(err))
 	}
@@ -339,7 +378,7 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 	mgmtpb.MgmtPrivateServiceClient,
 	*redis.Client,
 	*gorm.DB,
-	repository.ObjectStorage,
+	object.Storage,
 	repository.VectorDatabase,
 	*acl.ACLClient,
 	temporalclient.Client,
@@ -383,7 +422,8 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 	}
 
 	// Initialize Minio client
-	minioClient, err := repository.NewMinioObjectStorage(ctx, miniox.ClientParams{
+	logger.Info("Initializing MinIO client", zap.String("bucket", config.Config.Minio.BucketName), zap.String("host", config.Config.Minio.Host))
+	minioClient, err := object.NewMinIOStorage(ctx, miniox.ClientParams{
 		Config: config.Config.Minio,
 		Logger: logger,
 		AppInfo: miniox.AppInfo{
@@ -394,6 +434,7 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 	if err != nil {
 		logger.Fatal(fmt.Sprintf("failed to create minio client: %v", err))
 	}
+	logger.Info("MinIO client initialized successfully", zap.String("bucket", config.Config.Minio.BucketName))
 
 	// Initialize milvus client
 	vectorDB, vclose, err := repository.NewVectorDatabase(ctx, config.Config.Milvus.Host, config.Config.Milvus.Port)
@@ -454,12 +495,31 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 }
 
 // newAIClient creates an AI client based on the configured API keys
-func newAIClient(ctx context.Context, logger *zap.Logger) (ai.Client, error) {
+func newAIClient(ctx context.Context, logger *zap.Logger, storage object.Storage) (ai.Client, error) {
 	cfg := config.Config
 	aiClients := make(map[string]ai.Client)
 
-	// Initialize Gemini client if API key is provided
-	if cfg.RAG.Model.Gemini.APIKey != "" {
+	// Initialize VertexAI client if configured (takes precedence over Gemini for "gemini" model family)
+	// VertexAI requires GCS object storage backend
+	if cfg.RAG.Model.VertexAI.ProjectID != "" && cfg.RAG.Model.VertexAI.Region != "" && cfg.RAG.Model.VertexAI.SAKey != "" && storage != nil {
+		vertexaiClient, err := vertexai.NewClient(ctx, vertexai.Config{
+			ProjectID: cfg.RAG.Model.VertexAI.ProjectID,
+			Region:    cfg.RAG.Model.VertexAI.Region,
+			SAKey:     cfg.RAG.Model.VertexAI.SAKey,
+		}, storage)
+		if err != nil {
+			logger.Error("Failed to initialize VertexAI client", zap.Error(err))
+		} else {
+			// VertexAI handles "gemini" model family requests
+			aiClients[ai.ModelFamilyGemini] = vertexaiClient
+			logger.Info("VertexAI client initialized",
+				zap.String("client", vertexaiClient.Name()),
+				zap.String("project", cfg.RAG.Model.VertexAI.ProjectID),
+				zap.String("region", cfg.RAG.Model.VertexAI.Region),
+				zap.Int32("embedding_dimension", vertexaiClient.GetEmbeddingDimensionality()))
+		}
+	} else if cfg.RAG.Model.Gemini.APIKey != "" {
+		// Fallback to Gemini API client if VertexAI not configured
 		geminiClient, err := gemini.NewClient(ctx, cfg.RAG.Model.Gemini.APIKey)
 		if err != nil {
 			logger.Error("Failed to initialize Gemini client", zap.Error(err))
@@ -470,7 +530,7 @@ func newAIClient(ctx context.Context, logger *zap.Logger) (ai.Client, error) {
 				zap.Int32("embedding_dimension", geminiClient.GetEmbeddingDimensionality()))
 		}
 	} else {
-		logger.Warn("Gemini API key not configured. Content conversion and summarization will use pipeline fallback.")
+		logger.Warn("Neither VertexAI nor Gemini API configured. Content conversion and summarization will use pipeline fallback.")
 	}
 
 	// Initialize OpenAI client if API key is provided
