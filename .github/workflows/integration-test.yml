@@ -114,6 +114,13 @@ jobs:
           printf 'CFG_COMPONENT_SECRETS_OPENAI_APIKEY=%s\n' "${{ secrets.OPENAIAPIKEY }}" >> "$f"
           printf 'CFG_RAG_MODEL_OPENAI_APIKEY=%s\n' "${{ secrets.OPENAIAPIKEY }}" >> "$f"
           printf 'CFG_RAG_MODEL_GEMINI_APIKEY=%s\n' "${{ secrets.GEMINIAPIKEY }}" >> "$f"
+          printf 'CFG_RAG_MODEL_VERTEXAI_PROJECTID=%s\n' "${{ secrets.VERTEXAIPROJECTID }}" >> "$f"
+          printf 'CFG_RAG_MODEL_VERTEXAI_REGION=%s\n' "${{ secrets.VERTEXAIREGION }}" >> "$f"
+          printf 'CFG_RAG_MODEL_VERTEXAI_SAKEY=%s\n' "$(echo '${{ secrets.VERTEXAISERVICEACCOUNTKEY }}' | jq -c . | base64)" >> "$f"
+          printf 'CFG_GCS_PROJECTID=%s\n' "${{ secrets.GCSPROJECTID }}" >> "$f"
+          printf 'CFG_GCS_REGION=%s\n' "${{ secrets.GCSREGION }}" >> "$f"
+          printf 'CFG_GCS_BUCKET=%s\n' "${{ secrets.GCSBUCKET }}" >> "$f"
+          printf 'CFG_GCS_SAKEY=%s\n' "$(echo '${{ secrets.GCSSERVICEACCOUNTKEY }}' | jq -c . | base64)" >> "$f"
           make compose-dev EDITION=docker-ce:test CI=true ARTIFACT_BACKEND_VERSION=${{ env.COMMIT_SHORT_SHA }}
 
       - name: Run integration-test
