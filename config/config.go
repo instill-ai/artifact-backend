@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"flag"
 	"log"
 	"os"
@@ -174,7 +175,7 @@ type OpenAIConfig struct {
 type VertexAIConfig struct {
 	ProjectID string `koanf:"projectid"`
 	Region    string `koanf:"region"`
-	SAKey     string `koanf:"sakey"` // JSON string of service account key
+	SAKey     string `koanf:"sakey"` // JSON string of service account key (base64-encoded in env vars)
 }
 
 // GCSConfig defines the configuration for Google Cloud Storage as an object storage backend
@@ -183,7 +184,7 @@ type GCSConfig struct {
 	ProjectID string `koanf:"projectid"`
 	Region    string `koanf:"region"`
 	Bucket    string `koanf:"bucket"`
-	SAKey     string `koanf:"sakey"` // JSON string of service account key
+	SAKey     string `koanf:"sakey"` // JSON string of service account key (base64-encoded in env vars)
 }
 
 // Init - Assign global config to decoded config struct
@@ -216,7 +217,41 @@ func Init(filePath string) error {
 		return err
 	}
 
+	// Decode base64-encoded service account keys
+	// These are base64-encoded in the secrets generation script to prevent
+	// the config loader from splitting them on commas (JSON contains commas)
+	if err := decodeBase64SAKeys(&Config); err != nil {
+		return err
+	}
+
 	return ValidateConfig(&Config)
+}
+
+// decodeBase64SAKeys decodes base64-encoded service account keys
+// Service account keys are base64-encoded in environment variables to prevent
+// the config loader from splitting them into arrays when it encounters commas
+func decodeBase64SAKeys(cfg *AppConfig) error {
+	// Decode GCS service account key if present and appears to be base64
+	if cfg.GCS.SAKey != "" {
+		decoded, err := base64.StdEncoding.DecodeString(cfg.GCS.SAKey)
+		if err == nil {
+			// Successfully decoded, use the decoded value
+			cfg.GCS.SAKey = string(decoded)
+		}
+		// If decode fails, assume it's already plain text (for backward compatibility)
+	}
+
+	// Decode VertexAI service account key if present and appears to be base64
+	if cfg.RAG.Model.VertexAI.SAKey != "" {
+		decoded, err := base64.StdEncoding.DecodeString(cfg.RAG.Model.VertexAI.SAKey)
+		if err == nil {
+			// Successfully decoded, use the decoded value
+			cfg.RAG.Model.VertexAI.SAKey = string(decoded)
+		}
+		// If decode fails, assume it's already plain text (for backward compatibility)
+	}
+
+	return nil
 }
 
 // ValidateConfig is for custom validation rules for the configuration

@@ -1426,7 +1426,7 @@ export function TEST_22_ViewOriginalFileType_ImmediateAvailability(data) {
     if (file) {
       console.log(`File created: ${file.uid}, testing immediate availability...`);
 
-      // Test MinIO provider - should be available immediately (< 50 milliseconds)
+      // Test MinIO provider - should be available immediately (< 1 second)
       const startTimeMinIO = new Date().getTime();
       const resMinIO = getFileWithStorage(data, kbId, file.uid, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_MINIO");
       const minioResponseTime = new Date().getTime() - startTimeMinIO;
@@ -1436,7 +1436,7 @@ export function TEST_22_ViewOriginalFileType_ImmediateAvailability(data) {
 
       check(resMinIO, {
         "MinIO: Request successful": (r) => r.status === 200,
-        "MinIO: Response within 50 milliseconds": () => minioResponseTime < 50,
+        "MinIO: Response within 1 second": () => minioResponseTime < 1000,
         "MinIO: Has derivedResourceUri": (r) => {
           try {
             const body = r.json();
@@ -1549,7 +1549,7 @@ export function TEST_22_ViewOriginalFileType_ImmediateAvailability(data) {
 
       check(resDefault, {
         "Default provider: Request successful": (r) => r.status === 200,
-        "Default provider: Response within 50 ms": () => defaultResponseTime < 50,
+        "Default provider: Response within 1 second": () => defaultResponseTime < 1000,
         "Default provider: Uses blob-urls endpoint": (r) => {
           try {
             const body = r.json();

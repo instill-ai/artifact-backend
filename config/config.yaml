@@ -99,7 +99,7 @@ gcs:
   projectid:
   region:
   bucket:
-  sakey:
+  sakey: # JSON string of service account key (base64-encoded)
 rag:
   update:
     # Update settings - simple tag-based management without versioning
@@ -109,7 +109,7 @@ rag:
     vertexai:
       projectid:
       region:
-      sakey:
+      sakey: # JSON string of service account key (base64-encoded)
     gemini:
       apikey:
     openai:
