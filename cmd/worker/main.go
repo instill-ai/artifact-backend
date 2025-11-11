@@ -251,8 +251,7 @@ func main() {
 	w.RegisterActivity(cw.UpdateUsageMetadataActivity)            // Update usage metadata (AI token counts) from content and summary processing
 
 	// Format Standardization Phase - Executed before caching
-	w.RegisterActivity(cw.StandardizeFileTypeActivity)          // Convert non-AI-native formats (DOCX→PDF, GIF→PNG, MKV→MP4) and save PDFs to converted-file folder
-	w.RegisterActivity(cw.DeleteTemporaryConvertedFileActivity) // Clean up temporary converted file from MinIO (core-blob/tmp/*) - only for non-PDF conversions
+	w.RegisterActivity(cw.StandardizeFileTypeActivity) // Convert non-AI-native formats and save all standard files (PDF, PNG, OGG, MP4) to converted-file folder
 
 	// AI Caching Phase - Create caches for efficient processing
 	w.RegisterActivity(cw.CacheFileContextActivity) // Create AI cache for individual file processing

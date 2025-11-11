@@ -11,12 +11,16 @@ import (
 
 // Model family constants
 const (
-	// DefaultModelFamily is the default client family for backward compatibility
-	DefaultModelFamily = "gemini"
-
 	// Model family identifiers for routing requests
+	// Note: VertexAI and Gemini both use ModelFamilyGemini
+	// VertexAI is the preferred implementation when configured (GCS-based)
+	// Gemini API is the fallback (direct API-based)
 	ModelFamilyGemini = "gemini"
 	ModelFamilyOpenAI = "openai"
+
+	// DefaultModelFamily is determined by precedence in NewCompositeClient
+	// Precedence: Gemini (VertexAI preferred) > OpenAI
+	DefaultModelFamily = "gemini"
 )
 
 // ConversionResult represents the result of understanding unstructured data content and extracting it to Markdown

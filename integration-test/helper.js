@@ -398,6 +398,87 @@ export function countMinioObjects(kbUID, fileUID, objectType) {
 }
 
 /**
+ * Verify that a converted file with specific extension exists in MinIO
+ * Used to validate StandardizeFileTypeActivity created the correct file type
+ *
+ * @param {string} kbUID - Knowledge base UUID
+ * @param {string} fileUID - File UUID
+ * @param {string} expectedExtension - Expected file extension (e.g., 'png', 'pdf', 'ogg', 'mp4')
+ * @returns {boolean} True if converted file with expected extension exists
+ */
+export function verifyConvertedFileType(kbUID, fileUID, expectedExtension) {
+  try {
+    // Query database for converted file destination
+    const convertedResult = safeQuery(`
+      SELECT destination FROM converted_file
+      WHERE file_uid = $1
+      AND destination LIKE '%/converted-file/%'
+      LIMIT 1
+    `, fileUID);
+
+    if (!convertedResult || convertedResult.length === 0) {
+      console.warn(`No converted file found in database for file ${fileUID}`);
+      return false;
+    }
+
+    // Extract prefix from destination
+    const dest = convertedResult[0].destination;
+    const lastSlashIndex = dest.lastIndexOf('/');
+    const prefix = dest.substring(0, lastSlashIndex + 1);
+
+    // Use the verify mode of count-minio-objects.sh
+    const minioHost = __ENV.MINIO_HOST || 'minio';
+    const minioPort = __ENV.MINIO_PORT || '9000';
+    const result = exec.command('sh', [
+      `${__ENV.TEST_FOLDER_ABS_PATH}/integration-test/scripts/count-minio-objects.sh`,
+      constant.minioConfig.bucket,
+      prefix,
+      minioHost,
+      minioPort,
+      'verify',
+      expectedExtension
+    ]);
+
+    const count = parseInt(result.trim());
+    const exists = count > 0;
+
+    if (!exists) {
+      console.warn(`Expected .${expectedExtension} file not found in MinIO at ${prefix}`);
+    }
+
+    return exists;
+  } catch (e) {
+    console.error(`Failed to verify converted file type for file ${fileUID}: ${e}`);
+    return false;
+  }
+}
+
+/**
+ * Get the expected standard file extension for a given file type
+ * Maps file types to their standardized formats (PDF, PNG, OGG, MP4)
+ *
+ * @param {string} fileType - File type (e.g., 'TYPE_PNG', 'TYPE_DOC', 'TYPE_MP3')
+ * @returns {string|null} Expected extension ('pdf', 'png', 'ogg', 'mp4') or null if not standardizable
+ */
+export function getStandardFileExtension(fileType) {
+  const documentTypes = ["TYPE_PDF", "TYPE_DOC", "TYPE_DOCX", "TYPE_PPT", "TYPE_PPTX",
+    "TYPE_XLS", "TYPE_XLSX", "TYPE_HTML", "TYPE_TEXT", "TYPE_MARKDOWN", "TYPE_CSV"];
+  const imageTypes = ["TYPE_PNG", "TYPE_JPEG", "TYPE_GIF", "TYPE_BMP", "TYPE_TIFF",
+    "TYPE_AVIF", "TYPE_HEIC", "TYPE_HEIF", "TYPE_WEBP"];
+  const audioTypes = ["TYPE_MP3", "TYPE_WAV", "TYPE_AAC", "TYPE_OGG", "TYPE_FLAC",
+    "TYPE_AIFF", "TYPE_M4A", "TYPE_WMA", "TYPE_WEBM_AUDIO"];
+  const videoTypes = ["TYPE_MP4", "TYPE_MPEG", "TYPE_MOV", "TYPE_AVI", "TYPE_FLV",
+    "TYPE_WMV", "TYPE_MKV", "TYPE_WEBM_VIDEO"];
+
+  if (documentTypes.includes(fileType)) return 'pdf';
+  if (imageTypes.includes(fileType)) return 'png';
+  if (audioTypes.includes(fileType)) return 'ogg';
+  if (videoTypes.includes(fileType)) return 'mp4';
+
+  return null; // Not a standardizable type
+}
+
+/**
  * Count embeddings in the database for a specific file
  * Verifies vector data consistency in Postgres (Milvus vectors are referenced here)
  *

@@ -434,33 +434,6 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				fileCacheFuture: fileCacheFuture,
 				conversionData:  &cr,
 			}
-
-			// REFACTORED: PDF handling moved to StandardizeFileTypeActivity
-			// - PDFs (converted or original) are now saved directly to converted-file folder during standardization
-			// - No need for deferred SavePDFAsConvertedFileActivity calls
-			// - Non-PDF temporary files (GIF→PNG, MKV→MP4) still need cleanup
-			if cr.converted && cr.convertedDestination != "" && cr.effectiveFileType != artifactpb.File_TYPE_PDF {
-				// For non-PDF (PNG, OGG, MP4): Delete temporary file after processing
-				defer func(bucket, destination string, fuid types.FileUIDType) {
-					cleanupCtx, _ := workflow.NewDisconnectedContext(ctx)
-					cleanupCtx = workflow.WithActivityOptions(cleanupCtx, workflow.ActivityOptions{
-						StartToCloseTimeout: time.Minute,
-						RetryPolicy: &temporal.RetryPolicy{
-							InitialInterval:    time.Second,
-							BackoffCoefficient: 2.0,
-							MaximumInterval:    30 * time.Second,
-							MaximumAttempts:    3,
-						},
-					})
-
-					if err := workflow.ExecuteActivity(cleanupCtx, w.DeleteTemporaryConvertedFileActivity, &DeleteTemporaryConvertedFileActivityParam{
-						Bucket:      bucket,
-						Destination: destination,
-					}).Get(cleanupCtx, nil); err != nil {
-						logger.Warn("Temporary converted file cleanup failed", "fileUID", fuid.String(), "error", err)
-					}
-				}(cr.convertedBucket, cr.convertedDestination, cr.fileUID)
-			}
 		}
 
 		// Now start content/summary activities for each file - they'll wait for their own file cache

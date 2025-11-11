@@ -245,12 +245,9 @@ function getFileWithStorage(data, kbId, fileUid, view, storageProvider) {
 function downloadFromURL(url, maxRetries = 10) {
   // Replace any localhost:8080 or hardcoded host with the proper API gateway URL
   // This ensures the URL works in both local and Docker container environments
-  let downloadUrl = url;
-
-  // If the URL starts with http://localhost:8080 or https://localhost:8080, replace it
-  if (!constant.apiGatewayMode) {
-    downloadUrl = url.replace(/^https?:\/\/localhost:8080/, constant.apiGatewayPublicHost);
-  }
+  // Always replace localhost:8080 with the proper API gateway URL
+  // (localhost:8080 from host machine, api-gateway:8080 from inside Docker)
+  let downloadUrl = url.replace(/^https?:\/\/localhost:8080/, constant.apiGatewayPublicHost);
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {

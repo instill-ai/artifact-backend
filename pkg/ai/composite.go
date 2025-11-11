@@ -17,6 +17,7 @@ type compositeClient struct {
 
 // NewCompositeClient creates a composite client from a map of clients
 // This allows external callers to initialize individual clients and compose them
+// Default client precedence: VertexAI > Gemini > OpenAI
 func NewCompositeClient(clients map[string]Client, defaultModelFamily string) (Client, error) {
 	if len(clients) == 0 {
 		return nil, fmt.Errorf("at least one client must be provided")
@@ -29,14 +30,42 @@ func NewCompositeClient(clients map[string]Client, defaultModelFamily string) (C
 		}
 	}
 
-	// Determine default client
-	defaultClient, ok := clients[defaultModelFamily]
-	if !ok {
-		// Use first available client
-		for _, client := range clients {
+	// Determine default client with precedence: Gemini (VertexAI/Gemini) > OpenAI
+	var defaultClient Client
+
+	// First, try the requested default model family
+	if defaultModelFamily != "" {
+		if client, ok := clients[defaultModelFamily]; ok && client != nil {
 			defaultClient = client
-			break
 		}
+	}
+
+	// If no default specified or not found, use precedence order
+	if defaultClient == nil {
+		// Precedence: Gemini (includes VertexAI) > OpenAI
+		// Note: VertexAI and Gemini API both register as ModelFamilyGemini
+		// VertexAI takes precedence when both are configured
+		precedenceOrder := []string{ModelFamilyGemini, ModelFamilyOpenAI}
+		for _, family := range precedenceOrder {
+			if client, ok := clients[family]; ok && client != nil {
+				defaultClient = client
+				break
+			}
+		}
+	}
+
+	// Fallback: use any available client
+	if defaultClient == nil {
+		for _, client := range clients {
+			if client != nil {
+				defaultClient = client
+				break
+			}
+		}
+	}
+
+	if defaultClient == nil {
+		return nil, fmt.Errorf("no valid clients available")
 	}
 
 	// Multiple clients: return composite
@@ -120,9 +149,18 @@ func (c *compositeClient) GetEmbeddingDimensionality() int32 {
 	return c.defaultClient.GetEmbeddingDimensionality()
 }
 
-// SupportsFileType checks if the default client supports the file type
+// SupportsFileType checks if ANY of the available clients supports the file type
+// This is important for composite clients where OpenAI (embedding-only) might be default
+// but Gemini/VertexAI (which support file processing) are also available
 func (c *compositeClient) SupportsFileType(fileType artifactpb.File_Type) bool {
-	return c.defaultClient.SupportsFileType(fileType)
+	// Check all available clients, not just the default
+	// This allows file processing to work even when OpenAI is the default for embeddings
+	for _, client := range c.clients {
+		if client != nil && client.SupportsFileType(fileType) {
+			return true
+		}
+	}
+	return false
 }
 
 // Close releases all client resources
