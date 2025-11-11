@@ -166,7 +166,6 @@ export function teardown(data) {
   });
 }
 
-
 // Scenario execs per file type
 export function TEST_TYPE_TEXT(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.txt", fileType: "TYPE_TEXT" }); }
 export function TEST_TYPE_MARKDOWN(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.md", fileType: "TYPE_MARKDOWN" }); }
@@ -537,12 +536,20 @@ function runKnowledgeBaseFileTest(data, opts) {
     // Get file standardized format (using VIEW_STANDARD_FILE_TYPE)
     // Standardized view returns:
     // - Documents → PDF (e.g., DOC, DOCX, PPT, PPTX, XLS, XLSX, HTML, TEXT, MARKDOWN, CSV)
-    // - Images → PNG (e.g., GIF, BMP, TIFF, AVIF)
-    // - Audio → OGG (e.g., M4A, WMA)
-    // - Video → MP4 (e.g., MKV)
-    // AI-native formats (PDF, PNG, JPEG, MP3, WAV, MP4, etc.) are also accessible as standardized files
-    const standardizableTypes = ["TYPE_PDF", "TYPE_DOC", "TYPE_DOCX", "TYPE_PPT", "TYPE_PPTX", "TYPE_XLS", "TYPE_XLSX", "TYPE_HTML", "TYPE_TEXT", "TYPE_MARKDOWN", "TYPE_CSV"];
-    const isStandardizable = standardizableTypes.includes(fileType);
+    // - Images → PNG (e.g., JPEG, GIF, BMP, TIFF, AVIF, HEIC, HEIF, WEBP)
+    // - Audio → OGG (e.g., MP3, WAV, AAC, FLAC, AIFF, M4A, WMA, WEBM_AUDIO)
+    // - Video → MP4 (e.g., MPEG, MOV, AVI, FLV, WMV, MKV, WEBM_VIDEO)
+    // AI-native formats (PDF, PNG, OGG, MP4) are also accessible as standardized files
+    const documentTypes = ["TYPE_PDF", "TYPE_DOC", "TYPE_DOCX", "TYPE_PPT", "TYPE_PPTX", "TYPE_XLS", "TYPE_XLSX", "TYPE_HTML", "TYPE_TEXT", "TYPE_MARKDOWN", "TYPE_CSV"];
+    const imageTypes = ["TYPE_PNG", "TYPE_JPEG", "TYPE_GIF", "TYPE_BMP", "TYPE_TIFF", "TYPE_AVIF", "TYPE_HEIC", "TYPE_HEIF", "TYPE_WEBP"];
+    const audioTypes = ["TYPE_MP3", "TYPE_WAV", "TYPE_AAC", "TYPE_OGG", "TYPE_FLAC", "TYPE_AIFF", "TYPE_M4A", "TYPE_WMA", "TYPE_WEBM_AUDIO"];
+    const videoTypes = ["TYPE_MP4", "TYPE_MPEG", "TYPE_MOV", "TYPE_AVI", "TYPE_FLV", "TYPE_WMV", "TYPE_MKV", "TYPE_WEBM_VIDEO"];
+
+    const isDocument = documentTypes.includes(fileType);
+    const isImage = imageTypes.includes(fileType);
+    const isAudio = audioTypes.includes(fileType);
+    const isVideo = videoTypes.includes(fileType);
+    const isStandardizable = isDocument || isImage || isAudio || isVideo;
 
     const getStandardRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileUid}?view=VIEW_STANDARD_FILE_TYPE`, null, data.header);
     logUnexpected(getStandardRes, 'GET /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id}/files/{file_uid}?view=VIEW_STANDARD_FILE_TYPE');
@@ -555,12 +562,75 @@ function runKnowledgeBaseFileTest(data, opts) {
         [`VIEW_STANDARD_FILE_TYPE returns derivedResourceUri for standardizable type (${testLabel})`]: () => standardUri && standardUri.length > 0,
       });
 
-      // Verify the URL is accessible (basic check)
+      // Verify the URL is accessible and has correct MIME type
       if (standardUri) {
-        console.log(`✓ VIEW_STANDARD_FILE_TYPE returned URL for ${testLabel}: ${standardUri.substring(0, 50)}...`);
+        let expectedFormat = "unknown";
+        let expectedMimeType = "";
+        if (isDocument) {
+          expectedFormat = "PDF";
+          expectedMimeType = "application/pdf";
+        } else if (isImage) {
+          expectedFormat = "PNG";
+          expectedMimeType = "image/png";
+        } else if (isAudio) {
+          expectedFormat = "OGG";
+          expectedMimeType = "audio/ogg";
+        } else if (isVideo) {
+          expectedFormat = "MP4";
+          expectedMimeType = "video/mp4";
+        }
+
+        console.log(`✓ VIEW_STANDARD_FILE_TYPE returned URL for ${testLabel} (expected format: ${expectedFormat}): ${standardUri.substring(0, 50)}...`);
+
+        // Normalize URL for Docker environment
+        // Always replace localhost:8080 with the proper API gateway URL
+        // (localhost:8080 from host machine, api-gateway:8080 from inside Docker)
+        let downloadUrl = standardUri.replace(/^https?:\/\/localhost:8080/, constant.apiGatewayPublicHost);
+
+        // Try to fetch the standardized file to verify MIME type
+        // Note: Blob URLs are presigned and self-authenticating, so no auth headers needed
+        // Note: We use GET instead of HEAD because KrakenD's blob plugin doesn't handle HEAD requests properly
+        const headRes = http.get(downloadUrl);
+        const contentType = headRes.headers['Content-Type'] || headRes.headers['content-type'] || "";
+
+        // Check accessibility and MIME type
+        const urlAccessible = headRes.status === 200;
+        const mimeTypeCorrect = contentType.startsWith(expectedMimeType);
+
+        check(headRes, {
+          [`Standardized file is accessible via URL (${testLabel})`]: (r) => r.status === 200,
+          [`Standardized file has correct MIME type ${expectedMimeType} (${testLabel})`]: () => mimeTypeCorrect,
+        });
+
+        if (urlAccessible && mimeTypeCorrect) {
+          console.log(`✓ Standardized file MIME type verified: ${contentType} (${testLabel})`);
+        }
+
+        if (!urlAccessible) {
+          console.error(`✗ Blob URL NOT accessible for ${testLabel}: status ${headRes.status}, URL: ${downloadUrl}`);
+        }
+
+        if (!mimeTypeCorrect) {
+          console.error(`✗ MIME type mismatch for ${testLabel}: expected ${expectedMimeType}, got ${contentType}`);
+        }
+
+        // ✅ NEW: Verify that the converted standard file actually exists in MinIO with correct extension
+        const expectedExtension = helper.getStandardFileExtension(fileType);
+        if (expectedExtension) {
+          const minioVerified = helper.verifyConvertedFileType(knowledgeBaseId, fileUid, expectedExtension);
+          check({ minioVerified }, {
+            [`Converted standard file exists in MinIO with correct extension .${expectedExtension} (${testLabel})`]: () => minioVerified === true,
+          });
+
+          if (minioVerified) {
+            console.log(`✓ Verified converted .${expectedExtension} file exists in MinIO for ${testLabel}`);
+          } else {
+            console.error(`✗ Converted .${expectedExtension} file NOT found in MinIO for ${testLabel}`);
+          }
+        }
       }
     } else {
-      // For non-standardizable types (TEXT, MARKDOWN, CSV, HTML), VIEW_STANDARD_FILE_TYPE should still return 200 but may not have a standardized file
+      // For non-standardizable types, VIEW_STANDARD_FILE_TYPE should still return 200 but may not have a standardized file
       check(getStandardRes, {
         [`GET /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id}/files/{file_uid}?view=VIEW_STANDARD_FILE_TYPE 200 (${testLabel})`]: (r) => r.status === 200,
       });

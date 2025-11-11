@@ -17,6 +17,7 @@ if (__ENV.API_GATEWAY_PROTOCOL) {
   proto = "http"
 }
 
+export const apiGatewayPublicHost = apiGatewayMode ? `${proto}://${__ENV.API_GATEWAY_URL}` : `http://api-gateway:8080`
 export const artifactRESTPublicHost = apiGatewayMode ? `${proto}://${__ENV.API_GATEWAY_URL}` : `http://api-gateway:8080`
 export const mgmtRESTPublicHost = apiGatewayMode ? `${proto}://${__ENV.API_GATEWAY_URL}` : `http://api-gateway:8080`
 

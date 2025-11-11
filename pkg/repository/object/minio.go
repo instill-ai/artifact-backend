@@ -193,9 +193,28 @@ func (m *minioStorage) SaveConvertedFile(ctx context.Context, kbUID types.KBUIDT
 	filename := convertedFileUID.String() + "." + fileExt
 	path := filepath.Join(convertedFileBasePath(kbUID, fileUID), filename)
 
+	// Set appropriate MIME type based on file extension
+	// Note: converted-file folder contains:
+	// 1. Standard file types: pdf, png, ogg, mp4 (for VIEW_STANDARD_FILE_TYPE)
+	// 2. Content/Summary markdown: md (for VIEW_CONTENT/VIEW_SUMMARY)
 	mimeType := "application/octet-stream"
-	if fileExt == "md" {
+	switch fileExt {
+	case "md":
 		mimeType = "text/markdown"
+	case "pdf":
+		mimeType = "application/pdf"
+	case "png":
+		mimeType = "image/png"
+	case "ogg":
+		mimeType = "audio/ogg"
+	case "mp4":
+		mimeType = "video/mp4"
+	default:
+		// This should not happen - only md, pdf, png, ogg, mp4 should be saved to converted-file folder
+		// If we reach here, there's a bug in the calling code
+		m.logger.Warn("Unexpected file extension in SaveConvertedFile",
+			zap.String("extension", fileExt),
+			zap.String("path", path))
 	}
 
 	err := m.UploadBase64File(ctx, config.Config.Minio.BucketName, path, base64.StdEncoding.EncodeToString(content), mimeType)

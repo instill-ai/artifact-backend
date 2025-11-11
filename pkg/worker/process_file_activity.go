@@ -1006,8 +1006,42 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 
 		// Original blob remains in place for consistency with other file types
 		// Converted-file folder copy provides unified VIEW_STANDARD_FILE_TYPE access
-		if param.FileType == artifactpb.File_TYPE_PDF {
-			w.log.Info("StandardizeFileTypeActivity: Copying original PDF to converted-file folder for VIEW_STANDARD_FILE_TYPE support")
+		// For AI-native files (PDF, PNG, OGG, MP4), copy to converted-file folder
+		var convertedFileTypeEnum artifactpb.ConvertedFileType
+		var fileExtension string
+		var contentType string
+		var shouldCopy bool
+
+		switch param.FileType {
+		case artifactpb.File_TYPE_PDF:
+			convertedFileTypeEnum = artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_DOCUMENT
+			fileExtension = "pdf"
+			contentType = "application/pdf"
+			shouldCopy = true
+		case artifactpb.File_TYPE_PNG:
+			convertedFileTypeEnum = artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_IMAGE
+			fileExtension = "png"
+			contentType = "image/png"
+			shouldCopy = true
+		case artifactpb.File_TYPE_OGG:
+			convertedFileTypeEnum = artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_AUDIO
+			fileExtension = "ogg"
+			contentType = "audio/ogg"
+			shouldCopy = true
+		case artifactpb.File_TYPE_MP4:
+			convertedFileTypeEnum = artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_VIDEO
+			fileExtension = "mp4"
+			contentType = "video/mp4"
+			shouldCopy = true
+		default:
+			// For other AI-native files that don't have standard file type support
+			shouldCopy = false
+		}
+
+		if shouldCopy {
+			w.log.Info("StandardizeFileTypeActivity: Copying AI-native file to converted-file folder for VIEW_STANDARD_FILE_TYPE support",
+				zap.String("fileType", param.FileType.String()),
+				zap.String("extension", fileExtension))
 
 			// Create authenticated context if metadata provided
 			authCtx := ctx
@@ -1023,11 +1057,11 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 				}
 			}
 
-			// Fetch original PDF content from MinIO blob location
-			pdfContent, err := w.repository.GetMinIOStorage().GetFile(authCtx, param.Bucket, param.Destination)
+			// Fetch original file content from MinIO blob location
+			fileContent, err := w.repository.GetMinIOStorage().GetFile(authCtx, param.Bucket, param.Destination)
 			if err != nil {
 				return nil, temporal.NewApplicationErrorWithCause(
-					fmt.Sprintf("Failed to retrieve original PDF from storage: %s", errorsx.MessageOrErr(err)),
+					fmt.Sprintf("Failed to retrieve original file from storage: %s", errorsx.MessageOrErr(err)),
 					standardizeFileTypeActivityError,
 					err,
 				)
@@ -1041,8 +1075,8 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 				UID:           convertedFileUID,
 				KBUID:         param.KBUID,
 				FileUID:       param.FileUID,
-				ContentType:   "application/pdf",
-				ConvertedType: artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_DOCUMENT.String(),
+				ContentType:   contentType,
+				ConvertedType: convertedFileTypeEnum.String(),
 				Destination:   "placeholder",
 				PositionData:  nil,
 			}
@@ -1056,19 +1090,19 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 				)
 			}
 
-			// Copy PDF to converted-file folder (original blob remains at param.Destination)
+			// Copy file to converted-file folder (original blob remains at param.Destination)
 			convertedDestination, err := w.repository.GetMinIOStorage().SaveConvertedFile(
 				authCtx,
 				param.KBUID,
 				param.FileUID,
 				convertedFileUID,
-				"pdf",
-				pdfContent,
+				fileExtension,
+				fileContent,
 			)
 			if err != nil {
 				_ = w.repository.DeleteConvertedFile(authCtx, convertedFileUID)
 				return nil, temporal.NewApplicationErrorWithCause(
-					fmt.Sprintf("Failed to copy original PDF to converted-file folder: %s", errorsx.MessageOrErr(err)),
+					fmt.Sprintf("Failed to copy original file to converted-file folder: %s", errorsx.MessageOrErr(err)),
 					standardizeFileTypeActivityError,
 					err,
 				)
@@ -1087,7 +1121,8 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 				)
 			}
 
-			w.log.Info("StandardizeFileTypeActivity: Original PDF copied to converted-file folder",
+			w.log.Info("StandardizeFileTypeActivity: AI-native file copied to converted-file folder",
+				zap.String("fileType", param.FileType.String()),
 				zap.String("originalDestination", param.Destination),
 				zap.String("convertedFileUID", convertedFileUID.String()),
 				zap.String("convertedDestination", convertedDestination))
@@ -1105,7 +1140,7 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 			}, nil
 		}
 
-		// For AI-native files that don't need conversion (images, audio, video)
+		// For AI-native files that don't need conversion and no standard file type support
 		return &StandardizeFileTypeActivityResult{
 			ConvertedDestination: "", // No conversion, use original file
 			ConvertedBucket:      "",
@@ -1648,9 +1683,21 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 			}
 
 			// Check if AI client supports this file type
-			if !w.aiClient.SupportsFileType(param.FileType) {
+			clientName := "unknown"
+			if w.aiClient != nil {
+				clientName = w.aiClient.Name()
+			}
+
+			supportsFileType := w.aiClient.SupportsFileType(param.FileType)
+			logger.Info("Checking AI client file type support",
+				zap.String("fileType", param.FileType.String()),
+				zap.String("clientName", clientName),
+				zap.Bool("supported", supportsFileType))
+
+			if !supportsFileType {
 				logger.Error("File type not supported by AI client",
 					zap.String("fileType", param.FileType.String()),
+					zap.String("clientName", clientName),
 					zap.String("hint", "File should have been converted by StandardizeFileTypeActivity"))
 				return nil, temporal.NewApplicationErrorWithCause(
 					fmt.Sprintf("File type %s is not supported. The file may need to be converted to a supported format first.", param.FileType.String()),
@@ -2152,45 +2199,6 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 type DeleteTemporaryConvertedFileActivityParam struct {
 	Bucket      string // MinIO bucket (usually blob)
 	Destination string // MinIO path to temporary converted file
-}
-
-// DeleteTemporaryConvertedFileActivity deletes a temporary format-converted file from MinIO
-// after it has been used for AI caching and markdown conversion.
-//
-// Purpose: When processing files like GIF or MKV, we first convert them to AI-friendly
-// formats (GIF→PNG, MKV→MP4) using the indexing-convert-file-type pipeline.
-// These converted files are temporarily stored in MinIO (e.g., tmp/fileUID/uuid.png) and used
-// for AI caching and markdown conversion. Once processing is complete, these intermediate files
-// are no longer needed and should be cleaned up to avoid storage waste.
-//
-// Note: PDFs are now handled directly by StandardizeFileTypeActivity and saved to converted-file folder,
-// so they don't use this cleanup activity.
-//
-// TODO: Standardize image, video and audio files to store in converted-file folder too, to deprecate this activity.
-//
-// Lifecycle:
-//  1. Original file: kb-123/file-456/example.gif (kept permanently)
-//  2. Temporary converted: tmp/file-456/abc-123.png (deleted by this activity)
-func (w *Worker) DeleteTemporaryConvertedFileActivity(ctx context.Context, param *DeleteTemporaryConvertedFileActivityParam) error {
-	if param.Destination == "" {
-		w.log.Info("DeleteTemporaryConvertedFileActivity: No destination provided, skipping deletion")
-		return nil
-	}
-
-	w.log.Info("DeleteTemporaryConvertedFileActivity: Deleting temporary converted file",
-		zap.String("bucket", param.Bucket),
-		zap.String("destination", param.Destination))
-
-	err := w.repository.GetMinIOStorage().DeleteFile(ctx, param.Bucket, param.Destination)
-	if err != nil {
-		// Log error but don't fail the activity - temporary files can accumulate but won't break functionality
-		w.log.Warn("DeleteTemporaryConvertedFileActivity: Failed to delete temporary file (will remain in MinIO)",
-			zap.String("destination", param.Destination),
-			zap.Error(err))
-		return nil
-	}
-
-	return nil
 }
 
 // ===== MARKDOWN CONVERSION HELPERS =====
