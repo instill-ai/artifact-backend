@@ -22,7 +22,7 @@ import (
 type FileContentRef struct {
 	FileUID  types.FileUIDType `json:"file_uid"`  // File unique identifier
 	Content  []byte            `json:"content"`   // Actual file content (small, typically < 4KB)
-	FileType string            `json:"file_type"` // File type (e.g., "FILE_TYPE_PDF")
+	FileType string            `json:"file_type"` // File type (e.g., "TYPE_PDF")
 	Filename string            `json:"filename"`  // Original filename
 }
 

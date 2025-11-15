@@ -39,7 +39,8 @@ ALTER TABLE converted_file
 -- Drop redundant content and summary columns (now stored as converted_files)
 ALTER TABLE knowledge_base_file DROP COLUMN IF EXISTS content;
 ALTER TABLE knowledge_base_file DROP COLUMN IF EXISTS summary;
--- Rename 'type' to 'file_type' (stores FileType enum string like "FILE_TYPE_PDF")
+-- Rename 'type' to 'file_type' (stores FileType enum string like "TYPE_PDF")
+-- Note: Migration 000042 later standardizes the format by removing the "FILE_" prefix
 ALTER TABLE knowledge_base_file
     RENAME COLUMN type TO file_type;
 -- ==========================================

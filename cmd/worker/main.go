@@ -12,6 +12,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel"
+	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/contrib/opentelemetry"
 	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/worker"
@@ -186,6 +187,10 @@ func main() {
 	// Child workflows (called by main workflows)
 	w.RegisterWorkflow(cw.SaveEmbeddingsWorkflow) // Vector embedding storage
 
+	// GCS cleanup workflows
+	w.RegisterWorkflow(cw.GCSCleanupWorkflow)           // Single-run GCS cleanup (scheduled or manual)
+	w.RegisterWorkflow(cw.GCSCleanupContinuousWorkflow) // Continuous GCS cleanup (runs every 2 minutes)
+
 	// ===== Shared Activities (Used by Multiple Workflows) =====
 
 	// Embedding generation
@@ -276,11 +281,35 @@ func main() {
 	w.RegisterActivity(cw.SaveEmbeddingBatchActivity)  // Save embedding batch to DB and vector store
 	w.RegisterActivity(cw.FlushCollectionActivity)     // Flush Milvus collection to persist data
 
+	// ===== GCS Cleanup Activities =====
+	// Activities for cleaning up expired GCS files
+	w.RegisterActivity(cw.CleanupExpiredGCSFilesActivity) // Scan and delete expired GCS files from bucket and Redis
+
 	if err := w.Start(); err != nil {
 		logger.Fatal(fmt.Sprintf("Unable to start worker: %s", err))
 	}
 
 	logger.Info("Temporal worker started successfully and is polling for tasks")
+
+	// Start the GCS cleanup continuous workflow as a singleton
+	// This workflow runs indefinitely, cleaning up expired GCS files every 2 minutes
+	// Using a fixed WorkflowID ensures only one instance runs at a time
+	go func() {
+		workflowOptions := temporalclient.StartWorkflowOptions{
+			ID:                       "gcs-cleanup-continuous-singleton",
+			TaskQueue:                artifactworker.TaskQueue,
+			WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+			WorkflowExecutionTimeout: 0, // No timeout - runs indefinitely
+		}
+
+		logger.Info("Starting GCS cleanup continuous workflow (singleton)")
+		_, err := temporalClient.ExecuteWorkflow(context.Background(), workflowOptions, cw.GCSCleanupContinuousWorkflow)
+		if err != nil {
+			logger.Error("Failed to start GCS cleanup continuous workflow", zap.Error(err))
+		} else {
+			logger.Info("GCS cleanup continuous workflow started successfully")
+		}
+	}()
 
 	// Workflows are triggered by API handlers (e.g., ProcessCatalogFiles in cmd/main)
 	// No dispatcher needed - Temporal handles task distribution and retries automatically

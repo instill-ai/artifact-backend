@@ -96,7 +96,7 @@ type KnowledgeBaseFileModel struct {
 	KBUID      types.KBUIDType        `gorm:"column:kb_uid;type:uuid;not null" json:"kb_uid"`
 	CreatorUID types.CreatorUIDType   `gorm:"column:creator_uid;type:uuid;not null" json:"creator_uid"`
 	Filename   string                 `gorm:"column:filename;size:255;not null" json:"filename"`
-	// FileType stores the FileType enum string (e.g., "FILE_TYPE_PDF", "FILE_TYPE_TEXT")
+	// FileType stores the FileType enum string (e.g., "TYPE_PDF", "TYPE_TEXT")
 	FileType string `gorm:"column:file_type;not null" json:"file_type"`
 	// Destination is the path in the MinIO bucket
 	Destination string `gorm:"column:destination;size:255;not null" json:"destination"`
