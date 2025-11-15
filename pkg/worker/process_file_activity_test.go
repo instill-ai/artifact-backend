@@ -87,22 +87,22 @@ func TestProcessWaitingFileActivity_FileTypeConversion(t *testing.T) {
 	}{
 		{
 			name:                "PDF should convert",
-			fileType:            "FILE_TYPE_PDF",
+			fileType:            "TYPE_PDF",
 			expectConvertStatus: true,
 		},
 		{
 			name:                "Markdown should not convert",
-			fileType:            "FILE_TYPE_MARKDOWN",
+			fileType:            "TYPE_MARKDOWN",
 			expectConvertStatus: false,
 		},
 		{
 			name:                "Text should not convert",
-			fileType:            "FILE_TYPE_TEXT",
+			fileType:            "TYPE_TEXT",
 			expectConvertStatus: false,
 		},
 		{
 			name:                "DOC should convert",
-			fileType:            "FILE_TYPE_DOC",
+			fileType:            "TYPE_DOC",
 			expectConvertStatus: true,
 		},
 	}
@@ -132,7 +132,7 @@ func TestGetFileMetadataActivity_Success(t *testing.T) {
 			UID:         fileUID,
 			KBUID:       kbUID,
 			Filename:    "test.pdf",
-			FileType:    "FILE_TYPE_PDF",
+			FileType:    "TYPE_PDF",
 			Size:        1024,
 			Destination: "kb/test.pdf",
 		},
@@ -168,7 +168,7 @@ func TestGetFileMetadataActivity_Success(t *testing.T) {
 	c.Assert(result.File.UID, qt.Equals, fileUID)
 	c.Assert(result.File.KBUID, qt.Equals, kbUID)
 	c.Assert(result.File.Filename, qt.Equals, "test.pdf")
-	c.Assert(result.File.FileType, qt.Equals, "FILE_TYPE_PDF")
+	c.Assert(result.File.FileType, qt.Equals, "TYPE_PDF")
 }
 
 func TestGetFileContentActivity_Success(t *testing.T) {

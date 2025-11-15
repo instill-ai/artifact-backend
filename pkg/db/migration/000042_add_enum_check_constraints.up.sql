@@ -5,6 +5,11 @@ BEGIN;
 -- ============================================================================
 -- TABLE: file
 -- ============================================================================
+-- FIRST: Update existing data to match the expected format
+-- Remove "FILE_" prefix from file_type values (e.g., "FILE_TYPE_PDF" -> "TYPE_PDF")
+UPDATE file
+SET file_type = REGEXP_REPLACE(file_type, '^FILE_(TYPE_)', '\1')
+WHERE file_type ~ '^FILE_TYPE_';
 -- Constraint: file_type must start with "TYPE_" (e.g., "TYPE_PDF", "TYPE_TEXT")
 ALTER TABLE file
 ADD CONSTRAINT check_file_type_format CHECK (file_type ~ '^TYPE_[A-Z0-9_]+$');

@@ -9,6 +9,12 @@ ALTER TABLE file
 ALTER TABLE file
     DROP CONSTRAINT IF EXISTS check_process_status_format;
 
+-- Restore "FILE_" prefix to file_type values (e.g., "TYPE_PDF" -> "FILE_TYPE_PDF")
+-- This reverses the change made in the up migration
+UPDATE file
+SET file_type = 'FILE_' || file_type
+WHERE file_type ~ '^TYPE_' AND file_type !~ '^FILE_TYPE_';
+
 -- TABLE: knowledge_base
 ALTER TABLE knowledge_base
     DROP CONSTRAINT IF EXISTS check_update_status_format;

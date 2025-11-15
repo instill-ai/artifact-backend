@@ -242,7 +242,7 @@ func TestProcessFileWorkflow_GetFileMetadataSuccess(t *testing.T) {
 			KBUID:         kbUID,
 			ProcessStatus: "FILE_PROCESS_STATUS_NOTSTARTED",
 			Filename:      "test.pdf",
-			FileType:      "FILE_TYPE_PDF",
+			FileType:      "TYPE_PDF",
 			Destination:   "test/file.pdf",
 		},
 	}, nil)

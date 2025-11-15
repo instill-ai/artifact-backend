@@ -81,78 +81,79 @@ func convertKBFileToPB(kbf *repository.KnowledgeBaseFileModel, ns *resource.Name
 
 func convertFileType(dbType string) artifactpb.File_Type {
 	// Map database file type string to protobuf enum
+	// Supports both formats: "TYPE_*" (new) and "FILE_TYPE_*" (legacy)
 	switch dbType {
-	case "FILE_TYPE_TEXT":
+	case "TYPE_TEXT", "FILE_TYPE_TEXT":
 		return artifactpb.File_TYPE_TEXT
-	case "FILE_TYPE_PDF":
+	case "TYPE_PDF", "FILE_TYPE_PDF":
 		return artifactpb.File_TYPE_PDF
-	case "FILE_TYPE_MARKDOWN":
+	case "TYPE_MARKDOWN", "FILE_TYPE_MARKDOWN":
 		return artifactpb.File_TYPE_MARKDOWN
-	case "FILE_TYPE_PNG":
+	case "TYPE_PNG", "FILE_TYPE_PNG":
 		return artifactpb.File_TYPE_PNG
-	case "FILE_TYPE_JPEG":
+	case "TYPE_JPEG", "FILE_TYPE_JPEG":
 		return artifactpb.File_TYPE_JPEG
-	case "FILE_TYPE_GIF":
+	case "TYPE_GIF", "FILE_TYPE_GIF":
 		return artifactpb.File_TYPE_GIF
-	case "FILE_TYPE_WEBP":
+	case "TYPE_WEBP", "FILE_TYPE_WEBP":
 		return artifactpb.File_TYPE_WEBP
-	case "FILE_TYPE_TIFF":
+	case "TYPE_TIFF", "FILE_TYPE_TIFF":
 		return artifactpb.File_TYPE_TIFF
-	case "FILE_TYPE_HEIC":
+	case "TYPE_HEIC", "FILE_TYPE_HEIC":
 		return artifactpb.File_TYPE_HEIC
-	case "FILE_TYPE_HEIF":
+	case "TYPE_HEIF", "FILE_TYPE_HEIF":
 		return artifactpb.File_TYPE_HEIF
-	case "FILE_TYPE_AVIF":
+	case "TYPE_AVIF", "FILE_TYPE_AVIF":
 		return artifactpb.File_TYPE_AVIF
-	case "FILE_TYPE_BMP":
+	case "TYPE_BMP", "FILE_TYPE_BMP":
 		return artifactpb.File_TYPE_BMP
-	case "FILE_TYPE_MP3":
+	case "TYPE_MP3", "FILE_TYPE_MP3":
 		return artifactpb.File_TYPE_MP3
-	case "FILE_TYPE_WAV":
+	case "TYPE_WAV", "FILE_TYPE_WAV":
 		return artifactpb.File_TYPE_WAV
-	case "FILE_TYPE_AAC":
+	case "TYPE_AAC", "FILE_TYPE_AAC":
 		return artifactpb.File_TYPE_AAC
-	case "FILE_TYPE_OGG":
+	case "TYPE_OGG", "FILE_TYPE_OGG":
 		return artifactpb.File_TYPE_OGG
-	case "FILE_TYPE_FLAC":
+	case "TYPE_FLAC", "FILE_TYPE_FLAC":
 		return artifactpb.File_TYPE_FLAC
-	case "FILE_TYPE_AIFF":
+	case "TYPE_AIFF", "FILE_TYPE_AIFF":
 		return artifactpb.File_TYPE_AIFF
-	case "FILE_TYPE_M4A":
+	case "TYPE_M4A", "FILE_TYPE_M4A":
 		return artifactpb.File_TYPE_M4A
-	case "FILE_TYPE_WMA":
+	case "TYPE_WMA", "FILE_TYPE_WMA":
 		return artifactpb.File_TYPE_WMA
-	case "FILE_TYPE_WEBM_AUDIO":
+	case "TYPE_WEBM_AUDIO", "FILE_TYPE_WEBM_AUDIO":
 		return artifactpb.File_TYPE_WEBM_AUDIO
-	case "FILE_TYPE_MP4":
+	case "TYPE_MP4", "FILE_TYPE_MP4":
 		return artifactpb.File_TYPE_MP4
-	case "FILE_TYPE_AVI":
+	case "TYPE_AVI", "FILE_TYPE_AVI":
 		return artifactpb.File_TYPE_AVI
-	case "FILE_TYPE_MOV":
+	case "TYPE_MOV", "FILE_TYPE_MOV":
 		return artifactpb.File_TYPE_MOV
-	case "FILE_TYPE_FLV":
+	case "TYPE_FLV", "FILE_TYPE_FLV":
 		return artifactpb.File_TYPE_FLV
-	case "FILE_TYPE_WEBM_VIDEO":
+	case "TYPE_WEBM_VIDEO", "FILE_TYPE_WEBM_VIDEO":
 		return artifactpb.File_TYPE_WEBM_VIDEO
-	case "FILE_TYPE_WMV":
+	case "TYPE_WMV", "FILE_TYPE_WMV":
 		return artifactpb.File_TYPE_WMV
-	case "FILE_TYPE_MKV":
+	case "TYPE_MKV", "FILE_TYPE_MKV":
 		return artifactpb.File_TYPE_MKV
-	case "FILE_TYPE_HTML":
+	case "TYPE_HTML", "FILE_TYPE_HTML":
 		return artifactpb.File_TYPE_HTML
-	case "FILE_TYPE_DOCX":
+	case "TYPE_DOCX", "FILE_TYPE_DOCX":
 		return artifactpb.File_TYPE_DOCX
-	case "FILE_TYPE_DOC":
+	case "TYPE_DOC", "FILE_TYPE_DOC":
 		return artifactpb.File_TYPE_DOC
-	case "FILE_TYPE_PPT":
+	case "TYPE_PPT", "FILE_TYPE_PPT":
 		return artifactpb.File_TYPE_PPT
-	case "FILE_TYPE_PPTX":
+	case "TYPE_PPTX", "FILE_TYPE_PPTX":
 		return artifactpb.File_TYPE_PPTX
-	case "FILE_TYPE_XLSX":
+	case "TYPE_XLSX", "FILE_TYPE_XLSX":
 		return artifactpb.File_TYPE_XLSX
-	case "FILE_TYPE_XLS":
+	case "TYPE_XLS", "FILE_TYPE_XLS":
 		return artifactpb.File_TYPE_XLS
-	case "FILE_TYPE_CSV":
+	case "TYPE_CSV", "FILE_TYPE_CSV":
 		return artifactpb.File_TYPE_CSV
 	default:
 		return artifactpb.File_TYPE_UNSPECIFIED
