@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -227,6 +228,10 @@ func TestCleanupOldKnowledgeBaseActivity_Success(t *testing.T) {
 	kbUID := types.KBUIDType(uuid.Must(uuid.NewV4()))
 	activeCollectionUID := types.KBUIDType(uuid.Must(uuid.NewV4()))
 
+	// Mock MinIO storage for file deletion
+	mockStorage := mock.NewStorageMock(mc)
+	mockStorage.ListKnowledgeBaseFilePathsMock.Return([]string{}, nil)
+
 	mockRepository := mock.NewRepositoryMock(mc)
 	mockRepository.GetKnowledgeBaseByUIDMock.
 		When(minimock.AnyContext, kbUID).
@@ -237,6 +242,7 @@ func TestCleanupOldKnowledgeBaseActivity_Success(t *testing.T) {
 			ActiveCollectionUID: activeCollectionUID,
 			DeleteTime:          gorm.DeletedAt{},
 		}, nil)
+	mockRepository.GetMinIOStorageMock.Return(mockStorage)
 	mockRepository.DeleteAllKnowledgeBaseFilesMock.Return(nil)
 	mockRepository.DeleteAllConvertedFilesInKbMock.Return(nil)
 	mockRepository.DeleteKnowledgeBaseMock.Return(&repository.KnowledgeBaseModel{}, nil)
@@ -544,6 +550,92 @@ func TestSwapKnowledgeBasesActivity_Success(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(result, qt.Not(qt.IsNil))
 	c.Assert(result.StagingKBUID, qt.Equals, stagingKBUID)
+}
+
+func TestSwapKnowledgeBasesActivity_OriginalCollectionDoesNotExist(t *testing.T) {
+	c := qt.New(t)
+	mc := minimock.NewController(t)
+
+	ctx := context.Background()
+	originalKBUID := types.KBUIDType(uuid.Must(uuid.NewV4()))
+	stagingKBUID := types.KBUIDType(uuid.Must(uuid.NewV4()))
+	ownerUID := uuid.Must(uuid.NewV4())
+	originalCollectionUID := types.KBUIDType(uuid.Must(uuid.NewV4()))
+	stagingCollectionUID := types.KBUIDType(uuid.Must(uuid.NewV4()))
+
+	mockRepository := mock.NewRepositoryMock(mc)
+
+	// Get original KB with config
+	mockRepository.GetKnowledgeBaseByUIDWithConfigMock.
+		When(minimock.AnyContext, originalKBUID).
+		Then(&repository.KnowledgeBaseWithConfig{
+			KnowledgeBaseModel: repository.KnowledgeBaseModel{
+				UID:                 originalKBUID,
+				KBID:                "test-kb",
+				Owner:               ownerUID.String(),
+				CreatorUID:          types.CreatorUIDType(ownerUID),
+				ActiveCollectionUID: originalCollectionUID,
+			},
+		}, nil)
+
+	// Get staging KB with config
+	mockRepository.GetKnowledgeBaseByUIDWithConfigMock.
+		When(minimock.AnyContext, stagingKBUID).
+		Then(&repository.KnowledgeBaseWithConfig{
+			KnowledgeBaseModel: repository.KnowledgeBaseModel{
+				UID:                 stagingKBUID,
+				KBID:                "test-kb-staging",
+				Owner:               ownerUID.String(),
+				ActiveCollectionUID: stagingCollectionUID,
+			},
+		}, nil)
+
+	// Check if collections exist - original does NOT exist, staging does
+	mockRepository.CollectionExistsMock.
+		Set(func(ctx context.Context, collectionName string) (bool, error) {
+			// Original collection doesn't exist
+			// Collection name format: kb_<uuid with underscores instead of dashes>
+			expectedOriginalCollection := "kb_" + strings.ReplaceAll(originalCollectionUID.String(), "-", "_")
+			if collectionName == expectedOriginalCollection {
+				return false, nil
+			}
+			// Staging collection exists
+			expectedStagingCollection := "kb_" + strings.ReplaceAll(stagingCollectionUID.String(), "-", "_")
+			if collectionName == expectedStagingCollection {
+				return true, nil
+			}
+			return false, fmt.Errorf("unexpected collection name: %s", collectionName)
+		})
+
+	// Update resource KB UIDs (only once - staging → original, no rollback needed)
+	mockRepository.UpdateKnowledgeBaseResourcesMock.Return(nil)
+
+	// Update KB metadata (production KB update + staging KB cleanup)
+	mockRepository.UpdateKnowledgeBaseWithMapMock.Return(nil)
+
+	// Check for existing rollback KB to delete (returns not found)
+	mockRepository.GetKnowledgeBaseByOwnerAndKbIDMock.
+		When(minimock.AnyContext, types.OwnerUIDType(ownerUID), "test-kb-rollback").
+		Then(nil, fmt.Errorf("not found"))
+
+	// Delete staging KB after assignment
+	mockRepository.DeleteKnowledgeBaseMock.Return(&repository.KnowledgeBaseModel{}, nil)
+
+	w := &Worker{repository: mockRepository, log: zap.NewNop()}
+
+	param := &SwapKnowledgeBasesActivityParam{
+		OriginalKBUID: originalKBUID,
+		StagingKBUID:  stagingKBUID,
+		RetentionDays: 7,
+	}
+	result, err := w.SwapKnowledgeBasesActivity(ctx, param)
+
+	c.Assert(err, qt.IsNil)
+	c.Assert(result, qt.Not(qt.IsNil))
+	c.Assert(result.StagingKBUID, qt.Equals, stagingKBUID)
+	// When original collection doesn't exist, no rollback KB should be created
+	c.Assert(result.RollbackKBUID, qt.Equals, types.KBUIDType(uuid.Nil))
+	c.Assert(result.NewProductionCollectionUID, qt.Equals, stagingCollectionUID)
 }
 
 func TestSynchronizeKBActivity_FilesStillProcessing(t *testing.T) {

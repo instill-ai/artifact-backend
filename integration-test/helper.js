@@ -562,6 +562,60 @@ export function countMilvusVectors(kbUID, fileUID) {
   }
 }
 
+/**
+ * Drop a Milvus collection (used for testing missing collection scenarios)
+ *
+ * @param {string} kbUID - Knowledge base UUID
+ * @returns {boolean} True if collection was dropped successfully
+ */
+export function dropMilvusCollection(kbUID) {
+  try {
+    // Query active_collection_uid from database (same logic as countMilvusVectors)
+    const kbResult = safeQuery(`
+      SELECT active_collection_uid
+      FROM knowledge_base
+      WHERE uid = $1
+    `, kbUID);
+
+    if (!kbResult || kbResult.length === 0) {
+      console.error(`dropMilvusCollection: KB ${kbUID} not found in database`);
+      return false;
+    }
+
+    // Convert active_collection_uid from Buffer (PostgreSQL UUID) to string
+    let activeCollectionUID = kbResult[0].active_collection_uid;
+    if (Array.isArray(activeCollectionUID)) {
+      activeCollectionUID = String.fromCharCode(...activeCollectionUID);
+    }
+
+    if (!activeCollectionUID) {
+      console.error(`dropMilvusCollection: KB ${kbUID} has null active_collection_uid`);
+      return false;
+    }
+
+    // Convert active_collection_uid to Milvus collection name format: kb_{uuid_with_underscores}
+    const collectionName = `kb_${activeCollectionUID.replace(/-/g, '_')}`;
+
+    const milvusHost = __ENV.MILVUS_HOST || 'milvus';
+    const milvusPort = __ENV.MILVUS_PORT || '19530';
+
+    const result = exec.command('sh', [
+      `${__ENV.TEST_FOLDER_ABS_PATH}/integration-test/scripts/drop-milvus-collection.sh`,
+      collectionName,
+      milvusHost,
+      milvusPort
+    ]);
+
+    console.log(`dropMilvusCollection: KB=${kbUID}, collection=${collectionName}, result="${result.trim()}"`);
+
+    // Check if operation was successful
+    return result.includes('SUCCESS') || result.includes('INFO');
+  } catch (e) {
+    console.error(`Failed to drop Milvus collection for KB ${kbUID}: ${e}`);
+    return false;
+  }
+}
+
 // ============================================================================
 // Polling Helpers for Eventual Consistency
 // ============================================================================

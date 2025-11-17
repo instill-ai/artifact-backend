@@ -1070,27 +1070,8 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 			// Generate UUID for the converted file
 			convertedFileUID := types.FileUIDType(uuid.Must(uuid.NewV4()))
 
-			// Create converted_file DB record
-			convertedFileRecord := repository.ConvertedFileModel{
-				UID:           convertedFileUID,
-				KBUID:         param.KBUID,
-				FileUID:       param.FileUID,
-				ContentType:   contentType,
-				ConvertedType: convertedFileTypeEnum.String(),
-				Destination:   "placeholder",
-				PositionData:  nil,
-			}
-
-			_, err = w.repository.CreateConvertedFileWithDestination(authCtx, convertedFileRecord)
-			if err != nil {
-				return nil, temporal.NewApplicationErrorWithCause(
-					fmt.Sprintf("Failed to create converted_file record: %s", errorsx.MessageOrErr(err)),
-					standardizeFileTypeActivityError,
-					err,
-				)
-			}
-
-			// Copy file to converted-file folder (original blob remains at param.Destination)
+			// Upload to MinIO FIRST (before creating DB record)
+			// This makes the activity idempotent - retries will generate new UUIDs and upload new files
 			convertedDestination, err := w.repository.GetMinIOStorage().SaveConvertedFile(
 				authCtx,
 				param.KBUID,
@@ -1100,7 +1081,6 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 				fileContent,
 			)
 			if err != nil {
-				_ = w.repository.DeleteConvertedFile(authCtx, convertedFileUID)
 				return nil, temporal.NewApplicationErrorWithCause(
 					fmt.Sprintf("Failed to copy original file to converted-file folder: %s", errorsx.MessageOrErr(err)),
 					standardizeFileTypeActivityError,
@@ -1108,14 +1088,23 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 				)
 			}
 
-			// Update DB record with actual destination
-			updateMap := map[string]any{"destination": convertedDestination}
-			err = w.repository.UpdateConvertedFile(authCtx, convertedFileUID, updateMap)
+			// Create converted_file DB record with actual destination (after successful upload)
+			convertedFileRecord := repository.ConvertedFileModel{
+				UID:           convertedFileUID,
+				KBUID:         param.KBUID,
+				FileUID:       param.FileUID,
+				ContentType:   contentType,
+				ConvertedType: convertedFileTypeEnum.String(),
+				Destination:   convertedDestination, // Use actual destination, not placeholder
+				PositionData:  nil,
+			}
+
+			_, err = w.repository.CreateConvertedFileWithDestination(authCtx, convertedFileRecord)
 			if err != nil {
-				_ = w.repository.DeleteConvertedFile(authCtx, convertedFileUID)
+				// Compensate: delete the uploaded MinIO file
 				_ = w.repository.GetMinIOStorage().DeleteFile(authCtx, config.Config.Minio.BucketName, convertedDestination)
 				return nil, temporal.NewApplicationErrorWithCause(
-					fmt.Sprintf("Failed to update converted_file destination: %s", errorsx.MessageOrErr(err)),
+					fmt.Sprintf("Failed to create converted_file record: %s", errorsx.MessageOrErr(err)),
 					standardizeFileTypeActivityError,
 					err,
 				)
@@ -1245,31 +1234,8 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 	// Generate UUID for the converted file
 	convertedFileUID := types.FileUIDType(uuid.Must(uuid.NewV4()))
 
-	// Create converted_file DB record with placeholder destination
-	convertedFileRecord := repository.ConvertedFileModel{
-		UID:           convertedFileUID,
-		KBUID:         param.KBUID,
-		FileUID:       param.FileUID,
-		ContentType:   convertedMimeType,
-		ConvertedType: convertedFileTypeEnum.String(),
-		Destination:   "placeholder", // Will be updated after upload
-		PositionData:  nil,           // Position data extraction not yet implemented for converted files
-	}
-
-	_, err = w.repository.CreateConvertedFileWithDestination(authCtx, convertedFileRecord)
-	if err != nil {
-		return nil, temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to create converted_file record: %s", errorsx.MessageOrErr(err)),
-			standardizeFileTypeActivityError,
-			err,
-		)
-	}
-
-	w.log.Info("StandardizeFileTypeActivity: Created converted_file DB record",
-		zap.String("convertedFileUID", convertedFileUID.String()),
-		zap.String("convertedType", convertedFileTypeEnum.String()))
-
-	// Upload standardized file to converted-file folder (final destination)
+	// Upload to MinIO FIRST (before creating DB record)
+	// This makes the activity idempotent - retries will generate new UUIDs and upload new files
 	convertedDestination, err := w.repository.GetMinIOStorage().SaveConvertedFile(
 		authCtx,
 		param.KBUID,
@@ -1279,8 +1245,6 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 		convertedContent,
 	)
 	if err != nil {
-		// Cleanup: delete DB record
-		_ = w.repository.DeleteConvertedFile(authCtx, convertedFileUID)
 		return nil, temporal.NewApplicationErrorWithCause(
 			fmt.Sprintf("Failed to upload standardized file to MinIO: %s", errorsx.MessageOrErr(err)),
 			standardizeFileTypeActivityError,
@@ -1292,19 +1256,31 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 		zap.String("destination", convertedDestination),
 		zap.String("format", targetFormat))
 
-	// Update DB record with actual destination
-	updateMap := map[string]any{"destination": convertedDestination}
-	err = w.repository.UpdateConvertedFile(authCtx, convertedFileUID, updateMap)
+	// Create converted_file DB record with actual destination (after successful upload)
+	convertedFileRecord := repository.ConvertedFileModel{
+		UID:           convertedFileUID,
+		KBUID:         param.KBUID,
+		FileUID:       param.FileUID,
+		ContentType:   convertedMimeType,
+		ConvertedType: convertedFileTypeEnum.String(),
+		Destination:   convertedDestination, // Use actual destination, not placeholder
+		PositionData:  nil,                  // Position data extraction not yet implemented for converted files
+	}
+
+	_, err = w.repository.CreateConvertedFileWithDestination(authCtx, convertedFileRecord)
 	if err != nil {
-		// Cleanup: delete both DB record and MinIO file
-		_ = w.repository.DeleteConvertedFile(authCtx, convertedFileUID)
+		// Compensate: delete the uploaded MinIO file
 		_ = w.repository.GetMinIOStorage().DeleteFile(authCtx, config.Config.Minio.BucketName, convertedDestination)
 		return nil, temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to update converted_file destination: %s", errorsx.MessageOrErr(err)),
+			fmt.Sprintf("Failed to create converted_file record: %s", errorsx.MessageOrErr(err)),
 			standardizeFileTypeActivityError,
 			err,
 		)
 	}
+
+	w.log.Info("StandardizeFileTypeActivity: Created converted_file DB record",
+		zap.String("convertedFileUID", convertedFileUID.String()),
+		zap.String("convertedType", convertedFileTypeEnum.String()))
 
 	w.log.Info("StandardizeFileTypeActivity: Standardized file saved to converted-file folder",
 		zap.String("convertedFileUID", convertedFileUID.String()),
