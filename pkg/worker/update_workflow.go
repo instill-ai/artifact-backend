@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
+	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
@@ -391,7 +392,8 @@ func (w *Worker) UpdateKnowledgeBaseWorkflow(ctx workflow.Context, param UpdateK
 	retentionSeconds := int64(retentionDuration.Seconds())
 
 	childWorkflowOptions := workflow.ChildWorkflowOptions{
-		WorkflowID: fmt.Sprintf("cleanup-rollback-kb-%s", swapResult.RollbackKBUID.String()),
+		WorkflowID:        fmt.Sprintf("cleanup-rollback-kb-%s", swapResult.RollbackKBUID.String()),
+		ParentClosePolicy: enums.PARENT_CLOSE_POLICY_ABANDON, // Allow child to continue after parent completes
 	}
 	rollbackCleanupCtx := workflow.WithChildOptions(ctx, childWorkflowOptions)
 

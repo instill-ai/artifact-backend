@@ -480,7 +480,7 @@ func (w *Worker) GCSCleanupWorkflow(ctx workflow.Context) error {
 // It runs every 2 minutes indefinitely until cancelled
 //
 // Workflow name: GCSCleanupContinuousWorkflow
-// Singleton: Yes - Only one instance runs at a time using WorkflowID "gcs-cleanup-continuous-singleton"
+// Singleton: Yes - Only one instance runs at a time using WorkflowID "artifact-backend-gcs-cleanup-continuous-singleton"
 // Usage: Start once and it will run forever on a 2-minute interval
 func (w *Worker) GCSCleanupContinuousWorkflow(ctx workflow.Context) error {
 	logger := workflow.GetLogger(ctx)

@@ -1262,6 +1262,133 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 		)
 	}
 
+	// Check that collection UIDs are set (not uuid.Nil)
+	if originalKB.ActiveCollectionUID == uuid.Nil || stagingKB.ActiveCollectionUID == uuid.Nil {
+		return nil, temporal.NewApplicationErrorWithCause(
+			"active_collection_uid is unset (uuid.Nil) for original or staging KB",
+			swapKnowledgeBasesActivityError,
+			fmt.Errorf("originalKB.ActiveCollectionUID=%v, stagingKB.ActiveCollectionUID=%v", originalKB.ActiveCollectionUID, stagingKB.ActiveCollectionUID),
+		)
+	}
+
+	// CRITICAL: Validate that collections exist in Milvus before proceeding
+	// This determines whether we need a full swap (with rollback) or simple assignment
+	originalCollectionName := constant.KBCollectionName(originalKB.ActiveCollectionUID)
+	stagingCollectionName := constant.KBCollectionName(stagingKB.ActiveCollectionUID)
+
+	originalCollectionExists, err := w.repository.CollectionExists(ctx, originalCollectionName)
+	if err != nil {
+		return nil, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to check if original collection exists: %s", originalCollectionName),
+			swapKnowledgeBasesActivityError,
+			err,
+		)
+	}
+
+	stagingCollectionExists, err := w.repository.CollectionExists(ctx, stagingCollectionName)
+	if err != nil {
+		return nil, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Failed to check if staging collection exists: %s", stagingCollectionName),
+			swapKnowledgeBasesActivityError,
+			err,
+		)
+	}
+	if !stagingCollectionExists {
+		return nil, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("Staging KB's collection does not exist in Milvus: %s (UID: %s)", stagingCollectionName, stagingKB.ActiveCollectionUID),
+			swapKnowledgeBasesActivityError,
+			fmt.Errorf("collection %s not found", stagingCollectionName),
+		)
+	}
+
+	retentionUntil := time.Now().Add(time.Duration(param.RetentionDays) * 24 * time.Hour)
+
+	// Handle case where original collection doesn't exist in Milvus
+	// This can happen if the collection was deleted or never created
+	// In this case, we simply point the production KB to the staging collection
+	// without creating a rollback KB (since there's nothing to rollback to)
+	if !originalCollectionExists {
+		w.log.Warn("SwapKnowledgeBasesActivity: Original KB's collection does not exist in Milvus, performing simple resource move and collection assignment",
+			zap.String("originalCollectionName", originalCollectionName),
+			zap.String("originalCollectionUID", originalKB.ActiveCollectionUID.String()),
+			zap.String("stagingCollectionUID", stagingKB.ActiveCollectionUID.String()),
+			zap.String("stagingCollectionName", stagingCollectionName))
+
+		// Simply move staging KB's resources → original KB (no rollback needed)
+		if err := w.updateResourceKBUIDs(ctx, param.StagingKBUID, param.OriginalKBUID); err != nil {
+			return nil, temporal.NewApplicationErrorWithCause(
+				"Failed to move staging resources to production",
+				swapKnowledgeBasesActivityError,
+				err,
+			)
+		}
+
+		// Update production KB to point to staging's collection (no rollback KB created)
+		// NOTE: Do NOT set update_status here - it will be set by UpdateKnowledgeBaseUpdateStatusActivity at the end of the workflow
+		err = w.repository.UpdateKnowledgeBaseWithMap(ctx, originalKB.KBID, originalKB.Owner, map[string]interface{}{
+			"active_collection_uid":    stagingKB.ActiveCollectionUID, // Point to new collection
+			"system_uid":               stagingKB.SystemUID,           // Update system UID (may reference different system with new dimensionality)
+			"staging":                  false,
+			"rollback_retention_until": retentionUntil,
+		})
+		if err != nil {
+			err = errorsx.AddMessage(err, "Unable to update production KB metadata and collection pointer. Please try again.")
+			return nil, temporal.NewApplicationErrorWithCause(
+				errorsx.MessageOrErr(err),
+				swapKnowledgeBasesActivityError,
+				err,
+			)
+		}
+
+		// Clean up any existing rollback KB (since we don't need it)
+		// This is a best-effort cleanup - if it fails, cleanup workflow will handle it later
+		ownerUID, err := uuid.FromString(originalKB.Owner)
+		if err == nil {
+			rollbackKBID := fmt.Sprintf("%s-rollback", originalKB.KBID)
+			existingRollback, err := w.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, types.OwnerUIDType(ownerUID), rollbackKBID)
+			if err == nil && existingRollback != nil {
+				w.log.Info("SwapKnowledgeBasesActivity: Marking existing rollback KB for deletion since original collection doesn't exist",
+					zap.String("rollbackKBUID", existingRollback.UID.String()))
+				_, _ = w.repository.DeleteKnowledgeBase(ctx, existingRollback.Owner, existingRollback.KBID)
+			}
+		}
+
+		// Delete staging KB immediately (no longer needed - its resources are now in production)
+		w.log.Info("SwapKnowledgeBasesActivity: Marking staging KB for deletion",
+			zap.String("stagingKBUID", stagingKB.UID.String()),
+			zap.String("stagingKBID", stagingKB.KBID))
+
+		// Mark staging KB for immediate deletion to prevent it from blocking future updates
+		// CRITICAL: Also clear update_workflow_id to prevent blocking API deletion
+		// First clear the update fields, then soft delete using GORM's Delete()
+		err = w.repository.UpdateKnowledgeBaseWithMap(ctx, stagingKB.KBID, stagingKB.Owner, map[string]interface{}{
+			"update_status":      "",  // Clear update status so it doesn't block future updates
+			"update_workflow_id": nil, // Clear workflow ID so API deletion works
+		})
+		if err == nil {
+			// Now perform soft delete using GORM's Delete method (which sets delete_time automatically)
+			_, err = w.repository.DeleteKnowledgeBase(ctx, stagingKB.Owner, stagingKB.KBID)
+		}
+		if err != nil {
+			w.log.Error("SwapKnowledgeBasesActivity: Failed to mark staging KB for deletion (non-fatal)",
+				zap.String("stagingKBUID", stagingKB.UID.String()),
+				zap.Error(err))
+			// Non-fatal: Continue anyway, cleanup will happen later
+		}
+
+		w.log.Info("SwapKnowledgeBasesActivity: Simple collection assignment completed successfully (no rollback KB created)",
+			zap.String("productionKBUID", param.OriginalKBUID.String()),
+			zap.String("stagingKBUID", stagingKB.UID.String()),
+			zap.String("newProductionCollectionUID", stagingKB.ActiveCollectionUID.String()))
+
+		return &SwapKnowledgeBasesActivityResult{
+			RollbackKBUID:              types.KBUIDType(uuid.Nil),     // No rollback KB created
+			StagingKBUID:               stagingKB.UID,                 // Return staging KB UID for cleanup
+			NewProductionCollectionUID: stagingKB.ActiveCollectionUID, // Protect this collection from cleanup
+		}, nil
+	}
+
+	// Normal path: Original collection exists, so we need to create rollback KB and do full swap
 	// Step 1: Create/update rollback KB to store old resources
 	rollbackKBID := fmt.Sprintf("%s-rollback", originalKB.KBID)
 
@@ -1287,7 +1414,6 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 	} else {
 		// Create new rollback KB
 		rollbackKBUID = types.KBUIDType(uuid.Must(uuid.NewV4()))
-		retentionUntil := time.Now().Add(time.Duration(param.RetentionDays) * 24 * time.Hour)
 
 		rollbackKB := &repository.KnowledgeBaseModel{
 			UID:                    rollbackKBUID,
@@ -1358,53 +1484,6 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 	// - Production KB now points to staging's collection (which may have different dimensionality)
 	// - Rollback KB points to original's collection (preserves old dimensionality for rollback)
 	// - Collections themselves are NOT moved - only the pointers are swapped
-	retentionUntil := time.Now().Add(time.Duration(param.RetentionDays) * 24 * time.Hour)
-
-	// Check that collection UIDs are set (not uuid.Nil)
-	if originalKB.ActiveCollectionUID == uuid.Nil || stagingKB.ActiveCollectionUID == uuid.Nil {
-		return nil, temporal.NewApplicationErrorWithCause(
-			"active_collection_uid is unset (uuid.Nil) for original or staging KB",
-			swapKnowledgeBasesActivityError,
-			fmt.Errorf("originalKB.ActiveCollectionUID=%v, stagingKB.ActiveCollectionUID=%v", originalKB.ActiveCollectionUID, stagingKB.ActiveCollectionUID),
-		)
-	}
-
-	// CRITICAL: Validate that both collections actually exist in Milvus before swapping pointers
-	// This prevents "collection does not exist" errors in SaveEmbeddingsWorkflow
-	originalCollectionName := constant.KBCollectionName(originalKB.ActiveCollectionUID)
-	stagingCollectionName := constant.KBCollectionName(stagingKB.ActiveCollectionUID)
-
-	originalCollectionExists, err := w.repository.CollectionExists(ctx, originalCollectionName)
-	if err != nil {
-		return nil, temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to check if original collection exists: %s", originalCollectionName),
-			swapKnowledgeBasesActivityError,
-			err,
-		)
-	}
-	if !originalCollectionExists {
-		return nil, temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Original KB's collection does not exist in Milvus: %s (UID: %s)", originalCollectionName, originalKB.ActiveCollectionUID),
-			swapKnowledgeBasesActivityError,
-			fmt.Errorf("collection %s not found", originalCollectionName),
-		)
-	}
-
-	stagingCollectionExists, err := w.repository.CollectionExists(ctx, stagingCollectionName)
-	if err != nil {
-		return nil, temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Failed to check if staging collection exists: %s", stagingCollectionName),
-			swapKnowledgeBasesActivityError,
-			err,
-		)
-	}
-	if !stagingCollectionExists {
-		return nil, temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Staging KB's collection does not exist in Milvus: %s (UID: %s)", stagingCollectionName, stagingKB.ActiveCollectionUID),
-			swapKnowledgeBasesActivityError,
-			fmt.Errorf("collection %s not found", stagingCollectionName),
-		)
-	}
 
 	w.log.Info("SwapKnowledgeBasesActivity: Collection existence validated, swapping pointers",
 		zap.String("originalCollectionUID", originalKB.ActiveCollectionUID.String()),
@@ -1570,6 +1649,19 @@ func (w *Worker) CleanupOldKnowledgeBaseActivity(ctx context.Context, param *Cle
 		w.log.Info("CleanupOldKnowledgeBaseActivity: KB already soft-deleted, skipping soft-delete",
 			zap.String("kbUID", param.KBUID.String()),
 			zap.Time("deleteTime", kb.DeleteTime.Time))
+	}
+
+	// CRITICAL: Delete all files from MinIO before dropping collection and DB records
+	// This prevents orphaned blobs when updates fail
+	w.log.Info("CleanupOldKnowledgeBaseActivity: Deleting all files from MinIO",
+		zap.String("kbUID", param.KBUID.String()))
+	err = w.deleteKnowledgeBaseSync(ctx, param.KBUID.String())
+	if err != nil {
+		// Log warning but continue - MinIO cleanup failure shouldn't block DB cleanup
+		// Orphaned files can be cleaned up by garbage collection later
+		w.log.Warn("CleanupOldKnowledgeBaseActivity: Failed to delete files from MinIO, continuing with DB cleanup",
+			zap.String("kbUID", param.KBUID.String()),
+			zap.Error(err))
 	}
 
 	// Drop Milvus collection using active_collection_uid

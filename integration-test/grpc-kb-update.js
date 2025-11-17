@@ -4837,6 +4837,183 @@ function TestResourceCleanup(client, data) {
             console.log("Cleanup: Skipping manual purge verification (rollback KB was empty or already purged)");
         }
 
+        // ========================================================================
+        // TEST: MinIO Cleanup During Staging KB Deletion
+        // ========================================================================
+        // This test verifies that when staging KBs are cleaned up, their MinIO blobs
+        // are also deleted (not just DB records and Milvus collections).
+        // This prevents orphaned blobs from consuming storage on failed updates.
+        console.log("\n=== Testing MinIO Cleanup During Staging KB Deletion ===");
+
+        // Create a new test KB specifically for MinIO cleanup verification
+        const minioTestKBId = data.dbIDPrefix + "g8-minio-cleanup-" + randomString(8);
+        const minioTestCreateRes = http.request(
+            "POST",
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
+            JSON.stringify({
+                id: minioTestKBId,
+                description: "Test MinIO cleanup during staging KB deletion (Fix 4)",
+                tags: ["test", "group8", "minio-cleanup"],
+            }),
+            data.header
+        );
+
+        let minioTestKB;
+        try {
+            minioTestKB = minioTestCreateRes.json().knowledgeBase;
+            console.log(`MinIO Cleanup Test: Created KB "${minioTestKBId}" with UID ${minioTestKB.uid}`);
+        } catch (e) {
+            console.error(`MinIO Cleanup Test: Failed to create KB: ${e}`);
+            // Continue with main cleanup even if this test fails
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
+            return;
+        }
+
+        const minioTestKBUID = minioTestKB.uid;
+
+        // Upload a file to create MinIO objects
+        const minioTestFilename = data.dbIDPrefix + "minio-cleanup-test.txt";
+        const minioTestUploadRes = http.request(
+            "POST",
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${minioTestKBId}/files`,
+            JSON.stringify({
+                filename: minioTestFilename,
+                type: "TYPE_TEXT",
+                content: constant.docSampleTxt
+            }),
+            data.header
+        );
+
+        let minioTestFileUID;
+        try {
+            minioTestFileUID = minioTestUploadRes.json().file.uid;
+            console.log(`MinIO Cleanup Test: Uploaded file ${minioTestFileUID}`);
+        } catch (e) {
+            console.error(`MinIO Cleanup Test: Failed to upload file: ${e}`);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${minioTestKBId}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
+            return;
+        }
+
+        // Wait for file processing
+        const minioTestProcessResult = helper.waitForFileProcessingComplete(
+            data.expectedOwner.id,
+            minioTestKBId,
+            minioTestFileUID,
+            data.header,
+            600
+        );
+
+        if (!minioTestProcessResult.completed) {
+            console.error(`MinIO Cleanup Test: File processing failed or timed out`);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${minioTestKBId}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
+            return;
+        }
+
+        console.log(`MinIO Cleanup Test: File processed successfully`);
+
+        // Verify MinIO objects exist (chunks and converted files)
+        const minioChunksBeforeUpdate = helper.countMinioObjects(minioTestKBUID, minioTestFileUID, 'chunk');
+        const minioConvertedBeforeUpdate = helper.countMinioObjects(minioTestKBUID, minioTestFileUID, 'converted-file');
+
+        console.log(`MinIO Cleanup Test: Before update - Chunks in MinIO: ${minioChunksBeforeUpdate}, Converted files: ${minioConvertedBeforeUpdate}`);
+
+        check({ minioChunksBeforeUpdate, minioConvertedBeforeUpdate }, {
+            "MinIO Cleanup Test: MinIO chunks exist before update": () => minioChunksBeforeUpdate > 0,
+            "MinIO Cleanup Test: MinIO converted files exist before update": () => minioConvertedBeforeUpdate >= 0, // May be 0 for text files
+        });
+
+        // Trigger update to create staging KB
+        console.log("MinIO Cleanup Test: Triggering update to create staging KB...");
+        const minioTestUpdateRes = client.invoke(
+            "artifact.artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
+            { knowledgeBaseIds: [minioTestKBId] },
+            data.metadata
+        );
+
+        if (!minioTestUpdateRes || minioTestUpdateRes.status !== grpc.StatusOK) {
+            console.error(`MinIO Cleanup Test: Failed to trigger update`);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${minioTestKBId}`, null, data.header);
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
+            return;
+        }
+
+        // Wait for update to complete
+        const minioTestUpdateCompleted = helper.pollUpdateCompletion(client, data, minioTestKBUID, 900);
+
+        if (!minioTestUpdateCompleted) {
+            console.error("MinIO Cleanup Test: Update timed out - NOT deleting KB to avoid interfering with ongoing workflow");
+            // Clean up the original test KB
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
+            return;
+        }
+
+        console.log(`MinIO Cleanup Test: Update completed`);
+
+        // CRITICAL TEST: Verify staging KB's MinIO objects were cleaned up
+        // After update completes, staging KB should be soft-deleted AND its MinIO objects should be gone
+        const stagingKBIdForMinio = `${minioTestKBId}-staging`;
+        const stagingKBForMinio = helper.getKnowledgeBaseByIdAndOwner(stagingKBIdForMinio, data.expectedOwner.uid);
+
+        // Get staging KB's file UIDs to check MinIO
+        let stagingFileUIDs = [];
+        if (stagingKBForMinio && stagingKBForMinio.length > 0) {
+            const stagingKBUIDForMinio = stagingKBForMinio[0].uid;
+            console.log(`MinIO Cleanup Test: Staging KB UID: ${stagingKBUIDForMinio}, delete_time: ${stagingKBForMinio[0].delete_time}`);
+
+            // Get file UIDs from staging KB (they may be soft-deleted)
+            const stagingFilesQuery = `SELECT uid FROM file WHERE kb_uid = $1`;
+            try {
+                const stagingFiles = helper.safeQuery(stagingFilesQuery, stagingKBUIDForMinio);
+                stagingFileUIDs = stagingFiles.map(f => f.uid);
+                console.log(`MinIO Cleanup Test: Found ${stagingFileUIDs.length} files in staging KB (including soft-deleted)`);
+            } catch (e) {
+                console.error(`MinIO Cleanup Test: Failed to query staging KB files: ${e}`);
+            }
+
+            // Check MinIO cleanup for staging KB files
+            if (stagingFileUIDs.length > 0) {
+                let totalStagingChunksInMinIO = 0;
+                let totalStagingConvertedInMinIO = 0;
+
+                for (const stagingFileUID of stagingFileUIDs) {
+                    const stagingChunks = helper.countMinioObjects(stagingKBUIDForMinio, stagingFileUID, 'chunk');
+                    const stagingConverted = helper.countMinioObjects(stagingKBUIDForMinio, stagingFileUID, 'converted-file');
+                    totalStagingChunksInMinIO += stagingChunks;
+                    totalStagingConvertedInMinIO += stagingConverted;
+                }
+
+                console.log(`MinIO Cleanup Test: Staging KB MinIO objects - Chunks: ${totalStagingChunksInMinIO}, Converted files: ${totalStagingConvertedInMinIO}`);
+
+                check({ totalStagingChunksInMinIO, totalStagingConvertedInMinIO }, {
+                    "MinIO Cleanup Test: Staging KB chunks cleaned up from MinIO": () => {
+                        if (totalStagingChunksInMinIO > 0) {
+                            console.error(`MinIO Cleanup Test: ❌ Staging KB still has ${totalStagingChunksInMinIO} chunks in MinIO (orphaned blobs!)`);
+                            console.error("MinIO Cleanup Test: This indicates CleanupOldKnowledgeBaseActivity is NOT cleaning up MinIO properly");
+                        }
+                        return totalStagingChunksInMinIO === 0;
+                    },
+                    "MinIO Cleanup Test: Staging KB converted files cleaned up from MinIO": () => {
+                        if (totalStagingConvertedInMinIO > 0) {
+                            console.error(`MinIO Cleanup Test: ❌ Staging KB still has ${totalStagingConvertedInMinIO} converted files in MinIO (orphaned blobs!)`);
+                        }
+                        return totalStagingConvertedInMinIO === 0;
+                    },
+                });
+            } else {
+                console.log("MinIO Cleanup Test: No files found in staging KB to check MinIO cleanup");
+            }
+        } else {
+            console.log("MinIO Cleanup Test: Staging KB fully cleaned up (not found in DB)");
+        }
+
+        // Cleanup: Delete the MinIO test KB
+        console.log("MinIO Cleanup Test: Cleaning up test KB...");
+        http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${minioTestKBId}`, null, data.header);
+
+        console.log("=== MinIO Cleanup Test Complete ===\n");
+
         // Cleanup: Delete test knowledge base and all related KBs
         console.log("Cleanup: Deleting test knowledge base...");
         http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
@@ -5471,6 +5648,103 @@ function TestRollbackAndReUpdate(client, data) {
         // Removed second rollback cycle to reduce test time by ~40% while still validating
         // the core rollback and re-update functionality
         console.log("Rollback Cycle: Test completed with update → rollback → update sequence");
+
+        // ========================================================================
+        // TEST: Rollback KB Cleanup Workflow Independence
+        // ========================================================================
+        // This test verifies that rollback KB cleanup workflows continue to execute
+        // independently even after the parent update workflow completes. The cleanup
+        // workflow uses ParentClosePolicy: ABANDON to prevent premature termination.
+        console.log("\n=== Testing Rollback KB Cleanup Workflow Independence ===");
+
+        console.log("Rollback Cycle: Testing rollback retention and cleanup workflow independence");
+
+        // Get the current rollback KB (should exist after second update)
+        const currentRollbackKBs = helper.getKnowledgeBaseByIdAndOwner(rollbackKBID, data.expectedOwner.uid);
+
+        if (currentRollbackKBs && currentRollbackKBs.length > 0) {
+            const currentRollbackKBUID = currentRollbackKBs[0].uid;
+            console.log(`Rollback Cycle: Found rollback KB with UID ${currentRollbackKBUID}`);
+
+            // Set a very short rollback retention (5 seconds) to trigger cleanup workflow quickly
+            console.log("Rollback Cycle: Setting rollback retention to 5 seconds to trigger cleanup...");
+            const retentionRes = client.invoke(
+                "artifact.artifact.v1alpha.ArtifactPrivateService/SetRollbackRetentionAdmin",
+                {
+                    name: `users/${data.expectedOwner.uid}/knowledge-bases/${knowledgeBaseId}`,
+                    duration: 5,
+                    time_unit: 1  // TIME_UNIT_SECOND
+                },
+                data.metadata
+            );
+
+            if (retentionRes.status === grpc.StatusOK) {
+                console.log("Rollback Cycle: Rollback retention set successfully");
+
+                // Wait a bit longer than retention period for cleanup workflow to execute
+                // The cleanup workflow should continue independently even though parent workflow has completed
+                console.log("Rollback Cycle: Waiting for rollback retention to expire and cleanup to execute...");
+                sleep(10); // Wait 10 seconds (5s retention + 5s buffer for workflow execution)
+
+                // Check if rollback KB was cleaned up (should be hard-deleted or have delete_time set)
+                const rollbackKBAfterRetention = helper.getKnowledgeBaseByIdAndOwner(rollbackKBID, data.expectedOwner.uid);
+
+                // Also check if files in rollback KB were cleaned up
+                let rollbackFilesCount = 0;
+                if (rollbackKBAfterRetention && rollbackKBAfterRetention.length > 0 && rollbackKBAfterRetention[0].delete_time === null) {
+                    // Still exists and not soft-deleted - check file count
+                    rollbackFilesCount = helper.countFilesInKnowledgeBase(currentRollbackKBUID);
+                }
+
+                check({ rollbackKBAfterRetention, rollbackFilesCount }, {
+                    "Rollback Cycle: Rollback KB cleaned up after retention expires": () => {
+                        // Should be either: not found (hard-deleted) or soft-deleted (delete_time set) or empty (files purged)
+                        const cleaned = !rollbackKBAfterRetention ||
+                            rollbackKBAfterRetention.length === 0 ||
+                            rollbackKBAfterRetention[0].delete_time !== null ||
+                            rollbackFilesCount === 0;
+
+                        if (!cleaned) {
+                            console.error(`Rollback Cycle: ❌ Rollback KB not cleaned up after retention expired`);
+                            console.error(`Rollback Cycle: This may indicate cleanup workflow was terminated with parent workflow`);
+                            console.error(`Rollback Cycle: Rollback KB status: delete_time=${rollbackKBAfterRetention[0]?.delete_time}, files=${rollbackFilesCount}`);
+                        } else {
+                            console.log("Rollback Cycle: ✅ Rollback KB successfully cleaned up after retention expired");
+                            console.log("Rollback Cycle: This confirms cleanup workflow continued independently after parent workflow completed");
+                        }
+
+                        return cleaned;
+                    },
+                });
+
+                // Additional verification: Check that production KB is still operational
+                const prodKBAfterCleanup = helper.getKnowledgeBaseByIdAndOwner(knowledgeBaseId, data.expectedOwner.uid);
+                check({ prodKBAfterCleanup }, {
+                    "Rollback Cycle: Production KB remains operational after rollback cleanup": () => {
+                        const operational = prodKBAfterCleanup &&
+                            prodKBAfterCleanup.length > 0 &&
+                            prodKBAfterCleanup[0].delete_time === null;
+
+                        if (!operational) {
+                            console.error("Rollback Cycle: ❌ Production KB was affected by rollback cleanup!");
+                        } else {
+                            console.log("Rollback Cycle: ✅ Production KB unaffected by rollback cleanup");
+                        }
+
+                        return operational;
+                    },
+                });
+
+                console.log("=== Rollback Cleanup Workflow Test Complete ===\n");
+
+            } else {
+                console.error(`Rollback Cycle: Failed to set rollback retention - status=${retentionRes.status}`);
+                console.log("=== Rollback Cleanup Workflow Test Skipped ===\n");
+            }
+        } else {
+            console.log("Rollback Cycle: No rollback KB found to test cleanup workflow");
+            console.log("=== Rollback Cleanup Workflow Test Skipped ===\n");
+        }
 
         // Cleanup
         http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
@@ -6291,6 +6565,271 @@ function TestEdgeCases(client, data) {
         });
 
         http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
+
+        // ========================================================================
+        // TEST: Swap Operation Handles Missing Milvus Collection
+        // ========================================================================
+        // This test verifies that when the original KB's Milvus collection doesn't exist
+        // (e.g., manually deleted or corrupted), the swap operation gracefully falls back
+        // to a simple resource move instead of failing with a 3-way swap error.
+        console.log("\n=== Testing Swap Operation with Missing Milvus Collection ===");
+
+        // Verify through normal update path that the system handles missing collections gracefully
+        const missingCollKBId = data.dbIDPrefix + "missing-coll-" + randomString(8);
+        const missingCollCreateRes = http.request(
+            "POST",
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
+            JSON.stringify({
+                id: missingCollKBId,
+                description: "Test missing collection handling (Fix 1)",
+                tags: ["test", "edge-missing-collection"],
+            }),
+            data.header
+        );
+
+        let missingCollKB;
+        try {
+            missingCollKB = missingCollCreateRes.json().knowledgeBase;
+            console.log(`Edge Cases: Created KB "${missingCollKBId}" with UID ${missingCollKB.uid}`);
+        } catch (e) {
+            console.error(`Edge Cases: Failed to create KB: ${e}`);
+            // Non-fatal, just log and continue
+            console.log("=== Missing Collection Test Skipped ===\n");
+        }
+
+        if (missingCollKB) {
+            const missingCollKBUID = missingCollKB.uid;
+
+            // Upload a file to create some data
+            const missingCollFilename = data.dbIDPrefix + "missing-coll-test.txt";
+            const missingCollUploadRes = http.request(
+                "POST",
+                `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${missingCollKBId}/files`,
+                JSON.stringify({
+                    filename: missingCollFilename,
+                    type: "TYPE_TEXT",
+                    content: encoding.b64encode("Test content for missing collection scenario")
+                }),
+                data.header
+            );
+
+            let missingCollFileUID;
+            try {
+                missingCollFileUID = missingCollUploadRes.json().file.uid;
+                console.log(`Edge Cases: Uploaded file ${missingCollFileUID}`);
+            } catch (e) {
+                console.error(`Edge Cases: Failed to upload file: ${e}`);
+                http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${missingCollKBId}`, null, data.header);
+                console.log("=== Missing Collection Test Skipped ===\n");
+            }
+
+            if (missingCollFileUID) {
+                // Wait for file processing
+                const missingCollProcessResult = helper.waitForFileProcessingComplete(
+                    data.expectedOwner.id,
+                    missingCollKBId,
+                    missingCollFileUID,
+                    data.header,
+                    300
+                );
+
+                if (missingCollProcessResult.completed) {
+                    console.log(`Edge Cases: File processed successfully`);
+
+                    // Verify Milvus vectors exist before deletion
+                    const vectorsBeforeDrop = helper.countMilvusVectors(missingCollKBUID, missingCollFileUID);
+                    console.log(`Edge Cases: Vectors in Milvus before drop: ${vectorsBeforeDrop}`);
+
+                    check({ vectorsBeforeDrop }, {
+                        "Edge Cases: Milvus vectors exist before collection drop": () => {
+                            if (vectorsBeforeDrop <= 0) {
+                                console.error("Edge Cases: No vectors found - cannot test missing collection scenario");
+                            }
+                            return vectorsBeforeDrop > 0;
+                        },
+                    });
+
+                    if (vectorsBeforeDrop > 0) {
+                        // CRITICAL: Drop the Milvus collection to simulate missing collection scenario
+                        console.log("Edge Cases: Dropping Milvus collection to simulate missing collection scenario...");
+                        const dropSuccess = helper.dropMilvusCollection(missingCollKBUID);
+
+                        check({ dropSuccess }, {
+                            "Edge Cases: Milvus collection dropped successfully": () => {
+                                if (!dropSuccess) {
+                                    console.error("Edge Cases: Failed to drop Milvus collection");
+                                }
+                                return dropSuccess;
+                            },
+                        });
+
+                        if (dropSuccess) {
+                            // Verify collection is actually gone
+                            const vectorsAfterDrop = helper.countMilvusVectors(missingCollKBUID, missingCollFileUID);
+                            console.log(`Edge Cases: Vectors in Milvus after drop: ${vectorsAfterDrop}`);
+
+                            // Now trigger update - this will test the swap logic with missing collection
+                            console.log("Edge Cases: Triggering update with missing Milvus collection...");
+                            const missingCollUpdateRes = client.invoke(
+                                "artifact.artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
+                                { knowledgeBaseIds: [missingCollKBId] },
+                                data.metadata
+                            );
+
+                            if (missingCollUpdateRes && missingCollUpdateRes.status === grpc.StatusOK) {
+                                console.log("Edge Cases: Update started with missing collection, waiting for completion...");
+
+                                // Wait for update to complete
+                                const missingCollUpdateCompleted = helper.pollUpdateCompletion(client, data, missingCollKBUID, 300);
+
+                                check({ missingCollUpdateCompleted }, {
+                                    "Edge Cases: Update completes successfully despite missing Milvus collection": () => {
+                                        if (missingCollUpdateCompleted !== true) {
+                                            console.error("Edge Cases: Update failed - swap logic did not handle missing collection gracefully");
+                                        } else {
+                                            console.log("Edge Cases: ✅ Update completed successfully with missing collection");
+                                            console.log("Edge Cases: Swap logic performed simple resource move instead of 3-way swap");
+                                        }
+                                        return missingCollUpdateCompleted === true;
+                                    },
+                                });
+
+                                if (missingCollUpdateCompleted) {
+                                    // Verify rollback KB was NOT created (since there's no original data to preserve)
+                                    const rollbackKBIdMissingColl = `${missingCollKBId}-rollback`;
+                                    const rollbackKBMissingColl = helper.getKnowledgeBaseByIdAndOwner(rollbackKBIdMissingColl, data.expectedOwner.uid);
+
+                                    const noRollbackKB = !rollbackKBMissingColl || rollbackKBMissingColl.length === 0;
+                                    console.log(`Edge Cases: Rollback KB creation skipped (as expected): ${noRollbackKB}`);
+
+                                    // This is informational - rollback KB might still be created depending on implementation
+                                    // The key test is that the update completed successfully
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Cleanup
+                console.log("Edge Cases: Cleaning up test KB...");
+                http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${missingCollKBId}`, null, data.header);
+            }
+
+            console.log("=== Missing Collection Test Complete ===\n");
+        }
+
+        // ========================================================================
+        // TEST: Idempotent File Type Conversion
+        // ========================================================================
+        // This test verifies that file type conversion activities are idempotent and can be
+        // safely retried. Uses upload-first pattern: upload to MinIO first, then create DB
+        // record with actual destination, preventing duplicate key errors on activity retries.
+        console.log("\n=== Testing Idempotent File Type Conversion ===");
+        console.log("Edge Cases: File type conversion is idempotent by uploading to MinIO first");
+        console.log("Edge Cases: Upload-first pattern: Upload to MinIO, then create DB record with actual destination");
+        console.log("Edge Cases: Benefit: Activities can be safely retried without duplicate key violations");
+        console.log("Edge Cases: Coverage: Normal file processing validates this works correctly");
+
+        // Verify normal file processing works (which now uses the idempotent pattern)
+        const idempotentTestKBId = data.dbIDPrefix + "idempotent-" + randomString(8);
+        const idempotentCreateRes = http.request(
+            "POST",
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
+            JSON.stringify({
+                id: idempotentTestKBId,
+                description: "Test idempotent file processing (Fix 2)",
+                tags: ["test", "edge-idempotent"],
+            }),
+            data.header
+        );
+
+        let idempotentKB;
+        try {
+            idempotentKB = idempotentCreateRes.json().knowledgeBase;
+            console.log(`Edge Cases: Created KB "${idempotentTestKBId}" with UID ${idempotentKB.uid}`);
+        } catch (e) {
+            console.error(`Edge Cases: Failed to create KB: ${e}`);
+            console.log("=== Idempotency Test Skipped ===\n");
+        }
+
+        if (idempotentKB) {
+            // Upload a file that requires conversion (image file)
+            const idempotentFilename = data.dbIDPrefix + "idempotent-test.jpg";
+            const idempotentUploadRes = http.request(
+                "POST",
+                `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${idempotentTestKBId}/files`,
+                JSON.stringify({
+                    filename: idempotentFilename,
+                    type: "TYPE_IMAGE",
+                    content: constant.imgSampleJpg  // Use a real image
+                }),
+                data.header
+            );
+
+            let idempotentFileUID;
+            try {
+                idempotentFileUID = idempotentUploadRes.json().file.uid;
+                console.log(`Edge Cases: Uploaded image file ${idempotentFileUID}`);
+            } catch (e) {
+                console.error(`Edge Cases: Failed to upload file: ${e}`);
+                http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${idempotentTestKBId}`, null, data.header);
+                console.log("=== Idempotency Test Skipped ===\n");
+            }
+
+            if (idempotentFileUID) {
+                // Wait for file processing to complete
+                const idempotentProcessResult = helper.waitForFileProcessingComplete(
+                    data.expectedOwner.id,
+                    idempotentTestKBId,
+                    idempotentFileUID,
+                    data.header,
+                    300
+                );
+
+                check({ idempotentProcessResult }, {
+                    "Edge Cases: File processing completes without duplicate key errors": () => {
+                        if (!idempotentProcessResult.completed) {
+                            console.error("Edge Cases: File processing failed - may indicate idempotency issues");
+                        }
+                        return idempotentProcessResult.completed && idempotentProcessResult.status === "COMPLETED";
+                    },
+                });
+
+                if (idempotentProcessResult.completed) {
+                    // Verify converted file was created with proper destination
+                    const convertedFileQuery = `SELECT destination FROM converted_file WHERE file_uid = $1`;
+                    try {
+                        const convertedFiles = helper.safeQuery(convertedFileQuery, idempotentFileUID);
+                        const hasProperDestination = convertedFiles && convertedFiles.length > 0 &&
+                            convertedFiles[0].destination &&
+                            convertedFiles[0].destination !== "placeholder";
+
+                        check({ hasProperDestination }, {
+                            "Edge Cases: Converted file has proper destination (not placeholder)": () => {
+                                if (!hasProperDestination) {
+                                    console.error("Edge Cases: Converted file has placeholder destination - idempotency may not be working");
+                                }
+                                return hasProperDestination;
+                            },
+                        });
+
+                        if (hasProperDestination) {
+                            console.log(`Edge Cases: Converted file destination: ${convertedFiles[0].destination}`);
+                        }
+                    } catch (e) {
+                        console.error(`Edge Cases: Failed to query converted file: ${e}`);
+                    }
+
+                    console.log("Edge Cases: File processing completed successfully with idempotent pattern");
+                }
+
+                // Cleanup
+                console.log("Edge Cases: Cleaning up test KB...");
+                http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${idempotentTestKBId}`, null, data.header);
+            }
+
+            console.log("=== Idempotency Test Complete ===\n");
+        }
     });
 }
 
