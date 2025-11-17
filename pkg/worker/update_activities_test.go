@@ -512,17 +512,30 @@ func TestSwapKnowledgeBasesActivity_Success(t *testing.T) {
 			},
 		}, nil)
 
-	// Check for existing rollback KB
-	mockRepository.GetKnowledgeBaseByOwnerAndKbIDMock.
-		When(minimock.AnyContext, types.OwnerUIDType(ownerUID), "test-kb-rollback").
+	// Check for existing rollback KB using new parent_kb_uid-based lookup
+	mockRepository.GetRollbackKBForProductionMock.
+		When(minimock.AnyContext, types.OwnerUIDType(ownerUID), "test-kb").
 		Then(nil, fmt.Errorf("not found"))
 
 	// Create rollback KB
+	var rollbackKBUID types.KBUIDType
+	var rollbackKBID string
 	mockRepository.CreateKnowledgeBaseMock.
 		Set(func(ctx context.Context, kb repository.KnowledgeBaseModel, externalService func(kbUID types.KBUIDType) error) (*repository.KnowledgeBaseModel, error) {
+			rollbackKBUID = types.KBUIDType(uuid.Must(uuid.NewV4()))
+			rollbackKBID = uuid.Must(uuid.NewV4()).String() // UUID-based KBID for rollback KB
 			return &repository.KnowledgeBaseModel{
-				UID:  types.KBUIDType(uuid.Must(uuid.NewV4())),
-				KBID: "test-kb-rollback",
+				UID:  rollbackKBUID,
+				KBID: rollbackKBID,
+			}, nil
+		})
+
+	// Get rollback KB by UID (called after creation to retrieve KBID)
+	mockRepository.GetKnowledgeBaseByUIDMock.
+		Set(func(ctx context.Context, kbUID types.KBUIDType) (*repository.KnowledgeBaseModel, error) {
+			return &repository.KnowledgeBaseModel{
+				UID:  rollbackKBUID,
+				KBID: rollbackKBID,
 			}, nil
 		})
 
@@ -613,9 +626,9 @@ func TestSwapKnowledgeBasesActivity_OriginalCollectionDoesNotExist(t *testing.T)
 	// Update KB metadata (production KB update + staging KB cleanup)
 	mockRepository.UpdateKnowledgeBaseWithMapMock.Return(nil)
 
-	// Check for existing rollback KB to delete (returns not found)
-	mockRepository.GetKnowledgeBaseByOwnerAndKbIDMock.
-		When(minimock.AnyContext, types.OwnerUIDType(ownerUID), "test-kb-rollback").
+	// Check for existing rollback KB to delete (returns not found) using new parent_kb_uid-based lookup
+	mockRepository.GetRollbackKBForProductionMock.
+		When(minimock.AnyContext, types.OwnerUIDType(ownerUID), "test-kb").
 		Then(nil, fmt.Errorf("not found"))
 
 	// Delete staging KB after assignment

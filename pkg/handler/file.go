@@ -1310,30 +1310,17 @@ func (ph *PublicHandler) DeleteFile(ctx context.Context, req *artifactpb.DeleteF
 	//    if the user has permission on the production KB
 	var aclCheckKBUID types.KBUIDType
 	if kb.Staging {
-		// Extract production knowledge base ID from staging/rollback ID
-		// Format: {production-kb-id}-staging or {production-kb-id}-rollback
-		prodCatalogID := kb.KBID
-		if len(prodCatalogID) > 8 {
-			if prodCatalogID[len(prodCatalogID)-8:] == "-staging" {
-				prodCatalogID = prodCatalogID[:len(prodCatalogID)-8]
-			} else if len(prodCatalogID) > 9 && prodCatalogID[len(prodCatalogID)-9:] == "-rollback" {
-				prodCatalogID = prodCatalogID[:len(prodCatalogID)-9]
-			}
-		}
-
-		// Get production KB UID for ACL check
-		prodKB, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, types.OwnerUIDType(uuid.FromStringOrNil(kb.Owner)), prodCatalogID)
-		if err != nil {
-			logger.Error("failed to get production KB for ACL check",
+		// Use parent_kb_uid to get production KB UID for ACL check
+		if kb.ParentKBUID == nil {
+			logger.Error("staging/rollback KB missing parent_kb_uid",
 				zap.String("stagingKBID", kb.KBID),
-				zap.String("prodCatalogID", prodCatalogID),
-				zap.Error(err))
+				zap.String("stagingKBUID", kb.UID.String()))
 			return nil, errorsx.AddMessage(
-				fmt.Errorf("failed to get production knowledge base for permission check: %w", err),
+				fmt.Errorf("staging/rollback KB missing parent reference"),
 				"Unable to verify access permissions for this file. Please try again.",
 			)
 		}
-		aclCheckKBUID = prodKB.UID
+		aclCheckKBUID = *kb.ParentKBUID
 		logger.Info("Checking permission against production KB for staging/rollback file deletion",
 			zap.String("fileKBUID", kbfs[0].KBUID.String()),
 			zap.String("prodKBUID", aclCheckKBUID.String()))

@@ -27,10 +27,13 @@ func (s *service) RollbackAdmin(ctx context.Context, ownerUID types.OwnerUIDType
 	}
 
 	// Find the rollback KB (contains the old resources to restore)
-	rollbackKBID := fmt.Sprintf("%s-rollback", knowledgeBaseID)
-	rollbackKB, err := s.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, rollbackKBID)
+	// Use parent_kb_uid lookup instead of KBID string manipulation
+	rollbackKB, err := s.repository.GetRollbackKBForProduction(ctx, ownerUID, knowledgeBaseID)
 	if err != nil {
-		return nil, fmt.Errorf("rollback version not found: %w", err)
+		return nil, fmt.Errorf("failed to find rollback KB: %w", err)
+	}
+	if rollbackKB == nil {
+		return nil, fmt.Errorf("rollback version not found for knowledge base: %s", knowledgeBaseID)
 	}
 
 	logger, _ := logx.GetZapLogger(ctx)
@@ -157,8 +160,7 @@ func (s *service) RollbackAdmin(ctx context.Context, ownerUID types.OwnerUIDType
 	// Step 5: Update rollback KB to have the new system config
 	// Rollback KB gets the new system config (from production)
 	// This maintains consistency - rollback KB represents what was rolled back from
-	rollbackKBIDStr := fmt.Sprintf("%s-rollback", knowledgeBaseID)
-	err = s.repository.UpdateKnowledgeBaseWithMap(ctx, rollbackKBIDStr, productionKB.Owner, map[string]any{
+	err = s.repository.UpdateKnowledgeBaseWithMap(ctx, rollbackKB.KBID, productionKB.Owner, map[string]any{
 		"system_uid": productionSystemUID,
 	})
 	if err != nil {
@@ -189,11 +191,13 @@ func (s *service) RollbackAdmin(ctx context.Context, ownerUID types.OwnerUIDType
 func (s *service) PurgeRollbackAdmin(ctx context.Context, ownerUID types.OwnerUIDType, knowledgeBaseID string) (*artifactpb.PurgeRollbackAdminResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 
-	// Find rollback KB (named with -rollback suffix)
-	rollbackKBID := fmt.Sprintf("%s-rollback", knowledgeBaseID)
-	rollbackKB, err := s.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, rollbackKBID)
+	// Find rollback KB using parent_kb_uid lookup
+	rollbackKB, err := s.repository.GetRollbackKBForProduction(ctx, ownerUID, knowledgeBaseID)
 	if err != nil {
-		return nil, fmt.Errorf("rollback version not found: %w", err)
+		return nil, fmt.Errorf("failed to find rollback KB: %w", err)
+	}
+	if rollbackKB == nil {
+		return nil, fmt.Errorf("rollback version not found for knowledge base: %s", knowledgeBaseID)
 	}
 
 	// SYNCHRONIZATION: Wait for any in-progress file operations to complete
@@ -328,25 +332,21 @@ func (s *service) SetRollbackRetentionAdmin(ctx context.Context, ownerUID types.
 	// Set retention to exactly duration from NOW
 	newRetention := time.Now().Add(retentionDuration)
 
-	// Find the rollback KB first
-	// The workflow ID is deterministic: cleanup-rollback-kb-{rollbackKBUID}
-	// Query for the rollback KB by looking for KBs with the "-rollback" suffix and "rollback" tag
-	//
+	// Find the rollback KB using parent_kb_uid lookup
 	// IMPORTANT: Retry logic for race conditions
 	// The rollback KB might not be immediately visible after the update workflow completes
 	// due to DB commit timing. Retry up to 3 times with 1s delay.
 	logger, _ := logx.GetZapLogger(ctx)
-	rollbackKBID := currentKB.KBID + "-rollback"
 	var rollbackKB *repository.KnowledgeBaseModel
 	maxRetries := 3
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		rollbackKB, err = s.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, rollbackKBID)
+		rollbackKB, err = s.repository.GetRollbackKBForProduction(ctx, ownerUID, currentKB.KBID)
 		if err == nil && rollbackKB != nil {
 			break
 		}
 		if attempt < maxRetries {
 			logger.Warn("Rollback KB not found yet, retrying...",
-				zap.String("rollbackKBID", rollbackKBID),
+				zap.String("productionKBID", currentKB.KBID),
 				zap.Int("attempt", attempt),
 				zap.Int("maxRetries", maxRetries))
 			time.Sleep(time.Second)
@@ -357,7 +357,7 @@ func (s *service) SetRollbackRetentionAdmin(ctx context.Context, ownerUID types.
 		return nil, fmt.Errorf("failed to find rollback KB after %d attempts: %w", maxRetries, err)
 	}
 	if rollbackKB == nil {
-		return nil, fmt.Errorf("rollback KB not found after %d attempts: %s", maxRetries, rollbackKBID)
+		return nil, fmt.Errorf("rollback KB not found for production KB %s after %d attempts", currentKB.KBID, maxRetries)
 	}
 
 	// CRITICAL: Update retention timestamp on ROLLBACK KB (not production KB)

@@ -725,55 +725,42 @@ func (w *Worker) ClearProductionKBRetentionActivity(ctx context.Context, param *
 		return nil
 	}
 
-	// Check if this is a rollback KB (ends with "-rollback")
-	if !strings.HasSuffix(rollbackKB.KBID, "-rollback") {
-		w.log.Info("ClearProductionKBRetentionActivity: Not a rollback KB, skipping",
+	// Check if this is a rollback KB (has parent_kb_uid set)
+	if rollbackKB.ParentKBUID == nil {
+		w.log.Info("ClearProductionKBRetentionActivity: Not a rollback KB (no parent_kb_uid), skipping",
 			zap.String("kbID", rollbackKB.KBID))
 		return nil
 	}
 
-	// Derive production KB ID by removing "-rollback" suffix
-	productionKBID := strings.TrimSuffix(rollbackKB.KBID, "-rollback")
-
-	// Parse owner UUID
-	ownerUUID, err := uuid.FromString(rollbackKB.Owner)
-	if err != nil {
-		w.log.Error("ClearProductionKBRetentionActivity: Invalid owner UUID",
-			zap.String("owner", rollbackKB.Owner),
-			zap.Error(err))
-		return nil
-	}
-	ownerUID := types.OwnerUIDType(ownerUUID)
-
-	// Get production KB to verify it exists
-	productionKB, err := w.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, productionKBID)
+	// Get production KB using parent_kb_uid
+	productionKB, err := w.repository.GetKnowledgeBaseByUID(ctx, *rollbackKB.ParentKBUID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			w.log.Info("ClearProductionKBRetentionActivity: Production KB not found",
-				zap.String("productionKBID", productionKBID))
+				zap.String("productionKBUID", rollbackKB.ParentKBUID.String()))
 			return nil
 		}
 		w.log.Error("ClearProductionKBRetentionActivity: Failed to get production KB",
-			zap.String("productionKBID", productionKBID),
+			zap.String("productionKBUID", rollbackKB.ParentKBUID.String()),
 			zap.Error(err))
 		// Non-fatal - don't fail the workflow
 		return nil
 	}
 
 	// Clear the retention field
-	err = w.repository.UpdateKnowledgeBaseWithMap(ctx, productionKBID, productionKB.Owner, map[string]any{
+	err = w.repository.UpdateKnowledgeBaseWithMap(ctx, productionKB.KBID, productionKB.Owner, map[string]any{
 		"rollback_retention_until": nil,
 	})
 	if err != nil {
 		w.log.Error("ClearProductionKBRetentionActivity: Failed to clear retention field",
-			zap.String("productionKBID", productionKBID),
+			zap.String("productionKBID", productionKB.KBID),
 			zap.Error(err))
 		// Non-fatal - don't fail the workflow
 		return nil
 	}
 
 	w.log.Info("ClearProductionKBRetentionActivity: Cleared retention field successfully",
-		zap.String("productionKBID", productionKBID),
+		zap.String("productionKBID", productionKB.KBID),
 		zap.String("rollbackKBID", rollbackKB.KBID))
 
 	return nil
