@@ -293,56 +293,71 @@ func EmbedPipe(ctx context.Context, pipelineClient pipelinepb.PipelinePublicServ
 		return [][]float32{}, nil
 	}
 
-	// Build inputs for batch processing
-	inputs := make([]*structpb.Struct, len(texts))
-	for i, text := range texts {
-		inputs[i] = &structpb.Struct{
-			Fields: map[string]*structpb.Value{
-				"text": structpb.NewStringValue(text),
-			},
+	// Pipeline batch size limit
+	const maxBatchSize = 32
+
+	var allEmbeddings [][]float32
+
+	// Process texts in batches of 32
+	for i := 0; i < len(texts); i += maxBatchSize {
+		end := i + maxBatchSize
+		if end > len(texts) {
+			end = len(texts)
+		}
+		batchTexts := texts[i:end]
+
+		// Build inputs for this batch
+		inputs := make([]*structpb.Struct, len(batchTexts))
+		for j, text := range batchTexts {
+			inputs[j] = &structpb.Struct{
+				Fields: map[string]*structpb.Value{
+					"text": structpb.NewStringValue(text),
+				},
+			}
+		}
+
+		req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
+			NamespaceId: EmbedPipeline.Namespace,
+			PipelineId:  EmbedPipeline.ID,
+			ReleaseId:   EmbedPipeline.Version,
+			Inputs:      inputs,
+		}
+
+		resp, err := pipelineClient.TriggerNamespacePipelineRelease(ctx, req)
+		if err != nil {
+			return nil, fmt.Errorf("triggering embedding pipeline (batch %d-%d): %w", i, end, err)
+		}
+
+		// Parse embeddings from response for this batch
+		for idx, output := range resp.Outputs {
+			fields := output.GetFields()
+			if fields == nil {
+				err := fmt.Errorf("output %d has no fields", idx)
+				return nil, enhanceErrorWithPipelineMetadata(err, resp, &EmbedPipeline)
+			}
+
+			embeddingValue := fields["embedding"]
+			if embeddingValue == nil {
+				err := fmt.Errorf("output %d missing 'embedding' field", idx)
+				return nil, enhanceErrorWithPipelineMetadata(err, resp, &EmbedPipeline)
+			}
+
+			// Extract float array from list value
+			listValue := embeddingValue.GetListValue()
+			if listValue == nil {
+				err := fmt.Errorf("output %d embedding is not a list", idx)
+				return nil, enhanceErrorWithPipelineMetadata(err, resp, &EmbedPipeline)
+			}
+
+			values := listValue.GetValues()
+			embedding := make([]float32, len(values))
+			for k, v := range values {
+				embedding[k] = float32(v.GetNumberValue())
+			}
+
+			allEmbeddings = append(allEmbeddings, embedding)
 		}
 	}
 
-	req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
-		NamespaceId: EmbedPipeline.Namespace,
-		PipelineId:  EmbedPipeline.ID,
-		ReleaseId:   EmbedPipeline.Version,
-		Inputs:      inputs,
-	}
-
-	resp, err := pipelineClient.TriggerNamespacePipelineRelease(ctx, req)
-	if err != nil {
-		return nil, fmt.Errorf("triggering embedding pipeline: %w", err)
-	}
-
-	// Parse embeddings from response
-	embeddings := make([][]float32, len(resp.Outputs))
-	for i, output := range resp.Outputs {
-		fields := output.GetFields()
-		if fields == nil {
-			err := fmt.Errorf("output %d has no fields", i)
-			return nil, enhanceErrorWithPipelineMetadata(err, resp, &EmbedPipeline)
-		}
-
-		embeddingValue := fields["embedding"]
-		if embeddingValue == nil {
-			err := fmt.Errorf("output %d missing 'embedding' field", i)
-			return nil, enhanceErrorWithPipelineMetadata(err, resp, &EmbedPipeline)
-		}
-
-		// Extract float array from list value
-		listValue := embeddingValue.GetListValue()
-		if listValue == nil {
-			err := fmt.Errorf("output %d embedding is not a list", i)
-			return nil, enhanceErrorWithPipelineMetadata(err, resp, &EmbedPipeline)
-		}
-
-		embedding := make([]float32, len(listValue.Values))
-		for j, val := range listValue.Values {
-			embedding[j] = float32(val.GetNumberValue())
-		}
-		embeddings[i] = embedding
-	}
-
-	return embeddings, nil
+	return allEmbeddings, nil
 }

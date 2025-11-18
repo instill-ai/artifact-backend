@@ -298,7 +298,7 @@ func main() {
 		workflowOptions := temporalclient.StartWorkflowOptions{
 			ID:                       "artifact-backend-gcs-cleanup-continuous-singleton",
 			TaskQueue:                artifactworker.TaskQueue,
-			WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+			WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
 			WorkflowExecutionTimeout: 0, // No timeout - runs indefinitely
 		}
 
