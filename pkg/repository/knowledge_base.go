@@ -148,7 +148,10 @@ type KnowledgeBaseModel struct {
 	// Staging flag for KB update management
 	// staging=false: Production KB (actively used for queries)
 	// staging=true: Staging/rollback KB (held for potential rollback)
-	Staging                bool                `gorm:"column:staging;not null;default:false" json:"staging"`
+	Staging bool `gorm:"column:staging;not null;default:false" json:"staging"`
+	// ParentKBUID establishes parent-child relationship for staging/rollback KBs
+	// NULL for production KBs, references production KB UID for staging/rollback
+	ParentKBUID            *types.KBUIDType    `gorm:"column:parent_kb_uid;type:uuid" json:"parent_kb_uid,omitempty"`
 	UpdateStatus           string              `gorm:"column:update_status;size:50" json:"update_status"`
 	UpdateWorkflowID       string              `gorm:"column:update_workflow_id;size:255" json:"update_workflow_id"`
 	UpdateStartedAt        *time.Time          `gorm:"column:update_started_at" json:"update_started_at"`
@@ -220,6 +223,7 @@ type KnowledgeBaseColumns struct {
 	KnowledgeBaseType      string
 	ActiveCollectionUID    string
 	Staging                string
+	ParentKBUID            string
 	UpdateStatus           string
 	UpdateWorkflowID       string
 	UpdateStartedAt        string
@@ -241,6 +245,7 @@ var KnowledgeBaseColumn = KnowledgeBaseColumns{
 	KnowledgeBaseType:      "knowledge_base_type",
 	ActiveCollectionUID:    "active_collection_uid",
 	Staging:                "staging",
+	ParentKBUID:            "parent_kb_uid",
 	UpdateStatus:           "update_status",
 	UpdateWorkflowID:       "update_workflow_id",
 	UpdateStartedAt:        "update_started_at",
@@ -757,18 +762,38 @@ func (r *repository) IsKBUpdating(ctx context.Context, kbUID types.KBUIDType) (b
 
 // GetStagingKBForProduction finds the staging KB for a production knowledge base during an update
 // Returns nil if no staging KB exists (no update in progress)
+// Uses parent_kb_uid and tags for reliable lookup without KBID manipulation
 func (r *repository) GetStagingKBForProduction(ctx context.Context, ownerUID types.OwnerUIDType, productionKBID string) (*KnowledgeBaseModel, error) {
-	// Staging KB naming convention: {production-kb-id}-staging
-	stagingKBID := fmt.Sprintf("%s-staging", productionKBID)
-
-	var stagingKB KnowledgeBaseModel
+	// First, get the production KB's UID
+	var productionKB KnowledgeBaseModel
 	err := r.db.WithContext(ctx).
+		Select("uid").
 		Where(fmt.Sprintf("%v = ? AND %v = ? AND %v = ? AND %v IS NULL",
 			KnowledgeBaseColumn.Owner,
 			KnowledgeBaseColumn.KBID,
 			KnowledgeBaseColumn.Staging,
 			KnowledgeBaseColumn.DeleteTime),
-			ownerUID, stagingKBID, true).
+			ownerUID, productionKBID, false).
+		First(&productionKB).
+		Error
+
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			// Production KB not found
+			return nil, nil
+		}
+		return nil, fmt.Errorf("finding production KB %s: %w", productionKBID, err)
+	}
+
+	// Query for staging KB using parent_kb_uid and tags
+	var stagingKB KnowledgeBaseModel
+	err = r.db.WithContext(ctx).
+		Where(fmt.Sprintf("%v = ? AND %v = ? AND ? = ANY(%v) AND %v IS NULL",
+			KnowledgeBaseColumn.ParentKBUID,
+			KnowledgeBaseColumn.Staging,
+			KnowledgeBaseColumn.Tags,
+			KnowledgeBaseColumn.DeleteTime),
+			productionKB.UID, true, "staging").
 		First(&stagingKB).
 		Error
 
@@ -785,18 +810,38 @@ func (r *repository) GetStagingKBForProduction(ctx context.Context, ownerUID typ
 
 // GetRollbackKBForProduction finds the rollback KB for a production knowledge base during retention period
 // Returns nil if no rollback KB exists (no retention period active)
+// Uses parent_kb_uid and tags for reliable lookup without KBID manipulation
 func (r *repository) GetRollbackKBForProduction(ctx context.Context, ownerUID types.OwnerUIDType, productionKBID string) (*KnowledgeBaseModel, error) {
-	// Rollback KB naming convention: {production-kb-id}-rollback
-	rollbackKBID := fmt.Sprintf("%s-rollback", productionKBID)
-
-	var rollbackKB KnowledgeBaseModel
+	// First, get the production KB's UID
+	var productionKB KnowledgeBaseModel
 	err := r.db.WithContext(ctx).
+		Select("uid").
 		Where(fmt.Sprintf("%v = ? AND %v = ? AND %v = ? AND %v IS NULL",
 			KnowledgeBaseColumn.Owner,
 			KnowledgeBaseColumn.KBID,
 			KnowledgeBaseColumn.Staging,
 			KnowledgeBaseColumn.DeleteTime),
-			ownerUID, rollbackKBID, true).
+			ownerUID, productionKBID, false).
+		First(&productionKB).
+		Error
+
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			// Production KB not found
+			return nil, nil
+		}
+		return nil, fmt.Errorf("finding production KB %s: %w", productionKBID, err)
+	}
+
+	// Query for rollback KB using parent_kb_uid and tags
+	var rollbackKB KnowledgeBaseModel
+	err = r.db.WithContext(ctx).
+		Where(fmt.Sprintf("%v = ? AND %v = ? AND ? = ANY(%v) AND %v IS NULL",
+			KnowledgeBaseColumn.ParentKBUID,
+			KnowledgeBaseColumn.Staging,
+			KnowledgeBaseColumn.Tags,
+			KnowledgeBaseColumn.DeleteTime),
+			productionKB.UID, true, "rollback").
 		First(&rollbackKB).
 		Error
 
@@ -921,17 +966,21 @@ func (r *repository) CreateStagingKnowledgeBase(ctx context.Context, original *K
 		systemUID = *newSystemUID
 	}
 
+	// Generate UUID-based KBID for staging KB (following principle: KBID is user-facing and shouldn't be manipulated)
+	stagingKBUID := types.KBUIDType(uuid.Must(uuid.NewV4()))
+
 	stagingKB := KnowledgeBaseModel{
 		// New UID is generated automatically by GORM
-		// Shadow KB naming: {original}-staging (simpler than version-based naming)
-		KBID:              fmt.Sprintf("%s-staging", original.KBID),
+		// Use UUID-based KBID instead of suffix pattern for consistency with rollback KBs
+		KBID:              stagingKBUID.String(),
 		Description:       original.Description,
 		Tags:              append(original.Tags, "staging"),
 		Owner:             original.Owner,
 		CreatorUID:        original.CreatorUID,
 		KnowledgeBaseType: original.KnowledgeBaseType,
 		SystemUID:         systemUID,
-		Staging:           true, // Mark as staging for staging KB
+		Staging:           true,          // Mark as staging for staging KB
+		ParentKBUID:       &original.UID, // Link to production KB via parent_kb_uid
 		UpdateStatus:      artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING.String(),
 		CreateTime:        &now,
 		UpdateTime:        &now,

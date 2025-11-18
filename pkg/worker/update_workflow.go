@@ -360,6 +360,12 @@ func (w *Worker) UpdateKnowledgeBaseWorkflow(ctx workflow.Context, param UpdateK
 		"stagingKBUID", swapResult.StagingKBUID.String(),
 		"newProductionCollectionUID", swapResult.NewProductionCollectionUID.String())
 
+	// CRITICAL: Mark update as completed IMMEDIATELY after swap succeeds
+	// The swap is the "point of no return" - once it succeeds, the update is logically complete
+	// All subsequent operations (cleanup, status updates) are best-effort and should NOT cause
+	// the production KB to be marked as FAILED if they fail
+	updateCompleted = true
+
 	// CRITICAL: Trigger staging KB cleanup with protected collection UID
 	// This is deterministic and prevents race conditions - the cleanup workflow
 	// will NOT drop the collection that was just swapped to production
@@ -419,9 +425,6 @@ func (w *Worker) UpdateKnowledgeBaseWorkflow(ctx workflow.Context, param UpdateK
 			"retentionSeconds", retentionSeconds,
 			"retentionDays", config.Config.RAG.Update.RollbackRetentionDays)
 	}
-
-	// Mark update as completed
-	updateCompleted = true
 
 	// CRITICAL: Set final COMPLETED status and clear workflow_id
 	// This allows the KB to be deleted and prevents knowledge base pileup

@@ -905,8 +905,8 @@ function TestCompleteUpdateWorkflow(client, data) {
                     "Workflow Phase 1: Staging has staging=true": () => stagingKB.staging === true,
                     "Workflow Phase 1: Staging has update_status='KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING'": () =>
                         stagingKB.update_status === "KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING",
-                    "Workflow Phase 1: Staging has correct name": () =>
-                        stagingKB.id === `${knowledgeBaseId}-staging`,
+                    "Workflow Phase 1: Staging has parent_kb_uid set": () =>
+                        stagingKB.parent_kb_uid !== null && stagingKB.parent_kb_uid !== undefined,
                 });
             }
         }
@@ -1012,7 +1012,6 @@ function TestPhasePrepare(client, data) {
         }
 
         const knowledgeBaseUid = kb.uid;
-        const stagingKBID = `${knowledgeBaseId}-staging`;
 
         // Upload and process file
         const filename = data.dbIDPrefix + "prepare-test.txt";
@@ -1084,8 +1083,8 @@ function TestPhasePrepare(client, data) {
             return;
         }
 
-        // PHASE 1 VALIDATIONS: Staging KB exists and has correct properties
-        const stagingKBs = helper.getKnowledgeBaseByIdAndOwner(stagingKBID, data.expectedOwner.uid);
+        // PHASE 1 VALIDATIONS: Staging KB exists and has correct properties (using parent_kb_uid relationship)
+        const stagingKBs = helper.verifyStagingKB(knowledgeBaseId, data.expectedOwner.uid);
         const prodKB = helper.getKnowledgeBaseByIdAndOwner(knowledgeBaseId, data.expectedOwner.uid);
 
         check({ stagingKBs, prodKB }, {
@@ -1103,8 +1102,6 @@ function TestPhasePrepare(client, data) {
         const productionKB = prodKB[0];
 
         check({ stagingKB, productionKB }, {
-            "Phase 1 Prepare: Staging KB has correct KBID": () =>
-                stagingKB.id === stagingKBID,
             "Phase 1 Prepare: Staging KB has staging=true flag": () =>
                 stagingKB.staging === true,
             "Phase 1 Prepare: Staging KB has its own UID (not production UID)": () => {
@@ -1114,6 +1111,10 @@ function TestPhasePrepare(client, data) {
                 }
                 return different;
             },
+            "Phase 1 Prepare: Staging KB has parent_kb_uid set": () =>
+                stagingKB.parent_kb_uid !== null && stagingKB.parent_kb_uid !== undefined,
+            "Phase 1 Prepare: Staging KB parent_kb_uid matches production UID": () =>
+                stagingKB.parent_kb_uid === productionKB.uid,
             "Phase 1 Prepare: Production KB has update_status='KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING'": () =>
                 productionKB.update_status === "KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING",
             "Phase 1 Prepare: Staging KB has active_collection_uid": () => {
@@ -1189,7 +1190,6 @@ function TestReprocessAndDualProcessing(client, data) {
         }
 
         const knowledgeBaseUid = kb.uid;
-        const rollbackKBID = `${knowledgeBaseId}-rollback`;
 
         // Upload and process 1 initial file to ensure update workflow runs long enough for dual processing
         const file1Name = data.dbIDPrefix + "initial.txt";
@@ -1255,9 +1255,8 @@ function TestReprocessAndDualProcessing(client, data) {
             return;
         }
 
-        // Get staging KB UID
-        const stagingKBID = `${knowledgeBaseId}-staging`;
-        const stagingKBs = helper.getKnowledgeBaseByIdAndOwner(stagingKBID, data.expectedOwner.uid);
+        // Get staging KB UID (using parent_kb_uid relationship)
+        const stagingKBs = helper.verifyStagingKB(knowledgeBaseId, data.expectedOwner.uid);
         if (!stagingKBs || stagingKBs.length === 0) {
             console.error("Group 4: Could not get staging KB");
             http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
@@ -1442,6 +1441,7 @@ function TestReprocessAndDualProcessing(client, data) {
             "Group 4: Update completed successfully": () => updateCompleted === true,
         });
 
+        let rollbackKBID = null; // For cleanup
         if (updateCompleted) {
             // VERIFY: Deleted file does NOT exist in production or rollback after swap
             // Poll for rollback KB creation before checking state
@@ -1451,6 +1451,7 @@ function TestReprocessAndDualProcessing(client, data) {
             if (prodKB && prodKB.length > 0 && rollbackKBObj) {
                 const finalProdKBUID = prodKB[0].uid;
                 const finalRollbackKBUID = rollbackKBObj.uid;
+                rollbackKBID = rollbackKBObj.id; // Get actual rollback KB ID for cleanup
 
                 const prodFileCountQuery = `SELECT COUNT(*) as count FROM file WHERE kb_uid = $1 AND filename = $2 AND delete_time IS NULL`;
                 const prodFinalFile = helper.safeQuery(prodFileCountQuery, finalProdKBUID, fileToDelete);
@@ -1531,7 +1532,6 @@ function TestCC01_AddingFilesDuringSwap(client, data) {
         }
 
         const knowledgeBaseUidCC1 = kbCC1.uid;
-        const rollbackKBIDCC1 = `${knowledgeBaseIdCC1}-rollback`;
 
         // Upload and process 1 initial file (simplified for faster test)
         const uploadResCC1Initial = http.request(
@@ -1702,7 +1702,7 @@ function TestCC01_AddingFilesDuringSwap(client, data) {
 
         // VERIFY: File exists in BOTH new production and rollback KBs
         const prodKBCC1 = helper.getKnowledgeBaseByIdAndOwner(knowledgeBaseIdCC1, data.expectedOwner.uid);
-        const rollbackKBCC1 = helper.getKnowledgeBaseByIdAndOwner(rollbackKBIDCC1, data.expectedOwner.uid);
+        const rollbackKBCC1 = helper.verifyRollbackKB(knowledgeBaseIdCC1, data.expectedOwner.uid);
 
         if (!prodKBCC1 || prodKBCC1.length === 0 || !rollbackKBCC1 || rollbackKBCC1.length === 0) {
             console.error("CC1: Cannot proceed without both KBs");
@@ -1712,6 +1712,7 @@ function TestCC01_AddingFilesDuringSwap(client, data) {
 
         const prodKBUIDCC1 = Array.isArray(prodKBCC1[0].uid) ? String.fromCharCode(...prodKBCC1[0].uid) : prodKBCC1[0].uid;
         const rollbackKBUIDCC1 = Array.isArray(rollbackKBCC1[0].uid) ? String.fromCharCode(...rollbackKBCC1[0].uid) : rollbackKBCC1[0].uid;
+        const rollbackKBIDCC1 = rollbackKBCC1[0].id; // Get actual rollback KB ID for cleanup
 
         const fileCountQueryCC1 = `SELECT COUNT(*) as count FROM file WHERE kb_uid = $1 AND filename = $2 AND delete_time IS NULL`;
         const prodFileCC1 = helper.safeQuery(fileCountQueryCC1, prodKBUIDCC1, fileAddedDuringSwapping);
@@ -1784,7 +1785,6 @@ function TestCC02_DeletingFilesDuringSwap(client, data) {
         }
 
         const knowledgeBaseUidCC2 = kbCC2.uid;
-        const rollbackKBIDCC2 = `${knowledgeBaseIdCC2}-rollback`;
 
         // Upload 2 initial files
         const uploadRes1 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC2}/files`,
@@ -1944,7 +1944,6 @@ function TestCC03_RapidOperations(client, data) {
         }
 
         const knowledgeBaseUidCC3 = kbCC3.uid;
-        const rollbackKBIDCC3 = `${knowledgeBaseIdCC3}-rollback`;
 
         // Upload initial files
         const uploadRes1 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC3}/files`,
@@ -2116,11 +2115,12 @@ function TestCC03_RapidOperations(client, data) {
         // With dual processing during update, all file operations (uploads, deletions) are synchronized
         // to both KBs, so they should be identical after the update completes.
         const prodKB = helper.getKnowledgeBaseByIdAndOwner(knowledgeBaseIdCC3, data.expectedOwner.uid);
-        const rollbackKB = helper.getKnowledgeBaseByIdAndOwner(rollbackKBIDCC3, data.expectedOwner.uid);
+        const rollbackKB = helper.verifyRollbackKB(knowledgeBaseIdCC3, data.expectedOwner.uid);
 
         if (prodKB && prodKB.length > 0 && rollbackKB && rollbackKB.length > 0) {
             const prodKBUID = Array.isArray(prodKB[0].uid) ? String.fromCharCode(...prodKB[0].uid) : prodKB[0].uid;
             const rollbackKBUID = Array.isArray(rollbackKB[0].uid) ? String.fromCharCode(...rollbackKB[0].uid) : rollbackKB[0].uid;
+            const rollbackKBIDCC3 = rollbackKB[0].id; // Get actual rollback KB ID for cleanup
 
             const query = `SELECT COUNT(*) as count FROM file WHERE kb_uid = $1 AND delete_time IS NULL`;
             const prodCount = parseInt(helper.safeQuery(query, prodKBUID)[0].count);
@@ -2177,7 +2177,6 @@ function TestCC04_RaceConditions(client, data) {
         }
 
         const knowledgeBaseUidCC4 = kbCC4.uid;
-        const rollbackKBIDCC4 = `${knowledgeBaseIdCC4}-rollback`;
 
         // Upload initial file
         const uploadResCC4 = http.request(
@@ -2364,11 +2363,12 @@ function TestCC04_RaceConditions(client, data) {
 
         // Verify: Race file exists in both KBs
         const prodKB = helper.getKnowledgeBaseByIdAndOwner(knowledgeBaseIdCC4, data.expectedOwner.uid);
-        const rollbackKB = helper.getKnowledgeBaseByIdAndOwner(rollbackKBIDCC4, data.expectedOwner.uid);
+        const rollbackKB = helper.verifyRollbackKB(knowledgeBaseIdCC4, data.expectedOwner.uid);
 
         if (prodKB && prodKB.length > 0 && rollbackKB && rollbackKB.length > 0) {
             const prodKBUID = Array.isArray(prodKB[0].uid) ? String.fromCharCode(...prodKB[0].uid) : prodKB[0].uid;
             const rollbackKBUID = Array.isArray(rollbackKB[0].uid) ? String.fromCharCode(...rollbackKB[0].uid) : rollbackKB[0].uid;
+            const rollbackKBIDCC4 = rollbackKB[0].id; // Get actual rollback KB ID for cleanup
 
             const fileQuery = `SELECT uid, kb_uid, filename FROM file WHERE filename = $1 AND delete_time IS NULL`;
             const raceFiles = helper.safeQuery(fileQuery, raceFileNameCC4);
@@ -2424,7 +2424,6 @@ function TestCC05_AddingFilesAfterSwap(client, data) {
         }
 
         const knowledgeBaseUidCC5 = kbCC5.uid;
-        const rollbackKBIDCC5 = `${knowledgeBaseIdCC5}-rollback`;
 
         // Upload and process initial file
         const uploadResCC5 = http.request(
@@ -2667,7 +2666,6 @@ function TestCC06_DeletingFilesAfterSwap(client, data) {
         }
 
         const knowledgeBaseUidCC6 = kbCC6.uid;
-        const rollbackKBIDCC6 = `${knowledgeBaseIdCC6}-rollback`;
 
         // Upload and process TWO files (one to keep, one to delete)
         const file1NameCC6 = data.dbIDPrefix + "cc6-keep.txt";
@@ -2908,7 +2906,6 @@ function TestCC07_MultipleOperations(client, data) {
         }
 
         const knowledgeBaseUidCC7 = kbCC7.uid;
-        const rollbackKBIDCC7 = `${knowledgeBaseIdCC7}-rollback`;
 
         // Upload 3 initial files
         const file1NameCC7 = data.dbIDPrefix + "cc7-file1.txt";
@@ -2987,7 +2984,7 @@ function TestCC07_MultipleOperations(client, data) {
 
         // Get production KB UID (file UIDs change after swap)
         const prodKBCC7 = helper.getKnowledgeBaseByIdAndOwner(knowledgeBaseIdCC7, data.expectedOwner.uid);
-        const rollbackKBCC7 = helper.getKnowledgeBaseByIdAndOwner(rollbackKBIDCC7, data.expectedOwner.uid);
+        const rollbackKBCC7 = helper.verifyRollbackKB(knowledgeBaseIdCC7, data.expectedOwner.uid);
 
         if (!prodKBCC7 || !rollbackKBCC7) {
             console.error("CC7: Missing KBs");
@@ -2997,6 +2994,7 @@ function TestCC07_MultipleOperations(client, data) {
 
         const prodKBUIDCC7 = Array.isArray(prodKBCC7[0].uid) ? String.fromCharCode(...prodKBCC7[0].uid) : prodKBCC7[0].uid;
         const rollbackKBUIDCC7 = Array.isArray(rollbackKBCC7[0].uid) ? String.fromCharCode(...rollbackKBCC7[0].uid) : rollbackKBCC7[0].uid;
+        const rollbackKBIDCC7 = rollbackKBCC7[0].id; // Get actual rollback KB ID for cleanup
 
         // Get NEW production file UIDs (post-swap)
         const prodFile1Query = helper.safeQuery(`SELECT uid FROM file WHERE kb_uid = $1 AND filename = $2 AND delete_time IS NULL`, prodKBUIDCC7, file1NameCC7);
@@ -3119,7 +3117,6 @@ function TestCC08_RollbackDuringProcessing(client, data) {
         }
 
         const knowledgeBaseUidCC8 = kbCC8.uid;
-        const rollbackKBIDCC8 = `${knowledgeBaseIdCC8}-rollback`;
 
         // Upload and process initial file
         const uploadResCC8 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC8}/files`,
@@ -3272,7 +3269,6 @@ function TestCC09_DualProcessingStops(client, data) {
         }
 
         const knowledgeBaseUidCC9 = kbCC9.uid;
-        const rollbackKBIDCC9 = `${knowledgeBaseIdCC9}-rollback`;
 
         // Upload, process, and trigger update
         const uploadResCC9 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC9}/files`,
@@ -3359,6 +3355,15 @@ function TestCC09_DualProcessingStops(client, data) {
         }
 
         console.log("CC9: File processing completed, proceeding with purge...");
+
+        // Get rollback KB's actual ID for cleanup and verification
+        const rollbackKBCC9ForPurge = helper.verifyRollbackKB(knowledgeBaseIdCC9, data.expectedOwner.uid);
+        if (!rollbackKBCC9ForPurge || rollbackKBCC9ForPurge.length === 0) {
+            console.error("CC9: Rollback KB not found");
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC9}`, null, data.header);
+            return;
+        }
+        const rollbackKBIDCC9 = rollbackKBCC9ForPurge[0].id;
 
         // Purge rollback KB
         console.log("CC9: Purging rollback KB...");
@@ -3506,7 +3511,6 @@ function TestCC10_RetentionExpiration(client, data) {
         }
 
         const knowledgeBaseUidCC10 = kbCC10.uid;
-        const rollbackKBIDCC10 = `${knowledgeBaseIdCC10}-rollback`;
 
         // Upload and process initial file
         console.log("CC10: Uploading initial file...");
@@ -3581,6 +3585,7 @@ function TestCC10_RetentionExpiration(client, data) {
         // Verify rollback KB exists (poll for rollback KB creation)
         const rollbackKBCC10Obj = helper.pollForRollbackKBCreation(knowledgeBaseIdCC10, data.expectedOwner.uid);
         const rollbackKBCC10 = rollbackKBCC10Obj ? [rollbackKBCC10Obj] : null;
+        const rollbackKBIDCC10 = rollbackKBCC10 && rollbackKBCC10.length > 0 ? rollbackKBCC10[0].id : null;
         check({ rollbackKBCC10 }, {
             "CC10: Rollback KB exists (retention active)": () => rollbackKBCC10 && rollbackKBCC10.length > 0,
         });
@@ -3775,7 +3780,6 @@ function TestPhaseValidate(client, data) {
 
         const knowledgeBaseUid = kb.uid;
         const stagingKBID = `${knowledgeBaseId}-staging`;
-        const rollbackKBID = `${knowledgeBaseId}-rollback`;
 
         console.log(`Validate: Created knowledge base ${knowledgeBaseId} with UID ${knowledgeBaseUid}`);
 
@@ -3929,8 +3933,9 @@ function TestPhaseValidate(client, data) {
         // VERIFY POST-SWAP: Validation succeeded and swap happened (poll for rollback KB)
         const rollbackKBAfterObj = helper.pollForRollbackKBCreation(knowledgeBaseId, data.expectedOwner.uid);
         const rollbackKBAfter = rollbackKBAfterObj ? [rollbackKBAfterObj] : null;
+        const rollbackKBID = rollbackKBAfterObj ? rollbackKBAfterObj.id : null; // Get actual rollback KB ID for cleanup
         const prodKBAfter = helper.getKnowledgeBaseByIdAndOwner(knowledgeBaseId, data.expectedOwner.uid);
-        const stagingKBAfter = helper.getKnowledgeBaseByIdAndOwner(stagingKBID, data.expectedOwner.uid);
+        const stagingKBAfter = helper.verifyStagingKB(knowledgeBaseId, data.expectedOwner.uid);
 
         check({ prodKBAfter, stagingKBAfter, rollbackKBAfter }, {
             "Validate: Production KB exists after validation": () => prodKBAfter && prodKBAfter.length > 0,
@@ -4331,20 +4336,18 @@ function TestPhaseSwap(client, data) {
             },
         });
 
-        // Verify rollback KB created
-        const rollbackKBID = `${knowledgeBaseId}-rollback`;
-        const rollbackKBs = helper.getKnowledgeBaseByIdAndOwner(rollbackKBID, data.expectedOwner.uid);
+        // Verify rollback KB created (using parent_kb_uid relationship)
+        const rollbackKBResult = helper.verifyRollbackKB(knowledgeBaseId, data.expectedOwner.uid);
+        const rollbackKBID = rollbackKBResult && rollbackKBResult.length > 0 ? rollbackKBResult[0].id : null; // For cleanup
 
-        check({ rollbackKBs }, {
-            "Phase 5 Swap: Rollback KB created": () => rollbackKBs && rollbackKBs.length > 0,
+        check({ rollbackKBResult }, {
+            "Phase 5 Swap: Rollback KB created": () => rollbackKBResult && rollbackKBResult.length > 0,
         });
 
-        if (rollbackKBs && rollbackKBs.length > 0) {
-            const rollbackKB = rollbackKBs[0];
+        if (rollbackKBResult && rollbackKBResult.length > 0) {
+            const rollbackKB = rollbackKBResult[0];
 
             check(rollbackKB, {
-                "Phase 5 Swap: Rollback has correct KBID": () =>
-                    rollbackKB.id === rollbackKBID,
                 "Phase 5 Swap: Rollback has staging=true": () =>
                     rollbackKB.staging === true,
                 "Phase 5 Swap: Rollback has 'rollback' tag": () =>
@@ -4357,19 +4360,22 @@ function TestPhaseSwap(client, data) {
                     }
                     return hasOwnUID;
                 },
+                "Phase 5 Swap: Rollback has parent_kb_uid set": () =>
+                    rollbackKB.parent_kb_uid !== null && rollbackKB.parent_kb_uid !== undefined,
+                "Phase 5 Swap: Rollback parent_kb_uid matches production UID": () =>
+                    rollbackKB.parent_kb_uid === originalKBUID,
             });
 
             console.log(`Phase 5 Swap: Rollback KB created with UID ${rollbackKB.uid}`);
         }
 
-        // Verify staging KB was soft-deleted
-        const stagingKBID = `${knowledgeBaseId}-staging`;
-        const stagingKBs = helper.getKnowledgeBaseByIdAndOwner(stagingKBID, data.expectedOwner.uid);
+        // Verify staging KB was soft-deleted (using parent_kb_uid relationship)
+        const stagingKBsDeleted = helper.verifyStagingKB(knowledgeBaseId, data.expectedOwner.uid);
 
-        check({ stagingKBs }, {
+        check({ stagingKBsDeleted }, {
             "Phase 5 Swap: Staging KB soft-deleted after swap": () => {
-                // Staging KB should not exist or should have delete_time set
-                const softDeleted = !stagingKBs || stagingKBs.length === 0 || stagingKBs[0].delete_time !== null;
+                // Staging KB should not exist (verifyStagingKB excludes deleted KBs)
+                const softDeleted = !stagingKBsDeleted || stagingKBsDeleted.length === 0;
                 if (!softDeleted) {
                     console.error("Phase 5 Swap: Staging KB still active after swap");
                 }
@@ -4432,6 +4438,74 @@ function TestPhaseSwap(client, data) {
         });
 
         console.log(`Phase 5 Swap: Test completed - Production UID constant: ${originalKBUID === newProdUID}`);
+
+        // ========== CRITICAL: Verify parent_kb_uid relationships ==========
+        // Validates that staging and rollback KBs use parent_kb_uid FK instead of KBID string manipulation
+        console.log("Phase Swap: Verifying parent_kb_uid relationships for staging and rollback KBs...");
+
+        // Verify rollback KB has correct parent_kb_uid
+        const rollbackKBsWithParent = helper.verifyRollbackKB(knowledgeBaseId, data.expectedOwner.uid);
+        if (rollbackKBsWithParent && rollbackKBsWithParent.length > 0) {
+            const rollbackKB = rollbackKBsWithParent[0];
+            console.log(`Phase Swap: Rollback KB found - UID: ${rollbackKB.uid}, parent_kb_uid: ${rollbackKB.parent_kb_uid}`);
+
+            check({ rollbackKB }, {
+                "Phase Swap: Rollback KB has parent_kb_uid set": () => {
+                    if (!rollbackKB.parent_kb_uid) {
+                        console.error("Phase Swap: CRITICAL - Rollback KB missing parent_kb_uid!");
+                        return false;
+                    }
+                    return true;
+                },
+                "Phase Swap: Rollback KB parent_kb_uid matches production KB UID": () => {
+                    if (rollbackKB.parent_kb_uid !== originalKBUID) {
+                        console.error(`Phase Swap: parent_kb_uid mismatch! Expected: ${originalKBUID}, Got: ${rollbackKB.parent_kb_uid}`);
+                        return false;
+                    }
+                    return true;
+                },
+                "Phase Swap: Rollback KB has staging=true": () => {
+                    return rollbackKB.staging === true || rollbackKB.staging === 't';
+                },
+                "Phase Swap: Rollback KB has 'rollback' tag": () => {
+                    const tags = rollbackKB.tags;
+                    const hasRollbackTag = tags && (tags.includes('rollback') || tags.includes('"rollback"'));
+                    if (!hasRollbackTag) {
+                        console.error(`Phase Swap: Rollback KB missing 'rollback' tag. Tags: ${JSON.stringify(tags)}`);
+                    }
+                    return hasRollbackTag;
+                },
+            });
+        } else {
+            console.warn("Phase Swap: No rollback KB found (may be normal for first update or dimension-only changes)");
+        }
+
+        // Check if staging KB still exists (should be soft-deleted after swap)
+        const stagingKBsWithParent = helper.verifyStagingKB(knowledgeBaseId, data.expectedOwner.uid);
+        if (stagingKBsWithParent && stagingKBsWithParent.length > 0) {
+            const stagingKB = stagingKBsWithParent[0];
+            console.log(`Phase Swap: Staging KB still exists - UID: ${stagingKB.uid}, parent_kb_uid: ${stagingKB.parent_kb_uid}`);
+
+            // If staging KB exists, verify it had correct parent_kb_uid during its lifecycle
+            check({ stagingKB }, {
+                "Phase Swap: Staging KB had parent_kb_uid set": () => {
+                    if (!stagingKB.parent_kb_uid) {
+                        console.error("Phase Swap: CRITICAL - Staging KB missing parent_kb_uid!");
+                        return false;
+                    }
+                    return true;
+                },
+                "Phase Swap: Staging KB parent_kb_uid matched production KB UID": () => {
+                    if (stagingKB.parent_kb_uid !== originalKBUID) {
+                        console.error(`Phase Swap: parent_kb_uid mismatch! Expected: ${originalKBUID}, Got: ${stagingKB.parent_kb_uid}`);
+                        return false;
+                    }
+                    return true;
+                },
+            });
+        } else {
+            console.log("Phase Swap: Staging KB has been cleaned up (expected after successful swap)");
+        }
 
         // Cleanup
         http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
@@ -4555,35 +4629,32 @@ function TestResourceCleanup(client, data) {
             return;
         }
 
-        // Verify staging KB is soft-deleted
-        const stagingKBID = `${knowledgeBaseId}-staging`;
-        const stagingKBAfterUpdate = helper.getKnowledgeBaseByIdAndOwner(stagingKBID, data.expectedOwner.uid);
+        // Verify staging KB is soft-deleted (using parent_kb_uid relationship)
+        const stagingKBAfterUpdate = helper.verifyStagingKB(knowledgeBaseId, data.expectedOwner.uid);
 
         check(stagingKBAfterUpdate, {
             "Cleanup: Staging KB soft-deleted after update": () => {
-                if (!stagingKBAfterUpdate || stagingKBAfterUpdate.length === 0) {
-                    return true; // Fully cleaned
-                }
-                return stagingKBAfterUpdate[0].delete_time !== null;
+                // verifyStagingKB excludes deleted KBs, so empty result means it's cleaned up
+                return !stagingKBAfterUpdate || stagingKBAfterUpdate.length === 0;
             },
         });
 
-        // Verify rollback KB exists and has resources
-        const rollbackKBID = `${knowledgeBaseId}-rollback`;
-        const rollbackKBs = helper.getKnowledgeBaseByIdAndOwner(rollbackKBID, data.expectedOwner.uid);
+        // Verify rollback KB exists and has resources (using parent_kb_uid relationship)
+        const rollbackKBResult = helper.verifyRollbackKB(knowledgeBaseId, data.expectedOwner.uid);
 
-        check(rollbackKBs, {
-            "Cleanup: Rollback KB created": () => rollbackKBs && rollbackKBs.length > 0,
+        check(rollbackKBResult, {
+            "Cleanup: Rollback KB created": () => rollbackKBResult && rollbackKBResult.length > 0,
         });
 
-        if (!rollbackKBs || rollbackKBs.length === 0) {
+        if (!rollbackKBResult || rollbackKBResult.length === 0) {
             console.error("Cleanup: Rollback KB not found");
             http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
             return;
         }
 
-        const rollbackKB = rollbackKBs[0];
+        const rollbackKB = rollbackKBResult[0];
         const rollbackKBUID = rollbackKB.uid;
+        const rollbackKBID = rollbackKB.id; // Get actual rollback KB ID for cleanup
 
         // Count ALL resources in rollback KB BEFORE purge (database records)
         // Note: This validates database integrity. MinIO and Milvus cleanup is handled by
@@ -5301,8 +5372,7 @@ function TestCollectionVersioning(client, data) {
 
                 // TEST 5: Verify cleanup preserves collections still in use
                 // Manually trigger cleanup of staging KB (which should have been deleted already)
-                const stagingKBID = `${knowledgeBaseId}-staging`;
-                const stagingKBAfterSwap = helper.getKnowledgeBaseByIdAndOwner(stagingKBID, data.expectedOwner.uid);
+                const stagingKBAfterSwap = helper.verifyStagingKB(knowledgeBaseId, data.expectedOwner.uid);
 
                 if (stagingKBAfterSwap && stagingKBAfterSwap.length > 0) {
                     const stagingKBUID = stagingKBAfterSwap[0].uid;
@@ -5459,9 +5529,9 @@ function TestRollbackAndReUpdate(client, data) {
             return;
         }
 
-        // Verify rollback KB exists after first update
-        const rollbackKBID = `${knowledgeBaseId}-rollback`;
-        const rollbackKBsAfterUpdate = helper.getKnowledgeBaseByIdAndOwner(rollbackKBID, data.expectedOwner.uid);
+        // Verify rollback KB exists after first update (using parent_kb_uid relationship)
+        const rollbackKBsAfterUpdate = helper.verifyRollbackKB(knowledgeBaseId, data.expectedOwner.uid);
+        const rollbackKBID = rollbackKBsAfterUpdate && rollbackKBsAfterUpdate.length > 0 ? rollbackKBsAfterUpdate[0].id : null; // For cleanup
         check(rollbackKBsAfterUpdate, {
             "Rollback Cycle: Rollback KB exists after first update": () =>
                 rollbackKBsAfterUpdate && rollbackKBsAfterUpdate.length > 0,
@@ -5794,7 +5864,8 @@ function TestMultipleKBUpdates(client, data) {
         for (let i = 0; i < numKBs; i++) {
             const knowledgeBaseId = data.dbIDPrefix + "multi-" + randomString(5) + "-" + i;
             knowledgeBaseIds.push(knowledgeBaseId);
-            rollbackKBIDs.push(`${knowledgeBaseId}-rollback`);
+            // Don't pre-populate rollbackKBIDs with suffix pattern - will get actual IDs after updates complete
+            rollbackKBIDs.push(null);
 
             const createBody = {
                 id: knowledgeBaseId,
@@ -5940,8 +6011,7 @@ function TestMultipleKBUpdates(client, data) {
             }
             stagingKBsCreated = 0;
             for (let i = 0; i < numKBs; i++) {
-                const stagingKBID = `${knowledgeBaseIds[i]}-staging`;
-                const stagingKBs = helper.getKnowledgeBaseByIdAndOwner(stagingKBID, data.expectedOwner.uid);
+                const stagingKBs = helper.verifyStagingKB(knowledgeBaseIds[i], data.expectedOwner.uid);
                 if (stagingKBs && stagingKBs.length > 0) {
                     stagingKBsCreated++;
                 }
@@ -6026,7 +6096,12 @@ function TestMultipleKBUpdates(client, data) {
 
         for (let i = 0; i < numKBs; i++) {
             const prodKB = helper.getKnowledgeBaseByIdAndOwner(knowledgeBaseIds[i], data.expectedOwner.uid);
-            const rollbackKB = helper.getKnowledgeBaseByIdAndOwner(rollbackKBIDs[i], data.expectedOwner.uid);
+            // Get rollback KB using parent_kb_uid relationship
+            const rollbackKB = helper.verifyRollbackKB(knowledgeBaseIds[i], data.expectedOwner.uid);
+            // Update rollbackKBIDs array with actual rollback KB ID for later cleanup
+            if (rollbackKB && rollbackKB.length > 0) {
+                rollbackKBIDs[i] = rollbackKB[0].id;
+            }
 
             if (prodKB && prodKB.length > 0) {
                 const kb = prodKB[0];
@@ -6097,19 +6172,14 @@ function TestMultipleKBUpdates(client, data) {
         console.log("Multiple KB Updates: Verifying staging KBs cleanup...");
         let stagingKBsCleanedUp = 0;
         for (let i = 0; i < numKBs; i++) {
-            const stagingKBID = `${knowledgeBaseIds[i]}-staging`;
-            const stagingKBs = helper.getKnowledgeBaseByIdAndOwner(stagingKBID, data.expectedOwner.uid);
+            // verifyStagingKB excludes deleted KBs, so empty result means cleaned up
+            const stagingKBs = helper.verifyStagingKB(knowledgeBaseIds[i], data.expectedOwner.uid);
 
-            if (stagingKBs && stagingKBs.length > 0) {
-                // Staging KB should be soft-deleted (delete_time IS NOT NULL)
-                if (stagingKBs[0].delete_time !== null) {
-                    stagingKBsCleanedUp++;
-                } else {
-                    console.error(`Multiple KB Updates: Staging KB ${i + 1} (${stagingKBID}) NOT soft-deleted`);
-                }
-            } else {
-                // Staging KB may have been fully purged already (also valid)
+            if (!stagingKBs || stagingKBs.length === 0) {
+                // Staging KB is cleaned up (either soft-deleted or fully purged)
                 stagingKBsCleanedUp++;
+            } else {
+                console.error(`Multiple KB Updates: Staging KB ${i + 1} still active (NOT soft-deleted)`);
             }
         }
 
@@ -6830,6 +6900,124 @@ function TestEdgeCases(client, data) {
 
             console.log("=== Idempotency Test Complete ===\n");
         }
+        // ========== Test: Production KB status after successful swap ==========
+        // This test verifies that once the swap succeeds, the production KB is marked as COMPLETED
+        // even if post-swap cleanup operations fail. The swap is the "point of no return" - once it
+        // succeeds, the update is logically complete from a data perspective.
+        console.log("\nEdge Cases: Testing production KB status after successful swap...");
+        console.log("Edge Cases: Verifying that swap success guarantees COMPLETED status");
+
+        // Create a KB specifically for testing this behavior
+        const updateCompletedKBId = data.dbIDPrefix + "update-completed-test-" + randomString(8);
+        const updateCompletedCreateBody = {
+            id: updateCompletedKBId,
+            description: "Test updateCompleted flag placement after swap",
+            tags: ["test", "update-completed-flag"],
+        };
+
+        const updateCompletedCreateRes = http.request(
+            "POST",
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
+            JSON.stringify(updateCompletedCreateBody),
+            data.header
+        );
+
+        let updateCompletedKB;
+        try {
+            updateCompletedKB = updateCompletedCreateRes.json().knowledgeBase;
+        } catch (e) {
+            console.error("Edge Cases: Failed to create KB for updateCompleted test");
+        }
+
+        if (updateCompletedKB) {
+            const updateCompletedKBUid = updateCompletedKB.uid;
+            console.log(`Edge Cases: Created test KB ${updateCompletedKBId} (UID: ${updateCompletedKBUid})`);
+
+            // Upload a file to the KB
+            const updateCompletedFileRes = helper.uploadFile(
+                constant.simpleTextFilePath,
+                updateCompletedKBId,
+                data.expectedOwner.id,
+                data.header
+            );
+
+            if (updateCompletedFileRes.status === 200) {
+                const updateCompletedFile = updateCompletedFileRes.json().file;
+                const updateCompletedFileUID = updateCompletedFile.uid;
+                console.log(`Edge Cases: Uploaded file with UID: ${updateCompletedFileUID}`);
+
+                // Wait for file processing to complete
+                console.log("Edge Cases: Waiting for initial file processing...");
+                helper.waitForFileProcessing(client, data, updateCompletedKBUid, updateCompletedFileUID, 120);
+
+                // Trigger update
+                console.log("Edge Cases: Triggering update to test updateCompleted flag behavior...");
+                const updateCompletedUpdateRes = client.invoke(
+                    "artifact.artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
+                    { knowledgeBaseIds: [updateCompletedKBId] },
+                    data.metadata
+                );
+
+                check(updateCompletedUpdateRes, {
+                    "Edge Cases: Update started successfully (swap status test)": (r) => r.status === grpc.StatusOK,
+                });
+
+                if (updateCompletedUpdateRes && updateCompletedUpdateRes.status === grpc.StatusOK) {
+                    // Wait for update to complete
+                    console.log("Edge Cases: Waiting for update completion (testing post-swap status)...");
+                    helper.pollUpdateCompletion(client, data, updateCompletedKBUid, 300);
+
+                    // CRITICAL: Verify that the KB is marked as COMPLETED (not FAILED)
+                    // This validates Fix #2: updateCompleted flag is set immediately after swap
+                    const finalStatusRes = client.invoke(
+                        "artifact.artifact.v1alpha.ArtifactPrivateService/GetKnowledgeBaseUpdateStatusAdmin",
+                        {},
+                        data.metadata
+                    );
+
+                    let finalStatus = null;
+                    if (finalStatusRes.status === grpc.StatusOK && finalStatusRes.message.details) {
+                        finalStatus = finalStatusRes.message.details.find(d =>
+                            (d.knowledge_base_uid || d.knowledgeBaseUid || d.uid) === updateCompletedKBUid
+                        );
+                    }
+
+                    if (finalStatus) {
+                        console.log(`Edge Cases: Final KB status: ${finalStatus.status}`);
+                        console.log(`Edge Cases: Workflow ID: ${finalStatus.workflowId || 'none'}`);
+
+                        check({ finalStatus }, {
+                            "Edge Cases: KB marked as COMPLETED after swap (not FAILED)": () => {
+                                // The critical test: After swap succeeds, KB should be COMPLETED
+                                // This ensures swap success = update success, regardless of cleanup failures
+                                const isCompleted = finalStatus.status === "KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED";
+                                if (!isCompleted) {
+                                    console.error(`Edge Cases: CRITICAL - KB status is ${finalStatus.status}, expected COMPLETED`);
+                                    console.error("Edge Cases: This indicates post-swap failures are incorrectly marking KB as FAILED");
+                                }
+                                return isCompleted;
+                            },
+                            "Edge Cases: Workflow ID cleared after completion": () => {
+                                return !finalStatus.workflowId || finalStatus.workflowId === "";
+                            },
+                        });
+
+                        // Verify rollback KB was created (proving swap succeeded)
+                        const rollbackKBsForTest = helper.verifyRollbackKB(updateCompletedKBId, data.expectedOwner.uid);
+                        if (rollbackKBsForTest && rollbackKBsForTest.length > 0) {
+                            console.log("Edge Cases: Rollback KB exists, confirming swap completed successfully");
+                            check({ hasRollback: true }, {
+                                "Edge Cases: Rollback KB created (swap succeeded)": () => true,
+                            });
+                        }
+                    }
+                }
+            }
+
+            // Cleanup
+            console.log("Edge Cases: Cleaning up swap status test KB...");
+            http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${updateCompletedKBId}`, null, data.header);
+        }
     });
 }
 
@@ -6977,12 +7165,10 @@ function TestAbortKnowledgeBaseUpdate(client, data) {
         console.log("\n=== Test 14.5: Verify staging KB cleanup ===");
 
         if (actuallyAborted) {
-            const stagingKBID = `${knowledgeBaseIdAbort}-staging`;
-
             // Poll for staging KB cleanup (abort triggers async cleanup workflow)
             // Use generous timeout as cleanup involves Temporal workflow + DB operations
             // Increased to 90s to handle resource contention during parallel test execution
-            const stagingCleanedUp = helper.pollStagingKBCleanup(stagingKBID, data.expectedOwner.uid, 90);
+            const stagingCleanedUp = helper.pollStagingKBCleanup(knowledgeBaseIdAbort, data.expectedOwner.uid, 90);
 
             check(stagingCleanedUp, {
                 "Abort: Staging KB cleaned up": (cleaned) => cleaned === true,

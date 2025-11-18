@@ -1054,14 +1054,28 @@ function normalizeDBRow(row) {
 }
 
 export function verifyRollbackKB(knowledgeBaseId, ownerUid) {
-  const rollbackKbId = `${knowledgeBaseId}-rollback`;
   try {
-    const query = `
-      SELECT id, uid, staging, update_status, rollback_retention_until, tags, active_collection_uid
+    // First, get the production KB's UID
+    const prodQuery = `
+      SELECT uid
       FROM knowledge_base
-      WHERE id = $1 AND owner = $2
+      WHERE id = $1 AND owner = $2 AND staging = false AND delete_time IS NULL
     `;
-    const results = safeQuery(query, rollbackKbId, ownerUid);
+    const prodResults = safeQuery(prodQuery, knowledgeBaseId, ownerUid);
+    if (!prodResults || prodResults.length === 0) {
+      return [];
+    }
+    // Normalize the production KB UID (convert from byte array to UUID string if needed)
+    const normalizedProdKB = normalizeDBRow(prodResults[0]);
+    const prodKBUID = normalizedProdKB.uid;
+
+    // Query rollback KB using parent_kb_uid and tags (no longer relying on KBID suffix)
+    const query = `
+      SELECT id, uid, staging, update_status, rollback_retention_until, tags, active_collection_uid, parent_kb_uid
+      FROM knowledge_base
+      WHERE parent_kb_uid = $1 AND staging = true AND 'rollback' = ANY(tags) AND delete_time IS NULL
+    `;
+    const results = safeQuery(query, prodKBUID);
     return results ? results.map(row => normalizeDBRow(row)) : [];
   } catch (e) {
     console.error(`Failed to verify rollback KB for ${knowledgeBaseId}: ${e}`);
@@ -1078,14 +1092,28 @@ export function verifyRollbackKB(knowledgeBaseId, ownerUid) {
  * @returns {Array} Array of staging KB rows (should be 1 or 0)
  */
 export function verifyStagingKB(knowledgeBaseId, ownerUid) {
-  const stagingKbId = `${knowledgeBaseId}-staging`;
   try {
-    const query = `
-      SELECT uid, id, staging, update_status, active_collection_uid
+    // First, get the production KB's UID
+    const prodQuery = `
+      SELECT uid
       FROM knowledge_base
-      WHERE id = $1 AND owner = $2
+      WHERE id = $1 AND owner = $2 AND staging = false AND delete_time IS NULL
     `;
-    const results = safeQuery(query, stagingKbId, ownerUid);
+    const prodResults = safeQuery(prodQuery, knowledgeBaseId, ownerUid);
+    if (!prodResults || prodResults.length === 0) {
+      return [];
+    }
+    // Normalize the production KB UID (convert from byte array to UUID string if needed)
+    const normalizedProdKB = normalizeDBRow(prodResults[0]);
+    const prodKBUID = normalizedProdKB.uid;
+
+    // Query staging KB using parent_kb_uid and tags (no longer relying on KBID suffix)
+    const query = `
+      SELECT uid, id, staging, update_status, active_collection_uid, parent_kb_uid, description, tags
+      FROM knowledge_base
+      WHERE parent_kb_uid = $1 AND staging = true AND 'staging' = ANY(tags) AND delete_time IS NULL
+    `;
+    const results = safeQuery(query, prodKBUID);
     return results ? results.map(row => normalizeDBRow(row)) : [];
   } catch (e) {
     console.error(`Failed to verify staging KB for ${knowledgeBaseId}: ${e}`);
@@ -1119,28 +1147,29 @@ export function getKnowledgeBaseByIdAndOwner(knowledgeBaseId, ownerUid) {
  * Poll for staging KB to be cleaned up (soft-deleted)
  * Used after abort operations to wait for async cleanup to complete
  *
- * @param {string} stagingKBID - Staging KB ID to check
+ * @param {string} productionKBID - Production KB ID (to find associated staging KB via parent_kb_uid)
  * @param {string} ownerUid - Owner UID
  * @param {number} maxWaitSeconds - Maximum time to wait (default 10s)
  * @returns {boolean} True if staging KB is cleaned up or doesn't exist
  */
-export function pollStagingKBCleanup(stagingKBID, ownerUid, maxWaitSeconds = 10) {
-  console.log(`[POLL] Waiting for staging KB cleanup: ${stagingKBID}, maxWait=${maxWaitSeconds}s`);
+export function pollStagingKBCleanup(productionKBID, ownerUid, maxWaitSeconds = 10) {
+  console.log(`[POLL] Waiting for staging KB cleanup for production KB: ${productionKBID}, maxWait=${maxWaitSeconds}s`);
 
   for (let i = 0; i < maxWaitSeconds; i++) {
-    const stagingKB = getKnowledgeBaseByIdAndOwner(stagingKBID, ownerUid);
+    // Use verifyStagingKB which queries by parent_kb_uid and excludes deleted KBs
+    const stagingKBs = verifyStagingKB(productionKBID, ownerUid);
 
     // Log on first attempt and every 3 seconds
     if (i === 0 || i % 3 === 0) {
-      if (stagingKB && stagingKB.length > 0) {
-        console.log(`[POLL] Attempt ${i + 1}: Staging KB found, delete_time=${stagingKB[0].delete_time}, update_status=${stagingKB[0].update_status}`);
+      if (stagingKBs && stagingKBs.length > 0) {
+        console.log(`[POLL] Attempt ${i + 1}: Staging KB still exists, update_status=${stagingKBs[0].update_status}`);
       } else {
         console.log(`[POLL] Attempt ${i + 1}: Staging KB not found (cleaned up)`);
       }
     }
 
-    // Check if staging KB is cleaned up
-    if (!stagingKB || stagingKB.length === 0 || stagingKB[0].delete_time !== null) {
+    // Check if staging KB is cleaned up (verifyStagingKB excludes deleted KBs)
+    if (!stagingKBs || stagingKBs.length === 0) {
       console.log(`[POLL] Staging KB cleanup confirmed after ${i + 1}s`);
       return true;
     }
@@ -1886,14 +1915,22 @@ export function pollForStagingKBCleanup(knowledgeBaseId, ownerUid, maxWaitSecond
  * Poll until rollback KB exists after an update completes.
  * The update workflow creates the rollback KB during the swap phase.
  *
- * @param {string} knowledgeBaseId - The base knowledge base ID (rollback KB is {knowledgeBaseId}-rollback)
+ * @param {string} knowledgeBaseId - The production knowledge base ID
  * @param {string} ownerUid - The owner UID
  * @param {number} maxWaitSeconds - Maximum time to wait (default: 10)
  * @returns {object|null} - The rollback KB object if found, null if timeout
  */
 export function pollForRollbackKBCreation(knowledgeBaseId, ownerUid, maxWaitSeconds = 10) {
-  const rollbackKBID = `${knowledgeBaseId}-rollback`;
-  return pollForKBState(rollbackKBID, ownerUid, maxWaitSeconds, false);
+  // Use parent_kb_uid to find rollback KB instead of KBID suffix
+  const startTime = Date.now();
+  while ((Date.now() - startTime) / 1000 < maxWaitSeconds) {
+    const rollbackKBs = verifyRollbackKB(knowledgeBaseId, ownerUid);
+    if (rollbackKBs && rollbackKBs.length > 0) {
+      return rollbackKBs[0];
+    }
+    sleep(1);
+  }
+  return null;
 }
 
 // ============================================================================

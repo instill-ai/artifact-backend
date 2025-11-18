@@ -1344,8 +1344,7 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 		// This is a best-effort cleanup - if it fails, cleanup workflow will handle it later
 		ownerUID, err := uuid.FromString(originalKB.Owner)
 		if err == nil {
-			rollbackKBID := fmt.Sprintf("%s-rollback", originalKB.KBID)
-			existingRollback, err := w.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, types.OwnerUIDType(ownerUID), rollbackKBID)
+			existingRollback, err := w.repository.GetRollbackKBForProduction(ctx, types.OwnerUIDType(ownerUID), originalKB.KBID)
 			if err == nil && existingRollback != nil {
 				w.log.Info("SwapKnowledgeBasesActivity: Marking existing rollback KB for deletion since original collection doesn't exist",
 					zap.String("rollbackKBUID", existingRollback.UID.String()))
@@ -1390,8 +1389,6 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 
 	// Normal path: Original collection exists, so we need to create rollback KB and do full swap
 	// Step 1: Create/update rollback KB to store old resources
-	rollbackKBID := fmt.Sprintf("%s-rollback", originalKB.KBID)
-
 	ownerUID, err := uuid.FromString(originalKB.Owner)
 	if err != nil {
 		err = errorsx.AddMessage(err, "Invalid owner UID format")
@@ -1402,8 +1399,8 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 		)
 	}
 
-	// Check if rollback KB exists from previous update
-	existingRollback, err := w.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, types.OwnerUIDType(ownerUID), rollbackKBID)
+	// Check if rollback KB exists from previous update using parent_kb_uid lookup
+	existingRollback, err := w.repository.GetRollbackKBForProduction(ctx, types.OwnerUIDType(ownerUID), originalKB.KBID)
 	var rollbackKBUID types.KBUIDType
 
 	if err == nil && existingRollback != nil {
@@ -1417,11 +1414,12 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 
 		rollbackKB := &repository.KnowledgeBaseModel{
 			UID:                    rollbackKBUID,
-			KBID:                   rollbackKBID, // Use rollback knowledge base ID
+			KBID:                   rollbackKBUID.String(), // Use UID as KBID (system-generated ID for rollback KB)
 			Owner:                  originalKB.Owner,
 			CreatorUID:             originalKB.CreatorUID,
 			Tags:                   append(originalKB.Tags, "rollback"),
 			Staging:                true,
+			ParentKBUID:            &originalKB.UID, // Link to production KB via parent_kb_uid
 			UpdateStatus:           artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED.String(),
 			RollbackRetentionUntil: &retentionUntil,
 			KnowledgeBaseType:      originalKB.KnowledgeBaseType,
@@ -1509,9 +1507,18 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 	}
 
 	// Update rollback KB to point to original's collection (preserve old dimensionality)
-	// Note: Use the KBID string, not the UID, for the lookup
-	rollbackKBIDStr := fmt.Sprintf("%s-rollback", originalKB.KBID)
-	err = w.repository.UpdateKnowledgeBaseWithMap(ctx, rollbackKBIDStr, originalKB.Owner, map[string]interface{}{
+	// Note: Use the rollback KB's KBID (already known from existingRollback or newly created)
+	// We need to get the rollback KB to obtain its KBID
+	rollbackKB, err := w.repository.GetKnowledgeBaseByUID(ctx, rollbackKBUID)
+	if err != nil {
+		err = errorsx.AddMessage(err, "Unable to retrieve rollback KB for update. Please try again.")
+		return nil, temporal.NewApplicationErrorWithCause(
+			errorsx.MessageOrErr(err),
+			swapKnowledgeBasesActivityError,
+			err,
+		)
+	}
+	err = w.repository.UpdateKnowledgeBaseWithMap(ctx, rollbackKB.KBID, originalKB.Owner, map[string]interface{}{
 		"active_collection_uid": originalKB.ActiveCollectionUID, // Keep original collection pointer
 		"system_uid":            originalKB.SystemUID,           // Keep original system UID
 	})
