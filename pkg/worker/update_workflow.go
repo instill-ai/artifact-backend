@@ -54,6 +54,7 @@ func (w *Worker) UpdateKnowledgeBaseWorkflow(ctx workflow.Context, param UpdateK
 
 	// Track completion for cleanup
 	var stagingKBUID types.KBUIDType
+	var stagingCollectionUID types.KBUIDType
 	updateCompleted := false
 
 	// Defer cleanup on failure
@@ -64,7 +65,7 @@ func (w *Worker) UpdateKnowledgeBaseWorkflow(ctx workflow.Context, param UpdateK
 			// Prepare cleanup context
 			cleanupCtx, _ := workflow.NewDisconnectedContext(ctx)
 			cleanupCtx = workflow.WithActivityOptions(cleanupCtx, workflow.ActivityOptions{
-				StartToCloseTimeout: time.Minute,
+				StartToCloseTimeout: 5 * time.Minute, // Increased from 1 min: cleanup waits up to 2 min for file processing
 				RetryPolicy: &temporal.RetryPolicy{
 					InitialInterval:    time.Second,
 					BackoffCoefficient: 2.0,
@@ -79,9 +80,36 @@ func (w *Worker) UpdateKnowledgeBaseWorkflow(ctx workflow.Context, param UpdateK
 				logger.Warn("update failed, cleaning up staging KB",
 					"stagingKBUID", stagingKBUID)
 
-				_ = workflow.ExecuteActivity(cleanupCtx, w.CleanupOldKnowledgeBaseActivity, &CleanupOldKnowledgeBaseActivityParam{
+				cleanupErr := workflow.ExecuteActivity(cleanupCtx, w.CleanupOldKnowledgeBaseActivity, &CleanupOldKnowledgeBaseActivityParam{
 					KBUID: stagingKBUID,
 				}).Get(cleanupCtx, nil)
+
+				if cleanupErr != nil {
+					logger.Error("Failed to cleanup staging KB after update failure",
+						"stagingKBUID", stagingKBUID.String(),
+						"error", cleanupErr)
+				} else if stagingCollectionUID.String() != "" {
+					// Cleanup succeeded - verify it was complete
+					verifyCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+						StartToCloseTimeout: 30 * time.Second,
+						RetryPolicy: &temporal.RetryPolicy{
+							InitialInterval:    time.Second,
+							BackoffCoefficient: 2.0,
+							MaximumInterval:    10 * time.Second,
+							MaximumAttempts:    2,
+						},
+					})
+					verifyErr := workflow.ExecuteActivity(verifyCtx, w.VerifyKBCleanupActivity, &VerifyKBCleanupActivityParam{
+						KBUID:         stagingKBUID,
+						CollectionUID: stagingCollectionUID,
+					}).Get(verifyCtx, nil)
+
+					if verifyErr != nil {
+						logger.Warn("Staging KB cleanup verification failed after update failure",
+							"stagingKBUID", stagingKBUID.String(),
+							"error", verifyErr)
+					}
+				}
 			}
 
 			// CRITICAL: ALWAYS mark production KB as failed, even if staging KB was never created
@@ -176,7 +204,10 @@ func (w *Worker) UpdateKnowledgeBaseWorkflow(ctx workflow.Context, param UpdateK
 	}
 
 	stagingKBUID = stagingResult.StagingKB.UID
-	logger.Info("Staging KB created", "stagingKBUID", stagingKBUID.String())
+	stagingCollectionUID = stagingResult.StagingKB.ActiveCollectionUID
+	logger.Info("Staging KB created",
+		"stagingKBUID", stagingKBUID.String(),
+		"stagingCollectionUID", stagingCollectionUID.String())
 
 	// ========== Phase 2: Reprocess ==========
 	logger.Info("Phase 2: Reprocess - Reprocessing all files from snapshot", "fileCount", len(listFilesResult.FileUIDs))
@@ -371,7 +402,7 @@ func (w *Worker) UpdateKnowledgeBaseWorkflow(ctx workflow.Context, param UpdateK
 	// will NOT drop the collection that was just swapped to production
 	logger.Info("Triggering staging KB cleanup (deterministic protection for new production collection)")
 	cleanupCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-		StartToCloseTimeout: time.Minute,
+		StartToCloseTimeout: 5 * time.Minute, // Increased from 1 min: cleanup waits up to 2 min for file processing
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval:    time.Second,
 			BackoffCoefficient: 2.0,
@@ -385,9 +416,33 @@ func (w *Worker) UpdateKnowledgeBaseWorkflow(ctx workflow.Context, param UpdateK
 	}).Get(cleanupCtx, nil); err != nil {
 		// Log error but don't fail workflow - swap already succeeded
 		// Orphaned staging KB will need manual cleanup
-		logger.Error("Failed to cleanup staging KB after successful swap - manual cleanup may be needed",
+		logger.Error("CRITICAL: Failed to cleanup staging KB after successful swap - manual cleanup may be needed",
 			"stagingKBUID", swapResult.StagingKBUID.String(),
 			"error", err)
+		// TODO: Add metric/alert for monitoring
+	} else {
+		// Cleanup succeeded - now verify it was complete
+		logger.Info("Verifying staging KB cleanup was complete")
+		verifyCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			StartToCloseTimeout: 30 * time.Second,
+			RetryPolicy: &temporal.RetryPolicy{
+				InitialInterval:    time.Second,
+				BackoffCoefficient: 2.0,
+				MaximumInterval:    10 * time.Second,
+				MaximumAttempts:    2,
+			},
+		})
+		if verifyErr := workflow.ExecuteActivity(verifyCtx, w.VerifyKBCleanupActivity, &VerifyKBCleanupActivityParam{
+			KBUID:         swapResult.StagingKBUID,
+			CollectionUID: stagingCollectionUID, // Use tracked staging collection UID
+		}).Get(verifyCtx, nil); verifyErr != nil {
+			// Log warning but don't fail workflow - cleanup may need retry
+			logger.Warn("Staging KB cleanup verification failed - resources may need manual cleanup",
+				"stagingKBUID", swapResult.StagingKBUID.String(),
+				"error", verifyErr)
+		} else {
+			logger.Info("Staging KB cleanup verified successfully")
+		}
 	}
 
 	// ========== Phase 6: Cleanup ==========

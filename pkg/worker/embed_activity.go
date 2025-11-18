@@ -168,16 +168,21 @@ func (w *Worker) SaveEmbeddingBatchActivity(ctx context.Context, param *SaveEmbe
 		)
 	}
 
-	collectionUID := param.KBUID
-	if kb.ActiveCollectionUID != uuid.Nil {
-		collectionUID = kb.ActiveCollectionUID
+	// CRITICAL FIX 3: active_collection_uid must ALWAYS be set and NEVER be nil
+	// No fallback to param.KBUID - that would query the wrong collection
+	if kb.ActiveCollectionUID == uuid.Nil {
+		return temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("KB has nil active_collection_uid: %s. This should never happen after migration 000044.", param.KBUID),
+			saveEmbeddingsActivityError,
+			fmt.Errorf("nil active_collection_uid for KB %s", param.KBUID),
+		)
 	}
 
-	collection := constant.KBCollectionName(collectionUID)
+	collection := constant.KBCollectionName(kb.ActiveCollectionUID)
 
 	w.log.Info("SaveEmbeddingBatchActivity: Using active collection",
 		zap.String("kbUID", param.KBUID.String()),
-		zap.String("activeCollectionUID", collectionUID.String()),
+		zap.String("activeCollectionUID", kb.ActiveCollectionUID.String()),
 		zap.String("collectionName", collection))
 
 	// CRITICAL: Validate collection exists before attempting to insert embeddings
@@ -192,7 +197,7 @@ func (w *Worker) SaveEmbeddingBatchActivity(ctx context.Context, param *SaveEmbe
 	}
 	if !collectionExists {
 		return temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Collection does not exist in Milvus: %s (KB UID: %s, Collection UID: %s). The collection may have been dropped or never created. Please check if the KB was created successfully or contact support.", collection, param.KBUID, collectionUID),
+			fmt.Sprintf("Collection does not exist in Milvus: %s (KB UID: %s, Collection UID: %s). The collection may have been dropped or never created. Please check if the KB was created successfully or contact support.", collection, param.KBUID, kb.ActiveCollectionUID),
 			saveEmbeddingsActivityError,
 			fmt.Errorf("collection %s not found", collection),
 		)

@@ -5163,7 +5163,7 @@ function TestCollectionVersioning(client, data) {
         }
         console.log(`Collection Versioning: Created knowledge base "${knowledgeBaseId}" with UID ${knowledgeBaseUid}`);
 
-        // TEST 1: Verify active_collection_uid is set on creation
+        // TEST 1: Verify active_collection_uid is set on creation and is unique
         const kbAfterCreate = helper.getKnowledgeBaseByIdAndOwner(knowledgeBaseId, data.expectedOwner.uid);
         check(kbAfterCreate, {
             "Collection Versioning: KB has active_collection_uid after creation": () => {
@@ -5177,12 +5177,12 @@ function TestCollectionVersioning(client, data) {
                     console.error(`Collection Versioning: active_collection_uid is null/undefined`);
                     return false;
                 }
-                // Should initially point to KB's own UID
-                const pointsToSelf = kb.active_collection_uid === kb.uid;
-                if (!pointsToSelf) {
-                    console.log(`Collection Versioning: active_collection_uid=${kb.active_collection_uid}, kb.uid=${kb.uid}`);
+                // active_collection_uid should ALWAYS be unique (different from KB UID)
+                const isUnique = kb.active_collection_uid !== kb.uid;
+                if (!isUnique) {
+                    console.error(`Collection Versioning: active_collection_uid=${kb.active_collection_uid} is the same as KB UID=${kb.uid}, should be unique!`);
                 }
-                return pointsToSelf;
+                return isUnique;
             },
         });
 
@@ -5259,13 +5259,13 @@ function TestCollectionVersioning(client, data) {
                 check(stagingKB, {
                     "Collection Versioning: Staging KB has active_collection_uid": () =>
                         stagingCollectionUID !== null && stagingCollectionUID !== undefined,
-                    "Collection Versioning: Staging KB has its own collection": () => {
-                        // Staging KB should point to its own UID as the collection
-                        const pointsToSelf = stagingCollectionUID === stagingKB.uid;
-                        if (!pointsToSelf) {
-                            console.log(`Collection Versioning: Staging active_collection_uid=${stagingCollectionUID}, staging KB UID=${stagingKB.uid}`);
+                    "Collection Versioning: Staging KB has its own unique collection": () => {
+                        // FIX 3: Staging KB should have a unique active_collection_uid (NOT its own UID)
+                        const isUnique = stagingCollectionUID !== stagingKB.uid;
+                        if (!isUnique) {
+                            console.error(`Collection Versioning: Staging active_collection_uid=${stagingCollectionUID} is the same as staging KB UID=${stagingKB.uid}, should be unique!`);
                         }
-                        return pointsToSelf;
+                        return isUnique;
                     },
                     "Collection Versioning: Staging collection differs from original": () => {
                         const differs = stagingCollectionUID !== originalCollectionUID;

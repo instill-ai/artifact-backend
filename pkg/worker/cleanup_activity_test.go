@@ -12,6 +12,7 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/instill-ai/artifact-backend/pkg/repository"
+	"github.com/instill-ai/artifact-backend/pkg/types"
 	"github.com/instill-ai/artifact-backend/pkg/worker/mock"
 )
 
@@ -239,11 +240,21 @@ func TestDeleteEmbeddingsFromVectorDBActivity_Success(t *testing.T) {
 	kbUID := uuid.Must(uuid.NewV4())
 	embeddingUID := uuid.Must(uuid.NewV4())
 
+	activeCollectionUID := types.KBUIDType(uuid.Must(uuid.NewV4()))
+
 	mockRepository := mock.NewRepositoryMock(mc)
 	mockRepository.ListEmbeddingsByKBFileUIDMock.
 		When(minimock.AnyContext, fileUID).
 		Then([]repository.EmbeddingModel{
 			{UID: embeddingUID, KBUID: kbUID},
+		}, nil)
+
+	// Mock for getting active_collection_uid
+	mockRepository.GetKnowledgeBaseByUIDMock.
+		When(minimock.AnyContext, types.KBUIDType(kbUID)).
+		Then(&repository.KnowledgeBaseModel{
+			UID:                 types.KBUIDType(kbUID),
+			ActiveCollectionUID: activeCollectionUID,
 		}, nil)
 
 	mockRepository.DeleteEmbeddingsWithFileUIDMock.Return(nil)
@@ -267,12 +278,21 @@ func TestDeleteEmbeddingsFromVectorDBActivity_CollectionNotFound(t *testing.T) {
 	fileUID := uuid.Must(uuid.NewV4())
 	kbUID := uuid.Must(uuid.NewV4())
 	embeddingUID := uuid.Must(uuid.NewV4())
+	activeCollectionUID := types.KBUIDType(uuid.Must(uuid.NewV4()))
 
 	mockRepository := mock.NewRepositoryMock(mc)
 	mockRepository.ListEmbeddingsByKBFileUIDMock.
 		When(minimock.AnyContext, fileUID).
 		Then([]repository.EmbeddingModel{
 			{UID: embeddingUID, KBUID: kbUID},
+		}, nil)
+
+	// Mock for getting active_collection_uid
+	mockRepository.GetKnowledgeBaseByUIDMock.
+		When(minimock.AnyContext, types.KBUIDType(kbUID)).
+		Then(&repository.KnowledgeBaseModel{
+			UID:                 types.KBUIDType(kbUID),
+			ActiveCollectionUID: activeCollectionUID,
 		}, nil)
 
 	mockRepository.DeleteEmbeddingsWithFileUIDMock.Return(fmt.Errorf("can't find collection"))
@@ -297,7 +317,7 @@ func TestDropVectorDBCollectionActivity_Success(t *testing.T) {
 	activeCollectionUID := uuid.Must(uuid.NewV4())
 
 	mockRepository := mock.NewRepositoryMock(mc)
-	mockRepository.GetKnowledgeBaseByUIDMock.Return(&repository.KnowledgeBaseModel{
+	mockRepository.GetKnowledgeBaseByUIDIncludingDeletedMock.Return(&repository.KnowledgeBaseModel{
 		UID:                 kbUID,
 		ActiveCollectionUID: activeCollectionUID,
 	}, nil)
@@ -324,7 +344,7 @@ func TestDropVectorDBCollectionActivity_AlreadyDropped(t *testing.T) {
 	activeCollectionUID := uuid.Must(uuid.NewV4())
 
 	mockRepository := mock.NewRepositoryMock(mc)
-	mockRepository.GetKnowledgeBaseByUIDMock.Return(&repository.KnowledgeBaseModel{
+	mockRepository.GetKnowledgeBaseByUIDIncludingDeletedMock.Return(&repository.KnowledgeBaseModel{
 		UID:                 kbUID,
 		ActiveCollectionUID: activeCollectionUID,
 	}, nil)

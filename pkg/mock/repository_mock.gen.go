@@ -65,9 +65,9 @@ type RepositoryMock struct {
 	beforeCreateEmbeddingsCounter uint64
 	CreateEmbeddingsMock          mRepositoryMockCreateEmbeddings
 
-	funcCreateKnowledgeBase          func(ctx context.Context, kb mm_repository.KnowledgeBaseModel, externalService func(kbUID types.KBUIDType) error) (kp1 *mm_repository.KnowledgeBaseModel, err error)
+	funcCreateKnowledgeBase          func(ctx context.Context, kb mm_repository.KnowledgeBaseModel, externalService func(kbUID types.KBUIDType, collectionUID types.KBUIDType) error) (kp1 *mm_repository.KnowledgeBaseModel, err error)
 	funcCreateKnowledgeBaseOrigin    string
-	inspectFuncCreateKnowledgeBase   func(ctx context.Context, kb mm_repository.KnowledgeBaseModel, externalService func(kbUID types.KBUIDType) error)
+	inspectFuncCreateKnowledgeBase   func(ctx context.Context, kb mm_repository.KnowledgeBaseModel, externalService func(kbUID types.KBUIDType, collectionUID types.KBUIDType) error)
 	afterCreateKnowledgeBaseCounter  uint64
 	beforeCreateKnowledgeBaseCounter uint64
 	CreateKnowledgeBaseMock          mRepositoryMockCreateKnowledgeBase
@@ -86,9 +86,9 @@ type RepositoryMock struct {
 	beforeCreateObjectCounter uint64
 	CreateObjectMock          mRepositoryMockCreateObject
 
-	funcCreateStagingKnowledgeBase          func(ctx context.Context, original *mm_repository.KnowledgeBaseModel, newSystemUID *types.SystemUIDType, externalService func(kbUID types.KBUIDType) error) (kp1 *mm_repository.KnowledgeBaseModel, err error)
+	funcCreateStagingKnowledgeBase          func(ctx context.Context, original *mm_repository.KnowledgeBaseModel, newSystemUID *types.SystemUIDType, externalService func(kbUID types.KBUIDType, collectionUID types.KBUIDType) error) (kp1 *mm_repository.KnowledgeBaseModel, err error)
 	funcCreateStagingKnowledgeBaseOrigin    string
-	inspectFuncCreateStagingKnowledgeBase   func(ctx context.Context, original *mm_repository.KnowledgeBaseModel, newSystemUID *types.SystemUIDType, externalService func(kbUID types.KBUIDType) error)
+	inspectFuncCreateStagingKnowledgeBase   func(ctx context.Context, original *mm_repository.KnowledgeBaseModel, newSystemUID *types.SystemUIDType, externalService func(kbUID types.KBUIDType, collectionUID types.KBUIDType) error)
 	afterCreateStagingKnowledgeBaseCounter  uint64
 	beforeCreateStagingKnowledgeBaseCounter uint64
 	CreateStagingKnowledgeBaseMock          mRepositoryMockCreateStagingKnowledgeBase
@@ -3439,14 +3439,14 @@ type RepositoryMockCreateKnowledgeBaseExpectation struct {
 type RepositoryMockCreateKnowledgeBaseParams struct {
 	ctx             context.Context
 	kb              mm_repository.KnowledgeBaseModel
-	externalService func(kbUID types.KBUIDType) error
+	externalService func(kbUID types.KBUIDType, collectionUID types.KBUIDType) error
 }
 
 // RepositoryMockCreateKnowledgeBaseParamPtrs contains pointers to parameters of the Repository.CreateKnowledgeBase
 type RepositoryMockCreateKnowledgeBaseParamPtrs struct {
 	ctx             *context.Context
 	kb              *mm_repository.KnowledgeBaseModel
-	externalService *func(kbUID types.KBUIDType) error
+	externalService *func(kbUID types.KBUIDType, collectionUID types.KBUIDType) error
 }
 
 // RepositoryMockCreateKnowledgeBaseResults contains results of the Repository.CreateKnowledgeBase
@@ -3474,7 +3474,7 @@ func (mmCreateKnowledgeBase *mRepositoryMockCreateKnowledgeBase) Optional() *mRe
 }
 
 // Expect sets up expected params for Repository.CreateKnowledgeBase
-func (mmCreateKnowledgeBase *mRepositoryMockCreateKnowledgeBase) Expect(ctx context.Context, kb mm_repository.KnowledgeBaseModel, externalService func(kbUID types.KBUIDType) error) *mRepositoryMockCreateKnowledgeBase {
+func (mmCreateKnowledgeBase *mRepositoryMockCreateKnowledgeBase) Expect(ctx context.Context, kb mm_repository.KnowledgeBaseModel, externalService func(kbUID types.KBUIDType, collectionUID types.KBUIDType) error) *mRepositoryMockCreateKnowledgeBase {
 	if mmCreateKnowledgeBase.mock.funcCreateKnowledgeBase != nil {
 		mmCreateKnowledgeBase.mock.t.Fatalf("RepositoryMock.CreateKnowledgeBase mock is already set by Set")
 	}
@@ -3545,7 +3545,7 @@ func (mmCreateKnowledgeBase *mRepositoryMockCreateKnowledgeBase) ExpectKbParam2(
 }
 
 // ExpectExternalServiceParam3 sets up expected param externalService for Repository.CreateKnowledgeBase
-func (mmCreateKnowledgeBase *mRepositoryMockCreateKnowledgeBase) ExpectExternalServiceParam3(externalService func(kbUID types.KBUIDType) error) *mRepositoryMockCreateKnowledgeBase {
+func (mmCreateKnowledgeBase *mRepositoryMockCreateKnowledgeBase) ExpectExternalServiceParam3(externalService func(kbUID types.KBUIDType, collectionUID types.KBUIDType) error) *mRepositoryMockCreateKnowledgeBase {
 	if mmCreateKnowledgeBase.mock.funcCreateKnowledgeBase != nil {
 		mmCreateKnowledgeBase.mock.t.Fatalf("RepositoryMock.CreateKnowledgeBase mock is already set by Set")
 	}
@@ -3568,7 +3568,7 @@ func (mmCreateKnowledgeBase *mRepositoryMockCreateKnowledgeBase) ExpectExternalS
 }
 
 // Inspect accepts an inspector function that has same arguments as the Repository.CreateKnowledgeBase
-func (mmCreateKnowledgeBase *mRepositoryMockCreateKnowledgeBase) Inspect(f func(ctx context.Context, kb mm_repository.KnowledgeBaseModel, externalService func(kbUID types.KBUIDType) error)) *mRepositoryMockCreateKnowledgeBase {
+func (mmCreateKnowledgeBase *mRepositoryMockCreateKnowledgeBase) Inspect(f func(ctx context.Context, kb mm_repository.KnowledgeBaseModel, externalService func(kbUID types.KBUIDType, collectionUID types.KBUIDType) error)) *mRepositoryMockCreateKnowledgeBase {
 	if mmCreateKnowledgeBase.mock.inspectFuncCreateKnowledgeBase != nil {
 		mmCreateKnowledgeBase.mock.t.Fatalf("Inspect function is already set for RepositoryMock.CreateKnowledgeBase")
 	}
@@ -3593,7 +3593,7 @@ func (mmCreateKnowledgeBase *mRepositoryMockCreateKnowledgeBase) Return(kp1 *mm_
 }
 
 // Set uses given function f to mock the Repository.CreateKnowledgeBase method
-func (mmCreateKnowledgeBase *mRepositoryMockCreateKnowledgeBase) Set(f func(ctx context.Context, kb mm_repository.KnowledgeBaseModel, externalService func(kbUID types.KBUIDType) error) (kp1 *mm_repository.KnowledgeBaseModel, err error)) *RepositoryMock {
+func (mmCreateKnowledgeBase *mRepositoryMockCreateKnowledgeBase) Set(f func(ctx context.Context, kb mm_repository.KnowledgeBaseModel, externalService func(kbUID types.KBUIDType, collectionUID types.KBUIDType) error) (kp1 *mm_repository.KnowledgeBaseModel, err error)) *RepositoryMock {
 	if mmCreateKnowledgeBase.defaultExpectation != nil {
 		mmCreateKnowledgeBase.mock.t.Fatalf("Default expectation is already set for the Repository.CreateKnowledgeBase method")
 	}
@@ -3609,7 +3609,7 @@ func (mmCreateKnowledgeBase *mRepositoryMockCreateKnowledgeBase) Set(f func(ctx 
 
 // When sets expectation for the Repository.CreateKnowledgeBase which will trigger the result defined by the following
 // Then helper
-func (mmCreateKnowledgeBase *mRepositoryMockCreateKnowledgeBase) When(ctx context.Context, kb mm_repository.KnowledgeBaseModel, externalService func(kbUID types.KBUIDType) error) *RepositoryMockCreateKnowledgeBaseExpectation {
+func (mmCreateKnowledgeBase *mRepositoryMockCreateKnowledgeBase) When(ctx context.Context, kb mm_repository.KnowledgeBaseModel, externalService func(kbUID types.KBUIDType, collectionUID types.KBUIDType) error) *RepositoryMockCreateKnowledgeBaseExpectation {
 	if mmCreateKnowledgeBase.mock.funcCreateKnowledgeBase != nil {
 		mmCreateKnowledgeBase.mock.t.Fatalf("RepositoryMock.CreateKnowledgeBase mock is already set by Set")
 	}
@@ -3651,7 +3651,7 @@ func (mmCreateKnowledgeBase *mRepositoryMockCreateKnowledgeBase) invocationsDone
 }
 
 // CreateKnowledgeBase implements mm_repository.Repository
-func (mmCreateKnowledgeBase *RepositoryMock) CreateKnowledgeBase(ctx context.Context, kb mm_repository.KnowledgeBaseModel, externalService func(kbUID types.KBUIDType) error) (kp1 *mm_repository.KnowledgeBaseModel, err error) {
+func (mmCreateKnowledgeBase *RepositoryMock) CreateKnowledgeBase(ctx context.Context, kb mm_repository.KnowledgeBaseModel, externalService func(kbUID types.KBUIDType, collectionUID types.KBUIDType) error) (kp1 *mm_repository.KnowledgeBaseModel, err error) {
 	mm_atomic.AddUint64(&mmCreateKnowledgeBase.beforeCreateKnowledgeBaseCounter, 1)
 	defer mm_atomic.AddUint64(&mmCreateKnowledgeBase.afterCreateKnowledgeBaseCounter, 1)
 
@@ -4531,7 +4531,7 @@ type RepositoryMockCreateStagingKnowledgeBaseParams struct {
 	ctx             context.Context
 	original        *mm_repository.KnowledgeBaseModel
 	newSystemUID    *types.SystemUIDType
-	externalService func(kbUID types.KBUIDType) error
+	externalService func(kbUID types.KBUIDType, collectionUID types.KBUIDType) error
 }
 
 // RepositoryMockCreateStagingKnowledgeBaseParamPtrs contains pointers to parameters of the Repository.CreateStagingKnowledgeBase
@@ -4539,7 +4539,7 @@ type RepositoryMockCreateStagingKnowledgeBaseParamPtrs struct {
 	ctx             *context.Context
 	original        **mm_repository.KnowledgeBaseModel
 	newSystemUID    **types.SystemUIDType
-	externalService *func(kbUID types.KBUIDType) error
+	externalService *func(kbUID types.KBUIDType, collectionUID types.KBUIDType) error
 }
 
 // RepositoryMockCreateStagingKnowledgeBaseResults contains results of the Repository.CreateStagingKnowledgeBase
@@ -4568,7 +4568,7 @@ func (mmCreateStagingKnowledgeBase *mRepositoryMockCreateStagingKnowledgeBase) O
 }
 
 // Expect sets up expected params for Repository.CreateStagingKnowledgeBase
-func (mmCreateStagingKnowledgeBase *mRepositoryMockCreateStagingKnowledgeBase) Expect(ctx context.Context, original *mm_repository.KnowledgeBaseModel, newSystemUID *types.SystemUIDType, externalService func(kbUID types.KBUIDType) error) *mRepositoryMockCreateStagingKnowledgeBase {
+func (mmCreateStagingKnowledgeBase *mRepositoryMockCreateStagingKnowledgeBase) Expect(ctx context.Context, original *mm_repository.KnowledgeBaseModel, newSystemUID *types.SystemUIDType, externalService func(kbUID types.KBUIDType, collectionUID types.KBUIDType) error) *mRepositoryMockCreateStagingKnowledgeBase {
 	if mmCreateStagingKnowledgeBase.mock.funcCreateStagingKnowledgeBase != nil {
 		mmCreateStagingKnowledgeBase.mock.t.Fatalf("RepositoryMock.CreateStagingKnowledgeBase mock is already set by Set")
 	}
@@ -4662,7 +4662,7 @@ func (mmCreateStagingKnowledgeBase *mRepositoryMockCreateStagingKnowledgeBase) E
 }
 
 // ExpectExternalServiceParam4 sets up expected param externalService for Repository.CreateStagingKnowledgeBase
-func (mmCreateStagingKnowledgeBase *mRepositoryMockCreateStagingKnowledgeBase) ExpectExternalServiceParam4(externalService func(kbUID types.KBUIDType) error) *mRepositoryMockCreateStagingKnowledgeBase {
+func (mmCreateStagingKnowledgeBase *mRepositoryMockCreateStagingKnowledgeBase) ExpectExternalServiceParam4(externalService func(kbUID types.KBUIDType, collectionUID types.KBUIDType) error) *mRepositoryMockCreateStagingKnowledgeBase {
 	if mmCreateStagingKnowledgeBase.mock.funcCreateStagingKnowledgeBase != nil {
 		mmCreateStagingKnowledgeBase.mock.t.Fatalf("RepositoryMock.CreateStagingKnowledgeBase mock is already set by Set")
 	}
@@ -4685,7 +4685,7 @@ func (mmCreateStagingKnowledgeBase *mRepositoryMockCreateStagingKnowledgeBase) E
 }
 
 // Inspect accepts an inspector function that has same arguments as the Repository.CreateStagingKnowledgeBase
-func (mmCreateStagingKnowledgeBase *mRepositoryMockCreateStagingKnowledgeBase) Inspect(f func(ctx context.Context, original *mm_repository.KnowledgeBaseModel, newSystemUID *types.SystemUIDType, externalService func(kbUID types.KBUIDType) error)) *mRepositoryMockCreateStagingKnowledgeBase {
+func (mmCreateStagingKnowledgeBase *mRepositoryMockCreateStagingKnowledgeBase) Inspect(f func(ctx context.Context, original *mm_repository.KnowledgeBaseModel, newSystemUID *types.SystemUIDType, externalService func(kbUID types.KBUIDType, collectionUID types.KBUIDType) error)) *mRepositoryMockCreateStagingKnowledgeBase {
 	if mmCreateStagingKnowledgeBase.mock.inspectFuncCreateStagingKnowledgeBase != nil {
 		mmCreateStagingKnowledgeBase.mock.t.Fatalf("Inspect function is already set for RepositoryMock.CreateStagingKnowledgeBase")
 	}
@@ -4710,7 +4710,7 @@ func (mmCreateStagingKnowledgeBase *mRepositoryMockCreateStagingKnowledgeBase) R
 }
 
 // Set uses given function f to mock the Repository.CreateStagingKnowledgeBase method
-func (mmCreateStagingKnowledgeBase *mRepositoryMockCreateStagingKnowledgeBase) Set(f func(ctx context.Context, original *mm_repository.KnowledgeBaseModel, newSystemUID *types.SystemUIDType, externalService func(kbUID types.KBUIDType) error) (kp1 *mm_repository.KnowledgeBaseModel, err error)) *RepositoryMock {
+func (mmCreateStagingKnowledgeBase *mRepositoryMockCreateStagingKnowledgeBase) Set(f func(ctx context.Context, original *mm_repository.KnowledgeBaseModel, newSystemUID *types.SystemUIDType, externalService func(kbUID types.KBUIDType, collectionUID types.KBUIDType) error) (kp1 *mm_repository.KnowledgeBaseModel, err error)) *RepositoryMock {
 	if mmCreateStagingKnowledgeBase.defaultExpectation != nil {
 		mmCreateStagingKnowledgeBase.mock.t.Fatalf("Default expectation is already set for the Repository.CreateStagingKnowledgeBase method")
 	}
@@ -4726,7 +4726,7 @@ func (mmCreateStagingKnowledgeBase *mRepositoryMockCreateStagingKnowledgeBase) S
 
 // When sets expectation for the Repository.CreateStagingKnowledgeBase which will trigger the result defined by the following
 // Then helper
-func (mmCreateStagingKnowledgeBase *mRepositoryMockCreateStagingKnowledgeBase) When(ctx context.Context, original *mm_repository.KnowledgeBaseModel, newSystemUID *types.SystemUIDType, externalService func(kbUID types.KBUIDType) error) *RepositoryMockCreateStagingKnowledgeBaseExpectation {
+func (mmCreateStagingKnowledgeBase *mRepositoryMockCreateStagingKnowledgeBase) When(ctx context.Context, original *mm_repository.KnowledgeBaseModel, newSystemUID *types.SystemUIDType, externalService func(kbUID types.KBUIDType, collectionUID types.KBUIDType) error) *RepositoryMockCreateStagingKnowledgeBaseExpectation {
 	if mmCreateStagingKnowledgeBase.mock.funcCreateStagingKnowledgeBase != nil {
 		mmCreateStagingKnowledgeBase.mock.t.Fatalf("RepositoryMock.CreateStagingKnowledgeBase mock is already set by Set")
 	}
@@ -4768,7 +4768,7 @@ func (mmCreateStagingKnowledgeBase *mRepositoryMockCreateStagingKnowledgeBase) i
 }
 
 // CreateStagingKnowledgeBase implements mm_repository.Repository
-func (mmCreateStagingKnowledgeBase *RepositoryMock) CreateStagingKnowledgeBase(ctx context.Context, original *mm_repository.KnowledgeBaseModel, newSystemUID *types.SystemUIDType, externalService func(kbUID types.KBUIDType) error) (kp1 *mm_repository.KnowledgeBaseModel, err error) {
+func (mmCreateStagingKnowledgeBase *RepositoryMock) CreateStagingKnowledgeBase(ctx context.Context, original *mm_repository.KnowledgeBaseModel, newSystemUID *types.SystemUIDType, externalService func(kbUID types.KBUIDType, collectionUID types.KBUIDType) error) (kp1 *mm_repository.KnowledgeBaseModel, err error) {
 	mm_atomic.AddUint64(&mmCreateStagingKnowledgeBase.beforeCreateStagingKnowledgeBaseCounter, 1)
 	defer mm_atomic.AddUint64(&mmCreateStagingKnowledgeBase.afterCreateStagingKnowledgeBaseCounter, 1)
 

@@ -12,6 +12,7 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/instill-ai/artifact-backend/pkg/repository"
+	"github.com/instill-ai/artifact-backend/pkg/types"
 	"github.com/instill-ai/artifact-backend/pkg/worker/mock"
 )
 
@@ -131,8 +132,13 @@ func TestCleanupFileWorkflow_Success(t *testing.T) {
 	mockRepository.HardDeleteTextChunksByKBFileUIDMock.Return(nil)
 
 	// Mock for DeleteEmbeddingsFromVectorDBActivity and DeleteEmbeddingRecordsActivity
+	activeCollectionUID := types.KBUIDType(uuid.Must(uuid.NewV4()))
 	mockRepository.ListEmbeddingsByKBFileUIDMock.Return([]repository.EmbeddingModel{
 		{UID: uuid.Must(uuid.NewV4()), KBUID: kbUID},
+	}, nil)
+	mockRepository.GetKnowledgeBaseByUIDMock.Return(&repository.KnowledgeBaseModel{
+		UID:                 types.KBUIDType(kbUID),
+		ActiveCollectionUID: activeCollectionUID,
 	}, nil)
 	mockRepository.DeleteEmbeddingsWithFileUIDMock.Return(nil)
 	mockRepository.HardDeleteEmbeddingsByKBFileUIDMock.Return(nil)
@@ -235,7 +241,7 @@ func TestCleanupKnowledgeBaseWorkflow_Success(t *testing.T) {
 	mockRepository.GetMinIOStorageMock.Return(mockStorage)
 
 	// Mock for DropVectorDBCollectionActivity
-	mockRepository.GetKnowledgeBaseByUIDMock.Return(&repository.KnowledgeBaseModel{
+	mockRepository.GetKnowledgeBaseByUIDIncludingDeletedMock.Return(&repository.KnowledgeBaseModel{
 		UID:                 kbUID,
 		ActiveCollectionUID: activeCollectionUID,
 	}, nil)
@@ -295,7 +301,7 @@ func TestCleanupKnowledgeBaseWorkflow_VectorDBError(t *testing.T) {
 	mockRepository.GetMinIOStorageMock.Return(mockStorage)
 
 	// Mock for DropVectorDBCollectionActivity (fails but is handled)
-	mockRepository.GetKnowledgeBaseByUIDMock.Return(&repository.KnowledgeBaseModel{
+	mockRepository.GetKnowledgeBaseByUIDIncludingDeletedMock.Return(&repository.KnowledgeBaseModel{
 		UID:                 kbUID,
 		ActiveCollectionUID: activeCollectionUID,
 	}, nil)

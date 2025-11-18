@@ -18,6 +18,7 @@
  * Phase 3: Verify staging KB uses new config, production uses old config
  * Phase 4: Wait for update completion and verify swap
  * Phase 4.5: Verify Gemini conversion preserves position data after reprocessing
+ * Phase 4.6: Verify staging KB cleanup (soft-deleted, update_status cleared)
  * Phase 5: Upload multi-page PDF files during retention (dual processing)
  * Phase 5.5: Verify Gemini AI route generates position data correctly
  * Phase 6: Verify dual processing used different configs
@@ -32,6 +33,11 @@
  * - Dual processing uses correct config for each KB
  * - Files uploaded during retention work correctly after rollback
  * - Retention expiry cleans up rollback KB properly
+ * - Staging KB cleanup clears update_status before soft-deletion
+ * - Staging KB resources fully cleaned after successful update
+ * - New KBs have unique active_collection_uid != KB UID
+ * - Rollback KB cleanup clears update_status before soft-deletion
+ * - Rollback KB cleanup verification runs after cleanup
  *
  * POSITION DATA VALIDATIONS:
  * - OpenAI pipeline generates position_data with PageDelimiters
@@ -303,6 +309,21 @@ export default function (data) {
                 "Phase 1: KB1 has OpenAI model_family": (c) => c && c.embeddingConfig && c.embeddingConfig.modelFamily === "openai",
                 "Phase 1: KB1 has 1536 dimensionality": (c) => c && c.embeddingConfig && c.embeddingConfig.dimensionality === 1536,
             });
+
+            // Verify active_collection_uid is unique
+            const kb1CollectionCheck = helper.safeQuery(
+                `SELECT uid, active_collection_uid FROM knowledge_base WHERE uid = $1`,
+                kb1.uid
+            );
+            if (kb1CollectionCheck && kb1CollectionCheck.length > 0) {
+                const collectionUID = kb1CollectionCheck[0].active_collection_uid;
+                check({ collectionUID, kbUID: kb1.uid }, {
+                    "Phase 1: KB1 active_collection_uid is not null": () => collectionUID !== null,
+                    "Phase 1: KB1 active_collection_uid != KB UID": () =>
+                        collectionUID !== kb1.uid && collectionUID !== kb1CollectionCheck[0].uid,
+                });
+                console.log(`KB1 collection UID: ${collectionUID} (different from KB UID: ${kb1.uid})`);
+            }
 
             if (!kb1 || !kb1.embeddingConfig) {
                 console.error(`Phase 1: KB1 missing embedding config. Knowledge base: ${JSON.stringify(kb1)}`);
@@ -1009,6 +1030,142 @@ export default function (data) {
             }
 
             console.log("Phase 4.5: Position data verification complete");
+
+            // ====================================================================
+            // Phase 4.6: Verify Staging KB Cleanup
+            // ====================================================================
+            console.log("\n=== Phase 4.6: Verifying staging KB cleanup was complete ===");
+
+            // After successful update, staging KBs should be soft-deleted and update_status cleared
+            // Poll for up to 30 seconds to ensure cleanup activity has completed
+            // (cleanup may take longer if there are files being processed)
+            let kb1CleanupVerified = false;
+            let kb2CleanupVerified = false;
+
+            for (let i = 0; i < 30 && (!kb1CleanupVerified || !kb2CleanupVerified); i++) {
+                if (!kb1CleanupVerified) {
+                    const stagingKB1Check = helper.safeQuery(
+                        `SELECT delete_time, update_status, update_workflow_id
+                         FROM knowledge_base
+                         WHERE parent_kb_uid = $1 AND staging = true AND 'staging' = ANY(tags)`,
+                        data.kb1_initial.knowledgeBaseUid
+                    );
+
+                    if (stagingKB1Check && stagingKB1Check.length > 0) {
+                        const stagingKB = stagingKB1Check[0];
+                        const isSoftDeleted = stagingKB.delete_time !== null;
+                        const statusCleared = stagingKB.update_status === "" || stagingKB.update_status === null;
+
+                        if (i % 5 === 0 || (isSoftDeleted && statusCleared)) {
+                            console.log(`Staging KB1 cleanup check [${i + 1}s]: delete_time=${isSoftDeleted ? 'SET' : 'NULL'}, update_status="${stagingKB.update_status}"`);
+                        }
+
+                        if (isSoftDeleted && statusCleared) {
+                            kb1CleanupVerified = true;
+                            console.log(`✓ Staging KB1 cleanup verified after ${i + 1}s`);
+                        }
+                    } else {
+                        if (i % 5 === 0) {
+                            console.log(`Staging KB1 cleanup check [${i + 1}s]: not found in database`);
+                        }
+                    }
+                }
+
+                if (!kb2CleanupVerified) {
+                    const stagingKB2Check = helper.safeQuery(
+                        `SELECT delete_time, update_status, update_workflow_id
+                         FROM knowledge_base
+                         WHERE parent_kb_uid = $1 AND staging = true AND 'staging' = ANY(tags)`,
+                        data.kb2_initial.knowledgeBaseUid
+                    );
+
+                    if (stagingKB2Check && stagingKB2Check.length > 0) {
+                        const stagingKB = stagingKB2Check[0];
+                        const isSoftDeleted = stagingKB.delete_time !== null;
+                        const statusCleared = stagingKB.update_status === "" || stagingKB.update_status === null;
+
+                        if (i % 5 === 0 || (isSoftDeleted && statusCleared)) {
+                            console.log(`Staging KB2 cleanup check [${i + 1}s]: delete_time=${isSoftDeleted ? 'SET' : 'NULL'}, update_status="${stagingKB.update_status}"`);
+                        }
+
+                        if (isSoftDeleted && statusCleared) {
+                            kb2CleanupVerified = true;
+                            console.log(`✓ Staging KB2 cleanup verified after ${i + 1}s`);
+                        }
+                    } else {
+                        if (i % 5 === 0) {
+                            console.log(`Staging KB2 cleanup check [${i + 1}s]: not found in database`);
+                        }
+                    }
+                }
+
+                if (!kb1CleanupVerified || !kb2CleanupVerified) {
+                    sleep(1);
+                }
+            }
+
+            // Now perform final verification with proper checks
+            const stagingKB1Check = helper.safeQuery(
+                `SELECT delete_time, update_status, update_workflow_id
+                 FROM knowledge_base
+                 WHERE parent_kb_uid = $1 AND staging = true AND 'staging' = ANY(tags)`,
+                data.kb1_initial.knowledgeBaseUid
+            );
+
+            if (stagingKB1Check && stagingKB1Check.length > 0) {
+                const stagingKB = stagingKB1Check[0];
+                const isSoftDeleted = stagingKB.delete_time !== null;
+                const statusCleared = stagingKB.update_status === "" || stagingKB.update_status === null;
+
+                console.log(`FINAL CHECK KB1: delete_time=${isSoftDeleted ? 'SET' : 'NULL'}, update_status="${stagingKB.update_status}"`);
+
+                check(stagingKB, {
+                    "Phase 4.6: Staging KB1 is soft-deleted": () => isSoftDeleted,
+                    "Phase 4.6: Staging KB1 update_status cleared": () => statusCleared,
+                    "Phase 4.6: Staging KB1 update_workflow_id cleared": () =>
+                        stagingKB.update_workflow_id === "" || stagingKB.update_workflow_id === null,
+                });
+
+                if (isSoftDeleted && statusCleared) {
+                    console.log("✓ Staging KB1 cleanup PASSED: soft-deleted with cleared status");
+                } else {
+                    console.error(`✗ Staging KB1 cleanup FAILED: delete_time=${isSoftDeleted ? 'SET' : 'NULL'}, status="${stagingKB.update_status}"`);
+                }
+            } else {
+                console.log("Staging KB1 not found (may be hard-deleted - this is acceptable)");
+            }
+
+            const stagingKB2Check = helper.safeQuery(
+                `SELECT delete_time, update_status, update_workflow_id
+                 FROM knowledge_base
+                 WHERE parent_kb_uid = $1 AND staging = true AND 'staging' = ANY(tags)`,
+                data.kb2_initial.knowledgeBaseUid
+            );
+
+            if (stagingKB2Check && stagingKB2Check.length > 0) {
+                const stagingKB = stagingKB2Check[0];
+                const isSoftDeleted = stagingKB.delete_time !== null;
+                const statusCleared = stagingKB.update_status === "" || stagingKB.update_status === null;
+
+                console.log(`FINAL CHECK KB2: delete_time=${isSoftDeleted ? 'SET' : 'NULL'}, update_status="${stagingKB.update_status}"`);
+
+                check(stagingKB, {
+                    "Phase 4.6: Staging KB2 is soft-deleted": () => isSoftDeleted,
+                    "Phase 4.6: Staging KB2 update_status cleared": () => statusCleared,
+                    "Phase 4.6: Staging KB2 update_workflow_id cleared": () =>
+                        stagingKB.update_workflow_id === "" || stagingKB.update_workflow_id === null,
+                });
+
+                if (isSoftDeleted && statusCleared) {
+                    console.log("✓ Staging KB2 cleanup PASSED: soft-deleted with cleared status");
+                } else {
+                    console.error(`✗ Staging KB2 cleanup FAILED: delete_time=${isSoftDeleted ? 'SET' : 'NULL'}, status="${stagingKB.update_status}"`);
+                }
+            } else {
+                console.log("Staging KB2 not found (may be hard-deleted - this is acceptable)");
+            }
+
+            console.log("Phase 4.6: Staging KB cleanup verification complete");
         });
 
         // ====================================================================
@@ -1666,6 +1823,19 @@ export default function (data) {
 
             // Wait for cleanup to complete
             if (data.kb2_rollback) {
+                // BEFORE cleanup completes, verify rollback KB status will be cleared
+                console.log("Verifying rollback KB status before cleanup completes...");
+                const rollbackKBPreCleanup = helper.safeQuery(
+                    `SELECT uid, delete_time, update_status, update_workflow_id
+                     FROM knowledge_base
+                     WHERE uid = $1`,
+                    data.kb2_rollback.kbUid
+                );
+
+                if (rollbackKBPreCleanup && rollbackKBPreCleanup.length > 0) {
+                    console.log(`Rollback KB2 pre-cleanup state: update_status="${rollbackKBPreCleanup[0].update_status}", delete_time=${rollbackKBPreCleanup[0].delete_time}`);
+                }
+
                 const cleanedUp = helper.pollRollbackKBCleanup(
                     data.kb2_rollback.knowledgeBaseId,
                     data.kb2_rollback.kbUid,
@@ -1676,6 +1846,30 @@ export default function (data) {
                 check({ cleanedUp }, {
                     "Phase 9: Rollback KB2 cleaned up after expiry": () => cleanedUp === true,
                 });
+
+                // AFTER cleanup, verify status was cleared
+                if (cleanedUp) {
+                    const rollbackKBPostCleanup = helper.safeQuery(
+                        `SELECT uid, delete_time, update_status, update_workflow_id
+                         FROM knowledge_base
+                         WHERE uid = $1`,
+                        data.kb2_rollback.kbUid
+                    );
+
+                    if (rollbackKBPostCleanup && rollbackKBPostCleanup.length > 0) {
+                        const rollbackKB = rollbackKBPostCleanup[0];
+                        check(rollbackKB, {
+                            "Phase 9: Rollback KB2 is soft-deleted": () => rollbackKB.delete_time !== null,
+                            "Phase 9: Rollback KB2 update_status cleared": () =>
+                                rollbackKB.update_status === "" || rollbackKB.update_status === null,
+                            "Phase 9: Rollback KB2 update_workflow_id cleared": () =>
+                                rollbackKB.update_workflow_id === "" || rollbackKB.update_workflow_id === null,
+                        });
+                        console.log("Rollback KB2 cleanup verified: soft-deleted with cleared status");
+                    } else {
+                        console.log("Rollback KB2 not found after cleanup (may be hard-deleted - acceptable)");
+                    }
+                }
 
                 // Verify production KB2 still works normally
                 const prodKB2 = helper.getKnowledgeBaseByIdAndOwner(data.kb2_initial.knowledgeBaseId, data.expectedOwner.uid);

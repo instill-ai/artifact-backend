@@ -55,7 +55,7 @@ func IsDualProcessingNeeded(status string) bool {
 
 // KnowledgeBase interface defines the methods for the knowledge base repository
 type KnowledgeBase interface {
-	CreateKnowledgeBase(ctx context.Context, kb KnowledgeBaseModel, externalService func(kbUID types.KBUIDType) error) (*KnowledgeBaseModel, error)
+	CreateKnowledgeBase(ctx context.Context, kb KnowledgeBaseModel, externalService func(kbUID types.KBUIDType, collectionUID types.KBUIDType) error) (*KnowledgeBaseModel, error)
 	ListKnowledgeBases(ctx context.Context, ownerUID string) ([]KnowledgeBaseModel, error)
 	ListKnowledgeBasesByType(ctx context.Context, ownerUID string, kbType artifactpb.KnowledgeBaseType) ([]KnowledgeBaseModel, error)
 	ListKnowledgeBasesByTypeWithConfig(ctx context.Context, ownerUID string, kbType artifactpb.KnowledgeBaseType) ([]KnowledgeBaseWithConfig, error)
@@ -91,7 +91,7 @@ type KnowledgeBase interface {
 	// Returns a DualProcessingTarget with IsNeeded=false if no dual processing is needed
 	GetDualProcessingTarget(ctx context.Context, productionKB *KnowledgeBaseModel) (*DualProcessingTarget, error)
 	// RAG update methods
-	CreateStagingKnowledgeBase(ctx context.Context, original *KnowledgeBaseModel, newSystemUID *types.SystemUIDType, externalService func(kbUID types.KBUIDType) error) (*KnowledgeBaseModel, error)
+	CreateStagingKnowledgeBase(ctx context.Context, original *KnowledgeBaseModel, newSystemUID *types.SystemUIDType, externalService func(kbUID types.KBUIDType, collectionUID types.KBUIDType) error) (*KnowledgeBaseModel, error)
 	// ListKnowledgeBasesForUpdate finds KBs ready for the next update cycle
 	ListKnowledgeBasesForUpdate(ctx context.Context, tagFilters []string, knowledgeBaseIDs []string) ([]KnowledgeBaseModel, error)
 	// ListKnowledgeBasesByUpdateStatus lists all KBs with a specific update_status
@@ -294,7 +294,7 @@ func formatPostgresArray(tags []string) string {
 }
 
 // CreateKnowledgeBase inserts a new KnowledgeBaseModel record into the database.
-func (r *repository) CreateKnowledgeBase(ctx context.Context, kb KnowledgeBaseModel, externalService func(kbUID types.KBUIDType) error) (*KnowledgeBaseModel, error) {
+func (r *repository) CreateKnowledgeBase(ctx context.Context, kb KnowledgeBaseModel, externalService func(kbUID types.KBUIDType, collectionUID types.KBUIDType) error) (*KnowledgeBaseModel, error) {
 	// Start a database transaction
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// check if the name is unique in the owner's knowledge bases
@@ -315,18 +315,20 @@ func (r *repository) CreateKnowledgeBase(ctx context.Context, kb KnowledgeBaseMo
 		}
 
 		// After Create(), kb.UID is now set by the database
-		// If active_collection_uid is not set (uuid.Nil), default it to the KB's own UID (legacy behavior)
-		// This maintains backward compatibility for existing code paths
+		// ALWAYS generate a unique UUID for active_collection_uid (NEVER use KB UID)
+		// This prevents confusion between KB identity and collection identity
 		if kb.ActiveCollectionUID == uuid.Nil {
-			kb.ActiveCollectionUID = kb.UID
-			if err := tx.Model(&KnowledgeBaseModel{}).Where("uid = ?", kb.UID).Update("active_collection_uid", kb.UID).Error; err != nil {
+			newCollectionUID := uuid.Must(uuid.NewV4())
+			if err := tx.Model(&KnowledgeBaseModel{}).Where("uid = ?", kb.UID).Update("active_collection_uid", newCollectionUID).Error; err != nil {
 				return fmt.Errorf("setting active_collection_uid: %w", err)
 			}
+			kb.ActiveCollectionUID = newCollectionUID
 		}
 
-		// Call the external service
+		// Call the external service with both KB UID and collection UID
+		// CRITICAL: Pass active_collection_uid directly (don't query - we're in a transaction!)
 		if externalService != nil {
-			if err := externalService(kb.UID); err != nil {
+			if err := externalService(kb.UID, kb.ActiveCollectionUID); err != nil {
 				return err
 			}
 		}
@@ -957,7 +959,7 @@ func (r *repository) GetDualProcessingTarget(ctx context.Context, productionKB *
 
 // CreateStagingKnowledgeBase creates a staging KB for update with a new UID
 // If newSystemUID is provided, uses it; otherwise uses original's system_uid
-func (r *repository) CreateStagingKnowledgeBase(ctx context.Context, original *KnowledgeBaseModel, newSystemUID *types.SystemUIDType, externalService func(kbUID types.KBUIDType) error) (*KnowledgeBaseModel, error) {
+func (r *repository) CreateStagingKnowledgeBase(ctx context.Context, original *KnowledgeBaseModel, newSystemUID *types.SystemUIDType, externalService func(kbUID types.KBUIDType, collectionUID types.KBUIDType) error) (*KnowledgeBaseModel, error) {
 	now := time.Now()
 
 	// Use new system_uid if provided, otherwise use original's system_uid
