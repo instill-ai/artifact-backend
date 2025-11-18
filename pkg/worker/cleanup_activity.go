@@ -31,8 +31,9 @@ import (
 // - DeleteKBTextChunkRecordsActivity - Deletes text chunk records for a knowledge base
 // - DeleteKBEmbeddingRecordsActivity - Deletes embedding records for a knowledge base
 // - PurgeKBACLActivity - Removes ACL permissions for a knowledge base
-// - SoftDeleteKBRecordActivity - Soft-deletes knowledge base record in database
+// - SoftDeleteKBRecordActivity - Soft-deletes knowledge base record (clears update_status first)
 // - GetInProgressFileCountActivity - Checks for in-progress files before cleanup
+// - GetKBCollectionUIDActivity - Retrieves active_collection_uid for verification
 // - ClearProductionKBRetentionActivity - Clears rollback retention timestamp on production KB
 
 // Activity error type constants
@@ -50,6 +51,7 @@ const (
 	purgeKBACLActivityError               = "PurgeKBACLActivity"
 	softDeleteKBRecordActivityError       = "SoftDeleteKBRecordActivity"
 	getInProgressFileCountActivityError   = "GetInProgressFileCountActivity"
+	getKBCollectionUIDActivityError       = "GetKBCollectionUIDActivity"
 	cleanupExpiredGCSFilesActivityError   = "CleanupExpiredGCSFilesActivity"
 )
 
@@ -251,7 +253,25 @@ func (w *Worker) DeleteEmbeddingsFromVectorDBActivity(ctx context.Context, param
 
 	// Get KB UID from the first embedding (all embeddings have the same KB UID)
 	kbUID := embeddings[0].KBUID
-	collection := constant.KBCollectionName(kbUID)
+
+	// CRITICAL: Query KB to get active_collection_uid (not kbUID) for the Milvus collection
+	kb, err := w.repository.GetKnowledgeBaseByUID(ctx, kbUID)
+	if err != nil {
+		// If KB is already deleted, collection is likely already cleaned up
+		if strings.Contains(err.Error(), "not found") {
+			w.log.Info("DeleteEmbeddingsFromVectorDBActivity: KB not found (already cleaned up)",
+				zap.String("kbUID", kbUID.String()))
+			return nil
+		}
+		err = errorsx.AddMessage(err, "Unable to fetch knowledge base. Please try again.")
+		return temporal.NewApplicationErrorWithCause(
+			errorsx.MessageOrErr(err),
+			deleteEmbeddingsActivityError,
+			err,
+		)
+	}
+
+	collection := constant.KBCollectionName(kb.ActiveCollectionUID)
 
 	// Delete from vector db
 	err = w.repository.DeleteEmbeddingsWithFileUID(ctx, collection, param.FileUID)
@@ -358,29 +378,36 @@ func (w *Worker) DeleteKBFilesFromMinIOActivity(ctx context.Context, param *Dele
 }
 
 // DropVectorDBCollectionActivity drops the vector db collection for a knowledge base
-// IMPORTANT: With collection versioning, we must check if the collection is still in use
-// by other KBs before dropping it (e.g., during rollback, old and new KBs may share collections)
+// IMPORTANT: Must verify the collection is not in use by other KBs before dropping
+// (e.g., race condition protection during concurrent operations, or edge cases where
+// multiple KBs might temporarily reference the same collection during transitions)
 func (w *Worker) DropVectorDBCollectionActivity(ctx context.Context, param *DropVectorDBCollectionActivityParam) error {
 	w.log.Info("DropVectorDBCollectionActivity: Preparing to drop collection",
 		zap.String("kbUID", param.KBUID.String()))
 
 	// Get the KB to find its active collection
-	kb, err := w.repository.GetKnowledgeBaseByUID(ctx, param.KBUID)
+	// CRITICAL: Must include soft-deleted KBs because the KB may be soft-deleted before cleanup workflow runs
+	kb, err := w.repository.GetKnowledgeBaseByUIDIncludingDeleted(ctx, param.KBUID)
 	if err != nil {
-		w.log.Warn("DropVectorDBCollectionActivity: KB not found (may have been deleted)",
+		w.log.Warn("DropVectorDBCollectionActivity: KB not found in database (including soft-deleted)",
 			zap.String("kbUID", param.KBUID.String()),
 			zap.Error(err))
-		// KB not found - try to drop collection by KB UID anyway (legacy behavior)
-		collection := constant.KBCollectionName(param.KBUID)
-		_ = w.repository.DropCollection(ctx, collection)
 		return nil
 	}
 
-	// Determine which collection this KB was using
-	collectionUID := param.KBUID
-	if kb.ActiveCollectionUID != uuid.Nil {
-		collectionUID = kb.ActiveCollectionUID
+	// CRITICAL: active_collection_uid must ALWAYS be set and NEVER be nil after migration 000044
+	// No fallback to param.KBUID - that would drop the wrong collection
+	if kb.ActiveCollectionUID == uuid.Nil {
+		w.log.Error("DropVectorDBCollectionActivity: KB has nil active_collection_uid, cannot drop collection",
+			zap.String("kbUID", param.KBUID.String()))
+		return temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("KB has nil active_collection_uid: %s.", param.KBUID),
+			dropCollectionActivityError,
+			fmt.Errorf("nil active_collection_uid for KB %s", param.KBUID),
+		)
 	}
+
+	collectionUID := kb.ActiveCollectionUID
 
 	// CRITICAL: Check if this collection is explicitly protected (e.g., just swapped to production)
 	// This is deterministic and prevents race conditions with swap transaction commits
@@ -557,6 +584,28 @@ func (w *Worker) SoftDeleteKBRecordActivity(ctx context.Context, param *SoftDele
 		return nil
 	}
 
+	// CRITICAL: Clear update_status and update_workflow_id BEFORE soft-deletion
+	// This prevents rollback KBs from blocking future operations with stale update status
+	// Same fix as CleanupOldKnowledgeBaseActivity (for staging KBs)
+	if kb.UpdateStatus != "" || kb.UpdateWorkflowID != "" {
+		w.log.Info("SoftDeleteKBRecordActivity: Clearing update status before soft-deletion",
+			zap.String("kbUID", param.KBUID.String()),
+			zap.String("previousUpdateStatus", kb.UpdateStatus))
+
+		err = w.repository.UpdateKnowledgeBaseWithMap(ctx, kb.KBID, kb.Owner, map[string]interface{}{
+			"update_status":      "",
+			"update_workflow_id": "",
+		})
+		if err != nil {
+			err = errorsx.AddMessage(err, "Unable to clear update status before soft-deletion. Please try again.")
+			return temporal.NewApplicationErrorWithCause(
+				"Failed to clear update status before soft-deletion",
+				softDeleteKBRecordActivityError,
+				err,
+			)
+		}
+	}
+
 	// Soft delete the KB record
 	_, err = w.repository.DeleteKnowledgeBase(ctx, kb.Owner, kb.KBID)
 	if err != nil {
@@ -695,6 +744,39 @@ func (w *Worker) isWorkflowRunning(ctx context.Context, workflowID string) bool 
 	}
 
 	return false
+}
+
+// GetKBCollectionUIDActivityParam defines parameters for getting KB collection UID
+type GetKBCollectionUIDActivityParam struct {
+	KBUID types.KBUIDType
+}
+
+// GetKBCollectionUIDActivity retrieves the active_collection_uid for a KB
+// This is used by CleanupKnowledgeBaseWorkflow for verification
+func (w *Worker) GetKBCollectionUIDActivity(ctx context.Context, param *GetKBCollectionUIDActivityParam) (types.KBUIDType, error) {
+	w.log.Info("GetKBCollectionUIDActivity: Getting collection UID",
+		zap.String("kbUID", param.KBUID.String()))
+
+	// Get KB (including deleted ones for rollback KB verification)
+	kb, err := w.repository.GetKnowledgeBaseByUIDIncludingDeleted(ctx, param.KBUID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			w.log.Info("GetKBCollectionUIDActivity: KB not found",
+				zap.String("kbUID", param.KBUID.String()))
+			return types.KBUIDType{}, nil
+		}
+		return types.KBUIDType{}, temporal.NewApplicationErrorWithCause(
+			"Failed to get KB for collection UID retrieval",
+			getKBCollectionUIDActivityError,
+			err,
+		)
+	}
+
+	w.log.Info("GetKBCollectionUIDActivity: Collection UID retrieved",
+		zap.String("kbUID", param.KBUID.String()),
+		zap.String("collectionUID", kb.ActiveCollectionUID.String()))
+
+	return kb.ActiveCollectionUID, nil
 }
 
 // ClearProductionKBRetentionActivityParam defines parameters for clearing production KB retention

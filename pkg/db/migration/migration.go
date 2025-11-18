@@ -9,7 +9,7 @@ import (
 )
 
 // TargetSchemaVersion determines the database schema version.
-const TargetSchemaVersion uint = 43
+const TargetSchemaVersion uint = 44
 
 type migration interface {
 	Migrate() error

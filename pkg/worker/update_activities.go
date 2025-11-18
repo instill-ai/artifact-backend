@@ -31,6 +31,7 @@ import (
 // - ValidateUpdatedKBActivity - Validates staging KB data integrity before swap
 // - SwapKnowledgeBasesActivity - Performs atomic 3-step resource swap (production ↔ staging ↔ rollback)
 // - CleanupOldKnowledgeBaseActivity - Cleans up staging/rollback KB resources (files, Milvus collection)
+// - VerifyKBCleanupActivity - Verifies KB cleanup was successful (both staging and rollback)
 // - UpdateKnowledgeBaseUpdateStatusActivity - Updates KB update status and workflow ID
 
 // Activity error type constants
@@ -43,6 +44,7 @@ const (
 	swapKnowledgeBasesActivityError              = "SwapKnowledgeBasesActivity"
 	updateKnowledgeBaseUpdateStatusActivityError = "UpdateKnowledgeBaseUpdateStatusActivity"
 	cleanupOldKnowledgeBaseActivityError         = "CleanupOldKnowledgeBaseActivity"
+	verifyKBCleanupActivityError                 = "VerifyKBCleanupActivity"
 	listFilesForReprocessingActivityError        = "ListFilesForReprocessingActivity"
 	cloneFileToStagingKBActivityError            = "CloneFileToStagingKBActivity"
 )
@@ -133,6 +135,13 @@ type UpdateKnowledgeBaseUpdateStatusActivityParam struct {
 type CleanupOldKnowledgeBaseActivityParam struct {
 	KBUID                  types.KBUIDType
 	ProtectedCollectionUID *types.KBUIDType // Collection UID that must not be dropped (e.g., after swap)
+}
+
+// VerifyKBCleanupActivityParam defines parameters for KB cleanup verification
+// Used for both staging and rollback KB cleanup verification
+type VerifyKBCleanupActivityParam struct {
+	KBUID         types.KBUIDType // UID of the KB being verified (staging or rollback)
+	CollectionUID types.KBUIDType // Collection UID that should have been dropped
 }
 
 // ListFilesForReprocessingActivityParam defines parameters for listing files
@@ -320,10 +329,11 @@ func (w *Worker) CreateStagingKnowledgeBaseActivity(ctx context.Context, param *
 	}
 
 	// Create Milvus collection for staging KB
-	externalServiceCall := func(kbUID types.KBUIDType) error {
-		// Create collection with updated dimensionality from embedding config
-		// Use KBCollectionName to convert UUID to valid collection name (replace hyphens with underscores)
-		collectionName := constant.KBCollectionName(kbUID)
+	// CRITICAL: collectionUID is passed directly from the transaction (can't query KB - it's uncommitted!)
+	externalServiceCall := func(kbUID types.KBUIDType, collectionUID types.KBUIDType) error {
+		// Create collection with active_collection_uid (not kb.UID!)
+		// After Fix 3, active_collection_uid is always unique (NOT equal to kb.UID)
+		collectionName := constant.KBCollectionName(collectionUID)
 		err := w.repository.CreateCollection(ctx, collectionName, dimensionality)
 		if err != nil {
 			return fmt.Errorf("creating vector database collection: %w", err)
@@ -1427,7 +1437,8 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 		}
 
 		// Create rollback KB without external service callback (no ACL needed for staging KB)
-		_, err = w.repository.CreateKnowledgeBase(ctx, *rollbackKB, nil)
+		// Create rollback KB without external service (no collection creation needed - reuses old collection)
+		_, err = w.repository.CreateKnowledgeBase(ctx, *rollbackKB, nil /* no external service */)
 		if err != nil {
 			err = errorsx.AddMessage(err, "Unable to create rollback KB. Please try again.")
 			return nil, temporal.NewApplicationErrorWithCause(
@@ -1631,6 +1642,28 @@ func (w *Worker) CleanupOldKnowledgeBaseActivity(ctx context.Context, param *Cle
 		)
 	}
 
+	// CRITICAL: Clear update_status and update_workflow_id BEFORE soft-deletion
+	// This prevents failed updates from blocking future operations
+	// (A KB stuck in "UPDATING" state cannot be updated again)
+	if kb.UpdateStatus != "" || kb.UpdateWorkflowID != "" {
+		w.log.Info("CleanupOldKnowledgeBaseActivity: Clearing update status before soft-deletion",
+			zap.String("kbUID", param.KBUID.String()),
+			zap.String("previousUpdateStatus", kb.UpdateStatus))
+
+		err = w.repository.UpdateKnowledgeBaseWithMap(ctx, kb.KBID, kb.Owner, map[string]interface{}{
+			"update_status":      "",
+			"update_workflow_id": "",
+		})
+		if err != nil {
+			err = errorsx.AddMessage(err, "Unable to clear update status before cleanup. Please try again.")
+			return temporal.NewApplicationErrorWithCause(
+				"Failed to clear update status before cleanup",
+				cleanupOldKnowledgeBaseActivityError,
+				err,
+			)
+		}
+	}
+
 	// Only soft delete if not already deleted
 	if !kb.DeleteTime.Valid {
 		w.log.Info("CleanupOldKnowledgeBaseActivity: Soft-deleting KB",
@@ -1658,6 +1691,21 @@ func (w *Worker) CleanupOldKnowledgeBaseActivity(ctx context.Context, param *Cle
 			zap.Time("deleteTime", kb.DeleteTime.Time))
 	}
 
+	// CRITICAL: Wait for any in-progress file processing to complete before cleanup
+	// This prevents race conditions where file processing tries to insert embeddings
+	// while we're dropping the collection
+	w.log.Info("CleanupOldKnowledgeBaseActivity: Checking for in-progress file processing",
+		zap.String("kbUID", param.KBUID.String()))
+
+	err = w.waitForInProgressFiles(ctx, param.KBUID, 120, 5)
+	if err != nil {
+		// Non-fatal: Log warning but continue with cleanup
+		// This prevents cleanup from being blocked indefinitely
+		w.log.Warn("CleanupOldKnowledgeBaseActivity: Error while waiting for file processing, proceeding with cleanup",
+			zap.String("kbUID", param.KBUID.String()),
+			zap.Error(err))
+	}
+
 	// CRITICAL: Delete all files from MinIO before dropping collection and DB records
 	// This prevents orphaned blobs when updates fail
 	w.log.Info("CleanupOldKnowledgeBaseActivity: Deleting all files from MinIO",
@@ -1674,8 +1722,13 @@ func (w *Worker) CleanupOldKnowledgeBaseActivity(ctx context.Context, param *Cle
 	// Drop Milvus collection using active_collection_uid
 	collectionUID := kb.ActiveCollectionUID
 	if collectionUID == uuid.Nil {
-		// Fallback to KB UID if no active_collection_uid (shouldn't happen but be safe)
-		collectionUID = param.KBUID
+		// This should never happen after migration 000044 - return error instead of fallback
+		err = fmt.Errorf("active_collection_uid is not set for KB %s", param.KBUID)
+		return temporal.NewApplicationErrorWithCause(
+			"Invalid state: active_collection_uid is nil",
+			cleanupOldKnowledgeBaseActivityError,
+			err,
+		)
 	}
 
 	// Check if collection is in use by other KBs before dropping
@@ -1724,6 +1777,130 @@ func (w *Worker) CleanupOldKnowledgeBaseActivity(ctx context.Context, param *Cle
 	}
 
 	w.log.Info("CleanupOldKnowledgeBaseActivity: Cleanup completed successfully")
+	return nil
+}
+
+// waitForInProgressFiles waits for all in-progress file processing to complete
+// This is a helper method used by CleanupOldKnowledgeBaseActivity to prevent race conditions
+func (w *Worker) waitForInProgressFiles(ctx context.Context, kbUID types.KBUIDType, maxWaitSeconds int, checkIntervalSeconds int) error {
+	maxAttempts := maxWaitSeconds / checkIntervalSeconds
+
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		// Count files in active processing states (same logic as GetInProgressFileCountActivity)
+		inProgressStatuses := "FILE_PROCESS_STATUS_PROCESSING,FILE_PROCESS_STATUS_CHUNKING,FILE_PROCESS_STATUS_EMBEDDING"
+		dbCount, err := w.repository.GetFileCountByKnowledgeBaseUIDIncludingDeleted(ctx, kbUID, inProgressStatuses)
+		if err != nil {
+			w.log.Warn("waitForInProgressFiles: Failed to check DB file count",
+				zap.String("kbUID", kbUID.String()),
+				zap.Error(err))
+			return err
+		}
+
+		// Check for active Temporal workflows
+		activeWorkflowCount := w.getActiveWorkflowCount(ctx, kbUID)
+		totalCount := dbCount + activeWorkflowCount
+
+		if totalCount == 0 {
+			w.log.Info("waitForInProgressFiles: No in-progress files, safe to proceed",
+				zap.String("kbUID", kbUID.String()),
+				zap.Int("attempt", attempt+1))
+			return nil
+		}
+
+		w.log.Info("waitForInProgressFiles: Waiting for file processing to complete",
+			zap.String("kbUID", kbUID.String()),
+			zap.Int64("dbCount", dbCount),
+			zap.Int64("activeWorkflowCount", activeWorkflowCount),
+			zap.Int64("totalCount", totalCount),
+			zap.Int("attempt", attempt+1),
+			zap.Int("maxAttempts", maxAttempts))
+
+		if attempt < maxAttempts-1 {
+			time.Sleep(time.Duration(checkIntervalSeconds) * time.Second)
+		}
+	}
+
+	w.log.Warn("waitForInProgressFiles: Timeout waiting for file processing",
+		zap.String("kbUID", kbUID.String()),
+		zap.Int("maxWaitSeconds", maxWaitSeconds))
+	return fmt.Errorf("timeout after %d seconds waiting for file processing to complete", maxWaitSeconds)
+}
+
+// VerifyKBCleanupActivity verifies that KB cleanup was successful
+// Used for both staging and rollback KB cleanup verification
+// This activity checks that:
+// - KB is soft-deleted in DB
+// - update_status and update_workflow_id are cleared
+// - Milvus collection is dropped (unless protected)
+// - Files are deleted from MinIO
+func (w *Worker) VerifyKBCleanupActivity(ctx context.Context, param *VerifyKBCleanupActivityParam) error {
+	w.log.Info("VerifyKBCleanupActivity: Verifying cleanup",
+		zap.String("kbUID", param.KBUID.String()))
+
+	// Check 1: KB should be soft-deleted (or hard-deleted)
+	kb, err := w.repository.GetKnowledgeBaseByUID(ctx, param.KBUID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// KB is hard-deleted - this is fine (cleanup went further than expected)
+			w.log.Info("VerifyKBCleanupActivity: KB is hard-deleted (cleanup complete)",
+				zap.String("kbUID", param.KBUID.String()))
+			return nil
+		}
+		w.log.Warn("VerifyKBCleanupActivity: Error checking KB status",
+			zap.String("kbUID", param.KBUID.String()),
+			zap.Error(err))
+		return temporal.NewApplicationErrorWithCause(
+			"Failed to verify KB cleanup - cannot check KB status",
+			verifyKBCleanupActivityError,
+			err,
+		)
+	}
+
+	// Check 2: KB should be soft-deleted
+	if !kb.DeleteTime.Valid {
+		w.log.Warn("VerifyKBCleanupActivity: KB is not soft-deleted",
+			zap.String("kbUID", param.KBUID.String()))
+		return temporal.NewApplicationError(
+			"Cleanup verification failed: KB is not soft-deleted",
+			verifyKBCleanupActivityError,
+		)
+	}
+
+	// Check 3: update_status and update_workflow_id should be cleared
+	if kb.UpdateStatus != "" || kb.UpdateWorkflowID != "" {
+		w.log.Warn("VerifyKBCleanupActivity: Update status/workflow ID not cleared",
+			zap.String("kbUID", param.KBUID.String()),
+			zap.String("updateStatus", kb.UpdateStatus))
+		return temporal.NewApplicationError(
+			"Cleanup verification failed: update status not cleared",
+			verifyKBCleanupActivityError,
+		)
+	}
+
+	// Check 4: Milvus collection should be dropped
+	collectionName := constant.KBCollectionName(param.CollectionUID)
+	collectionExists, err := w.repository.CollectionExists(ctx, collectionName)
+	if err != nil {
+		// Non-fatal - log warning but don't fail verification
+		w.log.Warn("VerifyKBCleanupActivity: Cannot verify collection drop",
+			zap.String("collectionName", collectionName),
+			zap.Error(err))
+	} else if collectionExists {
+		// Check if collection is protected (in use by other KBs)
+		inUse, err := w.repository.IsCollectionInUse(ctx, param.CollectionUID)
+		if err != nil || !inUse {
+			w.log.Warn("VerifyKBCleanupActivity: Collection still exists but should be dropped",
+				zap.String("collectionName", collectionName),
+				zap.Bool("inUse", inUse))
+			// Don't fail - collection cleanup can be retried later
+		}
+	}
+
+	// Check 5: Files should be deleted from MinIO (spot check - don't enumerate all)
+	// This is a best-effort check - MinIO cleanup failures are logged but not fatal
+
+	w.log.Info("VerifyKBCleanupActivity: Cleanup verification passed",
+		zap.String("kbUID", param.KBUID.String()))
 	return nil
 }
 

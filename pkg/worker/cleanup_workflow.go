@@ -413,6 +413,51 @@ func (w *Worker) CleanupKnowledgeBaseWorkflow(ctx workflow.Context, param Cleanu
 			"error", err.Error())
 	}
 
+	// Step 10: Verify cleanup completed successfully (best-effort verification)
+	// This helps detect orphaned resources that may need manual cleanup
+	if len(errors) == 0 {
+		logger.Info("All cleanup operations succeeded, verifying cleanup completion")
+		verifyCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			StartToCloseTimeout: 30 * time.Second,
+			RetryPolicy: &temporal.RetryPolicy{
+				InitialInterval:    time.Second,
+				BackoffCoefficient: 2.0,
+				MaximumInterval:    10 * time.Second,
+				MaximumAttempts:    2,
+			},
+		})
+
+		// Get the collection UID for verification
+		// For rollback KBs, we need to query the KB to get its active_collection_uid
+		var collectionUID types.KBUIDType
+		verifyErr := workflow.ExecuteActivity(verifyCtx, w.GetKBCollectionUIDActivity, &GetKBCollectionUIDActivityParam{
+			KBUID: kbUID,
+		}).Get(verifyCtx, &collectionUID)
+
+		if verifyErr != nil {
+			logger.Warn("Failed to get collection UID for verification",
+				"kbUID", kbUID.String(),
+				"error", verifyErr.Error())
+		} else if collectionUID.String() != "" {
+			verifyErr = workflow.ExecuteActivity(verifyCtx, w.VerifyKBCleanupActivity, &VerifyKBCleanupActivityParam{
+				KBUID:         kbUID,
+				CollectionUID: collectionUID,
+			}).Get(verifyCtx, nil)
+
+			if verifyErr != nil {
+				logger.Warn("Rollback KB cleanup verification failed - resources may need manual cleanup",
+					"kbUID", kbUID.String(),
+					"error", verifyErr.Error())
+			} else {
+				logger.Info("Rollback KB cleanup verified successfully")
+			}
+		}
+	} else {
+		logger.Warn("Skipping verification due to cleanup errors",
+			"kbUID", kbUID.String(),
+			"errorCount", len(errors))
+	}
+
 	// If any cleanup operation failed, return an error
 	if len(errors) > 0 {
 		logger.Error("CleanupKnowledgeBaseWorkflow completed with errors",

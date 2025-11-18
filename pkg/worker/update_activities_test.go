@@ -165,10 +165,11 @@ func TestCreateStagingKnowledgeBaseActivity_Success(t *testing.T) {
 			},
 		}, nil)
 	mockRepository.CreateStagingKnowledgeBaseMock.
-		Set(func(ctx context.Context, original *repository.KnowledgeBaseModel, newSystemUID *types.SystemUIDType, externalService func(kbUID types.KBUIDType) error) (*repository.KnowledgeBaseModel, error) {
+		Set(func(ctx context.Context, original *repository.KnowledgeBaseModel, newSystemUID *types.SystemUIDType, externalService func(kbUID types.KBUIDType, collectionUID types.KBUIDType) error) (*repository.KnowledgeBaseModel, error) {
 			// Call the external service to create the collection
 			if externalService != nil {
-				if err := externalService(stagingKBUID); err != nil {
+				collectionUID := types.KBUIDType(uuid.Must(uuid.NewV4()))
+				if err := externalService(stagingKBUID, collectionUID); err != nil {
 					return nil, err
 				}
 			}
@@ -242,6 +243,9 @@ func TestCleanupOldKnowledgeBaseActivity_Success(t *testing.T) {
 			ActiveCollectionUID: activeCollectionUID,
 			DeleteTime:          gorm.DeletedAt{},
 		}, nil)
+	// Mock for waitForInProgressFiles check
+	mockRepository.GetFileCountByKnowledgeBaseUIDIncludingDeletedMock.Return(int64(0), nil)
+	mockRepository.ListKnowledgeBaseFilesMock.Return(&repository.KnowledgeBaseFileList{Files: []repository.KnowledgeBaseFileModel{}}, nil) // No files = no active workflows
 	mockRepository.GetMinIOStorageMock.Return(mockStorage)
 	mockRepository.DeleteAllKnowledgeBaseFilesMock.Return(nil)
 	mockRepository.DeleteAllConvertedFilesInKbMock.Return(nil)
@@ -521,7 +525,7 @@ func TestSwapKnowledgeBasesActivity_Success(t *testing.T) {
 	var rollbackKBUID types.KBUIDType
 	var rollbackKBID string
 	mockRepository.CreateKnowledgeBaseMock.
-		Set(func(ctx context.Context, kb repository.KnowledgeBaseModel, externalService func(kbUID types.KBUIDType) error) (*repository.KnowledgeBaseModel, error) {
+		Set(func(ctx context.Context, kb repository.KnowledgeBaseModel, externalService func(kbUID types.KBUIDType, collectionUID types.KBUIDType) error) (*repository.KnowledgeBaseModel, error) {
 			rollbackKBUID = types.KBUIDType(uuid.Must(uuid.NewV4()))
 			rollbackKBID = uuid.Must(uuid.NewV4()).String() // UUID-based KBID for rollback KB
 			return &repository.KnowledgeBaseModel{

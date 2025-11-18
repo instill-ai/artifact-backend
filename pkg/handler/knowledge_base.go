@@ -107,14 +107,16 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 		zap.Uint32("dimensionality", systemConfig.RAG.Embedding.Dimensionality))
 
 	// external service call - create knowledge base collection and set ACL in openFGA
-	callExternalService := func(kbUID types.KBUIDType) error {
-		// Create collection with dimensionality from system config
-		err := ph.service.Repository().CreateCollection(ctx, constant.KBCollectionName(kbUID), systemConfig.RAG.Embedding.Dimensionality)
+	// CRITICAL: collectionUID is passed directly from the transaction (can't query KB - it's uncommitted!)
+	callExternalService := func(kbUID types.KBUIDType, collectionUID types.KBUIDType) error {
+		// Create collection with active_collection_uid (not kb.UID!)
+		// After Fix 3, active_collection_uid is always unique (NOT equal to kb.UID)
+		err := ph.service.Repository().CreateCollection(ctx, constant.KBCollectionName(collectionUID), systemConfig.RAG.Embedding.Dimensionality)
 		if err != nil {
 			return fmt.Errorf("creating vector database collection: %w", err)
 		}
 
-		// set the owner of the knowledge base
+		// Set ACL owner with KB UID (not active_collection_uid)
 		err = ph.service.ACLClient().SetOwner(ctx, "knowledgebase", kbUID, string(ns.NsType), ns.NsUID)
 		if err != nil {
 			return fmt.Errorf("setting knowledge base owner: %w", err)

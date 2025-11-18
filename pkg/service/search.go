@@ -72,8 +72,9 @@ func (s *service) SearchChunks(ctx context.Context, ownerUID types.OwnerUIDType,
 	}
 
 	// Single KB query - no dual-mode routing needed
+	// CRITICAL: Use active_collection_uid (not kb.UID) to query the correct Milvus collection
 	sp := repository.SearchVectorParam{
-		CollectionID: constant.KBCollectionName(kb.UID),
+		CollectionID: constant.KBCollectionName(kb.ActiveCollectionUID),
 		Vectors:      textVector,
 		TopK:         topK,
 		FileUIDs:     fileUIDs,
