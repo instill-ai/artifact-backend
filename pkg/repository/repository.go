@@ -41,6 +41,8 @@ type Repository interface {
 	GetMinIOStorage() object.Storage
 	// GetGCSStorage returns the GCS storage instance for on-demand use (returns nil if not configured)
 	GetGCSStorage() object.Storage
+	// GetDB returns the underlying database connection for transaction management
+	GetDB() *gorm.DB
 }
 
 // repository implements Artifact storage functions in PostgreSQL, vector database, object storage, and Redis.
@@ -75,4 +77,9 @@ func (r *repository) GetMinIOStorage() object.Storage {
 // Returns nil if GCS is not configured.
 func (r *repository) GetGCSStorage() object.Storage {
 	return r.gcsStorage
+}
+
+// GetDB returns the underlying database connection for transaction management
+func (r *repository) GetDB() *gorm.DB {
+	return r.db
 }

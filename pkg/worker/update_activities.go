@@ -1324,8 +1324,37 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 			zap.String("stagingCollectionUID", stagingKB.ActiveCollectionUID.String()),
 			zap.String("stagingCollectionName", stagingCollectionName))
 
-		// Simply move staging KB's resources → original KB (no rollback needed)
-		if err := w.updateResourceKBUIDs(ctx, param.StagingKBUID, param.OriginalKBUID); err != nil {
+		// Perform atomic swap within transaction (even for simple case to ensure consistency)
+		tx := w.repository.GetDB().Begin()
+		defer func() {
+			if r := recover(); r != nil {
+				tx.Rollback()
+				panic(r)
+			}
+		}()
+
+		// CRITICAL: Clear staging KB's active_collection_uid FIRST
+		// This prevents unique constraint violation when production KB is updated to same collection UID
+		w.log.Info("SwapKnowledgeBasesActivity: Clearing staging KB's active_collection_uid to avoid constraint violation",
+			zap.String("stagingKBUID", stagingKB.UID.String()),
+			zap.String("stagingCollectionUID", stagingKB.ActiveCollectionUID.String()))
+
+		err = w.repository.UpdateKnowledgeBaseWithMapTx(ctx, tx, stagingKB.KBID, stagingKB.Owner, map[string]interface{}{
+			"active_collection_uid": uuid.Nil, // Clear to NULL to avoid unique constraint violation
+		})
+		if err != nil {
+			tx.Rollback()
+			err = errorsx.AddMessage(err, "Unable to clear staging KB collection UID before swap. Please try again.")
+			return nil, temporal.NewApplicationErrorWithCause(
+				errorsx.MessageOrErr(err),
+				swapKnowledgeBasesActivityError,
+				err,
+			)
+		}
+
+		// Move staging KB's resources → original KB (within transaction)
+		if err := w.repository.UpdateKnowledgeBaseResourcesTx(ctx, tx, param.StagingKBUID, param.OriginalKBUID); err != nil {
+			tx.Rollback()
 			return nil, temporal.NewApplicationErrorWithCause(
 				"Failed to move staging resources to production",
 				swapKnowledgeBasesActivityError,
@@ -1333,15 +1362,15 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 			)
 		}
 
-		// Update production KB to point to staging's collection (no rollback KB created)
-		// NOTE: Do NOT set update_status here - it will be set by UpdateKnowledgeBaseUpdateStatusActivity at the end of the workflow
-		err = w.repository.UpdateKnowledgeBaseWithMap(ctx, originalKB.KBID, originalKB.Owner, map[string]interface{}{
+		// Update production KB to point to staging's collection (no conflict now!)
+		err = w.repository.UpdateKnowledgeBaseWithMapTx(ctx, tx, originalKB.KBID, originalKB.Owner, map[string]interface{}{
 			"active_collection_uid":    stagingKB.ActiveCollectionUID, // Point to new collection
 			"system_uid":               stagingKB.SystemUID,           // Update system UID (may reference different system with new dimensionality)
 			"staging":                  false,
 			"rollback_retention_until": retentionUntil,
 		})
 		if err != nil {
+			tx.Rollback()
 			err = errorsx.AddMessage(err, "Unable to update production KB metadata and collection pointer. Please try again.")
 			return nil, temporal.NewApplicationErrorWithCause(
 				errorsx.MessageOrErr(err),
@@ -1350,39 +1379,59 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 			)
 		}
 
-		// Clean up any existing rollback KB (since we don't need it)
-		// This is a best-effort cleanup - if it fails, cleanup workflow will handle it later
+		// Clean up any existing rollback KB (within transaction)
 		ownerUID, err := uuid.FromString(originalKB.Owner)
 		if err == nil {
 			existingRollback, err := w.repository.GetRollbackKBForProduction(ctx, types.OwnerUIDType(ownerUID), originalKB.KBID)
 			if err == nil && existingRollback != nil {
-				w.log.Info("SwapKnowledgeBasesActivity: Marking existing rollback KB for deletion since original collection doesn't exist",
+				w.log.Info("SwapKnowledgeBasesActivity: Soft-deleting existing rollback KB since original collection doesn't exist",
 					zap.String("rollbackKBUID", existingRollback.UID.String()))
-				_, _ = w.repository.DeleteKnowledgeBase(ctx, existingRollback.Owner, existingRollback.KBID)
+				_ = w.repository.DeleteKnowledgeBaseTx(ctx, tx, existingRollback.Owner, existingRollback.KBID)
 			}
 		}
 
-		// Delete staging KB immediately (no longer needed - its resources are now in production)
-		w.log.Info("SwapKnowledgeBasesActivity: Marking staging KB for deletion",
+		// Delete staging KB (within transaction)
+		w.log.Info("SwapKnowledgeBasesActivity: Soft-deleting staging KB",
 			zap.String("stagingKBUID", stagingKB.UID.String()),
 			zap.String("stagingKBID", stagingKB.KBID))
 
-		// Mark staging KB for immediate deletion to prevent it from blocking future updates
-		// CRITICAL: Also clear update_workflow_id to prevent blocking API deletion
-		// First clear the update fields, then soft delete using GORM's Delete()
-		err = w.repository.UpdateKnowledgeBaseWithMap(ctx, stagingKB.KBID, stagingKB.Owner, map[string]interface{}{
+		// Clear update fields before soft delete
+		err = w.repository.UpdateKnowledgeBaseWithMapTx(ctx, tx, stagingKB.KBID, stagingKB.Owner, map[string]interface{}{
 			"update_status":      "",  // Clear update status so it doesn't block future updates
 			"update_workflow_id": nil, // Clear workflow ID so API deletion works
 		})
-		if err == nil {
-			// Now perform soft delete using GORM's Delete method (which sets delete_time automatically)
-			_, err = w.repository.DeleteKnowledgeBase(ctx, stagingKB.Owner, stagingKB.KBID)
-		}
 		if err != nil {
-			w.log.Error("SwapKnowledgeBasesActivity: Failed to mark staging KB for deletion (non-fatal)",
+			tx.Rollback()
+			w.log.Error("SwapKnowledgeBasesActivity: Failed to clear staging KB update fields",
 				zap.String("stagingKBUID", stagingKB.UID.String()),
 				zap.Error(err))
-			// Non-fatal: Continue anyway, cleanup will happen later
+			return nil, temporal.NewApplicationErrorWithCause(
+				"Failed to clear staging KB update fields",
+				swapKnowledgeBasesActivityError,
+				err,
+			)
+		}
+
+		err = w.repository.DeleteKnowledgeBaseTx(ctx, tx, stagingKB.Owner, stagingKB.KBID)
+		if err != nil {
+			tx.Rollback()
+			w.log.Error("SwapKnowledgeBasesActivity: Failed to soft-delete staging KB",
+				zap.String("stagingKBUID", stagingKB.UID.String()),
+				zap.Error(err))
+			return nil, temporal.NewApplicationErrorWithCause(
+				"Failed to soft-delete staging KB",
+				swapKnowledgeBasesActivityError,
+				err,
+			)
+		}
+
+		// COMMIT TRANSACTION - all or nothing!
+		if err := tx.Commit().Error; err != nil {
+			return nil, temporal.NewApplicationErrorWithCause(
+				"Failed to commit simple swap transaction",
+				swapKnowledgeBasesActivityError,
+				err,
+			)
 		}
 
 		w.log.Info("SwapKnowledgeBasesActivity: Simple collection assignment completed successfully (no rollback KB created)",
@@ -1451,18 +1500,48 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 			zap.String("rollbackKBUID", rollbackKBUID.String()))
 	}
 
-	// Step 2: Swap resources AND collection pointers (using temp UID to avoid conflicts)
-	// CRITICAL: The original KB UID remains unchanged!
-	// NEW: We also swap active_collection_uid to support dimension changes
-	w.log.Info("SwapKnowledgeBasesActivity: Swapping resources and collection pointers (keeping original KB UID constant)",
+	// Step 2: Perform atomic swap within a database transaction
+	// CRITICAL: Wrap entire swap in transaction to prevent:
+	// - active_collection_uid constraint violation (clear staging's UID before updating production)
+	// - Duplicate files from partial swap (all-or-nothing atomicity)
+	w.log.Info("SwapKnowledgeBasesActivity: Starting atomic swap transaction",
 		zap.String("originalKBUID", param.OriginalKBUID.String()),
 		zap.String("stagingKBUID", param.StagingKBUID.String()),
 		zap.String("rollbackKBUID", rollbackKBUID.String()))
 
-	tempUID := uuid.Must(uuid.NewV4())
+	// Start database transaction
+	tx := w.repository.GetDB().Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+			panic(r)
+		}
+	}()
 
-	// Step 2a: Move original KB's resources → temp
-	if err := w.updateResourceKBUIDs(ctx, param.OriginalKBUID, types.KBUIDType(tempUID)); err != nil {
+	// CRITICAL: Clear staging KB's active_collection_uid FIRST
+	// This prevents unique constraint violation when production KB is updated to same collection UID
+	// Without this, we get: duplicate key value violates unique constraint "idx_kb_active_collection_uid_unique"
+	w.log.Info("SwapKnowledgeBasesActivity: Clearing staging KB's active_collection_uid to avoid constraint violation",
+		zap.String("stagingKBUID", stagingKB.UID.String()),
+		zap.String("stagingCollectionUID", stagingKB.ActiveCollectionUID.String()))
+
+	err = w.repository.UpdateKnowledgeBaseWithMapTx(ctx, tx, stagingKB.KBID, stagingKB.Owner, map[string]interface{}{
+		"active_collection_uid": uuid.Nil, // Clear to NULL to avoid unique constraint violation
+	})
+	if err != nil {
+		tx.Rollback()
+		err = errorsx.AddMessage(err, "Unable to clear staging KB collection UID before swap. Please try again.")
+		return nil, temporal.NewApplicationErrorWithCause(
+			errorsx.MessageOrErr(err),
+			swapKnowledgeBasesActivityError,
+			err,
+		)
+	}
+
+	// Step 2a: Move original KB's resources → temp (within transaction)
+	tempUID := uuid.Must(uuid.NewV4())
+	if err := w.repository.UpdateKnowledgeBaseResourcesTx(ctx, tx, param.OriginalKBUID, types.KBUIDType(tempUID)); err != nil {
+		tx.Rollback()
 		return nil, temporal.NewApplicationErrorWithCause(
 			"Failed to move original resources to temp",
 			swapKnowledgeBasesActivityError,
@@ -1471,7 +1550,8 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 	}
 
 	// Step 2b: Move staging KB's resources → original KB (staging resources become production)
-	if err := w.updateResourceKBUIDs(ctx, param.StagingKBUID, param.OriginalKBUID); err != nil {
+	if err := w.repository.UpdateKnowledgeBaseResourcesTx(ctx, tx, param.StagingKBUID, param.OriginalKBUID); err != nil {
+		tx.Rollback()
 		return nil, temporal.NewApplicationErrorWithCause(
 			"Failed to move staging resources to production",
 			swapKnowledgeBasesActivityError,
@@ -1480,7 +1560,8 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 	}
 
 	// Step 2c: Move temp resources → rollback KB (old resources saved for rollback)
-	if err := w.updateResourceKBUIDs(ctx, types.KBUIDType(tempUID), rollbackKBUID); err != nil {
+	if err := w.repository.UpdateKnowledgeBaseResourcesTx(ctx, tx, types.KBUIDType(tempUID), rollbackKBUID); err != nil {
+		tx.Rollback()
 		return nil, temporal.NewApplicationErrorWithCause(
 			"Failed to move old resources to rollback",
 			swapKnowledgeBasesActivityError,
@@ -1488,27 +1569,20 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 		)
 	}
 
-	// Step 3: Swap collection pointers and metadata
-	// This is the KEY to supporting dimension changes:
-	// - Production KB now points to staging's collection (which may have different dimensionality)
-	// - Rollback KB points to original's collection (preserves old dimensionality for rollback)
-	// - Collections themselves are NOT moved - only the pointers are swapped
-
-	w.log.Info("SwapKnowledgeBasesActivity: Collection existence validated, swapping pointers",
+	// Step 3: Swap collection pointers and metadata (within transaction)
+	// Now safe to update production KB's active_collection_uid since staging's was cleared above
+	w.log.Info("SwapKnowledgeBasesActivity: Updating production KB to point to staging's collection",
 		zap.String("originalCollectionUID", originalKB.ActiveCollectionUID.String()),
-		zap.String("originalCollectionName", originalCollectionName),
-		zap.String("stagingCollectionUID", stagingKB.ActiveCollectionUID.String()),
-		zap.String("stagingCollectionName", stagingCollectionName))
+		zap.String("stagingCollectionUID", stagingKB.ActiveCollectionUID.String()))
 
-	// Update production KB to point to staging's collection
-	// NOTE: Do NOT set update_status here - it will be set by UpdateKnowledgeBaseUpdateStatusActivity at the end of the workflow
-	err = w.repository.UpdateKnowledgeBaseWithMap(ctx, originalKB.KBID, originalKB.Owner, map[string]interface{}{
-		"active_collection_uid":    stagingKB.ActiveCollectionUID, // Point to new collection
+	err = w.repository.UpdateKnowledgeBaseWithMapTx(ctx, tx, originalKB.KBID, originalKB.Owner, map[string]interface{}{
+		"active_collection_uid":    stagingKB.ActiveCollectionUID, // Point to new collection (no conflict now!)
 		"system_uid":               stagingKB.SystemUID,           // Update system UID (may reference different system with new dimensionality)
 		"staging":                  false,
 		"rollback_retention_until": retentionUntil,
 	})
 	if err != nil {
+		tx.Rollback()
 		err = errorsx.AddMessage(err, "Unable to update production KB metadata and collection pointer. Please try again.")
 		return nil, temporal.NewApplicationErrorWithCause(
 			errorsx.MessageOrErr(err),
@@ -1518,10 +1592,9 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 	}
 
 	// Update rollback KB to point to original's collection (preserve old dimensionality)
-	// Note: Use the rollback KB's KBID (already known from existingRollback or newly created)
-	// We need to get the rollback KB to obtain its KBID
 	rollbackKB, err := w.repository.GetKnowledgeBaseByUID(ctx, rollbackKBUID)
 	if err != nil {
+		tx.Rollback()
 		err = errorsx.AddMessage(err, "Unable to retrieve rollback KB for update. Please try again.")
 		return nil, temporal.NewApplicationErrorWithCause(
 			errorsx.MessageOrErr(err),
@@ -1529,11 +1602,12 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 			err,
 		)
 	}
-	err = w.repository.UpdateKnowledgeBaseWithMap(ctx, rollbackKB.KBID, originalKB.Owner, map[string]interface{}{
+	err = w.repository.UpdateKnowledgeBaseWithMapTx(ctx, tx, rollbackKB.KBID, originalKB.Owner, map[string]interface{}{
 		"active_collection_uid": originalKB.ActiveCollectionUID, // Keep original collection pointer
 		"system_uid":            originalKB.SystemUID,           // Keep original system UID
 	})
 	if err != nil {
+		tx.Rollback()
 		err = errorsx.AddMessage(err, "Unable to update rollback KB metadata. Please try again.")
 		return nil, temporal.NewApplicationErrorWithCause(
 			errorsx.MessageOrErr(err),
@@ -1542,28 +1616,52 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 		)
 	}
 
-	// Step 4: Delete staging KB immediately (no longer needed - its resources are now in production)
-	w.log.Info("SwapKnowledgeBasesActivity: Marking staging KB for deletion",
+	// Step 4: Soft-delete staging KB (within transaction)
+	w.log.Info("SwapKnowledgeBasesActivity: Soft-deleting staging KB",
 		zap.String("stagingKBUID", stagingKB.UID.String()),
 		zap.String("stagingKBID", stagingKB.KBID))
 
-	// Mark staging KB for immediate deletion to prevent it from blocking future updates
-	// CRITICAL: Also clear update_workflow_id to prevent blocking API deletion
-	// First clear the update fields, then soft delete using GORM's Delete()
-	err = w.repository.UpdateKnowledgeBaseWithMap(ctx, stagingKB.KBID, stagingKB.Owner, map[string]interface{}{
+	// Clear update fields before soft delete
+	err = w.repository.UpdateKnowledgeBaseWithMapTx(ctx, tx, stagingKB.KBID, stagingKB.Owner, map[string]interface{}{
 		"update_status":      "",  // Clear update status so it doesn't block future updates
 		"update_workflow_id": nil, // Clear workflow ID so API deletion works
 	})
-	if err == nil {
-		// Now perform soft delete using GORM's Delete method (which sets delete_time automatically)
-		_, err = w.repository.DeleteKnowledgeBase(ctx, stagingKB.Owner, stagingKB.KBID)
-	}
 	if err != nil {
-		w.log.Error("SwapKnowledgeBasesActivity: Failed to mark staging KB for deletion (non-fatal)",
+		tx.Rollback()
+		w.log.Error("SwapKnowledgeBasesActivity: Failed to clear staging KB update fields",
 			zap.String("stagingKBUID", stagingKB.UID.String()),
 			zap.Error(err))
-		// Non-fatal: Continue anyway, cleanup will happen later
+		return nil, temporal.NewApplicationErrorWithCause(
+			"Failed to clear staging KB update fields",
+			swapKnowledgeBasesActivityError,
+			err,
+		)
 	}
+
+	// Now perform soft delete
+	err = w.repository.DeleteKnowledgeBaseTx(ctx, tx, stagingKB.Owner, stagingKB.KBID)
+	if err != nil {
+		tx.Rollback()
+		w.log.Error("SwapKnowledgeBasesActivity: Failed to soft-delete staging KB",
+			zap.String("stagingKBUID", stagingKB.UID.String()),
+			zap.Error(err))
+		return nil, temporal.NewApplicationErrorWithCause(
+			"Failed to soft-delete staging KB",
+			swapKnowledgeBasesActivityError,
+			err,
+		)
+	}
+
+	// COMMIT TRANSACTION - all or nothing!
+	if err := tx.Commit().Error; err != nil {
+		return nil, temporal.NewApplicationErrorWithCause(
+			"Failed to commit swap transaction",
+			swapKnowledgeBasesActivityError,
+			err,
+		)
+	}
+
+	w.log.Info("SwapKnowledgeBasesActivity: Atomic swap transaction committed successfully")
 
 	// NOTE: Do NOT trigger cleanup here - it creates a race condition where the collection
 	// gets dropped before the production KB's active_collection_uid update is visible.
@@ -1580,24 +1678,6 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 		StagingKBUID:               stagingKB.UID,                 // Return staging KB UID for cleanup
 		NewProductionCollectionUID: stagingKB.ActiveCollectionUID, // Protect this collection from cleanup
 	}, nil
-}
-
-// updateResourceKBUIDs updates kb_uid in all resource tables (files, chunks, embeddings, converted_files)
-func (w *Worker) updateResourceKBUIDs(ctx context.Context, fromKBUID, toKBUID types.KBUIDType) error {
-	// Update kb_uid in all related resource tables using repository methods
-	if err := w.repository.UpdateKnowledgeBaseResources(ctx, fromKBUID, toKBUID); err != nil {
-		w.log.Error("Failed to update kb_uid in resource tables",
-			zap.String("fromKBUID", fromKBUID.String()),
-			zap.String("toKBUID", toKBUID.String()),
-			zap.Error(err))
-		return fmt.Errorf("updating kb_uid in resources: %w", err)
-	}
-
-	w.log.Info("Successfully updated kb_uid references in all resource tables",
-		zap.String("fromKBUID", fromKBUID.String()),
-		zap.String("toKBUID", toKBUID.String()))
-
-	return nil
 }
 
 // UpdateKnowledgeBaseUpdateStatusActivity updates the update status of a KB
