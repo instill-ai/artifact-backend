@@ -11,6 +11,7 @@ import (
 	"github.com/gojuno/minimock/v3"
 	"github.com/minio/minio-go/v7"
 	"go.uber.org/zap"
+	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
 	qt "github.com/frankban/quicktest"
@@ -546,14 +547,19 @@ func TestSwapKnowledgeBasesActivity_Success(t *testing.T) {
 	// Check if collections exist (both original and staging)
 	mockRepository.CollectionExistsMock.Return(true, nil)
 
-	// Update resource KB UIDs (3 times for swap)
-	mockRepository.UpdateKnowledgeBaseResourcesMock.Return(nil)
+	// Mock database transaction - use in-memory SQLite to handle Begin() properly
+	testDB, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
+	c.Assert(err, qt.IsNil)
+	mockRepository.GetDBMock.Return(testDB)
 
-	// Update KB metadata (called multiple times)
-	mockRepository.UpdateKnowledgeBaseWithMapMock.Return(nil)
+	// Update resource KB UIDs (3 times for swap) - using transaction-based mock
+	mockRepository.UpdateKnowledgeBaseResourcesTxMock.Return(nil)
 
-	// Delete staging KB after swap
-	mockRepository.DeleteKnowledgeBaseMock.Return(&repository.KnowledgeBaseModel{}, nil)
+	// Update KB metadata (called multiple times) - using transaction-based mock
+	mockRepository.UpdateKnowledgeBaseWithMapTxMock.Return(nil)
+
+	// Delete staging KB after swap - using transaction-based mock
+	mockRepository.DeleteKnowledgeBaseTxMock.Return(nil)
 
 	w := &Worker{repository: mockRepository, log: zap.NewNop()}
 
@@ -624,19 +630,24 @@ func TestSwapKnowledgeBasesActivity_OriginalCollectionDoesNotExist(t *testing.T)
 			return false, fmt.Errorf("unexpected collection name: %s", collectionName)
 		})
 
-	// Update resource KB UIDs (only once - staging → original, no rollback needed)
-	mockRepository.UpdateKnowledgeBaseResourcesMock.Return(nil)
+	// Mock database transaction - use in-memory SQLite to handle Begin() properly
+	testDB, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
+	c.Assert(err, qt.IsNil)
+	mockRepository.GetDBMock.Return(testDB)
 
-	// Update KB metadata (production KB update + staging KB cleanup)
-	mockRepository.UpdateKnowledgeBaseWithMapMock.Return(nil)
+	// Update resource KB UIDs (only once - staging → original, no rollback needed) - using transaction-based mock
+	mockRepository.UpdateKnowledgeBaseResourcesTxMock.Return(nil)
+
+	// Update KB metadata (production KB update + staging KB cleanup) - using transaction-based mock
+	mockRepository.UpdateKnowledgeBaseWithMapTxMock.Return(nil)
 
 	// Check for existing rollback KB to delete (returns not found) using new parent_kb_uid-based lookup
 	mockRepository.GetRollbackKBForProductionMock.
 		When(minimock.AnyContext, types.OwnerUIDType(ownerUID), "test-kb").
 		Then(nil, fmt.Errorf("not found"))
 
-	// Delete staging KB after assignment
-	mockRepository.DeleteKnowledgeBaseMock.Return(&repository.KnowledgeBaseModel{}, nil)
+	// Delete staging KB after assignment - using transaction-based mock
+	mockRepository.DeleteKnowledgeBaseTxMock.Return(nil)
 
 	w := &Worker{repository: mockRepository, log: zap.NewNop()}
 

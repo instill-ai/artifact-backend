@@ -191,6 +191,13 @@ type RepositoryMock struct {
 	beforeDeleteKnowledgeBaseFileAndDecreaseUsageCounter uint64
 	DeleteKnowledgeBaseFileAndDecreaseUsageMock          mRepositoryMockDeleteKnowledgeBaseFileAndDecreaseUsage
 
+	funcDeleteKnowledgeBaseTx          func(ctx context.Context, tx *gorm.DB, owner string, kbID string) (err error)
+	funcDeleteKnowledgeBaseTxOrigin    string
+	inspectFuncDeleteKnowledgeBaseTx   func(ctx context.Context, tx *gorm.DB, owner string, kbID string)
+	afterDeleteKnowledgeBaseTxCounter  uint64
+	beforeDeleteKnowledgeBaseTxCounter uint64
+	DeleteKnowledgeBaseTxMock          mRepositoryMockDeleteKnowledgeBaseTx
+
 	funcDeleteObject          func(ctx context.Context, uid types.ObjectUIDType) (err error)
 	funcDeleteObjectOrigin    string
 	inspectFuncDeleteObject   func(ctx context.Context, uid types.ObjectUIDType)
@@ -298,6 +305,13 @@ type RepositoryMock struct {
 	afterGetConvertedFileCountByKBUIDCounter  uint64
 	beforeGetConvertedFileCountByKBUIDCounter uint64
 	GetConvertedFileCountByKBUIDMock          mRepositoryMockGetConvertedFileCountByKBUID
+
+	funcGetDB          func() (dp1 *gorm.DB)
+	funcGetDBOrigin    string
+	inspectFuncGetDB   func()
+	afterGetDBCounter  uint64
+	beforeGetDBCounter uint64
+	GetDBMock          mRepositoryMockGetDB
 
 	funcGetDefaultSystem          func(ctx context.Context) (sp1 *mm_repository.SystemModel, err error)
 	funcGetDefaultSystemOrigin    string
@@ -787,6 +801,13 @@ type RepositoryMock struct {
 	beforeUpdateKnowledgeBaseResourcesCounter uint64
 	UpdateKnowledgeBaseResourcesMock          mRepositoryMockUpdateKnowledgeBaseResources
 
+	funcUpdateKnowledgeBaseResourcesTx          func(ctx context.Context, tx *gorm.DB, fromKBUID types.KBUIDType, toKBUID types.KBUIDType) (err error)
+	funcUpdateKnowledgeBaseResourcesTxOrigin    string
+	inspectFuncUpdateKnowledgeBaseResourcesTx   func(ctx context.Context, tx *gorm.DB, fromKBUID types.KBUIDType, toKBUID types.KBUIDType)
+	afterUpdateKnowledgeBaseResourcesTxCounter  uint64
+	beforeUpdateKnowledgeBaseResourcesTxCounter uint64
+	UpdateKnowledgeBaseResourcesTxMock          mRepositoryMockUpdateKnowledgeBaseResourcesTx
+
 	funcUpdateKnowledgeBaseUpdateStatus          func(ctx context.Context, kbUID types.KBUIDType, status string, workflowID string, errorMessage string, previousSystemUID types.SystemUIDType) (err error)
 	funcUpdateKnowledgeBaseUpdateStatusOrigin    string
 	inspectFuncUpdateKnowledgeBaseUpdateStatus   func(ctx context.Context, kbUID types.KBUIDType, status string, workflowID string, errorMessage string, previousSystemUID types.SystemUIDType)
@@ -800,6 +821,13 @@ type RepositoryMock struct {
 	afterUpdateKnowledgeBaseWithMapCounter  uint64
 	beforeUpdateKnowledgeBaseWithMapCounter uint64
 	UpdateKnowledgeBaseWithMapMock          mRepositoryMockUpdateKnowledgeBaseWithMap
+
+	funcUpdateKnowledgeBaseWithMapTx          func(ctx context.Context, tx *gorm.DB, id string, owner string, updates map[string]any) (err error)
+	funcUpdateKnowledgeBaseWithMapTxOrigin    string
+	inspectFuncUpdateKnowledgeBaseWithMapTx   func(ctx context.Context, tx *gorm.DB, id string, owner string, updates map[string]any)
+	afterUpdateKnowledgeBaseWithMapTxCounter  uint64
+	beforeUpdateKnowledgeBaseWithMapTxCounter uint64
+	UpdateKnowledgeBaseWithMapTxMock          mRepositoryMockUpdateKnowledgeBaseWithMapTx
 
 	funcUpdateKnowledgeFileMetadata          func(ctx context.Context, fileUID types.FileUIDType, e1 mm_repository.ExtraMetaData) (err error)
 	funcUpdateKnowledgeFileMetadataOrigin    string
@@ -945,6 +973,9 @@ func NewRepositoryMock(t minimock.Tester) *RepositoryMock {
 	m.DeleteKnowledgeBaseFileAndDecreaseUsageMock = mRepositoryMockDeleteKnowledgeBaseFileAndDecreaseUsage{mock: m}
 	m.DeleteKnowledgeBaseFileAndDecreaseUsageMock.callArgs = []*RepositoryMockDeleteKnowledgeBaseFileAndDecreaseUsageParams{}
 
+	m.DeleteKnowledgeBaseTxMock = mRepositoryMockDeleteKnowledgeBaseTx{mock: m}
+	m.DeleteKnowledgeBaseTxMock.callArgs = []*RepositoryMockDeleteKnowledgeBaseTxParams{}
+
 	m.DeleteObjectMock = mRepositoryMockDeleteObject{mock: m}
 	m.DeleteObjectMock.callArgs = []*RepositoryMockDeleteObjectParams{}
 
@@ -989,6 +1020,8 @@ func NewRepositoryMock(t minimock.Tester) *RepositoryMock {
 
 	m.GetConvertedFileCountByKBUIDMock = mRepositoryMockGetConvertedFileCountByKBUID{mock: m}
 	m.GetConvertedFileCountByKBUIDMock.callArgs = []*RepositoryMockGetConvertedFileCountByKBUIDParams{}
+
+	m.GetDBMock = mRepositoryMockGetDB{mock: m}
 
 	m.GetDefaultSystemMock = mRepositoryMockGetDefaultSystem{mock: m}
 	m.GetDefaultSystemMock.callArgs = []*RepositoryMockGetDefaultSystemParams{}
@@ -1192,11 +1225,17 @@ func NewRepositoryMock(t minimock.Tester) *RepositoryMock {
 	m.UpdateKnowledgeBaseResourcesMock = mRepositoryMockUpdateKnowledgeBaseResources{mock: m}
 	m.UpdateKnowledgeBaseResourcesMock.callArgs = []*RepositoryMockUpdateKnowledgeBaseResourcesParams{}
 
+	m.UpdateKnowledgeBaseResourcesTxMock = mRepositoryMockUpdateKnowledgeBaseResourcesTx{mock: m}
+	m.UpdateKnowledgeBaseResourcesTxMock.callArgs = []*RepositoryMockUpdateKnowledgeBaseResourcesTxParams{}
+
 	m.UpdateKnowledgeBaseUpdateStatusMock = mRepositoryMockUpdateKnowledgeBaseUpdateStatus{mock: m}
 	m.UpdateKnowledgeBaseUpdateStatusMock.callArgs = []*RepositoryMockUpdateKnowledgeBaseUpdateStatusParams{}
 
 	m.UpdateKnowledgeBaseWithMapMock = mRepositoryMockUpdateKnowledgeBaseWithMap{mock: m}
 	m.UpdateKnowledgeBaseWithMapMock.callArgs = []*RepositoryMockUpdateKnowledgeBaseWithMapParams{}
+
+	m.UpdateKnowledgeBaseWithMapTxMock = mRepositoryMockUpdateKnowledgeBaseWithMapTx{mock: m}
+	m.UpdateKnowledgeBaseWithMapTxMock.callArgs = []*RepositoryMockUpdateKnowledgeBaseWithMapTxParams{}
 
 	m.UpdateKnowledgeFileMetadataMock = mRepositoryMockUpdateKnowledgeFileMetadata{mock: m}
 	m.UpdateKnowledgeFileMetadataMock.callArgs = []*RepositoryMockUpdateKnowledgeFileMetadataParams{}
@@ -10039,6 +10078,410 @@ func (m *RepositoryMock) MinimockDeleteKnowledgeBaseFileAndDecreaseUsageInspect(
 	}
 }
 
+type mRepositoryMockDeleteKnowledgeBaseTx struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockDeleteKnowledgeBaseTxExpectation
+	expectations       []*RepositoryMockDeleteKnowledgeBaseTxExpectation
+
+	callArgs []*RepositoryMockDeleteKnowledgeBaseTxParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockDeleteKnowledgeBaseTxExpectation specifies expectation struct of the Repository.DeleteKnowledgeBaseTx
+type RepositoryMockDeleteKnowledgeBaseTxExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockDeleteKnowledgeBaseTxParams
+	paramPtrs          *RepositoryMockDeleteKnowledgeBaseTxParamPtrs
+	expectationOrigins RepositoryMockDeleteKnowledgeBaseTxExpectationOrigins
+	results            *RepositoryMockDeleteKnowledgeBaseTxResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockDeleteKnowledgeBaseTxParams contains parameters of the Repository.DeleteKnowledgeBaseTx
+type RepositoryMockDeleteKnowledgeBaseTxParams struct {
+	ctx   context.Context
+	tx    *gorm.DB
+	owner string
+	kbID  string
+}
+
+// RepositoryMockDeleteKnowledgeBaseTxParamPtrs contains pointers to parameters of the Repository.DeleteKnowledgeBaseTx
+type RepositoryMockDeleteKnowledgeBaseTxParamPtrs struct {
+	ctx   *context.Context
+	tx    **gorm.DB
+	owner *string
+	kbID  *string
+}
+
+// RepositoryMockDeleteKnowledgeBaseTxResults contains results of the Repository.DeleteKnowledgeBaseTx
+type RepositoryMockDeleteKnowledgeBaseTxResults struct {
+	err error
+}
+
+// RepositoryMockDeleteKnowledgeBaseTxOrigins contains origins of expectations of the Repository.DeleteKnowledgeBaseTx
+type RepositoryMockDeleteKnowledgeBaseTxExpectationOrigins struct {
+	origin      string
+	originCtx   string
+	originTx    string
+	originOwner string
+	originKbID  string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmDeleteKnowledgeBaseTx *mRepositoryMockDeleteKnowledgeBaseTx) Optional() *mRepositoryMockDeleteKnowledgeBaseTx {
+	mmDeleteKnowledgeBaseTx.optional = true
+	return mmDeleteKnowledgeBaseTx
+}
+
+// Expect sets up expected params for Repository.DeleteKnowledgeBaseTx
+func (mmDeleteKnowledgeBaseTx *mRepositoryMockDeleteKnowledgeBaseTx) Expect(ctx context.Context, tx *gorm.DB, owner string, kbID string) *mRepositoryMockDeleteKnowledgeBaseTx {
+	if mmDeleteKnowledgeBaseTx.mock.funcDeleteKnowledgeBaseTx != nil {
+		mmDeleteKnowledgeBaseTx.mock.t.Fatalf("RepositoryMock.DeleteKnowledgeBaseTx mock is already set by Set")
+	}
+
+	if mmDeleteKnowledgeBaseTx.defaultExpectation == nil {
+		mmDeleteKnowledgeBaseTx.defaultExpectation = &RepositoryMockDeleteKnowledgeBaseTxExpectation{}
+	}
+
+	if mmDeleteKnowledgeBaseTx.defaultExpectation.paramPtrs != nil {
+		mmDeleteKnowledgeBaseTx.mock.t.Fatalf("RepositoryMock.DeleteKnowledgeBaseTx mock is already set by ExpectParams functions")
+	}
+
+	mmDeleteKnowledgeBaseTx.defaultExpectation.params = &RepositoryMockDeleteKnowledgeBaseTxParams{ctx, tx, owner, kbID}
+	mmDeleteKnowledgeBaseTx.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmDeleteKnowledgeBaseTx.expectations {
+		if minimock.Equal(e.params, mmDeleteKnowledgeBaseTx.defaultExpectation.params) {
+			mmDeleteKnowledgeBaseTx.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmDeleteKnowledgeBaseTx.defaultExpectation.params)
+		}
+	}
+
+	return mmDeleteKnowledgeBaseTx
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.DeleteKnowledgeBaseTx
+func (mmDeleteKnowledgeBaseTx *mRepositoryMockDeleteKnowledgeBaseTx) ExpectCtxParam1(ctx context.Context) *mRepositoryMockDeleteKnowledgeBaseTx {
+	if mmDeleteKnowledgeBaseTx.mock.funcDeleteKnowledgeBaseTx != nil {
+		mmDeleteKnowledgeBaseTx.mock.t.Fatalf("RepositoryMock.DeleteKnowledgeBaseTx mock is already set by Set")
+	}
+
+	if mmDeleteKnowledgeBaseTx.defaultExpectation == nil {
+		mmDeleteKnowledgeBaseTx.defaultExpectation = &RepositoryMockDeleteKnowledgeBaseTxExpectation{}
+	}
+
+	if mmDeleteKnowledgeBaseTx.defaultExpectation.params != nil {
+		mmDeleteKnowledgeBaseTx.mock.t.Fatalf("RepositoryMock.DeleteKnowledgeBaseTx mock is already set by Expect")
+	}
+
+	if mmDeleteKnowledgeBaseTx.defaultExpectation.paramPtrs == nil {
+		mmDeleteKnowledgeBaseTx.defaultExpectation.paramPtrs = &RepositoryMockDeleteKnowledgeBaseTxParamPtrs{}
+	}
+	mmDeleteKnowledgeBaseTx.defaultExpectation.paramPtrs.ctx = &ctx
+	mmDeleteKnowledgeBaseTx.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmDeleteKnowledgeBaseTx
+}
+
+// ExpectTxParam2 sets up expected param tx for Repository.DeleteKnowledgeBaseTx
+func (mmDeleteKnowledgeBaseTx *mRepositoryMockDeleteKnowledgeBaseTx) ExpectTxParam2(tx *gorm.DB) *mRepositoryMockDeleteKnowledgeBaseTx {
+	if mmDeleteKnowledgeBaseTx.mock.funcDeleteKnowledgeBaseTx != nil {
+		mmDeleteKnowledgeBaseTx.mock.t.Fatalf("RepositoryMock.DeleteKnowledgeBaseTx mock is already set by Set")
+	}
+
+	if mmDeleteKnowledgeBaseTx.defaultExpectation == nil {
+		mmDeleteKnowledgeBaseTx.defaultExpectation = &RepositoryMockDeleteKnowledgeBaseTxExpectation{}
+	}
+
+	if mmDeleteKnowledgeBaseTx.defaultExpectation.params != nil {
+		mmDeleteKnowledgeBaseTx.mock.t.Fatalf("RepositoryMock.DeleteKnowledgeBaseTx mock is already set by Expect")
+	}
+
+	if mmDeleteKnowledgeBaseTx.defaultExpectation.paramPtrs == nil {
+		mmDeleteKnowledgeBaseTx.defaultExpectation.paramPtrs = &RepositoryMockDeleteKnowledgeBaseTxParamPtrs{}
+	}
+	mmDeleteKnowledgeBaseTx.defaultExpectation.paramPtrs.tx = &tx
+	mmDeleteKnowledgeBaseTx.defaultExpectation.expectationOrigins.originTx = minimock.CallerInfo(1)
+
+	return mmDeleteKnowledgeBaseTx
+}
+
+// ExpectOwnerParam3 sets up expected param owner for Repository.DeleteKnowledgeBaseTx
+func (mmDeleteKnowledgeBaseTx *mRepositoryMockDeleteKnowledgeBaseTx) ExpectOwnerParam3(owner string) *mRepositoryMockDeleteKnowledgeBaseTx {
+	if mmDeleteKnowledgeBaseTx.mock.funcDeleteKnowledgeBaseTx != nil {
+		mmDeleteKnowledgeBaseTx.mock.t.Fatalf("RepositoryMock.DeleteKnowledgeBaseTx mock is already set by Set")
+	}
+
+	if mmDeleteKnowledgeBaseTx.defaultExpectation == nil {
+		mmDeleteKnowledgeBaseTx.defaultExpectation = &RepositoryMockDeleteKnowledgeBaseTxExpectation{}
+	}
+
+	if mmDeleteKnowledgeBaseTx.defaultExpectation.params != nil {
+		mmDeleteKnowledgeBaseTx.mock.t.Fatalf("RepositoryMock.DeleteKnowledgeBaseTx mock is already set by Expect")
+	}
+
+	if mmDeleteKnowledgeBaseTx.defaultExpectation.paramPtrs == nil {
+		mmDeleteKnowledgeBaseTx.defaultExpectation.paramPtrs = &RepositoryMockDeleteKnowledgeBaseTxParamPtrs{}
+	}
+	mmDeleteKnowledgeBaseTx.defaultExpectation.paramPtrs.owner = &owner
+	mmDeleteKnowledgeBaseTx.defaultExpectation.expectationOrigins.originOwner = minimock.CallerInfo(1)
+
+	return mmDeleteKnowledgeBaseTx
+}
+
+// ExpectKbIDParam4 sets up expected param kbID for Repository.DeleteKnowledgeBaseTx
+func (mmDeleteKnowledgeBaseTx *mRepositoryMockDeleteKnowledgeBaseTx) ExpectKbIDParam4(kbID string) *mRepositoryMockDeleteKnowledgeBaseTx {
+	if mmDeleteKnowledgeBaseTx.mock.funcDeleteKnowledgeBaseTx != nil {
+		mmDeleteKnowledgeBaseTx.mock.t.Fatalf("RepositoryMock.DeleteKnowledgeBaseTx mock is already set by Set")
+	}
+
+	if mmDeleteKnowledgeBaseTx.defaultExpectation == nil {
+		mmDeleteKnowledgeBaseTx.defaultExpectation = &RepositoryMockDeleteKnowledgeBaseTxExpectation{}
+	}
+
+	if mmDeleteKnowledgeBaseTx.defaultExpectation.params != nil {
+		mmDeleteKnowledgeBaseTx.mock.t.Fatalf("RepositoryMock.DeleteKnowledgeBaseTx mock is already set by Expect")
+	}
+
+	if mmDeleteKnowledgeBaseTx.defaultExpectation.paramPtrs == nil {
+		mmDeleteKnowledgeBaseTx.defaultExpectation.paramPtrs = &RepositoryMockDeleteKnowledgeBaseTxParamPtrs{}
+	}
+	mmDeleteKnowledgeBaseTx.defaultExpectation.paramPtrs.kbID = &kbID
+	mmDeleteKnowledgeBaseTx.defaultExpectation.expectationOrigins.originKbID = minimock.CallerInfo(1)
+
+	return mmDeleteKnowledgeBaseTx
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.DeleteKnowledgeBaseTx
+func (mmDeleteKnowledgeBaseTx *mRepositoryMockDeleteKnowledgeBaseTx) Inspect(f func(ctx context.Context, tx *gorm.DB, owner string, kbID string)) *mRepositoryMockDeleteKnowledgeBaseTx {
+	if mmDeleteKnowledgeBaseTx.mock.inspectFuncDeleteKnowledgeBaseTx != nil {
+		mmDeleteKnowledgeBaseTx.mock.t.Fatalf("Inspect function is already set for RepositoryMock.DeleteKnowledgeBaseTx")
+	}
+
+	mmDeleteKnowledgeBaseTx.mock.inspectFuncDeleteKnowledgeBaseTx = f
+
+	return mmDeleteKnowledgeBaseTx
+}
+
+// Return sets up results that will be returned by Repository.DeleteKnowledgeBaseTx
+func (mmDeleteKnowledgeBaseTx *mRepositoryMockDeleteKnowledgeBaseTx) Return(err error) *RepositoryMock {
+	if mmDeleteKnowledgeBaseTx.mock.funcDeleteKnowledgeBaseTx != nil {
+		mmDeleteKnowledgeBaseTx.mock.t.Fatalf("RepositoryMock.DeleteKnowledgeBaseTx mock is already set by Set")
+	}
+
+	if mmDeleteKnowledgeBaseTx.defaultExpectation == nil {
+		mmDeleteKnowledgeBaseTx.defaultExpectation = &RepositoryMockDeleteKnowledgeBaseTxExpectation{mock: mmDeleteKnowledgeBaseTx.mock}
+	}
+	mmDeleteKnowledgeBaseTx.defaultExpectation.results = &RepositoryMockDeleteKnowledgeBaseTxResults{err}
+	mmDeleteKnowledgeBaseTx.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmDeleteKnowledgeBaseTx.mock
+}
+
+// Set uses given function f to mock the Repository.DeleteKnowledgeBaseTx method
+func (mmDeleteKnowledgeBaseTx *mRepositoryMockDeleteKnowledgeBaseTx) Set(f func(ctx context.Context, tx *gorm.DB, owner string, kbID string) (err error)) *RepositoryMock {
+	if mmDeleteKnowledgeBaseTx.defaultExpectation != nil {
+		mmDeleteKnowledgeBaseTx.mock.t.Fatalf("Default expectation is already set for the Repository.DeleteKnowledgeBaseTx method")
+	}
+
+	if len(mmDeleteKnowledgeBaseTx.expectations) > 0 {
+		mmDeleteKnowledgeBaseTx.mock.t.Fatalf("Some expectations are already set for the Repository.DeleteKnowledgeBaseTx method")
+	}
+
+	mmDeleteKnowledgeBaseTx.mock.funcDeleteKnowledgeBaseTx = f
+	mmDeleteKnowledgeBaseTx.mock.funcDeleteKnowledgeBaseTxOrigin = minimock.CallerInfo(1)
+	return mmDeleteKnowledgeBaseTx.mock
+}
+
+// When sets expectation for the Repository.DeleteKnowledgeBaseTx which will trigger the result defined by the following
+// Then helper
+func (mmDeleteKnowledgeBaseTx *mRepositoryMockDeleteKnowledgeBaseTx) When(ctx context.Context, tx *gorm.DB, owner string, kbID string) *RepositoryMockDeleteKnowledgeBaseTxExpectation {
+	if mmDeleteKnowledgeBaseTx.mock.funcDeleteKnowledgeBaseTx != nil {
+		mmDeleteKnowledgeBaseTx.mock.t.Fatalf("RepositoryMock.DeleteKnowledgeBaseTx mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockDeleteKnowledgeBaseTxExpectation{
+		mock:               mmDeleteKnowledgeBaseTx.mock,
+		params:             &RepositoryMockDeleteKnowledgeBaseTxParams{ctx, tx, owner, kbID},
+		expectationOrigins: RepositoryMockDeleteKnowledgeBaseTxExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmDeleteKnowledgeBaseTx.expectations = append(mmDeleteKnowledgeBaseTx.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.DeleteKnowledgeBaseTx return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockDeleteKnowledgeBaseTxExpectation) Then(err error) *RepositoryMock {
+	e.results = &RepositoryMockDeleteKnowledgeBaseTxResults{err}
+	return e.mock
+}
+
+// Times sets number of times Repository.DeleteKnowledgeBaseTx should be invoked
+func (mmDeleteKnowledgeBaseTx *mRepositoryMockDeleteKnowledgeBaseTx) Times(n uint64) *mRepositoryMockDeleteKnowledgeBaseTx {
+	if n == 0 {
+		mmDeleteKnowledgeBaseTx.mock.t.Fatalf("Times of RepositoryMock.DeleteKnowledgeBaseTx mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmDeleteKnowledgeBaseTx.expectedInvocations, n)
+	mmDeleteKnowledgeBaseTx.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmDeleteKnowledgeBaseTx
+}
+
+func (mmDeleteKnowledgeBaseTx *mRepositoryMockDeleteKnowledgeBaseTx) invocationsDone() bool {
+	if len(mmDeleteKnowledgeBaseTx.expectations) == 0 && mmDeleteKnowledgeBaseTx.defaultExpectation == nil && mmDeleteKnowledgeBaseTx.mock.funcDeleteKnowledgeBaseTx == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmDeleteKnowledgeBaseTx.mock.afterDeleteKnowledgeBaseTxCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmDeleteKnowledgeBaseTx.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// DeleteKnowledgeBaseTx implements mm_repository.Repository
+func (mmDeleteKnowledgeBaseTx *RepositoryMock) DeleteKnowledgeBaseTx(ctx context.Context, tx *gorm.DB, owner string, kbID string) (err error) {
+	mm_atomic.AddUint64(&mmDeleteKnowledgeBaseTx.beforeDeleteKnowledgeBaseTxCounter, 1)
+	defer mm_atomic.AddUint64(&mmDeleteKnowledgeBaseTx.afterDeleteKnowledgeBaseTxCounter, 1)
+
+	mmDeleteKnowledgeBaseTx.t.Helper()
+
+	if mmDeleteKnowledgeBaseTx.inspectFuncDeleteKnowledgeBaseTx != nil {
+		mmDeleteKnowledgeBaseTx.inspectFuncDeleteKnowledgeBaseTx(ctx, tx, owner, kbID)
+	}
+
+	mm_params := RepositoryMockDeleteKnowledgeBaseTxParams{ctx, tx, owner, kbID}
+
+	// Record call args
+	mmDeleteKnowledgeBaseTx.DeleteKnowledgeBaseTxMock.mutex.Lock()
+	mmDeleteKnowledgeBaseTx.DeleteKnowledgeBaseTxMock.callArgs = append(mmDeleteKnowledgeBaseTx.DeleteKnowledgeBaseTxMock.callArgs, &mm_params)
+	mmDeleteKnowledgeBaseTx.DeleteKnowledgeBaseTxMock.mutex.Unlock()
+
+	for _, e := range mmDeleteKnowledgeBaseTx.DeleteKnowledgeBaseTxMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmDeleteKnowledgeBaseTx.DeleteKnowledgeBaseTxMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmDeleteKnowledgeBaseTx.DeleteKnowledgeBaseTxMock.defaultExpectation.Counter, 1)
+		mm_want := mmDeleteKnowledgeBaseTx.DeleteKnowledgeBaseTxMock.defaultExpectation.params
+		mm_want_ptrs := mmDeleteKnowledgeBaseTx.DeleteKnowledgeBaseTxMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockDeleteKnowledgeBaseTxParams{ctx, tx, owner, kbID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmDeleteKnowledgeBaseTx.t.Errorf("RepositoryMock.DeleteKnowledgeBaseTx got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDeleteKnowledgeBaseTx.DeleteKnowledgeBaseTxMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.tx != nil && !minimock.Equal(*mm_want_ptrs.tx, mm_got.tx) {
+				mmDeleteKnowledgeBaseTx.t.Errorf("RepositoryMock.DeleteKnowledgeBaseTx got unexpected parameter tx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDeleteKnowledgeBaseTx.DeleteKnowledgeBaseTxMock.defaultExpectation.expectationOrigins.originTx, *mm_want_ptrs.tx, mm_got.tx, minimock.Diff(*mm_want_ptrs.tx, mm_got.tx))
+			}
+
+			if mm_want_ptrs.owner != nil && !minimock.Equal(*mm_want_ptrs.owner, mm_got.owner) {
+				mmDeleteKnowledgeBaseTx.t.Errorf("RepositoryMock.DeleteKnowledgeBaseTx got unexpected parameter owner, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDeleteKnowledgeBaseTx.DeleteKnowledgeBaseTxMock.defaultExpectation.expectationOrigins.originOwner, *mm_want_ptrs.owner, mm_got.owner, minimock.Diff(*mm_want_ptrs.owner, mm_got.owner))
+			}
+
+			if mm_want_ptrs.kbID != nil && !minimock.Equal(*mm_want_ptrs.kbID, mm_got.kbID) {
+				mmDeleteKnowledgeBaseTx.t.Errorf("RepositoryMock.DeleteKnowledgeBaseTx got unexpected parameter kbID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDeleteKnowledgeBaseTx.DeleteKnowledgeBaseTxMock.defaultExpectation.expectationOrigins.originKbID, *mm_want_ptrs.kbID, mm_got.kbID, minimock.Diff(*mm_want_ptrs.kbID, mm_got.kbID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmDeleteKnowledgeBaseTx.t.Errorf("RepositoryMock.DeleteKnowledgeBaseTx got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmDeleteKnowledgeBaseTx.DeleteKnowledgeBaseTxMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmDeleteKnowledgeBaseTx.DeleteKnowledgeBaseTxMock.defaultExpectation.results
+		if mm_results == nil {
+			mmDeleteKnowledgeBaseTx.t.Fatal("No results are set for the RepositoryMock.DeleteKnowledgeBaseTx")
+		}
+		return (*mm_results).err
+	}
+	if mmDeleteKnowledgeBaseTx.funcDeleteKnowledgeBaseTx != nil {
+		return mmDeleteKnowledgeBaseTx.funcDeleteKnowledgeBaseTx(ctx, tx, owner, kbID)
+	}
+	mmDeleteKnowledgeBaseTx.t.Fatalf("Unexpected call to RepositoryMock.DeleteKnowledgeBaseTx. %v %v %v %v", ctx, tx, owner, kbID)
+	return
+}
+
+// DeleteKnowledgeBaseTxAfterCounter returns a count of finished RepositoryMock.DeleteKnowledgeBaseTx invocations
+func (mmDeleteKnowledgeBaseTx *RepositoryMock) DeleteKnowledgeBaseTxAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmDeleteKnowledgeBaseTx.afterDeleteKnowledgeBaseTxCounter)
+}
+
+// DeleteKnowledgeBaseTxBeforeCounter returns a count of RepositoryMock.DeleteKnowledgeBaseTx invocations
+func (mmDeleteKnowledgeBaseTx *RepositoryMock) DeleteKnowledgeBaseTxBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmDeleteKnowledgeBaseTx.beforeDeleteKnowledgeBaseTxCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.DeleteKnowledgeBaseTx.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmDeleteKnowledgeBaseTx *mRepositoryMockDeleteKnowledgeBaseTx) Calls() []*RepositoryMockDeleteKnowledgeBaseTxParams {
+	mmDeleteKnowledgeBaseTx.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockDeleteKnowledgeBaseTxParams, len(mmDeleteKnowledgeBaseTx.callArgs))
+	copy(argCopy, mmDeleteKnowledgeBaseTx.callArgs)
+
+	mmDeleteKnowledgeBaseTx.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockDeleteKnowledgeBaseTxDone returns true if the count of the DeleteKnowledgeBaseTx invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockDeleteKnowledgeBaseTxDone() bool {
+	if m.DeleteKnowledgeBaseTxMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.DeleteKnowledgeBaseTxMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.DeleteKnowledgeBaseTxMock.invocationsDone()
+}
+
+// MinimockDeleteKnowledgeBaseTxInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockDeleteKnowledgeBaseTxInspect() {
+	for _, e := range m.DeleteKnowledgeBaseTxMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.DeleteKnowledgeBaseTx at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterDeleteKnowledgeBaseTxCounter := mm_atomic.LoadUint64(&m.afterDeleteKnowledgeBaseTxCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.DeleteKnowledgeBaseTxMock.defaultExpectation != nil && afterDeleteKnowledgeBaseTxCounter < 1 {
+		if m.DeleteKnowledgeBaseTxMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.DeleteKnowledgeBaseTx at\n%s", m.DeleteKnowledgeBaseTxMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.DeleteKnowledgeBaseTx at\n%s with params: %#v", m.DeleteKnowledgeBaseTxMock.defaultExpectation.expectationOrigins.origin, *m.DeleteKnowledgeBaseTxMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcDeleteKnowledgeBaseTx != nil && afterDeleteKnowledgeBaseTxCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.DeleteKnowledgeBaseTx at\n%s", m.funcDeleteKnowledgeBaseTxOrigin)
+	}
+
+	if !m.DeleteKnowledgeBaseTxMock.invocationsDone() && afterDeleteKnowledgeBaseTxCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.DeleteKnowledgeBaseTx at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.DeleteKnowledgeBaseTxMock.expectedInvocations), m.DeleteKnowledgeBaseTxMock.expectedInvocationsOrigin, afterDeleteKnowledgeBaseTxCounter)
+	}
+}
+
 type mRepositoryMockDeleteObject struct {
 	optional           bool
 	mock               *RepositoryMock
@@ -15252,6 +15695,192 @@ func (m *RepositoryMock) MinimockGetConvertedFileCountByKBUIDInspect() {
 	if !m.GetConvertedFileCountByKBUIDMock.invocationsDone() && afterGetConvertedFileCountByKBUIDCounter > 0 {
 		m.t.Errorf("Expected %d calls to RepositoryMock.GetConvertedFileCountByKBUID at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.GetConvertedFileCountByKBUIDMock.expectedInvocations), m.GetConvertedFileCountByKBUIDMock.expectedInvocationsOrigin, afterGetConvertedFileCountByKBUIDCounter)
+	}
+}
+
+type mRepositoryMockGetDB struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockGetDBExpectation
+	expectations       []*RepositoryMockGetDBExpectation
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockGetDBExpectation specifies expectation struct of the Repository.GetDB
+type RepositoryMockGetDBExpectation struct {
+	mock *RepositoryMock
+
+	results      *RepositoryMockGetDBResults
+	returnOrigin string
+	Counter      uint64
+}
+
+// RepositoryMockGetDBResults contains results of the Repository.GetDB
+type RepositoryMockGetDBResults struct {
+	dp1 *gorm.DB
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmGetDB *mRepositoryMockGetDB) Optional() *mRepositoryMockGetDB {
+	mmGetDB.optional = true
+	return mmGetDB
+}
+
+// Expect sets up expected params for Repository.GetDB
+func (mmGetDB *mRepositoryMockGetDB) Expect() *mRepositoryMockGetDB {
+	if mmGetDB.mock.funcGetDB != nil {
+		mmGetDB.mock.t.Fatalf("RepositoryMock.GetDB mock is already set by Set")
+	}
+
+	if mmGetDB.defaultExpectation == nil {
+		mmGetDB.defaultExpectation = &RepositoryMockGetDBExpectation{}
+	}
+
+	return mmGetDB
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.GetDB
+func (mmGetDB *mRepositoryMockGetDB) Inspect(f func()) *mRepositoryMockGetDB {
+	if mmGetDB.mock.inspectFuncGetDB != nil {
+		mmGetDB.mock.t.Fatalf("Inspect function is already set for RepositoryMock.GetDB")
+	}
+
+	mmGetDB.mock.inspectFuncGetDB = f
+
+	return mmGetDB
+}
+
+// Return sets up results that will be returned by Repository.GetDB
+func (mmGetDB *mRepositoryMockGetDB) Return(dp1 *gorm.DB) *RepositoryMock {
+	if mmGetDB.mock.funcGetDB != nil {
+		mmGetDB.mock.t.Fatalf("RepositoryMock.GetDB mock is already set by Set")
+	}
+
+	if mmGetDB.defaultExpectation == nil {
+		mmGetDB.defaultExpectation = &RepositoryMockGetDBExpectation{mock: mmGetDB.mock}
+	}
+	mmGetDB.defaultExpectation.results = &RepositoryMockGetDBResults{dp1}
+	mmGetDB.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmGetDB.mock
+}
+
+// Set uses given function f to mock the Repository.GetDB method
+func (mmGetDB *mRepositoryMockGetDB) Set(f func() (dp1 *gorm.DB)) *RepositoryMock {
+	if mmGetDB.defaultExpectation != nil {
+		mmGetDB.mock.t.Fatalf("Default expectation is already set for the Repository.GetDB method")
+	}
+
+	if len(mmGetDB.expectations) > 0 {
+		mmGetDB.mock.t.Fatalf("Some expectations are already set for the Repository.GetDB method")
+	}
+
+	mmGetDB.mock.funcGetDB = f
+	mmGetDB.mock.funcGetDBOrigin = minimock.CallerInfo(1)
+	return mmGetDB.mock
+}
+
+// Times sets number of times Repository.GetDB should be invoked
+func (mmGetDB *mRepositoryMockGetDB) Times(n uint64) *mRepositoryMockGetDB {
+	if n == 0 {
+		mmGetDB.mock.t.Fatalf("Times of RepositoryMock.GetDB mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetDB.expectedInvocations, n)
+	mmGetDB.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmGetDB
+}
+
+func (mmGetDB *mRepositoryMockGetDB) invocationsDone() bool {
+	if len(mmGetDB.expectations) == 0 && mmGetDB.defaultExpectation == nil && mmGetDB.mock.funcGetDB == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetDB.mock.afterGetDBCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetDB.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetDB implements mm_repository.Repository
+func (mmGetDB *RepositoryMock) GetDB() (dp1 *gorm.DB) {
+	mm_atomic.AddUint64(&mmGetDB.beforeGetDBCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetDB.afterGetDBCounter, 1)
+
+	mmGetDB.t.Helper()
+
+	if mmGetDB.inspectFuncGetDB != nil {
+		mmGetDB.inspectFuncGetDB()
+	}
+
+	if mmGetDB.GetDBMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetDB.GetDBMock.defaultExpectation.Counter, 1)
+
+		mm_results := mmGetDB.GetDBMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetDB.t.Fatal("No results are set for the RepositoryMock.GetDB")
+		}
+		return (*mm_results).dp1
+	}
+	if mmGetDB.funcGetDB != nil {
+		return mmGetDB.funcGetDB()
+	}
+	mmGetDB.t.Fatalf("Unexpected call to RepositoryMock.GetDB.")
+	return
+}
+
+// GetDBAfterCounter returns a count of finished RepositoryMock.GetDB invocations
+func (mmGetDB *RepositoryMock) GetDBAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetDB.afterGetDBCounter)
+}
+
+// GetDBBeforeCounter returns a count of RepositoryMock.GetDB invocations
+func (mmGetDB *RepositoryMock) GetDBBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetDB.beforeGetDBCounter)
+}
+
+// MinimockGetDBDone returns true if the count of the GetDB invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockGetDBDone() bool {
+	if m.GetDBMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.GetDBMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetDBMock.invocationsDone()
+}
+
+// MinimockGetDBInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockGetDBInspect() {
+	for _, e := range m.GetDBMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Error("Expected call to RepositoryMock.GetDB")
+		}
+	}
+
+	afterGetDBCounter := mm_atomic.LoadUint64(&m.afterGetDBCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetDBMock.defaultExpectation != nil && afterGetDBCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.GetDB at\n%s", m.GetDBMock.defaultExpectation.returnOrigin)
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetDB != nil && afterGetDBCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.GetDB at\n%s", m.funcGetDBOrigin)
+	}
+
+	if !m.GetDBMock.invocationsDone() && afterGetDBCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.GetDB at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.GetDBMock.expectedInvocations), m.GetDBMock.expectedInvocationsOrigin, afterGetDBCounter)
 	}
 }
 
@@ -39413,6 +40042,410 @@ func (m *RepositoryMock) MinimockUpdateKnowledgeBaseResourcesInspect() {
 	}
 }
 
+type mRepositoryMockUpdateKnowledgeBaseResourcesTx struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockUpdateKnowledgeBaseResourcesTxExpectation
+	expectations       []*RepositoryMockUpdateKnowledgeBaseResourcesTxExpectation
+
+	callArgs []*RepositoryMockUpdateKnowledgeBaseResourcesTxParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockUpdateKnowledgeBaseResourcesTxExpectation specifies expectation struct of the Repository.UpdateKnowledgeBaseResourcesTx
+type RepositoryMockUpdateKnowledgeBaseResourcesTxExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockUpdateKnowledgeBaseResourcesTxParams
+	paramPtrs          *RepositoryMockUpdateKnowledgeBaseResourcesTxParamPtrs
+	expectationOrigins RepositoryMockUpdateKnowledgeBaseResourcesTxExpectationOrigins
+	results            *RepositoryMockUpdateKnowledgeBaseResourcesTxResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockUpdateKnowledgeBaseResourcesTxParams contains parameters of the Repository.UpdateKnowledgeBaseResourcesTx
+type RepositoryMockUpdateKnowledgeBaseResourcesTxParams struct {
+	ctx       context.Context
+	tx        *gorm.DB
+	fromKBUID types.KBUIDType
+	toKBUID   types.KBUIDType
+}
+
+// RepositoryMockUpdateKnowledgeBaseResourcesTxParamPtrs contains pointers to parameters of the Repository.UpdateKnowledgeBaseResourcesTx
+type RepositoryMockUpdateKnowledgeBaseResourcesTxParamPtrs struct {
+	ctx       *context.Context
+	tx        **gorm.DB
+	fromKBUID *types.KBUIDType
+	toKBUID   *types.KBUIDType
+}
+
+// RepositoryMockUpdateKnowledgeBaseResourcesTxResults contains results of the Repository.UpdateKnowledgeBaseResourcesTx
+type RepositoryMockUpdateKnowledgeBaseResourcesTxResults struct {
+	err error
+}
+
+// RepositoryMockUpdateKnowledgeBaseResourcesTxOrigins contains origins of expectations of the Repository.UpdateKnowledgeBaseResourcesTx
+type RepositoryMockUpdateKnowledgeBaseResourcesTxExpectationOrigins struct {
+	origin          string
+	originCtx       string
+	originTx        string
+	originFromKBUID string
+	originToKBUID   string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmUpdateKnowledgeBaseResourcesTx *mRepositoryMockUpdateKnowledgeBaseResourcesTx) Optional() *mRepositoryMockUpdateKnowledgeBaseResourcesTx {
+	mmUpdateKnowledgeBaseResourcesTx.optional = true
+	return mmUpdateKnowledgeBaseResourcesTx
+}
+
+// Expect sets up expected params for Repository.UpdateKnowledgeBaseResourcesTx
+func (mmUpdateKnowledgeBaseResourcesTx *mRepositoryMockUpdateKnowledgeBaseResourcesTx) Expect(ctx context.Context, tx *gorm.DB, fromKBUID types.KBUIDType, toKBUID types.KBUIDType) *mRepositoryMockUpdateKnowledgeBaseResourcesTx {
+	if mmUpdateKnowledgeBaseResourcesTx.mock.funcUpdateKnowledgeBaseResourcesTx != nil {
+		mmUpdateKnowledgeBaseResourcesTx.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseResourcesTx mock is already set by Set")
+	}
+
+	if mmUpdateKnowledgeBaseResourcesTx.defaultExpectation == nil {
+		mmUpdateKnowledgeBaseResourcesTx.defaultExpectation = &RepositoryMockUpdateKnowledgeBaseResourcesTxExpectation{}
+	}
+
+	if mmUpdateKnowledgeBaseResourcesTx.defaultExpectation.paramPtrs != nil {
+		mmUpdateKnowledgeBaseResourcesTx.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseResourcesTx mock is already set by ExpectParams functions")
+	}
+
+	mmUpdateKnowledgeBaseResourcesTx.defaultExpectation.params = &RepositoryMockUpdateKnowledgeBaseResourcesTxParams{ctx, tx, fromKBUID, toKBUID}
+	mmUpdateKnowledgeBaseResourcesTx.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmUpdateKnowledgeBaseResourcesTx.expectations {
+		if minimock.Equal(e.params, mmUpdateKnowledgeBaseResourcesTx.defaultExpectation.params) {
+			mmUpdateKnowledgeBaseResourcesTx.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmUpdateKnowledgeBaseResourcesTx.defaultExpectation.params)
+		}
+	}
+
+	return mmUpdateKnowledgeBaseResourcesTx
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.UpdateKnowledgeBaseResourcesTx
+func (mmUpdateKnowledgeBaseResourcesTx *mRepositoryMockUpdateKnowledgeBaseResourcesTx) ExpectCtxParam1(ctx context.Context) *mRepositoryMockUpdateKnowledgeBaseResourcesTx {
+	if mmUpdateKnowledgeBaseResourcesTx.mock.funcUpdateKnowledgeBaseResourcesTx != nil {
+		mmUpdateKnowledgeBaseResourcesTx.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseResourcesTx mock is already set by Set")
+	}
+
+	if mmUpdateKnowledgeBaseResourcesTx.defaultExpectation == nil {
+		mmUpdateKnowledgeBaseResourcesTx.defaultExpectation = &RepositoryMockUpdateKnowledgeBaseResourcesTxExpectation{}
+	}
+
+	if mmUpdateKnowledgeBaseResourcesTx.defaultExpectation.params != nil {
+		mmUpdateKnowledgeBaseResourcesTx.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseResourcesTx mock is already set by Expect")
+	}
+
+	if mmUpdateKnowledgeBaseResourcesTx.defaultExpectation.paramPtrs == nil {
+		mmUpdateKnowledgeBaseResourcesTx.defaultExpectation.paramPtrs = &RepositoryMockUpdateKnowledgeBaseResourcesTxParamPtrs{}
+	}
+	mmUpdateKnowledgeBaseResourcesTx.defaultExpectation.paramPtrs.ctx = &ctx
+	mmUpdateKnowledgeBaseResourcesTx.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmUpdateKnowledgeBaseResourcesTx
+}
+
+// ExpectTxParam2 sets up expected param tx for Repository.UpdateKnowledgeBaseResourcesTx
+func (mmUpdateKnowledgeBaseResourcesTx *mRepositoryMockUpdateKnowledgeBaseResourcesTx) ExpectTxParam2(tx *gorm.DB) *mRepositoryMockUpdateKnowledgeBaseResourcesTx {
+	if mmUpdateKnowledgeBaseResourcesTx.mock.funcUpdateKnowledgeBaseResourcesTx != nil {
+		mmUpdateKnowledgeBaseResourcesTx.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseResourcesTx mock is already set by Set")
+	}
+
+	if mmUpdateKnowledgeBaseResourcesTx.defaultExpectation == nil {
+		mmUpdateKnowledgeBaseResourcesTx.defaultExpectation = &RepositoryMockUpdateKnowledgeBaseResourcesTxExpectation{}
+	}
+
+	if mmUpdateKnowledgeBaseResourcesTx.defaultExpectation.params != nil {
+		mmUpdateKnowledgeBaseResourcesTx.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseResourcesTx mock is already set by Expect")
+	}
+
+	if mmUpdateKnowledgeBaseResourcesTx.defaultExpectation.paramPtrs == nil {
+		mmUpdateKnowledgeBaseResourcesTx.defaultExpectation.paramPtrs = &RepositoryMockUpdateKnowledgeBaseResourcesTxParamPtrs{}
+	}
+	mmUpdateKnowledgeBaseResourcesTx.defaultExpectation.paramPtrs.tx = &tx
+	mmUpdateKnowledgeBaseResourcesTx.defaultExpectation.expectationOrigins.originTx = minimock.CallerInfo(1)
+
+	return mmUpdateKnowledgeBaseResourcesTx
+}
+
+// ExpectFromKBUIDParam3 sets up expected param fromKBUID for Repository.UpdateKnowledgeBaseResourcesTx
+func (mmUpdateKnowledgeBaseResourcesTx *mRepositoryMockUpdateKnowledgeBaseResourcesTx) ExpectFromKBUIDParam3(fromKBUID types.KBUIDType) *mRepositoryMockUpdateKnowledgeBaseResourcesTx {
+	if mmUpdateKnowledgeBaseResourcesTx.mock.funcUpdateKnowledgeBaseResourcesTx != nil {
+		mmUpdateKnowledgeBaseResourcesTx.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseResourcesTx mock is already set by Set")
+	}
+
+	if mmUpdateKnowledgeBaseResourcesTx.defaultExpectation == nil {
+		mmUpdateKnowledgeBaseResourcesTx.defaultExpectation = &RepositoryMockUpdateKnowledgeBaseResourcesTxExpectation{}
+	}
+
+	if mmUpdateKnowledgeBaseResourcesTx.defaultExpectation.params != nil {
+		mmUpdateKnowledgeBaseResourcesTx.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseResourcesTx mock is already set by Expect")
+	}
+
+	if mmUpdateKnowledgeBaseResourcesTx.defaultExpectation.paramPtrs == nil {
+		mmUpdateKnowledgeBaseResourcesTx.defaultExpectation.paramPtrs = &RepositoryMockUpdateKnowledgeBaseResourcesTxParamPtrs{}
+	}
+	mmUpdateKnowledgeBaseResourcesTx.defaultExpectation.paramPtrs.fromKBUID = &fromKBUID
+	mmUpdateKnowledgeBaseResourcesTx.defaultExpectation.expectationOrigins.originFromKBUID = minimock.CallerInfo(1)
+
+	return mmUpdateKnowledgeBaseResourcesTx
+}
+
+// ExpectToKBUIDParam4 sets up expected param toKBUID for Repository.UpdateKnowledgeBaseResourcesTx
+func (mmUpdateKnowledgeBaseResourcesTx *mRepositoryMockUpdateKnowledgeBaseResourcesTx) ExpectToKBUIDParam4(toKBUID types.KBUIDType) *mRepositoryMockUpdateKnowledgeBaseResourcesTx {
+	if mmUpdateKnowledgeBaseResourcesTx.mock.funcUpdateKnowledgeBaseResourcesTx != nil {
+		mmUpdateKnowledgeBaseResourcesTx.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseResourcesTx mock is already set by Set")
+	}
+
+	if mmUpdateKnowledgeBaseResourcesTx.defaultExpectation == nil {
+		mmUpdateKnowledgeBaseResourcesTx.defaultExpectation = &RepositoryMockUpdateKnowledgeBaseResourcesTxExpectation{}
+	}
+
+	if mmUpdateKnowledgeBaseResourcesTx.defaultExpectation.params != nil {
+		mmUpdateKnowledgeBaseResourcesTx.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseResourcesTx mock is already set by Expect")
+	}
+
+	if mmUpdateKnowledgeBaseResourcesTx.defaultExpectation.paramPtrs == nil {
+		mmUpdateKnowledgeBaseResourcesTx.defaultExpectation.paramPtrs = &RepositoryMockUpdateKnowledgeBaseResourcesTxParamPtrs{}
+	}
+	mmUpdateKnowledgeBaseResourcesTx.defaultExpectation.paramPtrs.toKBUID = &toKBUID
+	mmUpdateKnowledgeBaseResourcesTx.defaultExpectation.expectationOrigins.originToKBUID = minimock.CallerInfo(1)
+
+	return mmUpdateKnowledgeBaseResourcesTx
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.UpdateKnowledgeBaseResourcesTx
+func (mmUpdateKnowledgeBaseResourcesTx *mRepositoryMockUpdateKnowledgeBaseResourcesTx) Inspect(f func(ctx context.Context, tx *gorm.DB, fromKBUID types.KBUIDType, toKBUID types.KBUIDType)) *mRepositoryMockUpdateKnowledgeBaseResourcesTx {
+	if mmUpdateKnowledgeBaseResourcesTx.mock.inspectFuncUpdateKnowledgeBaseResourcesTx != nil {
+		mmUpdateKnowledgeBaseResourcesTx.mock.t.Fatalf("Inspect function is already set for RepositoryMock.UpdateKnowledgeBaseResourcesTx")
+	}
+
+	mmUpdateKnowledgeBaseResourcesTx.mock.inspectFuncUpdateKnowledgeBaseResourcesTx = f
+
+	return mmUpdateKnowledgeBaseResourcesTx
+}
+
+// Return sets up results that will be returned by Repository.UpdateKnowledgeBaseResourcesTx
+func (mmUpdateKnowledgeBaseResourcesTx *mRepositoryMockUpdateKnowledgeBaseResourcesTx) Return(err error) *RepositoryMock {
+	if mmUpdateKnowledgeBaseResourcesTx.mock.funcUpdateKnowledgeBaseResourcesTx != nil {
+		mmUpdateKnowledgeBaseResourcesTx.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseResourcesTx mock is already set by Set")
+	}
+
+	if mmUpdateKnowledgeBaseResourcesTx.defaultExpectation == nil {
+		mmUpdateKnowledgeBaseResourcesTx.defaultExpectation = &RepositoryMockUpdateKnowledgeBaseResourcesTxExpectation{mock: mmUpdateKnowledgeBaseResourcesTx.mock}
+	}
+	mmUpdateKnowledgeBaseResourcesTx.defaultExpectation.results = &RepositoryMockUpdateKnowledgeBaseResourcesTxResults{err}
+	mmUpdateKnowledgeBaseResourcesTx.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmUpdateKnowledgeBaseResourcesTx.mock
+}
+
+// Set uses given function f to mock the Repository.UpdateKnowledgeBaseResourcesTx method
+func (mmUpdateKnowledgeBaseResourcesTx *mRepositoryMockUpdateKnowledgeBaseResourcesTx) Set(f func(ctx context.Context, tx *gorm.DB, fromKBUID types.KBUIDType, toKBUID types.KBUIDType) (err error)) *RepositoryMock {
+	if mmUpdateKnowledgeBaseResourcesTx.defaultExpectation != nil {
+		mmUpdateKnowledgeBaseResourcesTx.mock.t.Fatalf("Default expectation is already set for the Repository.UpdateKnowledgeBaseResourcesTx method")
+	}
+
+	if len(mmUpdateKnowledgeBaseResourcesTx.expectations) > 0 {
+		mmUpdateKnowledgeBaseResourcesTx.mock.t.Fatalf("Some expectations are already set for the Repository.UpdateKnowledgeBaseResourcesTx method")
+	}
+
+	mmUpdateKnowledgeBaseResourcesTx.mock.funcUpdateKnowledgeBaseResourcesTx = f
+	mmUpdateKnowledgeBaseResourcesTx.mock.funcUpdateKnowledgeBaseResourcesTxOrigin = minimock.CallerInfo(1)
+	return mmUpdateKnowledgeBaseResourcesTx.mock
+}
+
+// When sets expectation for the Repository.UpdateKnowledgeBaseResourcesTx which will trigger the result defined by the following
+// Then helper
+func (mmUpdateKnowledgeBaseResourcesTx *mRepositoryMockUpdateKnowledgeBaseResourcesTx) When(ctx context.Context, tx *gorm.DB, fromKBUID types.KBUIDType, toKBUID types.KBUIDType) *RepositoryMockUpdateKnowledgeBaseResourcesTxExpectation {
+	if mmUpdateKnowledgeBaseResourcesTx.mock.funcUpdateKnowledgeBaseResourcesTx != nil {
+		mmUpdateKnowledgeBaseResourcesTx.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseResourcesTx mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockUpdateKnowledgeBaseResourcesTxExpectation{
+		mock:               mmUpdateKnowledgeBaseResourcesTx.mock,
+		params:             &RepositoryMockUpdateKnowledgeBaseResourcesTxParams{ctx, tx, fromKBUID, toKBUID},
+		expectationOrigins: RepositoryMockUpdateKnowledgeBaseResourcesTxExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmUpdateKnowledgeBaseResourcesTx.expectations = append(mmUpdateKnowledgeBaseResourcesTx.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.UpdateKnowledgeBaseResourcesTx return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockUpdateKnowledgeBaseResourcesTxExpectation) Then(err error) *RepositoryMock {
+	e.results = &RepositoryMockUpdateKnowledgeBaseResourcesTxResults{err}
+	return e.mock
+}
+
+// Times sets number of times Repository.UpdateKnowledgeBaseResourcesTx should be invoked
+func (mmUpdateKnowledgeBaseResourcesTx *mRepositoryMockUpdateKnowledgeBaseResourcesTx) Times(n uint64) *mRepositoryMockUpdateKnowledgeBaseResourcesTx {
+	if n == 0 {
+		mmUpdateKnowledgeBaseResourcesTx.mock.t.Fatalf("Times of RepositoryMock.UpdateKnowledgeBaseResourcesTx mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmUpdateKnowledgeBaseResourcesTx.expectedInvocations, n)
+	mmUpdateKnowledgeBaseResourcesTx.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmUpdateKnowledgeBaseResourcesTx
+}
+
+func (mmUpdateKnowledgeBaseResourcesTx *mRepositoryMockUpdateKnowledgeBaseResourcesTx) invocationsDone() bool {
+	if len(mmUpdateKnowledgeBaseResourcesTx.expectations) == 0 && mmUpdateKnowledgeBaseResourcesTx.defaultExpectation == nil && mmUpdateKnowledgeBaseResourcesTx.mock.funcUpdateKnowledgeBaseResourcesTx == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmUpdateKnowledgeBaseResourcesTx.mock.afterUpdateKnowledgeBaseResourcesTxCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmUpdateKnowledgeBaseResourcesTx.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// UpdateKnowledgeBaseResourcesTx implements mm_repository.Repository
+func (mmUpdateKnowledgeBaseResourcesTx *RepositoryMock) UpdateKnowledgeBaseResourcesTx(ctx context.Context, tx *gorm.DB, fromKBUID types.KBUIDType, toKBUID types.KBUIDType) (err error) {
+	mm_atomic.AddUint64(&mmUpdateKnowledgeBaseResourcesTx.beforeUpdateKnowledgeBaseResourcesTxCounter, 1)
+	defer mm_atomic.AddUint64(&mmUpdateKnowledgeBaseResourcesTx.afterUpdateKnowledgeBaseResourcesTxCounter, 1)
+
+	mmUpdateKnowledgeBaseResourcesTx.t.Helper()
+
+	if mmUpdateKnowledgeBaseResourcesTx.inspectFuncUpdateKnowledgeBaseResourcesTx != nil {
+		mmUpdateKnowledgeBaseResourcesTx.inspectFuncUpdateKnowledgeBaseResourcesTx(ctx, tx, fromKBUID, toKBUID)
+	}
+
+	mm_params := RepositoryMockUpdateKnowledgeBaseResourcesTxParams{ctx, tx, fromKBUID, toKBUID}
+
+	// Record call args
+	mmUpdateKnowledgeBaseResourcesTx.UpdateKnowledgeBaseResourcesTxMock.mutex.Lock()
+	mmUpdateKnowledgeBaseResourcesTx.UpdateKnowledgeBaseResourcesTxMock.callArgs = append(mmUpdateKnowledgeBaseResourcesTx.UpdateKnowledgeBaseResourcesTxMock.callArgs, &mm_params)
+	mmUpdateKnowledgeBaseResourcesTx.UpdateKnowledgeBaseResourcesTxMock.mutex.Unlock()
+
+	for _, e := range mmUpdateKnowledgeBaseResourcesTx.UpdateKnowledgeBaseResourcesTxMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmUpdateKnowledgeBaseResourcesTx.UpdateKnowledgeBaseResourcesTxMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmUpdateKnowledgeBaseResourcesTx.UpdateKnowledgeBaseResourcesTxMock.defaultExpectation.Counter, 1)
+		mm_want := mmUpdateKnowledgeBaseResourcesTx.UpdateKnowledgeBaseResourcesTxMock.defaultExpectation.params
+		mm_want_ptrs := mmUpdateKnowledgeBaseResourcesTx.UpdateKnowledgeBaseResourcesTxMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockUpdateKnowledgeBaseResourcesTxParams{ctx, tx, fromKBUID, toKBUID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmUpdateKnowledgeBaseResourcesTx.t.Errorf("RepositoryMock.UpdateKnowledgeBaseResourcesTx got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateKnowledgeBaseResourcesTx.UpdateKnowledgeBaseResourcesTxMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.tx != nil && !minimock.Equal(*mm_want_ptrs.tx, mm_got.tx) {
+				mmUpdateKnowledgeBaseResourcesTx.t.Errorf("RepositoryMock.UpdateKnowledgeBaseResourcesTx got unexpected parameter tx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateKnowledgeBaseResourcesTx.UpdateKnowledgeBaseResourcesTxMock.defaultExpectation.expectationOrigins.originTx, *mm_want_ptrs.tx, mm_got.tx, minimock.Diff(*mm_want_ptrs.tx, mm_got.tx))
+			}
+
+			if mm_want_ptrs.fromKBUID != nil && !minimock.Equal(*mm_want_ptrs.fromKBUID, mm_got.fromKBUID) {
+				mmUpdateKnowledgeBaseResourcesTx.t.Errorf("RepositoryMock.UpdateKnowledgeBaseResourcesTx got unexpected parameter fromKBUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateKnowledgeBaseResourcesTx.UpdateKnowledgeBaseResourcesTxMock.defaultExpectation.expectationOrigins.originFromKBUID, *mm_want_ptrs.fromKBUID, mm_got.fromKBUID, minimock.Diff(*mm_want_ptrs.fromKBUID, mm_got.fromKBUID))
+			}
+
+			if mm_want_ptrs.toKBUID != nil && !minimock.Equal(*mm_want_ptrs.toKBUID, mm_got.toKBUID) {
+				mmUpdateKnowledgeBaseResourcesTx.t.Errorf("RepositoryMock.UpdateKnowledgeBaseResourcesTx got unexpected parameter toKBUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateKnowledgeBaseResourcesTx.UpdateKnowledgeBaseResourcesTxMock.defaultExpectation.expectationOrigins.originToKBUID, *mm_want_ptrs.toKBUID, mm_got.toKBUID, minimock.Diff(*mm_want_ptrs.toKBUID, mm_got.toKBUID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmUpdateKnowledgeBaseResourcesTx.t.Errorf("RepositoryMock.UpdateKnowledgeBaseResourcesTx got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmUpdateKnowledgeBaseResourcesTx.UpdateKnowledgeBaseResourcesTxMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmUpdateKnowledgeBaseResourcesTx.UpdateKnowledgeBaseResourcesTxMock.defaultExpectation.results
+		if mm_results == nil {
+			mmUpdateKnowledgeBaseResourcesTx.t.Fatal("No results are set for the RepositoryMock.UpdateKnowledgeBaseResourcesTx")
+		}
+		return (*mm_results).err
+	}
+	if mmUpdateKnowledgeBaseResourcesTx.funcUpdateKnowledgeBaseResourcesTx != nil {
+		return mmUpdateKnowledgeBaseResourcesTx.funcUpdateKnowledgeBaseResourcesTx(ctx, tx, fromKBUID, toKBUID)
+	}
+	mmUpdateKnowledgeBaseResourcesTx.t.Fatalf("Unexpected call to RepositoryMock.UpdateKnowledgeBaseResourcesTx. %v %v %v %v", ctx, tx, fromKBUID, toKBUID)
+	return
+}
+
+// UpdateKnowledgeBaseResourcesTxAfterCounter returns a count of finished RepositoryMock.UpdateKnowledgeBaseResourcesTx invocations
+func (mmUpdateKnowledgeBaseResourcesTx *RepositoryMock) UpdateKnowledgeBaseResourcesTxAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateKnowledgeBaseResourcesTx.afterUpdateKnowledgeBaseResourcesTxCounter)
+}
+
+// UpdateKnowledgeBaseResourcesTxBeforeCounter returns a count of RepositoryMock.UpdateKnowledgeBaseResourcesTx invocations
+func (mmUpdateKnowledgeBaseResourcesTx *RepositoryMock) UpdateKnowledgeBaseResourcesTxBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateKnowledgeBaseResourcesTx.beforeUpdateKnowledgeBaseResourcesTxCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.UpdateKnowledgeBaseResourcesTx.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmUpdateKnowledgeBaseResourcesTx *mRepositoryMockUpdateKnowledgeBaseResourcesTx) Calls() []*RepositoryMockUpdateKnowledgeBaseResourcesTxParams {
+	mmUpdateKnowledgeBaseResourcesTx.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockUpdateKnowledgeBaseResourcesTxParams, len(mmUpdateKnowledgeBaseResourcesTx.callArgs))
+	copy(argCopy, mmUpdateKnowledgeBaseResourcesTx.callArgs)
+
+	mmUpdateKnowledgeBaseResourcesTx.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockUpdateKnowledgeBaseResourcesTxDone returns true if the count of the UpdateKnowledgeBaseResourcesTx invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockUpdateKnowledgeBaseResourcesTxDone() bool {
+	if m.UpdateKnowledgeBaseResourcesTxMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.UpdateKnowledgeBaseResourcesTxMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.UpdateKnowledgeBaseResourcesTxMock.invocationsDone()
+}
+
+// MinimockUpdateKnowledgeBaseResourcesTxInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockUpdateKnowledgeBaseResourcesTxInspect() {
+	for _, e := range m.UpdateKnowledgeBaseResourcesTxMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.UpdateKnowledgeBaseResourcesTx at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterUpdateKnowledgeBaseResourcesTxCounter := mm_atomic.LoadUint64(&m.afterUpdateKnowledgeBaseResourcesTxCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.UpdateKnowledgeBaseResourcesTxMock.defaultExpectation != nil && afterUpdateKnowledgeBaseResourcesTxCounter < 1 {
+		if m.UpdateKnowledgeBaseResourcesTxMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.UpdateKnowledgeBaseResourcesTx at\n%s", m.UpdateKnowledgeBaseResourcesTxMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.UpdateKnowledgeBaseResourcesTx at\n%s with params: %#v", m.UpdateKnowledgeBaseResourcesTxMock.defaultExpectation.expectationOrigins.origin, *m.UpdateKnowledgeBaseResourcesTxMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcUpdateKnowledgeBaseResourcesTx != nil && afterUpdateKnowledgeBaseResourcesTxCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.UpdateKnowledgeBaseResourcesTx at\n%s", m.funcUpdateKnowledgeBaseResourcesTxOrigin)
+	}
+
+	if !m.UpdateKnowledgeBaseResourcesTxMock.invocationsDone() && afterUpdateKnowledgeBaseResourcesTxCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.UpdateKnowledgeBaseResourcesTx at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.UpdateKnowledgeBaseResourcesTxMock.expectedInvocations), m.UpdateKnowledgeBaseResourcesTxMock.expectedInvocationsOrigin, afterUpdateKnowledgeBaseResourcesTxCounter)
+	}
+}
+
 type mRepositoryMockUpdateKnowledgeBaseUpdateStatus struct {
 	optional           bool
 	mock               *RepositoryMock
@@ -40280,6 +41313,441 @@ func (m *RepositoryMock) MinimockUpdateKnowledgeBaseWithMapInspect() {
 	if !m.UpdateKnowledgeBaseWithMapMock.invocationsDone() && afterUpdateKnowledgeBaseWithMapCounter > 0 {
 		m.t.Errorf("Expected %d calls to RepositoryMock.UpdateKnowledgeBaseWithMap at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.UpdateKnowledgeBaseWithMapMock.expectedInvocations), m.UpdateKnowledgeBaseWithMapMock.expectedInvocationsOrigin, afterUpdateKnowledgeBaseWithMapCounter)
+	}
+}
+
+type mRepositoryMockUpdateKnowledgeBaseWithMapTx struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockUpdateKnowledgeBaseWithMapTxExpectation
+	expectations       []*RepositoryMockUpdateKnowledgeBaseWithMapTxExpectation
+
+	callArgs []*RepositoryMockUpdateKnowledgeBaseWithMapTxParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockUpdateKnowledgeBaseWithMapTxExpectation specifies expectation struct of the Repository.UpdateKnowledgeBaseWithMapTx
+type RepositoryMockUpdateKnowledgeBaseWithMapTxExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockUpdateKnowledgeBaseWithMapTxParams
+	paramPtrs          *RepositoryMockUpdateKnowledgeBaseWithMapTxParamPtrs
+	expectationOrigins RepositoryMockUpdateKnowledgeBaseWithMapTxExpectationOrigins
+	results            *RepositoryMockUpdateKnowledgeBaseWithMapTxResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockUpdateKnowledgeBaseWithMapTxParams contains parameters of the Repository.UpdateKnowledgeBaseWithMapTx
+type RepositoryMockUpdateKnowledgeBaseWithMapTxParams struct {
+	ctx     context.Context
+	tx      *gorm.DB
+	id      string
+	owner   string
+	updates map[string]any
+}
+
+// RepositoryMockUpdateKnowledgeBaseWithMapTxParamPtrs contains pointers to parameters of the Repository.UpdateKnowledgeBaseWithMapTx
+type RepositoryMockUpdateKnowledgeBaseWithMapTxParamPtrs struct {
+	ctx     *context.Context
+	tx      **gorm.DB
+	id      *string
+	owner   *string
+	updates *map[string]any
+}
+
+// RepositoryMockUpdateKnowledgeBaseWithMapTxResults contains results of the Repository.UpdateKnowledgeBaseWithMapTx
+type RepositoryMockUpdateKnowledgeBaseWithMapTxResults struct {
+	err error
+}
+
+// RepositoryMockUpdateKnowledgeBaseWithMapTxOrigins contains origins of expectations of the Repository.UpdateKnowledgeBaseWithMapTx
+type RepositoryMockUpdateKnowledgeBaseWithMapTxExpectationOrigins struct {
+	origin        string
+	originCtx     string
+	originTx      string
+	originId      string
+	originOwner   string
+	originUpdates string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmUpdateKnowledgeBaseWithMapTx *mRepositoryMockUpdateKnowledgeBaseWithMapTx) Optional() *mRepositoryMockUpdateKnowledgeBaseWithMapTx {
+	mmUpdateKnowledgeBaseWithMapTx.optional = true
+	return mmUpdateKnowledgeBaseWithMapTx
+}
+
+// Expect sets up expected params for Repository.UpdateKnowledgeBaseWithMapTx
+func (mmUpdateKnowledgeBaseWithMapTx *mRepositoryMockUpdateKnowledgeBaseWithMapTx) Expect(ctx context.Context, tx *gorm.DB, id string, owner string, updates map[string]any) *mRepositoryMockUpdateKnowledgeBaseWithMapTx {
+	if mmUpdateKnowledgeBaseWithMapTx.mock.funcUpdateKnowledgeBaseWithMapTx != nil {
+		mmUpdateKnowledgeBaseWithMapTx.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseWithMapTx mock is already set by Set")
+	}
+
+	if mmUpdateKnowledgeBaseWithMapTx.defaultExpectation == nil {
+		mmUpdateKnowledgeBaseWithMapTx.defaultExpectation = &RepositoryMockUpdateKnowledgeBaseWithMapTxExpectation{}
+	}
+
+	if mmUpdateKnowledgeBaseWithMapTx.defaultExpectation.paramPtrs != nil {
+		mmUpdateKnowledgeBaseWithMapTx.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseWithMapTx mock is already set by ExpectParams functions")
+	}
+
+	mmUpdateKnowledgeBaseWithMapTx.defaultExpectation.params = &RepositoryMockUpdateKnowledgeBaseWithMapTxParams{ctx, tx, id, owner, updates}
+	mmUpdateKnowledgeBaseWithMapTx.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmUpdateKnowledgeBaseWithMapTx.expectations {
+		if minimock.Equal(e.params, mmUpdateKnowledgeBaseWithMapTx.defaultExpectation.params) {
+			mmUpdateKnowledgeBaseWithMapTx.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmUpdateKnowledgeBaseWithMapTx.defaultExpectation.params)
+		}
+	}
+
+	return mmUpdateKnowledgeBaseWithMapTx
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.UpdateKnowledgeBaseWithMapTx
+func (mmUpdateKnowledgeBaseWithMapTx *mRepositoryMockUpdateKnowledgeBaseWithMapTx) ExpectCtxParam1(ctx context.Context) *mRepositoryMockUpdateKnowledgeBaseWithMapTx {
+	if mmUpdateKnowledgeBaseWithMapTx.mock.funcUpdateKnowledgeBaseWithMapTx != nil {
+		mmUpdateKnowledgeBaseWithMapTx.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseWithMapTx mock is already set by Set")
+	}
+
+	if mmUpdateKnowledgeBaseWithMapTx.defaultExpectation == nil {
+		mmUpdateKnowledgeBaseWithMapTx.defaultExpectation = &RepositoryMockUpdateKnowledgeBaseWithMapTxExpectation{}
+	}
+
+	if mmUpdateKnowledgeBaseWithMapTx.defaultExpectation.params != nil {
+		mmUpdateKnowledgeBaseWithMapTx.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseWithMapTx mock is already set by Expect")
+	}
+
+	if mmUpdateKnowledgeBaseWithMapTx.defaultExpectation.paramPtrs == nil {
+		mmUpdateKnowledgeBaseWithMapTx.defaultExpectation.paramPtrs = &RepositoryMockUpdateKnowledgeBaseWithMapTxParamPtrs{}
+	}
+	mmUpdateKnowledgeBaseWithMapTx.defaultExpectation.paramPtrs.ctx = &ctx
+	mmUpdateKnowledgeBaseWithMapTx.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmUpdateKnowledgeBaseWithMapTx
+}
+
+// ExpectTxParam2 sets up expected param tx for Repository.UpdateKnowledgeBaseWithMapTx
+func (mmUpdateKnowledgeBaseWithMapTx *mRepositoryMockUpdateKnowledgeBaseWithMapTx) ExpectTxParam2(tx *gorm.DB) *mRepositoryMockUpdateKnowledgeBaseWithMapTx {
+	if mmUpdateKnowledgeBaseWithMapTx.mock.funcUpdateKnowledgeBaseWithMapTx != nil {
+		mmUpdateKnowledgeBaseWithMapTx.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseWithMapTx mock is already set by Set")
+	}
+
+	if mmUpdateKnowledgeBaseWithMapTx.defaultExpectation == nil {
+		mmUpdateKnowledgeBaseWithMapTx.defaultExpectation = &RepositoryMockUpdateKnowledgeBaseWithMapTxExpectation{}
+	}
+
+	if mmUpdateKnowledgeBaseWithMapTx.defaultExpectation.params != nil {
+		mmUpdateKnowledgeBaseWithMapTx.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseWithMapTx mock is already set by Expect")
+	}
+
+	if mmUpdateKnowledgeBaseWithMapTx.defaultExpectation.paramPtrs == nil {
+		mmUpdateKnowledgeBaseWithMapTx.defaultExpectation.paramPtrs = &RepositoryMockUpdateKnowledgeBaseWithMapTxParamPtrs{}
+	}
+	mmUpdateKnowledgeBaseWithMapTx.defaultExpectation.paramPtrs.tx = &tx
+	mmUpdateKnowledgeBaseWithMapTx.defaultExpectation.expectationOrigins.originTx = minimock.CallerInfo(1)
+
+	return mmUpdateKnowledgeBaseWithMapTx
+}
+
+// ExpectIdParam3 sets up expected param id for Repository.UpdateKnowledgeBaseWithMapTx
+func (mmUpdateKnowledgeBaseWithMapTx *mRepositoryMockUpdateKnowledgeBaseWithMapTx) ExpectIdParam3(id string) *mRepositoryMockUpdateKnowledgeBaseWithMapTx {
+	if mmUpdateKnowledgeBaseWithMapTx.mock.funcUpdateKnowledgeBaseWithMapTx != nil {
+		mmUpdateKnowledgeBaseWithMapTx.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseWithMapTx mock is already set by Set")
+	}
+
+	if mmUpdateKnowledgeBaseWithMapTx.defaultExpectation == nil {
+		mmUpdateKnowledgeBaseWithMapTx.defaultExpectation = &RepositoryMockUpdateKnowledgeBaseWithMapTxExpectation{}
+	}
+
+	if mmUpdateKnowledgeBaseWithMapTx.defaultExpectation.params != nil {
+		mmUpdateKnowledgeBaseWithMapTx.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseWithMapTx mock is already set by Expect")
+	}
+
+	if mmUpdateKnowledgeBaseWithMapTx.defaultExpectation.paramPtrs == nil {
+		mmUpdateKnowledgeBaseWithMapTx.defaultExpectation.paramPtrs = &RepositoryMockUpdateKnowledgeBaseWithMapTxParamPtrs{}
+	}
+	mmUpdateKnowledgeBaseWithMapTx.defaultExpectation.paramPtrs.id = &id
+	mmUpdateKnowledgeBaseWithMapTx.defaultExpectation.expectationOrigins.originId = minimock.CallerInfo(1)
+
+	return mmUpdateKnowledgeBaseWithMapTx
+}
+
+// ExpectOwnerParam4 sets up expected param owner for Repository.UpdateKnowledgeBaseWithMapTx
+func (mmUpdateKnowledgeBaseWithMapTx *mRepositoryMockUpdateKnowledgeBaseWithMapTx) ExpectOwnerParam4(owner string) *mRepositoryMockUpdateKnowledgeBaseWithMapTx {
+	if mmUpdateKnowledgeBaseWithMapTx.mock.funcUpdateKnowledgeBaseWithMapTx != nil {
+		mmUpdateKnowledgeBaseWithMapTx.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseWithMapTx mock is already set by Set")
+	}
+
+	if mmUpdateKnowledgeBaseWithMapTx.defaultExpectation == nil {
+		mmUpdateKnowledgeBaseWithMapTx.defaultExpectation = &RepositoryMockUpdateKnowledgeBaseWithMapTxExpectation{}
+	}
+
+	if mmUpdateKnowledgeBaseWithMapTx.defaultExpectation.params != nil {
+		mmUpdateKnowledgeBaseWithMapTx.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseWithMapTx mock is already set by Expect")
+	}
+
+	if mmUpdateKnowledgeBaseWithMapTx.defaultExpectation.paramPtrs == nil {
+		mmUpdateKnowledgeBaseWithMapTx.defaultExpectation.paramPtrs = &RepositoryMockUpdateKnowledgeBaseWithMapTxParamPtrs{}
+	}
+	mmUpdateKnowledgeBaseWithMapTx.defaultExpectation.paramPtrs.owner = &owner
+	mmUpdateKnowledgeBaseWithMapTx.defaultExpectation.expectationOrigins.originOwner = minimock.CallerInfo(1)
+
+	return mmUpdateKnowledgeBaseWithMapTx
+}
+
+// ExpectUpdatesParam5 sets up expected param updates for Repository.UpdateKnowledgeBaseWithMapTx
+func (mmUpdateKnowledgeBaseWithMapTx *mRepositoryMockUpdateKnowledgeBaseWithMapTx) ExpectUpdatesParam5(updates map[string]any) *mRepositoryMockUpdateKnowledgeBaseWithMapTx {
+	if mmUpdateKnowledgeBaseWithMapTx.mock.funcUpdateKnowledgeBaseWithMapTx != nil {
+		mmUpdateKnowledgeBaseWithMapTx.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseWithMapTx mock is already set by Set")
+	}
+
+	if mmUpdateKnowledgeBaseWithMapTx.defaultExpectation == nil {
+		mmUpdateKnowledgeBaseWithMapTx.defaultExpectation = &RepositoryMockUpdateKnowledgeBaseWithMapTxExpectation{}
+	}
+
+	if mmUpdateKnowledgeBaseWithMapTx.defaultExpectation.params != nil {
+		mmUpdateKnowledgeBaseWithMapTx.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseWithMapTx mock is already set by Expect")
+	}
+
+	if mmUpdateKnowledgeBaseWithMapTx.defaultExpectation.paramPtrs == nil {
+		mmUpdateKnowledgeBaseWithMapTx.defaultExpectation.paramPtrs = &RepositoryMockUpdateKnowledgeBaseWithMapTxParamPtrs{}
+	}
+	mmUpdateKnowledgeBaseWithMapTx.defaultExpectation.paramPtrs.updates = &updates
+	mmUpdateKnowledgeBaseWithMapTx.defaultExpectation.expectationOrigins.originUpdates = minimock.CallerInfo(1)
+
+	return mmUpdateKnowledgeBaseWithMapTx
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.UpdateKnowledgeBaseWithMapTx
+func (mmUpdateKnowledgeBaseWithMapTx *mRepositoryMockUpdateKnowledgeBaseWithMapTx) Inspect(f func(ctx context.Context, tx *gorm.DB, id string, owner string, updates map[string]any)) *mRepositoryMockUpdateKnowledgeBaseWithMapTx {
+	if mmUpdateKnowledgeBaseWithMapTx.mock.inspectFuncUpdateKnowledgeBaseWithMapTx != nil {
+		mmUpdateKnowledgeBaseWithMapTx.mock.t.Fatalf("Inspect function is already set for RepositoryMock.UpdateKnowledgeBaseWithMapTx")
+	}
+
+	mmUpdateKnowledgeBaseWithMapTx.mock.inspectFuncUpdateKnowledgeBaseWithMapTx = f
+
+	return mmUpdateKnowledgeBaseWithMapTx
+}
+
+// Return sets up results that will be returned by Repository.UpdateKnowledgeBaseWithMapTx
+func (mmUpdateKnowledgeBaseWithMapTx *mRepositoryMockUpdateKnowledgeBaseWithMapTx) Return(err error) *RepositoryMock {
+	if mmUpdateKnowledgeBaseWithMapTx.mock.funcUpdateKnowledgeBaseWithMapTx != nil {
+		mmUpdateKnowledgeBaseWithMapTx.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseWithMapTx mock is already set by Set")
+	}
+
+	if mmUpdateKnowledgeBaseWithMapTx.defaultExpectation == nil {
+		mmUpdateKnowledgeBaseWithMapTx.defaultExpectation = &RepositoryMockUpdateKnowledgeBaseWithMapTxExpectation{mock: mmUpdateKnowledgeBaseWithMapTx.mock}
+	}
+	mmUpdateKnowledgeBaseWithMapTx.defaultExpectation.results = &RepositoryMockUpdateKnowledgeBaseWithMapTxResults{err}
+	mmUpdateKnowledgeBaseWithMapTx.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmUpdateKnowledgeBaseWithMapTx.mock
+}
+
+// Set uses given function f to mock the Repository.UpdateKnowledgeBaseWithMapTx method
+func (mmUpdateKnowledgeBaseWithMapTx *mRepositoryMockUpdateKnowledgeBaseWithMapTx) Set(f func(ctx context.Context, tx *gorm.DB, id string, owner string, updates map[string]any) (err error)) *RepositoryMock {
+	if mmUpdateKnowledgeBaseWithMapTx.defaultExpectation != nil {
+		mmUpdateKnowledgeBaseWithMapTx.mock.t.Fatalf("Default expectation is already set for the Repository.UpdateKnowledgeBaseWithMapTx method")
+	}
+
+	if len(mmUpdateKnowledgeBaseWithMapTx.expectations) > 0 {
+		mmUpdateKnowledgeBaseWithMapTx.mock.t.Fatalf("Some expectations are already set for the Repository.UpdateKnowledgeBaseWithMapTx method")
+	}
+
+	mmUpdateKnowledgeBaseWithMapTx.mock.funcUpdateKnowledgeBaseWithMapTx = f
+	mmUpdateKnowledgeBaseWithMapTx.mock.funcUpdateKnowledgeBaseWithMapTxOrigin = minimock.CallerInfo(1)
+	return mmUpdateKnowledgeBaseWithMapTx.mock
+}
+
+// When sets expectation for the Repository.UpdateKnowledgeBaseWithMapTx which will trigger the result defined by the following
+// Then helper
+func (mmUpdateKnowledgeBaseWithMapTx *mRepositoryMockUpdateKnowledgeBaseWithMapTx) When(ctx context.Context, tx *gorm.DB, id string, owner string, updates map[string]any) *RepositoryMockUpdateKnowledgeBaseWithMapTxExpectation {
+	if mmUpdateKnowledgeBaseWithMapTx.mock.funcUpdateKnowledgeBaseWithMapTx != nil {
+		mmUpdateKnowledgeBaseWithMapTx.mock.t.Fatalf("RepositoryMock.UpdateKnowledgeBaseWithMapTx mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockUpdateKnowledgeBaseWithMapTxExpectation{
+		mock:               mmUpdateKnowledgeBaseWithMapTx.mock,
+		params:             &RepositoryMockUpdateKnowledgeBaseWithMapTxParams{ctx, tx, id, owner, updates},
+		expectationOrigins: RepositoryMockUpdateKnowledgeBaseWithMapTxExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmUpdateKnowledgeBaseWithMapTx.expectations = append(mmUpdateKnowledgeBaseWithMapTx.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.UpdateKnowledgeBaseWithMapTx return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockUpdateKnowledgeBaseWithMapTxExpectation) Then(err error) *RepositoryMock {
+	e.results = &RepositoryMockUpdateKnowledgeBaseWithMapTxResults{err}
+	return e.mock
+}
+
+// Times sets number of times Repository.UpdateKnowledgeBaseWithMapTx should be invoked
+func (mmUpdateKnowledgeBaseWithMapTx *mRepositoryMockUpdateKnowledgeBaseWithMapTx) Times(n uint64) *mRepositoryMockUpdateKnowledgeBaseWithMapTx {
+	if n == 0 {
+		mmUpdateKnowledgeBaseWithMapTx.mock.t.Fatalf("Times of RepositoryMock.UpdateKnowledgeBaseWithMapTx mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmUpdateKnowledgeBaseWithMapTx.expectedInvocations, n)
+	mmUpdateKnowledgeBaseWithMapTx.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmUpdateKnowledgeBaseWithMapTx
+}
+
+func (mmUpdateKnowledgeBaseWithMapTx *mRepositoryMockUpdateKnowledgeBaseWithMapTx) invocationsDone() bool {
+	if len(mmUpdateKnowledgeBaseWithMapTx.expectations) == 0 && mmUpdateKnowledgeBaseWithMapTx.defaultExpectation == nil && mmUpdateKnowledgeBaseWithMapTx.mock.funcUpdateKnowledgeBaseWithMapTx == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmUpdateKnowledgeBaseWithMapTx.mock.afterUpdateKnowledgeBaseWithMapTxCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmUpdateKnowledgeBaseWithMapTx.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// UpdateKnowledgeBaseWithMapTx implements mm_repository.Repository
+func (mmUpdateKnowledgeBaseWithMapTx *RepositoryMock) UpdateKnowledgeBaseWithMapTx(ctx context.Context, tx *gorm.DB, id string, owner string, updates map[string]any) (err error) {
+	mm_atomic.AddUint64(&mmUpdateKnowledgeBaseWithMapTx.beforeUpdateKnowledgeBaseWithMapTxCounter, 1)
+	defer mm_atomic.AddUint64(&mmUpdateKnowledgeBaseWithMapTx.afterUpdateKnowledgeBaseWithMapTxCounter, 1)
+
+	mmUpdateKnowledgeBaseWithMapTx.t.Helper()
+
+	if mmUpdateKnowledgeBaseWithMapTx.inspectFuncUpdateKnowledgeBaseWithMapTx != nil {
+		mmUpdateKnowledgeBaseWithMapTx.inspectFuncUpdateKnowledgeBaseWithMapTx(ctx, tx, id, owner, updates)
+	}
+
+	mm_params := RepositoryMockUpdateKnowledgeBaseWithMapTxParams{ctx, tx, id, owner, updates}
+
+	// Record call args
+	mmUpdateKnowledgeBaseWithMapTx.UpdateKnowledgeBaseWithMapTxMock.mutex.Lock()
+	mmUpdateKnowledgeBaseWithMapTx.UpdateKnowledgeBaseWithMapTxMock.callArgs = append(mmUpdateKnowledgeBaseWithMapTx.UpdateKnowledgeBaseWithMapTxMock.callArgs, &mm_params)
+	mmUpdateKnowledgeBaseWithMapTx.UpdateKnowledgeBaseWithMapTxMock.mutex.Unlock()
+
+	for _, e := range mmUpdateKnowledgeBaseWithMapTx.UpdateKnowledgeBaseWithMapTxMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmUpdateKnowledgeBaseWithMapTx.UpdateKnowledgeBaseWithMapTxMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmUpdateKnowledgeBaseWithMapTx.UpdateKnowledgeBaseWithMapTxMock.defaultExpectation.Counter, 1)
+		mm_want := mmUpdateKnowledgeBaseWithMapTx.UpdateKnowledgeBaseWithMapTxMock.defaultExpectation.params
+		mm_want_ptrs := mmUpdateKnowledgeBaseWithMapTx.UpdateKnowledgeBaseWithMapTxMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockUpdateKnowledgeBaseWithMapTxParams{ctx, tx, id, owner, updates}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmUpdateKnowledgeBaseWithMapTx.t.Errorf("RepositoryMock.UpdateKnowledgeBaseWithMapTx got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateKnowledgeBaseWithMapTx.UpdateKnowledgeBaseWithMapTxMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.tx != nil && !minimock.Equal(*mm_want_ptrs.tx, mm_got.tx) {
+				mmUpdateKnowledgeBaseWithMapTx.t.Errorf("RepositoryMock.UpdateKnowledgeBaseWithMapTx got unexpected parameter tx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateKnowledgeBaseWithMapTx.UpdateKnowledgeBaseWithMapTxMock.defaultExpectation.expectationOrigins.originTx, *mm_want_ptrs.tx, mm_got.tx, minimock.Diff(*mm_want_ptrs.tx, mm_got.tx))
+			}
+
+			if mm_want_ptrs.id != nil && !minimock.Equal(*mm_want_ptrs.id, mm_got.id) {
+				mmUpdateKnowledgeBaseWithMapTx.t.Errorf("RepositoryMock.UpdateKnowledgeBaseWithMapTx got unexpected parameter id, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateKnowledgeBaseWithMapTx.UpdateKnowledgeBaseWithMapTxMock.defaultExpectation.expectationOrigins.originId, *mm_want_ptrs.id, mm_got.id, minimock.Diff(*mm_want_ptrs.id, mm_got.id))
+			}
+
+			if mm_want_ptrs.owner != nil && !minimock.Equal(*mm_want_ptrs.owner, mm_got.owner) {
+				mmUpdateKnowledgeBaseWithMapTx.t.Errorf("RepositoryMock.UpdateKnowledgeBaseWithMapTx got unexpected parameter owner, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateKnowledgeBaseWithMapTx.UpdateKnowledgeBaseWithMapTxMock.defaultExpectation.expectationOrigins.originOwner, *mm_want_ptrs.owner, mm_got.owner, minimock.Diff(*mm_want_ptrs.owner, mm_got.owner))
+			}
+
+			if mm_want_ptrs.updates != nil && !minimock.Equal(*mm_want_ptrs.updates, mm_got.updates) {
+				mmUpdateKnowledgeBaseWithMapTx.t.Errorf("RepositoryMock.UpdateKnowledgeBaseWithMapTx got unexpected parameter updates, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateKnowledgeBaseWithMapTx.UpdateKnowledgeBaseWithMapTxMock.defaultExpectation.expectationOrigins.originUpdates, *mm_want_ptrs.updates, mm_got.updates, minimock.Diff(*mm_want_ptrs.updates, mm_got.updates))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmUpdateKnowledgeBaseWithMapTx.t.Errorf("RepositoryMock.UpdateKnowledgeBaseWithMapTx got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmUpdateKnowledgeBaseWithMapTx.UpdateKnowledgeBaseWithMapTxMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmUpdateKnowledgeBaseWithMapTx.UpdateKnowledgeBaseWithMapTxMock.defaultExpectation.results
+		if mm_results == nil {
+			mmUpdateKnowledgeBaseWithMapTx.t.Fatal("No results are set for the RepositoryMock.UpdateKnowledgeBaseWithMapTx")
+		}
+		return (*mm_results).err
+	}
+	if mmUpdateKnowledgeBaseWithMapTx.funcUpdateKnowledgeBaseWithMapTx != nil {
+		return mmUpdateKnowledgeBaseWithMapTx.funcUpdateKnowledgeBaseWithMapTx(ctx, tx, id, owner, updates)
+	}
+	mmUpdateKnowledgeBaseWithMapTx.t.Fatalf("Unexpected call to RepositoryMock.UpdateKnowledgeBaseWithMapTx. %v %v %v %v %v", ctx, tx, id, owner, updates)
+	return
+}
+
+// UpdateKnowledgeBaseWithMapTxAfterCounter returns a count of finished RepositoryMock.UpdateKnowledgeBaseWithMapTx invocations
+func (mmUpdateKnowledgeBaseWithMapTx *RepositoryMock) UpdateKnowledgeBaseWithMapTxAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateKnowledgeBaseWithMapTx.afterUpdateKnowledgeBaseWithMapTxCounter)
+}
+
+// UpdateKnowledgeBaseWithMapTxBeforeCounter returns a count of RepositoryMock.UpdateKnowledgeBaseWithMapTx invocations
+func (mmUpdateKnowledgeBaseWithMapTx *RepositoryMock) UpdateKnowledgeBaseWithMapTxBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateKnowledgeBaseWithMapTx.beforeUpdateKnowledgeBaseWithMapTxCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.UpdateKnowledgeBaseWithMapTx.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmUpdateKnowledgeBaseWithMapTx *mRepositoryMockUpdateKnowledgeBaseWithMapTx) Calls() []*RepositoryMockUpdateKnowledgeBaseWithMapTxParams {
+	mmUpdateKnowledgeBaseWithMapTx.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockUpdateKnowledgeBaseWithMapTxParams, len(mmUpdateKnowledgeBaseWithMapTx.callArgs))
+	copy(argCopy, mmUpdateKnowledgeBaseWithMapTx.callArgs)
+
+	mmUpdateKnowledgeBaseWithMapTx.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockUpdateKnowledgeBaseWithMapTxDone returns true if the count of the UpdateKnowledgeBaseWithMapTx invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockUpdateKnowledgeBaseWithMapTxDone() bool {
+	if m.UpdateKnowledgeBaseWithMapTxMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.UpdateKnowledgeBaseWithMapTxMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.UpdateKnowledgeBaseWithMapTxMock.invocationsDone()
+}
+
+// MinimockUpdateKnowledgeBaseWithMapTxInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockUpdateKnowledgeBaseWithMapTxInspect() {
+	for _, e := range m.UpdateKnowledgeBaseWithMapTxMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.UpdateKnowledgeBaseWithMapTx at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterUpdateKnowledgeBaseWithMapTxCounter := mm_atomic.LoadUint64(&m.afterUpdateKnowledgeBaseWithMapTxCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.UpdateKnowledgeBaseWithMapTxMock.defaultExpectation != nil && afterUpdateKnowledgeBaseWithMapTxCounter < 1 {
+		if m.UpdateKnowledgeBaseWithMapTxMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.UpdateKnowledgeBaseWithMapTx at\n%s", m.UpdateKnowledgeBaseWithMapTxMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.UpdateKnowledgeBaseWithMapTx at\n%s with params: %#v", m.UpdateKnowledgeBaseWithMapTxMock.defaultExpectation.expectationOrigins.origin, *m.UpdateKnowledgeBaseWithMapTxMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcUpdateKnowledgeBaseWithMapTx != nil && afterUpdateKnowledgeBaseWithMapTxCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.UpdateKnowledgeBaseWithMapTx at\n%s", m.funcUpdateKnowledgeBaseWithMapTxOrigin)
+	}
+
+	if !m.UpdateKnowledgeBaseWithMapTxMock.invocationsDone() && afterUpdateKnowledgeBaseWithMapTxCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.UpdateKnowledgeBaseWithMapTx at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.UpdateKnowledgeBaseWithMapTxMock.expectedInvocations), m.UpdateKnowledgeBaseWithMapTxMock.expectedInvocationsOrigin, afterUpdateKnowledgeBaseWithMapTxCounter)
 	}
 }
 
@@ -43634,6 +45102,8 @@ func (m *RepositoryMock) MinimockFinish() {
 
 			m.MinimockDeleteKnowledgeBaseFileAndDecreaseUsageInspect()
 
+			m.MinimockDeleteKnowledgeBaseTxInspect()
+
 			m.MinimockDeleteObjectInspect()
 
 			m.MinimockDeleteObjectByDestinationInspect()
@@ -43663,6 +45133,8 @@ func (m *RepositoryMock) MinimockFinish() {
 			m.MinimockGetConvertedFileByFileUIDAndTypeInspect()
 
 			m.MinimockGetConvertedFileCountByKBUIDInspect()
+
+			m.MinimockGetDBInspect()
 
 			m.MinimockGetDefaultSystemInspect()
 
@@ -43800,9 +45272,13 @@ func (m *RepositoryMock) MinimockFinish() {
 
 			m.MinimockUpdateKnowledgeBaseResourcesInspect()
 
+			m.MinimockUpdateKnowledgeBaseResourcesTxInspect()
+
 			m.MinimockUpdateKnowledgeBaseUpdateStatusInspect()
 
 			m.MinimockUpdateKnowledgeBaseWithMapInspect()
+
+			m.MinimockUpdateKnowledgeBaseWithMapTxInspect()
 
 			m.MinimockUpdateKnowledgeFileMetadataInspect()
 
@@ -43868,6 +45344,7 @@ func (m *RepositoryMock) minimockDone() bool {
 		m.MinimockDeleteKnowledgeBaseDone() &&
 		m.MinimockDeleteKnowledgeBaseFileDone() &&
 		m.MinimockDeleteKnowledgeBaseFileAndDecreaseUsageDone() &&
+		m.MinimockDeleteKnowledgeBaseTxDone() &&
 		m.MinimockDeleteObjectDone() &&
 		m.MinimockDeleteObjectByDestinationDone() &&
 		m.MinimockDeleteRepositoryTagDone() &&
@@ -43883,6 +45360,7 @@ func (m *RepositoryMock) minimockDone() bool {
 		m.MinimockGetConvertedFileByFileUIDDone() &&
 		m.MinimockGetConvertedFileByFileUIDAndTypeDone() &&
 		m.MinimockGetConvertedFileCountByKBUIDDone() &&
+		m.MinimockGetDBDone() &&
 		m.MinimockGetDefaultSystemDone() &&
 		m.MinimockGetDualProcessingTargetDone() &&
 		m.MinimockGetEmbeddingCountByKBUIDDone() &&
@@ -43951,8 +45429,10 @@ func (m *RepositoryMock) minimockDone() bool {
 		m.MinimockUpdateKnowledgeBaseAbortedDone() &&
 		m.MinimockUpdateKnowledgeBaseFileDone() &&
 		m.MinimockUpdateKnowledgeBaseResourcesDone() &&
+		m.MinimockUpdateKnowledgeBaseResourcesTxDone() &&
 		m.MinimockUpdateKnowledgeBaseUpdateStatusDone() &&
 		m.MinimockUpdateKnowledgeBaseWithMapDone() &&
+		m.MinimockUpdateKnowledgeBaseWithMapTxDone() &&
 		m.MinimockUpdateKnowledgeFileMetadataDone() &&
 		m.MinimockUpdateKnowledgeFileUsageMetadataDone() &&
 		m.MinimockUpdateObjectDone() &&

@@ -105,9 +105,21 @@ type KnowledgeBase interface {
 	// UpdateKnowledgeBaseWithMap updates a KB using a map to allow zero values like false
 	UpdateKnowledgeBaseWithMap(ctx context.Context, id, owner string, updates map[string]any) error
 
+	// UpdateKnowledgeBaseWithMapTx updates a KB using a map within a transaction
+	UpdateKnowledgeBaseWithMapTx(ctx context.Context, tx *gorm.DB, id, owner string, updates map[string]any) error
+
+	// DeleteKnowledgeBaseTx soft-deletes a KB within a transaction
+	DeleteKnowledgeBaseTx(ctx context.Context, tx *gorm.DB, owner, kbID string) error
+
 	// UpdateKnowledgeBaseResources updates kb_uid references in all resource tables
 	// This is critical for atomic swap to ensure resources follow their knowledge bases
 	UpdateKnowledgeBaseResources(ctx context.Context, fromKBUID, toKBUID types.KBUIDType) error
+
+	// UpdateKnowledgeBaseResourcesTx updates kb_uid references within a transaction
+	UpdateKnowledgeBaseResourcesTx(ctx context.Context, tx *gorm.DB, fromKBUID, toKBUID types.KBUIDType) error
+
+	// GetDB returns the underlying database connection for transaction management
+	GetDB() *gorm.DB
 }
 
 // KnowledgeBaseWithConfig represents a KB with its system config joined
@@ -458,6 +470,56 @@ func (r *repository) UpdateKnowledgeBaseWithMap(ctx context.Context, id, owner s
 	return nil
 }
 
+// UpdateKnowledgeBaseWithMapTx updates a knowledge base using a map within a transaction
+func (r *repository) UpdateKnowledgeBaseWithMapTx(ctx context.Context, tx *gorm.DB, id, owner string, updates map[string]any) error {
+	where := fmt.Sprintf("%s = ? AND %s = ? AND %s is NULL", KnowledgeBaseColumn.KBID, KnowledgeBaseColumn.Owner, KnowledgeBaseColumn.DeleteTime)
+
+	// Convert tags if present to TagsArray type for proper PostgreSQL array handling
+	if tags, ok := updates["tags"]; ok {
+		if tagSlice, ok := tags.([]string); ok {
+			updates["tags"] = TagsArray(tagSlice)
+		}
+	}
+
+	err := tx.WithContext(ctx).
+		Model(&KnowledgeBaseModel{}).
+		Where(where, id, owner).
+		Updates(updates).
+		Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("knowledge base %s/%s not found", id, owner)
+		}
+		return fmt.Errorf("updating record: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteKnowledgeBaseTx soft-deletes a KB within a transaction
+func (r *repository) DeleteKnowledgeBaseTx(ctx context.Context, tx *gorm.DB, owner, kbID string) error {
+	var existingKB KnowledgeBaseModel
+
+	// Lock the KB row with SELECT ... FOR UPDATE
+	conds := fmt.Sprintf("%v = ? AND %v = ? AND %v IS NULL", KnowledgeBaseColumn.Owner, KnowledgeBaseColumn.KBID, KnowledgeBaseColumn.DeleteTime)
+	if err := tx.WithContext(ctx).Clauses(clause.Locking{Strength: "UPDATE"}).First(&existingKB, conds, owner, kbID).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return fmt.Errorf("knowledge base ID not found: %v. err: %w", kbID, gorm.ErrRecordNotFound)
+		}
+		return err
+	}
+
+	// Perform soft delete using GORM's Delete() method
+	if err := tx.WithContext(ctx).Delete(&existingKB).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("knowledge base ID not found: %v. err: %w", existingKB.KBID, gorm.ErrRecordNotFound)
+		}
+		return err
+	}
+
+	return nil
+}
+
 // UpdateKBUIDInResources updates kb_uid in all resource tables (files, chunks, embeddings, converted_files)
 // This is CRITICAL for atomic swap: when KBs are swapped, all resources must follow their KBs.
 // Without this, queries will fail because resources point to old KB UIDs.
@@ -480,6 +542,25 @@ func (r *repository) UpdateKnowledgeBaseResources(ctx context.Context, fromKBUID
 		}
 		return nil
 	})
+}
+
+// UpdateKnowledgeBaseResourcesTx updates kb_uid in all resource tables within an existing transaction
+func (r *repository) UpdateKnowledgeBaseResourcesTx(ctx context.Context, tx *gorm.DB, fromKBUID, toKBUID types.KBUIDType) error {
+	tables := []string{
+		"file",
+		"chunk",
+		"embedding",
+		"converted_file",
+	}
+
+	for _, table := range tables {
+		query := fmt.Sprintf("UPDATE %s SET kb_uid = ? WHERE kb_uid = ?", table)
+		result := tx.WithContext(ctx).Exec(query, toKBUID, fromKBUID)
+		if result.Error != nil {
+			return fmt.Errorf("updating kb_uid in %s: %w", table, result.Error)
+		}
+	}
+	return nil
 }
 
 // DeleteKnowledgeBase sets the DeleteTime to the current time to perform a soft delete.

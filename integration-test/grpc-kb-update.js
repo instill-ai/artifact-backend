@@ -7018,6 +7018,370 @@ function TestEdgeCases(client, data) {
             console.log("Edge Cases: Cleaning up swap status test KB...");
             http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${updateCompletedKBId}`, null, data.header);
         }
+
+        // ========================================================================
+        // REGRESSION TEST: active_collection_uid Constraint Violation
+        // ========================================================================
+        // This test verifies that the atomic swap correctly handles the unique constraint
+        // on active_collection_uid by clearing staging KB's value BEFORE updating production.
+        //
+        // Bug Scenario (Fixed):
+        // 1. Production KB has active_collection_uid = X
+        // 2. Staging KB has active_collection_uid = Y
+        // 3. Swap attempts to set production.active_collection_uid = Y (staging's value)
+        // 4. BUT staging still has active_collection_uid = Y with delete_time = NULL
+        // 5. Unique constraint violation: duplicate key value violates unique constraint "idx_kb_active_collection_uid_unique"
+        //
+        // Fix:
+        // Clear staging.active_collection_uid = NULL BEFORE updating production
+        // All operations wrapped in atomic transaction
+        console.log("\n=== BUG REGRESSION: Testing active_collection_uid Constraint Handling ===");
+
+        const constraintTestKBId = data.dbIDPrefix + "constraint-test-" + randomString(8);
+        const constraintCreateRes = http.request(
+            "POST",
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
+            JSON.stringify({
+                id: constraintTestKBId,
+                description: "Bug regression test for active_collection_uid constraint",
+                tags: ["test", "bug-regression", "constraint"],
+            }),
+            data.header
+        );
+
+        let constraintKB;
+        try {
+            constraintKB = constraintCreateRes.json().knowledgeBase;
+            console.log(`Bug Regression: Created KB "${constraintTestKBId}" with UID ${constraintKB.uid}`);
+        } catch (e) {
+            console.error(`Bug Regression: Failed to create KB: ${e}`);
+            console.log("=== Constraint Test Skipped ===\n");
+        }
+
+        if (constraintKB) {
+            const constraintKBUID = constraintKB.uid;
+            const originalCollectionUID = constraintKB.activeCollectionUid;
+            console.log(`Bug Regression: Original active_collection_uid: ${originalCollectionUID}`);
+
+            // Upload file and process
+            const constraintFilename = data.dbIDPrefix + "constraint-test.txt";
+            const constraintUploadRes = http.request(
+                "POST",
+                `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${constraintTestKBId}/files`,
+                JSON.stringify({
+                    filename: constraintFilename,
+                    type: "TYPE_TEXT",
+                    content: encoding.b64encode("Test content for constraint validation")
+                }),
+                data.header
+            );
+
+            let constraintFileUID;
+            try {
+                constraintFileUID = constraintUploadRes.json().file.uid;
+            } catch (e) {
+                http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${constraintTestKBId}`, null, data.header);
+                console.log("=== Constraint Test Skipped ===\n");
+            }
+
+            if (constraintFileUID) {
+                // Wait for file processing
+                const constraintProcessResult = helper.waitForFileProcessingComplete(
+                    data.expectedOwner.id,
+                    constraintTestKBId,
+                    constraintFileUID,
+                    data.header,
+                    300
+                );
+
+                if (constraintProcessResult.completed) {
+                    console.log("Bug Regression: File processed, triggering update to test swap constraint handling...");
+
+                    // Trigger update - this will test the constraint handling during swap
+                    const constraintUpdateRes = client.invoke(
+                        "artifact.artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
+                        { knowledgeBaseIds: [constraintTestKBId] },
+                        data.metadata
+                    );
+
+                    if (constraintUpdateRes && constraintUpdateRes.status === grpc.StatusOK) {
+                        console.log("Bug Regression: Update started, waiting for completion...");
+
+                        // Wait for update to complete
+                        const constraintUpdateCompleted = helper.pollUpdateCompletion(client, data, constraintKBUID, 600);
+
+                        check({ constraintUpdateCompleted }, {
+                            "Bug Regression #1: Update completes without active_collection_uid constraint violation": () => {
+                                if (constraintUpdateCompleted !== true) {
+                                    console.error("Bug Regression: ❌ Update failed - likely hit constraint violation during swap");
+                                    console.error("Bug Regression: This indicates staging KB's active_collection_uid was not cleared before updating production");
+                                } else {
+                                    console.log("Bug Regression: ✅ Update completed - constraint handling works correctly");
+                                    console.log("Bug Regression: Staging's active_collection_uid was cleared before production update");
+                                }
+                                return constraintUpdateCompleted === true;
+                            },
+                        });
+
+                        if (constraintUpdateCompleted) {
+                            // Verify the KB has a new collection UID (staging's collection was swapped in)
+                            const updatedKB = helper.getKnowledgeBaseByIdAndOwner(constraintTestKBId, data.expectedOwner.uid);
+                            if (updatedKB && updatedKB.length > 0) {
+                                const newCollectionUID = updatedKB[0].activeCollectionUid;
+                                console.log(`Bug Regression: New active_collection_uid: ${newCollectionUID}`);
+
+                                check({ originalCollectionUID, newCollectionUID }, {
+                                    "Bug Regression #1: active_collection_uid changed to staging's collection": () => {
+                                        const changed = originalCollectionUID !== newCollectionUID;
+                                        if (!changed) {
+                                            console.error("Bug Regression: Collection UID did not change - swap may not have occurred");
+                                        } else {
+                                            console.log("Bug Regression: ✅ Collection UID successfully swapped");
+                                        }
+                                        return changed;
+                                    },
+                                });
+
+                                // Verify rollback KB has the old collection UID
+                                const rollbackKBsConstraint = helper.verifyRollbackKB(constraintTestKBId, data.expectedOwner.uid);
+                                if (rollbackKBsConstraint && rollbackKBsConstraint.length > 0) {
+                                    const rollbackCollectionUID = rollbackKBsConstraint[0].active_collection_uid;
+                                    console.log(`Bug Regression: Rollback KB active_collection_uid: ${rollbackCollectionUID}`);
+
+                                    check({ rollbackCollectionUID, originalCollectionUID }, {
+                                        "Bug Regression #1: Rollback KB preserved original collection UID": () => {
+                                            const preserved = rollbackCollectionUID === originalCollectionUID;
+                                            if (!preserved) {
+                                                console.error("Bug Regression: Rollback KB doesn't have original collection UID");
+                                            } else {
+                                                console.log("Bug Regression: ✅ Rollback KB correctly preserved original collection");
+                                            }
+                                            return preserved;
+                                        },
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Cleanup
+                console.log("Bug Regression: Cleaning up constraint test KB...");
+                http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${constraintTestKBId}`, null, data.header);
+            }
+
+            console.log("=== Constraint Test Complete ===\n");
+        }
+
+        // ========================================================================
+        // REGRESSION TEST: Duplicate Files After Update
+        // ========================================================================
+        // This test verifies that the atomic swap transaction prevents duplicate files
+        // when the swap operation is interrupted or fails.
+        //
+        // Bug Scenario (Fixed):
+        // 1. Swap starts: 3-step resource shuffle (original → temp → staging → original → temp → rollback)
+        // 2. Step 2a completes: Original files moved to temp
+        // 3. Step 2b completes: Staging files moved to original (new files in production)
+        // 4. Step 2c or metadata update FAILS (e.g., constraint violation)
+        // 5. Partial rollback: Some operations rolled back, some committed
+        // 6. Result: DUPLICATE FILES (both old and new files in production KB)
+        //
+        // Fix:
+        // Wrap entire swap in atomic database transaction
+        // If ANY step fails, ALL operations roll back (all-or-nothing)
+        console.log("\n=== BUG REGRESSION: Testing Atomic Swap Prevents Duplicate Files ===");
+
+        const duplicateTestKBId = data.dbIDPrefix + "duplicate-test-" + randomString(8);
+        const duplicateCreateRes = http.request(
+            "POST",
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
+            JSON.stringify({
+                id: duplicateTestKBId,
+                description: "Bug regression test for duplicate file prevention",
+                tags: ["test", "bug-regression", "duplicate"],
+            }),
+            data.header
+        );
+
+        let duplicateKB;
+        try {
+            duplicateKB = duplicateCreateRes.json().knowledgeBase;
+            console.log(`Bug Regression: Created KB "${duplicateTestKBId}" with UID ${duplicateKB.uid}`);
+        } catch (e) {
+            console.error(`Bug Regression: Failed to create KB: ${e}`);
+            console.log("=== Duplicate Test Skipped ===\n");
+        }
+
+        if (duplicateKB) {
+            const duplicateKBUID = duplicateKB.uid;
+
+            // Upload multiple files to ensure we have enough data to detect duplicates
+            const testFiles = [
+                { name: "file1.txt", content: "Test content 1 for duplicate detection" },
+                { name: "file2.txt", content: "Test content 2 for duplicate detection" },
+                { name: "file3.txt", content: "Test content 3 for duplicate detection" }
+            ];
+
+            const uploadedFileUIDs = [];
+
+            for (const testFile of testFiles) {
+                const filename = data.dbIDPrefix + testFile.name;
+                const uploadRes = http.request(
+                    "POST",
+                    `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${duplicateTestKBId}/files`,
+                    JSON.stringify({
+                        filename: filename,
+                        type: "TYPE_TEXT",
+                        content: encoding.b64encode(testFile.content)
+                    }),
+                    data.header
+                );
+
+                try {
+                    const fileUID = uploadRes.json().file.uid;
+                    uploadedFileUIDs.push(fileUID);
+                    console.log(`Bug Regression: Uploaded ${filename} (UID: ${fileUID})`);
+                } catch (e) {
+                    console.error(`Bug Regression: Failed to upload ${filename}: ${e}`);
+                }
+            }
+
+            if (uploadedFileUIDs.length > 0) {
+                // Wait for all files to process
+                console.log("Bug Regression: Waiting for all files to process...");
+                let allFilesProcessed = true;
+                for (const fileUID of uploadedFileUIDs) {
+                    const processResult = helper.waitForFileProcessingComplete(
+                        data.expectedOwner.id,
+                        duplicateTestKBId,
+                        fileUID,
+                        data.header,
+                        300
+                    );
+                    if (!processResult.completed) {
+                        allFilesProcessed = false;
+                        console.error(`Bug Regression: File ${fileUID} did not complete processing`);
+                    }
+                }
+
+                if (allFilesProcessed) {
+                    console.log("Bug Regression: All files processed successfully");
+
+                    // Get file count BEFORE update
+                    const filesBeforeUpdate = helper.listFiles(data.expectedOwner.id, duplicateTestKBId, data.header);
+                    const fileCountBefore = filesBeforeUpdate ? filesBeforeUpdate.length : 0;
+                    console.log(`Bug Regression: File count BEFORE update: ${fileCountBefore}`);
+
+                    // Trigger update
+                    console.log("Bug Regression: Triggering update to test atomic swap...");
+                    const duplicateUpdateRes = client.invoke(
+                        "artifact.artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
+                        { knowledgeBaseIds: [duplicateTestKBId] },
+                        data.metadata
+                    );
+
+                    if (duplicateUpdateRes && duplicateUpdateRes.status === grpc.StatusOK) {
+                        console.log("Bug Regression: Update started, waiting for completion...");
+
+                        // Wait for update to complete
+                        const duplicateUpdateCompleted = helper.pollUpdateCompletion(client, data, duplicateKBUID, 600);
+
+                        check({ duplicateUpdateCompleted }, {
+                            "Bug Regression #2: Update completes successfully with atomic swap": () => {
+                                if (duplicateUpdateCompleted !== true) {
+                                    console.error("Bug Regression: ❌ Update failed - atomic swap may have issues");
+                                } else {
+                                    console.log("Bug Regression: ✅ Update completed successfully");
+                                }
+                                return duplicateUpdateCompleted === true;
+                            },
+                        });
+
+                        if (duplicateUpdateCompleted) {
+                            // Get file count AFTER update
+                            const filesAfterUpdate = helper.listFiles(data.expectedOwner.id, duplicateTestKBId, data.header);
+                            const fileCountAfter = filesAfterUpdate ? filesAfterUpdate.length : 0;
+                            console.log(`Bug Regression: File count AFTER update: ${fileCountAfter}`);
+
+                            check({ fileCountBefore, fileCountAfter }, {
+                                "Bug Regression #2: No duplicate files after update (file count unchanged)": () => {
+                                    const noDuplicates = fileCountBefore === fileCountAfter;
+                                    if (!noDuplicates) {
+                                        console.error(`Bug Regression: ❌ DUPLICATE FILES DETECTED!`);
+                                        console.error(`Bug Regression: Before: ${fileCountBefore} files, After: ${fileCountAfter} files`);
+                                        console.error("Bug Regression: Atomic swap transaction failed - partial state committed");
+
+                                        // Log detailed file information for debugging
+                                        if (filesAfterUpdate) {
+                                            const filesByName = {};
+                                            for (const file of filesAfterUpdate) {
+                                                const name = file.name || file.filename;
+                                                if (!filesByName[name]) {
+                                                    filesByName[name] = [];
+                                                }
+                                                filesByName[name].push({
+                                                    uid: file.uid,
+                                                    createTime: file.createTime
+                                                });
+                                            }
+
+                                            for (const [name, instances] of Object.entries(filesByName)) {
+                                                if (instances.length > 1) {
+                                                    console.error(`Bug Regression: File "${name}" has ${instances.length} instances:`);
+                                                    for (const inst of instances) {
+                                                        console.error(`  - UID: ${inst.uid}, Created: ${inst.createTime}`);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        console.log("Bug Regression: ✅ No duplicate files - atomic swap preserved data integrity");
+                                        console.log("Bug Regression: Transaction correctly handled swap as all-or-nothing operation");
+                                    }
+                                    return noDuplicates;
+                                },
+                            });
+
+                            // Additional check: Verify no files with same name but different UIDs
+                            if (filesAfterUpdate) {
+                                const filesByName = {};
+                                for (const file of filesAfterUpdate) {
+                                    const name = file.name || file.filename;
+                                    if (!filesByName[name]) {
+                                        filesByName[name] = 0;
+                                    }
+                                    filesByName[name]++;
+                                }
+
+                                const duplicateNames = Object.entries(filesByName).filter(([_, count]) => count > 1);
+
+                                check({ duplicateNames }, {
+                                    "Bug Regression #2: No files with duplicate names in production KB": () => {
+                                        const noDuplicateNames = duplicateNames.length === 0;
+                                        if (!noDuplicateNames) {
+                                            console.error(`Bug Regression: ❌ Found ${duplicateNames.length} duplicate file names:`);
+                                            for (const [name, count] of duplicateNames) {
+                                                console.error(`  - "${name}": ${count} instances`);
+                                            }
+                                        } else {
+                                            console.log("Bug Regression: ✅ All file names are unique");
+                                        }
+                                        return noDuplicateNames;
+                                    },
+                                });
+                            }
+                        }
+                    }
+                }
+
+                // Cleanup
+                console.log("Bug Regression: Cleaning up duplicate test KB...");
+                http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${duplicateTestKBId}`, null, data.header);
+            }
+
+            console.log("=== Duplicate Test Complete ===\n");
+        }
     });
 }
 
