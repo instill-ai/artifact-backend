@@ -187,8 +187,7 @@ func main() {
 	// Child workflows (called by main workflows)
 	w.RegisterWorkflow(cw.SaveEmbeddingsWorkflow) // Vector embedding storage
 
-	// GCS cleanup workflows
-	w.RegisterWorkflow(cw.GCSCleanupWorkflow)           // Single-run GCS cleanup (scheduled or manual)
+	// GCS cleanup workflow
 	w.RegisterWorkflow(cw.GCSCleanupContinuousWorkflow) // Continuous GCS cleanup (runs every 2 minutes)
 
 	// ===== Shared Activities (Used by Multiple Workflows) =====
