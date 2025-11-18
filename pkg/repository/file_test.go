@@ -10,10 +10,10 @@ import (
 func TestKnowledgeBaseFile_ExtraMetaDataUnmarshal_Empty(t *testing.T) {
 	c := qt.New(t)
 
-	kf := KnowledgeBaseFileModel{ExtraMetaData: `{"fail_reason":"some reason"}`}
+	kf := KnowledgeBaseFileModel{ExtraMetaData: `{"status_message":"processing complete"}`}
 	err := kf.ExtraMetaDataUnmarshalFunc()
 	c.Check(err, qt.IsNil)
-	c.Check(kf.ExtraMetaDataUnmarshal.FailReason, qt.Equals, "some reason")
+	c.Check(kf.ExtraMetaDataUnmarshal.StatusMessage, qt.Equals, "processing complete")
 }
 
 // test ExtraMetaDataUnmarshal, when extra metadata is ""
