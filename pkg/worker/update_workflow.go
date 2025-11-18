@@ -182,9 +182,9 @@ func (w *Worker) UpdateKnowledgeBaseWorkflow(ctx workflow.Context, param UpdateK
 	logger.Info("Phase 2: Reprocess - Reprocessing all files from snapshot", "fileCount", len(listFilesResult.FileUIDs))
 
 	// Reprocess files in batches
-	batchSize := config.Config.RAG.Update.BatchSize
+	batchSize := config.Config.RAG.Update.FileBatchSize
 	if batchSize <= 0 {
-		batchSize = 10 // Default batch size
+		batchSize = 5 // Default batch size (lowered from 10 to 5)
 	}
 
 	for i := 0; i < len(listFilesResult.FileUIDs); i += batchSize {

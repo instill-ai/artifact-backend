@@ -104,7 +104,8 @@ rag:
   update:
     # Update settings - simple tag-based management without versioning
     rollback_retention_days: 7 # Days to keep old KB after swap before cleanup
-    batch_size: 10 # KBs to process concurrently
+    max_concurrent_kb_updates: 5 # Maximum number of KBs updating concurrently
+    file_batch_size: 5 # Files to process per batch within each KB
   model:
     vertexai:
       projectid:

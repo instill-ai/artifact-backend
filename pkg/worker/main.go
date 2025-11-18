@@ -424,50 +424,73 @@ func (w *Worker) ExecuteKnowledgeBaseUpdate(ctx context.Context, knowledgeBaseID
 		}, nil
 	}
 
-	// Start UpdateKnowledgeBaseWorkflow for each KB
-	// Note: We start all workflows immediately (fire-and-forget) rather than batching
-	// because Temporal handles concurrency control via its worker pool. Each workflow
-	// runs independently and will process its files in batches using config.RAG.Update.BatchSize.
-	successCount := 0
-	for _, kb := range kbs {
-		// Parse owner UID
-		ownerUID, err := uuid.FromString(kb.Owner)
-		if err != nil {
-			w.log.Error("Failed to parse owner UID",
-				zap.String("knowledgeBaseID", kb.KBID),
-				zap.String("kbUID", kb.UID.String()),
-				zap.Error(err))
-			continue
-		}
-
-		// Start child workflow for this KB
-		// Use unique workflow ID by adding timestamp to support rollback → re-update scenarios
-		workflowOptions := client.StartWorkflowOptions{
-			ID:                       fmt.Sprintf("update-kb-%s-%d", kb.UID.String(), time.Now().UnixNano()),
-			TaskQueue:                "artifact-backend",
-			WorkflowExecutionTimeout: 24 * time.Hour,
-		}
-
-		_, err = w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, w.UpdateKnowledgeBaseWorkflow, UpdateKnowledgeBaseWorkflowParam{
-			OriginalKBUID: kb.UID,
-			UserUID:       types.UserUIDType(ownerUID),
-			RequesterUID:  types.RequesterUIDType(kb.CreatorUID),
-			SystemID:      systemID,
-		})
-
-		if err != nil {
-			w.log.Error("Failed to start update workflow for KB",
-				zap.String("knowledgeBaseID", kb.KBID),
-				zap.String("kbUID", kb.UID.String()),
-				zap.Error(err))
-			continue
-		}
-
-		successCount++
-		w.log.Info("Update workflow started for KB",
-			zap.String("knowledgeBaseID", kb.KBID),
-			zap.String("kbUID", kb.UID.String()))
+	// Start UpdateKnowledgeBaseWorkflow for each KB with concurrency control
+	// Use semaphore to limit concurrent KB updates and prevent resource surge
+	maxConcurrent := config.Config.RAG.Update.MaxConcurrentKBUpdates
+	if maxConcurrent <= 0 {
+		maxConcurrent = 5 // Default to 5 concurrent KBs
 	}
+
+	semaphore := make(chan struct{}, maxConcurrent)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	successCount := 0
+
+	for _, kb := range kbs {
+		wg.Add(1)
+
+		// Acquire semaphore slot
+		semaphore <- struct{}{}
+
+		go func(kb repository.KnowledgeBaseModel) {
+			defer wg.Done()
+			defer func() { <-semaphore }() // Release slot when done
+
+			// Parse owner UID
+			ownerUID, err := uuid.FromString(kb.Owner)
+			if err != nil {
+				w.log.Error("Failed to parse owner UID",
+					zap.String("knowledgeBaseID", kb.KBID),
+					zap.String("kbUID", kb.UID.String()),
+					zap.Error(err))
+				return
+			}
+
+			// Start child workflow for this KB
+			// Use unique workflow ID by adding timestamp to support rollback → re-update scenarios
+			workflowOptions := client.StartWorkflowOptions{
+				ID:                       fmt.Sprintf("update-kb-%s-%d", kb.UID.String(), time.Now().UnixNano()),
+				TaskQueue:                "artifact-backend",
+				WorkflowExecutionTimeout: 24 * time.Hour,
+			}
+
+			_, err = w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, w.UpdateKnowledgeBaseWorkflow, UpdateKnowledgeBaseWorkflowParam{
+				OriginalKBUID: kb.UID,
+				UserUID:       types.UserUIDType(ownerUID),
+				RequesterUID:  types.RequesterUIDType(kb.CreatorUID),
+				SystemID:      systemID,
+			})
+
+			if err != nil {
+				w.log.Error("Failed to start update workflow for KB",
+					zap.String("knowledgeBaseID", kb.KBID),
+					zap.String("kbUID", kb.UID.String()),
+					zap.Error(err))
+				return
+			}
+
+			mu.Lock()
+			successCount++
+			mu.Unlock()
+
+			w.log.Info("Update workflow started for KB",
+				zap.String("knowledgeBaseID", kb.KBID),
+				zap.String("kbUID", kb.UID.String()))
+		}(kb)
+	}
+
+	// Wait for all goroutines to complete
+	wg.Wait()
 
 	if successCount == 0 {
 		return &UpdateRAGIndexResult{
@@ -478,7 +501,7 @@ func (w *Worker) ExecuteKnowledgeBaseUpdate(ctx context.Context, knowledgeBaseID
 
 	return &UpdateRAGIndexResult{
 		Started: true,
-		Message: fmt.Sprintf("Knowledge base update initiated for %d/%d knowledge bases", successCount, len(kbs)),
+		Message: fmt.Sprintf("Knowledge base update initiated for %d/%d knowledge bases (max %d concurrent)", successCount, len(kbs), maxConcurrent),
 	}, nil
 }
 

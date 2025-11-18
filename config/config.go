@@ -148,8 +148,9 @@ type RAGConfig struct {
 
 // RAGUpdateConfig defines the configuration for RAG system updates
 type RAGUpdateConfig struct {
-	RollbackRetentionDays int `koanf:"rollback_retention_days"` // Days to keep old KB after swap
-	BatchSize             int `koanf:"batch_size"`              // KBs to process concurrently
+	RollbackRetentionDays  int `koanf:"rollback_retention_days"`   // Days to keep old KB after swap
+	MaxConcurrentKBUpdates int `koanf:"max_concurrent_kb_updates"` // Maximum number of KBs updating concurrently
+	FileBatchSize          int `koanf:"file_batch_size"`           // Files to process per batch within each KB
 }
 
 // ModelConfig defines the configuration for AI model providers
