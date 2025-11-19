@@ -237,6 +237,7 @@ func main() {
 	w.RegisterActivity(cw.UpdateKnowledgeBaseUpdateStatusActivity) // Update KB update status
 	w.RegisterActivity(cw.CleanupOldKnowledgeBaseActivity)         // Cleanup rollback KB after retention
 	w.RegisterActivity(cw.VerifyKBCleanupActivity)                 // Verify KB cleanup was successful
+	w.RegisterActivity(cw.GetKBCollectionUIDActivity)              // Get KB collection UID for verification
 
 	// ===== ProcessFileWorkflow Activities (Main Workflow) =====
 	// Main workflow orchestrating the entire file processing pipeline

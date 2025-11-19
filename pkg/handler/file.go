@@ -130,6 +130,7 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 		KBUID:                     kb.UID,
 		ProcessStatus:             artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_NOTSTARTED.String(),
 		ExternalMetadataUnmarshal: md,
+		Tags:                      repository.TagsArray(req.GetFile().GetTags()),
 	}
 
 	if req.GetFile().GetConvertingPipeline() != "" {
@@ -1646,6 +1647,21 @@ func (ph *PublicHandler) UpdateFile(ctx context.Context, req *artifactpb.UpdateF
 			fmt.Errorf("updating file: %w", err),
 			"Unable to update file. Please try again.",
 		)
+	}
+
+	// If tags were updated, sync them to Milvus embeddings
+	if _, tagsUpdated := updates[repository.KnowledgeBaseFileColumn.Tags]; tagsUpdated {
+		// Get the active collection UID for this KB
+		collectionID := constant.KBCollectionName(kb.ActiveCollectionUID)
+
+		// Update tags in Milvus for all embeddings of this file
+		if err := ph.service.Repository().UpdateEmbeddingTagsForFile(ctx, collectionID, fileUID, updatedFile.Tags); err != nil {
+			logger.Warn("Failed to update embedding tags in Milvus (file tags in DB were updated)",
+				zap.String("fileUID", fileUID.String()),
+				zap.Error(err))
+			// Don't fail the request - DB tags were updated successfully
+			// Milvus tags will be resynced if file is reprocessed
+		}
 	}
 
 	// Convert to protobuf

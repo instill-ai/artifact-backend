@@ -10,7 +10,6 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
-	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/types"
 
 	errorsx "github.com/instill-ai/x/errors"
@@ -23,6 +22,7 @@ type CleanupFileWorkflowParam struct {
 	RequesterUID        types.RequesterUIDType
 	WorkflowID          string
 	IncludeOriginalFile bool
+	MinioBucket         string // Minio bucket name for object storage
 }
 
 // CleanupKnowledgeBaseWorkflowParam defines the parameters for the CleanupKnowledgeBaseWorkflow
@@ -30,6 +30,7 @@ type CleanupKnowledgeBaseWorkflowParam struct {
 	KBUID                  types.KBUIDType
 	CleanupAfterSeconds    int64            // If > 0, wait this many seconds before cleanup (for retention-based cleanup)
 	ProtectedCollectionUID *types.KBUIDType // Collection UID that must not be dropped (e.g., after swap)
+	MinioBucket            string           // Minio bucket name for object storage
 }
 
 type cleanupFileWorkflow struct {
@@ -136,7 +137,7 @@ func (w *Worker) CleanupFileWorkflow(ctx workflow.Context, param CleanupFileWork
 			name: "delete original file",
 			future: workflow.ExecuteActivity(ctx, w.DeleteOriginalFileActivity, &DeleteOriginalFileActivityParam{
 				FileUID: fileUID,
-				Bucket:  config.Config.Minio.BucketName,
+				Bucket:  param.MinioBucket,
 			}),
 		})
 	}

@@ -10,7 +10,6 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
-	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/types"
 	errorsx "github.com/instill-ai/x/errors"
 
@@ -24,7 +23,10 @@ type UpdateKnowledgeBaseWorkflowParam struct {
 	RequesterUID  types.RequesterUIDType
 	// SystemID specifies which system ID to use for the new embedding config
 	// If empty, uses the KB's current embedding config (useful for reprocessing)
-	SystemID string
+	SystemID              string
+	RollbackRetentionDays int    // Days to keep rollback KB after swap before cleanup
+	FileBatchSize         int    // Files to process per batch within each KB
+	MinioBucket           string // Minio bucket name for object storage
 }
 
 // UpdateKnowledgeBaseWorkflow updates a single knowledge base through 6 phases:
@@ -213,7 +215,8 @@ func (w *Worker) UpdateKnowledgeBaseWorkflow(ctx workflow.Context, param UpdateK
 	logger.Info("Phase 2: Reprocess - Reprocessing all files from snapshot", "fileCount", len(listFilesResult.FileUIDs))
 
 	// Reprocess files in batches
-	batchSize := config.Config.RAG.Update.FileBatchSize
+	// Use workflow parameter for determinism (don't access global config during workflow execution)
+	batchSize := param.FileBatchSize
 	if batchSize <= 0 {
 		batchSize = 5 // Default batch size (lowered from 10 to 5)
 	}
@@ -379,7 +382,7 @@ func (w *Worker) UpdateKnowledgeBaseWorkflow(ctx workflow.Context, param UpdateK
 	err = workflow.ExecuteActivity(ctx, w.SwapKnowledgeBasesActivity, &SwapKnowledgeBasesActivityParam{
 		OriginalKBUID: param.OriginalKBUID,
 		StagingKBUID:  stagingKBUID,
-		RetentionDays: config.Config.RAG.Update.RollbackRetentionDays,
+		RetentionDays: param.RollbackRetentionDays,
 	}).Get(ctx, &swapResult)
 	if err != nil {
 		logger.Error("Failed to perform atomic swap", "error", err)
@@ -449,7 +452,11 @@ func (w *Worker) UpdateKnowledgeBaseWorkflow(ctx workflow.Context, param UpdateK
 	logger.Info("Phase 6: Cleanup - Scheduling rollback KB deletion after retention period")
 
 	// Schedule cleanup workflow for ROLLBACK KB after retention period
-	retentionDuration := time.Duration(config.Config.RAG.Update.RollbackRetentionDays) * 24 * time.Hour
+	// CRITICAL: Use param.RollbackRetentionDays instead of config.Config to ensure
+	// Temporal workflow determinism. Accessing global config during workflow execution
+	// can cause non-deterministic behavior during replay, potentially resulting in
+	// RollbackRetentionDays being 0 and immediate cleanup instead of the configured delay.
+	retentionDuration := time.Duration(param.RollbackRetentionDays) * 24 * time.Hour
 	retentionSeconds := int64(retentionDuration.Seconds())
 
 	childWorkflowOptions := workflow.ChildWorkflowOptions{
@@ -464,6 +471,7 @@ func (w *Worker) UpdateKnowledgeBaseWorkflow(ctx workflow.Context, param UpdateK
 	childWF := workflow.ExecuteChildWorkflow(rollbackCleanupCtx, w.CleanupKnowledgeBaseWorkflow, CleanupKnowledgeBaseWorkflowParam{
 		KBUID:               swapResult.RollbackKBUID,
 		CleanupAfterSeconds: retentionSeconds,
+		MinioBucket:         param.MinioBucket,
 	})
 
 	// Get the workflow execution to verify it started (but don't wait for completion)
@@ -471,14 +479,14 @@ func (w *Worker) UpdateKnowledgeBaseWorkflow(ctx workflow.Context, param UpdateK
 		// Log error but don't fail - rollback KB can be cleaned up manually later
 		logger.Error("Failed to start cleanup workflow for rollback KB - manual cleanup may be needed",
 			"rollbackKBUID", swapResult.RollbackKBUID.String(),
-			"retentionDays", config.Config.RAG.Update.RollbackRetentionDays,
+			"retentionDays", param.RollbackRetentionDays,
 			"error", err)
 	} else {
 		// Workflow started successfully - it will run in background
 		logger.Info("Cleanup workflow scheduled for rollback KB",
 			"rollbackKBUID", swapResult.RollbackKBUID.String(),
 			"retentionSeconds", retentionSeconds,
-			"retentionDays", config.Config.RAG.Update.RollbackRetentionDays)
+			"retentionDays", param.RollbackRetentionDays)
 	}
 
 	// CRITICAL: Set final COMPLETED status and clear workflow_id
