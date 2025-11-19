@@ -357,6 +357,7 @@ func TestFlushCollectionActivity_Success(t *testing.T) {
 		UID:                 kbUID,
 		ActiveCollectionUID: kbUID,
 	}, nil)
+	mockRepository.CollectionExistsMock.Return(true, nil)
 	mockRepository.FlushCollectionMock.Return(nil)
 
 	w := &Worker{repository: mockRepository, log: zap.NewNop()}
@@ -381,6 +382,7 @@ func TestFlushCollectionActivity_Failure(t *testing.T) {
 		UID:                 kbUID,
 		ActiveCollectionUID: kbUID,
 	}, nil)
+	mockRepository.CollectionExistsMock.Return(true, nil)
 	mockRepository.FlushCollectionMock.Return(fmt.Errorf("flush collection error"))
 
 	w := &Worker{repository: mockRepository, log: zap.NewNop()}
