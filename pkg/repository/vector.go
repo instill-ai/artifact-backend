@@ -75,6 +75,8 @@ type VectorDatabase interface {
 	FlushCollection(_ context.Context, collectionID string) error
 	// CollectionExists checks if a collection exists in the vector database
 	CollectionExists(_ context.Context, collectionID string) (bool, error)
+	// UpdateEmbeddingTags updates tags for all embeddings belonging to a file
+	UpdateEmbeddingTags(_ context.Context, collectionID string, fileUID types.FileUIDType, tags []string) error
 }
 
 // Milvus implementation constants
@@ -267,7 +269,13 @@ func (m *milvusClient) InsertVectorsInCollection(ctx context.Context, collection
 				tagsBytes[i][j] = []byte(tag)
 			}
 		}
+		logger.Info("Inserting embeddings with tags",
+			zap.Int("embedding_count", len(tags)),
+			zap.Strings("first_embedding_tags", tags[0]))
 		columns = append(columns, entity.NewColumnVarCharArray(kbCollectionFieldTags, tagsBytes))
+	} else {
+		logger.Warn("Collection does not support tags - embeddings will be inserted without tags",
+			zap.String("collection", collectionName))
 	}
 
 	// Insert the data with retry
@@ -639,4 +647,102 @@ func (m *milvusClient) CollectionExists(ctx context.Context, collectionID string
 		zap.Bool("exists", has))
 
 	return has, nil
+}
+
+// UpdateEmbeddingTags updates tags for all embeddings belonging to a specific file
+// This is used when file tags are updated to keep Milvus embeddings in sync
+func (m *milvusClient) UpdateEmbeddingTags(ctx context.Context, collectionID string, fileUID types.FileUIDType, tags []string) error {
+	logger, _ := logx.GetZapLogger(ctx)
+	logger = logger.With(
+		zap.String("collection_id", collectionID),
+		zap.String("file_uid", fileUID.String()),
+		zap.Strings("tags", tags))
+
+	logger.Info("UpdateEmbeddingTags: Starting tags update")
+
+	// Check if collection exists
+	has, err := m.c.HasCollection(ctx, collectionID)
+	if err != nil {
+		return fmt.Errorf("checking collection existence: %w", err)
+	}
+	if !has {
+		logger.Warn("UpdateEmbeddingTags: Collection does not exist, skipping")
+		return nil
+	}
+
+	// Check if collection has tags field
+	_, _, hasTags, err := m.checkMetadataFields(ctx, collectionID)
+	if err != nil {
+		return fmt.Errorf("checking metadata fields: %w", err)
+	}
+	if !hasTags {
+		logger.Warn("UpdateEmbeddingTags: Collection does not support tags, skipping")
+		return nil
+	}
+
+	// Load collection before querying
+	if err := m.c.LoadCollection(ctx, collectionID, false); err != nil {
+		logger.Warn("UpdateEmbeddingTags: Failed to load collection (may already be loaded)",
+			zap.Error(err))
+		// Continue anyway - collection might already be loaded
+	}
+
+	// Query to get all embedding UIDs for this file
+	expr := fmt.Sprintf("%s == '%s'", kbCollectionFieldFileUID, fileUID.String())
+
+	searchResult, err := m.c.Query(
+		ctx,
+		collectionID,
+		nil, // partitions
+		expr,
+		[]string{kbCollectionFieldEmbeddingUID},
+	)
+	if err != nil {
+		return fmt.Errorf("querying embeddings for file: %w", err)
+	}
+
+	if len(searchResult) == 0 {
+		logger.Info("UpdateEmbeddingTags: No embeddings found for file")
+		return nil
+	}
+
+	// Extract embedding UIDs
+	embeddingUIDs, err := getStringData(searchResult[0])
+	if err != nil {
+		return fmt.Errorf("extracting embedding UIDs: %w", err)
+	}
+
+	if len(embeddingUIDs) == 0 {
+		logger.Info("UpdateEmbeddingTags: No embeddings to update")
+		return nil
+	}
+
+	logger.Info("UpdateEmbeddingTags: Found embeddings to update",
+		zap.Int("count", len(embeddingUIDs)))
+
+	// Convert tags to [][]byte for Milvus array column
+	tagsBytes := make([][][]byte, len(embeddingUIDs))
+	for i := range embeddingUIDs {
+		tagsBytes[i] = make([][]byte, len(tags))
+		for j, tag := range tags {
+			tagsBytes[i][j] = []byte(tag)
+		}
+	}
+
+	// Build update columns
+	columns := []entity.Column{
+		entity.NewColumnVarChar(kbCollectionFieldEmbeddingUID, embeddingUIDs),
+		entity.NewColumnVarCharArray(kbCollectionFieldTags, tagsBytes),
+	}
+
+	// Upsert to update tags (Milvus uses upsert for updates based on primary key)
+	_, err = m.c.Upsert(ctx, collectionID, "", columns...)
+	if err != nil {
+		return fmt.Errorf("updating embedding tags: %w", err)
+	}
+
+	logger.Info("UpdateEmbeddingTags: Successfully updated tags",
+		zap.Int("embeddings_updated", len(embeddingUIDs)))
+
+	return nil
 }

@@ -271,7 +271,8 @@ func TestCleanupKnowledgeBaseWorkflow_Success(t *testing.T) {
 	env.RegisterWorkflow(w.CleanupKnowledgeBaseWorkflow)
 
 	param := CleanupKnowledgeBaseWorkflowParam{
-		KBUID: kbUID,
+		KBUID:       kbUID,
+		MinioBucket: "test-bucket",
 	}
 
 	env.ExecuteWorkflow(w.CleanupKnowledgeBaseWorkflow, param)
@@ -325,7 +326,8 @@ func TestCleanupKnowledgeBaseWorkflow_VectorDBError(t *testing.T) {
 	env.RegisterWorkflow(w.CleanupKnowledgeBaseWorkflow)
 
 	param := CleanupKnowledgeBaseWorkflowParam{
-		KBUID: kbUID,
+		KBUID:       kbUID,
+		MinioBucket: "test-bucket",
 	}
 
 	env.ExecuteWorkflow(w.CleanupKnowledgeBaseWorkflow, param)

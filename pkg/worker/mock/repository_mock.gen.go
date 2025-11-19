@@ -773,6 +773,20 @@ type RepositoryMock struct {
 	beforeUpdateConvertedFileCounter uint64
 	UpdateConvertedFileMock          mRepositoryMockUpdateConvertedFile
 
+	funcUpdateEmbeddingTags          func(ctx context.Context, collectionID string, fileUID types.FileUIDType, tags []string) (err error)
+	funcUpdateEmbeddingTagsOrigin    string
+	inspectFuncUpdateEmbeddingTags   func(ctx context.Context, collectionID string, fileUID types.FileUIDType, tags []string)
+	afterUpdateEmbeddingTagsCounter  uint64
+	beforeUpdateEmbeddingTagsCounter uint64
+	UpdateEmbeddingTagsMock          mRepositoryMockUpdateEmbeddingTags
+
+	funcUpdateEmbeddingTagsForFile          func(ctx context.Context, collectionID string, fileUID types.FileUIDType, tags []string) (err error)
+	funcUpdateEmbeddingTagsForFileOrigin    string
+	inspectFuncUpdateEmbeddingTagsForFile   func(ctx context.Context, collectionID string, fileUID types.FileUIDType, tags []string)
+	afterUpdateEmbeddingTagsForFileCounter  uint64
+	beforeUpdateEmbeddingTagsForFileCounter uint64
+	UpdateEmbeddingTagsForFileMock          mRepositoryMockUpdateEmbeddingTagsForFile
+
 	funcUpdateKnowledgeBase          func(ctx context.Context, id string, ownerUID string, kb mm_repository.KnowledgeBaseModel) (kp1 *mm_repository.KnowledgeBaseModel, err error)
 	funcUpdateKnowledgeBaseOrigin    string
 	inspectFuncUpdateKnowledgeBase   func(ctx context.Context, id string, ownerUID string, kb mm_repository.KnowledgeBaseModel)
@@ -1212,6 +1226,12 @@ func NewRepositoryMock(t minimock.Tester) *RepositoryMock {
 
 	m.UpdateConvertedFileMock = mRepositoryMockUpdateConvertedFile{mock: m}
 	m.UpdateConvertedFileMock.callArgs = []*RepositoryMockUpdateConvertedFileParams{}
+
+	m.UpdateEmbeddingTagsMock = mRepositoryMockUpdateEmbeddingTags{mock: m}
+	m.UpdateEmbeddingTagsMock.callArgs = []*RepositoryMockUpdateEmbeddingTagsParams{}
+
+	m.UpdateEmbeddingTagsForFileMock = mRepositoryMockUpdateEmbeddingTagsForFile{mock: m}
+	m.UpdateEmbeddingTagsForFileMock.callArgs = []*RepositoryMockUpdateEmbeddingTagsForFileParams{}
 
 	m.UpdateKnowledgeBaseMock = mRepositoryMockUpdateKnowledgeBase{mock: m}
 	m.UpdateKnowledgeBaseMock.callArgs = []*RepositoryMockUpdateKnowledgeBaseParams{}
@@ -38548,6 +38568,814 @@ func (m *RepositoryMock) MinimockUpdateConvertedFileInspect() {
 	}
 }
 
+type mRepositoryMockUpdateEmbeddingTags struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockUpdateEmbeddingTagsExpectation
+	expectations       []*RepositoryMockUpdateEmbeddingTagsExpectation
+
+	callArgs []*RepositoryMockUpdateEmbeddingTagsParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockUpdateEmbeddingTagsExpectation specifies expectation struct of the Repository.UpdateEmbeddingTags
+type RepositoryMockUpdateEmbeddingTagsExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockUpdateEmbeddingTagsParams
+	paramPtrs          *RepositoryMockUpdateEmbeddingTagsParamPtrs
+	expectationOrigins RepositoryMockUpdateEmbeddingTagsExpectationOrigins
+	results            *RepositoryMockUpdateEmbeddingTagsResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockUpdateEmbeddingTagsParams contains parameters of the Repository.UpdateEmbeddingTags
+type RepositoryMockUpdateEmbeddingTagsParams struct {
+	ctx          context.Context
+	collectionID string
+	fileUID      types.FileUIDType
+	tags         []string
+}
+
+// RepositoryMockUpdateEmbeddingTagsParamPtrs contains pointers to parameters of the Repository.UpdateEmbeddingTags
+type RepositoryMockUpdateEmbeddingTagsParamPtrs struct {
+	ctx          *context.Context
+	collectionID *string
+	fileUID      *types.FileUIDType
+	tags         *[]string
+}
+
+// RepositoryMockUpdateEmbeddingTagsResults contains results of the Repository.UpdateEmbeddingTags
+type RepositoryMockUpdateEmbeddingTagsResults struct {
+	err error
+}
+
+// RepositoryMockUpdateEmbeddingTagsOrigins contains origins of expectations of the Repository.UpdateEmbeddingTags
+type RepositoryMockUpdateEmbeddingTagsExpectationOrigins struct {
+	origin             string
+	originCtx          string
+	originCollectionID string
+	originFileUID      string
+	originTags         string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmUpdateEmbeddingTags *mRepositoryMockUpdateEmbeddingTags) Optional() *mRepositoryMockUpdateEmbeddingTags {
+	mmUpdateEmbeddingTags.optional = true
+	return mmUpdateEmbeddingTags
+}
+
+// Expect sets up expected params for Repository.UpdateEmbeddingTags
+func (mmUpdateEmbeddingTags *mRepositoryMockUpdateEmbeddingTags) Expect(ctx context.Context, collectionID string, fileUID types.FileUIDType, tags []string) *mRepositoryMockUpdateEmbeddingTags {
+	if mmUpdateEmbeddingTags.mock.funcUpdateEmbeddingTags != nil {
+		mmUpdateEmbeddingTags.mock.t.Fatalf("RepositoryMock.UpdateEmbeddingTags mock is already set by Set")
+	}
+
+	if mmUpdateEmbeddingTags.defaultExpectation == nil {
+		mmUpdateEmbeddingTags.defaultExpectation = &RepositoryMockUpdateEmbeddingTagsExpectation{}
+	}
+
+	if mmUpdateEmbeddingTags.defaultExpectation.paramPtrs != nil {
+		mmUpdateEmbeddingTags.mock.t.Fatalf("RepositoryMock.UpdateEmbeddingTags mock is already set by ExpectParams functions")
+	}
+
+	mmUpdateEmbeddingTags.defaultExpectation.params = &RepositoryMockUpdateEmbeddingTagsParams{ctx, collectionID, fileUID, tags}
+	mmUpdateEmbeddingTags.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmUpdateEmbeddingTags.expectations {
+		if minimock.Equal(e.params, mmUpdateEmbeddingTags.defaultExpectation.params) {
+			mmUpdateEmbeddingTags.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmUpdateEmbeddingTags.defaultExpectation.params)
+		}
+	}
+
+	return mmUpdateEmbeddingTags
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.UpdateEmbeddingTags
+func (mmUpdateEmbeddingTags *mRepositoryMockUpdateEmbeddingTags) ExpectCtxParam1(ctx context.Context) *mRepositoryMockUpdateEmbeddingTags {
+	if mmUpdateEmbeddingTags.mock.funcUpdateEmbeddingTags != nil {
+		mmUpdateEmbeddingTags.mock.t.Fatalf("RepositoryMock.UpdateEmbeddingTags mock is already set by Set")
+	}
+
+	if mmUpdateEmbeddingTags.defaultExpectation == nil {
+		mmUpdateEmbeddingTags.defaultExpectation = &RepositoryMockUpdateEmbeddingTagsExpectation{}
+	}
+
+	if mmUpdateEmbeddingTags.defaultExpectation.params != nil {
+		mmUpdateEmbeddingTags.mock.t.Fatalf("RepositoryMock.UpdateEmbeddingTags mock is already set by Expect")
+	}
+
+	if mmUpdateEmbeddingTags.defaultExpectation.paramPtrs == nil {
+		mmUpdateEmbeddingTags.defaultExpectation.paramPtrs = &RepositoryMockUpdateEmbeddingTagsParamPtrs{}
+	}
+	mmUpdateEmbeddingTags.defaultExpectation.paramPtrs.ctx = &ctx
+	mmUpdateEmbeddingTags.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmUpdateEmbeddingTags
+}
+
+// ExpectCollectionIDParam2 sets up expected param collectionID for Repository.UpdateEmbeddingTags
+func (mmUpdateEmbeddingTags *mRepositoryMockUpdateEmbeddingTags) ExpectCollectionIDParam2(collectionID string) *mRepositoryMockUpdateEmbeddingTags {
+	if mmUpdateEmbeddingTags.mock.funcUpdateEmbeddingTags != nil {
+		mmUpdateEmbeddingTags.mock.t.Fatalf("RepositoryMock.UpdateEmbeddingTags mock is already set by Set")
+	}
+
+	if mmUpdateEmbeddingTags.defaultExpectation == nil {
+		mmUpdateEmbeddingTags.defaultExpectation = &RepositoryMockUpdateEmbeddingTagsExpectation{}
+	}
+
+	if mmUpdateEmbeddingTags.defaultExpectation.params != nil {
+		mmUpdateEmbeddingTags.mock.t.Fatalf("RepositoryMock.UpdateEmbeddingTags mock is already set by Expect")
+	}
+
+	if mmUpdateEmbeddingTags.defaultExpectation.paramPtrs == nil {
+		mmUpdateEmbeddingTags.defaultExpectation.paramPtrs = &RepositoryMockUpdateEmbeddingTagsParamPtrs{}
+	}
+	mmUpdateEmbeddingTags.defaultExpectation.paramPtrs.collectionID = &collectionID
+	mmUpdateEmbeddingTags.defaultExpectation.expectationOrigins.originCollectionID = minimock.CallerInfo(1)
+
+	return mmUpdateEmbeddingTags
+}
+
+// ExpectFileUIDParam3 sets up expected param fileUID for Repository.UpdateEmbeddingTags
+func (mmUpdateEmbeddingTags *mRepositoryMockUpdateEmbeddingTags) ExpectFileUIDParam3(fileUID types.FileUIDType) *mRepositoryMockUpdateEmbeddingTags {
+	if mmUpdateEmbeddingTags.mock.funcUpdateEmbeddingTags != nil {
+		mmUpdateEmbeddingTags.mock.t.Fatalf("RepositoryMock.UpdateEmbeddingTags mock is already set by Set")
+	}
+
+	if mmUpdateEmbeddingTags.defaultExpectation == nil {
+		mmUpdateEmbeddingTags.defaultExpectation = &RepositoryMockUpdateEmbeddingTagsExpectation{}
+	}
+
+	if mmUpdateEmbeddingTags.defaultExpectation.params != nil {
+		mmUpdateEmbeddingTags.mock.t.Fatalf("RepositoryMock.UpdateEmbeddingTags mock is already set by Expect")
+	}
+
+	if mmUpdateEmbeddingTags.defaultExpectation.paramPtrs == nil {
+		mmUpdateEmbeddingTags.defaultExpectation.paramPtrs = &RepositoryMockUpdateEmbeddingTagsParamPtrs{}
+	}
+	mmUpdateEmbeddingTags.defaultExpectation.paramPtrs.fileUID = &fileUID
+	mmUpdateEmbeddingTags.defaultExpectation.expectationOrigins.originFileUID = minimock.CallerInfo(1)
+
+	return mmUpdateEmbeddingTags
+}
+
+// ExpectTagsParam4 sets up expected param tags for Repository.UpdateEmbeddingTags
+func (mmUpdateEmbeddingTags *mRepositoryMockUpdateEmbeddingTags) ExpectTagsParam4(tags []string) *mRepositoryMockUpdateEmbeddingTags {
+	if mmUpdateEmbeddingTags.mock.funcUpdateEmbeddingTags != nil {
+		mmUpdateEmbeddingTags.mock.t.Fatalf("RepositoryMock.UpdateEmbeddingTags mock is already set by Set")
+	}
+
+	if mmUpdateEmbeddingTags.defaultExpectation == nil {
+		mmUpdateEmbeddingTags.defaultExpectation = &RepositoryMockUpdateEmbeddingTagsExpectation{}
+	}
+
+	if mmUpdateEmbeddingTags.defaultExpectation.params != nil {
+		mmUpdateEmbeddingTags.mock.t.Fatalf("RepositoryMock.UpdateEmbeddingTags mock is already set by Expect")
+	}
+
+	if mmUpdateEmbeddingTags.defaultExpectation.paramPtrs == nil {
+		mmUpdateEmbeddingTags.defaultExpectation.paramPtrs = &RepositoryMockUpdateEmbeddingTagsParamPtrs{}
+	}
+	mmUpdateEmbeddingTags.defaultExpectation.paramPtrs.tags = &tags
+	mmUpdateEmbeddingTags.defaultExpectation.expectationOrigins.originTags = minimock.CallerInfo(1)
+
+	return mmUpdateEmbeddingTags
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.UpdateEmbeddingTags
+func (mmUpdateEmbeddingTags *mRepositoryMockUpdateEmbeddingTags) Inspect(f func(ctx context.Context, collectionID string, fileUID types.FileUIDType, tags []string)) *mRepositoryMockUpdateEmbeddingTags {
+	if mmUpdateEmbeddingTags.mock.inspectFuncUpdateEmbeddingTags != nil {
+		mmUpdateEmbeddingTags.mock.t.Fatalf("Inspect function is already set for RepositoryMock.UpdateEmbeddingTags")
+	}
+
+	mmUpdateEmbeddingTags.mock.inspectFuncUpdateEmbeddingTags = f
+
+	return mmUpdateEmbeddingTags
+}
+
+// Return sets up results that will be returned by Repository.UpdateEmbeddingTags
+func (mmUpdateEmbeddingTags *mRepositoryMockUpdateEmbeddingTags) Return(err error) *RepositoryMock {
+	if mmUpdateEmbeddingTags.mock.funcUpdateEmbeddingTags != nil {
+		mmUpdateEmbeddingTags.mock.t.Fatalf("RepositoryMock.UpdateEmbeddingTags mock is already set by Set")
+	}
+
+	if mmUpdateEmbeddingTags.defaultExpectation == nil {
+		mmUpdateEmbeddingTags.defaultExpectation = &RepositoryMockUpdateEmbeddingTagsExpectation{mock: mmUpdateEmbeddingTags.mock}
+	}
+	mmUpdateEmbeddingTags.defaultExpectation.results = &RepositoryMockUpdateEmbeddingTagsResults{err}
+	mmUpdateEmbeddingTags.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmUpdateEmbeddingTags.mock
+}
+
+// Set uses given function f to mock the Repository.UpdateEmbeddingTags method
+func (mmUpdateEmbeddingTags *mRepositoryMockUpdateEmbeddingTags) Set(f func(ctx context.Context, collectionID string, fileUID types.FileUIDType, tags []string) (err error)) *RepositoryMock {
+	if mmUpdateEmbeddingTags.defaultExpectation != nil {
+		mmUpdateEmbeddingTags.mock.t.Fatalf("Default expectation is already set for the Repository.UpdateEmbeddingTags method")
+	}
+
+	if len(mmUpdateEmbeddingTags.expectations) > 0 {
+		mmUpdateEmbeddingTags.mock.t.Fatalf("Some expectations are already set for the Repository.UpdateEmbeddingTags method")
+	}
+
+	mmUpdateEmbeddingTags.mock.funcUpdateEmbeddingTags = f
+	mmUpdateEmbeddingTags.mock.funcUpdateEmbeddingTagsOrigin = minimock.CallerInfo(1)
+	return mmUpdateEmbeddingTags.mock
+}
+
+// When sets expectation for the Repository.UpdateEmbeddingTags which will trigger the result defined by the following
+// Then helper
+func (mmUpdateEmbeddingTags *mRepositoryMockUpdateEmbeddingTags) When(ctx context.Context, collectionID string, fileUID types.FileUIDType, tags []string) *RepositoryMockUpdateEmbeddingTagsExpectation {
+	if mmUpdateEmbeddingTags.mock.funcUpdateEmbeddingTags != nil {
+		mmUpdateEmbeddingTags.mock.t.Fatalf("RepositoryMock.UpdateEmbeddingTags mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockUpdateEmbeddingTagsExpectation{
+		mock:               mmUpdateEmbeddingTags.mock,
+		params:             &RepositoryMockUpdateEmbeddingTagsParams{ctx, collectionID, fileUID, tags},
+		expectationOrigins: RepositoryMockUpdateEmbeddingTagsExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmUpdateEmbeddingTags.expectations = append(mmUpdateEmbeddingTags.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.UpdateEmbeddingTags return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockUpdateEmbeddingTagsExpectation) Then(err error) *RepositoryMock {
+	e.results = &RepositoryMockUpdateEmbeddingTagsResults{err}
+	return e.mock
+}
+
+// Times sets number of times Repository.UpdateEmbeddingTags should be invoked
+func (mmUpdateEmbeddingTags *mRepositoryMockUpdateEmbeddingTags) Times(n uint64) *mRepositoryMockUpdateEmbeddingTags {
+	if n == 0 {
+		mmUpdateEmbeddingTags.mock.t.Fatalf("Times of RepositoryMock.UpdateEmbeddingTags mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmUpdateEmbeddingTags.expectedInvocations, n)
+	mmUpdateEmbeddingTags.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmUpdateEmbeddingTags
+}
+
+func (mmUpdateEmbeddingTags *mRepositoryMockUpdateEmbeddingTags) invocationsDone() bool {
+	if len(mmUpdateEmbeddingTags.expectations) == 0 && mmUpdateEmbeddingTags.defaultExpectation == nil && mmUpdateEmbeddingTags.mock.funcUpdateEmbeddingTags == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmUpdateEmbeddingTags.mock.afterUpdateEmbeddingTagsCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmUpdateEmbeddingTags.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// UpdateEmbeddingTags implements mm_repository.Repository
+func (mmUpdateEmbeddingTags *RepositoryMock) UpdateEmbeddingTags(ctx context.Context, collectionID string, fileUID types.FileUIDType, tags []string) (err error) {
+	mm_atomic.AddUint64(&mmUpdateEmbeddingTags.beforeUpdateEmbeddingTagsCounter, 1)
+	defer mm_atomic.AddUint64(&mmUpdateEmbeddingTags.afterUpdateEmbeddingTagsCounter, 1)
+
+	mmUpdateEmbeddingTags.t.Helper()
+
+	if mmUpdateEmbeddingTags.inspectFuncUpdateEmbeddingTags != nil {
+		mmUpdateEmbeddingTags.inspectFuncUpdateEmbeddingTags(ctx, collectionID, fileUID, tags)
+	}
+
+	mm_params := RepositoryMockUpdateEmbeddingTagsParams{ctx, collectionID, fileUID, tags}
+
+	// Record call args
+	mmUpdateEmbeddingTags.UpdateEmbeddingTagsMock.mutex.Lock()
+	mmUpdateEmbeddingTags.UpdateEmbeddingTagsMock.callArgs = append(mmUpdateEmbeddingTags.UpdateEmbeddingTagsMock.callArgs, &mm_params)
+	mmUpdateEmbeddingTags.UpdateEmbeddingTagsMock.mutex.Unlock()
+
+	for _, e := range mmUpdateEmbeddingTags.UpdateEmbeddingTagsMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmUpdateEmbeddingTags.UpdateEmbeddingTagsMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmUpdateEmbeddingTags.UpdateEmbeddingTagsMock.defaultExpectation.Counter, 1)
+		mm_want := mmUpdateEmbeddingTags.UpdateEmbeddingTagsMock.defaultExpectation.params
+		mm_want_ptrs := mmUpdateEmbeddingTags.UpdateEmbeddingTagsMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockUpdateEmbeddingTagsParams{ctx, collectionID, fileUID, tags}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmUpdateEmbeddingTags.t.Errorf("RepositoryMock.UpdateEmbeddingTags got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateEmbeddingTags.UpdateEmbeddingTagsMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.collectionID != nil && !minimock.Equal(*mm_want_ptrs.collectionID, mm_got.collectionID) {
+				mmUpdateEmbeddingTags.t.Errorf("RepositoryMock.UpdateEmbeddingTags got unexpected parameter collectionID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateEmbeddingTags.UpdateEmbeddingTagsMock.defaultExpectation.expectationOrigins.originCollectionID, *mm_want_ptrs.collectionID, mm_got.collectionID, minimock.Diff(*mm_want_ptrs.collectionID, mm_got.collectionID))
+			}
+
+			if mm_want_ptrs.fileUID != nil && !minimock.Equal(*mm_want_ptrs.fileUID, mm_got.fileUID) {
+				mmUpdateEmbeddingTags.t.Errorf("RepositoryMock.UpdateEmbeddingTags got unexpected parameter fileUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateEmbeddingTags.UpdateEmbeddingTagsMock.defaultExpectation.expectationOrigins.originFileUID, *mm_want_ptrs.fileUID, mm_got.fileUID, minimock.Diff(*mm_want_ptrs.fileUID, mm_got.fileUID))
+			}
+
+			if mm_want_ptrs.tags != nil && !minimock.Equal(*mm_want_ptrs.tags, mm_got.tags) {
+				mmUpdateEmbeddingTags.t.Errorf("RepositoryMock.UpdateEmbeddingTags got unexpected parameter tags, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateEmbeddingTags.UpdateEmbeddingTagsMock.defaultExpectation.expectationOrigins.originTags, *mm_want_ptrs.tags, mm_got.tags, minimock.Diff(*mm_want_ptrs.tags, mm_got.tags))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmUpdateEmbeddingTags.t.Errorf("RepositoryMock.UpdateEmbeddingTags got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmUpdateEmbeddingTags.UpdateEmbeddingTagsMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmUpdateEmbeddingTags.UpdateEmbeddingTagsMock.defaultExpectation.results
+		if mm_results == nil {
+			mmUpdateEmbeddingTags.t.Fatal("No results are set for the RepositoryMock.UpdateEmbeddingTags")
+		}
+		return (*mm_results).err
+	}
+	if mmUpdateEmbeddingTags.funcUpdateEmbeddingTags != nil {
+		return mmUpdateEmbeddingTags.funcUpdateEmbeddingTags(ctx, collectionID, fileUID, tags)
+	}
+	mmUpdateEmbeddingTags.t.Fatalf("Unexpected call to RepositoryMock.UpdateEmbeddingTags. %v %v %v %v", ctx, collectionID, fileUID, tags)
+	return
+}
+
+// UpdateEmbeddingTagsAfterCounter returns a count of finished RepositoryMock.UpdateEmbeddingTags invocations
+func (mmUpdateEmbeddingTags *RepositoryMock) UpdateEmbeddingTagsAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateEmbeddingTags.afterUpdateEmbeddingTagsCounter)
+}
+
+// UpdateEmbeddingTagsBeforeCounter returns a count of RepositoryMock.UpdateEmbeddingTags invocations
+func (mmUpdateEmbeddingTags *RepositoryMock) UpdateEmbeddingTagsBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateEmbeddingTags.beforeUpdateEmbeddingTagsCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.UpdateEmbeddingTags.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmUpdateEmbeddingTags *mRepositoryMockUpdateEmbeddingTags) Calls() []*RepositoryMockUpdateEmbeddingTagsParams {
+	mmUpdateEmbeddingTags.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockUpdateEmbeddingTagsParams, len(mmUpdateEmbeddingTags.callArgs))
+	copy(argCopy, mmUpdateEmbeddingTags.callArgs)
+
+	mmUpdateEmbeddingTags.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockUpdateEmbeddingTagsDone returns true if the count of the UpdateEmbeddingTags invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockUpdateEmbeddingTagsDone() bool {
+	if m.UpdateEmbeddingTagsMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.UpdateEmbeddingTagsMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.UpdateEmbeddingTagsMock.invocationsDone()
+}
+
+// MinimockUpdateEmbeddingTagsInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockUpdateEmbeddingTagsInspect() {
+	for _, e := range m.UpdateEmbeddingTagsMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.UpdateEmbeddingTags at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterUpdateEmbeddingTagsCounter := mm_atomic.LoadUint64(&m.afterUpdateEmbeddingTagsCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.UpdateEmbeddingTagsMock.defaultExpectation != nil && afterUpdateEmbeddingTagsCounter < 1 {
+		if m.UpdateEmbeddingTagsMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.UpdateEmbeddingTags at\n%s", m.UpdateEmbeddingTagsMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.UpdateEmbeddingTags at\n%s with params: %#v", m.UpdateEmbeddingTagsMock.defaultExpectation.expectationOrigins.origin, *m.UpdateEmbeddingTagsMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcUpdateEmbeddingTags != nil && afterUpdateEmbeddingTagsCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.UpdateEmbeddingTags at\n%s", m.funcUpdateEmbeddingTagsOrigin)
+	}
+
+	if !m.UpdateEmbeddingTagsMock.invocationsDone() && afterUpdateEmbeddingTagsCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.UpdateEmbeddingTags at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.UpdateEmbeddingTagsMock.expectedInvocations), m.UpdateEmbeddingTagsMock.expectedInvocationsOrigin, afterUpdateEmbeddingTagsCounter)
+	}
+}
+
+type mRepositoryMockUpdateEmbeddingTagsForFile struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockUpdateEmbeddingTagsForFileExpectation
+	expectations       []*RepositoryMockUpdateEmbeddingTagsForFileExpectation
+
+	callArgs []*RepositoryMockUpdateEmbeddingTagsForFileParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockUpdateEmbeddingTagsForFileExpectation specifies expectation struct of the Repository.UpdateEmbeddingTagsForFile
+type RepositoryMockUpdateEmbeddingTagsForFileExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockUpdateEmbeddingTagsForFileParams
+	paramPtrs          *RepositoryMockUpdateEmbeddingTagsForFileParamPtrs
+	expectationOrigins RepositoryMockUpdateEmbeddingTagsForFileExpectationOrigins
+	results            *RepositoryMockUpdateEmbeddingTagsForFileResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockUpdateEmbeddingTagsForFileParams contains parameters of the Repository.UpdateEmbeddingTagsForFile
+type RepositoryMockUpdateEmbeddingTagsForFileParams struct {
+	ctx          context.Context
+	collectionID string
+	fileUID      types.FileUIDType
+	tags         []string
+}
+
+// RepositoryMockUpdateEmbeddingTagsForFileParamPtrs contains pointers to parameters of the Repository.UpdateEmbeddingTagsForFile
+type RepositoryMockUpdateEmbeddingTagsForFileParamPtrs struct {
+	ctx          *context.Context
+	collectionID *string
+	fileUID      *types.FileUIDType
+	tags         *[]string
+}
+
+// RepositoryMockUpdateEmbeddingTagsForFileResults contains results of the Repository.UpdateEmbeddingTagsForFile
+type RepositoryMockUpdateEmbeddingTagsForFileResults struct {
+	err error
+}
+
+// RepositoryMockUpdateEmbeddingTagsForFileOrigins contains origins of expectations of the Repository.UpdateEmbeddingTagsForFile
+type RepositoryMockUpdateEmbeddingTagsForFileExpectationOrigins struct {
+	origin             string
+	originCtx          string
+	originCollectionID string
+	originFileUID      string
+	originTags         string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmUpdateEmbeddingTagsForFile *mRepositoryMockUpdateEmbeddingTagsForFile) Optional() *mRepositoryMockUpdateEmbeddingTagsForFile {
+	mmUpdateEmbeddingTagsForFile.optional = true
+	return mmUpdateEmbeddingTagsForFile
+}
+
+// Expect sets up expected params for Repository.UpdateEmbeddingTagsForFile
+func (mmUpdateEmbeddingTagsForFile *mRepositoryMockUpdateEmbeddingTagsForFile) Expect(ctx context.Context, collectionID string, fileUID types.FileUIDType, tags []string) *mRepositoryMockUpdateEmbeddingTagsForFile {
+	if mmUpdateEmbeddingTagsForFile.mock.funcUpdateEmbeddingTagsForFile != nil {
+		mmUpdateEmbeddingTagsForFile.mock.t.Fatalf("RepositoryMock.UpdateEmbeddingTagsForFile mock is already set by Set")
+	}
+
+	if mmUpdateEmbeddingTagsForFile.defaultExpectation == nil {
+		mmUpdateEmbeddingTagsForFile.defaultExpectation = &RepositoryMockUpdateEmbeddingTagsForFileExpectation{}
+	}
+
+	if mmUpdateEmbeddingTagsForFile.defaultExpectation.paramPtrs != nil {
+		mmUpdateEmbeddingTagsForFile.mock.t.Fatalf("RepositoryMock.UpdateEmbeddingTagsForFile mock is already set by ExpectParams functions")
+	}
+
+	mmUpdateEmbeddingTagsForFile.defaultExpectation.params = &RepositoryMockUpdateEmbeddingTagsForFileParams{ctx, collectionID, fileUID, tags}
+	mmUpdateEmbeddingTagsForFile.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmUpdateEmbeddingTagsForFile.expectations {
+		if minimock.Equal(e.params, mmUpdateEmbeddingTagsForFile.defaultExpectation.params) {
+			mmUpdateEmbeddingTagsForFile.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmUpdateEmbeddingTagsForFile.defaultExpectation.params)
+		}
+	}
+
+	return mmUpdateEmbeddingTagsForFile
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.UpdateEmbeddingTagsForFile
+func (mmUpdateEmbeddingTagsForFile *mRepositoryMockUpdateEmbeddingTagsForFile) ExpectCtxParam1(ctx context.Context) *mRepositoryMockUpdateEmbeddingTagsForFile {
+	if mmUpdateEmbeddingTagsForFile.mock.funcUpdateEmbeddingTagsForFile != nil {
+		mmUpdateEmbeddingTagsForFile.mock.t.Fatalf("RepositoryMock.UpdateEmbeddingTagsForFile mock is already set by Set")
+	}
+
+	if mmUpdateEmbeddingTagsForFile.defaultExpectation == nil {
+		mmUpdateEmbeddingTagsForFile.defaultExpectation = &RepositoryMockUpdateEmbeddingTagsForFileExpectation{}
+	}
+
+	if mmUpdateEmbeddingTagsForFile.defaultExpectation.params != nil {
+		mmUpdateEmbeddingTagsForFile.mock.t.Fatalf("RepositoryMock.UpdateEmbeddingTagsForFile mock is already set by Expect")
+	}
+
+	if mmUpdateEmbeddingTagsForFile.defaultExpectation.paramPtrs == nil {
+		mmUpdateEmbeddingTagsForFile.defaultExpectation.paramPtrs = &RepositoryMockUpdateEmbeddingTagsForFileParamPtrs{}
+	}
+	mmUpdateEmbeddingTagsForFile.defaultExpectation.paramPtrs.ctx = &ctx
+	mmUpdateEmbeddingTagsForFile.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmUpdateEmbeddingTagsForFile
+}
+
+// ExpectCollectionIDParam2 sets up expected param collectionID for Repository.UpdateEmbeddingTagsForFile
+func (mmUpdateEmbeddingTagsForFile *mRepositoryMockUpdateEmbeddingTagsForFile) ExpectCollectionIDParam2(collectionID string) *mRepositoryMockUpdateEmbeddingTagsForFile {
+	if mmUpdateEmbeddingTagsForFile.mock.funcUpdateEmbeddingTagsForFile != nil {
+		mmUpdateEmbeddingTagsForFile.mock.t.Fatalf("RepositoryMock.UpdateEmbeddingTagsForFile mock is already set by Set")
+	}
+
+	if mmUpdateEmbeddingTagsForFile.defaultExpectation == nil {
+		mmUpdateEmbeddingTagsForFile.defaultExpectation = &RepositoryMockUpdateEmbeddingTagsForFileExpectation{}
+	}
+
+	if mmUpdateEmbeddingTagsForFile.defaultExpectation.params != nil {
+		mmUpdateEmbeddingTagsForFile.mock.t.Fatalf("RepositoryMock.UpdateEmbeddingTagsForFile mock is already set by Expect")
+	}
+
+	if mmUpdateEmbeddingTagsForFile.defaultExpectation.paramPtrs == nil {
+		mmUpdateEmbeddingTagsForFile.defaultExpectation.paramPtrs = &RepositoryMockUpdateEmbeddingTagsForFileParamPtrs{}
+	}
+	mmUpdateEmbeddingTagsForFile.defaultExpectation.paramPtrs.collectionID = &collectionID
+	mmUpdateEmbeddingTagsForFile.defaultExpectation.expectationOrigins.originCollectionID = minimock.CallerInfo(1)
+
+	return mmUpdateEmbeddingTagsForFile
+}
+
+// ExpectFileUIDParam3 sets up expected param fileUID for Repository.UpdateEmbeddingTagsForFile
+func (mmUpdateEmbeddingTagsForFile *mRepositoryMockUpdateEmbeddingTagsForFile) ExpectFileUIDParam3(fileUID types.FileUIDType) *mRepositoryMockUpdateEmbeddingTagsForFile {
+	if mmUpdateEmbeddingTagsForFile.mock.funcUpdateEmbeddingTagsForFile != nil {
+		mmUpdateEmbeddingTagsForFile.mock.t.Fatalf("RepositoryMock.UpdateEmbeddingTagsForFile mock is already set by Set")
+	}
+
+	if mmUpdateEmbeddingTagsForFile.defaultExpectation == nil {
+		mmUpdateEmbeddingTagsForFile.defaultExpectation = &RepositoryMockUpdateEmbeddingTagsForFileExpectation{}
+	}
+
+	if mmUpdateEmbeddingTagsForFile.defaultExpectation.params != nil {
+		mmUpdateEmbeddingTagsForFile.mock.t.Fatalf("RepositoryMock.UpdateEmbeddingTagsForFile mock is already set by Expect")
+	}
+
+	if mmUpdateEmbeddingTagsForFile.defaultExpectation.paramPtrs == nil {
+		mmUpdateEmbeddingTagsForFile.defaultExpectation.paramPtrs = &RepositoryMockUpdateEmbeddingTagsForFileParamPtrs{}
+	}
+	mmUpdateEmbeddingTagsForFile.defaultExpectation.paramPtrs.fileUID = &fileUID
+	mmUpdateEmbeddingTagsForFile.defaultExpectation.expectationOrigins.originFileUID = minimock.CallerInfo(1)
+
+	return mmUpdateEmbeddingTagsForFile
+}
+
+// ExpectTagsParam4 sets up expected param tags for Repository.UpdateEmbeddingTagsForFile
+func (mmUpdateEmbeddingTagsForFile *mRepositoryMockUpdateEmbeddingTagsForFile) ExpectTagsParam4(tags []string) *mRepositoryMockUpdateEmbeddingTagsForFile {
+	if mmUpdateEmbeddingTagsForFile.mock.funcUpdateEmbeddingTagsForFile != nil {
+		mmUpdateEmbeddingTagsForFile.mock.t.Fatalf("RepositoryMock.UpdateEmbeddingTagsForFile mock is already set by Set")
+	}
+
+	if mmUpdateEmbeddingTagsForFile.defaultExpectation == nil {
+		mmUpdateEmbeddingTagsForFile.defaultExpectation = &RepositoryMockUpdateEmbeddingTagsForFileExpectation{}
+	}
+
+	if mmUpdateEmbeddingTagsForFile.defaultExpectation.params != nil {
+		mmUpdateEmbeddingTagsForFile.mock.t.Fatalf("RepositoryMock.UpdateEmbeddingTagsForFile mock is already set by Expect")
+	}
+
+	if mmUpdateEmbeddingTagsForFile.defaultExpectation.paramPtrs == nil {
+		mmUpdateEmbeddingTagsForFile.defaultExpectation.paramPtrs = &RepositoryMockUpdateEmbeddingTagsForFileParamPtrs{}
+	}
+	mmUpdateEmbeddingTagsForFile.defaultExpectation.paramPtrs.tags = &tags
+	mmUpdateEmbeddingTagsForFile.defaultExpectation.expectationOrigins.originTags = minimock.CallerInfo(1)
+
+	return mmUpdateEmbeddingTagsForFile
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.UpdateEmbeddingTagsForFile
+func (mmUpdateEmbeddingTagsForFile *mRepositoryMockUpdateEmbeddingTagsForFile) Inspect(f func(ctx context.Context, collectionID string, fileUID types.FileUIDType, tags []string)) *mRepositoryMockUpdateEmbeddingTagsForFile {
+	if mmUpdateEmbeddingTagsForFile.mock.inspectFuncUpdateEmbeddingTagsForFile != nil {
+		mmUpdateEmbeddingTagsForFile.mock.t.Fatalf("Inspect function is already set for RepositoryMock.UpdateEmbeddingTagsForFile")
+	}
+
+	mmUpdateEmbeddingTagsForFile.mock.inspectFuncUpdateEmbeddingTagsForFile = f
+
+	return mmUpdateEmbeddingTagsForFile
+}
+
+// Return sets up results that will be returned by Repository.UpdateEmbeddingTagsForFile
+func (mmUpdateEmbeddingTagsForFile *mRepositoryMockUpdateEmbeddingTagsForFile) Return(err error) *RepositoryMock {
+	if mmUpdateEmbeddingTagsForFile.mock.funcUpdateEmbeddingTagsForFile != nil {
+		mmUpdateEmbeddingTagsForFile.mock.t.Fatalf("RepositoryMock.UpdateEmbeddingTagsForFile mock is already set by Set")
+	}
+
+	if mmUpdateEmbeddingTagsForFile.defaultExpectation == nil {
+		mmUpdateEmbeddingTagsForFile.defaultExpectation = &RepositoryMockUpdateEmbeddingTagsForFileExpectation{mock: mmUpdateEmbeddingTagsForFile.mock}
+	}
+	mmUpdateEmbeddingTagsForFile.defaultExpectation.results = &RepositoryMockUpdateEmbeddingTagsForFileResults{err}
+	mmUpdateEmbeddingTagsForFile.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmUpdateEmbeddingTagsForFile.mock
+}
+
+// Set uses given function f to mock the Repository.UpdateEmbeddingTagsForFile method
+func (mmUpdateEmbeddingTagsForFile *mRepositoryMockUpdateEmbeddingTagsForFile) Set(f func(ctx context.Context, collectionID string, fileUID types.FileUIDType, tags []string) (err error)) *RepositoryMock {
+	if mmUpdateEmbeddingTagsForFile.defaultExpectation != nil {
+		mmUpdateEmbeddingTagsForFile.mock.t.Fatalf("Default expectation is already set for the Repository.UpdateEmbeddingTagsForFile method")
+	}
+
+	if len(mmUpdateEmbeddingTagsForFile.expectations) > 0 {
+		mmUpdateEmbeddingTagsForFile.mock.t.Fatalf("Some expectations are already set for the Repository.UpdateEmbeddingTagsForFile method")
+	}
+
+	mmUpdateEmbeddingTagsForFile.mock.funcUpdateEmbeddingTagsForFile = f
+	mmUpdateEmbeddingTagsForFile.mock.funcUpdateEmbeddingTagsForFileOrigin = minimock.CallerInfo(1)
+	return mmUpdateEmbeddingTagsForFile.mock
+}
+
+// When sets expectation for the Repository.UpdateEmbeddingTagsForFile which will trigger the result defined by the following
+// Then helper
+func (mmUpdateEmbeddingTagsForFile *mRepositoryMockUpdateEmbeddingTagsForFile) When(ctx context.Context, collectionID string, fileUID types.FileUIDType, tags []string) *RepositoryMockUpdateEmbeddingTagsForFileExpectation {
+	if mmUpdateEmbeddingTagsForFile.mock.funcUpdateEmbeddingTagsForFile != nil {
+		mmUpdateEmbeddingTagsForFile.mock.t.Fatalf("RepositoryMock.UpdateEmbeddingTagsForFile mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockUpdateEmbeddingTagsForFileExpectation{
+		mock:               mmUpdateEmbeddingTagsForFile.mock,
+		params:             &RepositoryMockUpdateEmbeddingTagsForFileParams{ctx, collectionID, fileUID, tags},
+		expectationOrigins: RepositoryMockUpdateEmbeddingTagsForFileExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmUpdateEmbeddingTagsForFile.expectations = append(mmUpdateEmbeddingTagsForFile.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.UpdateEmbeddingTagsForFile return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockUpdateEmbeddingTagsForFileExpectation) Then(err error) *RepositoryMock {
+	e.results = &RepositoryMockUpdateEmbeddingTagsForFileResults{err}
+	return e.mock
+}
+
+// Times sets number of times Repository.UpdateEmbeddingTagsForFile should be invoked
+func (mmUpdateEmbeddingTagsForFile *mRepositoryMockUpdateEmbeddingTagsForFile) Times(n uint64) *mRepositoryMockUpdateEmbeddingTagsForFile {
+	if n == 0 {
+		mmUpdateEmbeddingTagsForFile.mock.t.Fatalf("Times of RepositoryMock.UpdateEmbeddingTagsForFile mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmUpdateEmbeddingTagsForFile.expectedInvocations, n)
+	mmUpdateEmbeddingTagsForFile.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmUpdateEmbeddingTagsForFile
+}
+
+func (mmUpdateEmbeddingTagsForFile *mRepositoryMockUpdateEmbeddingTagsForFile) invocationsDone() bool {
+	if len(mmUpdateEmbeddingTagsForFile.expectations) == 0 && mmUpdateEmbeddingTagsForFile.defaultExpectation == nil && mmUpdateEmbeddingTagsForFile.mock.funcUpdateEmbeddingTagsForFile == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmUpdateEmbeddingTagsForFile.mock.afterUpdateEmbeddingTagsForFileCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmUpdateEmbeddingTagsForFile.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// UpdateEmbeddingTagsForFile implements mm_repository.Repository
+func (mmUpdateEmbeddingTagsForFile *RepositoryMock) UpdateEmbeddingTagsForFile(ctx context.Context, collectionID string, fileUID types.FileUIDType, tags []string) (err error) {
+	mm_atomic.AddUint64(&mmUpdateEmbeddingTagsForFile.beforeUpdateEmbeddingTagsForFileCounter, 1)
+	defer mm_atomic.AddUint64(&mmUpdateEmbeddingTagsForFile.afterUpdateEmbeddingTagsForFileCounter, 1)
+
+	mmUpdateEmbeddingTagsForFile.t.Helper()
+
+	if mmUpdateEmbeddingTagsForFile.inspectFuncUpdateEmbeddingTagsForFile != nil {
+		mmUpdateEmbeddingTagsForFile.inspectFuncUpdateEmbeddingTagsForFile(ctx, collectionID, fileUID, tags)
+	}
+
+	mm_params := RepositoryMockUpdateEmbeddingTagsForFileParams{ctx, collectionID, fileUID, tags}
+
+	// Record call args
+	mmUpdateEmbeddingTagsForFile.UpdateEmbeddingTagsForFileMock.mutex.Lock()
+	mmUpdateEmbeddingTagsForFile.UpdateEmbeddingTagsForFileMock.callArgs = append(mmUpdateEmbeddingTagsForFile.UpdateEmbeddingTagsForFileMock.callArgs, &mm_params)
+	mmUpdateEmbeddingTagsForFile.UpdateEmbeddingTagsForFileMock.mutex.Unlock()
+
+	for _, e := range mmUpdateEmbeddingTagsForFile.UpdateEmbeddingTagsForFileMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmUpdateEmbeddingTagsForFile.UpdateEmbeddingTagsForFileMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmUpdateEmbeddingTagsForFile.UpdateEmbeddingTagsForFileMock.defaultExpectation.Counter, 1)
+		mm_want := mmUpdateEmbeddingTagsForFile.UpdateEmbeddingTagsForFileMock.defaultExpectation.params
+		mm_want_ptrs := mmUpdateEmbeddingTagsForFile.UpdateEmbeddingTagsForFileMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockUpdateEmbeddingTagsForFileParams{ctx, collectionID, fileUID, tags}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmUpdateEmbeddingTagsForFile.t.Errorf("RepositoryMock.UpdateEmbeddingTagsForFile got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateEmbeddingTagsForFile.UpdateEmbeddingTagsForFileMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.collectionID != nil && !minimock.Equal(*mm_want_ptrs.collectionID, mm_got.collectionID) {
+				mmUpdateEmbeddingTagsForFile.t.Errorf("RepositoryMock.UpdateEmbeddingTagsForFile got unexpected parameter collectionID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateEmbeddingTagsForFile.UpdateEmbeddingTagsForFileMock.defaultExpectation.expectationOrigins.originCollectionID, *mm_want_ptrs.collectionID, mm_got.collectionID, minimock.Diff(*mm_want_ptrs.collectionID, mm_got.collectionID))
+			}
+
+			if mm_want_ptrs.fileUID != nil && !minimock.Equal(*mm_want_ptrs.fileUID, mm_got.fileUID) {
+				mmUpdateEmbeddingTagsForFile.t.Errorf("RepositoryMock.UpdateEmbeddingTagsForFile got unexpected parameter fileUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateEmbeddingTagsForFile.UpdateEmbeddingTagsForFileMock.defaultExpectation.expectationOrigins.originFileUID, *mm_want_ptrs.fileUID, mm_got.fileUID, minimock.Diff(*mm_want_ptrs.fileUID, mm_got.fileUID))
+			}
+
+			if mm_want_ptrs.tags != nil && !minimock.Equal(*mm_want_ptrs.tags, mm_got.tags) {
+				mmUpdateEmbeddingTagsForFile.t.Errorf("RepositoryMock.UpdateEmbeddingTagsForFile got unexpected parameter tags, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateEmbeddingTagsForFile.UpdateEmbeddingTagsForFileMock.defaultExpectation.expectationOrigins.originTags, *mm_want_ptrs.tags, mm_got.tags, minimock.Diff(*mm_want_ptrs.tags, mm_got.tags))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmUpdateEmbeddingTagsForFile.t.Errorf("RepositoryMock.UpdateEmbeddingTagsForFile got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmUpdateEmbeddingTagsForFile.UpdateEmbeddingTagsForFileMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmUpdateEmbeddingTagsForFile.UpdateEmbeddingTagsForFileMock.defaultExpectation.results
+		if mm_results == nil {
+			mmUpdateEmbeddingTagsForFile.t.Fatal("No results are set for the RepositoryMock.UpdateEmbeddingTagsForFile")
+		}
+		return (*mm_results).err
+	}
+	if mmUpdateEmbeddingTagsForFile.funcUpdateEmbeddingTagsForFile != nil {
+		return mmUpdateEmbeddingTagsForFile.funcUpdateEmbeddingTagsForFile(ctx, collectionID, fileUID, tags)
+	}
+	mmUpdateEmbeddingTagsForFile.t.Fatalf("Unexpected call to RepositoryMock.UpdateEmbeddingTagsForFile. %v %v %v %v", ctx, collectionID, fileUID, tags)
+	return
+}
+
+// UpdateEmbeddingTagsForFileAfterCounter returns a count of finished RepositoryMock.UpdateEmbeddingTagsForFile invocations
+func (mmUpdateEmbeddingTagsForFile *RepositoryMock) UpdateEmbeddingTagsForFileAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateEmbeddingTagsForFile.afterUpdateEmbeddingTagsForFileCounter)
+}
+
+// UpdateEmbeddingTagsForFileBeforeCounter returns a count of RepositoryMock.UpdateEmbeddingTagsForFile invocations
+func (mmUpdateEmbeddingTagsForFile *RepositoryMock) UpdateEmbeddingTagsForFileBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateEmbeddingTagsForFile.beforeUpdateEmbeddingTagsForFileCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.UpdateEmbeddingTagsForFile.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmUpdateEmbeddingTagsForFile *mRepositoryMockUpdateEmbeddingTagsForFile) Calls() []*RepositoryMockUpdateEmbeddingTagsForFileParams {
+	mmUpdateEmbeddingTagsForFile.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockUpdateEmbeddingTagsForFileParams, len(mmUpdateEmbeddingTagsForFile.callArgs))
+	copy(argCopy, mmUpdateEmbeddingTagsForFile.callArgs)
+
+	mmUpdateEmbeddingTagsForFile.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockUpdateEmbeddingTagsForFileDone returns true if the count of the UpdateEmbeddingTagsForFile invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockUpdateEmbeddingTagsForFileDone() bool {
+	if m.UpdateEmbeddingTagsForFileMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.UpdateEmbeddingTagsForFileMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.UpdateEmbeddingTagsForFileMock.invocationsDone()
+}
+
+// MinimockUpdateEmbeddingTagsForFileInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockUpdateEmbeddingTagsForFileInspect() {
+	for _, e := range m.UpdateEmbeddingTagsForFileMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.UpdateEmbeddingTagsForFile at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterUpdateEmbeddingTagsForFileCounter := mm_atomic.LoadUint64(&m.afterUpdateEmbeddingTagsForFileCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.UpdateEmbeddingTagsForFileMock.defaultExpectation != nil && afterUpdateEmbeddingTagsForFileCounter < 1 {
+		if m.UpdateEmbeddingTagsForFileMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.UpdateEmbeddingTagsForFile at\n%s", m.UpdateEmbeddingTagsForFileMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.UpdateEmbeddingTagsForFile at\n%s with params: %#v", m.UpdateEmbeddingTagsForFileMock.defaultExpectation.expectationOrigins.origin, *m.UpdateEmbeddingTagsForFileMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcUpdateEmbeddingTagsForFile != nil && afterUpdateEmbeddingTagsForFileCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.UpdateEmbeddingTagsForFile at\n%s", m.funcUpdateEmbeddingTagsForFileOrigin)
+	}
+
+	if !m.UpdateEmbeddingTagsForFileMock.invocationsDone() && afterUpdateEmbeddingTagsForFileCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.UpdateEmbeddingTagsForFile at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.UpdateEmbeddingTagsForFileMock.expectedInvocations), m.UpdateEmbeddingTagsForFileMock.expectedInvocationsOrigin, afterUpdateEmbeddingTagsForFileCounter)
+	}
+}
+
 type mRepositoryMockUpdateKnowledgeBase struct {
 	optional           bool
 	mock               *RepositoryMock
@@ -45264,6 +46092,10 @@ func (m *RepositoryMock) MinimockFinish() {
 
 			m.MinimockUpdateConvertedFileInspect()
 
+			m.MinimockUpdateEmbeddingTagsInspect()
+
+			m.MinimockUpdateEmbeddingTagsForFileInspect()
+
 			m.MinimockUpdateKnowledgeBaseInspect()
 
 			m.MinimockUpdateKnowledgeBaseAbortedInspect()
@@ -45425,6 +46257,8 @@ func (m *RepositoryMock) minimockDone() bool {
 		m.MinimockSetGCSFileInfoDone() &&
 		m.MinimockUpdateConfigByIDDone() &&
 		m.MinimockUpdateConvertedFileDone() &&
+		m.MinimockUpdateEmbeddingTagsDone() &&
+		m.MinimockUpdateEmbeddingTagsForFileDone() &&
 		m.MinimockUpdateKnowledgeBaseDone() &&
 		m.MinimockUpdateKnowledgeBaseAbortedDone() &&
 		m.MinimockUpdateKnowledgeBaseFileDone() &&

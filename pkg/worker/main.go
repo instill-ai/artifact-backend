@@ -465,10 +465,13 @@ func (w *Worker) ExecuteKnowledgeBaseUpdate(ctx context.Context, knowledgeBaseID
 			}
 
 			_, err = w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, w.UpdateKnowledgeBaseWorkflow, UpdateKnowledgeBaseWorkflowParam{
-				OriginalKBUID: kb.UID,
-				UserUID:       types.UserUIDType(ownerUID),
-				RequesterUID:  types.RequesterUIDType(kb.CreatorUID),
-				SystemID:      systemID,
+				OriginalKBUID:         kb.UID,
+				UserUID:               types.UserUIDType(ownerUID),
+				RequesterUID:          types.RequesterUIDType(kb.CreatorUID),
+				SystemID:              systemID,
+				RollbackRetentionDays: config.Config.RAG.Update.RollbackRetentionDays,
+				FileBatchSize:         config.Config.RAG.Update.FileBatchSize,
+				MinioBucket:           config.Config.Minio.BucketName,
 			})
 
 			if err != nil {
@@ -689,6 +692,7 @@ func (w *Worker) RescheduleCleanupWorkflow(ctx context.Context, kbUID types.KBUI
 	_, err = w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, w.CleanupKnowledgeBaseWorkflow, CleanupKnowledgeBaseWorkflowParam{
 		KBUID:               kbUID,
 		CleanupAfterSeconds: cleanupAfterSeconds,
+		MinioBucket:         config.Config.Minio.BucketName,
 	})
 	if err != nil {
 		w.log.Warn("Could not reschedule cleanup workflow",

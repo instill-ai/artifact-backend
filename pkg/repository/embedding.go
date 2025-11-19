@@ -27,6 +27,7 @@ type Embedding interface {
 	HardDeleteEmbeddingsByKBFileUID(_ context.Context, kbFileUID types.FileUIDType) error
 	ListEmbeddingsByKBFileUID(_ context.Context, kbFileUID types.FileUIDType) ([]EmbeddingModel, error)
 	GetEmbeddingCountByKBUID(ctx context.Context, kbUID types.KBUIDType) (int64, error)
+	UpdateEmbeddingTagsForFile(ctx context.Context, collectionID string, fileUID types.FileUIDType, tags []string) error
 }
 
 // EmbeddingModel is the model for the embedding table
@@ -272,4 +273,10 @@ func (r *repository) GetEmbeddingCountByKBUID(ctx context.Context, kbUID types.K
 		return 0, fmt.Errorf("counting embeddings for KB %s: %w", kbUID, err)
 	}
 	return count, nil
+}
+
+// UpdateEmbeddingTagsForFile updates tags in Milvus for all embeddings of a file
+// This is used when file tags are updated to keep vector database in sync with file metadata
+func (r *repository) UpdateEmbeddingTagsForFile(ctx context.Context, collectionID string, fileUID types.FileUIDType, tags []string) error {
+	return r.UpdateEmbeddingTags(ctx, collectionID, fileUID, tags)
 }
