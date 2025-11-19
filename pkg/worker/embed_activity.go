@@ -186,7 +186,7 @@ func (w *Worker) SaveEmbeddingBatchActivity(ctx context.Context, param *SaveEmbe
 		zap.String("collectionName", collection))
 
 	// CRITICAL: Validate collection exists before attempting to insert embeddings
-	// This provides a clear error message if the collection is missing
+	// If missing, auto-recreate it for self-healing behavior
 	collectionExists, err := w.repository.CollectionExists(ctx, collection)
 	if err != nil {
 		return temporal.NewApplicationErrorWithCause(
@@ -196,11 +196,49 @@ func (w *Worker) SaveEmbeddingBatchActivity(ctx context.Context, param *SaveEmbe
 		)
 	}
 	if !collectionExists {
-		return temporal.NewApplicationErrorWithCause(
-			fmt.Sprintf("Collection does not exist in Milvus: %s (KB UID: %s, Collection UID: %s). The collection may have been dropped or never created. Please check if the KB was created successfully or contact support.", collection, param.KBUID, kb.ActiveCollectionUID),
-			saveEmbeddingsActivityError,
-			fmt.Errorf("collection %s not found", collection),
-		)
+		w.log.Warn("Collection does not exist in Milvus, attempting to recreate",
+			zap.String("collection", collection),
+			zap.String("kbUID", param.KBUID.String()),
+			zap.String("activeCollectionUID", kb.ActiveCollectionUID.String()))
+
+		// Self-healing: Recreate the missing collection
+		// Get the system config to retrieve dimensionality
+		system, err := w.repository.GetSystemByUID(ctx, kb.SystemUID)
+		if err != nil {
+			return temporal.NewApplicationErrorWithCause(
+				fmt.Sprintf("Failed to get system config for collection recreation: KB UID %s, System UID %s", param.KBUID, kb.SystemUID),
+				saveEmbeddingsActivityError,
+				err,
+			)
+		}
+
+		systemConfig, err := system.GetConfigJSON()
+		if err != nil {
+			return temporal.NewApplicationErrorWithCause(
+				fmt.Sprintf("Failed to parse system config for collection recreation: KB UID %s", param.KBUID),
+				saveEmbeddingsActivityError,
+				err,
+			)
+		}
+
+		w.log.Info("Recreating missing collection",
+			zap.String("collection", collection),
+			zap.String("modelFamily", systemConfig.RAG.Embedding.ModelFamily),
+			zap.Uint32("dimensionality", systemConfig.RAG.Embedding.Dimensionality))
+
+		// Recreate the collection with the correct dimensionality
+		err = w.repository.CreateCollection(ctx, collection, systemConfig.RAG.Embedding.Dimensionality)
+		if err != nil {
+			return temporal.NewApplicationErrorWithCause(
+				fmt.Sprintf("Failed to recreate missing collection: %s (KB UID: %s, Collection UID: %s). Original error: %v", collection, param.KBUID, kb.ActiveCollectionUID, err),
+				saveEmbeddingsActivityError,
+				err,
+			)
+		}
+
+		w.log.Info("Successfully recreated missing collection",
+			zap.String("collection", collection),
+			zap.String("kbUID", param.KBUID.String()))
 	}
 
 	externalServiceCall := func(insertedEmbeddings []repository.EmbeddingModel) error {
@@ -335,6 +373,64 @@ func (w *Worker) FlushCollectionActivity(ctx context.Context, param *DeleteOldEm
 	w.log.Info("FlushCollectionActivity: Using active collection",
 		zap.String("kbUID", param.KBUID.String()),
 		zap.String("activeCollectionUID", activeCollectionUID.String()))
+
+	// Check if collection exists before flushing, recreate if missing (self-healing)
+	collectionExists, err := w.repository.CollectionExists(ctx, collection)
+	if err != nil {
+		err = errorsx.AddMessage(err, "Unable to verify collection existence. Please try again.")
+		return temporal.NewApplicationErrorWithCause(
+			errorsx.MessageOrErr(err),
+			flushCollectionActivityError,
+			err,
+		)
+	}
+
+	if !collectionExists {
+		w.log.Warn("Collection does not exist during flush, attempting to recreate",
+			zap.String("collection", collection),
+			zap.String("kbUID", param.KBUID.String()),
+			zap.String("activeCollectionUID", activeCollectionUID.String()))
+
+		// Self-healing: Recreate the missing collection
+		system, err := w.repository.GetSystemByUID(ctx, kb.SystemUID)
+		if err != nil {
+			err = errorsx.AddMessage(err, "Unable to get system config for collection recreation. Please try again.")
+			return temporal.NewApplicationErrorWithCause(
+				errorsx.MessageOrErr(err),
+				flushCollectionActivityError,
+				err,
+			)
+		}
+
+		systemConfig, err := system.GetConfigJSON()
+		if err != nil {
+			err = errorsx.AddMessage(err, "Unable to parse system config for collection recreation. Please try again.")
+			return temporal.NewApplicationErrorWithCause(
+				errorsx.MessageOrErr(err),
+				flushCollectionActivityError,
+				err,
+			)
+		}
+
+		w.log.Info("Recreating missing collection before flush",
+			zap.String("collection", collection),
+			zap.String("modelFamily", systemConfig.RAG.Embedding.ModelFamily),
+			zap.Uint32("dimensionality", systemConfig.RAG.Embedding.Dimensionality))
+
+		err = w.repository.CreateCollection(ctx, collection, systemConfig.RAG.Embedding.Dimensionality)
+		if err != nil {
+			err = errorsx.AddMessage(err, "Unable to recreate missing collection. Please try again.")
+			return temporal.NewApplicationErrorWithCause(
+				errorsx.MessageOrErr(err),
+				flushCollectionActivityError,
+				err,
+			)
+		}
+
+		w.log.Info("Successfully recreated missing collection",
+			zap.String("collection", collection),
+			zap.String("kbUID", param.KBUID.String()))
+	}
 
 	if err := w.repository.FlushCollection(ctx, collection); err != nil {
 		err = errorsx.AddMessage(err, "Unable to flush vector database collection. Please try again.")
