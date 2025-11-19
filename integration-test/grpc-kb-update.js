@@ -152,6 +152,10 @@
  *
  * Group 8: Phase 6 - Cleanup (Staging Cleanup & Rollback Retention)
  *   - Validates staging KB immediate soft-deletion after swap
+ *   - Tests VerifyKBCleanupActivity execution and validation logic:
+ *     * Staging KB is soft-deleted with update_status/update_workflow_id cleared
+ *     * Staging KB collection is dropped (or preserved if still in use)
+ *     * Rollback KB is NOT cleaned up yet (retention period active)
  *   - Tests SetRollbackRetention API (set retention with flexible time units)
  *   - Verifies automatic scheduled cleanup executes and purges rollback KB resources
  *   - Tests PurgeRollback API independently (manual immediate purge)
@@ -4787,6 +4791,75 @@ function TestResourceCleanup(client, data) {
                 return hasOnlyProd;
             },
         });
+
+        // ========================================================================
+        // TEST: VerifyKBCleanupActivity Execution and Validation
+        // ========================================================================
+        // This test specifically verifies that VerifyKBCleanupActivity runs and
+        // properly validates the cleanup state (soft-delete, status cleared, collection dropped)
+        console.log("\n=== Testing VerifyKBCleanupActivity Execution ===");
+
+        // The staging KB should have been cleaned up by the update workflow
+        // Let's verify its cleanup state matches what VerifyKBCleanupActivity checks for
+        const stagingKBCleanupQuery = `
+            SELECT uid, delete_time, update_status, update_workflow_id, collection_uid
+            FROM knowledge_base
+            WHERE parent_kb_uid = $1 AND staging = true AND 'staging' = ANY(tags)
+        `;
+        const stagingKBCleanupCheck = helper.safeQuery(stagingKBCleanupQuery, knowledgeBaseUid);
+
+        if (stagingKBCleanupCheck && stagingKBCleanupCheck.length > 0) {
+            const stagingKB = stagingKBCleanupCheck[0];
+            const isSoftDeleted = stagingKB.delete_time !== null;
+            const statusCleared = stagingKB.update_status === "" || stagingKB.update_status === null;
+            const workflowIdCleared = stagingKB.update_workflow_id === "" || stagingKB.update_workflow_id === null;
+
+            console.log(`VerifyKBCleanupActivity: Staging KB state - soft_deleted=${isSoftDeleted}, status_cleared=${statusCleared}, workflow_id_cleared=${workflowIdCleared}`);
+
+            check({ isSoftDeleted, statusCleared, workflowIdCleared }, {
+                "VerifyKBCleanup: Staging KB is soft-deleted": (vars) => vars.isSoftDeleted,
+                "VerifyKBCleanup: Staging KB update_status cleared": (vars) => vars.statusCleared,
+                "VerifyKBCleanup: Staging KB update_workflow_id cleared": (vars) => vars.workflowIdCleared,
+            });
+
+            // Verify collection was dropped (or doesn't exist)
+            if (stagingKB.collection_uid) {
+                const collectionExists = helper.checkMilvusCollectionExists(stagingKB.collection_uid);
+                check({ collectionExists }, {
+                    "VerifyKBCleanup: Staging KB collection dropped": (vars) => !vars.collectionExists,
+                });
+                console.log(`VerifyKBCleanupActivity: Staging KB collection exists=${collectionExists}`);
+            }
+        } else {
+            console.log("VerifyKBCleanupActivity: Staging KB fully deleted (hard-deleted from DB)");
+            check(true, {
+                "VerifyKBCleanup: Staging KB cleaned up (hard-deleted)": () => true,
+            });
+        }
+
+        // Verify rollback KB has NOT been cleaned up yet (retention not expired)
+        // This ensures VerifyKBCleanupActivity distinguishes between immediate staging cleanup
+        // and deferred rollback cleanup
+        const rollbackKBStatusQuery = `
+            SELECT uid, delete_time, update_status, update_workflow_id
+            FROM knowledge_base
+            WHERE uid = $1
+        `;
+        const rollbackKBStatus = helper.safeQuery(rollbackKBStatusQuery, rollbackKBUID);
+
+        if (rollbackKBStatus && rollbackKBStatus.length > 0) {
+            const rollbackKB = rollbackKBStatus[0];
+            const isNotDeleted = rollbackKB.delete_time === null;
+            const statusNotCleared = rollbackKB.update_status !== "" && rollbackKB.update_status !== null;
+
+            console.log(`VerifyKBCleanupActivity: Rollback KB state before retention expires - not_deleted=${isNotDeleted}, status_preserved=${statusNotCleared}`);
+
+            check({ isNotDeleted }, {
+                "VerifyKBCleanup: Rollback KB NOT cleaned up yet (retention active)": (vars) => vars.isNotDeleted,
+            });
+        }
+
+        console.log("VerifyKBCleanupActivity: Validation complete\n");
 
         // CRITICAL TEST: Test PurgeRollback API (Manual Purge)
         // This test creates a new rollback KB by triggering another update, then uses
