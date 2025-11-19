@@ -9,6 +9,7 @@ import (
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	pipelinepb "github.com/instill-ai/protogen-go/pipeline/pipeline/v1beta"
+	filetype "github.com/instill-ai/x/file"
 )
 
 const (
@@ -52,31 +53,9 @@ type GenerateContentResult struct {
 }
 
 // GetFileTypePrefix returns the appropriate prefix for the given file type
+// Deprecated: Use filetype.GetDataURIPrefix from github.com/instill-ai/x/file instead
 func GetFileTypePrefix(fileType artifactpb.File_Type) string {
-	switch fileType {
-	case artifactpb.File_TYPE_PDF:
-		return "data:application/pdf;base64,"
-	case artifactpb.File_TYPE_DOCX:
-		return "data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,"
-	case artifactpb.File_TYPE_DOC:
-		return "data:application/msword;base64,"
-	case artifactpb.File_TYPE_PPT:
-		return "data:application/vnd.ms-powerpoint;base64,"
-	case artifactpb.File_TYPE_PPTX:
-		return "data:application/vnd.openxmlformats-officedocument.presentationml.presentation;base64,"
-	case artifactpb.File_TYPE_HTML:
-		return "data:text/html;base64,"
-	case artifactpb.File_TYPE_TEXT:
-		return "data:text/plain;base64,"
-	case artifactpb.File_TYPE_XLSX:
-		return "data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,"
-	case artifactpb.File_TYPE_XLS:
-		return "data:application/vnd.ms-excel;base64,"
-	case artifactpb.File_TYPE_CSV:
-		return "data:text/csv;base64,"
-	default:
-		return ""
-	}
+	return filetype.GetDataURIPrefix(fileType)
 }
 
 // ProtoListToStrings converts a protobuf ListValue to a slice of strings

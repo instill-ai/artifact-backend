@@ -14,6 +14,7 @@ import (
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	errorsx "github.com/instill-ai/x/errors"
+	filetype "github.com/instill-ai/x/file"
 )
 
 // ConvertToMarkdownWithoutCache implements ai.Client
@@ -23,7 +24,7 @@ func (c *Client) ConvertToMarkdownWithoutCache(ctx context.Context, content []by
 		return nil, errorsx.AddMessage(errorsx.ErrInvalidArgument, "Content is empty")
 	}
 
-	mimeType := ai.FileTypeToMIME(fileType)
+	mimeType := filetype.FileTypeToMimeType(fileType)
 
 	// Upload file to object storage (GCS)
 	// Generate unique path for file

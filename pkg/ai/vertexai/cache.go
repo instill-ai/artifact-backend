@@ -13,6 +13,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/ai"
 
 	errorsx "github.com/instill-ai/x/errors"
+	filetype "github.com/instill-ai/x/file"
 )
 
 // CreateCache implements ai.Client
@@ -174,7 +175,7 @@ func (c *Client) createBatchCache(ctx context.Context, model string, files []ai.
 
 	// Upload all files to GCS first
 	for _, file := range files {
-		mimeType := ai.FileTypeToMIME(file.FileType)
+		mimeType := filetype.FileTypeToMimeType(file.FileType)
 
 		// Upload to object storage (GCS)
 		// Generate unique path for file

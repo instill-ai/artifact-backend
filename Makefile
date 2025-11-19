@@ -16,7 +16,6 @@ dev:							## Run dev container
 		echo "Run dev container ${SERVICE_NAME}. To stop it, run \"make stop\"."
 	@docker run -d --rm \
 		-v $(PWD):/${SERVICE_NAME} \
-		-v /Users/Pinglin/Workspace/instill/protogen-go:/protogen-go \
 		-p ${PUBLIC_SERVICE_PORT}:${PUBLIC_SERVICE_PORT} \
 		-p ${PRIVATE_SERVICE_PORT}:${PRIVATE_SERVICE_PORT} \
 		--network instill-network \
@@ -89,8 +88,36 @@ unit-test:       				## Run unit test
 	@rm coverage.out coverage.final.out
 
 .PHONY: integration-test
-integration-test:		## Run integration tests in parallel using GNU parallel
+integration-test:		## Run integration tests (parallel by default, sequential if CI=true)
+ifeq ($(CI),true)
+	@echo "Running integration tests sequentially (CI mode)..."
+	@rm -f /tmp/artifact-integration-test.log
+	@bash -c 'set -o pipefail; \
+	for test in \
+		integration-test/rest.js \
+		integration-test/rest-object-storage.js \
+		integration-test/rest-file-type.js \
+		integration-test/rest-db.js \
+		integration-test/rest-ai-client.js \
+		integration-test/rest-kb-e2e-file-process.js \
+		integration-test/rest-file-reprocess.js \
+		integration-test/rest-kb-delete.js \
+		integration-test/grpc.js \
+		integration-test/grpc-kb-update.js \
+		integration-test/grpc-system-config-update.js \
+		integration-test/grpc-system-admin.js; do \
+		echo "Running $$test..." | tee -a /tmp/artifact-integration-test.log; \
+		TEST_FOLDER_ABS_PATH=$(PWD) k6 run --address="" \
+			-e API_GATEWAY_PROTOCOL=$(API_GATEWAY_PROTOCOL) \
+			-e API_GATEWAY_URL=$(API_GATEWAY_URL) \
+			-e DB_HOST=$(DB_HOST) \
+			$$test --no-usage-report 2>&1 | tee -a /tmp/artifact-integration-test.log; \
+		if [ $${PIPESTATUS[0]} -ne 0 ]; then exit 1; fi; \
+	done'
+	@bash integration-test/scripts/report-summary.sh /tmp/artifact-integration-test.log
+else
 	@echo "Running integration tests in parallel..."
+	@rm -f /tmp/artifact-integration-test.log
 	@parallel --halt now,fail=1 --tag --line-buffer \
 		"TEST_FOLDER_ABS_PATH=${PWD} k6 run --address=\"\" \
 		-e API_GATEWAY_PROTOCOL=${API_GATEWAY_PROTOCOL} -e API_GATEWAY_URL=${API_GATEWAY_URL} \
@@ -98,8 +125,7 @@ integration-test:		## Run integration tests in parallel using GNU parallel
 		{} --no-usage-report" ::: \
 		integration-test/rest.js \
 		integration-test/rest-object-storage.js \
-		integration-test/rest-file-type.js 2>&1 | tee /tmp/artifact-integration-test.log; \
-	bash integration-test/scripts/report-summary.sh /tmp/artifact-integration-test.log
+		integration-test/rest-file-type.js 2>&1 | tee -a /tmp/artifact-integration-test.log
 	@parallel --halt now,fail=1 --tag --line-buffer \
 		"TEST_FOLDER_ABS_PATH=${PWD} k6 run --address=\"\" \
 		-e API_GATEWAY_PROTOCOL=${API_GATEWAY_PROTOCOL} -e API_GATEWAY_URL=${API_GATEWAY_URL} \
@@ -109,8 +135,7 @@ integration-test:		## Run integration tests in parallel using GNU parallel
 		integration-test/rest-ai-client.js \
 		integration-test/rest-kb-e2e-file-process.js \
 		integration-test/rest-file-reprocess.js \
-		integration-test/rest-kb-delete.js 2>&1 | tee /tmp/artifact-integration-test.log; \
-	bash integration-test/scripts/report-summary.sh /tmp/artifact-integration-test.log
+		integration-test/rest-kb-delete.js 2>&1 | tee -a /tmp/artifact-integration-test.log
 	@parallel --halt now,fail=1 --tag --line-buffer \
 		"TEST_FOLDER_ABS_PATH=${PWD} k6 run --address=\"\" \
 		-e API_GATEWAY_PROTOCOL=${API_GATEWAY_PROTOCOL} -e API_GATEWAY_URL=${API_GATEWAY_URL} \
@@ -119,8 +144,9 @@ integration-test:		## Run integration tests in parallel using GNU parallel
 		integration-test/grpc.js \
 		integration-test/grpc-kb-update.js \
 		integration-test/grpc-system-config-update.js \
-		integration-test/grpc-system-admin.js 2>&1 | tee /tmp/artifact-integration-test.log; \
-	bash integration-test/scripts/report-summary.sh /tmp/artifact-integration-test.log
+		integration-test/grpc-system-admin.js 2>&1 | tee -a /tmp/artifact-integration-test.log
+	@bash integration-test/scripts/report-summary.sh /tmp/artifact-integration-test.log
+endif
 
 .PHONY: help
 help:       	 				## Show this help

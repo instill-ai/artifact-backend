@@ -24,6 +24,7 @@ import (
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	errorsx "github.com/instill-ai/x/errors"
+	filetype "github.com/instill-ai/x/file"
 )
 
 // This file contains file processing activities used by ProcessFileWorkflow:
@@ -999,7 +1000,7 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 		zap.String("filename", param.Filename))
 
 	// Check if file needs conversion
-	needsConversion, targetFormat := ai.NeedsFileTypeConversion(param.FileType)
+	needsConversion, targetFormat, _ := filetype.NeedsFileTypeConversion(param.FileType)
 	if !needsConversion {
 		w.log.Info("StandardizeFileTypeActivity: File type is AI-native, no standardization needed",
 			zap.String("fileType", param.FileType.String()))
@@ -1007,36 +1008,8 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 		// Original blob remains in place for consistency with other file types
 		// Converted-file folder copy provides unified VIEW_STANDARD_FILE_TYPE access
 		// For AI-native files (PDF, PNG, OGG, MP4), copy to converted-file folder
-		var convertedFileTypeEnum artifactpb.ConvertedFileType
-		var fileExtension string
-		var contentType string
-		var shouldCopy bool
-
-		switch param.FileType {
-		case artifactpb.File_TYPE_PDF:
-			convertedFileTypeEnum = artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_DOCUMENT
-			fileExtension = "pdf"
-			contentType = "application/pdf"
-			shouldCopy = true
-		case artifactpb.File_TYPE_PNG:
-			convertedFileTypeEnum = artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_IMAGE
-			fileExtension = "png"
-			contentType = "image/png"
-			shouldCopy = true
-		case artifactpb.File_TYPE_OGG:
-			convertedFileTypeEnum = artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_AUDIO
-			fileExtension = "ogg"
-			contentType = "audio/ogg"
-			shouldCopy = true
-		case artifactpb.File_TYPE_MP4:
-			convertedFileTypeEnum = artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_VIDEO
-			fileExtension = "mp4"
-			contentType = "video/mp4"
-			shouldCopy = true
-		default:
-			// For other AI-native files that don't have standard file type support
-			shouldCopy = false
-		}
+		convertedFileTypeEnum, fileExtension, contentType := filetype.GetConvertedFileTypeInfo(param.FileType)
+		shouldCopy := convertedFileTypeEnum != artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_UNSPECIFIED
 
 		if shouldCopy {
 			w.log.Info("StandardizeFileTypeActivity: Copying AI-native file to converted-file folder for VIEW_STANDARD_FILE_TYPE support",
@@ -1173,7 +1146,7 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 		zap.Int("contentSize", len(content)))
 
 	// Convert using indexing-convert-file-type pipeline (handles both data URI and blob URL outputs)
-	mimeType := ai.FileTypeToMIME(param.FileType)
+	mimeType := filetype.FileTypeToMimeType(param.FileType)
 	convertedContent, err := pipeline.ConvertFileTypePipe(authCtx, w.pipelineClient, content, param.FileType, mimeType)
 	if err != nil {
 		w.log.Warn("StandardizeFileTypeActivity: Pipeline standardization failed",
@@ -1193,10 +1166,10 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 		zap.Int("convertedSize", len(convertedContent)))
 
 	// Map target format string to FileType enum
-	convertedFileType := ai.MapFormatToFileType(targetFormat)
+	convertedFileType := filetype.FormatToFileType(targetFormat)
 
 	// Get MIME type for the converted file type
-	convertedMimeType := ai.FileTypeToMIME(convertedFileType)
+	convertedMimeType := filetype.FileTypeToMimeType(convertedFileType)
 
 	// Map target format to ConvertedFileType enum
 	var convertedFileTypeEnum artifactpb.ConvertedFileType

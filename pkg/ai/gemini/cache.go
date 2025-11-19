@@ -11,6 +11,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/ai"
 
 	errorsx "github.com/instill-ai/x/errors"
+	filetype "github.com/instill-ai/x/file"
 )
 
 // MaxInlineSize is the 20MB threshold for File API
@@ -279,7 +280,7 @@ func (c *Client) createBatchCache(ctx context.Context, model string, files []ai.
 	// Process each file
 	for _, file := range files {
 		// Determine if we need to use File API
-		mimeType := ai.FileTypeToMIME(file.FileType)
+		mimeType := filetype.FileTypeToMimeType(file.FileType)
 		useFileAPI := len(file.Content) > MaxInlineSize || isVideoType(mimeType)
 
 		var part *genai.Part

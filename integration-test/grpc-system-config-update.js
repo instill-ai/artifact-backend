@@ -68,6 +68,7 @@ client.load(
 export let options = {
     setupTimeout: '600s',
     teardownTimeout: '180s',
+    duration: '5m',  // Test with AI processing, update workflows, and retention periods
     insecureSkipTLSVerify: true,
     thresholds: {
         checks: ["rate == 1.0"],
@@ -312,15 +313,16 @@ export default function (data) {
 
             // Verify active_collection_uid is unique
             const kb1CollectionCheck = helper.safeQuery(
-                `SELECT uid, active_collection_uid FROM knowledge_base WHERE uid = $1`,
+                `SELECT uid::text, active_collection_uid::text FROM knowledge_base WHERE uid = $1`,
                 kb1.uid
             );
             if (kb1CollectionCheck && kb1CollectionCheck.length > 0) {
                 const collectionUID = kb1CollectionCheck[0].active_collection_uid;
+                const kbUIDFromDB = kb1CollectionCheck[0].uid;
                 check({ collectionUID, kbUID: kb1.uid }, {
                     "Phase 1: KB1 active_collection_uid is not null": () => collectionUID !== null,
                     "Phase 1: KB1 active_collection_uid != KB UID": () =>
-                        collectionUID !== kb1.uid && collectionUID !== kb1CollectionCheck[0].uid,
+                        collectionUID !== kb1.uid && collectionUID !== kbUIDFromDB,
                 });
                 console.log(`KB1 collection UID: ${collectionUID} (different from KB UID: ${kb1.uid})`);
             }
@@ -1284,7 +1286,7 @@ export default function (data) {
             // CRITICAL: Also wait for rollback KB files to complete
             // Sequential dual-processing triggers rollback files after production completes
             // Rollback workflow will block if any files are NOTSTARTED in rollback KB
-            // Increased timeout for CI environments with AI rate limiting (900s = 15 minutes)
+            // Timeout for rollback file processing (120s = 2 minutes)
             console.log("Waiting for retention file processing in rollback KBs (sequential dual-processing)...");
             let rollbackCompleted = false;
             let kb1Count = 0;
@@ -1303,7 +1305,7 @@ export default function (data) {
 
             // Wait for rollback KB files - only wait for KB2 if rollback KB2 exists
             if (data.kb1_rollback && data.kb2_rollback) {
-                for (let i = 0; i < 1800; i++) { // 1800 * 0.5s = 900s (15 minutes)
+                for (let i = 0; i < 240; i++) { // 240 * 0.5s = 120s (2 minutes)
                     kb1Count = 0;
                     kb2Count = 0;
 
@@ -1350,6 +1352,32 @@ export default function (data) {
                     if (i % 10 === 0 && i > 0) {
                         const kb2Status = data.kb2_rollback ? `${kb2Count}/2` : 'N/A (no rollback KB2)';
                         console.log(`Waiting for rollback files... KB1: ${kb1Count}/2, KB2: ${kb2Status}`);
+
+                        // DIAGNOSTIC: Check if files exist in rollback KB and their status
+                        if (i === 10) { // Only log once at 10s to avoid spam
+                            const diagQuery = helper.safeQuery(
+                                `SELECT filename, process_status, create_time, update_time
+                                 FROM file
+                                 WHERE kb_uid = $1 AND delete_time IS NULL
+                                 ORDER BY create_time DESC`,
+                                data.kb1_rollback.kbUid
+                            );
+                            if (diagQuery && diagQuery.length > 0) {
+                                console.log(`DIAGNOSTIC: Rollback KB1 has ${diagQuery.length} files:`);
+                                diagQuery.forEach(f => console.log(`  - ${f.filename}: ${f.process_status} (created: ${f.create_time})`));
+                            } else {
+                                console.log(`DIAGNOSTIC: Rollback KB1 has NO files - dual processing may have failed`);
+                            }
+
+                            // Check production KB status
+                            const prodKBStatus = helper.safeQuery(
+                                `SELECT update_status FROM knowledge_base WHERE uid = $1`,
+                                data.kb1_initial.knowledgeBaseUid
+                            );
+                            if (prodKBStatus && prodKBStatus.length > 0) {
+                                console.log(`DIAGNOSTIC: Production KB1 update_status = "${prodKBStatus[0].update_status}"`);
+                            }
+                        }
                     }
 
                     sleep(0.5);
@@ -1377,7 +1405,7 @@ export default function (data) {
             } else if (data.kb1_rollback) {
                 // Only KB1 rollback exists - wait for KB1 files only
                 console.log("Only KB1 rollback exists, waiting for KB1 rollback files only...");
-                for (let i = 0; i < 1800; i++) {
+                for (let i = 0; i < 240; i++) { // 240 * 0.5s = 120s (2 minutes)
                     kb1Count = 0;
 
                     for (const filename of [`${data.dbIDPrefix}sysconfig-retention-kb1-1.pdf`, `${data.dbIDPrefix}sysconfig-retention-kb1-2.pdf`]) {

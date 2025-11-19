@@ -15,6 +15,7 @@ import (
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	errorsx "github.com/instill-ai/x/errors"
+	filetype "github.com/instill-ai/x/file"
 )
 
 // Client implements the ai.Client interface for VertexAI
@@ -152,7 +153,7 @@ func (c *Client) CountTokens(ctx context.Context, content []byte, fileType artif
 	objectPath := fmt.Sprintf("ns-%s/obj-%s", namespaceUID, objectUID)
 
 	// Determine MIME type
-	mimeType := ai.FileTypeToMIME(fileType)
+	mimeType := filetype.FileTypeToMimeType(fileType)
 
 	// Convert to base64 for object.Storage interface
 	base64Content := base64.StdEncoding.EncodeToString(content)

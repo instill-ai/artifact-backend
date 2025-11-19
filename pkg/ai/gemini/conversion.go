@@ -12,6 +12,7 @@ import (
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	errorsx "github.com/instill-ai/x/errors"
+	filetype "github.com/instill-ai/x/file"
 )
 
 // conversionOutput defines the output of content-to-markdown conversion
@@ -30,7 +31,7 @@ type conversionOutput struct {
 // This does direct conversion WITHOUT using a cached context.
 // For cached conversion, use ConvertToMarkdownWithCache() with a pre-existing cache.
 func (c *Client) ConvertToMarkdownWithoutCache(ctx context.Context, content []byte, fileType artifactpb.File_Type, filename string, prompt string) (*ai.ConversionResult, error) {
-	mimeType := ai.FileTypeToMIME(fileType)
+	mimeType := filetype.FileTypeToMimeType(fileType)
 
 	// Retry logic for non-cached conversion
 	output, err := retryConversion(ctx, 2, func() (*conversionOutput, error) {

@@ -19,6 +19,7 @@ import (
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	errorsx "github.com/instill-ai/x/errors"
+	filetype "github.com/instill-ai/x/file"
 )
 
 // This file contains embedding activities used by ProcessFileWorkflow and SaveEmbeddingsWorkflow:
@@ -127,7 +128,7 @@ func (w *Worker) GetChunksForEmbeddingActivity(ctx context.Context, param *GetCh
 	// Convert FileType enum string to MIME type
 	// FileType in DB is stored as enum string (e.g., "TYPE_PDF", "TYPE_TEXT")
 	fileTypeEnum := artifactpb.File_Type(artifactpb.File_Type_value[file.FileType])
-	contentType := ai.FileTypeToMIME(fileTypeEnum)
+	contentType := filetype.FileTypeToMimeType(fileTypeEnum)
 
 	return &GetTextChunksForEmbeddingActivityResult{
 		SourceTable: sourceTable,
