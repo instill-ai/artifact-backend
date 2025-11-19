@@ -637,6 +637,60 @@ export function dropMilvusCollection(kbUID) {
   }
 }
 
+/**
+ * Check if a Milvus collection exists (used for testing cleanup verification)
+ *
+ * @param {string} collectionUID - Collection UUID (not KB UID)
+ * @returns {boolean} True if collection exists, false if dropped or error
+ */
+export function checkMilvusCollectionExists(collectionUID) {
+  try {
+    if (!collectionUID) {
+      console.log(`checkMilvusCollectionExists: null collectionUID provided`);
+      return false;
+    }
+
+    // Convert collection_uid from Buffer (PostgreSQL UUID) to string if needed
+    let collectionUIDStr = collectionUID;
+    if (Array.isArray(collectionUID)) {
+      collectionUIDStr = String.fromCharCode(...collectionUID);
+    }
+
+    // Convert collection_uid to Milvus collection name format: kb_{uuid_with_underscores}
+    const collectionName = `kb_${collectionUIDStr.replace(/-/g, '_')}`;
+
+    const milvusHost = __ENV.MILVUS_HOST || 'milvus';
+    const milvusPort = __ENV.MILVUS_PORT || '19530';
+
+    // Use a simple check - try to count vectors in the collection
+    // If collection doesn't exist, the script will indicate that
+    const result = exec.command('sh', [
+      `${__ENV.TEST_FOLDER_ABS_PATH}/integration-test/scripts/count-milvus-vectors.sh`,
+      collectionName,
+      'dummy_file_uid', // Not filtering by file, just checking collection existence
+      milvusHost,
+      milvusPort
+    ]);
+
+    // If collection doesn't exist, the result will contain error messages or "0"
+    // If collection exists, result should be a number (even if 0)
+    const trimmedResult = result.trim();
+
+    // Collection doesn't exist if we get error messages
+    if (trimmedResult.includes('collection not exist') ||
+        trimmedResult.includes('ERROR') ||
+        trimmedResult.includes('not found')) {
+      return false;
+    }
+
+    // Collection exists if we get a numeric result (including "0")
+    return /^\d+$/.test(trimmedResult);
+  } catch (e) {
+    console.error(`Failed to check Milvus collection existence for ${collectionUID}: ${e}`);
+    return false;
+  }
+}
+
 // ============================================================================
 // Polling Helpers for Eventual Consistency
 // ============================================================================

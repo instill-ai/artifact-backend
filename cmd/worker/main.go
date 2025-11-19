@@ -236,6 +236,7 @@ func main() {
 	w.RegisterActivity(cw.SwapKnowledgeBasesActivity)              // Atomic pointer swap of collections
 	w.RegisterActivity(cw.UpdateKnowledgeBaseUpdateStatusActivity) // Update KB update status
 	w.RegisterActivity(cw.CleanupOldKnowledgeBaseActivity)         // Cleanup rollback KB after retention
+	w.RegisterActivity(cw.VerifyKBCleanupActivity)                 // Verify KB cleanup was successful
 
 	// ===== ProcessFileWorkflow Activities (Main Workflow) =====
 	// Main workflow orchestrating the entire file processing pipeline
