@@ -44,8 +44,9 @@ type SearchVectorParam struct {
 	Vectors      [][]float32
 	TopK         uint32
 	FileUIDs     []types.FileUIDType
-	ContentType  string // MIME type filter (e.g., "text/markdown", "application/pdf")
-	ChunkType    string // Chunk classification filter ("content", "summary", "augmented")
+	ContentType  string   // MIME type filter (e.g., "text/markdown", "application/pdf")
+	ChunkType    string   // Chunk classification filter ("content", "summary", "augmented")
+	Tags         []string // Tags to filter by (OR logic when multiple tags provided)
 
 	// The filename filter was implemented back when the filename in a knowledge base was
 	// unique, which isn't the case anymore. Using this filter might yield
@@ -416,7 +417,7 @@ func (m *milvusClient) SearchVectorsInCollection(ctx context.Context, p SearchVe
 
 	logger.Info("Collection load.", zap.Duration("duration", time.Since(t)))
 
-	hasMetadata, hasFileUID, _, err := m.checkMetadataFields(ctx, collectionName)
+	hasMetadata, hasFileUID, hasTags, err := m.checkMetadataFields(ctx, collectionName)
 	if err != nil {
 		return nil, fmt.Errorf("checking metadata fields: %w", err)
 	}
@@ -456,6 +457,20 @@ func (m *milvusClient) SearchVectorsInCollection(ctx context.Context, p SearchVe
 
 		if p.ChunkType != "" {
 			filterStrs = append(filterStrs, fmt.Sprintf("%s == '%s'", kbCollectionFieldContentType, p.ChunkType))
+		}
+
+		// Add tags filtering with ARRAY_CONTAINS_ANY logic
+		// Only apply if collection supports tags and tags are provided
+		if hasTags && len(p.Tags) > 0 {
+			// Build ARRAY_CONTAINS_ANY filter: array_contains_any(tags, ["tag1", "tag2"])
+			quotedTags := make([]string, len(p.Tags))
+			for i, tag := range p.Tags {
+				quotedTags[i] = fmt.Sprintf(`"%s"`, tag)
+			}
+			tagsFilter := fmt.Sprintf("array_contains_any(%s, [%s])",
+				kbCollectionFieldTags,
+				strings.Join(quotedTags, ","))
+			filterStrs = append(filterStrs, tagsFilter)
 		}
 	}
 
