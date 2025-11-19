@@ -700,9 +700,9 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 			ConvertingPipeline: kbFile.ConvertingPipeline(),
 		}
 
-		// Include error message if processing failed
-		if kbFile.ExtraMetaDataUnmarshal != nil && kbFile.ExtraMetaDataUnmarshal.FailReason != "" {
-			file.ProcessOutcome = kbFile.ExtraMetaDataUnmarshal.FailReason
+		// Include status message (error or success message)
+		if kbFile.ExtraMetaDataUnmarshal != nil && kbFile.ExtraMetaDataUnmarshal.StatusMessage != "" {
+			file.ProcessOutcome = kbFile.ExtraMetaDataUnmarshal.StatusMessage
 		}
 
 		if kbFile.ExtraMetaDataUnmarshal != nil && len(kbFile.ExtraMetaDataUnmarshal.Length) > 0 {

@@ -101,7 +101,7 @@ func (w *Worker) UpdateFileStatusActivity(ctx context.Context, param *UpdateFile
 	}
 
 	if param.Message != "" {
-		err := w.repository.UpdateKnowledgeFileMetadata(ctx, param.FileUID, repository.ExtraMetaData{FailReason: param.Message})
+		err := w.repository.UpdateKnowledgeFileMetadata(ctx, param.FileUID, repository.ExtraMetaData{StatusMessage: param.Message})
 		if err != nil {
 			w.log.Warn("Failed to update file extra metadata with message (file may be deleted)", zap.Error(err))
 		}

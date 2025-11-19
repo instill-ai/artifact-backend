@@ -135,7 +135,10 @@ func (KnowledgeBaseFileModel) TableName() string {
 
 // ExtraMetaData is the extra meta data of the knowledge base file
 type ExtraMetaData struct {
-	FailReason      string `json:"fail_reason"`
+	// StatusMessage stores status messages for all processing stages (success or failure)
+	// Examples: "File processing completed successfully", "Conversion failed: invalid format"
+	StatusMessage string `json:"status_message,omitempty"`
+
 	ConvertingPipe  string `json:"converting_pipe"`
 	SummarizingPipe string `json:"summarizing_pipe"`
 	EmbeddingPipe   string `json:"embedding_pipe"`
@@ -546,8 +549,8 @@ func (r *repository) ProcessKnowledgeBaseFiles(
 	updates := map[string]any{
 		"process_status": artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_PROCESSING.String(),
 		"requester_uid":  requester,
-		// Clear previous failure reason
-		"extra_meta_data": gorm.Expr("COALESCE(extra_meta_data, '{}'::jsonb) || ?::jsonb", `{"fail_reason": ""}`),
+		// Clear previous status message
+		"extra_meta_data": gorm.Expr("COALESCE(extra_meta_data, '{}'::jsonb) || ?::jsonb", `{"status_message": ""}`),
 	}
 
 	if err := db.Model(&KnowledgeBaseFileModel{}).Where("uid IN ?", fileUIDs).Updates(updates).Error; err != nil {
@@ -932,20 +935,19 @@ func (r *repository) UpdateKnowledgeFileMetadata(ctx context.Context, fileUID ty
 			file.ExtraMetaDataUnmarshal = &ExtraMetaData{}
 		}
 
-		if updates.FailReason != "" {
-			file.ExtraMetaDataUnmarshal.FailReason = updates.FailReason
-		}
-		if updates.ConvertingPipe != "" {
-			file.ExtraMetaDataUnmarshal.ConvertingPipe = updates.ConvertingPipe
-		}
-		if updates.SummarizingPipe != "" {
-			file.ExtraMetaDataUnmarshal.SummarizingPipe = updates.SummarizingPipe
-		}
-		if updates.ChunkingPipe != "" {
-			file.ExtraMetaDataUnmarshal.ChunkingPipe = updates.ChunkingPipe
-		}
-		if updates.EmbeddingPipe != "" {
-			file.ExtraMetaDataUnmarshal.EmbeddingPipe = updates.EmbeddingPipe
+		// CRITICAL: Always update pipeline fields (even to empty strings)
+		// This allows switching between pipeline route and AI client route:
+		// - Pipeline route: sets pipeline names (e.g., "preset/indexing-generate-content@v1.4.0")
+		// - AI client route: clears pipelines by passing empty strings
+		// Without this fix, reprocessing with AI client would leave old pipeline values in place
+		file.ExtraMetaDataUnmarshal.ConvertingPipe = updates.ConvertingPipe
+		file.ExtraMetaDataUnmarshal.SummarizingPipe = updates.SummarizingPipe
+		file.ExtraMetaDataUnmarshal.ChunkingPipe = updates.ChunkingPipe
+		file.ExtraMetaDataUnmarshal.EmbeddingPipe = updates.EmbeddingPipe
+
+		// For other fields, only update if non-zero/non-empty (keep existing logic)
+		if updates.StatusMessage != "" {
+			file.ExtraMetaDataUnmarshal.StatusMessage = updates.StatusMessage
 		}
 		if updates.ProcessingTime != 0 {
 			file.ExtraMetaDataUnmarshal.ProcessingTime = updates.ProcessingTime

@@ -182,7 +182,7 @@ func TestUpdateFileStatusActivity_WithMessage(t *testing.T) {
 		Inspect(func(ctx context.Context, fuid types.FileUIDType, metadata repository.ExtraMetaData) {
 			metadataUpdateCalled = true
 			c.Check(fuid, qt.Equals, fileUID)
-			c.Check(metadata.FailReason, qt.Equals, failMessage)
+			c.Check(metadata.StatusMessage, qt.Equals, failMessage)
 		}).
 		Return(nil)
 
