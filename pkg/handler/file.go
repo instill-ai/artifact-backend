@@ -27,6 +27,7 @@ import (
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	errorsx "github.com/instill-ai/x/errors"
+	filetype "github.com/instill-ai/x/file"
 	logx "github.com/instill-ai/x/log"
 )
 
@@ -696,7 +697,6 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 			TotalChunks:        int32(totalChunks[kbFile.UID]),
 			TotalTokens:        int32(totalTokens[kbFile.UID]),
 			ObjectUid:          objectUID.String(),
-			Summary:            "", // Summary is now stored as a separate converted_file, use GetFileSummary API to retrieve
 			DownloadUrl:        downloadURL,
 			ConvertingPipeline: kbFile.ConvertingPipeline(),
 		}
@@ -1021,64 +1021,9 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 		fileProtoType := artifactpb.File_Type(fileType)
 
 		// Determine the converted file type and file extension based on media category
-		var convertedFileType artifactpb.ConvertedFileType
-		var fileExtension string
+		convertedFileType, fileExtension, _ := filetype.GetConvertedFileTypeInfo(fileProtoType)
 
-		switch fileProtoType {
-		// Documents → PDF
-		case artifactpb.File_TYPE_PDF,
-			artifactpb.File_TYPE_DOC,
-			artifactpb.File_TYPE_DOCX,
-			artifactpb.File_TYPE_PPT,
-			artifactpb.File_TYPE_PPTX,
-			artifactpb.File_TYPE_XLS,
-			artifactpb.File_TYPE_XLSX,
-			artifactpb.File_TYPE_HTML,
-			artifactpb.File_TYPE_TEXT,
-			artifactpb.File_TYPE_MARKDOWN,
-			artifactpb.File_TYPE_CSV:
-			convertedFileType = artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_DOCUMENT
-			fileExtension = "pdf"
-
-		// Images → PNG
-		case artifactpb.File_TYPE_PNG,
-			artifactpb.File_TYPE_JPEG,
-			artifactpb.File_TYPE_WEBP,
-			artifactpb.File_TYPE_HEIC,
-			artifactpb.File_TYPE_HEIF,
-			artifactpb.File_TYPE_GIF,
-			artifactpb.File_TYPE_BMP,
-			artifactpb.File_TYPE_TIFF,
-			artifactpb.File_TYPE_AVIF:
-			convertedFileType = artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_IMAGE
-			fileExtension = "png"
-
-		// Audio → OGG
-		case artifactpb.File_TYPE_MP3,
-			artifactpb.File_TYPE_WAV,
-			artifactpb.File_TYPE_AAC,
-			artifactpb.File_TYPE_OGG,
-			artifactpb.File_TYPE_FLAC,
-			artifactpb.File_TYPE_AIFF,
-			artifactpb.File_TYPE_M4A,
-			artifactpb.File_TYPE_WMA,
-			artifactpb.File_TYPE_WEBM_AUDIO:
-			convertedFileType = artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_AUDIO
-			fileExtension = "ogg"
-
-		// Video → MP4
-		case artifactpb.File_TYPE_MP4,
-			artifactpb.File_TYPE_MPEG,
-			artifactpb.File_TYPE_MOV,
-			artifactpb.File_TYPE_AVI,
-			artifactpb.File_TYPE_FLV,
-			artifactpb.File_TYPE_WMV,
-			artifactpb.File_TYPE_MKV,
-			artifactpb.File_TYPE_WEBM_VIDEO:
-			convertedFileType = artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_VIDEO
-			fileExtension = "mp4"
-
-		default:
+		if convertedFileType == artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_UNSPECIFIED {
 			logger.Warn("unsupported file type for VIEW_STANDARD_FILE_TYPE",
 				zap.String("fileType", kbFile.FileType),
 				zap.String("fileUID", kbFile.UID.String()))
@@ -1133,7 +1078,7 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 		bucket := object.BucketFromDestination(kbFile.Destination)
 
 		// Get MIME type for the original file
-		contentType := fileTypeConvertToMime(fileProtoType)
+		contentType := filetype.FileTypeToMimeType(fileProtoType)
 
 		// Generate file URL for the original file
 		fileURL, err := getFileURL(
@@ -1901,95 +1846,6 @@ func getFileSize(base64String string) (int64, string) {
 	return int64(decodedSize), fmt.Sprintf("%.1f %cB", size, "KMGTPE"[exp])
 }
 
-func fileTypeConvertToMime(t artifactpb.File_Type) string {
-	switch t {
-	// Document types
-	case artifactpb.File_TYPE_PDF:
-		return "application/pdf"
-	case artifactpb.File_TYPE_MARKDOWN:
-		return "text/markdown"
-	case artifactpb.File_TYPE_TEXT:
-		return "text/plain"
-	case artifactpb.File_TYPE_HTML:
-		return "text/html"
-	case artifactpb.File_TYPE_CSV:
-		return "text/csv"
-	case artifactpb.File_TYPE_DOC:
-		return "application/msword"
-	case artifactpb.File_TYPE_DOCX:
-		return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-	case artifactpb.File_TYPE_PPT:
-		return "application/vnd.ms-powerpoint"
-	case artifactpb.File_TYPE_PPTX:
-		return "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-	case artifactpb.File_TYPE_XLS:
-		return "application/vnd.ms-excel"
-	case artifactpb.File_TYPE_XLSX:
-		return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-
-	// Image types
-	case artifactpb.File_TYPE_PNG:
-		return "image/png"
-	case artifactpb.File_TYPE_JPEG:
-		return "image/jpeg"
-	case artifactpb.File_TYPE_GIF:
-		return "image/gif"
-	case artifactpb.File_TYPE_WEBP:
-		return "image/webp"
-	case artifactpb.File_TYPE_BMP:
-		return "image/bmp"
-	case artifactpb.File_TYPE_TIFF:
-		return "image/tiff"
-	case artifactpb.File_TYPE_AVIF:
-		return "image/avif"
-	case artifactpb.File_TYPE_HEIC:
-		return "image/heic"
-	case artifactpb.File_TYPE_HEIF:
-		return "image/heif"
-
-	// Audio types
-	case artifactpb.File_TYPE_MP3:
-		return "audio/mpeg"
-	case artifactpb.File_TYPE_WAV:
-		return "audio/wav"
-	case artifactpb.File_TYPE_AAC:
-		return "audio/aac"
-	case artifactpb.File_TYPE_OGG:
-		return "audio/ogg"
-	case artifactpb.File_TYPE_FLAC:
-		return "audio/flac"
-	case artifactpb.File_TYPE_AIFF:
-		return "audio/aiff"
-	case artifactpb.File_TYPE_M4A:
-		return "audio/mp4"
-	case artifactpb.File_TYPE_WMA:
-		return "audio/x-ms-wma"
-	case artifactpb.File_TYPE_WEBM_AUDIO:
-		return "audio/webm"
-
-	// Video types
-	case artifactpb.File_TYPE_MP4:
-		return "video/mp4"
-	case artifactpb.File_TYPE_AVI:
-		return "video/x-msvideo"
-	case artifactpb.File_TYPE_MOV:
-		return "video/quicktime"
-	case artifactpb.File_TYPE_FLV:
-		return "video/x-flv"
-	case artifactpb.File_TYPE_WMV:
-		return "video/x-ms-wmv"
-	case artifactpb.File_TYPE_MKV:
-		return "video/x-matroska"
-	case artifactpb.File_TYPE_MPEG:
-		return "video/mpeg"
-	case artifactpb.File_TYPE_WEBM_VIDEO:
-		return "video/webm"
-
-	default:
-		return "application/octet-stream"
-	}
-}
-
 // detectWebMType inspects WebM file content to determine if it's audio-only or video
 // WebM files can contain audio-only or audio+video streams
 // Returns FILE_TYPE_WEBM_AUDIO for audio-only, FILE_TYPE_WEBM_VIDEO for video
@@ -2027,87 +1883,9 @@ func detectWebMType(base64Content string) artifactpb.File_Type {
 }
 
 func determineFileType(filename string) artifactpb.File_Type {
-	fileNameLower := strings.ToLower(filename)
-	if strings.HasSuffix(fileNameLower, ".pdf") {
-		return artifactpb.File_TYPE_PDF
-	} else if strings.HasSuffix(fileNameLower, ".md") {
-		return artifactpb.File_TYPE_MARKDOWN
-	} else if strings.HasSuffix(fileNameLower, ".txt") {
-		return artifactpb.File_TYPE_TEXT
-	} else if strings.HasSuffix(fileNameLower, ".doc") {
-		return artifactpb.File_TYPE_DOC
-	} else if strings.HasSuffix(fileNameLower, ".docx") {
-		return artifactpb.File_TYPE_DOCX
-	} else if strings.HasSuffix(fileNameLower, ".html") {
-		return artifactpb.File_TYPE_HTML
-	} else if strings.HasSuffix(fileNameLower, ".ppt") {
-		return artifactpb.File_TYPE_PPT
-	} else if strings.HasSuffix(fileNameLower, ".pptx") {
-		return artifactpb.File_TYPE_PPTX
-	} else if strings.HasSuffix(fileNameLower, ".xlsx") {
-		return artifactpb.File_TYPE_XLSX
-	} else if strings.HasSuffix(fileNameLower, ".xls") {
-		return artifactpb.File_TYPE_XLS
-	} else if strings.HasSuffix(fileNameLower, ".csv") {
-		return artifactpb.File_TYPE_CSV
-	} else if strings.HasSuffix(fileNameLower, ".png") {
-		return artifactpb.File_TYPE_PNG
-	} else if strings.HasSuffix(fileNameLower, ".jpeg") {
-		return artifactpb.File_TYPE_JPEG
-	} else if strings.HasSuffix(fileNameLower, ".jpg") {
-		return artifactpb.File_TYPE_JPEG
-	} else if strings.HasSuffix(fileNameLower, ".gif") {
-		return artifactpb.File_TYPE_GIF
-	} else if strings.HasSuffix(fileNameLower, ".webp") {
-		return artifactpb.File_TYPE_WEBP
-	} else if strings.HasSuffix(fileNameLower, ".tiff") {
-		return artifactpb.File_TYPE_TIFF
-	} else if strings.HasSuffix(fileNameLower, ".tif") {
-		return artifactpb.File_TYPE_TIFF
-	} else if strings.HasSuffix(fileNameLower, ".heic") {
-		return artifactpb.File_TYPE_HEIC
-	} else if strings.HasSuffix(fileNameLower, ".heif") {
-		return artifactpb.File_TYPE_HEIF
-	} else if strings.HasSuffix(fileNameLower, ".avif") {
-		return artifactpb.File_TYPE_AVIF
-	} else if strings.HasSuffix(fileNameLower, ".bmp") {
-		return artifactpb.File_TYPE_BMP
-	} else if strings.HasSuffix(fileNameLower, ".mp3") {
-		return artifactpb.File_TYPE_MP3
-	} else if strings.HasSuffix(fileNameLower, ".wav") {
-		return artifactpb.File_TYPE_WAV
-	} else if strings.HasSuffix(fileNameLower, ".aac") {
-		return artifactpb.File_TYPE_AAC
-	} else if strings.HasSuffix(fileNameLower, ".ogg") {
-		return artifactpb.File_TYPE_OGG
-	} else if strings.HasSuffix(fileNameLower, ".flac") {
-		return artifactpb.File_TYPE_FLAC
-	} else if strings.HasSuffix(fileNameLower, ".aiff") {
-		return artifactpb.File_TYPE_AIFF
-	} else if strings.HasSuffix(fileNameLower, ".m4a") {
-		return artifactpb.File_TYPE_M4A
-	} else if strings.HasSuffix(fileNameLower, ".wma") {
-		return artifactpb.File_TYPE_WMA
-	} else if strings.HasSuffix(fileNameLower, ".mp4") {
-		return artifactpb.File_TYPE_MP4
-	} else if strings.HasSuffix(fileNameLower, ".avi") {
-		return artifactpb.File_TYPE_AVI
-	} else if strings.HasSuffix(fileNameLower, ".mov") {
-		return artifactpb.File_TYPE_MOV
-	} else if strings.HasSuffix(fileNameLower, ".flv") {
-		return artifactpb.File_TYPE_FLV
-	} else if strings.HasSuffix(fileNameLower, ".webm") {
-		// WebM type will be determined by content inspection
-		// Return a placeholder that will be replaced by detectWebMType
-		return artifactpb.File_TYPE_WEBM_VIDEO
-	} else if strings.HasSuffix(fileNameLower, ".wmv") {
-		return artifactpb.File_TYPE_WMV
-	} else if strings.HasSuffix(fileNameLower, ".mkv") {
-		return artifactpb.File_TYPE_MKV
-	} else if strings.HasSuffix(fileNameLower, ".mpeg") {
-		return artifactpb.File_TYPE_MPEG
-	}
-	return artifactpb.File_TYPE_UNSPECIFIED
+	// Use centralized file type detection from x/file package
+	// Pass empty contentType since this function only has filename
+	return filetype.DetermineFileType("", filename)
 }
 
 func getPositionUnit(fileType artifactpb.File_Type) artifactpb.File_Position_Unit {
@@ -2174,7 +1952,7 @@ func (ph *PublicHandler) uploadBase64FileToMinIO(ctx context.Context, nsID strin
 	}
 	objectUID := uuid.FromStringOrNil(response.Object.Uid)
 	destination := object.GetBlobObjectPath(nsUID, objectUID)
-	err = ph.service.Repository().GetMinIOStorage().UploadBase64File(ctx, object.BlobBucketName, destination, content, fileTypeConvertToMime(fileType))
+	err = ph.service.Repository().GetMinIOStorage().UploadBase64File(ctx, object.BlobBucketName, destination, content, filetype.FileTypeToMimeType(fileType))
 	if err != nil {
 		return uuid.Nil, errorsx.AddMessage(
 			fmt.Errorf("failed to upload file to MinIO: %w", err),

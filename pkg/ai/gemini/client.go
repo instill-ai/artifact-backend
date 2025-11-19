@@ -10,6 +10,7 @@ import (
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	errorsx "github.com/instill-ai/x/errors"
+	filetype "github.com/instill-ai/x/file"
 )
 
 // Client implements the ai.Client interface for Gemini
@@ -59,7 +60,7 @@ func (c *Client) SupportsFileType(fileType artifactpb.File_Type) bool {
 // Uses the Gemini CountTokens API: https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/get-token-count
 func (c *Client) CountTokens(ctx context.Context, content []byte, fileType artifactpb.File_Type, filename string) (int, any, error) {
 	// Get MIME type for the file
-	mimeType := ai.FileTypeToMIME(fileType)
+	mimeType := filetype.FileTypeToMimeType(fileType)
 
 	// Build file part from content (using File API for large files or inline for small files)
 	filePart, uploadedFileName, err := c.createContentPartWithFileAPI(ctx, content, mimeType)

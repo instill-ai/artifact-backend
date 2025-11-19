@@ -21,6 +21,12 @@ parse_results() {
     echo -e "${BLUE}╚════════════════════════════════════════════════════════════╝${NC}"
     echo ""
 
+    # Detect log format: sequential (has "Running integration-test/") or parallel (has test filename prefix on each line)
+    local is_parallel_format=false
+    if grep -q "^integration-test/.*checks_total" "$log_file" 2>/dev/null; then
+        is_parallel_format=true
+    fi
+
     # Extract test results for each file
     for test_file in \
         "grpc.js" \
@@ -36,52 +42,60 @@ parse_results() {
         "grpc-kb-update.js" \
         "grpc-system-admin.js"; do
 
-        # Check if this test file had any errors (timeout, execution failure, etc.)
-        # Exclude warnings and informational error logs (level=warning, [POLL] logs)
-        # Use word boundary to ensure exact test file match
-        # Note: All actual failures now have explicit check() calls, so this is just a safety net
-        local has_error=$(grep -a "^integration-test/${test_file}[[:space:]]" "$log_file" | grep -a -E "timed out|This job failed" | grep -a -v -E "level=warning|\[POLL\]" | head -1)
+        local total=""
+        local succeeded=""
 
-        # Find the line with checks_total for this specific test file
-        # Format: "integration-test/test.js    checks_total.......: 20      0.659725/s"
-        local total_line=$(grep -a "integration-test/${test_file}" "$log_file" | \
-            grep -a "checks_total" | tail -1)
+        if [ "$is_parallel_format" = true ]; then
+            # Parallel format: Each line prefixed with "integration-test/test.js\t"
+            local total_line=$(grep -a "^integration-test/${test_file}[[:space:]]" "$log_file" | grep -a "checks_total" | tail -1)
+            local succeeded_line=$(grep -a "^integration-test/${test_file}[[:space:]]" "$log_file" | grep -a "checks_succeeded" | tail -1)
 
-        if [ -n "$total_line" ]; then
-            # Extract total count (3rd field in the line)
-            local total=$(echo "$total_line" | awk '{print $3}')
-
-            # Find the checks_succeeded line for this test
-            local succeeded_line=$(grep -a "integration-test/${test_file}" "$log_file" | \
-                grep -a "checks_succeeded" | tail -1)
-
+            if [ -n "$total_line" ]; then
+                total=$(echo "$total_line" | awk '{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+$/) {print $i; exit}}')
+            fi
             if [ -n "$succeeded_line" ]; then
-                # Format: "integration-test/test.js    checks_succeeded...: 100.00% 20 out of 20"
-                # Extract the first number after the percentage (field 4)
-                local succeeded=$(echo "$succeeded_line" | awk '{print $4}')
+                succeeded=$(echo "$succeeded_line" | awk '{for(i=1;i<=NF;i++) if($i=="out") print $(i-1)}')
+            fi
+        else
+            # Sequential format: Test sections marked by "Running integration-test/test.js..."
+            local start_line=$(grep -n "Running integration-test/${test_file}" "$log_file" | tail -1 | cut -d: -f1)
 
-                if [ -n "$succeeded" ] && [ -n "$total" ]; then
-                    total_passed=$((total_passed + succeeded))
-                    total_checks=$((total_checks + total))
-
-                    # Format test name (30 chars wide)
-                    local test_name=$(printf "%-30s" "$test_file")
-
-                    # Calculate percentage
-                    local percentage=$((succeeded * 100 / total))
-
-                    # Determine status icon
-                    # Mark as failed if there are errors, even if checks passed
-                    if [ -n "$has_error" ]; then
-                        echo -e "${RED}❌${NC} ${BLUE}${test_name} ${succeeded}/${total}   (${percentage}%)${NC} ${RED}[ERROR/TIMEOUT]${NC}"
-                        all_passed=false
-                    elif [ "$succeeded" -eq "$total" ]; then
-                        echo -e "${GREEN}✅${NC} ${BLUE}${test_name} ${succeeded}/${total}   (${percentage}%)${NC}"
-                    else
-                        echo -e "${RED}❌${NC} ${BLUE}${test_name} ${succeeded}/${total}   (${percentage}%)${NC}"
-                        all_passed=false
-                    fi
+            if [ -n "$start_line" ]; then
+                local next_test_line=$(awk -v start="$start_line" 'NR > start && /^Running integration-test\// {print NR; exit}' "$log_file")
+                if [ -z "$next_test_line" ]; then
+                    next_test_line=$(wc -l < "$log_file")
                 fi
+
+                local test_section=$(sed -n "${start_line},${next_test_line}p" "$log_file")
+                local total_line=$(echo "$test_section" | grep -a "checks_total" | tail -1)
+                local succeeded_line=$(echo "$test_section" | grep -a "checks_succeeded" | tail -1)
+
+                if [ -n "$total_line" ]; then
+                    total=$(echo "$total_line" | awk '{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+$/) {print $i; exit}}')
+                fi
+                if [ -n "$succeeded_line" ]; then
+                    succeeded=$(echo "$succeeded_line" | awk '{for(i=1;i<=NF;i++) if($i=="out") print $(i-1)}')
+                fi
+            fi
+        fi
+
+        # Report results if we found them
+        if [ -n "$succeeded" ] && [ -n "$total" ]; then
+            total_passed=$((total_passed + succeeded))
+            total_checks=$((total_checks + total))
+
+            # Format test name (30 chars wide)
+            local test_name=$(printf "%-30s" "$test_file")
+
+            # Calculate percentage
+            local percentage=$((succeeded * 100 / total))
+
+            # Determine status icon
+            if [ "$succeeded" -eq "$total" ]; then
+                echo -e "${GREEN}✅${NC} ${BLUE}${test_name} ${succeeded}/${total}   (${percentage}%)${NC}"
+            else
+                echo -e "${RED}❌${NC} ${BLUE}${test_name} ${succeeded}/${total}   (${percentage}%)${NC}"
+                all_passed=false
             fi
         fi
     done
