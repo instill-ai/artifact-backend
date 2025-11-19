@@ -80,6 +80,7 @@ func (s *service) SearchChunks(ctx context.Context, ownerUID types.OwnerUIDType,
 		FileUIDs:     fileUIDs,
 		ContentType:  string(fileType),
 		ChunkType:    string(chunkType),
+		Tags:         req.GetTags(),
 	}
 
 	// Check file UID metadata availability
