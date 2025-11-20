@@ -375,8 +375,9 @@ func (r *repository) CreateKnowledgeBaseFile(ctx context.Context, kb KnowledgeBa
 	// 1. Transaction locks KB row
 	// 2. DeleteKB blocks waiting for lock
 	// 3. File created
-	// 4. Transaction commits, releases lock
-	// 5. DeleteKB proceeds and CASCADE deletes file ✓
+	// 4. KB usage incremented (atomic with file creation)
+	// 5. Transaction commits, releases lock
+	// 6. DeleteKB proceeds and CASCADE deletes file ✓
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// Lock the KB row with SELECT ... FOR UPDATE to prevent concurrent deletion
 		var existingKB KnowledgeBaseModel
@@ -391,6 +392,14 @@ func (r *repository) CreateKnowledgeBaseFile(ctx context.Context, kb KnowledgeBa
 		// Create the knowledge base file
 		if err := tx.Create(&kb).Error; err != nil {
 			return err
+		}
+
+		// Increase knowledge base usage in same transaction
+		// This prevents race conditions and makes the operation atomic with file creation
+		where := fmt.Sprintf("%v = ?", KnowledgeBaseColumn.UID)
+		expr := fmt.Sprintf("%v + ?", KnowledgeBaseColumn.Usage)
+		if err := tx.Model(&KnowledgeBaseModel{}).Where(where, kb.KBUID.String()).Update(KnowledgeBaseColumn.Usage, gorm.Expr(expr, int(kb.Size))).Error; err != nil {
+			return fmt.Errorf("increasing knowledge base usage: %w", err)
 		}
 
 		// Call the external service
