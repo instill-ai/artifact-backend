@@ -903,25 +903,14 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 				}
 			}
 
-			// Generate GCS signed URL using GCS storage client
-			signedURL, err := gcsStorage.GetPresignedURLForDownload(
-				ctx,
-				gcsBucket,
-				gcsObjectPath,
-				filename,
-				contentType,
-				15*time.Minute,
-			)
-			if err != nil {
-				return "", errorsx.AddMessage(
-					fmt.Errorf("failed to generate GCS signed URL: %w", err),
-					"Unable to generate GCS access URL for file. Please try again.",
-				)
-			}
+			// Return native gs:// URI for VertexAI cache creation
+			// VertexAI requires gs:// URIs (not signed HTTPS URLs) to access files with its own credentials
+			gcsURI := fmt.Sprintf("gs://%s/%s", gcsBucket, gcsObjectPath)
 
-			logger.Info("GCS signed URL generated",
+			logger.Info("GCS URI generated for VertexAI access",
+				zap.String("gcsURI", gcsURI),
 				zap.String("path", gcsObjectPath))
-			return signedURL.String(), nil
+			return gcsURI, nil
 		}
 
 		// Use MinIO storage (default)
