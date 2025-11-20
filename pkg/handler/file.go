@@ -291,21 +291,13 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 	}
 
 	// create knowledge base file in database
+	// Note: CreateKnowledgeBaseFile now atomically handles both file creation
+	// and knowledge base usage increment in a single transaction
 	res, err := ph.service.Repository().CreateKnowledgeBaseFile(ctx, kbFile, nil)
 	if err != nil {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("creating knowledge base file: %w", err),
 			"Unable to add file to knowledge base. Please try again.",
-		)
-	}
-
-	// increase knowledge base usage. need to increase after the file is created.
-	// TODO: increase the usage in transaction with creating the file.
-	err = ph.service.Repository().IncreaseKnowledgeBaseUsage(ctx, nil, kb.UID.String(), int(kbFile.Size))
-	if err != nil {
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("increasing knowledge base usage: %w", err),
-			"File uploaded but knowledge base statistics update failed. The file is available for use.",
 		)
 	}
 
@@ -417,15 +409,8 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 				zap.Int("attempts", maxRetries))
 			// Log error but don't fail the upload - production file upload succeeded
 		} else {
-			// Increase target KB usage
-			err = ph.service.Repository().IncreaseKnowledgeBaseUsage(ctx, nil, dualTarget.TargetKB.UID.String(), int(targetFile.Size))
-			if err != nil {
-				logger.Warn("Failed to increase target KB usage",
-					zap.Error(err),
-					zap.String("phase", dualTarget.Phase))
-				// Non-fatal, continue with processing
-			}
-
+			// Target KB usage is automatically incremented by CreateKnowledgeBaseFile
+			// in the same transaction as file creation (atomic operation)
 			logger.Info("Created target file record for dual processing",
 				zap.String("prodFileUID", res.UID.String()),
 				zap.String("targetFileUID", targetFileRes.UID.String()),
