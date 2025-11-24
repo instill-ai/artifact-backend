@@ -51,11 +51,6 @@ func (c *Client) GetEmbeddingDimensionality() int32 {
 	return DefaultEmbeddingDimension
 }
 
-// SupportsFileType returns true if Gemini can handle the file type
-func (c *Client) SupportsFileType(fileType artifactpb.File_Type) bool {
-	return ai.SupportsFileType(fileType)
-}
-
 // CountTokens counts the total tokens for the given content without processing it
 // Uses the Gemini CountTokens API: https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/get-token-count
 func (c *Client) CountTokens(ctx context.Context, content []byte, fileType artifactpb.File_Type, filename string) (int, any, error) {

@@ -129,9 +129,6 @@ type Client interface {
 	// For Gemini: always returns 3072 (full dimensionality)
 	GetEmbeddingDimensionality() int32
 
-	// SupportsFileType returns true if this client can understand and extract content from this file type
-	SupportsFileType(fileType artifactpb.File_Type) bool
-
 	// CountTokens counts the total tokens for the given content without actually processing it
 	// This is useful for determining whether to use caching or direct processing
 	// Returns the total token count and any usage metadata from the AI client

@@ -1000,7 +1000,7 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 		zap.String("filename", param.Filename))
 
 	// Check if file needs conversion
-	needsConversion, targetFormat, _ := filetype.NeedsFileTypeConversion(param.FileType)
+	needsConversion, targetFormat, _ := filetype.NeedFileTypeConversion(param.FileType)
 	if !needsConversion {
 		w.log.Info("StandardizeFileTypeActivity: File type is AI-native, no standardization needed",
 			zap.String("fileType", param.FileType.String()))
@@ -1315,7 +1315,7 @@ func (w *Worker) CacheFileContextActivity(ctx context.Context, param *CacheFileC
 	}
 
 	// Check if file type is supported for caching
-	if !w.aiClient.SupportsFileType(param.FileType) {
+	if !filetype.IsFileTypeSupported(param.FileType) {
 		w.log.Info("CacheFileContextActivity: File type not supported for caching",
 			zap.String("fileType", param.FileType.String()))
 		return &CacheFileContextActivityResult{
@@ -1628,30 +1628,6 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 					"AI client is required for content conversion. Please configure Gemini API key in the server configuration.",
 					processContentActivityError,
 					fmt.Errorf("AI client not configured"),
-				)
-			}
-
-			// Check if AI client supports this file type
-			clientName := "unknown"
-			if w.aiClient != nil {
-				clientName = w.aiClient.Name()
-			}
-
-			supportsFileType := w.aiClient.SupportsFileType(param.FileType)
-			logger.Info("Checking AI client file type support",
-				zap.String("fileType", param.FileType.String()),
-				zap.String("clientName", clientName),
-				zap.Bool("supported", supportsFileType))
-
-			if !supportsFileType {
-				logger.Error("File type not supported by AI client",
-					zap.String("fileType", param.FileType.String()),
-					zap.String("clientName", clientName),
-					zap.String("hint", "File should have been converted by StandardizeFileTypeActivity"))
-				return nil, temporal.NewApplicationErrorWithCause(
-					fmt.Sprintf("File type %s is not supported. The file may need to be converted to a supported format first.", param.FileType.String()),
-					processContentActivityError,
-					fmt.Errorf("unsupported file type: %s", param.FileType.String()),
 				)
 			}
 
@@ -1984,7 +1960,7 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 		fileType := param.FileType
 
 		// Try AI client with cache first (if available)
-		if param.CacheName != "" && w.aiClient.SupportsFileType(fileType) {
+		if param.CacheName != "" {
 			logger.Info("Attempting AI summarization with cache",
 				zap.String("cacheName", param.CacheName),
 				zap.String("client", w.aiClient.Name()))
@@ -2002,7 +1978,7 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 		}
 
 		// Try AI client without cache if cached attempt failed or wasn't available
-		if summary == "" && w.aiClient.SupportsFileType(fileType) {
+		if summary == "" {
 			logger.Info("Attempting AI summarization without cache",
 				zap.String("fileType", fileType.String()),
 				zap.String("client", w.aiClient.Name()))
