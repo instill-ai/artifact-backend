@@ -346,8 +346,8 @@ github.com/instill-ai/protogen-go v0.3.3-alpha.0.20251119183858-b13030b21834 h1:
 github.com/instill-ai/protogen-go v0.3.3-alpha.0.20251119183858-b13030b21834/go.mod h1:bCnBosofpaUxKBuTTJM3/I3thAK37kvfBnKByjnLsl4=
 github.com/instill-ai/usage-client v0.4.0 h1:xf1hAlO4a8lZwZzz9bprZOJqU3ghIcIsavUUB7UURyg=
 github.com/instill-ai/usage-client v0.4.0/go.mod h1:zZ9LRoXps2u63ARYPAbR2YvqTib3dWJLObZn+9YqhF0=
-github.com/instill-ai/x v0.10.1-alpha.0.20251119172102-7db770caec14 h1:Bo8syFKZzf9U4kTbUMbbaPn9pnNxpHxqPbeZW17aXTk=
-github.com/instill-ai/x v0.10.1-alpha.0.20251119172102-7db770caec14/go.mod h1:hv7MqODkKt4EW2M700ymNvHgXOFWxH9eXp2+acUf0vI=
+github.com/instill-ai/x v0.10.1-alpha.0.20251124025741-686e0983cf51 h1:2CsfgnA7ghjdjCYl/whUrUh9sdUFCKKHPEo8ynk1cL4=
+github.com/instill-ai/x v0.10.1-alpha.0.20251124025741-686e0983cf51/go.mod h1:hv7MqODkKt4EW2M700ymNvHgXOFWxH9eXp2+acUf0vI=
 github.com/iris-contrib/blackfriday v2.0.0+incompatible/go.mod h1:UzZ2bDEoaSGPbkg6SAB4att1aAwTmVIx/5gCVqeyUdI=
 github.com/iris-contrib/go.uuid v2.0.0+incompatible/go.mod h1:iz2lgM/1UnEf1kP0L/+fafWORmlnuysV2EMP8MW+qe0=
 github.com/iris-contrib/jade v1.1.3/go.mod h1:H/geBymxJhShH5kecoiOCSssPX7QWYH7UaeZTSWddIk=

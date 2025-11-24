@@ -246,7 +246,6 @@ func TestCacheFileContextActivity_UnsupportedFileType(t *testing.T) {
 	logger := zap.NewNop()
 
 	mockAIClient := mock.NewClientMock(mc)
-	mockAIClient.SupportsFileTypeMock.Return(false)
 
 	w := &Worker{repository: mockRepositoryMock, log: logger, aiClient: mockAIClient}
 
@@ -283,7 +282,6 @@ func TestCacheFileContextActivity_Success(t *testing.T) {
 	now := time.Now()
 
 	mockAIClient := mock.NewClientMock(mc)
-	mockAIClient.SupportsFileTypeMock.Return(true)
 	mockAIClient.CreateCacheMock.Return(&ai.CacheResult{
 		CacheName:  cacheName,
 		Model:      "gemini-2.0-flash",

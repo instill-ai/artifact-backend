@@ -10,6 +10,7 @@ import (
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	errorsx "github.com/instill-ai/x/errors"
+	filetype "github.com/instill-ai/x/file"
 )
 
 func TestNewClient(t *testing.T) {
@@ -43,45 +44,43 @@ func TestClient_Name(t *testing.T) {
 	c.Assert(name, qt.Equals, "gemini")
 }
 
-func TestClient_SupportsFileType(t *testing.T) {
+func TestClient_IsFileTypeSupported(t *testing.T) {
 	c := qt.New(t)
 
-	client := &Client{}
-
 	t.Run("supports PDF", func(t *testing.T) {
-		result := client.SupportsFileType(artifactpb.File_TYPE_PDF)
+		result := filetype.IsFileTypeSupported(artifactpb.File_TYPE_PDF)
 		c.Assert(result, qt.IsTrue)
 	})
 
 	t.Run("supports DOCX", func(t *testing.T) {
-		result := client.SupportsFileType(artifactpb.File_TYPE_DOCX)
+		result := filetype.IsFileTypeSupported(artifactpb.File_TYPE_DOCX)
 		c.Assert(result, qt.IsTrue)
 	})
 
 	t.Run("supports images", func(t *testing.T) {
-		c.Assert(client.SupportsFileType(artifactpb.File_TYPE_PNG), qt.IsTrue)
-		c.Assert(client.SupportsFileType(artifactpb.File_TYPE_JPEG), qt.IsTrue)
-		c.Assert(client.SupportsFileType(artifactpb.File_TYPE_WEBP), qt.IsTrue)
-		c.Assert(client.SupportsFileType(artifactpb.File_TYPE_GIF), qt.IsTrue)
-		c.Assert(client.SupportsFileType(artifactpb.File_TYPE_AVIF), qt.IsTrue)
+		c.Assert(filetype.IsFileTypeSupported(artifactpb.File_TYPE_PNG), qt.IsTrue)
+		c.Assert(filetype.IsFileTypeSupported(artifactpb.File_TYPE_JPEG), qt.IsTrue)
+		c.Assert(filetype.IsFileTypeSupported(artifactpb.File_TYPE_WEBP), qt.IsTrue)
+		c.Assert(filetype.IsFileTypeSupported(artifactpb.File_TYPE_GIF), qt.IsTrue)
+		c.Assert(filetype.IsFileTypeSupported(artifactpb.File_TYPE_AVIF), qt.IsTrue)
 	})
 
 	t.Run("supports audio", func(t *testing.T) {
-		c.Assert(client.SupportsFileType(artifactpb.File_TYPE_MP3), qt.IsTrue)
-		c.Assert(client.SupportsFileType(artifactpb.File_TYPE_WAV), qt.IsTrue)
-		c.Assert(client.SupportsFileType(artifactpb.File_TYPE_AAC), qt.IsTrue)
-		c.Assert(client.SupportsFileType(artifactpb.File_TYPE_FLAC), qt.IsTrue)
+		c.Assert(filetype.IsFileTypeSupported(artifactpb.File_TYPE_MP3), qt.IsTrue)
+		c.Assert(filetype.IsFileTypeSupported(artifactpb.File_TYPE_WAV), qt.IsTrue)
+		c.Assert(filetype.IsFileTypeSupported(artifactpb.File_TYPE_AAC), qt.IsTrue)
+		c.Assert(filetype.IsFileTypeSupported(artifactpb.File_TYPE_FLAC), qt.IsTrue)
 	})
 
 	t.Run("supports video", func(t *testing.T) {
-		c.Assert(client.SupportsFileType(artifactpb.File_TYPE_MP4), qt.IsTrue)
-		c.Assert(client.SupportsFileType(artifactpb.File_TYPE_MOV), qt.IsTrue)
-		c.Assert(client.SupportsFileType(artifactpb.File_TYPE_WEBM_VIDEO), qt.IsTrue)
-		c.Assert(client.SupportsFileType(artifactpb.File_TYPE_AVI), qt.IsTrue)
+		c.Assert(filetype.IsFileTypeSupported(artifactpb.File_TYPE_MP4), qt.IsTrue)
+		c.Assert(filetype.IsFileTypeSupported(artifactpb.File_TYPE_MOV), qt.IsTrue)
+		c.Assert(filetype.IsFileTypeSupported(artifactpb.File_TYPE_WEBM_VIDEO), qt.IsTrue)
+		c.Assert(filetype.IsFileTypeSupported(artifactpb.File_TYPE_AVI), qt.IsTrue)
 	})
 
 	t.Run("unsupported file type", func(t *testing.T) {
-		result := client.SupportsFileType(artifactpb.File_TYPE_UNSPECIFIED)
+		result := filetype.IsFileTypeSupported(artifactpb.File_TYPE_UNSPECIFIED)
 		c.Assert(result, qt.IsFalse)
 	})
 }
@@ -111,11 +110,6 @@ func TestClient_MethodSignatures(t *testing.T) {
 	t.Run("Name returns string", func(t *testing.T) {
 		name := client.Name()
 		c.Assert(name, qt.Not(qt.Equals), "")
-	})
-
-	t.Run("SupportsFileType accepts FileType", func(t *testing.T) {
-		// Just verify the method can be called
-		_ = client.SupportsFileType(artifactpb.File_TYPE_PDF)
 	})
 
 	t.Run("Close returns error", func(t *testing.T) {

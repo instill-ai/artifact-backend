@@ -15,6 +15,7 @@ import (
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	errorsx "github.com/instill-ai/x/errors"
+	filetype "github.com/instill-ai/x/file"
 	logx "github.com/instill-ai/x/log"
 )
 
@@ -59,8 +60,8 @@ func (s *service) GetOrCreateFileCache(
 		)
 	}
 
-	// Check if file type is supported by AI client
-	if !s.aiClient.SupportsFileType(fileType) {
+	// Check if file type is supported by AI processing
+	if !filetype.IsFileTypeSupported(fileType) {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("file type not supported for caching: %s", fileType.String()),
 			fmt.Sprintf("File type %s is not supported for caching. Only documents, images, audio, and video files can be cached.", fileType.String()),

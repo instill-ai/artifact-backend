@@ -50,13 +50,6 @@ func (c *Client) GetEmbeddingDimensionality() int32 {
 	return DefaultEmbeddingDimension
 }
 
-// SupportsFileType returns false - OpenAI client doesn't process files
-// This client is for legacy embedding generation only (1536-dim vectors)
-// Use Gemini client for content conversion and file processing
-func (c *Client) SupportsFileType(fileType artifactpb.File_Type) bool {
-	return false // OpenAI client doesn't process files, only generates embeddings
-}
-
 // CountTokens is not fully supported by OpenAI client for multimodal content
 // OpenAI only supports text tokenization via tiktoken: https://github.com/openai/tiktoken
 // For multimodal files (images, audio, video, documents), this returns an error

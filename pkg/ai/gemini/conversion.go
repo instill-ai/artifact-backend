@@ -203,7 +203,7 @@ func (c *Client) createContentPartWithFileAPI(ctx context.Context, content []byt
 
 // createContentPart creates a genai.Part from the input content using inline data (for testing and small files)
 func (c *Client) createContentPart(content []byte, contentType string) (*genai.Part, error) {
-	// ContentType should always be set by the caller (via ai.FileTypeToMIME)
+	// ContentType should always be set by the caller (via filetype.FileTypeToMimeType)
 	if contentType == "" {
 		err := errorsx.ErrInvalidArgument
 		return nil, errorsx.AddMessage(err, "Unsupported file type. Please upload a supported file format.")

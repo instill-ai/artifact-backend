@@ -149,20 +149,6 @@ func (c *compositeClient) GetEmbeddingDimensionality() int32 {
 	return c.defaultClient.GetEmbeddingDimensionality()
 }
 
-// SupportsFileType checks if ANY of the available clients supports the file type
-// This is important for composite clients where OpenAI (embedding-only) might be default
-// but Gemini/VertexAI (which support file processing) are also available
-func (c *compositeClient) SupportsFileType(fileType artifactpb.File_Type) bool {
-	// Check all available clients, not just the default
-	// This allows file processing to work even when OpenAI is the default for embeddings
-	for _, client := range c.clients {
-		if client != nil && client.SupportsFileType(fileType) {
-			return true
-		}
-	}
-	return false
-}
-
 // Close releases all client resources
 func (c *compositeClient) Close() error {
 	var errors []error

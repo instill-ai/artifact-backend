@@ -684,6 +684,7 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 			ObjectUid:          objectUID.String(),
 			DownloadUrl:        downloadURL,
 			ConvertingPipeline: kbFile.ConvertingPipeline(),
+			Tags:               []string(kbFile.Tags),
 		}
 
 		// Include status message (error or success message)
