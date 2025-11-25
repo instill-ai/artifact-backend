@@ -52,9 +52,7 @@ import (
 //    - SaveTextChunksActivity - Persists text chunks to database and MinIO storage
 //      Content chunks reference content converted_file UID
 //      Summary chunks reference summary converted_file UID (separate source_uid)
-//    - (GetChunksForEmbeddingActivity - in embed_activity.go)
-//    - (EmbedTextsActivity - in embed_activity.go)
-//    - (SaveEmbeddingsWorkflow - in embed_workflow.go)
+//    - (EmbedAndSaveChunksActivity - in embed_activity.go, combined: queries chunks, embeds, saves)
 //
 // 5. Metadata & Cleanup:
 //    - UpdateConversionMetadataActivity - Updates file conversion metadata

@@ -639,8 +639,8 @@ func (w *Worker) SoftDeleteKBRecordActivity(ctx context.Context, param *SoftDele
 // CRITICAL: This checks BOTH database file status AND active Temporal workflows
 // to prevent race conditions where:
 // 1. File status is optimistically updated to COMPLETED in DB
-// 2. But SaveEmbeddingsWorkflow (child workflow) is still running/retrying
-// 3. Cleanup drops collection while SaveEmbeddingsWorkflow tries to flush
+// 2. But embedding activities are still running/retrying
+// 3. Cleanup drops collection while embedding flush activity runs
 func (w *Worker) GetInProgressFileCountActivity(ctx context.Context, param *GetInProgressFileCountActivityParam) (int64, error) {
 	w.log.Info("GetInProgressFileCountActivity: Checking for in-progress files and workflows",
 		zap.String("kbUID", param.KBUID.String()))
@@ -666,7 +666,7 @@ func (w *Worker) GetInProgressFileCountActivity(ctx context.Context, param *GetI
 	}
 
 	// STEP 2: Check for active Temporal workflows related to this KB
-	// This catches child workflows (SaveEmbeddingsWorkflow) that may still be running
+	// This catches ProcessFileWorkflow that may still be running
 	// even after the parent workflow updated the file status to COMPLETED
 	activeWorkflowCount := w.getActiveWorkflowCount(ctx, param.KBUID)
 
@@ -682,7 +682,7 @@ func (w *Worker) GetInProgressFileCountActivity(ctx context.Context, param *GetI
 }
 
 // getActiveWorkflowCount queries Temporal for running workflows related to this KB
-// Returns the count of ProcessFileWorkflow and SaveEmbeddingsWorkflow instances
+// Returns the count of ProcessFileWorkflow instances
 func (w *Worker) getActiveWorkflowCount(ctx context.Context, kbUID types.KBUIDType) int64 {
 	// Get the KB first to retrieve owner information
 	kb, err := w.repository.GetKnowledgeBaseByUID(ctx, kbUID)
@@ -712,14 +712,14 @@ func (w *Worker) getActiveWorkflowCount(ctx context.Context, kbUID types.KBUIDTy
 
 	activeCount := int64(0)
 
-	// Check for each file's SaveEmbeddingsWorkflow
-	// This is the most critical workflow to check since it's the one that flushes collections
+	// Check for each file's ProcessFileWorkflow
+	// Embedding storage is now done inline in ProcessFileWorkflow (no separate child workflow)
 	for _, file := range files.Files {
-		// SaveEmbeddingsWorkflow ID format: "save-embeddings-{fileUID}"
-		saveEmbeddingsWorkflowID := fmt.Sprintf("save-embeddings-%s", file.UID.String())
-		if w.isWorkflowRunning(ctx, saveEmbeddingsWorkflowID) {
-			w.log.Info("Found active SaveEmbeddingsWorkflow",
-				zap.String("workflowID", saveEmbeddingsWorkflowID),
+		// ProcessFileWorkflow ID format: "process-file-{fileUID}"
+		processFileWorkflowID := fmt.Sprintf("process-file-%s", file.UID.String())
+		if w.isWorkflowRunning(ctx, processFileWorkflowID) {
+			w.log.Info("Found active ProcessFileWorkflow",
+				zap.String("workflowID", processFileWorkflowID),
 				zap.String("fileUID", file.UID.String()))
 			activeCount++
 		}

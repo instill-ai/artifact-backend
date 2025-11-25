@@ -637,7 +637,7 @@ func (w *Worker) SynchronizeKBActivity(ctx context.Context, param *SynchronizeKB
 
 	// CRITICAL: Poll database to ensure all async workflow transactions are fully visible
 	// ProcessFileWorkflow contains multiple async operations that continue after file status = COMPLETED:
-	// 1. SaveEmbeddingsWorkflow (child workflow) - saves embeddings to DB/Milvus
+	// 1. Embedding storage activities - saves embeddings to DB/Milvus
 	// 2. ProcessSummaryActivity - creates summary converted_file records
 	// 3. ProcessContentActivity - creates content converted_file records
 	//

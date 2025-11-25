@@ -39,7 +39,7 @@ type KnowledgeBaseFile interface {
 	// GetKnowledgeBaseFilesByFileUIDs returns the knowledge base files by file UIDs
 	GetKnowledgeBaseFilesByFileUIDs(ctx context.Context, fileUIDs []types.FileUIDType, columns ...string) ([]KnowledgeBaseFileModel, error)
 	// GetKnowledgeBaseFilesByFileUIDsIncludingDeleted returns files by UIDs, INCLUDING soft-deleted files
-	// Used for SaveEmbeddingsWorkflow to generate embeddings even if file was deleted during processing
+	// Used for embedding activities to generate embeddings even if file was deleted during processing
 	GetKnowledgeBaseFilesByFileUIDsIncludingDeleted(ctx context.Context, fileUIDs []types.FileUIDType, columns ...string) ([]KnowledgeBaseFileModel, error)
 	// GetKnowledgeBaseFilesByName retrieves files by name in a specific KB
 	// Used for dual deletion to find corresponding files in staging/rollback KB
@@ -801,7 +801,7 @@ func (r *repository) GetKnowledgeBaseFilesByFileUIDs(
 }
 
 // GetKnowledgeBaseFilesByFileUIDsIncludingDeleted retrieves files by UIDs, INCLUDING soft-deleted files
-// This is needed for SaveEmbeddingsWorkflow which may run after a file has been soft-deleted during
+// This is needed for embedding activities which may run after a file has been soft-deleted during
 // dual deletion. The embeddings must still be generated for existing chunks.
 func (r *repository) GetKnowledgeBaseFilesByFileUIDsIncludingDeleted(
 	ctx context.Context,
