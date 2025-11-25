@@ -1673,14 +1673,14 @@ func (ph *PublicHandler) ReprocessFile(ctx context.Context, req *artifactpb.Repr
 		)
 	}
 
-	// Check if file is already processing
+	// Log if file is already processing - we allow force reprocessing to handle stuck files
 	if file.ProcessStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_PROCESSING.String() ||
 		file.ProcessStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CHUNKING.String() ||
 		file.ProcessStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_EMBEDDING.String() {
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("%w: file is currently being processed", errorsx.ErrRateLimiting),
-			fmt.Sprintf("File is currently being processed (status: %s). Please wait for it to complete.", file.ProcessStatus),
-		)
+		logger.Warn("Force reprocessing file that is currently being processed",
+			zap.String("fileUID", file.UID.String()),
+			zap.String("currentStatus", file.ProcessStatus),
+			zap.String("message", "This will restart the file processing workflow from scratch"))
 	}
 
 	// CRITICAL: Block reprocessing during validation phase (same as file upload)

@@ -64,11 +64,34 @@ func (c *Client) EmbedTexts(ctx context.Context, texts []string, taskType string
 	var embeddingErr error
 
 	const maxRetries = 3
+	// Limit concurrent API calls to avoid rate limiting from Gemini
+	// Gemini has quotas (~60-100 requests/min depending on tier)
+	const maxConcurrent = 10
+	semaphore := make(chan struct{}, maxConcurrent)
 
 	for i, text := range texts {
 		wg.Add(1)
 		go func(idx int, txt string) {
 			defer wg.Done()
+
+			// Acquire semaphore slot with context cancellation support
+			// This prevents goroutines from blocking indefinitely if context times out
+			select {
+			case semaphore <- struct{}{}:
+				// Got a slot, continue
+			case <-ctx.Done():
+				// Context cancelled, exit early
+				mu.Lock()
+				if embeddingErr == nil {
+					embeddingErr = errorsx.AddMessage(
+						ctx.Err(),
+						"Embedding operation cancelled or timed out.",
+					)
+				}
+				mu.Unlock()
+				return
+			}
+			defer func() { <-semaphore }()
 
 			// Retry with exponential backoff for transient failures
 			var embedding []float32
@@ -76,6 +99,13 @@ func (c *Client) EmbedTexts(ctx context.Context, texts []string, taskType string
 			var lastErrorType string // Track error type for better user message
 
 			for attempt := range maxRetries {
+				// Check context before each attempt
+				if ctx.Err() != nil {
+					err = ctx.Err()
+					lastErrorType = "context_cancelled"
+					break
+				}
+
 				// Create content for this text
 				contents := []*genai.Content{
 					genai.NewContentFromText(txt, genai.RoleUser),
@@ -92,9 +122,16 @@ func (c *Client) EmbedTexts(ctx context.Context, texts []string, taskType string
 					lastErrorType = "api_error"
 					// Don't retry on last attempt
 					if attempt < maxRetries-1 {
-						// Exponential backoff: 1s, 2s
+						// Exponential backoff with context-aware sleep
 						backoff := time.Duration(1<<uint(attempt)) * time.Second
-						time.Sleep(backoff)
+						select {
+						case <-time.After(backoff):
+							// Continue to retry
+						case <-ctx.Done():
+							err = ctx.Err()
+							lastErrorType = "context_cancelled"
+							break
+						}
 						continue
 					}
 					break
@@ -106,7 +143,13 @@ func (c *Client) EmbedTexts(ctx context.Context, texts []string, taskType string
 					lastErrorType = "empty_response"
 					if attempt < maxRetries-1 {
 						backoff := time.Duration(1<<uint(attempt)) * time.Second
-						time.Sleep(backoff)
+						select {
+						case <-time.After(backoff):
+						case <-ctx.Done():
+							err = ctx.Err()
+							lastErrorType = "context_cancelled"
+							break
+						}
 						continue
 					}
 					break
@@ -118,7 +161,13 @@ func (c *Client) EmbedTexts(ctx context.Context, texts []string, taskType string
 					lastErrorType = "invalid_embedding"
 					if attempt < maxRetries-1 {
 						backoff := time.Duration(1<<uint(attempt)) * time.Second
-						time.Sleep(backoff)
+						select {
+						case <-time.After(backoff):
+						case <-ctx.Done():
+							err = ctx.Err()
+							lastErrorType = "context_cancelled"
+							break
+						}
 						continue
 					}
 					break
@@ -143,6 +192,8 @@ func (c *Client) EmbedTexts(ctx context.Context, texts []string, taskType string
 						userMessage = "AI service returned empty response. Please try again."
 					case "invalid_embedding":
 						userMessage = "AI service returned invalid embeddings. Please try again."
+					case "context_cancelled":
+						userMessage = "Embedding operation cancelled or timed out."
 					default:
 						userMessage = "Unable to generate embeddings. Please try again."
 					}
@@ -165,6 +216,14 @@ func (c *Client) EmbedTexts(ctx context.Context, texts []string, taskType string
 
 	// Wait for all goroutines to complete
 	wg.Wait()
+
+	// Check context error first (timeout/cancellation takes priority)
+	if ctx.Err() != nil {
+		return nil, errorsx.AddMessage(
+			ctx.Err(),
+			"Embedding operation cancelled or timed out.",
+		)
+	}
 
 	// Check if any errors occurred
 	if embeddingErr != nil {

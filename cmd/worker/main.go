@@ -184,16 +184,10 @@ func main() {
 	// RAG update workflows
 	w.RegisterWorkflow(cw.UpdateKnowledgeBaseWorkflow) // Single KB update workflow (6-phase)
 
-	// Child workflows (called by main workflows)
-	w.RegisterWorkflow(cw.SaveEmbeddingsWorkflow) // Vector embedding storage
-
 	// GCS cleanup workflow
 	w.RegisterWorkflow(cw.GCSCleanupContinuousWorkflow) // Continuous GCS cleanup (runs every 2 minutes)
 
 	// ===== Shared Activities (Used by Multiple Workflows) =====
-
-	// Embedding generation
-	w.RegisterActivity(cw.EmbedTextsActivity) // Generate vector embeddings for text batches
 
 	// MinIO operations
 	w.RegisterActivity(cw.DeleteFilesBatchActivity) // Delete multiple files from MinIO (parallel)
@@ -273,14 +267,8 @@ func main() {
 	w.RegisterActivity(cw.SaveTextChunksActivity)      // Persist chunks to database and MinIO storage
 
 	// Embedding Phase - Vector embedding generation and storage
-	w.RegisterActivity(cw.GetChunksForEmbeddingActivity)   // Retrieve text chunks for embedding
+	w.RegisterActivity(cw.EmbedAndSaveChunksActivity)      // Combined: query chunks, generate embeddings, save to DB/Milvus
 	w.RegisterActivity(cw.UpdateEmbeddingMetadataActivity) // Update file status and embedding metadata
-
-	// ===== SaveEmbeddingsWorkflow Activities (Child Workflow) =====
-	// Child workflow handling vector embedding storage
-	w.RegisterActivity(cw.DeleteOldEmbeddingsActivity) // Remove old embeddings from both Milvus and DB
-	w.RegisterActivity(cw.SaveEmbeddingBatchActivity)  // Save embedding batch to DB and vector store
-	w.RegisterActivity(cw.FlushCollectionActivity)     // Flush Milvus collection to persist data
 
 	// ===== GCS Cleanup Activities =====
 	// Activities for cleaning up expired GCS files

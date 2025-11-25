@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+	"go.uber.org/zap"
 
 	"github.com/gofrs/uuid"
 	"github.com/instill-ai/artifact-backend/pkg/pipeline"
@@ -52,6 +53,11 @@ func (w *processFileWorkflow) Execute(ctx context.Context, param ProcessFileWork
 		workflowID = fmt.Sprintf("process-files-batch-%s-count-%d", param.FileUIDs[0].String(), len(param.FileUIDs))
 	}
 
+	// Terminate any existing workflow with the same ID before starting a new one
+	// This handles "reprocess" scenarios where a file might be stuck in processing
+	// We don't check for errors here because the workflow might not exist (which is fine)
+	_ = w.terminateExistingWorkflow(ctx, workflowID)
+
 	workflowOptions := client.StartWorkflowOptions{
 		ID:                    workflowID,
 		TaskQueue:             TaskQueue,
@@ -60,6 +66,41 @@ func (w *processFileWorkflow) Execute(ctx context.Context, param ProcessFileWork
 
 	_, err := w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, w.worker.ProcessFileWorkflow, param)
 	return err
+}
+
+// terminateExistingWorkflow attempts to terminate an existing workflow if it's running.
+// Returns nil if no workflow exists or if termination succeeds.
+func (w *processFileWorkflow) terminateExistingWorkflow(ctx context.Context, workflowID string) error {
+	// First, check if the workflow exists and is running by describing it
+	desc, err := w.temporalClient.DescribeWorkflowExecution(ctx, workflowID, "")
+	if err != nil {
+		// Workflow doesn't exist or other error - that's fine, nothing to terminate
+		return nil
+	}
+
+	// Check if the workflow is in a running state
+	status := desc.WorkflowExecutionInfo.Status
+	if status == enums.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		// Terminate the running workflow
+		w.worker.log.Info("Terminating existing workflow for reprocessing",
+			zap.String("workflowID", workflowID),
+			zap.String("status", status.String()))
+
+		err = w.temporalClient.TerminateWorkflow(ctx, workflowID, "", "Terminated for file reprocessing")
+		if err != nil {
+			w.worker.log.Warn("Failed to terminate existing workflow",
+				zap.String("workflowID", workflowID),
+				zap.Error(err))
+			// Don't return error - we'll try to start the new workflow anyway
+			// If the old one is truly stuck, ALLOW_DUPLICATE policy will handle it
+		}
+
+		// Give Temporal a moment to process the termination
+		// This helps ensure the workflow ID is available for reuse
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	return nil
 }
 
 // ProcessFileWorkflow orchestrates the file processing pipeline for multiple files
@@ -96,8 +137,6 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 
 	// Extract common UUIDs from parameters
 	kbUID := param.KBUID
-	userUID := param.UserUID
-	requesterUID := param.RequesterUID
 
 	// Track workflow completion status for each file
 	filesCompleted := make(map[string]bool, fileCount)
@@ -404,9 +443,9 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			if useCaching {
 				// Start file cache creation for this file (non-blocking) - Gemini only
 				// Use the CONVERTED file for caching, not the original
-				// Use 2-minute timeout for cache creation (AI API calls should complete quickly)
+				// Use ActivityTimeoutLong for AI API operations that may take time for large files
 				cacheCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-					StartToCloseTimeout: 2 * time.Minute,
+					StartToCloseTimeout: ActivityTimeoutLong, // 5 min for heavy AI operations
 					RetryPolicy: &temporal.RetryPolicy{
 						InitialInterval:    RetryInitialInterval,
 						BackoffCoefficient: RetryBackoffCoefficient,
@@ -809,31 +848,10 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				logger.Warn("Failed to update status to EMBEDDING", "fileUID", fileUID.String(), "error", err)
 			}
 
-			// Get text chunks from database
-			// Use shorter timeout (5 min) for this I/O-only activity (DB + MinIO reads)
-			chunksCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-				StartToCloseTimeout: ActivityTimeoutStandard, // 5 minutes for I/O operations
-				RetryPolicy: &temporal.RetryPolicy{
-					InitialInterval:    RetryInitialInterval,
-					BackoffCoefficient: RetryBackoffCoefficient,
-					MaximumInterval:    RetryMaximumIntervalStandard,
-					MaximumAttempts:    RetryMaximumAttempts,
-				},
-			})
-			var chunksData GetTextChunksForEmbeddingActivityResult
-			if err := workflow.ExecuteActivity(chunksCtx, w.GetChunksForEmbeddingActivity, &GetChunksForEmbeddingActivityParam{
-				FileUID: fileUID,
-			}).Get(chunksCtx, &chunksData); err != nil {
-				filesFailed[fileUID.String()] = handleFileError(fileUID, "get text chunks for embedding", err)
-				filesCompleted[fileUID.String()] = true
-				continue
-			}
-
-			// Generate embeddings using activity
-			// Pass KBUID to enable client selection based on KB's embedding config
-			// Use 2-minute timeout (embedding should complete within 1 minute normally)
+			// Combined activity: query chunks, generate embeddings, save to DB/Milvus
+			// This eliminates large data transfer between workflow and activities
 			embedCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-				StartToCloseTimeout: 2 * time.Minute, // Embedding should be fast, timeout if taking too long
+				StartToCloseTimeout: ActivityTimeoutEmbedding, // 10 min for embedding large files
 				RetryPolicy: &temporal.RetryPolicy{
 					InitialInterval:    RetryInitialInterval,
 					BackoffCoefficient: RetryBackoffCoefficient,
@@ -841,59 +859,28 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 					MaximumAttempts:    RetryMaximumAttempts,
 				},
 			})
-			var embeddingResult EmbedTextsActivityResult
-			if err := workflow.ExecuteActivity(embedCtx, w.EmbedTextsActivity, &EmbedTextsActivityParam{
-				KBUID:    &kbUID, // Pass KBUID for client selection (Gemini 3072-dim vs OpenAI 1536-dim)
-				Texts:    chunksData.Texts,
-				TaskType: "RETRIEVAL_DOCUMENT",                                     // For indexing document chunks
-				Metadata: wf.conversionData.fileMetadata.metadata.ExternalMetadata, // Pass metadata for authentication
-			}).Get(embedCtx, &embeddingResult); err != nil {
-				filesFailed[fileUID.String()] = handleFileError(fileUID, "generate embeddings", err)
+			var embedResult EmbedAndSaveChunksActivityResult
+			if err := workflow.ExecuteActivity(embedCtx, w.EmbedAndSaveChunksActivity, &EmbedAndSaveChunksActivityParam{
+				KBUID:    kbUID,
+				FileUID:  fileUID,
+				Metadata: wf.conversionData.fileMetadata.metadata.ExternalMetadata,
+			}).Get(embedCtx, &embedResult); err != nil {
+				filesFailed[fileUID.String()] = handleFileError(fileUID, "embed and save chunks", err)
 				filesCompleted[fileUID.String()] = true
 				continue
 			}
 
-			// Build embedding records
-			embeddings := make([]repository.EmbeddingModel, len(chunksData.Chunks))
-			for j, chunk := range chunksData.Chunks {
-				embeddings[j] = repository.EmbeddingModel{
-					UID:         types.EmbeddingUIDType(uuid.Must(uuid.NewV4())),
-					SourceTable: repository.TextChunkTableName,
-					SourceUID:   chunk.UID,
-					Vector:      embeddingResult.Vectors[j],
-					KBUID:       kbUID,
-					FileUID:     fileUID,
-					ContentType: chunksData.ContentType,
-					ChunkType:   chunk.ChunkType,
-					Tags:        chunksData.Tags,
-				}
-			}
-
-			// Save embeddings to Milvus + DB
-			childWorkflowOptions := workflow.ChildWorkflowOptions{
-				WorkflowID: fmt.Sprintf("save-embeddings-%s", fileUID.String()),
-			}
-			childCtx := workflow.WithChildOptions(ctx, childWorkflowOptions)
-
-			if err := workflow.ExecuteChildWorkflow(childCtx, w.SaveEmbeddingsWorkflow, SaveEmbeddingsWorkflowParam{
-				KBUID:        kbUID,
-				FileUID:      fileUID,
-				Filename:     chunksData.Filename,
-				Embeddings:   embeddings,
-				UserUID:      userUID,
-				RequesterUID: requesterUID,
-			}).Get(childCtx, nil); err != nil {
-				filesFailed[fileUID.String()] = handleFileError(fileUID, "save embeddings to vector DB", err)
-				filesCompleted[fileUID.String()] = true
-				continue
-			}
+			logger.Info("Embeddings saved successfully",
+				"fileUID", fileUID.String(),
+				"chunkCount", embedResult.ChunkCount,
+				"embeddingCount", embedResult.EmbeddingCount)
 
 			// Update embedding metadata with pipeline information
 			// Pipeline field contains the embedding pipeline name if used (e.g., "preset/indexing-embed@v1.0.0"),
 			// or empty string if AI client was used directly
 			if err := workflow.ExecuteActivity(ctx, w.UpdateEmbeddingMetadataActivity, &UpdateEmbeddingMetadataActivityParam{
 				FileUID:  fileUID,
-				Pipeline: embeddingResult.Pipeline,
+				Pipeline: embedResult.Pipeline,
 			}).Get(ctx, nil); err != nil {
 				filesFailed[fileUID.String()] = handleFileError(fileUID, "update embedding metadata", err)
 				filesCompleted[fileUID.String()] = true

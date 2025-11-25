@@ -41,10 +41,12 @@ const (
 const EmbeddingBatchSize = 50
 
 // ActivityTimeoutStandard is timeout for normal activities. ActivityTimeoutLong is for heavy operations.
+// ActivityTimeoutEmbedding is extra long for embedding large files (100+ chunks × 10 concurrent API calls).
 // Too short = premature failures. Too long = blocked worker slots.
 const (
-	ActivityTimeoutStandard = 1 * time.Minute // File I/O, DB, MinIO
-	ActivityTimeoutLong     = 5 * time.Minute // File conversion, embeddings, synchronization with reconciliation
+	ActivityTimeoutStandard  = 1 * time.Minute  // File I/O, DB, MinIO
+	ActivityTimeoutLong      = 5 * time.Minute  // File conversion, caching, synchronization with reconciliation
+	ActivityTimeoutEmbedding = 10 * time.Minute // Embeddings: 100+ chunks @ ~3s/chunk = 5-10 min for large files
 )
 
 // RetryInitialInterval, RetryBackoffCoefficient, RetryMaximumInterval*, and RetryMaximumAttempts control retry behavior.
@@ -773,155 +775,4 @@ func (w *Worker) deleteTextChunksByFileUIDSync(ctx context.Context, kbUID, fileU
 		)
 	}
 	return w.deleteFilesSync(ctx, config.Config.Minio.BucketName, filePaths)
-}
-
-// getTextChunksByFile returns the text chunks of a file
-// Fetches text chunk content directly from MinIO using parallel goroutines for better performance
-// IMPORTANT: Returns ALL chunks for the file (content chunks + summary chunks)
-func (w *Worker) getTextChunksByFile(ctx context.Context, file *repository.KnowledgeBaseFileModel) (
-	types.SourceTableType,
-	types.SourceUIDType,
-	[]repository.TextChunkModel,
-	map[types.TextChunkUIDType]string,
-	[]string,
-	error,
-) {
-	var sourceTable string
-	var sourceUID types.SourceUIDType
-
-	// Get ALL converted files for this file (there may be multiple: content + summary)
-	convertedFiles, err := w.repository.GetAllConvertedFilesByFileUID(ctx, file.UID)
-	if err != nil || len(convertedFiles) == 0 {
-		// CRITICAL FIX: Create proper error if err is nil (when no converted files exist)
-		if err == nil {
-			err = errorsx.AddMessage(errorsx.ErrNotFound, fmt.Sprintf("No converted files found for file UID %s", file.UID.String()))
-		}
-		w.log.Error("Failed to get converted files metadata",
-			zap.String("fileUID", file.UID.String()),
-			zap.Error(err))
-		return sourceTable, sourceUID, nil, nil, nil, errorsx.AddMessage(
-			err,
-			"Unable to retrieve file information. Please try again.",
-		)
-	}
-	// Use the first converted file for source metadata (legacy compatibility)
-	sourceTable = repository.ConvertedFileTableName
-	sourceUID = convertedFiles[0].UID
-
-	// Get ALL text chunks for this file (including both content and summary chunks)
-	// This is critical for embedding generation - we need to embed ALL chunks, not just content chunks
-	chunks, err := w.repository.ListTextChunksByKBFileUID(ctx, file.UID)
-	if err != nil {
-		w.log.Error("Failed to get text chunks from database", zap.String("fileUID", file.UID.String()), zap.Error(err))
-		return sourceTable, sourceUID, nil, nil, nil, err
-	}
-
-	w.log.Info("getTextChunksByFile: Retrieved all chunks for file",
-		zap.String("fileUID", file.UID.String()),
-		zap.Int("totalChunks", len(chunks)))
-
-	// CRITICAL FIX: Handle case where chunking hasn't completed yet (race condition)
-	// If no chunks exist, the file is likely still being chunked - fail early
-	if len(chunks) == 0 {
-		w.log.Error("No text chunks found for file - chunking may not have completed",
-			zap.String("fileUID", file.UID.String()))
-		return sourceTable, sourceUID, nil, nil, nil, errorsx.AddMessage(
-			fmt.Errorf("no text chunks found for file %s", file.UID.String()),
-			"File has no text chunks. The chunking process may still be in progress. Please try again.",
-		)
-	}
-
-	// Fetch text chunks from MinIO in parallel using goroutines with retry
-	texts := make([]string, len(chunks))
-	var wg sync.WaitGroup
-	var mu sync.Mutex
-	var fetchErr error
-
-	bucket := config.Config.Minio.BucketName
-
-	for i, chunk := range chunks {
-		wg.Add(1)
-		go func(idx int, path string) {
-			defer wg.Done()
-
-			// CRITICAL FIX: Check if context is already cancelled before starting
-			if ctx.Err() != nil {
-				mu.Lock()
-				if fetchErr == nil {
-					fetchErr = ctx.Err()
-				}
-				mu.Unlock()
-				return
-			}
-
-			// Retry up to 3 times with exponential backoff for transient failures
-			var content []byte
-			var err error
-			maxAttempts := 3
-
-			for attempt := range maxAttempts {
-				// Create a timeout context for this MinIO fetch (max 10s per attempt)
-				fetchCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-				content, err = w.repository.GetMinIOStorage().GetFile(fetchCtx, bucket, path)
-				cancel() // Always cancel to free resources
-
-				if err == nil {
-					break // Success!
-				}
-
-				// Check if parent context was cancelled
-				if ctx.Err() != nil {
-					err = ctx.Err()
-					break
-				}
-
-				// Don't sleep after last attempt
-				if attempt < maxAttempts-1 {
-					// Exponential backoff: 1s, 2s (context-aware)
-					backoff := time.Duration(1<<uint(attempt)) * time.Second
-					select {
-					case <-time.After(backoff):
-						// Continue to next attempt
-					case <-ctx.Done():
-						err = ctx.Err()
-						break
-					}
-				}
-			}
-
-			if err != nil {
-				mu.Lock()
-				if fetchErr == nil {
-					fetchErr = errorsx.AddMessage(
-						fmt.Errorf("failed to fetch text chunk %s after %d attempts: %w", path, maxAttempts, err),
-						"Unable to retrieve text chunks. Please try again.",
-					)
-				}
-				mu.Unlock()
-				return
-			}
-
-			mu.Lock()
-			texts[idx] = string(content)
-			mu.Unlock()
-		}(i, chunk.ContentDest)
-	}
-
-	wg.Wait()
-
-	if fetchErr != nil {
-		w.log.Error("Failed to get text chunks from MinIO.",
-			zap.String("SourceTable", sourceTable),
-			zap.String("SourceUID", sourceUID.String()),
-			zap.Error(fetchErr))
-		return sourceTable, sourceUID, nil, nil, nil, fetchErr
-	}
-
-	// Build text chunk UID to content text map
-	chunkUIDToContents := make(map[types.TextChunkUIDType]string, len(chunks))
-	for i, c := range chunks {
-		chunkUIDToContents[c.UID] = texts[i]
-	}
-
-	return sourceTable, sourceUID, chunks, chunkUIDToContents, texts, nil
 }
