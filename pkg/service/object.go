@@ -184,12 +184,34 @@ func (s *service) GetDownloadURL(
 
 	expirationTime := time.Duration(urlExpireDays) * time.Hour * 24
 
+	// Determine download filename:
+	// 1. Use custom download_filename from request if provided (user-friendly name)
+	// 2. Otherwise extract filename from the object name path
+	downloadFilename := req.GetDownloadFilename()
+	if downloadFilename == "" {
+		// Extract filename from obj.Name which might be a path like
+		// "code_executor_agent/namespace/chat/filename.png/0"
+		downloadFilename = obj.Name
+		nameParts := strings.Split(obj.Name, "/")
+		if len(nameParts) > 1 {
+			// Check if the last part is a version number (all digits)
+			lastPart := nameParts[len(nameParts)-1]
+			if _, err := strconv.Atoi(lastPart); err == nil && len(nameParts) > 2 {
+				// Last part is version number, use second-to-last as filename
+				downloadFilename = nameParts[len(nameParts)-2]
+			} else {
+				// Last part is the filename
+				downloadFilename = lastPart
+			}
+		}
+	}
+
 	// Get presigned URL for downloading object
 	presignedURL, err := s.repository.GetMinIOStorage().GetPresignedURLForDownload(
 		ctx,
 		object.BlobBucketName,
 		obj.Destination,
-		obj.Name,
+		downloadFilename,
 		obj.ContentType,
 		expirationTime,
 	)

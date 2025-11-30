@@ -450,13 +450,26 @@ func (m *milvusClient) SearchVectorsInCollection(ctx context.Context, p SearchVe
 
 			filter := m.fileUIDFilter(p.FileUIDs)
 			if filter != "" {
+				logger.Info("Applying file UID filter",
+					zap.String("filter", filter),
+					zap.Int("file_uid_count", len(p.FileUIDs)))
 				filterStrs = append(filterStrs, filter)
+			} else if len(p.FileUIDs) > 0 {
+				logger.Warn("File UIDs provided but filter is empty - check if UIDs are valid",
+					zap.Int("file_uid_count", len(p.FileUIDs)))
 			}
 		} else if len(p.Filenames) > 0 {
 			// Filename filter is only used for backwards compatibility in
 			// collections that lack the file UID metadata.
 			filter := fmt.Sprintf(`%s in ["%s"]`, kbCollectionFieldFileName, strings.Join(p.Filenames, `","`))
+			logger.Info("Applying filename filter (legacy mode)",
+				zap.String("filter", filter),
+				zap.Int("filename_count", len(p.Filenames)))
 			filterStrs = append(filterStrs, filter)
+		} else if len(p.FileUIDs) > 0 {
+			logger.Warn("File UIDs provided but collection doesn't have file_uid field - NO FILTERING APPLIED",
+				zap.Int("file_uid_count", len(p.FileUIDs)),
+				zap.String("collection", collectionName))
 		}
 
 		if p.ContentType != "" {
@@ -497,6 +510,11 @@ func (m *milvusClient) SearchVectorsInCollection(ctx context.Context, p SearchVe
 
 	filterExpr := strings.Join(filterStrs, " and ")
 
+	logger.Debug("Executing Milvus search",
+		zap.String("filter_expression", filterExpr),
+		zap.Int("filter_count", len(filterStrs)),
+		zap.Int("topK", topK))
+
 	results, err := m.c.Search(
 		ctx,
 		collectionName,
@@ -512,7 +530,9 @@ func (m *milvusClient) SearchVectorsInCollection(ctx context.Context, p SearchVe
 	if err != nil {
 		return nil, fmt.Errorf("searching embeddings: %w", err)
 	}
-	logger.Info("Embeddings search.", zap.Duration("duration", time.Since(t)))
+	logger.Debug("Embeddings search completed",
+		zap.Duration("duration", time.Since(t)),
+		zap.Int("result_count", len(results)))
 
 	// Extract the embeddings from the search results
 	var embeddings [][]SimilarVectorEmbedding
@@ -560,6 +580,7 @@ func (m *milvusClient) SearchVectorsInCollection(ctx context.Context, p SearchVe
 		}
 
 		tempVectors := []SimilarVectorEmbedding{}
+		returnedFileUIDs := make(map[string]int) // Track unique file UIDs in results
 		for i := range sourceTables {
 			emb := VectorEmbedding{
 				SourceTable:  sourceTables[i],
@@ -573,6 +594,10 @@ func (m *milvusClient) SearchVectorsInCollection(ctx context.Context, p SearchVe
 				emb.ChunkType = contentTypes[i] // chunk type from content_type field
 				if hasFileUID {
 					emb.FileUID = uuid.FromStringOrNil(fileUIDs[i])
+					// Track which file UIDs are in the results
+					if fileUIDs[i] != "" {
+						returnedFileUIDs[fileUIDs[i]]++
+					}
 				}
 			}
 			tempVectors = append(tempVectors, SimilarVectorEmbedding{
@@ -580,6 +605,39 @@ func (m *milvusClient) SearchVectorsInCollection(ctx context.Context, p SearchVe
 				Score:           scores[i],
 			})
 		}
+
+		// Log file UID distribution in results to help debug filtering issues
+		if len(returnedFileUIDs) > 0 {
+			logger.Debug("Search results file UID distribution",
+				zap.Int("unique_file_uids", len(returnedFileUIDs)),
+				zap.Int("total_chunks", len(tempVectors)),
+				zap.Any("file_uid_counts", returnedFileUIDs))
+
+			// Check if results contain chunks from files NOT in the filter
+			if len(p.FileUIDs) > 0 {
+				requestedUIDs := make(map[string]bool)
+				for _, uid := range p.FileUIDs {
+					if !uid.IsNil() {
+						requestedUIDs[uid.String()] = true
+					}
+				}
+
+				unexpectedFileUIDs := []string{}
+				for fileUID := range returnedFileUIDs {
+					if !requestedUIDs[fileUID] {
+						unexpectedFileUIDs = append(unexpectedFileUIDs, fileUID)
+					}
+				}
+
+				if len(unexpectedFileUIDs) > 0 {
+					logger.Error("BUG: Search returned chunks from files NOT in the filter",
+						zap.Strings("unexpected_file_uids", unexpectedFileUIDs),
+						zap.Int("requested_file_count", len(p.FileUIDs)),
+						zap.String("filter_expression", filterExpr))
+				}
+			}
+		}
+
 		embeddings = append(embeddings, tempVectors)
 	}
 
