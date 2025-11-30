@@ -18,6 +18,7 @@ import (
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/acl"
 	"github.com/instill-ai/artifact-backend/pkg/ai"
+	"github.com/instill-ai/artifact-backend/pkg/ai/gemini"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/types"
 
@@ -78,7 +79,8 @@ type Worker struct {
 	aiClient ai.Client // AI client (can be single or composite with routing capabilities)
 	log      *zap.Logger
 
-	postFileCompletion PostFileCompletionFn
+	postFileCompletion    PostFileCompletionFn
+	generateContentPrompt string // Prompt for AI content generation
 }
 
 // TemporalClient returns the Temporal client for workflow execution
@@ -112,6 +114,20 @@ func (w *Worker) GetLogger() *zap.Logger {
 // successfully processed.
 func (w *Worker) SetPostFileCompletionFn(fn PostFileCompletionFn) {
 	w.postFileCompletion = fn
+}
+
+// SetGenerateContentPrompt allows clients to override the content generation prompt.
+// If not set, defaults to CE's embedded prompt.
+func (w *Worker) SetGenerateContentPrompt(prompt string) {
+	w.generateContentPrompt = prompt
+}
+
+// getGenerateContentPrompt returns the prompt to use, falling back to CE default if not set.
+func (w *Worker) getGenerateContentPrompt() string {
+	if w.generateContentPrompt != "" {
+		return w.generateContentPrompt
+	}
+	return gemini.GetGenerateContentPrompt()
 }
 
 // New creates a new worker instance with direct dependencies (no circular dependency)

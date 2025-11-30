@@ -1637,11 +1637,11 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 					zap.String("cacheName", param.CacheName),
 					zap.String("client", w.aiClient.Name()))
 
-				conversion, err := w.aiClient.ConvertToMarkdownWithCache(
-					authCtx,
-					param.CacheName,
-					gemini.GetGenerateContentPrompt(),
-				)
+			conversion, err := w.aiClient.ConvertToMarkdownWithCache(
+				authCtx,
+				param.CacheName,
+				w.getGenerateContentPrompt(),
+			)
 				if err != nil {
 					logger.Warn("Cached AI conversion failed, will try without cache", zap.Error(err))
 					conversionErr = err
@@ -1665,13 +1665,13 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 					zap.String("fileType", param.FileType.String()),
 					zap.String("client", w.aiClient.Name()))
 
-				conversion, err := w.aiClient.ConvertToMarkdownWithoutCache(
-					authCtx,
-					rawFileContent,
-					param.FileType,
-					param.Filename,
-					gemini.GetGenerateContentPrompt(),
-				)
+			conversion, err := w.aiClient.ConvertToMarkdownWithoutCache(
+				authCtx,
+				rawFileContent,
+				param.FileType,
+				param.Filename,
+				w.getGenerateContentPrompt(),
+			)
 				if err != nil {
 					logger.Error("AI conversion failed", zap.Error(err))
 					conversionErr = err
