@@ -81,6 +81,7 @@ func (s *service) SearchChunks(ctx context.Context, ownerUID types.OwnerUIDType,
 		ContentType:  string(fileType),
 		ChunkType:    string(chunkType),
 		Tags:         req.GetTags(),
+		QueryText:    req.TextPrompt, // Pass query text for hybrid search (BM25 + dense)
 	}
 
 	// Check file UID metadata availability

@@ -9,8 +9,10 @@ import (
 	"github.com/gofrs/uuid"
 
 	"github.com/instill-ai/artifact-backend/pkg/types"
-	"github.com/milvus-io/milvus-sdk-go/v2/client"
-	"github.com/milvus-io/milvus-sdk-go/v2/entity"
+	"github.com/milvus-io/milvus/client/v2/column"
+	"github.com/milvus-io/milvus/client/v2/entity"
+	"github.com/milvus-io/milvus/client/v2/index"
+	"github.com/milvus-io/milvus/client/v2/milvusclient"
 	"go.uber.org/zap"
 
 	errorsx "github.com/instill-ai/x/errors"
@@ -29,6 +31,7 @@ type VectorEmbedding struct {
 	ContentType  string // MIME type (e.g., "text/markdown", "application/pdf")
 	ChunkType    string // Chunk classification ("content", "summary", "augmented")
 	Tags         []string
+	Text         string // Original text content for BM25 sparse vector generation
 }
 
 // SimilarVectorEmbedding extends VectorEmbedding to add a similarity search score.
@@ -47,6 +50,7 @@ type SearchVectorParam struct {
 	ContentType  string   // MIME type filter (e.g., "text/markdown", "application/pdf")
 	ChunkType    string   // Chunk classification filter ("content", "summary", "augmented")
 	Tags         []string // Tags to filter by (OR logic when multiple tags provided)
+	QueryText    string   // Original query text for BM25 sparse vector generation (hybrid search)
 
 	// The filename filter was implemented back when the filename in a knowledge base was
 	// unique, which isn't the case anymore. Using this filter might yield
@@ -88,31 +92,39 @@ const (
 	nProbe   = 250
 	reorderK = 250
 
-	kbCollectionFieldSourceTable  = "source_table"
-	kbCollectionFieldSourceUID    = "source_uid"
-	kbCollectionFieldEmbeddingUID = "embedding_uid"
-	kbCollectionFieldEmbedding    = "embedding"
-	kbCollectionFieldFileUID      = "file_uid"
-	kbCollectionFieldFileName     = "file_name"
-	kbCollectionFieldFileType     = "file_type"
-	kbCollectionFieldContentType  = "content_type"
-	kbCollectionFieldTags         = "tags"
+	kbCollectionFieldSourceTable       = "source_table"
+	kbCollectionFieldSourceUID         = "source_uid"
+	kbCollectionFieldDenseEmbeddingUID = "embedding_uid"
+	kbCollectionFieldDenseEmbedding    = "embedding"        // Dense vectors (Gemini 3072-dim)
+	kbCollectionFieldSparseEmbedding   = "sparse_embedding" // Sparse vectors (BM25 variable-dim) for hybrid search
+	kbCollectionFieldFileUID           = "file_uid"
+	kbCollectionFieldFileName          = "file_name"
+	kbCollectionFieldFileType          = "file_type"
+	kbCollectionFieldContentType       = "content_type"
+	kbCollectionFieldTags              = "tags"
 )
 
 type milvusClient struct {
-	c client.Client
+	c *milvusclient.Client
 }
 
 // NewVectorDatabase returns a VectorDatabase implementation (milvus).
 func NewVectorDatabase(ctx context.Context, host, port string) (db VectorDatabase, closeFn func() error, _ error) {
-	c, err := client.NewGrpcClient(ctx, host+":"+port)
+	c, err := milvusclient.New(ctx, &milvusclient.ClientConfig{
+		Address: host + ":" + port,
+	})
 	if err != nil {
 		return nil, nil, err
 	}
 
+	// Wrap the new Close signature (takes context) to match the old signature (no args)
+	closeFn = func() error {
+		return c.Close(context.Background())
+	}
+
 	return &milvusClient{
 		c: c,
-	}, c.Close, nil
+	}, closeFn, nil
 }
 
 func (m *milvusClient) CreateCollection(ctx context.Context, collectionName string, dimensionality uint32) error {
@@ -120,7 +132,7 @@ func (m *milvusClient) CreateCollection(ctx context.Context, collectionName stri
 	logger = logger.With(zap.String("collection_name", collectionName), zap.Uint32("dimensionality", dimensionality))
 
 	// 1. Check if the collection already exists
-	has, err := m.c.HasCollection(ctx, collectionName)
+	has, err := m.c.HasCollection(ctx, milvusclient.NewHasCollectionOption(collectionName))
 	if err != nil {
 		return fmt.Errorf("checking collection existence: %w", err)
 	}
@@ -129,47 +141,42 @@ func (m *milvusClient) CreateCollection(ctx context.Context, collectionName stri
 		return nil
 	}
 
-	// 2. Create the collection with the specified schema
-	// Use the provided dimensionality from KB's system config
-	vectorDimStr := fmt.Sprintf("%d", dimensionality)
-	schema := &entity.Schema{
-		CollectionName: collectionName,
-		Description:    "",
-		Fields: []*entity.Field{
-			{Name: kbCollectionFieldSourceTable, DataType: entity.FieldTypeVarChar, TypeParams: map[string]string{"max_length": "255"}},
-			{Name: kbCollectionFieldSourceUID, DataType: entity.FieldTypeVarChar, TypeParams: map[string]string{"max_length": "255"}},
-			{Name: kbCollectionFieldEmbeddingUID, DataType: entity.FieldTypeVarChar, PrimaryKey: true, TypeParams: map[string]string{"max_length": "255"}},
-			{Name: kbCollectionFieldEmbedding, DataType: entity.FieldTypeFloatVector, TypeParams: map[string]string{"dim": vectorDimStr}},
-			{Name: kbCollectionFieldFileUID, DataType: entity.FieldTypeVarChar, TypeParams: map[string]string{"max_length": "255"}},
-			{Name: kbCollectionFieldFileName, DataType: entity.FieldTypeVarChar, TypeParams: map[string]string{"max_length": "255"}},
-			{Name: kbCollectionFieldFileType, DataType: entity.FieldTypeVarChar, TypeParams: map[string]string{"max_length": "255"}},
-			{Name: kbCollectionFieldContentType, DataType: entity.FieldTypeVarChar, TypeParams: map[string]string{"max_length": "255"}},
-			{Name: kbCollectionFieldTags, DataType: entity.FieldTypeArray, ElementType: entity.FieldTypeVarChar, TypeParams: map[string]string{"max_capacity": "100", "max_length": "255"}},
-		},
+	// 2. Create the collection schema with the specified dimensionality
+	schema := entity.NewSchema().
+		WithName(collectionName).
+		WithField(entity.NewField().WithName(kbCollectionFieldSourceTable).WithDataType(entity.FieldTypeVarChar).WithMaxLength(255)).
+		WithField(entity.NewField().WithName(kbCollectionFieldSourceUID).WithDataType(entity.FieldTypeVarChar).WithMaxLength(255)).
+		WithField(entity.NewField().WithName(kbCollectionFieldDenseEmbeddingUID).WithDataType(entity.FieldTypeVarChar).WithMaxLength(255).WithIsPrimaryKey(true)).
+		WithField(entity.NewField().WithName(kbCollectionFieldDenseEmbedding).WithDataType(entity.FieldTypeFloatVector).WithDim(int64(dimensionality))).
+		WithField(entity.NewField().WithName(kbCollectionFieldSparseEmbedding).WithDataType(entity.FieldTypeSparseVector)). // BM25 sparse vectors for hybrid search
+		WithField(entity.NewField().WithName(kbCollectionFieldFileUID).WithDataType(entity.FieldTypeVarChar).WithMaxLength(255)).
+		WithField(entity.NewField().WithName(kbCollectionFieldFileName).WithDataType(entity.FieldTypeVarChar).WithMaxLength(255)).
+		WithField(entity.NewField().WithName(kbCollectionFieldFileType).WithDataType(entity.FieldTypeVarChar).WithMaxLength(255)).
+		WithField(entity.NewField().WithName(kbCollectionFieldContentType).WithDataType(entity.FieldTypeVarChar).WithMaxLength(255)).
+		WithField(entity.NewField().WithName(kbCollectionFieldTags).WithDataType(entity.FieldTypeArray).WithElementType(entity.FieldTypeVarChar).WithMaxLength(255).WithMaxCapacity(100))
+
+	// 3. Create indexes
+	indexOptions := []milvusclient.CreateIndexOption{
+		// Dense vector index (SCANN)
+		milvusclient.NewCreateIndexOption(collectionName, kbCollectionFieldDenseEmbedding,
+			index.NewSCANNIndex(index.MetricType(metricType), scanNList, withRaw)).WithIndexName("dense_vector_index"),
+		// Sparse vector index for BM25 hybrid search
+		milvusclient.NewCreateIndexOption(collectionName, kbCollectionFieldSparseEmbedding,
+			index.NewSparseInvertedIndex(entity.IP, 0.0)).WithIndexName("sparse_vector_index"),
+		// Scalar index for file UID filtering
+		milvusclient.NewCreateIndexOption(collectionName, kbCollectionFieldFileUID,
+			index.NewInvertedIndex()).WithIndexName("file_uid_index"),
 	}
 
-	err = m.c.CreateCollection(ctx, schema, 1)
+	// 4. Create collection with schema and indexes
+	err = m.c.CreateCollection(ctx, milvusclient.NewCreateCollectionOption(collectionName, schema).
+		WithShardNum(1).
+		WithIndexOptions(indexOptions...))
 	if err != nil {
 		return fmt.Errorf("creating collection: %w", err)
 	}
 
-	// 3. Create indexes
-	vectorIdx, err := entity.NewIndexSCANN(metricType, scanNList, withRaw)
-	if err != nil {
-		return fmt.Errorf("building index: %w", err)
-	}
-
-	for field, idx := range map[string]entity.Index{
-		kbCollectionFieldEmbedding: vectorIdx,
-		kbCollectionFieldFileUID:   entity.NewScalarIndexWithType(entity.Inverted),
-	} {
-		err = m.c.CreateIndex(ctx, collectionName, field, idx, false)
-		if err != nil {
-			return fmt.Errorf("creating index for field %s: %w", field, err)
-		}
-	}
-
-	logger.Info("Collection created successfully.")
+	logger.Info("Collection created successfully with hybrid search support.")
 	return nil
 }
 
@@ -178,7 +185,7 @@ func (m *milvusClient) InsertVectorsInCollection(ctx context.Context, collection
 	logger = logger.With(zap.String("collection_name", collectionName))
 
 	// Check if the collection exists
-	has, err := m.c.HasCollection(ctx, collectionName)
+	has, err := m.c.HasCollection(ctx, milvusclient.NewHasCollectionOption(collectionName))
 	if err != nil {
 		return fmt.Errorf("checking collection existence: %w", err)
 	}
@@ -187,15 +194,15 @@ func (m *milvusClient) InsertVectorsInCollection(ctx context.Context, collection
 	}
 
 	// Get collection schema to determine vector dimension
-	collection, err := m.c.DescribeCollection(ctx, collectionName)
+	collDesc, err := m.c.DescribeCollection(ctx, milvusclient.NewDescribeCollectionOption(collectionName))
 	if err != nil {
 		return fmt.Errorf("describing collection: %w", err)
 	}
 
 	// Find the embedding field to get its dimension
 	var vectorDim int
-	for _, field := range collection.Schema.Fields {
-		if field.Name == kbCollectionFieldEmbedding {
+	for _, field := range collDesc.Schema.Fields {
+		if field.Name == kbCollectionFieldDenseEmbedding {
 			if dimStr, ok := field.TypeParams["dim"]; ok {
 				if _, err := fmt.Sscanf(dimStr, "%d", &vectorDim); err != nil {
 					return fmt.Errorf("failed to parse vector dimension: %w", err)
@@ -223,65 +230,86 @@ func (m *milvusClient) InsertVectorsInCollection(ctx context.Context, collection
 	for i, embedding := range embeddings {
 		sourceTables[i] = embedding.SourceTable
 		sourceUIDs[i] = embedding.SourceUID
-		embeddingUIDs[i] = embedding.EmbeddingUID // Use the embeddingUID from the input struct
+		embeddingUIDs[i] = embedding.EmbeddingUID
 		fileUIDs[i] = embedding.FileUID.String()
 		fileNames[i] = embedding.Filename
-		fileTypes[i] = embedding.ContentType  // MIME type
-		contentTypes[i] = embedding.ChunkType // chunk type
+		fileTypes[i] = embedding.ContentType
+		contentTypes[i] = embedding.ChunkType
 		tags[i] = embedding.Tags
-		vectors[i] = make([]float32, len(embedding.Vector))
-		for j, val := range embedding.Vector {
-			vectors[i][j] = float32(val)
-		}
+		vectors[i] = embedding.Vector
 	}
 
-	// Create the columns for insertion
-	columns := []entity.Column{
-		entity.NewColumnVarChar(kbCollectionFieldSourceTable, sourceTables),
-		entity.NewColumnVarChar(kbCollectionFieldSourceUID, sourceUIDs),
-		entity.NewColumnVarChar(kbCollectionFieldEmbeddingUID, embeddingUIDs),
-		entity.NewColumnFloatVector(kbCollectionFieldEmbedding, vectorDim, vectors),
-	}
-
+	// Check metadata field support
 	hasMetadata, hasFileUID, hasTags, err := m.checkMetadataFields(ctx, collectionName)
 	if err != nil {
 		return fmt.Errorf("checking metadata fields: %w", err)
 	}
 
+	// Build insert option using fluent API
+	insertOpt := milvusclient.NewColumnBasedInsertOption(collectionName).
+		WithVarcharColumn(kbCollectionFieldSourceTable, sourceTables).
+		WithVarcharColumn(kbCollectionFieldSourceUID, sourceUIDs).
+		WithVarcharColumn(kbCollectionFieldDenseEmbeddingUID, embeddingUIDs).
+		WithFloatVectorColumn(kbCollectionFieldDenseEmbedding, vectorDim, vectors)
+
 	if hasMetadata {
-		columns = append(columns,
-			entity.NewColumnVarChar(kbCollectionFieldFileName, fileNames),
-			entity.NewColumnVarChar(kbCollectionFieldFileType, fileTypes),
-			entity.NewColumnVarChar(kbCollectionFieldContentType, contentTypes),
-		)
+		insertOpt.WithVarcharColumn(kbCollectionFieldFileName, fileNames).
+			WithVarcharColumn(kbCollectionFieldFileType, fileTypes).
+			WithVarcharColumn(kbCollectionFieldContentType, contentTypes)
 	}
 
 	if hasFileUID {
-		columns = append(columns, entity.NewColumnVarChar(kbCollectionFieldFileUID, fileUIDs))
+		insertOpt.WithVarcharColumn(kbCollectionFieldFileUID, fileUIDs)
 	}
 
 	if hasTags {
-		// Convert [][]string to [][][]byte for Milvus array column
-		tagsBytes := make([][][]byte, len(tags))
-		for i, tagList := range tags {
-			tagsBytes[i] = make([][]byte, len(tagList))
-			for j, tag := range tagList {
-				tagsBytes[i][j] = []byte(tag)
-			}
-		}
+		// Create array column for tags
+		tagsColumn := column.NewColumnVarCharArray(kbCollectionFieldTags, tags)
+		insertOpt.WithColumns(tagsColumn)
 		logger.Info("Inserting embeddings with tags",
-			zap.Int("embedding_count", len(tags)),
-			zap.Strings("first_embedding_tags", tags[0]))
-		columns = append(columns, entity.NewColumnVarCharArray(kbCollectionFieldTags, tagsBytes))
+			zap.Int("embedding_count", len(tags)))
 	} else {
-		logger.Warn("Collection does not support tags - embeddings will be inserted without tags",
-			zap.String("collection", collectionName))
+		logger.Warn("Collection does not support tags - embeddings will be inserted without tags")
+	}
+
+	// Check if collection supports sparse embeddings for hybrid search
+	hasSparse, err := m.checkSparseEmbeddingField(ctx, collectionName)
+	if err != nil {
+		return fmt.Errorf("checking sparse embedding field: %w", err)
+	}
+
+	if hasSparse {
+		// Generate BM25 sparse vectors for hybrid search
+		texts := make([]string, len(embeddings))
+		for i, emb := range embeddings {
+			texts[i] = emb.Text
+		}
+
+		// Initialize BM25 encoder and fit on corpus
+		encoder := NewBM25Encoder()
+		encoder.Fit(texts)
+
+		// Generate sparse vectors
+		sparseVectors, err := encoder.EncodeDocuments(texts)
+		if err != nil {
+			return fmt.Errorf("encoding sparse vectors: %w", err)
+		}
+
+		logger.Info("Inserting embeddings with BM25 sparse vectors for hybrid search",
+			zap.Int("embedding_count", len(sparseVectors)),
+			zap.Int("vocabulary_size", len(encoder.vocabulary)))
+
+		// Create sparse vector column
+		sparseColumn := column.NewColumnSparseVectors(kbCollectionFieldSparseEmbedding, sparseVectors)
+		insertOpt.WithColumns(sparseColumn)
+	} else {
+		logger.Debug("Collection does not support sparse vectors - using dense-only search")
 	}
 
 	// Insert the data with retry
 	maxRetries := 3
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		_, err = m.c.Upsert(ctx, collectionName, "", columns...)
+		_, err = m.c.Upsert(ctx, insertOpt)
 		if err == nil {
 			break
 		}
@@ -289,10 +317,9 @@ func (m *milvusClient) InsertVectorsInCollection(ctx context.Context, collection
 		time.Sleep(time.Second * time.Duration(attempt))
 	}
 	if err != nil {
-		return fmt.Errorf("inserting vectors: %w", err)
+		return fmt.Errorf("failed to insert vectors after %d attempts: %w", maxRetries, err)
 	}
 
-	// Note: Flush removed for performance. Call FlushCollection separately after all batches complete.
 	logger.Info("Successfully inserted vectors", zap.Int("count", vectorCount))
 	return nil
 }
@@ -303,7 +330,7 @@ func (m *milvusClient) FlushCollection(ctx context.Context, collectionName strin
 	logger = logger.With(zap.String("collection_name", collectionName))
 
 	// Check if the collection exists
-	has, err := m.c.HasCollection(ctx, collectionName)
+	has, err := m.c.HasCollection(ctx, milvusclient.NewHasCollectionOption(collectionName))
 	if err != nil {
 		return fmt.Errorf("checking collection existence: %w", err)
 	}
@@ -313,16 +340,23 @@ func (m *milvusClient) FlushCollection(ctx context.Context, collectionName strin
 
 	// Flush the collection with retry
 	maxRetries := 3
+	var flushErr error
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		err = m.c.Flush(ctx, collectionName, false)
+		task, err := m.c.Flush(ctx, milvusclient.NewFlushOption(collectionName))
 		if err == nil {
-			break
+			// Wait for flush to complete
+			flushErr = task.Await(ctx)
+			if flushErr == nil {
+				break
+			}
+		} else {
+			flushErr = err
 		}
-		logger.Warn("Failed to flush collection, retrying", zap.Int("attempt", attempt), zap.Error(err))
+		logger.Warn("Failed to flush collection, retrying", zap.Int("attempt", attempt), zap.Error(flushErr))
 		time.Sleep(time.Second * time.Duration(attempt))
 	}
-	if err != nil {
-		return fmt.Errorf("flushing collection: %w", err)
+	if flushErr != nil {
+		return fmt.Errorf("flushing collection: %w", flushErr)
 	}
 
 	logger.Info("Successfully flushed collection")
@@ -334,7 +368,7 @@ func (m *milvusClient) DeleteEmbeddingsWithFileUID(ctx context.Context, collecti
 	logger = logger.With(zap.String("collection_name", collectionName), zap.String("file_uid", fileUID.String()))
 
 	// Check if collection exists first
-	has, err := m.c.HasCollection(ctx, collectionName)
+	has, err := m.c.HasCollection(ctx, milvusclient.NewHasCollectionOption(collectionName))
 	if err != nil {
 		return fmt.Errorf("checking collection existence: %w", err)
 	}
@@ -356,15 +390,19 @@ func (m *milvusClient) DeleteEmbeddingsWithFileUID(ctx context.Context, collecti
 	}
 
 	// Load collection if needed - check load state first to avoid redundant load
-	loadState, err := m.c.GetLoadState(ctx, collectionName, []string{})
+	loadState, err := m.c.GetLoadState(ctx, milvusclient.NewGetLoadStateOption(collectionName))
 	if err != nil {
 		return fmt.Errorf("checking load state: %w", err)
 	}
 
 	// Only load if not already loaded
-	if loadState != entity.LoadStateLoaded {
-		if err = m.c.LoadCollection(ctx, collectionName, false); err != nil {
+	if loadState.State != entity.LoadStateLoaded {
+		loadTask, err := m.c.LoadCollection(ctx, milvusclient.NewLoadCollectionOption(collectionName))
+		if err != nil {
 			return fmt.Errorf("loading collection for delete: %w", err)
+		}
+		if err = loadTask.Await(ctx); err != nil {
+			return fmt.Errorf("waiting for collection load: %w", err)
 		}
 		logger.Info("Collection loaded for delete operation")
 	} else {
@@ -372,7 +410,9 @@ func (m *milvusClient) DeleteEmbeddingsWithFileUID(ctx context.Context, collecti
 	}
 
 	expr := fmt.Sprintf("%s == '%s'", kbCollectionFieldFileUID, fileUID.String())
-	if err := m.c.Delete(ctx, collectionName, "", expr); err != nil {
+	deleteOpt := milvusclient.NewDeleteOption(collectionName).WithExpr(expr)
+	_, err = m.c.Delete(ctx, deleteOpt)
+	if err != nil {
 		return fmt.Errorf("deleting embeddings: %w", err)
 	}
 
@@ -406,7 +446,7 @@ func (m *milvusClient) SearchVectorsInCollection(ctx context.Context, p SearchVe
 
 	// Check if the collection exists
 	t := time.Now()
-	has, err := m.c.HasCollection(ctx, collectionName)
+	has, err := m.c.HasCollection(ctx, milvusclient.NewHasCollectionOption(collectionName))
 	if err != nil {
 		return nil, fmt.Errorf("checking collection existence: %w", err)
 	}
@@ -418,9 +458,12 @@ func (m *milvusClient) SearchVectorsInCollection(ctx context.Context, p SearchVe
 	t = time.Now()
 
 	// Load the collection if it's not already loaded
-	err = m.c.LoadCollection(ctx, collectionName, false)
+	loadTask, err := m.c.LoadCollection(ctx, milvusclient.NewLoadCollectionOption(collectionName))
 	if err != nil {
 		return nil, fmt.Errorf("loading collection: %w", err)
+	}
+	if err = loadTask.Await(ctx); err != nil {
+		return nil, fmt.Errorf("waiting for collection load: %w", err)
 	}
 
 	logger.Info("Collection load.", zap.Duration("duration", time.Since(t)))
@@ -430,11 +473,25 @@ func (m *milvusClient) SearchVectorsInCollection(ctx context.Context, p SearchVe
 		return nil, fmt.Errorf("checking metadata fields: %w", err)
 	}
 
+	// Check if collection supports hybrid search (dense + BM25 sparse)
+	hasSparse, err := m.checkSparseEmbeddingField(ctx, collectionName)
+	if err != nil {
+		return nil, fmt.Errorf("checking sparse embedding field: %w", err)
+	}
+
+	// Use hybrid search if sparse embeddings are available and query text is provided
+	useHybridSearch := hasSparse && p.QueryText != ""
+	if useHybridSearch {
+		logger.Debug("Using HYBRID search (dense + BM25 sparse vectors)")
+	} else {
+		logger.Debug("Using dense-only search", zap.Bool("has_sparse", hasSparse), zap.Bool("has_query_text", p.QueryText != ""))
+	}
+
 	outputFields := []string{
 		kbCollectionFieldSourceTable,
 		kbCollectionFieldSourceUID,
-		kbCollectionFieldEmbeddingUID,
-		kbCollectionFieldEmbedding,
+		kbCollectionFieldDenseEmbeddingUID,
+		kbCollectionFieldDenseEmbedding,
 	}
 	var filterStrs []string
 	if hasMetadata {
@@ -502,81 +559,138 @@ func (m *milvusClient) SearchVectorsInCollection(ctx context.Context, p SearchVe
 	for i, v := range p.Vectors {
 		milvusVectors[i] = entity.FloatVector(v)
 	}
-	// Perform the search
-	sp, err := entity.NewIndexSCANNSearchParam(nProbe, reorderK)
-	if err != nil {
-		return nil, fmt.Errorf("creating search param: %w", err)
-	}
 
 	filterExpr := strings.Join(filterStrs, " and ")
 
 	logger.Debug("Executing Milvus search",
 		zap.String("filter_expression", filterExpr),
 		zap.Int("filter_count", len(filterStrs)),
-		zap.Int("topK", topK))
+		zap.Int("topK", topK),
+		zap.Bool("hybrid_search", useHybridSearch))
 
-	results, err := m.c.Search(
-		ctx,
-		collectionName,
-		nil,
-		filterExpr,
-		outputFields,
-		milvusVectors,
-		kbCollectionFieldEmbedding,
-		metricType,
-		topK,
-		sp,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("searching embeddings: %w", err)
+	var results []milvusclient.ResultSet
+
+	if useHybridSearch {
+		// HYBRID SEARCH: Dense + BM25 Sparse
+		// Generate BM25 sparse vector from query text
+		encoder := NewBM25Encoder()
+		encoder.Fit([]string{p.QueryText}) // Fit on query (simple approach)
+
+		sparseVectors, err := encoder.EncodeQueries([]string{p.QueryText})
+		if err != nil {
+			logger.Warn("Failed to generate sparse vector, falling back to dense-only search",
+				zap.Error(err))
+			useHybridSearch = false
+		} else {
+			// Create ANN requests for both dense and sparse vectors
+			denseAnnParam := index.NewSCANNAnnParam(nProbe, reorderK)
+			denseRequest := milvusclient.NewAnnRequest(kbCollectionFieldDenseEmbedding, topK, milvusVectors...).
+				WithAnnParam(denseAnnParam)
+			if filterExpr != "" {
+				denseRequest.WithFilter(filterExpr)
+			}
+
+			sparseAnnParam := index.NewSparseAnnParam()
+			sparseRequest := milvusclient.NewAnnRequest(kbCollectionFieldSparseEmbedding, topK, sparseVectors[0]).
+				WithAnnParam(sparseAnnParam)
+			if filterExpr != "" {
+				sparseRequest.WithFilter(filterExpr)
+			}
+
+			// Execute hybrid search with RRF reranker
+			hybridOpt := milvusclient.NewHybridSearchOption(collectionName, topK, denseRequest, sparseRequest).
+				WithReranker(milvusclient.NewRRFReranker()).
+				WithOutputFields(outputFields...)
+
+			results, err = m.c.HybridSearch(ctx, hybridOpt)
+			if err != nil {
+				return nil, fmt.Errorf("hybrid search failed: %w", err)
+			}
+
+			logger.Info("Hybrid search completed",
+				zap.Duration("duration", time.Since(t)),
+				zap.Int("result_count", len(results)))
+		}
 	}
-	logger.Debug("Embeddings search completed",
-		zap.Duration("duration", time.Since(t)),
-		zap.Int("result_count", len(results)))
+
+	// Fall back to dense-only search if hybrid search is not available or failed
+	if !useHybridSearch {
+		// DENSE-ONLY SEARCH
+		annParam := index.NewSCANNAnnParam(nProbe, reorderK)
+
+		searchOpt := milvusclient.NewSearchOption(collectionName, topK, milvusVectors).
+			WithANNSField(kbCollectionFieldDenseEmbedding).
+			WithOutputFields(outputFields...).
+			WithAnnParam(annParam)
+
+		if filterExpr != "" {
+			searchOpt.WithFilter(filterExpr)
+		}
+
+		results, err = m.c.Search(ctx, searchOpt)
+		if err != nil {
+			return nil, fmt.Errorf("dense search failed: %w", err)
+		}
+
+		logger.Debug("Dense-only search completed",
+			zap.Duration("duration", time.Since(t)),
+			zap.Int("result_count", len(results)))
+	}
 
 	// Extract the embeddings from the search results
 	var embeddings [][]SimilarVectorEmbedding
-	for _, result := range results {
+	for idx, result := range results {
+		logger.Debug("Processing result set",
+			zap.Int("set_index", idx),
+			zap.Int("hits_in_set", result.ResultCount))
 		if result.ResultCount == 0 {
+			logger.Warn("Result set is empty, skipping",
+				zap.Int("set_index", idx))
 			continue
 		}
-		sourceTables, err := getStringData(result.Fields.GetColumn(kbCollectionFieldSourceTable))
+		sourceTables, err := getStringData(result.GetColumn(kbCollectionFieldSourceTable))
 		if err != nil {
 			return nil, fmt.Errorf("getting source table column value: %w", err)
 		}
 
-		sourceUIDs, err := getStringData(result.Fields.GetColumn(kbCollectionFieldSourceUID))
+		sourceUIDs, err := getStringData(result.GetColumn(kbCollectionFieldSourceUID))
 		if err != nil {
 			return nil, fmt.Errorf("getting source UID column value: %w", err)
 		}
-		embeddingUIDs, err := getStringData(result.Fields.GetColumn(kbCollectionFieldEmbeddingUID))
+		embeddingUIDs, err := getStringData(result.GetColumn(kbCollectionFieldDenseEmbeddingUID))
 		if err != nil {
 			return nil, fmt.Errorf("getting embedding UID column value: %w", err)
 		}
-		vectors := result.Fields.GetColumn(kbCollectionFieldEmbedding).(*entity.ColumnFloatVector)
+		vectorsCol := result.GetColumn(kbCollectionFieldDenseEmbedding)
 		scores := result.Scores
 
 		// Extract metadata fields if available
 		var fileUIDs, fileNames, fileTypes, contentTypes []string
 		if hasMetadata {
-			fileNames, err = getStringData(result.Fields.GetColumn(kbCollectionFieldFileName))
+			fileNames, err = getStringData(result.GetColumn(kbCollectionFieldFileName))
 			if err != nil {
 				return nil, fmt.Errorf("getting file name column value: %w", err)
 			}
-			fileTypes, err = getStringData(result.Fields.GetColumn(kbCollectionFieldFileType))
+			fileTypes, err = getStringData(result.GetColumn(kbCollectionFieldFileType))
 			if err != nil {
 				return nil, fmt.Errorf("getting file type column value: %w", err)
 			}
-			contentTypes, err = getStringData(result.Fields.GetColumn(kbCollectionFieldContentType))
+			contentTypes, err = getStringData(result.GetColumn(kbCollectionFieldContentType))
 			if err != nil {
 				return nil, fmt.Errorf("getting content type column value: %w", err)
 			}
 			if hasFileUID {
-				fileUIDs, err = getStringData(result.Fields.GetColumn(kbCollectionFieldFileUID))
+				fileUIDs, err = getStringData(result.GetColumn(kbCollectionFieldFileUID))
 				if err != nil {
 					return nil, fmt.Errorf("getting file UID column value: %w", err)
 				}
 			}
+		}
+
+		// Cast vector column to ColumnFloatVector to access data
+		vectorData, ok := vectorsCol.(*column.ColumnFloatVector)
+		if !ok {
+			return nil, fmt.Errorf("unexpected vector column type: %T", vectorsCol)
 		}
 
 		tempVectors := []SimilarVectorEmbedding{}
@@ -586,7 +700,7 @@ func (m *milvusClient) SearchVectorsInCollection(ctx context.Context, p SearchVe
 				SourceTable:  sourceTables[i],
 				SourceUID:    sourceUIDs[i],
 				EmbeddingUID: embeddingUIDs[i],
-				Vector:       vectors.Data()[i],
+				Vector:       vectorData.Data()[i],
 			}
 			if hasMetadata {
 				emb.Filename = fileNames[i]
@@ -645,7 +759,7 @@ func (m *milvusClient) SearchVectorsInCollection(ctx context.Context, p SearchVe
 }
 
 func (m *milvusClient) DropCollection(ctx context.Context, collectionName string) error {
-	return m.c.DropCollection(ctx, collectionName)
+	return m.c.DropCollection(ctx, milvusclient.NewDropCollectionOption(collectionName))
 }
 
 func (m *milvusClient) CheckFileUIDMetadata(ctx context.Context, collectionName string) (bool, error) {
@@ -654,10 +768,10 @@ func (m *milvusClient) CheckFileUIDMetadata(ctx context.Context, collectionName 
 }
 
 // checkMetadataFields returns whether the collection schema has metadata
-// fields. Additionally, it checks the file UID and tags metadata fields separately as they
+// fields. Additionally, it checks the file UID, tags, and sparse embedding fields separately as they
 // were introduced later and certain legacy collections don't have them.
 func (m *milvusClient) checkMetadataFields(ctx context.Context, collectionName string) (hasMetadata, hasFileUID, hasTags bool, _ error) {
-	collDesc, err := m.c.DescribeCollection(ctx, collectionName)
+	collDesc, err := m.c.DescribeCollection(ctx, milvusclient.NewDescribeCollectionOption(collectionName))
 	if err != nil {
 		return false, false, false, fmt.Errorf("describing collection: %w", err)
 	}
@@ -677,15 +791,41 @@ func (m *milvusClient) checkMetadataFields(ctx context.Context, collectionName s
 	return hasMetadata, hasFileUID, hasTags, nil
 }
 
-func getStringData(col entity.Column) ([]string, error) {
+// checkSparseEmbeddingField checks if the collection has the sparse embedding field
+// for hybrid search (BM25 + dense vectors)
+func (m *milvusClient) checkSparseEmbeddingField(ctx context.Context, collectionName string) (bool, error) {
+	collDesc, err := m.c.DescribeCollection(ctx, milvusclient.NewDescribeCollectionOption(collectionName))
+	if err != nil {
+		return false, fmt.Errorf("describing collection: %w", err)
+	}
+
+	for _, field := range collDesc.Schema.Fields {
+		if field.Name == kbCollectionFieldSparseEmbedding {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+func getStringData(col column.Column) ([]string, error) {
 	switch v := col.(type) {
-	case *entity.ColumnVarChar:
+	case *column.ColumnVarChar:
 		return v.Data(), nil
-	case *entity.ColumnString:
+	case *column.ColumnString:
 		return v.Data(), nil
 	default:
 		return nil, fmt.Errorf("unexpected column type for string data: %T", col)
 	}
+}
+
+// convertTagsToArray converts tags to [][]string format for multiple rows
+func convertTagsToArray(embeddingUIDs []string, tags []string) [][]string {
+	result := make([][]string, len(embeddingUIDs))
+	for i := range embeddingUIDs {
+		result[i] = tags
+	}
+	return result
 }
 
 // CollectionExists checks if a collection exists in Milvus
@@ -693,7 +833,7 @@ func (m *milvusClient) CollectionExists(ctx context.Context, collectionID string
 	logger, _ := logx.GetZapLogger(ctx)
 	logger = logger.With(zap.String("collection_id", collectionID))
 
-	has, err := m.c.HasCollection(ctx, collectionID)
+	has, err := m.c.HasCollection(ctx, milvusclient.NewHasCollectionOption(collectionID))
 	if err != nil {
 		logger.Error("Failed to check collection existence",
 			zap.String("collection", collectionID),
@@ -719,7 +859,7 @@ func (m *milvusClient) UpdateEmbeddingTags(ctx context.Context, collectionID str
 	logger.Info("UpdateEmbeddingTags: Starting tags update")
 
 	// Check if collection exists
-	has, err := m.c.HasCollection(ctx, collectionID)
+	has, err := m.c.HasCollection(ctx, milvusclient.NewHasCollectionOption(collectionID))
 	if err != nil {
 		return fmt.Errorf("checking collection existence: %w", err)
 	}
@@ -739,33 +879,37 @@ func (m *milvusClient) UpdateEmbeddingTags(ctx context.Context, collectionID str
 	}
 
 	// Load collection before querying
-	if err := m.c.LoadCollection(ctx, collectionID, false); err != nil {
+	loadTask, err := m.c.LoadCollection(ctx, milvusclient.NewLoadCollectionOption(collectionID))
+	if err != nil {
 		logger.Warn("UpdateEmbeddingTags: Failed to load collection (may already be loaded)",
 			zap.Error(err))
 		// Continue anyway - collection might already be loaded
+	} else {
+		if err = loadTask.Await(ctx); err != nil {
+			logger.Warn("UpdateEmbeddingTags: Failed to wait for collection load",
+				zap.Error(err))
+		}
 	}
 
 	// Query to get all embedding UIDs for this file
 	expr := fmt.Sprintf("%s == '%s'", kbCollectionFieldFileUID, fileUID.String())
 
-	searchResult, err := m.c.Query(
-		ctx,
-		collectionID,
-		nil, // partitions
-		expr,
-		[]string{kbCollectionFieldEmbeddingUID},
-	)
+	queryOpt := milvusclient.NewQueryOption(collectionID).
+		WithFilter(expr).
+		WithOutputFields(kbCollectionFieldDenseEmbeddingUID)
+
+	searchResult, err := m.c.Query(ctx, queryOpt)
 	if err != nil {
 		return fmt.Errorf("querying embeddings for file: %w", err)
 	}
 
-	if len(searchResult) == 0 {
+	if searchResult.ResultCount == 0 {
 		logger.Info("UpdateEmbeddingTags: No embeddings found for file")
 		return nil
 	}
 
-	// Extract embedding UIDs
-	embeddingUIDs, err := getStringData(searchResult[0])
+	// Extract embedding UIDs from the result set
+	embeddingUIDs, err := getStringData(searchResult.GetColumn(kbCollectionFieldDenseEmbeddingUID))
 	if err != nil {
 		return fmt.Errorf("extracting embedding UIDs: %w", err)
 	}
@@ -778,23 +922,15 @@ func (m *milvusClient) UpdateEmbeddingTags(ctx context.Context, collectionID str
 	logger.Info("UpdateEmbeddingTags: Found embeddings to update",
 		zap.Int("count", len(embeddingUIDs)))
 
-	// Convert tags to [][]byte for Milvus array column
-	tagsBytes := make([][][]byte, len(embeddingUIDs))
-	for i := range embeddingUIDs {
-		tagsBytes[i] = make([][]byte, len(tags))
-		for j, tag := range tags {
-			tagsBytes[i][j] = []byte(tag)
-		}
-	}
+	// Build upsert option using fluent API
+	tagsColumn := column.NewColumnVarCharArray(kbCollectionFieldTags, convertTagsToArray(embeddingUIDs, tags))
 
-	// Build update columns
-	columns := []entity.Column{
-		entity.NewColumnVarChar(kbCollectionFieldEmbeddingUID, embeddingUIDs),
-		entity.NewColumnVarCharArray(kbCollectionFieldTags, tagsBytes),
-	}
+	upsertOpt := milvusclient.NewColumnBasedInsertOption(collectionID).
+		WithVarcharColumn(kbCollectionFieldDenseEmbeddingUID, embeddingUIDs).
+		WithColumns(tagsColumn)
 
 	// Upsert to update tags (Milvus uses upsert for updates based on primary key)
-	_, err = m.c.Upsert(ctx, collectionID, "", columns...)
+	_, err = m.c.Upsert(ctx, upsertOpt)
 	if err != nil {
 		return fmt.Errorf("updating embedding tags: %w", err)
 	}
