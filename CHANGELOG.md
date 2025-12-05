@@ -1,5 +1,68 @@
 # Changelog
 
+## [0.34.0](https://github.com/instill-ai/artifact-backend/compare/v0.33.0...v0.34.0) (2025-12-05)
+
+
+### Features
+
+* **ai:** add multi-provider support with OpenAI for legacy embeddings ([#271](https://github.com/instill-ai/artifact-backend/issues/271)) ([6896341](https://github.com/instill-ai/artifact-backend/commit/689634194af655d533a3f6dda4afd98b110abfb3))
+* **api:** implement file reprocessing endpoint and integration test ([#283](https://github.com/instill-ai/artifact-backend/issues/283)) ([a17b3c4](https://github.com/instill-ai/artifact-backend/commit/a17b3c4d5c8fd52d9f846677efa5d36f416500b3))
+* **cache,file-type:** implement small file caching and enhance multimedia support ([#285](https://github.com/instill-ai/artifact-backend/issues/285)) ([7597d5d](https://github.com/instill-ai/artifact-backend/commit/7597d5d27ec20256d93cfa84ab4e3b1e2628cf78))
+* **cache:** enlongate cache time at calling ([#284](https://github.com/instill-ai/artifact-backend/issues/284)) ([8b12a79](https://github.com/instill-ai/artifact-backend/commit/8b12a79b6d0b79c17209d248dc5d0e2350b17c0c))
+* **file-type:** enhance file type support ([#286](https://github.com/instill-ai/artifact-backend/issues/286)) ([706d63e](https://github.com/instill-ai/artifact-backend/commit/706d63e768597aa49f1e991a743060035539e442))
+* **file,retrieval:** add tag filter to similarity chunk search ([#266](https://github.com/instill-ai/artifact-backend/issues/266)) ([d384282](https://github.com/instill-ai/artifact-backend/commit/d3842822277abb5574379e5670e3d97e017a97ed))
+* **file:** add tag update endpoint ([#267](https://github.com/instill-ai/artifact-backend/issues/267)) ([fde1952](https://github.com/instill-ai/artifact-backend/commit/fde1952577d53e944c65e8122ca79e80f555c2f8))
+* **kb:** add abort capability and enum standardization for zero-downtime update ([#274](https://github.com/instill-ai/artifact-backend/issues/274)) ([89d3bf7](https://github.com/instill-ai/artifact-backend/commit/89d3bf7821ff876624a53a6b17d378a482fb7f78))
+* **kb:** implement zero-downtime KB update ([#273](https://github.com/instill-ai/artifact-backend/issues/273)) ([28ca0d0](https://github.com/instill-ai/artifact-backend/commit/28ca0d0a81d595c040a50ba002da10c00eca1771))
+* **object:** add custom download filename support for object downloads ([#309](https://github.com/instill-ai/artifact-backend/issues/309)) ([892889e](https://github.com/instill-ai/artifact-backend/commit/892889e08a413bd6b293c69556cad0d381b6a1b3))
+* **rag:** implement zero-downtime KB update framework with system config management ([#275](https://github.com/instill-ai/artifact-backend/issues/275)) ([6b3733d](https://github.com/instill-ai/artifact-backend/commit/6b3733d1ca1be4840c33a4eb2cdfad28ea161e4d))
+* **search:** add BM25 hybrid search support ([#310](https://github.com/instill-ai/artifact-backend/issues/310)) ([b84247f](https://github.com/instill-ai/artifact-backend/commit/b84247f64213bced555d7d0fea6ad235eb36ad12))
+* **storage:** implement dual storage architecture with GCS on-demand and AI usage metadata tracking ([#287](https://github.com/instill-ai/artifact-backend/issues/287)) ([7f5f6a0](https://github.com/instill-ai/artifact-backend/commit/7f5f6a00b8972341561dd7e7ed1cce342bfe1c7a))
+* **worker:** implement Temporal worker to replace Go routine ([#264](https://github.com/instill-ai/artifact-backend/issues/264)) ([941299a](https://github.com/instill-ai/artifact-backend/commit/941299aed69734460c16071c9882fb2c9827f1c6))
+
+
+### Bug Fixes
+
+* **config:** add base64 encoding for VertexAI and GCS service account keys ([#288](https://github.com/instill-ai/artifact-backend/issues/288)) ([aa310af](https://github.com/instill-ai/artifact-backend/commit/aa310afc9c3409cd45f17e61b0c15f65edaa3b5f))
+* **handler:** return native gs:// URIs for VertexAI cache access ([#305](https://github.com/instill-ai/artifact-backend/issues/305)) ([084d636](https://github.com/instill-ai/artifact-backend/commit/084d636705c2883eee66dd4db211f46ad162b75e))
+* **kb-update:** atomic transaction for swap prevents constraint viola… ([#297](https://github.com/instill-ai/artifact-backend/issues/297)) ([3aa30d8](https://github.com/instill-ai/artifact-backend/commit/3aa30d8ad6fb238476807791de2af69674096be1))
+* **kb:** atomically update KB usage during file creation to prevent race condition errors ([#306](https://github.com/instill-ai/artifact-backend/issues/306)) ([a05bdd8](https://github.com/instill-ai/artifact-backend/commit/a05bdd851c20587e8967638ce88f1d0731650662))
+* **kb:** ensure active_collection_uid is always unique and consistently used for Milvus operations ([#295](https://github.com/instill-ai/artifact-backend/issues/295)) ([752667f](https://github.com/instill-ai/artifact-backend/commit/752667fcb0346386f060c500000e8e1edbec26c5))
+* **migration:** standardize file_type enum format and ensure singleton GCS cleanup ([#290](https://github.com/instill-ai/artifact-backend/issues/290)) ([04f7c48](https://github.com/instill-ai/artifact-backend/commit/04f7c48699810c5c993a7b05e407c63a024d6b56))
+* **pipeline:** batch embedding requests in groups of 32 ([#294](https://github.com/instill-ai/artifact-backend/issues/294)) ([abb47f2](https://github.com/instill-ai/artifact-backend/commit/abb47f2ca2654b94d32111a7c1c823e166e479fb))
+* **repository:** rename fail_reason to status_message and allow pipeline clearing ([#298](https://github.com/instill-ai/artifact-backend/issues/298)) ([d7fe111](https://github.com/instill-ai/artifact-backend/commit/d7fe11197ba05c2f3671e47fc2e0346218ca0990))
+* **search:** restore tags and file filtering in chunk similarity search ([#299](https://github.com/instill-ai/artifact-backend/issues/299)) ([f0be006](https://github.com/instill-ai/artifact-backend/commit/f0be006383c46899da64b64ae1f6128c0a558e54))
+* **storage:** ensure standard file types are correctly stored and retrieved from MinIO ([#289](https://github.com/instill-ai/artifact-backend/issues/289)) ([eb77a68](https://github.com/instill-ai/artifact-backend/commit/eb77a682a9c0d276ca548774384f319b0340eed5))
+* **worker:** auto-recreate missing milvus collections ([#302](https://github.com/instill-ai/artifact-backend/issues/302)) ([d06f215](https://github.com/instill-ai/artifact-backend/commit/d06f21536e7edcfcfe4ffdbce59c4a606a99d5c4))
+* **worker:** improve KB update robustness and resource cleanup ([#291](https://github.com/instill-ai/artifact-backend/issues/291)) ([9b97f09](https://github.com/instill-ai/artifact-backend/commit/9b97f0935a317fd84e67fc1831d665f3f3f5e919))
+* **worker:** prevent immediate rollback KB cleanup and fix activity registration ([#301](https://github.com/instill-ai/artifact-backend/issues/301)) ([68e2d26](https://github.com/instill-ai/artifact-backend/commit/68e2d266b7c3e53fd0d5cc32741bcd23f8d95229))
+* **worker:** register VerifyKBCleanupActivity in Temporal worker ([#300](https://github.com/instill-ai/artifact-backend/issues/300)) ([4977fe1](https://github.com/instill-ai/artifact-backend/commit/4977fe181124e7b4ac1c6ce3808be5fab0af0119))
+
+
+### Miscellaneous
+
+* **deps:** bump golang.org/x/crypto from 0.39.0 to 0.45.0 ([#304](https://github.com/instill-ai/artifact-backend/issues/304)) ([cbbd3ab](https://github.com/instill-ai/artifact-backend/commit/cbbd3abc543390b56f83b8e9754b4f239d8f733e))
+* **file:** add post-file-processing hook ([#281](https://github.com/instill-ai/artifact-backend/issues/281)) ([850e6a1](https://github.com/instill-ai/artifact-backend/commit/850e6a1a7404cab4538a0e36278edd55cefe6512))
+* **main:** fix manifest.json release version ([6ac591d](https://github.com/instill-ai/artifact-backend/commit/6ac591de088523e5c37363d53ae675b6c7978be1))
+* **main:** revert back to previous value scheme ([#268](https://github.com/instill-ai/artifact-backend/issues/268)) ([0511ed1](https://github.com/instill-ai/artifact-backend/commit/0511ed14046ba6fce3106da6af2db85cc31c90fe))
+* release v0.34.0 ([851a3dc](https://github.com/instill-ai/artifact-backend/commit/851a3dc21736d9fc598cfcc219b156215b09a170))
+
+
+### Refactor
+
+* **ai:** move AI client from internal to public API ([#280](https://github.com/instill-ai/artifact-backend/issues/280)) ([d6dd9b4](https://github.com/instill-ai/artifact-backend/commit/d6dd9b4f8d6c92290fd87c608337d634d2becd27))
+* **api:** align artifact backend with Google AIP standards ([#278](https://github.com/instill-ai/artifact-backend/issues/278)) ([128a286](https://github.com/instill-ai/artifact-backend/commit/128a286c64ba141eb81e0f252838d5839f6f1de2))
+* **api:** rename Catalog to Knowledge Base across entire codebase ([#279](https://github.com/instill-ai/artifact-backend/issues/279)) ([edade9d](https://github.com/instill-ai/artifact-backend/commit/edade9d798016954c2773964fd0f768469e2b0f0))
+* **artifact:** remove deprecated start_pos and end_pos fields from Chunk message ([#282](https://github.com/instill-ai/artifact-backend/issues/282)) ([eeb433d](https://github.com/instill-ai/artifact-backend/commit/eeb433df49cb42a6b0261302033a5b7069d0dbd1))
+* **artifact:** simplify chunk retrieval and align chunk type naming with protobuf ([#270](https://github.com/instill-ai/artifact-backend/issues/270)) ([04a3c69](https://github.com/instill-ai/artifact-backend/commit/04a3c693d9714820738b5294f5e938095781f711))
+* **embeddings:** replace preset pipeline with direct model API call ([#269](https://github.com/instill-ai/artifact-backend/issues/269)) ([89d528f](https://github.com/instill-ai/artifact-backend/commit/89d528fb2107b9140e4d4fb9b8af59865925a4fc))
+* **file-type:** use centralized SupportsFileType from x/file package ([#307](https://github.com/instill-ai/artifact-backend/issues/307)) ([fa943e7](https://github.com/instill-ai/artifact-backend/commit/fa943e76f67ca836142bfd80c0a6d6819c236736))
+* **file:** adopt centralized file type utilities from x package ([#303](https://github.com/instill-ai/artifact-backend/issues/303)) ([8f13707](https://github.com/instill-ai/artifact-backend/commit/8f137074ff43fb8d8d7c54fede4272f73ce572ce))
+* **knowledge-base:** use parent_kb_uid for staging/rollback KB relationships ([#292](https://github.com/instill-ai/artifact-backend/issues/292)) ([005e01a](https://github.com/instill-ai/artifact-backend/commit/005e01af1ed0fff87474039c45b1732730746ac8))
+* **worker:** combine embedding activities to eliminate large data transfer ([#308](https://github.com/instill-ai/artifact-backend/issues/308)) ([8956328](https://github.com/instill-ai/artifact-backend/commit/8956328c64c8fba2c1e5da4114b8f32b00f2b156))
+* **worker:** implement symmetric cleanup patterns and simplify embedding workflow ([#272](https://github.com/instill-ai/artifact-backend/issues/272)) ([e29b676](https://github.com/instill-ai/artifact-backend/commit/e29b676b03234f92c03a5d3fd161547b810d38f5))
+* **worker:** remove redundant GCS cleanup workflow ([#296](https://github.com/instill-ai/artifact-backend/issues/296)) ([7a49257](https://github.com/instill-ai/artifact-backend/commit/7a49257386653c3561387b38da0277ffe0c9228f))
+
 ## [0.32.1](https://github.com/instill-ai/artifact-backend/compare/v0.32.0...v0.32.1) (2025-09-30)
 
 
