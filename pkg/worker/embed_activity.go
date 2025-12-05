@@ -11,6 +11,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 	"gorm.io/gorm"
 
+	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/ai"
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/pipeline"
@@ -141,11 +142,29 @@ func (w *Worker) EmbedAndSaveChunksActivity(ctx context.Context, param *EmbedAnd
 		zap.String("fileUID", param.FileUID.String()),
 		zap.Int("chunkCount", len(chunks)))
 
-	// Step 3: Extract texts from chunks
+	// Step 3: Load chunk text content from MinIO
+	// ContentDest contains MinIO paths, we need to fetch the actual content
 	texts := make([]string, len(chunks))
+	bucket := config.Config.Minio.BucketName
+
 	for i, chunk := range chunks {
-		texts[i] = chunk.ContentDest
+		content, err := w.repository.GetMinIOStorage().GetFile(ctx, bucket, chunk.ContentDest)
+		if err != nil {
+			err = errorsx.AddMessage(
+				fmt.Errorf("failed to load chunk content from MinIO: %w", err),
+				"Unable to load chunk content for embedding. Please try again.",
+			)
+			return nil, temporal.NewApplicationErrorWithCause(
+				errorsx.MessageOrErr(err),
+				embedAndSaveChunksActivityError,
+				err,
+			)
+		}
+		texts[i] = string(content)
 	}
+
+	w.log.Info("Loaded chunk content from MinIO",
+		zap.Int("chunkCount", len(texts)))
 
 	// Step 4: Create authenticated context if metadata provided
 	authCtx := ctx
@@ -308,6 +327,14 @@ func (w *Worker) EmbedAndSaveChunksActivity(ctx context.Context, param *EmbedAnd
 		externalServiceCall := func(insertedEmbeddings []repository.EmbeddingModel) error {
 			vectors := make([]repository.VectorEmbedding, len(insertedEmbeddings))
 			for j, emb := range insertedEmbeddings {
+				// Find the corresponding chunk text for BM25 sparse vector generation
+				// The batch offset maps to the original chunks array
+				chunkIndex := start + j
+				chunkText := ""
+				if chunkIndex < len(texts) {
+					chunkText = texts[chunkIndex]
+				}
+
 				vectors[j] = repository.VectorEmbedding{
 					SourceTable:  emb.SourceTable,
 					SourceUID:    emb.SourceUID.String(),
@@ -318,6 +345,7 @@ func (w *Worker) EmbedAndSaveChunksActivity(ctx context.Context, param *EmbedAnd
 					ContentType:  emb.ContentType,
 					ChunkType:    emb.ChunkType,
 					Tags:         emb.Tags,
+					Text:         chunkText, // Add text for BM25 sparse vector generation
 				}
 			}
 			if err := w.repository.InsertVectorsInCollection(ctx, collection, vectors); err != nil {
