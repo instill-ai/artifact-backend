@@ -377,9 +377,9 @@ export function countMinioObjects(kbUID, fileUID, objectType) {
     }
 
     // Execute the shell script to count MinIO objects
-    // Pass MinIO host/port from environment or use defaults
-    const minioHost = __ENV.MINIO_HOST || 'minio';
-    const minioPort = __ENV.MINIO_PORT || '9000';
+    // Use minioConfig.host which handles local vs Docker mode automatically
+    const minioHost = __ENV.MINIO_HOST || constant.minioConfig.host;
+    const minioPort = __ENV.MINIO_PORT || String(constant.minioConfig.port);
     const result = exec.command('sh', [
       `${__ENV.TEST_FOLDER_ABS_PATH}/integration-test/scripts/count-minio-objects.sh`,
       constant.minioConfig.bucket,
@@ -427,8 +427,9 @@ export function verifyConvertedFileType(kbUID, fileUID, expectedExtension) {
     const prefix = dest.substring(0, lastSlashIndex + 1);
 
     // Use the verify mode of count-minio-objects.sh
-    const minioHost = __ENV.MINIO_HOST || 'minio';
-    const minioPort = __ENV.MINIO_PORT || '9000';
+    // Use minioConfig.host which handles local vs Docker mode automatically
+    const minioHost = __ENV.MINIO_HOST || constant.minioConfig.host;
+    const minioPort = __ENV.MINIO_PORT || String(constant.minioConfig.port);
     const result = exec.command('sh', [
       `${__ENV.TEST_FOLDER_ABS_PATH}/integration-test/scripts/count-minio-objects.sh`,
       constant.minioConfig.bucket,
@@ -541,9 +542,9 @@ export function countMilvusVectors(kbUID, fileUID) {
     const collectionName = `kb_${activeCollectionUID.replace(/-/g, '_')}`;
 
     // Execute the shell script to count Milvus vectors using milvus_cli
-    // Pass Milvus host/port from environment or use defaults
-    const milvusHost = __ENV.MILVUS_HOST || 'milvus';
-    const milvusPort = __ENV.MILVUS_PORT || '19530';
+    // Use milvusConfig which switches between localhost (local) and milvus (Docker)
+    const milvusHost = constant.milvusConfig.host;
+    const milvusPort = constant.milvusConfig.port;
     const result = exec.command('sh', [
       `${__ENV.TEST_FOLDER_ABS_PATH}/integration-test/scripts/count-milvus-vectors.sh`,
       collectionName,
@@ -678,8 +679,8 @@ export function checkMilvusCollectionExists(collectionUID) {
 
     // Collection doesn't exist if we get error messages
     if (trimmedResult.includes('collection not exist') ||
-        trimmedResult.includes('ERROR') ||
-        trimmedResult.includes('not found')) {
+      trimmedResult.includes('ERROR') ||
+      trimmedResult.includes('not found')) {
       return false;
     }
 
@@ -750,10 +751,13 @@ export function pollEmbeddings(fileUid, maxWaitSeconds = 3) {
  * @param {number} maxWaitSeconds - Maximum seconds to wait (default: 10)
  * @returns {number} Final count of vectors
  */
-export function pollMilvusVectors(kbUID, fileUID, maxWaitSeconds = 3) {
+export function pollMilvusVectors(kbUID, fileUID, maxWaitSeconds = 30) {
+  // Default increased to 30s because Milvus indexing can take 5-10 seconds,
+  // especially under load or when other tests are running in parallel
   for (let i = 0; i < maxWaitSeconds; i++) {
     const count = countMilvusVectors(kbUID, fileUID);
     if (count > 0) {
+      console.log(`pollMilvusVectors: Found ${count} vectors after ${i}s for KB=${kbUID}, file=${fileUID}`);
       return count;
     }
     if (i < maxWaitSeconds - 1) {
@@ -761,7 +765,9 @@ export function pollMilvusVectors(kbUID, fileUID, maxWaitSeconds = 3) {
     }
   }
   // Final attempt after waiting
-  return countMilvusVectors(kbUID, fileUID);
+  const finalCount = countMilvusVectors(kbUID, fileUID);
+  console.log(`pollMilvusVectors: Final count=${finalCount} after ${maxWaitSeconds}s for KB=${kbUID}, file=${fileUID}`);
+  return finalCount;
 }
 
 /**
@@ -1608,6 +1614,90 @@ export function waitForAllFileProcessingComplete(maxWaitSeconds = 120, dbIDPrefi
 
   console.warn(`${scope}: Timeout waiting for file processing after ${maxWaitSeconds}s`);
   return false;
+}
+
+/**
+ * Wait for all file processing AND Temporal activities to settle before cleanup.
+ *
+ * This is a more robust version for test teardown that:
+ * 1. Waits for file processing to complete (via DB check)
+ * 2. Adds a buffer delay for in-flight Temporal activities to finish
+ * 3. Optionally checks for pending Temporal workflows
+ *
+ * This reduces "no file found" errors during cleanup when activities are
+ * still running after file processing status has changed.
+ *
+ * @param {number} maxWaitSeconds - Maximum time to wait for processing (default: 120s)
+ * @param {string|null} dbIDPrefix - Knowledge Base ID prefix to filter (e.g., "test-ab12-")
+ * @param {number} bufferSeconds - Additional seconds to wait after processing complete (default: 3s)
+ * @returns {boolean} - True if cleanup is safe to proceed
+ */
+export function waitForSafeCleanup(maxWaitSeconds = 120, dbIDPrefix = null, bufferSeconds = 3) {
+  const scope = dbIDPrefix ? `this test (${dbIDPrefix})` : "GLOBAL";
+
+  // Step 1: Wait for file processing to complete
+  const processingComplete = waitForAllFileProcessingComplete(maxWaitSeconds, dbIDPrefix);
+
+  if (!processingComplete) {
+    console.warn(`${scope}: File processing did not complete within ${maxWaitSeconds}s, proceeding with cleanup anyway`);
+    // Still add buffer to let in-flight activities settle
+    console.log(`${scope}: Adding ${bufferSeconds}s buffer for Temporal activities to settle...`);
+    sleep(bufferSeconds);
+    return false;
+  }
+
+  // Step 2: Add buffer for Temporal activities to complete
+  // Even after file status is COMPLETED/FAILED, there may be follow-up activities running
+  // (e.g., embedding, cleanup, workflow completion handlers)
+  console.log(`${scope}: Processing complete, adding ${bufferSeconds}s buffer for Temporal activities to settle...`);
+  sleep(bufferSeconds);
+
+  // Step 3: Check for any pending Temporal workflows (optional, may not catch all)
+  // This is a best-effort check - some workflows may still be in flight
+  const pendingWorkflows = checkPendingWorkflows(dbIDPrefix);
+  if (pendingWorkflows > 0) {
+    console.log(`${scope}: ${pendingWorkflows} Temporal workflows may still be running, adding extra buffer...`);
+    sleep(2); // Extra buffer for workflow completion
+  }
+
+  console.log(`${scope}: Safe to proceed with cleanup`);
+  return true;
+}
+
+/**
+ * Check for pending Temporal workflows related to test KBs (best-effort).
+ *
+ * This queries the database for files that might have workflows in progress.
+ * It's not perfect (can't directly query Temporal) but helps reduce race conditions.
+ *
+ * @param {string|null} dbIDPrefix - KB ID prefix to filter
+ * @returns {number} - Approximate count of potentially pending workflows
+ */
+function checkPendingWorkflows(dbIDPrefix) {
+  try {
+    // Check for files that were recently completed but might have follow-up workflows
+    // (embedding, cleanup, etc.)
+    const prefixFilter = dbIDPrefix
+      ? `AND kb.id LIKE '${dbIDPrefix}%'`
+      : '';
+
+    // Look for files completed in the last 10 seconds that might still have activities
+    const recentQuery = `
+      SELECT COUNT(*) as count
+      FROM file kbf
+      JOIN knowledge_base kb ON kbf.kb_uid = kb.uid
+      WHERE kbf.process_status IN ('FILE_PROCESS_STATUS_COMPLETED', 'FILE_PROCESS_STATUS_FAILED')
+        AND kbf.update_time > NOW() - INTERVAL '10 seconds'
+        AND kb.delete_time IS NULL
+        ${prefixFilter}
+    `;
+
+    const result = safeQuery(recentQuery);
+    return result && result.length > 0 ? parseInt(result[0].count) : 0;
+  } catch (e) {
+    // If query fails, return 0 to not block cleanup
+    return 0;
+  }
 }
 
 /**

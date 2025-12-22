@@ -84,14 +84,9 @@ export function teardown(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
-    // CRITICAL: Wait for THIS TEST's file processing to complete before deleting knowledge bases
-    // Deleting knowledge bases triggers cleanup workflows that drop vector DB collections
-    // If we delete while files are still processing, we get "collection does not exist" errors
-    console.log("Teardown: Waiting for this test's file processing to complete...");
-    const allProcessingComplete = helper.waitForAllFileProcessingComplete(120, data.dbIDPrefix);
-    if (!allProcessingComplete) {
-      console.warn("Teardown: Some files still processing after 120s, proceeding anyway");
-    }
+    // Wait for file processing AND Temporal activities to settle before cleanup
+    console.log("Teardown: Waiting for safe cleanup...");
+    helper.waitForSafeCleanup(120, data.dbIDPrefix, 3);
 
     // Clean up knowledge bases created by this test
     var listResp = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`, null, data.header)

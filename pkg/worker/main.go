@@ -10,7 +10,6 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/redis/go-redis/v9"
 	"go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -273,11 +272,7 @@ func (w *Worker) DeleteFilesBatchActivity(ctx context.Context, param *DeleteFile
 	if len(errors) > 0 {
 		// Return first error
 		err := errorsx.AddMessage(errors[0], fmt.Sprintf("Failed to delete %d/%d files. Please try again.", len(errors), len(param.FilePaths)))
-		return temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			"DeleteFilesBatchActivity",
-			err,
-		)
+		return activityError(err, "DeleteFilesBatchActivity")
 	}
 
 	w.log.Info("DeleteFilesBatchActivity completed successfully",
@@ -316,11 +311,7 @@ func (w *Worker) GetFilesBatchActivity(ctx context.Context, param *GetFilesBatch
 		authCtx, err = CreateAuthenticatedContext(ctx, param.Metadata)
 		if err != nil {
 			err = errorsx.AddMessage(err, "Authentication failed. Please try again.")
-			return nil, temporal.NewApplicationErrorWithCause(
-				errorsx.MessageOrErr(err),
-				"GetFilesBatchActivity",
-				err,
-			)
+			return nil, activityError(err, "GetFilesBatchActivity")
 		}
 	}
 
@@ -348,11 +339,7 @@ func (w *Worker) GetFilesBatchActivity(ctx context.Context, param *GetFilesBatch
 		res := <-resultChan
 		if res.err != nil {
 			err := errorsx.AddMessage(res.err, fmt.Sprintf("Failed to retrieve file: %s. Please try again.", param.FilePaths[res.index]))
-			return nil, temporal.NewApplicationErrorWithCause(
-				errorsx.MessageOrErr(err),
-				"GetFilesBatchActivity",
-				err,
-			)
+			return nil, activityError(err, "GetFilesBatchActivity")
 		}
 		results[res.index] = FileContent{
 			Index:   res.index,
@@ -465,7 +452,7 @@ func (w *Worker) ExecuteKnowledgeBaseUpdate(ctx context.Context, knowledgeBaseID
 			defer func() { <-semaphore }() // Release slot when done
 
 			// Parse owner UID
-			ownerUID, err := uuid.FromString(kb.Owner)
+			ownerUID, err := uuid.FromString(kb.NamespaceUID)
 			if err != nil {
 				w.log.Error("Failed to parse owner UID",
 					zap.String("knowledgeBaseID", kb.KBID),
@@ -620,11 +607,11 @@ func (w *Worker) AbortKnowledgeBaseUpdate(ctx context.Context, knowledgeBaseIDs 
 
 		// Find and cleanup staging KB
 		stagingKBID := fmt.Sprintf("%s-staging", kb.KBID)
-		ownerUID, err := uuid.FromString(kb.Owner)
+		ownerUID, err := uuid.FromString(kb.NamespaceUID)
 		if err != nil {
 			w.log.Warn("Failed to parse owner UID",
 				zap.String("knowledgeBaseID", kb.KBID),
-				zap.String("owner", kb.Owner),
+				zap.String("owner", kb.NamespaceUID),
 				zap.Error(err))
 		} else {
 			stagingKB, err := w.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, types.OwnerUIDType(ownerUID), stagingKBID)

@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
-	"go.temporal.io/sdk/temporal"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/structpb"
 	"gorm.io/gorm"
@@ -131,7 +130,7 @@ func (w *Worker) GetFileMetadataActivity(ctx context.Context, param *GetFileMeta
 	// Get file metadata
 	files, err := w.repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{param.FileUID})
 	if err != nil {
-		return nil, temporal.NewApplicationErrorWithCause(
+		return nil, activityErrorWithCauseFlat(
 			errorsx.MessageOrErr(err),
 			getFileMetadataActivityError,
 			err,
@@ -146,7 +145,7 @@ func (w *Worker) GetFileMetadataActivity(ctx context.Context, param *GetFileMeta
 		w.log.Info("GetFileMetadataActivity: File not found (file record missing from database)",
 			zap.String("fileUID", param.FileUID.String()))
 		err := fmt.Errorf("file not found: %s", param.FileUID.String())
-		return nil, temporal.NewNonRetryableApplicationError(
+		return nil, activityErrorNonRetryableFlat(
 			"File not found",
 			getFileMetadataActivityError, err,
 		)
@@ -156,7 +155,7 @@ func (w *Worker) GetFileMetadataActivity(ctx context.Context, param *GetFileMeta
 	// Get KB's model family to determine caching strategy (Gemini only)
 	kbWithConfig, err := w.repository.GetKnowledgeBaseByUIDWithConfig(ctx, param.KBUID)
 	if err != nil {
-		return nil, temporal.NewApplicationErrorWithCause(
+		return nil, activityErrorWithCauseFlat(
 			fmt.Sprintf("Failed to get KB config: %s", errorsx.MessageOrErr(err)),
 			getFileMetadataActivityError,
 			err,
@@ -169,7 +168,7 @@ func (w *Worker) GetFileMetadataActivity(ctx context.Context, param *GetFileMeta
 	// We query this here to avoid additional DB roundtrips later
 	kb, err := w.repository.GetKnowledgeBaseByUID(ctx, param.KBUID)
 	if err != nil {
-		return nil, temporal.NewApplicationErrorWithCause(
+		return nil, activityErrorWithCauseFlat(
 			fmt.Sprintf("Failed to get KB: %s", errorsx.MessageOrErr(err)),
 			getFileMetadataActivityError,
 			err,
@@ -190,7 +189,7 @@ func (w *Worker) GetFileMetadataActivity(ctx context.Context, param *GetFileMeta
 		if err != nil {
 			// CRITICAL: If we can't check dual-processing requirements, we might miss triggering target files
 			// This would cause target KB files to remain NOTSTARTED, blocking synchronization
-			return nil, temporal.NewApplicationErrorWithCause(
+			return nil, activityErrorWithCauseFlat(
 				fmt.Sprintf("Failed to check dual-processing requirements for KB %s: %s", param.KBUID.String(), errorsx.MessageOrErr(err)),
 				getFileMetadataActivityError,
 				err,
@@ -225,7 +224,7 @@ func (w *Worker) GetFileContentActivity(ctx context.Context, param *GetFileConte
 		var err error
 		authCtx, err = CreateAuthenticatedContext(ctx, param.Metadata)
 		if err != nil {
-			return nil, temporal.NewApplicationErrorWithCause(
+			return nil, activityErrorWithCauseFlat(
 				fmt.Sprintf("Failed to create authenticated context: %s", errorsx.MessageOrErr(err)),
 				getFileContentActivityError,
 				err,
@@ -235,7 +234,7 @@ func (w *Worker) GetFileContentActivity(ctx context.Context, param *GetFileConte
 
 	content, err := w.repository.GetMinIOStorage().GetFile(authCtx, param.Bucket, param.Destination)
 	if err != nil {
-		return nil, temporal.NewApplicationErrorWithCause(
+		return nil, activityErrorWithCauseFlat(
 			fmt.Sprintf("Failed to retrieve file from storage: %s", errorsx.MessageOrErr(err)),
 			getFileContentActivityError,
 			err,
@@ -320,7 +319,7 @@ func (w *Worker) DeleteOldConvertedFilesActivity(ctx context.Context, param *Del
 	// Get ALL converted files for this file UID (content + summary + any others)
 	allConvertedFiles, err := w.repository.GetAllConvertedFilesByFileUID(ctx, param.FileUID)
 	if err != nil {
-		return temporal.NewApplicationErrorWithCause(
+		return activityErrorWithCauseFlat(
 			fmt.Sprintf("Failed to list converted files: %s", errorsx.MessageOrErr(err)),
 			deleteOldConvertedFilesActivityError,
 			err,
@@ -366,7 +365,7 @@ func (w *Worker) DeleteOldConvertedFilesActivity(ctx context.Context, param *Del
 				w.log.Error("DeleteOldConvertedFilesActivity: Failed to delete old chunk blobs from MinIO",
 					zap.String("convertedFileUID", file.UID.String()),
 					zap.Error(err))
-				return temporal.NewApplicationErrorWithCause(
+				return activityErrorWithCauseFlat(
 					fmt.Sprintf("Failed to delete old chunk blobs from MinIO: %s", errorsx.MessageOrErr(err)),
 					deleteOldConvertedFilesActivityError,
 					err,
@@ -385,7 +384,7 @@ func (w *Worker) DeleteOldConvertedFilesActivity(ctx context.Context, param *Del
 			w.log.Error("DeleteOldConvertedFilesActivity: Failed to delete old converted file from MinIO",
 				zap.String("destination", file.Destination),
 				zap.Error(err))
-			return temporal.NewApplicationErrorWithCause(
+			return activityErrorWithCauseFlat(
 				fmt.Sprintf("Failed to delete old converted file from MinIO: %s", errorsx.MessageOrErr(err)),
 				deleteOldConvertedFilesActivityError,
 				err,
@@ -400,7 +399,7 @@ func (w *Worker) DeleteOldConvertedFilesActivity(ctx context.Context, param *Del
 			w.log.Error("DeleteOldConvertedFilesActivity: Failed to delete old converted file DB record",
 				zap.String("convertedFileUID", file.UID.String()),
 				zap.Error(err))
-			return temporal.NewApplicationErrorWithCause(
+			return activityErrorWithCauseFlat(
 				fmt.Sprintf("Failed to delete old converted file DB record: %s", errorsx.MessageOrErr(err)),
 				deleteOldConvertedFilesActivityError,
 				err,
@@ -437,7 +436,7 @@ func (w *Worker) CreateConvertedFileRecordActivity(ctx context.Context, param *C
 		w.log.Error("CreateConvertedFileRecordActivity: Failed to create DB record",
 			zap.String("fileUID", param.FileUID.String()),
 			zap.Error(err))
-		return nil, temporal.NewApplicationErrorWithCause(
+		return nil, activityErrorWithCauseFlat(
 			fmt.Sprintf("Failed to create converted file record: %s", errorsx.MessageOrErr(err)),
 			createConvertedFileRecordActivityError,
 			err,
@@ -467,7 +466,7 @@ func (w *Worker) UploadConvertedFileToMinIOActivity(ctx context.Context, param *
 	if err != nil {
 		w.log.Error("UploadConvertedFileToMinIOActivity: Failed to upload to MinIO",
 			zap.Error(err))
-		return nil, temporal.NewApplicationErrorWithCause(
+		return nil, activityErrorWithCauseFlat(
 			fmt.Sprintf("Failed to upload converted file: %s", errorsx.MessageOrErr(err)),
 			uploadConvertedFileToMinIOActivityError,
 			err,
@@ -490,7 +489,7 @@ func (w *Worker) DeleteConvertedFileRecordActivity(ctx context.Context, param *D
 		w.log.Error("DeleteConvertedFileRecordActivity: Failed to delete DB record",
 			zap.String("convertedFileUID", param.ConvertedFileUID.String()),
 			zap.Error(err))
-		return temporal.NewApplicationErrorWithCause(
+		return activityErrorWithCauseFlat(
 			fmt.Sprintf("Failed to delete converted file record: %s", errorsx.MessageOrErr(err)),
 			deleteConvertedFileRecordActivityError,
 			err,
@@ -514,7 +513,7 @@ func (w *Worker) UpdateConvertedFileDestinationActivity(ctx context.Context, par
 		w.log.Error("UpdateConvertedFileDestinationActivity: Failed to update destination",
 			zap.String("convertedFileUID", param.ConvertedFileUID.String()),
 			zap.Error(err))
-		return temporal.NewApplicationErrorWithCause(
+		return activityErrorWithCauseFlat(
 			fmt.Sprintf("Failed to update file destination: %s", errorsx.MessageOrErr(err)),
 			updateConvertedFileDestinationActivityError,
 			err,
@@ -536,7 +535,7 @@ func (w *Worker) DeleteConvertedFileFromMinIOActivity(ctx context.Context, param
 		w.log.Error("DeleteConvertedFileFromMinIOActivity: Failed to delete from MinIO",
 			zap.String("destination", param.Destination),
 			zap.Error(err))
-		return temporal.NewApplicationErrorWithCause(
+		return activityErrorWithCauseFlat(
 			fmt.Sprintf("Failed to delete converted file from storage: %s", errorsx.MessageOrErr(err)),
 			deleteConvertedFileFromMinIOActivityError,
 			err,
@@ -576,7 +575,7 @@ func (w *Worker) UpdateConversionMetadataActivity(ctx context.Context, param *Up
 				zap.String("fileUID", param.FileUID.String()))
 			return nil
 		}
-		return temporal.NewApplicationErrorWithCause(
+		return activityErrorWithCauseFlat(
 			fmt.Sprintf("Failed to update file metadata: %s", errorsx.MessageOrErr(err)),
 			updateConversionMetadataActivityError,
 			err,
@@ -646,7 +645,7 @@ func (w *Worker) UpdateUsageMetadataActivity(ctx context.Context, param *UpdateU
 				zap.String("fileUID", param.FileUID.String()))
 			return nil
 		}
-		return temporal.NewApplicationErrorWithCause(
+		return activityErrorWithCauseFlat(
 			fmt.Sprintf("Failed to update usage metadata: %s", errorsx.MessageOrErr(err)),
 			updateUsageMetadataActivityError,
 			err,
@@ -813,7 +812,7 @@ func (w *Worker) DeleteOldTextChunksActivity(ctx context.Context, param *DeleteO
 		w.log.Error("DeleteOldTextChunksActivity: Failed to delete text chunk records",
 			zap.String("fileUID", param.FileUID.String()),
 			zap.Error(err))
-		return temporal.NewApplicationErrorWithCause(
+		return activityErrorWithCauseFlat(
 			fmt.Sprintf("Failed to delete old text chunk records: %s", errorsx.MessageOrErr(err)),
 			deleteOldTextChunksActivityError,
 			err,
@@ -906,7 +905,7 @@ func (w *Worker) SaveTextChunksActivity(ctx context.Context, param *SaveTextChun
 	// This activity only creates new chunks
 	err := w.repository.CreateTextChunks(ctx, textChunks)
 	if err != nil {
-		return nil, temporal.NewApplicationErrorWithCause(
+		return nil, activityErrorWithCauseFlat(
 			fmt.Sprintf("Failed to save text chunks to database: %s", errorsx.MessageOrErr(err)),
 			saveTextChunksActivityError,
 			err,
@@ -935,7 +934,7 @@ func (w *Worker) SaveTextChunksActivity(ctx context.Context, param *SaveTextChun
 			"text/markdown",
 		)
 		if err != nil {
-			return nil, temporal.NewApplicationErrorWithCause(
+			return nil, activityErrorWithCauseFlat(
 				fmt.Sprintf("Failed to upload text chunk (ID: %s) to MinIO: %s", chunkUID, errorsx.MessageOrErr(err)),
 				saveTextChunksActivityError,
 				err,
@@ -948,7 +947,7 @@ func (w *Worker) SaveTextChunksActivity(ctx context.Context, param *SaveTextChun
 	// Step 4: Update text chunk destinations in database
 	err = w.repository.UpdateTextChunkDestinations(ctx, destinations)
 	if err != nil {
-		return nil, temporal.NewApplicationErrorWithCause(
+		return nil, activityErrorWithCauseFlat(
 			fmt.Sprintf("Failed to update text chunk destinations: %s", errorsx.MessageOrErr(err)),
 			saveTextChunksActivityError,
 			err,
@@ -1020,7 +1019,7 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 				var err error
 				authCtx, err = CreateAuthenticatedContext(ctx, param.Metadata)
 				if err != nil {
-					return nil, temporal.NewApplicationErrorWithCause(
+					return nil, activityErrorWithCauseFlat(
 						fmt.Sprintf("Failed to create authenticated context: %s", errorsx.MessageOrErr(err)),
 						standardizeFileTypeActivityError,
 						err,
@@ -1031,7 +1030,7 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 			// Fetch original file content from MinIO blob location
 			fileContent, err := w.repository.GetMinIOStorage().GetFile(authCtx, param.Bucket, param.Destination)
 			if err != nil {
-				return nil, temporal.NewApplicationErrorWithCause(
+				return nil, activityErrorWithCauseFlat(
 					fmt.Sprintf("Failed to retrieve original file from storage: %s", errorsx.MessageOrErr(err)),
 					standardizeFileTypeActivityError,
 					err,
@@ -1052,7 +1051,7 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 				fileContent,
 			)
 			if err != nil {
-				return nil, temporal.NewApplicationErrorWithCause(
+				return nil, activityErrorWithCauseFlat(
 					fmt.Sprintf("Failed to copy original file to converted-file folder: %s", errorsx.MessageOrErr(err)),
 					standardizeFileTypeActivityError,
 					err,
@@ -1074,7 +1073,7 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 			if err != nil {
 				// Compensate: delete the uploaded MinIO file
 				_ = w.repository.GetMinIOStorage().DeleteFile(authCtx, config.Config.Minio.BucketName, convertedDestination)
-				return nil, temporal.NewApplicationErrorWithCause(
+				return nil, activityErrorWithCauseFlat(
 					fmt.Sprintf("Failed to create converted_file record: %s", errorsx.MessageOrErr(err)),
 					standardizeFileTypeActivityError,
 					err,
@@ -1122,7 +1121,7 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 		var err error
 		authCtx, err = CreateAuthenticatedContext(ctx, param.Metadata)
 		if err != nil {
-			return nil, temporal.NewApplicationErrorWithCause(
+			return nil, activityErrorWithCauseFlat(
 				fmt.Sprintf("Failed to create authenticated context: %s", errorsx.MessageOrErr(err)),
 				standardizeFileTypeActivityError,
 				err,
@@ -1133,7 +1132,7 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 	// Fetch original file content from MinIO
 	content, err := w.repository.GetMinIOStorage().GetFile(authCtx, param.Bucket, param.Destination)
 	if err != nil {
-		return nil, temporal.NewApplicationErrorWithCause(
+		return nil, activityErrorWithCauseFlat(
 			fmt.Sprintf("Failed to retrieve file from storage: %s", errorsx.MessageOrErr(err)),
 			standardizeFileTypeActivityError,
 			err,
@@ -1150,7 +1149,7 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 		w.log.Warn("StandardizeFileTypeActivity: Pipeline standardization failed",
 			zap.Error(err),
 			zap.String("pipeline", pipeline.ConvertFileTypePipeline.Name()))
-		return nil, temporal.NewApplicationErrorWithCause(
+		return nil, activityErrorWithCauseFlat(
 			fmt.Sprintf("Failed to convert file: %s", errorsx.MessageOrErr(err)),
 			standardizeFileTypeActivityError,
 			err,
@@ -1186,7 +1185,7 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 		convertedFileTypeEnum = artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_VIDEO
 		fileExtension = "mp4"
 	default:
-		return nil, temporal.NewApplicationError(
+		return nil, activityErrorSimple(
 			fmt.Sprintf("Unsupported target format: %s", targetFormat),
 			standardizeFileTypeActivityError,
 		)
@@ -1216,7 +1215,7 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 		convertedContent,
 	)
 	if err != nil {
-		return nil, temporal.NewApplicationErrorWithCause(
+		return nil, activityErrorWithCauseFlat(
 			fmt.Sprintf("Failed to upload standardized file to MinIO: %s", errorsx.MessageOrErr(err)),
 			standardizeFileTypeActivityError,
 			err,
@@ -1242,7 +1241,7 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 	if err != nil {
 		// Compensate: delete the uploaded MinIO file
 		_ = w.repository.GetMinIOStorage().DeleteFile(authCtx, config.Config.Minio.BucketName, convertedDestination)
-		return nil, temporal.NewApplicationErrorWithCause(
+		return nil, activityErrorWithCauseFlat(
 			fmt.Sprintf("Failed to create converted_file record: %s", errorsx.MessageOrErr(err)),
 			standardizeFileTypeActivityError,
 			err,
@@ -1480,7 +1479,7 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 		authCtx, err = CreateAuthenticatedContext(ctx, param.Metadata)
 		if err != nil {
 			logger.Error("Failed to create authenticated context", zap.Error(err))
-			return nil, temporal.NewApplicationErrorWithCause(
+			return nil, activityErrorWithCauseFlat(
 				fmt.Sprintf("Failed to create authenticated context: %s", errorsx.MessageOrErr(err)),
 				processContentActivityError,
 				err,
@@ -1512,7 +1511,7 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 
 		// No existing converted content - this is a real error
 		logger.Error("Failed to retrieve file from storage", zap.Error(err))
-		return nil, temporal.NewApplicationErrorWithCause(
+		return nil, activityErrorWithCauseFlat(
 			fmt.Sprintf("Failed to retrieve file from storage: %s", errorsx.MessageOrErr(err)),
 			processContentActivityError,
 			err,
@@ -1531,7 +1530,7 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 	kb, err := w.repository.GetKnowledgeBaseByUIDWithConfig(authCtx, param.KBUID)
 	if err != nil {
 		logger.Error("Failed to get KB for routing", zap.Error(err))
-		return nil, temporal.NewApplicationErrorWithCause(
+		return nil, activityErrorWithCauseFlat(
 			fmt.Sprintf("Failed to get knowledge base: %s", errorsx.MessageOrErr(err)),
 			processContentActivityError, err)
 	}
@@ -1550,7 +1549,7 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 		// Check for UNSPECIFIED or unsupported file types
 		if param.FileType == artifactpb.File_TYPE_UNSPECIFIED {
 			logger.Error("File type is UNSPECIFIED")
-			return nil, temporal.NewApplicationErrorWithCause(
+			return nil, activityErrorWithCauseFlat(
 				"File type could not be determined. Please ensure the file has a valid extension and format.",
 				processContentActivityError,
 				fmt.Errorf("file type is UNSPECIFIED"),
@@ -1562,7 +1561,7 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 			logger.Info("Using OpenAI pipeline route for content conversion")
 
 			if w.pipelineClient == nil {
-				return nil, temporal.NewApplicationErrorWithCause(
+				return nil, activityErrorWithCauseFlat(
 					"Pipeline client not configured for OpenAI route",
 					processContentActivityError, fmt.Errorf("pipeline client is nil"))
 			}
@@ -1589,14 +1588,14 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 					// OpenAI returned empty response - likely content filtering or model issue
 					// Mark as end-user error (non-retryable) with helpful message
 					// Note: Pipeline debug information (failed components, error details) is included in the error message
-					return nil, temporal.NewNonRetryableApplicationError(
+					return nil, activityErrorNonRetryableFlat(
 						fmt.Sprintf("AI service failed to generate content. This may be due to content filtering, document complexity, or AI service issues. Please try with a different document or contact support if the problem persists. Details: %s", err.Error()),
 						processContentActivityError, err)
 				}
 
 				// Other errors (network, timeout, etc.) should retry
 				// Note: Pipeline debug information (failed components, error details) is included in the error message
-				return nil, temporal.NewApplicationErrorWithCause(
+				return nil, activityErrorWithCauseFlat(
 					fmt.Sprintf("OpenAI pipeline failed: %s", errorsx.MessageOrErr(err)),
 					processContentActivityError, err)
 			}
@@ -1622,7 +1621,7 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 			// Check if AI client is configured
 			if w.aiClient == nil {
 				logger.Error("AI client not configured")
-				return nil, temporal.NewApplicationErrorWithCause(
+				return nil, activityErrorWithCauseFlat(
 					"AI client is required for content conversion. Please configure Gemini API key in the server configuration.",
 					processContentActivityError,
 					fmt.Errorf("AI client not configured"),
@@ -1637,11 +1636,11 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 					zap.String("cacheName", param.CacheName),
 					zap.String("client", w.aiClient.Name()))
 
-			conversion, err := w.aiClient.ConvertToMarkdownWithCache(
-				authCtx,
-				param.CacheName,
-				w.getGenerateContentPrompt(),
-			)
+				conversion, err := w.aiClient.ConvertToMarkdownWithCache(
+					authCtx,
+					param.CacheName,
+					w.getGenerateContentPrompt(),
+				)
 				if err != nil {
 					logger.Warn("Cached AI conversion failed, will try without cache", zap.Error(err))
 					conversionErr = err
@@ -1665,13 +1664,13 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 					zap.String("fileType", param.FileType.String()),
 					zap.String("client", w.aiClient.Name()))
 
-			conversion, err := w.aiClient.ConvertToMarkdownWithoutCache(
-				authCtx,
-				rawFileContent,
-				param.FileType,
-				param.Filename,
-				w.getGenerateContentPrompt(),
-			)
+				conversion, err := w.aiClient.ConvertToMarkdownWithoutCache(
+					authCtx,
+					rawFileContent,
+					param.FileType,
+					param.Filename,
+					w.getGenerateContentPrompt(),
+				)
 				if err != nil {
 					logger.Error("AI conversion failed", zap.Error(err))
 					conversionErr = err
@@ -1693,13 +1692,16 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 			if contentInMarkdown == "" {
 				logger.Error("AI conversion failed to produce content")
 				if conversionErr != nil {
-					return nil, temporal.NewApplicationErrorWithCause(
-						fmt.Sprintf("AI client failed to convert file: %s", errorsx.MessageOrErr(conversionErr)),
+					// Use NonRetryable for AI conversion failures (they won't succeed on retry)
+					// Break the error chain: use MessageOrErr for display, Error() for internal details
+					// This prevents deeply nested error structures in Temporal logs
+					return nil, activityErrorNonRetryableFlat(
+						errorsx.MessageOrErr(conversionErr),
 						processContentActivityError,
-						conversionErr,
+						fmt.Errorf("AI conversion failed: %s", conversionErr.Error()),
 					)
 				}
-				return nil, temporal.NewApplicationErrorWithCause(
+				return nil, activityErrorNonRetryableFlat(
 					"AI client failed to convert file: conversion produced empty content",
 					processContentActivityError,
 					fmt.Errorf("empty conversion result"),
@@ -1731,7 +1733,7 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 	})
 	if err != nil {
 		logger.Error("Failed to create converted file record", zap.Error(err))
-		return nil, temporal.NewApplicationErrorWithCause(
+		return nil, activityErrorWithCauseFlat(
 			fmt.Sprintf("Failed to create converted file record: %s", errorsx.MessageOrErr(err)),
 			processContentActivityError,
 			err,
@@ -1751,7 +1753,7 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 		_ = w.DeleteConvertedFileRecordActivity(ctx, &DeleteConvertedFileRecordActivityParam{
 			ConvertedFileUID: convertedFileUID,
 		})
-		return nil, temporal.NewApplicationErrorWithCause(
+		return nil, activityErrorWithCauseFlat(
 			fmt.Sprintf("Failed to upload converted file to MinIO: %s", errorsx.MessageOrErr(err)),
 			processContentActivityError,
 			err,
@@ -1772,7 +1774,7 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 		_ = w.DeleteConvertedFileRecordActivity(ctx, &DeleteConvertedFileRecordActivityParam{
 			ConvertedFileUID: convertedFileUID,
 		})
-		return nil, temporal.NewApplicationErrorWithCause(
+		return nil, activityErrorWithCauseFlat(
 			fmt.Sprintf("Failed to update converted file destination: %s", errorsx.MessageOrErr(err)),
 			processContentActivityError,
 			err,
@@ -1830,7 +1832,7 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 		authCtx, err = CreateAuthenticatedContext(ctx, param.Metadata)
 		if err != nil {
 			logger.Error("Failed to create authenticated context", zap.Error(err))
-			return nil, temporal.NewApplicationErrorWithCause(
+			return nil, activityErrorWithCauseFlat(
 				fmt.Sprintf("Failed to create authenticated context: %s", errorsx.MessageOrErr(err)),
 				processSummaryActivityError,
 				err,
@@ -1874,7 +1876,7 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 
 			// No existing summary - this is a real error
 			logger.Error("Failed to retrieve file from storage", zap.Error(err))
-			return nil, temporal.NewApplicationErrorWithCause(
+			return nil, activityErrorWithCauseFlat(
 				fmt.Sprintf("Failed to retrieve file from storage: %s", errorsx.MessageOrErr(err)),
 				processSummaryActivityError,
 				err,
@@ -1891,7 +1893,7 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 
 	// Verify content is not empty
 	if len(strings.TrimSpace(contentStr)) == 0 {
-		return nil, temporal.NewApplicationError(
+		return nil, activityErrorSimple(
 			fmt.Sprintf("content is empty for file %s", param.FileUID.String()),
 			processSummaryActivityError,
 		)
@@ -1901,7 +1903,7 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 	kb, err := w.repository.GetKnowledgeBaseByUIDWithConfig(authCtx, param.KBUID)
 	if err != nil {
 		logger.Error("Failed to get KB for routing", zap.Error(err))
-		return nil, temporal.NewApplicationErrorWithCause(
+		return nil, activityErrorWithCauseFlat(
 			fmt.Sprintf("Failed to get KB: %s", errorsx.MessageOrErr(err)),
 			processSummaryActivityError, err)
 	}
@@ -1914,7 +1916,7 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 		logger.Info("Using OpenAI pipeline route for summary generation")
 
 		if w.pipelineClient == nil {
-			return nil, temporal.NewApplicationErrorWithCause(
+			return nil, activityErrorWithCauseFlat(
 				"Pipeline client not configured for OpenAI route",
 				processSummaryActivityError, fmt.Errorf("pipeline client is nil"))
 		}
@@ -1923,7 +1925,7 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 		summary, err = pipeline.GenerateSummaryPipe(authCtx, w.pipelineClient, contentStr, param.FileType)
 		if err != nil {
 			logger.Error("OpenAI pipeline summarization failed", zap.Error(err))
-			return nil, temporal.NewApplicationErrorWithCause(
+			return nil, activityErrorWithCauseFlat(
 				fmt.Sprintf("OpenAI pipeline failed: %s", errorsx.MessageOrErr(err)),
 				processSummaryActivityError, err)
 		}
@@ -1939,7 +1941,7 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 		// Check if AI client is configured
 		if w.aiClient == nil {
 			logger.Error("AI client not configured")
-			return nil, temporal.NewApplicationErrorWithCause(
+			return nil, activityErrorWithCauseFlat(
 				"AI client is required for summary generation. Please configure Gemini API key in the server configuration.",
 				processSummaryActivityError,
 				fmt.Errorf("AI client not configured"),
@@ -2003,13 +2005,13 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 		if summary == "" {
 			logger.Error("AI summarization failed to produce content")
 			if summarizationErr != nil {
-				return nil, temporal.NewApplicationErrorWithCause(
+				return nil, activityErrorWithCauseFlat(
 					fmt.Sprintf("AI client failed to generate summary: %s", errorsx.MessageOrErr(summarizationErr)),
 					processSummaryActivityError,
 					summarizationErr,
 				)
 			}
-			return nil, temporal.NewApplicationErrorWithCause(
+			return nil, activityErrorWithCauseFlat(
 				"AI client failed to generate summary: summarization produced empty content",
 				processSummaryActivityError,
 				fmt.Errorf("empty summarization result"),
@@ -2053,7 +2055,7 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 		})
 		if err != nil {
 			logger.Error("Failed to create summary converted file record", zap.Error(err))
-			return nil, temporal.NewApplicationErrorWithCause(
+			return nil, activityErrorWithCauseFlat(
 				fmt.Sprintf("Failed to create summary converted file record: %s", errorsx.MessageOrErr(err)),
 				processSummaryActivityError,
 				err,
@@ -2073,7 +2075,7 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 			_ = w.DeleteConvertedFileRecordActivity(ctx, &DeleteConvertedFileRecordActivityParam{
 				ConvertedFileUID: convertedFileUID,
 			})
-			return nil, temporal.NewApplicationErrorWithCause(
+			return nil, activityErrorWithCauseFlat(
 				fmt.Sprintf("Failed to upload summary to MinIO: %s", errorsx.MessageOrErr(err)),
 				processSummaryActivityError,
 				err,
@@ -2094,7 +2096,7 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 			_ = w.DeleteConvertedFileRecordActivity(ctx, &DeleteConvertedFileRecordActivityParam{
 				ConvertedFileUID: convertedFileUID,
 			})
-			return nil, temporal.NewApplicationErrorWithCause(
+			return nil, activityErrorWithCauseFlat(
 				fmt.Sprintf("Failed to update summary converted file destination: %s", errorsx.MessageOrErr(err)),
 				processSummaryActivityError,
 				err,
@@ -2195,7 +2197,7 @@ func (w *Worker) FindTargetFileByNameActivity(ctx context.Context, param *FindTa
 		PageSize: 1000, // Large enough to cover typical KB update scenarios
 	})
 	if err != nil {
-		return nil, temporal.NewApplicationErrorWithCause(
+		return nil, activityErrorWithCauseFlat(
 			fmt.Sprintf("Failed to list files: %s", errorsx.MessageOrErr(err)),
 			findTargetFileByNameActivityError,
 			err,

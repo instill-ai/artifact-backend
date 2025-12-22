@@ -419,20 +419,16 @@ export function teardown(data) {
             console.warn(`Failed to clean orphaned files: ${e}`);
         }
 
-        // STEP 0b: Wait for THIS TEST's file processing to complete
-        // This prevents "collection does not exist" errors when cleanup deletes KBs
-        // while file processing workflows are still running
-        // CRITICAL: Pass data.dbIDPrefix to only wait for THIS test's files, not global files
-        // IMPORTANT: We MUST NOT proceed with deletion if files are still processing, as this creates
-        // zombie workflows that continue running after the KB/files are deleted.
-        console.log("Step 0b: Ensuring this test's file processing complete before cleanup...");
-        const allProcessingComplete = helper.waitForAllFileProcessingComplete(300, data.dbIDPrefix); // Increased to 5 minutes
+        // STEP 0b: Wait for file processing AND Temporal activities to settle before cleanup
+        // Uses waitForSafeCleanup which adds buffer for in-flight Temporal activities
+        console.log("Step 0b: Waiting for safe cleanup...");
+        const safeToCleanup = helper.waitForSafeCleanup(300, data.dbIDPrefix, 5); // 5 min + 5s buffer
 
-        check({ allProcessingComplete }, {
-            "Teardown: All files processed before cleanup (no zombie workflows)": () => allProcessingComplete === true,
+        check({ safeToCleanup }, {
+            "Teardown: Safe to cleanup (no zombie workflows)": () => safeToCleanup === true,
         });
 
-        if (!allProcessingComplete) {
+        if (!safeToCleanup) {
             console.error("TEARDOWN: Files still processing after timeout - CANNOT safely delete knowledge bases");
             console.error("TEARDOWN: Leaving knowledge bases in place to avoid zombie workflows");
             console.error("TEARDOWN: Manual cleanup may be required or increase timeout");

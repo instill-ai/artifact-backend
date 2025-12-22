@@ -132,7 +132,7 @@ func (h *PrivateHandler) DeleteFileAdmin(ctx context.Context, req *artifactpb.De
 	}
 
 	// Create namespace ID from owner UID for the public API
-	namespaceID := fmt.Sprintf("users/%s", kb.Owner)
+	namespaceID := fmt.Sprintf("users/%s", kb.NamespaceUID)
 
 	// For admin endpoints, inject owner UID into gRPC metadata for authentication
 	// Get existing metadata and append to it
@@ -143,12 +143,12 @@ func (h *PrivateHandler) DeleteFileAdmin(ctx context.Context, req *artifactpb.De
 	// Set the auth type and user UID headers (make a copy to avoid modifying the original)
 	md = md.Copy()
 	md.Set(strings.ToLower(constantx.HeaderAuthTypeKey), "user")
-	md.Set(strings.ToLower(constantx.HeaderUserUIDKey), kb.Owner)
+	md.Set(strings.ToLower(constantx.HeaderUserUIDKey), kb.NamespaceUID)
 	ctx = metadata.NewIncomingContext(ctx, md)
 
 	h.logger.Info("DeleteFileAdmin: Injected metadata",
 		zap.String("auth_type", "user"),
-		zap.String("user_uid", kb.Owner))
+		zap.String("user_uid", kb.NamespaceUID))
 
 	// Create a public handler to reuse the existing delete logic
 	publicHandler := &PublicHandler{

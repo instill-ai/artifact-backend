@@ -24,48 +24,49 @@ export let options = {
   thresholds: {
     checks: ["rate == 1.0"],
   },
+  // Staggered start times prevent API gateway rate limiting (429 errors)
   scenarios: {
-    // Object storage provider tests for different views
-    test_01_minio_view_summary: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_01_MinIO_ViewSummary' },
-    test_02_minio_view_content: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_02_MinIO_ViewContent' },
-    test_03_minio_view_standard: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_03_MinIO_ViewStandardFileType' },
-    test_04_minio_view_original: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_04_MinIO_ViewOriginalFileType' },
+    // Object storage provider tests for different views (0-3s stagger)
+    test_01_minio_view_summary: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_01_MinIO_ViewSummary', startTime: '0s' },
+    test_02_minio_view_content: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_02_MinIO_ViewContent', startTime: '1s' },
+    test_03_minio_view_standard: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_03_MinIO_ViewStandardFileType', startTime: '2s' },
+    test_04_minio_view_original: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_04_MinIO_ViewOriginalFileType', startTime: '3s' },
 
-    // GCS tests - only if GCS is configured
-    test_05_gcs_view_summary: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_05_GCS_ViewSummary' },
-    test_06_gcs_view_content: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_06_GCS_ViewContent' },
-    test_07_gcs_view_standard: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_07_GCS_ViewStandardFileType' },
-    test_08_gcs_view_original: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_08_GCS_ViewOriginalFileType' },
+    // GCS tests (4-7s stagger)
+    test_05_gcs_view_summary: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_05_GCS_ViewSummary', startTime: '4s' },
+    test_06_gcs_view_content: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_06_GCS_ViewContent', startTime: '5s' },
+    test_07_gcs_view_standard: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_07_GCS_ViewStandardFileType', startTime: '6s' },
+    test_08_gcs_view_original: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_08_GCS_ViewOriginalFileType', startTime: '7s' },
 
-    // Storage provider unspecified/default (should use MinIO)
-    test_09_unspecified_provider_defaults_to_minio: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_09_UnspecifiedProvider_DefaultsToMinIO' },
+    // Storage provider unspecified/default (8s)
+    test_09_unspecified_provider_defaults_to_minio: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_09_UnspecifiedProvider_DefaultsToMinIO', startTime: '8s' },
 
-    // Cross-provider consistency tests
-    test_10_url_content_consistency: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_10_URLContentConsistency' },
-    test_11_gcs_cache_behavior: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_11_GCSCacheBehavior' },
+    // Cross-provider consistency tests (9-10s)
+    test_10_url_content_consistency: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_10_URLContentConsistency', startTime: '9s' },
+    test_11_gcs_cache_behavior: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_11_GCSCacheBehavior', startTime: '10s' },
 
-    // Filename and content-type tests
-    test_12_minio_filename_content_type: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_12_MinIO_FilenameContentType' },
-    test_13_gcs_filename_content_type: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_13_GCS_FilenameContentType' },
+    // Filename and content-type tests (11-12s)
+    test_12_minio_filename_content_type: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_12_MinIO_FilenameContentType', startTime: '11s' },
+    test_13_gcs_filename_content_type: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_13_GCS_FilenameContentType', startTime: '12s' },
 
-    // Error handling
-    test_14_gcs_not_configured: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_14_GCS_NotConfigured' },
+    // Error handling (13s)
+    test_14_gcs_not_configured: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_14_GCS_NotConfigured', startTime: '13s' },
 
-    // Multiple file types with storage providers
-    test_15_multiple_file_types_minio: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_15_MultipleFileTypes_MinIO' },
-    test_16_multiple_file_types_gcs: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_16_MultipleFileTypes_GCS' },
+    // Multiple file types with storage providers (14-15s)
+    test_15_multiple_file_types_minio: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_15_MultipleFileTypes_MinIO', startTime: '14s' },
+    test_16_multiple_file_types_gcs: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_16_MultipleFileTypes_GCS', startTime: '15s' },
 
-    // Redis cache tests
-    test_17_redis_cache_hit: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_17_RedisCacheHit' },
-    test_18_redis_cache_miss: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_18_RedisCacheMiss' },
-    test_19_redis_cache_performance: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_19_RedisCachePerformance' },
+    // Redis cache tests (16-18s)
+    test_17_redis_cache_hit: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_17_RedisCacheHit', startTime: '16s' },
+    test_18_redis_cache_miss: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_18_RedisCacheMiss', startTime: '17s' },
+    test_19_redis_cache_performance: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_19_RedisCachePerformance', startTime: '18s' },
 
-    // GCS TTL and cleanup tests
-    test_20_gcs_ttl_tracking: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_20_GCSTTLTracking' },
-    test_21_gcs_file_expiration: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_21_GCSFileExpiration' },
+    // GCS TTL and cleanup tests (19-20s)
+    test_20_gcs_ttl_tracking: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_20_GCSTTLTracking', startTime: '19s' },
+    test_21_gcs_file_expiration: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_21_GCSFileExpiration', startTime: '20s' },
 
-    // View original file type immediate availability tests
-    test_22_view_original_file_type_immediate_availability: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_22_ViewOriginalFileType_ImmediateAvailability' },
+    // View original file type immediate availability tests (21s)
+    test_22_view_original_file_type_immediate_availability: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_22_ViewOriginalFileType_ImmediateAvailability', startTime: '21s' },
   },
 };
 
@@ -110,12 +111,9 @@ export function teardown(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
-    // Wait for file processing to complete before deleting knowledge bases
-    console.log("Teardown: Waiting for this test's file processing to complete...");
-    const allProcessingComplete = helper.waitForAllFileProcessingComplete(120, data.dbIDPrefix);
-    if (!allProcessingComplete) {
-      console.warn("Teardown: Some files still processing after 120s, proceeding anyway");
-    }
+    // Wait for file processing AND Temporal activities to settle before cleanup
+    console.log("Teardown: Waiting for safe cleanup...");
+    helper.waitForSafeCleanup(120, data.dbIDPrefix, 3);
 
     console.log(`rest-object-storage.js teardown: Cleaning up resources with prefix: ${data.dbIDPrefix}`);
     var listResp = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`, null, data.header)

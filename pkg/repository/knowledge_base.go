@@ -134,7 +134,7 @@ type KnowledgeBaseModel struct {
 	KBID        string          `gorm:"column:id;size:255;not null" json:"kb_id"`
 	Description string          `gorm:"column:description;size:1023" json:"description"`
 	Tags        TagsArray       `gorm:"column:tags;type:VARCHAR(255)[]" json:"tags"`
-	Owner       string          `gorm:"column:owner;type:uuid;not null" json:"owner"`
+	NamespaceUID string         `gorm:"column:namespace_uid;type:uuid;not null" json:"namespace_uid"`
 	CreateTime  *time.Time      `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
 	UpdateTime  *time.Time      `gorm:"column:update_time;not null;autoUpdateTime" json:"update_time"` // Use autoUpdateTime
 	DeleteTime  gorm.DeletedAt  `gorm:"column:delete_time;index" json:"delete_time"`
@@ -227,7 +227,7 @@ type KnowledgeBaseColumns struct {
 	KBID                   string
 	Description            string
 	Tags                   string
-	Owner                  string
+	NamespaceUID           string
 	CreateTime             string
 	UpdateTime             string
 	DeleteTime             string
@@ -249,7 +249,7 @@ var KnowledgeBaseColumn = KnowledgeBaseColumns{
 	KBID:                   "id",
 	Description:            "description",
 	Tags:                   "tags",
-	Owner:                  "owner",
+	NamespaceUID:           "namespace_uid",
 	CreateTime:             "create_time",
 	UpdateTime:             "update_time",
 	DeleteTime:             "delete_time",
@@ -310,7 +310,7 @@ func (r *repository) CreateKnowledgeBase(ctx context.Context, kb KnowledgeBaseMo
 	// Start a database transaction
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// check if the name is unique in the owner's knowledge bases
-		KBIDExists, err := r.checkIfKBIDUnique(ctx, kb.Owner, kb.KBID)
+		KBIDExists, err := r.checkIfKBIDUnique(ctx, kb.NamespaceUID, kb.KBID)
 		if err != nil {
 			return err
 		}
@@ -361,7 +361,7 @@ func (r *repository) ListKnowledgeBases(ctx context.Context, owner string) ([]Kn
 	var knowledgeBases []KnowledgeBaseModel
 	// GORM's DeletedAt automatically filters out soft-deleted records
 	// Filter for staging=false to exclude staging/rollback KBs from user-facing APIs
-	whereString := fmt.Sprintf("%v = ? AND %v = ?", KnowledgeBaseColumn.Owner, KnowledgeBaseColumn.Staging)
+	whereString := fmt.Sprintf("%v = ? AND %v = ?", KnowledgeBaseColumn.NamespaceUID, KnowledgeBaseColumn.Staging)
 	if err := r.db.WithContext(ctx).Where(whereString, owner, false).Find(&knowledgeBases).Error; err != nil {
 		return nil, err
 	}
@@ -375,7 +375,7 @@ func (r *repository) ListKnowledgeBasesByType(ctx context.Context, owner string,
 	var knowledgeBases []KnowledgeBaseModel
 	// GORM's DeletedAt automatically filters out soft-deleted records
 	// Filter for staging=false to exclude staging/rollback KBs from user-facing APIs
-	whereString := fmt.Sprintf("%v = ? AND %v = ? AND %v = ?", KnowledgeBaseColumn.Owner, KnowledgeBaseColumn.KnowledgeBaseType, KnowledgeBaseColumn.Staging)
+	whereString := fmt.Sprintf("%v = ? AND %v = ? AND %v = ?", KnowledgeBaseColumn.NamespaceUID, KnowledgeBaseColumn.KnowledgeBaseType, KnowledgeBaseColumn.Staging)
 	if err := r.db.WithContext(ctx).Where(whereString, owner, kbType.String(), false).Find(&knowledgeBases).Error; err != nil {
 		return nil, err
 	}
@@ -397,7 +397,7 @@ func (r *repository) ListKnowledgeBasesByTypeWithConfig(ctx context.Context, own
 		Select("kb.*, s.config").
 		Joins("INNER JOIN system s ON kb.system_uid = s.uid").
 		Where("kb.delete_time IS NULL").
-		Where("kb.owner = ?", owner).
+		Where("kb.namespace_uid = ?", owner).
 		Where("kb.knowledge_base_type = ?", kbType.String()).
 		Where("kb.staging = ?", false).
 		Scan(&tempResults).Error
@@ -423,7 +423,7 @@ func (r *repository) ListKnowledgeBasesByTypeWithConfig(ctx context.Context, own
 // UpdateKnowledgeBase updates a KnowledgeBaseModel record in the database.
 // For the atomic swap, use this method with all necessary fields (Name, KBID, Staging, etc.)
 func (r *repository) UpdateKnowledgeBase(ctx context.Context, id, owner string, kb KnowledgeBaseModel) (*KnowledgeBaseModel, error) {
-	where := fmt.Sprintf("%s = ? AND %s = ? AND %s is NULL", KnowledgeBaseColumn.KBID, KnowledgeBaseColumn.Owner, KnowledgeBaseColumn.DeleteTime)
+	where := fmt.Sprintf("%s = ? AND %s = ? AND %s is NULL", KnowledgeBaseColumn.KBID, KnowledgeBaseColumn.NamespaceUID, KnowledgeBaseColumn.DeleteTime)
 
 	// Update all non-zero fields of the record using struct (GORM ignores zero values)
 	// This allows atomic swap to update Name, KBID, Staging, UpdateStatus, etc.
@@ -446,7 +446,7 @@ func (r *repository) UpdateKnowledgeBase(ctx context.Context, id, owner string, 
 
 // UpdateKnowledgeBaseWithMap updates a knowledge base using a map, allowing zero values like false
 func (r *repository) UpdateKnowledgeBaseWithMap(ctx context.Context, id, owner string, updates map[string]any) error {
-	where := fmt.Sprintf("%s = ? AND %s = ? AND %s is NULL", KnowledgeBaseColumn.KBID, KnowledgeBaseColumn.Owner, KnowledgeBaseColumn.DeleteTime)
+	where := fmt.Sprintf("%s = ? AND %s = ? AND %s is NULL", KnowledgeBaseColumn.KBID, KnowledgeBaseColumn.NamespaceUID, KnowledgeBaseColumn.DeleteTime)
 
 	// Convert tags if present to TagsArray type for proper PostgreSQL array handling
 	if tags, ok := updates["tags"]; ok {
@@ -472,7 +472,7 @@ func (r *repository) UpdateKnowledgeBaseWithMap(ctx context.Context, id, owner s
 
 // UpdateKnowledgeBaseWithMapTx updates a knowledge base using a map within a transaction
 func (r *repository) UpdateKnowledgeBaseWithMapTx(ctx context.Context, tx *gorm.DB, id, owner string, updates map[string]any) error {
-	where := fmt.Sprintf("%s = ? AND %s = ? AND %s is NULL", KnowledgeBaseColumn.KBID, KnowledgeBaseColumn.Owner, KnowledgeBaseColumn.DeleteTime)
+	where := fmt.Sprintf("%s = ? AND %s = ? AND %s is NULL", KnowledgeBaseColumn.KBID, KnowledgeBaseColumn.NamespaceUID, KnowledgeBaseColumn.DeleteTime)
 
 	// Convert tags if present to TagsArray type for proper PostgreSQL array handling
 	if tags, ok := updates["tags"]; ok {
@@ -501,7 +501,7 @@ func (r *repository) DeleteKnowledgeBaseTx(ctx context.Context, tx *gorm.DB, own
 	var existingKB KnowledgeBaseModel
 
 	// Lock the KB row with SELECT ... FOR UPDATE
-	conds := fmt.Sprintf("%v = ? AND %v = ? AND %v IS NULL", KnowledgeBaseColumn.Owner, KnowledgeBaseColumn.KBID, KnowledgeBaseColumn.DeleteTime)
+	conds := fmt.Sprintf("%v = ? AND %v = ? AND %v IS NULL", KnowledgeBaseColumn.NamespaceUID, KnowledgeBaseColumn.KBID, KnowledgeBaseColumn.DeleteTime)
 	if err := tx.WithContext(ctx).Clauses(clause.Locking{Strength: "UPDATE"}).First(&existingKB, conds, owner, kbID).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return fmt.Errorf("knowledge base ID not found: %v. err: %w", kbID, gorm.ErrRecordNotFound)
@@ -583,7 +583,7 @@ func (r *repository) DeleteKnowledgeBase(ctx context.Context, ownerUID string, k
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// Lock the KB row with SELECT ... FOR UPDATE
 		// This prevents concurrent file operations from proceeding until we commit/rollback
-		conds := fmt.Sprintf("%v = ? AND %v = ? AND %v IS NULL", KnowledgeBaseColumn.Owner, KnowledgeBaseColumn.KBID, KnowledgeBaseColumn.DeleteTime)
+		conds := fmt.Sprintf("%v = ? AND %v = ? AND %v IS NULL", KnowledgeBaseColumn.NamespaceUID, KnowledgeBaseColumn.KBID, KnowledgeBaseColumn.DeleteTime)
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&existingKB, conds, ownerUID, kbID).Error; err != nil {
 			if err == gorm.ErrRecordNotFound {
 				return fmt.Errorf("knowledge base ID not found: %v. err: %w", kbID, gorm.ErrRecordNotFound)
@@ -612,7 +612,7 @@ func (r *repository) DeleteKnowledgeBase(ctx context.Context, ownerUID string, k
 
 func (r *repository) checkIfKBIDUnique(ctx context.Context, owner string, kbID string) (bool, error) {
 	var existingKB KnowledgeBaseModel
-	whereString := fmt.Sprintf("%v = ? AND %v = ?", KnowledgeBaseColumn.Owner, KnowledgeBaseColumn.KBID)
+	whereString := fmt.Sprintf("%v = ? AND %v = ?", KnowledgeBaseColumn.NamespaceUID, KnowledgeBaseColumn.KBID)
 	if err := r.db.WithContext(ctx).Where(whereString, owner, kbID).First(&existingKB).Error; err != nil {
 		if err != gorm.ErrRecordNotFound {
 			return false, err
@@ -626,7 +626,7 @@ func (r *repository) checkIfKBIDUnique(ctx context.Context, owner string, kbID s
 // get the knowledge base by (owner, kb_id)
 func (r *repository) GetKnowledgeBaseByOwnerAndKbID(ctx context.Context, owner types.OwnerUIDType, kbID string) (*KnowledgeBaseModel, error) {
 	var existingKB KnowledgeBaseModel
-	whereString := fmt.Sprintf("%v = ? AND %v = ? AND %v is NULL", KnowledgeBaseColumn.Owner, KnowledgeBaseColumn.KBID, KnowledgeBaseColumn.DeleteTime)
+	whereString := fmt.Sprintf("%v = ? AND %v = ? AND %v is NULL", KnowledgeBaseColumn.NamespaceUID, KnowledgeBaseColumn.KBID, KnowledgeBaseColumn.DeleteTime)
 	if err := r.db.WithContext(ctx).Where(whereString, owner, kbID).First(&existingKB).Error; err != nil {
 		return nil, err
 	}
@@ -674,7 +674,7 @@ func (r *repository) GetKnowledgeBaseCountByOwner(ctx context.Context, owner str
 	// GORM automatically excludes soft-deleted records with gorm.DeletedAt
 	// Filter for staging=false to exclude staging/rollback KBs from user-facing counts
 	if err := r.db.WithContext(ctx).Model(&KnowledgeBaseModel{}).
-		Where("owner = ? AND knowledge_base_type = ? AND staging = ?", owner, kbType.String(), false).
+		Where("namespace_uid = ? AND knowledge_base_type = ? AND staging = ?", owner, kbType.String(), false).
 		Count(&count).Error; err != nil {
 		return 0, err
 	}
@@ -852,7 +852,7 @@ func (r *repository) GetStagingKBForProduction(ctx context.Context, ownerUID typ
 	err := r.db.WithContext(ctx).
 		Select("uid").
 		Where(fmt.Sprintf("%v = ? AND %v = ? AND %v = ? AND %v IS NULL",
-			KnowledgeBaseColumn.Owner,
+			KnowledgeBaseColumn.NamespaceUID,
 			KnowledgeBaseColumn.KBID,
 			KnowledgeBaseColumn.Staging,
 			KnowledgeBaseColumn.DeleteTime),
@@ -900,7 +900,7 @@ func (r *repository) GetRollbackKBForProduction(ctx context.Context, ownerUID ty
 	err := r.db.WithContext(ctx).
 		Select("uid").
 		Where(fmt.Sprintf("%v = ? AND %v = ? AND %v = ? AND %v IS NULL",
-			KnowledgeBaseColumn.Owner,
+			KnowledgeBaseColumn.NamespaceUID,
 			KnowledgeBaseColumn.KBID,
 			KnowledgeBaseColumn.Staging,
 			KnowledgeBaseColumn.DeleteTime),
@@ -969,7 +969,7 @@ func (r *repository) GetDualProcessingTarget(ctx context.Context, productionKB *
 	// CRITICAL FIX: During "swapping" status, after the actual swap happens (Phase 5), the staging KB is deleted
 	// and rollback KB is created. So we need to check BOTH: first try staging, then fallback to rollback.
 	if IsUpdateInProgress(status) {
-		ownerUID := types.OwnerUIDType(uuid.FromStringOrNil(productionKB.Owner))
+		ownerUID := types.OwnerUIDType(uuid.FromStringOrNil(productionKB.NamespaceUID))
 
 		// First, try to find staging KB (exists before swap)
 		stagingKB, err := r.GetStagingKBForProduction(ctx, ownerUID, productionKB.KBID)
@@ -1016,7 +1016,7 @@ func (r *repository) GetDualProcessingTarget(ctx context.Context, productionKB *
 	// In both cases, if rollback KB exists, continue dual processing
 	if status == artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED.String() ||
 		status == artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_ROLLED_BACK.String() {
-		ownerUID := types.OwnerUIDType(uuid.FromStringOrNil(productionKB.Owner))
+		ownerUID := types.OwnerUIDType(uuid.FromStringOrNil(productionKB.NamespaceUID))
 		rollbackKB, err := r.GetRollbackKBForProduction(ctx, ownerUID, productionKB.KBID)
 		if err != nil {
 			return nil, fmt.Errorf("checking for rollback KB: %w", err)
@@ -1058,7 +1058,7 @@ func (r *repository) CreateStagingKnowledgeBase(ctx context.Context, original *K
 		KBID:              stagingKBUID.String(),
 		Description:       original.Description,
 		Tags:              append(original.Tags, "staging"),
-		Owner:             original.Owner,
+		NamespaceUID:      original.NamespaceUID,
 		CreatorUID:        original.CreatorUID,
 		KnowledgeBaseType: original.KnowledgeBaseType,
 		SystemUID:         systemUID,
